@@ -9,7 +9,7 @@ function get_best_times((; device, float_type))
 end
 
 function get_best_times_cpu_float64()
-    best_times = OrderedCollections.OrderedDict()
+    best_times = DataStructures.OrderedDict()
     best_times[:kernel_spectral_wdiv!] = 87042.2667
     best_times[:kernel_spectral_grad!] = 77839.3543
     best_times[:kernel_spectral_grad_norm!] = 105859.9405
@@ -22,7 +22,7 @@ function get_best_times_cpu_float64()
     return best_times
 end
 function get_best_times_cpu_float32()
-    best_times = OrderedCollections.OrderedDict()
+    best_times = DataStructures.OrderedDict()
     best_times[:kernel_spectral_wdiv!] = 79922.8909
     best_times[:kernel_spectral_grad!] = 74736.2011
     best_times[:kernel_spectral_grad_norm!] = 101959.6227
@@ -35,7 +35,7 @@ function get_best_times_cpu_float32()
     return best_times
 end
 function get_best_times_gpu_float64()
-    best_times = OrderedCollections.OrderedDict()
+    best_times = DataStructures.OrderedDict()
     best_times[:kernel_spectral_wdiv!] = 21750.2493
     best_times[:kernel_spectral_grad!] = 21046.113
     best_times[:kernel_spectral_grad_norm!] = 53723.9003
@@ -48,7 +48,7 @@ function get_best_times_gpu_float64()
     return best_times
 end
 function get_best_times_gpu_float32()
-    best_times = OrderedCollections.OrderedDict()
+    best_times = DataStructures.OrderedDict()
     best_times[:kernel_spectral_wdiv!] = 26606.9483
     best_times[:kernel_spectral_grad!] = 20715.8317
     best_times[:kernel_spectral_grad_norm!] = 52673.6528

@@ -5,7 +5,6 @@
 using LinearAlgebra: ×
 import PrettyTables
 import LinearAlgebra as LA
-import OrderedCollections
 import ClimaCore.DataLayouts
 import ClimaCore.Operators as Operators
 import ClimaCore.Domains as Domains

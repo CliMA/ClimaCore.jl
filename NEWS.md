@@ -19,6 +19,13 @@ main
  - We've refactored some modules to use less internals. PR [#2053](https://github.com/CliMA/ClimaCore.jl/pull/2053), PR [#2052](https://github.com/CliMA/ClimaCore.jl/pull/2052), [#2051](https://github.com/CliMA/ClimaCore.jl/pull/2051), [#2049](https://github.com/CliMA/ClimaCore.jl/pull/2049).
  - Some work was done in attempt to reduce specializations and compile time. PR [#2042](https://github.com/CliMA/ClimaCore.jl/pull/2042), [#2041](https://github.com/CliMA/ClimaCore.jl/pull/2041)
 
+### ![][badge-🐛bugfix] Fix lower compat bounds
+
+`ClimaCore` had incorrect lower bounds for certain packages. PR
+[#2078](https://github.com/CliMA/ClimaCore.jl/pull/2078) fixes the lower bounds
+and adds a GitHub Action workflow to test it. `ClimaCore` now requires Julia
+1.10 or greater.
+
 v0.14.19
 -------
 

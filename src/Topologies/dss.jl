@@ -1,4 +1,3 @@
-using DocStringExtensions
 using .DataLayouts: CartesianFieldIndex
 
 const DSSTypesAll = Union{
@@ -24,7 +23,18 @@ const DSSWeightTypes = Union{DataLayouts.IJFH, DataLayouts.IJHF}
     DSSBuffer{G, D, A, B}
 
 # Fields
-$(DocStringExtensions.FIELDS)
+
+- `graph_context`: ClimaComms graph context for communication
+- `perimeter_data`: Perimeter `DataLayout` object: typically a
+   `VIFH{TT,Nv,Np,Nh}` or `VIHF{TT,Nv,Np,Nh}`, where `TT` is the transformed
+   type, `Nv` is the number of vertical levels, and `Np` is the length of the
+   perimeter
+- `send_date`: send buffer `AbstractVector{FT}`
+- `recv_data`: recv buffer `AbstractVector{FT}`
+- `send_buf_idx`: indexing array for loading send buffer from `perimeter_data`
+- `recv_buf_idx`: indexing array for loading (and summing) data from recv buffer to
+- `internal_elems`: internal local elements (lidx)
+- `perimeter_elems`: local elements (lidx) located on process boundary
 """
 struct DSSBuffer{S, G, D, A, B, VI}
     "ClimaComms graph context for communication"

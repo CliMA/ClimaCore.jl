@@ -10,7 +10,6 @@ using BenchmarkTools
 
 using ClimaComms
 ClimaComms.@import_required_backends
-using OrderedCollections
 using StaticArrays, IntervalSets
 import ClimaCore
 import ClimaCore.Utilities: PlusHalf
