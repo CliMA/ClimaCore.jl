@@ -5,6 +5,7 @@ using LinearAlgebra, StaticArrays
 import ClimaComms
 import ..DataLayouts,
     ..Geometry,
+    ..Domains,
     ..Spaces,
     ..Grids,
     ..Topologies,

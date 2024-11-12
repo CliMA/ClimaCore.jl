@@ -4,6 +4,39 @@ ClimaCore.jl Release Notes
 main
 -------
 
+### ![][badge-✨feature/enhancement] Various improvements to `Remapper` (PR [2060](https://github.com/CliMA/ClimaCore.jl/pull/2060))
+
+The `ClimaCore.Remapping` was updated with the following improvements:
+- [new documentation page](https://clima.github.io/ClimaCore.jl/dev/remapping);
+- support for interpolating purely vertical spaces;
+- a new way to `interpolate` without creating a `Remapper`.
+
+Interpolating a `Field` onto a Cartesian grid used to require creating a
+`ClimaCore.Remapping.Remapper` object first (a `Remapper` is a struct that
+contains interpolation weights and other auxiliary variables that are needed to
+perform remapping). Starting from this version, `ClimaCore.Remapping` provides a
+new interface to interpolating that no longer requires creating a `Remapper`
+first.
+
+Suppose you have a `Field` `field`, you can now directly interpolate it onto a
+uniform Cartesian grid with
+```julia-repl
+julia> import ClimaCore.Remapping
+julia> Remapping.interpolate(field)
+# Output Array
+```
+
+This `interpolate` function is slower than the one that uses `Remapper`, so, you
+should reserve its use for post-processing or any other task where performance
+is not important.
+
+When `interpolate` is called, the output grid is automatically determined from
+the bounds of the computational domain. It is often convenient to have access to
+the interpolation points (e.g., for plotting), and the
+[documentation](https://clima.github.io/ClimaCore.jl/dev/remapping) describes
+how to obtain them as `Vector`s.
+
+
 v0.14.20
 -------
 
