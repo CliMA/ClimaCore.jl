@@ -46,7 +46,6 @@ BandedMatrices = "0.17, 1"
 BenchmarkTools = "1"
 BlockArrays = "0.16, 1"
 ClimaComms = "0.6"
-Combinatorics = "1"
 CountFlops = "0.1"
 CubedSphere = "0.2, 0.3"
 CUDA = "5"
@@ -90,7 +89,6 @@ Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
 AssociatedLegendrePolynomials = "2119f1ac-fb78-50f5-8cc0-dda848ebdb19"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
-Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
 CountFlops = "1db9610d-79e1-487a-8d40-77f3295c7593"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 FastBroadcast = "7034ab61-46d4-4ed7-9d0f-46aef9175898"
@@ -108,5 +106,5 @@ TerminalLoggers = "5d786b92-1e48-4d6f-9151-6b4477ca9bed"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Aqua", "ArgParse", "AssociatedLegendrePolynomials", "BenchmarkTools", "Combinatorics", "CountFlops", "Dates", "FastBroadcast", "Krylov", "JET", "LazyBroadcast", "Logging", "MPI", "OrderedCollections", "PrettyTables", "Random", "SafeTestsets", "StatsBase", "TerminalLoggers", "Test"]
+test = ["Aqua", "ArgParse", "AssociatedLegendrePolynomials", "BenchmarkTools", "CountFlops", "Dates", "FastBroadcast", "Krylov", "JET", "LazyBroadcast", "Logging", "MPI", "OrderedCollections", "PrettyTables", "Random", "SafeTestsets", "StatsBase", "TerminalLoggers", "Test"]
 

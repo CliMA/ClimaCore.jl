@@ -1,7 +1,7 @@
 using Test, StaticArrays
 #! format: off
 import Random, BenchmarkTools, StatsBase,
-    OrderedCollections, LinearAlgebra, Combinatorics, CountFlops
+    OrderedCollections, LinearAlgebra, CountFlops
 using ClimaCore.Geometry:Geometry, AbstractAxis, CovariantAxis,
     AxisVector, ContravariantAxis, LocalAxis, CartesianAxis, AxisTensor,
     Covariant1Vector, Covariant13Vector, UVVector, UWVector, UVector,
