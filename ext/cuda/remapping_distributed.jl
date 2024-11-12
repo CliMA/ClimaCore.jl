@@ -131,6 +131,40 @@ function set_interpolated_values_kernel!(
     return nothing
 end
 
+# GPU, vertical case
+function set_interpolated_values_kernel!(
+    out::AbstractArray,
+    ::Nothing,
+    ::Nothing,
+    vert_interpolation_weights,
+    vert_bounding_indices,
+    ::Nothing,
+)
+    # TODO: Check the memory access pattern. This was not optimized and likely inefficient!
+    num_fields = length(field_values)
+
+    vindex = (blockIdx().y - Int32(1)) * blockDim().y + threadIdx().y
+    findex = (blockIdx().z - Int32(1)) * blockDim().z + threadIdx().z
+
+    totalThreadsY = gridDim().y * blockDim().y
+    totalThreadsZ = gridDim().z * blockDim().z
+
+    CI = CartesianIndex
+    for j in vindex:totalThreadsY:num_vert
+        v_lo, v_hi = vert_bounding_indices[j]
+        A, B = vert_interpolation_weights[j]
+        for k in findex:totalThreadsZ:num_fields
+            if j ≤ num_vert && k ≤ num_fields
+                out[j, k] = (
+                    A * field_values[k][CI(1, 1, 1, v_lo, 1)] +
+                    B * field_values[k][CI(1, 1, 1, v_hi, 1)]
+                )
+            end
+        end
+    end
+    return nothing
+end
+
 function _set_interpolated_values_device!(
     out::AbstractArray,
     fields::AbstractArray{<:Fields.Field},

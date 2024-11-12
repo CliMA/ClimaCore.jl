@@ -77,6 +77,7 @@ withenv("GKSwstype" => "nul") do
             "Installation and How-to Guides" => "installation_instructions.md",
             "Geometry" => "geometry.md",
             "Operators" => "operators.md",
+            "Remapping" => "remapping.md",
             "MatrixFields" => "matrix_fields.md",
             "API" => "api.md",
             "Developer docs" => ["Performance tips" => "performance_tips.md"],

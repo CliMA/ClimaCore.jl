@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+### ![][badge-✨feature/enhancement] Various improvements to `Remapper`
+
+
+v0.14.20
+---------
  - We've added new convenience constructors for spaces PR [2082](https://github.com/CliMA/ClimaCore.jl/pull/2082). Here are links to the new constructors:
    - [ExtrudedCubedSphereSpace]()
    - [CubedSphereSpace]()
@@ -11,8 +16,6 @@ main
    - [Box3DSpace]()
    - [SliceXZSpace]()
    - [RectangleXYSpace]()
-
-v0.14.20
 
  - We've added new convenience constructors for grids PR [1848](https://github.com/CliMA/ClimaCore.jl/pull/1848). Here are links to the new constructors:
    - [ExtrudedCubedSphereGrid](https://github.com/CliMA/ClimaCore.jl/blob/cbb193042fac3b4bef33251fbc0f232427bfe506/src/CommonGrids/CommonGrids.jl#L85-L144)
