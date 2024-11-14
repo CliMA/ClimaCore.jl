@@ -356,6 +356,8 @@ Hypsography.ref_z_to_physical_z
 The limiters supertype is
 ```@docs
 Limiters.AbstractLimiter
+Limiters.QuasiMonotoneLimiter
+Limiters.VerticalMassBorrowingLimiter
 ```
 
 This class of flux-limiters is applied only in the horizontal direction (on spectral advection operators).
@@ -363,7 +365,6 @@ This class of flux-limiters is applied only in the horizontal direction (on spec
 
 ### Interfaces
 ```@docs
-Limiters.QuasiMonotoneLimiter
 Limiters.compute_bounds!
 Limiters.apply_limiter!
 ```

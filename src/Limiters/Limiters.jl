@@ -19,5 +19,6 @@ abstract type AbstractLimiter end
 
 # implementations
 include("quasimonotone.jl")
+include("vertical_mass_borrowing_limiter.jl")
 
 end # end module

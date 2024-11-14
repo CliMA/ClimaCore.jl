@@ -4,6 +4,9 @@ ClimaCore.jl Release Notes
 main
 -------
 
+ - A new limiter, `VerticalMassBorrowingLimiter`, was added. Which redistributes all negative values from a given field while preserving mass.
+  PR [2084](https://github.com/CliMA/ClimaCore.jl/pull/2084)
+
  - We've added new convenience constructors for spaces PR [2082](https://github.com/CliMA/ClimaCore.jl/pull/2082). Here are links to the new constructors:
    - [ExtrudedCubedSphereSpace]()
    - [CubedSphereSpace]()
