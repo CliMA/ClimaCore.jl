@@ -1834,8 +1834,6 @@ struct MonotonizedCentralLimiter <: AbstractTVDSlopeLimiter end
 struct VanLeerLimiter <: AbstractTVDSlopeLimiter end
 
 @inline function compute_limiter_coeff(r, ::RZeroLimiter)
-    # Returns the low order flux
-    # Typically first-order upwind in ClimaCore schemes.
     return zero(eltype(r))
 end
 
@@ -1867,7 +1865,6 @@ end
     return (r + abs(r)) / (1 + abs(r) + eps(eltype(r)))
 end
 
-# ??? Do we want to allow flux method types to be determined here? 
 struct TVDSlopeLimitedFlux{BCS} <: AdvectionOperator
     bcs::BCS
 end

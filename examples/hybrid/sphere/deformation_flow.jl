@@ -189,7 +189,7 @@ function vertical_tendency!(Yₜ, Y, cache, t)
                 ᶠwinterp(ᶜJ, Y.c.ρ) * (
                     upwind1(face_uᵥ, q_n) + SlopeLimitedFlux(
                         upwind3(face_uᵥ, q_n) - upwind1(face_uᵥ, q_n),
-                        Y.c.ρ * q_n / dt,
+                        q_n / dt,
                     )
                 ),
             )
