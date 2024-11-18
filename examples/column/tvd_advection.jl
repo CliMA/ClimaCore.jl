@@ -65,8 +65,6 @@ function tendency!(yₜ, y, parameters, t)
             upwind1(w, y.q) +
             LimitedFlux(upwind3(w, y.q) - upwind1(w, y.q), y.q / Δt),
         )
-    # @. yₜ.q =
-    #     -divf2c(w * If(y.q))
 end
 
 # Define a pulse wave or square wave
@@ -91,6 +89,9 @@ domain = Domains.IntervalDomain(
 
 stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(FT(7.0)))
 plot_string = ["uniform", "stretched"]
+
+stretch_fns = [Meshes.Uniform(),]
+plot_string = ["uniform",]
 
 for (i, stretch_fn) in enumerate(stretch_fns)
     limiter_methods = (
@@ -135,18 +136,21 @@ for (i, stretch_fn) in enumerate(stretch_fns)
 
         q_final = sol.u[end].q
         q_analytic = pulse.(z, t₁, z₀, zₕ, z₁)
+        
         err = norm(q_final .- q_analytic)
         rel_mass_err = norm((sum(q_final) - sum(q_init)) / sum(q_init))
 
-
-        plot(q_final)
+        if i == 1
+            fig = Plots.plot(q_analytic; label = "Exact")
+        end
+        fig = plot!(q_final; label = "$(typeof(limiter_method))"[21:end])
+        fig = plot!(legend=:outerbottom, legendcolumns=2)
         Plots.png(
-            Plots.plot!(q_analytic, title = "$(typeof(limiter_method))"),
+            fig, 
             joinpath(
                 path,
-                "exact_and_computed_advected_square_wave_TVDSlopeLimitedFlux_" *
-                "$(typeof(limiter_method))_" *
-                plot_string[i] *
+                "SlopeLimitedFluxSolution_" *
+                "$(typeof(limiter_method))"[21:end] * 
                 ".png",
             ),
         )
