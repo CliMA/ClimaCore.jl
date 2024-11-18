@@ -136,7 +136,6 @@ function launch_fused_copyto!(fmb::FusedMultiBroadcast)
             args;
             threads_s = p.threads,
             blocks_s = p.blocks,
-            always_inline = false,
         )
     else
         args = (fmb, dest1, us)
