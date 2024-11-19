@@ -137,7 +137,7 @@ for (i, stretch_fn) in enumerate(stretch_fns)
             joinpath(
                 path,
                 "exact_and_computed_advected_square_wave_TVDSlopeLimitedFlux_" *
-                "$(typeof(limiter_method))_" *
+                "$(nameof(typeof(limiter_method)))_" *
                 plot_string[i] *
                 ".png",
             ),
