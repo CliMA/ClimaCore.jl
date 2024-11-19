@@ -29,14 +29,6 @@ dir = "tvd_advection"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
-end
 
 function tendency!(yₜ, y, parameters, t)
     (; w, Δt, limiter_method) = parameters
