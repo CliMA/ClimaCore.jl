@@ -1937,12 +1937,11 @@ Base.@propagate_inbounds function stencil_interior(
 end
 
 @inline function compute_slope_ratio(ϕⱼ, ϕⱼ₋₁, ϕⱼ₊₁, ϕⱼ₊₂, 𝓊)
-    #if sign(𝓊) < 0
-    #    return (ϕⱼ₊₂ - ϕⱼ₊₁) / max(ϕⱼ₊₁ - ϕⱼ, eps(eltype(ϕⱼ)))
-    #else sign(𝓊) >= 0
-    #    return (ϕⱼ - ϕⱼ₋₁) / max(ϕⱼ₊₁ - ϕⱼ, eps(eltype(ϕⱼ)))
-    #end
-    return (ϕⱼ - ϕⱼ₋₁) / max(ϕⱼ₊₁ - ϕⱼ, eps(eltype(ϕⱼ)))
+    if sign(𝓊) < 0
+        return (ϕⱼ₊₂ - ϕⱼ₊₁) / (ϕⱼ₊₁ - ϕⱼ +  eps(eltype(ϕⱼ)))
+    else 
+        return (ϕⱼ - ϕⱼ₋₁) / (ϕⱼ₊₁ - ϕⱼ, + eps(eltype(ϕⱼ)))
+    end
 end
 
 boundary_width(::TVDSlopeLimitedFlux, ::AbstractBoundaryCondition) = 2
