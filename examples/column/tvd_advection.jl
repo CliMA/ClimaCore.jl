@@ -63,7 +63,7 @@ function tendency!(yₜ, y, parameters, t)
     @. yₜ.q =
         -divf2c(
             upwind1(w, y.q) +
-            LimitedFlux(upwind3(w, y.q) - upwind1(w, y.q), y.q / Δt),
+            LimitedFlux(upwind3(w, y.q) - upwind1(w, y.q), y.q / Δt, w),
         )
 end
 

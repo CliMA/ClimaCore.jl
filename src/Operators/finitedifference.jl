@@ -1797,7 +1797,7 @@ end
 ######Limited Flux Methods######
 """
     U = TVDSlopeLimitedFlux(;boundaries)
-    U.(𝒜, Φ)
+    U.(𝒜, Φ, 𝓊)
 𝒜, following the notation of Durran (Numerical Methods for Fluid
 Dynamics, 2ⁿᵈ ed.) is the antidiffusive flux given by
 𝒜 = ℱʰ - ℱˡ
@@ -1869,16 +1869,17 @@ end
 TVDSlopeLimitedFlux(; method, kwargs...) =
     TVDSlopeLimitedFlux((; method, kwargs...))
 
-return_eltype(::TVDSlopeLimitedFlux, A, Φ) =
+return_eltype(::TVDSlopeLimitedFlux, A, Φ, 𝓊) =
     Geometry.Contravariant3Vector{eltype(eltype(A))}
 
 return_space(
     ::TVDSlopeLimitedFlux,
     A_space::AllFaceFiniteDifferenceSpace,
     Φ_space::AllCenterFiniteDifferenceSpace,
+    𝓊_space::AllFaceFiniteDifferenceSpace,
 ) = A_space
 
-function tvd_limited_flux(Aⱼ₋₁₂, Aⱼ₊₁₂, ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂, rⱼ₊₁₂, method)
+function tvd_limited_flux(Aⱼ₋₁₂, Aⱼ₊₁₂, ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂,rⱼ₊₁₂, method)
     stable_zero = zero(eltype(Aⱼ₊₁₂))
     stable_one = one(eltype(Aⱼ₊₁₂))
     Cⱼ₊₁₂ = compute_limiter_coeff(rⱼ₊₁₂, method)
@@ -1887,8 +1888,8 @@ function tvd_limited_flux(Aⱼ₋₁₂, Aⱼ₊₁₂, ϕⱼ₋₁, ϕⱼ, ϕ�
     return Cⱼ₊₁₂ * Aⱼ₊₁₂
 end
 
-stencil_interior_width(::TVDSlopeLimitedFlux, A_space, Φ_space) =
-    ((-1, 1), (-half - 1, half + 1))
+stencil_interior_width(::TVDSlopeLimitedFlux, A_space, Φ_space, 𝓊_space) =
+    ((-1, 1), (-half - 1, half + 1), (-1, +1))
 
 Base.@propagate_inbounds function stencil_interior(
     ℱ::TVDSlopeLimitedFlux,
@@ -1898,12 +1899,17 @@ Base.@propagate_inbounds function stencil_interior(
     hidx,
     A_field,
     Φ_field,
+    𝓊_field,
 )
     # cell center variables
     ϕⱼ₋₁ = getidx(space, Φ_field, loc, idx - half - 1, hidx)
     ϕⱼ = getidx(space, Φ_field, loc, idx - half, hidx)
     ϕⱼ₊₁ = getidx(space, Φ_field, loc, idx + half, hidx)
     ϕⱼ₊₂ = getidx(space, Φ_field, loc, idx + half + 1, hidx)
+    𝓊 = Geometry.contravariant3(
+        getidx(space, 𝓊_field, loc, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
     # cell face variables
     Aⱼ₊₁₂ = Geometry.contravariant3(
         getidx(space, A_field, loc, idx, hidx),
@@ -1914,7 +1920,7 @@ Base.@propagate_inbounds function stencil_interior(
         Geometry.LocalGeometry(space, idx - 1, hidx),
     )
     # See filter options below
-    rⱼ₊₁₂ = compute_slope_ratio(ϕⱼ, ϕⱼ₋₁, ϕⱼ₊₁)
+    rⱼ₊₁₂ = compute_slope_ratio(ϕⱼ, ϕⱼ₋₁, ϕⱼ₊₁, ϕⱼ₊₂, 𝓊)
 
     return Geometry.Contravariant3Vector(
         tvd_limited_flux(
@@ -1930,8 +1936,13 @@ Base.@propagate_inbounds function stencil_interior(
     )
 end
 
-@inline function compute_slope_ratio(ϕⱼ, ϕⱼ₋₁, ϕⱼ₊₁)
-    return (ϕⱼ - ϕⱼ₋₁) / (ϕⱼ₊₁ - ϕⱼ + eps(eltype(ϕⱼ)))
+@inline function compute_slope_ratio(ϕⱼ, ϕⱼ₋₁, ϕⱼ₊₁, ϕⱼ₊₂, 𝓊)
+    #if sign(𝓊) < 0
+    #    return (ϕⱼ₊₂ - ϕⱼ₊₁) / max(ϕⱼ₊₁ - ϕⱼ, eps(eltype(ϕⱼ)))
+    #else sign(𝓊) >= 0
+    #    return (ϕⱼ - ϕⱼ₋₁) / max(ϕⱼ₊₁ - ϕⱼ, eps(eltype(ϕⱼ)))
+    #end
+    return (ϕⱼ - ϕⱼ₋₁) / max(ϕⱼ₊₁ - ϕⱼ, eps(eltype(ϕⱼ)))
 end
 
 boundary_width(::TVDSlopeLimitedFlux, ::AbstractBoundaryCondition) = 2
@@ -1945,6 +1956,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
     hidx,
     A_field,
     Φ_field,
+    𝓊_field,
 )
     @assert idx <= left_face_boundary_idx(space) + 1
 
@@ -1960,6 +1972,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
     hidx,
     A_field,
     Φ_field,
+    𝓊_field,
 )
     @assert idx <= right_face_boundary_idx(space) - 1
 
