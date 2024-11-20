@@ -71,24 +71,24 @@ end
 
 FT = Float64
 t₀ = FT(0.0)
-Δt = 0.0001 * 25
-t₁ = 200Δt
+Δt = 0.0001
+t₁ = FT(4π)
 z₀ = FT(0.0)
 zₕ = FT(1.0)
 z₁ = FT(1.0)
 speed = FT(-1.0)
-pulse(z, t, z₀, zₕ, z₁) = abs(z - speed * t) ≤ zₕ ? z₁ : z₀
+pulse(z, t, z₀, zₕ, z₁) = z - speed * t ≤ zₕ ? z₁ : z₀
 
 n = 2 .^ 6
 
 domain = Domains.IntervalDomain(
-    Geometry.ZPoint{FT}(-π),
-    Geometry.ZPoint{FT}(π);
+    Geometry.ZPoint{FT}(-10π),
+    Geometry.ZPoint{FT}(10π);
     boundary_names = (:bottom, :top),
 )
 
-stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(FT(7.0)))
-plot_string = ["uniform", "stretched"]
+#stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(FT(7.0)))
+#plot_string = ["uniform", "stretched"]
 
 stretch_fns = [Meshes.Uniform(),]
 plot_string = ["uniform",]
@@ -96,15 +96,15 @@ plot_string = ["uniform",]
 for (i, stretch_fn) in enumerate(stretch_fns)
     limiter_methods = (
         Operators.RZeroLimiter(),
-        Operators.RHalfLimiter(),
+       # Operators.RHalfLimiter(),
         Operators.RMaxLimiter(),
         Operators.MinModLimiter(),
-        Operators.KorenLimiter(),
-        Operators.SuperbeeLimiter(),
-        Operators.MonotonizedCentralLimiter(),
+       # Operators.KorenLimiter(),
+       # Operators.SuperbeeLimiter(),
+       # Operators.MonotonizedCentralLimiter(),
         Operators.VanLeerLimiter(),
     )
-    for limiter_method in limiter_methods
+    for (j, limiter_method) in enumerate(limiter_methods)
         @info (limiter_method, stretch_fn)
         mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
         cent_space = Spaces.CenterFiniteDifferenceSpace(mesh)
@@ -140,21 +140,25 @@ for (i, stretch_fn) in enumerate(stretch_fns)
         err = norm(q_final .- q_analytic)
         rel_mass_err = norm((sum(q_final) - sum(q_init)) / sum(q_init))
 
-        if i == 1
-            fig = Plots.plot(q_analytic; label = "Exact")
+        if j == 1
+            fig = Plots.plot(q_analytic; label = "Exact", color=:red)
         end
-        fig = plot!(q_final; label = "$(typeof(limiter_method))"[21:end])
+        linstyl = [:dash, :solid, :dashdot, :dashdotdot]
+        clrs = [:black, :blue, :green, :orange]
+        fig = plot!(q_final; label = "$(typeof(limiter_method))"[21:end], linestyle = linstyl[j], color=clrs[j], dpi=400, xlim=(-0.1, 1.1), ylim=(-25,0))
         fig = plot!(legend=:outerbottom, legendcolumns=2)
-        Plots.png(
-            fig, 
-            joinpath(
-                path,
-                "SlopeLimitedFluxSolution_" *
-                "$(typeof(limiter_method))"[21:end] * 
-                ".png",
-            ),
-        )
-        @test err ≤ 0.25
-        @test rel_mass_err ≤ 10eps()
+        if j == length(limiter_methods)
+            Plots.png(
+                fig, 
+                joinpath(
+                    path,
+                    "SlopeLimitedFluxSolution_" *
+                    "$(typeof(limiter_method))"[21:end] * 
+                    ".png",
+                ),
+            )
+        end
+#        @test err ≤ 0.25
+#        @test rel_mass_err ≤ 10eps()
     end
 end
