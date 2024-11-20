@@ -96,12 +96,11 @@ plot_string = ["uniform",]
 for (i, stretch_fn) in enumerate(stretch_fns)
     limiter_methods = (
         Operators.RZeroLimiter(),
-       # Operators.RHalfLimiter(),
         Operators.RMaxLimiter(),
         Operators.MinModLimiter(),
-       # Operators.KorenLimiter(),
-       # Operators.SuperbeeLimiter(),
-       # Operators.MonotonizedCentralLimiter(),
+        Operators.KorenLimiter(),
+        Operators.SuperbeeLimiter(),
+        Operators.MonotonizedCentralLimiter(),
         Operators.VanLeerLimiter(),
     )
     for (j, limiter_method) in enumerate(limiter_methods)
@@ -143,8 +142,8 @@ for (i, stretch_fn) in enumerate(stretch_fns)
         if j == 1
             fig = Plots.plot(q_analytic; label = "Exact", color=:red)
         end
-        linstyl = [:dash, :solid, :dashdot, :dashdotdot]
-        clrs = [:black, :blue, :green, :orange]
+        linstyl = [:dash, :solid, :dashdot, :dashdotdot, :dash, :dash, :dash]
+        clrs = [:black, :blue, :green, :orange, :pink, :yellow, :teal]
         fig = plot!(q_final; label = "$(typeof(limiter_method))"[21:end], linestyle = linstyl[j], color=clrs[j], dpi=400, xlim=(-0.1, 1.1), ylim=(-25,0))
         fig = plot!(legend=:outerbottom, legendcolumns=2)
         if j == length(limiter_methods)
