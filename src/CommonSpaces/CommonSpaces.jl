@@ -1,89 +1,34 @@
 """
-    CommonGrids
+    CommonSpaces
 
-CommonGrids contains convenience constructors for common
-grids. Constructors in this module are sometimes dynamically
-created. You may want to use a different constructor if you're
-making the object in a performance-critical section, and if
-you know the type parameters at compile time.
-
-If no convenience constructor exists, then you may need to
-create a custom grid using our low-level compose-able API.
-
-
-# Transitioning to using CommonGrids
-
-You may have constructed a grid in the following way:
-
-```julia
-using ClimaComms
-using ClimaCore: DataLayouts, Geometry, Topologies, Quadratures, Domains, Meshes, Grids
-FT = Float64
-z_elem = 63
-z_min = FT(0)
-z_max = FT(1)
-radius = FT(6.371229e6)
-h_elem = 15
-n_quad_points = 4
-device = ClimaComms.device()
-context = ClimaComms.context(device)
-hypsography = Grids.Flat()
-global_geometry = Geometry.ShallowSphericalGlobalGeometry(radius)
-quad = Quadratures.GLL{n_quad_points}()
-h_mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain{FT}(radius), h_elem)
-h_topology = Topologies.Topology2D(context, h_mesh)
-z_boundary_names = (:bottom, :top)
-z_domain = Domains.IntervalDomain(
-    Geometry.ZPoint{FT}(z_min),
-    Geometry.ZPoint{FT}(z_max);
-    boundary_names = z_boundary_names,
-)
-z_mesh = Meshes.IntervalMesh(z_domain; nelems = z_elem)
-h_grid = Grids.SpectralElementGrid2D(h_topology, quad)
-z_topology = Topologies.IntervalTopology(context, z_mesh)
-z_grid = Grids.FiniteDifferenceGrid(z_topology)
-grid = Grids.ExtrudedFiniteDifferenceGrid(
-    h_grid,
-    z_grid,
-    hypsography,
-    global_geometry,
-)
-```
-
-You may re-write this as:
-
-```julia
-using ClimaCore.CommonGrids: ExtrudedCubedSphereGrid
-grid = ExtrudedCubedSphereGrid(;
-    z_elem = 63,
-    z_min = 0,
-    z_max = 1,
-    radius = 6.371229e6,
-    h_elem = 15,
-    n_quad_points = 4,
-)
-```
+CommonSpaces contains convenience constructors for common spaces, which builds
+off of [`CommonGrids`](@ref) and(when appropriate) requires an additional
+argument, `staggering::Staggering` to construct the desired space.
 """
-module CommonGrids
+module CommonSpaces
 
-export ExtrudedCubedSphereGrid,
-    CubedSphereGrid, ColumnGrid, Box3DGrid, SliceXZGrid, RectangleXYGrid
+export ExtrudedCubedSphereSpace,
+    CubedSphereSpace, ColumnSpace, Box3DSpace, SliceXZSpace, RectangleXYSpace
 
+export Grids
 import ClimaComms
+
 import ..DataLayouts,
     ..Meshes, ..Topologies, ..Geometry, ..Domains, ..Quadratures, ..Grids
 
-include("Helpers.jl")
-import .Helpers.DefaultSliceXMesh
-import .Helpers.DefaultZMesh
-import .Helpers.DefaultRectangleXYMesh
-
-#####
-##### Grids
-#####
+import ..Grids: Staggering
+import ..Spaces
+import ..CommonGrids
+import ..CommonGrids:
+    ExtrudedCubedSphereGrid,
+    CubedSphereGrid,
+    ColumnGrid,
+    Box3DGrid,
+    SliceXZGrid,
+    RectangleXYGrid
 
 """
-    ExtrudedCubedSphereGrid(
+	ExtrudedCubedSphereSpace(
         ::Type{<:AbstractFloat}; # defaults to Float64
         z_elem::Integer,
         z_min::Real,
@@ -102,10 +47,11 @@ import .Helpers.DefaultRectangleXYMesh
         horizontal_layout_type = DataLayouts.IJFH,
         z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
         enable_bubble::Bool = false
+        staggering::Staggering,
     )
 
-A convenience constructor, which builds an
-[`Grids.ExtrudedFiniteDifferenceGrid`](@ref), given:
+Construct an [`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) for a
+cubed sphere configuration, given:
 
  - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
  - `z_elem` the number of z-points
@@ -125,80 +71,41 @@ A convenience constructor, which builds an
  - `horizontal_layout_type` the horizontal DataLayout type (defaults to `DataLayouts.IJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
  - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
  - `enable_bubble` enables the "bubble correction" for more accurate element areas when computing the spectral element space. See [`Grids.SpectralElementGrid2D`](@ref) for more information.
+ - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
+
+Note that these arguments are all the same as
+[`CommonGrids.ExtrudedCubedSphereGrid`](@ref), except for `staggering`.
 
 # Example usage
 
 ```julia
-using ClimaCore.CommonGrids
-grid = ExtrudedCubedSphereGrid(;
+using ClimaCore.CommonSpaces
+space = ExtrudedCubedSphereSpace(;
     z_elem = 10,
     z_min = 0,
     z_max = 1,
     radius = 10,
     h_elem = 10,
     n_quad_points = 4,
+    staggering = Grids.CellCenter()
 )
 ```
 """
-ExtrudedCubedSphereGrid(; kwargs...) =
-    ExtrudedCubedSphereGrid(Float64; kwargs...)
+function ExtrudedCubedSphereSpace end
 
-function ExtrudedCubedSphereGrid(
+ExtrudedCubedSphereSpace(; kwargs...) =
+    ExtrudedCubedSphereSpace(Float64; kwargs...)
+ExtrudedCubedSphereSpace(
     ::Type{FT};
-    z_elem::Integer,
-    z_min::Real,
-    z_max::Real,
-    radius::Real,
-    h_elem::Integer,
-    n_quad_points::Integer,
-    device::ClimaComms.AbstractDevice = ClimaComms.device(),
-    context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
-    stretch::Meshes.StretchingRule = Meshes.Uniform(),
-    hypsography_fun = (h_grid, z_grid) -> Grids.Flat(),
-    global_geometry::Geometry.AbstractGlobalGeometry = Geometry.ShallowSphericalGlobalGeometry(
-        radius,
-    ),
-    quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
-    h_mesh = Meshes.EquiangularCubedSphere(
-        Domains.SphereDomain{FT}(radius),
-        h_elem,
-    ),
-    h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(
-        context,
-        h_mesh,
-    ),
-    horizontal_layout_type = DataLayouts.IJFH,
-    z_mesh::Meshes.IntervalMesh = DefaultZMesh(
-        FT;
-        z_min,
-        z_max,
-        z_elem,
-        stretch,
-    ),
-    enable_bubble::Bool = false,
-) where {FT}
-    @assert horizontal_layout_type <: DataLayouts.AbstractData
-    @assert ClimaComms.device(context) == device "The given device and context device do not match."
-
-    z_boundary_names = (:bottom, :top)
-    h_grid = Grids.SpectralElementGrid2D(
-        h_topology,
-        quad;
-        horizontal_layout_type,
-        enable_bubble,
-    )
-    z_topology = Topologies.IntervalTopology(context, z_mesh)
-    z_grid = Grids.FiniteDifferenceGrid(z_topology)
-    return Grids.ExtrudedFiniteDifferenceGrid(
-        h_grid,
-        z_grid,
-        hypsography_fun(h_grid, z_grid),
-        global_geometry,
-    )
-end
+    staggering::Staggering,
+    kwargs...,
+) where {FT} = Spaces.ExtrudedFiniteDifferenceSpace(
+    ExtrudedCubedSphereGrid(FT; kwargs...),
+    staggering,
+)
 
 """
-    CubedSphereGrid(
+	CubedSphereSpace(
         ::Type{<:AbstractFloat}; # defaults to Float64
         radius::Real,
         h_elem::Integer,
@@ -211,8 +118,8 @@ end
         horizontal_layout_type = DataLayouts.IJFH,
     )
 
-A convenience constructor, which builds a
-[`Grids.SpectralElementGrid2D`](@ref) given:
+Construct a [`Spaces.SpectralElementSpace2D`](@ref) for a
+cubed sphere configuration, given:
 
  - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
  - `radius` the radius of the cubed sphere
@@ -225,39 +132,26 @@ A convenience constructor, which builds a
  - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
  - `horizontal_layout_type` the horizontal DataLayout type (defaults to `DataLayouts.IJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
 
+Note that these arguments are all the same as [`CommonGrids.CubedSphereGrid`](@ref).
+
 # Example usage
 
 ```julia
-using ClimaCore.CommonGrids
-grid = CubedSphereGrid(; radius = 10, n_quad_points = 4, h_elem = 10)
+using ClimaCore.CommonSpaces
+space = CubedSphereSpace(;
+    radius = 10,
+    n_quad_points = 4,
+    h_elem = 10,
+)
 ```
 """
-CubedSphereGrid(; kwargs...) = CubedSphereGrid(Float64; kwargs...)
-function CubedSphereGrid(
-    ::Type{FT};
-    radius::Real,
-    h_elem::Integer,
-    n_quad_points::Integer,
-    device::ClimaComms.AbstractDevice = ClimaComms.device(),
-    context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
-    quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
-    h_mesh = Meshes.EquiangularCubedSphere(
-        Domains.SphereDomain{FT}(radius),
-        h_elem,
-    ),
-    h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(
-        context,
-        h_mesh,
-    ),
-    horizontal_layout_type = DataLayouts.IJFH,
-) where {FT}
-    @assert horizontal_layout_type <: DataLayouts.AbstractData
-    @assert ClimaComms.device(context) == device "The given device and context device do not match."
-    return Grids.SpectralElementGrid2D(h_topology, quad; horizontal_layout_type)
-end
+function CubedSphereSpace end
+CubedSphereSpace(; kwargs...) = CubedSphereSpace(Float64; kwargs...)
+CubedSphereSpace(::Type{FT}; kwargs...) where {FT} =
+    Spaces.SpectralElementSpace2D(CubedSphereGrid(FT; kwargs...))
 
 """
-    ColumnGrid(
+	ColumnSpace(
         ::Type{<:AbstractFloat}; # defaults to Float64
         z_elem::Integer,
         z_min::Real,
@@ -268,8 +162,8 @@ end
         z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
     )
 
-A convenience constructor, which builds a
-[`Grids.FiniteDifferenceGrid`](@ref) given:
+Construct a 1D [`Spaces.FiniteDifferenceSpace`](@ref) for a
+column configuration, given:
 
  - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
  - `z_elem` the number of z-points
@@ -279,38 +173,30 @@ A convenience constructor, which builds a
  - `context` the `ClimaComms.context`
  - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
  - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
+ - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
+
+Note that these arguments are all the  same as [`CommonGrids.ColumnGrid`]
+(@ref), except for `staggering`.
 
 # Example usage
 
 ```julia
-using ClimaCore.CommonGrids
-grid = ColumnGrid(; z_elem = 10, z_min = 0, z_max = 10)
+using ClimaCore.CommonSpaces
+space = ColumnSpace(;
+    z_elem = 10,
+    z_min = 0,
+    z_max = 10,
+    staggering = Grids.CellCenter()
+)
 ```
 """
-ColumnGrid(; kwargs...) = ColumnGrid(Float64; kwargs...)
-function ColumnGrid(
-    ::Type{FT};
-    z_elem::Integer,
-    z_min::Real,
-    z_max::Real,
-    device::ClimaComms.AbstractDevice = ClimaComms.device(),
-    context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
-    stretch::Meshes.StretchingRule = Meshes.Uniform(),
-    z_mesh::Meshes.IntervalMesh = DefaultZMesh(
-        FT;
-        z_min,
-        z_max,
-        z_elem,
-        stretch,
-    ),
-) where {FT}
-    @assert ClimaComms.device(context) == device "The given device and context device do not match."
-    z_topology = Topologies.IntervalTopology(context, z_mesh)
-    return Grids.FiniteDifferenceGrid(z_topology)
-end
+function ColumnSpace end
+ColumnSpace(; kwargs...) = ColumnSpace(Float64; kwargs...)
+ColumnSpace(::Type{FT}; staggering::Staggering, kwargs...) where {FT} =
+    Spaces.FiniteDifferenceSpace(ColumnGrid(FT; kwargs...), staggering)
 
 """
-    Box3DGrid(
+	Box3DSpace(
         ::Type{<:AbstractFloat}; # defaults to Float64
         z_elem::Integer,
         x_min::Real,
@@ -334,12 +220,11 @@ end
         [h_topology::Topologies.AbstractDistributedTopology], # optional
         [z_mesh::Meshes.IntervalMesh], # optional
         enable_bubble::Bool = false,
+        staggering::Staggering
     )
 
-A convenience constructor, which builds a
-[`Grids.ExtrudedFiniteDifferenceGrid`](@ref) with a
-[`Grids.FiniteDifferenceGrid`](@ref) vertical grid and a
-[`Grids.SpectralElementGrid2D`](@ref) horizontal grid, given:
+Construct a [`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) for a 3D box
+configuration, given:
 
  - `z_elem` the number of z-points
  - `x_min` the domain minimum along the x-direction.
@@ -363,12 +248,16 @@ A convenience constructor, which builds a
  - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
  - `enable_bubble` enables the "bubble correction" for more accurate element areas when computing the spectral element space. See [`Grids.SpectralElementGrid2D`](@ref) for more information.
  - `horizontal_layout_type` the horizontal DataLayout type (defaults to `DataLayouts.IJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
+ - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
+
+Note that these arguments are all  the same as [`CommonGrids.Box3DGrid`]
+(@ref), except for `staggering`.
 
 # Example usage
 
 ```julia
-using ClimaCore.CommonGrids
-grid = Box3DGrid(;
+using ClimaCore.CommonSpaces
+space = Box3DSpace(;
     z_elem = 10,
     x_min = 0,
     x_max = 1,
@@ -381,74 +270,17 @@ grid = Box3DGrid(;
     n_quad_points = 4,
     x_elem = 3,
     y_elem = 4,
+    staggering = Grids.CellCenter()
 )
 ```
 """
-Box3DGrid(; kwargs...) = Box3DGrid(Float64; kwargs...)
-function Box3DGrid(
-    ::Type{FT};
-    z_elem::Integer,
-    x_min::Real,
-    x_max::Real,
-    y_min::Real,
-    y_max::Real,
-    z_min::Real,
-    z_max::Real,
-    periodic_x::Bool,
-    periodic_y::Bool,
-    n_quad_points::Integer,
-    x_elem::Integer,
-    y_elem::Integer,
-    device::ClimaComms.AbstractDevice = ClimaComms.device(),
-    context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
-    stretch::Meshes.StretchingRule = Meshes.Uniform(),
-    hypsography_fun = (h_grid, z_grid) -> Grids.Flat(),
-    global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
-    quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
-    h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(
-        context,
-        DefaultRectangleXYMesh(
-            FT;
-            x_min,
-            x_max,
-            y_min,
-            y_max,
-            x_elem,
-            y_elem,
-            periodic_x,
-            periodic_y,
-        ),
-    ),
-    z_mesh::Meshes.IntervalMesh = DefaultZMesh(
-        FT;
-        z_min,
-        z_max,
-        z_elem,
-        stretch,
-    ),
-    enable_bubble::Bool = false,
-    horizontal_layout_type = DataLayouts.IJFH,
-) where {FT}
-    @assert horizontal_layout_type <: DataLayouts.AbstractData
-    @assert ClimaComms.device(context) == device "The given device and context device do not match."
-    h_grid = Grids.SpectralElementGrid2D(
-        h_topology,
-        quad;
-        horizontal_layout_type,
-        enable_bubble,
-    )
-    z_topology = Topologies.IntervalTopology(context, z_mesh)
-    z_grid = Grids.FiniteDifferenceGrid(z_topology)
-    return Grids.ExtrudedFiniteDifferenceGrid(
-        h_grid,
-        z_grid,
-        hypsography_fun(h_grid, z_grid),
-        global_geometry,
-    )
-end
+function Box3DSpace end
+Box3DSpace(; kwargs...) = Box3DSpace(Float64; kwargs...)
+Box3DSpace(::Type{FT}; staggering::Staggering, kwargs...) where {FT} =
+    Spaces.ExtrudedFiniteDifferenceSpace(Box3DGrid(FT; kwargs...), staggering)
 
 """
-    SliceXZGrid(
+	SliceXZSpace(
         ::Type{<:AbstractFloat}; # defaults to Float64
         z_elem::Integer,
         x_min::Real,
@@ -464,13 +296,11 @@ end
         hypsography_fun = (h_grid, z_grid) -> Grids.Flat(),
         global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
         quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
+        staggering::Staggering
     )
 
-A convenience constructor, which builds a
-[`Grids.ExtrudedFiniteDifferenceGrid`](@ref) with a
-[`Grids.FiniteDifferenceGrid`](@ref) vertical grid and a
-[`Grids.SpectralElementGrid1D`](@ref) horizontal grid, given:
-
+Construct a [`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) for a 2D slice
+configuration, given:
 
  - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
  - `z_elem` the number of z-points
@@ -487,12 +317,17 @@ A convenience constructor, which builds a
  - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
  - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
  - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
+ - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
+
+Note that these arguments are all the same
+as [`CommonGrids.SliceXZGrid`](@ref),
+except for `staggering`.
 
 # Example usage
 
 ```julia
-using ClimaCore.CommonGrids
-grid = SliceXZGrid(;
+using ClimaCore.CommonSpaces
+space = SliceXZSpace(;
     z_elem = 10,
     x_min = 0,
     x_max = 1,
@@ -501,60 +336,17 @@ grid = SliceXZGrid(;
     periodic_x = false,
     n_quad_points = 4,
     x_elem = 4,
+    staggering = Grids.CellCenter()
 )
 ```
 """
-SliceXZGrid(; kwargs...) = SliceXZGrid(Float64; kwargs...)
-function SliceXZGrid(
-    ::Type{FT};
-    z_elem::Integer,
-    x_min::Real,
-    x_max::Real,
-    z_min::Real,
-    z_max::Real,
-    periodic_x::Bool,
-    n_quad_points::Integer,
-    x_elem::Integer,
-    device::ClimaComms.AbstractDevice = ClimaComms.device(),
-    context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
-    stretch::Meshes.StretchingRule = Meshes.Uniform(),
-    hypsography_fun = (h_grid, z_grid) -> Grids.Flat(),
-    global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
-    quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
-    horizontal_layout_type = DataLayouts.IFH,
-    h_mesh::Meshes.IntervalMesh = DefaultSliceXMesh(
-        FT;
-        x_min,
-        x_max,
-        periodic_x,
-        x_elem,
-    ),
-    z_mesh::Meshes.IntervalMesh = DefaultZMesh(
-        FT;
-        z_min,
-        z_max,
-        z_elem,
-        stretch,
-    ),
-) where {FT}
-    @assert horizontal_layout_type <: DataLayouts.AbstractData
-    @assert ClimaComms.device(context) == device "The given device and context device do not match."
-
-    h_topology = Topologies.IntervalTopology(context, h_mesh)
-    h_grid =
-        Grids.SpectralElementGrid1D(h_topology, quad; horizontal_layout_type)
-    z_topology = Topologies.IntervalTopology(context, z_mesh)
-    z_grid = Grids.FiniteDifferenceGrid(z_topology)
-    return Grids.ExtrudedFiniteDifferenceGrid(
-        h_grid,
-        z_grid,
-        hypsography_fun(h_grid, z_grid),
-        global_geometry,
-    )
-end
+function SliceXZSpace end
+SliceXZSpace(; kwargs...) = SliceXZSpace(Float64; kwargs...)
+SliceXZSpace(::Type{FT}; staggering::Staggering, kwargs...) where {FT} =
+    Spaces.ExtrudedFiniteDifferenceSpace(SliceXZGrid(FT; kwargs...), staggering)
 
 """
-    RectangleXYGrid(
+	RectangleXYSpace(
         ::Type{<:AbstractFloat}; # defaults to Float64
         x_min::Real,
         x_max::Real,
@@ -572,9 +364,8 @@ end
         quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
     )
 
-A convenience constructor, which builds a
-[`Grids.SpectralElementGrid2D`](@ref) with a horizontal
-`RectilinearMesh` mesh, given:
+Construct a [`Spaces.SpectralElementSpace2D`](@ref) space for a 2D rectangular
+configuration, given:
 
  - `x_min` the domain minimum along the x-direction.
  - `x_max` the domain maximum along the x-direction.
@@ -591,11 +382,14 @@ A convenience constructor, which builds a
  - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
  - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
 
+Note that these arguments are all the same as [`CommonGrids.RectangleXYGrid`]
+(@ref), except for `staggering`.
+
 # Example usage
 
 ```julia
-using ClimaCore.CommonGrids
-grid = RectangleXYGrid(;
+using ClimaCore.CommonSpaces
+space = RectangleXYSpace(;
     x_min = 0,
     x_max = 1,
     y_min = 0,
@@ -608,48 +402,9 @@ grid = RectangleXYGrid(;
 )
 ```
 """
-RectangleXYGrid(; kwargs...) = RectangleXYGrid(Float64; kwargs...)
-function RectangleXYGrid(
-    ::Type{FT};
-    x_min::Real,
-    x_max::Real,
-    y_min::Real,
-    y_max::Real,
-    periodic_x::Bool,
-    periodic_y::Bool,
-    n_quad_points::Integer,
-    x_elem::Integer, # number of horizontal elements
-    y_elem::Integer, # number of horizontal elements
-    device::ClimaComms.AbstractDevice = ClimaComms.device(),
-    context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
-    hypsography::Grids.HypsographyAdaption = Grids.Flat(),
-    global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
-    quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
-    horizontal_layout_type = DataLayouts.IJFH,
-    h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(
-        context,
-        DefaultRectangleXYMesh(
-            FT;
-            x_min,
-            x_max,
-            y_min,
-            y_max,
-            x_elem,
-            y_elem,
-            periodic_x,
-            periodic_y,
-        ),
-    ),
-    enable_bubble::Bool = false,
-) where {FT}
-    @assert horizontal_layout_type <: DataLayouts.AbstractData
-    @assert ClimaComms.device(context) == device "The given device and context device do not match."
-    return Grids.SpectralElementGrid2D(
-        h_topology,
-        quad;
-        horizontal_layout_type,
-        enable_bubble,
-    )
-end
+function RectangleXYSpace end
+RectangleXYSpace(; kwargs...) = RectangleXYSpace(Float64; kwargs...)
+RectangleXYSpace(::Type{FT}; kwargs...) where {FT} =
+    Spaces.SpectralElementSpace2D(RectangleXYGrid(FT; kwargs...))
 
 end # module
