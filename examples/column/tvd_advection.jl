@@ -77,7 +77,7 @@ z₀ = FT(0.0)
 zₕ = FT(1.0)
 z₁ = FT(1.0)
 speed = FT(1.0)
-pulse(z, t, z₀, zₕ, z₁) = abs(z - speed * t) ≤ zₕ ? z₁ : z₀
+pulse(z, t, z₀, zₕ, z₁) = z - speed * t ≤ zₕ ? z₁ : z₀
 
 n = 2 .^ 6
 
@@ -144,8 +144,8 @@ for (i, stretch_fn) in enumerate(stretch_fns)
         end
         linstyl = [:dash, :solid, :dashdot, :dashdotdot, :dash, :dash, :solid]
         clrs = [:orange, :blue, :green, :maroon, :pink, :yellow, :black]
-        fig = plot!(q_final; label = "$(typeof(limiter_method))"[21:end], linestyle = linstyl[j], color=clrs[j], dpi=400, xlim=(-0.1, 1.1), ylim=(-10,25))
-        fig = plot!(legend=:outerbottom, legendcolumns=2)
+        fig = plot!(q_final; label = "$(typeof(limiter_method))"[21:end], linestyle = linstyl[j], color=clrs[j], dpi=400, xlim=(-0.1, 1.1), ylim=(-0,25))
+        fig = plot!(legend=:outerbottom, legendcolumns=3)
         if j == length(limiter_methods)
             Plots.png(
                 fig, 
