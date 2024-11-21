@@ -59,11 +59,22 @@ function tendency!(yₜ, y, parameters, t)
         top = Operators.FirstOrderOneSided(),
         method = limiter_method,
     )
+    LWMethod = Operators.LaxWendroffC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+        method = limiter_method, 
+    )
     If = Operators.InterpolateC2F()
+    #@. yₜ.q =
+    #    -divf2c(
+    #        upwind1(w, y.q) +
+    #        LimitedFlux(upwind3(w, y.q) - upwind1(w, y.q), y.q / Δt, w),
+    #    )
     @. yₜ.q =
         -divf2c(
-            upwind1(w, y.q) +
-            LimitedFlux(upwind3(w, y.q) - upwind1(w, y.q), y.q / Δt, w),
+            LWMethod(w, 
+                     y.q,
+                     w*Δt),
         )
 end
 
@@ -144,7 +155,8 @@ for (i, stretch_fn) in enumerate(stretch_fns)
         end
         linstyl = [:dash, :solid, :dashdot, :dashdotdot, :dash, :dash, :solid]
         clrs = [:orange, :blue, :green, :maroon, :pink, :yellow, :black]
-        fig = plot!(q_final; label = "$(typeof(limiter_method))"[21:end], linestyle = linstyl[j], color=clrs[j], dpi=400, xlim=(-0.1, 1.1), ylim=(-0,25))
+        fig = plot!(q_final; label = "$(typeof(limiter_method))"[21:end], linestyle = linstyl[j], color=clrs[j], dpi=400, xlim=(-1.5, 1.5), ylim=(-30,30))
+        #fig = plot!(q_final; label = "$(typeof(limiter_method))"[21:end], linestyle = linstyl[j], color=clrs[j], dpi=400, xlim = (-5,5), ylim=(-0, 25))
         fig = plot!(legend=:outerbottom, legendcolumns=3)
         if j == length(limiter_methods)
             Plots.png(
@@ -157,7 +169,7 @@ for (i, stretch_fn) in enumerate(stretch_fns)
                 ),
             )
         end
-#        @test err ≤ 0.25
-#        @test rel_mass_err ≤ 10eps()
+        @test err ≤ 0.25
+        @test rel_mass_err ≤ 10eps()
     end
 end

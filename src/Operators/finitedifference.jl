@@ -1174,6 +1174,182 @@ end
 abstract type AdvectionOperator <: FiniteDifferenceOperator end
 return_eltype(::AdvectionOperator, velocity, arg) = eltype(arg)
 
+####
+"""
+    U = LaxWendroffC2F(;boundaries)
+    U.(v, x)
+
+Compute the product of the face-valued vector field `v` and a center-valued
+field `x` at cell faces by upwinding `x` according to the direction of `v`.
+
+More precisely, it is computed based on the sign of the 3rd contravariant
+component, and it returns a `Contravariant3Vector`:
+```math
+U(\\boldsymbol{v},x)[i] = \\begin{cases}
+  v^3[i] x[i-\\tfrac{1}{2}]\\boldsymbol{e}_3 \\textrm{, if } v^3[i] > 0 \\\\
+  v^3[i] x[i+\\tfrac{1}{2}]\\boldsymbol{e}_3 \\textrm{, if } v^3[i] < 0
+  \\end{cases}
+```
+where ``\\boldsymbol{e}_3`` is the 3rd covariant basis vector.
+
+Supported boundary conditions are:
+- [`SetValue(x₀)`](@ref): set the value of `x` to be `x₀` in a hypothetical
+  ghost cell on the other side of the boundary. On the left boundary the stencil
+  is
+  ```math
+  U(\\boldsymbol{v},x)[\\tfrac{1}{2}] = \\begin{cases}
+    v^3[\\tfrac{1}{2}] x_0  \\boldsymbol{e}_3 \\textrm{, if }  v^3[\\tfrac{1}{2}] > 0 \\\\
+    v^3[\\tfrac{1}{2}] x[1] \\boldsymbol{e}_3 \\textrm{, if }  v^3[\\tfrac{1}{2}] < 0
+    \\end{cases}
+  ```
+- [`Extrapolate()`](@ref): set the value of `x` to be the same as the closest
+  interior point. On the left boundary, the stencil is
+  ```math
+  U(\\boldsymbol{v},x)[\\tfrac{1}{2}] = U(\\boldsymbol{v},x)[1 + \\tfrac{1}{2}]
+  ```
+"""
+struct LaxWendroffC2F{BCS} <: AdvectionOperator
+    bcs::BCS
+end
+LaxWendroffC2F(; method, kwargs...) =
+    LaxWendroffC2F((; method, kwargs...))
+
+return_eltype(::LaxWendroffC2F, V, A, 𝜈) =
+    Geometry.Contravariant3Vector{eltype(eltype(V))}
+
+return_space(
+    ::LaxWendroffC2F,
+    velocity_space::AllFaceFiniteDifferenceSpace,
+    arg_space::AllCenterFiniteDifferenceSpace,
+    𝜈_space::AllFaceFiniteDifferenceSpace,
+) = velocity_space
+
+function slope_limited_product(v, a⁻, a⁺, 𝜈, a⁻⁻, a⁺⁺, method)
+
+    𝜃 = compute_slope_ratio(a⁻, a⁻⁻, a⁺, a⁺⁺, 𝜈)
+    𝜙 = compute_limiter_coeff(𝜃, method)
+    RecursiveApply.rdiv(
+        ((v ⊞ RecursiveApply.rmap(abs, v)) ⊠ a⁻) ⊞
+        ((v ⊟ RecursiveApply.rmap(abs, v)) ⊠ a⁺),
+        2,
+    ) ⊞ 
+    RecursiveApply.rdiv(
+        (𝜙 ⊠ (sign(𝜈) - 𝜈) ⊠ v ⊠ (a⁺ - a⁻)),
+    2,
+    )
+end
+
+stencil_interior_width(::LaxWendroffC2F, velocity, arg, 𝜈) =
+    ((0, 0), (-half-1, half+1), (0,0))
+
+Base.@propagate_inbounds function stencil_interior(
+    ℱ::LaxWendroffC2F,
+    loc,
+    space,
+    idx,
+    hidx,
+    velocity,
+    arg,
+    𝜈
+)
+    a⁻ = stencil_interior(LeftBiasedC2F(), loc, space, idx, hidx, arg)
+    a⁺ = stencil_interior(RightBiasedC2F(), loc, space, idx, hidx, arg)
+    a⁻⁻ = stencil_interior(LeftBiasedC2F(), loc, space, idx - 1, hidx, arg)
+    a⁺⁺ = stencil_interior(RightBiasedC2F(), loc, space, idx + 1, hidx, arg)
+    vᶠ = Geometry.contravariant3(
+        getidx(space, velocity, loc, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+    𝜈 = Geometry.contravariant3(
+        getidx(space, 𝜈, loc, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+    return Geometry.Contravariant3Vector(slope_limited_product(vᶠ, a⁻, a⁺, 𝜈, a⁻⁻, a⁺⁺, ℱ.bcs.method))
+end
+
+boundary_width(::LaxWendroffC2F, ::AbstractBoundaryCondition) = 1
+
+Base.@propagate_inbounds function stencil_left_boundary(
+    ℱ::LaxWendroffC2F,
+    bc::SetValue,
+    loc,
+    space,
+    idx,
+    hidx,
+    velocity,
+    arg,
+    𝜈
+)
+    @assert idx == left_face_boundary_idx(space)
+    aᴸᴮ = getidx(space, bc.val, loc, nothing, hidx)
+    a⁺ = stencil_interior(RightBiasedC2F(), loc, space, idx, hidx, arg)
+    vᶠ = Geometry.contravariant3(
+        getidx(space, velocity, loc, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+    𝜈 = Geometry.contravariant3(
+        getidx(space, 𝜈, loc, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+    return Geometry.Contravariant3Vector(slope_limited_product(vᶠ, aᴸᴮ, a⁺, 𝜈, ℱ.bcs.method))
+end
+
+Base.@propagate_inbounds function stencil_right_boundary(
+    ℱ::LaxWendroffC2F,
+    bc::SetValue,
+    loc,
+    space,
+    idx,
+    hidx,
+    velocity,
+    arg,
+    𝜈
+)
+    @assert idx == right_face_boundary_idx(space)
+    a⁻ = stencil_interior(LeftBiasedC2F(), loc, space, idx, hidx, arg)
+    aᴿᴮ = getidx(space, bc.val, loc, nothing, hidx)
+    vᶠ = Geometry.contravariant3(
+        getidx(space, velocity, loc, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+    𝜈 = Geometry.contravariant3(
+        getidx(space, 𝜈, loc, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+    return Geometry.Contravariant3Vector(slope_limited_product(vᶠ, a⁻, aᴿᴮ, 𝜈, ℱ.bcs.method))
+end
+
+Base.@propagate_inbounds function stencil_left_boundary(
+    op::LaxWendroffC2F,
+    ::Extrapolate,
+    loc,
+    space,
+    idx,
+    hidx,
+    velocity,
+    arg,
+    𝜈
+)
+    @assert idx == left_face_boundary_idx(space)
+    stencil_interior(op, loc, space, idx + 1, hidx, velocity, arg, 𝜈)
+end
+
+Base.@propagate_inbounds function stencil_right_boundary(
+    op::LaxWendroffC2F,
+    ::Extrapolate,
+    loc,
+    space,
+    idx,
+    hidx,
+    velocity,
+    arg,
+    ν
+)
+    @assert idx == right_face_boundary_idx(space)
+    stencil_interior(op, loc, space, idx - 1, hidx, velocity, arg, 𝜈)
+end
+####
+
 """
     U = UpwindBiasedProductC2F(;boundaries)
     U.(v, x)
