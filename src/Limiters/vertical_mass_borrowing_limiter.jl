@@ -80,6 +80,9 @@ function columnwise_massborrow_cpu(q::Fields.Field, ρ::Fields.Field, cache) # c
 
     Δz = Fields.Δz_field(q)
     Δz_vals = Fields.field_values(Δz)
+    (; J) = Fields.local_geometry_field(ρ)
+    # ΔV_vals = Fields.field_values(J)
+    ΔV_vals = Δz_vals
     ρ_vals = Fields.field_values(ρ)
     #  loop over tracers
     nlevels = Spaces.nlevels(axes(q))
@@ -91,16 +94,16 @@ function columnwise_massborrow_cpu(q::Fields.Field, ρ::Fields.Field, cache) # c
         for v in 1:nlevels
             CI = CartesianIndex(1, 1, f, v, 1)
             # new mass in the current layer
-            ρΔz_v =
-                DL.getindex_field(Δz_vals, CI) * DL.getindex_field(ρ_vals, CI)
-            nmass = DL.getindex_field(q_vals, CI) + bmass[] / ρΔz_v
+            ρΔV_lev =
+                DL.getindex_field(ΔV_vals, CI) * DL.getindex_field(ρ_vals, CI)
+            nmass = DL.getindex_field(q_vals, CI) + bmass[] / ρΔV_lev
             if nmass > q_min[f]
                 #  if new mass in the current layer is positive, don't borrow mass any more
                 DL.setindex_field!(q_vals, nmass, CI)
                 bmass[] = 0
             else
                 #  set mass to q_min in the current layer, and save bmass
-                bmass[] = (nmass - q_min[f]) * ρΔz_v
+                bmass[] = (nmass - q_min[f]) * ρΔV_lev
                 DL.setindex_field!(q_vals, q_min[f], CI)
                 ic[] = ic[] + 1
             end
@@ -111,18 +114,18 @@ function columnwise_massborrow_cpu(q::Fields.Field, ρ::Fields.Field, cache) # c
             CI = CartesianIndex(1, 1, f, v, 1)
             # if the surface layer still needs to borrow mass
             if bmass[] < 0
-                ρΔz_v =
-                    DL.getindex_field(Δz_vals, CI) *
+                ρΔV_lev =
+                    DL.getindex_field(ΔV_vals, CI) *
                     DL.getindex_field(ρ_vals, CI)
                 # new mass in the current layer
-                nmass = DL.getindex_field(q_vals, CI) + bmass[] / ρΔz_v
+                nmass = DL.getindex_field(q_vals, CI) + bmass[] / ρΔV_lev
                 if nmass > q_min[f]
                     # if new mass in the current layer is positive, don't borrow mass any more
                     DL.setindex_field!(q_vals, nmass, CI)
                     bmass[] = 0
                 else
                     # if new mass in the current layer is negative, continue to borrow mass
-                    bmass[] = (nmass - q_min[f]) * ρΔz_v
+                    bmass[] = (nmass - q_min[f]) * ρΔV_lev
                     DL.setindex_field!(q_vals, q_min[f], CI)
                 end
             end
