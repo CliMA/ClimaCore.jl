@@ -7,6 +7,8 @@ using LinearAlgebra
 import ClimaComms
 ClimaComms.@import_required_backends
 using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+using ClimaCore.CommonGrids
+using ClimaCore.Grids
 using ClimaTimeSteppers
 
 import ClimaCore:
@@ -28,7 +30,8 @@ import ClimaCore:
 
 # visualization artifacts
 ENV["GKSwstype"] = "nul"
-using ClimaCorePlots, Plots
+import ClimaCorePlots
+import Plots
 Plots.GRBackend()
 dir = "vert_mass_borrow_advection"
 path = joinpath(@__DIR__, "output", dir)
@@ -36,7 +39,17 @@ mkpath(path)
 
 function lim!(y, parameters, t, y_ref)
     (; w, Δt, limiter) = parameters
-    Limiters.apply_limiter!(y.q, limiter)
+    Limiters.apply_limiter!(y.q, y.ρ, limiter)
+    return nothing
+end
+
+function perturb_field!(f::Fields.Field; perturb_radius)
+    device = ClimaComms.device(f)
+    ArrayType = ClimaComms.array_type(device)
+    rand_data = ArrayType(rand(size(parent(f))...)) # [0-1]
+    rand_data = rand_data .- sum(rand_data) / length(rand_data) # make centered about 0 ([-0.5:0.5])
+    rand_data = (rand_data ./ maximum(rand_data)) .* perturb_radius # rand_data now in [-perturb_radius:perturb_radius]
+    parent(f) .= parent(f) .+ rand_data # f in [f ± perturb_radius]
     return nothing
 end
 
@@ -57,10 +70,7 @@ function tendency!(yₜ, y, parameters, t)
         top = Operators.ThirdOrderOneSided(),
     )
     If = Operators.InterpolateC2F()
-    @. yₜ.q =
-    # -divf2c(w * If(y.q))
-        -divf2c(upwind1(w, y.q) * If(y.q))
-    # -divf2c(upwind3(w, y.q) * If(y.q))
+    @. yₜ.q = -divf2c(upwind1(w, y.q) * If(y.q))
     return nothing
 end
 
@@ -76,30 +86,51 @@ z₁ = FT(1.0)
 speed = FT(-1.0)
 pulse(z, t, z₀, zₕ, z₁) = abs(z - speed * t) ≤ zₕ ? z₁ : z₀
 
-n = 2 .^ 6
-
-domain = Domains.IntervalDomain(
-    Geometry.ZPoint{FT}(-π),
-    Geometry.ZPoint{FT}(π);
-    boundary_names = (:bottom, :top),
-)
-
-# stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(FT(7.0)))
-stretch_fns = (Meshes.Uniform(),)
+stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(FT(7.0)))
 plot_string = ["uniform", "stretched"]
 
 @testset "VerticalMassBorrowingLimiter on advection" begin
-    for (i, stretch_fn) in enumerate(stretch_fns)
-        mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
-        cent_space = Spaces.CenterFiniteDifferenceSpace(mesh)
-        face_space = Spaces.FaceFiniteDifferenceSpace(cent_space)
-        z = Fields.coordinate_field(cent_space).z
-        O = ones(FT, face_space)
+    for (i, stretch) in enumerate(stretch_fns)
+        i = 1
+        stretch = Meshes.Uniform()
+
+        z_elem = 2^6
+        z_min = -π
+        z_max = π
+        device = ClimaComms.device()
+
+        # use_column = true
+        use_column = false
+        if use_column
+            grid = ColumnGrid(; z_elem, z_min, z_max, stretch, device)
+            cspace = Spaces.FiniteDifferenceSpace(grid, Grids.CellCenter())
+            fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
+        else
+            grid = ExtrudedCubedSphereGrid(;
+                z_elem,
+                z_min,
+                z_max,
+                stretch,
+                radius = 10,
+                h_elem = 10,
+                n_quad_points = 4,
+                device,
+            )
+            cspace =
+                Spaces.ExtrudedFiniteDifferenceSpace(grid, Grids.CellCenter())
+            fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
+        end
+
+        z = Fields.coordinate_field(cspace).z
+        O = ones(FT, fspace)
 
         # Initial condition
         q_init = pulse.(z, 0.0, z₀, zₕ, z₁)
         q = q_init
-        y = Fields.FieldVector(; q)
+        coords = Fields.coordinate_field(q)
+        ρ = map(coord -> 1.0, coords)
+        perturb_field!(ρ; perturb_radius = 0.1)
+        y = Fields.FieldVector(; q, ρ)
         limiter = Limiters.VerticalMassBorrowingLimiter(q, (0.0,))
 
         # Unitary, constant advective velocity
@@ -127,17 +158,48 @@ plot_string = ["uniform", "stretched"]
         rel_mass_err = norm((sum(q_final) - sum(q_init)) / sum(q_init))
 
 
-        p = plot()
-        Plots.plot!(q_init, label = "init")
-        Plots.plot!(q_final, label = "computed")
-        Plots.plot!(q_analytic, label = "analytic")
-        Plots.plot!(; legend = :topright)
-        Plots.plot!(; xlabel = "q", title = "VerticalMassBorrowingLimiter")
-        f = joinpath(
-            path,
-            "VerticalMassBorrowingLimiter_comparison_$(plot_string[i]).png",
-        )
-        Plots.png(p, f)
+        if use_column
+            p = Plots.plot()
+            Plots.plot!(q_init, label = "init")
+            Plots.plot!(q_final, label = "computed")
+            Plots.plot!(q_analytic, label = "analytic")
+            Plots.plot!(; legend = :topright)
+            Plots.plot!(; xlabel = "q", title = "VerticalMassBorrowingLimiter")
+            f = joinpath(
+                path,
+                "VerticalMassBorrowingLimiter_comparison_$(plot_string[i]).png",
+            )
+            Plots.png(p, f)
+        else
+            colidx = Fields.ColumnIndex((1, 1), 1)
+            p = Plots.plot()
+            Plots.plot!(
+                vec(parent(z[colidx])),
+                vec(parent(q_init[colidx])),
+                label = "init",
+            )
+            Plots.plot!(
+                vec(parent(z[colidx])),
+                vec(parent(q_final[colidx])),
+                label = "computed",
+            )
+            Plots.plot!(
+                vec(parent(z[colidx])),
+                vec(parent(q_analytic[colidx])),
+                label = "analytic",
+            )
+            Plots.plot!(; legend = :topright)
+            Plots.plot!(;
+                xlabel = "q",
+                ylabel = "z",
+                title = "VerticalMassBorrowingLimiter",
+            )
+            f = joinpath(
+                path,
+                "VerticalMassBorrowingLimiter_comparison_$(plot_string[i]).png",
+            )
+            Plots.png(p, f)
+        end
         @test err ≤ 0.25
         @test rel_mass_err ≤ 10eps()
         @test minimum(q_final) ≥ 0
