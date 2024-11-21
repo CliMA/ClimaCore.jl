@@ -76,8 +76,8 @@ t₁ = FT(4π)
 z₀ = FT(0.0)
 zₕ = FT(1.0)
 z₁ = FT(1.0)
-speed = FT(-1.0)
-pulse(z, t, z₀, zₕ, z₁) = z - speed * t ≤ zₕ ? z₁ : z₀
+speed = FT(1.0)
+pulse(z, t, z₀, zₕ, z₁) = abs(z - speed * t) ≤ zₕ ? z₁ : z₀
 
 n = 2 .^ 6
 
@@ -142,9 +142,9 @@ for (i, stretch_fn) in enumerate(stretch_fns)
         if j == 1
             fig = Plots.plot(q_analytic; label = "Exact", color=:red)
         end
-        linstyl = [:dash, :solid, :dashdot, :dashdotdot, :dash, :dash, :dash]
-        clrs = [:black, :blue, :green, :orange, :pink, :yellow, :teal]
-        fig = plot!(q_final; label = "$(typeof(limiter_method))"[21:end], linestyle = linstyl[j], color=clrs[j], dpi=400, xlim=(-0.1, 1.1), ylim=(-25,0))
+        linstyl = [:dash, :solid, :dashdot, :dashdotdot, :dash, :dash, :solid]
+        clrs = [:orange, :blue, :green, :maroon, :pink, :yellow, :black]
+        fig = plot!(q_final; label = "$(typeof(limiter_method))"[21:end], linestyle = linstyl[j], color=clrs[j], dpi=400, xlim=(-0.1, 1.1), ylim=(-10,25))
         fig = plot!(legend=:outerbottom, legendcolumns=2)
         if j == length(limiter_methods)
             Plots.png(
