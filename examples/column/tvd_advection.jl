@@ -43,7 +43,7 @@ function tendency!(yₜ, y, parameters, t)
     FT = Spaces.undertype(axes(y.q))
     bcvel = pulse(-π, t, z₀, zₕ, z₁)
     divf2c = Operators.DivergenceF2C(
-        bottom = Operators.SetValue(Geometry.WVector(FT(bcvel))),
+        bottom = Operators.SetValue(Geometry.WVector(FT(0))),
         top = Operators.SetValue(Geometry.WVector(FT(0))),
     )
     upwind1 = Operators.UpwindBiasedProductC2F(
@@ -59,23 +59,16 @@ function tendency!(yₜ, y, parameters, t)
         top = Operators.FirstOrderOneSided(),
         method = limiter_method,
     )
-    LWMethod = Operators.LaxWendroffC2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
+    SLMethod = Operators.SlopeLimitedFluxC2F(
+        bottom = Operators.FirstOrderOneSided(),
+        top = Operators.FirstOrderOneSided(),
         method = limiter_method, 
     )
     If = Operators.InterpolateC2F()
-    #@. yₜ.q =
-    #    -divf2c(
-    #        upwind1(w, y.q) +
-    #        LimitedFlux(upwind3(w, y.q) - upwind1(w, y.q), y.q / Δt, w),
-    #    )
     @. yₜ.q =
         -divf2c(
             LWMethod(w, 
-                     y.q,
-                     w*Δt),
-        )
+                     y.q))
 end
 
 # Define a pulse wave or square wave
@@ -83,12 +76,12 @@ end
 FT = Float64
 t₀ = FT(0.0)
 Δt = 0.0001
-t₁ = FT(4π)
+t₁ = FT(1)
 z₀ = FT(0.0)
-zₕ = FT(1.0)
+zₕ = FT(2π)
 z₁ = FT(1.0)
-speed = FT(1.0)
-pulse(z, t, z₀, zₕ, z₁) = z - speed * t ≤ zₕ ? z₁ : z₀
+speed = FT(-1.0)
+pulse(z, t, z₀, zₕ, z₁) = abs(z - speed * t) ≤ zₕ ? z₁ : z₀
 
 n = 2 .^ 6
 
@@ -97,9 +90,6 @@ domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(10π);
     boundary_names = (:bottom, :top),
 )
-
-#stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(FT(7.0)))
-#plot_string = ["uniform", "stretched"]
 
 stretch_fns = [Meshes.Uniform(),]
 plot_string = ["uniform",]
@@ -112,7 +102,6 @@ for (i, stretch_fn) in enumerate(stretch_fns)
         Operators.KorenLimiter(),
         Operators.SuperbeeLimiter(),
         Operators.MonotonizedCentralLimiter(),
-        Operators.VanLeerLimiter(),
     )
     for (j, limiter_method) in enumerate(limiter_methods)
         @info (limiter_method, stretch_fn)
