@@ -1341,9 +1341,8 @@ return_space(
 function slope_limited_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺, method)
     # Compute slope ratio
     𝜃 = compute_slope_ratio(a⁻, a⁻⁻, a⁺, a⁺⁺, v)
-    # Compute 
+    # Compute limiter coefficient
     𝜙 = compute_limiter_coeff(𝜃, method)
-    @info (𝜃, 𝜙)
     @assert 0 <= 𝜙 <= 2
     if v >= 0 
         return v ⊠ (a⁻ ⊞ RecursiveApply.rdiv((a⁺ - a⁻) ⊠ 𝜙 ,2))
@@ -2076,12 +2075,8 @@ end
 
 @inline function compute_slope_ratio(ϕⱼ, ϕⱼ₋₁, ϕⱼ₊₁, ϕⱼ₊₂, 𝓊)
     if 𝓊 >= 0
-        @info (ϕⱼ₊₁ - ϕⱼ)
-        @info (ϕⱼ - ϕⱼ₋₁) 
         return (ϕⱼ - ϕⱼ₋₁) / (ϕⱼ₊₁ - ϕⱼ + eps(eltype(ϕⱼ)))
     else
-        @info (ϕⱼ₊₁ - ϕⱼ)
-        @info (ϕⱼ - ϕⱼ₋₁) 
         return (ϕⱼ₊₂ - ϕⱼ₊₁) / (ϕⱼ₊₁ - ϕⱼ +  eps(eltype(ϕⱼ)))
     end
 end

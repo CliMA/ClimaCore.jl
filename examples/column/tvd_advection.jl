@@ -67,7 +67,7 @@ function tendency!(yₜ, y, parameters, t)
     If = Operators.InterpolateC2F()
     @. yₜ.q =
         -divf2c(
-            LWMethod(w, 
+            SLMethod(w, 
                      y.q))
 end
 
