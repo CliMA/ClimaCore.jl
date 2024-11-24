@@ -6,7 +6,7 @@ Plots a heatmap of a field.
 
 ## Attributes
 
-Inherited from [`Makie.mesh`](https://docs.makie.org/stable/examples/plotting_functions/mesh/index.html#mesh). 
+Inherited from [`Makie.mesh`](https://docs.makie.org/stable/examples/plotting_functions/mesh/index.html#mesh).
 
 - `colormap::Union{Symbol, Vector{<:Colorant}} = :viridis`` sets the colormap that is sampled for numeric colors.
 
@@ -20,7 +20,7 @@ Inherited from [`Makie.mesh`](https://docs.makie.org/stable/examples/plotting_fu
 
 """
 @recipe(FieldHeatmap, field) do scene
-    attrs = Makie.Attributes(; coords = nothing, shading = false)
+    attrs = Makie.Attributes(; coords = nothing, shading = Makie.NoShading)
     return merge(attrs, Makie.default_theme(scene, Makie.Mesh))
 end
 
