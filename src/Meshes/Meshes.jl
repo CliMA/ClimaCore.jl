@@ -115,6 +115,7 @@ function element_horizontal_length_scale end
 
 include("common.jl")
 include("interval.jl")
+include("lazy_interval.jl")
 include("rectangle.jl")
 include("cubedsphere.jl")
 

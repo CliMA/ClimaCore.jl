@@ -1,3 +1,7 @@
+#=
+julia --project
+using Revise; include("test/Meshes/interval.jl")
+=#
 using Test
 using SparseArrays
 
