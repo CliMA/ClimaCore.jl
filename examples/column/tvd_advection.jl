@@ -54,36 +54,67 @@ function tendency!(yₜ, y, parameters, t)
         bottom = Operators.ThirdOrderOneSided(),
         top = Operators.ThirdOrderOneSided(),
     )
-    LimitedFlux = Operators.TVDSlopeLimitedFlux(
-        bottom = Operators.FirstOrderOneSided(),
-        top = Operators.FirstOrderOneSided(),
-        method = limiter_method,
-    )
     SLMethod = Operators.SlopeLimitedFluxC2F(
         bottom = Operators.FirstOrderOneSided(),
         top = Operators.FirstOrderOneSided(),
         method = limiter_method, 
     )
+    FCTZalesak = Operators.FCTZalesak(
+        bottom = Operators.FirstOrderOneSided(),
+        top = Operators.FirstOrderOneSided(),
+    )
+    TVDSlopeLimited = Operators.TVDSlopeLimitedFlux(
+        bottom = Operators.FirstOrderOneSided(),
+        top = Operators.FirstOrderOneSided(),
+        method = Operators.MinModLimiter(),
+    )
+
     If = Operators.InterpolateC2F()
-    @. yₜ.q =
-        -divf2c(
-            SLMethod(w, 
-                     y.q))
+
+    if limiter_method == "Zalesak"
+        @. yₜ.q =
+            -divf2c(
+                upwind1(w, y.q) + FCTZalesak(
+                    upwind3(w, y.q) - upwind1(w, y.q),
+                    y.q / Δt,
+                    y.q / Δt - divf2c(upwind1(w, y.q)),
+                ),
+            )
+    elseif limiter_method == "TVDSlopeLimiterMethod"
+        Δfluxₕ = @. w * If(y.q) 
+        @info typeof(Δfluxₕ)
+        Δfluxₗ = @. upwind1(w, y.q)
+        @info typeof(Δfluxₗ)
+        @. yₜ.q =
+            -divf2c(
+                upwind1(w, y.q) + TVDSlopeLimited(
+                    w * If(y.q) - upwind1(w, y.q),
+                    y.q / Δt,
+                    w, 
+                ),
+            )
+    else
+        @. yₜ.q =
+            -divf2c(
+                SLMethod(w, 
+                         y.q))
+    end
 end
 
 # Define a pulse wave or square wave
 
 FT = Float64
 t₀ = FT(0.0)
-Δt = 0.0001
-t₁ = FT(1)
+t₁ = FT(4)
 z₀ = FT(0.0)
 zₕ = FT(2π)
 z₁ = FT(1.0)
 speed = FT(-1.0)
 pulse(z, t, z₀, zₕ, z₁) = abs(z - speed * t) ≤ zₕ ? z₁ : z₀
 
-n = 2 .^ 6
+n = 2 .^ 8
+elemlist = 2 .^ [3,4,5,6,7,8,9,10] 
+Δt = FT(0.3) * (20π / n)
 
 domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(-10π),
@@ -97,11 +128,13 @@ plot_string = ["uniform",]
 for (i, stretch_fn) in enumerate(stretch_fns)
     limiter_methods = (
         Operators.RZeroLimiter(),
-        Operators.RMaxLimiter(),
-        Operators.MinModLimiter(),
-        Operators.KorenLimiter(),
-        Operators.SuperbeeLimiter(),
+        #Operators.RMaxLimiter(),
+        #Operators.MinModLimiter(),
+        #Operators.KorenLimiter(),
+        #Operators.SuperbeeLimiter(),
         Operators.MonotonizedCentralLimiter(),
+        "Zalesak",
+        #"TVDSlopeLimiterMethod",
     )
     for (j, limiter_method) in enumerate(limiter_methods)
         @info (limiter_method, stretch_fn)
@@ -140,13 +173,16 @@ for (i, stretch_fn) in enumerate(stretch_fns)
         rel_mass_err = norm((sum(q_final) - sum(q_init)) / sum(q_init))
 
         if j == 1
-            fig = Plots.plot(q_analytic; label = "Exact", color=:red)
+            fig = Plots.plot(q_analytic; label = "Exact", color=:red, )
         end
-        linstyl = [:dash, :solid, :dashdot, :dashdotdot, :dash, :dash, :solid]
-        clrs = [:orange, :blue, :green, :maroon, :pink, :yellow, :black]
-        fig = plot!(q_final; label = "$(typeof(limiter_method))"[21:end], linestyle = linstyl[j], color=clrs[j], dpi=400, xlim=(-1.5, 1.5), ylim=(-30,30))
-        #fig = plot!(q_final; label = "$(typeof(limiter_method))"[21:end], linestyle = linstyl[j], color=clrs[j], dpi=400, xlim = (-5,5), ylim=(-0, 25))
-        fig = plot!(legend=:outerbottom, legendcolumns=3)
+        linstyl = [:dash, :dot, :dashdot, :dashdotdot, :dash, :solid, :solid]
+        clrs = [:orange, :gray, :green, :maroon, :pink, :blue, :black]
+        if limiter_method == "Zalesak"
+            fig = plot!(q_final; label = "Zalesak", linestyle = linstyl[j], color=clrs[j], dpi=400, xlim=(-0.5, 1.1), ylim=(-15,10))
+        else
+            fig = plot!(q_final; label = "$(typeof(limiter_method))"[21:end], linestyle = linstyl[j], color=clrs[j], dpi=400, xlim=(-0.5, 1.1), ylim=(-15,10))
+        end
+        fig = plot!(legend=:outerbottom, legendcolumns=2)
         if j == length(limiter_methods)
             Plots.png(
                 fig, 
