@@ -129,6 +129,7 @@ mutable struct SpectralElementGrid2D{
     D,
     IS,
     BS,
+    EM,
 } <: AbstractSpectralElementGrid
     topology::T
     quadrature_style::Q
@@ -138,11 +139,12 @@ mutable struct SpectralElementGrid2D{
     internal_surface_geometry::IS
     boundary_surface_geometries::BS
     enable_bubble::Bool
+    element_mask::EM
 end
 
 local_geometry_type(
-    ::Type{SpectralElementGrid2D{T, Q, GG, LG, D, IS, BS}},
-) where {T, Q, GG, LG, D, IS, BS} = eltype(LG) # calls eltype from DataLayouts
+    ::Type{SpectralElementGrid2D{T, Q, GG, LG}},
+) where {T, Q, GG, LG} = eltype(LG) # calls eltype from DataLayouts
 
 """
     SpectralElementSpace2D(topology, quadrature_style; enable_bubble, horizontal_layout_type = DataLayouts.IJFH)
@@ -155,6 +157,7 @@ flag `enable_bubble` enables the `bubble correction` for more accurate element a
 - quadrature_style: QuadratureStyle
 - enable_bubble: Bool
 - horizontal_layout_type: Type{<:AbstractData}
+- mask spectral element (default is `true`)
 
 The idea behind the so-called `bubble_correction` is that the numerical area
 of the domain (e.g., the sphere) is given by the sum of nodal integration weights
@@ -176,6 +179,8 @@ where ``\\tilde{A}^e`` is the approximated area given by the sum of the interior
 
 Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSphere`](@ref) and
 [`Meshes.EquidistantCubedSphere`](@ref) type, not for [`Meshes.ConformalCubedSphere`](@ref).
+
+The element mask can be used to block evaluation of tendencies for spectral elements for which it is set to `false`.
 """
 function SpectralElementGrid2D(
     topology::Topologies.Topology2D,
@@ -502,6 +507,7 @@ function _SpectralElementGrid2D(
         internal_surface_geometry,
         boundary_surface_geometries,
         enable_bubble,
+        DA(Vector{Bool}(ones(Topologies.nlocalelems(topology)))),
     )
 end
 
