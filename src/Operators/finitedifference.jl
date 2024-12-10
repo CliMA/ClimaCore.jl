@@ -1343,22 +1343,33 @@ function slope_limited_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺, method)
     𝜃 = compute_slope_ratio(a⁻, a⁻⁻, a⁺, a⁺⁺, v)
     𝜙 = compute_limiter_coeff(𝜃, method)
     
-    # Following Lin's paper: 
-    #Δ𝜙_avg = ((a⁺ - a⁻)+(a⁺⁺ - a⁺))/2
-    #min𝜙 = min(a⁻, a⁺, a⁺⁺) 
-    #max𝜙 = max(a⁻, a⁺, a⁺⁺) 
-    #𝛼 = min(abs(Δ𝜙_avg),
-    #        2 * (a⁺ - min𝜙), 
-    #        2 * (max𝜙 - a⁺))
-
-    #Δ𝛼 = sign(Δ𝜙_avg) * 𝛼
-
-    @assert 0 <= 𝜙 <= 2
+    
+    #@assert 0 <= 𝜙 <= 2
+    #if v >= 0 
+    #    return v ⊠ (a⁻ ⊞ RecursiveApply.rdiv((a⁺ - a⁻) ⊠ 𝜙 ,2))
+    #else
+    #    return v ⊠ (a⁺ ⊟ RecursiveApply.rdiv((a⁺ - a⁻) ⊠ 𝜙 ,2)) # Current working solution
+    #end
     if v >= 0 
-        return v ⊠ (a⁻ ⊞ RecursiveApply.rdiv((a⁺ - a⁻) ⊠ 𝜙 ,2))
+        # Following Lin's paper: 
+        Δ𝜙_avg = ((a⁻ - a⁻⁻)+(a⁺ - a⁻))/2
+        min𝜙 = min(a⁻⁻, a⁻, a⁺) 
+        max𝜙 = max(a⁻⁻, a⁻, a⁺) 
+        𝛼 = min(abs(Δ𝜙_avg),
+                2 * (a⁻ - min𝜙), 
+                2 * (max𝜙 - a⁻))
+        Δ𝛼 = sign(Δ𝜙_avg) * 𝛼
+        return v ⊠ (a⁻ ⊞ RecursiveApply.rdiv(Δ𝛼 , 2)) # Testing Lin mono5
     else
-        return v ⊠ (a⁺ ⊟ RecursiveApply.rdiv((a⁺ - a⁻) ⊠ 𝜙 ,2)) # Current working solution
-        #return v ⊠ (a⁺ ⊟ RecursiveApply.rdiv((a⁺ - a⁻) ⊠ Δ𝛼 ,2)) # Testing Lin mono5
+        # Following Lin's paper: 
+        Δ𝜙_avg = ((a⁺ - a⁻)+(a⁺⁺ - a⁺))/2
+        min𝜙 = min(a⁻, a⁺, a⁺⁺) 
+        max𝜙 = max(a⁻, a⁺, a⁺⁺) 
+        𝛼 = min(abs(Δ𝜙_avg),
+                2 * (a⁺ - min𝜙), 
+                2 * (max𝜙 - a⁺))
+        Δ𝛼 = sign(Δ𝜙_avg) * 𝛼
+        return v ⊠ (a⁺ ⊟ RecursiveApply.rdiv(Δ𝛼 , 2)) # Testing Lin mono5
     end
 end
 

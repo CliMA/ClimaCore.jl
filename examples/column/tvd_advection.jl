@@ -105,7 +105,7 @@ end
 
 FT = Float64
 t₀ = FT(0.0)
-t₁ = FT(4)
+t₁ = FT(6)
 z₀ = FT(0.0)
 zₕ = FT(2π)
 z₁ = FT(1.0)
@@ -115,6 +115,7 @@ pulse(z, t, z₀, zₕ, z₁) = abs(z - speed * t) ≤ zₕ ? z₁ : z₀
 n = 2 .^ 8
 elemlist = 2 .^ [3,4,5,6,7,8,9,10] 
 Δt = FT(0.3) * (20π / n)
+@info "Timestep Δt[s]: $(Δt)" 
 
 domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(-10π),
@@ -127,7 +128,7 @@ plot_string = ["uniform",]
 
 for (i, stretch_fn) in enumerate(stretch_fns)
     limiter_methods = (
-        Operators.RZeroLimiter(),
+        #Operators.RZeroLimiter(),
         #Operators.RMaxLimiter(),
         #Operators.MinModLimiter(),
         #Operators.KorenLimiter(),
