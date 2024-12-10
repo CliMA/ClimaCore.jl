@@ -1339,13 +1339,11 @@ return_space(
 ) = velocity_space
 
 function slope_limited_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺, method)
-    # Compute slope ratio 𝜃 and limiter coefficient 𝜙
-    𝜃 = compute_slope_ratio(a⁻, a⁻⁻, a⁺, a⁺⁺, v)
-    𝜙 = compute_limiter_coeff(𝜃, method)
-    
+    # Following Lin's paper: 
+    # https://doi.org/10.1175/1520-0493(1994)122<1575:ACOTVL>2.0.CO;2
     
     if v >= 0 
-        # Following Lin's paper: 
+        # Eqn (2,5a,5b,5c)
         Δ𝜙_avg = ((a⁻ - a⁻⁻)+(a⁺ - a⁻))/2
         min𝜙 = min(a⁻⁻, a⁻, a⁺) 
         max𝜙 = max(a⁻⁻, a⁻, a⁺) 
@@ -1354,9 +1352,11 @@ function slope_limited_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺, method)
                 2 * (max𝜙 - a⁻))
         c⁻ = v * eltype(v)(0.07)
         Δ𝛼 = sign(Δ𝜙_avg) * 𝛼 * (1 - c⁻)
-        return v ⊠ (a⁻ ⊞ RecursiveApply.rdiv(Δ𝛼 , 2)) # Testing Lin mono5
+        # Eqn (1b)
+        return v ⊠ (a⁻ ⊞ RecursiveApply.rdiv(Δ𝛼 , 2))
     else
         # Following Lin's paper: 
+        # Eqn (2,5a,5b,5c)
         Δ𝜙_avg = ((a⁺ - a⁻)+(a⁺⁺ - a⁺))/2
         min𝜙 = min(a⁻, a⁺, a⁺⁺) 
         max𝜙 = max(a⁻, a⁺, a⁺⁺) 
@@ -1365,7 +1365,8 @@ function slope_limited_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺, method)
                 2 * (max𝜙 - a⁺))
         c⁺ = v * eltype(v)(0.07) 
         Δ𝛼 = sign(Δ𝜙_avg) * 𝛼 * (1 + c⁺)
-        return v ⊠ (a⁺ ⊟ RecursiveApply.rdiv(Δ𝛼 , 2)) # Testing Lin mono5
+        # Eqn (1c)
+        return v ⊠ (a⁺ ⊟ RecursiveApply.rdiv(Δ𝛼 , 2))
     end
 end
 
@@ -3785,6 +3786,10 @@ Base.@propagate_inbounds function apply_stencil!(
     end
     return field_out
 end
+    # Compute slope ratio 𝜃 and limiter coefficient 𝜙
+    #𝜃 = compute_slope_ratio(a⁻, a⁻⁻, a⁺, a⁺⁺, v)
+    #𝜙 = compute_limiter_coeff(𝜃, method)
+    
 
     #@assert 0 <= 𝜙 <= 2
     #if v >= 0 
