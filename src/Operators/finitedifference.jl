@@ -11,8 +11,6 @@ const AllCenterFiniteDifferenceSpace = Union{
     Spaces.CenterExtrudedFiniteDifferenceSpace,
 }
 
-
-
 left_idx(space::AllCenterFiniteDifferenceSpace) =
     left_center_boundary_idx(space)
 right_idx(space::AllCenterFiniteDifferenceSpace) =
@@ -2028,27 +2026,38 @@ end
 TVDSlopeLimitedFlux(; method, kwargs...) =
     TVDSlopeLimitedFlux((; method, kwargs...))
 
-return_eltype(::TVDSlopeLimitedFlux, A, Φ, 𝓊) =
+return_eltype(::TVDSlopeLimitedFlux, 𝓊, Φ) =
     Geometry.Contravariant3Vector{eltype(eltype(A))}
 
 return_space(
     ::TVDSlopeLimitedFlux,
-    A_space::AllFaceFiniteDifferenceSpace,
-    Φ_space::AllCenterFiniteDifferenceSpace,
     𝓊_space::AllFaceFiniteDifferenceSpace,
-) = A_space
+    Φ_space::AllCenterFiniteDifferenceSpace,
+) = 𝓊_space 
 
-function tvd_limited_flux(Aⱼ₋₁₂, Aⱼ₊₁₂, ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂,rⱼ₊₁₂, method)
-    stable_zero = zero(eltype(Aⱼ₊₁₂))
-    stable_one = one(eltype(Aⱼ₊₁₂))
+function tvd_limited_flux(𝓊, a⁻⁻, a⁻, a⁺, a⁺⁺,rⱼ₊₁₂, method)
     Cⱼ₊₁₂ = compute_limiter_coeff(rⱼ₊₁₂, method)
-    @assert Cⱼ₊₁₂ <= eltype(Aⱼ₊₁₂)(2)
-    @assert Cⱼ₊₁₂ >= eltype(Aⱼ₊₁₂)(0)
-    return Cⱼ₊₁₂ * Aⱼ₊₁₂
+    @assert Cⱼ₊₁₂ <= eltype(𝓊)(2)
+    @assert Cⱼ₊₁₂ >= eltype(𝓊)(0)
+    
+    low_order = RecursiveApply.rdiv(
+        ((𝓊 ⊞ RecursiveApply.rmap(abs, 𝓊)) ⊠ a⁻) ⊞
+        ((𝓊 ⊟ RecursiveApply.rmap(abs, 𝓊)) ⊠ a⁺),
+        2,)
+    high_order = RecursiveApply.rdiv(
+        (𝓊 ⊠ (7 ⊠ (a⁺ + a⁻) ⊟ (a⁺⁺ + a⁻⁻))) ⊟
+        (RecursiveApply.rmap(abs, 𝓊) ⊠ (3 ⊠ (a⁺ - a⁻) ⊟ (a⁺⁺ - a⁻⁻))),
+        12,
+    )
+    #high_order = ifelse(𝓊 >= eltype(𝓊)(0),
+    #                    RecursiveApply.rdiv(𝓊 ⊠ (-2 ⊠ a⁻⁻ ⊞ 10 ⊠ a⁻ ⊞ 4 * a⁺),12),
+    #                    RecursiveApply.rdiv(𝓊 ⊠ (4 ⊠ a⁻ ⊞ 10 ⊠ a⁺ ⊟ 2 ⊠ a⁺⁺), 12),
+    #                  )
+    return low_order + Cⱼ₊₁₂ * (high_order - low_order)
 end
 
-stencil_interior_width(::TVDSlopeLimitedFlux, A_space, Φ_space, 𝓊_space) =
-    ((-1, 1), (-half - 1, half + 1), (-1, +1))
+stencil_interior_width(::TVDSlopeLimitedFlux, 𝓊_space, Φ_space) =
+    ((-1, 1), (-half - 1, half + 1))
 
 Base.@propagate_inbounds function stencil_interior(
     ℱ::TVDSlopeLimitedFlux,
@@ -2056,9 +2065,8 @@ Base.@propagate_inbounds function stencil_interior(
     space,
     idx,
     hidx,
-    A_field,
-    Φ_field,
     𝓊_field,
+    Φ_field,
 )
     # cell center variables
     ϕⱼ₋₁ = getidx(space, Φ_field, loc, idx - half - 1, hidx)
@@ -2069,22 +2077,12 @@ Base.@propagate_inbounds function stencil_interior(
         getidx(space, 𝓊_field, loc, idx, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
-    # cell face variables
-    Aⱼ₊₁₂ = Geometry.contravariant3(
-        getidx(space, A_field, loc, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    Aⱼ₋₁₂ = Geometry.contravariant3(
-        getidx(space, A_field, loc, idx - 1, hidx),
-        Geometry.LocalGeometry(space, idx - 1, hidx),
-    )
     # See filter options below
     rⱼ₊₁₂ = compute_slope_ratio(ϕⱼ, ϕⱼ₋₁, ϕⱼ₊₁, ϕⱼ₊₂, 𝓊)
 
     return Geometry.Contravariant3Vector(
         tvd_limited_flux(
-            Aⱼ₋₁₂,
-            Aⱼ₊₁₂,
+            𝓊,
             ϕⱼ₋₁,
             ϕⱼ,
             ϕⱼ₊₁,
@@ -2096,10 +2094,12 @@ Base.@propagate_inbounds function stencil_interior(
 end
 
 @inline function compute_slope_ratio(ϕⱼ, ϕⱼ₋₁, ϕⱼ₊₁, ϕⱼ₊₂, 𝓊)
+    #@info (ϕⱼ₊₁ - ϕⱼ, ϕⱼ₊₂ - ϕⱼ₊₁)
+    #@info (ϕⱼ₊₂ - ϕⱼ₊₁) / (ϕⱼ₊₁ - ϕⱼ)
     if 𝓊 >= 0
-        return (ϕⱼ - ϕⱼ₋₁) / (ϕⱼ₊₁ - ϕⱼ + eps(eltype(ϕⱼ)))
+        return (ϕⱼ - ϕⱼ₋₁) / (ϕⱼ₊₁ - ϕⱼ + sqrt(eps(eltype(ϕⱼ))))
     else
-        return (ϕⱼ₊₂ - ϕⱼ₊₁) / (ϕⱼ₊₁ - ϕⱼ +  eps(eltype(ϕⱼ)))
+        return (ϕⱼ₊₂ - ϕⱼ₊₁) / (ϕⱼ₊₁ - ϕⱼ + sqrt(eps(eltype(ϕⱼ))))
     end
 end
 
@@ -2112,13 +2112,12 @@ Base.@propagate_inbounds function stencil_left_boundary(
     space,
     idx,
     hidx,
-    A_field,
-    Φ_field,
     𝓊_field,
+    Φ_field,
 )
     @assert idx <= left_face_boundary_idx(space) + 1
 
-    return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
+    return Geometry.Contravariant3Vector(zero(eltype(eltype(𝓊_field))))
 end
 
 Base.@propagate_inbounds function stencil_right_boundary(
@@ -2128,13 +2127,12 @@ Base.@propagate_inbounds function stencil_right_boundary(
     space,
     idx,
     hidx,
-    A_field,
-    Φ_field,
     𝓊_field,
+    Φ_field,
 )
     @assert idx <= right_face_boundary_idx(space) - 1
 
-    return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
+    return Geometry.Contravariant3Vector(zero(eltype(eltype(𝓊_field))))
 end
 
 """

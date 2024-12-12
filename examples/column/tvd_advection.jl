@@ -66,7 +66,7 @@ function tendency!(yₜ, y, parameters, t)
     TVDSlopeLimited = Operators.TVDSlopeLimitedFlux(
         bottom = Operators.FirstOrderOneSided(),
         top = Operators.FirstOrderOneSided(),
-        method = Operators.MinModLimiter(),
+        method = Operators.KorenLimiter(),
     )
 
     If = Operators.InterpolateC2F()
@@ -81,18 +81,8 @@ function tendency!(yₜ, y, parameters, t)
                 ),
             )
     elseif limiter_method == "TVDSlopeLimiterMethod"
-        Δfluxₕ = @. w * If(y.q) 
-        @info typeof(Δfluxₕ)
-        Δfluxₗ = @. upwind1(w, y.q)
-        @info typeof(Δfluxₗ)
         @. yₜ.q =
-            -divf2c(
-                upwind1(w, y.q) + TVDSlopeLimited(
-                    w * If(y.q) - upwind1(w, y.q),
-                    y.q / Δt,
-                    w, 
-                ),
-            )
+            -divf2c(TVDSlopeLimited(w, y.q))
     else
         @. yₜ.q =
             -divf2c(
@@ -133,9 +123,9 @@ for (i, stretch_fn) in enumerate(stretch_fns)
         #Operators.MinModLimiter(),
         #Operators.KorenLimiter(),
         #Operators.SuperbeeLimiter(),
-        Operators.MonotonizedCentralLimiter(),
+        #Operators.MonotonizedCentralLimiter(),
         "Zalesak",
-        #"TVDSlopeLimiterMethod",
+        "TVDSlopeLimiterMethod",
     )
     for (j, limiter_method) in enumerate(limiter_methods)
         @info (limiter_method, stretch_fn)
