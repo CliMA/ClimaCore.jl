@@ -63,6 +63,8 @@ function tendency!(yₜ, y, parameters, t)
         bottom = Operators.FirstOrderOneSided(),
         top = Operators.FirstOrderOneSided(),
     )
+    # TODO TVDSlopeLimited
+    # FIXME FIXME
     TVDSlopeLimited = Operators.TVDSlopeLimitedFlux(
         bottom = Operators.FirstOrderOneSided(),
         top = Operators.FirstOrderOneSided(),
@@ -80,10 +82,10 @@ function tendency!(yₜ, y, parameters, t)
                     y.q / Δt - divf2c(upwind1(w, y.q)),
                 ),
             )
-    elseif limiter_method == "TVDSlopeLimiterMethod"
+    elseif limiter_method == "TVDSlopeLimitedFlux"
         @. yₜ.q =
             -divf2c(TVDSlopeLimited(w, y.q))
-    else
+    elseif limiter_method == "LinVanLeer"
         @. yₜ.q =
             -divf2c(
                 SLMethod(w, 
@@ -95,7 +97,7 @@ end
 
 FT = Float64
 t₀ = FT(0.0)
-t₁ = FT(6)
+t₁ = FT(3π)
 z₀ = FT(0.0)
 zₕ = FT(2π)
 z₁ = FT(1.0)
@@ -104,7 +106,7 @@ pulse(z, t, z₀, zₕ, z₁) = abs(z - speed * t) ≤ zₕ ? z₁ : z₀
 
 n = 2 .^ 8
 elemlist = 2 .^ [3,4,5,6,7,8,9,10] 
-Δt = FT(0.3) * (20π / n)
+Δt = FT(0.9) * (20π / n)
 @info "Timestep Δt[s]: $(Δt)" 
 
 domain = Domains.IntervalDomain(
@@ -118,14 +120,14 @@ plot_string = ["uniform",]
 
 for (i, stretch_fn) in enumerate(stretch_fns)
     limiter_methods = (
-        #Operators.RZeroLimiter(),
-        #Operators.RMaxLimiter(),
-        #Operators.MinModLimiter(),
-        #Operators.KorenLimiter(),
-        #Operators.SuperbeeLimiter(),
-        #Operators.MonotonizedCentralLimiter(),
+        Operators.RZeroLimiter(),
+        Operators.RMaxLimiter(),
+        Operators.MinModLimiter(),
+        Operators.KorenLimiter(),
+        Operators.SuperbeeLimiter(),
+        Operators.MonotonizedCentralLimiter(),
         "Zalesak",
-        "TVDSlopeLimiterMethod",
+        "LinVanLeer",
     )
     for (j, limiter_method) in enumerate(limiter_methods)
         @info (limiter_method, stretch_fn)
@@ -166,8 +168,8 @@ for (i, stretch_fn) in enumerate(stretch_fns)
         if j == 1
             fig = Plots.plot(q_analytic; label = "Exact", color=:red, )
         end
-        linstyl = [:dash, :dot, :dashdot, :dashdotdot, :dash, :solid, :solid]
-        clrs = [:orange, :gray, :green, :maroon, :pink, :blue, :black]
+        linstyl = [:dash, :dot, :dashdot, :dashdotdot, :dash, :solid, :solid, :solid]
+        clrs = [:orange, :gray, :green, :maroon, :pink, :blue, :black, :magenta]
         if limiter_method == "Zalesak"
             fig = plot!(q_final; label = "Zalesak", linestyle = linstyl[j], color=clrs[j], dpi=400, xlim=(-0.5, 1.1), ylim=(-15,10))
         else

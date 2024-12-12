@@ -2049,11 +2049,14 @@ function tvd_limited_flux(𝓊, a⁻⁻, a⁻, a⁺, a⁺⁺,rⱼ₊₁₂, meth
         (RecursiveApply.rmap(abs, 𝓊) ⊠ (3 ⊠ (a⁺ - a⁻) ⊟ (a⁺⁺ - a⁻⁻))),
         12,
     )
+    #antidiff = high_order - low_order
     #high_order = ifelse(𝓊 >= eltype(𝓊)(0),
     #                    RecursiveApply.rdiv(𝓊 ⊠ (-2 ⊠ a⁻⁻ ⊞ 10 ⊠ a⁻ ⊞ 4 * a⁺),12),
     #                    RecursiveApply.rdiv(𝓊 ⊠ (4 ⊠ a⁻ ⊞ 10 ⊠ a⁺ ⊟ 2 ⊠ a⁺⁺), 12),
     #                  )
-    return low_order + Cⱼ₊₁₂ * (high_order - low_order)
+    #return low_order + Cⱼ₊₁₂ * (antidiff)
+    return RecursiveApply.rdiv(𝓊 ⊠ (a⁺ ⊞ a⁻) ⊟ (a⁺ ⊟ a⁻) ⊠ 
+                               ((1 ⊟ Cⱼ₊₁₂) ⊠ RecursiveApply.rmap(abs,𝓊)),2)
 end
 
 stencil_interior_width(::TVDSlopeLimitedFlux, 𝓊_space, Φ_space) =
