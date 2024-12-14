@@ -1146,35 +1146,39 @@ steps:
 
       - label: "Unit: spectralelement2d"
         key: unit_spectralelement2d
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/spectralelement2d.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_spectralelement2d.jl"
 
       - label: "Unit: hybrid2dbox"
         key: unit_hybrid2dbox
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/hybrid2dbox.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid2dbox.jl"
 
       - label: "Unit: hybrid2dbox topography"
         key: unit_hybrid2dbox_topography
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/hybrid2dbox_topography.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid2dbox_topography.jl"
 
       - label: "Unit: hybrid2dbox stretched"
         key: unit_hybrid2dbox_stretched
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/hybrid2dbox_stretched.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid2dbox_stretched.jl"
 
       - label: "Unit: hybrid3dbox"
         key: unit_hybrid3dbox
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/hybrid3dbox.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid3dbox.jl"
 
       - label: "Unit: hybrid3dcubedsphere"
         key: unit_hybrid3dcubedsphere
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/hybrid3dcubedsphere.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid3dcubedsphere.jl"
 
       - label: "Unit: hybrid3dcubedsphere topography"
         key: unit_hybrid3dcubedsphere_topography
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/hybrid3dcubedsphere_topography.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid3dcubedsphere_topography.jl"
+
+      - label: "Unit: finitedifference"
+        key: unit_finitedifference
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_finitedifference.jl"
 
       - label: "Unit: Parallel HDF5 IO tests"
         key: "cpu_parallel_hdf5"
-        command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/hybrid3dcubedsphere.jl"
+        command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid3dcubedsphere.jl"
         timeout_in_minutes: 5
         env:
           CLIMACOMMS_CONTEXT: "MPI"
