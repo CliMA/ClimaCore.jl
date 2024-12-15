@@ -33,7 +33,7 @@ function column_reduce_device!(
     nitems = Ni * Nj * Nh
     threads = threads_via_occupancy(bycolumn_kernel!, args)
     n_max_threads = min(threads, nitems)
-    p = columnwise_partition(us, n_max_threads)
+    p = linear_partition(nitems, n_max_threads)
     auto_launch!(
         bycolumn_kernel!,
         args;
@@ -67,7 +67,7 @@ function column_accumulate_device!(
     nitems = Ni * Nj * Nh
     threads = threads_via_occupancy(bycolumn_kernel!, args)
     n_max_threads = min(threads, nitems)
-    p = columnwise_partition(us, n_max_threads)
+    p = linear_partition(nitems, n_max_threads)
     auto_launch!(
         bycolumn_kernel!,
         args;
@@ -89,9 +89,10 @@ bycolumn_kernel!(
     if space isa Spaces.FiniteDifferenceSpace
         single_column_function!(f, transform, output, input, init, space)
     else
-        I = columnwise_universal_index(us)
-        if columnwise_is_valid_index(I, us)
-            (i, j, _, _, h) = I.I
+        idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+        Ni, Nj, _, _, Nh = size(Fields.field_values(output))
+        if idx <= Ni * Nj * Nh
+            i, j, h = cart_ind((Ni, Nj, Nh), idx).I
             single_column_function!(
                 f,
                 transform,
