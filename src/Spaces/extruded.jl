@@ -33,6 +33,29 @@ const FaceExtrudedFiniteDifferenceSpace{G} =
 const CenterExtrudedFiniteDifferenceSpace{G} =
     ExtrudedFiniteDifferenceSpace{G, CellCenter}
 
+"""
+    face_space(space::ExtrudedFiniteDifferenceSpace)
+
+Return face-centered space corresponding to `space`.
+
+If `space` is already face-centered, return itself.
+"""
+function face_space(space::ExtrudedFiniteDifferenceSpace)
+    return ExtrudedFiniteDifferenceSpace(grid(space), CellFace())
+end
+
+"""
+    center_space(space::ExtrudedFiniteDifferenceSpace)
+
+Return center-centered space corresponding to `space`.
+
+If `space` is already center-centered, return itself.
+"""
+function center_space(space::ExtrudedFiniteDifferenceSpace)
+    return ExtrudedFiniteDifferenceSpace(grid(space), CellCenter())
+end
+
+
 #=
 ExtrudedFiniteDifferenceSpace{S}(
     grid::Grids.ExtrudedFiniteDifferenceGrid,
