@@ -1343,7 +1343,7 @@ function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt)
     𝛼 = min(abs(Δ𝜙_avg),
             2 * (a⁰ - min𝜙), 
             2 * (max𝜙 - a⁰))
-    Δ𝛼 = sign(Δ𝜙_avg) * 𝛼 #* (1 - sign(v) * v * dt)
+    Δ𝛼 = sign(Δ𝜙_avg) * 𝛼 * (1 - sign(v) * v * dt)
 end
 
 function slope_limited_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺, dt)

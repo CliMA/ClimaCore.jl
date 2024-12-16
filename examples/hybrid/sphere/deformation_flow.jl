@@ -88,6 +88,10 @@ const SlopeLimitedFlux = Operators.TVDSlopeLimitedFlux(
     top = Operators.FirstOrderOneSided(),
     method = Operators.MinModLimiter(),
 )
+const LinVanLeerFlux = Operators.LinVanLeerC2F(
+    bottom = Operators.FirstOrderOneSided(),
+    top = Operators.FirstOrderOneSided(),
+)
 const FCTBorisBook = Operators.FCTBorisBook(
     bottom = Operators.FirstOrderOneSided(),
     top = Operators.FirstOrderOneSided(),
@@ -189,10 +193,13 @@ function vertical_tendency!(Yₜ, Y, cache, t)
                 ᶠwinterp(ᶜJ, Y.c.ρ) * (
                     upwind1(face_uᵥ, q_n) + SlopeLimitedFlux(
                         upwind3(face_uᵥ, q_n) - upwind1(face_uᵥ, q_n),
-                        Y.c.ρ * q_n / dt,
+                        q_n / dt,
+                        face_uᵥ
                     )
                 ),
             )
+        elseif fct_op == LinVanLeerFlux
+            @. ρqₜ_n -= vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * LinVanLeerFlux(face_uᵥ, q_n, dt))
         else
             error("unrecognized FCT operator $fct_op")
         end
@@ -323,6 +330,9 @@ tracer_ranges(sol) =
 @info "Slope Limited Solutions"
 tvd_sol = run_deformation_flow(false, SlopeLimitedFlux, _dt)
 lim_tvd_sol = run_deformation_flow(true, SlopeLimitedFlux, _dt)
+@info "vanLeer Flux Solutions"
+lvl_sol= run_deformation_flow(false, LinVanLeerFlux, _dt)
+lim_lvl_sol = run_deformation_flow(true, LinVanLeerFlux, _dt)
 @info "Third-Order Upwind Solutions"
 third_upwind_sol = run_deformation_flow(false, upwind3, _dt)
 lim_third_upwind_sol = run_deformation_flow(true, upwind3, _dt)
@@ -407,9 +417,11 @@ for (sol, suffix) in (
     (third_upwind_sol, "_third_upwind"),
     (fct_sol, "_fct"),
     (tvd_sol, "_tvd"),
+    (lvl_sol, "_lvl"),
     (lim_third_upwind_sol, "_lim_third_upwind"),
     (lim_fct_sol, "_lim_fct"),
     (lim_tvd_sol, "_lim_tvd"),
+    (lim_lvl_sol, "_lim_lvl"),
 )
     for (sol_index, day) in ((1, 6), (2, 12))
         Plots.png(
@@ -429,8 +441,9 @@ for (sol, suffix) in (
     (third_upwind_sol, "_third_upwind"),
     (fct_sol, "_fct"),
     (tvd_sol, "_tvd"),
+    (lvl_sol, "_lvl"),
     (lim_fct_sol, "_lim_fct"),
-    (lim_tvd_sol, "_lim_tvd"),
+    (lim_lvl_sol, "_lim_lvl"),
 )
     for (sol_index, day) in ((1, 6), (2, 12))
         Plots.png(
