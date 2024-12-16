@@ -1320,6 +1320,168 @@ Base.@propagate_inbounds function stencil_right_boundary(
     stencil_interior(op, loc, space, idx - 1, hidx, velocity, arg)
 end
 
+
+#####
+
+struct SlopeLimitedFluxC2F{BCS} <: AdvectionOperator
+    bcs::BCS
+end
+SlopeLimitedFluxC2F(; kwargs...) =
+    SlopeLimitedFluxC2F(NamedTuple(kwargs))
+
+return_eltype(::SlopeLimitedFluxC2F, V, A) =
+    Geometry.Contravariant3Vector{eltype(eltype(V))}
+
+return_space(
+    ::SlopeLimitedFluxC2F,
+    velocity_space::AllFaceFiniteDifferenceSpace,
+    arg_space::AllCenterFiniteDifferenceSpace,
+) = velocity_space
+
+function slope_limited_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺, method)
+    # Following Lin's paper: 
+    # https://doi.org/10.1175/1520-0493(1994)122<1575:ACOTVL>2.0.CO;2
+    
+    if v >= 0 
+        # Eqn (2,5a,5b,5c)
+        Δ𝜙_avg = ((a⁻ - a⁻⁻)+(a⁺ - a⁻))/2
+        min𝜙 = min(a⁻⁻, a⁻, a⁺) 
+        max𝜙 = max(a⁻⁻, a⁻, a⁺) 
+        𝛼 = min(abs(Δ𝜙_avg),
+                2 * (a⁻ - min𝜙), 
+                2 * (max𝜙 - a⁻))
+        c⁻ = v * eltype(v)(0.07)
+        Δ𝛼 = sign(Δ𝜙_avg) * 𝛼 * (1 - c⁻)
+        # Eqn (1b)
+        return v ⊠ (a⁻ ⊞ RecursiveApply.rdiv(Δ𝛼 , 2))
+    else
+        # Following Lin's paper: 
+        # Eqn (2,5a,5b,5c)
+        Δ𝜙_avg = ((a⁺ - a⁻)+(a⁺⁺ - a⁺))/2
+        min𝜙 = min(a⁻, a⁺, a⁺⁺) 
+        max𝜙 = max(a⁻, a⁺, a⁺⁺) 
+        𝛼 = min(abs(Δ𝜙_avg),
+                2 * (a⁺ - min𝜙), 
+                2 * (max𝜙 - a⁺))
+        c⁺ = v * eltype(v)(0.07) 
+        Δ𝛼 = sign(Δ𝜙_avg) * 𝛼 * (1 + c⁺)
+        # Eqn (1c)
+        return v ⊠ (a⁺ ⊟ RecursiveApply.rdiv(Δ𝛼 , 2))
+    end
+end
+
+stencil_interior_width(::SlopeLimitedFluxC2F, velocity, arg) =
+    ((0, 0), (-half - 1, half + 1))
+
+Base.@propagate_inbounds function stencil_interior(
+    ℱ::SlopeLimitedFluxC2F,
+    loc,
+    space,
+    idx,
+    hidx,
+    velocity,
+    arg,
+)
+    a⁻ = getidx(space, arg, loc, idx - half, hidx)
+    a⁻⁻ = getidx(space, arg, loc, idx - half - 1, hidx)
+    a⁺ = getidx(space, arg, loc, idx + half, hidx)
+    a⁺⁺ = getidx(space, arg, loc, idx + half + 1, hidx)
+    vᶠ = Geometry.contravariant3(
+        getidx(space, velocity, loc, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+    return Geometry.Contravariant3Vector(
+        slope_limited_product(vᶠ, a⁻, a⁻⁻, a⁺, a⁺⁺, ℱ.bcs.method),
+    )
+end
+
+boundary_width(::SlopeLimitedFluxC2F, ::AbstractBoundaryCondition) =
+    2
+
+Base.@propagate_inbounds function stencil_left_boundary(
+    ::SlopeLimitedFluxC2F,
+    bc::FirstOrderOneSided,
+    loc,
+    space,
+    idx,
+    hidx,
+    velocity,
+    arg,
+)
+    @assert idx <= left_face_boundary_idx(space) + 1
+    v = Geometry.contravariant3(
+        getidx(space, velocity, loc, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+    a⁻ = stencil_interior(LeftBiasedC2F(), loc, space, idx, hidx, arg)
+    a⁺ = stencil_interior(RightBiased3rdOrderC2F(), loc, space, idx, hidx, arg)
+    return Geometry.Contravariant3Vector(upwind_biased_product(v, a⁻, a⁺))
+end
+
+Base.@propagate_inbounds function stencil_right_boundary(
+    ::SlopeLimitedFluxC2F,
+    bc::FirstOrderOneSided,
+    loc,
+    space,
+    idx,
+    hidx,
+    velocity,
+    arg,
+)
+    @assert idx >= right_face_boundary_idx(space) - 1
+    v = Geometry.contravariant3(
+        getidx(space, velocity, loc, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+    a⁻ = stencil_interior(LeftBiased3rdOrderC2F(), loc, space, idx, hidx, arg)
+    a⁺ = stencil_interior(RightBiasedC2F(), loc, space, idx, hidx, arg)
+    return Geometry.Contravariant3Vector(upwind_biased_product(v, a⁻, a⁺))
+
+end
+
+Base.@propagate_inbounds function stencil_left_boundary(
+    ℱ::SlopeLimitedFluxC2F,
+    bc::ThirdOrderOneSided,
+    loc,
+    space,
+    idx,
+    hidx,
+    velocity,
+    arg,
+)
+    @assert idx <= left_face_boundary_idx(space) + 1
+
+    vᶠ = Geometry.contravariant3(
+        getidx(space, velocity, loc, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+    a = stencil_interior(RightBiased3rdOrderC2F(), loc, space, idx, hidx, arg)
+
+    return Geometry.Contravariant3Vector(vᶠ * a)
+end
+
+Base.@propagate_inbounds function stencil_right_boundary(
+    ℱ::SlopeLimitedFluxC2F,
+    bc::ThirdOrderOneSided,
+    loc,
+    space,
+    idx,
+    hidx,
+    velocity,
+    arg,
+)
+    @assert idx <= right_face_boundary_idx(space) - 1
+
+    vᶠ = Geometry.contravariant3(
+        getidx(space, velocity, loc, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+    a = stencil_interior(LeftBiased3rdOrderC2F(), loc, space, idx, hidx, arg)
+
+    return Geometry.Contravariant3Vector(vᶠ * a)
+end
+######
+
 """
     U = Upwind3rdOrderBiasedProductC2F(;boundaries)
     U.(v, x)
@@ -1797,7 +1959,7 @@ end
 ######Limited Flux Methods######
 """
     U = TVDSlopeLimitedFlux(;boundaries)
-    U.(𝒜, Φ)
+    U.(𝒜, Φ, 𝓊)
 𝒜, following the notation of Durran (Numerical Methods for Fluid
 Dynamics, 2ⁿᵈ ed.) is the antidiffusive flux given by
 𝒜 = ℱʰ - ℱˡ
@@ -1818,7 +1980,6 @@ Supported limiter types are
 - KorenLimiter
 - SuperbeeLimiter
 - MonotonizedCentralLimiter
-- VanLeerLimiter
 """
 abstract type AbstractTVDSlopeLimiter end
 struct RZeroLimiter <: AbstractTVDSlopeLimiter end
@@ -1828,7 +1989,6 @@ struct MinModLimiter <: AbstractTVDSlopeLimiter end
 struct KorenLimiter <: AbstractTVDSlopeLimiter end
 struct SuperbeeLimiter <: AbstractTVDSlopeLimiter end
 struct MonotonizedCentralLimiter <: AbstractTVDSlopeLimiter end
-struct VanLeerLimiter <: AbstractTVDSlopeLimiter end
 
 @inline function compute_limiter_coeff(r, ::RZeroLimiter)
     return zero(eltype(r))
@@ -1858,10 +2018,6 @@ end
     return max(zero(eltype(r)), min(2r, (1 + r) / 2, 2))
 end
 
-@inline function compute_limiter_coeff(r, ::VanLeerLimiter)
-    return (r + abs(r)) / (1 + abs(r) + eps(eltype(r)))
-end
-
 struct TVDSlopeLimitedFlux{BCS} <: AdvectionOperator
     bcs::BCS
 end
@@ -1869,16 +2025,17 @@ end
 TVDSlopeLimitedFlux(; method, kwargs...) =
     TVDSlopeLimitedFlux((; method, kwargs...))
 
-return_eltype(::TVDSlopeLimitedFlux, A, Φ) =
+return_eltype(::TVDSlopeLimitedFlux, A, Φ, 𝓊) =
     Geometry.Contravariant3Vector{eltype(eltype(A))}
 
 return_space(
     ::TVDSlopeLimitedFlux,
     A_space::AllFaceFiniteDifferenceSpace,
     Φ_space::AllCenterFiniteDifferenceSpace,
+    𝓊_space::AllFaceFiniteDifferenceSpace,
 ) = A_space
 
-function tvd_limited_flux(Aⱼ₋₁₂, Aⱼ₊₁₂, ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂, rⱼ₊₁₂, method)
+function tvd_limited_flux(Aⱼ₋₁₂, Aⱼ₊₁₂, ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂,rⱼ₊₁₂, method)
     stable_zero = zero(eltype(Aⱼ₊₁₂))
     stable_one = one(eltype(Aⱼ₊₁₂))
     Cⱼ₊₁₂ = compute_limiter_coeff(rⱼ₊₁₂, method)
@@ -1887,8 +2044,8 @@ function tvd_limited_flux(Aⱼ₋₁₂, Aⱼ₊₁₂, ϕⱼ₋₁, ϕⱼ, ϕ�
     return Cⱼ₊₁₂ * Aⱼ₊₁₂
 end
 
-stencil_interior_width(::TVDSlopeLimitedFlux, A_space, Φ_space) =
-    ((-1, 1), (-half - 1, half + 1))
+stencil_interior_width(::TVDSlopeLimitedFlux, A_space, Φ_space, 𝓊_space) =
+    ((-1, 1), (-half - 1, half + 1), (-1, +1))
 
 Base.@propagate_inbounds function stencil_interior(
     ℱ::TVDSlopeLimitedFlux,
@@ -1898,12 +2055,17 @@ Base.@propagate_inbounds function stencil_interior(
     hidx,
     A_field,
     Φ_field,
+    𝓊_field,
 )
     # cell center variables
     ϕⱼ₋₁ = getidx(space, Φ_field, loc, idx - half - 1, hidx)
     ϕⱼ = getidx(space, Φ_field, loc, idx - half, hidx)
     ϕⱼ₊₁ = getidx(space, Φ_field, loc, idx + half, hidx)
     ϕⱼ₊₂ = getidx(space, Φ_field, loc, idx + half + 1, hidx)
+    𝓊 = Geometry.contravariant3(
+        getidx(space, 𝓊_field, loc, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
     # cell face variables
     Aⱼ₊₁₂ = Geometry.contravariant3(
         getidx(space, A_field, loc, idx, hidx),
@@ -1914,7 +2076,7 @@ Base.@propagate_inbounds function stencil_interior(
         Geometry.LocalGeometry(space, idx - 1, hidx),
     )
     # See filter options below
-    rⱼ₊₁₂ = compute_slope_ratio(ϕⱼ, ϕⱼ₋₁, ϕⱼ₊₁)
+    rⱼ₊₁₂ = compute_slope_ratio(ϕⱼ, ϕⱼ₋₁, ϕⱼ₊₁, ϕⱼ₊₂, 𝓊)
 
     return Geometry.Contravariant3Vector(
         tvd_limited_flux(
@@ -1930,8 +2092,12 @@ Base.@propagate_inbounds function stencil_interior(
     )
 end
 
-@inline function compute_slope_ratio(ϕⱼ, ϕⱼ₋₁, ϕⱼ₊₁)
-    return (ϕⱼ - ϕⱼ₋₁) / (ϕⱼ₊₁ - ϕⱼ + eps(eltype(ϕⱼ)))
+@inline function compute_slope_ratio(ϕⱼ, ϕⱼ₋₁, ϕⱼ₊₁, ϕⱼ₊₂, 𝓊)
+    if 𝓊 >= 0
+        return (ϕⱼ - ϕⱼ₋₁) / (ϕⱼ₊₁ - ϕⱼ + eps(eltype(ϕⱼ)))
+    else
+        return (ϕⱼ₊₂ - ϕⱼ₊₁) / (ϕⱼ₊₁ - ϕⱼ +  eps(eltype(ϕⱼ)))
+    end
 end
 
 boundary_width(::TVDSlopeLimitedFlux, ::AbstractBoundaryCondition) = 2
@@ -1945,6 +2111,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
     hidx,
     A_field,
     Φ_field,
+    𝓊_field,
 )
     @assert idx <= left_face_boundary_idx(space) + 1
 
@@ -1960,6 +2127,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
     hidx,
     A_field,
     Φ_field,
+    𝓊_field,
 )
     @assert idx <= right_face_boundary_idx(space) - 1
 
@@ -3618,3 +3786,14 @@ Base.@propagate_inbounds function apply_stencil!(
     end
     return field_out
 end
+    # Compute slope ratio 𝜃 and limiter coefficient 𝜙
+    #𝜃 = compute_slope_ratio(a⁻, a⁻⁻, a⁺, a⁺⁺, v)
+    #𝜙 = compute_limiter_coeff(𝜃, method)
+    
+
+    #@assert 0 <= 𝜙 <= 2
+    #if v >= 0 
+    #    return v ⊠ (a⁻ ⊞ RecursiveApply.rdiv((a⁺ - a⁻) ⊠ 𝜙 ,2))
+    #else
+    #    return v ⊠ (a⁺ ⊟ RecursiveApply.rdiv((a⁺ - a⁻) ⊠ 𝜙 ,2)) # Current working solution
+    #end

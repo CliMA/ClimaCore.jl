@@ -35,7 +35,7 @@ function tendency!(yₜ, y, parameters, t)
     FT = Spaces.undertype(axes(y.q))
     bcvel = pulse(-π, t, z₀, zₕ, z₁)
     divf2c = Operators.DivergenceF2C(
-        bottom = Operators.SetValue(Geometry.WVector(FT(bcvel))),
+        bottom = Operators.SetValue(Geometry.WVector(FT(0))),
         top = Operators.SetValue(Geometry.WVector(FT(0))),
     )
     upwind1 = Operators.UpwindBiasedProductC2F(
@@ -46,56 +46,90 @@ function tendency!(yₜ, y, parameters, t)
         bottom = Operators.ThirdOrderOneSided(),
         top = Operators.ThirdOrderOneSided(),
     )
-    LimitedFlux = Operators.TVDSlopeLimitedFlux(
+    SLMethod = Operators.SlopeLimitedFluxC2F(
         bottom = Operators.FirstOrderOneSided(),
         top = Operators.FirstOrderOneSided(),
-        method = limiter_method,
+        method = limiter_method, 
     )
+    FCTZalesak = Operators.FCTZalesak(
+        bottom = Operators.FirstOrderOneSided(),
+        top = Operators.FirstOrderOneSided(),
+    )
+    TVDSlopeLimited = Operators.TVDSlopeLimitedFlux(
+        bottom = Operators.FirstOrderOneSided(),
+        top = Operators.FirstOrderOneSided(),
+        method = Operators.MinModLimiter(),
+    )
+
     If = Operators.InterpolateC2F()
-    @. yₜ.q =
-        -divf2c(
-            upwind1(w, y.q) +
-            LimitedFlux(upwind3(w, y.q) - upwind1(w, y.q), y.q / Δt),
-        )
-    # @. yₜ.q =
-    #     -divf2c(w * If(y.q))
+
+    if limiter_method == "Zalesak"
+        @. yₜ.q =
+            -divf2c(
+                upwind1(w, y.q) + FCTZalesak(
+                    upwind3(w, y.q) - upwind1(w, y.q),
+                    y.q / Δt,
+                    y.q / Δt - divf2c(upwind1(w, y.q)),
+                ),
+            )
+    elseif limiter_method == "TVDSlopeLimiterMethod"
+        Δfluxₕ = @. w * If(y.q) 
+        @info typeof(Δfluxₕ)
+        Δfluxₗ = @. upwind1(w, y.q)
+        @info typeof(Δfluxₗ)
+        @. yₜ.q =
+            -divf2c(
+                upwind1(w, y.q) + TVDSlopeLimited(
+                    w * If(y.q) - upwind1(w, y.q),
+                    y.q / Δt,
+                    w, 
+                ),
+            )
+    else
+        @. yₜ.q =
+            -divf2c(
+                SLMethod(w, 
+                         y.q))
+    end
 end
 
 # Define a pulse wave or square wave
 
 FT = Float64
 t₀ = FT(0.0)
-Δt = 0.0001 * 25
-t₁ = 200Δt
+t₁ = FT(6)
 z₀ = FT(0.0)
-zₕ = FT(1.0)
+zₕ = FT(2π)
 z₁ = FT(1.0)
 speed = FT(-1.0)
 pulse(z, t, z₀, zₕ, z₁) = abs(z - speed * t) ≤ zₕ ? z₁ : z₀
 
-n = 2 .^ 6
+n = 2 .^ 8
+elemlist = 2 .^ [3,4,5,6,7,8,9,10] 
+Δt = FT(0.3) * (20π / n)
+@info "Timestep Δt[s]: $(Δt)" 
 
 domain = Domains.IntervalDomain(
-    Geometry.ZPoint{FT}(-π),
-    Geometry.ZPoint{FT}(π);
+    Geometry.ZPoint{FT}(-10π),
+    Geometry.ZPoint{FT}(10π);
     boundary_names = (:bottom, :top),
 )
 
-stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(FT(7.0)))
-plot_string = ["uniform", "stretched"]
+stretch_fns = [Meshes.Uniform(),]
+plot_string = ["uniform",]
 
 for (i, stretch_fn) in enumerate(stretch_fns)
     limiter_methods = (
         Operators.RZeroLimiter(),
-        Operators.RHalfLimiter(),
         Operators.RMaxLimiter(),
         Operators.MinModLimiter(),
         Operators.KorenLimiter(),
         Operators.SuperbeeLimiter(),
         Operators.MonotonizedCentralLimiter(),
-        Operators.VanLeerLimiter(),
+        "Zalesak",
+        "TVDSlopeLimiterMethod",
     )
-    for limiter_method in limiter_methods
+    for (j, limiter_method) in enumerate(limiter_methods)
         @info (limiter_method, stretch_fn)
         mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
         cent_space = Spaces.CenterFiniteDifferenceSpace(mesh)
@@ -127,21 +161,32 @@ for (i, stretch_fn) in enumerate(stretch_fns)
 
         q_final = sol.u[end].q
         q_analytic = pulse.(z, t₁, z₀, zₕ, z₁)
+        
         err = norm(q_final .- q_analytic)
         rel_mass_err = norm((sum(q_final) - sum(q_init)) / sum(q_init))
 
-
-        plot(q_final)
-        Plots.png(
-            Plots.plot!(q_analytic, title = "$(typeof(limiter_method))"),
-            joinpath(
-                path,
-                "exact_and_computed_advected_square_wave_TVDSlopeLimitedFlux_" *
-                "$(nameof(typeof(limiter_method)))_" *
-                plot_string[i] *
-                ".png",
-            ),
-        )
+        if j == 1
+            fig = Plots.plot(q_analytic; label = "Exact", color=:red, )
+        end
+        linstyl = [:dash, :dot, :dashdot, :dashdotdot, :dash, :solid, :solid]
+        clrs = [:orange, :gray, :green, :maroon, :pink, :blue, :black]
+        if limiter_method == "Zalesak"
+            fig = plot!(q_final; label = "Zalesak", linestyle = linstyl[j], color=clrs[j], dpi=400, xlim=(-0.5, 1.1), ylim=(-15,10))
+        else
+            fig = plot!(q_final; label = "$(typeof(limiter_method))"[21:end], linestyle = linstyl[j], color=clrs[j], dpi=400, xlim=(-0.5, 1.1), ylim=(-15,10))
+        end
+        fig = plot!(legend=:outerbottom, legendcolumns=2)
+        if j == length(limiter_methods)
+            Plots.png(
+                fig, 
+                joinpath(
+                    path,
+                    "SlopeLimitedFluxSolution_" *
+                    "$(typeof(limiter_method))"[21:end] * 
+                    ".png",
+                ),
+            )
+        end
         @test err ≤ 0.25
         @test rel_mass_err ≤ 10eps()
     end
