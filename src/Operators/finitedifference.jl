@@ -1323,6 +1323,12 @@ end
 struct LinVanLeerC2F{BCS} <: AdvectionOperator
     bcs::BCS
 end
+
+abstract type LimiterConstraint end
+struct Mono4 <: LimiterConstraint end
+struct Mono5 <: LimiterConstraint end
+struct PosDef <: LimiterConstraint end
+
 LinVanLeerC2F(; kwargs...) =
     LinVanLeerC2F(NamedTuple(kwargs))
 
@@ -1336,7 +1342,7 @@ return_space(
     dt,
 ) = velocity_space
 
-function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt)
+function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::Mono5)
     Δ𝜙_avg = ((a⁰ - a⁻)+(a⁺ - a⁰))/2
     min𝜙 = min(a⁻, a⁰, a⁺) 
     max𝜙 = max(a⁻, a⁰, a⁺) 
@@ -1346,16 +1352,36 @@ function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt)
     Δ𝛼 = sign(Δ𝜙_avg) * 𝛼 * (1 - sign(v) * v * dt)
 end
 
-function slope_limited_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺, dt)
+function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::Mono4)
+    𝛿𝜙ᵢ = a⁰ - a⁻
+    𝛿𝜙ᵢ₊₁ = a⁺ - a⁰
+    Δ𝜙_avg = (𝛿𝜙ᵢ+𝛿𝜙ᵢ₊₁)/2
+    if sign(𝛿𝜙ᵢ) == sign(𝛿𝜙ᵢ₊₁)
+       return (2*𝛿𝜙ᵢ*𝛿𝜙ᵢ₊₁)/Δ𝜙_avg
+    else
+       return eltype(v)(0)
+    end
+end
+
+function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::PosDef)
+    Δ𝜙_avg = ((a⁰ - a⁻)+(a⁺ - a⁰))/2
+    return sign(Δ𝜙_avg) * min(abs(Δ𝜙_avg), 2*a⁰)
+end
+
+function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::Algebraic)
+    return ((a⁰ - a⁻)+(a⁺ - a⁰))/2
+end
+
+function slope_limited_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺, dt, method)
     # Following Lin et al. (1994)
     # https://doi.org/10.1175/1520-0493(1994)122<1575:ACOTVL>2.0.CO;2
     if v >= 0 
         # Eqn (2,5a,5b,5c)
-        Δ𝛼 = compute_Δ𝛼_linvanleer(a⁻⁻, a⁻, a⁺, v, dt)
+        Δ𝛼 = compute_Δ𝛼_linvanleer(a⁻⁻, a⁻, a⁺, v, dt, method)
         return v ⊠ (a⁻ ⊞ RecursiveApply.rdiv(Δ𝛼 , 2))
     else
         # Eqn (2,5a,5b,5c)
-        Δ𝛼 = compute_Δ𝛼_linvanleer(a⁻, a⁺, a⁺⁺, v, dt)
+        Δ𝛼 = compute_Δ𝛼_linvanleer(a⁻, a⁺, a⁺⁺, v, dt, method)
         return v ⊠ (a⁺ ⊟ RecursiveApply.rdiv(Δ𝛼 , 2))
     end
 end
@@ -1382,7 +1408,7 @@ Base.@propagate_inbounds function stencil_interior(
         Geometry.LocalGeometry(space, idx, hidx),
     )
     return Geometry.Contravariant3Vector(
-        slope_limited_product(vᶠ, a⁻, a⁻⁻, a⁺, a⁺⁺, dt),
+        slope_limited_product(vᶠ, a⁻, a⁻⁻, a⁺, a⁺⁺, dt, ℱ.bcs.method),
     )
 end
 
