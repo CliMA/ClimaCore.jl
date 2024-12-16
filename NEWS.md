@@ -17,6 +17,13 @@ main
 
 - Fixed writing/reading purely vertical spaces
 
+### ![][badge-✨feature/enhancement] `face_space`, `center_space` functions
+
+`ClimaCore.Spaces` now comes with two functions, `face_space` and
+`center_space`, to convert a `Space` from being cell-centered to be
+face-centered (and viceversa). These functions only work for vertical and
+extruded spaces.
+
 v0.14.20
 --------
 
