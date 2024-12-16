@@ -1320,67 +1320,58 @@ Base.@propagate_inbounds function stencil_right_boundary(
     stencil_interior(op, loc, space, idx - 1, hidx, velocity, arg)
 end
 
-
-#####
-
-struct SlopeLimitedFluxC2F{BCS} <: AdvectionOperator
+struct LinVanLeerC2F{BCS} <: AdvectionOperator
     bcs::BCS
 end
-SlopeLimitedFluxC2F(; kwargs...) =
-    SlopeLimitedFluxC2F(NamedTuple(kwargs))
+LinVanLeerC2F(; kwargs...) =
+    LinVanLeerC2F(NamedTuple(kwargs))
 
-return_eltype(::SlopeLimitedFluxC2F, V, A) =
+return_eltype(::LinVanLeerC2F, V, A, dt) =
     Geometry.Contravariant3Vector{eltype(eltype(V))}
 
 return_space(
-    ::SlopeLimitedFluxC2F,
+    ::LinVanLeerC2F,
     velocity_space::AllFaceFiniteDifferenceSpace,
     arg_space::AllCenterFiniteDifferenceSpace,
+    dt,
 ) = velocity_space
 
-function slope_limited_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺, method)
-    # Following Lin's paper: 
+function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt)
+    Δ𝜙_avg = ((a⁰ - a⁻)+(a⁺ - a⁰))/2
+    min𝜙 = min(a⁻, a⁰, a⁺) 
+    max𝜙 = max(a⁻, a⁰, a⁺) 
+    𝛼 = min(abs(Δ𝜙_avg),
+            2 * (a⁰ - min𝜙), 
+            2 * (max𝜙 - a⁰))
+    Δ𝛼 = sign(Δ𝜙_avg) * 𝛼 #* (1 - sign(v) * v * dt)
+end
+
+function slope_limited_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺, dt)
+    # Following Lin et al. (1994)
     # https://doi.org/10.1175/1520-0493(1994)122<1575:ACOTVL>2.0.CO;2
-    
     if v >= 0 
         # Eqn (2,5a,5b,5c)
-        Δ𝜙_avg = ((a⁻ - a⁻⁻)+(a⁺ - a⁻))/2
-        min𝜙 = min(a⁻⁻, a⁻, a⁺) 
-        max𝜙 = max(a⁻⁻, a⁻, a⁺) 
-        𝛼 = min(abs(Δ𝜙_avg),
-                2 * (a⁻ - min𝜙), 
-                2 * (max𝜙 - a⁻))
-        c⁻ = v * eltype(v)(0.07)
-        Δ𝛼 = sign(Δ𝜙_avg) * 𝛼 * (1 - c⁻)
-        # Eqn (1b)
+        Δ𝛼 = compute_Δ𝛼_linvanleer(a⁻⁻, a⁻, a⁺, v, dt)
         return v ⊠ (a⁻ ⊞ RecursiveApply.rdiv(Δ𝛼 , 2))
     else
-        # Following Lin's paper: 
         # Eqn (2,5a,5b,5c)
-        Δ𝜙_avg = ((a⁺ - a⁻)+(a⁺⁺ - a⁺))/2
-        min𝜙 = min(a⁻, a⁺, a⁺⁺) 
-        max𝜙 = max(a⁻, a⁺, a⁺⁺) 
-        𝛼 = min(abs(Δ𝜙_avg),
-                2 * (a⁺ - min𝜙), 
-                2 * (max𝜙 - a⁺))
-        c⁺ = v * eltype(v)(0.07) 
-        Δ𝛼 = sign(Δ𝜙_avg) * 𝛼 * (1 + c⁺)
-        # Eqn (1c)
+        Δ𝛼 = compute_Δ𝛼_linvanleer(a⁻, a⁺, a⁺⁺, v, dt)
         return v ⊠ (a⁺ ⊟ RecursiveApply.rdiv(Δ𝛼 , 2))
     end
 end
 
-stencil_interior_width(::SlopeLimitedFluxC2F, velocity, arg) =
-    ((0, 0), (-half - 1, half + 1))
+stencil_interior_width(::LinVanLeerC2F, velocity, arg, dt) =
+    ((0, 0), (-half - 1, half + 1), (0,0))
 
 Base.@propagate_inbounds function stencil_interior(
-    ℱ::SlopeLimitedFluxC2F,
+    ℱ::LinVanLeerC2F,
     loc,
     space,
     idx,
     hidx,
     velocity,
     arg,
+    dt,
 )
     a⁻ = getidx(space, arg, loc, idx - half, hidx)
     a⁻⁻ = getidx(space, arg, loc, idx - half - 1, hidx)
@@ -1391,15 +1382,15 @@ Base.@propagate_inbounds function stencil_interior(
         Geometry.LocalGeometry(space, idx, hidx),
     )
     return Geometry.Contravariant3Vector(
-        slope_limited_product(vᶠ, a⁻, a⁻⁻, a⁺, a⁺⁺, ℱ.bcs.method),
+        slope_limited_product(vᶠ, a⁻, a⁻⁻, a⁺, a⁺⁺, dt),
     )
 end
 
-boundary_width(::SlopeLimitedFluxC2F, ::AbstractBoundaryCondition) =
+boundary_width(::LinVanLeerC2F, ::AbstractBoundaryCondition) =
     2
 
 Base.@propagate_inbounds function stencil_left_boundary(
-    ::SlopeLimitedFluxC2F,
+    ::LinVanLeerC2F,
     bc::FirstOrderOneSided,
     loc,
     space,
@@ -1407,6 +1398,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
     hidx,
     velocity,
     arg,
+    dt,
 )
     @assert idx <= left_face_boundary_idx(space) + 1
     v = Geometry.contravariant3(
@@ -1419,7 +1411,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
 end
 
 Base.@propagate_inbounds function stencil_right_boundary(
-    ::SlopeLimitedFluxC2F,
+    ::LinVanLeerC2F,
     bc::FirstOrderOneSided,
     loc,
     space,
@@ -1427,6 +1419,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
     hidx,
     velocity,
     arg,
+    dt,
 )
     @assert idx >= right_face_boundary_idx(space) - 1
     v = Geometry.contravariant3(
@@ -1440,7 +1433,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
 end
 
 Base.@propagate_inbounds function stencil_left_boundary(
-    ℱ::SlopeLimitedFluxC2F,
+    ℱ::LinVanLeerC2F,
     bc::ThirdOrderOneSided,
     loc,
     space,
@@ -1448,6 +1441,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
     hidx,
     velocity,
     arg,
+    dt,
 )
     @assert idx <= left_face_boundary_idx(space) + 1
 
@@ -1461,7 +1455,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
 end
 
 Base.@propagate_inbounds function stencil_right_boundary(
-    ℱ::SlopeLimitedFluxC2F,
+    ℱ::LinVanLeerC2F,
     bc::ThirdOrderOneSided,
     loc,
     space,
@@ -1469,6 +1463,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
     hidx,
     velocity,
     arg,
+    dt,
 )
     @assert idx <= right_face_boundary_idx(space) - 1
 
@@ -1480,7 +1475,6 @@ Base.@propagate_inbounds function stencil_right_boundary(
 
     return Geometry.Contravariant3Vector(vᶠ * a)
 end
-######
 
 """
     U = Upwind3rdOrderBiasedProductC2F(;boundaries)
@@ -1768,9 +1762,6 @@ Base.@propagate_inbounds function stencil_right_boundary(
     return Geometry.Contravariant3Vector(zero(eltype(vᶠ)))
 end
 
-
-
-#########################
 """
     U = FCTZalesak(;boundaries)
     U.(A, Φ, Φᵗᵈ)
@@ -1956,7 +1947,6 @@ Base.@propagate_inbounds function stencil_right_boundary(
     return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
 end
 
-######Limited Flux Methods######
 """
     U = TVDSlopeLimitedFlux(;boundaries)
     U.(𝒜, Φ, 𝓊)

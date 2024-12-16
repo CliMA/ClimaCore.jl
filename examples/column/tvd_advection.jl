@@ -46,10 +46,9 @@ function tendency!(yₜ, y, parameters, t)
         bottom = Operators.ThirdOrderOneSided(),
         top = Operators.ThirdOrderOneSided(),
     )
-    SLMethod = Operators.SlopeLimitedFluxC2F(
+    VanLeerMethod = Operators.LinVanLeerC2F(
         bottom = Operators.FirstOrderOneSided(),
         top = Operators.FirstOrderOneSided(),
-        method = limiter_method, 
     )
     FCTZalesak = Operators.FCTZalesak(
         bottom = Operators.FirstOrderOneSided(),
@@ -58,7 +57,7 @@ function tendency!(yₜ, y, parameters, t)
     TVDSlopeLimited = Operators.TVDSlopeLimitedFlux(
         bottom = Operators.FirstOrderOneSided(),
         top = Operators.FirstOrderOneSided(),
-        method = Operators.MinModLimiter(),
+        method = limiter_method,
     )
 
     If = Operators.InterpolateC2F()
@@ -72,24 +71,21 @@ function tendency!(yₜ, y, parameters, t)
                     y.q / Δt - divf2c(upwind1(w, y.q)),
                 ),
             )
-    elseif limiter_method == "TVDSlopeLimiterMethod"
+    elseif limiter_method == "LinVanLeerC2F"
+        @. yₜ.q =
+            -divf2c(
+                VanLeerMethod(w, y.q, Δt))
+    else
         Δfluxₕ = @. w * If(y.q) 
-        @info typeof(Δfluxₕ)
         Δfluxₗ = @. upwind1(w, y.q)
-        @info typeof(Δfluxₗ)
         @. yₜ.q =
             -divf2c(
                 upwind1(w, y.q) + TVDSlopeLimited(
-                    w * If(y.q) - upwind1(w, y.q),
+                    upwind3(w, y.q) - upwind1(w, y.q),
                     y.q / Δt,
                     w, 
                 ),
             )
-    else
-        @. yₜ.q =
-            -divf2c(
-                SLMethod(w, 
-                         y.q))
     end
 end
 
@@ -122,12 +118,11 @@ for (i, stretch_fn) in enumerate(stretch_fns)
     limiter_methods = (
         Operators.RZeroLimiter(),
         Operators.RMaxLimiter(),
-        Operators.MinModLimiter(),
         Operators.KorenLimiter(),
         Operators.SuperbeeLimiter(),
         Operators.MonotonizedCentralLimiter(),
         "Zalesak",
-        "TVDSlopeLimiterMethod",
+        "LinVanLeerC2F",
     )
     for (j, limiter_method) in enumerate(limiter_methods)
         @info (limiter_method, stretch_fn)
@@ -172,6 +167,8 @@ for (i, stretch_fn) in enumerate(stretch_fns)
         clrs = [:orange, :gray, :green, :maroon, :pink, :blue, :black]
         if limiter_method == "Zalesak"
             fig = plot!(q_final; label = "Zalesak", linestyle = linstyl[j], color=clrs[j], dpi=400, xlim=(-0.5, 1.1), ylim=(-15,10))
+        elseif limiter_method == "LinVanLeerC2F"
+            fig = plot!(q_final; label = "LinVanLeer", linestyle = linstyl[j], color=clrs[j], dpi=400, xlim=(-0.5, 1.1), ylim=(-15,10))
         else
             fig = plot!(q_final; label = "$(typeof(limiter_method))"[21:end], linestyle = linstyl[j], color=clrs[j], dpi=400, xlim=(-0.5, 1.1), ylim=(-15,10))
         end

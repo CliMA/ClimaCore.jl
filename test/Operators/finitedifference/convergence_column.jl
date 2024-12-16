@@ -688,6 +688,70 @@ end
     @test conv_adv_wc[1] ≤ conv_adv_wc[2] ≤ conv_adv_wc[2]
 end
 
+@testset "Lin et al. (1994) Van-Leer class limiter" begin
+    FT = Float64
+    n_elems_seq = 2 .^ (4, 6, 8, 10, 12)
+    stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(1.0))
+    device = ClimaComms.device()
+
+    for (i, stretch_fn) in enumerate(stretch_fns)
+        err_adv_wc = zeros(FT, length(n_elems_seq))
+        Δh = zeros(FT, length(n_elems_seq))
+        for (k, n) in enumerate(n_elems_seq)
+            domain = Domains.IntervalDomain(
+                Geometry.ZPoint{FT}(-pi),
+                Geometry.ZPoint{FT}(pi);
+                boundary_names = (:bottom, :top),
+            )
+            mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
+
+            cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+            fs = Spaces.FaceFiniteDifferenceSpace(cs)
+
+            centers = getproperty(Fields.coordinate_field(cs), :z)
+
+            # Unitary, constant advective velocity
+            w = Geometry.WVector.(ones(fs))
+            # c = sin(z), scalar field defined at the centers
+            Δz = FT(2pi / n)
+            c = (cos.(centers .- Δz / 2) .- cos.(centers .+ Δz / 2)) ./ Δz
+            s = sin.(centers)
+
+            fluxᶠ = Operators.LinVanLeerC2F(
+                bottom = Operators.FirstOrderOneSided(),
+                top = Operators.FirstOrderOneSided(),
+                dt = FT(0),
+            )
+
+            divf2c = Operators.DivergenceF2C(
+                bottom = Operators.SetValue(
+                    Geometry.Contravariant3Vector(FT(0.0)),
+                ),
+                top = Operators.SetValue(
+                    Geometry.Contravariant3Vector(FT(0.0)),
+                ),
+            )
+
+            adv_wc =
+                @. divf2c.(fluxᶠ(w, c))
+
+            Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+
+            # Error
+            err_adv_wc[k] = norm(adv_wc .- cos.(centers))
+        end
+
+        # Check convergence rate
+        conv_adv_wc = convergence_rate(err_adv_wc, Δh)
+        # LinVanLeer Limited Flux conv, with f(z) = sin(z)
+        @test err_adv_wc[3] ≤ err_adv_wc[2] ≤ err_adv_wc[1] ≤ 0.1
+        @test conv_adv_wc[1] ≈ 1.5 atol = 0.1
+        @test conv_adv_wc[2] ≈ 1.5 atol = 0.1
+        @test conv_adv_wc[3] ≈ 1.5 atol = 0.1
+        @test conv_adv_wc[4] ≈ 1.5 atol = 0.1
+    end
+end
+
 @testset "Simple FCT: lin combination of UpwindBiasedProductC2F + Upwind3rdOrderBiasedProductC2F on (uniform and stretched) non-periodic mesh, with FirstOrderOneSided BCs" begin
     FT = Float64
     n_elems_seq = 2 .^ (4, 6, 8, 10)
