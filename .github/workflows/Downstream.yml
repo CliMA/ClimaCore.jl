@@ -46,20 +46,16 @@ jobs:
           repository: 'CliMA/${{ matrix.package }}'
           path: ${{ matrix.package }}
 
-      # The test suite for ClimaTimesteppers depends on ClimaCore, not
-      # ClimaTimesteppers itself. If we dev-ed ClimaCore in ClimaTimesteppers,
-      # the aqua test would fail because we never use ClimaCore.
-      - if: (matrix.package != 'ClimaTimesteppers.jl' && matrix.package != 'ClimaCoupler.jl')
+      # Some of the packages only use ClimaCore in the test suite, so dev-ing ClimaCore
+      # from the package itself would cause the aqua test to fail. Instead, we install
+      # TestEnv into the base environment, activate the test env for the downstream package,
+      # and dev ClimaCore before running the test suite from there.
+      - if: (matrix.package != 'ClimaCoupler.jl')
         run: |
+          julia --color=yes -e 'using Pkg; Pkg.add("TestEnv")'
           julia --color=yes --project=${{ matrix.package }} -e 'using Pkg; Pkg.instantiate()'
-          julia --color=yes --project=${{ matrix.package }} -e 'using Pkg; Pkg.develop(; path = ".")'
-          julia --color=yes --project=${{ matrix.package }} -e 'using Pkg; Pkg.test()'
-
-      - if: matrix.package == 'ClimaTimesteppers.jl'
-        run: |
-          julia --color=yes --project=ClimaTimesteppers.jl/test -e 'using Pkg; Pkg.instantiate()'
-          julia --color=yes --project=ClimaTimesteppers.jl/test -e 'using Pkg; Pkg.develop(; path = ".")'
-          julia --color=yes --project=ClimaTimesteppers.jl/test ClimaTimesteppers.jl/test/runtests.jl
+          julia --color=yes --project=${{ matrix.package }} -e 'using TestEnv; TestEnv.activate();\
+            using Pkg; Pkg.develop(; path = "."); include("${{ matrix.package }}/test/runtests.jl")'
 
       - if: matrix.package == 'ClimaCoupler.jl'
         run: |
