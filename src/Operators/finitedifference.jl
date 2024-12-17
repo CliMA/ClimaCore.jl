@@ -1407,7 +1407,7 @@ stencil_interior_width(::LinVanLeerC2F, velocity, arg, dt) =
     ((0, 0), (-half - 1, half + 1), (0, 0))
 
 Base.@propagate_inbounds function stencil_interior(
-    ℱ::LinVanLeerC2F,
+    op::LinVanLeerC2F,
     loc,
     space,
     idx,
@@ -1425,7 +1425,7 @@ Base.@propagate_inbounds function stencil_interior(
         Geometry.LocalGeometry(space, idx, hidx),
     )
     return Geometry.Contravariant3Vector(
-        slope_limited_product(vᶠ, a⁻, a⁻⁻, a⁺, a⁺⁺, dt, ℱ.bcs.method),
+        slope_limited_product(vᶠ, a⁻, a⁻⁻, a⁺, a⁺⁺, dt, op.bcs.method),
     )
 end
 
@@ -1475,7 +1475,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
 end
 
 Base.@propagate_inbounds function stencil_left_boundary(
-    ℱ::LinVanLeerC2F,
+    op::LinVanLeerC2F,
     bc::ThirdOrderOneSided,
     loc,
     space,
@@ -1497,7 +1497,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
 end
 
 Base.@propagate_inbounds function stencil_right_boundary(
-    ℱ::LinVanLeerC2F,
+    op::LinVanLeerC2F,
     bc::ThirdOrderOneSided,
     loc,
     space,
@@ -2080,7 +2080,7 @@ stencil_interior_width(::TVDSlopeLimitedFlux, A_space, Φ_space, 𝓊_space) =
     ((-1, 1), (-half - 1, half + 1), (-1, +1))
 
 Base.@propagate_inbounds function stencil_interior(
-    ℱ::TVDSlopeLimitedFlux,
+    op::TVDSlopeLimitedFlux,
     loc,
     space,
     idx,
@@ -2119,7 +2119,7 @@ Base.@propagate_inbounds function stencil_interior(
             ϕⱼ₊₁,
             ϕⱼ₊₂,
             rⱼ₊₁₂,
-            ℱ.bcs.method,
+            op.bcs.method,
         ),
     )
 end
