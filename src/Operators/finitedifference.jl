@@ -1324,10 +1324,24 @@ struct LinVanLeerC2F{BCS} <: AdvectionOperator
     bcs::BCS
 end
 
+"""
+    LimiterConstraint
+For the van Leer class of limiters as noted in 
+Lin et al. (1994), four limiter constraint options are provided
+- AlgebraicMean: Algebraic mean, this guarantees neither positivity nor monotonicity (eq 2)
+- PosDef: Positive-definite with implicit diffusion based on local stencil extrema (eq 3b, 3c, 5a, 5b)
+- Mono4: Monotonicity preserving harmonic mean, this implies a strong monotonicity constraint (eq 4)
+- Mono5: Monotonicity preserving, with extrema bounded by the edge cells in the stencil (eq 5)
+
+The diffusion implied by these methods is proportional to the local upwind CFL number.
+The `mismatch` Δ𝜙 = 0 returns the first-order upwind method. Special cases (discussed in Lin et al (1994)) include setting the 𝜙_min = 0 or 𝜙_max = saturation mixing ratio for water vapor
+are not considered here in favour of the generalized local extrema in equation (5a, 5b).
+"""
 abstract type LimiterConstraint end
+struct AlgebraicMean <: LimiterConstraint end
+struct PosDef <: LimiterConstraint end
 struct Mono4 <: LimiterConstraint end
 struct Mono5 <: LimiterConstraint end
-struct PosDef <: LimiterConstraint end
 
 LinVanLeerC2F(; kwargs...) =
     LinVanLeerC2F(NamedTuple(kwargs))
@@ -1353,22 +1367,25 @@ function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::Mono5)
 end
 
 function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::Mono4)
-    𝛿𝜙ᵢ = a⁰ - a⁻
-    𝛿𝜙ᵢ₊₁ = a⁺ - a⁰
-    Δ𝜙_avg = (𝛿𝜙ᵢ+𝛿𝜙ᵢ₊₁)/2
-    if sign(𝛿𝜙ᵢ) == sign(𝛿𝜙ᵢ₊₁)
-       return (2*𝛿𝜙ᵢ*𝛿𝜙ᵢ₊₁)/Δ𝜙_avg
+    Δ𝜙_avg = ((a⁰ - a⁻)+(a⁺ - a⁰))/2
+    if sign(a⁰ - a⁻) == sign(a⁺ - a⁰)
+       return ((a⁰ - a⁻)*(a⁺ - a⁰))/(Δ𝜙_avg + eps(eltype(v)))
     else
        return eltype(v)(0)
     end
 end
 
+function posdiff(x,y)
+    ifelse(x-y >= eltype(x)(0), x-y, eltype(x)(0))
+end
 function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::PosDef)
     Δ𝜙_avg = ((a⁰ - a⁻)+(a⁺ - a⁰))/2
-    return sign(Δ𝜙_avg) * min(abs(Δ𝜙_avg), 2*a⁰)
+    min𝜙 = min(a⁻, a⁰, a⁺) 
+    max𝜙 = max(a⁻, a⁰, a⁺) 
+    return sign(Δ𝜙_avg) * min(abs(Δ𝜙_avg), 2*posdiff(a⁺, min𝜙), 2*posdiff(max𝜙, a⁺))
 end
 
-function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::Algebraic)
+function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::AlgebraicMean)
     return ((a⁰ - a⁻)+(a⁺ - a⁰))/2
 end
 
