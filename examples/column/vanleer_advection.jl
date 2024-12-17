@@ -131,7 +131,7 @@ for (i, stretch_fn) in enumerate(stretch_fns)
                 fig, 
                 joinpath(
                     path,
-                    "SlopeLimitedFluxSolution_" *
+                    "LinVanLeerFluxLimiter_" *
                     "$(typeof(limiter_method))"[21:end] * 
                     ".png",
                 ),
