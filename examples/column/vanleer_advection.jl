@@ -25,7 +25,7 @@ import ClimaCore:
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
-dir = "tvd_advection"
+dir = "vanleer_advection"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
@@ -73,8 +73,8 @@ domain = Domains.IntervalDomain(
     boundary_names = (:bottom, :top),
 )
 
-stretch_fns = [Meshes.Uniform(),]
-plot_string = ["uniform",]
+stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(FT(7.0)))
+plot_string = ["uniform","stretched"]
 
 for (i, stretch_fn) in enumerate(stretch_fns)
     limiter_methods = (
@@ -124,7 +124,7 @@ for (i, stretch_fn) in enumerate(stretch_fns)
         end
         linstyl = [:solid, :dot, :dashdot, :dash]
         clrs = [:orange, :blue, :green, :black]
-        fig = plot!(q_final; label = "$(typeof(limiter_method))"[21:end], linestyle = linstyl[j], color=clrs[j], dpi=400, xlim=(-0.5, 1.1), ylim=(-15,10))
+        fig = plot!(q_final; label = "$(typeof(limiter_method))"[21:end], linestyle = linstyl[j], color=clrs[j], dpi=400, xlim=(-0.5, 1.1), ylim=(-17,12))
         fig = plot!(legend=:outerbottom, legendcolumns=2)
         if j == length(limiter_methods)
             Plots.png(
@@ -133,6 +133,7 @@ for (i, stretch_fn) in enumerate(stretch_fns)
                     path,
                     "LinVanLeerFluxLimiter_" *
                     "$(typeof(limiter_method))"[21:end] * 
+                    plot_string[i] *
                     ".png",
                 ),
             )
