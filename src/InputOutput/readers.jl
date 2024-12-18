@@ -152,17 +152,19 @@ function _scan_data_layout(layoutstring::AbstractString)
         "IFH",
         "IHF",
         "IF",
+        "VF",
         "VIJFH",
         "VIJHF",
         "VIFH",
         "VIHF",
-    )
+    ) "datalayout is $layoutstring"
     layoutstring == "IJFH" && return DataLayouts.IJFH
     layoutstring == "IJHF" && return DataLayouts.IJHF
     layoutstring == "IJF" && return DataLayouts.IJF
     layoutstring == "IFH" && return DataLayouts.IFH
     layoutstring == "IHF" && return DataLayouts.IHF
     layoutstring == "IF" && return DataLayouts.IF
+    layoutstring == "VF" && return DataLayouts.VF
     layoutstring == "VIJFH" && return DataLayouts.VIJFH
     layoutstring == "VIJHF" && return DataLayouts.VIJHF
     return DataLayouts.VIFH
@@ -482,8 +484,10 @@ function read_field(reader::HDF5Reader, name::AbstractString)
         topology = Spaces.topology(space)
         ArrayType = ClimaComms.array_type(topology)
         data_layout = attrs(obj)["data_layout"]
+        has_horizontal = occursin('I', data_layout)
         DataLayout = _scan_data_layout(data_layout)
-        h_dim = DataLayouts.h_dim(DataLayouts.singleton(DataLayout))
+        has_horizontal &&
+            (h_dim = DataLayouts.h_dim(DataLayouts.singleton(DataLayout)))
         if topology isa Topologies.Topology2D
             nd = ndims(obj)
             localidx =
@@ -492,7 +496,7 @@ function read_field(reader::HDF5Reader, name::AbstractString)
         else
             data = ArrayType(read(obj))
         end
-        Nij = size(data, findfirst("I", data_layout)[1])
+        has_horizontal && (Nij = size(data, findfirst("I", data_layout)[1]))
         # For when `Nh` is added back to the type space
         #     Nhd = Nh_dim(data_layout)
         #     Nht = Nhd == -1 ? () : (size(data, Nhd),)
@@ -501,6 +505,9 @@ function read_field(reader::HDF5Reader, name::AbstractString)
             Nv = size(data, 1)
             # values = DataLayout{ElType, Nv, Nij, Nht...}(data) # when Nh is in type-domain
             values = DataLayout{ElType, Nv, Nij}(data)
+        elseif data_layout in ("VF",)
+            Nv = size(data, 1)
+            values = DataLayout{ElType, Nv}(data)
         else
             # values = DataLayout{ElType, Nij, Nht...}(data) # when Nh is in type-domain
             values = DataLayout{ElType, Nij}(data)
