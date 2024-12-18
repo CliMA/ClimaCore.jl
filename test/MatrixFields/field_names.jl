@@ -45,7 +45,7 @@ const x = (; foo = Foo(0), a = (; b = 1, c = ((; d = 2), (;), ((), nothing))))
     @test_all MatrixFields.broadcasted_has_field(typeof(x), @name(a.c.:(1).d))
     @test_all !MatrixFields.broadcasted_has_field(
         typeof(x),
-        @name(foo.invalid_name),
+        @name(foo.invalid_name)
     )
 
     @test_all MatrixFields.broadcasted_get_field(x, @name()) == x
@@ -65,7 +65,7 @@ const x = (; foo = Foo(0), a = (; b = 1, c = ((; d = 2), (;), ((), nothing))))
               @name(c.:(1).d)
     @test_throws "is not a child name" MatrixFields.extract_internal_name(
         @name(a.c.:(1).d),
-        @name(foo),
+        @name(foo)
     )
 
     @test_all MatrixFields.append_internal_name(@name(a), @name(c.:(1).d)) ==
@@ -125,21 +125,21 @@ end
 
     @testset "FieldNameSet Constructors" begin
         @test_throws "Invalid FieldNameSet value" vector_keys(
-            @name(invalid_name),
+            @name(invalid_name)
         )
         @test_throws "Invalid FieldNameSet value" matrix_keys((
             @name(invalid_name),
-            @name(a.c),
+            @name(a.c)
         ),)
 
         for constructor in (vector_keys, vector_keys_no_tree)
             @test_throws "Duplicate FieldNameSet values" constructor(
                 @name(foo),
-                @name(foo),
+                @name(foo)
             )
             @test_throws "Overlapping FieldNameSet values" constructor(
                 @name(foo),
-                @name(foo.value),
+                @name(foo.value)
             )
         end
         for constructor in (matrix_keys, matrix_keys_no_tree)
@@ -166,7 +166,7 @@ end
         @name(foo.value),
         @name(a.c.:(1)),
         @name(a.c.:(2)),
-        @name(a.c.:(3)),
+        @name(a.c.:(3))
     )
     m_set3 = matrix_keys(
         (@name(foo.value), @name(a.c.:(1))),
@@ -376,7 +376,7 @@ end
                               @name(a.b),
                               @name(a.c.:(1)),
                               @name(a.c.:(2)),
-                              @name(a.c.:(3)),
+                              @name(a.c.:(3))
                           )
                 @test_all setdiff(set1, set4) ==
                           vector_keys_no_tree(@name(foo), @name(a.c.:(3)))
@@ -511,7 +511,7 @@ end
         ) == vector_keys_no_tree(
             @name(a.c.:(1)),
             @name(a.c.:(2)),
-            @name(a.c.:(3)),
+            @name(a.c.:(3))
         )
         @test_all MatrixFields.matrix_product_keys(
             matrix_keys_no_tree(
