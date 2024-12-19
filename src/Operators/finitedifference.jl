@@ -2064,7 +2064,7 @@ return_space(
     ::TVDSlopeLimitedFlux,
     A_space::AllFaceFiniteDifferenceSpace,
     Φ_space::AllCenterFiniteDifferenceSpace,
-    𝓊_space::AllFaceFiniteDifferenceSpace,
+    u_space::AllFaceFiniteDifferenceSpace,
 ) = A_space
 
 function tvd_limited_flux(Aⱼ₋₁₂, Aⱼ₊₁₂, ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂, rⱼ₊₁₂, method)
@@ -2076,7 +2076,7 @@ function tvd_limited_flux(Aⱼ₋₁₂, Aⱼ₊₁₂, ϕⱼ₋₁, ϕⱼ, ϕ�
     return Cⱼ₊₁₂ * Aⱼ₊₁₂
 end
 
-stencil_interior_width(::TVDSlopeLimitedFlux, A_space, Φ_space, 𝓊_space) =
+stencil_interior_width(::TVDSlopeLimitedFlux, A_space, Φ_space, u_space) =
     ((-1, 1), (-half - 1, half + 1), (-1, +1))
 
 Base.@propagate_inbounds function stencil_interior(
