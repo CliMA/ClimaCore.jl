@@ -15,7 +15,8 @@ main
 
 ### ![][badge-🐛bugfix] Bug fixes
 
-- Fixed writing/reading purely vertical spaces
+- Fixed writing/reading purely vertical spaces. PR [2102](https://github.com/CliMA/ClimaCore.jl/pull/2102)
+- Fixed correctness bug in reductions on GPUs. PR [2106](https://github.com/CliMA/ClimaCore.jl/pull/2106)
 
 v0.14.20
 --------
