@@ -774,7 +774,7 @@ end
         SLMethod = Operators.LinVanLeerC2F(
             bottom = Operators.FirstOrderOneSided(),
             top = Operators.FirstOrderOneSided(),
-            method = Operators.Mono4(),
+            method = Operators.MonotoneHarmonic(),
         )
 
         divf2c = Operators.DivergenceF2C()
