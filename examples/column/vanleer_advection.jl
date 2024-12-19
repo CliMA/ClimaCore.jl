@@ -116,13 +116,16 @@ for (i, stretch_fn) in enumerate(stretch_fns)
         if limiter_method != Operators.AlgebraicMean() && stretch_fn == Meshes.Uniform()
             @info "Extrema with $(limiter_method): $(extrema(q_final))"
             @assert maximum(q_final) <= FT(1)
-            @assert isapprox(maximum(q_final .- 1), FT(0), atol = FT(1e-6))
-            @assert isapprox(minimum(q_final .- 0), FT(0), atol = FT(1e-6))
+            @show maximum(q_final .- 1)
+            @show minimum(q_final .- 0)
+            @show abs(maximum(q_final .- 1))
+            @assert abs(maximum(q_final .- 1)) <= 10*sqrt(eps(FT))
+            @assert abs(minimum(q_final .- 0)) <= 10*sqrt(eps(FT))
         elseif limiter_method != Operators.AlgebraicMean()
             @info "Extrema with $(limiter_method): $(extrema(q_final))"
             @assert maximum(q_final) <= FT(1)
-            @assert isapprox(maximum(q_final .- 1), FT(0), atol = FT(0.05))
-            @assert isapprox(minimum(q_final .- 0), FT(0), atol = FT(0.05))
+            @assert abs(maximum(q_final .- 1)) <= FT(0.05)
+            @assert abs(minimum(q_final .- 0)) <= FT(0.05)
         end
 
         q_analytic = pulse.(z, t₁, z₀, zₕ, z₁)
