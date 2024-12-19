@@ -113,14 +113,15 @@ for (i, stretch_fn) in enumerate(stretch_fns)
 
         q_final = sol.u[end].q
 
-        if limiter_method != Operators.AlgebraicMean() && stretch_fn == Meshes.Uniform()
+        if limiter_method != Operators.AlgebraicMean() &&
+           stretch_fn == Meshes.Uniform()
             @info "Extrema with $(limiter_method): $(extrema(q_final))"
             @assert maximum(q_final) <= FT(1)
             @show maximum(q_final .- 1)
             @show minimum(q_final .- 0)
             @show abs(maximum(q_final .- 1))
-            @assert abs(maximum(q_final .- 1)) <= 10*sqrt(eps(FT))
-            @assert abs(minimum(q_final .- 0)) <= 10*sqrt(eps(FT))
+            @assert abs(maximum(q_final .- 1)) <= 10 * sqrt(eps(FT))
+            @assert abs(minimum(q_final .- 0)) <= 10 * sqrt(eps(FT))
         elseif limiter_method != Operators.AlgebraicMean()
             @info "Extrema with $(limiter_method): $(extrema(q_final))"
             @assert maximum(q_final) <= FT(1)
