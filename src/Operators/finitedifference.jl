@@ -1320,14 +1320,10 @@ Base.@propagate_inbounds function stencil_right_boundary(
     stencil_interior(op, loc, space, idx - 1, hidx, velocity, arg)
 end
 
-struct LinVanLeerC2F{BCS} <: AdvectionOperator
-    bcs::BCS
-end
-
 """
-    LimiterConstraint
+    LinVanLeerC2F
 Following the van Leer class of limiters as noted in 
-[Lin1994](@cite), four limiter constraint options are provided
+[Lin1994](@cite), four limiter constraint options are provided for use with advection operators:
 - AlgebraicMean: Algebraic mean, this guarantees neither positivity nor monotonicity (eq 2)
 - PosDef: Positive-definite with implicit diffusion based on local stencil extrema (eq 3b, 3c, 5a, 5b)
 - Mono4: Monotonicity preserving harmonic mean, this implies a strong monotonicity constraint (eq 4)
@@ -1337,6 +1333,9 @@ The diffusion implied by these methods is proportional to the local upwind CFL n
 The `mismatch` Δ𝜙 = 0 returns the first-order upwind method. Special cases (discussed in Lin et al (1994)) include setting the 𝜙_min = 0 or 𝜙_max = saturation mixing ratio for water vapor
 are not considered here in favour of the generalized local extrema in equation (5a, 5b).
 """
+struct LinVanLeerC2F{BCS} <: AdvectionOperator
+    bcs::BCS
+end
 abstract type LimiterConstraint end
 struct AlgebraicMean <: LimiterConstraint end
 struct PosDef <: LimiterConstraint end
