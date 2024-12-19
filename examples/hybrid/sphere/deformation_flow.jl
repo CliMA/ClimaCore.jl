@@ -83,7 +83,7 @@ const FCTZalesak = Operators.FCTZalesak(
     bottom = Operators.FirstOrderOneSided(),
     top = Operators.FirstOrderOneSided(),
 )
-const SlopeLimitedFlux = Operators.TVDSlopeLimitedFlux(
+const SlopeLimitedFlux = Operators.TVDLimitedFluxC2F(
     bottom = Operators.FirstOrderOneSided(),
     top = Operators.FirstOrderOneSided(),
     method = Operators.MinModLimiter(),
@@ -91,7 +91,7 @@ const SlopeLimitedFlux = Operators.TVDSlopeLimitedFlux(
 const LinVanLeerFlux = Operators.LinVanLeerC2F(
     bottom = Operators.FirstOrderOneSided(),
     top = Operators.FirstOrderOneSided(),
-    method = Operators.Mono5(),
+    method = Operators.MonotoneLocalExtrema(),
 )
 const FCTBorisBook = Operators.FCTBorisBook(
     bottom = Operators.FirstOrderOneSided(),
