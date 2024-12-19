@@ -1989,7 +1989,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
 end
 
 """
-    U = TVDSlopeLimitedFlux(;boundaries)
+    U = TVDLimitedFluxC2F(;boundaries)
     U.(𝒜, Φ, 𝓊)
 𝒜, following the notation of Durran (Numerical Methods for Fluid
 Dynamics, 2ⁿᵈ ed.) is the antidiffusive flux given by
@@ -2049,18 +2049,18 @@ end
     return max(zero(eltype(r)), min(2r, (1 + r) / 2, 2))
 end
 
-struct TVDSlopeLimitedFlux{BCS} <: AdvectionOperator
+struct TVDLimitedFluxC2F{BCS} <: AdvectionOperator
     bcs::BCS
 end
 
-TVDSlopeLimitedFlux(; method, kwargs...) =
-    TVDSlopeLimitedFlux((; method, kwargs...))
+TVDLimitedFluxC2F(; method, kwargs...) =
+    TVDLimitedFluxC2F((; method, kwargs...))
 
-return_eltype(::TVDSlopeLimitedFlux, A, Φ, 𝓊) =
+return_eltype(::TVDLimitedFluxC2F, A, Φ, 𝓊) =
     Geometry.Contravariant3Vector{eltype(eltype(A))}
 
 return_space(
-    ::TVDSlopeLimitedFlux,
+    ::TVDLimitedFluxC2F,
     A_space::AllFaceFiniteDifferenceSpace,
     Φ_space::AllCenterFiniteDifferenceSpace,
     u_space::AllFaceFiniteDifferenceSpace,
@@ -2075,11 +2075,11 @@ function tvd_limited_flux(Aⱼ₋₁₂, Aⱼ₊₁₂, ϕⱼ₋₁, ϕⱼ, ϕ�
     return Cⱼ₊₁₂ * Aⱼ₊₁₂
 end
 
-stencil_interior_width(::TVDSlopeLimitedFlux, A_space, Φ_space, u_space) =
+stencil_interior_width(::TVDLimitedFluxC2F, A_space, Φ_space, u_space) =
     ((-1, 1), (-half - 1, half + 1), (-1, +1))
 
 Base.@propagate_inbounds function stencil_interior(
-    op::TVDSlopeLimitedFlux,
+    op::TVDLimitedFluxC2F,
     loc,
     space,
     idx,
@@ -2131,10 +2131,10 @@ end
     end
 end
 
-boundary_width(::TVDSlopeLimitedFlux, ::AbstractBoundaryCondition) = 2
+boundary_width(::TVDLimitedFluxC2F, ::AbstractBoundaryCondition) = 2
 
 Base.@propagate_inbounds function stencil_left_boundary(
-    ::TVDSlopeLimitedFlux,
+    ::TVDLimitedFluxC2F,
     bc::FirstOrderOneSided,
     loc,
     space,
@@ -2150,7 +2150,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
 end
 
 Base.@propagate_inbounds function stencil_right_boundary(
-    ::TVDSlopeLimitedFlux,
+    ::TVDLimitedFluxC2F,
     bc::FirstOrderOneSided,
     loc,
     space,

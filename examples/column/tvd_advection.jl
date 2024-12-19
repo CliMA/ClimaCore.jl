@@ -50,7 +50,7 @@ function tendency!(yₜ, y, parameters, t)
         bottom = Operators.FirstOrderOneSided(),
         top = Operators.FirstOrderOneSided(),
     )
-    TVDSlopeLimited = Operators.TVDSlopeLimitedFlux(
+    TVDSlopeLimited = Operators.TVDLimitedFluxC2F(
         bottom = Operators.FirstOrderOneSided(),
         top = Operators.FirstOrderOneSided(),
         method = limiter_method,
