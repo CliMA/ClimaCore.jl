@@ -1365,16 +1365,15 @@ end
 function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::MonotoneHarmonic)
     Δ𝜙_avg = ((a⁰ - a⁻) + (a⁺ - a⁰)) / 2
     c = sign(v) * v * dt
-    if sign(a⁰ - a⁻) == sign(a⁺ - a⁰) && Δ𝜙_avg != eltype(v)(0)
+    if sign(a⁰ - a⁻) == sign(a⁺ - a⁰) && Δ𝜙_avg != 0
         return ((a⁰ - a⁻) * (a⁺ - a⁰)) / (Δ𝜙_avg) * (1 - c)
     else
         return eltype(v)(0)
     end
 end
 
-function posdiff(x, y)
-    ifelse(x - y >= eltype(x)(0), x - y, eltype(x)(0))
-end
+posdiff(x, y) = ifelse(x - y ≥ 0, x - y, eltype(x)(0))
+
 function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::PositiveDefinite)
     Δ𝜙_avg = ((a⁰ - a⁻) + (a⁺ - a⁰)) / 2
     min𝜙 = min(a⁻, a⁰, a⁺)
