@@ -146,7 +146,7 @@ for (i, stretch_fn) in enumerate(stretch_fns)
             color = clrs[j],
             dpi = 400,
             xlim = (-0.5, 1.1),
-            ylim = (-17, 12),
+            ylim = (-20, 20),
         )
         fig = plot!(legend = :outerbottom, legendcolumns = 2)
         if j == length(limiter_methods)
