@@ -1325,9 +1325,9 @@ end
 Following the van Leer class of limiters as noted in 
 [Lin1994](@cite), four limiter constraint options are provided for use with advection operators:
 - AlgebraicMean: Algebraic mean, this guarantees neither positivity nor monotonicity (eq 2)
-- PosDef: Positive-definite with implicit diffusion based on local stencil extrema (eq 3b, 3c, 5a, 5b)
-- Mono4: Monotonicity preserving harmonic mean, this implies a strong monotonicity constraint (eq 4)
-- Mono5: Monotonicity preserving, with extrema bounded by the edge cells in the stencil (eq 5)
+- PositiveDefinite: Positive-definite with implicit diffusion based on local stencil extrema (eq 3b, 3c, 5a, 5b)
+- MonotoneHarmonic: Monotonicity preserving harmonic mean, this implies a strong monotonicity constraint (eq 4)
+- MonotoneLocalExtrema: Monotonicity preserving, with extrema bounded by the edge cells in the stencil (eq 5)
 
 The diffusion implied by these methods is proportional to the local upwind CFL number.
 The `mismatch` Δ𝜙 = 0 returns the first-order upwind method. Special cases (discussed in Lin et al (1994)) include setting the 𝜙_min = 0 or 𝜙_max = saturation mixing ratio for water vapor
@@ -1338,9 +1338,9 @@ struct LinVanLeerC2F{BCS} <: AdvectionOperator
 end
 abstract type LimiterConstraint end
 struct AlgebraicMean <: LimiterConstraint end
-struct PosDef <: LimiterConstraint end
-struct Mono4 <: LimiterConstraint end
-struct Mono5 <: LimiterConstraint end
+struct PositiveDefinite <: LimiterConstraint end
+struct MonotoneHarmonic <: LimiterConstraint end
+struct MonotoneLocalExtrema <: LimiterConstraint end
 
 LinVanLeerC2F(; kwargs...) = LinVanLeerC2F(NamedTuple(kwargs))
 
@@ -1354,7 +1354,7 @@ return_space(
     dt,
 ) = velocity_space
 
-function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::Mono5)
+function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::MonotoneLocalExtrema)
     Δ𝜙_avg = ((a⁰ - a⁻) + (a⁺ - a⁰)) / 2
     min𝜙 = min(a⁻, a⁰, a⁺)
     max𝜙 = max(a⁻, a⁰, a⁺)
@@ -1362,7 +1362,7 @@ function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::Mono5)
     Δ𝛼 = sign(Δ𝜙_avg) * 𝛼 * (1 - sign(v) * v * dt)
 end
 
-function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::Mono4)
+function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::MonotoneHarmonic)
     Δ𝜙_avg = ((a⁰ - a⁻) + (a⁺ - a⁰)) / 2
     c = sign(v) * v * dt
     if sign(a⁰ - a⁻) == sign(a⁺ - a⁰) && Δ𝜙_avg != eltype(v)(0)
@@ -1375,7 +1375,7 @@ end
 function posdiff(x, y)
     ifelse(x - y >= eltype(x)(0), x - y, eltype(x)(0))
 end
-function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::PosDef)
+function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::PositiveDefinite)
     Δ𝜙_avg = ((a⁰ - a⁻) + (a⁺ - a⁰)) / 2
     min𝜙 = min(a⁻, a⁰, a⁺)
     max𝜙 = max(a⁻, a⁰, a⁺)

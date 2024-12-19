@@ -79,8 +79,8 @@ for (i, stretch_fn) in enumerate(stretch_fns)
     limiter_methods = (
         Operators.AlgebraicMean(),
         Operators.PosDef(),
-        Operators.Mono4(),
-        Operators.Mono5(),
+        Operators.MonotoneHarmonic(),
+        Operators.MonotoneLocalExtrema(),
     )
     for (j, limiter_method) in enumerate(limiter_methods)
         mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
