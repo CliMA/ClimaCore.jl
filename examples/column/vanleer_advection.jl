@@ -62,7 +62,7 @@ pulse(z, t, z₀, zₕ, z₁) = abs(z - speed * t) ≤ zₕ ? z₁ : z₀
 
 n = 2 .^ 8
 elemlist = 2 .^ [3, 4, 5, 6, 7, 8, 9, 10]
-Δt = FT(0.3) * (20π / n)
+Δt = FT(0.1) * (20π / n)
 @info "Timestep Δt[s]: $(Δt)"
 
 domain = Domains.IntervalDomain(
@@ -78,7 +78,7 @@ for (i, stretch_fn) in enumerate(stretch_fns)
     @info stretch_fn
     limiter_methods = (
         Operators.AlgebraicMean(),
-        Operators.PosDef(),
+        Operators.PositiveDefinite(),
         Operators.MonotoneHarmonic(),
         Operators.MonotoneLocalExtrema(),
     )
@@ -113,7 +113,12 @@ for (i, stretch_fn) in enumerate(stretch_fns)
 
         q_final = sol.u[end].q
 
-        if limiter_method != Operators.AlgebraicMean()
+        if limiter_method != Operators.AlgebraicMean() && stretch_fn == Meshes.Uniform()
+            @info "Extrema with $(limiter_method): $(extrema(q_final))"
+            @assert maximum(q_final) <= FT(1)
+            @assert isapprox(maximum(q_final .- 1), FT(0), atol = FT(1e-6))
+            @assert isapprox(minimum(q_final .- 0), FT(0), atol = FT(1e-6))
+        elseif limiter_method != Operators.AlgebraicMean()
             @info "Extrema with $(limiter_method): $(extrema(q_final))"
             @assert maximum(q_final) <= FT(1)
             @assert isapprox(maximum(q_final .- 1), FT(0), atol = FT(0.05))
