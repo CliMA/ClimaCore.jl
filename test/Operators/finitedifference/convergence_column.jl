@@ -718,7 +718,7 @@ end
         SLMethod = Operators.LinVanLeerC2F(
             bottom = Operators.FirstOrderOneSided(),
             top = Operators.FirstOrderOneSided(),
-            method = Operators.Mono5(),
+            constraint = Operators.MonotoneLocalExtrema(),
         )
 
         divf2c = Operators.DivergenceF2C()
@@ -771,10 +771,10 @@ end
         # c = sin(z), scalar field defined at the centers
         c = sin.(centers)
 
-        SLMethod = Operators.LinVanLeerC2F(
+        SLMethod = Operators.LinVanLeerC2F(;
             bottom = Operators.FirstOrderOneSided(),
             top = Operators.FirstOrderOneSided(),
-            method = Operators.MonotoneHarmonic(),
+            constraint = Operators.MonotoneHarmonic(),
         )
 
         divf2c = Operators.DivergenceF2C()
@@ -830,7 +830,7 @@ end
         SLMethod = Operators.LinVanLeerC2F(
             bottom = Operators.FirstOrderOneSided(),
             top = Operators.FirstOrderOneSided(),
-            method = Operators.PosDef(),
+            constraint = Operators.PositiveDefinite(),
         )
 
         divf2c = Operators.DivergenceF2C()

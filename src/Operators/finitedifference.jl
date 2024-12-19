@@ -1341,8 +1341,9 @@ cases (discussed in Lin et al (1994)) include setting the 𝜙_min = 0 or 𝜙_m
 saturation mixing ratio for water vapor are not considered here in favour of
 the generalized local extrema in equation (5a, 5b).
 """
-struct LinVanLeerC2F{BCS} <: AdvectionOperator
+struct LinVanLeerC2F{BCS, C} <: AdvectionOperator
     bcs::BCS
+    constraint::C
 end
 abstract type LimiterConstraint end
 struct AlgebraicMean <: LimiterConstraint end
@@ -1350,7 +1351,8 @@ struct PositiveDefinite <: LimiterConstraint end
 struct MonotoneHarmonic <: LimiterConstraint end
 struct MonotoneLocalExtrema <: LimiterConstraint end
 
-LinVanLeerC2F(; kwargs...) = LinVanLeerC2F(NamedTuple(kwargs))
+LinVanLeerC2F(; constraint, kwargs...) =
+    LinVanLeerC2F(NamedTuple(kwargs), constraint)
 
 return_eltype(::LinVanLeerC2F, V, A, dt) =
     Geometry.Contravariant3Vector{eltype(eltype(V))}
@@ -1395,16 +1397,16 @@ function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::AlgebraicMean)
     return ((a⁰ - a⁻) + (a⁺ - a⁰)) / 2 * (1 - sign(v) * v * dt)
 end
 
-function slope_limited_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺, dt, method)
+function slope_limited_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺, dt, constraint)
     # Following Lin et al. (1994)
     # https://doi.org/10.1175/1520-0493(1994)122<1575:ACOTVL>2.0.CO;2
     if v >= 0
         # Eqn (2,5a,5b,5c)
-        Δ𝛼 = compute_Δ𝛼_linvanleer(a⁻⁻, a⁻, a⁺, v, dt, method)
+        Δ𝛼 = compute_Δ𝛼_linvanleer(a⁻⁻, a⁻, a⁺, v, dt, constraint)
         return v ⊠ (a⁻ ⊞ RecursiveApply.rdiv(Δ𝛼, 2))
     else
         # Eqn (2,5a,5b,5c)
-        Δ𝛼 = compute_Δ𝛼_linvanleer(a⁻, a⁺, a⁺⁺, v, dt, method)
+        Δ𝛼 = compute_Δ𝛼_linvanleer(a⁻, a⁺, a⁺⁺, v, dt, constraint)
         return v ⊠ (a⁺ ⊟ RecursiveApply.rdiv(Δ𝛼, 2))
     end
 end
@@ -1431,7 +1433,7 @@ Base.@propagate_inbounds function stencil_interior(
         Geometry.LocalGeometry(space, idx, hidx),
     )
     return Geometry.Contravariant3Vector(
-        slope_limited_product(vᶠ, a⁻, a⁻⁻, a⁺, a⁺⁺, dt, op.bcs.method),
+        slope_limited_product(vᶠ, a⁻, a⁻⁻, a⁺, a⁺⁺, dt, op.constraint),
     )
 end
 
