@@ -1324,10 +1324,10 @@ end
     LinVanLeerC2F
 Following the van Leer class of limiters as noted in 
 [Lin1994](@cite), four limiter constraint options are provided for use with advection operators:
-- AlgebraicMean: Algebraic mean, this guarantees neither positivity nor monotonicity (eq 2)
-- PositiveDefinite: Positive-definite with implicit diffusion based on local stencil extrema (eq 3b, 3c, 5a, 5b)
-- MonotoneHarmonic: Monotonicity preserving harmonic mean, this implies a strong monotonicity constraint (eq 4)
-- MonotoneLocalExtrema: Monotonicity preserving, with extrema bounded by the edge cells in the stencil (eq 5)
+- AlgebraicMean: Algebraic mean, this guarantees neither positivity nor monotonicity (eq 2, `avg`)
+- PositiveDefinite: Positive-definite with implicit diffusion based on local stencil extrema (eq 3b, 3c, 5a, 5b, `posd`)
+- MonotoneHarmonic: Monotonicity preserving harmonic mean, this implies a strong monotonicity constraint (eq 4, `mono4`)
+- MonotoneLocalExtrema: Monotonicity preserving, with extrema bounded by the edge cells in the stencil (eq 5, `mono5`)
 
 The diffusion implied by these methods is proportional to the local upwind CFL number.
 The `mismatch` Δ𝜙 = 0 returns the first-order upwind method. Special cases (discussed in Lin et al (1994)) include setting the 𝜙_min = 0 or 𝜙_max = saturation mixing ratio for water vapor
