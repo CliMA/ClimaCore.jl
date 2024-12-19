@@ -2121,12 +2121,13 @@ end
     return max(zero(eltype(r)), min(2r, (1 + r) / 2, 2))
 end
 
-struct TVDLimitedFluxC2F{BCS} <: AdvectionOperator
+struct TVDLimitedFluxC2F{BCS, M} <: AdvectionOperator
     bcs::BCS
+    method::M
 end
 
 TVDLimitedFluxC2F(; method, kwargs...) =
-    TVDLimitedFluxC2F((; method, kwargs...))
+    TVDLimitedFluxC2F((; kwargs...), method)
 
 return_eltype(::TVDLimitedFluxC2F, A, Φ, 𝓊) =
     Geometry.Contravariant3Vector{eltype(eltype(A))}
@@ -2138,12 +2139,12 @@ return_space(
     u_space::AllFaceFiniteDifferenceSpace,
 ) = A_space
 
-function tvd_limited_flux(Aⱼ₋₁₂, Aⱼ₊₁₂, ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂, rⱼ₊₁₂, method)
+function tvd_limited_flux(Aⱼ₋₁₂, Aⱼ₊₁₂, ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂, rⱼ₊₁₂, constraint)
     stable_zero = zero(eltype(Aⱼ₊₁₂))
     stable_one = one(eltype(Aⱼ₊₁₂))
-    Cⱼ₊₁₂ = compute_limiter_coeff(rⱼ₊₁₂, method)
-    @assert Cⱼ₊₁₂ <= eltype(Aⱼ₊₁₂)(2)
-    @assert Cⱼ₊₁₂ >= eltype(Aⱼ₊₁₂)(0)
+    Cⱼ₊₁₂ = compute_limiter_coeff(rⱼ₊₁₂, constraint)
+    @assert Cⱼ₊₁₂ <= 2
+    @assert Cⱼ₊₁₂ >= 0
     return Cⱼ₊₁₂ * Aⱼ₊₁₂
 end
 
@@ -2182,16 +2183,7 @@ Base.@propagate_inbounds function stencil_interior(
     rⱼ₊₁₂ = compute_slope_ratio(ϕⱼ, ϕⱼ₋₁, ϕⱼ₊₁, ϕⱼ₊₂, 𝓊)
 
     return Geometry.Contravariant3Vector(
-        tvd_limited_flux(
-            Aⱼ₋₁₂,
-            Aⱼ₊₁₂,
-            ϕⱼ₋₁,
-            ϕⱼ,
-            ϕⱼ₊₁,
-            ϕⱼ₊₂,
-            rⱼ₊₁₂,
-            op.bcs.method,
-        ),
+        tvd_limited_flux(Aⱼ₋₁₂, Aⱼ₊₁₂, ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂, rⱼ₊₁₂, op.method),
     )
 end
 

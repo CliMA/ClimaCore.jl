@@ -113,20 +113,21 @@ for (i, stretch_fn) in enumerate(stretch_fns)
 
         q_final = sol.u[end].q
 
-        if limiter_method != Operators.AlgebraicMean() &&
+        @info "Extrema with $(limiter_method), i=$i, j=$j: $(extrema(q_final))"
+        @show maximum(q_final .- 1)
+        @show minimum(q_final .- 0)
+        @show abs(maximum(q_final .- 1))
+        monotonicity_preserving =
+            [Operators.MonotoneHarmonic, Operators.MonotoneLocalExtrema]
+        if any(x -> limiter_method isa x, monotonicity_preserving) &&
            stretch_fn == Meshes.Uniform()
-            @info "Extrema with $(limiter_method): $(extrema(q_final))"
+            @assert abs(maximum(q_final .- 1)) <= eps(FT)
+            @assert abs(minimum(q_final .- 0)) <= eps(FT)
             @assert maximum(q_final) <= FT(1)
-            @show maximum(q_final .- 1)
-            @show minimum(q_final .- 0)
-            @show abs(maximum(q_final .- 1))
-            @assert abs(maximum(q_final .- 1)) <= 10 * sqrt(eps(FT))
-            @assert abs(minimum(q_final .- 0)) <= 10 * sqrt(eps(FT))
         elseif limiter_method != Operators.AlgebraicMean()
-            @info "Extrema with $(limiter_method): $(extrema(q_final))"
-            @assert maximum(q_final) <= FT(1)
             @assert abs(maximum(q_final .- 1)) <= FT(0.05)
             @assert abs(minimum(q_final .- 0)) <= FT(0.05)
+            @assert maximum(q_final) <= FT(1)
         end
 
         q_analytic = pulse.(z, t₁, z₀, zₕ, z₁)
