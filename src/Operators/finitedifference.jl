@@ -1870,9 +1870,9 @@ function fct_zalesak(
     stable_zero = zero(eltype(Aⱼ₊₁₂))
     stable_one = one(eltype(Aⱼ₊₁₂))
 
-    # 𝒮5.4.2 (1)  Durran (5.32)  Zalesak's cosmetic correction 
-    # which is usually omitted but used in Durran's textbook 
-    # implementation of the flux corrected transport method. 
+    # 𝒮5.4.2 (1)  Durran (5.32)  Zalesak's cosmetic correction
+    # which is usually omitted but used in Durran's textbook
+    # implementation of the flux corrected transport method.
     # (Textbook suggests mixed results in 3 reported scenarios)
     if (
         Aⱼ₊₁₂ * (ϕⱼ₊₁ᵗᵈ - ϕⱼᵗᵈ) < stable_zero && (
@@ -1888,7 +1888,7 @@ function fct_zalesak(
     ϕⱼᵐᵃˣ = max(ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₋₁ᵗᵈ, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ)
     ϕⱼᵐⁱⁿ = min(ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₋₁ᵗᵈ, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ)
     Pⱼ⁺ = max(stable_zero, Aⱼ₋₁₂) - min(stable_zero, Aⱼ₊₁₂)
-    # Zalesak also requires, in equation (5.33) Δx/Δt, which for the 
+    # Zalesak also requires, in equation (5.33) Δx/Δt, which for the
     # reference element we may assume Δζ = 1 between interfaces
     Qⱼ⁺ = (ϕⱼᵐᵃˣ - ϕⱼᵗᵈ)
     Rⱼ⁺ = (Pⱼ⁺ > stable_zero ? min(stable_one, Qⱼ⁺ / Pⱼ⁺) : stable_zero)
@@ -2000,19 +2000,24 @@ end
 """
     U = TVDLimitedFluxC2F(;boundaries)
     U.(𝒜, Φ, 𝓊)
-𝒜, following the notation of Durran (Numerical Methods for Fluid
-Dynamics, 2ⁿᵈ ed.) is the antidiffusive flux given by
-𝒜 = ℱʰ - ℱˡ
-where h and l superscripts represent the high and lower order (monotone) 
-fluxes respectively. The effect of the TVD limiters is then to 
-adjust the flux 
-F_{j+1/2} = F^{l}_{j+1/2} + C_{j+1/2}(F^{h}_{j+1/2} - F^{l}_{j+1/2})
-where C_{j+1/2} is the multiplicative limiter which is a function of 
-the ratio of the slope of the solution across a cell interface.
-C=1 recovers the high order flux.
-C=0 recovers the low order flux. 
 
-Supported limiter types are 
+`𝒜`, following the notation of Durran (Numerical Methods for Fluid Dynamics, 2ⁿᵈ
+ed.) is the antidiffusive flux given by
+
+``` 𝒜 = ℱʰ - ℱˡ ``` where h and l superscripts represent the high and lower
+order (monotone) fluxes respectively. The effect of the TVD limiters is then to
+adjust the flux
+
+``` F_{j+1/2} = F^{l}_{j+1/2} + C_{j+1/2}(F^{h}_{j+1/2} - F^{l}_{j+1/2}) where
+C_{j+1/2} is the multiplicative limiter which is a function of ```
+
+the ratio of the slope of the solution across a cell interface.
+
+ - `C=1` recovers the high order flux.
+ - `C=0` recovers the low order flux.
+
+Supported limiter types are
+
 - RZeroLimiter (returns low order flux)
 - RHalfLimiter (flux multiplier == 1/2)
 - RMaxLimiter (returns high order flux)
@@ -2020,14 +2025,72 @@ Supported limiter types are
 - KorenLimiter
 - SuperbeeLimiter
 - MonotonizedCentralLimiter
+
 """
 abstract type AbstractTVDSlopeLimiter end
+
+
+"""
+    U = RZeroLimiter(;boundaries)
+    U.(𝒜, Φ, 𝓊)
+
+A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
+[`AbstractTVDSlopeLimiter`](@ref) for the general formulation.
+"""
 struct RZeroLimiter <: AbstractTVDSlopeLimiter end
+
+"""
+    U = RHalfLimiter(;boundaries)
+    U.(𝒜, Φ, 𝓊)
+
+A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
+[`AbstractTVDSlopeLimiter`](@ref) for the general formulation.
+"""
 struct RHalfLimiter <: AbstractTVDSlopeLimiter end
+
+"""
+    U = RMaxLimiter(;boundaries)
+    U.(𝒜, Φ, 𝓊)
+
+A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
+[`AbstractTVDSlopeLimiter`](@ref) for the general formulation.
+"""
 struct RMaxLimiter <: AbstractTVDSlopeLimiter end
+
+"""
+    U = MinModLimiter(;boundaries)
+    U.(𝒜, Φ, 𝓊)
+
+A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
+[`AbstractTVDSlopeLimiter`](@ref) for the general formulation.
+"""
 struct MinModLimiter <: AbstractTVDSlopeLimiter end
+
+"""
+    U = KorenLimiter(;boundaries)
+    U.(𝒜, Φ, 𝓊)
+
+A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
+[`AbstractTVDSlopeLimiter`](@ref) for the general formulation.
+"""
 struct KorenLimiter <: AbstractTVDSlopeLimiter end
+
+"""
+    U = SuperbeeLimiter(;boundaries)
+    U.(𝒜, Φ, 𝓊)
+
+A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
+[`AbstractTVDSlopeLimiter`](@ref) for the general formulation.
+"""
 struct SuperbeeLimiter <: AbstractTVDSlopeLimiter end
+
+"""
+    U = MonotonizedCentralLimiter(;boundaries)
+    U.(𝒜, Φ, 𝓊)
+
+A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
+[`AbstractTVDSlopeLimiter`](@ref) for the general formulation.
+"""
 struct MonotonizedCentralLimiter <: AbstractTVDSlopeLimiter end
 
 @inline function compute_limiter_coeff(r, ::RZeroLimiter)
@@ -3832,7 +3895,7 @@ end
 
 
 #@assert 0 <= 𝜙 <= 2
-#if v >= 0 
+#if v >= 0
 #    return v ⊠ (a⁻ ⊞ RecursiveApply.rdiv((a⁺ - a⁻) ⊠ 𝜙 ,2))
 #else
 #    return v ⊠ (a⁺ ⊟ RecursiveApply.rdiv((a⁺ - a⁻) ⊠ 𝜙 ,2)) # Current working solution
