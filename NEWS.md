@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.21
+--------
+
+ - Support for new TVD limiters were added, PR [1662]
+   (https://github.com/CliMA/ClimaCore.jl/pull/1662).
 
  - We've added new convenience constructors for spaces PR [2082](https://github.com/CliMA/ClimaCore.jl/pull/2082). Here are links to the new constructors:
    - [ExtrudedCubedSphereSpace]()
