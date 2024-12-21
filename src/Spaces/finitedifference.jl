@@ -81,7 +81,27 @@ CenterFiniteDifferenceSpace(
 Adapt.adapt_structure(to, space::FiniteDifferenceSpace) =
     FiniteDifferenceSpace(Adapt.adapt(to, grid(space)), staggering(space))
 
+"""
+    face_space(space::FiniteDifferenceSpace)
 
+Return face-centered space corresponding to `space`.
+
+If `space` is already face-centered, return itself.
+"""
+function face_space(space::FiniteDifferenceSpace)
+    return FiniteDifferenceSpace(grid(space), CellFace())
+end
+
+"""
+    center_space(space::FiniteDifferenceSpace)
+
+Return center-centered space corresponding to `space`.
+
+If `space` is already center-centered, return itself.
+"""
+function center_space(space::FiniteDifferenceSpace)
+    return FiniteDifferenceSpace(grid(space), CellCenter())
+end
 
 nlevels(space::FiniteDifferenceSpace) = length(space)
 # TODO: deprecate?

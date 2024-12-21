@@ -8,15 +8,20 @@ argument, `staggering::Staggering` to construct the desired space.
 module CommonSpaces
 
 export ExtrudedCubedSphereSpace,
-    CubedSphereSpace, ColumnSpace, Box3DSpace, SliceXZSpace, RectangleXYSpace
+    CubedSphereSpace,
+    ColumnSpace,
+    Box3DSpace,
+    SliceXZSpace,
+    RectangleXYSpace,
+    CellCenter,
+    CellFace
 
-export Grids
 import ClimaComms
 
 import ..DataLayouts,
     ..Meshes, ..Topologies, ..Geometry, ..Domains, ..Quadratures, ..Grids
 
-import ..Grids: Staggering
+import ..Grids: Staggering, CellCenter, CellFace
 import ..Spaces
 import ..CommonGrids
 import ..CommonGrids:
@@ -86,10 +91,24 @@ space = ExtrudedCubedSphereSpace(;
     z_max = 1,
     radius = 10,
     h_elem = 10,
-    n_quad_points = 4,
-    staggering = Grids.CellCenter()
+    n_quad_points = 4
+    staggering = CellCenter()
 )
 ```
+This will construct a cell-center space. If you wish to create a face centered space:
+```julia
+using ClimaCore.CommonSpaces
+space = ExtrudedCubedSphereSpace(;
+    z_elem = 10,
+    z_min = 0,
+    z_max = 1,
+    radius = 10,
+    h_elem = 10,
+    n_quad_points = 4,
+    staggering = CellFace()
+)
+```
+alternatively, you can use the `Spaces.face_space` function.
 """
 function ExtrudedCubedSphereSpace end
 
@@ -186,7 +205,7 @@ space = ColumnSpace(;
     z_elem = 10,
     z_min = 0,
     z_max = 10,
-    staggering = Grids.CellCenter()
+    staggering = CellCenter()
 )
 ```
 """
@@ -270,7 +289,7 @@ space = Box3DSpace(;
     n_quad_points = 4,
     x_elem = 3,
     y_elem = 4,
-    staggering = Grids.CellCenter()
+    staggering = CellCenter()
 )
 ```
 """
@@ -319,8 +338,7 @@ configuration, given:
  - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
  - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
 
-Note that these arguments are all the same
-as [`CommonGrids.SliceXZGrid`](@ref),
+Note that these arguments are all the same as [`CommonGrids.SliceXZGrid`](@ref),
 except for `staggering`.
 
 # Example usage
@@ -336,7 +354,7 @@ space = SliceXZSpace(;
     periodic_x = false,
     n_quad_points = 4,
     x_elem = 4,
-    staggering = Grids.CellCenter()
+    staggering = CellCenter()
 )
 ```
 """
@@ -381,9 +399,6 @@ configuration, given:
  - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
  - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
  - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
-
-Note that these arguments are all the same as [`CommonGrids.RectangleXYGrid`]
-(@ref), except for `staggering`.
 
 # Example usage
 
