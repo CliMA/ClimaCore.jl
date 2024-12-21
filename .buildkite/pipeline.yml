@@ -490,6 +490,8 @@ steps:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_field_multi_broadcast_fusion.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/convergence_field_integrals.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/inference_repro.jl"
+        agents:
+          slurm_mem: 20GB
 
       - label: "Unit: field cuda"
         key: unit_field_cuda
