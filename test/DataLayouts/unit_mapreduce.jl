@@ -162,3 +162,35 @@ end
     # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_mapreduce_2!(context, data_view(data)) # TODO: test
     # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);             test_mapreduce_2!(context, data_view(data)) # TODO: test
 end
+
+@testset "mapreduce with space with some non-round blocks" begin
+    # https://github.com/CliMA/ClimaCore.jl/issues/2097
+    space = ClimaCore.CommonSpaces.RectangleXYSpace(;
+        x_min = 0,
+        x_max = 1,
+        y_min = 0,
+        y_max = 1,
+        periodic_x = false,
+        periodic_y = false,
+        n_quad_points = 4,
+        x_elem = 129,
+        y_elem = 129,
+    )
+    @test minimum(ones(space)) == 1
+
+    if ClimaComms.context isa ClimaComms.SingletonCommsContext
+        # Less than 256 threads
+        space = ClimaCore.CommonSpaces.RectangleXYSpace(;
+            x_min = 0,
+            x_max = 1,
+            y_min = 0,
+            y_max = 1,
+            periodic_x = false,
+            periodic_y = false,
+            n_quad_points = 2,
+            x_elem = 2,
+            y_elem = 2,
+        )
+        @test minimum(ones(space)) == 1
+    end
+end

@@ -31,6 +31,35 @@ function mapreduce_cuda(
     weighted_jacobian = OnesArray(parent(data)),
     opargs...,
 )
+    # This function implements the following parallel reduction algorithm:
+    #
+    # Each thread in each blocks processes multiple data points at the same time
+    # (n_ops_on_load) each and we perform a block-wise reduction, with each
+    # block writing to an array of (block-)shared memory. This array has the
+    # same size as the block, ie, it is as long as many threads are available.
+    # Processing multiple points means that we apply the reduction to the point
+    # with index reduction[thread_index] = f(thread_index, thread_index +
+    # OFFSET), with various OFFSETS that depend on `n_ops_on_load` and block
+    # size.
+    #
+    # For the purpose of indexing, this is equivalent to having larger blocks
+    # with size effective_blksize = blksize * (n_ops_on_load + 1).
+    #
+    #
+    # After this operation, we have reduced all the data by a factor of
+    # 1/n_ops_on_load and have results in various arrays `reduction` (one per
+    # block)
+    #
+    # Once we have all the blocks reduced, we perform a tree reduction within
+    # the block and "move" the reduced value to the first element of the array.
+    # In this, one of the things to watch out for is that the last block might
+    # not necessarily have all threads doing work, so we have to be careful to
+    # not include data in `reduction` that did not have corresponding work.
+    # Threads of index 1 will write that array into an output array.
+    #
+    # The output array has size nblocks, so we do another round of reduction,
+    # but this time we put each Field in a different block.
+
     S = eltype(data)
     pdata = parent(data)
     T = eltype(pdata)
@@ -112,7 +141,13 @@ function mapreduce_cuda_kernel!(
         end
     end
     sync_threads()
-    _cuda_intrablock_reduce!(op, reduction, tidx, blksize)
+
+    # The last block might not have enough threads to fill `reduction`, so some
+    # of its elements might still have the value at initialization.
+    blksize_for_reduction =
+        min(blksize, nitems - effective_blksize * (bidx - 1))
+
+    _cuda_intrablock_reduce!(op, reduction, tidx, blksize_for_reduction)
 
     tidx == 1 && (reduce_cuda[bidx, fidx] = reduction[1])
     return nothing
