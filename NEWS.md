@@ -4,19 +4,27 @@ ClimaCore.jl Release Notes
 main
 -------
 
+### ![][badge-✨feature/enhancement] Various improvements to `Remapper` [2060](https://github.com/CliMA/ClimaCore.jl/pull/2060)
+
+The `ClimaCore.Remapping` module received two improvements. First, `Remapper` is
+now compatible with purely vertical `Space`s (performing a linear
+interpolation), making it compatible with column setups. Second, a new set of
+simplified interpolation functions are provided.
+
+Now, interpolating a `Field` `field` is as easy as
+```julia
+import ClimaCore.Remapping: interpolate
+output_array = interpolate(field)
+```
+The target coordinates are automatically determined, but can also be customized.
+Refer to the [documentation](https://clima.github.io/ClimaCore.jl/dev/remapping/)
+for more information.
+
 v0.14.21
 --------
 
  - Support for new TVD limiters were added, PR [1662]
    (https://github.com/CliMA/ClimaCore.jl/pull/1662).
-
- - We've added new convenience constructors for spaces PR [2082](https://github.com/CliMA/ClimaCore.jl/pull/2082). Here are links to the new constructors:
-   - [ExtrudedCubedSphereSpace]()
-   - [CubedSphereSpace]()
-   - [ColumnSpace]()
-   - [Box3DSpace]()
-   - [SliceXZSpace]()
-   - [RectangleXYSpace]()
 
 ### ![][badge-🐛bugfix] Bug fixes
 
@@ -29,6 +37,14 @@ v0.14.21
 `center_space`, to convert a `Space` from being cell-centered to be
 face-centered (and viceversa). These functions only work for vertical and
 extruded spaces.
+
+- We've added new convenience constructors for spaces PR [2082](https://github.com/CliMA/ClimaCore.jl/pull/2082). Here are links to the new constructors:
+  - [ExtrudedCubedSphereSpace](https://clima.github.io/ClimaCore.jl/dev/api/#ClimaCore.CommonSpaces.ExtrudedCubedSphereSpace)
+  - [CubedSphereSpace](https://clima.github.io/ClimaCore.jl/dev/api/#ClimaCore.CommonSpaces.CubedSphereSpace)
+  - [ColumnSpace](https://clima.github.io/ClimaCore.jl/dev/api/#ClimaCore.CommonSpaces.ColumnSpace)
+  - [Box3DSpace](https://clima.github.io/ClimaCore.jl/dev/api/#ClimaCore.CommonSpaces.Box3DSpace)
+  - [SliceXZSpace](https://clima.github.io/ClimaCore.jl/dev/api/#ClimaCore.CommonSpaces.SliceXZSpace)
+  - [RectangleXYSpace](https://clima.github.io/ClimaCore.jl/dev/api/#ClimaCore.CommonSpaces.RectangleXYSpace)
 
 v0.14.20
 --------
