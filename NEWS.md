@@ -18,6 +18,13 @@ main
 - Fixed writing/reading purely vertical spaces. PR [2102](https://github.com/CliMA/ClimaCore.jl/pull/2102)
 - Fixed correctness bug in reductions on GPUs. PR [2106](https://github.com/CliMA/ClimaCore.jl/pull/2106)
 
+### ![][badge-✨feature/enhancement] `face_space`, `center_space` functions
+
+`ClimaCore.Spaces` now comes with two functions, `face_space` and
+`center_space`, to convert a `Space` from being cell-centered to be
+face-centered (and viceversa). These functions only work for vertical and
+extruded spaces.
+
 v0.14.20
 --------
 
