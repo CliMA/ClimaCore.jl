@@ -86,7 +86,7 @@ export slab,
     VIHF,
     DataF
 
-# Internal types for managing CPU/GPU dispatching
+# Internal types for managing CPU/GPU dispatching / conversions
 abstract type AbstractDispatchToDevice end
 struct ToCPU <: AbstractDispatchToDevice end
 struct ToCUDA <: AbstractDispatchToDevice end

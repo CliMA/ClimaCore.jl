@@ -324,6 +324,45 @@ end
     end
 end
 
+using ClimaCore.CommonSpaces
+using ClimaCore.Grids
+using ClimaCore.DataLayouts: ToCPU, ToCUDA
+using Adapt
+@testset "Adapt between CPU<->CPU" begin
+    cpu_space_in = ExtrudedCubedSphereSpace(;
+        device = ClimaComms.CPUSingleThreaded(),
+        z_elem = 10,
+        z_min = 0,
+        z_max = 1,
+        radius = 10,
+        h_elem = 10,
+        n_quad_points = 4,
+        staggering = Grids.CellCenter()
+    )
+    cpu_space_out = Adapt.adapt(ToCPU(), cpu_space_in)
+    @test cpu_space_in === cpu_space_out
+end
+
+if ClimaComms.device() isa ClimaComms.CUDADevice
+    @testset "Adapt between CPU->GPU->CPU" begin
+        cpu_space_in = ExtrudedCubedSphereSpace(;
+            device = ClimaComms.CPUSingleThreaded(),
+            z_elem = 10,
+            z_min = 0,
+            z_max = 1,
+            radius = 10,
+            h_elem = 10,
+            n_quad_points = 4,
+            staggering = Grids.CellCenter()
+        )
+        cpu_space_out = Adapt.adapt(ToCPU(), cpu_space_in)
+        @test cpu_space_in === cpu_space_out
+        gpu_space_out = Adapt.adapt(ToCUDA(), cpu_space_in)
+        gpu_array_type = ClimaComms.array_type(ClimaComms.CUDADevice())
+        @test parent(Spaces.coordinates_data(space)) isa gpu_array_type
+
+    end
+end
 
 #=
 @testset "dss on 2×2 rectangular mesh (unstructured)" begin
