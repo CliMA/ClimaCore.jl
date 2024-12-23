@@ -3061,19 +3061,24 @@ function Adapt.adapt_structure(to, bc::AbstractBoundaryCondition)
 end
 
 # Extend `adapt_structure` for all operator types with boundary conditions.
-function Adapt.adapt_structure(to, op::FiniteDifferenceOperator)
-    if hasfield(typeof(op), :bcs)
-        bcs_adapted = NamedTuple{keys(op.bcs)}(
-            UnrolledFunctions.unrolled_map(
-                bc -> Adapt.adapt_structure(to, bc),
-                values(op.bcs),
-            ),
-        )
-        return unionall_type(typeof(op))(bcs_adapted)
-    else
-        return op
-    end
-end
+Adapt.adapt_structure(to, op::FiniteDifferenceOperator) =
+    hasfield(typeof(op), :bcs) ? adapt_fd_operator(to, op, op.bcs) : op
+
+@inline adapt_fd_operator(to, op::LinVanLeerC2F, bcs) =
+    LinVanLeerC2F(adapt_bcs(to, bcs), Adapt.adapt_structure(to, op.constraint))
+
+@inline adapt_fd_operator(to, op::TVDLimitedFluxC2F, bcs) =
+    TVDLimitedFluxC2F(adapt_bcs(to, bcs), Adapt.adapt_structure(to, op.method))
+
+@inline adapt_fd_operator(to, op, bcs) =
+    unionall_type(typeof(op))(adapt_bcs(to, bcs))
+
+@inline adapt_bcs(to, bcs) = NamedTuple{keys(bcs)}(
+    UnrolledFunctions.unrolled_map(
+        bc -> Adapt.adapt_structure(to, bc),
+        values(bcs),
+    ),
+)
 
 """
     D = DivergenceC2F(;boundaryname=boundarycondition...)
