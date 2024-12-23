@@ -22,6 +22,13 @@ struct ExtrudedFiniteDifferenceSpace{
     staggering::S
 end
 
+function Adapt.adapt(to::ToCPU, space::ExtrudedFiniteDifferenceSpace)
+    return ExtrudedFiniteDifferenceSpace(
+        Adapt.adapt(Array, grid(space)),
+        space.staggering,
+    )
+end
+
 local_geometry_type(::Type{ExtrudedFiniteDifferenceSpace{G, S}}) where {G, S} =
     local_geometry_type(G)
 

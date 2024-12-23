@@ -337,7 +337,7 @@ using Adapt
         radius = 10,
         h_elem = 10,
         n_quad_points = 4,
-        staggering = Grids.CellCenter()
+        staggering = Grids.CellCenter(),
     )
     cpu_space_out = Adapt.adapt(ToCPU(), cpu_space_in)
     @test cpu_space_in === cpu_space_out
@@ -353,14 +353,13 @@ if ClimaComms.device() isa ClimaComms.CUDADevice
             radius = 10,
             h_elem = 10,
             n_quad_points = 4,
-            staggering = Grids.CellCenter()
+            staggering = Grids.CellCenter(),
         )
         cpu_space_out = Adapt.adapt(ToCPU(), cpu_space_in)
         @test cpu_space_in === cpu_space_out
         gpu_space_out = Adapt.adapt(ToCUDA(), cpu_space_in)
         gpu_array_type = ClimaComms.array_type(ClimaComms.CUDADevice())
         @test parent(Spaces.coordinates_data(space)) isa gpu_array_type
-
     end
 end
 

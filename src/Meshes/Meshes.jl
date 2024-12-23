@@ -2,6 +2,8 @@ module Meshes
 
 import RootSolvers
 
+import ..DataLayouts: ToCPU, ToCUDA
+import Adapt
 export RectilinearMesh,
     EquiangularCubedSphere,
     EquidistantCubedSphere,

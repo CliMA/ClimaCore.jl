@@ -2,6 +2,8 @@ module Topologies
 
 import ClimaComms, Adapt
 
+import ..DataLayouts: ToCPU, ToCUDA
+import Adapt
 import ..ClimaCore
 import ..Utilities: Cache, cart_ind, linear_ind
 import ..Geometry

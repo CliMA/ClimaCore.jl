@@ -24,6 +24,13 @@ FiniteDifferenceSpace(
     staggering::Staggering,
 ) = FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(topology), staggering)
 
+function Adapt.adapt(to::ToCPU, space::FiniteDifferenceSpace)
+    return FiniteDifferenceSpace(
+        Adapt.adapt(Array, grid(space)),
+        space.staggering,
+    )
+end
+
 local_geometry_type(::Type{FiniteDifferenceSpace{G, S}}) where {G, S} =
     local_geometry_type(G)
 

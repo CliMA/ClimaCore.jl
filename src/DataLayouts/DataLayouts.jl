@@ -2229,4 +2229,8 @@ include("mapreduce.jl")
 
 include("struct_linear_indexing.jl")
 
+function Adapt.adapt(to::ToCPU, data::AbstractData)
+    union_all(singleton(data))(Adapt.adapt(Array, parent(data)))
+end
+
 end # module
