@@ -1,3 +1,8 @@
+#=
+julia --project=.buildkite
+ENV["CLIMACOMMS_DEVICE"] = "CUDA"
+using Revise; include("examples/column/vanleer_advection.jl")
+=#
 using Test
 using LinearAlgebra
 import ClimaComms
@@ -51,13 +56,13 @@ end
 
 # Define a pulse wave or square wave
 
-FT = Float64
-t₀ = FT(0.0)
-t₁ = FT(6)
-z₀ = FT(0.0)
-zₕ = FT(2π)
-z₁ = FT(1.0)
-speed = FT(-1.0)
+const FT = Float64
+const t₀ = FT(0.0)
+const t₁ = FT(6)
+const z₀ = FT(0.0)
+const zₕ = FT(2π)
+const z₁ = FT(1.0)
+const speed = FT(-1.0)
 pulse(z, t, z₀, zₕ, z₁) = abs(z - speed * t) ≤ zₕ ? z₁ : z₀
 
 n = 2 .^ 8
@@ -135,6 +140,14 @@ for (i, stretch_fn) in enumerate(stretch_fns)
         err = norm(q_final .- q_analytic)
         rel_mass_err = norm((sum(q_final) - sum(q_init)) / sum(q_init))
 
+        @test err ≤ 0.25
+        @test rel_mass_err ≤ 10eps()
+
+        device = ClimaComms.device(q_init)
+        if device isa ClimaComms.CUDADevice
+            continue
+        end
+
         if j == 1
             fig = Plots.plot(q_analytic; label = "Exact", color = :red)
         end
@@ -162,7 +175,5 @@ for (i, stretch_fn) in enumerate(stretch_fns)
                 ),
             )
         end
-        @test err ≤ 0.25
-        @test rel_mass_err ≤ 10eps()
     end
 end
