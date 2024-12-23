@@ -27,7 +27,9 @@ function vertical_reference_coordinates(space, zcoords)
     vert_topology = Spaces.vertical_topology(space)
     vert_mesh = vert_topology.mesh
 
-    is_cell_center = space isa Spaces.CenterExtrudedFiniteDifferenceSpace
+    is_cell_center =
+        space isa Spaces.CenterExtrudedFiniteDifferenceSpace ||
+        space isa Spaces.CenterFiniteDifferenceSpace
 
     ξ3s = map(zcoords) do zcoord
         velem = Meshes.containing_element(vert_mesh, zcoord)
@@ -51,10 +53,13 @@ element in a column, no interpolation is performed and the value at the cell cen
 returned. Effectively, this means that the interpolation is first-order accurate across the
 column, but zeroth-order accurate close to the boundaries.
 """
-function vertical_bounding_indices(space, zcoords) end
+function vertical_bounding_indices end
 
 function vertical_bounding_indices(
-    space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+    space::Union{
+        Spaces.FaceExtrudedFiniteDifferenceSpace,
+        Spaces.FaceFiniteDifferenceSpace,
+    },
     zcoords,
 )
     vert_topology = Spaces.vertical_topology(space)
@@ -64,7 +69,10 @@ function vertical_bounding_indices(
 end
 
 function vertical_bounding_indices(
-    space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+    space::Union{
+        Spaces.CenterExtrudedFiniteDifferenceSpace,
+        Spaces.CenterFiniteDifferenceSpace,
+    },
     zcoords,
 )
     vert_topology = Spaces.vertical_topology(space)
