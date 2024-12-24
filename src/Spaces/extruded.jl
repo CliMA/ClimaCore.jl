@@ -177,14 +177,17 @@ function Base.show(io::IO, space::ExtrudedFiniteDifferenceSpace)
         ":",
     )
     print(iio, " "^(indent + 2), "context: ")
-    hspace = Spaces.horizontal_space(space)
-    Topologies.print_context(iio, Spaces.topology(hspace).context)
-    println(iio)
-    println(iio, " "^(indent + 2), "horizontal:")
-    println(iio, " "^(indent + 4), "mesh: ", Spaces.topology(hspace).mesh)
-    println(iio, " "^(indent + 4), "quadrature: ", quadrature_style(hspace))
-    println(iio, " "^(indent + 2), "vertical:")
-    print(iio, " "^(indent + 4), "mesh: ", vertical_topology(space).mesh)
+    grid = Spaces.grid(space)
+    if !(grid isa Grids.DeviceExtrudedFiniteDifferenceGrid)
+        hspace = Spaces.horizontal_space(space)
+        Topologies.print_context(iio, Spaces.topology(hspace).context)
+        println(iio)
+        println(iio, " "^(indent + 2), "horizontal:")
+        println(iio, " "^(indent + 4), "mesh: ", Spaces.topology(hspace).mesh)
+        println(iio, " "^(indent + 4), "quadrature: ", quadrature_style(hspace))
+        println(iio, " "^(indent + 2), "vertical:")
+        print(iio, " "^(indent + 4), "mesh: ", vertical_topology(space).mesh)
+    end
 end
 
 quadrature_style(space::ExtrudedFiniteDifferenceSpace) =
