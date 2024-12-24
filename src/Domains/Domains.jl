@@ -1,5 +1,7 @@
 module Domains
 
+import ..DataLayouts: ToCPU, ToCUDA
+import Adapt
 import ..Geometry: Geometry, float_type
 import IntervalSets
 export RectangleDomain

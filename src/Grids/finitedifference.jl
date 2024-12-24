@@ -41,6 +41,14 @@ mutable struct FiniteDifferenceGrid{
     face_local_geometry::FLG
 end
 
+function Adapt.adapt(to::ToCPU, grid::FiniteDifferenceGrid)
+    return FiniteDifferenceGrid(
+        Adapt.adapt(Array, grid.topology),
+        Adapt.adapt(Array, grid.global_geometry),
+        Adapt.adapt(Array, grid.center_local_geometry),
+        Adapt.adapt(Array, grid.face_local_geometry),
+    )
+end
 
 function FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
     get!(Cache.OBJECT_CACHE, (FiniteDifferenceGrid, topology)) do

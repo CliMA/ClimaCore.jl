@@ -33,5 +33,6 @@ include(joinpath("cuda", "operators_thomas_algorithm.jl"))
 include(joinpath("cuda", "matrix_fields_single_field_solve.jl"))
 include(joinpath("cuda", "matrix_fields_multiple_field_solve.jl"))
 include(joinpath("cuda", "operators_spectral_element.jl"))
+include(joinpath("cuda", "adapt.jl"))
 
 end

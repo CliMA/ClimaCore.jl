@@ -28,4 +28,11 @@ include("CommonSpaces/CommonSpaces.jl")
 
 include("deprecated.jl")
 
+import Adapt
+import .DataLayouts: ToCPU
+import ClimaComms
+function Adapt.adapt(::ToCPU, context::ClimaComms.AbstractCommsContext)
+    return context(ClimaComms.CPUSingleThreaded())
+end
+
 end # module

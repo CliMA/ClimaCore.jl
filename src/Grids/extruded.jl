@@ -38,6 +38,17 @@ mutable struct ExtrudedFiniteDifferenceGrid{
     face_local_geometry::FLG
 end
 
+function Adapt.adapt(to::ToCPU, grid::ExtrudedFiniteDifferenceGrid)
+    return ExtrudedFiniteDifferenceGrid(
+        Adapt.adapt(Array, grid.horizontal_grid),
+        Adapt.adapt(Array, grid.vertical_grid),
+        Adapt.adapt(Array, grid.hypsography),
+        Adapt.adapt(Array, grid.global_geometry),
+        Adapt.adapt(Array, grid.center_local_geometry),
+        Adapt.adapt(Array, grid.face_local_geometry),
+    )
+end
+
 local_geometry_type(
     ::Type{ExtrudedFiniteDifferenceGrid{H, V, A, GG, CLG, FLG}},
 ) where {H, V, A, GG, CLG, FLG} = eltype(CLG) # calls eltype from DataLayouts

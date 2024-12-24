@@ -22,6 +22,13 @@ struct ExtrudedFiniteDifferenceSpace{
     staggering::S
 end
 
+function Adapt.adapt(to::ToCPU, space::ExtrudedFiniteDifferenceSpace)
+    return ExtrudedFiniteDifferenceSpace(
+        Adapt.adapt(Array, grid(space)),
+        space.staggering,
+    )
+end
+
 local_geometry_type(::Type{ExtrudedFiniteDifferenceSpace{G, S}}) where {G, S} =
     local_geometry_type(G)
 
@@ -170,12 +177,15 @@ function Base.show(io::IO, space::ExtrudedFiniteDifferenceSpace)
         ":",
     )
     print(iio, " "^(indent + 2), "context: ")
-    hspace = Spaces.horizontal_space(space)
-    Topologies.print_context(iio, Spaces.topology(hspace).context)
-    println(iio)
-    println(iio, " "^(indent + 2), "horizontal:")
-    println(iio, " "^(indent + 4), "mesh: ", Spaces.topology(hspace).mesh)
-    println(iio, " "^(indent + 4), "quadrature: ", quadrature_style(hspace))
+    grid = Spaces.grid(space)
+    if !(grid isa Grids.DeviceExtrudedFiniteDifferenceGrid)
+        hspace = Spaces.horizontal_space(space)
+        Topologies.print_context(iio, Spaces.topology(hspace).context)
+        println(iio)
+        println(iio, " "^(indent + 2), "horizontal:")
+        println(iio, " "^(indent + 4), "mesh: ", Spaces.topology(hspace).mesh)
+        println(iio, " "^(indent + 4), "quadrature: ", quadrature_style(hspace))
+    end
     println(iio, " "^(indent + 2), "vertical:")
     print(iio, " "^(indent + 4), "mesh: ", vertical_topology(space).mesh)
 end
