@@ -41,6 +41,14 @@ mutable struct FiniteDifferenceGrid{
     face_local_geometry::FLG
 end
 
+function Adapt.adapt(to::ToCPU, grid::FiniteDifferenceGrid)
+    return FiniteDifferenceGrid(
+        Adapt.adapt(Array, grid.topology),
+        Adapt.adapt(Array, grid.global_geometry),
+        Adapt.adapt(Array, grid.center_local_geometry),
+        Adapt.adapt(Array, grid.face_local_geometry),
+    )
+end
 
 function FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
     get!(Cache.OBJECT_CACHE, (FiniteDifferenceGrid, topology)) do
@@ -189,14 +197,6 @@ end
 local_geometry_type(
     ::Type{DeviceFiniteDifferenceGrid{T, GG, CLG, FLG}},
 ) where {T, GG, CLG, FLG} = eltype(CLG) # calls eltype from DataLayouts
-
-Adapt.adapt_structure(to, grid::FiniteDifferenceGrid) =
-    DeviceFiniteDifferenceGrid(
-        Adapt.adapt(to, grid.topology),
-        Adapt.adapt(to, grid.global_geometry),
-        Adapt.adapt(to, grid.center_local_geometry),
-        Adapt.adapt(to, grid.face_local_geometry),
-    )
 
 topology(grid::DeviceFiniteDifferenceGrid) = grid.topology
 vertical_topology(grid::DeviceFiniteDifferenceGrid) = grid.topology

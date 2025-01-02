@@ -86,7 +86,7 @@ export slab,
     VIHF,
     DataF
 
-# Internal types for managing CPU/GPU dispatching
+# Internal types for managing CPU/GPU dispatching / conversions
 abstract type AbstractDispatchToDevice end
 struct ToCPU <: AbstractDispatchToDevice end
 struct ToCUDA <: AbstractDispatchToDevice end
@@ -2228,5 +2228,9 @@ include("fill.jl")
 include("mapreduce.jl")
 
 include("struct_linear_indexing.jl")
+
+function Adapt.adapt(to::ToCPU, data::AbstractData)
+    union_all(singleton(data))(Adapt.adapt(Array, parent(data)))
+end
 
 end # module

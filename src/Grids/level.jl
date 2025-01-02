@@ -6,6 +6,13 @@ struct LevelGrid{
     level::L
 end
 
+function Adapt.adapt(to::ToCPU, grid::LevelGrid)
+    return LevelGrid(
+        Adapt.adapt(Array, grid.full_grid),
+        Adapt.adapt(Array, grid.level),
+    )
+end
+
 quadrature_style(levelgrid::LevelGrid) =
     quadrature_style(levelgrid.full_grid.horizontal_grid)
 

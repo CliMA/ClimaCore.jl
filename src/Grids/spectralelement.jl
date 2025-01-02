@@ -21,6 +21,16 @@ mutable struct SpectralElementGrid1D{
     dss_weights::D
 end
 
+function Adapt.adapt(to::ToCPU, space::SpectralElementGrid1D)
+    return SpectralElementGrid1D(
+        Adapt.adapt(Array, space.topology),
+        Adapt.adapt(Array, space.quadrature_style),
+        Adapt.adapt(Array, space.global_geometry),
+        Adapt.adapt(Array, space.local_geometry),
+        Adapt.adapt(Array, space.dss_weights),
+    )
+end
+
 local_geometry_type(
     ::Type{SpectralElementGrid1D{T, Q, GG, LG}},
 ) where {T, Q, GG, LG} = eltype(LG) # calls eltype from DataLayouts
@@ -138,6 +148,19 @@ mutable struct SpectralElementGrid2D{
     internal_surface_geometry::IS
     boundary_surface_geometries::BS
     enable_bubble::Bool
+end
+
+function Adapt.adapt(::ToCPU, grid::SpectralElementGrid2D)
+    return SpectralElementGrid2D(
+        Adapt.adapt(Array, grid.topology),
+        Adapt.adapt(Array, grid.quadrature_style),
+        Adapt.adapt(Array, grid.global_geometry),
+        Adapt.adapt(Array, grid.local_geometry),
+        Adapt.adapt(Array, grid.local_dss_weights),
+        Adapt.adapt(Array, grid.internal_surface_geometry),
+        Adapt.adapt(Array, grid.boundary_surface_geometries),
+        grid.enable_bubble,
+    )
 end
 
 local_geometry_type(
@@ -596,13 +619,6 @@ end
 
 ClimaComms.context(grid::DeviceSpectralElementGrid2D) = DeviceSideContext()
 ClimaComms.device(grid::DeviceSpectralElementGrid2D) = DeviceSideDevice()
-
-Adapt.adapt_structure(to, grid::SpectralElementGrid2D) =
-    DeviceSpectralElementGrid2D(
-        Adapt.adapt(to, grid.quadrature_style),
-        Adapt.adapt(to, grid.global_geometry),
-        Adapt.adapt(to, grid.local_geometry),
-    )
 
 ## aliases
 const RectilinearSpectralElementGrid2D =

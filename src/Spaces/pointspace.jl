@@ -15,6 +15,13 @@ struct PointSpace{
     local_geometry::LG
 end
 
+function Adapt.adapt(to::ToCPU, space::PointSpace)
+    return PointSpace(
+        Adapt.adapt(to, context),
+        Adapt.adapt(Array, space.local_geometry),
+    )
+end
+
 local_geometry_type(::Type{PointSpace{C, LG}}) where {C, LG} = eltype(LG) # calls eltype from DataLayouts
 
 ClimaComms.device(space::PointSpace) = ClimaComms.device(space.context)

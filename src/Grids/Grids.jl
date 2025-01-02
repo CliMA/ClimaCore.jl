@@ -1,5 +1,7 @@
 module Grids
 
+import ..DataLayouts: ToCPU, ToCUDA
+import Adapt
 import ClimaComms, Adapt, ForwardDiff, LinearAlgebra
 import LinearAlgebra: det, norm
 import ..DataLayouts: slab_index, vindex

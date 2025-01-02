@@ -19,6 +19,7 @@ using Adapt
 
 import ..slab, ..column, ..level
 import ..Utilities: PlusHalf, half
+import ..DataLayouts: ToCPU, ToCUDA
 import ..DataLayouts,
     ..Geometry, ..Domains, ..Meshes, ..Topologies, ..Grids, ..Quadratures
 
