@@ -81,3 +81,33 @@ function Adapt.adapt(to::ToCUDA, data::DataLayouts.AbstractData)
         Adapt.adapt(CUDA.CuArray, parent(data)),
     )
 end
+
+Adapt.adapt_structure(
+    to::CUDA.KernelAdaptor,
+    grid::Grids.ExtrudedFiniteDifferenceGrid,
+) = Grids.DeviceExtrudedFiniteDifferenceGrid(
+    Adapt.adapt(to, Grids.vertical_topology(grid)),
+    Adapt.adapt(to, grid.horizontal_grid.quadrature_style),
+    Adapt.adapt(to, grid.global_geometry),
+    Adapt.adapt(to, grid.center_local_geometry),
+    Adapt.adapt(to, grid.face_local_geometry),
+)
+
+Adapt.adapt_structure(
+    to::CUDA.KernelAdaptor,
+    grid::Grids.FiniteDifferenceGrid,
+) = Grids.DeviceFiniteDifferenceGrid(
+    Adapt.adapt(to, grid.topology),
+    Adapt.adapt(to, grid.global_geometry),
+    Adapt.adapt(to, grid.center_local_geometry),
+    Adapt.adapt(to, grid.face_local_geometry),
+)
+
+Adapt.adapt_structure(
+    to::CUDA.KernelAdaptor,
+    grid::Grids.SpectralElementGrid2D,
+) = Grids.DeviceSpectralElementGrid2D(
+    Adapt.adapt(to, grid.quadrature_style),
+    Adapt.adapt(to, grid.global_geometry),
+    Adapt.adapt(to, grid.local_geometry),
+)
