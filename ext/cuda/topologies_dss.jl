@@ -33,6 +33,7 @@ function Topologies.dss_load_perimeter_data!(
         threads_s = p.threads,
         blocks_s = p.blocks,
     )
+    call_post_op_callback() && post_op_callback(perimeter_data)
     return nothing
 end
 
@@ -73,6 +74,7 @@ function Topologies.dss_unload_perimeter_data!(
         threads_s = p.threads,
         blocks_s = p.blocks,
     )
+    call_post_op_callback() && post_op_callback(data)
     return nothing
 end
 
@@ -123,6 +125,7 @@ function Topologies.dss_local!(
             threads_s = p.threads,
             blocks_s = p.blocks,
         )
+        call_post_op_callback() && post_op_callback(perimeter_data)
     end
     return nothing
 end
@@ -213,6 +216,7 @@ function Topologies.dss_transform!(
             threads_s = p.threads,
             blocks_s = p.blocks,
         )
+        call_post_op_callback() && post_op_callback(perimeter_data)
     end
     return nothing
 end
@@ -276,6 +280,7 @@ function Topologies.dss_untransform!(
             threads_s = p.threads,
             blocks_s = p.blocks,
         )
+        call_post_op_callback() && post_op_callback(data)
     end
     return nothing
 end
@@ -333,6 +338,7 @@ function Topologies.dss_local_ghost!(
             threads_s = p.threads,
             blocks_s = p.blocks,
         )
+        call_post_op_callback() && post_op_callback(perimeter_data)
     end
     return nothing
 end
@@ -396,6 +402,7 @@ function Topologies.fill_send_buffer!(
         if synchronize
             CUDA.synchronize(; blocking = true) # CUDA MPI uses a separate stream. This will synchronize across streams
         end
+        call_post_op_callback() && post_op_callback(send_data)
     end
     return nothing
 end
@@ -440,6 +447,7 @@ function Topologies.load_from_recv_buffer!(
             threads_s = p.threads,
             blocks_s = p.blocks,
         )
+        call_post_op_callback() && post_op_callback(perimeter_data)
     end
     return nothing
 end
@@ -499,6 +507,7 @@ function Topologies.dss_ghost!(
             threads_s = p.threads,
             blocks_s = p.blocks,
         )
+        call_post_op_callback() && post_op_callback(perimeter_data)
     end
     return nothing
 end

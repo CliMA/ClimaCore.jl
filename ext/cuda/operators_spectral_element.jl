@@ -49,6 +49,7 @@ function Base.copyto!(
         threads_s = p.threads,
         blocks_s = p.blocks,
     )
+    call_post_op_callback() && post_op_callback(out)
     return out
 end
 

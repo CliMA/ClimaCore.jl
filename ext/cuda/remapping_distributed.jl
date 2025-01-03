@@ -33,6 +33,7 @@ function _set_interpolated_values_device!(
         threads_s = (nthreads),
         blocks_s = (nblocks),
     )
+    call_post_op_callback() && post_op_callback(out)
 end
 
 # GPU, 3D case

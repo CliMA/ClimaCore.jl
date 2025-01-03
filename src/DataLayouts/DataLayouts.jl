@@ -2229,4 +2229,24 @@ include("mapreduce.jl")
 
 include("struct_linear_indexing.jl")
 
+"""
+    post_op_callback(result)
+
+A callback that is called, if `ClimaCore.DataLayouts.call_post_op_callback() =
+true`, on the result of every data operation.
+
+There is purposely no implementation-- this is a debugging tool, and users may
+want to check different things.
+"""
+function post_op_callback end
+
+"""
+    call_post_op_callback()
+
+Returns a Bool. Meant to be overloaded so that
+`ClimaCore.DataLayouts.post_op_callback(data::AbstractData)` is called after
+every data operation.
+"""
+call_post_op_callback() = false
+
 end # module

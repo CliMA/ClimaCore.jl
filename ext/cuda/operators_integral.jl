@@ -40,6 +40,7 @@ function column_reduce_device!(
         threads_s = p.threads,
         blocks_s = p.blocks,
     )
+    call_post_op_callback() && post_op_callback(output)
 end
 
 function column_accumulate_device!(
