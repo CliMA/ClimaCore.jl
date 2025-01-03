@@ -168,6 +168,7 @@ function Base.copyto!(
         Base.@_inline_meta
         @inbounds copyto_slab!(out, sbc, slabidx)
     end
+    call_post_op_callback() && post_op_callback(out, out, sbc)
     return out
 end
 

@@ -13,7 +13,9 @@ if VERSION ≥ v"1.11.0-beta"
         dest::AbstractData{S},
         bc::Union{AbstractData, Base.Broadcast.Broadcasted},
     ) where {S}
-        return Base.copyto!(dest, bc, device_dispatch(parent(dest)))
+        Base.copyto!(dest, bc, device_dispatch(parent(dest)))
+        call_post_op_callback() && post_op_callback(dest, dest, bc)
+        dest
     end
 else
     function Base.copyto!(
@@ -33,6 +35,7 @@ else
         else
             Base.copyto!(dest, bc, device_dispatch(parent(dest)))
         end
+        call_post_op_callback() && post_op_callback(dest, dest, bc)
         return dest
     end
 end
@@ -40,6 +43,7 @@ end
 # Specialize on non-Broadcasted objects
 function Base.copyto!(dest::D, src::D) where {D <: AbstractData}
     copyto!(parent(dest), parent(src))
+    call_post_op_callback() && post_op_callback(dest, dest, src)
     return dest
 end
 
@@ -48,7 +52,7 @@ end
 function Base.copyto!(
     dest::AbstractData,
     bc::Base.Broadcast.Broadcasted{Style},
-    ::AbstractDispatchToDevice,
+    to::AbstractDispatchToDevice,
 ) where {
     Style <:
     Union{Base.Broadcast.AbstractArrayStyle{0}, Base.Broadcast.Style{Tuple}},
@@ -58,6 +62,7 @@ function Base.copyto!(
     )
     @inbounds bc0 = bc[]
     fill!(dest, bc0)
+    call_post_op_callback() && post_op_callback(dest, dest, bc, to)
 end
 
 #####

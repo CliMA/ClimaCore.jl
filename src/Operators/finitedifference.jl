@@ -3779,6 +3779,8 @@ function _serial_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
     @inbounds for h in 1:Nh, j in 1:Nj, i in 1:Ni
         apply_stencil!(space, field_out, bcs, (i, j, h), bounds)
     end
+    call_post_op_callback() &&
+        post_op_callback(field_out, field_out, bc, Ni, Nj, Nh)
     return field_out
 end
 
@@ -3793,6 +3795,8 @@ function _threaded_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
             end
         end
     end
+    call_post_op_callback() &&
+        post_op_callback(field_out, field_out, bc, Ni, Nj, Nh)
     return field_out
 end
 

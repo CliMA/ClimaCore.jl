@@ -13,7 +13,7 @@ function _set_interpolated_values_device!(
     interpolation_matrix,
     vert_interpolation_weights::AbstractArray,
     vert_bounding_indices::AbstractArray,
-    ::ClimaComms.CUDADevice,
+    dev::ClimaComms.CUDADevice,
 )
     # FIXME: Avoid allocation of tuple
     field_values = tuple(map(f -> Fields.field_values(f), fields)...)
@@ -38,6 +38,17 @@ function _set_interpolated_values_device!(
         args;
         threads_s = (nthreads),
         blocks_s = (nblocks),
+    )
+    call_post_op_callback() && post_op_callback(
+        out,
+        out,
+        fields,
+        scratch_field_values,
+        local_horiz_indices,
+        interpolation_matrix,
+        vert_interpolation_weights,
+        vert_bounding_indices,
+        dev,
     )
 end
 

@@ -27,6 +27,7 @@ function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
         threads_s = p.threads,
         blocks_s = p.blocks,
     )
+    call_post_op_callback() && post_op_callback(x, device, cache, x, A, b)
 end
 
 function single_field_solve_kernel!(device, cache, x, A, b, us)

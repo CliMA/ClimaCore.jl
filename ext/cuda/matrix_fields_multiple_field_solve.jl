@@ -11,7 +11,7 @@ import ClimaCore.Utilities.UnrolledFunctions: unrolled_map
 is_CuArray_type(::Type{T}) where {T <: CUDA.CuArray} = true
 
 NVTX.@annotate function multiple_field_solve!(
-    ::ClimaComms.CUDADevice,
+    dev::ClimaComms.CUDADevice,
     cache,
     x,
     A,
@@ -48,6 +48,7 @@ NVTX.@annotate function multiple_field_solve!(
         blocks_s = p.blocks,
         always_inline = true,
     )
+    call_post_op_callback() && post_op_callback(x, dev, cache, x, A, b, x1)
 end
 
 Base.@propagate_inbounds column_A(A::UniformScaling, i, j, h) = A

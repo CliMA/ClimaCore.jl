@@ -15,7 +15,10 @@ function mapreduce_cuda(
 )
     pdata = parent(data)
     S = eltype(data)
-    return DataLayouts.DataF{S}(Array(Array(f(pdata))[1, :]))
+    data_out = DataLayouts.DataF{S}(Array(Array(f(pdata))[1, :]))
+    call_post_op_callback() &&
+        post_op_callback(data_out, f, op, data; weighted_jacobian, opargs...)
+    return data_out
 end
 
 function mapreduce_cuda(
@@ -101,7 +104,11 @@ function mapreduce_cuda(
             Val(shmemsize),
         )
     end
-    return DataLayouts.DataF{S}(Array(Array(reduce_cuda)[1, :]))
+    data_out = DataLayouts.DataF{S}(Array(Array(reduce_cuda)[1, :]))
+
+    call_post_op_callback() &&
+        post_op_callback(data_out, f, op, data; weighted_jacobian, opargs...)
+    return data_out
 end
 
 function mapreduce_cuda_kernel!(

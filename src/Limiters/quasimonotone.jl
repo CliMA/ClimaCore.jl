@@ -113,7 +113,7 @@ function compute_element_bounds!(
     limiter::QuasiMonotoneLimiter,
     ρq,
     ρ,
-    ::ClimaComms.AbstractCPUDevice,
+    dev::ClimaComms.AbstractCPUDevice,
 )
     ρ_data = Fields.field_values(ρ)
     ρq_data = Fields.field_values(ρq)
@@ -144,6 +144,8 @@ function compute_element_bounds!(
             slab_q_bounds[slab_index(2)] = q_max
         end
     end
+    call_post_op_callback() &&
+        post_op_callback(limiter.q_bounds, limiter, ρq, ρ, dev)
     return nothing
 end
 
@@ -161,7 +163,7 @@ compute_neighbor_bounds_local!(limiter::QuasiMonotoneLimiter, ρ) =
 function compute_neighbor_bounds_local!(
     limiter::QuasiMonotoneLimiter,
     ρ,
-    ::ClimaComms.AbstractCPUDevice,
+    dev::ClimaComms.AbstractCPUDevice,
 )
     topology = Spaces.topology(axes(ρ))
     q_bounds = limiter.q_bounds
@@ -182,6 +184,8 @@ function compute_neighbor_bounds_local!(
             slab_q_bounds_nbr[slab_index(2)] = q_max
         end
     end
+    call_post_op_callback() &&
+        post_op_callback(limiter.q_bounds_nbr, limiter, ρ, dev)
     return nothing
 end
 
@@ -218,6 +222,8 @@ function compute_neighbor_bounds_ghost!(
             end
         end
     end
+    call_post_op_callback() &&
+        post_op_callback(limiter.q_bounds_nbr, limiter, topology)
     return nothing
 end
 
@@ -253,6 +259,8 @@ function compute_bounds!(
         ClimaComms.finish(limiter.ghost_buffer.graph_context)
         compute_neighbor_bounds_ghost!(limiter, Spaces.topology(axes(ρq)))
     end
+    call_post_op_callback() &&
+        post_op_callback(limiter.q_bounds, limiter, ρq, ρ)
 end
 
 
@@ -276,7 +284,7 @@ function apply_limiter!(
     ρq::Fields.Field,
     ρ::Fields.Field,
     limiter::QuasiMonotoneLimiter,
-    ::ClimaComms.AbstractCPUDevice,
+    dev::ClimaComms.AbstractCPUDevice,
 )
     (; q_bounds_nbr, rtol) = limiter
 
@@ -302,6 +310,7 @@ function apply_limiter!(
     converged ||
         @warn "Limiter failed to converge with rtol = $rtol, `max_rel_err`=$max_rel_err"
 
+    call_post_op_callback() && post_op_callback(ρq, ρq, ρ, limiter, dev)
     return ρq
 end
 

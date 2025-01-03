@@ -26,6 +26,14 @@ function interpolate_slab!(
         threads_s = (nthreads),
         blocks_s = (nblocks),
     )
+    call_post_op_callback() && post_op_callback(
+        output_array,
+        output_array,
+        field,
+        slab_indices,
+        weights,
+        device,
+    )
 
     output_array .= Array(output_cuarray)
 end

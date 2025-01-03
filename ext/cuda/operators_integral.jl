@@ -10,7 +10,7 @@ import ClimaComms
 using CUDA: @cuda
 
 function column_reduce_device!(
-    ::ClimaComms.CUDADevice,
+    dev::ClimaComms.CUDADevice,
     f::F,
     transform::T,
     output,
@@ -39,6 +39,11 @@ function column_reduce_device!(
         args;
         threads_s = p.threads,
         blocks_s = p.blocks,
+    )
+    call_post_op_callback() && post_op_callback(
+        output,
+        (dev, f, transform, output, input, init, space),
+        (;),
     )
 end
 

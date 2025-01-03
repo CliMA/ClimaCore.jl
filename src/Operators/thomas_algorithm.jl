@@ -27,6 +27,7 @@ function thomas_algorithm!(
     Fields.bycolumn(axes(A)) do colidx
         thomas_algorithm!(A[colidx], b[colidx])
     end
+    call_post_op_callback() && post_op_callback(b, A, b)
 end
 
 function thomas_algorithm!(

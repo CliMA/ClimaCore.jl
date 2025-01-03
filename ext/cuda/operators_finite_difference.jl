@@ -34,6 +34,7 @@ function Base.copyto!(
         threads_s = p.threads,
         blocks_s = p.blocks,
     )
+    call_post_op_callback() && post_op_callback(out, out, bc)
     return out
 end
 import ClimaCore.DataLayouts: get_N, get_Nv, get_Nij, get_Nij, get_Nh
