@@ -18,6 +18,7 @@ function Base.sum(
     context = ClimaComms.context(axes(field))
     localsum = mapreduce_cuda(identity, +, field, weighting = true)
     ClimaComms.allreduce!(context, parent(localsum), +)
+    call_post_op_callback() && post_op_callback(localsum[])
     return localsum[]
 end
 
@@ -25,6 +26,7 @@ function Base.sum(fn, field::Field, ::ClimaComms.CUDADevice)
     context = ClimaComms.context(axes(field))
     localsum = mapreduce_cuda(fn, +, field, weighting = true)
     ClimaComms.allreduce!(context, parent(localsum), +)
+    call_post_op_callback() && post_op_callback(localsum[])
     return localsum[]
 end
 
@@ -32,6 +34,7 @@ function Base.maximum(fn, field::Field, ::ClimaComms.CUDADevice)
     context = ClimaComms.context(axes(field))
     localmax = mapreduce_cuda(fn, max, field)
     ClimaComms.allreduce!(context, parent(localmax), max)
+    call_post_op_callback() && post_op_callback(localmax[])
     return localmax[]
 end
 
@@ -39,6 +42,7 @@ function Base.maximum(field::Field, ::ClimaComms.CUDADevice)
     context = ClimaComms.context(axes(field))
     localmax = mapreduce_cuda(identity, max, field)
     ClimaComms.allreduce!(context, parent(localmax), max)
+    call_post_op_callback() && post_op_callback(localmax[])
     return localmax[]
 end
 
@@ -46,6 +50,7 @@ function Base.minimum(fn, field::Field, ::ClimaComms.CUDADevice)
     context = ClimaComms.context(axes(field))
     localmin = mapreduce_cuda(fn, min, field)
     ClimaComms.allreduce!(context, parent(localmin), min)
+    call_post_op_callback() && post_op_callback(localmin[])
     return localmin[]
 end
 
@@ -53,6 +58,7 @@ function Base.minimum(field::Field, ::ClimaComms.CUDADevice)
     context = ClimaComms.context(axes(field))
     localmin = mapreduce_cuda(identity, min, field)
     ClimaComms.allreduce!(context, parent(localmin), min)
+    call_post_op_callback() && post_op_callback(localmin[])
     return localmin[]
 end
 

@@ -48,6 +48,7 @@ NVTX.@annotate function multiple_field_solve!(
         blocks_s = p.blocks,
         always_inline = true,
     )
+    call_post_op_callback() && post_op_callback(x)
 end
 
 Base.@propagate_inbounds column_A(A::UniformScaling, i, j, h) = A

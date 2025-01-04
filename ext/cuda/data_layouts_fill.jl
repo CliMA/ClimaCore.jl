@@ -41,5 +41,6 @@ function Base.fill!(dest::AbstractData, bc, ::ToCUDA)
             )
         end
     end
+    call_post_op_callback() && post_op_callback(dest)
     return dest
 end

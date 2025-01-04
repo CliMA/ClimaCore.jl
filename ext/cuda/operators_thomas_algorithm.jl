@@ -18,6 +18,7 @@ function column_thomas_solve!(::ClimaComms.CUDADevice, A, b)
         threads_s = p.threads,
         blocks_s = p.blocks,
     )
+    call_post_op_callback() && post_op_callback(b)
 end
 
 function thomas_algorithm_kernel!(

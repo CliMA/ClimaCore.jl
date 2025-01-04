@@ -39,6 +39,7 @@ if VERSION ≥ v"1.11.0-beta"
                 blocks_s = p.blocks,
             )
         end
+        call_post_op_callback() && post_op_callback(dest)
         return dest
     end
 else
@@ -74,6 +75,7 @@ else
                 )
             end
         end
+        call_post_op_callback() && post_op_callback(dest)
         return dest
     end
 end
@@ -95,6 +97,7 @@ function Base.copyto!(
     )
     @inbounds bc0 = bc[]
     fill!(dest, bc0)
+    call_post_op_callback() && post_op_callback(dest)
 end
 
 # For field-vector operations
@@ -119,6 +122,7 @@ function DataLayouts.copyto_per_field!(
         threads_s = p.threads,
         blocks_s = p.blocks,
     )
+    call_post_op_callback() && post_op_callback(array)
     return array
 end
 function copyto_per_field_kernel!(array, bc, N)
@@ -154,6 +158,7 @@ function DataLayouts.copyto_per_field_scalar!(
         threads_s = p.threads,
         blocks_s = p.blocks,
     )
+    call_post_op_callback() && post_op_callback(array)
     return array
 end
 function DataLayouts.copyto_per_field_scalar!(
@@ -177,6 +182,7 @@ function DataLayouts.copyto_per_field_scalar!(
         threads_s = p.threads,
         blocks_s = p.blocks,
     )
+    call_post_op_callback() && post_op_callback(array)
     return array
 end
 function copyto_per_field_kernel_0D!(array, bc, N)
