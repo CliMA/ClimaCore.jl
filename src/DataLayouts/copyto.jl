@@ -1,43 +1,25 @@
 #####
 ##### Dispatching and edge cases
 #####
-if VERSION ≥ v"1.11.0-beta"
-    # https://github.com/JuliaLang/julia/issues/56295
-    # Julia 1.11's Base.Broadcast currently requires
-    # multiple integer indexing, wheras Julia 1.10 did not.
-    # This means that we cannot reserve linear indexing to
-    # special-case fixes for https://github.com/JuliaLang/julia/issues/28126
-    # (including the GPU-variant related issue resolution efforts:
-    # JuliaGPU/GPUArrays.jl#454, JuliaGPU/GPUArrays.jl#464).
-    function Base.copyto!(
-        dest::AbstractData{S},
-        bc::Union{AbstractData, Base.Broadcast.Broadcasted},
-    ) where {S}
-        Base.copyto!(dest, bc, device_dispatch(parent(dest)))
-        call_post_op_callback() && post_op_callback(dest, dest, bc)
-        dest
-    end
-else
-    function Base.copyto!(
-        dest::AbstractData{S},
-        bc::Union{AbstractData, Base.Broadcast.Broadcasted},
-    ) where {S}
-        dev = device_dispatch(parent(dest))
-        if dev isa ToCPU &&
-           has_uniform_datalayouts(bc) &&
-           dest isa EndsWithField &&
-           !(dest isa DataF)
-            # Specialize on linear indexing when possible:
-            bc′ = Base.Broadcast.instantiate(to_non_extruded_broadcasted(bc))
-            @inbounds @simd for I in 1:get_N(UniversalSize(dest))
-                dest[I] = convert(S, bc′[I])
-            end
-        else
-            Base.copyto!(dest, bc, device_dispatch(parent(dest)))
+function Base.copyto!(
+    dest::AbstractData{S},
+    bc::Union{AbstractData, Base.Broadcast.Broadcasted},
+) where {S}
+    dev = device_dispatch(parent(dest))
+    if dev isa ToCPU &&
+       has_uniform_datalayouts(bc) &&
+       dest isa EndsWithField &&
+       !(dest isa DataF)
+        # Specialize on linear indexing when possible:
+        bc′ = Base.Broadcast.instantiate(to_non_extruded_broadcasted(bc))
+        @inbounds @simd for I in 1:get_N(UniversalSize(dest))
+            dest[I] = convert(S, bc′[I])
         end
-        call_post_op_callback() && post_op_callback(dest, dest, bc)
-        return dest
+    else
+        Base.copyto!(dest, bc, device_dispatch(parent(dest)))
     end
+    call_post_op_callback() && post_op_callback(dest, dest, bc)
+    return dest
 end
 
 # Specialize on non-Broadcasted objects

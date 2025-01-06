@@ -120,8 +120,7 @@ function launch_fused_copyto!(fmb::FusedMultiBroadcast)
     destinations = map(p -> p.first, fmb.pairs)
     bcs = map(p -> p.second, fmb.pairs)
     if all(bc -> DataLayouts.has_uniform_datalayouts(bc), bcs) &&
-       all(d -> d isa DataLayouts.EndsWithField, destinations) &&
-       !(VERSION ≥ v"1.11.0-beta")
+       all(d -> d isa DataLayouts.EndsWithField, destinations)
         pairs′ = map(fmb.pairs) do p
             bc′ = DataLayouts.to_non_extruded_broadcasted(p.second)
             Pair(p.first, Base.Broadcast.instantiate(bc′))
