@@ -27,7 +27,7 @@ jobs:
     - uses: julia-actions/setup-julia@v2
       if: steps.filter.outputs.julia_file_change == 'true'
       with:
-        version: '1.10'
+        version: '1.11'
 
     - name: Apply JuliaFormatter
       if: steps.filter.outputs.julia_file_change == 'true'
