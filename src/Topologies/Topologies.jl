@@ -11,8 +11,6 @@ import ..DataLayouts
 import ..DataLayouts: slab_index
 import ..slab, ..column, ..level
 
-import ..DeviceSideDevice, ..DeviceSideContext
-
 """
    AbstractTopology
 

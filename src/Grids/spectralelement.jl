@@ -587,25 +587,38 @@ quadrature_style(grid::AbstractSpectralElementGrid) = grid.quadrature_style
 local_dss_weights(grid::SpectralElementGrid1D) = grid.dss_weights
 local_dss_weights(grid::SpectralElementGrid2D) = grid.local_dss_weights
 
-## GPU compatibility
-struct DeviceSpectralElementGrid2D{Q, GG, LG} <: AbstractSpectralElementGrid
+## Same as SpectralElementGrid2D, but immutable (for GPU compatibility)
+struct DeviceSpectralElementGrid2D{
+    T,
+    Q,
+    GG <: Geometry.AbstractGlobalGeometry,
+    LG,
+    D,
+    IS,
+    BS,
+} <: AbstractSpectralElementGrid
+    topology::T
     quadrature_style::Q
     global_geometry::GG
     local_geometry::LG
+    local_dss_weights::D
+    internal_surface_geometry::IS
+    boundary_surface_geometries::BS
+    enable_bubble::Bool
 end
 
-ClimaComms.context(grid::DeviceSpectralElementGrid2D) = DeviceSideContext()
-ClimaComms.device(grid::DeviceSpectralElementGrid2D) = DeviceSideDevice()
+local_dss_weights(grid::DeviceSpectralElementGrid2D) = grid.local_dss_weights
+local_geometry_type(
+    ::Type{DeviceSpectralElementGrid2D{T, Q, GG, LG, D, IS, BS}},
+) where {T, Q, GG, LG, D, IS, BS} = eltype(LG) # calls eltype from DataLayouts
 
-Adapt.adapt_structure(to, grid::SpectralElementGrid2D) =
-    DeviceSpectralElementGrid2D(
-        Adapt.adapt(to, grid.quadrature_style),
-        Adapt.adapt(to, grid.global_geometry),
-        Adapt.adapt(to, grid.local_geometry),
-    )
-
+# for both CPU/GPU SpectralElementGrid2D
+const SpectralElementGrids2D{T, Q, GG, LG, D, IS, BS} = Union{
+    SpectralElementGrid2D{T, Q, GG, LG, D, IS, BS},
+    DeviceSpectralElementGrid2D{T, Q, GG, LG, D, IS, BS},
+}
 ## aliases
 const RectilinearSpectralElementGrid2D =
-    SpectralElementGrid2D{<:Topologies.RectilinearTopology2D}
+    SpectralElementGrids2D{<:Topologies.RectilinearTopology2D}
 const CubedSphereSpectralElementGrid2D =
-    SpectralElementGrid2D{<:Topologies.CubedSphereTopology2D}
+    SpectralElementGrids2D{<:Topologies.CubedSphereTopology2D}

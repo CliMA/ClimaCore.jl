@@ -7,7 +7,6 @@ import ..DataLayouts,
     ..Domains, ..Meshes, ..Topologies, ..Geometry, ..Quadratures
 import ..Utilities: PlusHalf, half, Cache
 import ..slab, ..column, ..level
-import ..DeviceSideDevice, ..DeviceSideContext
 
 using StaticArrays
 

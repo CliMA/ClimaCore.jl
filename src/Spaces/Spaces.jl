@@ -25,8 +25,6 @@ import ..DataLayouts,
 import ..Domains: z_max, z_min
 import ..Meshes: n_elements_per_panel_direction
 
-import ..DeviceSideDevice, ..DeviceSideContext
-
 import ..Grids:
     Staggering,
     CellFace,

@@ -39,8 +39,10 @@ function PointSpace(
 end
 
 
-Adapt.adapt_structure(to, space::PointSpace) =
-    PointSpace(DeviceSideContext(), Adapt.adapt(to, local_geometry_data(space)))
+Adapt.adapt_structure(to, space::PointSpace) = PointSpace(
+    ClimaComms.CUDADevice(),
+    Adapt.adapt(to, local_geometry_data(space)),
+)
 
 function PointSpace(
     context::ClimaComms.AbstractCommsContext,

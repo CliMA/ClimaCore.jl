@@ -17,9 +17,7 @@ import ClimaCore:
     Quadratures,
     Fields,
     DataLayouts,
-    Geometry,
-    DeviceSideContext,
-    DeviceSideDevice
+    Geometry
 
 import ClimaCore.DataLayouts: IJFH, VF, slab_index
 
@@ -199,12 +197,14 @@ end
 
     if on_gpu
         adapted_space = adapt(c_space)(c_space)
-        @test ClimaComms.context(adapted_space) == DeviceSideContext()
-        @test ClimaComms.device(adapted_space) == DeviceSideDevice()
+        @test ClimaComms.context(adapted_space) ==
+              ClimaComms.context(ClimaComms.CUDADevice())
+        @test ClimaComms.device(adapted_space) == ClimaComms.CUDADevice()
 
         adapted_hspace = adapt(hspace)(hspace)
-        @test ClimaComms.context(adapted_hspace) == DeviceSideContext()
-        @test ClimaComms.device(adapted_hspace) == DeviceSideDevice()
+        @test ClimaComms.context(adapted_hspace) ==
+              ClimaComms.context(ClimaComms.CUDADevice())
+        @test ClimaComms.device(adapted_hspace) == ClimaComms.CUDADevice()
     end
 
 end
@@ -246,8 +246,9 @@ end
 
     if on_gpu
         adapted_space = adapt(space)(space)
-        @test ClimaComms.context(adapted_space) == DeviceSideContext()
-        @test ClimaComms.device(adapted_space) == DeviceSideDevice()
+        @test ClimaComms.context(adapted_space) ==
+              ClimaComms.context(ClimaComms.CUDADevice())
+        @test ClimaComms.device(adapted_space) == ClimaComms.CUDADevice()
     end
 
     for i in 1:4, j in 1:4
