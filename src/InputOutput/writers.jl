@@ -52,7 +52,7 @@ function HDF5Writer(
     if context isa ClimaComms.SingletonCommsContext
         file = h5open(filename, mode)
     else
-        file = h5open(filename, mode, context.mpicomm)
+        file = h5open(filename, mode, climacomms_mpicomm(context))
     end
     # Add an attribute to the file if it doesn't already exist
     if haskey(attributes(file), "ClimaCore version")

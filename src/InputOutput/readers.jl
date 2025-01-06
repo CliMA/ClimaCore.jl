@@ -95,7 +95,7 @@ function HDF5Reader(
     if context isa ClimaComms.SingletonCommsContext
         file = h5open(filename, "r")
     else
-        file = h5open(filename, "r", context.mpicomm)
+        file = h5open(filename, "r", climacomms_mpicomm(context))
     end
     if !haskey(attrs(file), "ClimaCore version")
         error("Not a ClimaCore HDF5 file")

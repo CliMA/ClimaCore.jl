@@ -27,5 +27,6 @@ include("CommonGrids/CommonGrids.jl")
 include("CommonSpaces/CommonSpaces.jl")
 
 include("deprecated.jl")
+include("compat.jl")
 
 end # module

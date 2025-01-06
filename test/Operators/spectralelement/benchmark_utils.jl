@@ -15,6 +15,7 @@ import ClimaCore.Geometry as Geometry
 import ClimaCore.Quadratures as Quadratures
 import ClimaCore.Fields as Fields
 import ClimaCore as CC
+import ClimaCore: climacomms_mpicomm
 import ClimaComms
 ClimaComms.@import_required_backends
 
@@ -160,9 +161,9 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
        device isa ClimaComms.CUDADevice
         # assign GPUs based on local rank
         local_comm = ClimaComms.MPI.Comm_split_type(
-            context.mpicomm,
+            climacomms_mpicomm(context),
             ClimaComms.MPI.COMM_TYPE_SHARED,
-            ClimaComms.MPI.Comm_rank(context.mpicomm),
+            ClimaComms.MPI.Comm_rank(climacomms_mpicomm(context)),
         )
         CUDA.device!(
             ClimaComms.MPI.Comm_rank(local_comm) % length(CUDA.devices()),

@@ -13,6 +13,7 @@ import ..Geometry,
     ..Hypsography
 import ..VERSION
 import ..Utilities: PlusHalf, half
+import ..climacomms_mpicomm
 
 include("writers.jl")
 include("readers.jl")
