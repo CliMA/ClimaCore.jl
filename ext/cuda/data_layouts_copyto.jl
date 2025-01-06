@@ -16,18 +16,26 @@ function knl_copyto_linear!(dest, src, us)
     return nothing
 end
 
-if VERSION ≥ v"1.11.0-beta"
-    # https://github.com/JuliaLang/julia/issues/56295
-    # Julia 1.11's Base.Broadcast currently requires
-    # multiple integer indexing, wheras Julia 1.10 did not.
-    # This means that we cannot reserve linear indexing to
-    # special-case fixes for https://github.com/JuliaLang/julia/issues/28126
-    # (including the GPU-variant related issue resolution efforts:
-    # JuliaGPU/GPUArrays.jl#454, JuliaGPU/GPUArrays.jl#464).
-    function Base.copyto!(dest::AbstractData, bc, to::ToCUDA)
-        (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest)
-        us = DataLayouts.UniversalSize(dest)
-        if Nv > 0 && Nh > 0
+function Base.copyto!(dest::AbstractData, bc, to::ToCUDA)
+    (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest)
+    us = DataLayouts.UniversalSize(dest)
+    if Nv > 0 && Nh > 0
+        if DataLayouts.has_uniform_datalayouts(bc) &&
+           dest isa DataLayouts.EndsWithField
+            bc′ = Base.Broadcast.instantiate(
+                DataLayouts.to_non_extruded_broadcasted(bc),
+            )
+            args = (dest, bc′, us)
+            threads = threads_via_occupancy(knl_copyto_linear!, args)
+            n_max_threads = min(threads, get_N(us))
+            p = linear_partition(prod(size(dest)), n_max_threads)
+            auto_launch!(
+                knl_copyto_linear!,
+                args;
+                threads_s = p.threads,
+                blocks_s = p.blocks,
+            )
+        else
             args = (dest, bc, us)
             threads = threads_via_occupancy(knl_copyto!, args)
             n_max_threads = min(threads, get_N(us))
@@ -39,45 +47,9 @@ if VERSION ≥ v"1.11.0-beta"
                 blocks_s = p.blocks,
             )
         end
-        call_post_op_callback() && post_op_callback(dest, dest, bc, to)
-        return dest
     end
-else
-    function Base.copyto!(dest::AbstractData, bc, to::ToCUDA)
-        (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest)
-        us = DataLayouts.UniversalSize(dest)
-        if Nv > 0 && Nh > 0
-            if DataLayouts.has_uniform_datalayouts(bc) &&
-               dest isa DataLayouts.EndsWithField
-                bc′ = Base.Broadcast.instantiate(
-                    DataLayouts.to_non_extruded_broadcasted(bc),
-                )
-                args = (dest, bc′, us)
-                threads = threads_via_occupancy(knl_copyto_linear!, args)
-                n_max_threads = min(threads, get_N(us))
-                p = linear_partition(prod(size(dest)), n_max_threads)
-                auto_launch!(
-                    knl_copyto_linear!,
-                    args;
-                    threads_s = p.threads,
-                    blocks_s = p.blocks,
-                )
-            else
-                args = (dest, bc, us)
-                threads = threads_via_occupancy(knl_copyto!, args)
-                n_max_threads = min(threads, get_N(us))
-                p = partition(dest, n_max_threads)
-                auto_launch!(
-                    knl_copyto!,
-                    args;
-                    threads_s = p.threads,
-                    blocks_s = p.blocks,
-                )
-            end
-        end
-        call_post_op_callback() && post_op_callback(dest, dest, bc, to)
-        return dest
-    end
+    call_post_op_callback() && post_op_callback(dest, dest, bc, to)
+    return dest
 end
 
 # broadcasting scalar assignment

@@ -52,8 +52,7 @@ function Base.copyto!(
     dev = device_dispatch(parent(dest1))
     if dev isa ClimaComms.AbstractCPUDevice &&
        all(bc -> has_uniform_datalayouts(bc), bcs) &&
-       all(d -> d isa EndsWithField, destinations) &&
-       !(VERSION ≥ v"1.11.0-beta")
+       all(d -> d isa EndsWithField, destinations)
         pairs′ = map(fmb_inst.pairs) do p
             bc′ = to_non_extruded_broadcasted(p.second)
             Pair(p.first, bc′)

@@ -19,7 +19,7 @@ function Base.fill!(dest::AbstractData, bc, to::ToCUDA)
     us = DataLayouts.UniversalSize(dest)
     args = (dest, bc, us)
     if Nv > 0 && Nh > 0
-        if !(VERSION ≥ v"1.11.0-beta") && dest isa DataLayouts.EndsWithField
+        if dest isa DataLayouts.EndsWithField
             threads = threads_via_occupancy(knl_fill_linear!, args)
             n_max_threads = min(threads, get_N(us))
             p = linear_partition(prod(size(dest)), n_max_threads)

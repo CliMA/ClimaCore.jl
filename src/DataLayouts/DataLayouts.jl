@@ -2052,88 +2052,23 @@ end
 const EndsWithField{S} =
     Union{IJHF{S}, IHF{S}, IJF{S}, IF{S}, VF{S}, VIJHF{S}, VIHF{S}}
 
-if VERSION ≥ v"1.11.0-beta"
-    ### --------------- Support for multi-dimensional indexing
-    # TODO: can we remove this? It's not needed for Julia 1.10,
-    #       but seems needed in Julia 1.11.
-    @inline Base.getindex(
-        data::Union{
-            IJF,
-            IJFH,
-            IJHF,
-            IFH,
-            IHF,
-            VIJFH,
-            VIJHF,
-            VIFH,
-            VIHF,
-            VF,
-            IF,
-        },
-        I::Vararg{Int, N},
-    ) where {N} = Base.getindex(
-        data,
-        CartesianIndex(to_universal_index(singleton(data), I)),
-    )
-
-    @inline Base.setindex!(
-        data::Union{
-            IJF,
-            IJFH,
-            IJHF,
-            IFH,
-            IHF,
-            VIJFH,
-            VIJHF,
-            VIFH,
-            VIHF,
-            VF,
-            IF,
-        },
-        val,
-        I::Vararg{Int, N},
-    ) where {N} = Base.setindex!(
-        data,
-        val,
-        CartesianIndex(to_universal_index(singleton(data), I)),
-    )
-
-    # Certain datalayouts support special indexing.
-    # Like VF datalayouts with `getindex(::VF, v::Integer)`
-    #! format: off
-    @inline to_universal_index(::VFSingleton, I::NTuple{1, T}) where {T} =  (T(1), T(1), T(1), I[1], T(1))
-    @inline to_universal_index(::IFSingleton, I::NTuple{1, T}) where {T} =  (I[1], T(1), T(1), T(1), T(1))
-    @inline to_universal_index(::IFSingleton, I::NTuple{2, T}) where {T} =  (I[1], T(1), T(1), T(1), T(1))
-    @inline to_universal_index(::IFSingleton, I::NTuple{3, T}) where {T} =  (I[1], T(1), T(1), T(1), T(1))
-    @inline to_universal_index(::IFSingleton, I::NTuple{4, T}) where {T} =  (I[1], T(1), T(1), T(1), T(1))
-    @inline to_universal_index(::IFSingleton, I::NTuple{5, T}) where {T} =  (I[1], T(1), T(1), T(1), T(1))
-    @inline to_universal_index(::IJFSingleton, I::NTuple{2, T}) where {T} = (I[1], I[2], T(1), T(1), T(1))
-    @inline to_universal_index(::IJFSingleton, I::NTuple{3, T}) where {T} = (I[1], I[2], T(1), T(1), T(1))
-    @inline to_universal_index(::IJFSingleton, I::NTuple{4, T}) where {T} = (I[1], I[2], T(1), T(1), T(1))
-    @inline to_universal_index(::IJFSingleton, I::NTuple{5, T}) where {T} = (I[1], I[2], T(1), T(1), T(1))
-    @inline to_universal_index(::AbstractDataSingleton, I::NTuple{5}) = I
-    #! format: on
-    ### ---------------
-else
-    # Only support datalayouts that end with fields, since those
-    # are the only layouts where we can efficiently compute the
-    # strides.
-    @propagate_inbounds function Base.getindex(
-        data::EndsWithField{S},
-        I::Integer,
-    ) where {S}
-        s_array = farray_size(data)
-        @inbounds get_struct_linear(parent(data), S, I, s_array)
-    end
-    @propagate_inbounds function Base.setindex!(
-        data::EndsWithField{S},
-        val,
-        I::Integer,
-    ) where {S}
-        s_array = farray_size(data)
-        @inbounds set_struct_linear!(parent(data), convert(S, val), I, s_array)
-    end
-
+# Only support datalayouts that end with fields, since those
+# are the only layouts where we can efficiently compute the
+# strides.
+@propagate_inbounds function Base.getindex(
+    data::EndsWithField{S},
+    I::Integer,
+) where {S}
+    s_array = farray_size(data)
+    @inbounds get_struct_linear(parent(data), S, I, s_array)
+end
+@propagate_inbounds function Base.setindex!(
+    data::EndsWithField{S},
+    val,
+    I::Integer,
+) where {S}
+    s_array = farray_size(data)
+    @inbounds set_struct_linear!(parent(data), convert(S, val), I, s_array)
 end
 
 """
