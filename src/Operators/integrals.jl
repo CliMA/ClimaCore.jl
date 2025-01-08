@@ -5,37 +5,50 @@ import ClimaComms
 """
     column_integral_definite!(ϕ_top, ᶜ∂ϕ∂z, [ϕ_bot])
 
-Sets `ϕ_top```{}= \\int_{z_{bot}}^{z_{top}}\\,```ᶜ∂ϕ∂z```(z)\\,dz +{}```ϕ_bot`,
-where ``z_{bot}`` and ``z_{top}`` are the values of `z` at the bottom and top of
-the domain, respectively. The input `ᶜ∂ϕ∂z` should be a cell-center `Field` or
-`AbstractBroadcasted`, and the output `ϕ_top` should be a horizontal `Field`.
-The default value of `ϕ_bot` is 0.
+Sets `ϕ_top```{}= \\frac{1}{ΔA(z_{bot})}\\int_{z_{bot}}^{z_{top}}\\,
+```ᶜ∂ϕ∂z```(z)\\,ΔA(z)\\,dz +{}```ϕ_bot`, where ``z_{bot}`` and ``z_{top}`` are
+the values of `z` at the bottom and top of the domain, and where `ΔA` is the
+area differential `J/Δz`, with `J` denoting the metric Jacobian. The input
+`ᶜ∂ϕ∂z` should be a cell-center `Field` or `AbstractBroadcasted`, and the output
+`ϕ_top` should be a horizontal `Field`. The default value of `ϕ_bot` is 0.
 """
 function column_integral_definite!(ϕ_top, ᶜ∂ϕ∂z, ϕ_bot = rzero(eltype(ϕ_top)))
-    ᶜΔϕ = Base.Broadcast.broadcasted(⊠, ᶜ∂ϕ∂z, Fields.Δz_field(axes(ᶜ∂ϕ∂z)))
+    ᶜJ = Fields.local_geometry_field(axes(ᶜ∂ϕ∂z)).J
+    f_space = Spaces.face_space(axes(ᶜ∂ϕ∂z))
+    J_bot = Fields.level(Fields.local_geometry_field(f_space).J, half)
+    Δz_bot = Fields.level(Fields.Δz_field(f_space), half)
+    ΔA_bot = Base.broadcasted(/, J_bot, Δz_bot)
+    ᶜΔϕ = Base.broadcasted(⊠, ᶜ∂ϕ∂z, Base.broadcasted(/, ᶜJ, ΔA_bot))
     column_reduce!(⊞, ϕ_top, ᶜΔϕ; init = ϕ_bot)
 end
 
 """
     column_integral_indefinite!(ᶠϕ, ᶜ∂ϕ∂z, [ϕ_bot])
 
-Sets `ᶠϕ```(z) = \\int_{z_{bot}}^z\\,```ᶜ∂ϕ∂z```(z')\\,dz' +{}```ϕ_bot`, where
-``z_{bot}`` is the value of `z` at the bottom of the domain. The input `ᶜ∂ϕ∂z`
-should be a cell-center `Field` or `AbstractBroadcasted`, and the output `ᶠϕ`
-should be a cell-face `Field`. The default value of `ϕ_bot` is 0.
+Sets `ᶠϕ```(z) = \\frac{1}{ΔA(z_{bot})}\\int_{z_{bot}}^z\\,```ᶜ∂ϕ∂z```(z')\\,
+ΔA(z')\\,dz' +{}```ϕ_bot`, where ``z_{bot}`` is the value of `z` at the bottom
+of the domain, and where `ΔA` is the area differential `J/Δz`, with `J` denoting
+the metric Jacobian. The input `ᶜ∂ϕ∂z` should be a cell-center `Field` or
+`AbstractBroadcasted`, and the output `ᶠϕ` should be a cell-face `Field`. The
+default value of `ϕ_bot` is 0.
 
     column_integral_indefinite!(∂ϕ∂z, ᶠϕ, [ϕ_bot], [rtol])
 
-Sets
-`ᶠϕ```(z) = \\int_{z_{bot}}^z\\,```∂ϕ∂z```(```ᶠϕ```(z'), z')\\,dz' +{}```ϕ_bot`,
-where `∂ϕ∂z` can be any scalar-valued two-argument function. The output `ᶠϕ`
-satisfies `ᶜgradᵥ.(ᶠϕ) ≈ ∂ϕ∂z.(ᶜint.(ᶠϕ), ᶜz)`, where `ᶜgradᵥ = GradientF2C()`,
-`ᶜint = InterpolateF2C()`, and `ᶜz = Fields.coordinate_field(ᶜint.(ᶠϕ)).z`, and
-where the approximation is accurate to a relative tolerance of `rtol`. The
+Sets `ᶠϕ```(z) = \\frac{1}{ΔA(z_{bot})}\\int_{z_{bot}}^z\\,
+```∂ϕ∂z```(```ᶠϕ```(z'), z')\\,ΔA(z')\\,dz' +{}```ϕ_bot`, where `∂ϕ∂z` can be
+any scalar-valued two-argument function. When a shallow atmosphere approximation
+is used, `ΔA = ΔA_{bot}` at all values of `z`, and the output `ᶠϕ` satisfies
+`ᶜgradᵥ.(ᶠϕ) ≈ ∂ϕ∂z.(ᶜint.(ᶠϕ), ᶜz)` with a relative tolerance of `rtol`, where
+`ᶜgradᵥ = GradientF2C()` and `ᶜint = InterpolateF2C()`. When a deep atmosphere
+is used, the vertical gradient is replaced with an area-weighted gradient. The
 default value of `ϕ_bot` is 0, and the default value of `rtol` is 0.001.
 """
 function column_integral_indefinite!(ᶠϕ, ᶜ∂ϕ∂z, ϕ_bot = rzero(eltype(ᶠϕ)))
-    ᶜΔϕ = Base.Broadcast.broadcasted(⊠, ᶜ∂ϕ∂z, Fields.Δz_field(axes(ᶜ∂ϕ∂z)))
+    ᶜJ = Fields.local_geometry_field(axes(ᶜ∂ϕ∂z)).J
+    J_bot = Fields.level(Fields.local_geometry_field(ᶠϕ).J, half)
+    Δz_bot = Fields.level(Fields.Δz_field(ᶠϕ), half)
+    ΔA_bot = Base.broadcasted(/, J_bot, Δz_bot)
+    ᶜΔϕ = Base.broadcasted(⊠, ᶜ∂ϕ∂z, Base.broadcasted(/, ᶜJ, ΔA_bot))
     column_accumulate!(⊞, ᶠϕ, ᶜΔϕ; init = ϕ_bot)
 end
 function column_integral_indefinite!(
@@ -45,26 +58,23 @@ function column_integral_indefinite!(
     rtol = eltype(ᶠϕ)(0.001),
 ) where {F <: Function}
     device = ClimaComms.device(ᶠϕ)
-    face_space = axes(ᶠϕ)
-    center_space = if face_space isa Spaces.FaceFiniteDifferenceSpace
-        Spaces.CenterFiniteDifferenceSpace(face_space)
-    elseif face_space isa Spaces.FaceExtrudedFiniteDifferenceSpace
-        Spaces.CenterExtrudedFiniteDifferenceSpace(face_space)
-    else
-        error("output of column_integral_indefinite! must be on cell faces")
-    end
-    ᶜz = Fields.coordinate_field(center_space).z
-    ᶜΔz = Fields.Δz_field(center_space)
-    ᶜz_and_Δz = Base.Broadcast.broadcasted(tuple, ᶜz, ᶜΔz)
-    column_accumulate!(ᶠϕ, ᶜz_and_Δz; init = ϕ_bot) do ϕ_prev, (z, Δz)
-        residual(ϕ_new) = (ϕ_new - ϕ_prev) / Δz - ∂ϕ∂z((ϕ_prev + ϕ_new) / 2, z)
+    c_space = Spaces.center_space(axes(ᶠϕ))
+    ᶜz = Fields.coordinate_field(c_space).z
+    ᶜJ = Fields.local_geometry_field(c_space).J
+    J_bot = Fields.level(Fields.local_geometry_field(ᶠϕ).J, half)
+    Δz_bot = Fields.level(Fields.Δz_field(ᶠϕ), half)
+    ΔA_bot = Base.broadcasted(/, J_bot, Δz_bot)
+    ᶜz_and_Δz = Base.broadcasted(tuple, ᶜz, Base.broadcasted(/, ᶜJ, ΔA_bot))
+    column_accumulate!(ᶠϕ, ᶜz_and_Δz; init = ϕ_bot) do ϕ_prev, (z, weighted_Δz)
+        residual(ϕ_new) =
+            (ϕ_new - ϕ_prev) / weighted_Δz - ∂ϕ∂z((ϕ_prev + ϕ_new) / 2, z)
         (; converged, root) = RootSolvers.find_zero(
             residual,
             RootSolvers.NewtonsMethodAD(ϕ_prev),
             RootSolvers.CompactSolution(),
             RootSolvers.RelativeSolutionTolerance(rtol),
         )
-        ClimaComms.@assert device converged "∂ϕ∂z could not be integrated over \
+        ClimaComms.@assert device converged "unable to integrate through \
                                              z = $z with rtol set to $rtol"
         return root
     end
