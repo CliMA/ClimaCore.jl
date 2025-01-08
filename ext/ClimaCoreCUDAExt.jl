@@ -20,6 +20,7 @@ import ClimaCore.RecursiveApply:
 import ClimaCore.DataLayouts: get_N, get_Nv, get_Nij, get_Nij, get_Nh
 import ClimaCore.DataLayouts: UniversalSize
 
+include(joinpath("cuda", "adapt.jl"))
 include(joinpath("cuda", "cuda_utils.jl"))
 include(joinpath("cuda", "data_layouts.jl"))
 include(joinpath("cuda", "fields.jl"))

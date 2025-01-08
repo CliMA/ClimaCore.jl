@@ -197,12 +197,12 @@ end
     @test length(Spaces.unique_nodes(hspace)) == 4
     @test length(Spaces.all_nodes(hspace)) == 4
 
-    if on_gpu
-        adapted_space = adapt(c_space)(c_space)
+    @static if on_gpu
+        adapted_space = adapt(CUDA.KernelAdaptor(), c_space)
         @test ClimaComms.context(adapted_space) == DeviceSideContext()
         @test ClimaComms.device(adapted_space) == DeviceSideDevice()
 
-        adapted_hspace = adapt(hspace)(hspace)
+        adapted_hspace = adapt(CUDA.KernelAdaptor(), hspace)
         @test ClimaComms.context(adapted_hspace) == DeviceSideContext()
         @test ClimaComms.device(adapted_hspace) == DeviceSideDevice()
     end
@@ -244,8 +244,8 @@ end
     local_geometry_slab = slab(Spaces.local_geometry_data(space), 1)
     dss_weights_slab = slab(Spaces.local_dss_weights(space), 1)
 
-    if on_gpu
-        adapted_space = adapt(space)(space)
+    @static if on_gpu
+        adapted_space = adapt(CUDA.KernelAdaptor(), space)
         @test ClimaComms.context(adapted_space) == DeviceSideContext()
         @test ClimaComms.device(adapted_space) == DeviceSideDevice()
     end

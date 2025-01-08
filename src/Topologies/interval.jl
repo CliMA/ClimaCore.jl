@@ -20,8 +20,6 @@ end
 struct DeviceIntervalTopology{B} <: AbstractIntervalTopology
     boundaries::B
 end
-Adapt.adapt_structure(to, topology::IntervalTopology) =
-    DeviceIntervalTopology(topology.boundaries)
 
 ClimaComms.context(topology::DeviceIntervalTopology) = DeviceSideContext()
 ClimaComms.device(topology::DeviceIntervalTopology) = DeviceSideDevice()
