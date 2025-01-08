@@ -50,7 +50,6 @@ device = ClimaComms.CPUSingleThreaded()
     xpts = range(Geometry.XPoint(-500.0), Geometry.XPoint(500.0), length = 21)
     zpts = range(Geometry.ZPoint(0.0), Geometry.ZPoint(1000.0), length = 21)
 
-
     interp_x = Remapping.interpolate_array(coords.x, xpts, zpts)
     @test interp_x ≈ [x.x for x in xpts, z in zpts]
 

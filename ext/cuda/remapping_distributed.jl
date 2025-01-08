@@ -17,8 +17,14 @@ function _set_interpolated_values_device!(
 )
     # FIXME: Avoid allocation of tuple
     field_values = tuple(map(f -> Fields.field_values(f), fields)...)
-    nblocks, _ = size(interpolation_matrix[1])
-    nthreads = length(vert_interpolation_weights)
+
+    purely_vertical_space = isnothing(interpolation_matrix)
+    num_horizontal_points =
+        purely_vertical_space ? 1 : prod(size(local_horiz_indices))
+    num_points = num_horizontal_points * length(vert_interpolation_weights)
+    max_threads = 256
+    nthreads = min(num_points, max_threads)
+    nblocks = cld(num_points, nthreads)
     args = (
         out,
         interpolation_matrix,
@@ -125,6 +131,41 @@ function set_interpolated_values_kernel!(
                             )
                     end
                 end
+            end
+        end
+    end
+    return nothing
+end
+
+# GPU, vertical case
+function set_interpolated_values_kernel!(
+    out::AbstractArray,
+    ::Nothing,
+    ::Nothing,
+    vert_interpolation_weights,
+    vert_bounding_indices,
+    field_values,
+)
+    # TODO: Check the memory access pattern. This was not optimized and likely inefficient!
+    num_fields = length(field_values)
+    num_vert = length(vert_bounding_indices)
+
+    vindex = (blockIdx().y - Int32(1)) * blockDim().y + threadIdx().y
+    findex = (blockIdx().z - Int32(1)) * blockDim().z + threadIdx().z
+
+    totalThreadsY = gridDim().y * blockDim().y
+    totalThreadsZ = gridDim().z * blockDim().z
+
+    CI = CartesianIndex
+    for j in vindex:totalThreadsY:num_vert
+        v_lo, v_hi = vert_bounding_indices[j]
+        A, B = vert_interpolation_weights[j]
+        for k in findex:totalThreadsZ:num_fields
+            if j ≤ num_vert && k ≤ num_fields
+                out[j, k] = (
+                    A * field_values[k][CI(1, 1, 1, v_lo, 1)] +
+                    B * field_values[k][CI(1, 1, 1, v_hi, 1)]
+                )
             end
         end
     end

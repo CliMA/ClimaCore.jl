@@ -1,3 +1,7 @@
+#=
+julia --project
+using Revise; include("test/Remapping/distributed_remapping.jl")
+=#
 using Logging
 using Test
 using IntervalSets
@@ -36,7 +40,7 @@ end
 end
 
 on_gpu = device isa ClimaComms.CUDADevice
-broken = false
+with_mpi = context isa ClimaComms.MPICommsContext
 
 if !on_gpu
     @testset "2D extruded" begin
@@ -655,5 +659,240 @@ end
         @test interp_sin_long ≈ dest[:, :, 1]
         @test interp_sin_lat ≈ dest[:, :, 2]
         @test interp_sin_long ≈ dest[:, :, 3]
+    end
+end
+
+if !with_mpi
+    @testset "Purely vertical space" begin
+        vertdomain = Domains.IntervalDomain(
+            Geometry.ZPoint(0.0),
+            Geometry.ZPoint(1000.0);
+            boundary_names = (:bottom, :top),
+        )
+
+        vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 30)
+        verttopo = Topologies.IntervalTopology(
+            ClimaComms.SingletonCommsContext(ClimaComms.device()),
+            vertmesh,
+        )
+        cspace = Spaces.CenterFiniteDifferenceSpace(verttopo)
+        fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
+
+        zpts = range(0.0, 1000.0, 21)
+        zcoords = [Geometry.ZPoint(z) for z in zpts]
+
+        # Center space
+        cremapper = Remapping.Remapper(
+            cspace;
+            target_zcoords = zcoords,
+            buffer_length = 2,
+        )
+        ccoords = Fields.coordinate_field(cspace)
+        cinterp_z = Remapping.interpolate(cremapper, ccoords.z)
+        cexpected_z = ArrayType(zpts)
+        ClimaComms.allowscalar(device) do
+            cexpected_z[1] = 1000.0 * (0 / 30 + 1 / 30) / 2
+            cexpected_z[end] = 1000.0 * (29 / 30 + 30 / 30) / 2
+        end
+        @test cinterp_z ≈ cexpected_z
+
+        # Face space
+        fremapper = Remapping.Remapper(
+            fspace;
+            target_zcoords = zcoords,
+            buffer_length = 2,
+        )
+        fcoords = Fields.coordinate_field(fspace)
+        finterp_z = Remapping.interpolate(fremapper, fcoords.z)
+        fexpected_z = ArrayType(zpts)
+        finterp_z ≈ fexpected_z
+
+        # Remapping two fields
+        cinterp = Remapping.interpolate(cremapper, [ccoords.z, ccoords.z])
+        @test cexpected_z ≈ cinterp[:, 1]
+        @test cexpected_z ≈ cinterp[:, 2]
+
+        finterp = Remapping.interpolate(fremapper, [fcoords.z, fcoords.z])
+        @test fexpected_z ≈ finterp[:, 1]
+        @test fexpected_z ≈ finterp[:, 2]
+
+        # Remapping three fields (more than the buffer length)
+        cinterp =
+            Remapping.interpolate(cremapper, [ccoords.z, ccoords.z, ccoords.z])
+        @test cexpected_z ≈ cinterp[:, 1]
+        @test cexpected_z ≈ cinterp[:, 2]
+        @test cexpected_z ≈ cinterp[:, 3]
+
+        finterp =
+            Remapping.interpolate(fremapper, [fcoords.z, fcoords.z, fcoords.z])
+        @test fexpected_z ≈ finterp[:, 1]
+        @test fexpected_z ≈ finterp[:, 2]
+        @test fexpected_z ≈ finterp[:, 3]
+
+        # Remapping in-place one field
+        dest = ArrayType(zeros(21))
+        Remapping.interpolate!(dest, cremapper, ccoords.z)
+        @test cexpected_z ≈ dest
+
+        Remapping.interpolate!(dest, fremapper, fcoords.z)
+        @test fexpected_z ≈ dest
+
+        # Three fields (more than buffer length)
+        dest = ArrayType(zeros(21, 3))
+        Remapping.interpolate!(
+            dest,
+            cremapper,
+            [ccoords.z, ccoords.z, ccoords.z],
+        )
+        @test cexpected_z ≈ dest[:, 1]
+        @test cexpected_z ≈ dest[:, 2]
+        @test cexpected_z ≈ dest[:, 3]
+
+        Remapping.interpolate!(
+            dest,
+            fremapper,
+            [fcoords.z, fcoords.z, fcoords.z],
+        )
+        @test fexpected_z ≈ dest[:, 1]
+        @test fexpected_z ≈ dest[:, 2]
+        @test fexpected_z ≈ dest[:, 3]
+    end
+
+end
+
+@testset "Convenience interpolate" begin
+
+    # 3D Sphere space
+    vertdomain = Domains.IntervalDomain(
+        Geometry.ZPoint(0.0),
+        Geometry.ZPoint(1000.0);
+        boundary_names = (:bottom, :top),
+    )
+
+    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 30)
+    verttopo = Topologies.IntervalTopology(
+        ClimaComms.SingletonCommsContext(ClimaComms.device()),
+        vertmesh,
+    )
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopo)
+
+    horzdomain = Domains.SphereDomain(1e6)
+
+    quad = Quadratures.GLL{4}()
+    horzmesh = Meshes.EquiangularCubedSphere(horzdomain, 6)
+    horztopology = Topologies.Topology2D(context, horzmesh)
+    horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
+
+    hv_center_space =
+        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
+
+    @test all(
+        Remapping.default_target_zcoords(hv_center_space) .≈
+        Geometry.ZPoint.(range(0.0, 1000; length = 50)),
+    )
+
+    @test Remapping.default_target_hcoords(hv_center_space) == [
+        Geometry.LatLongPoint(x, y) for x in range(-180.0, 180.0, length = 180),
+        y in range(-90.0, 90.0, length = 180)
+    ]
+
+    # Purely horizontal 2D space sphere
+    @test Remapping.default_target_hcoords(horzspace) == [
+        Geometry.LatLongPoint(x, y) for x in range(-180.0, 180.0, length = 180),
+        y in range(-90.0, 90.0, length = 180)
+    ]
+
+    # Purely vertical spaces
+
+    @test all(
+        Remapping.default_target_zcoords(vert_center_space) .≈
+        Geometry.ZPoint.(range(0.0, 1000; length = 50)),
+    )
+    @test all(
+        Remapping.default_target_zcoords(
+            Spaces.FaceFiniteDifferenceSpace(vert_center_space),
+        ) .≈ Geometry.ZPoint.(range(0.0, 1000; length = 50)),
+    )
+
+    # 3D box space
+
+    vertdomain = Domains.IntervalDomain(
+        Geometry.ZPoint(0.0),
+        Geometry.ZPoint(1000.0);
+        boundary_names = (:bottom, :top),
+    )
+
+    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 30)
+    verttopo = Topologies.IntervalTopology(
+        ClimaComms.SingletonCommsContext(device),
+        vertmesh,
+    )
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopo)
+
+    horzdomain = Domains.RectangleDomain(
+        Geometry.XPoint(-500.0) .. Geometry.XPoint(500.0),
+        Geometry.YPoint(-300.0) .. Geometry.YPoint(300.0),
+        x1periodic = true,
+        x2periodic = true,
+    )
+
+    quad = Quadratures.GLL{4}()
+    horzmesh = Meshes.RectilinearMesh(horzdomain, 10, 10)
+    horztopology = Topologies.Topology2D(
+        ClimaComms.SingletonCommsContext(device),
+        horzmesh,
+    )
+    horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
+
+    hv_center_space =
+        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
+
+    @test all(
+        Remapping.default_target_hcoords(hv_center_space) .≈ [
+            Geometry.XYPoint(x, y) for x in range(-500.0, 500.0, length = 180),
+            y in range(-300.0, 300.0, length = 180)
+        ],
+    )
+
+    # Purely horizontal 2D space box
+    @test all(
+        Remapping.default_target_hcoords(horzspace) .≈ [
+            Geometry.XYPoint(x, y) for x in range(-500.0, 500.0, length = 180),
+            y in range(-300.0, 300.0, length = 180)
+        ],
+    )
+
+    # 2D slice space
+    if !on_gpu
+        horzdomain = Domains.IntervalDomain(
+            Geometry.XPoint(-500.0) .. Geometry.XPoint(500.0),
+            periodic = true,
+        )
+        quad = Quadratures.GLL{4}()
+        horzmesh = Meshes.IntervalMesh(horzdomain, nelems = 10)
+        horztopology = Topologies.IntervalTopology(
+            ClimaComms.SingletonCommsContext(device),
+            horzmesh,
+        )
+        horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
+
+        hv_center_space =
+            Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
+
+        @test all(
+            Remapping.default_target_hcoords(hv_center_space) .≈
+            [Geometry.XPoint(x) for x in range(-500.0, 500.0, length = 180)],
+        )
+
+        @test all(
+            Remapping.default_target_zcoords(hv_center_space) .≈
+            Geometry.ZPoint.(range(0.0, 1000; length = 50)),
+        )
+
+        # Purely horizontal 1D space
+        @test all(
+            Remapping.default_target_hcoords(horzspace) .≈
+            [Geometry.XPoint(x) for x in range(-500.0, 500.0, length = 180)],
+        )
     end
 end

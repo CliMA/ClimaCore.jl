@@ -78,6 +78,9 @@
 #   process-local interpolate points in the correct shape with respect to the global
 #   interpolation (and where to collect results)
 #
+# Horizontal and vertical interpolation can be switch off, so that we interpolate purely
+# horizontal/vertical Fields.
+#
 # To process multiple Fields at the same time, some of the scratch spaces gain an extra
 # dimension (buffer_length). With this extra dimension, we can batch the work and process up
 # to buffer_length fields at the same time. This reduces the number of kernel launches and
@@ -116,62 +119,72 @@ function target_hcoords_pid_bitmask(target_hcoords, topology, pid)
     return pid_hcoord.(target_hcoords) .== pid
 end
 
+
+# TODO: Define an inner construct and restrict types, as was done in
+#       https://github.com/CliMA/RRTMGP.jl/pull/352
+#       to avoid potential compilation issues.
 struct Remapper{
     CC <: ClimaComms.AbstractCommsContext,
     SPACE <: Spaces.AbstractSpace,
-    T1 <: AbstractArray,
+    T1, # <: Union{AbstractArray, Nothing},
     TARG_Z <: Union{Nothing, AA1} where {AA1 <: AbstractArray},
-    T3 <: AbstractArray,
-    T4 <: Tuple,
-    T5 <: AbstractArray,
+    T3, # <: Union{AbstractArray, Nothing},
+    T4, # <: Union{Tuple, Nothing},
+    T5, # <: Union{AbstractArray, Nothing},
     VERT_W <: Union{Nothing, AA2} where {AA2 <: AbstractArray},
     VERT_IND <: Union{Nothing, AA3} where {AA3 <: AbstractArray},
-    T8 <: AbstractArray,
-    T9 <: AbstractArray,
+    T8, # <: AbstractArray,
+    T9, # <: AbstractArray,
     T10 <: AbstractArray,
     T11 <: Union{Tuple{Colon}, Tuple{Colon, Colon}, Tuple{Colon, Colon, Colon}},
 }
-
+    # The ClimaComms context
     comms_ctx::CC
 
     # Space over which the remapper is defined
     space::SPACE
 
-    # Target points that are on the process where this object is defined
+    # Target points that are on the process where this object is defined.
     # local_target_hcoords is stored as a 1D array (we store it as 1D array because in
     # general there is no structure to this object, especially for cubed sphere, which have
-    # points spread all over the place)
+    # points spread all over the place). This is nothing when remapping purely vertical
+    # spaces.
     local_target_hcoords::T1
 
-    # Target coordinates in the vertical direction. zcoords are the same for all the processes.
-    # target_zcoords are always assumed to be "reference z"s.
+    # Target coordinates in the vertical direction. zcoords are the same for all the
+    # processes. target_zcoords are always assumed to be "reference z"s. is nothing when
+    # remapping purely horizontal spaces.
     target_zcoords::TARG_Z
 
     # bitmask that identifies which target points are on process where the object is
     # defined. In general, local_target_points_bitmask is a 2D matrix and it is used to fill
     # the correct values in the final output. Every time we find a 1, we are going to stick
-    # the vertical column of the interpolated data.
+    # the vertical column of the interpolated data. This is nothing when remapping purely
+    # vertical spaces.
     local_target_hcoords_bitmask::T3
 
     # Tuple of arrays of weights that performs horizontal interpolation (fixed the
     # horizontal and target spaces). It contains 1 element for grids with one horizontal
-    # dimension, and 2 elements for grids with two horizontal dimensions.
+    # dimension, and 2 elements for grids with two horizontal dimensions. This is nothing
+    # when remapping purely vertical spaces.
     local_horiz_interpolation_weights::T4
 
     # Local indices the element of each local_target_hcoords in the given topology. This is
-    # a linear array with the same length as local_target_hcoords.
+    # a linear array with the same length as local_target_hcoords. This is nothing when
+    # remapping purely vertical spaces.
     local_horiz_indices::T5
 
     # Given the target_zcoords, vert_reference_coordinates contains the reference coordinate
     # in the element. For center spaces, the reference coordinate is shifted to be in (0, 1)
     # when the point is in the lower half of the cell, and in (-1, 0) when it is in the
     # upper half. This shift is needed to directly use the reference coordinate in linear
-    # vertical interpolation. Array of tuples or Nothing.
+    # vertical interpolation. Array of tuples or Nothing. This is nothing when remapping
+    # purely horizontal spaces.
     vert_interpolation_weights::VERT_W
 
     # Given the target_zcoords, vert_bounding_indices contain the vertical indices of the
-    # neighboring elements that are required for vertical interpolation.
-    # Array of tuples or Nothing.
+    # neighboring elements that are required for vertical interpolation. Array of tuples or
+    # Nothing. This is nothing when remapping purely horizontal spaces.
     vert_bounding_indices::VERT_IND
 
     # Scratch space where we save the process-local interpolated values. We keep overwriting
@@ -181,8 +194,8 @@ struct Remapper{
 
     # Scratch space where we save the process-local field value. We keep overwriting this to
     # avoid extra allocations. Ideally, we wouldn't need this and we would use views for
-    # everything. This has dimensions (Nq, ) or (Nq, Nq, )
-    # depending if the horizontal space is 1D or 2D.
+    # everything. This has dimensions (Nq, ) or (Nq, Nq, ) depending if the horizontal space
+    # is 1D or 2D. This is nothing when remapping purely vertical spaces.
     _field_values::T9
 
     # Storage area where the interpolated values are saved. This is meaningful only for the
@@ -200,18 +213,23 @@ struct Remapper{
 end
 
 """
-   Remapper(space, target_hcoords, target_zcoords; buffer_length = 1)
+   Remapper(space, target_hcoords, target_zcoords, buffer_length = 1)
+   Remapper(space; target_hcoords, target_zcoords, buffer_length = 1)
    Remapper(space, target_hcoords; buffer_length = 1)
+   Remapper(space, target_zcoords; buffer_length = 1)
 
 Return a `Remapper` responsible for interpolating any `Field` defined on the given `space`
 to the Cartesian product of `target_hcoords` with `target_zcoords`.
 
-`target_zcoords` can be `nothing` for interpolation on horizontal spaces.
+`target_zcoords` can be `nothing` for interpolation on horizontal spaces. Similarly,
+`target_hcoords` can be `nothing` for interpolation on vertical spaces.
 
 The `Remapper` is designed to not be tied to any particular `Field`. You can use the same
 `Remapper` for any `Field` as long as they are all defined on the same `topology`.
 
 `Remapper` is the main argument to the `interpolate` function.
+
+If you want to quickly remap something, you can call directly `interpolate`.
 
 Keyword arguments
 =================
@@ -220,15 +238,47 @@ Keyword arguments
 for interpolation. Effectively, this controls how many fields can be remapped simultaneously
 in `interpolate`. When more fields than `buffer_length` are passed, the remapper will batch
 the work in sizes of `buffer_length`.
-
 """
-function Remapper(
+function Remapper end
+
+# 3D case, everything passed as a keyword argument
+Remapper(
+    space::Spaces.AbstractSpace;
+    target_hcoords::Union{AbstractArray, Nothing} = nothing,
+    target_zcoords::Union{AbstractArray, Nothing} = nothing,
+    buffer_length::Int = 1,
+) = _Remapper(space; target_zcoords, target_hcoords, buffer_length)
+
+# 3D case, horizontal coordinate passed as position argument (backward compatibility)
+Remapper(
     space::Spaces.AbstractSpace,
-    target_hcoords::AbstractArray,
+    target_hcoords::Union{AbstractArray, Nothing},
     target_zcoords::Union{AbstractArray, Nothing};
     buffer_length::Int = 1,
-)
+) = _Remapper(space; target_hcoords, target_zcoords, buffer_length)
 
+
+# Purely vertical case
+Remapper(
+    space::Spaces.FiniteDifferenceSpace;
+    target_zcoords::AbstractArray,
+    buffer_length::Int = 1,
+) = _Remapper(space; target_zcoords, target_hcoords = nothing, buffer_length)
+
+# Purely horizontal case
+Remapper(
+    space::Spaces.AbstractSpectralElementSpace,
+    target_hcoords::AbstractArray;
+    buffer_length::Int = 1,
+) = _Remapper(space; target_zcoords = nothing, target_hcoords, buffer_length)
+
+# Constructor for the case with horizontal spaces
+function _Remapper(
+    space::Spaces.AbstractSpace;
+    target_zcoords::Union{AbstractArray, Nothing},
+    target_hcoords::AbstractArray,
+    buffer_length::Int = 1,
+)
     comms_ctx = ClimaComms.context(space)
     pid = ClimaComms.mypid(comms_ctx)
     FT = Spaces.undertype(space)
@@ -367,11 +417,45 @@ function Remapper(
     )
 end
 
-Remapper(
-    space::Spaces.AbstractSpace,
-    target_hcoords::AbstractArray;
+# Constructor for the case with vertical spaces
+function _Remapper(
+    space::Spaces.FiniteDifferenceSpace;
+    target_zcoords::AbstractArray,
+    target_hcoords::Nothing,
     buffer_length::Int = 1,
-) = Remapper(space, target_hcoords, nothing; buffer_length)
+)
+    comms_ctx = ClimaComms.context(space)
+    FT = Spaces.undertype(space)
+    ArrayType = ClimaComms.array_type(space)
+
+    vert_interpolation_weights =
+        ArrayType(vertical_interpolation_weights(space, target_zcoords))
+    vert_bounding_indices =
+        ArrayType(vertical_bounding_indices(space, target_zcoords))
+
+    local_interpolated_values =
+        ArrayType(zeros(FT, (length(target_zcoords), buffer_length)))
+    interpolated_values =
+        ArrayType(zeros(FT, (length(target_zcoords), buffer_length)))
+    colons = (:,)
+
+    return Remapper(
+        comms_ctx,
+        space,
+        nothing, # local_target_hcoords,
+        target_zcoords,
+        nothing, # local_target_hcoords_bitmask,
+        nothing, # local_horiz_interpolation_weights,
+        nothing, # local_horiz_indices,
+        vert_interpolation_weights,
+        vert_bounding_indices,
+        local_interpolated_values,
+        nothing, # field_values,
+        interpolated_values,
+        buffer_length,
+        colons,
+    )
+end
 
 """
     _set_interpolated_values!(remapper, field)
@@ -434,6 +518,38 @@ function set_interpolated_values_cpu_kernel!(
                         scratch_field_values[i, j]
                 end
                 out[out_index, vindex, field_index] = tmp
+            end
+        end
+    end
+end
+
+# CPU, vertical case
+function set_interpolated_values_cpu_kernel!(
+    out::AbstractArray,
+    fields::AbstractArray{<:Fields.Field},
+    ::Nothing,
+    ::Nothing,
+    vert_interpolation_weights,
+    vert_bounding_indices,
+    ::Nothing,
+)
+    space = axes(first(fields))
+    FT = Spaces.undertype(space)
+    for (field_index, field) in enumerate(fields)
+        field_values = Fields.field_values(field)
+
+        # Reading values from field_values is expensive, so we try to limit the number of reads. We can do
+        # this because multiple target points might be all contained in the same element.
+        prev_vindex = -1
+        @inbounds for (vindex, (A, B)) in enumerate(vert_interpolation_weights)
+            (v_lo, v_hi) = vert_bounding_indices[vindex]
+            # If we are no longer in the same element, read the field values again
+            if prev_vindex != vindex
+                out[vindex, field_index] = (
+                    A * field_values[CartesianIndex(1, 1, 1, v_lo, 1)] +
+                    B * field_values[CartesianIndex(1, 1, 1, v_hi, 1)]
+                )
+                prev_vindex = vindex
             end
         end
     end
@@ -559,7 +675,6 @@ function _set_interpolated_values_device!(
     ::Nothing,
     ::ClimaComms.AbstractDevice,
 )
-
     space = axes(first(fields))
     FT = Spaces.undertype(space)
     quad = Spaces.quadrature_style(space)
@@ -659,7 +774,6 @@ function _collect_interpolated_values!(
     index_field_end::Int;
     only_one_field,
 )
-
     if only_one_field
         ClimaComms.reduce!(
             remapper.comms_ctx,
@@ -757,6 +871,8 @@ function interpolate(remapper::Remapper, fields)
             error("Field is defined on a different space than remapper")
     end
 
+    isa_vertical_space = remapper.space isa Spaces.FiniteDifferenceSpace
+
     index_field_begin, index_field_end =
         1, min(length(fields), remapper.buffer_length)
 
@@ -777,13 +893,18 @@ function interpolate(remapper::Remapper, fields)
             remapper,
             view(fields, index_field_begin:index_field_end),
         )
-        # Reshape the output so that it is a nice grid.
-        _apply_mpi_bitmask!(remapper, num_fields)
+
+        if !isa_vertical_space
+            # For spaces with an horizontal component, reshape the output so that it is a nice grid.
+            _apply_mpi_bitmask!(remapper, num_fields)
+        else
+            # For purely vertical spaces, just move to _interpolated_values
+            remapper._interpolated_values .= remapper._local_interpolated_values
+        end
+
         # Finally, we have to send all the _interpolated_values to root and sum them up to
-        # obtain the final answer. Only the root will contain something useful. This also
-        # moves the data off the GPU
-        ret = _collect_and_return_interpolated_values!(remapper, num_fields)
-        return ret
+        # obtain the final answer. Only the root will contain something useful.
+        return _collect_and_return_interpolated_values!(remapper, num_fields)
     end
 
     # Non-root processes
@@ -791,39 +912,6 @@ function interpolate(remapper::Remapper, fields)
 
     return only_one_field ? interpolated_values[remapper.colons..., begin] :
            interpolated_values
-end
-
-"""
-       interpolate(field::ClimaCore.Fields, target_hcoords, target_zcoords)
-
-Interpolate the given fields on the Cartesian product of `target_hcoords` with
-`target_zcoords` (if not empty).
-
-Coordinates have to be `ClimaCore.Geometry.Points`.
-
-Note: do not use this method when performance is important. Instead, define a `Remapper` and
-call `interpolate(remapper, fields)`. Different `Field`s defined on the same `Space` can
-share a `Remapper`, so that interpolation can be optimized.
-
-Example
-========
-
-Given `field`, a `Field` defined on a cubed sphere.
-
-```julia
-longpts = range(-180.0, 180.0, 21)
-latpts = range(-80.0, 80.0, 21)
-zpts = range(0.0, 1000.0, 21)
-
-hcoords = [Geometry.LatLongPoint(lat, long) for long in longpts, lat in latpts]
-zcoords = [Geometry.ZPoint(z) for z in zpts]
-
-interpolate(field, hcoords, zcoords)
-```
-"""
-function interpolate(field::Fields.Field, target_hcoords, target_zcoords)
-    remapper = Remapper(axes(field), target_hcoords, target_zcoords)
-    return interpolate(remapper, field)
 end
 
 # dest has to be allowed to be nothing because interpolation happens only on the root
@@ -837,6 +925,7 @@ function interpolate!(
     if only_one_field
         fields = [fields]
     end
+    isa_vertical_space = remapper.space isa Spaces.FiniteDifferenceSpace
 
     if !isnothing(dest)
         # !isnothing(dest) means that this is the root process, in this case, the size have
@@ -869,11 +958,17 @@ function interpolate!(
             remapper,
             view(fields, index_field_begin:index_field_end),
         )
-        # Reshape the output so that it is a nice grid.
-        _apply_mpi_bitmask!(remapper, num_fields)
+
+        if !isa_vertical_space
+            # For spaces with an horizontal component, reshape the output so that it is a nice grid.
+            _apply_mpi_bitmask!(remapper, num_fields)
+        else
+            # For purely vertical spaces, just move to _interpolated_values
+            remapper._interpolated_values .= remapper._local_interpolated_values
+        end
+
         # Finally, we have to send all the _interpolated_values to root and sum them up to
-        # obtain the final answer. Only the root will contain something useful. This also
-        # moves the data off the GPU
+        # obtain the final answer.
         _collect_interpolated_values!(
             dest,
             remapper,
@@ -888,4 +983,188 @@ function interpolate!(
             min(length(fields), index_field_end + remapper.buffer_length)
     end
     return nothing
+end
+
+"""
+       interpolate(field::ClimaCore.Fields;
+                   hresolution = 180,
+                   zresolution = 50,
+                   target_hcoords = default_target_hcoords(space; hresolution),
+                   target_zcoords = default_target_vcoords(space; zresolution)
+                   )
+
+Interpolate the given fields on the Cartesian product of `target_hcoords` with
+`target_zcoords` (if not empty).
+
+Coordinates have to be `ClimaCore.Geometry.Points`.
+
+Note: do not use this method when performance is important. Instead, define a `Remapper` and
+call `interpolate(remapper, fields)`. Different `Field`s defined on the same `Space` can
+share a `Remapper`, so that interpolation can be optimized.
+
+Example
+========
+
+Given `field`, a `Field` defined on a cubed sphere.
+
+By default, a target uniform grid is chosen (with resolution `hresolution` and
+`zresolution`), so remapping is simply
+```julia
+julia> interpolate(field)
+```
+This will return an array of interpolated values.
+
+Resolution can be specified
+```julia
+julia> interpolate(field; hresolution = 100, zresolution = 50)
+```
+Coordinates can be also specified directly:
+```julia
+julia> longpts = range(-180.0, 180.0, 21)
+julia> latpts = range(-80.0, 80.0, 21)
+julia> zpts = range(0.0, 1000.0, 21)
+
+julia> hcoords = [Geometry.LatLongPoint(lat, long) for long in longpts, lat in latpts]
+julia> zcoords = [Geometry.ZPoint(z) for z in zpts]
+
+julia> interpolate(field, target_hcoords, target_zcoords)
+```
+
+If you need the array of coordinates, you can call `default_target_hcoords` (or
+`default_target_vcoords`) passing `axes(field)`. This will return an array of
+`Geometry.Point`s. The functions `Geometry.Components` and `Geometry.Component`
+can be used to extract the components as numeric values. For example,
+```julia
+julia> Geometry.components.(Geometry.components.([
+           Geometry.LatLongPoint(x, y) for x in range(-180.0, 180.0, length = 180),
+           y in range(-90.0, 90.0, length = 180)
+       ]))
+180×180 Matrix{StaticArraysCore.SVector{2, Float64}}:
+ [-180.0, -90.0]    [-180.0, -88.9944]    …  [-180.0, 88.9944]    [-180.0, 90.0]
+  ⋮                                        ⋱
+ [180.0, -90.0]     [180.0, -88.9944]        [180.0, 88.9944]     [180.0, 90.0]
+```
+To extract only long or lat, one can broadcast `getindex`
+```julia
+julia> lats = getindex.(Geometry.components.([Geometry.LatLongPoint(x, y)
+                                              for x in range(-180.0, 180.0, length = 180),
+                                                  y in range(-90.0, 90.0, length = 180)
+                                             ]),
+                        1)
+```
+This can be used directly for plotting.
+"""
+function interpolate(
+    field::Fields.Field;
+    zresolution = 50,
+    hresolution = 180,
+    target_hcoords = default_target_hcoords(axes(field); hresolution),
+    target_zcoords = default_target_zcoords(axes(field); zresolution),
+)
+    return interpolate(field, axes(field); hresolution, zresolution)
+end
+
+function interpolate(field::Fields.Field, target_hcoords, target_zcoords)
+    remapper = Remapper(axes(field), target_hcoords, target_zcoords)
+    return interpolate(remapper, field)
+end
+
+"""
+    default_target_hcoords(space::Spaces.AbstractSpace; hresolution)
+
+Return an Array with the Geometry.Points to interpolate uniformly the horizontal
+component of the given `space`.
+"""
+function default_target_hcoords(space::Spaces.AbstractSpace; hresolution = 180)
+    return default_target_hcoords(Spaces.horizontal_space(space); hresolution)
+end
+
+"""
+    default_target_hcoords_as_vectors(space::Spaces.AbstractSpace; hresolution)
+
+Return an Vectors with the coordinate to interpolate uniformly the horizontal
+component of the given `space`.
+"""
+function default_target_hcoords_as_vectors(
+    space::Spaces.AbstractSpace;
+    hresolution = 180,
+)
+    return default_target_hcoords_as_vectors(
+        Spaces.horizontal_space(space);
+        hresolution,
+    )
+end
+
+function default_target_hcoords(
+    space::Spaces.SpectralElementSpace2D;
+    hresolution = 180,
+)
+    topology = Spaces.topology(space)
+    domain = Meshes.domain(topology.mesh)
+    xrange, yrange = default_target_hcoords_as_vectors(space; hresolution)
+    PointType =
+        domain isa Domains.SphereDomain ? Geometry.LatLongPoint :
+        Topologies.coordinate_type(topology)
+    return [PointType(x, y) for x in xrange, y in yrange]
+end
+
+function default_target_hcoords_as_vectors(
+    space::Spaces.SpectralElementSpace2D;
+    hresolution = 180,
+)
+    FT = Spaces.undertype(space)
+    topology = Spaces.topology(space)
+    domain = Meshes.domain(topology.mesh)
+    if domain isa Domains.SphereDomain
+        return FT.(range(-180.0, 180.0, hresolution)),
+        FT.(range(-90.0, 90.0, hresolution))
+    else
+        x1min = Geometry.component(domain.interval1.coord_min, 1)
+        x2min = Geometry.component(domain.interval2.coord_min, 1)
+        x1max = Geometry.component(domain.interval1.coord_max, 1)
+        x2max = Geometry.component(domain.interval2.coord_max, 1)
+        return FT.(range(x1min, x1max, hresolution)),
+        FT.(range(x2min, x2max, hresolution))
+    end
+end
+
+function default_target_hcoords(
+    space::Spaces.SpectralElementSpace1D;
+    hresolution = 180,
+)
+    topology = Spaces.topology(space)
+    PointType = Topologies.coordinate_type(topology)
+    return PointType.(default_target_hcoords_as_vectors(space; hresolution))
+end
+
+function default_target_hcoords_as_vectors(
+    space::Spaces.SpectralElementSpace1D;
+    hresolution = 180,
+)
+    FT = Spaces.undertype(space)
+    topology = Spaces.topology(space)
+    domain = Meshes.domain(topology.mesh)
+    xmin = Geometry.component(domain.coord_min, 1)
+    xmax = Geometry.component(domain.coord_max, 1)
+    return FT.(range(xmin, xmax, hresolution))
+end
+
+
+"""
+    default_target_zcoords(space::Spaces.AbstractSpace; zresolution)
+
+Return an Array with the Geometry.Points to interpolate uniformly the vertical component of
+the given `space`.
+"""
+function default_target_zcoords(space; zresolution = 50)
+    return Geometry.ZPoint.(
+        default_target_zcoords_as_vectors(space; zresolution)
+    )
+
+end
+
+function default_target_zcoords_as_vectors(space; zresolution = 50)
+    return collect(
+        range(Domains.z_min(space), Domains.z_max(space), zresolution),
+    )
 end
