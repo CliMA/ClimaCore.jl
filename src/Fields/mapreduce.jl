@@ -8,17 +8,21 @@ context.
 
 See [`sum`](@ref) for the integral over the full domain.
 """
-local_sum(
+function local_sum(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
-    ::ClimaComms.AbstractCPUDevice,
-) = Base.reduce(
-    RecursiveApply.radd,
-    Base.Broadcast.broadcasted(
-        RecursiveApply.rmul,
-        Spaces.weighted_jacobian(axes(field)),
-        todata(field),
-    ),
+    dev::ClimaComms.AbstractCPUDevice,
 )
+    result = Base.reduce(
+        RecursiveApply.radd,
+        Base.Broadcast.broadcasted(
+            RecursiveApply.rmul,
+            Spaces.weighted_jacobian(axes(field)),
+            todata(field),
+        ),
+    )
+    call_post_op_callback() && post_op_callback(result, field, dev)
+    result
+end
 local_sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}}) =
     local_sum(field, ClimaComms.device(axes(field)))
 """

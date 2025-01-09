@@ -19,6 +19,7 @@ using Adapt
 
 import ..slab, ..column, ..level
 import ..Utilities: PlusHalf, half
+import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..DataLayouts,
     ..Geometry, ..Domains, ..Meshes, ..Topologies, ..Grids, ..Quadratures
 

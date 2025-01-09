@@ -19,7 +19,7 @@ function compute_element_bounds!(
     limiter::QuasiMonotoneLimiter,
     ρq,
     ρ,
-    ::ClimaComms.CUDADevice,
+    dev::ClimaComms.CUDADevice,
 )
     ρ_values = Fields.field_values(Operators.strip_space(ρ, axes(ρ)))
     ρq_values = Fields.field_values(Operators.strip_space(ρq, axes(ρq)))
@@ -33,6 +33,8 @@ function compute_element_bounds!(
         threads_s = nthreads,
         blocks_s = nblocks,
     )
+    call_post_op_callback() &&
+        post_op_callback(limiter.q_bounds, limiter, ρq, ρ, dev)
     return nothing
 end
 
@@ -70,7 +72,7 @@ end
 function compute_neighbor_bounds_local!(
     limiter::QuasiMonotoneLimiter,
     ρ,
-    ::ClimaComms.CUDADevice,
+    dev::ClimaComms.CUDADevice,
 )
     topology = Spaces.topology(axes(ρ))
     us = DataLayouts.UniversalSize(Fields.field_values(ρ))
@@ -88,6 +90,8 @@ function compute_neighbor_bounds_local!(
         threads_s = nthreads,
         blocks_s = nblocks,
     )
+    call_post_op_callback() &&
+        post_op_callback(limiter.q_bounds, limiter, ρ, dev)
 end
 
 function compute_neighbor_bounds_local_kernel!(
@@ -123,7 +127,7 @@ function apply_limiter!(
     ρq::Fields.Field,
     ρ::Fields.Field,
     limiter::QuasiMonotoneLimiter,
-    ::ClimaComms.CUDADevice,
+    dev::ClimaComms.CUDADevice,
 )
     ρq_data = Fields.field_values(ρq)
     us = DataLayouts.UniversalSize(ρq_data)
@@ -147,6 +151,7 @@ function apply_limiter!(
         threads_s = nthreads,
         blocks_s = nblocks,
     )
+    call_post_op_callback() && post_op_callback(ρq, ρq, ρ, limiter, dev)
     return nothing
 end
 

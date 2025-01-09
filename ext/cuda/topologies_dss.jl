@@ -17,7 +17,7 @@ _configure_threadblock(nitems) =
     _configure_threadblock(_max_threads_cuda(), nitems)
 
 function Topologies.dss_load_perimeter_data!(
-    ::ClimaComms.CUDADevice,
+    dev::ClimaComms.CUDADevice,
     dss_buffer::Topologies.DSSBuffer,
     data::DSSDataTypes,
     perimeter::Topologies.Perimeter2D,
@@ -33,6 +33,8 @@ function Topologies.dss_load_perimeter_data!(
         threads_s = p.threads,
         blocks_s = p.blocks,
     )
+    call_post_op_callback() &&
+        post_op_callback(perimeter_data, dev, dss_buffer, data, perimeter)
     return nothing
 end
 
@@ -57,7 +59,7 @@ function dss_load_perimeter_data_kernel!(
 end
 
 function Topologies.dss_unload_perimeter_data!(
-    ::ClimaComms.CUDADevice,
+    dev::ClimaComms.CUDADevice,
     data::DSSDataTypes,
     dss_buffer::Topologies.DSSBuffer,
     perimeter,
@@ -73,6 +75,8 @@ function Topologies.dss_unload_perimeter_data!(
         threads_s = p.threads,
         blocks_s = p.blocks,
     )
+    call_post_op_callback() &&
+        post_op_callback(data, dev, data, dss_buffer, perimeter)
     return nothing
 end
 
@@ -97,7 +101,7 @@ function dss_unload_perimeter_data_kernel!(
 end
 
 function Topologies.dss_local!(
-    ::ClimaComms.CUDADevice,
+    dev::ClimaComms.CUDADevice,
     perimeter_data::DSSPerimeterTypes,
     perimeter::Topologies.Perimeter2D,
     topology::Topologies.Topology2D,
@@ -122,6 +126,13 @@ function Topologies.dss_local!(
             args;
             threads_s = p.threads,
             blocks_s = p.blocks,
+        )
+        call_post_op_callback() && post_op_callback(
+            perimeter_data,
+            dev,
+            perimeter_data,
+            perimeter,
+            topology,
         )
     end
     return nothing
@@ -213,6 +224,16 @@ function Topologies.dss_transform!(
             threads_s = p.threads,
             blocks_s = p.blocks,
         )
+        call_post_op_callback() && post_op_callback(
+            perimeter_data,
+            device,
+            perimeter_data,
+            data,
+            perimeter,
+            local_geometry,
+            weight,
+            localelems,
+        )
     end
     return nothing
 end
@@ -276,6 +297,15 @@ function Topologies.dss_untransform!(
             threads_s = p.threads,
             blocks_s = p.blocks,
         )
+        call_post_op_callback() && post_op_callback(
+            data,
+            device,
+            perimeter_data,
+            data,
+            local_geometry,
+            perimeter,
+            localelems,
+        )
     end
     return nothing
 end
@@ -309,7 +339,7 @@ end
 
 # TODO: Function stubs, code to be implemented, needed only for distributed GPU runs
 function Topologies.dss_local_ghost!(
-    ::ClimaComms.CUDADevice,
+    dev::ClimaComms.CUDADevice,
     perimeter_data::DSSPerimeterTypes,
     perimeter::Topologies.Perimeter2D,
     topology::Topologies.AbstractTopology,
@@ -332,6 +362,13 @@ function Topologies.dss_local_ghost!(
             args;
             threads_s = p.threads,
             blocks_s = p.blocks,
+        )
+        call_post_op_callback() && post_op_callback(
+            perimeter_data,
+            dev,
+            perimeter_data,
+            perimeter,
+            topology,
         )
     end
     return nothing
@@ -374,7 +411,7 @@ function dss_local_ghost_kernel!(
 end
 
 function Topologies.fill_send_buffer!(
-    ::ClimaComms.CUDADevice,
+    dev::ClimaComms.CUDADevice,
     dss_buffer::Topologies.DSSBuffer;
     synchronize = true,
 )
@@ -396,6 +433,8 @@ function Topologies.fill_send_buffer!(
         if synchronize
             CUDA.synchronize(; blocking = true) # CUDA MPI uses a separate stream. This will synchronize across streams
         end
+        call_post_op_callback() &&
+            post_op_callback(send_data, dev, dss_buffer; synchronize)
     end
     return nothing
 end
@@ -422,7 +461,7 @@ function fill_send_buffer_kernel!(
 end
 
 function Topologies.load_from_recv_buffer!(
-    ::ClimaComms.CUDADevice,
+    dev::ClimaComms.CUDADevice,
     dss_buffer::Topologies.DSSBuffer,
 )
     (; perimeter_data, recv_buf_idx, recv_data) = dss_buffer
@@ -440,6 +479,8 @@ function Topologies.load_from_recv_buffer!(
             threads_s = p.threads,
             blocks_s = p.blocks,
         )
+        call_post_op_callback() &&
+            post_op_callback(perimeter_data, dev, dss_buffer)
     end
     return nothing
 end
@@ -474,7 +515,7 @@ end
 
 
 function Topologies.dss_ghost!(
-    ::ClimaComms.CUDADevice,
+    dev::ClimaComms.CUDADevice,
     perimeter_data::DSSPerimeterTypes,
     perimeter::Topologies.Perimeter2D,
     topology::Topologies.Topology2D,
@@ -498,6 +539,13 @@ function Topologies.dss_ghost!(
             args;
             threads_s = p.threads,
             blocks_s = p.blocks,
+        )
+        call_post_op_callback() && post_op_callback(
+            perimeter_data,
+            dev,
+            perimeter_data,
+            perimeter,
+            topology,
         )
     end
     return nothing

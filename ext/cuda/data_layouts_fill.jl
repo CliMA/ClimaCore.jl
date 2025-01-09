@@ -14,7 +14,7 @@ function knl_fill_linear!(dest, val, us)
     return nothing
 end
 
-function Base.fill!(dest::AbstractData, bc, ::ToCUDA)
+function Base.fill!(dest::AbstractData, bc, to::ToCUDA)
     (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest)
     us = DataLayouts.UniversalSize(dest)
     args = (dest, bc, us)
@@ -41,5 +41,6 @@ function Base.fill!(dest::AbstractData, bc, ::ToCUDA)
             )
         end
     end
+    call_post_op_callback() && post_op_callback(dest, dest, bc, to)
     return dest
 end

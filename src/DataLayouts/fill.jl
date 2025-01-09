@@ -9,6 +9,8 @@ function Base.fill!(dest::AbstractData, val)
     else
         Base.fill!(dest, val, dev)
     end
+    call_post_op_callback() && post_op_callback(dest, dest, val)
+    dest
 end
 
 function Base.fill!(data::Union{IJFH, IJHF}, val, ::ToCPU)

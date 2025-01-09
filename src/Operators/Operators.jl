@@ -8,6 +8,7 @@ import Base.Broadcast: Broadcasted
 
 import ..slab, ..slab_args, ..column, ..column_args
 import ClimaComms
+import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..DataLayouts: DataLayouts, Data2D, DataSlab2D
 import ..DataLayouts: vindex
 import ..Geometry: Geometry, Covariant12Vector, Contravariant12Vector, ⊗

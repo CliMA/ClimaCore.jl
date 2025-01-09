@@ -69,6 +69,7 @@ import ClimaComms
 import MultiBroadcastFusion as MBF
 import Adapt
 
+import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..slab, ..slab_args, ..column, ..column_args, ..level
 export slab,
     column,

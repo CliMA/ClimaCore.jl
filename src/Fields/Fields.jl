@@ -3,6 +3,7 @@ module Fields
 import ClimaComms
 import MultiBroadcastFusion as MBF
 import ..slab, ..slab_args, ..column, ..column_args, ..level
+import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..DataLayouts:
     DataLayouts,
     AbstractData,

@@ -9,6 +9,7 @@ import CUDA
 using CUDA
 using CUDA: threadIdx, blockIdx, blockDim
 import StaticArrays: SVector, SMatrix, SArray
+import ClimaCore.DebugOnly: call_post_op_callback, post_op_callback
 import ClimaCore.DataLayouts: mapreduce_cuda
 import ClimaCore.DataLayouts: ToCUDA
 import ClimaCore.DataLayouts: slab, column

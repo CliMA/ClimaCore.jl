@@ -97,6 +97,7 @@ function weighted_dss!(
     weighted_dss_start!(data, space, dss_buffer)
     weighted_dss_internal!(data, space, dss_buffer)
     weighted_dss_ghost!(data, space, dss_buffer)
+    call_post_op_callback() && post_op_callback(data, data, space, dss_buffer)
 end
 
 

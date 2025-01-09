@@ -4,6 +4,7 @@ using PkgVersion
 const VERSION = PkgVersion.@Version
 import ClimaComms
 
+include("DebugOnly/DebugOnly.jl")
 include("interface.jl")
 include("devices.jl")
 include("Utilities/Utilities.jl")

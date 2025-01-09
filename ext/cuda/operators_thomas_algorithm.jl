@@ -4,7 +4,7 @@ import ClimaCore.Operators:
     column_thomas_solve!, thomas_algorithm_kernel!, thomas_algorithm!
 import CUDA
 using CUDA: @cuda
-function column_thomas_solve!(::ClimaComms.CUDADevice, A, b)
+function column_thomas_solve!(dev::ClimaComms.CUDADevice, A, b)
     us = UniversalSize(Fields.field_values(A))
     args = (A, b, us)
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
@@ -18,6 +18,7 @@ function column_thomas_solve!(::ClimaComms.CUDADevice, A, b)
         threads_s = p.threads,
         blocks_s = p.blocks,
     )
+    call_post_op_callback() && post_op_callback(b, dev, A, b)
 end
 
 function thomas_algorithm_kernel!(

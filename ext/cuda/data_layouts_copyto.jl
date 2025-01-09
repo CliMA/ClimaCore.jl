@@ -24,7 +24,7 @@ if VERSION ≥ v"1.11.0-beta"
     # special-case fixes for https://github.com/JuliaLang/julia/issues/28126
     # (including the GPU-variant related issue resolution efforts:
     # JuliaGPU/GPUArrays.jl#454, JuliaGPU/GPUArrays.jl#464).
-    function Base.copyto!(dest::AbstractData, bc, ::ToCUDA)
+    function Base.copyto!(dest::AbstractData, bc, to::ToCUDA)
         (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest)
         us = DataLayouts.UniversalSize(dest)
         if Nv > 0 && Nh > 0
@@ -39,10 +39,11 @@ if VERSION ≥ v"1.11.0-beta"
                 blocks_s = p.blocks,
             )
         end
+        call_post_op_callback() && post_op_callback(dest, dest, bc, to)
         return dest
     end
 else
-    function Base.copyto!(dest::AbstractData, bc, ::ToCUDA)
+    function Base.copyto!(dest::AbstractData, bc, to::ToCUDA)
         (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest)
         us = DataLayouts.UniversalSize(dest)
         if Nv > 0 && Nh > 0
@@ -74,6 +75,7 @@ else
                 )
             end
         end
+        call_post_op_callback() && post_op_callback(dest, dest, bc, to)
         return dest
     end
 end
@@ -85,7 +87,7 @@ end
 function Base.copyto!(
     dest::AbstractData,
     bc::Base.Broadcast.Broadcasted{Style},
-    ::ToCUDA,
+    to::ToCUDA,
 ) where {
     Style <:
     Union{Base.Broadcast.AbstractArrayStyle{0}, Base.Broadcast.Style{Tuple}},
@@ -95,13 +97,14 @@ function Base.copyto!(
     )
     @inbounds bc0 = bc[]
     fill!(dest, bc0)
+    call_post_op_callback() && post_op_callback(dest, dest, bc, to)
 end
 
 # For field-vector operations
 function DataLayouts.copyto_per_field!(
     array::AbstractArray,
     bc::Union{AbstractArray, Base.Broadcast.Broadcasted},
-    ::ToCUDA,
+    to::ToCUDA,
 )
     bc′ = DataLayouts.to_non_extruded_broadcasted(bc)
     # All field variables are treated separately, so
@@ -119,6 +122,7 @@ function DataLayouts.copyto_per_field!(
         threads_s = p.threads,
         blocks_s = p.blocks,
     )
+    call_post_op_callback() && post_op_callback(array, array, bc, to)
     return array
 end
 function copyto_per_field_kernel!(array, bc, N)
@@ -133,7 +137,7 @@ end
 function DataLayouts.copyto_per_field_scalar!(
     array::AbstractArray,
     bc::Base.Broadcast.Broadcasted{Style},
-    ::ToCUDA,
+    to::ToCUDA,
 ) where {
     Style <:
     Union{Base.Broadcast.AbstractArrayStyle{0}, Base.Broadcast.Style{Tuple}},
@@ -154,12 +158,13 @@ function DataLayouts.copyto_per_field_scalar!(
         threads_s = p.threads,
         blocks_s = p.blocks,
     )
+    call_post_op_callback() && post_op_callback(array, array, bc, to)
     return array
 end
 function DataLayouts.copyto_per_field_scalar!(
     array::AbstractArray,
     bc::Real,
-    ::ToCUDA,
+    to::ToCUDA,
 )
     bc′ = DataLayouts.to_non_extruded_broadcasted(bc)
     # All field variables are treated separately, so
@@ -177,6 +182,7 @@ function DataLayouts.copyto_per_field_scalar!(
         threads_s = p.threads,
         blocks_s = p.blocks,
     )
+    call_post_op_callback() && post_op_callback(array, array, bc, to)
     return array
 end
 function copyto_per_field_kernel_0D!(array, bc, N)
