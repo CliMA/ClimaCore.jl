@@ -5,7 +5,7 @@ using Revise; include(joinpath("test", "Spaces", "unit_spaces.jl"))
 using Test
 using ClimaComms
 using StaticArrays, IntervalSets, LinearAlgebra
-using Adapt
+import Adapt
 ClimaComms.@import_required_backends
 
 import ClimaCore:
@@ -198,11 +198,11 @@ end
     @test length(Spaces.all_nodes(hspace)) == 4
 
     @static if on_gpu
-        adapted_space = adapt(CUDA.KernelAdaptor(), c_space)
+        adapted_space = Adapt.adapt(CUDA.KernelAdaptor(), c_space)
         @test ClimaComms.context(adapted_space) == DeviceSideContext()
         @test ClimaComms.device(adapted_space) == DeviceSideDevice()
 
-        adapted_hspace = adapt(CUDA.KernelAdaptor(), hspace)
+        adapted_hspace = Adapt.adapt(CUDA.KernelAdaptor(), hspace)
         @test ClimaComms.context(adapted_hspace) == DeviceSideContext()
         @test ClimaComms.device(adapted_hspace) == DeviceSideDevice()
     end
@@ -245,7 +245,7 @@ end
     dss_weights_slab = slab(Spaces.local_dss_weights(space), 1)
 
     @static if on_gpu
-        adapted_space = adapt(CUDA.KernelAdaptor(), space)
+        adapted_space = Adapt.adapt(CUDA.KernelAdaptor(), space)
         @test ClimaComms.context(adapted_space) == DeviceSideContext()
         @test ClimaComms.device(adapted_space) == DeviceSideDevice()
     end

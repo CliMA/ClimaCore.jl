@@ -40,7 +40,7 @@ mutable struct FiniteDifferenceGrid{
     center_local_geometry::CLG
     face_local_geometry::FLG
 end
-
+Adapt.@adapt_structure FiniteDifferenceGrid
 
 function FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
     get!(Cache.OBJECT_CACHE, (FiniteDifferenceGrid, topology)) do

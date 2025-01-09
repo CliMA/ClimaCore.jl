@@ -21,6 +21,8 @@ mutable struct SpectralElementGrid1D{
     dss_weights::D
 end
 
+Adapt.@adapt_structure SpectralElementGrid1D
+
 local_geometry_type(
     ::Type{SpectralElementGrid1D{T, Q, GG, LG}},
 ) where {T, Q, GG, LG} = eltype(LG) # calls eltype from DataLayouts
@@ -139,6 +141,8 @@ mutable struct SpectralElementGrid2D{
     boundary_surface_geometries::BS
     enable_bubble::Bool
 end
+
+Adapt.@adapt_structure SpectralElementGrid2D
 
 local_geometry_type(
     ::Type{SpectralElementGrid2D{T, Q, GG, LG, D, IS, BS}},
