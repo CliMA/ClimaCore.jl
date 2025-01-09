@@ -190,14 +190,6 @@ local_geometry_type(
     ::Type{DeviceFiniteDifferenceGrid{T, GG, CLG, FLG}},
 ) where {T, GG, CLG, FLG} = eltype(CLG) # calls eltype from DataLayouts
 
-Adapt.adapt_structure(to, grid::FiniteDifferenceGrid) =
-    DeviceFiniteDifferenceGrid(
-        Adapt.adapt(to, grid.topology),
-        Adapt.adapt(to, grid.global_geometry),
-        Adapt.adapt(to, grid.center_local_geometry),
-        Adapt.adapt(to, grid.face_local_geometry),
-    )
-
 topology(grid::DeviceFiniteDifferenceGrid) = grid.topology
 vertical_topology(grid::DeviceFiniteDifferenceGrid) = grid.topology
 

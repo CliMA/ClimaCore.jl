@@ -38,10 +38,6 @@ function PointSpace(
     return PointSpace(context, Adapt.adapt(ArrayType, local_geometry_data))
 end
 
-
-Adapt.adapt_structure(to, space::PointSpace) =
-    PointSpace(DeviceSideContext(), Adapt.adapt(to, local_geometry_data(space)))
-
 function PointSpace(
     context::ClimaComms.AbstractCommsContext,
     coord::Geometry.Abstract1DPoint{FT},
