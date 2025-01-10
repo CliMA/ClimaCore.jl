@@ -72,6 +72,7 @@ withenv("GKSwstype" => "nul") do
         ],
         pages = Any[
             "Home" => "index.md",
+            "Quick start" => "quick_start.md",
             "Introduction" => "intro.md",
             "Mathematical Framework" => "math_framework.md",
             "Installation and How-to Guides" => "installation_instructions.md",

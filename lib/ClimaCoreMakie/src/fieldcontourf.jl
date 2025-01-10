@@ -17,7 +17,7 @@ These are inherited from [`Makie.tricontourf`](https://docs.makie.org/stable/exa
 
 """
 @recipe(FieldContourf, field) do scene
-    attrs = Makie.Attributes(; coords = nothing)
+    attrs = Makie.Attributes(; coords = nothing, shading = Makie.NoShading)
     return merge(attrs, Makie.default_theme(scene, Makie.Tricontourf))
 end
 
