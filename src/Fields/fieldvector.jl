@@ -23,6 +23,11 @@ struct FieldVector{T, M} <: BlockArrays.AbstractBlockVector{T}
 end
 FieldVector{T}(values::M) where {T, M} = FieldVector{T, M}(values)
 
+function Adapt.adapt_structure(to, fv::FieldVector)
+    pn = propertynames(fv)
+    vals = map(key -> Adapt.adapt(to, getproperty(fv, key)), pn)
+    return FieldVector(; NamedTuple{pn}(vals)...)
+end
 
 """
     Fields.ScalarWrapper(val) <: AbstractArray{T,0}

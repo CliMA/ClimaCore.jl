@@ -1,6 +1,6 @@
 #=
 julia --check-bounds=yes --project
-julia --project
+julia --project=.buildkite
 using Revise; include(joinpath("test", "Fields", "unit_field.jl"))
 =#
 using Test
@@ -700,6 +700,155 @@ end
         nothing
     end
     nothing
+end
+
+using ClimaCore.CommonSpaces
+using ClimaCore.Grids
+using Adapt
+
+function test_adapt(cpu_space_in)
+    test_adapt_space(cpu_space_in)
+    cpu_f_in = Fields.Field(Float64, cpu_space_in)
+    cpu_f_out = Adapt.adapt(Array, cpu_f_in)
+    @test parent(Spaces.local_geometry_data(axes(cpu_f_out))) isa Array
+    @test parent(Fields.field_values(cpu_f_out)) isa Array
+
+    @static if ClimaComms.device() isa ClimaComms.CUDADevice
+        # cpu -> gpu
+        gpu_f_out = Adapt.adapt(CUDA.CuArray, cpu_f_in)
+        @test parent(Fields.field_values(gpu_f_out)) isa CUDA.CuArray
+        # gpu -> gpu
+        cpu_f_out = Adapt.adapt(Array, gpu_f_out)
+        @test parent(Fields.field_values(cpu_f_out)) isa Array
+    end
+end
+
+function test_adapt_fieldvector(fv_in)
+    cpu_fv_out = Adapt.adapt(Array, fv_in)
+    @test parent(Spaces.local_geometry_data(axes(cpu_fv_out.c))) isa Array
+    @test parent(Spaces.local_geometry_data(axes(cpu_fv_out.f))) isa Array
+    @test parent(Fields.field_values(cpu_fv_out.c)) isa Array
+    @test parent(Fields.field_values(cpu_fv_out.f)) isa Array
+
+    @static if ClimaComms.device() isa ClimaComms.CUDADevice
+        # cpu -> gpu
+        gpu_fv_out = Adapt.adapt(CUDA.CuArray, cpu_fv_out)
+        @test parent(Fields.field_values(gpu_fv_out.c)) isa CUDA.CuArray
+        @test parent(Fields.field_values(gpu_fv_out.f)) isa CUDA.CuArray
+        # gpu -> gpu
+        cpu_fv_out = Adapt.adapt(Array, gpu_fv_out)
+        @test parent(Fields.field_values(cpu_fv_out.c)) isa Array
+        @test parent(Fields.field_values(cpu_fv_out.f)) isa Array
+    end
+end
+
+function test_adapt_space(cpu_space_in)
+    # cpu -> cpu
+    cpu_space_out = Adapt.adapt(Array, cpu_space_in)
+    @test parent(Spaces.local_geometry_data(cpu_space_out)) isa Array
+
+    @static if ClimaComms.device() isa ClimaComms.CUDADevice
+        # cpu -> gpu
+        gpu_space_out = Adapt.adapt(CUDA.CuArray, cpu_space_in)
+        @test parent(Spaces.local_geometry_data(gpu_space_out)) isa CUDA.CuArray
+        # gpu -> gpu
+        cpu_space_out = Adapt.adapt(Array, gpu_space_out)
+        @test parent(Spaces.local_geometry_data(cpu_space_out)) isa Array
+    end
+end
+
+@testset "Test Adapt" begin
+    space = ExtrudedCubedSphereSpace(;
+        device = ClimaComms.CPUSingleThreaded(),
+        z_elem = 10,
+        z_min = 0,
+        z_max = 1,
+        radius = 10,
+        h_elem = 10,
+        n_quad_points = 4,
+        staggering = Grids.CellCenter(),
+    )
+    test_adapt(space)
+
+    space = CubedSphereSpace(;
+        device = ClimaComms.CPUSingleThreaded(),
+        radius = 10,
+        n_quad_points = 4,
+        h_elem = 10,
+    )
+    test_adapt(space)
+
+    space = ColumnSpace(;
+        device = ClimaComms.CPUSingleThreaded(),
+        z_elem = 10,
+        z_min = 0,
+        z_max = 10,
+        staggering = CellCenter(),
+    )
+    test_adapt(space)
+
+    space = Box3DSpace(;
+        device = ClimaComms.CPUSingleThreaded(),
+        z_elem = 10,
+        x_min = 0,
+        x_max = 1,
+        y_min = 0,
+        y_max = 1,
+        z_min = 0,
+        z_max = 10,
+        periodic_x = false,
+        periodic_y = false,
+        n_quad_points = 4,
+        x_elem = 3,
+        y_elem = 4,
+        staggering = CellCenter(),
+    )
+    test_adapt(space)
+
+    space = SliceXZSpace(;
+        device = ClimaComms.CPUSingleThreaded(),
+        z_elem = 10,
+        x_min = 0,
+        x_max = 1,
+        z_min = 0,
+        z_max = 1,
+        periodic_x = false,
+        n_quad_points = 4,
+        x_elem = 4,
+        staggering = CellCenter(),
+    )
+    test_adapt(space)
+
+    space = RectangleXYSpace(;
+        device = ClimaComms.CPUSingleThreaded(),
+        x_min = 0,
+        x_max = 1,
+        y_min = 0,
+        y_max = 1,
+        periodic_x = false,
+        periodic_y = false,
+        n_quad_points = 4,
+        x_elem = 3,
+        y_elem = 4,
+    )
+    test_adapt(space)
+
+    # FieldVector
+    cspace = ExtrudedCubedSphereSpace(;
+        device = ClimaComms.CPUSingleThreaded(),
+        z_elem = 10,
+        z_min = 0,
+        z_max = 1,
+        radius = 10,
+        h_elem = 10,
+        n_quad_points = 4,
+        staggering = Grids.CellCenter(),
+    )
+    fspace = Spaces.face_space(cspace)
+    c = Fields.zeros(cspace)
+    f = Fields.zeros(fspace)
+    fv = Fields.FieldVector(; c, f)
+    test_adapt_fieldvector(fv)
 end
 
 @testset "Memoization of spaces" begin
