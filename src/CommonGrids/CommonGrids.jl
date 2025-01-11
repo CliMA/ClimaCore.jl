@@ -28,7 +28,7 @@ n_quad_points = 4
 device = ClimaComms.device()
 context = ClimaComms.context(device)
 hypsography = Grids.Flat()
-global_geometry = Geometry.ShallowSphericalGlobalGeometry(radius)
+global_geometry = Geometry.ShallowSphericalGlobalGeometry{FT}(radius)
 quad = Quadratures.GLL{n_quad_points}()
 h_mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain{FT}(radius), h_elem)
 h_topology = Topologies.Topology2D(context, h_mesh)
@@ -95,7 +95,7 @@ import .Helpers.DefaultRectangleXYMesh
         context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
         stretch::Meshes.StretchingRule = Meshes.Uniform(),
         hypsography_fun = (h_grid, z_grid) -> Grids.Flat(),
-        global_geometry::Geometry.AbstractGlobalGeometry = Geometry.ShallowSphericalGlobalGeometry(radius),
+        global_geometry::Geometry.AbstractGlobalGeometry = Geometry.ShallowSphericalGlobalGeometry{FT}(radius),
         quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
         h_mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain{FT}(radius), h_elem),
         h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(context, h_mesh),
@@ -155,7 +155,9 @@ function ExtrudedCubedSphereGrid(
     context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
     stretch::Meshes.StretchingRule = Meshes.Uniform(),
     hypsography_fun = (h_grid, z_grid) -> Grids.Flat(),
-    global_geometry::Geometry.AbstractGlobalGeometry = Geometry.ShallowSphericalGlobalGeometry(
+    global_geometry::Geometry.AbstractGlobalGeometry = Geometry.ShallowSphericalGlobalGeometry{
+        FT,
+    }(
         radius,
     ),
     quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
