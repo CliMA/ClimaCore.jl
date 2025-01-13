@@ -5,7 +5,8 @@
     ExtrudedFiniteDifferenceSpace(
         horizontal_space::AbstractSpace,
         vertical_space::FiniteDifferenceSpace,
-        hypsography::Grids.HypsographyAdaption = Grids.Flat(),
+        hypsography::Grids.HypsographyAdaption = Grids.Flat();
+        deep::Bool = false,
     )
 
 An extruded finite-difference space,
@@ -68,12 +69,14 @@ ExtrudedFiniteDifferenceSpace{S}(
 function ExtrudedFiniteDifferenceSpace(
     horizontal_space::AbstractSpace,
     vertical_space::FiniteDifferenceSpace,
-    hypsography::Grids.HypsographyAdaption = Grids.Flat(),
+    hypsography::Grids.HypsographyAdaption = Grids.Flat();
+    deep = false,
 )
     grid_space = Grids.ExtrudedFiniteDifferenceGrid(
         grid(horizontal_space),
         grid(vertical_space),
-        hypsography,
+        hypsography;
+        deep,
     )
     return ExtrudedFiniteDifferenceSpace(grid_space, vertical_space.staggering)
 end

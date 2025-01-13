@@ -1,5 +1,6 @@
 using Test
 using JET
+import Random
 import CUDA # explicitly required due to JET
 import ClimaComms
 ClimaComms.@import_required_backends
@@ -152,6 +153,22 @@ function test_column_reduce_and_accumulate!(center_space)
     end
 end
 
+function test_fubinis_theorem(space)
+    FT = Spaces.undertype(space)
+    center_field = zeros(space)
+    face_field = zeros(center_to_face_space(space))
+    surface_field = Fields.level(face_field, Fields.half)
+    surface_Δz = Fields.Δz_field(surface_field) ./ 2
+
+    Random.seed!(1) # ensures reproducibility
+    parent(center_field) .= rand.(FT)
+    volume_sum = sum(center_field)
+
+    column_integral_definite!(surface_field, center_field)
+    horizontal_sum_of_vertical_sum = sum(surface_field ./ surface_Δz)
+    @test horizontal_sum_of_vertical_sum ≈ volume_sum rtol = 10 * eps(FT)
+end
+
 @testset "Integral operations unit tests" begin
     device = ClimaComms.device()
     context = ClimaComms.SingletonCommsContext(device)
@@ -164,6 +181,18 @@ end
             test_column_integral_indefinite!(space)
             test_column_integral_indefinite_fn!(space)
             test_column_reduce_and_accumulate!(space)
+        end
+    end
+end
+
+@testset "Volume integral consistency" begin
+    device = ClimaComms.device()
+    context = ClimaComms.SingletonCommsContext(device)
+    for FT in (Float32, Float64)
+        for topography in (false, true), deep in (false, true)
+            space_kwargs = (; context, topography, deep)
+            space = TU.CenterExtrudedFiniteDifferenceSpace(FT; space_kwargs...)
+            test_fubinis_theorem(space)
         end
     end
 end

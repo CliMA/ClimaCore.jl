@@ -20,6 +20,7 @@ import ClimaCore.Meshes
 import ClimaCore.Spaces
 import ClimaCore.Topologies
 import ClimaCore.Domains
+import ClimaCore.Hypsography
 
 function PointSpace(
     ::Type{FT};
@@ -110,17 +111,20 @@ function CenterExtrudedFiniteDifferenceSpace(
     context = ClimaComms.SingletonCommsContext(),
     helem = 4,
     Nq = 4,
+    deep = false,
+    topography = false,
     horizontal_layout_type = DataLayouts.IJFH,
 ) where {FT}
     radius = FT(128)
-    zlim = (0, 1)
-    vertdomain = Domains.IntervalDomain(
-        Geometry.ZPoint{FT}(zlim[1]),
-        Geometry.ZPoint{FT}(zlim[2]);
+    zlim = (FT(0), FT(1))
+
+    vdomain = Domains.IntervalDomain(
+        Geometry.ZPoint(zlim[1]),
+        Geometry.ZPoint(zlim[2]);
         boundary_names = (:bottom, :top),
     )
-    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    vtopology = Topologies.IntervalTopology(context, vertmesh)
+    vmesh = Meshes.IntervalMesh(vdomain, nelems = zelem)
+    vtopology = Topologies.IntervalTopology(context, vmesh)
     vspace = Spaces.CenterFiniteDifferenceSpace(vtopology)
 
     hdomain = Domains.SphereDomain(radius)
@@ -129,16 +133,27 @@ function CenterExtrudedFiniteDifferenceSpace(
     quad = Quadratures.GLL{Nq}()
     hspace =
         Spaces.SpectralElementSpace2D(htopology, quad; horizontal_layout_type)
-    return Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
+
+    hypsography = if topography
+        # some non-trivial function of latitude and longitude
+        H = (zlim[2] - zlim[1]) / zelem
+        (; lat, long) = Fields.coordinate_field(hspace)
+        surface_elevation =
+            @. Geometry.ZPoint(H * (cosd(lat) + cosd(long) + 1))
+        Hypsography.LinearAdaption(surface_elevation)
+    else
+        Hypsography.Flat()
+    end
+    return Spaces.ExtrudedFiniteDifferenceSpace(
+        hspace,
+        vspace,
+        hypsography;
+        deep,
+    )
 end
 
-function FaceExtrudedFiniteDifferenceSpace(
-    ::Type{FT};
-    zelem = 10,
-    helem = 4,
-    context = ClimaComms.SingletonCommsContext(),
-) where {FT}
-    cspace = CenterExtrudedFiniteDifferenceSpace(FT; zelem, context, helem)
+function FaceExtrudedFiniteDifferenceSpace(::Type{FT}; kwargs...) where {FT}
+    cspace = CenterExtrudedFiniteDifferenceSpace(FT; kwargs...)
     return Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
 end
 
