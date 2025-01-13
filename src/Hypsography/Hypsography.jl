@@ -234,10 +234,6 @@ function _ExtrudedFiniteDifferenceGrid(
         grad.(
             Fields.Field(face_z_local_geometry, face_flat_space).coordinates.z
         )
-    buffer = (;
-        c = Spaces.create_dss_buffer(center_∇Z_field),
-        f = Spaces.create_dss_buffer(face_∇Z_field),
-    )
 
     # construct full local geometry
     center_local_geometry =
