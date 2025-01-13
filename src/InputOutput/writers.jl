@@ -215,6 +215,15 @@ function write_new!(
             [getfield(mesh.faces[i], 1) for i in 1:length(mesh.faces)],
         )
     end
+    (; stretch) = mesh
+    write_attribute(group, "stretch_type", string(nameof(typeof(stretch))))
+    fns = fieldnames(typeof(stretch))
+    if !isempty(fns)
+        vals = map(fns) do fn
+            getfield(stretch, fn)
+        end
+        write_attribute(group, "stretch_params", [vals...])
+    end
     return name
 end
 

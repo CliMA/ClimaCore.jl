@@ -30,6 +30,17 @@ import ..Geometry:
     Covariant3Vector
 using ..DataLayouts
 
+function get_key(file, key)
+    if haskey(file, key)
+        return file[key]
+    else
+        msg = "Key `$key` not found in HDF5Reader.\n"
+        msg *= "Available keys:\n"
+        msg *= string(keys(file))
+        error(msg)
+    end
+end
+
 """
     HDF5Reader(filename::AbstractString[, context::ClimaComms.AbstractCommsContext])
     HDF5Reader(::Function, filename::AbstractString[, context::ClimaComms.AbstractCommsContext])
@@ -259,23 +270,32 @@ function read_mesh(reader, name)
 end
 
 function read_mesh_new(reader::HDF5Reader, name::AbstractString)
-    group = reader.file["meshes/$name"]
+    group = get_key(reader.file, "meshes/$name")
     type = attrs(group)["type"]
     if type == "IntervalMesh"
         domain = read_domain(reader, attrs(group)["domain"])
         nelements = attrs(group)["nelements"]
-        faces_type = attrs(group)["faces_type"]
-        if faces_type == "Range"
+        faces_type = get(attrs(group), "faces_type", nothing)
+        stretch_type = get(attrs(group), "stretch_type", nothing)
+        if stretch_type == "Uniform" || faces_type == "Range"
             return Meshes.IntervalMesh(
                 domain,
-                Meshes.Uniform(),
+                Meshes.Uniform();
                 nelems = nelements,
             )
-        else
-            CT = Domains.coordinate_type(domain)
-            faces = [CT(coords) for coords in attrs(group)["faces"]]
-            return Meshes.IntervalMesh(domain, faces)
         end
+        if stretch_type ≠ "UnknownStretch"
+            stretch_params = attrs(group)["stretch_params"]
+            CT = Domains.coordinate_type(domain)
+            stretch =
+                getproperty(Meshes, Symbol(stretch_type))(stretch_params...)
+            return Meshes.IntervalMesh(domain, stretch; nelems = nelements)
+        end
+        # Fallback: read from array
+        @assert faces_type == "Array"
+        CT = Domains.coordinate_type(domain)
+        faces = [CT(coords) for coords in attrs(group)["faces"]]
+        return Meshes.IntervalMesh(domain, faces)
     elseif type == "RectilinearMesh"
         intervalmesh1 = read_mesh(reader, attrs(group)["intervalmesh1"])
         intervalmesh2 = read_mesh(reader, attrs(group)["intervalmesh2"])
@@ -480,7 +500,8 @@ cached, so that reading the same field multiple times will create multiple
 distinct objects.
 """
 function read_field(reader::HDF5Reader, name::AbstractString)
-    obj = reader.file["fields/$name"]
+    key = "fields/$name"
+    obj = get_key(reader.file, key)
     type = attrs(obj)["type"]
     if type == "Field"
         if haskey(attrs(obj), "grid")
