@@ -135,6 +135,12 @@ function Δz_data(space::AbstractSpace)
     )
 end
 
+horizontal_space(space::FiniteDifferenceSpace) = nothing
+
+node_horizontal_length_scale(space::Nothing) = 0
+
+quadrature_style(space::Nothing) = nothing
+
 function left_boundary_name(space::AbstractSpace)
     boundaries = Topologies.boundaries(Spaces.vertical_topology(space))
     propertynames(boundaries)[1]

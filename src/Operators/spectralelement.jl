@@ -63,6 +63,7 @@ end
 node_indices(space::Spaces.ExtrudedFiniteDifferenceSpace) =
     node_indices(Spaces.horizontal_space(space))
 
+node_indices(space::Spaces.FiniteDifferenceSpace) = CartesianIndices(())
 
 """
     SpectralBroadcasted{Style}(op, args[,axes[, work]])
@@ -180,8 +181,6 @@ Copy the slab indexed by `slabidx` from `bc` to `out`.
 """
 Base.@propagate_inbounds function copyto_slab!(out, bc, slabidx)
     space = axes(out)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
     rbc = resolve_operator(bc, slabidx)
     @inbounds for ij in node_indices(axes(out))
         set_node!(space, out, ij, slabidx, get_node(space, rbc, ij, slabidx))
@@ -330,6 +329,26 @@ end
 Base.@propagate_inbounds function get_node(
     parent_space,
     field::Fields.Field,
+    ij::CartesianIndex{0},
+    slabidx,
+)
+    space = reconstruct_placeholder_space(axes(field), parent_space)
+    if space isa Spaces.FaceFiniteDifferenceSpace
+        _v = slabidx.v + half
+    elseif space isa Spaces.CenterFiniteDifferenceSpace
+        _v = slabidx.v
+    else
+        error("invalid space")
+    end
+    h = slabidx.h
+    fv = Fields.field_values(field)
+    v = isnothing(_v) ? 1 : _v
+    rv = fv[CartesianIndex(1, 1, 1, v, h)]
+    return rv
+end
+Base.@propagate_inbounds function get_node(
+    parent_space,
+    field::Fields.Field,
     ij::CartesianIndex{1},
     slabidx,
 )
@@ -445,6 +464,23 @@ end
 Base.@propagate_inbounds function set_node!(
     space,
     field::Fields.Field,
+    ij::CartesianIndex{0},
+    slabidx,
+    val,
+)
+    if space isa Spaces.FaceFiniteDifferenceSpace
+        _v = slabidx.v + half
+    else
+        _v = slabidx.v
+    end
+    h = slabidx.h
+    fv = Fields.field_values(field)
+    v = isnothing(_v) ? 1 : _v
+    fv[CartesianIndex(1, 1, 1, v, h)] = val
+end
+Base.@propagate_inbounds function set_node!(
+    space,
+    field::Fields.Field,
     ij::CartesianIndex{1},
     slabidx,
     val,
@@ -527,6 +563,12 @@ Divergence{()}(space) = Divergence{operator_axes(space)}()
 
 operator_return_eltype(op::Divergence{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(Geometry.divergence_result_type, S)
+
+function apply_operator(op::Divergence{()}, space, slabidx, arg)
+    RT = operator_return_eltype(op, eltype(arg))
+    out = DataF(RT(0))
+    return Field(SArray(out), space)
+end
 
 function apply_operator(op::Divergence{(1,)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
@@ -647,6 +689,12 @@ WeakDivergence{()}(space) = WeakDivergence{operator_axes(space)}()
 operator_return_eltype(::WeakDivergence{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(Geometry.divergence_result_type, S)
 
+function apply_operator(op::WeakDivergence{()}, space, slabidx, arg)
+    RT = operator_return_eltype(op, eltype(arg))
+    out = DataF(RT(0))
+    return Field(SArray(out), space)
+end
+
 function apply_operator(op::WeakDivergence{(1,)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
@@ -746,6 +794,12 @@ Gradient{()}(space) = Gradient{operator_axes(space)}()
 operator_return_eltype(::Gradient{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.gradient_result_type(Val(I), T), S)
 
+function apply_operator(op::Gradient{()}, space, slabidx, arg)
+    RT = operator_return_eltype(op, eltype(arg))
+    out = DataF(zeros(RT))
+    return Field(SArray(out), space)
+end
+
 function apply_operator(op::Gradient{(1,)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
@@ -836,6 +890,12 @@ WeakGradient{()}(space) = WeakGradient{operator_axes(space)}()
 
 operator_return_eltype(::WeakGradient{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.gradient_result_type(Val(I), T), S)
+
+function apply_operator(op::WeakGradient{()}, space, slabidx, arg)
+    RT = operator_return_eltype(op, eltype(arg))
+    out = DataF(zeros(RT))
+    return Field(SArray(out), space)
+end
 
 function apply_operator(op::WeakGradient{(1,)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
@@ -947,6 +1007,12 @@ Curl{()}(space) = Curl{operator_axes(space)}()
 
 operator_return_eltype(::Curl{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(Val(I), T), S)
+
+function apply_operator(op::Curl{()}, space, slabidx, arg)
+    RT = operator_return_eltype(op, eltype(arg))
+    out = DataF(zeros(RT))
+    return Field(SArray(out), space)
+end
 
 function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
@@ -1135,6 +1201,12 @@ WeakCurl{()}(space) = WeakCurl{operator_axes(space)}()
 
 operator_return_eltype(::WeakCurl{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(Val(I), T), S)
+
+function apply_operator(op::WeakCurl{()}, space, slabidx, arg)
+    RT = operator_return_eltype(op, eltype(arg))
+    out = DataF(zeros(RT))
+    return Field(SArray(out), space)
+end
 
 function apply_operator(op::WeakCurl{(1,)}, space, slabidx, arg)
     FT = Spaces.undertype(space)

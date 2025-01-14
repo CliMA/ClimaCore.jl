@@ -547,7 +547,14 @@ Required for statically infering the result type of the divergence operation for
 The return type when taking the gradient along dimension `I` of a field `V`.
 
 Required for statically infering the result type of the gradient operation for `AxisVector` subtypes.
-    """
+When `I` is an empty tuple, the gradient result type is assumed to be a Covariant12Vector.
+"""
+@inline function gradient_result_type(
+    ::Val{()},
+    ::Type{V},
+) where {V <: Number}
+    AxisVector{V, CovariantAxis{(1,2)}, SVector{2, V}}
+end
 @inline function gradient_result_type(
     ::Val{I},
     ::Type{V},
@@ -594,6 +601,20 @@ Curl is only defined for `CovariantVector`` field input types.
 ) where {FT} = Contravariant3Vector{FT}
 @inline curl_result_type(
     ::Val{(1, 2)},
+    ::Type{Covariant123Vector{FT}},
+) where {FT} = Contravariant123Vector{FT}
+
+# TODO: this is wrong, but replicates behavior of if a column represented by a box
+@inline curl_result_type(
+    ::Val{()},
+    ::Type{Covariant3Vector{FT}},
+) where {FT} = Contravariant12Vector{FT}
+@inline curl_result_type(
+    ::Val{()},
+    ::Type{Covariant12Vector{FT}},
+) where {FT} = Contravariant3Vector{FT}
+@inline curl_result_type(
+    ::Val{()},
     ::Type{Covariant123Vector{FT}},
 ) where {FT} = Contravariant123Vector{FT}
 

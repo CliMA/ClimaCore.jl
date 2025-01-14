@@ -252,3 +252,59 @@ function byslab(
         end
     end
 end
+
+function byslab(
+    fn,
+    ::ClimaComms.CPUSingleThreaded,
+    space::Spaces.CenterFiniteDifferenceSpace,
+)
+    Nh = Topologies.nlocalelems(Spaces.topology(space))
+    Nv = Spaces.nlevels(space)
+    @inbounds begin
+        for v in 1:Nv
+            fn(SlabIndex(v, 1))
+        end
+    end
+end
+
+function byslab(
+    fn,
+    ::ClimaComms.CPUMultiThreaded,
+    space::Spaces.CenterFiniteDifferenceSpace,
+)
+    Nh = Topologies.nlocalelems(Spaces.topology(space))
+    Nv = Spaces.nlevels(space)
+    @inbounds begin
+        Threads.@threads for v in 1:Nv
+            fn(SlabIndex(v, 1))
+        end
+    end
+end
+
+function byslab(
+    fn,
+    ::ClimaComms.CPUSingleThreaded,
+    space::Spaces.FaceFiniteDifferenceSpace,
+)
+    Nh = Topologies.nlocalelems(Spaces.topology(space))
+    Nv = Spaces.nlevels(space)
+    @inbounds begin
+        for v in 1:Nv
+            fn(SlabIndex(v - half, 1))
+        end
+    end
+end
+
+function byslab(
+    fn,
+    ::ClimaComms.CPUMultiThreaded,
+    space::Spaces.FaceFiniteDifferenceSpace,
+)
+    Nh = Topologies.nlocalelems(Spaces.topology(space))
+    Nv = Spaces.nlevels(space)
+    @inbounds begin
+        Threads.@threads for v in 1:Nv
+            fn(SlabIndex(v - half, 1))
+        end
+    end
+end
