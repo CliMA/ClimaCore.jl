@@ -1,6 +1,6 @@
 import CUDA, Adapt
 import ClimaCore
-import ClimaCore: Grids, Spaces, Topologies, Devices
+import ClimaCore: Grids, Spaces, Topologies
 
 Adapt.adapt_structure(
     to::CUDA.KernelAdaptor,
