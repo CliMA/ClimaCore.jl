@@ -134,7 +134,8 @@ function Δz_data(space::AbstractSpace)
         Δz_metric_component(data_layout_type),
     )
 end
-
+# TODO: Not true if defined on horizontal mesh?
+# TODO:Maybe this should just be taken care of in ClimaAtmos
 horizontal_space(space::FiniteDifferenceSpace) = nothing
 
 node_horizontal_length_scale(space::Nothing) = 0

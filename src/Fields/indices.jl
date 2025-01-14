@@ -252,7 +252,7 @@ function byslab(
         end
     end
 end
-
+# TODO: This is not correct when the space is horizontal
 function byslab(
     fn,
     ::ClimaComms.CPUSingleThreaded,
