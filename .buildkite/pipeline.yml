@@ -358,8 +358,6 @@ steps:
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Remapping/distributed_remapping.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
