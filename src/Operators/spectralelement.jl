@@ -1394,6 +1394,14 @@ struct Interpolate{I, S} <: TensorOperator
 end
 Interpolate(space) = Interpolate{operator_axes(space), typeof(space)}(space)
 
+function apply_operator(op::Interpolate{()}, space, slabidx, arg)
+    # TODO: How would interpolation be done with no horizontal space?
+    # this returns the value at the (1,1) node. Maybe it should be some sort of weighted mean
+    space_in = axes(arg)
+    out = DataF(get_node(space_in, arg, CartesianIndex(), slabidx))
+    return Field(SArray(out), space)
+end
+
 function apply_operator(op::Interpolate{(1,)}, space_out, slabidx, arg)
     FT = Spaces.undertype(space_out)
     space_in = axes(arg)
@@ -1482,6 +1490,13 @@ struct Restrict{I, S} <: TensorOperator
     space::S
 end
 Restrict(space) = Restrict{operator_axes(space), typeof(space)}(space)
+
+function apply_operator(op::Restrict{()}, space, slabidx, arg)
+    # TODO: How would this be done with no horizontal space?
+    space_in = axes(arg)
+    out = DataF(get_node(space_in, arg, CartesianIndex(), slabidx))
+    return Field(SArray(out), space)
+end
 
 function apply_operator(op::Restrict{(1,)}, space_out, slabidx, arg)
     FT = Spaces.undertype(space_out)
