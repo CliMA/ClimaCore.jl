@@ -93,6 +93,72 @@ end
     @test isfile(fig_png)
 end
 
+@testset "finitedifference" begin
+    vdomain = ClimaCore.Domains.IntervalDomain(
+        ClimaCore.Geometry.ZPoint(0.0),
+        ClimaCore.Geometry.ZPoint(10e3);
+        boundary_names = (:bottom, :top),
+    )
+    context = ClimaComms.context()
+    vmesh = ClimaCore.Meshes.IntervalMesh(vdomain; nelems = 45)
+    vtopology = ClimaCore.Topologies.IntervalTopology(context, vmesh)
+    vspace = ClimaCore.Spaces.CenterFiniteDifferenceSpace(vtopology)
+    coords = ClimaCore.Fields.coordinate_field(vspace)
+
+    u = sin.(π .* coords.z)
+
+    field_fig = Plots.plot(u)
+    @test field_fig !== nothing
+
+    fig_png = joinpath(OUTPUT_DIR, "fd_field.png")
+    Plots.png(field_fig, fig_png)
+    @test isfile(fig_png)
+end
+
+@testset "Column from extruded finitedifference" begin
+    FT = Float64
+    R = 6.37122e6
+    velem = 40
+
+    horz_domain = ClimaCore.Domains.SphereDomain(R)
+    horz_mesh = ClimaCore.Meshes.EquiangularCubedSphere(horz_domain, 6)
+    horz_grid_topology = ClimaCore.Topologies.Topology2D(
+        ClimaComms.SingletonCommsContext(),
+        horz_mesh,
+    )
+    quad = ClimaCore.Quadratures.GLL{4}()
+    horz_space =
+        ClimaCore.Spaces.SpectralElementSpace2D(horz_grid_topology, quad)
+
+    vertdomain = ClimaCore.Domains.IntervalDomain(
+        ClimaCore.Geometry.ZPoint{FT}(0),
+        ClimaCore.Geometry.ZPoint{FT}(1000);
+        boundary_names = (:bottom, :top),
+    )
+    vertmesh = ClimaCore.Meshes.IntervalMesh(vertdomain, nelems = velem)
+    device = ClimaComms.device()
+    vert_center_space =
+        ClimaCore.Spaces.CenterFiniteDifferenceSpace(device, vertmesh)
+
+    hv_center_space = ClimaCore.Spaces.ExtrudedFiniteDifferenceSpace(
+        horz_space,
+        vert_center_space,
+    )
+    coords = ClimaCore.Fields.coordinate_field(hv_center_space)
+
+    uw = map(coords) do coord
+        sin(coord.z)
+    end
+
+    colidx = ClimaCore.Fields.ColumnIndex((1, 1), 1)
+    field_fig = Plots.plot(uw[colidx])
+    @test field_fig !== nothing
+
+    fig_png = joinpath(OUTPUT_DIR, "col_from_extruded_fd_field.png")
+    Plots.png(field_fig, fig_png)
+    @test isfile(fig_png)
+end
+
 @testset "spectral element 3D extruded cubed-sphere" begin
     FT = Float64
     R = 6.37122e6
@@ -104,7 +170,7 @@ end
         ClimaComms.SingletonCommsContext(),
         horz_mesh,
     )
-    quad = ClimaCore.Quadratures.GLL{5}()
+    quad = ClimaCore.Quadratures.GLL{4}()
     horz_space =
         ClimaCore.Spaces.SpectralElementSpace2D(horz_grid_topology, quad)
 

@@ -137,7 +137,7 @@ RecipesBase.@recipe function f(field::Fields.FiniteDifferenceField)
     coord_field = Fields.coordinate_field(space)
 
     xdata = parent(field)[:, 1]
-    ydata = parent(Spaces.coordinates_data(space))[:, 1]
+    ydata = parent(Spaces.coordinates_data(space).z)[:, 1]
 
     coord_symbols = propertynames(coord_field)
 
