@@ -4,6 +4,9 @@ ClimaCore.jl Release Notes
 main
 -------
 
+ - A new limiter, `VerticalMassBorrowingLimiter`, was added. Which redistributes all negative values from a given field while preserving mass.
+  PR [2084](https://github.com/CliMA/ClimaCore.jl/pull/2084)
+
 ### ![][badge-✨feature/enhancement] Various improvements to `Remapper` [2060](https://github.com/CliMA/ClimaCore.jl/pull/2060)
 
 The `ClimaCore.Remapping` module received two improvements. First, `Remapper` is
