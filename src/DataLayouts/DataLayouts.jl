@@ -850,6 +850,11 @@ function DataF(x::T) where {T}
     end
 end
 
+function SArray(data::DataF{S, A}) where {S, A<:AbstractArray}
+    Nf = typesize(eltype(A), S)
+    DataF{S}(SArray{Tuple{Nf}, eltype(A), 1, Nf}(parent(data)))
+end
+
 Base.@propagate_inbounds function Base.getindex(data::DataF{S}) where {S}
     @inbounds get_struct(
         parent(data),
