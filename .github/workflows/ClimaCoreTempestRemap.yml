@@ -16,12 +16,15 @@ jobs:
   lib-climacore-tempestremap:
     runs-on: ubuntu-20.04
     timeout-minutes: 30
+    strategy:
+      matrix:
+        version: ['1.10', '1.11']
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
-          version: '1.10'
+          version: ${{ matrix.version }}
       - uses: julia-actions/cache@v2
       - name: Install Julia dependencies
         run: >
@@ -38,7 +41,7 @@ jobs:
         with:
           name: climacore-tempestremap-output
           path: |
-            lib/ClimaCoreTempestRemap/test/output
+            lib/ClimaCoreTempestRemap/test/output/${{ matrix.version }}
       - name: Fail after artifacts if tests failed
         if: ${{ env.TESTS_SUCCESSFUL != 'true' }}
         run: exit 1
