@@ -259,6 +259,7 @@ steps:
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/unit_spaces.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/opt_spaces.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/unit_high_resolution_space.jl"
 
       - label: "Unit: cuda spaces"
         key: "gpu_cuda_spaces"
@@ -266,7 +267,7 @@ steps:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/unit_spaces.jl"
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/opt_spaces.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/high_resolution_space.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/unit_high_resolution_space.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
