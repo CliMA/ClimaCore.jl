@@ -14,6 +14,7 @@ import ClimaCore:
     Operators,
     Spaces,
     Quadratures,
+    DataLayouts,
     Topologies,
     Remapping,
     Hypsography
@@ -531,6 +532,9 @@ end
               [sind(y) for x in longpts, y in latpts, z in zpts] rtol = 0.01
     end
 
+    z_fv = Fields.field_values(coords.z)
+    @show z_fv
+    @show DataLayouts.universal_size(z_fv)
     interp_z = Remapping.interpolate(remapper, coords.z)
     expected_z = [z for x in longpts, y in latpts, z in zpts]
     if ClimaComms.iamroot(context)

@@ -66,22 +66,22 @@ function set_interpolated_values_kernel!(
     num_vert = length(vert_bounding_indices)
     num_fields = length(field_values)
 
+    (size(out, 1) == num_horiz) || error("Incorrect input size")
+    (size(out, 2) == num_vert) || error("Incorrect input size")
+    (size(out, 3) == num_fields) || error("Incorrect input size")
+
     hindex = (blockIdx().x - Int32(1)) * blockDim().x + threadIdx().x
-    vindex = (blockIdx().y - Int32(1)) * blockDim().y + threadIdx().y
-    findex = (blockIdx().z - Int32(1)) * blockDim().z + threadIdx().z
 
     totalThreadsX = gridDim().x * blockDim().x
-    totalThreadsY = gridDim().y * blockDim().y
-    totalThreadsZ = gridDim().z * blockDim().z
 
     _, Nq = size(I1)
     CI = CartesianIndex
     for i in hindex:totalThreadsX:num_horiz
         h = local_horiz_indices[i]
-        for j in vindex:totalThreadsY:num_vert
+        for j in 1:num_vert
             v_lo, v_hi = vert_bounding_indices[j]
             A, B = vert_interpolation_weights[j]
-            for k in findex:totalThreadsZ:num_fields
+            for k in 1:num_fields
                 if i ≤ num_horiz && j ≤ num_vert && k ≤ num_fields
                     out[i, j, k] = 0
                     for t in 1:Nq, s in 1:Nq
