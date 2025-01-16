@@ -47,7 +47,11 @@ function example_debug_post_op_callback(result, args...; kwargs...)
 end
 
 """
-    depth_limited_stack_trace([io::IO, ]st::Base.StackTraces.StackTrace; maxtypedepth=3)
+    depth_limited_stack_trace(
+        [io::IO, ]
+        st::Base.StackTraces.StackTrace;
+        maxtypedepth=3
+    )
 
 Given a stacktrace `st`, return a vector of strings containing the trace with
 depth-limited printing.
@@ -69,10 +73,14 @@ function type_depth_limit(io::IO, s::String; maxtypedepth::Union{Nothing, Int})
 end
 
 """
-    depth_limited_stack_trace([io::IO, ]st::Base.StackTraces.StackTrace; maxtypedepth=3)
+    print_depth_limited_stack_trace(
+        [io::IO, ]
+        st::Base.StackTraces.StackTrace;
+        maxtypedepth=3
+    )
 
-Given a stacktrace `st`, return a vector of strings containing the trace with
-depth-limited printing.
+Given a stacktrace `st`, print the stack trace with depth-limited types, given
+by `maxtypedepth`.
 """
 print_depth_limited_stack_trace(
     st::Base.StackTraces.StackTrace;
