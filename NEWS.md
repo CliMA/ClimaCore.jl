@@ -4,6 +4,14 @@ ClimaCore.jl Release Notes
 main
 -------
 
+### ![][badge-✨feature/enhancement] A new DebugOnly module can help find where
+     NaNs/Inf come from. PRs [2115](https://github.com/CliMA/ClimaCore.jl/pull/2115) and
+     [2139](https://github.com/CliMA/ClimaCore.jl/pull/2139)
+
+A new `ClimaCore.DebugOnly` module was added, which can help users find where
+NaNs or Infs come from in a simulation, interactively. Documentation, with a
+simple representative example can be found [here](https://clima.github.io/ClimaCore.jl/dev/debugging/#Infiltrating).
+
 ### ![][badge-✨feature/enhancement] Various improvements to `Remapper` [2060](https://github.com/CliMA/ClimaCore.jl/pull/2060)
 
 The `ClimaCore.Remapping` module received two improvements. First, `Remapper` is

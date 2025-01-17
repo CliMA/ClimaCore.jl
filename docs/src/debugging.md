@@ -78,15 +78,21 @@ import ClimaCore
 import Infiltrator # must be in your default environment
 ClimaCore.DebugOnly.call_post_op_callback() = true
 function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
-    if any(isnan, parent(result))
-        println("NaNs found!")
+    has_nans = any(isnan, parent(result))
+    has_inf = any(isinf, parent(result))
+    if has_nans || has_inf
+        has_nans && println("NaNs found!")
+        has_inf && println("Infs found!")
         # Let's define the stack trace so that we know where this came from
         st = stacktrace()
 
         # Let's use Infiltrator.jl to exfiltrate to drop into the REPL.
         # Now, `Infiltrator.safehouse` will be a NamedTuple
-        # containing `result`, `args` and `kwargs`.
+        # containing `result`, `args`, `kwargs` and `st`.
         Infiltrator.@exfiltrate
+        # sometimes code execution doesn't stop, I'm not sure why. Let's
+        # make sure we exfiltrate immediately with the data we want.
+        error("Exfiltrating.")
     end
 end
 
@@ -97,7 +103,7 @@ data = ClimaCore.DataLayouts.VIJFH{FT}(Array{FT}, zeros; Nv=5, Nij=2, Nh=2)
 (;result, args, kwargs, st) = Infiltrator.safehouse;
 
 # You can print the stack trace, to see where the NaNs were found:
-ClimaCore.DebugOnly.print_depth_limited_stack_trace(st;maxtypedepth=1)
+ClimaCore.DebugOnly.print_depth_limited_stack_trace(st; maxtypedepth=1)
 
 # Once there, you can see that the call lead you to `copyto!`,
 # Inspecting `args` shows that the `Broadcasted` object used to populate the
@@ -122,3 +128,10 @@ Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}}(identity, (NaN,)
     `post_op_callback` is called in many places, so this is a
     performance-critical code path and expensive operations performed in
     `post_op_callback` may significantly slow down your code.
+
+!!! warn
+
+    It is _highly_ recommended to use `post_op_callback` _without_ `@testset`,
+    as Test.jl may continue running through code execution, until all of the
+    tests in a given `@testset` are complete, and the result will be that you
+    will get the _last_ observed instance of `NaN` or `Inf`.

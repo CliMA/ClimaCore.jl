@@ -325,10 +325,14 @@ end
     parent(getfield(_values(fv), symb))
 @inline transform_broadcasted(x, symb, axes) = x
 
-@inline Base.copyto!(
+@inline function Base.copyto!(
     dest::FieldVector,
     bc::Union{FieldVector, Base.Broadcast.Broadcasted{FieldVectorStyle}},
-) = copyto_per_field!(dest, bc)
+)
+    copyto_per_field!(dest, bc)
+    call_post_op_callback() && post_op_callback(dest, dest, bc)
+    return dest
+end
 
 @inline function copyto_per_field!(
     dest::FieldVector,
@@ -351,18 +355,29 @@ end
     return dest
 end
 
-@inline Base.copyto!(
+@inline function Base.copyto!(
     dest::FieldVector,
     bc::Base.Broadcast.Broadcasted{<:Base.Broadcast.Style{Tuple}},
-) = copyto_per_field_scalar!(dest, bc)
+)
+    copyto_per_field_scalar!(dest, bc)
+    call_post_op_callback() && post_op_callback(dest, dest, bc)
+    return dest
+end
 
-@inline Base.copyto!(
+@inline function Base.copyto!(
     dest::FieldVector,
     bc::Base.Broadcast.Broadcasted{<:Base.Broadcast.AbstractArrayStyle{0}},
-) = copyto_per_field_scalar!(dest, bc)
-
-@inline Base.copyto!(dest::FieldVector, bc::Real) =
+)
     copyto_per_field_scalar!(dest, bc)
+    call_post_op_callback() && post_op_callback(dest, dest, bc)
+    return dest
+end
+
+@inline function Base.copyto!(dest::FieldVector, bc::Real)
+    copyto_per_field_scalar!(dest, bc)
+    call_post_op_callback() && post_op_callback(dest, dest, bc)
+    return dest
+end
 
 @inline function copyto_per_field_scalar!(dest::FieldVector, bc)
     map(propertynames(dest)) do symb

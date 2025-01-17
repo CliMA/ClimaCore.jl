@@ -91,7 +91,7 @@ space = ExtrudedCubedSphereSpace(;
     z_max = 1,
     radius = 10,
     h_elem = 10,
-    n_quad_points = 4
+    n_quad_points = 4,
     staggering = CellCenter()
 )
 ```
