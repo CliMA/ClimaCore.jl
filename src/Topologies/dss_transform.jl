@@ -226,13 +226,13 @@ end
 _transformed_type(
     data::DataLayouts.AbstractData,
     local_geometry::Union{DataLayouts.AbstractData, Nothing},
-    local_weights::Union{DataLayouts.AbstractData, Nothing},
+    dss_weights::Union{DataLayouts.AbstractData, Nothing},
     ::Type{DA},
 ) where {DA} = typeof(
     dss_transform(
         _representative_slab(data, DA),
         _representative_slab(local_geometry, DA),
-        _representative_slab(local_weights, DA),
+        _representative_slab(dss_weights, DA),
         CartesianIndex(1, 1, 1, 1, 1),
     ),
 )
