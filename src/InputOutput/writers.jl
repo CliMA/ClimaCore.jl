@@ -185,15 +185,14 @@ function write_new!(
     write_attribute(group, "type", "IntervalMesh")
     write_attribute(group, "domain", domainname)
     write_attribute(group, "nelements", Meshes.nelements(mesh))
-    if occursin("LinRange", string(typeof(mesh.faces)))
-        write_attribute(group, "faces_type", "Range")
-    else
-        write_attribute(group, "faces_type", "Array")
-        write_attribute(
-            group,
-            "faces",
-            [getfield(mesh.faces[i], 1) for i in 1:length(mesh.faces)],
-        )
+    (; stretch) = mesh
+    write_attribute(group, "stretch_type", string(nameof(typeof(stretch))))
+    fns = fieldnames(typeof(stretch))
+    if !isempty(fns)
+        vals = map(fns) do fn
+            getfield(stretch, fn)
+        end
+        write_attribute(group, "stretch_params", [vals...])
     end
     return name
 end

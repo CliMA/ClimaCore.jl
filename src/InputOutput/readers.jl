@@ -250,17 +250,35 @@ function read_mesh_new(reader::HDF5Reader, name::AbstractString)
     if type == "IntervalMesh"
         domain = read_domain(reader, attrs(group)["domain"])
         nelements = attrs(group)["nelements"]
-        faces_type = attrs(group)["faces_type"]
-        if faces_type == "Range"
-            return Meshes.IntervalMesh(
-                domain,
-                Meshes.Uniform(),
-                nelems = nelements,
-            )
+        if haskey(attrs(group), "faces_type")
+            faces_type = attrs(group)["faces_type"]
+            if faces_type == "Range"
+                return Meshes.IntervalMesh(
+                    domain,
+                    Meshes.Uniform(),
+                    nelems = nelements,
+                )
+            else
+                CT = Domains.coordinate_type(domain)
+                faces = [CT(coords) for coords in attrs(group)["faces"]]
+                return Meshes.IntervalMesh(domain, faces)
+            end
         else
-            CT = Domains.coordinate_type(domain)
-            faces = [CT(coords) for coords in attrs(group)["faces"]]
-            return Meshes.IntervalMesh(domain, faces)
+            stretch_type = attrs(group)["stretch_type"]
+            if stretch_type == "Uniform"
+                return Meshes.IntervalMesh(
+                    domain,
+                    Meshes.Uniform();
+                    nelems = nelements,
+                )
+            else
+                stretch_type = attrs(group)["stretch_type"]
+                stretch_params = attrs(group)["stretch_params"]
+                CT = Domains.coordinate_type(domain)
+                stretch =
+                    getproperty(Meshes, Symbol(stretch_type))(stretch_params...)
+                return Meshes.IntervalMesh(domain, stretch; nelems = nelements)
+            end
         end
     elseif type == "RectilinearMesh"
         intervalmesh1 = read_mesh(reader, attrs(group)["intervalmesh1"])
