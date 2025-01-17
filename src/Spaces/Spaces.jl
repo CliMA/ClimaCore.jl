@@ -37,7 +37,7 @@ import ..Grids:
     local_geometry_type,
     local_geometry_data,
     global_geometry,
-    local_dss_weights,
+    dss_weights,
     quadrature_style
 
 import ClimaComms
@@ -69,6 +69,7 @@ vertical_topology(space::AbstractSpace) = vertical_topology(grid(space))
 
 local_geometry_data(space::AbstractSpace) =
     local_geometry_data(grid(space), staggering(space))
+dss_weights(space::AbstractSpace) = dss_weights(grid(space), staggering(space))
 
 function n_elements_per_panel_direction(space::AbstractSpace)
     hspace = Spaces.horizontal_space(space)

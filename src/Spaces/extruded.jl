@@ -90,10 +90,6 @@ FaceExtrudedFiniteDifferenceSpace(space::ExtrudedFiniteDifferenceSpace) =
 CenterExtrudedFiniteDifferenceSpace(space::ExtrudedFiniteDifferenceSpace) =
     ExtrudedFiniteDifferenceSpace(grid(space), CellCenter())
 
-
-local_dss_weights(space::ExtrudedFiniteDifferenceSpace) =
-    local_dss_weights(grid(space))
-
 staggering(space::ExtrudedFiniteDifferenceSpace) = getfield(space, :staggering)
 grid(space::ExtrudedFiniteDifferenceSpace) = getfield(space, :grid)
 space(space::ExtrudedFiniteDifferenceSpace, staggering::Staggering) =

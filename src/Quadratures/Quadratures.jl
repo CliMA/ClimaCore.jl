@@ -9,21 +9,21 @@ export QuadratureStyle,
     GLL, GL, polynomial_degree, degrees_of_freedom, quadrature_points
 
 """
-   QuadratureStyle
+   QuadratureStyle{Nq}
 
 Quadrature style supertype. See sub-types:
  - [`GLL`](@ref)
  - [`GL`](@ref)
  - [`Uniform`](@ref)
 """
-abstract type QuadratureStyle end
+abstract type QuadratureStyle{Nq} end
 
 """
     polynomial_degree(QuadratureStyle) -> Int
 
 Returns the polynomial degree of the `QuadratureStyle` concrete type
 """
-function polynomial_degree end
+@inline polynomial_degree(::QuadratureStyle{Nq}) where {Nq} = Nq - 1
 
 
 """
@@ -31,7 +31,7 @@ function polynomial_degree end
 
 Returns the degrees_of_freedom of the `QuadratureStyle` concrete type
 """
-function degrees_of_freedom end
+@inline degrees_of_freedom(::QuadratureStyle{Nq}) where {Nq} = Nq
 
 """
     points, weights = quadrature_points(::Type{FT}, quadrature_style)
@@ -46,15 +46,12 @@ function quadrature_points end
 
 Gauss-Legendre-Lobatto quadrature using `Nq` quadrature points.
 """
-struct GLL{Nq} <: QuadratureStyle end
+struct GLL{Nq} <: QuadratureStyle{Nq} end
 
 Base.show(io::IO, ::GLL{Nq}) where {Nq} =
     print(io, Nq, "-point Gauss-Legendre-Lobatto quadrature")
 
-@inline polynomial_degree(::GLL{Nq}) where {Nq} = Int(Nq - 1)
-@inline degrees_of_freedom(::GLL{Nq}) where {Nq} = Int(Nq)
-unique_degrees_of_freedom(::GLL{Nq}) where {Nq} = Int(Nq - 1)
-
+unique_degrees_of_freedom(::GLL{Nq}) where {Nq} = Nq - 1
 @generated function quadrature_points(::Type{FT}, ::GLL{Nq}) where {FT, Nq}
     points, weights = GaussQuadrature.legendre(FT, Nq, GaussQuadrature.both)
     :($(SVector{Nq}(points)), $(SVector{Nq}(weights)))
@@ -65,14 +62,12 @@ end
 
 Gauss-Legendre quadrature using `Nq` quadrature points.
 """
-struct GL{Nq} <: QuadratureStyle end
+struct GL{Nq} <: QuadratureStyle{Nq} end
+
 Base.show(io::IO, ::GL{Nq}) where {Nq} =
     print(io, Nq, "-point Gauss-Legendre quadrature")
 
-@inline polynomial_degree(::GL{Nq}) where {Nq} = Int(Nq - 1)
-@inline degrees_of_freedom(::GL{Nq}) where {Nq} = Int(Nq)
-unique_degrees_of_freedom(::GL{Nq}) where {Nq} = Int(Nq)
-
+unique_degrees_of_freedom(::GL{Nq}) where {Nq} = Nq
 @generated function quadrature_points(::Type{FT}, ::GL{Nq}) where {FT, Nq}
     points, weights = GaussQuadrature.legendre(FT, Nq, GaussQuadrature.neither)
     :($(SVector{Nq}(points)), $(SVector{Nq}(weights)))
@@ -83,11 +78,9 @@ end
 
 Uniformly-spaced quadrature.
 """
-struct Uniform{Nq} <: QuadratureStyle end
+struct Uniform{Nq} <: QuadratureStyle{Nq} end
 
-@inline polynomial_degree(::Uniform{Nq}) where {Nq} = Int(Nq - 1)
-@inline degrees_of_freedom(::Uniform{Nq}) where {Nq} = Int(Nq)
-
+unique_degrees_of_freedom(::Uniform{Nq}) where {Nq} = Nq
 @generated function quadrature_points(::Type{FT}, ::Uniform{Nq}) where {FT, Nq}
     points = SVector{Nq}(range(-1 + FT(1 / Nq), step = FT(2 / Nq), length = Nq))
     weights = SVector{Nq}(ntuple(i -> FT(2 / Nq), Nq))
@@ -99,11 +92,9 @@ end
 
 Uniformly-spaced quadrature including boundary.
 """
-struct ClosedUniform{Nq} <: QuadratureStyle end
+struct ClosedUniform{Nq} <: QuadratureStyle{Nq} end
 
-@inline polynomial_degree(::ClosedUniform{Nq}) where {Nq} = Int(Nq - 1)
-@inline degrees_of_freedom(::ClosedUniform{Nq}) where {Nq} = Int(Nq)
-
+unique_degrees_of_freedom(::ClosedUniform{Nq}) where {Nq} = Nq - 1
 @generated function quadrature_points(
     ::Type{FT},
     ::ClosedUniform{Nq},
