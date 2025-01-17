@@ -168,6 +168,9 @@ end
 LazySchurComplement(A₁₁, A₁₂, A₂₁, A₂₂) =
     LazySchurComplement(A₁₁, A₁₂, A₂₁, A₂₂, nothing, nothing, nothing, nothing)
 
+Base.zero(lsc::LazySchurComplement) =
+    LazySchurComplement(map(fn -> zero(getfield(lsc, fn)), fieldnames(lsc))...)
+
 NVTX.@annotate function lazy_mul(A₂₂′::LazySchurComplement, x₂)
     (; A₁₁, A₁₂, A₂₁, A₂₂, alg₁, cache₁, A₁₂_x₂, invA₁₁_A₁₂_x₂) = A₂₂′
     zero_rows = setdiff(keys(A₁₂_x₂), matrix_row_keys(keys(A₁₂)))
@@ -228,6 +231,8 @@ this would require swapping the rows of `Aₙₙ` (i.e., replacing `Dₙ` with a
 partial pivoting matrix).
 """
 struct BlockDiagonalSolve <: FieldMatrixSolverAlgorithm end
+
+Base.zero(alg::BlockDiagonalSolve) = alg
 
 function field_matrix_solver_cache(::BlockDiagonalSolve, A, b)
     caches = map(matrix_row_keys(keys(A))) do name
@@ -314,6 +319,9 @@ BlockLowerTriangularSolve(
     alg₁ = BlockDiagonalSolve(),
     alg₂ = BlockDiagonalSolve(),
 ) = BlockLowerTriangularSolve(names₁, alg₁, alg₂)
+
+Base.zero(alg::BlockLowerTriangularSolve) =
+    BlockLowerTriangularSolve(alg.names₁, zero(alg.alg₁), zero(alg.alg₂))
 
 function field_matrix_solver_cache(alg::BlockLowerTriangularSolve, A, b)
     A₁₁, _, _, A₂₂, b₁, b₂ = partition_blocks(alg.names₁, A, b)
@@ -447,6 +455,9 @@ struct SchurComplementReductionSolve{
 end
 SchurComplementReductionSolve(names₁...; alg₁ = BlockDiagonalSolve(), alg₂) =
     SchurComplementReductionSolve(names₁, alg₁, alg₂)
+
+Base.zero(alg::SchurComplementReductionSolve) =
+    SchurComplementReductionSolve(alg.names₁, zero(alg.alg₁), zero(alg.alg₂))
 
 function field_matrix_solver_cache(alg::SchurComplementReductionSolve, A, b)
     A₁₁, A₁₂, A₂₁, A₂₂, b₁, b₂ = partition_blocks(alg.names₁, A, b)

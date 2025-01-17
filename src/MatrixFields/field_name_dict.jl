@@ -182,6 +182,13 @@ function Base.similar(dict::FieldNameDict)
     return FieldNameDict(keys(dict), entries)
 end
 
+function Base.zero(dict::FieldNameDict)
+    entries = unrolled_map(values(dict)) do entry
+        entry isa UniformScaling ? entry : zero(entry)
+    end
+    return FieldNameDict(keys(dict), entries)
+end
+
 # Note: This assumes that the matrix has the same row and column units, since I
 # cannot be multiplied by anything other than a scalar.
 function Base.one(matrix::FieldMatrix)
