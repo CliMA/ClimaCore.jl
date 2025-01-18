@@ -8,6 +8,7 @@ using ClimaComms
 using Random
 ClimaComms.@import_required_backends
 
+import ClimaCore
 import ClimaCore:
     Domains,
     Fields,
@@ -18,6 +19,11 @@ import ClimaCore:
     Quadratures,
     Topologies,
     DataLayouts
+
+include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+)
+import .TestUtilities as TU
 
 function get_space_cs(::Type{FT}; context, R = 300.0) where {FT}
     domain = Domains.SphereDomain{FT}(300.0)
@@ -110,4 +116,30 @@ end
     @test n_dss_affected_y12 * 3 / 2 ==
           n_dss_affected_y123 ==
           n_dss_affected_y3 * 3
+end
+
+function test_dss_conservation(space)
+    Random.seed!(1) # ensures reproducibility
+    field = zeros(space)
+    FT = Spaces.undertype(space)
+    parent(field) .= rand.(FT)
+    integral_before_dss = sum(field)
+    Spaces.weighted_dss!(field)
+    integral_after_dss = sum(field)
+    @test integral_after_dss ≈ integral_before_dss rtol = 14 * eps(FT)
+end
+
+@testset "DSS Conservation on Cubed Sphere" begin
+    device = ClimaComms.device()
+    context = ClimaComms.SingletonCommsContext(device)
+    for FT in (Float32, Float64)
+        for topography in (false, true), deep in (false, true)
+            space_kwargs = (; context, topography, deep)
+            center_space =
+                TU.CenterExtrudedFiniteDifferenceSpace(FT; space_kwargs...)
+            for space in (center_space, Spaces.face_space(center_space))
+                test_dss_conservation(space)
+            end
+        end
+    end
 end

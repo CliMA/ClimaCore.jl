@@ -7,8 +7,6 @@ Topologies.nlocalelems(space::AbstractSpectralElementSpace) =
 
 quadrature_style(space::AbstractSpectralElementSpace) =
     quadrature_style(grid(space))
-local_dss_weights(space::AbstractSpectralElementSpace) =
-    local_dss_weights(grid(space))
 
 horizontal_space(space::AbstractSpectralElementSpace) = space
 nlevels(space::AbstractSpectralElementSpace) = 1

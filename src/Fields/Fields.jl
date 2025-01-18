@@ -474,11 +474,8 @@ end
 
 Create a buffer for communicating neighbour information of `field`.
 """
-function Spaces.create_dss_buffer(field::Field)
-    space = axes(field)
-    hspace = Spaces.horizontal_space(space)
-    Spaces.create_dss_buffer(field_values(field), hspace)
-end
+Spaces.create_dss_buffer(field::Field) =
+    Spaces.create_dss_buffer(field_values(field), axes(field))
 
 Base.@propagate_inbounds function level(
     field::Union{

@@ -102,17 +102,13 @@ function _SpectralElementGrid1D(
             )
         end
     end
-    dss_weights = copy(local_geometry.J)
-    dss_weights .= one(FT)
-    Topologies.dss_1d!(topology, dss_weights)
-    dss_weights = one(FT) ./ dss_weights
 
     return SpectralElementGrid1D(
         topology,
         quadrature_style,
         global_geometry,
         local_geometry,
-        dss_weights,
+        compute_dss_weights(local_geometry, topology, quadrature_style),
     )
 end
 
@@ -136,7 +132,7 @@ mutable struct SpectralElementGrid2D{
     quadrature_style::Q
     global_geometry::GG
     local_geometry::LG
-    local_dss_weights::D
+    dss_weights::D
     internal_surface_geometry::IS
     boundary_surface_geometries::BS
     enable_bubble::Bool
@@ -418,14 +414,6 @@ function _SpectralElementGrid2D(
         end
     end
 
-    # dss_weights = J ./ dss(J)
-    J = DataLayouts.rebuild(local_geometry.J, DA)
-    dss_local_weights = copy(J)
-    if quadrature_style isa Quadratures.GLL
-        Topologies.dss!(dss_local_weights, topology)
-    end
-    dss_local_weights .= J ./ dss_local_weights
-
     SG = Geometry.SurfaceGeometry{
         FT,
         Geometry.AxisVector{FT, Geometry.LocalAxis{AIdx}, SVector{2, FT}},
@@ -497,12 +485,14 @@ function _SpectralElementGrid2D(
         internal_surface_geometry = nothing
         boundary_surface_geometries = nothing
     end
+
+    device_local_geometry = DataLayouts.rebuild(local_geometry, DA)
     return SpectralElementGrid2D(
         topology,
         quadrature_style,
         global_geometry,
-        DataLayouts.rebuild(local_geometry, DA),
-        dss_local_weights,
+        device_local_geometry,
+        compute_dss_weights(device_local_geometry, topology, quadrature_style),
         internal_surface_geometry,
         boundary_surface_geometries,
         enable_bubble,
@@ -578,6 +568,21 @@ function compute_surface_geometry(
     return Geometry.SurfaceGeometry(sWJ, n)
 end
 
+function compute_dss_weights(local_geometry, topology, quadrature_style)
+    is_dss_required =
+        Quadratures.unique_degrees_of_freedom(quadrature_style) <
+        Quadratures.degrees_of_freedom(quadrature_style)
+    # Although the weights are defined as WJ / Σ collocated WJ, we can use J
+    # instead of WJ if the weights are symmetric across element boundaries.
+    dss_weights = copy(local_geometry.J)
+    if topology isa Topologies.IntervalTopology
+        is_dss_required && Topologies.dss_1d!(topology, dss_weights)
+    else
+        is_dss_required && Topologies.dss!(dss_weights, topology)
+    end
+    @. dss_weights = local_geometry.J / dss_weights
+    return dss_weights
+end
 
 # accessors
 
@@ -588,8 +593,7 @@ local_geometry_data(grid::AbstractSpectralElementGrid, ::Nothing) =
 global_geometry(grid::AbstractSpectralElementGrid) = grid.global_geometry
 
 quadrature_style(grid::AbstractSpectralElementGrid) = grid.quadrature_style
-local_dss_weights(grid::SpectralElementGrid1D) = grid.dss_weights
-local_dss_weights(grid::SpectralElementGrid2D) = grid.local_dss_weights
+dss_weights(grid::AbstractSpectralElementGrid, ::Nothing) = grid.dss_weights
 
 ## GPU compatibility
 struct DeviceSpectralElementGrid2D{Q, GG, LG} <: AbstractSpectralElementGrid
