@@ -4,9 +4,18 @@ ClimaCore.jl Release Notes
 main
 -------
 
-### ![][badge-✨feature/enhancement] A new DebugOnly module can help find where
-     NaNs/Inf come from. PRs [2115](https://github.com/CliMA/ClimaCore.jl/pull/2115) and
-     [2139](https://github.com/CliMA/ClimaCore.jl/pull/2139)
+v0.14.22
+-------
+
+ - Added support for CPU<->GPU conversion of spaces, fields and fieldvectors, via Adapt. PR [2114](https://github.com/CliMA/ClimaCore.jl/pull/2114).
+
+ - Fixed numerics of column integrals for deep atmosphere. PR [2119](https://github.com/CliMA/ClimaCore.jl/pull/2119).
+
+ - Fixed high-resolution gpu space construction. PR [2100](https://github.com/CliMA/ClimaCore.jl/pull/2100).
+
+### ![][badge-✨feature/enhancement] A new DebugOnly module can help find where NaNs/Inf come from
+ - PRs [2115](https://github.com/CliMA/ClimaCore.jl/pull/2115) and
+ [2139](https://github.com/CliMA/ClimaCore.jl/pull/2139)
 
 A new `ClimaCore.DebugOnly` module was added, which can help users find where
 NaNs or Infs come from in a simulation, interactively. Documentation, with a
@@ -27,6 +36,11 @@ output_array = interpolate(field)
 The target coordinates are automatically determined, but can also be customized.
 Refer to the [documentation](https://clima.github.io/ClimaCore.jl/dev/remapping/)
 for more information.
+
+v0.14.22
+-------
+
+ - Fixed gpu support (adapt) for van-leer limiters. PR [2112](https://github.com/CliMA/ClimaCore.jl/pull/2112).
 
 v0.14.21
 --------
