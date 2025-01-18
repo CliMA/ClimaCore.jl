@@ -18,10 +18,12 @@ function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
     @testset "$test_name" begin
         x = similar(b)
         A′ = FieldMatrixWithSolver(A, b, alg)
+        @test zero(A′) isa typeof(A′)
         solve_time =
             @benchmark ClimaComms.@cuda_sync comms_device ldiv!(x, A′, b)
 
         b_test = similar(b)
+        @test zero(b) isa typeof(b)
         mul_time =
             @benchmark ClimaComms.@cuda_sync comms_device mul!(b_test, A′, x)
 

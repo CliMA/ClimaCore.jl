@@ -41,6 +41,9 @@ Base.:(==)(A1::FieldMatrixWithSolver, A2::FieldMatrixWithSolver) =
 Base.similar(A::FieldMatrixWithSolver) =
     FieldMatrixWithSolver(similar(A.matrix), A.solver)
 
+Base.zero(A::FieldMatrixWithSolver) =
+    FieldMatrixWithSolver(zero(A.matrix), A.solver)
+
 ldiv!(x::Fields.FieldVector, A::FieldMatrixWithSolver, b::Fields.FieldVector) =
     field_matrix_solve!(A.solver, x, A.matrix, b)
 
