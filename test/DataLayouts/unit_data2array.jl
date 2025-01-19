@@ -21,6 +21,10 @@ end
     device = ClimaComms.device()
     ArrayType = ClimaComms.array_type(device)
 
+    data = DataF{FT}(ArrayType{FT}, rand)
+    @test DataLayouts.data2array(data) == reshape(parent(data), :)
+    @test is_data2array2data_identity(data)
+
     data = IF{FT}(ArrayType{FT}, rand; Ni)
     @test DataLayouts.data2array(data) == reshape(parent(data), :)
     @test is_data2array2data_identity(data)
