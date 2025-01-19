@@ -2149,6 +2149,7 @@ Also, this assumes that `eltype(data) <: Real`.
 """
 function data2array end
 
+data2array(data::DataF) = reshape(parent(data), :)
 data2array(data::Union{IF, IFH, IHF}) = reshape(parent(data), :)
 data2array(data::Union{IJF, IJFH, IJHF}) = reshape(parent(data), :)
 data2array(

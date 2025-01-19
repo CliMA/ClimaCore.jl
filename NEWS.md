@@ -4,6 +4,8 @@ ClimaCore.jl Release Notes
 main
 -------
 
+ - Added support `data2array` for `DataF` (i.e., `PointField`s). PR [2143](https://github.com/CliMA/ClimaCore.jl/pull/2143).
+
 v0.14.22
 -------
 
