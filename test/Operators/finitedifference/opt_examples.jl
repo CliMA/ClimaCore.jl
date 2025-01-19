@@ -1,3 +1,7 @@
+#=
+julia --project=.buildkite
+using Revise; include("test/Operators/finitedifference/opt_examples.jl")
+=#
 import ClimaCore
 using ClimaComms
 ClimaComms.@import_required_backends
@@ -45,6 +49,14 @@ function alloc_test_f2c_interp(cfield, ffield)
         closure()
     end
     @test p == 0 broken = using_cuda
+end
+
+function jet_test_f2c_interp2(cfield, ffield)
+    (; fx, fy, fz, fϕ, fψ) = ffield
+    (; cx, cy, cz, cϕ, cψ) = cfield
+    Ic = Operators.InterpolateF2C()
+    @. cz = cx * cy * Ic(fy) * Ic(fx) * cϕ * cψ
+    return nothing
 end
 
 function alloc_test_c2f_interp(cfield, ffield, If)
@@ -468,6 +480,9 @@ end
     wvec_glob = Geometry.WVector
 
     alloc_test_f2c_interp(cfield, ffield)
+    if !(ClimaComms.device(ffield) isa ClimaComms.CUDADevice)
+        JET.@test_call jet_test_f2c_interp2(cfield, ffield)
+    end
 
     alloc_test_c2f_interp(
         cfield,
