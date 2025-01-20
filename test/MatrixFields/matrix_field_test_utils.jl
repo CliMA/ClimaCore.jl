@@ -3,7 +3,7 @@ using JET
 import Dates
 import Random: seed!
 import Base.Broadcast: materialize, materialize!
-import LazyBroadcast: @lazy
+import ClimaCore: @lazy
 import BenchmarkTools as BT
 
 import ClimaComms

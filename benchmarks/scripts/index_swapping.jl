@@ -63,7 +63,7 @@ end;
 function custom_kernel_bc!(X, Y, us::UniversalSizesStatic; swap=0, printtb=false, nreps = 1, print_info = true, bm=nothing, n_trials=30)
     (; x1, x2, x3) = X
     (; y1) = Y
-    bc = @lazy @. y1 = foo(x1, x2, x3)
+    bc = @lazy @. foo(x1, x2, x3)
     @assert !(y1 isa Array)
     f = if swap==0
         custom_kernel_knl_bc_0swap!

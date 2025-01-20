@@ -4,6 +4,9 @@ using PkgVersion
 const VERSION = PkgVersion.@Version
 import ClimaComms
 
+# Temporary helpers to work around https://github.com/CliMA/ClimaCore.jl/issues/2146
+include("lazy_broadcast.jl")
+
 include("DebugOnly/DebugOnly.jl")
 include("interface.jl")
 include("devices.jl")

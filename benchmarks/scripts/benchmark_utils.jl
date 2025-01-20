@@ -1,7 +1,7 @@
 # import CUDA
 import ClimaComms
 using BenchmarkTools, Dates
-using LazyBroadcast: @lazy
+using ClimaCore: @lazy
 
 """
     caller_name(@__FILE__)
