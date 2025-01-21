@@ -1,6 +1,6 @@
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
-
+using ClimaCore
 using ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields, Operators
@@ -297,4 +297,63 @@ end
     @. cy = RBF2C(fy)
     cy_ref = [i == length(cyp) ? FT(10) : fyp[i + 1] for i in 1:length(cyp)]
     @test all(cy_ref .== cyp)
+end
+
+# https://github.com/CliMA/ClimaCore.jl/issues/994
+# TODO: make this test more low-level / granular (test `getidx`).
+@testset "Spatially varying BC with Grad" begin
+    FT = Float64
+    zmin = FT(1.0)
+    zmax = FT(2.0)
+    xlim = FT.((0.0, 10.0))
+    ylim = FT.((0.0, 1.0))
+    zlim = FT.((zmin, zmax))
+    nelements = (1, 1, 5)
+    npolynomial = 3
+    domain_x = Domains.IntervalDomain(
+        Geometry.XPoint(xlim[1]),
+        Geometry.XPoint(xlim[2]);
+        periodic = true,
+    )
+    domain_y = Domains.IntervalDomain(
+        Geometry.YPoint(ylim[1]),
+        Geometry.YPoint(ylim[2]);
+        periodic = true,
+    )
+    plane = Domains.RectangleDomain(domain_x, domain_y)
+    context = ClimaComms.context()
+    mesh = Meshes.RectilinearMesh(plane, nelements[1], nelements[2])
+    grid_topology = Topologies.Topology2D(context, mesh)
+    quad = Spaces.Quadratures.GLL{npolynomial + 1}()
+    horzspace = Spaces.SpectralElementSpace2D(grid_topology, quad)
+
+
+    vertdomain = Domains.IntervalDomain(
+        Geometry.ZPoint(zlim[1]),
+        Geometry.ZPoint(zlim[2]);
+        boundary_names = (:bottom, :top),
+    )
+    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = nelements[3])
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+
+    hv_center_space =
+        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
+
+    surface_field = Fields.zeros(horzspace)
+
+    ψ = Fields.ones(hv_center_space)
+    value = surface_field # same type/instance of underlying space as horizontal space of \psi
+
+    gradc2f_no_bc = Operators.GradientC2F()
+    divf2c = Operators.DivergenceF2C(
+        top = Operators.SetValue(Geometry.WVector.(value)),
+        bottom = Operators.SetValue(Geometry.WVector(FT(0.0))),
+    )
+    @. divf2c(gradc2f_no_bc(ψ)) # runs
+
+    gradc2f = Operators.GradientC2F(;
+        top = Operators.SetValue(value),
+        bottom = Operators.SetValue{FT}(0.0),
+    )
+    gradc2f.(ψ) # fails
 end
