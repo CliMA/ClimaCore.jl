@@ -218,3 +218,5 @@ begin
 
     fig
 end
+
+close(reader)

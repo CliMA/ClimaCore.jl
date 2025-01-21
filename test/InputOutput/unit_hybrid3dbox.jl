@@ -122,10 +122,11 @@ end
 
     # write field vector to hdf5 file
     filename = tempname(pwd())
-    writer = InputOutput.HDF5Writer(filename, context)
-    InputOutput.write!(writer, "Y" => Y) # write field vector from hdf5 file
-    reader = InputOutput.HDF5Reader(filename, context)
-    restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
-    close(reader)
-    @test restart_Y == Y # test if restart is exact
+    InputOutput.HDF5Writer(filename, context) do writer
+        InputOutput.write!(writer, "Y" => Y) # write field vector from hdf5 file
+    end
+    InputOutput.HDF5Reader(filename, context) do reader
+        restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
+        @test restart_Y == Y # test if restart is exact
+    end
 end

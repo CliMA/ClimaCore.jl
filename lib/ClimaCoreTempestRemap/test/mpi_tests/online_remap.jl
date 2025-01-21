@@ -82,38 +82,39 @@ using Test
     # write distributed fields to hdf5 files
     field_ref_file = OUTPUT_DIR * "/field_ref.hdf5"
     ClimaComms.barrier(comms_ctx)
-    writer = ClimaCore.InputOutput.HDF5Writer(field_ref_file, comms_ctx)
-    ClimaCore.InputOutput.write!(writer, field_ref, "field_ref")
-    ClimaComms.barrier(comms_ctx)
-    close(writer)
+    ClimaCore.InputOutput.HDF5Writer(field_ref_file, comms_ctx) do writer
+        ClimaCore.InputOutput.write!(writer, field_ref, "field_ref")
+        ClimaComms.barrier(comms_ctx)
+    end
 
     field_o_distr_file = OUTPUT_DIR * "/field_o_distr.hdf5"
     ClimaComms.barrier(comms_ctx)
-    writer = ClimaCore.InputOutput.HDF5Writer(field_o_distr_file, comms_ctx)
-    ClimaCore.InputOutput.write!(writer, field_o_distr, "field_o_distr")
-    ClimaComms.barrier(comms_ctx)
-    close(writer)
+    ClimaCore.InputOutput.HDF5Writer(field_o_distr_file, comms_ctx) do writer
+        ClimaCore.InputOutput.write!(writer, field_o_distr, "field_o_distr")
+        ClimaComms.barrier(comms_ctx)
+    end
 
     ClimaComms.barrier(comms_ctx)
 
     # plot input data and remapped data for comparison
     if ClimaComms.iamroot(comms_ctx)
         # read distributed fields from hdf5 files
-        reader = ClimaCore.InputOutput.HDF5Reader(
+        ClimaCore.InputOutput.HDF5Reader(
             field_ref_file,
             comms_ctx_singleton,
-        )
-        restart_field_ref =
-            ClimaCore.InputOutput.read_field(reader, "field_ref")
-        close(reader)
+        ) do reader
+            restart_field_ref =
+                ClimaCore.InputOutput.read_field(reader, "field_ref")
+        end
 
-        reader = ClimaCore.InputOutput.HDF5Reader(
+        local restart_field_o_distr
+        ClimaCore.InputOutput.HDF5Reader(
             field_o_distr_file,
             comms_ctx_singleton,
-        )
-        restart_field_o_distr =
-            ClimaCore.InputOutput.read_field(reader, "field_o_distr")
-        close(reader)
+        ) do reader
+            restart_field_o_distr =
+                ClimaCore.InputOutput.read_field(reader, "field_o_distr")
+        end
 
         # plot source data, serial, analytical, and distributed solutions - for manual inspection
         # field_i_fig = plot(field_i_singleton, title = "source data")

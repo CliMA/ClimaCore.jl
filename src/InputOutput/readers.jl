@@ -32,6 +32,7 @@ using ..DataLayouts
 
 """
     HDF5Reader(filename::AbstractString[, context::ClimaComms.AbstractCommsContext])
+    HDF5Reader(::Function, filename::AbstractString[, context::ClimaComms.AbstractCommsContext])
 
 An `AbstractReader` for reading from HDF5 files created by [`HDF5Writer`](@ref).
 The reader object contains an internal cache of domains, meshes, topologies and
@@ -52,27 +53,27 @@ HDF5 library with MPI support.
 # Usage
 
 ```julia
-reader = InputOutput.HDF5Reader(filename)
-Y = read_field(reader, "Y")
-Y.c |> propertynames
-Y.f |> propertynames
-ρ_field = read_field(reader, "Y.c.ρ")
-w_field = read_field(reader, "Y.f.w")
-close(reader)
+InputOutput.HDF5Reader(filename) do reader
+    Y = read_field(reader, "Y")
+    Y.c |> propertynames
+    Y.f |> propertynames
+    ρ_field = read_field(reader, "Y.c.ρ")
+    w_field = read_field(reader, "Y.f.w")
+end
 ```
 
 To explore the contents of the `reader`, use either
 ```julia
 julia> reader |> propertynames
-``` 
-e.g, to explore the components of the `space`, 
+```
+e.g, to explore the components of the `space`,
 ```julia
 julia> reader.space_cache
 Dict{Any, Any} with 3 entries:
   "center_extruded_finite_difference_space" => CenterExtrudedFiniteDifferenceSpace:…
   "horizontal_space"                        => SpectralElementSpace2D:…
   "face_extruded_finite_difference_space"   => FaceExtrudedFiniteDifferenceSpace:…
-``` 
+```
 
 Once "unpacked" as shown above, `ClimaCorePlots` or `ClimaCoreMakie` can be used to visualise
 fields. `ClimaCoreTempestRemap` supports interpolation onto user-specified grids if necessary.
@@ -86,6 +87,19 @@ struct HDF5Reader{C <: ClimaComms.AbstractCommsContext}
     mesh_cache::Dict{Any, Any}
     topology_cache::Dict{Any, Any}
     grid_cache::Dict{Any, Any}
+end
+
+function HDF5Reader(
+    f::Function,
+    filename::AbstractString,
+    context::ClimaComms.AbstractCommsContext,
+)
+    reader = HDF5Reader(filename, context)
+    try
+        f(reader)
+    finally
+        Base.close(reader)
+    end
 end
 
 function HDF5Reader(

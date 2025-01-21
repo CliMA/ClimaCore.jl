@@ -80,13 +80,13 @@ end
         Y = Fields.FieldVector(; c = ᶜlocal_geometry, f = ᶠlocal_geometry)
 
         # write field vector to hdf5 file
-        writer = InputOutput.HDF5Writer(filename, comms_ctx)
-        InputOutput.write!(writer, Y, "Y")
-        close(writer)
+        InputOutput.HDF5Writer(filename, comms_ctx) do writer
+            InputOutput.write!(writer, Y, "Y")
+        end
 
-        reader = InputOutput.HDF5Reader(filename, comms_ctx)
-        restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
-        close(reader)
-        @test restart_Y == Y # test if restart is exact
+        InputOutput.HDF5Reader(filename, comms_ctx) do reader
+            restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
+            @test restart_Y == Y # test if restart is exact
+        end
     end
 end

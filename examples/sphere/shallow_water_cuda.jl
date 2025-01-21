@@ -560,10 +560,10 @@ function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
             @info "Saving state" day sec
             mkpath(output_dir)
             output_file = joinpath(output_dir, "day$day.$sec.hdf5")
-            hdfwriter = InputOutput.HDF5Writer(output_file, context)
-            InputOutput.HDF5.write_attribute(hdfwriter.file, "time", t)
-            InputOutput.write!(hdfwriter, "Y" => Y)
-            Base.close(hdfwriter)
+            InputOutput.HDF5Writer(output_file, context) do hdfwriter
+                InputOutput.HDF5.write_attribute(hdfwriter.file, "time", t)
+                InputOutput.write!(hdfwriter, "Y" => Y)
+            end
         end
         return nothing
     end
