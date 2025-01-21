@@ -4,7 +4,8 @@ using Revise; include(joinpath("test", "DataLayouts", "unit_non_extruded_broadca
 =#
 using Test
 using ClimaComms
-using LazyBroadcast: @lazy
+import Base.Broadcast: broadcasted, instantiate
+using ClimaCore: @lazy
 using ClimaCore.DataLayouts
 using ClimaCore.Geometry
 using ClimaCore: Geometry, Domains, Topologies, Meshes, Spaces, Fields
@@ -13,7 +14,7 @@ using ClimaCore: Geometry, Domains, Topologies, Meshes, Spaces, Fields
     a = [1, 2, 3]
     b = [10, 20, 30]
     bc = @lazy @. a + b
-    bc = Base.Broadcast.instantiate(bc)
+    bc = instantiate(bc)
     @test !DataLayouts.isascalar(bc)
     bc = DataLayouts.to_non_extruded_broadcasted(bc)
     @test !DataLayouts.isascalar(bc)
@@ -32,7 +33,7 @@ end
     data[] = 5.0
 
     bc = @lazy @. data + data
-    bc = Base.Broadcast.instantiate(bc)
+    bc = instantiate(bc)
     @test !DataLayouts.isascalar(bc)
     bc = DataLayouts.to_non_extruded_broadcasted(bc)
     @test !DataLayouts.isascalar(bc)
@@ -50,7 +51,7 @@ foo(a, b, c) = a
     data_empty = similar(data, typeof(()))
 
     bc = @lazy @. foo(data_empty, data_empty, ())
-    bc = Base.Broadcast.instantiate(bc)
+    bc = instantiate(bc)
     @test !DataLayouts.isascalar(bc)
     bc = DataLayouts.to_non_extruded_broadcasted(bc)
     @test !DataLayouts.isascalar(bc)
@@ -77,8 +78,8 @@ end
     @. f = FT(2.0)
     tup = (2.0,)
     @. f = tup
-    bc = @lazy @. f = FT(2.0)
-    bc = Base.Broadcast.instantiate(bc)
+    bc = broadcasted(identity, FT(2.0))
+    bc = instantiate(bc)
     bc = DataLayouts.to_non_extruded_broadcasted(bc)
     @test bc[] == 2.0
 end
@@ -86,6 +87,6 @@ end
 @testset "Conceptual test (to compare against Base)" begin
     foo(a, b) = a
     bc = @lazy @. foo((), ())
-    bc = Base.Broadcast.instantiate(bc)
+    bc = instantiate(bc)
     @test_throws BoundsError bc[]
 end

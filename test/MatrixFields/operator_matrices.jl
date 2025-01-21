@@ -6,6 +6,7 @@ using Revise; include(joinpath("test", "MatrixFields", "operator_matrices.jl"))
 import LinearAlgebra: I
 
 import ClimaCore.RecursiveApply: rzero
+import ClimaCore
 import ClimaCore.Operators:
     SetValue,
     SetGradient,
@@ -240,7 +241,7 @@ end
         test_field_broadcast(;
             test_name = "product of two lazy operator matrices",
             get_result,
-            set_result = @lazy(@. result = ᶜlbias_matrix() ⋅ ᶠinterp_matrix()),
+            set_result = @lazy(@. ᶜlbias_matrix() ⋅ ᶠinterp_matrix()),
         )
     end
 
@@ -252,10 +253,9 @@ end
                ᶠinterp_matrix()
         ),
         set_result = @lazy(
-            @. result =
-                ᶜflux_correct_matrix(ᶠuvw) ⋅ ᶜadvect_matrix(ᶠuvw) ⋅
-                ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠrbias_matrix() ⋅ ᶜlbias_matrix() ⋅
-                ᶠinterp_matrix()
+            @. ᶜflux_correct_matrix(ᶠuvw) ⋅ ᶜadvect_matrix(ᶠuvw) ⋅
+               ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠrbias_matrix() ⋅ ᶜlbias_matrix() ⋅
+               ᶠinterp_matrix()
         ),
     )
 
@@ -268,13 +268,12 @@ end
                ᶠinterp_matrix() ⋅ ᶜnested
         ),
         set_result = @lazy(
-            @. result =
-                ᶜflux_correct_matrix(ᶠuvw) ⋅ ᶜadvect_matrix(ᶠuvw) ⋅
-                ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠrbias_matrix() ⋅ ᶜlbias_matrix() ⋅
-                ᶠinterp_matrix() ⋅ ᶜnested
+            @. ᶜflux_correct_matrix(ᶠuvw) ⋅ ᶜadvect_matrix(ᶠuvw) ⋅
+               ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠrbias_matrix() ⋅ ᶜlbias_matrix() ⋅
+               ᶠinterp_matrix() ⋅ ᶜnested
         ),
         ref_set_result = @lazy(
-            @. result = ᶜflux_correct(
+            @. ᶜflux_correct(
                 ᶠuvw,
                 ᶜadvect(
                     ᶠuvw,
@@ -298,18 +297,17 @@ end
             )
         ),
         set_result = @lazy(
-            @. result =
-                ᶜflux_correct_matrix(ᶠuvw) ⋅ (
-                    ᶜadvect_matrix(ᶠuvw) ⋅ (
-                        ᶜwinterp_matrix(ᶠscalar) ⋅ (
-                            ᶠrbias_matrix() ⋅
-                            (ᶜlbias_matrix() ⋅ (ᶠinterp_matrix() ⋅ ᶜnested))
-                        )
+            @. ᶜflux_correct_matrix(ᶠuvw) ⋅ (
+                ᶜadvect_matrix(ᶠuvw) ⋅ (
+                    ᶜwinterp_matrix(ᶠscalar) ⋅ (
+                        ᶠrbias_matrix() ⋅
+                        (ᶜlbias_matrix() ⋅ (ᶠinterp_matrix() ⋅ ᶜnested))
                     )
                 )
+            )
         ),
         ref_set_result = @lazy(
-            @. result = ᶜflux_correct(
+            @. ᶜflux_correct(
                 ᶠuvw,
                 ᶜadvect(
                     ᶠuvw,
@@ -357,16 +355,14 @@ end
             )
         ),
         set_result = @lazy(
-            @. result =
-                ᶠupwind_matrix(ᶠuvw) ⋅ (
-                    ᶜdiv_matrix() ⋅ DiagonalMatrixRow(ᶠscalar) ⋅
-                    ᶠgrad_matrix() ⋅ (
-                        (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() *
-                        (c12_a,) +
-                        (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) /
-                        5
-                    ) - (2I,)
-                )
+            @. ᶠupwind_matrix(ᶠuvw) ⋅ (
+                ᶜdiv_matrix() ⋅ DiagonalMatrixRow(ᶠscalar) ⋅ ᶠgrad_matrix() ⋅
+                (
+                    (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() *
+                    (c12_a,) +
+                    (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
+                ) - (2I,)
+            )
         ),
     )
 
@@ -389,18 +385,16 @@ end
             ) ⋅ ᶜscalar
         ),
         set_result = @lazy(
-            @. result =
-                ᶠupwind_matrix(ᶠuvw) ⋅ (
-                    ᶜdiv_matrix() ⋅ DiagonalMatrixRow(ᶠscalar) ⋅
-                    ᶠgrad_matrix() ⋅ (
-                        (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() *
-                        (c12_a,) +
-                        (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) /
-                        5
-                    ) - (2I,)
-                ) ⋅ ᶜscalar
+            @. ᶠupwind_matrix(ᶠuvw) ⋅ (
+                ᶜdiv_matrix() ⋅ DiagonalMatrixRow(ᶠscalar) ⋅ ᶠgrad_matrix() ⋅
+                (
+                    (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() *
+                    (c12_a,) +
+                    (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
+                ) - (2I,)
+            ) ⋅ ᶜscalar
         ),
-        # ref_set_result = @lazy(@. result = ᶠupwind(
+        # ref_set_result = @lazy(@. ᶠupwind(
         #     ᶠuvw,
         #     ᶜdiv(
         #         ᶠscalar * ᶠgrad(

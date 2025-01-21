@@ -298,7 +298,7 @@ end;
 function custom_kernel_bc!(X, Y, us::AbstractUniversalSizes; printtb=false, use_pw=true, nreps = 1, bm=nothing, n_trials = 30)
     (; x1, x2, x3) = X
     (; y1) = Y
-    bc_base = @lazy @. y1 = myadd(x1, x2, x3)
+    bc_base = @lazy @. myadd(x1, x2, x3)
     bc = use_pw ? to_pointwise_bc(bc_base) : bc_base
     e = Inf
     if y1 isa Array
