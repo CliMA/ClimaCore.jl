@@ -60,6 +60,7 @@ UpwindBiasedProductC2F
 Upwind3rdOrderBiasedProductC2F
 FCTBorisBook
 FCTZalesak
+LinVanLeerC2F
 LeftBiasedC2F
 RightBiasedC2F
 LeftBiasedF2C
