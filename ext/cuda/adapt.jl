@@ -42,3 +42,14 @@ Adapt.adapt_structure(
     to::CUDA.KernelAdaptor,
     topology::Topologies.IntervalTopology,
 ) = Topologies.DeviceIntervalTopology(topology.boundaries)
+
+Adapt.adapt_structure(
+    to::CUDA.KernelAdaptor,
+    lim::Limiters.QuasiMonotoneLimiter,
+) = Limiters.QuasiMonotoneLimiter(
+    Adapt.adapt(to, lim.q_bounds),
+    Adapt.adapt(to, lim.q_bounds_nbr),
+    Adapt.adapt(to, lim.ghost_buffer),
+    lim.rtol,
+    Limiters.NoConvergenceStats(),
+)

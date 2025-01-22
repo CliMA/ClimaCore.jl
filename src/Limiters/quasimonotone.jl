@@ -4,6 +4,52 @@ import ..RecursiveApply: ⊠, ⊞, ⊟, rmap, rzero, rdiv
 import ..DataLayouts: slab_index
 import Adapt
 
+
+abstract type AbstractLimiterConvergenceStats end
+
+struct NoConvergenceStats <: AbstractLimiterConvergenceStats end
+
+Base.@kwdef mutable struct LimiterConvergenceStats{FT} <:
+                           AbstractLimiterConvergenceStats
+    n_times_unconverged::Int = 0
+    max_rel_err::FT = 0
+    min_tracer_mass::FT = Inf
+end
+
+print_convergence_stats(io::IO, lcs::AbstractLimiterConvergenceStats) =
+    print_convergence_stats(io, lcs)
+
+print_convergence_stats(io::IO, ::NoConvergenceStats) = nothing
+print_convergence_stats(io::IO, lcs::LimiterConvergenceStats) =
+    print(io, convergence_stats_str(lcs))
+
+function convergence_stats_str(lcs::LimiterConvergenceStats)
+    return string(
+        "Limiter convergence stats:\n",
+        "     `n_times_unconverged = $(lcs.n_times_unconverged)`\n",
+        "     `max_rel_err = $(lcs.max_rel_err)`\n",
+        "     `min_tracer_mass = $(lcs.min_tracer_mass)`\n",
+    )
+end
+
+function update_convergence_stats!(
+    lcs::LimiterConvergenceStats,
+    max_rel_err,
+    min_tracer_mass,
+)
+    lcs.max_rel_err = max(lcs.max_rel_err, max_rel_err)
+    lcs.min_tracer_mass = min(lcs.min_tracer_mass, min_tracer_mass)
+    lcs.n_times_unconverged += 1
+    return nothing
+end
+
+function reset_convergence_stats!(lcs::LimiterConvergenceStats)
+    lcs.max_rel_err = 0
+    lcs.min_tracer_mass = Inf
+    lcs.n_times_unconverged = 0
+    return nothing
+end
+
 """
     QuasiMonotoneLimiter
 
@@ -28,9 +74,18 @@ a few iterations (until `abs(Δtracer_mass) <= rtol * tracer_mass`).
 
 # Constructor
 
-    limiter = QuasiMonotoneLimiter(ρq::Field; rtol = eps(eltype(parent(ρq))))
+    limiter = QuasiMonotoneLimiter(
+        ρq::Field;
+        rtol = eps(eltype(parent(ρq))),
+        convergence_stats = LimiterConvergenceStats()
+    )
 
-Creates a limiter instance for the field `ρq` with relative tolerance `rtol`.
+Creates a limiter instance for the field `ρq` with relative tolerance `rtol`,
+and `convergence_stats`, which collects statistics in `apply_limiter!`
+(e.g., number of times that convergence is met or not). Users can call
+
+`Limiters.print_convergence_stats(::QuasiMonotoneLimiter)` to print the
+convergence stats.
 
 # Usage
 
@@ -42,7 +97,7 @@ Then call [`apply_limiter!`](@ref) on the output fields:
 
     apply_limiter!(ρq, ρ, limiter)
 """
-struct QuasiMonotoneLimiter{D, G, FT}
+struct QuasiMonotoneLimiter{D, G, FT, CS}
     "contains the min and max of each element"
     q_bounds::D
     "contains the min and max of each element and its neighbors"
@@ -51,20 +106,36 @@ struct QuasiMonotoneLimiter{D, G, FT}
     ghost_buffer::G
     "relative tolerance for tracer mass change"
     rtol::FT
+    "Convergence statistics"
+    convergence_stats::CS
 end
+
+print_convergence_stats(lim::QuasiMonotoneLimiter) =
+    print_convergence_stats(stdout, lim.convergence_stats)
 
 Adapt.adapt_structure(to, lim::QuasiMonotoneLimiter) = QuasiMonotoneLimiter(
     Adapt.adapt(to, lim.q_bounds),
     Adapt.adapt(to, lim.q_bounds_nbr),
     Adapt.adapt(to, lim.ghost_buffer),
     lim.rtol,
+    Adapt.adapt(to, lim.convergence_stats),
 )
 
-function QuasiMonotoneLimiter(ρq::Fields.Field; rtol = eps(eltype(parent(ρq))))
+function QuasiMonotoneLimiter(
+    ρq::Fields.Field;
+    rtol = eps(eltype(parent(ρq))),
+    convergence_stats = LimiterConvergenceStats{eltype(parent(ρq))}(),
+)
     q_bounds = make_q_bounds(Fields.field_values(ρq))
     ghost_buffer =
         Topologies.create_ghost_buffer(q_bounds, Spaces.topology(axes(ρq)))
-    return QuasiMonotoneLimiter(q_bounds, similar(q_bounds), ghost_buffer, rtol)
+    return QuasiMonotoneLimiter(
+        q_bounds,
+        similar(q_bounds),
+        ghost_buffer,
+        rtol,
+        convergence_stats,
+    )
 end
 
 function make_q_bounds(
@@ -277,14 +348,16 @@ converge for any element, a warning is issued.
 apply_limiter!(
     ρq::Fields.Field,
     ρ::Fields.Field,
-    limiter::QuasiMonotoneLimiter,
-) = apply_limiter!(ρq, ρ, limiter, ClimaComms.device(ρ))
+    limiter::QuasiMonotoneLimiter;
+    warn::Bool = true,
+) = apply_limiter!(ρq, ρ, limiter, ClimaComms.device(ρ); warn)
 
 function apply_limiter!(
     ρq::Fields.Field,
     ρ::Fields.Field,
     limiter::QuasiMonotoneLimiter,
-    dev::ClimaComms.AbstractCPUDevice,
+    dev::ClimaComms.AbstractCPUDevice;
+    warn::Bool = true,
 )
     (; q_bounds_nbr, rtol) = limiter
 
@@ -294,6 +367,7 @@ function apply_limiter!(
 
     converged = true
     max_rel_err = zero(rtol)
+    min_tracer_mass = Inf
     (_, _, _, Nv, Nh) = size(ρq_data)
     for h in 1:Nh
         for v in 1:Nv
@@ -301,14 +375,23 @@ function apply_limiter!(
             slab_ρq = slab(ρq_data, v, h)
             slab_WJ = slab(WJ_data, v, h)
             slab_q_bounds = slab(q_bounds_nbr, v, h)
-            (_converged, rel_err) =
+            (_converged, slab_max_rel_err, slab_min_tracer_mass) =
                 apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
             converged &= _converged
-            max_rel_err = max(rel_err, max_rel_err)
+            max_rel_err = max(slab_max_rel_err, max_rel_err)
+            min_tracer_mass = max(min_tracer_mass, slab_min_tracer_mass)
         end
     end
-    converged ||
-        @warn "Limiter failed to converge with rtol = $rtol, `max_rel_err`=$max_rel_err"
+    if !converged
+        lcs = limiter.convergence_stats
+        update_convergence_stats!(lcs, max_rel_err, min_tracer_mass)
+    end
+    if warn
+        lcs = limiter.convergence_stats
+        msg = convergence_stats_str(lcs)
+        msg *= "Use `warn = false` in `Limiters.apply_limiter!` to suppress this message.\n"
+        @warn msg
+    end
 
     call_post_op_callback() && post_op_callback(ρq, ρq, ρ, limiter, dev)
     return ρq
@@ -331,9 +414,10 @@ function apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
     array_ρ = parent(slab_ρ)
     array_w = parent(slab_WJ)
     array_q_bounds = parent(slab_q_bounds)
+    FT = eltype(array_ρq)
 
     # 1) compute ∫ρ
-    total_mass = zero(eltype(array_ρ))
+    total_mass = zero(FT)
     for j in 1:Nj, i in 1:Ni
         total_mass += array_ρ[i, j, 1] * array_w[i, j, 1]
     end
@@ -342,6 +426,8 @@ function apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
 
     converged = true
     max_rel_err = zero(rtol)
+    min_tracer_mass = FT(Inf)
+    rel_err = zero(FT)
     for f in 1:Nf
         q_min = array_q_bounds[1, f]
         q_max = array_q_bounds[2, f]
@@ -380,6 +466,7 @@ function apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
 
             rel_err = abs(Δtracer_mass) / abs(tracer_mass)
             max_rel_err = max(max_rel_err, rel_err)
+            min_tracer_mass = min(min_tracer_mass, abs(tracer_mass))
             if rel_err <= rtol
                 break
             end
@@ -427,5 +514,5 @@ function apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
             end
         end
     end
-    return (converged, max_rel_err)
+    return (converged, max_rel_err, min_tracer_mass)
 end

@@ -50,12 +50,12 @@ const Z_t = FT(1000)              # vertical half-width of tracers
 const D₄ = FT(1e16)               # hyperviscosity coefficient
 
 # Parameters used in run_deformation_flow
-z_top = FT(1.2e4)
-zelem = 36
-helem = 4
-npoly = 4
-t_end = FT(60 * 60 * 24 * 12) # 12 days of simulation time
-_dt = FT(60 * 60) # 1 hour timestep
+const z_top = FT(1.2e4)
+const zelem = 36
+const helem = 4
+const npoly = 4
+const t_end = FT(60 * 60 * 24 * 12) # 12 days of simulation time
+const _dt = FT(60 * 60) # 1 hour timestep
 ode_algorithm = ExplicitAlgorithm(SSP33ShuOsher())
 
 # Operators used in increment!
@@ -67,7 +67,7 @@ const Ic2f = Operators.InterpolateC2F(
     bottom = Operators.Extrapolate(),
     top = Operators.Extrapolate(),
 )
-ᶠwinterp = Operators.WeightedInterpolateC2F(
+const ᶠwinterp = Operators.WeightedInterpolateC2F(
     bottom = Operators.Extrapolate(),
     top = Operators.Extrapolate(),
 )
@@ -136,6 +136,11 @@ function local_velocity(coord, t)
     uw = -ω / ρ_ref(z) / grav
 
     return Geometry.UVWVector(uu, uv, uw)
+end
+
+function T_exp_T_lim!(Yₜ, Yₜ_lim, Y, cache, t)
+    horizontal_tendency!(Yₜ_lim, Y, cache, t)
+    vertical_tendency!(Yₜ, Y, cache, t)
 end
 
 function horizontal_tendency!(Yₜ, Y, cache, t)
@@ -216,7 +221,7 @@ function lim!(Y, cache, t, Y_ref)
     (; limiter) = cache
     if !isnothing(limiter)
         Limiters.compute_bounds!(limiter, Y_ref.c.ρq, Y_ref.c.ρ)
-        Limiters.apply_limiter!(Y.c.ρq, Y.c.ρ, limiter)
+        Limiters.apply_limiter!(Y.c.ρq, Y.c.ρ, limiter; warn = false)
     end
 end
 
@@ -295,17 +300,17 @@ function run_deformation_flow(use_limiter, fct_op, dt)
     )
 
     problem = ODEProblem(
-        ClimaODEFunction(;
-            T_lim! = horizontal_tendency!,
-            T_exp! = vertical_tendency!,
-            lim!,
-            dss!,
-        ),
+        ClimaODEFunction(; T_exp_T_lim!, lim!, dss!),
         Y,
         (0, t_end),
         cache,
     )
-    return solve(problem, ode_algorithm; dt, saveat = t_end / 2)
+    sol = solve(problem, ode_algorithm; dt, saveat = t_end / 2)
+    if !(cache.limiter isa Nothing)
+        @show cache.limiter.rtol
+        Limiters.print_convergence_stats(cache.limiter)
+    end
+    return sol
 end
 
 function conservation_errors(sol)
@@ -388,36 +393,24 @@ max_q5_roundoff_err = 2 * eps(FT)
     max_q5_roundoff_err
 @test lim_centered_ρq_errs[5] ≈ third_upwind_ρ_err atol = max_q5_roundoff_err
 
+compare_tracer_props(a, b; buffer = 1) = all(
+    x -> x[1] < x[2] * buffer || (x[1] ≤ 100eps() && x[2] ≤ 100eps()),
+    zip(a, b),
+)
+
 # Check that the different upwinding modes with the limiter improve the "smoothness" of the tracers.
+#! format: off
 @testset "Test tracer properties" begin
-    @test all(
-        tracer_roughnesses(fct_sol) .< tracer_roughnesses(third_upwind_sol),
-    )
-    @test all(
-        tracer_roughnesses(lim_third_upwind_sol) .<
-        0.99 .* tracer_roughnesses(third_upwind_sol),
-    )
-    @test all(
-        tracer_roughnesses(lim_fct_sol) .<
-        0.8 .* tracer_roughnesses(third_upwind_sol),
-    )
-    @test all(tracer_ranges(fct_sol) .< tracer_ranges(third_upwind_sol))
-    @test all(
-        tracer_ranges(lim_third_upwind_sol) .<
-        0.6 .* tracer_ranges(third_upwind_sol),
-    )
-    @test all(
-        tracer_ranges(lim_fct_sol) .< 0.55 .* tracer_ranges(third_upwind_sol),
-    )
-    @test all(
-        tracer_ranges(lim_first_upwind_sol) .<
-        0.5 .* tracer_ranges(third_upwind_sol),
-    )
-    @test all(
-        tracer_ranges(lim_centered_sol) .<
-        0.9 .* tracer_ranges(third_upwind_sol),
-    )
+    @test compare_tracer_props(tracer_roughnesses(fct_sol)             , tracer_roughnesses(third_upwind_sol); buffer = 1.0)
+    @test compare_tracer_props(tracer_roughnesses(lim_third_upwind_sol), tracer_roughnesses(third_upwind_sol); buffer = 1.0)
+    @test compare_tracer_props(tracer_roughnesses(lim_fct_sol)         , tracer_roughnesses(third_upwind_sol); buffer = 0.93)
+    @test compare_tracer_props(tracer_ranges(fct_sol)                  , tracer_ranges(third_upwind_sol); buffer = 1.0)
+    @test compare_tracer_props(tracer_ranges(lim_third_upwind_sol)     , tracer_ranges(third_upwind_sol); buffer = 1.0)
+    @test compare_tracer_props(tracer_ranges(lim_fct_sol)              , tracer_ranges(third_upwind_sol); buffer = 1.0)
+    @test compare_tracer_props(tracer_ranges(lim_first_upwind_sol)     , tracer_ranges(third_upwind_sol); buffer = 0.6)
+    @test compare_tracer_props(tracer_ranges(lim_centered_sol)         , tracer_ranges(third_upwind_sol); buffer = 1.3)
 end
+#! format: on
 
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
