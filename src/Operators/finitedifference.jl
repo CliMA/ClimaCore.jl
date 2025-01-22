@@ -2845,7 +2845,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
 )
     @assert idx == right_face_boundary_idx(space)
     Geometry.Covariant3Vector(2) ⊗ (
-        getidx(space, bc.val, loc, nothing, idx) ⊟
+        getidx(space, bc.val, loc, nothing, hidx) ⊟
         getidx(space, arg, loc, idx - half, hidx)
     )
 end
