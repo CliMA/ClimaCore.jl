@@ -1,7 +1,12 @@
 abstract type AbstractWriter end
 
 """
-    HDF5Writer(filename::AbstractString[, context::ClimaComms.AbstractCommsContext];
+    HDF5Writer(filename::AbstractString[,
+               context::ClimaComms.AbstractCommsContext];
+               overwrite::Bool = true)
+    HDF5Writer(::Function,
+               filename::AbstractString[,
+               context::ClimaComms.AbstractCommsContext];
                overwrite::Bool = true)
 
 An `AbstractWriter` for writing to HDF5-formatted files using the ClimaCore
@@ -31,15 +36,30 @@ The writer overwrites or appends to existing files depending on the value of the
 # Usage
 
 ```julia
-writer = InputOutput.HDF5Writer(filename)
-InputOutput.write!(writer, Y, "Y")
-close(writer)
+InputOutput.HDF5Writer(filename) do writer
+    InputOutput.write!(writer, Y, "Y")
+end
 ```
 """
 struct HDF5Writer{C <: ClimaComms.AbstractCommsContext} <: AbstractWriter
     file::HDF5.File
     context::C
     cache::Dict{String, String}
+end
+
+function HDF5Writer(
+    f::Function,
+    filename::AbstractString,
+    context::ClimaComms.AbstractCommsContext;
+    overwrite::Bool = true,
+)
+
+    writer = HDF5Writer(filename, context; overwrite)
+    try
+        f(writer)
+    finally
+        Base.close(writer)
+    end
 end
 
 function HDF5Writer(

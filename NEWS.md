@@ -5,6 +5,7 @@ main
 -------
 
  - Added support `data2array` for `DataF` (i.e., `PointField`s). PR [2143](https://github.com/CliMA/ClimaCore.jl/pull/2143).
+ - `HDF5Reader` / `HDF5Writer` now support `do`-syntax. PR [2147](https://github.com/CliMA/ClimaCore.jl/pull/2147).
 
 v0.14.22
 -------

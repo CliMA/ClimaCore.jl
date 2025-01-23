@@ -81,17 +81,17 @@ end
 
         # write field vector to hdf5 file
         filename = tempname(pwd())
-        writer = InputOutput.HDF5Writer(filename, context)
-        InputOutput.write!(writer, "Y" => Y) # write field vector from hdf5 file
-        close(writer)
-        reader = InputOutput.HDF5Reader(filename, context)
-        restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
-        close(reader)
-        ClimaComms.allowscalar(device) do
-            @test restart_Y == Y # test if restart is exact
+        InputOutput.HDF5Writer(filename, context) do writer
+            InputOutput.write!(writer, "Y" => Y) # write field vector from hdf5 file
         end
-        ClimaComms.allowscalar(device) do
-            @test axes(restart_Y) == axes(Y) # test if restart is exact for space
+        InputOutput.HDF5Reader(filename, context) do reader
+            restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
+            ClimaComms.allowscalar(device) do
+                @test restart_Y == Y # test if restart is exact
+            end
+            ClimaComms.allowscalar(device) do
+                @test axes(restart_Y) == axes(Y) # test if restart is exact for space
+            end
         end
     end
 end

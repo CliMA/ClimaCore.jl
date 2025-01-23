@@ -39,12 +39,12 @@ end
     Y = ClimaCore.Fields.FieldVector(; c = center_field, f = face_field)
 
     # write field vector to hdf5 file
-    writer = ClimaCore.InputOutput.HDF5Writer(filename, comms_ctx)
-    ClimaCore.InputOutput.write!(writer, Y, "Y")
-    close(writer)
+    ClimaCore.InputOutput.HDF5Writer(filename, comms_ctx) do writer
+        ClimaCore.InputOutput.write!(writer, Y, "Y")
+    end
 
-    reader = ClimaCore.InputOutput.HDF5Reader(filename, comms_ctx)
-    restart_Y = ClimaCore.InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
-    close(reader)
-    @test restart_Y == Y # test if restart is exact
+    ClimaCore.InputOutput.HDF5Reader(filename, comms_ctx) do reader
+        restart_Y = ClimaCore.InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
+        @test restart_Y == Y # test if restart is exact
+    end
 end
