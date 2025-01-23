@@ -772,11 +772,12 @@ function _collect_and_return_interpolated_values!(
     # _collect_interpolated_values! function
     ClimaComms.barrier(remapper.comms_ctx)
 
-    ret = ClimaComms.reduce(
+    ret = ClimaComms.sync(ClimaComms.device(remapper.comms_ctx)) do
+        ClimaComms.reduce(
         remapper.comms_ctx,
         remapper._interpolated_values[remapper.colons..., 1:num_fields],
         +,
-    )
+    ) end
 
     ClimaComms.barrier(remapper.comms_ctx)
     return ret
@@ -793,24 +794,27 @@ function _collect_interpolated_values!(
     ClimaComms.barrier(remapper.comms_ctx)
 
     if only_one_field
-        ClimaComms.reduce!(
+        ClimaComms.sync(ClimaComms.device(remapper.comms_ctx)) do
+            ClimaComms.reduce!(
             remapper.comms_ctx,
             remapper._interpolated_values[remapper.colons..., begin],
             dest,
             +,
-        )
+        ) end
         ClimaComms.barrier(remapper.comms_ctx)
         return nothing
     end
 
     num_fields = 1 + index_field_end - index_field_begin
 
-    ClimaComms.reduce!(
+    ClimaComms.sync(ClimaComms.device(remapper.comms_ctx)) do
+        ClimaComms.reduce!(
         remapper.comms_ctx,
         view(remapper._interpolated_values, remapper.colons..., 1:num_fields),
         view(dest, remapper.colons..., index_field_begin:index_field_end),
         +,
-    )
+    ) end
+
     ClimaComms.barrier(remapper.comms_ctx)
 
     return nothing
