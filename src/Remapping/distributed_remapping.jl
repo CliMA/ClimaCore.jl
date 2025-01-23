@@ -906,6 +906,8 @@ function interpolate(remapper::Remapper, fields)
 
     cat_fn = (l...) -> cat(l..., dims = length(remapper.colons) + 1)
 
+    tosync = ClimaComms.iamroot(remapper.comms_ctx) ? ClimaComms.array_type(remapper.space) : identity
+
     interpolated_values = mapreduce(cat_fn, index_ranges) do range
         num_fields = length(range)
 
@@ -930,7 +932,7 @@ function interpolate(remapper::Remapper, fields)
         # obtain the final answer. Only the root will contain something useful.
         ret = _collect_and_return_interpolated_values!(remapper, num_fields)
         return ret
-    end
+    end |> tosync
 
     # Non-root processes just return nothing (but only after having performed the reduction)
     ClimaComms.iamroot(remapper.comms_ctx) || return nothing
