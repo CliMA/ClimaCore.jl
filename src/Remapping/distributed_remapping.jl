@@ -919,7 +919,8 @@ function interpolate(remapper::Remapper, fields)
 
         # Finally, we have to send all the _interpolated_values to root and sum them up to
         # obtain the final answer. Only the root will contain something useful.
-        return _collect_and_return_interpolated_values!(remapper, num_fields)
+        ret = _collect_and_return_interpolated_values!(remapper, num_fields)
+        return ret
     end
 
     # Non-root processes
