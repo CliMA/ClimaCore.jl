@@ -760,6 +760,18 @@ function _collect_and_return_interpolated_values!(
     remapper::Remapper,
     num_fields::Int,
 )
+    # NOTE: (GB) I am not entirely sure why a barrier is needed here. I expect
+    # ClimaComms.reduce to be a blocking operation, essentially implying a barrier. This
+    # seems to cause problems on certain machines, and it seems that the order of operation
+    # is not what one would expect with a blocking reducing. In any case, the correct
+    # behavior is to ensure that the data is fresh and reduce is correctly called with the
+    # consistent data. If reduce implies a barrier, this will add negligible overhead. If it
+    # doesn't, this will ensure correctness.
+    #
+    # If you modify this comment or function, also have look at the
+    # _collect_interpolated_values! function
+    ClimaComms.barrier(remapper.comms_ctx)
+
     return ClimaComms.reduce(
         remapper.comms_ctx,
         remapper._interpolated_values[remapper.colons..., 1:num_fields],
@@ -774,6 +786,9 @@ function _collect_interpolated_values!(
     index_field_end::Int;
     only_one_field,
 )
+    # NOTE: See comment in _collect_and_return_interpolated_values! regarding barrier
+    ClimaComms.barrier(remapper.comms_ctx)
+
     if only_one_field
         ClimaComms.reduce!(
             remapper.comms_ctx,
