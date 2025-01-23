@@ -932,8 +932,8 @@ function interpolate(remapper::Remapper, fields)
         return ret
     end
 
-    # Non-root processes
-    isnothing(interpolated_values) && return nothing
+    # Non-root processes just return nothing (but only after having performed the reduction)
+    ClimaComms.iamroot(remapper.comms_ctx) || return nothing
 
     return only_one_field ? interpolated_values[remapper.colons..., begin] :
            interpolated_values
