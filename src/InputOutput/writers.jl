@@ -425,14 +425,17 @@ end
 function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
     values = Fields.field_values(field)
     space = axes(field)
-    staggering = Spaces.staggering(space)
-    grid = Spaces.grid(space)
-    grid_name = write!(writer, grid)
-
     array = parent(field)
-    topology = Spaces.topology(space)
     nd = ndims(array)
-    if topology isa Topologies.Topology2D &&
+    # These functions can be defined for PointSpaces by returning nothing?
+    if !(space isa Spaces.AbstractPointSpace)
+        staggering = Spaces.staggering(space)
+        topology = Spaces.topology(space)
+        grid = Spaces.grid(space)
+        grid_name = write!(writer, grid)
+    end
+
+    if !(space isa Spaces.AbstractPointSpace) && topology isa Topologies.Topology2D &&
        !(writer.context isa ClimaComms.SingletonCommsContext)
         nelems = Topologies.nelems(topology)
         h_dim = DataLayouts.h_dim(DataLayouts.singleton(values))
@@ -463,13 +466,15 @@ function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
         string(nameof(typeof(Fields.field_values(field)))),
     )
     write_attribute(dataset, "value_type", string(eltype(field)))
-    write_attribute(dataset, "grid", grid_name)
-    if !isnothing(staggering)
-        write_attribute(
-            dataset,
-            "staggering",
-            string(nameof(typeof(staggering))),
-        )
+    if !(space isa Spaces.AbstractPointSpace)
+        write_attribute(dataset, "grid", grid_name)
+        if !isnothing(staggering)
+            write_attribute(
+                dataset,
+                "staggering",
+                string(nameof(typeof(staggering))),
+            )
+        end
     end
 
     return name
