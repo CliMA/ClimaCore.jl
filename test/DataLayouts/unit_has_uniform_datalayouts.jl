@@ -41,6 +41,5 @@ Random.seed!(1234)
     # This is not a valid broadcast expression,
     # but these two datalayouts can exist in a
     # valid broadcast expression (e.g., interpolation).
-    bc = @lazy @. data_VIJFHᶜ + data_VIJFHᶠ
-    @test DataLayouts.has_uniform_datalayouts(bc)
+    @test_throws DimensionMismatch @lazy @. data_VIJFHᶜ + data_VIJFHᶠ
 end
