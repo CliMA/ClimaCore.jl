@@ -15,7 +15,7 @@ using ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore: Domains, Meshes, Topologies, Spaces, Fields, Operators
 import ClimaCore.DataLayouts: get_struct
-using ClimaCore: @lazy
+import LazyBroadcast: @lazy
 
 Random.seed!(1234)
 

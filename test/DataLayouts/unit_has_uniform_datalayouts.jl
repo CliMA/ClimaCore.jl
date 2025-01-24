@@ -6,7 +6,7 @@ using Test
 using ClimaCore.DataLayouts
 import ClimaCore.Geometry
 import ClimaComms
-import ClimaCore: @lazy
+import LazyBroadcast: @lazy
 using StaticArrays
 import Random
 Random.seed!(1234)
