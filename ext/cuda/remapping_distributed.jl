@@ -4,7 +4,6 @@ import CUDA
 using CUDA: @cuda
 import ClimaCore.Remapping: _set_interpolated_values_device!
 
-
 function _set_interpolated_values_device!(
     out::AbstractArray,
     fields::AbstractArray{<:Fields.Field},
@@ -21,7 +20,12 @@ function _set_interpolated_values_device!(
     purely_vertical_space = isnothing(interpolation_matrix)
     num_horizontal_points =
         purely_vertical_space ? 1 : prod(size(local_horiz_indices))
-    num_points = num_horizontal_points * length(vert_interpolation_weights)
+    num_vertical_points = length(vert_interpolation_weights)
+
+    # We parallelize over horizontal points, unless the space is purely vertical
+    # (in which case we parallelize over vertical points)
+    num_points =
+        purely_vertical_space ? num_vertical_points : num_horizontal_points
     max_threads = 256
     nthreads = min(num_points, max_threads)
     nblocks = cld(num_points, nthreads)
@@ -67,32 +71,26 @@ function set_interpolated_values_kernel!(
     num_fields = length(field_values)
 
     hindex = (blockIdx().x - Int32(1)) * blockDim().x + threadIdx().x
-    vindex = (blockIdx().y - Int32(1)) * blockDim().y + threadIdx().y
-    findex = (blockIdx().z - Int32(1)) * blockDim().z + threadIdx().z
 
     totalThreadsX = gridDim().x * blockDim().x
-    totalThreadsY = gridDim().y * blockDim().y
-    totalThreadsZ = gridDim().z * blockDim().z
 
     _, Nq = size(I1)
     CI = CartesianIndex
-    for i in hindex:totalThreadsX:num_horiz
-        h = local_horiz_indices[i]
-        for j in vindex:totalThreadsY:num_vert
-            v_lo, v_hi = vert_bounding_indices[j]
-            A, B = vert_interpolation_weights[j]
-            for k in findex:totalThreadsZ:num_fields
-                if i ≤ num_horiz && j ≤ num_vert && k ≤ num_fields
-                    out[i, j, k] = 0
-                    for t in 1:Nq, s in 1:Nq
-                        out[i, j, k] +=
-                            I1[i, t] *
-                            I2[i, s] *
-                            (
-                                A * field_values[k][CI(t, s, 1, v_lo, h)] +
-                                B * field_values[k][CI(t, s, 1, v_hi, h)]
-                            )
-                    end
+    for k in 1:num_fields
+        for i in hindex:totalThreadsX:num_horiz
+            h = local_horiz_indices[i]
+            for j in 1:num_vert
+                v_lo, v_hi = vert_bounding_indices[j]
+                A, B = vert_interpolation_weights[j]
+                out[i, j, k] = 0
+                for t in 1:Nq, s in 1:Nq
+                    out[i, j, k] +=
+                        I1[i, t] *
+                        I2[i, s] *
+                        (
+                            A * field_values[k][CI(t, s, 1, v_lo, h)] +
+                            B * field_values[k][CI(t, s, 1, v_hi, h)]
+                        )
                 end
             end
         end
@@ -115,32 +113,26 @@ function set_interpolated_values_kernel!(
     num_fields = length(field_values)
 
     hindex = (blockIdx().x - Int32(1)) * blockDim().x + threadIdx().x
-    vindex = (blockIdx().y - Int32(1)) * blockDim().y + threadIdx().y
-    findex = (blockIdx().z - Int32(1)) * blockDim().z + threadIdx().z
 
     totalThreadsX = gridDim().x * blockDim().x
-    totalThreadsY = gridDim().y * blockDim().y
-    totalThreadsZ = gridDim().z * blockDim().z
 
     _, Nq = size(I)
     CI = CartesianIndex
-    for i in hindex:totalThreadsX:num_horiz
-        h = local_horiz_indices[i]
-        for j in vindex:totalThreadsY:num_vert
-            v_lo, v_hi = vert_bounding_indices[j]
-            A, B = vert_interpolation_weights[j]
-            for k in findex:totalThreadsZ:num_fields
-                if i ≤ num_horiz && j ≤ num_vert && k ≤ num_fields
-                    out[i, j, k] = 0
-                    for t in 1:Nq
-                        out[i, j, k] +=
-                            I[i, t] *
-                            I[i, s] *
-                            (
-                                A * field_values[k][CI(t, 1, 1, v_lo, h)] +
-                                B * field_values[k][CI(t, 1, 1, v_hi, h)]
-                            )
-                    end
+    for k in 1:num_fields
+        for i in hindex:totalThreadsX:num_horiz
+            h = local_horiz_indices[i]
+            for j in 1:num_vert
+                v_lo, v_hi = vert_bounding_indices[j]
+                A, B = vert_interpolation_weights[j]
+                out[i, j, k] = 0
+                for t in 1:Nq
+                    out[i, j, k] +=
+                        I[i, t] *
+                        I[i, s] *
+                        (
+                            A * field_values[k][CI(t, 1, 1, v_lo, h)] +
+                            B * field_values[k][CI(t, 1, 1, v_hi, h)]
+                        )
                 end
             end
         end
@@ -161,23 +153,19 @@ function set_interpolated_values_kernel!(
     num_fields = length(field_values)
     num_vert = length(vert_bounding_indices)
 
-    vindex = (blockIdx().y - Int32(1)) * blockDim().y + threadIdx().y
-    findex = (blockIdx().z - Int32(1)) * blockDim().z + threadIdx().z
+    vindex = (blockIdx().x - Int32(1)) * blockDim().x + threadIdx().x
 
-    totalThreadsY = gridDim().y * blockDim().y
-    totalThreadsZ = gridDim().z * blockDim().z
+    totalThreadsY = gridDim().x * blockDim().x
 
     CI = CartesianIndex
-    for j in vindex:totalThreadsY:num_vert
-        v_lo, v_hi = vert_bounding_indices[j]
-        A, B = vert_interpolation_weights[j]
-        for k in findex:totalThreadsZ:num_fields
-            if j ≤ num_vert && k ≤ num_fields
-                out[j, k] = (
-                    A * field_values[k][CI(1, 1, 1, v_lo, 1)] +
-                    B * field_values[k][CI(1, 1, 1, v_hi, 1)]
-                )
-            end
+    for k in 1:num_fields
+        for j in vindex:totalThreadsY:num_vert
+            v_lo, v_hi = vert_bounding_indices[j]
+            A, B = vert_interpolation_weights[j]
+            out[j, k] = (
+                A * field_values[k][CI(1, 1, 1, v_lo, 1)] +
+                B * field_values[k][CI(1, 1, 1, v_hi, 1)]
+            )
         end
     end
     return nothing
@@ -231,24 +219,20 @@ function set_interpolated_values_kernel!(
     num_fields = length(field_values)
 
     hindex = (blockIdx().x - Int32(1)) * blockDim().x + threadIdx().x
-    findex = (blockIdx().z - Int32(1)) * blockDim().z + threadIdx().z
 
     totalThreadsX = gridDim().x * blockDim().x
-    totalThreadsZ = gridDim().z * blockDim().z
 
     _, Nq = size(I1)
 
-    for i in hindex:totalThreadsX:num_horiz
-        h = local_horiz_indices[i]
-        for k in findex:totalThreadsZ:num_fields
-            if i ≤ num_horiz && k ≤ num_fields
-                out[i, k] = 0
-                for t in 1:Nq, s in 1:Nq
-                    out[i, k] +=
-                        I1[i, t] *
-                        I2[i, s] *
-                        field_values[k][CartesianIndex(t, s, 1, 1, h)]
-                end
+    for k in 1:num_fields
+        for i in hindex:totalThreadsX:num_horiz
+            h = local_horiz_indices[i]
+            out[i, k] = 0
+            for t in 1:Nq, s in 1:Nq
+                out[i, k] +=
+                    I1[i, t] *
+                    I2[i, s] *
+                    field_values[k][CartesianIndex(t, s, 1, 1, h)]
             end
         end
     end
@@ -266,22 +250,18 @@ function set_interpolated_values_kernel!(
     num_fields = length(field_values)
 
     hindex = (blockIdx().x - Int32(1)) * blockDim().x + threadIdx().x
-    findex = (blockIdx().z - Int32(1)) * blockDim().z + threadIdx().z
 
     totalThreadsX = gridDim().x * blockDim().x
-    totalThreadsZ = gridDim().z * blockDim().z
 
     _, Nq = size(I)
 
-    for i in hindex:totalThreadsX:num_horiz
-        h = local_horiz_indices[i]
-        for k in findex:totalThreadsZ:num_fields
-            if i ≤ num_horiz && k ≤ num_fields
-                out[i, k] = 0
-                for t in 1:Nq, s in 1:Nq
-                    out[i, k] +=
-                        I[i, i] * field_values[k][CartesianIndex(t, 1, 1, 1, h)]
-                end
+    for k in 1:num_fields
+        for i in hindex:totalThreadsX:num_horiz
+            h = local_horiz_indices[i]
+            out[i, k] = 0
+            for t in 1:Nq, s in 1:Nq
+                out[i, k] +=
+                    I[i, i] * field_values[k][CartesianIndex(t, 1, 1, 1, h)]
             end
         end
     end
