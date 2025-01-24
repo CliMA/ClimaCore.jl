@@ -127,7 +127,8 @@ function apply_limiter!(
     ρq::Fields.Field,
     ρ::Fields.Field,
     limiter::QuasiMonotoneLimiter,
-    dev::ClimaComms.CUDADevice,
+    dev::ClimaComms.CUDADevice;
+    warn::Bool = true,
 )
     ρq_data = Fields.field_values(ρq)
     us = DataLayouts.UniversalSize(ρq_data)
