@@ -14,7 +14,9 @@ export ExtrudedCubedSphereSpace,
     SliceXZSpace,
     RectangleXYSpace,
     CellCenter,
-    CellFace
+    CellFace,
+    face_space,
+    center_space
 
 import ClimaComms
 
@@ -31,6 +33,8 @@ import ..CommonGrids:
     Box3DGrid,
     SliceXZGrid,
     RectangleXYGrid
+import ..Spaces: face_space, center_space
+
 
 """
 	ExtrudedCubedSphereSpace(
