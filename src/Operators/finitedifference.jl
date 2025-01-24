@@ -249,7 +249,9 @@ function Base.Broadcast.instantiate(sbc::StencilBroadcasted)
         axes = Base.axes(sbc)
     else
         axes = sbc.axes
-        Base.Broadcast.check_broadcast_axes(axes, args...)
+        if axes !== Base.axes(sbc)
+            Base.Broadcast.check_broadcast_axes(axes, args...)
+        end
     end
     Style = AbstractStencilStyle(ClimaComms.device(axes))
     return StencilBroadcasted{Style}(op, args, axes)

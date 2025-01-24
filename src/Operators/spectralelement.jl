@@ -123,7 +123,9 @@ function Base.Broadcast.instantiate(sbc::SpectralBroadcasted)
         axes = Base.axes(sbc)
     else
         axes = sbc.axes
-        Base.Broadcast.check_broadcast_axes(axes, args...)
+        if axes !== Base.axes(sbc)
+            Base.Broadcast.check_broadcast_axes(axes, args...)
+        end
     end
     op = typeof(op)(axes)
     Style = AbstractSpectralStyle(ClimaComms.device(axes))

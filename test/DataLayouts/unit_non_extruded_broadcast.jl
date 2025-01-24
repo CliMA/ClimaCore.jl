@@ -5,7 +5,7 @@ using Revise; include(joinpath("test", "DataLayouts", "unit_non_extruded_broadca
 using Test
 using ClimaComms
 import Base.Broadcast: broadcasted, instantiate
-using ClimaCore: @lazy
+import LazyBroadcast: @lazy
 using ClimaCore.DataLayouts
 using ClimaCore.Geometry
 using ClimaCore: Geometry, Domains, Topologies, Meshes, Spaces, Fields
