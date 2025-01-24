@@ -104,6 +104,7 @@ UnitTest("InputOutput - hybrid3dbox"               ,"InputOutput/unit_hybrid3dbo
 UnitTest("InputOutput - hybrid3dcubedsphere"       ,"InputOutput/unit_hybrid3dcubedsphere.jl"),
 UnitTest("InputOutput - hybrid3dcubedsphere_topo"  ,"InputOutput/unit_hybrid3dcubedsphere_topography.jl"),
 UnitTest("InputOutput - finitedifferences"         ,"InputOutput/unit_finitedifference.jl"),
+UnitTest("InputOutput - pointspaces"               ,"InputOutput/unit_point.jl"),
 UnitTest("Array interpolation"                     ,"Remapping/interpolate_array.jl"),
 UnitTest("Array interpolation"                     ,"Remapping/distributed_remapping.jl"),
 UnitTest("Aqua"                                    ,"aqua.jl"),
