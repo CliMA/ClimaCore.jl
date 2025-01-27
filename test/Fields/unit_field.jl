@@ -713,12 +713,26 @@ function test_adapt(cpu_space_in)
     @test parent(Spaces.local_geometry_data(axes(cpu_f_out))) isa Array
     @test parent(Fields.field_values(cpu_f_out)) isa Array
 
+    cpu_f_in = Fields.Field(Float64, cpu_space_in)
+    cpu_f_out = ClimaCore.to_device(ClimaComms.CPUSingleThreaded(), cpu_f_in)
+    @test parent(Spaces.local_geometry_data(axes(cpu_f_out))) isa Array
+    @test parent(Fields.field_values(cpu_f_out)) isa Array
+
     @static if ClimaComms.device() isa ClimaComms.CUDADevice
         # cpu -> gpu
         gpu_f_out = Adapt.adapt(CUDA.CuArray, cpu_f_in)
         @test parent(Fields.field_values(gpu_f_out)) isa CUDA.CuArray
         # gpu -> gpu
         cpu_f_out = Adapt.adapt(Array, gpu_f_out)
+        @test parent(Fields.field_values(cpu_f_out)) isa Array
+
+        # to_device
+        # cpu -> gpu
+        gpu_f_out = ClimaCore.to_device(ClimaComms.CUDADevice(), cpu_f_in)
+        @test parent(Fields.field_values(gpu_f_out)) isa CUDA.CuArray
+        # gpu -> gpu
+        cpu_f_out =
+            ClimaCore.to_device(ClimaComms.CPUSingleThreaded(), gpu_f_out)
         @test parent(Fields.field_values(cpu_f_out)) isa Array
     end
 end

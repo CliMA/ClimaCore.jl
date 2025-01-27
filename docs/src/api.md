@@ -402,6 +402,13 @@ Remapping.interpolate_array
 Remapping.interpolate
 ```
 
+## Converting between devices
+
+```@docs
+to_device
+to_cpu
+```
+
 ## DebugOnly
 
 ```@docs
