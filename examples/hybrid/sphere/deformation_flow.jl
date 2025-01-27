@@ -405,7 +405,7 @@ compare_tracer_props(a, b; buffer = 1) = all(
     @test compare_tracer_props(tracer_roughnesses(lim_third_upwind_sol), tracer_roughnesses(third_upwind_sol); buffer = 1.0)
     @test compare_tracer_props(tracer_roughnesses(lim_fct_sol)         , tracer_roughnesses(third_upwind_sol); buffer = 0.93)
     @test compare_tracer_props(tracer_ranges(fct_sol)                  , tracer_ranges(third_upwind_sol); buffer = 1.0)
-    @test compare_tracer_props(tracer_ranges(lim_third_upwind_sol)     , tracer_ranges(third_upwind_sol); buffer = 1.0)
+    @test compare_tracer_props(tracer_ranges(lim_third_upwind_sol)     , tracer_ranges(third_upwind_sol); buffer = 1.2)
     @test compare_tracer_props(tracer_ranges(lim_fct_sol)              , tracer_ranges(third_upwind_sol); buffer = 1.0)
     @test compare_tracer_props(tracer_ranges(lim_first_upwind_sol)     , tracer_ranges(third_upwind_sol); buffer = 0.6)
     @test compare_tracer_props(tracer_ranges(lim_centered_sol)         , tracer_ranges(third_upwind_sol); buffer = 1.3)

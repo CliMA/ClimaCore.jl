@@ -173,11 +173,15 @@ function _ExtrudedFiniteDifferenceGrid(
     @assert Spaces.grid(axes(adaption.surface)) == horizontal_grid
     z_surface = Fields.field_values(adaption.surface)
 
+    center_z_ref =
+        Grids.local_geometry_data(vertical_grid, Grids.CellCenter()).coordinates
     face_z_ref =
         Grids.local_geometry_data(vertical_grid, Grids.CellFace()).coordinates
     vertical_domain = Topologies.domain(vertical_grid)
     z_top = vertical_domain.coord_max
 
+    center_z =
+        ref_z_to_physical_z.(Ref(adaption), center_z_ref, z_surface, Ref(z_top))
     face_z =
         ref_z_to_physical_z.(Ref(adaption), face_z_ref, z_surface, Ref(z_top))
 
@@ -186,16 +190,18 @@ function _ExtrudedFiniteDifferenceGrid(
         vertical_grid,
         adaption,
         global_geometry,
+        center_z,
         face_z,
     )
 end
 
-# generic 5-arg hypsography constructor, uses computed face_z points
+# generic hypsography constructor, uses computed center_z and face_z points
 function _ExtrudedFiniteDifferenceGrid(
     horizontal_grid::Grids.AbstractGrid,
     vertical_grid::Grids.FiniteDifferenceGrid,
     adaption::HypsographyAdaption,
     global_geometry::Geometry.AbstractGlobalGeometry,
+    center_z::DataLayouts.AbstractData{Geometry.ZPoint{FT}},
     face_z::DataLayouts.AbstractData{Geometry.ZPoint{FT}},
 ) where {FT}
     # construct the "flat" grid
@@ -213,6 +219,7 @@ function _ExtrudedFiniteDifferenceGrid(
     ArrayType = ClimaComms.array_type(horizontal_grid.topology)
     # currently only works on Arrays
     (center_z_local_geometry, face_z_local_geometry) = Grids.fd_geometry_data(
+        Adapt.adapt(Array, center_z),
         Adapt.adapt(Array, face_z),
         Val(Topologies.isperiodic(vertical_grid.topology)),
     )

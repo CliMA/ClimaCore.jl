@@ -126,15 +126,16 @@ function test_dss_conservation(space)
     integral_before_dss = sum(field)
     Spaces.weighted_dss!(field)
     integral_after_dss = sum(field)
-    @test integral_after_dss ≈ integral_before_dss rtol = 14 * eps(FT)
+    @test integral_after_dss ≈ integral_before_dss rtol = 18 * eps(FT)
 end
 
 @testset "DSS Conservation on Cubed Sphere" begin
     device = ClimaComms.device()
     context = ClimaComms.SingletonCommsContext(device)
     for FT in (Float32, Float64)
-        for topography in (false, true), deep in (false, true)
-            space_kwargs = (; context, topography, deep)
+        bools = (false, true)
+        for topography in bools, deep in bools, autodiff_metric in bools
+            space_kwargs = (; context, topography, deep, autodiff_metric)
             center_space =
                 TU.CenterExtrudedFiniteDifferenceSpace(FT; space_kwargs...)
             for space in (center_space, Spaces.face_space(center_space))

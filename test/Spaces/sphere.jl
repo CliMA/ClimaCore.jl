@@ -113,25 +113,25 @@ end
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)
     horztopology = Topologies.Topology2D(context, horzmesh)
     quad = Quadratures.GLL{Nq}()
-    horzgrid = Grids.SpectralElementGrid2D(horztopology, quad)
-    horzspace = Spaces.SpectralElementSpace2D(horzgrid)
-    @test Spaces.node_horizontal_length_scale(horzspace) ≈
-          sqrt((4 * pi * radius^2) / (helem^2 * 6 * (Nq - 1)^2))
+    for autodiff_metric in (true, false)
+        horzgrid =
+            Grids.SpectralElementGrid2D(horztopology, quad; autodiff_metric)
+        horzspace = Spaces.SpectralElementSpace2D(horzgrid)
+        @test Spaces.node_horizontal_length_scale(horzspace) ≈
+              sqrt((4 * pi * radius^2) / (helem^2 * 6 * (Nq - 1)^2))
 
-    # "shallow atmosphere" spherical shell: volume = surface area * height
-    shallow_grid = Grids.ExtrudedFiniteDifferenceGrid(horzgrid, vertgrid)
+        # In a shallow atmosphere, the volume is given by surface area * height.
+        shallow_volume = 4pi * radius^2 * (zlim[2] - zlim[1])
+        deep_volume = 4pi / 3 * ((zlim[2] + radius)^3 - (zlim[1] + radius)^3)
 
-    @test sum(ones(Spaces.CenterExtrudedFiniteDifferenceSpace(shallow_grid))) ≈
-          4pi * radius^2 * (zlim[2] - zlim[1]) rtol = 1e-3
-    @test sum(ones(Spaces.FaceExtrudedFiniteDifferenceSpace(shallow_grid))) ≈
-          4pi * radius^2 * (zlim[2] - zlim[1]) rtol = 1e-3
-
-    deep_grid =
-        Grids.ExtrudedFiniteDifferenceGrid(horzgrid, vertgrid; deep = true)
-
-    @test sum(ones(Spaces.CenterExtrudedFiniteDifferenceSpace(deep_grid))) ≈
-          4pi / 3 * ((zlim[2] + radius)^3 - (zlim[1] + radius)^3) rtol = 1e-3
-    @test sum(ones(Spaces.FaceExtrudedFiniteDifferenceSpace(deep_grid))) ≈
-          4pi / 3 * ((zlim[2] + radius)^3 - (zlim[1] + radius)^3) rtol = 1e-3
-
+        for (deep, ref_volume) in ((false, shallow_volume), (true, deep_volume))
+            grid = Grids.ExtrudedFiniteDifferenceGrid(horzgrid, vertgrid; deep)
+            center_volume =
+                sum(ones(Spaces.CenterExtrudedFiniteDifferenceSpace(grid)))
+            face_volume =
+                sum(ones(Spaces.FaceExtrudedFiniteDifferenceSpace(grid)))
+            @test center_volume ≈ ref_volume rtol = deep ? 2e-5 : 6e-6
+            @test face_volume ≈ ref_volume rtol = deep ? 1e-5 : 6e-6
+        end
+    end
 end
