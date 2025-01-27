@@ -127,7 +127,9 @@ function Base.Broadcast.instantiate(sbc::SpectralBroadcasted)
             Base.Broadcast.check_broadcast_axes(axes, args...)
         end
     end
-    op = typeof(op)(axes)
+    # If we've already instantiated, then we need to strip the type parameters,
+    # for example, `Divergence{()}(axes)`.
+    op = unionall_type(typeof(op)){()}(axes)
     Style = AbstractSpectralStyle(ClimaComms.device(axes))
     return SpectralBroadcasted{Style}(op, args, axes)
 end
@@ -1323,6 +1325,7 @@ struct Interpolate{I, S} <: TensorOperator
     space::S
 end
 Interpolate(space) = Interpolate{operator_axes(space), typeof(space)}(space)
+Interpolate{()}(space) = Interpolate{operator_axes(space), typeof(space)}(space)
 
 function apply_operator(op::Interpolate{(1,)}, space_out, slabidx, arg)
     FT = Spaces.undertype(space_out)
@@ -1412,6 +1415,7 @@ struct Restrict{I, S} <: TensorOperator
     space::S
 end
 Restrict(space) = Restrict{operator_axes(space), typeof(space)}(space)
+Restrict{()}(space) = Restrict{operator_axes(space), typeof(space)}(space)
 
 function apply_operator(op::Restrict{(1,)}, space_out, slabidx, arg)
     FT = Spaces.undertype(space_out)
