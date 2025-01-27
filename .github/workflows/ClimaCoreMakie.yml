@@ -15,12 +15,15 @@ jobs:
   lib-climacore-makie:
     runs-on: ubuntu-20.04
     timeout-minutes: 45
+    strategy:
+      matrix:
+        version: ['1.10', '1.11']
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
-          version: '1.10'
+          version: ${{ matrix.version }}
       - uses: julia-actions/cache@v2
       - run: sudo apt-get update && sudo apt-get install -y xorg-dev mesa-utils xvfb libgl1 freeglut3-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev
       - name: Install Julia dependencies
@@ -38,7 +41,7 @@ jobs:
         with:
           name: climacore-makie-output
           path: |
-            lib/ClimaCoreMakie/test/output
+            lib/ClimaCoreMakie/test/output/${{ matrix.version }}
       - name: Fail after artifacts if tests failed
         if: ${{ env.TESTS_SUCCESSFUL != 'true' }}
         run: exit 1
