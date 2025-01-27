@@ -140,6 +140,7 @@ mutable struct SpectralElementGrid2D{
     internal_surface_geometry::IS
     boundary_surface_geometries::BS
     enable_bubble::Bool
+    autodiff_metric::Bool
 end
 
 Adapt.@adapt_structure SpectralElementGrid2D
@@ -149,15 +150,18 @@ local_geometry_type(
 ) where {T, Q, GG, LG, D, IS, BS} = eltype(LG) # calls eltype from DataLayouts
 
 """
-    SpectralElementSpace2D(topology, quadrature_style; enable_bubble, horizontal_layout_type = DataLayouts.IJFH)
+    SpectralElementSpace2D(topology, quadrature_style; enable_bubble, autodiff_metric, horizontal_layout_type = DataLayouts.IJFH)
 
 Construct a `SpectralElementSpace2D` instance given a `topology` and `quadrature`. The
 flag `enable_bubble` enables the `bubble correction` for more accurate element areas.
+The flag `autodiff_metric` enables the use of automatic differentiation instead of the
+SEM for computing metric terms.
 
 # Input arguments:
 - topology: Topology2D
 - quadrature_style: QuadratureStyle
 - enable_bubble: Bool
+- autodiff_metric: Bool
 - horizontal_layout_type: Type{<:AbstractData}
 
 The idea behind the so-called `bubble_correction` is that the numerical area
@@ -186,6 +190,7 @@ function SpectralElementGrid2D(
     quadrature_style::Quadratures.QuadratureStyle;
     horizontal_layout_type = DataLayouts.IJFH,
     enable_bubble::Bool = false,
+    autodiff_metric::Bool = true,
 )
     get!(
         Cache.OBJECT_CACHE,
@@ -194,6 +199,7 @@ function SpectralElementGrid2D(
             topology,
             quadrature_style,
             enable_bubble,
+            autodiff_metric,
             horizontal_layout_type,
         ),
     ) do
@@ -202,6 +208,7 @@ function SpectralElementGrid2D(
             quadrature_style,
             horizontal_layout_type;
             enable_bubble,
+            autodiff_metric,
         )
     end
 end
@@ -221,12 +228,14 @@ _SpectralElementGrid2D(
     quadrature_style::Quadratures.QuadratureStyle,
     horizontal_layout_type = DataLayouts.IJFH;
     enable_bubble::Bool,
+    autodiff_metric::Bool,
 ) = _SpectralElementGrid2D(
     topology,
     quadrature_style,
     Val(Topologies.nlocalelems(topology)),
     horizontal_layout_type;
     enable_bubble,
+    autodiff_metric,
 )
 
 function _SpectralElementGrid2D(
@@ -235,6 +244,7 @@ function _SpectralElementGrid2D(
     ::Val{Nh},
     ::Type{horizontal_layout_type};
     enable_bubble::Bool,
+    autodiff_metric::Bool,
 ) where {Nh, horizontal_layout_type}
     @assert horizontal_layout_type <: Union{DataLayouts.IJHF, DataLayouts.IJFH}
     surface_layout_type = if horizontal_layout_type <: DataLayouts.IJFH
@@ -506,7 +516,64 @@ function _SpectralElementGrid2D(
         internal_surface_geometry,
         boundary_surface_geometries,
         enable_bubble,
+        autodiff_metric,
     )
+end
+
+function ξ_at_nodal_point(FT, quadrature_style, i, j)
+    quad_points = Quadratures.quadrature_points(FT, quadrature_style)[1]
+    return SVector(quad_points[i], quad_points[j])
+end
+function ∂f∂ξ_at_nodal_point(f, FT, quadrature_style, i, j, autodiff_metric)
+    if autodiff_metric
+        ξ = ξ_at_nodal_point(FT, quadrature_style, i, j)
+        return ForwardDiff.jacobian(f, ξ)
+    end
+    nodal_indices = SOneTo(Quadratures.degrees_of_freedom(quadrature_style))
+    deriv_matrix = Quadratures.differentiation_matrix(FT, quadrature_style)
+    ∂f∂ξ¹ = sum(nodal_indices; init = SVector(FT(0), FT(0))) do i′
+        deriv_matrix[i′, j] * f(ξ_at_nodal_point(FT, quadrature_style, i′, j))
+    end
+    ∂f∂ξ² = sum(nodal_indices; init = SVector(FT(0), FT(0))) do j′
+        deriv_matrix[i, j′] * f(ξ_at_nodal_point(FT, quadrature_style, i, j′))
+    end
+    return hcat(∂f∂ξ¹, ∂f∂ξ²)
+end
+function cartesian_geometry_at_nodal_point(
+    topology,
+    quadrature_style,
+    elem,
+    i,
+    j,
+    autodiff_metric,
+    ::Val{AIdx},
+) where {AIdx}
+    FT = eltype(Topologies.coordinate_type(topology))
+    ξ = ξ_at_nodal_point(FT, quadrature_style, i, j)
+    x = Meshes.coordinates(topology.mesh, elem, ξ)
+    ∂x∂ξ = Geometry.AxisTensor(
+        (Geometry.Cartesian123Axis(), Geometry.CovariantAxis{AIdx}()),
+        ∂f∂ξ_at_nodal_point(FT, quadrature_style, i, j, autodiff_metric) do ξ
+            Geometry.components(Meshes.coordinates(topology.mesh, elem, ξ))
+        end,
+    )
+    return x, ∂x∂ξ
+end
+function local_geometry_at_nodal_point(
+    global_geometry::Geometry.SphericalGlobalGeometry,
+    args...,
+)
+    x, ∂x∂ξ = cartesian_geometry_at_nodal_point(args...)
+    u = Geometry.LatLongPoint(x, global_geometry)
+    G = Geometry.local_to_cartesian(global_geometry, u)
+    ∂u∂ξ = Geometry.project(Geometry.LocalAxis{AIdx}(), G' * ∂x∂ξ)
+    return u, ∂u∂ξ
+end
+function local_geometry_at_nodal_point(
+    ::Geometry.AbstractGlobalGeometry,
+    args...,
+)
+    x, ∂x∂ξ = cartesian_geometry_at_nodal_point(args...)
 end
 
 function compute_local_geometry(
