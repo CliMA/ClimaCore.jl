@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+ - A new `Adapt` wrapper was added, `to_device`, which allows users to adapt datalayouts, spaces, fields, and fieldvectors between the cpu and gpu. PR [2159](https://github.com/CliMA/ClimaCore.jl/pull/2159).
+ - Remap interpolation cuda threading was improved. PR [2159](https://github.com/CliMA/ClimaCore.jl/pull/2159).
+ - `center_space` and `face_space` are now exported from `CommonSpaces`. PR [2157](https://github.com/CliMA/ClimaCore.jl/pull/2157).
+ - Limiter debug printing can now be suppressed, and printed at the end of a simulation, using `Limiters.print_convergence_stats(limiter)`. PR [2152](https://github.com/CliMA/ClimaCore.jl/pull/2152).
+ - Fixed getidx for `GradientC2F` with `SetValue` bcs. PR [2148](https://github.com/CliMA/ClimaCore.jl/pull/2148).
  - Added support `data2array` for `DataF` (i.e., `PointField`s). PR [2143](https://github.com/CliMA/ClimaCore.jl/pull/2143).
  - `HDF5Reader` / `HDF5Writer` now support `do`-syntax. PR [2147](https://github.com/CliMA/ClimaCore.jl/pull/2147).
 

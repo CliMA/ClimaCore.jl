@@ -96,6 +96,7 @@ withenv("GKSwstype" => "nul") do
             ],
             "Contributing guide" => "Contributing.md",
             "Code of Conduct" => "code_of_conduct.md",
+            "Frequently asked questions" => "faq.md",
             "references.md",
         ],
     )
