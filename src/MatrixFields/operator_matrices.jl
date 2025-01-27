@@ -241,27 +241,34 @@ Operators.get_boundary(
     rbw::Operators.RightBoundaryWindow{name},
 ) where {name} = Operators.get_boundary(op_matrix.op, rbw)
 
-Operators.stencil_interior_width(op_matrix::FDOperatorMatrix, args...) =
-    Operators.stencil_interior_width(op_matrix.op, args...)
+Operators.stencil_interior_width(
+    op_matrix::FDOperatorMatrix,
+    args::Vararg{Any, N},
+) where {N} = Operators.stencil_interior_width(op_matrix.op, args...)
 
 Operators.left_interior_idx(
     space::Spaces.AbstractSpace,
     op_matrix::FDOperatorMatrix,
     bc::Operators.AbstractBoundaryCondition,
-    args...,
-) = Operators.left_interior_idx(space, op_matrix.op, bc, args...)
+    args::Vararg{Any, N},
+) where {N} = Operators.left_interior_idx(space, op_matrix.op, bc, args...)
 
 Operators.right_interior_idx(
     space::Spaces.AbstractSpace,
     op_matrix::FDOperatorMatrix,
     bc::Operators.AbstractBoundaryCondition,
-    args...,
-) = Operators.right_interior_idx(space, op_matrix.op, bc, args...)
+    args::Vararg{Any, N},
+) where {N} = Operators.right_interior_idx(space, op_matrix.op, bc, args...)
 
-Operators.return_space(op_matrix::FDOperatorMatrix, spaces...) =
-    Operators.return_space(op_matrix.op, spaces...)
+Operators.return_space(
+    op_matrix::FDOperatorMatrix,
+    spaces::Vararg{Any, N},
+) where {N} = Operators.return_space(op_matrix.op, spaces...)
 
-function Operators.return_eltype(op_matrix::FDOperatorMatrix, args...)
+function Operators.return_eltype(
+    op_matrix::FDOperatorMatrix,
+    args::Vararg{Any, N},
+) where {N}
     args′ = args[1:(end - 1)]
     FT = Geometry.undertype(eltype(args[end]))
     return op_matrix_row_type(op_matrix.op, FT, args′...)
@@ -273,8 +280,8 @@ Base.@propagate_inbounds function Operators.stencil_interior(
     space,
     idx,
     hidx,
-    args...,
-)
+    args::Vararg{Any, N},
+) where {N}
     args′ = args[1:(end - 1)]
     row = op_matrix_interior_row(op_matrix.op, space, loc, idx, hidx, args′...)
     return convert(Operators.return_eltype(op_matrix, args...), row)
@@ -287,8 +294,8 @@ Base.@propagate_inbounds function Operators.stencil_left_boundary(
     space,
     idx,
     hidx,
-    args...,
-)
+    args::Vararg{Any, N},
+) where {N}
     args′ = args[1:(end - 1)]
     row = op_matrix_first_row(op_matrix.op, bc, space, loc, idx, hidx, args′...)
     return convert(Operators.return_eltype(op_matrix, args...), row)
@@ -301,22 +308,42 @@ Base.@propagate_inbounds function Operators.stencil_right_boundary(
     space,
     idx,
     hidx,
-    args...,
-)
+    args::Vararg{Any, N},
+) where {N}
     args′ = args[1:(end - 1)]
     row = op_matrix_last_row(op_matrix.op, bc, space, loc, idx, hidx, args′...)
     return convert(Operators.return_eltype(op_matrix, args...), row)
 end
 
 # Simplified methods for when the operator matrix only depends on FT.
-op_matrix_row_type(op, ::Type{FT}, args...) where {FT} =
+op_matrix_row_type(op, ::Type{FT}, args::Vararg{Any, N}) where {FT, N} =
     typeof(op_matrix_interior_row(op, FT))
-op_matrix_interior_row(op, space, loc, idx, hidx, args...) =
-    op_matrix_interior_row(op, Spaces.undertype(space))
-op_matrix_first_row(op, bc, space, loc, idx, hidx, args...) =
-    op_matrix_first_row(op, bc, Spaces.undertype(space))
-op_matrix_last_row(op, bc, space, loc, idx, hidx, args...) =
-    op_matrix_last_row(op, bc, Spaces.undertype(space))
+op_matrix_interior_row(
+    op,
+    space,
+    loc,
+    idx,
+    hidx,
+    args::Vararg{Any, N},
+) where {N} = op_matrix_interior_row(op, Spaces.undertype(space))
+op_matrix_first_row(
+    op,
+    bc,
+    space,
+    loc,
+    idx,
+    hidx,
+    args::Vararg{Any, N},
+) where {N} = op_matrix_first_row(op, bc, Spaces.undertype(space))
+op_matrix_last_row(
+    op,
+    bc,
+    space,
+    loc,
+    idx,
+    hidx,
+    args::Vararg{Any, N},
+) where {N} = op_matrix_last_row(op, bc, Spaces.undertype(space))
 
 ################################################################################
 
