@@ -1,7 +1,6 @@
 import LinearAlgebra: issymmetric
 
-isapproxsymmetric(A::AbstractMatrix{T}; rtol = 10 * eps(T)) where {T} =
-    Base.isapprox(A, A'; rtol)
+exactly_symmetric(A::AbstractMatrix{T}) where {T} = A == A'
 
 """
     LocalGeometry
@@ -36,8 +35,20 @@ struct LocalGeometry{I, C <: AbstractPoint, FT, S}
         Jinv = inv(J)
         gⁱʲ = ∂ξ∂x * ∂ξ∂x'
         gᵢⱼ = ∂x∂ξ' * ∂x∂ξ
-        isapproxsymmetric(components(gⁱʲ)) || error("gⁱʲ is not symmetric.")
-        isapproxsymmetric(components(gᵢⱼ)) || error("gᵢⱼ is not symmetric.")
+        if !exactly_symmetric(components(gⁱʲ))
+            @show coordinates
+            @show J
+            @show WJ
+            @show ∂x∂ξ
+            error("gⁱʲ is not symmetric.")
+        end
+        if !exactly_symmetric(components(gᵢⱼ))
+            @show coordinates
+            @show J
+            @show WJ
+            @show ∂x∂ξ
+            error("gᵢⱼ is not symmetric.")
+        end
         return new{I, C, FT, S}(coordinates, J, WJ, Jinv, ∂x∂ξ, ∂ξ∂x, gⁱʲ, gᵢⱼ)
     end
 end
