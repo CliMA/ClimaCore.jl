@@ -13,8 +13,7 @@ import ..Topologies:
     load_from_recv_buffer!,
     DSSTypesAll,
     DSSDataTypes,
-    DSSPerimeterTypes,
-    DSSWeightTypes
+    DSSPerimeterTypes
 
 
 perimeter(space::AbstractSpectralElementSpace) = Topologies.Perimeter2D(
@@ -23,10 +22,7 @@ perimeter(space::AbstractSpectralElementSpace) = Topologies.Perimeter2D(
 
 
 """
-    create_dss_buffer(
-        data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
-        hspace::AbstractSpectralElementSpace,
-    )
+    create_dss_buffer(data, space)
 
 Creates a [`DSSBuffer`](@ref) for the field data corresponding to `data`
 """
@@ -37,13 +33,13 @@ function create_dss_buffer(
         DataLayouts.VIJFH,
         DataLayouts.VIJHF,
     },
-    hspace::SpectralElementSpace2D,
+    space,
 )
     create_dss_buffer(
         data,
-        topology(hspace),
-        local_geometry_data(hspace),
-        local_dss_weights(hspace),
+        topology(space),
+        local_geometry_data(space),
+        dss_weights(space),
     )
 end
 
@@ -54,7 +50,7 @@ function create_dss_buffer(
         DataLayouts.VIFH,
         DataLayouts.VIHF,
     },
-    hspace::SpectralElementSpace1D,
+    space,
 )
     nothing
 end
@@ -122,7 +118,7 @@ function weighted_dss_prepare!(
         dss_buffer,
         data,
         local_geometry_data(space),
-        local_dss_weights(hspace),
+        dss_weights(space),
         Spaces.perimeter(hspace),
         dss_buffer.perimeter_elems,
     )
@@ -236,7 +232,7 @@ function weighted_dss_internal!(
             topology(hspace),
             data,
             local_geometry_data(space),
-            local_dss_weights(space),
+            dss_weights(space),
         )
     else
         device = ClimaComms.device(topology(hspace))
@@ -245,7 +241,7 @@ function weighted_dss_internal!(
             dss_buffer,
             data,
             local_geometry_data(space),
-            local_dss_weights(space),
+            dss_weights(space),
             Spaces.perimeter(hspace),
             dss_buffer.internal_elems,
         )

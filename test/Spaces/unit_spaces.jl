@@ -242,7 +242,7 @@ end
 
     @test Spaces.local_geometry_type(typeof(space)) <: Geometry.LocalGeometry
     local_geometry_slab = slab(Spaces.local_geometry_data(space), 1)
-    dss_weights_slab = slab(Spaces.local_dss_weights(space), 1)
+    dss_weights_slab = slab(Spaces.dss_weights(space), 1)
 
     @static if on_gpu
         adapted_space = Adapt.adapt(CUDA.KernelAdaptor(), space)

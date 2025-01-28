@@ -2,7 +2,7 @@ import ClimaCore: DataLayouts, Topologies, Spaces, Fields
 import ClimaCore.DataLayouts: CartesianFieldIndex
 using CUDA
 import ClimaCore.Topologies
-import ClimaCore.Topologies: DSSDataTypes, DSSPerimeterTypes, DSSWeightTypes
+import ClimaCore.Topologies: DSSDataTypes, DSSPerimeterTypes
 import ClimaCore.Topologies: perimeter_vertex_node_index
 
 _max_threads_cuda() = 256
@@ -198,7 +198,7 @@ function Topologies.dss_transform!(
     data::DSSDataTypes,
     perimeter::Topologies.Perimeter2D,
     local_geometry::DSSDataTypes,
-    weight::DSSWeightTypes,
+    dss_weights::DSSDataTypes,
     localelems::AbstractVector{Int},
 )
     nlocalelems = length(localelems)
@@ -214,7 +214,7 @@ function Topologies.dss_transform!(
             data,
             perimeter,
             local_geometry,
-            weight,
+            dss_weights,
             localelems,
             Val(nlocalelems),
         )
@@ -231,7 +231,7 @@ function Topologies.dss_transform!(
             data,
             perimeter,
             local_geometry,
-            weight,
+            dss_weights,
             localelems,
         )
     end
@@ -243,7 +243,7 @@ function dss_transform_kernel!(
     data::DSSDataTypes,
     perimeter::Topologies.Perimeter2D,
     local_geometry::DSSDataTypes,
-    weight::DSSWeightTypes,
+    dss_weights::DSSDataTypes,
     localelems::AbstractVector{Int},
     ::Val{nlocalelems},
 ) where {nlocalelems}
@@ -260,7 +260,7 @@ function dss_transform_kernel!(
         src = Topologies.dss_transform(
             data[loc],
             local_geometry[loc],
-            weight[loc],
+            dss_weights[loc],
         )
         perimeter_data[CI(p, 1, 1, level, elem)] =
             Topologies.drop_vert_dim(eltype(perimeter_data), src)
