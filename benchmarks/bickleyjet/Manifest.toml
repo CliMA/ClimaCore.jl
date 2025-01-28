@@ -1,6 +1,6 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.10.7"
+julia_version = "1.10.8"
 manifest_format = "2.0"
 project_hash = "a5acdbd13ed54ab47f61f609c38695ceeafab1b8"
 
@@ -110,18 +110,20 @@ uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 
 [[deps.Atomix]]
 deps = ["UnsafeAtomics"]
-git-tree-sha1 = "c3b238aa28c1bebd4b5ea4988bebf27e9a01b72b"
+git-tree-sha1 = "93da6c8228993b0052e358ad592ee7c1eccaa639"
 uuid = "a9b6321e-bd34-4604-b9c9-b65b8de01458"
-version = "1.0.1"
+version = "1.1.0"
 
     [deps.Atomix.extensions]
     AtomixCUDAExt = "CUDA"
     AtomixMetalExt = "Metal"
+    AtomixOpenCLExt = "OpenCL"
     AtomixoneAPIExt = "oneAPI"
 
     [deps.Atomix.weakdeps]
     CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
     Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
+    OpenCL = "08131aa3-fb12-5dee-8b74-c09406e224a2"
     oneAPI = "8f75cd03-7ff8-4ecb-9b8f-daf728133b1b"
 
 [[deps.BFloat16s]]
@@ -217,9 +219,9 @@ version = "1.18.2+1"
 
 [[deps.ClimaComms]]
 deps = ["Adapt", "Logging", "LoggingExtras"]
-git-tree-sha1 = "d29ca07d91e6ca6c0a3649ad6cf37f2634951fd3"
+git-tree-sha1 = "40ad44466dfe0092e18c04bc02c849fe8e095d30"
 uuid = "3a4d1b5c-c61d-41fd-a00a-5873ba7a1b0d"
-version = "0.6.5"
+version = "0.6.6"
 
     [deps.ClimaComms.extensions]
     ClimaCommsCUDAExt = "CUDA"
@@ -233,7 +235,7 @@ version = "0.6.5"
 deps = ["Adapt", "BandedMatrices", "BlockArrays", "ClimaComms", "CubedSphere", "DataStructures", "ForwardDiff", "GaussQuadrature", "GilbertCurves", "HDF5", "InteractiveUtils", "IntervalSets", "KrylovKit", "LinearAlgebra", "MultiBroadcastFusion", "NVTX", "PkgVersion", "RecursiveArrayTools", "RootSolvers", "SparseArrays", "StaticArrays", "Statistics", "Unrolled"]
 path = "../.."
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
-version = "0.14.23"
+version = "0.14.24"
 
     [deps.ClimaCore.extensions]
     ClimaCoreCUDAExt = "CUDA"
@@ -700,9 +702,9 @@ version = "0.2.1+0"
 
 [[deps.KernelAbstractions]]
 deps = ["Adapt", "Atomix", "InteractiveUtils", "MacroTools", "PrecompileTools", "Requires", "StaticArrays", "UUIDs"]
-git-tree-sha1 = "019e9de20154148a4937965ec43084435e946450"
+git-tree-sha1 = "d5bc0b079382e89bfa91433639bc74b9f9e17ae7"
 uuid = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
-version = "0.9.32"
+version = "0.9.33"
 
     [deps.KernelAbstractions.extensions]
     EnzymeExt = "EnzymeCore"
@@ -740,9 +742,9 @@ version = "4.0.1+0"
 
 [[deps.LLVM]]
 deps = ["CEnum", "LLVMExtra_jll", "Libdl", "Preferences", "Printf", "Unicode"]
-git-tree-sha1 = "d422dfd9707bec6617335dc2ea3c5172a87d5908"
+git-tree-sha1 = "5fcfea6df2ff3e4da708a40c969c3812162346df"
 uuid = "929cbde3-209d-540e-8aea-75f648917ca0"
-version = "9.1.3"
+version = "9.2.0"
 weakdeps = ["BFloat16s"]
 
     [deps.LLVM.extensions]
@@ -750,9 +752,9 @@ weakdeps = ["BFloat16s"]
 
 [[deps.LLVMExtra_jll]]
 deps = ["Artifacts", "JLLWrappers", "LazyArtifacts", "Libdl", "TOML"]
-git-tree-sha1 = "05a8bd5a42309a9ec82f700876903abce1017dd3"
+git-tree-sha1 = "4b5ad6a4ffa91a00050a964492bc4f86bb48cea0"
 uuid = "dad2f222-ce93-54a1-a47d-0025e8a3acab"
-version = "0.0.34+0"
+version = "0.0.35+0"
 
 [[deps.LLVMLoopInfo]]
 git-tree-sha1 = "2e5c102cfc41f48ae4740c7eca7743cc7e7b75ea"
@@ -985,9 +987,9 @@ version = "3.1.0+2"
 
 [[deps.NaNMath]]
 deps = ["OpenLibm_jll"]
-git-tree-sha1 = "030ea22804ef91648f29b7ad3fc15fa49d0e6e71"
+git-tree-sha1 = "fe891aea7ccd23897520db7f16931212454e277e"
 uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
-version = "1.0.3"
+version = "1.1.1"
 
 [[deps.NetworkOptions]]
 uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
@@ -1416,9 +1418,9 @@ version = "1.10.0"
 
 [[deps.TaylorSeries]]
 deps = ["LinearAlgebra", "Markdown", "Requires", "SparseArrays"]
-git-tree-sha1 = "267e579c6aa0e1605bb5dc681996bb1e3a43c740"
+git-tree-sha1 = "ae73e40c647c0061697fa9708ee12cce385653e3"
 uuid = "6aa5eb33-94cf-58f4-a9d0-e4b2c4fc25ea"
-version = "0.18.2"
+version = "0.18.3"
 
     [deps.TaylorSeries.extensions]
     TaylorSeriesIAExt = "IntervalArithmetic"
@@ -1546,9 +1548,9 @@ version = "1.1.42+0"
 
 [[deps.XZ_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "beef98d5aad604d9e7d60b2ece5181f7888e2fd6"
+git-tree-sha1 = "56c6604ec8b2d82cc4cfe01aa03b00426aac7e1f"
 uuid = "ffd25f8a-64ca-5728-b0f7-c24cf3aae800"
-version = "5.6.4+0"
+version = "5.6.4+1"
 
 [[deps.Xorg_libICE_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
