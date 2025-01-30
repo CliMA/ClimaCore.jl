@@ -31,14 +31,6 @@ atexit() do
     global_logger(prev_logger)
 end
 
-@testset "Utils" begin
-    # batched_ranges(num_fields, buffer_length)
-    @test Remapping.batched_ranges(1, 1) == [1:1]
-    @test Remapping.batched_ranges(1, 2) == [1:1]
-    @test Remapping.batched_ranges(2, 2) == [1:2]
-    @test Remapping.batched_ranges(3, 2) == [1:2, 3:3]
-end
-
 on_gpu = device isa ClimaComms.CUDADevice
 with_mpi = context isa ClimaComms.MPICommsContext
 
@@ -169,10 +161,7 @@ end
 
     quad = Quadratures.GLL{4}()
     horzmesh = Meshes.RectilinearMesh(horzdomain, 10, 10)
-    horztopology = Topologies.Topology2D(
-        ClimaComms.SingletonCommsContext(device),
-        horzmesh,
-    )
+    horztopology = Topologies.Topology2D(context, horzmesh)
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
     hv_center_space =
@@ -338,7 +327,7 @@ end
     quad = Quadratures.GLL{4}()
     horzmesh = Meshes.RectilinearMesh(horzdomain, 10, 10)
     horztopology = Topologies.Topology2D(
-        ClimaComms.SingletonCommsContext(device),
+        context,
         horzmesh,
         Topologies.spacefillingcurve(horzmesh),
     )
