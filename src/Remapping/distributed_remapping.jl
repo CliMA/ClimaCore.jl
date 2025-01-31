@@ -751,28 +751,53 @@ function _collect_interpolated_values!(
     index_field_end::Int;
     only_one_field,
 )
-    println("PRE", ClimaComms.mypid(remapper.comms_ctx), " ", Array(remapper._interpolated_values)[end, end, end, 1]); flush(stdout)
+    siz = size(dest)
+
+    println("PRE", ClimaComms.mypid(remapper.comms_ctx), " ", Array(remapper._interpolated_values)[end, end, end, :]); flush(stdout)
 
     # NOTE: MPI barriers for #2108
     ClimaComms.barrier(remapper.comms_ctx)
     if only_one_field
-        ClimaComms.reduce!(
-            remapper.comms_ctx,
+        Main.MPI.Reduce!(
             remapper._interpolated_values[remapper.colons..., begin],
             dest,
             +,
+            remapper.comms_ctx.mpicomm;
+            root = 0
         )
+
+        # ClimaComms.reduce!(
+        #     remapper.comms_ctx,
+        #     remapper._interpolated_values[remapper.colons..., begin],
+        #     dest,
+        #     +,
+        # )
     else
         num_fields = 1 + index_field_end - index_field_begin
-        ClimaComms.reduce!(
-            remapper.comms_ctx,
+
+        Main.MPI.Reduce!(
             view(remapper._interpolated_values, remapper.colons..., 1:num_fields),
             view(dest, remapper.colons..., index_field_begin:index_field_end),
             +,
+            remapper.comms_ctx.mpicomm;
+            root = 0
         )
+
+        # ClimaComms.reduce!(
+        #     remapper.comms_ctx,
+        #     view(remapper._interpolated_values, remapper.colons..., 1:num_fields),
+        #     view(dest, remapper.colons..., index_field_begin:index_field_end),
+        #     +,
+        # )
     end
     ClimaComms.barrier(remapper.comms_ctx)
-    println("POST", ClimaComms.mypid(remapper.comms_ctx), " ", Array(dest)[end, end, end, 1], " ", size(dest)); flush(stdout)
+
+    if only_one_field
+        println("POSToof", ClimaComms.mypid(remapper.comms_ctx), " ", Array(dest)[end, end, end], " ", size(dest)); flush(stdout)
+    else
+        println("POST", ClimaComms.mypid(remapper.comms_ctx), " ", Array(dest)[end, end, end, :]); flush(stdout)
+    end
+
     return nothing
 end
 
