@@ -584,6 +584,7 @@ steps:
         key: unit_column
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_column.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_getidx.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/convergence_column.jl"
 
       - label: "Unit: wfact"

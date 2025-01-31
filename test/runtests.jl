@@ -58,6 +58,7 @@ UnitTest("Spectral elem - sphere diffusion vec"    ,"Operators/spectralelement/s
 UnitTest("Spectral elem - sphere hyperdiff"        ,"Operators/spectralelement/unit_sphere_hyperdiffusion.jl"),
 UnitTest("Spectral elem - sphere hyperdiff vec"    ,"Operators/spectralelement/unit_sphere_hyperdiffusion_vec.jl"),
 UnitTest("FD ops - column"                         ,"Operators/finitedifference/unit_column.jl"),
+UnitTest("FD ops - getidx"                         ,"Operators/finitedifference/unit_getidx.jl"),
 UnitTest("FD ops - opt"                            ,"Operators/finitedifference/opt.jl"),
 UnitTest("FD ops - wfact"                          ,"Operators/finitedifference/wfact.jl"),
 UnitTest("FD ops - linsolve"                       ,"Operators/finitedifference/linsolve.jl"),
