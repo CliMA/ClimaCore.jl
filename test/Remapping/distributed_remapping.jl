@@ -178,18 +178,26 @@ end
     remapper =
         Remapping.Remapper(hv_center_space, hcoords, zcoords, buffer_length = 2)
 
+    ClimaComms.barrier(remapper.comms_ctx)
+    println("INT 1 ", ClimaComms.mypid(remapper.comms_ctx)); flush(stdout)
     interp_x = Remapping.interpolate(remapper, coords.x)
+    ClimaComms.barrier(remapper.comms_ctx)
+    println("INT 2 ", ClimaComms.mypid(remapper.comms_ctx)); flush(stdout)
     interp_x2 = Remapping.interpolate(coords.x, hcoords, zcoords)
     if ClimaComms.iamroot(context)
         @test Array(interp_x) ≈ [x for x in xpts, y in ypts, z in zpts]
         @test Array(interp_x2) ≈ [x for x in xpts, y in ypts, z in zpts]
     end
 
+    ClimaComms.barrier(remapper.comms_ctx)
+    println("INT 3 ", ClimaComms.mypid(remapper.comms_ctx)); flush(stdout)
     interp_y = Remapping.interpolate(remapper, coords.y)
     if ClimaComms.iamroot(context)
         @test Array(interp_y) ≈ [y for x in xpts, y in ypts, z in zpts]
     end
 
+    ClimaComms.barrier(remapper.comms_ctx)
+    println("INT 4 ", ClimaComms.mypid(remapper.comms_ctx)); flush(stdout)
     interp_z = Remapping.interpolate(remapper, coords.z)
     expected_z = [z for x in xpts, y in ypts, z in zpts]
     if ClimaComms.iamroot(context)
@@ -200,12 +208,16 @@ end
               [1000.0 * (29 / 30 + 30 / 30) / 2 for x in xpts, y in ypts]
     end
 
+    ClimaComms.barrier(remapper.comms_ctx)
+    println("INT 5 ", ClimaComms.mypid(remapper.comms_ctx)); flush(stdout)
     # Remapping two fields
     interp_xy = Remapping.interpolate(remapper, [coords.x, coords.y])
     if ClimaComms.iamroot(context)
         @test interp_x ≈ interp_xy[:, :, :, 1]
         @test interp_y ≈ interp_xy[:, :, :, 2]
     end
+    ClimaComms.barrier(remapper.comms_ctx)
+    println("INT 6 ", ClimaComms.mypid(remapper.comms_ctx)); flush(stdout)
     # Remapping three fields (more than the buffer length)
     interp_xyx = Remapping.interpolate(remapper, [coords.x, coords.y, coords.x])
     if ClimaComms.iamroot(context)
@@ -214,6 +226,8 @@ end
         @test interp_x ≈ interp_xyx[:, :, :, 3]
     end
 
+    ClimaComms.barrier(remapper.comms_ctx)
+    println("INT 7 ", ClimaComms.mypid(remapper.comms_ctx)); flush(stdout)
     # Remapping in-place one field
     dest = ArrayType(zeros(21, 21, 21))
     Remapping.interpolate!(dest, remapper, coords.x)
@@ -221,6 +235,8 @@ end
         @test interp_x ≈ dest
     end
 
+    ClimaComms.barrier(remapper.comms_ctx)
+    println("INT 8 ", ClimaComms.mypid(remapper.comms_ctx)); flush(stdout)
     # Two fields
     dest = ArrayType(zeros(21, 21, 21, 2))
     Remapping.interpolate!(dest, remapper, [coords.x, coords.y])
@@ -229,6 +245,8 @@ end
         @test interp_y ≈ dest[:, :, :, 2]
     end
 
+    ClimaComms.barrier(remapper.comms_ctx)
+    println("INT 9 ", ClimaComms.mypid(remapper.comms_ctx)); flush(stdout)
     # Three fields (more than buffer length)
     dest = ArrayType(zeros(21, 21, 21, 3))
     Remapping.interpolate!(dest, remapper, [coords.x, coords.y, coords.x])

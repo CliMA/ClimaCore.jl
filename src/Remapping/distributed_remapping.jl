@@ -751,6 +751,8 @@ function _collect_interpolated_values!(
     index_field_end::Int;
     only_one_field,
 )
+    println("PRE", ClimaComms.mypid(remapper.comms_ctx), " ", Array(remapper._interpolated_values)[end, end, end, 1]); flush(stdout)
+
     # NOTE: MPI barriers for #2108
     ClimaComms.barrier(remapper.comms_ctx)
     if only_one_field
@@ -770,6 +772,7 @@ function _collect_interpolated_values!(
         )
     end
     ClimaComms.barrier(remapper.comms_ctx)
+    println("POST", ClimaComms.mypid(remapper.comms_ctx), " ", Array(dest)[end, end, end, 1], " ", size(dest)); flush(stdout)
     return nothing
 end
 
