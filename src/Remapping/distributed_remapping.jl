@@ -88,6 +88,8 @@
 #
 # For GPU runs, we store all the vectors as CuArrays on the GPU.
 
+import ClimaCore.Spaces: cuda_synchronize
+
 """
     containing_pid(target_point, topology)
 
@@ -753,11 +755,14 @@ function _collect_interpolated_values!(
 )
     siz = size(dest)
 
+    println("COLONS", remapper.colons)
     println("PRE", ClimaComms.mypid(remapper.comms_ctx), " ", Array(remapper._interpolated_values)[end, end, end, :]); flush(stdout)
 
     # NOTE: MPI barriers for #2108
     ClimaComms.barrier(remapper.comms_ctx)
     if only_one_field
+        cuda_synchronize(ClimaComms.device(remapper.comms_ctx), blocking = true)
+
         Main.MPI.Reduce!(
             remapper._interpolated_values[remapper.colons..., begin],
             dest,
