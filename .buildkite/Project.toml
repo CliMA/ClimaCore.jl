@@ -58,3 +58,4 @@ ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 
 [compat]
 SnoopCompileCore = "2"
+Atomix = "<1"
