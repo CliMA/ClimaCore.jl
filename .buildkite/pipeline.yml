@@ -376,6 +376,30 @@ steps:
           slurm_ntasks: 2
           slurm_gpus_per_task: 1
 
+      - label: "Unit: distributed remapping with CUDA (2 processes)"
+        key: distributed_remapping_gpu_2procs2
+        command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Remapping/distributed_remapping.jl"
+        soft_fail: true
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_ntasks: 2
+          slurm_gpus_per_task: 1
+
+      - label: "Unit: distributed remapping with CUDA (2 processes)"
+        key: distributed_remapping_gpu_2procs3
+        command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Remapping/distributed_remapping.jl"
+        soft_fail: true
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_ntasks: 2
+          slurm_gpus_per_task: 1
+
+
+
 #       - label: "Unit: distributed gather"
 #         key: unit_distributed_gather4
 #         command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/distributed/gather4.jl"
