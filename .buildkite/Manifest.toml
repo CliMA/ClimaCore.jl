@@ -299,9 +299,10 @@ uuid = "7057c7e9-c182-5462-911a-8362d720325c"
 version = "0.3.14"
 
 [[deps.ClimaComms]]
-git-tree-sha1 = "ec303a4a66dc0a0ebe15a639a7e685afeaa0daef"
+deps = ["Adapt", "Logging", "LoggingExtras"]
+git-tree-sha1 = "d29ca07d91e6ca6c0a3649ad6cf37f2634951fd3"
 uuid = "3a4d1b5c-c61d-41fd-a00a-5873ba7a1b0d"
-version = "0.6.4"
+version = "0.6.5"
 weakdeps = ["CUDA", "MPI"]
 
     [deps.ClimaComms.extensions]
