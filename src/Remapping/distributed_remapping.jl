@@ -763,13 +763,14 @@ function _collect_interpolated_values!(
     if only_one_field
         cuda_synchronize(ClimaComms.device(remapper.comms_ctx), blocking = true)
 
-        Main.MPI.Reduce!(
-            remapper._interpolated_values[remapper.colons..., begin],
-            dest,
-            +,
-            remapper.comms_ctx.mpicomm;
-            root = 0
-        )
+        ClimaComms.cuda_sync(Main.MPI.Reduce!, ClimaComms.device(remapper.comms_ctx),
+                             remapper._interpolated_values[remapper.colons..., begin],
+                             dest,
+                             +,
+                             remapper.comms_ctx.mpicomm;
+                             root = 0
+                             )
+
 
         # ClimaComms.reduce!(
         #     remapper.comms_ctx,
