@@ -18,9 +18,12 @@ Constuct a 1D mesh on `domain` with `nelems` elements, using `stretching`. Possi
 - [`GeneralizedExponentialStretching(dz_bottom, dz_top)`](@ref)
 - [`HyperbolicTangentStretching(dz_bottom)`](@ref)
 """
-struct IntervalMesh{I <: IntervalDomain, V <: AbstractVector} <: AbstractMesh1D
+struct IntervalMesh{S, I <: IntervalDomain, V <: AbstractVector, M} <:
+       AbstractMesh1D
+    stretch::S
     domain::I
     faces::V
+    meta::M
 end
 
 # implies isequal
@@ -127,6 +130,21 @@ end
 abstract type StretchingRule end
 
 """
+    UnknownStretch()
+
+An unknown stretch rule, to be used when constructing an `IntervalMesh` with
+given faces.
+"""
+struct UnknownStretch end
+
+function IntervalMesh(domain::IntervalDomain, faces::AbstractArray)
+    nelems = length(faces)
+    nelems < 1 && throw(ArgumentError("`nelems` must be ≥ 1"))
+    monotonic_check(faces)
+    IntervalMesh(UnknownStretch(), domain, faces, nothing)
+end
+
+"""
     Uniform()
 
 Use uniformly-sized elements.
@@ -135,7 +153,7 @@ struct Uniform <: StretchingRule end
 
 function IntervalMesh(
     domain::IntervalDomain{CT},
-    ::Uniform = Uniform();
+    stretch::Uniform = Uniform();
     nelems::Int,
 ) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
     if nelems < 1
@@ -143,7 +161,7 @@ function IntervalMesh(
     end
     faces = range(domain.coord_min, domain.coord_max; length = nelems + 1)
     monotonic_check(faces)
-    IntervalMesh(domain, faces)
+    IntervalMesh(stretch, domain, faces, nothing)
 end
 
 
@@ -199,7 +217,7 @@ function IntervalMesh(
         reverse!(faces)
     end
     monotonic_check(faces)
-    IntervalMesh(domain, faces)
+    IntervalMesh(stretch, domain, faces, nothing)
 end
 
 """
@@ -320,7 +338,7 @@ function IntervalMesh(
         faces[end] = faces[end] == -z_bottom ? z_bottom : faces[1]
     end
     monotonic_check(faces)
-    IntervalMesh(domain, CT.(faces))
+    IntervalMesh(stretch, domain, CT.(faces), (; h_top))
 end
 
 """
@@ -409,7 +427,7 @@ function IntervalMesh(
         faces[end] = faces[end] == -z_bottom ? z_bottom : faces[1]
     end
     monotonic_check(faces)
-    IntervalMesh(domain, CT.(faces))
+    IntervalMesh(stretch, domain, CT.(faces), (; γ_sol = γ_sol.root))
 end
 
 """
