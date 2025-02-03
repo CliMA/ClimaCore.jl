@@ -163,6 +163,23 @@ end
     # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);             test_mapreduce_2!(context, data_view(data)) # TODO: test
 end
 
+@testset "mapreduce extruded 1D data" begin
+    ArrayType = ClimaComms.array_type(device)
+    FT = Float64
+    S = Tuple{FT, FT}
+    Nv = 4
+    Ni = 3
+    Nh = 5
+    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
+    test_mapreduce_2!(context, data)
+    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
+    test_mapreduce_2!(context, data)
+    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    test_mapreduce_2!(context, data)
+    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    test_mapreduce_2!(context, data)
+end
+
 @testset "mapreduce with space with some non-round blocks" begin
     # https://github.com/CliMA/ClimaCore.jl/issues/2097
     space = ClimaCore.CommonSpaces.RectangleXYSpace(;

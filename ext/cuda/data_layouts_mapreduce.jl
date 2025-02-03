@@ -24,13 +24,7 @@ end
 function mapreduce_cuda(
     f,
     op,
-    data::Union{
-        DataLayouts.VF,
-        DataLayouts.IJFH,
-        DataLayouts.IJHF,
-        DataLayouts.VIJFH,
-        DataLayouts.VIJHF,
-    };
+    data::DataLayouts.AbstractData;
     weighted_jacobian = OnesArray(parent(data)),
     opargs...,
 )
@@ -132,9 +126,9 @@ function mapreduce_cuda_kernel!(
     gidx = _get_gidx(tidx, bidx, effective_blksize)
     reduction = CUDA.CuStaticSharedArray(T, shmemsize)
     reduction[tidx] = 0
-    (Nij, _, _, Nv, Nh) = DataLayouts.universal_size(us)
+    (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(us)
     Nf = 1 # a view into `fidx` always gives a size of Nf = 1
-    nitems = Nv * Nij * Nij * Nf * Nh
+    nitems = Nv * Ni * Nj * Nf * Nh
 
     # load shmem
     if gidx ≤ nitems
