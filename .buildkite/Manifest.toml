@@ -2,7 +2,7 @@
 
 julia_version = "1.10.7"
 manifest_format = "2.0"
-project_hash = "ec33af95cf38c1cd436031d4cd81da580a940407"
+project_hash = "d84ce97cd400286c9083b465ed669d49a6fbe790"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "e1ce448a0d7f88168ffe2eeac4549c32d45a42d1"
@@ -899,9 +899,9 @@ version = "0.2.0"
 
 [[deps.GPUCompiler]]
 deps = ["ExprTools", "InteractiveUtils", "LLVM", "Libdl", "Logging", "PrecompileTools", "Preferences", "Scratch", "Serialization", "TOML", "TimerOutputs", "UUIDs"]
-git-tree-sha1 = "8e30cd0b1934f03dd925416970061c1014c6686f"
+git-tree-sha1 = "1d6f290a5eb1201cd63574fbc4440c788d5cb38f"
 uuid = "61eb1bfa-7361-4325-ad38-22787b887f55"
-version = "1.1.0"
+version = "0.27.8"
 
 [[deps.GR]]
 deps = ["Artifacts", "Base64", "DelimitedFiles", "Downloads", "GR_jll", "HTTP", "JSON", "Libdl", "LinearAlgebra", "Preferences", "Printf", "Qt6Wayland_jll", "Random", "Serialization", "Sockets", "TOML", "Tar", "Test", "p7zip_jll"]

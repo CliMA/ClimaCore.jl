@@ -11,34 +11,6 @@ env:
   OPENBLAS_NUM_THREADS: 1
 
 steps:
-  - label: "GPUCompiler 1.1"
-    key: "init11"
-    command:
-      - echo "--- Instantiate buildkite env"
-      - "julia --project=.buildkite --check-bounds=yes -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
-      - "julia --project=.buildkite -e 'using CUDA; CUDA.precompile_runtime()'"
-    agents:
-      slurm_mem: 80G
-      slurm_gpus: 1
-      slurm_cpus_per_task: 12
-    env:
-      JULIA_NUM_PRECOMPILE_TASKS: 12
-
-  - wait
-
-  - label: "Unit: distributed remapping with CUDA (2 processes)"
-    key: distributed_remapping_gpu_2procs
-    command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Remapping/distributed_remapping.jl"
-    soft_fail: true
-    timeout_in_minutes: 5
-    env:
-      CLIMACOMMS_CONTEXT: "MPI"
-      CLIMACOMMS_DEVICE: "CUDA"
-    agents:
-      slurm_ntasks: 2
-      slurm_gpus_per_task: 1
-
-  - wait
 
   - label: "GPUCompiler 0.27"
     key: "init27"
@@ -60,6 +32,36 @@ steps:
     key: distributed_remapping_gpu_2procs27
     command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Remapping/distributed_remapping.jl"
     soft_fail: true
+    env:
+      CLIMACOMMS_CONTEXT: "MPI"
+      CLIMACOMMS_DEVICE: "CUDA"
+    agents:
+      slurm_ntasks: 2
+      slurm_gpus_per_task: 1
+
+
+  - wait
+
+  - label: "GPUCompiler 1.1"
+    key: "init11"
+    command:
+      - echo "--- Instantiate buildkite env"
+      - "julia --project=.buildkite --check-bounds=yes -e 'using Pkg;Pkg.add(name=\"GPUCompiler\", version=\"1.1.0\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
+      - "julia --project=.buildkite -e 'using CUDA; CUDA.precompile_runtime()'"
+    agents:
+      slurm_mem: 80G
+      slurm_gpus: 1
+      slurm_cpus_per_task: 12
+    env:
+      JULIA_NUM_PRECOMPILE_TASKS: 12
+
+  - wait
+
+  - label: "Unit: distributed remapping with CUDA (2 processes)"
+    key: distributed_remapping_gpu_2procs
+    command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Remapping/distributed_remapping.jl"
+    soft_fail: true
+    timeout_in_minutes: 5
     env:
       CLIMACOMMS_CONTEXT: "MPI"
       CLIMACOMMS_DEVICE: "CUDA"
