@@ -130,9 +130,7 @@ function set_interpolated_values_kernel!(
         out[i, j, k] = 0
         for t in 1:Nq
             out[i, j, k] +=
-                I[i, t] *
-                I[i, s] *
-                (
+                I[i, t] * (
                     A * field_values[k][CI(t, 1, 1, v_lo, h)] +
                     B * field_values[k][CI(t, 1, 1, v_hi, h)]
                 )
@@ -275,9 +273,9 @@ function set_interpolated_values_kernel!(
 
         h = local_horiz_indices[i]
         out[i, k] = 0
-        for t in 1:Nq, s in 1:Nq
+        for t in 1:Nq
             out[i, k] +=
-                I[i, i] * field_values[k][CartesianIndex(t, 1, 1, 1, h)]
+                I[i, t] * field_values[k][CartesianIndex(t, 1, 1, 1, h)]
         end
     end
     return nothing

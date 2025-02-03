@@ -34,6 +34,14 @@ Returns the degrees_of_freedom of the `QuadratureStyle` concrete type
 @inline degrees_of_freedom(::QuadratureStyle{Nq}) where {Nq} = Nq
 
 """
+    requires_dss(QuadratureStyle)
+
+Determines whether the `QuadratureStyle` requires direct stiffness summation.
+"""
+requires_dss(quadstyle) =
+    unique_degrees_of_freedom(quadstyle) < degrees_of_freedom(quadstyle)
+
+"""
     points, weights = quadrature_points(::Type{FT}, quadrature_style)
 
 The points and weights of the quadrature rule in floating point type `FT`.

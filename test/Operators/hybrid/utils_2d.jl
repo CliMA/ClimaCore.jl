@@ -15,6 +15,7 @@
 
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
+import Adapt
 import ClimaComms
 ClimaComms.@import_required_backends
 

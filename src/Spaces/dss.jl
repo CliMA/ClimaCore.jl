@@ -12,7 +12,7 @@ import ..Topologies:
     fill_send_buffer!,
     load_from_recv_buffer!,
     DSSTypesAll,
-    DSSDataTypes,
+    DSSTypes2D,
     DSSPerimeterTypes
 
 
@@ -102,7 +102,7 @@ function weighted_dss_prepare!(data, space, dss_buffer::Nothing)
 end
 
 function weighted_dss_prepare!(
-    data::DSSDataTypes,
+    data::DSSTypes2D,
     space::Union{
         Spaces.SpectralElementSpace2D,
         Spaces.ExtrudedFiniteDifferenceSpace,
@@ -110,7 +110,6 @@ function weighted_dss_prepare!(
     dss_buffer::DSSBuffer,
 )
     assert_same_eltype(data, dss_buffer)
-    length(parent(data)) == 0 && return nothing
     device = ClimaComms.device(topology(space))
     hspace = horizontal_space(space)
     dss_transform!(
@@ -169,13 +168,15 @@ representative ghost vertices which store result of "ghost local" DSS are loaded
 4). Start DSS communication with neighboring processes
 """
 function weighted_dss_start!(
-    data::DSSDataTypes,
+    data::DSSTypes2D,
     space::Union{
         Spaces.SpectralElementSpace2D,
         Spaces.ExtrudedFiniteDifferenceSpace,
     },
     dss_buffer::DSSBuffer,
 )
+    Quadratures.requires_dss(quadrature_style(space)) || return nothing
+    sizeof(eltype(data)) > 0 || return nothing
     device = ClimaComms.device(topology(space))
     weighted_dss_prepare!(data, space, dss_buffer)
     cuda_synchronize(device; blocking = true)
@@ -225,17 +226,19 @@ function weighted_dss_internal!(
     hspace::AbstractSpectralElementSpace,
     dss_buffer::Union{DSSBuffer, Nothing},
 )
+    Quadratures.requires_dss(quadrature_style(space)) || return nothing
+    sizeof(eltype(data)) > 0 || return nothing
     assert_same_eltype(data, dss_buffer)
-    length(parent(data)) == 0 && return nothing
+    device = ClimaComms.device(topology(hspace))
     if hspace isa SpectralElementSpace1D
         dss_1d!(
-            topology(hspace),
+            device,
             data,
+            topology(hspace),
             local_geometry_data(space),
             dss_weights(space),
         )
     else
-        device = ClimaComms.device(topology(hspace))
         dss_transform!(
             device,
             dss_buffer,
@@ -303,14 +306,15 @@ weighted_dss_ghost!(
 
 
 function weighted_dss_ghost!(
-    data::DSSDataTypes,
+    data::DSSTypes2D,
     space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
     hspace::SpectralElementSpace2D,
     dss_buffer::DSSBuffer,
 )
+    Quadratures.requires_dss(quadrature_style(space)) || return data
+    sizeof(eltype(data)) > 0 || return data
     assert_same_eltype(data, dss_buffer)
     ClimaComms.finish(dss_buffer.graph_context)
-    length(parent(data)) == 0 && return data
     device = ClimaComms.device(topology(hspace))
     load_from_recv_buffer!(device, dss_buffer)
     dss_ghost!(
