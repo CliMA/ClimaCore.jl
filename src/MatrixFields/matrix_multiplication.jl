@@ -201,6 +201,8 @@ This means that we can express the bounds on the interior values of ``i`` as
 struct MultiplyColumnwiseBandMatrixField <: Operators.FiniteDifferenceOperator end
 const ⋅ = MultiplyColumnwiseBandMatrixField()
 
+Operators.strip_space(op::MultiplyColumnwiseBandMatrixField, _) = op
+
 struct TopLeftMatrixCorner <: Operators.AbstractBoundaryCondition end
 struct BottomRightMatrixCorner <: Operators.AbstractBoundaryCondition end
 

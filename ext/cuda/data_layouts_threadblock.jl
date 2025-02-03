@@ -213,15 +213,15 @@ end
     us::DataLayouts.UniversalSize,
     n_max_threads::Integer,
 )
-    (Nij, _, _, _, Nh) = DataLayouts.universal_size(us)
+    (Ni, Nj, _, _, Nh) = DataLayouts.universal_size(us)
     Nh_thread = min(
-        Int(fld(n_max_threads, Nij * Nij)),
+        Int(fld(n_max_threads, Ni * Nj)),
         maximum_allowable_threads()[3],
         Nh,
     )
     Nh_blocks = cld(Nh, Nh_thread)
-    @assert prod((Nij, Nij, Nh_thread)) ≤ n_max_threads "threads,n_max_threads=($(prod((Nij, Nij, Nh_thread))),$n_max_threads)"
-    return (; threads = (Nij, Nij, Nh_thread), blocks = (Nh_blocks,))
+    @assert prod((Ni, Nj, Nh_thread)) ≤ n_max_threads "threads,n_max_threads=($(prod((Ni, Nj, Nh_thread))),$n_max_threads)"
+    return (; threads = (Ni, Nj, Nh_thread), blocks = (Nh_blocks,))
 end
 @inline function columnwise_universal_index(us::UniversalSize)
     (i, j, th) = CUDA.threadIdx()
@@ -241,9 +241,9 @@ end
     n_max_threads::Integer;
     Nnames,
 )
-    (Nij, _, _, _, Nh) = DataLayouts.universal_size(us)
-    @assert prod((Nij, Nij, Nnames)) ≤ n_max_threads "threads,n_max_threads=($(prod((Nij, Nij, Nnames))),$n_max_threads)"
-    return (; threads = (Nij, Nij, Nnames), blocks = (Nh,))
+    (Ni, Nj, _, _, Nh) = DataLayouts.universal_size(us)
+    @assert prod((Ni, Nj, Nnames)) ≤ n_max_threads "threads,n_max_threads=($(prod((Ni, Nj, Nnames))),$n_max_threads)"
+    return (; threads = (Ni, Nj, Nnames), blocks = (Nh,))
 end
 @inline function multiple_field_solve_universal_index(us::UniversalSize)
     (i, j, iname) = CUDA.threadIdx()
@@ -258,12 +258,12 @@ end
     us::DataLayouts.UniversalSize,
     n_max_threads::Integer = 256;
 )
-    (Nq, _, _, Nv, Nh) = DataLayouts.universal_size(us)
-    Nvthreads = min(fld(n_max_threads, Nq * Nq), maximum_allowable_threads()[3])
+    (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(us)
+    Nvthreads = min(fld(n_max_threads, Ni * Nj), maximum_allowable_threads()[3])
     Nvblocks = cld(Nv, Nvthreads)
-    @assert prod((Nq, Nq, Nvthreads)) ≤ n_max_threads "threads,n_max_threads=($(prod((Nq, Nq, Nvthreads))),$n_max_threads)"
-    @assert Nq * Nq ≤ n_max_threads
-    return (; threads = (Nq, Nq, Nvthreads), blocks = (Nh, Nvblocks), Nvthreads)
+    @assert prod((Ni, Nj, Nvthreads)) ≤ n_max_threads "threads,n_max_threads=($(prod((Ni, Nj, Nvthreads))),$n_max_threads)"
+    @assert Ni * Nj ≤ n_max_threads
+    return (; threads = (Ni, Nj, Nvthreads), blocks = (Nh, Nvblocks), Nvthreads)
 end
 @inline function spectral_universal_index(space::Spaces.AbstractSpace)
     i = threadIdx().x

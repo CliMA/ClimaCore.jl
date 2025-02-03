@@ -609,6 +609,16 @@ steps:
            - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_2d.jl"
            - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/convergence_2d.jl"
 
+      - label: "Unit: hyb ops 2d CUDA"
+        key: unit_hyb_ops_2d_cuda
+        command:
+           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_2d.jl"
+           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/convergence_2d.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: hyb ops 3d"
         key: unit_hyb_ops_3d
         command:

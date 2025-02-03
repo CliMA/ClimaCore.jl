@@ -285,6 +285,8 @@ Bandwidths of Matrix-Matrix Product
 
 abstract type PointwiseStencilOperator <: FiniteDifferenceOperator end
 
+strip_space(op::PointwiseStencilOperator, _) = op
+
 struct LeftStencilBoundary <: AbstractBoundaryCondition end
 struct RightStencilBoundary <: AbstractBoundaryCondition end
 

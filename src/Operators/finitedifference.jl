@@ -80,6 +80,10 @@ Subtypes should define:
 """
 abstract type AbstractBoundaryCondition end
 
+strip_space(bc::AbstractBoundaryCondition, parent_space) =
+    hasproperty(bc, :val) ?
+    unionall_type(typeof(bc))(strip_space(bc.val, parent_space)) : bc
+
 """
     NullBoundaryCondition()
 
@@ -204,6 +208,12 @@ has_boundary(
     ::RightBoundaryWindow{name},
 ) where {name} = hasproperty(op.bcs, name)
 
+strip_space(op::FiniteDifferenceOperator, parent_space) =
+    unionall_type(typeof(op))(
+        NamedTuple{keys(op.bcs)}(
+            strip_space_args(values(op.bcs), parent_space),
+        ),
+    )
 
 abstract type AbstractStencilStyle <: Fields.AbstractFieldStyle end
 
@@ -272,7 +282,15 @@ function Base.Broadcast.instantiate(
     return Base.Broadcast.Broadcasted{Style}(bc.f, args, axes)
 end
 
-
+function strip_space(sbc::StencilBroadcasted{Style}, parent_space) where {Style}
+    current_space = axes(sbc)
+    new_space = placeholder_space(current_space, parent_space)
+    return StencilBroadcasted{Style}(
+        strip_space(sbc.op, current_space),
+        strip_space_args(sbc.args, current_space),
+        new_space,
+    )
+end
 
 """
     return_eltype(::Op, fields...)
@@ -1355,6 +1373,11 @@ struct MonotoneLocalExtrema <: LimiterConstraint end
 
 LinVanLeerC2F(; constraint, kwargs...) =
     LinVanLeerC2F(NamedTuple(kwargs), constraint)
+
+strip_space(op::LinVanLeerC2F, parent_space) = LinVanLeerC2F(
+    NamedTuple{keys(op.bcs)}(strip_space_args(values(op.bcs), parent_space)),
+    op.constraint,
+)
 
 return_eltype(::LinVanLeerC2F, V, A, dt) =
     Geometry.Contravariant3Vector{eltype(eltype(V))}
@@ -3800,16 +3823,6 @@ function _threaded_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
     call_post_op_callback() &&
         post_op_callback(field_out, field_out, bc, Ni, Nj, Nh)
     return field_out
-end
-
-function strip_space(bc::StencilBroadcasted{Style}, parent_space) where {Style}
-    current_space = axes(bc)
-    new_space = placeholder_space(current_space, parent_space)
-    return StencilBroadcasted{Style}(
-        bc.op,
-        strip_space_args(bc.args, current_space),
-        new_space,
-    )
 end
 
 function Base.copyto!(
