@@ -12,12 +12,12 @@ env:
 
 steps:
 
-  - label: "GPUCompiler 0.27"
+  - label: "CUDA 5.5"
     key: "init27"
     command:
       - echo "--- Instantiate buildkite env"
       - rm -rf $JULIA_DEPOT_PATH
-      - "julia --project=.buildkite --check-bounds=yes -e 'using Pkg; Pkg.add(name=\"GPUCompiler\", version=\"0.27.8\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
+      - "julia --project=.buildkite --check-bounds=yes -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
       - "julia --project=.buildkite -e 'using CUDA; CUDA.precompile_runtime()'"
     agents:
       slurm_mem: 80G
@@ -42,11 +42,11 @@ steps:
 
   - wait
 
-  - label: "GPUCompiler 1.1"
+  - label: "CUDA 5.6"
     key: "init11"
     command:
       - echo "--- Instantiate buildkite env"
-      - "julia --project=.buildkite --check-bounds=yes -e 'using Pkg;Pkg.add(name=\"GPUCompiler\", version=\"1.1.0\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
+      - "julia --project=.buildkite --check-bounds=yes -e 'using Pkg;Pkg.add(name=\"CUDA\", version=\"5.6.1\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
       - "julia --project=.buildkite -e 'using CUDA; CUDA.precompile_runtime()'"
     agents:
       slurm_mem: 80G
