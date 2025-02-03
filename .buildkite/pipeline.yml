@@ -44,6 +44,7 @@ steps:
     key: "init27"
     command:
       - echo "--- Instantiate buildkite env"
+      - rm -rf $JULIA_DEPOT_PATH
       - "julia --project=.buildkite --check-bounds=yes -e 'using Pkg; Pkg.add(name=\"GPUCompiler\", version=\"0.27.8\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
       - "julia --project=.buildkite -e 'using CUDA; CUDA.precompile_runtime()'"
     agents:
