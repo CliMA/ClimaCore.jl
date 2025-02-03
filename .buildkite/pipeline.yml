@@ -12,7 +12,7 @@ env:
 
 steps:
 
-  - label: "Atomix 0.1"
+  - label: "GPUCompiler 0.27"
     key: "init27"
     command:
       - echo "--- Instantiate buildkite env"
@@ -42,12 +42,12 @@ steps:
 
   - wait
 
-  - label: "Atomix 1.1"
+  - label: "GPUCompiler 1"
     key: "init11"
     command:
       - echo "--- Instantiate buildkite env"
       - rm -rf $JULIA_DEPOT_PATH
-      - "julia --project=.buildkite --check-bounds=yes -e 'using Pkg;Pkg.add(name=\"Atomix\", version=\"1.1.0\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
+      - "julia --project=.buildkite --check-bounds=yes -e 'using Pkg;Pkg.add(name=\"GPUCompiler\", version=\"1\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
       - "julia --project=.buildkite -e 'using CUDA; CUDA.precompile_runtime()'"
     agents:
       slurm_mem: 80G
