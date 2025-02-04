@@ -452,15 +452,58 @@ end
 
 # write fields
 function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
+    write!(writer, field, name, axes(field))
+end
+
+function write!(
+    writer::HDF5Writer,
+    field::Fields.Field,
+    name::AbstractString,
+    space::Spaces.AbstractPointSpace,
+)
+    array = parent(field)
+    lg_data = Grids.local_geometry_data(space)
+    lg_type = Grids.local_geometry_type(typeof(space))
+    lg_array = parent(lg_data)
+    dataset = create_dataset(
+        writer.file,
+        "fields/$name",
+        datatype(eltype(array)),
+        dataspace(size(array)),
+    )
+    dataset[:] = array
+    write_attribute(dataset, "type", "Field")
+    write_attribute(
+        dataset,
+        "data_layout",
+        string(nameof(typeof(Fields.field_values(field)))),
+    )
+    write_attribute(dataset, "value_type", string(eltype(field)))
+    local_geometry_dataset = create_dataset(
+        writer.file,
+        "local_geometry_data/$name",
+        datatype(eltype(array)),
+        dataspace(size(lg_array)),
+    )
+    local_geometry_dataset[:] = lg_array
+    write_attribute(local_geometry_dataset, "value_type", string(lg_type))
+end
+
+function write!(
+    writer::HDF5Writer,
+    field::Fields.Field,
+    name::AbstractString,
+    space::Spaces.AbstractSpace,
+)
     values = Fields.field_values(field)
-    space = axes(field)
+    array = parent(field)
+    nd = ndims(array)
+
     staggering = Spaces.staggering(space)
+    topology = Spaces.topology(space)
     grid = Spaces.grid(space)
     grid_name = write!(writer, grid)
 
-    array = parent(field)
-    topology = Spaces.topology(space)
-    nd = ndims(array)
     if topology isa Topologies.Topology2D &&
        !(writer.context isa ClimaComms.SingletonCommsContext)
         nelems = Topologies.nelems(topology)
