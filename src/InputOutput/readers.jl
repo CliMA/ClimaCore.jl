@@ -520,16 +520,16 @@ function read_field(reader::HDF5Reader, name::AbstractString)
         else
             # if the there is no grid, then the field is on a PointSpace
             lg_obj = reader.file["local_geometry_data/$name"]
+            # TODO: Is this array type correct? should we assume SingletonCommsContext?
             ArrayType = ClimaComms.array_type(ClimaComms.device(reader.context))
             lg_data = ArrayType(read(lg_obj))
             # because it is a point space, the data layout of local_geometry_data is always DataF
             lg_type = eval(Meta.parse(attrs(lg_obj)["value_type"]))
             local_geometry_data = DataLayouts.DataF{lg_type}(lg_data)
             space = Spaces.PointSpace(local_geometry_data)
-        end
-        if space isa Spaces.AbstractPointSpace
             topology = nothing
-        else
+        end
+        if !(space isa Spaces.AbstractPointSpace)
             topology = Spaces.topology(space)
             ArrayType = ClimaComms.array_type(topology)
         end

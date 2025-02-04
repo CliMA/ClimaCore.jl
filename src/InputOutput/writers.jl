@@ -451,10 +451,29 @@ function write_new!(
 end
 
 # write fields
+"""
+    write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
+
+Calls `write!` with the `axes` of `field` as an extra positional argument, which
+writes an object of type 'Field' and name 'name' to the HDF5 file.
+"""
 function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
     write!(writer, field, name, axes(field))
 end
 
+"""
+    write!(
+        writer::HDF5Writer,
+        field::Fields.Field,
+        name::AbstractString,
+        space::Spaces.AbstractPointSpace,
+    )
+
+Writes a `Field`, with `axes` of type `PointSpace`,  to the HDF5 file. The field
+is written to the `fields` group in the file, with the name `name`. The local
+geometry data of the `PointSpace` is written to the `local_geometry_data` group
+with name `name`.
+"""
 function write!(
     writer::HDF5Writer,
     field::Fields.Field,
@@ -489,6 +508,16 @@ function write!(
     write_attribute(local_geometry_dataset, "value_type", string(lg_type))
 end
 
+"""
+    write!(
+        writer::HDF5Writer,
+        field::Fields.Field,
+        name::AbstractString,
+        space::Spaces.AbstractSpace,
+    )
+
+Writes an object of type 'Field' and name 'name' to the HDF5 file.
+"""
 function write!(
     writer::HDF5Writer,
     field::Fields.Field,
