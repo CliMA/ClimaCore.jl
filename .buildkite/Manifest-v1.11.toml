@@ -1387,7 +1387,9 @@ version = "0.4.17"
 
 [[deps.MPI]]
 deps = ["Distributed", "DocStringExtensions", "Libdl", "MPICH_jll", "MPIPreferences", "MPItrampoline_jll", "MicrosoftMPI_jll", "OpenMPI_jll", "PkgVersion", "PrecompileTools", "Requires", "Serialization", "Sockets"]
-git-tree-sha1 = "5465632f9dd11aea0d912cb64a6f80640092a33e"
+git-tree-sha1 = "3b3d958d378fa6a9f7f22e54229a4db97e32aad8"
+repo-rev = "aac9688e6961bc7e3aeeba7600f5e7d0b10596a3"
+repo-url = "https://github.com/JuliaParallel/MPI.jl.git"
 uuid = "da04e1cc-30fd-572f-bb4f-1f8673147195"
 version = "0.20.21"
 
