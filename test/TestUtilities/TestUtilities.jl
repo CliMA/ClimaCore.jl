@@ -113,6 +113,7 @@ function CenterExtrudedFiniteDifferenceSpace(
     Nq = 4,
     deep = false,
     topography = false,
+    autodiff_metric = true,
     horizontal_layout_type = DataLayouts.IJFH,
 ) where {FT}
     radius = FT(128)
@@ -131,8 +132,12 @@ function CenterExtrudedFiniteDifferenceSpace(
     hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
     htopology = Topologies.Topology2D(context, hmesh)
     quad = Quadratures.GLL{Nq}()
-    hspace =
-        Spaces.SpectralElementSpace2D(htopology, quad; horizontal_layout_type)
+    hspace = Spaces.SpectralElementSpace2D(
+        htopology,
+        quad;
+        autodiff_metric,
+        horizontal_layout_type,
+    )
 
     hypsography = if topography
         # some non-trivial function of latitude and longitude

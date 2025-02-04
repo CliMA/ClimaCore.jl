@@ -136,6 +136,7 @@ mutable struct SpectralElementGrid2D{
     internal_surface_geometry::IS
     boundary_surface_geometries::BS
     enable_bubble::Bool
+    autodiff_metric::Bool
 end
 
 Adapt.@adapt_structure SpectralElementGrid2D
@@ -145,15 +146,18 @@ local_geometry_type(
 ) where {T, Q, GG, LG, D, IS, BS} = eltype(LG) # calls eltype from DataLayouts
 
 """
-    SpectralElementSpace2D(topology, quadrature_style; enable_bubble, horizontal_layout_type = DataLayouts.IJFH)
+    SpectralElementSpace2D(topology, quadrature_style; enable_bubble, autodiff_metric, horizontal_layout_type = DataLayouts.IJFH)
 
 Construct a `SpectralElementSpace2D` instance given a `topology` and `quadrature`. The
 flag `enable_bubble` enables the `bubble correction` for more accurate element areas.
+The flag `autodiff_metric` enables the use of automatic differentiation instead of the
+SEM for computing metric terms.
 
 # Input arguments:
 - topology: Topology2D
 - quadrature_style: QuadratureStyle
 - enable_bubble: Bool
+- autodiff_metric: Bool
 - horizontal_layout_type: Type{<:AbstractData}
 
 The idea behind the so-called `bubble_correction` is that the numerical area
@@ -182,6 +186,7 @@ function SpectralElementGrid2D(
     quadrature_style::Quadratures.QuadratureStyle;
     horizontal_layout_type = DataLayouts.IJFH,
     enable_bubble::Bool = false,
+    autodiff_metric::Bool = true,
 )
     get!(
         Cache.OBJECT_CACHE,
@@ -190,6 +195,7 @@ function SpectralElementGrid2D(
             topology,
             quadrature_style,
             enable_bubble,
+            autodiff_metric,
             horizontal_layout_type,
         ),
     ) do
@@ -198,6 +204,7 @@ function SpectralElementGrid2D(
             quadrature_style,
             horizontal_layout_type;
             enable_bubble,
+            autodiff_metric,
         )
     end
 end
@@ -217,12 +224,14 @@ _SpectralElementGrid2D(
     quadrature_style::Quadratures.QuadratureStyle,
     horizontal_layout_type = DataLayouts.IJFH;
     enable_bubble::Bool,
+    autodiff_metric::Bool,
 ) = _SpectralElementGrid2D(
     topology,
     quadrature_style,
     Val(Topologies.nlocalelems(topology)),
     horizontal_layout_type;
     enable_bubble,
+    autodiff_metric,
 )
 
 function _SpectralElementGrid2D(
@@ -231,6 +240,7 @@ function _SpectralElementGrid2D(
     ::Val{Nh},
     ::Type{horizontal_layout_type};
     enable_bubble::Bool,
+    autodiff_metric::Bool,
 ) where {Nh, horizontal_layout_type}
     @assert horizontal_layout_type <: Union{DataLayouts.IJHF, DataLayouts.IJFH}
     surface_layout_type = if horizontal_layout_type <: DataLayouts.IJFH
@@ -274,9 +284,8 @@ function _SpectralElementGrid2D(
 
     local_geometry = horizontal_layout_type{LG, Nq}(Array{FT}, Nh)
 
-    quad_points, quad_weights =
-        Quadratures.quadrature_points(FT, quadrature_style)
-    high_order_quad_points, high_order_quad_weights =
+    _, quad_weights = Quadratures.quadrature_points(FT, quadrature_style)
+    _, high_order_quad_weights =
         Quadratures.quadrature_points(FT, high_order_quadrature_style)
     for (lidx, elem) in enumerate(Topologies.localelems(topology))
         elem_area = zero(FT)
@@ -285,16 +294,18 @@ function _SpectralElementGrid2D(
         interior_elem_area = zero(FT)
         rel_interior_elem_area_Δ = zero(FT)
         local_geometry_slab = slab(local_geometry, lidx)
+        lg_args =
+            (global_geometry, topology, quadrature_style, autodiff_metric, elem)
+        high_order_lg_args = (
+            global_geometry,
+            topology,
+            high_order_quadrature_style,
+            autodiff_metric,
+            elem,
+        )
         # high-order quadrature loop for computing geometric element face area.
         for i in 1:high_order_Nq, j in 1:high_order_Nq
-            ξ = SVector(high_order_quad_points[i], high_order_quad_points[j])
-            u, ∂u∂ξ = compute_local_geometry(
-                global_geometry,
-                topology,
-                elem,
-                ξ,
-                Val(AIdx),
-            )
+            u, ∂u∂ξ = local_geometry_at_nodal_point(high_order_lg_args..., i, j)
             J_high_order = det(Geometry.components(∂u∂ξ))
             WJ_high_order =
                 J_high_order *
@@ -304,14 +315,7 @@ function _SpectralElementGrid2D(
         end
         # low-order quadrature loop for computing numerical element face area
         for i in 1:Nq, j in 1:Nq
-            ξ = SVector(quad_points[i], quad_points[j])
-            u, ∂u∂ξ = compute_local_geometry(
-                global_geometry,
-                topology,
-                elem,
-                ξ,
-                Val(AIdx),
-            )
+            u, ∂u∂ξ = local_geometry_at_nodal_point(lg_args..., i, j)
             J = det(Geometry.components(∂u∂ξ))
             WJ = J * quad_weights[i] * quad_weights[j]
             elem_area += WJ
@@ -325,14 +329,7 @@ function _SpectralElementGrid2D(
         if enable_bubble
             if abs(elem_area - high_order_elem_area) ≤ eps(FT)
                 for i in 1:Nq, j in 1:Nq
-                    ξ = SVector(quad_points[i], quad_points[j])
-                    u, ∂u∂ξ = compute_local_geometry(
-                        global_geometry,
-                        topology,
-                        elem,
-                        ξ,
-                        Val(AIdx),
-                    )
+                    u, ∂u∂ξ = local_geometry_at_nodal_point(lg_args..., i, j)
                     J = det(Geometry.components(∂u∂ξ))
                     WJ = J * quad_weights[i] * quad_weights[j]
                     local_geometry_slab[slab_index(i, j)] =
@@ -354,14 +351,8 @@ function _SpectralElementGrid2D(
                 # Use uniform bubble correction
                 if Nq == 2
                     for i in 1:Nq, j in 1:Nq
-                        ξ = SVector(quad_points[i], quad_points[j])
-                        u, ∂u∂ξ = compute_local_geometry(
-                            global_geometry,
-                            topology,
-                            elem,
-                            ξ,
-                            Val(AIdx),
-                        )
+                        u, ∂u∂ξ =
+                            local_geometry_at_nodal_point(lg_args..., i, j)
                         J = det(Geometry.components(∂u∂ξ))
                         J += Δarea / Nq^2
                         WJ = J * quad_weights[i] * quad_weights[j]
@@ -370,14 +361,8 @@ function _SpectralElementGrid2D(
                     end
                 else # Higher-order elements: Use HOMME bubble correction for the interior nodes
                     for i in 2:(Nq - 1), j in 2:(Nq - 1)
-                        ξ = SVector(quad_points[i], quad_points[j])
-                        u, ∂u∂ξ = compute_local_geometry(
-                            global_geometry,
-                            topology,
-                            elem,
-                            ξ,
-                            Val(AIdx),
-                        )
+                        u, ∂u∂ξ =
+                            local_geometry_at_nodal_point(lg_args..., i, j)
                         J = det(Geometry.components(∂u∂ξ))
                         WJ = J * quad_weights[i] * quad_weights[j]
                         interior_elem_area += WJ
@@ -391,14 +376,8 @@ function _SpectralElementGrid2D(
                     rel_interior_elem_area_Δ = Δarea / interior_elem_area
 
                     for i in 1:Nq, j in 1:Nq
-                        ξ = SVector(quad_points[i], quad_points[j])
-                        u, ∂u∂ξ = compute_local_geometry(
-                            global_geometry,
-                            topology,
-                            elem,
-                            ξ,
-                            Val(AIdx),
-                        )
+                        u, ∂u∂ξ =
+                            local_geometry_at_nodal_point(lg_args..., i, j)
                         J = det(Geometry.components(∂u∂ξ))
                         # Modify J only for interior nodes
                         if i != 1 && j != 1 && i != Nq && j != Nq
@@ -496,44 +475,74 @@ function _SpectralElementGrid2D(
         internal_surface_geometry,
         boundary_surface_geometries,
         enable_bubble,
+        autodiff_metric,
     )
 end
 
-function compute_local_geometry(
+function ξ_at_nodal_point(FT, quadrature_style, i, j)
+    quad_points = Quadratures.quadrature_points(FT, quadrature_style)[1]
+    return SVector(quad_points[i], quad_points[j])
+end
+
+function ∂f∂ξ_at_nodal_point(f, FT, quadrature_style, autodiff_metric, i, j)
+    if autodiff_metric
+        ξ = ξ_at_nodal_point(FT, quadrature_style, i, j)
+        return ForwardDiff.jacobian(f, ξ)
+    end
+    nodal_indices = SOneTo(Quadratures.degrees_of_freedom(quadrature_style))
+    deriv_matrix = Quadratures.differentiation_matrix(FT, quadrature_style)
+    ∂f∂ξ¹ = sum(nodal_indices) do i′
+        deriv_matrix[i, i′] * f(ξ_at_nodal_point(FT, quadrature_style, i′, j))
+    end
+    ∂f∂ξ² = sum(nodal_indices) do j′
+        deriv_matrix[j, j′] * f(ξ_at_nodal_point(FT, quadrature_style, i, j′))
+    end
+    return hcat(∂f∂ξ¹, ∂f∂ξ²)
+end
+
+function local_geometry_at_nodal_point(
     global_geometry::Geometry.SphericalGlobalGeometry,
     topology,
+    quadrature_style,
+    autodiff_metric,
     elem,
-    ξ,
-    ::Val{AIdx},
-) where {AIdx}
+    i,
+    j,
+)
+    FT = eltype(Topologies.coordinate_type(topology))
+    AIdx = Geometry.coordinate_axis(get_CoordType2D(topology))
+    ξ = ξ_at_nodal_point(FT, quadrature_style, i, j)
     x = Meshes.coordinates(topology.mesh, elem, ξ)
-    u = Geometry.LatLongPoint(x, global_geometry)
     ∂x∂ξ = Geometry.AxisTensor(
         (Geometry.Cartesian123Axis(), Geometry.CovariantAxis{AIdx}()),
-        ForwardDiff.jacobian(ξ) do ξ
+        ∂f∂ξ_at_nodal_point(FT, quadrature_style, autodiff_metric, i, j) do ξ
             Geometry.components(Meshes.coordinates(topology.mesh, elem, ξ))
         end,
     )
+    u = Geometry.LatLongPoint(x, global_geometry)
     G = Geometry.local_to_cartesian(global_geometry, u)
     ∂u∂ξ = Geometry.project(Geometry.LocalAxis{AIdx}(), G' * ∂x∂ξ)
-
     return u, ∂u∂ξ
 end
-function compute_local_geometry(
-    global_geometry::Geometry.AbstractGlobalGeometry,
+function local_geometry_at_nodal_point(
+    ::Geometry.AbstractGlobalGeometry,
     topology,
+    quadrature_style,
+    autodiff_metric,
     elem,
-    ξ,
-    ::Val{AIdx},
-) where {AIdx}
+    i,
+    j,
+)
+    FT = eltype(Topologies.coordinate_type(topology))
+    AIdx = Geometry.coordinate_axis(get_CoordType2D(topology))
+    ξ = ξ_at_nodal_point(FT, quadrature_style, i, j)
     u = Meshes.coordinates(topology.mesh, elem, ξ)
     ∂u∂ξ = Geometry.AxisTensor(
         (Geometry.LocalAxis{AIdx}(), Geometry.CovariantAxis{AIdx}()),
-        ForwardDiff.jacobian(ξ) do ξ
+        ∂f∂ξ_at_nodal_point(FT, quadrature_style, autodiff_metric, i, j) do ξ
             Geometry.components(Meshes.coordinates(topology.mesh, elem, ξ))
         end,
     )
-
     return u, ∂u∂ξ
 end
 

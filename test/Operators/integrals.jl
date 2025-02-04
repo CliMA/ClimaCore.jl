@@ -189,8 +189,9 @@ end
     device = ClimaComms.device()
     context = ClimaComms.SingletonCommsContext(device)
     for FT in (Float32, Float64)
-        for topography in (false, true), deep in (false, true)
-            space_kwargs = (; context, topography, deep)
+        bools = (false, true)
+        for topography in bools, deep in bools, autodiff_metric in bools
+            space_kwargs = (; context, topography, deep, autodiff_metric)
             space = TU.CenterExtrudedFiniteDifferenceSpace(FT; space_kwargs...)
             test_fubinis_theorem(space)
         end
