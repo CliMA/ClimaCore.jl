@@ -15,8 +15,8 @@
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
 [docs-dev-url]: https://CliMA.github.io/ClimaCore.jl/dev/
 
-[gha-ci-img]: https://github.com/CliMA/ClimaCore.jl/actions/workflows/OS-UnitTests.yml/badge.svg
-[gha-ci-url]: https://github.com/CliMA/ClimaCore.jl/actions/workflows/OS-UnitTests.yml
+[gha-ci-img]: https://github.com/CliMA/ClimaCore.jl/actions/workflows/UnitTests.yml/badge.svg
+[gha-ci-url]: https://github.com/CliMA/ClimaCore.jl/actions/workflows/UnitTests.yml
 
 [buildkite-ci-img]: https://badge.buildkite.com/2b63d3c49347804f61bd8e99c8b85e05871253b92612cd1af4.svg
 [buildkite-ci-url]: https://buildkite.com/clima/climacore-ci
