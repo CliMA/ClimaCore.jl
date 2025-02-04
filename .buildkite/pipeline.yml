@@ -12,7 +12,7 @@ env:
 
 steps:
 
-  - label: "GPUCompiler 0.27"
+  - label: "MPI 21"
     key: "init27"
     command:
       - echo "--- Instantiate buildkite env"
@@ -42,12 +42,12 @@ steps:
 
   - wait
 
-  - label: "GPUCompiler 1"
+  - label: "MPI 22"
     key: "init11"
     command:
       - echo "--- Instantiate buildkite env"
       - rm -rf $JULIA_DEPOT_PATH
-      - "julia --project=.buildkite --check-bounds=yes -e 'using Pkg;Pkg.add(name=\"GPUCompiler\", version=\"1\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
+      - "julia --project=.buildkite --check-bounds=yes -e 'using Pkg;Pkg.add(name=\"MPI\", version=\"0.20.22\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
       - "julia --project=.buildkite -e 'using CUDA; CUDA.precompile_runtime()'"
     agents:
       slurm_mem: 80G
