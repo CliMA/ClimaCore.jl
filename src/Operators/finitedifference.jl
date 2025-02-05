@@ -221,17 +221,20 @@ This is similar to a `Base.Broadcast.Broadcasted` object.
 
 This is returned by `Base.Broadcast.broadcasted(op::FiniteDifferenceOperator)`.
 """
-struct StencilBroadcasted{Style, Op, Args, Axes} <: OperatorBroadcasted{Style}
+struct StencilBroadcasted{Style, Op, Args, Axes, Work} <:
+       OperatorBroadcasted{Style}
     op::Op
     args::Args
     axes::Axes
+    work::Work
 end
 StencilBroadcasted{Style}(
     op::Op,
     args::Args,
     axes::Axes = nothing,
-) where {Style, Op, Args, Axes} =
-    StencilBroadcasted{Style, Op, Args, Axes}(op, args, axes)
+    work::Work = nothing,
+) where {Style, Op, Args, Axes, Work} =
+    StencilBroadcasted{Style, Op, Args, Axes, Work}(op, args, axes, work)
 
 Adapt.adapt_structure(to, sbc::StencilBroadcasted{Style}) where {Style} =
     StencilBroadcasted{Style}(
@@ -3829,6 +3832,56 @@ function Base.copyto!(
     end
     return _serial_copyto!(field_out, bc, Ni, Nj, Nh)
 end
+
+"""
+    is_center_space(space)::Bool
+
+Returns `true` if the space is a cell center space, `false` otherwise.
+"""
+function is_center_space end
+
+"""
+    is_face_space(space)::Bool
+
+Returns `true` if the space is a cell face space, `false` otherwise.
+"""
+function is_face_space end
+
+@inline is_center_space(
+    ::Union{
+        Spaces.CenterExtrudedFiniteDifferenceSpace,
+        Spaces.CenterFiniteDifferenceSpace,
+    },
+) = true
+@inline is_face_space(
+    ::Union{
+        Spaces.CenterExtrudedFiniteDifferenceSpace,
+        Spaces.CenterFiniteDifferenceSpace,
+    },
+) = false
+@inline is_face_space(
+    ::Union{
+        Spaces.FaceExtrudedFiniteDifferenceSpace,
+        Spaces.FaceFiniteDifferenceSpace,
+    },
+) = true
+@inline is_center_space(
+    ::Union{
+        Spaces.FaceExtrudedFiniteDifferenceSpace,
+        Spaces.FaceFiniteDifferenceSpace,
+    },
+) = false
+
+
+@inline function reconstruct_placeholder_broadcasted(
+    parent_space::Spaces.AbstractSpace,
+    sbc::StencilBroadcasted{Style},
+) where {Style}
+    space = reconstruct_placeholder_space(axes(sbc), parent_space)
+    args = _reconstruct_placeholder_broadcasted(space, sbc.args...)
+    return StencilBroadcasted{Style}(sbc.op, args, space, sbc.work)
+end
+
 
 function window_bounds(space, bc)
     if Topologies.isperiodic(Spaces.vertical_topology(space))

@@ -289,3 +289,42 @@ end
     ij,
     slabidx,
 ) = Operators.is_valid_index(space, ij, slabidx)
+
+##### shmem fd kernel partition
+@inline function fd_stencil_partition(
+    us::DataLayouts.UniversalSize,
+    n_max_threads::Integer = 256;
+)
+    (Nq, _, _, Nv, Nh) = DataLayouts.universal_size(us)
+    Nvthreads = min(fld(n_max_threads, Nq) + 2, maximum_allowable_threads()[1])
+    Nvblocks = cld(Nv, Nvthreads) # +1 may be needed to guarantee that shared memory is populated at the last cell face
+    @assert Nvthreads >= Nv + 1 "Nvthreads must exceed number of vertical points by 1, for shared memory."
+    # @assert prod((Nq, Nvthreads)) ≤ n_max_threads "threads,n_max_threads=($(prod((Nq, Nvthreads))),$n_max_threads)"
+    @assert Nq * Nq ≤ n_max_threads
+    # This is basically a rotation permutation of the spectral element config
+    return (;
+        threads = (Nvthreads,),
+        blocks = (Nvblocks, Nh, Nq * Nq),
+        Nvthreads,
+    )
+end
+@inline function fd_stencil_universal_index(space::Spaces.AbstractSpace, us)
+    (tv,) = CUDA.threadIdx()
+    (bv, h, ij) = CUDA.blockIdx()
+    vid = tv + (bv - 1) * CUDA.blockDim().x
+    (Nq, _, _, _, _) = DataLayouts.universal_size(us)
+    (i, j) = CartesianIndices((Nq, Nq))[ij].I
+    v =
+        if space isa Spaces.FaceExtrudedFiniteDifferenceSpace ||
+           space isa Spaces.FaceFiniteDifferenceSpace
+            v = vid - half
+        elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace ||
+               space isa Spaces.CenterFiniteDifferenceSpace
+            v = vid
+        else
+            error("Invalid space")
+        end
+    return CartesianIndex((i, j, 1, v, h))
+end
+@inline fd_stencil_is_valid_index(I::CI5, us::UniversalSize) =
+    1 ≤ I[5] ≤ DataLayouts.get_Nh(us)
