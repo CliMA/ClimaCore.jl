@@ -77,9 +77,11 @@ end
 Locate the levels by linear interpolation between the surface field and the top
 of the domain, using the method of [GalChen1975](@cite).
 """
-struct LinearAdaption{F <: Fields.Field} <: HypsographyAdaption
+struct LinearAdaption{F} <: HypsographyAdaption
     surface::F
 end
+
+strip_field(::LinearAdaption) = LinearAdaption(nothing)
 
 Adapt.adapt_structure(to, adaption::LinearAdaption) =
     LinearAdaption(Adapt.adapt(to, adaption.surface))
@@ -114,20 +116,19 @@ bounds represent the domain bottom and top respectively. `s` governs the decay r
 If the decay-scale is poorly specified (i.e., `s * zₜ` is lower than the maximum
 surface elevation), a warning is thrown and `s` is adjusted such that it `szₜ > maximum(z_surface)`.
 """
-struct SLEVEAdaption{F <: Fields.Field, FT <: Real} <: HypsographyAdaption
+struct SLEVEAdaption{F, FT} <: HypsographyAdaption
     surface::F
     ηₕ::FT
     s::FT
-    function SLEVEAdaption(
-        surface::Fields.Field,
-        ηₕ::FT,
-        s::FT,
-    ) where {FT <: Real}
-        @assert 0 <= ηₕ <= 1
-        @assert s >= 0
-        new{typeof(surface), FT}(surface, ηₕ, s)
-    end
 end
+function SLEVEAdaption(surface, ηₕ, s)
+    @assert 0 <= ηₕ <= 1
+    @assert s >= 0
+    SLEVEAdaption{typeof(surface), FT}(surface, ηₕ, s)
+end
+
+strip_field(adaption::SLEVEAdaption) =
+    SLEVEAdaption(nothing, adaption.ηₕ, adaption.s)
 
 Adapt.adapt_structure(to, adaption::SLEVEAdaption) =
     SLEVEAdaption(Adapt.adapt(to, adaption.surface), adaption.ηₕ, adaption.s)
@@ -180,10 +181,11 @@ function _ExtrudedFiniteDifferenceGrid(
     vertical_domain = Topologies.domain(vertical_grid)
     z_top = vertical_domain.coord_max
 
+    adaption_ref = Ref(strip_field(adaption))
     center_z =
-        ref_z_to_physical_z.(Ref(adaption), center_z_ref, z_surface, Ref(z_top))
+        ref_z_to_physical_z.(adaption_ref, center_z_ref, z_surface, Ref(z_top))
     face_z =
-        ref_z_to_physical_z.(Ref(adaption), face_z_ref, z_surface, Ref(z_top))
+        ref_z_to_physical_z.(adaption_ref, face_z_ref, z_surface, Ref(z_top))
 
     return _ExtrudedFiniteDifferenceGrid(
         horizontal_grid,
