@@ -63,6 +63,7 @@ function _SpectralElementGrid1D(
     ::Val{Nh},
     ::Type{horizontal_layout_type},
 ) where {Nh, horizontal_layout_type}
+    DA = ClimaComms.array_type(topology)
     global_geometry = Geometry.CartesianGlobalGeometry()
     CoordType = Topologies.coordinate_type(topology)
     AIdx = Geometry.coordinate_axis(CoordType)
@@ -103,12 +104,13 @@ function _SpectralElementGrid1D(
         end
     end
 
+    device_local_geometry = DataLayouts.rebuild(local_geometry, DA)
     return SpectralElementGrid1D(
         topology,
         quadrature_style,
         global_geometry,
-        local_geometry,
-        compute_dss_weights(local_geometry, topology, quadrature_style),
+        device_local_geometry,
+        compute_dss_weights(device_local_geometry, topology, quadrature_style),
     )
 end
 
@@ -584,11 +586,7 @@ function compute_dss_weights(local_geometry, topology, quadrature_style)
     # Although the weights are defined as WJ / Σ collocated WJ, we can use J
     # instead of WJ if the weights are symmetric across element boundaries.
     dss_weights = copy(local_geometry.J)
-    if topology isa Topologies.IntervalTopology
-        is_dss_required && Topologies.dss_1d!(topology, dss_weights)
-    else
-        is_dss_required && Topologies.dss!(dss_weights, topology)
-    end
+    is_dss_required && Topologies.dss!(dss_weights, topology)
     @. dss_weights = local_geometry.J / dss_weights
     return dss_weights
 end
