@@ -91,6 +91,7 @@ Adapt.adapt_structure(to, sbc::SpectralBroadcasted{Style}) where {Style} =
         sbc.op,
         Adapt.adapt(to, sbc.args),
         Adapt.adapt(to, sbc.axes),
+        Adapt.adapt(to, sbc.work),
     )
 
 return_space(::SpectralElementOperator, space) = space
