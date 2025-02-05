@@ -36,6 +36,13 @@ end
     @test Operators.any_fd_shmem_supported(bc)
     @test !ext.any_fd_shmem_style(ext.disable_shmem_style(bc))
     @. c = div(Geometry.WVector(f))
+    ᶠgrad = Operators.GradientC2F(;
+        bottom = Operators.SetValue(FT(0)),
+        top = Operators.SetValue(FT(0)),
+    )
+    bc = @. lazy(ᶠgrad(c))
+    @test Operators.any_fd_shmem_supported(bc)
+    @test Operators.fd_shmem_is_supported(bc)
 end
 
 #! format: off
@@ -66,6 +73,7 @@ end
     @test compare_cpu_gpu(fields_cpu.ᶜout9, fields.ᶜout9); @test !is_trivial(fields_cpu.ᶜout9)
     @test compare_cpu_gpu(fields_cpu.ᶜout10, fields.ᶜout10); @test !is_trivial(fields_cpu.ᶜout10)
     @test compare_cpu_gpu(fields_cpu.ᶜout_uₕ, fields.ᶜout_uₕ); @test !is_trivial(fields_cpu.ᶜout_uₕ)
+    @test compare_cpu_gpu(fields_cpu.ᶠout3_cov, fields.ᶠout3_cov); @test !is_trivial(fields_cpu.ᶠout3_cov)
 end
 
 @testset "Correctness plane" begin
