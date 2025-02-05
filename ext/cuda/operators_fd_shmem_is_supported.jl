@@ -149,6 +149,8 @@ end
 ) = false
 
 # Add cases here where shmem is supported:
+
+##### DivergenceF2C
 @inline Operators.fd_shmem_is_supported(op::Operators.DivergenceF2C) =
     Operators.fd_shmem_is_supported(op, op.bcs)
 @inline Operators.fd_shmem_is_supported(
@@ -157,6 +159,21 @@ end
 ) = true
 @inline Operators.fd_shmem_is_supported(
     op::Operators.DivergenceF2C,
+    bcs::NamedTuple,
+) =
+    all(values(bcs)) do bc
+        all(supported_bc -> bc isa supported_bc, (Operators.SetValue,))
+    end
+
+##### GradientC2F
+@inline Operators.fd_shmem_is_supported(op::Operators.GradientC2F) =
+    Operators.fd_shmem_is_supported(op, op.bcs)
+@inline Operators.fd_shmem_is_supported(
+    op::Operators.GradientC2F,
+    ::@NamedTuple{},
+) = false
+@inline Operators.fd_shmem_is_supported(
+    op::Operators.GradientC2F,
     bcs::NamedTuple,
 ) =
     all(values(bcs)) do bc

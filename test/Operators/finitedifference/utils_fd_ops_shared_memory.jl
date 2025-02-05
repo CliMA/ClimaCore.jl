@@ -35,6 +35,7 @@ function kernels!(fields)
     (; ᶜout1, ᶜout2, ᶜout3, ᶜout4, ᶜout5, ᶜout6, ᶜout7, ᶜout8, ᶜout9) = fields
     (; ᶜout10) = fields
     (; ᶠout1_contra, ᶠout2_contra) = fields
+    (; ᶠout3_cov) = fields
     (; w_cov) = fields
     (; ᶜout_uₕ, ᶜuₕ) = fields
     FT = Spaces.undertype(axes(ϕ))
@@ -103,13 +104,19 @@ function kernels!(fields)
     )
     Δt = FT(1)
     @. ᶜout10 = -divf2c_vl(VanLeerMethod(w_cov, ϕ, Δt))
-
+    
     inner = (;)
     outer = set_value_divgrad_uₕ_maybe_field_bcs(axes(ϕ))
-
+    
     grad = Operators.GradientC2F(inner)
     div_uh = Operators.DivergenceF2C(outer)
     @. ᶜout_uₕ = div_uh(f * grad(ᶜuₕ))
+
+    ᶠgrad = Operators.GradientC2F(;
+        bottom = Operators.SetValue(FT(10)),
+        top = Operators.SetValue(FT(10)),
+    )
+    @. ᶠout3_cov = ᶠgrad(ϕ)
 
     return nothing
 end;
@@ -124,12 +131,17 @@ function get_fields(space::Operators.AllFaceFiniteDifferenceSpace)
         i -> Fields.Field(Geometry.Contravariant3Vector{FT}, space),
         length(K_contra),
     )
+    K_cov_out = (ntuple(i -> Symbol("ᶠout$(i)_cov"), 8)...,)
+    V_cov_out = ntuple(
+        i -> Fields.zeros(Geometry.Covariant3Vector{FT}, space),
+        length(K_cov_out),
+    )
     K_cov = (:w_cov,)
     V_cov = ntuple(
         i -> Fields.Field(Geometry.Covariant3Vector{FT}, space),
         length(K_cov),
     )
-    nt = (; zip(K, V)..., zip(K_contra, V_contra)..., zip(K_cov, V_cov)...)
+    nt = (; zip(K, V)..., zip(K_contra, V_contra)..., zip(K_cov, V_cov)..., zip(K_cov_out, V_cov_out)...)
     @. nt.f = sin(z)
     @. nt.w_cov.components.data.:1 = sin(z)
     return nt

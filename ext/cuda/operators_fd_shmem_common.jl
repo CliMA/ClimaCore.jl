@@ -303,17 +303,27 @@ Base.@propagate_inbounds function fd_resolve_shmem!(
     else  # populate shmem on centers
 #! format: off
         # TODO: this needs exercised
-        case1 = IP || get_cent_idx(bc_lw) ≤ ᶜidx ≤ get_cent_idx(bc_rw) + 1 # interior
+        ᶜidx⁺ = ᶜidx+1
+        CUDA.@cuprintln("Populating shmem at ᶜidx=$ᶜidx")
+        case1 = IP || get_cent_idx(bc_lw) ≤ ᶜidx ≤ get_cent_idx(bc_rw)+1 # interior
         case2 = get_cent_idx(bc_li) < ᶜidx < get_cent_idx(bc_lw) && Operators.has_boundary(op, lloc) # left
-        case3 = get_cent_idx(bc_rw) < ᶜidx < get_cent_idx(bc_ri) && Operators.has_boundary(op, rloc) # right
+        # case2 = Operators.call_left_boundary(ᶜidx, arg_space, sbc, lloc) # left
+        case3 = get_cent_idx(bc_rw)-1 < ᶜidx < get_cent_idx(bc_ri)+2 && Operators.has_boundary(op, rloc) # right
+        # case3 = Operators.call_right_boundary(ᶜidx, arg_space, sbc, rloc) # right
         case4 = get_cent_idx(bc_li) < ᶜidx < get_cent_idx(bc_lw) && !Operators.has_boundary(op, lloc) # left
-        case5 = get_cent_idx(bc_rw) < ᶜidx < get_cent_idx(bc_ri) && !Operators.has_boundary(op, rloc) # right
-        if case1; fd_operator_fill_shmem_interior!(sbc.op,sbc.work,iloc,space,ᶜidx,hidx,sbc.args...)
+        case5 = get_cent_idx(bc_rw)-1 < ᶜidx < get_cent_idx(bc_ri)+2 && !Operators.has_boundary(op, rloc) # right
+
+        # case2 = false
+        # case3 = false
+        case4 = false
+        # case5 = false
+        if case1; fd_operator_fill_shmem_interior!(sbc.op,sbc.work,iloc,space,ᶜidx-1,hidx,sbc.args...)
         elseif case2; fd_operator_fill_shmem_left_boundary!(sbc.op,Operators.get_boundary(op, lloc),sbc.work,lloc,space,ᶜidx,hidx,sbc.args...)
         elseif case3; fd_operator_fill_shmem_right_boundary!(sbc.op,Operators.get_boundary(op, rloc),sbc.work,rloc,space,ᶜidx,hidx,sbc.args...)
         elseif case4; fd_operator_fill_shmem_interior!(sbc.op,sbc.work,lloc,space,ᶜidx,hidx,sbc.args...)
         elseif case5; fd_operator_fill_shmem_interior!(sbc.op,sbc.work,rloc,space,ᶜidx,hidx,sbc.args...)
         else # this else should never run
+            CUDA.@cuprintln("Missed at ᶜidx=$ᶜidx")
         end
 #! format: on
     end
