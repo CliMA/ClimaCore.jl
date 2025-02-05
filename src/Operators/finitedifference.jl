@@ -201,12 +201,12 @@ get_boundary(
 has_boundary(
     op::FiniteDifferenceOperator,
     ::LeftBoundaryWindow{name},
-) where {name} = hasproperty(op.bcs, name)
+) where {name} = hasfield(typeof(op.bcs), name)
 
 has_boundary(
     op::FiniteDifferenceOperator,
     ::RightBoundaryWindow{name},
-) where {name} = hasproperty(op.bcs, name)
+) where {name} = hasfield(typeof(op.bcs), name)
 
 strip_space(op::FiniteDifferenceOperator, parent_space) =
     unionall_type(typeof(op))(
@@ -231,17 +231,20 @@ This is similar to a `Base.Broadcast.Broadcasted` object.
 
 This is returned by `Base.Broadcast.broadcasted(op::FiniteDifferenceOperator)`.
 """
-struct StencilBroadcasted{Style, Op, Args, Axes} <: OperatorBroadcasted{Style}
+struct StencilBroadcasted{Style, Op, Args, Axes, Work} <:
+       OperatorBroadcasted{Style}
     op::Op
     args::Args
     axes::Axes
+    work::Work
 end
 StencilBroadcasted{Style}(
     op::Op,
     args::Args,
     axes::Axes = nothing,
-) where {Style, Op, Args, Axes} =
-    StencilBroadcasted{Style, Op, Args, Axes}(op, args, axes)
+    work::Work = nothing,
+) where {Style, Op, Args, Axes, Work} =
+    StencilBroadcasted{Style, Op, Args, Axes, Work}(op, args, axes, work)
 
 Adapt.adapt_structure(to, sbc::StencilBroadcasted{Style}) where {Style} =
     StencilBroadcasted{Style}(
@@ -3740,6 +3743,28 @@ end
     right_idx(space)
 end
 
+@inline function call_left_boundary(idx, space, bc, loc)
+    (; op) = bc
+    return Operators.has_boundary(op, loc) &&
+           idx < Operators.left_interior_idx(
+        space,
+        op,
+        Operators.get_boundary(op, loc),
+        bc.args...,
+    )
+end
+
+@inline function call_right_boundary(idx, space, bc, loc)
+    (; op) = bc
+    return Operators.has_boundary(op, loc) &&
+           idx > Operators.right_interior_idx(
+        space,
+        bc.op,
+        Operators.get_boundary(bc.op, loc),
+        bc.args...,
+    )
+end
+
 
 Base.@propagate_inbounds function getidx(
     parent_space,
@@ -3761,9 +3786,7 @@ Base.@propagate_inbounds function getidx(
 )
     space = reconstruct_placeholder_space(axes(bc), parent_space)
     op = bc.op
-    if has_boundary(op, loc) &&
-       idx <
-       left_interior_idx(space, bc.op, get_boundary(bc.op, loc), bc.args...)
+    if call_left_boundary(idx, space, bc, loc)
         stencil_left_boundary(
             op,
             get_boundary(op, loc),
@@ -3788,9 +3811,7 @@ Base.@propagate_inbounds function getidx(
 )
     op = bc.op
     space = reconstruct_placeholder_space(axes(bc), parent_space)
-    if has_boundary(op, loc) &&
-       idx >
-       right_interior_idx(space, bc.op, get_boundary(bc.op, loc), bc.args...)
+    if call_right_boundary(idx, space, bc, loc)
         stencil_right_boundary(
             op,
             get_boundary(op, loc),
@@ -4076,6 +4097,16 @@ function Base.copyto!(
     return _serial_copyto!(field_out, bc, Ni, Nj, Nh)
 end
 
+@inline function reconstruct_placeholder_broadcasted(
+    parent_space::Spaces.AbstractSpace,
+    sbc::StencilBroadcasted{Style},
+) where {Style}
+    space = reconstruct_placeholder_space(axes(sbc), parent_space)
+    args = _reconstruct_placeholder_broadcasted(space, sbc.args...)
+    return StencilBroadcasted{Style}(sbc.op, args, space, sbc.work)
+end
+
+
 function window_bounds(space, bc)
     if Topologies.isperiodic(Spaces.vertical_topology(space))
         li = lw = left_idx(space)
@@ -4149,3 +4180,32 @@ end
 #else
 #    return v ⊠ (a⁺ ⊟ RecursiveApply.rdiv((a⁺ - a⁻) ⊠ 𝜙 ,2)) # Current working solution
 #end
+
+"""
+    fd_shmem_is_supported(bc::Base.Broadcast.AbstractBroadcasted)
+
+Returns a Bool indicating whether or not the broadcasted object supports
+shared memory, allowing us to dispatch into an optimized kernel.
+
+This function and dispatch should be removed once all operators support
+shared memory.
+"""
+function fd_shmem_is_supported end
+
+"""
+    any_fd_shmem_supported(::Base.Broadcast.AbstractBroadcasted)
+
+Returns a Bool indicating if any operators in the broadcasted object support 
+finite difference shared memory shmem.
+"""
+function any_fd_shmem_supported end
+
+if hasfield(Method, :recursion_relation)
+    dont_limit = (args...) -> true
+    for m in methods(reconstruct_placeholder_broadcasted)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(_reconstruct_placeholder_broadcasted)
+        m.recursion_relation = dont_limit
+    end
+end
