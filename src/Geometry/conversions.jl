@@ -182,6 +182,27 @@ LocalVector(u::ContravariantVector{<:Any, (3,)}, ::LocalGeometry{(1, 2)}) =
 @inline Jcontravariant3(u::AxisTensor, local_geometry::LocalGeometry) =
     local_geometry.J * contravariant3(u, local_geometry)
 
+# Extracting the element from a single element mat-vec multiply
+# results in a non-fused FMA with CUDA, so we specialize these cases
+# to use scalar operations, resulting in fused FMA. Yields up to 25%
+# speedup for metric term FD operators.
+@inline Jcontravariant3(
+    u::Covariant3Vector,
+    local_geometry::LocalGeometry{(3,)},
+) = @inbounds local_geometry.J * local_geometry.gⁱʲ[1, 1] * u[1]
+
+@inline Jcontravariant3(u::WVector, local_geometry::LocalGeometry{(3,)}) =
+    @inbounds local_geometry.J * local_geometry.∂ξ∂x[1, 1] * u[1]
+
+@inline Jcontravariant3(
+    u::Covariant3Vector,
+    local_geometry::LocalGeometry{(1, 2, 3)},
+) = @inbounds local_geometry.J * local_geometry.gⁱʲ[3, 3] * u[1]
+
+@inline Jcontravariant3(u::WVector, local_geometry::LocalGeometry{(1, 2, 3)}) =
+    @inbounds local_geometry.J * local_geometry.∂ξ∂x[3, 3] * u[1]
+
+
 # required for curl-curl
 @inline covariant3(
     u::Contravariant3Vector,
@@ -540,6 +561,16 @@ Required for statically infering the result type of the divergence operation for
     ::Type{Axis2Tensor{FT, Tuple{A1, A2}, S}},
 ) where {FT, A1, A2 <: LocalAxis, S <: StaticMatrix{S1, S2}} where {S1, S2} =
     AxisVector{FT, A2, SVector{S2, FT}}
+
+# TODO: can we better generalize this?
+@inline divergence_result_type(
+    ::Type{AxisTensor{FT, 2, Tuple{A1, A2}, S}},
+) where {
+    FT,
+    A1 <: CovariantAxis{(3,)},
+    A2 <: CovariantAxis{(1, 2)},
+    S <: SMatrix{1, 2, FT, 2},
+} = Covariant12Vector{FT}
 
 """
     gradient_result_type(Val(I), V)
