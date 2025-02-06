@@ -751,12 +751,10 @@ function _collect_interpolated_values!(
     index_field_end::Int;
     only_one_field,
 )
-    # NOTE: MPI barriers for #2108
-    ClimaComms.barrier(remapper.comms_ctx)
     if only_one_field
         ClimaComms.reduce!(
             remapper.comms_ctx,
-            remapper._interpolated_values[remapper.colons..., begin],
+            view(remapper._interpolated_values, remapper.colons..., 1),
             dest,
             +,
         )
@@ -764,12 +762,15 @@ function _collect_interpolated_values!(
         num_fields = 1 + index_field_end - index_field_begin
         ClimaComms.reduce!(
             remapper.comms_ctx,
-            view(remapper._interpolated_values, remapper.colons..., 1:num_fields),
+            view(
+                remapper._interpolated_values,
+                remapper.colons...,
+                1:num_fields,
+            ),
             view(dest, remapper.colons..., index_field_begin:index_field_end),
             +,
         )
     end
-    ClimaComms.barrier(remapper.comms_ctx)
     return nothing
 end
 
