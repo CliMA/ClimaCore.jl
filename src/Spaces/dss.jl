@@ -110,7 +110,6 @@ function weighted_dss_prepare!(
     dss_buffer::DSSBuffer,
 )
     assert_same_eltype(data, dss_buffer)
-    length(parent(data)) == 0 && return nothing
     device = ClimaComms.device(topology(space))
     hspace = horizontal_space(space)
     dss_transform!(
@@ -176,6 +175,8 @@ function weighted_dss_start!(
     },
     dss_buffer::DSSBuffer,
 )
+    Quadratures.requires_dss(quadrature_style(space)) || return nothing
+    sizeof(eltype(data)) > 0 || return nothing
     device = ClimaComms.device(topology(space))
     weighted_dss_prepare!(data, space, dss_buffer)
     cuda_synchronize(device; blocking = true)
@@ -225,8 +226,9 @@ function weighted_dss_internal!(
     hspace::AbstractSpectralElementSpace,
     dss_buffer::Union{DSSBuffer, Nothing},
 )
+    Quadratures.requires_dss(quadrature_style(space)) || return nothing
+    sizeof(eltype(data)) > 0 || return nothing
     assert_same_eltype(data, dss_buffer)
-    length(parent(data)) == 0 && return nothing
     device = ClimaComms.device(topology(hspace))
     if hspace isa SpectralElementSpace1D
         dss_1d!(
@@ -309,9 +311,10 @@ function weighted_dss_ghost!(
     hspace::SpectralElementSpace2D,
     dss_buffer::DSSBuffer,
 )
+    Quadratures.requires_dss(quadrature_style(space)) || return data
+    sizeof(eltype(data)) > 0 || return data
     assert_same_eltype(data, dss_buffer)
     ClimaComms.finish(dss_buffer.graph_context)
-    length(parent(data)) == 0 && return data
     device = ClimaComms.device(topology(hspace))
     load_from_recv_buffer!(device, dss_buffer)
     dss_ghost!(

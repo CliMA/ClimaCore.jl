@@ -678,15 +678,14 @@ end
 Computed unweighted/pure DSS of `data`.
 """
 function dss!(data::DSSTypes1D, topology::IntervalTopology)
-    Nij = DataLayouts.get_Nij(data)
-    length(parent(data)) == 0 && return nothing
+    sizeof(eltype(data)) > 0 || return nothing
     device = ClimaComms.device(topology)
     dss_1d!(device, data, topology)
     return nothing
 end
 function dss!(data::DSSTypes2D, topology::Topology2D)
+    sizeof(eltype(data)) > 0 || return nothing
     Nij = DataLayouts.get_Nij(data)
-    length(parent(data)) == 0 && return nothing
     device = ClimaComms.device(topology)
     perimeter = Perimeter2D(Nij)
     # create dss buffer

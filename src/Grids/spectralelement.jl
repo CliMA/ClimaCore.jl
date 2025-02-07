@@ -580,13 +580,12 @@ function compute_surface_geometry(
 end
 
 function compute_dss_weights(local_geometry, topology, quadrature_style)
-    is_dss_required =
-        Quadratures.unique_degrees_of_freedom(quadrature_style) <
-        Quadratures.degrees_of_freedom(quadrature_style)
+    Quadratures.requires_dss(quadrature_style) || return nothing
+
     # Although the weights are defined as WJ / Σ collocated WJ, we can use J
     # instead of WJ if the weights are symmetric across element boundaries.
     dss_weights = copy(local_geometry.J)
-    is_dss_required && Topologies.dss!(dss_weights, topology)
+    Topologies.dss!(dss_weights, topology)
     @. dss_weights = local_geometry.J / dss_weights
     return dss_weights
 end
