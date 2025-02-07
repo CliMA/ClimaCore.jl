@@ -180,29 +180,30 @@ boundary_width(
     args...,
 ) = invalid_boundary_condition_error(typeof(op), typeof(bc))
 
+get_boundary(bcs::NamedTuple, name::Symbol) =
+    hasfield(typeof(bcs), name) ? getfield(bcs, name) : NullBoundaryCondition()
+
+get_boundary(bcs::@NamedTuple{}, name::Symbol) = NullBoundaryCondition()
+
 get_boundary(
     op::FiniteDifferenceOperator,
     ::LeftBoundaryWindow{name},
-) where {name} =
-    hasproperty(op.bcs, name) ? getproperty(op.bcs, name) :
-    NullBoundaryCondition()
+) where {name} = get_boundary(op.bcs, name)
 
 get_boundary(
     op::FiniteDifferenceOperator,
     ::RightBoundaryWindow{name},
-) where {name} =
-    hasproperty(op.bcs, name) ? getproperty(op.bcs, name) :
-    NullBoundaryCondition()
+) where {name} = get_boundary(op.bcs, name)
 
 has_boundary(
     op::FiniteDifferenceOperator,
     ::LeftBoundaryWindow{name},
-) where {name} = hasproperty(op.bcs, name)
+) where {name} = hasfield(typeof(op.bcs), name)
 
 has_boundary(
     op::FiniteDifferenceOperator,
     ::RightBoundaryWindow{name},
-) where {name} = hasproperty(op.bcs, name)
+) where {name} = hasfield(typeof(op.bcs), name)
 
 
 abstract type AbstractStencilStyle <: Fields.AbstractFieldStyle end
