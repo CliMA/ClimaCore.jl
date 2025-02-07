@@ -74,29 +74,30 @@ get_boundary(op::Operator2Stencil, bw::LeftBoundaryWindow{name}) where {name} =
 get_boundary(op::Operator2Stencil, bw::RightBoundaryWindow{name}) where {name} =
     get_boundary(op.op, bw)
 
-function return_eltype(op::Operator2Stencil, args...)
+function return_eltype(op::Operator2Stencil, args::Vararg{Any, M}) where {M}
     lbw, ubw = stencil_interior_width(op.op, args...)[1]
     N = ubw - lbw + 1
     return StencilCoefs{lbw, ubw, NTuple{N, return_eltype(op.op, args...)}}
 end
 
-return_space(op::Operator2Stencil, spaces...) = return_space(op.op, spaces...)
+return_space(op::Operator2Stencil, spaces::Vararg{Any, N}) where {N} =
+    return_space(op.op, spaces...)
 
-stencil_interior_width(op::Operator2Stencil, args...) =
+stencil_interior_width(op::Operator2Stencil, args::Vararg{Any, N}) where {N} =
     stencil_interior_width(op.op, args...)
 
 left_interior_idx(
     space::AbstractSpace,
     op::Operator2Stencil,
     bc::AbstractBoundaryCondition,
-    args...,
-) = left_interior_idx(space, op.op, bc, args...)
+    args::Vararg{Any, N},
+) where {N} = left_interior_idx(space, op.op, bc, args...)
 right_interior_idx(
     space::AbstractSpace,
     op::Operator2Stencil,
     bc::AbstractBoundaryCondition,
-    args...,
-) = right_interior_idx(space, op.op, bc, args...)
+    args::Vararg{Any, N},
+) where {N} = right_interior_idx(space, op.op, bc, args...)
 
 # TODO: find out why using Base.@propagate_inbounds blows up compilation time
 function stencil_interior(
