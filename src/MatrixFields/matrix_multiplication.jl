@@ -346,7 +346,7 @@ boundary_modified_ud(::BottomRightMatrixCorner, ud, column_space, i) =
 # matrix field broadcast expressions to take roughly 3 or 4 times longer to
 # evaluate, but this is less significant than the decrease in compilation time.
 # matrix-matrix multiplication
-function multiply_matrix_at_index(
+Base.@propagate_inbounds function multiply_matrix_at_index(
     loc,
     space,
     idx,
@@ -384,20 +384,33 @@ function multiply_matrix_at_index(
     # of as a map from boundary_modified_ld1 to boundary_modified_ud1. For
     # simplicity, use zero padding for rows that are outside the matrix.
     # Wrap the rows in a BandMatrixRow so that they can be easily indexed.
-    matrix2_rows = unrolled_map((ld1:ud1...,)) do d
+    N_mr = ud1 - ld1 + 1
+    nt_mr = ntuple(ξ -> ld1 + ξ - 1, Val(N_mr))
+    row_type = eltype(matrix2)
+    matrix2_rows = unrolled_map(nt_mr) do d
         # TODO: Use @propagate_inbounds_meta instead of @inline_meta.
         Base.@_inline_meta
-        if isnothing(bc) || boundary_modified_ld1 <= d <= boundary_modified_ud1
-            @inbounds Operators.getidx(space, matrix2, loc, idx + d, hidx)
+        if isnothing(bc) ||
+           boundary_modified_ld1 <=
+           d <=
+           boundary_modified_ud1
+            @inbounds Operators.getidx(
+                space,
+                matrix2,
+                loc,
+                idx + d,
+                hidx,
+            )::row_type
         else
-            zero(eltype(matrix2)) # This row is outside the matrix.
+            zero(row_type) # This row is outside the matrix.
         end
-    end
+    end::NTuple{N_mr, row_type}
     matrix2_rows_wrapper = BandMatrixRow{ld1}(matrix2_rows...)
 
     # Precompute the zero value to avoid inference issues caused by passing
     # prod_type into the function closure below.
-    zero_value = rzero(eltype(prod_type))
+    prod_entry_type = eltype(prod_type)
+    zero_value = rzero(prod_entry_type)::prod_entry_type
 
     # Compute the entries of the product matrix row. To avoid inference
     # issues at boundary points, this is implemented as a padded map from
@@ -405,18 +418,35 @@ function multiply_matrix_at_index(
     # to boundary_modified_prod_ud. For simplicity, use zero padding for
     # entries that are outside the matrix. Wrap the entries in a
     # BandMatrixRow before returning them.
-    prod_entries = map((prod_ld:prod_ud...,)) do prod_d
+    N_pe = prod_ud - prod_ld + 1
+    nt_pe = ntuple(ζ -> prod_ld + ζ - 1, Val(N_pe))
+    prod_entries = unrolled_map(nt_pe) do prod_d
         # TODO: Use @propagate_inbounds_meta instead of @inline_meta.
         Base.@_inline_meta
         if isnothing(bc) ||
-           boundary_modified_prod_ld <= prod_d <= boundary_modified_prod_ud
-            prod_entry = zero_value
-            min_d = max(boundary_modified_ld1, prod_d - ud2)
-            max_d = min(boundary_modified_ud1, prod_d - ld2)
+           boundary_modified_prod_ld <=
+           prod_d <=
+           boundary_modified_prod_ud
+            prod_entry =
+                zero_value::prod_entry_type
+            min_d = max(
+                boundary_modified_ld1,
+                prod_d - ud2,
+            )
+            max_d = min(
+                boundary_modified_ud1,
+                prod_d - ld2,
+            )
             @inbounds for d in min_d:max_d
                 value1 = matrix1_row[d]
-                value2 = matrix2_rows_wrapper[d][prod_d - d]
-                value2_lg = Geometry.LocalGeometry(space, idx + d, hidx)
+                value2 =
+                    matrix2_rows_wrapper[d][prod_d - d]
+                value2_lg =
+                    Geometry.LocalGeometry(
+                        space,
+                        idx + d,
+                        hidx,
+                    )
                 prod_entry = radd(
                     prod_entry,
                     rmul_with_projection(value1, value2, value2_lg),
@@ -426,11 +456,11 @@ function multiply_matrix_at_index(
         else
             zero_value # This entry is outside the matrix.
         end
-    end
+    end::NTuple{N_pe, prod_entry_type}
     return BandMatrixRow{prod_ld}(prod_entries...)
 end
 # matrix-vector multiplication
-function multiply_matrix_at_index(
+Base.@propagate_inbounds function multiply_matrix_at_index(
     loc,
     space,
     idx,
@@ -454,7 +484,7 @@ function multiply_matrix_at_index(
     matrix1_row = @inbounds Operators.getidx(space, matrix1, loc, idx, hidx)
 
     vector = arg
-    prod_value = rzero(prod_type)
+    prod_value = rzero(prod_type)::prod_type
     @inbounds for d in boundary_modified_ld1:boundary_modified_ud1
         value1 = matrix1_row[d]
         value2 = Operators.getidx(space, vector, loc, idx + d, hidx)
