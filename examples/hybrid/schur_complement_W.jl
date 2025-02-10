@@ -37,8 +37,8 @@ end
 function Base.zero(jac::SchurComplementW)
     return SchurComplementW(
         jac.transform,
-        Base.zero(jac.flags),
-        Base.zero(jac.dtγ_ref),
+        jac.flags,
+        jac.dtγ_ref,
         Base.zero(jac.∂ᶜρₜ∂ᶠ𝕄),
         Base.zero(jac.∂ᶜ𝔼ₜ∂ᶠ𝕄),
         Base.zero(jac.∂ᶠ𝕄ₜ∂ᶜ𝔼),
