@@ -1,21 +1,14 @@
 using .DataLayouts: CartesianFieldIndex
 
-const DSSTypesAll = Union{
-    DataLayouts.IFH,
-    DataLayouts.IHF,
-    DataLayouts.VIFH,
-    DataLayouts.VIHF,
+const DSSTypes1D =
+    Union{DataLayouts.IFH, DataLayouts.IHF, DataLayouts.VIFH, DataLayouts.VIHF}
+const DSSTypes2D = Union{
     DataLayouts.IJFH,
     DataLayouts.IJHF,
     DataLayouts.VIJFH,
     DataLayouts.VIJHF,
 }
-const DSSDataTypes = Union{
-    DataLayouts.IJFH,
-    DataLayouts.IJHF,
-    DataLayouts.VIJFH,
-    DataLayouts.VIJHF,
-}
+const DSSTypesAll = Union{DSSTypes1D, DSSTypes2D}
 const DSSPerimeterTypes = Union{DataLayouts.VIFH, DataLayouts.VIHF}
 
 """
@@ -68,10 +61,10 @@ end
 Creates a [`DSSBuffer`](@ref) for the field data corresponding to `data`
 """
 create_dss_buffer(
-    data::DSSDataTypes,
+    data::DSSTypes2D,
     topology::Topology2D,
-    local_geometry::Union{DSSDataTypes, Nothing} = nothing,
-    dss_weights::Union{DSSDataTypes, Nothing} = nothing,
+    local_geometry::Union{DSSTypes2D, Nothing} = nothing,
+    dss_weights::Union{DSSTypes2D, Nothing} = nothing,
 ) = create_dss_buffer(
     data,
     topology,
@@ -81,11 +74,11 @@ create_dss_buffer(
 )
 
 function create_dss_buffer(
-    data::DSSDataTypes,
+    data::DSSTypes2D,
     topology::Topology2D,
     ::Type{PerimeterLayout},
-    local_geometry::Union{DSSDataTypes, Nothing} = nothing,
-    dss_weights::Union{DSSDataTypes, Nothing} = nothing,
+    local_geometry::Union{DSSTypes2D, Nothing} = nothing,
+    dss_weights::Union{DSSTypes2D, Nothing} = nothing,
 ) where {PerimeterLayout}
     S = eltype(data)
     Nij = DataLayouts.get_Nij(data)
@@ -210,9 +203,9 @@ Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 function dss_transform!(
     device::ClimaComms.AbstractDevice,
     dss_buffer::DSSBuffer,
-    data::DSSDataTypes,
-    local_geometry::DSSDataTypes,
-    dss_weights::DSSDataTypes,
+    data::DSSTypes2D,
+    local_geometry::DSSTypes2D,
+    dss_weights::DSSTypes2D,
     perimeter::Perimeter2D,
     localelems::AbstractVector{Int},
 )
@@ -279,10 +272,10 @@ Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 function dss_transform!(
     ::ClimaComms.AbstractCPUDevice,
     perimeter_data::DSSPerimeterTypes,
-    data::DSSDataTypes,
+    data::DSSTypes2D,
     perimeter::Perimeter2D{Nq},
-    local_geometry::DSSDataTypes,
-    dss_weights::DSSDataTypes,
+    local_geometry::DSSTypes2D,
+    dss_weights::DSSTypes2D,
     localelems::Vector{Int},
 ) where {Nq}
     (_, _, _, nlevels, _) = DataLayouts.universal_size(perimeter_data)
@@ -331,8 +324,8 @@ Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 function dss_untransform!(
     device::ClimaComms.AbstractDevice,
     dss_buffer::DSSBuffer,
-    data::DSSDataTypes,
-    local_geometry::DSSDataTypes,
+    data::DSSTypes2D,
+    local_geometry::DSSTypes2D,
     perimeter::Perimeter2D,
     localelems::AbstractVector{Int},
 )
@@ -373,8 +366,8 @@ Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 function dss_untransform!(
     ::ClimaComms.AbstractCPUDevice,
     perimeter_data::DSSPerimeterTypes,
-    data::DSSDataTypes,
-    local_geometry::DSSDataTypes,
+    data::DSSTypes2D,
+    local_geometry::DSSTypes2D,
     perimeter::Perimeter2D,
     localelems::Vector{Int},
 )
@@ -397,7 +390,7 @@ end
 function dss_load_perimeter_data!(
     ::ClimaComms.AbstractCPUDevice,
     dss_buffer::DSSBuffer,
-    data::DSSDataTypes,
+    data::DSSTypes2D,
     perimeter::Perimeter2D,
 )
     (; perimeter_data) = dss_buffer
@@ -414,7 +407,7 @@ end
 
 function dss_unload_perimeter_data!(
     ::ClimaComms.AbstractCPUDevice,
-    data::DSSDataTypes,
+    data::DSSTypes2D,
     dss_buffer::DSSBuffer,
     perimeter::Perimeter2D,
 )
@@ -684,9 +677,15 @@ end
 
 Computed unweighted/pure DSS of `data`.
 """
-function dss!(data::DSSDataTypes, topology::Topology2D)
+function dss!(data::DSSTypes1D, topology::IntervalTopology)
+    sizeof(eltype(data)) > 0 || return nothing
+    device = ClimaComms.device(topology)
+    dss_1d!(device, data, topology)
+    return nothing
+end
+function dss!(data::DSSTypes2D, topology::Topology2D)
+    sizeof(eltype(data)) > 0 || return nothing
     Nij = DataLayouts.get_Nij(data)
-    length(parent(data)) == 0 && return nothing
     device = ClimaComms.device(topology)
     perimeter = Perimeter2D(Nij)
     # create dss buffer
@@ -713,52 +712,23 @@ function dss!(data::DSSDataTypes, topology::Topology2D)
 end
 
 function dss_1d!(
-    htopology::AbstractTopology,
-    data,
-    local_geometry_data = nothing,
+    ::ClimaComms.AbstractCPUDevice,
+    data::DSSTypes1D,
+    topology::IntervalTopology,
+    local_geometry = nothing,
     dss_weights = nothing,
 )
-    Nq = size(data, 1)
-    Nv = size(data, 4)
-    idx1 = CartesianIndex(1, 1, 1, 1, 1)
-    idx2 = CartesianIndex(Nq, 1, 1, 1, 1)
-    @inbounds for (elem1, face1, elem2, face2, reversed) in
-                  interior_faces(htopology)
-        for level in 1:Nv
-            @assert face1 == 1 && face2 == 2 && !reversed
-            local_geometry_slab1 = slab(local_geometry_data, level, elem1)
-            weight_slab1 = slab(dss_weights, level, elem1)
-            data_slab1 = slab(data, level, elem1)
-
-            local_geometry_slab2 = slab(local_geometry_data, level, elem2)
-            weight_slab2 = slab(dss_weights, level, elem2)
-            data_slab2 = slab(data, level, elem2)
-            val =
-                dss_transform(
-                    data_slab1,
-                    local_geometry_slab1,
-                    weight_slab1,
-                    idx1,
-                ) ⊞ dss_transform(
-                    data_slab2,
-                    local_geometry_slab2,
-                    weight_slab2,
-                    idx2,
-                )
-
-            data_slab1[idx1] = dss_untransform(
-                eltype(data_slab1),
-                val,
-                local_geometry_slab1,
-                idx1,
-            )
-            data_slab2[idx2] = dss_untransform(
-                eltype(data_slab2),
-                val,
-                local_geometry_slab2,
-                idx2,
-            )
-        end
+    T = eltype(data)
+    (Ni, _, _, Nv, Nh) = DataLayouts.universal_size(data)
+    nfaces = isperiodic(topology) ? Nh : Nh - 1
+    @inbounds for left_face_elem in 1:nfaces, level in 1:Nv
+        right_face_elem = left_face_elem == Nh ? 1 : left_face_elem + 1
+        left_idx = CartesianIndex(Ni, 1, 1, level, left_face_elem)
+        right_idx = CartesianIndex(1, 1, 1, level, right_face_elem)
+        val =
+            dss_transform(data, local_geometry, dss_weights, left_idx) ⊞
+            dss_transform(data, local_geometry, dss_weights, right_idx)
+        data[left_idx] = dss_untransform(T, val, local_geometry, left_idx)
+        data[right_idx] = dss_untransform(T, val, local_geometry, right_idx)
     end
-    return data
 end

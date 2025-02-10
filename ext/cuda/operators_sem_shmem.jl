@@ -7,6 +7,20 @@ import ClimaCore.Operators: operator_return_eltype, get_local_geometry
 Base.@propagate_inbounds function operator_shmem(
     space,
     ::Val{Nvt},
+    op::Operators.Divergence{(1,)},
+    arg,
+) where {Nvt}
+    FT = Spaces.undertype(space)
+    QS = Spaces.quadrature_style(space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    # allocate temp output
+    RT = Operators.operator_return_eltype(op, eltype(arg))
+    Jv¹ = CUDA.CuStaticSharedArray(RT, (Nq, Nvt))
+    return (Jv¹,)
+end
+Base.@propagate_inbounds function operator_shmem(
+    space,
+    ::Val{Nvt},
     op::Divergence{(1, 2)},
     arg,
 ) where {Nvt}
@@ -20,6 +34,23 @@ Base.@propagate_inbounds function operator_shmem(
     return (Jv¹, Jv²)
 end
 
+Base.@propagate_inbounds function operator_fill_shmem!(
+    op::Divergence{(1,)},
+    (Jv¹,),
+    space,
+    ij,
+    slabidx,
+    arg,
+)
+    vt = threadIdx().z
+    local_geometry = get_local_geometry(space, ij, slabidx)
+    i, _ = ij.I
+    Jv¹[i, vt] =
+        local_geometry.J ⊠ RecursiveApply.rmap(
+            v -> Geometry.contravariant1(v, local_geometry),
+            arg,
+        )
+end
 Base.@propagate_inbounds function operator_fill_shmem!(
     op::Divergence{(1, 2)},
     (Jv¹, Jv²),
@@ -47,6 +78,21 @@ end
 Base.@propagate_inbounds function operator_shmem(
     space,
     ::Val{Nvt},
+    op::WeakDivergence{(1,)},
+    arg,
+) where {Nvt}
+    FT = Spaces.undertype(space)
+    QS = Spaces.quadrature_style(space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    # allocate temp output
+    RT = operator_return_eltype(op, eltype(arg))
+    Nf = DataLayouts.typesize(FT, RT)
+    WJv¹ = CUDA.CuStaticSharedArray(RT, (Nq, Nvt))
+    return (WJv¹,)
+end
+Base.@propagate_inbounds function operator_shmem(
+    space,
+    ::Val{Nvt},
     op::WeakDivergence{(1, 2)},
     arg,
 ) where {Nvt}
@@ -61,6 +107,23 @@ Base.@propagate_inbounds function operator_shmem(
     return (WJv¹, WJv²)
 end
 
+Base.@propagate_inbounds function operator_fill_shmem!(
+    op::WeakDivergence{(1,)},
+    (WJv¹,),
+    space,
+    ij,
+    slabidx,
+    arg,
+)
+    vt = threadIdx().z
+    local_geometry = get_local_geometry(space, ij, slabidx)
+    i, _ = ij.I
+    WJv¹[i, vt] =
+        local_geometry.WJ ⊠ RecursiveApply.rmap(
+            v -> Geometry.contravariant1(v, local_geometry),
+            arg,
+        )
+end
 Base.@propagate_inbounds function operator_fill_shmem!(
     op::WeakDivergence{(1, 2)},
     (WJv¹, WJv²),
@@ -88,43 +151,36 @@ end
 Base.@propagate_inbounds function operator_shmem(
     space,
     ::Val{Nvt},
+    op::Gradient{(1,)},
+    arg,
+) where {Nvt}
+    QS = Spaces.quadrature_style(space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    return CUDA.CuStaticSharedArray(eltype(arg), (Nq, Nvt))
+end
+Base.@propagate_inbounds function operator_shmem(
+    space,
+    ::Val{Nvt},
     op::Gradient{(1, 2)},
     arg,
 ) where {Nvt}
-    FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
-    IT = eltype(arg)
-    ET = eltype(IT)
-    RT = operator_return_eltype(op, IT)
-    RT12 = Geometry.AxisTensor{
-        ET,
-        2,
-        Tuple{Geometry.CovariantAxis{(1, 2)}, Geometry.LocalAxis{(1, 2)}},
-        SMatrix{2, 2, ET, 4},
-    }
-    RT123 = Geometry.AxisTensor{
-        ET,
-        2,
-        Tuple{Geometry.CovariantAxis{(1, 2)}, Geometry.LocalAxis{(1, 2, 3)}},
-        SMatrix{2, 3, ET, 6},
-    }
-    if RT <: Geometry.Covariant12Vector
-        # allocate temp output
-        input = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-        return (input,)
-    elseif RT <: RT12
-        v₁ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-        v₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-        return (v₁, v₂)
-    elseif RT <: RT123
-        v₁ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-        v₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-        v₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-        return (v₁, v₂, v₃)
-    end
+    return CUDA.CuStaticSharedArray(eltype(arg), (Nq, Nq, Nvt))
 end
 
+Base.@propagate_inbounds function operator_fill_shmem!(
+    op::Gradient{(1,)},
+    input,
+    space,
+    ij,
+    slabidx,
+    arg,
+)
+    vt = threadIdx().z
+    i, _ = ij.I
+    input[i, vt] = arg
+end
 Base.@propagate_inbounds function operator_fill_shmem!(
     op::Gradient{(1, 2)},
     input,
@@ -135,37 +191,23 @@ Base.@propagate_inbounds function operator_fill_shmem!(
 )
     vt = threadIdx().z
     i, j = ij.I
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    RT = operator_return_eltype(op, typeof(arg))
-    ET = eltype(eltype(arg))
-    RT12 = Geometry.AxisTensor{
-        ET,
-        2,
-        Tuple{Geometry.CovariantAxis{(1, 2)}, Geometry.LocalAxis{(1, 2)}},
-        SMatrix{2, 2, ET, 4},
-    }
-    RT123 = Geometry.AxisTensor{
-        ET,
-        2,
-        Tuple{Geometry.CovariantAxis{(1, 2)}, Geometry.LocalAxis{(1, 2, 3)}},
-        SMatrix{2, 3, ET, 6},
-    }
-    if RT <: Geometry.Covariant12Vector
-        (v,) = input
-        v[i, j, vt] = arg
-    elseif RT <: RT12
-        v₁, v₂ = input
-        v₁[i, j, vt] = Geometry.LocalVector(arg, local_geometry).u
-        v₂[i, j, vt] = Geometry.LocalVector(arg, local_geometry).v
-    elseif RT <: RT123
-        v₁, v₂, v₃ = input
-        v₁[i, j, vt] = Geometry.LocalVector(arg, local_geometry).u
-        v₂[i, j, vt] = Geometry.LocalVector(arg, local_geometry).v
-        v₃[i, j, vt] = Geometry.LocalVector(arg, local_geometry).w
-    end
+    input[i, j, vt] = arg
 end
 
-
+Base.@propagate_inbounds function operator_shmem(
+    space,
+    ::Val{Nvt},
+    op::WeakGradient{(1,)},
+    arg,
+) where {Nvt}
+    FT = Spaces.undertype(space)
+    QS = Spaces.quadrature_style(space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    # allocate temp output
+    IT = eltype(arg)
+    Wf = CUDA.CuStaticSharedArray(IT, (Nq, Nvt))
+    return (Wf,)
+end
 Base.@propagate_inbounds function operator_shmem(
     space,
     ::Val{Nvt},
@@ -182,6 +224,20 @@ Base.@propagate_inbounds function operator_shmem(
 end
 
 Base.@propagate_inbounds function operator_fill_shmem!(
+    op::WeakGradient{(1,)},
+    (Wf,),
+    space,
+    ij,
+    slabidx,
+    arg,
+)
+    vt = threadIdx().z
+    local_geometry = get_local_geometry(space, ij, slabidx)
+    W = local_geometry.WJ * local_geometry.invJ
+    i, _ = ij.I
+    Wf[i, vt] = W ⊠ arg
+end
+Base.@propagate_inbounds function operator_fill_shmem!(
     op::WeakGradient{(1, 2)},
     (Wf,),
     space,
@@ -196,7 +252,33 @@ Base.@propagate_inbounds function operator_fill_shmem!(
     Wf[i, j, vt] = W ⊠ arg
 end
 
-
+Base.@propagate_inbounds function operator_shmem(
+    space,
+    ::Val{Nvt},
+    op::Curl{(1,)},
+    arg,
+) where {Nvt}
+    FT = Spaces.undertype(space)
+    QS = Spaces.quadrature_style(space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    IT = eltype(arg)
+    ET = eltype(IT)
+    RT = operator_return_eltype(op, IT)
+    # allocate temp output
+    if RT <: Geometry.Contravariant3Vector # input is a Covariant12Vector
+        v₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nvt))
+        return (nothing, v₂)
+    elseif RT <: Geometry.Contravariant2Vector # input is a Covariant3Vector
+        v₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nvt))
+        return (v₃,)
+    elseif RT <: Geometry.Contravariant23Vector # input is a Covariant123Vector
+        v₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nvt))
+        v₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nvt))
+        return (nothing, v₂, v₃)
+    else
+        error("invalid return type")
+    end
+end
 Base.@propagate_inbounds function operator_shmem(
     space,
     ::Val{Nvt},
@@ -210,15 +292,14 @@ Base.@propagate_inbounds function operator_shmem(
     ET = eltype(IT)
     RT = operator_return_eltype(op, IT)
     # allocate temp output
-    if RT <: Geometry.Contravariant3Vector
-        # input data is a Covariant12Vector field
+    if RT <: Geometry.Contravariant3Vector # input is a Covariant12Vector
         v₁ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
         v₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
         return (v₁, v₂)
-    elseif RT <: Geometry.Contravariant12Vector
+    elseif RT <: Geometry.Contravariant12Vector # input is a Covariant3Vector
         v₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
         return (v₃,)
-    elseif RT <: Geometry.Contravariant123Vector
+    elseif RT <: Geometry.Contravariant123Vector # input is a Covariant123Vector
         v₁ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
         v₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
         v₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
@@ -228,6 +309,30 @@ Base.@propagate_inbounds function operator_shmem(
     end
 end
 
+Base.@propagate_inbounds function operator_fill_shmem!(
+    op::Curl{(1,)},
+    work,
+    space,
+    ij,
+    slabidx,
+    arg,
+)
+    vt = threadIdx().z
+    i, _ = ij.I
+    local_geometry = get_local_geometry(space, ij, slabidx)
+    RT = operator_return_eltype(op, typeof(arg))
+    if RT <: Geometry.Contravariant3Vector
+        _, v₂ = work
+        v₂[i, vt] = Geometry.covariant2(arg, local_geometry)
+    elseif RT <: Geometry.Contravariant2Vector
+        (v₃,) = work
+        v₃[i, vt] = Geometry.covariant3(arg, local_geometry)
+    else
+        _, v₂, v₃ = work
+        v₂[i, vt] = Geometry.covariant2(arg, local_geometry)
+        v₃[i, vt] = Geometry.covariant3(arg, local_geometry)
+    end
+end
 Base.@propagate_inbounds function operator_fill_shmem!(
     op::Curl{(1, 2)},
     work,
@@ -255,8 +360,33 @@ Base.@propagate_inbounds function operator_fill_shmem!(
     end
 end
 
-
-
+Base.@propagate_inbounds function operator_shmem(
+    space,
+    ::Val{Nvt},
+    op::WeakCurl{(1,)},
+    arg,
+) where {Nvt}
+    FT = Spaces.undertype(space)
+    QS = Spaces.quadrature_style(space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    IT = eltype(arg)
+    ET = eltype(IT)
+    RT = operator_return_eltype(op, IT)
+    # allocate temp output
+    if RT <: Geometry.Contravariant3Vector # input is a Covariant12Vector
+        Wv₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nvt))
+        return (nothing, Wv₂)
+    elseif RT <: Geometry.Contravariant2Vector # input is a Covariant3Vector
+        Wv₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nvt))
+        return (Wv₃,)
+    elseif RT <: Geometry.Contravariant23Vector # input is a Covariant123Vector
+        Wv₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nvt))
+        Wv₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nvt))
+        return (nothing, Wv₂, Wv₃)
+    else
+        error("invalid return type")
+    end
+end
 Base.@propagate_inbounds function operator_shmem(
     space,
     ::Val{Nvt},
@@ -270,15 +400,14 @@ Base.@propagate_inbounds function operator_shmem(
     ET = eltype(IT)
     RT = operator_return_eltype(op, IT)
     # allocate temp output
-    if RT <: Geometry.Contravariant3Vector
-        # input data is a Covariant12Vector field
+    if RT <: Geometry.Contravariant3Vector # input is a Covariant12Vector
         Wv₁ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
         Wv₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
         return (Wv₁, Wv₂)
-    elseif RT <: Geometry.Contravariant12Vector
+    elseif RT <: Geometry.Contravariant12Vector # input is a Covariant3Vector
         Wv₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
         return (Wv₃,)
-    elseif RT <: Geometry.Contravariant123Vector
+    elseif RT <: Geometry.Contravariant123Vector # input is a Covariant123Vector
         Wv₁ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
         Wv₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
         Wv₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
@@ -288,6 +417,31 @@ Base.@propagate_inbounds function operator_shmem(
     end
 end
 
+Base.@propagate_inbounds function operator_fill_shmem!(
+    op::WeakCurl{(1,)},
+    work,
+    space,
+    ij,
+    slabidx,
+    arg,
+)
+    vt = threadIdx().z
+    i, _ = ij.I
+    local_geometry = get_local_geometry(space, ij, slabidx)
+    W = local_geometry.WJ * local_geometry.invJ
+    RT = operator_return_eltype(op, typeof(arg))
+    if RT <: Geometry.Contravariant3Vector
+        _, Wv₂ = work
+        Wv₂[i, vt] = W ⊠ Geometry.covariant2(arg, local_geometry)
+    elseif RT <: Geometry.Contravariant2Vector
+        (Wv₃,) = work
+        Wv₃[i, vt] = W ⊠ Geometry.covariant3(arg, local_geometry)
+    else
+        _, Wv₂, Wv₃ = work
+        Wv₂[i, vt] = W ⊠ Geometry.covariant2(arg, local_geometry)
+        Wv₃[i, vt] = W ⊠ Geometry.covariant3(arg, local_geometry)
+    end
+end
 Base.@propagate_inbounds function operator_fill_shmem!(
     op::WeakCurl{(1, 2)},
     work,

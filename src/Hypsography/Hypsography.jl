@@ -24,7 +24,7 @@ using StaticArrays, LinearAlgebra
 
 
 """
-    ref_z_to_physical_z(adaption::HypsographyAdaption, z_ref::ZPoint, z_surface::ZPoint, z_top::ZPoint) :: ZPoint
+    ref_z_to_physical_z(adaption::HypsographyAdaption, z_ref::ZPoint, z_top::ZPoint) :: ZPoint
 
 Convert reference `z`s to physical `z`s as prescribed by the given adaption.
 
@@ -33,12 +33,11 @@ This function has to be the inverse of `physical_z_to_ref_z`.
 function ref_z_to_physical_z(
     adaption::HypsographyAdaption,
     z_ref::Geometry.ZPoint,
-    z_surface::Geometry.ZPoint,
     z_top::Geometry.ZPoint,
 ) end
 
 """
-    physical_z_to_ref_z(adaption::HypsographyAdaption, z_ref::ZPoint, z_surface::ZPoint, z_top::ZPoint) :: ZPoint
+    physical_z_to_ref_z(adaption::HypsographyAdaption, z_ref::ZPoint, z_top::ZPoint) :: ZPoint
 
 Convert physical `z`s to reference `z`s as prescribed by the given adaption.
 
@@ -47,7 +46,6 @@ This function has to be the inverse of `ref_z_to_physical_z`.
 function physical_z_to_ref_z(
     adaption::HypsographyAdaption,
     z_phys::Geometry.ZPoint,
-    z_surface::Geometry.ZPoint,
     z_top::Geometry.ZPoint,
 ) end
 
@@ -56,7 +54,6 @@ function physical_z_to_ref_z(
 function ref_z_to_physical_z(
     ::Flat,
     z_ref::Geometry.ZPoint,
-    z_surface::Geometry.ZPoint,
     z_top::Geometry.ZPoint,
 )
     return z_ref
@@ -65,19 +62,19 @@ end
 function physical_z_to_ref_z(
     ::Flat,
     z_physical::Geometry.ZPoint,
-    z_surface::Geometry.ZPoint,
     z_top::Geometry.ZPoint,
 )
     return z_physical
 end
 
 """
-    LinearAdaption(surface::Field)
+    LinearAdaption(surface)
 
-Locate the levels by linear interpolation between the surface field and the top
-of the domain, using the method of [GalChen1975](@cite).
+Locate the levels by linear interpolation between the surface and the top of the
+domain, using the method of [GalChen1975](@cite). The surface can be specified
+as a `ZPoint` or a `Field` of `ZPoint`s.
 """
-struct LinearAdaption{F <: Fields.Field} <: HypsographyAdaption
+struct LinearAdaption{F} <: HypsographyAdaption
     surface::F
 end
 
@@ -86,47 +83,41 @@ Adapt.adapt_structure(to, adaption::LinearAdaption) =
 
 # This method is invoked by the ExtrudedFiniteDifferenceGrid constructor
 function ref_z_to_physical_z(
-    ::LinearAdaption,
+    adaption::LinearAdaption,
     z_ref::Geometry.ZPoint,
-    z_surface::Geometry.ZPoint,
     z_top::Geometry.ZPoint,
 )
-    Geometry.ZPoint(z_ref.z + (1 - z_ref.z / z_top.z) * z_surface.z)
+    Geometry.ZPoint(z_ref.z + (1 - z_ref.z / z_top.z) * adaption.surface.z)
 end
 
 # This method is used for remapping
 function physical_z_to_ref_z(
-    ::LinearAdaption,
+    adaption::LinearAdaption,
     z_physical::Geometry.ZPoint,
-    z_surface::Geometry.ZPoint,
     z_top::Geometry.ZPoint,
 )
-    Geometry.ZPoint((z_physical.z - z_surface.z) / (1 - z_surface.z / z_top.z))
+    Geometry.ZPoint(
+        (z_physical.z - adaption.surface.z) /
+        (1 - adaption.surface.z / z_top.z),
+    )
 end
 
 """
-    SLEVEAdaption(surface::Field, ηₕ::FT, s::FT)
+    SLEVEAdaption(surface, ηₕ, s)
 
-Locate vertical levels using an exponential function between the surface field and the top
-of the domain, using the method of [Schar2002](@cite). This method is modified
-such no warping is applied above some user defined parameter 0 ≤ ηₕ < 1.0, where the lower and upper
-bounds represent the domain bottom and top respectively. `s` governs the decay rate.
+Locate vertical levels using an exponential function between the surface and the
+top of the domain, using the method of [Schar2002](@cite).  The surface can be
+specified as a `ZPoint` or a `Field` of `ZPoint`s.
+
+This method is modified such no warping is applied above the generalized
+coordinate `ηₕ`, where `0 ≤ ηₕ < 1`. `s` governs the decay rate.
 If the decay-scale is poorly specified (i.e., `s * zₜ` is lower than the maximum
 surface elevation), a warning is thrown and `s` is adjusted such that it `szₜ > maximum(z_surface)`.
 """
-struct SLEVEAdaption{F <: Fields.Field, FT <: Real} <: HypsographyAdaption
+struct SLEVEAdaption{F, FT} <: HypsographyAdaption
     surface::F
     ηₕ::FT
     s::FT
-    function SLEVEAdaption(
-        surface::Fields.Field,
-        ηₕ::FT,
-        s::FT,
-    ) where {FT <: Real}
-        @assert 0 <= ηₕ <= 1
-        @assert s >= 0
-        new{typeof(surface), FT}(surface, ηₕ, s)
-    end
 end
 
 Adapt.adapt_structure(to, adaption::SLEVEAdaption) =
@@ -135,11 +126,12 @@ Adapt.adapt_structure(to, adaption::SLEVEAdaption) =
 function ref_z_to_physical_z(
     adaption::SLEVEAdaption,
     z_ref::Geometry.ZPoint,
-    z_surface::Geometry.ZPoint,
     z_top::Geometry.ZPoint,
 )
-    (; ηₕ, s) = adaption
-    if s * z_top.z <= z_surface.z
+    (; surface, ηₕ, s) = adaption
+    @assert 0 <= ηₕ <= 1
+    @assert s >= 0
+    if s * z_top.z <= adaption.surface.z
         error("Decay scale (s*z_top) must be higher than max surface elevation")
     end
 
@@ -147,7 +139,7 @@ function ref_z_to_physical_z(
     if η <= ηₕ
         return Geometry.ZPoint(
             η * z_top.z +
-            z_surface.z * (sinh((ηₕ - η) / s / ηₕ)) / (sinh(1 / s)),
+            adaption.surface.z * (sinh((ηₕ - η) / s / ηₕ)) / (sinh(1 / s)),
         )
     else
         return Geometry.ZPoint(η * z_top.z)
@@ -157,11 +149,16 @@ end
 function physical_z_to_ref_z(
     adaption::SLEVEAdaption,
     z_physical::Geometry.ZPoint,
-    z_surface::Geometry.ZPoint,
     z_top::Geometry.ZPoint,
 )
     error("This method is not implemented")
 end
+
+function lazy_data_broadcast(adaption::T) where {T}
+    n_args = Val(fieldcount(T))
+    data_args = ntuple(i -> Fields.todata(getfield(adaption, i)), n_args)
+    return Base.Broadcast.broadcasted(Operators.unionall_type(T), data_args...)
+end # Should this be defined in Fields? It can also be extended to nested structs.
 
 # can redefine this constructor for e.g. multi-arg SLEVE
 function _ExtrudedFiniteDifferenceGrid(
@@ -171,7 +168,6 @@ function _ExtrudedFiniteDifferenceGrid(
     global_geometry::Geometry.AbstractGlobalGeometry,
 )
     @assert Spaces.grid(axes(adaption.surface)) == horizontal_grid
-    z_surface = Fields.field_values(adaption.surface)
 
     center_z_ref =
         Grids.local_geometry_data(vertical_grid, Grids.CellCenter()).coordinates
@@ -180,10 +176,9 @@ function _ExtrudedFiniteDifferenceGrid(
     vertical_domain = Topologies.domain(vertical_grid)
     z_top = vertical_domain.coord_max
 
-    center_z =
-        ref_z_to_physical_z.(Ref(adaption), center_z_ref, z_surface, Ref(z_top))
-    face_z =
-        ref_z_to_physical_z.(Ref(adaption), face_z_ref, z_surface, Ref(z_top))
+    adaption_data = lazy_data_broadcast(adaption)
+    center_z = ref_z_to_physical_z.(adaption_data, center_z_ref, Ref(z_top))
+    face_z = ref_z_to_physical_z.(adaption_data, face_z_ref, Ref(z_top))
 
     return _ExtrudedFiniteDifferenceGrid(
         horizontal_grid,

@@ -57,21 +57,12 @@ grid = Grids.ExtrudedFiniteDifferenceGrid(
 )
 center_space = Spaces.CenterExtrudedFiniteDifferenceSpace(grid)
 face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(grid)
-
-# Create fields and show that it fails
 ᶜgradᵥ = Operators.GradientF2C()
 
 level_field = Fields.level(Fields.Field(Float64, face_space), Utilities.half)
 ᶠscalar_field = Fields.Field(Float64, face_space)
-# Does not work:
-using Test
 
-@testset "Broken broadcast expression on GPUs" begin
-    if device isa ClimaComms.CUDADevice
-        @test_broken begin
-            @. ᶜgradᵥ(level_field + ᶠscalar_field)
-        end
-    else
-        @. ᶜgradᵥ(level_field + ᶠscalar_field)
-    end
-end
+using Test
+@testset "Example broadcast expression on GPUs" begin
+    @test !isnothing(@. ᶜgradᵥ(level_field + ᶠscalar_field))
+end # Formerly broken; fixed in CliMA/ClimaCore.jl#2172

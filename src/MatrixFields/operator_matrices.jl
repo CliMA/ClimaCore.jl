@@ -90,6 +90,9 @@ function FDOperatorMatrix(op::O) where {O}
     return FDOperatorMatrix{O}(op)
 end
 
+Operators.strip_space(op::FDOperatorMatrix, parent_space) =
+    FDOperatorMatrix(Operators.strip_space(op.op, parent_space))
+
 struct LazyOneArgFDOperatorMatrix{O <: OneArgFDOperator} <: AbstractLazyOperator
     op::O
 end
