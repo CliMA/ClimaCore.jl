@@ -744,29 +744,6 @@ function _reset_interpolated_values!(remapper::Remapper)
     fill!(remapper._interpolated_values, 0)
 end
 
-"""
-    _collect_and_return_interpolated_values!(remapper::Remapper,
-                                             num_fields::Int)
-
-Perform an MPI call to aggregate the interpolated points from all the MPI processes and save
-the result in the local state of the `remapper`. Only the root process will return the
-interpolated data.
-
-`_collect_and_return_interpolated_values!` is type-unstable and allocates new return arrays.
-
-`num_fields` is the number of fields that have been interpolated in this batch.
-"""
-function _collect_and_return_interpolated_values!(
-    remapper::Remapper,
-    num_fields::Int,
-)
-    return ClimaComms.reduce(
-        remapper.comms_ctx,
-        remapper._interpolated_values[remapper.colons..., 1:num_fields],
-        +,
-    )
-end
-
 function _collect_interpolated_values!(
     dest,
     remapper::Remapper,
@@ -777,36 +754,24 @@ function _collect_interpolated_values!(
     if only_one_field
         ClimaComms.reduce!(
             remapper.comms_ctx,
-            remapper._interpolated_values[remapper.colons..., begin],
+            view(remapper._interpolated_values, remapper.colons..., 1),
             dest,
             +,
         )
-        return nothing
+    else
+        num_fields = 1 + index_field_end - index_field_begin
+        ClimaComms.reduce!(
+            remapper.comms_ctx,
+            view(
+                remapper._interpolated_values,
+                remapper.colons...,
+                1:num_fields,
+            ),
+            view(dest, remapper.colons..., index_field_begin:index_field_end),
+            +,
+        )
     end
-
-    num_fields = 1 + index_field_end - index_field_begin
-
-    ClimaComms.reduce!(
-        remapper.comms_ctx,
-        view(remapper._interpolated_values, remapper.colons..., 1:num_fields),
-        view(dest, remapper.colons..., index_field_begin:index_field_end),
-        +,
-    )
-
     return nothing
-end
-
-"""
-    batched_ranges(num_fields, buffer_length)
-
-Partition the indices from 1 to num_fields in such a way that no range is larger than
-buffer_length.
-"""
-function batched_ranges(num_fields, buffer_length)
-    return [
-        (i * buffer_length + 1):(min((i + 1) * buffer_length, num_fields)) for
-        i in 0:(div((num_fields - 1), buffer_length))
-    ]
 end
 
 """
@@ -860,58 +825,21 @@ int12 = interpolate(remapper, [field1, field2])
 ```
 """
 function interpolate(remapper::Remapper, fields)
-
+    ArrayType = ClimaComms.array_type(remapper.space)
+    FT = Spaces.undertype(remapper.space)
     only_one_field = fields isa Fields.Field
-    if only_one_field
-        fields = [fields]
-    end
 
-    for field in fields
-        axes(field) == remapper.space ||
-            error("Field is defined on a different space than remapper")
-    end
+    interpolated_values_dim..., _buffer_length =
+        size(remapper._interpolated_values)
 
-    isa_vertical_space = remapper.space isa Spaces.FiniteDifferenceSpace
+    allocate_extra = only_one_field ? () : (length(fields),)
+    dest = ArrayType(zeros(FT, interpolated_values_dim..., allocate_extra...))
 
-    index_field_begin, index_field_end =
-        1, min(length(fields), remapper.buffer_length)
-
-    # Partition the indices in such a way that nothing is larger than
-    # buffer_length
-    index_ranges = batched_ranges(length(fields), remapper.buffer_length)
-
-    cat_fn = (l...) -> cat(l..., dims = length(remapper.colons) + 1)
-
-    interpolated_values = mapreduce(cat_fn, index_ranges) do range
-        num_fields = length(range)
-
-        # Reset interpolated_values. This is needed because we collect distributed results
-        # with a + reduction.
-        _reset_interpolated_values!(remapper)
-        # Perform the interpolations (horizontal and vertical)
-        _set_interpolated_values!(
-            remapper,
-            view(fields, index_field_begin:index_field_end),
-        )
-
-        if !isa_vertical_space
-            # For spaces with an horizontal component, reshape the output so that it is a nice grid.
-            _apply_mpi_bitmask!(remapper, num_fields)
-        else
-            # For purely vertical spaces, just move to _interpolated_values
-            remapper._interpolated_values .= remapper._local_interpolated_values
-        end
-
-        # Finally, we have to send all the _interpolated_values to root and sum them up to
-        # obtain the final answer. Only the root will contain something useful.
-        return _collect_and_return_interpolated_values!(remapper, num_fields)
-    end
-
-    # Non-root processes
-    isnothing(interpolated_values) && return nothing
-
-    return only_one_field ? interpolated_values[remapper.colons..., begin] :
-           interpolated_values
+    # interpolate! has an MPI call, so it is important to return after it is
+    # called, not before!
+    interpolate!(dest, remapper, fields)
+    ClimaComms.iamroot(remapper.comms_ctx) || return nothing
+    return dest
 end
 
 # dest has to be allowed to be nothing because interpolation happens only on the root
@@ -926,6 +854,11 @@ function interpolate!(
         fields = [fields]
     end
     isa_vertical_space = remapper.space isa Spaces.FiniteDifferenceSpace
+
+    for field in fields
+        axes(field) == remapper.space ||
+            error("Field is defined on a different space than remapper")
+    end
 
     if !isnothing(dest)
         # !isnothing(dest) means that this is the root process, in this case, the size have
