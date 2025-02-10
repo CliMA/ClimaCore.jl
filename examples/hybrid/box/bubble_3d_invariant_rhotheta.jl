@@ -311,7 +311,7 @@ sol = solve(
     prob,
     SSPRK33(),
     dt = Δt,
-    saveat = 1.0,
+    saveat = [0.0, 1.0],
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );

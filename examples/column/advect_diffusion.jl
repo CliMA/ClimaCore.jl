@@ -95,7 +95,7 @@ sol = solve(
     prob,
     SSPRK33(),
     dt = Δt,
-    saveat = 10000 * Δt,
+    saveat = collect(t₀:(10000 * Δt):t₁),
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );

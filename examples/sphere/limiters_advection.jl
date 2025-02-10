@@ -229,7 +229,7 @@ for (k, ne) in enumerate(ne_seq)
         prob,
         SSPRK33(stage_callback!),
         dt = dt,
-        saveat = 10 * dt,
+        saveat = [0.0:(10 * dt):end_time..., end_time],
         progress = true,
         adaptive = false,
         progress_message = (dt, u, p, t) -> t,

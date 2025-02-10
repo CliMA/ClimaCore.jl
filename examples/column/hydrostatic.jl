@@ -134,7 +134,7 @@ sol = solve(
     prob,
     SSPRK33(),
     dt = Δt,
-    saveat = 60 * 60, # save every hour
+    saveat = collect(0.0:(60 * 60):(60 * 60 * 24 * ndays)), # save every hour
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );

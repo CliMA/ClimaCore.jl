@@ -415,7 +415,7 @@ integrator = init(
     prob,
     SSPRK33(),
     dt = Δt,
-    saveat = 500.0,
+    saveat = collect(0.0:500.0:timeend),
     progress = true,
     progress_message = (dt, u, p, t) -> t,
     callback = dss_callback,

@@ -202,7 +202,7 @@ for (k, ne) in enumerate(ne_seq)
         prob,
         ExplicitAlgorithm(SSP33ShuOsher()),
         dt = dt,
-        saveat = 0.99 * 800 * dt,
+        saveat = [0.0:(0.99 * 800 * dt):end_time..., end_time],
     )
 
     q_final = sol.u[end].ρq ./ sol.u[end].ρ

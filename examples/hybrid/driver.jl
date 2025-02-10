@@ -177,7 +177,7 @@ problem = SciMLBase.ODEProblem(
 integrator = SciMLBase.init(
     problem,
     ode_algo;
-    saveat = dt_save_to_sol == 0 ? [] : dt_save_to_sol,
+    saveat = dt_save_to_sol == 0 ? [] : collect(t_start:dt_save_to_sol:t_end),
     callback = callback,
     dt = dt,
     adaptive = false,

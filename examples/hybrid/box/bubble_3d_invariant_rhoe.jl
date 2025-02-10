@@ -451,7 +451,7 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
         prob,
         SSPRK33(),
         dt = Δt,
-        saveat = 10.0,
+        saveat = [0.0:10.0:(sim_params.t_int)..., sim_params.t_int],
         progress = true,
         progress_message = (dt, u, p, t) -> t,
         internalnorm = (u, t) -> norm(u),

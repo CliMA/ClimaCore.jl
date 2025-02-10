@@ -226,7 +226,7 @@ sol = solve(
     prob,
     SSPRK33(),
     dt = 0.02,
-    saveat = 1.0,
+    saveat = collect(0.0:1.0:200.0),
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 )

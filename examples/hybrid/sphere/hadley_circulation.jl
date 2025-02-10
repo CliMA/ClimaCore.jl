@@ -211,7 +211,12 @@ prob = ODEProblem(
     (0.0, T),
     parameters,
 )
-sol = solve(prob, ExplicitAlgorithm(SSP33ShuOsher()), dt = dt, saveat = dt)
+sol = solve(
+    prob,
+    ExplicitAlgorithm(SSP33ShuOsher()),
+    dt = dt,
+    saveat = collect(0.0:dt:T),
+)
 
 q1_error =
     norm(sol.u[end].ρq1 ./ ρ .- sol.u[1].ρq1 ./ ρ) / norm(sol.u[1].ρq1 ./ ρ)

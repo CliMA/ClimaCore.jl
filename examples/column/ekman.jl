@@ -118,7 +118,7 @@ sol = solve(
     prob,
     SSPRK33(),
     dt = Δt,
-    saveat = 600, # save 10 min
+    saveat = collect(0.0:600:(60 * 60 * 50)), # save 10 min
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );

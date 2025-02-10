@@ -390,7 +390,8 @@ function heat_fd_tendency!(dydt, y, α, t)
 end
 
 heat_fd_prob = ODEProblem(heat_fd_tendency!, y0, (0.0, 5.0), 0.1)
-heat_fd_sol = solve(heat_fd_prob, SSPRK33(), dt = 0.1, saveat = 0.25)
+heat_fd_sol =
+    solve(heat_fd_prob, SSPRK33(), dt = 0.1, saveat = collect(0.0:0.25:5.0))
 #----------------------------------------------------------------------------
 
 anim = Plots.@animate for u in heat_fd_sol.u
@@ -417,7 +418,8 @@ end
 y0 = exp.(.-(coord.y .^ 2 .+ coord.x .^ 2) ./ 2)
 
 heat_cg_prob = ODEProblem(heat_cg_tendency!, y0, (0.0, 5.0), 0.1)
-heat_cg_sol = solve(heat_cg_prob, SSPRK33(), dt = 0.1, saveat = 0.5)
+heat_cg_sol =
+    solve(heat_cg_prob, SSPRK33(), dt = 0.1, saveat = collect(0.0:0.5:5.0))
 #----------------------------------------------------------------------------
 
 anim = Plots.@animate for u in heat_cg_sol.u
@@ -535,8 +537,12 @@ end
 #----------------------------------------------------------------------------
 
 shallow_water_prob = ODEProblem(shallow_water_tendency!, y0, (0.0, 20.0))
-@time shallow_water_sol =
-    solve(shallow_water_prob, SSPRK33(), dt = 0.05, saveat = 1.0)
+@time shallow_water_sol = solve(
+    shallow_water_prob,
+    SSPRK33(),
+    dt = 0.05,
+    saveat = collect(0.0:1.0:20.0),
+)
 anim = Plots.@animate for u in shallow_water_sol.u
     Plots.plot(u.ρθ, clim = (-1, 1))
 end
