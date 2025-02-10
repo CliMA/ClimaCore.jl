@@ -305,7 +305,12 @@ function run_deformation_flow(use_limiter, fct_op, dt)
         (0, t_end),
         cache,
     )
-    sol = solve(problem, ode_algorithm; dt, saveat = t_end / 2)
+    sol = solve(
+        problem,
+        ode_algorithm;
+        dt,
+        saveat = collect(0.0:(t_end / 2):t_end),
+    )
     if !(cache.limiter isa Nothing)
         @show cache.limiter.rtol
         Limiters.print_convergence_stats(cache.limiter)

@@ -260,7 +260,7 @@ sol = solve(
     prob,
     SSPRK33(),
     dt = dt,
-    saveat = dt,
+    saveat = collect(0:dt:time_end),
     progress = true,
     adaptive = false,
     progress_message = (dt, u, p, t) -> t,

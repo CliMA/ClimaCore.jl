@@ -115,7 +115,7 @@ for (i, stretch_fn) in enumerate(stretch_fns)
         prob,
         ExplicitAlgorithm(SSP33ShuOsher()),
         dt = Δt,
-        saveat = Δt,
+        saveat = collect(t₀:Δt:t₁),
         progress = true,
         adaptive = false,
         progress_message = (dt, u, p, t) -> t,

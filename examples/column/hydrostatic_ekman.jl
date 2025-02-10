@@ -180,7 +180,7 @@ sol = solve(
     prob,
     SSPRK33(),
     dt = Δt,
-    saveat = 600, # save every hour
+    saveat = collect(0.0:600:(60 * 60)), # save every hour
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );

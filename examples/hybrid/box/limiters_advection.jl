@@ -320,7 +320,7 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
         prob,
         CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
         dt = dt,
-        saveat = 0.99 * 80 * dt,
+        saveat = [0.0:(0.99 * 80 * dt):end_time..., end_time],
     )
 
     q_final = sol.u[end].ρq ./ sol.u[end].ρ

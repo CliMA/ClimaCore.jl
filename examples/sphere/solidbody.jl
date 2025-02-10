@@ -137,7 +137,7 @@ for (k, ne) in enumerate(ne_seq)
         prob,
         SSPRK33(),
         dt = dt,
-        saveat = dt,
+        saveat = collect(0.0:dt:T),
         progress = true,
         adaptive = false,
         progress_message = (dt, u, p, t) -> t,

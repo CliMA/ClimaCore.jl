@@ -34,6 +34,24 @@ struct SchurComplementW{F, FT, J1, J2, J3, J4, S, T}
     temp2::T
 end
 
+function Base.zero(jac::SchurComplementW)
+    return SchurComplementW(
+        jac.transform,
+        jac.flags,
+        jac.dtγ_ref,
+        Base.zero(jac.∂ᶜρₜ∂ᶠ𝕄),
+        Base.zero(jac.∂ᶜ𝔼ₜ∂ᶠ𝕄),
+        Base.zero(jac.∂ᶠ𝕄ₜ∂ᶜ𝔼),
+        Base.zero(jac.∂ᶠ𝕄ₜ∂ᶜρ),
+        Base.zero(jac.∂ᶠ𝕄ₜ∂ᶠ𝕄),
+        Base.zero(jac.S),
+        jac.test,
+        Base.zero(jac.temp1),
+        Base.zero(jac.temp2),
+    )
+end
+
+
 function SchurComplementW(Y, transform, flags, test = false)
     FT = eltype(Y)
     dtγ_ref = Ref(zero(FT))

@@ -112,7 +112,12 @@ for (i, stretch_fn) in enumerate(stretch_fns)
         (t₀, t₁),
         parameters,
     )
-    sol = solve(prob, ExplicitAlgorithm(SSP33ShuOsher()), dt = Δt, saveat = Δt)
+    sol = solve(
+        prob,
+        ExplicitAlgorithm(SSP33ShuOsher()),
+        dt = Δt,
+        saveat = collect(t₀:Δt:t₁),
+    )
 
     q_final = sol.u[end].q
     q_analytic = pulse.(z, t₁, z₀, zₕ, z₁)

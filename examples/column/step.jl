@@ -121,7 +121,7 @@ sol1 = solve(
     prob1,
     SSPRK33(),
     dt = Δt,
-    saveat = 10 * Δt,
+    saveat = collect(0.0:(10 * Δt):5.0),
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
@@ -129,7 +129,7 @@ sol2 = solve(
     prob2,
     SSPRK33(),
     dt = Δt,
-    saveat = 10 * Δt,
+    saveat = collect(0.0:(10 * Δt):5.0),
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
@@ -137,7 +137,7 @@ sol3 = solve(
     prob3,
     SSPRK33(),
     dt = Δt,
-    saveat = 10 * Δt,
+    saveat = collect(0.0:(10 * Δt):5.0),
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
@@ -145,7 +145,7 @@ sol4 = solve(
     prob4,
     SSPRK33(),
     dt = Δt,
-    saveat = 10 * Δt,
+    saveat = collect(0.0:(10 * Δt):5.0),
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );

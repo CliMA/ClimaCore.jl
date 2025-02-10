@@ -303,7 +303,7 @@ integrator = init(
     prob,
     SSPRK33(),
     dt = Δt,
-    saveat = 50.0,
+    saveat = collect(0.0:50.0:900.0),
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );

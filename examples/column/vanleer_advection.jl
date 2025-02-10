@@ -113,7 +113,7 @@ for (i, stretch_fn) in enumerate(stretch_fns)
             prob,
             ExplicitAlgorithm(SSP33ShuOsher()),
             dt = Δt,
-            saveat = Δt,
+            saveat = [t₀:Δt:t₁..., t₁],
         )
 
         q_final = sol.u[end].q

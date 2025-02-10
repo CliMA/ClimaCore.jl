@@ -62,7 +62,7 @@ sol = solve(
     prob,
     SSPRK33(),
     dt = Δt,
-    saveat = 10 * Δt,
+    saveat = [0.0:(10 * Δt):(4 * pi)..., 4 * pi],
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
