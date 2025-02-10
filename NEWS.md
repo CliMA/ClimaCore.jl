@@ -4,6 +4,14 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- Prior to this version, `CommonSpaces` could not be created with
+`ClimaComms.MPICommContext`. This is now fixed with PR
+[2176](https://github.com/CliMA/ClimaCore.jl/pull/2176).
+
+
+v0.14.24
+-------
+
  - A new `Adapt` wrapper was added, `to_device`, which allows users to adapt datalayouts, spaces, fields, and fieldvectors between the cpu and gpu. PR [2159](https://github.com/CliMA/ClimaCore.jl/pull/2159).
  - Remap interpolation cuda threading was improved. PR [2159](https://github.com/CliMA/ClimaCore.jl/pull/2159).
  - `center_space` and `face_space` are now exported from `CommonSpaces`. PR [2157](https://github.com/CliMA/ClimaCore.jl/pull/2157).

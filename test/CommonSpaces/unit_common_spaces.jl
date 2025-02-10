@@ -16,6 +16,9 @@ using ClimaCore:
     DataLayouts
 using Test
 
+# Initialize MPI context
+ClimaComms.init(ClimaComms.context())
+
 @testset "Convenience constructors" begin
     function warp_surface(coord)
         # sin²(x) form ground elevation
@@ -75,14 +78,17 @@ using Test
     @test grid isa Grids.SpectralElementGrid2D
     @test Grids.topology(grid).mesh isa Meshes.EquiangularCubedSphere
 
-    space = ColumnSpace(;
-        z_elem = 10,
-        z_min = 0,
-        z_max = 1,
-        staggering = Grids.CellCenter(),
-    )
-    grid = Spaces.grid(space)
-    @test grid isa Grids.FiniteDifferenceGrid
+    # Column spaces are not supported with MPI
+    if !(ClimaComms.context() isa ClimaComms.MPICommsContext)
+        space = ColumnSpace(;
+            z_elem = 10,
+            z_min = 0,
+            z_max = 1,
+            staggering = Grids.CellCenter(),
+        )
+        grid = Spaces.grid(space)
+        @test grid isa Grids.FiniteDifferenceGrid
+    end
 
     space = Box3DSpace(;
         z_elem = 10,
@@ -104,21 +110,24 @@ using Test
     @test grid.horizontal_grid isa Grids.SpectralElementGrid2D
     @test Grids.topology(grid.horizontal_grid).mesh isa Meshes.RectilinearMesh
 
-    space = SliceXZSpace(;
-        z_elem = 10,
-        x_min = 0,
-        x_max = 1,
-        z_min = 0,
-        z_max = 1,
-        periodic_x = false,
-        n_quad_points = 4,
-        x_elem = 4,
-        staggering = Grids.CellCenter(),
-    )
-    grid = Spaces.grid(space)
-    @test grid isa Grids.ExtrudedFiniteDifferenceGrid
-    @test grid.horizontal_grid isa Grids.SpectralElementGrid1D
-    @test Grids.topology(grid.horizontal_grid).mesh isa Meshes.IntervalMesh
+    # Slices are currently not compatible with GPU
+    if !(ClimaComms.device() isa ClimaComms.CUDADevice)
+        space = SliceXZSpace(;
+            z_elem = 10,
+            x_min = 0,
+            x_max = 1,
+            z_min = 0,
+            z_max = 1,
+            periodic_x = false,
+            n_quad_points = 4,
+            x_elem = 4,
+            staggering = Grids.CellCenter(),
+        )
+        grid = Spaces.grid(space)
+        @test grid isa Grids.ExtrudedFiniteDifferenceGrid
+        @test grid.horizontal_grid isa Grids.SpectralElementGrid1D
+        @test Grids.topology(grid.horizontal_grid).mesh isa Meshes.IntervalMesh
+    end
 
     space = RectangleXYSpace(;
         x_min = 0,
