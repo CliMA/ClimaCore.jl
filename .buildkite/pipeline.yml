@@ -585,6 +585,7 @@ steps:
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_column.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/convergence_column.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/convergence_column.jl --stretch ExponentialStretching"
 
       - label: "Unit: wfact"
         key: unit_wfact
