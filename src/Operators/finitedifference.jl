@@ -353,15 +353,31 @@ function stencil_right_boundary end
 
 abstract type InterpolationOperator <: FiniteDifferenceOperator end
 
+function assert_no_bcs(op, kwargs)
+    length(kwargs) == 0 && return nothing
+    error("InterpolateF2C does not accept boundary conditions.")
+end
+
+function assert_valid_bcs(op, kwargs, valid_bcs)
+    for bc in values(values(kwargs))
+        @assert any(valid_bc -> bc isa valid_bc, valid_bcs) "$op only supports boundary conditions:\n\n\t $valid_bcs.\n\n BCs given:\n\n\t $(values(values(kwargs)))\n"
+    end
+    return nothing
+end
+
 """
     InterpolateF2C()
 
-Interpolate from face to center mesh. No boundary conditions are required (or supported).
+Interpolate from face to center mesh. No boundary conditions are required
+(or supported).
 """
-struct InterpolateF2C{BCS} <: InterpolationOperator
+struct InterpolateF2C{BCS <: @NamedTuple{}} <: InterpolationOperator
     bcs::BCS
 end
-InterpolateF2C(; kwargs...) = InterpolateF2C(NamedTuple(kwargs))
+function InterpolateF2C(; kwargs...)
+    assert_no_bcs("InterpolateF2C", kwargs)
+    InterpolateF2C((NamedTuple()))
+end
 
 return_space(::InterpolateF2C, space::AllFaceFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellCenter())
@@ -412,8 +428,16 @@ I(x)[\\tfrac{1}{2}] = x[1]
 """
 struct InterpolateC2F{BCS} <: InterpolationOperator
     bcs::BCS
+    function InterpolateC2F(; kwargs...)
+        assert_valid_bcs(
+            "InterpolateC2F",
+            kwargs,
+            (SetValue, SetGradient, Extrapolate),
+        )
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    InterpolateC2F(bcs) = InterpolateC2F(; bcs...)
 end
-InterpolateC2F(; kwargs...) = InterpolateC2F(NamedTuple(kwargs))
 
 return_space(::InterpolateC2F, space::AllCenterFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellFace())
@@ -537,8 +561,12 @@ L(x)[\\tfrac{1}{2}] = x_0
 """
 struct LeftBiasedC2F{BCS} <: InterpolationOperator
     bcs::BCS
+    function LeftBiasedC2F(; kwargs...)
+        assert_valid_bcs("LeftBiasedC2F", kwargs, (SetValue,))
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    LeftBiasedC2F(bcs) = LeftBiasedC2F(; bcs...)
 end
-LeftBiasedC2F(; kwargs...) = LeftBiasedC2F(NamedTuple(kwargs))
 
 return_space(::LeftBiasedC2F, space::AllCenterFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellFace())
@@ -596,8 +624,12 @@ L(x)[1] = x_0
 """
 struct LeftBiasedF2C{BCS} <: InterpolationOperator
     bcs::BCS
+    function LeftBiasedF2C(; kwargs...)
+        assert_valid_bcs("LeftBiasedF2C", kwargs, (SetValue,))
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    LeftBiasedF2C(bcs) = LeftBiasedF2C(; bcs...)
 end
-LeftBiasedF2C(; kwargs...) = LeftBiasedF2C(NamedTuple(kwargs))
 
 return_space(::LeftBiasedF2C, space::AllFaceFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellCenter())
@@ -656,8 +688,12 @@ L(x)[\\tfrac{1}{2}] = x_0
 """
 struct LeftBiased3rdOrderC2F{BCS} <: InterpolationOperator
     bcs::BCS
+    function LeftBiased3rdOrderC2F(; kwargs...)
+        assert_valid_bcs("LeftBiased3rdOrderC2F", kwargs, (SetValue,))
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    LeftBiased3rdOrderC2F(bcs) = LeftBiased3rdOrderC2F(; bcs...)
 end
-LeftBiased3rdOrderC2F(; kwargs...) = LeftBiased3rdOrderC2F(NamedTuple(kwargs))
 
 return_space(::LeftBiased3rdOrderC2F, space::AllCenterFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellFace())
@@ -720,8 +756,13 @@ L(x)[1] = x_0
 """
 struct LeftBiased3rdOrderF2C{BCS} <: InterpolationOperator
     bcs::BCS
+    function LeftBiased3rdOrderF2C(; kwargs...)
+        assert_valid_bcs("LeftBiased3rdOrderF2C", kwargs, (SetValue,))
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    LeftBiased3rdOrderF2C(bcs) = LeftBiased3rdOrderF2C(; bcs...)
 end
-LeftBiased3rdOrderF2C(; kwargs...) = LeftBiased3rdOrderF2C(NamedTuple(kwargs))
+
 
 return_space(::LeftBiased3rdOrderF2C, space::AllFaceFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellCenter())
@@ -784,8 +825,12 @@ R(x)[n+\\tfrac{1}{2}] = x_0
 """
 struct RightBiasedC2F{BCS} <: InterpolationOperator
     bcs::BCS
+    function RightBiasedC2F(; kwargs...)
+        assert_valid_bcs("RightBiasedC2F", kwargs, (SetValue,))
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    RightBiasedC2F(bcs) = RightBiasedC2F(; bcs...)
 end
-RightBiasedC2F(; kwargs...) = RightBiasedC2F(NamedTuple(kwargs))
 
 return_space(::RightBiasedC2F, space::AllCenterFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellFace())
@@ -843,8 +888,12 @@ R(x)[n+\\tfrac{1}{2}] = x_0
 """
 struct RightBiasedF2C{BCS} <: InterpolationOperator
     bcs::BCS
+    function RightBiasedF2C(; kwargs...)
+        assert_valid_bcs("RightBiasedF2C", kwargs, (SetValue,))
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    RightBiasedF2C(bcs) = RightBiasedF2C(; bcs...)
 end
-RightBiasedF2C(; kwargs...) = RightBiasedF2C(NamedTuple(kwargs))
 
 return_space(::RightBiasedF2C, space::AllFaceFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellCenter())
@@ -905,8 +954,12 @@ R(x)[n+\\tfrac{1}{2}] = x_0
 """
 struct RightBiased3rdOrderC2F{BCS} <: InterpolationOperator
     bcs::BCS
+    function RightBiased3rdOrderC2F(; kwargs...)
+        assert_valid_bcs("RightBiased3rdOrderC2F", kwargs, (SetValue,))
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    RightBiased3rdOrderC2F(bcs) = RightBiased3rdOrderC2F(; bcs...)
 end
-RightBiased3rdOrderC2F(; kwargs...) = RightBiased3rdOrderC2F(NamedTuple(kwargs))
 
 return_space(::RightBiased3rdOrderC2F, space::AllCenterFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellFace())
@@ -957,8 +1010,13 @@ R(x)[n+\\tfrac{1}{2}] = x_0
 """
 struct RightBiased3rdOrderF2C{BCS} <: InterpolationOperator
     bcs::BCS
+    function RightBiased3rdOrderF2C(; kwargs...)
+        assert_valid_bcs("RightBiased3rdOrderF2C", kwargs, (SetValue,))
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    RightBiased3rdOrderF2C(bcs) = RightBiased3rdOrderF2C(; bcs...)
 end
-RightBiased3rdOrderF2C(; kwargs...) = RightBiased3rdOrderF2C(NamedTuple(kwargs))
+
 
 return_space(::RightBiased3rdOrderF2C, space::AllFaceFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellCenter())
@@ -1014,10 +1072,15 @@ WI(w, x)[i] = \\frac{
 
 No boundary conditions are required (or supported)
 """
-struct WeightedInterpolateF2C{BCS} <: WeightedInterpolationOperator
+struct WeightedInterpolateF2C{BCS <: @NamedTuple{}} <:
+       WeightedInterpolationOperator
     bcs::BCS
 end
-WeightedInterpolateF2C(; kwargs...) = WeightedInterpolateF2C(NamedTuple(kwargs))
+
+function WeightedInterpolateF2C(; kwargs...)
+    assert_no_bcs("WeightedInterpolateF2C", kwargs)
+    WeightedInterpolateF2C(NamedTuple(kwargs))
+end
 
 return_space(
     ::WeightedInterpolateF2C,
@@ -1069,8 +1132,16 @@ These have the same stencil as in [`InterpolateC2F`](@ref).
 """
 struct WeightedInterpolateC2F{BCS} <: WeightedInterpolationOperator
     bcs::BCS
+    function WeightedInterpolateC2F(; kwargs...)
+        assert_valid_bcs(
+            "WeightedInterpolateC2F",
+            kwargs,
+            (SetValue, SetGradient, Extrapolate),
+        )
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    WeightedInterpolateC2F(bcs) = WeightedInterpolateC2F(; bcs...)
 end
-WeightedInterpolateC2F(; kwargs...) = WeightedInterpolateC2F(NamedTuple(kwargs))
 
 return_space(
     ::WeightedInterpolateC2F,
@@ -1229,8 +1300,16 @@ Supported boundary conditions are:
 """
 struct UpwindBiasedProductC2F{BCS} <: AdvectionOperator
     bcs::BCS
+    function UpwindBiasedProductC2F(; kwargs...)
+        assert_valid_bcs(
+            "UpwindBiasedProductC2F",
+            kwargs,
+            (SetValue, Extrapolate),
+        )
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    UpwindBiasedProductC2F(bcs) = UpwindBiasedProductC2F(; bcs...)
 end
-UpwindBiasedProductC2F(; kwargs...) = UpwindBiasedProductC2F(NamedTuple(kwargs))
 
 return_eltype(::UpwindBiasedProductC2F, V, A) =
     Geometry.Contravariant3Vector{eltype(eltype(V))}
@@ -1360,19 +1439,35 @@ number. The `mismatch` Δ𝜙 = 0 returns the first-order upwind method. Special
 cases (discussed in Lin et al (1994)) include setting the 𝜙_min = 0 or 𝜙_max =
 saturation mixing ratio for water vapor are not considered here in favour of
 the generalized local extrema in equation (5a, 5b).
+
+Supported boundary conditions include:
+
+ - [`FirstOrderOneSided`](@ref)
+ - [`ThirdOrderOneSided`](@ref)
 """
 struct LinVanLeerC2F{BCS, C} <: AdvectionOperator
     bcs::BCS
     constraint::C
+    function LinVanLeerC2F(; constraint, kwargs...)
+        assert_valid_bcs(
+            "LinVanLeerC2F",
+            kwargs,
+            (FirstOrderOneSided, ThirdOrderOneSided),
+        )
+        new{typeof(NamedTuple(kwargs)), typeof(constraint)}(
+            NamedTuple(kwargs),
+            constraint,
+        )
+    end
+    LinVanLeerC2F(bcs, constraint) = LinVanLeerC2F(; constraint, bcs...)
 end
+
 abstract type LimiterConstraint end
 struct AlgebraicMean <: LimiterConstraint end
 struct PositiveDefinite <: LimiterConstraint end
 struct MonotoneHarmonic <: LimiterConstraint end
 struct MonotoneLocalExtrema <: LimiterConstraint end
 
-LinVanLeerC2F(; constraint, kwargs...) =
-    LinVanLeerC2F(NamedTuple(kwargs), constraint)
 
 strip_space(op::LinVanLeerC2F, parent_space) = LinVanLeerC2F(
     NamedTuple{keys(op.bcs)}(strip_space_args(values(op.bcs), parent_space)),
@@ -1566,19 +1661,33 @@ U(v,x)[i] = \\begin{cases}
 This stencil is based on [WickerSkamarock2002](@cite), eq. 4(a).
 
 Supported boundary conditions are:
-- [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind scheme to compute `x` on the left boundary,
-  and the first-order upwind scheme to compute `x` on the right boundary.
-- [`ThirdOrderOneSided(x₀)`](@ref): uses the third-order downwind reconstruction to compute `x` on the left boundary,
-and the third-order upwind reconstruction to compute `x` on the right boundary.
+- [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind scheme to
+  compute `x` on the left boundary, and the first-order upwind scheme to
+  compute `x` on the right boundary.
+- [`ThirdOrderOneSided(x₀)`](@ref): uses the third-order downwind reconstruction
+  to compute `x` on the left boundary, and the third-order upwind
+  reconstruction to compute `x` on the right boundary.
 
 !!! note
-    These boundary conditions do not define the value at the actual boundary faces, and so this operator cannot be materialized directly: it needs to be composed with another operator that does not make use of this value, e.g. a [`DivergenceF2C`](@ref) operator, with a [`SetValue`](@ref) boundary.
+    These boundary conditions do not define the value at the actual
+    boundary faces, and so this operator should not be materialized directly: it
+    needs to be composed with another operator that does not make use of this
+    value, e.g. a [`DivergenceF2C`](@ref) operator, with a [`SetValue`]
+    (@ref) boundary.
 """
 struct Upwind3rdOrderBiasedProductC2F{BCS} <: AdvectionOperator
     bcs::BCS
+    function Upwind3rdOrderBiasedProductC2F(; kwargs...)
+        assert_valid_bcs(
+            "Upwind3rdOrderBiasedProductC2F",
+            kwargs,
+            (FirstOrderOneSided, ThirdOrderOneSided),
+        )
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    Upwind3rdOrderBiasedProductC2F(bcs) =
+        Upwind3rdOrderBiasedProductC2F(; bcs...)
 end
-Upwind3rdOrderBiasedProductC2F(; kwargs...) =
-    Upwind3rdOrderBiasedProductC2F(NamedTuple(kwargs))
 
 return_eltype(::Upwind3rdOrderBiasedProductC2F, V, A) =
     Geometry.Contravariant3Vector{eltype(eltype(V))}
@@ -1712,30 +1821,43 @@ end
     U = FCTBorisBook(;boundaries)
     U.(v, x)
 
-Correct the flux using the flux-corrected transport formulation by Boris and Book [BorisBook1973](@cite).
+Correct the flux using the flux-corrected transport formulation by Boris and
+Book [BorisBook1973](@cite).
 
 Input arguments:
 - a face-valued vector field `v`
 - a center-valued field `x`
+
 ```math
 Ac(v,x)[i] =
   s[i] \\max \\left\\{0, \\min \\left[ |v[i] |, s[i] \\left( x[i+\\tfrac{3}{2}] - x[i+\\tfrac{1}{2}]  \\right) ,  s[i] \\left( x[i-\\tfrac{1}{2}] - x[i-\\tfrac{3}{2}]  \\right) \\right] \\right\\},
 ```
-where ``s[i] = +1`` if  `` v[i] \\geq 0`` and ``s[i] = -1`` if  `` v[i] \\leq 0``, and ``Ac`` represents the resulting corrected antidiffusive flux.
-This formulation is based on [BorisBook1973](@cite), as reported in [durran2010](@cite) section 5.4.1.
+
+where ``s[i] = +1`` if  `` v[i] \\geq 0`` and ``s[i] = -1`` if  `` v
+[i] \\leq 0``, and ``Ac`` represents the resulting corrected antidiffusive
+flux. This formulation is based on [BorisBook1973](@cite), as reported in
+[durran2010](@cite) section 5.4.1.
 
 Supported boundary conditions are:
-- [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind reconstruction to compute `x` on the left boundary, and the first-order upwind reconstruction to compute `x` on the right boundary.
+- [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind reconstruction
+  to compute `x` on the left boundary, and the first-order upwind
+  reconstruction to compute `x` on the right boundary.
 
 !!! note
-    Similar to the [`Upwind3rdOrderBiasedProductC2F`](@ref) operator, these boundary conditions do not define the value at the actual boundary faces,
-    and so this operator cannot be materialized directly: it needs to be composed with another operator that does not make use of this value, e.g. a
+    Similar to the [`Upwind3rdOrderBiasedProductC2F`](@ref) operator, these
+    boundary conditions do not define the value at the actual boundary faces,
+    and so this operator cannot be materialized directly: it needs to be
+    composed with another operator that does not make use of this value, e.g. a
     [`DivergenceF2C`](@ref) operator, with a [`SetValue`](@ref) boundary.
 """
 struct FCTBorisBook{BCS} <: AdvectionOperator
     bcs::BCS
+    function FCTBorisBook(; kwargs...)
+        assert_valid_bcs("FCTBorisBook", kwargs, (FirstOrderOneSided,))
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    FCTBorisBook(bcs) = FCTBorisBook(; bcs...)
 end
-FCTBorisBook(; kwargs...) = FCTBorisBook(NamedTuple(kwargs))
 
 return_eltype(::FCTBorisBook, V, A) =
     Geometry.Contravariant3Vector{eltype(eltype(V))}
@@ -1841,31 +1963,42 @@ end
     U = FCTZalesak(;boundaries)
     U.(A, Φ, Φᵗᵈ)
 
-Correct the flux using the flux-corrected transport formulation by Zalesak [zalesak1979fully](@cite).
+Correct the flux using the flux-corrected transport formulation by Zalesak
+[zalesak1979fully](@cite).
 
 Input arguments:
 - a face-valued vector field `A`
 - a center-valued field `Φ`
 - a center-valued field `Φᵗᵈ`
+
 ```math
 Φ_j^{n+1} = Φ_j^{td} - (C_{j+\\frac{1}{2}}A_{j+\\frac{1}{2}} - C_{j-\\frac{1}{2}}A_{j-\\frac{1}{2}})
 ```
-This stencil is based on [zalesak1979fully](@cite), as reported in [durran2010](@cite) section 5.4.2, where ``C`` denotes
-the corrected antidiffusive flux.
+
+This stencil is based on [zalesak1979fully](@cite), as reported in [durran2010]
+(@cite) section 5.4.2, where ``C`` denotes the corrected antidiffusive flux.
 
 Supported boundary conditions are:
-- [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind reconstruction to compute `x` on the left boundary, and the first-order upwind reconstruction to compute `x` on the right boundary.
+
+- [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind reconstruction
+  to compute `x` on the left boundary, and the first-order upwind
+  reconstruction to compute `x` on the right boundary.
 
 !!! note
-    Similar to the [`Upwind3rdOrderBiasedProductC2F`](@ref) operator, these boundary conditions do not define
-    the value at the actual boundary faces, and so this operator cannot be materialized directly: it needs to
-    be composed with another operator that does not make use of this value, e.g. a [`DivergenceF2C`](@ref) operator,
-    with a [`SetValue`](@ref) boundary.
+    Similar to the [`Upwind3rdOrderBiasedProductC2F`](@ref) operator, these
+    boundary conditions do not define the value at the actual boundary faces,
+    and so this operator cannot be materialized directly: it needs to be
+    composed with another operator that does not make use of this value, e.g.
+    a [`DivergenceF2C`](@ref) operator, with a [`SetValue`](@ref) boundary.
 """
 struct FCTZalesak{BCS} <: AdvectionOperator
     bcs::BCS
+    function FCTZalesak(; kwargs...)
+        assert_valid_bcs("FCTZalesak", kwargs, (FirstOrderOneSided,))
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    FCTZalesak(bcs) = FCTZalesak(; bcs...)
 end
-FCTZalesak(; kwargs...) = FCTZalesak(NamedTuple(kwargs))
 
 return_eltype(::FCTZalesak, A, Φ, Φᵗᵈ) =
     Geometry.Contravariant3Vector{eltype(eltype(A))}
@@ -2023,34 +2156,12 @@ Base.@propagate_inbounds function stencil_right_boundary(
 end
 
 """
-    U = TVDLimitedFluxC2F(;boundaries)
-    U.(𝒜, Φ, 𝓊)
+    AbstractTVDSlopeLimiter
 
-`𝒜`, following the notation of Durran (Numerical Methods for Fluid Dynamics, 2ⁿᵈ
-ed.) is the antidiffusive flux given by
+An asbtract TVD-slope limiter type. Use `subtypes(AbstractTVDSlopeLimiter)`
+to see the supported subtypes. See
 
-``` 𝒜 = ℱʰ - ℱˡ ``` where h and l superscripts represent the high and lower
-order (monotone) fluxes respectively. The effect of the TVD limiters is then to
-adjust the flux
-
-``` F_{j+1/2} = F^{l}_{j+1/2} + C_{j+1/2}(F^{h}_{j+1/2} - F^{l}_{j+1/2}) where
-C_{j+1/2} is the multiplicative limiter which is a function of ```
-
-the ratio of the slope of the solution across a cell interface.
-
- - `C=1` recovers the high order flux.
- - `C=0` recovers the low order flux.
-
-Supported limiter types are
-
-- RZeroLimiter (returns low order flux)
-- RHalfLimiter (flux multiplier == 1/2)
-- RMaxLimiter (returns high order flux)
-- MinModLimiter
-- KorenLimiter
-- SuperbeeLimiter
-- MonotonizedCentralLimiter
-
+`TVDLimitedFluxC2F` for the general formulation.
 """
 abstract type AbstractTVDSlopeLimiter end
 
@@ -2060,7 +2171,7 @@ abstract type AbstractTVDSlopeLimiter end
     U.(𝒜, Φ, 𝓊)
 
 A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
-[`AbstractTVDSlopeLimiter`](@ref) for the general formulation.
+`TVDLimitedFluxC2F` for the general formulation.
 """
 struct RZeroLimiter <: AbstractTVDSlopeLimiter end
 
@@ -2069,7 +2180,7 @@ struct RZeroLimiter <: AbstractTVDSlopeLimiter end
     U.(𝒜, Φ, 𝓊)
 
 A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
-[`AbstractTVDSlopeLimiter`](@ref) for the general formulation.
+`TVDLimitedFluxC2F` for the general formulation.
 """
 struct RHalfLimiter <: AbstractTVDSlopeLimiter end
 
@@ -2078,7 +2189,7 @@ struct RHalfLimiter <: AbstractTVDSlopeLimiter end
     U.(𝒜, Φ, 𝓊)
 
 A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
-[`AbstractTVDSlopeLimiter`](@ref) for the general formulation.
+`TVDLimitedFluxC2F` for the general formulation.
 """
 struct RMaxLimiter <: AbstractTVDSlopeLimiter end
 
@@ -2087,7 +2198,7 @@ struct RMaxLimiter <: AbstractTVDSlopeLimiter end
     U.(𝒜, Φ, 𝓊)
 
 A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
-[`AbstractTVDSlopeLimiter`](@ref) for the general formulation.
+`TVDLimitedFluxC2F` for the general formulation.
 """
 struct MinModLimiter <: AbstractTVDSlopeLimiter end
 
@@ -2096,7 +2207,7 @@ struct MinModLimiter <: AbstractTVDSlopeLimiter end
     U.(𝒜, Φ, 𝓊)
 
 A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
-[`AbstractTVDSlopeLimiter`](@ref) for the general formulation.
+`TVDLimitedFluxC2F` for the general formulation.
 """
 struct KorenLimiter <: AbstractTVDSlopeLimiter end
 
@@ -2105,7 +2216,7 @@ struct KorenLimiter <: AbstractTVDSlopeLimiter end
     U.(𝒜, Φ, 𝓊)
 
 A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
-[`AbstractTVDSlopeLimiter`](@ref) for the general formulation.
+`TVDLimitedFluxC2F` for the general formulation.
 """
 struct SuperbeeLimiter <: AbstractTVDSlopeLimiter end
 
@@ -2114,7 +2225,7 @@ struct SuperbeeLimiter <: AbstractTVDSlopeLimiter end
     U.(𝒜, Φ, 𝓊)
 
 A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
-[`AbstractTVDSlopeLimiter`](@ref) for the general formulation.
+`TVDLimitedFluxC2F` for the general formulation.
 """
 struct MonotonizedCentralLimiter <: AbstractTVDSlopeLimiter end
 
@@ -2146,13 +2257,53 @@ end
     return max(zero(eltype(r)), min(2r, (1 + r) / 2, 2))
 end
 
+"""
+    TVDLimitedFluxC2F{BCS, M} <: AdvectionOperator
+
+    U = TVDLimitedFluxC2F(;boundaries)
+    U.(𝒜, Φ, 𝓊)
+
+`𝒜`, following the notation of Durran (Numerical Methods for Fluid Dynamics, 2ⁿᵈ
+ed.) is the antidiffusive flux given by
+
+``` 𝒜 = ℱʰ - ℱˡ ``` where h and l superscripts represent the high and lower
+order (monotone) fluxes respectively. The effect of the TVD limiters is then to
+adjust the flux
+
+``` F_{j+1/2} = F^{l}_{j+1/2} + C_{j+1/2}(F^{h}_{j+1/2} - F^{l}_{j+1/2}) where
+C_{j+1/2} is the multiplicative limiter which is a function of ```
+
+the ratio of the slope of the solution across a cell interface.
+
+ - `C=1` recovers the high order flux.
+ - `C=0` recovers the low order flux.
+
+Supported limiter types are
+
+- RZeroLimiter (returns low order flux)
+- RHalfLimiter (flux multiplier == 1/2)
+- RMaxLimiter (returns high order flux)
+- MinModLimiter
+- KorenLimiter
+- SuperbeeLimiter
+- MonotonizedCentralLimiter
+
+Supported boundary conditions are:
+
+ - [`FirstOrderOneSided`](@ref)
+"""
 struct TVDLimitedFluxC2F{BCS, M} <: AdvectionOperator
     bcs::BCS
     method::M
+    function TVDLimitedFluxC2F(; method, kwargs...)
+        assert_valid_bcs("TVDLimitedFluxC2F", kwargs, (FirstOrderOneSided,))
+        new{typeof(NamedTuple(kwargs)), typeof(method)}(
+            NamedTuple(kwargs),
+            method,
+        )
+    end
+    TVDLimitedFluxC2F(bcs, method) = TVDLimitedFluxC2F(; method, bcs...)
 end
-
-TVDLimitedFluxC2F(; method, kwargs...) =
-    TVDLimitedFluxC2F((; kwargs...), method)
 
 return_eltype(::TVDLimitedFluxC2F, A, Φ, 𝓊) =
     Geometry.Contravariant3Vector{eltype(eltype(A))}
@@ -2268,10 +2419,14 @@ A(v,θ)[i] = \\frac{1}{2} (θ[i+1] - θ[i-1]) v³[i]
 
 No boundary conditions are currently supported.
 """
-struct AdvectionF2F{BCS} <: AdvectionOperator
+struct AdvectionF2F{BCS <: @NamedTuple{}} <: AdvectionOperator
     bcs::BCS
 end
-AdvectionF2F(; kwargs...) = AdvectionF2F(NamedTuple(kwargs))
+
+function AdvectionF2F(; kwargs...)
+    assert_no_bcs("AdvectionF2F", kwargs)
+    AdvectionF2F(NamedTuple(kwargs))
+end
 
 return_space(
     ::AdvectionF2F,
@@ -2304,8 +2459,8 @@ boundary_width(::AdvectionF2F, ::AbstractBoundaryCondition) = 1
     A = AdvectionC2C(;boundaries)
     A.(v, θ)
 
-Vertical advection operator at cell centers, for cell face velocity field `v` cell center
-variables `θ`, approximating ``v^3 \\partial_3 \\theta``.
+Vertical advection operator at cell centers, for cell face velocity field `v`
+cell center variables `θ`, approximating ``v^3 \\partial_3 \\theta``.
 
 It uses the following stencil
 ```math
@@ -2327,8 +2482,12 @@ A(v,θ)[1] = (θ[2] - θ[1]) v³[1 + \\tfrac{1}{2}] \\}
 """
 struct AdvectionC2C{BCS} <: AdvectionOperator
     bcs::BCS
+    function AdvectionC2C(; kwargs...)
+        assert_valid_bcs("AdvectionC2C", kwargs, (SetValue, Extrapolate))
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    AdvectionC2C(bcs) = AdvectionC2C(; bcs...)
 end
-AdvectionC2C(; kwargs...) = AdvectionC2C(NamedTuple(kwargs))
 
 return_space(
     ::AdvectionC2C,
@@ -2458,10 +2617,31 @@ Base.@propagate_inbounds function stencil_right_boundary(
     return (w³⁻ ⊠ ∂θ₃⁻)
 end
 
+"""
+    A = FluxCorrectionC2C(;boundaries)
+    A.(v, θ)
+
+Vertical advection operator at cell centers, for cell center velocity field `v`
+cell center variables `θ`, approximating ``v^3 \\partial_3 \\theta``.
+
+It uses the following stencil (TODO)
+
+```math
+```
+
+Supported boundary conditions:
+
+- [`Extrapolate`](@ref): use the closest interior point as the boundary value.
+  At the lower boundary.
+"""
 struct FluxCorrectionC2C{BCS} <: AdvectionOperator
     bcs::BCS
+    function FluxCorrectionC2C(; kwargs...)
+        assert_valid_bcs("FluxCorrectionC2C", kwargs, (Extrapolate,))
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    FluxCorrectionC2C(bcs) = FluxCorrectionC2C(; bcs...)
 end
-FluxCorrectionC2C(; kwargs...) = FluxCorrectionC2C(NamedTuple(kwargs))
 
 return_space(
     ::FluxCorrectionC2C,
@@ -2538,10 +2718,31 @@ Base.@propagate_inbounds function stencil_right_boundary(
     return ⊟(abs(w³⁻) ⊠ ∂θ₃⁻)
 end
 
+"""
+    A = FluxCorrectionF2F(;boundaries)
+    A.(v, θ)
+
+Vertical advection operator at cell faces, for cell face velocity field `v`
+cell face variables `θ`, approximating ``v^3 \\partial_3 \\theta``.
+
+It uses the following stencil (TODO)
+
+```math
+```
+
+Supported boundary conditions:
+
+- [`Extrapolate`](@ref): use the closest interior point as the boundary value.
+  At the lower boundary.
+"""
 struct FluxCorrectionF2F{BCS} <: AdvectionOperator
     bcs::BCS
+    function FluxCorrectionF2F(; kwargs...)
+        assert_valid_bcs("FluxCorrectionF2F", kwargs, (Extrapolate,))
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    FluxCorrectionF2F(bcs) = FluxCorrectionF2F(; bcs...)
 end
-FluxCorrectionF2F(; kwargs...) = FluxCorrectionF2F(NamedTuple(kwargs))
 
 return_space(
     ::FluxCorrectionF2F,
@@ -2625,12 +2826,17 @@ abstract type BoundaryOperator <: FiniteDifferenceOperator end
     SetBoundaryOperator(;boundaries...)
 
 This operator only modifies the values at the boundary:
+
  - [`SetValue(val)`](@ref): set the value to be `val` on the boundary.
 """
 struct SetBoundaryOperator{BCS} <: BoundaryOperator
     bcs::BCS
+    function SetBoundaryOperator(; kwargs...)
+        assert_valid_bcs("SetBoundaryOperator", kwargs, (SetValue,))
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    SetBoundaryOperator(bcs) = SetBoundaryOperator(; bcs...)
 end
-SetBoundaryOperator(; kwargs...) = SetBoundaryOperator(NamedTuple(kwargs))
 
 return_space(::SetBoundaryOperator, space::AllFaceFiniteDifferenceSpace) = space
 
@@ -2708,8 +2914,12 @@ G(x)[1]³ = G(x)[2]³
 """
 struct GradientF2C{BCS} <: GradientOperator
     bcs::BCS
+    function GradientF2C(; kwargs...)
+        assert_valid_bcs("GradientF2C", kwargs, (SetValue, Extrapolate))
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    GradientF2C(bcs) = GradientF2C(; bcs...)
 end
-GradientF2C(; kwargs...) = GradientF2C(NamedTuple(kwargs))
 
 return_space(::GradientF2C, space::AllFaceFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellCenter())
@@ -2821,8 +3031,12 @@ The following boundary conditions are supported:
 """
 struct GradientC2F{BC} <: GradientOperator
     bcs::BC
+    function GradientC2F(; kwargs...)
+        assert_valid_bcs("GradientC2F", kwargs, (SetValue, SetGradient))
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    GradientC2F(bcs) = GradientC2F(; bcs...)
 end
-GradientC2F(; kwargs...) = GradientC2F(NamedTuple(kwargs))
 
 return_space(::GradientC2F, space::AllCenterFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellFace())
@@ -2941,12 +3155,23 @@ D(v)[1] = (Jv³[1+\\tfrac{1}{2}] - Jv³₀) / J[i]
   becomes:
 ```math
 D(v)[1]³ = D(v)[2]³
-```
+
+- [`SetDivergence(v₀)`](@ref): set the divergence at the cell center  closest to
+  the boundary
+
 """
 struct DivergenceF2C{BCS} <: DivergenceOperator
     bcs::BCS
+    function DivergenceF2C(; kwargs...)
+        assert_valid_bcs(
+            "DivergenceF2C",
+            kwargs,
+            (SetValue, Extrapolate, SetDivergence),
+        )
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    DivergenceF2C(bcs) = DivergenceF2C(; bcs...)
 end
-DivergenceF2C(; kwargs...) = DivergenceF2C(NamedTuple(kwargs))
 
 return_space(::DivergenceF2C, space::AllFaceFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellCenter())
@@ -3096,7 +3321,7 @@ Adapt.adapt_structure(to, op::FiniteDifferenceOperator) =
     TVDLimitedFluxC2F(adapt_bcs(to, bcs), Adapt.adapt_structure(to, op.method))
 
 @inline adapt_fd_operator(to, op, bcs) =
-    unionall_type(typeof(op))(adapt_bcs(to, bcs))
+    unionall_type(typeof(op))(; adapt_bcs(to, bcs)...)
 
 @inline adapt_bcs(to, bcs) = NamedTuple{keys(bcs)}(
     UnrolledFunctions.unrolled_map(
@@ -3130,8 +3355,12 @@ The following boundary conditions are supported:
 """
 struct DivergenceC2F{BC} <: DivergenceOperator
     bcs::BC
+    function DivergenceC2F(; kwargs...)
+        assert_valid_bcs("DivergenceC2F", kwargs, (SetValue, SetDivergence))
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    DivergenceC2F(bcs) = DivergenceC2F(; bcs...)
 end
-DivergenceC2F(; kwargs...) = DivergenceC2F(NamedTuple(kwargs))
 
 return_space(::DivergenceC2F, space::AllCenterFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellFace())
@@ -3274,8 +3503,12 @@ The following boundary conditions are supported:
 """
 struct CurlC2F{BC} <: CurlFiniteDifferenceOperator
     bcs::BC
+    function CurlC2F(; kwargs...)
+        assert_valid_bcs("CurlC2F", kwargs, (SetValue, SetCurl))
+        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
+    end
+    CurlC2F(bcs) = CurlC2F(; bcs...)
 end
-CurlC2F(; kwargs...) = CurlC2F(NamedTuple(kwargs))
 
 return_space(::CurlC2F, space::AllCenterFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellFace())
