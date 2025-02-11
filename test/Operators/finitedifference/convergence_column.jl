@@ -77,39 +77,31 @@ convergence_rate(err, Δh) =
 
 @testset "Face -> Center interpolation" begin
     FT = Float64
-    a, b = FT(0.0), FT(1.0)
     n_elems_seq = 2 .^ (5, 6, 7, 8)
-    device = ClimaComms.device()
-    stretch_fn = stretch_function(FT, parse_commandline())
+    stretch = stretch_function(FT, parse_commandline())
     err = zeros(FT, length(n_elems_seq))
     werr = zeros(FT, length(n_elems_seq))
     Δh = zeros(FT, length(n_elems_seq))
 
     for (k, n) in enumerate(n_elems_seq)
-        interval = Geometry.ZPoint(a) .. Geometry.ZPoint(b)
-        domain =
-            Domains.IntervalDomain(interval; boundary_names = (:left, :right))
-        mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
+        ᶜspace = ColumnSpace(FT;
+            z_elem=n,
+            z_min=0,
+            z_max=1,
+            stretch,
+            staggering=CellCenter()
+        )
+        (; ᶠspace, ᶜz, ᶠz, ᶜJ, ᶠJ, ᶠJdata, ᶜJdata) = coord_info(ᶜspace)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
-        fs = Spaces.FaceFiniteDifferenceSpace(cs)
+        face_field = sin.(3π .* ᶠz)
 
-        cent_field_exact = zeros(FT, cs)
-        face_field = zeros(FT, fs)
-
-        centers = Fields.coordinate_field(cs)
-        faces = Fields.coordinate_field(fs)
-
-        face_field .= sin.(3π .* faces.z)
-        face_J = Fields.local_geometry_field(fs).J
-
-        cent_field_exact .= sin.(3π .* centers.z)
+        cent_field_exact = sin.(3π .* ᶜz)
         operator = Operators.InterpolateF2C()
         woperator = Operators.WeightedInterpolateF2C()
         cent_field = operator.(face_field)
-        wcent_field = woperator.(face_J, face_field)
+        wcent_field = woperator.(ᶠJ, face_field)
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+        Δh[k] = ᶠJdata[vindex(1)]
         err[k] = norm(cent_field .- cent_field_exact)
         werr[k] = norm(wcent_field .- cent_field_exact)
     end
@@ -126,40 +118,34 @@ end
     a, b = FT(0.0), FT(1.0)
     n_elems_seq = 2 .^ (5, 6, 7, 8)
     device = ClimaComms.device()
-    stretch_fn = stretch_function(FT, parse_commandline())
+    stretch = stretch_function(FT, parse_commandline())
     err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
     werr = zeros(FT, length(n_elems_seq))
     for (k, n) in enumerate(n_elems_seq)
-        interval = Geometry.ZPoint(a) .. Geometry.ZPoint(b)
-        domain =
-            Domains.IntervalDomain(interval; boundary_names = (:left, :right))
-        mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
+        ᶜspace = ColumnSpace(FT;
+            z_elem=n,
+            z_min=0,
+            z_max=1,
+            stretch,
+            staggering=CellCenter()
+        )
+        (; ᶠspace, ᶜz, ᶠz, ᶜJ, ᶠJ, ᶠJdata, ᶜJdata) = coord_info(ᶜspace)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
-        fs = Spaces.FaceFiniteDifferenceSpace(cs)
-
-        face_field_exact = zeros(FT, fs)
-        cent_field = zeros(FT, cs)
-
-        centers = Fields.coordinate_field(cs)
-        faces = Fields.coordinate_field(fs)
-
-        cent_field .= sin.(3π .* centers.z)
-        cent_J = Fields.local_geometry_field(cs).J
-        face_field_exact .= sin.(3π .* faces.z)
+        cent_field = sin.(3π .* ᶜz)
+        face_field_exact = sin.(3π .* ᶠz)
 
         operator = Operators.InterpolateC2F(
-            left = Operators.SetValue(0.0),
-            right = Operators.SetValue(0.0),
+            bottom = Operators.SetValue(0.0),
+            top = Operators.SetValue(0.0),
         )
         woperator = Operators.WeightedInterpolateC2F(
-            left = Operators.SetValue(0.0),
-            right = Operators.SetValue(0.0),
+            bottom = Operators.SetValue(0.0),
+            top = Operators.SetValue(0.0),
         )
         face_field = operator.(cent_field)
-        wface_field = woperator.(cent_J, cent_field)
+        wface_field = woperator.(ᶜJ, cent_field)
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+        Δh[k] = ᶠJdata[vindex(1)]
         err[k] = norm(face_field .- face_field_exact)
         werr[k] = norm(wface_field .- face_field_exact)
     end
@@ -172,41 +158,33 @@ end
 
 @testset "∂ Center -> Face interpolation" begin
     FT = Float64
-    a, b = FT(0.0), FT(1.0)
     n_elems_seq = 2 .^ (5, 6, 7, 8)
-    device = ClimaComms.device()
-    stretch_fn = stretch_function(FT, parse_commandline())
+    stretch = stretch_function(FT, parse_commandline())
     err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
     for (k, n) in enumerate(n_elems_seq)
-        interval = Geometry.ZPoint(a) .. Geometry.ZPoint(b)
-        domain =
-            Domains.IntervalDomain(interval; boundary_names = (:left, :right))
-        mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
+        ᶜspace = ColumnSpace(FT;
+            z_elem=n,
+            z_min=0,
+            z_max=1,
+            stretch,
+            staggering=CellCenter()
+        )
+        (; ᶠspace, ᶜz, ᶠz, ᶜJ, ᶠJ, ᶠJdata, ᶜJdata) = coord_info(ᶜspace)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
-        fs = Spaces.FaceFiniteDifferenceSpace(cs)
-
-        face_field_exact = Geometry.Covariant3Vector.(zeros(FT, fs))
-        cent_field = zeros(FT, cs)
-        face_field = Geometry.Covariant3Vector.(zeros(FT, fs))
-
-        centers = Fields.coordinate_field(cs)
-        faces = Fields.coordinate_field(fs)
-
-        cent_field .= sin.(3π .* centers.z)
-        face_field_exact .=
+        cent_field = sin.(3π .* ᶜz)
+        face_field_exact =
             Geometry.CovariantVector.(
-                Geometry.WVector.(3π .* cos.(3π .* faces.z)),
+                Geometry.WVector.(3π .* cos.(3π .* ᶠz)),
             )
 
         operator = Operators.GradientC2F(
-            left = Operators.SetGradient(Geometry.WVector(3π)),
-            right = Operators.SetGradient(Geometry.WVector(-3π)),
+            bottom = Operators.SetGradient(Geometry.WVector(3π)),
+            top = Operators.SetGradient(Geometry.WVector(-3π)),
         )
 
-        face_field .= operator.(cent_field)
+        face_field = operator.(cent_field)
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+        Δh[k] = ᶠJdata[vindex(1)]
         err[k] = norm(face_field .- face_field_exact)
     end
     conv = convergence_rate(err, Δh)
@@ -220,38 +198,30 @@ end
 
 @testset "∂ Face -> Center interpolation" begin
     FT = Float64
-    a, b = FT(0.0), FT(1.0)
     n_elems_seq = 2 .^ (5, 6, 7, 8)
-    device = ClimaComms.device()
-    stretch_fn = stretch_function(FT, parse_commandline())
+    stretch = stretch_function(FT, parse_commandline())
     err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
     for (k, n) in enumerate(n_elems_seq)
-        interval = Geometry.ZPoint(a) .. Geometry.ZPoint(b)
-        domain =
-            Domains.IntervalDomain(interval; boundary_names = (:left, :right))
-        mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
+        ᶜspace = ColumnSpace(FT;
+            z_elem=n,
+            z_min=0,
+            z_max=1,
+            stretch,
+            staggering=CellCenter()
+        )
+        (; ᶠspace, ᶜz, ᶠz, ᶜJ, ᶠJ, ᶠJdata, ᶜJdata) = coord_info(ᶜspace)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
-        fs = Spaces.FaceFiniteDifferenceSpace(cs)
-
-        cent_field_exact = Geometry.Covariant3Vector.(zeros(FT, cs))
-        cent_field = Geometry.Covariant3Vector.(zeros(FT, cs))
-        face_field = zeros(FT, fs)
-
-        centers = Fields.coordinate_field(cs)
-        faces = Fields.coordinate_field(fs)
-
-        face_field .= sin.(3π .* faces.z)
-        cent_field_exact .=
+        face_field = sin.(3π .* ᶠz)
+        cent_field_exact =
             Geometry.CovariantVector.(
-                Geometry.WVector.(3π .* cos.(3π .* centers.z)),
+                Geometry.WVector.(3π .* cos.(3π .* ᶜz)),
             )
 
         operator = Operators.GradientF2C()
 
-        cent_field .= operator.(face_field)
+        cent_field = operator.(face_field)
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+        Δh[k] = ᶠJdata[vindex(1)]
         err[k] = norm(cent_field .- cent_field_exact)
     end
     conv = convergence_rate(err, Δh)
@@ -276,95 +246,91 @@ end
     err_div_cos_f = zeros(FT, length(n_elems_seq))
     err_curl_sin_f = zeros(FT, length(n_elems_seq))
     Δh = zeros(FT, length(n_elems_seq))
-    device = ClimaComms.device()
+    stretch = stretch_function(FT, parse_commandline())
 
     for (k, n) in enumerate(n_elems_seq)
-        domain = Domains.IntervalDomain(
-            Geometry.ZPoint{FT}(0.0),
-            Geometry.ZPoint{FT}(pi);
-            boundary_names = (:left, :right),
+        ᶜspace = ColumnSpace(FT;
+            z_elem=n,
+            z_min=0,
+            z_max=pi,
+            stretch,
+            staggering=CellCenter()
         )
-        mesh = Meshes.IntervalMesh(domain; nelems = n)
-
-        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
-        fs = Spaces.FaceFiniteDifferenceSpace(cs)
-
-        centers = getproperty(Fields.coordinate_field(cs), :z)
-        faces = getproperty(Fields.coordinate_field(fs), :z)
+        (; ᶠspace, ᶜz, ᶠz, ᶜJ, ᶠJ, ᶠJdata, ᶜJdata) = coord_info(ᶜspace)
 
         # Face -> Center operators:
         # GradientF2C
         # f(z) = sin(z)
         ∇ᶜ = Operators.GradientF2C()
-        gradsinᶜ = Geometry.WVector.(∇ᶜ.(sin.(faces)))
+        gradsinᶜ = Geometry.WVector.(∇ᶜ.(sin.(ᶠz)))
 
         # DivergenceF2C
         # f(z) = sin(z)
         divᶜ = Operators.DivergenceF2C()
-        divsinᶜ = divᶜ.(Geometry.WVector.(sin.(faces)))
+        divsinᶜ = divᶜ.(Geometry.WVector.(sin.(ᶠz)))
 
         # Center -> Face operators:
         # GradientC2F, SetValue
         # f(z) = z
         ∇ᶠ⁰ = Operators.GradientC2F(
-            left = Operators.SetValue(FT(0)),
-            right = Operators.SetValue(FT(pi)),
+            bottom = Operators.SetValue(FT(0)),
+            top = Operators.SetValue(FT(pi)),
         )
-        ∂zᶠ = Geometry.WVector.(∇ᶠ⁰.(centers))
+        ∂zᶠ = Geometry.WVector.(∇ᶠ⁰.(ᶜz))
 
         # GradientC2F, SetValue
         # f(z) = cos(z)
         ∇ᶠ¹ = Operators.GradientC2F(
-            left = Operators.SetValue(FT(1)),
-            right = Operators.SetValue(FT(-1)),
+            bottom = Operators.SetValue(FT(1)),
+            top = Operators.SetValue(FT(-1)),
         )
-        gradcosᶠ¹ = Geometry.WVector.(∇ᶠ¹.(cos.(centers)))
+        gradcosᶠ¹ = Geometry.WVector.(∇ᶠ¹.(cos.(ᶜz)))
 
         # GradientC2F, SetGradient
         # f(z) = cos(z)
         ∇ᶠ² = Operators.GradientC2F(
-            left = Operators.SetGradient(Geometry.WVector(FT(0))),
-            right = Operators.SetGradient(Geometry.WVector(FT(0))),
+            bottom = Operators.SetGradient(Geometry.WVector(FT(0))),
+            top = Operators.SetGradient(Geometry.WVector(FT(0))),
         )
-        gradcosᶠ² = Geometry.WVector.(∇ᶠ².(cos.(centers)))
+        gradcosᶠ² = Geometry.WVector.(∇ᶠ².(cos.(ᶜz)))
 
         # DivergenceC2F, SetValue
         # f(z) = sin(z)
         divᶠ⁰ = Operators.DivergenceC2F(
-            left = Operators.SetValue(Geometry.WVector(zero(FT))),
-            right = Operators.SetValue(Geometry.WVector(zero(FT))),
+            bottom = Operators.SetValue(Geometry.WVector(zero(FT))),
+            top = Operators.SetValue(Geometry.WVector(zero(FT))),
         )
-        divsinᶠ = divᶠ⁰.(Geometry.WVector.(sin.(centers)))
+        divsinᶠ = divᶠ⁰.(Geometry.WVector.(sin.(ᶜz)))
 
         # DivergenceC2F, SetDivergence
         # f(z) = cos(z)
         divᶠ¹ = Operators.DivergenceC2F(
-            left = Operators.SetDivergence(FT(0)),
-            right = Operators.SetDivergence(FT(0)),
+            bottom = Operators.SetDivergence(FT(0)),
+            top = Operators.SetDivergence(FT(0)),
         )
-        divcosᶠ = divᶠ¹.(Geometry.WVector.(cos.(centers)))
+        divcosᶠ = divᶠ¹.(Geometry.WVector.(cos.(ᶜz)))
 
         curlᶠ = Operators.CurlC2F(
-            left = Operators.SetValue(Geometry.Covariant1Vector(zero(FT))),
-            right = Operators.SetValue(Geometry.Covariant1Vector(zero(FT))),
+            bottom = Operators.SetValue(Geometry.Covariant1Vector(zero(FT))),
+            top = Operators.SetValue(Geometry.Covariant1Vector(zero(FT))),
         )
-        curlsinᶠ = curlᶠ.(Geometry.Covariant1Vector.(sin.(centers)))
+        curlsinᶠ = curlᶠ.(Geometry.Covariant1Vector.(sin.(ᶜz)))
 
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+        Δh[k] = ᶠJdata[vindex(1)]
         # Errors
-        err_grad_sin_c[k] = norm(gradsinᶜ .- Geometry.WVector.(cos.(centers)))
-        err_div_sin_c[k] = norm(divsinᶜ .- cos.(centers))
-        err_grad_z_f[k] = norm(∂zᶠ .- Geometry.WVector.(ones(FT, fs)))
-        err_grad_cos_f1[k] = norm(gradcosᶠ¹ .- Geometry.WVector.(.-sin.(faces)))
-        err_grad_cos_f2[k] = norm(gradcosᶠ² .- Geometry.WVector.(.-sin.(faces)))
+        err_grad_sin_c[k] = norm(gradsinᶜ .- Geometry.WVector.(cos.(ᶜz)))
+        err_div_sin_c[k] = norm(divsinᶜ .- cos.(ᶜz))
+        err_grad_z_f[k] = norm(∂zᶠ .- Geometry.WVector.(ones(FT, ᶠspace)))
+        err_grad_cos_f1[k] = norm(gradcosᶠ¹ .- Geometry.WVector.(.-sin.(ᶠz)))
+        err_grad_cos_f2[k] = norm(gradcosᶠ² .- Geometry.WVector.(.-sin.(ᶠz)))
         err_div_sin_f[k] =
-            norm(divsinᶠ .- (Geometry.WVector.(cos.(faces))).components.data.:1)
+            norm(divsinᶠ .- (Geometry.WVector.(cos.(ᶠz))).components.data.:1)
         err_div_cos_f[k] = norm(
-            divcosᶠ .- (Geometry.WVector.(.-sin.(faces))).components.data.:1,
+            divcosᶠ .- (Geometry.WVector.(.-sin.(ᶠz))).components.data.:1,
         )
         err_curl_sin_f[k] =
-            norm(curlsinᶠ .- Geometry.Contravariant2Vector.(cos.(faces)))
+            norm(curlsinᶠ .- Geometry.Contravariant2Vector.(cos.(ᶠz)))
     end
 
     # GradientF2C conv, with f(z) = sin(z)
@@ -444,28 +410,26 @@ end
     n_elems_seq = 2 .^ (5, 6, 7, 8)
 
     err_adv_wc = zeros(FT, length(n_elems_seq))
+    device = ClimaComms.device()
 
     Δh = zeros(FT, length(n_elems_seq))
-    device = ClimaComms.device()
 
     for (k, n) in enumerate(n_elems_seq)
         domain = Domains.IntervalDomain(
             Geometry.ZPoint{FT}(-pi),
             Geometry.ZPoint{FT}(pi);
-            periodic = true,
+            periodic = true, # not yet supported by CommonSpaces
         )
         mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
-        fs = Spaces.FaceFiniteDifferenceSpace(cs)
-
-        centers = getproperty(Fields.coordinate_field(cs), :z)
+        ᶜspace = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+        (; ᶠspace, ᶜz, ᶠz, ᶜJ, ᶠJ, ᶠJdata, ᶜJdata) = coord_info(ᶜspace)
 
         # Upwind3rdOrderBiasedProductC2F Center -> Face operator
         # Unitary, constant advective velocity
-        w = Geometry.WVector.(ones(fs))
+        w = Geometry.WVector.(ones(axes(ᶠz)))
         # c = sin(z), scalar field defined at the centers
-        c = sin.(centers)
+        c = sin.(ᶜz)
 
         third_order_fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F()
         third_order_fluxsinᶠ = third_order_fluxᶠ.(w, c)
@@ -473,10 +437,10 @@ end
         divf2c = Operators.DivergenceF2C()
         adv_wc = divf2c.(third_order_fluxsinᶠ)
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+        Δh[k] = ᶠJdata[vindex(1)]
 
         # Error
-        err_adv_wc[k] = norm(adv_wc .- cos.(centers))
+        err_adv_wc[k] = norm(adv_wc .- cos.(ᶜz))
     end
 
     # Check convergence rate
@@ -507,17 +471,14 @@ end
         )
         mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
-        fs = Spaces.FaceFiniteDifferenceSpace(cs)
-
-        centers = getproperty(Fields.coordinate_field(cs), :z)
-        faces = getproperty(Fields.coordinate_field(fs), :z)
+        ᶜspace = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+        (; ᶠspace, ᶜz, ᶠz, ᶜJ, ᶠJ, ᶠJdata, ᶜJdata) = coord_info(ᶜspace)
 
         # Upwind3rdOrderBiasedProductC2F Center -> Face operator
         # w = cos(z), vertical velocity field defined at the faces
-        w = Geometry.WVector.(cos.(faces))
+        w = Geometry.WVector.(cos.(ᶠz))
         # c = sin(z), scalar field defined at the centers
-        c = sin.(centers)
+        c = sin.(ᶜz)
 
         third_order_fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F()
         third_order_fluxsinᶠ = third_order_fluxᶠ.(w, c)
@@ -525,11 +486,11 @@ end
         divf2c = Operators.DivergenceF2C()
         adv_wc = divf2c.(third_order_fluxsinᶠ)
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+        Δh[k] = ᶠJdata[vindex(1)]
 
         # Error
         err_adv_wc[k] =
-            norm(adv_wc .- ((cos.(centers)) .^ 2 .- (sin.(centers)) .^ 2))
+            norm(adv_wc .- ((cos.(ᶜz)) .^ 2 .- (sin.(ᶜz)) .^ 2))
     end
 
     # Check convergence rate
@@ -545,31 +506,27 @@ end
 @testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on non-periodic mesh, with FirstOrderOneSided + DivergenceF2C SetValue BCs, constant w" begin
     FT = Float64
     n_elems_seq = 2 .^ (4, 6, 8, 10)
-    stretch_fn = stretch_function(FT, parse_commandline(), 1.0)
-    device = ClimaComms.device()
+    stretch = stretch_function(FT, parse_commandline(), 1.0)
 
     err_adv_wc = zeros(FT, length(n_elems_seq))
     Δh = zeros(FT, length(n_elems_seq))
     for (k, n) in enumerate(n_elems_seq)
-        domain = Domains.IntervalDomain(
-            Geometry.ZPoint{FT}(-pi),
-            Geometry.ZPoint{FT}(pi);
-            boundary_names = (:bottom, :top),
+        ᶜspace = ColumnSpace(FT;
+            z_elem=n,
+            z_min=-π,
+            z_max=π,
+            stretch,
+            staggering=CellCenter()
         )
-        mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
-
-        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
-        fs = Spaces.FaceFiniteDifferenceSpace(cs)
-
-        centers = getproperty(Fields.coordinate_field(cs), :z)
+        (; ᶠspace, ᶜz, ᶠz, ᶜJ, ᶠJ, ᶠJdata, ᶜJdata) = coord_info(ᶜspace)
 
         # Upwind3rdOrderBiasedProductC2F Center -> Face operator
         # Unitary, constant advective velocity
-        w = Geometry.WVector.(ones(fs))
+        w = Geometry.WVector.(ones(axes(ᶠz)))
         # c = sin(z), scalar field defined at the centers
         Δz = FT(2pi / n)
-        c = (cos.(centers .- Δz / 2) .- cos.(centers .+ Δz / 2)) ./ Δz
-        s = sin.(centers)
+        c = (cos.(ᶜz .- Δz / 2) .- cos.(ᶜz .+ Δz / 2)) ./ Δz
+        s = sin.(ᶜz)
 
         third_order_fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F(
             bottom = Operators.FirstOrderOneSided(),
@@ -583,10 +540,10 @@ end
 
         adv_wc = divf2c.(third_order_fluxᶠ.(w, c))
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+        Δh[k] = ᶠJdata[vindex(1)]
 
         # Error
-        err_adv_wc[k] = norm(adv_wc .- cos.(centers))
+        err_adv_wc[k] = norm(adv_wc .- cos.(ᶜz))
     end
 
     # Check convergence rate
@@ -601,30 +558,25 @@ end
 @testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on non-periodic mesh, with ThirdOrderOneSided + DivergenceF2C SetValue BCs, varying sign w" begin
     FT = Float64
     n_elems_seq = 2 .^ (4, 6, 8, 10)
-    stretch_fn = stretch_function(FT, parse_commandline(), 1.0)
-    device = ClimaComms.device()
+    stretch = stretch_function(FT, parse_commandline(), 1.0)
 
     err_adv_wc = zeros(FT, length(n_elems_seq))
     Δh = zeros(FT, length(n_elems_seq))
     for (k, n) in enumerate(n_elems_seq)
-        domain = Domains.IntervalDomain(
-            Geometry.ZPoint{FT}(-pi),
-            Geometry.ZPoint{FT}(pi);
-            boundary_names = (:bottom, :top),
+        ᶜspace = ColumnSpace(FT;
+            z_elem=n,
+            z_min=-π,
+            z_max=π,
+            stretch,
+            staggering=CellCenter()
         )
-        mesh = Meshes.IntervalMesh(domain; nelems = n)
-
-        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
-        fs = Spaces.FaceFiniteDifferenceSpace(cs)
-
-        centers = getproperty(Fields.coordinate_field(cs), :z)
-        faces = getproperty(Fields.coordinate_field(fs), :z)
+        (; ᶠspace, ᶜz, ᶠz, ᶜJ, ᶠJ, ᶠJdata, ᶜJdata) = coord_info(ᶜspace)
 
         # Upwind3rdOrderBiasedProductC2F Center -> Face operator
         # w = cos(z), vertical velocity field defined at the faces
-        w = Geometry.WVector.(cos.(faces))
+        w = Geometry.WVector.(cos.(ᶠz))
         # c = sin(z), scalar field defined at the centers
-        c = sin.(centers)
+        c = sin.(ᶜz)
 
         third_order_fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F(
             bottom = Operators.ThirdOrderOneSided(),
@@ -637,10 +589,10 @@ end
         )
         adv_wc = divf2c.(third_order_fluxᶠ.(w, c))
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+        Δh[k] = ᶠJdata[vindex(1)]
         # Errors
         err_adv_wc[k] =
-            norm(adv_wc .- ((cos.(centers)) .^ 2 .- (sin.(centers)) .^ 2))
+            norm(adv_wc .- ((cos.(ᶜz)) .^ 2 .- (sin.(ᶜz)) .^ 2))
 
     end
 
@@ -670,17 +622,16 @@ end
         )
         mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
-        fs = Spaces.FaceFiniteDifferenceSpace(cs)
+        ᶜspace = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+        (; ᶠspace, ᶜz, ᶠz, ᶜJ, ᶠJ, ᶠJdata, ᶜJdata) = coord_info(ᶜspace)
 
-        centers = getproperty(Fields.coordinate_field(cs), :z)
         C = FT(1.0) # flux-correction coefficient (falling back to third-order upwinding)
 
         # UpwindBiasedProductC2F & Upwind3rdOrderBiasedProductC2F Center -> Face operator
         # Unitary, constant advective velocity
-        w = Geometry.WVector.(ones(fs))
+        w = Geometry.WVector.(ones(axes(ᶠz)))
         # c = sin(z), scalar field defined at the centers
-        c = sin.(centers)
+        c = sin.(ᶜz)
 
         first_order_fluxᶠ = Operators.UpwindBiasedProductC2F()
         third_order_fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F()
@@ -692,10 +643,10 @@ end
             @. divf2c(C * (third_order_fluxsinᶠ - first_order_fluxsinᶠ))
         adv_wc = @. divf2c.(first_order_fluxsinᶠ) + corrected_antidiff_flux
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+        Δh[k] = ᶠJdata[vindex(1)]
 
         # Error
-        err_adv_wc[k] = norm(adv_wc .- cos.(centers))
+        err_adv_wc[k] = norm(adv_wc .- cos.(ᶜz))
     end
 
     # Check convergence rate
@@ -879,7 +830,7 @@ end
 @testset "Simple FCT: lin combination of UpwindBiasedProductC2F + Upwind3rdOrderBiasedProductC2F on non-periodic mesh, with FirstOrderOneSided BCs" begin
     FT = Float64
     n_elems_seq = 2 .^ (4, 6, 8, 10)
-    stretch_fn = stretch_function(FT, parse_commandline(), 1.0)
+    stretch = stretch_function(FT, parse_commandline(), 1.0)
     device = ClimaComms.device()
 
     err_adv_wc = zeros(FT, length(n_elems_seq))
@@ -890,7 +841,7 @@ end
             Geometry.ZPoint{FT}(pi);
             boundary_names = (:bottom, :top),
         )
-        mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
+        mesh = Meshes.IntervalMesh(domain, stretch; nelems = n)
 
         cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
         fs = Spaces.FaceFiniteDifferenceSpace(cs)
@@ -942,7 +893,7 @@ end
 @testset "Simple FCT: lin combination of UpwindBiasedProductC2F + Upwind3rdOrderBiasedProductC2F on non-periodic mesh, with ThirdOrderOneSided BCs" begin
     FT = Float64
     n_elems_seq = 2 .^ (4, 6, 8, 10)
-    stretch_fn = stretch_function(FT, parse_commandline(), 1.0)
+    stretch = stretch_function(FT, parse_commandline(), 1.0)
     device = ClimaComms.device()
 
     err_adv_wc = zeros(FT, length(n_elems_seq))
