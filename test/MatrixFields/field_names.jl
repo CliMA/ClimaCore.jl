@@ -787,6 +787,12 @@ end
         (@name(foo), @name(foo)) => I,
         (@name(a), @name(a)) => I,
     )
+    @test_all MatrixFields.identity_field_matrix(vector) ==
+              MatrixFields.FieldMatrix(
+        (@name(foo._value), @name(foo._value)) => I,
+        (@name(a.b), @name(a.b)) => I,
+        (@name(a.c.:(1).d), @name(a.c.:(1).d)) => I,
+    )
 
     # FieldNameDict broadcast operations are tested in field_matrix_solvers.jl.
 end

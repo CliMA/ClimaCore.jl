@@ -59,12 +59,26 @@ end
 const FieldVectorView = FieldNameDict{FieldName}
 const FieldMatrix = FieldNameDict{FieldNamePair}
 
+const ScalingFieldMatrixEntry{T} =
+    Union{UniformScaling{T}, DiagonalMatrixRow{T}}
+
+scaling_value(entry::UniformScaling) = entry.λ
+scaling_value(entry::DiagonalMatrixRow) = entry[0]
+
 check_entry(_, _) = false
 check_entry(::Type{FieldName}, ::Fields.Field) = true
-check_entry(::Type{FieldNamePair}, ::UniformScaling) = true
+check_entry(::Type{FieldNamePair}, ::ScalingFieldMatrixEntry) = true
 check_entry(::Type{FieldNamePair}, ::ColumnwiseBandMatrixField) = true
-check_entry(_, entry::Base.AbstractBroadcasted) =
-    Base.Broadcast.BroadcastStyle(typeof(entry)) isa Fields.AbstractFieldStyle
+
+check_entry(::Type{FieldName}, entry::Base.AbstractBroadcasted) =
+    is_field_broadcasted(entry)
+check_entry(::Type{FieldNamePair}, entry::Base.AbstractBroadcasted) =
+    is_field_broadcasted(entry) && eltype(entry) <: BandMatrixRow
+is_field_broadcasted(bc) =
+    Base.Broadcast.BroadcastStyle(typeof(bc)) isa Fields.AbstractFieldStyle
+
+is_diagonal_matrix_entry(::ScalingFieldMatrixEntry) = true
+is_diagonal_matrix_entry(entry) = eltype(entry) <: DiagonalMatrixRow
 
 function Base.show(io::IO, dict::FieldNameDict)
     T = eltype(keys(dict))
@@ -74,13 +88,13 @@ function Base.show(io::IO, dict::FieldNameDict)
         if entry isa Fields.Field
             print(io, eltype(entry), "-valued Field:")
             Fields._show_compact_field(io, entry, "    ", true)
-        elseif entry isa UniformScaling
-            if entry.λ == 1
+        elseif entry isa ScalingFieldMatrixEntry
+            if scaling_value(entry) == 1
                 print(io, "I")
-            elseif entry.λ == -1
+            elseif scaling_value(entry) == -1
                 print(io, "-I")
             else
-                print(io, "$(entry.λ) * I")
+                print(io, "$(scaling_value(entry)) * I")
             end
         else
             print(io, entry)
@@ -141,8 +155,13 @@ get_internal_entry(entry, name_pair::FieldNamePair) =
     name_pair == (@name(), @name()) ? entry :
     unsupported_internal_entry_error(entry, name_pair)
 get_internal_entry(entry::UniformScaling, name_pair::FieldNamePair) =
-    name_pair[1] == name_pair[2] ? entry :
-    unsupported_internal_entry_error(entry, name_pair)
+    if name_pair[1] == name_pair[2]
+        entry
+    elseif is_overlapping_name(name_pair[1], name_pair[2])
+        unsupported_internal_entry_error(entry, name_pair)
+    else
+        zero(entry)
+    end
 function get_internal_entry(
     entry::ColumnwiseBandMatrixField,
     name_pair::FieldNamePair,
@@ -177,23 +196,40 @@ end
 
 function Base.similar(dict::FieldNameDict)
     entries = unrolled_map(values(dict)) do entry
-        entry isa UniformScaling ? entry : similar(entry)
+        entry isa ScalingFieldMatrixEntry ? entry : similar(entry)
     end
     return FieldNameDict(keys(dict), entries)
 end
 
+# TODO: The behavior of this function is extremely counterintuitive---it is
+# zeroing out mutable values, but leaving nonzero immutable values unchanged.
 function Base.zero(dict::FieldNameDict)
     entries = unrolled_map(values(dict)) do entry
-        entry isa UniformScaling ? entry : zero(entry)
+        entry isa ScalingFieldMatrixEntry ? entry : zero(entry)
     end
     return FieldNameDict(keys(dict), entries)
 end
 
-# Note: This assumes that the matrix has the same row and column units, since I
-# cannot be multiplied by anything other than a scalar.
 function Base.one(matrix::FieldMatrix)
-    diagonal_keys = matrix_diagonal_keys(keys(matrix))
-    return FieldNameDict(diagonal_keys, map(_ -> I, diagonal_keys))
+    all_inferred_diagonal_keys = matrix_all_inferred_diagonal_keys(keys(matrix))
+    entries = map(all_inferred_diagonal_keys) do key
+        if !(key in keys(matrix))
+            I # default value for missing entries
+        else
+            T =
+                matrix[key] isa ScalingFieldMatrixEntry ?
+                eltype(matrix[key]) : eltype(eltype(matrix[key]))
+            if T <: Number
+                UniformScaling(one(T))
+            elseif T <: Geometry.Axis2Tensor
+                I = Geometry.AxisTensor(axes(T), UniformScaling(one(eltype(T))))
+                DiagonalMatrixRow(I)
+            else
+                error("Unsupported diagonal FieldMatrix entry type: $T")
+            end
+        end
+    end
+    return FieldNameDict(all_inferred_diagonal_keys, entries)
 end
 
 replace_name_tree(dict::FieldNameDict, name_tree) =
@@ -210,7 +246,7 @@ end
 function check_diagonal_matrix(matrix, error_message_start = "The matrix")
     check_block_diagonal_matrix(matrix, error_message_start)
     non_diagonal_entry_pairs = unrolled_filter(pairs(matrix)) do pair
-        !(pair[2] isa UniformScaling || eltype(pair[2]) <: DiagonalMatrixRow)
+        !is_diagonal_matrix_entry(pair[2])
     end
     non_diagonal_entry_keys =
         FieldMatrixKeys(unrolled_map(pair -> pair[1], non_diagonal_entry_pairs))
@@ -238,11 +274,47 @@ function lazy_main_diagonal(matrix)
     diagonal_keys = matrix_diagonal_keys(keys(matrix))
     entries = map(diagonal_keys) do key
         entry = matrix[key]
-        entry isa UniformScaling || eltype(entry) <: DiagonalMatrixRow ?
-        entry :
+        is_diagonal_matrix_entry(entry) ? entry :
         Base.Broadcast.broadcasted(row -> DiagonalMatrixRow(row[0]), entry)
     end
     return FieldNameDict(diagonal_keys, entries)
+end
+
+"""
+    identity_field_matrix(x)
+
+Constructs a `FieldMatrix` that represents the identity operator for the
+`FieldVector` `x`. The keys of this `FieldMatrix` correspond to single values,
+such as numbers and vectors.
+
+This offers an alternative to `one(matrix)`, which is not guaranteed to have all
+the entries required to solve `matrix * x = b` for `x` if `matrix` is sparse.
+"""
+function identity_field_matrix(x::Fields.FieldVector)
+    name_tree = FieldNameTree(x)
+    field_names = filtered_names(x) do field
+        field isa Fields.Field && eltype(field) <: Geometry.SingleValue
+    end
+    field_keys = FieldVectorKeys(field_names, name_tree)
+    all_keys = FieldVectorKeys((@name(),), name_tree)
+    is_subset_that_covers_set(field_keys, all_keys) ||
+        error("FieldVector contains entries that are not Fields: \
+               $(set_string(setdiff(all_keys, field_keys)))")
+    entries = map(field_keys) do name
+        T = eltype(get_field(x, name))
+        if T <: Number
+            UniformScaling(one(T))
+        elseif T <: Geometry.AxisVector
+            # TODO: Add support for UniformScaling + Axis2Tensor to simplify this
+            tensor_axes = (axes(T)[1], Geometry.dual(axes(T)[1]))
+            I = Geometry.AxisTensor(tensor_axes, UniformScaling(one(eltype(T))))
+            DiagonalMatrixRow(I)
+        else
+            error("Higher-order identity tensors have not been implemented \
+                   for Fields with elements of type $T")
+        end
+    end # This must be consistent with the definition of one(::FieldMatrix).
+    return FieldNameDict(corresponding_matrix_keys(field_keys), entries)
 end
 
 """
@@ -253,24 +325,15 @@ Constructs a `FieldVectorView` that contains all of the `Field`s in the
 be modified if needed.
 """
 function field_vector_view(x, name_tree = FieldNameTree(x))
-    keys_of_fields = FieldVectorKeys(names_of_fields(x, name_tree), name_tree)
-    entries = map(name -> get_field(x, name), keys_of_fields)
-    return FieldNameDict(keys_of_fields, entries)
+    field_names = filtered_names(field -> field isa Fields.Field, x)
+    field_keys = FieldVectorKeys(field_names, name_tree)
+    all_keys = FieldVectorKeys((@name(),), name_tree)
+    is_subset_that_covers_set(field_keys, all_keys) ||
+        error("FieldVector contains entries that are not Fields: \
+               $(set_string(setdiff(all_keys, field_keys)))")
+    entries = map(name -> get_field(x, name), field_keys)
+    return FieldNameDict(field_keys, entries)
 end
-names_of_fields(x, name_tree) =
-    unrolled_flatmap(top_level_names(x)) do name
-        entry = get_field(x, name)
-        if entry isa Fields.Field
-            (name,)
-        elseif entry isa Fields.FieldVector
-            unrolled_map(names_of_fields(entry, name_tree)) do internal_name
-                append_internal_name(name, internal_name)
-            end
-        else
-            error("field_vector_view does not support entries of type \
-                   $(typeof(entry).name.name)")
-        end
-    end
 
 """
     concrete_field_vector(vector)
@@ -302,9 +365,6 @@ concrete_field_vector_within_subtree(tree, vector) =
 # This is required for type-stability as of Julia 1.9.
 if hasfield(Method, :recursion_relation)
     dont_limit = (args...) -> true
-    for m in methods(names_of_fields)
-        m.recursion_relation = dont_limit
-    end
     for m in methods(concrete_field_vector_within_subtree)
         m.recursion_relation = dont_limit
     end
@@ -324,6 +384,10 @@ Base.Broadcast.broadcastable(vector_or_matrix::FieldNameDict) = vector_or_matrix
 Base.Broadcast.BroadcastStyle(::Type{<:FieldNameDict}) = FieldNameDictStyle()
 Base.Broadcast.BroadcastStyle(::FieldNameDictStyle, ::Fields.FieldVectorStyle) =
     FieldNameDictStyle()
+Base.Broadcast.BroadcastStyle(
+    ::FieldNameDictStyle,
+    ::Base.Broadcast.DefaultArrayStyle{0}, # default style for scalar quantities
+) = FieldNameDictStyle()
 
 function field_matrix_broadcast_error(f, args...)
     arg_string(::FieldVectorView) = "<vector>"
@@ -365,13 +429,39 @@ Base.Broadcast.broadcasted(
     arg::FieldNameDict,
 ) = arg
 
+# Add support for scalar multiplication and division.
+function Base.Broadcast.broadcasted(
+    ::FieldNameDictStyle,
+    f::Union{typeof(*), typeof(/), typeof(\)},
+    scalar::Number,
+    vector_or_matrix::FieldNameDict,
+)
+    entries = unrolled_map(values(vector_or_matrix)) do entry
+        entry isa ScalingFieldMatrixEntry ? f(scalar, entry) :
+        Base.Broadcast.broadcasted(f, scalar, entry)
+    end
+    return FieldNameDict(keys(vector_or_matrix), entries)
+end
+function Base.Broadcast.broadcasted(
+    ::FieldNameDictStyle,
+    f::Union{typeof(*), typeof(/), typeof(\)},
+    vector_or_matrix::FieldNameDict,
+    scalar::Number,
+)
+    entries = unrolled_map(values(vector_or_matrix)) do entry
+        entry isa ScalingFieldMatrixEntry ? f(entry, scalar) :
+        Base.Broadcast.broadcasted(f, entry, scalar)
+    end
+    return FieldNameDict(keys(vector_or_matrix), entries)
+end
+
 function Base.Broadcast.broadcasted(
     ::FieldNameDictStyle,
     ::typeof(zero),
     vector_or_matrix::FieldNameDict,
 )
     entries = unrolled_map(values(vector_or_matrix)) do entry
-        entry isa UniformScaling ? zero(entry) :
+        entry isa ScalingFieldMatrixEntry ? zero(entry) :
         Base.Broadcast.broadcasted(value -> rzero(typeof(value)), entry)
     end
     return FieldNameDict(keys(vector_or_matrix), entries)
@@ -383,11 +473,13 @@ function Base.Broadcast.broadcasted(
     vector_or_matrix::FieldNameDict,
 )
     entries = unrolled_map(values(vector_or_matrix)) do entry
-        entry isa UniformScaling ? -entry : Base.Broadcast.broadcasted(-, entry)
+        entry isa ScalingFieldMatrixEntry ? -entry :
+        Base.Broadcast.broadcasted(-, entry)
     end
     return FieldNameDict(keys(vector_or_matrix), entries)
 end
 
+# TODO: Simplify this function, if possible.
 function Base.Broadcast.broadcasted(
     ::FieldNameDictStyle,
     f::Union{typeof(+), typeof(-)},
@@ -399,11 +491,14 @@ function Base.Broadcast.broadcasted(
         if key in intersect(keys(vector_or_matrix1), keys(vector_or_matrix2))
             entry1 = vector_or_matrix1[key]
             entry2 = vector_or_matrix2[key]
-            if entry1 isa UniformScaling && entry2 isa UniformScaling
+            if (
+                entry1 isa ScalingFieldMatrixEntry &&
+                entry2 isa ScalingFieldMatrixEntry
+            )
                 f(entry1, entry2)
-            elseif entry1 isa UniformScaling
+            elseif entry1 isa ScalingFieldMatrixEntry
                 Base.Broadcast.broadcasted(f, (entry1,), entry2)
-            elseif entry2 isa UniformScaling
+            elseif entry2 isa ScalingFieldMatrixEntry
                 Base.Broadcast.broadcasted(f, entry1, (entry2,))
             else
                 Base.Broadcast.broadcasted(f, entry1, entry2)
@@ -415,7 +510,7 @@ function Base.Broadcast.broadcasted(
                 vector_or_matrix2[key]
             else
                 entry = vector_or_matrix2[key]
-                entry isa UniformScaling ? -entry :
+                entry isa ScalingFieldMatrixEntry ? -entry :
                 Base.Broadcast.broadcasted(-, entry)
             end
         end
@@ -440,12 +535,18 @@ function Base.Broadcast.broadcasted(
             key1, key2 = matrix_product_argument_keys(product_key, summand_name)
             entry1 = matrix[key1]
             entry2 = vector_or_matrix[key2]
-            if entry1 isa UniformScaling && entry2 isa UniformScaling
-                entry1 * entry2
-            elseif entry1 isa UniformScaling
-                Base.Broadcast.broadcasted(*, entry1.λ, entry2)
-            elseif entry2 isa UniformScaling
-                Base.Broadcast.broadcasted(*, entry1, entry2.λ)
+            if (
+                entry1 isa ScalingFieldMatrixEntry &&
+                entry2 isa ScalingFieldMatrixEntry
+            )
+                product_value = scaling_value(entry1) * scaling_value(entry2)
+                product_value isa Number ?
+                UniformScaling(product_value) :
+                DiagonalMatrixRow(product_value)
+            elseif entry1 isa ScalingFieldMatrixEntry
+                Base.Broadcast.broadcasted(*, (scaling_value(entry1),), entry2)
+            elseif entry2 isa ScalingFieldMatrixEntry
+                Base.Broadcast.broadcasted(*, entry1, (scaling_value(entry2),))
             else
                 Base.Broadcast.broadcasted(⋅, entry1, entry2)
             end
@@ -471,7 +572,7 @@ function Base.Broadcast.broadcasted(
         "inv.(<matrix>) cannot be computed because the matrix",
     )
     entries = unrolled_map(values(matrix)) do entry
-        entry isa UniformScaling ? inv(entry) :
+        entry isa ScalingFieldMatrixEntry ? inv(entry) :
         Base.Broadcast.broadcasted(inv, entry)
     end
     return FieldNameDict(keys(matrix), entries)
@@ -536,9 +637,9 @@ NVTX.@annotate function copyto_foreach!(
 )
     foreach(keys(vector_or_matrix)) do key
         entry = vector_or_matrix[key]
-        if dest[key] isa UniformScaling
-            dest[key] == entry || error("UniformScaling is immutable")
-        elseif entry isa UniformScaling
+        if dest[key] isa ScalingFieldMatrixEntry
+            dest[key] == entry || error("matrix entry at $key is immutable")
+        elseif entry isa ScalingFieldMatrixEntry
             dest[key] .= (entry,)
         else
             dest[key] .= entry
