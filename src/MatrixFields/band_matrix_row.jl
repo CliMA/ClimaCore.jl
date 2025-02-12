@@ -55,9 +55,6 @@ band_matrix_row_type(ld, ud, T) = BandMatrixRow{ld, ud - ld + 1, T}
 
 Base.eltype(::Type{BandMatrixRow{ld, bw, T}}) where {ld, bw, T} = T
 
-Base.zero(::Type{BandMatrixRow{ld, bw, T}}) where {ld, bw, T} =
-    BandMatrixRow{ld}(ntuple(_ -> rzero(T), Val(bw))...)
-
 Base.map(f::F, rows::BandMatrixRow...) where {F} =
     BandMatrixRow{lower_diagonal(rows)}(
         map(f, map(row -> row.entries, rows)...)...,
@@ -143,8 +140,20 @@ Base.:*(value::Geometry.SingleValue, row::BandMatrixRow) =
 Base.:/(row::BandMatrixRow, value::Number) =
     map(entry -> rdiv(entry, value), row)
 
-inv(row::DiagonalMatrixRow) = DiagonalMatrixRow(inv(row[0]))
+Base.zero(row::BandMatrixRow) = zero(typeof(row))
+Base.zero(::Type{BandMatrixRow{ld, bw, T}}) where {ld, bw, T} =
+    BandMatrixRow{ld}(ntuple(_ -> rzero(T), Val(bw))...)
+
+Base.one(row::BandMatrixRow) = one(typeof(row))
+Base.one(::Type{DiagonalMatrixRow{T}}) where {T} =
+    DiagonalMatrixRow(rmap(one, T))
+Base.one(::Type{BandMatrixRow{ld, bw, T}}) where {ld, bw, T} =
+    ld isa PlusHalf ?
+    error("A non-square matrix does not have a corresponding identity matrix") :
+    one(DiagonalMatrixRow{T})
+
+inv(row::DiagonalMatrixRow) = DiagonalMatrixRow(rmap(inv, row[0]))
 inv(::BandMatrixRow{ld, bw}) where {ld, bw} = error(
-    "The inverse of a matrix with $bw diagonals is (usually) a dense matrix, \
+    "The inverse of a matrix with $bw diagonals is generally a dense matrix, \
      so it cannot be represented using BandMatrixRows",
 )

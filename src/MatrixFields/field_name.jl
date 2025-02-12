@@ -101,6 +101,18 @@ wrapped_prop_names(::Val{prop_names}) where {prop_names} = (
     wrapped_prop_names(Val(Base.tail(prop_names)))...,
 )
 
+filtered_names(f::F, x) where {F} = filtered_child_names(f, x, @name())
+function filtered_child_names(f::F, x, name) where {F}
+    field = get_field(x, name)
+    f(field) && return (name,)
+    internal_names = top_level_names(field)
+    isempty(internal_names) && return ()
+    tuples_of_child_names = unrolled_map(internal_names) do internal_name
+        filtered_child_names(f, x, append_internal_name(name, internal_name))
+    end
+    return unrolled_flatten(tuples_of_child_names)
+end
+
 ################################################################################
 
 """
@@ -172,6 +184,9 @@ if hasfield(Method, :recursion_relation)
         m.recursion_relation = dont_limit
     end
     for m in methods(wrapped_prop_names)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(filtered_child_names)
         m.recursion_relation = dont_limit
     end
     for m in methods(subtree_at_name)

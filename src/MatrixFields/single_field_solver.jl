@@ -11,14 +11,14 @@ inv_return_type(::Type{X}) where {T, X <: Geometry.Axis2TensorOrAdj{T}} =
         Tuple{dual_type(Geometry.axis2(X)), dual_type(Geometry.axis1(X))},
     )
 
-x_eltype(A::UniformScaling, b) = x_eltype(eltype(A), eltype(b))
+x_eltype(A::ScalingFieldMatrixEntry, b) = x_eltype(eltype(A), eltype(b))
 x_eltype(A::ColumnwiseBandMatrixField, b) =
     x_eltype(eltype(eltype(A)), eltype(b))
 x_eltype(::Type{T_A}, ::Type{T_b}) where {T_A, T_b} =
     rmul_return_type(inv_return_type(T_A), T_b)
 # Base.promote_op(rmul_with_projection, inv_return_type(T_A), T_b, LG)
 
-unit_eltype(A::UniformScaling) = eltype(A)
+unit_eltype(A::ScalingFieldMatrixEntry) = eltype(A)
 unit_eltype(A::ColumnwiseBandMatrixField) =
     unit_eltype(eltype(eltype(A)), local_geometry_type(A))
 unit_eltype(::Type{T_A}, ::Type{LG}) where {T_A, LG} =
@@ -27,7 +27,7 @@ unit_eltype(::Type{T_A}, ::Type{LG}) where {T_A, LG} =
 
 ################################################################################
 
-check_single_field_solver(::UniformScaling, _) = nothing
+check_single_field_solver(::ScalingFieldMatrixEntry, _) = nothing
 function check_single_field_solver(A, b)
     matrix_shape(A) == Square() || error(
         "Cannot solve linear system because a diagonal entry in A is not a \
@@ -39,7 +39,7 @@ function check_single_field_solver(A, b)
     )
 end
 
-single_field_solver_cache(::UniformScaling, b) = similar(b, Tuple{})
+single_field_solver_cache(::ScalingFieldMatrixEntry, b) = similar(b, Tuple{})
 function single_field_solver_cache(A::ColumnwiseBandMatrixField, b)
     ud = outer_diagonals(eltype(A))[2]
     cache_eltype =
@@ -60,7 +60,8 @@ function single_field_solve_diag_matrix_row!(
     (A₀,) = Aⱼs
     @. x_vals = inv(A₀) ⊠ b_vals
 end
-single_field_solve!(_, x, A::UniformScaling, b) = x .= inv(A.λ) .* b
+single_field_solve!(_, x, A::ScalingFieldMatrixEntry, b) =
+    x .= (inv(scaling_value(A)),) .* b
 function single_field_solve!(cache, x, A::ColumnwiseBandMatrixField, b)
     if eltype(A) <: MatrixFields.DiagonalMatrixRow
         single_field_solve_diag_matrix_row!(cache, x, A, b)
@@ -112,8 +113,8 @@ function _single_field_solve_col!(
             Fields.field_values(b),
             vindex,
         )
-    elseif A isa UniformScaling
-        x .= inv(A.λ) .* b
+    elseif A isa ScalingFieldMatrixEntry
+        x .= (inv(scaling_value(A)),) .* b
     else
         error("uncaught case")
     end

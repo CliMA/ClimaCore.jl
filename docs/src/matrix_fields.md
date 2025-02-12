@@ -26,7 +26,16 @@ MultiplyColumnwiseBandMatrixField
 operator_matrix
 ```
 
-# Linear Solvers
+## Vectors and Matrices of Fields
+
+``@docs
+FieldNameDict
+identity_field_matrix
+field_vector_view
+concrete_field_vector
+``
+
+## Linear Solvers
 
 ```@docs
 FieldMatrixSolverAlgorithm
@@ -42,7 +51,7 @@ StationaryIterativeSolve
 ApproximateBlockArrowheadIterativeSolve
 ```
 
-# Preconditioners
+## Preconditioners
 
 ```@docs
 PreconditionerAlgorithm
@@ -67,9 +76,6 @@ FieldName
 @name
 FieldNameTree
 FieldNameSet
-FieldNameDict
-field_vector_view
-concrete_field_vector
 is_lazy
 lazy_main_diagonal
 lazy_mul

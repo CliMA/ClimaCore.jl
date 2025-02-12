@@ -127,10 +127,11 @@ rpromote_type(Ts...) = reduce((T1, T2) -> rmaptype(promote_type, T1, T2), Ts)
 rpromote_type() = Union{}
 
 """
-    rzero(T)
+    rzero(X)
 
-Recursively compute the zero value of type `T`.
+Recursively zero out each element of `X`.
 """
+rzero(X) = rzero(typeof(X))
 rzero(::Type{T}) where {T} = zero(T)
 rzero(::Type{Tuple{}}) = ()
 rzero(::Type{T}) where {E, T <: Tuple{E}} = (rzero(E),)
