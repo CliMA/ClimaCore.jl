@@ -14,7 +14,7 @@ use_transform(ode_algo) = !is_imex_CTS_algo(ode_algo)
 
 function jac_kwargs(ode_algo, Y, jacobi_flags)
     if is_imex_CTS_algo(ode_algo)
-        W = SchurComplementW(Y, use_transform(ode_algo), jacobi_flags)
+        W = ImplicitEquationJacobian(Y, use_transform(ode_algo), jacobi_flags)
         if use_transform(ode_algo)
             return (; jac_prototype = W, Wfact_t = Wfact!)
         else

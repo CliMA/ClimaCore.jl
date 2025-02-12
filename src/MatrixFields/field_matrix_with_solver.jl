@@ -20,9 +20,6 @@ FieldMatrixWithSolver(
     alg::FieldMatrixSolverAlgorithm = BlockDiagonalSolve(),
 ) = FieldMatrixWithSolver(A, FieldMatrixSolver(alg, A, b))
 
-# TODO: Find a simple way to make b an optional argument and add a method for
-# Base.one(::FieldMatrixWithSolver).
-
 Base.keys(A::FieldMatrixWithSolver) = keys(A.matrix)
 
 Base.values(A::FieldMatrixWithSolver) = values(A.matrix)
@@ -41,10 +38,24 @@ Base.:(==)(A1::FieldMatrixWithSolver, A2::FieldMatrixWithSolver) =
 Base.similar(A::FieldMatrixWithSolver) =
     FieldMatrixWithSolver(similar(A.matrix), A.solver)
 
+# Since zero(::FieldMatrix) retains the sparsity pattern of the original matrix
+# while zeroing out all mutable entries, its linear solver is unchanged.
 Base.zero(A::FieldMatrixWithSolver) =
     FieldMatrixWithSolver(zero(A.matrix), A.solver)
 
+# Since one(::FieldMatrix) is an identity matrix, it does not require a linear
+# solver. The equation I * x == b can be solved directly, without calling ldiv.
+# TODO: Find a simple way to construct a linear solver for the identity matrix.
+Base.one(A::FieldMatrixWithSolver) =
+    FieldMatrixWithSolver(one(A.matrix), nothing)
+
+Base.Broadcast.broadcastable(A::FieldMatrixWithSolver) = A.matrix
+
+Base.Broadcast.materialize!(A::FieldMatrixWithSolver, matrix::FieldMatrix) =
+    Base.Broadcast.materialize!(A.matrix, matrix)
+
 ldiv!(x::Fields.FieldVector, A::FieldMatrixWithSolver, b::Fields.FieldVector) =
+    isnothing(A.solver) ? error("FieldMatrixSolver is unavailable") :
     field_matrix_solve!(A.solver, x, A.matrix, b)
 
 mul!(b::Fields.FieldVector, A::FieldMatrixWithSolver, x::Fields.FieldVector) =
