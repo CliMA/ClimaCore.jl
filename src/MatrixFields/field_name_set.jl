@@ -144,12 +144,15 @@ function cartesian_product(row_set::FieldVectorKeys, col_set::FieldVectorKeys)
     return FieldMatrixKeys(result_values, name_tree)
 end
 
-function matrix_row_keys(set::FieldMatrixKeys)
-    result_values′ = unrolled_map(name_pair -> name_pair[1], set.values)
+function corresponding_vector_keys(set::FieldMatrixKeys, ::Val{N}) where {N}
+    result_values′ = unrolled_map(name_pair -> name_pair[N], set.values)
     result_values =
         unique_and_non_overlapping_values(result_values′, set.name_tree)
     return FieldVectorKeys(result_values, set.name_tree)
 end
+
+matrix_row_keys(set::FieldMatrixKeys) = corresponding_vector_keys(set, Val(1))
+matrix_col_keys(set::FieldMatrixKeys) = corresponding_vector_keys(set, Val(2))
 
 function matrix_off_diagonal_keys(set::FieldMatrixKeys)
     result_values =
@@ -173,6 +176,21 @@ function matrix_diagonal_keys(set::FieldMatrixKeys)
     return FieldMatrixKeys(result_values, set.name_tree)
 end
 
+function matrix_all_inferred_diagonal_keys(set::FieldMatrixKeys)
+    row_keys = matrix_row_keys(set)
+    col_keys = matrix_col_keys(set)
+    diag_keys = matrix_row_keys(matrix_diagonal_keys(set))
+    largest_set_of_keys =
+        if issubset(row_keys, diag_keys) && issubset(col_keys, diag_keys)
+            diag_keys
+        elseif issubset(col_keys, row_keys)
+            row_keys
+        else
+            col_keys
+        end
+    return corresponding_matrix_keys(largest_set_of_keys)
+end
+
 #=
 There are four cases that we need to support in order to be compatible with
 RecursiveApply (i.e., with rmul):
@@ -187,7 +205,7 @@ RecursiveApply (i.e., with rmul):
    (name, name) * (name_child, _) -> (name_child, name_child) * (name_child, _)
    We are able to support this by extracting internal diagonal blocks from
    FieldNameDict entries. We can only extract an internal diagonal block from a
-   LinearAlgebra.UniformScaling or a ColumnwiseBandMatrixField of SingleValues.
+   ScalingFieldMatrixEntry or a ColumnwiseBandMatrixField of SingleValues.
 4. (name1, name1) * name2      -> (name_child, name_child) * name_child or
    (name1, name1) * (name2, _) -> (name_child, name_child) * (name_child, _)
    This is a combination of cases 2 and 3, where "name_child" is a child name of

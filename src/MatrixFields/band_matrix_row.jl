@@ -143,6 +143,10 @@ Base.:*(value::Geometry.SingleValue, row::BandMatrixRow) =
 Base.:/(row::BandMatrixRow, value::Number) =
     map(entry -> rdiv(entry, value), row)
 
+Base.one(::Type{DiagonalMatrixRow{T}}) where {T} = DiagonalMatrixRow(one(T))
+Base.one(::Type{BandMatrixRow{ld, bw}}) where {ld, bw} =
+    error("The `one` function cannot be used on a matrix with $bw diagonals")
+
 inv(row::DiagonalMatrixRow) = DiagonalMatrixRow(inv(row[0]))
 inv(::BandMatrixRow{ld, bw}) where {ld, bw} = error(
     "The inverse of a matrix with $bw diagonals is (usually) a dense matrix, \

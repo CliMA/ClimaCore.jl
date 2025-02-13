@@ -20,9 +20,6 @@ FieldMatrixWithSolver(
     alg::FieldMatrixSolverAlgorithm = BlockDiagonalSolve(),
 ) = FieldMatrixWithSolver(A, FieldMatrixSolver(alg, A, b))
 
-# TODO: Find a simple way to make b an optional argument and add a method for
-# Base.one(::FieldMatrixWithSolver).
-
 Base.keys(A::FieldMatrixWithSolver) = keys(A.matrix)
 
 Base.values(A::FieldMatrixWithSolver) = values(A.matrix)
@@ -43,6 +40,14 @@ Base.similar(A::FieldMatrixWithSolver) =
 
 Base.zero(A::FieldMatrixWithSolver) =
     FieldMatrixWithSolver(zero(A.matrix), A.solver)
+
+Base.one(A::FieldMatrixWithSolver) =
+    FieldMatrixWithSolver(one(A.matrix), A.solver)
+
+Base.Broadcast.broadcastable(A::FieldMatrixWithSolver) = A.matrix
+
+Base.Broadcast.materialize!(A::FieldMatrixWithSolver, matrix::FieldNameDict) =
+    Base.Broadcast.materialize!(A.matrix, matrix)
 
 ldiv!(x::Fields.FieldVector, A::FieldMatrixWithSolver, b::Fields.FieldVector) =
     field_matrix_solve!(A.solver, x, A.matrix, b)
