@@ -7,6 +7,7 @@
 | **GHA CI**           | [![gha ci][gha-ci-img]][gha-ci-url]           |
 | **Buildkite CI**     | [![buildkite ci][buildkite-ci-img]][buildkite-ci-url] |
 | **Code Coverage**    | [![codecov][codecov-img]][codecov-url]        |
+| **Downloads**        | [![downloads][downloads-img]][downloads-url]  |
 | **DOI**              | [![zenodo][zenodo-img]][zenodo-url]           |
 
 [docs-bld-img]: https://github.com/CliMA/ClimaCore.jl/workflows/Documentation/badge.svg
@@ -23,6 +24,9 @@
 
 [codecov-img]: https://codecov.io/gh/CliMA/ClimaCore.jl/branch/main/graph/badge.svg
 [codecov-url]: https://codecov.io/gh/CliMA/ClimaCore.jl
+
+[downloads-img]: https://img.shields.io/badge/dynamic/json?url=http%3A%2F%2Fjuliapkgstats.com%2Fapi%2Fv1%2Ftotal_downloads%2FClimaCore&query=total_requests&suffix=%2Ftotal&label=Downloads
+[downloads-url]: http://juliapkgstats.com/pkg/ClimaCore
 
 [zenodo-img]: https://zenodo.org/badge/356355994.svg
 [zenodo-url]: https://zenodo.org/badge/latestdoi/356355994
