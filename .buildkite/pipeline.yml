@@ -273,6 +273,35 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Unit: common spaces with CUDA"
+        key: "gpu_common_cuda_spaces"
+        command:
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/CommonSpaces/unit_common_spaces.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Unit: common spaces with CUDA and MPI"
+        key: "gpu_common_cuda_mpi_spaces"
+        command:
+          - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/CommonSpaces/unit_common_spaces.jl"
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+          slurm_ntasks: 2
+
+      - label: "Unit: common spaces with MPI"
+        key: "common_cuda_mpi_spaces"
+        command:
+          - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/CommonSpaces/unit_common_spaces.jl"
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+        agents:
+          slurm_ntasks: 2
+
       - label: "Unit: distributed cuda spaces"
         key: "gpu_distributed_extruded_cuda_spaces"
         command:
