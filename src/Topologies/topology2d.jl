@@ -124,6 +124,45 @@ mutable struct Topology2D{
     ghost_face_neighbor_loc::Vector{Int}
 end
 
+function Adapt.adapt_structure(to, topo::Topology2D)
+    return Topology2D(
+        Adapt.adapt(to, topo.context),
+        Adapt.adapt(to, topo.mesh),
+        Adapt.adapt(to, topo.elemorder),
+        Adapt.adapt(to, topo.orderindex),
+        topo.elempid,
+        topo.local_elem_gidx,
+        topo.neighbor_pids,
+        topo.send_elem_lidx,
+        topo.send_elem_lengths,
+        topo.recv_elem_gidx,
+        topo.recv_elem_lengths,
+        Adapt.adapt(to, topo.interior_faces),
+        Adapt.adapt(to, topo.ghost_faces),
+        Adapt.adapt(to, topo.local_vertices),
+        Adapt.adapt(to, topo.local_vertex_offset),
+        Adapt.adapt(to, topo.ghost_vertices),
+        Adapt.adapt(to, topo.ghost_vertex_offset),
+        Adapt.adapt(to, topo.local_neighbor_elem),
+        Adapt.adapt(to, topo.local_neighbor_elem_offset),
+        topo.ghost_neighbor_elem,
+        topo.ghost_neighbor_elem_offset,
+        Adapt.adapt(to, topo.boundaries),
+        topo.internal_elems,
+        topo.perimeter_elems,
+        topo.nglobalvertices,
+        topo.nglobalfaces,
+        topo.ghost_vertex_gcidx,
+        topo.ghost_face_gcidx,
+        topo.comm_vertex_lengths,
+        topo.comm_face_lengths,
+        topo.ghost_vertex_neighbor_loc,
+        topo.ghost_vertex_comm_idx_offset,
+        Adapt.adapt(to, topo.repr_ghost_vertex),
+        topo.ghost_face_neighbor_loc,
+    )
+end
+
 ClimaComms.device(topology::Topology2D) = ClimaComms.device(topology.context)
 ClimaComms.array_type(topology::Topology2D) =
     ClimaComms.array_type(topology.context.device)
