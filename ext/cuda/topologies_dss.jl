@@ -2,7 +2,7 @@ import ClimaCore: DataLayouts, Topologies, Spaces, Fields
 import ClimaCore.DataLayouts: CartesianFieldIndex
 using CUDA
 import ClimaCore.Topologies
-import ClimaCore.Topologies: DSSDataTypes, DSSPerimeterTypes
+import ClimaCore.Topologies: DSSTypes1D, DSSTypes2D, DSSPerimeterTypes
 import ClimaCore.Topologies: perimeter_vertex_node_index
 
 _max_threads_cuda() = 256
@@ -19,7 +19,7 @@ _configure_threadblock(nitems) =
 function Topologies.dss_load_perimeter_data!(
     dev::ClimaComms.CUDADevice,
     dss_buffer::Topologies.DSSBuffer,
-    data::DSSDataTypes,
+    data::DSSTypes2D,
     perimeter::Topologies.Perimeter2D,
 )
     (; perimeter_data) = dss_buffer
@@ -40,7 +40,7 @@ end
 
 function dss_load_perimeter_data_kernel!(
     perimeter_data::DSSPerimeterTypes,
-    data::DSSDataTypes,
+    data::DSSTypes2D,
     perimeter::Topologies.Perimeter2D{Nq},
 ) where {Nq}
     gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
@@ -60,7 +60,7 @@ end
 
 function Topologies.dss_unload_perimeter_data!(
     dev::ClimaComms.CUDADevice,
-    data::DSSDataTypes,
+    data::DSSTypes2D,
     dss_buffer::Topologies.DSSBuffer,
     perimeter,
 )
@@ -81,7 +81,7 @@ function Topologies.dss_unload_perimeter_data!(
 end
 
 function dss_unload_perimeter_data_kernel!(
-    data::DSSDataTypes,
+    data::DSSTypes2D,
     perimeter_data::DSSPerimeterTypes,
     perimeter::Topologies.Perimeter2D{Nq},
 ) where {Nq}
@@ -195,10 +195,10 @@ end
 function Topologies.dss_transform!(
     device::ClimaComms.CUDADevice,
     perimeter_data::DSSPerimeterTypes,
-    data::DSSDataTypes,
+    data::DSSTypes2D,
     perimeter::Topologies.Perimeter2D,
-    local_geometry::DSSDataTypes,
-    dss_weights::DSSDataTypes,
+    local_geometry::DSSTypes2D,
+    dss_weights::DSSTypes2D,
     localelems::AbstractVector{Int},
 )
     nlocalelems = length(localelems)
@@ -240,10 +240,10 @@ end
 
 function dss_transform_kernel!(
     perimeter_data::DSSPerimeterTypes,
-    data::DSSDataTypes,
+    data::DSSTypes2D,
     perimeter::Topologies.Perimeter2D,
-    local_geometry::DSSDataTypes,
-    dss_weights::DSSDataTypes,
+    local_geometry::DSSTypes2D,
+    dss_weights::DSSTypes2D,
     localelems::AbstractVector{Int},
     ::Val{nlocalelems},
 ) where {nlocalelems}
@@ -271,8 +271,8 @@ end
 function Topologies.dss_untransform!(
     device::ClimaComms.CUDADevice,
     perimeter_data::DSSPerimeterTypes,
-    data::DSSDataTypes,
-    local_geometry::DSSDataTypes,
+    data::DSSTypes2D,
+    local_geometry::DSSTypes2D,
     perimeter::Topologies.Perimeter2D,
     localelems::AbstractVector{Int},
 )
@@ -312,8 +312,8 @@ end
 
 function dss_untransform_kernel!(
     perimeter_data::DSSPerimeterTypes,
-    data::DSSDataTypes,
-    local_geometry::DSSDataTypes,
+    data::DSSTypes2D,
+    local_geometry::DSSTypes2D,
     perimeter::Topologies.Perimeter2D,
     localelems::AbstractVector{Int},
     ::Val{nlocalelems},
@@ -579,6 +579,58 @@ function dss_ghost_kernel!(
                 perimeter_data[CI(ip, 1, fidx, level, eidx)] = result
             end
         end
+    end
+    return nothing
+end
+
+function Topologies.dss_1d!(
+    ::ClimaComms.CUDADevice,
+    data::DSSTypes1D,
+    topology::Topologies.IntervalTopology,
+    local_geometry = nothing,
+    dss_weights = nothing,
+)
+    (_, _, _, Nv, Nh) = DataLayouts.universal_size(data)
+    nfaces = Topologies.isperiodic(topology) ? Nh : Nh - 1
+    nitems = Nv * nfaces
+    threads = _max_threads_cuda()
+    p = linear_partition(nitems, threads)
+    args = (data, local_geometry, dss_weights, nfaces)
+    auto_launch!(
+        dss_1d_kernel!,
+        args;
+        threads_s = p.threads,
+        blocks_s = p.blocks,
+    )
+    return nothing
+end
+
+function dss_1d_kernel!(data, local_geometry, dss_weights, nfaces)
+    T = eltype(data)
+    (Ni, _, _, Nv, Nh) = DataLayouts.universal_size(data)
+    gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+    if gidx ≤ Nv * nfaces
+        left_face_elem = cld(gidx, Nv)
+        level = gidx - (left_face_elem - 1) * Nv
+        right_face_elem = left_face_elem == Nh ? 1 : left_face_elem + 1
+        left_idx = CartesianIndex(Ni, 1, 1, level, left_face_elem)
+        right_idx = CartesianIndex(1, 1, 1, level, right_face_elem)
+        val =
+            Topologies.dss_transform(
+                data,
+                local_geometry,
+                dss_weights,
+                left_idx,
+            ) ⊞ Topologies.dss_transform(
+                data,
+                local_geometry,
+                dss_weights,
+                right_idx,
+            )
+        data[left_idx] =
+            Topologies.dss_untransform(T, val, local_geometry, left_idx)
+        data[right_idx] =
+            Topologies.dss_untransform(T, val, local_geometry, right_idx)
     end
     return nothing
 end

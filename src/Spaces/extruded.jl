@@ -220,15 +220,10 @@ column(space::ExtrudedFiniteDifferenceSpace, i, j, h) =
 column(space::ExtrudedFiniteDifferenceSpace, i, h) =
     column(space, Grids.ColumnIndex((i,), h))
 
-level(space::CenterExtrudedFiniteDifferenceSpace2D, v::Integer) =
+level(space::ExtrudedFiniteDifferenceSpace, v) =
+    space isa ExtrudedFiniteDifferenceSpace3D ?
+    SpectralElementSpace2D(level(grid(space), v)) :
     SpectralElementSpace1D(level(grid(space), v))
-level(space::FaceExtrudedFiniteDifferenceSpace2D, v::PlusHalf) =
-    SpectralElementSpace1D(level(grid(space), v))
-level(space::CenterExtrudedFiniteDifferenceSpace3D, v::Integer) =
-    SpectralElementSpace2D(level(grid(space), v))
-level(space::FaceExtrudedFiniteDifferenceSpace3D, v::PlusHalf) =
-    SpectralElementSpace2D(level(grid(space), v))
-
 
 nlevels(space::ExtrudedFiniteDifferenceSpace) =
     size(local_geometry_data(space), 4)

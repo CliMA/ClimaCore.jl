@@ -33,8 +33,10 @@ end
     face_field = sin.(Fields.coordinate_field(hv_face_space).z)
 
     for npoints in (3, 8)
-        M_center = Operators.matrix_interpolate(center_field, npoints)
-        M_face = Operators.matrix_interpolate(face_field, npoints)
+        center_field_cpu = Adapt.adapt(Array, center_field)
+        face_field_cpu = Adapt.adapt(Array, face_field)
+        M_center = Operators.matrix_interpolate(center_field_cpu, npoints)
+        M_face = Operators.matrix_interpolate(face_field_cpu, npoints)
         @test size(M_center) == (10, 10 * npoints)
         @test size(M_face) == (10 + 1, 10 * npoints)
     end

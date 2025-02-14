@@ -53,13 +53,14 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     @test eltype(coord_data) == Geometry.XPoint{Float64}
 
     @test DataLayouts.farray_size(Spaces.coordinates_data(space)) == (4, 1, 1)
-    coord_slab = slab(Spaces.coordinates_data(space), 1)
+    coord_slab = Adapt.adapt(Array, slab(Spaces.coordinates_data(space), 1))
     @test coord_slab[slab_index(1)] == Geometry.XPoint{FT}(-3)
     @test typeof(coord_slab[slab_index(4)]) == Geometry.XPoint{FT}
     @test coord_slab[slab_index(4)].x ≈ FT(5)
 
-    local_geometry_slab = slab(Spaces.local_geometry_data(space), 1)
-    dss_weights_slab = slab(space.grid.dss_weights, 1)
+    local_geometry_slab =
+        Adapt.adapt(Array, slab(Spaces.local_geometry_data(space), 1))
+    dss_weights_slab = Adapt.adapt(Array, slab(space.grid.dss_weights, 1))
 
     for i in 1:4
         @test Geometry.components(local_geometry_slab[slab_index(i)].∂x∂ξ) ≈
@@ -79,8 +80,8 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
 
     point_space = Spaces.column(space, 1, 1)
     @test point_space isa Spaces.PointSpace
-    @test Spaces.coordinates_data(point_space)[] ==
-          Spaces.column(coord_data, 1, 1)[]
+    @test parent(Spaces.coordinates_data(point_space)) ==
+          parent(Spaces.column(coord_data, 1, 1))
     @test Spaces.local_geometry_type(typeof(point_space)) <:
           Geometry.LocalGeometry
 end

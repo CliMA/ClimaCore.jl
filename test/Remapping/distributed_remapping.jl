@@ -39,110 +39,102 @@ end
     @test Remapping.batched_ranges(3, 2) == [1:2, 3:3]
 end
 
-on_gpu = device isa ClimaComms.CUDADevice
 with_mpi = context isa ClimaComms.MPICommsContext
 
-if !on_gpu
-    @testset "2D extruded" begin
-        vertdomain = Domains.IntervalDomain(
-            Geometry.ZPoint(0.0),
-            Geometry.ZPoint(1000.0);
-            boundary_names = (:bottom, :top),
-        )
+@testset "2D extruded" begin
+    vertdomain = Domains.IntervalDomain(
+        Geometry.ZPoint(0.0),
+        Geometry.ZPoint(1000.0);
+        boundary_names = (:bottom, :top),
+    )
 
-        vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 30)
-        verttopo = Topologies.IntervalTopology(
-            ClimaComms.SingletonCommsContext(device),
-            vertmesh,
-        )
-        vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopo)
+    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 30)
+    verttopo = Topologies.IntervalTopology(
+        ClimaComms.SingletonCommsContext(device),
+        vertmesh,
+    )
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopo)
 
-        horzdomain = Domains.IntervalDomain(
-            Geometry.XPoint(-500.0) .. Geometry.XPoint(500.0),
-            periodic = true,
-        )
+    horzdomain = Domains.IntervalDomain(
+        Geometry.XPoint(-500.0) .. Geometry.XPoint(500.0),
+        periodic = true,
+    )
 
-        quad = Quadratures.GLL{4}()
-        horzmesh = Meshes.IntervalMesh(horzdomain, nelems = 10)
-        horztopology = Topologies.IntervalTopology(
-            ClimaComms.SingletonCommsContext(device),
-            horzmesh,
-        )
-        horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
+    quad = Quadratures.GLL{4}()
+    horzmesh = Meshes.IntervalMesh(horzdomain, nelems = 10)
+    horztopology = Topologies.IntervalTopology(
+        ClimaComms.SingletonCommsContext(device),
+        horzmesh,
+    )
+    horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
 
-        hv_center_space =
-            Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
+    hv_center_space =
+        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
 
-        coords = Fields.coordinate_field(hv_center_space)
+    coords = Fields.coordinate_field(hv_center_space)
 
-        xpts = range(-500.0, 500.0, length = 21)
-        zpts = range(0.0, 1000.0, length = 21)
-        hcoords = [Geometry.XPoint(x) for x in xpts]
-        zcoords = [Geometry.ZPoint(z) for z in zpts]
+    xpts = range(-500.0, 500.0, length = 21)
+    zpts = range(0.0, 1000.0, length = 21)
+    hcoords = [Geometry.XPoint(x) for x in xpts]
+    zcoords = [Geometry.ZPoint(z) for z in zpts]
 
-        remapper = Remapping.Remapper(
-            hv_center_space,
-            hcoords,
-            zcoords,
-            buffer_length = 2,
-        )
+    remapper =
+        Remapping.Remapper(hv_center_space, hcoords, zcoords, buffer_length = 2)
 
-        interp_x = Remapping.interpolate(remapper, coords.x)
-        interp_x2 = Remapping.interpolate(coords.x, hcoords, zcoords)
-        if ClimaComms.iamroot(context)
-            @test Array(interp_x) ≈ [x for x in xpts, z in zpts]
-            @test Array(interp_x2) ≈ [x for x in xpts, z in zpts]
-        end
+    interp_x = Remapping.interpolate(remapper, coords.x)
+    interp_x2 = Remapping.interpolate(coords.x, hcoords, zcoords)
+    if ClimaComms.iamroot(context)
+        @test Array(interp_x) ≈ [x for x in xpts, z in zpts]
+        @test Array(interp_x2) ≈ [x for x in xpts, z in zpts]
+    end
 
-        interp_z = Remapping.interpolate(remapper, coords.z)
-        expected_z = [z for x in xpts, z in zpts]
-        if ClimaComms.iamroot(context)
-            @test Array(interp_z[:, 2:(end - 1)]) ≈ expected_z[:, 2:(end - 1)]
-            @test Array(interp_z[:, 1]) ≈
-                  [1000.0 * (0 / 30 + 1 / 30) / 2 for x in xpts]
-            @test Array(interp_z[:, end]) ≈
-                  [1000.0 * (29 / 30 + 30 / 30) / 2 for x in xpts]
-        end
+    interp_z = Remapping.interpolate(remapper, coords.z)
+    expected_z = [z for x in xpts, z in zpts]
+    if ClimaComms.iamroot(context)
+        @test Array(interp_z[:, 2:(end - 1)]) ≈ expected_z[:, 2:(end - 1)]
+        @test Array(interp_z[:, 1]) ≈
+              [1000.0 * (0 / 30 + 1 / 30) / 2 for x in xpts]
+        @test Array(interp_z[:, end]) ≈
+              [1000.0 * (29 / 30 + 30 / 30) / 2 for x in xpts]
+    end
 
-        # Remapping two fields
-        interp_xx = Remapping.interpolate(remapper, [coords.x, coords.x])
-        if ClimaComms.iamroot(context)
-            @test interp_x ≈ interp_xx[:, :, 1]
-            @test interp_x ≈ interp_xx[:, :, 2]
-        end
+    # Remapping two fields
+    interp_xx = Remapping.interpolate(remapper, [coords.x, coords.x])
+    if ClimaComms.iamroot(context)
+        @test interp_x ≈ interp_xx[:, :, 1]
+        @test interp_x ≈ interp_xx[:, :, 2]
+    end
 
-        # Remapping three fields (more than the buffer length)
-        interp_xxx =
-            Remapping.interpolate(remapper, [coords.x, coords.x, coords.x])
-        if ClimaComms.iamroot(context)
-            @test interp_x ≈ interp_xxx[:, :, 1]
-            @test interp_x ≈ interp_xxx[:, :, 2]
-            @test interp_x ≈ interp_xxx[:, :, 3]
-        end
+    # Remapping three fields (more than the buffer length)
+    interp_xxx = Remapping.interpolate(remapper, [coords.x, coords.x, coords.x])
+    if ClimaComms.iamroot(context)
+        @test interp_x ≈ interp_xxx[:, :, 1]
+        @test interp_x ≈ interp_xxx[:, :, 2]
+        @test interp_x ≈ interp_xxx[:, :, 3]
+    end
 
-        # Remapping in-place one field
-        dest = ArrayType(zeros(21, 21))
-        Remapping.interpolate!(dest, remapper, coords.x)
-        if ClimaComms.iamroot(context)
-            @test interp_x ≈ dest
-        end
+    # Remapping in-place one field
+    dest = ArrayType(zeros(21, 21))
+    Remapping.interpolate!(dest, remapper, coords.x)
+    if ClimaComms.iamroot(context)
+        @test interp_x ≈ dest
+    end
 
-        # Two fields
-        dest = ArrayType(zeros(21, 21, 2))
-        Remapping.interpolate!(dest, remapper, [coords.x, coords.x])
-        if ClimaComms.iamroot(context)
-            @test interp_x ≈ dest[:, :, 1]
-            @test interp_x ≈ dest[:, :, 2]
-        end
+    # Two fields
+    dest = ArrayType(zeros(21, 21, 2))
+    Remapping.interpolate!(dest, remapper, [coords.x, coords.x])
+    if ClimaComms.iamroot(context)
+        @test interp_x ≈ dest[:, :, 1]
+        @test interp_x ≈ dest[:, :, 2]
+    end
 
-        # Three fields (more than buffer length)
-        dest = ArrayType(zeros(21, 21, 3))
-        Remapping.interpolate!(dest, remapper, [coords.x, coords.x, coords.x])
-        if ClimaComms.iamroot(context)
-            @test interp_x ≈ dest[:, :, 1]
-            @test interp_x ≈ dest[:, :, 2]
-            @test interp_x ≈ dest[:, :, 3]
-        end
+    # Three fields (more than buffer length)
+    dest = ArrayType(zeros(21, 21, 3))
+    Remapping.interpolate!(dest, remapper, [coords.x, coords.x, coords.x])
+    if ClimaComms.iamroot(context)
+        @test interp_x ≈ dest[:, :, 1]
+        @test interp_x ≈ dest[:, :, 2]
+        @test interp_x ≈ dest[:, :, 3]
     end
 end
 
@@ -863,36 +855,35 @@ end
     )
 
     # 2D slice space
-    if !on_gpu
-        horzdomain = Domains.IntervalDomain(
-            Geometry.XPoint(-500.0) .. Geometry.XPoint(500.0),
-            periodic = true,
-        )
-        quad = Quadratures.GLL{4}()
-        horzmesh = Meshes.IntervalMesh(horzdomain, nelems = 10)
-        horztopology = Topologies.IntervalTopology(
-            ClimaComms.SingletonCommsContext(device),
-            horzmesh,
-        )
-        horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
 
-        hv_center_space =
-            Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
+    horzdomain = Domains.IntervalDomain(
+        Geometry.XPoint(-500.0) .. Geometry.XPoint(500.0),
+        periodic = true,
+    )
+    quad = Quadratures.GLL{4}()
+    horzmesh = Meshes.IntervalMesh(horzdomain, nelems = 10)
+    horztopology = Topologies.IntervalTopology(
+        ClimaComms.SingletonCommsContext(device),
+        horzmesh,
+    )
+    horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
 
-        @test all(
-            Remapping.default_target_hcoords(hv_center_space) .≈
-            [Geometry.XPoint(x) for x in range(-500.0, 500.0, length = 180)],
-        )
+    hv_center_space =
+        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
 
-        @test all(
-            Remapping.default_target_zcoords(hv_center_space) .≈
-            Geometry.ZPoint.(range(0.0, 1000; length = 50)),
-        )
+    @test all(
+        Remapping.default_target_hcoords(hv_center_space) .≈
+        [Geometry.XPoint(x) for x in range(-500.0, 500.0, length = 180)],
+    )
 
-        # Purely horizontal 1D space
-        @test all(
-            Remapping.default_target_hcoords(horzspace) .≈
-            [Geometry.XPoint(x) for x in range(-500.0, 500.0, length = 180)],
-        )
-    end
+    @test all(
+        Remapping.default_target_zcoords(hv_center_space) .≈
+        Geometry.ZPoint.(range(0.0, 1000; length = 50)),
+    )
+
+    # Purely horizontal 1D space
+    @test all(
+        Remapping.default_target_hcoords(horzspace) .≈
+        [Geometry.XPoint(x) for x in range(-500.0, 500.0, length = 180)],
+    )
 end

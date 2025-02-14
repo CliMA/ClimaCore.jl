@@ -53,6 +53,9 @@ struct Operator2Stencil{O <: FiniteDifferenceOperator} <:
     op::O
 end
 
+strip_space(op::Operator2Stencil, parent_space) =
+    Operator2Stencil(strip_space(op.op, parent_space))
+
 extrapolation_increases_bandwidth_error(op_type::Type) = throw(
     ArgumentError(
         "Operator2Stencil currently only supports operators whose stencils \
