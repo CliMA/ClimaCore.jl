@@ -189,7 +189,10 @@ function ExtrudedCubedSphereGrid(
         horizontal_layout_type,
         enable_bubble,
     )
-    z_topology = Topologies.IntervalTopology(context, z_mesh)
+    z_topology = Topologies.IntervalTopology(
+        ClimaComms.SingletonCommsContext(device),
+        z_mesh,
+    )
     z_grid = Grids.FiniteDifferenceGrid(z_topology)
     return Grids.ExtrudedFiniteDifferenceGrid(
         h_grid,
@@ -307,6 +310,7 @@ function ColumnGrid(
     ),
 ) where {FT}
     @assert ClimaComms.device(context) == device "The given device and context device do not match."
+    @assert context isa ClimaComms.SingletonCommsContext "Columns can only be created on Singleton contextes."
     z_topology = Topologies.IntervalTopology(context, z_mesh)
     return Grids.FiniteDifferenceGrid(z_topology)
 end
@@ -439,7 +443,10 @@ function Box3DGrid(
         horizontal_layout_type,
         enable_bubble,
     )
-    z_topology = Topologies.IntervalTopology(context, z_mesh)
+    z_topology = Topologies.IntervalTopology(
+        ClimaComms.SingletonCommsContext(device),
+        z_mesh,
+    )
     z_grid = Grids.FiniteDifferenceGrid(z_topology)
     return Grids.ExtrudedFiniteDifferenceGrid(
         h_grid,
@@ -542,10 +549,16 @@ function SliceXZGrid(
     @assert horizontal_layout_type <: DataLayouts.AbstractData
     @assert ClimaComms.device(context) == device "The given device and context device do not match."
 
-    h_topology = Topologies.IntervalTopology(context, h_mesh)
+    h_topology = Topologies.IntervalTopology(
+        ClimaComms.SingletonCommsContext(device),
+        h_mesh,
+    )
     h_grid =
         Grids.SpectralElementGrid1D(h_topology, quad; horizontal_layout_type)
-    z_topology = Topologies.IntervalTopology(context, z_mesh)
+    z_topology = Topologies.IntervalTopology(
+        ClimaComms.SingletonCommsContext(device),
+        z_mesh,
+    )
     z_grid = Grids.FiniteDifferenceGrid(z_topology)
     return Grids.ExtrudedFiniteDifferenceGrid(
         h_grid,
