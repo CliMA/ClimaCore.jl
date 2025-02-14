@@ -37,7 +37,7 @@ ClimaComms.init(ClimaComms.context())
         h_elem = 10,
         n_quad_points = 4,
         horizontal_layout_type = DataLayouts.IJHF,
-        staggering = Grids.CellCenter(),
+        staggering = CellCenter(),
     )
     grid = Spaces.grid(space)
     @test grid isa Grids.ExtrudedFiniteDifferenceGrid
@@ -63,7 +63,7 @@ ClimaComms.init(ClimaComms.context())
         h_elem = 10,
         n_quad_points = 4,
         hypsography_fun,
-        staggering = Grids.CellCenter(),
+        staggering = CellCenter(),
     )
     grid = Spaces.grid(space)
     @test grid isa Grids.ExtrudedFiniteDifferenceGrid
@@ -103,7 +103,7 @@ ClimaComms.init(ClimaComms.context())
         n_quad_points = 4,
         x_elem = 3,
         y_elem = 4,
-        staggering = Grids.CellCenter(),
+        staggering = CellCenter(),
     )
     grid = Spaces.grid(space)
     @test grid isa Grids.ExtrudedFiniteDifferenceGrid
@@ -121,7 +121,7 @@ ClimaComms.init(ClimaComms.context())
             periodic_x = false,
             n_quad_points = 4,
             x_elem = 4,
-            staggering = Grids.CellCenter(),
+            staggering = CellCenter(),
         )
         grid = Spaces.grid(space)
         @test grid isa Grids.ExtrudedFiniteDifferenceGrid
