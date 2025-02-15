@@ -5,9 +5,11 @@ main
 -------
 
 - Prior to this version, `CommonSpaces` could not be created with
-`ClimaComms.MPICommContext`. This is now fixed with PR
+`ClimaComms.MPICommsContext`. This is now fixed with PR
 [2176](https://github.com/CliMA/ClimaCore.jl/pull/2176).
-
+- Fixed bug in distributed remapping with CUDA. Sometimes, `ClimaCore` would not
+  properly fill the output arrays with the correct values. This is now fixed. PR
+  [2169](https://github.com/CliMA/ClimaCore.jl/pull/2169)
 
 v0.14.24
 -------
