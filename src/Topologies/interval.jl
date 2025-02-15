@@ -16,6 +16,8 @@ struct IntervalTopology{
     boundaries::B
 end
 
+Adapt.@adapt_structure IntervalTopology
+
 ## gpu
 struct DeviceIntervalTopology{B} <: AbstractIntervalTopology
     boundaries::B
