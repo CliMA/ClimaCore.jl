@@ -284,8 +284,8 @@ function read_mesh_new(reader::HDF5Reader, name::AbstractString)
                 nelems = nelements,
             )
         end
-        if stretch_type ≠ "UnknownStretch"
-            stretch_params = attrs(group)["stretch_params"]
+        stretch_params = get(attrs(group), "stretch_params", nothing)
+        if stretch_type ≠ "UnknownStretch" && !isnothing(stretch_params)
             CT = Domains.coordinate_type(domain)
             stretch =
                 getproperty(Meshes, Symbol(stretch_type))(stretch_params...)
