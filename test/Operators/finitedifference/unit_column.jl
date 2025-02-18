@@ -1,3 +1,7 @@
+#=
+julia --check-bounds=yes --project=.buildkite
+using Revise; include("test/Operators/finitedifference/unit_column.jl")
+=#
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 using ClimaCore
@@ -155,15 +159,14 @@ end
 
         # can't define Neumann conditions on GradientF2C
         ∂ = Operators.GradientF2C(
-            left = Operators.SetGradient(FT(1)),
-            right = Operators.SetGradient(FT(-1)),
+            left = Operators.Extrapolate(),
+            right = Operators.Extrapolate(),
         )
 
-        if are_boundschecks_forced
-            @test_throws Exception ∂.(w .* I.(θ))
-        else
-            @warn "Bounds check on BoundsError ∂.(w .* I.(θ)) not verified."
-        end
+        @test_throws AssertionError Operators.GradientF2C(
+            left = Operators.SetGradient(1),
+            right = Operators.SetGradient(1),
+        )
 
         # 2) we set boundaries on the 1st operator
         I = Operators.InterpolateC2F(
