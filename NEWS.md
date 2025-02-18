@@ -4,12 +4,26 @@ ClimaCore.jl Release Notes
 main
 -------
 
-- Prior to this version, `CommonSpaces` could not be created with
+v0.14.25
+-------
+
+ - Using incorrect boundary conditions will now error PR
+  [2180](https://github.com/CliMA/ClimaCore.jl/pull/2180).
+
+ - Prior to this version, `CommonSpaces` could not be created with
 `ClimaComms.MPICommsContext`. This is now fixed with PR
 [2176](https://github.com/CliMA/ClimaCore.jl/pull/2176).
-- Fixed bug in distributed remapping with CUDA. Sometimes, `ClimaCore` would not
+
+ - Fixed bug in distributed remapping with CUDA. Sometimes, `ClimaCore` would not
   properly fill the output arrays with the correct values. This is now fixed. PR
   [2169](https://github.com/CliMA/ClimaCore.jl/pull/2169)
+
+ - Fixed adapt for vertical topology. PR [2187](https://github.com/CliMA/ClimaCore.jl/pull/2187).
+   Closed [2186](https://github.com/CliMA/ClimaCore.jl/issues/2186).
+
+ - Added support for 1D extruded spaces. PR [2172](https://github.com/CliMA/ClimaCore.jl/pull/2172).
+   Closed [1989](https://github.com/CliMA/ClimaCore.jl/issues/1989), and
+   [1383](https://github.com/CliMA/ClimaCore.jl/issues/1383).
 
 v0.14.24
 -------
