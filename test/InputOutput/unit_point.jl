@@ -7,8 +7,7 @@ const comms_ctx = ClimaComms.context(ClimaComms.CPUSingleThreaded())
 
 @testset "HDF5 write/read test for 0d PointSpace" begin
     # need to define equality because with no Grid to cache, the read space will not be "egal"
-    # to the written space. Furthermore, the typeof the read Field will be different from the
-    # written Field's because the written Field contains SubArrays of the column
+    # to the written space.
     function Base.:(==)(
         lg1::ClimaCore.Geometry.LocalGeometry{I, C, FT, <:Any},
         lg2::ClimaCore.Geometry.LocalGeometry{I, C, FT, <:Any},
@@ -21,54 +20,24 @@ const comms_ctx = ClimaComms.context(ClimaComms.CPUSingleThreaded())
         return true
     end
 
-    Base.:(==)(
-        data1::ClimaCore.DataLayouts.DataF,
-        data2::ClimaCore.DataLayouts.DataF,
-    ) = data1[] == data2[]
-
-    Base.:(==)(
-        space1::ClimaCore.Spaces.PointSpace,
-        space2::ClimaCore.Spaces.PointSpace,
-    ) =
-        ClimaComms.context(space1) == ClimaComms.context(space2) &&
-        ClimaCore.Spaces.local_geometry_data(space1) ==
-        ClimaCore.Spaces.local_geometry_data(space2)
-
-    Base.:(==)(
-        field1::ClimaCore.Fields.Field{
-            <:ClimaCore.DataLayouts.AbstractData,
-            <:ClimaCore.Spaces.PointSpace,
-        },
-        field2::ClimaCore.Fields.Field{
-            <:ClimaCore.DataLayouts.AbstractData,
-            <:ClimaCore.Spaces.PointSpace,
-        },
-    ) = axes(field1) == axes(field2) && parent(field1) == parent(field2)
-
     FT = Float32
 
-    # instead of directly constructing a PointSpace, we construct Field with a ColumnSpace,
-    # and call the level function to get a Field with a PointSpace
-    column_space = ClimaCore.CommonSpaces.ColumnSpace(;
-        z_min = FT(0),
-        z_max = FT(100),
-        z_elem = 10,
-        staggering = ClimaCore.Grids.CellCenter(),
-    )
-
-    field_1d = ClimaCore.Fields.local_geometry_field(column_space)
-    field_0d = ClimaCore.Fields.level(field_1d, 5)
-
+    space =
+        ClimaCore.Spaces.PointSpace(comms_ctx, ClimaCore.Geometry.ZPoint(FT(1)))
+    field_0d = ClimaCore.Fields.local_geometry_field(space)
+    Y = ClimaCore.Fields.FieldVector(; p = field_0d)
 
     filename = tempname()
 
-    writer = ClimaCore.InputOutput.HDF5Writer(filename, comms_ctx)
-    ClimaCore.InputOutput.write!(writer, field_0d, "field_0d")
-    close(writer)
+    ClimaCore.InputOutput.HDF5Writer(filename, comms_ctx) do writer
+        ClimaCore.InputOutput.write!(writer, "Y" => Y) # write field vector from hdf5 file
+    end
 
-    reader = ClimaCore.InputOutput.HDF5Reader(filename, comms_ctx)
-    restart_field_0d = ClimaCore.InputOutput.read_field(reader, "field_0d")
-    close(reader)
-
-    @test restart_field_0d == field_0d
+    ClimaCore.InputOutput.HDF5Reader(filename, comms_ctx) do reader
+        restart_Y = ClimaCore.InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
+        @test restart_Y == Y # test if restart is exact
+        # test if space is the same by comparing local geometry data
+        @test ClimaCore.Spaces.local_geometry_data(axes(restart_Y.p))[] ==
+              ClimaCore.Spaces.local_geometry_data(axes(Y.p))[]
+    end
 end
