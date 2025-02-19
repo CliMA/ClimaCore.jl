@@ -4,6 +4,9 @@ ClimaCore.jl Release Notes
 main
 -------
 
+ - Fixed bug in DSS for level fields. PR [2194](https://github.com/CliMA/ClimaCore.jl/pull/2194).
+   Closed [2193](https://github.com/CliMA/ClimaCore.jl/issues/2193).
+
 v0.14.25
 -------
 
