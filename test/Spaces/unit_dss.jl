@@ -138,7 +138,10 @@ end
             space_kwargs = (; context, topography, deep, autodiff_metric)
             center_space =
                 TU.CenterExtrudedFiniteDifferenceSpace(FT; space_kwargs...)
-            for space in (center_space, Spaces.face_space(center_space))
+            face_space = Spaces.face_space(center_space)
+            level_space1 = Spaces.level(center_space, 2)
+            level_space2 = Spaces.level(face_space, 1 + Spaces.half)
+            for space in (center_space, face_space, level_space1, level_space2)
                 test_dss_conservation(space)
             end
         end

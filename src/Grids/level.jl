@@ -16,10 +16,10 @@ level(
 
 topology(levelgrid::LevelGrid) = topology(levelgrid.full_grid)
 
-dss_weights(levelgrid::LevelGrid{<:Any, Int}, ::Nothing) =
-    level(dss_weights(levelgrid.full_grid, CellCenter()), levelgrid.level)
-dss_weights(levelgrid::LevelGrid{<:Any, PlusHalf{Int}}, ::Nothing) =
-    level(dss_weights(levelgrid.full_grid, CellFace()), levelgrid.level + half)
+# The DSS weights for extruded spaces are currently the same as the weights for
+# horizontal spaces. If we ever need to use extruded weights, this method will
+# need to extract the weights at a particular level.
+dss_weights(levelgrid::LevelGrid, _) = dss_weights(levelgrid.full_grid, nothing)
 
 local_geometry_type(::Type{LevelGrid{G, L}}) where {G, L} =
     local_geometry_type(G)

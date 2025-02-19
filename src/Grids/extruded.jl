@@ -131,8 +131,9 @@ vertical_topology(grid::ExtrudedFiniteDifferenceGrid) =
 
 # Since ∂z/∂ξ₃ and r are continuous across element boundaries, we can reuse
 # the horizontal weights instead of calling compute_dss_weights on the
-# extruded local geometry.
-dss_weights(grid::AbstractExtrudedFiniteDifferenceGrid, ::Staggering) =
+# extruded local geometry. If we ever need to use extruded weights, this method
+# will need to distinguish between weights on centers and weights on faces.
+dss_weights(grid::AbstractExtrudedFiniteDifferenceGrid, _) =
     dss_weights(grid.horizontal_grid, nothing)
 
 local_geometry_data(grid::AbstractExtrudedFiniteDifferenceGrid, ::CellCenter) =
