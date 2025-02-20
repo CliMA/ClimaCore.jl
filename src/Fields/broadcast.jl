@@ -331,6 +331,9 @@ Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(/), args...) =
 Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(muladd), args...) =
     Base.Broadcast.broadcasted(fs, RecursiveApply.rmuladd, args...)
 
+Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(zero), arg) =
+    Base.Broadcast.broadcasted(fs, RecursiveApply.rzero, arg)
+
 # Specialize handling of vector-based functions to automatically add LocalGeometry information
 function Base.Broadcast.broadcasted(
     fs::AbstractFieldStyle,

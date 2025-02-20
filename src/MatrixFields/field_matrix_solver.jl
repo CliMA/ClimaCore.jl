@@ -253,7 +253,7 @@ function check_field_matrix_solver(::BlockDiagonalSolve, _, A, b)
 end
 
 cheap_inv(_) = false
-cheap_inv(::UniformScaling) = true
+cheap_inv(::ScalingFieldMatrixEntry) = true
 cheap_inv(A::ColumnwiseBandMatrixField) = eltype(A) <: DiagonalMatrixRow
 
 NVTX.@annotate function run_field_matrix_solver!(
@@ -271,7 +271,7 @@ NVTX.@annotate function run_field_matrix_solver!(
     # these kernels into one. However, `multiple_field_solve!`
     # launches threads horizontally, and loops vertically (which
     # is slow) to perform the solve. In some circumstances,
-    # when a vertical loop is not needed (e.g., UniformScaling)
+    # when a vertical loop is not needed (e.g., ScalingFieldMatrixEntry)
     # launching several kernels may be cheaper than launching one
     # slower kernel, so we first check for types that may lead to fast
     # kernels.

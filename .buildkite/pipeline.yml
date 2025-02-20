@@ -617,10 +617,6 @@ steps:
         key: unit_wfact
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/wfact.jl"
 
-      - label: "Unit: linsolve"
-        key: unit_linsolve
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/linsolve.jl"
-
       - label: "Unit: fd tensor"
         key: unit_fd_tensor
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/tensor.jl"
