@@ -199,8 +199,10 @@ Returns a `StaticArray` containing the components of `a` in its stored basis.
 """
 components(a::AxisTensor) = getfield(a, :components)
 
-Base.@propagate_inbounds Base.getindex(v::AxisTensor, i::Int...) =
-    getindex(components(v), i...)
+Base.@propagate_inbounds Base.getindex(
+    v::AxisTensor,
+    i::Vararg{Int, N},
+) where {N} = getindex(components(v), i...)
 
 
 Base.@propagate_inbounds function Base.getindex(
