@@ -101,8 +101,7 @@ right_interior_idx(
     args...,
 ) = right_interior_idx(space, op.op, bc, args...)
 
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_interior(
+Base.@propagate_inbounds function stencil_interior(
     ::Operator2Stencil{<:Union{InterpolateF2C, InterpolateC2F}},
     loc,
     space,
@@ -126,8 +125,7 @@ function stencil_left_boundary(
     T = eltype(arg)
     return StencilCoefs{-half, half}((zero(T), zero(T)))
 end
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_right_boundary(
+Base.@propagate_inbounds function stencil_right_boundary(
     ::Operator2Stencil{<:InterpolateC2F},
     bc::SetValue,
     loc,
@@ -139,8 +137,8 @@ function stencil_right_boundary(
     T = eltype(arg)
     return StencilCoefs{-half, half}((zero(T), zero(T)))
 end
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_left_boundary(
+
+Base.@propagate_inbounds function stencil_left_boundary(
     ::Operator2Stencil{<:InterpolateC2F},
     bc::Union{SetGradient, Extrapolate},
     loc,
@@ -152,8 +150,8 @@ function stencil_left_boundary(
     val⁺ = getidx(space, arg, loc, idx + half, hidx)
     return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_right_boundary(
+
+Base.@propagate_inbounds function stencil_right_boundary(
     ::Operator2Stencil{<:InterpolateC2F},
     bc::Union{SetGradient, Extrapolate},
     loc,
@@ -167,8 +165,8 @@ function stencil_right_boundary(
 end
 
 
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_interior(
+
+Base.@propagate_inbounds function stencil_interior(
     ::Operator2Stencil{<:Union{LeftBiasedF2C, LeftBiasedC2F}},
     loc,
     space,
@@ -190,8 +188,8 @@ stencil_left_boundary(
 ) = StencilCoefs{-half, -half}((zero(eltype(arg)),))
 
 
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_interior(
+
+Base.@propagate_inbounds function stencil_interior(
     ::Operator2Stencil{<:Union{RightBiasedF2C, RightBiasedC2F}},
     loc,
     space,
@@ -213,8 +211,8 @@ stencil_right_boundary(
 ) = StencilCoefs{half, half}((zero(eltype(arg)),))
 
 
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_interior(
+
+Base.@propagate_inbounds function stencil_interior(
     ::Operator2Stencil{<:AdvectionC2C},
     loc,
     space,
@@ -238,8 +236,8 @@ function stencil_interior(
     val⁺ = RecursiveApply.rdiv(w³⁺ ⊠ (θ⁺ ⊟ θ), 2)
     return StencilCoefs{-half, half}((val⁻, val⁺))
 end
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_left_boundary(
+
+Base.@propagate_inbounds function stencil_left_boundary(
     ::Operator2Stencil{<:AdvectionC2C},
     bc::SetValue,
     loc,
@@ -264,8 +262,8 @@ function stencil_left_boundary(
     val⁺ = RecursiveApply.rdiv(w³⁺ ⊠ (θ⁺ ⊟ θ), 2)
     return StencilCoefs{-half, half}((val⁻, val⁺))
 end
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_right_boundary(
+
+Base.@propagate_inbounds function stencil_right_boundary(
     ::Operator2Stencil{<:AdvectionC2C},
     bc::SetValue,
     loc,
@@ -290,8 +288,8 @@ function stencil_right_boundary(
     val⁺ = w³⁺ ⊠ (θ⁺ ⊟ θ)
     return StencilCoefs{-half, half}((val⁻, val⁺))
 end
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_left_boundary(
+
+Base.@propagate_inbounds function stencil_left_boundary(
     ::Operator2Stencil{<:AdvectionC2C},
     bc::Extrapolate,
     loc,
@@ -310,8 +308,8 @@ function stencil_left_boundary(
     val⁺ = w³⁺ ⊠ (θ⁺ ⊟ θ)
     return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_right_boundary(
+
+Base.@propagate_inbounds function stencil_right_boundary(
     ::Operator2Stencil{<:AdvectionC2C},
     bc::Extrapolate,
     loc,
@@ -332,8 +330,8 @@ function stencil_right_boundary(
 end
 
 
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_interior(
+
+Base.@propagate_inbounds function stencil_interior(
     ::Operator2Stencil{<:Union{FluxCorrectionC2C, FluxCorrectionF2F}},
     loc,
     space,
@@ -357,8 +355,8 @@ function stencil_interior(
     val⁺ = abs(w³⁺) ⊠ (θ⁺ ⊟ θ)
     return StencilCoefs{-half, half}((val⁻, val⁺))
 end
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_left_boundary(
+
+Base.@propagate_inbounds function stencil_left_boundary(
     ::Operator2Stencil{<:Union{FluxCorrectionC2C, FluxCorrectionF2F}},
     bc::Extrapolate,
     loc,
@@ -377,8 +375,8 @@ function stencil_left_boundary(
     val⁺ = abs(w³⁺) ⊠ (θ⁺ ⊟ θ)
     return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_right_boundary(
+
+Base.@propagate_inbounds function stencil_right_boundary(
     ::Operator2Stencil{<:Union{FluxCorrectionC2C, FluxCorrectionF2F}},
     bc::Extrapolate,
     loc,
@@ -399,8 +397,8 @@ function stencil_right_boundary(
 end
 
 
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_interior(
+
+Base.@propagate_inbounds function stencil_interior(
     ::Operator2Stencil{<:Union{GradientF2C, GradientC2F}},
     loc,
     space,
@@ -415,8 +413,8 @@ function stencil_interior(
         Geometry.Covariant3Vector(1) ⊗ getidx(space, arg, loc, idx + half, hidx)
     return StencilCoefs{-half, half}((val⁻, val⁺))
 end
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_left_boundary(
+
+Base.@propagate_inbounds function stencil_left_boundary(
     ::Operator2Stencil{<:GradientF2C},
     bc::SetValue,
     loc,
@@ -429,8 +427,8 @@ function stencil_left_boundary(
         Geometry.Covariant3Vector(1) ⊗ getidx(space, arg, loc, idx + half, hidx)
     return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_right_boundary(
+
+Base.@propagate_inbounds function stencil_right_boundary(
     ::Operator2Stencil{<:GradientF2C},
     bc::SetValue,
     loc,
@@ -462,8 +460,8 @@ stencil_right_boundary(
     hidx,
     arg,
 ) = extrapolation_increases_bandwidth_error(GradientF2C)
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_left_boundary(
+
+Base.@propagate_inbounds function stencil_left_boundary(
     ::Operator2Stencil{<:GradientC2F},
     bc::SetValue,
     loc,
@@ -476,8 +474,8 @@ function stencil_left_boundary(
         Geometry.Covariant3Vector(2) ⊗ getidx(space, arg, loc, idx + half, hidx)
     return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_right_boundary(
+
+Base.@propagate_inbounds function stencil_right_boundary(
     ::Operator2Stencil{<:GradientC2F},
     bc::SetValue,
     loc,
@@ -517,8 +515,8 @@ function stencil_right_boundary(
 end
 
 
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_interior(
+
+Base.@propagate_inbounds function stencil_interior(
     ::Operator2Stencil{<:Union{DivergenceF2C, DivergenceC2F}},
     loc,
     space,
@@ -539,8 +537,8 @@ function stencil_interior(
     val⁺ = Ju³⁺ ⊠ invJ
     return StencilCoefs{-half, half}((val⁻, val⁺))
 end
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_left_boundary(
+
+Base.@propagate_inbounds function stencil_left_boundary(
     ::Operator2Stencil{<:DivergenceF2C},
     bc::SetValue,
     loc,
@@ -557,8 +555,8 @@ function stencil_left_boundary(
     val⁺ = Ju³⁺ ⊠ invJ
     return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_right_boundary(
+
+Base.@propagate_inbounds function stencil_right_boundary(
     ::Operator2Stencil{<:DivergenceF2C},
     bc::SetValue,
     loc,
@@ -593,8 +591,8 @@ stencil_right_boundary(
     hidx,
     arg,
 ) = extrapolation_increases_bandwidth_error(DivergenceF2C)
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_left_boundary(
+
+Base.@propagate_inbounds function stencil_left_boundary(
     ::Operator2Stencil{<:DivergenceC2F},
     bc::SetValue,
     loc,
@@ -611,8 +609,8 @@ function stencil_left_boundary(
     val⁺ = Ju³⁺ ⊠ (2 * invJ)
     return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_right_boundary(
+
+Base.@propagate_inbounds function stencil_right_boundary(
     ::Operator2Stencil{<:DivergenceC2F},
     bc::SetValue,
     loc,
@@ -664,8 +662,8 @@ fd3_curl⁺(::Geometry.Covariant3Vector, invJ) =
 fd3_curl⁺(u::Geometry.Covariant12Vector, invJ) =
     Geometry.Contravariant12Vector(-u.u₂ * invJ, u.u₁ * invJ)
 
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_interior(
+
+Base.@propagate_inbounds function stencil_interior(
     ::Operator2Stencil{<:CurlC2F},
     loc,
     space,
@@ -680,8 +678,8 @@ function stencil_interior(
     val⁺ = fd3_curl⁺(u₊, invJ)
     return StencilCoefs{-half, half}((val⁻, val⁺))
 end
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_left_boundary(
+
+Base.@propagate_inbounds function stencil_left_boundary(
     ::Operator2Stencil{<:CurlC2F},
     bc::SetValue,
     loc,
@@ -695,8 +693,8 @@ function stencil_left_boundary(
     val⁺ = fd3_curl⁺(u₊, 2 * invJ)
     return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_right_boundary(
+
+Base.@propagate_inbounds function stencil_right_boundary(
     ::Operator2Stencil{<:CurlC2F},
     bc::SetValue,
     loc,
