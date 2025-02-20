@@ -182,6 +182,7 @@ function _scan_data_layout(layoutstring::AbstractString)
         "VIJHF",
         "VIFH",
         "VIHF",
+        "DataF",
     ) "datalayout is $layoutstring"
     layoutstring == "IJFH" && return DataLayouts.IJFH
     layoutstring == "IJHF" && return DataLayouts.IJHF
@@ -192,6 +193,7 @@ function _scan_data_layout(layoutstring::AbstractString)
     layoutstring == "VF" && return DataLayouts.VF
     layoutstring == "VIJFH" && return DataLayouts.VIJFH
     layoutstring == "VIJHF" && return DataLayouts.VIJHF
+    layoutstring == "DataF" && return DataLayouts.DataF
     return DataLayouts.VIFH
 end
 
@@ -513,11 +515,24 @@ function read_field(reader::HDF5Reader, name::AbstractString)
                 staggering = Grids.CellFace()
             end
             space = Spaces.space(grid, staggering)
-        else
+        elseif haskey(attrs(obj), "space")
             space = read_space(reader, attrs(obj)["space"])
+        else
+            # if the there is no grid, then the field is on a PointSpace
+            lg_obj = reader.file["local_geometry_data/$name"]
+            # TODO: Is this array type correct? should we assume SingletonCommsContext?
+            ArrayType = ClimaComms.array_type(ClimaComms.device(reader.context))
+            lg_data = ArrayType(read(lg_obj))
+            # because it is a point space, the data layout of local_geometry_data is always DataF
+            lg_type = eval(Meta.parse(attrs(lg_obj)["value_type"]))
+            local_geometry_data = DataLayouts.DataF{lg_type}(lg_data)
+            space = Spaces.PointSpace(local_geometry_data)
+            topology = nothing
         end
-        topology = Spaces.topology(space)
-        ArrayType = ClimaComms.array_type(topology)
+        if !(space isa Spaces.AbstractPointSpace)
+            topology = Spaces.topology(space)
+            ArrayType = ClimaComms.array_type(topology)
+        end
         data_layout = attrs(obj)["data_layout"]
         has_horizontal = occursin('I', data_layout)
         DataLayout = _scan_data_layout(data_layout)
@@ -543,6 +558,8 @@ function read_field(reader::HDF5Reader, name::AbstractString)
         elseif data_layout in ("VF",)
             Nv = size(data, 1)
             values = DataLayout{ElType, Nv}(data)
+        elseif data_layout in ("DataF",)
+            values = DataLayout{ElType}(data)
         else
             # values = DataLayout{ElType, Nij, Nht...}(data) # when Nh is in type-domain
             values = DataLayout{ElType, Nij}(data)
