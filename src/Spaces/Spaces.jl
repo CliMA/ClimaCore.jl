@@ -141,8 +141,8 @@ ClimaComms.array_type(space::AbstractSpace) =
 
 The domain maximum along the z-direction.
 """
-function z_max(space::Spaces.AbstractSpace)
-    mesh = Topologies.mesh(Spaces.vertical_topology(space))
+function z_max(space::AbstractSpace)
+    mesh = Topologies.mesh(vertical_topology(space))
     domain = Topologies.domain(mesh)
     return Domains.z_max(domain)
 end
@@ -152,10 +152,30 @@ end
 
 The domain minimum along the z-direction.
 """
-function z_min(space::Spaces.AbstractSpace)
-    mesh = Topologies.mesh(Spaces.vertical_topology(space))
+function z_min(space::AbstractSpace)
+    mesh = Topologies.mesh(vertical_topology(space))
     domain = Topologies.domain(mesh)
     return Domains.z_min(domain)
 end
+
+"""
+    ncolumns(::AbstractSpace)
+
+Number of columns in a given space.
+"""
+ncolumns(space::ExtrudedFiniteDifferenceSpace) =
+    ncolumns(horizontal_space(space))
+
+function ncolumns(space::SpectralElementSpace1D)
+    Nh = Topologies.nlocalelems(space)
+    Nq = Quadratures.degrees_of_freedom(quadrature_style(space))
+    return Nh * Nq
+end
+function ncolumns(space::SpectralElementSpace2D)
+    Nh = Topologies.nlocalelems(space)
+    Nq = Quadratures.degrees_of_freedom(quadrature_style(space))
+    return Nh * Nq * Nq
+end
+
 
 end # module
