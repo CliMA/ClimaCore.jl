@@ -159,9 +159,9 @@ function z_min(space::AbstractSpace)
 end
 
 """
-    ncolumns(::AbstractSpace)
+    ncolumns(space::AbstractSpace)
 
-Number of columns in a given space.
+Number of columns in a given `space` on the local processor.
 """
 ncolumns(space::ExtrudedFiniteDifferenceSpace) =
     ncolumns(horizontal_space(space))
