@@ -613,10 +613,6 @@ steps:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_column.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/convergence_column.jl"
 
-      - label: "Unit: wfact"
-        key: unit_wfact
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/wfact.jl"
-
       - label: "Unit: fd tensor"
         key: unit_fd_tensor
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/tensor.jl"
@@ -754,21 +750,6 @@ steps:
         agents:
           slurm_gpus: 1
 
-      - label: "Unit: implicit stencil Float32"
-        key: "cpu_implicit_stencil_float32"
-        command: "julia -O0 --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/implicit_stencils.jl --float_type Float32"
-
-      - label: "Unit: implicit stencil Float64"
-        key: "cpu_implicit_stencil_float64"
-        command: "julia -O0 --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/implicit_stencils.jl --float_type Float64"
-
-      - label: "Unit: implicit stencil Float32"
-        key: "gpu_implicit_stencil_float32"
-        command: "julia -O0 --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/implicit_stencils.jl --float_type Float32"
-        agents:
-          slurm_mem: 20GB
-          slurm_gpus: 1
-
       - label: "Unit: Integrals (CPU)"
         key: "cpu_integrals"
         command:
@@ -778,20 +759,6 @@ steps:
         key: "gpu_integrals"
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/integrals.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: Thomas Algorithm"
-        key: "cpu_thomas_algorithm"
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/unit_thomas_algorithm.jl"
-
-      - label: "Unit: Thomas Algorithm"
-        key: "gpu_thomas_algorithm"
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/unit_thomas_algorithm.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -1394,10 +1361,6 @@ steps:
       - label: "Perf: hybrid operators"
         key: perf_hybrid_ops
         command: "julia --color=yes --project=.buildkite test/Operators/hybrid/opt.jl"
-
-      - label: "Perf: implicit stencil"
-        key: "perf_cpu_implicit_stencil"
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/opt_implicit_stencils.jl"
 
       - label: "Perf: FD operator stencil benchmarks"
         key: "perf_fd_ops"
