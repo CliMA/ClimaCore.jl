@@ -1,4 +1,5 @@
-import ..Utilities: PlusHalf, half, UnrolledFunctions
+import ..Utilities: PlusHalf, half
+import UnrolledUtilities: unrolled_map
 
 const AllFiniteDifferenceSpace =
     Union{Spaces.FiniteDifferenceSpace, Spaces.ExtrudedFiniteDifferenceSpace}
@@ -3324,10 +3325,7 @@ Adapt.adapt_structure(to, op::FiniteDifferenceOperator) =
     unionall_type(typeof(op))(; adapt_bcs(to, bcs)...)
 
 @inline adapt_bcs(to, bcs) = NamedTuple{keys(bcs)}(
-    UnrolledFunctions.unrolled_map(
-        bc -> Adapt.adapt_structure(to, bc),
-        values(bcs),
-    ),
+    unrolled_map(bc -> Adapt.adapt_structure(to, bc), values(bcs)),
 )
 
 """

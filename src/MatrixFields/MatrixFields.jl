@@ -52,6 +52,7 @@ import KrylovKit
 import ClimaComms
 import NVTX
 import Adapt
+using UnrolledUtilities
 
 import ..Utilities: PlusHalf, half
 import ..RecursiveApply:
@@ -65,8 +66,6 @@ import ..Spaces
 import ..Spaces: local_geometry_type
 import ..Fields
 import ..Operators
-
-using ..Utilities.UnrolledFunctions
 using ..Geometry:
     rmul_with_projection,
     mul_with_projection,
