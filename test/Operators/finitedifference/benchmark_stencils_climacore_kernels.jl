@@ -169,11 +169,6 @@ Yₜ.c.uₕ -= ᶜinterp(ᶠω¹² × ᶠu³) + (ᶜf + ᶜω³) × (project(Con
 # Composing with non-stencil operations
  - Example: `Geometry.project(Geometry.Contravariant12Axis(), ᶠinterp(ᶜuvw))`
 
-# Add tests for Operator2Stencil's
- - how to add Operator2Stencil tests?
- - can we leverage the existing tests?
- - Example: `ᶜdivᵥ_stencil(ᶠinterp(ᶜρ) * one(ᶠw))`
-
 # Full "core" operator list (not including composed):
 
 ```
