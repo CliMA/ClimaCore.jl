@@ -1,4 +1,5 @@
 import LinearAlgebra: I
+import ClimaCore.RecursiveApply: rzero
 import ClimaCore.DataLayouts: replace_basetype
 import ClimaCore.MatrixFields: @name, is_subset_that_covers_set
 
@@ -11,8 +12,9 @@ Base.propertynames(::Foo) = (:value,)
 Base.getproperty(foo::Foo, s::Symbol) =
     s == :value ? getfield(foo, :_value) : error("Invalid property name")
 Base.convert(::Type{Foo{T}}, foo::Foo) where {T} = Foo{T}(foo.value)
+Base.zero(::Type{Foo{T}}) where {T} = Foo(zero(T))
 
-const x = (; foo = Foo(0), a = (; b = 1, c = ((; d = 2), (;), ((), nothing))))
+const x = (; foo = Foo(0), a = (; b = 1, c = ((; d = 2), (;), (3, ()))))
 
 @testset "FieldName Unit Tests" begin
     @test_all @name() == MatrixFields.FieldName()
@@ -618,7 +620,7 @@ end
     end
 
     @testset "Other FieldNameSet Operations" begin
-        # With one exception, none of the following operations require a
+        # With three exceptions, none of the following operations require a
         # FieldNameTree.
 
         @test_all MatrixFields.corresponding_matrix_keys(drop_tree(v_set1)) ==
@@ -641,6 +643,8 @@ end
 
         @test_all MatrixFields.matrix_row_keys(drop_tree(m_set1)) ==
                   vector_keys_no_tree(@name(foo), @name(a.b))
+        @test_all MatrixFields.matrix_col_keys(drop_tree(m_set1)) ==
+                  vector_keys_no_tree(@name(foo), @name(a.c))
 
         @test_all MatrixFields.matrix_row_keys(m_set4) == vector_keys_no_tree(
             @name(foo.value),
@@ -649,7 +653,17 @@ end
             @name(a.c.:(2)),
             @name(a.c.:(3))
         )
+        @test_all MatrixFields.matrix_col_keys(m_set4) == vector_keys_no_tree(
+            @name(foo.value),
+            @name(a.c.:(1)),
+            @name(a.c.:(2)),
+            @name(a.c.:(3))
+        )
+
         @test_throws "FieldNameTree" MatrixFields.matrix_row_keys(
+            drop_tree(m_set4),
+        )
+        @test_throws "FieldNameTree" MatrixFields.matrix_col_keys(
             drop_tree(m_set4),
         )
 
@@ -667,126 +681,231 @@ end
             (@name(a.c.:(1)), @name(a.c.:(1))),
             (@name(a.c.:(3)), @name(a.c.:(3))),
         )
+
+        @test_all MatrixFields.matrix_inferred_diagonal_keys(
+            drop_tree(m_set1),
+        ) == matrix_keys_no_tree(
+            (@name(foo), @name(foo)),
+            (@name(a.b), @name(a.b)),
+            (@name(a.c), @name(a.c)),
+        )
+
+        @test_all MatrixFields.matrix_inferred_diagonal_keys(m_set4) ==
+                  matrix_keys_no_tree(
+            (@name(foo.value), @name(foo.value)),
+            (@name(a.b), @name(a.b)),
+            (@name(a.c.:(1)), @name(a.c.:(1))),
+            (@name(a.c.:(2)), @name(a.c.:(2))),
+            (@name(a.c.:(3)), @name(a.c.:(3))),
+        )
+
+        @test_throws "FieldNameTree" MatrixFields.matrix_inferred_diagonal_keys(
+            drop_tree(m_set4),
+        )
     end
 end
 
 @testset "FieldNameDict Unit Tests" begin
     FT = Float64
-    center_space, face_space = test_spaces(FT)
-
     x_FT = convert(replace_basetype(Int, FT, typeof(x)), x)
+
+    C3 = Geometry.Covariant3Vector{FT}
+    C12 = Geometry.Covariant12Vector{FT}
+    CT3 = Geometry.Contravariant3Vector{FT}
+    CT12 = Geometry.Contravariant12Vector{FT}
+    C12XC3 = typeof(zero(C12) * zero(C3)')
+    CT3XC3 = typeof(zero(CT3) * zero(C3)')
+    C12XCT12 = typeof(zero(C12) * zero(CT12)')
+    CT3XCT12 = typeof(zero(CT3) * zero(CT12)')
+    x_C12 = rzero(replace_basetype(Int, C12, typeof(x)))
+    x_CT3 = rzero(replace_basetype(Int, CT3, typeof(x)))
+    x_C12XC3 = rzero(replace_basetype(Int, C12XC3, typeof(x)))
+    x_CT3XCT12 = rzero(replace_basetype(Int, CT3XCT12, typeof(x)))
+    I_CT3XC3 = DiagonalMatrixRow(Geometry.AxisTensor(axes(CT3XC3), I))
+    I_C12XCT12 = DiagonalMatrixRow(Geometry.AxisTensor(axes(C12XCT12), I))
+
+    center_space, face_space = test_spaces(FT)
 
     seed!(1) # ensures reproducibility
 
-    vector = Fields.FieldVector(;
+    vector_of_scalars = Fields.FieldVector(;
         foo = random_field(typeof(x_FT.foo), center_space),
         a = random_field(typeof(x_FT.a), face_space),
     )
 
-    matrix = MatrixFields.replace_name_tree(
-        MatrixFields.FieldMatrix(
-            (@name(foo), @name(foo)) => -I,
-            (@name(a), @name(a)) =>
-                random_field(DiagonalMatrixRow{FT}, face_space),
-            (@name(foo), @name(a.b)) => random_field(
-                BidiagonalMatrixRow{typeof(x_FT.foo)},
-                center_space,
-            ),
-            (@name(a), @name(foo._value)) => random_field(
-                QuaddiagonalMatrixRow{typeof(x_FT.a)},
-                face_space,
-            ),
+    matrix_of_scalars = MatrixFields.FieldMatrix(
+        (@name(foo), @name(foo)) =>
+            random_field(DiagonalMatrixRow{FT}, center_space),
+        (@name(foo), @name(a.b)) => random_field(
+            BidiagonalMatrixRow{typeof(x_FT.foo)},
+            center_space,
         ),
-        MatrixFields.FieldNameTree(vector),
-    ) # Add a FieldNameTree in order to fully test the behavior of getindex.
-
-    @test_all MatrixFields.field_vector_view(vector) ==
-              MatrixFields.FieldVectorView(
-        @name(foo) => vector.foo,
-        @name(a) => vector.a,
+        (@name(a), @name(foo._value)) =>
+            random_field(QuaddiagonalMatrixRow{typeof(x_FT.a)}, face_space),
+        (@name(a), @name(a)) => -I,
     )
 
-    vector_view = MatrixFields.field_vector_view(vector)
-
-    # Some of the `.*`s in the following RegEx strings are needed to account for
-    # module qualifiers that may or may not get printed, depending on how these
-    # tests are run.
-
-    @test startswith(
-        string(vector_view),
-        r"""
-        .*FieldVectorView with 2 entries:
-          @name\(foo\) => .*-valued Field:
-            _value: \[.*\]
-          @name\(a\) => .*-valued Field:
-        """,
+    vector_of_vectors = Fields.FieldVector(;
+        foo = random_field(typeof(x_C12.foo), center_space),
+        a = random_field(typeof(x_CT3.a), face_space),
     )
 
-    @test startswith(
-        string(matrix),
-        r"""
-        .*FieldMatrix with 4 entries:
-          \(@name\(foo\), @name\(foo\)\) => -I
-          \(@name\(a\), @name\(a\)\) => .*DiagonalMatrixRow{.*}-valued Field:
-            entries: \
-              1: \[.*\]
-          \(@name\(foo\), @name\(a.b\)\) => .*BidiagonalMatrixRow{.*}-valued Field:
-            entries: \
-              1: \
-                _value: \[.*\]
-              2: \
-                _value: \[.*\]
-          \(@name\(a\), @name\(foo._value\)\) => .*QuaddiagonalMatrixRow{.*}-valued Field:
-        """,
-    ) broken = Sys.iswindows()
-
-    @test_all vector_view[@name(foo)] == vector.foo
-    @test_throws KeyError vector_view[@name(invalid_name)]
-    @test_throws KeyError vector_view[@name(foo.invalid_name)]
-
-    @test_all matrix[@name(foo), @name(foo)] == -I
-    @test_throws KeyError matrix[@name(invalid_name), @name(foo)]
-    @test_throws KeyError matrix[@name(foo.invalid_name), @name(foo)]
-
-    @test_all vector_view[@name(foo._value)] == vector.foo._value
-    @test_all vector_view[@name(a.c)] == vector.a.c
-
-    @test_all matrix[@name(foo._value), @name(foo._value)] ==
-              matrix[@name(foo), @name(foo)]
-    @test_throws "get_internal_entry" matrix[@name(foo), @name(foo._value)]
-    @test_throws "get_internal_entry" matrix[@name(foo._value), @name(foo)]
-
-    @test_all matrix[@name(a.c), @name(a.c)] == matrix[@name(a), @name(a)]
-    @test_throws "get_internal_entry" matrix[@name(a), @name(a.c)]
-    @test_throws "get_internal_entry" matrix[@name(a.c), @name(a)]
-
-    @test_all matrix[@name(foo._value), @name(a.b)] isa Base.AbstractBroadcasted
-    @test Base.materialize(matrix[@name(foo._value), @name(a.b)]) ==
-          map(row -> map(foo -> foo.value, row), matrix[@name(foo), @name(a.b)])
-
-    @test_all matrix[@name(a.c), @name(foo._value)] isa Base.AbstractBroadcasted
-    @test Base.materialize(matrix[@name(a.c), @name(foo._value)]) ==
-          map(row -> map(a -> a.c, row), matrix[@name(a), @name(foo._value)])
-
-    vector_keys = MatrixFields.FieldVectorKeys((@name(foo), @name(a.c)))
-    @test_all vector_view[vector_keys] == MatrixFields.FieldVectorView(
-        @name(foo) => vector_view[@name(foo)],
-        @name(a.c) => vector_view[@name(a.c)],
+    matrix_of_tensors = MatrixFields.FieldMatrix(
+        (@name(foo), @name(foo)) =>
+            random_field(DiagonalMatrixRow{C12XCT12}, center_space),
+        (@name(foo), @name(a.b)) => random_field(
+            BidiagonalMatrixRow{typeof(x_C12XC3.foo)},
+            center_space,
+        ),
+        (@name(a), @name(foo._value)) => random_field(
+            QuaddiagonalMatrixRow{typeof(x_CT3XCT12.a)},
+            face_space,
+        ),
+        (@name(a), @name(a)) => -I_CT3XC3,
     )
 
-    matrix_keys = MatrixFields.FieldMatrixKeys((
-        (@name(foo), @name(foo)),
-        (@name(a.c), @name(a.c)),
-    ),)
-    @test_all matrix[matrix_keys] == MatrixFields.FieldMatrix(
-        (@name(foo), @name(foo)) => matrix[@name(foo), @name(foo)],
-        (@name(a.c), @name(a.c)) => matrix[@name(a.c), @name(a.c)],
+    for (vector, matrix, I_foo, I_a) in (
+        (vector_of_scalars, matrix_of_scalars, I, I),
+        (vector_of_vectors, matrix_of_tensors, I_C12XCT12, I_CT3XC3),
     )
+        @test_all MatrixFields.field_vector_view(vector) ==
+                  MatrixFields.FieldVectorView(
+            @name(foo) => vector.foo,
+            @name(a) => vector.a,
+        )
 
-    @test_all one(matrix) == MatrixFields.FieldMatrix(
-        (@name(foo), @name(foo)) => I,
-        (@name(a), @name(a)) => I,
-    )
+        vector_view = MatrixFields.field_vector_view(vector)
+
+        matrix_with_tree = MatrixFields.replace_name_tree(
+            matrix,
+            MatrixFields.FieldNameTree(vector),
+        )
+
+        # Some of the `.*`s in the following RegEx strings are needed to account
+        # for module qualifiers that may or may not get printed, depending on
+        # how these tests are run.
+
+        @test startswith(
+            string(vector_view),
+            r"""
+            .*FieldVectorView with 2 entries:
+              @name\(foo\) => .*-valued Field:
+                _value: (.|\n)*
+              @name\(a\) => .*-valued Field:
+                (.|\n)*""",
+        )
+
+        @test startswith(
+            string(matrix),
+            r"""
+            .*FieldMatrix with 4 entries:
+              \(@name\(foo\), @name\(foo\)\) => .*DiagonalMatrixRow{.*}-valued Field:
+                entries: \
+                  1: (.|\n)*
+              \(@name\(foo\), @name\(a.b\)\) => .*BidiagonalMatrixRow{.*}-valued Field:
+                entries: \
+                  1: \
+                    _value: (.|\n)*
+                  2: \
+                    _value: (.|\n)*
+              \(@name\(a\), @name\(foo._value\)\) => .*QuaddiagonalMatrixRow{.*}-valued Field:
+                entries: (.|\n)*
+              \(@name\(a\), @name\(a\)\) => .*I""",
+        ) broken = Sys.iswindows()
+
+        @test_throws KeyError vector_view[@name(invalid_name)]
+        @test_throws KeyError vector_view[@name(a.invalid_name)]
+
+        @test_all vector_view[@name(a)] == vector.a
+        @test_all vector_view[@name(a.c)] == vector.a.c
+        @test_all vector_view[@name(foo._value)] == vector.foo._value
+
+        @test_throws KeyError matrix[@name(invalid_name), @name(invalid_name)]
+        @test_throws KeyError matrix[@name(invalid_name), @name(a)]
+        @test_throws KeyError matrix[@name(a), @name(invalid_name)]
+        @test_throws KeyError matrix[@name(a), @name(a.invalid_name)]
+        @test_throws KeyError matrix[@name(a.invalid_name), @name(a)]
+
+        @test_throws KeyError matrix[@name(a), @name(a.c)]
+        @test_throws KeyError matrix[@name(a.c), @name(a)]
+        @test_throws KeyError matrix[@name(foo), @name(foo._value)]
+        @test_throws KeyError matrix[@name(foo._value), @name(foo)]
+
+        @test_all matrix[@name(a), @name(a)] == -I_a
+        @test_all matrix[@name(a.c), @name(a.c)] == -I_a
+        @test_all matrix[@name(a.c), @name(a.b)] == zero(I_a)
+        @test_all matrix[@name(foo._value), @name(foo._value)] ==
+                  matrix[@name(foo), @name(foo)]
+
+        @test_all matrix[@name(foo._value), @name(a.b)] isa
+                  Base.AbstractBroadcasted
+        @test Base.materialize(matrix[@name(foo._value), @name(a.b)]) == map(
+            row -> map(foo -> foo.value, row),
+            matrix[@name(foo), @name(a.b)],
+        )
+
+        @test_all matrix[@name(a.c), @name(foo._value)] isa
+                  Base.AbstractBroadcasted
+        @test Base.materialize(matrix[@name(a.c), @name(foo._value)]) == map(
+            row -> map(a -> a.c, row),
+            matrix[@name(a), @name(foo._value)],
+        )
+
+        vector_keys = MatrixFields.FieldVectorKeys((@name(foo), @name(a.c)))
+        @test_all vector_view[vector_keys] == MatrixFields.FieldVectorView(
+            @name(foo) => vector_view[@name(foo)],
+            @name(a.c) => vector_view[@name(a.c)],
+        )
+
+        matrix_keys1 = MatrixFields.FieldMatrixKeys((
+            (@name(foo), @name(foo)),
+            (@name(foo), @name(a.b)),
+        ),)
+        @test_all matrix[matrix_keys1] == MatrixFields.FieldMatrix(
+            (@name(foo), @name(foo)) => matrix[@name(foo), @name(foo)],
+            (@name(foo), @name(a.b)) => matrix[@name(foo), @name(a.b)],
+        )
+
+        matrix_keys2 = MatrixFields.FieldMatrixKeys((
+            (@name(foo), @name(foo)),
+            (@name(a.c), @name(a.c)), # child key of (@name(a), @name(a))
+        ),)
+        @test_throws "FieldNameTree" matrix[matrix_keys2]
+        @test_all matrix_with_tree[matrix_keys2] == MatrixFields.FieldMatrix(
+            (@name(foo), @name(foo)) => matrix[@name(foo), @name(foo)],
+            (@name(a.c), @name(a.c)) => matrix[@name(a.c), @name(a.c)],
+        )
+
+        partial_identity_matrix1 = MatrixFields.FieldMatrix(
+            (@name(foo), @name(foo)) => I_foo,
+            (@name(a.b), @name(a.b)) => I, # default for inferred diagonal key
+        )
+        @test_all one(matrix[matrix_keys1]) == partial_identity_matrix1
+
+        partial_identity_matrix2 = MatrixFields.FieldMatrix(
+            (@name(foo), @name(foo)) => I_foo,
+            (@name(a.c), @name(a.c)) => I_a,
+        )
+        @test_all one(matrix_with_tree[matrix_keys2]) ==
+                  partial_identity_matrix2
+
+        identity_matrix1 = MatrixFields.FieldMatrix(
+            (@name(foo), @name(foo)) => I_foo,
+            (@name(a), @name(a)) => I_a,
+        )
+        @test_throws "FieldNameTree" one(matrix)
+        @test_all one(matrix_with_tree) == identity_matrix1
+
+        identity_matrix2 = MatrixFields.FieldMatrix(
+            (@name(foo._value), @name(foo._value)) => I_foo,
+            (@name(a.b), @name(a.b)) => I_a,
+            (@name(a.c.:(1).d), @name(a.c.:(1).d)) => I_a,
+            (@name(a.c.:(3).:(1)), @name(a.c.:(3).:(1))) => I_a,
+        )
+        @test_all MatrixFields.identity_field_matrix(vector) == identity_matrix2
+
+        # TODO: Modify == so that identity_matrix1 == identity_matrix2 is true.
+    end
 
     # FieldNameDict broadcast operations are tested in field_matrix_solvers.jl.
 end

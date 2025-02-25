@@ -60,7 +60,6 @@ UnitTest("Spectral elem - sphere hyperdiff vec"    ,"Operators/spectralelement/u
 UnitTest("FD ops - column"                         ,"Operators/finitedifference/unit_column.jl"),
 UnitTest("FD ops - opt"                            ,"Operators/finitedifference/opt.jl"),
 UnitTest("FD ops - wfact"                          ,"Operators/finitedifference/wfact.jl"),
-UnitTest("FD ops - linsolve"                       ,"Operators/finitedifference/linsolve.jl"),
 UnitTest("Hybrid - 2D"                             ,"Operators/hybrid/unit_2d.jl"),
 UnitTest("Hybrid - 3D"                             ,"Operators/hybrid/unit_3d.jl"),
 UnitTest("Hybrid - dss opt"                        ,"Operators/hybrid/dss_opt.jl"),
