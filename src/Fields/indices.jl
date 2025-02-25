@@ -107,25 +107,17 @@ bycolumn(
 
 """
     ncolumns(::Field)
-    ncolumns(::Space)
 
-Number of columns in a given space.
+Number of columns in the field's space.
 """
 ncolumns(field::Field) = ncolumns(axes(field))
 
-ncolumns(space::Spaces.ExtrudedFiniteDifferenceSpace) =
-    ncolumns(Spaces.horizontal_space(space))
+"""
+    nlevels(::Field)
 
-function ncolumns(space::Spaces.SpectralElementSpace1D)
-    Nh = Topologies.nlocalelems(space)
-    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
-    return Nh * Nq
-end
-function ncolumns(space::Spaces.SpectralElementSpace2D)
-    Nh = Topologies.nlocalelems(space)
-    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
-    return Nh * Nq * Nq
-end
+Number of levels in the field's space.
+"""
+nlevels(field::Field) = nlevels(axes(field))
 
 # potential TODO:
 # - define a ColumnIndices type, make it work with https://github.com/JuliaFolds/FLoops.jl
