@@ -160,10 +160,11 @@ get_subtree_at_name(name, tree) =
     if name == tree.name
         tree
     else
-        subtree = unrolled_findonly(tree.subtrees) do subtree
+        subtrees_at_name = unrolled_filter(tree.subtrees) do subtree
             is_valid_name(name, subtree)
         end
-        get_subtree_at_name(name, subtree)
+        @assert length(subtrees_at_name) == 1
+        get_subtree_at_name(name, subtrees_at_name[1])
     end
 
 ################################################################################

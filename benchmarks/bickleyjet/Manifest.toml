@@ -232,10 +232,10 @@ version = "0.6.6"
     MPI = "da04e1cc-30fd-572f-bb4f-1f8673147195"
 
 [[deps.ClimaCore]]
-deps = ["Adapt", "BandedMatrices", "BlockArrays", "ClimaComms", "CubedSphere", "DataStructures", "ForwardDiff", "GaussQuadrature", "GilbertCurves", "HDF5", "InteractiveUtils", "IntervalSets", "KrylovKit", "LinearAlgebra", "MultiBroadcastFusion", "NVTX", "PkgVersion", "RecursiveArrayTools", "RootSolvers", "SparseArrays", "StaticArrays", "Statistics", "Unrolled"]
+deps = ["Adapt", "BandedMatrices", "BlockArrays", "ClimaComms", "CubedSphere", "DataStructures", "ForwardDiff", "GaussQuadrature", "GilbertCurves", "HDF5", "InteractiveUtils", "IntervalSets", "KrylovKit", "LinearAlgebra", "MultiBroadcastFusion", "NVTX", "PkgVersion", "RecursiveArrayTools", "RootSolvers", "SparseArrays", "StaticArrays", "Statistics", "UnrolledUtilities"]
 path = "../.."
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
-version = "0.14.24"
+version = "0.14.26"
 
     [deps.ClimaCore.extensions]
     ClimaCoreCUDAExt = "CUDA"
@@ -1490,11 +1490,14 @@ git-tree-sha1 = "975c354fcd5f7e1ddcc1f1a23e6e091d99e99bc8"
 uuid = "45397f5d-5981-4c77-b2b3-fc36d6e9b728"
 version = "1.6.4"
 
-[[deps.Unrolled]]
-deps = ["MacroTools"]
-git-tree-sha1 = "6cc9d682755680e0f0be87c56392b7651efc2c7b"
-uuid = "9602ed7d-8fef-5bc8-8597-8f21381861e8"
-version = "0.1.5"
+[[deps.UnrolledUtilities]]
+git-tree-sha1 = "5caf11dfadeee25daafa7caabb3f252a977ffe72"
+uuid = "0fe1646c-419e-43be-ac14-22321958931b"
+version = "0.1.6"
+weakdeps = ["StaticArrays"]
+
+    [deps.UnrolledUtilities.extensions]
+    UnrolledUtilitiesStaticArraysExt = "StaticArrays"
 
 [[deps.UnsafeAtomics]]
 git-tree-sha1 = "b13c4edda90890e5b04ba24e20a310fbe6f249ff"

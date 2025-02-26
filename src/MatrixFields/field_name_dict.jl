@@ -137,7 +137,7 @@ Base.:(==)(dict1::FieldNameDict, dict2::FieldNameDict) =
 function Base.getindex(dict::FieldNameDict, key)
     key in keys(dict) || throw(KeyError(key))
     key′, entry′ =
-        unrolled_findonly(pair -> is_child_value(key, pair[1]), pairs(dict))
+        unrolled_filter(pair -> is_child_value(key, pair[1]), pairs(dict))[1]
     internal_key = get_internal_key(key, key′)
     return get_internal_entry(entry′, internal_key, KeyError(key))
 end
