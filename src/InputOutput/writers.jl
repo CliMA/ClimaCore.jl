@@ -504,7 +504,11 @@ function write!(
         dataspace(size(lg_array)),
     )
     local_geometry_dataset[:] = lg_array
-    write_attribute(local_geometry_dataset, "value_type", string(lg_type))
+    write_attribute(
+        local_geometry_dataset,
+        "local_geometry_type",
+        string(lg_type),
+    )
 end
 
 """
