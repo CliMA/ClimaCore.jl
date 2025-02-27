@@ -4,6 +4,8 @@ ClimaCore.jl Release Notes
 main
 -------
 
+ - Improved `show` for spaces, and added `show` for grids. PR [2202](https://github.com/CliMA/ClimaCore.jl/pull/2202).
+
 v0.14.26
 -------
 

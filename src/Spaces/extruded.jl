@@ -169,14 +169,32 @@ function Base.show(io::IO, space::ExtrudedFiniteDifferenceSpace)
         ":",
     )
     print(iio, " "^(indent + 2), "context: ")
-    hspace = Spaces.horizontal_space(space)
-    Topologies.print_context(iio, Spaces.topology(hspace).context)
-    println(iio)
-    println(iio, " "^(indent + 2), "horizontal:")
-    println(iio, " "^(indent + 4), "mesh: ", Spaces.topology(hspace).mesh)
-    println(iio, " "^(indent + 4), "quadrature: ", quadrature_style(hspace))
-    println(iio, " "^(indent + 2), "vertical:")
-    print(iio, " "^(indent + 4), "mesh: ", vertical_topology(space).mesh)
+    Topologies.print_context(iio, ClimaComms.context(space))
+    if has_horizontal(space)
+        hspace = Spaces.horizontal_space(space)
+        hmesh = Spaces.topology(hspace).mesh
+        Topologies.print_context(iio, Spaces.topology(hspace).context)
+        println(iio)
+        println(iio, " "^(indent + 2), "horizontal:")
+        println(iio, " "^(indent + 4), "mesh: ", hmesh)
+        println(
+            iio,
+            " "^(indent + 4),
+            "node_horizontal_length_scale: ",
+            Spaces.node_horizontal_length_scale(hspace),
+        )
+        println(
+            iio,
+            " "^(indent + 4),
+            "element_horizontal_length_scale: ",
+            Meshes.element_horizontal_length_scale(hmesh),
+        )
+        println(iio, " "^(indent + 4), "quadrature: ", quadrature_style(hspace))
+    end
+    if has_vertical(space)
+        println(iio, " "^(indent + 2), "vertical:")
+        print(iio, " "^(indent + 4), "mesh: ", vertical_topology(space).mesh)
+    end
 end
 
 quadrature_style(space::ExtrudedFiniteDifferenceSpace) =
@@ -190,16 +208,10 @@ horizontal_space(full_space::ExtrudedFiniteDifferenceSpace) =
 vertical_topology(space::ExtrudedFiniteDifferenceSpace) =
     vertical_topology(grid(space))
 
-
-
 function column(space::ExtrudedFiniteDifferenceSpace, colidx::Grids.ColumnIndex)
     column_grid = column(grid(space), colidx)
     FiniteDifferenceSpace(column_grid, space.staggering)
 end
-
-
-
-
 
 Base.@propagate_inbounds function slab(
     space::ExtrudedFiniteDifferenceSpace,
