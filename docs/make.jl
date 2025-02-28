@@ -86,6 +86,7 @@ withenv("GKSwstype" => "nul") do
                 tutorial in TUTORIALS
             ],
             "Examples" => "examples.md",
+            "Masks" => "masks.md",
             "Debugging" => "debugging.md",
             "Libraries" => [
                 joinpath("lib", "ClimaCorePlots.md"),
