@@ -1,23 +1,55 @@
 # Masks
 
+## Motivation
+
 ClimaCore spaces, `SpectralElement2DSpace`s in particular, support masks, where
 users can set horizontal nodal locations where operations are skipped.
 
-Users can enable the mask by using the `enable_mask = true` keyword argument in
-any space constructor that results in a `SpectralElement2DSpace`.
+This is especially helpful for the land model, where they may have degrees of
+freedom over the ocean, but do not want to evaluate expressions in regions where
+data is missing.
 
-Next, users can set the mask with one of two ways-- a function, or field
-assignment:
+Masks in ClimaCore offer a solution to this by, ahead of time prescribing
+regions to skip. This helps both with the ergonomics, as well as performance.
+
+## User interface
+
+There are two user-facing parts for ClimaCore masks:
+
+ - set the `enable_mask = true` keyword in the space constructor (when available),
+   which is currently any constructor that returns/contains a `SpectralElement2DSpace`.
+ - use `set_mask!` to set where the mask is `true` (where compute should occur)
+   and `false` (where compute should be skipped)
+
+Here is an example
 
 ```julia
-Spaces.set_mask!(space) do coords
+using ClimaComms
+ClimaComms.@import_required_backends
+import ClimaCore: Spaces, Fields
+using ClimaCore.CommonSpaces
+using Test
+
+FT = Float64
+ᶜspace = ExtrudedCubedSphereSpace(FT;
+    z_elem = 10,
+    z_min = 0,
+    z_max = 1,
+    radius = 10,
+    h_elem = 10,
+    n_quad_points = 4,
+    staggering = CellCenter(),
+    enable_mask = true,
+)
+
+# How to set the mask
+Spaces.set_mask!(ᶜspace) do coords
     coords.lat > 0.5
 end
-```
-Or
-```julia
-mask # a ClimaCore Field
-Spaces.set_mask!(space, mask)
+# Or
+mask = Fields.Field(FT, ᶜspace)
+mask .= map(cf -> cf.lat > 0.5 ? 0.0 : 1.0, Fields.coordinate_field(mask))
+Spaces.set_mask!(ᶜspace, mask)
 ```
 
 Finally, operations over fields will be skipped where `mask == 0`, and applied
@@ -26,6 +58,8 @@ where `mask == 1`:
 ```
 @. f = 1 # only applied where the mask is equal to 1
 ```
+
+## Example script
 
 Here is a more complex script where the mask is used:
 

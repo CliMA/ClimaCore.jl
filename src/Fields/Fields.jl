@@ -637,7 +637,7 @@ function field2array(field::Field)
     return DataLayouts.data2array(field_values(field))
 end
 
-set_mask!(space::Spaces.AbstractSpace, ::Field) =
-    set_mask!(space, field_values(field))
+set_mask!(space::Spaces.AbstractSpace, field::Field) =
+    set_mask!(Spaces.horizontal_space(space), field_values(field))
 
 end # module

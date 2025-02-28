@@ -84,8 +84,14 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     )
     ᶠspace = Spaces.face_space(ᶜspace)
     ᶠcoords = Fields.coordinate_field(ᶠspace)
+    hᶠcoords = Fields.coordinate_field(Spaces.horizontal_space(ᶠspace))
     mask = Spaces.get_mask(ᶜspace)
     @test mask isa DataLayouts.IJHMask
+    is_active = similar(mask.is_active)
+    @show typeof(is_active)
+    # is_active .= hᶠcoords.lat .> 0.5
+    # @show is_active
+    Spaces.set_mask!(ᶜspace, is_active)
     Spaces.set_mask!(ᶜspace) do coords
         coords.lat > 0.5
     end
@@ -121,8 +127,14 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     ᶠcoords_no_mask = Fields.coordinate_field(ᶠspace_no_mask)
     c_no_mask = Fields.Field(FT, ᶜspace_no_mask)
     ᶠf_no_mask = Fields.Field(FT, ᶠspace_no_mask)
-    @. c_no_mask = div(Geometry.WVector(foo(ᶠf_no_mask, ᶠcoords_no_mask)))
-    @test count(isnan, parent(c_no_mask)) == 49600
+    if ClimaComms.device(ᶜspace_no_mask) isa ClimaComms.CUDADevice
+        @. c_no_mask = div(Geometry.WVector(foo(ᶠf_no_mask, ᶠcoords_no_mask)))
+        @test count(isnan, parent(c_no_mask)) == 49600
+    else
+        @test_throws DomainError begin
+            @. c_no_mask = div(Geometry.WVector(foo(ᶠf_no_mask, ᶠcoords_no_mask)))
+        end
+    end
 
 end
 
