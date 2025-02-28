@@ -116,8 +116,6 @@ function issubspace(
     return grid(hspace) === grid(level_space).full_grid.horizontal_grid
 end
 
-set_mask!(fn, space::AbstractSpace) = set_mask!(fn, grid(space))
-
 """
     SpectralElementSpaceSlab <: AbstractSpace
 

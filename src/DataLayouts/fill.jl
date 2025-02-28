@@ -18,7 +18,7 @@ function Base.fill!(data::Union{IJFH, IJHF}, val, ::ToCPU, mask = NoMask())
     (Ni, Nj, _, _, Nh) = size(data)
     @inbounds for h in 1:Nh, i in 1:Ni, j in 1:Nj
         idx = CartesianIndex(i, j, 1, 1, h)
-        compute(mask, idx) || continue
+        should_compute(mask, idx) || continue
         data[idx] = val
     end
     return data
@@ -27,7 +27,7 @@ function Base.fill!(data::Union{IFH, IHF}, val, ::ToCPU, mask = NoMask())
     (Ni, _, _, _, Nh) = size(data)
     @inbounds for h in 1:Nh, i in 1:Ni
         idx = CartesianIndex(i, 1, 1, 1, h)
-        compute(mask, idx) || continue
+        should_compute(mask, idx) || continue
         data[idx] = val
     end
     return data
@@ -45,7 +45,7 @@ function Base.fill!(
 ) where {S, Nij}
     @inbounds for j in 1:Nij, i in 1:Nij
         idx = CartesianIndex(i, j, 1, 1, 1)
-        compute(mask, idx) || continue
+        should_compute(mask, idx) || continue
         data[idx] = val
     end
     return data
@@ -59,7 +59,7 @@ function Base.fill!(
 ) where {S, Ni}
     @inbounds for i in 1:Ni
         idx = CartesianIndex(i, 1, 1, 1, 1)
-        compute(mask, idx) || continue
+        should_compute(mask, idx) || continue
         data[idx] = val
     end
     return data
@@ -78,7 +78,7 @@ function Base.fill!(data::Union{VIJFH, VIJHF}, val, ::ToCPU, mask = NoMask())
     (Ni, Nj, _, Nv, Nh) = size(data)
     @inbounds for h in 1:Nh, i in 1:Ni, j in 1:Nj, v in 1:Nv
         idx = CartesianIndex(i, j, 1, v, h)
-        compute(mask, idx) || continue
+        should_compute(mask, idx) || continue
         data[idx] = val
     end
     return data
@@ -87,7 +87,7 @@ function Base.fill!(data::Union{VIFH, VIHF}, val, ::ToCPU, mask = NoMask())
     (Ni, _, _, Nv, Nh) = size(data)
     @inbounds for h in 1:Nh, i in 1:Ni, v in 1:Nv
         idx = CartesianIndex(i, 1, 1, v, h)
-        compute(mask, idx) || continue
+        should_compute(mask, idx) || continue
         data[idx] = val
     end
     return data

@@ -301,13 +301,8 @@ function _SpectralElementGrid2D(
     LG = Geometry.LocalGeometry{AIdx, CoordType2D, FT, SMatrix{2, 2, FT, 4}}
 
     local_geometry = horizontal_layout_type{LG, Nq}(Array{FT}, Nh)
-    bool_mask = if enable_mask
-        _bool_mask = DataLayouts.replace_basetype(
-            horizontal_layout_type{FT, Nq}(Array{FT}, Nh),
-            Bool,
-        )
-        _bool_mask .= 1
-        DataLayouts.rebuild(_bool_mask, DA)
+    mask = if enable_mask
+        DataLayouts.ColumnMask(FT, horizontal_layout_type, DA, Val(Nq), Val(Nh))
     else
         DataLayouts.NoMask()
     end
@@ -502,7 +497,7 @@ function _SpectralElementGrid2D(
         compute_dss_weights(device_local_geometry, topology, quadrature_style),
         internal_surface_geometry,
         boundary_surface_geometries,
-        bool_mask,
+        mask,
         enable_bubble,
         autodiff_metric,
     )
@@ -512,13 +507,22 @@ get_mask(grid::SpectralElementGrid2D) = grid.mask
 
 """
     set_mask!(fn, grid)
+    set_mask!(grid, ::DataLayouts.AbstractData)
 
 Set the mask using the function `fn`, which is called for all coordinates on the
 given grid.
 """
 function set_mask!(fn, grid::SpectralElementGrid2D)
     if !(grid.mask isa DataLayouts.NoMask)
-        @. grid.mask = fn(grid.local_geometry.coordinates)
+        @. grid.mask.is_active = fn(grid.local_geometry.coordinates)
+        DataLayouts.set_mask_maps!(grid.mask)
+    end
+    return nothing
+end
+function set_mask!(grid::SpectralElementGrid2D, data::DataLayouts.AbstractData)
+    if !(grid.mask isa DataLayouts.NoMask)
+        @. grid.mask.is_active = data
+        DataLayouts.set_mask_maps!(grid.mask)
     end
     return nothing
 end

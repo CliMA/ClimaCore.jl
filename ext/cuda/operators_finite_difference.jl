@@ -51,7 +51,12 @@ function copyto_stencil_kernel!(out, bc, space, bds, us, mask)
     @inbounds begin
         out_fv = Fields.field_values(out)
         I = universal_index(out_fv)
-        DataLayouts.compute(mask, I) || return nothing
+        # I = if mask isa NoMask
+        #     universal_index(out_fv)
+        # else
+        #     masked_universal_index(out_fv, mask)
+        # end
+        DataLayouts.should_compute(mask, I) || return nothing
         if is_valid_index(out_fv, I, us)
             (li, lw, rw, ri) = bds
             (i, j, _, v, h) = I.I

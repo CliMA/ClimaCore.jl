@@ -185,6 +185,7 @@ get_mask(space::SpectralElementSpaceSlab) = DataLayouts.NoMask()
 get_mask(space::ExtrudedFiniteDifferenceSpace) =
     get_mask(horizontal_space(space))
 
+<<<<<<< HEAD
 """
     has_vertical(::AbstractSpace)
 
@@ -205,5 +206,11 @@ has_horizontal(::AbstractSpace) = false
 has_horizontal(::ExtrudedFiniteDifferenceSpace) = true
 has_horizontal(::SpectralElementSpace1D) = true
 has_horizontal(::SpectralElementSpace2D) = true
+
+set_mask!(fn, space::AbstractSpace) = set_mask!(fn, grid(space))
+set_mask!(fn, space::ExtrudedFiniteDifferenceSpace) =
+    set_mask!(fn, grid(horizontal_space(space)))
+set_mask!(space::AbstractSpace, data::DataLayouts.AbstractData) =
+    set_mask!(grid(space), data)
 
 end # module

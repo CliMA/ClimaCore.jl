@@ -1,7 +1,7 @@
 function knl_fill!(dest, val, us, mask)
     I = universal_index(dest)
     if is_valid_index(dest, I, us)
-        DataLayouts.compute(mask, I) || return nothing
+        DataLayouts.should_compute(mask, I) || return nothing
         @inbounds dest[I] = val
     end
     return nothing

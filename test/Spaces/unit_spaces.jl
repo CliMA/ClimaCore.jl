@@ -21,6 +21,7 @@ import ClimaCore:
     DeviceSideContext,
     DeviceSideDevice
 
+using ClimaCore.CommonSpaces
 import ClimaCore.DataLayouts: IJFH, VF, slab_index
 
 on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
@@ -49,22 +50,40 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     htopology = Topologies.Topology2D(context, hmesh)
     # Test for no-mask case
     hspace = Spaces.SpectralElementSpace2D(htopology, quad; enable_mask = false)
-    @test hspace.grid.mask isa DataLayouts.NoMask
+    @test Spaces.get_mask(hspace) isa DataLayouts.NoMask
 
     # Tests with mask
     hspace = Spaces.SpectralElementSpace2D(htopology, quad; enable_mask = true)
-    @test hspace.grid.mask isa DataLayouts.IJFH
-    @test eltype(hspace.grid.mask) <: Bool
+    mask = Spaces.get_mask(hspace)
+    @test mask isa DataLayouts.IJHMask
     Spaces.set_mask!(hspace) do coords
         coords.x > 0.5
     end
-    @test count(parent(hspace.grid.mask)) == 2
-    @test length(parent(hspace.grid.mask)) == 4
+    @test count(parent(mask.is_active)) == 2
+    @test length(parent(mask.is_active)) == 4
 
     f = Fields.Field(FT, hspace)
     fill!(parent(f), 0)
     @. f = 1
     @test count(iszero, parent(f)) == 2
+
+    ᶜspace = ExtrudedCubedSphereSpace(;
+        z_elem = 10,
+        z_min = 0,
+        z_max = 1,
+        radius = 10,
+        h_elem = 10,
+        n_quad_points = 4,
+        staggering = CellCenter(),
+        enable_mask = true,
+    )
+    mask = Spaces.get_mask(ᶜspace)
+    @test mask isa DataLayouts.IJHMask
+    Spaces.set_mask!(ᶜspace) do coords
+        coords.lat > 0.5
+    end
+    @test count(parent(mask.is_active)) == 4640
+    @test length(parent(mask.is_active)) == 9600
 end
 
 @testset "1d domain space" begin

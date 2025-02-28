@@ -73,8 +73,9 @@ end
 ##### DataLayouts
 #####
 
-compute(::NoMask, idx) = true
-compute(mask, idx) = !iszero(mask[idx])
+should_compute(::NoMask, idx) = true
+should_compute(mask::DataLayouts.AbstractMask, idx) =
+    !iszero(mask.is_active[idx])
 
 function Base.copyto!(
     dest::DataF{S},
@@ -97,7 +98,7 @@ function Base.copyto!(
     (_, _, _, _, Nh) = size(dest)
     @inbounds for h in 1:Nh, j in 1:Nij, i in 1:Nij
         idx = CartesianIndex(i, j, 1, 1, h)
-        compute(mask, idx) || continue
+        should_compute(mask, idx) || continue
         dest[idx] = convert(S, bc[idx])
     end
     return dest
@@ -112,7 +113,7 @@ function Base.copyto!(
     (_, _, _, _, Nh) = size(dest)
     @inbounds for h in 1:Nh, i in 1:Ni
         idx = CartesianIndex(i, 1, 1, 1, h)
-        compute(mask, idx) || continue
+        should_compute(mask, idx) || continue
         dest[idx] = convert(S, bc[idx])
     end
     return dest
@@ -127,7 +128,7 @@ function Base.copyto!(
 ) where {S, Nij, A}
     @inbounds for j in 1:Nij, i in 1:Nij
         idx = CartesianIndex(i, j, 1, 1, 1)
-        compute(mask, idx) || continue
+        should_compute(mask, idx) || continue
         dest[idx] = convert(S, bc[idx])
     end
     return dest
@@ -141,7 +142,7 @@ function Base.copyto!(
 ) where {S, Ni, A}
     @inbounds for i in 1:Ni
         idx = CartesianIndex(i, 1, 1, 1, 1)
-        compute(mask, idx) || continue
+        should_compute(mask, idx) || continue
         dest[idx] = convert(S, bc[idx])
     end
     return dest
@@ -156,7 +157,7 @@ function Base.copyto!(
 ) where {S, Ni, A}
     @inbounds for i in 1:Ni
         idx = CartesianIndex(i, 1, 1, 1, 1)
-        compute(mask, idx) || continue
+        should_compute(mask, idx) || continue
         dest[idx] = convert(S, bc[idx])
     end
     return dest
@@ -171,7 +172,7 @@ function Base.copyto!(
 ) where {S, Nv, A}
     @inbounds for v in 1:Nv
         idx = CartesianIndex(1, 1, 1, v, 1)
-        compute(mask, idx) || continue
+        should_compute(mask, idx) || continue
         dest[idx] = convert(S, bc[idx])
     end
     return dest
@@ -187,7 +188,7 @@ function Base.copyto!(
     (_, _, _, _, Nh) = size(dest)
     @inbounds for h in 1:Nh, i in 1:Ni, v in 1:Nv
         idx = CartesianIndex(i, 1, 1, v, h)
-        compute(mask, idx) || continue
+        should_compute(mask, idx) || continue
         dest[idx] = convert(S, bc[idx])
     end
     return dest
@@ -206,7 +207,7 @@ function Base.copyto!(
     (_, _, _, _, Nh) = size(dest)
     @inbounds for h in 1:Nh, j in 1:Nij, i in 1:Nij, v in 1:Nv
         idx = CartesianIndex(i, j, 1, v, h)
-        compute(mask, idx) || continue
+        should_compute(mask, idx) || continue
         dest[idx] = convert(S, bc[idx])
     end
     return dest

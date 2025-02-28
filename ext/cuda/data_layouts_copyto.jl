@@ -3,7 +3,7 @@ DataLayouts.device_dispatch(x::CUDA.CuArray) = ToCUDA()
 function knl_copyto!(dest, src, us, mask)
     I = universal_index(dest)
     if is_valid_index(dest, I, us)
-        DataLayouts.compute(mask, I) || return nothing
+        DataLayouts.should_compute(mask, I) || return nothing
         @inbounds dest[I] = src[I]
     end
     return nothing

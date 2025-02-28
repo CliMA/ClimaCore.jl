@@ -102,6 +102,7 @@ import .Helpers.DefaultRectangleXYMesh
         horizontal_layout_type = DataLayouts.IJFH,
         z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
         enable_bubble::Bool = false
+        enable_mask::Bool = false
     )
 
 A convenience constructor, which builds an
@@ -125,6 +126,8 @@ A convenience constructor, which builds an
  - `horizontal_layout_type` the horizontal DataLayout type (defaults to `DataLayouts.IJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
  - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
  - `enable_bubble` enables the "bubble correction" for more accurate element areas when computing the spectral element space. See [`Grids.SpectralElementGrid2D`](@ref) for more information.
+ - `enable_mask` enables a horizontal mask, for skipping operations on specified
+                 columns via `set_mask!`.
 
 # Example usage
 
@@ -178,6 +181,7 @@ function ExtrudedCubedSphereGrid(
         stretch,
     ),
     enable_bubble::Bool = false,
+    enable_mask::Bool = false,
 ) where {FT}
     @assert horizontal_layout_type <: DataLayouts.AbstractData
     @assert ClimaComms.device(context) == device "The given device and context device do not match."
@@ -188,6 +192,7 @@ function ExtrudedCubedSphereGrid(
         quad;
         horizontal_layout_type,
         enable_bubble,
+        enable_mask,
     )
     z_topology = Topologies.IntervalTopology(
         ClimaComms.SingletonCommsContext(device),
@@ -214,6 +219,7 @@ end
         h_mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain{FT}(radius), h_elem),
         h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(context, h_mesh),
         horizontal_layout_type = DataLayouts.IJFH,
+        enable_mask = false,
     )
 
 A convenience constructor, which builds a
@@ -229,6 +235,8 @@ A convenience constructor, which builds a
  - `h_mesh` the horizontal mesh (defaults to `Meshes.EquiangularCubedSphere`)
  - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
  - `horizontal_layout_type` the horizontal DataLayout type (defaults to `DataLayouts.IJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
+ - `enable_mask` enables a horizontal mask, for skipping operations on specified
+                 columns via `set_mask!`.
 
 # Example usage
 
@@ -255,10 +263,16 @@ function CubedSphereGrid(
         h_mesh,
     ),
     horizontal_layout_type = DataLayouts.IJFH,
+    enable_mask::Bool = false,
 ) where {FT}
     @assert horizontal_layout_type <: DataLayouts.AbstractData
     @assert ClimaComms.device(context) == device "The given device and context device do not match."
-    return Grids.SpectralElementGrid2D(h_topology, quad; horizontal_layout_type)
+    return Grids.SpectralElementGrid2D(
+        h_topology,
+        quad;
+        horizontal_layout_type,
+        enable_mask,
+    )
 end
 
 """
@@ -340,6 +354,7 @@ end
         [h_topology::Topologies.AbstractDistributedTopology], # optional
         [z_mesh::Meshes.IntervalMesh], # optional
         enable_bubble::Bool = false,
+        enable_mask::Bool = false,
     )
 
 A convenience constructor, which builds a
@@ -369,6 +384,8 @@ A convenience constructor, which builds a
  - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
  - `enable_bubble` enables the "bubble correction" for more accurate element areas when computing the spectral element space. See [`Grids.SpectralElementGrid2D`](@ref) for more information.
  - `horizontal_layout_type` the horizontal DataLayout type (defaults to `DataLayouts.IJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
+ - `enable_mask` enables a horizontal mask, for skipping operations on specified
+                 columns via `set_mask!`.
 
 # Example usage
 
@@ -434,6 +451,7 @@ function Box3DGrid(
     ),
     enable_bubble::Bool = false,
     horizontal_layout_type = DataLayouts.IJFH,
+    enable_mask::Bool = false,
 ) where {FT}
     @assert horizontal_layout_type <: DataLayouts.AbstractData
     @assert ClimaComms.device(context) == device "The given device and context device do not match."
@@ -442,6 +460,7 @@ function Box3DGrid(
         quad;
         horizontal_layout_type,
         enable_bubble,
+        enable_mask,
     )
     z_topology = Topologies.IntervalTopology(
         ClimaComms.SingletonCommsContext(device),
@@ -585,6 +604,7 @@ end
         hypsography::Grids.HypsographyAdaption = Grids.Flat(),
         global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
         quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
+        enable_mask::Bool = false,
     )
 
 A convenience constructor, which builds a
@@ -605,6 +625,8 @@ A convenience constructor, which builds a
  - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
  - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
  - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
+ - `enable_mask` enables a horizontal mask, for skipping operations on specified
+                 columns via `set_mask!`.
 
 # Example usage
 
@@ -656,6 +678,7 @@ function RectangleXYGrid(
         ),
     ),
     enable_bubble::Bool = false,
+    enable_mask::Bool = false,
 ) where {FT}
     @assert horizontal_layout_type <: DataLayouts.AbstractData
     @assert ClimaComms.device(context) == device "The given device and context device do not match."
@@ -664,6 +687,7 @@ function RectangleXYGrid(
         quad;
         horizontal_layout_type,
         enable_bubble,
+        enable_mask,
     )
 end
 
