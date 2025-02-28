@@ -64,10 +64,13 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
 
     f = Fields.Field(FT, hspace)
     fill!(parent(f), 0)
-    @. f = 1
+    @. f = 1 # tests fill!
+    @test count(iszero, parent(f)) == 2
+    @. f = 1 + 0 # tests copyto!
     @test count(iszero, parent(f)) == 2
 
-    ᶜspace = ExtrudedCubedSphereSpace(;
+    FT = Float64
+    ᶜspace = ExtrudedCubedSphereSpace(FT;
         z_elem = 10,
         z_min = 0,
         z_max = 1,
@@ -84,6 +87,14 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     end
     @test count(parent(mask.is_active)) == 4640
     @test length(parent(mask.is_active)) == 9600
+    f = zeros(ᶜspace)
+    @. f = 1 # tests fill!
+    @test count(x->x==1, parent(f)) == 4640 * Spaces.nlevels(axes(f))
+    @test length(parent(f)) == 9600 * Spaces.nlevels(axes(f))
+    f = zeros(ᶜspace)
+    @. f = 1 + 0 # tests copyto!
+    @test count(x->x==1, parent(f)) == 4640 * Spaces.nlevels(axes(f))
+    @test length(parent(f)) == 9600 * Spaces.nlevels(axes(f))
 end
 
 @testset "1d domain space" begin

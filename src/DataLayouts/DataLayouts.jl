@@ -127,6 +127,8 @@ struct IJHMask{B, V} <: AbstractMask
     h_map::V
 end
 
+Adapt.@adapt_structure IJHMask
+
 include("struct.jl")
 
 abstract type AbstractData{S} end
@@ -2277,16 +2279,18 @@ function set_mask_maps! end
 
 function set_mask_maps!(mask::IJHMask)
     (Ni, Nj, _, _, Nh) = size(mask.is_active)
+    # This only happens during initialization, so let's just do this on the cpu:
     I = 1
     i_map = zeros(Int, length(mask.i_map))
     j_map = zeros(Int, length(mask.j_map))
     h_map = zeros(Int, length(mask.h_map))
+    is_active = rebuild(mask.is_active, Array)
     for h in 1:Nh, j in 1:Nj, i in 1:Ni
         CI = CartesianIndex(i, j, 1, 1, h)
-        if mask.is_active[CI]
-            mask.i_map[I] = i
-            mask.j_map[I] = j
-            mask.h_map[I] = h
+        if is_active[CI]
+            i_map[I] = i
+            j_map[I] = j
+            h_map[I] = h
             I += 1
         end
     end
