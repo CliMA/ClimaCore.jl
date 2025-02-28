@@ -54,3 +54,14 @@ Adapt.adapt_structure(
     lim.rtol,
     Limiters.NoConvergenceStats(),
 )
+
+Adapt.adapt_structure(
+    to::CUDA.KernelAdaptor,
+    mask::DataLayouts.IJHMask,
+) = DataLayouts.IJHMask(
+    Adapt.adapt(to, mask.is_active),
+    nothing,
+    Adapt.adapt(to, mask.i_map),
+    Adapt.adapt(to, mask.j_map),
+    Adapt.adapt(to, mask.h_map),
+)

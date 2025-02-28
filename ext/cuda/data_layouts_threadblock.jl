@@ -196,10 +196,10 @@ end
     n_max_threads::Integer,
     mask::IJHMask,
 )
-    (Ni, _, _, Nv, Nh) = DataLayouts.universal_size(data)
+    (Ni, _, _, Nv, Nh) = DataLayouts.universal_size(us)
     Nv_thread = min(Int(fld(n_max_threads, Ni)), Nv)
     Nv_blocks = cld(Nv, Nv_thread)
-    n_active_columns = length(mask.i_map)
+    n_active_columns = mask.N[1]
     @assert Nv_thread ≤ n_max_threads "threads,n_max_threads=($Nv_thread,$n_max_threads)"
     return (; threads = (Nv_thread,), blocks = (n_active_columns, Nv_blocks))
 end
@@ -208,9 +208,9 @@ end
     (ijh, bv) = CUDA.blockIdx()
     v = tv + (bv - 1) * CUDA.blockDim().x
     (; i_map, j_map, h_map) = mask
-    i = i_map[ijh]
-    j = j_map[ijh]
-    h = h_map[ijh]
+    @inbounds i = i_map[ijh]
+    @inbounds j = j_map[ijh]
+    @inbounds h = h_map[ijh]
     return CartesianIndex((i, j, 1, v, h))
 end
 

@@ -1,7 +1,10 @@
 function knl_fill!(dest, val, us, mask)
-    I = universal_index(dest)
+    I = if mask isa NoMask
+        universal_index(dest)
+    else
+        masked_universal_index(mask)
+    end
     if is_valid_index(dest, I, us)
-        DataLayouts.should_compute(mask, I) || return nothing
         @inbounds dest[I] = val
     end
     return nothing
@@ -36,7 +39,11 @@ function Base.fill!(dest::AbstractData, bc, to::ToCUDA, mask = NoMask())
             args = (dest, bc, us, mask)
             threads = threads_via_occupancy(knl_fill!, args)
             n_max_threads = min(threads, get_N(us))
-            p = partition(dest, n_max_threads)
+            p = if mask isa NoMask
+                partition(dest, n_max_threads)
+            else
+                masked_partition(us, n_max_threads, mask)
+            end
             auto_launch!(
                 knl_fill!,
                 args;

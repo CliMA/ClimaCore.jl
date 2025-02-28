@@ -18,6 +18,7 @@ import ClimaCore:
     Fields,
     DataLayouts,
     Geometry,
+    Operators,
     DeviceSideContext,
     DeviceSideDevice
 
@@ -66,7 +67,8 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     fill!(parent(f), 0)
     @. f = 1 # tests fill!
     @test count(iszero, parent(f)) == 2
-    @. f = 1 + 0 # tests copyto!
+    ᶜx = Fields.coordinate_field(hspace).x
+    @. f = 1 + ᶜx * 0 # tests copyto!
     @test count(iszero, parent(f)) == 2
 
     FT = Float64
@@ -80,6 +82,8 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
         staggering = CellCenter(),
         enable_mask = true,
     )
+    ᶠspace = Spaces.face_space(ᶜspace)
+    ᶠcoords = Fields.coordinate_field(ᶠspace)
     mask = Spaces.get_mask(ᶜspace)
     @test mask isa DataLayouts.IJHMask
     Spaces.set_mask!(ᶜspace) do coords
@@ -87,14 +91,39 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     end
     @test count(parent(mask.is_active)) == 4640
     @test length(parent(mask.is_active)) == 9600
-    f = zeros(ᶜspace)
-    @. f = 1 # tests fill!
-    @test count(x->x==1, parent(f)) == 4640 * Spaces.nlevels(axes(f))
-    @test length(parent(f)) == 9600 * Spaces.nlevels(axes(f))
-    f = zeros(ᶜspace)
-    @. f = 1 + 0 # tests copyto!
-    @test count(x->x==1, parent(f)) == 4640 * Spaces.nlevels(axes(f))
-    @test length(parent(f)) == 9600 * Spaces.nlevels(axes(f))
+    ᶜf = zeros(ᶜspace)
+    @. ᶜf = 1 # tests fill!
+    @test count(x->x==1, parent(ᶜf)) == 4640 * Spaces.nlevels(axes(ᶜf))
+    @test length(parent(ᶜf)) == 9600 * Spaces.nlevels(axes(ᶜf))
+    ᶜz = Fields.coordinate_field(ᶜspace).z
+    ᶜf = zeros(ᶜspace)
+    @. ᶜf = 1 + 0 * ᶜz # tests copyto!
+    @test count(x->x==1, parent(ᶜf)) == 4640 * Spaces.nlevels(axes(ᶜf))
+    @test length(parent(ᶜf)) == 9600 * Spaces.nlevels(axes(ᶜf))
+
+    ᶠf = zeros(ᶠspace)
+    c = Fields.Field(FT, ᶜspace)
+    div = Operators.DivergenceF2C()
+    foo(f, cf) = cf.lat > 0.5 ? zero(f) : sqrt(-1) # results in NaN in masked regions
+    @. c = div(Geometry.WVector(foo(ᶠf, ᶠcoords)))
+    @test count(isnan, parent(c)) == 0
+
+    ᶜspace_no_mask = ExtrudedCubedSphereSpace(FT;
+        z_elem = 10,
+        z_min = 0,
+        z_max = 1,
+        radius = 10,
+        h_elem = 10,
+        n_quad_points = 4,
+        staggering = CellCenter(),
+    )
+    ᶠspace_no_mask = Spaces.face_space(ᶜspace_no_mask)
+    ᶠcoords_no_mask = Fields.coordinate_field(ᶠspace_no_mask)
+    c_no_mask = Fields.Field(FT, ᶜspace_no_mask)
+    ᶠf_no_mask = Fields.Field(FT, ᶠspace_no_mask)
+    @. c_no_mask = div(Geometry.WVector(foo(ᶠf_no_mask, ᶠcoords_no_mask)))
+    @test count(isnan, parent(c_no_mask)) == 49600
+
 end
 
 @testset "1d domain space" begin

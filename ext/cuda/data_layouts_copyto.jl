@@ -1,9 +1,12 @@
 DataLayouts.device_dispatch(x::CUDA.CuArray) = ToCUDA()
 
 function knl_copyto!(dest, src, us, mask)
-    I = universal_index(dest)
+    I = if mask isa NoMask
+        universal_index(dest)
+    else
+        masked_universal_index(mask)
+    end
     if is_valid_index(dest, I, us)
-        DataLayouts.should_compute(mask, I) || return nothing
         @inbounds dest[I] = src[I]
     end
     return nothing
@@ -32,7 +35,11 @@ if VERSION ≥ v"1.11.0-beta"
             args = (dest, bc, us, mask)
             threads = threads_via_occupancy(knl_copyto!, args)
             n_max_threads = min(threads, get_N(us))
-            p = partition(dest, n_max_threads)
+            p = if mask isa NoMask
+                partition(dest, n_max_threads)
+            else
+                masked_partition(us, n_max_threads, mask)
+            end
             auto_launch!(
                 knl_copyto!,
                 args;
@@ -68,7 +75,11 @@ else
                 args = (dest, bc, us, mask)
                 threads = threads_via_occupancy(knl_copyto!, args)
                 n_max_threads = min(threads, get_N(us))
-                p = partition(dest, n_max_threads)
+                p = if mask isa NoMask
+                    partition(dest, n_max_threads)
+                else
+                    masked_partition(us, n_max_threads, mask)
+                end
                 auto_launch!(
                     knl_copyto!,
                     args;

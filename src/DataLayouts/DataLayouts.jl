@@ -119,15 +119,13 @@ in a grid are active.
  - `j_map` a Int array, containing j-indices of active columns
  - `h_map` a Int array, containing h-indices of active columns
 """
-struct IJHMask{B, V} <: AbstractMask
+struct IJHMask{B, NT, V} <: AbstractMask
     is_active::B
-    N::V
+    N::NT
     i_map::V
     j_map::V
     h_map::V
 end
-
-Adapt.@adapt_structure IJHMask
 
 include("struct.jl")
 
@@ -2285,7 +2283,11 @@ function set_mask_maps!(mask::IJHMask)
     j_map = zeros(Int, length(mask.j_map))
     h_map = zeros(Int, length(mask.h_map))
     is_active = rebuild(mask.is_active, Array)
-    for h in 1:Nh, j in 1:Nj, i in 1:Ni
+    # TODO: the order that this loop is performed is decoupled from correctness,
+    #       but it can have a significant impact on runtime performance (on gpus).
+    #       So, we should figure out a good way or heuristic to permute these arrays
+    #       to maximize performance.
+    @inbounds for h in 1:Nh, j in 1:Nj, i in 1:Ni
         CI = CartesianIndex(i, j, 1, 1, h)
         if is_active[CI]
             i_map[I] = i
@@ -2335,7 +2337,7 @@ function ColumnMask(
     h_map = zeros(Int, Nijh)
     return IJHMask(
         rebuild(is_active, DA),
-        DA(zeros(Int, 1)), # N
+        zeros(Int, 1), # N
         DA(i_map),
         DA(j_map),
         DA(h_map),
