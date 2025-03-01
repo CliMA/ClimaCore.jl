@@ -505,28 +505,6 @@ end
 
 get_mask(grid::SpectralElementGrid2D) = grid.mask
 
-"""
-    set_mask!(fn, grid)
-    set_mask!(grid, ::DataLayouts.AbstractData)
-
-Set the mask using the function `fn`, which is called for all coordinates on the
-given grid.
-"""
-function set_mask!(fn, grid::SpectralElementGrid2D)
-    if !(grid.mask isa DataLayouts.NoMask)
-        @. grid.mask.is_active = fn(grid.local_geometry.coordinates)
-        DataLayouts.set_mask_maps!(grid.mask)
-    end
-    return nothing
-end
-function set_mask!(grid::SpectralElementGrid2D, data::DataLayouts.AbstractData)
-    if !(grid.mask isa DataLayouts.NoMask)
-        @. grid.mask.is_active = data
-        DataLayouts.set_mask_maps!(grid.mask)
-    end
-    return nothing
-end
-
 function ξ_at_nodal_point(FT, quadrature_style, i, j)
     quad_points = Quadratures.quadrature_points(FT, quadrature_style)[1]
     return SVector(quad_points[i], quad_points[j])

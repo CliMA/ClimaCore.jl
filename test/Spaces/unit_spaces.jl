@@ -72,7 +72,8 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     @test count(iszero, parent(f)) == 2
 
     FT = Float64
-    ᶜspace = ExtrudedCubedSphereSpace(FT;
+    ᶜspace = ExtrudedCubedSphereSpace(
+        FT;
         z_elem = 10,
         z_min = 0,
         z_max = 1,
@@ -87,11 +88,14 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     hᶠcoords = Fields.coordinate_field(Spaces.horizontal_space(ᶠspace))
     mask = Spaces.get_mask(ᶜspace)
     @test mask isa DataLayouts.IJHMask
+
+    # Test that mask-field assignment works:
+    # TODO: we should make this easier
     is_active = similar(mask.is_active)
-    @show typeof(is_active)
-    # is_active .= hᶠcoords.lat .> 0.5
-    # @show is_active
+    _is_active = Fields.field_values(float.(hᶠcoords.lat .> 0.5))
+    is_active .= DataLayouts.replace_basetype(_is_active, Bool)
     Spaces.set_mask!(ᶜspace, is_active)
+
     Spaces.set_mask!(ᶜspace) do coords
         coords.lat > 0.5
     end
@@ -99,12 +103,12 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     @test length(parent(mask.is_active)) == 9600
     ᶜf = zeros(ᶜspace)
     @. ᶜf = 1 # tests fill!
-    @test count(x->x==1, parent(ᶜf)) == 4640 * Spaces.nlevels(axes(ᶜf))
+    @test count(x -> x == 1, parent(ᶜf)) == 4640 * Spaces.nlevels(axes(ᶜf))
     @test length(parent(ᶜf)) == 9600 * Spaces.nlevels(axes(ᶜf))
     ᶜz = Fields.coordinate_field(ᶜspace).z
     ᶜf = zeros(ᶜspace)
     @. ᶜf = 1 + 0 * ᶜz # tests copyto!
-    @test count(x->x==1, parent(ᶜf)) == 4640 * Spaces.nlevels(axes(ᶜf))
+    @test count(x -> x == 1, parent(ᶜf)) == 4640 * Spaces.nlevels(axes(ᶜf))
     @test length(parent(ᶜf)) == 9600 * Spaces.nlevels(axes(ᶜf))
 
     ᶠf = zeros(ᶠspace)
@@ -114,7 +118,8 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     @. c = div(Geometry.WVector(foo(ᶠf, ᶠcoords)))
     @test count(isnan, parent(c)) == 0
 
-    ᶜspace_no_mask = ExtrudedCubedSphereSpace(FT;
+    ᶜspace_no_mask = ExtrudedCubedSphereSpace(
+        FT;
         z_elem = 10,
         z_min = 0,
         z_max = 1,
@@ -132,7 +137,8 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
         @test count(isnan, parent(c_no_mask)) == 49600
     else
         @test_throws DomainError begin
-            @. c_no_mask = div(Geometry.WVector(foo(ᶠf_no_mask, ᶠcoords_no_mask)))
+            @. c_no_mask =
+                div(Geometry.WVector(foo(ᶠf_no_mask, ᶠcoords_no_mask)))
         end
     end
 
