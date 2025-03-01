@@ -112,7 +112,7 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     @test length(parent(ᶜf)) == 9600 * Spaces.nlevels(axes(ᶜf))
 
     ᶠf = zeros(ᶠspace)
-    c = Fields.Field(FT, ᶜspace)
+    c = zeros(ᶜspace)
     div = Operators.DivergenceF2C()
     foo(f, cf) = cf.lat > 0.5 ? zero(f) : sqrt(-1) # results in NaN in masked regions
     @. c = div(Geometry.WVector(foo(ᶠf, ᶠcoords)))

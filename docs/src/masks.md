@@ -162,6 +162,11 @@ supported and unsupported mask operations:
    - `extrema` (unsupported)
    - `min` (unsupported)
    - `max` (unsupported)
+ - field constructors (`copy`, `Fields.Field`, `ones`, `zeros`) unsupported.
+   Not supporting masks for newly allocated fields is an intentional design
+   choice, because it's difficult to reason about what `ones` should return
+   where `mask == 0`-- should it return `NaN`? `1`? `0`? So, we chose to 
+   use `NoMask` when allocating new fields.
 
 ## Developer docs
 
