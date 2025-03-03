@@ -102,21 +102,34 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     @test count(parent(mask.is_active)) == 4640
     @test length(parent(mask.is_active)) == 9600
     ᶜf = zeros(ᶜspace)
+    fill!(parent(ᶜf), 0)
     @. ᶜf = 1 # tests fill!
     @test count(x -> x == 1, parent(ᶜf)) == 4640 * Spaces.nlevels(axes(ᶜf))
     @test length(parent(ᶜf)) == 9600 * Spaces.nlevels(axes(ᶜf))
     ᶜz = Fields.coordinate_field(ᶜspace).z
     ᶜf = zeros(ᶜspace)
+    fill!(parent(ᶜf), 0)
     @. ᶜf = 1 + 0 * ᶜz # tests copyto!
     @test count(x -> x == 1, parent(ᶜf)) == 4640 * Spaces.nlevels(axes(ᶜf))
     @test length(parent(ᶜf)) == 9600 * Spaces.nlevels(axes(ᶜf))
 
     ᶠf = zeros(ᶠspace)
+    fill!(parent(ᶠf), 0)
     c = zeros(ᶜspace)
+    fill!(parent(c), 0)
     div = Operators.DivergenceF2C()
     foo(f, cf) = cf.lat > 0.5 ? zero(f) : sqrt(-1) # results in NaN in masked regions
     @. c = div(Geometry.WVector(foo(ᶠf, ᶠcoords)))
     @test count(isnan, parent(c)) == 0
+    @test_warn "sum is not yet supported on masked fields, and may return incorrect results." sum(
+        c,
+    )
+    @test_warn "maximum is not yet supported on masked fields, and may return incorrect results." maximum(
+        c,
+    )
+    @test_warn "minimum is not yet supported on masked fields, and may return incorrect results." minimum(
+        c,
+    )
 
     ᶜspace_no_mask = ExtrudedCubedSphereSpace(
         FT;

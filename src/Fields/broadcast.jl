@@ -38,6 +38,18 @@ Base.Broadcast.broadcastable(field::Field) = field
 Base.eltype(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     Base.Broadcast.combine_eltypes(bc.f, bc.args)
 
+find_mask(field::Field) = get_mask(axes(field))
+
+function find_mask(bc)
+    _mask = first_mask_in_bc(bc)
+    if !isnothing(_mask)
+        @assert has_uniform_mask(bc)
+        return _mask
+    else
+        return DataLayouts.NoMask()
+    end
+end
+
 # _first: recursively get the first element
 function _first end
 
@@ -92,7 +104,7 @@ function Base.copy(
         throw(BroadcastInferenceError(bc))
     end
     # We can trust it and defer to the simpler `copyto!`
-    return copyto!(similar(bc, ElType), bc, DataLayouts.NoMask())
+    return copyto!(similar(bc, ElType), bc, find_mask(bc))
 end
 
 Base.@propagate_inbounds function slab(

@@ -22,6 +22,7 @@ import ..Quadratures
 import ..Grids: ColumnIndex, local_geometry_type
 import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace, cuda_synchronize
 import ..Spaces: nlevels, ncolumns
+import ..DataLayouts: AbstractMask
 import ..Spaces: get_mask, set_mask!
 import ..Geometry: Geometry, Cartesian12Vector
 import ..Utilities: PlusHalf, half
@@ -270,7 +271,8 @@ function Base.similar(
     Field(Eltype, space_to)
 end
 
-Base.copy(field::Field) = Field(copy(field_values(field)), axes(field))
+Base.copy(field::Field, mask::AbstractMask = get_mask(axes(field))) =
+    Field(copy(field_values(field)), axes(field), mask)
 
 Base.deepcopy_internal(field::Field, stackdict::IdDict) =
     Field(Base.deepcopy_internal(field_values(field), stackdict), axes(field))
@@ -278,7 +280,7 @@ Base.deepcopy_internal(field::Field, stackdict::IdDict) =
 function Base.copyto!(
     dest::Field{V, M},
     src::Field{V, M},
-    mask = DataLayouts.NoMask,
+    mask::AbstractMask = get_mask(axes(dest)),
 ) where {V, M}
     @assert axes(dest) == axes(src)
     copyto!(field_values(dest), field_values(src), mask)
@@ -290,51 +292,66 @@ end
 
 Fill `field` with `value`.
 """
-function Base.fill!(field::Field, value)
-    fill!(field_values(field), value)
+function Base.fill!(field::Field, value, mask::AbstractMask = get_mask(space))
+    fill!(field_values(field), value, mask)
     return field
 end
+
 """
     fill(value, space::AbstractSpace)
 
 Create a new `Field` on `space` and fill it with `value`.
 """
-function Base.fill(value::FT, space::AbstractSpace) where {FT}
+function Base.fill(
+    value::FT,
+    space::AbstractSpace,
+    mask::AbstractMask = get_mask(space),
+) where {FT}
     field = Field(FT, space)
-    return fill!(field, value)
+    return fill!(field, value, mask)
 end
 
 """
     zeros(space::AbstractSpace)
+    zeros(::Type, space::AbstractSpace[, mask])
 
 Construct a field on `space` that is zero everywhere.
 """
-function Base.zeros(::Type{FT}, space::AbstractSpace) where {FT}
+function Base.zeros(
+    ::Type{FT},
+    space::AbstractSpace,
+    mask::AbstractMask = get_mask(space),
+) where {FT}
     field = Field(FT, space)
-    data = parent(field)
-    fill!(data, zero(eltype(data)))
+    data = Fields.field_values(field)
+    fill!(data, zero(eltype(data)), mask)
     return field
 end
-Base.zeros(space::AbstractSpace) = zeros(Spaces.undertype(space), space)
+Base.zeros(space::AbstractSpace, mask::AbstractMask = get_mask(space)) =
+    zeros(Spaces.undertype(space), space, mask)
 
 """
     ones(space::AbstractSpace)
 
 Construct a field on `space` that is one everywhere.
 """
-function Base.ones(::Type{FT}, space::AbstractSpace) where {FT}
+function Base.ones(
+    ::Type{FT},
+    space::AbstractSpace,
+    mask::AbstractMask = get_mask(space),
+) where {FT}
     field = Field(FT, space)
-    data = parent(field)
-    fill!(data, one(eltype(data)))
+    data = Fields.field_values(field)
+    fill!(data, one(eltype(data)), mask)
     return field
 end
 Base.ones(space::AbstractSpace) = ones(Spaces.undertype(space), space)
 
-function Base.zero(field::Field)
+function Base.zero(field::Field, mask::AbstractMask = get_mask(axes(field)))
     zfield = similar(field)
-    zarray = parent(zfield)
-    fill!(zarray, zero(eltype(zarray)))
-    return zfield
+    data = Fields.field_values(field)
+    fill!(data, zero(eltype(data)), mask)
+    return data
 end
 
 
@@ -639,5 +656,7 @@ end
 
 set_mask!(space::Spaces.AbstractSpace, field::Field) =
     set_mask!(Spaces.horizontal_space(space), field_values(field))
+
+include("has_uniform_mask.jl")
 
 end # module
