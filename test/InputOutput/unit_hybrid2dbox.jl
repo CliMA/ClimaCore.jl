@@ -105,7 +105,7 @@ end
         coords,
     )
     uₕ = map(coord -> Geometry.Covariant1Vector(coord.x * 0.1), coords)
-    w = map(coord -> Geometry.Covariant3Vector(coord.x * 0.2), face_coords)
+    w = map(coord -> Geometry.Covariant3Vector(coord.z * 0.2), face_coords)
     Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 
     # write field vector to hdf5 file
