@@ -70,7 +70,7 @@ We provide a brief [git tutorial](https://github.com/CliMA/ClimaWorkshops/blob/m
 ### General coding guidelines
 1. Keep the number of members of Julia structs small if possible (less than 8 members).
 2. Code should reflect "human intuition" if possible. This mean abstraction should reflect how humans reason about the problem under consideration.
-3. Code with small blast radius. If your code needs to be modified or extendended, the resulting required changes should be as small and as localized as possible.
+3. Code with small blast radius. If your code needs to be modified or extended, the resulting required changes should be as small and as localized as possible.
 4. When you write code, write it with testing and debugging in mind.
 5. Ideally, the lowest level structs have no defaults for their member fields. Nobody can remember all the defaults, so it is better to introduce them at the high-level API only.
 6. Make sure that module imports are specific so that it is easy to trace back where functions that are used inside a module are coming from.
@@ -175,7 +175,7 @@ do not require the unit tests to be run.
 ### Integration testing
 
 Currently a number of checks are run during integration testing before being
-merged into master.
+merged into `main`.
 
 - `JuliaFormatter` checks if the PR is formatted with `.dev/climaformat.jl`.
 - `Documentation` checks that the documentation correctly builds for the merged PR.
@@ -200,7 +200,7 @@ $CLIMACORE_HOME/docs/src
 ```
 And [Literate.jl](https://fredrikekre.github.io/Literate.jl/v2/) tutorials:
 ```
-$$CLIMACORE_HOME/tutorials
+$CLIMACORE_HOME/tutorials
 ```
 
 To locally build the documentation you need to create a new `docs` project
