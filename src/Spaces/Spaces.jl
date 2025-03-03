@@ -178,4 +178,25 @@ function ncolumns(space::SpectralElementSpace2D)
 end
 
 
+"""
+    has_vertical(::AbstractSpace)
+
+Returns a bool indicating that the space has a vertical grid.
+"""
+function has_vertical end
+has_vertical(::AbstractSpace) = false
+has_vertical(::ExtrudedFiniteDifferenceSpace) = true
+has_vertical(::FiniteDifferenceSpace) = false
+
+"""
+    has_horizontal(::AbstractSpace)
+
+Returns a bool indicating that the space has a vertical grid.
+"""
+function has_horizontal end
+has_horizontal(::AbstractSpace) = false
+has_horizontal(::ExtrudedFiniteDifferenceSpace) = true
+has_horizontal(::SpectralElementSpace1D) = true
+has_horizontal(::SpectralElementSpace2D) = true
+
 end # module

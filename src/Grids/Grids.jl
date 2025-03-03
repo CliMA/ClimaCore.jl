@@ -35,8 +35,6 @@ Get the topology of a grid.
 """
 function topology end
 
-function vertical_topology end
-
 """
     Grids.local_geometry_data(
         grid       :: AbstractGrid,
@@ -77,6 +75,47 @@ include("extruded.jl")
 include("column.jl")
 include("level.jl")
 
+function Base.show(io::IO, grid::AbstractGrid)
+    indent = get(io, :indent, 0)
+    iio = IOContext(io, :indent => indent + 2)
+    println(io, nameof(typeof(grid)), ":")
+    if has_horizontal(grid)
+        # some reduced spaces (like slab space) do not have topology
+        println(iio, " "^(indent + 2), "horizontal:")
+        print(iio, " "^(indent + 4), "context: ")
+        Topologies.print_context(iio, topology(grid).context)
+        println(iio)
+        println(iio, " "^(indent + 4), "mesh: ", topology(grid).mesh)
+        print(iio, " "^(indent + 4), "quadrature: ", quadrature_style(grid))
+    end
+    if has_vertical(grid)
+        has_horizontal(grid) && println(iio, "")
+        println(iio, " "^(indent + 2), "vertical:")
+        print(iio, " "^(indent + 4), "mesh: ", vertical_topology(grid).mesh)
+    end
+end
+
+"""
+    has_horizontal(::AbstractGrid)
+
+Returns a bool indicating that the grid has a vertical part.
+"""
+function has_horizontal end
+has_horizontal(::AbstractGrid) = false
+has_horizontal(::ExtrudedFiniteDifferenceGrid) = true
+has_horizontal(::DeviceSpectralElementGrid2D) = true
+has_horizontal(::SpectralElementGrid2D) = true
+has_horizontal(::SpectralElementGrid1D) = true
+
+"""
+    has_vertical(::AbstractGrid)
+
+Returns a bool indicating that the space has a vertical part.
+"""
+function has_vertical end
+has_vertical(::AbstractGrid) = false
+has_vertical(::FiniteDifferenceGrid) = true
+has_vertical(::ExtrudedFiniteDifferenceGrid) = true
 
 
 end # module
