@@ -152,21 +152,20 @@ mask.
 In addition, not all operations support masks. Here is a list of operations of
 supported and unsupported mask operations:
 
- - `DataLayout` operations (`Fields.field_values(f) = 1`) unsupported (these )
+ - `DataLayout` operations (`Fields.field_values(f) = 1`) unsupported (these operations are unaware of the mask and will likely never support masked operations).
  - `fill!` (`@. f = 1`) supported
  - point-wise `copyto!` (`@. f = 1 + z`) supported
  - stencil `copyto!` (`@. ᶜf = 1 + DivergenceF2C()(Geometry.WVector(ᶠf))`) supported (vertical derivatives and interpolations interpolations)
- - spectral element operations `copyto!` (`@. ᶜf = 1 + Operators.Divergence()(ᶠf)`) (unsupported)
+ - spectral element operations `copyto!` (`@. ᶜf = 1 + Operators.Divergence()(ᶠf)`) (unsupported, will execute everywhere)
+ - fieldvector operations `copyto!` (`@. Y += 1`) (unsupported, will execute everywhere)
  - reductions:
-   - `sum` (unsupported)
-   - `extrema` (unsupported)
-   - `min` (unsupported)
-   - `max` (unsupported)
- - field constructors (`copy`, `Fields.Field`, `ones`, `zeros`) unsupported.
-   Not supporting masks for newly allocated fields is an intentional design
-   choice, because it's difficult to reason about what `ones` should return
-   where `mask == 0`-- should it return `NaN`? `1`? `0`? So, we chose to 
-   use `NoMask` when allocating new fields.
+   - `sum` (unsupported, warning is thrown)
+   - `extrema` (unsupported, warning is thrown)
+   - `min` (unsupported, warning is thrown)
+   - `max` (unsupported, warning is thrown)
+ - field constructors (`copy`, `Fields.Field`, `ones`, `zeros`) are supported.
+   Please be warned that calling `zeros(masked_space)` will result in undefined
+   data in regions where `mask == 0`. To fill those values, one can do `fill!(parent(field), 0)`, which will ignore the mask.
 
 ## Developer docs
 
