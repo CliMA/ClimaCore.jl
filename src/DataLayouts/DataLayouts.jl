@@ -112,8 +112,8 @@ struct NoMask <: AbstractMask end
 
 A mask type, used to house and use information for which columns
 in a grid are active.
- - `is_active` a bool mask, the size of the entire grid, that indicates if the
-   column is active or not
+ - `is_active` a bool mask, the size of the entire process-local grid, that
+   indicates if the column is active or not
  - `N` a Int array with 1 element, containing number of active columns
  - `i_map` a Int array, containing i-indices of active columns
  - `j_map` a Int array, containing j-indices of active columns

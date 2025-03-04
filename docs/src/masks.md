@@ -2,7 +2,7 @@
 
 ## Motivation
 
-ClimaCore spaces, `SpectralElement2DSpace`s in particular, support masks, where
+ClimaCore spaces, `SpectralElementSpace2D`s in particular, support masks, where
 users can set horizontal nodal locations where operations are skipped.
 
 This is especially helpful for the land model, where they may have degrees of
@@ -17,7 +17,7 @@ regions to skip. This helps both with the ergonomics, as well as performance.
 There are two user-facing parts for ClimaCore masks:
 
  - set the `enable_mask = true` keyword in the space constructor (when available),
-   which is currently any constructor that returns/contains a `SpectralElement2DSpace`.
+   which is currently any constructor that returns/contains a `SpectralElementSpace2D`.
  - use `set_mask!` to set where the mask is `true` (where compute should occur)
    and `false` (where compute should be skipped)
 
@@ -144,7 +144,7 @@ c_no_mask = Fields.Field(FT, ᶜspace_no_mask)
 ## Supported operations and caveats
 
 Currently, masks are only supported for `Fields` (and not `DataLayouts`) with
-`SpectralElement2DSpace`s. We do not yet have support for
+`SpectralElementSpace2D`s. We do not yet have support for
 `SpectralElement1DSpace`s, and we will likely never offer support for
 `DataLayouts`, as they do not have the space, and can therefore not use the
 mask.
