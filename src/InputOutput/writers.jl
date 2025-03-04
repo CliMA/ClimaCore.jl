@@ -496,7 +496,7 @@ function write!(
         "data_layout",
         string(nameof(typeof(Fields.field_values(field)))),
     )
-    write_attribute(dataset, "value_type", string(eltype(field)))
+    write_attribute(dataset, "field_eltype", string(eltype(field)))
     local_geometry_dataset = create_dataset(
         writer.file,
         "local_geometry_data/$name",
@@ -566,7 +566,7 @@ function write!(
         "data_layout",
         string(nameof(typeof(Fields.field_values(field)))),
     )
-    write_attribute(dataset, "value_type", string(eltype(field)))
+    write_attribute(dataset, "field_eltype", string(eltype(field)))
     write_attribute(dataset, "grid", grid_name)
     if !isnothing(staggering)
         write_attribute(
