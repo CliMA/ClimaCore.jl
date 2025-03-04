@@ -271,8 +271,8 @@ function Base.similar(
     Field(Eltype, space_to)
 end
 
-Base.copy(field::Field, mask::AbstractMask = get_mask(axes(field))) =
-    Field(copy(field_values(field)), axes(field), mask)
+Base.copy(field::Field) =
+    Field(copy(field_values(field)), axes(field))
 
 Base.deepcopy_internal(field::Field, stackdict::IdDict) =
     Field(Base.deepcopy_internal(field_values(field), stackdict), axes(field))
