@@ -190,6 +190,30 @@ end
 @inline universal_index(::DataLayouts.DataF) = CartesianIndex((1, 1, 1, 1, 1))
 @inline is_valid_index(::DataLayouts.DataF, I::CI5, us::UniversalSize) = true
 
+##### Masked
+@inline function masked_partition(
+    us::DataLayouts.UniversalSize,
+    n_max_threads::Integer,
+    mask::IJHMask,
+)
+    (Ni, _, _, Nv, Nh) = DataLayouts.universal_size(us)
+    Nv_thread = min(Int(fld(n_max_threads, Ni)), Nv)
+    Nv_blocks = cld(Nv, Nv_thread)
+    n_active_columns = mask.N[1]
+    @assert Nv_thread ≤ n_max_threads "threads,n_max_threads=($Nv_thread,$n_max_threads)"
+    return (; threads = (Nv_thread,), blocks = (n_active_columns, Nv_blocks))
+end
+@inline function masked_universal_index(mask::IJHMask)
+    (tv,) = CUDA.threadIdx()
+    (ijh, bv) = CUDA.blockIdx()
+    v = tv + (bv - 1) * CUDA.blockDim().x
+    (; i_map, j_map, h_map) = mask
+    @inbounds i = i_map[ijh]
+    @inbounds j = j_map[ijh]
+    @inbounds h = h_map[ijh]
+    return CartesianIndex((i, j, 1, v, h))
+end
+
 #####
 ##### Custom partitions
 #####

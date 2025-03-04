@@ -22,6 +22,7 @@ import ..Quadratures
 import ..Grids: ColumnIndex, local_geometry_type
 import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace, cuda_synchronize
 import ..Spaces: nlevels, ncolumns
+import ..Spaces: get_mask, set_mask!
 import ..Geometry: Geometry, Cartesian12Vector
 import ..Utilities: PlusHalf, half
 
@@ -274,9 +275,13 @@ Base.copy(field::Field) = Field(copy(field_values(field)), axes(field))
 Base.deepcopy_internal(field::Field, stackdict::IdDict) =
     Field(Base.deepcopy_internal(field_values(field), stackdict), axes(field))
 
-function Base.copyto!(dest::Field{V, M}, src::Field{V, M}) where {V, M}
+function Base.copyto!(
+    dest::Field{V, M},
+    src::Field{V, M},
+    mask = DataLayouts.NoMask,
+) where {V, M}
     @assert axes(dest) == axes(src)
-    copyto!(field_values(dest), field_values(src))
+    copyto!(field_values(dest), field_values(src), mask)
     return dest
 end
 
@@ -631,5 +636,8 @@ function field2array(field::Field)
     end
     return DataLayouts.data2array(field_values(field))
 end
+
+set_mask!(space::Spaces.AbstractSpace, field::Field) =
+    set_mask!(Spaces.horizontal_space(space), field_values(field))
 
 end # module

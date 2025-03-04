@@ -1,7 +1,11 @@
 DataLayouts.device_dispatch(x::CUDA.CuArray) = ToCUDA()
 
-function knl_copyto!(dest, src, us)
-    I = universal_index(dest)
+function knl_copyto!(dest, src, us, mask)
+    I = if mask isa NoMask
+        universal_index(dest)
+    else
+        masked_universal_index(mask)
+    end
     if is_valid_index(dest, I, us)
         @inbounds dest[I] = src[I]
     end
@@ -24,14 +28,18 @@ if VERSION ≥ v"1.11.0-beta"
     # special-case fixes for https://github.com/JuliaLang/julia/issues/28126
     # (including the GPU-variant related issue resolution efforts:
     # JuliaGPU/GPUArrays.jl#454, JuliaGPU/GPUArrays.jl#464).
-    function Base.copyto!(dest::AbstractData, bc, to::ToCUDA)
+    function Base.copyto!(dest::AbstractData, bc, to::ToCUDA, mask = NoMask())
         (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest)
         us = DataLayouts.UniversalSize(dest)
         if Nv > 0 && Nh > 0
-            args = (dest, bc, us)
+            args = (dest, bc, us, mask)
             threads = threads_via_occupancy(knl_copyto!, args)
             n_max_threads = min(threads, get_N(us))
-            p = partition(dest, n_max_threads)
+            p = if mask isa NoMask
+                partition(dest, n_max_threads)
+            else
+                masked_partition(us, n_max_threads, mask)
+            end
             auto_launch!(
                 knl_copyto!,
                 args;
@@ -39,16 +47,17 @@ if VERSION ≥ v"1.11.0-beta"
                 blocks_s = p.blocks,
             )
         end
-        call_post_op_callback() && post_op_callback(dest, dest, bc, to)
+        call_post_op_callback() && post_op_callback(dest, dest, bc, to, mask)
         return dest
     end
 else
-    function Base.copyto!(dest::AbstractData, bc, to::ToCUDA)
+    function Base.copyto!(dest::AbstractData, bc, to::ToCUDA, mask = NoMask())
         (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest)
         us = DataLayouts.UniversalSize(dest)
         if Nv > 0 && Nh > 0
             if DataLayouts.has_uniform_datalayouts(bc) &&
-               dest isa DataLayouts.EndsWithField
+               dest isa DataLayouts.EndsWithField &&
+               mask isa NoMask
                 bc′ = Base.Broadcast.instantiate(
                     DataLayouts.to_non_extruded_broadcasted(bc),
                 )
@@ -63,10 +72,14 @@ else
                     blocks_s = p.blocks,
                 )
             else
-                args = (dest, bc, us)
+                args = (dest, bc, us, mask)
                 threads = threads_via_occupancy(knl_copyto!, args)
                 n_max_threads = min(threads, get_N(us))
-                p = partition(dest, n_max_threads)
+                p = if mask isa NoMask
+                    partition(dest, n_max_threads)
+                else
+                    masked_partition(us, n_max_threads, mask)
+                end
                 auto_launch!(
                     knl_copyto!,
                     args;
@@ -75,7 +88,7 @@ else
                 )
             end
         end
-        call_post_op_callback() && post_op_callback(dest, dest, bc, to)
+        call_post_op_callback() && post_op_callback(dest, dest, bc, to, mask)
         return dest
     end
 end
@@ -88,6 +101,7 @@ function Base.copyto!(
     dest::AbstractData,
     bc::Base.Broadcast.Broadcasted{Style},
     to::ToCUDA,
+    mask = NoMask(),
 ) where {
     Style <:
     Union{Base.Broadcast.AbstractArrayStyle{0}, Base.Broadcast.Style{Tuple}},
@@ -96,8 +110,8 @@ function Base.copyto!(
         Base.Broadcast.Broadcasted{Style}(bc.f, bc.args, ()),
     )
     @inbounds bc0 = bc[]
-    fill!(dest, bc0)
-    call_post_op_callback() && post_op_callback(dest, dest, bc, to)
+    fill!(dest, bc0, mask)
+    call_post_op_callback() && post_op_callback(dest, dest, bc, to, mask)
 end
 
 # For field-vector operations

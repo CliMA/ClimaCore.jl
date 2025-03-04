@@ -92,7 +92,7 @@ function Base.copy(
         throw(BroadcastInferenceError(bc))
     end
     # We can trust it and defer to the simpler `copyto!`
-    return copyto!(similar(bc, ElType), bc)
+    return copyto!(similar(bc, ElType), bc, DataLayouts.NoMask())
 end
 
 Base.@propagate_inbounds function slab(
@@ -180,8 +180,9 @@ end
 @inline function Base.copyto!(
     dest::Field,
     bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle},
+    mask = get_mask(axes(dest)),
 )
-    copyto!(field_values(dest), Base.Broadcast.instantiate(todata(bc)))
+    copyto!(field_values(dest), Base.Broadcast.instantiate(todata(bc)), mask)
     return dest
 end
 
@@ -443,18 +444,21 @@ function Base.copyto!(
     field::Field,
     bc::Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}},
 )
-    copyto!(Fields.field_values(field), todata(bc))
+    mask = get_mask(axes(field))
+    copyto!(Fields.field_values(field), todata(bc), mask)
     return field
 end
 function Base.copyto!(
     field::Field,
     bc::Base.Broadcast.Broadcasted{Base.Broadcast.Style{Tuple}},
 )
-    copyto!(Fields.field_values(field), todata(bc))
+    mask = get_mask(axes(field))
+    copyto!(Fields.field_values(field), todata(bc), mask)
     return field
 end
 
 function Base.copyto!(field::Field, nt::NamedTuple)
+    mask = get_mask(axes(field))
     copyto!(
         field,
         Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}}(
@@ -462,5 +466,6 @@ function Base.copyto!(field::Field, nt::NamedTuple)
             (nt,),
             axes(field),
         ),
+        mask,
     )
 end

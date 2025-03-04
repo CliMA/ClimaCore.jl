@@ -13,6 +13,7 @@ import StaticArrays: SVector, SMatrix, SArray
 import ClimaCore.DebugOnly: call_post_op_callback, post_op_callback
 import ClimaCore.DataLayouts: mapreduce_cuda
 import ClimaCore.DataLayouts: ToCUDA
+import ClimaCore.DataLayouts: NoMask, IJHMask
 import ClimaCore.DataLayouts: slab, column
 import ClimaCore.Utilities: half
 import ClimaCore.Utilities: cart_ind, linear_ind

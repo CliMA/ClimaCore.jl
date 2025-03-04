@@ -4,6 +4,8 @@ ClimaCore.jl Release Notes
 main
 -------
 
+ - `SpectralElementSpace2D` constructors now support nodal masks. PR [2201](https://github.com/CliMA/ClimaCore.jl/pull/2201). See its documentation [here](https://clima.github.io/ClimaCore.jl/dev/masks). Note that it does not yet support restarts.
+
 - Added support for InputOutput with PointSpaces
   PR [2162](https://github.com/CliMA/ClimaCore.jl/pull/2162).
 

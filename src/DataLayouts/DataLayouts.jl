@@ -92,6 +92,41 @@ abstract type AbstractDispatchToDevice end
 struct ToCPU <: AbstractDispatchToDevice end
 struct ToCUDA <: AbstractDispatchToDevice end
 
+"""
+    AbstractMask
+
+An abstract mask type, for marking domains as present or absent.
+"""
+abstract type AbstractMask end
+
+"""
+    NoMask
+
+A lazy non-mask type (default), used to indicate that an entire domain is
+present.
+"""
+struct NoMask <: AbstractMask end
+
+"""
+    IJHMask
+
+A mask type, used to house and use information for which columns
+in a grid are active.
+ - `is_active` a bool mask, the size of the entire grid, that indicates if the
+   column is active or not
+ - `N` a Int array with 1 element, containing number of active columns
+ - `i_map` a Int array, containing i-indices of active columns
+ - `j_map` a Int array, containing j-indices of active columns
+ - `h_map` a Int array, containing h-indices of active columns
+"""
+struct IJHMask{B, NT, V} <: AbstractMask
+    is_active::B
+    N::NT
+    i_map::V
+    j_map::V
+    h_map::V
+end
+
 include("struct.jl")
 
 abstract type AbstractData{S} end
@@ -2230,5 +2265,83 @@ include("fill.jl")
 include("mapreduce.jl")
 
 include("struct_linear_indexing.jl")
+
+
+"""
+    set_mask_maps!(mask)
+
+Sets the mask maps, such that the elements of the maps correspond
+to active columns.
+"""
+function set_mask_maps! end
+
+function set_mask_maps!(mask::IJHMask)
+    (Ni, Nj, _, _, Nh) = size(mask.is_active)
+    # This only happens during initialization, so let's just do this on the cpu:
+    I = 1
+    i_map = zeros(Int, length(mask.i_map))
+    j_map = zeros(Int, length(mask.j_map))
+    h_map = zeros(Int, length(mask.h_map))
+    is_active = rebuild(mask.is_active, Array)
+    # TODO: the order that this loop is performed is decoupled from correctness,
+    #       but it can have a significant impact on runtime performance (on gpus).
+    #       So, we should figure out a good way or heuristic to permute these arrays
+    #       to maximize performance.
+    @inbounds for h in 1:Nh, j in 1:Nj, i in 1:Ni
+        CI = CartesianIndex(i, j, 1, 1, h)
+        if is_active[CI]
+            i_map[I] = i
+            j_map[I] = j
+            h_map[I] = h
+            I += 1
+        end
+    end
+    mask.N .= I - 1
+    mask.i_map .= typeof(mask.i_map)(i_map)
+    mask.j_map .= typeof(mask.j_map)(j_map)
+    mask.h_map .= typeof(mask.h_map)(h_map)
+    return nothing
+end
+
+"""
+    ColumnMask(
+        ::Type{FT},
+        ::Type{horizontal_layout_type},
+        ::Type{DA},
+        ::Val{Nq},
+        ::Val{Nh}
+    )
+
+Construct a column mask, given:
+ - `FT` float type
+ - `horizontal_layout_type` horizontal layout type (e.g., `IJFH` or `IJHF`)
+ - `DA` device array type
+ - `Nq` number of quad points
+ - `Nh` number of horizontal elements
+"""
+function ColumnMask(
+    ::Type{FT},
+    ::Type{horizontal_layout_type},
+    ::Type{DA},
+    ::Val{Nq},
+    ::Val{Nh},
+) where {FT, horizontal_layout_type <: Union{IJFH, IJHF}, DA, Nq, Nh}
+    @assert FT <: Real
+    @assert Nq isa Integer
+    @assert Nh isa Integer
+    T = horizontal_layout_type
+    is_active = replace_basetype(T{FT, Nq}(Array{FT}, Nh), Bool)
+    Nijh = Nq * Nq * Nh
+    i_map = zeros(Int, Nijh)
+    j_map = zeros(Int, Nijh)
+    h_map = zeros(Int, Nijh)
+    return IJHMask(
+        rebuild(is_active, DA),
+        zeros(Int, 1), # N
+        DA(i_map),
+        DA(j_map),
+        DA(h_map),
+    )
+end
 
 end # module

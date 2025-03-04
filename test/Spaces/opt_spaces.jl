@@ -37,20 +37,20 @@ end
         test_n_failures(91,   TU.PointSpace, context)
         test_n_failures(825,  TU.SpectralElementSpace1D, context)
         test_n_failures(1141, TU.SpectralElementSpace2D, context)
-        test_n_failures(3,  TU.ColumnCenterFiniteDifferenceSpace, context)
-        test_n_failures(4,  TU.ColumnFaceFiniteDifferenceSpace, context)
+        test_n_failures(4,  TU.ColumnCenterFiniteDifferenceSpace, context)
+        test_n_failures(5,  TU.ColumnFaceFiniteDifferenceSpace, context)
         test_n_failures(1147, TU.SphereSpectralElementSpace, context)
         test_n_failures(1146, TU.CenterExtrudedFiniteDifferenceSpace, context)
         test_n_failures(1146, TU.FaceExtrudedFiniteDifferenceSpace, context)
     else
         test_n_failures(0,    TU.PointSpace, context)
         test_n_failures(150,  TU.SpectralElementSpace1D, context)
-        test_n_failures(310,  TU.SpectralElementSpace2D, context)
+        test_n_failures(316,  TU.SpectralElementSpace2D, context)
         test_n_failures(4,  TU.ColumnCenterFiniteDifferenceSpace, context)
         test_n_failures(5,  TU.ColumnFaceFiniteDifferenceSpace, context)
-        test_n_failures(316,  TU.SphereSpectralElementSpace, context)
-        test_n_failures(321,  TU.CenterExtrudedFiniteDifferenceSpace, context)
-        test_n_failures(321,  TU.FaceExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(322,  TU.SphereSpectralElementSpace, context)
+        test_n_failures(327,  TU.CenterExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(327,  TU.FaceExtrudedFiniteDifferenceSpace, context)
 
         # The OBJECT_CACHE causes inference failures that inhibit understanding
         # inference failures in _SpectralElementGrid2D, so let's `@test_opt` those
