@@ -32,6 +32,7 @@ function Base.copyto!(
         SpectralBroadcasted{CUDASpectralStyle},
         Broadcasted{CUDASpectralStyle},
     },
+    mask = DataLayouts.NoMask(),
 )
     space = axes(out)
     us = UniversalSize(Fields.field_values(out))

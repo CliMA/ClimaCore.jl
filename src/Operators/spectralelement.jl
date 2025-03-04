@@ -167,6 +167,7 @@ function Base.copyto!(
         SpectralBroadcasted{SlabBlockSpectralStyle},
         Broadcasted{SlabBlockSpectralStyle},
     },
+    mask = DataLayouts.NoMask(),
 )
     Fields.byslab(axes(out)) do slabidx
         Base.@_inline_meta

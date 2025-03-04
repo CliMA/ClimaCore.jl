@@ -1,6 +1,7 @@
-function knl_fill!(dest, val, us)
+function knl_fill!(dest, val, us, mask)
     I = universal_index(dest)
     if is_valid_index(dest, I, us)
+        DataLayouts.compute(mask, I) || return nothing
         @inbounds dest[I] = val
     end
     return nothing
@@ -14,12 +15,14 @@ function knl_fill_linear!(dest, val, us)
     return nothing
 end
 
-function Base.fill!(dest::AbstractData, bc, to::ToCUDA)
+function Base.fill!(dest::AbstractData, bc, to::ToCUDA, mask = NoMask())
     (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest)
     us = DataLayouts.UniversalSize(dest)
-    args = (dest, bc, us)
     if Nv > 0 && Nh > 0
-        if !(VERSION ≥ v"1.11.0-beta") && dest isa DataLayouts.EndsWithField
+        if !(VERSION ≥ v"1.11.0-beta") &&
+           dest isa DataLayouts.EndsWithField &&
+           mask isa NoMask
+            args = (dest, bc, us)
             threads = threads_via_occupancy(knl_fill_linear!, args)
             n_max_threads = min(threads, get_N(us))
             p = linear_partition(prod(size(dest)), n_max_threads)
@@ -30,6 +33,7 @@ function Base.fill!(dest::AbstractData, bc, to::ToCUDA)
                 blocks_s = p.blocks,
             )
         else
+            args = (dest, bc, us, mask)
             threads = threads_via_occupancy(knl_fill!, args)
             n_max_threads = min(threads, get_N(us))
             p = partition(dest, n_max_threads)

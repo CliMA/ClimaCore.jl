@@ -25,6 +25,48 @@ import ClimaCore.DataLayouts: IJFH, VF, slab_index
 
 on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
 
+@testset "2D spaces with mask" begin
+    FT = Float64
+    context = ClimaComms.context()
+    x_max = FT(1)
+    y_max = FT(1)
+    x_elem = 2
+    y_elem = 2
+    x_domain = Domains.IntervalDomain(
+        Geometry.XPoint(zero(x_max)),
+        Geometry.XPoint(x_max);
+        periodic = true,
+    )
+    y_domain = Domains.IntervalDomain(
+        Geometry.YPoint(zero(y_max)),
+        Geometry.YPoint(y_max);
+        periodic = true,
+    )
+    domain = Domains.RectangleDomain(x_domain, y_domain)
+    hmesh = Meshes.RectilinearMesh(domain, x_elem, y_elem)
+
+    quad = Quadratures.GL{1}()
+    htopology = Topologies.Topology2D(context, hmesh)
+    # Test for no-mask case
+    hspace = Spaces.SpectralElementSpace2D(htopology, quad; enable_mask = false)
+    @test hspace.grid.mask isa DataLayouts.NoMask
+
+    # Tests with mask
+    hspace = Spaces.SpectralElementSpace2D(htopology, quad; enable_mask = true)
+    @test hspace.grid.mask isa DataLayouts.IJFH
+    @test eltype(hspace.grid.mask) <: Bool
+    Spaces.set_mask!(hspace) do coords
+        coords.x > 0.5
+    end
+    @test count(parent(hspace.grid.mask)) == 2
+    @test length(parent(hspace.grid.mask)) == 4
+
+    f = Fields.Field(FT, hspace)
+    fill!(parent(f), 0)
+    @. f = 1
+    @test count(iszero, parent(f)) == 2
+end
+
 @testset "1d domain space" begin
     FT = Float64
     domain = Domains.IntervalDomain(

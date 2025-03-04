@@ -30,6 +30,7 @@ Adapt.adapt_structure(
     Adapt.adapt(to, grid.quadrature_style),
     Adapt.adapt(to, grid.global_geometry),
     Adapt.adapt(to, grid.local_geometry),
+    Adapt.adapt(to, grid.mask),
 )
 
 Adapt.adapt_structure(to::CUDA.KernelAdaptor, space::Spaces.PointSpace) =

@@ -92,6 +92,21 @@ abstract type AbstractDispatchToDevice end
 struct ToCPU <: AbstractDispatchToDevice end
 struct ToCUDA <: AbstractDispatchToDevice end
 
+"""
+    AbstractMask
+
+An abstract mask type, for marking domains as present or absent.
+"""
+abstract type AbstractMask end
+
+"""
+    NoMask
+
+A lazy non-mask type (default), used to indicate that an entire domain is
+present.
+"""
+struct NoMask <: AbstractMask end
+
 include("struct.jl")
 
 abstract type AbstractData{S} end

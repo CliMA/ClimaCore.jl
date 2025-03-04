@@ -117,5 +117,11 @@ has_vertical(::AbstractGrid) = false
 has_vertical(::FiniteDifferenceGrid) = true
 has_vertical(::ExtrudedFiniteDifferenceGrid) = true
 
+"""
+    get_mask(grid::AbstractGrid)
+
+Retrieve the mask for the grid (defaults to DataLayouts.NoMask).
+"""
+get_mask(::AbstractGrid) = DataLayouts.NoMask()
 
 end # module
