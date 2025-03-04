@@ -185,7 +185,6 @@ get_mask(space::SpectralElementSpaceSlab) = DataLayouts.NoMask()
 get_mask(space::ExtrudedFiniteDifferenceSpace) =
     get_mask(horizontal_space(space))
 
-<<<<<<< HEAD
 """
     has_vertical(::AbstractSpace)
 
