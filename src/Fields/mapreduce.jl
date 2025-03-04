@@ -12,6 +12,9 @@ function local_sum(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
     dev::ClimaComms.AbstractCPUDevice,
 )
+    if !(find_mask(field) isa DataLayouts.NoMask)
+        @warn "sum is not yet supported on masked fields, and may return incorrect results."
+    end
     result = Base.reduce(
         RecursiveApply.radd,
         Base.Broadcast.broadcasted(
@@ -48,6 +51,9 @@ function Base.sum(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
     ::ClimaComms.AbstractCPUDevice,
 )
+    if !(find_mask(field) isa DataLayouts.NoMask)
+        @warn "sum is not yet supported on masked fields, and may return incorrect results."
+    end
     context = ClimaComms.context(axes(field))
     data_sum = DataLayouts.DataF(local_sum(field))
     ClimaComms.allreduce!(context, parent(data_sum), +)
@@ -67,6 +73,9 @@ Approximate maximum of `v` or `f.(v)` over the domain.
 If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
 """
 function Base.maximum(fn, field::Field, ::ClimaComms.AbstractCPUDevice)
+    if !(find_mask(field) isa DataLayouts.NoMask)
+        @warn "maximum is not yet supported on masked fields, and may return incorrect results."
+    end
     context = ClimaComms.context(axes(field))
     data_max = DataLayouts.DataF(mapreduce(fn, max, todata(field)))
     ClimaComms.allreduce!(context, parent(data_max), max)
@@ -79,6 +88,9 @@ Base.maximum(fn, field::Field) =
 Base.maximum(field::Field) = Base.maximum(field, ClimaComms.device(field))
 
 function Base.minimum(fn, field::Field, ::ClimaComms.AbstractCPUDevice)
+    if !(find_mask(field) isa DataLayouts.NoMask)
+        @warn "minimum is not yet supported on masked fields, and may return incorrect results."
+    end
     context = ClimaComms.context(axes(field))
     data_min = DataLayouts.DataF(mapreduce(fn, min, todata(field)))
     ClimaComms.allreduce!(context, parent(data_min), min)
@@ -114,6 +126,9 @@ function Statistics.mean(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
     ::ClimaComms.AbstractCPUDevice,
 )
+    if !(find_mask(field) isa DataLayouts.NoMask)
+        @warn "mean is not yet supported on masked fields, and may return incorrect results."
+    end
     space = axes(field)
     context = ClimaComms.context(space)
     data_combined =

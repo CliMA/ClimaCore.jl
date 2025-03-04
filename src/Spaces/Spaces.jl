@@ -38,6 +38,8 @@ import ..Grids:
     local_geometry_data,
     global_geometry,
     dss_weights,
+    set_mask!,
+    get_mask,
     quadrature_style
 
 import ClimaComms
@@ -177,6 +179,11 @@ function ncolumns(space::SpectralElementSpace2D)
     return Nh * Nq * Nq
 end
 
+get_mask(space::AbstractSpace) = get_mask(grid(space))
+get_mask(space::PointSpace) = DataLayouts.NoMask()
+get_mask(space::SpectralElementSpaceSlab) = DataLayouts.NoMask()
+get_mask(space::ExtrudedFiniteDifferenceSpace) =
+    get_mask(horizontal_space(space))
 
 """
     has_vertical(::AbstractSpace)
@@ -198,5 +205,11 @@ has_horizontal(::AbstractSpace) = false
 has_horizontal(::ExtrudedFiniteDifferenceSpace) = true
 has_horizontal(::SpectralElementSpace1D) = true
 has_horizontal(::SpectralElementSpace2D) = true
+
+set_mask!(fn, space::AbstractSpace) = set_mask!(fn, grid(space))
+set_mask!(fn, space::ExtrudedFiniteDifferenceSpace) =
+    set_mask!(fn, grid(horizontal_space(space)))
+set_mask!(space::AbstractSpace, data::DataLayouts.AbstractData) =
+    set_mask!(grid(space), data)
 
 end # module
