@@ -4,6 +4,13 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- Added support for InputOutput with PointSpaces
+  PR [2162](https://github.com/CliMA/ClimaCore.jl/pull/2162).
+
+- Reading a `Field` with `HDF5Reader` will not call `eval ∘ Meta.parse` on the raw
+`value_type` attribute. Instead, the new `read_type` function is used, which prevents
+the execution of arbitrary code. PR [2162](https://github.com/CliMA/ClimaCore.jl/pull/2162).
+
  - Improved `show` for spaces, and added `show` for grids. PR [2202](https://github.com/CliMA/ClimaCore.jl/pull/2202).
 
 v0.14.26
