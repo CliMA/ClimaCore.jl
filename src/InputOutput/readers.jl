@@ -585,7 +585,11 @@ function read_field(reader::HDF5Reader, name::AbstractString)
         # For when `Nh` is added back to the type space
         #     Nhd = Nh_dim(data_layout)
         #     Nht = Nhd == -1 ? () : (size(data, Nhd),)
-        ElType = read_type(attrs(obj)["value_type"])
+        # The `value_type` attribute is deprecated. here we mantain backwards compatibility
+        ElType = read_type(
+            haskey(attrs(obj), "field_eltype") ?
+            attrs(obj)["field_eltype"] : attrs(obj)["value_type"],
+        )
         if data_layout in ("VIJFH", "VIFH")
             Nv = size(data, 1)
             # values = DataLayout{ElType, Nv, Nij, Nht...}(data) # when Nh is in type-domain
