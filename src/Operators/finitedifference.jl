@@ -50,6 +50,7 @@ right_face_boundary_idx(space::AllFiniteDifferenceSpace⁺) =
 
 vertically_periodic(space) =
     Topologies.isperiodic(Spaces.vertical_topology(space))
+vertically_periodic(space::Spaces.AbstractSpectralElementSpace) = false
 vertically_periodic(::FacePlaceholderSpace{N, IP}) where {N, IP} = IP
 vertically_periodic(::CenterPlaceholderSpace{N, IP}) where {N, IP} = IP
 

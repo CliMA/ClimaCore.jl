@@ -68,10 +68,11 @@ end
 # the GPU, which is quite limited (~4kB).
 
 # Functions for CUDASpectralStyle
-struct PlaceholderSpace{N, IP} <: Spaces.AbstractSpace end
-struct LevelPlaceholderSpace{N, IP} <: Spaces.AbstractSpace end
-struct CenterPlaceholderSpace{N, IP} <: Spaces.AbstractSpace end
-struct FacePlaceholderSpace{N, IP} <: Spaces.AbstractSpace end
+abstract type AbstractPlaceHolderSpace <: Spaces.AbstractSpace end
+struct PlaceholderSpace{N, IP} <: AbstractPlaceHolderSpace end
+struct LevelPlaceholderSpace{N, IP} <: AbstractPlaceHolderSpace end
+struct CenterPlaceholderSpace{N, IP} <: AbstractPlaceHolderSpace end
+struct FacePlaceholderSpace{N, IP} <: AbstractPlaceHolderSpace end
 Spaces.nlevels(::FacePlaceholderSpace{N}) where {N} = N
 Spaces.nlevels(::CenterPlaceholderSpace{N}) where {N} = N
 
