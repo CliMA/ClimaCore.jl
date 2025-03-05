@@ -93,6 +93,15 @@ FacePlaceholderSpace(space) = FacePlaceholderSpace{
 }()
 
 placeholder_space(current_space, parent_space) = current_space
+placeholder_space(current_space::T, parent_space::T) where {T <: Spaces.CenterFiniteDifferenceSpace} =
+    CenterPlaceholderSpace(current_space)
+placeholder_space(current_space::T, parent_space::T) where {T <: Spaces.FaceFiniteDifferenceSpace} =
+    FacePlaceholderSpace(current_space)
+placeholder_space(current_space::T, parent_space::T) where {T <: Spaces.FaceExtrudedFiniteDifferenceSpace} =
+    FacePlaceholderSpace(current_space)
+placeholder_space(current_space::T, parent_space::T) where {T <: Spaces.CenterExtrudedFiniteDifferenceSpace} =
+    CenterPlaceholderSpace(current_space)
+
 placeholder_space(current_space::T, parent_space::T) where {T} =
     PlaceholderSpace(current_space)
 placeholder_space(
