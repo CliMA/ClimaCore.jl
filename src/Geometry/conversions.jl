@@ -538,7 +538,7 @@ Required for statically infering the result type of the divergence operation for
 # this isn't quite right: it only is true when the Christoffel symbols are zero
 @inline divergence_result_type(
     ::Type{Axis2Tensor{FT, Tuple{A1, A2}, S}},
-) where {FT, A1, A2 <: LocalAxis, S <: StaticMatrix{S1, S2}} where {S1, S2} =
+) where {FT, A1, A2 <: AbstractAxis, S <: StaticMatrix{S1, S2}} where {S1, S2} =
     AxisVector{FT, A2, SVector{S2, FT}}
 
 """
