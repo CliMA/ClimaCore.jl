@@ -48,10 +48,10 @@ column_axes(matrix_field, matrix_space = axes(matrix_field)) =
 
 _column_axes(::Square, space) = space
 _column_axes(::FaceToCenter, space) = Operators.reconstruct_placeholder_space(
-    Operators.FacePlaceholderSpace(),
+    Operators.FacePlaceholderSpace(space),
     space,
 )
 _column_axes(::CenterToFace, space) = Operators.reconstruct_placeholder_space(
-    Operators.CenterPlaceholderSpace(),
+    Operators.CenterPlaceholderSpace(space),
     space,
 )

@@ -68,38 +68,57 @@ end
 # the GPU, which is quite limited (~4kB).
 
 # Functions for CUDASpectralStyle
-struct PlaceholderSpace <: Spaces.AbstractSpace end
-struct LevelPlaceholderSpace <: Spaces.AbstractSpace end
-struct CenterPlaceholderSpace <: Spaces.AbstractSpace end
-struct FacePlaceholderSpace <: Spaces.AbstractSpace end
+struct PlaceholderSpace{N, IP} <: Spaces.AbstractSpace end
+struct LevelPlaceholderSpace{N, IP} <: Spaces.AbstractSpace end
+struct CenterPlaceholderSpace{N, IP} <: Spaces.AbstractSpace end
+struct FacePlaceholderSpace{N, IP} <: Spaces.AbstractSpace end
+Spaces.nlevels(::FacePlaceholderSpace{N}) where {N} = N
+Spaces.nlevels(::CenterPlaceholderSpace{N}) where {N} = N
+
+PlaceholderSpace(space) = PlaceholderSpace{
+    Spaces.nlevels(space),
+    Topologies.isperiodic(Spaces.vertical_topology(space)),
+}()
+LevelPlaceholderSpace(space) = LevelPlaceholderSpace{
+    Spaces.nlevels(space),
+    Topologies.isperiodic(Spaces.vertical_topology(space)),
+}()
+CenterPlaceholderSpace(space) = CenterPlaceholderSpace{
+    Spaces.nlevels(space),
+    Topologies.isperiodic(Spaces.vertical_topology(space)),
+}()
+FacePlaceholderSpace(space) = FacePlaceholderSpace{
+    Spaces.nlevels(space),
+    Topologies.isperiodic(Spaces.vertical_topology(space)),
+}()
 
 placeholder_space(current_space, parent_space) = current_space
 placeholder_space(current_space::T, parent_space::T) where {T} =
-    PlaceholderSpace()
+    PlaceholderSpace(current_space)
 placeholder_space(
     current_space::Spaces.AbstractPointSpace,
     parent_space::Spaces.AbstractFiniteDifferenceSpace,
-) = LevelPlaceholderSpace()
+) = LevelPlaceholderSpace(current_space)
 placeholder_space(
     current_space::Spaces.AbstractSpectralElementSpace,
     parent_space::Spaces.ExtrudedFiniteDifferenceSpace,
-) = LevelPlaceholderSpace()
+) = LevelPlaceholderSpace(current_space)
 placeholder_space(
     current_space::Spaces.CenterFiniteDifferenceSpace,
     parent_space::Spaces.FaceFiniteDifferenceSpace,
-) = CenterPlaceholderSpace()
+) = CenterPlaceholderSpace(current_space)
 placeholder_space(
     current_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
     parent_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
-) = CenterPlaceholderSpace()
+) = CenterPlaceholderSpace(current_space)
 placeholder_space(
     current_space::Spaces.FaceFiniteDifferenceSpace,
     parent_space::Spaces.CenterFiniteDifferenceSpace,
-) = FacePlaceholderSpace()
+) = FacePlaceholderSpace(current_space)
 placeholder_space(
     current_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
     parent_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
-) = FacePlaceholderSpace()
+) = FacePlaceholderSpace(current_space)
 
 @inline reconstruct_placeholder_space(current_space, parent_space) =
     current_space

@@ -12,27 +12,46 @@ const AllCenterFiniteDifferenceSpace = Union{
     Spaces.CenterExtrudedFiniteDifferenceSpace,
 }
 
+const AllFiniteDifferenceSpace⁺ = Union{
+    FacePlaceholderSpace,
+    CenterPlaceholderSpace,
+    Spaces.FiniteDifferenceSpace,
+    Spaces.ExtrudedFiniteDifferenceSpace,
+}
+
+# These include placeholder spaces
+const AllFaceFiniteDifferenceSpace⁺ = Union{
+    FacePlaceholderSpace,
+    Spaces.FaceFiniteDifferenceSpace,
+    Spaces.FaceExtrudedFiniteDifferenceSpace,
+}
+const AllCenterFiniteDifferenceSpace⁺ = Union{
+    CenterPlaceholderSpace,
+    Spaces.CenterFiniteDifferenceSpace,
+    Spaces.CenterExtrudedFiniteDifferenceSpace,
+}
 
 
-left_idx(space::AllCenterFiniteDifferenceSpace) =
+
+left_idx(space::AllCenterFiniteDifferenceSpace⁺) =
     left_center_boundary_idx(space)
-right_idx(space::AllCenterFiniteDifferenceSpace) =
+right_idx(space::AllCenterFiniteDifferenceSpace⁺) =
     right_center_boundary_idx(space)
-left_idx(space::AllFaceFiniteDifferenceSpace) = left_face_boundary_idx(space)
+left_idx(space::AllFaceFiniteDifferenceSpace⁺) = left_face_boundary_idx(space)
 right_idx(space::AllFaceFiniteDifferenceSpace) = right_face_boundary_idx(space)
+right_idx(space::FacePlaceholderSpace) = right_face_boundary_idx(space)
 
-left_center_boundary_idx(space::AllFiniteDifferenceSpace) = 1
-right_center_boundary_idx(space::AllFiniteDifferenceSpace) = size(
-    Spaces.local_geometry_data(Spaces.space(space, Spaces.CellCenter())),
-    4,
-)
-left_face_boundary_idx(space::AllFiniteDifferenceSpace) = half
-right_face_boundary_idx(space::AllFiniteDifferenceSpace) =
-    size(
-        Spaces.local_geometry_data(Spaces.space(space, Spaces.CellFace())),
-        4,
-    ) - half
+left_center_boundary_idx(space::AllFiniteDifferenceSpace⁺) = 1
+right_center_boundary_idx(space::AllFiniteDifferenceSpace⁺) =
+    Spaces.nlevels(space)
+left_face_boundary_idx(space::AllFiniteDifferenceSpace⁺) = half
+right_face_boundary_idx(space::AllFiniteDifferenceSpace⁺) =
+    Spaces.nlevels(space) - half
 
+vertically_periodic(space) =
+    Topologies.isperiodic(Spaces.vertical_topology(space))
+vertically_periodic(::FacePlaceholderSpace{N, IP}) where {N, IP} = IP
+vertically_periodic(::CenterPlaceholderSpace{N, IP}) where {N, IP} = IP
 
 left_face_boundary_idx(arg) = left_face_boundary_idx(axes(arg))
 right_face_boundary_idx(arg) = right_face_boundary_idx(axes(arg))
@@ -46,7 +65,7 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     hidx,
 )
     v = idx
-    if Topologies.isperiodic(Spaces.vertical_topology(space))
+    if vertically_periodic(space)
         v = mod1(v, Spaces.nlevels(space))
     end
     i, j, h = hidx
@@ -60,7 +79,7 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     hidx,
 )
     v = idx + half
-    if Topologies.isperiodic(Spaces.vertical_topology(space))
+    if vertically_periodic(space)
         v = mod1(v, Spaces.nlevels(space))
     end
     i, j, h = hidx
@@ -3657,7 +3676,8 @@ Compute the index of the leftmost point which uses only the interior stencil of 
     parent_space,
     loc::LeftBoundaryWindow,
 )
-    space = reconstruct_placeholder_space(axes(bc), parent_space)
+    # space = reconstruct_placeholder_space(axes(bc), parent_space)
+    space = axes(bc)
     widths = _stencil_interior_width(bc)
     args_idx = _left_interior_window_idx_args(bc.args, space, loc)
     args_idx_widths = map((arg, width) -> arg - width[1], args_idx, widths)
@@ -3671,7 +3691,8 @@ end
     parent_space,
     loc::LeftBoundaryWindow,
 )
-    space = reconstruct_placeholder_space(axes(bc), parent_space)
+    # space = reconstruct_placeholder_space(axes(bc), parent_space)
+    space = axes(bc)
     arg_idxs = _left_interior_window_idx_args(bc.args, space, loc)
     maximum(arg_idxs)
 end
@@ -3683,7 +3704,8 @@ end
     parent_space,
     loc::LeftBoundaryWindow,
 )
-    space = reconstruct_placeholder_space(axes(field), parent_space)
+    # space = reconstruct_placeholder_space(axes(field), parent_space)
+    space = axes(field)
     left_idx(space)
 end
 @inline function left_interior_window_idx(_, space, loc::LeftBoundaryWindow)
@@ -3703,7 +3725,8 @@ end
     parent_space,
     loc::RightBoundaryWindow,
 )
-    space = reconstruct_placeholder_space(axes(bc), parent_space)
+    # space = reconstruct_placeholder_space(axes(bc), parent_space)
+    space = axes(bc)
     widths = _stencil_interior_width(bc)
     args_idx = _right_interior_window_idx_args(bc.args, space, loc)
     args_widths = map((arg, width) -> arg - width[2], args_idx, widths)
@@ -3718,7 +3741,8 @@ end
     parent_space,
     loc::RightBoundaryWindow,
 )
-    space = reconstruct_placeholder_space(axes(bc), parent_space)
+    # space = reconstruct_placeholder_space(axes(bc), parent_space)
+    space = axes(bc)
     arg_idxs = _right_interior_window_idx_args(bc.args, space, loc)
     minimum(arg_idxs)
 end
@@ -3731,7 +3755,8 @@ end
     parent_space,
     loc::RightBoundaryWindow,
 )
-    space = reconstruct_placeholder_space(axes(field), parent_space)
+    # space = reconstruct_placeholder_space(axes(field), parent_space)
+    space = axes(field)
     right_idx(space)
 end
 @inline function right_interior_window_idx(_, space, loc::RightBoundaryWindow)
@@ -3746,7 +3771,8 @@ Base.@propagate_inbounds function getidx(
     idx,
     hidx,
 )
-    space = reconstruct_placeholder_space(axes(bc), parent_space)
+    # space = reconstruct_placeholder_space(axes(bc), parent_space)
+    space = axes(bc)
     stencil_interior(bc.op, loc, space, idx, hidx, bc.args...)
 end
 
@@ -3757,7 +3783,8 @@ Base.@propagate_inbounds function getidx(
     idx,
     hidx,
 )
-    space = reconstruct_placeholder_space(axes(bc), parent_space)
+    # space = reconstruct_placeholder_space(axes(bc), parent_space)
+    space = axes(bc)
     op = bc.op
     if has_boundary(op, loc) &&
        idx <
@@ -3785,7 +3812,8 @@ Base.@propagate_inbounds function getidx(
     hidx,
 )
     op = bc.op
-    space = reconstruct_placeholder_space(axes(bc), parent_space)
+    # space = reconstruct_placeholder_space(axes(bc), parent_space)
+    space = axes(bc)
     if has_boundary(op, loc) &&
        idx >
        right_interior_idx(space, bc.op, get_boundary(bc.op, loc), bc.args...)
@@ -3816,18 +3844,24 @@ Base.Broadcast.BroadcastStyle(
 
 Base.eltype(bc::StencilBroadcasted) = return_eltype(bc.op, bc.args...)
 
-function vidx(space::AllFaceFiniteDifferenceSpace, idx)
+function vidx(
+    space::Union{AllFaceFiniteDifferenceSpace, FacePlaceholderSpace},
+    idx,
+)
     @assert idx isa PlusHalf
     v = idx + half
-    if Topologies.isperiodic(Spaces.vertical_topology(space))
+    if vertically_periodic(space)
         v = mod1(v, Spaces.nlevels(space))
     end
     return v
 end
-function vidx(space::AllCenterFiniteDifferenceSpace, idx)
+function vidx(
+    space::Union{AllCenterFiniteDifferenceSpace, CenterPlaceholderSpace},
+    idx,
+)
     @assert idx isa Integer
     v = idx
-    if Topologies.isperiodic(Spaces.vertical_topology(space))
+    if vertically_periodic(space)
         v = mod1(v, Spaces.nlevels(space))
     end
     return v
@@ -3843,7 +3877,8 @@ Base.@propagate_inbounds function getidx(
     idx,
 )
     field_data = Fields.field_values(bc)
-    space = reconstruct_placeholder_space(axes(bc), parent_space)
+    # space = reconstruct_placeholder_space(axes(bc), parent_space)
+    space = axes(bc)
     v = vidx(space, idx)
     return @inbounds field_data[vindex(v)]
 end
@@ -3855,7 +3890,8 @@ Base.@propagate_inbounds function getidx(
     hidx,
 )
     field_data = Fields.field_values(bc)
-    space = reconstruct_placeholder_space(axes(bc), parent_space)
+    # space = reconstruct_placeholder_space(axes(bc), parent_space)
+    space = axes(bc)
     v = vidx(space, idx)
     i, j, h = hidx
     return @inbounds field_data[CartesianIndex(i, j, 1, v, h)]
@@ -3922,7 +3958,8 @@ Base.@propagate_inbounds function getidx(
     idx,
     hidx,
 )
-    space = reconstruct_placeholder_space(axes(bc), parent_space)
+    # space = reconstruct_placeholder_space(axes(bc), parent_space)
+    space = axes(bc)
     _args = getidx_args(space, bc.args, loc, idx, hidx)
     bc.f(_args...)
 end
@@ -3945,7 +3982,8 @@ Base.@propagate_inbounds function setidx!(
     hidx,
     val,
 )
-    space = reconstruct_placeholder_space(axes(field), parent_space)
+    # space = reconstruct_placeholder_space(axes(field), parent_space)
+    space = axes(field)
     v = vidx(space, idx)
     field_data = Fields.field_values(field)
     i, j, h = hidx
