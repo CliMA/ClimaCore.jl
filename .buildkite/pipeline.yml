@@ -1149,6 +1149,15 @@ steps:
   - group: "Unit: InputOutput"
     steps:
 
+      - label: "Unit: read_type"
+        key: unit_read_type
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_read_type.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+          slurm_mem: 3GB
+
       - label: "Unit: spectralelement2d"
         key: unit_spectralelement2d
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_spectralelement2d.jl"

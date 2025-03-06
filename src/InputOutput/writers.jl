@@ -451,16 +451,91 @@ function write_new!(
 end
 
 # write fields
+"""
+    write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
+
+Write the `field` to the HDF5 in `writer` and assign it the given `name`.
+"""
 function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
+    write!(writer, field, name, axes(field))
+end
+
+"""
+    write!(
+        writer::HDF5Writer,
+        field::Fields.Field,
+        name::AbstractString,
+        space::Spaces.AbstractPointSpace,
+    )
+
+Write a `Field`, with `axes` of type `PointSpace`,  to the HDF5 file. The field
+is written to the `fields` group in the file, with the name `name`. The local
+geometry data of the `PointSpace` is written to the `local_geometry_data` group
+with name `name`.
+"""
+function write!(
+    writer::HDF5Writer,
+    field::Fields.Field,
+    name::AbstractString,
+    space::Spaces.AbstractPointSpace,
+)
+    array = parent(field)
+    lg_data = Grids.local_geometry_data(space)
+    lg_type = Grids.local_geometry_type(typeof(space))
+    lg_array = parent(lg_data)
+    dataset = create_dataset(
+        writer.file,
+        "fields/$name",
+        datatype(eltype(array)),
+        dataspace(size(array)),
+    )
+    dataset[:] = array
+    write_attribute(dataset, "type", "Field")
+    write_attribute(
+        dataset,
+        "data_layout",
+        string(nameof(typeof(Fields.field_values(field)))),
+    )
+    write_attribute(dataset, "field_eltype", string(eltype(field)))
+    local_geometry_dataset = create_dataset(
+        writer.file,
+        "local_geometry_data/$name",
+        datatype(eltype(array)),
+        dataspace(size(lg_array)),
+    )
+    local_geometry_dataset[:] = lg_array
+    write_attribute(
+        local_geometry_dataset,
+        "local_geometry_type",
+        string(lg_type),
+    )
+end
+
+"""
+    write!(
+        writer::HDF5Writer,
+        field::Fields.Field,
+        name::AbstractString,
+        space::Spaces.AbstractSpace,
+    )
+
+Write an object of type 'Field' and name 'name' to the HDF5 file.
+"""
+function write!(
+    writer::HDF5Writer,
+    field::Fields.Field,
+    name::AbstractString,
+    space::Spaces.AbstractSpace,
+)
     values = Fields.field_values(field)
-    space = axes(field)
+    array = parent(field)
+    nd = ndims(array)
+
     staggering = Spaces.staggering(space)
+    topology = Spaces.topology(space)
     grid = Spaces.grid(space)
     grid_name = write!(writer, grid)
 
-    array = parent(field)
-    topology = Spaces.topology(space)
-    nd = ndims(array)
     if topology isa Topologies.Topology2D &&
        !(writer.context isa ClimaComms.SingletonCommsContext)
         nelems = Topologies.nelems(topology)
@@ -491,7 +566,7 @@ function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
         "data_layout",
         string(nameof(typeof(Fields.field_values(field)))),
     )
-    write_attribute(dataset, "value_type", string(eltype(field)))
+    write_attribute(dataset, "field_eltype", string(eltype(field)))
     write_attribute(dataset, "grid", grid_name)
     if !isnothing(staggering)
         write_attribute(

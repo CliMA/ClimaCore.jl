@@ -42,6 +42,42 @@ function get_key(file, key)
 end
 
 """
+    read_type(ts::AbstractString)
+
+Parse a string `ts` into an expression, and then evaluate it into a type if it is a valid type expression.
+"""
+function read_type(ts::AbstractString)
+    type_expr = Meta.parse(ts)
+    if is_type_expr(type_expr)
+        return eval(type_expr)
+    end
+    error("$ts cannot be parsed into a valid type")
+end
+
+"""
+    is_type_expr(expr)
+
+Check if an expression is a type expression, with no function calls or other non-type
+expressions, with the expection of @NamedTuple.
+This function is based on the JLD.jl `is_valid_type_exp`.
+See https://github.com/JuliaIO/JLD.jl/blob/80ac89643e3ad87545e48f4d361a00a29cdf4e2f/src/JLD.jl#L922
+"""
+is_type_expr(s::Symbol) = true
+is_type_expr(q::QuoteNode) = is_type_expr(q.value)
+function is_type_expr(expr::Expr)
+    if expr.head == :macrocall && expr.args[1] == Symbol("@NamedTuple")
+        # skip the LineNumberNode, as eval does nothing for it
+        if length(expr.args) > 2
+            return all(map(is_type_expr, expr.args[3:end]))
+        end
+        return true
+    end
+    return expr.head in (:curly, :., :tuple, :braces, Symbol("::")) &&
+           all(map(is_type_expr, expr.args))
+end
+is_type_expr(t) = isbits(t)
+
+"""
     HDF5Reader(filename::AbstractString[, context::ClimaComms.AbstractCommsContext])
     HDF5Reader(::Function, filename::AbstractString[, context::ClimaComms.AbstractCommsContext])
 
@@ -182,6 +218,7 @@ function _scan_data_layout(layoutstring::AbstractString)
         "VIJHF",
         "VIFH",
         "VIHF",
+        "DataF",
     ) "datalayout is $layoutstring"
     layoutstring == "IJFH" && return DataLayouts.IJFH
     layoutstring == "IJHF" && return DataLayouts.IJHF
@@ -192,6 +229,7 @@ function _scan_data_layout(layoutstring::AbstractString)
     layoutstring == "VF" && return DataLayouts.VF
     layoutstring == "VIJFH" && return DataLayouts.VIJFH
     layoutstring == "VIJHF" && return DataLayouts.VIJHF
+    layoutstring == "DataF" && return DataLayouts.DataF
     return DataLayouts.VIFH
 end
 
@@ -513,11 +551,23 @@ function read_field(reader::HDF5Reader, name::AbstractString)
                 staggering = Grids.CellFace()
             end
             space = Spaces.space(grid, staggering)
-        else
+        elseif haskey(attrs(obj), "space")
             space = read_space(reader, attrs(obj)["space"])
+        else
+            # if the there is no grid, then the field is on a PointSpace
+            lg_obj = reader.file["local_geometry_data/$name"]
+            ArrayType = ClimaComms.array_type(ClimaComms.device(reader.context))
+            lg_data = ArrayType(read(lg_obj))
+            # because it is a point space, the data layout of local_geometry_data is always DataF
+            lg_type = read_type(attrs(lg_obj)["local_geometry_type"])
+            local_geometry_data = DataLayouts.DataF{lg_type}(lg_data)
+            space = Spaces.PointSpace(local_geometry_data)
+            topology = nothing
         end
-        topology = Spaces.topology(space)
-        ArrayType = ClimaComms.array_type(topology)
+        if !(space isa Spaces.AbstractPointSpace)
+            topology = Spaces.topology(space)
+            ArrayType = ClimaComms.array_type(topology)
+        end
         data_layout = attrs(obj)["data_layout"]
         has_horizontal = occursin('I', data_layout)
         DataLayout = _scan_data_layout(data_layout)
@@ -535,7 +585,11 @@ function read_field(reader::HDF5Reader, name::AbstractString)
         # For when `Nh` is added back to the type space
         #     Nhd = Nh_dim(data_layout)
         #     Nht = Nhd == -1 ? () : (size(data, Nhd),)
-        ElType = eval(Meta.parse(attrs(obj)["value_type"]))
+        # The `value_type` attribute is deprecated. here we mantain backwards compatibility
+        ElType = read_type(
+            haskey(attrs(obj), "field_eltype") ?
+            attrs(obj)["field_eltype"] : attrs(obj)["value_type"],
+        )
         if data_layout in ("VIJFH", "VIFH")
             Nv = size(data, 1)
             # values = DataLayout{ElType, Nv, Nij, Nht...}(data) # when Nh is in type-domain
@@ -543,6 +597,8 @@ function read_field(reader::HDF5Reader, name::AbstractString)
         elseif data_layout in ("VF",)
             Nv = size(data, 1)
             values = DataLayout{ElType, Nv}(data)
+        elseif data_layout in ("DataF",)
+            values = DataLayout{ElType}(data)
         else
             # values = DataLayout{ElType, Nij, Nht...}(data) # when Nh is in type-domain
             values = DataLayout{ElType, Nij}(data)
