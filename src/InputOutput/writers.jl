@@ -321,6 +321,7 @@ end
 
 # Grids
 #
+defaultname(::DataLayouts.IJHMask) = "IJHMask"
 defaultname(::Grids.SpectralElementGrid1D) = "horizontal_grid"
 defaultname(::Grids.SpectralElementGrid2D) = "horizontal_grid"
 defaultname(::Grids.ExtrudedFiniteDifferenceGrid) =
@@ -374,6 +375,13 @@ function write_new!(
     )
     write_attribute(group, "bubble", grid.enable_bubble ? "true" : "false")
     write_attribute(group, "topology", write!(writer, Spaces.topology(grid)))
+    if !(grid.mask isa DataLayouts.NoMask)
+        write_attribute(
+            group,
+            "grid_mask",
+            write!(writer, grid.mask, Spaces.topology(grid)),
+        )
+    end
     return name
 end
 
@@ -450,6 +458,17 @@ function write_new!(
     return name
 end
 
+function write!(
+    writer::HDF5Writer,
+    mask::DataLayouts.IJHMask,
+    topology::Topologies.AbstractTopology,
+    name::AbstractString = defaultname(mask),
+)
+    group = create_group(writer.file, "grid_mask/$name")
+    write!(writer, group, mask.is_active, "is_active", topology)
+    return name
+end
+
 # write fields
 """
     write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
@@ -510,6 +529,109 @@ function write!(
         string(lg_type),
     )
 end
+
+"""
+    write!(
+        writer::HDF5Writer,
+        values::DataLayouts.AbstractData,
+        name::AbstractString,
+        topology::Topologies.AbstractTopology,
+    )
+
+Write an object of type `AbstractData` and name `name` to the HDF5 file.
+
+The `values` should belong to a `Field` whose `space`'s topology is
+`topology(axes(field))`.
+"""
+function write!(
+    writer::HDF5Writer,
+    group,
+    values::DataLayouts.AbstractData,
+    name::AbstractString,
+    topology::Topologies.AbstractTopology,
+)
+    if topology isa Topologies.Topology2D &&
+       !(writer.context isa ClimaComms.SingletonCommsContext)
+        nelems = Topologies.nelems(topology)
+        (; local_elem_gidx) = topology
+        _write_mpi!(group, values, name; nelems, local_elem_gidx)
+    else
+        _write!(group, values, name)
+    end
+end
+
+function write_plain_array!(group, array::AbstractArray, name::AbstractString)
+    nd = ndims(array)
+    dims = size(array)
+    localidx = ntuple(d -> (:), nd)
+    dataset =
+        create_dataset(group, name, datatype(eltype(array)), dataspace(dims))
+    dataset[localidx...] = array
+    return dataset
+end
+
+"""
+    _write_mpi!(
+        writer::HDF5Writer,
+        data::DataLayouts.AbstractData,
+        name::AbstractString,
+        nelems,
+        local_elem_gidx
+    )
+
+This is an internal method, meant to be used for writing data layouts to the
+HDF5 file.
+
+This method should be used for distributed datalayouts.
+"""
+function _write_mpi!(
+    group,
+    values::DataLayouts.AbstractData,
+    name::AbstractString;
+    nelems,
+    local_elem_gidx,
+)
+    h_dim = DataLayouts.h_dim(DataLayouts.singleton(values))
+    array = parent(values)
+    nd = ndims(array)
+    dims = ntuple(d -> d == h_dim ? nelems : size(array, d), nd)
+    localidx = ntuple(d -> d == h_dim ? local_elem_gidx : (:), nd)
+    dataset = create_dataset(
+        group,
+        "data/$name",
+        datatype(eltype(array)),
+        dataspace(dims);
+        dxpl_mpio = :collective,
+    )
+    dataset[localidx...] = array
+    write_attribute(dataset, "array", array)
+    write_attribute(dataset, "data_layout", string(nameof(typeof(values))))
+    write_attribute(dataset, "data_eltype", string(eltype(values)))
+    return name
+end
+
+"""
+    _write!(
+        writer::HDF5Writer,
+        data::DataLayouts.AbstractData,
+        name::AbstractString,
+    )
+
+This is an internal method, meant to be used for writing data layouts to the
+HDF5 file.
+
+This method should be used when this is not a distributed datalayout.
+"""
+function _write!(group, values::DataLayouts.AbstractData, name::AbstractString;)
+    h_dim = DataLayouts.h_dim(DataLayouts.singleton(values))
+    array = parent(values)
+    dataset = write_plain_array!(group, array, name)
+    write_attribute(dataset, "array", array)
+    write_attribute(dataset, "type", string(nameof(typeof(values))))
+    write_attribute(dataset, "data_eltype", string(eltype(values)))
+    return name
+end
+
 
 """
     write!(

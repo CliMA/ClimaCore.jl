@@ -414,6 +414,49 @@ function read_grid(reader, name)
     end
 end
 
+"""
+    read_data_layout(dataset, topology)
+
+Read a datalayout from a `dataset`, with a given `topology`.
+
+This should cooperate with datasets written by `write!` for datalayouts.
+"""
+function read_data_layout(dataset, topology)
+    ArrayType = ClimaComms.array_type(topology)
+    data_layout = HDF5.read_attribute(dataset, "type")
+    has_horizontal = occursin('I', data_layout)
+    DataLayout = _scan_data_layout(data_layout)
+    array = HDF5.read(dataset)
+    has_horizontal &&
+        (h_dim = DataLayouts.h_dim(DataLayouts.singleton(DataLayout)))
+    if topology isa Topologies.Topology2D
+        nd = ndims(array)
+        localidx = ntuple(d -> d == h_dim ? topology.local_elem_gidx : (:), nd)
+        data = ArrayType(array[localidx...])
+    else
+        data = ArrayType(read(array))
+    end
+    has_horizontal && (Nij = size(data, findfirst("I", data_layout)[1]))
+    # For when `Nh` is added back to the type space
+    #     Nhd = Nh_dim(data_layout)
+    #     Nht = Nhd == -1 ? () : (size(data, Nhd),)
+    ElType = read_type(HDF5.read_attribute(dataset, "data_eltype"))
+    if data_layout in ("VIJFH", "VIFH")
+        Nv = size(data, 1)
+        # values = DataLayout{ElType, Nv, Nij, Nht...}(data) # when Nh is in type-domain
+        values = DataLayout{ElType, Nv, Nij}(data)
+    elseif data_layout in ("VF",)
+        Nv = size(data, 1)
+        values = DataLayout{ElType, Nv}(data)
+    elseif data_layout in ("DataF",)
+        values = DataLayout{ElType}(data)
+    else
+        # values = DataLayout{ElType, Nij, Nht...}(data) # when Nh is in type-domain
+        values = DataLayout{ElType, Nij}(data)
+    end
+    return values
+end
+
 function read_grid_new(reader, name)
     group = reader.file["grids/$name"]
     type = attrs(group)["type"]
@@ -426,11 +469,21 @@ function read_grid_new(reader, name)
         if type == "SpectralElementGrid1D"
             return Grids.SpectralElementGrid1D(topology, quadrature_style)
         else
-            return Grids.SpectralElementGrid2D(
+            enable_mask = haskey(attrs(group), "grid_mask")
+            grid = Grids.SpectralElementGrid2D(
                 topology,
                 quadrature_style;
                 enable_bubble,
+                enable_mask,
             )
+            if enable_mask
+                mask_type = keys(reader.file["grid_mask"])[1]
+                @assert mask_type == "IJHMask"
+                ds_is_active = reader.file["grid_mask"]["IJHMask"]["is_active"]
+                is_active = read_data_layout(ds_is_active, topology)
+                Grids.set_mask!(grid, is_active)
+            end
+            return grid
         end
     elseif type == "FiniteDifferenceGrid"
         topology = read_topology(reader, attrs(group)["topology"])

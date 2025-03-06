@@ -1,8 +1,13 @@
+#=
+julia --project=.buildkite
+using Revise; include("test/InputOutput/unit_spectralelement2d.jl")
+=#
 using Test
 using ClimaComms
 ClimaComms.@import_required_backends
 using LinearAlgebra
 import ClimaCore
+import ClimaCore.Utilities.Cache
 import ClimaCore:
     Domains,
     Fields,
@@ -41,16 +46,7 @@ function init_state(local_geometry, p)
     return (ρ = ρ, u = u, ρθ = ρ * θ)
 end
 
-@testset "restart test for 2D spectral element simulations" begin
-    parameters = (
-        ϵ = 0.1,  # perturbation size for initial condition
-        l = 0.5, # Gaussian width
-        k = 0.5, # Sinusoidal wavenumber
-        ρ₀ = 1.0, # reference density
-        c = 2,
-        g = 10,
-        D₄ = 1e-4, # hyperdiffusion coefficient
-    )
+function init_space(context; enable_bubble, enable_mask)
     domain = Domains.RectangleDomain(
         Domains.IntervalDomain(
             Geometry.XPoint(-2π),
@@ -67,31 +63,92 @@ end
     Nq = 4
     quad = Quadratures.GLL{Nq}()
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
-    device = ClimaComms.device()
-    @info "Using device" device
-    context = ClimaComms.SingletonCommsContext(device)
     grid_topology = Topologies.Topology2D(context, mesh)
 
-    for enable_bubble in (true, false)
-        space =
-            Spaces.SpectralElementSpace2D(grid_topology, quad; enable_bubble)
+    return Spaces.SpectralElementSpace2D(
+        grid_topology,
+        quad;
+        enable_bubble,
+        enable_mask,
+    )
+end
 
-        y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
-        Y = Fields.FieldVector(y0 = y0)
+# function mktempfile(f)
+#     mktempdir() do dir
+#         cd(dir) do
+#             f(tempname(dir))
+#         end
+#     end
+# end
 
-        # write field vector to hdf5 file
-        filename = tempname(pwd())
+function mktempfile(f, context)
+    filename =
+        ClimaComms.iamroot(context) ? tempname(pwd(); cleanup = true) : ""
+    filename = ClimaComms.bcast(context, filename)
+    f(filename)
+end
+
+@testset "restart test for 2D spectral element simulations" begin
+    device = ClimaComms.device()
+    @info "Using device" device
+    context = ClimaComms.context(device)
+    parameters = (
+        ϵ = 0.1,  # perturbation size for initial condition
+        l = 0.5, # Gaussian width
+        k = 0.5, # Sinusoidal wavenumber
+        ρ₀ = 1.0, # reference density
+        c = 2,
+        g = 10,
+        D₄ = 1e-4, # hyperdiffusion coefficient
+    )
+    space = init_space(context; enable_bubble = true, enable_mask = false)
+    y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
+    Y = Fields.FieldVector(y0 = y0)
+
+    # write field vector to hdf5 file
+    mktempfile(context) do filename
         InputOutput.HDF5Writer(filename, context) do writer
             InputOutput.write!(writer, "Y" => Y) # write field vector from hdf5 file
         end
+        Cache.clean_cache!()
         InputOutput.HDF5Reader(filename, context) do reader
             restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
-            ClimaComms.allowscalar(device) do
-                @test restart_Y == Y # test if restart is exact
-            end
-            ClimaComms.allowscalar(device) do
-                @test axes(restart_Y) == axes(Y) # test if restart is exact for space
-            end
+            @test restart_Y == Y # test if restart is exact
+            @test axes(restart_Y) == axes(Y) # test if restart is exact for space
+        end
+    end
+
+    # Test with masks
+    space = init_space(context; enable_bubble = true, enable_mask = true)
+    y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
+    Y = Fields.FieldVector(y0 = y0)
+
+    Spaces.set_mask!(space) do coords
+        rand() > 0.5
+    end
+
+    # write field vector to hdf5 file
+    mktempfile(context) do filename
+        InputOutput.HDF5Writer(filename, context) do writer
+            InputOutput.write!(writer, "Y" => Y) # write field vector from hdf5 file
+        end
+
+        InputOutput.HDF5Reader(filename, context) do reader
+            # We need to clean the cache so that the next read of space
+            # does not use a pointer to the cached one.
+            Cache.clean_cache!()
+            restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
+
+            is_active_restart =
+                parent(Spaces.get_mask(axes(restart_Y.y0)).is_active)
+            is_active = parent(Spaces.get_mask(axes(Y.y0)).is_active)
+            @test is_active == is_active_restart
+
+            # Test that we're not doing trivial pointer comparisons
+            @test !(axes(Y.y0) === axes(restart_Y.y0))
+            @test restart_Y == Y
+            @test typeof(axes(restart_Y.y0)) == typeof(axes(Y.y0))
+            @test axes(restart_Y) == axes(Y) # test if restart is exact for space
         end
     end
 end
