@@ -16,17 +16,29 @@ function Base.copyto!(
         StencilBroadcasted{CUDAColumnStencilStyle},
         Broadcasted{CUDAColumnStencilStyle},
     },
+    mask = DataLayouts.NoMask(),
 )
     space = axes(out)
     bounds = Operators.window_bounds(space, bc)
     out_fv = Fields.field_values(out)
     us = DataLayouts.UniversalSize(out_fv)
-    args =
-        (strip_space(out, space), strip_space(bc, space), axes(out), bounds, us)
+    mask = Spaces.get_mask(space)
+    args = (
+        strip_space(out, space),
+        strip_space(bc, space),
+        axes(out),
+        bounds,
+        us,
+        mask,
+    )
 
     threads = threads_via_occupancy(copyto_stencil_kernel!, args)
     n_max_threads = min(threads, get_N(us))
-    p = partition(out_fv, n_max_threads)
+    p = if mask isa NoMask
+        partition(out_fv, n_max_threads)
+    else
+        masked_partition(us, n_max_threads, mask)
+    end
 
     auto_launch!(
         copyto_stencil_kernel!,
@@ -39,10 +51,14 @@ function Base.copyto!(
 end
 import ClimaCore.DataLayouts: get_N, get_Nv, get_Nij, get_Nij, get_Nh
 
-function copyto_stencil_kernel!(out, bc, space, bds, us)
+function copyto_stencil_kernel!(out, bc, space, bds, us, mask)
     @inbounds begin
         out_fv = Fields.field_values(out)
-        I = universal_index(out_fv)
+        I = if mask isa NoMask
+            universal_index(out_fv)
+        else
+            masked_universal_index(mask)
+        end
         if is_valid_index(out_fv, I, us)
             (li, lw, rw, ri) = bds
             (i, j, _, v, h) = I.I

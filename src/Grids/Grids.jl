@@ -117,5 +117,44 @@ has_vertical(::AbstractGrid) = false
 has_vertical(::FiniteDifferenceGrid) = true
 has_vertical(::ExtrudedFiniteDifferenceGrid) = true
 
+"""
+    get_mask(grid::AbstractGrid)
+
+Retrieve the mask for the grid (defaults to DataLayouts.NoMask).
+"""
+get_mask(::AbstractGrid) = DataLayouts.NoMask()
+get_mask(grid::ExtrudedFiniteDifferenceGrid) = grid.horizontal_grid.mask
+
+"""
+    set_mask!(fn::Function, grid)
+    set_mask!(grid, ::DataLayouts.AbstractData)
+
+Set the mask using the function `fn`, which is called for all coordinates on the
+given grid.
+"""
+function set_mask! end
+
+set_mask!(fn, grid::ExtrudedFiniteDifferenceGrid) =
+    set_mask!(fn, grid.horizontal_grid)
+function set_mask!(
+    fn,
+    grid::Union{SpectralElementGrid2D, ExtrudedFiniteDifferenceGrid},
+)
+    if !(grid.mask isa DataLayouts.NoMask)
+        @. grid.mask.is_active = fn(grid.local_geometry.coordinates)
+        DataLayouts.set_mask_maps!(grid.mask)
+    end
+    return nothing
+end
+
+set_mask!(grid::ExtrudedFiniteDifferenceGrid, data::DataLayouts.AbstractData) =
+    set_mask!(grid.horizontal_grid, data)
+function set_mask!(grid::SpectralElementGrid2D, data::DataLayouts.AbstractData)
+    if !(grid.mask isa DataLayouts.NoMask)
+        @. grid.mask.is_active = data
+        DataLayouts.set_mask_maps!(grid.mask)
+    end
+    return nothing
+end
 
 end # module

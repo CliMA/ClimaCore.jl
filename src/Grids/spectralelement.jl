@@ -129,6 +129,7 @@ mutable struct SpectralElementGrid2D{
     D,
     IS,
     BS,
+    M,
 } <: AbstractSpectralElementGrid
     topology::T
     quadrature_style::Q
@@ -137,6 +138,7 @@ mutable struct SpectralElementGrid2D{
     dss_weights::D
     internal_surface_geometry::IS
     boundary_surface_geometries::BS
+    mask::M
     enable_bubble::Bool
     autodiff_metric::Bool
 end
@@ -144,11 +146,18 @@ end
 Adapt.@adapt_structure SpectralElementGrid2D
 
 local_geometry_type(
-    ::Type{SpectralElementGrid2D{T, Q, GG, LG, D, IS, BS}},
-) where {T, Q, GG, LG, D, IS, BS} = eltype(LG) # calls eltype from DataLayouts
+    ::Type{SpectralElementGrid2D{T, Q, GG, LG, D, IS, BS, M}},
+) where {T, Q, GG, LG, D, IS, BS, M} = eltype(LG) # calls eltype from DataLayouts
 
 """
-    SpectralElementSpace2D(topology, quadrature_style; enable_bubble, autodiff_metric, horizontal_layout_type = DataLayouts.IJFH)
+    SpectralElementSpace2D(
+        topology,
+        quadrature_style;
+        enable_bubble,
+        autodiff_metric,
+        horizontal_layout_type = DataLayouts.IJFH
+        enable_mask::Bool,
+    )
 
 Construct a `SpectralElementSpace2D` instance given a `topology` and `quadrature`. The
 flag `enable_bubble` enables the `bubble correction` for more accurate element areas.
@@ -161,6 +170,7 @@ SEM for computing metric terms.
 - enable_bubble: Bool
 - autodiff_metric: Bool
 - horizontal_layout_type: Type{<:AbstractData}
+- enable_mask: Boolean used to skip operations where the space's mask is 0
 
 The idea behind the so-called `bubble_correction` is that the numerical area
 of the domain (e.g., the sphere) is given by the sum of nodal integration weights
@@ -189,6 +199,7 @@ function SpectralElementGrid2D(
     horizontal_layout_type = DataLayouts.IJFH,
     enable_bubble::Bool = false,
     autodiff_metric::Bool = true,
+    enable_mask::Bool = false,
 )
     get!(
         Cache.OBJECT_CACHE,
@@ -199,6 +210,7 @@ function SpectralElementGrid2D(
             enable_bubble,
             autodiff_metric,
             horizontal_layout_type,
+            enable_mask,
         ),
     ) do
         _SpectralElementGrid2D(
@@ -207,6 +219,7 @@ function SpectralElementGrid2D(
             horizontal_layout_type;
             enable_bubble,
             autodiff_metric,
+            enable_mask,
         )
     end
 end
@@ -227,6 +240,7 @@ _SpectralElementGrid2D(
     horizontal_layout_type = DataLayouts.IJFH;
     enable_bubble::Bool,
     autodiff_metric::Bool,
+    enable_mask::Bool = false,
 ) = _SpectralElementGrid2D(
     topology,
     quadrature_style,
@@ -234,6 +248,7 @@ _SpectralElementGrid2D(
     horizontal_layout_type;
     enable_bubble,
     autodiff_metric,
+    enable_mask,
 )
 
 function _SpectralElementGrid2D(
@@ -243,6 +258,7 @@ function _SpectralElementGrid2D(
     ::Type{horizontal_layout_type};
     enable_bubble::Bool,
     autodiff_metric::Bool,
+    enable_mask::Bool = false,
 ) where {Nh, horizontal_layout_type}
     @assert horizontal_layout_type <: Union{DataLayouts.IJHF, DataLayouts.IJFH}
     surface_layout_type = if horizontal_layout_type <: DataLayouts.IJFH
@@ -285,6 +301,11 @@ function _SpectralElementGrid2D(
     LG = Geometry.LocalGeometry{AIdx, CoordType2D, FT, SMatrix{2, 2, FT, 4}}
 
     local_geometry = horizontal_layout_type{LG, Nq}(Array{FT}, Nh)
+    mask = if enable_mask
+        DataLayouts.ColumnMask(FT, horizontal_layout_type, DA, Val(Nq), Val(Nh))
+    else
+        DataLayouts.NoMask()
+    end
 
     _, quad_weights = Quadratures.quadrature_points(FT, quadrature_style)
     _, high_order_quad_weights =
@@ -476,10 +497,13 @@ function _SpectralElementGrid2D(
         compute_dss_weights(device_local_geometry, topology, quadrature_style),
         internal_surface_geometry,
         boundary_surface_geometries,
+        mask,
         enable_bubble,
         autodiff_metric,
     )
 end
+
+get_mask(grid::SpectralElementGrid2D) = grid.mask
 
 function ξ_at_nodal_point(FT, quadrature_style, i, j)
     quad_points = Quadratures.quadrature_points(FT, quadrature_style)[1]
@@ -602,10 +626,11 @@ quadrature_style(grid::AbstractSpectralElementGrid) = grid.quadrature_style
 dss_weights(grid::AbstractSpectralElementGrid, ::Nothing) = grid.dss_weights
 
 ## GPU compatibility
-struct DeviceSpectralElementGrid2D{Q, GG, LG} <: AbstractSpectralElementGrid
+struct DeviceSpectralElementGrid2D{Q, GG, LG, M} <: AbstractSpectralElementGrid
     quadrature_style::Q
     global_geometry::GG
     local_geometry::LG
+    mask::M
 end
 
 ClimaComms.context(grid::DeviceSpectralElementGrid2D) = DeviceSideContext()

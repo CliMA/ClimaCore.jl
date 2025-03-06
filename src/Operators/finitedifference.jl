@@ -4032,7 +4032,10 @@ function _serial_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
     space = axes(field_out)
     bounds = window_bounds(space, bc)
     bcs = bc # strip_space(bc, space)
+    mask = Spaces.get_mask(axes(field_out))
     @inbounds for h in 1:Nh, j in 1:Nj, i in 1:Ni
+        DataLayouts.should_compute(mask, CartesianIndex(i, j, 1, 1, h)) ||
+            continue
         apply_stencil!(space, field_out, bcs, (i, j, h), bounds)
     end
     call_post_op_callback() &&
@@ -4044,9 +4047,14 @@ function _threaded_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
     space = axes(field_out)
     bounds = window_bounds(space, bc)
     bcs = bc # strip_space(bc, space)
+    mask = Spaces.get_mask(axes(field_out))
     @inbounds begin
         Threads.@threads for h in 1:Nh
             for j in 1:Nj, i in 1:Ni
+                DataLayouts.should_compute(
+                    mask,
+                    CartesianIndex(i, j, 1, 1, h),
+                ) || continue
                 apply_stencil!(space, field_out, bcs, (i, j, h), bounds)
             end
         end
@@ -4062,6 +4070,7 @@ function Base.copyto!(
         StencilBroadcasted{ColumnStencilStyle},
         Broadcasted{ColumnStencilStyle},
     },
+    mask = DataLayouts.NoMask(),
 )
     space = axes(bc)
     local_geometry = Spaces.local_geometry_data(space)

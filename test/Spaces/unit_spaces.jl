@@ -18,12 +18,131 @@ import ClimaCore:
     Fields,
     DataLayouts,
     Geometry,
+    Operators,
     DeviceSideContext,
     DeviceSideDevice
 
+using ClimaCore.CommonSpaces
 import ClimaCore.DataLayouts: IJFH, VF, slab_index
 
 on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
+
+@testset "2D spaces with mask" begin
+    FT = Float64
+    context = ClimaComms.context()
+    x_max = FT(1)
+    y_max = FT(1)
+    x_elem = 2
+    y_elem = 2
+    x_domain = Domains.IntervalDomain(
+        Geometry.XPoint(zero(x_max)),
+        Geometry.XPoint(x_max);
+        periodic = true,
+    )
+    y_domain = Domains.IntervalDomain(
+        Geometry.YPoint(zero(y_max)),
+        Geometry.YPoint(y_max);
+        periodic = true,
+    )
+    domain = Domains.RectangleDomain(x_domain, y_domain)
+    hmesh = Meshes.RectilinearMesh(domain, x_elem, y_elem)
+
+    quad = Quadratures.GL{1}()
+    htopology = Topologies.Topology2D(context, hmesh)
+    # Test for no-mask case
+    hspace = Spaces.SpectralElementSpace2D(htopology, quad; enable_mask = false)
+    @test Spaces.get_mask(hspace) isa DataLayouts.NoMask
+
+    # Tests with mask
+    hspace = Spaces.SpectralElementSpace2D(htopology, quad; enable_mask = true)
+    mask = Spaces.get_mask(hspace)
+    @test mask isa DataLayouts.IJHMask
+    Spaces.set_mask!(hspace) do coords
+        coords.x > 0.5
+    end
+    @test count(parent(mask.is_active)) == 2
+    @test length(parent(mask.is_active)) == 4
+
+    f = Fields.Field(FT, hspace)
+    fill!(parent(f), 0)
+    @. f = 1 # tests fill!
+    @test count(iszero, parent(f)) == 2
+    ᶜx = Fields.coordinate_field(hspace).x
+    @. f = 1 + ᶜx * 0 # tests copyto!
+    @test count(iszero, parent(f)) == 2
+
+    FT = Float64
+    ᶜspace = ExtrudedCubedSphereSpace(
+        FT;
+        z_elem = 10,
+        z_min = 0,
+        z_max = 1,
+        radius = 10,
+        h_elem = 10,
+        n_quad_points = 4,
+        staggering = CellCenter(),
+        enable_mask = true,
+    )
+    ᶠspace = Spaces.face_space(ᶜspace)
+    ᶠcoords = Fields.coordinate_field(ᶠspace)
+    hᶠcoords = Fields.coordinate_field(Spaces.horizontal_space(ᶠspace))
+    mask = Spaces.get_mask(ᶜspace)
+    @test mask isa DataLayouts.IJHMask
+
+    # Test that mask-field assignment works:
+    # TODO: we should make this easier
+    is_active = similar(mask.is_active)
+    _is_active = Fields.field_values(float.(hᶠcoords.lat .> 0.5))
+    is_active .= DataLayouts.replace_basetype(_is_active, Bool)
+    Spaces.set_mask!(ᶜspace, is_active)
+
+    Spaces.set_mask!(ᶜspace) do coords
+        coords.lat > 0.5
+    end
+    @test count(parent(mask.is_active)) == 4640
+    @test length(parent(mask.is_active)) == 9600
+    ᶜf = zeros(ᶜspace)
+    @. ᶜf = 1 # tests fill!
+    @test count(x -> x == 1, parent(ᶜf)) == 4640 * Spaces.nlevels(axes(ᶜf))
+    @test length(parent(ᶜf)) == 9600 * Spaces.nlevels(axes(ᶜf))
+    ᶜz = Fields.coordinate_field(ᶜspace).z
+    ᶜf = zeros(ᶜspace)
+    @. ᶜf = 1 + 0 * ᶜz # tests copyto!
+    @test count(x -> x == 1, parent(ᶜf)) == 4640 * Spaces.nlevels(axes(ᶜf))
+    @test length(parent(ᶜf)) == 9600 * Spaces.nlevels(axes(ᶜf))
+
+    ᶠf = zeros(ᶠspace)
+    c = zeros(ᶜspace)
+    div = Operators.DivergenceF2C()
+    foo(f, cf) = cf.lat > 0.5 ? zero(f) : sqrt(-1) # results in NaN in masked regions
+    @. c = div(Geometry.WVector(foo(ᶠf, ᶠcoords)))
+    @test count(isnan, parent(c)) == 0
+
+    ᶜspace_no_mask = ExtrudedCubedSphereSpace(
+        FT;
+        z_elem = 10,
+        z_min = 0,
+        z_max = 1,
+        radius = 10,
+        h_elem = 10,
+        n_quad_points = 4,
+        staggering = CellCenter(),
+    )
+    ᶠspace_no_mask = Spaces.face_space(ᶜspace_no_mask)
+    ᶠcoords_no_mask = Fields.coordinate_field(ᶠspace_no_mask)
+    c_no_mask = Fields.Field(FT, ᶜspace_no_mask)
+    ᶠf_no_mask = Fields.Field(FT, ᶠspace_no_mask)
+    if ClimaComms.device(ᶜspace_no_mask) isa ClimaComms.CUDADevice
+        @. c_no_mask = div(Geometry.WVector(foo(ᶠf_no_mask, ᶠcoords_no_mask)))
+        @test count(isnan, parent(c_no_mask)) == 49600
+    else
+        @test_throws DomainError begin
+            @. c_no_mask =
+                div(Geometry.WVector(foo(ᶠf_no_mask, ᶠcoords_no_mask)))
+        end
+    end
+
+end
 
 @testset "1d domain space" begin
     FT = Float64

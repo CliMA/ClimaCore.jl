@@ -30,6 +30,7 @@ Adapt.adapt_structure(
     Adapt.adapt(to, grid.quadrature_style),
     Adapt.adapt(to, grid.global_geometry),
     Adapt.adapt(to, grid.local_geometry),
+    Adapt.adapt(to, grid.mask),
 )
 
 Adapt.adapt_structure(to::CUDA.KernelAdaptor, space::Spaces.PointSpace) =
@@ -53,3 +54,12 @@ Adapt.adapt_structure(
     lim.rtol,
     Limiters.NoConvergenceStats(),
 )
+
+Adapt.adapt_structure(to::CUDA.KernelAdaptor, mask::DataLayouts.IJHMask) =
+    DataLayouts.IJHMask(
+        Adapt.adapt(to, mask.is_active),
+        nothing,
+        Adapt.adapt(to, mask.i_map),
+        Adapt.adapt(to, mask.j_map),
+        Adapt.adapt(to, mask.h_map),
+    )
