@@ -104,8 +104,8 @@ end
         coord -> init_dry_rising_bubble_2d(coord.x, coord.z, params),
         coords,
     )
-    uₕ = map(_ -> Geometry.Covariant1Vector(0.0), coords)
-    w = map(_ -> Geometry.Covariant3Vector(0.0), face_coords)
+    uₕ = map(coord -> Geometry.Covariant1Vector(coord.x * 0.1), coords)
+    w = map(coord -> Geometry.Covariant3Vector(coord.z * 0.2), face_coords)
     Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 
     # write field vector to hdf5 file
