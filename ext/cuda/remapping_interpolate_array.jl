@@ -46,10 +46,11 @@ function interpolate_slab_kernel!(
     weights::AbstractArray{Tuple{A, A}},
 ) where {A}
     index = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+
+    index <= length(output_array) || return nothing
     space = axes(field)
     FT = Spaces.undertype(space)
-
-    if index <= length(output_array)
+    @inbounds begin
         I1, I2 = weights[index]
         Nq1, Nq2 = length(I1), length(I2)
 
@@ -74,10 +75,11 @@ function interpolate_slab_kernel!(
     weights::AbstractArray{Tuple{A}},
 ) where {A}
     index = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    space = axes(field)
-    FT = Spaces.undertype(space)
 
-    if index <= length(output_array)
+    index <= length(output_array) || return nothing
+    @inbounds begin
+        space = axes(field)
+        FT = Spaces.undertype(space)
         I1, = weights[index]
         Nq = length(I1)
 
@@ -130,11 +132,12 @@ function interpolate_slab_level_kernel!(
     (I1, I2)::Tuple{<:AbstractArray, <:AbstractArray},
 )
     index = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    space = axes(field)
-    FT = Spaces.undertype(space)
-    Nq1, Nq2 = length(I1), length(I2)
 
-    if index <= length(vidx_ref_coordinates)
+    index <= length(vidx_ref_coordinates) || return nothing
+    @inbounds begin
+        space = axes(field)
+        FT = Spaces.undertype(space)
+        Nq1, Nq2 = length(I1), length(I2)
         v_lo, v_hi, ξ3 = vidx_ref_coordinates[index]
 
         f_lo = zero(FT)
@@ -165,11 +168,13 @@ function interpolate_slab_level_kernel!(
     (I1,)::Tuple{<:AbstractArray},
 )
     index = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    space = axes(field)
-    FT = Spaces.undertype(space)
-    Nq = length(I1)
 
-    if index <= length(vidx_ref_coordinates)
+    index <= length(vidx_ref_coordinates) || return nothing
+    @inbounds begin
+        space = axes(field)
+        FT = Spaces.undertype(space)
+        Nq = length(I1)
+
         v_lo, v_hi, ξ3 = vidx_ref_coordinates[index]
 
         f_lo = zero(FT)

@@ -685,7 +685,7 @@ function _set_interpolated_values_device!(
 
     for (field_index, field) in enumerate(fields)
         field_values = Fields.field_values(field)
-        for (out_index, h) in enumerate(local_horiz_indices)
+        @inbounds for (out_index, h) in enumerate(local_horiz_indices)
             out[out_index, field_index] = zero(FT)
             if hdims == 2
                 for j in 1:Nq, i in 1:Nq

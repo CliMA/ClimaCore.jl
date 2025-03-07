@@ -29,7 +29,7 @@ function interpolate_slab!(
     space = axes(field)
     FT = Spaces.undertype(space)
 
-    for index in 1:length(output_array)
+    @inbounds for index in 1:length(output_array)
         (I1, I2) = weights[index]
         Nq1, Nq2 = length(I1), length(I2)
 
@@ -56,7 +56,7 @@ function interpolate_slab!(
     space = axes(field)
     FT = Spaces.undertype(space)
 
-    for index in 1:length(output_array)
+    @inbounds for index in 1:length(output_array)
         (I1,) = weights[index]
         Nq = length(I1)
 
@@ -178,7 +178,7 @@ function interpolate_slab_level!(
     FT = Spaces.undertype(space)
     Nq1, Nq2 = length(I1), length(I2)
 
-    for index in 1:length(vidx_ref_coordinates)
+    @inbounds for index in 1:length(vidx_ref_coordinates)
         v_lo, v_hi, ξ3 = vidx_ref_coordinates[index]
 
         f_lo = zero(FT)
@@ -213,7 +213,7 @@ function interpolate_slab_level!(
     FT = Spaces.undertype(space)
     Nq = length(I1)
 
-    for index in 1:length(vidx_ref_coordinates)
+    @inbounds for index in 1:length(vidx_ref_coordinates)
         v_lo, v_hi, ξ3 = vidx_ref_coordinates[index]
 
         f_lo = zero(FT)
@@ -274,7 +274,7 @@ function interpolate_array(
     vertical_indices_ref_coordinates =
         [vertical_indices_ref_coordinate(space, zcoord) for zcoord in zpts]
 
-    for (ix, xcoord) in enumerate(xpts)
+    @inbounds for (ix, xcoord) in enumerate(xpts)
         hcoord = xcoord
         helem = Meshes.containing_element(horz_mesh, hcoord)
         quad = Spaces.quadrature_style(space)
@@ -313,7 +313,9 @@ function interpolate_array(
     vertical_indices_ref_coordinates =
         [vertical_indices_ref_coordinate(space, zcoord) for zcoord in zpts]
 
-    for (iy, ycoord) in enumerate(ypts), (ix, xcoord) in enumerate(xpts)
+    @inbounds for (iy, ycoord) in enumerate(ypts),
+        (ix, xcoord) in enumerate(xpts)
+
         hcoord = Geometry.product_coordinates(xcoord, ycoord)
         helem = Meshes.containing_element(horz_mesh, hcoord)
         quad = Spaces.quadrature_style(space)
