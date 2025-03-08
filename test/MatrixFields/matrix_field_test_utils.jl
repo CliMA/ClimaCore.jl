@@ -21,6 +21,7 @@ import ClimaCore:
     Operators,
     Quadratures
 using ClimaCore.MatrixFields
+import ClimaCore.MatrixFields: ⋆
 
 # Test that an expression is true and that it is also type-stable.
 macro test_all(expression)

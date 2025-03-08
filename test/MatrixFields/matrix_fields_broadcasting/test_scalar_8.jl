@@ -10,7 +10,7 @@ test_opt = get(ENV, "BUILDKITE", "") == "true"
 @testset "diagonal matrix times bi-diagonal matrix times \
                  tri-diagonal matrix times quad-diagonal matrix, but with \
                  forced right-associativity" begin
-    bc = @lazy @. ᶜᶜmat ⋅ (ᶜᶠmat ⋅ (ᶠᶠmat ⋅ ᶠᶜmat))
+    bc = @lazy @. ᶜᶜmat ⋆ (ᶜᶠmat ⋆ (ᶠᶠmat ⋆ ᶠᶜmat))
     if using_cuda
         @test_throws invalid_ir_error materialize(bc)
         @warn "cuda is broken for this test, exiting."
@@ -19,7 +19,7 @@ test_opt = get(ENV, "BUILDKITE", "") == "true"
     result = materialize(bc)
 
     input_fields = (ᶜᶜmat, ᶜᶠmat, ᶠᶠmat, ᶠᶜmat)
-    temp_value_fields = ((@. ᶠᶠmat ⋅ ᶠᶜmat), (@. ᶜᶠmat ⋅ (ᶠᶠmat ⋅ ᶠᶜmat)))
+    temp_value_fields = ((@. ᶠᶠmat ⋆ ᶠᶜmat), (@. ᶜᶠmat ⋆ (ᶠᶠmat ⋆ ᶠᶜmat)))
     ref_set_result! =
         (_result, _ᶜᶜmat, _ᶜᶠmat, _ᶠᶠmat, _ᶠᶜmat, _temp1, _temp2) -> begin
             mul!(_temp1, _ᶠᶠmat, _ᶠᶜmat)
