@@ -2,6 +2,7 @@ import LinearAlgebra: ldiv!
 using ClimaCore: Spaces, Fields, Operators
 using ClimaCore.Utilities: half
 using ClimaCore.MatrixFields
+import ClimaCore.MatrixFields: ⋆
 using ClimaCore.MatrixFields: @name
 
 """

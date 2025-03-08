@@ -224,6 +224,7 @@ function run_unit_test!(
     prevent_leaky_tests::Bool = false,
 )
     @debug "--- About to test $(test.filename)"
+    # @info "--- About to test $(test.filename)"
     stats = if prevent_leaky_tests
         # This is a home-brewed `SafeTestsets`, but it allows us to (inside a module)
         @timevd eval(Meta.parse(test_expr_safe(test)))
@@ -231,6 +232,7 @@ function run_unit_test!(
         @timevd eval(Meta.parse(test_expr(test)))
         # test.elapsed = @elapsed include(test.filename)
     end
+    # @info "--- finished evaling test $(test.filename)"
     (; compile_elapsedtimes, elapsed) = stats
     compile_time = first(compile_elapsedtimes) / 1e9
     recompile_time = last(compile_elapsedtimes) / 1e9

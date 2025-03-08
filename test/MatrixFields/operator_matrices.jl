@@ -7,6 +7,7 @@ import LinearAlgebra: I
 
 import ClimaCore.RecursiveApply: rzero
 import ClimaCore
+import ClimaCore.MatrixFields: ⋆
 import ClimaCore.Operators:
     SetValue,
     SetGradient,
@@ -41,13 +42,13 @@ import ClimaCore.Operators:
 
 include("matrix_field_test_utils.jl")
 
-apply_op_matrix(::Nothing, op_matrix, arg) = @lazy @. op_matrix() ⋅ arg
+apply_op_matrix(::Nothing, op_matrix, arg) = @lazy @. op_matrix() ⋆ arg
 apply_op_matrix(boundary_op, op_matrix, arg) =
-    @lazy @. boundary_op(op_matrix() ⋅ arg)
+    @lazy @. boundary_op(op_matrix() ⋆ arg)
 apply_op_matrix(::Nothing, op_matrix, arg1, arg2) =
-    @lazy @. op_matrix(arg1) ⋅ arg2
+    @lazy @. op_matrix(arg1) ⋆ arg2
 apply_op_matrix(boundary_op, op_matrix, arg1, arg2) =
-    @lazy @. boundary_op(op_matrix(arg1) ⋅ arg2)
+    @lazy @. boundary_op(op_matrix(arg1) ⋆ arg2)
 
 apply_op(::Nothing, op, args...) = @lazy @. op(args...)
 apply_op(boundary_op, op, args...) = @lazy @. boundary_op(op(args...))
@@ -225,36 +226,36 @@ end
     ᶜdiv_matrix = MatrixFields.operator_matrix(ᶜdiv)
     ᶠcurl_matrix = MatrixFields.operator_matrix(ᶠcurl)
 
-    @test_throws "does not contain any Fields" @. ᶜlbias_matrix() ⋅
+    @test_throws "does not contain any Fields" @. ᶜlbias_matrix() ⋆
                                                   ᶠinterp_matrix()
 
     ᶜ0 = @. zero(ᶜscalar)
     ᶜ1 = @. one(ᶜscalar)
     ᶠ1 = @. one(ᶠscalar)
     for get_result in (
-        @lazy(@. ᶜlbias_matrix() ⋅ ᶠinterp_matrix() + DiagonalMatrixRow(ᶜ0)),
-        @lazy(@. DiagonalMatrixRow(ᶜ0) + ᶜlbias_matrix() ⋅ ᶠinterp_matrix()),
-        @lazy(@. ᶜlbias_matrix() ⋅ ᶠinterp_matrix() ⋅ DiagonalMatrixRow(ᶜ1)),
-        @lazy(@. ᶜlbias_matrix() ⋅ DiagonalMatrixRow(ᶠ1) ⋅ ᶠinterp_matrix()),
-        @lazy(@. DiagonalMatrixRow(ᶜ1) ⋅ ᶜlbias_matrix() ⋅ ᶠinterp_matrix()),
+        @lazy(@. ᶜlbias_matrix() ⋆ ᶠinterp_matrix() + DiagonalMatrixRow(ᶜ0)),
+        @lazy(@. DiagonalMatrixRow(ᶜ0) + ᶜlbias_matrix() ⋆ ᶠinterp_matrix()),
+        @lazy(@. ᶜlbias_matrix() ⋆ ᶠinterp_matrix() ⋆ DiagonalMatrixRow(ᶜ1)),
+        @lazy(@. ᶜlbias_matrix() ⋆ DiagonalMatrixRow(ᶠ1) ⋆ ᶠinterp_matrix()),
+        @lazy(@. DiagonalMatrixRow(ᶜ1) ⋆ ᶜlbias_matrix() ⋆ ᶠinterp_matrix()),
     )
         test_field_broadcast(;
             test_name = "product of two lazy operator matrices",
             get_result,
-            set_result = @lazy(@. ᶜlbias_matrix() ⋅ ᶠinterp_matrix()),
+            set_result = @lazy(@. ᶜlbias_matrix() ⋆ ᶠinterp_matrix()),
         )
     end
 
     test_field_broadcast(;
         test_name = "product of six operator matrices",
         get_result = @lazy(
-            @. ᶜflux_correct_matrix(ᶠuvw) ⋅ ᶜadvect_matrix(ᶠuvw) ⋅
-               ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠrbias_matrix() ⋅ ᶜlbias_matrix() ⋅
+            @. ᶜflux_correct_matrix(ᶠuvw) ⋆ ᶜadvect_matrix(ᶠuvw) ⋆
+               ᶜwinterp_matrix(ᶠscalar) ⋆ ᶠrbias_matrix() ⋆ ᶜlbias_matrix() ⋆
                ᶠinterp_matrix()
         ),
         set_result = @lazy(
-            @. ᶜflux_correct_matrix(ᶠuvw) ⋅ ᶜadvect_matrix(ᶠuvw) ⋅
-               ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠrbias_matrix() ⋅ ᶜlbias_matrix() ⋅
+            @. ᶜflux_correct_matrix(ᶠuvw) ⋆ ᶜadvect_matrix(ᶠuvw) ⋆
+               ᶜwinterp_matrix(ᶠscalar) ⋆ ᶠrbias_matrix() ⋆ ᶜlbias_matrix() ⋆
                ᶠinterp_matrix()
         ),
     )
@@ -263,14 +264,14 @@ end
         test_name = "applying six operators to a nested field using operator \
                      matrices",
         get_result = @lazy(
-            @. ᶜflux_correct_matrix(ᶠuvw) ⋅ ᶜadvect_matrix(ᶠuvw) ⋅
-               ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠrbias_matrix() ⋅ ᶜlbias_matrix() ⋅
-               ᶠinterp_matrix() ⋅ ᶜnested
+            @. ᶜflux_correct_matrix(ᶠuvw) ⋆ ᶜadvect_matrix(ᶠuvw) ⋆
+               ᶜwinterp_matrix(ᶠscalar) ⋆ ᶠrbias_matrix() ⋆ ᶜlbias_matrix() ⋆
+               ᶠinterp_matrix() ⋆ ᶜnested
         ),
         set_result = @lazy(
-            @. ᶜflux_correct_matrix(ᶠuvw) ⋅ ᶜadvect_matrix(ᶠuvw) ⋅
-               ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠrbias_matrix() ⋅ ᶜlbias_matrix() ⋅
-               ᶠinterp_matrix() ⋅ ᶜnested
+            @. ᶜflux_correct_matrix(ᶠuvw) ⋆ ᶜadvect_matrix(ᶠuvw) ⋆
+               ᶜwinterp_matrix(ᶠscalar) ⋆ ᶠrbias_matrix() ⋆ ᶜlbias_matrix() ⋆
+               ᶠinterp_matrix() ⋆ ᶜnested
         ),
         ref_set_result = @lazy(
             @. ᶜflux_correct(
@@ -287,21 +288,21 @@ end
         test_name = "applying six operators to a nested field using operator \
                      matrices, but with forced right associativity",
         get_result = @lazy(
-            @. ᶜflux_correct_matrix(ᶠuvw) ⋅ (
-                ᶜadvect_matrix(ᶠuvw) ⋅ (
-                    ᶜwinterp_matrix(ᶠscalar) ⋅ (
-                        ᶠrbias_matrix() ⋅
-                        (ᶜlbias_matrix() ⋅ (ᶠinterp_matrix() ⋅ ᶜnested))
+            @. ᶜflux_correct_matrix(ᶠuvw) ⋆ (
+                ᶜadvect_matrix(ᶠuvw) ⋆ (
+                    ᶜwinterp_matrix(ᶠscalar) ⋆ (
+                        ᶠrbias_matrix() ⋆
+                        (ᶜlbias_matrix() ⋆ (ᶠinterp_matrix() ⋆ ᶜnested))
                     )
                 )
             )
         ),
         set_result = @lazy(
-            @. ᶜflux_correct_matrix(ᶠuvw) ⋅ (
-                ᶜadvect_matrix(ᶠuvw) ⋅ (
-                    ᶜwinterp_matrix(ᶠscalar) ⋅ (
-                        ᶠrbias_matrix() ⋅
-                        (ᶜlbias_matrix() ⋅ (ᶠinterp_matrix() ⋅ ᶜnested))
+            @. ᶜflux_correct_matrix(ᶠuvw) ⋆ (
+                ᶜadvect_matrix(ᶠuvw) ⋆ (
+                    ᶜwinterp_matrix(ᶠscalar) ⋆ (
+                        ᶠrbias_matrix() ⋆
+                        (ᶜlbias_matrix() ⋆ (ᶠinterp_matrix() ⋆ ᶜnested))
                     )
                 )
             )
@@ -325,13 +326,13 @@ end
     # false positive, a compiler issue, or a sign that the code can be improved?
     for get_result in (
         @lazy(
-            @. (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() *
+            @. (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋆ ᶠcurl_matrix() *
                (c12_a,) +
                (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
         ),
         @lazy(
-            @. ᶜdiv_matrix() ⋅ DiagonalMatrixRow(ᶠscalar) ⋅ ᶠgrad_matrix() ⋅ (
-                (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() *
+            @. ᶜdiv_matrix() ⋆ DiagonalMatrixRow(ᶠscalar) ⋆ ᶠgrad_matrix() ⋆ (
+                (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋆ ᶠcurl_matrix() *
                 (c12_a,) +
                 (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
             )
@@ -345,20 +346,20 @@ end
         test_name = "non-trivial combination of operator matrices and other \
                      matrix fields",
         get_result = @lazy(
-            @. ᶠupwind_matrix(ᶠuvw) ⋅ (
-                ᶜdiv_matrix() ⋅ DiagonalMatrixRow(ᶠscalar) ⋅ ᶠgrad_matrix() ⋅
+            @. ᶠupwind_matrix(ᶠuvw) ⋆ (
+                ᶜdiv_matrix() ⋆ DiagonalMatrixRow(ᶠscalar) ⋆ ᶠgrad_matrix() ⋆
                 (
-                    (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() *
+                    (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋆ ᶠcurl_matrix() *
                     (c12_a,) +
                     (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
                 ) - (2I,)
             )
         ),
         set_result = @lazy(
-            @. ᶠupwind_matrix(ᶠuvw) ⋅ (
-                ᶜdiv_matrix() ⋅ DiagonalMatrixRow(ᶠscalar) ⋅ ᶠgrad_matrix() ⋅
+            @. ᶠupwind_matrix(ᶠuvw) ⋆ (
+                ᶜdiv_matrix() ⋆ DiagonalMatrixRow(ᶠscalar) ⋆ ᶠgrad_matrix() ⋆
                 (
-                    (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() *
+                    (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋆ ᶠcurl_matrix() *
                     (c12_a,) +
                     (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
                 ) - (2I,)
@@ -368,31 +369,31 @@ end
 
     # TODO: This case's reference function takes too long to compile on both
     # CPUs and GPUs (more than half an hour), as of Julia 1.9. This might be
-    # happening because of excessive inlining---aside from ⋅, all other finite
+    # happening because of excessive inlining---aside from ⋆, all other finite
     # difference operators use @propagate_inbounds. So, the reference function
     # is currently disabled, although the test does pass when it is enabled.
     test_field_broadcast(;
         test_name = "applying a non-trivial sequence of operations to a scalar \
                      field using operator matrices and other matrix fields",
         get_result = @lazy(
-            @. ᶠupwind_matrix(ᶠuvw) ⋅ (
-                ᶜdiv_matrix() ⋅ DiagonalMatrixRow(ᶠscalar) ⋅ ᶠgrad_matrix() ⋅
+            @. ᶠupwind_matrix(ᶠuvw) ⋆ (
+                ᶜdiv_matrix() ⋆ DiagonalMatrixRow(ᶠscalar) ⋆ ᶠgrad_matrix() ⋆
                 (
-                    (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() *
+                    (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋆ ᶠcurl_matrix() *
                     (c12_a,) +
                     (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
                 ) - (2I,)
-            ) ⋅ ᶜscalar
+            ) ⋆ ᶜscalar
         ),
         set_result = @lazy(
-            @. ᶠupwind_matrix(ᶠuvw) ⋅ (
-                ᶜdiv_matrix() ⋅ DiagonalMatrixRow(ᶠscalar) ⋅ ᶠgrad_matrix() ⋅
+            @. ᶠupwind_matrix(ᶠuvw) ⋆ (
+                ᶜdiv_matrix() ⋆ DiagonalMatrixRow(ᶠscalar) ⋆ ᶠgrad_matrix() ⋆
                 (
-                    (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() *
+                    (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋆ ᶠcurl_matrix() *
                     (c12_a,) +
                     (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
                 ) - (2I,)
-            ) ⋅ ᶜscalar
+            ) ⋆ ᶜscalar
         ),
         # ref_set_result = @lazy(@. ᶠupwind(
         #     ᶠuvw,

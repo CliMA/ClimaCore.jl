@@ -65,6 +65,6 @@ end
         (ᶠᶠmatrix_without_outside_entries, ᶠᶠmatrix_with_outside_entries),
         (ᶠᶠmatrix_without_outside_entries, ᶠᶜmatrix_with_outside_entries),
     )
-        @test !any(isnan, parent(@. matrix_field1 ⋅ matrix_field2))
+        @test !any(isnan, parent(@. matrix_field1 ⋆ matrix_field2))
     end
 end

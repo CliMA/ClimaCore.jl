@@ -6,9 +6,9 @@ using Revise; include(joinpath("test", "Spaces", "opt_spaces.jl"))
 import ClimaCore
 import ClimaCore: Spaces, Grids, Topologies
 using Test
-include(
+@isdefined(TU) || include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
-)
+);
 import .TestUtilities as TU
 import ClimaComms
 ClimaComms.@import_required_backends

@@ -28,9 +28,9 @@ using LinearAlgebra: norm
 using Statistics: mean
 using ForwardDiff
 
-include(
+@isdefined(TU) || include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
-)
+);
 import .TestUtilities as TU
 
 """

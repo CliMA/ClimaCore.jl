@@ -9,10 +9,10 @@ include(joinpath(pkgdir(ClimaCore),"test","MatrixFields","matrix_fields_broadcas
 test_opt = get(ENV, "BUILDKITE", "") == "true"
 @testset "matrix times matrix times linear combination times matrix \
                  times another linear combination times matrix" begin
-    bc = @lazy @. ᶠᶜmat ⋅ ᶜᶠmat ⋅
-             (2 * ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat + ᶠᶠmat ⋅ ᶠᶠmat / 3 - (4I,)) ⋅
-             ᶠᶠmat ⋅
-             (ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat * 2 - (ᶠᶠmat / 3) ⋅ ᶠᶠmat + (4I,)) ⋅
+    bc = @lazy @. ᶠᶜmat ⋆ ᶜᶠmat ⋆
+             (2 * ᶠᶜmat ⋆ ᶜᶜmat ⋆ ᶜᶠmat + ᶠᶠmat ⋆ ᶠᶠmat / 3 - (4I,)) ⋆
+             ᶠᶠmat ⋆
+             (ᶠᶜmat ⋆ ᶜᶜmat ⋆ ᶜᶠmat * 2 - (ᶠᶠmat / 3) ⋆ ᶠᶠmat + (4I,)) ⋆
              ᶠᶠmat
     result = materialize(bc)
 
@@ -60,26 +60,26 @@ test_opt = get(ENV, "BUILDKITE", "") == "true"
         end
 
     temp_value_fields = (
-        (@. ᶠᶜmat ⋅ ᶜᶠmat),
+        (@. ᶠᶜmat ⋆ ᶜᶠmat),
         (@. 2 * ᶠᶜmat),
-        (@. 2 * ᶠᶜmat ⋅ ᶜᶜmat),
-        (@. 2 * ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat),
-        (@. ᶠᶠmat ⋅ ᶠᶠmat),
-        (@. 2 * ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat + ᶠᶠmat ⋅ ᶠᶠmat / 3 - (4I,)),
-        (@. ᶠᶜmat ⋅ ᶜᶠmat ⋅
-            (2 * ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat + ᶠᶠmat ⋅ ᶠᶠmat / 3 - (4I,))),
-        (@. ᶠᶜmat ⋅ ᶜᶠmat ⋅
-            (2 * ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat + ᶠᶠmat ⋅ ᶠᶠmat / 3 - (4I,)) ⋅
+        (@. 2 * ᶠᶜmat ⋆ ᶜᶜmat),
+        (@. 2 * ᶠᶜmat ⋆ ᶜᶜmat ⋆ ᶜᶠmat),
+        (@. ᶠᶠmat ⋆ ᶠᶠmat),
+        (@. 2 * ᶠᶜmat ⋆ ᶜᶜmat ⋆ ᶜᶠmat + ᶠᶠmat ⋆ ᶠᶠmat / 3 - (4I,)),
+        (@. ᶠᶜmat ⋆ ᶜᶠmat ⋆
+            (2 * ᶠᶜmat ⋆ ᶜᶜmat ⋆ ᶜᶠmat + ᶠᶠmat ⋆ ᶠᶠmat / 3 - (4I,))),
+        (@. ᶠᶜmat ⋆ ᶜᶠmat ⋆
+            (2 * ᶠᶜmat ⋆ ᶜᶜmat ⋆ ᶜᶠmat + ᶠᶠmat ⋆ ᶠᶠmat / 3 - (4I,)) ⋆
             ᶠᶠmat),
-        (@. ᶠᶜmat ⋅ ᶜᶜmat),
-        (@. ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat),
+        (@. ᶠᶜmat ⋆ ᶜᶜmat),
+        (@. ᶠᶜmat ⋆ ᶜᶜmat ⋆ ᶜᶠmat),
         (@. ᶠᶠmat / 3),
-        (@. (ᶠᶠmat / 3) ⋅ ᶠᶠmat),
-        (@. ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat * 2 - (ᶠᶠmat / 3) ⋅ ᶠᶠmat + (4I,)),
-        (@. ᶠᶜmat ⋅ ᶜᶠmat ⋅
-            (2 * ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat + ᶠᶠmat ⋅ ᶠᶠmat / 3 - (4I,)) ⋅
-            ᶠᶠmat ⋅
-            (ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat * 2 - (ᶠᶠmat / 3) ⋅ ᶠᶠmat + (4I,))),
+        (@. (ᶠᶠmat / 3) ⋆ ᶠᶠmat),
+        (@. ᶠᶜmat ⋆ ᶜᶜmat ⋆ ᶜᶠmat * 2 - (ᶠᶠmat / 3) ⋆ ᶠᶠmat + (4I,)),
+        (@. ᶠᶜmat ⋆ ᶜᶠmat ⋆
+            (2 * ᶠᶜmat ⋆ ᶜᶜmat ⋆ ᶜᶠmat + ᶠᶠmat ⋆ ᶠᶠmat / 3 - (4I,)) ⋆
+            ᶠᶠmat ⋆
+            (ᶠᶜmat ⋆ ᶜᶜmat ⋆ ᶜᶠmat * 2 - (ᶠᶠmat / 3) ⋆ ᶠᶠmat + (4I,))),
     )
 
     unit_test_field_broadcast_vs_array_reference(

@@ -31,17 +31,10 @@ using LinearAlgebra: norm
 using Statistics: mean
 using ForwardDiff
 
-if !(@isdefined(TU))
-    include(
-        joinpath(
-            pkgdir(ClimaCore),
-            "test",
-            "TestUtilities",
-            "TestUtilities.jl",
-        ),
-    )
-    import .TestUtilities as TU
-end
+@isdefined(TU) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+);
+import .TestUtilities as TU
 
 @show ClimaComms.device()
 
