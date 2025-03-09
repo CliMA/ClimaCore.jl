@@ -20,9 +20,9 @@ import ClimaCore:
     Topologies,
     DataLayouts
 
-include(
+@isdefined(TU) || include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
-)
+);
 import .TestUtilities as TU
 
 function get_space_cs(::Type{FT}; context, R = 300.0) where {FT}
@@ -34,7 +34,7 @@ function get_space_cs(::Type{FT}; context, R = 300.0) where {FT}
     return space
 end
 
-function one_to_n(a::AbstractArray)
+function one_to_n_dss(a::AbstractArray)
     _a = Array(a)
     Random.seed!(1234)
     for i in 1:length(_a)
@@ -44,7 +44,7 @@ function one_to_n(a::AbstractArray)
 end
 
 function test_dss_count(f::Fields.Field, buff::Topologies.DSSBuffer, nc)
-    parent(f) .= one_to_n(parent(f))
+    parent(f) .= one_to_n_dss(parent(f))
     @test allunique(parent(f))
     cf = copy(f)
     Spaces.weighted_dss!(f => buff)
@@ -53,7 +53,7 @@ function test_dss_count(f::Fields.Field, buff::Topologies.DSSBuffer, nc)
     return (; n_dss_affected)
 end
 
-function get_space_and_buffers(::Type{FT}; context) where {FT}
+function get_space_and_buffers3(::Type{FT}; context) where {FT}
     init_state_covariant12(local_geometry, p) =
         Geometry.Covariant12Vector(1.0, -1.0)
     init_state_covariant123(local_geometry, p) =
@@ -102,7 +102,7 @@ end
 @testset "DSS of AxisTensors on Cubed Sphere" begin
     FT = Float64
     device = ClimaComms.device()
-    nt = get_space_and_buffers(FT; context = ClimaComms.context(device))
+    nt = get_space_and_buffers3(FT; context = ClimaComms.context(device))
 
     # test DSS for a Covariant12Vector
     # ensure physical velocity is continuous across SE boundary for initial state

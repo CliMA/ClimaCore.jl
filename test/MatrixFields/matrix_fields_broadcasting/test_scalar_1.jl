@@ -9,7 +9,7 @@ include(joinpath(pkgdir(ClimaCore),"test","MatrixFields","matrix_fields_broadcas
 #! format: on
 test_opt = get(ENV, "BUILDKITE", "") == "true"
 @testset "diagonal matrix times vector" begin
-    bc = @lazy @. ᶜᶜmat ⋅ ᶜvec
+    bc = @lazy @. ᶜᶜmat ⋆ ᶜvec
     result = materialize(bc)
 
     input_fields = (ᶜᶜmat, ᶜvec)

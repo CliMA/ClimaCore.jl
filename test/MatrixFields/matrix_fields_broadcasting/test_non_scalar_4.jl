@@ -13,14 +13,14 @@ test_opt = get(ENV, "BUILDKITE", "") == "true"
                  times matrix of numbers times matrix of numbers times \
                  vector of nested values" begin
 
-    bc = @lazy @. ᶜᶠmat_NT ⋅ ᶠᶜmat ⋅ ᶜᶠmat ⋅ ᶠᶜmat_NT ⋅ ᶜvec_NT
+    bc = @lazy @. ᶜᶠmat_NT ⋆ ᶠᶜmat ⋆ ᶜᶠmat ⋆ ᶠᶜmat_NT ⋆ ᶜvec_NT
     result = materialize(bc)
 
     ref_set_result! =
         result -> (@. result = nested_type(
-            ᶜᶠmat ⋅ ᶠᶜmat ⋅ ᶜᶠmat ⋅ ᶠᶜmat ⋅ ᶜvec,
-            ᶜᶠmat2 ⋅ ᶠᶜmat ⋅ ᶜᶠmat ⋅ ᶠᶜmat2 ⋅ ᶜvec,
-            ᶜᶠmat3 ⋅ ᶠᶜmat ⋅ ᶜᶠmat ⋅ ᶠᶜmat3 ⋅ ᶜvec,
+            ᶜᶠmat ⋆ ᶠᶜmat ⋆ ᶜᶠmat ⋆ ᶠᶜmat ⋆ ᶜvec,
+            ᶜᶠmat2 ⋆ ᶠᶜmat ⋆ ᶜᶠmat ⋆ ᶠᶜmat2 ⋆ ᶜvec,
+            ᶜᶠmat3 ⋆ ᶠᶜmat ⋆ ᶜᶠmat ⋆ ᶠᶜmat3 ⋆ ᶜvec,
         ))
 
     unit_test_field_broadcast(

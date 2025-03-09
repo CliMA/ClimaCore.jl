@@ -8,8 +8,8 @@ include(joinpath(pkgdir(ClimaCore),"test","MatrixFields","matrix_fields_broadcas
 #! format: on
 test_opt = get(ENV, "BUILDKITE", "") == "true"
 @testset "linear combination times another linear combination" begin
-    bc = @lazy @. (2 * ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat + ᶠᶠmat ⋅ ᶠᶠmat / 3 - (4I,)) ⋅
-             (ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat * 2 - (ᶠᶠmat / 3) ⋅ ᶠᶠmat + (4I,))
+    bc = @lazy @. (2 * ᶠᶜmat ⋆ ᶜᶜmat ⋆ ᶜᶠmat + ᶠᶠmat ⋆ ᶠᶠmat / 3 - (4I,)) ⋆
+             (ᶠᶜmat ⋆ ᶜᶜmat ⋆ ᶜᶠmat * 2 - (ᶠᶠmat / 3) ⋆ ᶠᶠmat + (4I,))
     result = materialize(bc)
 
     input_fields = (ᶜᶜmat, ᶜᶠmat, ᶠᶠmat, ᶠᶜmat)
@@ -49,15 +49,15 @@ test_opt = get(ENV, "BUILDKITE", "") == "true"
 
     temp_value_fields = (
         (@. 2 * ᶠᶜmat),
-        (@. 2 * ᶠᶜmat ⋅ ᶜᶜmat),
-        (@. 2 * ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat),
-        (@. ᶠᶠmat ⋅ ᶠᶠmat),
-        (@. 2 * ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat + ᶠᶠmat ⋅ ᶠᶠmat / 3 - (4I,)),
-        (@. ᶠᶜmat ⋅ ᶜᶜmat),
-        (@. ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat),
+        (@. 2 * ᶠᶜmat ⋆ ᶜᶜmat),
+        (@. 2 * ᶠᶜmat ⋆ ᶜᶜmat ⋆ ᶜᶠmat),
+        (@. ᶠᶠmat ⋆ ᶠᶠmat),
+        (@. 2 * ᶠᶜmat ⋆ ᶜᶜmat ⋆ ᶜᶠmat + ᶠᶠmat ⋆ ᶠᶠmat / 3 - (4I,)),
+        (@. ᶠᶜmat ⋆ ᶜᶜmat),
+        (@. ᶠᶜmat ⋆ ᶜᶜmat ⋆ ᶜᶠmat),
         (@. ᶠᶠmat / 3),
-        (@. (ᶠᶠmat / 3) ⋅ ᶠᶠmat),
-        (@. ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat * 2 - (ᶠᶠmat / 3) ⋅ ᶠᶠmat + (4I,)),
+        (@. (ᶠᶠmat / 3) ⋆ ᶠᶠmat),
+        (@. ᶠᶜmat ⋆ ᶜᶜmat ⋆ ᶜᶠmat * 2 - (ᶠᶠmat / 3) ⋆ ᶠᶠmat + (4I,)),
     )
 
     unit_test_field_broadcast_vs_array_reference(

@@ -200,6 +200,7 @@ This means that we can express the bounds on the interior values of ``i`` as
 """
 struct MultiplyColumnwiseBandMatrixField <: Operators.FiniteDifferenceOperator end
 const ⋅ = MultiplyColumnwiseBandMatrixField()
+const ⋆ = MultiplyColumnwiseBandMatrixField()
 
 Operators.strip_space(op::MultiplyColumnwiseBandMatrixField, _) = op
 

@@ -9,15 +9,15 @@ include(joinpath(pkgdir(ClimaCore),"test","MatrixFields","matrix_fields_broadcas
 test_opt = get(ENV, "BUILDKITE", "") == "true"
 @testset "another linear combination of matrix products and \
                  LinearAlgebra.I" begin
-    bc = @lazy @. ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat * 2 - (ᶠᶠmat / 3) ⋅ ᶠᶠmat + (4I,)
+    bc = @lazy @. ᶠᶜmat ⋆ ᶜᶜmat ⋆ ᶜᶠmat * 2 - (ᶠᶠmat / 3) ⋆ ᶠᶠmat + (4I,)
     result = materialize(bc)
 
     input_fields = (ᶜᶜmat, ᶜᶠmat, ᶠᶠmat, ᶠᶜmat)
     temp_value_fields = (
-        (@. ᶠᶜmat ⋅ ᶜᶜmat),
-        (@. ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat),
+        (@. ᶠᶜmat ⋆ ᶜᶜmat),
+        (@. ᶠᶜmat ⋆ ᶜᶜmat ⋆ ᶜᶠmat),
         (@. ᶠᶠmat / 3),
-        (@. (ᶠᶠmat / 3) ⋅ ᶠᶠmat),
+        (@. (ᶠᶠmat / 3) ⋆ ᶠᶠmat),
     )
     ref_set_result! =
         (

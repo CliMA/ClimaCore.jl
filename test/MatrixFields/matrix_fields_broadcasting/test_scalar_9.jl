@@ -10,14 +10,14 @@ test_opt = get(ENV, "BUILDKITE", "") == "true"
 @testset "diagonal matrix times bi-diagonal matrix times \
                  tri-diagonal matrix times quad-diagonal matrix times \
                  vector" begin
-    bc = @lazy @. ᶜᶜmat ⋅ ᶜᶠmat ⋅ ᶠᶠmat ⋅ ᶠᶜmat ⋅ ᶜvec
+    bc = @lazy @. ᶜᶜmat ⋆ ᶜᶠmat ⋆ ᶠᶠmat ⋆ ᶠᶜmat ⋆ ᶜvec
     result = materialize(bc)
 
     input_fields = (ᶜᶜmat, ᶜᶠmat, ᶠᶠmat, ᶠᶜmat, ᶜvec)
     temp_value_fields = (
-        (@. ᶜᶜmat ⋅ ᶜᶠmat),
-        (@. ᶜᶜmat ⋅ ᶜᶠmat ⋅ ᶠᶠmat),
-        (@. ᶜᶜmat ⋅ ᶜᶠmat ⋅ ᶠᶠmat ⋅ ᶠᶜmat),
+        (@. ᶜᶜmat ⋆ ᶜᶠmat),
+        (@. ᶜᶜmat ⋆ ᶜᶠmat ⋆ ᶠᶠmat),
+        (@. ᶜᶜmat ⋆ ᶜᶠmat ⋆ ᶠᶠmat ⋆ ᶠᶜmat),
     )
     ref_set_result! =
         (

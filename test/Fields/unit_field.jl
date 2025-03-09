@@ -29,9 +29,9 @@ using LinearAlgebra: norm
 using Statistics: mean
 using ForwardDiff
 
-include(
+@isdefined(TU) || include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
-)
+);
 import .TestUtilities as TU
 
 function spectral_space_2D(; n1 = 1, n2 = 1, Nij = 4)

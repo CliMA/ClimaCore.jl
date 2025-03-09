@@ -16,17 +16,10 @@ if ClimaComms.device() isa ClimaComms.CUDADevice
 else
     device_name = "CPU"
 end
-if !(@isdefined(TU))
-    include(
-        joinpath(
-            pkgdir(ClimaCore),
-            "test",
-            "TestUtilities",
-            "TestUtilities.jl",
-        ),
-    )
-    import .TestUtilities as TU
-end
+@isdefined(TU) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+);
+import .TestUtilities as TU
 
 include(joinpath(pkgdir(ClimaCore), "benchmarks/scripts/benchmark_utils.jl"))
 

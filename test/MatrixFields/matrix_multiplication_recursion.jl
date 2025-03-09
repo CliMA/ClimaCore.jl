@@ -1,17 +1,11 @@
 import ClimaCore
-if !(@isdefined(TU))
-    include(
-        joinpath(
-            pkgdir(ClimaCore),
-            "test",
-            "TestUtilities",
-            "TestUtilities.jl",
-        ),
-    )
-end
+@isdefined(TU) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+);
 import .TestUtilities as TU
 import ClimaCore: Spaces, Geometry, Operators, Fields, MatrixFields
-import ClimaCore.MatrixFields: ⋅
+import ClimaCore.MatrixFields: ⋆
+
 import ClimaComms
 ClimaComms.@import_required_backends
 
@@ -74,9 +68,9 @@ fill!(parent(dest_field), NaN)
 # Test field update with multiple nested operations
 function update_field!(dest_field, K, dψdϑ_res)
     @. dest_field =
-        divf2c_matrix() ⋅ (
-            MatrixFields.DiagonalMatrixRow(interpc2f_op(-K)) ⋅
-            gradc2f_matrix() ⋅ MatrixFields.DiagonalMatrixRow(dψdϑ_res) +
+        divf2c_matrix() ⋆ (
+            MatrixFields.DiagonalMatrixRow(interpc2f_op(-K)) ⋆
+            gradc2f_matrix() ⋆ MatrixFields.DiagonalMatrixRow(dψdϑ_res) +
             MatrixFields.LowerDiagonalMatrixRow(
                 topBC_op(Geometry.Covariant3Vector(zero(interpc2f_op(K)))),
             )

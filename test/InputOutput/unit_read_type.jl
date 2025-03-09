@@ -3,10 +3,10 @@ import ClimaCore
 import ClimaCore: Fields, InputOutput
 using ClimaComms
 ClimaComms.@import_required_backends
-include(
+@isdefined(TU) || include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
-)
-import .TestUtilities as TU
+);
+import .TestUtilities as TU;
 
 compare_read_type(x) = InputOutput.read_type(string(eltype(x))) == eltype(x)
 @testset "Read field element types" begin

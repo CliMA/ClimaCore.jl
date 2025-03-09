@@ -1,5 +1,6 @@
 #=
-julia --project
+julia --check-bounds=yes --project
+using TestEnv; TestEnv.activate();
 using Revise; include(joinpath("test", "runtests.jl"))
 =#
 using Test
@@ -140,7 +141,7 @@ fail_fast = true
 # Use prevent_leaky_tests = !isnothing(get(ENV, "CI", nothing))
 # once https://github.com/CliMA/ClimaCore.jl/issues/1826 is fixed:
 # prevent_leaky_tests = !isnothing(get(ENV, "CI", nothing)) # prevent leaky tests on CI)
-prevent_leaky_tests = true
+prevent_leaky_tests = false
 # tabulate_tests(unit_tests; include_timings = false) # uncomment for preview
 
 # If `fail_fast` is `true`, then let's error on invalid tests before starting them.

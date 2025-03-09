@@ -12,9 +12,9 @@ import ClimaCore.Operators:
     column_reduce!,
     column_accumulate!
 
-include(
+@isdefined(TU) || include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
-)
+);
 import .TestUtilities as TU
 
 are_boundschecks_forced = Base.JLOptions().check_bounds == 1
