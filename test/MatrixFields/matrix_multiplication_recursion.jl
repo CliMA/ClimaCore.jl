@@ -1,15 +1,9 @@
 import ClimaCore
-if !(@isdefined(TU))
-    include(
-        joinpath(
-            pkgdir(ClimaCore),
-            "test",
-            "TestUtilities",
-            "TestUtilities.jl",
-        ),
-    )
-end
-import .TestUtilities as TU
+@isdefined(TU) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+);
+import .TestUtilities as TU;
+
 import ClimaCore: Spaces, Geometry, Operators, Fields, MatrixFields
 import ClimaCore.MatrixFields: ⋅
 import ClimaComms

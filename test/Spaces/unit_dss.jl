@@ -20,10 +20,10 @@ import ClimaCore:
     Topologies,
     DataLayouts
 
-include(
+@isdefined(TU) || include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
-)
-import .TestUtilities as TU
+);
+import .TestUtilities as TU;
 
 function get_space_cs(::Type{FT}; context, R = 300.0) where {FT}
     domain = Domains.SphereDomain{FT}(300.0)

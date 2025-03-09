@@ -10,10 +10,10 @@ using ClimaCore.Geometry: ⊗
 import ClimaCore.DataLayouts
 
 import ClimaCore
-include(
+@isdefined(TU) || include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
-)
-import .TestUtilities as TU
+);
+import .TestUtilities as TU;
 
 @show ClimaComms.device() isa ClimaComms.CUDADevice
 if ClimaComms.device() isa ClimaComms.CUDADevice
