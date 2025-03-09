@@ -48,7 +48,7 @@ Base.@propagate_inbounds function getidx(
         )
     end
     op = bc.op
-    if Operators.call_left_boundary(idx, space, bc, loc)
+    if Operators.should_call_left_boundary(idx, space, bc, loc)
         Operators.stencil_left_boundary(
             op,
             Operators.get_boundary(op, loc),
@@ -84,7 +84,7 @@ Base.@propagate_inbounds function getidx(
         )
     end
     op = bc.op
-    if Operators.call_right_boundary(idx, space, bc, loc)
+    if Operators.should_call_right_boundary(idx, space, bc, loc)
         Operators.stencil_right_boundary(
             op,
             Operators.get_boundary(op, loc),
@@ -256,7 +256,7 @@ Base.@propagate_inbounds function fd_resolve_shmem!(
                 hidx,
                 sbc.args...,
             )
-        elseif Operators.call_left_boundary(ᶠidx, arg_space, sbc, lloc) # left
+        elseif Operators.should_call_left_boundary(ᶠidx, arg_space, sbc, lloc) # left
             fd_operator_fill_shmem_left_boundary!(
                 sbc.op,
                 Operators.get_boundary(op, lloc),
@@ -267,7 +267,7 @@ Base.@propagate_inbounds function fd_resolve_shmem!(
                 hidx,
                 sbc.args...,
             )
-        elseif Operators.call_right_boundary(ᶠidx, arg_space, sbc, rloc) # right
+        elseif Operators.should_call_right_boundary(ᶠidx, arg_space, sbc, rloc) # right
             fd_operator_fill_shmem_right_boundary!(
                 sbc.op,
                 Operators.get_boundary(op, rloc),
