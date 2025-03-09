@@ -5,18 +5,21 @@ import ClimaCore.MatrixFields: @name, is_subset_that_covers_set
 
 include("matrix_field_test_utils.jl")
 
-struct Foo{T}
+struct FooFieldName{T}
     _value::T
 end
-Base.propertynames(::Foo) = (:value,)
-Base.getproperty(foo::Foo, s::Symbol) =
+Base.propertynames(::FooFieldName) = (:value,)
+Base.getproperty(foo::FooFieldName, s::Symbol) =
     s == :value ? getfield(foo, :_value) : error("Invalid property name")
-Base.convert(::Type{Foo{T}}, foo::Foo) where {T} = Foo{T}(foo.value)
-Base.zero(::Type{Foo{T}}) where {T} = Foo(zero(T))
+Base.convert(::Type{FooFieldName{T}}, foo::FooFieldName) where {T} =
+    FooFieldName{T}(foo.value)
+Base.zero(::Type{FooFieldName{T}}) where {T} = FooFieldName(zero(T))
 
-const x = (; foo = Foo(0), a = (; b = 1, c = ((; d = 2), (;), (3, ()))))
+get_x() =
+    (; foo = FooFieldName(0), a = (; b = 1, c = ((; d = 2), (;), (3, ()))))
 
 @testset "FieldName Unit Tests" begin
+    x = get_x()
     @test_all @name() == MatrixFields.FieldName()
     @test_all @name(a.c.:(1).d) == MatrixFields.FieldName(:a, :c, 1, :d)
     @test_all @name(a.c.:(3).:(1)) == MatrixFields.FieldName(:a, :c, 3, 1)
@@ -81,6 +84,7 @@ const x = (; foo = Foo(0), a = (; b = 1, c = ((; d = 2), (;), (3, ()))))
 end
 
 @testset "FieldNameTree Unit Tests" begin
+    x = get_x()
     name_tree = MatrixFields.FieldNameTree(x)
 
     @test_all MatrixFields.FieldNameTree(x) == name_tree
@@ -110,6 +114,7 @@ end
 end
 
 @testset "FieldNameSet Unit Tests" begin
+    x = get_x()
     name_tree = MatrixFields.FieldNameTree(x)
 
     vector_keys(names...) = MatrixFields.FieldVectorKeys(names, name_tree)
@@ -706,6 +711,7 @@ end
 end
 
 @testset "FieldNameDict Unit Tests" begin
+    x = get_x()
     FT = Float64
     x_FT = convert(replace_basetype(Int, FT, typeof(x)), x)
 
