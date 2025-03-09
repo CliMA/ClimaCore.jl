@@ -34,7 +34,7 @@ function get_space_cs(::Type{FT}; context, R = 300.0) where {FT}
     return space
 end
 
-function one_to_n(a::AbstractArray)
+function one_to_n_dss(a::AbstractArray)
     _a = Array(a)
     Random.seed!(1234)
     for i in 1:length(_a)
@@ -44,7 +44,7 @@ function one_to_n(a::AbstractArray)
 end
 
 function test_dss_count(f::Fields.Field, buff::Topologies.DSSBuffer, nc)
-    parent(f) .= one_to_n(parent(f))
+    parent(f) .= one_to_n_dss(parent(f))
     @test allunique(parent(f))
     cf = copy(f)
     Spaces.weighted_dss!(f => buff)
