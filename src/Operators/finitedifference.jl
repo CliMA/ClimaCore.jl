@@ -3739,6 +3739,27 @@ end
     right_idx(space)
 end
 
+@inline function should_call_left_boundary(idx, space, bc, loc)
+    (; op) = bc
+    return Operators.has_boundary(op, loc) &&
+           idx < Operators.left_interior_idx(
+        space,
+        op,
+        Operators.get_boundary(op, loc),
+        bc.args...,
+    )
+end
+
+@inline function should_call_right_boundary(idx, space, bc, loc)
+    (; op) = bc
+    return Operators.has_boundary(op, loc) &&
+           idx > Operators.right_interior_idx(
+        space,
+        bc.op,
+        Operators.get_boundary(bc.op, loc),
+        bc.args...,
+    )
+end
 
 Base.@propagate_inbounds function getidx(
     parent_space,
@@ -3760,9 +3781,7 @@ Base.@propagate_inbounds function getidx(
 )
     space = reconstruct_placeholder_space(axes(bc), parent_space)
     op = bc.op
-    if has_boundary(op, loc) &&
-       idx <
-       left_interior_idx(space, bc.op, get_boundary(bc.op, loc), bc.args...)
+    if should_call_left_boundary(idx, space, bc, loc)
         stencil_left_boundary(
             op,
             get_boundary(op, loc),
@@ -3787,9 +3806,7 @@ Base.@propagate_inbounds function getidx(
 )
     op = bc.op
     space = reconstruct_placeholder_space(axes(bc), parent_space)
-    if has_boundary(op, loc) &&
-       idx >
-       right_interior_idx(space, bc.op, get_boundary(bc.op, loc), bc.args...)
+    if should_call_right_boundary(idx, space, bc, loc)
         stencil_right_boundary(
             op,
             get_boundary(op, loc),
