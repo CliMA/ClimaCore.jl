@@ -107,7 +107,10 @@ end
 function Operators.strip_space(dict::FieldNameDict)
     vals = unrolled_map(values(dict)) do val
         if val isa Fields.Field
-            Fields.Field(Fields.field_values(val), Operators.PlaceholderSpace())
+            Fields.Field(
+                Fields.field_values(val),
+                Operators.PlaceholderSpace(axes(val)),
+            )
         else
             val
         end
