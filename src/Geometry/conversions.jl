@@ -562,16 +562,6 @@ Required for statically infering the result type of the divergence operation for
 ) where {FT, A1, A2 <: AbstractAxis, S <: StaticMatrix{S1, S2}} where {S1, S2} =
     AxisVector{FT, A2, SVector{S2, FT}}
 
-# TODO: can we better generalize this?
-@inline divergence_result_type(
-    ::Type{AxisTensor{FT, 2, Tuple{A1, A2}, S}},
-) where {
-    FT,
-    A1 <: CovariantAxis{(3,)},
-    A2 <: CovariantAxis{(1, 2)},
-    S <: SMatrix{1, 2, FT, 2},
-} = Covariant12Vector{FT}
-
 """
     gradient_result_type(Val(I), V)
 
