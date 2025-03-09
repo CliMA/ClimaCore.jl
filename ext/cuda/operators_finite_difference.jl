@@ -25,7 +25,7 @@ function Base.copyto!(
         Broadcasted{CUDAColumnStencilStyle},
         Broadcasted{CUDAWithShmemColumnStencilStyle},
     },
-    mask = Spaces.get_mask(axes(out))
+    mask = Spaces.get_mask(axes(out)),
 )
     space = axes(out)
     bounds = Operators.window_bounds(space, bc)
@@ -37,13 +37,19 @@ function Base.copyto!(
     high_resolution = !(n_face_levels ≤ 256)
     # https://github.com/JuliaGPU/CUDA.jl/issues/2672
     # max_shmem = 166912 # CUDA.limit(CUDA.LIMIT_SHMEM_SIZE) #
-    max_shmem = CUDA.attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK)
+    max_shmem = CUDA.attribute(
+        device(),
+        CUDA.DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK,
+    )
     total_shmem = fd_shmem_needed_per_column(bc)
     enough_shmem = total_shmem ≤ max_shmem
 
     # TODO: Use CUDA.limit(CUDA.LIMIT_SHMEM_SIZE) to determine how much shmem should be used
     # TODO: add shmem support for masked operations
-    if Operators.any_fd_shmem_supported(bc) && !high_resolution && mask isa NoMask && enough_shmem
+    if Operators.any_fd_shmem_supported(bc) &&
+       !high_resolution &&
+       mask isa NoMask &&
+       enough_shmem
         p = fd_stencil_partition(us, n_face_levels)
         args = (
             strip_space(out, space),
@@ -69,7 +75,7 @@ function Base.copyto!(
             axes(out),
             bounds,
             us,
-            mask
+            mask,
         )
 
         threads = threads_via_occupancy(copyto_stencil_kernel!, args)
@@ -101,7 +107,7 @@ function copyto_stencil_kernel!(
     space,
     bds,
     us,
-    mask
+    mask,
 )
     @inbounds begin
         out_fv = Fields.field_values(out)
