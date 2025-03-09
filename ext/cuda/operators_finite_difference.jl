@@ -141,6 +141,7 @@ function copyto_stencil_kernel_shmem!(
     space,
     bds,
     us,
+    mask,
     ::Val{Nvt},
 ) where {Nvt}
     @inbounds begin
