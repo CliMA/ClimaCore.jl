@@ -12,10 +12,10 @@ import ClimaCore:
     Domains, Topologies, Meshes, Spaces, Geometry, column, Fields, Grids
 using Test
 
-include(
+@isdefined(TU) || include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
-)
-import .TestUtilities as TU
+);
+import .TestUtilities as TU;
 
 compare(cpu, gpu) = all(parent(cpu) .≈ Array(parent(gpu)))
 compare(cpu, gpu, f) = all(parent(f(cpu)) .≈ Array(parent(f(gpu))))

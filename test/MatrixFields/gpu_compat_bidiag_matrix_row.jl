@@ -4,17 +4,10 @@ using Revise; include(joinpath("test", "MatrixFields", "gpu_compat_bidiag_matrix
 import ClimaCore
 import ClimaComms
 ClimaComms.@import_required_backends
-if !(@isdefined(TU))
-    include(
-        joinpath(
-            pkgdir(ClimaCore),
-            "test",
-            "TestUtilities",
-            "TestUtilities.jl",
-        ),
-    )
-end
-import .TestUtilities as TU
+@isdefined(TU) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+);
+import .TestUtilities as TU;
 
 import ClimaCore: Spaces, Geometry, Operators, Fields, MatrixFields
 using LinearAlgebra: Adjoint

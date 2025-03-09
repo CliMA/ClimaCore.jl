@@ -1,8 +1,8 @@
 import ClimaCore
-include(
+@isdefined(TU) || include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
-)
-import .TestUtilities as TU
+);
+import .TestUtilities as TU;
 
 include("matrix_field_test_utils.jl")
 import ClimaCore.MatrixFields: @name, ⋅
