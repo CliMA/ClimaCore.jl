@@ -67,7 +67,7 @@ function Base.copyto!(
             blocks_s = p.blocks,
         )
     else
-        bc′ = high_resolution ? disable_shmem_style(bc) : bc
+        bc′ = disable_shmem_style(bc)
         @assert !any_fd_shmem_style(bc′)
         args = (
             strip_space(out, space),
