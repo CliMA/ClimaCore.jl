@@ -162,6 +162,7 @@ end
 
     expected_repr = """
     SpectralElementSpace1D:
+      mask_enabled: false
       context: SingletonCommsContext using $(nameof(typeof(device)))
       mesh: 1-element IntervalMesh of IntervalDomain: x ∈ [-3.0,5.0] (periodic)
       quadrature: 4-point Gauss-Legendre-Lobatto quadrature"""
@@ -348,6 +349,7 @@ end
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     @test repr(space) == """
     SpectralElementSpace2D:
+      mask_enabled: false
       context: SingletonCommsContext using CPUSingleThreaded
       mesh: 1×1-element RectilinearMesh of RectangleDomain: x ∈ [-3.0,5.0] (periodic) × y ∈ [-2.0,8.0] (:south, :north)
       quadrature: 4-point Gauss-Legendre-Lobatto quadrature"""
