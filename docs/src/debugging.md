@@ -78,8 +78,8 @@ import ClimaCore
 import Infiltrator # must be in your default environment
 ClimaCore.DebugOnly.call_post_op_callback() = true
 function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
-    has_nans = any(isnan, parent(result))
-    has_inf = any(isinf, parent(result))
+    has_nans = result isa Number ? isnan(result) : any(isnan, parent(result))
+    has_inf = result isa Number ? isinf(result) : any(isinf, parent(result))
     if has_nans || has_inf
         has_nans && println("NaNs found!")
         has_inf && println("Infs found!")
