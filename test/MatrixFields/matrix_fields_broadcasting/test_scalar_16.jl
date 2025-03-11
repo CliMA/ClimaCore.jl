@@ -8,9 +8,10 @@ include(joinpath(pkgdir(ClimaCore),"test","MatrixFields","matrix_fields_broadcas
 #! format: on
 test_opt = get(ENV, "BUILDKITE", "") == "true"
 @testset "matrix constructions and multiplications" begin
-    bc = @lazy @. BidiagonalMatrixRow(ᶜᶠmat ⋅ ᶠvec, ᶜᶜmat ⋅ ᶜvec) ⋅
-             TridiagonalMatrixRow(ᶠvec, ᶠᶜmat ⋅ ᶜvec, 1) ⋅ ᶠᶠmat ⋅
-             DiagonalMatrixRow(DiagonalMatrixRow(ᶠvec) ⋅ ᶠvec)
+    bc = @lazy @. BidiagonalMatrixRow(ᶜᶠmat * ᶠvec, ᶜᶜmat * ᶜvec) *
+             TridiagonalMatrixRow(ᶠvec, ᶠᶜmat * ᶜvec, 1) *
+             ᶠᶠmat *
+             DiagonalMatrixRow(DiagonalMatrixRow(ᶠvec) * ᶠvec)
     result = materialize(bc)
 
     input_fields = (ᶜᶜmat, ᶜᶠmat, ᶠᶠmat, ᶠᶜmat, ᶜvec, ᶠvec)
@@ -44,14 +45,15 @@ test_opt = get(ENV, "BUILDKITE", "") == "true"
         end
 
     temp_value_fields = (
-        (@. BidiagonalMatrixRow(ᶜᶠmat ⋅ ᶠvec, ᶜᶜmat ⋅ ᶜvec)),
-        (@. TridiagonalMatrixRow(ᶠvec, ᶠᶜmat ⋅ ᶜvec, 1)),
-        (@. BidiagonalMatrixRow(ᶜᶠmat ⋅ ᶠvec, ᶜᶜmat ⋅ ᶜvec) ⋅
-            TridiagonalMatrixRow(ᶠvec, ᶠᶜmat ⋅ ᶜvec, 1)),
-        (@. BidiagonalMatrixRow(ᶜᶠmat ⋅ ᶠvec, ᶜᶜmat ⋅ ᶜvec) ⋅
-            TridiagonalMatrixRow(ᶠvec, ᶠᶜmat ⋅ ᶜvec, 1) ⋅ ᶠᶠmat),
+        (@. BidiagonalMatrixRow(ᶜᶠmat * ᶠvec, ᶜᶜmat * ᶜvec)),
+        (@. TridiagonalMatrixRow(ᶠvec, ᶠᶜmat * ᶜvec, 1)),
+        (@. BidiagonalMatrixRow(ᶜᶠmat * ᶠvec, ᶜᶜmat * ᶜvec) *
+            TridiagonalMatrixRow(ᶠvec, ᶠᶜmat * ᶜvec, 1)),
+        (@. BidiagonalMatrixRow(ᶜᶠmat * ᶠvec, ᶜᶜmat * ᶜvec) *
+            TridiagonalMatrixRow(ᶠvec, ᶠᶜmat * ᶜvec, 1) *
+            ᶠᶠmat),
         (@. DiagonalMatrixRow(ᶠvec)),
-        (@. DiagonalMatrixRow(DiagonalMatrixRow(ᶠvec) ⋅ ᶠvec)),
+        (@. DiagonalMatrixRow(DiagonalMatrixRow(ᶠvec) * ᶠvec)),
     )
     unit_test_field_broadcast_vs_array_reference(
         result,

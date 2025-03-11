@@ -5,7 +5,7 @@ import ClimaCore
 import .TestUtilities as TU;
 
 include("matrix_field_test_utils.jl")
-import ClimaCore.MatrixFields: @name, ⋅
+import ClimaCore.MatrixFields: @name
 
 @testset "Matrix Fields with Spectral Element and Point Spaces" begin
     get_j_field(space, FT) = fill(MatrixFields.DiagonalMatrixRow(FT(1)), space)

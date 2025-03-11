@@ -422,7 +422,7 @@ Base.Broadcast.broadcasted(
     arg3,
     args...,
 ) =
-    foldl((arg1, arg2, arg3, args...)) do arg1′, arg2′
+    unrolled_reduce((arg1, arg2, arg3, args...)) do arg1′, arg2′
         Base.Broadcast.broadcasted(f, arg1′, arg2′)
     end
 
@@ -553,7 +553,7 @@ function Base.Broadcast.broadcasted(
             elseif entry2 isa ScalingFieldMatrixEntry
                 Base.Broadcast.broadcasted(*, entry1, (scaling_value(entry2),))
             else
-                Base.Broadcast.broadcasted(⋅, entry1, entry2)
+                Base.Broadcast.broadcasted(*, entry1, entry2)
             end
         end
         length(summand_bcs) == 1 ? summand_bcs[1] :
