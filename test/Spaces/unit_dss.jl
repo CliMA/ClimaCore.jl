@@ -53,7 +53,7 @@ function test_dss_count(f::Fields.Field, buff::Topologies.DSSBuffer, nc)
     return (; n_dss_affected)
 end
 
-function get_space_and_buffers(::Type{FT}; context) where {FT}
+function get_space_and_buffers3(::Type{FT}; context) where {FT}
     init_state_covariant12(local_geometry, p) =
         Geometry.Covariant12Vector(1.0, -1.0)
     init_state_covariant123(local_geometry, p) =
@@ -102,7 +102,7 @@ end
 @testset "DSS of AxisTensors on Cubed Sphere" begin
     FT = Float64
     device = ClimaComms.device()
-    nt = get_space_and_buffers(FT; context = ClimaComms.context(device))
+    nt = get_space_and_buffers3(FT; context = ClimaComms.context(device))
 
     # test DSS for a Covariant12Vector
     # ensure physical velocity is continuous across SE boundary for initial state

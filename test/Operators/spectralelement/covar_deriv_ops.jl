@@ -25,7 +25,6 @@ zlim = (FT(0), FT(1))
 helem = 5
 velem = 5
 npoly = 5
-ndims = 3
 stretch = Meshes.Uniform()
 comms_context = ClimaComms.SingletonCommsContext(device)
 FT = eltype(xlim)
