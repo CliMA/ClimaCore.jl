@@ -179,6 +179,13 @@ Base.@propagate_inbounds @generated function get_struct(
     ::Val{D},
     start_index::CartesianIndex,
 ) where {T, S, D}
+    # recursion base case: hit array type is the same as the struct leaf type
+    if T === S # Use Union-splitting for better latency
+        return quote
+            Base.@_propagate_inbounds_meta
+            @inbounds return array[start_index]
+        end
+    end
     tup = :(())
     for i in 1:fieldcount(S)
         push!(
@@ -199,16 +206,6 @@ Base.@propagate_inbounds @generated function get_struct(
         Base.@_propagate_inbounds_meta
         @inbounds bypass_constructor(S, $tup)
     end
-end
-
-# recursion base case: hit array type is the same as the struct leaf type
-Base.@propagate_inbounds function get_struct(
-    array::AbstractArray{S},
-    ::Type{S},
-    ::Val{D},
-    start_index::CartesianIndex,
-) where {S, D}
-    @inbounds return array[start_index]
 end
 
 """
