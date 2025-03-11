@@ -70,12 +70,11 @@ function ImplicitEquationJacobian(Y, transform, flags = (;))
         flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :exact && :ρe in propertynames(Y.c) ?
         QuaddiagonalRow_ACT3 : BidiagonalRow_ACT3
     ∂Yₜ∂Y = FieldMatrix(
-        (ᶜρ_name, ᶠ𝕄_name) => Fields.Field(BidiagonalRow_ACT3, axes(Y.c)),
-        (ᶜ𝔼_name, ᶠ𝕄_name) => Fields.Field(∂ᶜ𝔼ₜ∂ᶠ𝕄_Row_ACT3, axes(Y.c)),
-        (ᶠ𝕄_name, ᶜρ_name) => Fields.Field(BidiagonalRow_C3, axes(Y.f)),
-        (ᶠ𝕄_name, ᶜ𝔼_name) => Fields.Field(BidiagonalRow_C3, axes(Y.f)),
-        (ᶠ𝕄_name, ᶠ𝕄_name) =>
-            Fields.Field(TridiagonalRow_C3xACT3, axes(Y.f)),
+        (ᶜρ_name, ᶠ𝕄_name) => zeros(BidiagonalRow_ACT3, axes(Y.c)),
+        (ᶜ𝔼_name, ᶠ𝕄_name) => zeros(∂ᶜ𝔼ₜ∂ᶠ𝕄_Row_ACT3, axes(Y.c)),
+        (ᶠ𝕄_name, ᶜρ_name) => zeros(BidiagonalRow_C3, axes(Y.f)),
+        (ᶠ𝕄_name, ᶜ𝔼_name) => zeros(BidiagonalRow_C3, axes(Y.f)),
+        (ᶠ𝕄_name, ᶠ𝕄_name) => zeros(TridiagonalRow_C3xACT3, axes(Y.f)),
     )
 
     # When ∂Yₜ∂Y is sparse, one(∂Yₜ∂Y) doesn't contain every diagonal block.
