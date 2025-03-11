@@ -3908,30 +3908,19 @@ end
 
 
 # recursively unwrap getidx broadcast arguments in a way that is statically reducible by the optimizer
-Base.@propagate_inbounds getidx_args(
+Base.@propagate_inbounds @generated function call_bc_f(
+    f::F,
     space,
-    args::Tuple,
+    args,
     loc::Location,
     idx,
     hidx,
-) = (
-    getidx(space, args[1], loc, idx, hidx),
-    getidx_args(space, Base.tail(args), loc, idx, hidx)...,
-)
-Base.@propagate_inbounds getidx_args(
-    space,
-    arg::Tuple{Any},
-    loc::Location,
-    idx,
-    hidx,
-) = (getidx(space, arg[1], loc, idx, hidx),)
-Base.@propagate_inbounds getidx_args(
-    space,
-    ::Tuple{},
-    loc::Location,
-    idx,
-    hidx,
-) = ()
+    ::Val{N},
+) where {N, F}
+    return quote
+        Base.Cartesian.@ncall $N f i -> getidx(space, args[i], loc, idx, hidx)
+    end
+end
 
 Base.@propagate_inbounds function getidx(
     parent_space,
@@ -3941,13 +3930,17 @@ Base.@propagate_inbounds function getidx(
     hidx,
 )
     space = reconstruct_placeholder_space(axes(bc), parent_space)
-    _args = getidx_args(space, bc.args, loc, idx, hidx)
-    bc.f(_args...)
+    N = length(bc.args)
+    if N == 0
+        return bc.f()
+    else
+        return call_bc_f(bc.f, space, bc.args, loc, idx, hidx, Val(N))
+    end
 end
 
 if hasfield(Method, :recursion_relation)
     dont_limit = (args...) -> true
-    for m in methods(getidx_args)
+    for m in methods(call_bc_f)
         m.recursion_relation = dont_limit
     end
     for m in methods(getidx)
