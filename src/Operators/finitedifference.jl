@@ -3922,6 +3922,31 @@ Base.@propagate_inbounds @generated function call_bc_f(
     end
 end
 
+Base.@propagate_inbounds getidx_args(
+     space,
+     args::Tuple,
+     loc::Location,
+     idx,
+     hidx,
+) = (
+    getidx(space, args[1], loc, idx, hidx),
+    getidx_args(space, Base.tail(args), loc, idx, hidx)...,
+)
+Base.@propagate_inbounds getidx_args(
+    space,
+    arg::Tuple{Any},
+    loc::Location,
+    idx,
+    hidx,
+) = (getidx(space, arg[1], loc, idx, hidx),)
+Base.@propagate_inbounds getidx_args(
+    space,
+    ::Tuple{},
+    loc::Location,
+    idx,
+    hidx,
+) = ()
+
 Base.@propagate_inbounds function getidx(
     parent_space,
     bc::Base.Broadcast.Broadcasted,
@@ -3930,17 +3955,40 @@ Base.@propagate_inbounds function getidx(
     hidx,
 )
     space = reconstruct_placeholder_space(axes(bc), parent_space)
+    _args = getidx_args(space, bc.args, loc, idx, hidx)
+    result_1 = bc.f(_args...)
     N = length(bc.args)
-    if N == 0
-        return bc.f()
+    result_2 = if N == 0
+        bc.f()
     else
-        return call_bc_f(bc.f, space, bc.args, loc, idx, hidx, Val(N))
+        call_bc_f(bc.f, space, bc.args, loc, idx, hidx, Val(N))
+    end
+    if !(result_1 === result_2)
+        println("###############################")
+        println("###############################")
+        println("###############################")
+        @show result_1
+        @show result_2
+        @show loc
+        @show idx
+        @show hidx
+        println("###############################")
+        println("###############################")
+        println("###############################")
+        @show bc
+        println("###############################")
+        println("###############################")
+        println("###############################")
+        error("Result mismatch")
     end
 end
 
 if hasfield(Method, :recursion_relation)
     dont_limit = (args...) -> true
     for m in methods(call_bc_f)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(getidx_args)
         m.recursion_relation = dont_limit
     end
     for m in methods(getidx)

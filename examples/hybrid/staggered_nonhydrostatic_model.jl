@@ -287,7 +287,6 @@ end
 additional_tendency!(Yₜ, Y, p, t) = nothing
 
 function implicit_equation_jacobian!(j, Y, p, δtγ, t)
-    @show t
     (; ∂Yₜ∂Y, ∂R∂Y, transform, flags) = j
     ᶜρ = Y.c.ρ
     ᶜuₕ = Y.c.uₕ
