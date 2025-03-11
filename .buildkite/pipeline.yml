@@ -21,15 +21,18 @@ steps:
           rm -rf ${JULIA_DEPOT_PATH}
         fi
 
+      - echo "--- Check that ClimaCore is developed in Manifest"
+      - julia --check-bounds=yes -e 'using TOML; @assert TOML.parsefile(".buildkite/Manifest.toml")["deps"]["ClimaCore"][1]["path"] == ".."'
+
       - echo "--- Instantiate buildkite env"
-      - "julia --project=.buildkite --check-bounds=yes -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
+      - "julia --project=.buildkite --check-bounds=yes -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true); Pkg.status()'"
       - "julia --project=.buildkite -e 'using CUDA; CUDA.precompile_runtime()'"
 
       - echo "--- Instantiate lib/ClimaCoreTempestRemap"
-      - "julia --project=lib/ClimaCoreTempestRemap -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
+      - "julia --project=lib/ClimaCoreTempestRemap -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true); Pkg.status()'"
 
       - echo "--- Instantiate benchmarks"
-      - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
+      - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true); Pkg.status()'"
 
     agents:
       slurm_mem: 80G
