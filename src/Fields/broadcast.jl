@@ -92,7 +92,7 @@ function Base.copy(
         throw(BroadcastInferenceError(bc))
     end
     # We can trust it and defer to the simpler `copyto!`
-    return copyto!(similar(bc, ElType), bc, DataLayouts.NoMask())
+    return copyto!(similar(bc, ElType), bc, Spaces.get_mask(axes(bc)))
 end
 
 Base.@propagate_inbounds function slab(

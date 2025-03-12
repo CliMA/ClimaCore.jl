@@ -20,6 +20,11 @@ function Base.show(io::IO, space::AbstractSpectralElementSpace)
     indent = get(io, :indent, 0)
     iio = IOContext(io, :indent => indent + 2)
     println(io, nameof(typeof(space)), ":")
+    if get_mask(space) isa DataLayouts.NoMask
+        println(iio, " "^(indent + 2), "mask_enabled: false")
+    else
+        println(iio, " "^(indent + 2), "mask_enabled: true")
+    end
     if hasfield(typeof(grid(space)), :topology)
         # some reduced spaces (like slab space) do not have topology
         print(iio, " "^(indent + 2), "context: ")

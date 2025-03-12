@@ -23,11 +23,15 @@ import ClimaCore:
     DeviceSideDevice
 
 using ClimaCore.CommonSpaces
+using ClimaCore.Utilities.Cache
 import ClimaCore.DataLayouts: IJFH, VF, slab_index
 
 on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
 
 @testset "2D spaces with mask" begin
+    # We need to test a fresh instance of the spaces, since
+    # masked spaces include data set by users.
+    Cache.clean_cache!()
     FT = Float64
     context = ClimaComms.context()
     x_max = FT(1)
@@ -57,6 +61,7 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     hspace = Spaces.SpectralElementSpace2D(htopology, quad; enable_mask = true)
     mask = Spaces.get_mask(hspace)
     @test mask isa DataLayouts.IJHMask
+    @test all(x -> x == true, parent(mask.is_active)) # test that default is true
     Spaces.set_mask!(hspace) do coords
         coords.x > 0.5
     end
@@ -70,6 +75,9 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     ᶜx = Fields.coordinate_field(hspace).x
     @. f = 1 + ᶜx * 0 # tests copyto!
     @test count(iszero, parent(f)) == 2
+
+    fbc = @. 1 + ᶜx * 0 # tests copy
+    @test Spaces.get_mask(axes(fbc)) isa DataLayouts.IJHMask
 
     FT = Float64
     ᶜspace = ExtrudedCubedSphereSpace(
@@ -92,8 +100,7 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     # Test that mask-field assignment works:
     # TODO: we should make this easier
     is_active = similar(mask.is_active)
-    _is_active = Fields.field_values(float.(hᶠcoords.lat .> 0.5))
-    is_active .= DataLayouts.replace_basetype(_is_active, Bool)
+    parent(is_active) .= parent(hᶠcoords.lat) .> 0.5
     Spaces.set_mask!(ᶜspace, is_active)
 
     Spaces.set_mask!(ᶜspace) do coords
@@ -131,6 +138,8 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     ᶠspace_no_mask = Spaces.face_space(ᶜspace_no_mask)
     ᶠcoords_no_mask = Fields.coordinate_field(ᶠspace_no_mask)
     c_no_mask = Fields.Field(FT, ᶜspace_no_mask)
+    @test_throws ErrorException("Broacasted spaces are not the same.") @. c_no_mask +
+                                                                          ᶜf
     ᶠf_no_mask = Fields.Field(FT, ᶠspace_no_mask)
     if ClimaComms.device(ᶜspace_no_mask) isa ClimaComms.CUDADevice
         @. c_no_mask = div(Geometry.WVector(foo(ᶠf_no_mask, ᶠcoords_no_mask)))
@@ -162,6 +171,7 @@ end
 
     expected_repr = """
     SpectralElementSpace1D:
+      mask_enabled: false
       context: SingletonCommsContext using $(nameof(typeof(device)))
       mesh: 1-element IntervalMesh of IntervalDomain: x ∈ [-3.0,5.0] (periodic)
       quadrature: 4-point Gauss-Legendre-Lobatto quadrature"""
@@ -348,6 +358,7 @@ end
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     @test repr(space) == """
     SpectralElementSpace2D:
+      mask_enabled: false
       context: SingletonCommsContext using CPUSingleThreaded
       mesh: 1×1-element RectilinearMesh of RectangleDomain: x ∈ [-3.0,5.0] (periodic) × y ∈ [-2.0,8.0] (:south, :north)
       quadrature: 4-point Gauss-Legendre-Lobatto quadrature"""
