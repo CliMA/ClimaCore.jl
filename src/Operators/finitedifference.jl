@@ -3907,6 +3907,10 @@ end
     error("Invalid index type `$idx_type` for field on space `$space_type`")
 
 
+#####
+#####
+#####
+
 # recursively unwrap getidx broadcast arguments in a way that is statically reducible by the optimizer
 Base.@propagate_inbounds @generated function call_bc_f(
     f::F,
@@ -3921,6 +3925,10 @@ Base.@propagate_inbounds @generated function call_bc_f(
         Base.Cartesian.@ncall $N f i -> getidx(space, args[i], loc, idx, hidx)
     end
 end
+
+#####
+#####
+#####
 
 Base.@propagate_inbounds getidx_args(
      space,
@@ -3981,6 +3989,7 @@ Base.@propagate_inbounds function getidx(
         println("###############################")
         error("Result mismatch")
     end
+    return result_1
 end
 
 if hasfield(Method, :recursion_relation)
