@@ -10,7 +10,8 @@ horizontal_mesh = cubed_sphere_mesh(; radius = R, h_elem = 4)
 npoly = 4
 z_max = FT(30e3)
 z_elem = 10
-t_end = FT(60 * 60 * 24 * 10)
+# t_end = FT(60 * 60 * 24 * 10)
+t_end = FT(60 * 60 * 24)
 dt = FT(400)
 dt_save_to_sol = FT(60 * 60 * 24)
 dt_save_to_disk = FT(0) # 0 means don't save to disk
@@ -26,6 +27,7 @@ additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = merge(
     held_suarez_cache(ᶜlocal_geometry),
 )
 function additional_tendency!(Yₜ, Y, p, t)
+    @show t
     hyperdiffusion_tendency!(Yₜ, Y, p, t)
     sponge && rayleigh_sponge_tendency!(Yₜ, Y, p, t)
     held_suarez_tendency!(Yₜ, Y, p, t)
