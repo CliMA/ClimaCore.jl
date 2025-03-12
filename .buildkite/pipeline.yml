@@ -11,6 +11,8 @@ env:
   JULIA_NVTX_CALLBACKS: gc
   OPENBLAS_NUM_THREADS: 1
 
+timeout_in_minutes: 1440
+
 steps:
   - label: "initialize"
     key: "init_cpu_env"
@@ -2014,6 +2016,8 @@ steps:
           - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
         artifact_paths:
           - "examples/hybrid/sphere/output/held_suarez_rhoe/Float32/*"
+        agents:
+          slurm_time: 12:00:00
         env:
           TEST_NAME: "sphere/held_suarez_rhoe"
 

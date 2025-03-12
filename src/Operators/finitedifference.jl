@@ -3975,6 +3975,7 @@ Base.@propagate_inbounds function getidx(
         println("###############################")
         println("###############################")
         println("###############################")
+        @show N
         @show result_1
         @show result_2
         @show loc
