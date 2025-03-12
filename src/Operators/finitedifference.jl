@@ -3990,7 +3990,7 @@ Base.@propagate_inbounds function getidx(
         println("###############################")
         error("Result mismatch")
     end
-    return result_1
+    return result_2
 end
 
 if hasfield(Method, :recursion_relation)
