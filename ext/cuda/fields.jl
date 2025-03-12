@@ -42,7 +42,7 @@ function Base.maximum(field::Field, dev::ClimaComms.CUDADevice)
     context = ClimaComms.context(axes(field))
     localmax = mapreduce_cuda(identity, max, field)
     ClimaComms.allreduce!(context, parent(localmax), max)
-    call_post_op_callback() && post_op_callback(localmax[], fn, field, dev)
+    call_post_op_callback() && post_op_callback(localmax[], field, dev)
     return localmax[]
 end
 
@@ -58,7 +58,7 @@ function Base.minimum(field::Field, ::ClimaComms.CUDADevice)
     context = ClimaComms.context(axes(field))
     localmin = mapreduce_cuda(identity, min, field)
     ClimaComms.allreduce!(context, parent(localmin), min)
-    call_post_op_callback() && post_op_callback(localmin[], fn, field, dev)
+    call_post_op_callback() && post_op_callback(localmin[], field, dev)
     return localmin[]
 end
 
