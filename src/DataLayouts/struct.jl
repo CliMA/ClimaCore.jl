@@ -91,7 +91,7 @@ parent_array_type(::Type{<:MArray{S, T, N, L}}) where {S, T, N, L} =
     MArray{S, T}
 parent_array_type(::Type{<:SubArray{T, N, A}}) where {T, N, A} =
     parent_array_type(A)
-
+parent_array_type(::Type{LinearAlgebra.Transpose{T, Matrix{T}}}) = Matrix{T}
 # ReshapedArray is needed for converting between arrays and fields for RRTMGP:
 parent_array_type(::Type{<:Base.ReshapedArray{T, N, P}}) where {T, N, P} =
     parent_array_type(P)
