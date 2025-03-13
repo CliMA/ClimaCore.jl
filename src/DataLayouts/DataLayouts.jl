@@ -69,6 +69,7 @@ import ClimaComms
 import MultiBroadcastFusion as MBF
 import Adapt
 
+import ..Utilities: PlusHalf, unionall_type
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..slab, ..slab_args, ..column, ..column_args, ..level
 export slab,
@@ -2335,10 +2336,8 @@ function ColumnMask(
     return IJHMask(is_active)
 end
 
-union_all_type(::Type{T}) where {T} = T.name.wrapper
-
 function IJHMask(is_active::Union{IJFH, IJHF})
-    DA = union_all_type(typeof(parent(is_active)))
+    DA = unionall_type(typeof(parent(is_active)))
     (Ni, Nj, _, _, Nh) = size(is_active)
     Nijh = Ni * Nj * Nh
     i_map = zeros(Int, Nijh)

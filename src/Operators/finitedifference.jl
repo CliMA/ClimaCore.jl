@@ -1,4 +1,4 @@
-import ..Utilities: PlusHalf, half
+import ..Utilities: PlusHalf, half, unionall_type
 import UnrolledUtilities: unrolled_map
 
 const AllFiniteDifferenceSpace =
@@ -3295,13 +3295,6 @@ Base.@propagate_inbounds function stencil_right_boundary(
     @assert idx == right_center_boundary_idx(space)
     stencil_interior(op, loc, space, idx - 1, hidx, arg)
 end
-
-"""
-    unionall_type(::Type{T})
-
-Extract the type of the input, and strip it of any type parameters.
-"""
-unionall_type(::Type{T}) where {T} = T.name.wrapper
 
 # Extend `adapt_structure` for all boundary conditions containing a `val` field.
 function Adapt.adapt_structure(to, bc::AbstractBoundaryCondition)
