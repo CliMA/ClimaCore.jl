@@ -54,7 +54,7 @@ function Base.minimum(fn, field::Field, dev::ClimaComms.CUDADevice)
     return localmin[]
 end
 
-function Base.minimum(field::Field, ::ClimaComms.CUDADevice)
+function Base.minimum(field::Field, dev::ClimaComms.CUDADevice)
     context = ClimaComms.context(axes(field))
     localmin = mapreduce_cuda(identity, min, field)
     ClimaComms.allreduce!(context, parent(localmin), min)
