@@ -53,6 +53,13 @@ Field(values::V, space::S) where {V <: AbstractData, S <: AbstractSpace} =
 Field(::Type{T}, space::S) where {T, S <: AbstractSpace} =
     Field(similar(Spaces.coordinates_data(space), T), space)
 
+function Field(::Type{Bool}, space::S) where {S <: AbstractSpace}
+    FT = Spaces.undertype(space)
+    data = similar(Spaces.coordinates_data(space), FT)
+    bool_data = DataLayouts.replace_basetype(data, Bool)
+    return Field(bool_data, space)
+end
+
 local_geometry_type(::Field{V, S}) where {V, S} = local_geometry_type(S)
 
 ClimaComms.context(field::Field) = ClimaComms.context(axes(field))
