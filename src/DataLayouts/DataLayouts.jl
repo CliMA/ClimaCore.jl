@@ -2330,8 +2330,17 @@ function ColumnMask(
     @assert Nq isa Integer
     @assert Nh isa Integer
     T = horizontal_layout_type
-    is_active = replace_basetype(T{FT, Nq}(Array{FT}, Nh), Bool)
-    Nijh = Nq * Nq * Nh
+    is_active = replace_basetype(T{FT, Nq}(DA{FT}, Nh), Bool)
+    parent(is_active) .= true
+    return IJHMask(is_active)
+end
+
+union_all_type(::Type{T}) where {T} = T.name.wrapper
+
+function IJHMask(is_active::Union{IJFH, IJHF})
+    DA = union_all_type(typeof(parent(is_active)))
+    (Ni, Nj, _, _, Nh) = size(is_active)
+    Nijh = Ni * Nj * Nh
     i_map = zeros(Int, Nijh)
     j_map = zeros(Int, Nijh)
     h_map = zeros(Int, Nijh)
