@@ -3900,13 +3900,35 @@ end
     error("Invalid index type `$idx_type` for field on space `$space_type`")
 
 
+#####
+#####
+#####
+
 # recursively unwrap getidx broadcast arguments in a way that is statically reducible by the optimizer
-Base.@propagate_inbounds getidx_args(
+Base.@propagate_inbounds @generated function call_bc_f(
+    f::F,
     space,
-    args::Tuple,
+    args,
     loc::Location,
     idx,
     hidx,
+    ::Val{N},
+) where {N, F}
+    return quote
+        Base.Cartesian.@ncall $N f i -> getidx(space, args[i], loc, idx, hidx)
+    end
+end
+
+#####
+#####
+#####
+
+Base.@propagate_inbounds getidx_args(
+     space,
+     args::Tuple,
+     loc::Location,
+     idx,
+     hidx,
 ) = (
     getidx(space, args[1], loc, idx, hidx),
     getidx_args(space, Base.tail(args), loc, idx, hidx)...,
@@ -3934,12 +3956,41 @@ Base.@propagate_inbounds function getidx(
     hidx,
 )
     space = reconstruct_placeholder_space(axes(bc), parent_space)
-    _args = getidx_args(space, bc.args, loc, idx, hidx)
-    bc.f(_args...)
+    # _args = getidx_args(space, bc.args, loc, idx, hidx)
+    # result_1 = bc.f(_args...)
+    N = length(bc.args)
+    result_2 = if N == 0
+        bc.f()
+    else
+        call_bc_f(bc.f, space, bc.args, loc, idx, hidx, Val(N))
+    end
+    # if !(result_1 === result_2)
+    #     println("###############################")
+    #     println("###############################")
+    #     println("###############################")
+    #     @show N
+    #     @show result_1
+    #     @show result_2
+    #     @show loc
+    #     @show idx
+    #     @show hidx
+    #     println("###############################")
+    #     println("###############################")
+    #     println("###############################")
+    #     @show bc
+    #     println("###############################")
+    #     println("###############################")
+    #     println("###############################")
+    #     error("Result mismatch")
+    # end
+    return result_2
 end
 
 if hasfield(Method, :recursion_relation)
     dont_limit = (args...) -> true
+    for m in methods(call_bc_f)
+        m.recursion_relation = dont_limit
+    end
     for m in methods(getidx_args)
         m.recursion_relation = dont_limit
     end

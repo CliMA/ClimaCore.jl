@@ -1,5 +1,22 @@
 # Test-specific definitions (may be overwritten in each test case file)
 # TODO: Allow some of these to be enironment variables or command line arguments
+
+# import ClimaCore
+# ClimaCore.DebugOnly.call_post_op_callback() = true
+# function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
+#     has_nans = result isa Number ? isnan(result) : any(isnan, parent(result))
+#     has_inf = result isa Number ? isinf(result) : any(isinf, parent(result))
+#     if has_nans || has_inf
+#         has_nans && println("NaNs found!")
+#         has_inf && println("Infs found!")
+#         # Let's define the stack trace so that we know where this came from
+#         st = stacktrace()
+#         ClimaCore.DebugOnly.print_depth_limited_stack_trace(st; maxtypedepth=2)
+
+#         error("Halting execution.")
+#     end
+# end
+
 upwinding_mode = :none
 horizontal_mesh = nothing # must be object of type AbstractMesh
 npoly = 0

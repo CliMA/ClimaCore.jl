@@ -26,6 +26,7 @@ additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = merge(
     held_suarez_cache(ᶜlocal_geometry),
 )
 function additional_tendency!(Yₜ, Y, p, t)
+    t > 805400.0 && @show t
     hyperdiffusion_tendency!(Yₜ, Y, p, t)
     sponge && rayleigh_sponge_tendency!(Yₜ, Y, p, t)
     held_suarez_tendency!(Yₜ, Y, p, t)
