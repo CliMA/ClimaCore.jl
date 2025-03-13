@@ -224,7 +224,7 @@ struct StencilStyle <: AbstractStencilStyle end
 
 struct ColumnStencilStyle <: AbstractStencilStyle end
 
-AbstractStencilStyle(::ClimaComms.AbstractCPUDevice) = ColumnStencilStyle
+AbstractStencilStyle(bc, ::ClimaComms.AbstractCPUDevice) = ColumnStencilStyle
 
 """
     StencilBroadcasted{Style}(op, args[,axes[, work]])
@@ -233,17 +233,20 @@ This is similar to a `Base.Broadcast.Broadcasted` object.
 
 This is returned by `Base.Broadcast.broadcasted(op::FiniteDifferenceOperator)`.
 """
-struct StencilBroadcasted{Style, Op, Args, Axes} <: OperatorBroadcasted{Style}
+struct StencilBroadcasted{Style, Op, Args, Axes, Work} <:
+       OperatorBroadcasted{Style}
     op::Op
     args::Args
     axes::Axes
+    work::Work
 end
 StencilBroadcasted{Style}(
     op::Op,
     args::Args,
     axes::Axes = nothing,
-) where {Style, Op, Args, Axes} =
-    StencilBroadcasted{Style, Op, Args, Axes}(op, args, axes)
+    work::Work = nothing,
+) where {Style, Op, Args, Axes, Work} =
+    StencilBroadcasted{Style, Op, Args, Axes, Work}(op, args, axes, work)
 
 Adapt.adapt_structure(to, sbc::StencilBroadcasted{Style}) where {Style} =
     StencilBroadcasted{Style}(
@@ -265,7 +268,7 @@ function Base.Broadcast.instantiate(sbc::StencilBroadcasted)
             Base.Broadcast.check_broadcast_axes(axes, args...)
         end
     end
-    Style = AbstractStencilStyle(ClimaComms.device(axes))
+    Style = AbstractStencilStyle(sbc, ClimaComms.device(axes))
     return StencilBroadcasted{Style}(op, args, axes)
 end
 function Base.Broadcast.instantiate(
@@ -280,7 +283,7 @@ function Base.Broadcast.instantiate(
         axes = bc.axes
         Base.Broadcast.check_broadcast_axes(axes, args...)
     end
-    Style = AbstractStencilStyle(ClimaComms.device(axes))
+    Style = AbstractStencilStyle(bc, ClimaComms.device(axes))
     return Base.Broadcast.Broadcasted{Style}(bc.f, args, axes)
 end
 
@@ -4094,6 +4097,16 @@ function Base.copyto!(
     return _serial_copyto!(field_out, bc, Ni, Nj, Nh)
 end
 
+@inline function reconstruct_placeholder_broadcasted(
+    parent_space::Spaces.AbstractSpace,
+    sbc::StencilBroadcasted{Style},
+) where {Style}
+    space = reconstruct_placeholder_space(axes(sbc), parent_space)
+    args = _reconstruct_placeholder_broadcasted(space, sbc.args...)
+    return StencilBroadcasted{Style}(sbc.op, args, space, sbc.work)
+end
+
+
 function window_bounds(space, bc)
     if Topologies.isperiodic(Spaces.vertical_topology(space))
         li = lw = left_idx(space)
@@ -4167,3 +4180,32 @@ end
 #else
 #    return v ⊠ (a⁺ ⊟ RecursiveApply.rdiv((a⁺ - a⁻) ⊠ 𝜙 ,2)) # Current working solution
 #end
+
+"""
+    fd_shmem_is_supported(bc::Base.Broadcast.AbstractBroadcasted)
+
+Returns a Bool indicating whether or not the broadcasted object supports
+shared memory, allowing us to dispatch into an optimized kernel.
+
+This function and dispatch should be removed once all operators support
+shared memory.
+"""
+function fd_shmem_is_supported end
+
+"""
+    any_fd_shmem_supported(::Base.Broadcast.AbstractBroadcasted)
+
+Returns a Bool indicating if any operators in the broadcasted object support 
+finite difference shared memory shmem.
+"""
+function any_fd_shmem_supported end
+
+if hasfield(Method, :recursion_relation)
+    dont_limit = (args...) -> true
+    for m in methods(reconstruct_placeholder_broadcasted)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(_reconstruct_placeholder_broadcasted)
+        m.recursion_relation = dont_limit
+    end
+end
