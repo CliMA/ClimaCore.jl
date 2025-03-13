@@ -4,6 +4,8 @@ ClimaCore.jl Release Notes
 main
 -------
 
+ - `Fields.Field(Bool, ::AbstractSpace)` is now supported. PR [2239](https://github.com/CliMA/ClimaCore.jl/pull/2239).
+
  - `SpectralElementSpace2D` constructors now support nodal masks. PR [2201](https://github.com/CliMA/ClimaCore.jl/pull/2201). See its documentation [here](https://clima.github.io/ClimaCore.jl/dev/masks). Note that it does not yet support restarts.
 
 - Added support for InputOutput with PointSpaces

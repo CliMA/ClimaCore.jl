@@ -1118,6 +1118,34 @@ end
     @. f += 1
 end
 
+@testset "Boolean fields" begin
+    FT = Float32
+    space = ExtrudedCubedSphereSpace(;
+        z_elem = 10,
+        z_min = 0,
+        z_max = 1,
+        radius = 10,
+        h_elem = 10,
+        n_quad_points = 4,
+        staggering = Grids.CellCenter(),
+    )
+    bf = Fields.Field(Bool, space)
+    @. bf = true
+    @test all(x -> x == true, Array(parent(bf)))
+    @. bf = 1
+    @test all(x -> x == true, Array(parent(bf)))
+    @. bf = 0
+    @test all(x -> x == false, Array(parent(bf)))
+    @. bf = 0 + bf # test copyto!(bf, ::Braodcasted)
+    @test all(x -> x == false, Array(parent(bf)))
+    if ClimaComms.device() isa ClimaComms.AbstractCPUDevice
+        @test_throws InexactError begin
+            @. bf = 2.0 # no error on gpu
+        end
+    end
+    bf_new = @. bf # test copy()
+end
+
 include("unit_field_multi_broadcast_fusion.jl")
 
 nothing
