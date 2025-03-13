@@ -3963,33 +3963,33 @@ Base.@propagate_inbounds function getidx(
     hidx,
 )
     space = reconstruct_placeholder_space(axes(bc), parent_space)
-    _args = getidx_args(space, bc.args, loc, idx, hidx)
-    result_1 = bc.f(_args...)
+    # _args = getidx_args(space, bc.args, loc, idx, hidx)
+    # result_1 = bc.f(_args...)
     N = length(bc.args)
     result_2 = if N == 0
         bc.f()
     else
         call_bc_f(bc.f, space, bc.args, loc, idx, hidx, Val(N))
     end
-    if !(result_1 === result_2)
-        println("###############################")
-        println("###############################")
-        println("###############################")
-        @show N
-        @show result_1
-        @show result_2
-        @show loc
-        @show idx
-        @show hidx
-        println("###############################")
-        println("###############################")
-        println("###############################")
-        @show bc
-        println("###############################")
-        println("###############################")
-        println("###############################")
-        error("Result mismatch")
-    end
+    # if !(result_1 === result_2)
+    #     println("###############################")
+    #     println("###############################")
+    #     println("###############################")
+    #     @show N
+    #     @show result_1
+    #     @show result_2
+    #     @show loc
+    #     @show idx
+    #     @show hidx
+    #     println("###############################")
+    #     println("###############################")
+    #     println("###############################")
+    #     @show bc
+    #     println("###############################")
+    #     println("###############################")
+    #     println("###############################")
+    #     error("Result mismatch")
+    # end
     return result_2
 end
 
