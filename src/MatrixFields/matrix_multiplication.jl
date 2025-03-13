@@ -2,8 +2,7 @@
     MultiplyColumnwiseBandMatrixField()
 
 An operator that multiplies a `ColumnwiseBandMatrixField` by another `Field`,
-i.e., matrix-vector or matrix-matrix multiplication. The `⋅` symbol is an alias
-for `MultiplyColumnwiseBandMatrixField()`.
+i.e., matrix-vector or matrix-matrix multiplication.
 
 What follows is a derivation of the algorithm used by this operator with
 single-column `Field`s. For `Field`s on multiple columns, the same computation
@@ -21,7 +20,7 @@ We will also use `outer_indices```(```space```)`` to denote the tuple
 
 From the definition of matrix-vector multiplication,
 ```math
-(M_1 ⋅ V)[i] = \\sum_k M_1[i, k] * V[k].
+(M_1 * V)[i] = \\sum_k M_1[i, k] * V[k].
 ```
 To establish bounds on the values of ``k``, let us define the following values:
 - ``li_1, ri_1 ={}```outer_indices```(```column_axes```(M_1))``
@@ -36,16 +35,16 @@ Combining these into a single inequality gives us
 ```math
 \\text{max}(li_1, i + ld_1) \\leq k \\leq \\text{min}(ri_1, i + ud_1).
 ```
-So, we can rewrite the expression for ``(M_1 ⋅ V)[i]`` as
+So, we can rewrite the expression for ``(M_1 * V)[i]`` as
 ```math
-(M_1 ⋅ V)[i] =
+(M_1 * V)[i] =
     \\sum_{k\\ =\\ \\text{max}(li_1, i + ld_1)}^{\\text{min}(ri_1, i + ud_1)}
     M_1[i, k] * V[k].
 ```
 If we replace the variable ``k`` with ``d = k - i`` and switch from array-like
 indexing to `Field` indexing, we find that
 ```math
-(M_1 ⋅ V)[i] =
+(M_1 * V)[i] =
     \\sum_{d\\ =\\ \\text{max}(li_1 - i, ld_1)}^{\\text{min}(ri_1 - i, ud_1)}
     M_1[i][d] * V[i + d].
 ```
@@ -61,9 +60,9 @@ If this is the case, then the bounds on ``d`` can be simplified to
 \\text{max}(li_1 - i, ld_1) = ld_1 \\quad \\text{and} \\quad
 \\text{min}(ri_1 - i, ud_1) = ud_1.
 ```
-The expression for ``(M_1 ⋅ V)[i]`` then becomes
+The expression for ``(M_1 * V)[i]`` then becomes
 ```math
-(M_1 ⋅ V)[i] = \\sum_{d = ld_1}^{ud_1} M_1[i][d] * V[i + d].
+(M_1 * V)[i] = \\sum_{d = ld_1}^{ud_1} M_1[i][d] * V[i + d].
 ```
 The values of ``i`` in this range are considered to be in the "interior" of the
 operator, while those not in this range (for which we cannot make the above
@@ -73,7 +72,7 @@ simplification) are considered to be on the "boundary".
 
 From the definition of matrix-matrix multiplication,
 ```math
-(M_1 ⋅ M_2)[i, j] = \\sum_k M_1[i, k] * M_2[k, j].
+(M_1 * M_2)[i, j] = \\sum_k M_1[i, k] * M_2[k, j].
 ```
 To establish bounds on the values of ``j`` and ``k``, let us define the
 following values:
@@ -83,7 +82,7 @@ following values:
 - ``ld_2, ud_2 ={}```outer_diagonals```(```eltype```(M_2))``
 
 In addition, let ``ld_{prod}`` and ``ud_{prod}`` denote the outer diagonal
-indices of the product matrix ``M_1 ⋅ M_2``. We will derive the values of
+indices of the product matrix ``M_1 * M_2``. We will derive the values of
 ``ld_{prod}`` and ``ud_{prod}`` in the last section.
 
 Since ``M_1[i, k]`` is only well-defined if ``k`` is a valid column index and
@@ -96,7 +95,7 @@ Since ``M_2[k, j]`` is only well-defined if ``j`` is a valid column index and
 ```math
 li_2 \\leq j \\leq ri_2 \\quad \\text{and} \\quad ld_2 \\leq j - k \\leq ud_2.
 ```
-Finally, ``(M_1 ⋅ M_2)[i, j]`` is only well-defined if ``j - i`` is a valid
+Finally, ``(M_1 * M_2)[i, j]`` is only well-defined if ``j - i`` is a valid
 diagonal index, so
 ```math
 ld_{prod} \\leq j - i \\leq ud_{prod}.
@@ -111,10 +110,10 @@ These inequalities can be combined to obtain
 \\text{min}(ri_1, i + ud_1, j - ld_2).
 \\end{gather*}
 ```
-So, we can rewrite the expression for ``(M_1 ⋅ M_2)[i, j]`` as
+So, we can rewrite the expression for ``(M_1 * M_2)[i, j]`` as
 ```math
 \\begin{gather*}
-(M_1 ⋅ M_2)[i, j] =
+(M_1 * M_2)[i, j] =
     \\sum_{
         k\\ =\\ \\text{max}(li_1, i + ld_1, j - ud_2)
     }^{\\text{min}(ri_1, i + ud_1, j - ld_2)}
@@ -127,7 +126,7 @@ with ``d_{prod} = j - i``, and switch from array-like indexing to `Field`
 indexing, we find that
 ```math
 \\begin{gather*}
-(M_1 ⋅ M_2)[i][d_{prod}] =
+(M_1 * M_2)[i][d_{prod}] =
     \\sum_{
         d\\ =\\ \\text{max}(li_1 - i, ld_1, d_{prod} - ud_2)
     }^{\\text{min}(ri_1 - i, ud_1, d_{prod} - ld_2)}
@@ -154,10 +153,10 @@ Similarly, the bounds on ``d`` can be simplified using the fact that
 \\text{max}(li_1 - i, ld_1) = ld_1 \\quad \\text{and} \\quad
 \\text{min}(ri_1 - i, ud_1) = ud_1.
 ```
-The expression for ``(M_1 ⋅ M_2)[i][d_{prod}]`` then becomes
+The expression for ``(M_1 * M_2)[i][d_{prod}]`` then becomes
 ```math
 \\begin{gather*}
-(M_1 ⋅ M_2)[i][d_{prod}] =
+(M_1 * M_2)[i][d_{prod}] =
     \\sum_{
         d\\ =\\ \\text{max}(ld_1, d_{prod} - ud_2)
     }^{\\text{min}(ud_1, d_{prod} - ld_2)}
@@ -171,7 +170,7 @@ simplifications) are considered to be on the "boundary".
 
 ## 2.2 ``ld_{prod}`` and ``ud_{prod}``
 
-We only need to compute ``(M_1 ⋅ M_2)[i][d_{prod}]`` for values of ``d_{prod}``
+We only need to compute ``(M_1 * M_2)[i][d_{prod}]`` for values of ``d_{prod}``
 that correspond to a nonempty sum in the interior, i.e, those for which
 ```math
 \\text{max}(ld_1, d_{prod} - ud_2) \\leq \\text{min}(ud_1, d_{prod} - ld_2).
@@ -188,7 +187,7 @@ tells us that
 ```math
 ld_1 + ld_2 \\leq d_{prod} \\leq ud_1 + ud_2.
 ```
-In other words, the outer diagonal indices of ``M_1 ⋅ M_2`` are
+In other words, the outer diagonal indices of ``M_1 * M_2`` are
 ```math
 ld_{prod} = ld_1 + ld_2 \\quad \\text{and} \\quad ud_{prod} = ud_1 + ud_2.
 ```
@@ -199,6 +198,8 @@ This means that we can express the bounds on the interior values of ``i`` as
 ```
 """
 struct MultiplyColumnwiseBandMatrixField <: Operators.FiniteDifferenceOperator end
+
+# TODO: Remove this in the next major release of ClimaCore.
 const ⋅ = MultiplyColumnwiseBandMatrixField()
 
 Operators.strip_space(op::MultiplyColumnwiseBandMatrixField, _) = op
@@ -280,8 +281,8 @@ function Operators.return_eltype(
     et_mat1 = eltype(matrix1)
     et_arg = eltype(arg)
     et_mat1 <: BandMatrixRow || error(
-        "The first argument of ⋅ must have elements of type BandMatrixRow, but \
-         the given argument has elements of type $et_mat1",
+        "The first argument of MultiplyColumnwiseBandMatrixField must have
+         elements of type BandMatrixRow, but the given argument has $et_mat1",
     )
     if et_arg <: BandMatrixRow # matrix-matrix multiplication
         matrix2 = arg
@@ -305,8 +306,8 @@ function Operators.return_eltype(
     et_mat1 = eltype(matrix1)
     et_arg = eltype(arg)
     et_mat1 <: BandMatrixRow || error(
-        "The first argument of ⋅ must have elements of type BandMatrixRow, but \
-         the given argument has elements of type $et_mat1",
+        "The first argument of MultiplyColumnwiseBandMatrixField must have
+         elements of type BandMatrixRow, but the given argument has $et_mat1",
     )
     if et_arg <: BandMatrixRow # matrix-matrix multiplication
         matrix2 = arg
@@ -360,7 +361,12 @@ function multiply_matrix_at_index(
 ) where {T <: BandMatrixRow}
     # T = eltype(arg)
     lg = Geometry.LocalGeometry(space, idx, hidx)
-    prod_type = Operators.return_eltype(⋅, matrix1, arg, typeof(lg))
+    prod_type = Operators.return_eltype(
+        MultiplyColumnwiseBandMatrixField(),
+        matrix1,
+        arg,
+        typeof(lg),
+    )
 
     column_space1 = column_axes(matrix1, space)
     ld1, ud1 = outer_diagonals(eltype(matrix1))
@@ -444,7 +450,12 @@ function multiply_matrix_at_index(
 ) where {T}
     # T = eltype(arg)
     lg = Geometry.LocalGeometry(space, idx, hidx)
-    prod_type = Operators.return_eltype(⋅, matrix1, arg, typeof(lg))
+    prod_type = Operators.return_eltype(
+        MultiplyColumnwiseBandMatrixField(),
+        matrix1,
+        arg,
+        typeof(lg),
+    )
 
     column_space1 = column_axes(matrix1, space)
     ld1, ud1 = outer_diagonals(eltype(matrix1))

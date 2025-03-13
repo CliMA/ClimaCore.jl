@@ -42,7 +42,7 @@ end
     nan_outside_entries!(ᶠᶜmatrix_with_outside_entries)
 
     # Test all possible products of matrix fields that include outside entries.
-    # Ensure that ⋅ never makes use of the outside entries.
+    # Ensure that matrix multiplication never makes use of the outside entries.
     for (matrix_field1, matrix_field2) in (
         (ᶜᶜmatrix_with_outside_entries, ᶜᶜmatrix_with_outside_entries),
         (ᶜᶜmatrix_with_outside_entries, ᶜᶠmatrix_with_outside_entries),
@@ -65,6 +65,6 @@ end
         (ᶠᶠmatrix_without_outside_entries, ᶠᶠmatrix_with_outside_entries),
         (ᶠᶠmatrix_without_outside_entries, ᶠᶜmatrix_with_outside_entries),
     )
-        @test !any(isnan, parent(@. matrix_field1 ⋅ matrix_field2))
+        @test !any(isnan, parent(@. matrix_field1 * matrix_field2))
     end
 end

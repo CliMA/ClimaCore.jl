@@ -125,9 +125,9 @@ Base.Broadcast.broadcasted(
 Constructs a new operator (or operator-like object) that generates the matrix
 applied by `op` to its final argument. If `op_matrix = operator_matrix(op)`,
 we can use the following identities:
-- When `op` takes one argument, `@. op(arg) == @. op_matrix() ⋅ arg`.
+- When `op` takes one argument, `@. op(arg) == @. op_matrix() * arg`.
 - When `op` takes multiple arguments,
-    `@. op(args..., arg) == @. op_matrix(args...) ⋅ arg`.
+    `@. op(args..., arg) == @. op_matrix(args...) * arg`.
 
 When `op` takes more than one argument, `operator_matrix(op)` constructs a
 `FiniteDifferenceOperator` that generates the operator matrix. When `op` only
@@ -147,7 +147,7 @@ centers applies an ``n \\times (n + 1)`` bidiagonal matrix:
 \\vdots & \\vdots & \\vdots & \\ddots & \\vdots & \\vdots & \\vdots \\\\
       0 &       0 &       0 & \\cdots &     0.5 &     0.5 &       0 \\\\
       0 &       0 &       0 & \\cdots &       0 &     0.5 &     0.5
-\\end{bmatrix} ⋅ arg
+\\end{bmatrix} * arg
 ```
 The `GradientF2C()` operator applies a similar matrix, but with different
 entries:
@@ -159,7 +159,7 @@ entries:
        \\vdots &        \\vdots &        \\vdots & \\ddots &        \\vdots &        \\vdots &       \\vdots \\\\
              0 &              0 &              0 & \\cdots & -\\textbf{e}^3 &  \\textbf{e}^3 &             0 \\\\
              0 &              0 &              0 & \\cdots &              0 & -\\textbf{e}^3 & \\textbf{e}^3
-\\end{bmatrix} ⋅ arg
+\\end{bmatrix} * arg
 ```
 The unit vector ``\\textbf{e}^3``, which can also be thought of as the
 differential along the third coordinate axis (``\\textrm{d}\\xi^3``), is
@@ -179,7 +179,7 @@ grad_b \\\\ 0 \\\\ 0 \\\\ \\vdots \\\\ 0 \\\\ 0 \\\\ grad_t
              0 &              0 &              0 & \\cdots &  \\textbf{e}^3 &             0 \\\\
              0 &              0 &              0 & \\cdots & -\\textbf{e}^3 & \\textbf{e}^3 \\\\
              0 &              0 &              0 & \\cdots &              0 &             0
-\\end{bmatrix} ⋅ arg
+\\end{bmatrix} * arg
 ```
 However, this simplifies to a linear transformation when ``grad_b`` and
 ``grad_t`` are both 0:
@@ -192,7 +192,7 @@ However, this simplifies to a linear transformation when ``grad_b`` and
              0 &              0 &              0 & \\cdots &  \\textbf{e}^3 &             0 \\\\
              0 &              0 &              0 & \\cdots & -\\textbf{e}^3 & \\textbf{e}^3 \\\\
              0 &              0 &              0 & \\cdots &              0 &             0
-\\end{bmatrix} ⋅ arg
+\\end{bmatrix} * arg
 ```
 In general, when `op` has nonzero boundary conditions that make it apply an
 affine transformation, `operator_matrix(op)` will print out a warning and zero
@@ -203,8 +203,8 @@ nonlinear transformations to their arguments; that is, transformations which
 cannot be accurately approximated without using more terms of the form
 ```math
 \\textrm{op}(\\textbf{0}) +
-\\textrm{op}'(\\textbf{0}) ⋅ arg +
-\\textrm{op}''(\\textbf{0}) ⋅ arg ⋅ arg +
+\\textrm{op}'(\\textbf{0}) * arg +
+\\textrm{op}''(\\textbf{0}) * arg * arg +
 \\ldots.
 ```
 When `op` is such an operator, `operator_matrix(op)` will throw an error. In the

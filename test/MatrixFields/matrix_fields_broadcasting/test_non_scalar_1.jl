@@ -11,14 +11,14 @@ end
 test_opt = get(ENV, "BUILDKITE", "") == "true"
 @testset "matrix of covectors times matrix of vectors" begin
 
-    bc = @lazy @. ᶜᶠmat_AC1 ⋅ ᶠᶜmat_C12
+    bc = @lazy @. ᶜᶠmat_AC1 * ᶠᶜmat_C12
     result = materialize(bc)
 
     ref_set_result! =
         result -> (@. result =
-            ᶜᶠmat ⋅ (
-                DiagonalMatrixRow(ᶠlg.gⁱʲ.components.data.:1) ⋅ ᶠᶜmat2 +
-                DiagonalMatrixRow(ᶠlg.gⁱʲ.components.data.:2) ⋅ ᶠᶜmat3
+            ᶜᶠmat * (
+                DiagonalMatrixRow(ᶠlg.gⁱʲ.components.data.:1) * ᶠᶜmat2 +
+                DiagonalMatrixRow(ᶠlg.gⁱʲ.components.data.:2) * ᶠᶜmat3
             ))
 
     unit_test_field_broadcast(

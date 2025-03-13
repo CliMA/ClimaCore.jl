@@ -18,8 +18,7 @@ using ClimaCore.MatrixFields:
     DiagonalMatrixRow,
     BidiagonalMatrixRow,
     TridiagonalMatrixRow,
-    MultiplyColumnwiseBandMatrixField,
-    ⋅
+    MultiplyColumnwiseBandMatrixField
 const C3 = Geometry.Covariant3Vector
 const CT3 = Geometry.Contravariant3Vector
 GFT = Float64
@@ -82,14 +81,14 @@ function foo(c, f)
     dtγ = FT(1)
 
     @. ∂ᶠu₃ʲ_err_∂ᶠu₃ʲ =
-        dtγ * ᶠtridiagonal_matrix_c3 ⋅ DiagonalMatrixRow(adjoint(CT3(ᶠu₃))) -
+        dtγ * ᶠtridiagonal_matrix_c3 * DiagonalMatrixRow(adjoint(CT3(ᶠu₃))) -
         (I_u₃,)
 
-    @. ∂ᶠu₃ʲ_err_∂ᶠu₃ʲ = dtγ * ᶠtridiagonal_matrix_c3 ⋅ adj_u₃ - (I_u₃,)
+    @. ∂ᶠu₃ʲ_err_∂ᶠu₃ʲ = dtγ * ᶠtridiagonal_matrix_c3 * adj_u₃ - (I_u₃,)
 
     # Fails on gpu
     @. ᶠtridiagonal_matrix_c3 =
-        -(ᶠgradᵥ_matrix()) ⋅ ifelse(
+        -(ᶠgradᵥ_matrix()) * ifelse(
             ᶜu₃ʲ.components.data.:1 > 0,
             convert(BidiagonalMatrixRow{FT}, ᶜleft_bias_matrix()),
             convert(BidiagonalMatrixRow{FT}, ᶜright_bias_matrix()),
@@ -100,7 +99,7 @@ function foo(c, f)
     @. bdmr_l = convert(BidiagonalMatrixRow{FT}, ᶜleft_bias_matrix())
     @. bdmr_r = convert(BidiagonalMatrixRow{FT}, ᶜright_bias_matrix())
     @. bdmr = ifelse(ᶜu₃ʲ.components.data.:1 > 0, bdmr_l, bdmr_r)
-    @. ᶠtridiagonal_matrix_c3 = -(ᶠgradᵥ_matrix()) ⋅ bdmr
+    @. ᶠtridiagonal_matrix_c3 = -(ᶠgradᵥ_matrix()) * bdmr
 
     return nothing
 end

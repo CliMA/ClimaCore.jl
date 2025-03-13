@@ -12,8 +12,8 @@ matrices, one for each column of the `Field`. Such `Field`s are called
 for them:
 - Constructors, e.g., `matrix_field = @. BidiagonalMatrixRow(field1, field2)`
 - Linear combinations, e.g., `@. 3 * matrix_field1 + matrix_field2 / 3`
-- Matrix-vector multiplication, e.g., `@. matrix_field ⋅ field`
-- Matrix-matrix multiplication, e.g., `@. matrix_field1 ⋅ matrix_field2`
+- Matrix-vector multiplication, e.g., `@. matrix_field * field`
+- Matrix-matrix multiplication, e.g., `@. matrix_field1 * matrix_field2`
 - Compatibility with `LinearAlgebra.I`, e.g., `@. matrix_field = (4I,)` or
     `@. matrix_field - (4I,)`
 - Integration with `RecursiveApply`, e.g., the entries of `matrix_field` can be
@@ -106,6 +106,37 @@ include("multiple_field_solver.jl")
 include("field_matrix_solver.jl")
 include("field_matrix_iterative_solver.jl")
 include("field_matrix_with_solver.jl")
+
+const FieldOrStencilStyleType = Union{
+    Fields.Field,
+    Base.Broadcast.Broadcasted{<:Fields.AbstractFieldStyle},
+    Operators.StencilBroadcasted,
+    LazyOperatorBroadcasted,
+}
+
+Base.Broadcast.broadcasted(
+    ::typeof(*),
+    field_or_broadcasted::FieldOrStencilStyleType,
+    args...,
+) =
+    unrolled_reduce(args; init = field_or_broadcasted) do arg1, arg2
+        arg1_isa_matrix =
+            eltype(arg1) <: BandMatrixRow || arg1 isa LazyOperatorBroadcasted
+        use_matrix_mul_op = arg1_isa_matrix && arg2 isa FieldOrStencilStyleType
+        op = use_matrix_mul_op ? MultiplyColumnwiseBandMatrixField() : ⊠
+        Base.Broadcast.broadcasted(op, arg1, arg2)
+    end
+Base.Broadcast.broadcasted(
+    ::typeof(*),
+    single_value_or_broadcasted::SingleValueStyleType,
+    field_or_broadcasted::FieldOrStencilStyleType,
+    args...,
+) = Base.Broadcast.broadcasted(
+    ⊠,
+    single_value_or_broadcasted,
+    Base.Broadcast.broadcasted(*, field_or_broadcasted, args...),
+)
+# TODO: Generalize this to handle, e.g., @. scalar * scalar * matrix * matrix.
 
 function Base.show(io::IO, field::ColumnwiseBandMatrixField)
     print(io, eltype(field), "-valued Field")
