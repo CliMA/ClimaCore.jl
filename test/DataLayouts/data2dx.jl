@@ -5,7 +5,16 @@ using Revise; include(joinpath("test", "DataLayouts", "data2dx.jl"))
 using Test
 using ClimaComms
 using ClimaCore.DataLayouts
-import ClimaCore.DataLayouts: VF, IJFH, VIJFH, slab, column, slab_index, vindex
+import ClimaCore.DataLayouts:
+    VF,
+    IJFH,
+    VIJFH,
+    slab,
+    column,
+    slab_index,
+    vindex,
+    data2array_rrtmgp!,
+    array2data_rrtmgp!
 
 device = ClimaComms.device()
 ArrayType = ClimaComms.array_type(device)
