@@ -4,6 +4,9 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.27
+-------
+
  - Added support for `map!`  PR
  [2248](https://github.com/CliMA/ClimaCore.jl/pull/2248).
 
