@@ -29,5 +29,6 @@ include("CommonSpaces/CommonSpaces.jl")
 
 include("deprecated.jl")
 include("to_device.jl")
+include("precompile.jl")
 
 end # module
