@@ -610,6 +610,16 @@ steps:
         key: unit_spec_ops_plane
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/plane.jl"
 
+      - label: "Unit: FD operator (shmem)"
+        key: unit_fd_operator_shmem
+        command:
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_fd_ops_shared_memory.jl"
+          - "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_fd_ops_shared_memory.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: column"
         key: unit_column
         command:

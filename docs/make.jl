@@ -80,7 +80,10 @@ withenv("GKSwstype" => "nul") do
             "Remapping" => "remapping.md",
             "MatrixFields" => "matrix_fields.md",
             "API" => "api.md",
-            "Developer docs" => ["Performance tips" => "performance_tips.md"],
+            "Developer docs" => [
+                "Performance tips" => "performance_tips.md"
+                "Shared memory design" => "shmem_design.md"
+            ],
             "Tutorials" => [
                 joinpath("tutorials", tutorial * ".md") for
                 tutorial in TUTORIALS

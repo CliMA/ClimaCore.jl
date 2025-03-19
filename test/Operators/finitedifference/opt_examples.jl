@@ -455,7 +455,7 @@ end
 
 @testset "FD operator allocation tests" begin
     FT = Float64
-    n_elems = 1000
+    n_elems = 100
     domain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(0.0),
         Geometry.ZPoint{FT}(pi);

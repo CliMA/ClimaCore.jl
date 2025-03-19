@@ -182,6 +182,27 @@ LocalVector(u::ContravariantVector{<:Any, (3,)}, ::LocalGeometry{(1, 2)}) =
 @inline Jcontravariant3(u::AxisTensor, local_geometry::LocalGeometry) =
     local_geometry.J * contravariant3(u, local_geometry)
 
+# Extracting the element from a single element mat-vec multiply
+# results in a non-fused FMA with CUDA, so we specialize these cases
+# to use scalar operations, resulting in fused FMA. Yields up to 25%
+# speedup for metric term FD operators.
+@inline Jcontravariant3(
+    u::Covariant3Vector,
+    local_geometry::LocalGeometry{(3,)},
+) = @inbounds local_geometry.J * local_geometry.gⁱʲ[1, 1] * u[1]
+
+@inline Jcontravariant3(u::WVector, local_geometry::LocalGeometry{(3,)}) =
+    @inbounds local_geometry.J * local_geometry.∂ξ∂x[1, 1] * u[1]
+
+@inline Jcontravariant3(
+    u::Covariant3Vector,
+    local_geometry::LocalGeometry{(1, 2, 3)},
+) = @inbounds local_geometry.J * local_geometry.gⁱʲ[3, 3] * u[1]
+
+@inline Jcontravariant3(u::WVector, local_geometry::LocalGeometry{(1, 2, 3)}) =
+    @inbounds local_geometry.J * local_geometry.∂ξ∂x[3, 3] * u[1]
+
+
 # required for curl-curl
 @inline covariant3(
     u::Contravariant3Vector,

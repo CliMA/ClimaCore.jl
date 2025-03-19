@@ -313,3 +313,33 @@ end
     ij,
     slabidx,
 ) = Operators.is_valid_index(space, ij, slabidx)
+
+##### shmem fd kernel partition
+@inline function fd_stencil_partition(
+    us::DataLayouts.UniversalSize,
+    n_face_levels::Integer,
+    n_max_threads::Integer = 256;
+)
+    (Nq, _, _, Nv, Nh) = DataLayouts.universal_size(us)
+    Nvthreads = n_face_levels
+    @assert Nvthreads <= maximum_allowable_threads()[1] "Number of vertical face levels cannot exceed $(maximum_allowable_threads()[1])"
+    Nvblocks = cld(Nv, Nvthreads) # +1 may be needed to guarantee that shared memory is populated at the last cell face
+    return (;
+        threads = (Nvthreads,),
+        blocks = (Nh, Nvblocks, Nq * Nq),
+        Nvthreads,
+    )
+end
+@inline function fd_stencil_universal_index(space::Spaces.AbstractSpace, us)
+    (tv,) = CUDA.threadIdx()
+    (h, bv, ij) = CUDA.blockIdx()
+    v = tv + (bv - 1) * CUDA.blockDim().x
+    (Nq, _, _, _, _) = DataLayouts.universal_size(us)
+    if Nq * Nq < ij
+        return CartesianIndex((-1, -1, 1, -1, -1))
+    end
+    @inbounds (i, j) = CartesianIndices((Nq, Nq))[ij].I
+    return CartesianIndex((i, j, 1, v, h))
+end
+@inline fd_stencil_is_valid_index(I::CI5, us::UniversalSize) =
+    1 ≤ I[5] ≤ DataLayouts.get_Nh(us)
