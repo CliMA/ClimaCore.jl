@@ -4,6 +4,9 @@ ClimaCore.jl Release Notes
 main
 -------
 
+ - The standard `*` symbol now denotes matrix multiplication, and the alias
+ `const ⋅ = MultiplyColumnwiseBandMatrixField()` is removed PR [2232](https://github.com/CliMA/ClimaCore.jl/pull/2232)
+
  - `Fields.Field(Bool, ::AbstractSpace)` is now supported. PR [2239](https://github.com/CliMA/ClimaCore.jl/pull/2239).
 
  - `SpectralElementSpace2D` constructors now support nodal masks. PR [2201](https://github.com/CliMA/ClimaCore.jl/pull/2201). See its documentation [here](https://clima.github.io/ClimaCore.jl/dev/masks). Note that it does not yet support restarts.
@@ -16,6 +19,10 @@ main
 the execution of arbitrary code. PR [2162](https://github.com/CliMA/ClimaCore.jl/pull/2162).
 
  - Improved `show` for spaces, and added `show` for grids. PR [2202](https://github.com/CliMA/ClimaCore.jl/pull/2202).
+
+ - `UnrolledFunctions` removed and replaced with `UnrolledUtilities` PR [1713](https://github.com/CliMA/ClimaCore.jl/pull/1713)
+
+ - Unused original implicit solver intereface removed PR [2200](https://github.com/CliMA/ClimaCore.jl/pull/2200)
 
 v0.14.26
 -------
