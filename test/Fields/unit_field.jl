@@ -84,6 +84,12 @@ end
 
 
     field_sin = map(x -> sin((x.x) / 2), Fields.coordinate_field(space))
+
+    # Exercise map!
+    map!(field_sin, Fields.coordinate_field(space)) do x
+        sin((x.x) / 2)
+    end
+
     M = Operators.matrix_interpolate(field_sin, 20)
     @test size(M) == (20, 20)  # 20 x 20 for a 1 element field
 

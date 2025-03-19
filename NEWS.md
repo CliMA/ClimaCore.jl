@@ -4,8 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+ - Added support for `map!`  PR
+ [2248](https://github.com/CliMA/ClimaCore.jl/pull/2248).
+
  - The standard `*` symbol now denotes matrix multiplication, and the alias
- `const ⋅ = MultiplyColumnwiseBandMatrixField()` is removed PR [2232](https://github.com/CliMA/ClimaCore.jl/pull/2232)
+ `const ⋅ = MultiplyColumnwiseBandMatrixField()` is being deprecated PR [2232](https://github.com/CliMA/ClimaCore.jl/pull/2232). Please replace use of `⋅` with `*`.
 
  - `Fields.Field(Bool, ::AbstractSpace)` is now supported. PR [2239](https://github.com/CliMA/ClimaCore.jl/pull/2239).
 
