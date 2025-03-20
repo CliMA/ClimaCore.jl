@@ -2211,6 +2211,52 @@ array2data(array::AbstractArray{T}, data::AbstractData) where {T} =
         reshape(array, array_size(data)...),
     )
 
+function data2array_rrtmgp!(
+    array::AbstractArray,
+    data::Union{VF{S}, VIFH{S}, VIHF{S}, VIJFH{S}, VIJHF{S}},
+    ::Val{trans},
+) where {trans, S}
+    (nl, ncol) = trans ? size(array) : reverse(size(array))
+    Ni, Nj, Nk, Nv, Nh = Base.size(data)
+    @assert nl * ncol == Ni * Nj * Nk * Nv * Nh
+    @assert prod(size(parent(data))) == Ni * Nj * Nk * Nv * Nh # verify Nf == 1
+
+    @inbounds begin
+        for i in 1:Ni, j in 1:Nj, k in 1:Nk, h in 1:Nh
+            colidx =
+                i + (j - 1) * Ni + (k - 1) * Ni * Nj + (h - 1) * Ni * Nj * Nk
+            for v in 1:Nv
+                cidx = CartesianIndex(i, j, k, v, h)
+                trans ? (array[colidx, v] = data[cidx]) :
+                (array[v, colidx] = data[cidx])
+            end
+        end
+    end
+    return nothing
+end
+
+function array2data_rrtmgp!(
+    data::Union{VF{S}, VIFH{S}, VIHF{S}, VIJFH{S}, VIJHF{S}},
+    array::AbstractArray,
+    ::Val{trans},
+) where {trans, S}
+    (nl, ncol) = trans ? size(array) : reverse(size(array))
+    Ni, Nj, Nk, Nv, Nh = Base.size(data)
+    @assert nl * ncol == Ni * Nj * Nk * Nv * Nh
+    @assert prod(size(parent(data))) == Ni * Nj * Nk * Nv * Nh # verify Nf == 1
+    @inbounds begin
+        for i in 1:Ni, j in 1:Nj, k in 1:Nk, h in 1:Nh
+            colidx =
+                i + (j - 1) * Ni + (k - 1) * Ni * Nj + (h - 1) * Ni * Nj * Nk
+            for v in 1:Nv
+                data[CartesianIndex(i, j, k, v, h)] =
+                    trans ? S(array[colidx, v]) : S(array[v, colidx])
+            end
+        end
+    end
+    return nothing
+end
+
 """
     device_dispatch(array::AbstractArray)
 
