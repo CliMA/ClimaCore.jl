@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.28
+-------
+
+ - Bugfix in ClimaCore FD stencil code PR [2251](https://github.com/CliMA/ClimaCore.jl/pull/2251).
+
 v0.14.27
 -------
 
