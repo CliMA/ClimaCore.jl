@@ -4017,6 +4017,9 @@ function Base.similar(
     return Field(Eltype, sp)
 end
 
+Base.similar(bc::Base.Broadcast.Broadcasted{<:AbstractStencilStyle}) =
+    Base.similar(bc, eltype(bc))
+
 function _serial_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
     space = axes(field_out)
     bounds = window_bounds(space, bc)
