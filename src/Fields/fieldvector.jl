@@ -557,11 +557,17 @@ rcompare(
 rcompare(x::T, y::T; strict = true) where {T <: FieldVector} =
     _rcompare(true, x, y; strict)
 
+rcompare(x::T, y::T; strict = true) where {T <: Field} =
+    _rcompare(true, x, y; strict)
+
 rcompare(x::T, y::T; strict = true) where {T <: NamedTuple} =
     _rcompare(true, x, y; strict)
 
 # FieldVectors with different types are always different
 rcompare(x::FieldVector, y::FieldVector; strict::Bool = true) =
+    strict ? false : _rcompare(true, x, y; strict)
+
+rcompare(x::Field, y::Field; strict::Bool = true) =
     strict ? false : _rcompare(true, x, y; strict)
 
 rcompare(x::NamedTuple, y::NamedTuple; strict::Bool = true) =

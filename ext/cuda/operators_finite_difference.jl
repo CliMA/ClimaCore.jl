@@ -46,16 +46,16 @@ function Base.copyto!(
 
     # TODO: Use CUDA.limit(CUDA.LIMIT_SHMEM_SIZE) to determine how much shmem should be used
     # TODO: add shmem support for masked operations
-    # if Operators.any_fd_shmem_supported(bc) &&
-    #    !high_resolution &&
-    #    mask isa NoMask &&
-    #    enough_shmem
-    if false
+    out_shmem = similar(out)
+    if Operators.any_fd_shmem_supported(bc) &&
+       !high_resolution &&
+       mask isa NoMask &&
+       enough_shmem
         p = fd_stencil_partition(us, n_face_levels)
         args = (
-            strip_space(out, space),
+            strip_space(out_shmem, space),
             strip_space(bc, space),
-            axes(out),
+            axes(out_shmem),
             bounds,
             us,
             mask,
@@ -67,6 +67,35 @@ function Base.copyto!(
             threads_s = p.threads,
             blocks_s = p.blocks,
         )
+
+        bc′ = disable_shmem_style(bc)
+        args = (
+            strip_space(out, space),
+            strip_space(bc′, space),
+            axes(out),
+            bounds,
+            us,
+            mask,
+        )
+
+        threads = threads_via_occupancy(copyto_stencil_kernel!, args)
+        n_max_threads = min(threads, get_N(us))
+        p = if mask isa NoMask
+            partition(out_fv, n_max_threads)
+        else
+            masked_partition(us, n_max_threads, mask)
+        end
+
+        auto_launch!(
+            copyto_stencil_kernel!,
+            args;
+            threads_s = p.threads,
+            blocks_s = p.blocks,
+        )
+        if !Fields.rcompare(out, out_shmem)
+            error("Result mismatch")
+        end
+
     else
         bc′ = disable_shmem_style(bc)
         @assert !any_fd_shmem_style(bc′)
