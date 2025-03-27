@@ -93,7 +93,8 @@ function Base.copyto!(
             blocks_s = p.blocks,
         )
         if !Fields.rcompare(out, out_shmem)
-            error("Result mismatch")
+            Δabs = abs.(parent(out) .- parent(out_shmem))
+            error("Result mismatch. maximum(Δabs) = $(maximum(Δabs))")
         end
 
     else
