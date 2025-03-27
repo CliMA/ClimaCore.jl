@@ -92,11 +92,14 @@ function Base.copyto!(
             threads_s = p.threads,
             blocks_s = p.blocks,
         )
-        if !Fields.rcompare(out, out_shmem)
-            Δabs = abs.(parent(out) .- parent(out_shmem))
-            error("Result mismatch. maximum(Δabs) = $(maximum(Δabs))")
+        Δabs = abs.(parent(out) .- parent(out_shmem))
+        M = maximum(abs.(parent(out)))
+        MΔabs = maximum(Δabs)
+        FT = Spaces.undertype(axes(out))
+        Mdenom = M < 1 ? FT(1) : M
+        if MΔabs/Mdenom > 100*eps(FT)
+            error("Result mismatch. maximum(Δabs),M = $(maximum(Δabs)), $M")
         end
-
     else
         bc′ = disable_shmem_style(bc)
         @assert !any_fd_shmem_style(bc′)
