@@ -51,11 +51,10 @@ function Base.copyto!(
 
     # TODO: Use CUDA.limit(CUDA.LIMIT_SHMEM_SIZE) to determine how much shmem should be used
     # TODO: add shmem support for masked operations
-    # if Operators.any_fd_shmem_supported(bc) &&
-    #    !high_resolution &&
-    #    mask isa NoMask &&
-    #    enough_shmem
-    if false
+    if Operators.any_fd_shmem_supported(bc) &&
+       !high_resolution &&
+       mask isa NoMask &&
+       enough_shmem
         p = fd_stencil_partition(us, n_face_levels)
         args = (
             strip_space(out, space),
