@@ -4,6 +4,14 @@ ClimaCore.jl Release Notes
 main
 -------
 
+
+v0.14.29
+-------
+
+ - Fix empty interpolation with certain versions of CUDA+MPI
+   [2256](https://github.com/CliMA/ClimaCore.jl/pull/2256).
+
+
 v0.14.28
 -------
 

@@ -15,6 +15,7 @@ import ..DataLayouts,
     ..Fields,
     ..Hypsography
 import ClimaCore.Utilities: half
+import ClimaCore.Spaces: cuda_synchronize
 
 using ..RecursiveApply
 
