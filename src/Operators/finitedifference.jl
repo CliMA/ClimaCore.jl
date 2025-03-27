@@ -219,9 +219,6 @@ strip_space(op::FiniteDifferenceOperator, parent_space) =
 
 abstract type AbstractStencilStyle <: Fields.AbstractFieldStyle end
 
-# the .f field is an operator
-struct StencilStyle <: AbstractStencilStyle end
-
 struct ColumnStencilStyle <: AbstractStencilStyle end
 
 AbstractStencilStyle(bc, ::ClimaComms.AbstractCPUDevice) = ColumnStencilStyle
@@ -3815,8 +3812,7 @@ Base.@propagate_inbounds function getidx(
     end
 end
 
-
-# broadcasting a StencilStyle gives a CompositeStencilStyle
+# broadcasting a ColumnStencilStyle gives the StencilBroadcasted's style
 Base.Broadcast.BroadcastStyle(
     ::Type{<:StencilBroadcasted{Style}},
 ) where {Style} = Style()
@@ -3945,7 +3941,7 @@ end
 function Base.Broadcast.broadcasted(op::FiniteDifferenceOperator, args...)
     args′ = map(Base.Broadcast.broadcastable, args)
     style = Base.Broadcast.result_style(
-        StencilStyle(),
+        ColumnStencilStyle(),
         Base.Broadcast.combine_styles(args′...),
     )
     Base.Broadcast.broadcasted(style, op, args′...)

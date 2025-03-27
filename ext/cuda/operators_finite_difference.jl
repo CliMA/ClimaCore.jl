@@ -15,6 +15,11 @@ AbstractStencilStyle(bc, ::ClimaComms.CUDADevice) =
     Operators.any_fd_shmem_supported(bc) ? CUDAWithShmemColumnStencilStyle :
     CUDAColumnStencilStyle
 
+Base.Broadcast.BroadcastStyle(
+    x::Operators.ColumnStencilStyle,
+    y::CUDAColumnStencilStyle,
+) = y
+
 include("operators_fd_shmem_is_supported.jl")
 
 function Base.copyto!(
