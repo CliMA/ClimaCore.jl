@@ -98,7 +98,9 @@ end
 
 FT = Float64
 data = ClimaCore.DataLayouts.VIJFH{FT}(Array{FT}, zeros; Nv=5, Nij=2, Nh=2)
-@. data = NaN
+x = ClimaCore.DataLayouts.VIJFH{FT}(Array{FT}, zeros; Nv=5, Nij=2, Nh=2)
+parent(x)[1] = NaN # emulate incorrect initialization
+@. data = x + 1
 # Let's see what happened
 (;result, args, kwargs, st) = Infiltrator.safehouse;
 
@@ -109,9 +111,48 @@ ClimaCore.DebugOnly.print_depth_limited_stack_trace(st; maxtypedepth=1)
 # Inspecting `args` shows that the `Broadcasted` object used to populate the
 # result was:
 julia> args[2]
-Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}}(identity, (NaN,))
+Base.Broadcast.Broadcasted{ClimaCore.DataLayouts.VIJFHStyle{5, 2, Array{Float64}}}(+, (ClimaCore.DataLayouts.VIJFH{Float64, 5, 2, Array{Float64, 5}}
+  [NaN, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  …  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1))
 
 # And there's your problem, NaNs is on the right-hand-side of that assignment.
+```
+
+If your broadcasted object is very long, it can be a bit overwhelming to figure
+out which part of the expression contains NaNs (if any). To make this process
+more manageable, we can use [`StructuredPrinting.jl`]
+(https://github.com/charleskawczynski/StructuredPrinting.jl) to highlight which
+parts of the broadcasted object contains NaNs:
+
+```julia
+using StructuredPrinting
+import ClimaCore: DataLayouts
+highlight_nans(x::DataLayouts.AbstractData) = any(y->isnan(y), parent(x));
+highlight_nans(_) = false;
+bc = Infiltrator.safehouse.args[2]; # we know that argument 2 is the broadcasted object
+(; result) = Infiltrator.safehouse; # get the result
+@structured_print bc Options(; highlight = x->highlight_nans(x))
+```
+This last line results in:
+
+```julia
+julia> @structured_print bc Options(; highlight = x->highlight_nans(x))
+bc
+bc.style::ClimaCore.DataLayouts.VIJFHStyle{5, 2, Array{Float64}}
+bc.f::typeof(+)
+bc.args::Tuple{ClimaCore.DataLayouts.VIJFH{Float64, 5, 2, Array{…}}, Int64}
+bc.args.1::ClimaCore.DataLayouts.VIJFH{Float64, 5, 2, Array{Float64, 5}}       # highlighted in RED
+bc.args.2::Int64
+bc.axes::NTuple{5, Base.OneTo{Int64}}
+bc.axes.1::Base.OneTo{Int64}
+bc.axes.1.stop::Int64
+bc.axes.2::Base.OneTo{Int64}
+bc.axes.2.stop::Int64
+bc.axes.3::Base.OneTo{Int64}
+bc.axes.3.stop::Int64
+bc.axes.4::Base.OneTo{Int64}
+bc.axes.4.stop::Int64
+bc.axes.5::Base.OneTo{Int64}
+bc.axes.5.stop::Int64
 ```
 
 ### Caveats
