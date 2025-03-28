@@ -1,7 +1,7 @@
 
 module Quadratures
 
-import GaussQuadrature
+import FastGaussQuadrature
 import StaticArrays: SVector, SMatrix, MMatrix
 import LinearAlgebra: Diagonal
 
@@ -53,6 +53,8 @@ function quadrature_points end
     GLL{Nq}()
 
 Gauss-Legendre-Lobatto quadrature using `Nq` quadrature points.
+
+https://mathworld.wolfram.com/LobattoQuadrature.html
 """
 struct GLL{Nq} <: QuadratureStyle{Nq} end
 
@@ -61,8 +63,8 @@ Base.show(io::IO, ::GLL{Nq}) where {Nq} =
 
 unique_degrees_of_freedom(::GLL{Nq}) where {Nq} = Nq - 1
 @generated function quadrature_points(::Type{FT}, ::GLL{Nq}) where {FT, Nq}
-    points, weights = GaussQuadrature.legendre(FT, Nq, GaussQuadrature.both)
-    :($(SVector{Nq}(points)), $(SVector{Nq}(weights)))
+    points, weights = FastGaussQuadrature.gausslobatto(Nq)
+    :($(SVector{Nq, FT}(points)), $(SVector{Nq, FT}(weights)))
 end
 
 """
@@ -77,8 +79,8 @@ Base.show(io::IO, ::GL{Nq}) where {Nq} =
 
 unique_degrees_of_freedom(::GL{Nq}) where {Nq} = Nq
 @generated function quadrature_points(::Type{FT}, ::GL{Nq}) where {FT, Nq}
-    points, weights = GaussQuadrature.legendre(FT, Nq, GaussQuadrature.neither)
-    :($(SVector{Nq}(points)), $(SVector{Nq}(weights)))
+    points, weights = FastGaussQuadrature.gausslegendre(Nq)
+    :($(SVector{Nq, FT}(points)), $(SVector{Nq, FT}(weights)))
 end
 
 """
@@ -220,7 +222,7 @@ end
         quadrature_points(FT, quadfrom())[1],
     )
 end
-
+#=
 """
     V = orthonormal_poly(points, quad)
 
@@ -247,7 +249,7 @@ function spectral_filter_matrix(
     V = orthonormal_poly(points, quad)
     return V * Diagonal(Σ) / V
 end
-
+=#
 function cutoff_filter_matrix(
     ::Type{FT},
     quad::GLL{Nq},

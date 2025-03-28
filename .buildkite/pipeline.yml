@@ -28,12 +28,6 @@ steps:
       - "julia --project=.buildkite --check-bounds=yes -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true); Pkg.status()'"
       - "julia --project=.buildkite -e 'using CUDA; CUDA.precompile_runtime()'"
 
-      - echo "--- Instantiate lib/ClimaCoreTempestRemap"
-      - "julia --project=lib/ClimaCoreTempestRemap -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true); Pkg.status()'"
-
-      - echo "--- Instantiate benchmarks"
-      - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true); Pkg.status()'"
-
     agents:
       slurm_mem: 80G
       slurm_gpus: 1
