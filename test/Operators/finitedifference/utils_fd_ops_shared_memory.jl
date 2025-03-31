@@ -4,7 +4,7 @@ using ClimaCore.Utilities: half
 using Test, ClimaComms
 ClimaComms.@import_required_backends;
 using ClimaCore: Geometry, Spaces, Fields, Operators, ClimaCore;
-using ClimaCore: Utilities
+using ClimaCore: Utilities, DataLayouts
 using ClimaCore.CommonSpaces;
 import ClimaCore.Geometry: ⊗
 
@@ -20,6 +20,20 @@ get_space_extruded(dev, FT; z_elem = 63, h_elem = 30) =
         n_quad_points = 4,
         staggering = CellCenter(),
     );
+
+get_space_plane(dev, FT; z_elem = 100) = SliceXZSpace(
+    FT;
+    device = dev,
+    z_elem,
+    x_min = 0,
+    x_max = 100000,
+    z_min = 0,
+    z_max = 21000,
+    periodic_x = false,
+    n_quad_points = 4,
+    x_elem = 100,
+    staggering = CellCenter(),
+);
 
 get_space_column(dev, FT; z_elem = 10) = ColumnSpace(
     FT;
@@ -207,18 +221,26 @@ function compare_cpu_gpu(cpu, gpu; print_diff = true, C_best = 10)
     max_err = maximum(absΔ)
     gpu_matches_cpu = max_err <= max_allowed_err
     gpu_matches_cpu || @show max_err
+    z = Fields.field_values(Fields.coordinate_field(space))
     C = count(x -> x <= max_allowed_err, absΔ)
     if !gpu_matches_cpu && print_diff
-        if space isa Spaces.FiniteDifferenceSpace
+        if z isa DataLayouts.VF
             @show parent(cpu)[1:3]
             @show parent(gpu)[1:3]
             @show parent(cpu)[(end - 3):end]
             @show parent(gpu)[(end - 3):end]
-        else
+        elseif z isa DataLayouts.VIJFH
             @show parent(cpu)[1:3, 1, 1, 1, end]
             @show parent(gpu)[1:3, 1, 1, 1, end]
             @show parent(cpu)[(end - 3):end, 1, 1, 1, end]
             @show parent(gpu)[(end - 3):end, 1, 1, 1, end]
+        elseif z isa DataLayouts.VIFH
+            @show parent(cpu)[1:3, 1, 1, end]
+            @show parent(gpu)[1:3, 1, 1, end]
+            @show parent(cpu)[(end - 3):end, 1, 1, end]
+            @show parent(gpu)[(end - 3):end, 1, 1, end]
+        else
+            error("Unsupported type")
         end
     end
     return gpu_matches_cpu
@@ -228,6 +250,7 @@ end
 function compare_cpu_gpu_incremental(cpu, gpu; print_diff = true, C_best = 10)
     # there are some odd errors that build up when run without debug / bounds checks:
     space = axes(cpu)
+    z = Fields.field_values(Fields.coordinate_field(space))
     are_boundschecks_forced = Base.JLOptions().check_bounds == 1
     absΔ = abs.(parent(cpu) .- Array(parent(gpu)))
     max_err = are_boundschecks_forced ? 10000 * eps() : 10000000 * eps()
@@ -239,16 +262,23 @@ function compare_cpu_gpu_incremental(cpu, gpu; print_diff = true, C_best = 10)
         @test_broken C > C_best
     end
     if !B && print_diff
-        if space isa Spaces.FiniteDifferenceSpace
+        if z isa DataLayouts.VF
             @show parent(cpu)[1:3]
             @show parent(gpu)[1:3]
             @show parent(cpu)[(end - 3):end]
             @show parent(gpu)[(end - 3):end]
-        else
+        elseif z isa DataLayouts.VIJFH
             @show parent(cpu)[1:3, 1, 1, 1, end]
             @show parent(gpu)[1:3, 1, 1, 1, end]
             @show parent(cpu)[(end - 3):end, 1, 1, 1, end]
             @show parent(gpu)[(end - 3):end, 1, 1, 1, end]
+        elseif z isa DataLayouts.VIJFH
+            @show parent(cpu)[1:3, 1, 1, end]
+            @show parent(gpu)[1:3, 1, 1, end]
+            @show parent(cpu)[(end - 3):end, 1, 1, end]
+            @show parent(gpu)[(end - 3):end, 1, 1, end]
+        else
+            error("Unsupported type")
         end
     end
     return true
