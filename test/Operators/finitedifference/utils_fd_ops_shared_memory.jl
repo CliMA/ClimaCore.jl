@@ -240,7 +240,7 @@ function compare_cpu_gpu(cpu, gpu; print_diff = true, C_best = 10)
             @show parent(cpu)[(end - 3):end, 1, 1, end]
             @show parent(gpu)[(end - 3):end, 1, 1, end]
         else
-            error("Unsupported type")
+            error("Unsupported type: $(typeof(z))")
         end
     end
     return gpu_matches_cpu
@@ -278,7 +278,7 @@ function compare_cpu_gpu_incremental(cpu, gpu; print_diff = true, C_best = 10)
             @show parent(cpu)[(end - 3):end, 1, 1, end]
             @show parent(gpu)[(end - 3):end, 1, 1, end]
         else
-            error("Unsupported type")
+            error("Unsupported type: $(typeof(z))")
         end
     end
     return true
