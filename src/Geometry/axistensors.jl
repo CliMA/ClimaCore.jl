@@ -308,6 +308,9 @@ Base.zero(::Type{AdjointAxisTensor{T, N, A, S}}) where {T, N, A, S} =
 
 const AdjointAxisVector{T, A1, S} = Adjoint{T, AxisVector{T, A1, S}}
 
+const AxisVectorOrAdj{T, A, S} =
+    Union{AxisVector{T, A, S}, AdjointAxisVector{T, A, S}}
+
 Base.@propagate_inbounds Base.getindex(va::AdjointAxisVector, i::Int) =
     getindex(components(va), i)
 Base.@propagate_inbounds Base.getindex(va::AdjointAxisVector, i::Int, j::Int) =
