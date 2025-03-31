@@ -28,12 +28,12 @@ operator_matrix
 
 ## Vectors and Matrices of Fields
 
-``@docs
+```@docs
 FieldNameDict
 identity_field_matrix
 field_vector_view
 concrete_field_vector
-``
+```
 
 ## Linear Solvers
 
