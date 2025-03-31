@@ -181,11 +181,51 @@ function get_internal_entry(
         entry
     elseif name_pair[2] == @name() && broadcasted_has_field(T, name_pair[1])
         # multiplication case 2 or 4, second argument
-        Base.broadcasted(entry) do matrix_row
-            map(matrix_row) do matrix_row_entry
-                broadcasted_get_field(matrix_row_entry, name_pair[1])
-            end
-        end # Note: This assumes that the entry is in a FieldMatrixBroadcasted.
+        target_field_eltype = broadcasted_get_field_type(T, name_pair[1])
+        if target_field_eltype <: Number
+            T_band = eltype(entry)
+            singleton_datalayout =
+                DataLayouts.singleton(Fields.field_values(entry))
+            # BandMatrixRow with same lowest diagonal and bandwidth as `entry`, with a scalar eltype
+            scalar_band_type = BandMatrixRow{
+                T_band.parameters[1],
+                T_band.parameters[2],
+                eltype(parent(entry)),
+            }
+            field_dim_size = DataLayouts.ncomponents(Fields.field_values(entry))
+            scalar_field_offset = get_field_first_index_offset(
+                name_pair[1],
+                target_field_eltype,
+                T,
+            )
+            band_element_size = Int(div(sizeof(T), sizeof(target_field_eltype)))
+            parent_indices = DataLayouts.to_data_specific_field(
+                singleton_datalayout,
+                (
+                    :,
+                    :,
+                    (1 + scalar_field_offset):band_element_size:field_dim_size,
+                    :,
+                    :,
+                ),
+            )
+            scalar_data = view(parent(entry), parent_indices...)
+            values = DataLayouts.union_all(singleton_datalayout){
+                scalar_band_type,
+                Base.tail(
+                    DataLayouts.type_params(Fields.field_values(entry)),
+                )...,
+            }(
+                scalar_data,
+            )
+            Fields.Field(values, axes(entry))
+        else
+            Base.broadcasted(entry) do matrix_row
+                map(matrix_row) do matrix_row_entry
+                    broadcasted_get_field(matrix_row_entry, name_pair[1])
+                end
+            end # Note: This assumes that the entry is in a FieldMatrixBroadcasted.
+        end
     else
         throw(key_error)
     end
@@ -235,6 +275,96 @@ function Base.one(matrix::FieldMatrix)
         end
     end
     return FieldNameDict(inferred_diagonal_keys, entries)
+end
+
+"""
+    get_field_first_index_offset(name::FieldName, ::Type{T}, ::Type{S})
+
+Returns the offset of the the field with name `name` in an object of type `S`
+in multiples of `sizeof(T)`.
+"""
+function get_field_first_index_offset(
+    name::FieldName,
+    ::Type{T},
+    ::Type{S},
+) where {T, S}
+    if name == @name()
+        return 0
+    end
+    child_name = extract_first(name)
+    child_type = fieldtype(S, child_name)
+    remaining_field_chain = drop_first(name)
+    field_index =
+        unrolled_filter(i -> fieldname(S, i) == child_name, 1:fieldcount(S))[1]
+    return DataLayouts.fieldtypeoffset(T, S, field_index) +
+           get_field_first_index_offset(remaining_field_chain, T, child_type)
+end
+if hasfield(Method, :recursion_relation)
+    dont_limit = (args...) -> true
+    for m in methods(get_field_first_index_offset)
+        m.recursion_relation = dont_limit
+    end
+end
+
+"""
+    get_scalar_keys(dict::FieldMatrix)
+
+Returns a `FieldMatrixKeys` object that contains the keys of all the scalar
+entries in the `FieldMatrix` `dict`.
+"""
+function get_scalar_keys(dict::FieldMatrix)
+    keys_tuple = unrolled_flatmap(keys(dict).values) do key
+        _, entry = unrolled_filter(pair -> key == pair[1], pairs(dict))[1]
+        entry =
+            entry isa ColumnwiseBandMatrixField ? entry.entries.:(1) : entry
+        unrolled_map(
+            filtered_child_names(
+                field -> eltype(field) <: Number,
+                entry,
+                @name()
+            ),
+        ) do name
+            (append_internal_name(key[1], name), key[2])
+        end
+    end
+    return FieldMatrixKeys(keys_tuple)
+end
+
+"""
+    scalar_fieldmatrix(field_matrix::FieldMatrix)
+
+Constructs a `FieldNameDict` where the keys and entries are views
+of the entries of `field_matrix`, which corresponding to the
+scalar components of entries of `field_matrix`.
+
+# Example usage
+```julia
+struct foo{T1, T2}
+    a::T
+    b::T2
+end
+mat1 = fill(DiagonalMatrixRow(ClimaCore.Geometry.Covariant12Vector(1.0, 2.0)), space)
+mat2 = fill(DiagonalMatrixRow(foo(foo(1.0, 2.0), 3.0)), space)
+A = MatrixFields.FieldMatrix(
+    (@name(biz), @name(baz)) => mat1,
+    (@name(bip), @name(bop)) => mat2,
+)
+A_scalar = MatrixFields.scalar_fieldmatrix(A)
+keys(A_scalar)
+# Output:
+# (@name(biz.components.data.:(1)), @name(baz))
+# (@name(biz.components.data.:(2)), @name(baz))
+# (@name(bip.a.a), @name(bop))
+# (@name(bip.a.b), @name(bop))
+# (@name(bip.b), @name(bop))
+```
+"""
+function scalar_fieldmatrix(field_matrix::FieldMatrix)
+    scalar_keys = get_scalar_keys(field_matrix)
+    entries = unrolled_map(scalar_keys.values) do key
+        field_matrix[key]
+    end
+    return FieldNameDict(scalar_keys, entries)
 end
 
 replace_name_tree(dict::FieldNameDict, name_tree) =

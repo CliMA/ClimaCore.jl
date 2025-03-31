@@ -89,6 +89,9 @@ preconditioner_cache
 check_preconditioner
 lazy_or_concrete_preconditioner
 apply_preconditioner
+get_scalar_keys
+get_field_first_index_offset
+broadcasted_get_field_type
 ```
 
 ## Utilities
@@ -98,4 +101,5 @@ column_field2array
 column_field2array_view
 field2arrays
 field2arrays_view
+scalar_fieldmatrix
 ```
