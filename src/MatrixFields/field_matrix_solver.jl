@@ -386,9 +386,20 @@ end
 BlockArrowheadSolve(names₁...; alg₂ = BlockDiagonalSolve()) =
     BlockArrowheadSolve(names₁, alg₂)
 
+import LazyBroadcast: lazy
 function field_matrix_solver_cache(alg::BlockArrowheadSolve, A, b)
     A₁₁, A₁₂, A₂₁, A₂₂, _, b₂ = partition_blocks(alg.names₁, A, b)
-    A₂₂′ = @. A₂₂ - A₂₁ * inv(A₁₁) * A₁₂
+    # We want to allocate a field for A₂₂′, but we can't simply use
+    # `similar(A₂₂)`, as `A₂₂` could be a `BidiagonalMatrixRow` and
+    # `A₂₁` could be a `QuaddiagonalMatrixRow`, resulting in `A₂₂′
+    # needing to be a `QuaddiagonalMatrixRow` (due to promotion).
+
+    # So we need the eltype of the broadcast expression. We use `lazy` to first
+    # get the broadcasted object and then call similar (instead of evaluating
+    # broadcast expressions with potentially un-initialized data).
+
+    A₂₂′_bc = @. lazy(A₂₂ - A₂₁ * inv(A₁₁) * A₁₂) # Broadcasted{<:AbstractFieldStyle} object
+    A₂₂′ = similar(A₂₂′_bc) # returns a Field
     b₂′ = similar(b₂)
     cache₂ = field_matrix_solver_cache(alg.alg₂, A₂₂′, b₂′)
     return (; A₂₂′, b₂′, cache₂)
