@@ -320,13 +320,13 @@ end
     n_face_levels::Integer,
     n_max_threads::Integer = 256;
 )
-    (Nq, _, _, Nv, Nh) = DataLayouts.universal_size(us)
+    (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(us)
     Nvthreads = n_face_levels
     @assert Nvthreads <= maximum_allowable_threads()[1] "Number of vertical face levels cannot exceed $(maximum_allowable_threads()[1])"
     Nvblocks = cld(Nv, Nvthreads) # +1 may be needed to guarantee that shared memory is populated at the last cell face
     return (;
         threads = (Nvthreads,),
-        blocks = (Nh, Nvblocks, Nq * Nq),
+        blocks = (Nh, Nvblocks, Ni * Nj),
         Nvthreads,
     )
 end
@@ -334,11 +334,11 @@ end
     (tv,) = CUDA.threadIdx()
     (h, bv, ij) = CUDA.blockIdx()
     v = tv + (bv - 1) * CUDA.blockDim().x
-    (Nq, _, _, _, _) = DataLayouts.universal_size(us)
-    if Nq * Nq < ij
+    (Ni, Nj, _, _, _) = DataLayouts.universal_size(us)
+    if Ni * Nj < ij
         return CartesianIndex((-1, -1, 1, -1, -1))
     end
-    @inbounds (i, j) = CartesianIndices((Nq, Nq))[ij].I
+    @inbounds (i, j) = CartesianIndices((Ni, Nj))[ij].I
     return CartesianIndex((i, j, 1, v, h))
 end
 @inline fd_stencil_is_valid_index(I::CI5, us::UniversalSize) =
