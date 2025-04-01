@@ -113,3 +113,128 @@ function vertical_interpolation_weights(space, zcoords)
     ξs = vertical_reference_coordinates(space, zcoords)
     return map(ξ -> ((1 - ξ) / 2, (1 + ξ) / 2), ξs)
 end
+
+function default_target_hcoords(
+    space::Spaces.FiniteDifferenceSpace;
+    hresolution,
+)
+    return nothing
+end
+
+function default_target_zcoords(
+    space::Spaces.AbstractSpectralElementSpace;
+    zresolution,
+)
+    return nothing
+end
+
+"""
+    default_target_hcoords(space::Spaces.AbstractSpace; hresolution)
+
+Return an Array with the Geometry.Points to interpolate uniformly the horizontal
+component of the given `space`.
+"""
+function default_target_hcoords(space::Spaces.AbstractSpace; hresolution = 180)
+    return default_target_hcoords(Spaces.horizontal_space(space); hresolution)
+end
+
+"""
+    default_target_hcoords_as_vectors(space::Spaces.AbstractSpace; hresolution)
+
+Return an Vectors with the coordinate to interpolate uniformly the horizontal
+component of the given `space`.
+"""
+function default_target_hcoords_as_vectors(
+    space::Spaces.AbstractSpace;
+    hresolution = 180,
+)
+    return default_target_hcoords_as_vectors(
+        Spaces.horizontal_space(space);
+        hresolution,
+    )
+end
+
+function default_target_hcoords(
+    space::Spaces.SpectralElementSpace2D;
+    hresolution = 180,
+)
+    topology = Spaces.topology(space)
+    domain = Meshes.domain(topology.mesh)
+    xrange, yrange = default_target_hcoords_as_vectors(space; hresolution)
+    PointType =
+        domain isa Domains.SphereDomain ? Geometry.LatLongPoint :
+        Topologies.coordinate_type(topology)
+    return [PointType(x, y) for x in xrange, y in yrange]
+end
+
+function default_target_hcoords_as_vectors(
+    space::Spaces.SpectralElementSpace2D;
+    hresolution = 180,
+)
+    FT = Spaces.undertype(space)
+    topology = Spaces.topology(space)
+    domain = Meshes.domain(topology.mesh)
+    if domain isa Domains.SphereDomain
+        return FT.(range(-180.0, 180.0, hresolution)),
+        FT.(range(-90.0, 90.0, hresolution))
+    else
+        x1min = Geometry.component(domain.interval1.coord_min, 1)
+        x2min = Geometry.component(domain.interval2.coord_min, 1)
+        x1max = Geometry.component(domain.interval1.coord_max, 1)
+        x2max = Geometry.component(domain.interval2.coord_max, 1)
+        return FT.(range(x1min, x1max, hresolution)),
+        FT.(range(x2min, x2max, hresolution))
+    end
+end
+
+function default_target_hcoords(
+    space::Spaces.SpectralElementSpace1D;
+    hresolution = 180,
+)
+    topology = Spaces.topology(space)
+    PointType = Topologies.coordinate_type(topology)
+    return PointType.(default_target_hcoords_as_vectors(space; hresolution))
+end
+
+function default_target_hcoords_as_vectors(
+    space::Spaces.SpectralElementSpace1D;
+    hresolution = 180,
+)
+    FT = Spaces.undertype(space)
+    topology = Spaces.topology(space)
+    domain = Meshes.domain(topology.mesh)
+    xmin = Geometry.component(domain.coord_min, 1)
+    xmax = Geometry.component(domain.coord_max, 1)
+    return FT.(range(xmin, xmax, hresolution))
+end
+
+
+"""
+    default_target_zcoords(space::Spaces.AbstractSpace; zresolution)
+
+Return an `Array` with the `Geometry.Points` to interpolate the vertical component of the
+given `space`.
+
+When `zresolution` is `nothing`, return the levels (which essentially disables vertical
+interpolation), otherwise return linearly spaced values.
+"""
+function default_target_zcoords(space; zresolution = nothing)
+    return Geometry.ZPoint.(
+        default_target_zcoords_as_vectors(space; zresolution)
+    )
+end
+
+function default_target_zcoords_as_vectors(space; zresolution = nothing)
+    if isnothing(zresolution)
+        # If has to be center space for the interpolation to be correct
+        cspace = Spaces.space(space, Grids.CellCenter())
+        return Array(Fields.field2array(Fields.coordinate_field(cspace).z))[
+            :,
+            1,
+        ]
+    else
+        return collect(
+            range(Domains.z_min(space), Domains.z_max(space), zresolution),
+        )
+    end
+end

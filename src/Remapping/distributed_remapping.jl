@@ -231,6 +231,9 @@ The `Remapper` is designed to not be tied to any particular `Field`. You can use
 
 If you want to quickly remap something, you can call directly `interpolate`.
 
+By default, [`default_target_zcoords`](@ref) [`default_target_hcoords`](@ref) are used to
+determine the coordinates.
+
 Keyword arguments
 =================
 
@@ -241,31 +244,51 @@ the work in sizes of `buffer_length`.
 """
 function Remapper end
 
-# 3D case, everything passed as a keyword argument
+# General case
+#
+# We have Union{AbstractArray, Nothing} because we want to allow for a single interface that
+# capture every case.
 Remapper(
     space::Spaces.AbstractSpace;
-    target_hcoords::Union{AbstractArray, Nothing} = nothing,
-    target_zcoords::Union{AbstractArray, Nothing} = nothing,
+    target_hcoords::Union{AbstractArray, Nothing} = default_target_hcoords(
+        space,
+    ),
+    target_zcoords::Union{AbstractArray, Nothing} = default_target_zcoords(
+        space,
+    ),
     buffer_length::Int = 1,
 ) = _Remapper(space; target_zcoords, target_hcoords, buffer_length)
 
-# 3D case, horizontal coordinate passed as position argument (backward compatibility)
+# General case, everything passed as positional
 Remapper(
     space::Spaces.AbstractSpace,
     target_hcoords::Union{AbstractArray, Nothing},
     target_zcoords::Union{AbstractArray, Nothing};
     buffer_length::Int = 1,
-) = _Remapper(space; target_hcoords, target_zcoords, buffer_length)
-
+) = _Remapper(space; target_zcoords, target_hcoords, buffer_length)
 
 # Purely vertical case
 Remapper(
     space::Spaces.FiniteDifferenceSpace;
-    target_zcoords::AbstractArray,
+    target_zcoords::AbstractArray = default_target_zcoords(space),
+    buffer_length::Int = 1,
+) = _Remapper(space; target_zcoords, target_hcoords = nothing, buffer_length)
+
+# Purely vertical, positional
+Remapper(
+    space::Spaces.FiniteDifferenceSpace,
+    target_zcoords::AbstractArray;
     buffer_length::Int = 1,
 ) = _Remapper(space; target_zcoords, target_hcoords = nothing, buffer_length)
 
 # Purely horizontal case
+Remapper(
+    space::Spaces.AbstractSpectralElementSpace;
+    target_hcoords::AbstractArray = default_target_hcoords(space),
+    buffer_length::Int = 1,
+) = _Remapper(space; target_zcoords = nothing, target_hcoords, buffer_length)
+
+# Purely horizontal case, positional
 Remapper(
     space::Spaces.AbstractSpectralElementSpace,
     target_hcoords::AbstractArray;
@@ -922,13 +945,17 @@ end
 """
        interpolate(field::ClimaCore.Fields;
                    hresolution = 180,
-                   zresolution = 50,
+                   zresolution = nothing,
                    target_hcoords = default_target_hcoords(space; hresolution),
-                   target_zcoords = default_target_vcoords(space; zresolution)
+                   target_zcoords = default_target_zcoords(space; zresolution)
                    )
 
 Interpolate the given fields on the Cartesian product of `target_hcoords` with
-`target_zcoords` (if not empty).
+`target_zcoords`. For `Space`s without horizontal/vertical component, the relevant
+`target_*coords` are ignored.
+
+When `zresolution` is set to `nothing`, do not perform any interpolation in the vertical
+direction. When `zresolution`, perform linear interpolation with uniformly spaced levels.
 
 Coordinates have to be `ClimaCore.Geometry.Points`.
 
@@ -965,7 +992,7 @@ julia> interpolate(field, target_hcoords, target_zcoords)
 ```
 
 If you need the array of coordinates, you can call `default_target_hcoords` (or
-`default_target_vcoords`) passing `axes(field)`. This will return an array of
+`default_target_zcoords`) passing `axes(field)`. This will return an array of
 `Geometry.Point`s. The functions `Geometry.Components` and `Geometry.Component`
 can be used to extract the components as numeric values. For example,
 ```julia
@@ -990,115 +1017,45 @@ This can be used directly for plotting.
 """
 function interpolate(
     field::Fields.Field;
-    zresolution = 50,
+    zresolution = nothing,
     hresolution = 180,
     target_hcoords = default_target_hcoords(axes(field); hresolution),
     target_zcoords = default_target_zcoords(axes(field); zresolution),
 )
-    return interpolate(field, axes(field); hresolution, zresolution)
+    return interpolate(field, axes(field); target_hcoords, target_zcoords)
 end
 
+# interpolate, positional
 function interpolate(field::Fields.Field, target_hcoords, target_zcoords)
-    remapper = Remapper(axes(field), target_hcoords, target_zcoords)
+    return interpolate(field, axes(field); target_hcoords, target_zcoords)
+end
+
+function interpolate(
+    field::Fields.Field,
+    space::Spaces.AbstractSpace;
+    target_hcoords,
+    target_zcoords,
+)
+    remapper = Remapper(space; target_hcoords, target_zcoords)
     return interpolate(remapper, field)
 end
 
-"""
-    default_target_hcoords(space::Spaces.AbstractSpace; hresolution)
-
-Return an Array with the Geometry.Points to interpolate uniformly the horizontal
-component of the given `space`.
-"""
-function default_target_hcoords(space::Spaces.AbstractSpace; hresolution = 180)
-    return default_target_hcoords(Spaces.horizontal_space(space); hresolution)
-end
-
-"""
-    default_target_hcoords_as_vectors(space::Spaces.AbstractSpace; hresolution)
-
-Return an Vectors with the coordinate to interpolate uniformly the horizontal
-component of the given `space`.
-"""
-function default_target_hcoords_as_vectors(
-    space::Spaces.AbstractSpace;
-    hresolution = 180,
+function interpolate(
+    field::Fields.Field,
+    space::Spaces.FiniteDifferenceSpace;
+    target_zcoords,
+    target_hcoords,
 )
-    return default_target_hcoords_as_vectors(
-        Spaces.horizontal_space(space);
-        hresolution,
-    )
+    remapper = Remapper(space; target_zcoords)
+    return interpolate(remapper, field)
 end
 
-function default_target_hcoords(
-    space::Spaces.SpectralElementSpace2D;
-    hresolution = 180,
+function interpolate(
+    field::Fields.Field,
+    space::Spaces.AbstractSpectralElementSpace;
+    target_hcoords,
+    target_zcoords,
 )
-    topology = Spaces.topology(space)
-    domain = Meshes.domain(topology.mesh)
-    xrange, yrange = default_target_hcoords_as_vectors(space; hresolution)
-    PointType =
-        domain isa Domains.SphereDomain ? Geometry.LatLongPoint :
-        Topologies.coordinate_type(topology)
-    return [PointType(x, y) for x in xrange, y in yrange]
-end
-
-function default_target_hcoords_as_vectors(
-    space::Spaces.SpectralElementSpace2D;
-    hresolution = 180,
-)
-    FT = Spaces.undertype(space)
-    topology = Spaces.topology(space)
-    domain = Meshes.domain(topology.mesh)
-    if domain isa Domains.SphereDomain
-        return FT.(range(-180.0, 180.0, hresolution)),
-        FT.(range(-90.0, 90.0, hresolution))
-    else
-        x1min = Geometry.component(domain.interval1.coord_min, 1)
-        x2min = Geometry.component(domain.interval2.coord_min, 1)
-        x1max = Geometry.component(domain.interval1.coord_max, 1)
-        x2max = Geometry.component(domain.interval2.coord_max, 1)
-        return FT.(range(x1min, x1max, hresolution)),
-        FT.(range(x2min, x2max, hresolution))
-    end
-end
-
-function default_target_hcoords(
-    space::Spaces.SpectralElementSpace1D;
-    hresolution = 180,
-)
-    topology = Spaces.topology(space)
-    PointType = Topologies.coordinate_type(topology)
-    return PointType.(default_target_hcoords_as_vectors(space; hresolution))
-end
-
-function default_target_hcoords_as_vectors(
-    space::Spaces.SpectralElementSpace1D;
-    hresolution = 180,
-)
-    FT = Spaces.undertype(space)
-    topology = Spaces.topology(space)
-    domain = Meshes.domain(topology.mesh)
-    xmin = Geometry.component(domain.coord_min, 1)
-    xmax = Geometry.component(domain.coord_max, 1)
-    return FT.(range(xmin, xmax, hresolution))
-end
-
-
-"""
-    default_target_zcoords(space::Spaces.AbstractSpace; zresolution)
-
-Return an Array with the Geometry.Points to interpolate uniformly the vertical component of
-the given `space`.
-"""
-function default_target_zcoords(space; zresolution = 50)
-    return Geometry.ZPoint.(
-        default_target_zcoords_as_vectors(space; zresolution)
-    )
-
-end
-
-function default_target_zcoords_as_vectors(space; zresolution = 50)
-    return collect(
-        range(Domains.z_min(space), Domains.z_max(space), zresolution),
-    )
+    remapper = Remapper(space; target_hcoords)
+    return interpolate(remapper, field)
 end

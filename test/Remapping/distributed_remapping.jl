@@ -128,6 +128,13 @@ with_mpi = context isa ClimaComms.MPICommsContext
         @test interp_x ≈ dest[:, :, 2]
         @test interp_x ≈ dest[:, :, 3]
     end
+
+    # Convenience interpolate (just checking the shape, correctness of the
+    # interpolation is checked elsewhere)
+    interp_conv = Remapping.interpolate(coords.x)
+    if ClimaComms.iamroot(context)
+        @test size(interp_conv) == (180, 30)
+    end
 end
 
 @testset "3D box" begin
@@ -230,6 +237,12 @@ end
         @test interp_x ≈ dest[:, :, :, 3]
     end
 
+    # Convenience interpolate (just checking the shape, correctness of the
+    # interpolation is checked elsewhere)
+    interp_conv = Remapping.interpolate(coords.x; zresolution = 50)
+    if ClimaComms.iamroot(context)
+        @test size(interp_conv) == (180, 180, 50)
+    end
 
     # Horizontal space
     horiz_space = Spaces.horizontal_space(hv_center_space)
@@ -292,6 +305,12 @@ end
         @test interp_x ≈ dest[:, :, 3]
     end
 
+    # Convenience interpolate horizontal (just checking the shape, correctness
+    # of the interpolation is checked elsewhere)
+    interp_conv = Remapping.interpolate(coords.x)
+    if ClimaComms.iamroot(context)
+        @test size(interp_conv) == (180, 180)
+    end
 end
 
 
@@ -737,11 +756,19 @@ if !with_mpi
         @test fexpected_z ≈ dest[:, 1]
         @test fexpected_z ≈ dest[:, 2]
         @test fexpected_z ≈ dest[:, 3]
-    end
 
+        # Convenience interpolate (just checking the shape, correctness of the
+        # interpolation is checked elsewhere)
+        if ClimaComms.iamroot(context)
+            @test size(Remapping.interpolate(fcoords.z)) == (30,)
+        end
+        if ClimaComms.iamroot(context)
+            @test size(Remapping.interpolate(ccoords.z)) == (30,)
+        end
+    end
 end
 
-@testset "Convenience interpolate" begin
+@testset "Default coordinates" begin
 
     # 3D Sphere space
     vertdomain = Domains.IntervalDomain(
@@ -768,8 +795,20 @@ end
         Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
 
     @test all(
-        Remapping.default_target_zcoords(hv_center_space) .≈
+        Remapping.default_target_zcoords(hv_center_space, zresolution = 50) .≈
         Geometry.ZPoint.(range(0.0, 1000; length = 50)),
+    )
+
+    @test all(
+        Remapping.default_target_zcoords(hv_center_space) .≈
+        Geometry.ZPoint.(
+            Array(
+                Fields.field2array(Fields.coordinate_field(hv_center_space).z),
+            )[
+                :,
+                1,
+            ]
+        ),
     )
 
     @test Remapping.default_target_hcoords(hv_center_space) == [
@@ -787,11 +826,21 @@ end
 
     @test all(
         Remapping.default_target_zcoords(vert_center_space) .≈
-        Geometry.ZPoint.(range(0.0, 1000; length = 50)),
+        Geometry.ZPoint.(
+            Array(
+                Fields.field2array(
+                    Fields.coordinate_field(vert_center_space).z,
+                ),
+            )[
+                :,
+                1,
+            ]
+        ),
     )
     @test all(
         Remapping.default_target_zcoords(
             Spaces.FaceFiniteDifferenceSpace(vert_center_space),
+            zresolution = 50,
         ) .≈ Geometry.ZPoint.(range(0.0, 1000; length = 50)),
     )
 
@@ -866,7 +915,7 @@ end
     )
 
     @test all(
-        Remapping.default_target_zcoords(hv_center_space) .≈
+        Remapping.default_target_zcoords(hv_center_space; zresolution = 50) .≈
         Geometry.ZPoint.(range(0.0, 1000; length = 50)),
     )
 
