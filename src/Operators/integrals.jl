@@ -124,7 +124,7 @@ bottom of each column and moving upward, and the result of the final iteration
 is passed to the `transform` function before being stored in `output`. If `init`
 is specified, it is used as the initial value of the iteration; otherwise, the
 value at the bottom of each column in `input` is used as the initial value.
-    
+
 With `first_level` and `last_level` denoting the indices of the boundary levels
 of `input`, the reduction in each column can be summarized as follows:
   - If `init` is unspecified,
@@ -156,7 +156,7 @@ function column_reduce!(
     column_reduce_device!(device, f, transform, output, input, init, space)
 end
 
-column_reduce_device!(
+function column_reduce_device!(
     ::ClimaComms.AbstractCPUDevice,
     f::F,
     transform::T,
@@ -164,19 +164,27 @@ column_reduce_device!(
     input,
     init,
     space,
-) where {F, T} =
-    space isa Spaces.FiniteDifferenceSpace ?
-    single_column_reduce!(f, transform, output, input, init, space) :
-    Fields.bycolumn(space) do colidx
-        single_column_reduce!(
-            f,
-            transform,
-            output[colidx],
-            input[colidx],
-            init,
-            space[colidx],
-        )
+) where {F, T}
+    mask = Spaces.get_mask(space)
+    if space isa Spaces.FiniteDifferenceSpace
+        @assert mask isa DataLayouts.NoMask
+        single_column_reduce!(f, transform, output, input, init, space)
+    else
+        Fields.bycolumn(space) do colidx
+            I = Fields.universal_index(colidx)
+            if DataLayouts.should_compute(mask, I)
+                single_column_reduce!(
+                    f,
+                    transform,
+                    output[colidx],
+                    input[colidx],
+                    init,
+                    space[colidx],
+                )
+            end
+        end
     end
+end
 
 # On GPUs, input and output go through strip_space to become _input and _output.
 function single_column_reduce!(
@@ -214,7 +222,7 @@ from the bottom of each column and moving upward, and the result of each
 iteration is passed to the `transform` function before being stored in `output`.
 The `init` value is is optional for center-to-center, face-to-face, and
 face-to-center accumulation, but it is required for center-to-face accumulation.
-    
+
 With `first_level` and `last_level` denoting the indices of the boundary levels
 of `input`, the accumulation in each column can be summarized as follows:
   - For center-to-center and face-to-face accumulation with `init` unspecified,
@@ -276,7 +284,7 @@ function column_accumulate!(
     column_accumulate_device!(device, f, transform, output, input, init, space)
 end
 
-column_accumulate_device!(
+function column_accumulate_device!(
     ::ClimaComms.AbstractCPUDevice,
     f::F,
     transform::T,
@@ -284,19 +292,27 @@ column_accumulate_device!(
     input,
     init,
     space,
-) where {F, T} =
-    space isa Spaces.FiniteDifferenceSpace ?
-    single_column_accumulate!(f, transform, output, input, init, space) :
-    Fields.bycolumn(space) do colidx
-        single_column_accumulate!(
-            f,
-            transform,
-            output[colidx],
-            input[colidx],
-            init,
-            space[colidx],
-        )
+) where {F, T}
+    mask = Spaces.get_mask(space)
+    if space isa Spaces.FiniteDifferenceSpace
+        @assert mask isa DataLayouts.NoMask
+        single_column_accumulate!(f, transform, output, input, init, space)
+    else
+        Fields.bycolumn(space) do colidx
+            I = Fields.universal_index(colidx)
+            if DataLayouts.should_compute(mask, I)
+                single_column_accumulate!(
+                    f,
+                    transform,
+                    output[colidx],
+                    input[colidx],
+                    init,
+                    space[colidx],
+                )
+            end
+        end
     end
+end
 
 # On GPUs, input and output go through strip_space to become _input and _output.
 function single_column_accumulate!(

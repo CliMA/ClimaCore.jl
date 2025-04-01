@@ -1,3 +1,4 @@
+import ..DataLayouts
 dual_type(::Type{A}) where {A} = typeof(Geometry.dual(A.instance))
 
 inv_return_type(::Type{X}) where {X} = error(
@@ -54,11 +55,10 @@ function single_field_solve_diag_matrix_row!(
     A::ColumnwiseBandMatrixField,
     b,
 )
-    Aⱼs = unzip_tuple_field_values(Fields.field_values(A.entries))
-    b_vals = Fields.field_values(b)
-    x_vals = Fields.field_values(x)
-    (A₀,) = Aⱼs
-    @. x_vals = inv(A₀) ⊠ b_vals
+    # Use fields here, and not field values, so that this operation is
+    # mask-aware.
+    A₀ = A.entries.:1
+    @. x = inv(A₀) ⊠ b
 end
 single_field_solve!(_, x, A::ScalingFieldMatrixEntry, b) =
     x .= (inv(scaling_value(A)),) .* b
@@ -82,17 +82,22 @@ function _single_field_solve!(
     b,
 )
     space = axes(x)
+    mask = Spaces.get_mask(space)
     if space isa Spaces.FiniteDifferenceSpace
+        @assert mask isa DataLayouts.NoMask
         _single_field_solve_col!(device, cache, x, A, b)
     else
         Fields.bycolumn(space) do colidx
-            _single_field_solve_col!(
-                device,
-                cache[colidx],
-                x[colidx],
-                A[colidx],
-                b[colidx],
-            )
+            I = Fields.universal_index(colidx)
+            if DataLayouts.should_compute(mask, I)
+                _single_field_solve_col!(
+                    device,
+                    cache[colidx],
+                    x[colidx],
+                    A[colidx],
+                    b[colidx],
+                )
+            end
         end
     end
 end

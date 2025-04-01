@@ -16,7 +16,8 @@ import ClimaCore.RecursiveApply: ⊠, ⊞, ⊟, rmap, rzero, rdiv
 function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
     us = UniversalSize(Fields.field_values(A))
-    args = (device, cache, x, A, b, us)
+    mask = Spaces.get_mask(axes(x))
+    args = (device, cache, x, A, b, us, mask)
     threads = threads_via_occupancy(single_field_solve_kernel!, args)
     nitems = Ni * Nj * Nh
     n_max_threads = min(threads, nitems)
@@ -30,8 +31,9 @@ function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
     call_post_op_callback() && post_op_callback(x, device, cache, x, A, b)
 end
 
-function single_field_solve_kernel!(device, cache, x, A, b, us)
+function single_field_solve_kernel!(device, cache, x, A, b, us, mask)
     I = columnwise_universal_index(us)
+    DataLayouts.should_compute(mask, I) || return nothing
     if columnwise_is_valid_index(I, us)
         (i, j, _, _, h) = I.I
         _single_field_solve!(

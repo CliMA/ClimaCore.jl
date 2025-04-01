@@ -244,3 +244,9 @@ function byslab(
         end
     end
 end
+
+universal_index(colidx::Fields.ColumnIndex{2}) =
+    CartesianIndex(colidx.ij[1], colidx.ij[2], 1, 1, colidx.h)
+
+universal_index(colidx::Fields.ColumnIndex{1}) =
+    CartesianIndex(colidx.ij[1], 1, 1, 1, colidx.h)
