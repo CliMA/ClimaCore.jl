@@ -4167,3 +4167,11 @@ if hasfield(Method, :recursion_relation)
         m.recursion_relation = dont_limit
     end
 end
+
+"""
+    enable_fd_shmem()
+
+Allows users to overload whether shared memory, for finite difference stencils,
+is used or not.
+"""
+enable_fd_shmem() = false
