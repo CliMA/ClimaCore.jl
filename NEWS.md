@@ -4,6 +4,37 @@ ClimaCore.jl Release Notes
 main
 -------
 
+### ![][badge-✨feature/enhancement] Improvements to `Remapping.interpolate` PR [2272](https://github.com/CliMA/ClimaCore.jl/pull/2272)
+
+PR [2272](https://github.com/CliMA/ClimaCore.jl/pull/2272) introduces
+convenience `interpolate` functions that are optimally suited for plotting.
+
+Assuming `field` is a 3D `Field`,
+```julia
+import ClimaCore.Remapping: interpolate
+
+array3D = interpolate(fields)
+```
+
+`array3D` will be an 3D Array with values along the three dimensions. 
+
+By default, no interpolation in the vertical direction is performed. Linear
+interpolation can be obtained by passing `zresolution`
+```julia
+array3D_linear_in_z = interpolate(fields; zresolution)
+```
+
+Controlling the specific interpolation points is also possible, as shown in this
+example:
+```julia
+import ClimaCore.Geometry: LatLongPoint, ZPoint
+import ClimaCore.Remapping: interpolate
+
+target_hcoords = [LatLongPoint(45., 23.)]
+target_zcoords = ZPoint.([100., 200., 1000.])
+
+array3D_specific = interpolate(fields; target_hcoords, target_zcoords)
+```
 
 v0.14.29
 -------

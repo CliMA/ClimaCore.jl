@@ -45,6 +45,9 @@ given `field`. To obtain such coordinates, you can call the
 functions. These functions return an `Array` with the coordinates over which
 interpolation will occur. These arrays are of type `Geometry.Point`s.
 
+By default, vertical interpolation is switched off and the `field` is evaluated
+directly on the levels.
+
 `ClimaCore.Remapping.interpolate` allocates new output arrays. As such, it is
 not suitable for performance-critical applications.
 `ClimaCore.Remapping.interpolate!` performs interpolation in-place. When using
@@ -80,6 +83,12 @@ If the default target coordinates are being used, it is possible to broadcast
 `ClimaCore.Geometry.components` to extract them as a vector of tuples (and then
 broadcast `getindex` to extract the respective coordinates as vectors).
 
+This also provides the simplest way to plot a `Field`. Suppose `field` is a 2D `Field`:
+```julia
+using CairoMakie
+heatmap(ClimaCore.Remapping.interpolate(field))
+```
+
 ### The `Remapper` object
 
 A `Remapping.Remapper` is an object that is tied to a specified `Space` and can
@@ -88,7 +97,8 @@ The grid does not have to be regular, but it has to be defined as a Cartesian
 product between some horizontal and vertical coordinates (meaning, for each
 horizontal point, there is a fixed column of vertical coordinates).
 
-Let us create our first remapper, assuming we have `space` defined on the surface of the sphere
+Let us create our first remapper, assuming we have `space` defined on the
+surface of the sphere
 ```julia
 import ClimaCore.Geometry: LatLongPoint, ZPoint
 import ClimaCore.Remapping: Remapper
@@ -96,7 +106,8 @@ import ClimaCore.Remapping: Remapper
 hcoords = [Geometry.LatLongPoint(lat, long) for long in -180.:180., lat in -90.:90.]
 remapper = Remapper(space, target_hcoords)
 ```
-This `remapper` object knows can interpolate `Field`s defined on `space` with the same `interpolate` and `interpolate!` functions.
+This `remapper` object knows can interpolate `Field`s defined on `space` with
+the same `interpolate` and `interpolate!` functions.
 ```julia
 import ClimaCore.Fields: coordinate_field
 import ClimaCore.Remapping: interpolate, interpolate!
@@ -118,7 +129,8 @@ When interpolating multiple fields, greater performance can be achieved by
 creating the `Remapper` with a larger internal buffer to store intermediate
 values for interpolation. Effectively, this controls how many fields can be
 remapped simultaneously in `interpolate`. When more fields than `buffer_length`
-are passed, the remapper will batch the work in sizes of `buffer_length`. The optimal number of fields passed is the `buffer_length` of the `remapper`. If
+are passed, the remapper will batch the work in sizes of `buffer_length`. The
+optimal number of fields passed is the `buffer_length` of the `remapper`. If
 more fields are passed, the `remapper` will batch work with size up to its
 `buffer_length`.
 
