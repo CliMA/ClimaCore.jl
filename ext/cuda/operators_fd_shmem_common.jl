@@ -192,10 +192,11 @@ get_arg_space(
     args::Tuple,
 ) = axes(args[1])
 
-get_cent_idx(idx::Integer) = idx
-get_face_idx(idx::PlusHalf) = idx
-get_cent_idx(idx::PlusHalf) = idx + half
-get_face_idx(idx::Integer) = idx - half
+get_cent_idx(idx::Integer) = idx # center when traversing centers (trivial)
+get_face_idx(idx::PlusHalf) = idx # face when traversing faces (trivial)
+
+get_cent_idx(idx::PlusHalf) = idx + half # center when traversing faces. Convention: use center right of face
+get_face_idx(idx::Integer) = idx - half # face when traversing centers. Convention: use face left of center
 
 """
     fd_resolve_shmem!(
@@ -301,21 +302,69 @@ Base.@propagate_inbounds function fd_resolve_shmem!(
         else # this else should never run
         end
     else  # populate shmem on centers
-#! format: off
-        # TODO: this needs exercised
-        case1 = IP || get_cent_idx(bc_lw) ≤ ᶜidx ≤ get_cent_idx(bc_rw) + 1 # interior
-        case2 = get_cent_idx(bc_li) < ᶜidx < get_cent_idx(bc_lw) && Operators.has_boundary(op, lloc) # left
-        case3 = get_cent_idx(bc_rw) < ᶜidx < get_cent_idx(bc_ri) && Operators.has_boundary(op, rloc) # right
-        case4 = get_cent_idx(bc_li) < ᶜidx < get_cent_idx(bc_lw) && !Operators.has_boundary(op, lloc) # left
-        case5 = get_cent_idx(bc_rw) < ᶜidx < get_cent_idx(bc_ri) && !Operators.has_boundary(op, rloc) # right
-        if case1; fd_operator_fill_shmem_interior!(sbc.op,sbc.work,iloc,space,ᶜidx,hidx,sbc.args...)
-        elseif case2; fd_operator_fill_shmem_left_boundary!(sbc.op,Operators.get_boundary(op, lloc),sbc.work,lloc,space,ᶜidx,hidx,sbc.args...)
-        elseif case3; fd_operator_fill_shmem_right_boundary!(sbc.op,Operators.get_boundary(op, rloc),sbc.work,rloc,space,ᶜidx,hidx,sbc.args...)
-        elseif case4; fd_operator_fill_shmem_interior!(sbc.op,sbc.work,lloc,space,ᶜidx,hidx,sbc.args...)
-        elseif case5; fd_operator_fill_shmem_interior!(sbc.op,sbc.work,rloc,space,ᶜidx,hidx,sbc.args...)
-        else # this else should never run
+        if IP || get_cent_idx(bc_lw) ≤ ᶜidx < get_cent_idx(bc_rw) # interior
+            fd_operator_fill_shmem_interior!(
+                sbc.op,
+                sbc.work,
+                iloc,
+                space,
+                ᶜidx,
+                hidx,
+                sbc.args...,
+            )
+        elseif get_cent_idx(bc_li) ≤ ᶜidx < get_cent_idx(bc_lw) &&
+               Operators.has_boundary(op, lloc) # left
+            fd_operator_fill_shmem_left_boundary!(
+                sbc.op,
+                Operators.get_boundary(op, lloc),
+                sbc.work,
+                lloc,
+                space,
+                ᶜidx,
+                hidx,
+                sbc.args...,
+            )
+        elseif get_cent_idx(bc_rw) ≤ ᶜidx < get_cent_idx(bc_ri) &&
+               Operators.has_boundary(op, rloc) # right
+            fd_operator_fill_shmem_right_boundary!(
+                sbc.op,
+                Operators.get_boundary(op, rloc),
+                sbc.work,
+                rloc,
+                space,
+                ᶜidx,
+                hidx,
+                sbc.args...,
+            )
+        elseif get_cent_idx(bc_li) < ᶜidx < get_cent_idx(bc_lw) &&
+               !Operators.has_boundary(op, lloc) # left
+            fd_operator_fill_shmem_interior!(
+                sbc.op,
+                sbc.work,
+                lloc,
+                space,
+                ᶜidx,
+                hidx,
+                sbc.args...,
+            )
+        elseif get_cent_idx(bc_rw) < ᶜidx < get_cent_idx(bc_ri) &&
+               !Operators.has_boundary(op, rloc) # right
+            fd_operator_fill_shmem_interior!(
+                sbc.op,
+                sbc.work,
+                rloc,
+                space,
+                ᶜidx,
+                hidx,
+                sbc.args...,
+            )
+        else # this should only ever be exercised at Spaces.nlevels(ᶜspace)+1
+            # We don't have or need to fill shmem at `Spaces.nlevels
+            # (ᶜspace)+1`, but threads may have this ᶜidx because they may be
+            # filling shmem for an operator whose shmem exists on the face
+            # space, which extends beyond the center space.
+            # @assert ᶜidx == Spaces.nlevels(ᶜspace) + 1 # assertion passes, but commented to remove potential thrown exception in llvm output
         end
-#! format: on
     end
     return nothing
 end
