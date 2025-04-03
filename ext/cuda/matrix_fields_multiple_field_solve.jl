@@ -21,6 +21,7 @@ NVTX.@annotate function multiple_field_solve!(
     Nnames = length(names)
     Ni, Nj, _, _, Nh = size(Fields.field_values(x1))
     sscache = Operators.strip_space(cache)
+    mask = Spaces.get_mask(axes(x1))
     ssx = Operators.strip_space(x)
     ssA = Operators.strip_space(A)
     ssb = Operators.strip_space(b)
@@ -33,7 +34,7 @@ NVTX.@annotate function multiple_field_solve!(
     device = ClimaComms.device(x[first(names)])
 
     us = UniversalSize(Fields.field_values(x1))
-    args = (device, caches, xs, As, bs, x1, us, Val(Nnames))
+    args = (device, caches, xs, As, bs, x1, us, mask, Val(Nnames))
 
     nitems = Ni * Nj * Nh * Nnames
     threads = threads_via_occupancy(multiple_field_solve_kernel!, args)
@@ -86,10 +87,12 @@ function multiple_field_solve_kernel!(
     bs,
     x1,
     us::UniversalSize,
+    mask,
     ::Val{Nnames},
 ) where {Nnames}
     @inbounds begin
         (I, iname) = multiple_field_solve_universal_index(us)
+        DataLayouts.should_compute(mask, I) || return nothing
         if multiple_field_solve_is_valid_index(I, us)
             (i, j, _, _, h) = I.I
             generated_single_field_solve!(

@@ -20,6 +20,10 @@ function column_reduce_device!(
 ) where {F, T}
     Ni, Nj, _, _, Nh = size(Fields.field_values(output))
     us = UniversalSize(Fields.field_values(output))
+    mask = Spaces.get_mask(space)
+    if !(mask isa DataLayouts.NoMask) && space isa Spaces.FiniteDifferenceSpace
+        error("Masks not supported for FiniteDifferenceSpace")
+    end
     args = (
         single_column_reduce!,
         f,
@@ -29,6 +33,7 @@ function column_reduce_device!(
         init,
         space,
         us,
+        mask,
     )
     nitems = Ni * Nj * Nh
     threads = threads_via_occupancy(bycolumn_kernel!, args)
@@ -57,6 +62,10 @@ function column_accumulate_device!(
     space,
 ) where {F, T}
     out_fv = Fields.field_values(output)
+    mask = Spaces.get_mask(space)
+    if !(mask isa DataLayouts.NoMask) && space isa Spaces.FiniteDifferenceSpace
+        error("Masks not supported for FiniteDifferenceSpace")
+    end
     us = UniversalSize(out_fv)
     args = (
         single_column_accumulate!,
@@ -67,6 +76,7 @@ function column_accumulate_device!(
         init,
         space,
         us,
+        mask,
     )
     (Ni, Nj, _, _, Nh) = DataLayouts.universal_size(us)
     nitems = Ni * Nj * Nh
@@ -81,7 +91,7 @@ function column_accumulate_device!(
     )
 end
 
-bycolumn_kernel!(
+function bycolumn_kernel!(
     single_column_function!::S,
     f::F,
     transform::T,
@@ -90,11 +100,13 @@ bycolumn_kernel!(
     init,
     space,
     us::DataLayouts.UniversalSize,
-) where {S, F, T} =
+    mask,
+) where {S, F, T}
     if space isa Spaces.FiniteDifferenceSpace
         single_column_function!(f, transform, output, input, init, space)
     else
         I = columnwise_universal_index(us)
+        DataLayouts.should_compute(mask, I) || return nothing
         if columnwise_is_valid_index(I, us)
             (i, j, _, _, h) = I.I
             single_column_function!(
@@ -107,3 +119,4 @@ bycolumn_kernel!(
             )
         end
     end
+end
