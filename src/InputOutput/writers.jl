@@ -620,11 +620,7 @@ end
 This is an internal method, meant to be used for writing data layouts to the
 HDF5 file.
 
-This method should be used when
-
-```julia
-!(topology isa Topologies.Topology2D && !(writer.context isa ClimaComms.SingletonCommsContext))
-```
+This method should be used when this is not a distributed datalayout.
 """
 function _write!(group, values::DataLayouts.AbstractData, name::AbstractString;)
     h_dim = DataLayouts.h_dim(DataLayouts.singleton(values))

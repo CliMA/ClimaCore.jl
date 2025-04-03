@@ -119,7 +119,6 @@ end
     Spaces.set_mask!(space) do coords
         rand() > 0.5
     end
-    is_active₀ = Spaces.get_mask(space).is_active
 
     # write field vector to hdf5 file
     mktempfile() do filename
