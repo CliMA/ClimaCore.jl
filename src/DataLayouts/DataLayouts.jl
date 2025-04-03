@@ -364,9 +364,9 @@ end
 
 @noinline _property_view(
     data::AbstractData{S},
-    ::Val{Nothing},
+    ::Val{nothing},
     name,
-) where {S} = error("Invalid field name $name for type $(S)")
+) where {S} = error("Invalid field name `$name` for type `$(S)`.")
 
 # In the past, we've sometimes needed a generated function
 # for inference and constant propagation:

@@ -1,5 +1,5 @@
 #=
-julia --project=test
+julia --project
 using Revise; include(joinpath("test", "DataLayouts", "data0d.jl"))
 =#
 using Test
@@ -63,6 +63,14 @@ end
     @test ret === SA
     @test data[] isa typeof(SA)
     @test_throws MethodError data[] = SB
+end
+
+@testset "DataF error messages" begin
+    SA = (; a = 1.0)
+    data = DataF{typeof(SA)}(ArrayType{Float64})
+    @test_throws ErrorException(
+        "Invalid field name `oops` for type `$(typeof(SA))`.",
+    ) data.oops
 end
 
 @testset "DataF broadcasting between 0D data objects and scalars" begin
