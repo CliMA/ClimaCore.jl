@@ -39,10 +39,11 @@ call_post_op_callback() = false
 An example `post_op_callback` method, that checks for `NaN`s and `Inf`s.
 """
 function example_debug_post_op_callback(result, args...; kwargs...)
-    if any(isnan, parent(result))
-        error("NaNs found!")
-    elseif any(isinf, parent(result))
-        error("Inf found!")
+    has_nans = result isa Number ? isnan(result) : any(isnan, parent(result))
+    has_inf = result isa Number ? isinf(result) : any(isinf, parent(result))
+    if has_nans || has_inf
+        has_nans && error("NaNs found!")
+        has_inf && error("Infs found!")
     end
 end
 
