@@ -33,8 +33,11 @@ end of every `ClimaCore` operation, the function
 nothing. So, the second ingredient is to define a method:
 ```@example clima_debug
 function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
-    if any(isnan, parent(result))
-        println("NaNs found!")
+    has_nans = result isa Number ? isnan(result) : any(isnan, parent(result))
+    has_inf = result isa Number ? isinf(result) : any(isinf, parent(result))
+    if has_nans || has_inf
+        has_nans && println("NaNs found!")
+        has_inf && println("Infs found!")
     end
 end
 ```
@@ -53,8 +56,11 @@ Now, let us put everything together and demonstrate a complete example:
 import ClimaCore
 ClimaCore.DebugOnly.call_post_op_callback() = true
 function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
-    if any(isnan, parent(result))
-        println("NaNs found!")
+    has_nans = result isa Number ? isnan(result) : any(isnan, parent(result))
+    has_inf = result isa Number ? isinf(result) : any(isinf, parent(result))
+    if has_nans || has_inf
+        has_nans && println("NaNs found!")
+        has_inf && println("Infs found!")
     end
 end
 
