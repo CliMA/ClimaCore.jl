@@ -360,10 +360,14 @@ function assert_no_bcs(op, kwargs)
     error("InterpolateF2C does not accept boundary conditions.")
 end
 
+import UnrolledUtilities: unrolled_foreach, unrolled_any
 function assert_valid_bcs(op, kwargs, valid_bcs)
-    for bc in values(values(kwargs))
-        @assert any(valid_bc -> bc isa valid_bc, valid_bcs) "$op only supports boundary conditions:\n\n\t $valid_bcs.\n\n BCs given:\n\n\t $(values(values(kwargs)))\n"
+    unrolled_foreach(values(values(kwargs))) do bc
+        @assert unrolled_any(valid_bc -> bc isa valid_bc, valid_bcs) "$op only supports boundary conditions:\n\n\t $valid_bcs.\n\n BCs given:\n\n\t $(values(values(kwargs)))\n"
     end
+    # for bc in values(values(kwargs))
+    #     @assert any(valid_bc -> bc isa valid_bc, valid_bcs) "$op only supports boundary conditions:\n\n\t $valid_bcs.\n\n BCs given:\n\n\t $(values(values(kwargs)))\n"
+    # end
     return nothing
 end
 
@@ -3052,10 +3056,9 @@ Base.@propagate_inbounds function stencil_interior(
     hidx,
     arg,
 )
-    Geometry.Covariant3Vector(1) ⊗ (
-        getidx(space, arg, loc, idx + half, hidx) ⊟
-        getidx(space, arg, loc, idx - half, hidx)
-    )
+    u⁺ = getidx(space, arg, loc, idx + half, hidx)
+    u⁻ = getidx(space, arg, loc, idx - half, hidx)::typeof(u⁺)
+    Geometry.Covariant3Vector(1) ⊗ (u⁺ ⊟ u⁻)
 end
 
 boundary_width(::GradientC2F, ::AbstractBoundaryCondition) = 1
@@ -3187,13 +3190,15 @@ Base.@propagate_inbounds function stencil_interior(
     hidx,
     arg,
 )
+    u⁺ = getidx(space, arg, loc, idx + half, hidx)
+    u⁻ = getidx(space, arg, loc, idx - half, hidx)::typeof(u⁺)
     local_geometry = Geometry.LocalGeometry(space, idx, hidx)
     Ju³₊ = Geometry.Jcontravariant3(
-        getidx(space, arg, loc, idx + half, hidx),
+        u⁺,
         Geometry.LocalGeometry(space, idx + half, hidx),
     )
     Ju³₋ = Geometry.Jcontravariant3(
-        getidx(space, arg, loc, idx - half, hidx),
+        u⁻,
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
     (Ju³₊ ⊟ Ju³₋) ⊠ local_geometry.invJ
@@ -4061,14 +4066,15 @@ function Base.copyto!(
     mask = DataLayouts.NoMask(),
 )
     space = axes(bc)
+    bc′ = promote_bcs(bc, Spaces.undertype(space))
     local_geometry = Spaces.local_geometry_data(space)
     (Ni, Nj, _, _, Nh) = size(local_geometry)
     context = ClimaComms.context(axes(field_out))
     device = ClimaComms.device(context)
     if (device isa ClimaComms.CPUMultiThreaded) && Nh > 1
-        return _threaded_copyto!(field_out, bc, Ni, Nj, Nh)
+        return _threaded_copyto!(field_out, bc′, Ni, Nj, Nh)
     end
-    return _serial_copyto!(field_out, bc, Ni, Nj, Nh)
+    return _serial_copyto!(field_out, bc′, Ni, Nj, Nh)
 end
 
 @inline function reconstruct_placeholder_broadcasted(
@@ -4158,8 +4164,83 @@ finite difference shared memory shmem.
 """
 function any_fd_shmem_supported end
 
+@inline function promote_bcs(bc::Base.Broadcast.Broadcasted{Style}, ::Type{FT}) where {Style, FT}
+    Base.Broadcast.Broadcasted{Style}(
+        bc.f,
+        promote_bc_args(bc.args, FT),
+        bc.axes,
+    )
+end
+@inline function promote_bcs(bc::StencilBroadcasted{Style}, ::Type{FT}) where {Style, FT}
+    StencilBroadcasted{Style}(
+        promote_bcs(bc.op, FT),
+        promote_bc_args(bc.args, FT),
+        bc.axes,
+        bc.work,
+    )
+end
+
+@inline function promote_bcs(op::FiniteDifferenceOperator, ::Type{FT}) where {FT}
+    if hasfield(typeof(op), :bcs)
+        unionall_type(typeof(op))(promote_bcs(op.bcs, FT))
+    else
+        op
+    end
+end
+
+@inline promote_bcs(x::Fields.Field, ::Type{FT}) where {FT} = x
+
+@inline promote_bcs(bcs::@NamedTuple{}, ::Type{FT}) where {FT} = NamedTuple()
+@inline promote_bcs(bcs::NamedTuple{N, V}, ::Type{FT}) where {FT} where {N, V} =
+    NamedTuple{N}(map(x -> promote_bc(x, FT), values(bcs)))
+
+promote_bc(bc::DivergenceF2C, FT) = bc
+promote_bc(bc::SetValue, FT) = bc
+promote_bc(bc::SetGradient, FT) = bc
+promote_bc(bc::SetDivergence, FT) = bc
+promote_bc(bc::SetCurl, FT) = bc
+
+promote_bc(bc::SetValue{<:Integer}, ::Type{FT}) where {FT} =
+    SetValue(FT(bc.val))
+promote_bc(bc::SetGradient{<:Integer}, ::Type{FT}) where {FT} =
+    SetGradient(FT(bc.val))
+promote_bc(bc::SetDivergence{<:Integer}, ::Type{FT}) where {FT} =
+    SetDivergence(FT(bc.val))
+promote_bc(bc::SetCurl{<:Integer}, ::Type{FT}) where {FT} =
+    SetCurl(FT(bc.val))
+
+sconvert(::Type{T}, x::SArray{S}) where {T, S} =
+    SArray{S,T}(x...)
+
+function promote_axis_tensor(at::Geometry.AxisTensor{T, N, A, S}, ::Type{FT}) where {T, N, A, S, FT}
+    fc = sconvert(FT, Geometry.components(at))
+    return Geometry.AxisTensor{FT, N, A, typeof(fc)}(axes(at), fc)
+end
+
+promote_bc(bc::SetValue{<:Geometry.AxisTensor}, ::Type{FT}) where {FT} =
+    SetValue(promote_axis_tensor(bc.val, FT))
+promote_bc(bc::SetGradient{<:Geometry.AxisTensor}, ::Type{FT}) where {FT} =
+    SetGradient(promote_axis_tensor(bc.val, FT))
+promote_bc(bc::SetDivergence{<:Geometry.AxisTensor}, ::Type{FT}) where {FT} =
+    SetDivergence(promote_axis_tensor(bc.val, FT))
+promote_bc(bc::SetCurl{<:Geometry.AxisTensor}, ::Type{FT}) where {FT} =
+    SetCurl(promote_axis_tensor(bc.val, FT))
+
+@inline promote_bc_args(args::Tuple, ::Type{FT}) where {FT} =
+    (promote_bcs(args[1], FT), promote_bc_args(Base.tail(args), FT)...)
+@inline promote_bc_args(args::Tuple{Any}, ::Type{FT}) where {FT} =
+    (promote_bcs(args[1], FT),)
+@inline promote_bc_args(args::Tuple{}, FT) = ()
+
+
 if hasfield(Method, :recursion_relation)
     dont_limit = (args...) -> true
+    for m in methods(promote_bcs)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(promote_bc_args)
+        m.recursion_relation = dont_limit
+    end
     for m in methods(reconstruct_placeholder_broadcasted)
         m.recursion_relation = dont_limit
     end
