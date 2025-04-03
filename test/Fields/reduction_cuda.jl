@@ -3,6 +3,8 @@ using ClimaComms
 ClimaComms.@import_required_backends
 using Statistics
 using LinearAlgebra
+using Random
+Random.seed!(1234)
 
 import ClimaCore:
     Domains,
@@ -16,6 +18,21 @@ import ClimaCore:
     DataLayouts
 
 include("reduction_cuda_utils.jl")
+
+function test_extrema(x_cpu, x_gpu)
+    parent(x_gpu) .= 100 .* rand(size(parent(x_gpu)))
+    parent(x_cpu) .= Array(parent(x_gpu))
+
+    local_max_gpu = Base.maximum(identity, x_gpu)
+    local_max_cpu = Base.maximum(identity, x_cpu)
+
+    local_min_gpu = Base.minimum(identity, x_gpu)
+    local_min_cpu = Base.minimum(identity, x_cpu)
+    # test maximum
+    @test local_max_gpu == local_max_cpu
+    # test minimum
+    @test local_min_gpu == local_min_cpu
+end
 
 @testset "test cuda reduction op on surface of sphere" begin
     FT = Float64
@@ -59,11 +76,11 @@ include("reduction_cuda_utils.jl")
     @test result ≈ 4 * pi * R^2 rtol = 1e-5
     @test result ≈ result_cpu
     # test maximum
-    @test local_max ≈ h₀
-    @test local_max ≈ local_max_cpu
+    @test local_max == h₀
+    @test local_max == local_max_cpu
     # test minimum
-    @test local_min ≈ FT(0)
-    @test local_min ≈ local_min_cpu
+    @test local_min == FT(0)
+    @test local_min == local_min_cpu
     # testing mean
     meanz = Statistics.mean(Z)
     meanz_cpu = Statistics.mean(Z_cpu)
@@ -84,6 +101,8 @@ include("reduction_cuda_utils.jl")
     norminfz = LinearAlgebra.norm(Z, Inf)
     norminfz_cpu = LinearAlgebra.norm(Z_cpu, Inf)
     @test norminfz ≈ norminfz_cpu
+
+    test_extrema(Z_cpu, Z)
 end
 
 @testset "test cuda reduction op for extruded 3D domain (hollow sphere)" begin
@@ -186,6 +205,9 @@ end
     @test LinearAlgebra.norm(Yf, 2) ≈ LinearAlgebra.norm(Yf_cpu, 2)
     @test LinearAlgebra.norm(Yf, 3) ≈ LinearAlgebra.norm(Yf_cpu, 3)
     @test LinearAlgebra.norm(Yf, Inf) ≈ LinearAlgebra.norm(Yf_cpu, Inf)
+
+    test_extrema(Yc_cpu, Yc)
+    test_extrema(Yf_cpu, Yf)
 end
 
 @testset "test cuda reduction op for single column" begin
