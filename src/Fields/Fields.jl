@@ -314,7 +314,7 @@ end
 """
     zeros(space::AbstractSpace)
 
-Construct a field on `space` that is zero everywhere.
+Create a new field on `space` that is zero everywhere.
 """
 function Base.zeros(::Type{FT}, space::AbstractSpace) where {FT}
     field = Field(FT, space)
@@ -327,7 +327,7 @@ Base.zeros(space::AbstractSpace) = zeros(Spaces.undertype(space), space)
 """
     ones(space::AbstractSpace)
 
-Construct a field on `space` that is one everywhere.
+Create a new field on `space` that is one everywhere.
 """
 function Base.ones(::Type{FT}, space::AbstractSpace) where {FT}
     field = Field(FT, space)
@@ -348,7 +348,7 @@ end
 """
     coordinate_field(space::AbstractSpace)
 
-Construct a `Field` of the coordinates of the space.
+Return a pointer to the input space's coordinates `Field`.
 """
 coordinate_field(space::AbstractSpace) =
     Field(Spaces.coordinates_data(space), space)
@@ -357,7 +357,7 @@ coordinate_field(field::Field) = coordinate_field(axes(field))
 """
     local_geometry_field(space::AbstractSpace)
 
-Construct a `Field` of the `LocalGeometry` of the space.
+Return a pointer to the input space's `LocalGeometry` `Field`.
 """
 local_geometry_field(space::AbstractSpace) =
     Field(Spaces.local_geometry_data(space), space)
@@ -367,7 +367,8 @@ local_geometry_field(field::Field) = local_geometry_field(axes(field))
     Δz_field(field::Field)
     Δz_field(space::AbstractSpace)
 
-A `Field` containing the `Δz` values on the same space as the given field.
+Return a pointer to the input space's `Field` containing the `Δz` values on the
+same space as the given field.
 """
 Δz_field(field::Field) = Δz_field(axes(field))
 Δz_field(space::AbstractSpace) = Field(Spaces.Δz_data(space), space)
@@ -521,12 +522,29 @@ Base.@propagate_inbounds Base.setindex!(field::PointField, val) =
 """
     set!(f::Function, field::Field, args = ())
 
-Apply function `f` to populate
-values in field `field`. `f` must
-have a function signature with signature
-`f(::LocalGeometry[, args...])`.
-Additional arguments may be passed to
-`f` with `args`.
+Apply function `f` to populate values in field `field`. `f` must have a function
+signature with signature `f(::LocalGeometry[, args...])`. Additional arguments
+may be passed to `f` with `args`.
+
+## Example
+
+```julia
+using ClimaCore.Fields
+using ClimaCore.CommonSpaces
+ᶜspace = ExtrudedCubedSphereSpace(Float64;
+    z_elem = 10,
+    z_min = 0,
+    z_max = 1,
+    radius = 10,
+    h_elem = 10,
+    n_quad_points = 4,
+    staggering = CellCenter(),
+)
+x = Fields.Field(Float64, ᶜspace)
+Fields.set!(x) do lg
+    sin(lg.coordinates.z)
+end
+```
 """
 function set!(f::Function, field::Field, args = ())
     space = axes(field)
