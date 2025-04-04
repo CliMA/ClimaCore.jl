@@ -47,7 +47,8 @@ get_space_column(dev, FT; z_elem = 10) = ColumnSpace(
 function kernels!(fields)
     (; f, ρ, ϕ) = fields
     (; ᶜout1, ᶜout2, ᶜout3, ᶜout4, ᶜout5, ᶜout6, ᶜout7, ᶜout8, ᶜout9) = fields
-    (; ᶜout10) = fields
+    (; ᶜout10, ᶜout11, ᶜout12) = fields
+    (; ᶠout1) = fields
     (; ᶠout1_contra, ᶠout2_contra) = fields
     (; ᶠout3_cov) = fields
     (; w_cov) = fields
@@ -132,6 +133,27 @@ function kernels!(fields)
     )
     @. ᶠout3_cov = ᶠgrad(ϕ)
 
+    ᶠgrad_top_bcs = Operators.GradientC2F(; top = Operators.SetValue(FT(10)))
+    divf2c = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(Geometry.Covariant3Vector(FT(10))),
+    )
+    @. ᶜout11 = 0
+    @. ᶜout11 += divf2c(ᶠgrad_top_bcs(ϕ))
+
+    ᶠgrad_no_bc = Operators.GradientC2F()
+    div_bcs = Operators.DivergenceF2C(;
+        bottom = Operators.SetValue(Geometry.Covariant3Vector(FT(10))),
+        top = Operators.SetValue(Geometry.Covariant3Vector(FT(10))),
+    )
+    @. ᶜout12 = 0
+    @. ᶜout12 += div_bcs(ᶠgrad_no_bc(ϕ))
+
+    ᶠinterp = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    @. ᶠout1 = ᶠinterp(ϕ)
+
     return nothing
 end;
 
@@ -145,6 +167,8 @@ function get_fields(space::Operators.AllFaceFiniteDifferenceSpace)
         i -> Fields.Field(Geometry.Contravariant3Vector{FT}, space),
         length(K_contra),
     )
+    K_scalar = (ntuple(i -> Symbol("ᶠout$(i)"), 1)...,)
+    V_scalar = ntuple(i -> Fields.Field(FT, space), length(K_scalar))
     K_cov_out = (ntuple(i -> Symbol("ᶠout$(i)_cov"), 8)...,)
     V_cov_out = ntuple(
         i -> Fields.zeros(Geometry.Covariant3Vector{FT}, space),
@@ -157,6 +181,7 @@ function get_fields(space::Operators.AllFaceFiniteDifferenceSpace)
     )
     nt = (;
         zip(K, V)...,
+        zip(K_scalar, V_scalar)...,
         zip(K_contra, V_contra)...,
         zip(K_cov, V_cov)...,
         zip(K_cov_out, V_cov_out)...,
@@ -168,7 +193,7 @@ end
 
 function get_fields(space::Operators.AllCenterFiniteDifferenceSpace)
     FT = Spaces.undertype(space)
-    K = (ntuple(i -> Symbol("ᶜout$i"), 10)..., :ρ, :ϕ)
+    K = (ntuple(i -> Symbol("ᶜout$i"), 12)..., :ρ, :ϕ)
     V = ntuple(i -> Fields.zeros(space), length(K))
     nt = (;
         zip(K, V)...,
