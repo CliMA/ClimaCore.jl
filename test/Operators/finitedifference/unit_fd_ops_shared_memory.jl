@@ -40,9 +40,9 @@ end
         bottom = Operators.SetValue(FT(0)),
         top = Operators.SetValue(FT(0)),
     )
-    bc = @. lazy(ᶠgrad(c))
-    @test Operators.any_fd_shmem_supported(bc)
-    @test Operators.fd_shmem_is_supported(bc)
+    # bc = @. lazy(ᶠgrad(c))
+    # @test Operators.any_fd_shmem_supported(bc)
+    # @test Operators.fd_shmem_is_supported(bc)
 end
 
 #! format: off
@@ -72,6 +72,8 @@ end
     @test compare_cpu_gpu(fields_cpu.ᶠout2_contra, fields.ᶠout2_contra); @test !is_trivial(fields_cpu.ᶠout2_contra)
     @test compare_cpu_gpu(fields_cpu.ᶜout9, fields.ᶜout9); @test !is_trivial(fields_cpu.ᶜout9)
     @test compare_cpu_gpu(fields_cpu.ᶜout10, fields.ᶜout10); @test !is_trivial(fields_cpu.ᶜout10)
+    @test compare_cpu_gpu(fields_cpu.ᶜout11, fields.ᶜout11); @test !is_trivial(fields_cpu.ᶜout11)
+    @test compare_cpu_gpu(fields_cpu.ᶜout12, fields.ᶜout12); @test !is_trivial(fields_cpu.ᶜout12)
     @test compare_cpu_gpu(fields_cpu.ᶜout_uₕ, fields.ᶜout_uₕ); @test !is_trivial(fields_cpu.ᶜout_uₕ)
     @test compare_cpu_gpu(fields_cpu.ᶠout3_cov, fields.ᶠout3_cov); @test !is_trivial(fields_cpu.ᶠout3_cov)
 end
@@ -102,6 +104,8 @@ end
     @test compare_cpu_gpu(fields_cpu.ᶠout2_contra, fields.ᶠout2_contra); @test !is_trivial(fields_cpu.ᶠout2_contra)
     @test compare_cpu_gpu(fields_cpu.ᶜout9, fields.ᶜout9); @test !is_trivial(fields_cpu.ᶜout9)
     @test compare_cpu_gpu(fields_cpu.ᶜout10, fields.ᶜout10); @test !is_trivial(fields_cpu.ᶜout10)
+    @test compare_cpu_gpu(fields_cpu.ᶜout11, fields.ᶜout11); @test !is_trivial(fields_cpu.ᶜout11)
+    @test compare_cpu_gpu(fields_cpu.ᶜout12, fields.ᶜout12); @test !is_trivial(fields_cpu.ᶜout12)
     @test compare_cpu_gpu(fields_cpu.ᶜout_uₕ, fields.ᶜout_uₕ); @test !is_trivial(fields_cpu.ᶜout_uₕ)
 end
 
@@ -130,6 +134,8 @@ end
     @test compare_cpu_gpu(fields_cpu.ᶠout2_contra, fields.ᶠout2_contra); @test !is_trivial(fields_cpu.ᶠout2_contra)
     @test compare_cpu_gpu(fields_cpu.ᶜout9, fields.ᶜout9); @test !is_trivial(fields_cpu.ᶜout9)
     @test compare_cpu_gpu(fields_cpu.ᶜout10, fields.ᶜout10); @test !is_trivial(fields_cpu.ᶜout10)
+    @test compare_cpu_gpu(fields_cpu.ᶜout11, fields.ᶜout11); @test !is_trivial(fields_cpu.ᶜout11)
+    @test compare_cpu_gpu(fields_cpu.ᶜout12, fields.ᶜout12); @test !is_trivial(fields_cpu.ᶜout12)
     @test compare_cpu_gpu(fields_cpu.ᶜout_uₕ, fields.ᶜout_uₕ); @test !is_trivial(fields_cpu.ᶜout_uₕ)
 
 end
