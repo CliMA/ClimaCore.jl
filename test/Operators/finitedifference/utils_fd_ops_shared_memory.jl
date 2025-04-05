@@ -44,13 +44,53 @@ get_space_column(dev, FT; z_elem = 10) = ColumnSpace(
     staggering = CellCenter(),
 );
 
+function test_face_windows(Base.@nospecialize(bc))
+    ext = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
+    @test bc isa Operators.StencilBroadcasted
+    space = axes(bc)
+    ᶜspace = Spaces.center_space(space)
+    arg_space = ext.get_arg_space(bc, bc.args)
+    bc_bds = Operators.window_bounds(space, bc)
+    for lev in 1:(Spaces.nlevels(ᶜspace) + 1)
+        idx = (lev - half)::Utilities.PlusHalf
+        args = (idx, arg_space, bc_bds, bc.op, bc.args...)
+        B = (
+            ext.in_left_boundary_window(args...),
+            ext.in_interior(args...),
+            ext.in_right_boundary_window(args...),
+        )
+        count(B) == 1 || @show idx, B
+        @test count(B) == 1
+    end
+end
+
+@inline function test_center_windows(Base.@nospecialize(bc))
+    ext = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
+    @test bc isa Operators.StencilBroadcasted
+    space = axes(bc)
+    ᶜspace = Spaces.center_space(space)
+    arg_space = ext.get_arg_space(bc, bc.args)
+    bc_bds = Operators.window_bounds(space, bc)
+    for idx in 1:Spaces.nlevels(ᶜspace)
+        args = (idx, arg_space, bc_bds, bc.op, bc.args...)
+        B = (
+            ext.in_left_boundary_window(args...),
+            ext.in_interior(args...),
+            ext.in_right_boundary_window(args...),
+            idx == Spaces.nlevels(ᶜspace) + 1,
+        )
+        count(B) == 1 || @show idx, B
+        @test count(B) == 1
+    end
+end
+
 function kernels!(fields)
     (; f, ρ, ϕ) = fields
     (; ᶜout1, ᶜout2, ᶜout3, ᶜout4, ᶜout5, ᶜout6, ᶜout7, ᶜout8, ᶜout9) = fields
-    (; ᶜout10, ᶜout11, ᶜout12) = fields
+    (; ᶜout10, ᶜout11, ᶜout12, ᶜout13) = fields
     (; ᶠout1) = fields
     (; ᶠout1_contra, ᶠout2_contra) = fields
-    (; ᶠout3_cov) = fields
+    (; ᶠout3_cov, ᶠout4_cov, ᶠout5_cov) = fields
     (; w_cov) = fields
     (; ᶜout_uₕ, ᶜuₕ) = fields
     FT = Spaces.undertype(axes(ϕ))
@@ -108,8 +148,8 @@ function kernels!(fields)
     @. ᶜout9 = divf2c(upwind(w_cov, ϕ))
 
     divf2c_vl = Operators.DivergenceF2C(
-        bottom = Operators.SetValue(Geometry.WVector(FT(0))),
-        top = Operators.SetValue(Geometry.WVector(FT(0))),
+        bottom = Operators.SetValue(Geometry.WVector(FT(10))),
+        top = Operators.SetValue(Geometry.WVector(FT(10))),
     )
     limiter_method = Operators.AlgebraicMean()
     VanLeerMethod = Operators.LinVanLeerC2F(
@@ -132,6 +172,25 @@ function kernels!(fields)
         top = Operators.SetValue(FT(10)),
     )
     @. ᶠout3_cov = ᶠgrad(ϕ)
+
+    ᶠgrad = Operators.GradientC2F(;
+        bottom = Operators.SetValue(FT(10)),
+        top = Operators.SetValue(FT(10)),
+    )
+    ᶜinterp = Operators.InterpolateF2C()
+    ᶠinterp = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    @. ᶠout4_cov = ᶠgrad(ᶜinterp(f))
+    @. ᶠout5_cov = ᶠgrad(ᶜinterp(ᶠinterp(ᶜinterp(f)))) # exercises very nested operation
+
+    @. ᶠout4_cov = ᶠgrad(ᶜinterp(f))
+    ᶜdiv = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(Geometry.Covariant3Vector(FT(10))),
+        top = Operators.SetValue(Geometry.Covariant3Vector(FT(10))),
+    )
+    @. ᶜout13 = ᶜdiv(Geometry.WVector(ᶠinterp(ᶜinterp(f)))) # exercises very nested operation
 
     ᶠgrad_top_bcs = Operators.GradientC2F(; top = Operators.SetValue(FT(10)))
     divf2c = Operators.DivergenceF2C(
@@ -193,7 +252,7 @@ end
 
 function get_fields(space::Operators.AllCenterFiniteDifferenceSpace)
     FT = Spaces.undertype(space)
-    K = (ntuple(i -> Symbol("ᶜout$i"), 12)..., :ρ, :ϕ)
+    K = (ntuple(i -> Symbol("ᶜout$i"), 13)..., :ρ, :ϕ)
     V = ntuple(i -> Fields.zeros(space), length(K))
     nt = (;
         zip(K, V)...,

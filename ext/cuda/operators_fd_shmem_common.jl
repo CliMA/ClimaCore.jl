@@ -5,6 +5,170 @@ import ClimaCore.Operators: getidx
 import ClimaCore.Utilities: PlusHalf
 import ClimaCore.Utilities
 
+#####
+##### Boundary helpers
+#####
+
+@inline function has_left_boundary(space, op)
+    lloc = Operators.LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
+    return Operators.has_boundary(op, lloc)
+end
+@inline function has_right_boundary(space, op)
+    rloc = Operators.RightBoundaryWindow{Spaces.right_boundary_name(space)}()
+    return Operators.has_boundary(op, rloc)
+end
+
+@inline on_boundary(space, op, loc, idx) =
+    Operators.has_boundary(op, loc) && on_boundary(idx, space)
+
+@inline on_left_boundary(idx, space, op) =
+    has_left_boundary(space, op) && on_left_boundary(idx, space)
+@inline on_right_boundary(idx, space, op) =
+    has_right_boundary(space, op) && on_right_boundary(idx, space)
+
+@inline on_boundary(idx::PlusHalf, space) =
+    idx == Operators.left_face_boundary_idx(space) ||
+    idx == Operators.right_face_boundary_idx(space)
+@inline on_boundary(idx::Integer, space) =
+    idx == Operators.left_center_boundary_idx(space) ||
+    idx == Operators.right_center_boundary_idx(space)
+
+@inline on_left_boundary(idx::PlusHalf, space) =
+    idx == Operators.left_face_boundary_idx(space)
+@inline on_left_boundary(idx::Integer, space) =
+    idx == Operators.left_center_boundary_idx(space)
+
+@inline on_right_boundary(idx::PlusHalf, space) =
+    idx == Operators.right_face_boundary_idx(space)
+@inline on_right_boundary(idx::Integer, space) =
+    idx == Operators.right_center_boundary_idx(space)
+
+@inline on_any_boundary(idx, space, op) =
+    (has_left_boundary(space, op) && on_left_boundary(idx, space)) ||
+    has_right_boundary(space, op) && on_right_boundary(idx, space)
+
+#####
+##### range window helpers (faces)
+#####
+
+@inline function in_interior_range(idx::PlusHalf, bc_bds)
+    (bc_li, bc_lw, bc_rw, bc_ri) = bc_bds
+    get_face_idx(bc_lw) ≤ idx ≤ get_face_idx(bc_rw) + 1
+end
+@inline function in_left_boundary_window_range(idx::PlusHalf, bc_bds)
+    (bc_li, bc_lw, bc_rw, bc_ri) = bc_bds
+    return get_face_idx(bc_li) - 1 ≤ idx ≤ get_face_idx(bc_lw + half)
+end
+@inline function in_right_boundary_window_range(idx::PlusHalf, bc_bds)
+    (bc_li, bc_lw, bc_rw, bc_ri) = bc_bds
+    return get_face_idx(bc_rw) ≤ idx ≤ get_face_idx(bc_ri) + 1
+end
+
+#####
+##### range window helpers (centers)
+#####
+
+@inline function in_interior_range(idx::Integer, bc_bds)
+    (bc_li, bc_lw, bc_rw, bc_ri) = bc_bds
+    get_cent_idx(bc_lw) ≤ idx ≤ get_cent_idx(bc_rw)
+end
+@inline function in_left_boundary_window_range(idx::Integer, bc_bds)
+    (bc_li, bc_lw, bc_rw, bc_ri) = bc_bds
+    return get_cent_idx(bc_li) ≤ idx < get_cent_idx(bc_lw)
+end
+@inline function in_right_boundary_window_range(idx::Integer, bc_bds)
+    (bc_li, bc_lw, bc_rw, bc_ri) = bc_bds
+    return get_cent_idx(bc_rw) < idx ≤ get_cent_idx(bc_ri)
+end
+
+#####
+##### window helpers (faces)
+#####
+
+@inline function in_left_boundary_window(
+    idx::PlusHalf,
+    space,
+    bc_bds,
+    op,
+    args...,
+)
+    lloc = Operators.LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
+    Operators.should_call_left_boundary(idx, space, lloc, op, args...) ||
+        in_left_boundary_window_range(idx, bc_bds)
+end
+
+@inline function in_right_boundary_window(
+    idx::PlusHalf,
+    space,
+    bc_bds,
+    op,
+    args...,
+)
+    rloc = Operators.RightBoundaryWindow{Spaces.right_boundary_name(space)}()
+    Operators.should_call_right_boundary(idx, space, rloc, op, args...) ||
+        in_right_boundary_window_range(idx, bc_bds)
+end
+
+@inline function in_interior(idx::PlusHalf, space, bc_bds, op, args...)
+    # TODO: simplify this function / logic / arithmetic
+    (bc_li, bc_lw, bc_rw, bc_ri) = bc_bds
+    IP = Topologies.isperiodic(Spaces.vertical_topology(space))
+    crb = in_right_boundary_window_range(idx, bc_bds)
+    clb = in_left_boundary_window_range(idx, bc_bds)
+    return IP || in_interior_range(idx, bc_bds) && !(crb || clb)
+end
+
+#####
+##### window helpers (centers)
+#####
+
+@inline function in_interior(idx::Integer, space, bc_bds, op, args...)
+    # TODO: simplify this function / logic / arithmetic
+    # TODO: use the (commented) range methods instead, as it would be much simpler.
+    (bc_li, bc_lw, bc_rw, bc_ri) = bc_bds
+    IP = Topologies.isperiodic(Spaces.vertical_topology(space))
+    # crb = in_right_boundary_window_range(idx, bc_bds)
+    crb = in_right_boundary_window(idx, space, bc_bds, op, args...)
+    # clb = in_left_boundary_window_range(idx, bc_bds)
+    clb = in_left_boundary_window(idx, space, bc_bds, op, args...)
+    return IP || in_interior_range(idx, bc_bds) && !(crb || clb)
+end
+
+@inline function in_domain(idx::Integer, space)
+    ᶜspace = Spaces.center_space(space)
+    return 1 ≤ idx ≤ Spaces.nlevels(ᶜspace)
+end
+
+@inline function in_left_boundary_window(
+    idx::Integer,
+    space,
+    bc_bds,
+    op,
+    args...,
+)
+    lloc = Operators.LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
+    Operators.should_call_left_boundary(idx, space, lloc, op, args...) ||
+        in_left_boundary_window_range(idx, bc_bds)
+end
+
+@inline function in_right_boundary_window(
+    idx::Integer,
+    space,
+    bc_bds,
+    op,
+    args...,
+)
+    rloc = Operators.RightBoundaryWindow{Spaces.right_boundary_name(space)}()
+    ᶜspace = Spaces.center_space(space)
+    idx > Spaces.nlevels(ᶜspace) && return false # short-circuit if
+    Operators.should_call_right_boundary(idx, space, rloc, op, args...) ||
+        in_right_boundary_window_range(idx, bc_bds)
+end
+
+#####
+#####
+#####
+
 Base.@propagate_inbounds function getidx(
     parent_space,
     bc::StencilBroadcasted{CUDAWithShmemColumnStencilStyle},
@@ -48,7 +212,7 @@ Base.@propagate_inbounds function getidx(
         )
     end
     op = bc.op
-    if Operators.should_call_left_boundary(idx, space, bc, loc)
+    if Operators.should_call_left_boundary(idx, space, loc, bc.op, bc.args...)
         Operators.stencil_left_boundary(
             op,
             Operators.get_boundary(op, loc),
@@ -84,7 +248,7 @@ Base.@propagate_inbounds function getidx(
         )
     end
     op = bc.op
-    if Operators.should_call_right_boundary(idx, space, bc, loc)
+    if Operators.should_call_right_boundary(idx, space, loc, bc.op, bc.args...)
         Operators.stencil_right_boundary(
             op,
             Operators.get_boundary(op, loc),
@@ -183,14 +347,8 @@ end
     _fd_shmem_needed_per_column(shmem_bytes::Integer, Base.tail(args))
 
 
-get_arg_space(
-    bc::StencilBroadcasted{CUDAWithShmemColumnStencilStyle},
-    args::Tuple{},
-) = axes(bc)
-get_arg_space(
-    bc::StencilBroadcasted{CUDAWithShmemColumnStencilStyle},
-    args::Tuple,
-) = axes(args[1])
+get_arg_space(bc::StencilBroadcasted, args::Tuple{}) = axes(bc)
+get_arg_space(bc::StencilBroadcasted, args::Tuple) = axes(args[1])
 
 get_cent_idx(idx::Integer) = idx # center when traversing centers (trivial)
 get_face_idx(idx::PlusHalf) = idx # face when traversing faces (trivial)
@@ -246,126 +404,52 @@ Base.@propagate_inbounds function fd_resolve_shmem!(
 
     bc_bds = Operators.window_bounds(space, sbc)
     (bc_li, bc_lw, bc_rw, bc_ri) = bc_bds
-    if arg_space isa Operators.AllFaceFiniteDifferenceSpace # populate shmem on faces
-        if IP || get_face_idx(bc_lw) ≤ ᶠidx ≤ get_face_idx(bc_rw) + 1 # interior
-            fd_operator_fill_shmem_interior!(
-                sbc.op,
-                sbc.work,
-                iloc,
-                space,
-                ᶠidx,
-                hidx,
-                sbc.args...,
-            )
-        elseif Operators.should_call_left_boundary(ᶠidx, arg_space, sbc, lloc) # left
-            fd_operator_fill_shmem_left_boundary!(
-                sbc.op,
-                Operators.get_boundary(op, lloc),
-                sbc.work,
-                lloc,
-                space,
-                ᶠidx,
-                hidx,
-                sbc.args...,
-            )
-        elseif Operators.should_call_right_boundary(ᶠidx, arg_space, sbc, rloc) # right
-            fd_operator_fill_shmem_right_boundary!(
-                sbc.op,
-                Operators.get_boundary(op, rloc),
-                sbc.work,
-                rloc,
-                space,
-                ᶠidx,
-                hidx,
-                sbc.args...,
-            )
-        elseif get_face_idx(bc_li) - 1 ≤ ᶠidx ≤ get_face_idx(bc_lw + half)
-            fd_operator_fill_shmem_interior!(
-                sbc.op,
-                sbc.work,
-                lloc,
-                space,
-                ᶠidx,
-                hidx,
-                sbc.args...,
-            )
-        elseif get_face_idx(bc_rw) ≤ ᶠidx ≤ get_face_idx(bc_ri) + 1
-            fd_operator_fill_shmem_interior!(
-                sbc.op,
-                sbc.work,
-                rloc,
-                space,
-                ᶠidx,
-                hidx,
-                sbc.args...,
-            )
-        else # this else should never run
-        end
-    else  # populate shmem on centers
-        if IP || get_cent_idx(bc_lw) ≤ ᶜidx < get_cent_idx(bc_rw) # interior
-            fd_operator_fill_shmem_interior!(
-                sbc.op,
-                sbc.work,
-                iloc,
-                space,
-                ᶜidx,
-                hidx,
-                sbc.args...,
-            )
-        elseif get_cent_idx(bc_li) ≤ ᶜidx < get_cent_idx(bc_lw) &&
-               Operators.has_boundary(op, lloc) # left
-            fd_operator_fill_shmem_left_boundary!(
-                sbc.op,
-                Operators.get_boundary(op, lloc),
-                sbc.work,
-                lloc,
-                space,
-                ᶜidx,
-                hidx,
-                sbc.args...,
-            )
-        elseif get_cent_idx(bc_rw) ≤ ᶜidx < get_cent_idx(bc_ri) &&
-               Operators.has_boundary(op, rloc) # right
-            fd_operator_fill_shmem_right_boundary!(
-                sbc.op,
-                Operators.get_boundary(op, rloc),
-                sbc.work,
-                rloc,
-                space,
-                ᶜidx,
-                hidx,
-                sbc.args...,
-            )
-        elseif get_cent_idx(bc_li) < ᶜidx < get_cent_idx(bc_lw) &&
-               !Operators.has_boundary(op, lloc) # left
-            fd_operator_fill_shmem_interior!(
-                sbc.op,
-                sbc.work,
-                lloc,
-                space,
-                ᶜidx,
-                hidx,
-                sbc.args...,
-            )
-        elseif get_cent_idx(bc_rw) < ᶜidx < get_cent_idx(bc_ri) &&
-               !Operators.has_boundary(op, rloc) # right
-            fd_operator_fill_shmem_interior!(
-                sbc.op,
-                sbc.work,
-                rloc,
-                space,
-                ᶜidx,
-                hidx,
-                sbc.args...,
-            )
-        else # this should only ever be exercised at Spaces.nlevels(ᶜspace)+1
-            # We don't have or need to fill shmem at `Spaces.nlevels
-            # (ᶜspace)+1`, but threads may have this ᶜidx because they may be
-            # filling shmem for an operator whose shmem exists on the face
-            # space, which extends beyond the center space.
-            # @assert ᶜidx == Spaces.nlevels(ᶜspace) + 1 # assertion passes, but commented to remove potential thrown exception in llvm output
-        end
+    ᵃidx = arg_space isa Operators.AllFaceFiniteDifferenceSpace ? ᶠidx : ᶜidx
+
+    if in_interior(ᵃidx, arg_space, bc_bds, sbc.op, sbc.args...)
+        fd_operator_fill_shmem!(
+            sbc.op,
+            sbc.work,
+            iloc,
+            bc_bds,
+            arg_space,
+            space,
+            ᵃidx,
+            hidx,
+            sbc.args...,
+        )
+    elseif in_left_boundary_window(ᵃidx, arg_space, bc_bds, sbc.op, sbc.args...)
+        fd_operator_fill_shmem!(
+            sbc.op,
+            sbc.work,
+            lloc,
+            bc_bds,
+            arg_space,
+            space,
+            ᵃidx,
+            hidx,
+            sbc.args...,
+        )
+    elseif in_right_boundary_window(
+        ᵃidx,
+        arg_space,
+        bc_bds,
+        sbc.op,
+        sbc.args...,
+    )
+        fd_operator_fill_shmem!(
+            sbc.op,
+            sbc.work,
+            rloc,
+            bc_bds,
+            arg_space,
+            space,
+            ᵃidx,
+            hidx,
+            sbc.args...,
+        )
     end
+    CUDA.sync_threads()
     return nothing
 end
 
