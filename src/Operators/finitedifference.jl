@@ -164,6 +164,8 @@ struct RightBoundaryWindow{name} <: BoundaryWindow end
 
 An abstract type for finite difference operators. Instances of this should define:
 
+- [`getidx_return_type`](@ref)
+- [`stencil_return_type`](@ref)
 - [`return_eltype`](@ref)
 - [`return_space`](@ref)
 - [`stencil_interior_width`](@ref)
@@ -174,6 +176,18 @@ See also [`AbstractBoundaryCondition`](@ref) for how to define the boundaries.
 abstract type FiniteDifferenceOperator <: AbstractOperator end
 
 return_eltype(::FiniteDifferenceOperator, arg) = eltype(arg)
+
+"""
+    getidx_return_type(::Base.Broadcasted)
+    getidx_return_type(::StencilBroadcasted)
+    getidx_return_type(::Field)
+    getidx_return_type(::Any)
+    ...
+
+The return type of `getidx` on the arguemnt.
+Defaults to the type of the argument.
+"""
+function getidx_return_type end
 
 # boundary width error fallback
 @noinline invalid_boundary_condition_error(op_type::Type, bc_type::Type) =
@@ -327,6 +341,13 @@ Defines the stencil of the operator `Op` in the interior of the domain at `idx`;
 """
 function stencil_interior end
 
+"""
+    stencil_return_type(::Op, args...)
+
+The return type of the given stencil and arguments.
+"""
+function stencil_return_type end
+
 
 """
     boundary_width(::Op, ::BC, args...)
@@ -354,6 +375,14 @@ function stencil_right_boundary end
 
 
 abstract type InterpolationOperator <: FiniteDifferenceOperator end
+
+# single argument interpolation must be the return type of getidx on the
+# argument, which should be cheaper / simpler than return_eltype(op, args...)
+@inline stencil_return_type(::InterpolationOperator, arg) =
+    getidx_return_type(arg)
+
+@inline stencil_return_type(op::FiniteDifferenceOperator, args...) =
+    return_eltype(op, args...)
 
 function assert_no_bcs(op, kwargs)
     length(kwargs) == 0 && return nothing
@@ -3812,6 +3841,20 @@ Base.@propagate_inbounds function getidx(
     end
 end
 
+@inline getidx_return_type(scalar::Tuple{<:Any}) = eltype(scalar)
+@inline getidx_return_type(scalar::Ref) = eltype(scalar)
+@inline getidx_return_type(x::T) where {T} = T
+@inline getidx_return_type(f::Fields.Field) = eltype(f)
+
+@inline getidx_return_type(bc::Base.Broadcast.Broadcasted) =
+    Base.promote_op(bc.f, map(getidx_return_type, bc.args)...)
+
+@inline getidx_return_type(op::AbstractOperator, args...) =
+    stencil_return_type(bc.op, bc.args...)
+
+@inline getidx_return_type(bc::StencilBroadcasted) =
+    stencil_return_type(bc.op, bc.args...)
+
 # broadcasting a ColumnStencilStyle gives the StencilBroadcasted's style
 Base.Broadcast.BroadcastStyle(
     ::Type{<:StencilBroadcasted{Style}},
@@ -4104,6 +4147,7 @@ Base.@propagate_inbounds function apply_stencil!(
     hidx,
     (li, lw, rw, ri) = window_bounds(space, bc),
 )
+    T = getidx_return_type(bc)
     if !Topologies.isperiodic(Spaces.vertical_topology(space))
         # left window
         lbw = LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
@@ -4114,7 +4158,7 @@ Base.@propagate_inbounds function apply_stencil!(
     end
     # interior
     @inbounds for idx in lw:rw
-        val = getidx(space, bc, Interior(), idx, hidx)
+        val = getidx(space, bc, Interior(), idx, hidx)::T
         setidx!(space, field_out, idx, hidx, val)
     end
     if !Topologies.isperiodic(Spaces.vertical_topology(space))
