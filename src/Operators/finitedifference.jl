@@ -4147,7 +4147,6 @@ Base.@propagate_inbounds function apply_stencil!(
     hidx,
     (li, lw, rw, ri) = window_bounds(space, bc),
 )
-    T = getidx_return_type(bc)
     if !Topologies.isperiodic(Spaces.vertical_topology(space))
         # left window
         lbw = LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
@@ -4158,7 +4157,7 @@ Base.@propagate_inbounds function apply_stencil!(
     end
     # interior
     @inbounds for idx in lw:rw
-        val = getidx(space, bc, Interior(), idx, hidx)::T
+        val = getidx(space, bc, Interior(), idx, hidx)
         setidx!(space, field_out, idx, hidx, val)
     end
     if !Topologies.isperiodic(Spaces.vertical_topology(space))
