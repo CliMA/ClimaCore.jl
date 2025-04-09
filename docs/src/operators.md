@@ -111,6 +111,8 @@ column_accumulate!
 ## Internal APIs
 
 ```@docs
+getidx_return_type
+stencil_return_type
 return_eltype
 return_space
 stencil_interior_width
