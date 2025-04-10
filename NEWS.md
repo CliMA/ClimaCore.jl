@@ -4,6 +4,18 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.30
+-------
+
+ - Fixed error messages in our DataLayouts
+   [2275](https://github.com/CliMA/ClimaCore.jl/pull/2275).
+
+ - Bug fix in our finite difference shared memory implementation
+   [2282](https://github.com/CliMA/ClimaCore.jl/pull/2282).
+
+ - Added support for shared memory in `GradientC2F`
+   [2268](https://github.com/CliMA/ClimaCore.jl/pull/2268).
+
 ### ![][badge-✨feature/enhancement] Improvements to `Remapping.interpolate` PR [2272](https://github.com/CliMA/ClimaCore.jl/pull/2272)
 
 PR [2272](https://github.com/CliMA/ClimaCore.jl/pull/2272) introduces
