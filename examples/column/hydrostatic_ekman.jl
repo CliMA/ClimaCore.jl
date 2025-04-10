@@ -133,7 +133,7 @@ function tendency!(dY, Y, _, t)
     # TODO!: Undesirable casting to vector required
     @. dρθ = -∂c(w * If(ρθ)) + ρ * ∂c(ν * ∂f(ρθ / ρ))
 
-    uv_1 = Operators.getidx(axes(uv), uv, Operators.Interior(), 1)
+    uv_1 = Operators.getidx(axes(uv), uv, 1)
     u_wind = LinearAlgebra.norm(uv_1)
 
     A = Operators.AdvectionC2C(
