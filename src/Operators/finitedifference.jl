@@ -224,6 +224,8 @@ has_boundary(
     ::RightBoundaryWindow{name},
 ) where {name} = hasfield(typeof(op.bcs), name)
 
+has_boundary(op::FiniteDifferenceOperator, ::Interior) = false
+
 strip_space(op::FiniteDifferenceOperator, parent_space) =
     unionall_type(typeof(op))(
         NamedTuple{keys(op.bcs)}(
@@ -3761,25 +3763,23 @@ end
     right_idx(space)
 end
 
-@inline function should_call_left_boundary(idx, space, bc, loc)
-    (; op) = bc
+@inline function should_call_left_boundary(idx, space, loc, op, args...)
     return Operators.has_boundary(op, loc) &&
            idx < Operators.left_interior_idx(
         space,
         op,
         Operators.get_boundary(op, loc),
-        bc.args...,
+        args...,
     )
 end
 
-@inline function should_call_right_boundary(idx, space, bc, loc)
-    (; op) = bc
+@inline function should_call_right_boundary(idx, space, loc, op, args...)
     return Operators.has_boundary(op, loc) &&
            idx > Operators.right_interior_idx(
         space,
-        bc.op,
-        Operators.get_boundary(bc.op, loc),
-        bc.args...,
+        op,
+        Operators.get_boundary(op, loc),
+        args...,
     )
 end
 
@@ -3815,7 +3815,7 @@ Base.@propagate_inbounds function getidx(
     end
     op = bc.op
     if loc isa LeftBoundaryWindow &&
-       should_call_left_boundary(idx, space, bc, loc)
+       should_call_left_boundary(idx, space, loc, bc.op, bc.args...)
         stencil_left_boundary(
             op,
             get_boundary(op, loc),
@@ -3826,7 +3826,7 @@ Base.@propagate_inbounds function getidx(
             bc.args...,
         )
     elseif loc isa RightBoundaryWindow &&
-           should_call_right_boundary(idx, space, bc, loc)
+           should_call_right_boundary(idx, space, loc, bc.op, bc.args...)
         stencil_right_boundary(
             op,
             get_boundary(op, loc),
@@ -4210,3 +4210,16 @@ if hasfield(Method, :recursion_relation)
         m.recursion_relation = dont_limit
     end
 end
+
+"""
+    use_fd_shmem()
+
+Allows users to, from global scope, disable finite
+difference shmem for operators that support it.
+
+## Usage
+```julia
+Operators.use_fd_shmem() = false
+```
+"""
+use_fd_shmem() = true

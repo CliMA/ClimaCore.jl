@@ -54,7 +54,8 @@ function Base.copyto!(
     if Operators.any_fd_shmem_supported(bc) &&
        !high_resolution &&
        mask isa NoMask &&
-       enough_shmem
+       enough_shmem &&
+       Operators.use_fd_shmem()
         p = fd_stencil_partition(us, n_face_levels)
         args = (
             strip_space(out, space),

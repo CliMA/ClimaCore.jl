@@ -175,7 +175,7 @@ end
 @inline Operators.fd_shmem_is_supported(
     op::Operators.GradientC2F,
     bcs::NamedTuple,
-) = false
-# all(values(bcs)) do bc
-#     all(supported_bc -> bc isa supported_bc, (Operators.SetValue,))
-# end
+) =
+    all(values(bcs)) do bc
+        all(supported_bc -> bc isa supported_bc, (Operators.SetValue,))
+    end
