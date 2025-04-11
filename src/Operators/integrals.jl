@@ -89,21 +89,13 @@ const PointwiseOrColumnwiseBroadcasted = Union{
     Operators.StencilBroadcasted,
 }
 
+# TODO: inline / delete this helper
 Base.@propagate_inbounds function get_level_value(
     space::Spaces.FiniteDifferenceSpace,
     field_or_bc,
     level,
 )
-    is_periodic = Topologies.isperiodic(Spaces.vertical_topology(space))
-    (_, lw, rw, _) = window_bounds(space, field_or_bc)
-    window = if !is_periodic && level < lw
-        LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
-    elseif !is_periodic && level > rw
-        RightBoundaryWindow{Spaces.right_boundary_name(space)}()
-    else
-        Interior()
-    end
-    return getidx(space, field_or_bc, window, level, (1, 1, 1))
+    return getidx(space, field_or_bc, level, (1, 1, 1))
 end
 
 """

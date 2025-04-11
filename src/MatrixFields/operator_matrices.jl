@@ -272,53 +272,50 @@ end
 
 Base.@propagate_inbounds function Operators.stencil_interior(
     op_matrix::FDOperatorMatrix,
-    loc,
     space,
     idx,
     hidx,
     args...,
 )
     args′ = args[1:(end - 1)]
-    row = op_matrix_interior_row(op_matrix.op, space, loc, idx, hidx, args′...)
+    row = op_matrix_interior_row(op_matrix.op, space, idx, hidx, args′...)
     return convert(Operators.return_eltype(op_matrix, args...), row)
 end
 
 Base.@propagate_inbounds function Operators.stencil_left_boundary(
     op_matrix::FDOperatorMatrix,
     bc::Operators.AbstractBoundaryCondition,
-    loc,
     space,
     idx,
     hidx,
     args...,
 )
     args′ = args[1:(end - 1)]
-    row = op_matrix_first_row(op_matrix.op, bc, space, loc, idx, hidx, args′...)
+    row = op_matrix_first_row(op_matrix.op, bc, space, idx, hidx, args′...)
     return convert(Operators.return_eltype(op_matrix, args...), row)
 end
 
 Base.@propagate_inbounds function Operators.stencil_right_boundary(
     op_matrix::FDOperatorMatrix,
     bc::Operators.AbstractBoundaryCondition,
-    loc,
     space,
     idx,
     hidx,
     args...,
 )
     args′ = args[1:(end - 1)]
-    row = op_matrix_last_row(op_matrix.op, bc, space, loc, idx, hidx, args′...)
+    row = op_matrix_last_row(op_matrix.op, bc, space, idx, hidx, args′...)
     return convert(Operators.return_eltype(op_matrix, args...), row)
 end
 
 # Simplified methods for when the operator matrix only depends on FT.
 op_matrix_row_type(op, ::Type{FT}, args...) where {FT} =
     typeof(op_matrix_interior_row(op, FT))
-op_matrix_interior_row(op, space, loc, idx, hidx, args...) =
+op_matrix_interior_row(op, space, idx, hidx, args...) =
     op_matrix_interior_row(op, Spaces.undertype(space))
-op_matrix_first_row(op, bc, space, loc, idx, hidx, args...) =
+op_matrix_first_row(op, bc, space, idx, hidx, args...) =
     op_matrix_first_row(op, bc, Spaces.undertype(space))
-op_matrix_last_row(op, bc, space, loc, idx, hidx, args...) =
+op_matrix_last_row(op, bc, space, idx, hidx, args...) =
     op_matrix_last_row(op, bc, Spaces.undertype(space))
 
 ################################################################################
@@ -351,9 +348,9 @@ const εⁱʲ = Geometry.AxisTensor(
     SMatrix{2, 2}(0, 1, -1, 0),
 )
 
-Base.@propagate_inbounds ct3_data(velocity, space, loc, idx, hidx) =
+Base.@propagate_inbounds ct3_data(velocity, space, idx, hidx) =
     Geometry.contravariant3(
-        Operators.getidx(space, velocity, loc, idx, hidx),
+        Operators.getidx(space, velocity, idx, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
 
@@ -432,13 +429,12 @@ op_matrix_row_type(
 Base.@propagate_inbounds function op_matrix_interior_row(
     ::Operators.WeightedInterpolationOperator,
     space,
-    loc,
     idx,
     hidx,
     weight,
 )
-    w⁻ = Operators.getidx(space, weight, loc, idx - half, hidx)
-    w⁺ = Operators.getidx(space, weight, loc, idx + half, hidx)
+    w⁻ = Operators.getidx(space, weight, idx - half, hidx)
+    w⁺ = Operators.getidx(space, weight, idx + half, hidx)
     denominator = radd(w⁻, w⁺)
     return BidiagonalMatrixRow(rdiv(w⁻, denominator), rdiv(w⁺, denominator))
 end
@@ -483,12 +479,11 @@ op_matrix_row_type(
 Base.@propagate_inbounds function op_matrix_interior_row(
     ::Operators.UpwindBiasedProductC2F,
     space,
-    loc,
     idx,
     hidx,
     velocity,
 )
-    v³ = CT3(ct3_data(velocity, space, loc, idx, hidx))
+    v³ = CT3(ct3_data(velocity, space, idx, hidx))
     av³ = CT3(abs(v³.u³))
     return BidiagonalMatrixRow(v³ + av³, v³ - av³) / 2
 end
@@ -496,12 +491,11 @@ Base.@propagate_inbounds function op_matrix_first_row(
     ::Operators.UpwindBiasedProductC2F,
     ::Operators.SetValue,
     space,
-    loc,
     idx,
     hidx,
     velocity,
 )
-    v³ = CT3(ct3_data(velocity, space, loc, idx, hidx))
+    v³ = CT3(ct3_data(velocity, space, idx, hidx))
     av³ = CT3(abs(v³.u³))
     return UpperDiagonalMatrixRow(v³ - av³) / 2
 end
@@ -509,12 +503,11 @@ Base.@propagate_inbounds function op_matrix_last_row(
     ::Operators.UpwindBiasedProductC2F,
     ::Operators.SetValue,
     space,
-    loc,
     idx,
     hidx,
     velocity,
 )
-    v³ = CT3(ct3_data(velocity, space, loc, idx, hidx))
+    v³ = CT3(ct3_data(velocity, space, idx, hidx))
     av³ = CT3(abs(v³.u³))
     return LowerDiagonalMatrixRow(v³ + av³) / 2
 end
@@ -522,12 +515,11 @@ Base.@propagate_inbounds function op_matrix_first_row(
     ::Operators.UpwindBiasedProductC2F,
     ::Operators.Extrapolate,
     space,
-    loc,
     idx,
     hidx,
     velocity,
 )
-    v³ = CT3(ct3_data(velocity, space, loc, idx + 1, hidx))
+    v³ = CT3(ct3_data(velocity, space, idx + 1, hidx))
     av³ = CT3(abs(v³.u³))
     return UpperBidiagonalMatrixRow(v³ + av³, v³ - av³) / 2
 end
@@ -535,12 +527,11 @@ Base.@propagate_inbounds function op_matrix_last_row(
     ::Operators.UpwindBiasedProductC2F,
     ::Operators.Extrapolate,
     space,
-    loc,
     idx,
     hidx,
     velocity,
 )
-    v³ = CT3(ct3_data(velocity, space, loc, idx - 1, hidx))
+    v³ = CT3(ct3_data(velocity, space, idx - 1, hidx))
     av³ = CT3(abs(v³.u³))
     return LowerBidiagonalMatrixRow(v³ + av³, v³ - av³) / 2
 end
@@ -553,12 +544,11 @@ op_matrix_row_type(
 Base.@propagate_inbounds function op_matrix_interior_row(
     ::Operators.Upwind3rdOrderBiasedProductC2F,
     space,
-    loc,
     idx,
     hidx,
     velocity,
 )
-    v³ = CT3(ct3_data(velocity, space, loc, idx, hidx))
+    v³ = CT3(ct3_data(velocity, space, idx, hidx))
     av³ = CT3(abs(v³.u³))
     return QuaddiagonalMatrixRow(-v³ - av³, 7v³ + 3av³, 7v³ - 3av³, -v³ + av³) /
            12
@@ -567,12 +557,11 @@ Base.@propagate_inbounds function op_matrix_first_row(
     ::Operators.Upwind3rdOrderBiasedProductC2F,
     ::Operators.FirstOrderOneSided,
     space,
-    loc,
     idx,
     hidx,
     velocity,
 )
-    v³ = CT3(ct3_data(velocity, space, loc, idx, hidx))
+    v³ = CT3(ct3_data(velocity, space, idx, hidx))
     av³ = CT3(abs(v³.u³))
     return UpperTridiagonalMatrixRow(8v³ + 4av³, 5v³ - 5av³, -v³ + av³) / 12
 end
@@ -580,12 +569,11 @@ Base.@propagate_inbounds function op_matrix_last_row(
     ::Operators.Upwind3rdOrderBiasedProductC2F,
     ::Operators.FirstOrderOneSided,
     space,
-    loc,
     idx,
     hidx,
     velocity,
 )
-    v³ = CT3(ct3_data(velocity, space, loc, idx, hidx))
+    v³ = CT3(ct3_data(velocity, space, idx, hidx))
     av³ = CT3(abs(v³.u³))
     return LowerTridiagonalMatrixRow(-v³ - av³, 5v³ + 5av³, 8v³ - 4av³) / 12
 end
@@ -593,24 +581,22 @@ Base.@propagate_inbounds function op_matrix_first_row(
     ::Operators.Upwind3rdOrderBiasedProductC2F,
     ::Operators.ThirdOrderOneSided,
     space,
-    loc,
     idx,
     hidx,
     velocity,
 )
-    v³ = CT3(ct3_data(velocity, space, loc, idx, hidx))
+    v³ = CT3(ct3_data(velocity, space, idx, hidx))
     return UpperTridiagonalMatrixRow(4v³, 10v³, -2v³) / 12
 end
 Base.@propagate_inbounds function op_matrix_last_row(
     ::Operators.Upwind3rdOrderBiasedProductC2F,
     ::Operators.ThirdOrderOneSided,
     space,
-    loc,
     idx,
     hidx,
     velocity,
 )
-    v³ = CT3(ct3_data(velocity, space, loc, idx, hidx))
+    v³ = CT3(ct3_data(velocity, space, idx, hidx))
     return LowerTridiagonalMatrixRow(-2v³, 10v³, 4v³) / 12
 end
 
@@ -619,111 +605,102 @@ op_matrix_row_type(::Operators.AdvectionOperator, ::Type{FT}, _) where {FT} =
 Base.@propagate_inbounds function op_matrix_interior_row(
     ::Operators.AdvectionC2C,
     space,
-    loc,
     idx,
     hidx,
     velocity,
 )
-    v³⁻_data = ct3_data(velocity, space, loc, idx - half, hidx)
-    v³⁺_data = ct3_data(velocity, space, loc, idx + half, hidx)
+    v³⁻_data = ct3_data(velocity, space, idx - half, hidx)
+    v³⁺_data = ct3_data(velocity, space, idx + half, hidx)
     return TridiagonalMatrixRow(-v³⁻_data, v³⁻_data - v³⁺_data, v³⁺_data) / 2
 end
 Base.@propagate_inbounds function op_matrix_first_row(
     ::Operators.AdvectionC2C,
     ::Operators.SetValue,
     space,
-    loc,
     idx,
     hidx,
     velocity,
 )
-    v³⁻_data = ct3_data(velocity, space, loc, idx - half, hidx)
-    v³⁺_data = ct3_data(velocity, space, loc, idx + half, hidx)
+    v³⁻_data = ct3_data(velocity, space, idx - half, hidx)
+    v³⁺_data = ct3_data(velocity, space, idx + half, hidx)
     return UpperBidiagonalSquareMatrixRow(2v³⁻_data - v³⁺_data, v³⁺_data) / 2
 end
 Base.@propagate_inbounds function op_matrix_last_row(
     ::Operators.AdvectionC2C,
     ::Operators.SetValue,
     space,
-    loc,
     idx,
     hidx,
     velocity,
 )
-    v³⁻_data = ct3_data(velocity, space, loc, idx - half, hidx)
-    v³⁺_data = ct3_data(velocity, space, loc, idx + half, hidx)
+    v³⁻_data = ct3_data(velocity, space, idx - half, hidx)
+    v³⁺_data = ct3_data(velocity, space, idx + half, hidx)
     return LowerBidiagonalSquareMatrixRow(-v³⁻_data, v³⁻_data - 2v³⁺_data) / 2
 end
 Base.@propagate_inbounds function op_matrix_first_row(
     ::Operators.AdvectionC2C,
     ::Operators.Extrapolate,
     space,
-    loc,
     idx,
     hidx,
     velocity,
 )
-    v³⁺_data = ct3_data(velocity, space, loc, idx + half, hidx)
+    v³⁺_data = ct3_data(velocity, space, idx + half, hidx)
     return UpperBidiagonalSquareMatrixRow(-v³⁺_data, v³⁺_data)
 end
 Base.@propagate_inbounds function op_matrix_last_row(
     ::Operators.AdvectionC2C,
     ::Operators.Extrapolate,
     space,
-    loc,
     idx,
     hidx,
     velocity,
 )
-    v³⁻_data = ct3_data(velocity, space, loc, idx - half, hidx)
+    v³⁻_data = ct3_data(velocity, space, idx - half, hidx)
     return LowerBidiagonalSquareMatrixRow(-v³⁻_data, v³⁻_data)
 end
 Base.@propagate_inbounds function op_matrix_interior_row(
     ::Operators.AdvectionF2F,
     space,
-    loc,
     idx,
     hidx,
     velocity,
 )
     FT = Spaces.undertype(space)
-    v³_data = ct3_data(velocity, space, loc, idx, hidx)
+    v³_data = ct3_data(velocity, space, idx, hidx)
     return TridiagonalMatrixRow(-v³_data, FT(0), v³_data) / 2
 end
 Base.@propagate_inbounds function op_matrix_interior_row(
     ::Union{Operators.FluxCorrectionC2C, Operators.FluxCorrectionF2F},
     space,
-    loc,
     idx,
     hidx,
     velocity,
 )
-    av³⁻_data = abs(ct3_data(velocity, space, loc, idx - half, hidx))
-    av³⁺_data = abs(ct3_data(velocity, space, loc, idx + half, hidx))
+    av³⁻_data = abs(ct3_data(velocity, space, idx - half, hidx))
+    av³⁺_data = abs(ct3_data(velocity, space, idx + half, hidx))
     return TridiagonalMatrixRow(av³⁻_data, -av³⁻_data - av³⁺_data, av³⁺_data)
 end
 Base.@propagate_inbounds function op_matrix_first_row(
     ::Union{Operators.FluxCorrectionC2C, Operators.FluxCorrectionF2F},
     ::Operators.Extrapolate,
     space,
-    loc,
     idx,
     hidx,
     velocity,
 )
-    av³⁺_data = abs(ct3_data(velocity, space, loc, idx + half, hidx))
+    av³⁺_data = abs(ct3_data(velocity, space, idx + half, hidx))
     return UpperBidiagonalSquareMatrixRow(-av³⁺_data, av³⁺_data)
 end
 Base.@propagate_inbounds function op_matrix_last_row(
     ::Union{Operators.FluxCorrectionC2C, Operators.FluxCorrectionF2F},
     ::Operators.Extrapolate,
     space,
-    loc,
     idx,
     hidx,
     velocity,
 )
-    av³⁻_data = abs(ct3_data(velocity, space, loc, idx - half, hidx))
+    av³⁻_data = abs(ct3_data(velocity, space, idx - half, hidx))
     return LowerBidiagonalSquareMatrixRow(av³⁻_data, -av³⁻_data)
 end
 
@@ -792,7 +769,6 @@ op_matrix_row_type(op::Operators.DivergenceOperator, ::Type{FT}) where {FT} =
 Base.@propagate_inbounds function op_matrix_interior_row(
     ::Operators.DivergenceOperator,
     space,
-    loc,
     idx,
     hidx,
 )
@@ -805,7 +781,6 @@ Base.@propagate_inbounds function op_matrix_first_row(
     ::Operators.DivergenceC2F,
     ::Operators.SetValue,
     space,
-    loc,
     idx,
     hidx,
 )
@@ -817,7 +792,6 @@ Base.@propagate_inbounds function op_matrix_last_row(
     ::Operators.DivergenceC2F,
     ::Operators.SetValue,
     space,
-    loc,
     idx,
     hidx,
 )
@@ -839,7 +813,6 @@ Base.@propagate_inbounds function op_matrix_first_row(
     ::Operators.DivergenceF2C,
     ::Operators.SetValue,
     space,
-    loc,
     idx,
     hidx,
 )
@@ -852,7 +825,6 @@ Base.@propagate_inbounds function op_matrix_last_row(
     ::Operators.DivergenceF2C,
     ::Operators.SetValue,
     space,
-    loc,
     idx,
     hidx,
 )
@@ -875,7 +847,6 @@ Base.@propagate_inbounds function op_matrix_first_row(
     ::Operators.DivergenceF2C,
     ::Operators.Extrapolate,
     space,
-    loc,
     idx,
     hidx,
 )
@@ -889,7 +860,6 @@ Base.@propagate_inbounds function op_matrix_last_row(
     ::Operators.DivergenceF2C,
     ::Operators.Extrapolate,
     space,
-    loc,
     idx,
     hidx,
 )
@@ -907,7 +877,6 @@ op_matrix_row_type(
 Base.@propagate_inbounds function op_matrix_interior_row(
     ::Operators.CurlFiniteDifferenceOperator,
     space,
-    loc,
     idx,
     hidx,
 )
@@ -918,7 +887,6 @@ Base.@propagate_inbounds function op_matrix_first_row(
     ::Operators.CurlC2F,
     ::Operators.SetValue,
     space,
-    loc,
     idx,
     hidx,
 )
@@ -929,7 +897,6 @@ Base.@propagate_inbounds function op_matrix_last_row(
     ::Operators.CurlC2F,
     ::Operators.SetValue,
     space,
-    loc,
     idx,
     hidx,
 )

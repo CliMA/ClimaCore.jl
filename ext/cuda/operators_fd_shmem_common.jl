@@ -9,17 +9,13 @@ import ClimaCore.Utilities
 ##### Boundary helpers
 #####
 
-@inline function has_left_boundary(space, op)
-    lloc = Operators.LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
-    return Operators.has_boundary(op, lloc)
-end
-@inline function has_right_boundary(space, op)
-    rloc = Operators.RightBoundaryWindow{Spaces.right_boundary_name(space)}()
-    return Operators.has_boundary(op, rloc)
-end
+@inline has_left_boundary(space, op) =
+    Operators.has_boundary(op, Operators.left_boundary_window(space))
+@inline has_right_boundary(space, op) =
+    Operators.has_boundary(op, Operators.right_boundary_window(space))
 
-@inline on_boundary(space, op, loc, idx) =
-    Operators.has_boundary(op, loc) && on_boundary(idx, space)
+@inline on_boundary(idx, space, op) =
+    on_left_boundary(idx, space, op) || on_right_boundary(idx, space, op)
 
 @inline on_left_boundary(idx, space, op) =
     has_left_boundary(space, op) && on_left_boundary(idx, space)
@@ -92,8 +88,7 @@ end
     op,
     args...,
 )
-    lloc = Operators.LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
-    Operators.should_call_left_boundary(idx, space, lloc, op, args...) ||
+    Operators.should_call_left_boundary(idx, space, op, args...) ||
         in_left_boundary_window_range(idx, bc_bds)
 end
 
@@ -104,8 +99,7 @@ end
     op,
     args...,
 )
-    rloc = Operators.RightBoundaryWindow{Spaces.right_boundary_name(space)}()
-    Operators.should_call_right_boundary(idx, space, rloc, op, args...) ||
+    Operators.should_call_right_boundary(idx, space, op, args...) ||
         in_right_boundary_window_range(idx, bc_bds)
 end
 
@@ -146,8 +140,7 @@ end
     op,
     args...,
 )
-    lloc = Operators.LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
-    Operators.should_call_left_boundary(idx, space, lloc, op, args...) ||
+    Operators.should_call_left_boundary(idx, space, op, args...) ||
         in_left_boundary_window_range(idx, bc_bds)
 end
 
@@ -158,10 +151,9 @@ end
     op,
     args...,
 )
-    rloc = Operators.RightBoundaryWindow{Spaces.right_boundary_name(space)}()
     ᶜspace = Spaces.center_space(space)
     idx > Spaces.nlevels(ᶜspace) && return false # short-circuit if
-    Operators.should_call_right_boundary(idx, space, rloc, op, args...) ||
+    Operators.should_call_right_boundary(idx, space, op, args...) ||
         in_right_boundary_window_range(idx, bc_bds)
 end
 
@@ -172,7 +164,6 @@ end
 Base.@propagate_inbounds function getidx(
     parent_space,
     bc::StencilBroadcasted{CUDAWithShmemColumnStencilStyle},
-    loc::Interior,
     idx,
     hidx,
 )
@@ -181,30 +172,6 @@ Base.@propagate_inbounds function getidx(
         return fd_operator_evaluate(
             bc.op,
             bc.work,
-            loc,
-            space,
-            idx,
-            hidx,
-            bc.args...,
-        )
-    end
-    Operators.stencil_interior(bc.op, loc, space, idx, hidx, bc.args...)
-end
-
-
-Base.@propagate_inbounds function getidx(
-    parent_space,
-    bc::StencilBroadcasted{CUDAWithShmemColumnStencilStyle},
-    loc::Operators.LeftBoundaryWindow,
-    idx,
-    hidx,
-)
-    space = axes(bc)
-    if Operators.fd_shmem_is_supported(bc)
-        return fd_operator_evaluate(
-            bc.op,
-            bc.work,
-            loc,
             space,
             idx,
             hidx,
@@ -212,47 +179,19 @@ Base.@propagate_inbounds function getidx(
         )
     end
     op = bc.op
-    if Operators.should_call_left_boundary(idx, space, loc, bc.op, bc.args...)
+    if Operators.should_call_left_boundary(idx, space, bc.op, bc.args...)
         Operators.stencil_left_boundary(
             op,
-            Operators.get_boundary(op, loc),
-            loc,
+            Operators.get_boundary(op, Operators.left_boundary_window(space)),
             space,
             idx,
             hidx,
             bc.args...,
         )
-    else
-        # fallback to interior stencil
-        Operators.stencil_interior(op, loc, space, idx, hidx, bc.args...)
-    end
-end
-
-Base.@propagate_inbounds function getidx(
-    parent_space,
-    bc::StencilBroadcasted{CUDAWithShmemColumnStencilStyle},
-    loc::Operators.RightBoundaryWindow,
-    idx,
-    hidx,
-)
-    space = axes(bc)
-    if Operators.fd_shmem_is_supported(bc)
-        return fd_operator_evaluate(
-            bc.op,
-            bc.work,
-            loc,
-            space,
-            idx,
-            hidx,
-            bc.args...,
-        )
-    end
-    op = bc.op
-    if Operators.should_call_right_boundary(idx, space, loc, bc.op, bc.args...)
+    elseif Operators.should_call_right_boundary(idx, space, bc.op, bc.args...)
         Operators.stencil_right_boundary(
             op,
-            Operators.get_boundary(op, loc),
-            loc,
+            Operators.get_boundary(op, Operators.right_boundary_window(space)),
             space,
             idx,
             hidx,
@@ -260,7 +199,7 @@ Base.@propagate_inbounds function getidx(
         )
     else
         # fallback to interior stencil
-        Operators.stencil_interior(op, loc, space, idx, hidx, bc.args...)
+        Operators.stencil_interior(op, space, idx, hidx, bc.args...)
     end
 end
 
@@ -375,9 +314,6 @@ Base.@propagate_inbounds function fd_resolve_shmem!(
 )
     (li, lw, rw, ri) = bds
     space = axes(sbc)
-
-    ᶜspace = Spaces.center_space(space)
-    ᶠspace = Spaces.face_space(space)
     arg_space = get_arg_space(sbc, sbc.args)
     ᶜidx = get_cent_idx(idx)
     ᶠidx = get_face_idx(idx)
@@ -386,13 +322,6 @@ Base.@propagate_inbounds function fd_resolve_shmem!(
 
     # After recursion, check if shmem is supported for this operator
     Operators.fd_shmem_is_supported(sbc) || return nothing
-
-    (; op) = sbc
-    lloc = Operators.LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
-    rloc = Operators.RightBoundaryWindow{Spaces.right_boundary_name(space)}()
-    iloc = Operators.Interior()
-
-    IP = Topologies.isperiodic(Spaces.vertical_topology(space))
 
     # There are `Nf` threads, where `Nf` is the number of face levels. So,
     # each thread is responsible for filling shared memory at its cell center
@@ -403,52 +332,18 @@ Base.@propagate_inbounds function fd_resolve_shmem!(
     # (the space of all broadcasted arguments must all match, so using the first is valid).
 
     bc_bds = Operators.window_bounds(space, sbc)
-    (bc_li, bc_lw, bc_rw, bc_ri) = bc_bds
     ᵃidx = arg_space isa Operators.AllFaceFiniteDifferenceSpace ? ᶠidx : ᶜidx
 
-    if in_interior(ᵃidx, arg_space, bc_bds, sbc.op, sbc.args...)
-        fd_operator_fill_shmem!(
-            sbc.op,
-            sbc.work,
-            iloc,
-            bc_bds,
-            arg_space,
-            space,
-            ᵃidx,
-            hidx,
-            sbc.args...,
-        )
-    elseif in_left_boundary_window(ᵃidx, arg_space, bc_bds, sbc.op, sbc.args...)
-        fd_operator_fill_shmem!(
-            sbc.op,
-            sbc.work,
-            lloc,
-            bc_bds,
-            arg_space,
-            space,
-            ᵃidx,
-            hidx,
-            sbc.args...,
-        )
-    elseif in_right_boundary_window(
-        ᵃidx,
-        arg_space,
-        bc_bds,
+    fd_operator_fill_shmem!(
         sbc.op,
+        sbc.work,
+        bc_bds,
+        arg_space,
+        space,
+        ᵃidx,
+        hidx,
         sbc.args...,
     )
-        fd_operator_fill_shmem!(
-            sbc.op,
-            sbc.work,
-            rloc,
-            bc_bds,
-            arg_space,
-            space,
-            ᵃidx,
-            hidx,
-            sbc.args...,
-        )
-    end
     CUDA.sync_threads()
     return nothing
 end

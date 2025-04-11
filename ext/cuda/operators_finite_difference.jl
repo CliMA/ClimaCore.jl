@@ -127,17 +127,7 @@ function copyto_stencil_kernel!(
             (i, j, _, v, h) = I.I
             hidx = (i, j, h)
             idx = v - 1 + li
-            if idx < lw
-                lwindow = LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
-                val = Operators.getidx(space, bc, lwindow, idx, hidx)
-            elseif idx > rw
-                rwindow =
-                    RightBoundaryWindow{Spaces.right_boundary_name(space)}()
-                val = Operators.getidx(space, bc, rwindow, idx, hidx)
-            else
-                iwindow = Interior()
-                val = Operators.getidx(space, bc, iwindow, idx, hidx)
-            end
+            val = Operators.getidx(space, bc, idx, hidx)
             setidx!(space, out, idx, hidx, val)
         end
     end
@@ -179,19 +169,7 @@ function copyto_stencil_kernel_shmem!(
             end
             if isactive
                 # Call getidx overloaded in operators_fd_shmem_common.jl
-                if li <= idx <= (lw - 1)
-                    lwindow =
-                        LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
-                    val = Operators.getidx(space, bc_shmem, lwindow, idx, hidx)
-                elseif (rw + 1) <= idx <= ri
-                    rwindow =
-                        RightBoundaryWindow{Spaces.right_boundary_name(space)}()
-                    val = Operators.getidx(space, bc_shmem, rwindow, idx, hidx)
-                else
-                    # @assert lw <= idx <= rw
-                    iwindow = Interior()
-                    val = Operators.getidx(space, bc_shmem, iwindow, idx, hidx)
-                end
+                val = Operators.getidx(space, bc_shmem, idx, hidx)
                 setidx!(space, out, idx, hidx, val)
             end
         end

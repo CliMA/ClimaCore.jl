@@ -220,8 +220,8 @@ end
 
 set_result!(result, bc) = (materialize!(result, bc); nothing)
 
-function call_getidx(space, bc, loc, idx, hidx)
-    @inbounds Operators.getidx(space, bc, loc, idx, hidx)
+function call_getidx(space, bc, idx, hidx)
+    @inbounds Operators.getidx(space, bc, idx, hidx)
     return nothing
 end
 
@@ -244,39 +244,31 @@ trunc_time(s::String) = count(',', s) > 1 ? join(split(s, ",")[1:2], ",") : s
 
 function get_getidx_args(bc)
     space = axes(bc)
+    # TODO: change this to idx_l, idx_i, idx_r
+    # may need to define a helper
     idx = if space.staggering isa Spaces.CellCenter
         10
     else
         Utilities.PlusHalf(10)
     end
     hidx = (1, 1, 1)
-
-    loc_i = Operators.Interior()
-    loc_l = Operators.LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
-    loc_r = Operators.RightBoundaryWindow{Spaces.left_boundary_name(space)}()
-    return (; space, bc, loc_l, loc_i, loc_r, idx, hidx)
+    return (; space, bc, idx, hidx)
 end
 
 import JET
 function perf_getidx(bc; broken = false)
-    (; space, bc, loc_l, loc_i, loc_r, idx, hidx) = get_getidx_args(bc)
-    call_getidx(space, bc, loc_i, idx, hidx)
-    call_getidx(space, bc, loc_l, idx, hidx)
-    call_getidx(space, bc, loc_r, idx, hidx)
+    (; space, bc, idx, hidx) = get_getidx_args(bc)
+    call_getidx(space, bc, idx, hidx)
+    call_getidx(space, bc, idx, hidx)
+    call_getidx(space, bc, idx, hidx)
 
-    bei = time_and_units_str(
-        BT.@belapsed call_getidx($space, $bc, $loc_i, $idx, $hidx)
-    )
-    bel = time_and_units_str(
-        BT.@belapsed call_getidx($space, $bc, $loc_l, $idx, $hidx)
-    )
-    ber = time_and_units_str(
-        BT.@belapsed call_getidx($space, $bc, $loc_r, $idx, $hidx)
-    )
+    bei = time_and_units_str(BT.@belapsed call_getidx($space, $bc, $idx, $hidx))
+    bel = time_and_units_str(BT.@belapsed call_getidx($space, $bc, $idx, $hidx))
+    ber = time_and_units_str(BT.@belapsed call_getidx($space, $bc, $idx, $hidx))
 
-    JET.@test_opt call_getidx(space, bc, loc_i, idx, hidx)
-    JET.@test_opt call_getidx(space, bc, loc_l, idx, hidx)
-    JET.@test_opt call_getidx(space, bc, loc_r, idx, hidx)
+    JET.@test_opt call_getidx(space, bc, idx, hidx)
+    JET.@test_opt call_getidx(space, bc, idx, hidx)
+    JET.@test_opt call_getidx(space, bc, idx, hidx)
     @info "getidx times max(interior,left,right) = ($bei,$bel,$ber)"
     return nothing
 end

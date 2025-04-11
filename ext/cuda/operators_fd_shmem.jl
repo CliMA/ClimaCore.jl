@@ -20,7 +20,6 @@ end
 Base.@propagate_inbounds function fd_operator_fill_shmem!(
     op::Operators.DivergenceF2C,
     (Ju³, lJu³, rJu³),
-    loc,
     bc_bds,
     arg_space,
     space,
@@ -31,12 +30,24 @@ Base.@propagate_inbounds function fd_operator_fill_shmem!(
     @inbounds begin
         vt = threadIdx().x
         lg = Geometry.LocalGeometry(space, idx, hidx)
-        if !on_boundary(space, op, loc, idx)
-            u³ = Operators.getidx(space, arg, loc, idx, hidx)
+        if !on_boundary(idx, space, op)
+            u³ = Operators.getidx(space, arg, idx, hidx)
             Ju³[vt] = Geometry.Jcontravariant3(u³, lg)
-        else
-            bc = Operators.get_boundary(op, loc)
-            ub = Operators.getidx(space, bc.val, loc, nothing, hidx)
+        elseif on_left_boundary(idx, space, op)
+            bloc = Operators.left_boundary_window(space)
+            bc = Operators.get_boundary(op, bloc)
+            ub = Operators.getidx(space, bc.val, nothing, hidx)
+            bJu³ = on_left_boundary(idx, space) ? lJu³ : rJu³
+            if bc isa Operators.SetValue
+                bJu³[1] = Geometry.Jcontravariant3(ub, lg)
+            elseif bc isa Operators.SetDivergence
+                bJu³[1] = ub
+            elseif bc isa Operators.Extrapolate # no shmem needed
+            end
+        elseif on_right_boundary(idx, space, op)
+            bloc = Operators.right_boundary_window(space)
+            bc = Operators.get_boundary(op, bloc)
+            ub = Operators.getidx(space, bc.val, nothing, hidx)
             bJu³ = on_left_boundary(idx, space) ? lJu³ : rJu³
             if bc isa Operators.SetValue
                 bJu³[1] = Geometry.Jcontravariant3(ub, lg)
@@ -52,7 +63,6 @@ end
 Base.@propagate_inbounds function fd_operator_evaluate(
     op::Operators.DivergenceF2C,
     (Ju³, lJu³, rJu³),
-    loc,
     space,
     idx::Integer,
     hidx,
@@ -61,12 +71,16 @@ Base.@propagate_inbounds function fd_operator_evaluate(
     @inbounds begin
         vt = threadIdx().x
         lg = Geometry.LocalGeometry(space, idx, hidx)
-        if !on_boundary(space, op, loc, idx)
+        if !on_boundary(idx, space, op)
             Ju³₋ = Ju³[vt]   # corresponds to idx - half
             Ju³₊ = Ju³[vt + 1] # corresponds to idx + half
             return (Ju³₊ ⊟ Ju³₋) ⊠ lg.invJ
         else
-            bc = Operators.get_boundary(op, loc)
+            bloc =
+                on_left_boundary(idx, space, op) ?
+                Operators.left_boundary_window(space) :
+                Operators.right_boundary_window(space)
+            bc = Operators.get_boundary(op, bloc)
             @assert bc isa Operators.SetValue || bc isa Operators.SetDivergence
             if on_left_boundary(idx, space)
                 if bc isa Operators.SetValue
@@ -109,7 +123,6 @@ end
 Base.@propagate_inbounds function fd_operator_fill_shmem!(
     op::Operators.GradientC2F,
     (u, lb, rb),
-    loc, # can be any location
     bc_bds,
     arg_space,
     space,
@@ -121,23 +134,20 @@ Base.@propagate_inbounds function fd_operator_fill_shmem!(
         vt = threadIdx().x
         cov3 = Geometry.Covariant3Vector(1)
         if in_domain(idx, arg_space)
-            u[vt] = cov3 ⊗ Operators.getidx(space, arg, loc, idx, hidx)
+            u[vt] = cov3 ⊗ Operators.getidx(space, arg, idx, hidx)
         else # idx can be Spaces.nlevels(ᶜspace)+1 because threads must extend to faces
             ᶜspace = Spaces.center_space(arg_space)
             @assert idx == Spaces.nlevels(ᶜspace) + 1
         end
         if on_any_boundary(idx, space, op)
-            lloc =
-                Operators.LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
-            rloc = Operators.RightBoundaryWindow{
-                Spaces.right_boundary_name(space),
-            }()
+            lloc = Operators.left_boundary_window(space)
+            rloc = Operators.right_boundary_window(space)
             bloc = on_left_boundary(idx, space, op) ? lloc : rloc
             @assert bloc isa typeof(lloc) && on_left_boundary(idx, space, op) ||
                     bloc isa typeof(rloc) && on_right_boundary(idx, space, op)
             bc = Operators.get_boundary(op, bloc)
             @assert bc isa Operators.SetValue || bc isa Operators.SetGradient
-            ub = Operators.getidx(space, bc.val, bloc, nothing, hidx)
+            ub = Operators.getidx(space, bc.val, nothing, hidx)
             bu = on_left_boundary(idx, space) ? lb : rb
             if bc isa Operators.SetValue
                 bu[1] = cov3 ⊗ ub
@@ -154,7 +164,6 @@ end
 Base.@propagate_inbounds function fd_operator_evaluate(
     op::Operators.GradientC2F,
     (u, lb, rb),
-    loc,
     space,
     idx::PlusHalf,
     hidx,
@@ -163,12 +172,16 @@ Base.@propagate_inbounds function fd_operator_evaluate(
     @inbounds begin
         vt = threadIdx().x
         lg = Geometry.LocalGeometry(space, idx, hidx)
-        if !on_boundary(space, op, loc, idx)
+        if !on_boundary(idx, space, op)
             u₋ = u[vt - 1]   # corresponds to idx - half
             u₊ = u[vt] # corresponds to idx + half
             return u₊ ⊟ u₋
         else
-            bc = Operators.get_boundary(op, loc)
+            bloc =
+                on_left_boundary(idx, space, op) ?
+                Operators.left_boundary_window(space) :
+                Operators.right_boundary_window(space)
+            bc = Operators.get_boundary(op, bloc)
             @assert bc isa Operators.SetValue
             if on_left_boundary(idx, space)
                 if bc isa Operators.SetValue

@@ -9,17 +9,17 @@ using Revise; include(joinpath("test", "MatrixFields", "matrix_field_broadcastin
 ```
 import Profile, ProfileCanvas
 
-function do_work(space, bc, loc, idx, hidx, n)
+function do_work(space, bc, idx, hidx, n)
     for i in 1:n
-        call_getidx(space, bc, loc, idx, hidx)
+        call_getidx(space, bc, idx, hidx)
     end
     return nothing
 end
 
-(; space, bc, loc_l, loc_i, loc_r, idx, hidx) = get_getidx_args(bc);
-do_work(space, bc, loc_i, idx, hidx, 1)
+(; space, bc, idx, hidx) = get_getidx_args(bc);
+do_work(space, bc, idx, hidx, 1)
 Profile.clear()
-prof = Profile.@profile do_work(space, bc, loc_i, idx, hidx, 10^6)
+prof = Profile.@profile do_work(space, bc, idx, hidx, 10^6)
 results = Profile.fetch()
 Profile.clear()
 ProfileCanvas.html_file("flame.html", results)
