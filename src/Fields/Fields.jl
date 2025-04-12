@@ -23,6 +23,7 @@ import ..Grids: ColumnIndex, local_geometry_type
 import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace, cuda_synchronize
 import ..Spaces: nlevels, ncolumns
 import ..Spaces: get_mask, set_mask!
+import ..DataLayouts: AbstractMask
 import ..Geometry: Geometry, Cartesian12Vector
 import ..Utilities: PlusHalf, half
 
@@ -285,7 +286,7 @@ Base.deepcopy_internal(field::Field, stackdict::IdDict) =
 function Base.copyto!(
     dest::Field{V, M},
     src::Field{V, M},
-    mask = DataLayouts.NoMask,
+    mask = DataLayouts.NoMask(),
 ) where {V, M}
     @assert axes(dest) == axes(src)
     copyto!(field_values(dest), field_values(src), mask)
@@ -293,12 +294,17 @@ function Base.copyto!(
 end
 
 """
-    fill!(field::Field, value)
+    fill!(field::Field, value, mask = get_mask(axes(field)))
 
-Fill `field` with `value`.
+Fill `field` with `value`. The mask is extracted from the field's space,
+and `fill!` is only applied where the `mask` is true.
 """
-function Base.fill!(field::Field, value)
-    fill!(field_values(field), value)
+function Base.fill!(
+    field::Field,
+    value,
+    mask::AbstractMask = get_mask(axes(field)),
+)
+    fill!(field_values(field), value, mask)
     return field
 end
 """
