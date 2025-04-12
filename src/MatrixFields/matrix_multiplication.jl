@@ -350,7 +350,6 @@ boundary_modified_ud(::BottomRightMatrixCorner, ud, column_space, i) =
 # evaluate, but this is less significant than the decrease in compilation time.
 # matrix-matrix multiplication
 function multiply_matrix_at_index(
-    loc,
     space,
     idx,
     hidx,
@@ -375,7 +374,7 @@ function multiply_matrix_at_index(
 
     # Precompute the row that is needed from matrix1 so that it does not get
     # recomputed multiple times.
-    matrix1_row = @inbounds Operators.getidx(space, matrix1, loc, idx, hidx)
+    matrix1_row = @inbounds Operators.getidx(space, matrix1, idx, hidx)
 
     matrix2 = arg
     column_space2 = column_axes(matrix2, column_space1)
@@ -396,7 +395,7 @@ function multiply_matrix_at_index(
         # TODO: Use @propagate_inbounds_meta instead of @inline_meta.
         Base.@_inline_meta
         if isnothing(bc) || boundary_modified_ld1 <= d <= boundary_modified_ud1
-            @inbounds Operators.getidx(space, matrix2, loc, idx + d, hidx)
+            @inbounds Operators.getidx(space, matrix2, idx + d, hidx)
         else
             zero(eltype(matrix2)) # This row is outside the matrix.
         end
@@ -439,7 +438,6 @@ function multiply_matrix_at_index(
 end
 # matrix-vector multiplication
 function multiply_matrix_at_index(
-    loc,
     space,
     idx,
     hidx,
@@ -464,13 +462,13 @@ function multiply_matrix_at_index(
 
     # Precompute the row that is needed from matrix1 so that it does not get
     # recomputed multiple times.
-    matrix1_row = @inbounds Operators.getidx(space, matrix1, loc, idx, hidx)
+    matrix1_row = @inbounds Operators.getidx(space, matrix1, idx, hidx)
 
     vector = arg
     prod_value = rzero(prod_type)
     @inbounds for d in boundary_modified_ld1:boundary_modified_ud1
         value1 = matrix1_row[d]
-        value2 = Operators.getidx(space, vector, loc, idx + d, hidx)
+        value2 = Operators.getidx(space, vector, idx + d, hidx)
         value2_lg = Geometry.LocalGeometry(space, idx + d, hidx)
         prod_value =
             radd(prod_value, rmul_with_projection(value1, value2, value2_lg))
@@ -480,14 +478,12 @@ end
 
 Base.@propagate_inbounds Operators.stencil_interior(
     ::MultiplyColumnwiseBandMatrixField,
-    loc,
     space,
     idx,
     hidx,
     matrix1,
     arg,
 ) = multiply_matrix_at_index(
-    loc,
     space,
     idx,
     hidx,
@@ -500,42 +496,22 @@ Base.@propagate_inbounds Operators.stencil_interior(
 Base.@propagate_inbounds Operators.stencil_left_boundary(
     ::MultiplyColumnwiseBandMatrixField,
     bc::TopLeftMatrixCorner,
-    loc,
     space,
     idx,
     hidx,
     matrix1,
     arg,
-) = multiply_matrix_at_index(
-    loc,
-    space,
-    idx,
-    hidx,
-    matrix1,
-    arg,
-    bc,
-    eltype(arg),
-)
+) = multiply_matrix_at_index(space, idx, hidx, matrix1, arg, bc, eltype(arg))
 
 Base.@propagate_inbounds Operators.stencil_right_boundary(
     ::MultiplyColumnwiseBandMatrixField,
     bc::BottomRightMatrixCorner,
-    loc,
     space,
     idx,
     hidx,
     matrix1,
     arg,
-) = multiply_matrix_at_index(
-    loc,
-    space,
-    idx,
-    hidx,
-    matrix1,
-    arg,
-    bc,
-    eltype(arg),
-)
+) = multiply_matrix_at_index(space, idx, hidx, matrix1, arg, bc, eltype(arg))
 
 # For matrix field broadcast expressions involving 4 or more matrices, we
 # sometimes hit a recursion limit and de-optimize.
