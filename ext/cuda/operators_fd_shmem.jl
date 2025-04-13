@@ -2,6 +2,7 @@ import ClimaCore: DataLayouts, Spaces, Geometry, RecursiveApply, DataLayouts
 import CUDA
 import ClimaCore.Operators: return_eltype, get_local_geometry
 import ClimaCore.Geometry: ⊗
+import ClimaCore.RecursiveApply: ⊟, ⊞
 
 Base.@propagate_inbounds function fd_operator_shmem(
     space,
@@ -131,13 +132,11 @@ Base.@propagate_inbounds function fd_operator_fill_shmem!(
     arg,
 )
     @inbounds begin
+        is_out_of_bounds(idx, space) && return nothing
         vt = threadIdx().x
         cov3 = Geometry.Covariant3Vector(1)
         if in_domain(idx, arg_space)
             u[vt] = cov3 ⊗ Operators.getidx(space, arg, idx, hidx)
-        else # idx can be Spaces.nlevels(ᶜspace)+1 because threads must extend to faces
-            ᶜspace = Spaces.center_space(arg_space)
-            @assert idx == Spaces.nlevels(ᶜspace) + 1
         end
         if on_any_boundary(idx, space, op)
             lloc = Operators.left_boundary_window(space)
@@ -195,6 +194,117 @@ Base.@propagate_inbounds function fd_operator_evaluate(
                     u₋ = 2 * u[vt - 1]   # corresponds to idx - half
                     u₊ = 2 * rb[1] # corresponds to idx + half
                     return u₊ ⊟ u₋
+                end
+            end
+        end
+    end
+end
+
+Base.@propagate_inbounds function fd_operator_shmem(
+    space,
+    ::Val{Nvt},
+    op::Operators.InterpolateC2F,
+    args...,
+) where {Nvt}
+    # allocate temp output
+    RT = return_eltype(op, args...)
+    u = CUDA.CuStaticSharedArray(RT, (Nvt,)) # cell centers
+    lb = CUDA.CuStaticSharedArray(RT, (1,)) # left boundary
+    rb = CUDA.CuStaticSharedArray(RT, (1,)) # right boundary
+    return (u, lb, rb)
+end
+
+Base.@propagate_inbounds function fd_operator_fill_shmem!(
+    op::Operators.InterpolateC2F,
+    (u, lb, rb),
+    bc_bds,
+    arg_space,
+    space,
+    idx::Integer,
+    hidx,
+    arg,
+)
+    @inbounds begin
+        is_out_of_bounds(idx, space) && return nothing
+        ᶜidx = get_cent_idx(idx)
+        if in_domain(idx, arg_space)
+            u[idx] = Operators.getidx(space, arg, idx, hidx)
+        else
+            lloc = Operators.left_boundary_window(space)
+            rloc = Operators.right_boundary_window(space)
+            bloc = on_left_boundary(idx, space, op) ? lloc : rloc
+            @assert bloc isa typeof(lloc) && on_left_boundary(idx, space, op) ||
+                    bloc isa typeof(rloc) && on_right_boundary(idx, space, op)
+            bc = Operators.get_boundary(op, bloc)
+            @assert bc isa Operators.SetValue ||
+                    bc isa Operators.SetGradient ||
+                    bc isa Operators.Extrapolate ||
+                    bc isa Operators.NullBoundaryCondition
+            if bc isa Operators.NullBoundaryCondition ||
+               bc isa Operators.Extrapolate
+                u[idx] = Operators.getidx(space, arg, idx, hidx)
+                return nothing
+            end
+            bu = on_left_boundary(idx, space) ? lb : rb
+            ub = Operators.getidx(space, bc.val, nothing, hidx)
+            if bc isa Operators.SetValue
+                bu[1] = ub
+            elseif bc isa Operators.SetGradient
+                lg = Geometry.LocalGeometry(space, idx, hidx)
+                bu[1] = Geometry.covariant3(ub, lg)
+            end
+        end
+    end
+    return nothing
+end
+
+Base.@propagate_inbounds function fd_operator_evaluate(
+    op::Operators.InterpolateC2F,
+    (u, lb, rb),
+    space,
+    idx::PlusHalf,
+    hidx,
+    args...,
+)
+    @inbounds begin
+        vt = threadIdx().x
+        lg = Geometry.LocalGeometry(space, idx, hidx)
+        ᶜidx = get_cent_idx(idx)
+        if !on_boundary(idx, space, op)
+            u₋ = u[ᶜidx - 1]   # corresponds to idx - half
+            u₊ = u[ᶜidx] # corresponds to idx + half
+            return RecursiveApply.rdiv(u₊ ⊞ u₋, 2)
+        else
+            bloc =
+                on_left_boundary(idx, space, op) ?
+                Operators.left_boundary_window(space) :
+                Operators.right_boundary_window(space)
+            bc = Operators.get_boundary(op, bloc)
+            @assert bc isa Operators.SetValue ||
+                    bc isa Operators.SetGradient ||
+                    bc isa Operators.Extrapolate
+            if on_left_boundary(idx, space)
+                if bc isa Operators.SetValue
+                    return lb[1]
+                elseif bc isa Operators.SetGradient
+                    u₋ = lb[1]   # corresponds to idx - half
+                    u₊ = u[ᶜidx] # corresponds to idx + half
+                    return u₊ ⊟ RecursiveApply.rdiv(u₋, 2)
+                else
+                    @assert bc isa Operators.Extrapolate
+                    return u[ᶜidx]
+                end
+            else
+                @assert on_right_boundary(idx, space)
+                if bc isa Operators.SetValue
+                    return rb[1]
+                elseif bc isa Operators.SetGradient
+                    u₋ = u[ᶜidx - 1] # corresponds to idx - half
+                    u₊ = rb[1]   # corresponds to idx + half
+                    return u₋ ⊞ RecursiveApply.rdiv(u₊, 2)
+                else
+                    @assert bc isa Operators.Extrapolate
+                    return u[ᶜidx - 1]
                 end
             end
         end
