@@ -4,6 +4,9 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- Fixed missing method for `Topologies.mesh(Topology2D)`
+   [2288](https://github.com/CliMA/ClimaCore.jl/pull/2288).
+
 v0.14.31
 -------
 
