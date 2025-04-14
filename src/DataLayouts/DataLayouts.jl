@@ -2352,4 +2352,33 @@ function IJHMask(is_active::Union{IJFH, IJHF})
     )
 end
 
+"""
+    full_bitmask(mask::IJHMask, data::AbstractData)
+
+Returns an array similar to `parent(data)`, containing
+bools indicating when the `mask`'s `is_active == true`.
+
+!!! warn
+
+    This function provides users a work-around to compute mask-aware reductions,
+    and should be deprecated in favor of providing native masked-reduction
+    support. Therefore, this function should be used sparingly.
+
+    This feature is extensible, but not performant in that it allocates
+    and, on the gpu, will launch many kernels.
+"""
+function full_bitmask end
+
+full_bitmask(mask::AbstractMask, data::AbstractData; complement::Bool = false) =
+    full_bitmask(mask, nlevels(data), singleton(data); complement)
+
+function full_bitmask(mask::IJHMask, Nv, s::VIJFHSingleton; complement::Bool)
+    _arr = parent(mask.is_active)
+    arr = complement ? .!_arr : _arr
+    return repeat(reshape(arr, 1, size(arr)...), Nv)
+end
+
+full_bitmask(mask::AbstractMask, data::IJFH; complement::Bool = false) =
+    complement ? .!parent(mask.is_active) : parent(mask.is_active)
+
 end # module
