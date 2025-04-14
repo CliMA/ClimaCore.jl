@@ -1,5 +1,5 @@
 #=
-julia --project
+julia --project=.buildkite
 using Revise; include(joinpath("test", "Spaces", "unit_spaces.jl"))
 =#
 using Test
@@ -70,8 +70,9 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
 
     f = Fields.Field(FT, hspace)
     fill!(parent(f), 0)
-    @. f = 1 # tests fill!
+    fill!(f, 1)
     @test count(iszero, parent(f)) == 2
+    @test count(x -> x == 1, parent(f)) == 2
     ᶜx = Fields.coordinate_field(hspace).x
     @. f = 1 + ᶜx * 0 # tests copyto!
     @test count(iszero, parent(f)) == 2
@@ -109,7 +110,7 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     @test count(parent(mask.is_active)) == 4640
     @test length(parent(mask.is_active)) == 9600
     ᶜf = zeros(ᶜspace)
-    @. ᶜf = 1 # tests fill!
+    fill!(ᶜf, 1)
     @test count(x -> x == 1, parent(ᶜf)) == 4640 * Spaces.nlevels(axes(ᶜf))
     @test length(parent(ᶜf)) == 9600 * Spaces.nlevels(axes(ᶜf))
     ᶜz = Fields.coordinate_field(ᶜspace).z
