@@ -308,6 +308,19 @@ function _Remapper(
     ArrayType = ClimaComms.array_type(space)
     horizontal_topology = Spaces.topology(space)
     horizontal_mesh = horizontal_topology.mesh
+    quad = Spaces.quadrature_style(space)
+
+    space_has_mask = !(Spaces.get_mask(space) isa DataLayouts.NoMask)
+    element_has_more_than_one_node = Quadratures.degrees_of_freedom(quad) > 1
+
+    # Spectral remapping with a mask makes sense only if there is only one node
+    # in the element (the code will go through, but the results will be
+    # incorrect)
+    if space_has_mask && element_has_more_than_one_node
+        error(
+            "Remapping does not support masks, unless each element contains exactly one nodal point",
+        )
+    end
 
     is_1d = typeof(horizontal_topology) <: Topologies.IntervalTopology
 
@@ -339,7 +352,6 @@ function _Remapper(
     ξs_split = Tuple([ξ[i] for ξ in ξs_combined] for i in 1:num_hdims)
 
     # Compute the interpolation matrices
-    quad = Spaces.quadrature_style(space)
     quad_points, _ = Quadratures.quadrature_points(FT, quad)
     Nq = Quadratures.degrees_of_freedom(quad)
 
