@@ -43,6 +43,11 @@ import ClimaCore.Utilities
     (has_left_boundary(space, op) && on_left_boundary(idx, space)) ||
     has_right_boundary(space, op) && on_right_boundary(idx, space)
 
+@inline function is_out_of_bounds(idx::Integer, space)
+    ᶜspace = Spaces.center_space(space)
+    return idx == Spaces.nlevels(ᶜspace) + 1
+end
+
 #####
 ##### range window helpers (faces)
 #####
@@ -348,6 +353,15 @@ Base.@propagate_inbounds function fd_resolve_shmem!(
     return nothing
 end
 
+Base.@propagate_inbounds function fd_resolve_shmem!(
+    sbc::StencilBroadcasted,
+    idx, # top-level index
+    hidx,
+    bds,
+)
+    _fd_resolve_shmem!(idx, hidx, bds, sbc.args...)
+end
+
 Base.@propagate_inbounds _fd_resolve_shmem!(idx, hidx, bds) = nothing
 Base.@propagate_inbounds function _fd_resolve_shmem!(
     idx,
@@ -360,12 +374,8 @@ Base.@propagate_inbounds function _fd_resolve_shmem!(
     _fd_resolve_shmem!(idx, hidx, bds, xargs...)
 end
 
-Base.@propagate_inbounds fd_resolve_shmem!(
-    bc::Broadcasted{CUDAWithShmemColumnStencilStyle},
-    idx,
-    hidx,
-    bds,
-) = _fd_resolve_shmem!(idx, hidx, bds, bc.args...)
+Base.@propagate_inbounds fd_resolve_shmem!(bc::Broadcasted, idx, hidx, bds) =
+    _fd_resolve_shmem!(idx, hidx, bds, bc.args...)
 @inline fd_resolve_shmem!(obj, idx, hidx, bds) = nothing
 
 if hasfield(Method, :recursion_relation)

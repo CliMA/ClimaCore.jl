@@ -162,7 +162,7 @@ end
     bcs::NamedTuple,
 ) =
     all(values(bcs)) do bc
-        all(supported_bc -> bc isa supported_bc, (Operators.SetValue,))
+        any(supported_bc -> bc isa supported_bc, (Operators.SetValue,))
     end
 
 ##### GradientC2F
@@ -177,5 +177,23 @@ end
     bcs::NamedTuple,
 ) =
     all(values(bcs)) do bc
-        all(supported_bc -> bc isa supported_bc, (Operators.SetValue,))
+        any(supported_bc -> bc isa supported_bc, (Operators.SetValue,))
+    end
+
+##### InterpolateC2F
+@inline Operators.fd_shmem_is_supported(op::Operators.InterpolateC2F) =
+    Operators.fd_shmem_is_supported(op, op.bcs)
+@inline Operators.fd_shmem_is_supported(
+    op::Operators.InterpolateC2F,
+    ::@NamedTuple{},
+) = true
+@inline Operators.fd_shmem_is_supported(
+    op::Operators.InterpolateC2F,
+    bcs::NamedTuple,
+) =
+    all(values(bcs)) do bc
+        any(
+            supported_bc -> bc isa supported_bc,
+            (Operators.SetValue, Operators.SetGradient, Operators.Extrapolate),
+        )
     end

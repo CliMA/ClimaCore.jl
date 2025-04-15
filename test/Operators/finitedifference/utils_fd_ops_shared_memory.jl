@@ -87,8 +87,8 @@ end
 function kernels!(fields)
     (; f, ρ, ϕ) = fields
     (; ᶜout1, ᶜout2, ᶜout3, ᶜout4, ᶜout5, ᶜout6, ᶜout7, ᶜout8, ᶜout9) = fields
-    (; ᶜout10, ᶜout11, ᶜout12, ᶜout13) = fields
-    (; ᶠout1) = fields
+    (; ᶜout10, ᶜout11, ᶜout12, ᶜout13, ᶜout14) = fields
+    (; ᶠout1, ᶠout2) = fields
     (; ᶠout1_contra, ᶠout2_contra) = fields
     (; ᶠout3_cov, ᶠout4_cov, ᶠout5_cov) = fields
     (; w_cov) = fields
@@ -183,7 +183,9 @@ function kernels!(fields)
         top = Operators.Extrapolate(),
     )
     @. ᶠout4_cov = ᶠgrad(ᶜinterp(f))
+    @. ᶠout2 = ᶠinterp(ᶜinterp(f)) # exercises very nested operation
     @. ᶠout5_cov = ᶠgrad(ᶜinterp(ᶠinterp(ᶜinterp(f)))) # exercises very nested operation
+    @. ᶜout14 = ᶜinterp(ᶠinterp(ᶜinterp(f))) # exercises very nested operation
 
     @. ᶠout4_cov = ᶠgrad(ᶜinterp(f))
     ᶜdiv = Operators.DivergenceF2C(
@@ -226,7 +228,7 @@ function get_fields(space::Operators.AllFaceFiniteDifferenceSpace)
         i -> Fields.Field(Geometry.Contravariant3Vector{FT}, space),
         length(K_contra),
     )
-    K_scalar = (ntuple(i -> Symbol("ᶠout$(i)"), 1)...,)
+    K_scalar = (ntuple(i -> Symbol("ᶠout$(i)"), 3)...,)
     V_scalar = ntuple(i -> Fields.Field(FT, space), length(K_scalar))
     K_cov_out = (ntuple(i -> Symbol("ᶠout$(i)_cov"), 8)...,)
     V_cov_out = ntuple(
@@ -252,7 +254,7 @@ end
 
 function get_fields(space::Operators.AllCenterFiniteDifferenceSpace)
     FT = Spaces.undertype(space)
-    K = (ntuple(i -> Symbol("ᶜout$i"), 13)..., :ρ, :ϕ)
+    K = (ntuple(i -> Symbol("ᶜout$i"), 14)..., :ρ, :ϕ)
     V = ntuple(i -> Fields.zeros(space), length(K))
     nt = (;
         zip(K, V)...,
@@ -325,21 +327,22 @@ function compare_cpu_gpu(cpu, gpu; print_diff = true, C_best = 10)
     z = Fields.field_values(Fields.coordinate_field(space))
     C = count(x -> x <= max_allowed_err, absΔ)
     if !gpu_matches_cpu && print_diff
+        N = 3
         if z isa DataLayouts.VF
-            @show parent(cpu)[1:3]
-            @show parent(gpu)[1:3]
-            @show parent(cpu)[(end - 3):end]
-            @show parent(gpu)[(end - 3):end]
+            @show parent(cpu)[1:N]
+            @show parent(gpu)[1:N]
+            @show parent(cpu)[(end - N):end]
+            @show parent(gpu)[(end - N):end]
         elseif z isa DataLayouts.VIJFH
-            @show parent(cpu)[1:3, 1, 1, 1, end]
-            @show parent(gpu)[1:3, 1, 1, 1, end]
-            @show parent(cpu)[(end - 3):end, 1, 1, 1, end]
-            @show parent(gpu)[(end - 3):end, 1, 1, 1, end]
+            @show parent(cpu)[1:N, 1, 1, 1, end]
+            @show parent(gpu)[1:N, 1, 1, 1, end]
+            @show parent(cpu)[(end - N):end, 1, 1, 1, end]
+            @show parent(gpu)[(end - N):end, 1, 1, 1, end]
         elseif z isa DataLayouts.VIFH
-            @show parent(cpu)[1:3, 1, 1, end]
-            @show parent(gpu)[1:3, 1, 1, end]
-            @show parent(cpu)[(end - 3):end, 1, 1, end]
-            @show parent(gpu)[(end - 3):end, 1, 1, end]
+            @show parent(cpu)[1:N, 1, 1, end]
+            @show parent(gpu)[1:N, 1, 1, end]
+            @show parent(cpu)[(end - N):end, 1, 1, end]
+            @show parent(gpu)[(end - N):end, 1, 1, end]
         else
             error("Unsupported type: $(typeof(z))")
         end
