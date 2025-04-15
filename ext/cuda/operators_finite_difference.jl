@@ -56,7 +56,7 @@ function Base.copyto!(
        mask isa NoMask &&
        enough_shmem &&
        Operators.use_fd_shmem()
-        p = fd_stencil_partition(us, n_face_levels)
+        p = fd_shmem_stencil_partition(us, n_face_levels)
         args = (
             strip_space(out, space),
             strip_space(bc, space),

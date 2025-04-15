@@ -137,6 +137,16 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Unit: data cuda threadblocks"
+        key: unit_data_threadblock
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_cuda_threadblocks.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: data fill"
         key: gpu_unit_data_fill
         command:

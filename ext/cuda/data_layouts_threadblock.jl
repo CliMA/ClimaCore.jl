@@ -191,15 +191,21 @@ end
 @inline is_valid_index(::DataLayouts.DataF, I::CI5, us::UniversalSize) = true
 
 ##### Masked
-@inline function masked_partition(
+@inline masked_partition(
     us::DataLayouts.UniversalSize,
     n_max_threads::Integer,
     mask::IJHMask,
+) = masked_partition(us, n_max_threads, typeof(mask), mask.N[1])
+
+@inline function masked_partition(
+    us::DataLayouts.UniversalSize,
+    n_max_threads::Integer,
+    ::Type{<:IJHMask},
+    n_active_columns::Integer,
 )
     (Ni, _, _, Nv, Nh) = DataLayouts.universal_size(us)
     Nv_thread = min(Int(fld(n_max_threads, Ni)), Nv)
     Nv_blocks = cld(Nv, Nv_thread)
-    n_active_columns = mask.N[1]
     @assert Nv_thread ≤ n_max_threads "threads,n_max_threads=($Nv_thread,$n_max_threads)"
     return (; threads = (Nv_thread,), blocks = (n_active_columns, Nv_blocks))
 end
@@ -315,7 +321,7 @@ end
 ) = Operators.is_valid_index(space, ij, slabidx)
 
 ##### shmem fd kernel partition
-@inline function fd_stencil_partition(
+@inline function fd_shmem_stencil_partition(
     us::DataLayouts.UniversalSize,
     n_face_levels::Integer,
     n_max_threads::Integer = 256;
