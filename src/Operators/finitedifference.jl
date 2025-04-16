@@ -3794,9 +3794,7 @@ function vidx(space::AllCenterFiniteDifferenceSpace, idx)
     end
     return v
 end
-function vidx(space::AbstractSpace, idx)
-    return 1
-end
+vidx(@nospecialize(::AbstractSpace), @nospecialize(idx)) = 1
 
 Base.@propagate_inbounds function getidx(parent_space, bc::Fields.Field, idx)
     field_data = Fields.field_values(bc)
@@ -3819,13 +3817,13 @@ end
 
 
 # unwap boxed scalars
-@inline getidx(parent_space, scalar::Tuple{T}, idx, hidx) where {T} = scalar[1]
-@inline getidx(parent_space, scalar::Ref, idx, hidx) = scalar[]
-@inline getidx(parent_space, field::Fields.PointField, idx, hidx) = field[]
-@inline getidx(parent_space, field::Fields.PointField, idx) = field[]
+@inline getidx(@nospecialize(parent_space), scalar::Tuple{T}, @nospecialize(idx), hidx) where {T} = scalar[1]
+@inline getidx(@nospecialize(parent_space), scalar::Ref, @nospecialize(idx), hidx) = scalar[]
+@inline getidx(@nospecialize(parent_space), field::Fields.PointField, @nospecialize(idx), hidx) = field[]
+@inline getidx(@nospecialize(parent_space), field::Fields.PointField, @nospecialize(idx)) = field[]
 
 # recursive fallback for scalar, just return
-@inline getidx(parent_space, scalar, idx, hidx) = scalar
+@inline getidx(@nospecialize(parent_space), @nospecialize(scalar), @nospecialize(idx), hidx) = scalar
 
 # getidx error fallbacks
 @noinline inferred_getidx_error(idx_type::Type, space_type::Type) =
