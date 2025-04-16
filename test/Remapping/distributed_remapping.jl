@@ -16,7 +16,8 @@ import ClimaCore:
     Quadratures,
     Topologies,
     Remapping,
-    Hypsography
+    Hypsography,
+    CommonSpaces
 using ClimaComms
 ClimaComms.@import_required_backends
 const context = ClimaComms.context()
@@ -923,5 +924,20 @@ end
     @test all(
         Remapping.default_target_hcoords(horzspace) .≈
         [Geometry.XPoint(x) for x in range(-500.0, 500.0, length = 180)],
+    )
+end
+
+@testset "Mask" begin
+    @test_throws ErrorException Remapping.Remapper(
+        CommonSpaces.ExtrudedCubedSphereSpace(;
+            z_elem = 10,
+            z_min = 0,
+            z_max = 1,
+            radius = 10,
+            h_elem = 10,
+            n_quad_points = 4,
+            staggering = CommonSpaces.CellCenter(),
+            enable_mask = true,
+        ),
     )
 end
