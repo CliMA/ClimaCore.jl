@@ -169,6 +169,60 @@ operations of mask-aware and mask-unaware:
    This was a design implementation detail, users should not generally depend on the results where `mask == 0`, in case this is changed in the future. 
  - internal array operations (`fill!(parent(field), 0)`) mask-unaware.
 
+## Temporary work-arounds
+
+We can perform mask-aware reductions with the following work-around
+
+```julia
+using ClimaComms
+ClimaComms.@import_required_backends
+import ClimaCore: Spaces, Fields, DataLayouts, Geometry, Operators
+using ClimaCore.CommonSpaces
+using Test
+
+FT = Float64
+ᶜspace = ExtrudedCubedSphereSpace(FT;
+    z_elem = 10,
+    z_min = 0,
+    z_max = 1,
+    radius = 10,
+    h_elem = 10,
+    n_quad_points = 4,
+    staggering = CellCenter(),
+    enable_mask = true,
+)
+ᶠspace = Spaces.face_space(ᶜspace)
+ᶠcoords = Fields.coordinate_field(ᶠspace)
+
+# Set the mask
+Spaces.set_mask!(ᶜspace) do coords
+    coords.lat > 0.5
+end
+
+# get the mask
+mask = Spaces.get_mask(ᶜspace)
+
+# make a field of ones
+ᶜf = ones(ᶜspace) # ignores mask
+
+# bitmask spanning datalayout
+bm = DataLayouts.full_bitmask(mask, Fields.field_values(ᶜf));
+
+# mask-unaware integral (includes jacobian weighting)
+@show sum(ᶜf)
+
+# mask-unaware sum (excludes jacobian weighting)
+@show sum(Fields.field_values(ᶜf))
+
+# mask-aware sum (excludes jacobian)
+@show sum(parent(ᶜf)[bm])
+
+# level mask
+ᶜf_lev = Fields.level(ᶜf, 1);
+bm_lev = DataLayouts.full_bitmask(mask, Fields.field_values(ᶜf_lev));
+@show sum(parent(ᶜf_lev)[bm_lev])
+```
+
 ## Developer docs
 
 In order to support masks, we define their types in `DataLayouts`, since 
