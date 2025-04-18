@@ -75,6 +75,12 @@ function Base.copyto!(
     else
         bc′ = disable_shmem_style(bc)
         @assert !any_fd_shmem_style(bc′)
+        cart_inds = if mask isa NoMask
+            cartesian_indices(us)
+        else
+            cartesian_indicies_mask(us, mask)
+        end
+
         args = (
             strip_space(out, space),
             strip_space(bc′, space),
@@ -82,14 +88,15 @@ function Base.copyto!(
             bounds,
             us,
             mask,
+            cart_inds,
         )
 
         threads = threads_via_occupancy(copyto_stencil_kernel!, args)
         n_max_threads = min(threads, get_N(us))
         p = if mask isa NoMask
-            partition(out_fv, n_max_threads)
+            linear_partition(prod(size(out_fv)), n_max_threads)
         else
-            masked_partition(us, n_max_threads, mask)
+            masked_partition(mask, n_max_threads, us)
         end
 
         auto_launch!(
@@ -114,15 +121,17 @@ function copyto_stencil_kernel!(
     bds,
     us,
     mask,
+    cart_inds,
 )
     @inbounds begin
         out_fv = Fields.field_values(out)
-        I = if mask isa NoMask
-            universal_index(out_fv)
-        else
-            masked_universal_index(mask)
-        end
-        if is_valid_index(out_fv, I, us)
+        tidx = linear_thread_idx()
+        if linear_is_valid_index(tidx, us) && tidx ≤ length(unval(cart_inds))
+            I = if mask isa NoMask
+                unval(cart_inds)[tidx]
+            else
+                masked_universal_index(mask, cart_inds)
+            end
             (li, lw, rw, ri) = bds
             (i, j, _, v, h) = I.I
             hidx = (i, j, h)
@@ -149,8 +158,8 @@ function copyto_stencil_kernel_shmem!(
     @inbounds begin
         out_fv = Fields.field_values(out)
         us = DataLayouts.UniversalSize(out_fv)
-        I = fd_stencil_universal_index(space, us)
-        if fd_stencil_is_valid_index(I, us) # check that hidx is in bounds
+        I = fd_shmem_stencil_universal_index(space, us)
+        if fd_shmem_stencil_is_valid_index(I, us) # check that hidx is in bounds
             (li, lw, rw, ri) = bds
             (i, j, _, v, h) = I.I
             hidx = (i, j, h)
