@@ -90,6 +90,84 @@ An animation of `u(z, t)` is generated with `Plots.jl`, and the final state is s
 - ![wave_end.png](../assets/wave_end.png) Final state of `u`
 - ![wave.gif](../assets/wave.gif) Time evolution of `u`
 
+### Heat
+
+The 1D Column heat example in [`examples/column/heat.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/column/heat.jl) in a 1D column domain.
+
+#### Equations and discretizations
+
+Follows the continuity equation
+
+```math
+\begin{equation}
+  \frac{\partial T}{\partial t} = \alpha \cdot \nabla^2 T.
+\label{eq:1d-column-heat-continuity}
+\end{equation}
+```
+
+This is discretized using the following
+
+```math
+\begin{equation}
+  \frac{\partial T}{\partial t} \approx \alpha \cdot D(G(T)).
+\label{eq:1d-column-heat-discrete}
+\end{equation}
+```
+
+#### Prognostic Variables
+
+* ``\alpha``: thermal diffusivity measured in  $\frac{m^2}{s}$
+* ``T``: temperature
+
+#### Differentiation Operators
+
+ * ``D`` is the [face-to-center divergence](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.DivergenceF2C), called `divf2c` in the example code
+ * ``G`` is the [center-to-face gradient](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.GradientC2F), called ``gradc2f`` in the example code
+
+#### Set Up
+
+This test case is set up in a 1D column domain ``z \in [0, 1]``.
+
+### Advection
+
+The 1D Column advection example in [`examples/column/advect.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/column/advect.jl) in a 1D column domain.
+
+#### Equations and Discretizations
+
+Follows the continuity equation
+
+```math
+\begin{equation}
+  \frac{\partial \theta}{\partial t} = -\frac{\partial (v \theta)}{\partial z}
+\label{eq:1d-column-advection-continuity}
+\end{equation}
+```
+This is discretized using the following
+
+```math
+\begin{equation}
+  \frac{\partial \theta}{\partial t} \approx - D(V, \theta) 
+\label{eq:1d-column-advection-discrete}
+\end{equation}
+```
+
+#### Prognostic Variables
+
+* ``\theta``: the scalar field
+* ``v``: velocity in measured in  $\frac{m}{s}$
+
+### Tendencies 
+The example code solves the equation for 4 different tendencies:
+
+* Tendency 1: ``D = \partial(UB), where \partial`` is the [`face-to-center divergence`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.DivergenceF2C) and $UB$ is the [`center-to-face upwind product operator`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.UpwindBiasedProductC2F)
+* Tendenct 2: Follows tendency 1 with the addition of flux correction ``fcc``
+* Tendency 3: $D = A$, where $A$ is the [`discrete vertical advection`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.AdvectionC2C)
+* Tendency 4: Follows tendency 3 with the addition of flux correction ``fcc``
+
+#### Set Up
+
+This test case is set up in a 1D column domain ``z \in$ [0, 4\pi]``. 
+
 ## 2D Cartesian examples
 
 ### Flux Limiters advection
