@@ -99,6 +99,189 @@ This test case is set up in a 1D column domain ``z \in [0, 4\pi]``, discretized 
 * For tendencies 1 and 2 where the upwind biased operator ``UB`` is used, the left boundary is defined as ``sin(a - t)``. The right boundary is ``sin(b - t)``. Here ``a`` and ``b`` are the left and right bounds of the domain. 
 * For tendencies 3 and 4, where the advection operator ``A`` is used, the left boundary is defined as ``sin(-t)``.  The right boundary is extrapolated, meaning its value is set to the closest interior point.
 
+### Ekman Layer
+
+The 1D vertical Ekman layer simulation in [`examples/column/ekman.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/column/ekman.jl) demonstrates the simulation of atmospheric boundary layer dynamics, specifically the Ekman spiral phenomenon resulting from the balance between Coriolis force and vertical diffusion.
+
+#### Equations and discretizations
+
+#### Momentum
+
+Follows the momentum equations with vertical diffusion and Coriolis force:
+```math
+\begin{align}
+\frac{\partial u}{\partial t} &= \frac{\partial}{\partial z}\left(\nu \frac{\partial u}{\partial z}\right) + f(v - v_g) - w\frac{\partial u}{\partial z} \\
+\frac{\partial v}{\partial t} &= \frac{\partial}{\partial z}\left(\nu \frac{\partial v}{\partial z}\right) - f(u - u_g) - w\frac{\partial v}{\partial z}
+\end{align}
+```
+
+These are discretized using the following:
+```math
+\begin{align}
+\frac{\partial u}{\partial t} &\approx D \left(\nu G(u)\right) + f(v - v_g) - A(w, u) \\
+\frac{\partial v}{\partial t} &\approx D \left(\nu G(v)\right) - f(u - u_g) - A(w, v)
+\end{align}
+```
+
+#### Prognostic variables
+
+* `u`: _horizontal velocity (zonal or east-west component)_ measured in m/s.
+* `v`: _horizontal velocity (meridional or north-south component)_ measured in m/s.
+* `w`: _vertical velocity_ measured in m/s (manually set to zero in this example to disable vertical advection effects).
+
+#### Differentiation operators
+
+Because this is a 1D vertical problem, we utilize the staggered vertical grid with:
+
+- ``D`` is the [face-to-center divergence](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.DivergenceF2C) operator, called `divf2c` in the example code
+- ``G`` is the [center-to-face gradient](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.GradientC2F) operator, called `gradc2f` in the example code
+- ``A`` is the [center-to-center vertical advection](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.AdvectionC2C) operator, called `A` in the example code.
+
+#### Problem flow and set-up
+
+This test case is set up in a vertical column domain $[0, L]$ with height $L = 200\,\mathrm{m}$. The Coriolis parameter is set to $f = 5 \times 10^{-5}\,\mathrm{s}^{-1}$, the viscosity coefficient to $\nu = 0.01\,\mathrm{m}^2/\mathrm{s}$, and the geostrophic wind to $(u_g, v_g) = (1.0, 0.0)\,\mathrm{m/s}$.
+
+The Ekman depth parameter is calculated as  
+$d = \sqrt{\dfrac{2\nu}{f}}$,  
+which determines the characteristic depth of the boundary layer.
+
+The initial condition is set to a uniform wind profile equal to the geostrophic wind throughout the vertical column. The simulation is run for 50 hours to allow the boundary layer to develop fully.
+
+Boundary conditions are applied as follows:  
+- At the top boundary: wind velocity equals the geostrophic wind $(u_g, v_g)$  
+- At the bottom boundary: drag condition proportional to the wind speed, where the surface stress is  
+  $C_d \, |\mathbf{U}| \, u$ and $C_d \, |\mathbf{U}| \, v$
+
+#### Application of boundary conditions
+
+The application of boundary conditions is implemented through the operators:
+
+1. For the u-momentum equation:
+   - Top boundary: `Operators.SetValue(FT(ug))` sets $u$ to the geostrophic value
+   - Bottom boundary: `Operators.SetValue(Geometry.WVector(Cd * u_wind * u_1))` applies the drag condition
+
+2. For the v-momentum equation:
+   - Top boundary: `Operators.SetValue(FT(vg))` sets $v$ to the geostrophic value
+   - Bottom boundary: `Operators.SetValue(Geometry.WVector(Cd * u_wind * v_1))` applies the drag condition
+
+The example verifies the numerical solution by comparing it to the analytical solution:
+```math
+\begin{align}
+u(z) &= u_g - e^{-z/d}(u_g\cos(z/d) + v_g\sin(z/d)) \\
+v(z) &= v_g + e^{-z/d}(u_g\sin(z/d) - v_g\cos(z/d))
+\end{align}
+```
+
+The results demonstrate accurate capture of the characteristic Ekman spiral, where wind speed increases with height and wind direction rotates with increasing height until it aligns with the geostrophic wind.
+
+
+### Hydrostatic Balance
+
+The 1D Column hydrostatic balance example in [`examples/column/hydrostatic.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/column/hydrostatic.jl) demonstrates the setup and maintenance of hydrostatic balance in a single vertical column using a finite difference discretization.
+
+#### Equations and discretizations
+
+##### Mass and Potential Temperature
+
+The system maintains hydrostatic balance while solving the continuity equations for density and potential temperature density:
+
+```math
+\begin{equation}
+  \frac{\partial \rho}{\partial t} = - \nabla \cdot(\rho \boldsymbol{w})
+\label{eq:1d-column-continuity}
+\end{equation}
+```
+
+```math
+\begin{equation}
+  \frac{\partial \rho\theta}{\partial t} = - \nabla \cdot(\rho\theta \boldsymbol{w})
+\label{eq:1d-column-theta}
+\end{equation}
+```
+
+These are discretized using the following:
+
+```math
+\begin{equation}
+  \frac{\partial \rho}{\partial t} \approx - D^c_v[I^f(\rho) \boldsymbol{w}]
+\label{eq:1d-column-discrete-continuity}
+\end{equation}
+```
+
+```math
+\begin{equation}
+  \frac{\partial \rho\theta}{\partial t} \approx - D^c_v[I^f(\rho\theta) \boldsymbol{w}]
+\label{eq:1d-column-discrete-theta}
+\end{equation}
+```
+
+#### Vertical Momentum
+
+The vertical momentum follows:
+
+```math
+\begin{equation}
+  \frac{\partial \boldsymbol{w}}{\partial t} = -I^f\left(\frac{\rho\theta}{\rho}\right) \nabla^f_v \Pi(\rho\theta) - \nabla^f_v \Phi(z)
+\label{eq:1d-column-momentum}
+\end{equation}
+```
+
+Where:
+- $\Pi(\rho\theta) = C_p \left(\frac{R_d \rho\theta}{p_0}\right)^{\frac{R_m}{C_v}}$ is the Exner function
+- $\Phi(z) = gz$ is the geopotential
+
+This is discretized using the following:
+
+```math
+\begin{equation}
+  \frac{\partial \boldsymbol{w}}{\partial t} \approx B\left(-I^f\left(\frac{\rho\theta}{\rho}\right) \nabla^f_v \Pi(\rho\theta) - \nabla^f_v \Phi(z)\right)
+\label{eq:1d-column-discrete-momentum}
+\end{equation}
+```
+
+Where $B$ applies boundary conditions to enforce $\boldsymbol{w} = 0$ at the domain boundaries.
+
+#### Prognostic variables
+
+**$\rho$**: *Density*, measured in kg/m³, discretized at cell centers.
+
+**$\rho\theta$**: *Potential temperature density*, measured in K·kg/m³, discretized at cell centers.
+
+**$\boldsymbol{w}$**: *Vertical velocity*, measured in m/s, discretized at cell faces.
+
+#### Operators
+
+##### Reconstructions
+
+**$I^f$** is the [center-to-face reconstruction](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.InterpolateC2F) operator, called `If` in the example code.  
+Currently this is implemented as the arithmetic mean.
+
+##### Differentiation operators
+
+**$D^c_v$** is the [face-to-center vertical divergence](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.DivergenceF2C), called `∂` in the example code.  
+This example uses zero vertical velocity at the top and bottom boundaries.
+
+**$\nabla^f_v$** is the [center-to-face vertical gradient](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.GradientC2F), called `∂f` in the example code.
+
+**$B$** is the [boundary operator](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.SetBoundaryOperator), called `B` in the example code.  
+This enforces zero vertical velocity at domain boundaries.
+
+
+#### Problem flow and set-up
+
+This test case is set up in a vertical column domain from $z=0$ m to $z=30$ km with 30 vertical elements. The column is initialized with a decaying temperature profile, where:
+
+- The virtual temperature starts at $T_{\textrm{virt}\_\textrm{surf}} = 280$ K at the surface
+- It asymptotically approaches $T_{\textrm{min}\_\textrm{ref}} = 230$ K with height
+- The profile follows a hyperbolic tangent function with height
+- The pressure follows a hydrostatic balance equation
+- Density is calculated from the equation of state using virtual temperature and pressure
+
+The initial vertical velocity is set to zero everywhere. To maintain hydrostatic balance, the discrete form computes iteratively the values of density that ensure the vertical pressure gradient balances gravity.
+
+The simulation is run for 10 days to verify that the hydrostatic balance is maintained over time. Results are plotted showing density ($\rho$), vertical velocity ($\boldsymbol{w}$), and potential temperature density ($\rho\theta$) profiles.
+
+
 ## 2D Cartesian examples
 
 ### Flux Limiters advection
