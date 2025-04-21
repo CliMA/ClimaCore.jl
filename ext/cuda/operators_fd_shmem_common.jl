@@ -323,9 +323,18 @@ Base.@propagate_inbounds function fd_resolve_shmem!(
     ᶜidx = get_cent_idx(idx)
     ᶠidx = get_face_idx(idx)
 
-    _fd_resolve_shmem!(idx, hidx, bds, sbc.args...) # propagate idx, not bc_idx recursively through broadcast expressions
+    # Here, we use tail-recursion. We visit leaves of the broadcast expression,
+    # then work our way up. The StencilBroadcasted and Broadcasted can be
+    # interleaved (e.g., `DivergenceF2C()(f*GradientC2F()(a*b)))`. The leaves of
+    # the StencilBroadcasted will call `getidx`, below which there are
+    # (by definition) no more `StencilBroadcasted`, and those `getidx` calls
+    # will read from global memory. Immediately above those reads, all
+    # subsequent reads will be from shmem (as they will be caught by the
+    # `getidx` defined above).
+    _fd_resolve_shmem!(idx, hidx, bds, sbc.args...)
 
-    # After recursion, check if shmem is supported for this operator
+    # Once we're about ready to fill the shmem, check if shmem is supported for
+    # this operator
     Operators.fd_shmem_is_supported(sbc) || return nothing
 
     # There are `Nf` threads, where `Nf` is the number of face levels. So,
