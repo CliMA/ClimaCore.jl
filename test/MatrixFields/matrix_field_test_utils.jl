@@ -21,6 +21,10 @@ import ClimaCore:
     Operators,
     Quadratures
 using ClimaCore.MatrixFields
+import ClimaCore.Utilities: half
+import ClimaCore.RecursiveApply: ⊠
+import LinearAlgebra: I, norm, ldiv!, mul!
+import ClimaCore.MatrixFields: @name
 
 # Test that an expression is true and that it is also type-stable.
 macro test_all(expression)
@@ -32,7 +36,7 @@ macro test_all(expression)
     end
 end
 
-# Compute the minimum time (in seconds) required to run an expression after it 
+# Compute the minimum time (in seconds) required to run an expression after it
 # has been compiled. This macro is used instead of @benchmark from
 # BenchmarkTools.jl because the latter is extremely slow (it appears to keep
 # triggering recompilations and allocating a lot of memory in the process).
@@ -134,6 +138,85 @@ function test_field_broadcast(;
     end
 end
 
+# Create a field matrix for a similar solve to ClimaAtmos's moist dycore + prognostic,
+# EDMF + prognostic surface temperature with implicit acoustic waves and SGS fluxes
+function dycore_prognostic_EDMF_FieldMatrix(;
+    ᶜᶜmat1,
+    ᶜᶠmat2,
+    ᶠᶜmat2,
+    ᶜᶜmat3,
+    ᶠᶠmat3,
+    e¹²,
+    e³,
+    e₃,
+    ρχ_unit,
+    ρaχ_unit,
+    ᶜᶠmat2_ρχ_u₃,
+    ᶠᶠmat3_u₃_u₃,
+    ᶜᶠmat2_scalar_u₃,
+    ᶠᶜmat2_u₃_scalar,
+)
+
+    ᶜᶜmat3_uₕ_scalar = ᶜᶜmat3 .* (e¹²,)
+    ᶜᶠmat2_uₕ_u₃ = ᶜᶠmat2 .* (e¹² * e₃',)
+    ᶜᶜmat3_ρχ_scalar = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit)), ᶜᶜmat3)
+    ᶜᶜmat3_ρaχ_scalar = map(Base.Fix1(map, Base.Fix2(⊠, ρaχ_unit)), ᶜᶜmat3)
+    ᶜᶠmat2_ρaχ_u₃ = map(Base.Fix1(map, Base.Fix2(⊠, ρaχ_unit ⊠ e₃')), ᶜᶠmat2)
+    return MatrixFields.FieldMatrix(
+        # GS-GS blocks:
+        (@name(sfc), @name(sfc)) => I,
+        (@name(c.ρ), @name(c.ρ)) => I,
+        (@name(c.ρe_tot), @name(c.ρe_tot)) => deepcopy(ᶜᶜmat3),
+        (@name(c.ρatke), @name(c.ρatke)) => deepcopy(ᶜᶜmat3),
+        (@name(c.ρχ), @name(c.ρχ)) => deepcopy(ᶜᶜmat3),
+        (@name(c.uₕ), @name(c.uₕ)) => deepcopy(ᶜᶜmat3),
+        (@name(c.ρ), @name(f.u₃)) => deepcopy(ᶜᶠmat2_scalar_u₃),
+        (@name(c.ρe_tot), @name(f.u₃)) => deepcopy(ᶜᶠmat2_scalar_u₃),
+        (@name(c.ρatke), @name(f.u₃)) => deepcopy(ᶜᶠmat2_scalar_u₃),
+        (@name(c.ρχ), @name(f.u₃)) => deepcopy(ᶜᶠmat2_ρχ_u₃),
+        (@name(f.u₃), @name(c.ρ)) => deepcopy(ᶠᶜmat2_u₃_scalar),
+        (@name(f.u₃), @name(c.ρe_tot)) => deepcopy(ᶠᶜmat2_u₃_scalar),
+        (@name(f.u₃), @name(f.u₃)) => deepcopy(ᶠᶠmat3_u₃_u₃),
+        # GS-SGS blocks:
+        (@name(c.ρe_tot), @name(c.sgsʲs.:(1).ρae_tot)) => deepcopy(ᶜᶜmat3),
+        (@name(c.ρχ.ρq_tot), @name(c.sgsʲs.:(1).ρaχ.ρaq_tot)) =>
+            deepcopy(ᶜᶜmat3),
+        (@name(c.ρχ.ρq_liq), @name(c.sgsʲs.:(1).ρaχ.ρaq_liq)) =>
+            deepcopy(ᶜᶜmat3),
+        (@name(c.ρχ.ρq_ice), @name(c.sgsʲs.:(1).ρaχ.ρaq_ice)) =>
+            deepcopy(ᶜᶜmat3),
+        (@name(c.ρχ.ρq_rai), @name(c.sgsʲs.:(1).ρaχ.ρaq_rai)) =>
+            deepcopy(ᶜᶜmat3),
+        (@name(c.ρχ.ρq_sno), @name(c.sgsʲs.:(1).ρaχ.ρaq_sno)) =>
+            deepcopy(ᶜᶜmat3),
+        (@name(c.ρe_tot), @name(c.sgsʲs.:(1).ρa)) => deepcopy(ᶜᶜmat3),
+        (@name(c.ρatke), @name(c.sgsʲs.:(1).ρa)) => deepcopy(ᶜᶜmat3),
+        (@name(c.ρχ), @name(c.sgsʲs.:(1).ρa)) => deepcopy(ᶜᶜmat3_ρχ_scalar),
+        (@name(c.uₕ), @name(c.sgsʲs.:(1).ρa)) => deepcopy(ᶜᶜmat3_uₕ_scalar),
+        (@name(c.ρe_tot), @name(f.sgsʲs.:(1).u₃)) => deepcopy(ᶜᶠmat2_scalar_u₃),
+        (@name(c.ρatke), @name(f.sgsʲs.:(1).u₃)) => deepcopy(ᶜᶠmat2_scalar_u₃),
+        (@name(c.ρχ), @name(f.sgsʲs.:(1).u₃)) => deepcopy(ᶜᶠmat2_ρχ_u₃),
+        (@name(c.uₕ), @name(f.sgsʲs.:(1).u₃)) => deepcopy(ᶜᶠmat2_uₕ_u₃),
+        (@name(f.u₃), @name(c.sgsʲs.:(1).ρa)) => deepcopy(ᶠᶜmat2_u₃_scalar),
+        (@name(f.u₃), @name(f.sgsʲs.:(1).u₃)) => deepcopy(ᶠᶠmat3_u₃_u₃),
+        # SGS-SGS blocks:
+        (@name(c.sgsʲs.:(1).ρa), @name(c.sgsʲs.:(1).ρa)) => I,
+        (@name(c.sgsʲs.:(1).ρae_tot), @name(c.sgsʲs.:(1).ρae_tot)) => I,
+        (@name(c.sgsʲs.:(1).ρaχ), @name(c.sgsʲs.:(1).ρaχ)) => I,
+        (@name(c.sgsʲs.:(1).ρa), @name(f.sgsʲs.:(1).u₃)) =>
+            deepcopy(ᶜᶠmat2_scalar_u₃),
+        (@name(c.sgsʲs.:(1).ρae_tot), @name(f.sgsʲs.:(1).u₃)) =>
+            deepcopy(ᶜᶠmat2_scalar_u₃),
+        (@name(c.sgsʲs.:(1).ρaχ), @name(f.sgsʲs.:(1).u₃)) =>
+            deepcopy(ᶜᶠmat2_ρaχ_u₃),
+        (@name(f.sgsʲs.:(1).u₃), @name(c.sgsʲs.:(1).ρa)) =>
+            deepcopy(ᶠᶜmat2_u₃_scalar),
+        (@name(f.sgsʲs.:(1).u₃), @name(c.sgsʲs.:(1).ρae_tot)) =>
+            deepcopy(ᶠᶜmat2_u₃_scalar),
+        (@name(f.sgsʲs.:(1).u₃), @name(f.sgsʲs.:(1).u₃)) =>
+            deepcopy(ᶠᶠmat3_u₃_u₃),
+    )
+end
 # Generate extruded finite difference spaces for testing. Include topography
 # when possible.
 function test_spaces(::Type{FT}) where {FT}

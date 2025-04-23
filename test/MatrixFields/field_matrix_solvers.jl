@@ -376,15 +376,10 @@ end
     center_gs_unit = (; dry_center_gs_unit..., ρatke = 1, ρχ = ρχ_unit)
     center_sgsʲ_unit = (; ρa = 1, ρae_tot = 1, ρaχ = ρaχ_unit)
 
-    ᶜᶜmat3_uₕ_scalar = ᶜᶜmat3 .* (e¹²,)
     ᶠᶜmat2_u₃_scalar = ᶠᶜmat2 .* (e³,)
     ᶜᶠmat2_scalar_u₃ = ᶜᶠmat2 .* (e₃',)
-    ᶜᶠmat2_uₕ_u₃ = ᶜᶠmat2 .* (e¹² * e₃',)
     ᶠᶠmat3_u₃_u₃ = ᶠᶠmat3 .* (e³ * e₃',)
-    ᶜᶜmat3_ρχ_scalar = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit)), ᶜᶜmat3)
-    ᶜᶜmat3_ρaχ_scalar = map(Base.Fix1(map, Base.Fix2(⊠, ρaχ_unit)), ᶜᶜmat3)
     ᶜᶠmat2_ρχ_u₃ = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit ⊠ e₃')), ᶜᶠmat2)
-    ᶜᶠmat2_ρaχ_u₃ = map(Base.Fix1(map, Base.Fix2(⊠, ρaχ_unit ⊠ e₃')), ᶜᶠmat2)
     # We need to use Fix1 and Fix2 instead of defining anonymous functions in
     # order for the result of map to be inferrable.
 
@@ -478,52 +473,21 @@ end
                 n_iters = 6,
             ),
         ),
-        A = MatrixFields.FieldMatrix(
-            # GS-GS blocks:
-            (@name(sfc), @name(sfc)) => I,
-            (@name(c.ρ), @name(c.ρ)) => I,
-            (@name(c.ρe_tot), @name(c.ρe_tot)) => ᶜᶜmat3,
-            (@name(c.ρatke), @name(c.ρatke)) => ᶜᶜmat3,
-            (@name(c.ρχ), @name(c.ρχ)) => ᶜᶜmat3,
-            (@name(c.uₕ), @name(c.uₕ)) => ᶜᶜmat3,
-            (@name(c.ρ), @name(f.u₃)) => ᶜᶠmat2_scalar_u₃,
-            (@name(c.ρe_tot), @name(f.u₃)) => ᶜᶠmat2_scalar_u₃,
-            (@name(c.ρatke), @name(f.u₃)) => ᶜᶠmat2_scalar_u₃,
-            (@name(c.ρχ), @name(f.u₃)) => ᶜᶠmat2_ρχ_u₃,
-            (@name(f.u₃), @name(c.ρ)) => ᶠᶜmat2_u₃_scalar,
-            (@name(f.u₃), @name(c.ρe_tot)) => ᶠᶜmat2_u₃_scalar,
-            (@name(f.u₃), @name(f.u₃)) => ᶠᶠmat3_u₃_u₃,
-            # GS-SGS blocks:
-            (@name(c.ρe_tot), @name(c.sgsʲs.:(1).ρae_tot)) => ᶜᶜmat3,
-            (@name(c.ρχ.ρq_tot), @name(c.sgsʲs.:(1).ρaχ.ρaq_tot)) => ᶜᶜmat3,
-            (@name(c.ρχ.ρq_liq), @name(c.sgsʲs.:(1).ρaχ.ρaq_liq)) => ᶜᶜmat3,
-            (@name(c.ρχ.ρq_ice), @name(c.sgsʲs.:(1).ρaχ.ρaq_ice)) => ᶜᶜmat3,
-            (@name(c.ρχ.ρq_rai), @name(c.sgsʲs.:(1).ρaχ.ρaq_rai)) => ᶜᶜmat3,
-            (@name(c.ρχ.ρq_sno), @name(c.sgsʲs.:(1).ρaχ.ρaq_sno)) => ᶜᶜmat3,
-            (@name(c.ρe_tot), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3,
-            (@name(c.ρatke), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3,
-            (@name(c.ρχ), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3_ρχ_scalar,
-            (@name(c.uₕ), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3_uₕ_scalar,
-            (@name(c.ρe_tot), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_scalar_u₃,
-            (@name(c.ρatke), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_scalar_u₃,
-            (@name(c.ρχ), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_ρχ_u₃,
-            (@name(c.uₕ), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_uₕ_u₃,
-            (@name(f.u₃), @name(c.sgsʲs.:(1).ρa)) => ᶠᶜmat2_u₃_scalar,
-            (@name(f.u₃), @name(f.sgsʲs.:(1).u₃)) => ᶠᶠmat3_u₃_u₃,
-            # SGS-SGS blocks:
-            (@name(c.sgsʲs.:(1).ρa), @name(c.sgsʲs.:(1).ρa)) => I,
-            (@name(c.sgsʲs.:(1).ρae_tot), @name(c.sgsʲs.:(1).ρae_tot)) => I,
-            (@name(c.sgsʲs.:(1).ρaχ), @name(c.sgsʲs.:(1).ρaχ)) => I,
-            (@name(c.sgsʲs.:(1).ρa), @name(f.sgsʲs.:(1).u₃)) =>
-                ᶜᶠmat2_scalar_u₃,
-            (@name(c.sgsʲs.:(1).ρae_tot), @name(f.sgsʲs.:(1).u₃)) =>
-                ᶜᶠmat2_scalar_u₃,
-            (@name(c.sgsʲs.:(1).ρaχ), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_ρaχ_u₃,
-            (@name(f.sgsʲs.:(1).u₃), @name(c.sgsʲs.:(1).ρa)) =>
-                ᶠᶜmat2_u₃_scalar,
-            (@name(f.sgsʲs.:(1).u₃), @name(c.sgsʲs.:(1).ρae_tot)) =>
-                ᶠᶜmat2_u₃_scalar,
-            (@name(f.sgsʲs.:(1).u₃), @name(f.sgsʲs.:(1).u₃)) => ᶠᶠmat3_u₃_u₃,
+        A = dycore_prognostic_EDMF_FieldMatrix(;
+            ᶜᶜmat1,
+            ᶜᶠmat2,
+            ᶠᶜmat2,
+            ᶜᶜmat3,
+            ᶠᶠmat3,
+            e¹²,
+            e³,
+            e₃,
+            ρχ_unit,
+            ρaχ_unit,
+            ᶜᶠmat2_ρχ_u₃,
+            ᶠᶠmat3_u₃_u₃,
+            ᶜᶠmat2_scalar_u₃,
+            ᶠᶜmat2_u₃_scalar,
         ),
         b = b_moist_dycore_prognostic_edmf_prognostic_surface,
     )

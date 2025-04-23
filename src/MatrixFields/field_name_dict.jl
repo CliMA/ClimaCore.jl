@@ -182,23 +182,22 @@ function get_internal_entry(
     elseif name_pair[2] == @name() && broadcasted_has_field(T, name_pair[1])
         # multiplication case 2 or 4, second argument
         target_field_eltype = broadcasted_get_field_type(T, name_pair[1])
-        if target_field_eltype <: Number
+        if target_field_eltype == eltype(parent(entry))
             T_band = eltype(entry)
             singleton_datalayout =
                 DataLayouts.singleton(Fields.field_values(entry))
             # BandMatrixRow with same lowest diagonal and bandwidth as `entry`, with a scalar eltype
-            scalar_band_type = BandMatrixRow{
-                T_band.parameters[1],
-                T_band.parameters[2],
-                eltype(parent(entry)),
-            }
+            scalar_band_type = band_matrix_row_type(
+                outer_diagonals(T_band)...,
+                target_field_eltype,
+            )
             field_dim_size = DataLayouts.ncomponents(Fields.field_values(entry))
             scalar_field_offset = get_field_first_index_offset(
                 name_pair[1],
                 target_field_eltype,
                 T,
             )
-            band_element_size = Int(div(sizeof(T), sizeof(target_field_eltype)))
+            band_element_size = div(sizeof(T), sizeof(target_field_eltype))
             parent_indices = DataLayouts.to_data_specific_field(
                 singleton_datalayout,
                 (
@@ -295,7 +294,7 @@ function get_field_first_index_offset(
     child_type = fieldtype(S, child_name)
     remaining_field_chain = drop_first(name)
     field_index =
-        unrolled_filter(i -> fieldname(S, i) == child_name, 1:fieldcount(S))[1]
+        UnrolledUtilities.unrolled_findfirst(isequal(child_name), fieldnames(S))
     return DataLayouts.fieldtypeoffset(T, S, field_index) +
            get_field_first_index_offset(remaining_field_chain, T, child_type)
 end
@@ -314,14 +313,18 @@ entries in the `FieldMatrix` `dict`.
 """
 function get_scalar_keys(dict::FieldMatrix)
     keys_tuple = unrolled_flatmap(keys(dict).values) do key
-        _, entry = unrolled_filter(pair -> key == pair[1], pairs(dict))[1]
+        entry = values(dict)[UnrolledUtilities.unrolled_findfirst(
+            isequal(key),
+            keys(dict).values,
+        )]
         entry =
             entry isa ColumnwiseBandMatrixField ? entry.entries.:(1) : entry
         unrolled_map(
-            filtered_child_names(
-                field -> eltype(field) <: Number,
+            filtered_names(
+                field ->
+                    (field isa UniformScaling) ||
+                        eltype(field) == eltype(parent(field)),
                 entry,
-                @name()
             ),
         ) do name
             (append_internal_name(key[1], name), key[2])
@@ -339,24 +342,27 @@ scalar components of entries of `field_matrix`.
 
 # Example usage
 ```julia
-struct foo{T1, T2}
-    a::T
-    b::T2
-end
-mat1 = fill(DiagonalMatrixRow(ClimaCore.Geometry.Covariant12Vector(1.0, 2.0)), space)
-mat2 = fill(DiagonalMatrixRow(foo(foo(1.0, 2.0), 3.0)), space)
+e¹² = Geometry.Covariant12Vector(1.6, 0.7)
+e₃ = Geometry.Contravariant3Vector(1.0)
+ᶜᶜmat3 = fill(TridiagonalMatrixRow(2.0, 3.2, 2.1), center_space)
+ᶜᶠmat2 = fill(BidiagonalMatrixRow(4.3, 1.7), center_space)
+ᶜᶜmat3_uₕ_scalar = ᶜᶜmat3 .* (e¹²,)
+ρχ_unit = (;ρq_liq = 1.0, ρq_ice = 1.0)
+ᶜᶠmat2_ρχ_u₃ = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit ⊠ e₃')), ᶜᶠmat2)
+
+
 A = MatrixFields.FieldMatrix(
-    (@name(biz), @name(baz)) => mat1,
-    (@name(bip), @name(bop)) => mat2,
+    (@name(c.ρχ), @name(f.u₃)) => ᶜᶠmat2_ρχ_u₃,
+    (@name(c.uₕ), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3_uₕ_scalar,
 )
+
 A_scalar = MatrixFields.scalar_fieldmatrix(A)
 keys(A_scalar)
 # Output:
-# (@name(biz.components.data.:(1)), @name(baz))
-# (@name(biz.components.data.:(2)), @name(baz))
-# (@name(bip.a.a), @name(bop))
-# (@name(bip.a.b), @name(bop))
-# (@name(bip.b), @name(bop))
+# (@name(c.ρχ.ρq_liq.parent.components.data.:(1)), @name(f.u₃))
+# (@name(c.ρχ.ρq_ice.parent.components.data.:(1)), @name(f.u₃))
+# (@name(c.uₕ.components.data.:(1)), @name(c.sgsʲs.:(1).ρa))
+# (@name(c.uₕ.components.data.:(2)), @name(c.sgsʲs.:(1).ρa))
 ```
 """
 function scalar_fieldmatrix(field_matrix::FieldMatrix)
