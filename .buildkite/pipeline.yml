@@ -799,6 +799,8 @@ steps:
       - label: "Unit: operator matrices (CPU)"
         key: unit_operator_matrices_cpu
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/operator_matrices.jl"
+        agents:
+          slurm_mem: 64GB
 
       - label: "Unit: operator matrices (GPU)"
         key: unit_operator_matrices_gpu
@@ -807,7 +809,7 @@ steps:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
-          slurm_mem: 40GB
+          slurm_mem: 64GB
 
       - label: "Unit: field names"
         key: unit_field_names
@@ -943,6 +945,8 @@ steps:
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_non_scalar_3
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_3.jl"
+        agents:
+          slurm_mem: 20GB
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_non_scalar_4
@@ -1141,7 +1145,7 @@ steps:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
-          slurm_mem: 10GB
+          slurm_mem: 20GB
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_non_scalar_5
