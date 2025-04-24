@@ -294,7 +294,7 @@ function get_field_first_index_offset(
     child_type = fieldtype(S, child_name)
     remaining_field_chain = drop_first(name)
     field_index =
-        UnrolledUtilities.unrolled_findfirst(isequal(child_name), fieldnames(S))
+        unrolled_filter(i -> fieldname(S, i) == child_name, 1:fieldcount(S))[1]
     return DataLayouts.fieldtypeoffset(T, S, field_index) +
            get_field_first_index_offset(remaining_field_chain, T, child_type)
 end
@@ -313,10 +313,7 @@ entries in the `FieldMatrix` `dict`.
 """
 function get_scalar_keys(dict::FieldMatrix)
     keys_tuple = unrolled_flatmap(keys(dict).values) do key
-        entry = values(dict)[UnrolledUtilities.unrolled_findfirst(
-            isequal(key),
-            keys(dict).values,
-        )]
+        entry = dict[unrolled_filter(isequal(key), keys(dict).values)[1]]
         entry =
             entry isa ColumnwiseBandMatrixField ? entry.entries.:(1) : entry
         unrolled_map(
