@@ -3840,16 +3840,6 @@ end
     end
 end
 
-if hasfield(Method, :recursion_relation)
-    dont_limit = (args...) -> true
-    for m in methods(call_bc_f)
-        m.recursion_relation = dont_limit
-    end
-    for m in methods(getidx)
-        m.recursion_relation = dont_limit
-    end
-end
-
 # setidx! methods for copyto!
 Base.@propagate_inbounds function setidx!(
     parent_space,
@@ -3927,17 +3917,6 @@ Base.@propagate_inbounds column(sbc::StencilBroadcasted{S}, inds...) where {S} =
         column_args(sbc.args, inds...),
         column(sbc.axes, inds...),
     )
-
-#TODO: the optimizer dies with column broadcast expressions over a certain complexity
-if hasfield(Method, :recursion_relation)
-    dont_limit = (args...) -> true
-    for m in methods(column)
-        m.recursion_relation = dont_limit
-    end
-    for m in methods(column_args)
-        m.recursion_relation = dont_limit
-    end
-end
 
 function Base.similar(
     bc::Base.Broadcast.Broadcasted{S},
@@ -4162,17 +4141,6 @@ promote_bc(bc::SetDivergence{<:Geometry.AxisTensor}, ::Type{FT}) where {FT} =
     SetDivergence(promote_axis_tensor(bc.val, FT))
 promote_bc(bc::SetCurl{<:Geometry.AxisTensor}, ::Type{FT}) where {FT} =
     SetCurl(promote_axis_tensor(bc.val, FT))
-
-
-if hasfield(Method, :recursion_relation)
-    dont_limit = (args...) -> true
-    for m in methods(reconstruct_placeholder_broadcasted)
-        m.recursion_relation = dont_limit
-    end
-    for m in methods(_reconstruct_placeholder_broadcasted)
-        m.recursion_relation = dont_limit
-    end
-end
 
 """
     use_fd_shmem()

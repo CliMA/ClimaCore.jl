@@ -455,13 +455,3 @@ function expand_child_values(
     end
 end
 
-# This is required for type-stability as of Julia 1.9.
-if hasfield(Method, :recursion_relation)
-    dont_limit = (args...) -> true
-    for m in methods(unique_and_non_overlapping_values)
-        m.recursion_relation = dont_limit
-    end
-    for m in methods(union_values)
-        m.recursion_relation = dont_limit
-    end
-end

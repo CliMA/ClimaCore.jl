@@ -167,36 +167,3 @@ get_subtree_at_name(name, tree) =
         get_subtree_at_name(name, subtrees_at_name[1])
     end
 
-################################################################################
-
-# This is required for type-stability as of Julia 1.9.
-if hasfield(Method, :recursion_relation)
-    dont_limit = (args...) -> true
-    for m in methods(has_field)
-        m.recursion_relation = dont_limit
-    end
-    for m in methods(get_field)
-        m.recursion_relation = dont_limit
-    end
-    for m in methods(broadcasted_has_field)
-        m.recursion_relation = dont_limit
-    end
-    for m in methods(broadcasted_get_field)
-        m.recursion_relation = dont_limit
-    end
-    for m in methods(wrapped_prop_names)
-        m.recursion_relation = dont_limit
-    end
-    for m in methods(filtered_child_names)
-        m.recursion_relation = dont_limit
-    end
-    for m in methods(subtree_at_name)
-        m.recursion_relation = dont_limit
-    end
-    for m in methods(is_valid_name)
-        m.recursion_relation = dont_limit
-    end
-    for m in methods(get_subtree_at_name)
-        m.recursion_relation = dont_limit
-    end
-end

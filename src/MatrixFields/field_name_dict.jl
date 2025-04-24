@@ -359,14 +359,6 @@ concrete_field_vector_within_subtree(tree, vector) =
         Fields.FieldVector{T}(NamedTuple{internal_names}(internal_entries))
     end
 
-# This is required for type-stability as of Julia 1.9.
-if hasfield(Method, :recursion_relation)
-    dont_limit = (args...) -> true
-    for m in methods(concrete_field_vector_within_subtree)
-        m.recursion_relation = dont_limit
-    end
-end
-
 ################################################################################
 
 struct FieldNameDictStyle <: Base.Broadcast.BroadcastStyle end
