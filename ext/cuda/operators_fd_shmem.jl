@@ -6,15 +6,15 @@ import ClimaCore.RecursiveApply: ⊟, ⊞
 
 Base.@propagate_inbounds function fd_operator_shmem(
     space,
-    ::Val{Nvt},
+    shmem_params,
     op::Operators.DivergenceF2C,
     args...,
-) where {Nvt}
+)
     # allocate temp output
     RT = return_eltype(op, args...)
-    Ju³ = CUDA.CuStaticSharedArray(RT, (Nvt,))
-    lJu³ = CUDA.CuStaticSharedArray(RT, (1,))
-    rJu³ = CUDA.CuStaticSharedArray(RT, (1,))
+    Ju³ = CUDA.CuStaticSharedArray(RT, interior_size(shmem_params))
+    lJu³ = CUDA.CuStaticSharedArray(RT, boundary_size(shmem_params))
+    rJu³ = CUDA.CuStaticSharedArray(RT, boundary_size(shmem_params))
     return (Ju³, lJu³, rJu³)
 end
 
@@ -109,15 +109,15 @@ end
 
 Base.@propagate_inbounds function fd_operator_shmem(
     space,
-    ::Val{Nvt},
+    shmem_params,
     op::Operators.GradientC2F,
     args...,
-) where {Nvt}
+)
     # allocate temp output
     RT = return_eltype(op, args...)
-    u = CUDA.CuStaticSharedArray(RT, (Nvt,)) # cell centers
-    lb = CUDA.CuStaticSharedArray(RT, (1,)) # left boundary
-    rb = CUDA.CuStaticSharedArray(RT, (1,)) # right boundary
+    u = CUDA.CuStaticSharedArray(RT, interior_size(shmem_params)) # cell centers
+    lb = CUDA.CuStaticSharedArray(RT, boundary_size(shmem_params)) # left boundary
+    rb = CUDA.CuStaticSharedArray(RT, boundary_size(shmem_params)) # right boundary
     return (u, lb, rb)
 end
 
@@ -202,15 +202,15 @@ end
 
 Base.@propagate_inbounds function fd_operator_shmem(
     space,
-    ::Val{Nvt},
+    shmem_params,
     op::Operators.InterpolateC2F,
     args...,
-) where {Nvt}
+)
     # allocate temp output
     RT = return_eltype(op, args...)
-    u = CUDA.CuStaticSharedArray(RT, (Nvt,)) # cell centers
-    lb = CUDA.CuStaticSharedArray(RT, (1,)) # left boundary
-    rb = CUDA.CuStaticSharedArray(RT, (1,)) # right boundary
+    u = CUDA.CuStaticSharedArray(RT, interior_size(shmem_params)) # cell centers
+    lb = CUDA.CuStaticSharedArray(RT, boundary_size(shmem_params)) # left boundary
+    rb = CUDA.CuStaticSharedArray(RT, boundary_size(shmem_params)) # right boundary
     return (u, lb, rb)
 end
 
