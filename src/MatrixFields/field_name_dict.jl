@@ -327,17 +327,15 @@ function get_scalar_keys(dict::FieldMatrix)
         entry = dict[unrolled_filter(isequal(key), keys(dict).values)[1]]
         entry =
             entry isa ColumnwiseBandMatrixField ? entry.entries.:(1) : entry
-        unrolled_map(
-            filtered_names(entry) do field
-                if field isa UniformScaling
-                    return true
-                elseif field isa Fields.Field
-                    return eltype(field) == eltype(eltype(field))
-                else
-                    return eltype(field) == typeof(field)
-                end
-            end,
-        ) do name
+        unrolled_map(filtered_names(entry) do field
+            if field isa UniformScaling
+                true
+            elseif field isa Fields.Field
+                eltype(field) == eltype(eltype(field))
+            else
+                eltype(field) == typeof(field)
+            end
+        end) do name
             (append_internal_name(key[1], name), key[2])
         end
     end

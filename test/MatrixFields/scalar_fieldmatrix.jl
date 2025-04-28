@@ -9,6 +9,7 @@ ClimaComms.@import_required_backends
 include("matrix_field_test_utils.jl")
 
 @testset "get_field_first_index_offset" begin
+    FT = Float64
     struct Singleton{T}
         x::T
     end
@@ -27,58 +28,59 @@ include("matrix_field_test_utils.jl")
     end
     test_get_field_first_index_offset(
         @name(x),
-        Float64,
-        Singleton{Singleton{Singleton{Singleton{Float64}}}},
+        FT,
+        Singleton{Singleton{Singleton{Singleton{FT}}}},
         0,
     )
     test_get_field_first_index_offset(
         @name(x.x.x.x),
-        Float64,
-        Singleton{Singleton{Singleton{Singleton{Float64}}}},
+        FT,
+        Singleton{Singleton{Singleton{Singleton{FT}}}},
         0,
     )
     test_get_field_first_index_offset(
         @name(y.x),
-        Float64,
-        TwoFields{TwoFields{Float64, Float64}, TwoFields{Float64, Float64}},
+        FT,
+        TwoFields{TwoFields{FT, FT}, TwoFields{FT, FT}},
         2,
     )
     test_get_field_first_index_offset(
         @name(y.y),
-        Float64,
+        FT,
         TwoFields{
-            TwoFields{Float64, Float64},
-            TwoFields{Float64, TwoFields{Float64, Singleton{Float64}}},
+            TwoFields{FT, FT},
+            TwoFields{FT, TwoFields{FT, Singleton{FT}}},
         },
         3,
     )
     test_get_field_first_index_offset(
         @name(y.y),
         Float32,
-        TwoFields{TwoFields{Float64, Float64}, TwoFields{Float64, Float64}},
+        TwoFields{TwoFields{FT, FT}, TwoFields{FT, FT}},
         6,
     )
     test_get_field_first_index_offset(
         @name(y.y.x),
-        Float64,
+        FT,
         TwoFields{
-            TwoFields{Float64, Float64},
-            TwoFields{Float64, TwoFields{Float64, Singleton{Float64}}},
+            TwoFields{FT, FT},
+            TwoFields{FT, TwoFields{FT, Singleton{FT}}},
         },
         3,
     )
     test_get_field_first_index_offset(
         @name(y.y.y.x),
-        Float64,
+        FT,
         TwoFields{
-            TwoFields{Float64, Float64},
-            TwoFields{Float64, TwoFields{Float64, Singleton{Float64}}},
+            TwoFields{FT, FT},
+            TwoFields{FT, TwoFields{FT, Singleton{FT}}},
         },
         4,
     )
 end
 
 @testset "broadcasted_get_field_type" begin
+    FT = Float64
     struct Singleton{T}
         x::T
     end
@@ -96,29 +98,29 @@ end
     end
     test_broadcasted_get_field_type(
         @name(x),
-        Singleton{Singleton{Singleton{Singleton{Float64}}}},
-        Singleton{Singleton{Singleton{Float64}}},
+        Singleton{Singleton{Singleton{Singleton{FT}}}},
+        Singleton{Singleton{Singleton{FT}}},
     )
     test_broadcasted_get_field_type(
         @name(x.x.x),
-        Singleton{Singleton{Singleton{Singleton{Float64}}}},
-        Singleton{Float64},
+        Singleton{Singleton{Singleton{Singleton{FT}}}},
+        Singleton{FT},
     )
     test_broadcasted_get_field_type(
         @name(y.x),
         TwoFields{
-            TwoFields{Float64, Float64},
-            TwoFields{Float64, TwoFields{Float64, Singleton{Float64}}},
+            TwoFields{FT, FT},
+            TwoFields{FT, TwoFields{FT, Singleton{FT}}},
         },
-        Float64,
+        FT,
     )
     test_broadcasted_get_field_type(
         @name(y.y.y),
         TwoFields{
-            TwoFields{Float64, Float64},
-            TwoFields{Float64, TwoFields{Float64, Singleton{Float64}}},
+            TwoFields{FT, FT},
+            TwoFields{FT, TwoFields{FT, Singleton{FT}}},
         },
-        Singleton{Float64},
+        Singleton{FT},
     )
 end
 
@@ -136,7 +138,7 @@ end
                 eltype(eltype(entry)) <: FT,
         MatrixFields.scalar_fieldmatrix(A).entries,
     )
-    test_get(A, entry, key) = A[key] == entry
+    test_get(A, entry, key) = A[key] === entry
     for (key, entry) in MatrixFields.scalar_fieldmatrix(A)
         @test test_get(A, entry, key)
         @test (@allocated test_get(A, entry, key)) == 0
