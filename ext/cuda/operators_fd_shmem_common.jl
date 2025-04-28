@@ -209,19 +209,23 @@ Base.@propagate_inbounds function getidx(
 end
 
 """
-    fd_allocate_shmem(Val(Nvt), b)
+    fd_allocate_shmem(shmem_params, b)
 
 Create a new broadcasted object with necessary share memory allocated,
-using `Nvt` nodal points per block.
+using `params` nodal points per block.
 """
-@inline function fd_allocate_shmem(::Val{Nvt}, obj) where {Nvt}
+@inline function fd_allocate_shmem(::ShmemParams, obj)
     obj
 end
 @inline function fd_allocate_shmem(
-    ::Val{Nvt},
+    shmem_params::ShmemParams,
     bc::Broadcasted{Style},
-) where {Nvt, Style}
-    Broadcasted{Style}(bc.f, _fd_allocate_shmem(Val(Nvt), bc.args...), bc.axes)
+) where {Style}
+    Broadcasted{Style}(
+        bc.f,
+        _fd_allocate_shmem(shmem_params, bc.args...),
+        bc.axes,
+    )
 end
 
 ######### MatrixFields
@@ -236,22 +240,22 @@ end
 #########
 
 @inline function fd_allocate_shmem(
-    ::Val{Nvt},
+    shmem_params::ShmemParams,
     sbc::StencilBroadcasted{Style},
-) where {Nvt, Style}
-    args = _fd_allocate_shmem(Val(Nvt), sbc.args...)
+) where {Style}
+    args = _fd_allocate_shmem(shmem_params, sbc.args...)
     work = if Operators.fd_shmem_is_supported(sbc)
-        fd_operator_shmem(sbc.axes, Val(Nvt), sbc.op, args...)
+        fd_operator_shmem(sbc.axes, shmem_params, sbc.op, args...)
     else
         nothing
     end
     StencilBroadcasted{Style}(sbc.op, args, sbc.axes, work)
 end
 
-@inline _fd_allocate_shmem(::Val{Nvt}) where {Nvt} = ()
-@inline _fd_allocate_shmem(::Val{Nvt}, arg, xargs...) where {Nvt} = (
-    fd_allocate_shmem(Val(Nvt), arg),
-    _fd_allocate_shmem(Val(Nvt), xargs...)...,
+@inline _fd_allocate_shmem(::ShmemParams) = ()
+@inline _fd_allocate_shmem(shmem_params::ShmemParams, arg, xargs...) = (
+    fd_allocate_shmem(shmem_params, arg),
+    _fd_allocate_shmem(shmem_params, xargs...)...,
 )
 
 """

@@ -22,6 +22,10 @@ Base.Broadcast.BroadcastStyle(
 
 include("operators_fd_shmem_is_supported.jl")
 
+struct ShmemParams{Nv} end
+interior_size(::ShmemParams{Nv}) where {Nv} = (Nv,)
+boundary_size(::ShmemParams{Nv}) where {Nv} = (1,)
+
 function Base.copyto!(
     out::Field,
     bc::Union{
@@ -56,6 +60,7 @@ function Base.copyto!(
        mask isa NoMask &&
        enough_shmem &&
        Operators.use_fd_shmem()
+        shmem_params = ShmemParams{n_face_levels}()
         p = fd_shmem_stencil_partition(us, n_face_levels)
         args = (
             strip_space(out, space),
@@ -64,7 +69,7 @@ function Base.copyto!(
             bounds,
             us,
             mask,
-            Val(p.Nvthreads),
+            shmem_params,
         )
         auto_launch!(
             copyto_stencil_kernel_shmem!,
@@ -153,8 +158,8 @@ function copyto_stencil_kernel_shmem!(
     bds,
     us,
     mask,
-    ::Val{Nvt},
-) where {Nvt}
+    shmem_params::ShmemParams,
+)
     @inbounds begin
         out_fv = Fields.field_values(out)
         us = DataLayouts.UniversalSize(out_fv)
@@ -165,7 +170,7 @@ function copyto_stencil_kernel_shmem!(
             hidx = (i, j, h)
             idx = v - 1 + li
             bc = Operators.reconstruct_placeholder_broadcasted(space, bc′)
-            bc_shmem = fd_allocate_shmem(Val(Nvt), bc) # allocates shmem
+            bc_shmem = fd_allocate_shmem(shmem_params, bc) # allocates shmem
 
             fd_resolve_shmem!(bc_shmem, idx, hidx, bds) # recursively fills shmem
             CUDA.sync_threads()
