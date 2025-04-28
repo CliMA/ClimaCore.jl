@@ -140,29 +140,53 @@ end
 
 # Create a field matrix for a similar solve to ClimaAtmos's moist dycore + prognostic,
 # EDMF + prognostic surface temperature with implicit acoustic waves and SGS fluxes
-function dycore_prognostic_EDMF_FieldMatrix(;
-    ᶜᶜmat1,
-    ᶜᶠmat2,
-    ᶠᶜmat2,
-    ᶜᶜmat3,
-    ᶠᶠmat3,
-    e¹²,
-    e³,
-    e₃,
-    ρχ_unit,
-    ρaχ_unit,
-    ᶜᶠmat2_ρχ_u₃,
-    ᶠᶠmat3_u₃_u₃,
-    ᶜᶠmat2_scalar_u₃,
-    ᶠᶜmat2_u₃_scalar,
-)
+# also returns corresponding FieldVector
+function dycore_prognostic_EDMF_FieldMatrix(::Type{FT}) where {FT}
+    seed!(1) # For reproducibility with random fields
+    center_space, face_space = test_spaces(FT)
+    surface_space = Spaces.level(face_space, half)
+    surface_space = Spaces.level(face_space, half)
+    sfc_vec = random_field(FT, surface_space)
+    ᶜvec = random_field(FT, center_space)
+    ᶠvec = random_field(FT, face_space)
+    seed!(1)
+    λ = 10
+    ᶜᶜmat1 = random_field(DiagonalMatrixRow{FT}, center_space) ./ λ .+ (I,)
+    ᶜᶠmat2 = random_field(BidiagonalMatrixRow{FT}, center_space) ./ λ
+    ᶠᶜmat2 = random_field(BidiagonalMatrixRow{FT}, face_space) ./ λ
+    ᶜᶜmat3 = random_field(TridiagonalMatrixRow{FT}, center_space) ./ λ .+ (I,)
+    ᶠᶠmat3 = random_field(TridiagonalMatrixRow{FT}, face_space) ./ λ .+ (I,)
 
-    ᶜᶜmat3_uₕ_scalar = ᶜᶜmat3 .* (e¹²,)
+    e¹² = Geometry.Covariant12Vector(1, 1)
+    e³ = Geometry.Covariant3Vector(1)
+    e₃ = Geometry.Contravariant3Vector(1)
+
+    ρχ_unit = (; ρq_tot = 1, ρq_liq = 1, ρq_ice = 1, ρq_rai = 1, ρq_sno = 1)
+    ρaχ_unit =
+        (; ρaq_tot = 1, ρaq_liq = 1, ρaq_ice = 1, ρaq_rai = 1, ρaq_sno = 1)
+
+
+    ᶠᶜmat2_u₃_scalar = ᶠᶜmat2 .* (e³,)
+    ᶜᶠmat2_scalar_u₃ = ᶜᶠmat2 .* (e₃',)
+    ᶠᶠmat3_u₃_u₃ = ᶠᶠmat3 .* (e³ * e₃',)
+    ᶜᶠmat2_ρχ_u₃ = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit ⊠ e₃')), ᶜᶠmat2)
+    ᶜᶜmat3_uₕ_scalar =
+        DiagonalMatrixRow(Geometry.Covariant12Vector(FT(1), FT(1)))
     ᶜᶠmat2_uₕ_u₃ = ᶜᶠmat2 .* (e¹² * e₃',)
     ᶜᶜmat3_ρχ_scalar = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit)), ᶜᶜmat3)
     ᶜᶜmat3_ρaχ_scalar = map(Base.Fix1(map, Base.Fix2(⊠, ρaχ_unit)), ᶜᶜmat3)
     ᶜᶠmat2_ρaχ_u₃ = map(Base.Fix1(map, Base.Fix2(⊠, ρaχ_unit ⊠ e₃')), ᶜᶠmat2)
-    return MatrixFields.FieldMatrix(
+
+    dry_center_gs_unit = (; ρ = 1, ρe_tot = 1, uₕ = e¹²)
+    center_gs_unit = (; dry_center_gs_unit..., ρatke = 1, ρχ = ρχ_unit)
+    center_sgsʲ_unit = (; ρa = 1, ρae_tot = 1, ρaχ = ρaχ_unit)
+
+    b = Fields.FieldVector(;
+        sfc = sfc_vec .* ((; T = 1),),
+        c = ᶜvec .* ((; center_gs_unit..., sgsʲs = (center_sgsʲ_unit,)),),
+        f = ᶠvec .* ((; u₃ = e³, sgsʲs = ((; u₃ = e³),)),),
+    )
+    A = MatrixFields.FieldMatrix(
         # GS-GS blocks:
         (@name(sfc), @name(sfc)) => I,
         (@name(c.ρ), @name(c.ρ)) => I,
@@ -193,8 +217,10 @@ function dycore_prognostic_EDMF_FieldMatrix(;
         (@name(c.ρatke), @name(c.sgsʲs.:(1).ρa)) => deepcopy(ᶜᶜmat3),
         (@name(c.ρχ), @name(c.sgsʲs.:(1).ρa)) => deepcopy(ᶜᶜmat3_ρχ_scalar),
         (@name(c.uₕ), @name(c.sgsʲs.:(1).ρa)) => deepcopy(ᶜᶜmat3_uₕ_scalar),
-        (@name(c.ρe_tot), @name(f.sgsʲs.:(1).u₃)) => deepcopy(ᶜᶠmat2_scalar_u₃),
-        (@name(c.ρatke), @name(f.sgsʲs.:(1).u₃)) => deepcopy(ᶜᶠmat2_scalar_u₃),
+        (@name(c.ρe_tot), @name(f.sgsʲs.:(1).u₃)) =>
+            deepcopy(ᶜᶠmat2_scalar_u₃),
+        (@name(c.ρatke), @name(f.sgsʲs.:(1).u₃)) =>
+            deepcopy(ᶜᶠmat2_scalar_u₃),
         (@name(c.ρχ), @name(f.sgsʲs.:(1).u₃)) => deepcopy(ᶜᶠmat2_ρχ_u₃),
         (@name(c.uₕ), @name(f.sgsʲs.:(1).u₃)) => deepcopy(ᶜᶠmat2_uₕ_u₃),
         (@name(f.u₃), @name(c.sgsʲs.:(1).ρa)) => deepcopy(ᶠᶜmat2_u₃_scalar),
@@ -216,6 +242,7 @@ function dycore_prognostic_EDMF_FieldMatrix(;
         (@name(f.sgsʲs.:(1).u₃), @name(f.sgsʲs.:(1).u₃)) =>
             deepcopy(ᶠᶠmat3_u₃_u₃),
     )
+    return A, b
 end
 # Generate extruded finite difference spaces for testing. Include topography
 # when possible.

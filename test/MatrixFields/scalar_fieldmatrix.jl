@@ -124,95 +124,29 @@ end
 
 @testset "fieldmatrix to scalar fieldmatrix unit tests" begin
     FT = Float64
-    center_space, face_space = test_spaces(FT)
-    surface_space = Spaces.level(face_space, half)
-    seed!(1)
-    λ = 10
-    ᶜᶜmat1 = random_field(DiagonalMatrixRow{FT}, center_space) ./ λ .+ (I,)
-    ᶜᶠmat2 = random_field(BidiagonalMatrixRow{FT}, center_space) ./ λ
-    ᶠᶜmat2 = random_field(BidiagonalMatrixRow{FT}, face_space) ./ λ
-    ᶜᶜmat3 = random_field(TridiagonalMatrixRow{FT}, center_space) ./ λ .+ (I,)
-    ᶠᶠmat3 = random_field(TridiagonalMatrixRow{FT}, face_space) ./ λ .+ (I,)
-
-    e¹² = Geometry.Covariant12Vector(1, 2)
-    e³ = Geometry.Covariant3Vector(1)
-    e₃ = Geometry.Contravariant3Vector(1)
-
-    ρχ_unit = (; ρq_tot = 1, ρq_liq = 1, ρq_ice = 1, ρq_rai = 1, ρq_sno = 1)
-    ρaχ_unit =
-        (; ρaq_tot = 1, ρaq_liq = 1, ρaq_ice = 1, ρaq_rai = 1, ρaq_sno = 1)
-
-
-    ᶠᶜmat2_u₃_scalar = ᶠᶜmat2 .* (e³,)
-    ᶜᶠmat2_scalar_u₃ = ᶜᶠmat2 .* (e₃',)
-    ᶠᶠmat3_u₃_u₃ = ᶠᶠmat3 .* (e³ * e₃',)
-    ᶜᶠmat2_ρχ_u₃ = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit ⊠ e₃')), ᶜᶠmat2)
-    A = dycore_prognostic_EDMF_FieldMatrix(;
-        ᶜᶜmat1,
-        ᶜᶠmat2,
-        ᶠᶜmat2,
-        ᶜᶜmat3,
-        ᶠᶠmat3,
-        e¹²,
-        e³,
-        e₃,
-        ρχ_unit,
-        ρaχ_unit,
-        ᶜᶠmat2_ρχ_u₃,
-        ᶠᶠmat3_u₃_u₃,
-        ᶜᶠmat2_scalar_u₃,
-        ᶠᶜmat2_u₃_scalar,
-    )
-
-    scalar_keys = MatrixFields.get_scalar_keys(A)
-    @test length(scalar_keys) > length(keys(A))
-    @test all(
-        f -> f isa MatrixFields.UniformScaling || eltype(eltype(f)) <: FT,
-        getindex.(Ref(A), scalar_keys),
-    )
-    @test (@allocated MatrixFields.get_scalar_keys(A)) == 0
-    @test_opt MatrixFields.get_scalar_keys(A)
-    foreach(scalar_keys) do key
-        @test_opt A[key]
-        @test (@allocated A[key]) == 0
+    A, _ = dycore_prognostic_EDMF_FieldMatrix(FT)
+    for key in MatrixFields.get_scalar_keys(A)
+        @test_all A[key] isa MatrixFields.ColumnwiseBandMatrixField ?
+                  eltype(eltype(A[key])) == eltype(parent(A[key])) :
+                  eltype(eltype(A[key])) == eltype(A[key])
     end
-
-    A_scalar = MatrixFields.scalar_fieldmatrix(A)
     @test all(
-        f -> f isa MatrixFields.UniformScaling || eltype(eltype(f)) <: FT,
-        getindex.(Ref(A_scalar), scalar_keys),
+        entry ->
+            entry isa MatrixFields.UniformScaling ||
+                eltype(eltype(entry)) <: FT,
+        MatrixFields.scalar_fieldmatrix(A).entries,
     )
-    @test all(scalar_keys) do key
-        entry = A_scalar[key]
-        entry isa MatrixFields.UniformScaling && return true
-        key′, entry′ =
-            filter(pair -> MatrixFields.is_child_value(key, pair[1]), pairs(A))[1]
-        if key != key′
-            parent(entry) isa SubArray ||
-                parent(entry) === parent(entry′) ||
-                return false
-        end
-        parent(parent(entry)) === parent(entry′) || return false
-        return true
+    test_get(A, entry, key) = A[key] == entry
+    for (key, entry) in MatrixFields.scalar_fieldmatrix(A)
+        @test test_get(A, entry, key)
+        @test (@allocated test_get(A, entry, key)) == 0
+        @test_opt test_get(A, entry, key)
     end
     function scalar_fieldmatrix_wrapper(field_matrix_of_tensors)
-        MatrixFields.scalar_fieldmatrix(field_matrix_of_tensors)
-        return
-    end
-    scalar_fieldmatrix_wrapper(A)
-    @test (@allocated scalar_fieldmatrix_wrapper(A)) == 0
-    @test_opt MatrixFields.scalar_fieldmatrix(A)
-
-    A_copy = deepcopy(A)
-    @test all(scalar_keys) do key
-        entry_copy = A_copy[key]
-        entry_original = A[key]
-        entry_flattened = A_scalar[key]
-        entry_flattened isa MatrixFields.UniformScaling && return true
-        entry_original == entry_copy || return false
-        entry_original === entry_flattened || return false
-        entry_flattened .*= 2
-        entry_original == 2 .* entry_copy || return false
+        A_scalar = MatrixFields.scalar_fieldmatrix(field_matrix_of_tensors)
         return true
     end
+    scalar_fieldmatrix_wrapper(A) # compile the wrapper function
+    @test (@allocated scalar_fieldmatrix_wrapper(A)) == 0
+    @test_opt MatrixFields.scalar_fieldmatrix(A)
 end

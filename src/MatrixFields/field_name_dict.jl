@@ -152,11 +152,7 @@ get_internal_key(child_name_pair::FieldNamePair, name_pair::FieldNamePair) = (
 get_internal_entry(entry, name::FieldName, key_error) = get_field(entry, name)
 get_internal_entry(entry, name_pair::FieldNamePair, key_error) =
     name_pair == (@name(), @name()) ? entry : throw(key_error)
-get_internal_entry(
-    entry::ScalingFieldMatrixEntry,
-    name_pair::FieldNamePair,
-    key_error,
-) =
+get_internal_entry(entry::UniformScaling, name_pair::FieldNamePair, key_error) =
     if name_pair[1] == name_pair[2]
         entry
     elseif is_overlapping_name(name_pair[1], name_pair[2])
@@ -164,6 +160,21 @@ get_internal_entry(
     else
         zero(entry)
     end
+function get_internal_entry(
+    entry::DiagonalMatrixRow,
+    name_pair::FieldNamePair,
+    key_error,
+)
+    if name_pair[1] == name_pair[2]
+        entry
+    elseif name_pair[2] == @name() && has_field(entry, name_pair[1])
+        DiagonalMatrixRow(get_field(entry, name_pair[1]))
+    elseif is_overlapping_name(name_pair[1], name_pair[2])
+        throw(key_error)
+    else
+        zero(entry)
+    end
+end
 function get_internal_entry(
     entry::ColumnwiseBandMatrixField,
     name_pair::FieldNamePair,
@@ -317,12 +328,15 @@ function get_scalar_keys(dict::FieldMatrix)
         entry =
             entry isa ColumnwiseBandMatrixField ? entry.entries.:(1) : entry
         unrolled_map(
-            filtered_names(
-                field ->
-                    (field isa UniformScaling) ||
-                        eltype(field) == eltype(parent(field)),
-                entry,
-            ),
+            filtered_names(entry) do field
+                if field isa UniformScaling
+                    return true
+                elseif field isa Fields.Field
+                    return eltype(field) == eltype(eltype(field))
+                else
+                    return eltype(field) == typeof(field)
+                end
+            end,
         ) do name
             (append_internal_name(key[1], name), key[2])
         end

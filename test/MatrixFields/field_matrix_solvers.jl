@@ -459,7 +459,10 @@ end
         ),
         b = b_moist_dycore_diagnostic_edmf,
     )
-
+    (
+        A_moist_dycore_prognostic_edmf_prognostic_surface,
+        b_moist_dycore_prognostic_edmf_prognostic_surface,
+    ) = dycore_prognostic_EDMF_FieldMatrix(FT)
     test_field_matrix_solver(;
         test_name = "similar solve to ClimaAtmos's moist dycore + prognostic \
                      EDMF + prognostic surface temperature with implicit \
@@ -473,22 +476,7 @@ end
                 n_iters = 6,
             ),
         ),
-        A = dycore_prognostic_EDMF_FieldMatrix(;
-            ᶜᶜmat1,
-            ᶜᶠmat2,
-            ᶠᶜmat2,
-            ᶜᶜmat3,
-            ᶠᶠmat3,
-            e¹²,
-            e³,
-            e₃,
-            ρχ_unit,
-            ρaχ_unit,
-            ᶜᶠmat2_ρχ_u₃,
-            ᶠᶠmat3_u₃_u₃,
-            ᶜᶠmat2_scalar_u₃,
-            ᶠᶜmat2_u₃_scalar,
-        ),
+        A = A_moist_dycore_prognostic_edmf_prognostic_surface,
         b = b_moist_dycore_prognostic_edmf_prognostic_surface,
     )
 end
