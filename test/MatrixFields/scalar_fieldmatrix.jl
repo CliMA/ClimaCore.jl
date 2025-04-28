@@ -12,7 +12,7 @@ include("matrix_field_test_utils.jl")
     struct Singleton{T}
         x::T
     end
-    struct Two_fields{T1, T2}
+    struct TwoFields{T1, T2}
         x::T1
         y::T2
     end
@@ -40,39 +40,39 @@ include("matrix_field_test_utils.jl")
     test_get_field_first_index_offset(
         @name(y.x),
         Float64,
-        Two_fields{Two_fields{Float64, Float64}, Two_fields{Float64, Float64}},
+        TwoFields{TwoFields{Float64, Float64}, TwoFields{Float64, Float64}},
         2,
     )
     test_get_field_first_index_offset(
         @name(y.y),
         Float64,
-        Two_fields{
-            Two_fields{Float64, Float64},
-            Two_fields{Float64, Two_fields{Float64, Singleton{Float64}}},
+        TwoFields{
+            TwoFields{Float64, Float64},
+            TwoFields{Float64, TwoFields{Float64, Singleton{Float64}}},
         },
         3,
     )
     test_get_field_first_index_offset(
         @name(y.y),
         Float32,
-        Two_fields{Two_fields{Float64, Float64}, Two_fields{Float64, Float64}},
+        TwoFields{TwoFields{Float64, Float64}, TwoFields{Float64, Float64}},
         6,
     )
     test_get_field_first_index_offset(
         @name(y.y.x),
         Float64,
-        Two_fields{
-            Two_fields{Float64, Float64},
-            Two_fields{Float64, Two_fields{Float64, Singleton{Float64}}},
+        TwoFields{
+            TwoFields{Float64, Float64},
+            TwoFields{Float64, TwoFields{Float64, Singleton{Float64}}},
         },
         3,
     )
     test_get_field_first_index_offset(
         @name(y.y.y.x),
         Float64,
-        Two_fields{
-            Two_fields{Float64, Float64},
-            Two_fields{Float64, Two_fields{Float64, Singleton{Float64}}},
+        TwoFields{
+            TwoFields{Float64, Float64},
+            TwoFields{Float64, TwoFields{Float64, Singleton{Float64}}},
         },
         4,
     )
@@ -82,7 +82,7 @@ end
     struct Singleton{T}
         x::T
     end
-    struct Two_fields{T1, T2}
+    struct TwoFields{T1, T2}
         x::T1
         y::T2
     end
@@ -106,17 +106,17 @@ end
     )
     test_broadcasted_get_field_type(
         @name(y.x),
-        Two_fields{
-            Two_fields{Float64, Float64},
-            Two_fields{Float64, Two_fields{Float64, Singleton{Float64}}},
+        TwoFields{
+            TwoFields{Float64, Float64},
+            TwoFields{Float64, TwoFields{Float64, Singleton{Float64}}},
         },
         Float64,
     )
     test_broadcasted_get_field_type(
         @name(y.y.y),
-        Two_fields{
-            Two_fields{Float64, Float64},
-            Two_fields{Float64, Two_fields{Float64, Singleton{Float64}}},
+        TwoFields{
+            TwoFields{Float64, Float64},
+            TwoFields{Float64, TwoFields{Float64, Singleton{Float64}}},
         },
         Singleton{Float64},
     )
