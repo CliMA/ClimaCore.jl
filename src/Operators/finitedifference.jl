@@ -4185,4 +4185,4 @@ difference shmem for operators that support it.
 Operators.use_fd_shmem() = false
 ```
 """
-use_fd_shmem() = true
+use_fd_shmem() = false
