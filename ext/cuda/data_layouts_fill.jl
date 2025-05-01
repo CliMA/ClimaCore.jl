@@ -1,17 +1,18 @@
-function knl_fill!(dest, val, us, mask)
-    I = if mask isa NoMask
-        universal_index(dest)
-    else
-        masked_universal_index(mask)
-    end
-    if is_valid_index(dest, I, us)
+function knl_fill!(dest, val, us, mask, cart_inds)
+    tidx = linear_thread_idx()
+    if linear_is_valid_index(tidx, us) && tidx ≤ length(unval(cart_inds))
+        I = if mask isa NoMask
+            unval(cart_inds)[tidx]
+        else
+            masked_universal_index(mask, cart_inds)
+        end
         @inbounds dest[I] = val
     end
     return nothing
 end
 
 function knl_fill_linear!(dest, val, us)
-    i = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
+    i = linear_thread_idx()
     if linear_is_valid_index(i, us)
         @inbounds dest[i] = val
     end
@@ -19,7 +20,7 @@ function knl_fill_linear!(dest, val, us)
 end
 
 function Base.fill!(dest::AbstractData, bc, to::ToCUDA, mask = NoMask())
-    (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest)
+    (Ni, Nj, Nv, _, Nh) = DataLayouts.universal_size(dest)
     us = DataLayouts.UniversalSize(dest)
     if Nv > 0 && Nh > 0
         if !(VERSION ≥ v"1.11.0-beta") &&
@@ -36,13 +37,18 @@ function Base.fill!(dest::AbstractData, bc, to::ToCUDA, mask = NoMask())
                 blocks_s = p.blocks,
             )
         else
-            args = (dest, bc, us, mask)
+            cart_inds = if mask isa NoMask
+                cartesian_indices(us)
+            else
+                cartesian_indicies_mask(us, mask)
+            end
+            args = (dest, bc, us, mask, cart_inds)
             threads = threads_via_occupancy(knl_fill!, args)
             n_max_threads = min(threads, get_N(us))
             p = if mask isa NoMask
-                partition(dest, n_max_threads)
+                linear_partition(prod(size(dest)), n_max_threads)
             else
-                masked_partition(us, n_max_threads, mask)
+                masked_partition(mask, n_max_threads, us)
             end
             auto_launch!(
                 knl_fill!,

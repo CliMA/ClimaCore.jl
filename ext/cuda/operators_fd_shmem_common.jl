@@ -209,19 +209,23 @@ Base.@propagate_inbounds function getidx(
 end
 
 """
-    fd_allocate_shmem(Val(Nvt), b)
+    fd_allocate_shmem(shmem_params, b)
 
 Create a new broadcasted object with necessary share memory allocated,
-using `Nvt` nodal points per block.
+using `params` nodal points per block.
 """
-@inline function fd_allocate_shmem(::Val{Nvt}, obj) where {Nvt}
+@inline function fd_allocate_shmem(::ShmemParams, obj)
     obj
 end
 @inline function fd_allocate_shmem(
-    ::Val{Nvt},
+    shmem_params::ShmemParams,
     bc::Broadcasted{Style},
-) where {Nvt, Style}
-    Broadcasted{Style}(bc.f, _fd_allocate_shmem(Val(Nvt), bc.args...), bc.axes)
+) where {Style}
+    Broadcasted{Style}(
+        bc.f,
+        _fd_allocate_shmem(shmem_params, bc.args...),
+        bc.axes,
+    )
 end
 
 ######### MatrixFields
@@ -236,22 +240,22 @@ end
 #########
 
 @inline function fd_allocate_shmem(
-    ::Val{Nvt},
+    shmem_params::ShmemParams,
     sbc::StencilBroadcasted{Style},
-) where {Nvt, Style}
-    args = _fd_allocate_shmem(Val(Nvt), sbc.args...)
+) where {Style}
+    args = _fd_allocate_shmem(shmem_params, sbc.args...)
     work = if Operators.fd_shmem_is_supported(sbc)
-        fd_operator_shmem(sbc.axes, Val(Nvt), sbc.op, args...)
+        fd_operator_shmem(sbc.axes, shmem_params, sbc.op, args...)
     else
         nothing
     end
     StencilBroadcasted{Style}(sbc.op, args, sbc.axes, work)
 end
 
-@inline _fd_allocate_shmem(::Val{Nvt}) where {Nvt} = ()
-@inline _fd_allocate_shmem(::Val{Nvt}, arg, xargs...) where {Nvt} = (
-    fd_allocate_shmem(Val(Nvt), arg),
-    _fd_allocate_shmem(Val(Nvt), xargs...)...,
+@inline _fd_allocate_shmem(::ShmemParams) = ()
+@inline _fd_allocate_shmem(shmem_params::ShmemParams, arg, xargs...) = (
+    fd_allocate_shmem(shmem_params, arg),
+    _fd_allocate_shmem(shmem_params, xargs...)...,
 )
 
 """
@@ -323,9 +327,18 @@ Base.@propagate_inbounds function fd_resolve_shmem!(
     ᶜidx = get_cent_idx(idx)
     ᶠidx = get_face_idx(idx)
 
-    _fd_resolve_shmem!(idx, hidx, bds, sbc.args...) # propagate idx, not bc_idx recursively through broadcast expressions
+    # Here, we use tail-recursion. We visit leaves of the broadcast expression,
+    # then work our way up. The StencilBroadcasted and Broadcasted can be
+    # interleaved (e.g., `DivergenceF2C()(f*GradientC2F()(a*b)))`. The leaves of
+    # the StencilBroadcasted will call `getidx`, below which there are
+    # (by definition) no more `StencilBroadcasted`, and those `getidx` calls
+    # will read from global memory. Immediately above those reads, all
+    # subsequent reads will be from shmem (as they will be caught by the
+    # `getidx` defined above).
+    _fd_resolve_shmem!(idx, hidx, bds, sbc.args...)
 
-    # After recursion, check if shmem is supported for this operator
+    # Once we're about ready to fill the shmem, check if shmem is supported for
+    # this operator
     Operators.fd_shmem_is_supported(sbc) || return nothing
 
     # There are `Nf` threads, where `Nf` is the number of face levels. So,

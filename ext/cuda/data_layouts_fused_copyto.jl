@@ -1,36 +1,44 @@
 Base.@propagate_inbounds function rcopyto_at!(
     pair::Pair{<:AbstractData, <:Any},
-    I,
+    cart_inds,
+    tidx,
     us,
 )
     dest, bc = pair.first, pair.second
-    if is_valid_index(dest, I, us)
+    if linear_is_valid_index(tidx, us) && tidx ≤ length(unval(cart_inds))
+        I = unval(cart_inds)[tidx]
         dest[I] = isascalar(bc) ? bc[] : bc[I]
     end
     return nothing
 end
-Base.@propagate_inbounds function rcopyto_at!(pair::Pair{<:DataF, <:Any}, I, us)
+Base.@propagate_inbounds function rcopyto_at!(
+    pair::Pair{<:DataF, <:Any},
+    cart_inds,
+    tidx,
+    us,
+)
     dest, bc = pair.first, pair.second
-    if is_valid_index(dest, I, us)
+    if linear_is_valid_index(tidx, us) && tidx ≤ length(unval(cart_inds))
+        I = unval(cart_inds)[tidx]
         bcI = isascalar(bc) ? bc[] : bc[I]
         dest[] = bcI
     end
     return nothing
 end
-Base.@propagate_inbounds function rcopyto_at!(pairs::Tuple, I, us)
-    rcopyto_at!(first(pairs), I, us)
-    rcopyto_at!(Base.tail(pairs), I, us)
+Base.@propagate_inbounds function rcopyto_at!(pairs::Tuple, cart_inds, tidx, us)
+    rcopyto_at!(first(pairs), cart_inds, tidx, us)
+    rcopyto_at!(Base.tail(pairs), cart_inds, tidx, us)
 end
-Base.@propagate_inbounds rcopyto_at!(pairs::Tuple{<:Any}, I, us) =
-    rcopyto_at!(first(pairs), I, us)
-@inline rcopyto_at!(pairs::Tuple{}, I, us) = nothing
+Base.@propagate_inbounds rcopyto_at!(pairs::Tuple{<:Any}, cart_inds, tidx, us) =
+    rcopyto_at!(first(pairs), cart_inds, tidx, us)
+@inline rcopyto_at!(pairs::Tuple{}, cart_inds, tidx, us) = nothing
 
-function knl_fused_copyto!(fmbc::FusedMultiBroadcast, dest1, us)
+function knl_fused_copyto!(fmbc::FusedMultiBroadcast, dest1, us, cart_inds)
     @inbounds begin
-        I = universal_index(dest1)
-        if is_valid_index(dest1, I, us)
+        tidx = linear_thread_idx()
+        if linear_is_valid_index(tidx, us) && tidx ≤ length(unval(cart_inds))
             (; pairs) = fmbc
-            rcopyto_at!(pairs, I, us)
+            rcopyto_at!(pairs, cart_inds, tidx, us)
         end
     end
     return nothing
@@ -138,10 +146,11 @@ function launch_fused_copyto!(fmb::FusedMultiBroadcast)
             blocks_s = p.blocks,
         )
     else
-        args = (fmb, dest1, us)
+        cart_inds = cartesian_indices(us)
+        args = (fmb, dest1, us, cart_inds)
         threads = threads_via_occupancy(knl_fused_copyto!, args)
         n_max_threads = min(threads, get_N(us))
-        p = partition(dest1, n_max_threads)
+        p = linear_partition(prod(size(dest1)), n_max_threads)
         auto_launch!(
             knl_fused_copyto!,
             args;
