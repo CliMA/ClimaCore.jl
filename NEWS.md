@@ -4,6 +4,30 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- Fixed missing method for `Topologies.mesh(Topology2D)`
+   [2288](https://github.com/CliMA/ClimaCore.jl/pull/2288).
+
+v0.14.31
+-------
+
+ - GPU performance should now be more robust
+   [2296](https://github.com/CliMA/ClimaCore.jl/pull/2296).
+
+ - Remapping is now protected for masked operations
+   [2292](https://github.com/CliMA/ClimaCore.jl/pull/2292).
+
+ - Shmem support for InterpolateC2F was added
+   [2290](https://github.com/CliMA/ClimaCore.jl/pull/2290).
+
+ - Some masked operations were fixed
+   [2285](https://github.com/CliMA/ClimaCore.jl/pull/2285).
+
+ - Internal refactoring should help reduce latency and improve gpu performance
+   [2284](https://github.com/CliMA/ClimaCore.jl/pull/2284).
+
+ - Masks now support restart
+   [2212](https://github.com/CliMA/ClimaCore.jl/pull/2212).
+
 v0.14.30
 -------
 

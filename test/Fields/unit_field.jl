@@ -147,6 +147,10 @@ function pow_n(f)
     @. f.x = f.x^2
     return nothing
 end
+function pow_n_bc(f)
+    @. f.x = (f.x * 2)^2
+    return nothing
+end
 @testset "Broadcasting with ^n" begin
     FT = Float32
     device = ClimaComms.CPUSingleThreaded() # fill is broken on gpu
@@ -155,6 +159,13 @@ end
         f = fill((; x = FT(1)), space)
         pow_n(f) # Compile first
         p_allocated = @allocated pow_n(f)
+        if space isa Spaces.SpectralElementSpace1D
+            @test p_allocated == 0
+        else
+            @test p_allocated == 0 broken = (device isa ClimaComms.CUDADevice)
+        end
+        pow_n_bc(f) # Compile first
+        p_allocated = @allocated pow_n_bc(f)
         if space isa Spaces.SpectralElementSpace1D
             @test p_allocated == 0
         else

@@ -27,6 +27,12 @@ Base.similar(
     dims::Dims{N},
 ) where {T, N, B} = similar(CUDA.CuArray{T, N, B}, dims)
 
+unval(::Val{CI}) where {CI} = CI
+unval(CI) = CI
+
+@inline linear_thread_idx() =
+    threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
+
 include("data_layouts_fill.jl")
 include("data_layouts_copyto.jl")
 include("data_layouts_fused_copyto.jl")

@@ -313,7 +313,7 @@ end
 Base.Broadcast.broadcasted(
     ::typeof(Base.literal_pow),
     ::typeof(^),
-    f::Field,
+    f::Union{Field, Base.Broadcast.Broadcasted{<:AbstractFieldStyle}},
     ::Val{n},
 ) where {n} = Base.Broadcast.broadcasted(x -> Base.literal_pow(^, x, Val(n)), f)
 

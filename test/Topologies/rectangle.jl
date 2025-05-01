@@ -337,3 +337,8 @@ end
     @test topology1 === topology2
     @test topology1 !== topology3
 end
+
+@testset "accessors" begin
+    topology = rectangular_grid(3, 3, true, true)
+    @test Topologies.mesh(topology) == topology.mesh
+end

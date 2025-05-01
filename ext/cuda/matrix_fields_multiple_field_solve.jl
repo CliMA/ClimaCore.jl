@@ -34,12 +34,13 @@ NVTX.@annotate function multiple_field_solve!(
     device = ClimaComms.device(x[first(names)])
 
     us = UniversalSize(Fields.field_values(x1))
-    args = (device, caches, xs, As, bs, x1, us, mask, Val(Nnames))
+    cart_inds = cartesian_indices_multiple_field_solve(us; Nnames)
+    args = (device, caches, xs, As, bs, x1, us, mask, cart_inds, Val(Nnames))
 
     nitems = Ni * Nj * Nh * Nnames
     threads = threads_via_occupancy(multiple_field_solve_kernel!, args)
     n_max_threads = min(threads, nitems)
-    p = multiple_field_solve_partition(us, n_max_threads; Nnames)
+    p = linear_partition(nitems, n_max_threads)
 
     auto_launch!(
         multiple_field_solve_kernel!,
@@ -88,13 +89,15 @@ function multiple_field_solve_kernel!(
     x1,
     us::UniversalSize,
     mask,
+    cart_inds,
     ::Val{Nnames},
 ) where {Nnames}
     @inbounds begin
-        (I, iname) = multiple_field_solve_universal_index(us)
-        DataLayouts.should_compute(mask, I) || return nothing
-        if multiple_field_solve_is_valid_index(I, us)
-            (i, j, _, _, h) = I.I
+        tidx = linear_thread_idx()
+        if linear_is_valid_index(tidx, us) && tidx ≤ length(unval(cart_inds))
+            (i, j, h, iname) = unval(cart_inds)[tidx].I
+            ui = CartesianIndex((i, j, 1, 1, h))
+            DataLayouts.should_compute(mask, ui) || return nothing
             generated_single_field_solve!(
                 device,
                 caches,
