@@ -22,6 +22,10 @@ Base.Broadcast.BroadcastStyle(
 
 include("operators_fd_shmem_is_supported.jl")
 
+struct ShmemParams{Nv} end
+interior_size(::ShmemParams{Nv}) where {Nv} = (Nv,)
+boundary_size(::ShmemParams{Nv}) where {Nv} = (1,)
+
 function Base.copyto!(
     out::Field,
     bc::Union{
@@ -56,6 +60,7 @@ function Base.copyto!(
        mask isa NoMask &&
        enough_shmem &&
        Operators.use_fd_shmem()
+        shmem_params = ShmemParams{n_face_levels}()
         p = fd_shmem_stencil_partition(us, n_face_levels)
         args = (
             strip_space(out, space),
@@ -64,7 +69,7 @@ function Base.copyto!(
             bounds,
             us,
             mask,
-            Val(p.Nvthreads),
+            shmem_params,
         )
         auto_launch!(
             copyto_stencil_kernel_shmem!,
@@ -75,6 +80,12 @@ function Base.copyto!(
     else
         bc′ = disable_shmem_style(bc)
         @assert !any_fd_shmem_style(bc′)
+        cart_inds = if mask isa NoMask
+            cartesian_indices(us)
+        else
+            cartesian_indicies_mask(us, mask)
+        end
+
         args = (
             strip_space(out, space),
             strip_space(bc′, space),
@@ -82,14 +93,15 @@ function Base.copyto!(
             bounds,
             us,
             mask,
+            cart_inds,
         )
 
         threads = threads_via_occupancy(copyto_stencil_kernel!, args)
         n_max_threads = min(threads, get_N(us))
         p = if mask isa NoMask
-            partition(out_fv, n_max_threads)
+            linear_partition(prod(size(out_fv)), n_max_threads)
         else
-            masked_partition(us, n_max_threads, mask)
+            masked_partition(mask, n_max_threads, us)
         end
 
         auto_launch!(
@@ -114,15 +126,17 @@ function copyto_stencil_kernel!(
     bds,
     us,
     mask,
+    cart_inds,
 )
     @inbounds begin
         out_fv = Fields.field_values(out)
-        I = if mask isa NoMask
-            universal_index(out_fv)
-        else
-            masked_universal_index(mask)
-        end
-        if is_valid_index(out_fv, I, us)
+        tidx = linear_thread_idx()
+        if linear_is_valid_index(tidx, us) && tidx ≤ length(unval(cart_inds))
+            I = if mask isa NoMask
+                unval(cart_inds)[tidx]
+            else
+                masked_universal_index(mask, cart_inds)
+            end
             (li, lw, rw, ri) = bds
             (i, j, _, v, h) = I.I
             hidx = (i, j, h)
@@ -144,19 +158,19 @@ function copyto_stencil_kernel_shmem!(
     bds,
     us,
     mask,
-    ::Val{Nvt},
-) where {Nvt}
+    shmem_params::ShmemParams,
+)
     @inbounds begin
         out_fv = Fields.field_values(out)
         us = DataLayouts.UniversalSize(out_fv)
-        I = fd_stencil_universal_index(space, us)
-        if fd_stencil_is_valid_index(I, us) # check that hidx is in bounds
+        I = fd_shmem_stencil_universal_index(space, us)
+        if fd_shmem_stencil_is_valid_index(I, us) # check that hidx is in bounds
             (li, lw, rw, ri) = bds
             (i, j, _, v, h) = I.I
             hidx = (i, j, h)
             idx = v - 1 + li
             bc = Operators.reconstruct_placeholder_broadcasted(space, bc′)
-            bc_shmem = fd_allocate_shmem(Val(Nvt), bc) # allocates shmem
+            bc_shmem = fd_allocate_shmem(shmem_params, bc) # allocates shmem
 
             fd_resolve_shmem!(bc_shmem, idx, hidx, bds) # recursively fills shmem
             CUDA.sync_threads()

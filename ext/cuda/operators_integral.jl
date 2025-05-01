@@ -24,6 +24,7 @@ function column_reduce_device!(
     if !(mask isa DataLayouts.NoMask) && space isa Spaces.FiniteDifferenceSpace
         error("Masks not supported for FiniteDifferenceSpace")
     end
+    cart_inds = cartesian_indices_columnwise(us)
     args = (
         single_column_reduce!,
         f,
@@ -34,11 +35,12 @@ function column_reduce_device!(
         space,
         us,
         mask,
+        cart_inds,
     )
     nitems = Ni * Nj * Nh
     threads = threads_via_occupancy(bycolumn_kernel!, args)
     n_max_threads = min(threads, nitems)
-    p = columnwise_partition(us, n_max_threads)
+    p = linear_partition(nitems, n_max_threads)
     auto_launch!(
         bycolumn_kernel!,
         args;
@@ -67,6 +69,7 @@ function column_accumulate_device!(
         error("Masks not supported for FiniteDifferenceSpace")
     end
     us = UniversalSize(out_fv)
+    cart_inds = cartesian_indices_columnwise(us)
     args = (
         single_column_accumulate!,
         f,
@@ -77,12 +80,13 @@ function column_accumulate_device!(
         space,
         us,
         mask,
+        cart_inds,
     )
     (Ni, Nj, _, _, Nh) = DataLayouts.universal_size(us)
     nitems = Ni * Nj * Nh
     threads = threads_via_occupancy(bycolumn_kernel!, args)
     n_max_threads = min(threads, nitems)
-    p = columnwise_partition(us, n_max_threads)
+    p = linear_partition(nitems, n_max_threads)
     auto_launch!(
         bycolumn_kernel!,
         args;
@@ -101,14 +105,17 @@ function bycolumn_kernel!(
     space,
     us::DataLayouts.UniversalSize,
     mask,
+    cart_inds,
 ) where {S, F, T}
     if space isa Spaces.FiniteDifferenceSpace
         single_column_function!(f, transform, output, input, init, space)
     else
-        I = columnwise_universal_index(us)
-        DataLayouts.should_compute(mask, I) || return nothing
-        if columnwise_is_valid_index(I, us)
-            (i, j, _, _, h) = I.I
+        tidx = linear_thread_idx()
+        if linear_is_valid_index(tidx, us) && tidx ≤ length(unval(cart_inds))
+            I = unval(cart_inds)[tidx]
+            (i, j, h) = I.I
+            ui = CartesianIndex((i, j, 1, 1, h))
+            DataLayouts.should_compute(mask, ui) || return nothing
             single_column_function!(
                 f,
                 transform,

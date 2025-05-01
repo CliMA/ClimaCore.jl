@@ -2340,16 +2340,13 @@ function IJHMask(is_active::Union{IJFH, IJHF})
     DA = unionall_type(typeof(parent(is_active)))
     (Ni, Nj, _, _, Nh) = size(is_active)
     Nijh = Ni * Nj * Nh
+    N = zeros(Int, 1)
     i_map = zeros(Int, Nijh)
     j_map = zeros(Int, Nijh)
     h_map = zeros(Int, Nijh)
-    return IJHMask(
-        rebuild(is_active, DA),
-        zeros(Int, 1), # N
-        DA(i_map),
-        DA(j_map),
-        DA(h_map),
-    )
+    mask = IJHMask(rebuild(is_active, DA), N, DA(i_map), DA(j_map), DA(h_map))
+    set_mask_maps!(mask)
+    return mask
 end
 
 """
