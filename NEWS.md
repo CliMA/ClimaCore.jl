@@ -4,6 +4,9 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- Latitude and longitudes were flipped in the default target coordiantes
+in the remapper, leading to non-sense values.
+
 v0.14.33
 -------
 
