@@ -175,8 +175,8 @@ function default_target_hcoords_as_vectors(
     topology = Spaces.topology(space)
     domain = Meshes.domain(topology.mesh)
     if domain isa Domains.SphereDomain
-        return FT.(range(-180.0, 180.0, hresolution)),
-        FT.(range(-90.0, 90.0, hresolution))
+        return FT.(range(-90.0, 90.0, hresolution)),
+        FT.(range(-180.0, 180.0, hresolution))
     else
         x1min = Geometry.component(domain.interval1.coord_min, 1)
         x2min = Geometry.component(domain.interval2.coord_min, 1)
