@@ -185,10 +185,9 @@ function get_internal_entry(
     T = eltype(eltype(entry))
     if name_pair == (@name(), @name())
         entry
-    elseif name_pair[1] == name_pair[2]
+    elseif name_pair[1] == name_pair[2] && !broadcasted_has_field(T, name_pair[1])
         # multiplication case 3 or 4, first argument
-        @assert T <: Geometry.SingleValue &&
-                !broadcasted_has_field(T, name_pair[1])
+        @assert T <: Geometry.SingleValue
         entry
     elseif name_pair[2] == @name() && broadcasted_has_field(T, name_pair[1])
         # multiplication case 2 or 4, second argument
@@ -236,6 +235,48 @@ function get_internal_entry(
                 end
             end # Note: This assumes that the entry is in a FieldMatrixBroadcasted.
         end
+    elseif broadcasted_has_field(T, name_pair[1]) && broadcasted_has_field(T, name_pair[2])
+        # this should only be the case when both independent and dependent var are axisvectors
+        @assert T <: Geometry.SingleValue && !(T <: Number)
+        @assert drop_last(name_pair[1]) == drop_last(name_pair[2]) == @name(components.data)
+        row_index = extract_last(name_pair[1])
+        col_index = extract_last(name_pair[2])
+        (n_rows, n_cols) = map(length, axes(T))
+        @assert row_index <= n_rows && col_index <= n_cols
+        flattened_index = n_rows * (col_index - 1) + row_index
+        band_element_size = div(sizeof(T), sizeof(eltype(T)))
+        T_band = eltype(entry)
+        singleton_datalayout =
+            DataLayouts.singleton(Fields.field_values(entry))
+        # BandMatrixRow with same lowest diagonal and bandwidth as `entry`, with a scalar eltype
+        scalar_band_type = band_matrix_row_type(
+            outer_diagonals(T_band)...,
+            eltype(T),
+        )
+        field_dim_size = DataLayouts.ncomponents(Fields.field_values(entry))
+        band_element_size = div(sizeof(T), sizeof(eltype(T)))
+        @assert band_element_size == n_rows * n_cols
+        parent_indices = DataLayouts.to_data_specific_field(
+                singleton_datalayout,
+                (
+                    :,
+                    :,
+                    flattened_index:band_element_size:field_dim_size,
+                    :,
+                    :,
+                ),
+            )
+        # Main.@infiltrate
+        scalar_data = view(parent(entry), parent_indices...)
+            values = DataLayouts.union_all(singleton_datalayout){
+                scalar_band_type,
+                Base.tail(
+                    DataLayouts.type_params(Fields.field_values(entry)),
+                )...,
+            }(
+                scalar_data,
+            )
+            Fields.Field(values, axes(entry))
     else
         throw(key_error)
     end
@@ -322,24 +363,68 @@ end
 Returns a `FieldMatrixKeys` object that contains the keys of all the scalar
 entries in the `FieldMatrix` `dict`.
 """
-function get_scalar_keys(dict::FieldMatrix)
+function get_scalar_keys(dict::FieldMatrix, Y::Fields.FieldVector)
     keys_tuple = unrolled_flatmap(keys(dict).values) do key
         entry = dict[unrolled_filter(isequal(key), keys(dict).values)[1]]
-        entry =
-            entry isa ColumnwiseBandMatrixField ? entry.entries.:(1) : entry
-        unrolled_map(filtered_names(entry) do field
-            if field isa UniformScaling
-                true
-            elseif field isa Fields.Field
-                eltype(field) == eltype(eltype(field))
+        if entry isa UniformScaling # uniformscalings can only contain numbers
+            (key,)
+        elseif entry isa ColumnwiseBandMatrixField
+            first_band = entry.entries.:(1)
+            target_eltype = eltype(parent(first_band))
+            if eltype(first_band) == target_eltype
+                (key,)
             else
-                eltype(field) == typeof(field)
+                dependent_var = get_field(Y, key[1])
+                independent_var = get_field(Y, key[2])
+                dependent_type = eltype(dependent_var)
+                independent_type = eltype(independent_var)
+                # @Main.infiltrate
+                @assert dependent_type <: Geometry.SingleValue ||
+                    independent_type <: Geometry.SingleValue ||
+                    "cannot get scalar keys for key $key"
+
+                # figure out if we need to drill into key[1] or key[2], or both
+                # @show key
+                unrolled_flatmap(filtered_names(x -> eltype(x) <: target_eltype, dependent_var)) do dependent_name
+                    unrolled_map(filtered_names(x -> eltype(x) <: target_eltype, independent_var)) do independent_name
+                        (append_internal_name(key[1], dependent_name), append_internal_name(key[2], independent_name))
+                    end
+                    # @Main.infiltrate
+                    # key
+                end
+                # (key,)
             end
-        end) do name
-            (append_internal_name(key[1], name), key[2])
+        else
+            # TODO: Fix me
+            (key,)
         end
+
+        # entry =
+        #     entry isa ColumnwiseBandMatrixField ? entry.entries.:(1) : entry
+        # unrolled_map(filtered_names(entry) do field
+        #     if field isa UniformScaling
+        #         true
+        #     elseif field isa Fields.Field
+        #         eltype(field) == eltype(eltype(field))
+        #     else
+        #         eltype(field) == typeof(field)
+        #     end
+        # end) do name
+        #     (append_internal_name(key[1], name), key[2])
+        # end
     end
     return FieldMatrixKeys(keys_tuple)
+end
+
+function new_get_scalar_keys(dict::FieldMatrix, Y::Fields.FieldVector)
+    scalar_field_vector_keys = MatrixFields.filtered_names(Y) do field
+        field isa Fields.Field && eltype(field) == eltype(parent(field))
+    end
+    map(keys(dict).values) do key
+        first_key_is_scalar = unrolled_any(isequal(key[1]), scalar_field_vector_keys)
+        second_key_is_scalar = unrolled_any(isequal(key[2]), scalar_field_vector_keys)
+        @assert first_key_is_scalar || second_key_is_scalar "$key"
+    end
 end
 
 """

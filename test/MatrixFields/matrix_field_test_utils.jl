@@ -156,7 +156,7 @@ function dycore_prognostic_EDMF_FieldMatrix(::Type{FT}) where {FT}
     ᶠᶜmat2 = random_field(BidiagonalMatrixRow{FT}, face_space) ./ λ
     ᶜᶜmat3 = random_field(TridiagonalMatrixRow{FT}, center_space) ./ λ .+ (I,)
     ᶠᶠmat3 = random_field(TridiagonalMatrixRow{FT}, face_space) ./ λ .+ (I,)
-
+    # Geometry.Covariant123Vector(1, 2, 3) * Geometry.Covariant12Vector(1, 2)'
     e¹² = Geometry.Covariant12Vector(1, 1)
     e³ = Geometry.Covariant3Vector(1)
     e₃ = Geometry.Contravariant3Vector(1)
@@ -172,6 +172,7 @@ function dycore_prognostic_EDMF_FieldMatrix(::Type{FT}) where {FT}
     ᶜᶠmat2_ρχ_u₃ = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit ⊠ e₃')), ᶜᶠmat2)
     ᶜᶜmat3_uₕ_scalar =
         DiagonalMatrixRow(Geometry.Covariant12Vector(FT(1), FT(1)))
+    ᶜᶜmat3_uₕ_uₕ = ᶜᶜmat3 .* (e¹² * e¹²',)
     ᶜᶠmat2_uₕ_u₃ = ᶜᶠmat2 .* (e¹² * e₃',)
     ᶜᶜmat3_ρχ_scalar = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit)), ᶜᶜmat3)
     ᶜᶜmat3_ρaχ_scalar = map(Base.Fix1(map, Base.Fix2(⊠, ρaχ_unit)), ᶜᶜmat3)
@@ -189,11 +190,12 @@ function dycore_prognostic_EDMF_FieldMatrix(::Type{FT}) where {FT}
     A = MatrixFields.FieldMatrix(
         # GS-GS blocks:
         (@name(sfc), @name(sfc)) => I,
+        (@name(sfc), @name(c.uₕ)) => ᶜᶜmat3 .* (Geometry.Covariant123Vector(1, 2, 3) * Geometry.Covariant12Vector(1, 2)',),
         (@name(c.ρ), @name(c.ρ)) => I,
         (@name(c.ρe_tot), @name(c.ρe_tot)) => ᶜᶜmat3,
         (@name(c.ρatke), @name(c.ρatke)) => ᶜᶜmat3,
         (@name(c.ρχ), @name(c.ρχ)) => ᶜᶜmat3,
-        (@name(c.uₕ), @name(c.uₕ)) => ᶜᶜmat3,
+        (@name(c.uₕ), @name(c.uₕ)) => ᶜᶜmat3_uₕ_uₕ,
         (@name(c.ρ), @name(f.u₃)) => ᶜᶠmat2_scalar_u₃,
         (@name(c.ρe_tot), @name(f.u₃)) => ᶜᶠmat2_scalar_u₃,
         (@name(c.ρatke), @name(f.u₃)) => ᶜᶠmat2_scalar_u₃,
