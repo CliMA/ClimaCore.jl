@@ -45,3 +45,4 @@ docs/src/tutorials/
 *.gz
 *.mp4
 *.png
+.DS_Store

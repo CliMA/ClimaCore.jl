@@ -2,6 +2,94 @@
 
 ## 1D Column examples
 
+### 1D Wave Equation
+
+The 1D linear wave example in [`examples/column/wave.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/column/wave.jl) demonstrates solving the following system of PDEs:
+
+#### Equations and Discretizations
+
+The first-order system for the 1D linear wave equation is:
+
+```math
+\begin{aligned}
+\frac{\partial u}{\partial t} &= -\frac{\partial p}{\partial z} \\
+\frac{\partial p}{\partial t} &= -\frac{\partial u}{\partial z}
+\end{aligned}
+```
+
+This is discretized using finite difference operators with a staggered grid:
+
+- `u` is defined at cell centers (`CenterFiniteDifferenceSpace`)
+- `p` is defined at cell faces (`FaceFiniteDifferenceSpace`)
+
+The discrete form is:
+
+```math
+\begin{aligned}
+\frac{d u}{dt} &\approx - \nabla \cdot p \\
+\frac{d p}{dt} &\approx - \nabla u
+\end{aligned}
+```
+
+These are implemented in code using:
+
+```julia
+∂f = GradientC2F(left = SetValue(0.0), right = SetValue(0.0))
+∂c = DivergenceF2C()
+
+@. dp = -WVector(∂f(u))
+@. du = -∂c(p)
+```
+
+with Dirichlet boundary conditions (`SetValue(0.0)`) applied at both ends.
+
+#### Prognostic Variables
+
+| Variable | Description                 | Space                        |
+|----------|-----------------------------|------------------------------|
+| `u`      | Scalar velocity             | CenterFiniteDifferenceSpace |
+| `p`      | Face-centered pressure flux | FaceFiniteDifferenceSpace   |
+
+#### Time Integration
+
+The system is solved using the `SSPRK33` time integrator from the `OrdinaryDiffEqSSPRK` package:
+
+```julia
+prob = ODEProblem(tendency!, Y, (0.0, 4π))
+sol = solve(prob, SSPRK33(), dt = 0.01, saveat = 0.1)
+```
+
+#### ClimaCore Operators Used
+
+| Operator             | Purpose                                                                 | Code Example                      |
+|----------------------|-------------------------------------------------------------------------|-----------------------------------|
+| `GradientC2F(...)`   | Computes the gradient from center (C) to face (F) locations              | `∂f = GradientC2F(...)`           |
+| `DivergenceF2C()`    | Computes the divergence from face (F) to center (C) locations            | `∂c = DivergenceF2C()`            |
+| `WVector(...)`       | Constructs a vertical vector field at faces                             | `@. dp = -WVector(∂f(u))`         |
+| `SetValue(val)`      | Enforces a boundary condition by setting values at the boundary          | `GradientC2F(left = SetValue(0.0))` |
+
+- **`GradientC2F`**: Computes ∂u/∂z, placing the result on face points.
+- **`DivergenceF2C`**: Computes ∂p/∂z, placing the result on center points.
+- **`WVector`**: Wraps scalars into 1D vertical vectors for compatibility with `DivergenceF2C`.
+- **`SetValue(0.0)`**: Applies fixed-value Dirichlet boundary conditions.
+
+#### Problem Flow and Setup
+
+1. **Mesh and Domain**: Create a 1D interval domain `[0, 4π]` with 30 elements.
+2. **Function Spaces**: Construct staggered finite-difference spaces for `u` (cell centers) and `p` (cell faces).
+3. **Initial Conditions**: Set `u(z) = sin(z)` and `p(z) = 0`.
+4. **Differential Operators**: Apply `GradientC2F` and `DivergenceF2C` with Dirichlet boundaries.
+5. **Tendency Function**: Compute time derivatives of `u` and `p`.
+6. **ODE Integration**: Solve the PDE system using `SSPRK33` with `OrdinaryDiffEqSSPRK`.
+7. **Output**: Save the final state and animated wave evolution using `Plots.jl`.
+
+#### Visualization
+
+An animation of `u(z, t)` is generated with `Plots.jl`, and the final state is saved as an image:
+
+- ![wave_end.png](../assets/wave_end.png) Final state of `u`
+- ![wave.gif](../assets/wave.gif) Time evolution of `u`
+
 ## 2D Cartesian examples
 
 ### Flux Limiters advection
