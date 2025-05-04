@@ -62,6 +62,19 @@ then may want to consider different bases, as not all operators accept all bases
 _Covariance_ and _contravariance_ describe how the quantitative description of
 certain geometric or physical entities changes with a change of basis.
 
+More specifically, 
+
+__Covariant objects__ —whether you mean covariant components (the coefficients that sit in front of the basis) 
+or the covariant basis vectors themselves—co-vary with the coordinate grid. In other words, when you change coordinates, 
+these quantities transform in the same way as the coordinate differentials. By convention they carry lower indices (subscripts).
+
+__Contravariant objects__—whether you mean contravariant components or the contravariant basis vectors—vary contra 
+to the coordinate grid. That is, they transform in the opposite way to the coordinate differentials so as to keep 
+tensorial expressions invariant. By convention they carry upper indices (superscripts).
+
+In ClimaCore.jl, `CovariantVector`s are aligned with the _contravariant basis vectors_, but have _covariant components_. 
+Conversely, `ContravariantVector`s are aligned with the _covariant basis vectors_, but have _contravariant components_. 
+
 In ClimaCore.jl, the _covariant basis_ is specified by the partial derivative
 of the transformation from the reference element ``\xi \in [-1,1]^d`` (where ``d``
 is the dimensionality of the domain ``\Omega``) to ``x`` in the physical space:
@@ -74,11 +87,12 @@ while the _contravariant basis_ is the opposite: gradient in ``x`` of the coordi
 \mathbf{e}^i = \nabla_x \xi^i
 ```
 
-Here is an intuitive example of how the _contravariant basis_ and _covariant basis_ changes when a coordinate is being transformed.
+<!-- Here is an intuitive example of how the _contravariant basis_ and _covariant basis_ changes when a coordinate is being transformed. -->
+Here is a visual representation of how vectors can be represented in _contravariant_ and _covariant_ components.
 
 ![Different bases supported in ClimaCore.jl](controva_cova.png)
 
-Start with the _contravariant basis_, which is the case that most of us is more familier. As it can be seen in the figure below, we have 2D vector $\vec{a}$, 
+Start with the _contravariant components_, which is exactly the definition of vectors we usually meet. As it can be seen in the figure above, we have a 2D vector $\vec{a}$, 
 and two unit vectors $\vec{e_{1}}$ and $\vec{e_{2}}$, served as two basis. Thus we can represent vector $\vec{a}$ as:
 ```math
 \vec{a} = a^{1} \vec{e_{1}} + a^{2} \vec{e_{2}}
@@ -91,9 +105,9 @@ a^{1'}  = \frac{1}{2} a^{1}
 ```
 
 With this being said, the components we use to describe a certain vector are changing in the opposite manner of the the basis, and we are calling these 
-components _contravariant components_. The _contravariant vector_ is a vector with _contravariant components_. 
+components _contravariant components_. This case corresponds to the definition of `ContravariantVector`s in ClimaCore.jl. 
 
-Now consider the _covariant basis_. We still have a 2D vector, but calling it $\vec{b}$. So if with the unit vectors $\vec{e_{1}}$ and $\vec{e_{2}}$, we can still 
+Now consider the _covariant components_. We still have a 2D vector, but calling it $\vec{b}$. So if with the unit vectors $\vec{e_{1}}$ and $\vec{e_{2}}$, we can still 
 represent vector $\vec{b}$ in a "controvariant component" manner:
 ```math
 \vec{b} = b^{1} \vec{e_{1}} + b^{2} \vec{e_{2}}
@@ -121,9 +135,9 @@ b_{1}^{'} = b^{1} \vec{e_{1}}^{'} \cdot \vec{e_{1}}+ b^{2} \vec{e_{2}}\cdot \vec
 ```
 
 In this case, the components of this vector are changing in the same manner of the the basis, and we are calling these 
-components _covariant components_. The _covariant vector_ is a vector with _covariant components_. 
+components _covariant components_. This case corresponds to the definition of `CovariantVector`s in ClimaCore.jl. 
 
-To summarize, from what we can see from the figure as well, parallel projections would lead to controvariant components, while perpendicular projection would lead to covariant components.
+From these two illustrative examples, we can see that parallel projections would lead to controvariant components, while perpendicular projection would lead to covariant components.
 
 
 
