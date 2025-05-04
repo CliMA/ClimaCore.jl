@@ -87,27 +87,34 @@ while the _contravariant basis_ is the opposite: gradient in ``x`` of the coordi
 \mathbf{e}^i = \nabla_x \xi^i
 ```
 
-<!-- Here is an intuitive example of how the _contravariant basis_ and _covariant basis_ changes when a coordinate is being transformed. -->
+If we plot these basis in a curvilinear space, _Covariant basis_ “ride along” the coordinate surfaces (parallel), 
+while _contravariant basis_ “stick out” of those surfaces (perpendicular). See the plot below:
+
+![normal and tangent](normal_tangent.png)
+
 Here is a visual representation of how vectors can be represented in _contravariant_ and _covariant_ components.
 
-![Different bases supported in ClimaCore.jl](controva_cova.png)
+![Different bases](controva_cova.png)
 
-Start with the _contravariant components_, which is exactly the definition of vectors we usually meet. As it can be seen in the figure above, we have a 2D vector $\vec{a}$, 
+Start with the _contravariant components_, which is exactly the definition of vectors we usually meet. 
+As it can be seen in the figure above, we have a 2D vector $\vec{a}$, 
 and two unit vectors $\vec{e_{1}}$ and $\vec{e_{2}}$, served as two basis. Thus we can represent vector $\vec{a}$ as:
 ```math
 \vec{a} = a^{1} \vec{e_{1}} + a^{2} \vec{e_{2}}
 ```
 
-And now we set amplify one of the basis $\vec{a}$ by 2 times, that is $\vec{e_{1}}^{'} = 2\vec{e_{1}}$. If we want to maintain the vector $\vec{a}$ to stay still, 
+And now we set amplify one of the basis $\vec{a}$ by 2 times, that is $\vec{e_{1}}^{'} = 2\vec{e_{1}}$. 
+If we want to maintain the vector $\vec{a}$ to stay still, 
 obviously we need to set $a^{1}$ to its half:
 ```math
 a^{1'}  = \frac{1}{2} a^{1}
 ```
 
-With this being said, the components we use to describe a certain vector are changing in the opposite manner of the the basis, and we are calling these 
-components _contravariant components_. This case corresponds to the definition of `ContravariantVector`s in ClimaCore.jl. 
+With this being said, the components we use to describe a certain vector are changing in the opposite manner of the the basis, 
+and we are calling these components _contravariant components_. This case corresponds to the definition of `ContravariantVector`s in ClimaCore.jl. 
 
-Now consider the _covariant components_. We still have a 2D vector, but calling it $\vec{b}$. So if with the unit vectors $\vec{e_{1}}$ and $\vec{e_{2}}$, we can still 
+Now consider the _covariant components_. We still have a 2D vector, but calling it $\vec{b}$. 
+So if with the unit vectors $\vec{e_{1}}$ and $\vec{e_{2}}$, we can still 
 represent vector $\vec{b}$ in a "controvariant component" manner:
 ```math
 \vec{b} = b^{1} \vec{e_{1}} + b^{2} \vec{e_{2}}
@@ -129,7 +136,8 @@ b_{1} = \vec{b}\cdot  \vec{e_{1}} = b^{1} \vec{e_{1}} \cdot \vec{e_{1}}+ b^{2} \
 b_{2} = \vec{b}\cdot  \vec{e_{2}} = b^{2} \vec{e_{2}} \cdot \vec{e_{1}}+ b^{2} \vec{e_{2}}\cdot \vec{e_{2}} 
 ```
 
-And in this case, if we still amplify one of the basis $\vec{a}$ by 2 times, it is not difficult to find that $b_{1}$ would also be amplified by 2 times!
+And in this case, if we still amplify one of the basis $\vec{a}$ by 2 times, 
+it is not difficult to find that $b_{1}$ would also be amplified by 2 times!
 ```math
 b_{1}^{'} = b^{1} \vec{e_{1}}^{'} \cdot \vec{e_{1}}+ b^{2} \vec{e_{2}}\cdot \vec{e_{1}}^{'} = 2 (b^{1} \vec{e_{1}} \cdot \vec{e_{1}}+ b^{2} \vec{e_{2}}\cdot \vec{e_{1}} )
 ```
@@ -137,7 +145,41 @@ b_{1}^{'} = b^{1} \vec{e_{1}}^{'} \cdot \vec{e_{1}}+ b^{2} \vec{e_{2}}\cdot \vec
 In this case, the components of this vector are changing in the same manner of the the basis, and we are calling these 
 components _covariant components_. This case corresponds to the definition of `CovariantVector`s in ClimaCore.jl. 
 
-From these two illustrative examples, we can see that parallel projections would lead to controvariant components, while perpendicular projection would lead to covariant components.
+From these two illustrative examples, we can see that parallel projections would lead to controvariant components, 
+while perpendicular projection would lead to covariant components.
+
+As to better connect the original idea of _covariant components_ / _contravariant components_ with the real application in ClimaCore.jl, 
+we bring the case of __polar coordinates__ -- a classic example of a __curvilinear coordinate system__.
+
+First of all, we have the Polar‐to‐Cartesian mapping as following:
+```math
+\vec{r} (r,\theta ) = (r \cos \theta, r \sin \theta)
+```
+
+Then we have the _covariant basis_:
+```math
+\vec{e_{r} } = \frac{\partial \vec{r} }{\partial r}  = \frac{\partial (r \cos \theta, r \sin \theta) }{\partial r} = (\cos \theta, \sin \theta)
+```
+```math
+\vec{e_{\theta} } = \frac{\partial \vec{r} }{\partial \theta }  = \frac{\partial (r \cos \theta, r \sin \theta) }{\partial \theta } = (-r\sin \theta,r \cos \theta)
+```
+
+$\vec{e_{r} }$ represents the direction that is tangent to the "radius direction", and $\vec{e_{\theta} }$ is tangent to the circle curve itself.
+
+And the _contravariant basis_:
+
+since we have $r(x,y) = \sqrt{x^{2} +y^{2}  }$ and $\theta (x,y) = \arctan (\frac{y}{x} )$. Thus,
+
+```math
+\vec{e^{r} } = \nabla r(x,y) = (\frac{x}{\sqrt{x^{2} +y^{2}  }}, \frac{y}{\sqrt{x^{2} +y^{2}  }}) = (\frac{x}{r},\frac{y}{r} ) = (\cos \theta, \sin \theta)
+```
+```math
+\vec{e^{\theta } } = \nabla \theta(x,y) = (\frac{-y}{x^{2} +y^{2}}, \frac{x}{x^{2} +y^{2}})  = (\frac{-\sin \theta}{r} , \frac{\cos \theta}{r})
+```
+
+$\vec{e^{r} }$ represents the direction that is perpendicular to the circle curve, and $\vec{e^{\theta} }$ is perpendicular to the "radius direction".
+
+
 
 
 
