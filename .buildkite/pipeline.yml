@@ -1179,6 +1179,14 @@ steps:
         key: unit_spectralelement2d
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_spectralelement2d.jl"
 
+      - label: "Unit: spectralelement2d"
+        key: unit_spectralelement2d_gpu
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_spectralelement2d.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: hybrid2dbox"
         key: unit_hybrid2dbox
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid2dbox.jl"
@@ -1202,6 +1210,14 @@ steps:
       - label: "Unit: hybrid3dcubedsphere topography"
         key: unit_hybrid3dcubedsphere_topography
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid3dcubedsphere_topography.jl"
+
+      - label: "Unit: hybrid3dcubedsphere topography"
+        key: unit_hybrid3dcubedsphere_topography_gpu
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid3dcubedsphere_topography.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
 
       - label: "Unit: finitedifference"
         key: unit_finitedifference

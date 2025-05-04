@@ -604,7 +604,6 @@ function _write_mpi!(
         dxpl_mpio = :collective,
     )
     dataset[localidx...] = array
-    write_attribute(dataset, "array", array)
     write_attribute(dataset, "data_layout", string(nameof(typeof(values))))
     write_attribute(dataset, "data_eltype", string(eltype(values)))
     return name
@@ -626,7 +625,6 @@ function _write!(group, values::DataLayouts.AbstractData, name::AbstractString;)
     h_dim = DataLayouts.h_dim(DataLayouts.singleton(values))
     array = parent(values)
     dataset = write_plain_array!(group, array, name)
-    write_attribute(dataset, "array", array)
     write_attribute(dataset, "type", string(nameof(typeof(values))))
     write_attribute(dataset, "data_eltype", string(eltype(values)))
     return name

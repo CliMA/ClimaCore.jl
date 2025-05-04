@@ -124,7 +124,7 @@ end
     Y = Fields.FieldVector(y0 = y0)
 
     Spaces.set_mask!(space) do coords
-        rand() > 0.5
+        sin(coords.x) > 0.5
     end
 
     # write field vector to hdf5 file

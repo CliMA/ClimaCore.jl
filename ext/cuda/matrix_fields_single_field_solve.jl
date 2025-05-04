@@ -17,11 +17,12 @@ function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
     us = UniversalSize(Fields.field_values(A))
     mask = Spaces.get_mask(axes(x))
-    args = (device, cache, x, A, b, us, mask)
+    cart_inds = cartesian_indices_columnwise(us)
+    args = (device, cache, x, A, b, us, mask, cart_inds)
     threads = threads_via_occupancy(single_field_solve_kernel!, args)
     nitems = Ni * Nj * Nh
     n_max_threads = min(threads, nitems)
-    p = columnwise_partition(us, n_max_threads)
+    p = linear_partition(nitems, n_max_threads)
     auto_launch!(
         single_field_solve_kernel!,
         args;
@@ -31,11 +32,13 @@ function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
     call_post_op_callback() && post_op_callback(x, device, cache, x, A, b)
 end
 
-function single_field_solve_kernel!(device, cache, x, A, b, us, mask)
-    I = columnwise_universal_index(us)
-    DataLayouts.should_compute(mask, I) || return nothing
-    if columnwise_is_valid_index(I, us)
-        (i, j, _, _, h) = I.I
+function single_field_solve_kernel!(device, cache, x, A, b, us, mask, cart_inds)
+    tidx = linear_thread_idx()
+    if linear_is_valid_index(tidx, us) && tidx ≤ length(unval(cart_inds))
+        I = unval(cart_inds)[tidx]
+        (i, j, h) = I.I
+        ui = CartesianIndex((i, j, 1, 1, h))
+        DataLayouts.should_compute(mask, ui) || return nothing
         _single_field_solve!(
             device,
             Spaces.column(cache, i, j, h),
