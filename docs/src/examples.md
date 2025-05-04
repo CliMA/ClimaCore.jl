@@ -6,7 +6,7 @@ The 1D Column advection example in [`examples/column/advect.jl`](https://github.
 
 #### Equations and Discretizations
 
-Follows the continuity equation
+Follows the advection equation
 
 ```math
 \begin{equation}
@@ -18,7 +18,7 @@ This is discretized using the following
 
 ```math
 \begin{equation}
-  \frac{\partial \theta}{\partial t} \approx - D(V, \theta) 
+  \frac{\partial \theta}{\partial t} \approx - D(v, \theta) 
 \label{eq:1d-column-advection-discrete}
 \end{equation}
 ```
@@ -32,14 +32,16 @@ This is discretized using the following
 
 The example code solves the equation for 4 different tendencies with the following discretizations:
 
-* Tendency 1: ``D = \partial(UB),`` where ``\partial`` is the [`face-to-center divergence`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.DivergenceF2C) and $UB$ is the [`center-to-face upwind product operator`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.UpwindBiasedProductC2F)
-* Tendenct 2: Follows tendency 1 with the addition of flux correction `fcc`
-* Tendency 3: $D = A$, where $A$ is the [`discrete vertical advection`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.AdvectionC2C)
-* Tendency 4: Follows tendency 3 with the addition of flux correction `fcc`
+* Tendency 1: ``D = \partial(UB)``, where ``\partial`` is the [`face-to-center divergence`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.DivergenceF2C) and $UB$ is the [`center-to-face upwind biased product`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.UpwindBiasedProductC2F) operator.
+* Tendency 2: Follows tendency 1, where ``D = \partial(UB)``. Similarly, ``\partial`` is the [`face-to-center divergence`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.DivergenceF2C) and $UB$ is the [`center-to-face upwind biased product`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.UpwindBiasedProductC2F) operator. Tendency 2 also includes the [`center-to-center flux correction`](https://github.com/CliMA/ClimaCore.jl/blob/main/src/Operators/finitedifference.jl#L2617), `fcc`.
+* Tendency 3: $D = A$, where $A$ is the [`center-to-center vertical advection`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.AdvectionC2C) operator.
+* Tendency 4: Follows tendency 3, where $D = A$, the [`center-to-center vertical advection`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.AdvectionC2C). Tendency 4 also includes the [`center-to-center flux correction`](https://github.com/CliMA/ClimaCore.jl/blob/main/src/Operators/finitedifference.jl#L2617), `fcc`.
 
 #### Set Up
 
-This test case is set up in a 1D column domain ``z \in [0, 4\pi]``. 
+This test case is set up in a 1D column domain ``z \in [0, 4\pi]``, discretized into a mesh of 128 elements. The velocity field is defined as a sinusoidal wave. The boundary conditions are operator dependent, so they depend on the tendency. 
+* For tendencies 1 and 2 where the upwind biased operator ``UB`` is used, the left boundary is defined as ``sin(a - t)``. The right boundary is ``sin(b - t)``. Here ``a`` and ``b`` are the left and right bounds of the domain. 
+* For tendencies 3 and 4, where the advection operator ``A`` is used, the left boundary is defined as ``sin(-t)``.  The right boundary is extrapolated, meaning its value is set to the closest interior point.
 
 ### Heat
 
@@ -47,7 +49,7 @@ The 1D Column heat example in [`examples/column/heat.jl`](https://github.com/Cli
 
 #### Equations and discretizations
 
-Follows the continuity equation
+Follows the heat equation
 
 ```math
 \begin{equation}
@@ -72,13 +74,12 @@ This is discretized using the following
 
 #### Differentiation Operators
 
- * ``D`` is the [face-to-center divergence](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.DivergenceF2C), called `divf2c` in the example code
- * ``G`` is the [center-to-face gradient](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.GradientC2F), called `gradc2f` in the example code
+ * ``D`` is the [face-to-center divergence](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.DivergenceF2C) operator, called `divf2c` in the example code
+ * ``G`` is the [center-to-face gradient](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.GradientC2F) operator, called `gradc2f` in the example code
 
 #### Set Up
 
-This test case is set up in a 1D column domain ``z \in [0, 1]``.
-
+This test case is set up in a 1D column domain ``z \in [0, 1]`` and discretized into a mesh of 10 elements. A homogeneous Dirichlet boundary condition is set at the bottom boundary, `bcs_bottom`, setting the temperature to 0. A Neumann boundary condition is applied to the top boundary, `bcs_top`, setting the temperature gradient to 1. 
 
 ## 2D Cartesian examples
 
