@@ -910,7 +910,7 @@ function interpolate!(
 
         found_type = nameof(typeof(dest))
 
-        dest isa expected_array_type ||
+        parent(dest) isa expected_array_type ||
             error("dest is a $found_type, expected $expected_array_type")
     end
     index_field_begin, index_field_end =
