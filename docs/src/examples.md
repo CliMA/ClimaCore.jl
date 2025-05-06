@@ -81,7 +81,7 @@ The results demonstrate accurate capture of the characteristic Ekman spiral, whe
 
 ### Hydrostatic Balance
 
-The 1D Column hydrostatic balance example in ['examples/column/hydrostatic.jl'](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/column/hydrostatic.jl) demonstrates the setup and maintenance of hydrostatic balance in a single vertical column using a finite difference discretization.
+The 1D Column hydrostatic balance example in [`examples/column/hydrostatic.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/column/hydrostatic.jl) demonstrates the setup and maintenance of hydrostatic balance in a single vertical column using a finite difference discretization.
 
 #### Equations and discretizations
 
