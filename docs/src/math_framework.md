@@ -95,56 +95,7 @@ Here is a visual representation of how vectors can be represented in _contravari
 
 ![Different bases](controva_cova.png)
 
-Start with the _contravariant components_, which is exactly the definition of vectors we usually meet. 
-As it can be seen in the figure above, we have a 2D vector $\vec{a}$, 
-and two unit vectors $\vec{e_{1}}$ and $\vec{e_{2}}$, served as two basis. Thus we can represent vector $\vec{a}$ as:
-```math
-\vec{a} = a^{1} \vec{e_{1}} + a^{2} \vec{e_{2}}
-```
-
-And now we set amplify one of the basis $\vec{a}$ by 2 times, that is $\vec{e_{1}}^{'} = 2\vec{e_{1}}$. 
-If we want to maintain the vector $\vec{a}$ to stay still, 
-obviously we need to set $a^{1}$ to its half:
-```math
-a^{1'}  = \frac{1}{2} a^{1}
-```
-
-With this being said, the components we use to describe a certain vector are changing in the opposite manner of the the basis, 
-and we are calling these components _contravariant components_. This case corresponds to the definition of `ContravariantVector`s in ClimaCore.jl. 
-
-Now consider the _covariant components_. We still have a 2D vector, but calling it $\vec{b}$. 
-So if with the unit vectors $\vec{e_{1}}$ and $\vec{e_{2}}$, we can still 
-represent vector $\vec{b}$ in a "controvariant component" manner:
-```math
-\vec{b} = b^{1} \vec{e_{1}} + b^{2} \vec{e_{2}}
-```
-
-Then we try to project vector $\vec{b}$ onto the two unit vectors, and we have the following:
-```math
-b_{1} = \vec{b}\cdot  \vec{e_{1}}
-```
-```math
-b_{2} = \vec{b}\cdot  \vec{e_{2}}
-```
-
-If we plug $\vec{b} = b^{1} \vec{e_{1}} + b^{2} \vec{e_{2}}$ into the above two equations, we can have:
-```math
-b_{1} = \vec{b}\cdot  \vec{e_{1}} = b^{1} \vec{e_{1}} \cdot \vec{e_{1}}+ b^{2} \vec{e_{2}}\cdot \vec{e_{1}} 
-```
-```math
-b_{2} = \vec{b}\cdot  \vec{e_{2}} = b^{2} \vec{e_{2}} \cdot \vec{e_{1}}+ b^{2} \vec{e_{2}}\cdot \vec{e_{2}} 
-```
-
-And in this case, if we still amplify one of the basis $\vec{a}$ by 2 times, 
-it is not difficult to find that $b_{1}$ would also be amplified by 2 times!
-```math
-b_{1}^{'} = b^{1} \vec{e_{1}}^{'} \cdot \vec{e_{1}}+ b^{2} \vec{e_{2}}\cdot \vec{e_{1}}^{'} = 2 (b^{1} \vec{e_{1}} \cdot \vec{e_{1}}+ b^{2} \vec{e_{2}}\cdot \vec{e_{1}} )
-```
-
-In this case, the components of this vector are changing in the same manner of the the basis, and we are calling these 
-components _covariant components_. This case corresponds to the definition of `CovariantVector`s in ClimaCore.jl. 
-
-From these two illustrative examples, we can see that parallel projections would lead to controvariant components, 
+From the above two figures, we can see that parallel projections would lead to controvariant components, 
 while perpendicular projection would lead to covariant components.
 
 As to better connect the original idea of _covariant components_ / _contravariant components_ with the real application in ClimaCore.jl, 
@@ -177,9 +128,6 @@ since we have $r(x,y) = \sqrt{x^{2} +y^{2}  }$ and $\theta (x,y) = \arctan (\fra
 ```
 
 $\vec{e^{r} }$ represents the direction that is perpendicular to the circle curve, and $\vec{e^{\theta} }$ is perpendicular to the "radius direction".
-
-
-
 
 
 **Note**:
