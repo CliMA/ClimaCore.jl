@@ -149,7 +149,6 @@ function dycore_prognostic_EDMF_FieldMatrix(::Type{FT}) where {FT}
     sfc_vec = random_field(FT, surface_space)
     ᶜvec = random_field(FT, center_space)
     ᶠvec = random_field(FT, face_space)
-    seed!(1)
     λ = 10
     ᶜᶜmat1 = random_field(DiagonalMatrixRow{FT}, center_space) ./ λ .+ (I,)
     ᶜᶠmat2 = random_field(BidiagonalMatrixRow{FT}, center_space) ./ λ
@@ -158,6 +157,7 @@ function dycore_prognostic_EDMF_FieldMatrix(::Type{FT}) where {FT}
     ᶠᶠmat3 = random_field(TridiagonalMatrixRow{FT}, face_space) ./ λ .+ (I,)
     # Geometry.Covariant123Vector(1, 2, 3) * Geometry.Covariant12Vector(1, 2)'
     e¹² = Geometry.Covariant12Vector(1, 1)
+    e₁₂ = Geometry.Contravariant12Vector(1, 1)
     e³ = Geometry.Covariant3Vector(1)
     e₃ = Geometry.Contravariant3Vector(1)
 
@@ -172,7 +172,14 @@ function dycore_prognostic_EDMF_FieldMatrix(::Type{FT}) where {FT}
     ᶜᶠmat2_ρχ_u₃ = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit ⊠ e₃')), ᶜᶠmat2)
     ᶜᶜmat3_uₕ_scalar =
         DiagonalMatrixRow(Geometry.Covariant12Vector(FT(1), FT(1)))
-    ᶜᶜmat3_uₕ_uₕ = ᶜᶜmat3 .* (e¹² * e¹²',)
+    # ᶜᶜmat3_uₕ_uₕ = ᶜᶜmat3 .* (e¹² * e₁₂',)
+    ᶜᶜmat3_uₕ_uₕ =
+        ᶜᶜmat3 .* (
+            Geometry.Covariant12Vector(1, 0) *
+            Geometry.Contravariant12Vector(1, 0)' +
+            Geometry.Covariant12Vector(0, 1) *
+            Geometry.Contravariant12Vector(0, 1)',
+        )
     ᶜᶠmat2_uₕ_u₃ = ᶜᶠmat2 .* (e¹² * e₃',)
     ᶜᶜmat3_ρχ_scalar = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit)), ᶜᶜmat3)
     ᶜᶜmat3_ρaχ_scalar = map(Base.Fix1(map, Base.Fix2(⊠, ρaχ_unit)), ᶜᶜmat3)
@@ -190,7 +197,7 @@ function dycore_prognostic_EDMF_FieldMatrix(::Type{FT}) where {FT}
     A = MatrixFields.FieldMatrix(
         # GS-GS blocks:
         (@name(sfc), @name(sfc)) => I,
-        (@name(sfc), @name(c.uₕ)) => ᶜᶜmat3 .* (Geometry.Covariant123Vector(1, 2, 3) * Geometry.Covariant12Vector(1, 2)',),
+        # (@name(sfc), @name(c.uₕ)) => ᶜᶜmat3 .* (Geometry.Covariant123Vector(1, 2, 3) * Geometry.Covariant12Vector(1, 2)',),
         (@name(c.ρ), @name(c.ρ)) => I,
         (@name(c.ρe_tot), @name(c.ρe_tot)) => ᶜᶜmat3,
         (@name(c.ρatke), @name(c.ρatke)) => ᶜᶜmat3,
