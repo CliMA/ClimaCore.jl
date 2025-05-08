@@ -87,11 +87,11 @@ while the _contravariant basis_ is the opposite: gradient in ``x`` of the coordi
 \mathbf{e}^i = \nabla_x \xi^i
 ```
 
-If we plot these bases in a curvilinear space, _covariant basis_ vectors “ride along” the coordinate surface liness (parallel),  while _contravariant basis_ vectors “stick out” of those surface lines (perpendicular). See the plot below:
+If we plot these bases in a curvilinear space, _covariant basis_ vectors “ride along” the coordinate surface liness (parallel),  while _contravariant basis_ vectors “stick out” of those surface lines (perpendicular). See the plot from [Yatunin2025](@cite) below:
 
 ![normal and tangent](normal_tangent.png)
 
-Here is a visual representation of how vectors can be represented in _contravariant_ and _covariant_ components (reference [Yatunin2025](@cite).).
+Here is a visual representation of how vectors can be represented in _contravariant_ and _covariant_ components.
 
 ![Different bases](controva_cova.png)
 
