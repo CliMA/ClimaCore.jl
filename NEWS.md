@@ -4,6 +4,21 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- Latitude and longitudes were flipped in the default target coordiantes
+in the remapper, leading to non-sense values.
+
+v0.14.33
+-------
+
+- Expanded compat for Krylov to `0.10`. [2318](https://github.com/CliMA/ClimaCore.jl/pull/2318).
+
+v0.14.32
+-------
+
+- Disabled shared memory on finite difference operators. It was found that it
+  has a severe performance penalty for more complex cases.
+  [2317](https://github.com/CliMA/ClimaCore.jl/pull/2317)
+
 - Fixed missing method for `Topologies.mesh(Topology2D)`
    [2288](https://github.com/CliMA/ClimaCore.jl/pull/2288).
 
