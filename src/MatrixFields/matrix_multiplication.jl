@@ -341,15 +341,7 @@ boundary_modified_ud(_, ud, column_space, i) = ud
 boundary_modified_ud(::BottomRightMatrixCorner, ud, column_space, i) =
     min(Operators.right_idx(column_space) - i, ud)
 
-# TODO: Use @propagate_inbounds here, and remove @inbounds from this function.
-# As of Julia 1.8, doing this increases compilation time by more than an order
-# of magnitude, and it also makes type inference fail for some complicated
-# matrix field broadcast expressions (in particular, those that involve products
-# of linear combinations of matrix fields). Not using @propagate_inbounds causes
-# matrix field broadcast expressions to take roughly 3 or 4 times longer to
-# evaluate, but this is less significant than the decrease in compilation time.
-# matrix-matrix multiplication
-function multiply_matrix_at_index(
+Base.@propagate_inbounds function multiply_matrix_at_index(
     space,
     idx,
     hidx,
@@ -374,9 +366,11 @@ function multiply_matrix_at_index(
 
     # Precompute the row that is needed from matrix1 so that it does not get
     # recomputed multiple times.
-    matrix1_row = @inbounds Operators.getidx(space, matrix1, idx, hidx)
+    TM1R = Operators.getidx_return_type(matrix1)
+    matrix1_row = @inbounds Operators.getidx(space, matrix1, idx, hidx)::TM1R
 
     matrix2 = arg
+    TM2R = Operators.getidx_return_type(matrix2)
     column_space2 = column_axes(matrix2, column_space1)
     ld2, ud2 = outer_diagonals(eltype(matrix2))
     prod_ld, prod_ud = outer_diagonals(prod_type)
@@ -395,7 +389,7 @@ function multiply_matrix_at_index(
         # TODO: Use @propagate_inbounds_meta instead of @inline_meta.
         Base.@_inline_meta
         if isnothing(bc) || boundary_modified_ld1 <= d <= boundary_modified_ud1
-            @inbounds Operators.getidx(space, matrix2, idx + d, hidx)
+            @inbounds Operators.getidx(space, matrix2, idx + d, hidx)::TM2R
         else
             zero(eltype(matrix2)) # This row is outside the matrix.
         end
@@ -437,7 +431,7 @@ function multiply_matrix_at_index(
     return BandMatrixRow{prod_ld}(prod_entries...)
 end
 # matrix-vector multiplication
-function multiply_matrix_at_index(
+Base.@propagate_inbounds function multiply_matrix_at_index(
     space,
     idx,
     hidx,
@@ -454,6 +448,7 @@ function multiply_matrix_at_index(
         arg,
         typeof(lg),
     )
+    TM1R = Operators.getidx_return_type(matrix1)
 
     column_space1 = column_axes(matrix1, space)
     ld1, ud1 = outer_diagonals(eltype(matrix1))
@@ -462,13 +457,14 @@ function multiply_matrix_at_index(
 
     # Precompute the row that is needed from matrix1 so that it does not get
     # recomputed multiple times.
-    matrix1_row = @inbounds Operators.getidx(space, matrix1, idx, hidx)
+    matrix1_row = @inbounds Operators.getidx(space, matrix1, idx, hidx)::TM1R
 
     vector = arg
+    TVR = Operators.getidx_return_type(vector)
     prod_value = rzero(prod_type)
     @inbounds for d in boundary_modified_ld1:boundary_modified_ud1
         value1 = matrix1_row[d]
-        value2 = Operators.getidx(space, vector, idx + d, hidx)
+        value2 = Operators.getidx(space, vector, idx + d, hidx)::TVR
         value2_lg = Geometry.LocalGeometry(space, idx + d, hidx)
         prod_value =
             radd(prod_value, rmul_with_projection(value1, value2, value2_lg))
@@ -513,13 +509,3 @@ Base.@propagate_inbounds Operators.stencil_right_boundary(
     arg,
 ) = multiply_matrix_at_index(space, idx, hidx, matrix1, arg, bc, eltype(arg))
 
-# For matrix field broadcast expressions involving 4 or more matrices, we
-# sometimes hit a recursion limit and de-optimize.
-# We know that the recursion will terminate due to the fact that broadcast
-# expressions are not self-referential.
-if hasfield(Method, :recursion_relation)
-    dont_limit = (args...) -> true
-    for m in methods(multiply_matrix_at_index)
-        m.recursion_relation = dont_limit
-    end
-end
