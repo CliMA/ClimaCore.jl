@@ -4177,12 +4177,15 @@ end
 """
     use_fd_shmem()
 
-Allows users to, from global scope, disable finite
+Allows users to, from global scope, enable finite
 difference shmem for operators that support it.
+TODO: ~30% slowdown was noticed with CC 0.14.31 
+in Aquaplanet benchmarks. This may need attention in 
+future releases
 
 ## Usage
 ```julia
 Operators.use_fd_shmem() = false
 ```
 """
-use_fd_shmem() = true
+use_fd_shmem() = false
