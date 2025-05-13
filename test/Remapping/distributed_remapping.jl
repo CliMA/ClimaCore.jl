@@ -813,14 +813,14 @@ end
     )
 
     @test Remapping.default_target_hcoords(hv_center_space) == [
-        Geometry.LatLongPoint(x, y) for x in range(-180.0, 180.0, length = 180),
-        y in range(-90.0, 90.0, length = 180)
+        Geometry.LatLongPoint(x, y) for x in range(-90.0, 90.0, length = 180),
+        y in range(-180.0, 180.0, length = 180)
     ]
 
     # Purely horizontal 2D space sphere
     @test Remapping.default_target_hcoords(horzspace) == [
-        Geometry.LatLongPoint(x, y) for x in range(-180.0, 180.0, length = 180),
-        y in range(-90.0, 90.0, length = 180)
+        Geometry.LatLongPoint(x, y) for x in range(-90.0, 90.0, length = 180),
+        y in range(-180.0, 180.0, length = 180)
     ]
 
     # Purely vertical spaces
