@@ -1,6 +1,15 @@
 const CI5 = CartesianIndex{5}
-# using ClimaCartesianIndices: FastCartesianIndices
-FastCartesianIndices(x) = CartesianIndices(x)
+import ClimaCartesianIndices
+function FastCartesianIndices(x::Tuple)
+    @assert length(CartesianIndices(x)) ≤ typemax(Int32)
+    # convert to Int32, as this results in simpler instructions.
+    inds = if eltype(x) <: Union{Base.OneTo, UnitRange}
+        map(i -> Base.OneTo(Int32(i.stop)), x)
+    else
+        map(i -> Base.OneTo(Int32(i)), x)
+    end
+    return ClimaCartesianIndices.FastCartesianIndices(inds)
+end
 
 maximum_allowable_threads() = (
     CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X),
