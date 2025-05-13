@@ -141,9 +141,15 @@ end
 # Create a field matrix for a similar solve to ClimaAtmos's moist dycore + prognostic,
 # EDMF + prognostic surface temperature with implicit acoustic waves and SGS fluxes
 # also returns corresponding FieldVector
-function dycore_prognostic_EDMF_FieldMatrix(::Type{FT}) where {FT}
+function dycore_prognostic_EDMF_FieldMatrix(
+    ::Type{FT},
+    center_space = nothing,
+    face_space = nothing,
+) where {FT}
     seed!(1) # For reproducibility with random fields
-    center_space, face_space = test_spaces(FT)
+    if isnothing(center_space) || isnothing(face_space)
+        center_space, face_space = test_spaces(FT)
+    end
     surface_space = Spaces.level(face_space, half)
     surface_space = Spaces.level(face_space, half)
     sfc_vec = random_field(FT, surface_space)
