@@ -1,4 +1,5 @@
 import ..Utilities: PlusHalf, half, unionall_type
+import ..DebugOnly: allow_mismatched_spaces_unsafe
 import UnrolledUtilities: unrolled_map
 
 const AllFiniteDifferenceSpace =
@@ -3889,8 +3890,6 @@ function Base.Broadcast.broadcasted(
     StencilBroadcasted{Style}(promote_bcs(op, FT), args)
 end
 
-allow_mismatched_fd_spaces() = false
-
 # check that inferred output field space is equal to dest field space
 @noinline inferred_stencil_spaces_error(
     dest_space_type::Type,
@@ -3905,7 +3904,7 @@ function Base.Broadcast.materialize!(
     bc::Base.Broadcast.Broadcasted{Style},
 ) where {Style <: AbstractStencilStyle}
     dest_space, result_space = axes(dest), axes(bc)
-    if result_space !== dest_space && !allow_mismatched_fd_spaces()
+    if result_space !== dest_space && !allow_mismatched_spaces_unsafe()
         # TODO: we pass the types here to avoid stack copying data
         # but this could lead to a confusing error message (same space type but different instances)
         inferred_stencil_spaces_error(typeof(dest_space), typeof(result_space))
