@@ -50,7 +50,8 @@ extract_first(::FieldName{name_chain}) where {name_chain} = first(name_chain)
 drop_first(::FieldName{name_chain}) where {name_chain} =
     FieldName(Base.tail(name_chain)...)
 
-extract_last(::FieldName{name_chain}) where {name_chain} = name_chain[length(name_chain)]
+extract_last(::FieldName{name_chain}) where {name_chain} =
+    name_chain[length(name_chain)]
 # drop_last(::FieldName{name_chain}) where {name_chain} =
 #     FieldName(name_chain[1:(end - 1)]...)
 
