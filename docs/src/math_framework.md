@@ -93,10 +93,10 @@ If we plot these bases in a curvilinear space, _covariant basis_ vectors “ride
 
 Here is a visual representation of how vectors can be represented in _contravariant_ and _covariant_ components.
 
-![Different bases](controva_cova.png)
+![Different bases](contrava_cova.png)
 
-From the above two figures, we can see that parallel projections would lead to controvariant components, 
-while perpendicular projection would lead to covariant components.
+From the above two figures, we can see that parallel projections would lead to contravariant components $a^{1}$ and $a^{2}$, 
+while perpendicular projections would lead to covariant components $b_{1} = \vec{b}\cdot \vec{e_{1}}$ and $b_{2} = \vec{b}\cdot \vec{e_{2}}$.
 
 As to better connect the original idea of _covariant components_ / _contravariant components_ with the real application in ClimaCore.jl, 
 we bring the case of __polar coordinates__ -- a classic example of a __curvilinear coordinate system__.
