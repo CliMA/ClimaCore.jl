@@ -52,7 +52,7 @@ with Dirichlet boundary conditions (`SetValue(0.0)`) applied at both ends.
 
 #### Time Integration
 
-The system is solved using the `SSPRK33` time integrator from the `OrdinaryDiffEqSSPRK` package:
+The system is solved using the `SSPRK33` 3rd order Runge Kutta time integrator from the `OrdinaryDiffEqSSPRK` package:
 
 ```julia
 prob = ODEProblem(tendency!, Y, (0.0, 4π))
@@ -82,13 +82,6 @@ sol = solve(prob, SSPRK33(), dt = 0.01, saveat = 0.1)
 5. **Tendency Function**: Compute time derivatives of `u` and `p`.
 6. **ODE Integration**: Solve the PDE system using `SSPRK33` with `OrdinaryDiffEqSSPRK`.
 7. **Output**: Save the final state and animated wave evolution using `Plots.jl`.
-
-#### Visualization
-
-An animation of `u(z, t)` is generated with `Plots.jl`, and the final state is saved as an image:
-
-- ![wave_end.png](../assets/wave_end.png) Final state of `u`
-- ![wave.gif](../assets/wave.gif) Time evolution of `u`
 
 ## 2D Cartesian examples
 
