@@ -96,38 +96,38 @@ Here is a visual representation of how vectors can be represented in _contravari
 ![Different bases](contrava_cova.png)
 
 From the above two figures, we can see that parallel projections would lead to contravariant components $a^{1}$ and $a^{2}$, 
-while perpendicular projections would lead to covariant components $b_{1} = \vec{b}\cdot \vec{e_{1}}$ and $b_{2} = \vec{b}\cdot \vec{e_{2}}$.
+while perpendicular projections would lead to covariant components $b_{1} = \mathbf{b}\cdot \mathbf{e}_1$ and $b_{2} = \mathbf{b}\cdot \mathbf{e}_2$.
 
 As to better connect the original idea of _covariant components_ / _contravariant components_ with the real application in ClimaCore.jl, 
 we bring the case of __polar coordinates__ -- a classic example of a __curvilinear coordinate system__.
 
 First of all, we have the Polar‐to‐Cartesian mapping as following:
 ```math
-\vec{r} (r,\theta ) = (r \cos \theta, r \sin \theta)
+\mathbf{r} (r,\theta ) = (r \cos \theta, r \sin \theta)
 ```
 
 Then we have the _covariant basis_:
 ```math
-\vec{e_{r} } = \frac{\partial \vec{r} }{\partial r}  = \frac{\partial (r \cos \theta, r \sin \theta) }{\partial r} = (\cos \theta, \sin \theta)
+\mathbf{e}_r = \frac{\partial \mathbf{r} }{\partial r}  = \frac{\partial (r \cos \theta, r \sin \theta) }{\partial r} = (\cos \theta, \sin \theta)
 ```
 ```math
-\vec{e_{\theta} } = \frac{\partial \vec{r} }{\partial \theta }  = \frac{\partial (r \cos \theta, r \sin \theta) }{\partial \theta } = (-r\sin \theta,r \cos \theta)
+\mathbf{e}_{\theta} = \frac{\partial \mathbf{r} }{\partial \theta }  = \frac{\partial (r \cos \theta, r \sin \theta) }{\partial \theta } = (-r\sin \theta,r \cos \theta)
 ```
 
-$\vec{e_{r} }$ represents the direction that is tangent to the "radius direction", and $\vec{e_{\theta} }$ is tangent to the circle curve itself.
+$\mathbf{e}_r$ represents the direction that is tangent to the "radius direction", and $\mathbf{e}_{\theta}$ is tangent to the circle curve itself.
 
 And the _contravariant basis_:
 
 since we have $r(x,y) = \sqrt{x^{2} +y^{2}  }$ and $\theta (x,y) = \arctan (\frac{y}{x} )$. Thus,
 
 ```math
-\vec{e^{r} } = \nabla r(x,y) = (\frac{x}{\sqrt{x^{2} +y^{2}  }}, \frac{y}{\sqrt{x^{2} +y^{2}  }}) = (\frac{x}{r},\frac{y}{r} ) = (\cos \theta, \sin \theta)
+\mathbf{e}^r = \nabla r(x,y) = (\frac{x}{\sqrt{x^{2} +y^{2}  }}, \frac{y}{\sqrt{x^{2} +y^{2}  }}) = (\frac{x}{r},\frac{y}{r} ) = (\cos \theta, \sin \theta)
 ```
 ```math
-\vec{e^{\theta } } = \nabla \theta(x,y) = (\frac{-y}{x^{2} +y^{2}}, \frac{x}{x^{2} +y^{2}})  = (\frac{-\sin \theta}{r} , \frac{\cos \theta}{r})
+\mathbf{e}^{\theta} = \nabla \theta(x,y) = (\frac{-y}{x^{2} +y^{2}}, \frac{x}{x^{2} +y^{2}})  = (\frac{-\sin \theta}{r} , \frac{\cos \theta}{r})
 ```
 
-$\vec{e^{r} }$ represents the direction that is perpendicular to the circle curve, and $\vec{e^{\theta} }$ is perpendicular to the "radius direction".
+$\mathbf{e}^r$ represents the direction that is perpendicular to the circle curve, and $\mathbf{e}^{\theta}$ is perpendicular to the "radius direction".
 
 
 **Note**:
