@@ -1,5 +1,5 @@
 """
-	DebugOnly
+    DebugOnly
 
 A module for debugging tools. Note that any tools in here are subject to sudden
 changes without warning. So, please, do _not_ use any of these tools in
@@ -96,6 +96,79 @@ function print_depth_limited_stack_trace(
     for t in depth_limited_stack_trace(st; maxtypedepth)
         println(io, t)
     end
+end
+
+
+"""
+    allow_mismatched_spaces_unsafe()
+
+When returning `true`, disable check for consistency among spaces in broadcasted
+operations.
+
+By default, `ClimaCore` checks that broadcasted in-place expressions use
+consistent spaces (ie, the destination space is the same as the space that the
+expression returns). Sometimes, when debugging, it is convenient to disable this
+check.
+
+The most common case for this is to allow combining spaces that were
+`deepcopied`, given that the consistency check in performed by comparing the
+pointer of the spaces, not their contents. In other words, allowing for
+mismatched spaces allows one to work with spaces that are identical, but not the
+same.
+
+To allow combining mismatched spaces, override this function so that it returns
+`true`.
+
+!!! warn
+
+    `ClimaCore` checks for consistency of spaces to protect you from non-sense
+    results. If you disable this check, you are responsible to ensure that the
+    results make sense.
+
+Example
+=======
+
+```julia
+julia> import ClimaCore;
+
+julia> using ClimaCore.CommonSpaces;
+
+julia> space = ExtrudedCubedSphereSpace(;
+           z_elem = 10,
+           z_min = 0,
+           z_max = 1,
+           radius = 10,
+           h_elem = 10,
+           n_quad_points = 4,
+           staggering = CellCenter()
+       );
+
+julia> other_space = deepcopy(space);
+
+julia> other_space == space
+false
+
+julia> one = ones(space);
+
+julia> other_one = ones(other_space);
+
+julia> one .+ other_one
+ERROR: Broacasted spaces are not the same.
+Stacktrace:
+ [1] error(s::String)
+   @ Base ./error.jl:35
+ [2] error_mismatched_spaces(space1::Type, space2::Type)
+   @ ClimaCore.Fields ~/repos/ClimaCore.jl/src/Fields/broadcast.jl:227
+
+# Turning `allow_mismatched_spaces_unsafe` on
+julia> ClimaCore.DebugOnly.allow_mismatched_spaces_unsafe() = true;
+
+julia> one .+ other_one
+Float64-valued Field:
+  [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0  …  2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
+"""
+function allow_mismatched_spaces_unsafe()
+    return false
 end
 
 end

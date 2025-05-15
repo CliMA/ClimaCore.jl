@@ -1,3 +1,5 @@
+import ..DebugOnly: allow_mismatched_spaces_unsafe
+
 """
     AbstractFieldStyle
 
@@ -229,7 +231,7 @@ end
     space1::AbstractSpace,
     space2::AbstractSpace,
 )
-    if space1 !== space2
+    if space1 !== space2 && !allow_mismatched_spaces_unsafe()
         if Spaces.issubspace(space2, space1)
             return space1
         elseif Spaces.issubspace(space1, space2)
@@ -263,7 +265,11 @@ end
     space1::AbstractSpace,
     space2::AbstractSpace,
 )
-    if space1 !== space2
+    # When DebugOnly.allow_mismatched_spaces_unsafe() returns true, we ignore the check
+    # and blindly return `space1`. Responsibility is left up to the user to
+    # handle this correctly. This is useful to work with spaces that are == but
+    # not ===, e.g., deepcopied spaces.
+    if space1 !== space2 && !allow_mismatched_spaces_unsafe()
         if Spaces.issubspace(space2, space1) ||
            Spaces.issubspace(space1, space2)
             nothing

@@ -4,8 +4,17 @@ ClimaCore.jl Release Notes
 main
 -------
 
-- Latitude and longitudes were flipped in the default target coordiantes
+- Latitude and longitudes were flipped in the default target coordinates
 in the remapper, leading to non-sense values.
+
+### ![][badge-✨feature/enhancement] Add option to disable check on spaces. PR [2322](https://github.com/CliMA/ClimaCore.jl/pull/2322)
+
+`ClimaCore.DebugOnly` now contains a function `allow_mismatched_spaces_unsafe`. When
+this function is overridden to return `true`, `ClimaCore` will skip consistency
+checks on spaces in broadcasted expressions. This is useful when debugging with
+`deepcopy`. See
+[documentation](https://clima.github.io/ClimaCore.jl/dev/debugging/#Faster-explorations-when-the-initialization-is-expensive)
+for more information.
 
 v0.14.33
 -------
