@@ -180,6 +180,103 @@ The initial vertical velocity is set to zero everywhere. To maintain hydrostatic
 
 The simulation is run for 10 days to verify that the hydrostatic balance is maintained over time. Results are plotted showing density ($\rho$), vertical velocity ($\boldsymbol{w}$), and potential temperature density ($\rho\theta$) profiles.
 
+### Heat equation
+
+The 1D Column heat example in [`examples/column/heat.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/column/heat.jl).
+
+#### Equations and discretizations
+
+Follows the heat equation
+
+```math
+\begin{equation}
+  \frac{\partial T}{\partial t} = \alpha \cdot \nabla^2 T.
+\label{eq:1d-column-heat-continuity}
+\end{equation}
+```
+
+This is discretized using the following
+
+```math
+\begin{equation}
+  \frac{\partial T}{\partial t} \approx \alpha \cdot D(G(T)).
+\label{eq:1d-column-heat-discrete}
+\end{equation}
+```
+
+#### Prognostic Variables
+
+* ``\alpha``: thermal diffusivity measured in  $\frac{m^2}{s}$
+* ``T``: temperature
+
+#### Differentiation Operators
+
+ * ``D`` is the [face-to-center divergence](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.DivergenceF2C) operator, called `divf2c` in the example code
+ * ``G`` is the [center-to-face gradient](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.GradientC2F) operator, called `gradc2f` in the example code
+
+#### Set Up
+
+This test case is set up in a 1D column domain ``z \in [0, 1]`` and discretized into a mesh of 10 elements. A homogeneous Dirichlet boundary condition is set at the bottom boundary, `bcs_bottom`, setting the temperature to 0. A Neumann boundary condition is applied to the top boundary, `bcs_top`, setting the temperature gradient to 1. 
+
+### Advection equation
+
+The 1D Column advection example in [`examples/column/advect.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/column/advect.jl).
+
+#### Equations and Discretizations
+
+Follows the advection equation
+
+```math
+\begin{equation}
+  \frac{\partial \theta}{\partial t} = -\frac{\partial (v \theta)}{\partial z} .
+\label{eq:1d-column-advection-continuity}
+\end{equation}
+```
+This is discretized using the following
+
+```math
+\begin{equation}
+  \frac{\partial \theta}{\partial t} \approx - D(v, \theta)  .
+\label{eq:1d-column-advection-discrete}
+\end{equation}
+```
+
+#### Prognostic Variables
+
+* ``\theta``: the scalar field
+* ``v``: the velocity field
+
+#### Tendencies 
+
+The example code solves the equation for 4 different tendencies with the following discretizations:
+
+- Tendency 1:
+
+  $$D = \partial(UB),$$  
+
+  where ``\partial`` is the [`face-to-center divergence`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.DivergenceF2C) and $UB$ is the [`center-to-face upwind biased product`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.UpwindBiasedProductC2F) operator.
+- Tendency 2:
+
+  $$D = \partial(UB) + \textrm{fcc}(v, \theta),$$  
+  
+  where $\textrm{fcc}(v, \theta)$ is the [`center-to-center flux correction`](https://github.com/CliMA/ClimaCore.jl/blob/main/src/Operators/finitedifference.jl#L2617) operator.
+- Tendency 3:
+
+  $$D = A,$$  
+   
+  where $A$ is the [`center-to-center vertical advection`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.AdvectionC2C) operator.
+- Tendency 4:
+
+  $$D = A + \textrm{fcc}(v, \theta),$$  
+  
+  where $\textrm{fcc}(v, \theta)$ is the [`center-to-center flux correction`](https://github.com/CliMA/ClimaCore.jl/blob/main/src/Operators/finitedifference.jl#L2617) operator.
+
+#### Set Up
+
+This test case is set up in a 1D column domain ``z \in [0, 4\pi]``, discretized into a mesh of 128 elements. The velocity field is defined as a sinusoidal wave. The boundary conditions are operator dependent, so they depend on the tendency. 
+* For tendencies 1 and 2 where the upwind biased operator ``UB`` is used, the left boundary is defined as ``sin(a - t)``. The right boundary is ``sin(b - t)``. Here ``a`` and ``b`` are the left and right bounds of the domain. 
+* For tendencies 3 and 4, where the advection operator ``A`` is used, the left boundary is defined as ``sin(-t)``.  The right boundary is extrapolated, meaning its value is set to the closest interior point.
+
 ## 2D Cartesian examples
 
 ### Flux Limiters advection
