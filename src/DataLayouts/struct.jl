@@ -105,17 +105,37 @@ both the element types and the array types themselves.
 promote_parent_array_type(::Type{Array{T1}}, ::Type{Array{T2}}) where {T1, T2} =
     Array{promote_type(T1, T2)}
 promote_parent_array_type(
+    ::Type{MArray{S1, T1}},
+    ::Type{MArray{S2, T2}},
+) where {S1, T1, S2, T2} = MArray{S, promote_type(T1, T2)} where {S}
+promote_parent_array_type(
+    ::Type{MArray{S1, T1} where {S1}},
+    ::Type{MArray{S2, T2}},
+) where {T1, S2, T2} = MArray{S, promote_type(T1, T2)} where {S}
+promote_parent_array_type(
+    ::Type{MArray{S1, T1}},
+    ::Type{MArray{S2, T2} where {S2}},
+) where {S1, T1, T2} = MArray{S, promote_type(T1, T2)} where {S}
+promote_parent_array_type(
     ::Type{MArray{S, T1}},
     ::Type{MArray{S, T2}},
-) where {S, T1, T2} = MArray{S, promote_type(T1, T2)}
+) where {S, T1, T2} = MArray{SU, promote_type(T1, T2)} where {SU}
 promote_parent_array_type(
     ::Type{MArray{S, T1}},
     ::Type{Array{T2}},
-) where {S, T1, T2} = MArray{S, promote_type(T1, T2)}
+) where {S, T1, T2} = MArray{SU, promote_type(T1, T2)} where {SU}
+promote_parent_array_type(
+    ::Type{MArray{S, T1} where {S}},
+    ::Type{Array{T2}},
+) where {T1, T2} = MArray{SU, promote_type(T1, T2)} where {SU}
 promote_parent_array_type(
     ::Type{Array{T1}},
     ::Type{MArray{S, T2}},
-) where {S, T1, T2} = MArray{S, promote_type(T1, T2)}
+) where {S, T1, T2} = MArray{SU, promote_type(T1, T2)} where {SU}
+promote_parent_array_type(
+    ::Type{Array{T1}},
+    ::Type{MArray{S, T2} where {S}},
+) where {T1, T2} = MArray{SU, promote_type(T1, T2)} where {SU}
 
 """
     StructArrays.bypass_constructor(T, args)
