@@ -187,10 +187,15 @@ function get_internal_entry(
     # Ensure compatibility with RecursiveApply (i.e., with rmul).
     # See note above matrix_product_keys in field_name_set.jl for more details.
     T = eltype(eltype(entry))
+    # @show !broadcasted_has_field(T, name_pair[1])
+    # @show name_pair
+    # @show T
     if name_pair == (@name(), @name())
         entry
-    elseif name_pair[1] == name_pair[2] &&
-           !broadcasted_has_field(T, name_pair[1])
+    elseif name_pair[1] == name_pair[2] && !broadcasted_has_field(T, name_pair[1]) &&
+                !(T <: Geometry.SingleValue) #&&
+            #!broadcasted_has_field(T, name_pair[1])
+        # @assert !(T <: Geometry.SingleValue)
         # @show name_pair
         #     # multiplication case 3 or 4, first argument
         # if T <: Number
@@ -198,7 +203,9 @@ function get_internal_entry(
         # else
         #     throw(key_error)
         # end
-        entry
+        # @show "aaa"
+        # entry
+        nothing
     elseif name_pair[1] == @name() || name_pair[2] == @name()
 
         target_chain = if name_pair[1] == @name()
@@ -423,17 +430,17 @@ end
 
 function bypass_adjoint(field::Fields.Field)
     if eltype(field) <: Adjoint
-        return (eltype(field.parent), true)
+        return eltype(field.parent)
     else
-        return (eltype(field), false)
+        return eltype(field)
     end
 end
 
 function bypass_adjoint(d::T) where {T}
     if T <: Adjoint
-        return (typeof(d.parent), true)
+        return typeof(d.parent)
     else
-        return (typeof(d), false)
+        return typeof(d)
     end
 end
 
@@ -446,8 +453,8 @@ Returns a `FieldMatrixKeys` object that contains the keys of all the scalar
 entries in the `FieldMatrix` `dict`.
 """
 function get_scalar_keys(dict::FieldMatrix, Y::Fields.FieldVector)
-    target_eltype = eltype(Y)
     keys_tuple = unrolled_flatmap(keys(dict).values) do key
+        target_eltype = eltype(Y)
         entry = dict[unrolled_filter(isequal(key), keys(dict).values)[1]]
         if entry isa UniformScaling # uniformscalings can only contain numbers
             (key,)
@@ -474,7 +481,7 @@ function get_scalar_keys(dict::FieldMatrix, Y::Fields.FieldVector)
                 # TODO: Make the cth axis check for all combinations
                 if independent_type <: Geometry.AxisTensor &&
                    dependent_type <: Geometry.AxisTensor
-                    (unwrapped_row_eltype, is_adjoint) =
+                    unwrapped_row_eltype =
                         bypass_adjoint(first_band)
                     @assert unwrapped_row_eltype <: Geometry.Axis2Tensor
                     axis_components =
@@ -509,7 +516,7 @@ function get_scalar_keys(dict::FieldMatrix, Y::Fields.FieldVector)
                     independent_type <: Number &&
                     dependent_type <: Geometry.AxisTensor
                 )
-                    (unwrapped_row_eltype, is_adjoint) =
+                    unwrapped_row_eltype =
                         bypass_adjoint(first_band)
                     @assert unwrapped_row_eltype <: Geometry.AxisVector
                     ncomponents = length(axes(unwrapped_row_eltype)[1])
@@ -548,11 +555,11 @@ function get_scalar_keys(dict::FieldMatrix, Y::Fields.FieldVector)
                             first_band,
                         ),
                     ) do dependent_name
-                        (unwrapped_row_eltype, is_adjoint) = bypass_adjoint(
+                        unwrapped_row_eltyped = bypass_adjoint(
                             get_field(first_band, dependent_name),
                         )
-                        ncomponents = length(axes(unwrapped_row_eltype)[1])
-                        unrolled_map(1:ncomponents) do component
+                        ncomponents1 = length(axes(unwrapped_row_eltyped)[1])
+                        unrolled_map(1:ncomponents1) do component
                             (
                                 append_internal_name(key[1], dependent_name),
                                 append_internal_name(
@@ -565,7 +572,6 @@ function get_scalar_keys(dict::FieldMatrix, Y::Fields.FieldVector)
                             )
                         end
                     end
-                    #
                 elseif dependent_type <: Union{NamedTuple, Tuple} &&
                        independent_type <: Number
                     unrolled_map(
@@ -578,14 +584,9 @@ function get_scalar_keys(dict::FieldMatrix, Y::Fields.FieldVector)
                         (append_internal_name(key[1], dependent_name), key[2])
 
                     end
-
                 end
                 # (key,)
             end
-            # elseif entry isa DiagonalMatrixRow
-            #     target_eltype = eltype(parent(get_field(Y, key[1])))
-            #     # TODO: unify target_eltype
-            #     (key,)
         else
             error("Cannot get scalar keys for key $key")
         end
