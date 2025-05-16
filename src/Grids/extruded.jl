@@ -157,6 +157,10 @@ struct DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, CLG, FLG} <:
     face_local_geometry::FLG
 end
 
+# Specialize to allow on-device call of `device` for `DeviceExtrudedFiniteDifferenceGrid`
+ClimaComms.device(grid::DeviceExtrudedFiniteDifferenceGrid) =
+    ClimaComms.device(vertical_topology(grid))
+
 local_geometry_type(
     ::Type{DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, CLG, FLG}},
 ) where {VT, Q, GG, CLG, FLG} = eltype(CLG) # calls eltype from DataLayouts
