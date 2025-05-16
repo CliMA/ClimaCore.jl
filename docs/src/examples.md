@@ -157,14 +157,12 @@ Boundary conditions are applied as follows:
 The application of boundary conditions is implemented through the operators:
 
 1. For the u-momentum equation:
-   - Top boundary: `Operators.SetValue(FT(ug))` sets u to the geostrophic value
+   - Top boundary: `Operators.SetValue(FT(ug))` sets $u$ to the geostrophic value
    - Bottom boundary: `Operators.SetValue(Geometry.WVector(Cd * u_wind * u_1))` applies the drag condition
 
 2. For the v-momentum equation:
-   - Top boundary: `Operators.SetValue(FT(vg))` sets v to the geostrophic value
+   - Top boundary: `Operators.SetValue(FT(vg))` sets $v$ to the geostrophic value
    - Bottom boundary: `Operators.SetValue(Geometry.WVector(Cd * u_wind * v_1))` applies the drag condition
-
-3. DSS (Direct Stiffness Summation) is applied implicitly through the operators to ensure continuity of the solution at element boundaries and reduction of unnecessary multiplicity
 
 The example verifies the numerical solution by comparing it to the analytical solution:
 ```math
@@ -268,8 +266,8 @@ Where $B$ applies boundary conditions to enforce $\boldsymbol{w} = 0$ at the dom
 
 This test case is set up in a vertical column domain from $z=0$ m to $z=30$ km with 30 vertical elements. The column is initialized with a decaying temperature profile, where:
 
-- The virtual temperature starts at $T_{virt\_surf} = 280$ K at the surface
-- It asymptotically approaches $T_{min\_ref} = 230$ K with height
+- The virtual temperature starts at $T_{\textrm{virt}\_\textrm{surf}} = 280$ K at the surface
+- It asymptotically approaches $T_{\textrm{min}\_\textrm{ref}} = 230$ K with height
 - The profile follows a hyperbolic tangent function with height
 - The pressure follows a hydrostatic balance equation
 - Density is calculated from the equation of state using virtual temperature and pressure
