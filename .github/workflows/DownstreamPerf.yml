@@ -1,9 +1,7 @@
-name: Downstream
+name: Downstream Performance Buildkite (ClimaAtmos)
 on:
   push:
-    branches:
-      - main
-    tags: '*'
+    tags: 'performance'
   pull_request:
 
 # Needed to allow julia-actions/cache to delete old caches that it has created
