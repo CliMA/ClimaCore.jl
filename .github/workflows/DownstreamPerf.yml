@@ -1,0 +1,39 @@
+name: Downstream Perf (ClimaAtmos Target-GPU Buildkite)
+on:
+  push:
+    branches:
+      - main
+    tags: 'performance'
+  pull_request:
+
+# Needed to allow julia-actions/cache to delete old caches that it has created
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Trigger, upon selection of a `performance` tag in a PR branch, a 
+# downstream buildkite job from the slug.
+# (clima/climaatmos-target-gpu-simulations)
+# This starts a job on the `clima` cluster that tests ClimaCore changes
+# in ClimaAtmos for potential performance improvements or degradation.
+# Currently the triggered job is based on the main branch
+#       TODO: Can we force the downstream run to trigger ClimaAtmos + ClimaCore(PR branch)
+#       in this Github Actions workflow ? 
+#       julia --project=.buildkite -e "using Pkg; Pkg.add("ClimaCore.jl#PRBRANCH");"
+#       This seems burdensome on the `clima` cluster
+perf: 
+  timeout-minutes: 60
+  name: Downstream (ClimaAtmos) perf build
+  uses: "buildkite/trigger-pipeline-action@v2.3.0"
+  with:
+    buildkite_api_access_token: ${{ secrets.TRIGGER_BK_BUILD_TOKEN }}
+    pipeline: "clima/climaatmos-target-gpu-simulations"
+    branch: "main"
+    commit: "HEAD"
+    message: ":github: Downstream (ClimaAtmos) performance check via Github Action"
+    build_env_vars: '{"TRIGGERED_FROM_GHA"}: "true"'
+    ignore_pipeline_branch_filter: true
