@@ -21,6 +21,10 @@ import ClimaCore:
     Operators,
     Quadratures
 using ClimaCore.MatrixFields
+import ClimaCore.Utilities: half
+import ClimaCore.RecursiveApply: ⊠
+import LinearAlgebra: I, norm, ldiv!, mul!
+import ClimaCore.MatrixFields: @name
 
 # Test that an expression is true and that it is also type-stable.
 macro test_all(expression)
@@ -32,7 +36,7 @@ macro test_all(expression)
     end
 end
 
-# Compute the minimum time (in seconds) required to run an expression after it 
+# Compute the minimum time (in seconds) required to run an expression after it
 # has been compiled. This macro is used instead of @benchmark from
 # BenchmarkTools.jl because the latter is extremely slow (it appears to keep
 # triggering recompilations and allocating a lot of memory in the process).
@@ -134,6 +138,118 @@ function test_field_broadcast(;
     end
 end
 
+# Create a field matrix for a similar solve to ClimaAtmos's moist dycore + prognostic,
+# EDMF + prognostic surface temperature with implicit acoustic waves and SGS fluxes
+# also returns corresponding FieldVector
+function dycore_prognostic_EDMF_FieldMatrix(
+    ::Type{FT},
+    center_space = nothing,
+    face_space = nothing,
+) where {FT}
+    seed!(1) # For reproducibility with random fields
+    if isnothing(center_space) || isnothing(face_space)
+        center_space, face_space = test_spaces(FT)
+    end
+    surface_space = Spaces.level(face_space, half)
+    surface_space = Spaces.level(face_space, half)
+    sfc_vec = random_field(FT, surface_space)
+    ᶜvec = random_field(FT, center_space)
+    ᶠvec = random_field(FT, face_space)
+    λ = 10
+    ᶜᶜmat1 = random_field(DiagonalMatrixRow{FT}, center_space) ./ λ .+ (I,)
+    ᶜᶠmat2 = random_field(BidiagonalMatrixRow{FT}, center_space) ./ λ
+    ᶠᶜmat2 = random_field(BidiagonalMatrixRow{FT}, face_space) ./ λ
+    ᶜᶜmat3 = random_field(TridiagonalMatrixRow{FT}, center_space) ./ λ .+ (I,)
+    ᶠᶠmat3 = random_field(TridiagonalMatrixRow{FT}, face_space) ./ λ .+ (I,)
+    # Geometry.Covariant123Vector(1, 2, 3) * Geometry.Covariant12Vector(1, 2)'
+    e¹² = Geometry.Covariant12Vector(1, 1)
+    e₁₂ = Geometry.Contravariant12Vector(1, 1)
+    e³ = Geometry.Covariant3Vector(1)
+    e₃ = Geometry.Contravariant3Vector(1)
+
+    ρχ_unit = (; ρq_tot = 1, ρq_liq = 1, ρq_ice = 1, ρq_rai = 1, ρq_sno = 1)
+    ρaχ_unit =
+        (; ρaq_tot = 1, ρaq_liq = 1, ρaq_ice = 1, ρaq_rai = 1, ρaq_sno = 1)
+
+
+    ᶠᶜmat2_u₃_scalar = ᶠᶜmat2 .* (e³,)
+    ᶜᶠmat2_scalar_u₃ = ᶜᶠmat2 .* (e₃',)
+    ᶠᶠmat3_u₃_u₃ = ᶠᶠmat3 .* (e³ * e₃',)
+    ᶜᶠmat2_ρχ_u₃ = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit ⊠ e₃')), ᶜᶠmat2)
+    ᶜᶜmat3_uₕ_scalar =
+        DiagonalMatrixRow(Geometry.Covariant12Vector(FT(1), FT(1)))
+    # ᶜᶜmat3_uₕ_uₕ = ᶜᶜmat3 .* (e¹² * e₁₂',)
+    ᶜᶜmat3_uₕ_uₕ =
+        ᶜᶜmat3 .* (
+            Geometry.Covariant12Vector(1, 0) *
+            Geometry.Contravariant12Vector(1, 0)' +
+            Geometry.Covariant12Vector(0, 1) *
+            Geometry.Contravariant12Vector(0, 1)',
+        )
+    ᶜᶠmat2_uₕ_u₃ = ᶜᶠmat2 .* (e¹² * e₃',)
+    ᶜᶜmat3_ρχ_scalar = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit)), ᶜᶜmat3)
+    ᶜᶜmat3_ρaχ_scalar = map(Base.Fix1(map, Base.Fix2(⊠, ρaχ_unit)), ᶜᶜmat3)
+    ᶜᶠmat2_ρaχ_u₃ = map(Base.Fix1(map, Base.Fix2(⊠, ρaχ_unit ⊠ e₃')), ᶜᶠmat2)
+
+    dry_center_gs_unit = (; ρ = 1, ρe_tot = 1, uₕ = e¹²)
+    center_gs_unit = (; dry_center_gs_unit..., ρatke = 1, ρχ = ρχ_unit)
+    center_sgsʲ_unit = (; ρa = 1, ρae_tot = 1, ρaχ = ρaχ_unit)
+
+    b = Fields.FieldVector(;
+        sfc = sfc_vec .* ((; T = 1),),
+        c = ᶜvec .* ((; center_gs_unit..., sgsʲs = (center_sgsʲ_unit,)),),
+        f = ᶠvec .* ((; u₃ = e³, sgsʲs = ((; u₃ = e³),)),),
+    )
+    A = MatrixFields.FieldMatrix(
+        # GS-GS blocks:
+        (@name(sfc), @name(sfc)) => I,
+        # (@name(sfc), @name(c.uₕ)) => ᶜᶜmat3 .* (Geometry.Covariant123Vector(1, 2, 3) * Geometry.Covariant12Vector(1, 2)',),
+        (@name(c.ρ), @name(c.ρ)) => I,
+        (@name(c.ρe_tot), @name(c.ρe_tot)) => ᶜᶜmat3,
+        (@name(c.ρatke), @name(c.ρatke)) => ᶜᶜmat3,
+        (@name(c.ρχ), @name(c.ρχ)) => ᶜᶜmat3,
+        (@name(c.uₕ), @name(c.uₕ)) => ᶜᶜmat3_uₕ_uₕ,
+        (@name(c.ρ), @name(f.u₃)) => ᶜᶠmat2_scalar_u₃,
+        (@name(c.ρe_tot), @name(f.u₃)) => ᶜᶠmat2_scalar_u₃,
+        (@name(c.ρatke), @name(f.u₃)) => ᶜᶠmat2_scalar_u₃,
+        (@name(c.ρχ), @name(f.u₃)) => ᶜᶠmat2_ρχ_u₃,
+        (@name(f.u₃), @name(c.ρ)) => ᶠᶜmat2_u₃_scalar,
+        (@name(f.u₃), @name(c.ρe_tot)) => ᶠᶜmat2_u₃_scalar,
+        (@name(f.u₃), @name(f.u₃)) => ᶠᶠmat3_u₃_u₃,
+        # GS-SGS blocks:
+        (@name(c.ρe_tot), @name(c.sgsʲs.:(1).ρae_tot)) => ᶜᶜmat3,
+        (@name(c.ρχ.ρq_tot), @name(c.sgsʲs.:(1).ρaχ.ρaq_tot)) => ᶜᶜmat3,
+        (@name(c.ρχ.ρq_liq), @name(c.sgsʲs.:(1).ρaχ.ρaq_liq)) => ᶜᶜmat3,
+        (@name(c.ρχ.ρq_ice), @name(c.sgsʲs.:(1).ρaχ.ρaq_ice)) => ᶜᶜmat3,
+        (@name(c.ρχ.ρq_rai), @name(c.sgsʲs.:(1).ρaχ.ρaq_rai)) => ᶜᶜmat3,
+        (@name(c.ρχ.ρq_sno), @name(c.sgsʲs.:(1).ρaχ.ρaq_sno)) => ᶜᶜmat3,
+        (@name(c.ρe_tot), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3,
+        (@name(c.ρatke), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3,
+        (@name(c.ρχ), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3_ρχ_scalar,
+        (@name(c.uₕ), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3_uₕ_scalar,
+        (@name(c.ρe_tot), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_scalar_u₃,
+        (@name(c.ρatke), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_scalar_u₃,
+        (@name(c.ρχ), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_ρχ_u₃,
+        (@name(c.uₕ), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_uₕ_u₃,
+        (@name(f.u₃), @name(c.sgsʲs.:(1).ρa)) => ᶠᶜmat2_u₃_scalar,
+        (@name(f.u₃), @name(f.sgsʲs.:(1).u₃)) => ᶠᶠmat3_u₃_u₃,
+        # SGS-SGS blocks:
+        (@name(c.sgsʲs.:(1).ρa), @name(c.sgsʲs.:(1).ρa)) => I,
+        (@name(c.sgsʲs.:(1).ρae_tot), @name(c.sgsʲs.:(1).ρae_tot)) => I,
+        (@name(c.sgsʲs.:(1).ρaχ), @name(c.sgsʲs.:(1).ρaχ)) => I,
+        (@name(c.sgsʲs.:(1).ρa), @name(f.sgsʲs.:(1).u₃)) =>
+            ᶜᶠmat2_scalar_u₃,
+        (@name(c.sgsʲs.:(1).ρae_tot), @name(f.sgsʲs.:(1).u₃)) =>
+            ᶜᶠmat2_scalar_u₃,
+        (@name(c.sgsʲs.:(1).ρaχ), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_ρaχ_u₃,
+        (@name(f.sgsʲs.:(1).u₃), @name(c.sgsʲs.:(1).ρa)) =>
+            ᶠᶜmat2_u₃_scalar,
+        (@name(f.sgsʲs.:(1).u₃), @name(c.sgsʲs.:(1).ρae_tot)) =>
+            ᶠᶜmat2_u₃_scalar,
+        (@name(f.sgsʲs.:(1).u₃), @name(f.sgsʲs.:(1).u₃)) => ᶠᶠmat3_u₃_u₃,
+    )
+    return A, b
+end
 # Generate extruded finite difference spaces for testing. Include topography
 # when possible.
 function test_spaces(::Type{FT}) where {FT}
