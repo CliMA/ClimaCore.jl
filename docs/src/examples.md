@@ -243,24 +243,29 @@ Where $B$ applies boundary conditions to enforce $\boldsymbol{w} = 0$ at the dom
 
 #### Prognostic variables
 
-* $\rho$: _density_ measured in kg/m³, discretized at cell centers.
-* $\rho\theta$: _potential temperature density_ measured in K·kg/m³, discretized at cell centers.
-* $\boldsymbol{w}$: _vertical velocity_ measured in m/s, discretized at cell faces.
+**$\rho$**: *Density*, measured in kg/m³, discretized at cell centers.
+
+**$\rho\theta$**: *Potential temperature density*, measured in K·kg/m³, discretized at cell centers.
+
+**$\boldsymbol{w}$**: *Vertical velocity*, measured in m/s, discretized at cell faces.
 
 #### Operators
 
-#### Reconstructions
+##### Reconstructions
 
-* $I^f$ is the [center-to-face reconstruction operator](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.InterpolateC2F), called `If` in the example code.
-  - Currently this is implemented as the arithmetic mean.
+**$I^f$** is the [center-to-face reconstruction operator](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.InterpolateC2F), called `If` in the example code.  
+Currently this is implemented as the arithmetic mean.
 
-#### Differentiation operators
+##### Differentiation operators
 
-* $D^c_v$ is the [face-to-center vertical divergence](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.DivergenceF2C), called `∂` in the example code.
-  - This example uses zero vertical velocity at the top and bottom boundaries.
-* $\nabla^f_v$ is the [center-to-face vertical gradient](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.GradientC2F), called `∂f` in the example code.
-* $B$ is the [boundary operator](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.SetBoundaryOperator), called `B` in the example code.
-  - This enforces zero vertical velocity at domain boundaries.
+**$D^c_v$** is the [face-to-center vertical divergence](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.DivergenceF2C), called `∂` in the example code.  
+This example uses zero vertical velocity at the top and bottom boundaries.
+
+**$\nabla^f_v$** is the [center-to-face vertical gradient](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.GradientC2F), called `∂f` in the example code.
+
+**$B$** is the [boundary operator](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.SetBoundaryOperator), called `B` in the example code.  
+This enforces zero vertical velocity at domain boundaries.
+
 
 #### Problem flow and set-up
 
