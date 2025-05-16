@@ -11,9 +11,8 @@ import ClimaCore.Operators: LeftBoundaryWindow, RightBoundaryWindow, Interior
 
 struct CUDAColumnStencilStyle <: AbstractStencilStyle end
 struct CUDAWithShmemColumnStencilStyle <: AbstractStencilStyle end
-AbstractStencilStyle(bc, ::ClimaComms.CUDADevice) =
-    Operators.any_fd_shmem_supported(bc) ? CUDAWithShmemColumnStencilStyle :
-    CUDAColumnStencilStyle
+
+AbstractStencilStyle(bc, ::ClimaComms.CUDADevice) = CUDAColumnStencilStyle
 
 Base.Broadcast.BroadcastStyle(
     x::Operators.ColumnStencilStyle,

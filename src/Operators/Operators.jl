@@ -26,5 +26,6 @@ include("numericalflux.jl")
 include("finitedifference.jl")
 include("remapping.jl")
 include("integrals.jl")
+include("columnwise.jl")
 
 end # module
