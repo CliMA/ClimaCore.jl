@@ -2,7 +2,7 @@
 
 julia_version = "1.10.9"
 manifest_format = "2.0"
-project_hash = "6ab89829ea190189b0319a6f8e22b3515e5283c2"
+project_hash = "45a11f30c749324ab2ca9eb06366eb279b21cfa8"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "e2478490447631aedba0823d4d7a80b2cc8cdb32"
@@ -331,7 +331,7 @@ weakdeps = ["CUDA", "MPI"]
 deps = ["Adapt", "BandedMatrices", "BlockArrays", "ClimaComms", "CubedSphere", "DataStructures", "ForwardDiff", "GaussQuadrature", "GilbertCurves", "HDF5", "InteractiveUtils", "IntervalSets", "KrylovKit", "LazyBroadcast", "LinearAlgebra", "MultiBroadcastFusion", "NVTX", "PkgVersion", "RecursiveArrayTools", "RootSolvers", "SparseArrays", "StaticArrays", "Statistics", "UnrolledUtilities"]
 path = ".."
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
-version = "0.14.29"
+version = "0.14.33"
 weakdeps = ["CUDA", "Krylov"]
 
     [deps.ClimaCore.extensions]
@@ -355,6 +355,12 @@ deps = ["ClimaCore", "WriteVTK"]
 path = "../lib/ClimaCoreVTK"
 uuid = "c8b6d40d-e815-466f-95ae-c48aefa668fa"
 version = "0.7.6"
+
+[[deps.ClimaParams]]
+deps = ["TOML"]
+git-tree-sha1 = "acf6c80c7ad59fe9dac9cc49625d52f4b8e1f4b7"
+uuid = "5c42b081-d73a-476f-9059-fd94b934656c"
+version = "0.10.30"
 
 [[deps.ClimaTimeSteppers]]
 deps = ["ClimaComms", "Colors", "DataStructures", "DiffEqBase", "KernelAbstractions", "Krylov", "LinearAlgebra", "LinearOperators", "NVTX", "SciMLBase", "StaticArrays"]
@@ -1516,6 +1522,11 @@ version = "400.902.209+0"
 uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
 version = "1.2.0"
 
+[[deps.NullBroadcasts]]
+git-tree-sha1 = "343c7bb67d0a29ea5d7d2b3e945afe81e2862337"
+uuid = "0d71be07-595a-4f89-9529-4065a4ab43a6"
+version = "0.1.0"
+
 [[deps.OffsetArrays]]
 git-tree-sha1 = "a414039192a155fb38c4599a60110f0018c6ec82"
 uuid = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
@@ -2185,6 +2196,16 @@ uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 git-tree-sha1 = "43044b737fa70bc12f6105061d3da38f881a3e3c"
 uuid = "b718987f-49a8-5099-9789-dcd902bef87d"
 version = "1.0.2"
+
+[[deps.Thermodynamics]]
+deps = ["DocStringExtensions", "KernelAbstractions", "Random", "RootSolvers"]
+git-tree-sha1 = "efe74e0344fd7fb68b831316055290d80a62d9c1"
+uuid = "b60c26fb-14c3-4610-9d3e-2d17fe7ff00c"
+version = "0.12.11"
+weakdeps = ["ClimaParams"]
+
+    [deps.Thermodynamics.extensions]
+    CreateParametersExt = "ClimaParams"
 
 [[deps.ThreadingUtilities]]
 deps = ["ManualMemory"]
