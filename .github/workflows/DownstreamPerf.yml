@@ -1,0 +1,29 @@
+name: Downstream
+on:
+  push:
+    branches:
+      - main
+    tags: '*'
+  pull_request:
+
+# Needed to allow julia-actions/cache to delete old caches that it has created
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+perf: 
+  timeout-minutes: 60
+  name: Downstream (ClimaAtmos) perf build
+  uses: "buildkite/trigger-pipeline-action@v2.3.0"
+  with:
+    buildkite_api_access_token: ${{ secrets.TRIGGER_BK_BUILD_TOKEN }}
+    pipeline: "clima/climaatmos-target-gpu-simulations"
+    branch: "main"
+    commit: "HEAD"
+    message: ":github: Downstream (ClimaAtmos) performance check via Github Action"
+    build_env_vars: '{"TRIGGERED_FROM_GHA"}: "true"'
+    ignore_pipeline_branch_filter: true
