@@ -118,8 +118,8 @@ Follows the momentum equations with vertical diffusion and Coriolis force:
 These are discretized using the following:
 ```math
 \begin{align}
-\frac{\partial u}{\partial t} &\approx D_{f2c}\left(\nu G_{c2f}(u)\right) + f(v - v_g) - A(w, u) \\
-\frac{\partial v}{\partial t} &\approx D_{f2c}\left(\nu G_{c2f}(v)\right) - f(u - u_g) - A(w, v)
+\frac{\partial u}{\partial t} &\approx D_\left(\nu G(u)\right) + f(v - v_g) - A(w, u) \\
+\frac{\partial v}{\partial t} &\approx D_\left(\nu G(v)\right) - f(u - u_g) - A(w, v)
 \end{align}
 ```
 
@@ -133,9 +133,9 @@ These are discretized using the following:
 
 Because this is a 1D vertical problem, we utilize the staggered vertical grid with:
 
-- `G_{c2f}` is the [gradient operator from cell centers to faces](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.GradientC2F), called `gradc2f` in the example code.
-- `D_{f2c}` is the [divergence operator from faces to centers](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.DivergenceF2C), called `divf2c` in the example code.
-- `A` is the [advection operator](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.AdvectionC2C), called `A` in the example code.
+- ``D`` is the [face-to-center divergence](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.DivergenceF2C) operator, called `divf2c` in the example code
+- ``G`` is the [center-to-face gradient](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.GradientC2F) operator, called `gradc2f` in the example code
+- ``A`` is the [center-to-center vertical advection](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.AdvectionC2C) operator, called `A` in the example code.
 
 #### Problem flow and set-up
 
@@ -253,7 +253,7 @@ Where $B$ applies boundary conditions to enforce $\boldsymbol{w} = 0$ at the dom
 
 ##### Reconstructions
 
-**$I^f$** is the [center-to-face reconstruction operator](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.InterpolateC2F), called `If` in the example code.  
+**$I^f$** is the [center-to-face reconstruction](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.InterpolateC2F) operator, called `If` in the example code.  
 Currently this is implemented as the arithmetic mean.
 
 ##### Differentiation operators
