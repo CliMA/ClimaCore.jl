@@ -114,11 +114,9 @@ Then we have the _covariant basis_:
 \mathbf{e}_{\theta} = \frac{\partial \mathbf{r} }{\partial \theta }  = \frac{\partial (r \cos \theta, r \sin \theta) }{\partial \theta } = (-r\sin \theta,r \cos \theta)
 ```
 
-$\mathbf{e}_r$ represents the direction that is tangent to the "radius direction", and $\mathbf{e}_{\theta}$ is tangent to the circle curve itself.
+where $\mathbf{e}_r$ represents the direction that is tangent to the radius, and the one $\mathbf{e}_{\theta}$ tangent to the unit circle.
 
 And the _contravariant basis_:
-
-since we have $r(x,y) = \sqrt{x^{2} +y^{2}  }$ and $\theta (x,y) = \arctan (\frac{y}{x} )$. Thus,
 
 ```math
 \mathbf{e}^r = \nabla r(x,y) = (\frac{x}{\sqrt{x^{2} +y^{2}  }}, \frac{y}{\sqrt{x^{2} +y^{2}  }}) = (\frac{x}{r},\frac{y}{r} ) = (\cos \theta, \sin \theta)
@@ -126,8 +124,9 @@ since we have $r(x,y) = \sqrt{x^{2} +y^{2}  }$ and $\theta (x,y) = \arctan (\fra
 ```math
 \mathbf{e}^{\theta} = \nabla \theta(x,y) = (\frac{-y}{x^{2} +y^{2}}, \frac{x}{x^{2} +y^{2}})  = (\frac{-\sin \theta}{r} , \frac{\cos \theta}{r})
 ```
+where we have used that $r(x,y) = \sqrt{x^{2} +y^{2}  }$ and $\theta (x,y) = \arctan (\frac{y}{x} )$.
 
-$\mathbf{e}^r$ represents the direction that is perpendicular to the circle curve, and $\mathbf{e}^{\theta}$ is perpendicular to the "radius direction".
+$\mathbf{e}^r$ represents the direction that is perpendicular to the unit circle, and $\mathbf{e}^{\theta}$ the one that is perpendicular to the radius.
 
 
 **Note**:
