@@ -103,6 +103,7 @@ function center_space(space::FiniteDifferenceSpace)
     return FiniteDifferenceSpace(grid(space), CellCenter())
 end
 
+ncolumns(::FiniteDifferenceSpace) = 1
 nlevels(space::FiniteDifferenceSpace) = length(space)
 # TODO: deprecate?
 Base.length(space::FiniteDifferenceSpace) = length(coordinates_data(space))

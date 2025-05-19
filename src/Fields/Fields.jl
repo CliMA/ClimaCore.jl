@@ -30,7 +30,7 @@ import ..Utilities: PlusHalf, half
 using ..RecursiveApply
 using ClimaComms
 import Adapt
-import UnrolledUtilities: unrolled_map
+import UnrolledUtilities: unrolled_map, unrolled_findfirst
 
 import StaticArrays, LinearAlgebra, Statistics, InteractiveUtils
 

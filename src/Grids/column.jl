@@ -36,6 +36,8 @@ struct ColumnGrid{
     colidx::C
 end
 
+Adapt.@adapt_structure ColumnGrid
+
 local_geometry_type(::Type{ColumnGrid{G, C}}) where {G, C} =
     local_geometry_type(G)
 
