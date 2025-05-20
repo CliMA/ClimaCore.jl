@@ -155,16 +155,32 @@ Base.Broadcast.BroadcastStyle(
     as::Base.Broadcast.DefaultArrayStyle{0},
 ) = fs
 Base.Broadcast.BroadcastStyle(
+    as::Base.Broadcast.DefaultArrayStyle{0},
+    fs::FieldVectorStyle,
+) = fs
+Base.Broadcast.BroadcastStyle(
     fs::FieldVectorStyle,
     as::Base.Broadcast.AbstractArrayStyle{0},
+) = fs
+Base.Broadcast.BroadcastStyle(
+    as::Base.Broadcast.AbstractArrayStyle{0},
+    fs::FieldVectorStyle,
 ) = fs
 Base.Broadcast.BroadcastStyle(
     fs::FieldVectorStyle,
     as::Base.Broadcast.DefaultArrayStyle,
 ) = as
 Base.Broadcast.BroadcastStyle(
+    as::Base.Broadcast.DefaultArrayStyle,
+    fs::FieldVectorStyle,
+) = as
+Base.Broadcast.BroadcastStyle(
     fs::FieldVectorStyle,
     as::Base.Broadcast.AbstractArrayStyle,
+) = as
+Base.Broadcast.BroadcastStyle(
+    as::Base.Broadcast.AbstractArrayStyle,
+    fs::FieldVectorStyle,
 ) = as
 
 function Base.similar(
