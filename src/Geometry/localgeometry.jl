@@ -3,12 +3,14 @@ import LinearAlgebra: issymmetric
 isapproxsymmetric(A::AbstractMatrix{T}; rtol = 10 * eps(T)) where {T} =
     Base.isapprox(A, A'; rtol)
 
+abstract type AbstractLocalGeometry{I, C <: AbstractPoint, FT, S} end
+
 """
     LocalGeometry
 
 The necessary local metric information defined at each node.
 """
-struct LocalGeometry{I, C <: AbstractPoint, FT, S}
+struct LocalGeometry{I, C, FT, S} <: AbstractLocalGeometry{I, C, FT, S}
     "Coordinates of the current point"
     coordinates::C
     "Jacobian determinant of the transformation `ξ` to `x`"
@@ -25,21 +27,67 @@ struct LocalGeometry{I, C <: AbstractPoint, FT, S}
     gⁱʲ::Axis2Tensor{FT, Tuple{ContravariantAxis{I}, ContravariantAxis{I}}, S}
     "Covariant metric tensor (gᵢⱼ), transforms contravariant to covariant vector components"
     gᵢⱼ::Axis2Tensor{FT, Tuple{CovariantAxis{I}, CovariantAxis{I}}, S}
-    @inline function LocalGeometry(
+end
+
+"""
+    PartialLocalGeometry
+
+A subset of LocalGeometry, used to reduce memory bandwidth in CUDA kernels
+where not all components of LocalGeometry are needed.
+"""
+struct PartialLocalGeometry{I, C, FT, S} <: AbstractLocalGeometry{I, C, FT, S}
+    "Coordinates of the current point"
+    coordinates::C
+    "Jacobian determinant of the transformation `ξ` to `x`"
+    J::FT
+    "Metric terms: `J` multiplied by the quadrature weights"
+    WJ::FT
+    "inverse Jacobian"
+    invJ::FT
+    "Δz (getproperty(lg.∂x∂ξ.components.data, Δz_metric_component(eltype(lg.coordinates))))"
+    Δz::FT
+    "Contravariant metric tensor (inverse of gᵢⱼ), transforms covariant to contravariant vector components"
+    gⁱʲ::Axis2Tensor{FT, Tuple{ContravariantAxis{I}, ContravariantAxis{I}}, S}
+    "Covariant metric tensor (gᵢⱼ), transforms contravariant to covariant vector components"
+    gᵢⱼ::Axis2Tensor{FT, Tuple{CovariantAxis{I}, CovariantAxis{I}}, S}
+end
+
+PartialLocalGeometry(lg::LocalGeometry) = PartialLocalGeometry(
+    lg.coordinates,
+    lg.J,
+    lg.WJ,
+    lg.invJ,
+    getproperty(
+        lg.∂x∂ξ.components.data,
+        Δz_metric_component(eltype(lg.coordinates)),
+    ),
+    lg.gⁱʲ,
+    lg.gᵢⱼ,
+)
+
+@inline function LocalGeometry(
+    coordinates,
+    J,
+    WJ,
+    ∂x∂ξ::Axis2Tensor{FT, Tuple{LocalAxis{I}, CovariantAxis{I}}, S},
+) where {FT, I, S}
+    ∂ξ∂x = inv(∂x∂ξ)
+    C = typeof(coordinates)
+    Jinv = inv(J)
+    gⁱʲ = ∂ξ∂x * ∂ξ∂x'
+    gᵢⱼ = ∂x∂ξ' * ∂x∂ξ
+    isapproxsymmetric(components(gⁱʲ)) || error("gⁱʲ is not symmetric.")
+    isapproxsymmetric(components(gᵢⱼ)) || error("gᵢⱼ is not symmetric.")
+    return LocalGeometry{I, C, FT, S}(
         coordinates,
         J,
         WJ,
-        ∂x∂ξ::Axis2Tensor{FT, Tuple{LocalAxis{I}, CovariantAxis{I}}, S},
-    ) where {FT, I, S}
-        ∂ξ∂x = inv(∂x∂ξ)
-        C = typeof(coordinates)
-        Jinv = inv(J)
-        gⁱʲ = ∂ξ∂x * ∂ξ∂x'
-        gᵢⱼ = ∂x∂ξ' * ∂x∂ξ
-        isapproxsymmetric(components(gⁱʲ)) || error("gⁱʲ is not symmetric.")
-        isapproxsymmetric(components(gᵢⱼ)) || error("gᵢⱼ is not symmetric.")
-        return new{I, C, FT, S}(coordinates, J, WJ, Jinv, ∂x∂ξ, ∂ξ∂x, gⁱʲ, gᵢⱼ)
-    end
+        Jinv,
+        ∂x∂ξ,
+        ∂ξ∂x,
+        gⁱʲ,
+        gᵢⱼ,
+    )
 end
 
 
@@ -56,6 +104,7 @@ struct SurfaceGeometry{FT, N}
 end
 
 undertype(::Type{LocalGeometry{I, C, FT, S}}) where {I, C, FT, S} = FT
+undertype(::Type{PartialLocalGeometry{I, C, FT, S}}) where {I, C, FT, S} = FT
 undertype(::Type{SurfaceGeometry{FT, N}}) where {FT, N} = FT
 
 """

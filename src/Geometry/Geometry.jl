@@ -31,4 +31,18 @@ include("conversions.jl")
 include("globalgeometry.jl")
 include("rmul_with_projection.jl")
 
+"""
+    Δz_metric_component(::Type{<:Goemetry.AbstractPoint})
+
+The index of the z-component of an abstract point
+in an `AxisTensor`.
+"""
+Δz_metric_component(::Type{<:LatLongZPoint}) = 9
+Δz_metric_component(::Type{<:Cartesian3Point}) = 1
+Δz_metric_component(::Type{<:Cartesian13Point}) = 4
+Δz_metric_component(::Type{<:Cartesian123Point}) = 9
+Δz_metric_component(::Type{<:XYZPoint}) = 9
+Δz_metric_component(::Type{<:ZPoint}) = 1
+Δz_metric_component(::Type{<:XZPoint}) = 4
+
 end # module

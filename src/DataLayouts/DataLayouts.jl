@@ -69,6 +69,7 @@ import ClimaComms
 import MultiBroadcastFusion as MBF
 import Adapt
 
+import ..Geometry
 import ..Utilities: PlusHalf, unionall_type
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..slab, ..slab_args, ..column, ..column_args, ..level
@@ -2377,5 +2378,12 @@ end
 
 full_bitmask(mask::AbstractMask, data::IJFH; complement::Bool = false) =
     complement ? .!parent(mask.is_active) : parent(mask.is_active)
+
+get_Δz(data::AbstractData{<:Geometry.LocalGeometry}) = getproperty(
+    lg.∂x∂ξ.components.data,
+    Geometry.Δz_metric_component(eltype(lg.coordinates)),
+)
+get_Δz(data::AbstractData{<:Geometry.PartialLocalGeometry}) = lg.Δz
+
 
 end # module

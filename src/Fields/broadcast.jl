@@ -49,7 +49,7 @@ _first(bc, ::Any) = throw(BroadcastInferenceError(bc))
 _first_data_layout(data::DataLayouts.VF) = data[CartesianIndex(1, 1, 1, 1, 1)]
 _first_data_layout(data::DataLayouts.DataF) = data[]
 _first(bc, x::Real) = x
-_first(bc, x::Geometry.LocalGeometry) = x
+_first(bc, x::Geometry.AbstractLocalGeometry) = x
 _first(bc, data::DataLayouts.VF) = data[]
 _first(bc, field::Field) =
     _first_data_layout(field_values(column(field, 1, 1, 1)))

@@ -12,7 +12,7 @@ Cartesian123Point(pt::AbstractPoint, global_geometry::AbstractGlobalGeometry) =
 (::Type{<:CartesianVector{<:Any, I}})(
     u::AxisVector,
     global_geometry::AbstractGlobalGeometry,
-    local_geometry::LocalGeometry,
+    local_geometry::AbstractLocalGeometry,
 ) where {I} = project(
     CartesianAxis{I}(),
     CartesianVector(u, global_geometry, local_geometry),
@@ -44,12 +44,12 @@ CartesianPoint(pt::XYZPoint{FT}, ::CartesianGlobalGeometry) where {FT} =
 CartesianVector(
     u::CartesianVector,
     ::CartesianGlobalGeometry,
-    ::LocalGeometry,
+    ::AbstractLocalGeometry,
 ) = u
 function CartesianVector(
     u::AxisVector,
     ::CartesianGlobalGeometry,
-    local_geometry::LocalGeometry{I},
+    local_geometry::AbstractLocalGeometry{I},
 ) where {I}
     u_local = LocalVector(u, local_geometry)
     AxisVector(CartesianAxis{I}(), components(u_local))
@@ -228,12 +228,12 @@ end
 CartesianVector(
     u::CartesianVector,
     ::AbstractSphericalGlobalGeometry,
-    ::LocalGeometry,
+    ::AbstractLocalGeometry,
 ) = u
 CartesianVector(
     u::AxisVector,
     global_geometry::SphericalGlobalGeometry,
-    local_geometry::LocalGeometry,
+    local_geometry::AbstractLocalGeometry,
 ) = CartesianVector(
     UVWVector(u, local_geometry),
     global_geometry,

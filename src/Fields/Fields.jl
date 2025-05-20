@@ -363,7 +363,7 @@ coordinate_field(field::Field) = coordinate_field(axes(field))
 """
     local_geometry_field(space::AbstractSpace)
 
-Return a pointer to the input space's `LocalGeometry` `Field`.
+Return a pointer to the input space's local geometry `Field`.
 """
 local_geometry_field(space::AbstractSpace) =
     Field(Spaces.local_geometry_data(space), space)
@@ -529,7 +529,7 @@ Base.@propagate_inbounds Base.setindex!(field::PointField, val) =
     set!(f::Function, field::Field, args = ())
 
 Apply function `f` to populate values in field `field`. `f` must have a function
-signature with signature `f(::LocalGeometry[, args...])`. Additional arguments
+signature with signature `f(::AbstractLocalGeometry[, args...])`. Additional arguments
 may be passed to `f` with `args`.
 
 ## Example
