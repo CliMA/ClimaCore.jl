@@ -25,6 +25,7 @@ import ClimaCore:
     Geometry,
     Quadratures
 
+using LazyBroadcast: lazy
 using LinearAlgebra: norm
 using Statistics: mean
 using ForwardDiff
@@ -661,24 +662,56 @@ end
     end
 end
 
-@testset "Points from Columns" begin
+@testset "Columns of Fields and Field broadcasts" begin
     FT = Float64
     for space in TU.all_spaces(FT)
-        if space isa Spaces.SpectralElementSpace1D
-            Y = fill((; x = FT(1)), space)
-            point_space_from_field = axes(Fields.column(Y.x, 1, 1))
-            point_space = Spaces.column(space, 1, 1)
-            @test Fields.ones(point_space) ==
-                  Fields.ones(point_space_from_field)
+        TwoColumnIndexSpace = Union{
+            Spaces.SpectralElementSpace1D,
+            Spaces.ExtrudedSpectralElementSpace2D,
+        }
+        ThreeColumnIndexSpace = Union{
+            Spaces.SpectralElementSpace2D,
+            Spaces.ExtrudedSpectralElementSpace3D,
+        }
+        if space isa Union{TwoColumnIndexSpace, ThreeColumnIndexSpace}
+            field = fill((; x = FT(1)), space)
+            indices = space isa TwoColumnIndexSpace ? (1, 1) : (1, 1, 1)
+            column_of_field = Fields.Field(
+                Spaces.column(Fields.field_values(field), indices...),
+                Spaces.column(space, indices...),
+            )
+            @test column_of_field == Spaces.column(field, indices...)
+            @test column_of_field == Base.materialize(
+                Spaces.column(lazy.(identity.(field)), indices...),
+            )
         end
-        if space isa Spaces.SpectralElementSpace2D
-            Y = fill((; x = FT(1)), space)
-            point_space_from_field = axes(Fields.column(Y.x, 1, 1, 1))
-            point_space = Spaces.column(space, 1, 1, 1)
-            @test Fields.ones(point_space) ==
-                  Fields.ones(point_space_from_field)
-        end
+    end
+end
 
+@testset "Slabs of Fields and Field broadcasts" begin
+    FT = Float64
+    is_cuda = ClimaComms.device() == ClimaComms.CUDADevice()
+    for space in TU.all_spaces(FT)
+        OneSlabIndexSpace =
+            Union{Spaces.SpectralElementSpace1D, Spaces.SpectralElementSpace2D}
+        TwoSlabIndexSpace = Union{
+            Spaces.ExtrudedSpectralElementSpace2D,
+            Spaces.ExtrudedSpectralElementSpace3D,
+        }
+        if space isa Union{OneSlabIndexSpace, TwoSlabIndexSpace}
+            field = fill((; x = FT(1)), space)
+            indices = space isa OneSlabIndexSpace ? (1,) : (1, 1)
+            slab_of_field = Fields.Field(
+                Spaces.slab(Fields.field_values(field), indices...),
+                Spaces.slab(space, indices...),
+            )
+            @test slab_of_field == Spaces.slab(field, indices...) broken =
+                is_cuda && space isa OneSlabIndexSpace
+            @test slab_of_field == Base.materialize(
+                Spaces.slab(lazy.(identity.(field)), indices...),
+            ) broken = is_cuda
+            # TODO: Figure out why some of these tests are broken on GPUs.
+        end
     end
 end
 

@@ -15,6 +15,11 @@ struct FieldStyle{DS <: DataStyle} <: AbstractFieldStyle end
 FieldStyle(::DS) where {DS <: DataStyle} = FieldStyle{DS}()
 FieldStyle(x::Base.Broadcast.Unknown) = x
 
+FieldColumnStyle(::Type{S}) where {DS, S <: FieldStyle{DS}} =
+    FieldStyle{DataLayouts.DataColumnStyle(DS)}
+FieldSlabStyle(::Type{S}) where {DS, S <: FieldStyle{DS}} =
+    FieldStyle{DataLayouts.DataSlabStyle(DS)}
+
 Base.Broadcast.BroadcastStyle(::Type{Field{V, S}}) where {V, S} =
     FieldStyle(DataStyle(V))
 
@@ -97,44 +102,42 @@ end
 
 Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{Style},
-    v,
-    h,
+    inds...,
 ) where {Style <: AbstractFieldStyle}
-    _args = slab_args(bc.args, v, h)
-    _axes = slab(axes(bc), v, h)
-    Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
+    _Style = FieldSlabStyle(Style)
+    _args = slab_args(bc.args, inds...)
+    _axes = slab(axes(bc), inds...)
+    Base.Broadcast.Broadcasted{_Style}(bc.f, _args, _axes)
 end
 
 Base.@propagate_inbounds function slab(
     bc::DataLayouts.NonExtrudedBroadcasted{Style},
-    v,
-    h,
+    inds...,
 ) where {Style <: AbstractFieldStyle}
-    _args = slab_args(bc.args, v, h)
-    _axes = slab(axes(bc), v, h)
-    DataLayouts.NonExtrudedBroadcasted{Style}(bc.f, _args, _axes)
+    _Style = FieldSlabStyle(Style)
+    _args = slab_args(bc.args, inds...)
+    _axes = slab(axes(bc), inds...)
+    DataLayouts.NonExtrudedBroadcasted{_Style}(bc.f, _args, _axes)
 end
 
 Base.@propagate_inbounds function column(
     bc::Base.Broadcast.Broadcasted{Style},
-    i,
-    j,
-    h,
+    inds...,
 ) where {Style <: AbstractFieldStyle}
-    _args = column_args(bc.args, i, j, h)
-    _axes = column(axes(bc), i, j, h)
-    Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
+    _Style = FieldColumnStyle(Style)
+    _args = column_args(bc.args, inds...)
+    _axes = column(axes(bc), inds...)
+    Base.Broadcast.Broadcasted{_Style}(bc.f, _args, _axes)
 end
 
 Base.@propagate_inbounds function column(
     bc::DataLayouts.NonExtrudedBroadcasted{Style},
-    i,
-    j,
-    h,
+    inds...,
 ) where {Style <: AbstractFieldStyle}
-    _args = column_args(bc.args, i, j, h)
-    _axes = column(axes(bc), i, j, h)
-    DataLayouts.NonExtrudedBroadcasted{Style}(bc.f, _args, _axes)
+    _Style = FieldColumnStyle(Style)
+    _args = column_args(bc.args, inds...)
+    _axes = column(axes(bc), inds...)
+    DataLayouts.NonExtrudedBroadcasted{_Style}(bc.f, _args, _axes)
 end
 
 # Return underlying DataLayout object, DataStyle of broadcasted
