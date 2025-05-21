@@ -70,7 +70,7 @@ function _SpectralElementGrid1D(
     FT = eltype(CoordType)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
-    LG = Geometry.LocalGeometry{AIdx, CoordType, FT, SMatrix{1, 1, FT, 1}}
+    LG = Geometry.FullLocalGeometry{AIdx, CoordType, FT, SMatrix{1, 1, FT, 1}}
     local_geometry = horizontal_layout_type{LG, Nq}(Array{FT}, Nh)
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
@@ -298,7 +298,7 @@ function _SpectralElementGrid2D(
     high_order_quadrature_style = Quadratures.GLL{Nq * 2}()
     high_order_Nq = Quadratures.degrees_of_freedom(high_order_quadrature_style)
 
-    LG = Geometry.LocalGeometry{AIdx, CoordType2D, FT, SMatrix{2, 2, FT, 4}}
+    LG = Geometry.FullLocalGeometry{AIdx, CoordType2D, FT, SMatrix{2, 2, FT, 4}}
 
     local_geometry = horizontal_layout_type{LG, Nq}(Array{FT}, Nh)
     mask = if enable_mask

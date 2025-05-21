@@ -10,7 +10,7 @@ using ClimaCore.Geometry:Geometry, AbstractAxis, CovariantAxis,
     Contravariant13Vector, Contravariant2Vector, Axis2Tensor, Contravariant3Axis,
     LocalGeometry, CovariantTensor, CartesianTensor, LocalTensor, ContravariantTensor,
     XZPoint, XYZPoint, LatLongZPoint, XYPoint, ZPoint, LatLongPoint, XPoint,
-    Contravariant1Axis, Contravariant2Axis
+    Contravariant1Axis, Contravariant2Axis, FullLocalGeometry
 
 include("ref_funcs.jl") # compact, generic but unoptimized reference
 include("method_info.jl")
