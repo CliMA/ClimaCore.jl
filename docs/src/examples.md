@@ -118,8 +118,8 @@ Follows the momentum equations with vertical diffusion and Coriolis force:
 These are discretized using the following:
 ```math
 \begin{align}
-\frac{\partial u}{\partial t} &\approx D_\left(\nu G(u)\right) + f(v - v_g) - A(w, u) \\
-\frac{\partial v}{\partial t} &\approx D_\left(\nu G(v)\right) - f(u - u_g) - A(w, v)
+\frac{\partial u}{\partial t} &\approx D \left(\nu G(u)\right) + f(v - v_g) - A(w, u) \\
+\frac{\partial v}{\partial t} &\approx D \left(\nu G(v)\right) - f(u - u_g) - A(w, v)
 \end{align}
 ```
 
