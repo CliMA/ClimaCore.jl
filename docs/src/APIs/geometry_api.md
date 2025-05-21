@@ -11,6 +11,18 @@ Geometry.AbstractGlobalGeometry
 Geometry.CartesianGlobalGeometry
 ```
 
+## LocalGeometry
+
+```@docs
+Geometry.LocalGeometry
+```
+
+## Internals
+
+```@docs
+Geometry.Δz_metric_component
+```
+
 ## Coordinates
 
 ```@docs

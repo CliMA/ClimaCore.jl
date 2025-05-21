@@ -34,12 +34,6 @@ Spaces.FiniteDifferenceSpace
 Users should construct either the center or face space from the mesh, then construct
 the other space from the original one: this internally reuses the same data structures, and avoids allocating additional memory.
 
-### Internals
-
-```@docs
-Spaces.Δz_metric_component
-```
-
 ## Spectral Element Spaces
 
 ```@docs
