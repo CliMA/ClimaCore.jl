@@ -130,8 +130,8 @@ end
     A, b = dycore_prognostic_EDMF_FieldMatrix(FT)
     for key in MatrixFields.get_scalar_keys(A, b)
         @test_all A[key] isa MatrixFields.ColumnwiseBandMatrixField ?
-              eltype(eltype(A[key])) == eltype(parent(A[key])) :
-              eltype(eltype(A[key])) == eltype(A[key])
+                  eltype(eltype(A[key])) == eltype(parent(A[key])) :
+                  eltype(eltype(A[key])) == eltype(A[key])
     end
     @test all(
         entry ->

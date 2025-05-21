@@ -187,37 +187,27 @@ function get_internal_entry(
     # Ensure compatibility with RecursiveApply (i.e., with rmul).
     # See note above matrix_product_keys in field_name_set.jl for more details.
     T = eltype(eltype(entry))
-    # @show !broadcasted_has_field(T, name_pair[1])
-    # @show name_pair
-    # @show T
     if name_pair == (@name(), @name())
-        entry
-    elseif name_pair[1] == name_pair[2] && !broadcasted_has_field(T, name_pair[1]) &&
-                !(T <: Geometry.SingleValue) #&&
-            #!broadcasted_has_field(T, name_pair[1])
-        # @assert !(T <: Geometry.SingleValue)
-        # @show name_pair
-        #     # multiplication case 3 or 4, first argument
-        # if T <: Number
-        #     entry
-        # else
-        #     throw(key_error)
-        # end
-        # @show "aaa"
-        # entry
-        nothing
+        if T <: Adjoint{Real, Real} # Adjoint of a real is itself
+            entry.parent
+        else
+            entry
+        end
+    elseif name_pair[1] == name_pair[2] &&
+           !broadcasted_has_field(T, name_pair[1]) &&
+           (T <: Number)
+        entry # multiplication case 3 or 4, first argument
     elseif name_pair[1] == @name() || name_pair[2] == @name()
-
         target_chain = if name_pair[1] == @name()
             if broadcasted_has_field(T, name_pair[2])
                 # this case should be dscalar/dvec with T isa vec
                 name_pair[2]
             else
                 # this should be dscalar/dvec with T isa adjoint
-                if !(T <: Adjoint)
+                if !(T <: Geometry.AdjointAxisTensor)
                     throw(key_error)
                 end
-                append_internal_name(@name(parent), name_pair[2])
+                append_internal_name(@name(parent), name_pair[2]) # axistensors can only contain reals
             end
         else
             if broadcasted_has_field(T, name_pair[1])
@@ -225,10 +215,10 @@ function get_internal_entry(
                 name_pair[1]
             else
                 # this should be dvec/dscalar with T isa adjoint
-                if !(T <: Adjoint)
+                if !(T <: Geometry.AdjointAxisTensor)
                     throw(key_error)
                 end
-                append_internal_name(@name(parent), name_pair[1])
+                append_internal_name(@name(parent), name_pair[1]) # axistensors can only contain reals
             end
         end
         target_field_eltype = broadcasted_get_field_type(T, target_chain)
@@ -247,7 +237,7 @@ function get_internal_entry(
                 target_field_eltype,
                 T,
             )
-            band_element_size = div(sizeof(T), sizeof(target_field_eltype))
+            band_element_size = div(sizeof(T), sizeof(eltype(parent(entry))))
             parent_indices = DataLayouts.to_data_specific_field(
                 singleton_datalayout,
                 (
@@ -278,19 +268,18 @@ function get_internal_entry(
     elseif name_pair[2] != @name() && name_pair[1] != @name()
         # this should only be the case with dvec/dvec or dNTuple/dvec
         if T <: Geometry.SingleValue
-            # @assert drop_last(name_pair[1]) ==
-            #         drop_last(name_pair[2]) ==
-            #         @name(components.data)
+            is_child_value(
+                name_pair,
+                (@name(components.data), @name(components.data)),
+            ) || throw(key_error)
             row_index = extract_last(name_pair[1])
             col_index = extract_last(name_pair[2])
             (n_rows, n_cols) = map(length, axes(T))
             @assert row_index <= n_rows && col_index <= n_cols
             flattened_index = n_rows * (col_index - 1) + row_index
         elseif eltype(T) <: Geometry.SingleValue #TODO: nested tuples?
-            # @assert drop_last(name_pair[2]) == @name(components.data)
-            modified_first_name =
-                broadcasted_has_field(T, name_pair[1]) ? name_pair[1] :
-                append_internal_name(@name(parent), name_pair[1])
+            is_child_name(name_pair[2], @name(components.data)) ||
+                throw(key_error)
             flattened_index =
                 get_field_first_index_offset(
                     name_pair[1],
@@ -298,22 +287,15 @@ function get_internal_entry(
                     T,
                 ) + extract_last(name_pair[2])
         else
-            # error("Cannot get entry for key $name_pair")
             throw(key_error)
-            # Base.broadcasted(entry) do matrix_row
-            #     map(matrix_row) do matrix_row_entry
-            #         broadcasted_get_field(matrix_row_entry, target_chain)
-            #     end
-            # end
         end
-        band_element_size = div(sizeof(T), sizeof(eltype(T)))
+        band_element_size = div(sizeof(T), sizeof(eltype(parent(entry))))
         T_band = eltype(entry)
         singleton_datalayout = DataLayouts.singleton(Fields.field_values(entry))
         # BandMatrixRow with same lowest diagonal and bandwidth as `entry`, with a scalar eltype
         scalar_band_type =
             band_matrix_row_type(outer_diagonals(T_band)..., eltype(eltype(T)))
         field_dim_size = DataLayouts.ncomponents(Fields.field_values(entry))
-        band_element_size = div(sizeof(T), sizeof(eltype(T)))
         parent_indices = DataLayouts.to_data_specific_field(
             singleton_datalayout,
             (:, :, flattened_index:band_element_size:field_dim_size, :, :),
@@ -333,25 +315,6 @@ function get_internal_entry(
     end
 end
 
-# function get_scalar_keys(dict::FieldMatrix)
-#     keys_tuple = unrolled_flatmap(keys(dict).values) do key
-#         entry = dict[unrolled_filter(isequal(key), keys(dict).values)[1]]
-#         entry =
-#             entry isa ColumnwiseBandMatrixField ? entry.entries.:(1) : entry
-#         unrolled_map(filtered_names(entry) do field
-#             if field isa UniformScaling
-#                 true
-#             elseif field isa Fields.Field
-#                 eltype(field) == eltype(eltype(field))
-#             else
-#                 eltype(field) == typeof(field)
-#             end
-#         end) do name
-#             (append_internal_name(key[1], name), key[2])
-#         end
-#     end
-#     return FieldMatrixKeys(keys_tuple)
-# end
 
 # Similar behavior to indexing an array with a slice.
 function Base.getindex(dict::FieldNameDict, new_keys::FieldNameSet)
@@ -428,23 +391,29 @@ if hasfield(Method, :recursion_relation)
     end
 end
 
-function bypass_adjoint(field::Fields.Field)
-    if eltype(field) <: Adjoint
-        return eltype(field.parent)
-    else
-        return eltype(field)
-    end
-end
-
-function bypass_adjoint(d::T) where {T}
-    if T <: Adjoint
-        return typeof(d.parent)
-    else
-        return typeof(d)
-    end
-end
 
 
+"""
+    inner_type_ignore_adjoint(x)
+
+If x is a Field, return the type of the elements inside it, ignoring Adjoint wrappers.
+Otherwise return the type of x, also ignoring Adjoint wrappers.
+"""
+inner_type_ignore_adjoint(x::Fields.Field) =
+    inner_type_ignore_adjoint(Fields.field_values(x))
+inner_type_ignore_adjoint(x::DataLayouts.AbstractData{<:Adjoint}) =
+    eltype(x.parent)
+inner_type_ignore_adjoint(x::DataLayouts.AbstractData) = eltype(x)
+inner_type_ignore_adjoint(x::Adjoint) = typeof(x.parent)
+inner_type_ignore_adjoint(x) = typeof(x)
+
+append_component_name(name::FieldName, component::Int) = append_internal_name(
+    name,
+    append_internal_name(
+        @name(components.data),
+        MatrixFields.FieldName(component),
+    ),
+)
 
 """
     get_scalar_keys(dict::FieldMatrix)
@@ -462,30 +431,29 @@ function get_scalar_keys(dict::FieldMatrix, Y::Fields.FieldVector)
                entry isa DiagonalMatrixRow
             first_band = entry.entries.:(1)
             # if entry isa DiagonalMatrixRow, then first_band is not a field
-            get_type = entry isa ColumnwiseBandMatrixField ? eltype : typeof
+            # adjoints can be ignored, assuming that the only adjoint a FieldMatrix will contain
+            # is the adjoint of a vector or a number, as the indices do not change, and they must contain Reals
+            T_first_band = inner_type_ignore_adjoint(first_band)
 
-            if get_type(first_band) <: target_eltype
+            if T_first_band <: target_eltype # The case when entry contains numbers or adjoint of numbers
                 (key,)
             else
-
                 dependent_var = get_field(Y, key[1])
                 independent_var = get_field(Y, key[2])
                 dependent_type = eltype(dependent_var)
                 independent_type = eltype(independent_var)
 
-                @assert dependent_type <: Geometry.SingleValue ||
-                        independent_type <: Geometry.SingleValue ||
-                        "cannot get scalar keys for key $key"
-                # figure out if we need to drill into key[1] or key[2], or both
-                # @show key
-                # TODO: Make the cth axis check for all combinations
-                if independent_type <: Geometry.AxisTensor &&
+                dependent_type <: Geometry.SingleValue ||
+                    independent_type <: Geometry.SingleValue ||
+                    error("cannot get scalar keys for key $key")
+
+                if independent_type <: Geometry.AxisTensor && # dvec/dvec
                    dependent_type <: Geometry.AxisTensor
-                    unwrapped_row_eltype =
-                        bypass_adjoint(first_band)
-                    @assert unwrapped_row_eltype <: Geometry.Axis2Tensor
-                    axis_components =
-                        map(length, axes(unwrapped_row_eltype))
+                    T_first_band <: Geometry.Axis2Tensor{target_eltype} ||
+                        error(
+                            "expected key $key to be a 2-tensor and found a $T_first_band",
+                        )
+                    axis_components = map(length, axes(T_first_band))
                     unrolled_map(
                         MatrixFields.unrolled_product(
                             1:axis_components[1],
@@ -493,20 +461,8 @@ function get_scalar_keys(dict::FieldMatrix, Y::Fields.FieldVector)
                         ),
                     ) do (component1, component2)
                         (
-                            append_internal_name(
-                                key[1],
-                                append_internal_name(
-                                    @name(components.data),
-                                    MatrixFields.FieldName(component1),
-                                ),
-                            ),
-                            append_internal_name(
-                                key[2],
-                                append_internal_name(
-                                    @name(components.data),
-                                    MatrixFields.FieldName(component2),
-                                ),
-                            ),
+                            append_component_name(key[1], component1),
+                            append_component_name(key[2], component2),
                         )
                     end
                 elseif (
@@ -515,77 +471,57 @@ function get_scalar_keys(dict::FieldMatrix, Y::Fields.FieldVector)
                 ) || (
                     independent_type <: Number &&
                     dependent_type <: Geometry.AxisTensor
-                )
-                    unwrapped_row_eltype =
-                        bypass_adjoint(first_band)
-                    @assert unwrapped_row_eltype <: Geometry.AxisVector
-                    ncomponents = length(axes(unwrapped_row_eltype)[1])
+                ) # dscalar/dvec or dvec/dscalar result in same types
+                    T_first_band <: Geometry.AxisVector{target_eltype} ||
+                        error(
+                            "expected key $key to be a vector of $target_eltype and found a $T_first_band",
+                        )
+                    ncomponents = length(axes(T_first_band)[1])
                     unrolled_map(1:ncomponents) do component
-                        if dependent_type <: Geometry.AxisTensor
-                            (
-                                append_internal_name(
-                                    key[1],
-                                    append_internal_name(
-                                        @name(components.data),
-                                        MatrixFields.FieldName(component),
-                                    ),
-                                ),
-                                key[2],
-                            )
-                        else
-                            (
-                                key[1],
-                                append_internal_name(
-                                    key[2],
-                                    append_internal_name(
-                                        @name(components.data),
-                                        MatrixFields.FieldName(component),
-                                    ),
-                                ),
-                            )
+                        if dependent_type <: Geometry.AxisTensor # dvec/dscalar
+                            (append_component_name(key[1], component), key[2])
+                        else # dscalar/dvec
+                            (key[1], append_component_name(key[2], component))
                         end
                     end
 
                 elseif dependent_type <: Union{NamedTuple, Tuple} &&
-                       independent_type <: Geometry.AxisVector
-                    # @assert unwrapped_row_eltype <: Geometry.AxisVector
+                       independent_type <: Geometry.AxisVector #dtuple/dvec
                     unrolled_flatmap(
                         filtered_names(
-                            x -> get_type(x) <: Geometry.SingleValue,
+                            x ->
+                                inner_type_ignore_adjoint(x) <:
+                                Geometry.SingleValue,
                             first_band,
                         ),
                     ) do dependent_name
-                        unwrapped_row_eltyped = bypass_adjoint(
+                        T_inner = inner_type_ignore_adjoint(
                             get_field(first_band, dependent_name),
                         )
-                        ncomponents1 = length(axes(unwrapped_row_eltyped)[1])
+                        T_inner <: Geometry.AxisVector{target_eltype} ||
+                            error(
+                                "expected key $key to be a tuple of vectors and found a tuple of $T_inner",
+                            )
+                        ncomponents1 = length(axes(T_inner)[1])
                         unrolled_map(1:ncomponents1) do component
                             (
                                 append_internal_name(key[1], dependent_name),
-                                append_internal_name(
-                                    key[2],
-                                    append_internal_name(
-                                        @name(components.data),
-                                        MatrixFields.FieldName(component),
-                                    ),
-                                ),
+                                append_component_name(key[2], component),
                             )
                         end
                     end
                 elseif dependent_type <: Union{NamedTuple, Tuple} &&
-                       independent_type <: Number
+                       independent_type <: Number # dtuple/dscalar
                     unrolled_map(
                         filtered_names(
                             x -> eltype(x) <: target_eltype,
                             dependent_var,
                         ),
                     ) do dependent_name
-
                         (append_internal_name(key[1], dependent_name), key[2])
 
                     end
                 end
-                # (key,)
             end
         else
             error("Cannot get scalar keys for key $key")
@@ -628,14 +564,6 @@ keys(A_scalar)
 # (@name(c.uₕ.components.data.:(2)), @name(c.sgsʲs.:(1).ρa))
 ```
 """
-function scalar_fieldmatrix(field_matrix::FieldMatrix)
-    scalar_keys = get_scalar_keys(field_matrix)
-    entries = unrolled_map(scalar_keys.values) do key
-        field_matrix[key]
-    end
-    return FieldNameDict(scalar_keys, entries)
-end
-
 function scalar_fieldmatrix(field_matrix::FieldMatrix, Y::Fields.FieldVector)
     scalar_keys = get_scalar_keys(field_matrix, Y)
     entries = unrolled_map(scalar_keys.values) do key
