@@ -18,13 +18,13 @@ Base.rand(::Type{T}) where {FT, T <: XPoint{FT}} = T(rand(FT))
 
 get_∂x∂ξ(::Type{FT}, I, ::Type{S}) where {FT, S} = rand(Axis2Tensor{FT, Tuple{LocalAxis{I}, CovariantAxis{I}}, S})
 
-get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{2, 2, FT, 4}, C <: XZPoint{FT}       , T <: LocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
-get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{3, 3, FT, 9}, C <: XYZPoint{FT}      , T <: LocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
-get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{3, 3, FT, 9}, C <: LatLongZPoint{FT} , T <: LocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
-get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{2, 2, FT, 4}, C <: XYPoint{FT}       , T <: LocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
-get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{1, 1, FT, 1}, C <: ZPoint{FT}        , T <: LocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
-get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{2, 2, FT, 4}, C <: LatLongPoint{FT}  , T <: LocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
-get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{1, 1, FT, 1}, C <: XPoint{FT}        , T <: LocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
+get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{2, 2, FT, 4}, C <: XZPoint{FT}       , T <: FullLocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
+get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{3, 3, FT, 9}, C <: XYZPoint{FT}      , T <: FullLocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
+get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{3, 3, FT, 9}, C <: LatLongZPoint{FT} , T <: FullLocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
+get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{2, 2, FT, 4}, C <: XYPoint{FT}       , T <: FullLocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
+get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{1, 1, FT, 1}, C <: ZPoint{FT}        , T <: FullLocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
+get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{2, 2, FT, 4}, C <: LatLongPoint{FT}  , T <: FullLocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
+get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{1, 1, FT, 1}, C <: XPoint{FT}        , T <: FullLocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
 
 #####
 ##### func args

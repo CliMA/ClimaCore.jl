@@ -8,7 +8,7 @@ isapproxsymmetric(A::AbstractMatrix{T}; rtol = 10 * eps(T)) where {T} =
 
 The necessary local metric information defined at each node.
 """
-struct LocalGeometry{I, C <: AbstractPoint, FT, S}
+struct LocalGeometry{I, C <: AbstractPoint, FT, ∂x∂ξT, ∂ξ∂xT, gⁱʲT, gᵢⱼT}
     "Coordinates of the current point"
     coordinates::C
     "Jacobian determinant of the transformation `ξ` to `x`"
@@ -18,28 +18,48 @@ struct LocalGeometry{I, C <: AbstractPoint, FT, S}
     "inverse Jacobian"
     invJ::FT
     "Partial derivatives of the map from `ξ` to `x`: `∂x∂ξ[i,j]` is ∂xⁱ/∂ξʲ"
-    ∂x∂ξ::Axis2Tensor{FT, Tuple{LocalAxis{I}, CovariantAxis{I}}, S}
+    ∂x∂ξ::∂x∂ξT #::Axis2Tensor{FT, Tuple{LocalAxis{I}, CovariantAxis{I}}, S}
     "Partial derivatives of the map from `x` to `ξ`: `∂ξ∂x[i,j]` is ∂ξⁱ/∂xʲ"
-    ∂ξ∂x::Axis2Tensor{FT, Tuple{ContravariantAxis{I}, LocalAxis{I}}, S}
+    ∂ξ∂x::∂ξ∂xT #::Axis2Tensor{FT, Tuple{ContravariantAxis{I}, LocalAxis{I}}, S}
     "Contravariant metric tensor (inverse of gᵢⱼ), transforms covariant to contravariant vector components"
-    gⁱʲ::Axis2Tensor{FT, Tuple{ContravariantAxis{I}, ContravariantAxis{I}}, S}
+    gⁱʲ::gⁱʲT #::Axis2Tensor{FT, Tuple{ContravariantAxis{I}, ContravariantAxis{I}}, S}
     "Covariant metric tensor (gᵢⱼ), transforms contravariant to covariant vector components"
-    gᵢⱼ::Axis2Tensor{FT, Tuple{CovariantAxis{I}, CovariantAxis{I}}, S}
-    @inline function LocalGeometry(
+    gᵢⱼ::gᵢⱼT #::Axis2Tensor{FT, Tuple{CovariantAxis{I}, CovariantAxis{I}}, S}
+end
+
+const FullLocalGeometry{I, C, FT, S} = LocalGeometry{
+    I,
+    C,
+    FT,
+    Axis2Tensor{FT, Tuple{LocalAxis{I}, CovariantAxis{I}}, S},
+    Axis2Tensor{FT, Tuple{ContravariantAxis{I}, LocalAxis{I}}, S},
+    Axis2Tensor{FT, Tuple{ContravariantAxis{I}, ContravariantAxis{I}}, S},
+    Axis2Tensor{FT, Tuple{CovariantAxis{I}, CovariantAxis{I}}, S},
+}
+
+@inline function LocalGeometry(
+    coordinates,
+    J,
+    WJ,
+    ∂x∂ξ::Axis2Tensor{FT, Tuple{LocalAxis{I}, CovariantAxis{I}}, S},
+) where {FT, I, S}
+    ∂ξ∂x = inv(∂x∂ξ)
+    C = typeof(coordinates)
+    Jinv = inv(J)
+    gⁱʲ = ∂ξ∂x * ∂ξ∂x'
+    gᵢⱼ = ∂x∂ξ' * ∂x∂ξ
+    isapproxsymmetric(components(gⁱʲ)) || error("gⁱʲ is not symmetric.")
+    isapproxsymmetric(components(gᵢⱼ)) || error("gᵢⱼ is not symmetric.")
+    return FullLocalGeometry{I, C, FT, S}(
         coordinates,
         J,
         WJ,
-        ∂x∂ξ::Axis2Tensor{FT, Tuple{LocalAxis{I}, CovariantAxis{I}}, S},
-    ) where {FT, I, S}
-        ∂ξ∂x = inv(∂x∂ξ)
-        C = typeof(coordinates)
-        Jinv = inv(J)
-        gⁱʲ = ∂ξ∂x * ∂ξ∂x'
-        gᵢⱼ = ∂x∂ξ' * ∂x∂ξ
-        isapproxsymmetric(components(gⁱʲ)) || error("gⁱʲ is not symmetric.")
-        isapproxsymmetric(components(gᵢⱼ)) || error("gᵢⱼ is not symmetric.")
-        return new{I, C, FT, S}(coordinates, J, WJ, Jinv, ∂x∂ξ, ∂ξ∂x, gⁱʲ, gᵢⱼ)
-    end
+        Jinv,
+        ∂x∂ξ,
+        ∂ξ∂x,
+        gⁱʲ,
+        gᵢⱼ,
+    )
 end
 
 
@@ -55,7 +75,7 @@ struct SurfaceGeometry{FT, N}
     normal::N
 end
 
-undertype(::Type{LocalGeometry{I, C, FT, S}}) where {I, C, FT, S} = FT
+undertype(::Type{<:LocalGeometry{I, C, FT}}) where {I, C, FT} = FT
 undertype(::Type{SurfaceGeometry{FT, N}}) where {FT, N} = FT
 
 """

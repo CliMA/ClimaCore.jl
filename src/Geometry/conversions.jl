@@ -514,7 +514,7 @@ end
 function project(
     ax::ContravariantAxis{(1,)},
     v::AxisTensor{FT,2,Tuple{LocalAxis{(1, 2)},LocalAxis{(1, 2)}},SMatrix{2,2,FT,4}},
-    lg::LocalGeometry{(1, 2, 3),XYZPoint{FT},FT,SMatrix{3,3,FT,9}}
+    lg::FullLocalGeometry{(1, 2, 3),XYZPoint{FT},FT,SMatrix{3,3,FT,9}}
 ) where {FT}
     AxisTensor(
         (ContravariantAxis{(1,)}(), LocalAxis{(1, 2)}()),
@@ -525,7 +525,7 @@ end
 function project(
     ax::ContravariantAxis{(2,)},
     v::AxisTensor{FT,2,Tuple{LocalAxis{(1,2)},LocalAxis{(1,2)}},SMatrix{2,2,FT,4}},
-    lg::LocalGeometry{(1,2,3),XYZPoint{FT},FT,SMatrix{3,3,FT,9}}
+    lg::FullLocalGeometry{(1,2,3),XYZPoint{FT},FT,SMatrix{3,3,FT,9}}
 ) where {FT}
     AxisTensor(
         (ContravariantAxis{(2,)}(), LocalAxis{(1, 2)}()),
@@ -537,7 +537,7 @@ end
 function project(
     ax::ContravariantAxis{(3,)},
     v::AxisTensor{FT,2,Tuple{LocalAxis{(3,)},LocalAxis{(1,2)}},SMatrix{1,2,FT,2}},
-    lg::LocalGeometry{(1,2,3),XYZPoint{FT},FT,SMatrix{3,3,FT,9}}
+    lg::FullLocalGeometry{(1,2,3),XYZPoint{FT},FT,SMatrix{3,3,FT,9}}
 ) where {FT}
     AxisTensor(
         (ContravariantAxis{(3,)}(), LocalAxis{(1, 2)}()),
