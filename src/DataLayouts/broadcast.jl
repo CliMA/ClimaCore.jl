@@ -21,37 +21,45 @@ struct VFStyle{Nv, A} <: DataColumnStyle end
 DataStyle(::Type{VF{S, Nv, A}}) where {S, Nv, A} =
     VFStyle{Nv, parent_array_type(A)}()
 DataColumnStyle(::Type{VFStyle{Nv, A}}) where {Nv, A} = VFStyle{Nv, A}
+Data0DStyle(::Type{VFStyle{Nv, A}}) where {Nv, A} = DataFStyle{A}
 
 abstract type Data1DStyle{Ni} <: DataStyle end
 struct IFHStyle{Ni, A} <: Data1DStyle{Ni} end
 DataStyle(::Type{IFH{S, Ni, A}}) where {S, Ni, A} =
     IFHStyle{Ni, parent_array_type(A)}()
+Data0DStyle(::Type{IFHStyle{Ni, A}}) where {Ni, A} = DataFStyle{A}
 struct IHFStyle{Ni, A} <: Data1DStyle{Ni} end
 DataStyle(::Type{IHF{S, Ni, A}}) where {S, Ni, A} =
     IHFStyle{Ni, parent_array_type(A)}()
+Data0DStyle(::Type{IHFStyle{Ni, A}}) where {Ni, A} = DataFStyle{A}
 
 abstract type DataSlab1DStyle{Ni} <: DataStyle end
 DataSlab1DStyle(::Type{IFHStyle{Ni, A}}) where {Ni, A} = IFStyle{Ni, A}
+DataSlab1DStyle(::Type{IHFStyle{Ni, A}}) where {Ni, A} = IFStyle{Ni, A}
 
 struct IFStyle{Ni, A} <: DataSlab1DStyle{Ni} end
 DataStyle(::Type{IF{S, Ni, A}}) where {S, Ni, A} =
     IFStyle{Ni, parent_array_type(A)}()
+Data0DStyle(::Type{IFStyle{Ni, A}}) where {Ni, A} = DataFStyle{A}
 
 abstract type DataSlab2DStyle{Nij} <: DataStyle end
 struct IJFStyle{Nij, A} <: DataSlab2DStyle{Nij} end
 DataStyle(::Type{IJF{S, Nij, A}}) where {S, Nij, A} =
     IJFStyle{Nij, parent_array_type(A)}()
+Data0DStyle(::Type{IJFStyle{Nij, A}}) where {Nij, A} = DataFStyle{A}
 
 abstract type Data2DStyle{Nij} <: DataStyle end
 struct IJFHStyle{Nij, A} <: Data2DStyle{Nij} end
 DataStyle(::Type{IJFH{S, Nij, A}}) where {S, Nij, A} =
     IJFHStyle{Nij, parent_array_type(A)}()
 DataSlab2DStyle(::Type{IJFHStyle{Nij, A}}) where {Nij, A} = IJFStyle{Nij, A}
+Data0DStyle(::Type{IJFHStyle{Nij, A}}) where {Nij, A} = DataFStyle{A}
 
 struct IJHFStyle{Nij, A} <: Data2DStyle{Nij} end
 DataStyle(::Type{IJHF{S, Nij, A}}) where {S, Nij, A} =
     IJHFStyle{Nij, parent_array_type(A)}()
 DataSlab2DStyle(::Type{IJHFStyle{Nij, A}}) where {Nij, A} = IJFStyle{Nij, A}
+Data0DStyle(::Type{IJHFStyle{Nij, A}}) where {Nij, A} = DataFStyle{A}
 
 abstract type Data1DXStyle{Nv, Ni} <: DataStyle end
 struct VIFHStyle{Nv, Ni, A} <: Data1DXStyle{Nv, Ni} end
@@ -61,6 +69,7 @@ Data1DXStyle(::Type{VIFHStyle{Nv, Ni, A}}) where {Ni, Nv, A} =
     VIFHStyle{Nv, Ni, A}
 DataColumnStyle(::Type{VIFHStyle{Nv, Ni, A}}) where {Ni, Nv, A} = VFStyle{Nv, A}
 DataSlab1DStyle(::Type{VIFHStyle{Nv, Ni, A}}) where {Ni, Nv, A} = IFStyle{Ni, A}
+Data0DStyle(::Type{VIFHStyle{Nv, Ni, A}}) where {Nv, Ni, A} = DataFStyle{A}
 
 struct VIHFStyle{Nv, Ni, A} <: Data1DXStyle{Nv, Ni} end
 DataStyle(::Type{VIHF{S, Nv, Ni, A}}) where {S, Nv, Ni, A} =
@@ -69,6 +78,7 @@ Data1DXStyle(::Type{VIHFStyle{Nv, Ni, A}}) where {Ni, Nv, A} =
     VIHFStyle{Nv, Ni, A}
 DataColumnStyle(::Type{VIHFStyle{Nv, Ni, A}}) where {Ni, Nv, A} = VFStyle{Nv, A}
 DataSlab1DStyle(::Type{VIHFStyle{Nv, Ni, A}}) where {Ni, Nv, A} = IFStyle{Ni, A}
+Data0DStyle(::Type{VIHFStyle{Nv, Ni, A}}) where {Nv, Ni, A} = DataFStyle{A}
 
 abstract type Data2DXStyle{Nv, Nij} <: DataStyle end
 struct VIJFHStyle{Nv, Nij, A} <: Data2DXStyle{Nv, Nij} end
@@ -80,6 +90,7 @@ DataColumnStyle(::Type{VIJFHStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
     VFStyle{Nv, A}
 DataSlab2DStyle(::Type{VIJFHStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
     IJFStyle{Nij, A}
+Data0DStyle(::Type{VIJFHStyle{Nv, Nij, A}}) where {Nv, Nij, A} = DataFStyle{A}
 
 struct VIJHFStyle{Nv, Nij, A} <: Data2DXStyle{Nv, Nij} end
 DataStyle(::Type{VIJHF{S, Nv, Nij, A}}) where {S, Nv, Nij, A} =
@@ -90,6 +101,22 @@ DataColumnStyle(::Type{VIJHFStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
     VFStyle{Nv, A}
 DataSlab2DStyle(::Type{VIJHFStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
     IJFStyle{Nij, A}
+Data0DStyle(::Type{VIJHFStyle{Nv, Nij, A}}) where {Nv, Nij, A} = DataFStyle{A}
+
+const HorizontalDataStyle = Union{
+    Data1DStyle,
+    Data2DStyle,
+    DataSlab1DStyle,
+    DataSlab2DStyle,
+    Data1DXStyle,
+    Data2DXStyle,
+}
+DataColumnStyle(::Type{Style}) where {Style <: HorizontalDataStyle} =
+    Data0DStyle(Style)
+DataSlabStyle(::Type{Style}) where {Style <: Union{Data1DStyle, Data1DXStyle}} =
+    DataSlab1DStyle(Style)
+DataSlabStyle(::Type{Style}) where {Style <: Union{Data2DStyle, Data2DXStyle}} =
+    DataSlab2DStyle(Style)
 
 #####
 ##### Union styles
