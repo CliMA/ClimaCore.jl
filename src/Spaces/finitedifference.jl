@@ -108,30 +108,15 @@ nlevels(space::FiniteDifferenceSpace) = length(space)
 Base.length(space::FiniteDifferenceSpace) = length(coordinates_data(space))
 
 """
-    Δz_metric_component(::Type{<:Goemetry.AbstractPoint})
-
-The index of the z-component of an abstract point
-in an `AxisTensor`.
-"""
-Δz_metric_component(::Type{<:Geometry.LatLongZPoint}) = 9
-Δz_metric_component(::Type{<:Geometry.Cartesian3Point}) = 1
-Δz_metric_component(::Type{<:Geometry.Cartesian13Point}) = 4
-Δz_metric_component(::Type{<:Geometry.Cartesian123Point}) = 9
-Δz_metric_component(::Type{<:Geometry.XYZPoint}) = 9
-Δz_metric_component(::Type{<:Geometry.ZPoint}) = 1
-Δz_metric_component(::Type{<:Geometry.XZPoint}) = 4
-
-"""
     Δz_data(space::AbstractSpace)
 
 A DataLayout containing the `Δz` on a given space `space`.
 """
 function Δz_data(space::AbstractSpace)
     lg = local_geometry_data(space)
-    data_layout_type = eltype(lg.coordinates)
     return getproperty(
         lg.∂x∂ξ.components.data,
-        Δz_metric_component(data_layout_type),
+        Geometry.Δz_metric_component(eltype(lg.coordinates)),
     )
 end
 
