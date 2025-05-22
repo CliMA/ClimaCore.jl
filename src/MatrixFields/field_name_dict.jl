@@ -195,7 +195,7 @@ function get_internal_entry(
         end
     elseif name_pair[1] == name_pair[2] &&
            !broadcasted_has_field(T, name_pair[1]) &&
-           (T <: Number)
+           !is_child_name(name_pair[2], @name(components.data))
         entry # multiplication case 3 or 4, first argument
     elseif name_pair[1] == @name() || name_pair[2] == @name()
         target_chain = if name_pair[1] == @name()
