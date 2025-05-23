@@ -166,18 +166,73 @@ function get_internal_entry(
     key_error,
 )
     # TODO: Add other cases
-    if name_pair[1] == name_pair[2]
+    T = eltype(entry)
+    if name_pair == (@name(), @name())
+        if T <: Adjoint{Real, Real} # Adjoint of a real is itself
+            DiagonalMatrixRow(entry.entries.:(1).parent)
+        else
+            entry
+        end
+    elseif name_pair[1] == name_pair[2] &&
+           !broadcasted_has_field(T, name_pair[1]) &&
+           !is_child_name(name_pair[2], @name(components.data))
         entry
     elseif name_pair[2] == @name() &&
-           broadcasted_has_field(eltype(entry), name_pair[1])
+           broadcasted_has_field(eltype(entry), name_pair[1]) &&
+           !(T <: Geometry.Axis2TensorOrAdj)
         DiagonalMatrixRow(
             broadcasted_get_field(entry.entries.:(1), name_pair[1]),
         )
     elseif name_pair[1] == @name() &&
-           broadcasted_has_field(eltype(entry), name_pair[2])
+           broadcasted_has_field(eltype(entry), name_pair[2]) &&
+           !(T <: Geometry.Axis2TensorOrAdj)
         DiagonalMatrixRow(
             broadcasted_get_field(entry.entries.:(1), name_pair[2]),
         )
+    elseif is_child_value(
+        name_pair,
+        (@name(components.data), @name(components.data)),
+    ) && T <: Geometry.Axis2Tensor
+        row_index = extract_last(name_pair[1])
+        col_index = extract_last(name_pair[2])
+        (n_rows, n_cols) = map(length, axes(T))
+        @assert row_index <= n_rows && col_index <= n_cols
+
+        DiagonalMatrixRow(
+            broadcasted_get_field(
+                entry.entries.:(1),
+                append_internal_name(
+                    @name(components.data),
+                    MatrixFields.FieldName(
+                        n_rows * (col_index - 1) + row_index,
+                    ),
+                ),
+            ),
+        )
+    elseif broadcasted_has_field(T, name_pair[1]) &&
+           is_child_name(name_pair[2], @name(components.data))
+        @assert T <: Union{NamedTuple, Tuple}
+        @assert broadcasted_get_field_type(T, name_pair[1]) <:
+                Geometry.AxisVectorOrAdj
+        if broadcasted_get_field_type(T, name_pair[1]) <: Adjoint
+            DiagonalMatrixRow(
+                broadcasted_get_field(
+                    entry.entries.:(1),
+                    append_internal_name(
+                        name_pair[1],
+                        append_internal_name(@name(parent), name_pair[2]),
+                    ),
+                ),
+            )
+        else
+            DiagonalMatrixRow(
+                broadcasted_get_field(
+                    entry.entries.:(1),
+                    append_internal_name(name_pair[1], name_pair[2]),
+                ),
+            )
+        end
+
     elseif is_overlapping_name(name_pair[1], name_pair[2])
         throw(key_error)
     else
@@ -205,78 +260,64 @@ function get_internal_entry(
     else
         start_index = if name_pair[1] == @name() || name_pair[2] == @name()
             target_chain = if name_pair[1] == @name()
-                if broadcasted_has_field(T, name_pair[2])
-                    # this case should be dscalar/dvec with T isa vec
-                    name_pair[2]
-                else
-                    # this should be dscalar/dvec with T isa adjoint
-                    if !(
-                        (T <: Geometry.AdjointAxisVector) &&
-                        is_overlapping_name(
-                            name_pair[2],
-                            @name(components.data)
-                        )
-                    )
-                        throw(key_error)
-                    end
-                    append_internal_name(@name(parent), name_pair[2]) # axistensors can only contain reals
-                end
+                # dscalar/dvec
+                # TODO: dtuple/dvec and dvec/dvec
+                @assert T <: Geometry.AxisVectorOrAdj
+                T <: Adjoint ?
+                append_internal_name(@name(parent), name_pair[2]) :
+                name_pair[2]
             else
-                if broadcasted_has_field(T, name_pair[1])
-                    # this case should be dtuple/dscalar or dvec/dscalar with T isa vec
-                    name_pair[1]
-                else
-                    # this should be dvec/dscalar with T isa adjoint
-                    if !(
-                        (T <: Geometry.AdjointAxisVector) &&
-                        is_overlapping_name(
-                            name_pair[1],
-                            @name(components.data)
-                        )
-                    )
-                        throw(key_error)
-                    end
-                    append_internal_name(@name(parent), name_pair[1]) # axistensors can only contain reals
-                end
+                # dvec/dscalar, dtuple/dscalar
+                # TODO: dtuple/dvec will return a broadcasted object, dvec/dvec incorrect
+                @assert !(T <: Geometry.Axis2TensorOrAdj)
+                name_pair[1]
             end
             target_field_eltype =
                 broadcasted_get_field_type(T, target_chain)
-            if target_field_eltype == eltype(parent(entry))
-                1 + get_field_first_index_offset(
-                    target_chain,
-                    target_field_eltype,
-                    T,
-                )
-            else
-                return Base.broadcasted(entry) do matrix_row
-                    map(matrix_row) do matrix_row_entry
-                        broadcasted_get_field(matrix_row_entry, target_chain)
+            if broadcasted_has_field(T, target_chain)
+                if target_field_eltype == eltype(parent(entry))
+                    1 + get_field_first_index_offset(
+                        target_chain,
+                        target_field_eltype,
+                        T,
+                    )
+                else
+                    return Base.broadcasted(entry) do matrix_row
+                        map(matrix_row) do matrix_row_entry
+                            broadcasted_get_field(matrix_row_entry, target_chain)
+                        end
                     end
                 end
+            else
+                throw(key_error)
             end
         elseif name_pair[2] != @name() && name_pair[1] != @name()
-            # this should only be the case with dvec/dvec or dNTuple/dvec
-            if T <: Geometry.Axis2Tensor && is_child_value(
+            if is_child_value(
                 name_pair,
                 (@name(components.data), @name(components.data)),
             )
+                # dvec/dvec
+                @assert T <: Geometry.Axis2Tensor
                 row_index = extract_last(name_pair[1])
                 col_index = extract_last(name_pair[2])
                 (n_rows, n_cols) = map(length, axes(T))
                 @assert row_index <= n_rows && col_index <= n_cols
                 n_rows * (col_index - 1) + row_index
             elseif broadcasted_has_field(T, name_pair[1]) &&
-                   is_child_name(name_pair[2], @name(components.data)) &&
-                   broadcasted_get_field_type(T, name_pair[1]) <:
-                   Geometry.AxisVectorOrAdj
+                   is_child_name(name_pair[2], @name(components.data))
+
+                # dNTuple/dvec
+                @assert T <: Union{NamedTuple, Tuple} &&
+                        broadcasted_has_field(T, name_pair[1])
+                @assert broadcasted_get_field_type(T, name_pair[1]) <:
+                        Geometry.AxisVectorOrAdj
                 get_field_first_index_offset(
                     name_pair[1],
                     broadcasted_get_field_type(T, name_pair[1]),
                     T,
                 ) + extract_last(name_pair[2])
             else
-                throw(key_error) # indexing with a name pair of two non-empty names
-                # is only supported when the target type is a scalar
+                throw(key_error)
             end
         else
             throw(key_error)
@@ -430,20 +471,20 @@ function get_scalar_keys(dict::FieldMatrix, Y::Fields.FieldVector)
             if T_first_band <: target_eltype # The case when entry contains numbers or adjoint of numbers
                 (key,)
             else
-                dependent_var = get_field(Y, key[1])
-                independent_var = get_field(Y, key[2])
-                dependent_type = eltype(dependent_var)
-                independent_type = eltype(independent_var)
+                row_key = get_field(Y, key[1])
+                col_key = get_field(Y, key[2])
+                row_key_type = eltype(row_key)
+                col_key_type = eltype(col_key)
 
-                dependent_type <: Geometry.SingleValue ||
-                    independent_type <: Geometry.SingleValue ||
+                row_key_type <: Geometry.SingleValue ||
+                    col_key_type <: Geometry.SingleValue ||
                     error("cannot get scalar keys for key $key")
 
-                if independent_type <: Geometry.AxisTensor && # dvec/dvec
-                   dependent_type <: Geometry.AxisTensor
+                if col_key_type <: Geometry.AxisTensor && # dvec/dvec
+                   row_key_type <: Geometry.AxisTensor
                     T_first_band <: Geometry.Axis2Tensor{target_eltype} ||
                         error(
-                            "expected key $key to be a 2-tensor and found a $T_first_band",
+                            "expected key $key to be a 2-tensor of $target_eltype and found a $T_first_band",
                         )
                     axis_components = map(length, axes(T_first_band))
                     unrolled_map(
@@ -458,11 +499,11 @@ function get_scalar_keys(dict::FieldMatrix, Y::Fields.FieldVector)
                         )
                     end
                 elseif (
-                    dependent_type <: Number &&
-                    independent_type <: Geometry.AxisTensor
+                    row_key_type <: Number &&
+                    col_key_type <: Geometry.AxisTensor
                 ) || (
-                    independent_type <: Number &&
-                    dependent_type <: Geometry.AxisTensor
+                    col_key_type <: Number &&
+                    row_key_type <: Geometry.AxisTensor
                 ) # dscalar/dvec or dvec/dscalar result in same types
                     T_first_band <: Geometry.AxisVector{target_eltype} ||
                         error(
@@ -470,15 +511,15 @@ function get_scalar_keys(dict::FieldMatrix, Y::Fields.FieldVector)
                         )
                     ncomponents = length(axes(T_first_band)[1])
                     unrolled_map(1:ncomponents) do component
-                        if dependent_type <: Geometry.AxisTensor # dvec/dscalar
+                        if row_key_type <: Geometry.AxisTensor # dvec/dscalar
                             (append_component_name(key[1], component), key[2])
                         else # dscalar/dvec
                             (key[1], append_component_name(key[2], component))
                         end
                     end
 
-                elseif dependent_type <: Union{NamedTuple, Tuple} &&
-                       independent_type <: Geometry.AxisVector #dtuple/dvec
+                elseif row_key_type <: Union{NamedTuple, Tuple} &&
+                       col_key_type <: Geometry.AxisVector #dtuple/dvec
                     unrolled_flatmap(
                         filtered_names(
                             x ->
@@ -502,12 +543,12 @@ function get_scalar_keys(dict::FieldMatrix, Y::Fields.FieldVector)
                             )
                         end
                     end
-                elseif dependent_type <: Union{NamedTuple, Tuple} &&
-                       independent_type <: Number # dtuple/dscalar
+                elseif row_key_type <: Union{NamedTuple, Tuple} &&
+                       col_key_type <: Number # dtuple/dscalar
                     unrolled_map(
                         filtered_names(
                             x -> eltype(x) <: target_eltype,
-                            dependent_var,
+                            row_key,
                         ),
                     ) do dependent_name
                         (append_internal_name(key[1], dependent_name), key[2])

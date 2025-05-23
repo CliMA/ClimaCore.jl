@@ -73,12 +73,6 @@ broadcasted_get_field_type(::Type{X}, name::FieldName) where {X} =
         fieldtype(X, extract_first(name)),
         drop_first(name),
     )
-if hasfield(Method, :recursion_relation)
-    dont_limit = (args...) -> true
-    for m in methods(broadcasted_get_field_type)
-        m.recursion_relation = dont_limit
-    end
-end
 
 broadcasted_has_field(::Type{X}, ::FieldName{()}) where {X} = true
 broadcasted_has_field(::Type{X}, name::FieldName) where {X} =
@@ -218,6 +212,9 @@ if hasfield(Method, :recursion_relation)
         m.recursion_relation = dont_limit
     end
     for m in methods(get_subtree_at_name)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(broadcasted_get_field_type)
         m.recursion_relation = dont_limit
     end
 end

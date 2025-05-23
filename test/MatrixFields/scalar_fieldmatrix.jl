@@ -128,30 +128,30 @@ end
 @testset "fieldmatrix to scalar fieldmatrix unit tests" begin
     FT = Float64
     A, b = dycore_prognostic_EDMF_FieldMatrix(FT)
-    for key in MatrixFields.get_scalar_keys(A, b)
-        @test_all A[key] isa MatrixFields.ColumnwiseBandMatrixField ?
-                  eltype(eltype(A[key])) == eltype(parent(A[key])) :
-                  eltype(eltype(A[key])) == eltype(A[key])
-    end
-    @test all(
-        entry ->
-            entry isa MatrixFields.UniformScaling ||
-                eltype(eltype(entry)) <: FT,
-        MatrixFields.scalar_fieldmatrix(A, b).entries,
+    for (A, b) in (
+        dycore_prognostic_EDMF_FieldMatrix(FT),
+        scaling_only_dycore_prognostic_EDMF_FieldMatrix(FT),
     )
-    test_get(A, entry, key) = A[key] === entry
-    for (key, entry) in MatrixFields.scalar_fieldmatrix(A, b)
-        @test test_get(A, entry, key)
-        @test (@allocated test_get(A, entry, key)) == 0
-        @test_opt test_get(A, entry, key)
-    end
+        @test all(
+            entry ->
+                entry isa MatrixFields.UniformScaling ||
+                    eltype(eltype(entry)) <: FT,
+            MatrixFields.scalar_fieldmatrix(A, b).entries,
+        )
+        test_get(A, entry, key) = A[key] === entry
+        for (key, entry) in MatrixFields.scalar_fieldmatrix(A, b)
+            @test test_get(A, entry, key)
+            @test (@allocated test_get(A, entry, key)) == 0
+            @test_opt test_get(A, entry, key)
+        end
 
-    function scalar_fieldmatrix_wrapper(field_matrix_of_tensors, b)
-        A_scalar = MatrixFields.scalar_fieldmatrix(field_matrix_of_tensors, b)
-        return nothing
+        function scalar_fieldmatrix_wrapper(field_matrix_of_tensors, b)
+            A_scalar =
+                MatrixFields.scalar_fieldmatrix(field_matrix_of_tensors, b)
+            return nothing
+        end
+        scalar_fieldmatrix_wrapper(A, b)
+        @test (@allocated scalar_fieldmatrix_wrapper(A, b)) == 0
+        @test_opt MatrixFields.scalar_fieldmatrix(A, b)
     end
-    scalar_fieldmatrix_wrapper(A, b)
-    scalar_fieldmatrix_wrapper(A, b) # compile the wrapper function
-    @test (@allocated scalar_fieldmatrix_wrapper(A, b)) == 0
-    @test_opt MatrixFields.scalar_fieldmatrix(A, b)
 end
