@@ -861,6 +861,18 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Unit: scalar_fieldmatrix (CPU)"
+        key: cpu_scalar_fieldmatrix
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/scalar_fieldmatrix.jl"
+
+      - label: "Unit: mscalar_fieldmatrix (GPU)"
+        key: gpu_scalar_fieldmatrix
+        command: "julia --color=yes --project=.buildkite test/MatrixFields/scalar_fieldmatrix.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
   - group: "Unit: MatrixFields - broadcasting (CPU)"
     steps:
 
