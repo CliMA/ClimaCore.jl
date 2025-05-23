@@ -116,6 +116,19 @@ promote_parent_array_type(
     ::Type{Array{T1}},
     ::Type{MArray{S, T2}},
 ) where {S, T1, T2} = MArray{S, promote_type(T1, T2)}
+# Ditch sizes (they're never actually used!)
+promote_parent_array_type(
+    ::Type{MArray{S1, T1}},
+    ::Type{MArray{S2, T2}},
+) where {S1, T1, S2, T2} = MArray{S, promote_type(T1, T2)} where {S}
+promote_parent_array_type(
+    ::Type{MArray{S1, T1} where {S1}},
+    ::Type{MArray{S2, T2}},
+) where {T1, S2, T2} = MArray{S, promote_type(T1, T2)} where {S}
+promote_parent_array_type(
+    ::Type{MArray{S1, T1}},
+    ::Type{MArray{S2, T2} where {S2}},
+) where {S1, T1, T2} = MArray{S, promote_type(T1, T2)} where {S}
 
 """
     StructArrays.bypass_constructor(T, args)
