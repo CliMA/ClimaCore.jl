@@ -173,6 +173,11 @@ function get_internal_entry(
         DiagonalMatrixRow(
             broadcasted_get_field(entry.entries.:(1), name_pair[1]),
         )
+    elseif name_pair[1] == @name() &&
+           broadcasted_has_field(eltype(entry), name_pair[2])
+        DiagonalMatrixRow(
+            broadcasted_get_field(entry.entries.:(1), name_pair[2]),
+        )
     elseif is_overlapping_name(name_pair[1], name_pair[2])
         throw(key_error)
     else
@@ -195,97 +200,84 @@ function get_internal_entry(
         end
     elseif name_pair[1] == name_pair[2] &&
            !broadcasted_has_field(T, name_pair[1]) &&
-           !is_child_name(name_pair[2], @name(components.data))
+           !is_child_name(name_pair[2], @name(components.data)) # don't enter case if attempting to access a component
         entry # multiplication case 3 or 4, first argument
-    elseif name_pair[1] == @name() || name_pair[2] == @name()
-        target_chain = if name_pair[1] == @name()
-            if broadcasted_has_field(T, name_pair[2])
-                # this case should be dscalar/dvec with T isa vec
-                name_pair[2]
+    else
+        start_index = if name_pair[1] == @name() || name_pair[2] == @name()
+            target_chain = if name_pair[1] == @name()
+                if broadcasted_has_field(T, name_pair[2])
+                    # this case should be dscalar/dvec with T isa vec
+                    name_pair[2]
+                else
+                    # this should be dscalar/dvec with T isa adjoint
+                    if !(
+                        (T <: Geometry.AdjointAxisVector) &&
+                        is_overlapping_name(
+                            name_pair[2],
+                            @name(components.data)
+                        )
+                    )
+                        throw(key_error)
+                    end
+                    append_internal_name(@name(parent), name_pair[2]) # axistensors can only contain reals
+                end
             else
-                # this should be dscalar/dvec with T isa adjoint
-                if !(T <: Geometry.AdjointAxisTensor)
-                    throw(key_error)
+                if broadcasted_has_field(T, name_pair[1])
+                    # this case should be dtuple/dscalar or dvec/dscalar with T isa vec
+                    name_pair[1]
+                else
+                    # this should be dvec/dscalar with T isa adjoint
+                    if !(
+                        (T <: Geometry.AdjointAxisVector) &&
+                        is_overlapping_name(
+                            name_pair[1],
+                            @name(components.data)
+                        )
+                    )
+                        throw(key_error)
+                    end
+                    append_internal_name(@name(parent), name_pair[1]) # axistensors can only contain reals
                 end
-                append_internal_name(@name(parent), name_pair[2]) # axistensors can only contain reals
             end
-        else
-            if broadcasted_has_field(T, name_pair[1])
-                # this case should be dtuple/dscalar or dvec/dscalar with T isa vec
-                name_pair[1]
+            target_field_eltype =
+                broadcasted_get_field_type(T, target_chain)
+            if target_field_eltype == eltype(parent(entry))
+                1 + get_field_first_index_offset(
+                    target_chain,
+                    target_field_eltype,
+                    T,
+                )
             else
-                # this should be dvec/dscalar with T isa adjoint
-                if !(T <: Geometry.AdjointAxisTensor)
-                    throw(key_error)
-                end
-                append_internal_name(@name(parent), name_pair[1]) # axistensors can only contain reals
-            end
-        end
-        target_field_eltype = broadcasted_get_field_type(T, target_chain)
-        if target_field_eltype == eltype(parent(entry))
-            T_band = eltype(entry)
-            singleton_datalayout =
-                DataLayouts.singleton(Fields.field_values(entry))
-            # BandMatrixRow with same lowest diagonal and bandwidth as `entry`, with a scalar eltype
-            scalar_band_type = band_matrix_row_type(
-                outer_diagonals(T_band)...,
-                target_field_eltype,
-            )
-            field_dim_size = DataLayouts.ncomponents(Fields.field_values(entry))
-            scalar_field_offset = get_field_first_index_offset(
-                target_chain,
-                target_field_eltype,
-                T,
-            )
-            band_element_size = div(sizeof(T), sizeof(eltype(parent(entry))))
-            parent_indices = DataLayouts.to_data_specific_field(
-                singleton_datalayout,
-                (
-                    :,
-                    :,
-                    (1 + scalar_field_offset):band_element_size:field_dim_size,
-                    :,
-                    :,
-                ),
-            )
-            scalar_data = view(parent(entry), parent_indices...)
-            values = DataLayouts.union_all(singleton_datalayout){
-                scalar_band_type,
-                Base.tail(
-                    DataLayouts.type_params(Fields.field_values(entry)),
-                )...,
-            }(
-                scalar_data,
-            )
-            Fields.Field(values, axes(entry))
-        else
-            Base.broadcasted(entry) do matrix_row
-                map(matrix_row) do matrix_row_entry
-                    broadcasted_get_field(matrix_row_entry, target_chain)
+                return Base.broadcasted(entry) do matrix_row
+                    map(matrix_row) do matrix_row_entry
+                        broadcasted_get_field(matrix_row_entry, target_chain)
+                    end
                 end
             end
-        end
-    elseif name_pair[2] != @name() && name_pair[1] != @name()
-        # this should only be the case with dvec/dvec or dNTuple/dvec
-        if T <: Geometry.SingleValue
-            is_child_value(
+        elseif name_pair[2] != @name() && name_pair[1] != @name()
+            # this should only be the case with dvec/dvec or dNTuple/dvec
+            if T <: Geometry.Axis2Tensor && is_child_value(
                 name_pair,
                 (@name(components.data), @name(components.data)),
-            ) || throw(key_error)
-            row_index = extract_last(name_pair[1])
-            col_index = extract_last(name_pair[2])
-            (n_rows, n_cols) = map(length, axes(T))
-            @assert row_index <= n_rows && col_index <= n_cols
-            flattened_index = n_rows * (col_index - 1) + row_index
-        elseif eltype(T) <: Geometry.SingleValue #TODO: nested tuples?
-            is_child_name(name_pair[2], @name(components.data)) ||
-                throw(key_error)
-            flattened_index =
+            )
+                row_index = extract_last(name_pair[1])
+                col_index = extract_last(name_pair[2])
+                (n_rows, n_cols) = map(length, axes(T))
+                @assert row_index <= n_rows && col_index <= n_cols
+                n_rows * (col_index - 1) + row_index
+            elseif broadcasted_has_field(T, name_pair[1]) &&
+                   is_child_name(name_pair[2], @name(components.data)) &&
+                   broadcasted_get_field_type(T, name_pair[1]) <:
+                   Geometry.AxisVectorOrAdj
                 get_field_first_index_offset(
                     name_pair[1],
                     broadcasted_get_field_type(T, name_pair[1]),
                     T,
                 ) + extract_last(name_pair[2])
+            else
+                throw(key_error) # indexing with a name pair of two non-empty names
+                # is only supported when the target type is a scalar
+            end
         else
             throw(key_error)
         end
@@ -293,12 +285,14 @@ function get_internal_entry(
         T_band = eltype(entry)
         singleton_datalayout = DataLayouts.singleton(Fields.field_values(entry))
         # BandMatrixRow with same lowest diagonal and bandwidth as `entry`, with a scalar eltype
-        scalar_band_type =
-            band_matrix_row_type(outer_diagonals(T_band)..., eltype(eltype(T)))
+        scalar_band_type = band_matrix_row_type(
+            outer_diagonals(T_band)...,
+            eltype(parent(entry)),
+        )
         field_dim_size = DataLayouts.ncomponents(Fields.field_values(entry))
         parent_indices = DataLayouts.to_data_specific_field(
             singleton_datalayout,
-            (:, :, flattened_index:band_element_size:field_dim_size, :, :),
+            (:, :, start_index:band_element_size:field_dim_size, :, :),
         )
 
         scalar_data = view(parent(entry), parent_indices...)
@@ -310,8 +304,6 @@ function get_internal_entry(
             scalar_data,
         )
         Fields.Field(values, axes(entry))
-    else
-        throw(key_error)
     end
 end
 
@@ -416,7 +408,7 @@ append_component_name(name::FieldName, component::Int) = append_internal_name(
 )
 
 """
-    get_scalar_keys(dict::FieldMatrix)
+    get_scalar_keys(dict::FieldMatrix, Y::Fields.FieldVector)
 
 Returns a `FieldMatrixKeys` object that contains the keys of all the scalar
 entries in the `FieldMatrix` `dict`.
@@ -543,23 +535,28 @@ scalar components of entries of `field_matrix`.
 ```julia
 e¹² = Geometry.Covariant12Vector(1.6, 0.7)
 e₃ = Geometry.Contravariant3Vector(1.0)
+e³ = Geometry.Covariant3Vector(1)
 ᶜᶜmat3 = fill(TridiagonalMatrixRow(2.0, 3.2, 2.1), center_space)
 ᶜᶠmat2 = fill(BidiagonalMatrixRow(4.3, 1.7), center_space)
 ᶜᶜmat3_uₕ_scalar = ᶜᶜmat3 .* (e¹²,)
 ρχ_unit = (;ρq_liq = 1.0, ρq_ice = 1.0)
 ᶜᶠmat2_ρχ_u₃ = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit ⊠ e₃')), ᶜᶠmat2)
-
-
+ᶜvec = random_field(Float64, center_space)
+ᶠvec = random_field(Float64, face_space)
+ b = Fields.FieldVector(;
+    c = ᶜvec .* ((; ρχ = ρχ_unit, uₕ = e¹², sgsʲs = ((; ρa = 1),)),),
+    f = ᶠvec .* ((; u₃ = e³),),
+)
 A = MatrixFields.FieldMatrix(
     (@name(c.ρχ), @name(f.u₃)) => ᶜᶠmat2_ρχ_u₃,
     (@name(c.uₕ), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3_uₕ_scalar,
 )
 
-A_scalar = MatrixFields.scalar_fieldmatrix(A)
+A_scalar = MatrixFields.scalar_fieldmatrix(A, b)
 keys(A_scalar)
 # Output:
-# (@name(c.ρχ.ρq_liq.parent.components.data.:(1)), @name(f.u₃))
-# (@name(c.ρχ.ρq_ice.parent.components.data.:(1)), @name(f.u₃))
+# (@name(c.ρχ.ρq_liq), @name(f.u₃.components.data.:(1)))
+# (@name(c.ρχ.ρq_ice), @name(f.u₃.components.data.:(1)))
 # (@name(c.uₕ.components.data.:(1)), @name(c.sgsʲs.:(1).ρa))
 # (@name(c.uₕ.components.data.:(2)), @name(c.sgsʲs.:(1).ρa))
 ```
