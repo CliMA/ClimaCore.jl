@@ -624,6 +624,19 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Unit: gpu columnwise"
+        key: unit_gpu_columnwise
+        command:
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_columnwise.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Unit: columnwise"
+        key: unit_columnwise
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_columnwise.jl"
+
       - label: "Unit: column"
         key: unit_column
         command:

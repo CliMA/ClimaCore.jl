@@ -15,11 +15,42 @@ import CUDA
 parent_array_type(::Type{<:CUDA.CuArray{T, N, B} where {N}}) where {T, B} =
     CUDA.CuArray{T, N, B} where {N}
 
+# allow on-device use of lazy broadcast objects
+parent_array_type(
+    ::Type{<:CUDA.CuDeviceArray{T, N, A} where {N}},
+) where {T, A} = CUDA.CuDeviceArray{T, N, A} where {N}
+
 # Ensure that both parent array types have the same memory buffer type.
 promote_parent_array_type(
     ::Type{CUDA.CuArray{T1, N, B} where {N}},
     ::Type{CUDA.CuArray{T2, N, B} where {N}},
 ) where {T1, T2, B} = CUDA.CuArray{promote_type(T1, T2), N, B} where {N}
+
+# allow on-device use of lazy broadcast objects
+promote_parent_array_type(
+    ::Type{CUDA.CuDeviceArray{T1, N, B} where {N}},
+    ::Type{CUDA.CuDeviceArray{T2, N, B} where {N}},
+) where {T1, T2, B} = CUDA.CuDeviceArray{promote_type(T1, T2), N, B} where {N}
+
+# allow on-device use of lazy broadcast objects with different type params
+promote_parent_array_type(
+    ::Type{CUDA.CuDeviceArray{T1, N, B1} where {N}},
+    ::Type{CUDA.CuDeviceArray{T2, N, B2} where {N}},
+) where {T1, T2, B1, B2} =
+    CUDA.CuDeviceArray{promote_type(T1, T2), N, B} where {N, B}
+
+# allow on-device use of lazy broadcast objects with different type params
+promote_parent_array_type(
+    ::Type{CUDA.CuDeviceArray{T1}},
+    ::Type{CUDA.CuDeviceArray{T2, N, B2} where {N}},
+) where {T1, T2, B2} =
+    CUDA.CuDeviceArray{promote_type(T1, T2), N, B} where {N, B}
+
+promote_parent_array_type(
+    ::Type{CUDA.CuDeviceArray{T1, N, B1} where {N}},
+    ::Type{CUDA.CuDeviceArray{T2} where {N}},
+) where {T1, T2, B1} =
+    CUDA.CuDeviceArray{promote_type(T1, T2), N, B} where {N, B}
 
 # Make `similar` accept our special `UnionAll` parent array type for CuArray.
 Base.similar(
