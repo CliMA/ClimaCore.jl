@@ -388,11 +388,9 @@ for op in (:transform, :project)
         $op(
             ax::CovariantAxis,
             v::ContravariantTensor,
-            local_geometry::LocalGeometry,
-        ) = $op(
-            ax,
-            local_geometry.gᵢⱼ * $op(dual(axes(local_geometry.∂x∂ξ, 2)), v),
-        )
+            local_geometry::LocalGeometry{I},
+        ) where {I} =
+            $op(ax, local_geometry.gᵢⱼ * $op(ContravariantAxis{I}(), v))
 
         $op(ato::CovariantAxis, v::CovariantTensor, ::LocalGeometry) =
             $op(ato, v)
@@ -407,11 +405,8 @@ end
 transform(
     ax::ContravariantAxis,
     v::CovariantTensor,
-    local_geometry::LocalGeometry,
-) = project(
-    ax,
-    local_geometry.gⁱʲ * project(dual(axes(local_geometry.∂ξ∂x, 1)), v),
-)
+    local_geometry::LocalGeometry{I},
+) where {I} = project(ax, local_geometry.gⁱʲ * project(CovariantAxis{I}(), v))
 
 @generated function project(
     ax::ContravariantAxis{Ito},
