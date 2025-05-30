@@ -50,6 +50,9 @@ extract_first(::FieldName{name_chain}) where {name_chain} = first(name_chain)
 drop_first(::FieldName{name_chain}) where {name_chain} =
     FieldName(Base.tail(name_chain)...)
 
+extract_last(::FieldName{name_chain}) where {name_chain} =
+    name_chain[length(name_chain)]
+
 has_field(x, ::FieldName{()}) = true
 has_field(x, name::FieldName) =
     extract_first(name) in propertynames(x) &&
@@ -58,6 +61,18 @@ has_field(x, name::FieldName) =
 get_field(x, ::FieldName{()}) = x
 get_field(x, name::FieldName) =
     get_field(getproperty(x, extract_first(name)), drop_first(name))
+
+"""
+    broadcasted_get_field_type(::Type{X}, name::FieldName)
+
+Returns the type of the field accessed by `name` in the type `X`.
+"""
+broadcasted_get_field_type(::Type{X}, ::FieldName{()}) where {X} = X
+broadcasted_get_field_type(::Type{X}, name::FieldName) where {X} =
+    broadcasted_get_field_type(
+        fieldtype(X, extract_first(name)),
+        drop_first(name),
+    )
 
 broadcasted_has_field(::Type{X}, ::FieldName{()}) where {X} = true
 broadcasted_has_field(::Type{X}, name::FieldName) where {X} =
@@ -197,6 +212,9 @@ if hasfield(Method, :recursion_relation)
         m.recursion_relation = dont_limit
     end
     for m in methods(get_subtree_at_name)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(broadcasted_get_field_type)
         m.recursion_relation = dont_limit
     end
 end
