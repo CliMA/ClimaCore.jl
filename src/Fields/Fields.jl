@@ -369,6 +369,9 @@ local_geometry_field(space::AbstractSpace) =
     Field(Spaces.local_geometry_data(space), space)
 local_geometry_field(field::Field) = local_geometry_field(axes(field))
 
+local_geometry_field(bc::Base.AbstractBroadcasted) =
+    local_geometry_field(axes(bc))
+
 Fields.local_geometry_field(bc::Base.Broadcast.Broadcasted) =
     Fields.local_geometry_field(axes(bc))
 

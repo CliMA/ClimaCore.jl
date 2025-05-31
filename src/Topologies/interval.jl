@@ -24,7 +24,15 @@ struct DeviceIntervalTopology{B} <: AbstractIntervalTopology
 end
 
 ClimaComms.context(topology::DeviceIntervalTopology) = DeviceSideContext()
-ClimaComms.device(topology::DeviceIntervalTopology) = DeviceSideDevice()
+
+# To allow executing broadcast expressions while on the device,
+# ClimaComms.device(topology::DeviceIntervalTopology) must return a
+# `CUDADevice` while on the device, and not a DeviceSideDevice.
+
+# A better solution might be to develop a more flexible abstraction around
+# devices. DeviceSideDevice would be fine if ClimaComms had a AbstractGPUDevice
+# and all methods dispatched on that-- but we currently don't do this.
+ClimaComms.device(topology::DeviceIntervalTopology) = ClimaComms.CUDADevice()
 
 ClimaComms.device(topology::IntervalTopology) = topology.context.device
 ClimaComms.array_type(topology::IntervalTopology) =
