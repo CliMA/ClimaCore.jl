@@ -32,12 +32,12 @@ struct IntervalDomain{CT, B} <: AbstractDomain where {
 } where {FT}
     coord_min::CT
     coord_max::CT
-    boundary_names::B
 end
 
-isperiodic(domain::IntervalDomain) = isnothing(domain.boundary_names)
-boundary_names(domain::IntervalDomain) =
-    isperiodic(domain) ? () : unique(domain.boundary_names)
+isperiodic(::IntervalDomain{CT, B}) where {CT, B} = B == nothing
+boundary_names(domain::IntervalDomain{CT, B}) where {CT, B} =
+    isperiodic(domain) ? () : unique(B)
+boundary_names_type(::IntervalDomain{CT, B}) where {CT, B} = B
 
 """
     IntervalDomain(coord⁻, coord⁺; periodic=true)
@@ -60,7 +60,13 @@ function IntervalDomain(
             ),
         )
     end
-    IntervalDomain(promote(coord_min, coord_max)..., boundary_names)
+    c = promote(coord_min, coord_max)
+    boundary_names = if isnothing(boundary_names)
+        boundary_names
+    else
+        Tuple(boundary_names)
+    end
+    IntervalDomain{eltype(c), boundary_names}(c...)
 end
 IntervalDomain(coords::IntervalSets.ClosedInterval; kwargs...) =
     IntervalDomain(coords.left, coords.right; kwargs...)
@@ -95,7 +101,7 @@ function print_interval(io::IO, domain::IntervalDomain{CT}) where {CT}
     if isperiodic(domain)
         print(io, "(periodic)")
     else
-        print(io, domain.boundary_names)
+        print(io, boundary_names_type(domain))
     end
 end
 function Base.show(io::IO, domain::IntervalDomain)

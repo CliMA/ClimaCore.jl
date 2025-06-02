@@ -330,8 +330,8 @@ end
 
     @static if on_gpu
         adapted_space = Adapt.adapt(CUDA.KernelAdaptor(), c_space)
-        @test ClimaComms.context(adapted_space) == DeviceSideContext()
-        @test ClimaComms.device(adapted_space) == DeviceSideDevice()
+        @test ClimaComms.context(adapted_space) == ClimaComms.context(c_space)
+        @test ClimaComms.device(adapted_space) == ClimaComms.device(c_space)
 
         adapted_hspace = Adapt.adapt(CUDA.KernelAdaptor(), hspace)
         @test ClimaComms.context(adapted_hspace) == DeviceSideContext()

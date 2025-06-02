@@ -166,10 +166,10 @@ function write_new!(
     )
     write_attribute(group, "coord_min", Geometry.component(domain.coord_min, 1))
     write_attribute(group, "coord_max", Geometry.component(domain.coord_max, 1))
-    !isnothing(domain.boundary_names) && write_attribute(
+    !isnothing(Domains.boundary_names_type(domain)) && write_attribute(
         group,
         "boundary_names",
-        [String(bname) for bname in domain.boundary_names],
+        [String(bname) for bname in Domains.boundary_names_type(domain)],
     )
     return name
 end
