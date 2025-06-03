@@ -95,6 +95,12 @@ grid(space::ExtrudedFiniteDifferenceSpace) = getfield(space, :grid)
 space(space::ExtrudedFiniteDifferenceSpace, staggering::Staggering) =
     ExtrudedFiniteDifferenceSpace(grid(space), staggering)
 
+FiniteDifferenceSpace(space::ExtrudedFiniteDifferenceSpace) =
+    FiniteDifferenceSpace(
+        Spaces.grid(space).vertical_grid,
+        Spaces.staggering(space),
+    )
+
 #=
 
 ExtrudedFiniteDifferenceSpace{S}(
