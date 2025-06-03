@@ -462,7 +462,7 @@ function _Topology2D(
     # 5) faces
     boundaries = NamedTuple(
         boundary_name => Tuple{Int, Int}[] for
-        boundary_name in Meshes.boundary_names(mesh)
+        boundary_name in Meshes.unique_boundary_names(mesh)
     )
     interior_faces = Tuple{Int, Int, Int, Int, Bool}[]
     ghost_faces = Tuple{Int, Int, Int, Int, Bool}[]
@@ -772,12 +772,12 @@ end
 
 
 neighbors(topology::Topology2D) = topology.neighbor_pids
-boundary_names(topology::Topology2D) = keys(topology.boundaries)
-boundary_tags(topology::Topology2D) = NamedTuple{boundary_names(topology)}(
+unique_boundary_names(topology::Topology2D) = keys(topology.boundaries)
+boundary_tags(topology::Topology2D) = NamedTuple{unique_boundary_names(topology)}(
     ntuple(i -> i, length(topology.boundaries)),
 )
 boundary_tag(topology::Topology2D, boundary_name::Symbol) =
-    findfirst(==(boundary_name), boundary_names(topology))
+    findfirst(==(boundary_name), unique_boundary_names(topology))
 
 boundary_faces(topology::Topology2D, boundary) = topology.boundaries[boundary]
 

@@ -88,9 +88,9 @@ end
 function boundary_face_name(mesh::IntervalMesh, elem::Integer, face)
     if !Domains.isperiodic(mesh.domain)
         if elem == 1 && face == 1
-            return Domains.boundary_names(mesh.domain)[1]
+            return Domains.unique_boundary_names(mesh.domain)[1]
         elseif elem == nelements(mesh) && face == 2
-            return Domains.boundary_names(mesh.domain)[2]
+            return Domains.unique_boundary_names(mesh.domain)[2]
         end
     end
     return nothing
@@ -471,7 +471,7 @@ function truncate_mesh(
     new_domain = IntervalDomain(
         z_bottom,
         Geometry.ZPoint{FT}(z_top),
-        boundary_names = Domains.boundary_names_type(trunc_domain),
+        boundary_names = Domains.boundary_names(trunc_domain),
     )
     return IntervalMesh(new_domain, new_stretch; nelems = new_nelems)
 end

@@ -22,9 +22,16 @@ float_type(domain::AbstractDomain) = float_type(coordinate_type(domain))
 """
     boundary_names(obj::Union{AbstractDomain, AbstractMesh, AbstractTopology})
 
-A tuple or vector of unique boundary names of a spatial domain.
+The boundary names passed to the IntervalDomain (a tuple, or `nothing`).
 """
 function boundary_names end
+
+"""
+    unique_boundary_names(obj::Union{AbstractDomain, AbstractMesh, AbstractTopology})
+
+A tuple or vector of unique boundary names of a spatial domain.
+"""
+function unique_boundary_names end
 
 struct IntervalDomain{CT, B} <: AbstractDomain where {
     CT <: Geometry.Abstract1DPoint{FT},
@@ -35,9 +42,9 @@ struct IntervalDomain{CT, B} <: AbstractDomain where {
 end
 
 isperiodic(::IntervalDomain{CT, B}) where {CT, B} = B == nothing
-boundary_names(domain::IntervalDomain{CT, B}) where {CT, B} =
+unique_boundary_names(domain::IntervalDomain{CT, B}) where {CT, B} =
     isperiodic(domain) ? () : unique(B)
-boundary_names_type(::IntervalDomain{CT, B}) where {CT, B} = B
+boundary_names(::IntervalDomain{CT, B}) where {CT, B} = B
 
 """
     IntervalDomain(coord⁻, coord⁺; periodic=true)
@@ -101,7 +108,7 @@ function print_interval(io::IO, domain::IntervalDomain{CT}) where {CT}
     if isperiodic(domain)
         print(io, "(periodic)")
     else
-        print(io, boundary_names_type(domain))
+        print(io, boundary_names(domain))
     end
 end
 function Base.show(io::IO, domain::IntervalDomain)
@@ -117,10 +124,10 @@ end
 Base.:*(interval1::IntervalDomain, interval2::IntervalDomain) =
     RectangleDomain(interval1, interval2)
 
-boundary_names(domain::RectangleDomain) = unique(
+unique_boundary_names(domain::RectangleDomain) = unique(
     Symbol[
-        boundary_names(domain.interval1)...,
-        boundary_names(domain.interval2)...,
+        unique_boundary_names(domain.interval1)...,
+        unique_boundary_names(domain.interval2)...,
     ],
 )::Vector{Symbol}
 
@@ -177,6 +184,7 @@ Base.show(io::IO, domain::SphereDomain) =
     print(io, nameof(typeof(domain)), ": radius = ", domain.radius)
 
 boundary_names(::SphereDomain) = ()
+unique_boundary_names(::SphereDomain) = ()
 coordinate_type(::SphereDomain{FT}) where {FT} = Geometry.Cartesian123Point{FT}
 
 end # module

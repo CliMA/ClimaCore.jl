@@ -45,7 +45,7 @@ function _IntervalTopology(
     if Domains.isperiodic(domain)
         boundaries = NamedTuple()
     else
-        bn = Domains.boundary_names_type(domain)
+        bn = Domains.boundary_names(domain)
         boundaries = if bn[1] == bn[2]
             NamedTuple{(bn[1],)}(1)
         else
