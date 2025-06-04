@@ -399,10 +399,11 @@ function _Remapper(
         )
         num_dims = num_hdims
     else
-        cpu_space = if ClimaComms.device(space) isa ClimaComms.AbstractCPUDevice
+        device = ClimaComms.device(space)
+        cpu_space = if device isa ClimaComms.AbstractCPUDevice
             space
         else
-            to_cpu(space)
+            Adapt.adapt(Array, space)
         end
         vert_interpolation_weights =
             ArrayType(vertical_interpolation_weights(cpu_space, target_zcoords))
@@ -471,7 +472,12 @@ function _Remapper(
     cpu_space = if ClimaComms.device(space) isa ClimaComms.AbstractCPUDevice
         space
     else
-        to_cpu(space)
+        device = ClimaComms.device(space)
+        cpu_space = if device isa ClimaComms.AbstractCPUDevice
+            space
+        else
+            Adapt.adapt(Array, space)
+        end
     end
 
     vert_interpolation_weights =
