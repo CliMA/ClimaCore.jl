@@ -33,10 +33,8 @@ A tuple or vector of unique boundary names of a spatial domain.
 """
 function unique_boundary_names end
 
-struct IntervalDomain{CT, B} <: AbstractDomain where {
-    CT <: Geometry.Abstract1DPoint{FT},
-    B,
-} where {FT}
+struct IntervalDomain{CT, B} <:
+       AbstractDomain where {CT <: Geometry.Abstract1DPoint{FT}, B} where {FT}
     coord_min::CT
     coord_max::CT
 end

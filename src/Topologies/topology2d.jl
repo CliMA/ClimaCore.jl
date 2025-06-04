@@ -773,9 +773,10 @@ end
 
 neighbors(topology::Topology2D) = topology.neighbor_pids
 unique_boundary_names(topology::Topology2D) = keys(topology.boundaries)
-boundary_tags(topology::Topology2D) = NamedTuple{unique_boundary_names(topology)}(
-    ntuple(i -> i, length(topology.boundaries)),
-)
+boundary_tags(topology::Topology2D) =
+    NamedTuple{unique_boundary_names(topology)}(
+        ntuple(i -> i, length(topology.boundaries)),
+    )
 boundary_tag(topology::Topology2D, boundary_name::Symbol) =
     findfirst(==(boundary_name), unique_boundary_names(topology))
 
