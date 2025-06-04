@@ -209,10 +209,15 @@ function write_new!(
         write_attribute(group, "faces_type", "Range")
     else
         write_attribute(group, "faces_type", "Array")
+        faces = if ClimaComms.device(writer.context) isa ClimaComms.AbstractCPUDevice
+            mesh.faces
+        else
+            Array(mesh.faces)
+        end
         write_attribute(
             group,
             "faces",
-            [getfield(mesh.faces[i], 1) for i in 1:length(mesh.faces)],
+            [getfield(faces[i], 1) for i in 1:length(faces)],
         )
     end
     (; stretch) = mesh
