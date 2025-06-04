@@ -35,7 +35,7 @@ function unique_boundary_names end
 
 struct IntervalDomain{CT, B} <: AbstractDomain where {
     CT <: Geometry.Abstract1DPoint{FT},
-    B <: BCTagType,
+    B,
 } where {FT}
     coord_min::CT
     coord_max::CT
@@ -43,7 +43,7 @@ end
 
 isperiodic(::IntervalDomain{CT, B}) where {CT, B} = B == nothing
 unique_boundary_names(domain::IntervalDomain{CT, B}) where {CT, B} =
-    isperiodic(domain) ? () : unique(B)
+    isperiodic(domain) ? Symbol[] : unique(B)
 boundary_names(::IntervalDomain{CT, B}) where {CT, B} = B
 
 """
@@ -184,7 +184,7 @@ Base.show(io::IO, domain::SphereDomain) =
     print(io, nameof(typeof(domain)), ": radius = ", domain.radius)
 
 boundary_names(::SphereDomain) = ()
-unique_boundary_names(::SphereDomain) = ()
+unique_boundary_names(::SphereDomain) = Symbol[]
 coordinate_type(::SphereDomain{FT}) where {FT} = Geometry.Cartesian123Point{FT}
 
 end # module
