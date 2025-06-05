@@ -3,10 +3,13 @@ julia --project=.buildkite
 using Revise; include("test/Operators/finitedifference/unit_columnwise.jl")
 ENV["CLIMACOMMS_DEVICE"] = "CPU";
 ENV["CLIMACOMMS_DEVICE"] = "CUDA";
+
+ncu -o columnwise_report.ncu-rep --section=WarpStateStats --set=full -f julia --project=.buildkite test/Operators/finitedifference/unit_columnwise.jl
+scp -r clima:/home/charliek/CliMA/ClimaCore.jl/columnwise_report.ncu-rep ./
 =#
 high_res = true;
 @info "high_res: $high_res"
-
+ENV["CLIMACOMMS_DEVICE"] = "CUDA";
 # using CUDA
 import ClimaComms
 using ClimaParams # needed in environment to load convenience parameter struct wrappers
@@ -228,7 +231,7 @@ FT = Float32;
 if high_res
     ᶜspace = ExtrudedCubedSphereSpace(
         FT;
-        z_elem = 63,
+        z_elem = 8,
         z_min = 0,
         z_max = 30000.0,
         radius = 6.371e6,
@@ -239,7 +242,7 @@ if high_res
 else
     ᶜspace = ExtrudedCubedSphereSpace(
         FT;
-        z_elem = 8,
+        z_elem = 5,
         z_min = 0,
         z_max = 30000.0,
         radius = 6.371e6,
@@ -249,14 +252,14 @@ else
     )
 end
 # ᶜspace = SliceXZSpace(FT;
-#     z_elem = 10,
+#     z_elem = 8,
 #     x_min = 0,
 #     x_max = 1,
 #     z_min = 0,
 #     z_max = 30000.0,
 #     periodic_x = false,
-#     n_quad_points = 4,
-#     x_elem = 4,
+#     n_quad_points = 2,
+#     x_elem = 2,
 #     staggering = CellCenter()
 # )
 # ᶜspace = Box3DSpace(FT;
@@ -327,6 +330,7 @@ fill!(parent(Yc.ρ), 1);
 parent(Yf.u₃) .+= 0.001 .* sin.(parent(zf));
 fill!(parent(Yc.uₕ), 0.01);
 fill!(parent(Yc.ρe_tot), 100000.0);
+# parent(Yc.ρe_tot) .+= 0.001 .* parent(Yc.ρe_tot) .* sin.(parent(zc));
 
 t₀ = zero(Spaces.undertype(axes(Yc)))
 
@@ -345,14 +349,20 @@ Operators.columnwise!(
     t₀,
 )
 implicit_tendency_bc!(Yₜ_bc, Y, p, t₀)
-abs_err_c = maximum(Array(abs.(parent(Yₜ.c) .- parent(Yₜ_bc.c))))
-abs_err_f = maximum(Array(abs.(parent(Yₜ.f) .- parent(Yₜ_bc.f))))
-results_match = abs_err_c < 6e-9 && abs_err_c < 6e-9
+abs_err_c = Array(abs.(parent(Yₜ.c) .- parent(Yₜ_bc.c)))
+abs_err_f = Array(abs.(parent(Yₜ.f) .- parent(Yₜ_bc.f)))
+maxabs_err_c = maximum(Array(abs.(parent(Yₜ.c) .- parent(Yₜ_bc.c))))
+maxabs_err_f = maximum(Array(abs.(parent(Yₜ.f) .- parent(Yₜ_bc.f))))
+results_match = maxabs_err_c < 6e-9 && maxabs_err_c < 6e-9
 if !results_match
     @show norm(Array(parent(Yₜ_bc.c))), norm(Array(parent(Yₜ.c)))
     @show norm(Array(parent(Yₜ_bc.f))), norm(Array(parent(Yₜ.f)))
-    @show abs_err_c
-    @show abs_err_f
+    # @show count(x->x!=0, abs_err_c)
+    # @show count(x->x!=0, abs_err_f)
+    @show maximum(Array(abs.(parent(Yₜ.c.ρ) .- parent(Yₜ_bc.c.ρ))))
+    @show maximum(Array(abs.(parent(Yₜ.c.ρe_tot) .- parent(Yₜ_bc.c.ρe_tot))))
+    @show maxabs_err_c
+    @show maxabs_err_f
 end
 @test results_match
 #! format: off
