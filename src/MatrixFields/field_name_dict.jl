@@ -453,6 +453,120 @@ append_component_name(name::FieldName, component::Int) = append_internal_name(
     ),
 )
 
+# general strat is Recursive
+# first we start with dict and Y
+# 1. flatmap all key pairs into pairs plus appended stuffs
+# 1.1 if the eltype is not a scalar, then we recurse, and append.
+# 1.1 the resucrsion func should take in an entry, and a CC field and maybe a target type?
+function gsk(dict::FieldMatrix, Y::Fields.FieldVector)
+    target_eltype = eltype(Y)
+    keys_tuple = unrolled_flatmap(keys(dict).values) do outer_key
+        @show outer_key
+        unrolled_map(
+            gsk(
+                dict[outer_key],
+                get_field(Y, outer_key[1]),
+                get_field(Y, outer_key[2]),
+                target_eltype,
+            ),
+        ) do inner_key
+            (
+                append_internal_name(inner_key[1], outer_key[1]),
+                append_internal_name(inner_key[2], outer_key[2]),
+            )
+        end
+    end
+end
+
+# function gsk(entry, row_field, column_field, ::Type)
+#     ((@name(), @name()),)
+# end
+
+gsk(entry::UniformScaling, row_field, column_field, ::Type) =
+    ((@name(), @name()),)
+
+
+# extract a single value, so we can use the same functions as for DiagonalMatrixRow
+gsk(
+    entry::ColumnwiseBandMatrixField,
+    row_field,
+    column_field,
+    ::Type{FT},
+) where {FT} = gsk(
+    Fields.field_values(entry)[CartesianIndex(1, 1, 1, 1, 1)],
+    row_field,
+    column_field,
+    FT,
+)
+
+# extract a single entry from band, so we can use the same functions as for DiagonalMatrixRow
+gsk(
+    entry::BT,
+    row_field,
+    column_field,
+    ::Type{FT},
+) where {FT, BT <: BandMatrixRow} =
+    return gsk(entry.entries.:(1), row_field, column_field, FT)
+
+# base case
+gsk(value::FT, row_field, column_field, ::Type{FT}) where {FT} =
+    ((@name(), @name()),)
+
+# dvec/dscalar
+function gsk(
+    value::Geometry.AxisVectorOrAdj{FT},
+    row_field::Fields.Field{
+        <:DataLayouts.AbstractData{<:Geometry.AxisVectorOrAdj{FT}},
+    },
+    column_field::Fields.Field{<:DataLayouts.AbstractData{FT}},
+    ::Type{FT},
+) where {FT}
+    ncomponents = length(axes(value, 1))
+    unrolled_map(propertynames(value)) do component_name
+        (@name(component_name), @name())
+    end
+end
+
+# dscalar/dvec
+function gsk(
+    value::Geometry.AxisVectorOrAdj{FT},
+    row_field::Fields.Field{<:DataLayouts.AbstractData{FT}},
+    column_field::Fields.Field{
+        <:DataLayouts.AbstractData{<:Geometry.AxisVectorOrAdj{FT}},
+    },
+    ::Type{FT},
+) where {FT}
+    Main.@infiltrate
+    unrolled_map(propertynames(value)) do component_name
+        (@name(), @name(component_name))
+    end
+end
+
+#  dvec/dvec
+function gsk(
+    value::Geometry.Axis2Tensor{FT},
+    row_field::Fields.Field{
+        <:DataLayouts.AbstractData{<:Geometry.AxisVectorOrAdj{FT}},
+    },
+    column_field::Fields.Field{
+        <:DataLayouts.AbstractData{<:Geometry.AxisVectorOrAdj{FT}},
+    },
+    ::Type{FT},
+) where {FT}
+    # Main.@infiltrate
+    ((@name(), @name()),)
+end
+
+# dtuple/dvec or dvec/dscalar
+function gsk(
+    value::RT,
+    row_field::Fields.Field{<:DataLayouts.AbstractData},
+    column_field::Fields.Field{<:DataLayouts.AbstractData},
+    ::Type{FT},
+) where {FT, RT <: Union{NamedTuple, Tuple}}
+    ((@name(), @name()),)
+end
+
 """
     get_scalar_keys(dict::FieldMatrix, Y::Fields.FieldVector)
 
