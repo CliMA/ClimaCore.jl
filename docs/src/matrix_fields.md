@@ -90,9 +90,7 @@ check_preconditioner
 lazy_or_concrete_preconditioner
 apply_preconditioner
 get_scalar_keys
-get_field_first_index_offset
-broadcasted_get_field_type
-inner_type_ignore_adjoint
+field_offset_and_type
 ```
 
 ## Utilities
@@ -155,27 +153,44 @@ and
 nt_fieldmatrix[(@name(a.bar), @name(b))]
 ```
 
-If the key `(@name(name1), @name(name2))` corresponds to an entry, then
-`(@name(foo.bar.buz), @name(biz.bop.fud))` would be the internal key for the key
-`(@name(name1.foo.bar.buz), @name(name2.biz.bop.fud))`.
+### Further Indexing Details
 
-Currently, internal values cannot be extracted in all situations. Extracting interal values
-works when:
+Let key `(@name(name1), @name(name2))` correspond to entry `sample_entry` in `FieldMatrix` `A`.
+An example of this is:
 
-- The second name in the internal key is empty, and the first name in the internal key accesses internal values for the type of element contained in each row of the entry. This does not work when the element type of each row is a 2d tensor.
+```julia
+ A = MatrixFields.FieldMatrix((@name(name1), @name(name2)) => sample_entry)
+```
 
-- The first name in the internal key is empty, and the type of element contained in each row of the entry is an `AxisVector` or the adjoint of an `AxisVector`. In this case, the second name must access inernal values for the type of `AxisVector` contained in each row.
+Now consider what happens indexing `A` with the key `(@name(name1.foo.bar.buz), @name(name2.biz.bop.fud))`.
 
-- The element type of each row in the entry is a 2d tensor, and the internal key is of the form `(@name(components.data.:(1)), @name(components.data.:(2)))`, but possibly with different numbers to index into the 2d tensor
+First, a function searches the keys of `A` for a key that `(@name(foo.bar.buz), @name(biz.bop.fud))`
+is a child of. In this example, `(@name(foo.bar.buz), @name(biz.bop.fud))` is a child of
+the key `(@name(name1), @name(name2))`, and
+`(@name(foo.bar.buz), @name(biz.bop.fud))` is referred to as the internal key.
 
-- The element type of each row in the entry is some number of nested `Tuple`s and `NamedTuple`s, and the first name in the internal key accesses an `AxisVector` or the adjoint of an `AxisVector` from the outer `Tuple`/`NamedTuple`, and the second name in the inernal key accesses a component of the `AxisVector`
+Next, the entry that `(@name(name1), @name(name2))` is paired with is recursively indexed
+by the internal key.
 
-If the `FieldMatrix` represents a Jacobian, then extracting internal values works when an entry represents:
+The recursive indexing of an internal entry given some entry `entry` and internal_key `internal_name_pair`
+works as follows:
 
-- The partial derrivative of an `AxisVector`, `Tuple`, or `NamedTuple` with respect to a scalar.
+1. If the  `internal_name_pair` is blank, return `entry`
+2. If the element type of each band of `entry` is an `Axis2Tensor`, and `internal_name_pair` is of the form
+`(@name(components.data.1...), @name(components.data.2...))` (potentially with different numbers),
+then extract the specified component, and recurse on it with the remaining `internal_name_pair`.
+3. If the element type of each band of `entry` is a `Geometry.AdjointAxisVector`, then recurse on the parent of the adjoint.
+4. If `internal_name_pair[1]` is not empty, and the first name in it is a field of the element type of each band of `entry`,
+extract that field from `entry`, and recurse on the it with the remaining names of `internal_name_pair[1]` and all of `internal_name_pair[2]`
+5. If `internal_name_pair[2]` is not empty, and the first name in it is a field of the element type of each row of `entry`,
+extract that field from `entry`, and recurse on the it with all of `internal_name_pair[1]` and the remaining names of `internal_name_pair[2]`
+6. At this point, if none of the previous cases are true, both `internal_name_pair[1]` and `internal_name_pair[2]` should be
+non-empty, and it is assumed that `entry` is being used to implicitly represent some tensor structure. If the first name in
+`internal_name_pair[1]` is equivalent to `internal_name_pair[2]`, then both the first names are dropped, and entry is recursed onto.
+If the first names are different, both the first names are dropped, and the zero of entry is recursed onto.
 
-- The partial derrivative of a scalar with respect to an `AxisVector`.
+When the entry is a `ColumnWiseBandMatrixField`, indexing it will return a broadcasted object in
+the following situations:
 
-- The partial derrivative of a `Tuple`, or `NamedTuple` with respect to an `AxisVector`. In this case, the first name of the internal key must index into the tuple and result in a scalar.
-
-- The partial derrivative of an `AxisVector` with respect to an `AxisVector`. In this case, the partial derrivative of a component of the first `AxisVector` with respect to a component of the second `AxisVector` can be extracted, but not an entire `AxisVector` with respect to a component, or a component with respect to an entire `AxisVector`
+1. The internal key indexes to a type different than the basetype of the entry
+2. The internal key indexes to a zero-ed value

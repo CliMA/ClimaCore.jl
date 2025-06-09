@@ -61,7 +61,7 @@ coordinate_axis(::Type{<:LatLongPoint}) = (1, 2)
 
 coordinate_axis(coord::AbstractPoint) = coordinate_axis(typeof(coord))
 
-@inline idxin(I::Tuple{Int}, i::Int) = 1
+@inline idxin(I::Tuple{Int}, i::Int) = I[1] == i ? 1 : nothing
 
 @inline function idxin(I::Tuple{Int, Int}, i::Int)
     @inbounds begin

@@ -834,12 +834,8 @@ end
 
         @test_throws KeyError matrix[@name(a), @name(a.c)]
         @test_throws KeyError matrix[@name(a.c), @name(a)]
-        @test_throws AssertionError matrix[@name(foo), @name(foo._value)]
-        if is_scalar_test
-            @test_throws KeyError matrix[@name(foo._value), @name(foo)]
-        else
-            @test_throws AssertionError matrix[@name(foo._value), @name(foo)]
-        end
+        @test_throws KeyError matrix[@name(foo), @name(foo._value)]
+        @test_throws KeyError matrix[@name(foo._value), @name(foo)]
 
         @test_all matrix[@name(a), @name(a)] == -I_a
         @test_all matrix[@name(a.c), @name(a.c)] == -I_a
