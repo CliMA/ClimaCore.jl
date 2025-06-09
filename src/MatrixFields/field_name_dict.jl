@@ -453,15 +453,10 @@ append_component_name(name::FieldName, component::Int) = append_internal_name(
     ),
 )
 
-# general strat is Recursive
-# first we start with dict and Y
-# 1. flatmap all key pairs into pairs plus appended stuffs
-# 1.1 if the eltype is not a scalar, then we recurse, and append.
-# 1.1 the resucrsion func should take in an entry, and a CC field and maybe a target type?
+
 function gsk(dict::FieldMatrix, Y::Fields.FieldVector)
     target_eltype = eltype(Y)
     keys_tuple = unrolled_flatmap(keys(dict).values) do outer_key
-        @show outer_key
         unrolled_map(
             gsk(
                 dict[outer_key],
@@ -471,16 +466,15 @@ function gsk(dict::FieldMatrix, Y::Fields.FieldVector)
             ),
         ) do inner_key
             (
-                append_internal_name(inner_key[1], outer_key[1]),
-                append_internal_name(inner_key[2], outer_key[2]),
+                append_internal_name(outer_key[1], inner_key[1]),
+                append_internal_name(outer_key[2], inner_key[2]),
             )
         end
     end
+    return FieldMatrixKeys(keys_tuple)
 end
 
-# function gsk(entry, row_field, column_field, ::Type)
-#     ((@name(), @name()),)
-# end
+
 
 gsk(entry::UniformScaling, row_field, column_field, ::Type) =
     ((@name(), @name()),)
@@ -494,8 +488,8 @@ gsk(
     ::Type{FT},
 ) where {FT} = gsk(
     Fields.field_values(entry)[CartesianIndex(1, 1, 1, 1, 1)],
-    row_field,
-    column_field,
+    Fields.field_values(row_field)[CartesianIndex(1, 1, 1, 1, 1)],
+    Fields.field_values(column_field)[CartesianIndex(1, 1, 1, 1, 1)],
     FT,
 )
 
@@ -512,59 +506,72 @@ gsk(
 gsk(value::FT, row_field, column_field, ::Type{FT}) where {FT} =
     ((@name(), @name()),)
 
+# generic fallback case
+function gsk(value::T, row_field, column_field, ::Type) where {T}
+    return unrolled_map(fieldnames(T)) do inner_name
+        (FieldName(inner_name), @name())
+    end
+end
+
 # dvec/dscalar
 function gsk(
-    value::Geometry.AxisVectorOrAdj{FT},
-    row_field::Fields.Field{
-        <:DataLayouts.AbstractData{<:Geometry.AxisVectorOrAdj{FT}},
-    },
-    column_field::Fields.Field{<:DataLayouts.AbstractData{FT}},
+    value::Geometry.AxisVector{FT},
+    row_field::Geometry.AxisVector{FT},
+    column_field::FT,
     ::Type{FT},
 ) where {FT}
-    ncomponents = length(axes(value, 1))
-    unrolled_map(propertynames(value)) do component_name
-        (@name(component_name), @name())
+
+    unrolled_map(1:length(axes(value, 1))) do component
+        (FieldName(component), @name())
     end
 end
 
 # dscalar/dvec
 function gsk(
-    value::Geometry.AxisVectorOrAdj{FT},
-    row_field::Fields.Field{<:DataLayouts.AbstractData{FT}},
-    column_field::Fields.Field{
-        <:DataLayouts.AbstractData{<:Geometry.AxisVectorOrAdj{FT}},
-    },
+    value::Geometry.AdjointAxisVector{FT},
+    row_field::FT,
+    column_field::Geometry.AxisVector{FT},
     ::Type{FT},
 ) where {FT}
-    Main.@infiltrate
-    unrolled_map(propertynames(value)) do component_name
-        (@name(), @name(component_name))
+    unrolled_map(1:length(axes(value, 1))) do component
+        (@name(), FieldName(component))
     end
 end
 
 #  dvec/dvec
 function gsk(
     value::Geometry.Axis2Tensor{FT},
-    row_field::Fields.Field{
-        <:DataLayouts.AbstractData{<:Geometry.AxisVectorOrAdj{FT}},
-    },
-    column_field::Fields.Field{
-        <:DataLayouts.AbstractData{<:Geometry.AxisVectorOrAdj{FT}},
-    },
+    row_field::Geometry.AxisVectorOrAdj{FT},
+    column_field::Geometry.AxisVectorOrAdj{FT},
     ::Type{FT},
 ) where {FT}
-    # Main.@infiltrate
-    ((@name(), @name()),)
+    unrolled_flatmap(1:length(axes(value, 1))) do row_component
+        unrolled_map(1:length(axes(value, 2))) do col_component
+            (FieldName(row_component), FieldName(col_component))
+        end
+    end
 end
 
 # dtuple/dvec or dvec/dscalar
 function gsk(
-    value::RT,
-    row_field::Fields.Field{<:DataLayouts.AbstractData},
-    column_field::Fields.Field{<:DataLayouts.AbstractData},
+    value::TT,
+    row_field::RT,
+    column_field,
     ::Type{FT},
-) where {FT, RT <: Union{NamedTuple, Tuple}}
-    ((@name(), @name()),)
+) where {FT, TT <: Union{NamedTuple, Tuple}, RT <: Union{NamedTuple, Tuple}}
+    unrolled_flatmap(fieldnames(TT)) do tuple_key
+        unrolled_map(gsk(
+            getfield(value, tuple_key),
+            getfield(row_field, tuple_key),
+            column_field,
+            FT,
+        )) do inner_key
+            (
+                append_internal_name(FieldName(tuple_key), inner_key[1]),
+                inner_key[2],
+            )
+        end
+    end
 end
 
 """
@@ -723,6 +730,7 @@ keys(A_scalar)
 """
 function scalar_fieldmatrix(field_matrix::FieldMatrix, Y::Fields.FieldVector)
     scalar_keys = get_scalar_keys(field_matrix, Y)
+    # scalar_keys = gsk(field_matrix, Y)
     entries = unrolled_map(scalar_keys.values) do key
         field_matrix[key]
     end
