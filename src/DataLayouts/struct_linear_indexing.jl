@@ -105,17 +105,3 @@ Base.@propagate_inbounds function set_struct_linear!(
     @inbounds array[start_index] = val
     val
 end
-
-# For complex nested types (ex. wrapped SMatrix) we hit a recursion limit and de-optimize
-# We know the recursion will terminate due to the fact that bitstype fields
-# cannot be self referential so there are no cycles in get/set_struct (bounded tree)
-# TODO: enforce inference termination some other way
-if hasfield(Method, :recursion_relation)
-    dont_limit = (args...) -> true
-    for m in methods(get_struct_linear)
-        m.recursion_relation = dont_limit
-    end
-    for m in methods(set_struct_linear!)
-        m.recursion_relation = dont_limit
-    end
-end
