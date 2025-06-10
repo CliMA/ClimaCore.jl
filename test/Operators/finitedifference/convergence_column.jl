@@ -409,6 +409,49 @@ end
     @test conv_curl_sin_f[1] ≤ conv_curl_sin_f[2] ≤ conv_curl_sin_f[3]
 end
 
+@testset "UpwindBiasedGradient on (uniform) periodic mesh, random w" begin
+    FT = Float64
+    device = ClimaComms.device()
+
+    n_elems_seq = 2 .^ (5, 6, 7, 8)
+    center_errors = zeros(FT, length(n_elems_seq))
+    face_errors = zeros(FT, length(n_elems_seq))
+    Δh = zeros(FT, length(n_elems_seq))
+
+    for (k, n) in enumerate(n_elems_seq)
+        domain = Domains.IntervalDomain(
+            Geometry.ZPoint{FT}(-pi),
+            Geometry.ZPoint{FT}(pi);
+            periodic = true,
+        )
+        mesh = Meshes.IntervalMesh(domain; nelems = n)
+
+        center_space = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+        face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
+
+        ᶜw = Geometry.WVector.(map(_ -> rand(), ones(center_space)))
+        ᶠw = Geometry.WVector.(map(_ -> rand(), ones(face_space)))
+
+        ᶜz = Fields.coordinate_field(center_space).z
+        ᶠz = Fields.coordinate_field(face_space).z
+
+        upwind_biased_grad = Operators.UpwindBiasedGradient()
+        ᶜ∇sinz = Geometry.WVector.(upwind_biased_grad.(ᶜw, sin.(ᶜz)))
+        ᶠ∇sinz = Geometry.WVector.(upwind_biased_grad.(ᶠw, sin.(ᶠz)))
+
+        center_errors[k] = norm(ᶜ∇sinz .- Geometry.WVector.(cos.(ᶜz)))
+        face_errors[k] = norm(ᶠ∇sinz .- Geometry.WVector.(cos.(ᶠz)))
+        Δh[k] = Spaces.local_geometry_data(face_space).J[vindex(1)]
+    end
+
+    @test all(error -> error < 0.1, center_errors)
+    @test all(error -> error < 0.1, face_errors)
+
+    center_convergence_rates = convergence_rate(center_errors, Δh)
+    face_convergence_rates = convergence_rate(face_errors, Δh)
+    @test all(rate -> isapprox(rate, 1; atol = 0.01), center_convergence_rates)
+    @test all(rate -> isapprox(rate, 1; atol = 0.01), face_convergence_rates)
+end
 
 @testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on (uniform) periodic mesh, constant w" begin
     FT = Float64
