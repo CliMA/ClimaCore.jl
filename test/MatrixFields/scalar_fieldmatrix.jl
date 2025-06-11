@@ -9,7 +9,7 @@ import ClimaCore.MatrixFields: @name
 ClimaComms.@import_required_backends
 include("matrix_field_test_utils.jl")
 
-@testset "get_field_first_index_offset" begin
+@testset "field_offset_and_type" begin
     FT = Float64
     struct Singleton{T}
         x::T
@@ -18,34 +18,38 @@ include("matrix_field_test_utils.jl")
         x::T1
         y::T2
     end
-    function test_get_field_first_index_offset(
+    function test_field_offset_and_type(
         name,
         ::Type{T},
         ::Type{S},
         expected_offset,
-    ) where {T, S}
-        @test_all MatrixFields.get_field_first_index_offset(name, T, S) ==
-                  expected_offset
+        ::Type{E},
+    ) where {T, S, E}
+        @test_all MatrixFields.field_offset_and_type(name, T, S) ==
+                  (expected_offset, E)
     end
-    test_get_field_first_index_offset(
+    test_field_offset_and_type(
         @name(x),
         FT,
         Singleton{Singleton{Singleton{Singleton{FT}}}},
         0,
+        Singleton{Singleton{Singleton{FT}}},
     )
-    test_get_field_first_index_offset(
+    test_field_offset_and_type(
         @name(x.x.x.x),
         FT,
         Singleton{Singleton{Singleton{Singleton{FT}}}},
         0,
+        FT,
     )
-    test_get_field_first_index_offset(
+    test_field_offset_and_type(
         @name(y.x),
         FT,
         TwoFields{TwoFields{FT, FT}, TwoFields{FT, FT}},
         2,
+        FT,
     )
-    test_get_field_first_index_offset(
+    test_field_offset_and_type(
         @name(y.y),
         FT,
         TwoFields{
@@ -53,14 +57,16 @@ include("matrix_field_test_utils.jl")
             TwoFields{FT, TwoFields{FT, Singleton{FT}}},
         },
         3,
+        TwoFields{FT, Singleton{FT}},
     )
-    test_get_field_first_index_offset(
+    test_field_offset_and_type(
         @name(y.y),
         Float32,
         TwoFields{TwoFields{FT, FT}, TwoFields{FT, FT}},
         6,
+        FT,
     )
-    test_get_field_first_index_offset(
+    test_field_offset_and_type(
         @name(y.y.x),
         FT,
         TwoFields{
@@ -68,8 +74,9 @@ include("matrix_field_test_utils.jl")
             TwoFields{FT, TwoFields{FT, Singleton{FT}}},
         },
         3,
+        FT,
     )
-    test_get_field_first_index_offset(
+    test_field_offset_and_type(
         @name(y.y.y.x),
         FT,
         TwoFields{
@@ -77,6 +84,7 @@ include("matrix_field_test_utils.jl")
             TwoFields{FT, TwoFields{FT, Singleton{FT}}},
         },
         4,
+        FT,
     )
 end
 
@@ -127,8 +135,7 @@ end
 
 @testset "fieldmatrix to scalar fieldmatrix unit tests" begin
     FT = Float64
-    A, b = dycore_prognostic_EDMF_FieldMatrix(FT)
-    for (A, b) in (
+    for (A, _) in (
         dycore_prognostic_EDMF_FieldMatrix(FT),
         scaling_only_dycore_prognostic_EDMF_FieldMatrix(FT),
     )
@@ -136,22 +143,26 @@ end
             entry ->
                 entry isa MatrixFields.UniformScaling ||
                     eltype(eltype(entry)) <: FT,
-            MatrixFields.scalar_fieldmatrix(A, b).entries,
+            MatrixFields.scalar_fieldmatrix(A, FT).entries,
         )
         test_get(A, entry, key) = A[key] === entry
-        for (key, entry) in MatrixFields.scalar_fieldmatrix(A, b)
+        for (key, entry) in MatrixFields.scalar_fieldmatrix(A, FT)
             @test test_get(A, entry, key)
             @test (@allocated test_get(A, entry, key)) == 0
             @test_opt test_get(A, entry, key)
         end
 
-        function scalar_fieldmatrix_wrapper(field_matrix_of_tensors, b)
+        function scalar_fieldmatrix_wrapper(
+            field_matrix_of_tensors,
+            ::Type{T},
+        ) where {T}
             A_scalar =
-                MatrixFields.scalar_fieldmatrix(field_matrix_of_tensors, b)
+                MatrixFields.scalar_fieldmatrix(field_matrix_of_tensors, T)
             return nothing
         end
-        scalar_fieldmatrix_wrapper(A, b)
-        @test (@allocated scalar_fieldmatrix_wrapper(A, b)) == 0
-        @test_opt MatrixFields.scalar_fieldmatrix(A, b)
+
+        scalar_fieldmatrix_wrapper(A, FT)
+        @test (@allocated scalar_fieldmatrix_wrapper(A, FT)) == 0
+        @test_opt MatrixFields.scalar_fieldmatrix(A, FT)
     end
 end
