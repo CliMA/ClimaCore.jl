@@ -84,7 +84,7 @@ include("matrix_field_test_utils.jl")
         KeyError(@name(y.y.x.x)),
     )
     test_field_offset_and_type(
-        (@name(y.y.y), @name(y.x)),
+        (@name(y.y), @name(y.x)),
         FT,
         TwoFields{
             TwoFields{FT, FT},
@@ -92,7 +92,7 @@ include("matrix_field_test_utils.jl")
         },
         4,
         FT,
-        KeyError(@name(y.y.y.x.x)),
+        KeyError(@name(y.y.y.x)),
     )
 end
 
