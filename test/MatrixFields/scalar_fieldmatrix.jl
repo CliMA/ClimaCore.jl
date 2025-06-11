@@ -24,8 +24,9 @@ include("matrix_field_test_utils.jl")
         ::Type{S},
         expected_offset,
         ::Type{E},
+        key_error,
     ) where {T, S, E}
-        @test_all MatrixFields.field_offset_and_type(name, T, S) ==
+        @test_all MatrixFields.field_offset_and_type(name, T, S, key_error) ==
                   (expected_offset, E)
     end
     test_field_offset_and_type(
@@ -34,6 +35,7 @@ include("matrix_field_test_utils.jl")
         Singleton{Singleton{Singleton{Singleton{FT}}}},
         0,
         Singleton{Singleton{Singleton{FT}}},
+        KeyError(@name(x.x.x.x)),
     )
     test_field_offset_and_type(
         @name(x.x.x.x),
@@ -41,6 +43,7 @@ include("matrix_field_test_utils.jl")
         Singleton{Singleton{Singleton{Singleton{FT}}}},
         0,
         FT,
+        KeyError(@name(x.x.x.x)),
     )
     test_field_offset_and_type(
         @name(y.x),
@@ -48,6 +51,7 @@ include("matrix_field_test_utils.jl")
         TwoFields{TwoFields{FT, FT}, TwoFields{FT, FT}},
         2,
         FT,
+        KeyError(@name(y.x)),
     )
     test_field_offset_and_type(
         @name(y.y),
@@ -58,6 +62,7 @@ include("matrix_field_test_utils.jl")
         },
         3,
         TwoFields{FT, Singleton{FT}},
+        KeyError(@name(y.y.x)),
     )
     test_field_offset_and_type(
         @name(y.y),
@@ -65,9 +70,10 @@ include("matrix_field_test_utils.jl")
         TwoFields{TwoFields{FT, FT}, TwoFields{FT, FT}},
         6,
         FT,
+        KeyError(@name(y.y.x)),
     )
     test_field_offset_and_type(
-        @name(y.y.x),
+        (@name(y.y), @name(x)),
         FT,
         TwoFields{
             TwoFields{FT, FT},
@@ -75,9 +81,10 @@ include("matrix_field_test_utils.jl")
         },
         3,
         FT,
+        KeyError(@name(y.y.x.x)),
     )
     test_field_offset_and_type(
-        @name(y.y.y.x),
+        (@name(y.y.y), @name(y.x)),
         FT,
         TwoFields{
             TwoFields{FT, FT},
@@ -85,51 +92,7 @@ include("matrix_field_test_utils.jl")
         },
         4,
         FT,
-    )
-end
-
-@testset "broadcasted_get_field_type" begin
-    FT = Float64
-    struct Singleton{T}
-        x::T
-    end
-    struct TwoFields{T1, T2}
-        x::T1
-        y::T2
-    end
-    function test_broadcasted_get_field_type(
-        name,
-        ::Type{T},
-        expected_type,
-    ) where {T}
-        @test_all MatrixFields.broadcasted_get_field_type(T, name) ==
-                  expected_type
-    end
-    test_broadcasted_get_field_type(
-        @name(x),
-        Singleton{Singleton{Singleton{Singleton{FT}}}},
-        Singleton{Singleton{Singleton{FT}}},
-    )
-    test_broadcasted_get_field_type(
-        @name(x.x.x),
-        Singleton{Singleton{Singleton{Singleton{FT}}}},
-        Singleton{FT},
-    )
-    test_broadcasted_get_field_type(
-        @name(y.x),
-        TwoFields{
-            TwoFields{FT, FT},
-            TwoFields{FT, TwoFields{FT, Singleton{FT}}},
-        },
-        FT,
-    )
-    test_broadcasted_get_field_type(
-        @name(y.y.y),
-        TwoFields{
-            TwoFields{FT, FT},
-            TwoFields{FT, TwoFields{FT, Singleton{FT}}},
-        },
-        Singleton{FT},
+        KeyError(@name(y.y.y.x.x)),
     )
 end
 

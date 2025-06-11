@@ -168,10 +168,15 @@ function get_internal_entry(
     if name_pair == (@name(), @name())
         return entry
     elseif T <: Geometry.Axis2Tensor
-        (name_pair[1] == @name() || name_pair[2] == @name()) &&
-            error("Cannot slice a 2D tensor")
+        (name_pair[1] == @name() || name_pair[2] == @name()) && throw(key_error) # Cannot slice a 2D tensor
         row_index = extract_first(name_pair[1])
         col_index = extract_first(name_pair[2])
+        if (!(row_index isa Number) || !(col_index isa Number))
+            name_pair[1] == name_pair[2] && return entry # multiplication case 3 or 4, first argument
+            is_overlapping_name(name_pair[1], name_pair[2]) ||
+                return zero(entry)
+            throw(key_error)
+        end
         (n_rows, n_cols) = map(length, axes(scaling_value(entry)))
         @assert row_index <= n_rows && col_index <= n_cols
         return DiagonalMatrixRow(
@@ -215,7 +220,9 @@ function get_internal_entry(
         name_pair,
         eltype(parent(entry)),
         eltype(eltype(entry)),
+        key_error,
     )
+    target_type <: eltype(eltype(entry)) && return entry # multiplication case 3 or 4, first argument
     if target_type <: eltype(parent(entry))
         band_element_size =
             DataLayouts.typesize(eltype(parent(entry)), eltype(eltype(entry)))
@@ -295,7 +302,7 @@ function Base.one(matrix::FieldMatrix)
 end
 
 """
-    field_offset_and_type(name_pair::FieldNamePair, ::Type{T}, ::Type{S})
+    field_offset_and_type(name_pair::FieldNamePair, ::Type{T}, ::Type{S}, key_error)
 
 Returns the offset of the field with name `name_pair` in an object of type `S` in
 multiples of `sizeof(T)` and the type of the field with name `name_pair`.
@@ -310,13 +317,17 @@ function field_offset_and_type(
     name_pair::FieldNamePair,
     ::Type{T},
     ::Type{S},
+    key_error,
 ) where {S, T}
     name_pair == (@name(), @name()) && return (0, S) # base case
     if S <: Geometry.Axis2Tensor{T}
-        (name_pair[1] == @name() || name_pair[2] == @name()) &&
-            error("Cannot slice a 2D tensor")
+        (name_pair[1] == @name() || name_pair[2] == @name()) && throw(key_error) # Cannot slice a 2D tensor
         row_index = extract_first(name_pair[1])
         col_index = extract_first(name_pair[2])
+        if (!(row_index isa Number) || !(col_index isa Number))
+            name_pair[1] == name_pair[2] && return (0, S) # multiplication case 3 or 4, first argument
+            throw(key_error)
+        end
         (n_rows, n_cols) = map(length, axes(S))
         @assert row_index <= n_rows && col_index <= n_cols
         return (n_rows * (col_index - 1) + row_index - 1, T)
@@ -325,19 +336,24 @@ function field_offset_and_type(
     )
         return (0, S)
     elseif name_pair[1] == @name()
-        return field_offset_and_type(name_pair[2], T, S)
+        return field_offset_and_type(name_pair[2], T, S, key_error)
     elseif name_pair[2] == @name()
-        return field_offset_and_type(name_pair[1], T, S)
+        return field_offset_and_type(name_pair[1], T, S, key_error)
     else
         child_name = extract_first(name_pair[1])
+        (child_name in fieldnames(S)) || throw(key_error)
         child_type = fieldtype(S, child_name)
         remaining_field_chain = (drop_first(name_pair[1]), name_pair[2])
         field_index = unrolled_filter(
             i -> fieldname(S, i) == child_name,
             1:fieldcount(S),
         )[1]
-        (remaining_offset, end_type) =
-            field_offset_and_type(remaining_field_chain, T, child_type)
+        (remaining_offset, end_type) = field_offset_and_type(
+            remaining_field_chain,
+            T,
+            child_type,
+            key_error,
+        )
         return (
             DataLayouts.fieldtypeoffset(T, S, field_index) + remaining_offset,
             end_type,
@@ -346,7 +362,7 @@ function field_offset_and_type(
 end
 
 """
-    field_offset_and_type(name::FieldName, ::Type{T}, ::Type{S})
+    field_offset_and_type(name::FieldName, ::Type{T}, ::Type{S}, key_error)
 
 Returns the offset of the the field with name `name` in an object of type `S`
 in multiples of `sizeof(T)` and the type of the field with name `name` in an object of type `S`
@@ -356,27 +372,34 @@ function field_offset_and_type(
     name::FieldName,
     ::Type{T},
     ::Type{S},
+    key_error,
 ) where {T, S}
     name == @name() && return (0, S) # base case
     if S <: Geometry.AdjointAxisVector
-        return field_offset_and_type(name, T, fieldtype(S, :parent))
+        return field_offset_and_type(name, T, fieldtype(S, :parent), key_error)
     elseif S <: Geometry.AxisVector
         (remaining_offset, end_type) = field_offset_and_type(
             name,
             T,
             fieldtype(fieldtype(S, :components), :data),
+            key_error,
         )
         return (remaining_offset, end_type)
     else
         child_name = extract_first(name)
+        (child_name in fieldnames(S)) || throw(key_error)
         child_type = fieldtype(S, child_name)
         remaining_field_chain = drop_first(name)
         field_index = unrolled_filter(
             i -> fieldname(S, i) == child_name,
             1:fieldcount(S),
         )[1]
-        (remaining_offset, end_type) =
-            field_offset_and_type(remaining_field_chain, T, child_type)
+        (remaining_offset, end_type) = field_offset_and_type(
+            remaining_field_chain,
+            T,
+            child_type,
+            key_error,
+        )
         return (
             DataLayouts.fieldtypeoffset(T, S, field_index) + remaining_offset,
             end_type,

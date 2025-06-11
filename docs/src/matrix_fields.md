@@ -90,9 +90,7 @@ check_preconditioner
 lazy_or_concrete_preconditioner
 apply_preconditioner
 get_scalar_keys
-get_field_first_index_offset
-broadcasted_get_field_type
-inner_type_ignore_adjoint
+field_offset_and_type
 ```
 
 ## Utilities
@@ -160,15 +158,16 @@ If the key `(@name(name1), @name(name2))` corresponds to an entry, then
 `(@name(name1.foo.bar.buz), @name(name2.biz.bop.fud))`.
 
 Currently, internal values cannot be extracted in all situations. Extracting interal values
-works when:
+works when indexing an object of type `eltype(entry)` with the
+second key of the internal key pair appended to the first results in a scalar.
+If the internal keys index to a non-scalar `Field`, a broadcasted object is returned.
 
-- The second name in the internal key is empty, and the first name in the internal key accesses internal values for the type of element contained in each row of the entry. This does not work when the element type of each row is a 2d tensor.
+When the entry is a `Field` of `Axis2Tensor`s, and both internal names are numbers that would index
+an `Axis2Tensor` with the same axis.
 
-- The first name in the internal key is empty, and the type of element contained in each row of the entry is an `AxisVector` or the adjoint of an `AxisVector`. In this case, the second name must access inernal values for the type of `AxisVector` contained in each row.
+This does not work when the internal keys index to a `Field` of sliced tensors.
 
-- The element type of each row in the entry is a 2d tensor, and the internal key is of the form `(@name(components.data.:(1)), @name(components.data.:(2)))`, but possibly with different numbers to index into the 2d tensor
-
-- The element type of each row in the entry is some number of nested `Tuple`s and `NamedTuple`s, and the first name in the internal key accesses an `AxisVector` or the adjoint of an `AxisVector` from the outer `Tuple`/`NamedTuple`, and the second name in the inernal key accesses a component of the `AxisVector`
+Extracting internal values from a `DiagonalMatrixRow` works in all cases, except when
 
 If the `FieldMatrix` represents a Jacobian, then extracting internal values works when an entry represents:
 
