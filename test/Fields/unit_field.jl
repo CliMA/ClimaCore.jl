@@ -1196,6 +1196,43 @@ end
     bf_new = @. bf # test copy()
 end
 
+@testset "Level function boundschecking" begin
+    FT = Float32
+    extruded_center_space = ExtrudedCubedSphereSpace(
+        FT;
+        z_elem = 10,
+        z_min = 0,
+        z_max = 1,
+        radius = 10,
+        h_elem = 10,
+        n_quad_points = 4,
+        staggering = Grids.CellCenter(),
+    )
+    fd_center_space = ColumnSpace(
+        FT;
+        z_elem = 10,
+        z_min = 0,
+        z_max = 10,
+        staggering = CellCenter(),
+    )
+    for center_space in (extruded_center_space, fd_center_space)
+        face_space = Spaces.face_space(center_space)
+        center_field = fill(FT(1), center_space)
+        face_field = fill(FT(2), face_space)
+        if Base.JLOptions().check_bounds == 1
+            for level in (-1, 11, 0)
+                @test_throws BoundsError Fields.level(center_field, level)
+                level != 0 && @test_throws BoundsError Fields.level(
+                    face_field,
+                    PlusHalf(level),
+                )
+            end
+        else
+            @warn "Bounds check on level(::Field) not verified."
+        end
+    end
+end
+
 include("unit_field_multi_broadcast_fusion.jl")
 
 nothing

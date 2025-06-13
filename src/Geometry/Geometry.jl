@@ -2,6 +2,7 @@ module Geometry
 
 using ..RecursiveApply
 import LinearAlgebra
+import UnrolledUtilities: unrolled_findfirst
 
 using StaticArrays
 
