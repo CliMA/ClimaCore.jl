@@ -664,7 +664,7 @@ element type of the array is the same as the struct type of `field`.
 """
 function field2array(field::Field)
     if sizeof(eltype(field)) != sizeof(eltype(parent(field)))
-        f_axis_size = sizeof(eltype(parent(field))) ÷ sizeof(eltype(field))
+        f_axis_size = sizeof(eltype(field)) ÷ sizeof(eltype(parent(field)))
         error("unable to use field2array because each Field element is \
                represented by $f_axis_size array elements (must be 1)")
     end
