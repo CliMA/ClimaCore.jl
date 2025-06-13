@@ -517,7 +517,7 @@ Base.@propagate_inbounds function level(
     v::PlusHalf,
 )
     hspace = level(axes(field), v)
-    @inbounds data = level(field_values(field), v.i + 1)
+    data = level(field_values(field), v.i + 1)
     Field(data, hspace)
 end
 
