@@ -145,3 +145,10 @@ Base.@propagate_inbounds function level(
     local_geometry = level(local_geometry_data(space), v)
     PointSpace(ClimaComms.context(space), local_geometry)
 end
+function issubspace(subspace::PointSpace, space::FiniteDifferenceSpace)
+    all_local_geometry = local_geometry_data(space)
+    unrolled_any(
+        v -> subspace.local_geometry === level(all_local_geometry, v),
+        1:nlevels(space),
+    )
+end

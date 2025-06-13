@@ -1196,6 +1196,46 @@ end
     bf_new = @. bf # test copy()
 end
 
+@testset "Level function on fields" begin
+    FT = Float32
+    extruded_center_space = ExtrudedCubedSphereSpace(
+        FT;
+        z_elem = 10,
+        z_min = 0,
+        z_max = 1,
+        radius = 10,
+        h_elem = 10,
+        n_quad_points = 4,
+        staggering = Grids.CellCenter(),
+    )
+    fd_center_space = ColumnSpace(
+        FT;
+        z_elem = 10,
+        z_min = 0,
+        z_max = 10,
+        staggering = CellCenter(),
+    )
+    for center_space in (extruded_center_space, fd_center_space)
+        face_space = Spaces.face_space(center_space)
+        center_field = fill(FT(1), center_space)
+        face_field = fill(FT(2), face_space)
+        for i in 1:10
+            center_face_level = Fields.level(center_field, i)
+            face_level = Fields.level(face_field, PlusHalf(i))
+            @test axes(center_face_level) == Spaces.level(center_space, i)
+            @test Spaces.issubspace(axes(center_face_level), center_space)
+            @test axes(face_level) == Spaces.level(face_space, PlusHalf(i))
+            @test Spaces.issubspace(axes(face_level), face_space)
+        end
+        if Base.JLOptions().check_bounds == 1
+            @test_throws BoundsError Fields.level(center_field, 11)
+            @test_throws BoundsError Fields.level(face_field, PlusHalf(11))
+        else
+            @warn "Bounds check on level(::Field) not verified."
+        end
+    end
+end
+
 include("unit_field_multi_broadcast_fusion.jl")
 
 nothing

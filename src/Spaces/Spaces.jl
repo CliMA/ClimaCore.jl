@@ -43,6 +43,7 @@ import ..Grids:
     quadrature_style
 
 import ClimaComms
+import UnrolledUtilities: unrolled_any
 using StaticArrays, ForwardDiff, LinearAlgebra, Adapt
 
 """
