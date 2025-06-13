@@ -61,33 +61,8 @@ coordinate_axis(::Type{<:LatLongPoint}) = (1, 2)
 
 coordinate_axis(coord::AbstractPoint) = coordinate_axis(typeof(coord))
 
-@inline idxin(I::Tuple{Int}, i::Int) = 1
-
-@inline function idxin(I::Tuple{Int, Int}, i::Int)
-    @inbounds begin
-        if I[1] == i
-            return 1
-        elseif I[2] == i
-            return 2
-        else
-            return nothing
-        end
-    end
-end
-
-@inline function idxin(I::Tuple{Int, Int, Int}, i::Int)
-    @inbounds begin
-        if I[1] == i
-            return 1
-        elseif I[2] == i
-            return 2
-        elseif I[3] == i
-            return 3
-        else
-            return nothing
-        end
-    end
-end
+@inline idxin(I::NTuple{N, Int}, i::Int) where {N} =
+    unrolled_findfirst(isequal(i), I)
 
 struct PropertyError <: Exception
     ax::Any
