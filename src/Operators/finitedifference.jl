@@ -3088,6 +3088,107 @@ Base.@propagate_inbounds function stencil_right_boundary(
     )
 end
 
+"""
+    UG = UpwindBiasedGradient()
+    UG.(v, θ)
+
+Compute the vertical gradient of the field `θ` by upwinding it according to the
+direction of a vector field `v` on the same space.
+
+More precisely, the gradient is computed based on the sign of the 3rd
+contravariant component of `v`:
+```math
+UG(\\boldsymbol{v}, θ)[i] = \\begin{cases}
+    G(LB(θ))[i] \\textrm{, if } v^3[i] > 0 \\\\
+    G(RB(θ))[i] \\textrm{, if } v^3[i] < 0
+\\end{cases}
+```
+where `G` is a gradient operator and `LB`/`RB` are left/right-bias operators.
+When `θ` and `v` are located on centers, `G = GradientF2C()`,
+`LB = LeftBiasedC2F()`, and `RB = RightBiasedC2F()`. When they are located on
+faces, `G = GradientC2F()`, `LB = LeftBiasedF2C()`, and `RB = RightBiasedF2C()`.
+
+No boundary conditions are currently supported. The default behavior on the left
+boundary is
+```math
+UG(\\boldsymbol{v}, θ)[i_min] = G(RB(θ))[i_min]
+```
+and the default behavior on the right boundary is
+```math
+UG(\\boldsymbol{v}, θ)[i_max] = G(LB(θ))[i_max]
+```
+"""
+struct UpwindBiasedGradient{BCS} <: FiniteDifferenceOperator
+    bcs::BCS
+end
+function UpwindBiasedGradient(; kwargs...)
+    assert_no_bcs("UpwindBiasedGradient", kwargs)
+    return UpwindBiasedGradient(NamedTuple())
+end
+
+return_eltype(::UpwindBiasedGradient, velocity, arg) =
+    Geometry.gradient_result_type(Val((3,)), eltype(arg))
+
+return_space(
+    ::UpwindBiasedGradient,
+    velocity_space::AllCenterFiniteDifferenceSpace,
+    arg_space::AllCenterFiniteDifferenceSpace,
+) = arg_space
+return_space(
+    ::UpwindBiasedGradient,
+    velocity_space::AllFaceFiniteDifferenceSpace,
+    arg_space::AllFaceFiniteDifferenceSpace,
+) = arg_space
+
+stencil_interior_width(::UpwindBiasedGradient, velocity, arg) =
+    ((0, 0), (-1, 1))
+Base.@propagate_inbounds function stencil_interior(
+    ::UpwindBiasedGradient,
+    space,
+    idx,
+    hidx,
+    velocity,
+    arg,
+)
+    FT = Spaces.undertype(space)
+    a⁺ = getidx(space, arg, idx + 1, hidx)
+    a = getidx(space, arg, idx, hidx)
+    a⁻ = getidx(space, arg, idx - 1, hidx)
+    v = Geometry.contravariant3(
+        getidx(space, velocity, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+    ∂a∂ξ₃_times_2 = (1 - sign(v)) ⊠ a⁺ + 2 * sign(v) ⊠ a - (1 + sign(v)) ⊠ a⁻
+    return Geometry.Covariant3Vector(FT(1) / 2) ⊗ ∂a∂ξ₃_times_2
+end
+boundary_width(::UpwindBiasedGradient, ::AbstractBoundaryCondition) = 1
+
+Base.@propagate_inbounds function stencil_left_boundary(
+    ::UpwindBiasedGradient,
+    ::NullBoundaryCondition,
+    space,
+    idx,
+    hidx,
+    arg,
+)
+    @assert idx == left_face_boundary_idx(space)
+    a⁺ = getidx(space, arg, idx + 1, hidx)
+    a = getidx(space, arg, idx, hidx)
+    return Geometry.Covariant3Vector(1) ⊗ (a⁺ ⊟ a)
+end
+Base.@propagate_inbounds function stencil_right_boundary(
+    ::UpwindBiasedGradient,
+    ::NullBoundaryCondition,
+    space,
+    idx,
+    hidx,
+    arg,
+)
+    @assert idx == right_face_boundary_idx(space)
+    a = getidx(space, arg, idx, hidx)
+    a⁻ = getidx(space, arg, idx - 1, hidx)
+    return Geometry.Covariant3Vector(1) ⊗ (a ⊟ a⁻)
+end
 
 abstract type DivergenceOperator <: FiniteDifferenceOperator end
 return_eltype(::DivergenceOperator, arg) =
