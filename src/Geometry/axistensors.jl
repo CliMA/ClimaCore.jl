@@ -61,7 +61,7 @@ coordinate_axis(::Type{<:LatLongPoint}) = (1, 2)
 
 coordinate_axis(coord::AbstractPoint) = coordinate_axis(typeof(coord))
 
-@inline idxin(I::Tuple{Int}, i::Int) = 1
+@inline idxin(I::Tuple{Int}, i::Int) = I[1] == i ? 1 : nothing
 
 @inline function idxin(I::Tuple{Int, Int}, i::Int)
     @inbounds begin
@@ -307,6 +307,9 @@ Base.zero(::Type{AdjointAxisTensor{T, N, A, S}}) where {T, N, A, S} =
 @inline (==)(a::AdjointAxisTensor, b::AdjointAxisTensor) = a' == b'
 
 const AdjointAxisVector{T, A1, S} = Adjoint{T, AxisVector{T, A1, S}}
+
+const AxisVectorOrAdj{T, A, S} =
+    Union{AxisVector{T, A, S}, AdjointAxisVector{T, A, S}}
 
 Base.@propagate_inbounds Base.getindex(va::AdjointAxisVector, i::Int) =
     getindex(components(va), i)
