@@ -139,7 +139,7 @@ function Base.getindex(dict::FieldNameDict, key)
     key′, entry′ =
         unrolled_filter(pair -> is_child_value(key, pair[1]), pairs(dict))[1]
     internal_key = get_internal_key(key, key′)
-    return get_internal_entry(entry′, internal_key, KeyError(key))
+    return get_internal_entry(entry′, internal_key)
 end
 
 get_internal_key(child_name::FieldName, name::FieldName) =
@@ -149,24 +149,19 @@ get_internal_key(child_name_pair::FieldNamePair, name_pair::FieldNamePair) = (
     extract_internal_name(child_name_pair[2], name_pair[2]),
 )
 
-get_internal_entry(entry, name::FieldName, key_error) = get_field(entry, name)
+get_internal_entry(entry, name::FieldName) = get_field(entry, name)
 # call get_internal_entry on scaling value, and rebuild entry container
-get_internal_entry(entry::UniformScaling, name_pair::FieldNamePair, key_error) =
-    UniformScaling(
-        get_internal_entry(scaling_value(entry), name_pair, key_error),
-    )
-get_internal_entry(
-    entry::DiagonalMatrixRow,
-    name_pair::FieldNamePair,
-    key_error,
-) = DiagonalMatrixRow(
-    get_internal_entry(scaling_value(entry), name_pair, key_error),
-)
+get_internal_entry(entry::UniformScaling, name_pair::FieldNamePair) =
+    UniformScaling(get_internal_entry(scaling_value(entry), name_pair))
+get_internal_entry(entry::DiagonalMatrixRow, name_pair::FieldNamePair) =
+    DiagonalMatrixRow(get_internal_entry(scaling_value(entry), name_pair))
+get_internal_entry(entry, name_pair) =
+    get_internal_entry(entry, name_pair, name_pair)
 # get_internal_entry to be used on the values held inside a `BandMatrixRow`
 function get_internal_entry(
     entry::T,
     name_pair::FieldNamePair,
-    key_error,
+    full_key::FieldNamePair,
 ) where {T}
     if name_pair == (@name(), @name())
         return entry
@@ -182,49 +177,44 @@ function get_internal_entry(
         return get_internal_entry(
             entry[row_index, col_index],
             (drop_first(internal_row_name), drop_first(internal_col_name)),
-            key_error,
+            full_key,
         )
     elseif T <: Geometry.AdjointAxisVector # bypass parent for adjoint vectors
-        return get_internal_entry(
-            getfield(entry, :parent),
-            name_pair,
-            key_error,
-        )
+        return get_internal_entry(getfield(entry, :parent), name_pair, full_key)
     elseif name_pair[1] != @name() &&
            extract_first(name_pair[1]) in fieldnames(T)
         return get_internal_entry(
             getfield(entry, extract_first(name_pair[1])),
             (drop_first(name_pair[1]), name_pair[2]),
-            key_error,
+            full_key,
         )
     elseif name_pair[2] != @name() &&
            extract_first(name_pair[2]) in fieldnames(T)
         return get_internal_entry(
             getfield(entry, extract_first(name_pair[2])),
             (name_pair[1], drop_first(name_pair[2])),
-            key_error,
+            full_key,
         )
     elseif !any(isequal(@name()), name_pair) # implicit tensor structure
         return get_internal_entry(
             extract_first(name_pair[1]) == extract_first(name_pair[2]) ? entry :
             zero(entry),
             (drop_first(name_pair[1]), drop_first(name_pair[2])),
-            key_error,
+            full_key,
         )
     else
-        throw(key_error)
+        throw(KeyError(full_key))
     end
 end
 function get_internal_entry(
     entry::ColumnwiseBandMatrixField,
     name_pair::FieldNamePair,
-    key_error,
 )
     name_pair == (@name(), @name()) && return entry
     S = eltype(eltype(entry))
     T = eltype(parent(entry))
     (start_offset, target_type, apply_zero) =
-        field_offset_and_type(name_pair, T, S, key_error)
+        field_offset_and_type(name_pair, T, S, name_pair)
     if target_type <: eltype(parent(entry)) && !apply_zero
         band_element_size =
             DataLayouts.typesize(eltype(parent(entry)), eltype(eltype(entry)))
@@ -244,20 +234,17 @@ function get_internal_entry(
             scalar_data,
         )
         return Fields.Field(values, axes(entry))
-    elseif apply_zero
+    elseif apply_zero && start_offset == 0
         zero_value = zero(target_type)
         return Base.broadcasted(entry) do matrix_row
-            map(matrix_row) do matrix_row_entry
-                # zero(target_type)
-                zero_value
-            end
+            map(x -> zero_value, matrix_row)
         end
-    elseif target_type == S
+    elseif target_type == S && start_offset == 0
         return entry
     else
         return Base.broadcasted(entry) do matrix_row
             map(matrix_row) do matrix_row_entry
-                get_internal_entry(matrix_row_entry, name_pair, key_error)
+                get_internal_entry(matrix_row_entry, name_pair)
             end
         end
     end
@@ -316,7 +303,7 @@ function Base.one(matrix::FieldMatrix)
 end
 
 """
-    field_offset_and_type(name_pair::FieldNamePair, ::Type{T}, ::Type{S}, key_error)
+    field_offset_and_type(name_pair::FieldNamePair, ::Type{T}, ::Type{S}, full_key::FieldNamePair)
 
 Returns the offset of the field with name `name_pair` in an object of type `S` in
 multiples of `sizeof(T)` and the type of the field with name `name_pair`.
@@ -331,34 +318,37 @@ function field_offset_and_type(
     name_pair::FieldNamePair,
     ::Type{T},
     ::Type{S},
-    key_error,
+    full_key::FieldNamePair,
 ) where {S, T}
     name_pair == (@name(), @name()) && return (0, S, false) # base case
     if S <: Geometry.Axis2Tensor &&
        all(n -> is_child_name(n, @name(components.data)), name_pair)# special case to calculate index
-        (name_pair[1] == @name() || name_pair[2] == @name()) && throw(key_error)
+        (name_pair[1] == @name() || name_pair[2] == @name()) &&
+            throw(KeyError(full_key))
         internal_row_name =
             extract_internal_name(name_pair[1], @name(components.data))
         internal_col_name =
             extract_internal_name(name_pair[2], @name(components.data))
         row_index = extract_first(internal_row_name)
         col_index = extract_first(internal_col_name)
-        ((row_index isa Number) && (col_index isa Number)) || throw(key_error) # slicing not supported
+        ((row_index isa Number) && (col_index isa Number)) ||
+            throw(KeyError(full_key)) # slicing not supported
         (n_rows, n_cols) = map(length, axes(S))
         (remaining_offset, end_type, apply_zero) = field_offset_and_type(
             (drop_first(internal_row_name), drop_first(internal_col_name)),
             T,
             eltype(S),
-            key_error,
+            full_key,
         )
-        (row_index <= n_rows && col_index <= n_cols) || throw(key_error)
+        (row_index <= n_rows && col_index <= n_cols) ||
+            throw(KeyError(full_key))
         return (
             (n_rows * (col_index - 1) + row_index - 1) + remaining_offset,
             end_type,
             apply_zero,
         )
     elseif S <: Geometry.AdjointAxisVector
-        return field_offset_and_type(name_pair, T, fieldtype(S, 1), key_error)
+        return field_offset_and_type(name_pair, T, fieldtype(S, 1), full_key)
     elseif name_pair[1] != @name() &&
            extract_first(name_pair[1]) in fieldnames(S)
 
@@ -372,7 +362,7 @@ function field_offset_and_type(
             remaining_field_chain,
             T,
             child_type,
-            key_error,
+            full_key,
         )
         return (
             DataLayouts.fieldtypeoffset(T, S, field_index) + remaining_offset,
@@ -392,7 +382,7 @@ function field_offset_and_type(
             remaining_field_chain,
             T,
             child_type,
-            key_error,
+            full_key,
         )
         return (
             DataLayouts.fieldtypeoffset(T, S, field_index) + remaining_offset,
@@ -404,7 +394,7 @@ function field_offset_and_type(
             (drop_first(name_pair[1]), drop_first(name_pair[2])),
             T,
             S,
-            key_error,
+            full_key,
         )
         return (
             remaining_offset,
@@ -413,7 +403,7 @@ function field_offset_and_type(
             apply_zero : true,
         )
     else
-        throw(key_error)
+        throw(KeyError(full_key))
     end
 end
 if hasfield(Method, :recursion_relation)

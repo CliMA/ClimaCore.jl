@@ -23,11 +23,10 @@ include("matrix_field_test_utils.jl")
         ::Type{T},
         ::Type{S},
         expected_offset,
-        ::Type{E},
-        key_error;
+        ::Type{E};
         apply_zero = false,
     ) where {T, S, E}
-        @test_all MatrixFields.field_offset_and_type(name, T, S, key_error) ==
+        @test_all MatrixFields.field_offset_and_type(name, T, S, name) ==
                   (expected_offset, E, apply_zero)
     end
     test_field_offset_and_type(
@@ -36,7 +35,6 @@ include("matrix_field_test_utils.jl")
         Singleton{Singleton{Singleton{Singleton{FT}}}},
         0,
         Singleton{Singleton{Singleton{FT}}},
-        KeyError(@name(x.x.x.x)),
     )
     test_field_offset_and_type(
         (@name(), @name(x.x.x.x)),
@@ -44,7 +42,6 @@ include("matrix_field_test_utils.jl")
         Singleton{Singleton{Singleton{Singleton{FT}}}},
         0,
         FT,
-        KeyError(@name(x.x.x.x)),
     )
     test_field_offset_and_type(
         (@name(), @name(y.x)),
@@ -52,7 +49,6 @@ include("matrix_field_test_utils.jl")
         TwoFields{TwoFields{FT, FT}, TwoFields{FT, FT}},
         2,
         FT,
-        KeyError(@name(y.x)),
     )
     test_field_offset_and_type(
         (@name(y), @name(y)),
@@ -63,7 +59,6 @@ include("matrix_field_test_utils.jl")
         },
         3,
         TwoFields{FT, Singleton{FT}},
-        KeyError(@name(y.y.x)),
     )
     test_field_offset_and_type(
         (@name(y.k), @name(y.k)),
@@ -74,7 +69,6 @@ include("matrix_field_test_utils.jl")
         },
         3,
         TwoFields{FT, Singleton{FT}},
-        KeyError(@name(y.y.x)),
     )
     test_field_offset_and_type(
         (@name(y.k.g), @name(y.k.l)),
@@ -85,7 +79,6 @@ include("matrix_field_test_utils.jl")
         },
         3,
         TwoFields{FT, Singleton{FT}},
-        KeyError(@name(y.y.x)),
         apply_zero = true,
     )
     test_field_offset_and_type(
@@ -97,7 +90,6 @@ include("matrix_field_test_utils.jl")
         },
         3,
         FT,
-        KeyError(@name(y.y.x.x)),
     )
     test_field_offset_and_type(
         (@name(y.y), @name(y.x)),
@@ -108,7 +100,6 @@ include("matrix_field_test_utils.jl")
         },
         4,
         FT,
-        KeyError(@name(y.y.y.x)),
     )
 end
 
