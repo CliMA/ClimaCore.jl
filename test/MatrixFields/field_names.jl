@@ -770,9 +770,9 @@ end
         (@name(a), @name(a)) => -I_CT3XC3,
     )
 
-    for (vector, matrix, I_foo, I_a) in (
-        (vector_of_scalars, matrix_of_scalars, I, I),
-        (vector_of_vectors, matrix_of_tensors, I_C12XCT12, I_CT3XC3),
+    for (vector, matrix, I_foo, I_a, is_scalar_test) in (
+        (vector_of_scalars, matrix_of_scalars, I, I, true),
+        (vector_of_vectors, matrix_of_tensors, I_C12XCT12, I_CT3XC3, false),
     )
         @test_all MatrixFields.field_vector_view(vector) ==
                   MatrixFields.FieldVectorView(
@@ -842,10 +842,13 @@ end
         @test_all matrix[@name(a.c), @name(a.b)] == zero(I_a)
         @test_all matrix[@name(foo._value), @name(foo._value)] ==
                   matrix[@name(foo), @name(foo)]
-
-        @test_all matrix[@name(foo._value), @name(a.b)] isa
-                  Base.AbstractBroadcasted
-        @test Base.materialize(matrix[@name(foo._value), @name(a.b)]) == map(
+        entry = matrix[@name(foo._value), @name(a.b)]
+        @test_all entry isa (
+            is_scalar_test ? MatrixFields.ColumnwiseBandMatrixField :
+            Base.AbstractBroadcasted
+        )
+        entry = is_scalar_test ? entry : Base.materialize(entry)
+        @test entry == map(
             row -> map(foo -> foo.value, row),
             matrix[@name(foo), @name(a.b)],
         )

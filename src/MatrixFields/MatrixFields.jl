@@ -58,6 +58,7 @@ import ..Utilities: PlusHalf, half
 import ..RecursiveApply:
     rmap, rmaptype, rpromote_type, rzero, rconvert, radd, rsub, rmul, rdiv
 import ..RecursiveApply: ⊠, ⊞, ⊟
+import ..DataLayouts
 import ..DataLayouts: AbstractData
 import ..DataLayouts: vindex
 import ..Geometry
