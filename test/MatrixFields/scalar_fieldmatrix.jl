@@ -105,7 +105,7 @@ end
 
 @testset "fieldmatrix to scalar fieldmatrix unit tests" begin
     FT = Float64
-    for (A, _) in (
+    for (A, b) in (
         dycore_prognostic_EDMF_FieldMatrix(FT),
         scaling_only_dycore_prognostic_EDMF_FieldMatrix(FT),
     )
@@ -130,6 +130,11 @@ end
         scalar_fieldmatrix_wrapper(A)
         @test (@allocated scalar_fieldmatrix_wrapper(A)) == 0
         @test_opt MatrixFields.scalar_fieldmatrix(A)
+
+        A_with_tree =
+            MatrixFields.replace_name_tree(A, MatrixFields.FieldNameTree(b))
+        @test MatrixFields.scalar_fieldmatrix(A_with_tree).keys.name_tree ==
+              A_with_tree.keys.name_tree
     end
 end
 

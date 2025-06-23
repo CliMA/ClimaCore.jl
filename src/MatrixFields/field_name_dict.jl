@@ -438,7 +438,7 @@ function get_scalar_keys(dict::FieldMatrix)
             )
         end
     end
-    return FieldMatrixKeys(keys_tuple)
+    return FieldMatrixKeys(keys_tuple, dict.keys.name_tree)
 end
 
 """
