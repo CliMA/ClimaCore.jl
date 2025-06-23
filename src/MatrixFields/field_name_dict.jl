@@ -498,7 +498,7 @@ end
 
 
 """
-    scalar_fieldmatrix(field_matrix::FieldMatrix)
+    scalar_field_matrix(field_matrix::FieldMatrix)
 
 Constructs a `FieldNameDict` where the keys and entries are views
 of the entries of `field_matrix`, which corresponding to the
@@ -520,7 +520,7 @@ A = MatrixFields.FieldMatrix(
     (@name(c.uₕ), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3_uₕ_scalar,
 )
 
-A_scalar = MatrixFields.scalar_fieldmatrix(A)
+A_scalar = MatrixFields.scalar_field_matrix(A)
 keys(A_scalar)
 # Output:
 # (@name(c.ρχ.ρq_liq), @name(f.u₃.:(1)))
@@ -529,7 +529,7 @@ keys(A_scalar)
 # (@name(c.uₕ.:(2)), @name(c.sgsʲs.:(1).ρa))
 ```
 """
-function scalar_fieldmatrix(field_matrix::FieldMatrix)
+function scalar_field_matrix(field_matrix::FieldMatrix)
     scalar_keys = get_scalar_keys(field_matrix)
     entries = unrolled_map(scalar_keys.values) do key
         field_matrix[key]

@@ -113,27 +113,27 @@ end
             entry ->
                 entry isa MatrixFields.UniformScaling ||
                     eltype(eltype(entry)) <: FT,
-            MatrixFields.scalar_fieldmatrix(A).entries,
+            MatrixFields.scalar_field_matrix(A).entries,
         )
         test_get(A, entry, key) = A[key] === entry
-        for (key, entry) in MatrixFields.scalar_fieldmatrix(A)
+        for (key, entry) in MatrixFields.scalar_field_matrix(A)
             @test test_get(A, entry, key)
             @test (@allocated test_get(A, entry, key)) == 0
             @test_opt test_get(A, entry, key)
         end
 
-        function scalar_fieldmatrix_wrapper(field_matrix_of_tensors)
-            A_scalar = MatrixFields.scalar_fieldmatrix(field_matrix_of_tensors)
+        function scalar_field_matrix_wrapper(field_matrix_of_tensors)
+            A_scalar = MatrixFields.scalar_field_matrix(field_matrix_of_tensors)
             return nothing
         end
 
-        scalar_fieldmatrix_wrapper(A)
-        @test (@allocated scalar_fieldmatrix_wrapper(A)) == 0
-        @test_opt MatrixFields.scalar_fieldmatrix(A)
+        scalar_field_matrix_wrapper(A)
+        @test (@allocated scalar_field_matrix_wrapper(A)) == 0
+        @test_opt MatrixFields.scalar_field_matrix(A)
 
         A_with_tree =
             MatrixFields.replace_name_tree(A, MatrixFields.FieldNameTree(b))
-        @test MatrixFields.scalar_fieldmatrix(A_with_tree).keys.name_tree ==
+        @test MatrixFields.scalar_field_matrix(A_with_tree).keys.name_tree ==
               A_with_tree.keys.name_tree
     end
 end

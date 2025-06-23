@@ -100,7 +100,7 @@ column_field2array
 column_field2array_view
 field2arrays
 field2arrays_view
-scalar_fieldmatrix
+scalar_field_matrix
 ```
 
 ## Indexing a FieldMatrix
