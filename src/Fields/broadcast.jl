@@ -40,6 +40,20 @@ Base.Broadcast.BroadcastStyle(
     ::FieldStyle{DS2},
 ) where {DS1, DS2} = FieldStyle(Base.Broadcast.BroadcastStyle(DS1(), DS2()))
 
+# Override the recursive unrolling used in combine_styles (which can lead to
+# inference failures in broadcast expressions with more than 10 arguments) with
+# manual unrolling (which can have higher latency but is always inferrable).
+Base.Broadcast.combine_styles(
+    arg1::Union{Field, Base.Broadcast.Broadcasted{<:AbstractFieldStyle}},
+    arg2,
+    arg3,
+    args...,
+) = unrolled_mapreduce(
+    Base.Broadcast.combine_styles,
+    Base.Broadcast.result_style,
+    (arg1, arg2, arg3, args...),
+)
+
 Base.Broadcast.broadcastable(field::Field) = field
 
 Base.eltype(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
