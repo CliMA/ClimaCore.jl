@@ -4,6 +4,20 @@ ClimaCore.jl Release Notes
 main
 -------
 
+
+v0.14.35
+-------
+- Fix unrolling over field broadcast arguments [2350](https://github.com/CliMA/ClimaCore.jl/pull/2350)
+- minor fixes/Fix field2array error msg, level func bounds check [2347](https://github.com/CliMA/ClimaCore.jl/pull/2347)
+- Define FiniteDifferenceSpace for extruded spaces [2344](https://github.com/CliMA/ClimaCore.jl/pull/2344)
+
+v0.14.34
+-------
+- Implement a columnwise shmem operator [2328](https://github.com/CliMA/ClimaCore.jl/pull/2328)
+- Dont reference localgeometry fields unnecessarily [2340](https://github.com/CliMA/ClimaCore.jl/pull/2340)
+- Add missing methods for column spaces and FieldVectors [2330](https://github.com/CliMA/ClimaCore.jl/pull/2330)
+- Move Δz_metric_component to Geometry module [2336](https://github.com/CliMA/ClimaCore.jl/pull/2336)
+- Allow for more flexibly constructed LocalGeometry [2335](https://github.com/CliMA/ClimaCore.jl/pull/2335)
 - Latitude and longitudes were flipped in the default target coordinates
 in the remapper, leading to non-sense values.
 
