@@ -874,13 +874,13 @@ steps:
         agents:
           slurm_gpus: 1
 
-      - label: "Unit: scalar_field_matrix (CPU)"
-        key: cpu_scalar_field_matrix
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/scalar_field_matrix.jl"
+      - label: "Unit: field_matrix_indexing (CPU)"
+        key: cpu_field_matrix_indexing
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/field_matrix_indexing.jl"
 
-      - label: "Unit: scalar_field_matrix (GPU)"
-        key: gpu_scalar_field_matrix
-        command: "julia --color=yes --project=.buildkite test/MatrixFields/scalar_field_matrix.jl"
+      - label: "Unit: field_matrix_indexing (GPU)"
+        key: gpu_field_matrix_indexing
+        command: "julia --color=yes --project=.buildkite test/MatrixFields/field_matrix_indexing.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:

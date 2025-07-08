@@ -5,7 +5,7 @@ import ClimaCore:
     Geometry, Domains, Meshes, Spaces, Fields, MatrixFields, CommonSpaces
 import ClimaCore.Utilities: half
 import ClimaComms
-import ClimaCore.MatrixFields: @name
+import ClimaCore.MatrixFields: @name, FieldName, append_internal_name
 ClimaComms.@import_required_backends
 include("matrix_field_test_utils.jl")
 
@@ -24,10 +24,10 @@ include("matrix_field_test_utils.jl")
         ::Type{S},
         expected_offset,
         ::Type{E};
-        apply_zero = false,
+        index_method = E <: T ? Val(:view) : Val(:view_of_blocks),
     ) where {T, S, E}
         @test_all MatrixFields.field_offset_and_type(name, T, S, name) ==
-                  (expected_offset, E, apply_zero)
+                  (expected_offset, E, index_method)
     end
     test_field_offset_and_type(
         (@name(x), @name()),
@@ -44,11 +44,12 @@ include("matrix_field_test_utils.jl")
         FT,
     )
     test_field_offset_and_type(
-        (@name(), @name(y.x)),
+        (@name(y.g), @name(x.k)), # off diagonal tensor optimization
         FT,
         TwoFields{TwoFields{FT, FT}, TwoFields{FT, FT}},
         2,
         FT,
+        index_method = Val(:broadcasted_zero),
     )
     test_field_offset_and_type(
         (@name(y), @name(y)),
@@ -61,7 +62,7 @@ include("matrix_field_test_utils.jl")
         TwoFields{FT, Singleton{FT}},
     )
     test_field_offset_and_type(
-        (@name(y.k), @name(y.k)),
+        (@name(y.k), @name(y.k)), # implicit tensor optimization
         FT,
         TwoFields{
             TwoFields{FT, FT},
@@ -79,7 +80,7 @@ include("matrix_field_test_utils.jl")
         },
         3,
         TwoFields{FT, Singleton{FT}},
-        apply_zero = true,
+        index_method = Val(:broadcasted_zero),
     )
     test_field_offset_and_type(
         (@name(y.y), @name(x)),
@@ -175,4 +176,25 @@ end
             )],
         ) == maybe_to_field(DiagonalMatrixRow(FT(0)))
     end
+end
+
+@testset "tensor slicing" begin
+    FT = Float64
+    center_space = test_spaces(FT)[1]
+    A, _ = dycore_prognostic_EDMF_FieldMatrix(FT)
+    A_scaling, _ = scaling_only_dycore_prognostic_EDMF_FieldMatrix(FT)
+
+    index_name_1 = @name(c.uₕ.components.data.:(1))
+    index_name_2 = @name(c.uₕ.components.data.:(2))
+
+    @test eltype(
+        eltype(Base.Broadcast.materialize(A[(@name(c.uₕ), index_name_1)])),
+    ) <: Geometry.CovariantVector
+    @test eltype(
+        eltype(Base.Broadcast.materialize(A[(index_name_2, @name(c.uₕ))])),
+    ) <: Geometry.ContravariantVector
+    @test eltype(A_scaling[(@name(c.uₕ), index_name_1)]) <:
+          Geometry.CovariantVector
+    @test eltype(A_scaling[(index_name_2, @name(c.uₕ))]) <:
+          Geometry.ContravariantVector
 end
