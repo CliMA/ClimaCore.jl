@@ -148,9 +148,22 @@ get_internal_key(child_name_pair::FieldNamePair, name_pair::FieldNamePair) = (
     extract_internal_name(child_name_pair[1], name_pair[1]),
     extract_internal_name(child_name_pair[2], name_pair[2]),
 )
+"""
+    get_internal_entry(entry, name::FieldName)
 
+Returns the field indexed to by `name` from `entry`
+"""
 get_internal_entry(entry, name::FieldName) = get_field(entry, name)
 # call get_internal_entry on scaling value, and rebuild entry container
+"""
+    get_internal_entry(entry, name_pair::FieldNamePair)
+
+Returns the field indexed to by `name_pair` from `entry`. Indexing behavior is described
+in the MatrixFields section of the documentation. If `entry` is a `ColumnwiseBandMatrixField`,
+and the field indexed to by `name_pair` is not a field of scalars, a broadcasted object
+is returned. This also happens when indexing off diagonal with the implicit tensor structure
+optimization (see MatrixFields documentation).
+"""
 get_internal_entry(entry::UniformScaling, name_pair::FieldNamePair) =
     UniformScaling(get_internal_entry(scaling_value(entry), name_pair))
 get_internal_entry(entry::DiagonalMatrixRow, name_pair::FieldNamePair) =
@@ -177,6 +190,24 @@ function get_internal_entry(
         return get_internal_entry(
             entry[row_index, col_index],
             (drop_first(internal_row_name), drop_first(internal_col_name)),
+            full_key,
+        )
+    elseif T <: Geometry.Axis2Tensor && # slicing a 2d tensor
+           is_child_name(name_pair[1], @name(components.data))
+        internal_row_name =
+            extract_internal_name(name_pair[1], @name(components.data))
+        return get_internal_entry(
+            entry[extract_first(internal_row_name), :],
+            (drop_first(internal_row_name), name_pair[2]),
+            full_key,
+        )
+    elseif T <: Geometry.Axis2Tensor && # slicing a 2d tensor
+           is_child_name(name_pair[2], @name(components.data))
+        internal_col_name =
+            extract_internal_name(name_pair[2], @name(components.data))
+        return get_internal_entry(
+            entry[:, extract_first(internal_col_name)],
+            (name_pair[1], drop_first(internal_col_name)),
             full_key,
         )
     elseif T <: Geometry.AdjointAxisVector # bypass parent for adjoint vectors
@@ -213,11 +244,11 @@ function get_internal_entry(
     name_pair == (@name(), @name()) && return entry
     S = eltype(eltype(entry))
     T = eltype(parent(entry))
-    (start_offset, target_type, apply_zero) =
+    (start_offset, target_type, index_method) =
         field_offset_and_type(name_pair, T, S, name_pair)
-    if target_type <: eltype(parent(entry)) && !apply_zero
-        band_element_size =
-            DataLayouts.typesize(eltype(parent(entry)), eltype(eltype(entry)))
+    if isa(index_method, Val{:view})
+        @assert target_type <: T
+        band_element_size = DataLayouts.typesize(T, S)
         singleton_datalayout = DataLayouts.singleton(Fields.field_values(entry))
         scalar_band_type =
             band_matrix_row_type(outer_diagonals(eltype(entry))..., target_type)
@@ -234,14 +265,15 @@ function get_internal_entry(
             scalar_data,
         )
         return Fields.Field(values, axes(entry))
-    elseif apply_zero && start_offset == 0
+    elseif isa(index_method, Val{:broadcasted_zero})
+        # implicit tensor structure optimization, off diagonal
         zero_value = zero(target_type)
         return Base.broadcasted(entry) do matrix_row
             map(x -> zero_value, matrix_row)
         end
-    elseif target_type == S && start_offset == 0
+    elseif target_type == S && isa(index_method, Val{:view_of_blocks})
         return entry
-    else
+    else # fallback to broadcasted indexing on each element, currently no support for view_of_blocks
         return Base.broadcasted(entry) do matrix_row
             map(matrix_row) do matrix_row_entry
                 get_internal_entry(matrix_row_entry, name_pair)
@@ -306,13 +338,24 @@ end
     field_offset_and_type(name_pair::FieldNamePair, ::Type{T}, ::Type{S}, full_key::FieldNamePair)
 
 Returns the offset of the field with name `name_pair` in an object of type `S` in
-multiples of `sizeof(T)` and the type of the field with name `name_pair`.
+multiples of `sizeof(T)`, the type of the field with name `name_pair`, and a `Val` indicating
+what method can index a ClimaCore `Field` of `S` with `name_pair`.
 
-When `S` is a `Geometry.Axis2Tensor`, the name pair must index into a scalar of
-the tensor or be empty. In other words, the name pair cannot index into a slice.
+The third return value is one of the following:
+- `Val(:view)`: indexing with a view is possible
+-  `Val(:view_of_blocks)`: indexing with a view of non-unfiform stride length is possible.\
+ This is not implemented, and currently treated the same as `Val(:broadcasted_fallback)`
+- `Val(:broadcasted_fallback)`: indexing with a view is not possible
+- `Val(:broadcasted_zero)`: indexing with a view is not possible, and the `name_pair` indexes
+off diagonal with implicit tensor structure optimization (see MatrixFields docs)
+
+When `S` is a `Geometry.Axis2Tensor`, and the name pair indexes to a slice of
+the tensor, an offset of `-1` is returned . In other words, the name pair cannot index into a slice.
 
 If neither element of `name_pair` is `@name()`, the first name in the pair is indexed with
 first, and then the second name is used to index the result of the first.
+
+This is an internal funtion designed to be used with `get_internal_entry(::ColumnwiseBandMatrixField)`
 """
 function field_offset_and_type(
     name_pair::FieldNamePair,
@@ -320,11 +363,13 @@ function field_offset_and_type(
     ::Type{S},
     full_key::FieldNamePair,
 ) where {S, T}
-    name_pair == (@name(), @name()) && return (0, S, false) # base case
-    if S <: Geometry.Axis2Tensor &&
-       all(n -> is_child_name(n, @name(components.data)), name_pair)# special case to calculate index
-        (name_pair[1] == @name() || name_pair[2] == @name()) &&
-            throw(KeyError(full_key))
+    if name_pair == (@name(), @name()) # recursion base case
+        # if S <: T, then its possible to construct a strided view in the indexing function
+        return (0, S, S <: T ? Val(:view) : Val(:view_of_blocks))
+    elseif S <: Geometry.Axis2Tensor &&
+           any(n -> is_child_name(n, @name(components.data)), name_pair) # special case to calculate index
+        all(n -> is_child_name(n, @name(components.data)), name_pair) ||
+            return (0, S, Val{:broadcasted_fallback}())
         internal_row_name =
             extract_internal_name(name_pair[1], @name(components.data))
         internal_col_name =
@@ -332,9 +377,9 @@ function field_offset_and_type(
         row_index = extract_first(internal_row_name)
         col_index = extract_first(internal_col_name)
         ((row_index isa Number) && (col_index isa Number)) ||
-            throw(KeyError(full_key)) # slicing not supported
+            throw(KeyError(full_key))
         (n_rows, n_cols) = map(length, axes(S))
-        (remaining_offset, end_type, apply_zero) = field_offset_and_type(
+        (remaining_offset, end_type, index_method) = field_offset_and_type(
             (drop_first(internal_row_name), drop_first(internal_col_name)),
             T,
             eltype(S),
@@ -345,20 +390,19 @@ function field_offset_and_type(
         return (
             (n_rows * (col_index - 1) + row_index - 1) + remaining_offset,
             end_type,
-            apply_zero,
+            index_method,
         )
-    elseif S <: Geometry.AdjointAxisVector
+    elseif S <: Geometry.AdjointAxisVector # bypass adjoint because indexing parent is equivalent
         return field_offset_and_type(name_pair, T, fieldtype(S, 1), full_key)
     elseif name_pair[1] != @name() &&
-           extract_first(name_pair[1]) in fieldnames(S)
-
+           extract_first(name_pair[1]) in fieldnames(S) # index with first part of name_pair[1]
         remaining_field_chain = (drop_first(name_pair[1]), name_pair[2])
         child_type = fieldtype(S, extract_first(name_pair[1]))
         field_index = unrolled_filter(
             i -> fieldname(S, i) == extract_first(name_pair[1]),
             1:fieldcount(S),
         )[1]
-        (remaining_offset, end_type, apply_zero) = field_offset_and_type(
+        (remaining_offset, end_type, index_method) = field_offset_and_type(
             remaining_field_chain,
             T,
             child_type,
@@ -367,18 +411,17 @@ function field_offset_and_type(
         return (
             DataLayouts.fieldtypeoffset(T, S, field_index) + remaining_offset,
             end_type,
-            apply_zero,
+            index_method,
         )
     elseif name_pair[2] != @name() &&
-           extract_first(name_pair[2]) in fieldnames(S)
-
+           extract_first(name_pair[2]) in fieldnames(S) # index with first part of name_pair[2]
         remaining_field_chain = name_pair[1], drop_first(name_pair[2])
         child_type = fieldtype(S, extract_first(name_pair[2]))
         field_index = unrolled_filter(
             i -> fieldname(S, i) == extract_first(name_pair[2]),
             1:fieldcount(S),
         )[1]
-        (remaining_offset, end_type, apply_zero) = field_offset_and_type(
+        (remaining_offset, end_type, index_method) = field_offset_and_type(
             remaining_field_chain,
             T,
             child_type,
@@ -387,10 +430,10 @@ function field_offset_and_type(
         return (
             DataLayouts.fieldtypeoffset(T, S, field_index) + remaining_offset,
             end_type,
-            apply_zero,
+            index_method,
         )
-    elseif !any(isequal(@name()), name_pair) # implicit tensor structure
-        (remaining_offset, end_type, apply_zero) = field_offset_and_type(
+    elseif !any(isequal(@name()), name_pair) # implicit tensor structure optimization
+        (remaining_offset, end_type, index_method) = field_offset_and_type(
             (drop_first(name_pair[1]), drop_first(name_pair[2])),
             T,
             S,
@@ -400,7 +443,7 @@ function field_offset_and_type(
             remaining_offset,
             end_type,
             extract_first(name_pair[1]) == extract_first(name_pair[2]) ?
-            apply_zero : true,
+            index_method : Val(:broadcasted_zero), # zero if off diagonal
         )
     else
         throw(KeyError(full_key))
