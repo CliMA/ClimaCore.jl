@@ -148,9 +148,22 @@ get_internal_key(child_name_pair::FieldNamePair, name_pair::FieldNamePair) = (
     extract_internal_name(child_name_pair[1], name_pair[1]),
     extract_internal_name(child_name_pair[2], name_pair[2]),
 )
+"""
+    get_internal_entry(entry, name::FieldName)
 
+Returns the field indexed to by `name` from `entry`
+"""
 get_internal_entry(entry, name::FieldName) = get_field(entry, name)
 # call get_internal_entry on scaling value, and rebuild entry container
+"""
+    get_internal_entry(entry, name_pair::FieldNamePair)
+
+Returns the field indexed to by `name_pair` from `entry`. Indexing behavior is described
+in the MatrixFields section of the documentation. If `entry` is a `ColumnwiseBandMatrixField`,
+and the field indexed to by `name_pair` is not a field of scalars, a broadcasted object
+is returned. This also happens when indexing off diagonal with the implicit tensor structure
+optimization (see MatrixFields documentation).
+"""
 get_internal_entry(entry::UniformScaling, name_pair::FieldNamePair) =
     UniformScaling(get_internal_entry(scaling_value(entry), name_pair))
 get_internal_entry(entry::DiagonalMatrixRow, name_pair::FieldNamePair) =
@@ -177,6 +190,24 @@ function get_internal_entry(
         return get_internal_entry(
             entry[row_index, col_index],
             (drop_first(internal_row_name), drop_first(internal_col_name)),
+            full_key,
+        )
+    elseif T <: Geometry.Axis2Tensor && # slicing a 2d tensor
+           is_child_name(name_pair[1], @name(components.data))
+        internal_row_name =
+            extract_internal_name(name_pair[1], @name(components.data))
+        return get_internal_entry(
+            entry[extract_first(internal_row_name), :],
+            (drop_first(internal_row_name), name_pair[2]),
+            full_key,
+        )
+    elseif T <: Geometry.Axis2Tensor && # slicing a 2d tensor
+           is_child_name(name_pair[2], @name(components.data))
+        internal_col_name =
+            extract_internal_name(name_pair[2], @name(components.data))
+        return get_internal_entry(
+            entry[:, extract_first(internal_col_name)],
+            (name_pair[1], drop_first(internal_col_name)),
             full_key,
         )
     elseif T <: Geometry.AdjointAxisVector # bypass parent for adjoint vectors
@@ -335,17 +366,15 @@ function field_offset_and_type(
         # if S <: T, then its possible to construct a strided view in the indexing function
         return (0, S, S <: T ? Val(:view) : Val(:view_of_blocks))
     elseif S <: Geometry.Axis2Tensor &&
-           all(n -> is_child_name(n, @name(components.data)), name_pair) # special case to calculate index
+           any(n -> is_child_name(n, @name(components.data)), name_pair) # special case to calculate index
+        all(n -> is_child_name(n, @name(components.data)), name_pair) ||
+            return (0, S, Val{:broadcasted_fallback}())
         internal_row_name =
             extract_internal_name(name_pair[1], @name(components.data))
         internal_col_name =
             extract_internal_name(name_pair[2], @name(components.data))
         row_index = extract_first(internal_row_name)
         col_index = extract_first(internal_col_name)
-        if ((row_index isa Number) && (col_index isa Colon)) ||
-           ((row_index isa Colon) && (col_index isa Number))
-            return (0, S, Val{:broadcasted_fallback}()) # slice case, return trigger fallback
-        end
         ((row_index isa Number) && (col_index isa Number)) ||
             throw(KeyError(full_key))
         (n_rows, n_cols) = map(length, axes(S))

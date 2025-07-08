@@ -184,19 +184,17 @@ end
     A, _ = dycore_prognostic_EDMF_FieldMatrix(FT)
     A_scaling, _ = scaling_only_dycore_prognostic_EDMF_FieldMatrix(FT)
 
-    colon_field_name =
-        append_internal_name(@name(c.uₕ.components.data), FieldName(Colon()))
     index_name_1 = @name(c.uₕ.components.data.:(1))
     index_name_2 = @name(c.uₕ.components.data.:(2))
 
     @test eltype(
-        eltype(Base.Broadcast.materialize(A[(colon_field_name, index_name_1)])),
+        eltype(Base.Broadcast.materialize(A[(@name(c.uₕ), index_name_1)])),
     ) <: Geometry.CovariantVector
     @test eltype(
-        eltype(Base.Broadcast.materialize(A[(index_name_2, colon_field_name)])),
+        eltype(Base.Broadcast.materialize(A[(index_name_2, @name(c.uₕ))])),
     ) <: Geometry.ContravariantVector
-    @test eltype(A_scaling[(colon_field_name, index_name_1)]) <:
+    @test eltype(A_scaling[(@name(c.uₕ), index_name_1)]) <:
           Geometry.CovariantVector
-    @test eltype(A_scaling[(index_name_2, colon_field_name)]) <:
+    @test eltype(A_scaling[(index_name_2, @name(c.uₕ))]) <:
           Geometry.ContravariantVector
 end

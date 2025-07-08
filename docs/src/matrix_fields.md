@@ -191,9 +191,6 @@ the following situations:
 
 1. The internal key indexes to a type different than the basetype of the entry
 2. The internal key indexes to a zero-ed value
-3. The internal key slices an `AxisTensor`
-
-### Implicit Tensor Structure Optimization
 
 ```@setup 2
 using ClimaCore.CommonSpaces
@@ -208,124 +205,147 @@ space = ColumnSpace(FT ;
            z_max = 10,
            staggering = CellCenter()
        )
-```
-
-If using a `FieldMatrix` to represent a jacobian, entries with certain structures
-can be stored in an optimized manner.
-
-The optimization assumes that if indexing into an entry of scalars, the user intends the
-entry to have an implicit tensor structure, with the scalar values representing a scaling of the
-tensor identity. If both the first and second name in the name pair are equivalent, then they index onto the diagonal,
-and the scalar value is returned. Otherwise, they index off the diagonal, and a zero value
-is returned.
-
-The following sections refer the `Field`s
-$f$ and $g$, which both have values of type `Covariant12Vector` and are defined on a column domain, which is discretized with $N_v$ layers.
-The notation $f_{n}[i]$ where $ 0 < n \leq N_v$ and $i \in (1,2)$ refers to the $i$ component of the element of $f$
-at the $i$ vertical level. $g$ is indexed similarly. Although $f$ and $g$ have values of type
-`Covariant12Vector`, this optimization works for any two `Field`s of `AxisVector`s
-
-```@example 2
 f = map(x -> rand(Geometry.Covariant12Vector{Float64}), Fields.local_geometry_field(space))
 g = map(x -> rand(Geometry.Covariant12Vector{Float64}), Fields.local_geometry_field(space))
-```
-
-#### Uniform Scaling Case
-
-If $\frac{\partial f_n[i]}{\partial g_n[j]} = [i = j]$ for some scalar $k$, then the
-non-optimized entry would be represented by a diagonal matrix with values of an identity 2d tensor. If $k=2$, then
-
-```@example 2
-identity_axis2tensor = Geometry.Covariant12Vector(FT(1), FT(0)) * # hide
-                   Geometry.Contravariant12Vector(FT(1), FT(0))' + # hide
-                   Geometry.Covariant12Vector(FT(0), FT(1)) * # hide
-                   Geometry.Contravariant12Vector(FT(0), FT(1))' # hide
-k = 2
-∂f_∂g = fill(MatrixFields.DiagonalMatrixRow(k * identity_axis2tensor), space)
-```
-
-Individual components can be indexed into:
-
-```@example 2
+identity_axis2tensor = Geometry.Covariant12Vector(FT(1), FT(0)) *
+                   Geometry.Contravariant12Vector(FT(1), FT(0))' +
+                   Geometry.Covariant12Vector(FT(0), FT(1)) *
+                   Geometry.Contravariant12Vector(FT(0), FT(1))'
+∂f_∂g = fill(MatrixFields.TridiagonalMatrixRow(-0.5 * identity_axis2tensor, identity_axis2tensor, -0.5 * identity_axis2tensor), space)
 J = MatrixFields.FieldMatrix((@name(f), @name(g))=> ∂f_∂g)
-J[[(@name(f.components.data.:(1)), @name(g.components.data.:(1)))]]
+```
+
+## Optimizations
+
+Each entry of a `FieldMatrix` can be a `ColumnwiseBandMatrixField`, a `DiagonalMatrixRow`, or an
+`UniformScaling`.
+
+A `ColumnwiseBandMatrixField` is a `Field` with a `BandMatrixRow` at each point. It is intended
+to represent a collection of banded matrices, where there is one band matrix for each column
+of the space the `Field` is on. Beyond only storing the diagonals of the band matrix, an `entry`
+can be optimized to use less memory. Each optimized representation can be indexed equivalently to
+non optimized representation, and used in addition, subtraction, Matrix-vector multiplication,
+Matrix-matrix multiplication, `RecursiveApply`, and `FieldMatrixSolver`.
+
+For the following sections, `space` is a column space with $N_v$ levels. A column space is
+used for simplicity in this example, but the optimizations work with any space with columns.
+
+$f$ and $g$ are both `Fields` on `space` with elements of type with elements of type
+`T_f` and `T_g`. $f_i$ and $g_i$ refers to the values of $f$ and $g$ at the $ 0 < i \leq N_v$ level.
+
+$M$ is a $N_v \times N_v$ banded matrix with lower and upper bandwidth of $b_1$ and $b_2$.
+$M$ represents $\frac{\partial f}{\partial g}$, so $M_{i,j} = \frac{\partial f_i}{\partial g_j}$
+
+### `ScalingFieldMatrixEntry` Optimization
+
+Consider the case where $b_1 = 0$ and $b_2 = 0$, i.e $M$ is a diagonal matrix, and
+where $M = k * I$, and $k$ is of type `T_k`. This would happen if
+$\frac{\partial f_i}{\partial g_j} = [i=j] * k$. Instead of storing
+each element on the diagonal, less memory can be used by storing a single value that represents a scaling of the identity. This reduces memory usage by a factor of $N_v$.
+
+```julia
+entry = fill(DiagonalMatrixRow(k), space)
+```
+
+can also be represented by
+
+```julia
+entry = DiagonalMatrixRow(k)
+```
+
+or, if `T_k` is a scalar, then
+
+```julia
+entry = I * k
+```
+
+### Implicit Tensor Structure Optimization
+
+The functions that index an entry with an internal key assume the implicit tensor structure optimization is being used
+when all of the following are true for `entry` where `T_k` is the element type of each band, and
+`(internal_key_1, internal_key_2)` is the internal key indexing `entry`.
+
+- the first key in the `internal_key_1` name chain is not a fieldname of `T_k`
+- the first key in the `internal_key_2` name chain is not a fieldname of `T_k`
+- `internal_key_1` and `internal_key_2` are both not empty
+
+For most use cases, `T_k` is a scalar.
+
+If the above conditions are met, the optimization assumes that the user intends the
+entry to have an implicit tensor structure, with the values of type `T_k` representing a scaling of the
+tensor identity. If both the first and second name in the name pair are equivalent, then they index onto the diagonal,
+and the value is returned. Otherwise, they index off the diagonal, and a zero value
+is returned.
+
+This optimization is intended to be used when `T_f = T_g`, and they are both `AxisVectors`
+The notation $f_{n}[i]$ where $ 0 < n \leq N_v$  refers to the $i$ component of the element
+at the $n$ vertical level of $f$. In the following example, `T_f=T_g=Covariant12Vector`, and
+$b_1 = b_2 = 1$, and
+
+```math
+\frac{\partial f_n[i]}{\partial g_m[j]} = \begin{cases}
+  -0.5, & \text{if } i = j \text{ and }  m = n-1 \text{ or } m = n+1 \\
+  1, & \text{if } i = j \text{ and } m = n \\
+  0, & \text{if } i \neq j \text{ or } m < n -1 \text{ or } m > n +1
+\end{cases}
+```
+
+The non-zero values of each row of `M` are equivalent in this example, but they can also vary in value.
+
+```julia
+∂f_∂g = fill(MatrixFields.TridiagonalMatrixRow(-0.5 * identity_axis2tensor, identity_axis2tensor, -0.5 * identity_axis2tensor), space)
+J = MatrixFields.FieldMatrix((@name(f), @name(g))=> ∂f_∂g)
+```
+
+`∂f_∂g` can be indexed into to get the partial derrivatives of individual components.
+
+
+```@example 2
+J[(@name(f.components.data.:(1)), @name(g.components.data.:(1)))]
 ```
 
 ```@example 2
-J[[(@name(f.components.data.:(2)), @name(g.components.data.:(1)))]]
+J[(@name(f.components.data.:(2)), @name(g.components.data.:(1)))]
 ```
 
-The above example indexes into $\frac{\partial f_n[1]}{\partial g_n[1]}$ where $ 0 < n \leq N_v$
-
-The entry can
-also be represeted with a single `DiagonalMatrixRow`, as follows:
+This can be more optimally with the implicit tensor structure:
 
 ```@example 2
-∂f_∂g_optimized = MatrixFields.DiagonalMatrixRow(k * identity_axis2tensor)
+∂f_∂g = fill(MatrixFields.TridiagonalMatrixRow(-0.5, 1.0, -0.5), space) # hide
+J = MatrixFields.FieldMatrix((@name(f), @name(g))=> ∂f_∂g) # hide
 ```
 
-`∂f_∂g_optimized` is a single `DiagonalMatrixRow`, which represents a diagonal matrix with the
-same tensor along the diagonal. In this case, that tensor is $k$ multiplied by the identity matrix, and that can be
-represented with `k * I` as follows
-
-```@example 2
-∂f_∂g_more_optimized = MatrixFields.DiagonalMatrixRow(k * identity_axis2tensor)
-```
-
-Individual components of `∂f_∂g_optimized` can be indexed in the same way as `∂f_∂g`.
-
-```@example 2
-J_unoptimized = MatrixFields.FieldMatrix((@name(f), @name(g)) => ∂f_∂g)
-J_unoptimized[(@name(f.components.data.:(1)), @name(g.components.data.:(1)))]
+```julia
+∂f_∂g = fill(MatrixFields.TridiagonalMatrixRow(-0.5, 1.0, -0.5), space)
+J = MatrixFields.FieldMatrix((@name(f), @name(g))=> ∂f_∂g)
 ```
 
 ```@example 2
-J_more_optimized = MatrixFields.FieldMatrix((@name(f), @name(g)) => ∂f_∂g_optimized)
-J_more_optimized[(@name(f.components.data.:(1)), @name(g.components.data.:(1)))]
+J[(@name(f.components.data.:(1)), @name(g.components.data.:(1)))]
 ```
 
 ```@example 2
-J_more_optimized[(@name(f.components.data.:(1)), @name(g.components.data.:(2)))]
+Base.Broadcast.materialize(J[(@name(f.components.data.:(2)), @name(g.components.data.:(1)))])
 ```
 
-`∂f_∂g` stores $2 * 2 * N_v$ floats in memory, `∂f_∂g_optimized` stores `$2*2$ floats, and
-`∂f_∂g_more_optimized` stores only one float.
+If it is the case that
 
-#### Vertically Varying Case
-
-The implicit tensor optimization can also be used when
-$\frac{\partial f_n[i]}{\partial g_n[j]} = [i = j] * h(f_n, g_n)$.
-
-In this case, a full `ColumnWiseBandMatrixField` must be used.
-
-```@example 2
-∂f_∂g_optimized = map(x -> MatrixFields.DiagonalMatrixRow(rand(Float64)), ∂f_∂g)
+```math
+\frac{\partial f_n[i]}{\partial g_m[j]} = \begin{cases}
+  k, & \text{if } i = j \text{ and } m = n \\
+  0, & \text{if } i \neq j \text{ or } m \neq n
+\end{cases}
 ```
 
-```@example 2
-J_optimized = MatrixFields.FieldMatrix((@name(f), @name(g)) => ∂f_∂g_optimized)
-J_optimized[(@name(f.components.data.:(1)), @name(g.components.data.:(1)))]
+where $k$ is a constant scalar, both the implicit tensor structure optimization and
+`ScalingFieldMatrixEntry` optimization can be applied:
+
+```julia
+∂f_∂g = fill(MatrixFields.DiagonalMatrixRow(k), space)
 ```
 
-```@example 2
-Base.Broadcast.materialize(J_optimized[(@name(f.components.data.:(2)), @name(g.components.data.:(1)))])
-```
+can equivalently be represented with
 
-#### bandwidth > 1 case
-
-The implicit tensor optimization can also be used when
-$\frac{\partial f_n[i]}{\partial g[j]} = [i = j] * h(f_n, g_{n-k_1}, ..., g_{n+k_2})$ where
-$b_1$ and $b_2$ are the lower and upper bandwidth. Say $b_1 = b_2 = 1$. Then
-
-```@example 2
-∂f_∂g_optimized = map(x -> MatrixFields.TridiagonalMatrixRow(rand(Float64), rand(Float64), rand(Float64)), ∂f_∂g)
-```
-
-```@example 2
-J_optimized = MatrixFields.FieldMatrix((@name(f), @name(g)) => ∂f_∂g_optimized)
-J_optimized[(@name(f.components.data.:(1)), @name(g.components.data.:(1)))]
-```
-
-```@example 2
-Base.Broadcast.materialize(J_optimized[(@name(f.components.data.:(2)), @name(g.components.data.:(1)))])
+```julia
+∂f_∂g = MatrixFields.DiagonalMatrixRow(k)
 ```
