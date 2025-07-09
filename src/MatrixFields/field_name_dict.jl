@@ -139,7 +139,7 @@ function Base.getindex(dict::FieldNameDict, key)
     key′, entry′ =
         unrolled_filter(pair -> is_child_value(key, pair[1]), pairs(dict))[1]
     internal_key = get_internal_key(key, key′)
-    return get_internal_entry(entry′, internal_key, KeyError(key))
+    return get_internal_entry(entry′, internal_key)
 end
 
 get_internal_key(child_name::FieldName, name::FieldName) =
@@ -148,46 +148,143 @@ get_internal_key(child_name_pair::FieldNamePair, name_pair::FieldNamePair) = (
     extract_internal_name(child_name_pair[1], name_pair[1]),
     extract_internal_name(child_name_pair[2], name_pair[2]),
 )
+"""
+    get_internal_entry(entry, name::FieldName)
 
-get_internal_entry(entry, name::FieldName, key_error) = get_field(entry, name)
-get_internal_entry(entry, name_pair::FieldNamePair, key_error) =
-    name_pair == (@name(), @name()) ? entry : throw(key_error)
-get_internal_entry(
-    entry::ScalingFieldMatrixEntry,
+Returns the field indexed to by `name` from `entry`
+"""
+get_internal_entry(entry, name::FieldName) = get_field(entry, name)
+# call get_internal_entry on scaling value, and rebuild entry container
+"""
+    get_internal_entry(entry, name_pair::FieldNamePair)
+
+Returns the field indexed to by `name_pair` from `entry`. Indexing behavior is described
+in the MatrixFields section of the documentation. If `entry` is a `ColumnwiseBandMatrixField`,
+and the field indexed to by `name_pair` is not a field of scalars, a broadcasted object
+is returned. This also happens when indexing off diagonal with the implicit tensor structure
+optimization (see MatrixFields documentation).
+"""
+get_internal_entry(entry::UniformScaling, name_pair::FieldNamePair) =
+    UniformScaling(get_internal_entry(scaling_value(entry), name_pair))
+get_internal_entry(entry::DiagonalMatrixRow, name_pair::FieldNamePair) =
+    DiagonalMatrixRow(get_internal_entry(scaling_value(entry), name_pair))
+get_internal_entry(entry, name_pair) =
+    get_internal_entry(entry, name_pair, name_pair)
+# get_internal_entry to be used on the values held inside a `BandMatrixRow`
+function get_internal_entry(
+    entry::T,
     name_pair::FieldNamePair,
-    key_error,
-) =
-    if name_pair[1] == name_pair[2]
-        entry
-    elseif is_overlapping_name(name_pair[1], name_pair[2])
-        throw(key_error)
+    full_key::FieldNamePair,
+) where {T}
+    if name_pair == (@name(), @name())
+        return entry
+    elseif T <: Geometry.Axis2Tensor &&
+           all(n -> is_child_name(n, @name(components.data)), name_pair)
+        # two indices needed to index into a 2d tensor (one can be Colon())
+        internal_row_name =
+            extract_internal_name(name_pair[1], @name(components.data))
+        internal_col_name =
+            extract_internal_name(name_pair[2], @name(components.data))
+        row_index = extract_first(internal_row_name)
+        col_index = extract_first(internal_col_name)
+        return get_internal_entry(
+            entry[row_index, col_index],
+            (drop_first(internal_row_name), drop_first(internal_col_name)),
+            full_key,
+        )
+    elseif T <: Geometry.Axis2Tensor && # slicing a 2d tensor
+           is_child_name(name_pair[1], @name(components.data))
+        internal_row_name =
+            extract_internal_name(name_pair[1], @name(components.data))
+        return get_internal_entry(
+            entry[extract_first(internal_row_name), :],
+            (drop_first(internal_row_name), name_pair[2]),
+            full_key,
+        )
+    elseif T <: Geometry.Axis2Tensor && # slicing a 2d tensor
+           is_child_name(name_pair[2], @name(components.data))
+        internal_col_name =
+            extract_internal_name(name_pair[2], @name(components.data))
+        return get_internal_entry(
+            entry[:, extract_first(internal_col_name)],
+            (name_pair[1], drop_first(internal_col_name)),
+            full_key,
+        )
+    elseif T <: Geometry.AdjointAxisVector # bypass parent for adjoint vectors
+        return get_internal_entry(getfield(entry, :parent), name_pair, full_key)
+    elseif name_pair[1] != @name() &&
+           extract_first(name_pair[1]) in fieldnames(T)
+        return get_internal_entry(
+            getfield(entry, extract_first(name_pair[1])),
+            (drop_first(name_pair[1]), name_pair[2]),
+            full_key,
+        )
+    elseif name_pair[2] != @name() &&
+           extract_first(name_pair[2]) in fieldnames(T)
+        return get_internal_entry(
+            getfield(entry, extract_first(name_pair[2])),
+            (name_pair[1], drop_first(name_pair[2])),
+            full_key,
+        )
+    elseif !any(isequal(@name()), name_pair) # implicit tensor structure
+        return get_internal_entry(
+            extract_first(name_pair[1]) == extract_first(name_pair[2]) ? entry :
+            zero(entry),
+            (drop_first(name_pair[1]), drop_first(name_pair[2])),
+            full_key,
+        )
     else
-        zero(entry)
+        throw(KeyError(full_key))
     end
+end
 function get_internal_entry(
     entry::ColumnwiseBandMatrixField,
     name_pair::FieldNamePair,
-    key_error,
 )
-    # Ensure compatibility with RecursiveApply (i.e., with rmul).
-    # See note above matrix_product_keys in field_name_set.jl for more details.
-    T = eltype(eltype(entry))
-    if name_pair == (@name(), @name())
-        entry
-    elseif name_pair[1] == name_pair[2]
-        # multiplication case 3 or 4, first argument
-        @assert T <: Geometry.SingleValue &&
-                !broadcasted_has_field(T, name_pair[1])
-        entry
-    elseif name_pair[2] == @name() && broadcasted_has_field(T, name_pair[1])
-        # multiplication case 2 or 4, second argument
-        Base.broadcasted(entry) do matrix_row
+    name_pair == (@name(), @name()) && return entry
+    S = eltype(eltype(entry))
+    T = eltype(parent(entry))
+    (start_offset, target_type, index_method) =
+        field_offset_and_type(name_pair, T, S, name_pair)
+    if isa(index_method, Val{:view})
+        @assert target_type <: T
+        band_element_size = DataLayouts.typesize(T, S)
+        singleton_datalayout = DataLayouts.singleton(Fields.field_values(entry))
+        scalar_band_type =
+            band_matrix_row_type(outer_diagonals(eltype(entry))..., target_type)
+        field_dim_size = DataLayouts.ncomponents(Fields.field_values(entry))
+        parent_indices = DataLayouts.to_data_specific_field(
+            singleton_datalayout,
+            (:, :, (start_offset + 1):band_element_size:field_dim_size, :, :),
+        )
+        scalar_data = view(parent(entry), parent_indices...)
+        values = DataLayouts.union_all(singleton_datalayout){
+            scalar_band_type,
+            Base.tail(DataLayouts.type_params(Fields.field_values(entry)))...,
+        }(
+            scalar_data,
+        )
+        return Fields.Field(values, axes(entry))
+    elseif isa(index_method, Val{:broadcasted_zero})
+        # implicit tensor structure optimization, off diagonal
+        zero_value = zero(target_type)
+        return Base.broadcasted(entry) do matrix_row
+            map(x -> zero_value, matrix_row)
+        end
+    elseif target_type == S && isa(index_method, Val{:view_of_blocks})
+        return entry
+    else # fallback to broadcasted indexing on each element, currently no support for view_of_blocks
+        return Base.broadcasted(entry) do matrix_row
             map(matrix_row) do matrix_row_entry
-                broadcasted_get_field(matrix_row_entry, name_pair[1])
+                get_internal_entry(matrix_row_entry, name_pair)
             end
-        end # Note: This assumes that the entry is in a FieldMatrixBroadcasted.
-    else
-        throw(key_error)
+        end
+    end
+end
+if hasfield(Method, :recursion_relation)
+    dont_limit = (args...) -> true
+    for m in methods(get_internal_entry)
+        m.recursion_relation = dont_limit
     end
 end
 
@@ -235,6 +332,251 @@ function Base.one(matrix::FieldMatrix)
         end
     end
     return FieldNameDict(inferred_diagonal_keys, entries)
+end
+
+"""
+    field_offset_and_type(name_pair::FieldNamePair, ::Type{T}, ::Type{S}, full_key::FieldNamePair)
+
+Returns the offset of the field with name `name_pair` in an object of type `S` in
+multiples of `sizeof(T)`, the type of the field with name `name_pair`, and a `Val` indicating
+what method can index a ClimaCore `Field` of `S` with `name_pair`.
+
+The third return value is one of the following:
+- `Val(:view)`: indexing with a view is possible
+-  `Val(:view_of_blocks)`: indexing with a view of blocks is possible (this is not implemented)
+- `Val(:broadcasted_fallback)`: indexing with a view is not possible
+- `Val(:broadcasted_zero)`: indexing with a view is not possible, and the `name_pair` indexes
+off diagonal with implicit tensor structure optimization (see MatrixFields docs)
+
+When `S` is a `Geometry.Axis2Tensor`, and the name pair indexes to a slice of
+the tensor, an offset of `-1` is returned . In other words, the name pair cannot index into a slice.
+
+If neither element of `name_pair` is `@name()`, the first name in the pair is indexed with
+first, and then the second name is used to index the result of the first.
+
+This is an internal funtion designed to be used with `get_internal_entry(::ColumnwiseBandMatrixField)`
+"""
+function field_offset_and_type(
+    name_pair::FieldNamePair,
+    ::Type{T},
+    ::Type{S},
+    full_key::FieldNamePair,
+) where {S, T}
+    if name_pair == (@name(), @name()) # recursion base case
+        # if S <: T, then its possible to construct a strided view in the indexing function
+        return (0, S, S <: T ? Val(:view) : Val(:view_of_blocks))
+    elseif S <: Geometry.Axis2Tensor &&
+           any(n -> is_child_name(n, @name(components.data)), name_pair) # special case to calculate index
+        all(n -> is_child_name(n, @name(components.data)), name_pair) ||
+            return (0, S, Val{:broadcasted_fallback}())
+        internal_row_name =
+            extract_internal_name(name_pair[1], @name(components.data))
+        internal_col_name =
+            extract_internal_name(name_pair[2], @name(components.data))
+        row_index = extract_first(internal_row_name)
+        col_index = extract_first(internal_col_name)
+        ((row_index isa Number) && (col_index isa Number)) ||
+            throw(KeyError(full_key))
+        (n_rows, n_cols) = map(length, axes(S))
+        (remaining_offset, end_type, index_method) = field_offset_and_type(
+            (drop_first(internal_row_name), drop_first(internal_col_name)),
+            T,
+            eltype(S),
+            full_key,
+        )
+        (row_index <= n_rows && col_index <= n_cols) ||
+            throw(KeyError(full_key))
+        return (
+            (n_rows * (col_index - 1) + row_index - 1) + remaining_offset,
+            end_type,
+            index_method,
+        )
+    elseif S <: Geometry.AdjointAxisVector # bypass adjoint because indexing parent is equivalent
+        return field_offset_and_type(name_pair, T, fieldtype(S, 1), full_key)
+    elseif name_pair[1] != @name() &&
+           extract_first(name_pair[1]) in fieldnames(S) # index with first part of name_pair[1]
+        remaining_field_chain = (drop_first(name_pair[1]), name_pair[2])
+        child_type = fieldtype(S, extract_first(name_pair[1]))
+        field_index = unrolled_filter(
+            i -> fieldname(S, i) == extract_first(name_pair[1]),
+            1:fieldcount(S),
+        )[1]
+        (remaining_offset, end_type, index_method) = field_offset_and_type(
+            remaining_field_chain,
+            T,
+            child_type,
+            full_key,
+        )
+        return (
+            DataLayouts.fieldtypeoffset(T, S, field_index) + remaining_offset,
+            end_type,
+            index_method,
+        )
+    elseif name_pair[2] != @name() &&
+           extract_first(name_pair[2]) in fieldnames(S) # index with first part of name_pair[2]
+        remaining_field_chain = name_pair[1], drop_first(name_pair[2])
+        child_type = fieldtype(S, extract_first(name_pair[2]))
+        field_index = unrolled_filter(
+            i -> fieldname(S, i) == extract_first(name_pair[2]),
+            1:fieldcount(S),
+        )[1]
+        (remaining_offset, end_type, index_method) = field_offset_and_type(
+            remaining_field_chain,
+            T,
+            child_type,
+            full_key,
+        )
+        return (
+            DataLayouts.fieldtypeoffset(T, S, field_index) + remaining_offset,
+            end_type,
+            index_method,
+        )
+    elseif !any(isequal(@name()), name_pair) # implicit tensor structure optimization
+        (remaining_offset, end_type, index_method) = field_offset_and_type(
+            (drop_first(name_pair[1]), drop_first(name_pair[2])),
+            T,
+            S,
+            full_key,
+        )
+        return (
+            remaining_offset,
+            end_type,
+            extract_first(name_pair[1]) == extract_first(name_pair[2]) ?
+            index_method : Val(:broadcasted_zero), # zero if off diagonal
+        )
+    else
+        throw(KeyError(full_key))
+    end
+end
+if hasfield(Method, :recursion_relation)
+    dont_limit = (args...) -> true
+    for m in methods(field_offset_and_type)
+        m.recursion_relation = dont_limit
+    end
+end
+
+"""
+    get_scalar_keys(dict::FieldMatrix)
+
+Returns a `FieldMatrixKeys` object that contains the keys that result in
+a `ScalingFieldMatrixEntry{<: target_type}` or a `ColumnwiseBandMatrixField` with bands of
+eltype `<: target_type` when indexing `dict`. `target_type` is determined by the eltype of the
+parent of the first entry in `dict` that is a `Fields.Field`. If no such entry
+is found, `target_type` defaults to `Number`.
+"""
+function get_scalar_keys(dict::FieldMatrix)
+    first_field_idx = unrolled_findfirst(x -> x isa Fields.Field, dict.entries)
+    target_type = Val(
+        isnothing(first_field_idx) ? Number :
+        eltype(parent(dict.entries[first_field_idx])),
+    )
+    keys_tuple = unrolled_flatmap(keys(dict).values) do outer_key
+        unrolled_map(
+            get_scalar_keys(eltype(dict[outer_key]), target_type),
+        ) do inner_key
+            (
+                append_internal_name(outer_key[1], inner_key[1]),
+                append_internal_name(outer_key[2], inner_key[2]),
+            )
+        end
+    end
+    return FieldMatrixKeys(keys_tuple, dict.keys.name_tree)
+end
+
+"""
+    get_scalar_keys(T::Type, ::Val{FT})
+
+Returns a tuple of `FieldNamePair` objects that correspond to any children
+of `T` that are of type `<: FT`.
+"""
+function get_scalar_keys(::Type{T}, ::Val{FT}) where {T, FT}
+    if T <: FT
+        return ((@name(), @name()),)
+    elseif T <: BandMatrixRow
+        return get_scalar_keys(eltype(T), Val(FT))
+    elseif T <: Geometry.Axis2Tensor
+        return unrolled_flatmap(1:length(axes(T)[1])) do row_component
+            unrolled_map(1:length(axes(T)[2])) do col_component
+                append_internal_name.(
+                    Ref(@name(components.data)),
+                    (FieldName(row_component), FieldName(col_component)),
+                )
+            end
+        end
+    elseif T <: Geometry.AdjointAxisVector
+        return unrolled_map(
+            get_scalar_keys(fieldtype(T, :parent), Val(FT)),
+        ) do inner_key
+            (inner_key[2], inner_key[1]) # assumes that adjoints only appear with d/dvec
+        end
+    elseif T <: Geometry.AxisVector # special case to avoid recursing into the axis field
+        return unrolled_map(
+            get_scalar_keys(fieldtype(T, :components), Val(FT)),
+        ) do inner_key
+            (
+                append_internal_name(@name(components), inner_key[1]),
+                inner_key[2],
+            )
+        end
+    else
+        return unrolled_flatmap(fieldnames(T)) do inner_name
+            unrolled_map(
+                get_scalar_keys(fieldtype(T, inner_name), Val(FT)),
+            ) do inner_key
+                (
+                    append_internal_name(FieldName(inner_name), inner_key[1]),
+                    inner_key[2],
+                )
+            end
+        end
+    end
+end
+if hasfield(Method, :recursion_relation)
+    dont_limit = (args...) -> true
+    for m in methods(get_scalar_keys)
+        m.recursion_relation = dont_limit
+    end
+end
+
+
+"""
+    scalar_field_matrix(field_matrix::FieldMatrix)
+
+Constructs a `FieldNameDict` where the keys and entries are views
+of the entries of `field_matrix`, which corresponding to the
+`FT` typed components of entries of `field_matrix`.
+
+# Example usage
+```julia
+e¹² = Geometry.Covariant12Vector(1.6, 0.7)
+e₃ = Geometry.Contravariant3Vector(1.0)
+e³ = Geometry.Covariant3Vector(1)
+ᶜᶜmat3 = fill(TridiagonalMatrixRow(2.0, 3.2, 2.1), center_space)
+ᶜᶠmat2 = fill(BidiagonalMatrixRow(4.3, 1.7), center_space)
+ᶜᶜmat3_uₕ_scalar = ᶜᶜmat3 .* (e¹²,)
+ρχ_unit = (;ρq_liq = 1.0, ρq_ice = 1.0)
+ᶜᶠmat2_ρχ_u₃ = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit ⊠ e₃')), ᶜᶠmat2)
+
+A = MatrixFields.FieldMatrix(
+    (@name(c.ρχ), @name(f.u₃)) => ᶜᶠmat2_ρχ_u₃,
+    (@name(c.uₕ), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3_uₕ_scalar,
+)
+
+A_scalar = MatrixFields.scalar_field_matrix(A)
+keys(A_scalar)
+# Output:
+# (@name(c.ρχ.ρq_liq), @name(f.u₃.:(1)))
+# (@name(c.ρχ.ρq_ice), @name(f.u₃.:(1)))
+# (@name(c.uₕ.:(1)), @name(c.sgsʲs.:(1).ρa))
+# (@name(c.uₕ.:(2)), @name(c.sgsʲs.:(1).ρa))
+```
+"""
+function scalar_field_matrix(field_matrix::FieldMatrix)
+    scalar_keys = get_scalar_keys(field_matrix)
+    entries = unrolled_map(scalar_keys.values) do key
+        field_matrix[key]
+    end
+    return FieldNameDict(scalar_keys, entries)
 end
 
 replace_name_tree(dict::FieldNameDict, name_tree) =
@@ -546,8 +888,8 @@ function Base.Broadcast.broadcasted(
             )
                 product_value = scaling_value(entry1) * scaling_value(entry2)
                 product_value isa Number ?
-                UniformScaling(product_value) :
-                DiagonalMatrixRow(product_value)
+                (UniformScaling(product_value),) :
+                (DiagonalMatrixRow(product_value),)
             elseif entry1 isa ScalingFieldMatrixEntry
                 Base.Broadcast.broadcasted(*, (scaling_value(entry1),), entry2)
             elseif entry2 isa ScalingFieldMatrixEntry

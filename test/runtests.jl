@@ -89,6 +89,7 @@ UnitTest("MatrixFields - non-scalar broadcasting (3)" ,"MatrixFields/matrix_fiel
 UnitTest("MatrixFields - non-scalar broadcasting (4)" ,"MatrixFields/matrix_fields_broadcasting/test_non_scalar_4.jl"),
 UnitTest("MatrixFields - non-scalar broadcasting (5)" ,"MatrixFields/matrix_fields_broadcasting/test_non_scalar_5.jl"),
 UnitTest("MatrixFields - flat spaces" ,"MatrixFields/flat_spaces.jl"),
+UnitTest("MatrixFields - indexing"                    ,"MatrixFields/field_matrix_indexing.jl"),
 # UnitTest("MatrixFields - operator matrices"        ,"MatrixFields/operator_matrices.jl"), # too long
 # UnitTest("MatrixFields - field matrix solvers"     ,"MatrixFields/field_matrix_solvers.jl"), # too long
 UnitTest("Hypsography - 2d"                        ,"Hypsography/2d.jl"),
