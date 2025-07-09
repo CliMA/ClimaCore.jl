@@ -278,7 +278,7 @@ and the value is returned. Otherwise, they index off the diagonal, and a zero va
 is returned.
 
 This optimization is intended to be used when `T_f = T_g`, and they are both `AxisVectors`
-The notation $f_{n}[i]$ where $ 0 < n \leq N_v$  refers to the $i$ component of the element
+The notation $f_{n}[i]$ where $0 < n \leq N_v$  refers to the $i$ component of the element
 at the $n$ vertical level of $f$. In the following example, `T_f=T_g=Covariant12Vector`, and
 $b_1 = b_2 = 1$, and
 
@@ -308,7 +308,7 @@ J[(@name(f.components.data.:(1)), @name(g.components.data.:(1)))]
 J[(@name(f.components.data.:(2)), @name(g.components.data.:(1)))]
 ```
 
-This can be more optimally with the implicit tensor structure:
+This can be more optimally stored with the implicit tensor structure optimization:
 
 ```@example 2
 ∂f_∂g = fill(MatrixFields.TridiagonalMatrixRow(-0.5, 1.0, -0.5), space) # hide
@@ -338,7 +338,7 @@ If it is the case that
 ```
 
 where $k$ is a constant scalar, both the implicit tensor structure optimization and
-`ScalingFieldMatrixEntry` optimization can be applied:
+`ScalingFieldMatrixEntry` optimization can both be applied:
 
 ```julia
 ∂f_∂g = fill(MatrixFields.DiagonalMatrixRow(k), space)
