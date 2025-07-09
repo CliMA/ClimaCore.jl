@@ -230,10 +230,10 @@ Matrix-matrix multiplication, `RecursiveApply`, and `FieldMatrixSolver`.
 For the following sections, `space` is a column space with $N_v$ levels. A column space is
 used for simplicity in this example, but the optimizations work with any space with columns.
 
-$f$ and $g$ are both `Fields` on `space` with elements of type with elements of type
+Let $f$ and $g$ be `Fields` on `space` with elements of type with elements of type
 `T_f` and `T_g`. $f_i$ and $g_i$ refers to the values of $f$ and $g$ at the $ 0 < i \leq N_v$ level.
 
-$M$ is a $N_v \times N_v$ banded matrix with lower and upper bandwidth of $b_1$ and $b_2$.
+Let $M$ be a $N_v \times N_v$ banded matrix with lower and upper bandwidth of $b_1$ and $b_2$.
 $M$ represents $\frac{\partial f}{\partial g}$, so $M_{i,j} = \frac{\partial f_i}{\partial g_j}$
 
 ### `ScalingFieldMatrixEntry` Optimization
