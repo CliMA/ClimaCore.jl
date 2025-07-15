@@ -3,7 +3,7 @@ julia --project
 using Revise; include("test/Operators/finitedifference/convergence_column.jl")
 =#
 using Test
-using StaticArrays, IntervalSets, LinearAlgebra
+using Random, StaticArrays, IntervalSets, LinearAlgebra
 
 using ClimaComms
 ClimaComms.@import_required_backends
@@ -429,6 +429,7 @@ end
         center_space = Spaces.CenterFiniteDifferenceSpace(device, mesh)
         face_space = Spaces.face_space(center_space)
 
+        Random.seed!(1) # ensures reproducibility
         ᶜw = Geometry.WVector.(map(_ -> 2 * rand() - 1, ones(center_space)))
         ᶠw = Geometry.WVector.(map(_ -> 2 * rand() - 1, ones(face_space)))
 
