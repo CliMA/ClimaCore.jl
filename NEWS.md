@@ -4,6 +4,10 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.36
+-------
+- Refactor FieldMatrix indexing, add scalar_field_matrix [2346](https://github.com/CliMA/ClimaCore.jl/pull/2346)
+- Add UpwindBiasedGradient operator [2345](https://github.com/CliMA/ClimaCore.jl/pull/2345)
 
 v0.14.35
 -------
@@ -90,7 +94,7 @@ import ClimaCore.Remapping: interpolate
 array3D = interpolate(fields)
 ```
 
-`array3D` will be an 3D Array with values along the three dimensions. 
+`array3D` will be a 3D Array with values along the three dimensions.
 
 By default, no interpolation in the vertical direction is performed. Linear
 interpolation can be obtained by passing `zresolution`
