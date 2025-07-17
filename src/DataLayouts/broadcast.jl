@@ -23,7 +23,8 @@ DataStyle(::Type{VF{S, Nv, A}}) where {S, Nv, A} =
 DataColumnStyle(::Type{VFStyle{Nv, A}}) where {Nv, A} = VFStyle{Nv, A}
 Data0DStyle(::Type{VFStyle{Nv, A}}) where {Nv, A} = DataFStyle{A}
 
-abstract type Data1DStyle{Ni} <: DataStyle end
+abstract type DataLevelStyle <: DataStyle end
+abstract type Data1DStyle{Ni} <: DataLevelStyle end
 struct IFHStyle{Ni, A} <: Data1DStyle{Ni} end
 DataStyle(::Type{IFH{S, Ni, A}}) where {S, Ni, A} =
     IFHStyle{Ni, parent_array_type(A)}()
@@ -33,7 +34,7 @@ DataStyle(::Type{IHF{S, Ni, A}}) where {S, Ni, A} =
     IHFStyle{Ni, parent_array_type(A)}()
 Data0DStyle(::Type{IHFStyle{Ni, A}}) where {Ni, A} = DataFStyle{A}
 
-abstract type DataSlab1DStyle{Ni} <: DataStyle end
+abstract type DataSlab1DStyle{Ni} <: DataLevelStyle end
 DataSlab1DStyle(::Type{IFHStyle{Ni, A}}) where {Ni, A} = IFStyle{Ni, A}
 DataSlab1DStyle(::Type{IHFStyle{Ni, A}}) where {Ni, A} = IFStyle{Ni, A}
 
@@ -42,13 +43,13 @@ DataStyle(::Type{IF{S, Ni, A}}) where {S, Ni, A} =
     IFStyle{Ni, parent_array_type(A)}()
 Data0DStyle(::Type{IFStyle{Ni, A}}) where {Ni, A} = DataFStyle{A}
 
-abstract type DataSlab2DStyle{Nij} <: DataStyle end
+abstract type DataSlab2DStyle{Nij} <: DataLevelStyle end
 struct IJFStyle{Nij, A} <: DataSlab2DStyle{Nij} end
 DataStyle(::Type{IJF{S, Nij, A}}) where {S, Nij, A} =
     IJFStyle{Nij, parent_array_type(A)}()
 Data0DStyle(::Type{IJFStyle{Nij, A}}) where {Nij, A} = DataFStyle{A}
 
-abstract type Data2DStyle{Nij} <: DataStyle end
+abstract type Data2DStyle{Nij} <: DataLevelStyle end
 struct IJFHStyle{Nij, A} <: Data2DStyle{Nij} end
 DataStyle(::Type{IJFH{S, Nij, A}}) where {S, Nij, A} =
     IJFHStyle{Nij, parent_array_type(A)}()
@@ -67,6 +68,7 @@ DataStyle(::Type{VIFH{S, Nv, Ni, A}}) where {S, Nv, Ni, A} =
     VIFHStyle{Nv, Ni, parent_array_type(A)}()
 Data1DXStyle(::Type{VIFHStyle{Nv, Ni, A}}) where {Ni, Nv, A} =
     VIFHStyle{Nv, Ni, A}
+DataLevelStyle(::Type{VIFHStyle{Nv, Ni, A}}) where {Ni, Nv, A} = IFHStyle{Ni, A}
 DataColumnStyle(::Type{VIFHStyle{Nv, Ni, A}}) where {Ni, Nv, A} = VFStyle{Nv, A}
 DataSlab1DStyle(::Type{VIFHStyle{Nv, Ni, A}}) where {Ni, Nv, A} = IFStyle{Ni, A}
 Data0DStyle(::Type{VIFHStyle{Nv, Ni, A}}) where {Nv, Ni, A} = DataFStyle{A}
@@ -76,6 +78,7 @@ DataStyle(::Type{VIHF{S, Nv, Ni, A}}) where {S, Nv, Ni, A} =
     VIHFStyle{Nv, Ni, parent_array_type(A)}()
 Data1DXStyle(::Type{VIHFStyle{Nv, Ni, A}}) where {Ni, Nv, A} =
     VIHFStyle{Nv, Ni, A}
+DataLevelStyle(::Type{VIHFStyle{Nv, Ni, A}}) where {Ni, Nv, A} = IHFStyle{Ni, A}
 DataColumnStyle(::Type{VIHFStyle{Nv, Ni, A}}) where {Ni, Nv, A} = VFStyle{Nv, A}
 DataSlab1DStyle(::Type{VIHFStyle{Nv, Ni, A}}) where {Ni, Nv, A} = IFStyle{Ni, A}
 Data0DStyle(::Type{VIHFStyle{Nv, Ni, A}}) where {Nv, Ni, A} = DataFStyle{A}
@@ -86,6 +89,8 @@ DataStyle(::Type{VIJFH{S, Nv, Nij, A}}) where {S, Nv, Nij, A} =
     VIJFHStyle{Nv, Nij, parent_array_type(A)}()
 Data2DXStyle(::Type{VIJFHStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
     VIJFHStyle{Nv, Nij, A}
+DataLevelStyle(::Type{VIJFHStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
+    IJFHStyle{Nij, A}
 DataColumnStyle(::Type{VIJFHStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
     VFStyle{Nv, A}
 DataSlab2DStyle(::Type{VIJFHStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
@@ -97,21 +102,18 @@ DataStyle(::Type{VIJHF{S, Nv, Nij, A}}) where {S, Nv, Nij, A} =
     VIJHFStyle{Nv, Nij, parent_array_type(A)}()
 Data2DXStyle(::Type{VIJHFStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
     VIJHFStyle{Nv, Nij, A}
+DataLevelStyle(::Type{VIJHFStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
+    IJHFStyle{Nij, A}
 DataColumnStyle(::Type{VIJHFStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
     VFStyle{Nv, A}
 DataSlab2DStyle(::Type{VIJHFStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
     IJFStyle{Nij, A}
 Data0DStyle(::Type{VIJHFStyle{Nv, Nij, A}}) where {Nv, Nij, A} = DataFStyle{A}
 
-const HorizontalDataStyle = Union{
-    Data1DStyle,
-    Data2DStyle,
-    DataSlab1DStyle,
-    DataSlab2DStyle,
-    Data1DXStyle,
-    Data2DXStyle,
-}
-DataColumnStyle(::Type{Style}) where {Style <: HorizontalDataStyle} =
+DataLevelStyle(::Type{Style}) where {Style <: DataLevelStyle} = Style
+DataLevelStyle(::Type{Style}) where {Style <: DataColumnStyle} =
+    Data0DStyle(Style)
+DataColumnStyle(::Type{Style}) where {Style <: DataLevelStyle} =
     Data0DStyle(Style)
 DataSlabStyle(::Type{Style}) where {Style <: Union{Data1DStyle, Data1DXStyle}} =
     DataSlab1DStyle(Style)
@@ -372,6 +374,23 @@ Base.@propagate_inbounds function slab(
     _args = slab_args(bc.args, inds...)
     _axes = (SOneTo(Nij), SOneTo(Nij))
     Base.Broadcast.Broadcasted{DataSlab2DStyle(DS)}(bc.f, _args, _axes)
+end
+
+Base.@propagate_inbounds function level(
+    bc::Base.Broadcast.Broadcasted{DS},
+    inds...,
+) where {DS <: DataStyle}
+    _args = level_args(bc.args, inds...)
+    _axes = nothing
+    bcc = Base.Broadcast.Broadcasted{DataLevelStyle(DS)}(bc.f, _args, _axes)
+    Base.Broadcast.instantiate(bcc)
+end
+
+@inline function level(
+    bc::Base.Broadcast.Broadcasted{DS},
+    inds...,
+) where {DS <: DataLevelStyle}
+    bc
 end
 
 Base.@propagate_inbounds function column(

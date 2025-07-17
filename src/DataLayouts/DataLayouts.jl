@@ -71,7 +71,7 @@ import Adapt
 
 import ..Utilities: PlusHalf, unionall_type
 import ..DebugOnly: call_post_op_callback, post_op_callback
-import ..slab, ..slab_args, ..column, ..column_args, ..level
+import ..slab, ..slab_args, ..column, ..column_args, ..level, ..level_args
 export slab,
     column,
     level,
@@ -315,6 +315,9 @@ end
 Base.parent(data::AbstractData) = getfield(data, :array)
 
 Base.similar(data::AbstractData{S}) where {S} = similar(data, S)
+
+@inline Base.:(==)(data1::D, data2::D) where {D <: AbstractData} =
+    parent(data1) == parent(data2)
 
 @inline function ncomponents(data::AbstractData{S}) where {S}
     typesize(eltype(parent(data)), S)
