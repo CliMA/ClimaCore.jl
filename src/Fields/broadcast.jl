@@ -17,6 +17,8 @@ struct FieldStyle{DS <: DataStyle} <: AbstractFieldStyle end
 FieldStyle(::DS) where {DS <: DataStyle} = FieldStyle{DS}()
 FieldStyle(x::Base.Broadcast.Unknown) = x
 
+FieldLevelStyle(::Type{S}) where {DS, S <: FieldStyle{DS}} =
+    FieldStyle{DataLayouts.DataLevelStyle(DS)}
 FieldColumnStyle(::Type{S}) where {DS, S <: FieldStyle{DS}} =
     FieldStyle{DataLayouts.DataColumnStyle(DS)}
 FieldSlabStyle(::Type{S}) where {DS, S <: FieldStyle{DS}} =
@@ -136,6 +138,26 @@ Base.@propagate_inbounds function slab(
     DataLayouts.NonExtrudedBroadcasted{_Style}(bc.f, _args, _axes)
 end
 
+Base.@propagate_inbounds function level(
+    bc::Base.Broadcast.Broadcasted{Style},
+    inds...,
+) where {Style <: AbstractFieldStyle}
+    _Style = FieldLevelStyle(Style)
+    _args = level_args(bc.args, inds...)
+    _axes = level(axes(bc), inds...)
+    Base.Broadcast.Broadcasted{_Style}(bc.f, _args, _axes)
+end
+
+Base.@propagate_inbounds function level(
+    bc::DataLayouts.NonExtrudedBroadcasted{Style},
+    inds...,
+) where {Style <: AbstractFieldStyle}
+    _Style = FieldLevelStyle(Style)
+    _args = level_args(bc.args, inds...)
+    _axes = level(axes(bc), inds...)
+    DataLayouts.NonExtrudedBroadcasted{_Style}(bc.f, _args, _axes)
+end
+
 Base.@propagate_inbounds function column(
     bc::Base.Broadcast.Broadcasted{Style},
     inds...,
@@ -182,6 +204,8 @@ function todata(bc::DataLayouts.NonExtrudedBroadcasted{Style}) where {Style}
     _args = _todata_args(bc.args)
     DataLayouts.NonExtrudedBroadcasted{Style}(bc.f, _args)
 end
+
+field_values(bc::Base.AbstractBroadcasted) = todata(bc)
 
 # same logic as Base.Broadcast.Broadcasted (which only defines it for Tuples)
 Base.axes(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =

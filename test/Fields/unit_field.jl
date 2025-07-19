@@ -662,6 +662,33 @@ end
     end
 end
 
+@testset "Lazy Field broadcasts" begin
+    FT = Float64
+    for space in TU.all_spaces(FT)
+        field = fill((; x = FT(1)), space)
+        @test field == Base.materialize(lazy.(identity.(field)))
+        @test field .+ 1 == Base.materialize(lazy.(field .+ 1))
+        @test Fields.field_values(field .+ 1) ==
+              Base.materialize(Fields.field_values(lazy.(field .+ 1)))
+    end
+end
+
+@testset "Levels of Fields and Field broadcasts" begin
+    FT = Float64
+    for space in TU.all_spaces(FT)
+        TU.levelable(space) || continue
+        field = fill((; x = FT(1)), space)
+        level_of_field = Fields.Field(
+            Spaces.level(Fields.field_values(field), 1),
+            Spaces.level(space, TU.fc_index(1, space)),
+        )
+        @test level_of_field == Spaces.level(field, TU.fc_index(1, space))
+        @test level_of_field == Base.materialize(
+            Spaces.level(lazy.(identity.(field)), TU.fc_index(1, space)),
+        )
+    end
+end
+
 @testset "Columns of Fields and Field broadcasts" begin
     FT = Float64
     for space in TU.all_spaces(FT)

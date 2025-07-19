@@ -43,3 +43,10 @@ Base.@propagate_inbounds column_args(args::NamedTuple, inds...) =
     NamedTuple{keys(args)}(column_args(values(args), inds...))
 
 function level end
+
+Base.@propagate_inbounds level(x, inds...) = x
+Base.@propagate_inbounds level_args(args::Tuple, inds...) =
+    (level(args[1], inds...), level_args(Base.tail(args), inds...)...)
+Base.@propagate_inbounds level_args(args::Tuple{Any}, inds...) =
+    (level(args[1], inds...),)
+Base.@propagate_inbounds level_args(args::Tuple{}, inds...) = ()
