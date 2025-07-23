@@ -4,6 +4,10 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.37
+-------
+- Extend level and field_values to work with lazy Fields [2356](https://github.com/CliMA/ClimaCore.jl/pull/2356)
+
 v0.14.36
 -------
 - Refactor FieldMatrix indexing, add scalar_field_matrix [2346](https://github.com/CliMA/ClimaCore.jl/pull/2346)
