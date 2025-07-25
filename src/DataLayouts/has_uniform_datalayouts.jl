@@ -13,17 +13,10 @@ end
 
 @inline function _has_uniform_datalayouts(
     start,
-    args,
+    args::Tuple,
 )
     return UnrolledUtilities.unrolled_all(arg -> _has_uniform_datalayouts(start, arg), args)
 end
-
-# @inline function _has_uniform_datalayouts(
-#     start,
-#     bc::Base.Broadcast.Broadcasted,
-# )
-#     return UnrolledUtilities.unrolled_all(arg -> _has_uniform_datalayouts(start, arg, rargs...), bc.args)
-# end
 
 for DL in (
     :IJKFVH,
