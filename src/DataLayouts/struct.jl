@@ -17,12 +17,10 @@ Determines whether an object of type `S` can be stored in an array with elements
 of type `T` by recursively checking whether the non-empty fields of `S` can be
 stored in such an array. If `S` is empty, this is always true.
 """
-is_valid_basetype(::Type{T}, ::Type{S}) where {T, S} =
-    sizeof(S) == 0 ||
-    (fieldcount(S) > 0 && is_valid_basetype(T, fieldtypes(S)...))
+function is_valid_basetype(::Type{T}, ::Type{S}) where {T, S}
+    sizeof(S) == 0 || fieldcount(S) > 0 && UnrolledUtilities.unrolled_all(s -> is_valid_basetype(T, s), fieldtypes(S))
+end
 is_valid_basetype(::Type{T}, ::Type{<:T}) where {T} = true
-is_valid_basetype(::Type{T}, ::Type{S}, Ss...) where {T, S} =
-    is_valid_basetype(T, S) && is_valid_basetype(T, Ss...)
 
 """
     check_basetype(::Type{T}, ::Type{S})
