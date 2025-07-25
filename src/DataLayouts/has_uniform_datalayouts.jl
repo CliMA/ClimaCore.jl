@@ -1,7 +1,5 @@
 @inline function first_datalayout_in_bc(args::Tuple, rargs...)
-    x1 = first_datalayout_in_bc(args[1], rargs...)
-    x1 isa AbstractData && return x1
-    return first_datalayout_in_bc(Base.tail(args), rargs...)
+    return UnrolledUtilities.unrolled_argfirst(arg -> first_datalayout_in_bc(arg, rargs...) isa AbstractData, args)
 end
 
 @inline first_datalayout_in_bc(args::Tuple{Any}, rargs...) =
