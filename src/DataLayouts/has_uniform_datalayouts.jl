@@ -11,27 +11,20 @@ end
 @inline first_datalayout_in_bc(bc::Base.Broadcast.Broadcasted) =
     first_datalayout_in_bc(bc.args)
 
-@inline _has_uniform_datalayouts_args(truesofar, start, args::Tuple, rargs...) =
-    truesofar &&
-    _has_uniform_datalayouts(truesofar, start, args[1], rargs...) &&
-    _has_uniform_datalayouts_args(truesofar, start, Base.tail(args), rargs...)
-
-@inline _has_uniform_datalayouts_args(
-    truesofar,
-    start,
-    args::Tuple{Any},
-    rargs...,
-) = truesofar && _has_uniform_datalayouts(truesofar, start, args[1], rargs...)
-@inline _has_uniform_datalayouts_args(truesofar, _, args::Tuple{}, rargs...) =
-    truesofar
-
 @inline function _has_uniform_datalayouts(
-    truesofar,
     start,
-    bc::Base.Broadcast.Broadcasted,
+    args,
 )
-    return truesofar && _has_uniform_datalayouts_args(truesofar, start, bc.args)
+    return UnrolledUtilities.unrolled_all(arg -> _has_uniform_datalayouts(start, arg), args)
 end
+
+# @inline function _has_uniform_datalayouts(
+#     start,
+#     bc::Base.Broadcast.Broadcasted,
+# )
+#     return UnrolledUtilities.unrolled_all(arg -> _has_uniform_datalayouts(start, arg, rargs...), bc.args)
+# end
+
 for DL in (
     :IJKFVH,
     :IJFH,
@@ -48,11 +41,11 @@ for DL in (
     :VIHF,
 )
     @eval begin
-        @inline _has_uniform_datalayouts(truesofar, ::$(DL), ::$(DL)) = true
+        @inline _has_uniform_datalayouts(::$(DL), ::$(DL)) = true
     end
 end
-@inline _has_uniform_datalayouts(truesofar, _, x::AbstractData) = false
-@inline _has_uniform_datalayouts(truesofar, _, x) = truesofar
+@inline _has_uniform_datalayouts(_, x::AbstractData) = false
+@inline _has_uniform_datalayouts(_, x) = true
 
 """
     has_uniform_datalayouts
@@ -67,6 +60,6 @@ Note: a broadcasted object can have different _types_,
 function has_uniform_datalayouts end
 
 @inline has_uniform_datalayouts(bc::Base.Broadcast.Broadcasted) =
-    _has_uniform_datalayouts_args(true, first_datalayout_in_bc(bc), bc.args)
+    _has_uniform_datalayouts(first_datalayout_in_bc(bc), bc.args)
 
 @inline has_uniform_datalayouts(bc::AbstractData) = true

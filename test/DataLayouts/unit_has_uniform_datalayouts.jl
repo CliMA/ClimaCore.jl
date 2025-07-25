@@ -33,6 +33,7 @@ Random.seed!(1234)
     bc = @lazy @. data_VIFH + data_VIFH
     @test DataLayouts.has_uniform_datalayouts(bc)
     bc = @lazy @. data_IJFH + data_VF
+    @show bc
     @test !DataLayouts.has_uniform_datalayouts(bc)
 
     data_VIJFHᶜ = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
