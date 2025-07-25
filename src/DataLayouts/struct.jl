@@ -18,7 +18,11 @@ of type `T` by recursively checking whether the non-empty fields of `S` can be
 stored in such an array. If `S` is empty, this is always true.
 """
 function is_valid_basetype(::Type{T}, ::Type{S}) where {T, S}
-    sizeof(S) == 0 || fieldcount(S) > 0 && UnrolledUtilities.unrolled_all(s -> is_valid_basetype(T, s), fieldtypes(S))
+    sizeof(S) == 0 ||
+        fieldcount(S) > 0 && UnrolledUtilities.unrolled_all(
+            s -> is_valid_basetype(T, s),
+            fieldtypes(S),
+        )
 end
 is_valid_basetype(::Type{T}, ::Type{<:T}) where {T} = true
 

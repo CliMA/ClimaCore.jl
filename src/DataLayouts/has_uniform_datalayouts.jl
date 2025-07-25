@@ -1,5 +1,8 @@
 @inline function first_datalayout_in_bc(args::Tuple, rargs...)
-    return UnrolledUtilities.unrolled_argfirst(arg -> first_datalayout_in_bc(arg, rargs...) isa AbstractData, args)
+    return UnrolledUtilities.unrolled_argfirst(
+        arg -> first_datalayout_in_bc(arg, rargs...) isa AbstractData,
+        args,
+    )
 end
 
 @inline first_datalayout_in_bc(args::Tuple{Any}, rargs...) =
@@ -11,11 +14,11 @@ end
 @inline first_datalayout_in_bc(bc::Base.Broadcast.Broadcasted) =
     first_datalayout_in_bc(bc.args)
 
-@inline function _has_uniform_datalayouts(
-    start,
-    args::Tuple,
-)
-    return UnrolledUtilities.unrolled_all(arg -> _has_uniform_datalayouts(start, arg), args)
+@inline function _has_uniform_datalayouts(start, args::Tuple)
+    return UnrolledUtilities.unrolled_all(
+        arg -> _has_uniform_datalayouts(start, arg),
+        args,
+    )
 end
 
 for DL in (
