@@ -62,8 +62,10 @@ struct SpectralElementSpace1D{G} <: AbstractSpectralElementSpace
 end
 space(grid::Grids.SpectralElementGrid1D, ::Nothing) =
     SpectralElementSpace1D(grid)
-space(grid::Grids.LevelGrid{<:Grids.ExtrudedSpectralElementGrid2D}, ::Nothing) =
-    SpectralElementSpace1D(grid)
+space(
+    grid::Grids.LevelGrid{<:Any, <:Grids.ExtrudedSpectralElementGrid2D},
+    ::Nothing,
+) = SpectralElementSpace1D(grid)
 grid(space::Spaces.SpectralElementSpace1D) = getfield(space, :grid)
 
 local_geometry_type(::Type{SpectralElementSpace1D{G}}) where {G} =
@@ -93,8 +95,10 @@ struct SpectralElementSpace2D{G} <: AbstractSpectralElementSpace
 end
 space(grid::Grids.SpectralElementGrid2D, ::Nothing) =
     SpectralElementSpace2D(grid)
-space(grid::Grids.LevelGrid{<:Grids.ExtrudedSpectralElementGrid3D}, ::Nothing) =
-    SpectralElementSpace2D(grid)
+space(
+    grid::Grids.LevelGrid{<:Any, <:Grids.ExtrudedSpectralElementGrid3D},
+    ::Nothing,
+) = SpectralElementSpace2D(grid)
 
 local_geometry_type(::Type{SpectralElementSpace2D{G}}) where {G} =
     local_geometry_type(G)
