@@ -522,6 +522,7 @@ function read_grid_new(reader, name)
         else
             level = attrs(group)["level_half"] + half
         end
+
         return Grids.LevelGrid(full_grid, level)
     else
         error("Unsupported grid type $type")

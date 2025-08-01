@@ -13,6 +13,11 @@ using ClimaCore:
     InputOutput,
     Grids
 
+@isdefined(TU) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+);
+import .TestUtilities as TU;
+
 using ClimaComms
 const comms_ctx = ClimaComms.context(ClimaComms.CPUSingleThreaded())
 pid, nprocs = ClimaComms.init(comms_ctx)
@@ -54,7 +59,7 @@ end
                 z_max / 8 .* (
                     cosd.(Fields.coordinate_field(h_space).lat) .+
                     cosd.(Fields.coordinate_field(h_space).long) .+ 1
-                )
+                ),
             )
 
         z_mesh = Meshes.IntervalMesh(z_domain, nelems = z_elem)
@@ -87,6 +92,53 @@ end
         InputOutput.HDF5Reader(filename, comms_ctx) do reader
             restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
             @test restart_Y == Y # test if restart is exact
+        end
+    end
+end
+
+
+@testset "HDF5 restart test for a Named Tuple of Levels of a 3D hybrid cubed sphere for deep" begin
+    # This I/O is used for the computation of the topographic drag
+    FT = Float32
+
+    for space in (
+        TU.CenterExtrudedFiniteDifferenceSpace(FT, context = comms_ctx),
+        TU.FaceExtrudedFiniteDifferenceSpace(FT, context = comms_ctx),
+    )
+        TU.levelable(space) || continue
+        field = fill((; x = FT(1)), space)
+
+        level_of_field = Fields.Field(
+            Spaces.level(Fields.field_values(field.x), 1),
+            Spaces.level(space, TU.fc_index(1, space)),
+        )
+
+        fake_drag = fill(
+            (;
+                t11 = FT(0.0),
+                t12 = FT(0.0),
+                t21 = FT(0.0),
+                t22 = FT(0.0),
+                hmin = FT(0.0),
+                hmax = FT(0.0),
+            ),
+            axes(level_of_field),
+        )
+
+        # write field vector to hdf5 file
+        InputOutput.HDF5Writer(filename, comms_ctx) do writer
+            InputOutput.write!(writer, fake_drag, "fake_drag")
+        end
+
+        InputOutput.HDF5Reader(filename, comms_ctx) do reader
+            restart_fake_drag = InputOutput.read_field(reader, "fake_drag") # read fieldvector from hdf5 file
+
+            # The underlying space is of a different instance, so we cannot use == to check for equivalence.
+            # Instead, we make sure that the values and types are the same.
+            @test typeof(restart_fake_drag) == typeof(fake_drag)
+            @test maximum(
+                abs.(parent(fake_drag.t21) .- parent(restart_fake_drag.t21)),
+            ) == 0.0f0
         end
     end
 end

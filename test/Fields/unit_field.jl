@@ -689,6 +689,35 @@ end
     end
 end
 
+@testset "Levels of nonlocal Fields and nonlocal Field broadcasts" begin
+    FT = Float64
+    gradh = Operators.Gradient()
+    # Todo: Make this work over all spaces; currently broken for everything else.
+    for space in (
+        TU.CenterExtrudedFiniteDifferenceSpace(FT),
+        TU.FaceExtrudedFiniteDifferenceSpace(FT),
+    )
+        TU.levelable(space) || continue
+        field = fill((; x = FT(1)), space)
+
+        op_on_level_of_field =
+            gradh.(
+                Fields.Field(
+                    Spaces.level(Fields.field_values(field.x), 1),
+                    Spaces.level(space, TU.fc_index(1, space)),
+                )
+            )
+
+        @test op_on_level_of_field ==
+              (Spaces.level(gradh.(field.x), TU.fc_index(1, space)))
+
+        @test_broken op_on_level_of_field == Base.materialize((Spaces.level(
+            lazy.(gradh.(field.x)),
+            TU.fc_index(1, space),
+        )),)
+    end
+end
+
 @testset "Columns of Fields and Field broadcasts" begin
     FT = Float64
     for space in TU.all_spaces(FT)
