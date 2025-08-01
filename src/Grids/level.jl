@@ -1,18 +1,19 @@
 struct LevelGrid{
     G <: AbstractExtrudedFiniteDifferenceGrid,
     L <: Union{Int, PlusHalf{Int}},
+    Q <: Quadratures.QuadratureStyle,
 } <: AbstractGrid
     full_grid::G
     level::L
+    quadrature_style::Q
 end
 
-quadrature_style(levelgrid::LevelGrid) =
-    quadrature_style(levelgrid.full_grid.horizontal_grid)
+quadrature_style(levelgrid::LevelGrid) = levelgrid.quadrature_style
 
 level(
     grid::AbstractExtrudedFiniteDifferenceGrid,
     level::Union{Int, PlusHalf{Int}},
-) = LevelGrid(grid, level)
+) = LevelGrid(grid, level, quadrature_style(grid))
 
 topology(levelgrid::LevelGrid) = topology(levelgrid.full_grid)
 
@@ -21,7 +22,7 @@ topology(levelgrid::LevelGrid) = topology(levelgrid.full_grid)
 # need to extract the weights at a particular level.
 dss_weights(levelgrid::LevelGrid, _) = dss_weights(levelgrid.full_grid, nothing)
 
-local_geometry_type(::Type{LevelGrid{G, L}}) where {G, L} =
+local_geometry_type(::Type{LevelGrid{G, L, Q}}) where {G, L, Q} =
     local_geometry_type(G)
 local_geometry_data(levelgrid::LevelGrid{<:Any, Int}, ::Nothing) = level(
     local_geometry_data(levelgrid.full_grid, CellCenter()),
@@ -32,11 +33,14 @@ local_geometry_data(levelgrid::LevelGrid{<:Any, PlusHalf{Int}}, ::Nothing) =
         local_geometry_data(levelgrid.full_grid, CellFace()),
         levelgrid.level + half,
     )
-global_geometry(levlgrid::LevelGrid) = global_geometry(levlgrid.full_grid)
+global_geometry(levelgrid::LevelGrid) = global_geometry(levelgrid.full_grid)
 
 ## GPU compatibility
-Adapt.adapt_structure(to, grid::LevelGrid) =
-    LevelGrid(Adapt.adapt(to, grid.full_grid), grid.level)
+Adapt.adapt_structure(to, grid::LevelGrid) = LevelGrid(
+    Adapt.adapt(to, grid.full_grid),
+    grid.level,
+    quadrature_style(grid),
+)
 
 ## aliases
 const LevelCubedSphereSpectralElementGrid2D =
