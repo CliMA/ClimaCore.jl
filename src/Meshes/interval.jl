@@ -296,7 +296,7 @@ function IntervalMesh(
         RootSolvers.SecantMethod(guess₋, guess₊),
         RootSolvers.CompactSolution(),
         RootSolvers.ResidualTolerance(FT_solve(tol)),
-        maxiters = 10_000,
+        10_000,
     )
     if h_bottom_sol.converged !== true
         error(
@@ -317,7 +317,7 @@ function IntervalMesh(
         RootSolvers.SecantMethod(guess₋, guess₊),
         RootSolvers.CompactSolution(),
         RootSolvers.ResidualTolerance(FT_solve(tol)),
-        maxiters = 10_000,
+        10_000,
     )
     if h_top_sol.converged !== true
         error(
@@ -412,7 +412,7 @@ function IntervalMesh(
         RootSolvers.NewtonsMethodAD(FT_solve(1.0)),
         RootSolvers.CompactSolution(),
         RootSolvers.ResidualTolerance(FT_solve(tol)),
-        maxiters = 10_000,
+        10_000,
     )
     if γ_sol.converged !== true
         error(

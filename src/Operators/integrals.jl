@@ -73,7 +73,7 @@ function column_integral_indefinite!(
             RootSolvers.NewtonsMethodAD(ϕ_prev),
             RootSolvers.CompactSolution(),
             RootSolvers.RelativeSolutionTolerance(rtol),
-            maxiters = 10_000,
+            10_000,
         )
         ClimaComms.@assert device converged "unable to integrate through \
                                              z = $z with rtol set to $rtol"
