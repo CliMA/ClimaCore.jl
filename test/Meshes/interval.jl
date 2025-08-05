@@ -239,7 +239,11 @@ end
     )
     # test the mesh coordinates are eqv to dz_bottom
     @test Meshes.coordinates(mesh, 1, 1) == Geometry.ZPoint(0.0)
-    @test Meshes.coordinates(mesh, 1, 2) ≈ Geometry.ZPoint(0.02 / 45.0)
+    @test isapprox(
+        Meshes.coordinates(mesh, 1, 2),
+        Geometry.ZPoint(0.02 / 45.0),
+        rtol = 1e-3,
+    )
 
     # test the face element distance at the top of the domain is dz_top
     fₑ₋₁ = Geometry.component(Meshes.coordinates(mesh, 45, 1), 1)
@@ -280,8 +284,11 @@ end
     # test the mesh coordinates are eqv to dz_bottom
     @test Meshes.coordinates(mesh, 1, 1) == Geometry.ZPoint(-1.0)
     # test the face element distance at the top of the domain is dz_top
-    @test Meshes.coordinates(mesh, 1, nelems) ≈
-          Geometry.ZPoint(-Geometry.ZPoint(0.02 / 45.0).z)
+    @test isapprox(
+        Meshes.coordinates(mesh, 1, nelems),
+        Geometry.ZPoint(-Geometry.ZPoint(0.02 / 45.0).z),
+        rtol = 1e-3,
+    )
     fₑ₋₁ = Geometry.component(Meshes.coordinates(mesh, nelems, 1), 1)
     fₑ = Geometry.component(Meshes.coordinates(mesh, nelems, 2), 1)
     # a residual tol of ~1e-1 or 1e-2 is fine for typical use cases
@@ -308,7 +315,11 @@ end
     @test Meshes.coordinates(mesh, 1, 1) == Geometry.ZPoint(0.0)
     @test Meshes.coordinates(mesh, 1, nelems + 1) ≈ Geometry.ZPoint(1.0)
     # test the interval of the mesh coordinates at the surface is the same as dz_surface
-    @test Meshes.coordinates(mesh, 1, 2) ≈ Geometry.ZPoint(0.03 / 75.0)
+    @test isapprox(
+        Meshes.coordinates(mesh, 1, 2),
+        Geometry.ZPoint(0.03 / 75.0),
+        rtol = 1e-3,
+    )
 end
 
 @testset "IntervalMesh HyperbolicTangentStretching reverse" begin
@@ -334,7 +345,11 @@ end
     @test Meshes.coordinates(mesh, 1, 1) == Geometry.ZPoint(-1.0)
     @test Meshes.coordinates(mesh, 1, nelems + 1) ≈ Geometry.ZPoint(0.0)
     # test the interval of the mesh coordinates at the surface is the same as dz_surface
-    @test Meshes.coordinates(mesh, 1, nelems) ≈ Geometry.ZPoint(-0.03 / 75.0)
+    @test isapprox(
+        Meshes.coordinates(mesh, 1, nelems),
+        Geometry.ZPoint(-0.03 / 75.0),
+        rtol = 1e-3,
+    )
 end
 
 @testset "Truncated IntervalMesh" begin

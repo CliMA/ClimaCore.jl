@@ -47,7 +47,7 @@ ClimaCore.jl's high-level application programming interface (API) facilitates mo
     - Flexible memory layouts: Array-of-Structs (AoS), Struct-of-Arrays (SoA),Array-of-Struct-of-Arrays (AoSoA)
     - Useful overloads: `sum` (integral), `norm`, etc.
     - Compatible with [`DifferentialEquations.jl`](https://diffeq.sciml.ai/stable/) time steppers.
-* Composable operators via broadcasting: apply a function element-wise to an array; scalar values are broadcast over arrays 
+* Composable operators via broadcasting: apply a function element-wise to an array; scalar values are broadcast over arrays
 * Fusion of multiple operations; can be specialized for custom functions or argument types (e.g. `CuArray` compiles and applies a custom CUDA kernel).
 * Operators (`grad`, `div`, `interpolate`) are “pseudo-functions”: Act like functions when broadcasted over a `Field`; fuse operators and function calls.
 * Add element node size dimensions to type domain
@@ -56,3 +56,6 @@ ClimaCore.jl's high-level application programming interface (API) facilitates mo
 * Flexible memory layouts allow for flexible threading models (upcoming):
     - CPU thread over elements
     - GPU thread over nodes.
+
+Versions before and including ClimaCore.jl v0.11.7 relied on WeakValueDicts.jl, which is not thread-safe and no longer maintained.
+These versions are considered unsupported, and newer versions of ClimaCore.jl should be used.
