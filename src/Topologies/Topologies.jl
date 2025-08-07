@@ -5,7 +5,7 @@ import ClimaComms, Adapt
 import ..ClimaCore
 import ..Utilities: Cache, cart_ind, linear_ind
 import ..Geometry
-import ..Domains: Domains, coordinate_type
+import ..Domains: Domains, coordinate_type, unique_boundary_names
 import ..Meshes: Meshes, domain, coordinates
 import ..DataLayouts
 import ..DataLayouts: slab_index
