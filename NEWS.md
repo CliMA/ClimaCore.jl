@@ -4,6 +4,15 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.38
+-------
+
+- Upgrade compatibility with RootSolvers.jl, KrylovKit.jl, DataStructures.jl. Using the following versions of RootSolvers may result in slightly different `IntervalMesh`(es) and results of `column_integral_indefinite!(∂ϕ∂z, ᶠϕ)`
+
+    - < v0.45
+    - = v0.45
+    - \> v0.45
+
 v0.14.37
 -------
 - Extend level and field_values to work with lazy Fields [2356](https://github.com/CliMA/ClimaCore.jl/pull/2356)
