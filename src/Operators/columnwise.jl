@@ -137,8 +137,8 @@ function columnwise_kernel!(
     SLG = partial_lg_type(eltype(ᶜlg))
     ᶜTS_lg = DataLayouts.typesize(FT, SLG)
 
-    ᶜui = universal_index_columnwise(device, UI, ᶜus)
-    ᶠui = universal_index_columnwise(device, UI, ᶠus)
+    ᶜui = universal_index_columnwise(device, UI, ᶜus, Val(ᶠNv))
+    ᶠui = universal_index_columnwise(device, UI, ᶠus, Val(ᶠNv))
     colidx = Grids.ColumnIndex((ᶠui.I[1], ᶠui.I[2]), ᶠui.I[5])
 
     if localmem_state
@@ -367,4 +367,5 @@ end
     device::ClimaComms.AbstractCPUDevice,
     UI,
     us,
+    ::Val
 ) = UI
