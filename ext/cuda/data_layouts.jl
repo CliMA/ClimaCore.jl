@@ -69,6 +69,7 @@ include("data_layouts_copyto.jl")
 include("data_layouts_fused_copyto.jl")
 include("data_layouts_mapreduce.jl")
 include("data_layouts_threadblock.jl")
+include("data_layouts_rrtmgp.jl")
 
 adapt_f(to, f::F) where {F} = Adapt.adapt(to, f)
 adapt_f(to, ::Type{F}) where {F} = (x...) -> F(x...)
