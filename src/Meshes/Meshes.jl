@@ -14,6 +14,7 @@ import ..Domains:
     RectangleDomain,
     SphereDomain,
     boundary_names,
+    unique_boundary_names,
     coordinate_type
 import ..Geometry
 import SparseArrays, CubedSphere, LinearAlgebra, StaticArrays
