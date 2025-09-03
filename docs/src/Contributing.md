@@ -157,7 +157,9 @@ and [submit a pull request](https://github.com/CLiMA/ClimaAtmos.jl/compare/).
 
 Currently a number of checks are run per commit for a given PR.
 
-- `JuliaFormatter` checks if the PR is formatted with `.dev/climaformat.jl`.
+- `JuliaFormatter` checks if the PR is formatted according to our guidelines.
+  Before merging, the formatter should be run via the command `julia -e 'using JuliaFormatter; format(".")'`.
+  JuliaFormatter.jl should be installed in your base Julia directory, and v1.0.62 must be used.
 - `Documentation` rebuilds the documentation for the PR and checks if the docs
   are consistent and generate valid output.
 - `Unit Tests` run subsets of the unit tests defined in `tests/`, using `Pkg.test()`.
@@ -177,7 +179,9 @@ do not require the unit tests to be run.
 Currently a number of checks are run during integration testing before being
 merged into `main`.
 
-- `JuliaFormatter` checks if the PR is formatted with `.dev/climaformat.jl`.
+- `JuliaFormatter` checks if the PR is formatted according to our guidelines.
+  Before merging, the formatter should be run via the command `julia -e 'using JuliaFormatter; format(".")'`.
+  JuliaFormatter.jl should be installed in your base Julia directory, and v1.0.62 must be used.
 - `Documentation` checks that the documentation correctly builds for the merged PR.
 - `OS Unit Tests` checks that `ClimaCore.jl` package unit tests can pass
    on every OS supported with a pre-compiled system image (Linux, macOS, Windows).
