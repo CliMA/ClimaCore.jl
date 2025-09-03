@@ -205,6 +205,7 @@ function write_new!(
     write_attribute(group, "type", "IntervalMesh")
     write_attribute(group, "domain", domainname)
     write_attribute(group, "nelements", Meshes.nelements(mesh))
+    write_attribute(group, "reverse_mode", mesh.reverse_mode)
     if occursin("LinRange", string(typeof(mesh.faces)))
         write_attribute(group, "faces_type", "Range")
     else

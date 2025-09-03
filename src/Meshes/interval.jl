@@ -17,6 +17,9 @@ Constuct a 1D mesh on `domain` with `nelems` elements, using `stretching`. Possi
 - [`ExponentialStretching(H)`](@ref)
 - [`GeneralizedExponentialStretching(dz_bottom, dz_top)`](@ref)
 - [`HyperbolicTangentStretching(dz_bottom)`](@ref)
+
+If `reverse_mode` is `true`, the smallest element is at the top, and the largest at the bottom
+(this is typical for land model configurations).
 """
 struct IntervalMesh{S, I <: IntervalDomain, V <: AbstractVector, M} <:
        AbstractMesh1D
@@ -24,6 +27,7 @@ struct IntervalMesh{S, I <: IntervalDomain, V <: AbstractVector, M} <:
     domain::I
     faces::V
     meta::M
+    reverse_mode::Bool
 end
 
 # implies isequal
@@ -141,7 +145,8 @@ function IntervalMesh(domain::IntervalDomain, faces::AbstractArray)
     nelems = length(faces)
     nelems < 1 && throw(ArgumentError("`nelems` must be ≥ 1"))
     monotonic_check(faces)
-    IntervalMesh(UnknownStretch(), domain, faces, nothing)
+    reverse_mode = false
+    IntervalMesh(UnknownStretch(), domain, faces, nothing, reverse_mode)
 end
 
 """
@@ -155,13 +160,15 @@ function IntervalMesh(
     domain::IntervalDomain{CT},
     stretch::Uniform = Uniform();
     nelems::Int,
+    reverse_mode::Bool = false,
 ) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
     if nelems < 1
         throw(ArgumentError("`nelems` must be ≥ 1"))
     end
     faces = range(domain.coord_min, domain.coord_max; length = nelems + 1)
     monotonic_check(faces)
-    IntervalMesh(stretch, domain, faces, nothing)
+    reverse_mode = false
+    IntervalMesh(stretch, domain, faces, nothing, reverse_mode)
 end
 
 
@@ -217,7 +224,7 @@ function IntervalMesh(
         reverse!(faces)
     end
     monotonic_check(faces)
-    IntervalMesh(stretch, domain, faces, nothing)
+    IntervalMesh(stretch, domain, faces, nothing, reverse_mode)
 end
 
 """
@@ -338,7 +345,7 @@ function IntervalMesh(
         faces[end] = faces[end] == -z_bottom ? z_bottom : faces[1]
     end
     monotonic_check(faces)
-    IntervalMesh(stretch, domain, CT.(faces), (; h_top))
+    IntervalMesh(stretch, domain, CT.(faces), (; h_top), reverse_mode)
 end
 
 """
@@ -356,13 +363,13 @@ For an interval ``[z_0,z_1]``, this makes the elements uniformally spaced in
 \\eta = 1 - \\frac{tanh[\\gamma(1-\\zeta)]}{tanh(\\gamma)},
 ```
 where ``\\eta = \\frac{z - z_0}{z_1-z_0}``. The stretching parameter ``\\gamma``
-is chosen to achieve a given resolution `dz_surface` at the surface. 
+is chosen to achieve a given resolution `dz_surface` at the surface.
 
 Then, the user can define a stretched mesh via
 
     ClimaCore.Meshes.IntervalMesh(interval_domain, HyperbolicTangentStretching(dz_surface); nelems::Int, reverse_mode)
 
-`reverse_mode` is default to false for atmosphere configurations. For land configurations, 
+`reverse_mode` is default to false for atmosphere configurations. For land configurations,
 use `reverse_mode` = `true`.
 
 `faces` contain reference z without any warping.
@@ -427,7 +434,13 @@ function IntervalMesh(
         faces[end] = faces[end] == -z_bottom ? z_bottom : faces[1]
     end
     monotonic_check(faces)
-    IntervalMesh(stretch, domain, CT.(faces), (; γ_sol = γ_sol.root))
+    IntervalMesh(
+        stretch,
+        domain,
+        CT.(faces),
+        (; γ_sol = γ_sol.root),
+        reverse_mode,
+    )
 end
 
 """

@@ -4,6 +4,14 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.40
+-------
+- Store `reverse_mode` in the `IntervalMesh` struct, so that we can access it when writing
+and reading the mesh for restarts
+
+v0.14.39
+-------
+
 v0.14.38
 -------
 

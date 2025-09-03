@@ -315,11 +315,13 @@ function read_mesh_new(reader::HDF5Reader, name::AbstractString)
         nelements = attrs(group)["nelements"]
         faces_type = get(attrs(group), "faces_type", nothing)
         stretch_type = get(attrs(group), "stretch_type", nothing)
+        reverse_mode = get(attrs(group), "reverse_mode", false)
         if stretch_type == "Uniform" || faces_type == "Range"
             return Meshes.IntervalMesh(
                 domain,
                 Meshes.Uniform();
                 nelems = nelements,
+                reverse_mode,
             )
         end
         stretch_params = get(attrs(group), "stretch_params", nothing)
@@ -327,7 +329,12 @@ function read_mesh_new(reader::HDF5Reader, name::AbstractString)
             CT = Domains.coordinate_type(domain)
             stretch =
                 getproperty(Meshes, Symbol(stretch_type))(stretch_params...)
-            return Meshes.IntervalMesh(domain, stretch; nelems = nelements)
+            return Meshes.IntervalMesh(
+                domain,
+                stretch;
+                nelems = nelements,
+                reverse_mode,
+            )
         end
         # Fallback: read from array
         @assert faces_type == "Array"
