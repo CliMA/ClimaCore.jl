@@ -39,10 +39,16 @@ function auto_launch!(
     always_inline = true,
     caller = :unknown,
 ) where {F!}
+    stacktrace_kernel_name = true
     if auto
         @assert !isnothing(nitems)
         if nitems ≥ 0
-            kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
+            if stacktrace_kernel_name
+                stacktraceStr = String(StackTrace())
+                kernel = CUDA.@cuda always_inline = true launch = false name = stacktraceStr f!(args...)
+            else
+                kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
+            end
             config = CUDA.launch_configuration(kernel.fun)
             threads = min(nitems, config.threads)
             blocks = cld(nitems, threads)
