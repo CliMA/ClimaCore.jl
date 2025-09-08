@@ -45,6 +45,7 @@ function auto_launch!(
         if nitems ≥ 0
             if stacktrace_kernel_name
                 stacktraceStr = String(StackTrace())
+                @info stacktraceStr
                 kernel = CUDA.@cuda always_inline = true launch = false name = stacktraceStr f!(args...)
             else
                 kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
@@ -55,9 +56,12 @@ function auto_launch!(
             kernel(args...; threads, blocks) # This knows to use always_inline from above.
         end
     else
-        kernel =
-            CUDA.@cuda always_inline = always_inline threads = threads_s blocks =
-                blocks_s f!(args...)
+        if stacktrace_kernel_name
+            kernel_name = join([string(i.func) for i in stacktrace()], ",")
+            kernel = CUDA.@cuda always_inline = always_inline threads = threads_s blocks = blocks_s name = kernel_name f!(args...)
+        else
+            kernel = CUDA.@cuda always_inline = always_inline threads = threads_s blocks = blocks_s f!(args...)
+        end
     end
 
     if collect_kernel_stats() # only for development use
