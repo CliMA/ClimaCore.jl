@@ -2,6 +2,7 @@ import CUDA
 import ClimaCore.Fields
 import ClimaCore.DataLayouts
 import ClimaCore.DataLayouts: empty_kernel_stats
+import ClimaCore.DebugOnly: profile_rename_kernel_names
 
 const reported_stats = Dict()
 # Call via ClimaCore.DataLayouts.empty_kernel_stats()
@@ -39,11 +40,10 @@ function auto_launch!(
     always_inline = true,
     caller = :unknown,
 ) where {F!}
-    stacktrace_kernel_name = true
     if auto
         @assert !isnothing(nitems)
         if nitems ≥ 0
-            if stacktrace_kernel_name
+            if profile_rename_kernel_names()
                 stacktraceStr = String(StackTrace())
                 @info stacktraceStr
                 kernel = CUDA.@cuda always_inline = true launch = false name = stacktraceStr f!(args...)
@@ -56,8 +56,14 @@ function auto_launch!(
             kernel(args...; threads, blocks) # This knows to use always_inline from above.
         end
     else
-        if stacktrace_kernel_name
-            kernel_name = join([string(i.func) for i in stacktrace()], ",")
+        if profile_rename_kernel_names()
+            stack_strs = [string(i.func) for i in stacktrace()]
+            # do some filtering on the names to remove unhelpful FirstOrderOneSided
+            unhelpful_names = ["auto_launch", "macro expansion"]
+            for name in unhelpful_names
+                deleteat!(stack_strs, findall(item -> occursin(name, item), stack_strs))
+            end
+            kernel_name = join(stack_strs, "_")
             kernel = CUDA.@cuda always_inline = always_inline threads = threads_s blocks = blocks_s name = kernel_name f!(args...)
         else
             kernel = CUDA.@cuda always_inline = always_inline threads = threads_s blocks = blocks_s f!(args...)

@@ -171,4 +171,16 @@ function allow_mismatched_spaces_unsafe()
     return false
 end
 
+"""
+    profile_rename_kernel_names()
+
+When returning true, causes CUDA kernel names to be changed to a filtered
+version of all levels of the stacktrace at call time.  This is expensive and
+may result in distorted timings. Oh well, the price of information!
+"""
+
+function profile_rename_kernel_names()
+    return false
+end
+
 end
