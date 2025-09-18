@@ -104,10 +104,44 @@ end
     n_max_threads::Integer = 256;
 )
     (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(us)
-    Nvthreads = min(fld(n_max_threads, Ni * Nj), maximum_allowable_threads()[3])
+
+    # Calculate base Nvthreads
+    base_Nvthreads = min(fld(n_max_threads, Ni * Nj), maximum_allowable_threads()[3])
+
+    # Ensure total threads per block is a factor of 64
+    total_threads_base = Ni * Nj * base_Nvthreads
+
+    # Find the largest factor of 64 that doesn't exceed n_max_threads
+    # and is compatible with Ni * Nj
+    if total_threads_base < 64
+        # If base is less than 64, round up to nearest factor of 64
+        target_total = 64
+        while target_total > n_max_threads
+            target_total = max(32, target_total ÷ 2)  # Try 32, 16, etc.
+        end
+        Nvthreads = max(1, fld(target_total, Ni * Nj))
+    else
+        # Round down to nearest factor of 64
+        factors_of_64 = [64 * i for i in 1:16]  # [64, 128, 192, ..., 1024]
+        target_total = 64
+        for factor in factors_of_64
+            if factor <= n_max_threads && fld(factor, Ni * Nj) >= 1
+                target_total = factor
+            else
+                break
+            end
+        end
+        Nvthreads = min(fld(target_total, Ni * Nj), maximum_allowable_threads()[3])
+    end
+
     Nvblocks = cld(Nv, Nvthreads)
     @assert prod((Ni, Nj, Nvthreads)) ≤ n_max_threads "threads,n_max_threads=($(prod((Ni, Nj, Nvthreads))),$n_max_threads)"
     @assert Ni * Nj ≤ n_max_threads
+
+    # Verify total threads is a factor of 64
+    total_threads = prod((Ni, Nj, Nvthreads))
+    @assert total_threads % 64 == 0 || total_threads < 64 "Total threads per block ($(total_threads)) should be a factor of 64"
+
     return (; threads = (Ni, Nj, Nvthreads), blocks = (Nh, Nvblocks), Nvthreads)
 end
 @inline function spectral_universal_index(space::Spaces.AbstractSpace)
