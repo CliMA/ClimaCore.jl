@@ -63,6 +63,8 @@ end
 node_indices(space::Spaces.ExtrudedFiniteDifferenceSpace) =
     node_indices(Spaces.horizontal_space(space))
 
+node_indices(space::Spaces.FiniteDifferenceSpace) = CartesianIndices((1,))
+
 
 """
     SpectralBroadcasted{Style}(op, args[,axes[, work]])
@@ -190,6 +192,19 @@ Base.@propagate_inbounds function copyto_slab!(out, bc, slabidx)
     Nq = Quadratures.degrees_of_freedom(QS)
     rbc = resolve_operator(bc, slabidx)
     @inbounds for ij in node_indices(axes(out))
+        set_node!(space, out, ij, slabidx, get_node(space, rbc, ij, slabidx))
+    end
+    return nothing
+end
+
+Base.@propagate_inbounds function copyto_slab!(
+    out::Field{T, <:Spaces.FiniteDifferenceSpace},
+    bc,
+    slabidx,
+) where {T}
+    space = axes(out)
+    rbc = resolve_operator(bc, slabidx)
+    @inbounds for ij in node_indices(space)
         set_node!(space, out, ij, slabidx, get_node(space, rbc, ij, slabidx))
     end
     return nothing
@@ -340,11 +355,13 @@ Base.@propagate_inbounds function get_node(
     slabidx,
 )
     space = reconstruct_placeholder_space(axes(field), parent_space)
-    i, = Tuple(ij)
-    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
+    i, = space isa Spaces.FiniteDifferenceSpace ? (1,) : Tuple(ij)
+    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace ||
+       space isa Spaces.FaceFiniteDifferenceSpace
         _v = slabidx.v + half
     elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace ||
-           space isa Spaces.AbstractSpectralElementSpace
+           space isa Spaces.AbstractSpectralElementSpace ||
+           space isa Spaces.CenterFiniteDifferenceSpace
         _v = slabidx.v
     else
         error("invalid space")
@@ -456,7 +473,8 @@ Base.@propagate_inbounds function set_node!(
     val,
 )
     i, = Tuple(ij)
-    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
+    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace ||
+       space isa Spaces.FaceFiniteDifferenceSpace
         _v = slabidx.v + half
     else
         _v = slabidx.v
@@ -1649,4 +1667,26 @@ function rmatmul2(W, S, i, j)
         r = RecursiveApply.rmuladd(W[j, jj], S[slab_index(i, jj)], r)
     end
     return r
+end
+
+
+function apply_operator(
+    op::Union{
+        Divergence{()},
+        WeakDivergence{()},
+        Gradient{()},
+        WeakGradient{()},
+        Curl{()},
+        WeakCurl{()},
+    },
+    space,
+    slabidx,
+    arg,
+)
+    FT = Spaces.undertype(space)
+    RT = operator_return_eltype(op, eltype(arg))
+    zero_value = zero(RT)
+    out = DataLayouts.IF{RT, 1}(MArray, FT)
+    out[slab_index(1)] = zero_value
+    return Field(SArray(out), space)
 end

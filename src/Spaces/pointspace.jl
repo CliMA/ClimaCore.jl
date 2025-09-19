@@ -55,3 +55,5 @@ function PointSpace(
     )
     return PointSpace(context, local_geometry)
 end
+
+all_nodes(space::PointSpace) = (1,)

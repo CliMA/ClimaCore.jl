@@ -36,6 +36,8 @@ staggering(space::FiniteDifferenceSpace) = getfield(space, :staggering)
 space(grid::Grids.AbstractFiniteDifferenceGrid, staggering::Staggering) =
     FiniteDifferenceSpace(grid, staggering)
 
+horizontal_space(space::FiniteDifferenceSpace) = nothing
+
 function Base.show(io::IO, space::FiniteDifferenceSpace)
     indent = get(io, :indent, 0)
     iio = IOContext(io, :indent => indent + 2)

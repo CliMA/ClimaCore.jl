@@ -93,8 +93,9 @@ function DefaultRectangleXYMesh(
     periodic_x::Bool,
     periodic_y::Bool,
 ) where {FT <: AbstractFloat}
-    x1boundary = (:east, :west)
-    x2boundary = (:south, :north)
+    x1boundary = periodic_x ? nothing : (:east, :west)
+    x2boundary = periodic_y ? nothing : (:south, :north)
+
     domain = Domains.RectangleDomain(
         Domains.IntervalDomain(
             Geometry.XPoint{FT}(x_min),

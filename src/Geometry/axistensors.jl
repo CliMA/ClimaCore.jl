@@ -244,6 +244,9 @@ AxisVector(ax::A1, v::SVector{N, T}) where {A1 <: AbstractAxis, N, T} =
     arg3::Real,
 ) where {A} = AxisVector(A.instance, SVector(arg1, arg2, arg3))
 
+(AxisVector{T, A, SVector{0, T}})() where {A, T} =
+    AxisVector(A.instance, SVector{0, T}())
+
 const CovariantVector{T, I, S} = AxisVector{T, CovariantAxis{I}, S}
 const ContravariantVector{T, I, S} = AxisVector{T, ContravariantAxis{I}, S}
 const CartesianVector{T, I, S} = AxisVector{T, CartesianAxis{I}, S}
@@ -328,17 +331,14 @@ const Cartesian2Tensor{T, A, S} =
 const Local2Tensor{T, A, S} =
     Axis2Tensor{T, A, S} where {T, A <: Tuple{LocalAxis, AbstractAxis}, S}
 
-const CovariantTensor = Union{CovariantVector, Covariant2Tensor}
-const ContravariantTensor = Union{ContravariantVector, Contravariant2Tensor}
-const CartesianTensor = Union{CartesianVector, Cartesian2Tensor}
-const LocalTensor = Union{LocalVector, Local2Tensor}
+for I in [(), (1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
 
-for I in [(1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
-    strI = join(I)
+    strI = isempty(I) ? "Null" : join(I)
     N = length(I)
-    strUVW = join(map(i -> [:U, :V, :W][i], I))
+
+    strUVW = isempty(I) ? "Null" : join(map(i -> [:U, :V, :W][i], I))
     @eval begin
-        const $(Symbol(:Covariant, strI, :Axis)) = CovariantAxis{$I}
+        const $(Symbol(:Covariant, strI, :Axis)) = CovariantAxis{($I)}
         const $(Symbol(:Covariant, strI, :Vector)){T} =
             CovariantVector{T, $I, SVector{$N, T}}
 
@@ -354,6 +354,12 @@ for I in [(1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
         const $(Symbol(strUVW, :Vector)){T} = LocalVector{T, $I, SVector{$N, T}}
     end
 end
+
+const CovariantTensor = Union{CovariantVector, NullVector, Covariant2Tensor}
+const ContravariantTensor =
+    Union{ContravariantVector, NullVector, Contravariant2Tensor}
+const CartesianTensor = Union{CartesianVector, NullVector, Cartesian2Tensor}
+const LocalTensor = Union{LocalVector, NullVector, Local2Tensor}
 
 # LinearAlgebra
 
@@ -496,7 +502,7 @@ end
         end
         push!(vals, val)
     end
-    return :(@inbounds AxisVector(ato, SVector($(vals...))))
+    return :(@inbounds AxisVector(ato, SVector{$(length(Ito)), $T}($(vals...))))
 end
 
 function _transform(

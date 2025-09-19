@@ -149,6 +149,8 @@ nlevels(space::SpectralElementSpaceSlab2D) = 1
 The approximate length scale of the distance between nodes. This is defined as the
 length scale of the mesh (see [`Meshes.element_horizontal_length_scale`](@ref)), divided by the
 number of unique quadrature points along each dimension.
+
+Returns a default length scale of 1 when no space is provided.
 """
 function node_horizontal_length_scale(space::AbstractSpectralElementSpace)
     quad = quadrature_style(space)
@@ -157,8 +159,7 @@ function node_horizontal_length_scale(space::AbstractSpectralElementSpace)
            Nu
 end
 
-
-
+node_horizontal_length_scale(::Nothing) = 1
 
 
 Base.@propagate_inbounds function slab(
