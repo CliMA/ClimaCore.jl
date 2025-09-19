@@ -62,20 +62,10 @@ function print_context(io::IO, context::ClimaComms.SingletonCommsContext)
 end
 
 function print_context(io::IO, context::ClimaComms.MPICommsContext)
-    if ClimaComms.MPI.Initialized()
-        print(
-            io,
-            "MPICommsContext with ",
-            ClimaComms.nprocs(context),
-            " processes",
-        )
-    else
-        print(io, "MPICommsContext (uninitialized)")
-    end
+    print(io, "MPICommsContext with ", ClimaComms.nprocs(context), " processes")
     print(io, " using ")
     print_device(io, context.device)
 end
-
 
 abstract type AbstractDistributedTopology <: AbstractTopology end
 

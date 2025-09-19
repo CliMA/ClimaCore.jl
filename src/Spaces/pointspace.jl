@@ -55,3 +55,7 @@ function PointSpace(
     )
     return PointSpace(context, local_geometry)
 end
+
+all_nodes(::PointSpace) = (1,)
+
+node_horizontal_length_scale(space::PointSpace) = 1

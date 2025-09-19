@@ -947,7 +947,7 @@ end
         staggering = CellCenter(),
     )
     test_adapt(box_space_fn)
-    test_adapt_types(box_space_fn; broken_space_type_match = true)
+    test_adapt_types(box_space_fn)
 
     slice_space_fn(dev) = SliceXZSpace(;
         device = dev,

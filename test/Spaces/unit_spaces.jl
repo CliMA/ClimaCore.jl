@@ -179,6 +179,8 @@ end
 
     @test repr(space) === expected_repr
 
+    @test Spaces.slab_type(space) == DataLayouts.IF
+
     coord_data = Spaces.coordinates_data(space)
     @test eltype(coord_data) == Geometry.XPoint{Float64}
 
@@ -302,6 +304,8 @@ end
 
     @test Spaces.local_geometry_type(typeof(c_space)) <: Geometry.LocalGeometry
 
+    @test Spaces.slab_type(c_space) == DataLayouts.IF
+
     x_max = FT(1)
     y_max = FT(1)
     x_elem = 2
@@ -363,6 +367,8 @@ end
       context: SingletonCommsContext using CPUSingleThreaded
       mesh: 1×1-element RectilinearMesh of RectangleDomain: x ∈ [-3.0,5.0] (periodic) × y ∈ [-2.0,8.0] (:south, :north)
       quadrature: 4-point Gauss-Legendre-Lobatto quadrature"""
+
+    @test Spaces.slab_type(space) == DataLayouts.IJF
 
     coord_data = Spaces.coordinates_data(space)
     @test DataLayouts.farray_size(coord_data) == (4, 4, 2, 1)
