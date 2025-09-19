@@ -431,3 +431,21 @@ end
     @test ∇z == WVector.(∇.(fz))
 
 end
+
+@testset "Horizontal operators on extracted column spaces" begin
+    FT = Float64
+    @testset "2D SliceXZ space -> column" begin
+        hv_center_space, _ = hvspace_2D(npoly = 4, velem = 5, helem = 3)
+
+        column_space = Spaces.column(hv_center_space, 1, 1)
+        @test column_space isa Spaces.FiniteDifferenceSpace
+        TU.test_column_operators(column_space)
+    end
+
+    @testset "Vertical column space (no extraction)" begin
+        column_space = TU.ColumnCenterFiniteDifferenceSpace(FT; zelem = 5)
+        @test column_space isa Spaces.FiniteDifferenceSpace
+        # Expect zero divergence since there are no horizontal dimensions
+        TU.test_column_operators(column_space, true)
+    end
+end
