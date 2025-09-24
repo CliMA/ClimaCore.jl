@@ -30,13 +30,11 @@ import ClimaCore.MatrixFields
 import ClimaCore.Spaces
 import ClimaCore.Fields
 
-Operators.fd_shmem_is_supported(bc::Base.Broadcast.Broadcasted) = false
-ClimaCore.Operators.use_fd_shmem() = false
+# Operators.fd_shmem_is_supported(bc::Base.Broadcast.Broadcasted) = false
+# ClimaCore.Operators.use_fd_shmem() = false
 # The existing implementation limits our ability to apply
 # the same expressions from within kernels
-ClimaComms.device(topology::Topologies.DeviceIntervalTopology) =
-    ClimaComms.CUDADevice()
-Fields.error_mismatched_spaces(::Type, ::Type) = nothing # causes unsupported dynamic function invocation
+# Fields.error_mismatched_spaces(::Type, ::Type) = nothing # causes unsupported dynamic function invocation
 
 const C1 = Geometry.Covariant1Vector
 const C2 = Geometry.Covariant2Vector
@@ -91,12 +89,14 @@ Base.Broadcast.broadcastable(x::RayleighSponge) = tuple(x)
 
 function rayleigh_sponge_tendency_uₕ(ᶜuₕ, s)
     s isa Nothing && return NullBroadcasted()
-    (; ᶜz, ᶠz) = z_coordinate_fields(axes(ᶜuₕ))
-    zmax = z_max(axes(ᶠz))
+    ᶜz = Fields.coordinate_field(axes(ᶜuₕ)).z
+    ᶠz = Fields.coordinate_field(Spaces.face_space(axes(ᶜuₕ))).z
+    # (; ᶜz, ᶠz) = z_coordinate_fields(axes(ᶜuₕ))
+    zmax = Spaces.z_max(axes(ᶠz))
     return @. lazy(-β_rayleigh_uₕ(s, ᶜz, zmax) * ᶜuₕ)
 end
 
-function compute_kinetic(uₕ::Fields.Field, uᵥ::Fields.Field)
+function compute_kinetic(uₕ, uᵥ)
     @assert eltype(uₕ) <: Union{C1, C2, C12}
     @assert eltype(uᵥ) <: C3
     FT = Spaces.undertype(axes(uₕ))
@@ -167,9 +167,9 @@ function ᶜimplicit_tendency_bc(ᶜY, ᶠY, p, t)
     ᶠu³ = @. lazy(ᶠuₕ³ + CT3(ᶠu₃))
     tend_ρ_1 = @. lazy(ᶜdivᵥ(ᶠwinterp(ᶜJ, ᶜρ) * ᶠuₕ³))
     tend_ρe_tot_1 = vertical_transport(ᶜρ, ᶠu³, ᶜh_tot, dt, Val(:none))
-    ᶜuₕ₀ = (zero(eltype(ᶜuₕ)),)
+    ᶜuₕ₀ = rayleigh_sponge_tendency_uₕ(ᶜuₕ, rayleigh_sponge)
 
-    return @. lazy(ᶜtendencies(-tend_ρ_1, - ᶜuₕ₀, tend_ρe_tot_1))
+    return @. lazy(ᶜtendencies(-tend_ρ_1, ᶜuₕ₀, tend_ρe_tot_1))
 end
 
 function ᶠimplicit_tendency_bc(ᶜY, ᶠY, p, t)
