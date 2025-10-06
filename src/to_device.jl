@@ -20,12 +20,7 @@ This means that `out === x` will not in general be satisfied.
 """
 function to_device(
     device::ClimaComms.AbstractDevice,
-    x::Union{
-        DataLayouts.AbstractData,
-        Spaces.AbstractSpace,
-        Fields.Field,
-        Fields.FieldVector,
-    },
+    x,
 )
     return Adapt.adapt(ClimaComms.array_type(device), x)
 end

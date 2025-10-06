@@ -338,7 +338,7 @@ for I in [(), (1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
 
     strUVW = isempty(I) ? "Null" : join(map(i -> [:U, :V, :W][i], I))
     @eval begin
-        const $(Symbol(:Covariant, strI, :Axis)) = CovariantAxis{($I)}
+        const $(Symbol(:Covariant, strI, :Axis)) = CovariantAxis{$I}
         const $(Symbol(:Covariant, strI, :Vector)){T} =
             CovariantVector{T, $I, SVector{$N, T}}
 
