@@ -355,11 +355,11 @@ for I in [(), (1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
     end
 end
 
-const CovariantTensor = Union{CovariantVector, NullVector, Covariant2Tensor}
+const CovariantTensor = Union{CovariantVector, Covariant2Tensor}
 const ContravariantTensor =
-    Union{ContravariantVector, NullVector, Contravariant2Tensor}
-const CartesianTensor = Union{CartesianVector, NullVector, Cartesian2Tensor}
-const LocalTensor = Union{LocalVector, NullVector, Local2Tensor}
+    Union{ContravariantVector, Contravariant2Tensor}
+const CartesianTensor = Union{CartesianVector, Cartesian2Tensor}
+const LocalTensor = Union{LocalVector, Local2Tensor}
 
 # LinearAlgebra
 
