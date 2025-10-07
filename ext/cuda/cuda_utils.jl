@@ -2,13 +2,13 @@ import CUDA
 import ClimaCore.Fields
 import ClimaCore.DataLayouts
 import ClimaCore.DataLayouts: empty_kernel_stats
+import ClimaCore.DebugOnly: name_kernels_from_stack_trace
 
 const reported_stats = Dict()
 const kernel_names = Dict{String, AbstractString}()
 # Call via ClimaCore.DataLayouts.empty_kernel_stats()
 empty_kernel_stats(::ClimaComms.CUDADevice) = empty!(reported_stats)
 collect_kernel_stats() = false
-name_kernels_from_stack_trace() = false
 
 """
     auto_launch!(f!::F!, args,
