@@ -234,6 +234,8 @@ const AxisVector{T, A1, S} = AxisTensor{T, 1, Tuple{A1}, S}
 AxisVector(ax::A1, v::SVector{N, T}) where {A1 <: AbstractAxis, N, T} =
     AxisVector{T, A1, SVector{N, T}}((ax,), v)
 
+(AxisVector{T, A, SVector{0, T}} where {T})() where {A} =
+    AxisVector(A.instance, SVector{0, T}())
 (AxisVector{T, A, SVector{1, T}} where {T})(arg1::Real) where {A} =
     AxisVector(A.instance, SVector(arg1))
 (AxisVector{T, A, SVector{2, T}} where {T})(arg1::Real, arg2::Real) where {A} =
@@ -244,8 +246,6 @@ AxisVector(ax::A1, v::SVector{N, T}) where {A1 <: AbstractAxis, N, T} =
     arg3::Real,
 ) where {A} = AxisVector(A.instance, SVector(arg1, arg2, arg3))
 
-(AxisVector{T, A, SVector{0, T}})() where {A, T} =
-    AxisVector(A.instance, SVector{0, T}())
 
 const CovariantVector{T, I, S} = AxisVector{T, CovariantAxis{I}, S}
 const ContravariantVector{T, I, S} = AxisVector{T, ContravariantAxis{I}, S}
@@ -331,6 +331,10 @@ const Cartesian2Tensor{T, A, S} =
 const Local2Tensor{T, A, S} =
     Axis2Tensor{T, A, S} where {T, A <: Tuple{LocalAxis, AbstractAxis}, S}
 
+const CovariantTensor = Union{CovariantVector, Covariant2Tensor}
+const ContravariantTensor = Union{ContravariantVector, Contravariant2Tensor}
+const CartesianTensor = Union{CartesianVector, Cartesian2Tensor}
+const LocalTensor = Union{LocalVector, Local2Tensor}
 for I in [(), (1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
 
     strI = isempty(I) ? "Null" : join(I)
@@ -354,12 +358,6 @@ for I in [(), (1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
         const $(Symbol(strUVW, :Vector)){T} = LocalVector{T, $I, SVector{$N, T}}
     end
 end
-
-const CovariantTensor = Union{CovariantVector, Covariant2Tensor}
-const ContravariantTensor =
-    Union{ContravariantVector, Contravariant2Tensor}
-const CartesianTensor = Union{CartesianVector, Cartesian2Tensor}
-const LocalTensor = Union{LocalVector, Local2Tensor}
 
 # LinearAlgebra
 

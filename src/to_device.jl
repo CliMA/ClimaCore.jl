@@ -18,10 +18,7 @@ If the input is already defined on the target device, returns a copy.
 
 This means that `out === x` will not in general be satisfied.
 """
-function to_device(
-    device::ClimaComms.AbstractDevice,
-    x,
-)
+function to_device(device::ClimaComms.AbstractDevice, x)
     return Adapt.adapt(ClimaComms.array_type(device), x)
 end
 

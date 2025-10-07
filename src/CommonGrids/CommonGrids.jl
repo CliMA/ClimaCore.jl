@@ -441,19 +441,6 @@ function Box3DGrid(
             periodic_x,
             periodic_y,
         ),
-        Topologies.spacefillingcurve(
-            DefaultRectangleXYMesh(
-                FT;
-                x_min,
-                x_max,
-                y_min,
-                y_max,
-                x_elem,
-                y_elem,
-                periodic_x,
-                periodic_y,
-            ),
-        ),
     ),
     z_mesh::Meshes.IntervalMesh = DefaultZMesh(
         FT;

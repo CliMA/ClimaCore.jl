@@ -188,8 +188,6 @@ Copy the slab indexed by `slabidx` from `bc` to `out`.
 """
 Base.@propagate_inbounds function copyto_slab!(out, bc, slabidx)
     space = axes(out)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
     rbc = resolve_operator(bc, slabidx)
     @inbounds for ij in node_indices(axes(out))
         set_node!(space, out, ij, slabidx, get_node(space, rbc, ij, slabidx))
@@ -197,18 +195,6 @@ Base.@propagate_inbounds function copyto_slab!(out, bc, slabidx)
     return nothing
 end
 
-Base.@propagate_inbounds function copyto_slab!(
-    out::Field{T, <:Spaces.FiniteDifferenceSpace},
-    bc,
-    slabidx,
-) where {T}
-    space = axes(out)
-    rbc = resolve_operator(bc, slabidx)
-    @inbounds for ij in node_indices(space)
-        set_node!(space, out, ij, slabidx, get_node(space, rbc, ij, slabidx))
-    end
-    return nothing
-end
 
 """
     resolve_operator(bc, slabidx)
@@ -355,7 +341,7 @@ Base.@propagate_inbounds function get_node(
     slabidx,
 )
     space = reconstruct_placeholder_space(axes(field), parent_space)
-    i, = space isa Spaces.FiniteDifferenceSpace ? (1,) : Tuple(ij)
+    i, = Tuple(ij)
     if space isa Spaces.FaceExtrudedFiniteDifferenceSpace ||
        space isa Spaces.FaceFiniteDifferenceSpace
         _v = slabidx.v + half
@@ -1635,6 +1621,7 @@ matrix_interpolate(field::Field, Nu::Integer) =
     matrix_interpolate(field, Quadratures.Uniform{Nu}())
 
 import .DataLayouts: slab_index
+import .Spaces: slab_type
 
 """
     rmatmul1(W, S, i, j)
@@ -1670,6 +1657,7 @@ function rmatmul2(W, S, i, j)
 end
 
 
+
 function apply_operator(
     op::Union{
         Divergence{()},
@@ -1686,7 +1674,18 @@ function apply_operator(
     FT = Spaces.undertype(space)
     RT = operator_return_eltype(op, eltype(arg))
     zero_value = zero(RT)
-    out = DataLayouts.IF{RT, 1}(MArray, FT)
-    out[slab_index(1)] = zero_value
+    slab_type = DataLayouts.slab_type(space)
+    QS = Spaces.quadrature_style(space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+
+    if slab_type === DataLayouts.IJF
+        out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+        fill!(parent(out), zero(FT))
+        out[slab_index(1, 1)] = zero_value
+    else
+        out = DataLayouts.IF{RT, 1}(MArray, FT)
+        out[slab_index(1)] = zero_value
+    end
+
     return Field(SArray(out), space)
 end

@@ -63,7 +63,6 @@ end
 
 function print_context(io::IO, context::ClimaComms.MPICommsContext)
     print(io, "MPICommsContext with ", ClimaComms.nprocs(context), " processes")
-
     print(io, " using ")
     print_device(io, context.device)
 end

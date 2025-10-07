@@ -237,7 +237,7 @@ end
 function Topology2D(
     context::ClimaComms.AbstractCommsContext,
     mesh::Meshes.AbstractMesh{2},
-    elemorder = Meshes.elements(mesh),
+    elemorder = spacefillingcurve(mesh),
     elempid = nothing, # array of same size as elemorder, containing owning pid for each element (it should be sorted)
     orderindex = Meshes.linearindices(elemorder), # inverse mapping of elemorder (e.g. map CartesianIndex => Int)
 )

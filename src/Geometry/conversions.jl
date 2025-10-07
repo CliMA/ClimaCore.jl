@@ -550,10 +550,6 @@ The return type when taking the divergence of a field of `V`.
 Required for statically infering the result type of the divergence operation for `AxisVector` subtypes.
 """
 @inline divergence_result_type(::Type{V}) where {V <: AxisVector} = eltype(V)
-@inline divergence_result_type(::Type{V}) where {V <: CovariantNullVector} =
-    eltype(V)
-@inline divergence_result_type(::Type{V}) where {V <: ContravariantNullVector} =
-    eltype(V)
 
 # this isn't quite right: it only is true when the Christoffel symbols are zero
 @inline divergence_result_type(
@@ -574,9 +570,6 @@ Required for statically infering the result type of the gradient operation for `
 ) where {I, V <: Number}
     N = length(I)
     AxisVector{V, CovariantAxis{I}, SVector{N, V}}
-end
-@inline function gradient_result_type(::Val{()}, ::Type{V}) where {V <: Number}
-    CovariantNullVector{V}
 end
 @inline function gradient_result_type(
     ::Val{I},
@@ -625,7 +618,8 @@ Curl is only defined for `CovariantVector`` field input types.
 ) where {FT} = ContravariantNullVector{FT}
 @inline curl_result_type(::Val{()}, ::Type{<:CovariantVector{FT}}) where {FT} =
     ContravariantNullVector{FT}
-
+@inline curl_result_type(_, ::Type{CovariantNullVector{FT}}) where {FT} =
+    ContravariantNullVector{FT}
 
 @inline curl_result_type(::Val{(1,)}, ::Type{Covariant1Vector{FT}}) where {FT} =
     Contravariant1Vector{FT} # not strictly correct: should be a zero Vector
