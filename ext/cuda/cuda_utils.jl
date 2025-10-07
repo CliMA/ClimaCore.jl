@@ -69,7 +69,9 @@ function auto_launch!(
                 frame = stack[first_relevant_index]
                 name_str =
                     string(frame.func) *
-                    basename(string(frame.linfo.def.file)) *
+                    "_" *
+                    string(frame.linfo.def.file) *
+                    "_" *
                     string(frame.line)
                 kernel_name = replace(name_str, r"[^A-Za-z0-9]" => "_")
             end
