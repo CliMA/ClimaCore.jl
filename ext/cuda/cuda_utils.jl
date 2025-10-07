@@ -4,9 +4,11 @@ import ClimaCore.DataLayouts
 import ClimaCore.DataLayouts: empty_kernel_stats
 
 const reported_stats = Dict()
+const kernel_names = IdDict{Function, AbstractString}()
 # Call via ClimaCore.DataLayouts.empty_kernel_stats()
 empty_kernel_stats(::ClimaComms.CUDADevice) = empty!(reported_stats)
 collect_kernel_stats() = false
+name_kernels_from_stack_trace() = true # TODO
 
 """
     auto_launch!(f!::F!, args,
@@ -39,10 +41,49 @@ function auto_launch!(
     always_inline = true,
     caller = :unknown,
 ) where {F!}
+    # If desired, compute a kernel name from the stack trace and store in
+    # a global Dict, which serves as an in memory cache
+    kernel_name = nothing
+    if name_kernels_from_stack_trace()
+        kernel_name_exists = f! in keys(kernel_names)
+        if !kernel_name_exists
+            # Construct the kernel name, ignoring modules we don't care about
+            uninteresting_modules = [
+                :Base,
+                :Core,
+                :GPUCompiler,
+                :CUDA,
+                :NVTX,
+                :ClimaCoreCUDAExt,
+                :ClimaCore,
+            ]
+            stack = stacktrace()
+            first_relevant_index = findfirst(stack) do frame
+                frame.linfo isa Core.MethodInstance && (
+                    fullname(frame.linfo.def.module)[1] ∉ uninteresting_modules
+                )
+            end
+            if !isnothing(first_relevant_index)
+                frame = stack[first_relevant_index]
+                rfn =
+                    string(frame.func) *
+                    "_line" *
+                    string(frame.linfo.def.file) *
+                    string(frame.line)
+                name_str = rfn
+                kernel_name = replace(name_str, r"[^A-Za-z0-9]" => "_")
+            end
+            @debug "Using kernel name: $kernel_name"
+            kernel_names[f!] = kernel_name
+        end
+        kernel_name = kernel_names[f!]
+    end
+
     if auto
         @assert !isnothing(nitems)
         if nitems ≥ 0
-            kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
+            kernel = CUDA.@cuda name = kernel_name always_inline = true launch =
+                false f!(args...)
             config = CUDA.launch_configuration(kernel.fun)
             threads = min(nitems, config.threads)
             blocks = cld(nitems, threads)
@@ -50,8 +91,8 @@ function auto_launch!(
         end
     else
         kernel =
-            CUDA.@cuda always_inline = always_inline threads = threads_s blocks =
-                blocks_s f!(args...)
+            CUDA.@cuda name = kernel_name always_inline = always_inline threads =
+                threads_s blocks = blocks_s f!(args...)
     end
 
     if collect_kernel_stats() # only for development use
