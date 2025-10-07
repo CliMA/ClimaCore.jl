@@ -67,12 +67,10 @@ function auto_launch!(
             end
             if !isnothing(first_relevant_index)
                 frame = stack[first_relevant_index]
-                rfn =
+                name_str =
                     string(frame.func) *
-                    "_line" *
-                    string(frame.linfo.def.file) *
+                    basename(string(frame.linfo.def.file)) *
                     string(frame.line)
-                name_str = rfn
                 kernel_name = replace(name_str, r"[^A-Za-z0-9]" => "_")
             end
             @debug "Using kernel name: $kernel_name"
