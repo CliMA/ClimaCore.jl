@@ -4,7 +4,7 @@ import ClimaCore.DataLayouts
 import ClimaCore.DataLayouts: empty_kernel_stats
 
 const reported_stats = Dict()
-const kernel_names = IdDict{Function, AbstractString}()
+const kernel_names = Dict{String, AbstractString}()
 # Call via ClimaCore.DataLayouts.empty_kernel_stats()
 empty_kernel_stats(::ClimaComms.CUDADevice) = empty!(reported_stats)
 collect_kernel_stats() = false
@@ -45,7 +45,9 @@ function auto_launch!(
     # a global Dict, which serves as an in memory cache
     kernel_name = nothing
     if name_kernels_from_stack_trace()
-        kernel_name_exists = f! in keys(kernel_names)
+        # Create a key from the function and types of the args
+        key = string(objectid(f!)) * "_" * string(typeof.(args))
+        kernel_name_exists = key in keys(kernel_names)
         if !kernel_name_exists
             # Construct the kernel name, ignoring modules we don't care about
             uninteresting_modules = [
@@ -74,9 +76,9 @@ function auto_launch!(
                 kernel_name = replace(name_str, r"[^A-Za-z0-9]" => "_")
             end
             @debug "Using kernel name: $kernel_name"
-            kernel_names[f!] = kernel_name
+            kernel_names[key] = kernel_name
         end
-        kernel_name = kernel_names[f!]
+        kernel_name = kernel_names[key]
     end
 
     if auto
