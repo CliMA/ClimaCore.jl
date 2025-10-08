@@ -1674,11 +1674,10 @@ function apply_operator(
     FT = Spaces.undertype(space)
     RT = operator_return_eltype(op, eltype(arg))
     zero_value = zero(RT)
-    slab_type = DataLayouts.slab_type(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
 
-    if slab_type === DataLayouts.IJF
+    if slab_type(space) === DataLayouts.IJF
+        QS = Spaces.quadrature_style(space)
+        Nq = Quadratures.degrees_of_freedom(QS)
         out = DataLayouts.IJF{RT, Nq}(MArray, FT)
         fill!(parent(out), zero(FT))
         out[slab_index(1, 1)] = zero_value
