@@ -24,10 +24,14 @@ get_x() =
     @test_all @name(a.c.:(1).d) == MatrixFields.FieldName(:a, :c, 1, :d)
     @test_all @name(a.c.:(3).:(1)) == MatrixFields.FieldName(:a, :c, 3, 1)
 
-    @test_throws "not a valid property name" @macroexpand @name("a")
-    @test_throws "not a valid property name" @macroexpand @name([a])
-    @test_throws "not a valid property name" @macroexpand @name((a.c.:3.0):1)
-    @test_throws "not a valid property name" @macroexpand @name(a.c.:(3).(1))
+    i = 1
+    @test @name(a.c.:($i).d) == @name(a.c.:(1).d)
+    @test @name(a.c.:($(i + 2)).:($i)) == @name(a.c.:(3).:(1))
+
+    @test_throws "invalid syntax" @macroexpand @name("a")
+    @test_throws "invalid syntax" @macroexpand @name([a])
+    @test_throws "invalid syntax" @macroexpand @name((a.c.:3.0):1)
+    @test_throws "invalid syntax" @macroexpand @name(a.c.:(3).(1))
 
     @test string(@name()) == "@name()"
     @test string(@name(a.c.:(1).d)) == "@name(a.c.:(1).d)"
