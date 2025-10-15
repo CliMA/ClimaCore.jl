@@ -2,7 +2,6 @@ using Test, JET
 using ClimaCore.Geometry, ClimaCore.DataLayouts
 using LinearAlgebra, StaticArrays
 import ClimaCore
-ClimaCore.Geometry.assert_exact_transform() = true
 
 @testset "AxisTensors" begin
     x = Geometry.Covariant12Vector(1.0, 2.0)
@@ -169,6 +168,26 @@ end
         Geometry.Covariant12Axis(),
         Geometry.Covariant13Vector(2.0, 2.0) * Geometry.Cartesian1Vector(1.0)',
     ) == Geometry.Covariant12Vector(2.0, 0.0) * Geometry.Cartesian1Vector(1.0)'
+
+    # Test projection over rightmost axis
+    x_C12 = Geometry.Covariant12Vector(2.0, 2.0)
+    x_Cart123 = Geometry.Cartesian123Vector(1.0, 1.0, 1.0)
+    @test Geometry.project(x_C12 * x_Cart123', Geometry.Cartesian3Axis()) ==
+          x_C12 * Geometry.Cartesian3Vector(1.0)'
+    @test Geometry.project(x_C12 * x_Cart123', Geometry.Cartesian23Axis()) ==
+          x_C12 * Geometry.Cartesian23Vector(1.0, 1.0)'
+
+    # Test projection over both axes
+    @test Geometry.project(
+        Geometry.Covariant12Axis(),
+        x_C12 * x_Cart123',
+        Geometry.Cartesian123Axis(),
+    ) == x_C12 * x_Cart123'
+    @test Geometry.project(
+        Geometry.Covariant2Axis(),
+        x_C12 * x_Cart123',
+        Geometry.Cartesian13Axis(),
+    ) == Geometry.Covariant2Vector(2.0) * Geometry.Cartesian13Vector(1.0, 1.0)'
 end
 
 

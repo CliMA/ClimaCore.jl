@@ -1,4 +1,4 @@
-using StaticArrays, LinearAlgebra
+using StaticArrays, LinearAlgebra, UnrolledUtilities
 
 """
     AbstractAxis
@@ -8,6 +8,7 @@ An axis of a [`AxisTensor`](@ref).
 abstract type AbstractAxis{I} end
 
 Base.Broadcast.broadcastable(a::AbstractAxis) = a
+axis_indices(::AbstractAxis{I}) where {I} = I
 
 """
     dual(ax::AbstractAxis)
@@ -521,101 +522,41 @@ function _project(
     x
 end
 
-#= Set `assert_exact_transform() = true` for debugging=#
-assert_exact_transform() = false
-
-@generated function _transform(
-    ato::Ato,
-    x::Axis2Tensor{T, Tuple{Afrom, A2}},
-) where {
-    Ato <: AbstractAxis{Ito},
-    Afrom <: AbstractAxis{Ifrom},
-    A2 <: AbstractAxis{J},
-} where {Ito, Ifrom, J, T}
-    N = length(Ifrom)
-    M = length(J)
-    if assert_exact_transform()
-        errcond = false
-        for n in 1:N
-            i = Ifrom[n]
-            if i ∉ Ito
-                for m in 1:M
-                    errcond = :($errcond || x[$n, $m] != zero(T))
-                end
-            end
-        end
-    end
-    vals = []
-    for m in 1:M
-        for i in Ito
-            val = :(zero(T))
-            for n in 1:N
-                if i == Ifrom[n]
-                    val = :(x[$n, $m])
-                    break
-                end
-            end
-            push!(vals, val)
-        end
-    end
-    quote
-        Base.@_propagate_inbounds_meta
-        if assert_exact_transform()
-            if $errcond
-                throw(InexactError(:transform, Ato, x))
-            end
-        end
-        @inbounds Axis2Tensor(
-            (ato, axes(x, 2)),
-            SMatrix{$(length(Ito)), $M}($(vals...)),
-        )
-    end
-end
-
-@generated function _project(
-    ato::Ato,
-    x::Axis2Tensor{T, Tuple{Afrom, A2}},
-) where {
-    Ato <: AbstractAxis{Ito},
-    Afrom <: AbstractAxis{Ifrom},
-    A2 <: AbstractAxis{J},
-} where {Ito, Ifrom, J, T}
-    N = length(Ifrom)
-    M = length(J)
-    vals = []
-    for m in 1:M
-        for i in Ito
-            val = :(zero(T))
-            for n in 1:N
-                if i == Ifrom[n]
-                    val = :(x[$n, $m])
-                    break
-                end
-            end
-            push!(vals, val)
-        end
-    end
-    quote
-        Base.@_propagate_inbounds_meta
-        @inbounds Axis2Tensor(
-            (ato, axes(x, 2)),
-            SMatrix{$(length(Ito)), $M}($(vals...)),
-        )
-    end
-end
-
-@inline transform(ato::CovariantAxis, v::CovariantTensor) = _project(ato, v)
+@inline transform(ato::CovariantAxis, v::CovariantTensor) = project(ato, v)
 @inline transform(ato::ContravariantAxis, v::ContravariantTensor) =
-    _project(ato, v)
-@inline transform(ato::CartesianAxis, v::CartesianTensor) = _project(ato, v)
-@inline transform(ato::LocalAxis, v::LocalTensor) = _project(ato, v)
+    project(ato, v)
+@inline transform(ato::CartesianAxis, v::CartesianTensor) = project(ato, v)
+@inline transform(ato::LocalAxis, v::LocalTensor) = project(ato, v)
 
-@inline project(ato::CovariantAxis, v::CovariantTensor) = _project(ato, v)
-@inline project(ato::ContravariantAxis, v::ContravariantTensor) =
-    _project(ato, v)
-@inline project(ato::CartesianAxis, v::CartesianTensor) = _project(ato, v)
-@inline project(ato::LocalAxis, v::LocalTensor) = _project(ato, v)
-
+@inline function project(
+    ato_l::AbstractAxis,
+    v::Axis2Tensor,
+    ato_r::AbstractAxis,
+)
+    @assert symbols.(axes(v)) == symbols.((ato_l, ato_r)) "Axes do not match"
+    T = eltype(v)
+    Ifrom_l, Ifrom_r = axis_indices.(axes(v))
+    product_to = unrolled_product(axis_indices(ato_l), axis_indices(ato_r))
+    vals = unrolled_map(product_to) do (m_l, m_r)
+        n_l = unrolled_findfirst(
+            ((n_l, ifrom),) -> m_l == ifrom,
+            enumerate(Ifrom_l),
+        )
+        n_r = unrolled_findfirst(
+            ((n_r, ifrom),) -> m_r == ifrom,
+            enumerate(Ifrom_r),
+        )
+        isnothing(n_l) || isnothing(n_r) ? zero(T) : v[n_l, n_r]
+    end
+    S = SMatrix{length(ato_l), length(ato_r)}(vals...)
+    @inbounds Axis2Tensor((ato_l, ato_r), S)
+end
+@inline project(ato::AbstractAxis, v::Axis2Tensor) = project(ato, v, axes(v, 2))
+@inline project(v::Axis2Tensor, ato::AbstractAxis) = project(axes(v, 1), v, ato)
+@inline function project(ato_l, v::AxisVector)
+    @assert symbols(axes(v, 1)) == symbols(ato_l)
+    _project(ato_l, v)
+end
 
 """
     outer(x, y)
