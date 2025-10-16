@@ -146,9 +146,7 @@ function postprocessing(sol, output_dir)
 
     ρ′ = Y -> @. Y.c.ρ - p₀(ᶜlocal_geometry.coordinates.z) / (R_d * T₀)
     if ᶜ𝔼_name == :ρθ
-        T′ =
-            Y -> @. Y.c.ρθ / Y.c.ρ * (pressure_ρθ(Y.c.ρθ) / p_0)^(R_d / cp_d) -
-               T₀
+        T′ = Y -> @. Y.c.ρθ / Y.c.ρ * (pressure_ρθ(Y.c.ρθ) / p_0)^(R_d / cp_d) - T₀
     elseif ᶜ𝔼_name == :ρe
         T′ = Y -> begin
             ᶜK = @. norm_sqr(C123(Y.c.uₕ) + C123(ᶜinterp(Y.f.w))) / 2
