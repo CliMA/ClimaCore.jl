@@ -37,10 +37,7 @@ const FullLocalGeometry{I, C, FT, S} = LocalGeometry{
     Axis2Tensor{FT, Tuple{CovariantAxis{I}, CovariantAxis{I}}, S},
 }
 
-@inline function LocalGeometry(
-    coordinates,
-    J,
-    WJ,
+@inline function LocalGeometry(coordinates, J, WJ,
     ∂x∂ξ::Axis2Tensor{FT, Tuple{LocalAxis{I}, CovariantAxis{I}}, S},
 ) where {FT, I, S}
     ∂ξ∂x = inv(∂x∂ξ)
@@ -50,16 +47,7 @@ const FullLocalGeometry{I, C, FT, S} = LocalGeometry{
     gᵢⱼ = ∂x∂ξ' * ∂x∂ξ
     isapproxsymmetric(components(gⁱʲ)) || error("gⁱʲ is not symmetric.")
     isapproxsymmetric(components(gᵢⱼ)) || error("gᵢⱼ is not symmetric.")
-    return FullLocalGeometry{I, C, FT, S}(
-        coordinates,
-        J,
-        WJ,
-        Jinv,
-        ∂x∂ξ,
-        ∂ξ∂x,
-        gⁱʲ,
-        gᵢⱼ,
-    )
+    return FullLocalGeometry{I, C, FT, S}(coordinates, J, WJ, Jinv, ∂x∂ξ, ∂ξ∂x, gⁱʲ, gᵢⱼ)
 end
 
 

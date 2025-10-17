@@ -13,10 +13,8 @@ Cartesian123Point(pt::AbstractPoint, global_geometry::AbstractGlobalGeometry) =
     u::AxisVector,
     global_geometry::AbstractGlobalGeometry,
     local_geometry::LocalGeometry,
-) where {I} = project(
-    CartesianAxis{I}(),
-    CartesianVector(u, global_geometry, local_geometry),
-)
+) where {I} =
+    project(CartesianAxis{I}(), CartesianVector(u, global_geometry, local_geometry))
 
 
 """
@@ -41,15 +39,9 @@ CartesianPoint(pt::XYZPoint{FT}, ::CartesianGlobalGeometry) where {FT} =
     Cartesian123Point{FT}(pt.x, pt.y, pt.z)
 
 # vectors
-CartesianVector(
-    u::CartesianVector,
-    ::CartesianGlobalGeometry,
-    ::LocalGeometry,
-) = u
+CartesianVector(u::CartesianVector, ::CartesianGlobalGeometry, ::LocalGeometry) = u
 function CartesianVector(
-    u::AxisVector,
-    ::CartesianGlobalGeometry,
-    local_geometry::LocalGeometry{I},
+    u::AxisVector, ::CartesianGlobalGeometry, local_geometry::LocalGeometry{I},
 ) where {I}
     u_local = LocalVector(u, local_geometry)
     AxisVector(CartesianAxis{I}(), components(u_local))
@@ -174,9 +166,7 @@ end
 Compute the great circle (spherical geodesic) distance between `pt1` and `pt2`.
 """
 function great_circle_distance(
-    pt1::LatLongPoint,
-    pt2::LatLongPoint,
-    global_geom::AbstractSphericalGlobalGeometry,
+    pt1::LatLongPoint, pt2::LatLongPoint, global_geom::AbstractSphericalGlobalGeometry,
 )
     r = global_geom.radius
     return r * unit_great_circle_distance(pt1, pt2)
@@ -188,27 +178,21 @@ end
 Compute the great circle (spherical geodesic) distance between `pt1` and `pt2`.
 """
 function great_circle_distance(
-    pt1::LatLongZPoint,
-    pt2::LatLongZPoint,
-    global_geom::ShallowSphericalGlobalGeometry,
+    pt1::LatLongZPoint, pt2::LatLongZPoint, global_geom::ShallowSphericalGlobalGeometry,
 )
     r = global_geom.radius
     return r * unit_great_circle_distance(
-        LatLongPoint(pt1.lat, pt1.long),
-        LatLongPoint(pt2.lat, pt2.long),
+        LatLongPoint(pt1.lat, pt1.long), LatLongPoint(pt2.lat, pt2.long),
     )
 end
 
 function great_circle_distance(
-    pt1::LatLongZPoint,
-    pt2::LatLongZPoint,
-    global_geom::DeepSphericalGlobalGeometry,
+    pt1::LatLongZPoint, pt2::LatLongZPoint, global_geom::DeepSphericalGlobalGeometry,
 )
     r = global_geom.radius
     R = r + (pt1.z + pt2.z) / 2
     return R * unit_great_circle_distance(
-        LatLongPoint(pt1.lat, pt1.long),
-        LatLongPoint(pt2.lat, pt2.long),
+        LatLongPoint(pt1.lat, pt1.long), LatLongPoint(pt2.lat, pt2.long),
     )
 end
 
@@ -225,23 +209,14 @@ function euclidean_distance(
 end
 
 # vectors
+CartesianVector(u::CartesianVector, ::AbstractSphericalGlobalGeometry, ::LocalGeometry) = u
 CartesianVector(
-    u::CartesianVector,
-    ::AbstractSphericalGlobalGeometry,
-    ::LocalGeometry,
-) = u
-CartesianVector(
-    u::AxisVector,
-    global_geometry::SphericalGlobalGeometry,
-    local_geometry::LocalGeometry,
+    u::AxisVector, global_geometry::SphericalGlobalGeometry, local_geometry::LocalGeometry,
 ) = CartesianVector(
-    UVWVector(u, local_geometry),
-    global_geometry,
-    local_geometry.coordinates,
+    UVWVector(u, local_geometry), global_geometry, local_geometry.coordinates,
 )
 function local_to_cartesian(
-    ::AbstractSphericalGlobalGeometry,
-    coord::Union{LatLongPoint, LatLongZPoint},
+    ::AbstractSphericalGlobalGeometry, coord::Union{LatLongPoint, LatLongZPoint},
 )
     ϕ = coord.lat
     λ = coord.long
