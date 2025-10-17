@@ -63,6 +63,8 @@ end
 node_indices(space::Spaces.ExtrudedFiniteDifferenceSpace) =
     node_indices(Spaces.horizontal_space(space))
 
+node_indices(space::Spaces.FiniteDifferenceSpace) = CartesianIndices((1,))
+
 
 """
     SpectralBroadcasted{Style}(op, args[,axes[, work]])
@@ -186,14 +188,13 @@ Copy the slab indexed by `slabidx` from `bc` to `out`.
 """
 Base.@propagate_inbounds function copyto_slab!(out, bc, slabidx)
     space = axes(out)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
     rbc = resolve_operator(bc, slabidx)
     @inbounds for ij in node_indices(axes(out))
         set_node!(space, out, ij, slabidx, get_node(space, rbc, ij, slabidx))
     end
     return nothing
 end
+
 
 """
     resolve_operator(bc, slabidx)
@@ -341,10 +342,12 @@ Base.@propagate_inbounds function get_node(
 )
     space = reconstruct_placeholder_space(axes(field), parent_space)
     i, = Tuple(ij)
-    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
+    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace ||
+       space isa Spaces.FaceFiniteDifferenceSpace
         _v = slabidx.v + half
     elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace ||
-           space isa Spaces.AbstractSpectralElementSpace
+           space isa Spaces.AbstractSpectralElementSpace ||
+           space isa Spaces.CenterFiniteDifferenceSpace
         _v = slabidx.v
     else
         error("invalid space")
@@ -456,7 +459,8 @@ Base.@propagate_inbounds function set_node!(
     val,
 )
     i, = Tuple(ij)
-    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
+    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace ||
+       space isa Spaces.FaceFiniteDifferenceSpace
         _v = slabidx.v + half
     else
         _v = slabidx.v
@@ -1617,6 +1621,7 @@ matrix_interpolate(field::Field, Nu::Integer) =
     matrix_interpolate(field, Quadratures.Uniform{Nu}())
 
 import .DataLayouts: slab_index
+import .Spaces: slab_type
 
 """
     rmatmul1(W, S, i, j)
@@ -1649,4 +1654,37 @@ function rmatmul2(W, S, i, j)
         r = RecursiveApply.rmuladd(W[j, jj], S[slab_index(i, jj)], r)
     end
     return r
+end
+
+
+
+function apply_operator(
+    op::Union{
+        Divergence{()},
+        WeakDivergence{()},
+        Gradient{()},
+        WeakGradient{()},
+        Curl{()},
+        WeakCurl{()},
+    },
+    space,
+    slabidx,
+    arg,
+)
+    FT = Spaces.undertype(space)
+    RT = operator_return_eltype(op, eltype(arg))
+    zero_value = zero(RT)
+
+    if slab_type(space) === DataLayouts.IJF
+        QS = Spaces.quadrature_style(space)
+        Nq = Quadratures.degrees_of_freedom(QS)
+        out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+        fill!(parent(out), zero(FT))
+        out[slab_index(1, 1)] = zero_value
+    else
+        out = DataLayouts.IF{RT, 1}(MArray, FT)
+        out[slab_index(1)] = zero_value
+    end
+
+    return Field(SArray(out), space)
 end

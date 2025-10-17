@@ -612,7 +612,14 @@ Curl is only defined for `CovariantVector`` field input types.
     ::Val{(1, 2)},
     ::Type{Covariant123Vector{FT}},
 ) where {FT} = Contravariant123Vector{FT}
-
+@inline curl_result_type(
+    ::Val{()},
+    ::Type{CovariantNullVector{FT}},
+) where {FT} = ContravariantNullVector{FT}
+@inline curl_result_type(::Val{()}, ::Type{<:CovariantVector{FT}}) where {FT} =
+    ContravariantNullVector{FT}
+@inline curl_result_type(_, ::Type{CovariantNullVector{FT}}) where {FT} =
+    ContravariantNullVector{FT}
 
 @inline curl_result_type(::Val{(1,)}, ::Type{Covariant1Vector{FT}}) where {FT} =
     Contravariant1Vector{FT} # not strictly correct: should be a zero Vector

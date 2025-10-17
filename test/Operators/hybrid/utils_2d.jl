@@ -35,6 +35,13 @@ import ClimaCore.Geometry: WVector
 import ClimaCore.Domains.Geometry: ⊗
 import ClimaCore.Utilities: half
 
+
+@isdefined(TU) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+)
+import .TestUtilities as TU
+
+
 convergence_rate(err, Δh) =
     [log(err[i] / err[i - 1]) / log(Δh[i] / Δh[i - 1]) for i in 2:length(Δh)]
 

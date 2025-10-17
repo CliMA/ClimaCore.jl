@@ -20,6 +20,12 @@ import ClimaCore.Geometry: WVector
 import ClimaCore.Utilities: half
 import ClimaCore.DataLayouts: level
 
+@isdefined(TU) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+)
+import .TestUtilities as TU
+
+
 function hvspace_3D(
     xlim = (-π, π),
     ylim = (-π, π),
