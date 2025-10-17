@@ -35,6 +35,17 @@ function Base.copyto!(
     mask = DataLayouts.NoMask(),
 )
     space = axes(out)
+    # Column spaces don't have horizontal spectral element structure,
+    # so operators with empty axes just return zero without launching a kernel
+    if space isa Spaces.FiniteDifferenceSpace
+        fill!(
+            parent(Fields.field_values(out)),
+            zero(eltype(parent(Fields.field_values(out)))),
+        )
+        Operators.call_post_op_callback() &&
+            Operators.post_op_callback(out, out, sbc)
+        return out
+    end
     us = UniversalSize(Fields.field_values(out))
     # executed
     p = spectral_partition(us)
