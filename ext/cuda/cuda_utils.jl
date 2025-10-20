@@ -46,7 +46,7 @@ function auto_launch!(
     kernel_name = nothing
     if name_kernels_from_stack_trace()
         # Create a key from the function and types of the args
-        key = string(objectid(f!)) * "_" * string(typeof.(args))
+        key = string(objectid(f!))
         kernel_name_exists = key in keys(kernel_names)
         if !kernel_name_exists
             # Construct the kernel name, ignoring modules we don't care about
