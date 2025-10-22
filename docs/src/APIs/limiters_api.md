@@ -16,6 +16,7 @@ This class of flux-limiters is applied only in the horizontal direction (on spec
 
 ```@docs
 Limiters.QuasiMonotoneLimiter
+Limiters.VerticalMassBorrowingLimiter
 Limiters.compute_bounds!
 Limiters.apply_limiter!
 ```
@@ -27,4 +28,5 @@ Limiters.compute_element_bounds!
 Limiters.compute_neighbor_bounds_local!
 Limiters.compute_neighbor_bounds_ghost!
 Limiters.apply_limit_slab!
+Limiters.column_massborrow!
 ```
