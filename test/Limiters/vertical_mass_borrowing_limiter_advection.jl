@@ -10,6 +10,7 @@ using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 using ClimaCore.CommonGrids
 using ClimaCore.Grids
 using ClimaTimeSteppers
+import ClimaCore
 
 import ClimaCore:
     Fields,
@@ -56,7 +57,7 @@ end
 function tendency!(yₜ, y, parameters, t)
     (; w, Δt, limiter) = parameters
     FT = Spaces.undertype(axes(y.q))
-    bcvel = pulse(-π, t, z₀, zₕ, z₁)
+    bcvel = pulse(-π, t, z₀, zₕ, z₁, speed)
     divf2c = Operators.DivergenceF2C(
         bottom = Operators.SetValue(Geometry.WVector(FT(bcvel))),
         top = Operators.SetValue(Geometry.WVector(FT(0))),
@@ -84,7 +85,7 @@ z₀ = FT(0.0)
 zₕ = FT(1.0)
 z₁ = FT(1.0)
 speed = FT(-1.0)
-pulse(z, t, z₀, zₕ, z₁) = abs(z - speed * t) ≤ zₕ ? z₁ : z₀
+pulse(z, t, z₀, zₕ, z₁, speed) = abs(z - speed * t) ≤ zₕ ? z₁ : z₀
 
 stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(FT(7.0)))
 plot_string = ["uniform", "stretched"]
@@ -125,7 +126,7 @@ plot_string = ["uniform", "stretched"]
         O = ones(FT, fspace)
 
         # Initial condition
-        q_init = pulse.(z, 0.0, z₀, zₕ, z₁)
+        q_init = pulse.(z, 0.0, z₀, zₕ, z₁, speed)
         q = q_init
         coords = Fields.coordinate_field(q)
         ρ = map(coord -> 1.0, coords)
@@ -153,16 +154,16 @@ plot_string = ["uniform", "stretched"]
 
         q_init = sol.u[1].q
         q_final = sol.u[end].q
-        q_analytic = pulse.(z, t₁, z₀, zₕ, z₁)
+        q_analytic = pulse.(z, t₁, z₀, zₕ, z₁, speed)
         err = norm(q_final .- q_analytic)
         rel_mass_err = norm((sum(q_final) - sum(q_init)) / sum(q_init))
 
 
         if use_column
             p = Plots.plot()
-            Plots.plot!(q_init, label = "init")
-            Plots.plot!(q_final, label = "computed")
-            Plots.plot!(q_analytic, label = "analytic")
+            Plots.plot!(q_init |> ClimaCore.to_cpu, label = "init")
+            Plots.plot!(q_final |> ClimaCore.to_cpu, label = "computed")
+            Plots.plot!(q_analytic |> ClimaCore.to_cpu, label = "analytic")
             Plots.plot!(; legend = :topright)
             Plots.plot!(; xlabel = "q", title = "VerticalMassBorrowingLimiter")
             f = joinpath(
@@ -174,18 +175,18 @@ plot_string = ["uniform", "stretched"]
             colidx = Fields.ColumnIndex((1, 1), 1)
             p = Plots.plot()
             Plots.plot!(
-                vec(parent(q_init[colidx])),
-                vec(parent(z[colidx])),
+                vec(parent(q_init[colidx] |> ClimaCore.to_cpu)),
+                vec(parent(z[colidx] |> ClimaCore.to_cpu)),
                 label = "init",
             )
             Plots.plot!(
-                vec(parent(q_final[colidx])),
-                vec(parent(z[colidx])),
+                vec(parent(q_final[colidx] |> ClimaCore.to_cpu)),
+                vec(parent(z[colidx] |> ClimaCore.to_cpu)),
                 label = "computed",
             )
             Plots.plot!(
-                vec(parent(q_analytic[colidx])),
-                vec(parent(z[colidx])),
+                vec(parent(q_analytic[colidx] |> ClimaCore.to_cpu)),
+                vec(parent(z[colidx] |> ClimaCore.to_cpu)),
                 label = "analytic",
             )
             Plots.plot!(; legend = :topright)
