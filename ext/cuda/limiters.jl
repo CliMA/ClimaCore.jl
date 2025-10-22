@@ -2,10 +2,12 @@ import ClimaCore.Limiters:
     QuasiMonotoneLimiter,
     compute_element_bounds!,
     compute_neighbor_bounds_local!,
-    apply_limiter!
+    apply_limiter!,
+    VerticalMassBorrowingLimiter,
+    column_massborrow!
 import ClimaCore.Fields
 import ClimaCore: DataLayouts, Spaces, Topologies, Fields
-import ClimaCore.DataLayouts: slab_index
+import ClimaCore.DataLayouts: slab_index, getindex_field, setindex_field!, column
 using CUDA
 
 function config_threadblock(Nv, Nh)
@@ -280,4 +282,77 @@ function apply_limiter_kernel!(
     # converged || @warn "Limiter failed to converge with rtol = $rtol"
 
     return nothing
+end
+
+
+function apply_limiter!(
+    q::Fields.Field,
+    ρ::Fields.Field,
+    space,
+    limiter::VerticalMassBorrowingLimiter,
+    dev::ClimaComms.CUDADevice;
+    warn::Bool = true,
+)
+    q_data = Fields.field_values(q)
+    Nf = DataLayouts.ncomponents(q_data)
+    us = DataLayouts.UniversalSize(q_data)
+    q_min = limiter.q_min
+    (; J) = Fields.local_geometry_field(ρ)
+    # J is the local Jacobian magnitude (determinant), which already represents
+    # the volume element per unit horizontal area for column fields.
+    # For shallow atmospheres: J ≈ Δz (units: m)
+    # For deep atmospheres: J accounts for spherical geometry (units: m)
+    (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(us)
+    ncols = Ni * Nj * Nh
+    nthread_x = Ni * Nj
+    nthread_y = Nf
+    nthread_z = cld(64, nthread_x * nthread_y) # ensure block is at least 64 threads
+    nthreads = (nthread_x, nthread_y, nthread_z)
+    nblocks = cld(ncols * Nf, prod(nthreads))
+
+    args = (
+        typeof(limiter),
+        Fields.field_values(q),
+        Fields.field_values(ρ),
+        Fields.field_values(J),
+        q_min,
+        us,
+    )
+    auto_launch!(
+        apply_limiter_kernel!,
+        args;
+        threads_s = nthreads,
+        blocks_s = nblocks,
+    )
+    call_post_op_callback() && post_op_callback(q, ρ, limiter, dev)
+    return nothing
+end
+
+function apply_limiter_kernel!(
+    ::Type{LM},
+    q_data,
+    ρ_data,
+    ΔV_data,
+    q_min_tuple,
+    us::DataLayouts.UniversalSize) where {LM <: VerticalMassBorrowingLimiter}
+    (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(us)
+    j_idx, i_idx = divrem(CUDA.threadIdx().x - Int32(1), Ni)
+    j_idx = j_idx + Int32(1)
+    i_idx = i_idx + Int32(1)
+    f_idx = CUDA.threadIdx().y
+    # each z in a block is a different element
+    h_idx = CUDA.blockDim().z * (CUDA.blockIdx().x - Int32(1)) + CUDA.threadIdx().z
+    @inbounds if h_idx <= Nh
+        q_min = q_min_tuple[f_idx]
+        q_column_data = column(q_data, i_idx, j_idx, h_idx)
+        ρ_column_data = column(ρ_data, i_idx, j_idx, h_idx)
+        ΔV_column_data = column(ΔV_data, i_idx, j_idx, h_idx)
+        column_massborrow!(
+            (@view parent(q_column_data)[:, f_idx]),
+            (@view parent(ρ_column_data)[:, 1]),
+            (@view parent(ΔV_column_data)[:, 1]),
+            q_min,
+        )
+    end
+    return
 end

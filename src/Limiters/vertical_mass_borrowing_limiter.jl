@@ -1,12 +1,14 @@
 import .DataLayouts as DL
 
 """
-    VerticalMassBorrowingLimiter(f::Fields.Field, q_min)
+    VerticalMassBorrowingLimiter(q_min)
 
 A vertical-only mass borrowing limiter.
 
 The mass borrower borrows tracer mass from an adjacent, lower layer.
 It conserves the total tracer mass and can avoid negative tracers.
+
+`q_min` should be a tuple of minimum tracer values for each tracer component.
 
 At level k, it will first borrow the mass from the layer k+1 (lower level).
 If the mass is not sufficient in layer k+1, it will borrow mass from
@@ -15,20 +17,22 @@ If the tracer mass in the bottom layer goes negative, it will repeat the
 process from the bottom to the top. In this way, the borrower works for
 any shape of mass profiles.
 
+# Example usage
+
+```julia
+ρ = fill(1.0, space)
+q = fill((a = 0.1, b = 0.1), space)
+limiter = VerticalMassBorrowingLimiter((0.0, 0.0))
+Limiters.apply_limiter!(q, ρ, limiter)
+```
+
 This code was adapted from [E3SM](https://github.com/E3SM-Project/E3SM/blob/2c377c5ec9a5585170524b366ad85074ab1b1a5c/components/eam/src/physics/cam/massborrow.F90)
 
 References:
  - [zhang2018impact](@cite)
 """
-struct VerticalMassBorrowingLimiter{F, T}
-    bmass::F
-    ic::F
+struct VerticalMassBorrowingLimiter{T <: Tuple}
     q_min::T
-end
-function VerticalMassBorrowingLimiter(f::Fields.Field, q_min)
-    bmass = similar(Spaces.level(f, 1))
-    ic = similar(Spaces.level(f, 1))
-    return VerticalMassBorrowingLimiter(bmass, ic, q_min)
 end
 
 
@@ -52,8 +56,20 @@ function apply_limiter!(
     lim::VerticalMassBorrowingLimiter,
     device::ClimaComms.AbstractCPUDevice,
 )
-    cache = (; bmass = lim.bmass, ic = lim.ic, q_min = lim.q_min)
-    columnwise_massborrow_cpu(q, ρ, cache)
+    (; J) = Fields.local_geometry_field(ρ)
+    q_column_data = Fields.field_values(q)
+    ρ_column_data = Fields.field_values(ρ)
+    ΔV_column_data = Fields.field_values(J)
+    for f in 1:DataLayouts.ncomponents(q_column_data)
+        q_min_component = lim.q_min[f]
+        column_massborrow!(
+            (@view parent(q_column_data)[:, f]),
+            (@view parent(ρ_column_data)[:, 1]),
+            (@view parent(ΔV_column_data)[:, 1]),
+            lim.q_min[f],
+        )
+    end
+    return nothing
 end
 
 function apply_limiter!(
@@ -63,74 +79,70 @@ function apply_limiter!(
     lim::VerticalMassBorrowingLimiter,
     device::ClimaComms.AbstractCPUDevice,
 )
+    (; J) = Fields.local_geometry_field(ρ)
     Fields.bycolumn(axes(q)) do colidx
-        cache = (;
-            bmass = lim.bmass[colidx],
-            ic = lim.ic[colidx],
-            q_min = lim.q_min,
-        )
-        columnwise_massborrow_cpu(q[colidx], ρ[colidx], cache)
+        q_column_data = Fields.field_values(q[colidx])
+        ρ_column_data = Fields.field_values(ρ[colidx])
+        ΔV_column_data = Fields.field_values(J[colidx])
+        for f in 1:DataLayouts.ncomponents(q_column_data)
+            q_min_component = lim.q_min[f]
+            column_massborrow!(
+                (@view parent(q_column_data)[:, f]),
+                (@view parent(ρ_column_data)[:, 1]),
+                (@view parent(ΔV_column_data)[:, 1]),
+                lim.q_min[f],
+            )
+        end
     end
+    return nothing
 end
 
-# TODO: can we improve the performance?
-# `bycolumn` on the CPU may be better here since we could multithread it.
-function columnwise_massborrow_cpu(q::Fields.Field, ρ::Fields.Field, cache) # column fields
-    (; bmass, ic, q_min) = cache
 
-    Δz = Fields.Δz_field(q)
-    Δz_vals = Fields.field_values(Δz)
-    (; J) = Fields.local_geometry_field(ρ)
-    # ΔV_vals = Fields.field_values(J)
-    ΔV_vals = Δz_vals
-    ρ_vals = Fields.field_values(ρ)
-    #  loop over tracers
-    nlevels = Spaces.nlevels(axes(q))
-    @. ic = 0
-    @. bmass = 0
-    q_vals = Fields.field_values(q)
-    # top to bottom
-    for f in 1:DataLayouts.ncomponents(q_vals)
-        for v in 1:nlevels
-            CI = CartesianIndex(1, 1, f, v, 1)
-            # new mass in the current layer
-            ρΔV_lev =
-                DL.getindex_field(ΔV_vals, CI) * DL.getindex_field(ρ_vals, CI)
-            nmass = DL.getindex_field(q_vals, CI) + bmass[] / ρΔV_lev
-            if nmass > q_min[f]
-                #  if new mass in the current layer is positive, don't borrow mass any more
-                DL.setindex_field!(q_vals, nmass, CI)
-                bmass[] = 0
-            else
-                #  set mass to q_min in the current layer, and save bmass
-                bmass[] = (nmass - q_min[f]) * ρΔV_lev
-                DL.setindex_field!(q_vals, q_min[f], CI)
-                ic[] = ic[] + 1
-            end
+
+"""
+    column_massborrow!(
+        q_data::AbstractArray,
+        ρ_data::AbstractArray,
+        ΔV_data::AbstractArray,
+        q_min::AbstractFloat,
+    )
+
+Apply vertical mass borrowing limiter to an array backing a single column of scalar data.
+"""
+function column_massborrow!(
+    q_data::AbstractArray,
+    ρ_data::AbstractArray,
+    ΔV_data::AbstractArray,
+    q_min::AbstractFloat,
+)
+    Nv = length(q_data)
+    borrowed_mass = zero(q_min)
+    for i in 0:(Nv - 1) # avoid stepranges for gpu performance
+        # top to bottom
+        v = Nv - i
+        ρΔV_lev = ρ_data[v] * ΔV_data[v]
+        new_mass = q_data[v] - (borrowed_mass / ρΔV_lev)
+        if new_mass > q_min
+            q_data[v] = new_mass
+            borrowed_mass = zero(borrowed_mass)
+        else
+            borrowed_mass = (q_min - new_mass) * ρΔV_lev
+            q_data[v] = q_min
         end
-
-        #  bottom to top
-        for v in nlevels:-1:1
-            CI = CartesianIndex(1, 1, f, v, 1)
-            # if the surface layer still needs to borrow mass
-            if bmass[] < 0
-                ρΔV_lev =
-                    DL.getindex_field(ΔV_vals, CI) *
-                    DL.getindex_field(ρ_vals, CI)
-                # new mass in the current layer
-                nmass = DL.getindex_field(q_vals, CI) + bmass[] / ρΔV_lev
-                if nmass > q_min[f]
-                    # if new mass in the current layer is positive, don't borrow mass any more
-                    DL.setindex_field!(q_vals, nmass, CI)
-                    bmass[] = 0
-                else
-                    # if new mass in the current layer is negative, continue to borrow mass
-                    bmass[] = (nmass - q_min[f]) * ρΔV_lev
-                    DL.setindex_field!(q_vals, q_min[f], CI)
-                end
+    end
+    borrowed_mass > zero(borrowed_mass) || return nothing
+    for v in 1:Nv
+        if borrowed_mass > zero(borrowed_mass)
+            ρΔV_lev = ρ_data[v] * ΔV_data[v]
+            new_mass = q_data[v] - (borrowed_mass / ρΔV_lev)
+            if new_mass > q_min
+                q_data[v] = new_mass
+                return nothing
+            else
+                borrowed_mass = (q_min - new_mass) * ρΔV_lev
+                q_data[v] = q_min
             end
         end
     end
-
     return nothing
 end
