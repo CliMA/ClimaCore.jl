@@ -1293,6 +1293,42 @@ steps:
         agents:
           slurm_ntasks: 3
 
+      - label: "Unit: limiter mass borrowing"
+        key: unit_limiter_mass_borrowing
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Limiters/vertical_mass_borrowing_limiter.jl"
+        artifact_paths:
+          - "test/Limiters/output/vert_mass_borrow/CPU/*"
+
+      - label: "Unit: mass borrowing limiter cuda"
+        key: unit_limiter_mass_borrowing_gpu
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite test/Limiters/vertical_mass_borrowing_limiter.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+        artifact_paths:
+          - "test/Limiters/output/vert_mass_borrow/GPU/*"
+
+      - label: "Unit: limiter mass borrowing advection"
+        key: unit_limiter_mass_borrowing_advection
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Limiters/vertical_mass_borrowing_limiter_advection.jl"
+        artifact_paths:
+          - "test/Limiters/output/vert_mass_borrow_advection/CPU/*"
+
+      - label: "Unit: mass borrowing limiter advection cuda"
+        key: unit_limiter_mass_borrowing_advection_gpu
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite test/Limiters/vertical_mass_borrowing_limiter_advection.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+        artifact_paths:
+          - "test/Limiters/output/vert_mass_borrow_advection/GPU/*"
+
   # TODO: improve performance label: [inference, allocs, flops, latency, benchmark, boundscheck]
   # TODO: use perf env for perf jobs, or merge test/perf envs
   - group: "Perf: Geometry"

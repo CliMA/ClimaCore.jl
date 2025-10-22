@@ -9,12 +9,17 @@ using ClimaCore.RecursiveApply
 using ClimaCore.Geometry
 using ClimaCore.Grids
 using ClimaCore.CommonGrids
+import ClimaCore
 using Test
 using Random
 
-#=
+
 import Plots
 import ClimaCorePlots
+dir = "vert_mass_borrow"
+device_name = ClimaComms.device() isa ClimaComms.CUDADevice ? "GPU" : "CPU"
+path = joinpath(@__DIR__, "output", dir, device_name)
+mkpath(path)
 function plot_results(f, f₀)
     col = Fields.ColumnIndex((1, 1), 1)
     fcol = f[col]
@@ -22,9 +27,11 @@ function plot_results(f, f₀)
     p = Plots.plot()
     Plots.plot(fcol; label = "field")
     Plots.plot!(f₀col; label = "initial")
+    Plots.savefig(joinpath(path, "lim.png"))
 end
-plot_results(ρq, ρq_init)
-=#
+# usage:
+# plot_results(ρq, ρq_init)
+
 
 function perturb_field!(f::Fields.Field; perturb_radius)
     device = ClimaComms.device(f)
@@ -38,7 +45,7 @@ end
 
 @testset "Vertical mass borrowing limiter - column" begin
     FT = Float64
-    Random.seed!(1234)
+    Random.seed!(1134)
     z_elem = 10
     z_min = 0
     z_max = 1
@@ -64,14 +71,13 @@ end
     @test 0.3 ≤ count(x -> x < 0, parent(q)) / 10 ≤ 0.5 # ensure reasonable percentage of points are negative
 
     @test -2 * perturb_q ≤ minimum(q) ≤ -tol
-    limiter = Limiters.VerticalMassBorrowingLimiter(q, (0.0,))
+    limiter = Limiters.VerticalMassBorrowingLimiter((0.0,))
     Limiters.apply_limiter!(q, ρ, limiter)
     @test 0 ≤ minimum(q)
     ρq = ρ .⊠ q
     @test isapprox(sum(ρq), sum_ρq_init; atol = 1e-15)
     @test isapprox(sum(ρq), sum_ρq_init; rtol = 1e-10)
-    # @show sum(ρq)     # 0.07388931313511024
-    # @show sum_ρq_init # 0.07388931313511025
+    plot_results(ClimaCore.to_cpu(ρq), ClimaCore.to_cpu(ρq_init))
 end
 
 @testset "Vertical mass borrowing limiter - sphere" begin
@@ -98,30 +104,36 @@ end
     # Initialize fields
     coords = Fields.coordinate_field(cspace)
     ρ = map(coord -> 1.0, coords)
-    q = map(coord -> 0.1, coords)
-
-    perturb_field!(q; perturb_radius = perturb_q)
+    q = map(coord -> (a = 0.1, b = 0.1), coords)
+    scalar_field = map(coord -> 0.1, coords)
+    (; z) = coords
+    perturb_field!(scalar_field; perturb_radius = perturb_q)
+    q.a .= scalar_field
+    scalar_field = map(coord -> 0.1, coords)
+    perturb_field!(scalar_field; perturb_radius = perturb_q)
+    q.b .= scalar_field
     perturb_field!(ρ; perturb_radius = perturb_ρ)
     ρq_init = ρ .⊠ q
     sum_ρq_init = sum(ρq_init)
 
     # Test that the minimum is below 0
-    @test length(parent(q)) == z_elem * h_elem^2 * 6 * n_quad_points^2 == 96000
-    @test 0.10 ≤ count(x -> x < 0.0001, parent(q)) / 96000 ≤ 1 # ensure 10% of points are negative
+    @test length(parent(q)) == 2 * z_elem * h_elem^2 * 6 * n_quad_points^2 == 192000
+    @test 0.10 ≤ count(x -> x < 0.0001, parent(q)) / 192000 ≤ 1 # ensure 10% of points are negative
 
-    @test -2 * perturb_q ≤ minimum(q) ≤ -tol
-    limiter = Limiters.VerticalMassBorrowingLimiter(q, (0.0,))
+    @test -2 * perturb_q ≤ minimum(parent(q)) ≤ -tol
+    limiter = Limiters.VerticalMassBorrowingLimiter((0.0, 0.0))
     Limiters.apply_limiter!(q, ρ, limiter)
-    @test 0 ≤ minimum(q)
+    @test 0 ≤ minimum(parent(q))
     ρq = ρ .⊠ q
-    @test isapprox(sum(ρq), sum_ρq_init; atol = 0.07)
-    @test isapprox(sum(ρq), sum_ρq_init; rtol = 0.07)
-    # @show sum(ρq)     # 125.5483524237572
-    # @show sum_ρq_init # 125.52052986152977
+    @test isapprox(sum(ρq.a), sum_ρq_init.a; atol = 0.07)
+    @test isapprox(sum(ρq.a), sum_ρq_init.a; rtol = 0.07)
+    @test isapprox(sum(ρq.b), sum_ρq_init.b; atol = 0.07)
+    @test isapprox(sum(ρq.b), sum_ρq_init.b; rtol = 0.07)
 end
 
 @testset "Vertical mass borrowing limiter - deep atmosphere" begin
     FT = Float64
+    Random.seed!(12214)
     z_elem = 10
     z_min = 0
     z_max = 1
@@ -157,12 +169,10 @@ end
     @test 0.10 ≤ count(x -> x < 0.0001, parent(q)) / 96000 ≤ 1 # ensure 10% of points are negative
 
     @test -2 * perturb_q ≤ minimum(q) ≤ -tol
-    limiter = Limiters.VerticalMassBorrowingLimiter(q, (0.0,))
+    limiter = Limiters.VerticalMassBorrowingLimiter((0.0,))
     Limiters.apply_limiter!(q, ρ, limiter)
     @test 0 ≤ minimum(q)
     ρq = ρ .⊠ q
-    @test isapprox(sum(ρq), sum_ρq_init; atol = 0.269)
-    @test isapprox(sum(ρq), sum_ρq_init; rtol = 0.00199)
-    # @show sum(ρq)     # 138.90494931641584
-    # @show sum_ρq_init # 139.1735731377394
+    @test isapprox(sum(ρq), sum_ρq_init; atol = 0.1)
+    @test isapprox(sum(ρq), sum_ρq_init; rtol = 0.001)
 end
