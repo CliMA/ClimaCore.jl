@@ -76,8 +76,9 @@ end
 # TODO: can we improve the performance?
 # `bycolumn` on the CPU may be better here since we could multithread it.
 function columnwise_massborrow_cpu(q::Fields.Field, ρ::Fields.Field, cache) # column fields
+    # TODO: maybe rm some stuff from struct or cache
     (; bmass, ic, q_min) = cache
-
+    # TODO: verify index direction
     Δz = Fields.Δz_field(q)
     Δz_vals = Fields.field_values(Δz)
     (; J) = Fields.local_geometry_field(ρ)
@@ -88,6 +89,8 @@ function columnwise_massborrow_cpu(q::Fields.Field, ρ::Fields.Field, cache) # c
     nlevels = Spaces.nlevels(axes(q))
     @. ic = 0
     @. bmass = 0
+    # TODO: Maybe delete ic
+    # TODO: make bmass positive
     q_vals = Fields.field_values(q)
     # top to bottom
     for f in 1:DataLayouts.ncomponents(q_vals)
@@ -97,6 +100,7 @@ function columnwise_massborrow_cpu(q::Fields.Field, ρ::Fields.Field, cache) # c
             ρΔV_lev =
                 DL.getindex_field(ΔV_vals, CI) * DL.getindex_field(ρ_vals, CI)
             nmass = DL.getindex_field(q_vals, CI) + bmass[] / ρΔV_lev
+            # TODO: should this be \geq
             if nmass > q_min[f]
                 #  if new mass in the current layer is positive, don't borrow mass any more
                 DL.setindex_field!(q_vals, nmass, CI)
@@ -133,4 +137,45 @@ function columnwise_massborrow_cpu(q::Fields.Field, ρ::Fields.Field, cache) # c
     end
 
     return nothing
+end
+
+
+function basic_lim(q, ρ = ones(Float64, length(q)), v = ones(Float64, length(q)))
+    ic = 0
+    bmass = 0.0
+    @show q
+    println("")
+    for i in 1:length(q)
+        @show i
+        ρΔV_lev = ρ[i] * v[i]
+        nmass = q[i] + bmass / ρΔV_lev
+        if nmass > 0.0
+            q[i] = nmass
+            bmass = 0.0
+        else
+            bmass = nmass * ρΔV_lev
+            q[i] = 0.0
+        end
+        @show q
+        println("")
+    end
+    for i in length(q):-1:1
+        @show i
+        if bmass < 0.0
+            ρΔV_lev = ρ[i] * v[i]
+            nmass = q[i] + bmass / ρΔV_lev
+            @show nmass
+            if nmass > 0
+                q[i] = nmass
+                @show q
+                return
+                bmass = 0.0
+            else
+                bmass = nmass * ρΔV_lev
+                q[i] = 0.0
+            end
+            @show q
+            println("")
+        end
+    end
 end

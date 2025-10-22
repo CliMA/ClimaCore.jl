@@ -9,10 +9,11 @@ using ClimaCore.RecursiveApply
 using ClimaCore.Geometry
 using ClimaCore.Grids
 using ClimaCore.CommonGrids
+import ClimaCore
 using Test
 using Random
 
-#=
+
 import Plots
 import ClimaCorePlots
 function plot_results(f, f₀)
@@ -22,9 +23,10 @@ function plot_results(f, f₀)
     p = Plots.plot()
     Plots.plot(fcol; label = "field")
     Plots.plot!(f₀col; label = "initial")
+    Plots.savefig("lim.png")
 end
-plot_results(ρq, ρq_init)
-=#
+# plot_results(ρq, ρq_init)
+
 
 function perturb_field!(f::Fields.Field; perturb_radius)
     device = ClimaComms.device(f)
@@ -38,7 +40,7 @@ end
 
 @testset "Vertical mass borrowing limiter - column" begin
     FT = Float64
-    Random.seed!(1234)
+    Random.seed!(1134)
     z_elem = 10
     z_min = 0
     z_max = 1
@@ -70,6 +72,7 @@ end
     ρq = ρ .⊠ q
     @test isapprox(sum(ρq), sum_ρq_init; atol = 1e-15)
     @test isapprox(sum(ρq), sum_ρq_init; rtol = 1e-10)
+    plot_results(ClimaCore.to_cpu(ρq), ClimaCore.to_cpu(ρq_init))
     # @show sum(ρq)     # 0.07388931313511024
     # @show sum_ρq_init # 0.07388931313511025
 end
@@ -110,8 +113,10 @@ end
     @test 0.10 ≤ count(x -> x < 0.0001, parent(q)) / 96000 ≤ 1 # ensure 10% of points are negative
 
     @test -2 * perturb_q ≤ minimum(q) ≤ -tol
+    @show q
     limiter = Limiters.VerticalMassBorrowingLimiter(q, (0.0,))
     Limiters.apply_limiter!(q, ρ, limiter)
+    @show q
     @test 0 ≤ minimum(q)
     ρq = ρ .⊠ q
     @test isapprox(sum(ρq), sum_ρq_init; atol = 0.07)
@@ -122,6 +127,7 @@ end
 
 @testset "Vertical mass borrowing limiter - deep atmosphere" begin
     FT = Float64
+    Random.seed!(12214)
     z_elem = 10
     z_min = 0
     z_max = 1

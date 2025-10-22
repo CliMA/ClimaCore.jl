@@ -148,7 +148,7 @@ plot_string = ["uniform", "stretched"]
             prob,
             ExplicitAlgorithm(SSP33ShuOsher()),
             dt = Δt,
-            saveat = Δt,
+            save_everystep = true,
         )
 
         q_init = sol.u[1].q
@@ -174,18 +174,18 @@ plot_string = ["uniform", "stretched"]
             colidx = Fields.ColumnIndex((1, 1), 1)
             p = Plots.plot()
             Plots.plot!(
-                vec(parent(z[colidx])),
                 vec(parent(q_init[colidx])),
+                vec(parent(z[colidx])),
                 label = "init",
             )
             Plots.plot!(
-                vec(parent(z[colidx])),
                 vec(parent(q_final[colidx])),
+                vec(parent(z[colidx])),
                 label = "computed",
             )
             Plots.plot!(
-                vec(parent(z[colidx])),
                 vec(parent(q_analytic[colidx])),
+                vec(parent(z[colidx])),
                 label = "analytic",
             )
             Plots.plot!(; legend = :topright)

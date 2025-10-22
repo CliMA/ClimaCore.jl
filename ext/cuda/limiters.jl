@@ -2,10 +2,11 @@ import ClimaCore.Limiters:
     QuasiMonotoneLimiter,
     compute_element_bounds!,
     compute_neighbor_bounds_local!,
-    apply_limiter!
+    apply_limiter!,
+    VerticalMassBorrowingLimiter
 import ClimaCore.Fields
 import ClimaCore: DataLayouts, Spaces, Topologies, Fields
-import ClimaCore.DataLayouts: slab_index
+import ClimaCore.DataLayouts: slab_index, getindex_field, setindex_field!
 using CUDA
 
 function config_threadblock(Nv, Nh)
@@ -281,3 +282,120 @@ function apply_limiter_kernel!(
 
     return nothing
 end
+
+
+function apply_limiter!(
+    q::Fields.Field,
+    ρ::Fields.Field,
+    space,
+    limiter::VerticalMassBorrowingLimiter,
+    dev::ClimaComms.CUDADevice;
+    warn::Bool = true,
+)
+    q_data = Fields.field_values(q)
+    Nf = DataLayouts.ncomponents(q_data)
+    us = DataLayouts.UniversalSize(q_data)
+    q_min = limiter.q_min
+    us = DataLayouts.UniversalSize(q_data)
+    Δz = Fields.Δz_field(q)
+    (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(us)
+    ncols = Ni * Nj * Nh
+    # if Ni * Nj * Nf > 64
+    nthread_x = Ni * Nj
+    nthread_y = Nf
+    nthread_z = cld(64, nthread_x * nthread_y)
+    nthreads = (nthread_x, nthread_y, nthread_z)
+    nblocks = cld(ncols * Nf, prod(nthreads))
+
+
+    args = (
+        typeof(limiter),
+        Fields.field_values(Operators.strip_space(q, axes(q))),
+        Fields.field_values(Operators.strip_space(ρ, axes(ρ))),
+        Fields.field_values(Operators.strip_space(Δz, axes(Δz))),
+        q_min,
+        us,
+    )
+    auto_launch!(
+        apply_limiter_kernel!,
+        args;
+        threads_s = nthreads,
+        blocks_s = nblocks,
+    )
+    call_post_op_callback() && post_op_callback(q, ρ, limiter, dev)
+    return nothing
+end
+
+function apply_limiter_kernel!(
+    ::Type{LM},
+    q_data,
+    ρ_data,
+    Δz_data,
+    q_min_tuple,
+    us::DataLayouts.UniversalSize) where {LM <: VerticalMassBorrowingLimiter}
+    (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(us)
+    j_idx, i_idx = divrem(CUDA.threadIdx().x - Int32(1), Ni)
+    j_idx = j_idx + Int32(1)
+    i_idx = i_idx + Int32(1)
+    f_idx = CUDA.threadIdx().y
+    h_idx = CUDA.blockDim().z * (CUDA.blockIdx().x - Int32(1)) + CUDA.threadIdx().z
+    # tidx = (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x - Int32(1)
+    q_min = q_min_tuple[f_idx]
+    borrowed_mass = zero(eltype(q_data))
+    @inbounds if h_idx <= Nh
+        # TODO: unroll this?
+        for v in 1:Nv
+            CI = CartesianIndex(i_idx, j_idx, f_idx, v, h_idx)
+            ρΔV_lev = getindex_field(ρ_data, CI) * getindex_field(Δz_data, CI)
+            new_mass = getindex_field(q_data, CI) - (borrowed_mass / ρΔV_lev)
+            if new_mass > q_min
+                setindex_field!(q_data, new_mass, CI)
+                borrowed_mass = zero(borrowed_mass)
+            else
+                borrowed_mass = (q_min - new_mass) * ρΔV_lev
+                setindex_field!(q_data, q_min, CI)
+            end
+        end
+        for i in 0:(Nv - 1) # CUDA.jl recommends avoiding stepranges
+            v = Nv - i
+            if borrowed_mass > zero(borrowed_mass)
+                CI = CartesianIndex(i_idx, j_idx, f_idx, v, h_idx)
+                ρΔV_lev = getindex_field(ρ_data, CI) * getindex_field(Δz_data, CI)
+                new_mass = getindex_field(q_data, CI) - (borrowed_mass / ρΔV_lev)
+                if new_mass > q_min
+                    setindex_field!(q_data, new_mass, CI)
+                    return
+                else
+                    borrowed_mass = (q_min - new_mass) * ρΔV_lev
+                    setindex_field!(q_data, q_min, CI)
+                end
+            end
+        end
+    end
+    return
+end
+
+# PLAN
+# Implementation 1: each thread handles a column. This likely will not most of the gpu until h >= 128
+# 1.1: no shmem
+# 1.2: shmem
+# 1.3 split fields?
+# Implementation 2: each block handles a column?
+#=
+
+while sync_threads_and(lev_mass < lim || bottom_lev)
+    borrowed_from_lower = lim - lev_mass
+    borrowed_from_me = gotten_from_shuffle
+    lev_mass = lim - borrowed_from_me
+end
+
+while lev_mass < lim
+    borrowing_from_above = lev_mass
+    borrowed_from_me = gotten_from_shuffle
+    lev_mass = lev_mass = lim - borrowed_from_me
+end
+
+
+=#
+
+# Implementation 3: each warp handles each col
