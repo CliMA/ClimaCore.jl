@@ -344,7 +344,8 @@ function apply_limiter_kernel!(
     borrowed_mass = zero(eltype(q_data))
     @inbounds if h_idx <= Nh
         # TODO: unroll this?
-        for v in 1:Nv
+        for i in 0:(Nv - 1) # CUDA.jl recommends avoiding stepranges
+            v = Nv - i
             CI = CartesianIndex(i_idx, j_idx, f_idx, v, h_idx)
             ρΔV_lev = getindex_field(ρ_data, CI) * getindex_field(Δz_data, CI)
             new_mass = getindex_field(q_data, CI) - (borrowed_mass / ρΔV_lev)
@@ -356,8 +357,7 @@ function apply_limiter_kernel!(
                 setindex_field!(q_data, q_min, CI)
             end
         end
-        for i in 0:(Nv - 1) # CUDA.jl recommends avoiding stepranges
-            v = Nv - i
+        for v in 1:Nv
             if borrowed_mass > zero(borrowed_mass)
                 CI = CartesianIndex(i_idx, j_idx, f_idx, v, h_idx)
                 ρΔV_lev = getindex_field(ρ_data, CI) * getindex_field(Δz_data, CI)
