@@ -51,7 +51,7 @@ function auto_launch!(
         kernel_name_exists = key in keys(kernel_names)
         if !kernel_name_exists
             # Construct the kernel name, ignoring modules we don't care about
-            uninteresting_modules = [
+            ignore_modules = [
                 :Base,
                 :Core,
                 :GPUCompiler,
@@ -63,17 +63,32 @@ function auto_launch!(
             stack = stacktrace()
             first_relevant_index = findfirst(stack) do frame
                 frame.linfo isa Core.MethodInstance && (
-                    fullname(frame.linfo.def.module)[1] ∉ uninteresting_modules
+                    fullname(frame.linfo.def.module)[1] ∉ ignore_modules
                 )
             end
             if !isnothing(first_relevant_index)
+                # Don't include file if this is inside an NVTX annotation
                 frame = stack[first_relevant_index]
-                name_str =
-                    string(frame.func) *
-                    "_" *
-                    string(frame.linfo.def.file) *
-                    "_" *
-                    string(frame.line)
+                func_name = string(frame.func)
+                if contains(func_name, "#")
+                    func_name = split(func_name, "#")[1]
+                end
+                file_path = frame.linfo.def.file
+                fp_split = split(string(file_path), "/")
+                if "NVTX" in fp_split
+                    fp_string = "_NVTX"
+                    line_string = ""
+                else
+                    # Trim base directory off of file path
+                    package_index = findfirst(fp_split) do part
+                        startswith(part, "Clima")
+                    end
+                    fp_string =
+                        "_FILE_" *
+                        string(joinpath(fp_split[package_index:end]...))
+                    line_string = "_L" * string(frame.line)
+                end
+                name_str = string(func_name) * fp_string * line_string
                 kernel_name = replace(name_str, r"[^A-Za-z0-9]" => "_")
             end
             @debug "Using kernel name: $kernel_name"
@@ -85,6 +100,7 @@ function auto_launch!(
     if auto
         @assert !isnothing(nitems)
         if nitems ≥ 0
+            # Note: `name = nothing` here will revert to default behavior
             kernel = CUDA.@cuda name = kernel_name always_inline = true launch =
                 false f!(args...)
             config = CUDA.launch_configuration(kernel.fun)
