@@ -79,9 +79,12 @@ function auto_launch!(
                     fp_string = "_NVTX"
                     line_string = ""
                 else
-                    # Trim base directory off of file path
+                    # Trim base directory off of file path to shorten
                     package_index = findfirst(fp_split) do part
                         startswith(part, "Clima")
+                    end
+                    if isnothing(package_index)
+                        package_index = findfirst(p -> p == ".julia", fp_split)
                     end
                     if isnothing(package_index)
                         package_index = 1
