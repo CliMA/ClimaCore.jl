@@ -83,6 +83,9 @@ function auto_launch!(
                     package_index = findfirst(fp_split) do part
                         startswith(part, "Clima")
                     end
+                    if isnothing(package_index)
+                        package_index = 1
+                    end
                     fp_string =
                         "_FILE_" *
                         string(joinpath(fp_split[package_index:end]...))
