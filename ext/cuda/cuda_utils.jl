@@ -87,6 +87,9 @@ function auto_launch!(
                         package_index = findfirst(p -> p == ".julia", fp_split)
                     end
                     if isnothing(package_index)
+                        package_index = findfirst(p -> p == "src", fp_split)
+                    end
+                    if isnothing(package_index)
                         package_index = 1
                     end
                     fp_string =
