@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.41
+-------
+- Add `project` for both sides of 2-tensors (previously only left side was supported). 
+  Simplify implementation. [2379](https://github.com/Clima/ClimaCore.jl/pull/2379)
+
 v0.14.40
 -------
 - Store `reverse_mode` in the `IntervalMesh` struct, so that we can access it when writing

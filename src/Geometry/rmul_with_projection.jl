@@ -14,11 +14,8 @@ projected onto the `Contravariant3Axis`. In general, the first axis of `y` will
 be projected onto the dual of the last axis of `x`.
 """
 mul_with_projection(x, y, _) = x * y
-mul_with_projection(
-    x::Union{AdjointAxisVector, Axis2TensorOrAdj},
-    y::AxisTensor,
-    lg,
-) = x * project(dual(axes(x)[2]), y, lg)
+mul_with_projection(x::Union{AdjointAxisVector, Axis2TensorOrAdj}, y::AxisTensor, lg) =
+    x * project(dual(axes(x)[2]), y, lg)
 
 """
     rmul_with_projection(x, y, lg)
@@ -26,14 +23,10 @@ mul_with_projection(
 Similar to `rmul(x, y)`, except that this version calls `mul_with_projection`
 instead of `*`.
 """
-rmul_with_projection(x, y, lg) =
-    rmap((x′, y′) -> mul_with_projection(x′, y′, lg), x, y)
-rmul_with_projection(x::SingleValue, y, lg) =
-    rmap(y′ -> mul_with_projection(x, y′, lg), y)
-rmul_with_projection(x, y::SingleValue, lg) =
-    rmap(x′ -> mul_with_projection(x′, y, lg), x)
-rmul_with_projection(x::SingleValue, y::SingleValue, lg) =
-    mul_with_projection(x, y, lg)
+rmul_with_projection(x, y, lg) = rmap((x′, y′) -> mul_with_projection(x′, y′, lg), x, y)
+rmul_with_projection(x::SingleValue, y, lg) = rmap(y′ -> mul_with_projection(x, y′, lg), y)
+rmul_with_projection(x, y::SingleValue, lg) = rmap(x′ -> mul_with_projection(x′, y, lg), x)
+rmul_with_projection(x::SingleValue, y::SingleValue, lg) = mul_with_projection(x, y, lg)
 
 axis_tensor_type(::Type{T}, ::Type{Tuple{A1}}) where {T, A1} =
     AxisVector{T, A1, SVector{_length(A1), T}}
@@ -72,57 +65,44 @@ mul_return_type(::Type{X}, ::Type{Y}) where {X, Y} = error(
 # Methods from Base:
 mul_return_type(::Type{X}, ::Type{Y}) where {X <: Number, Y <: Number} =
     promote_type(X, Y)
-mul_return_type(
-    ::Type{X},
-    ::Type{Y},
-) where {X <: AdjointAbsVec, Y <: AbstractMatrix} =
+mul_return_type(::Type{X}, ::Type{Y}) where {X <: AdjointAbsVec, Y <: AbstractMatrix} =
     adjoint_type(mul_return_type(adjoint_type(Y), adjoint_type(X)))
 
 # Methods from ClimaCore: 
 mul_return_type(
-    ::Type{X},
-    ::Type{Y},
+    ::Type{X}, ::Type{Y},
 ) where {T, N, A, X <: Number, Y <: AxisTensor{T, N, A}} =
     axis_tensor_type(promote_type(X, T), A)
 mul_return_type(
-    ::Type{X},
-    ::Type{Y},
+    ::Type{X}, ::Type{Y},
 ) where {T, N, A, X <: AxisTensor{T, N, A}, Y <: Number} =
     axis_tensor_type(promote_type(T, Y), A)
 mul_return_type(
-    ::Type{X},
-    ::Type{Y},
+    ::Type{X}, ::Type{Y},
 ) where {T, N, A, X <: Number, Y <: AdjointAxisTensor{T, N, A}} =
     adjoint_type(axis_tensor_type(promote_type(X, T), A))
 mul_return_type(
-    ::Type{X},
-    ::Type{Y},
+    ::Type{X}, ::Type{Y},
 ) where {T, N, A, X <: AdjointAxisTensor{T, N, A}, Y <: Number} =
     adjoint_type(axis_tensor_type(promote_type(T, Y), A))
 mul_return_type(
-    ::Type{X},
-    ::Type{Y},
+    ::Type{X}, ::Type{Y},
 ) where {T1, T2, X <: AdjointAxisVector{T1}, Y <: AxisVector{T2}} =
     promote_type(T1, T2) # This comes from the definition of dot.
 mul_return_type(
-    ::Type{X},
-    ::Type{Y},
+    ::Type{X}, ::Type{Y},
 ) where {
-    T1,
-    T2,
-    A1,
-    A2,
+    T1, T2,
+    A1, A2,
     X <: AxisVector{T1, A1},
     Y <: AdjointAxisVector{T2, A2},
 } = axis_tensor_type(promote_type(T1, T2), Tuple{A1, A2})
 mul_return_type(
-    ::Type{X},
-    ::Type{Y},
+    ::Type{X}, ::Type{Y},
 ) where {T1, T2, X <: Axis2TensorOrAdj{T1}, Y <: AxisVector{T2}} =
     axis_tensor_type(promote_type(T1, T2), Tuple{axis1(X)})
 mul_return_type(
-    ::Type{X},
-    ::Type{Y},
+    ::Type{X}, ::Type{Y},
 ) where {T1, T2, X <: Axis2TensorOrAdj{T1}, Y <: Axis2TensorOrAdj{T2}} =
     axis_tensor_type(promote_type(T1, T2), Tuple{axis1(X), axis2(Y)})
 
@@ -142,7 +122,5 @@ rmul_return_type(::Type{X}, ::Type{Y}) where {X <: SingleValue, Y} =
     rmaptype(Y′ -> mul_return_type(X, Y′), Y)
 rmul_return_type(::Type{X}, ::Type{Y}) where {X, Y <: SingleValue} =
     rmaptype(X′ -> mul_return_type(X′, Y), X)
-rmul_return_type(
-    ::Type{X},
-    ::Type{Y},
-) where {X <: SingleValue, Y <: SingleValue} = mul_return_type(X, Y)
+rmul_return_type(::Type{X}, ::Type{Y}) where {X <: SingleValue, Y <: SingleValue} =
+    mul_return_type(X, Y)

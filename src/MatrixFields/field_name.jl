@@ -28,17 +28,16 @@ macro name()
     return :(FieldName())
 end
 macro name(expr)
-    return :(FieldName($(expr_to_name_chain(expr))...))
+    return :(FieldName($(name_chain_exprs(expr)...)))
 end
 
-expr_to_name_chain(value) = error("$(repr(value)) is not a valid property name")
-expr_to_name_chain(value::Union{Symbol, Integer}) = (value,)
-expr_to_name_chain(quote_node::QuoteNode) = expr_to_name_chain(quote_node.value)
-function expr_to_name_chain(expr::Expr)
-    expr.head == :. || error("$expr is not a valid property name")
-    arg1, arg2 = expr.args
-    return (expr_to_name_chain(arg1)..., expr_to_name_chain(arg2)...)
-end
+name_chain_exprs(expr) =
+    expr isa Symbol ? (QuoteNode(expr),) :
+    expr isa Union{Integer, QuoteNode} ? (expr,) :
+    Meta.isexpr(expr, :quote) && Meta.isexpr(expr.args[1], :$) ? (esc(expr),) :
+    Meta.isexpr(expr, :.) ?
+    (name_chain_exprs(expr.args[1])..., name_chain_exprs(expr.args[2])...) :
+    error("invalid syntax _.$((expr isa Expr ? string : repr)(expr))")
 
 # Show a FieldName with @name syntax, instead of the default constructor syntax.
 function Base.show(io::IO, ::FieldName{name_chain}) where {name_chain}

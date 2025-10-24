@@ -505,8 +505,7 @@ if tendency_plots
         duₕh = @. -κ₄_dynamic * (hwgrad(hdiv(χuₕ)))
 
 
-        fuw = @. Geometry.Covariant13Vector(fuₕ) +
-           Geometry.Covariant13Vector(fw)
+        fuw = @. Geometry.Covariant13Vector(fuₕ) + Geometry.Covariant13Vector(fw)
         fω² = hcurl.(fw)
         fω² .+= vcurlc2f.(cuₕ)
 
@@ -623,8 +622,7 @@ if tendency_plots
         dρqh = @. -κ₄_tracer * hwdiv(cρ * hgrad(χq))
         duₕh = @. -κ₄_dynamic * (hwgrad(hdiv(χuₕ)))
 
-        fuw = @. Geometry.Covariant13Vector(fuₕ) +
-           Geometry.Covariant13Vector(fw)
+        fuw = @. Geometry.Covariant13Vector(fuₕ) + Geometry.Covariant13Vector(fw)
         fω² = hcurl.(fw)
         fω² .+= vcurlc2f.(cuₕ)
 
@@ -688,16 +686,14 @@ Plots.mp4(anim, joinpath(path, "tracer.mp4"), fps = 20)
 
 If2c = Operators.InterpolateF2C()
 anim = Plots.@animate for u in sol.u
-    ᶜuw = @. Geometry.Covariant13Vector(u.uₕ) +
-       Geometry.Covariant13Vector(If2c(u.w))
+    ᶜuw = @. Geometry.Covariant13Vector(u.uₕ) + Geometry.Covariant13Vector(If2c(u.w))
     w = @. Geometry.project(Geometry.WAxis(), ᶜuw)
     Plots.plot(w, ylim = (0, 12000), xlim = (-10000, 10000))
 end
 Plots.mp4(anim, joinpath(path, "vel_w.mp4"), fps = 20)
 
 anim = Plots.@animate for u in sol.u
-    ᶜuw = @. Geometry.Covariant13Vector(u.uₕ) +
-       Geometry.Covariant13Vector(If2c(u.w))
+    ᶜuw = @. Geometry.Covariant13Vector(u.uₕ) + Geometry.Covariant13Vector(If2c(u.w))
     u = @. Geometry.project(Geometry.UAxis(), ᶜuw)
     Plots.plot(u, ylim = (0, 12000), xlim = (-10000, 10000))
 end

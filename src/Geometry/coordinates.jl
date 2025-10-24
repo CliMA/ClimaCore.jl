@@ -37,25 +37,12 @@ abstract type Abstract3DPoint{FT} <: AbstractPoint{FT} end
 
 Base.show(io::IO, point::Abstract1DPoint) =
     print(io, nameof(typeof(point)), "(", component(point, 1), ")")
-Base.show(io::IO, point::Abstract2DPoint) = print(
-    io,
-    nameof(typeof(point)),
-    "(",
-    component(point, 1),
-    ", ",
-    component(point, 2),
-    ")",
+Base.show(io::IO, point::Abstract2DPoint) = print(io,
+    nameof(typeof(point)), "(", component(point, 1), ", ", component(point, 2), ")",
 )
-Base.show(io::IO, point::Abstract3DPoint) = print(
-    io,
+Base.show(io::IO, point::Abstract3DPoint) = print(io,
     nameof(typeof(point)),
-    "(",
-    component(point, 1),
-    ", ",
-    component(point, 2),
-    ", ",
-    component(point, 3),
-    ")",
+    "(", component(point, 1), ", ", component(point, 2), ", ", component(point, 3), ")",
 )
 
 """
@@ -92,10 +79,8 @@ macro pointtype(name, fields...)
             function Base.:(==)(x::$name, y::$name)
                 (&)($([:(x.$field == y.$field) for field in fields]...))
             end
-            Base.promote_rule(
-                ::Type{$name{FT1}},
-                ::Type{$name{FT2}},
-            ) where {FT1, FT2} = $name{promote_type(FT1, FT2)}
+            Base.promote_rule(::Type{$name{FT1}}, ::Type{$name{FT2}}) where {FT1, FT2} =
+                $name{promote_type(FT1, FT2)}
             $tofloat_expr
         end,
     )
@@ -140,8 +125,7 @@ product_coordinates(xp::XPoint, yp::YPoint) = XYPoint(promote(xp.x, yp.y)...)
 product_coordinates(xp::XPoint, zp::ZPoint) = XZPoint(promote(xp.x, zp.z)...)
 product_coordinates(yp::YPoint, zp::ZPoint) = YZPoint(promote(yp.y, zp.z)...)
 
-product_coordinates(xyp::XYPoint, zp::ZPoint) =
-    XYZPoint(promote(xyp.x, xyp.y, zp.z)...)
+product_coordinates(xyp::XYPoint, zp::ZPoint) = XYZPoint(promote(xyp.x, xyp.y, zp.z)...)
 
 product_coordinates(latp::LatPoint, longp::LongPoint) =
     LatLongPoint(promote(latp.lat, longp.long)...)
@@ -155,8 +139,7 @@ component(p::AbstractPoint{FT}, i::Integer) where {FT} = getfield(p, i)::FT
 
 @inline ncomponents(p::AbstractPoint) = nfields(p)
 @inline ncomponents(::Type{P}) where {P <: AbstractPoint} = fieldcount(P)
-components(p::AbstractPoint) =
-    SVector(ntuple(i -> component(p, i), ncomponents(p)))
+components(p::AbstractPoint) = SVector(ntuple(i -> component(p, i), ncomponents(p)))
 
 _coordinate_type(ptyp::Type{Abstract1DPoint}, ::Val{1}) = ptyp
 _coordinate(p::Abstract1DPoint, ::Val{1}) = p
@@ -183,17 +166,14 @@ _coordinate(p::XYZPoint, ::Val{1}) = XPoint(p.x)
 _coordinate(p::XYZPoint, ::Val{2}) = YPoint(p.y)
 _coordinate(p::XYZPoint, ::Val{3}) = ZPoint(p.z)
 
-coordinate_type(ptyp::Type{<:AbstractPoint}, ax::Int) =
-    _coordinate_type(ptyp, Val(ax))
-coordinate_type(ptyp::Type{<:AbstractPoint}, ax::Integer) =
-    _coordinate_type(ptyp, Int(ax))
+coordinate_type(ptyp::Type{<:AbstractPoint}, ax::Int) = _coordinate_type(ptyp, Val(ax))
+coordinate_type(ptyp::Type{<:AbstractPoint}, ax::Integer) = _coordinate_type(ptyp, Int(ax))
 
 coordinate(pt::AbstractPoint, ax::Int) = _coordinate(pt, Val(ax))
 coordinate(pt::AbstractPoint, ax::Integer) = _coordinate(pt, Int(ax))
 
 # the following are needed for linranges to work correctly with coordinate values
-Base.:(-)(p1::T) where {T <: AbstractPoint} =
-    unionalltype(T)((-components(p1)...))
+Base.:(-)(p1::T) where {T <: AbstractPoint} = unionalltype(T)((-components(p1)...))
 Base.:(-)(p1::T, p2::T) where {T <: AbstractPoint} =
     unionalltype(T)((components(p1) - components(p2))...)
 Base.:(+)(p1::T, p2::T) where {T <: AbstractPoint} =
@@ -208,12 +188,7 @@ Base.LinRange(start::T, stop::T, length::Integer) where {T <: Abstract1DPoint} =
     Base.LinRange{T}(start, stop, length)
 
 # we add our own method to this so that `BigFloat` coordinate ranges are computed accurately.
-function Base.lerpi(
-    j::Integer,
-    d::Integer,
-    a::T,
-    b::T,
-) where {T <: Abstract1DPoint}
+function Base.lerpi(j::Integer, d::Integer, a::T, b::T) where {T <: Abstract1DPoint}
     T(Base.lerpi(j, d, component(a, 1), component(b, 1)))
 end
 
@@ -250,11 +225,7 @@ function bilinear_interpolate(coords::NTuple{4, V}, ξ1, ξ2) where {V <: SVecto
     w1 .* coords[1] .+ w2 .* coords[2] .+ w3 .* coords[3] .+ w4 .* coords[4]
 end
 
-function bilinear_interpolate(
-    coords::NTuple{4, V},
-    ξ1,
-    ξ2,
-) where {V <: AbstractPoint}
+function bilinear_interpolate(coords::NTuple{4, V}, ξ1, ξ2) where {V <: AbstractPoint}
     VV = unionalltype(V)
     c = bilinear_interpolate(map(components, coords), ξ1, ξ2)
     VV(c...)

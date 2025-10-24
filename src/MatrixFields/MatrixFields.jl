@@ -84,14 +84,10 @@ export FieldMatrixWithSolver, ⋅
 include("band_matrix_row.jl")
 
 const ColumnwiseBandMatrixField{V, S} = Fields.Field{
-    V,
-    S,
+    V, S,
 } where {
     V <: AbstractData{<:BandMatrixRow},
-    S <: Union{
-        Spaces.AbstractSpace,
-        Operators.PlaceholderSpace, # so that this can exist inside cuda kernels
-    },
+    S <: Union{Spaces.AbstractSpace, Operators.PlaceholderSpace}, # so that this can exist inside cuda kernels
 }
 
 include("matrix_shape.jl")

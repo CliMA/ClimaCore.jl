@@ -1,4 +1,4 @@
-using StaticArrays, LinearAlgebra
+using StaticArrays, LinearAlgebra, UnrolledUtilities
 
 """
     AbstractAxis
@@ -8,6 +8,7 @@ An axis of a [`AxisTensor`](@ref).
 abstract type AbstractAxis{I} end
 
 Base.Broadcast.broadcastable(a::AbstractAxis) = a
+axis_indices(::AbstractAxis{I}) where {I} = I
 
 """
     dual(ax::AbstractAxis)
@@ -61,8 +62,7 @@ coordinate_axis(::Type{<:LatLongPoint}) = (1, 2)
 
 coordinate_axis(coord::AbstractPoint) = coordinate_axis(typeof(coord))
 
-@inline idxin(I::NTuple{N, Int}, i::Int) where {N} =
-    unrolled_findfirst(isequal(i), I)
+@inline idxin(I::NTuple{N, Int}, i::Int) where {N} = unrolled_findfirst(isequal(i), I)
 
 struct PropertyError <: Exception
     ax::Any
@@ -84,8 +84,7 @@ end
 # most of these are required for printing
 Base.length(ax::AbstractAxis{I}) where {I} = length(I)
 Base.unitrange(ax::AbstractAxis) = StaticArrays.SOneTo(length(ax))
-Base.LinearIndices(axes::Tuple{Vararg{AbstractAxis}}) =
-    1:prod(map(length, axes))
+Base.LinearIndices(axes::Tuple{Vararg{AbstractAxis}}) = 1:prod(map(length, axes))
 Base.checkindex(::Type{Bool}, ax::AbstractAxis, i) =
     Base.checkindex(Bool, Base.unitrange(ax), i)
 Base.lastindex(ax::AbstractAxis) = length(ax)
@@ -108,21 +107,16 @@ operations such as multiplication.
 [`components`](@ref) to obtain the underlying array.
 """
 struct AxisTensor{
-    T,
-    N,
-    A <: NTuple{N, AbstractAxis},
-    S <: StaticArray{<:Tuple, T, N},
+    T, N, A <: NTuple{N, AbstractAxis}, S <: StaticArray{<:Tuple, T, N},
 } <: AbstractArray{T, N}
     axes::A
     components::S
 end
 
 AxisTensor(
-    axes::A,
-    components::S,
+    axes::A, components::S,
 ) where {
-    A <: Tuple{Vararg{AbstractAxis}},
-    S <: StaticArray{<:Tuple, T, N},
+    A <: Tuple{Vararg{AbstractAxis}}, S <: StaticArray{<:Tuple, T, N},
 } where {T, N} = AxisTensor{T, N, A, S}(axes, components)
 
 AxisTensor(axes::Tuple{Vararg{AbstractAxis}}, components) =
@@ -153,8 +147,7 @@ Base.zeros(::Type{AxisTensor{T, N, A, S}}) where {T, N, A, S} =
 
 function Base.show(io::IO, a::AxisTensor{T, N, A, S}) where {T, N, A, S}
     print(
-        io,
-        "AxisTensor{$T, $N, $A, $S}($(getfield(a, :axes)), $(getfield(a, :components)))",
+        io, "AxisTensor{$T, $N, $A, $S}($(getfield(a, :axes)), $(getfield(a, :components)))",
     )
 end
 
@@ -179,16 +172,12 @@ Base.@propagate_inbounds Base.getindex(v::AxisTensor, i::Int...) =
 
 
 Base.@propagate_inbounds function Base.getindex(
-    v::AxisTensor{<:Any, 2, Tuple{A1, A2}},
-    ::Colon,
-    i::Integer,
+    v::AxisTensor{<:Any, 2, Tuple{A1, A2}}, ::Colon, i::Integer,
 ) where {A1, A2}
     AxisVector(axes(v, 1), getindex(components(v), :, i))
 end
 Base.@propagate_inbounds function Base.getindex(
-    v::AxisTensor{<:Any, 2, Tuple{A1, A2}},
-    i::Integer,
-    ::Colon,
+    v::AxisTensor{<:Any, 2, Tuple{A1, A2}}, i::Integer, ::Colon,
 ) where {A1, A2}
     AxisVector(axes(v, 2), getindex(components(v), i, :))
 end
@@ -196,11 +185,7 @@ end
 
 Base.map(f::F, a::AxisTensor) where {F} =
     AxisTensor(axes(a), map(f, components(a)))
-Base.map(
-    f::F,
-    a::AxisTensor{Ta, N, A},
-    b::AxisTensor{Tb, N, A},
-) where {F, Ta, Tb, N, A} =
+Base.map(f::F, a::AxisTensor{Ta, N, A}, b::AxisTensor{Tb, N, A}) where {F, Ta, Tb, N, A} =
     AxisTensor(axes(a), map(f, components(a), components(b)))
 #Base.map(f, a::AxisTensor{Ta,N}, b::AxisTensor{Tb,N}) where {Ta,Tb,N} =
 #    map(f, promote(a,b)...)
@@ -238,11 +223,8 @@ AxisVector(ax::A1, v::SVector{N, T}) where {A1 <: AbstractAxis, N, T} =
     AxisVector(A.instance, SVector(arg1))
 (AxisVector{T, A, SVector{2, T}} where {T})(arg1::Real, arg2::Real) where {A} =
     AxisVector(A.instance, SVector(arg1, arg2))
-(AxisVector{T, A, SVector{3, T}} where {T})(
-    arg1::Real,
-    arg2::Real,
-    arg3::Real,
-) where {A} = AxisVector(A.instance, SVector(arg1, arg2, arg3))
+(AxisVector{T, A, SVector{3, T}} where {T})(arg1::Real, arg2::Real, arg3::Real) where {A} =
+    AxisVector(A.instance, SVector(arg1, arg2, arg3))
 
 const CovariantVector{T, I, S} = AxisVector{T, CovariantAxis{I}, S}
 const ContravariantVector{T, I, S} = AxisVector{T, ContravariantAxis{I}, S}
@@ -283,8 +265,7 @@ Base.zero(::Type{AdjointAxisTensor{T, N, A, S}}) where {T, N, A, S} =
 
 const AdjointAxisVector{T, A1, S} = Adjoint{T, AxisVector{T, A1, S}}
 
-const AxisVectorOrAdj{T, A, S} =
-    Union{AxisVector{T, A, S}, AdjointAxisVector{T, A, S}}
+const AxisVectorOrAdj{T, A, S} = Union{AxisVector{T, A, S}, AdjointAxisVector{T, A, S}}
 
 Base.@propagate_inbounds Base.getindex(va::AdjointAxisVector, i::Int) =
     getindex(components(va), i)
@@ -293,35 +274,28 @@ Base.@propagate_inbounds Base.getindex(va::AdjointAxisVector, i::Int, j::Int) =
 
 # 2-tensors
 const Axis2Tensor{T, A, S} = AxisTensor{T, 2, A, S}
-Axis2Tensor(
-    axes::Tuple{AbstractAxis, AbstractAxis},
-    components::AbstractMatrix,
-) = AxisTensor(axes, components)
+Axis2Tensor(axes::Tuple{AbstractAxis, AbstractAxis}, components::AbstractMatrix) =
+    AxisTensor(axes, components)
 
 const AdjointAxis2Tensor{T, A, S} = Adjoint{T, Axis2Tensor{T, A, S}}
 
-const Axis2TensorOrAdj{T, A, S} =
-    Union{Axis2Tensor{T, A, S}, AdjointAxis2Tensor{T, A, S}}
+const Axis2TensorOrAdj{T, A, S} = Union{Axis2Tensor{T, A, S}, AdjointAxis2Tensor{T, A, S}}
 
 @inline +(
     a::Axis2Tensor{Ta, Tuple{A1, A2}, Sa},
     b::Adjoint{Tb, Axis2Tensor{Tb, Tuple{A2, A2}, Sb}},
-) where {Ta, Tb, A1, A2, Sa, Sb} =
-    AxisTensor(a.axes, components(a) + components(b))
+) where {Ta, Tb, A1, A2, Sa, Sb} = AxisTensor(a.axes, components(a) + components(b))
 
 @inline +(
     a::Adjoint{Ta, Axis2Tensor{Ta, Tuple{A1, A2}, Sa}},
     b::Axis2Tensor{Tb, Tuple{A2, A2}, Sb},
-) where {Ta, Tb, A1, A2, Sa, Sb} =
-    AxisTensor(b.axes, components(a) + components(b))
+) where {Ta, Tb, A1, A2, Sa, Sb} = AxisTensor(b.axes, components(a) + components(b))
 
 # based on 1st dimension
 const Covariant2Tensor{T, A, S} =
     Axis2Tensor{T, A, S} where {T, A <: Tuple{CovariantAxis, AbstractAxis}, S}
 const Contravariant2Tensor{T, A, S} = Axis2Tensor{
-    T,
-    A,
-    S,
+    T, A, S,
 } where {T, A <: Tuple{ContravariantAxis, AbstractAxis}, S}
 const Cartesian2Tensor{T, A, S} =
     Axis2Tensor{T, A, S} where {T, A <: Tuple{CartesianAxis, AbstractAxis}, S}
@@ -362,8 +336,7 @@ check_axes(ax1, ax2) = throw(DimensionMismatch("$ax1 and $ax2 do not match"))
 
 check_dual(ax1, ax2) = _check_dual(ax1, ax2, dual(ax2))
 _check_dual(::A, _, ::A) where {A} = nothing
-_check_dual(ax1, ax2, _) =
-    throw(DimensionMismatch("$ax1 is not dual with $ax2"))
+_check_dual(ax1, ax2, _) = throw(DimensionMismatch("$ax1 is not dual with $ax2"))
 
 
 function LinearAlgebra.dot(x::AxisVector, y::AxisVector)
@@ -431,15 +404,13 @@ end
 
 
 function _transform(
-    ato::Ato,
-    x::AxisVector{T, Afrom, SVector{N, T}},
+    ato::Ato, x::AxisVector{T, Afrom, SVector{N, T}},
 ) where {Ato <: AbstractAxis{I}, Afrom <: AbstractAxis{I}} where {I, T, N}
     x
 end
 
 function _project(
-    ato::Ato,
-    x::AxisVector{T, Afrom, SVector{N, T}},
+    ato::Ato, x::AxisVector{T, Afrom, SVector{N, T}},
 ) where {Ato <: AbstractAxis{I}, Afrom <: AbstractAxis{I}} where {I, T, N}
     x
 end
@@ -500,122 +471,45 @@ end
 end
 
 function _transform(
-    ato::Ato,
-    x::Axis2Tensor{T, Tuple{Afrom, A2}},
+    ato::Ato, x::Axis2Tensor{T, Tuple{Afrom, A2}},
 ) where {
-    Ato <: AbstractAxis{I},
-    Afrom <: AbstractAxis{I},
-    A2 <: AbstractAxis{J},
+    Ato <: AbstractAxis{I}, Afrom <: AbstractAxis{I}, A2 <: AbstractAxis{J},
 } where {I, J, T}
     x
 end
 
 function _project(
-    ato::Ato,
-    x::Axis2Tensor{T, Tuple{Afrom, A2}},
+    ato::Ato, x::Axis2Tensor{T, Tuple{Afrom, A2}},
 ) where {
-    Ato <: AbstractAxis{I},
-    Afrom <: AbstractAxis{I},
-    A2 <: AbstractAxis{J},
+    Ato <: AbstractAxis{I}, Afrom <: AbstractAxis{I}, A2 <: AbstractAxis{J},
 } where {I, J, T}
     x
 end
 
-#= Set `assert_exact_transform() = true` for debugging=#
-assert_exact_transform() = false
+@inline transform(ato::CovariantAxis, v::CovariantTensor) = project(ato, v)
+@inline transform(ato::ContravariantAxis, v::ContravariantTensor) = project(ato, v)
+@inline transform(ato::CartesianAxis, v::CartesianTensor) = project(ato, v)
+@inline transform(ato::LocalAxis, v::LocalTensor) = project(ato, v)
 
-@generated function _transform(
-    ato::Ato,
-    x::Axis2Tensor{T, Tuple{Afrom, A2}},
-) where {
-    Ato <: AbstractAxis{Ito},
-    Afrom <: AbstractAxis{Ifrom},
-    A2 <: AbstractAxis{J},
-} where {Ito, Ifrom, J, T}
-    N = length(Ifrom)
-    M = length(J)
-    if assert_exact_transform()
-        errcond = false
-        for n in 1:N
-            i = Ifrom[n]
-            if i ∉ Ito
-                for m in 1:M
-                    errcond = :($errcond || x[$n, $m] != zero(T))
-                end
-            end
-        end
+@inline function project(ato_l::AbstractAxis, v::Axis2Tensor, ato_r::AbstractAxis)
+    @assert symbols.(axes(v)) == symbols.((ato_l, ato_r)) "Axes do not match"
+    T = eltype(v)
+    Ifrom_l, Ifrom_r = axis_indices.(axes(v))
+    product_to = unrolled_product(axis_indices(ato_l), axis_indices(ato_r))
+    vals = unrolled_map(product_to) do (m_l, m_r)
+        n_l = unrolled_findfirst(((n_l, ifrom),) -> m_l == ifrom, enumerate(Ifrom_l))
+        n_r = unrolled_findfirst(((n_r, ifrom),) -> m_r == ifrom, enumerate(Ifrom_r))
+        isnothing(n_l) || isnothing(n_r) ? zero(T) : v[n_l, n_r]
     end
-    vals = []
-    for m in 1:M
-        for i in Ito
-            val = :(zero(T))
-            for n in 1:N
-                if i == Ifrom[n]
-                    val = :(x[$n, $m])
-                    break
-                end
-            end
-            push!(vals, val)
-        end
-    end
-    quote
-        Base.@_propagate_inbounds_meta
-        if assert_exact_transform()
-            if $errcond
-                throw(InexactError(:transform, Ato, x))
-            end
-        end
-        @inbounds Axis2Tensor(
-            (ato, axes(x, 2)),
-            SMatrix{$(length(Ito)), $M}($(vals...)),
-        )
-    end
+    S = SMatrix{length(ato_l), length(ato_r)}(vals...)
+    @inbounds Axis2Tensor((ato_l, ato_r), S)
 end
-
-@generated function _project(
-    ato::Ato,
-    x::Axis2Tensor{T, Tuple{Afrom, A2}},
-) where {
-    Ato <: AbstractAxis{Ito},
-    Afrom <: AbstractAxis{Ifrom},
-    A2 <: AbstractAxis{J},
-} where {Ito, Ifrom, J, T}
-    N = length(Ifrom)
-    M = length(J)
-    vals = []
-    for m in 1:M
-        for i in Ito
-            val = :(zero(T))
-            for n in 1:N
-                if i == Ifrom[n]
-                    val = :(x[$n, $m])
-                    break
-                end
-            end
-            push!(vals, val)
-        end
-    end
-    quote
-        Base.@_propagate_inbounds_meta
-        @inbounds Axis2Tensor(
-            (ato, axes(x, 2)),
-            SMatrix{$(length(Ito)), $M}($(vals...)),
-        )
-    end
+@inline project(ato::AbstractAxis, v::Axis2Tensor) = project(ato, v, axes(v, 2))
+@inline project(v::Axis2Tensor, ato::AbstractAxis) = project(axes(v, 1), v, ato)
+@inline function project(ato_l, v::AxisVector)
+    @assert symbols(axes(v, 1)) == symbols(ato_l)
+    _project(ato_l, v)
 end
-
-@inline transform(ato::CovariantAxis, v::CovariantTensor) = _project(ato, v)
-@inline transform(ato::ContravariantAxis, v::ContravariantTensor) =
-    _project(ato, v)
-@inline transform(ato::CartesianAxis, v::CartesianTensor) = _project(ato, v)
-@inline transform(ato::LocalAxis, v::LocalTensor) = _project(ato, v)
-
-@inline project(ato::CovariantAxis, v::CovariantTensor) = _project(ato, v)
-@inline project(ato::ContravariantAxis, v::ContravariantTensor) =
-    _project(ato, v)
-@inline project(ato::CartesianAxis, v::CartesianTensor) = _project(ato, v)
-@inline project(ato::LocalAxis, v::LocalTensor) = _project(ato, v)
-
 
 """
     outer(x, y)
