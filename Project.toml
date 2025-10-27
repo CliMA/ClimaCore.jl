@@ -31,7 +31,6 @@ UnrolledUtilities = "0fe1646c-419e-43be-ac14-22321958931b"
 
 [weakdeps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
-GPUCompiler = "61eb1bfa-7361-4325-ad38-22787b887f55"
 Krylov = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
 
 [extensions]
