@@ -2,8 +2,9 @@ import CUDA
 import ClimaCore.Fields
 import ClimaCore.DataLayouts
 import ClimaCore.DataLayouts: empty_kernel_stats
-import ClimaCore.DebugOnly: name_kernels_from_stack_trace
-import GPUCompiler: methodinstance
+# Import from CUDA.GPUCompiler, since we can't depend on GPUCompiler directly
+# in an extension package
+import CUDA.GPUCompiler: methodinstance
 
 const reported_stats = Dict()
 const kernel_names = IdDict()
@@ -31,6 +32,9 @@ function _getenv_bool(var::AbstractString; default::Bool = false)
         end
     end
 end
+
+const name_kernels_from_stack_trace =
+    _getenv_bool("CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE"; default = false)
 
 """
     auto_launch!(f!::F!, args,
@@ -66,7 +70,7 @@ function auto_launch!(
     # If desired, compute a kernel name from the stack trace and store in
     # a global Dict, which serves as an in memory cache
     kernel_name = nothing
-    if _getenv_bool("CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE")
+    if name_kernels_from_stack_trace
         # Create a key from the method instance and types of the args
         key = objectid(methodinstance(typeof(f!), typeof(args)))
         kernel_name_exists = key in keys(kernel_names)
