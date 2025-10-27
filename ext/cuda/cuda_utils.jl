@@ -3,7 +3,7 @@ import ClimaCore.Fields
 import ClimaCore.DataLayouts
 import ClimaCore.DataLayouts: empty_kernel_stats
 import ClimaCore.DebugOnly: name_kernels_from_stack_trace
-import CUDA.GPUCompiler: methodinstance
+import GPUCompiler: methodinstance
 
 const reported_stats = Dict()
 const kernel_names = IdDict()
