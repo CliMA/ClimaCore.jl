@@ -171,6 +171,4 @@ function allow_mismatched_spaces_unsafe()
     return false
 end
 
-name_kernels_from_stack_trace() = false
-
 end

@@ -11,6 +11,27 @@ const kernel_names = IdDict()
 empty_kernel_stats(::ClimaComms.CUDADevice) = empty!(reported_stats)
 collect_kernel_stats() = false
 
+# Robustly parse boolean-like environment variables
+function _getenv_bool(var::AbstractString; default::Bool = false)
+    raw = get(ENV, var, nothing)
+    raw === nothing && return default
+    s = lowercase(strip(String(raw)))
+    if s in ("1", "true", "t", "yes", "y", "on")
+        return true
+    elseif s in ("0", "false", "f", "no", "n", "off")
+        return false
+    else
+        # fall back to parse as integer (non-zero -> true)
+        try
+            return parse(Int, s) != 0
+        catch
+            @warn "Unrecognized boolean env var value; using default" var = var val = raw default =
+                default
+            return default
+        end
+    end
+end
+
 """
     auto_launch!(f!::F!, args,
         ::Union{
@@ -45,7 +66,7 @@ function auto_launch!(
     # If desired, compute a kernel name from the stack trace and store in
     # a global Dict, which serves as an in memory cache
     kernel_name = nothing
-    if name_kernels_from_stack_trace()
+    if _getenv_bool("CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE")
         # Create a key from the method instance and types of the args
         key = objectid(methodinstance(typeof(f!), typeof(args)))
         kernel_name_exists = key in keys(kernel_names)
