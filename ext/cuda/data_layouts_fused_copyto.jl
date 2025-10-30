@@ -80,9 +80,11 @@ function knl_fused_copyto_linear!(fmbc::FusedMultiBroadcast, us)
     end
     return nothing
 end
+import Adapt
+import CUDA
 import MultiBroadcastFusion
-const MBFCUDA =
-    Base.get_extension(MultiBroadcastFusion, :MultiBroadcastFusionCUDAExt)
+# MBFCUDA = Base.get_extension(MultiBroadcastFusion, :MultiBroadcastFusionCUDAExt)
+# @show MBFCUDA
 # https://github.com/JuliaLang/julia/issues/56295
 # Julia 1.11's Base.Broadcast currently requires
 # multiple integer indexing, wheras Julia 1.10 did not.
@@ -106,19 +108,20 @@ function fused_copyto!(
     (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest1)
     (Nv > 0 && Nh > 0) || return nothing # short circuit
 
-    if pkgversion(MultiBroadcastFusion) >= v"0.3.3"
-        # Automatically split kernels by available parameter memory space:
-        fmbs = MBFCUDA.partition_kernels(
-            fmb,
-            FusedMultiBroadcast,
-            fused_multibroadcast_args,
-        )
-        for fmb in fmbs
-            launch_fused_copyto!(fmb)
-        end
-    else
+    # if pkgversion(MultiBroadcastFusion) >= v"0.3.3"
+    #     # Automatically split kernels by available parameter memory space:
+    #     MBFCUDA = Base.get_extension(MultiBroadcastFusion, :MultiBroadcastFusionCUDAExt)
+    #     fmbs = MBFCUDA.partition_kernels(
+    #         fmb,
+    #         FusedMultiBroadcast,
+    #         fused_multibroadcast_args,
+    #     )
+    #     for fmb in fmbs
+    #         launch_fused_copyto!(fmb)
+    #     end
+    # else
         launch_fused_copyto!(fmb)
-    end
+    # end
     return nothing
 end
 
