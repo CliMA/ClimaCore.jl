@@ -52,6 +52,5 @@ To use `sphere/held_suarez_rhoe` as an example, one needs to modify [these lines
 
 ### Note: A computing node is needed to run the remapping on caltech central hpc. It gives the following warning messages without interrupting the process.
 ```
-/home/****/.julia/artifacts/db8bb055d059e1c04bade7bd86a3010466d5ad4a/bin/ApplyOfflineMap: /central/software/julia/1.7.0/bin/../lib/julia/libcurl.so.4: no version information available (required by /home/jiahe/.julia/artifacts/a990d3d23ca4ca4c1fcd1e42fc198f1272f7c49b/lib/libnetcdf.so.18)
+/home/****/.julia/artifacts/db8bb055d059e1c04bade7bd86a3010466d5ad4a/bin/ApplyOfflineMap: /resnick/software/julia/1.7.0/bin/../lib/julia/libcurl.so.4: no version information available (required by /home/jiahe/.julia/artifacts/a990d3d23ca4ca4c1fcd1e42fc198f1272f7c49b/lib/libnetcdf.so.18)
 ```
-
