@@ -27,13 +27,12 @@ function DefaultSliceXMesh(
     x_elem::Integer,
 ) where {FT}
 
-    x1boundary = (:east, :west)
-    z_boundary_names = (:bottom, :top)
+    x1boundary = periodic_x ? nothing : (:east, :west)
     h_domain = Domains.IntervalDomain(
         Geometry.XPoint{FT}(x_min),
         Geometry.XPoint{FT}(x_max);
         periodic = periodic_x,
-        boundary_names = (:east, :west),
+        boundary_names = x1boundary,
     )
     return Meshes.IntervalMesh(h_domain; nelems = x_elem)
 end

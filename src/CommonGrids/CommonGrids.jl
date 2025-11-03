@@ -582,7 +582,7 @@ function SliceXZGrid(
     @assert ClimaComms.device(context) == device "The given device and context device do not match."
 
     h_topology = Topologies.IntervalTopology(
-        context,
+        ClimaComms.SingletonCommsContext(device),
         h_mesh,
     )
     h_grid =
