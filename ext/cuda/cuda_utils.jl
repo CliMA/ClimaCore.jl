@@ -2,9 +2,6 @@ import CUDA
 import ClimaCore.Fields
 import ClimaCore.DataLayouts
 import ClimaCore.DataLayouts: empty_kernel_stats
-# Import from CUDA.GPUCompiler, since we can't depend on GPUCompiler directly
-# in an extension package
-import CUDA.GPUCompiler: methodinstance
 
 const reported_stats = Dict()
 const kernel_names = IdDict()
@@ -72,7 +69,7 @@ function auto_launch!(
     kernel_name = nothing
     if name_kernels_from_stack_trace
         # Create a key from the method instance and types of the args
-        key = objectid(methodinstance(typeof(f!), typeof(args)))
+        key = objectid(CUDA.methodinstance(typeof(f!), typeof(args)))
         kernel_name_exists = key in keys(kernel_names)
         if !kernel_name_exists
             # Construct the kernel name, ignoring modules we don't care about
