@@ -40,7 +40,7 @@ z_domain = Domains.IntervalDomain(
 )
 z_mesh = Meshes.IntervalMesh(z_domain; nelems = z_elem)
 h_grid = Grids.SpectralElementGrid2D(h_topology, quad)
-z_topology = Topologies.IntervalTopology(context, z_mesh)
+z_topology = Topologies.IntervalTopology(ClimaComms.SingletonCommsContext(device), z_mesh)
 z_grid = Grids.FiniteDifferenceGrid(z_topology)
 grid = Grids.ExtrudedFiniteDifferenceGrid(
     h_grid,
@@ -582,7 +582,7 @@ function SliceXZGrid(
     @assert ClimaComms.device(context) == device "The given device and context device do not match."
 
     h_topology = Topologies.IntervalTopology(
-        ClimaComms.SingletonCommsContext(device),
+        context,
         h_mesh,
     )
     h_grid =
