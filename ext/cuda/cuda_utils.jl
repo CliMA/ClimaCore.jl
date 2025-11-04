@@ -96,7 +96,7 @@ function auto_launch!(
                     func_name = split(func_name, "#")[1]
                 end
                 file_path = frame.linfo.def.file
-                fp_split = split(string(file_path), "/")
+                fp_split = splitpath(string(file_path))
                 if "NVTX" in fp_split
                     fp_string = "_NVTX"
                     line_string = ""
