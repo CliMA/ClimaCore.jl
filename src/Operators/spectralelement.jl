@@ -154,13 +154,15 @@ function Base.Broadcast.instantiate(
         axes = bc.axes
         Base.Broadcast.check_broadcast_axes(axes, args...)
     end
+    # For FiniteDifferenceSpace with operators, return zeros for horizontal operators
+    if axes isa Spaces.FiniteDifferenceSpace && bc.f isa SpectralElementOperator
+        op = unionall_type(typeof(bc.f)){()}(axes)
+        RT = operator_return_eltype(op, map(eltype, args)...)
+        return Broadcast.broadcasted(Returns(zero(RT)), Fields.coordinate_field(axes))
+    end
+    
     if bc.f isa SpectralElementOperator
         op = unionall_type(typeof(bc.f)){()}(axes)
-        # For FiniteDifferenceSpace, zero only purely-horizontal non-tensor operators
-        if axes isa Spaces.FiniteDifferenceSpace
-            RT = operator_return_eltype(op, map(eltype, args)...)
-            return Broadcast.broadcasted(Returns(zero(RT)), Fields.coordinate_field(axes))
-        end
         Style = AbstractSpectralStyle(ClimaComms.device(axes))
         return Base.Broadcast.Broadcasted{Style}(op, args, axes)
     else
