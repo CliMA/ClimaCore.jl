@@ -30,7 +30,7 @@ function _getenv_bool(var::AbstractString; default::Bool = false)
     end
 end
 
-function get_kernel_name(f!::F!) where {F!}
+function get_kernel_name(f!::F!, args) where {F!}
     kernel_name = nothing
     if _getenv_bool("CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE"; default = false)
         # Create a key from the method instance and types of the args
@@ -126,7 +126,7 @@ function auto_launch!(
     always_inline = true,
     caller = :unknown,
 ) where {F!}
-    kernel_name = get_kernel_name(f!)
+    kernel_name = get_kernel_name(f!, args)
     if auto
         @assert !isnothing(nitems)
         if nitems ≥ 0
