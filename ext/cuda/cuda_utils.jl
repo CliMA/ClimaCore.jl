@@ -93,7 +93,13 @@ end
 function threads_via_occupancy(f!::F!, args) where {F!}
     kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
     config = CUDA.launch_configuration(kernel.fun)
-    return config.threads
+    max_threads = config.threads
+    max_threads >= 1024 && return 1024
+    max_threads >= 512 && return 512
+    max_threads >= 256 && return 256
+    max_threads >= 128 && return 128
+    max_threads >= 64 && return 64
+    return max_threads
 end
 
 """
