@@ -30,44 +30,9 @@ function _getenv_bool(var::AbstractString; default::Bool = false)
     end
 end
 
-const name_kernels_from_stack_trace =
-    _getenv_bool("CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE"; default = false)
-
-"""
-    auto_launch!(f!::F!, args,
-        ::Union{
-            Int,
-            NTuple{N, <:Int},
-            AbstractArray,
-            AbstractData,
-            Field,
-        };
-        auto = false,
-        threads_s,
-        blocks_s,
-        always_inline = true
-    )
-
-Launch a cuda kernel, using `CUDA.launch_configuration` (if `auto=true`)
-to determine the number of threads/blocks.
-
-Suggested threads and blocks (`threads_s`, `blocks_s`) can be given
-to benchmark compare against auto-determined threads/blocks (if `auto=false`).
-"""
-function auto_launch!(
-    f!::F!,
-    args,
-    nitems::Union{Integer, Nothing} = nothing;
-    auto = false,
-    threads_s = nothing,
-    blocks_s = nothing,
-    always_inline = true,
-    caller = :unknown,
-) where {F!}
-    # If desired, compute a kernel name from the stack trace and store in
-    # a global Dict, which serves as an in memory cache
+function get_kernel_name(f!::F!) where {F!}
     kernel_name = nothing
-    if name_kernels_from_stack_trace
+    if _getenv_bool("CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE"; default = false)
         # Create a key from the method instance and types of the args
         key = objectid(CUDA.methodinstance(typeof(f!), typeof(args)))
         kernel_name_exists = key in keys(kernel_names)
@@ -127,7 +92,41 @@ function auto_launch!(
         end
         kernel_name = kernel_names[key]
     end
+    return kernel_name
+end
 
+"""
+    auto_launch!(f!::F!, args,
+        ::Union{
+            Int,
+            NTuple{N, <:Int},
+            AbstractArray,
+            AbstractData,
+            Field,
+        };
+        auto = false,
+        threads_s,
+        blocks_s,
+        always_inline = true
+    )
+
+Launch a cuda kernel, using `CUDA.launch_configuration` (if `auto=true`)
+to determine the number of threads/blocks.
+
+Suggested threads and blocks (`threads_s`, `blocks_s`) can be given
+to benchmark compare against auto-determined threads/blocks (if `auto=false`).
+"""
+function auto_launch!(
+    f!::F!,
+    args,
+    nitems::Union{Integer, Nothing} = nothing;
+    auto = false,
+    threads_s = nothing,
+    blocks_s = nothing,
+    always_inline = true,
+    caller = :unknown,
+) where {F!}
+    kernel_name = get_kernel_name(f!)
     if auto
         @assert !isnothing(nitems)
         if nitems ≥ 0
