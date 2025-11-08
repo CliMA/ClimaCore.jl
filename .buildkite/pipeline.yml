@@ -15,12 +15,6 @@ steps:
   - label: "initialize"
     key: "init_cpu_env"
     command:
-      - |
-        if [ -n "$$CLEAR_DEPOT" ]; then
-          echo "--- Clearing depot"
-          rm -rf ${JULIA_DEPOT_PATH}
-        fi
-
       - echo "--- Check that ClimaCore is developed in Manifest"
       - julia --check-bounds=yes -e 'using TOML; @assert TOML.parsefile(".buildkite/Manifest.toml")["deps"]["ClimaCore"][1]["path"] == ".."'
 
