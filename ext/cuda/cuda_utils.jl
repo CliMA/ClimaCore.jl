@@ -4,9 +4,69 @@ import ClimaCore.DataLayouts
 import ClimaCore.DataLayouts: empty_kernel_stats
 
 const reported_stats = Dict()
+const kernel_names = IdDict()
 # Call via ClimaCore.DataLayouts.empty_kernel_stats()
 empty_kernel_stats(::ClimaComms.CUDADevice) = empty!(reported_stats)
 collect_kernel_stats() = false
+
+# Robustly parse boolean-like environment variables
+function _getenv_bool(var::AbstractString; default::Bool = false)
+    raw = get(ENV, var, nothing)
+    raw === nothing && return default
+    s = lowercase(strip(String(raw)))
+    if s in ("1", "true", "t", "yes", "y", "on")
+        return true
+    elseif s in ("0", "false", "f", "no", "n", "off")
+        return false
+    else
+        # fall back to parse as integer (non-zero -> true)
+        try
+            return parse(Int, s) != 0
+        catch
+            @warn "Unrecognized boolean env var value; using default" var = var val = raw default =
+                default
+            return default
+        end
+    end
+end
+
+# Create a ref to hold the setting determining whether to name kernels from
+# stack trace
+const NAME_KERNELS_FROM_STACK_TRACE = Ref{Bool}(false)
+
+# Always reload when module is imported so precompilation doesn't make it "stick"
+function __init__()
+    NAME_KERNELS_FROM_STACK_TRACE[] = _getenv_bool(
+        "CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE"; default = false,
+    )
+end
+
+name_kernels_from_stack_trace() = NAME_KERNELS_FROM_STACK_TRACE[]
+
+# Modules to ignore when constructing kernel names from stack traces
+const IGNORE_MODULES = (
+    :Base,
+    :Core,
+    :GPUCompiler,
+    :CUDA,
+    :NVTX,
+    :ClimaCoreCUDAExt,
+    :ClimaCore,
+)
+
+# Helper function to check if a stack frame is relevant
+@inline function is_relevant_frame(frame::Base.StackTraces.StackFrame)
+    linfo = frame.linfo
+    linfo isa Core.MethodInstance || return false
+    mod = linfo.def.module::Module
+    mod_name = fullname(mod)[1]
+    return mod_name ∉ IGNORE_MODULES
+end
+
+# Extract file path from a MethodInstance as a string
+@inline function fpath_from_method_instance(mi::Core.MethodInstance)
+    return string(mi.def.file::Symbol)::String
+end
 
 """
     auto_launch!(f!::F!, args,
@@ -39,10 +99,63 @@ function auto_launch!(
     always_inline = true,
     caller = :unknown,
 ) where {F!}
+    # If desired, compute a kernel name from the stack trace and store in
+    # a global Dict, which serves as an in memory cache
+    kernel_name = nothing
+    if name_kernels_from_stack_trace()
+        # Create a key from the method instance and types of the args
+        key = objectid(CUDA.methodinstance(typeof(f!), typeof(args)))
+        kernel_name_exists = key in keys(kernel_names)
+        if !kernel_name_exists
+            # Construct the kernel name, ignoring modules we don't care about
+            stack = stacktrace()
+            first_relevant_index = findfirst(is_relevant_frame, stack)
+            if !isnothing(first_relevant_index)
+                # Don't include file if this is inside an NVTX annotation
+                frame = stack[first_relevant_index]::Base.StackTraces.StackFrame
+                func_name = string(frame.func)
+                if contains(func_name, "#")
+                    func_name = split(func_name, "#")[1]
+                end
+                fp_split =
+                    splitpath(fpath_from_method_instance(frame.linfo::Core.MethodInstance))
+                if "NVTX" in fp_split
+                    fp_string = "_NVTX"
+                    line_string = ""
+                else
+                    # Trim base directory off of file path to shorten
+                    package_index = findfirst(fp_split) do part
+                        startswith(part, "Clima")
+                    end
+                    if isnothing(package_index)
+                        package_index = findfirst(p -> p == ".julia", fp_split)
+                    end
+                    if isnothing(package_index)
+                        package_index = findfirst(p -> p == "src", fp_split)
+                    end
+                    if isnothing(package_index)
+                        package_index = 1
+                    end
+                    fp_string =
+                        "_FILE_" *
+                        string(joinpath(fp_split[package_index:end]...))
+                    line_string = "_L" * string(frame.line)
+                end
+                name_str = string(func_name) * fp_string * line_string
+                kernel_name = replace(name_str, r"[^A-Za-z0-9]" => "_")
+            end
+            @debug "Using kernel name: $kernel_name"
+            kernel_names[key] = kernel_name
+        end
+        kernel_name = kernel_names[key]
+    end
+
     if auto
         @assert !isnothing(nitems)
         if nitems ≥ 0
-            kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
+            # Note: `name = nothing` here will revert to default behavior
+            kernel = CUDA.@cuda name = kernel_name always_inline = true launch =
+                false f!(args...)
             config = CUDA.launch_configuration(kernel.fun)
             threads = min(nitems, config.threads)
             blocks = cld(nitems, threads)
@@ -50,8 +163,8 @@ function auto_launch!(
         end
     else
         kernel =
-            CUDA.@cuda always_inline = always_inline threads = threads_s blocks =
-                blocks_s f!(args...)
+            CUDA.@cuda name = kernel_name always_inline = always_inline threads =
+                threads_s blocks = blocks_s f!(args...)
     end
 
     if collect_kernel_stats() # only for development use
