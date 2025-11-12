@@ -92,3 +92,15 @@ end
     end
     @test ∇z == WVector.(∇.(fz))
 end
+
+@testset "Horizontal operators on extracted column spaces" begin
+    @testset "3D Box space -> column" begin
+        hv_center_space, _ =
+            hvspace_3D((-1.0, 1.0), (-1.0, 1.0), (0.0, 1.0), 2, 2, 5, 3)
+
+        # Extract column at position (i, j, h) = (1, 1, 1)
+        column_space = Spaces.column(hv_center_space, 1, 1, 1)
+        @test column_space isa Spaces.FiniteDifferenceSpace
+        TU.test_column_operators(column_space)
+    end
+end
