@@ -4,9 +4,25 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.42
+-------
+
+- Add opt-in CUDA kernel renaming based on stacktrace for broadcasts over ClimaCore Fields [2376](https://github.com/Clima/ClimaCore.jl/pull/2376)
+
+  To enable, set the following environment variable before starting Julia:
+
+  ```bash
+  export CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE=true
+  ```
+
+  With default kernel names, profiling downstream packages results in names like
+  `knl_copyto_(VIJFH<Float32, (int)63, (int)4, CuDeviceArray<Float32, (int)5, (int)1>>, Broadcasted<VIJFHStyle<(int)63, (int)4...`,
+  which are hard to read and often more than 50,000 characters long. With renaming enabled, profilers show names like
+  `set_velocity_quantities__FILE_ClimaAtmos_jl_src_cache_precomputed_quantities_jl_L351`, which gives more context about where the kernel was launched from.
+
 v0.14.41
 -------
-- Add `project` for both sides of 2-tensors (previously only left side was supported). 
+- Add `project` for both sides of 2-tensors (previously only left side was supported).
   Simplify implementation. [2379](https://github.com/Clima/ClimaCore.jl/pull/2379)
 
 v0.14.40
