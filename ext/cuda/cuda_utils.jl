@@ -59,52 +59,13 @@ const IGNORE_MODULES = (
     linfo = frame.linfo
     linfo isa Core.MethodInstance || return false
     mod = linfo.def.module::Module
-    mod_name::Symbol = fullname(mod)[1]::Symbol
+    mod_name = fullname(mod)[1]
     return mod_name ∉ IGNORE_MODULES
 end
 
 # Extract file path from a MethodInstance as a string
-@inline function fpath_from_method_instance(mi::Core.MethodInstance)::String
-    return string(mi.def.file::Symbol)
-end
-
-# Construct kernel name from stack trace (not type-stable due to stacktrace() internals)
-# This function is intentionally not inlined to avoid JET analyzing the runtime dispatch
-# that occurs inside Base.StackTraces.stacktrace()
-@noinline function kernel_name_from_stack()::Union{Nothing, String}
-    stack = stacktrace()
-    first_relevant_index = findfirst(is_relevant_frame, stack)
-    isnothing(first_relevant_index) && return nothing
-
-    # Don't include file if this is inside an NVTX annotation
-    frame = stack[first_relevant_index]::Base.StackTraces.StackFrame
-    func_name::String = string(frame.func)
-    if contains(func_name, "#")
-        func_name = String(split(func_name, "#")[1])
-    end
-    fp_split::Vector{String} =
-        splitpath(fpath_from_method_instance(frame.linfo::Core.MethodInstance))
-    if "NVTX" in fp_split
-        fp_string::String = "_NVTX"
-        line_string::String = ""
-    else
-        # Trim base directory off of file path to shorten
-        package_index::Int = something(
-            findfirst(fp_split) do part
-                startswith(part, "Clima")
-            end,
-            findfirst(p -> p == ".julia", fp_split),
-            findfirst(p -> p == "src", fp_split),
-            1,
-        )
-        fp_string =
-            "_FILE_" *
-            string(joinpath(fp_split[package_index:end]...))
-        line_string = "_L" * string(frame.line)
-    end
-    name_str::String = string(func_name) * fp_string * line_string
-    kernel_name = replace(name_str, r"[^A-Za-z0-9]" => "_")
-    return kernel_name
+@inline function fpath_from_method_instance(mi::Core.MethodInstance)
+    return string(mi.def.file::Symbol)::String
 end
 
 """
@@ -140,13 +101,49 @@ function auto_launch!(
 ) where {F!}
     # If desired, compute a kernel name from the stack trace and store in
     # a global Dict, which serves as an in memory cache
-    kernel_name::Union{Nothing, String} = nothing
+    kernel_name = nothing
     if name_kernels_from_stack_trace()
         # Create a key from the method instance and types of the args
         key = objectid(CUDA.methodinstance(typeof(f!), typeof(args)))
         kernel_name_exists = key in keys(kernel_names)
         if !kernel_name_exists
-            kernel_name = kernel_name_from_stack()
+            # Construct the kernel name, ignoring modules we don't care about
+            stack = stacktrace()
+            first_relevant_index = findfirst(is_relevant_frame, stack)
+            if !isnothing(first_relevant_index)
+                # Don't include file if this is inside an NVTX annotation
+                frame = stack[first_relevant_index]::Base.StackTraces.StackFrame
+                func_name = string(frame.func)
+                if contains(func_name, "#")
+                    func_name = split(func_name, "#")[1]
+                end
+                fp_split =
+                    splitpath(fpath_from_method_instance(frame.linfo::Core.MethodInstance))
+                if "NVTX" in fp_split
+                    fp_string = "_NVTX"
+                    line_string = ""
+                else
+                    # Trim base directory off of file path to shorten
+                    package_index = findfirst(fp_split) do part
+                        startswith(part, "Clima")
+                    end
+                    if isnothing(package_index)
+                        package_index = findfirst(p -> p == ".julia", fp_split)
+                    end
+                    if isnothing(package_index)
+                        package_index = findfirst(p -> p == "src", fp_split)
+                    end
+                    if isnothing(package_index)
+                        package_index = 1
+                    end
+                    fp_string =
+                        "_FILE_" *
+                        string(joinpath(fp_split[package_index:end]...))
+                    line_string = "_L" * string(frame.line)
+                end
+                name_str = string(func_name) * fp_string * line_string
+                kernel_name = replace(name_str, r"[^A-Za-z0-9]" => "_")
+            end
             @debug "Using kernel name: $kernel_name"
             kernel_names[key] = kernel_name
         end
