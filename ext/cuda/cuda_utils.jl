@@ -68,6 +68,52 @@ end
     return string(mi.def.file::Symbol)::String
 end
 
+function get_kernel_name(key::UInt)::Union{String, Nothing}
+    if haskey(kernel_names, key)
+        return kernel_names[key]
+    end
+    # Construct the kernel name, ignoring modules we don't care about
+    stack = stacktrace()
+    first_relevant_index = findfirst(is_relevant_frame, stack)
+    if !isnothing(first_relevant_index)
+        # Don't include file if this is inside an NVTX annotation
+        frame = stack[first_relevant_index]::Base.StackTraces.StackFrame
+        func_name = string(frame.func)
+        if contains(func_name, "#")
+            func_name = split(func_name, "#")[1]
+        end
+        fp_split =
+            splitpath(fpath_from_method_instance(frame.linfo::Core.MethodInstance))
+        if "NVTX" in fp_split
+            fp_string = "_NVTX"
+            line_string = ""
+        else
+            # Trim base directory off of file path to shorten
+            package_index = findfirst(fp_split) do part
+                startswith(part, "Clima")
+            end
+            if isnothing(package_index)
+                package_index = findfirst(p -> p == ".julia", fp_split)
+            end
+            if isnothing(package_index)
+                package_index = findfirst(p -> p == "src", fp_split)
+            end
+            if isnothing(package_index)
+                package_index = 1
+            end
+            fp_string =
+                "_FILE_" *
+                string(joinpath(fp_split[package_index:end]...))
+            line_string = "_L" * string(frame.line)
+        end
+        name_str = string(func_name) * fp_string * line_string
+        kernel_name = replace(name_str, r"[^A-Za-z0-9]" => "_")
+    end
+    @debug "Using kernel name: $kernel_name"
+    kernel_names[key] = kernel_name
+    return kernel_name
+end
+
 """
     auto_launch!(f!::F!, args,
         ::Union{
@@ -105,49 +151,7 @@ function auto_launch!(
     if name_kernels_from_stack_trace()
         # Create a key from the method instance and types of the args
         key = objectid(CUDA.methodinstance(typeof(f!), typeof(args)))
-        kernel_name_exists = key in keys(kernel_names)
-        if !kernel_name_exists
-            # Construct the kernel name, ignoring modules we don't care about
-            stack = stacktrace()
-            first_relevant_index = findfirst(is_relevant_frame, stack)
-            if !isnothing(first_relevant_index)
-                # Don't include file if this is inside an NVTX annotation
-                frame = stack[first_relevant_index]::Base.StackTraces.StackFrame
-                func_name = string(frame.func)
-                if contains(func_name, "#")
-                    func_name = split(func_name, "#")[1]
-                end
-                fp_split =
-                    splitpath(fpath_from_method_instance(frame.linfo::Core.MethodInstance))
-                if "NVTX" in fp_split
-                    fp_string = "_NVTX"
-                    line_string = ""
-                else
-                    # Trim base directory off of file path to shorten
-                    package_index = findfirst(fp_split) do part
-                        startswith(part, "Clima")
-                    end
-                    if isnothing(package_index)
-                        package_index = findfirst(p -> p == ".julia", fp_split)
-                    end
-                    if isnothing(package_index)
-                        package_index = findfirst(p -> p == "src", fp_split)
-                    end
-                    if isnothing(package_index)
-                        package_index = 1
-                    end
-                    fp_string =
-                        "_FILE_" *
-                        string(joinpath(fp_split[package_index:end]...))
-                    line_string = "_L" * string(frame.line)
-                end
-                name_str = string(func_name) * fp_string * line_string
-                kernel_name = replace(name_str, r"[^A-Za-z0-9]" => "_")
-            end
-            @debug "Using kernel name: $kernel_name"
-            kernel_names[key] = kernel_name
-        end
-        kernel_name = kernel_names[key]
+        kernel_name = get_kernel_name(key)
     end
 
     if auto
