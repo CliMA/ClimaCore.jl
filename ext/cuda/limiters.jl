@@ -303,7 +303,7 @@ function apply_limiter!(
     # if Ni * Nj * Nf > 64
     nthread_x = Ni * Nj
     nthread_y = Nf
-    nthread_z = cld(64, nthread_x * nthread_y)
+    nthread_z = cld(64, nthread_x * nthread_y) # ensure block is at least 64 threads
     nthreads = (nthread_x, nthread_y, nthread_z)
     nblocks = cld(ncols * Nf, prod(nthreads))
 
@@ -338,12 +338,11 @@ function apply_limiter_kernel!(
     j_idx = j_idx + Int32(1)
     i_idx = i_idx + Int32(1)
     f_idx = CUDA.threadIdx().y
+    # each z in a block is a different element
     h_idx = CUDA.blockDim().z * (CUDA.blockIdx().x - Int32(1)) + CUDA.threadIdx().z
-    # tidx = (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x - Int32(1)
     q_min = q_min_tuple[f_idx]
     borrowed_mass = zero(eltype(q_data))
     @inbounds if h_idx <= Nh
-        # TODO: unroll this?
         for i in 0:(Nv - 1) # CUDA.jl recommends avoiding stepranges
             v = Nv - i
             CI = CartesianIndex(i_idx, j_idx, f_idx, v, h_idx)
@@ -374,28 +373,3 @@ function apply_limiter_kernel!(
     end
     return
 end
-
-# PLAN
-# Implementation 1: each thread handles a column. This likely will not most of the gpu until h >= 128
-# 1.1: no shmem
-# 1.2: shmem
-# 1.3 split fields?
-# Implementation 2: each block handles a column?
-#=
-
-while sync_threads_and(lev_mass < lim || bottom_lev)
-    borrowed_from_lower = lim - lev_mass
-    borrowed_from_me = gotten_from_shuffle
-    lev_mass = lim - borrowed_from_me
-end
-
-while lev_mass < lim
-    borrowing_from_above = lev_mass
-    borrowed_from_me = gotten_from_shuffle
-    lev_mass = lev_mass = lim - borrowed_from_me
-end
-
-
-=#
-
-# Implementation 3: each warp handles each col

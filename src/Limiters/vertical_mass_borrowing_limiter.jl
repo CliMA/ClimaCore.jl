@@ -30,6 +30,7 @@ function VerticalMassBorrowingLimiter(f::Fields.Field, q_min)
     ic = similar(Spaces.level(f, 1))
     return VerticalMassBorrowingLimiter(bmass, ic, q_min)
 end
+# TODO: should q_min be a field that varies in space?
 
 
 """
