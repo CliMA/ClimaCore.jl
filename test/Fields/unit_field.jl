@@ -140,7 +140,7 @@ end
     @test begin
         @. c.∑ab = mapreduce(*, +, c.a, c.b)
         true
-    end broken = dev isa ClimaComms.CUDADevice
+    end
 end
 
 # https://github.com/CliMA/ClimaCore.jl/issues/1126
