@@ -56,7 +56,7 @@ function IntervalDomain(
     if !periodic && isnothing(boundary_names)
         throw(
             ArgumentError(
-                "if `periodic=false` then an `boundary_names::Tuple{Symbol,Symbol}` keyword argument is required.",
+                "if `periodic=false` then a `boundary_names::Tuple{Symbol,Symbol}` keyword argument is required.",
             ),
         )
     end

@@ -4,6 +4,12 @@ ClimaCore.jl Release Notes
 main
 -------
 
+
+v0.14.43
+-------
+
+- Add support for horizontal operators on column spaces [2375](https://github.com/Clima/ClimaCore.jl/pull/2375)
+
 v0.14.42
 -------
 

@@ -40,7 +40,7 @@ z_domain = Domains.IntervalDomain(
 )
 z_mesh = Meshes.IntervalMesh(z_domain; nelems = z_elem)
 h_grid = Grids.SpectralElementGrid2D(h_topology, quad)
-z_topology = Topologies.IntervalTopology(context, z_mesh)
+z_topology = Topologies.IntervalTopology(ClimaComms.SingletonCommsContext(device), z_mesh)
 z_grid = Grids.FiniteDifferenceGrid(z_topology)
 grid = Grids.ExtrudedFiniteDifferenceGrid(
     h_grid,
@@ -440,6 +440,19 @@ function Box3DGrid(
             y_elem,
             periodic_x,
             periodic_y,
+        ),
+        Topologies.spacefillingcurve(
+            DefaultRectangleXYMesh(
+                FT;
+                x_min,
+                x_max,
+                y_min,
+                y_max,
+                x_elem,
+                y_elem,
+                periodic_x,
+                periodic_y,
+            ),
         ),
     ),
     z_mesh::Meshes.IntervalMesh = DefaultZMesh(

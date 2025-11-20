@@ -501,13 +501,16 @@ Curl is only defined for `CovariantVector`` field input types.
 |  Covariant12Vector | (1,2) | Contravariant3Vector |
 |  Covariant3Vector | (1,2) | Contravariant12Vector |
 |  Covariant123Vector | (1,2) | Contravariant123Vector |
-|  Covariant1Vector | (1,) | Contravariant1Vector |
+|  Covariant1Vector | (1,) | ContravariantNullVector |
 |  Covariant2Vector | (1,) | Contravariant3Vector |
 |  Covariant3Vector | (1,) | Contravariant2Vector |
+|  Covariant13Vector | (1,) | Contravariant2Vector |
+|  Covariant123Vector | (1,) | Contravariant23Vector |
 |  Covariant12Vector | (3,) | Contravariant12Vector |
 |  Covariant1Vector | (3,) | Contravariant2Vector |
 |  Covariant2Vector | (3,) | Contravariant1Vector |
 |  Covariant3Vector | (3,) | Contravariant3Vector |
+|  Any CovariantVector | () | ContravariantNullVector |
 """
 @inline curl_result_type(::Val{(1, 2)}, ::Type{Covariant3Vector{FT}}) where {FT} =
     Contravariant12Vector{FT}
@@ -516,9 +519,8 @@ Curl is only defined for `CovariantVector`` field input types.
 @inline curl_result_type(::Val{(1, 2)}, ::Type{Covariant123Vector{FT}}) where {FT} =
     Contravariant123Vector{FT}
 
-
 @inline curl_result_type(::Val{(1,)}, ::Type{Covariant1Vector{FT}}) where {FT} =
-    Contravariant1Vector{FT} # not strictly correct: should be a zero Vector
+    ContravariantNullVector{FT}
 @inline curl_result_type(::Val{(1,)}, ::Type{Covariant2Vector{FT}}) where {FT} =
     Contravariant3Vector{FT}
 @inline curl_result_type(::Val{(1,)}, ::Type{Covariant3Vector{FT}}) where {FT} =
@@ -536,6 +538,9 @@ Curl is only defined for `CovariantVector`` field input types.
     Contravariant1Vector{FT}
 @inline curl_result_type(::Val{(3,)}, ::Type{Covariant3Vector{FT}}) where {FT} =
     Contravariant3Vector{FT}
+
+@inline curl_result_type(_, ::Type{<:CovariantVector{FT}}) where {FT} =
+    ContravariantNullVector{FT}
 
 _norm_sqr(x, local_geometry::LocalGeometry) = sum(x -> _norm_sqr(x, local_geometry), x)
 _norm_sqr(x::Number, ::LocalGeometry) = LinearAlgebra.norm_sqr(x)
