@@ -25,6 +25,26 @@ end
 is_valid_basetype(::Type{T}, ::Type{<:T}) where {T} = true
 
 """
+    invalid_basetype_trace(::Type{T}, ::Type{S})
+
+Returns a `Vector` of types tracing the path from `S` down to the first
+primitive subtype that cannot be represented using base type `T`. Returns an
+empty vector if `T` is a valid base type for `S`.
+"""
+function invalid_basetype_trace(::Type{T}, ::Type{S}) where {T, S}
+    is_valid_basetype(T, S) && return Type[]
+    Base.isprimitivetype(S) && return Type[S]
+    for FT in fieldtypes(S)
+        trace = invalid_basetype_trace(T, FT)
+        if !isempty(trace)
+            pushfirst!(trace, S)
+            return trace
+        end
+    end
+    return Type[]
+end
+
+"""
     check_basetype(::Type{T}, ::Type{S})
 
 Check whether the types `T` and `S` have well-defined sizes, and whether an
@@ -39,7 +59,16 @@ function check_basetype(::Type{T}, ::Type{S}) where {T, S}
             estr = "Struct type $S has indeterminate size"
             :(error($estr))
         elseif !is_valid_basetype(T, S)
-            estr = "Struct type $S cannot be represented using base type $T"
+            trace = invalid_basetype_trace(T, S)
+            _r = Base.text_colors[:red]
+            _c = Base.text_colors[:cyan]
+            _n = Base.text_colors[:normal]
+            trace_str = join(string.(trace), "\n $(_c)↳$(_n) ")
+            estr = string(
+                "$(_r)The struct type contains a subtype which cannot be represented using base type$(_n) ",
+                T, "\n",
+                "$(_c)Trace:$(_n) ", trace_str,
+            )
             :(error($estr))
         else
             :(return nothing)
@@ -47,8 +76,19 @@ function check_basetype(::Type{T}, ::Type{S}) where {T, S}
     else
         isbitstype(T) || error("Base type $T has indeterminate size")
         isbitstype(S) || error("Struct type $S has indeterminate size")
-        is_valid_basetype(T, S) ||
-            error("Struct type $S cannot be represented using base type $T")
+        if !is_valid_basetype(T, S)
+            trace = invalid_basetype_trace(T, S)
+            _r = Base.text_colors[:red]
+            _c = Base.text_colors[:cyan]
+            _n = Base.text_colors[:normal]
+            trace_str = join(string.(trace), "\n $(_c)↳$(_n) ")
+            estr = string(
+                "$(_r)The struct type contains a subtype which cannot be represented using base type$(_n) ",
+                T, "\n",
+                "$(_c)Trace:$(_n) ", trace_str,
+            )
+            error(estr)
+        end
         return nothing
     end
 end
