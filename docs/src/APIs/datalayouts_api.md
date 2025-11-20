@@ -19,3 +19,14 @@ DataLayouts.IJHF
 DataLayouts.VIHF
 DataLayouts.VIJHF
 ```
+
+## Internals
+
+```@docs
+check_basetype
+is_valid_basetype
+first_invalid_primitive_type
+replace_basetype
+parent_array_type
+promote_parent_array_type
+```
