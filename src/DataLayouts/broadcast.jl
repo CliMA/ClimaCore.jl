@@ -1,5 +1,6 @@
 import MultiBroadcastFusion as MBF
 import MultiBroadcastFusion: fused_direct
+import UnrolledUtilities: unrolled_map
 
 # Make a MultiBroadcastFusion type, `FusedMultiBroadcast`, and macro, `@fused`:
 # via https://github.com/CliMA/MultiBroadcastFusion.jl
@@ -575,6 +576,42 @@ function Base.similar(
     array = similar(PA, (newNv, Nij, Nij, Nh, typesize(eltype(A), Eltype)))
     return VIJHF{Eltype, newNv, Nij}(array)
 end
+
+# Standard getindex for Broadcasted on Julia 1.11.7 has the following failure:
+#  - getindex calls _broadcast_getindex
+#  - _broadcast_getindex calls _getindex
+#  - when the args include two tuples with distinct types following a DataLayout,
+#    the GPUCompiler fails to infer the result of unrolling over function arguments,
+#    so that the input Tuple to _getindex (args) has uninferred type parameters
+#  - calling args[1] then triggers a dynamic dispatch error
+
+# The following code overides the unrolling in _getindex with unrolled_map
+# It also bypasses the internal machinery of _broadcast_getindex, which may by okay for now
+
+Base.@propagate_inbounds function data_style_broadcast_getindex(bc::Broadcast.Broadcasted{<:DataStyle}, I)
+    Base.@propagate_inbounds _getindex(arg) = data_style_broadcast_getindex(arg, I)
+    args = unrolled_map(_getindex, bc.args)
+    return Broadcast._broadcast_getindex_evalf(bc.f, args...)
+end
+
+Base.@propagate_inbounds data_style_broadcast_getindex(bc, I) = Broadcast._broadcast_getindex(bc, I)
+
+@inline function Base.getindex(bc::Broadcast.Broadcasted{<:DataStyle}, Is::Vararg{Union{Integer,CartesianIndex},N}) where {N}
+    I = Broadcast.to_index(Base.IteratorsMD.flatten(Is))
+    @boundscheck checkbounds(bc, I)
+    @inbounds data_style_broadcast_getindex(bc, I)
+end
+
+# Override the recursion limit for the above methods
+@static if hasfield(Method, :recursion_relation)
+    module_names = names(@__MODULE__; all = true)
+    module_values = map(Base.Fix1(getproperty, @__MODULE__), module_names)
+    module_functions = filter(Base.Fix2(isa, Function), module_values)
+    for f in module_functions, method in methods(f)
+        method.recursion_relation = Returns(true)
+    end
+end
+
 
 # ============= FusedMultiBroadcast
 
