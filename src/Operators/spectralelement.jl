@@ -21,9 +21,9 @@ AbstractSpectralStyle(::ClimaComms.AbstractCPUDevice) = SlabBlockSpectralStyle
 
 
 """
-    SpectralElementOperator
+    SpectralElementOperator{I}
 
-Represents an operation that is applied to each element.
+Represents an operation that is applied to each element, where `I` is the tuple of axis indices.
 
 Subtypes `Op` of this should define the following:
 - [`operator_return_eltype(::Op, ElTypes...)`](@ref)
@@ -32,7 +32,7 @@ Subtypes `Op` of this should define the following:
 
 Additionally, the result type `OpResult <: OperatorSlabResult` of `apply_operator` should define `get_node(::OpResult, ij, slabidx)`.
 """
-abstract type SpectralElementOperator <: AbstractOperator end
+abstract type SpectralElementOperator{I} <: AbstractOperator end
 
 """
     operator_axes(space)
@@ -62,6 +62,8 @@ function node_indices(space::Spaces.SpectralElementSpace2D)
 end
 node_indices(space::Spaces.ExtrudedFiniteDifferenceSpace) =
     node_indices(Spaces.horizontal_space(space))
+
+node_indices(space::Spaces.FiniteDifferenceSpace) = CartesianIndices((1,))
 
 
 """
@@ -128,6 +130,11 @@ function Base.Broadcast.instantiate(sbc::SpectralBroadcasted)
             Base.Broadcast.check_broadcast_axes(axes, args...)
         end
     end
+    # For FiniteDifferenceSpace, return zeros 
+    if axes isa Spaces.FiniteDifferenceSpace
+        RT = operator_return_eltype(op, map(eltype, args)...)
+        return Broadcast.broadcasted(Returns(zero(RT)), Fields.coordinate_field(axes))
+    end
     # If we've already instantiated, then we need to strip the type parameters,
     # for example, `Divergence{()}(axes)`.
     op = unionall_type(typeof(op)){()}(axes)
@@ -147,8 +154,22 @@ function Base.Broadcast.instantiate(
         axes = bc.axes
         Base.Broadcast.check_broadcast_axes(axes, args...)
     end
-    Style = AbstractSpectralStyle(ClimaComms.device(axes))
-    return Base.Broadcast.Broadcasted{Style}(bc.f, args, axes)
+    # For FiniteDifferenceSpace with operators, return zeros for horizontal operators
+    if axes isa Spaces.FiniteDifferenceSpace && bc.f isa SpectralElementOperator
+        op = unionall_type(typeof(bc.f)){()}(axes)
+        RT = operator_return_eltype(op, map(eltype, args)...)
+        return Broadcast.broadcasted(Returns(zero(RT)), Fields.coordinate_field(axes))
+    end
+
+    if bc.f isa SpectralElementOperator
+        op = unionall_type(typeof(bc.f)){()}(axes)
+        Style = AbstractSpectralStyle(ClimaComms.device(axes))
+        return Base.Broadcast.Broadcasted{Style}(op, args, axes)
+    else
+        # For non-operators, use the default broadcast style to avoid needing
+        # operator_return_eltype for regular functions
+        return Base.Broadcast.Broadcasted(bc.f, args, axes)
+    end
 end
 
 function Base.similar(
@@ -186,8 +207,6 @@ Copy the slab indexed by `slabidx` from `bc` to `out`.
 """
 Base.@propagate_inbounds function copyto_slab!(out, bc, slabidx)
     space = axes(out)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
     rbc = resolve_operator(bc, slabidx)
     @inbounds for ij in node_indices(axes(out))
         set_node!(space, out, ij, slabidx, get_node(space, rbc, ij, slabidx))
@@ -341,10 +360,12 @@ Base.@propagate_inbounds function get_node(
 )
     space = reconstruct_placeholder_space(axes(field), parent_space)
     i, = Tuple(ij)
-    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
+    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace ||
+       space isa Spaces.FaceFiniteDifferenceSpace
         _v = slabidx.v + half
     elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace ||
-           space isa Spaces.AbstractSpectralElementSpace
+           space isa Spaces.AbstractSpectralElementSpace ||
+           space isa Spaces.CenterFiniteDifferenceSpace
         _v = slabidx.v
     else
         error("invalid space")
@@ -456,7 +477,8 @@ Base.@propagate_inbounds function set_node!(
     val,
 )
     i, = Tuple(ij)
-    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
+    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace ||
+       space isa Spaces.FaceFiniteDifferenceSpace
         _v = slabidx.v + half
     else
         _v = slabidx.v
@@ -527,7 +549,7 @@ where ``D_i`` is the derivative matrix along the ``i``th dimension
 ## References
 - [Taylor2010](@cite), equation 15
 """
-struct Divergence{I} <: SpectralElementOperator end
+struct Divergence{I} <: SpectralElementOperator{I} end
 Divergence() = Divergence{()}()
 Divergence{()}(space) = Divergence{operator_axes(space)}()
 
@@ -646,7 +668,7 @@ where
  - ``W`` is the diagonal matrix of quadrature weights
  - ``D_i`` is the derivative matrix along the ``i``th dimension
 """
-struct WeakDivergence{I} <: SpectralElementOperator end
+struct WeakDivergence{I} <: SpectralElementOperator{I} end
 WeakDivergence() = WeakDivergence{()}()
 WeakDivergence{()}(space) = WeakDivergence{operator_axes(space)}()
 
@@ -745,7 +767,7 @@ where ``D_i`` is the derivative matrix along the ``i``th dimension.
 ## References
 - [Taylor2010](@cite), equation 16
 """
-struct Gradient{I} <: SpectralElementOperator end
+struct Gradient{I} <: SpectralElementOperator{I} end
 Gradient() = Gradient{()}()
 Gradient{()}(space) = Gradient{operator_axes(space)}()
 
@@ -836,7 +858,7 @@ which reduces to
 ```
 where ``D_i`` is the derivative matrix along the ``i``th dimension.
 """
-struct WeakGradient{I} <: SpectralElementOperator end
+struct WeakGradient{I} <: SpectralElementOperator{I} end
 WeakGradient() = WeakGradient{()}()
 WeakGradient{()}(space) = WeakGradient{operator_axes(space)}()
 
@@ -904,7 +926,7 @@ function apply_operator(op::WeakGradient{(1, 2)}, space, slabidx, arg)
     return Field(SArray(out), space)
 end
 
-abstract type CurlSpectralElementOperator <: SpectralElementOperator end
+abstract type CurlSpectralElementOperator{I} <: SpectralElementOperator{I} end
 
 """
     curl = Curl()
@@ -947,7 +969,7 @@ Note that unused dimensions will be dropped: e.g. the 2D curl of a
 ## References
 - [Taylor2010](@cite), equation 17
 """
-struct Curl{I} <: CurlSpectralElementOperator end
+struct Curl{I} <: CurlSpectralElementOperator{I} end
 Curl() = Curl{()}()
 Curl{()}(space) = Curl{operator_axes(space)}()
 
@@ -1135,7 +1157,7 @@ which, by using the anti-symmetry of the Levi-Civita symbol, reduces to
 \\theta^i = - \\epsilon^{ijk} (WJ)^{-1} D_j^\\top W u_k
 ```
 """
-struct WeakCurl{I} <: CurlSpectralElementOperator end
+struct WeakCurl{I} <: CurlSpectralElementOperator{I} end
 WeakCurl() = WeakCurl{()}()
 WeakCurl{()}(space) = WeakCurl{operator_axes(space)}()
 
@@ -1303,7 +1325,7 @@ function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
 end
 
 # interplation / restriction
-abstract type TensorOperator <: SpectralElementOperator end
+abstract type TensorOperator{I} <: SpectralElementOperator{I} end
 
 return_space(op::TensorOperator, inspace) = op.space
 operator_return_eltype(::TensorOperator, ::Type{S}) where {S} = S
@@ -1323,7 +1345,7 @@ where ``I_i`` is the barycentric interpolation matrix in the ``i``th dimension.
 
 See also [`Restrict`](@ref).
 """
-struct Interpolate{I, S} <: TensorOperator
+struct Interpolate{I, S} <: TensorOperator{I}
     space::S
 end
 Interpolate(space) = Interpolate{operator_axes(space), typeof(space)}(space)
@@ -1413,7 +1435,7 @@ from ``\\mathcal{V}_0^*`` to ``\\mathcal{V}_0``. This reduces to
 \\theta = (W^* J^*)^{-1} I^\\top WJ f
 ```
 """
-struct Restrict{I, S} <: TensorOperator
+struct Restrict{I, S} <: TensorOperator{I}
     space::S
 end
 Restrict(space) = Restrict{operator_axes(space), typeof(space)}(space)
@@ -1617,6 +1639,7 @@ matrix_interpolate(field::Field, Nu::Integer) =
     matrix_interpolate(field, Quadratures.Uniform{Nu}())
 
 import .DataLayouts: slab_index
+import .Spaces: slab_type
 
 """
     rmatmul1(W, S, i, j)
@@ -1649,4 +1672,14 @@ function rmatmul2(W, S, i, j)
         r = RecursiveApply.rmuladd(W[j, jj], S[slab_index(i, jj)], r)
     end
     return r
+end
+
+function apply_operator(
+    op::SpectralElementOperator{()},
+    space,
+    _,
+    arg,
+)
+    RT = operator_return_eltype(op, eltype(arg))
+    return map(Returns(zero(RT)), space)
 end

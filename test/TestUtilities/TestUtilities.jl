@@ -10,9 +10,11 @@ TestUtilities is designed to:
 module TestUtilities
 
 using IntervalSets
+using Test
 import ClimaComms
 import ClimaCore.Fields
 import ClimaCore.DataLayouts
+import ClimaCore.Operators
 import ClimaCore.Utilities
 import ClimaCore.Quadratures
 import ClimaCore.Geometry
@@ -217,5 +219,39 @@ fc_index(
 ) = i
 
 has_z_coordinates(space) = :z in propertynames(Spaces.coordinates_data(space))
+
+# Helper function to test all three operators on a column space
+function test_column_operators(column_space, expect_zero_div = false)
+    FT = Spaces.undertype(column_space)
+    test_scalar = ones(FT, column_space)
+
+    @testset "Gradient" begin
+        grad_op = Operators.Gradient()
+        result = grad_op.(test_scalar)
+        @test axes(result) == axes(test_scalar)
+        @test eltype(result) <: Geometry.CovariantVector
+    end
+
+    @testset "Divergence" begin
+        grad_op = Operators.Gradient()
+        vector_field = grad_op.(test_scalar)
+        div_op = Operators.Divergence()
+        result = div_op.(vector_field)
+        @test axes(result) == axes(test_scalar)
+        if expect_zero_div
+            @test maximum(abs.(parent(result))) == 0.0
+        end
+    end
+
+    @testset "Curl" begin
+        grad_op = Operators.Gradient()
+        vector_field = grad_op.(test_scalar)
+        curl_op = Operators.Curl()
+        result = curl_op.(vector_field)
+        @test axes(result) == axes(test_scalar)
+        @test eltype(result) <: Geometry.ContravariantVector
+    end
+end
+
 
 end

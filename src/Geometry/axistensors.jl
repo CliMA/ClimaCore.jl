@@ -219,6 +219,8 @@ const AxisVector{T, A1, S} = AxisTensor{T, 1, Tuple{A1}, S}
 AxisVector(ax::A1, v::SVector{N, T}) where {A1 <: AbstractAxis, N, T} =
     AxisVector{T, A1, SVector{N, T}}((ax,), v)
 
+(AxisVector{T, A, SVector{0, T}} where {T})() where {A} =
+    AxisVector(A.instance, SVector{0, T}())
 (AxisVector{T, A, SVector{1, T}} where {T})(arg1::Real) where {A} =
     AxisVector(A.instance, SVector(arg1))
 (AxisVector{T, A, SVector{2, T}} where {T})(arg1::Real, arg2::Real) where {A} =
@@ -306,11 +308,12 @@ const CovariantTensor = Union{CovariantVector, Covariant2Tensor}
 const ContravariantTensor = Union{ContravariantVector, Contravariant2Tensor}
 const CartesianTensor = Union{CartesianVector, Cartesian2Tensor}
 const LocalTensor = Union{LocalVector, Local2Tensor}
+for I in [(), (1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
 
-for I in [(1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
-    strI = join(I)
+    strI = isempty(I) ? "Null" : join(I)
     N = length(I)
-    strUVW = join(map(i -> [:U, :V, :W][i], I))
+
+    strUVW = isempty(I) ? "Null" : join(map(i -> [:U, :V, :W][i], I))
     @eval begin
         const $(Symbol(:Covariant, strI, :Axis)) = CovariantAxis{$I}
         const $(Symbol(:Covariant, strI, :Vector)){T} =
@@ -467,7 +470,7 @@ end
         end
         push!(vals, val)
     end
-    return :(@inbounds AxisVector(ato, SVector($(vals...))))
+    return :(@inbounds AxisVector(ato, SVector{$(length(Ito)), $T}($(vals...))))
 end
 
 function _transform(

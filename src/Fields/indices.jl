@@ -245,6 +245,32 @@ function byslab(
     end
 end
 
+function byslab(
+    fn,
+    ::ClimaComms.AbstractCPUDevice,
+    space::Spaces.CenterFiniteDifferenceSpace,
+)
+    Nv = Spaces.nlevels(space)
+    @inbounds begin
+        for v in 1:Nv
+            fn(SlabIndex(v, 1))
+        end
+    end
+end
+
+function byslab(
+    fn,
+    ::ClimaComms.AbstractCPUDevice,
+    space::Spaces.FaceFiniteDifferenceSpace,
+)
+    Nv = Spaces.nlevels(space)
+    @inbounds begin
+        for v in 1:Nv
+            fn(SlabIndex(v - half, 1))
+        end
+    end
+end
+
 universal_index(colidx::Fields.ColumnIndex{2}) =
     CartesianIndex(colidx.ij[1], colidx.ij[2], 1, 1, colidx.h)
 

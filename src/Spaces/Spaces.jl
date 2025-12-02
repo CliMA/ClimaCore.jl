@@ -212,4 +212,18 @@ set_mask!(fn, space::ExtrudedFiniteDifferenceSpace) =
 set_mask!(space::AbstractSpace, data::DataLayouts.AbstractData) =
     set_mask!(grid(space), data)
 
+"""
+    slab_type(space)
+
+Determines the appropriate slab data layout type for a given space.
+
+For spaces with 2 horizontal dimensions, returns IJF.
+For 1D spaces, returns IF.
+"""
+slab_type(space::SpectralElementSpace2D) = DataLayouts.IJF
+slab_type(space::SpectralElementSpace1D) = DataLayouts.IF
+slab_type(space::FiniteDifferenceSpace) = DataLayouts.IF
+slab_type(space::ExtrudedFiniteDifferenceSpace) =
+    slab_type(horizontal_space(space))
+
 end # module
