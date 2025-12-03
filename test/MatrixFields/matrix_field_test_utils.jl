@@ -343,9 +343,15 @@ end
 
 # Generate extruded finite difference spaces for testing. Include topography
 # when possible.
-function test_spaces(::Type{FT}) where {FT}
-    velem = 20 # This should be big enough to test high-bandwidth matrices.
-    helem = npoly = 1 # These should be small enough for the tests to be fast.
+function test_spaces(::Type{FT}; high_res = using_cuda) where {FT}
+    if high_res
+        velem = 63
+        helem = 16
+        npoly = 3
+    else
+        velem = 20 # This should be big enough to test high-bandwidth matrices.
+        helem = npoly = 1 # These should be small enough for the tests to be fast.
+    end
 
     comms_ctx = ClimaComms.SingletonCommsContext(comms_device)
     hdomain = Domains.SphereDomain(FT(10))
