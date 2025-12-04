@@ -70,18 +70,21 @@ function integrate_each_element(field)
 end
 
 """
-    get_value_per_element(field, ones_field)
+    get_value_per_element!(value_per_element, field, ones_field)
 
 Get one value per element of a field by integrating over the nodes of
-each element and dividing by the area of the element.
+each element and dividing by the area of the element. The result is stored in
+`value_per_element`, which is expected to be a Float-valued vector of length equal
+to the number of elements in the space.
 
 Here `ones_field` is a field on the same space as `field` with all
 values set to 1.
 """
-function get_value_per_element(field, ones_field)
-    integral_each_element = integrate_each_element(field)
-    area_each_element = integrate_each_element(ones_field)
-    return integral_each_element ./ area_each_element
+function get_value_per_element!(value_per_element, field, ones_field)
+    integral_each_element = Remapping.integrate_each_element(field)
+    area_each_element = Remapping.integrate_each_element(ones_field)
+    value_per_element .= integral_each_element ./ area_each_element
+    return nothing
 end
 
 """
