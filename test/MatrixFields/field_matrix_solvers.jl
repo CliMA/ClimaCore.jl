@@ -59,16 +59,16 @@ function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
             cuda_frames...,
             cublas_frames...,
             AnyFrameModule(MatrixFields.KrylovKit),
-            AnyFrameModule(Base.CoreLogging),
+            AnyFrameModule(Base.CoreLogging)
         )
-        # using_cuda ||
-        #     @test_opt ignored_modules = ignored FieldMatrixWithSolver(A, b, alg)
-        # using_cuda || @test_opt ignored_modules = ignored ldiv!(x, A′, b)
-        # @test_opt ignored_modules = ignored mul!(b_test, A′, x)
+        using_cuda ||
+            @test_opt ignored_modules = ignored FieldMatrixWithSolver(A, b, alg)
+        using_cuda || @test_opt ignored_modules = ignored ldiv!(x, A′, b)
+        @test_opt ignored_modules = ignored mul!(b_test, A′, x)
 
-        # # TODO: fix broken test when Nv is added to the type space
-        # using_cuda || @test @allocated(ldiv!(x, A′, b)) ≤ 1536
-        # using_cuda || @test @allocated(mul!(b_test, A′, x)) == 0
+        # TODO: fix broken test when Nv is added to the type space
+        using_cuda || @test @allocated(ldiv!(x, A′, b)) ≤ 1536
+        using_cuda || @test @allocated(mul!(b_test, A′, x)) == 0
     end
 end
 
