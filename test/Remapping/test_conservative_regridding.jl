@@ -35,7 +35,8 @@ ones_field1 = Fields.ones(space1)
 @assert sum(Remapping.integrate_each_element(ones_field1)) ≈ sum(ones_field1)
 
 # Get one value per element in the field, equal to the average of the values at nodes of the element
-value_per_element1 = Remapping.get_value_per_element(field1, ones_field1)
+value_per_element1 = zeros(Float64, Meshes.nelements(space1.grid.topology.mesh))
+Remapping.get_value_per_element!(value_per_element1, field1, ones_field1)
 
 # Allocate a vector with length equal to the number of elements in the target space
 value_per_element2 = zeros(Float64, Meshes.nelements(space2.grid.topology.mesh))
