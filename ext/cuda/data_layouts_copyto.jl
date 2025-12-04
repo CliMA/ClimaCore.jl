@@ -21,6 +21,14 @@ function knl_copyto_linear!(dest, src, us)
     return nothing
 end
 
+function knl_copyto_VIJFH_64!(dest, src, ::Val{P}) where {P}
+    # P is a boolean, indicating if the column is padded
+    P && threadIdx().x == 64 && return nothing
+    I = CartesianIndex(threadIdx().y, blockIdx().x, 1, threadIdx().x, blockIdx().y)
+    @inbounds dest[I] = src[I]
+    return nothing
+end
+
 if VERSION ≥ v"1.11.0-beta"
     # https://github.com/JuliaLang/julia/issues/56295
     # Julia 1.11's Base.Broadcast currently requires
@@ -102,6 +110,44 @@ else
         call_post_op_callback() && post_op_callback(dest, dest, bc, to, mask)
         return dest
     end
+end
+
+# Specialized kernel launch for VIJFHStyle{63,4} and VIJFHStyle{64,4} arrays. This uses block and grid indices
+# instead of computing cartesian indices from a linear index. The threads are launched so that
+# a set 64 threads covers a column.
+function Base.copyto!(
+    dest::AbstractData,
+    bc::BC,
+    to::ToCUDA,
+    mask::NoMask = NoMask(),
+) where {BC <: Base.Broadcast.Broadcasted{<:ClimaCore.DataLayouts.VIJFHStyle{63, 4}}}
+    (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(dest)
+    Nv > 0 && Nh > 0 || return dest
+    args = (dest, bc, Val(true))
+    auto_launch!(
+        knl_copyto_VIJFH_64!,
+        args;
+        threads_s = (64, Ni, 1),
+        blocks_s = (Nj, Nh, 1),
+    )
+    return dest
+end
+function Base.copyto!(
+    dest::AbstractData,
+    bc::BC,
+    to::ToCUDA,
+    mask::NoMask = NoMask(),
+) where {BC <: Base.Broadcast.Broadcasted{<:ClimaCore.DataLayouts.VIJFHStyle{64, 4}}}
+    (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(dest)
+    Nv > 0 && Nh > 0 || return dest
+    args = (dest, bc, Val(false))
+    auto_launch!(
+        knl_copyto_VIJFH_64!,
+        args;
+        threads_s = (64, Ni, 1),
+        blocks_s = (Nj, Nh, 1),
+    )
+    return dest
 end
 
 # broadcasting scalar assignment
