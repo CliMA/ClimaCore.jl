@@ -81,6 +81,10 @@ end
 Adapt.adapt_structure(to, adaption::LinearAdaption) =
     LinearAdaption(Adapt.adapt(to, adaption.surface))
 
+function Adapt.adapt_structure(to, adaption::LinearAdaption, horizontal_grid)
+    return LinearAdaption(Adapt.adapt(to, adaption.surface, horizontal_grid))
+end
+
 # This method is invoked by the ExtrudedFiniteDifferenceGrid constructor
 function ref_z_to_physical_z(
     adaption::LinearAdaption,
@@ -122,6 +126,14 @@ end
 
 Adapt.adapt_structure(to, adaption::SLEVEAdaption) =
     SLEVEAdaption(Adapt.adapt(to, adaption.surface), adaption.ηₕ, adaption.s)
+
+function Adapt.adapt_structure(to, adaption::SLEVEAdaption, horizontal_grid)
+    return SLEVEAdaption(
+        Adapt.adapt(to, adaption.surface, horizontal_grid),
+        adaption.ηₕ,
+        adaption.s,
+    )
+end
 
 function ref_z_to_physical_z(
     adaption::SLEVEAdaption,

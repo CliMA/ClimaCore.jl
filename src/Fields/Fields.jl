@@ -72,6 +72,13 @@ ClimaComms.context(topology::T) where {T <: Topologies.AbstractTopology} =
 Adapt.adapt_structure(to, field::Field) =
     Field(Adapt.adapt(to, field_values(field)), Adapt.adapt(to, axes(field)))
 
+function Adapt.adapt(to, field::Field, horizontal_grid)
+    Field(
+        Adapt.adapt(to, field_values(field)),
+        Adapt.adapt(to, axes(field), horizontal_grid),
+    )
+end
+
 ## aliases
 # Point Field
 const PointField{V, S} =

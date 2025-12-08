@@ -38,7 +38,27 @@ mutable struct ExtrudedFiniteDifferenceGrid{
     face_local_geometry::FLG
 end
 
-Adapt.@adapt_structure ExtrudedFiniteDifferenceGrid
+# Adapt.@adapt_structure ExtrudedFiniteDifferenceGrid
+
+function Adapt.adapt_structure(to, a::ExtrudedFiniteDifferenceGrid)
+    horizontal_grid = Adapt.adapt_structure(to, a.horizontal_grid)
+    if hasproperty(a.hypsography, :surface) && (a.horizontal_grid === getfield(a.hypsography.surface, :space).grid)
+        hypsography = Adapt.adapt_structure(to, a.hypsography, horizontal_grid)
+    else
+        hypsography = Adapt.adapt_structure(to, a.hypsography)
+    end
+    vertical_grid = Adapt.adapt_structure(to, a.vertical_grid)
+    global_geometry = Adapt.adapt_structure(to, a.global_geometry)
+    center_local_geometry = Adapt.adapt_structure(to, a.center_local_geometry)
+    face_local_geometry = Adapt.adapt_structure(to, a.face_local_geometry)
+    return ExtrudedFiniteDifferenceGrid(horizontal_grid,
+        vertical_grid,
+        hypsography,
+        global_geometry,
+        center_local_geometry,
+        face_local_geometry,
+    )
+end
 
 local_geometry_type(
     ::Type{ExtrudedFiniteDifferenceGrid{H, V, A, GG, CLG, FLG}},

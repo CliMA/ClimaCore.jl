@@ -113,6 +113,8 @@ end
 Adapt.adapt_structure(to, space::SpectralElementSpace2D) =
     SpectralElementSpace2D(Adapt.adapt(to, grid(space)))
 
+Adapt.adapt(to, space::SpectralElementSpace2D, horizontal_grid) =
+    SpectralElementSpace2D(horizontal_grid)
 
 function issubspace(
     hspace::SpectralElementSpace2D{<:Grids.SpectralElementGrid2D},
