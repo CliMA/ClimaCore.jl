@@ -1,4 +1,5 @@
 import CUDA
+import CUDA.CUSOLVERS
 import ClimaComms
 import LinearAlgebra: UniformScaling
 import ClimaCore.Operators
@@ -7,10 +8,10 @@ import ClimaCore.Fields
 import ClimaCore.Spaces
 import ClimaCore.Topologies
 import ClimaCore.MatrixFields
-import ClimaCore.DataLayouts: vindex
-import ClimaCore.MatrixFields: single_field_solve!
+import ClimaCore.MatrixFields: single_field_solve!, TridiagonalMatrixRow
 import ClimaCore.MatrixFields: _single_field_solve!
 import ClimaCore.MatrixFields: band_matrix_solve!, unzip_tuple_field_values
+import ClimaCore.DataLayouts: vindex, nlevels
 import ClimaCore.RecursiveApply: ⊠, ⊞, ⊟, rmap, rzero, rdiv
 
 function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
@@ -211,5 +212,177 @@ function band_matrix_solve_local_mem!(
     @inbounds for v in 1:Nv
         x[vindex(v)] = inv(A₀[vindex(v)]) ⊠ b[vindex(v)]
     end
+    return nothing
+end
+
+# Batched tridiagonal solver using cuSOLVER for improved GPU utilization
+# This function solves multiple independent tridiagonal systems in parallel
+function batched_tridiag_solve_cusolver!(
+    dl::CUDA.CuVector,  # Lower diagonal
+    d::CUDA.CuVector,   # Main diagonal
+    du::CUDA.CuVector,  # Upper diagonal
+    x::CUDA.CuVector,   # Solution/RHS (overwritten with solution)
+    batch_size::Int,
+    n::Int,
+)
+    """
+    Solve batch_size independent tridiagonal systems using cuSOLVER's
+    strided batched tridiagonal solver.
+
+    Each system i has the form: A_i * x_i = b_i
+    where A_i is a tridiagonal matrix and is stored in strided format:
+    - dl[i*n+1:(i+1)*n] contains lower diagonal (sub-diagonal)
+    - d[i*n+1:(i+1)*n] contains main diagonal
+    - du[i*n+1:(i+1)*n] contains upper diagonal
+    - x[i*n+1:(i+1)*n] contains RHS b_i on input, solution x_i on output
+
+    Stride is n (number of unknowns per system).
+    """
+    handle = CUDA.CUSOLVERS.CusolverDnHandle()
+
+    # For strided batched dgtsv:
+    # stride = n (number of rows/unknowns in each system)
+    stride = n
+    m = 1  # Number of right-hand sides
+
+    # Allocate work buffer
+    lwork = Ref{Int32}()
+    CUDA.CUSOLVERS.cusolverDnDgtsv_strided_batched_bufferSize(
+        handle,
+        n,
+        dl,
+        d,
+        du,
+        x,
+        batch_size,
+        stride,
+        m,
+        lwork,
+    )
+    work = CUDA.zeros(Float64, lwork[])
+
+    # Solve
+    devInfo = CUDA.zeros(Int32, 1)
+    CUDA.CUSOLVERS.cusolverDnDgtsv_strided_batched(
+        handle,
+        n,
+        dl,
+        d,
+        du,
+        x,
+        batch_size,
+        stride,
+        m,
+        work,
+        lwork[],
+        devInfo,
+    )
+
+    # Check for errors
+    dev_info_val = Array(devInfo)[1]
+    if dev_info_val != 0
+        if dev_info_val > 0
+            error("cuSOLVER: Invalid arguments or singular matrix in system $dev_info_val")
+        else
+            error("cuSOLVER: Memory allocation or other error (info=$dev_info_val)")
+        end
+    end
+
+    return nothing
+end
+
+# Wrapper for batched tridiagonal solve that integrates with ClimaCore's field structure
+function band_matrix_solve_batched_cusolver!(
+    t::Type{<:MatrixFields.TridiagonalMatrixRow},
+    device::ClimaComms.CUDADevice,
+    x::CUDA.CuArray,
+    Aⱼs::Tuple,
+    b::CUDA.CuArray,
+    n_batch::Int,  # Number of independent columns (batch size)
+    n::Int,        # Size of each tridiagonal system (number of vertical levels)
+)
+    """
+    Batched solver for tridiagonal matrices using cuSOLVER.
+    Converts ClimaCore field data to strided format for cuSOLVER's batched solver.
+
+    Args:
+        t: Type indicator (TridiagonalMatrixRow)
+        device: CUDA device context
+        x: Solution vector (overwritten with result)
+        Aⱼs: Tuple of (lower_diag, main_diag, upper_diag) matrix components
+        b: Right-hand side vector
+        n_batch: Number of independent systems to solve (horizontal columns)
+        n: Size of each system (vertical levels)
+    """
+    A₋₁, A₀, A₊₁ = Aⱼs
+
+    # Create strided arrays for cuSOLVER
+    # Reshape data from (vertical_levels, n_columns) to (vertical_levels * n_columns,)
+    # with stride = vertical_levels between systems
+    dl = CUDA.vec(A₋₁)  # Lower diagonal
+    d = CUDA.vec(A₀)    # Main diagonal
+    du = CUDA.vec(A₊₁)  # Upper diagonal
+    x_vec = CUDA.vec(x) # Solution vector
+    b_vec = CUDA.vec(b) # RHS vector
+
+    # Copy RHS to solution vector (cuSOLVER solves in-place)
+    copyto!(x_vec, b_vec)
+
+    # Call batched solver
+    batched_tridiag_solve_cusolver!(dl, d, du, x_vec, n_batch, n)
+
+    return nothing
+end
+
+# Public entry used by BatchedTridiagonalSolve algorithm
+function MatrixFields.single_field_solve_batched!(
+    cache,
+    x::Fields.Field,
+    A::Fields.Field,
+    b::Fields.Field,
+)
+    device = ClimaComms.device(x)
+    device isa ClimaComms.CUDADevice || error("Batched solver only supports CUDA devices")
+
+    # Fallback if matrix is not tridiagonal
+    if !(eltype(A) <: MatrixFields.TridiagonalMatrixRow)
+        return single_field_solve!(device, cache, x, A, b)
+    end
+
+    # Extract data
+    A_vals = unzip_tuple_field_values(Fields.field_values(A.entries))
+    A₋₁, A₀, A₊₁ = A_vals
+    x_vals = Fields.field_values(x)
+    b_vals = Fields.field_values(b)
+
+    # Determine system size and batch count
+    n = nlevels(x_vals)
+    n_batch = length(x_vals) ÷ n
+
+    # Ensure arrays are on the GPU
+    dl = isa(A₋₁, CUDA.CuArray) ? A₋₁ : CUDA.CuArray(A₋₁)
+    d = isa(A₀, CUDA.CuArray) ? A₀ : CUDA.CuArray(A₀)
+    du = isa(A₊₁, CUDA.CuArray) ? A₊₁ : CUDA.CuArray(A₊₁)
+    x_gpu = isa(x_vals, CUDA.CuArray) ? x_vals : CUDA.CuArray(x_vals)
+    b_gpu = isa(b_vals, CUDA.CuArray) ? b_vals : CUDA.CuArray(b_vals)
+
+    # Copy RHS to solution buffer and solve
+    x_vec = CUDA.vec(x_gpu)
+    copyto!(x_vec, CUDA.vec(b_gpu))
+    band_matrix_solve_batched_cusolver!(
+        MatrixFields.TridiagonalMatrixRow,
+        device,
+        x_gpu,
+        (dl, d, du),
+        b_gpu,
+        n_batch,
+        n,
+    )
+
+    # If original x was not on GPU, copy back
+    if x_gpu !== x_vals
+        copyto!(x_vals, x_gpu)
+    end
+
     return nothing
 end

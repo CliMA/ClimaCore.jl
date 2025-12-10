@@ -234,6 +234,71 @@ struct BlockDiagonalSolve <: FieldMatrixSolverAlgorithm end
 
 Base.zero(alg::BlockDiagonalSolve) = alg
 
+# Fallback batched solver; CUDA extension replaces this with a GPU batched version
+single_field_solve_batched!(cache, x, A, b) = single_field_solve!(cache, x, A, b)
+
+"""
+    BatchedTridiagonalSolve
+
+A specialized `FieldMatrixSolverAlgorithm` for single-field tridiagonal matrices
+on CUDA devices. Uses cuSOLVER's batched tridiagonal solver (dgtsv_strided_batched)
+for improved performance by solving all horizontal columns in a single optimized
+kernel call, reducing kernel launch overhead and improving GPU utilization.
+
+Only applicable when:
+- Running on a CUDA device (A100 or similar)
+- Single field with tridiagonal matrix structure
+- Matrix values are Float64
+"""
+struct BatchedTridiagonalSolve <: FieldMatrixSolverAlgorithm end
+
+Base.zero(alg::BatchedTridiagonalSolve) = alg
+
+function field_matrix_solver_cache(::BatchedTridiagonalSolve, A, b)
+    caches = map(matrix_row_keys(keys(A))) do name
+        single_field_solver_cache(A[name, name], b[name])
+    end
+    return FieldNameDict(matrix_row_keys(keys(A)), caches)
+end
+
+function check_field_matrix_solver(::BatchedTridiagonalSolve, _, A, b)
+    check_block_diagonal_matrix(
+        A,
+        "BatchedTridiagonalSolve cannot be used because A",
+    )
+    check_block_diagonal_matrix_has_no_missing_blocks(A, b)
+
+    # Check that this is single field with tridiagonal structure
+    names = matrix_row_keys(keys(A))
+    if length(names) != 1
+        error("BatchedTridiagonalSolve only supports single-field matrices")
+    end
+
+    name = first(names.values)
+    A_mat = A[name, name]
+
+    # Check if matrix is tridiagonal
+    if !(eltype(A_mat) <: MatrixFields.TridiagonalMatrixRow)
+        error("BatchedTridiagonalSolve only supports TridiagonalMatrixRow matrices")
+    end
+
+    check_single_field_solver(A[name, name], b[name])
+end
+
+function run_field_matrix_solver!(
+    ::BatchedTridiagonalSolve,
+    cache,
+    x,
+    A,
+    b,
+)
+    names = matrix_row_keys(keys(A))
+    foreach(names) do name
+        single_field_solve_batched!(cache[name], x[name], A[name, name], b[name])
+    end
+    return nothing
+end
+
 function field_matrix_solver_cache(::BlockDiagonalSolve, A, b)
     caches = map(matrix_row_keys(keys(A))) do name
         single_field_solver_cache(A[name, name], b[name])
