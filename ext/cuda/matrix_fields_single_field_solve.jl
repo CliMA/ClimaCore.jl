@@ -1,5 +1,7 @@
 import CUDA
-import CUDA.CUSOLVERS
+import CUDA.CUSOLVER
+import CUDA.CUSPARSE
+import Base: Csize_t
 import ClimaComms
 import LinearAlgebra: UniformScaling
 import ClimaCore.Operators
@@ -226,11 +228,11 @@ function batched_tridiag_solve_cusolver!(
     n::Int,
 )
     """
-    Solve batch_size independent tridiagonal systems using cuSOLVER's
-    strided batched tridiagonal solver.
+    Solve batch_size independent tridiagonal systems using cuSPARSE's
+    gtsv2StridedBatch routine (double precision).
 
     Each system i has the form: A_i * x_i = b_i
-    where A_i is a tridiagonal matrix and is stored in strided format:
+    where A_i is tridiagonal and stored in strided format:
     - dl[i*n+1:(i+1)*n] contains lower diagonal (sub-diagonal)
     - d[i*n+1:(i+1)*n] contains main diagonal
     - du[i*n+1:(i+1)*n] contains upper diagonal
@@ -238,16 +240,14 @@ function batched_tridiag_solve_cusolver!(
 
     Stride is n (number of unknowns per system).
     """
-    handle = CUDA.CUSOLVERS.CusolverDnHandle()
+    handle = CUDA.CUSPARSE.handle()
 
-    # For strided batched dgtsv:
-    # stride = n (number of rows/unknowns in each system)
+    # Stride across batches
     stride = n
-    m = 1  # Number of right-hand sides
 
-    # Allocate work buffer
-    lwork = Ref{Int32}()
-    CUDA.CUSOLVERS.cusolverDnDgtsv_strided_batched_bufferSize(
+    # Workspace size (bytes)
+    workspace_bytes = Ref{Csize_t}()
+    CUDA.CUSPARSE.cusparseDgtsv2StridedBatch_bufferSizeExt(
         handle,
         n,
         dl,
@@ -256,14 +256,13 @@ function batched_tridiag_solve_cusolver!(
         x,
         batch_size,
         stride,
-        m,
-        lwork,
+        workspace_bytes,
     )
-    work = CUDA.zeros(Float64, lwork[])
 
-    # Solve
-    devInfo = CUDA.zeros(Int32, 1)
-    CUDA.CUSOLVERS.cusolverDnDgtsv_strided_batched(
+    work = CUDA.CuVector{UInt8}(undef, Int(workspace_bytes[]))
+
+    # Solve in-place on x
+    CUDA.CUSPARSE.cusparseDgtsv2StridedBatch(
         handle,
         n,
         dl,
@@ -272,21 +271,8 @@ function batched_tridiag_solve_cusolver!(
         x,
         batch_size,
         stride,
-        m,
         work,
-        lwork[],
-        devInfo,
     )
-
-    # Check for errors
-    dev_info_val = Array(devInfo)[1]
-    if dev_info_val != 0
-        if dev_info_val > 0
-            error("cuSOLVER: Invalid arguments or singular matrix in system $dev_info_val")
-        else
-            error("cuSOLVER: Memory allocation or other error (info=$dev_info_val)")
-        end
-    end
 
     return nothing
 end
@@ -349,40 +335,7 @@ function MatrixFields.single_field_solve_batched!(
         return single_field_solve!(device, cache, x, A, b)
     end
 
-    # Extract data
-    A_vals = unzip_tuple_field_values(Fields.field_values(A.entries))
-    A₋₁, A₀, A₊₁ = A_vals
-    x_vals = Fields.field_values(x)
-    b_vals = Fields.field_values(b)
-
-    # Determine system size and batch count
-    n = nlevels(x_vals)
-    n_batch = length(x_vals) ÷ n
-
-    # Ensure arrays are on the GPU
-    dl = isa(A₋₁, CUDA.CuArray) ? A₋₁ : CUDA.CuArray(A₋₁)
-    d = isa(A₀, CUDA.CuArray) ? A₀ : CUDA.CuArray(A₀)
-    du = isa(A₊₁, CUDA.CuArray) ? A₊₁ : CUDA.CuArray(A₊₁)
-    x_gpu = isa(x_vals, CUDA.CuArray) ? x_vals : CUDA.CuArray(x_vals)
-    b_gpu = isa(b_vals, CUDA.CuArray) ? b_vals : CUDA.CuArray(b_vals)
-
-    # Copy RHS to solution buffer and solve
-    x_vec = CUDA.vec(x_gpu)
-    copyto!(x_vec, CUDA.vec(b_gpu))
-    band_matrix_solve_batched_cusolver!(
-        MatrixFields.TridiagonalMatrixRow,
-        device,
-        x_gpu,
-        (dl, d, du),
-        b_gpu,
-        n_batch,
-        n,
-    )
-
-    # If original x was not on GPU, copy back
-    if x_gpu !== x_vals
-        copyto!(x_vals, x_gpu)
-    end
-
-    return nothing
+    # For now, reuse the stable column-wise solver until a numerically robust
+    # batched path is available.
+    return single_field_solve!(device, cache, x, A, b)
 end
