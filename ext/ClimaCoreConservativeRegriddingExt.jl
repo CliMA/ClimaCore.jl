@@ -1,3 +1,5 @@
+module ClimaCoreConservativeRegriddingExt
+
 """
     get_element_vertices(space::SpectralElementSpace2D)
 
@@ -113,4 +115,7 @@ function set_value_per_element!(field, value_per_element)
         end
     end
     return field
+end
+
+
 end
