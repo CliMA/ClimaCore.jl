@@ -2,10 +2,6 @@ using ClimaCore:
     CommonSpaces, Remapping, Fields, Spaces, RecursiveApply, Meshes, Quadratures
 using ConservativeRegridding
 
-
-
-# TODO figure out if 0-area elements is expected with odd h_elem
-
 space1 = CommonSpaces.CubedSphereSpace(;
     radius = 10,
     n_quad_points = 3,
