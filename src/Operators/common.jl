@@ -1,3 +1,5 @@
+import UnrolledUtilities: unrolled_map
+
 """
     AbstractOperator
 
@@ -24,15 +26,10 @@ Base.Broadcast.BroadcastStyle(
 
 
 # recursively unwrap axes broadcast arguments in a way that is statically reducible by the optimizer
-@inline axes_args(args::Tuple) = (axes(args[1]), axes_args(Base.tail(args))...)
-@inline axes_args(arg::Tuple{Any}) = (axes(arg[1]),)
-@inline axes_args(::Tuple{}) = ()
+@inline axes_args(args::Tuple) = unrolled_map(axes, args)
 
 @inline instantiate_args(args::Tuple) =
-    (Base.Broadcast.instantiate(args[1]), instantiate_args(Base.tail(args))...)
-@inline instantiate_args(args::Tuple{Any}) =
-    (Base.Broadcast.instantiate(args[1]),)
-@inline instantiate_args(::Tuple{}) = ()
+    unrolled_map(Base.Broadcast.instantiate, args)
 
 function Base.axes(opbc::OperatorBroadcasted)
     if isnothing(opbc.axes)
@@ -145,9 +142,8 @@ function strip_space(
     )
 end
 
-strip_space_args(::Tuple{}, space) = ()
 strip_space_args(args::Tuple, space) =
-    (strip_space(args[1], space), strip_space_args(Base.tail(args), space)...)
+    unrolled_map(arg -> strip_space(arg, space), args)
 
 function unstrip_space(field::Field, parent_space)
     new_space = reconstruct_placeholder_space(axes(field), parent_space)
