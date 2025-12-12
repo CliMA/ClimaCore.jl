@@ -66,6 +66,7 @@ module DataLayouts
 import Base: Base, @propagate_inbounds
 import StaticArrays: SOneTo, MArray, SArray
 import ClimaComms
+import UnrolledUtilities: unrolled_map, unrolled_all
 import MultiBroadcastFusion as MBF
 import Adapt
 

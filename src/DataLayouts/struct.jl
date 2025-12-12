@@ -17,12 +17,12 @@ Determines whether an object of type `S` can be stored in an array with elements
 of type `T` by recursively checking whether the non-empty fields of `S` can be
 stored in such an array. If `S` is empty, this is always true.
 """
-is_valid_basetype(::Type{T}, ::Type{S}) where {T, S} =
+function is_valid_basetype(::Type{T}, ::Type{S}) where {T, S}
     sizeof(S) == 0 ||
-    (fieldcount(S) > 0 && is_valid_basetype(T, fieldtypes(S)...))
+        fieldcount(S) > 0 &&
+            unrolled_all(s -> is_valid_basetype(T, s), fieldtypes(S))
+end
 is_valid_basetype(::Type{T}, ::Type{<:T}) where {T} = true
-is_valid_basetype(::Type{T}, ::Type{S}, Ss...) where {T, S} =
-    is_valid_basetype(T, S) && is_valid_basetype(T, Ss...)
 
 """
     check_basetype(::Type{T}, ::Type{S})
@@ -64,10 +64,10 @@ replace_basetype(::Type{T}, ::Type{T′}, ::Type{S}) where {T, T′, S} =
     S.name.wrapper{replace_basetypes(T, T′, S.parameters...)...}
 replace_basetype(::Type{T}, ::Type{T′}, ::Type{<:T}) where {T, T′} = T′
 replace_basetype(::Type{T}, ::Type{T′}, value) where {T, T′} = value
-replace_basetypes(::Type{T}, ::Type{T′}, value) where {T, T′} =
-    (replace_basetype(T, T′, value),)
-replace_basetypes(::Type{T}, ::Type{T′}, value, values...) where {T, T′} =
-    (replace_basetype(T, T′, value), replace_basetypes(T, T′, values...)...)
+replace_basetypes(::Type{T}, ::Type{T′}, values...) where {T, T′} =
+    unrolled_map(values) do value
+        replace_basetype(T, T′, value)
+    end
 # TODO: This could potentially lead to some annoying bugs, since it replaces
 # type parameters instead of field types. So, if `S` has `Float64` as a
 # parameter, `replace_basetype(Float64, Float32, S)` will replace that parameter

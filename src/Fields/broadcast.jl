@@ -1,4 +1,5 @@
 import ..DebugOnly: allow_mismatched_spaces_unsafe
+import UnrolledUtilities: unrolled_map
 
 """
     AbstractFieldStyle
@@ -180,7 +181,11 @@ end
 
 # Return underlying DataLayout object, DataStyle of broadcasted
 # for `Base.similar` of a Field
-_todata_args(args::Tuple) = (todata(args[1]), _todata_args(Base.tail(args))...)
+# _todata_args(args::Tuple) = (todata(args[1]), _todata_args(Base.tail(args))...)
+_todata_args(args::Tuple) =
+    unrolled_map(args) do arg
+        todata(arg)
+    end
 _todata_args(args::Tuple{Any}) = (todata(args[1]),)
 _todata_args(::Tuple{}) = ()
 
