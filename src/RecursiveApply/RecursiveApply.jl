@@ -6,11 +6,12 @@ This module contains operators to recurse over nested `Tuple`s or `NamedTuple`s.
 To extend to another type `T`, define `RecursiveApply.rmap(fn, args::T...)`
 """
 module RecursiveApply
-
+using UnrolledUtilities
 export ⊞, ⊠, ⊟
 
 # These functions need to be generated for type stability (since T.parameters is
 # a SimpleVector, the compiler cannot always infer its size and elements).
+@generated params_as_tuple(::Type{T}) where {T} = :($((T.parameters...,)))
 @generated first_param(::Type{T}) where {T} = :($(first(T.parameters)))
 @generated tail_params(::Type{T}) where {T} =
     :($(Tuple{Base.tail((T.parameters...,))...}))
@@ -22,20 +23,38 @@ export ⊞, ⊠, ⊟
 rmaptype_Tuple(fn::F, ::Type{Tuple{}}) where {F} = ()
 rmaptype_Tuple(fn::F, ::Type{T}) where {F, E, T <: Tuple{E}} =
     (rmaptype(fn, first_param(T)),)
-rmaptype_Tuple(fn::F, ::Type{T}) where {F, T <: Tuple} =
-    (rmaptype(fn, first_param(T)), rmaptype_Tuple(fn, tail_params(T))...)
+function rmaptype_Tuple(fn::F, ::Type{T}) where {F, T <: Tuple}
+    UnrolledUtilities.unrolled_map(params_as_tuple(T)) do param
+        rmaptype(fn, param)
+    end
+end
 
 rmaptype_Tuple(_, ::Type{Tuple{}}, ::Type{Tuple{}}) = ()
+rmaptype_Tuple(fn::F, ::Type{<:Tuple{A}}, ::Type{<:Tuple{B}}) where {F, A, B} =
+    (rmaptype(fn, A, B),)
 rmaptype_Tuple(_, ::Type{Tuple{}}, ::Type{T}) where {T <: Tuple} = ()
 rmaptype_Tuple(_, ::Type{T}, ::Type{Tuple{}}) where {T <: Tuple} = ()
-rmaptype_Tuple(
+function rmaptype_Tuple(
     fn::F,
     ::Type{T1},
     ::Type{T2},
-) where {F, T1 <: Tuple, T2 <: Tuple} = (
-    rmaptype(fn, first_param(T1), first_param(T2)),
-    rmaptype_Tuple(fn, tail_params(T1), tail_params(T2))...,
-)
+) where {F, T1 <: Tuple, T2 <: Tuple}
+    UnrolledUtilities.unrolled_map(
+        params_as_tuple(T1),
+        params_as_tuple(T2),
+    ) do param1, param2
+        rmaptype(fn, param1, param2)
+    end
+end
+function rmaptype_Tuple(
+    fn::F,
+    ::Type{T1},
+    ::Type{T1},
+) where {F, T1 <: Tuple}
+    UnrolledUtilities.unrolled_map(params_as_tuple(T1)) do param1
+        rmaptype(fn, param1, param1)
+    end
+end
 
 """
     rmap(fn, X...)
@@ -44,27 +63,32 @@ Recursively apply `fn` to each element of `X`
 """
 rmap(fn::F, X) where {F} = fn(X)
 rmap(fn::F, X::Tuple{}) where {F} = ()
-rmap(fn::F, X::Tuple) where {F} =
-    (rmap(fn, first(X)), rmap(fn, Base.tail(X))...)
-rmap(fn::F, X::NamedTuple) where {F} =
+@inline function rmap(fn::F, X::T) where {F, T <: Tuple}
+    UnrolledUtilities.unrolled_map(X) do x
+        rmap(fn, x)
+    end
+end
+rmap(fn::F, X::NT) where {F, NT <: NamedTuple} =
     NamedTuple{nt_names(X)}(rmap(fn, Tuple(X)))
 
 rmap(fn::F, X, Y) where {F} = fn(X, Y)
-rmap(fn::F, X::Tuple{}, Y::Tuple{}) where {F} = ()
-rmap(fn::F, X::Tuple{}, Y) where {F} = ()
-rmap(fn::F, X, Y::Tuple{}) where {F} = ()
-rmap(fn::F, X::Tuple, Y::Tuple) where {F} =
-    (rmap(fn, first(X), first(Y)), rmap(fn, Base.tail(X), Base.tail(Y))...)
-rmap(fn::F, X::Tuple, Y::Tuple{}) where {F} =
-    (rmap(fn, first(X)), rmap(fn, Base.tail(X))...)
+function rmap(fn::F, X::Tuple, Y::Tuple) where {F}
+    UnrolledUtilities.unrolled_map(X, Y) do x, y
+        rmap(fn, x, y)
+    end
+end
 
-rmap(fn::F, X::Tuple{}, Y::Tuple) where {F} =
-    (rmap(fn, first(Y)), rmap(fn, Base.tail(Y))...)
-rmap(fn::F, X, Y::Tuple) where {F} =
-    (rmap(fn, X, first(Y)), rmap(fn, X, Base.tail(Y))...)
+function rmap(fn::F, X, Y::Tuple) where {F}
+    UnrolledUtilities.unrolled_map(Y) do y
+        rmap(fn, X, y)
+    end
+end
 
-rmap(fn::F, X::Tuple, Y) where {F} =
-    (rmap(fn, first(X), Y), rmap(fn, Base.tail(X), Y)...)
+function rmap(fn::F, X::Tuple, Y) where {F}
+    UnrolledUtilities.unrolled_map(X) do x
+        rmap(fn, x, Y)
+    end
+end
 
 function rmap(fn::F, X::NamedTuple, Y::NamedTuple) where {F}
     @assert nt_names(X) === nt_names(Y)
@@ -133,10 +157,14 @@ Recursively zero out each element of `X`.
 """
 rzero(X) = rzero(typeof(X))
 rzero(::Type{T}) where {T} = zero(T)
-rzero(::Type{Tuple{}}) = ()
 rzero(::Type{T}) where {E, T <: Tuple{E}} = (rzero(E),)
-rzero(::Type{T}) where {T <: Tuple} =
-    (rzero(first_param(T)), rzero(tail_params(T))...)
+function rzero(::Type{T}) where {T <: Tuple}
+    UnrolledUtilities.unrolled_map(params_as_tuple(T)) do param
+        rzero(param)
+    end
+end
+
+
 rzero(::Type{Tup}) where {names, T, Tup <: NamedTuple{names, T}} =
     NamedTuple{names}(rzero(T))
 
