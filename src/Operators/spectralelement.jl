@@ -329,9 +329,6 @@ end
     return slabidx.v + half <= Nv
 end
 
-Base.@propagate_inbounds _get_node(space, ij, slabidx, args...) =
-    unrolled_map(arg -> get_node(space, arg, ij, slabidx), args)
-
 Base.@propagate_inbounds function get_node(space, scalar, ij, slabidx)
     scalar[]
 end
@@ -390,14 +387,14 @@ end
 
 
 
-Base.@propagate_inbounds function get_node(
+Base.@propagate_inbounds @inline function get_node(
     parent_space,
     bc::Base.Broadcast.Broadcasted,
     ij,
     slabidx,
 )
     space = reconstruct_placeholder_space(axes(bc), parent_space)
-    bc.f(_get_node(space, ij, slabidx, bc.args...)...)
+    return bc.f(unrolled_map(arg -> get_node(space, arg, ij, slabidx), bc.args)...)
 end
 Base.@propagate_inbounds function get_node(
     space,
