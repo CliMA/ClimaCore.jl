@@ -1,5 +1,6 @@
 import ..Topologies: Topology2D
 using ..RecursiveApply
+import UnrolledUtilities: unrolled_map
 
 """
     dss_transform(arg, local_geometry, weight, I)
@@ -35,14 +36,13 @@ Base.@propagate_inbounds dss_transform(
     ()
 end
 @inline function dss_transform(
-    arg::Tuple,
+    args::Tuple,
     local_geometry::Geometry.LocalGeometry,
     weight,
 )
-    (
-        dss_transform(first(arg), local_geometry, weight),
-        dss_transform(Base.tail(arg), local_geometry, weight)...,
-    )
+    return unrolled_map(args) do arg
+        dss_transform(arg, local_geometry, weight)
+    end
 end
 @inline dss_transform(
     arg::Tuple{Any},
