@@ -69,6 +69,7 @@ import ClimaComms
 import UnrolledUtilities: unrolled_map, unrolled_all
 import MultiBroadcastFusion as MBF
 import Adapt
+import UnrolledUtilities: unrolled_foreach, unrolled_all, unrolled_findfirst
 
 import ..Utilities: PlusHalf, unionall_type
 import ..DebugOnly: call_post_op_callback, post_op_callback

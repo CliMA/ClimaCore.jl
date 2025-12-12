@@ -231,44 +231,26 @@ function Spaces.weighted_dss!(
 end
 
 @inline function first_fieldvector_in_bc(args::Tuple, rargs...)
-    x1 = first_fieldvector_in_bc(args[1], rargs...)
-    x1 isa FieldVector && return x1
-    return first_fieldvector_in_bc(Base.tail(args), rargs...)
+    idx = unrolled_findfirst(args) do arg
+        !isnothing(first_fieldvector_in_bc(arg))
+    end
+    return isnothing(idx) ? nothing : first_fieldvector_in_bc(args[idx])
 end
-
-@inline first_fieldvector_in_bc(args::Tuple{Any}, rargs...) =
-    first_fieldvector_in_bc(args[1], rargs...)
-@inline first_fieldvector_in_bc(args::Tuple{}, rargs...) = nothing
-@inline first_fieldvector_in_bc(x) = nothing
-@inline first_fieldvector_in_bc(x::FieldVector) = x
 
 @inline first_fieldvector_in_bc(
     bc::Base.Broadcast.Broadcasted{FieldVectorStyle},
 ) = first_fieldvector_in_bc(bc.args)
+@inline first_fieldvector_in_bc(fv::FieldVector) = fv
+@inline first_fieldvector_in_bc(x) = nothing
 
 @inline _is_diagonal_bc_args(
     truesofar,
     ::Type{TStart},
     args::Tuple,
-    rargs...,
 ) where {TStart} =
-    truesofar &&
-    _is_diagonal_bc(truesofar, TStart, args[1], rargs...) &&
-    _is_diagonal_bc_args(truesofar, TStart, Base.tail(args), rargs...)
-
-@inline _is_diagonal_bc_args(
-    truesofar,
-    ::Type{TStart},
-    args::Tuple{Any},
-    rargs...,
-) where {TStart} =
-    truesofar && _is_diagonal_bc(truesofar, TStart, args[1], rargs...)
-@inline _is_diagonal_bc_args(
-    truesofar,
-    ::Type{TStart},
-    args::Tuple{},
-    rargs...,
-) where {TStart} = truesofar
+    truesofar && unrolled_all(args) do arg
+        _is_diagonal_bc(truesofar, TStart, arg)
+    end
 
 @inline function _is_diagonal_bc(
     truesofar,
@@ -318,13 +300,10 @@ end
 
 # Recursively call transform_bc_args() on broadcast arguments in a way that is statically reducible by the optimizer
 # see Base.Broadcast.preprocess_args
-@inline transform_bc_args(args::Tuple, inds...) = (
-    transform_broadcasted(args[1], inds...),
-    transform_bc_args(Base.tail(args), inds...)...,
-)
-@inline transform_bc_args(args::Tuple{Any}, inds...) =
-    (transform_broadcasted(args[1], inds...),)
-@inline transform_bc_args(args::Tuple{}, inds...) = ()
+@inline transform_bc_args(args::Tuple, inds...) =
+    unrolled_map(args) do arg
+        transform_broadcasted(arg, inds...)
+    end
 
 @inline function transform_broadcasted(
     bc::Base.Broadcast.Broadcasted{FieldVectorStyle},
