@@ -4107,7 +4107,7 @@ end
     sbc::StencilBroadcasted{Style},
 ) where {Style}
     space = reconstruct_placeholder_space(axes(sbc), parent_space)
-    args = _reconstruct_placeholder_broadcasted(space, sbc.args...)
+    args = _reconstruct_placeholder_broadcasted(space, sbc.args)
     return StencilBroadcasted{Style}(sbc.op, args, space, sbc.work)
 end
 
