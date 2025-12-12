@@ -1,3 +1,5 @@
+import UnrolledUtilities: unrolled_map
+
 abstract type AbstractSpectralStyle <: Fields.AbstractFieldStyle end
 
 """
@@ -244,15 +246,12 @@ end
 @inline resolve_operator(x, slabidx) = x
 
 """
-    _resolve_operator(slabidx, args...)
+    _resolve_operator_args(slabidx, args...)
 
 Calls `resolve_operator(arg, slabidx)` for each `arg` in `args`
 """
-@inline _resolve_operator_args(slabidx) = ()
-Base.@propagate_inbounds _resolve_operator_args(slabidx, arg, xargs...) = (
-    resolve_operator(arg, slabidx),
-    _resolve_operator_args(slabidx, xargs...)...,
-)
+Base.@propagate_inbounds _resolve_operator_args(slabidx, args...) =
+    unrolled_map(arg -> resolve_operator(arg, slabidx), args)
 
 function strip_space(bc::SpectralBroadcasted{Style}, parent_space) where {Style}
     current_space = axes(bc)
@@ -295,13 +294,8 @@ end
     return SpectralBroadcasted{Style}(sbc.op, args, space, sbc.work)
 end
 
-@inline _reconstruct_placeholder_broadcasted(parent_space) = ()
-@inline _reconstruct_placeholder_broadcasted(parent_space, arg, xargs...) = (
-    reconstruct_placeholder_broadcasted(parent_space, arg),
-    _reconstruct_placeholder_broadcasted(parent_space, xargs...)...,
-)
-
-
+@inline _reconstruct_placeholder_broadcasted(parent_space, args...) =
+    unrolled_map(arg -> reconstruct_placeholder_broadcasted(parent_space, arg), args)
 
 """
     is_valid_index(space, ij, slabidx)::Bool
@@ -335,11 +329,8 @@ end
     return slabidx.v + half <= Nv
 end
 
-@inline _get_node(space, ij, slabidx) = ()
-Base.@propagate_inbounds _get_node(space, ij, slabidx, arg, xargs...) = (
-    get_node(space, arg, ij, slabidx),
-    _get_node(space, ij, slabidx, xargs...)...,
-)
+Base.@propagate_inbounds _get_node(space, ij, slabidx, args...) =
+    unrolled_map(arg -> get_node(space, arg, ij, slabidx), args)
 
 Base.@propagate_inbounds function get_node(space, scalar, ij, slabidx)
     scalar[]

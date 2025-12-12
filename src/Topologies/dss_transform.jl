@@ -1,5 +1,6 @@
 import ..Topologies: Topology2D
 using ..RecursiveApply
+import UnrolledUtilities: unrolled_map
 
 """
     dss_transform(arg, local_geometry, weight, I)
@@ -28,27 +29,12 @@ Base.@propagate_inbounds dss_transform(
 ) = arg[I]
 
 @inline function dss_transform(
-    arg::Tuple{},
-    local_geometry::Geometry.LocalGeometry,
-    weight,
-)
-    ()
-end
-@inline function dss_transform(
     arg::Tuple,
     local_geometry::Geometry.LocalGeometry,
     weight,
 )
-    (
-        dss_transform(first(arg), local_geometry, weight),
-        dss_transform(Base.tail(arg), local_geometry, weight)...,
-    )
+    unrolled_map(x -> dss_transform(x, local_geometry, weight), arg)
 end
-@inline dss_transform(
-    arg::Tuple{Any},
-    local_geometry::Geometry.LocalGeometry,
-    weight,
-) = (dss_transform(first(arg), local_geometry, weight),)
 @inline function dss_transform(
     arg::NamedTuple{names},
     local_geometry::Geometry.LocalGeometry,
@@ -151,28 +137,14 @@ Base.@propagate_inbounds dss_untransform(
 ) where {names, T}
     NamedTuple{names}(dss_untransform(T, Tuple(targ), local_geometry))
 end
-@inline dss_untransform(
-    ::Type{Tuple{}},
-    targ::Tuple{},
-    local_geometry::Geometry.LocalGeometry,
-) = ()
 @inline function dss_untransform(
     ::Type{T},
     targ::Tuple,
     local_geometry::Geometry.LocalGeometry,
 ) where {T <: Tuple}
-    (
-        dss_untransform(
-            Base.tuple_type_head(T),
-            Base.first(targ),
-            local_geometry,
-        ),
-        dss_untransform(
-            Base.tuple_type_tail(T),
-            Base.tail(targ),
-            local_geometry,
-        )...,
-    )
+    ntuple(length(T.parameters)) do i
+        @inbounds dss_untransform(fieldtype(T, i), targ[i], local_geometry)
+    end
 end
 
 @inline dss_untransform(::Type{T}, targ::T, local_geometry) where {T} = targ
