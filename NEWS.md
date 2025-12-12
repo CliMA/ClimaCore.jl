@@ -5,6 +5,11 @@ main
 -------
 
 
+v0.14.44
+-------
+
+- Revert `to_device` dispatch change from #2375 [2403](https://github.com/CliMA/ClimaCore.jl/pull/2403)
+
 v0.14.43
 -------
 
