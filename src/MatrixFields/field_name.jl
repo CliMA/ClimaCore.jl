@@ -9,6 +9,7 @@ used to access a property or sub-property of an object `x` using the function
 struct FieldName{name_chain} end
 FieldName() = FieldName{()}() # This is required for type stability.
 FieldName(name_chain...) = FieldName{name_chain}()
+Base.broadcastable(name::FieldName) = tuple(name)
 
 """
     @name(expr)
