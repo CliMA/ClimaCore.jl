@@ -5,6 +5,8 @@ using CUDA
 import ClimaCore.Operators: AbstractSpectralStyle, strip_space
 import ClimaCore.Operators: SpectralBroadcasted, set_node!, get_node
 import ClimaCore.Operators: get_local_geometry
+import ClimaCore.Operators:
+    Divergence, WeakDivergence, SplitDivergence, Gradient, WeakGradient, Curl, WeakCurl
 import Base.Broadcast: Broadcasted
 
 """
@@ -275,6 +277,69 @@ Base.@propagate_inbounds function operator_evaluate(
         Dᵀ₂WJv² = Dᵀ₂WJv² ⊞ D[k, j] ⊠ WJv²[i, k, vt]
     end
     return ⊟(RecursiveApply.rdiv(Dᵀ₁WJv¹ ⊞ Dᵀ₂WJv², local_geometry.WJ))
+end
+
+Base.@propagate_inbounds function operator_evaluate(
+    op::SplitDivergence{(1,)},
+    (Ju1, psi),
+    space,
+    ij,
+    slabidx,
+)
+    vt = threadIdx().z
+    i, _ = ij.I
+
+    FT = Spaces.undertype(space)
+    QS = Spaces.quadrature_style(space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    D = Quadratures.differentiation_matrix(FT, QS)
+
+    local_geometry = get_local_geometry(space, ij, slabidx)
+
+    # Compute split-form divergence: sum_j D[i,j] * flux_ij
+    # where flux_ij = 0.5 * (Ju1[i] + Ju1[j]) * (psi[i] + psi[j])
+    result = zero(FT)
+    for j in 1:Nq
+        flux_ij = 0.5 * (Ju1[i, vt] + Ju1[j, vt]) * (psi[i, vt] + psi[j, vt])
+        result = result + D[i, j] * flux_ij
+    end
+    
+    return result * local_geometry.invJ
+end
+Base.@propagate_inbounds function operator_evaluate(
+    op::SplitDivergence{(1, 2)},
+    (Ju1, Ju2, psi),
+    space,
+    ij,
+    slabidx,
+)
+    vt = threadIdx().z
+    i, j = ij.I
+
+    FT = Spaces.undertype(space)
+    QS = Spaces.quadrature_style(space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    D = Quadratures.differentiation_matrix(FT, QS)
+
+    local_geometry = get_local_geometry(space, ij, slabidx)
+
+    # Compute split-form divergence in 2D
+    # First dimension: sum_k D[i,k] * flux_ik
+    # where flux_ik = 0.5 * (Ju1[i,j] + Ju1[k,j]) * (psi[i,j] + psi[k,j])
+    result = zero(FT)
+    for k in 1:Nq
+        flux_ik = 0.5 * (Ju1[i, j, vt] + Ju1[k, j, vt]) * (psi[i, j, vt] + psi[k, j, vt])
+        result = result + D[i, k] * flux_ik
+    end
+    
+    # Second dimension: sum_k D[j,k] * flux_jk
+    # where flux_jk = 0.5 * (Ju2[i,j] + Ju2[i,k]) * (psi[i,j] + psi[i,k])
+    for k in 1:Nq
+        flux_jk = 0.5 * (Ju2[i, j, vt] + Ju2[i, k, vt]) * (psi[i, j, vt] + psi[i, k, vt])
+        result = result + D[j, k] * flux_jk
+    end
+    
+    return result * local_geometry.invJ
 end
 
 Base.@propagate_inbounds function operator_evaluate(
