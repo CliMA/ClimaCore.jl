@@ -1,32 +1,15 @@
 @inline function first_datalayout_in_bc(args::Tuple, rargs...)
-    x1 = first_datalayout_in_bc(args[1], rargs...)
-    x1 isa AbstractData && return x1
-    return first_datalayout_in_bc(Base.tail(args), rargs...)
+    idx = unrolled_findfirst(x -> x isa AbstractData, args)
+    return isnothing(idx) ? nothing : args[idx]
 end
-
-@inline first_datalayout_in_bc(args::Tuple{Any}, rargs...) =
-    first_datalayout_in_bc(args[1], rargs...)
-@inline first_datalayout_in_bc(args::Tuple{}, rargs...) = nothing
-@inline first_datalayout_in_bc(x) = nothing
-@inline first_datalayout_in_bc(x::AbstractData) = x
 
 @inline first_datalayout_in_bc(bc::Base.Broadcast.Broadcasted) =
     first_datalayout_in_bc(bc.args)
 
 @inline _has_uniform_datalayouts_args(truesofar, start, args::Tuple, rargs...) =
-    truesofar &&
-    _has_uniform_datalayouts(truesofar, start, args[1], rargs...) &&
-    _has_uniform_datalayouts_args(truesofar, start, Base.tail(args), rargs...)
-
-@inline _has_uniform_datalayouts_args(
-    truesofar,
-    start,
-    args::Tuple{Any},
-    rargs...,
-) = truesofar && _has_uniform_datalayouts(truesofar, start, args[1], rargs...)
-@inline _has_uniform_datalayouts_args(truesofar, _, args::Tuple{}, rargs...) =
-    truesofar
-
+    truesofar && unrolled_all(args) do arg
+        _has_uniform_datalayouts(truesofar, start, arg, rargs...)
+    end
 @inline function _has_uniform_datalayouts(
     truesofar,
     start,
