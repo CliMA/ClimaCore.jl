@@ -1,7 +1,7 @@
 name = "ClimaCore"
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
-authors = ["CliMA Contributors <clima-software@caltech.edu>"]
 version = "0.14.44"
+authors = ["CliMA Contributors <clima-software@caltech.edu>"]
 
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
@@ -58,7 +58,7 @@ GilbertCurves = "0.1"
 HDF5 = "0.16.16, 0.17"
 InteractiveUtils = "1"
 IntervalSets = "0.5, 0.6, 0.7"
-JET = "0.9"
+JET = "0.9, 0.11"
 Krylov = "0.9, 0.10"
 KrylovKit = "0.6, 0.7, 0.8"
 LazyBroadcast = "1"
