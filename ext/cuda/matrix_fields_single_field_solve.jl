@@ -16,6 +16,9 @@ import ClimaCore.MatrixFields: band_matrix_solve!, unzip_tuple_field_values
 import ClimaCore.DataLayouts: vindex, nlevels
 import ClimaCore.RecursiveApply: ⊠, ⊞, ⊟, rmap, rzero, rdiv
 
+# Cap threads per block to keep more blocks resident on the GPU.
+const SINGLEFIELD_THREADS_CAP = 256
+
 function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
     us = UniversalSize(Fields.field_values(A))
@@ -24,7 +27,7 @@ function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
     args = (device, cache, x, A, b, us, mask, cart_inds)
     threads = threads_via_occupancy(single_field_solve_kernel!, args)
     nitems = Ni * Nj * Nh
-    n_max_threads = min(threads, nitems)
+    n_max_threads = min(threads, nitems, SINGLEFIELD_THREADS_CAP)
     p = linear_partition(nitems, n_max_threads)
     auto_launch!(
         single_field_solve_kernel!,

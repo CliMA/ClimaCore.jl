@@ -9,6 +9,9 @@ import ClimaCore.MatrixFields: is_CuArray_type
 
 is_CuArray_type(::Type{T}) where {T <: CUDA.CuArray} = true
 
+# Cap threads per block to improve occupancy on smaller grids.
+const MULTIFIELD_THREADS_CAP = 256
+
 NVTX.@annotate function multiple_field_solve!(
     dev::ClimaComms.CUDADevice,
     cache,
@@ -39,7 +42,7 @@ NVTX.@annotate function multiple_field_solve!(
 
     nitems = Ni * Nj * Nh * Nnames
     threads = threads_via_occupancy(multiple_field_solve_kernel!, args)
-    n_max_threads = min(threads, nitems)
+    n_max_threads = min(threads, nitems, MULTIFIELD_THREADS_CAP)
     p = linear_partition(nitems, n_max_threads)
 
     auto_launch!(
