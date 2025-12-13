@@ -55,6 +55,7 @@ UnitTest("Spectral elem - sphere divergence"       ,"Operators/spectralelement/s
 UnitTest("Spectral elem - sphere curl"             ,"Operators/spectralelement/sphere_curl.jl"),
 UnitTest("Spectral elem - sphere diffusion"        ,"Operators/spectralelement/sphere_diffusion.jl"),
 UnitTest("Spectral elem - sphere diffusion vec"    ,"Operators/spectralelement/sphere_diffusion_vec.jl"),
+UnitTest("Spectral elem - split divergence"        ,"Operators/spectralelement/split_divergence.jl"),
 UnitTest("Spectral elem - sphere hyperdiff"        ,"Operators/spectralelement/unit_sphere_hyperdiffusion.jl"),
 UnitTest("Spectral elem - sphere hyperdiff vec"    ,"Operators/spectralelement/unit_sphere_hyperdiffusion_vec.jl"),
 UnitTest("FD ops - column"                         ,"Operators/finitedifference/unit_column.jl"),
