@@ -1,7 +1,7 @@
 name = "ClimaCore"
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
-authors = ["CliMA Contributors <clima-software@caltech.edu>"]
 version = "0.14.44"
+authors = ["CliMA Contributors <clima-software@caltech.edu>"]
 
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
@@ -67,7 +67,7 @@ Logging = "1"
 MultiBroadcastFusion = "0.3.1, 0.4"
 NVTX = "0.3, 1"
 PkgVersion = "0.1, 0.2, 0.3"
-PrettyTables = "2"
+PrettyTables = "2, 3"
 Random = "1"
 RecursiveArrayTools = "3.2"
 RootSolvers = "0.3, 0.4, 1.0"
