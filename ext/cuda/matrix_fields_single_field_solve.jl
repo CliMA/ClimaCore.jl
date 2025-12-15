@@ -514,10 +514,136 @@ function MatrixFields.single_field_solve_batched!(
     n_batch = Ni * Nj * Nh
     Nv = DataLayouts.nlevels(Fields.field_values(x))
 
-    # PCR works best for small to medium systems
+    # Use cuSPARSE batched solver for tridiagonal systems
+    # cuSPARSE's dgtsv2StridedBatch is optimized for exactly this case
+    # It handles strided batch storage efficiently in hardware
+    try
+        solve_tridiag_cusparse_strided_batch!(x, A, b, Nv, n_batch)
+        call_post_op_callback() && post_op_callback(x, device, cache, x, A, b)
+        return nothing
+    catch e
+        # If cuSPARSE fails, log and fall back to cyclic reduction
+        @warn "cuSPARSE batched solver failed: $e. Falling back to cyclic reduction." maxlog =
+            1
+        solve_tridiag_cyclic_reduction!(x, A, b, Nv, n_batch)
+        call_post_op_callback() && post_op_callback(x, device, cache, x, A, b)
+        return nothing
+    end
+end
+
+"""
+    solve_tridiag_cusparse_strided_batch!(x, A, b, Nv, n_batch)
+
+Solve tridiagonal systems using cuSPARSE's optimized batched solver.
+
+This expects data in the following layout:
+- For each column (batch element), the vertical levels (Nv) are stored contiguously
+- The diagonals are stored as flat vectors where:
+  - dl[k*Nv+v] = lower diagonal at level v of column k
+  - d[k*Nv+v]  = main diagonal at level v of column k
+  - du[k*Nv+v] = upper diagonal at level v of column k
+  - b[k*Nv+v]  = RHS at level v of column k
+  - x[k*Nv+v]  = solution at level v of column k (output)
+"""
+function solve_tridiag_cusparse_strided_batch!(x, A, b, Nv::Int, n_batch::Int)
+    # Extract field data
+    x_data = Fields.field_values(x)
+    b_data = Fields.field_values(b)
+
+    # Get matrix band entries
+    Aⱼs = unzip_tuple_field_values(Fields.field_values(A.entries))
+    A₋₁, A₀, A₊₁ = Aⱼs
+
+    # Verify shapes match expectations
+    # Expected shape: (Nv, n_batch) for banded matrices stored column-wise
+    x_shape = size(parent(x_data))
+    b_shape = size(parent(b_data))
+    A_shape = size(parent(A₀))
+
+    # For column-major storage: first dimension is Nv, but could have extra dims
+    # Flatten to (Nv*n_batch,) for cuSPARSE
+    n_total = Nv * n_batch
+
+    # Extract and reshape to (Nv, n_batch), then flatten to contiguous vectors
+    # We need actual contiguous CuArrays, not views/ReshapedArrays, for cuSPARSE
+    a_flat = CUDA.CuArray(reshape(parent(A₋₁), Nv, n_batch))
+    b_flat = CUDA.CuArray(reshape(parent(A₀), Nv, n_batch))
+    c_flat = CUDA.CuArray(reshape(parent(A₊₁), Nv, n_batch))
+    d_flat = CUDA.CuArray(reshape(parent(b_data), Nv, n_batch))
+    x_flat = CUDA.CuArray(reshape(parent(x_data), Nv, n_batch))
+
+    # Create flat vectors from the (Nv, n_batch) matrices
+    dl_vec = vec(a_flat)  # Lower diagonal (size n_total)
+    d_vec = vec(b_flat)   # Main diagonal (size n_total)
+    du_vec = vec(c_flat)  # Upper diagonal (size n_total)
+    b_vec = vec(d_flat)   # RHS (size n_total)
+    x_vec = vec(x_flat)   # Solution (size n_total)
+
+    # Validate vector sizes
+    if length(dl_vec) != n_total || length(d_vec) != n_total ||
+       length(du_vec) != n_total || length(b_vec) != n_total || length(x_vec) != n_total
+        error(
+            "Shape mismatch in cuSPARSE batched solver: " *
+            "expected size $n_total for all vectors, got " *
+            "dl=$(length(dl_vec)), d=$(length(d_vec)), du=$(length(du_vec)), " *
+            "b=$(length(b_vec)), x=$(length(x_vec))",
+        )
+    end
+
+    # Copy RHS to solution vector (cuSPARSE solves in-place)
+    copyto!(x_vec, b_vec)
+
+    # Call cuSPARSE batched solver
+    # Stride is Nv: each batch element's data is separated by Nv entries
+    handle = CUDA.CUSPARSE.handle()
+
+    # Get workspace size
+    workspace_bytes = Ref{Csize_t}()
+    CUDA.CUSPARSE.cusparseDgtsv2StridedBatch_bufferSizeExt(
+        handle,
+        Nv,
+        dl_vec,
+        d_vec,
+        du_vec,
+        x_vec,
+        n_batch,
+        Nv,  # stride
+        workspace_bytes,
+    )
+
+    # Allocate workspace
+    work = CUDA.CuVector{UInt8}(undef, Int(workspace_bytes[]))
+
+    # Solve
+    CUDA.CUSPARSE.cusparseDgtsv2StridedBatch(
+        handle,
+        Nv,
+        dl_vec,
+        d_vec,
+        du_vec,
+        x_vec,
+        n_batch,
+        Nv,  # stride
+        work,
+    )
+
+    # Copy solution back to original x_flat array, then to parent x_data
+    copyto!(x_flat, x_vec)
+    copyto!(reshape(parent(x_data), Nv, n_batch), x_flat)
+
+    return nothing
+end
+
+"""
+    solve_tridiag_cyclic_reduction!(x, A, b, Nv, n_batch)
+
+Fallback solver using cyclic reduction (parallel cyclic reduction algorithm).
+"""
+function solve_tridiag_cyclic_reduction!(x, A, b, Nv::Int, n_batch::Int)
     # For very large systems or if shared memory is insufficient, fall back
     if Nv > 256
-        return single_field_solve!(device, cache, x, A, b)
+        device = ClimaComms.device(x)
+        return single_field_solve!(device, nothing, x, A, b)
     end
 
     # Extract matrix bands
@@ -526,7 +652,7 @@ function MatrixFields.single_field_solve_batched!(
     x_data = Fields.field_values(x)
     b_data = Fields.field_values(b)
 
-    # Reshape to (Nv, n_batch) matrices and convert to CuArray for kernel
+    # Reshape to (Nv, n_batch) matrices for kernel processing
     a_matrix = CUDA.CuArray(reshape(parent(A₋₁), Nv, n_batch))
     b_matrix = CUDA.CuArray(reshape(parent(A₀), Nv, n_batch))
     c_matrix = CUDA.CuArray(reshape(parent(A₊₁), Nv, n_batch))
@@ -542,6 +668,5 @@ function MatrixFields.single_field_solve_batched!(
     # Copy solution back to original array structure
     copyto!(reshape(parent(x_data), Nv, n_batch), x_matrix)
 
-    call_post_op_callback() && post_op_callback(x, device, cache, x, A, b)
     return nothing
 end
