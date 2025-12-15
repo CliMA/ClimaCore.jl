@@ -34,7 +34,7 @@ jobs:
           julia --project=monorepo -e 'using Pkg; Pkg.test("ClimaCoreTempestRemap")'
           && echo "TESTS_SUCCESSFUL=true" >> $GITHUB_ENV
       - name: Upload test Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: climacore-tempestremap-output
           path: |
