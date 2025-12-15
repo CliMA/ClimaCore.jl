@@ -20,24 +20,59 @@ import ClimaCore.RecursiveApply: ⊠, ⊞, ⊟, rmap, rzero, rdiv
 const SINGLEFIELD_THREADS_CAP = 256
 
 function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
-    Ni, Nj, _, _, Nh = size(Fields.field_values(A))
+    Ni, Nj, _, Nv, Nh = size(Fields.field_values(A))
     us = UniversalSize(Fields.field_values(A))
     mask = Spaces.get_mask(axes(x))
-    cart_inds = cartesian_indices_columnwise(us)
-    args = (device, cache, x, A, b, us, mask, cart_inds)
-    threads = threads_via_occupancy(single_field_solve_kernel!, args)
+
+    # Use block/thread layout that promotes memory coalescing:
+    # Each thread block handles multiple columns, threads within a block
+    # access consecutive memory when loading vertical column data
     nitems = Ni * Nj * Nh
-    n_max_threads = min(threads, nitems, SINGLEFIELD_THREADS_CAP)
-    p = linear_partition(nitems, n_max_threads)
+
+    # Aim for warp-sized or larger blocks for better coalescing
+    threads_per_block = min(SINGLEFIELD_THREADS_CAP, nitems)
+    blocks = cld(nitems, threads_per_block)
+
+    args = (device, cache, x, A, b, us, mask, Ni, Nj, Nh)
     auto_launch!(
-        single_field_solve_kernel!,
+        single_field_solve_kernel_coalesced!,
         args;
-        threads_s = p.threads,
-        blocks_s = p.blocks,
+        threads_s = threads_per_block,
+        blocks_s = blocks,
     )
     call_post_op_callback() && post_op_callback(x, device, cache, x, A, b)
 end
 
+function single_field_solve_kernel_coalesced!(device, cache, x, A, b, us, mask, Ni, Nj, Nh)
+    # Compute flat thread index across all blocks
+    tidx = (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
+
+    # Total number of columns
+    ncols = Ni * Nj * Nh
+
+    if tidx <= ncols
+        # Convert linear index to (i, j, h) using column-major ordering
+        # This ensures adjacent threads access adjacent columns in memory
+        tidx_0 = tidx - 1  # 0-indexed
+        i = (tidx_0 % Ni) + 1
+        j = ((tidx_0 ÷ Ni) % Nj) + 1
+        h = (tidx_0 ÷ (Ni * Nj)) + 1
+
+        ui = CartesianIndex((i, j, 1, 1, h))
+        DataLayouts.should_compute(mask, ui) || return nothing
+
+        _single_field_solve!(
+            device,
+            Spaces.column(cache, i, j, h),
+            Spaces.column(x, i, j, h),
+            Spaces.column(A, i, j, h),
+            Spaces.column(b, i, j, h),
+        )
+    end
+    return nothing
+end
+
+# Keep old kernel for compatibility
 function single_field_solve_kernel!(device, cache, x, A, b, us, mask, cart_inds)
     tidx = linear_thread_idx()
     if linear_is_valid_index(tidx, us) && tidx ≤ length(unval(cart_inds))
