@@ -36,20 +36,17 @@ NVTX.@annotate function multiple_field_solve!(
 
     device = ClimaComms.device(x[first(names)])
 
-    us = UniversalSize(Fields.field_values(x1))
-    cart_inds = cartesian_indices_multiple_field_solve(us; Nnames)
-    args = (device, caches, xs, As, bs, x1, us, mask, cart_inds, Val(Nnames))
-
+    # Use coalesced memory access pattern
     nitems = Ni * Nj * Nh * Nnames
-    threads = threads_via_occupancy(multiple_field_solve_kernel!, args)
-    n_max_threads = min(threads, nitems, MULTIFIELD_THREADS_CAP)
-    p = linear_partition(nitems, n_max_threads)
+    threads_per_block = min(MULTIFIELD_THREADS_CAP, nitems)
+    blocks = cld(nitems, threads_per_block)
 
+    args = (device, caches, xs, As, bs, mask, Ni, Nj, Nh, Val(Nnames))
     auto_launch!(
-        multiple_field_solve_kernel!,
+        multiple_field_solve_kernel_coalesced!,
         args;
-        threads_s = p.threads,
-        blocks_s = p.blocks,
+        threads_s = threads_per_block,
+        blocks_s = blocks,
         always_inline = true,
     )
     call_post_op_callback() && post_op_callback(x, dev, cache, x, A, b, x1)
@@ -83,6 +80,53 @@ Base.@propagate_inbounds column_A(A, i, j, h) = Spaces.column(A, i, j, h)
     end
 end
 
+function multiple_field_solve_kernel_coalesced!(
+    device::ClimaComms.CUDADevice,
+    caches,
+    xs,
+    As,
+    bs,
+    mask,
+    Ni,
+    Nj,
+    Nh,
+    ::Val{Nnames},
+) where {Nnames}
+    # Compute flat thread index across all blocks
+    tidx = (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
+
+    # Total number of columns * fields
+    ncols = Ni * Nj * Nh * Nnames
+
+    if tidx <= ncols
+        # Convert linear index to (i, j, h, iname) using column-major ordering
+        # This ensures adjacent threads access adjacent columns in memory
+        tidx_0 = tidx - 1  # 0-indexed
+        i = (tidx_0 % Ni) + 1
+        j = ((tidx_0 ÷ Ni) % Nj) + 1
+        h = ((tidx_0 ÷ (Ni * Nj)) % Nh) + 1
+        iname = (tidx_0 ÷ (Ni * Nj * Nh)) + 1
+
+        ui = CartesianIndex((i, j, 1, 1, h))
+        DataLayouts.should_compute(mask, ui) || return nothing
+
+        generated_single_field_solve!(
+            device,
+            caches,
+            xs,
+            As,
+            bs,
+            i,
+            j,
+            h,
+            iname,
+            Val(Nnames),
+        )
+    end
+    return nothing
+end
+
+# Keep old kernel for compatibility
 function multiple_field_solve_kernel!(
     device::ClimaComms.CUDADevice,
     caches,
