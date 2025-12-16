@@ -1,5 +1,12 @@
 module ClimaCoreConservativeRegriddingExt
 
+using ConservativeRegridding, ClimaCore
+import ConservativeRegridding: Regridder, regrid!
+import ClimaCore: Spaces, Meshes, Quadratures, Fields, RecursiveApply, Spaces
+
+export get_element_vertices, integrate_each_element, get_value_per_element!,
+    set_value_per_element!, Regridder, regrid!
+
 """
     get_element_vertices(space::SpectralElementSpace2D)
 
@@ -32,7 +39,7 @@ function get_element_vertices(space)
     # Put each polygon into a vector, with the first coordinate pair repeated at the end
     vertices = collect(Iterators.partition(vertex_coords, 5))
 
-    # Check for zero area polygons
+    # Check for zero area polygons (all latitude or longitude values are the same)
     for polygon in vertices
         if allequal(first.(polygon)) || allequal(last.(polygon))
             @error "Zero area polygon found in vertices" polygon
@@ -82,9 +89,13 @@ to the number of elements in the space.
 Here `ones_field` is a field on the same space as `field` with all
 values set to 1.
 """
-function get_value_per_element!(value_per_element, field, ones_field)
-    integral_each_element = Remapping.integrate_each_element(field)
-    area_each_element = Remapping.integrate_each_element(ones_field)
+function get_value_per_element!(
+    value_per_element,
+    field,
+    ones_field,
+)
+    integral_each_element = integrate_each_element(field)
+    area_each_element = integrate_each_element(ones_field)
     value_per_element .= integral_each_element ./ area_each_element
     return nothing
 end
@@ -117,5 +128,101 @@ function set_value_per_element!(field, value_per_element)
     return field
 end
 
+"""
+    Regridder(dst_space, src_space; kwargs...)
+
+Create a regridder between two ClimaCore Spaces.
+This works by finding the vertices of the elements of the source and
+destination spaces, and then computing the areas of their intersections.
+
+This is currently only defined for 2D spaces, but could be extended to
+3D spaces.
+
+This function is intended to be used with the finite volume approximation
+of the ClimaCore spectral element space.
+"""
+function Regridder(
+    dst_space::Spaces.SpectralElementSpace2D,
+    src_space::Spaces.SpectralElementSpace2D;
+    kwargs...,
+)
+    dst_vertices = get_element_vertices(dst_space)
+    src_vertices = get_element_vertices(src_space)
+    return ConservativeRegridding.Regridder(dst_vertices, src_vertices; kwargs...)
+end
+Regridder(
+    dst_field::Fields.Field,
+    src_field::Fields.Field;
+    kwargs...,
+) = Regridder(axes(dst_field), axes(src_field); kwargs...)
+
+"""
+    regrid!(dst_field, regridder_tuple, src_field)
+
+Perform conservative regridding from `src_field` to `dst_field` using a
+Regridder object and pre-allocated buffers.
+
+The `regridder_tuple` should be a NamedTuple containing:
+- `regridder`: The ConservativeRegridding.Regridder object
+- `value_per_element_src`: Pre-allocated buffer for source values
+- `value_per_element_dst`: Pre-allocated buffer for destination values
+- `ones_src`: Pre-allocated field of ones on the source space
+```
+"""
+function regrid!(
+    dst_field::Fields.Field,
+    regridder_tuple::NamedTuple,
+    src_field::Fields.Field,
+)
+    @assert eltype(dst_field) isa Number && eltype(src_field) isa Number "Regridding is only supported for scalar fields"
+    @assert eltype(dst_field) == eltype(src_field) "Source and destination fields must have the same element type"
+
+    # Use pre-allocated buffers from the regridder tuple
+    (; value_per_element_src, value_per_element_dst, ones_src, regridder) = regridder_tuple
+
+    # Get one value per element in the source field, equal to the quadrature-weighted average of the
+    # values at nodes of the element
+    get_value_per_element!(value_per_element_src, src_field, ones_src)
+
+    # Perform the regridding
+    ConservativeRegridding.regrid!(value_per_element_dst, regridder, value_per_element_src)
+
+    # Now that we have our regridded vector, put it onto a field on the second space
+    set_value_per_element!(dst_field, value_per_element_dst)
+    return nothing
+end
+
+"""
+    regrid!(dst_field, regridder, src_field)
+
+Perform conservative regridding from `src_field` to `dst_field` using a
+Regridder object.
+
+This is a convenience function that allocates the buffers for you.
+Note that this is not efficient for repeated regridding with the same regridder,
+but it may be helpful for one-off regriddings or testing/debugging.
+"""
+function regrid!(
+    dst_field::Fields.Field,
+    regridder::ConservativeRegridding.Regridder,
+    src_field::Fields.Field,
+)
+    # Allocate space for the buffers
+    value_per_element_src =
+        zeros(Float64, Meshes.nelements(axes(src_field).grid.topology.mesh))
+    value_per_element_dst =
+        zeros(Float64, Meshes.nelements(axes(dst_field).grid.topology.mesh))
+    ones_src = ones(axes(src_field))
+    regridder_tuple = (;
+        regridder,
+        value_per_element_src,
+        value_per_element_dst,
+        ones_src,
+    )
+
+    # Perform the regridding
+    regrid!(dst_field, regridder_tuple, src_field)
+    return nothing
+end
 
 end

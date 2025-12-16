@@ -1,61 +1,128 @@
+using Test
+using ClimaCore
 using ClimaCore:
     CommonSpaces, Remapping, Fields, Spaces, RecursiveApply, Meshes, Quadratures
 using ConservativeRegridding
 
-space1 = CommonSpaces.CubedSphereSpace(;
+# Extensions load lazily in Julia - they need to be explicitly triggered
+# This ensures the extension is loaded and its methods are available
+const ClimaConservativeRegrid =
+    Base.get_extension(ClimaCore, :ClimaCoreConservativeRegriddingExt)
+@assert !isnothing(ClimaConservativeRegrid) "ClimaCoreConservativeRegriddingExt extension not loaded"
+
+const src_space = CommonSpaces.CubedSphereSpace(;
     radius = 10,
     n_quad_points = 3,
     h_elem = 8,
 )
-space2 = CommonSpaces.CubedSphereSpace(;
+const dst_space = CommonSpaces.CubedSphereSpace(;
     radius = 10,
     n_quad_points = 4,
     h_elem = 6,
 )
 
-vertices1 = Remapping.get_element_vertices(space1)
-vertices2 = Remapping.get_element_vertices(space2)
+@testset "test get_element_vertices" begin
+    vertices = ClimaConservativeRegrid.get_element_vertices(src_space)
+    @test length(vertices) == Meshes.nelements(src_space.grid.topology.mesh)
 
-# Pass in destination vertices first, source vertices second
-# TODO open issue in CR.jl about ordering of inputs source/dest
-regridder_1_to_2 = ConservativeRegridding.Regridder(vertices2, vertices1)
-regridder_2_to_1 = ConservativeRegridding.Regridder(vertices1, vertices2)
+    # Check that there are 5 vertices per element (quadrilaterals with repeated first vertex)
+    @test all(length(vertex) == 5 for vertex in vertices)
+    @test all(vertex[1] == vertex[5] for vertex in vertices)
+end
 
-# Define a field on the first space, to use as our source field
-field1 = Fields.coordinate_field(space1).lat
-ones_field1 = Fields.ones(space1)
+@testset "test integrate_each_element" begin
+    # Test integrating a field of ones
+    ones_field = Fields.ones(src_space)
+    integral_each_element =
+        ClimaConservativeRegrid.integrate_each_element(ones_field)
+    @test isapprox(sum(integral_each_element), sum(ones_field), atol = 1e-11)
 
-# Check that integrating over each element and summing gives the same result as integrating over the whole domain
-@assert isapprox(sum(Remapping.integrate_each_element(field1)), sum(field1), atol = 1e-12)
-# Check that integrating 1 over each element and summing gives the same result as integrating 1 over the whole domain
-@assert sum(Remapping.integrate_each_element(ones_field1)) ≈ sum(ones_field1)
+    # Test integrating a field of latitude
+    field = Fields.coordinate_field(src_space).lat
+    integral_each_element = ClimaConservativeRegrid.integrate_each_element(field)
+    @test isapprox(sum(integral_each_element), sum(field), atol = 1e-12)
+end
 
-# Get one value per element in the field, equal to the average of the values at nodes of the element
-value_per_element1 = zeros(Float64, Meshes.nelements(space1.grid.topology.mesh))
-Remapping.get_value_per_element!(value_per_element1, field1, ones_field1)
+@testset "test get_value_per_element!" begin
+    field = Fields.coordinate_field(src_space).lat
+    ones_field = Fields.ones(src_space)
+    value_per_element = zeros(Float64, Meshes.nelements(src_space.grid.topology.mesh))
+    ClimaConservativeRegrid.get_value_per_element!(
+        value_per_element,
+        field,
+        ones_field,
+    )
 
-# Allocate a vector with length equal to the number of elements in the target space
-value_per_element2 = zeros(Float64, Meshes.nelements(space2.grid.topology.mesh))
-ConservativeRegridding.regrid!(value_per_element2, regridder_1_to_2, value_per_element1)
+    @test isapprox(sum(value_per_element), sum(field), atol = 1e-12)
+end
 
-# Now that we have our regridded vector, put it onto a field on the second space
-field2 = Fields.zeros(space2)
-Remapping.set_value_per_element!(field2, value_per_element2)
-field1_one_value_per_element = Fields.zeros(space1)
-Remapping.set_value_per_element!(field1_one_value_per_element, value_per_element1)
+@testset "test set_value_per_element!" begin
+    field = Fields.coordinate_field(src_space).lat
+    value_per_element = ones(Float64, Meshes.nelements(src_space.grid.topology.mesh))
+    ClimaConservativeRegrid.set_value_per_element!(field, value_per_element)
 
-# # Plot the fields
-# using ClimaCoreMakie
-# using GLMakie
-# fig = ClimaCoreMakie.fieldheatmap(field1)
-# save("field1.png", fig)
-# fig = ClimaCoreMakie.fieldheatmap(field1_one_value_per_element)
-# save("field1_one_value_per_element.png", fig)
-# fig = ClimaCoreMakie.fieldheatmap(field2)
-# save("field2.png", fig)
+    @test isapprox(sum(field), sum(value_per_element), atol = 1e-12)
+    @test all(field .== 1.0)
+end
 
-# Check the conservation error
-abs_error = abs(sum(field1) - sum(field2))
-@assert abs_error < 1e-12
-abs_error_one_value_per_element = abs(sum(field1_one_value_per_element) - sum(field2))
-@assert abs_error_one_value_per_element < 2e-12
+@testset "test Regridder constructor" begin
+    regridder = ClimaConservativeRegrid.Regridder(dst_space, src_space)
+    @test regridder isa ConservativeRegridding.Regridder
+end
+
+@testset "test regrid!" begin
+    src_field = Fields.coordinate_field(src_space).lat
+    dst_field = Fields.zeros(dst_space)
+
+    # Test regrid! without pre-allocated buffers
+    regridder = ClimaConservativeRegrid.Regridder(dst_space, src_space)
+    ClimaConservativeRegrid.regrid!(dst_field, regridder, src_field)
+    @test isapprox(sum(dst_field), sum(src_field), atol = 1e-12)
+
+    # Test regrid! with pre-allocated buffers
+    value_per_element_src = zeros(Float64, Meshes.nelements(src_space.grid.topology.mesh))
+    value_per_element_dst = zeros(Float64, Meshes.nelements(dst_space.grid.topology.mesh))
+    ones_src = ones(src_space)
+    regridder_tuple = (;
+        regridder,
+        value_per_element_src,
+        value_per_element_dst,
+        ones_src,
+    )
+    ClimaConservativeRegrid.regrid!(dst_field, regridder_tuple, src_field)
+    @test isapprox(sum(dst_field), sum(src_field), atol = 1e-12)
+end
+
+@testset "test regrid! onto the same space" begin
+    src_field = Fields.coordinate_field(src_space).lat
+    dst_field = Fields.zeros(src_space)
+
+    # Test regrid! without pre-allocated buffers
+    regridder = ClimaConservativeRegrid.Regridder(src_space, src_space)
+    ClimaConservativeRegrid.regrid!(dst_field, regridder, src_field)
+    @test isapprox(sum(dst_field), sum(src_field), atol = 1e-12)
+end
+
+@testset "test regrid! of a constant field" begin
+    src_field = ones(src_space)
+    dst_field = Fields.zeros(src_space)
+
+    # Test regrid! without pre-allocated buffers
+    regridder = ClimaConservativeRegrid.Regridder(src_space, src_space)
+    ClimaConservativeRegrid.regrid!(dst_field, regridder, src_field)
+    @test isapprox(sum(dst_field), sum(src_field), atol = 1e-12)
+end
+
+@testset "test regrid! from source to destination and back" begin
+    src_field = Fields.coordinate_field(src_space).lat
+    dst_field = Fields.zeros(dst_space)
+
+    # Regrid from source to destination
+    regridder = ClimaConservativeRegrid.Regridder(dst_space, src_space)
+    ClimaConservativeRegrid.regrid!(dst_field, regridder, src_field)
+    @test isapprox(sum(dst_field), sum(src_field), atol = 1e-12)
+
+    # Regrid from destination to source using the transpose of the regridder
+    ClimaConservativeRegrid.regrid!(src_field, transpose(regridder), dst_field)
+    @test isapprox(sum(src_field), sum(dst_field), atol = 1e-12)
+end
