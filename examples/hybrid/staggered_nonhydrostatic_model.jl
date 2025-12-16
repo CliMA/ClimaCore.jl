@@ -282,9 +282,9 @@ function default_remaining_tendency!(Yₜ, Y, p, t)
 
     @. Yₜ.c.uₕ -= ᶜinterp(ᶠω¹² × ᶠu³) + (ᶜf + ᶜω³) × CT12(ᶜuₕ)
     if point_type <: Geometry.Abstract3DPoint
-        @. Yₜ.c.uₕ -= (0.5 * cp_d * (ᶜθ * gradₕ(ᶜΠ) + gradₕ(ᶜθ * ᶜΠ) - ᶜΠ * gradₕ(ᶜθ))) + gradₕ(ᶜK + ᶜΦ)
+        @. Yₜ.c.uₕ -= gradₕ(ᶜp) / ᶜρ + gradₕ(ᶜK + ᶜΦ)
     elseif point_type <: Geometry.Abstract2DPoint
-        @. Yₜ.c.uₕ -= C12((0.5 * cp_d * (ᶜθ * gradₕ(ᶜΠ) + gradₕ(ᶜθ * ᶜΠ) - ᶜΠ * gradₕ(ᶜθ))) + gradₕ(ᶜK + ᶜΦ))
+        @. Yₜ.c.uₕ -= C12(gradₕ(ᶜp) / ᶜρ + gradₕ(ᶜK + ᶜΦ))
     end
 
     @. Yₜ.f.w -= ᶠω¹² × ᶠu¹²
