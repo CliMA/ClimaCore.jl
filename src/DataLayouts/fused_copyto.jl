@@ -18,11 +18,10 @@ Base.@propagate_inbounds function rcopyto_at_linear!(
     return nothing
 end
 Base.@propagate_inbounds function rcopyto_at_linear!(pairs::Tuple, I)
-    rcopyto_at_linear!(first(pairs), I)
-    rcopyto_at_linear!(Base.tail(pairs), I)
+    unrolled_foreach(pairs) do pair
+        rcopyto_at_linear!(pair, I)
+    end
 end
-Base.@propagate_inbounds rcopyto_at_linear!(pairs::Tuple{<:Any}, I) =
-    rcopyto_at_linear!(first(pairs), I)
 @inline rcopyto_at_linear!(pairs::Tuple{}, I) = nothing
 
 # Fused multi-broadcast entry point for DataLayouts
