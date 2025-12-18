@@ -1,6 +1,8 @@
 abstract type AbstractMatrixShape end
 struct Square <: AbstractMatrixShape end
 struct FaceToCenter <: AbstractMatrixShape end
+struct FaceToFace <: AbstractMatrixShape end
+struct CenterToCenter <: AbstractMatrixShape end
 struct CenterToFace <: AbstractMatrixShape end
 
 matrix_shape(matrix_field) = matrix_shape(matrix_field, axes(matrix_field))

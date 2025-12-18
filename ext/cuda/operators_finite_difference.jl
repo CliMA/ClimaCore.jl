@@ -8,6 +8,9 @@ import ClimaCore.Operators: AbstractStencilStyle, strip_space
 import ClimaCore.Operators: setidx!, getidx
 import ClimaCore.Operators: StencilBroadcasted
 import ClimaCore.Operators: LeftBoundaryWindow, RightBoundaryWindow, Interior
+import ClimaCore.MatrixFields: FaceToCenter, CenterToFace, Square
+import UnrolledUtilities
+
 
 struct CUDAColumnStencilStyle <: AbstractStencilStyle end
 struct CUDAWithShmemColumnStencilStyle <: AbstractStencilStyle end
@@ -20,7 +23,7 @@ Base.Broadcast.BroadcastStyle(
 ) = y
 
 include("operators_fd_shmem_is_supported.jl")
-
+include("matmul.jl")
 struct ShmemParams{Nv} end
 interior_size(::ShmemParams{Nv}) where {Nv} = (Nv,)
 boundary_size(::ShmemParams{Nv}) where {Nv} = (1,)
@@ -81,7 +84,33 @@ function Base.copyto!(
         (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(out_fv)
         #  Specialized kernel launch for common case.  This uses block and grid indices
         # instead of computing cartesian indices from a linear index
-        if (Nv == 64 || Nv == 63) && mask isa NoMask && Ni == 4 && Nj == 4 && Nh >= 1500
+        if false && (Nv == 64 || Nv == 63) && mask isa NoMask && Ni == 4 && Nj == 4 && Nh >= 1500
+            # @show bc′.op
+             # if mask isa NoMask &&  !any(x -> x isa Base.Broadcast.Broadcasted{CUDAColumnStencilStyle} || x isa StencilBroadcasted, bc′.args) && (Nv == 64 || Nv == 63)
+             if mask isa NoMask && length(bc′.args) == 2 && bc′ isa StencilBroadcasted && bc′.op isa ClimaCore.MatrixFields.MultiplyColumnwiseBandMatrixField && length(bc′.args) == 2
+                prod_shape = ClimaCore.MatrixFields.matrix_shape(out, axes(bc′.args[1]))
+                mat1_shape = ClimaCore.MatrixFields.matrix_shape(bc′.args[1], axes(bc′.args[1]))
+                mat2_shape = ClimaCore.MatrixFields.matrix_shape(bc′.args[2], axes(bc′.args[2]))
+                args = (
+                    strip_space(out, space),
+                    strip_space(bc′.args[1], space),
+                    strip_space(bc′.args[2], space),
+                    axes(out),
+                    # strip_space(bc′, space),
+                    # bounds,
+                    # prod_shape,
+                    # mat1_shape,
+                    # mat2_shape,
+                )
+                auto_launch!(
+                        entry_matmul!,
+                        args;
+                        threads_s = (64, 1, 1),
+                        blocks_s = (4, 4, Nh),
+                        # blocks_s = (1, 1, 1),
+                    )
+                return out
+             end
             args = (
                 strip_space(out, space),
                 strip_space(bc′, space),
