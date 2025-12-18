@@ -637,8 +637,7 @@ end
 
 Computes the divergence of `u * ψ` using a split-form discretization that enhances
 entropy stability. `u` should be the momentum/mass flux vector (e.g., `ρu`), and `ψ` a scalar
-field (e.g., a tracer or thermodynamic variable). For `ψ=1`, this reduces to the standard
-divergence of `u`.
+field. For `ψ=1`, this reduces to the standard divergence of `u`.
 
 The split form is defined as the arithmetic mean of the conservative and advective forms:
 ```math
@@ -649,14 +648,12 @@ The discrete implementation uses a symmetric two-point flux formulation:
 ```math
 (Div_{split})_i = \\frac{1}{J_i w_i} \\sum_j D_{ij} F_{ij}
 ```
-where ``i`` and ``j`` are indices over quadrature points (nodes) in the element, and the flux ``F_{ij} = F_{ji}`` between nodes ``i`` and ``j`` is given by:
+where the flux ``F_{ij} = F_{ji}`` between quadrature points ``i`` and ``j`` is given by:
 ```math
 F_{ij} = \\frac{1}{2} (J_i u^1_i + J_j u^1_j) (\\psi_i + \\psi_j)
 ```
-Here, ``u^1_i`` denotes the first contravariant component of ``u`` at node ``i``, and similarly for ``u^1_j``. In 2D, the flux includes contributions from both contravariant components.
+Here, ``u^1_i`` denotes the first contravariant component of ``u`` at node ``i``. In 2D, the flux includes contributions from both contravariant components.
 
-## References
-- Taylor et al. (2010) for split-form formulations in spectral element methods
 """
 struct SplitDivergence{I} <: SpectralElementOperator{I} end
 SplitDivergence() = SplitDivergence{()}()
@@ -673,10 +670,10 @@ function apply_operator(op::SplitDivergence{(1,)}, space, slabidx, arg1, arg2)
     RT = operator_return_eltype(op, eltype(arg1), eltype(arg2))
     out = IF{RT, Nq}(MArray, FT)
     fill!(parent(out), zero(FT))
-    
+
     Ju1_slab = MArray{Tuple{Nq}, FT}(undef)
     psi_slab = MArray{Tuple{Nq}, FT}(undef)
-    
+
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
@@ -686,7 +683,7 @@ function apply_operator(op::SplitDivergence{(1,)}, space, slabidx, arg1, arg2)
         Ju1_slab[i] = Ju1
         psi_slab[i] = psi
     end
-    
+
     @inbounds for i in 1:Nq
         val = zero(FT)
         for j in 1:Nq
@@ -695,13 +692,13 @@ function apply_operator(op::SplitDivergence{(1,)}, space, slabidx, arg1, arg2)
         end
         out[slab_index(i)] = val
     end
-    
+
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[slab_index(i)] = out[slab_index(i)] * local_geometry.invJ
     end
-    
+
     return Field(SArray(out), space)
 end
 
@@ -713,52 +710,54 @@ function apply_operator(op::SplitDivergence{(1, 2)}, space, slabidx, arg1, arg2)
     RT = operator_return_eltype(op, eltype(arg1), eltype(arg2))
     out = DataLayouts.IJF{RT, Nq}(MArray, FT)
     fill!(parent(out), zero(FT))
-    
+
     Ju1_slab = MArray{Tuple{Nq, Nq}, FT}(undef)
     Ju2_slab = MArray{Tuple{Nq, Nq}, FT}(undef)
     psi_slab = MArray{Tuple{Nq, Nq}, FT}(undef)
-    
+
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
         u = get_node(space, arg1, ij, slabidx)
         psi = get_node(space, arg2, ij, slabidx)
-        
+
         Ju1_slab[i, j] = local_geometry.J * Geometry.contravariant1(u, local_geometry)
         Ju2_slab[i, j] = local_geometry.J * Geometry.contravariant2(u, local_geometry)
         psi_slab[i, j] = psi
     end
-    
+
     @inbounds for j in 1:Nq
         for i in 1:Nq
             val = zero(FT)
             for k in 1:Nq
-                flux_ik = 0.5 * (Ju1_slab[i, j] + Ju1_slab[k, j]) * 
-                          (psi_slab[i, j] + psi_slab[k, j])
+                flux_ik =
+                    0.5 * (Ju1_slab[i, j] + Ju1_slab[k, j]) *
+                    (psi_slab[i, j] + psi_slab[k, j])
                 val += D[i, k] * flux_ik
             end
             out[slab_index(i, j)] += val
         end
     end
-    
+
     @inbounds for i in 1:Nq
         for j in 1:Nq
             val = zero(FT)
             for k in 1:Nq
-                flux_jk = 0.5 * (Ju2_slab[i, j] + Ju2_slab[i, k]) * 
-                          (psi_slab[i, j] + psi_slab[i, k])
+                flux_jk =
+                    0.5 * (Ju2_slab[i, j] + Ju2_slab[i, k]) *
+                    (psi_slab[i, j] + psi_slab[i, k])
                 val += D[j, k] * flux_jk
             end
             out[slab_index(i, j)] += val
         end
     end
-    
+
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[slab_index(i, j)] *= local_geometry.invJ
     end
-    
+
     return Field(SArray(out), space)
 end
 

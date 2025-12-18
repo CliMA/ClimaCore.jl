@@ -214,7 +214,7 @@ Base.@propagate_inbounds function operator_fill_shmem!(
     vt = threadIdx().z
     local_geometry = get_local_geometry(space, ij, slabidx)
     i, j = ij.I
-    
+
     Ju1[i, j, vt] = local_geometry.J * Geometry.contravariant1(arg1, local_geometry)
     Ju2[i, j, vt] = local_geometry.J * Geometry.contravariant2(arg1, local_geometry)
     psi[i, j, vt] = arg2

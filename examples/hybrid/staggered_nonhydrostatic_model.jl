@@ -113,8 +113,6 @@ function default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode)
         ᶜK = similar(ᶜlocal_geometry, FT),
         ᶜΦ = grav .* ᶜcoord.z,
         ᶜp = similar(ᶜlocal_geometry, FT),
-        ᶜΠ = similar(ᶜlocal_geometry, FT),
-        ᶜθ = similar(ᶜlocal_geometry, FT),
         ᶜω³ = similar(ᶜlocal_geometry, CT3{FT}),
         ᶠω¹² = similar(ᶠlocal_geometry, CT12{FT}),
         ᶠu¹² = similar(ᶠlocal_geometry, CT12{FT}),
@@ -222,7 +220,7 @@ function default_remaining_tendency!(Yₜ, Y, p, t)
     ᶜρ = Y.c.ρ
     ᶜuₕ = Y.c.uₕ
     ᶠw = Y.f.w
-    (; ᶜuvw, ᶜK, ᶜΦ, ᶜp, ᶜΠ, ᶜθ, ᶜω³, ᶠω¹², ᶠu¹², ᶠu³, ᶜf) = p
+    (; ᶜuvw, ᶜK, ᶜΦ, ᶜp, ᶜω³, ᶠω¹², ᶠu¹², ᶠu³, ᶜf) = p
     point_type = eltype(Fields.local_geometry_field(axes(Y.c)).coordinates)
 
     @. ᶜuvw = C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))
@@ -263,9 +261,6 @@ function default_remaining_tendency!(Yₜ, Y, p, t)
     end
 
     # Momentum conservation
-    
-    @. ᶜΠ = (ᶜp / p_0)^κ
-    @. ᶜθ = ᶜp / (ᶜρ * R_d) * (p_0 / ᶜp)^κ
 
     if point_type <: Geometry.Abstract3DPoint
         @. ᶜω³ = curlₕ(ᶜuₕ)

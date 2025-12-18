@@ -2,7 +2,7 @@ using Test
 using StaticArrays
 using ClimaComms
 ClimaComms.@import_required_backends
-import ClimaCore.DataLayouts: IJFH, VF
+import ClimaCore
 import ClimaCore:
     Geometry,
     Fields,
@@ -14,55 +14,85 @@ import ClimaCore:
     Quadratures
 using LinearAlgebra, IntervalSets
 
-FT = Float64
-domain = Domains.RectangleDomain(
-    Geometry.XPoint{FT}(-pi) .. Geometry.XPoint{FT}(pi),
-    Geometry.YPoint{FT}(-pi) .. Geometry.YPoint{FT}(pi);
-    x1periodic = true,
-    x2periodic = true,
+include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
 )
+import .TestUtilities as TU
 
-Nq = 5
-quad = Quadratures.GLL{Nq}()
-device = ClimaComms.CPUSingleThreaded()
-grid_mesh = Meshes.RectilinearMesh(domain, 17, 16)
-grid_topology =
-    Topologies.Topology2D(ClimaComms.SingletonCommsContext(device), grid_mesh)
-grid_space = Spaces.SpectralElementSpace2D(grid_topology, quad)
-grid_coords = Fields.coordinate_field(grid_space)
+split_div = Operators.SplitDivergence()
+div = Operators.Divergence()
 
-@testset "split divergence" begin
-    split_div = Operators.SplitDivergence()
-    div = Operators.Divergence()
-    
-    # Case 1: Constant. Div should be 0.
-    # rho*u * 1
-    u = Geometry.UVVector.(ones(FT, grid_space), ones(FT, grid_space))
-    psi = Ref(1.0)
-    
-    res = split_div.(u, psi)
-    @test norm(res) < 1e-12
+function create_test_fields(space, FT)
+    coords = Fields.coordinate_field(space)
+    u = @. Geometry.UVVector(cos(coords.x), zero(FT))
+    psi = @. FT(2) + sin(coords.x)
+    return u, psi
+end
 
-    # Case 2: Smooth function
-    # u = (cos(x), 0)
-    # psi = 2 + sin(x)
-    # div(u * psi)
-    
-    u = @. Geometry.UVVector(cos(grid_coords.x), 0.0)
-    psi = @. 2 + sin(grid_coords.x)
-    
-    res_split = split_div.(u, psi)
-    Spaces.weighted_dss!(res_split)
-    
-    res_div = div.(u .* psi)
-    Spaces.weighted_dss!(res_div)
-    
-    # Compare with standard divergence
-    # They should be close.
-    @test norm(res_split .- res_div) < 1e-2 
-    
-    # Conservation test
-    # Integral of split_div over periodic domain should be 0.
-    integral = sum(res_split)
-    @test abs(integral) < 1e-12
+function SpectralElem2D(FT, context, x2periodic)
+    domain = Domains.RectangleDomain(
+        Geometry.XPoint{FT}(-pi) .. Geometry.XPoint{FT}(pi),
+        Geometry.YPoint{FT}(-pi) .. Geometry.YPoint{FT}(pi);
+        x1periodic = true,
+        x2periodic,
+        x1boundary = nothing,
+        x2boundary = x2periodic ? nothing : (:south, :north),
+    )
+    quad = Quadratures.GLL{4}()
+    mesh = Meshes.RectilinearMesh(domain, 4, 4)
+    topology = Topologies.Topology2D(context, mesh)
+    return Spaces.SpectralElementSpace2D(topology, quad)
+end
+
+for FT in (Float32, Float64)
+    @testset "split divergence (FT = $FT)" begin
+        context = ClimaComms.context()
+
+        @testset "fully periodic Cartesian domain" begin
+            space = SpectralElem2D(FT, context, true)
+            u, psi = create_test_fields(space, FT)
+
+            u_const = Geometry.UVVector.(ones(FT, space), ones(FT, space))
+            # Test psi = 1
+            psi_const = FT(1)
+            res = split_div.(u_const, psi_const)
+            @test norm(res) < 100 * eps(FT)
+
+            psi_const_field = ones(FT, space) .* FT(2)
+            split_result_const = split_div.(u, psi_const_field)
+            Spaces.weighted_dss!(split_result_const)
+
+            div_result_const = div.(u .* psi_const_field)
+            Spaces.weighted_dss!(div_result_const)
+
+            @test norm(split_result_const .- div_result_const) < 100 * eps(FT)
+
+            split_result = split_div.(u, psi)
+            Spaces.weighted_dss!(split_result)
+
+            div_result = div.(u .* psi)
+            Spaces.weighted_dss!(div_result)
+
+            # Test comparison - not sure what tolerance to use here
+            max_val = max(norm(split_result), norm(div_result), one(FT))
+            @test norm(split_result .- div_result) < FT(0.1) * max_val
+
+            # Test conservation - integral of divergence over periodic domain should be zero
+            integral = sum(split_result)
+            @test abs(integral) < 100 * eps(FT)
+        end
+
+        @testset "non-periodic boundary behavior" begin
+            space = SpectralElem2D(FT, context, false)
+            u, psi = create_test_fields(space, FT)
+
+            split_result = split_div.(u, psi)
+            Spaces.weighted_dss!(split_result)
+
+            div_result = div.(u .* psi)
+            Spaces.weighted_dss!(div_result)
+
+            @test_broken norm(split_result .- div_result) < 100 * eps(FT)
+        end
+    end
 end

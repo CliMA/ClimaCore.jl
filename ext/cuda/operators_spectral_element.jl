@@ -303,7 +303,7 @@ Base.@propagate_inbounds function operator_evaluate(
         flux_ij = 0.5 * (Ju1[i, vt] + Ju1[j, vt]) * (psi[i, vt] + psi[j, vt])
         result = result + D[i, j] * flux_ij
     end
-    
+
     return result * local_geometry.invJ
 end
 Base.@propagate_inbounds function operator_evaluate(
@@ -331,14 +331,14 @@ Base.@propagate_inbounds function operator_evaluate(
         flux_ik = 0.5 * (Ju1[i, j, vt] + Ju1[k, j, vt]) * (psi[i, j, vt] + psi[k, j, vt])
         result = result + D[i, k] * flux_ik
     end
-    
+
     # Second dimension: sum_k D[j,k] * flux_jk
     # where flux_jk = 0.5 * (Ju2[i,j] + Ju2[i,k]) * (psi[i,j] + psi[i,k])
     for k in 1:Nq
         flux_jk = 0.5 * (Ju2[i, j, vt] + Ju2[i, k, vt]) * (psi[i, j, vt] + psi[i, k, vt])
         result = result + D[j, k] * flux_jk
     end
-    
+
     return result * local_geometry.invJ
 end
 
