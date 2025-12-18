@@ -635,15 +635,28 @@ end
     split_div = SplitDivergence()
     split_div.(u, ψ)
 
-Computes the divergence of `u * ψ` using a split form.
-`u` should be the momentum/mass flux vector, and `ψ` a scalar.
-For `ψ=1`, this reduces to the standard divergence of `u`.
+Computes the divergence of `u * ψ` using a split-form discretization that enhances
+entropy stability. `u` should be the momentum/mass flux vector (e.g., `ρu`), and `ψ` a scalar
+field (e.g., a tracer or thermodynamic variable). For `ψ=1`, this reduces to the standard
+divergence of `u`.
 
-The discrete form is:
+The split form is defined as the arithmetic mean of the conservative and advective forms:
+```math
+\\nabla \\cdot (u \\psi)|_{split} = \\frac{1}{2} \\nabla \\cdot (u \\psi) + \\frac{1}{2} (\\psi \\nabla \\cdot u + u \\cdot \\nabla \\psi)
+```
+
+The discrete implementation uses a symmetric two-point flux formulation:
 ```math
 (Div_{split})_i = \\frac{1}{J_i w_i} \\sum_j D_{ij} F_{ij}
 ```
-where ``F_{ij} = \\frac{1}{2} (J_i u^1_i + J_j u^1_j) (\\psi_i + \\psi_j)``
+where ``i`` and ``j`` are indices over quadrature points (nodes) in the element, and the flux ``F_{ij} = F_{ji}`` between nodes ``i`` and ``j`` is given by:
+```math
+F_{ij} = \\frac{1}{2} (J_i u^1_i + J_j u^1_j) (\\psi_i + \\psi_j)
+```
+Here, ``u^1_i`` denotes the first contravariant component of ``u`` at node ``i``, and similarly for ``u^1_j``. In 2D, the flux includes contributions from both contravariant components.
+
+## References
+- Taylor et al. (2010) for split-form formulations in spectral element methods
 """
 struct SplitDivergence{I} <: SpectralElementOperator{I} end
 SplitDivergence() = SplitDivergence{()}()
