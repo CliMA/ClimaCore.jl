@@ -635,25 +635,48 @@ end
     split_div = SplitDivergence()
     split_div.(u, ψ)
 
-Computes the divergence of `u * ψ` using a split-form discretization that enhances
-entropy stability. `u` should be the momentum/mass flux vector (e.g., `ρu`), and `ψ` a scalar
-field. For `ψ=1`, this reduces to the standard divergence of `u`.
+Computes the divergence of the product `u * ψ` using a **split-form (entropy-stable)** discretization.
 
-The split form is defined as the arithmetic mean of the conservative and advective forms:
+This operator is designed for the advection of scalar quantities in conservation laws (e.g., 
+thermodynamic variables or tracers). By evaluating the divergence using a specific averaging of the 
+conservative and advective forms, this formulation cancels aliasing errors that arise from the product 
+of two spectrally variable fields, thereby inhibiting the growth of quadratic instabilities (such as 
+cold temperature spikes) without requiring hyperviscosity.
+
+# Arguments
+- `u`: The transport vector field, typically the **mass flux** (``\\rho \\mathbf{u}``). It must be a vector quantity (e.g., `Geometry.Covariant12Vector`).
+- `ψ`: The **specific** scalar quantity to be advected (e.g., specific total energy ``e_{tot}`` or specific humidity ``q_{tot}``).
+
+# Mathematical Formulation
+## Continuous
+The split form is defined as the arithmetic mean of the conservative form and the advective form:
 ```math
-\\nabla \\cdot (u \\psi)|_{split} = \\frac{1}{2} \\nabla \\cdot (u \\psi) + \\frac{1}{2} (\\psi \\nabla \\cdot u + u \\cdot \\nabla \\psi)
+\\nabla \\cdot (\\rho \\mathbf{u} \\psi)|_{split} = \\frac{1}{2} \\nabla \\cdot (\\rho \\mathbf{u} \\psi) + \\frac{1}{2} \\left( \\psi \\nabla \\cdot (\\rho \\mathbf{u}) + \\rho \\mathbf{u} \\cdot \\nabla \\psi \\right)
 ```
 
-The discrete implementation uses a symmetric two-point flux formulation:
+## Discrete (SBP)
+The implementation uses the Summation-By-Parts (SBP) property of the spectral element derivative matrix ``D``. The divergence is computed locally on the reference element as:
 ```math
-(Div_{split})_i = \\frac{1}{J_i w_i} \\sum_j D_{ij} F_{ij}
+(Div_{split})_i = \\frac{1}{J_i} \\sum_j D_{ij} F_{ij}
 ```
-where the flux ``F_{ij} = F_{ji}`` between quadrature points ``i`` and ``j`` is given by:
+where ``F_{ij}`` is the symmetric **two-point flux** between nodes ``i`` and ``j``:
 ```math
-F_{ij} = \\frac{1}{2} (J_i u^1_i + J_j u^1_j) (\\psi_i + \\psi_j)
+F_{ij} = \\frac{1}{2} \\left( \\mathcal{U}_i + \\mathcal{U}_j \\right) (\\psi_i + \\psi_j)
 ```
-Here, ``u^1_i`` denotes the first contravariant component of ``u`` at node ``i``. In 2D, the flux includes contributions from both contravariant components.
+Here, ``\\mathcal{U}`` represents the volume-weighted contravariant flux component (``\\mathcal{U}^1 = J u^1``). In 2D/3D tensor-product grids, this 1D split operator is 
+applied sequentially along each dimension.
 
+# Properties
+1.  **Conservation:** The operator remains conservative.
+2.  **Consistency:** If `ψ` is spatially constant (e.g., `ψ = 1`), the operator degenerates to the standard divergence of `u` (mass continuity).
+3.  **Complexity:** Unlike standard spectral element divergence which utilizes tensor product factorization for ``O(N)`` cost, this operator requires explicit interaction 
+between all node pairs on a 1D line, resulting in ``O(N^2)`` complexity per line (where ``N`` is the polynomial order).
+
+# References
+- Fisher, T. C., & Carpenter, M. H. (2013). High-order entropy stable finite difference schemes for nonlinear conservation laws: Finite domains. *Journal of Computational 
+Physics*, 252, 518-557. [https://doi.org/10.1016/j.jcp.2013.06.014](https://doi.org/10.1016/j.jcp.2013.06.014)
+- Gassner, G. J. (2013). A skew-symmetric discontinuous Galerkin spectral element discretization and its relation to SBP-SAT finite difference methods. *SIAM Journal on 
+Scientific Computing*, 35, A1233-A1253. [https://doi.org/10.1137/120890144](https://doi.org/10.1137/120890144)
 """
 struct SplitDivergence{I} <: SpectralElementOperator{I} end
 SplitDivergence() = SplitDivergence{()}()

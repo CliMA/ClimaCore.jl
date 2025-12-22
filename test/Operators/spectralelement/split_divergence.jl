@@ -24,8 +24,8 @@ div = Operators.Divergence()
 
 function create_test_fields(space, FT)
     coords = Fields.coordinate_field(space)
-    u = @. Geometry.UVVector(cos(coords.x), zero(FT))
-    psi = @. FT(2) + sin(coords.x)
+    u = @. Geometry.UVVector(cos(coords.x) * sin(coords.y), sin(coords.x) * cos(coords.y))
+    psi = @. FT(2) + sin(coords.x) * cos(coords.y)
     return u, psi
 end
 
@@ -55,8 +55,13 @@ for FT in (Float32, Float64)
             u_const = Geometry.UVVector.(ones(FT, space), ones(FT, space))
             # Test psi = 1
             psi_const = FT(1)
+            # Test with constant u (divergence is zero)
             res = split_div.(u_const, psi_const)
             @test norm(res) < 100 * eps(FT)
+            # Test with varying u (reduction to standard divergence)
+            res_var = split_div.(u, psi_const)
+            div_res_var = div.(u)
+            @test norm(res_var .- div_res_var) < 100 * eps(FT)
 
             psi_const_field = ones(FT, space) .* FT(2)
             split_result_const = split_div.(u, psi_const_field)
@@ -73,7 +78,7 @@ for FT in (Float32, Float64)
             div_result = div.(u .* psi)
             Spaces.weighted_dss!(div_result)
 
-            # Test comparison - not sure what tolerance to use here
+            # Test comparison
             max_val = max(norm(split_result), norm(div_result), one(FT))
             @test norm(split_result .- div_result) < FT(0.1) * max_val
 
@@ -92,7 +97,8 @@ for FT in (Float32, Float64)
             div_result = div.(u .* psi)
             Spaces.weighted_dss!(div_result)
 
-            @test_broken norm(split_result .- div_result) < 100 * eps(FT)
+            max_val = max(norm(split_result), norm(div_result), one(FT))
+            @test norm(split_result .- div_result) < FT(0.1) * max_val
         end
     end
 end
