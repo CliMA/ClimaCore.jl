@@ -661,22 +661,19 @@ The implementation uses the Summation-By-Parts (SBP) property of the spectral el
 ```
 where ``F_{ij}`` is the symmetric **two-point flux** between nodes ``i`` and ``j``:
 ```math
-F_{ij} = \\frac{1}{2} \\left( \\mathcal{U}_i + \\mathcal{U}_j \\right) (\\psi_i + \\psi_j)
+F_{ij} = \\frac{1}{2} \\left( U_i + U_j \\right) (\\psi_i + \\psi_j)
 ```
-Here, ``\\mathcal{U}`` represents the volume-weighted contravariant flux component (``\\mathcal{U}^1 = J u^1``). In 2D/3D tensor-product grids, this 1D split operator is 
+Here, ``U`` represents the volume-weighted contravariant flux component (``U^1 = J u^1``). In 2D/3D tensor-product grids, this 1D split operator is 
 applied sequentially along each dimension.
 
 # Properties
 1.  **Conservation:** The operator remains conservative.
 2.  **Consistency:** If `ψ` is spatially constant (e.g., `ψ = 1`), the operator degenerates to the standard divergence of `u` (mass continuity).
-3.  **Complexity:** Unlike standard spectral element divergence which utilizes tensor product factorization for ``O(N)`` cost, this operator requires explicit interaction 
-between all node pairs on a 1D line, resulting in ``O(N^2)`` complexity per line (where ``N`` is the polynomial order).
+3.  **Complexity:** Unlike standard spectral element divergence which uses tensor product factorization for ``O(N)`` cost, this operator requires explicit interaction between all node pairs on a 1D line, resulting in ``O(N^2)`` complexity per line (where ``N`` is the polynomial order).
 
 # References
-- Fisher, T. C., & Carpenter, M. H. (2013). High-order entropy stable finite difference schemes for nonlinear conservation laws: Finite domains. *Journal of Computational 
-Physics*, 252, 518-557. [https://doi.org/10.1016/j.jcp.2013.06.014](https://doi.org/10.1016/j.jcp.2013.06.014)
-- Gassner, G. J. (2013). A skew-symmetric discontinuous Galerkin spectral element discretization and its relation to SBP-SAT finite difference methods. *SIAM Journal on 
-Scientific Computing*, 35, A1233-A1253. [https://doi.org/10.1137/120890144](https://doi.org/10.1137/120890144)
+- Fisher, T. C., & Carpenter, M. H. (2013). High-order entropy stable finite difference schemes for nonlinear conservation laws: Finite domains. Journal of Computational Physics, 252, 518-557. [https://doi.org/10.1016/j.jcp.2013.06.014](https://doi.org/10.1016/j.jcp.2013.06.014)
+- Gassner, G. J. (2013). A skew-symmetric discontinuous Galerkin spectral element discretization and its relation to SBP-SAT finite difference methods. SIAM Journal on Scientific Computing, 35, A1233-A1253. [https://doi.org/10.1137/120890144](https://doi.org/10.1137/120890144)
 """
 struct SplitDivergence{I} <: SpectralElementOperator{I} end
 SplitDivergence() = SplitDivergence{()}()
