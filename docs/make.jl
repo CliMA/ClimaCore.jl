@@ -102,8 +102,8 @@ withenv("GKSwstype" => "nul") do
                 "DebugOnly" => "APIs/debug_only_api.md",
             ],
             "Developer docs" => [
-                "Performance tips" => "performance_tips.md"
-                "Shared memory design" => "shmem_design.md"
+                "Performance tips" => "performance_tips.md",
+                "Shared memory design" => "shmem_design.md",
             ],
             "Tutorials" => [
                 joinpath("tutorials", tutorial * ".md") for

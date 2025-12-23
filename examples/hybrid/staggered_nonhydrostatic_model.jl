@@ -29,6 +29,7 @@ const CT3 = Geometry.Contravariant3Vector
 const CT12 = Geometry.Contravariant12Vector
 
 const divₕ = Operators.Divergence()
+const split_divₕ = Operators.SplitDivergence()
 const wdivₕ = Operators.WeakDivergence()
 const gradₕ = Operators.Gradient()
 const wgradₕ = Operators.WeakGradient()
@@ -226,8 +227,7 @@ function default_remaining_tendency!(Yₜ, Y, p, t)
     @. ᶜK = norm_sqr(ᶜuvw) / 2
 
     # Mass conservation
-
-    @. Yₜ.c.ρ -= divₕ(ᶜρ * ᶜuvw)
+    @. Yₜ.c.ρ -= split_divₕ(ᶜρ * ᶜuvw, 1)
     @. Yₜ.c.ρ -= ᶜdivᵥ(ᶠinterp(ᶜρ * ᶜuₕ))
 
     # Energy conservation
@@ -235,22 +235,22 @@ function default_remaining_tendency!(Yₜ, Y, p, t)
     if :ρθ in propertynames(Y.c)
         ᶜρθ = Y.c.ρθ
         @. ᶜp = pressure_ρθ(ᶜρθ)
-        @. Yₜ.c.ρθ -= divₕ(ᶜρθ * ᶜuvw)
+        @. Yₜ.c.ρθ -= split_divₕ(ᶜρ * ᶜuvw, ᶜρθ / ᶜρ)
         @. Yₜ.c.ρθ -= ᶜdivᵥ(ᶠinterp(ᶜρθ * ᶜuₕ))
     elseif :ρe in propertynames(Y.c)
         ᶜρe = Y.c.ρe
         @. ᶜp = pressure_ρe(ᶜρe, ᶜK, ᶜΦ, ᶜρ)
-        @. Yₜ.c.ρe -= divₕ((ᶜρe + ᶜp) * ᶜuvw)
+        @. Yₜ.c.ρe -= split_divₕ(ᶜρ * ᶜuvw, (ᶜρe + ᶜp) / ᶜρ)
         @. Yₜ.c.ρe -= ᶜdivᵥ(ᶠinterp((ᶜρe + ᶜp) * ᶜuₕ))
     elseif :ρe_int in propertynames(Y.c)
         ᶜρe_int = Y.c.ρe_int
         @. ᶜp = pressure_ρe_int(ᶜρe_int, ᶜρ)
         if point_type <: Geometry.Abstract3DPoint
             @. Yₜ.c.ρe_int -=
-                divₕ((ᶜρe_int + ᶜp) * ᶜuvw) - dot(gradₕ(ᶜp), CT12(ᶜuₕ))
+                split_divₕ(ᶜρ * ᶜuvw, (ᶜρe_int + ᶜp) / ᶜρ) - dot(gradₕ(ᶜp), CT12(ᶜuₕ))
         else
             @. Yₜ.c.ρe_int -=
-                divₕ((ᶜρe_int + ᶜp) * ᶜuvw) - dot(gradₕ(ᶜp), CT1(ᶜuₕ))
+                split_divₕ(ᶜρ * ᶜuvw, (ᶜρe_int + ᶜp) / ᶜρ) - dot(gradₕ(ᶜp), CT1(ᶜuₕ))
         end
         @. Yₜ.c.ρe_int -= ᶜdivᵥ(ᶠinterp((ᶜρe_int + ᶜp) * ᶜuₕ))
         # or, equivalently,
