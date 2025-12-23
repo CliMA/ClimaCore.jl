@@ -655,7 +655,18 @@ The split form is defined as the arithmetic mean of the conservative form and th
 ```
 
 ## Discrete (SBP)
-The implementation uses the Summation-By-Parts (SBP) property of the spectral element derivative matrix ``D``. The divergence is computed locally on the reference element as:
+The implementation uses the generalized summation-by-parts (SBP) property, where the divergence is the inverse of the mass matrix acting on the stiffness matrix. Let \\delta V_i = w_i J_i be the physical volume element (weights w, Jacobian J) and Q be the skew-symmetric stiffness matrix. The divergence is:
+```math
+(Div_{split})_i = \\frac{1}{\\delta V_i} \\sum_j Q_{ij} F_{ij}
+```
+where F_{ij} is the symmetric two-point flux.
+
+**Reduction to differentiation matrix form:** For Legendre-Gauss-Lobatto (LGL) elements, the stiffness matrix satisfies Q_{ij} = w_i D_{ij}. Substituting this into the equation above, the quadrature weights w_i cancel out:
+```math 
+\\frac{1}{w_i J_i} \\sum_j (w_i D_{ij}) F_{ij} = \\frac{1}{J_i} \\sum_j D_{ij} F_{ij}
+```
+
+This is the form implemented in the code:
 ```math
 (Div_{split})_i = \\frac{1}{J_i} \\sum_j D_{ij} F_{ij}
 ```
@@ -663,7 +674,7 @@ where ``F_{ij}`` is the symmetric **two-point flux** between nodes ``i`` and ``j
 ```math
 F_{ij} = \\frac{1}{2} \\left( U_i + U_j \\right) (\\psi_i + \\psi_j)
 ```
-Here, ``U`` represents the volume-weighted contravariant flux component (``U^1 = J u^1``). In 2D/3D tensor-product grids, this 1D split operator is 
+Here, ``U`` represents the Jacobian-weighted contravariant flux component (``U^1 = J u^1``). In 2D/3D tensor-product grids, this 1D split operator is 
 applied sequentially along each dimension.
 
 # Properties
@@ -754,8 +765,8 @@ function apply_operator(op::SplitDivergence{(1, 2)}, space, slabidx, arg1, arg2)
             val = zero(FT)
             for k in 1:Nq
                 flux_ik =
-                    0.5 * (Ju1_slab[i, j] + Ju1_slab[k, j]) *
-                    (psi_slab[i, j] + psi_slab[k, j])
+                    (Ju1_slab[i, j] + Ju1_slab[k, j]) *
+                    (psi_slab[i, j] + psi_slab[k, j]) / 2
                 val += D[i, k] * flux_ik
             end
             out[slab_index(i, j)] += val
@@ -767,8 +778,8 @@ function apply_operator(op::SplitDivergence{(1, 2)}, space, slabidx, arg1, arg2)
             val = zero(FT)
             for k in 1:Nq
                 flux_jk =
-                    0.5 * (Ju2_slab[i, j] + Ju2_slab[i, k]) *
-                    (psi_slab[i, j] + psi_slab[i, k])
+                    (Ju2_slab[i, j] + Ju2_slab[i, k]) *
+                    (psi_slab[i, j] + psi_slab[i, k]) / 2
                 val += D[j, k] * flux_jk
             end
             out[slab_index(i, j)] += val
@@ -799,7 +810,7 @@ for all ``\\phi\\in \\mathcal{V}_0``
 ```
 where ``\\mathcal{V}_0`` is the space of ``u``.
 
-This arises as the contribution of the volume integral after by applying
+This arises as the contribution of the volume integral after applying
 integration by parts to the weak form expression of the divergence
 ```math
 \\int_\\Omega \\phi (\\nabla \\cdot u) \\, d \\Omega
