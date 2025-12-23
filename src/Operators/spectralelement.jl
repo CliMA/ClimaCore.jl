@@ -710,7 +710,7 @@ function apply_operator(op::SplitDivergence{(1,)}, space, slabidx, arg1, arg2)
     @inbounds for i in 1:Nq
         val = zero(FT)
         for j in 1:Nq
-            flux_ij = 0.5 * (Ju1_slab[i] + Ju1_slab[j]) * (psi_slab[i] + psi_slab[j])
+            flux_ij = (Ju1_slab[i] + Ju1_slab[j]) * (psi_slab[i] + psi_slab[j]) / 2
             val += D[i, j] * flux_ij
         end
         out[slab_index(i)] = val
