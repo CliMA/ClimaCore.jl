@@ -680,7 +680,10 @@ SplitDivergence() = SplitDivergence{()}()
 SplitDivergence{()}(space) = SplitDivergence{operator_axes(space)}()
 
 operator_return_eltype(::SplitDivergence{I}, ::Type{S1}, ::Type{S2}) where {I, S1, S2} =
-    RecursiveApply.rmaptype(Geometry.divergence_result_type, S1)
+    Geometry.rmul_return_type(
+        RecursiveApply.rmaptype(Geometry.divergence_result_type, S1),
+        S2,
+    )
 
 function apply_operator(op::SplitDivergence{(1,)}, space, slabidx, arg1, arg2)
     FT = Spaces.undertype(space)
