@@ -227,8 +227,7 @@ function default_remaining_tendency!(Yₜ, Y, p, t)
     @. ᶜK = norm_sqr(ᶜuvw) / 2
 
     # Mass conservation
-    FT = eltype(Yₜ.c.ρ)
-    @. Yₜ.c.ρ -= split_divₕ(ᶜρ * ᶜuvw, FT(1))
+    @. Yₜ.c.ρ -= split_divₕ(ᶜρ * ᶜuvw, 1)
     @. Yₜ.c.ρ -= ᶜdivᵥ(ᶠinterp(ᶜρ * ᶜuₕ))
 
     # Energy conservation
