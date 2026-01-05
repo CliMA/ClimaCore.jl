@@ -1,3 +1,5 @@
+import UnrolledUtilities: unrolled_map
+
 abstract type AbstractSpectralStyle <: Fields.AbstractFieldStyle end
 
 """
@@ -231,28 +233,25 @@ Base.@propagate_inbounds function resolve_operator(
     bc::SpectralBroadcasted{SlabBlockSpectralStyle},
     slabidx,
 )
-    args = _resolve_operator_args(slabidx, bc.args...)
+    args = _resolve_operator_args(slabidx, bc.args)
     apply_operator(bc.op, bc.axes, slabidx, args...)
 end
 Base.@propagate_inbounds function resolve_operator(
     bc::Base.Broadcast.Broadcasted{SlabBlockSpectralStyle},
     slabidx,
 )
-    args = _resolve_operator_args(slabidx, bc.args...)
+    args = _resolve_operator_args(slabidx, bc.args)
     Base.Broadcast.Broadcasted{SlabBlockSpectralStyle}(bc.f, args, bc.axes)
 end
 @inline resolve_operator(x, slabidx) = x
 
 """
-    _resolve_operator(slabidx, args...)
+    _resolve_operator_args(slabidx, args)
 
 Calls `resolve_operator(arg, slabidx)` for each `arg` in `args`
 """
-@inline _resolve_operator_args(slabidx) = ()
-Base.@propagate_inbounds _resolve_operator_args(slabidx, arg, xargs...) = (
-    resolve_operator(arg, slabidx),
-    _resolve_operator_args(slabidx, xargs...)...,
-)
+Base.@propagate_inbounds _resolve_operator_args(slabidx, args::Tuple) =
+    unrolled_map(arg -> resolve_operator(arg, slabidx), args)
 
 function strip_space(bc::SpectralBroadcasted{Style}, parent_space) where {Style}
     current_space = axes(bc)
@@ -282,7 +281,7 @@ end
     bc::Broadcasted{Style},
 ) where {Style}
     space = reconstruct_placeholder_space(axes(bc), parent_space)
-    args = _reconstruct_placeholder_broadcasted(space, bc.args...)
+    args = _reconstruct_placeholder_broadcasted(space, bc.args)
     return Broadcasted{Style}(bc.f, args, space)
 end
 
@@ -291,17 +290,12 @@ end
     sbc::SpectralBroadcasted{Style},
 ) where {Style}
     space = reconstruct_placeholder_space(axes(sbc), parent_space)
-    args = _reconstruct_placeholder_broadcasted(space, sbc.args...)
+    args = _reconstruct_placeholder_broadcasted(space, sbc.args)
     return SpectralBroadcasted{Style}(sbc.op, args, space, sbc.work)
 end
 
-@inline _reconstruct_placeholder_broadcasted(parent_space) = ()
-@inline _reconstruct_placeholder_broadcasted(parent_space, arg, xargs...) = (
-    reconstruct_placeholder_broadcasted(parent_space, arg),
-    _reconstruct_placeholder_broadcasted(parent_space, xargs...)...,
-)
-
-
+@inline _reconstruct_placeholder_broadcasted(parent_space, args::Tuple) =
+    unrolled_map(arg -> reconstruct_placeholder_broadcasted(parent_space, arg), args)
 
 """
     is_valid_index(space, ij, slabidx)::Bool
@@ -335,11 +329,8 @@ end
     return slabidx.v + half <= Nv
 end
 
-@inline _get_node(space, ij, slabidx) = ()
-Base.@propagate_inbounds _get_node(space, ij, slabidx, arg, xargs...) = (
-    get_node(space, arg, ij, slabidx),
-    _get_node(space, ij, slabidx, xargs...)...,
-)
+Base.@propagate_inbounds _get_node(space, ij, slabidx, args::Tuple) =
+    unrolled_map(arg -> get_node(space, arg, ij, slabidx), args)
 
 Base.@propagate_inbounds function get_node(space, scalar, ij, slabidx)
     scalar[]
@@ -406,7 +397,8 @@ Base.@propagate_inbounds function get_node(
     slabidx,
 )
     space = reconstruct_placeholder_space(axes(bc), parent_space)
-    bc.f(_get_node(space, ij, slabidx, bc.args...)...)
+    args = _get_node(space, ij, slabidx, bc.args)
+    bc.f(args...)
 end
 Base.@propagate_inbounds function get_node(
     space,

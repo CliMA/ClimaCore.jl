@@ -152,13 +152,14 @@ Base.@propagate_inbounds function resolve_shmem!(
     ===#
 
     if isactive
+        args = Operators._get_node(space, ij, slabidx, sbc.args)
         operator_fill_shmem!(
             sbc.op,
             sbc.work,
             space,
             ij,
             slabidx,
-            Operators._get_node(space, ij, slabidx, sbc.args...)...,
+            args...,
         )
     end
     CUDA.sync_threads()
