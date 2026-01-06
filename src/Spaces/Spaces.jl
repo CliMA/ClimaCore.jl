@@ -61,6 +61,17 @@ abstract type AbstractSpace end
 function grid end
 function staggering end
 
+function Base.show(io::IO, ::MIME"text/plain", x::Type{<:AbstractSpace})
+    compact = get(io, :compact, true)
+    compact || return Base._show_type(io, x)
+    Base.show_type_name(io, x.name)
+end
+
+function Base.show(io::IO, x::Type{<:AbstractSpace})
+    compact = get(io, :compact, true)
+    compact || return Base._show_type(io, x)
+    Base.show_type_name(io, x.name)
+end
 
 ClimaComms.context(space::AbstractSpace) = ClimaComms.context(grid(space))
 ClimaComms.device(space::AbstractSpace) = ClimaComms.device(grid(space))
