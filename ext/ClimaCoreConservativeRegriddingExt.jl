@@ -178,7 +178,7 @@ function ConservativeRegridding.regrid!(
     regridder_tuple::NamedTuple,
     src_field::Fields.Field,
 )
-    @assert eltype(dst_field) isa Number && eltype(src_field) isa Number "Regridding is only supported for scalar fields"
+    @assert eltype(dst_field) <: Real && eltype(src_field) <: Real "Regridding is only supported for scalar fields"
     @assert eltype(dst_field) == eltype(src_field) "Source and destination fields must have the same element type"
 
     # Use pre-allocated buffers from the regridder tuple
