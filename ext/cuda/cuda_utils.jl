@@ -209,6 +209,27 @@ function threads_via_occupancy(f!::F!, args) where {F!}
     return config.threads
 end
 
+function config_via_occupancy(f!::F!, nitems, args) where {F!}
+    kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
+    config = CUDA.launch_configuration(kernel.fun)
+    SM_count = CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT)
+    max_block_size =
+        SM_count = CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X)
+    if cld(nitems, config.threads) < config.blocks
+        # gpu will not saturate, so spread out threads across more SMs
+        even_distribution_threads = cld(nitems, SM_count)
+        even_distribution_threads =
+            even_distribution_threads > max_block_size ? div(even_distribution_threads, 2) :
+            even_distribution_threads
+        threads = min(even_distribution_threads, config.threads)
+        blocks = cld(nitems, threads)
+    else
+        threads = min(nitems, config.threads)
+        blocks = cld(nitems, threads)
+    end
+    return (; threads, blocks)
+end
+
 """
     thread_index()
 
