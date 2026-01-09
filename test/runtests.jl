@@ -96,6 +96,7 @@ UnitTest("MatrixFields - indexing"                    ,"MatrixFields/field_matri
 UnitTest("Hypsography - 2d"                        ,"Hypsography/2d.jl"),
 UnitTest("Hypsography - 3d sphere"                 ,"Hypsography/3dsphere.jl"),
 UnitTest("Remapping"                               ,"Operators/remapping.jl"),
+UnitTest("ConservativeRegridding extension"        ,"ClimaCoreConservativeRegriddingExt/conservative_regridding.jl"),
 UnitTest("Limiter"                                 ,"Limiters/limiter.jl"),
 UnitTest("InputOutput - hdf5"                      ,"InputOutput/unit_hdf5.jl"),
 UnitTest("InputOutput - parse_type"                ,"InputOutput/unit_read_type.jl"),
