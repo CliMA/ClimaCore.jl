@@ -1,5 +1,6 @@
 module Utilities
 
+include("math_wrapper.jl")
 include("plushalf.jl")
 include("cache.jl")
 
