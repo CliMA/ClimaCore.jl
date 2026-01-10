@@ -210,15 +210,11 @@ J = MatrixFields.FieldMatrix((@name(f), @name(g))=> ∂f_∂g)
 
 ## Optimizations
 
-Each entry of a `FieldMatrix` can be a `ColumnwiseBandMatrixField`, a `DiagonalMatrixRow`, or an
-`UniformScaling`.
-
-A `ColumnwiseBandMatrixField` is a `Field` with a `BandMatrixRow` at each point. It is intended
-to represent a collection of banded matrices, where there is one band matrix for each column
-of the space the `Field` is on. Beyond only storing the diagonals of the band matrix, an `entry`
-can be optimized to use less memory. Each optimized representation can be indexed equivalently to
-non optimized representations, and used in addition, subtraction, matrix-vector multiplication,
-Matrix-matrix multiplication, `RecursiveApply`, and `FieldMatrixSolver`.
+Each entry of a `FieldMatrix` can be a `ColumnwiseBandMatrixField`, a `DiagonalMatrixRow`, or a
+`UniformScaling`. A `ColumnwiseBandMatrixField` is a `Field` with a `BandMatrixRow` at each point.
+It represents a collection of banded matrices, with each column of the `Field` corresponding to a
+specific matrix. If all columns correspond a constant multiple of the identity matrix, the `Field`
+may be replaced with a `ScalingFieldMatrixEntry` (i.e., a `DiagonalMatrixRow` or `UniformScaling`).
 
 For the following sections, `space` is a column space with $N_v$ levels. A column space is
 used for simplicity in this example, but the optimizations work with any space with columns.

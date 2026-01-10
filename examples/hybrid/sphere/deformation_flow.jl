@@ -62,16 +62,15 @@ ode_algorithm = ExplicitAlgorithm(SSP33ShuOsher())
 const hdiv = Operators.Divergence()
 const hwdiv = Operators.WeakDivergence()
 const hgrad = Operators.Gradient()
-const If2c = Operators.InterpolateF2C()
-const Ic2f = Operators.InterpolateC2F(
+const interp = Operators.InterpolateC2F(
     bottom = Operators.Extrapolate(),
     top = Operators.Extrapolate(),
 )
-const ᶠwinterp = Operators.WeightedInterpolateC2F(
+const winterp = Operators.WeightedInterpolateC2F(
     bottom = Operators.Extrapolate(),
     top = Operators.Extrapolate(),
 )
-const vdivf2c = Operators.DivergenceF2C(
+const vdiv = Operators.DivergenceF2C(
     top = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
     bottom = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
 )
@@ -96,10 +95,6 @@ const LinVanLeerFlux = Operators.LinVanLeerC2F(
     bottom = Operators.FirstOrderOneSided(),
     top = Operators.FirstOrderOneSided(),
     constraint = Operators.MonotoneLocalExtrema(),
-)
-const FCTBorisBook = Operators.FCTBorisBook(
-    bottom = Operators.FirstOrderOneSided(),
-    top = Operators.FirstOrderOneSided(),
 )
 
 # Reference pressure and density
@@ -145,75 +140,52 @@ end
 
 function horizontal_tendency!(Yₜ, Y, cache, t)
     (; u, Δₕq) = cache
-    coord = Fields.coordinate_field(u)
+    coord = Fields.coordinate_field(Y.c)
     @. u = local_velocity(coord, t)
     @. Δₕq = hwdiv(hgrad(Y.c.ρq / Y.c.ρ))
     Spaces.weighted_dss!(Δₕq)
     @. Yₜ.c.ρ = -hdiv(Y.c.ρ * u)
-    for n in 1:5 # TODO: update RecursiveApply/Operators to eliminate this loop
-        ρq_n = Y.c.ρq.:($n)
-        ρqₜ_n = Yₜ.c.ρq.:($n)
-        @. ρqₜ_n = -hdiv(ρq_n * u)
-    end
-    @. Yₜ.c.ρq -= D₄ * hwdiv(Y.c.ρ * hgrad(Δₕq))
+    @. Yₜ.c.ρq = -hdiv(Y.c.ρq * u) - D₄ * hwdiv(Y.c.ρ * hgrad(Δₕq))
 end
 
 function vertical_tendency!(Yₜ, Y, cache, t)
-    (; q_n, face_u, face_uₕ, face_uᵥ, fct_op, dt) = cache
+    (; q, face_ρ, face_u, fct_op, dt) = cache
+    (; J) = Fields.local_geometry_field(Y.c)
     face_coord = Fields.coordinate_field(face_u)
+    @. q = Y.c.ρq / Y.c.ρ
+    @. face_ρ = winterp(J, Y.c.ρ)
     @. face_u = local_velocity(face_coord, t)
-    @. face_uₕ = Geometry.project(Geometry.Covariant12Axis(), face_u)
-    @. face_uᵥ = Geometry.project(Geometry.Covariant3Axis(), face_u)
-    @. Yₜ.c.ρ = -vdivf2c(Ic2f(Y.c.ρ) * face_u)
-    ᶜJ = Fields.local_geometry_field(axes(Y.c.ρ)).J
-    for n in 1:5 # TODO: update RecursiveApply/Operators to eliminate this loop
-        ρq_n = Y.c.ρq.:($n)
-        ρqₜ_n = Yₜ.c.ρq.:($n)
-        @. q_n = ρq_n / Y.c.ρ
-        @. ρqₜ_n = -vdivf2c(Ic2f(ρq_n) * face_uₕ)
-        if isnothing(fct_op)
-            @. ρqₜ_n -= vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * face_uᵥ * Ic2f(q_n))
-        elseif fct_op == upwind1
-            @. ρqₜ_n -= vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * upwind1(face_uᵥ, q_n))
-        elseif fct_op == upwind3
-            @. ρqₜ_n -= vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * upwind3(face_uᵥ, q_n))
-        elseif fct_op == FCTBorisBook
-            @. ρqₜ_n -= vdivf2c(
-                ᶠwinterp(ᶜJ, Y.c.ρ) * (
-                    upwind1(face_uᵥ, q_n) + FCTBorisBook(
-                        upwind3(face_uᵥ, q_n) - upwind1(face_uᵥ, q_n),
-                        q_n / dt -
-                        vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * upwind1(face_uᵥ, q_n)) / Y.c.ρ,
-                    )
+    @. Yₜ.c.ρ = -vdiv(face_ρ * face_u)
+    if isnothing(fct_op)
+        @. Yₜ.c.ρq = -vdiv(face_ρ * face_u * interp(q))
+    elseif fct_op == upwind1
+        @. Yₜ.c.ρq = -vdiv(face_ρ * upwind1(face_u, q))
+    elseif fct_op == upwind3
+        @. Yₜ.c.ρq = -vdiv(face_ρ * upwind3(face_u, q))
+    elseif fct_op == FCTZalesak
+        @. Yₜ.c.ρq =
+            -vdiv(
+                face_ρ * upwind1(face_u, q) +
+                FCTZalesak(
+                    face_ρ * (upwind3(face_u, q) - upwind1(face_u, q)),
+                    q / dt,
+                    q / dt - vdiv(face_ρ * upwind1(face_u, q)) / Y.c.ρ,
                 ),
             )
-        elseif fct_op == FCTZalesak
-            @. ρqₜ_n -= vdivf2c(
-                ᶠwinterp(ᶜJ, Y.c.ρ) * (
-                    upwind1(face_uᵥ, q_n) + FCTZalesak(
-                        upwind3(face_uᵥ, q_n) - upwind1(face_uᵥ, q_n),
-                        q_n / dt,
-                        q_n / dt -
-                        vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * upwind1(face_uᵥ, q_n)) / Y.c.ρ,
-                    )
+    elseif fct_op == SlopeLimitedFlux
+        @. Yₜ.c.ρq =
+            -vdiv(
+                face_ρ * upwind1(face_u, q) +
+                SlopeLimitedFlux(
+                    face_ρ * (upwind3(face_u, q) - upwind1(face_u, q)),
+                    q / dt,
+                    face_u,
                 ),
             )
-        elseif fct_op == SlopeLimitedFlux
-            @. ρqₜ_n -= vdivf2c(
-                ᶠwinterp(ᶜJ, Y.c.ρ) * (
-                    upwind1(face_uᵥ, q_n) + SlopeLimitedFlux(
-                        upwind3(face_uᵥ, q_n) - upwind1(face_uᵥ, q_n),
-                        q_n / dt,
-                        face_uᵥ,
-                    )
-                ),
-            )
-        elseif fct_op == LinVanLeerFlux
-            @. ρqₜ_n -=
-                vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * LinVanLeerFlux(face_uᵥ, q_n, dt))
-        else
-            error("unrecognized FCT operator $fct_op")
-        end
+    elseif fct_op == LinVanLeerFlux
+        @. Yₜ.c.ρq = -vdiv(face_ρ * LinVanLeerFlux(face_u, q, dt))
+    else
+        error("unrecognized FCT operator $fct_op")
     end
 end
 
@@ -289,11 +261,10 @@ function run_deformation_flow(use_limiter, fct_op, dt)
 
     cache = (;
         u = Fields.Field(Geometry.UVWVector{FT}, cent_space),
+        q = Fields.Field(NTuple{5, FT}, cent_space),
         Δₕq = Fields.Field(NTuple{5, FT}, cent_space),
-        q_n = Fields.Field(FT, cent_space),
+        face_ρ = Fields.Field(FT, face_space),
         face_u = Fields.Field(Geometry.UVWVector{FT}, face_space),
-        face_uₕ = Fields.Field(Geometry.Covariant12Vector{FT}, face_space),
-        face_uᵥ = Fields.Field(Geometry.Covariant3Vector{FT}, face_space),
         limiter = use_limiter ? Limiters.QuasiMonotoneLimiter(Y.c.ρq) : nothing,
         fct_op,
         dt,
@@ -305,12 +276,7 @@ function run_deformation_flow(use_limiter, fct_op, dt)
         (0, t_end),
         cache,
     )
-    sol = solve(
-        problem,
-        ode_algorithm;
-        dt,
-        saveat = collect(0.0:(t_end / 2):t_end),
-    )
+    sol = solve(problem, ode_algorithm; dt)
     if !(cache.limiter isa Nothing)
         @show cache.limiter.rtol
         Limiters.print_convergence_stats(cache.limiter)
@@ -318,157 +284,117 @@ function run_deformation_flow(use_limiter, fct_op, dt)
     return sol
 end
 
-function conservation_errors(sol)
-    initial_total_mass = sum(sol.u[1].c.ρ)
-    initial_tracer_masses = map(n -> sum(sol.u[1].c.ρq.:($n)), 1:5)
-    final_total_mass = sum(sol.u[end].c.ρ)
-    final_tracer_masses = map(n -> sum(sol.u[end].c.ρq.:($n)), 1:5)
-    return (
-        (final_total_mass - initial_total_mass) / initial_total_mass,
-        (final_tracer_masses .- initial_tracer_masses) ./ initial_tracer_masses,
-    )
+function total_conservation_error(sol)
+    initial_mass = sum(sol[1].c.ρ)
+    final_mass = sum(sol[end].c.ρ)
+    return abs(final_mass - initial_mass) / initial_mass
 end
 
-# Roughness is measure as a deviation from the mean value
-tracer_roughnesses(sol) =
-    map(1:5) do n
-        q_n = sol.u[end].c.ρq.:($n) ./ sol.u[end].c.ρ
-        mean_q_n = mean(q_n) # TODO: replace the mean with a low-pass filter
-        return mean(abs.(q_n .- mean_q_n))
-    end
+function tracer_conservation_errors(sol)
+    initial_masses = sum(sol[1].c.ρq)
+    final_masses = sum(sol[end].c.ρq)
+    return abs.(final_masses .- initial_masses) ./ initial_masses
+end
 
-tracer_ranges(sol) =
-    map(1:5) do n
-        q_n = sol.u[end].c.ρq.:($n) ./ sol.u[end].c.ρ
-        return maximum(q_n) - minimum(q_n)
-    end
+# Roughness measured as deviation from mean (TODO: use a low-pass filter instead)
+function tracer_roughnesses(sol)
+    final_q = sol[end].c.ρq ./ sol[end].c.ρ
+    return mean(abs.(final_q .- mean(final_q)))
+end
 
-@info "Slope Limited Solutions"
-tvd_sol = run_deformation_flow(false, SlopeLimitedFlux, _dt)
-lim_tvd_sol = run_deformation_flow(true, SlopeLimitedFlux, _dt)
-@info "vanLeer Flux Solutions"
-lvl_sol = run_deformation_flow(false, LinVanLeerFlux, _dt)
-lim_lvl_sol = run_deformation_flow(true, LinVanLeerFlux, _dt)
-@info "Third-Order Upwind Solutions"
-third_upwind_sol = run_deformation_flow(false, upwind3, _dt)
-lim_third_upwind_sol = run_deformation_flow(true, upwind3, _dt)
-@info "Zalesak Flux-Corrected Transport Solutions"
-fct_sol = run_deformation_flow(false, FCTZalesak, _dt)
-lim_fct_sol = run_deformation_flow(true, FCTZalesak, _dt)
-@info "First-Order Upwind Solutions"
-lim_first_upwind_sol = run_deformation_flow(true, upwind1, _dt)
-lim_centered_sol = run_deformation_flow(true, nothing, _dt)
+function tracer_ranges(sol)
+    final_q = sol[end].c.ρq ./ sol[end].c.ρ
+    return maximum(final_q) .- minimum(final_q)
+end
 
-third_upwind_ρ_err, third_upwind_ρq_errs = conservation_errors(third_upwind_sol)
-fct_ρ_err, fct_ρq_errs = conservation_errors(fct_sol)
-lim_third_upwind_ρ_err, lim_third_upwind_ρq_errs =
-    conservation_errors(lim_third_upwind_sol)
-lim_fct_ρ_err, lim_fct_ρq_errs = conservation_errors(lim_fct_sol)
-lim_first_upwind_ρ_err, lim_first_upwind_ρq_errs =
-    conservation_errors(lim_first_upwind_sol)
-lim_centered_ρ_err, lim_centered_ρq_errs = conservation_errors(lim_centered_sol)
+@info "Centered Differences"
+centered_sol_no_lim = run_deformation_flow(false, nothing, _dt)
+centered_sol_with_lim = run_deformation_flow(true, nothing, _dt)
+@info "First-Order Upwinding"
+upwind1_sol_no_lim = run_deformation_flow(false, upwind1, _dt)
+upwind1_sol_with_lim = run_deformation_flow(true, upwind1, _dt)
+@info "Third-Order Upwinding"
+upwind3_sol_no_lim = run_deformation_flow(false, upwind3, _dt)
+upwind3_sol_with_lim = run_deformation_flow(true, upwind3, _dt)
+@info "Flux-Corrected Transport"
+fct_sol_no_lim = run_deformation_flow(false, FCTZalesak, _dt)
+fct_sol_with_lim = run_deformation_flow(true, FCTZalesak, _dt)
+@info "Slope-Limited Transport"
+tvd_sol_no_lim = run_deformation_flow(false, SlopeLimitedFlux, _dt)
+tvd_sol_with_lim = run_deformation_flow(true, SlopeLimitedFlux, _dt)
+@info "van Leer Transport"
+lvl_sol_no_lim = run_deformation_flow(false, LinVanLeerFlux, _dt)
+lvl_sol_with_lim = run_deformation_flow(true, LinVanLeerFlux, _dt)
 
-# Check that the conservation errors are not too big.
-max_err = 64 * eps(FT)
-@test abs(third_upwind_ρ_err) < max_err
-@test all(abs.(third_upwind_ρq_errs) .< max_err)
-@test all(abs.(fct_ρq_errs) .< max_err)
-@test all(abs.(lim_third_upwind_ρq_errs) .< max_err)
-@test all(abs.(lim_fct_ρq_errs) .< max_err)
-@test all(abs.(lim_first_upwind_ρ_err) .< max_err)
-@test all(abs.(lim_centered_ρq_errs) .< max_err)
-
-# Check that the different upwinding modes with the limiter have no effect on ρ.
-@test third_upwind_ρ_err ==
-      fct_ρ_err ==
-      lim_third_upwind_ρ_err ==
-      lim_fct_ρ_err ==
-      lim_first_upwind_ρ_err ==
-      lim_centered_ρ_err
-
-# Check that the different upwinding modes with the limiter have no effect on the tracer with q = 1, or at
-# least no effect up to round-off error.
-max_q5_roundoff_err = 2 * eps(FT)
-@test third_upwind_ρq_errs[5] ≈ third_upwind_ρ_err atol = max_q5_roundoff_err
-@test fct_ρq_errs[5] ≈ third_upwind_ρ_err atol = max_q5_roundoff_err
-@test lim_third_upwind_ρq_errs[5] ≈ third_upwind_ρ_err atol =
-    max_q5_roundoff_err
-@test lim_fct_ρq_errs[5] ≈ third_upwind_ρ_err atol = max_q5_roundoff_err
-@test lim_first_upwind_ρq_errs[5] ≈ third_upwind_ρ_err atol =
-    max_q5_roundoff_err
-@test lim_centered_ρq_errs[5] ≈ third_upwind_ρ_err atol = max_q5_roundoff_err
-
-compare_tracer_props(a, b; buffer = 1) = all(
-    x -> x[1] < x[2] * buffer || (x[1] ≤ 100eps() && x[2] ≤ 100eps()),
-    zip(a, b),
+sols_no_lim = (;
+    centered = centered_sol_no_lim,
+    upwind1 = upwind1_sol_no_lim,
+    upwind3 = upwind3_sol_no_lim,
+    fct = fct_sol_no_lim,
+    tvd = tvd_sol_no_lim,
+    lvl = lvl_sol_no_lim,
+)
+sols_with_lim = (;
+    centered = centered_sol_with_lim,
+    upwind1 = upwind1_sol_with_lim,
+    upwind3 = upwind3_sol_with_lim,
+    fct = fct_sol_with_lim,
+    tvd = tvd_sol_with_lim,
+    lvl = lvl_sol_with_lim,
 )
 
-# Check that the different upwinding modes with the limiter improve the "smoothness" of the tracers.
-#! format: off
-@testset "Test tracer properties" begin
-    @test compare_tracer_props(tracer_roughnesses(fct_sol)             , tracer_roughnesses(third_upwind_sol); buffer = 1.0)
-    @test compare_tracer_props(tracer_roughnesses(lim_third_upwind_sol), tracer_roughnesses(third_upwind_sol); buffer = 1.0)
-    @test compare_tracer_props(tracer_roughnesses(lim_fct_sol)         , tracer_roughnesses(third_upwind_sol); buffer = 0.93)
-    @test compare_tracer_props(tracer_ranges(fct_sol)                  , tracer_ranges(third_upwind_sol); buffer = 1.0)
-    @test compare_tracer_props(tracer_ranges(lim_third_upwind_sol)     , tracer_ranges(third_upwind_sol); buffer = 1.2)
-    @test compare_tracer_props(tracer_ranges(lim_fct_sol)              , tracer_ranges(third_upwind_sol); buffer = 1.0)
-    @test compare_tracer_props(tracer_ranges(lim_first_upwind_sol)     , tracer_ranges(third_upwind_sol); buffer = 0.6)
-    @test compare_tracer_props(tracer_ranges(lim_centered_sol)         , tracer_ranges(third_upwind_sol); buffer = 1.3)
+ρ_errs_no_lim = map(total_conservation_error, sols_no_lim)
+ρ_errs_with_lim = map(total_conservation_error, sols_with_lim)
+ρq_errs_no_lim = map(tracer_conservation_errors, sols_no_lim)
+ρq_errs_with_lim = map(tracer_conservation_errors, sols_with_lim)
+roughnesses_no_lim = map(tracer_roughnesses, sols_no_lim)
+roughnesses_with_lim = map(tracer_roughnesses, sols_with_lim)
+ranges_no_lim = map(tracer_ranges, sols_no_lim)
+ranges_with_lim = map(tracer_ranges, sols_with_lim)
+
+# Check that upwinding has no effect on total mass.
+for ρ_errs_data in (ρ_errs_no_lim, ρ_errs_with_lim), ρ_err in ρ_errs_data
+    @test ρ_err == ρ_errs_no_lim.centered
 end
-#! format: on
+
+# Check that upwinding has no effect on the constant tracer q5, and that the
+# other non-constant tracers are all conserved, accounting for round-off errors.
+for ρq_errs_data in (ρq_errs_no_lim, ρq_errs_with_lim), ρq_errs in ρq_errs_data
+    @test ρq_errs[5] ≈ ρ_errs_no_lim.centered atol = eps(FT)
+    @test all(ρq_errs[1:4] .< 40 * eps(FT))
+end
+
+# Check that using a limiter improves the "smoothness" of non-constant tracers.
+for (no_lim, with_lim) in zip(roughnesses_no_lim, roughnesses_with_lim)
+    @test all(with_lim[1:4] .< no_lim[1:4] .* 0.9999)
+end
+for (no_lim, with_lim) in zip(ranges_no_lim, ranges_with_lim)
+    @test all(with_lim[1:4] .< no_lim[1:4] .* 0.992)
+end
+
+# Check that the relative effects of different upwinding schemes are consistent.
+for data in (roughnesses_no_lim, roughnesses_with_lim, ranges_no_lim, ranges_with_lim)
+    @test all((data.upwind1 .< data.tvd .< data.lvl .< data.fct .< data.upwind3)[1:4])
+end
 
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
 path = joinpath(@__DIR__, "output", "deformation_flow")
 mkpath(path)
-for (sol, suffix) in (
-    (lim_centered_sol, "_lim_centered"),
-    (lim_first_upwind_sol, "_lim_first_upwind"),
-    (third_upwind_sol, "_third_upwind"),
-    (fct_sol, "_fct"),
-    (tvd_sol, "_tvd"),
-    (lvl_sol, "_lvl"),
-    (lim_third_upwind_sol, "_lim_third_upwind"),
-    (lim_fct_sol, "_lim_fct"),
-    (lim_tvd_sol, "_lim_tvd"),
-    (lim_lvl_sol, "_lim_lvl"),
-)
-    for (sol_index, day) in ((1, 6), (2, 12))
-        Plots.png(
-            Plots.plot(
-                sol.u[sol_index].c.ρq.:3 ./ sol.u[sol_index].c.ρ,
-                level = 15,
-                clim = (-1, 1),
-            ),
-            joinpath(path, "q3_day$day$suffix.png"),
-        )
-    end
-end
 
-for (sol, suffix) in (
-    (lim_centered_sol, "_lim_centered"),
-    (lim_first_upwind_sol, "_lim_first_upwind"),
-    (third_upwind_sol, "_third_upwind"),
-    (fct_sol, "_fct"),
-    (tvd_sol, "_tvd"),
-    (lvl_sol, "_lvl"),
-    (lim_fct_sol, "_lim_fct"),
-    (lim_lvl_sol, "_lim_lvl"),
-)
-    for (sol_index, day) in ((1, 6), (2, 12))
+ref_final_q3 = upwind3_sol_with_lim[end].c.ρq.:3 ./ upwind3_sol_with_lim[end].c.ρ
+for (lim_suffix, sols) in (("no_lim", sols_no_lim), ("with_lim", sols_with_lim))
+    for (name, sol) in pairs(sols)
+        final_q3 = sol[end].c.ρq.:3 ./ sol[end].c.ρ
         Plots.png(
-            Plots.plot(
-                (
-                    ((sol.u[sol_index].c.ρq.:3) ./ sol.u[sol_index].c.ρ) .- (
-                        lim_third_upwind_sol[sol_index].c.ρq.:3 ./
-                        lim_third_upwind_sol[sol_index].c.ρ
-                    )
-                ),
-                level = 15,
-                clim = (-1, 1),
-            ),
-            joinpath(path, "q3_day_diff_$day$suffix.png"),
+            Plots.plot(final_q3, level = 15, clim = (-1, 1)),
+            joinpath(path, "q3_day12_$(name)_$(lim_suffix).png"),
+        )
+        sol === upwind3_sol_with_lim && continue # skip diff plot for reference
+        Plots.png(
+            Plots.plot(final_q3 .- ref_final_q3, level = 15, clim = (-0.2, 0.2)),
+            joinpath(path, "q3_diff_day12_$(name)_$(lim_suffix).png"),
         )
     end
 end

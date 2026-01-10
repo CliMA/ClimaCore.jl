@@ -73,8 +73,9 @@ using UnrolledUtilities
 
 import ..Utilities.Unrolled:
     unrolled_setindex, unrolled_insert, unrolled_map_with_inbounds
-import ..Utilities:
-    PlusHalf, unionall_type, replace_type_parameter, fieldtype_vals
+import ..Utilities: PlusHalf, unionall_type, replace_type_parameter
+import ..Utilities: fieldtype_vals, safe_eltype, unsafe_eltype, auto_broadcasted
+import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..slab, ..slab_args, ..column, ..column_args, ..level, ..level_args
 export slab,
@@ -1615,6 +1616,10 @@ rebuild(data::AbstractData, ::Type{DA}) where {DA} =
 
 Base.copy(data::AbstractData) =
     union_all(singleton(data)){type_params(data)...}(copy(parent(data)))
+
+Base.reinterpret(::Type{S}, data::AbstractData{S}) where {S} = data
+Base.reinterpret(::Type{S}, data::AbstractData) where {S} =
+    union_all(singleton(data)){S, type_params(data)[2:end]...}(parent(data))
 
 # broadcast machinery
 include("non_extruded_broadcasted.jl")

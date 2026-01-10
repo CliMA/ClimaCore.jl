@@ -1,8 +1,12 @@
 module Utilities
 
-import UnrolledUtilities: unrolled_map
+using UnrolledUtilities
+
+import ForwardDiff
+import InteractiveUtils
 
 include("plushalf.jl")
+include("auto_broadcaster.jl")
 include("cache.jl")
 
 module Unrolled # TODO: Move all of these functions into UnrolledUtilities.jl
@@ -118,18 +122,104 @@ to ensure that recursive functions over nested types have inferrable outputs.
 @inline fieldtype_vals(::Type{T}) where {T} =
     ntuple(Val ∘ Base.Fix1(fieldtype, T), Val(fieldcount(T)))
 
+# :new may be called with uninitialized fields as of JuliaLang/julia#52169, but
+# this leads to segfaults or other compiler errors for immutable DataType fields
+@inline can_alloc_uninitialized(::Tuple{Bool, Val{T}}) where {T <: Type} =
+    throw(ArgumentError("Cannot allocate unspecified $T"))
+@inline can_alloc_uninitialized((mutable, _)::Tuple{Bool, Val{Type{T}}}) where {T} =
+    mutable
+@inline can_alloc_uninitialized((mutable, _)::Tuple{Bool, Val{T}}) where {T} =
+    if T isa Union{Union, UnionAll}
+        throw(ArgumentError("Cannot allocate value of ambiguous type $T"))
+    else
+        mutable_flags = ntuple(Base.Fix1(!isconst, T), Val(fieldcount(T)))
+        flags_and_type_vals = zip(mutable_flags, fieldtype_vals(T))
+        mutable || unrolled_all(can_alloc_uninitialized, flags_and_type_vals)
+    end
+
 """
     new(T, [fields])
 
-Exposes the `new` pseudo-function that allocates a value of type `T` with the
-specified fields. Can also be called without a second argument to leave the
-allocated value with uninitialized fields.
+Exposes the `new` pseudo-function that allocates a value of type `T`, which can
+otherwise only be explicitly called from inner constructors.
 
-In contrast to the pseudo-function, this only asserts that all fields match the
-`fieldtypes` of `T`, rather than automatically converting them to those types.
+If provided, the second argument is used to initialize fields of the new value
+(unlike the lowered pseudo-function, this will not automatically convert to the
+`fieldtypes` of `T`). Otherwise, the fields are initialized with arbitrary data,
+with special handling of `DataType` fields to avoid errors during compilation.
+
+# Examples
+```jldoctest; setup = :(import ClimaCore.Utilities: new), filter = r"\\d+"
+julia> new(Int)
+4889520192
+
+julia> new(Complex{Int}, (1, 2))
+1 + 2im
+
+julia> new(@NamedTuple{a::Type{Int}, b::Int, c::Complex{Int}})
+(a = Int64, b = 4889520192, c = 6162822528 + 8036417625im)
+
+julia> new(@NamedTuple{a::DataType, b::Int, c::Complex{Int}}, (Int, 1, 1 + 2im))
+(a = Int64, b = 1, c = 1 + 2im)
+```
 """
-@generated new(::Type{T}) where {T} = Expr(:new, :T)
-@generated new(::Type{T}, fields) where {T} =
-    Expr(:splatnew, :T, :(fields::$(Tuple{fieldtypes(T)...})))
+@inline new(::Type{T}) where {T} = maybe_nested_new(Val(T))
+@eval @inline new(::Type{T}, fields) where {T} = $(Expr(:splatnew, :T, :fields))
+
+# Wrap each type in a Val to guarantee recursive inlining
+@inline maybe_nested_new(::Val{Type{T}}) where {T} = T
+@eval @inline maybe_nested_new(val::Val{T}) where {T} =
+    can_alloc_uninitialized((false, val)) ? $(Expr(:new, :T)) : nested_new(val)
+
+# A Tuple{Type{T}, ...} turns into a Tuple{DataType, ...} when it is allocated;
+# a @NamedTuple{_::Type{T}, ...} also turns into a @NamedTuple{_::DataType, ...}
+@inline nested_new(::Val{T}) where {T} =
+    new(T, unrolled_map(maybe_nested_new, fieldtype_vals(T)))
+@inline nested_new(::Val{T}) where {T <: Tuple} =
+    unrolled_map(maybe_nested_new, fieldtype_vals(T))
+@inline nested_new(::Val{T}) where {names, T <: NamedTuple{names}} =
+    NamedTuple{names}(unrolled_map(maybe_nested_new, fieldtype_vals(T)))
+
+"""
+    unsafe_eltype(itr)
+
+Analogue of `eltype` with support for un-materialized broadcast expressions,
+adapted from `Base.Broadcast.combine_eltypes`. Does not perform any safety
+checks, and may potentially return non-concrete types (like an empty `Union{}`).
+"""
+@inline unsafe_eltype(itr) = eltype(itr)
+@inline unsafe_eltype((; f, args)::Base.Broadcast.Broadcasted) =
+    unrolled_any(has_inferred_error, args) ? Union{} :
+    Core.Compiler.return_type(f, Tuple{unrolled_map(unsafe_eltype, args)...})
+
+@inline has_inferred_error(itr) = unsafe_eltype(itr) == Union{}
+
+struct InferenceError <: Exception
+    f::Any
+    args_type::Type{<:Tuple}
+end
+function Base.showerror(io::IO, (; f, args_type)::InferenceError)
+    println(io, "Concrete type of result could not be inferred:\n")
+    InteractiveUtils.code_warntype(io, f, args_type)
+end
+
+"""
+    safe_eltype(itr)
+
+Analogue of `eltype` with support for un-materialized broadcast expressions,
+adapted from `Base.Broadcast.combine_eltypes`. Throws an error when the concrete
+element type of a broadcast expression cannot be inferred, indicating which part
+of the expression first encounters a type instability or error during inference.
+"""
+@inline safe_eltype(itr) =
+    has_inferred_error(itr) ||
+    !(isconcretetype(unsafe_eltype(itr)) || unsafe_eltype(itr) <: Type) ?
+    eltype_error(itr) : unsafe_eltype(itr)
+
+eltype_error(itr) = throw(InferenceError(eltype, Tuple{typeof(itr)}))
+eltype_error(bc::Base.Broadcast.Broadcasted) =
+    has_inferred_error(bc) ?
+    bc.f(unrolled_map(new ∘ safe_eltype, bc.args)...) : # f throws runtime error
+    throw(InferenceError(bc.f, Tuple{unrolled_map(safe_eltype, bc.args)...}))
 
 end # module

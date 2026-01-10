@@ -30,8 +30,7 @@ for Nq in Nqs
     volume!(dydt, y0, (parameters,), 0.0)
     # TODO: move this to volume!
     dydt_data = Fields.field_values(dydt)
-    dydt_data .=
-        RecursiveApply.rdiv.(dydt_data, Spaces.local_geometry_data(space).WJ)
+    dydt_data ./= Spaces.local_geometry_data(space).WJ
 
     # setup reference
     X = coordinates(Val(Nq), n1, n2)
@@ -84,8 +83,7 @@ for Nq in Nqs
     add_face!(dydt, y0, (parameters,), 0.0)
     # TODO: move this to volume!
     dydt_data = Fields.field_values(dydt)
-    dydt_data .=
-        RecursiveApply.rdiv.(dydt_data, Spaces.local_geometry_data(space).WJ)
+    dydt_data ./= Spaces.local_geometry_data(space).WJ
 
     fill!(dydt_ref, 0.0)
     add_face_ref!(dydt_ref, y0_ref, (n1, n2, parameters, Val(Nq)), 0.0)

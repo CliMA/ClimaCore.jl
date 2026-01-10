@@ -35,9 +35,7 @@ function test_column_integral_definite!(center_space)
     ᶜz = Fields.coordinate_field(center_space).z
     ᶠz = Fields.coordinate_field(face_space).z
     z_top = Fields.level(ᶠz, Operators.right_idx(face_space))
-    ᶜu = Base.Broadcast.broadcasted(ᶜz) do z
-        (; one = one(z), powers = (z, z^2, z^3))
-    end
+    ᶜu = map(z -> (; one = one(z), powers = (z, z^2, z^3)), ᶜz)
     ∫u_ref = map(z -> (; one = z, powers = (z^2 / 2, z^3 / 3, z^4 / 4)), z_top)
     ∫u_test = similar(∫u_ref)
 
@@ -57,9 +55,7 @@ function test_column_integral_indefinite!(center_space)
     face_space = center_to_face_space(center_space)
     ᶜz = Fields.coordinate_field(center_space).z
     ᶠz = Fields.coordinate_field(face_space).z
-    ᶜu = Base.Broadcast.broadcasted(ᶜz) do z
-        (; one = one(z), powers = (z, z^2, z^3))
-    end
+    ᶜu = map(z -> (; one = one(z), powers = (z, z^2, z^3)), ᶜz)
     ᶠ∫u_ref = map(z -> (; one = z, powers = (z^2 / 2, z^3 / 3, z^4 / 4)), ᶠz)
     ᶠ∫u_test = similar(ᶠ∫u_ref)
 
