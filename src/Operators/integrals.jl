@@ -1,6 +1,7 @@
-import ..RecursiveApply: rzero, ⊠, ⊞
 import RootSolvers
 import ClimaComms
+
+broadcast_zero(field) = zero(eltype(Base.broadcastable(field)))
 
 """
     column_integral_definite!(ϕ_top, ᶜ∂ϕ∂z, [ϕ_bot])
@@ -12,14 +13,14 @@ area differential `J/Δz`, with `J` denoting the metric Jacobian. The input
 `ᶜ∂ϕ∂z` should be a cell-center `Field` or `AbstractBroadcasted`, and the output
 `ϕ_top` should be a horizontal `Field`. The default value of `ϕ_bot` is 0.
 """
-function column_integral_definite!(ϕ_top, ᶜ∂ϕ∂z, ϕ_bot = rzero(eltype(ϕ_top)))
+function column_integral_definite!(ϕ_top, ᶜ∂ϕ∂z, ϕ_bot = broadcast_zero(ϕ_top))
     ᶜJ = Fields.local_geometry_field(axes(ᶜ∂ϕ∂z)).J
     f_space = Spaces.face_space(axes(ᶜ∂ϕ∂z))
     J_bot = Fields.level(Fields.local_geometry_field(f_space).J, half)
     Δz_bot = Fields.level(Fields.Δz_field(f_space), half)
     ΔA_bot = Base.broadcasted(/, J_bot, Δz_bot)
-    ᶜΔϕ = Base.broadcasted(⊠, ᶜ∂ϕ∂z, Base.broadcasted(/, ᶜJ, ΔA_bot))
-    column_reduce!(⊞, ϕ_top, ᶜΔϕ; init = ϕ_bot)
+    ᶜΔϕ = Base.broadcasted(*, ᶜ∂ϕ∂z, Base.broadcasted(/, ᶜJ, ΔA_bot))
+    column_reduce!(+, ϕ_top, ᶜΔϕ; init = ϕ_bot)
 end
 
 """
@@ -43,19 +44,19 @@ is used, `ΔA = ΔA_{bot}` at all values of `z`, and the output `ᶠϕ` satisfie
 is used, the vertical gradient is replaced with an area-weighted gradient. The
 default value of `ϕ_bot` is 0, and the default value of `rtol` is 0.001.
 """
-function column_integral_indefinite!(ᶠϕ, ᶜ∂ϕ∂z, ϕ_bot = rzero(eltype(ᶠϕ)))
+function column_integral_indefinite!(ᶠϕ, ᶜ∂ϕ∂z, ϕ_bot = broadcast_zero(ᶠϕ))
     ᶜJ = Fields.local_geometry_field(axes(ᶜ∂ϕ∂z)).J
     J_bot = Fields.level(Fields.local_geometry_field(ᶠϕ).J, half)
     Δz_bot = Fields.level(Fields.Δz_field(ᶠϕ), half)
     ΔA_bot = Base.broadcasted(/, J_bot, Δz_bot)
-    ᶜΔϕ = Base.broadcasted(⊠, ᶜ∂ϕ∂z, Base.broadcasted(/, ᶜJ, ΔA_bot))
-    column_accumulate!(⊞, ᶠϕ, ᶜΔϕ; init = ϕ_bot)
+    ᶜΔϕ = Base.broadcasted(*, ᶜ∂ϕ∂z, Base.broadcasted(/, ᶜJ, ΔA_bot))
+    column_accumulate!(+, ᶠϕ, ᶜΔϕ; init = ϕ_bot)
 end
 function column_integral_indefinite!(
     ∂ϕ∂z::F,
     ᶠϕ,
-    ϕ_bot = eltype(ᶠϕ)(0),
-    rtol = eltype(ᶠϕ)(0.001),
+    ϕ_bot = broadcast_zero(ᶠϕ),
+    rtol = eltype(parent(ᶠϕ))(0.001),
 ) where {F <: Function}
     device = ClimaComms.device(ᶠϕ)
     c_space = Spaces.center_space(axes(ᶠϕ))

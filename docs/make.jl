@@ -99,7 +99,6 @@ withenv("GKSwstype" => "nul") do
                 "Limiters" => "APIs/limiters_api.md",
                 "InputOutput" => "APIs/input_output_api.md",
                 "Remapping" => "APIs/remapping_api.md",
-                "RecursiveApply" => "APIs/recursive_apply_api.md",
                 "Devices" => "APIs/devices_api.md",
                 "DebugOnly" => "APIs/debug_only_api.md",
             ],

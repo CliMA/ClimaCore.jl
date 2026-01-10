@@ -59,14 +59,8 @@ replace_lazy_operators(space, bc::LazyOperatorBroadcasted) =
     bc.f isa AbstractLazyOperator ? replace_lazy_operator(space, bc.f) :
     Base.Broadcast.broadcasted(
         bc.f,
-        replace_lazy_operators_args(space, bc.args...)...,
+        unrolled_map(Base.Fix1(replace_lazy_operators, space), bc.args)...,
     )
-
-replace_lazy_operators_args(_) = ()
-replace_lazy_operators_args(space, arg, args...) = (
-    replace_lazy_operators(space, arg),
-    replace_lazy_operators_args(space, args...)...,
-)
 
 """
     replace_lazy_operator(space, lazy_op)
@@ -83,11 +77,8 @@ replace_lazy_operator(_, ::AbstractLazyOperator) =
 
 largest_space(_) = nothing
 largest_space(field::Fields.Field) = axes(field)
-largest_space(bc::Base.AbstractBroadcasted) = largest_space_args(bc.args...)
-
-largest_space_args() = nothing
-largest_space_args(arg, args...) =
-    larger_space(largest_space(arg), largest_space_args(args...))
+largest_space(bc::Base.AbstractBroadcasted) =
+    unrolled_reduce(larger_space, unrolled_map(largest_space, bc.args); init = nothing)
 
 larger_space(::Nothing, ::Nothing) = nothing
 larger_space(space1, ::Nothing) = space1

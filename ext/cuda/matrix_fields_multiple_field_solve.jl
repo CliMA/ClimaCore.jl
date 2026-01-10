@@ -15,8 +15,8 @@ NVTX.@annotate function multiple_field_solve!(
     x,
     A,
     b,
-    x1,
 )
+    x1 = first(values(x))
     names = MatrixFields.matrix_row_keys(keys(A))
     Nnames = length(names)
     Ni, Nj, _, _, Nh = size(Fields.field_values(x1))
@@ -29,13 +29,12 @@ NVTX.@annotate function multiple_field_solve!(
     xs = map(name -> ssx[name], names)
     As = map(name -> ssA[name, name], names)
     bs = map(name -> ssb[name], names)
-    x1 = first(xs)
 
     device = ClimaComms.device(x[first(names)])
 
     us = UniversalSize(Fields.field_values(x1))
     cart_inds = cartesian_indices_multiple_field_solve(us; Nnames)
-    args = (device, caches, xs, As, bs, x1, us, mask, cart_inds, Val(Nnames))
+    args = (device, caches, xs, As, bs, us, mask, cart_inds, Val(Nnames))
 
     nitems = Ni * Nj * Nh * Nnames
     (; threads, blocks) = config_via_occupancy(multiple_field_solve_kernel!, nitems, args)
@@ -46,7 +45,7 @@ NVTX.@annotate function multiple_field_solve!(
         blocks_s = blocks,
         always_inline = true,
     )
-    call_post_op_callback() && post_op_callback(x, dev, cache, x, A, b, x1)
+    call_post_op_callback() && post_op_callback(x, dev, cache, x, A, b)
 end
 
 Base.@propagate_inbounds column_A(A::UniformScaling, i, j, h) = A
@@ -83,7 +82,6 @@ function multiple_field_solve_kernel!(
     xs,
     As,
     bs,
-    x1,
     us::UniversalSize,
     mask,
     cart_inds,

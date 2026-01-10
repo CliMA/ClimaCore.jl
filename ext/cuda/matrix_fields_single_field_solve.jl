@@ -11,7 +11,6 @@ import ClimaCore.DataLayouts: vindex
 import ClimaCore.MatrixFields: single_field_solve!
 import ClimaCore.MatrixFields: _single_field_solve!
 import ClimaCore.MatrixFields: band_matrix_solve!, unzip_tuple_field_values
-import ClimaCore.RecursiveApply: ⊠, ⊞, ⊟, rmap, rzero, rdiv
 
 function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
@@ -73,7 +72,7 @@ function _single_field_solve_diag_matrix_row!(
     b_data = Fields.field_values(b)
     Nv = DataLayouts.nlevels(x_data)
     @inbounds for v in 1:Nv
-        x_data[vi(v)] = inv(A₀[vi(v)]) ⊠ b_data[vi(v)]
+        x_data[vi(v)] = inv(A₀[vi(v)]) * b_data[vi(v)]
     end
 end
 
@@ -108,7 +107,7 @@ function _single_field_solve!(
     b_data = Fields.field_values(b)
     Nv = DataLayouts.nlevels(x_data)
     @inbounds for v in 1:Nv
-        x_data[vindex(v)] = inv(A.λ) ⊠ b_data[vindex(v)]
+        x_data[vindex(v)] = inv(A.λ) * b_data[vindex(v)]
     end
 end
 
@@ -121,7 +120,7 @@ function _single_field_solve!(
 )
     x_data = Fields.field_values(x)
     b_data = Fields.field_values(b)
-    x_data[] = inv(A.λ) ⊠ b_data[]
+    x_data[] = inv(A.λ) * b_data[]
 end
 
 using StaticArrays: MArray
@@ -207,7 +206,7 @@ function band_matrix_solve_local_mem!(
     Nv = DataLayouts.nlevels(x)
     (A₀,) = Aⱼs
     @inbounds for v in 1:Nv
-        x[vindex(v)] = inv(A₀[vindex(v)]) ⊠ b[vindex(v)]
+        x[vindex(v)] = inv(A₀[vindex(v)]) * b[vindex(v)]
     end
     return nothing
 end

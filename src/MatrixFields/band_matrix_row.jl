@@ -16,14 +16,12 @@ several aliases for commonly used subtypes of `BandMatrixRow`:
 struct BandMatrixRow{ld, bw, T} # bw is the bandwidth (the number of diagonals)
     entries::NTuple{bw, T}
     BandMatrixRow{ld, bw, T}(entries::NTuple{bw, Any}) where {ld, bw, T} =
-        new{ld, bw, T}(rconvert(NTuple{bw, T}, entries))
-    # TODO: Remove this inner constructor once Julia's default convert function
-    # is type-stable for nested Tuple/NamedTuple types.
+        new{ld, bw, T}(entries)
 end
 BandMatrixRow{ld}(entries::Vararg{Any, bw}) where {ld, bw} =
     BandMatrixRow{ld, bw}(entries...)
 BandMatrixRow{ld, bw}(entries::Vararg{Any, bw}) where {ld, bw} =
-    BandMatrixRow{ld, bw, rpromote_type(map(typeof, entries)...)}(entries)
+    BandMatrixRow{ld, bw, promote_type(map(typeof, entries)...)}(entries)
 
 const DiagonalMatrixRow{T} = BandMatrixRow{0, 1, T}
 const BidiagonalMatrixRow{T} = BandMatrixRow{-1 + half, 2, T}
@@ -74,7 +72,7 @@ function Base.promote_rule(
          row type $BMR1 and the $(ld2 isa PlusHalf ? "non-" : "")square matrix \
          row type $BMR2 to a common type",
     )
-    T = rpromote_type(eltype(BMR1), eltype(BMR2))
+    T = promote_type(eltype(BMR1), eltype(BMR2))
     return band_matrix_row_type(min(ld1, ld2), max(ud1, ud2), T)
 end
 
@@ -99,8 +97,8 @@ function Base.convert(
         "Cannot convert a $(typeof(row)) to a $BMR, since that would require \
          dropping potentially non-zero row entries",
     )
-    first_zeros = ntuple(_ -> rzero(eltype(BMR)), Val(old_ld - new_ld))
-    last_zeros = ntuple(_ -> rzero(eltype(BMR)), Val(new_ud - old_ud))
+    first_zeros = ntuple(_ -> zero(eltype(BMR)), Val(old_ld - new_ld))
+    last_zeros = ntuple(_ -> zero(eltype(BMR)), Val(new_ud - old_ud))
     return BMR((first_zeros..., row.entries..., last_zeros...))
 end
 
@@ -116,44 +114,51 @@ Base.:(==)(row1::BandMatrixRow, row2::UniformScaling) =
 Base.:(==)(row1::UniformScaling, row2::BandMatrixRow) =
     ==(promote(row1, row2)...)
 
-Base.:+(row::BandMatrixRow) = map(radd, row)
+Base.:+(row::BandMatrixRow) = map(+, row)
 Base.:+(row1::BandMatrixRow, row2::BandMatrixRow) =
-    map(radd, promote(row1, row2)...)
+    map(+, promote(row1, row2)...)
 Base.:+(row1::BandMatrixRow, row2::UniformScaling) =
-    map(radd, promote(row1, row2)...)
+    map(+, promote(row1, row2)...)
 Base.:+(row1::UniformScaling, row2::BandMatrixRow) =
-    map(radd, promote(row1, row2)...)
+    map(+, promote(row1, row2)...)
 
-Base.:-(row::BandMatrixRow) = map(rsub, row)
+Base.:-(row::BandMatrixRow) = map(-, row)
 Base.:-(row1::BandMatrixRow, row2::BandMatrixRow) =
-    map(rsub, promote(row1, row2)...)
+    map(-, promote(row1, row2)...)
 Base.:-(row1::BandMatrixRow, row2::UniformScaling) =
-    map(rsub, promote(row1, row2)...)
+    map(-, promote(row1, row2)...)
 Base.:-(row1::UniformScaling, row2::BandMatrixRow) =
-    map(rsub, promote(row1, row2)...)
+    map(-, promote(row1, row2)...)
 
-Base.:*(row::BandMatrixRow, value::Geometry.SingleValue) =
-    map(entry -> rmul(entry, value), row)
-Base.:*(value::Geometry.SingleValue, row::BandMatrixRow) =
-    map(entry -> rmul(value, entry), row)
+Base.:*(row::BandMatrixRow, value::Union{SingleValue, AutoBroadcaster}) =
+    map(Base.Fix2(*, value), row)
+Base.:*(value::Union{SingleValue, AutoBroadcaster}, row::BandMatrixRow) =
+    map(Base.Fix1(*, value), row)
 
-Base.:/(row::BandMatrixRow, value::Number) =
-    map(entry -> rdiv(entry, value), row)
+Base.:/(row::BandMatrixRow, value::Union{SingleValue, AutoBroadcaster}) =
+    map(Base.Fix2(/, value), row)
 
 Base.zero(row::BandMatrixRow) = zero(typeof(row))
 Base.zero(::Type{BandMatrixRow{ld, bw, T}}) where {ld, bw, T} =
-    BandMatrixRow{ld}(ntuple(_ -> rzero(T), Val(bw))...)
+    BandMatrixRow{ld}(ntuple(Returns(zero(T)), Val(bw))...)
 
 Base.one(row::BandMatrixRow) = one(typeof(row))
-Base.one(::Type{DiagonalMatrixRow{T}}) where {T} =
-    DiagonalMatrixRow(rmap(one, T))
+Base.one(::Type{DiagonalMatrixRow{T}}) where {T} = DiagonalMatrixRow(one(T))
 Base.one(::Type{BandMatrixRow{ld, bw, T}}) where {ld, bw, T} =
     ld isa PlusHalf ?
     error("A non-square matrix does not have a corresponding identity matrix") :
     one(DiagonalMatrixRow{T})
 
-inv(row::DiagonalMatrixRow) = DiagonalMatrixRow(rmap(inv, row[0]))
+inv(row::DiagonalMatrixRow) = DiagonalMatrixRow(inv(row[0]))
 inv(::BandMatrixRow{ld, bw}) where {ld, bw} = error(
     "The inverse of a matrix with $bw diagonals is generally a dense matrix, \
      so it cannot be represented using BandMatrixRows",
 )
+
+# Allow row entries to be wrapped in AutoBroadcasters, but not the row itself.
+is_auto_broadcastable(::Type{BMR}) where {BMR <: BandMatrixRow} =
+    is_auto_broadcastable(eltype(BMR))
+enable_auto_broadcasting(row::BandMatrixRow) =
+    map(enable_auto_broadcasting, row)
+disable_auto_broadcasting(row::BandMatrixRow) =
+    map(disable_auto_broadcasting, row)

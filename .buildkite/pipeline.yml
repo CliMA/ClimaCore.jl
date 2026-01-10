@@ -48,15 +48,12 @@ steps:
         agents:
           slurm_gpus: 1
 
-  - group: "Unit: RecursiveApply"
-    steps:
-
-      - label: "Unit: RecursiveApply"
-        key: unit_recursive_apply
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/RecursiveApply/unit_recursive_apply.jl"
-
   - group: "Unit: Utilities"
     steps:
+
+      - label: "Unit: AutoBroadcaster"
+        key: unit_auto_broadcaster
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Utilities/unit_auto_broadcaster.jl"
 
       - label: "Unit: plushalf"
         key: unit_plushalf
@@ -194,9 +191,9 @@ steps:
         key: unit_axistensors
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/axistensors.jl"
 
-      - label: "Unit: rmul_with_projection"
-        key: unit_rmul_with_projection
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/rmul_with_projection.jl"
+      - label: "Unit: mul_with_projection"
+        key: unit_mul_with_projection
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/mul_with_projection.jl"
 
   - group: "Unit: Meshes"
     steps:

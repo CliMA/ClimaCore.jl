@@ -14,7 +14,6 @@ using ClimaCore:
     Spaces,
     Limiters,
     Quadratures
-using ClimaCore.RecursiveApply
 import ClimaCore.DataLayouts: slab_index
 using ClimaCore: slab
 using Test
@@ -167,7 +166,7 @@ end
             FT[i + f for i in 1:5, j in 1:5, f in 1:2],
         )
         ρ = DataLayouts.IJF{FT, 5}(FT[j / 2 for i in 1:5, j in 1:5, f in 1:1])
-        ρq = ρ .⊠ q
+        ρq = ρ .* q
         WJ = DataLayouts.IJF{FT, 5}(ones(FT, 5, 5, 1))
         q_min = (FT(3.2), FT(3.0))
         q_max = (FT(5.2), FT(5.0))
@@ -179,7 +178,7 @@ end
         ρq_new = deepcopy(ρq)
         Limiters.apply_limit_slab!(ρq_new, ρ, WJ, q_bounds, eps(FT))
 
-        q_new = RecursiveApply.rdiv.(ρq_new, ρ)
+        q_new = ρq_new ./ ρ
         for j in 1:5, i in 1:5
             @test q_min[1] <= q_new[si(i, j)][1] <= q_max[1]
             @test q_min[2] <= q_new[si(i, j)][2] <= q_max[2]
@@ -245,12 +244,12 @@ end
         q₀(coords, x_scale, y_scale) =
             (x = x_scale * coords.x, y = y_scale * coords.y)
         q = @. q₀(coords, x_scale, y_scale)
-        ρq = ρ .⊠ q
+        ρq = ρ .* q
         q_ref = map(
             coord -> (x = coord.x, y = coord.y),
             Fields.coordinate_field(space),
         )
-        ρq_ref = ρ .⊠ q_ref
+        ρq_ref = ρ .* q_ref
 
         total_ρq = (; x = sum(ρq.x), y = sum(ρq.y))
 
@@ -258,7 +257,7 @@ end
 
         Limiters.compute_bounds!(limiter, ρq_ref, ρ)
         Limiters.apply_limiter!(ρq, ρ, limiter)
-        q = RecursiveApply.rdiv.(ρq, ρ)
+        q = ρq ./ ρ
 
         @test sum(ρq.x) ≈ total_ρq.x
         @test sum(ρq.y) ≈ total_ρq.y
@@ -300,12 +299,12 @@ end
         q₀(coords, x_scale, y_scale) =
             (x = x_scale * coords.x, y = y_scale * coords.y)
         q = @. q₀(coords, x_scale, y_scale)
-        ρq = ρ .⊠ q
+        ρq = ρ .* q
         q_ref = map(
             coord -> (x = coord.x, y = coord.y),
             Fields.coordinate_field(hv_center_space),
         )
-        ρq_ref = ρ .⊠ q_ref
+        ρq_ref = ρ .* q_ref
 
         total_ρq = (; x = sum(ρq.x), y = sum(ρq.y))
 
@@ -313,7 +312,7 @@ end
 
         Limiters.compute_bounds!(limiter, ρq_ref, ρ)
         Limiters.apply_limiter!(ρq, ρ, limiter)
-        q = RecursiveApply.rdiv.(ρq, ρ)
+        q = ρq ./ ρ
 
         @test sum(ρq.x) ≈ total_ρq.x
         @test sum(ρq.y) ≈ total_ρq.y
