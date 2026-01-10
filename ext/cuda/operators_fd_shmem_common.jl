@@ -1,4 +1,4 @@
-import ClimaCore: DataLayouts, Spaces, Geometry, RecursiveApply, DataLayouts
+import ClimaCore: DataLayouts, Spaces, Geometry, DataLayouts
 import CUDA
 import ClimaCore.Operators: return_eltype, get_local_geometry
 import ClimaCore.Operators: getidx
@@ -9,18 +9,11 @@ import ClimaCore.Utilities
 ##### Boundary helpers
 #####
 
-@inline has_left_boundary(space, op) =
-    Operators.has_boundary(op, Operators.left_boundary_window(space))
-@inline has_right_boundary(space, op) =
-    Operators.has_boundary(op, Operators.right_boundary_window(space))
-
 @inline on_boundary(idx, space, op) =
     on_left_boundary(idx, space, op) || on_right_boundary(idx, space, op)
 
-@inline on_left_boundary(idx, space, op) =
-    has_left_boundary(space, op) && on_left_boundary(idx, space)
-@inline on_right_boundary(idx, space, op) =
-    has_right_boundary(space, op) && on_right_boundary(idx, space)
+@inline on_left_boundary(idx, space, op) = on_left_boundary(idx, space)
+@inline on_right_boundary(idx, space, op) = on_right_boundary(idx, space)
 
 @inline on_boundary(idx::PlusHalf, space) =
     idx == Operators.left_face_boundary_idx(space) ||
@@ -40,8 +33,7 @@ import ClimaCore.Utilities
     idx == Operators.right_center_boundary_idx(space)
 
 @inline on_any_boundary(idx, space, op) =
-    (has_left_boundary(space, op) && on_left_boundary(idx, space)) ||
-    has_right_boundary(space, op) && on_right_boundary(idx, space)
+    on_left_boundary(idx, space) || on_right_boundary(idx, space)
 
 @inline function is_out_of_bounds(idx::Integer, space)
     ᶜspace = Spaces.center_space(space)

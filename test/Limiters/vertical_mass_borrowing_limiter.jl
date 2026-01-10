@@ -5,7 +5,6 @@ using Revise; include(joinpath("test", "Limiters", "vertical_mass_borrowing_limi
 using ClimaComms
 ClimaComms.@import_required_backends
 using ClimaCore: Fields, Spaces, Limiters
-using ClimaCore.RecursiveApply
 using ClimaCore.Geometry
 using ClimaCore.Grids
 using ClimaCore.CommonGrids
@@ -63,7 +62,7 @@ end
     (; z) = coords
     perturb_field!(q; perturb_radius = perturb_q)
     perturb_field!(ρ; perturb_radius = perturb_ρ)
-    ρq_init = ρ .⊠ q
+    ρq_init = ρ .* q
     sum_ρq_init = sum(ρq_init)
 
     # Test that the minimum is below 0
@@ -74,7 +73,7 @@ end
     limiter = Limiters.VerticalMassBorrowingLimiter((0.0,))
     Limiters.apply_limiter!(q, ρ, limiter)
     @test 0 ≤ minimum(q)
-    ρq = ρ .⊠ q
+    ρq = ρ .* q
     @test isapprox(sum(ρq), sum_ρq_init; atol = 1e-15)
     @test isapprox(sum(ρq), sum_ρq_init; rtol = 1e-10)
     plot_results(ClimaCore.to_cpu(ρq), ClimaCore.to_cpu(ρq_init))
@@ -113,7 +112,7 @@ end
     perturb_field!(scalar_field; perturb_radius = perturb_q)
     q.b .= scalar_field
     perturb_field!(ρ; perturb_radius = perturb_ρ)
-    ρq_init = ρ .⊠ q
+    ρq_init = ρ .* q
     sum_ρq_init = sum(ρq_init)
 
     # Test that the minimum is below 0
@@ -124,7 +123,7 @@ end
     limiter = Limiters.VerticalMassBorrowingLimiter((0.0, 0.0))
     Limiters.apply_limiter!(q, ρ, limiter)
     @test 0 ≤ minimum(parent(q))
-    ρq = ρ .⊠ q
+    ρq = ρ .* q
     @test isapprox(sum(ρq.a), sum_ρq_init.a; atol = 0.07)
     @test isapprox(sum(ρq.a), sum_ρq_init.a; rtol = 0.07)
     @test isapprox(sum(ρq.b), sum_ρq_init.b; atol = 0.07)
@@ -161,7 +160,7 @@ end
 
     perturb_field!(q; perturb_radius = perturb_q)
     perturb_field!(ρ; perturb_radius = perturb_ρ)
-    ρq_init = ρ .⊠ q
+    ρq_init = ρ .* q
     sum_ρq_init = sum(ρq_init)
 
     # Test that the minimum is below 0
@@ -172,7 +171,7 @@ end
     limiter = Limiters.VerticalMassBorrowingLimiter((0.0,))
     Limiters.apply_limiter!(q, ρ, limiter)
     @test 0 ≤ minimum(q)
-    ρq = ρ .⊠ q
+    ρq = ρ .* q
     @test isapprox(sum(ρq), sum_ρq_init; atol = 0.1)
     @test isapprox(sum(ρq), sum_ρq_init; rtol = 0.001)
 end

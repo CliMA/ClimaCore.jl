@@ -225,15 +225,6 @@ operator_matrix(::O) where {O <: Operators.AbstractOperator} =
 
 ################################################################################
 
-Operators.has_boundary(
-    op_matrix::FDOperatorMatrix,
-    lbw::Operators.LeftBoundaryWindow{name},
-) where {name} = Operators.has_boundary(op_matrix.op, lbw)
-Operators.has_boundary(
-    op_matrix::FDOperatorMatrix,
-    rbw::Operators.RightBoundaryWindow{name},
-) where {name} = Operators.has_boundary(op_matrix.op, rbw)
-
 Operators.get_boundary(
     op_matrix::FDOperatorMatrix,
     lbw::Operators.LeftBoundaryWindow{name},
@@ -320,6 +311,25 @@ op_matrix_first_row(op, bc, space, idx, hidx, args...) =
     op_matrix_first_row(op, bc, Spaces.undertype(space))
 op_matrix_last_row(op, bc, space, idx, hidx, args...) =
     op_matrix_last_row(op, bc, Spaces.undertype(space))
+
+# Fallback methods for unspecified boundary conditions (need to use zero here
+# instead of NaN to avoid polluting nearby interior rows with NaNs)
+Operators.stencil_left_boundary(
+    op_matrix::FDOperatorMatrix,
+    ::Operators.NullBoundaryCondition,
+    space,
+    _,
+    _,
+    args...,
+) = zero(Operators.return_eltype(op_matrix, args...))
+Operators.stencil_right_boundary(
+    op_matrix::FDOperatorMatrix,
+    ::Operators.NullBoundaryCondition,
+    space,
+    _,
+    _,
+    args...,
+) = zero(Operators.return_eltype(op_matrix, args...))
 
 ################################################################################
 
@@ -438,8 +448,8 @@ Base.@propagate_inbounds function op_matrix_interior_row(
 )
     w⁻ = Operators.getidx(space, weight, idx - half, hidx)
     w⁺ = Operators.getidx(space, weight, idx + half, hidx)
-    denominator = radd(w⁻, w⁺)
-    return BidiagonalMatrixRow(rdiv(w⁻, denominator), rdiv(w⁺, denominator))
+    denominator = w⁻ + w⁺
+    return BidiagonalMatrixRow(w⁻ / denominator, w⁺ / denominator)
 end
 op_matrix_first_row(
     ::Operators.WeightedInterpolateC2F,

@@ -7,7 +7,6 @@ import Logging: Debug
 import LinearAlgebra: I, norm, ldiv!, mul!
 import ClimaComms
 import ClimaCore.Utilities: half
-import ClimaCore.RecursiveApply: ⊠
 import ClimaCore.MatrixFields: @name
 import ClimaCore:
     Spaces, MatrixFields, Fields, Domains, Meshes, Topologies, Geometry
@@ -379,9 +378,7 @@ end
     ᶠᶜmat2_u₃_scalar = ᶠᶜmat2 .* (e³,)
     ᶜᶠmat2_scalar_u₃ = ᶜᶠmat2 .* (e₃',)
     ᶠᶠmat3_u₃_u₃ = ᶠᶠmat3 .* (e³ * e₃',)
-    ᶜᶠmat2_ρχ_u₃ = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit ⊠ e₃')), ᶜᶠmat2)
-    # We need to use Fix1 and Fix2 instead of defining anonymous functions in
-    # order for the result of map to be inferrable.
+    ᶜᶠmat2_ρχ_u₃ = ᶜᶠmat2 .* (ρχ_unit,) .* (e₃',)
 
     b_dry_dycore = Fields.FieldVector(;
         c = ᶜvec .* (dry_center_gs_unit,),

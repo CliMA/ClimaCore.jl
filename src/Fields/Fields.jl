@@ -25,14 +25,14 @@ import ..Spaces: nlevels, ncolumns
 import ..Spaces: get_mask, set_mask!
 import ..DataLayouts: AbstractMask
 import ..Geometry: Geometry, Cartesian12Vector
-import ..Utilities: PlusHalf, half
+import ..Utilities: PlusHalf, half, safe_eltype, unsafe_eltype
+import ..Utilities: drop_auto_broadcasters, allow_auto_broadcasting
 
-using ..RecursiveApply
+using UnrolledUtilities
 using ClimaComms
 import Adapt
-import UnrolledUtilities: unrolled_map, unrolled_mapreduce, unrolled_findfirst, unrolled_all
 
-import StaticArrays, LinearAlgebra, Statistics, InteractiveUtils
+import StaticArrays, LinearAlgebra, Statistics
 
 """
     Field(values, space)

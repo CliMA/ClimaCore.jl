@@ -2,7 +2,6 @@ using Test
 
 using ClimaComms
 using ClimaCore:
-    Geometry,
     Domains,
     Meshes,
     Topologies,
@@ -10,6 +9,7 @@ using ClimaCore:
     Fields,
     Operators,
     Quadratures
+using ClimaCore.Geometry
 using LinearAlgebra
 
 for FT in (Float32, Float64)
@@ -40,20 +40,17 @@ for FT in (Float32, Float64)
         )
     end
 
-    ∇ᵥuvw_boundary = Geometry.outer(
-        Geometry.WVector(FT(1)),
-        Geometry.UVWVector(FT(1), FT(2), FT(3)),
-    )
+    ∇ᵥuvw_boundary =
+        Geometry.WVector(FT(1)) ⊗ Geometry.UVWVector(FT(1), FT(2), FT(3))
 
     gradc2f = Operators.GradientC2F(
         bottom = Operators.SetGradient(∇ᵥuvw_boundary),
         top = Operators.SetGradient(∇ᵥuvw_boundary),
     )
     ∇ᵥuvw = Geometry.project.(Ref(Geometry.UVWAxis()), gradc2f.(uvw))
-    ∇ᵥuvw_scalar = Geometry.outer(
-        Geometry.UVWVector(FT(0), FT(0), FT(1)),
-        Geometry.UVWVector(FT(1), FT(2), FT(3)),
-    )
+    ∇ᵥuvw_scalar =
+        Geometry.UVWVector(FT(0), FT(0), FT(1)) ⊗
+        Geometry.UVWVector(FT(1), FT(2), FT(3))
     ∇ᵥuvw_ref = fill(∇ᵥuvw_scalar, fspace)
     @test ∇ᵥuvw ≈ ∇ᵥuvw_ref
 
