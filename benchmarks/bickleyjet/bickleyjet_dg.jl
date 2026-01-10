@@ -7,9 +7,6 @@ import ClimaCore.Operators
 using ClimaCore.Geometry
 import ClimaCore.Geometry: Abstract2DPoint
 
-using ClimaCore.RecursiveApply
-
-
 const parameters = (
     ϵ = 0.1,  # perturbation size for initial condition
     l = 0.5, # Gaussian width
@@ -60,7 +57,7 @@ roe_average(ρ⁻, ρ⁺, var⁻, var⁺) =
     (sqrt(ρ⁻) * var⁻ + sqrt(ρ⁺) * var⁺) / (sqrt(ρ⁻) + sqrt(ρ⁺))
 
 function roeflux(n, (y⁻, parameters⁻), (y⁺, parameters⁺))
-    Favg = RecursiveApply.rdiv(flux(y⁻, parameters⁻) ⊞ flux(y⁺, parameters⁺), 2)
+    Favg = (flux(y⁻, parameters⁻) + flux(y⁺, parameters⁺)) / 2
 
     λ = sqrt(parameters⁻.g)
 
@@ -115,7 +112,7 @@ function roeflux(n, (y⁻, parameters⁻), (y⁺, parameters⁺))
     fluxᵀn_ρθ = ((w1 + w2) * θ + w5) * 0.5
 
     Δf = (ρ = -fluxᵀn_ρ, ρu = -fluxᵀn_ρu, ρθ = -fluxᵀn_ρθ)
-    RecursiveApply.rmap(f -> f' * n, Favg) ⊞ Δf
+    return Favg' * n + Δf
 end
 
 function volume!(dydt, y, (parameters,), t)

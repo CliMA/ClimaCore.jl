@@ -1,7 +1,9 @@
 module Utilities
 
 import UnrolledUtilities: unrolled_map
+import InteractiveUtils
 
+include("auto_broadcaster.jl")
 include("plushalf.jl")
 include("cache.jl")
 
@@ -118,18 +120,73 @@ to ensure that recursive functions over nested types have inferrable outputs.
 @inline fieldtype_vals(::Type{T}) where {T} =
     ntuple(Val ∘ Base.Fix1(fieldtype, T), Val(fieldcount(T)))
 
+# Special handling of Type values, which can cause new and splatnew to segfault
+new(::Type{Type{T}}, ::Tuple{} = ()) where {T} = T
+new(::Type{T}, ::Tuple{} = ()) where {T <: Type} =
+    throw(ArgumentError("Cannot allocate ambiguous $T"))
+
+no_immutable_types(::Type{<:Type}) = false
+no_immutable_types(::Type{T}) where {T} =
+    ismutabletype(T) || unrolled_all(no_immutable_types, fieldtypes(T))
+
+drop_immutable_types(not_a_type) = not_a_type
+drop_immutable_types(::Type{<:Type}) = DataType
+drop_immutable_types(::Type{T}) where {T} =
+    no_immutable_types(T) ? T :
+    unionall_type(T){unrolled_map(drop_immutable_types, Tuple(T.parameters))...}
+
 """
     new(T, [fields])
 
-Exposes the `new` pseudo-function that allocates a value of type `T` with the
-specified fields. Can also be called without a second argument to leave the
-allocated value with uninitialized fields.
-
-In contrast to the pseudo-function, this only asserts that all fields match the
-`fieldtypes` of `T`, rather than automatically converting them to those types.
+Exposes the `new` pseudo-function that allocates a value of type `T` with
+specific fields. Unlike the pseudo-function, this does not automatically
+convert the given fields to the `fieldtypes` of `T`. The second argument can
+also be omitted to leave the fields of the allocated value uninitialized.
 """
-@generated new(::Type{T}) where {T} = Expr(:new, :T)
 @generated new(::Type{T}, fields) where {T} =
-    Expr(:splatnew, :T, :(fields::$(Tuple{fieldtypes(T)...})))
+    Expr(:splatnew, :(drop_immutable_types(T)), :fields)
+@generated new(::Type{T}) where {T} =
+    no_immutable_types(T) ? Expr(:new, :T) :
+    :(new(T, unrolled_map(new, fieldtypes(T))))
+
+"""
+    unsafe_eltype(itr)
+
+Analogue of `eltype` with support for un-materialized broadcast expressions,
+adapted from `Base.Broadcast.combine_eltypes`. Does not perform any safety
+checks, and may potentially return non-concrete types (like an empty `Union{}`).
+"""
+@inline unsafe_eltype(::Ref{Type{T}}) where {T} = Type{T}
+@inline unsafe_eltype(itr) = eltype(itr)
+@inline unsafe_eltype((; f, args)::Base.Broadcast.Broadcasted) =
+    unrolled_any(==(Union{}), unrolled_map(unsafe_eltype, args)) ? Union{} :
+    Core.Compiler.return_type(f, Tuple{unrolled_map(unsafe_eltype, args)...})
+
+struct InferenceError <: Exception
+    f::Any
+    args_type::Type{<:Tuple}
+end
+function Base.showerror(io::IO, (; f, args_type)::InferenceError)
+    println(io, "Concrete type of result could not be inferred:\n")
+    InteractiveUtils.code_warntype(io, f, args_type)
+end
+
+"""
+    safe_eltype(itr)
+
+Analogue of `eltype` with support for un-materialized broadcast expressions,
+adapted from `Base.Broadcast.combine_eltypes`. Throws an error when the concrete
+element type of a broadcast expression cannot be inferred, indicating which part
+of the expression triggers the first type instability during inference.
+"""
+@inline safe_eltype(::Ref{Type{T}}) where {T} = Type{T}
+@inline safe_eltype(itr) =
+    isconcretetype(unsafe_eltype(itr)) ? unsafe_eltype(itr) : eltype_error(itr)
+
+eltype_error(itr) = throw(InferenceError(eltype, Tuple{typeof(itr)}))
+eltype_error(bc::Base.Broadcast.Broadcasted) =
+    unsafe_eltype(bc) == Union{} ?
+    bc.f(unrolled_map(new ∘ safe_eltype, bc.args)...) : # f throws runtime error
+    throw(InferenceError(bc.f, Tuple{unrolled_map(safe_eltype, bc.args)...}))
 
 end # module

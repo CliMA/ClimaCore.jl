@@ -1,6 +1,5 @@
-import LinearAlgebra: I
-import ClimaCore.RecursiveApply: rzero
-import ClimaCore.Utilities: replace_type_parameter
+import LinearAlgebra: I_a
+import ClimaCore.Utilities: replace_type_parameter, new
 import ClimaCore.MatrixFields: @name, is_subset_that_covers_set
 
 include("matrix_field_test_utils.jl")
@@ -13,7 +12,7 @@ Base.getproperty(foo::FooFieldName, s::Symbol) =
     s == :value ? getfield(foo, :_value) : error("Invalid property name")
 Base.convert(::Type{FooFieldName{T}}, foo::FooFieldName) where {T} =
     FooFieldName{T}(foo.value)
-Base.zero(::Type{FooFieldName{T}}) where {T} = FooFieldName(zero(T))
+Base.zero(::FooFieldName{T}) where {T} = FooFieldName(zero(T))
 
 get_x() =
     (; foo = FooFieldName(0), a = (; b = 1, c = ((; d = 2), (;), (3, ()))))
@@ -717,7 +716,7 @@ end
 @testset "FieldNameDict Unit Tests" begin
     x = get_x()
     FT = Float64
-    x_FT = convert(replace_type_parameter(typeof(x), Int, FT), x)
+    x_FT = new(replace_type_parameter(typeof(x), Int, FT))
 
     C3 = Geometry.Covariant3Vector{FT}
     C12 = Geometry.Covariant12Vector{FT}
@@ -727,10 +726,10 @@ end
     CT3XC3 = typeof(zero(CT3) * zero(C3)')
     C12XCT12 = typeof(zero(C12) * zero(CT12)')
     CT3XCT12 = typeof(zero(CT3) * zero(CT12)')
-    x_C12 = rzero(replace_type_parameter(typeof(x), Int, C12))
-    x_CT3 = rzero(replace_type_parameter(typeof(x), Int, CT3))
-    x_C12XC3 = rzero(replace_type_parameter(typeof(x), Int, C12XC3))
-    x_CT3XCT12 = rzero(replace_type_parameter(typeof(x), Int, CT3XCT12))
+    x_C12 = new(replace_type_parameter(typeof(x), Int, C12))
+    x_CT3 = new(replace_type_parameter(typeof(x), Int, CT3))
+    x_C12XC3 = new(replace_type_parameter(typeof(x), Int, C12XC3))
+    x_CT3XCT12 = new(replace_type_parameter(typeof(x), Int, CT3XCT12))
     I_CT3XC3 = DiagonalMatrixRow(Geometry.AxisTensor(axes(CT3XC3), I))
     I_C12XCT12 = DiagonalMatrixRow(Geometry.AxisTensor(axes(C12XCT12), I))
 

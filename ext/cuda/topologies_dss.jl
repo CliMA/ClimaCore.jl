@@ -262,8 +262,7 @@ function dss_transform_kernel!(
             local_geometry[loc],
             dss_weights[loc],
         )
-        perimeter_data[CI(p, 1, 1, level, elem)] =
-            Topologies.drop_vert_dim(eltype(perimeter_data), src)
+        perimeter_data[CI(p, 1, 1, level, elem)] = src
     end
     return nothing
 end
@@ -595,7 +594,7 @@ function Topologies.dss_1d!(
     nitems = Nv * nfaces
     threads = _max_threads_cuda()
     p = linear_partition(nitems, threads)
-    args = (data, local_geometry, dss_weights, nfaces)
+    args = (Base.broadcastable(data), local_geometry, dss_weights, nfaces)
     auto_launch!(
         dss_1d_kernel!,
         args;
@@ -621,7 +620,7 @@ function dss_1d_kernel!(data, local_geometry, dss_weights, nfaces)
                 local_geometry,
                 dss_weights,
                 left_idx,
-            ) ⊞ Topologies.dss_transform(
+            ) + Topologies.dss_transform(
                 data,
                 local_geometry,
                 dss_weights,
