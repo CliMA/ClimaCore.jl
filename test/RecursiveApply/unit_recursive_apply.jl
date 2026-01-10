@@ -1,8 +1,8 @@
 using JET
 using Test
 
-using ClimaCore.RecursiveApply
-using ClimaCore.Geometry
+using ClimaCore.Utilities: nested_math_mapper
+using ClimaCore.Geometry: UVVector
 
 @static if @isdefined(var"@test_opt") # v1.7 and higher
     @testset "RecursiveApply optimization test" begin
@@ -14,9 +14,9 @@ using ClimaCore.Geometry
             (a = 1.0, b = (x1 = 2.0, x2 = 3.0)),
             (a = 1.0f0, b = (x1 = 2.0f0, x2 = 3.0f0)),
         ]
-            @test_opt 2 ⊠ x
-            @test_opt x ⊞ x
-            @test_opt RecursiveApply.rdiv(x, 3)
+            @test_opt 2 * nested_math_mapper(x)
+            @test_opt nested_math_mapper(x) + x
+            @test_opt nested_math_mapper(x) / 3
         end
     end
 end
@@ -30,13 +30,10 @@ end
         (a = 1.0, b = (x1 = 2.0, x2 = 3.0)),
         (a = 1.0f0, b = (x1 = 2.0f0, x2 = 3.0f0)),
     ]
-        FT = eltype(x[1])
-        @test RecursiveApply.rmul(x, one(FT), one(FT), one(FT)) == x
-        @test RecursiveApply.rmul(x, one(FT), x, one(FT)) ==
-              RecursiveApply.rmul(x, x)
-        @test RecursiveApply.radd(x, zero(FT), zero(FT), zero(FT)) == x
-        @test RecursiveApply.radd(x, zero(FT), x, zero(FT)) ==
-              RecursiveApply.rmul(x, FT(2))
+        @test nested_math_mapper(x) * 1 * 1 * 1 === nested_math_mapper(x)
+        @test nested_math_mapper(x) * 1 * x * 1 === nested_math_mapper(x) * x
+        @test nested_math_mapper(x) + 0 + 0 + 0 === nested_math_mapper(x)
+        @test nested_math_mapper(x) + 0 + x + 0 === nested_math_mapper(x) + x
     end
 end
 
@@ -68,33 +65,34 @@ end
         },
     ]
     for nt in nested_types
-        rz = RecursiveApply.rmap(RecursiveApply.rzero, nt)
-        @test typeof(rz) == nt
-        @inferred RecursiveApply.rmap(RecursiveApply.rzero, nt)
+        T = Base.promote_op(nested_math_mapper, nt)
 
-        rz = RecursiveApply.rmap((x, y) -> RecursiveApply.rzero(x), nt, nt)
-        @test typeof(rz) == nt
-        @inferred RecursiveApply.rmap((x, y) -> RecursiveApply.rzero(x), nt, nt)
+        @test typeof(zero(T)) == T
+        @inferred zero(T)
 
-        rz = RecursiveApply.rmaptype(identity, nt)
-        @test rz == nt
-        @inferred RecursiveApply.rmaptype(zero, nt)
+        @test map(identity, zero(T)) === zero(T)
+        @inferred map(identity, zero(T))
 
-        rz = RecursiveApply.rmaptype((x, y) -> identity(x), nt, nt)
-        @test rz == nt
-        @inferred RecursiveApply.rmaptype((x, y) -> zero(x), nt, nt)
+        @test map(max, zero(T), one(T)) === one(T)
+        @inferred map(max, zero(T), one(T))
+
+        @test sum(zero(T)) == 0
+        @inferred sum(zero(T))
+
+        @test sum(one(T)) == sizeof(T) / sizeof(FT)
+        @inferred sum(one(T))
+
+        @test mapreduce(+, max, zero(T), one(T), one(T)) == 2
+        @inferred mapreduce(+, max, zero(T), one(T), one(T))
     end
 end
 
 @testset "NamedTuples and axis tensors" begin
     FT = Float64
     nt = (; a = FT(1), b = FT(2))
-    uv = Geometry.UVVector(FT(1), FT(2))
-    rz = RecursiveApply.rmap(*, nt, uv)
-    @test typeof(rz) == NamedTuple{(:a, :b), Tuple{UVVector{FT}, UVVector{FT}}}
-    @inferred RecursiveApply.rmap(*, nt, uv)
-    @test rz.a.u == 1
-    @test rz.a.v == 2
-    @test rz.b.u == 2
-    @test rz.b.v == 4
+    nmm = @inferred nested_math_mapper(nt) * UVVector(FT(1), FT(2))
+    @test nmm.a.u == 1
+    @test nmm.a.v == 2
+    @test nmm.b.u == 2
+    @test nmm.b.v == 4
 end
