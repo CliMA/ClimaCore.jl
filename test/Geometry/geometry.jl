@@ -11,6 +11,7 @@ using LinearAlgebra, StaticArrays
             Geometry.ZPoint(one(FT)),
             Geometry.LatPoint(one(FT)),
             Geometry.LongPoint(one(FT)),
+            Geometry.PPoint(one(FT)),
         )
             @test Geometry.ncomponents(pt) == 1
             @test Geometry.components(pt) isa SVector{1, FT}
@@ -83,6 +84,26 @@ end
             @test_throws Exception Geometry.coordinate(pt, 4)
             @test pt * FT(2) ==
                   typeof(pt)(one(FT) * FT(2), zero(FT), -2 * one(FT))
+        end
+    end
+end
+
+@testset "3D LatLongP Points" begin
+
+    for FT in (Float32, Float64, BigFloat)
+        for pt in (
+            Geometry.LatLongPPoint(one(FT), zero(FT), one(FT)),
+        )
+            @test Geometry.ncomponents(pt) == 3
+            @test Geometry.components(pt) isa SVector{3, FT}
+            @test Geometry.component(pt, 1) isa FT
+            @test Geometry.component(pt, 2) isa FT
+            @test Geometry.component(pt, 3) isa FT
+            @test Geometry.component(pt, 1) == one(FT)
+            @test Geometry.component(pt, 2) == zero(FT)
+            @test Geometry.component(pt, 3) == one(FT)
+            @test_throws Exception Geometry.component(pt, 4)
+            @test pt * FT(2) == typeof(pt)(one(FT) * FT(2), zero(FT), one(FT) * FT(2))
         end
     end
 end
