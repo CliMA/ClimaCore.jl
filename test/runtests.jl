@@ -37,6 +37,7 @@ UnitTest("Cubedsphere surface topology"            ,"Topologies/cubedsphere_sfc.
 UnitTest("dss_transform"                           ,"Topologies/unit_dss_transform.jl"),
 UnitTest("Quadratures"                             ,"Quadratures/Quadratures.jl"),
 UnitTest("CommonGrids"                             ,"CommonGrids/CommonGrids.jl"),
+UnitTest("CommonSpaces"                             ,"CommonSpaces/unit_common_spaces.jl"),
 UnitTest("Spaces"                                  ,"Spaces/unit_spaces.jl"),
 UnitTest("dss"                                     ,"Spaces/unit_dss.jl"),
 UnitTest("Spaces - serial CPU DSS"                 ,"Spaces/ddss1.jl"),
