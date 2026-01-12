@@ -292,3 +292,16 @@ function product_geometry(
     )
     return Geometry.LocalGeometry(coordinates, J, WJ, ∂x∂ξ)
 end
+
+function product_geometry(
+    horizontal_local_geometry::Geometry.LocalGeometry,
+    vertical_local_geometry::Geometry.CoordinateOnlyGeometry,
+    global_geometry::AbstractGlobalGeometry,
+    ∇z = nothing,
+)
+    coordinates = Geometry.product_coordinates(
+        horizontal_local_geometry.coordinates,
+        vertical_local_geometry.coordinates,
+    )
+    return Geometry.CoordinateOnlyGeometry(coordinates)
+end
