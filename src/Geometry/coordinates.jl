@@ -89,6 +89,7 @@ end
 @pointtype XPoint x
 @pointtype YPoint y
 @pointtype ZPoint z
+@pointtype PPoint p
 
 @pointtype XYPoint x y
 @pointtype XZPoint x z
@@ -120,6 +121,7 @@ Cartesian123Point(pt::Cartesian13Point{FT}) where {FT} =
 @pointtype LongPoint long
 @pointtype LatLongPoint lat long
 @pointtype LatLongZPoint lat long z
+@pointtype LatLongPPoint lat long p
 
 product_coordinates(xp::XPoint, yp::YPoint) = XYPoint(promote(xp.x, yp.y)...)
 product_coordinates(xp::XPoint, zp::ZPoint) = XZPoint(promote(xp.x, zp.z)...)
@@ -133,6 +135,8 @@ product_coordinates(longp::LongPoint, latp::LatPoint) =
     LatLongPoint(promote(latp.lat, longp.long)...)
 product_coordinates(latlongp::LatLongPoint, zp::ZPoint) =
     LatLongZPoint(promote(latlongp.lat, latlongp.long, zp.z)...)
+product_coordinates(latlongp::LatLongPoint, pressure_p::PPoint) =
+    LatLongPPoint(promote(latlongp.lat, latlongp.long, pressure_p.p)...)
 
 component(p::AbstractPoint{FT}, i::Symbol) where {FT} = getfield(p, i)::FT
 component(p::AbstractPoint{FT}, i::Integer) where {FT} = getfield(p, i)::FT
