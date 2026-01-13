@@ -133,7 +133,21 @@ function Base.copyto!(
 end
 import ClimaCore.DataLayouts: get_N, get_Nv, get_Nij, get_Nij, get_Nh
 
-# Specialized kernel for common case of Nv == 64 or Nv == 63
+"""
+    copyto_stencil_kernel_64!(
+        out,
+        bc::Union{
+            StencilBroadcasted{CUDAColumnStencilStyle},
+            Broadcasted{CUDAColumnStencilStyle},
+        },
+        space,
+        bds,
+        ::Val{P},
+    )
+
+Kernel for fd operators on VIJFHStyle{63,4} and VIJFHStyle{64,4} datalayouts. P is a boolean
+indicating if the column is padded (true for 63, false for 64).
+"""
 function copyto_stencil_kernel_64!(
     out,
     bc::Union{

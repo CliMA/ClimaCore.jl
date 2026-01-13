@@ -21,6 +21,12 @@ function knl_copyto_linear!(dest, src, us)
     return nothing
 end
 
+"""
+    knl_copyto_VIJFH_64!(dest, src, ::Val{P})
+
+Kernel for pointwise broadcasts on VIJFHStyle{63,4} and VIJFHStyle{64,4} datalayouts. P is a boolean
+indicating if the column is padded (true for 63, false for 64).
+"""
 function knl_copyto_VIJFH_64!(dest, src, ::Val{P}) where {P}
     # P is a boolean, indicating if the column is padded
     P && threadIdx().x == 64 && return nothing
@@ -122,7 +128,7 @@ function Base.copyto!(
     mask::NoMask = NoMask(),
 ) where {BC <: Base.Broadcast.Broadcasted{<:ClimaCore.DataLayouts.VIJFHStyle{63, 4}}}
     (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(dest)
-    Nv > 0 && Nh > 0 || return dest
+    Nv > 0 && Nh > 0 || return dest # copied from above
     args = (dest, bc, Val(true))
     auto_launch!(
         knl_copyto_VIJFH_64!,
@@ -139,7 +145,7 @@ function Base.copyto!(
     mask::NoMask = NoMask(),
 ) where {BC <: Base.Broadcast.Broadcasted{<:ClimaCore.DataLayouts.VIJFHStyle{64, 4}}}
     (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(dest)
-    Nv > 0 && Nh > 0 || return dest
+    Nv > 0 && Nh > 0 || return dest # copied from above
     args = (dest, bc, Val(false))
     auto_launch!(
         knl_copyto_VIJFH_64!,
