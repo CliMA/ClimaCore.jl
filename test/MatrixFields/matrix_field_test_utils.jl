@@ -58,7 +58,7 @@ const comms_device = ClimaComms.device()
 const using_cuda = comms_device isa ClimaComms.CUDADevice
 cuda_module(ext) = using_cuda ? ext.CUDA : ext
 const cuda_mod = cuda_module(Base.get_extension(ClimaComms, :ClimaCommsCUDAExt))
-const cuda_frames = using_cuda ? (AnyFrameModule(cuda_mod), AnyFrameModule(Base.StackTraces), AnyFrameModule(cuda_mod.GPUCompiler),) : ()
+const cuda_frames = using_cuda ? (AnyFrameModule(cuda_mod), AnyFrameModule(Base.StackTraces), AnyFrameModule(cuda_mod.GPUCompiler), AnyFrameModule(Base.CoreLogging)) : ()
 const cublas_frames = using_cuda ? (AnyFrameModule(cuda_mod.CUBLAS),) : ()
 const invalid_ir_error = using_cuda ? cuda_mod.InvalidIRError : ErrorException
 
