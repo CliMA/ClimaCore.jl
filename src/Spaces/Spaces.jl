@@ -61,12 +61,12 @@ abstract type AbstractSpace end
 function grid end
 function staggering end
 
-function Base.show(io::IO, ::MIME"text/plain", x::Type{<:AbstractSpace})
+function Base.show(io::IO, ::MIME"text/plain", @nospecialize(x::Type{<:AbstractSpace}))
     Base.show(io, x)
 end
 
-function Base.show(io::IO, x::Type{<:AbstractSpace})
-      compact = get(io, :compact, true)
+function Base.show(io::IO, @nospecialize(x::Type{<:AbstractSpace}))
+    compact = get(io, :compact, true)
     (compact && x isa DataType) || return Base._show_type(io, x)
     Base.show_typealias(io, x) && return
     Base.show_type_name(io, x.name)
