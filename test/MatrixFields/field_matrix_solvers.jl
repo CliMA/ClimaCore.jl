@@ -59,7 +59,7 @@ function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
             cuda_frames...,
             cublas_frames...,
             AnyFrameModule(MatrixFields.KrylovKit),
-            AnyFrameModule(Base.CoreLogging)
+            AnyFrameModule(Base.CoreLogging),
         )
         using_cuda ||
             @test_opt ignored_modules = ignored FieldMatrixWithSolver(A, b, alg)
@@ -74,7 +74,7 @@ end
 
 @testset "FieldMatrixSolver Unit Tests" begin
     FT = Float64
-    center_space, face_space = test_spaces(FT)
+    center_space, face_space = test_spaces(FT; high_res = using_cuda)
     surface_space = Spaces.level(face_space, half)
 
     seed!(1) # ensures reproducibility
@@ -345,7 +345,7 @@ end
 
 @testset "FieldMatrixSolver ClimaAtmos-Based Tests" begin
     FT = Float64
-    center_space, face_space = test_spaces(FT)
+    center_space, face_space = test_spaces(FT; high_res = using_cuda)
     surface_space = Spaces.level(face_space, half)
 
     seed!(1) # ensures reproducibility
