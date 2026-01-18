@@ -608,20 +608,6 @@ steps:
         key: unit_spec_ops_plane
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/plane.jl"
 
-      - label: "Unit: split divergence"
-        key: unit_split_divergence
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/split_divergence.jl"
-
-      - label: "Unit: split divergence cuda"
-        key: unit_split_divergence_cuda
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/split_divergence.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
       - label: "Unit: FD operator (shmem)"
         key: unit_fd_operator_shmem
         command:
@@ -727,6 +713,7 @@ steps:
 
       - label: "Unit: rectilinear cuda"
         key: unit_rectilinear_cuda
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/rectilinear_cuda.jl"
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/rectilinear_cuda.jl CUDA"
@@ -737,6 +724,7 @@ steps:
 
       - label: "Unit: operators on levels and extruded spaces"
         key: unit_cuda_operators_example
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/unit_operators_examples.jl"
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/unit_operators_examples.jl"
@@ -747,6 +735,7 @@ steps:
 
       - label: "Unit: velocity grad tensor ops"
         key: unit_spectral_tensor_op_cuda
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/covar_deriv_ops.jl"
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/covar_deriv_ops.jl CUDA"

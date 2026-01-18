@@ -1,13 +1,7 @@
 import ClimaCore: DataLayouts, Spaces, Geometry, RecursiveApply, DataLayouts
 import CUDA
 import ClimaCore.Operators:
-    Divergence,
-    WeakDivergence,
-    SplitDivergence,
-    Gradient,
-    WeakGradient,
-    Curl,
-    WeakCurl
+    Divergence, WeakDivergence, Gradient, WeakGradient, Curl, WeakCurl
 import ClimaCore.Operators: operator_return_eltype, get_local_geometry
 
 Base.@propagate_inbounds function operator_shmem(
@@ -152,72 +146,6 @@ Base.@propagate_inbounds function operator_fill_shmem!(
             v -> Geometry.contravariant2(v, local_geometry),
             arg,
         )
-end
-
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::SplitDivergence{(1,)},
-    arg1,
-    arg2,
-) where {Nvt}
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    # allocate temp output for Ju1 and psi
-    Ju1 = CUDA.CuStaticSharedArray(FT, (Nq, Nvt))
-    psi = CUDA.CuStaticSharedArray(FT, (Nq, Nvt))
-    return (Ju1, psi)
-end
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::SplitDivergence{(1, 2)},
-    arg1,
-    arg2,
-) where {Nvt}
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    # allocate temp output for Ju1, Ju2, and psi
-    Ju1 = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nvt))
-    Ju2 = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nvt))
-    psi = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nvt))
-    return (Ju1, Ju2, psi)
-end
-
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::SplitDivergence{(1,)},
-    (Ju1, psi),
-    space,
-    ij,
-    slabidx,
-    arg1,
-    arg2,
-)
-    vt = threadIdx().z
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    i, _ = ij.I
-    Ju1[i, vt] = local_geometry.J * Geometry.contravariant1(arg1, local_geometry)
-    psi[i, vt] = arg2
-end
-
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::SplitDivergence{(1, 2)},
-    (Ju1, Ju2, psi),
-    space,
-    ij,
-    slabidx,
-    arg1,
-    arg2,
-)
-    vt = threadIdx().z
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    i, j = ij.I
-
-    Ju1[i, j, vt] = local_geometry.J * Geometry.contravariant1(arg1, local_geometry)
-    Ju2[i, j, vt] = local_geometry.J * Geometry.contravariant2(arg1, local_geometry)
-    psi[i, j, vt] = arg2
 end
 
 Base.@propagate_inbounds function operator_shmem(

@@ -21,7 +21,6 @@ without explicitly assembling the matrix representing the discretized operator.
 ```@docs
 Gradient
 Divergence
-SplitDivergence
 WeakDivergence
 WeakGradient
 Curl

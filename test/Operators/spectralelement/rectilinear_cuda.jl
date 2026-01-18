@@ -75,11 +75,3 @@ wcurl = Operators.WeakCurl()
       parent(wcurl.(Geometry.Covariant12Vector.(g_cpu)))
 @test Array(parent(wcurl.(Geometry.Covariant3Vector.(f)))) ≈
       parent(wcurl.(Geometry.Covariant3Vector.(f_cpu)))
-
-split_div = Operators.SplitDivergence()
-
-# Test SplitDivergence with vector field and scalar
-psi_cpu = f_cpu
-psi = f
-
-@test Array(parent(split_div.(g, psi))) ≈ parent(split_div.(g_cpu, psi_cpu))

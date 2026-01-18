@@ -58,24 +58,22 @@ convergence_rate(err, Δh) =
         zc = Fields.coordinate_field(cs)
 
         T = gaussian.(zc.z, -0; μ = μ, δ = δ, ν = ν, 𝓌 = 𝓌)
-        V = Geometry.WVector.(ones(FT, fs))
+        V = ones(FT, fs)
 
         function ∑tendencies!(dT, T, z, t)
             bc_vb = Operators.SetValue(
                 FT(gaussian(z₀, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)),
             )
             bc_gt = Operators.SetGradient(
-                Geometry.WVector(
-                    FT(∇gaussian(z₁, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)),
-                ),
+                FT(∇gaussian(z₁, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)),
             )
             A = Operators.AdvectionC2C(
                 bottom = bc_vb,
                 top = Operators.Extrapolate(),
             )
             gradc2f = Operators.GradientC2F(; bottom = bc_vb, top = bc_gt)
-            divf2c = Operators.DivergenceF2C()
-            return @. dT = divf2c(ν * gradc2f(T)) - A(V, T)
+            gradf2c = Operators.GradientF2C()
+            return @. dT = gradf2c(ν * gradc2f(T)) - A(V, T)
         end
 
         # Solve the ODE operator
@@ -90,14 +88,15 @@ convergence_rate(err, Δh) =
         )
         computed_result = sol.u[end]
         analytical_result = gaussian.(zp, t₁; μ = μ, δ = δ, ν = ν, 𝓌 = 𝓌)
-        Δh[k] = (z₁ - z₀) / n
+        Δh[k] = cs.Δh_c2c[1]
         err[k] =
             norm(parent(computed_result) .- analytical_result) /
             length(analytical_result)
     end
     conv = convergence_rate(err, Δh)
     # conv should be approximately 2 for second order-accurate stencil.
-    @test 1.4 ≤ conv[1] ≤ 2.6
-    @test 1.4 ≤ conv[2] ≤ 2.6
+    @test 1.4 ≤ conv[1] ≤ 2.1
+    @test 1.4 ≤ conv[2] ≤ 2.1
+    @test conv[1] ≤ conv[2]
     @test err[3] ≤ err[2] ≤ err[1] ≤ 1e-2
 end

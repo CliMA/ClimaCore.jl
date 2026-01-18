@@ -5,13 +5,10 @@ A singleton type that represents a chain of `getproperty` calls, which can be
 used to access a property or sub-property of an object `x` using the function
 `get_field(x, name)`. The entire object `x` can also be accessed with the empty
 `FieldName()`.
-
-Note that `FieldName` behaves like a scalar for broadcasting.
 """
 struct FieldName{name_chain} end
 FieldName() = FieldName{()}() # This is required for type stability.
 FieldName(name_chain...) = FieldName{name_chain}()
-Base.broadcastable(name::FieldName) = tuple(name)
 
 """
     @name(expr)
