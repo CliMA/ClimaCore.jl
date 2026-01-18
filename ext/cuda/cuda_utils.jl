@@ -51,6 +51,7 @@ const IGNORE_MODULES = (
     :CUDA,
     :NVTX,
     :ClimaCoreCUDAExt,
+    :ClimaCore,
 )
 
 # Helper function to check if a stack frame is relevant
