@@ -21,9 +21,15 @@ Base.Broadcast.BroadcastStyle(
 
 include("operators_fd_shmem_is_supported.jl")
 
-struct ShmemParams{Nv} end
-interior_size(::ShmemParams{Nv}) where {Nv} = (Nv,)
-boundary_size(::ShmemParams{Nv}) where {Nv} = (1,)
+# ShmemParams holds dimensions for shared memory allocation
+# With 3D thread blocks, we have Ni×Nj columns per block, each with Nv levels
+struct ShmemParams{Nv, Ni, Nj} end
+
+# Interior shmem: one column buffer per (i,j) point = (Nv, Ni, Nj)
+interior_size(::ShmemParams{Nv, Ni, Nj}) where {Nv, Ni, Nj} = (Nv, Ni, Nj)
+
+# Boundary shmem: one value per (i,j) point for each boundary = (Ni, Nj)
+boundary_size(::ShmemParams{Nv, Ni, Nj}) where {Nv, Ni, Nj} = (Ni, Nj)
 
 function Base.copyto!(
     out::Field,
@@ -44,22 +50,24 @@ function Base.copyto!(
     n_face_levels = Spaces.nlevels(fspace)
     high_resolution = !(n_face_levels ≤ 256)
     # https://github.com/JuliaGPU/CUDA.jl/issues/2672
-    # max_shmem = 166912 # CUDA.limit(CUDA.LIMIT_SHMEM_SIZE) #
     max_shmem = CUDA.attribute(
         device(),
         CUDA.DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK,
     )
-    total_shmem = fd_shmem_needed_per_column(bc)
-    enough_shmem = total_shmem ≤ max_shmem
 
     # TODO: Use CUDA.limit(CUDA.LIMIT_SHMEM_SIZE) to determine how much shmem should be used
     # TODO: add shmem support for masked operations
+    (Ni, Nj, _, _, _) = DataLayouts.universal_size(us)
+    # With 3D thread blocks, we have Ni×Nj columns per block
+    total_shmem_per_block = fd_shmem_needed_per_column(n_face_levels, bc) * Ni * Nj
+    enough_shmem = total_shmem_per_block ≤ max_shmem
+    
     if Operators.any_fd_shmem_supported(bc) &&
        !high_resolution &&
        mask isa NoMask &&
        enough_shmem &&
        Operators.use_fd_shmem()
-        shmem_params = ShmemParams{n_face_levels}()
+        shmem_params = ShmemParams{n_face_levels, Ni, Nj}()
         p = fd_shmem_stencil_partition(us, n_face_levels)
         args = (
             strip_space(out, space),
