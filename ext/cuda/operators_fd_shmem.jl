@@ -10,17 +10,20 @@ Base.@propagate_inbounds function fd_operator_shmem(
     op::Operators.DivergenceF2C,
     args...,
 )
-    # allocate temp output
+    # allocate temp output and geometry cache
     RT = return_eltype(op, args...)
+    FT = eltype(RT)  # Get the float type from return type
     Ju³ = CUDA.CuStaticSharedArray(RT, interior_size(shmem_params))
     lJu³ = CUDA.CuStaticSharedArray(RT, boundary_size(shmem_params))
     rJu³ = CUDA.CuStaticSharedArray(RT, boundary_size(shmem_params))
-    return (Ju³, lJu³, rJu³)
+    # Cache invJ to avoid repeated global memory reads
+    invJ_shmem = CUDA.CuStaticSharedArray(FT, interior_size(shmem_params))
+    return (Ju³, lJu³, rJu³, invJ_shmem)
 end
 
 Base.@propagate_inbounds function fd_operator_fill_shmem!(
     op::Operators.DivergenceF2C,
-    (Ju³, lJu³, rJu³),
+    (Ju³, lJu³, rJu³, invJ_shmem),
     bc_bds,
     arg_space,
     space,
@@ -33,9 +36,13 @@ Base.@propagate_inbounds function fd_operator_fill_shmem!(
         ti = threadIdx().y  # horizontal i
         tj = threadIdx().z  # horizontal j
         lg = Geometry.LocalGeometry(space, idx, hidx)
+        
+        # Cache invJ for use in evaluate - each face level stores invJ for the center below it
         if !on_boundary(idx, space, op)
             u³ = Operators.getidx(space, arg, idx, hidx)
             Ju³[vt, ti, tj] = Geometry.Jcontravariant3(u³, lg)
+            # Cache invJ for the center at index vt (center below this face)
+            invJ_shmem[vt, ti, tj] = lg.invJ
         elseif on_left_boundary(idx, space, op)
             bloc = Operators.left_boundary_window(space)
             bc = Operators.get_boundary(op, bloc)
@@ -63,7 +70,7 @@ end
 
 Base.@propagate_inbounds function fd_operator_evaluate(
     op::Operators.DivergenceF2C,
-    (Ju³, lJu³, rJu³),
+    (Ju³, lJu³, rJu³, invJ_shmem),
     space,
     idx::Integer,
     hidx,
@@ -73,11 +80,12 @@ Base.@propagate_inbounds function fd_operator_evaluate(
         vt = threadIdx().x  # vertical level
         ti = threadIdx().y  # horizontal i
         tj = threadIdx().z  # horizontal j
-        lg = Geometry.LocalGeometry(space, idx, hidx)
+        # Use cached invJ instead of reading LocalGeometry from global memory
+        invJ = invJ_shmem[vt, ti, tj]
         if !on_boundary(idx, space, op)
             Ju³₋ = Ju³[vt, ti, tj]     # corresponds to idx - half
             Ju³₊ = Ju³[vt + 1, ti, tj] # corresponds to idx + half
-            return (Ju³₊ ⊟ Ju³₋) ⊠ lg.invJ
+            return (Ju³₊ ⊟ Ju³₋) ⊠ invJ
         else
             bloc =
                 on_left_boundary(idx, space, op) ?
@@ -89,7 +97,7 @@ Base.@propagate_inbounds function fd_operator_evaluate(
                 if bc isa Operators.SetValue
                     Ju³₋ = lJu³[ti, tj]       # corresponds to idx - half
                     Ju³₊ = Ju³[vt + 1, ti, tj] # corresponds to idx + half
-                    return (Ju³₊ ⊟ Ju³₋) ⊠ lg.invJ
+                    return (Ju³₊ ⊟ Ju³₋) ⊠ invJ
                 else
                     return lJu³[ti, tj]
                 end
@@ -98,7 +106,7 @@ Base.@propagate_inbounds function fd_operator_evaluate(
                 if bc isa Operators.SetValue
                     Ju³₋ = Ju³[vt, ti, tj]    # corresponds to idx - half
                     Ju³₊ = rJu³[ti, tj]       # corresponds to idx + half
-                    return (Ju³₊ ⊟ Ju³₋) ⊠ lg.invJ
+                    return (Ju³₊ ⊟ Ju³₋) ⊠ invJ
                 else
                     @assert bc isa Operators.SetDivergence
                     return rJu³[ti, tj]

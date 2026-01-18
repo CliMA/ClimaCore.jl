@@ -59,7 +59,7 @@ function Base.copyto!(
     # TODO: add shmem support for masked operations
     (Ni, Nj, _, _, _) = DataLayouts.universal_size(us)
     # With 3D thread blocks, we have Ni×Nj columns per block
-    total_shmem_per_block = fd_shmem_needed_per_column(bc) * Ni * Nj
+    total_shmem_per_block = fd_shmem_needed_per_column(n_face_levels, bc) * Ni * Nj
     enough_shmem = total_shmem_per_block ≤ max_shmem
     
     if Operators.any_fd_shmem_supported(bc) &&
