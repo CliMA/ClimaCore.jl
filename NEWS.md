@@ -4,6 +4,14 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.45
+-------
+- Add split divergence operator [2409](https://github.com/CliMA/ClimaCore.jl/pull/2409)
+
+v0.14.44
+-------
+
+- Revert `to_device` dispatch change from #2375 [2403](https://github.com/CliMA/ClimaCore.jl/pull/2403)
 
 v0.14.43
 -------
