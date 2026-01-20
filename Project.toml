@@ -31,6 +31,7 @@ UnrolledUtilities = "0fe1646c-419e-43be-ac14-22321958931b"
 
 [weakdeps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+GPUCompiler = "f5f5e495-2405-526c-b7e8-d49c91cb95a5"
 Krylov = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
 
 [extensions]
@@ -54,6 +55,7 @@ Dates = "1"
 FastBroadcast = "0.3.1"
 ForwardDiff = "0.10.15, 1"
 GaussQuadrature = "0.5.8"
+GPUCompiler = "< 1.7.6"
 GilbertCurves = "0.1"
 HDF5 = "0.16.16, 0.17"
 InteractiveUtils = "1"
