@@ -16,33 +16,35 @@ These are inherited from [`Makie.tricontourf`](https://docs.makie.org/stable/exa
 - `colormap::Union{Symbol, Vector{<:Colorant}} = :viridis` sets the colormap from which the band colors are sampled.
 
 """
-@recipe(FieldContourf, field) do scene
-    attrs = Makie.Attributes(; coords = nothing)
-    return merge(attrs, Makie.default_theme(scene, Makie.Tricontourf))
+@recipe FieldContourf (field,) begin
+    coords = nothing
+    Makie.filter_attributes(
+        Makie.documented_attributes(Makie.Tricontourf);
+        exclude = (:coords,),
+    )...
 end
 
 function Makie.plot!(plot::FieldContourf)
 
-    field = plot.field
-    # Only update vertices if axes updates
-    space = lift(axes, field; ignore_equal_values = true)
-    vertices = lift(plot_vertices, space, plot.coords)
-    plot.triangulation = lift(plot_triangles_matrix, space)
-
-    xs = lift(vertices) do vertices
-        map(x -> x[1], vertices)
+    input_nodes = [:field, :coords]
+    output_nodes = [:xs, :ys, :zs, :new_triangulation]
+    map!(plot.attributes, input_nodes, output_nodes) do f, coords
+        space = axes(f)
+        vertices = plot_vertices(space, coords)
+        new_triangulation = plot_triangles_matrix(space)
+        xs = map(x -> x[1], vertices)
+        ys = map(x -> x[2], vertices)
+        zs = vec(parent(f))
+        return (xs, ys, zs, new_triangulation)
     end
-    ys = lift(vertices) do vertices
-        map(x -> x[2], vertices)
-    end
-    zs = map(vec ∘ parent, field)
 
     Makie.tricontourf!(
         plot,
-        xs,
-        ys,
-        zs;
-        ((k, v) for (k, v) in pairs(plot.attributes) if k !== :coords)...,
+        plot.attributes,
+        plot.xs,
+        plot.ys,
+        plot.zs;
+        triangulation = plot.new_triangulation,
     )
 end
 
