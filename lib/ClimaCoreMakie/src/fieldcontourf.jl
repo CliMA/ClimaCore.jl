@@ -18,6 +18,9 @@ These are inherited from [`Makie.tricontourf`](https://docs.makie.org/stable/exa
 """
 @recipe(FieldContourf, field) do scene
     attrs = Makie.Attributes(; coords = nothing)
+    if isnothing(scene)
+        return attrs
+    end
     return merge(attrs, Makie.default_theme(scene, Makie.Tricontourf))
 end
 
@@ -39,10 +42,10 @@ function Makie.plot!(plot::FieldContourf)
 
     Makie.tricontourf!(
         plot,
+        plot.attributes,
         xs,
         ys,
         zs;
-        ((k, v) for (k, v) in pairs(plot.attributes) if k !== :coords)...,
     )
 end
 

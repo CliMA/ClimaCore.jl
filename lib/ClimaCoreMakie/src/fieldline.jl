@@ -1,6 +1,9 @@
 @recipe(FieldLine, field) do scene
-    attrs = Attributes()
-    merge(a, default_theme(scene, Lines))
+    attrs = Makie.Attributes()
+    if isnothing(scene)
+        return attrs
+    end
+    return merge(attrs, Makie.default_theme(scene, Makie.Lines))
 end
 
 Makie.plottype(::ClimaCore.Fields.SpectralElementField1D) =

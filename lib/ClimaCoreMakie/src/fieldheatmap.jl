@@ -21,6 +21,9 @@ Inherited from [`Makie.mesh`](https://docs.makie.org/stable/examples/plotting_fu
 """
 @recipe(FieldHeatmap, field) do scene
     attrs = Makie.Attributes(; coords = nothing, shading = Makie.NoShading)
+    if isnothing(scene)
+        return attrs
+    end
     return merge(attrs, Makie.default_theme(scene, Makie.Mesh))
 end
 
@@ -42,9 +45,9 @@ function Makie.plot!(plot::FieldHeatmap)
 
     Makie.mesh!(
         plot,
+        plot.attributes,
         vertices,
         triangles;
-        ((k, v) for (k, v) in pairs(plot.attributes) if k !== :coords)...,
     )
 end
 
