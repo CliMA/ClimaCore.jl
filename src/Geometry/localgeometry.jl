@@ -27,6 +27,62 @@ struct LocalGeometry{I, C <: AbstractPoint, FT, ∂x∂ξT, ∂ξ∂xT, gⁱʲT,
     gᵢⱼ::gᵢⱼT #::Axis2Tensor{FT, Tuple{CovariantAxis{I}, CovariantAxis{I}}, S}
 end
 
+"""
+
+Coordinates of the current point
+"""
+coordinates(lg::LocalGeometry) = lg.coordinates
+
+"""
+
+Jacobian determinant of the transformation `ξ` to `x`
+"""
+J(lg::LocalGeometry) = lg.J
+
+"""
+
+Metric terms: `J` multiplied by the quadrature weights
+"""
+WJ(lg::LocalGeometry) = lg.WJ
+
+"""
+
+Inverse Jacobian
+"""
+invJ(lg::LocalGeometry) = lg.invJ
+
+"""
+
+Partial derivatives of the map from `ξ` to `x`: `∂x∂ξ[i,j]` is ∂xⁱ/∂ξʲ, of type
+Axis2Tensor{FT, Tuple{LocalAxis{I}, CovariantAxis{I}}, S}
+"""
+∂x∂ξ(lg::LocalGeometry)) = lg.∂x∂ξ
+
+"""
+
+Partial derivatives of the map from `x` to `ξ`: `∂ξ∂x[i,j]` is ∂ξⁱ/∂xʲ, of type
+Axis2Tensor{FT, Tuple{ContravariantAxis{I}, LocalAxis{I}}, S}
+"""
+∂ξ∂x(lg::LocalGeometry)) = lg.∂ξ∂x
+
+"""
+
+Contravariant metric tensor (inverse of gᵢⱼ), transforms covariant to
+contravariant vector components, of type Axis2Tensor{FT, Tuple
+{ContravariantAxis{I}, ContravariantAxis{I}}, S}
+"""
+gⁱʲ(lg::LocalGeometry)) = lg.gⁱʲ
+
+"""
+
+Covariant metric tensor (gᵢⱼ), transforms contravariant to covariant vector
+components, of type Axis2Tensor{FT, Tuple{CovariantAxis{I}, CovariantAxis
+{I}}, S}
+"""
+gᵢⱼ(lg::LocalGeometry)) = lg.gᵢⱼ
+
+
+
 const FullLocalGeometry{I, C, FT, S} = LocalGeometry{
     I,
     C,
