@@ -2,13 +2,12 @@
 import ClimaCore
 using Makie, GLMakie, ClimaCoreMakie
 
-R = 6.37122e6
-
-domain = ClimaCore.Domains.SphereDomain(R)
-mesh = ClimaCore.Meshes.EquiangularCubedSphere(domain, 32)
-grid_topology = ClimaCore.Topologies.Topology2D(mesh)
-quad = ClimaCore.Quadratures.GLL{5}()
-space = ClimaCore.Spaces.SpectralElementSpace2D(grid_topology, quad)
+using ClimaCore.CommonSpaces
+space = CubedSphereSpace(;
+    radius = 10,
+    n_quad_points = 4,
+    h_elem = 10,
+)
 coords = ClimaCore.Fields.coordinate_field(space)
 
 

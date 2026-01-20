@@ -19,9 +19,13 @@ Inherited from [`Makie.mesh`](https://docs.makie.org/stable/examples/plotting_fu
 - `highclip::Union{Automatic, Symbol, <:Colorant} = automatic` sets a color for any value above the colorrange.
 
 """
-@recipe(FieldHeatmap, field) do scene
-    attrs = Makie.Attributes(; coords = nothing, shading = Makie.NoShading)
-    return merge(attrs, Makie.default_theme(scene, Makie.Mesh))
+@recipe FieldHeatmap (field,) begin
+    coords = nothing
+    shading = Makie.NoShading
+    Makie.filter_attributes(
+        Makie.documented_attributes(Makie.Mesh);
+        exclude = (:coords, :shading),
+    )...
 end
 
 Makie.plottype(::ClimaCore.Fields.ExtrudedFiniteDifferenceField) =
@@ -30,21 +34,23 @@ Makie.plottype(::ClimaCore.Fields.SpectralElementField2D) =
     FieldHeatmap{<:Tuple{ClimaCore.Fields.SpectralElementField2D}}
 
 function Makie.plot!(plot::FieldHeatmap)
-    field = plot.field
 
     # Only update vertices if axes updates
-    space = lift(axes, field; ignore_equal_values = true)
-
-    vertices = lift(plot_vertices, space, plot.coords)
-    triangles = lift(plot_triangles, space)
-
-    plot.color = map(vec ∘ parent, field)
-
+    input_nodes = [:field, :coords]
+    output_nodes = [:vertices, :triangles, :new_color]
+    map!(plot.attributes, input_nodes, output_nodes) do f, coords
+        space = axes(f)
+        vertices = plot_vertices(space, coords)
+        triangles = plot_triangles(space)
+        new_color = vec(parent(f))
+        return (vertices, triangles, new_color)
+    end
     Makie.mesh!(
         plot,
-        vertices,
-        triangles;
-        ((k, v) for (k, v) in pairs(plot.attributes) if k !== :coords)...,
+        plot.attributes,
+        plot.vertices,
+        plot.triangles;
+        color = plot.new_color,
     )
 end
 

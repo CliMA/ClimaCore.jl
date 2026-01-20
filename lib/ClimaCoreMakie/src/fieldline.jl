@@ -1,6 +1,5 @@
-@recipe(FieldLine, field) do scene
-    attrs = Attributes()
-    merge(a, default_theme(scene, Lines))
+@recipe FieldLine (field,) begin
+    Makie.documented_attributes(Makie.Lines)...
 end
 
 Makie.plottype(::ClimaCore.Fields.SpectralElementField1D) =
@@ -10,19 +9,20 @@ function Makie.plot!(
     plot::FieldLine{<:Tuple{ClimaCore.Fields.SpectralElementField1D}},
 )
 
-    field = plot.field
-    # Only update vertices if space updates
-    space = lift(axes, field; ignore_equal_values = true)
+    input_nodes = [:field]
+    output_nodes = [:positions]
+    map!(plot.attributes, input_nodes, output_nodes) do f
+        space = axes(f)
+        vertices = parent(ClimaCore.Spaces.coordinates_data(space))
+        Nq, _, Nh = size(vertices)
+        vals = parent(f)
+        positions = [
+            i <= Nq ? Makie.Point2f(vertices[i, 1, h], vals[i, 1, h]) :
+            Makie.Point2f(NaN, NaN) for i in 1:(Nq + 1), h in 1:Nh
+        ]
+        return (vec(positions),)
+    end
 
-    vertices = parent(ClimaCore.Spaces.coordinates_data(space[]))
 
-    # insert NaNs to create gaps between elements
-    Nq, _, Nh = size(vertices[])
-    vals = parent(field[])
-    positions = [
-        i <= Nq ? Makie.Point2f(vertices[i, 1, h], vals[i, 1, h]) :
-        Makie.Point2f(NaN, NaN) for i in 1:(Nq + 1), h in 1:Nh
-    ]
-
-    Makie.lines!(plot, vec(positions))
+    Makie.lines!(plot, plot.positions)
 end
