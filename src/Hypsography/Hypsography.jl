@@ -280,6 +280,16 @@ represented as a ClimaCore Field) are as follows:
 - Define `ExtrudedFiniteDifferenceSpace` with new surface elevation.
 Default diffusion parameters are appropriate for spherical arrangements.
 For `zmax-zsfc` == 𝒪(10^4), κ == 𝒪(10^8), dt == 𝒪(10⁻¹).
+
+The equation for a single iteration for the computation of a smoothed 
+field ϕᵥᵣ, from an unsmoothed field ϕᵤ is as follows: 
+
+ϕᵥᵣ = ϕᵤ + 𝒦(Δ𝓍)∇²ϕᵤ,
+
+where 𝒦(Δ𝓍) is a diffusion coefficient which scales with the grid resolution, 
+typically of order 𝒪(10⁷).
+
+See: Zarzycki et al. (2014) Eq(1)
 """
 function diffuse_surface_elevation!(
     f::Fields.Field;
