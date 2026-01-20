@@ -62,6 +62,19 @@ then may want to consider different bases, as not all operators accept all bases
 _Covariance_ and _contravariance_ describe how the quantitative description of
 certain geometric or physical entities changes with a change of basis.
 
+More specifically, 
+
+__Covariant objects__ —whether you mean covariant components (the coefficients that sit in front of the basis) 
+or the covariant basis vectors themselves—co-vary with the coordinate grid. In other words, when you change coordinates, 
+these quantities transform in the same way as the coordinate differentials. By convention they carry lower indices (subscripts).
+
+__Contravariant objects__—whether you mean contravariant components or the contravariant basis vectors—vary contra 
+to the coordinate grid. That is, they transform in the opposite way to the coordinate differentials so as to keep 
+tensorial expressions invariant. By convention they carry upper indices (superscripts).
+
+In ClimaCore.jl, `CovariantVector`s are aligned with the _contravariant basis vectors_, but have _covariant components_. 
+Conversely, `ContravariantVector`s are aligned with the _covariant basis vectors_, but have _contravariant components_. 
+
 In ClimaCore.jl, the _covariant basis_ is specified by the partial derivative
 of the transformation from the reference element ``\xi \in [-1,1]^d`` (where ``d``
 is the dimensionality of the domain ``\Omega``) to ``x`` in the physical space:
@@ -74,6 +87,47 @@ while the _contravariant basis_ is the opposite: gradient in ``x`` of the coordi
 \mathbf{e}^i = \nabla_x \xi^i
 ```
 
+If we plot these bases in a curvilinear space, _covariant basis_ vectors “ride along” the coordinate surface liness (parallel),  while _contravariant basis_ vectors “stick out” of those surface lines (perpendicular). See the plot from [Yatunin2025](@cite) below:
+
+![normal and tangent](normal_tangent.png)
+
+Here is a visual representation of how vectors can be represented in _contravariant_ and _covariant_ components.
+
+![Different bases](contrava_cova.png)
+
+From the above two figures, we can see that parallel projections would lead to contravariant components $a^{1}$ and $a^{2}$, 
+while perpendicular projections would lead to covariant components $b_{1} = \mathbf{b}\cdot \mathbf{e}_1$ and $b_{2} = \mathbf{b}\cdot \mathbf{e}_2$.
+
+As to better connect the original idea of _covariant components_ / _contravariant components_ with the real application in ClimaCore.jl, 
+we bring the case of __polar coordinates__ -- a classic example of a __curvilinear coordinate system__.
+
+First of all, we have the Polar‐to‐Cartesian mapping as following:
+```math
+\mathbf{r} (r,\theta ) = (r \cos \theta, r \sin \theta)
+```
+
+Then we have the _covariant basis_:
+```math
+\mathbf{e}_r = \frac{\partial \mathbf{r} }{\partial r}  = \frac{\partial (r \cos \theta, r \sin \theta) }{\partial r} = (\cos \theta, \sin \theta)
+```
+```math
+\mathbf{e}_{\theta} = \frac{\partial \mathbf{r} }{\partial \theta }  = \frac{\partial (r \cos \theta, r \sin \theta) }{\partial \theta } = (-r\sin \theta,r \cos \theta)
+```
+
+where $\mathbf{e}_r$ represents the direction that is tangent to the radius, and the one $\mathbf{e}_{\theta}$ tangent to the unit circle.
+
+And the _contravariant basis_:
+
+```math
+\mathbf{e}^r = \nabla r(x,y) = (\frac{x}{\sqrt{x^{2} +y^{2}  }}, \frac{y}{\sqrt{x^{2} +y^{2}  }}) = (\frac{x}{r},\frac{y}{r} ) = (\cos \theta, \sin \theta)
+```
+```math
+\mathbf{e}^{\theta} = \nabla \theta(x,y) = (\frac{-y}{x^{2} +y^{2}}, \frac{x}{x^{2} +y^{2}})  = (\frac{-\sin \theta}{r} , \frac{\cos \theta}{r})
+```
+where we have used that $r(x,y) = \sqrt{x^{2} +y^{2}  }$ and $\theta (x,y) = \arctan (\frac{y}{x} )$.
+
+$\mathbf{e}^r$ represents the direction that is perpendicular to the unit circle, and $\mathbf{e}^{\theta}$ the one that is perpendicular to the radius.
+
 
 **Note**:
 
@@ -85,6 +139,9 @@ while the _contravariant basis_ is the opposite: gradient in ``x`` of the coordi
 
 * things get a little more complicated in the presence of terrain, but ``\xi^3`` is radially aligned
   - the 3rd covariant component is aligned with W, but the 3rd contravariant component may not be (e.g. at the surface it is normal to the boundary).
+ 
+
+
 
 ### Cartesian bases
 Analogously to `CartesianPoint`s, in ClimaCore, there are also `CartesianVector`s:
