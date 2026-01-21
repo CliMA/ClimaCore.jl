@@ -111,6 +111,7 @@ UnitTest("InputOutput - finitedifferences"         ,"InputOutput/unit_finitediff
 UnitTest("InputOutput - pointspaces"               ,"InputOutput/unit_point.jl"),
 UnitTest("Array interpolation"                     ,"Remapping/interpolate_array.jl"),
 UnitTest("Array interpolation"                     ,"Remapping/distributed_remapping.jl"),
+UnitTest("Vertical interpolation"                  ,"Remapping/interpolate_pressure.jl"),
 UnitTest("Aqua"                                    ,"aqua.jl"),
 UnitTest("Deprecations"                            ,"deprecations.jl"),
 UnitTest("GPU - cuda"                              ,"gpu/cuda.jl";meta=:gpu_only),
