@@ -136,10 +136,16 @@ end
 @testset "rectangle" begin
 
     domain = Domains.RectangleDomain(
-        Geometry.XPoint(0) .. Geometry.XPoint(2π),
-        Geometry.YPoint(0) .. Geometry.YPoint(2π),
-        x1periodic = true,
-        x2periodic = true,
+        Domains.IntervalDomain(
+            Geometry.XPoint(0.0),
+            Geometry.XPoint(2π),
+            periodic = true,
+        ),
+        Domains.IntervalDomain(
+            Geometry.YPoint(0.0),
+            Geometry.YPoint(2π),
+            periodic = true,
+        ),
     )
 
     n1, n2 = 4, 4
@@ -260,6 +266,20 @@ end
 
     fspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
     cspace = Spaces.CenterExtrudedFiniteDifferenceSpace(fspace)
+    coords = Fields.coordinate_field(cspace)
+
+    times = 0:10:350
+    U = Array{Fields.Field}(undef, length(times))
+    for t in 1:length(times)
+        u = map(coords) do coord
+            α = 45.0
+            cosd(coord.lat) *
+            (sind(coord.long) * sind(α) + cosd(coord.long) * cosd(α)) +
+            coord.z
+        end
+        U[t] = u
+    end
+
     writevtk(
         joinpath(OUTPUT_DIR, "hybrid_sphere_point"),
         Fields.coordinate_field(fspace);
@@ -274,4 +294,44 @@ end
         basis = :point,
     )
     @test isfile(joinpath(OUTPUT_DIR, "hybrid_sphere_point_latlong.vtu"))
+
+    writepvd(
+        joinpath(OUTPUT_DIR, "series", "hybrid_sphere_scalar_cell"),
+        times,
+        Fields.coordinate_field(cspace);
+        basis = :cell,
+    )
+    for (i, _) in enumerate(times)
+        istr = lpad(i, 3, "0")
+        @test isfile(
+            joinpath(
+                OUTPUT_DIR,
+                "series",
+                "hybrid_sphere_scalar_cell_$(istr).vtu",
+            ),
+        )
+    end
+    @test isfile(
+        joinpath(OUTPUT_DIR, "series", "hybrid_sphere_scalar_cell.pvd"),
+    )
+
+    writepvd(
+        joinpath(OUTPUT_DIR, "series", "hybrid_sphere_vector_cell"),
+        times,
+        (U = U,);
+        basis = :cell,
+    )
+    for (i, _) in enumerate(times)
+        istr = lpad(i, 3, "0")
+        @test isfile(
+            joinpath(
+                OUTPUT_DIR,
+                "series",
+                "hybrid_sphere_vector_cell_$(istr).vtu",
+            ),
+        )
+    end
+    @test isfile(
+        joinpath(OUTPUT_DIR, "series", "hybrid_sphere_vector_cell.pvd"),
+    )
 end
