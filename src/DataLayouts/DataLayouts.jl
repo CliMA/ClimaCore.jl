@@ -2214,6 +2214,107 @@ array2data(array::AbstractArray{T}, data::AbstractData) where {T} =
         reshape(array, array_size(data)...),
     )
 
+function data2array_rrtmgp!(
+    array::AbstractArray,
+    data::D,
+    ::Val{trans},
+) where {trans, D <: Union{VF, VIFH, VIHF, VIJFH, VIJHF}}
+    (nl, ncol) = trans ? size(array) : reverse(size(array))
+    Ni, Nj, Nk, Nv, Nh = Base.size(data)
+    @assert nl * ncol == Ni * Nj * Nk * Nv * Nh
+    @assert prod(size(parent(data))) == Ni * Nj * Nk * Nv * Nh # verify Nf == 1
+
+    @inbounds begin
+        for i in 1:Ni, j in 1:Nj, k in 1:Nk, h in 1:Nh
+            colidx =
+                i + (j - 1) * Ni + (k - 1) * Ni * Nj + (h - 1) * Ni * Nj * Nk
+            for v in 1:Nv
+                cidx = CartesianIndex(i, j, k, v, h)
+                trans ? (array[colidx, v] = data[cidx][1]) :
+                (array[v, colidx] = data[cidx][1])
+            end
+        end
+    end
+    return nothing
+end
+
+_get_array2data_rrtmgp_function(::VIJFH) = array2data_rrtmgp_VIJFH!
+_get_array2data_rrtmgp_function(::VIJHF) = array2data_rrtmgp_VIJHF!
+_get_array2data_rrtmgp_function(::VIHF) = array2data_rrtmgp_VIHF!
+_get_array2data_rrtmgp_function(::VIFH) = array2data_rrtmgp_VIFH!
+_get_array2data_rrtmgp_function(::VF) = array2data_rrtmgp_VF!
+
+function array2data_rrtmgp!(
+    data::D,
+    array::AbstractArray,
+    ::Val{trans},
+) where {trans, D <: Union{VF, VIFH, VIHF, VIJFH, VIJHF}}
+    (nl, ncol) = trans ? size(array) : reverse(size(array))
+    Ni, Nj, _, Nv, Nh = Base.size(data)
+    @assert nl * ncol == Ni * Nj * Nv * Nh
+    parentdata = parent(data)
+    @assert prod(size(parentdata)) == Ni * Nj * Nv * Nh # verify Nf == 1
+    array2data_func! = _get_array2data_rrtmgp_function(data)
+    array2data_func!(parentdata, array, Val(trans))
+    return nothing
+end
+
+function array2data_rrtmgp_VIJFH!(parentdata, array, ::Val{trans}) where {trans}
+    Nv, Ni, Nj, _, Nh = size(parentdata)
+    for h in 1:Nh, j in 1:Nj, i in 1:Ni
+        colidx = i + (j - 1) * Ni + (h - 1) * Ni * Nj
+        for v in 1:Nv
+            @inbounds parentdata[v, i, j, 1, h] =
+                trans ? array[colidx, v] : array[v, colidx]
+        end
+    end
+    return nothing
+end
+
+function array2data_rrtmgp_VIFH!(parentdata, array, ::Val{trans}) where {trans}
+    Nv, Ni, _, Nh = size(parentdata)
+    for h in 1:Nh, i in 1:Ni
+        colidx = i + (h - 1) * Ni
+        for v in 1:Nv
+            @inbounds parentdata[v, i, 1, h] =
+                trans ? array[colidx, v] : array[v, colidx]
+        end
+    end
+    return nothing
+end
+
+function array2data_rrtmgp_VF!(parentdata, array, ::Val{trans}) where {trans}
+    Nv, _ = size(parentdata)
+    for v in 1:Nv
+        @inbounds parentdata[v, 1] = trans ? array[1, v] : array[v, 1]
+    end
+    return nothing
+end
+
+function array2data_rrtmgp_VIJHF!(parentdata, array, ::Val{trans}) where {trans}
+    Nv, Ni, Nj, Nh, _ = size(parentdata)
+    for h in 1:Nh, j in 1:Nj, i in 1:Ni
+        colidx = i + (j - 1) * Ni + (h - 1) * Ni * Nj
+        for v in 1:Nv
+            @inbounds parentdata[v, i, j, h, 1] =
+                trans ? array[colidx, v] : array[v, colidx]
+        end
+    end
+    return nothing
+end
+
+function array2data_rrtmgp_VIHF!(parentdata, array, ::Val{trans}) where {trans}
+    Nv, Ni, Nh, _ = size(parentdata)
+    for h in 1:Nh, i in 1:Ni
+        colidx = i + (h - 1) * Ni
+        for v in 1:Nv
+            @inbounds parentdata[v, i, h, 1] =
+                trans ? array[colidx, v] : array[v, colidx]
+        end
+    end
+    return nothing
+end
+
 """
     device_dispatch(array::AbstractArray)
 
