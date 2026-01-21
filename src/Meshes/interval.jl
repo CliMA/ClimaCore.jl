@@ -30,6 +30,9 @@ struct IntervalMesh{S, I <: IntervalDomain, V <: AbstractVector, M} <:
     reverse_mode::Bool
 end
 
+using Adapt
+Adapt.@adapt_structure IntervalMesh
+
 # implies isequal
 Base.:(==)(mesh1::IntervalMesh, mesh2::IntervalMesh) =
     mesh1.domain == mesh2.domain && mesh1.faces == mesh2.faces
@@ -89,9 +92,9 @@ end
 function boundary_face_name(mesh::IntervalMesh, elem::Integer, face)
     if !Domains.isperiodic(mesh.domain)
         if elem == 1 && face == 1
-            return mesh.domain.boundary_names[1]
+            return Domains.unique_boundary_names(mesh.domain)[1]
         elseif elem == nelements(mesh) && face == 2
-            return mesh.domain.boundary_names[2]
+            return Domains.unique_boundary_names(mesh.domain)[2]
         end
     end
     return nothing
@@ -481,7 +484,7 @@ function truncate_mesh(
     new_domain = IntervalDomain(
         z_bottom,
         Geometry.ZPoint{FT}(z_top),
-        boundary_names = trunc_domain.boundary_names,
+        boundary_names = Domains.boundary_names(trunc_domain),
     )
     return IntervalMesh(new_domain, new_stretch; nelems = new_nelems)
 end

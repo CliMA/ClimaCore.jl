@@ -399,10 +399,16 @@ function _Remapper(
         )
         num_dims = num_hdims
     else
+        device = ClimaComms.device(space)
+        cpu_space = if device isa ClimaComms.AbstractCPUDevice
+            space
+        else
+            Adapt.adapt(Array, space)
+        end
         vert_interpolation_weights =
-            ArrayType(vertical_interpolation_weights(space, target_zcoords))
+            ArrayType(vertical_interpolation_weights(cpu_space, target_zcoords))
         vert_bounding_indices =
-            ArrayType(vertical_bounding_indices(space, target_zcoords))
+            ArrayType(vertical_bounding_indices(cpu_space, target_zcoords))
 
         # We have to add one extra dimension with respect to the bitmask/local_horiz_indices
         # because we are going to store the values for the columns
@@ -463,10 +469,21 @@ function _Remapper(
     FT = Spaces.undertype(space)
     ArrayType = ClimaComms.array_type(space)
 
+    cpu_space = if ClimaComms.device(space) isa ClimaComms.AbstractCPUDevice
+        space
+    else
+        device = ClimaComms.device(space)
+        cpu_space = if device isa ClimaComms.AbstractCPUDevice
+            space
+        else
+            Adapt.adapt(Array, space)
+        end
+    end
+
     vert_interpolation_weights =
-        ArrayType(vertical_interpolation_weights(space, target_zcoords))
+        ArrayType(vertical_interpolation_weights(cpu_space, target_zcoords))
     vert_bounding_indices =
-        ArrayType(vertical_bounding_indices(space, target_zcoords))
+        ArrayType(vertical_bounding_indices(cpu_space, target_zcoords))
 
     local_interpolated_values =
         ArrayType(zeros(FT, (length(target_zcoords), buffer_length)))

@@ -1,4 +1,5 @@
 boundary_names(mesh::AbstractMesh) = boundary_names(domain(mesh))
+unique_boundary_names(mesh::AbstractMesh) = unique_boundary_names(domain(mesh))
 coordinate_type(mesh::AbstractMesh) = coordinate_type(domain(mesh))
 
 """

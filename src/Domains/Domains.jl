@@ -22,22 +22,27 @@ float_type(domain::AbstractDomain) = float_type(coordinate_type(domain))
 """
     boundary_names(obj::Union{AbstractDomain, AbstractMesh, AbstractTopology})
 
-A tuple or vector of unique boundary names of a spatial domain.
+The boundary names passed to the IntervalDomain (a tuple, or `nothing`).
 """
 function boundary_names end
 
-struct IntervalDomain{CT, B} <: AbstractDomain where {
-    CT <: Geometry.Abstract1DPoint{FT},
-    B <: BCTagType,
-} where {FT}
+"""
+    unique_boundary_names(obj::Union{AbstractDomain, AbstractMesh, AbstractTopology})
+
+A tuple or vector of unique boundary names of a spatial domain.
+"""
+function unique_boundary_names end
+
+struct IntervalDomain{CT, B} <:
+       AbstractDomain where {CT <: Geometry.Abstract1DPoint{FT}, B} where {FT}
     coord_min::CT
     coord_max::CT
-    boundary_names::B
 end
 
-isperiodic(domain::IntervalDomain) = isnothing(domain.boundary_names)
-boundary_names(domain::IntervalDomain) =
-    isperiodic(domain) ? () : unique(domain.boundary_names)
+isperiodic(::IntervalDomain{CT, B}) where {CT, B} = B == nothing
+unique_boundary_names(domain::IntervalDomain{CT, B}) where {CT, B} =
+    isperiodic(domain) ? Symbol[] : unique(B)
+boundary_names(::IntervalDomain{CT, B}) where {CT, B} = B
 
 """
     IntervalDomain(coord⁻, coord⁺; periodic=true)
@@ -60,7 +65,13 @@ function IntervalDomain(
             ),
         )
     end
-    IntervalDomain(promote(coord_min, coord_max)..., boundary_names)
+    c = promote(coord_min, coord_max)
+    boundary_names = if isnothing(boundary_names)
+        boundary_names
+    else
+        Tuple(boundary_names)
+    end
+    IntervalDomain{eltype(c), boundary_names}(c...)
 end
 IntervalDomain(coords::IntervalSets.ClosedInterval; kwargs...) =
     IntervalDomain(coords.left, coords.right; kwargs...)
@@ -95,7 +106,7 @@ function print_interval(io::IO, domain::IntervalDomain{CT}) where {CT}
     if isperiodic(domain)
         print(io, "(periodic)")
     else
-        print(io, domain.boundary_names)
+        print(io, boundary_names(domain))
     end
 end
 function Base.show(io::IO, domain::IntervalDomain)
@@ -111,10 +122,10 @@ end
 Base.:*(interval1::IntervalDomain, interval2::IntervalDomain) =
     RectangleDomain(interval1, interval2)
 
-boundary_names(domain::RectangleDomain) = unique(
+unique_boundary_names(domain::RectangleDomain) = unique(
     Symbol[
-        boundary_names(domain.interval1)...,
-        boundary_names(domain.interval2)...,
+        unique_boundary_names(domain.interval1)...,
+        unique_boundary_names(domain.interval2)...,
     ],
 )::Vector{Symbol}
 
@@ -171,6 +182,7 @@ Base.show(io::IO, domain::SphereDomain) =
     print(io, nameof(typeof(domain)), ": radius = ", domain.radius)
 
 boundary_names(::SphereDomain) = ()
+unique_boundary_names(::SphereDomain) = Symbol[]
 coordinate_type(::SphereDomain{FT}) where {FT} = Geometry.Cartesian123Point{FT}
 
 end # module
