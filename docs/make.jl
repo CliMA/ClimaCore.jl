@@ -4,7 +4,8 @@ import ClimaCore,
     ClimaCoreMakie,
     ClimaCorePlots,
     ClimaCoreTempestRemap,
-    ClimaCoreSpectra
+    ClimaCoreSpectra,
+    ClimaInterpolations
 using Makie  # Required for Documenter to resolve @ref links to Makie types in ClimaCoreMakie docs
 
 if !@isdefined(TUTORIALS)
@@ -71,6 +72,7 @@ withenv("GKSwstype" => "nul") do
             ClimaCorePlots,
             ClimaCoreMakie,
             ClimaCoreTempestRemap,
+            Base.get_extension(ClimaCore, :ClimaCoreClimaInterpolationsExt),
         ],
         pages = Any[
             "Home" => "index.md",
