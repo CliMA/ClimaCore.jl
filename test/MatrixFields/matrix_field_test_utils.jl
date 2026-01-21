@@ -74,15 +74,8 @@ function test_field_broadcast(;
     ref_set_result = nothing,
     time_ratio_limit = 10,
     max_eps_error_limit = 10,
-    test_broken_with_cuda = false,
 )
     @testset "$test_name" begin
-        if test_broken_with_cuda && using_cuda
-            @test_throws invalid_ir_error materialize(get_result)
-            @warn "$test_name:\n\tCUDA.InvalidIRError"
-            return
-        end
-
         result = materialize(get_result)
         result_copy = copy(result)
         time = @benchmark materialize!(result, set_result)

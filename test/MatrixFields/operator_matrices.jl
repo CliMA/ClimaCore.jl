@@ -330,7 +330,6 @@ end
             )
         ),
         time_ratio_limit = 30, # This case's ref function is fast on Buildkite.
-        test_broken_with_cuda = true, # TODO: Fix this.
     )
 
     # TODO: For some reason, we need to compile and run @test_opt on several
