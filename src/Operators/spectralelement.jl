@@ -625,9 +625,9 @@ end
 
 """
     split_div = SplitDivergence()
-    split_div.(u, ψ)
+    split_div.(ρu, ψ)
 
-Computes the divergence of the product `u * ψ` using a **split-form (entropy-stable)** discretization.
+Computes the divergence of the product `ρu * ψ` using a **split-form (entropy-stable)** discretization.
 
 This operator is designed for the advection of scalar quantities in conservation laws (e.g., 
 thermodynamic variables or tracers). By evaluating the divergence using a specific averaging of the 
@@ -636,43 +636,72 @@ of two spectrally variable fields, thereby inhibiting the growth of quadratic in
 cold temperature spikes) without requiring hyperviscosity.
 
 # Arguments
-- `u`: The transport vector field, typically the **mass flux** (``\\rho \\mathbf{u}``). It must be a vector quantity (e.g., `Geometry.Covariant12Vector`).
+- `ρu`: The transport vector field, typically the **mass flux**. It must be a vector quantity (e.g., `Geometry.Contravariant12Vector`).
 - `ψ`: The **specific** scalar quantity to be advected (e.g., specific total energy ``e_{tot}`` or specific humidity ``q_{tot}``).
 
 # Mathematical Formulation
+
 ## Continuous
-The split form is defined as the arithmetic mean of the conservative form and the advective form:
+The split form of the divergence operator is defined as the arithmetic mean of
+the conservative and advective forms:
 ```math
-\\nabla \\cdot (\\rho \\mathbf{u} \\psi)|_{split} = \\frac{1}{2} \\nabla \\cdot (\\rho \\mathbf{u} \\psi) + \\frac{1}{2} \\left( \\psi \\nabla \\cdot (\\rho \\mathbf{u}) + \\rho \\mathbf{u} \\cdot \\nabla \\psi \\right)
+\\nabla \\cdot (\\rho \\mathbf{u} \\psi)|_\\textrm{split} =
+    \\frac{1}{2} \\nabla \\cdot (\\rho \\mathbf{u} \\psi) +
+    \\frac{1}{2} \\left(
+        \\psi \\nabla \\cdot (\\rho \\mathbf{u}) +
+        \\rho \\mathbf{u} \\cdot \\nabla \\psi
+    \\right)
 ```
 
-## Discrete (SBP)
-The implementation uses the generalized summation-by-parts (SBP) property, where the divergence is the inverse of the mass matrix acting on the stiffness matrix. Let \\delta V_i = w_i J_i be the physical volume element (weights w, Jacobian J) and Q be the skew-symmetric stiffness matrix. The divergence is:
+## Discrete
+The discretized split operator is equivalent to using the strong formulation of
+the gradient operator and the weak formulation of the divergence operator:
 ```math
-(Div_{split})_i = \\frac{1}{\\delta V_i} \\sum_j Q_{ij} F_{ij}
+\\textrm{split_div}(\\rho \\mathbf{u}, \\psi) =
+    \\frac{1}{2} \\textrm{wdiv}(\\rho \\mathbf{u} \\psi) +
+    \\frac{1}{2} \\left(
+        \\psi \\textrm{wdiv}(\\rho \\mathbf{u}) +
+        \\rho \\mathbf{u} \\cdot \\textrm{grad}(\\psi)
+    \\right)
 ```
-where F_{ij} is the symmetric two-point flux.
+Swapping the weak and strong formulations in the last two terms also results in
+the same operator. The discrete form of the divergence theorem, which stems from
+the generalized summation-by-parts (SBP) property, guarantees that the integral
+of the first term vanishes,
+```math
+\\int_\\Omega \\textrm{wdiv}(\\rho \\mathbf{u} \\psi) dV = 0
+```
+while the integrals of the other two terms cancel out,
+```math
+\\int_\\Omega \\psi \\textrm{wdiv}(\\rho \\mathbf{u}) dV =
+    -\\int_\\Omega \\rho \\mathbf{u} \\cdot \\textrm{grad}(\\psi) dV
+```
+So, this discretization ensures that the split operator conserves the integral
+of ``\\rho \\mathbf{u} \\psi``.
 
-**Reduction to differentiation matrix form:** For Legendre-Gauss-Lobatto (LGL) elements, the stiffness matrix satisfies Q_{ij} = w_i D_{ij}. Substituting this into the equation above, the quadrature weights w_i cancel out:
-```math 
-\\frac{1}{w_i J_i} \\sum_j (w_i D_{ij}) F_{ij} = \\frac{1}{J_i} \\sum_j D_{ij} F_{ij}
-```
-
-This is the form implemented in the code:
+## Two-Point
+A more compact representation of the discretized operator can be obtained with
+the symmetric two-point flux, whose values in one dimension are
 ```math
-(Div_{split})_i = \\frac{1}{J_i} \\sum_j D_{ij} F_{ij}
+(F^1)_{ij} =
+    \\frac{1}{2} (\\rho_i J_i (u^1)_i + \\rho_j J_j (u^1)_j) (\\psi_i + \\psi_j)
 ```
-where ``F_{ij}`` is the symmetric **two-point flux** between nodes ``i`` and ``j``:
+With ``D`` denoting the spectral derivative matrix, the split operator in one
+dimension can be expressed as
 ```math
-F_{ij} = \\frac{1}{2} \\left( U_i + U_j \\right) (\\psi_i + \\psi_j)
+\\textrm{split_div}(\\rho \\mathbf{u}, \\psi)_i =
+    \\frac{1}{J_i} \\sum_{j \\neq i} D_{ij} (F^1)_{ij}
 ```
-Here, ``U`` represents the Jacobian-weighted contravariant flux component (``U^1 = J u^1``). In 2D/3D tensor-product grids, this 1D split operator is 
-applied sequentially along each dimension.
+In two dimensions, ``F^1`` and the analogous quantity ``F^2`` provide a similar
+expression for the split divergence, with the one-dimensional operator applied
+sequentially along each dimension.
 
 # Properties
-1.  **Conservation:** The operator remains conservative.
-2.  **Consistency:** If `ψ` is spatially constant (e.g., `ψ = 1`), the operator degenerates to the standard divergence of `u` (mass continuity).
-3.  **Complexity:** Unlike standard spectral element divergence which uses tensor product factorization for ``O(N)`` cost, this operator requires explicit interaction between all node pairs on a 1D line, resulting in ``O(N^2)`` complexity per line (where ``N`` is the polynomial order).
+1.  **Conservation:** The split operator conserves ``\\rho \\mathbf{u} \\psi``
+2.  **Consistency:** If ``\\psi = 1``, the split operator degenerates to the
+    weak formulation of ``\\nabla \\cdot \\rho \\mathbf{u}`` (mass continuity)
+3.  **Complexity:** The split operator has the same ``O(N^2)`` complexity per
+    element as the strong and weak operators, but needs twice as many operations
 
 # References
 - Fisher, T. C., & Carpenter, M. H. (2013). High-order entropy stable finite difference schemes for nonlinear conservation laws: Finite domains. Journal of Computational Physics, 252, 518-557. [https://doi.org/10.1016/j.jcp.2013.06.014](https://doi.org/10.1016/j.jcp.2013.06.014)
@@ -693,37 +722,39 @@ function apply_operator(op::SplitDivergence{(1,)}, space, slabidx, arg1, arg2)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
+    JT = operator_return_eltype(op, eltype(arg1), FT)
     RT = operator_return_eltype(op, eltype(arg1), eltype(arg2))
+
+    Ju1 = IF{JT, Nq}(MArray, FT)
+    psi = IF{eltype(arg2), Nq}(MArray, eltype(arg2))
+    @inbounds for i in 1:Nq
+        ij = CartesianIndex((i,))
+        local_geometry = get_local_geometry(space, ij, slabidx)
+        Ju1[slab_index(i)] =
+            local_geometry.J ⊠ RecursiveApply.rmap(
+                u -> Geometry.contravariant1(u, local_geometry),
+                get_node(space, arg1, ij, slabidx),
+            )
+        psi[slab_index(i)] = get_node(space, arg2, ij, slabidx)
+    end
+
     out = IF{RT, Nq}(MArray, FT)
     fill!(parent(out), zero(FT))
-
-    Ju1_slab = MArray{Tuple{Nq}, FT}(undef)
-    psi_slab = MArray{Tuple{Nq}, FT}(undef)
-
     @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        u = get_node(space, arg1, ij, slabidx)
-        psi = get_node(space, arg2, ij, slabidx)
-        Ju1 = local_geometry.J * Geometry.contravariant1(u, local_geometry)
-        Ju1_slab[i] = Ju1
-        psi_slab[i] = psi
-    end
-
-    @inbounds for i in 1:Nq
-        val = zero(FT)
-        for j in 1:Nq
-            j == i && continue
-            flux_ij = (Ju1_slab[i] + Ju1_slab[j]) * (psi_slab[i] + psi_slab[j]) / 2
-            val += D[i, j] * flux_ij
+        for j in 1:(i - 1) # loop over half the indices, since F1[i,j] = F1[j,i]
+            F1 = RecursiveApply.rdiv(
+                (Ju1[slab_index(i)] ⊞ Ju1[slab_index(j)]) ⊠
+                (psi[slab_index(i)] ⊞ psi[slab_index(j)]),
+                2,
+            )
+            out[slab_index(i)] = out[slab_index(i)] ⊞ D[i, j] ⊠ F1
+            out[slab_index(j)] = out[slab_index(j)] ⊞ D[j, i] ⊠ F1
         end
-        out[slab_index(i)] = val
     end
-
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i)] = out[slab_index(i)] * local_geometry.invJ
+        out[slab_index(i)] = out[slab_index(i)] ⊠ local_geometry.invJ
     end
 
     return Field(SArray(out), space)
@@ -734,57 +765,55 @@ function apply_operator(op::SplitDivergence{(1, 2)}, space, slabidx, arg1, arg2)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
+    JT = operator_return_eltype(op, eltype(arg1), FT)
     RT = operator_return_eltype(op, eltype(arg1), eltype(arg2))
-    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
-    fill!(parent(out), zero(FT))
 
-    Ju1_slab = MArray{Tuple{Nq, Nq}, FT}(undef)
-    Ju2_slab = MArray{Tuple{Nq, Nq}, FT}(undef)
-    psi_slab = MArray{Tuple{Nq, Nq}, FT}(undef)
-
+    Ju1 = DataLayouts.IJF{JT, Nq}(MArray, FT)
+    Ju2 = DataLayouts.IJF{JT, Nq}(MArray, FT)
+    psi = DataLayouts.IJF{eltype(arg2), Nq}(MArray, eltype(arg2))
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
         u = get_node(space, arg1, ij, slabidx)
-        psi = get_node(space, arg2, ij, slabidx)
-
-        Ju1_slab[i, j] = local_geometry.J * Geometry.contravariant1(u, local_geometry)
-        Ju2_slab[i, j] = local_geometry.J * Geometry.contravariant2(u, local_geometry)
-        psi_slab[i, j] = psi
+        Ju1[slab_index(i, j)] =
+            local_geometry.J ⊠ RecursiveApply.rmap(
+                u -> Geometry.contravariant1(u, local_geometry),
+                u,
+            )
+        Ju2[slab_index(i, j)] =
+            local_geometry.J ⊠ RecursiveApply.rmap(
+                u -> Geometry.contravariant2(u, local_geometry),
+                u,
+            )
+        psi[slab_index(i, j)] = get_node(space, arg2, ij, slabidx)
     end
 
-    @inbounds for j in 1:Nq
-        for i in 1:Nq
-            val = zero(FT)
-            for k in 1:Nq
-                k == i && continue
-                flux_ik =
-                    (Ju1_slab[i, j] + Ju1_slab[k, j]) *
-                    (psi_slab[i, j] + psi_slab[k, j]) / 2
-                val += D[i, k] * flux_ik
-            end
-            out[slab_index(i, j)] += val
+    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    fill!(parent(out), zero(FT))
+    @inbounds for j in 1:Nq, i in 1:Nq
+        for k in 1:(i - 1) # loop over half the indices, since F1[i,k] = F1[k,i]
+            F1 = RecursiveApply.rdiv(
+                (Ju1[slab_index(i, j)] ⊞ Ju1[slab_index(k, j)]) ⊠
+                (psi[slab_index(i, j)] ⊞ psi[slab_index(k, j)]),
+                2,
+            )
+            out[slab_index(i, j)] = out[slab_index(i, j)] ⊞ D[i, k] ⊠ F1
+            out[slab_index(k, j)] = out[slab_index(k, j)] ⊞ D[k, i] ⊠ F1
+        end
+        for k in 1:(j - 1) # loop over half the indices, since F2[j,k] = F2[k,j]
+            F2 = RecursiveApply.rdiv(
+                (Ju2[slab_index(i, j)] ⊞ Ju2[slab_index(i, k)]) ⊠
+                (psi[slab_index(i, j)] ⊞ psi[slab_index(i, k)]),
+                2,
+            )
+            out[slab_index(i, j)] = out[slab_index(i, j)] ⊞ D[j, k] ⊠ F2
+            out[slab_index(i, k)] = out[slab_index(i, k)] ⊞ D[k, j] ⊠ F2
         end
     end
-
-    @inbounds for i in 1:Nq
-        for j in 1:Nq
-            val = zero(FT)
-            for k in 1:Nq
-                k == j && continue
-                flux_jk =
-                    (Ju2_slab[i, j] + Ju2_slab[i, k]) *
-                    (psi_slab[i, j] + psi_slab[i, k]) / 2
-                val += D[j, k] * flux_jk
-            end
-            out[slab_index(i, j)] += val
-        end
-    end
-
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i, j)] *= local_geometry.invJ
+        out[slab_index(i, j)] = out[slab_index(i, j)] ⊠ local_geometry.invJ
     end
 
     return Field(SArray(out), space)

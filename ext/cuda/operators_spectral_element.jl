@@ -294,19 +294,20 @@ Base.@propagate_inbounds function operator_evaluate(
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
+    RT = Geometry.rmul_return_type(eltype(Ju1), eltype(psi))
 
     local_geometry = get_local_geometry(space, ij, slabidx)
 
-    # Compute split-form divergence: sum_j D[i,j] * flux_ij
-    # where flux_ij = 0.5 * (Ju1[i] + Ju1[j]) * (psi[i] + psi[j])
-    result = zero(FT)
+    result = zero(RT)
     for j in 1:Nq
         j == i && continue
-        flux_ij = 0.5 * (Ju1[i, vt] + Ju1[j, vt]) * (psi[i, vt] + psi[j, vt])
-        result = result + D[i, j] * flux_ij
+        F1 = RecursiveApply.rdiv(
+            (Ju1[i, vt] ⊞ Ju1[j, vt]) ⊠ (psi[i, vt] ⊞ psi[j, vt]),
+            2,
+        )
+        result = result ⊞ D[i, j] ⊠ F1
     end
-
-    return result * local_geometry.invJ
+    return result ⊠ local_geometry.invJ
 end
 Base.@propagate_inbounds function operator_evaluate(
     op::SplitDivergence{(1, 2)},
@@ -322,28 +323,28 @@ Base.@propagate_inbounds function operator_evaluate(
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
+    RT = Geometry.rmul_return_type(eltype(Ju1), eltype(psi))
 
     local_geometry = get_local_geometry(space, ij, slabidx)
 
-    # Compute split-form divergence in 2D
-    # First dimension: sum_k D[i,k] * flux_ik
-    # where flux_ik = 0.5 * (Ju1[i,j] + Ju1[k,j]) * (psi[i,j] + psi[k,j])
-    result = zero(FT)
+    result = zero(RT)
     for k in 1:Nq
         k == i && continue
-        flux_ik = 0.5 * (Ju1[i, j, vt] + Ju1[k, j, vt]) * (psi[i, j, vt] + psi[k, j, vt])
-        result = result + D[i, k] * flux_ik
+        F1 = RecursiveApply.rdiv(
+            (Ju1[i, j, vt] ⊞ Ju1[k, j, vt]) ⊠ (psi[i, j, vt] ⊞ psi[k, j, vt]),
+            2,
+        )
+        result = result ⊞ D[i, k] ⊠ F1
     end
-
-    # Second dimension: sum_k D[j,k] * flux_jk
-    # where flux_jk = 0.5 * (Ju2[i,j] + Ju2[i,k]) * (psi[i,j] + psi[i,k])
     for k in 1:Nq
         k == j && continue
-        flux_jk = 0.5 * (Ju2[i, j, vt] + Ju2[i, k, vt]) * (psi[i, j, vt] + psi[i, k, vt])
-        result = result + D[j, k] * flux_jk
+        F2 = RecursiveApply.rdiv(
+            (Ju2[i, j, vt] ⊞ Ju2[i, k, vt]) ⊠ (psi[i, j, vt] ⊞ psi[i, k, vt]),
+            2,
+        )
+        result = result ⊞ D[j, k] ⊠ F2
     end
-
-    return result * local_geometry.invJ
+    return result ⊠ local_geometry.invJ
 end
 
 Base.@propagate_inbounds function operator_evaluate(
