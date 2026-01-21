@@ -38,15 +38,12 @@ NVTX.@annotate function multiple_field_solve!(
     args = (device, caches, xs, As, bs, x1, us, mask, cart_inds, Val(Nnames))
 
     nitems = Ni * Nj * Nh * Nnames
-    threads = threads_via_occupancy(multiple_field_solve_kernel!, args)
-    n_max_threads = min(threads, nitems)
-    p = linear_partition(nitems, n_max_threads)
-
+    (; threads, blocks) = config_via_occupancy(multiple_field_solve_kernel!, nitems, args)
     auto_launch!(
         multiple_field_solve_kernel!,
         args;
-        threads_s = p.threads,
-        blocks_s = p.blocks,
+        threads_s = threads,
+        blocks_s = blocks,
         always_inline = true,
     )
     call_post_op_callback() && post_op_callback(x, dev, cache, x, A, b, x1)

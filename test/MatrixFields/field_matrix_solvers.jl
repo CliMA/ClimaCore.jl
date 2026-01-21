@@ -46,11 +46,11 @@ function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
         @info "$test_name:\n\tSolve Time = $solve_time_rounded s, \
                Multiplication Time = $mul_time_rounded s (Ratio = \
                $time_ratio_rounded)\n\t$error_string"
-
         if use_rel_error
             @test rel_error < 1e-5
         else
-            @test max_eps_error <= 3
+            # when run with CUDA, the errors are larger due to larger columns
+            @test max_eps_error <= (using_cuda ? 4 : 3)
         end
 
         # In addition to ignoring the type instabilities from CUDA, ignore those
@@ -74,7 +74,7 @@ end
 
 @testset "FieldMatrixSolver Unit Tests" begin
     FT = Float64
-    center_space, face_space = test_spaces(FT)
+    center_space, face_space = test_spaces(FT; high_res = using_cuda)
     surface_space = Spaces.level(face_space, half)
 
     seed!(1) # ensures reproducibility
@@ -127,7 +127,7 @@ end
         MatrixFields.BlockLowerTriangularSolve(@name(c)),
         MatrixFields.BlockArrowheadSolve(@name(c)),
         MatrixFields.ApproximateBlockArrowheadIterativeSolve(@name(c)),
-        MatrixFields.StationaryIterativeSolve(; n_iters = using_cuda ? 28 : 18),
+        MatrixFields.StationaryIterativeSolve(; n_iters = using_cuda ? 42 : 18),
     )
         test_field_matrix_solver(;
             test_name = "$(typeof(alg).name.name) for a block diagonal matrix \
@@ -345,7 +345,7 @@ end
 
 @testset "FieldMatrixSolver ClimaAtmos-Based Tests" begin
     FT = Float64
-    center_space, face_space = test_spaces(FT)
+    center_space, face_space = test_spaces(FT; high_res = using_cuda)
     surface_space = Spaces.level(face_space, half)
 
     seed!(1) # ensures reproducibility
