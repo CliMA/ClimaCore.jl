@@ -373,7 +373,7 @@ weakdeps = ["CUDA", "MPI"]
     ClimaCommsMPIExt = "MPI"
 
 [[deps.ClimaCore]]
-deps = ["Adapt", "BandedMatrices", "BlockArrays", "ClimaComms", "CubedSphere", "DataStructures", "ForwardDiff", "GaussQuadrature", "GilbertCurves", "HDF5", "InteractiveUtils", "IntervalSets", "KrylovKit", "LazyBroadcast", "LinearAlgebra", "MultiBroadcastFusion", "NVTX", "PkgVersion", "RecursiveArrayTools", "RootSolvers", "SparseArrays", "StaticArrays", "Statistics", "UnrolledUtilities"]
+deps = ["Adapt", "BandedMatrices", "BlockArrays", "ClimaComms", "ClimaInterpolations", "CubedSphere", "DataStructures", "ForwardDiff", "GaussQuadrature", "GilbertCurves", "HDF5", "InteractiveUtils", "IntervalSets", "KrylovKit", "LazyBroadcast", "LinearAlgebra", "MultiBroadcastFusion", "NVTX", "PkgVersion", "RecursiveArrayTools", "RootSolvers", "SparseArrays", "StaticArrays", "Statistics", "UnrolledUtilities"]
 path = ".."
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
 version = "0.14.48"
@@ -400,6 +400,16 @@ deps = ["ClimaCore", "WriteVTK"]
 path = "../lib/ClimaCoreVTK"
 uuid = "c8b6d40d-e815-466f-95ae-c48aefa668fa"
 version = "0.7.6"
+
+[[deps.ClimaInterpolations]]
+deps = ["DocStringExtensions"]
+git-tree-sha1 = "c3852119afe4fdaafa243b618bf28f12c4b3d811"
+uuid = "dd0f122e-fa3b-47f3-bcf0-93bbc60d885e"
+version = "0.1.1"
+weakdeps = ["CUDA"]
+
+    [deps.ClimaInterpolations.extensions]
+    ClimaInterpolationsCUDAExt = "CUDA"
 
 [[deps.ClimaParams]]
 deps = ["Dates", "TOML"]

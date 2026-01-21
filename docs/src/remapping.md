@@ -163,3 +163,81 @@ int12 = interpolate(remapper, [field1, field2])
 This section hasn't been written yet. You can help by writing it.
 
 TODO: finish writing this section.
+
+# Interpolating to pressure coordinates
+
+In addition to the `Remapper`, you can also interpolate to pressure coordinates.
+This can be used with the `Remapper` to remap a `ClimaCore` `Field` to a regular
+grid, where the vertical is pressure.
+
+`ClimaCore` provides the `PressureInterpolator` for efficient vertical
+interpolation from height to pressure coordinates.
+
+## Quick start
+
+The simplest way to interpolate a field to pressure coordinates:
+
+```julia
+import ClimaCore: Remapping, Fields
+using ClimaInterpolations
+
+# Define target pressure levels (in ascending order)
+pressure_levels = 100.0 .* [100.0, 250.0, 500.0, 850.0, 1000.0]
+
+# Create the interpolator
+# pressure_field is a pressure field on center space
+pressure_intp = Remapping.PressureInterpolator(pressure_field, pressure_levels)
+
+# Interpolate the field to pressure coordinates
+field_on_pressure_space = Remapping.interpolate_pressure(field, pressure_intp)
+
+# Get the pressure field and space with pressure as the vertical
+p_field = Remapping.pfull_field(pressure_intp)
+p_space = Remapping.pressure_space(pressure_intp)
+
+# If the pressure field changes, then you need to call update!
+Remapping.update!(pressure_intp)
+
+# This mutates both field_on_pressure_space and the interpolation done
+# in-place
+field_on_pressure_space =
+    Remapping.interpolate_pressure!(field_on_pressure_space, field, pressure_intp)
+```
+
+The result `field_on_pressure_space` is defined on a new space where the
+vertical coordinate is pressure rather than height.
+
+## How it works
+
+The `PressureInterpolator` performs the following steps:
+
+1. **Ensure monotonicity**: Applies a cumulative minimum along each column to
+   ensure pressure decreases monotonically with height.
+2. **Vertical interpolation**: Interpolates field values to the specified
+   pressure coordinates using linear interpolation with constant boundary
+   conditions.
+
+!!! warning "Pressure-height relationship"
+    The implementation assumes pressure decreases monotonically with height. If
+    the interpolated field appears unrealistic, check for instabilities or
+    inversions in your pressure field.
+
+!!! note "Boundary conditions"
+    By default, vertical interpolation uses constant boundary conditions at the
+    top and bottom of the atmosphere. Interpolated values at pressure levels
+    outside the model's vertical range may be inaccurate.
+
+## Space and staggering requirements
+
+!!! note "Space compatibility"
+    The pressure field and the field being interpolated must be defined on the
+    same space with the same vertical staggering (`CellCenter` or `CellFace`).
+    The pressure field must use `CellCenter` staggering.
+
+The `PressureInterpolator` works with:
+- `ExtrudedFiniteDifferenceSpace` - 3D spaces (e.g., cubed sphere with vertical
+  levels)
+- `FiniteDifferenceSpace` - 1D column spaces
+
+Interpolating fields on center and face spaces are supported, but the pressure
+field itself must always be on a center space.
