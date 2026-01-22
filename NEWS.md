@@ -4,6 +4,10 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.46
+-------
+- Restrict GPUCompiler to < v1.7.6 to avoid GPU errors [2430](https://github.com/CliMA/ClimaCore.jl/pull/2430)
+
 v0.14.45
 -------
 - Add split divergence operator [2409](https://github.com/CliMA/ClimaCore.jl/pull/2409)
