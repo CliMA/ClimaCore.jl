@@ -5,6 +5,7 @@ using Revise; include(joinpath("test", "CommonGrids", "CommonGrids.jl"))
 import ClimaComms
 ClimaComms.@import_required_backends
 using ClimaCore.CommonGrids
+import ClimaCore.CommonGrids: ExtrudedCubedSphereGrid, CubedSphereGrid, Box3DGrid
 using ClimaCore:
     Geometry,
     Hypsography,
@@ -118,4 +119,44 @@ using Test
     )
     @test grid isa Grids.SpectralElementGrid2D
     @test Grids.topology(grid).mesh isa Meshes.RectilinearMesh
+end
+
+@testset "Space-filling curve usage in CommonGrids" begin
+    @testset "ExtrudedCubedSphereGrid uses space-filling curve" begin
+        grid = ExtrudedCubedSphereGrid(;
+            z_elem = 10,
+            z_min = 0,
+            z_max = 1,
+            radius = 10,
+            h_elem = 10,
+            n_quad_points = 4,
+        )
+        topology = Grids.topology(grid.horizontal_grid)
+        @test Topologies.uses_spacefillingcurve(topology) == true
+    end
+
+    @testset "CubedSphereGrid uses space-filling curve" begin
+        grid = CubedSphereGrid(; radius = 10, n_quad_points = 4, h_elem = 10)
+        topology = Grids.topology(grid)
+        @test Topologies.uses_spacefillingcurve(topology) == true
+    end
+
+    @testset "Box3DGrid uses space-filling curve" begin
+        grid = Box3DGrid(;
+            z_elem = 10,
+            x_min = 0,
+            x_max = 1,
+            y_min = 0,
+            y_max = 1,
+            z_min = 0,
+            z_max = 10,
+            periodic_x = false,
+            periodic_y = false,
+            n_quad_points = 4,
+            x_elem = 3,
+            y_elem = 4,
+        )
+        topology = Grids.topology(grid.horizontal_grid)
+        @test Topologies.uses_spacefillingcurve(topology) == true
+    end
 end

@@ -702,6 +702,26 @@ end
 
 domain(topology::Topology2D) = domain(topology.mesh)
 nelems(topology::Topology2D) = length(topology.elemorder)
+
+"""
+    uses_spacefillingcurve(topology::Topology2D) -> Bool
+
+Return `true` if the topology uses a space-filling curve for element ordering,
+`false` if it uses the default ordering (e.g., `CartesianIndices`).
+
+# Examples
+
+```julia
+topology = Topology2D(context, mesh)
+if uses_spacefillingcurve(topology)
+    println("Using space-filling curve ordering")
+else
+    println("Using default Cartesian ordering")
+end
+```
+"""
+uses_spacefillingcurve(topology::Topology2D) = !(topology.elemorder isa CartesianIndices)
+
 nlocalelems(topology::Topology2D) = length(topology.local_elem_gidx)
 function localelems(topology::Topology2D)
     topology.elemorder[topology.local_elem_gidx]

@@ -171,6 +171,7 @@ function ExtrudedCubedSphereGrid(
     h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(
         context,
         h_mesh,
+        Topologies.spacefillingcurve(h_mesh),
     ),
     horizontal_layout_type = DataLayouts.IJFH,
     z_mesh::Meshes.IntervalMesh = DefaultZMesh(
@@ -261,6 +262,7 @@ function CubedSphereGrid(
     h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(
         context,
         h_mesh,
+        Topologies.spacefillingcurve(h_mesh),
     ),
     horizontal_layout_type = DataLayouts.IJFH,
     enable_mask::Bool = false,
