@@ -42,11 +42,6 @@ end
 )
     unrolled_map(arg -> dss_transform(arg, local_geometry, weight), args)
 end
-@inline dss_transform(
-    arg::Tuple{Any},
-    local_geometry::Geometry.LocalGeometry,
-    weight,
-) = (dss_transform(first(arg), local_geometry, weight),)
 @inline function dss_transform(
     arg::NamedTuple{names},
     local_geometry::Geometry.LocalGeometry,

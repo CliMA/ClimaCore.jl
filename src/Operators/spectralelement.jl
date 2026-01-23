@@ -250,7 +250,7 @@ end
 
 Calls `resolve_operator(arg, slabidx)` for each `arg` in `args`
 """
-Base.@propagate_inbounds _resolve_operator_args(slabidx, args::Tuple) =
+Base.@propagate_inbounds _resolve_operator_args(slabidx, args) =
     unrolled_map(arg -> resolve_operator(arg, slabidx), args)
 
 function strip_space(bc::SpectralBroadcasted{Style}, parent_space) where {Style}

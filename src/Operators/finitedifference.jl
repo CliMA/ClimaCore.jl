@@ -3678,9 +3678,6 @@ end
     unrolled_map(args) do arg
         left_interior_window_idx(arg, space, loc)
     end
-@inline _left_interior_window_idx_args(args::Tuple{Any}, space, loc) =
-    (left_interior_window_idx(args[1], space, loc),)
-@inline _left_interior_window_idx_args(args::Tuple{}, space, loc) = ()
 
 """
     left_interior_window_idx(arg, space, loc)
@@ -3729,9 +3726,6 @@ end
     unrolled_map(args) do arg
         right_interior_window_idx(arg, space, loc)
     end
-@inline _right_interior_window_idx_args(args::Tuple{Any}, space, loc) =
-    (right_interior_window_idx(args[1], space, loc),)
-@inline _right_interior_window_idx_args(args::Tuple{}, space, loc) = ()
 
 @inline function right_interior_window_idx(
     bc::StencilBroadcasted,

@@ -20,7 +20,8 @@ Base.@propagate_inbounds function slab_args(args::Tuple, inds...)
         slab(arg, inds...)
     end
 end
-Base.@propagate_inbounds slab_args(args::Tuple{}, inds...) = ()
+Base.@propagate_inbounds slab_args(args::NamedTuple, inds...) =
+    NamedTuple{keys(args)}(slab_args(values(args), inds...))
 
 """
     column(data::AbstractData, i::Integer)
@@ -41,7 +42,6 @@ Base.@propagate_inbounds function column_args(args::Tuple, inds...)
         column(arg, inds...)
     end
 end
-Base.@propagate_inbounds column_args(args::Tuple{}, inds...) = ()
 Base.@propagate_inbounds column_args(args::NamedTuple, inds...) =
     NamedTuple{keys(args)}(column_args(values(args), inds...))
 
@@ -53,4 +53,3 @@ Base.@propagate_inbounds function level_args(args::Tuple, inds...)
         level(arg, inds...)
     end
 end
-Base.@propagate_inbounds level_args(args::Tuple{}, inds...) = ()

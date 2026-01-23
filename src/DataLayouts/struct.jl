@@ -61,10 +61,10 @@ Changes the type parameters of `S` to produce a new type `S′` such that, if
 """
 replace_basetype(::Type{T}, ::Type{T′}, ::Type{S}) where {T, T′, S} =
     length(S.parameters) == 0 ? S :
-    S.name.wrapper{replace_basetypes(T, T′, S.parameters...)...}
+    S.name.wrapper{replace_basetypes(T, T′, Tuple(S.parameters))...}
 replace_basetype(::Type{T}, ::Type{T′}, ::Type{<:T}) where {T, T′} = T′
 replace_basetype(::Type{T}, ::Type{T′}, value) where {T, T′} = value
-replace_basetypes(::Type{T}, ::Type{T′}, values...) where {T, T′} =
+replace_basetypes(::Type{T}, ::Type{T′}, values) where {T, T′} =
     unrolled_map(values) do value
         replace_basetype(T, T′, value)
     end

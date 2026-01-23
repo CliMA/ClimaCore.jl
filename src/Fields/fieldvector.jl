@@ -244,38 +244,34 @@ end
 @inline first_fieldvector_in_bc(x) = nothing
 
 @inline _is_diagonal_bc_args(
-    truesofar,
     ::Type{TStart},
     args::Tuple,
 ) where {TStart} =
-    truesofar && unrolled_all(args) do arg
-        _is_diagonal_bc(truesofar, TStart, arg)
+    unrolled_all(args) do arg
+        _is_diagonal_bc(TStart, arg)
     end
 
 @inline function _is_diagonal_bc(
-    truesofar,
     ::Type{TStart},
     bc::Base.Broadcast.Broadcasted{FieldVectorStyle},
 ) where {TStart}
-    return truesofar && _is_diagonal_bc_args(truesofar, TStart, bc.args)
+    return _is_diagonal_bc_args(TStart, bc.args)
 end
 
 @inline _is_diagonal_bc(
-    truesofar,
     ::Type{TStart},
     ::TStart,
 ) where {TStart <: FieldVector} = true
 @inline _is_diagonal_bc(
-    truesofar,
     ::Type{TStart},
     x::FieldVector,
 ) where {TStart} = false
-@inline _is_diagonal_bc(truesofar, ::Type{TStart}, x) where {TStart} = truesofar
+@inline _is_diagonal_bc(::Type{TStart}, x) where {TStart} = true
 
 # Find the first fieldvector in the broadcast expression (BCE),
 # and compare against every other fieldvector in the BCE
 @inline is_diagonal_bc(bc::Base.Broadcast.Broadcasted{FieldVectorStyle}) =
-    _is_diagonal_bc_args(true, typeof(first_fieldvector_in_bc(bc)), bc.args)
+    _is_diagonal_bc_args(typeof(first_fieldvector_in_bc(bc)), bc.args)
 
 # Specialize on FieldVectorStyle to avoid inference failure
 # in fieldvector broadcast expressions:

@@ -186,8 +186,6 @@ _todata_args(args::Tuple) =
     unrolled_map(args) do arg
         todata(arg)
     end
-_todata_args(args::Tuple{Any}) = (todata(args[1]),)
-_todata_args(::Tuple{}) = ()
 
 todata(obj) = obj
 todata(field::Field) = Fields.field_values(field)
