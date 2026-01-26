@@ -73,7 +73,7 @@ has_affine_bc(op) = any(
     op.bcs,
 )
 
-uses_extrapolate(op) = unrolled_any(bc -> bc isa Operators.Extrapolate, op.bcs)
+uses_extrapolate(op) = unrolled_any(Base.Fix2(isa, Operators.Extrapolate), op.bcs)
 
 ################################################################################
 

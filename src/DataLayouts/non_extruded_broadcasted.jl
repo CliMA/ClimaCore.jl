@@ -1,6 +1,8 @@
 #! format: off
 # ============================================================ Adapted from Base.Broadcast (julia version 1.10.4)
 import Base.Broadcast: BroadcastStyle
+import UnrolledUtilities: unrolled_map
+
 struct NonExtrudedBroadcasted{
     Style <: Union{Nothing, BroadcastStyle},
     Axes,
@@ -54,13 +56,11 @@ end
     NonExtrudedBroadcasted(bc.style, bc.f, to_non_extruded_broadcasted_args(bc.args), bc.axes)
 @inline to_non_extruded_broadcasted(x) = x
 
-@inline to_non_extruded_broadcasted_args(args::Tuple) = (
-    to_non_extruded_broadcasted(args[1]),
-    to_non_extruded_broadcasted_args(Base.tail(args))...,
-)
-@inline to_non_extruded_broadcasted_args(args::Tuple{Any}) =
-    (to_non_extruded_broadcasted(args[1]),)
-@inline to_non_extruded_broadcasted_args(args::Tuple{}) = ()
+@inline function to_non_extruded_broadcasted_args(args::Tuple)
+    unrolled_map(args) do arg
+        to_non_extruded_broadcasted(arg)
+    end
+end
 
 # CartesianIndex{0} is used for DataF and empty data cases
 # And sometimes axes(bc) returns a (e.g.,) CenterFiniteDifferenceSpace
@@ -140,11 +140,11 @@ Base.@propagate_inbounds function _broadcast_getindex(
 end
 @inline _broadcast_getindex_evalf(f::Tf, args::Vararg{Any, N}) where {Tf, N} =
     f(args...)  # not propagate_inbounds
-Base.@propagate_inbounds _getindex(args::Tuple, I) =
-    (_broadcast_getindex(args[1], I), _getindex(Base.tail(args), I)...)
-Base.@propagate_inbounds _getindex(args::Tuple{Any}, I) =
-    (_broadcast_getindex(args[1], I),)
-Base.@propagate_inbounds _getindex(args::Tuple{}, I) = ()
+Base.@propagate_inbounds function _getindex(args::Tuple, I)
+    unrolled_map(args) do arg
+        _broadcast_getindex(arg, I)
+    end
+end
 
 @inline Base.axes(bc::NonExtrudedBroadcasted) = _axes(bc, bc.axes)
 _axes(::NonExtrudedBroadcasted, axes::Tuple) = axes
