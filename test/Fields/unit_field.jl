@@ -909,7 +909,7 @@ end
         staggering = Grids.CellCenter(),
     )
     test_adapt(ecs_space_fn)
-    test_adapt_types(ecs_space_fn; broken_space_type_match = true)
+    test_adapt_types(ecs_space_fn)
 
     cs_space_fn(dev) = CubedSphereSpace(;
         device = dev,
@@ -918,7 +918,7 @@ end
         h_elem = 10,
     )
     test_adapt(cs_space_fn)
-    test_adapt_types(cs_space_fn; broken_space_type_match = true)
+    test_adapt_types(cs_space_fn)
 
     column_space_fn(dev) = ColumnSpace(;
         device = dev,

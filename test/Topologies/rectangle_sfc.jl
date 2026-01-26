@@ -1,5 +1,6 @@
 using IntervalSets
 using Test
+using ClimaComms
 
 import ClimaCore:
     Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
@@ -58,5 +59,26 @@ end
         for (order, cartindex) in enumerate(sfc_elemorder)
             @test sfc_orderindex[cartindex] == order
         end
+    end
+end
+
+@testset "uses_spacefillingcurve tests for rectangular mesh" begin
+    device = ClimaComms.CPUSingleThreaded()
+    context = ClimaComms.SingletonCommsContext(device)
+
+    @testset "rectangular mesh with space-filling curve" begin
+        mesh = rectilinear_grid(4, 4, false, false)
+        topology_sfc = Topologies.Topology2D(
+            context,
+            mesh,
+            Topologies.spacefillingcurve(mesh),
+        )
+        @test Topologies.uses_spacefillingcurve(topology_sfc) == true
+    end
+
+    @testset "rectangular mesh with default ordering" begin
+        mesh = rectilinear_grid(4, 4, false, false)
+        topology_default = Topologies.Topology2D(context, mesh)
+        @test Topologies.uses_spacefillingcurve(topology_default) == false
     end
 end

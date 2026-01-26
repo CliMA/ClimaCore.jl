@@ -1,7 +1,7 @@
 using Test
 
 import ClimaCore:
-    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
+    ClimaComms, Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
 
 @testset "Space Filling Curve tests for a cubed sphere mesh with (16) elements per edge" begin
     mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain(1.0), 16)
@@ -36,5 +36,24 @@ import ClimaCore:
         for (order, cartindex) in enumerate(sfc_elemorder)
             @test sfc_orderindex[cartindex] == order
         end
+    end
+end
+
+@testset "uses_spacefillingcurve tests" begin
+    context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
+    @testset "cubed sphere with space-filling curve" begin
+        mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain(1.0), 6)
+        topology_sfc = Topologies.Topology2D(
+            context,
+            mesh,
+            Topologies.spacefillingcurve(mesh),
+        )
+        @test Topologies.uses_spacefillingcurve(topology_sfc) == true
+    end
+
+    @testset "cubed sphere with default ordering" begin
+        mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain(1.0), 6)
+        topology_default = Topologies.Topology2D(context, mesh)
+        @test Topologies.uses_spacefillingcurve(topology_default) == false
     end
 end

@@ -1,7 +1,7 @@
 name = "ClimaCore"
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
 authors = ["CliMA Contributors <clima-software@caltech.edu>"]
-version = "0.14.45"
+version = "0.14.47"
 
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
@@ -31,6 +31,7 @@ UnrolledUtilities = "0fe1646c-419e-43be-ac14-22321958931b"
 
 [weakdeps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+GPUCompiler = "61eb1bfa-7361-4325-ad38-22787b887f55"
 Krylov = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
 
 [extensions]
@@ -53,6 +54,7 @@ DataStructures = "0.18.13, 0.19"
 Dates = "1"
 FastBroadcast = "0.3.1"
 ForwardDiff = "0.10.15, 1"
+GPUCompiler = "< 1.7.6"
 GaussQuadrature = "0.5.8"
 GilbertCurves = "0.1"
 HDF5 = "0.16.16, 0.17"

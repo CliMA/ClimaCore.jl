@@ -5,6 +5,7 @@ import ClimaCore,
     ClimaCorePlots,
     ClimaCoreTempestRemap,
     ClimaCoreSpectra
+using Makie  # Required for Documenter to resolve @ref links to Makie types in ClimaCoreMakie docs
 
 if !@isdefined(TUTORIALS)
     TUTORIALS = ["introduction"]
@@ -60,6 +61,7 @@ withenv("GKSwstype" => "nul") do
         sitename = "ClimaCore.jl",
         format = format,
         checkdocs = :exports,
+        warnonly = [:cross_references],  # Warn instead of error on unresolved @ref links (e.g., Makie.Linestyle)
         clean = true,
         doctest = true,
         modules = [
