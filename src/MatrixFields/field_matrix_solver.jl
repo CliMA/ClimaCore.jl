@@ -256,7 +256,7 @@ cheap_inv(_) = false
 cheap_inv(::ScalingFieldMatrixEntry) = true
 cheap_inv(A::ColumnwiseBandMatrixField) = eltype(A) <: DiagonalMatrixRow
 
-NVTX.@annotate function run_field_matrix_solver!(
+function run_field_matrix_solver!(
     ::BlockDiagonalSolve,
     cache,
     x,
@@ -341,7 +341,7 @@ function check_field_matrix_solver(alg::BlockLowerTriangularSolve, cache, A, b)
     check_field_matrix_solver(alg.alg₂, cache.cache₂, A₂₂, cache.b₂′)
 end
 
-NVTX.@annotate function run_field_matrix_solver!(
+function run_field_matrix_solver!(
     alg::BlockLowerTriangularSolve,
     cache,
     x,
@@ -412,7 +412,7 @@ function check_field_matrix_solver(alg::BlockArrowheadSolve, cache, A, b)
     check_field_matrix_solver(alg.alg₂, cache.cache₂, cache.A₂₂′, cache.b₂′)
 end
 
-NVTX.@annotate function run_field_matrix_solver!(
+function run_field_matrix_solver!(
     alg::BlockArrowheadSolve,
     cache,
     x,
@@ -492,7 +492,7 @@ function check_field_matrix_solver(
     check_field_matrix_solver(alg.alg₂, cache.cache₂, A₂₂′, cache.b₂′)
 end
 
-NVTX.@annotate function run_field_matrix_solver!(
+function run_field_matrix_solver!(
     alg::SchurComplementReductionSolve,
     cache,
     x,
