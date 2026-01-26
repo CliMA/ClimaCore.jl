@@ -3,7 +3,9 @@ ClimaCore.jl Release Notes
 
 main
 -------
-
+v0.14.48
+-------
+- Add `VerticalMassBorrowingLimiter` [2383](https://github.com/CliMA/ClimaCore.jl/pull/2383)
 v0.14.47
 -------
 - Use space-filling curve for CubedSphereGrid and ExtrudedCubedSphereGrid
