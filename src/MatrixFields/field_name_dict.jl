@@ -51,8 +51,8 @@ struct FieldNameDict{
     end
 end
 function FieldNameDict{T}(key_entry_pairs::Pair{<:T}...) where {T}
-    keys = unrolled_map(pair -> pair[1], key_entry_pairs)
-    entries = unrolled_map(pair -> pair[2], key_entry_pairs)
+    keys = unrolled_map(first, key_entry_pairs)
+    entries = unrolled_map(last, key_entry_pairs)
     return FieldNameDict(FieldNameSet{T}(keys), entries)
 end
 
@@ -466,7 +466,7 @@ parent of the first entry in `dict` that is a `Fields.Field`. If no such entry
 is found, `target_type` defaults to `Number`.
 """
 function get_scalar_keys(dict::FieldMatrix)
-    first_field_idx = unrolled_findfirst(x -> x isa Fields.Field, dict.entries)
+    first_field_idx = unrolled_findfirst(Base.Fix2(isa, Fields.Field), dict.entries)
     target_type = Val(
         isnothing(first_field_idx) ? Number :
         eltype(parent(dict.entries[first_field_idx])),
@@ -597,7 +597,7 @@ function check_diagonal_matrix(matrix, error_message_start = "The matrix")
         !is_diagonal_matrix_entry(pair[2])
     end
     non_diagonal_entry_keys =
-        FieldMatrixKeys(unrolled_map(pair -> pair[1], non_diagonal_entry_pairs))
+        FieldMatrixKeys(unrolled_map(first, non_diagonal_entry_pairs))
     isempty(non_diagonal_entry_keys) || error(
         "$error_message_start has non-diagonal entries at the following keys: \
          $(set_string(non_diagonal_entry_keys))",
@@ -611,7 +611,7 @@ Checks whether the `FieldNameDict` `dict` contains any un-materialized
 `AbstractBroadcasted` entries.
 """
 is_lazy(dict) =
-    unrolled_any(entry -> entry isa Base.AbstractBroadcasted, values(dict))
+    unrolled_any(Base.Fix2(isa, Base.AbstractBroadcasted), values(dict))
 
 """
     lazy_main_diagonal(matrix)

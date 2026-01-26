@@ -1,5 +1,5 @@
 @inline function first_datalayout_in_bc(args::Tuple, rargs...)
-    idx = unrolled_findfirst(x -> x isa AbstractData, args)
+    idx = unrolled_findfirst(Base.Fix2(isa, AbstractData), args)
     return isnothing(idx) ? nothing : args[idx]
 end
 
