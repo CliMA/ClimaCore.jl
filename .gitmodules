@@ -1,0 +1,3 @@
+[submodule ".buildkite/perf/ClimaCoupler.jl"]
+	path = .buildkite/perf/ClimaCoupler.jl
+	url = https://github.com/CliMA/ClimaCoupler.jl.git

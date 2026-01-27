@@ -1,1 +1,66 @@
 # A pipeline for downstream performance checks
+agents:
+  queue: clima
+  slurm_time: 14:00:00
+  modules: climacommon/2025_05_15
+
+env:
+  JULIA_MAX_NUM_PRECOMPILE_FILES: 100
+  GKSwstype: 100
+  SLURM_KILL_BAD_EXIT: 1
+  CONFIG_PATH: "ClimaCoupler.jl/config/nightly_configs"
+  BENCHMARK_CONFIG_PATH: "ClimaCoupler.jl/config/benchmark_configs"
+
+timeout_in_minutes: 840
+
+steps:
+  - label: "init :GPU:"
+    key: "init_gpu_env"
+    command:
+      - "echo $$JULIA_DEPOT_PATH"
+      - echo "--- Instantiate AMIP env"
+      - "julia --project=ClimaCoupler.jl/experiments/ClimaEarth/ -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=ClimaCoupler.jl/experiments/ClimaEarth/ -e 'using Pkg; Pkg.precompile()'"
+      - "julia --project=ClimaCoupler.jl/experiments/ClimaEarth/ -e 'using Pkg; Pkg.status()'"
+    agents:
+      slurm_gpus: 1
+      slurm_cpus_per_task: 8
+    env:
+      JULIA_NUM_PRECOMPILE_TASKS: 8
+      JULIA_MAX_NUM_PRECOMPILE_FILES: 50
+
+  - wait
+
+  - group: AMIP
+    steps:
+      - label: "Flagship AMIP GPU with prognostic EDMF + 1M + integrated land (16 helems)"
+        key: "gpu_amip_progedmf_1M_land_he16"
+        command: "srun julia --threads=3 --color=yes --project=ClimaCoupler.jl/experiments/ClimaEarth/ ClimaCoupler.jl/experiments/ClimaEarth/run_amip.jl --config_file $BENCHMARK_CONFIG_PATH/amip_progedmf_1m_land_he16.yml --job_id gpu_amip_progedmf_1M_land_he16"
+        artifact_paths: "output/gpu_amip_progedmf_1M_land_he16/artifacts/*"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus_per_task: 1
+          slurm_cpus_per_task: 4
+          slurm_ntasks: 1
+          slurm_mem: 16GB
+
+  - wait
+
+  - label: "Check SYPD for flagship AMIP"
+    key: "check_amip_sypd"
+    depends_on: "gpu_amip_progedmf_1M_land_he16"
+    command:
+      - echo "--- Checking SYPD from artifacts"
+      - |
+        MIN_SYPD=0.079
+        SYPD=$(cat output/gpu_amip_progedmf_1M_land_he16/artifacts/sypd.txt)
+        echo "SYPD: $SYPD"
+        if (( $(echo "$SYPD < $MIN_SYPD" | bc -l) )); then
+          echo "❌ SYPD ($SYPD) is below threshold ($MIN_SYPD)"
+          exit 1
+        else
+          echo "✅ SYPD ($SYPD) meets threshold ($MIN_SYPD)"
+        fi
+    agents:
+      slurm_cpus_per_task: 1
