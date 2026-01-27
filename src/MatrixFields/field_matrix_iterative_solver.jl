@@ -428,7 +428,7 @@ check_field_matrix_solver(alg::StationaryIterativeSolve, cache, A, b) =
     check_preconditioner(alg.P_alg, cache.P_cache, A, b)
 
 is_CuArray_type(::Type{T}) where {T} = false
-NVTX.@annotate function run_field_matrix_solver!(
+function run_field_matrix_solver!(
     alg::StationaryIterativeSolve,
     cache,
     x,
