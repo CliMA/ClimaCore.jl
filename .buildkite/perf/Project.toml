@@ -1,0 +1,3 @@
+[deps]
+ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
+ClimaCoupler = "4ade58fe-a8da-486c-bd89-46df092ec0c7"
