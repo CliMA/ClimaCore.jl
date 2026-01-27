@@ -16,8 +16,25 @@ env:
 timeout_in_minutes: 840
 
 steps:
+  - label: "Check if pipeline should run :mag:"
+    key: "check_changes"
+    command:
+      - |
+        # Check if files in src, ext, or .buildkite/perf have changed
+        if git diff --quiet origin/main...HEAD -- src ext .buildkite/perf; then
+          echo "⏭️  No relevant changes detected, skipping downstream checks"
+          buildkite-agent meta-data set "run-perf-checks" "false"
+        else
+          echo "✅ Relevant changes detected, running downstream checks"
+          buildkite-agent meta-data set "run-perf-checks" "true"
+        fi
+    agents:
+      queue: clima
+
   - label: "init :GPU:"
     key: "init_gpu_env"
+    depends_on: "check_changes"
+    if: "buildkite-agent meta-data get run-perf-checks"
     command:
       - "echo $$JULIA_DEPOT_PATH"
       - echo "--- Instantiate AMIP env"
@@ -39,6 +56,7 @@ steps:
     steps:
       - label: "Flagship AMIP GPU with prognostic EDMF + 1M + integrated land (16 helems)"
         key: "gpu_amip_progedmf_1M_land_he16"
+        if: "buildkite-agent meta-data get run-perf-checks"
         command: "srun julia --threads=3 --color=yes --project=$COUPLER_PATH/experiments/ClimaEarth/ $COUPLER_PATH/experiments/ClimaEarth/run_amip.jl --config_file $BENCHMARK_CONFIG_PATH/amip_progedmf_1m_land_he16.yml --job_id gpu_amip_progedmf_1M_land_he16"
         artifact_paths: "output/gpu_amip_progedmf_1M_land_he16/artifacts/*"
         env:
@@ -54,6 +72,7 @@ steps:
   - label: "Check SYPD for flagship AMIP"
     key: "check_amip_sypd"
     depends_on: "gpu_amip_progedmf_1M_land_he16"
+    if: "buildkite-agent meta-data get run-perf-checks"
     command:
       - echo "--- Checking SYPD from artifacts"
       - |
