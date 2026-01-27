@@ -16,8 +16,14 @@ env:
 timeout_in_minutes: 840
 
 steps:
+  - label: "Ensure submodule is checked out"
+    command:
+      - git submodule update --init --recursive .buildkite/perf/ClimaCoupler.jl
+    key: "init_submodule"
+
   - label: "Check if pipeline should run :mag:"
     key: "check_changes"
+    depends_on: "init_submodule"
     command:
       - |
         # Check if files in src, ext, or .buildkite/perf have changed
@@ -28,8 +34,6 @@ steps:
           echo "✅ Relevant changes detected, running downstream checks"
           buildkite-agent meta-data set "run-perf-checks" "true"
         fi
-    agents:
-      queue: clima
 
   - label: "init :GPU:"
     key: "init_gpu_env"
