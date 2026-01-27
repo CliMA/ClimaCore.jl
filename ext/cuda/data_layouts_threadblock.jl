@@ -136,34 +136,67 @@ end
 ) = Operators.is_valid_index(space, ij, slabidx)
 
 ##### shmem fd kernel partition
+"""
+    fd_shmem_stencil_partition(us, n_face_levels, n_max_threads)
+
+Compute thread/block partition for finite difference shmem kernels.
+
+Uses 3D thread blocks: (Nv, Ni, Nj) where:
+- Nv threads handle vertical levels (up to n_face_levels)
+- Ni × Nj threads handle horizontal nodal points within each element
+- Each block processes one horizontal element (h)
+
+This achieves ~1024 threads/block for typical Nv=64, Ni=Nj=4 configurations,
+improving GPU occupancy compared to the previous 1D (Nv,) layout.
+"""
 @inline function fd_shmem_stencil_partition(
     us::DataLayouts.UniversalSize,
     n_face_levels::Integer,
-    n_max_threads::Integer = 256;
+    n_max_threads::Integer = 1024;
 )
     (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(us)
     Nvthreads = n_face_levels
-    @assert Nvthreads <= maximum_allowable_threads()[1] "Number of vertical face levels cannot exceed $(maximum_allowable_threads()[1])"
-    Nvblocks = cld(Nv, Nvthreads) # +1 may be needed to guarantee that shared memory is populated at the last cell face
+    
+    # Check thread limits
+    max_threads = maximum_allowable_threads()
+    @assert Nvthreads <= max_threads[1] "Number of vertical face levels ($Nvthreads) cannot exceed $(max_threads[1])"
+    @assert Ni <= max_threads[2] "Ni ($Ni) cannot exceed $(max_threads[2])"
+    @assert Nj <= max_threads[3] "Nj ($Nj) cannot exceed $(max_threads[3])"
+    
+    total_threads = Nvthreads * Ni * Nj
+    @assert total_threads <= n_max_threads "Total threads ($total_threads) exceeds max ($n_max_threads)"
+    
     return (;
-        threads = (Nvthreads,),
-        blocks = (Nh, Nvblocks, Ni * Nj),
+        threads = (Nvthreads, Ni, Nj),
+        blocks = (Nh,),
         Nvthreads,
     )
 end
+"""
+    fd_shmem_stencil_universal_index(space, us)
+
+Compute the universal CartesianIndex for the current thread in 3D thread block layout.
+
+Thread layout: (tv, ti, tj) where tv=vertical, ti/tj=horizontal nodal indices.
+Block layout: (h,) where h=horizontal element index.
+
+Returns CartesianIndex((i, j, 1, v, h)) for valid threads.
+"""
 @inline function fd_shmem_stencil_universal_index(
     space::Spaces.AbstractSpace,
     us,
 )
-    (tv,) = CUDA.threadIdx()
-    (h, bv, ij) = CUDA.blockIdx()
-    v = tv + (bv - 1) * CUDA.blockDim().x
-    (Ni, Nj, _, _, _) = DataLayouts.universal_size(us)
-    if Ni * Nj < ij
-        return CartesianIndex((-1, -1, 1, -1, -1))
-    end
-    @inbounds (i, j) = CartesianIndices((Ni, Nj))[ij].I
+    # 3D thread indexing: (v, i, j)
+    tv = CUDA.threadIdx().x  # vertical level within block
+    ti = CUDA.threadIdx().y  # horizontal nodal point i
+    tj = CUDA.threadIdx().z  # horizontal nodal point j
+    h = CUDA.blockIdx().x    # horizontal element
+    
+    v = tv  # Direct mapping: thread index = vertical level
+    i = ti
+    j = tj
+    
     return CartesianIndex((i, j, 1, v, h))
 end
 @inline fd_shmem_stencil_is_valid_index(I::CI5, us::UniversalSize) =
-    1 ≤ I[5] ≤ DataLayouts.get_Nh(us)
+    1 <= I[5] <= DataLayouts.get_Nh(us)
