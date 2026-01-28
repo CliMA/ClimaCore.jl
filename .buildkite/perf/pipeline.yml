@@ -24,7 +24,7 @@ steps:
       - |
         # Check if files in src, ext, or .buildkite/perf have changed
         if git diff --quiet origin/main...HEAD -- src ext .buildkite/perf; then
-          echo "⏭️  No relevant changes detected, skipping downstream checks"
+          echo "⏭️ No relevant changes detected, skipping downstream checks"
           exit 1
         else
           echo "✅ Relevant changes detected, running downstream checks"
