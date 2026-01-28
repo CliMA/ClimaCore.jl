@@ -164,9 +164,10 @@ Base.@propagate_inbounds function operator_shmem(
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
+    JT = operator_return_eltype(op, eltype(arg1), FT)
     # allocate temp output for Ju1 and psi
-    Ju1 = CUDA.CuStaticSharedArray(FT, (Nq, Nvt))
-    psi = CUDA.CuStaticSharedArray(FT, (Nq, Nvt))
+    Ju1 = CUDA.CuStaticSharedArray(JT, (Nq, Nvt))
+    psi = CUDA.CuStaticSharedArray(eltype(arg2), (Nq, Nvt))
     return (Ju1, psi)
 end
 Base.@propagate_inbounds function operator_shmem(
@@ -179,10 +180,11 @@ Base.@propagate_inbounds function operator_shmem(
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
+    JT = operator_return_eltype(op, eltype(arg1), FT)
     # allocate temp output for Ju1, Ju2, and psi
-    Ju1 = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nvt))
-    Ju2 = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nvt))
-    psi = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nvt))
+    Ju1 = CUDA.CuStaticSharedArray(JT, (Nq, Nq, Nvt))
+    Ju2 = CUDA.CuStaticSharedArray(JT, (Nq, Nq, Nvt))
+    psi = CUDA.CuStaticSharedArray(eltype(arg2), (Nq, Nq, Nvt))
     return (Ju1, Ju2, psi)
 end
 
@@ -198,7 +200,11 @@ Base.@propagate_inbounds function operator_fill_shmem!(
     vt = threadIdx().z
     local_geometry = get_local_geometry(space, ij, slabidx)
     i, _ = ij.I
-    Ju1[i, vt] = local_geometry.J * Geometry.contravariant1(arg1, local_geometry)
+    Ju1[i, vt] =
+        local_geometry.J ⊠ RecursiveApply.rmap(
+            u -> Geometry.contravariant1(u, local_geometry),
+            arg1,
+        )
     psi[i, vt] = arg2
 end
 
@@ -214,9 +220,16 @@ Base.@propagate_inbounds function operator_fill_shmem!(
     vt = threadIdx().z
     local_geometry = get_local_geometry(space, ij, slabidx)
     i, j = ij.I
-
-    Ju1[i, j, vt] = local_geometry.J * Geometry.contravariant1(arg1, local_geometry)
-    Ju2[i, j, vt] = local_geometry.J * Geometry.contravariant2(arg1, local_geometry)
+    Ju1[i, j, vt] =
+        local_geometry.J ⊠ RecursiveApply.rmap(
+            u -> Geometry.contravariant1(u, local_geometry),
+            arg1,
+        )
+    Ju2[i, j, vt] =
+        local_geometry.J ⊠ RecursiveApply.rmap(
+            u -> Geometry.contravariant2(u, local_geometry),
+            arg1,
+        )
     psi[i, j, vt] = arg2
 end
 
