@@ -60,23 +60,23 @@ steps:
           - "srun julia --threads=3 --color=yes --project=$COUPLER_PATH/experiments/ClimaEarth/ $COUPLER_PATH/experiments/ClimaEarth/run_amip.jl --config_file $BENCHMARK_CONFIG_PATH/amip_progedmf_1m_land_he16.yml --job_id gpu_amip_progedmf_1M_land_he16"
           - echo "--- Checking SYPD from artifacts"
           - |
-            SYPD_FILE="output/gpu_amip_progedmf_1M_land_he16/artifacts/sypd.txt"
-            if [[ ! -f "$SYPD_FILE" ]]; then
-              echo "❌ SYPD file not found: $SYPD_FILE"
+            SYPD_FILE=output/gpu_amip_progedmf_1M_land_he16/artifacts/sypd.txt
+            if [[ ! -f "$$SYPD_FILE" ]]; then
+              echo "❌ SYPD file not found: $$SYPD_FILE"
               exit 1
             fi
-            SYPD=$(cat "$SYPD_FILE" | tr -d '[:space:]')
-            if [[ -z "$SYPD" ]]; then
+            SYPD=$(cat "$$SYPD_FILE" | tr -d '[:space:]')
+            if [[ -z "$$SYPD" ]]; then
               echo "❌ SYPD file is empty"
               exit 1
             fi
-            echo "SYPD: $SYPD"
+            echo "SYPD: $$SYPD"
             MIN_SYPD=0.080
-            if (( $(echo "$SYPD < $MIN_SYPD" | bc -l) )); then
-              echo "❌ SYPD ($SYPD) is below threshold ($MIN_SYPD)"
+            if (( $(echo "$$SYPD < $$MIN_SYPD" | bc -l) )); then
+              echo "❌ SYPD ($$SYPD) is below threshold ($$MIN_SYPD)"
               exit 1
             else
-              echo "✅ SYPD ($SYPD) meets threshold ($MIN_SYPD)"
+              echo "✅ SYPD ($$SYPD) meets threshold ($$MIN_SYPD)"
             fi
         artifact_paths: "output/gpu_amip_progedmf_1M_land_he16/artifacts/*"
         env:
