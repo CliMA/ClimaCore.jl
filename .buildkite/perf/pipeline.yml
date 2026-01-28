@@ -50,23 +50,20 @@ steps:
       JULIA_NUM_PRECOMPILE_TASKS: 8
       JULIA_MAX_NUM_PRECOMPILE_FILES: 50
 
-  - wait
-
-  - group: AMIP
-    steps:
-      - label: "Flagship AMIP GPU with prognostic EDMF + 1M + integrated land (16 helems)"
-        key: "gpu_amip_progedmf_1M_land_he16"
-        command:
-          - "srun julia --threads=3 --color=yes --project=$COUPLER_PATH/experiments/ClimaEarth/ $COUPLER_PATH/experiments/ClimaEarth/run_amip.jl --config_file $BENCHMARK_CONFIG_PATH/amip_progedmf_1m_land_he16.yml --job_id gpu_amip_progedmf_1M_land_he16"
-          - echo "--- Checking SYPD from artifacts"
-          - bash .buildkite/perf/check-sypd.sh
-        artifact_paths: "output/gpu_amip_progedmf_1M_land_he16/artifacts/*"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-          BASELINE_SYPD: "0.081"
-          MIN_PERCENT_CHANGE: "-1"
-        agents:
-          slurm_gpus_per_task: 1
-          slurm_cpus_per_task: 4
-          slurm_ntasks: 1
-          slurm_mem: 16GB
+  - label: "Flagship AMIP GPU with prognostic EDMF + 1M + integrated land (16 helems)"
+    key: "gpu_amip_progedmf_1M_land_he16"
+    depends_on: "init_gpu_env"
+    command:
+      - "srun julia --threads=3 --color=yes --project=$COUPLER_PATH/experiments/ClimaEarth/ $COUPLER_PATH/experiments/ClimaEarth/run_amip.jl --config_file $BENCHMARK_CONFIG_PATH/amip_progedmf_1m_land_he16.yml --job_id gpu_amip_progedmf_1M_land_he16"
+      - echo "--- Checking SYPD from artifacts"
+      - bash .buildkite/perf/check-sypd.sh
+    artifact_paths: "output/gpu_amip_progedmf_1M_land_he16/artifacts/*"
+    env:
+      CLIMACOMMS_DEVICE: "CUDA"
+      BASELINE_SYPD: "0.081"
+      MIN_PERCENT_CHANGE: "-1"
+    agents:
+      slurm_gpus_per_task: 1
+      slurm_cpus_per_task: 4
+      slurm_ntasks: 1
+      slurm_mem: 16GB
