@@ -16,16 +16,11 @@ env:
 timeout_in_minutes: 840
 
 steps:
-  - label: "Ensure submodule is checked out"
-    command:
-      - git submodule update --init --recursive .buildkite/perf/ClimaCoupler.jl
-    key: "init_submodule"
-
   - label: "Check if pipeline should run :mag:"
     key: "check_changes"
-    depends_on: "init_submodule"
     soft_fail: true
     command:
+      - git submodule update --init --recursive .buildkite/perf/ClimaCoupler.jl
       - |
         # Check if files in src, ext, or .buildkite/perf have changed
         if git diff --quiet origin/main...HEAD -- src ext .buildkite/perf; then
