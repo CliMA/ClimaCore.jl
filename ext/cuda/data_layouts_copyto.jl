@@ -30,7 +30,7 @@ indicating if the column is padded (true for 63, false for 64).
 function knl_copyto_VIJFH_64!(dest, src, ::Val{P}) where {P}
     # P is a boolean, indicating if the column is padded
     P && threadIdx().x == 64 && return nothing
-    I = CartesianIndex(threadIdx().y, blockIdx().x, 1, threadIdx().x, blockIdx().y)
+    I = CartesianIndex(blockIdx().x, blockIdx().y, 1, threadIdx().x, blockIdx().z)
     @inbounds dest[I] = src[I]
     return nothing
 end
@@ -133,8 +133,8 @@ function Base.copyto!(
     auto_launch!(
         knl_copyto_VIJFH_64!,
         args;
-        threads_s = (64, Ni, 1),
-        blocks_s = (Nj, Nh, 1),
+        threads_s = (64, 1, 1),
+        blocks_s = (Ni, Nj, Nh),
     )
     return dest
 end
@@ -150,8 +150,8 @@ function Base.copyto!(
     auto_launch!(
         knl_copyto_VIJFH_64!,
         args;
-        threads_s = (64, Ni, 1),
-        blocks_s = (Nj, Nh, 1),
+        threads_s = (64, 1, 1),
+        blocks_s = (Ni, Nj, Nh),
     )
     return dest
 end

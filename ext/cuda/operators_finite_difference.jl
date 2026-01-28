@@ -92,8 +92,8 @@ function Base.copyto!(
             auto_launch!(
                 copyto_stencil_kernel_64!,
                 args;
-                threads_s = (64, Ni, 1),
-                blocks_s = (Nj, Nh, 1),
+                threads_s = (64, 1, 1),
+                blocks_s = (Ni, Nj, Nh),
             )
             return out
         end
@@ -161,10 +161,10 @@ function copyto_stencil_kernel_64!(
     @inbounds begin
         # P is a boolean, indicating if the column is padded
         P && threadIdx().x == 64 && return nothing
-        i = threadIdx().y
-        j = blockIdx().x
+        i = blockIdx().x
+        j = blockIdx().y
         v = threadIdx().x
-        h = blockIdx().y
+        h = blockIdx().z
         hidx = (i, j, h)
         (li, lw, rw, ri) = bds
         idx = v - 1 + li
