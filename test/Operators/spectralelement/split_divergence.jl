@@ -14,6 +14,9 @@ import ClimaCore:
     Quadratures
 using LinearAlgebra, IntervalSets
 
+import Random
+Random.seed!(1234)
+
 include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
 )
