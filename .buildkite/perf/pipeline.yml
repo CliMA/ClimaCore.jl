@@ -71,16 +71,18 @@ steps:
               exit 1
             fi
             echo "SYPD: $$SYPD"
-            MIN_SYPD=0.080
-            if (( $(echo "$$SYPD < $$MIN_SYPD" | bc -l) )); then
-              echo "❌ SYPD ($$SYPD) is below threshold ($$MIN_SYPD)"
+            PERCENT_CHANGE=$$(echo "scale=2; (($$SYPD - $BASELINE_SYPD) / $BASELINE_SYPD) * 100" | bc)
+            if (( $(echo "$$PERCENT_CHANGE < $MIN_PERCENT_CHANGE" | bc -l) )); then
+              echo "❌ SYPD changed by $$PERCENT_CHANGE% (threshold: $MIN_PERCENT_CHANGE%)"
               exit 1
             else
-              echo "✅ SYPD ($$SYPD) meets threshold ($$MIN_SYPD)"
+              echo "✅ SYPD change ($$PERCENT_CHANGE%) is okay (threshold: $MIN_PERCENT_CHANGE%)"
             fi
         artifact_paths: "output/gpu_amip_progedmf_1M_land_he16/artifacts/*"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
+          BASELINE_SYPD: "0.081"
+          MIN_PERCENT_CHANGE: "-1"
         agents:
           slurm_gpus_per_task: 1
           slurm_cpus_per_task: 4
