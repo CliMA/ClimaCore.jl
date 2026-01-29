@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   test:
-    timeout-minutes: 80
+    timeout-minutes: ${{ matrix.os == 'macOS-latest' && 120 || 80 }}
     name: ci ${{ matrix.version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
