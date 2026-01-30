@@ -1,5 +1,4 @@
 import ..Topologies: Topology2D
-using ..RecursiveApply
 import UnrolledUtilities: unrolled_map
 
 """

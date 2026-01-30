@@ -5,7 +5,7 @@ using ClimaCore.Utilities: nested_math_mapper
 using ClimaCore.Geometry: UVVector
 
 @static if @isdefined(var"@test_opt") # v1.7 and higher
-    @testset "RecursiveApply optimization test" begin
+    @testset "MathMapper optimization test" begin
         for x in [
             1.0,
             1.0f0,
@@ -21,7 +21,7 @@ using ClimaCore.Geometry: UVVector
     end
 end
 
-@testset "RecursiveApply nary ops" begin
+@testset "MathMapper nary ops" begin
     for x in [
         1.0,
         1.0f0,

@@ -58,9 +58,6 @@ struct MathMapper{I}
     itr::I
 end
 
-unwrap(::Type{MathMapper{I}}) where {I} = I
-unwrap(x::MathMapper) = getfield(x, :itr)
-
 """
     supports_math_mapper(itr)
 
@@ -88,16 +85,18 @@ nested_math_mapper(itr) =
     MathMapper(unrolled_map(nested_math_mapper, itr)) : itr
 
 """
-    nested_math_mapper_type(T)
+    unwrap_nested_math_mapper(x)
 
-Type of a [`nested_math_mapper`](@ref) constructed from an iterator of type `T`.
+Unwraps the constructors applied by [`nested_math_mapper`](@ref), extracting the
+iterator from every [`MathMapper`](@ref) in `x`.
 """
-nested_math_mapper_type(::Type{T}) where {T} =
-    inferred_result_type(nested_math_mapper, T)
+unwrap_nested_math_mapper(x) =
+    x isa MathMapper ?
+    unrolled_map(unwrap_nested_math_mapper, getfield(x, :itr)) : x
 
 # Unrolled analogue of tuple.(args...) for MathMapper broadcast arguments
 function zip_math_mapper_args(args...)
-    zip_args = unrolled_map(arg -> arg isa MathMapper ? unwrap(arg) : arg, args)
+    zip_args = unrolled_map(x -> x isa MathMapper ? getfield(x, :itr) : x, args)
     possible_zip_lengths =
         unrolled_map(length, unrolled_filter(supports_math_mapper, zip_args))
     if !unrolled_allequal(possible_zip_lengths)
@@ -105,11 +104,9 @@ function zip_math_mapper_args(args...)
         throw(DimensionMismatch("Arguments have unequal lengths $two_lengths"))
     end
     zip_length = possible_zip_lengths[1]
-    lazily_extrude = Base.Fix2(Iterators.map, StaticOneTo(zip_length))
+    extrude = Base.Fix2(Iterators.map, StaticOneTo(zip_length)) ∘ Returns
     extruded_zip_args =
-        unrolled_map(zip_args) do arg
-            supports_math_mapper(arg) ? arg : lazily_extrude(Returns(arg))
-        end
+        unrolled_map(x -> supports_math_mapper(x) ? x : extrude(x), zip_args)
     return unrolled_map(tuple, extruded_zip_args...)
 end
 
@@ -261,7 +258,7 @@ for n in 1:4
     ) where {F, O} = reduce_math_mapper_broadcast(f, op, $(args...); init...)
 end
 
-# Commutative reduction operations whose fallback methods do not call mapreduce
+# Reductions whose fallback methods don't call mapreduce, even though they could
 Base.any(f::F, x::MathMapper) where {F} = mapreduce(f, |, x; init = false)
 Base.all(f::F, x::MathMapper) where {F} = mapreduce(f, &, x; init = true)
 Base.reduce(op::O, x::MathMapper; init...) where {O} =
@@ -368,29 +365,30 @@ Base.adjoint(x::MathMapper) = map(adjoint, x)
 (f::MathMapper)(args...) =
     math_mapper_broadcast((f, args...) -> f(args...), f, args...)
 
-################################
-## Automatic Unwrapping Rules ##
-################################
+#########################################
+## Automatic Wrapping/Unwrapping Rules ##
+#########################################
 
-Base.convert(::Type{T}, itr) where {T <: MathMapper} =
-    MathMapper(convert(unwrap(T), itr))
-Base.convert(::Type{T}, x::MathMapper) where {T <: MathMapper} =
-    MathMapper(convert(unwrap(T), unwrap(x)))
+Base.convert(::Type{MathMapper{I}}, itr) where {I} = MathMapper(convert(I, itr))
+Base.convert(::Type{MathMapper{I}}, x::MathMapper) where {I} =
+    MathMapper(convert(I, getfield(x, :itr)))
+Base.convert(::Type{I}, x::MathMapper) where {I <: MathMapperCompatibleType} =
+    convert(I, getfield(x, :itr))
 
-Base.show(io::IO, x::MathMapper) = show(io, unwrap(x))
-Base.propertynames(x::MathMapper) = propertynames(unwrap(x))
-Base.getproperty(x::MathMapper, s::Symbol) = getproperty(unwrap(x), s)
+Base.show(io::IO, x::MathMapper) = show(io, getfield(x, :itr))
+Base.propertynames(x::MathMapper) = propertynames(getfield(x, :itr))
+Base.getproperty(x::MathMapper, s::Symbol) = getproperty(getfield(x, :itr), s)
 
-Base.length(x::MathMapper) = length(unwrap(x))
-Base.isempty(x::MathMapper) = isempty(unwrap(x))
-Base.iterate(x::MathMapper, i...) = iterate(unwrap(x), i...)
+Base.length(x::MathMapper) = length(getfield(x, :itr))
+Base.isempty(x::MathMapper) = isempty(getfield(x, :itr))
+Base.iterate(x::MathMapper, i...) = iterate(getfield(x, :itr), i...)
 
-Base.keys(x::MathMapper) = keys(unwrap(x))
-Base.values(x::MathMapper) = values(unwrap(x))
-Base.pairs(x::MathMapper) = pairs(unwrap(x))
+Base.keys(x::MathMapper) = keys(getfield(x, :itr))
+Base.values(x::MathMapper) = values(getfield(x, :itr))
+Base.pairs(x::MathMapper) = pairs(getfield(x, :itr))
 
-Base.firstindex(x::MathMapper) = firstindex(unwrap(x))
-Base.lastindex(x::MathMapper) = lastindex(unwrap(x))
-Base.getindex(x::MathMapper, i) = getindex(unwrap(x), i)
+Base.firstindex(x::MathMapper) = firstindex(getfield(x, :itr))
+Base.lastindex(x::MathMapper) = lastindex(getfield(x, :itr))
+Base.getindex(x::MathMapper, i) = getindex(getfield(x, :itr), i)
 Base.setindex(x::MathMapper, value, i) =
-    MathMapper(Base.setindex(unwrap(x), value, i))
+    MathMapper(Base.setindex(getfield(x, :itr), value, i))

@@ -61,9 +61,9 @@ function add_numerical_flux_internal!(fn, dydt, args...)
             )
 
             dydt_slab⁻[slab_index(i⁻, j⁻)] =
-                dydt_slab⁻[slab_index(i⁻, j⁻)] ⊟ (sgeom⁻.sWJ ⊠ numflux⁻)
+                dydt_slab⁻[slab_index(i⁻, j⁻)] - (sgeom⁻.sWJ * numflux⁻)
             dydt_slab⁺[slab_index(i⁺, j⁺)] =
-                dydt_slab⁺[slab_index(i⁺, j⁺)] ⊞ (sgeom⁻.sWJ ⊠ numflux⁻)
+                dydt_slab⁺[slab_index(i⁺, j⁺)] + (sgeom⁻.sWJ * numflux⁻)
         end
     end
 end
@@ -78,9 +78,8 @@ struct CentralNumericalFlux{F}
 end
 
 function (fn::CentralNumericalFlux)(normal, argvals⁻, argvals⁺)
-    Favg =
-        RecursiveApply.rdiv(fn.fluxfn(argvals⁻...) ⊞ fn.fluxfn(argvals⁺...), 2)
-    return RecursiveApply.rmap(f -> f' * normal, Favg)
+    Favg = (fn.fluxfn(argvals⁻...) + fn.fluxfn(argvals⁺...)) / 2
+    return Favg' * normal
 end
 
 """
@@ -96,10 +95,9 @@ end
 function (fn::RusanovNumericalFlux)(normal, argvals⁻, argvals⁺)
     y⁻ = argvals⁻[1]
     y⁺ = argvals⁺[1]
-    Favg =
-        RecursiveApply.rdiv(fn.fluxfn(argvals⁻...) ⊞ fn.fluxfn(argvals⁺...), 2)
+    Favg = (fn.fluxfn(argvals⁻...) + fn.fluxfn(argvals⁺...)) / 2
     λ = max(fn.wavespeedfn(argvals⁻...), fn.wavespeedfn(argvals⁺...))
-    return RecursiveApply.rmap(f -> f' * normal, Favg) ⊞ (λ / 2) ⊠ (y⁻ ⊟ y⁺)
+    return Favg' * normal + (λ / 2) * (y⁻ - y⁺)
 end
 
 
@@ -132,7 +130,7 @@ function add_numerical_flux_boundary!(fn, dydt, args...)
                     ),
                 )
                 dydt_slab⁻[slab_index(i⁻, j⁻)] =
-                    dydt_slab⁻[slab_index(i⁻, j⁻)] ⊟ (sgeom⁻.sWJ ⊠ numflux⁻)
+                    dydt_slab⁻[slab_index(i⁻, j⁻)] - (sgeom⁻.sWJ * numflux⁻)
             end
         end
     end

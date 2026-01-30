@@ -22,7 +22,6 @@ import ClimaCore:
     Quadratures
 using ClimaCore.MatrixFields
 import ClimaCore.Utilities: half
-import ClimaCore.RecursiveApply: ⊠
 import LinearAlgebra: I, norm, ldiv!, mul!
 import ClimaCore.MatrixFields: @name
 
@@ -175,7 +174,7 @@ function dycore_prognostic_EDMF_FieldMatrix(
     ᶠᶜmat2_u₃_scalar = ᶠᶜmat2 .* (e³,)
     ᶜᶠmat2_scalar_u₃ = ᶜᶠmat2 .* (e₃',)
     ᶠᶠmat3_u₃_u₃ = ᶠᶠmat3 .* (e³ * e₃',)
-    ᶜᶠmat2_ρχ_u₃ = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit ⊠ e₃')), ᶜᶠmat2)
+    ᶜᶠmat2_ρχ_u₃ = map(Base.Fix1(map, Base.Fix2(*, ρχ_unit * e₃')), ᶜᶠmat2)
     ᶜᶜmat3_uₕ_scalar = ᶜᶜmat3 .* (e¹²,)
     ᶜᶜmat3_uₕ_uₕ =
         ᶜᶜmat3 .* (
@@ -185,9 +184,9 @@ function dycore_prognostic_EDMF_FieldMatrix(
             Geometry.Contravariant12Vector(0, 1)',
         )
     ᶜᶠmat2_uₕ_u₃ = ᶜᶠmat2 .* (e¹² * e₃',)
-    ᶜᶜmat3_ρχ_scalar = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit)), ᶜᶜmat3)
-    ᶜᶜmat3_ρaχ_scalar = map(Base.Fix1(map, Base.Fix2(⊠, ρaχ_unit)), ᶜᶜmat3)
-    ᶜᶠmat2_ρaχ_u₃ = map(Base.Fix1(map, Base.Fix2(⊠, ρaχ_unit ⊠ e₃')), ᶜᶠmat2)
+    ᶜᶜmat3_ρχ_scalar = map(Base.Fix1(map, Base.Fix2(*, ρχ_unit)), ᶜᶜmat3)
+    ᶜᶜmat3_ρaχ_scalar = map(Base.Fix1(map, Base.Fix2(*, ρaχ_unit)), ᶜᶜmat3)
+    ᶜᶠmat2_ρaχ_u₃ = map(Base.Fix1(map, Base.Fix2(*, ρaχ_unit * e₃')), ᶜᶠmat2)
 
     dry_center_gs_unit = (; ρ = 1, ρe_tot = 1, uₕ = e¹²)
     center_gs_unit = (; dry_center_gs_unit..., ρatke = 1, ρχ = ρχ_unit)
@@ -382,7 +381,7 @@ function random_field(::Type{T}, space) where {T}
     return field
 end
 
-# Construct a highly nested type for testing integration with RecursiveApply.
+# Construct a nested iterator for testing compatibility with generic data types.
 nested_type(value) = nested_type(value, value, value)
 nested_type(value1, value2, value3) =
     (; a = (), b = value1, c = (value2, (; d = (value3,)), (;)))

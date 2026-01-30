@@ -59,65 +59,8 @@ Base.Broadcast.combine_styles(
 
 Base.Broadcast.broadcastable(field::Field) = field
 
-Base.eltype(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
-    Base.Broadcast.combine_eltypes(bc.f, bc.args)
-
-# _first: recursively get the first element
-function _first end
-
-# If we haven't caught the datatype, then this
-# may just result in a method error-- but all
-# we're trying to do is throw a more helpful
-# error message. So, let's throw it here instead.
-_first(bc, ::Any) = throw(BroadcastInferenceError(bc))
-_first_data_layout(data::DataLayouts.VF) = data[CartesianIndex(1, 1, 1, 1, 1)]
-_first_data_layout(data::DataLayouts.DataF) = data[]
-_first(bc, x::Real) = x
-_first(bc, x::Geometry.LocalGeometry) = x
-_first(bc, data::DataLayouts.VF) = data[]
-_first(bc, field::Field) =
-    _first_data_layout(field_values(column(field, 1, 1, 1)))
-_first(bc, space::Spaces.AbstractSpace) =
-    _first_data_layout(field_values(column(space, 1, 1, 1)))
-_first(bc, x::Base.Broadcast.Broadcasted) = _first(bc, copy(x))
-_first(bc, x::Ref{T}) where {T} = x.x
-_first(bc, x::Tuple{T}) where {T} = x[1]
-
-function call_with_first(bc)
-    # Try calling with first applied to all arguments:
-    bc′ = Base.Broadcast.preprocess(nothing, bc)
-    first_args = map(arg -> _first(bc, arg), bc′.args)
-    bc.f(first_args...)
-end
-
-# we implement our own to avoid the type-widening code, and throw a more useful error
-struct BroadcastInferenceError <: Exception
-    bc::Base.Broadcast.Broadcasted
-end
-
-function Base.showerror(io::IO, err::BroadcastInferenceError)
-    print(io, "BroadcastInferenceError: cannot infer eltype.\n")
-    bc = err.bc
-    f = bc.f
-    eltypes = map(eltype, bc.args)
-    if !hasmethod(f, eltypes)
-        print(io, "  function $(f) does not have a method for $(eltypes)")
-    else
-        InteractiveUtils.code_warntype(io, f, eltypes)
-    end
-end
-
-function Base.copy(
-    bc::Base.Broadcast.Broadcasted{Style},
-) where {Style <: AbstractFieldStyle}
-    ElType = eltype(bc)
-    if !Base.isconcretetype(ElType)
-        call_with_first(bc)
-        throw(BroadcastInferenceError(bc))
-    end
-    # We can trust it and defer to the simpler `copyto!`
-    return copyto!(similar(bc, ElType), bc, Spaces.get_mask(axes(bc)))
-end
+Base.copy(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
+    copyto!(similar(bc), bc)
 
 Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{Style},
@@ -179,36 +122,22 @@ Base.@propagate_inbounds function column(
     DataLayouts.NonExtrudedBroadcasted{_Style}(bc.f, _args, _axes)
 end
 
-# Return underlying DataLayout object, DataStyle of broadcasted
-# for `Base.similar` of a Field
-# _todata_args(args::Tuple) = (todata(args[1]), _todata_args(Base.tail(args))...)
-_todata_args(args::Tuple) =
-    unrolled_map(args) do arg
-        todata(arg)
-    end
+"""
+    todata(bc)
 
+Extracts the `DataLayout` of every `Field` in a broadcast expression, and
+ensures that every `Field` value is wrapped in a `MathMapper` when it is read.
+"""
 todata(obj) = obj
-todata(field::Field) = Fields.field_values(field)
-function todata(bc::Base.Broadcast.Broadcasted{FieldStyle{DS}}) where {DS}
-    _args = _todata_args(bc.args)
-    Base.Broadcast.Broadcasted{DS}(bc.f, _args)
-end
-function todata(bc::Base.Broadcast.Broadcasted{Style}) where {Style}
-    _args = _todata_args(bc.args)
-    Base.Broadcast.Broadcasted{Style}(bc.f, _args)
-end
-function todata(
-    bc::DataLayouts.NonExtrudedBroadcasted{FieldStyle{DS}},
-) where {DS}
-    _args = _todata_args(bc.args)
-    DataLayouts.NonExtrudedBroadcasted{DS}(bc.f, _args)
-end
-function todata(bc::DataLayouts.NonExtrudedBroadcasted{Style}) where {Style}
-    _args = _todata_args(bc.args)
-    DataLayouts.NonExtrudedBroadcasted{Style}(bc.f, _args)
-end
+todata(field::Field) =
+    Base.Broadcast.broadcasted(nested_math_mapper, field_values(field))
+todata(bc::Base.Broadcast.Broadcasted{FieldStyle{DS}}) where {DS} =
+    Base.Broadcast.Broadcasted{DS}(bc.f, unrolled_map(todata, bc.args))
+todata(bc::DataLayouts.NonExtrudedBroadcasted{FieldStyle{DS}}) where {DS} =
+    DataLayouts.NonExtrudedBroadcasted{DS}(bc.f, unrolled_map(todata, bc.args))
 
-field_values(bc::Base.AbstractBroadcasted) = todata(bc)
+field_values(bc::Base.AbstractBroadcasted) =
+    Base.Broadcast.broadcasted(unwrap_nested_math_mapper, todata(bc))
 
 # same logic as Base.Broadcast.Broadcasted (which only defines it for Tuples)
 Base.axes(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
@@ -224,7 +153,7 @@ function Base.similar(
 end
 
 Base.similar(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
-    Base.similar(bc, eltype(bc))
+    Base.similar(bc, eltype(field_values(bc)))
 
 @inline function Base.copyto!(
     dest::Field,
@@ -360,33 +289,13 @@ end
     return nothing
 end
 
+# By default, broadcasted Vals are put in Refs, leading to type instabilities
 Base.Broadcast.broadcasted(
     ::typeof(Base.literal_pow),
     ::typeof(^),
     f::Union{Field, Base.Broadcast.Broadcasted{<:AbstractFieldStyle}},
     ::Val{n},
 ) where {n} = Base.Broadcast.broadcasted(x -> Base.literal_pow(^, x, Val(n)), f)
-
-# Specialize handling of +, *, muladd, so that we can support broadcasting over NamedTuple element types
-# Required for ODE solvers
-
-Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(+), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveApply.:⊞, args...)
-
-Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(-), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveApply.:⊟, args...)
-
-Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(*), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveApply.:⊠, args...)
-
-Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(/), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveApply.rdiv, args...)
-
-Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(muladd), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveApply.rmuladd, args...)
-
-Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(zero), arg) =
-    Base.Broadcast.broadcasted(fs, RecursiveApply.rzero, arg)
 
 # Specialize handling of vector-based functions to automatically add LocalGeometry information
 function Base.Broadcast.broadcasted(
