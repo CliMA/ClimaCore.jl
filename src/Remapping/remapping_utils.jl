@@ -1,4 +1,39 @@
 """
+    AbstractRemappingMethod
+
+Abstract type for horizontal remapping methods. Dispatch on concrete subtypes to avoid
+branching in interpolation and Remapper logic.
+"""
+abstract type AbstractRemappingMethod end
+
+"""
+    SpectralElementRemapping <: AbstractRemappingMethod
+
+Use spectral element quadrature weights (e.g. Lagrange at GLL points) for horizontal
+interpolation.
+"""
+struct SpectralElementRemapping <: AbstractRemappingMethod end
+
+"""
+    BilinearRemapping{T12, T13, T14, T15} <: AbstractRemappingMethod
+
+Use bilinear interpolation on the 2-point cell containing the target point (1D: linear on
+2-point cell; 2D: bilinear on 2×2 cell). Holds precomputed local coordinates (s, t) and
+node indices (i, j). For 1D horizontal, `local_bilinear_t` and `local_bilinear_j` are
+`nothing`. Call `BilinearRemapping()` with no arguments to use as a method tag; the
+Remapper constructor fills in the arrays.
+"""
+struct BilinearRemapping{T12, T13, T14, T15} <: AbstractRemappingMethod
+    local_bilinear_s::T12
+    local_bilinear_t::T13
+    local_bilinear_i::T14
+    local_bilinear_j::T15
+end
+
+"""`BilinearRemapping()` with no arguments: method tag; Remapper constructor fills in the arrays."""
+BilinearRemapping() = BilinearRemapping(nothing, nothing, nothing, nothing)
+
+"""
     vertical_indices(space, zcoords)
 
 Return the vertical index of the element that contains `zcoords`.
@@ -238,3 +273,19 @@ function default_target_zcoords_as_vectors(space; zresolution = nothing)
         )
     end
 end
+
+"""
+    bilinear(c11, c21, c22, c12, s, t)
+
+Bilinear interpolation in (s,t) ∈ [0,1]² (local to 2-point cell; reference element is [-1,1]²):
+(1-s)(1-t)*c11 + s*(1-t)*c21 + (1-s)*t*c12 + s*t*c22
+"""
+@inline bilinear(c11, c21, c22, c12, s, t) =
+    (1 - s) * (1 - t) * c11 + s * (1 - t) * c21 + (1 - s) * t * c12 + s * t * c22
+
+"""
+    linear(c1, c2, s)
+
+Linear interpolation in s ∈ [0,1] on 2-point cell (1D analogue of bilinear).
+"""
+@inline linear(c1, c2, s) = (1 - s) * c1 + s * c2

@@ -45,8 +45,12 @@ given `field`. To obtain such coordinates, you can call the
 functions. These functions return an `Array` with the coordinates over which
 interpolation will occur. These arrays are of type `Geometry.Point`s.
 
-By default, vertical interpolation is switched off and the `field` is evaluated
-directly on the levels.
+By default, vertical interpolation is off (field evaluated on levels). Horizontal
+interpolation: `SpectralElementRemapping()` (default; uses spectral element quadrature weights) or `BilinearRemapping()`:
+
+```julia
+interpolated_array = Remapping.interpolate(field; horizontal_method = Remapping.BilinearRemapping())
+```
 
 `ClimaCore.Remapping.interpolate` allocates new output arrays. As such, it is
 not suitable for performance-critical applications.
@@ -76,6 +80,8 @@ hcoords = [Geometry.LatLongPoint(lat, long) for long in longpts, lat in latpts]
 zcoords = [Geometry.ZPoint(z) for z in zpts]
 
 interpolated_array = interpolate(field, hcoords, zcoords)
+# Or, to use bilinear remapping without spectral element weighting:
+# interpolate(field, hcoords, zcoords; horizontal_method = Remapping.BilinearRemapping())
 ```
 The output is defined on the Cartesian product of `hcoords` with `zcoords`.
 
@@ -88,6 +94,154 @@ This also provides the simplest way to plot a `Field`. Suppose `field` is a 2D `
 using CairoMakie
 heatmap(ClimaCore.Remapping.interpolate(field))
 ```
+
+### Remapping methods: Bilinear vs SpectralElementRemapping
+
+Two horizontal remapping methods are available:
+
+- **`SpectralElementRemapping()`** (default): Uses spectral element quadrature weights for high-order polynomial interpolation. More accurate for smooth fields but can produce overshoots/undershoots near discontinuities.
+- **`BilinearRemapping()`**: Uses bilinear interpolation on the 2×2 GLL cell containing each target point. More conservative (bounds-preserving) but lower-order accuracy.
+
+Both methods can be used with `interpolate_array` or `Remapper`:
+
+```julia
+using ClimaCore.Remapping: SpectralElementRemapping, BilinearRemapping
+
+# Use spectral remapping (default)
+interpolated = Remapping.interpolate_array(field, xpts, ypts)
+
+# Use bilinear remapping
+interpolated = Remapping.interpolate_array(
+    field, xpts, ypts; horizontal_method = BilinearRemapping()
+)
+
+# With Remapper
+remapper = Remapper(space; target_hcoords, horizontal_method = BilinearRemapping())
+```
+
+#### Slotted-cylinder example (demo of horizontal remapping types)
+
+```@example remap_visualization
+using ClimaComms
+using ClimaCore:
+    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Remapping, Quadratures
+using CairoMakie
+
+device = ClimaComms.CPUSingleThreaded()
+nelements_horz = 6
+Nq = 4
+n_interp = 24
+
+# Simple test field: disk with slot (discontinuous)
+slot_radius = 0.15
+slot_cx, slot_cy = 0.5, 0.5
+slot_half_width = 0.025
+slot_y_hi = slot_cy + slot_radius
+
+horzdomain = Domains.RectangleDomain(
+    Geometry.XPoint(0.0) .. Geometry.XPoint(1.0),
+    Geometry.YPoint(0.0) .. Geometry.YPoint(1.0),
+    x1periodic = true, x2periodic = true,
+)
+
+quad = Quadratures.GLL{Nq}()
+horzmesh = Meshes.RectilinearMesh(horzdomain, nelements_horz, nelements_horz)
+horztopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(device), horzmesh)
+space = Spaces.SpectralElementSpace2D(horztopology, quad)
+
+coords = Fields.coordinate_field(space)
+function slotted_cylinder(x, y)
+    in_disk = (x - slot_cx)^2 + (y - slot_cy)^2 <= slot_radius^2
+    in_slot = (abs(x - slot_cx) <= slot_half_width) && (y >= slot_cy) && (y <= slot_y_hi)
+    return (in_disk && !in_slot) ? 1.0 : 0.0
+end
+field = @. slotted_cylinder(coords.x, coords.y)
+Spaces.weighted_dss!(field)
+
+xpts = range(Geometry.XPoint(0.0), Geometry.XPoint(1.0), length = n_interp)
+ypts = range(Geometry.YPoint(0.0), Geometry.YPoint(1.0), length = n_interp)
+
+# Compare both methods
+interp_bilinear = Remapping.interpolate_array(
+    field, xpts, ypts; horizontal_method = Remapping.BilinearRemapping(),
+)
+interp_spectral = Remapping.interpolate_array(
+    field, xpts, ypts; horizontal_method = Remapping.SpectralElementRemapping(),
+)
+
+# Error (bilinear − spectral): highlights where the methods differ
+err_bilinear_spectral = interp_bilinear .- interp_spectral
+
+# Raw data at GLL nodes (source field before interpolation)
+x_se = Float64[]
+y_se = Float64[]
+vals_se = Float64[]
+Fields.byslab(space) do slabidx
+    x_data = parent(Fields.slab(coords.x, slabidx))
+    y_data = parent(Fields.slab(coords.y, slabidx))
+    f_data = parent(Fields.slab(field, slabidx))
+    for j in 1:Nq, i in 1:Nq
+        push!(x_se, x_data[i, j])
+        push!(y_se, y_data[i, j])
+        push!(vals_se, f_data[i, j])
+    end
+end
+
+x_plot = [p.x for p in xpts]
+y_plot = [p.y for p in ypts]
+
+fig = Figure(size = (1200, 700))
+ax1 = Axis(fig[1, 1], title = "Bilinear", xlabel = "x", ylabel = "y")
+hm1 = heatmap!(
+    ax1, x_plot, y_plot, interp_bilinear';
+    colorrange = (0, 1), colormap = :viridis,
+    lowclip = :orange, highclip = :red,
+)
+Colorbar(fig[1, 2], hm1; label = "value")
+
+ax2 = Axis(fig[1, 3], title = "Spectral", xlabel = "x", ylabel = "y")
+hm2 = heatmap!(
+    ax2, x_plot, y_plot, interp_spectral';
+    colorrange = (0, 1), colormap = :viridis,
+    lowclip = :orange, highclip = :red,
+)
+Colorbar(fig[1, 4], hm2; label = "value")
+
+ax3 = Axis(fig[1, 5], title = "Error (bilinear − spectral)", xlabel = "x", ylabel = "y")
+erange = extrema(err_bilinear_spectral)
+hm3 = heatmap!(
+    ax3, x_plot, y_plot, err_bilinear_spectral';
+    colorrange = erange, colormap = :RdBu,
+)
+Colorbar(fig[1, 6], hm3; label = "error")
+
+# Row 2: raw spectral element grid (exact values at GLL nodes)
+# Swap (y_se, x_se) so orientation matches heatmaps (slab i,j vs display x,y convention)
+ax_se = Axis(
+    fig[2, 1],
+    title = "Raw spectral element grid (GLL nodes)",
+    xlabel = "x",
+    ylabel = "y",
+)
+sc_se = scatter!(
+    ax_se, y_se, x_se;
+    color = vals_se,
+    colorrange = (0, 1),
+    colormap = :viridis,
+    lowclip = :orange,
+    highclip = :red,
+    markersize = 8,
+)
+boundary_pos = (0:nelements_horz) ./ nelements_horz
+vlines!(ax_se, boundary_pos; color = :pink, linewidth = 2)
+hlines!(ax_se, boundary_pos; color = :pink, linewidth = 2)
+limits!(ax_se, 0, 1, 0, 1)
+Colorbar(fig[2, 2], sc_se; label = "value")
+
+fig
+```
+
+Row 1: heatmaps use **orange** for undershoots (&lt; 0) and **red** for overshoots (&gt; 1). The spectral method produces overshoots/undershoots near the discontinuity; bilinear stays in [0, 1]. The error panel (bilinear − spectral) shows where the two methods differ. Row 2: raw field values at the GLL nodes (the source data); pink lines show element boundaries.
 
 ### The `Remapper` object
 

@@ -210,12 +210,15 @@ struct Remapper{
     # A tuple of Colons (1, 2, or 3), used to more easily get views into arrays with unknown
     # dimension (1-3D)
     colons::T11
+
+    # Horizontal remapping method. BilinearRemapping holds precomputed (s, t) and (i, j).
+    horiz_method::AbstractRemappingMethod
 end
 
 """
-   Remapper(space, target_hcoords, target_zcoords, buffer_length = 1)
-   Remapper(space; target_hcoords, target_zcoords, buffer_length = 1)
-   Remapper(space, target_hcoords; buffer_length = 1)
+   Remapper(space, target_hcoords, target_zcoords, buffer_length = 1, horizontal_method = SpectralElementRemapping())
+   Remapper(space; target_hcoords, target_zcoords, buffer_length = 1, horizontal_method = SpectralElementRemapping())
+   Remapper(space, target_hcoords; buffer_length = 1, horizontal_method = SpectralElementRemapping())
    Remapper(space, target_zcoords; buffer_length = 1)
 
 Return a `Remapper` responsible for interpolating any `Field` defined on the given `space`
@@ -241,6 +244,9 @@ Keyword arguments
 for interpolation. Effectively, this controls how many fields can be remapped simultaneously
 in `interpolate`. When more fields than `buffer_length` are passed, the remapper will batch
 the work in sizes of `buffer_length`.
+
+`horizontal_method`: `SpectralElementRemapping()` (default; uses spectral element quadrature weights)
+or `BilinearRemapping()` (1D: linear on 2-point cell; 2D: bilinear on 2×2 cell).
 """
 function Remapper end
 
@@ -257,7 +263,8 @@ Remapper(
         space,
     ),
     buffer_length::Int = 1,
-) = _Remapper(space; target_zcoords, target_hcoords, buffer_length)
+    horizontal_method::AbstractRemappingMethod = SpectralElementRemapping(),
+) = _Remapper(space; target_zcoords, target_hcoords, buffer_length, horizontal_method)
 
 # General case, everything passed as positional
 Remapper(
@@ -265,13 +272,15 @@ Remapper(
     target_hcoords::Union{AbstractArray, Nothing},
     target_zcoords::Union{AbstractArray, Nothing};
     buffer_length::Int = 1,
-) = _Remapper(space; target_zcoords, target_hcoords, buffer_length)
+    horizontal_method::AbstractRemappingMethod = SpectralElementRemapping(),
+) = _Remapper(space; target_zcoords, target_hcoords, buffer_length, horizontal_method)
 
-# Purely vertical case
+# Purely vertical case (horizontal_method accepted for uniform API, ignored)
 Remapper(
     space::Spaces.FiniteDifferenceSpace;
     target_zcoords::AbstractArray = default_target_zcoords(space),
     buffer_length::Int = 1,
+    horizontal_method::AbstractRemappingMethod = SpectralElementRemapping(),
 ) = _Remapper(space; target_zcoords, target_hcoords = nothing, buffer_length)
 
 # Purely vertical, positional
@@ -279,6 +288,7 @@ Remapper(
     space::Spaces.FiniteDifferenceSpace,
     target_zcoords::AbstractArray;
     buffer_length::Int = 1,
+    horizontal_method::AbstractRemappingMethod = SpectralElementRemapping(),
 ) = _Remapper(space; target_zcoords, target_hcoords = nothing, buffer_length)
 
 # Purely horizontal case
@@ -286,14 +296,28 @@ Remapper(
     space::Spaces.AbstractSpectralElementSpace;
     target_hcoords::AbstractArray = default_target_hcoords(space),
     buffer_length::Int = 1,
-) = _Remapper(space; target_zcoords = nothing, target_hcoords, buffer_length)
+    horizontal_method::AbstractRemappingMethod = SpectralElementRemapping(),
+) = _Remapper(
+    space;
+    target_zcoords = nothing,
+    target_hcoords,
+    buffer_length,
+    horizontal_method,
+)
 
 # Purely horizontal case, positional
 Remapper(
     space::Spaces.AbstractSpectralElementSpace,
     target_hcoords::AbstractArray;
     buffer_length::Int = 1,
-) = _Remapper(space; target_zcoords = nothing, target_hcoords, buffer_length)
+    horizontal_method::AbstractRemappingMethod = SpectralElementRemapping(),
+) = _Remapper(
+    space;
+    target_zcoords = nothing,
+    target_hcoords,
+    buffer_length,
+    horizontal_method,
+)
 
 # Constructor for the case with horizontal spaces
 function _Remapper(
@@ -301,7 +325,9 @@ function _Remapper(
     target_zcoords::Union{AbstractArray, Nothing},
     target_hcoords::AbstractArray,
     buffer_length::Int = 1,
+    horizontal_method::AbstractRemappingMethod = SpectralElementRemapping(),
 )
+    horiz_method = horizontal_method
     comms_ctx = ClimaComms.context(space)
     pid = ClimaComms.mypid(comms_ctx)
     FT = Spaces.undertype(space)
@@ -351,14 +377,52 @@ function _Remapper(
     # Here we split the two dimensions because we want to compute the two interpolation matrices.
     ξs_split = Tuple([ξ[i] for ξ in ξs_combined] for i in 1:num_hdims)
 
-    # Compute the interpolation matrices
+    # Compute the interpolation matrices (or bilinear objects when BilinearRemapping)
     quad_points, _ = Quadratures.quadrature_points(FT, quad)
     Nq = Quadratures.degrees_of_freedom(quad)
 
-    local_horiz_interpolation_weights = map(
-        ξs -> ArrayType(Quadratures.interpolation_matrix(ξs, quad_points)),
-        ξs_split,
-    )
+    if horiz_method isa BilinearRemapping
+        quad_pts = quad_points
+        if num_hdims == 1
+            # 1D: linear on 2-point cell. 
+            ξ1s = ξs_split[1]
+            i_arr = [clamp(searchsortedlast(quad_pts, ξ1), 1, Nq - 1) for ξ1 in ξ1s]
+            s_arr = [
+                (ξ1 - quad_pts[i]) / (quad_pts[i + 1] - quad_pts[i]) for
+                (ξ1, i) in zip(ξ1s, i_arr)
+            ]
+            local_bilinear_i = ArrayType(i_arr)
+            local_bilinear_s = ArrayType(s_arr)
+            local_bilinear_t = local_bilinear_j = nothing
+            local_horiz_interpolation_weights = nothing
+        else
+            # 2D: bilinear on 2×2 cell. 
+            n = length(ξs_split[1])
+            s_arr = Vector{FT}(undef, n)
+            t_arr = Vector{FT}(undef, n)
+            i_arr = Vector{Int}(undef, n)
+            j_arr = Vector{Int}(undef, n)
+            for (idx, (ξ1, ξ2)) in enumerate(zip(ξs_split[1], ξs_split[2]))
+                i = clamp(searchsortedlast(quad_pts, ξ1), 1, Nq - 1)
+                j = clamp(searchsortedlast(quad_pts, ξ2), 1, Nq - 1)
+                s_arr[idx] = (ξ1 - quad_pts[i]) / (quad_pts[i + 1] - quad_pts[i])
+                t_arr[idx] = (ξ2 - quad_pts[j]) / (quad_pts[j + 1] - quad_pts[j])
+                i_arr[idx] = i
+                j_arr[idx] = j
+            end
+            local_bilinear_s = ArrayType(s_arr)
+            local_bilinear_t = ArrayType(t_arr)
+            local_bilinear_i = ArrayType(i_arr)
+            local_bilinear_j = ArrayType(j_arr)
+            local_horiz_interpolation_weights = nothing  # bilinear uses horiz_method, not weights
+        end
+    else # SpectralElementRemapping
+        local_bilinear_s = local_bilinear_t = local_bilinear_i = local_bilinear_j = nothing
+        local_horiz_interpolation_weights = map(
+            ξs -> ArrayType(Quadratures.interpolation_matrix(ξs, quad_points)),
+            ξs_split,
+        )
+    end
 
     # For 2D meshes, we have a notion of local and global indices. This is not the case for
     # 1D meshes, which are much simpler. For 1D meshes, the "index" is the same as the
@@ -384,7 +448,12 @@ function _Remapper(
 
     local_horiz_indices = ArrayType(local_horiz_indices)
 
-    field_values_size = ntuple(_ -> Nq, num_hdims)
+    # For bilinear: 1D needs 2-point scratch; 2D needs 2×2. Spectral uses Nq×...×Nq.
+    field_values_size = if horiz_method isa BilinearRemapping
+        num_hdims == 1 ? (2,) : (2, 2)
+    else
+        ntuple(_ -> Nq, num_hdims)
+    end
     field_values = ArrayType(zeros(FT, field_values_size...))
 
     # We represent interpolation onto an horizontal slab as an empty list of zcoords
@@ -434,6 +503,16 @@ function _Remapper(
 
     colons = ntuple(_ -> Colon(), num_dims)
 
+    # Reconstruct BilinearRemapping with computed arrays to preserve interface BilinearRemapping().
+    if horiz_method isa BilinearRemapping
+        horiz_method = BilinearRemapping(
+            local_bilinear_s,
+            local_bilinear_t,
+            local_bilinear_i,
+            local_bilinear_j,
+        )
+    end
+
     return Remapper(
         comms_ctx,
         space,
@@ -449,15 +528,17 @@ function _Remapper(
         interpolated_values,
         buffer_length,
         colons,
+        horiz_method,
     )
 end
 
-# Constructor for the case with vertical spaces
+# Constructor for the case with vertical spaces (horizontal_method accepted, ignored)
 function _Remapper(
     space::Spaces.FiniteDifferenceSpace;
     target_zcoords::AbstractArray,
     target_hcoords::Nothing,
     buffer_length::Int = 1,
+    horizontal_method::AbstractRemappingMethod = SpectralElementRemapping(),
 )
     comms_ctx = ClimaComms.context(space)
     FT = Spaces.undertype(space)
@@ -489,6 +570,7 @@ function _Remapper(
         interpolated_values,
         buffer_length,
         colons,
+        SpectralElementRemapping(), # no horizontal interpolation
     )
 end
 
@@ -498,7 +580,29 @@ end
 Change the local state of `remapper` by performing interpolation of `fields` on the vertical
 and horizontal points.
 """
-function _set_interpolated_values!(remapper::Remapper, fields)
+_set_interpolated_values!(remapper::Remapper, fields) =
+    _set_interpolated_values!(remapper.horiz_method, remapper, fields)
+
+function _set_interpolated_values!(
+    horiz_method::BilinearRemapping,
+    remapper::Remapper,
+    fields,
+)
+    _set_interpolated_values_bilinear!(
+        remapper._local_interpolated_values,
+        fields,
+        remapper._field_values,
+        remapper.local_horiz_indices,
+        remapper.vert_interpolation_weights,
+        remapper.vert_bounding_indices,
+        horiz_method.local_bilinear_s,
+        horiz_method.local_bilinear_t,
+        horiz_method.local_bilinear_i,
+        horiz_method.local_bilinear_j,
+    )
+end
+
+function _set_interpolated_values!(::SpectralElementRemapping, remapper::Remapper, fields)
     _set_interpolated_values!(
         remapper._local_interpolated_values,
         fields,
@@ -508,6 +612,146 @@ function _set_interpolated_values!(remapper::Remapper, fields)
         remapper.vert_interpolation_weights,
         remapper.vert_bounding_indices,
     )
+end
+
+# 1D linear (2D extruded): horizontal linear at v_lo and v_hi, then vertical blend.
+# (bilinear and linear are defined in remapping_utils.jl)
+function _set_interpolated_values_bilinear!(
+    out::AbstractArray,
+    fields::AbstractArray{<:Fields.Field},
+    scratch_corners,
+    local_horiz_indices,
+    vert_interpolation_weights::AbstractArray,
+    vert_bounding_indices::AbstractArray,
+    local_bilinear_s,
+    ::Nothing,
+    local_bilinear_i,
+    ::Nothing,
+)
+    CI = CartesianIndex
+    for (field_index, field) in enumerate(fields)
+        fv = Fields.field_values(field)
+        # out_index = horizontal target point
+        # vindex = vertical target level 
+        # h = element index
+        # (i, s) = 1D linear stencil.
+        @inbounds for (vindex, (A, B)) in enumerate(vert_interpolation_weights)
+            (v_lo, v_hi) = vert_bounding_indices[vindex]
+            for (out_index, h) in enumerate(local_horiz_indices)
+                i, s = local_bilinear_i[out_index], local_bilinear_s[out_index]
+                out[out_index, vindex, field_index] =
+                    A * linear(fv[CI(i, 1, 1, v_lo, h)], fv[CI(i + 1, 1, 1, v_lo, h)], s) +
+                    B * linear(fv[CI(i, 1, 1, v_hi, h)], fv[CI(i + 1, 1, 1, v_hi, h)], s)
+            end
+        end
+    end
+end
+
+# Bilinear path (3D): horizontal bilinear level-by-level (at v_lo and v_hi), then vertical blend.
+# Same structure as spectral: horizontal interpolation at each level, then linear vertical.
+function _set_interpolated_values_bilinear!(
+    out::AbstractArray,
+    fields::AbstractArray{<:Fields.Field},
+    scratch_corners,
+    local_horiz_indices,
+    vert_interpolation_weights::AbstractArray,
+    vert_bounding_indices::AbstractArray,
+    local_bilinear_s,
+    local_bilinear_t,
+    local_bilinear_i,
+    local_bilinear_j,
+)
+    CI = CartesianIndex
+    for (field_index, field) in enumerate(fields)
+        field_values = Fields.field_values(field)
+        @inbounds for (vindex, (A, B)) in enumerate(vert_interpolation_weights)
+            (v_lo, v_hi) = vert_bounding_indices[vindex]
+            for (out_index, h) in enumerate(local_horiz_indices)
+                i, j = local_bilinear_i[out_index], local_bilinear_j[out_index]
+                s, t = local_bilinear_s[out_index], local_bilinear_t[out_index]
+                # Horizontal bilinear at v_lo (level by level, no vertical yet)
+                scratch_corners[1, 1] = field_values[CI(i, j, 1, v_lo, h)]
+                scratch_corners[2, 1] = field_values[CI(i + 1, j, 1, v_lo, h)]
+                scratch_corners[2, 2] = field_values[CI(i + 1, j + 1, 1, v_lo, h)]
+                scratch_corners[1, 2] = field_values[CI(i, j + 1, 1, v_lo, h)]
+                f_lo = bilinear(
+                    scratch_corners[1, 1],
+                    scratch_corners[2, 1],
+                    scratch_corners[2, 2],
+                    scratch_corners[1, 2],
+                    s,
+                    t,
+                )
+                # Horizontal bilinear at v_hi
+                scratch_corners[1, 1] = field_values[CI(i, j, 1, v_hi, h)]
+                scratch_corners[2, 1] = field_values[CI(i + 1, j, 1, v_hi, h)]
+                scratch_corners[2, 2] = field_values[CI(i + 1, j + 1, 1, v_hi, h)]
+                scratch_corners[1, 2] = field_values[CI(i, j + 1, 1, v_hi, h)]
+                f_hi = bilinear(
+                    scratch_corners[1, 1],
+                    scratch_corners[2, 1],
+                    scratch_corners[2, 2],
+                    scratch_corners[1, 2],
+                    s,
+                    t,
+                )
+                # Vertical linear blend (same as spectral)
+                out[out_index, vindex, field_index] = A * f_lo + B * f_hi
+            end
+        end
+    end
+end
+
+# 1D linear: horizontal-only.
+function _set_interpolated_values_bilinear!(
+    out::AbstractArray,
+    fields::AbstractArray{<:Fields.Field},
+    scratch_corners,
+    local_horiz_indices,
+    ::Nothing,
+    ::Nothing,
+    local_bilinear_s,
+    ::Nothing,
+    local_bilinear_i,
+    ::Nothing,
+)
+    CI = CartesianIndex
+    for (field_index, field) in enumerate(fields)
+        fv = Fields.field_values(field)
+        @inbounds for (out_index, h) in enumerate(local_horiz_indices)
+            i, s = local_bilinear_i[out_index], local_bilinear_s[out_index]
+            out[out_index, field_index] =
+                linear(fv[CI(i, 1, 1, 1, h)], fv[CI(i + 1, 1, 1, 1, h)], s)
+        end
+    end
+end
+
+# Bilinear path (2D horizontal-only): horizontal-only (no vertical).
+function _set_interpolated_values_bilinear!(
+    out::AbstractArray,
+    fields::AbstractArray{<:Fields.Field},
+    scratch_corners,
+    local_horiz_indices,
+    ::Nothing,
+    ::Nothing,
+    local_bilinear_s,
+    local_bilinear_t,
+    local_bilinear_i,
+    local_bilinear_j,
+)
+    CI = CartesianIndex
+    for (field_index, field) in enumerate(fields)
+        field_values = Fields.field_values(field)
+        @inbounds for (out_index, h) in enumerate(local_horiz_indices)
+            i, j = local_bilinear_i[out_index], local_bilinear_j[out_index]
+            c11 = field_values[CI(i, j, 1, 1, h)]
+            c21 = field_values[CI(i + 1, j, 1, 1, h)]
+            c22 = field_values[CI(i + 1, j + 1, 1, 1, h)]
+            c12 = field_values[CI(i, j + 1, 1, 1, h)]
+            s, t = local_bilinear_s[out_index], local_bilinear_t[out_index]
+            out[out_index, field_index] = bilinear(c11, c21, c22, c12, s, t)
+        end
+    end
 end
 
 # CPU, 3D case
@@ -955,25 +1199,11 @@ function interpolate!(
 end
 
 """
-       interpolate(field::ClimaCore.Fields;
-                   hresolution = 180,
-                   zresolution = nothing,
-                   target_hcoords = default_target_hcoords(space; hresolution),
-                   target_zcoords = default_target_zcoords(space; zresolution)
-                   )
+    interpolate(field; hresolution=180, zresolution=nothing, target_hcoords=..., target_zcoords=..., horizontal_method=SpectralElementRemapping())
 
-Interpolate the given fields on the Cartesian product of `target_hcoords` with
-`target_zcoords`. For `Space`s without horizontal/vertical component, the relevant
-`target_*coords` are ignored.
-
-When `zresolution` is set to `nothing`, do not perform any interpolation in the vertical
-direction. When `zresolution`, perform linear interpolation with uniformly spaced levels.
-
-Coordinates have to be `ClimaCore.Geometry.Points`.
-
-Note: do not use this method when performance is important. Instead, define a `Remapper` and
-call `interpolate(remapper, fields)`. Different `Field`s defined on the same `Space` can
-share a `Remapper`, so that interpolation can be optimized.
+Interpolate `field` onto the Cartesian product of `target_hcoords` and `target_zcoords`.
+`zresolution = nothing` disables vertical interpolation. `horizontal_method`: `SpectralElementRemapping()` or `BilinearRemapping()`.
+For performance, use a `Remapper` and `interpolate(remapper, fields)` instead.
 
 Example
 ========
@@ -1033,13 +1263,31 @@ function interpolate(
     hresolution = 180,
     target_hcoords = default_target_hcoords(axes(field); hresolution),
     target_zcoords = default_target_zcoords(axes(field); zresolution),
+    horizontal_method::AbstractRemappingMethod = SpectralElementRemapping(),
 )
-    return interpolate(field, axes(field); target_hcoords, target_zcoords)
+    return interpolate(
+        field,
+        axes(field);
+        target_hcoords,
+        target_zcoords,
+        horizontal_method,
+    )
 end
 
 # interpolate, positional
-function interpolate(field::Fields.Field, target_hcoords, target_zcoords)
-    return interpolate(field, axes(field); target_hcoords, target_zcoords)
+function interpolate(
+    field::Fields.Field,
+    target_hcoords,
+    target_zcoords;
+    horizontal_method::AbstractRemappingMethod = SpectralElementRemapping(),
+)
+    return interpolate(
+        field,
+        axes(field);
+        target_hcoords,
+        target_zcoords,
+        horizontal_method,
+    )
 end
 
 function interpolate(
@@ -1047,8 +1295,9 @@ function interpolate(
     space::Spaces.AbstractSpace;
     target_hcoords,
     target_zcoords,
+    horizontal_method::AbstractRemappingMethod = SpectralElementRemapping(),
 )
-    remapper = Remapper(space; target_hcoords, target_zcoords)
+    remapper = Remapper(space; target_hcoords, target_zcoords, horizontal_method)
     return interpolate(remapper, field)
 end
 
@@ -1057,6 +1306,7 @@ function interpolate(
     space::Spaces.FiniteDifferenceSpace;
     target_zcoords,
     target_hcoords,
+    kwargs...,  # e.g. horizontal_method; accepted for uniform API, ignored for vertical-only
 )
     remapper = Remapper(space; target_zcoords)
     return interpolate(remapper, field)
@@ -1067,7 +1317,8 @@ function interpolate(
     space::Spaces.AbstractSpectralElementSpace;
     target_hcoords,
     target_zcoords,
+    horizontal_method::AbstractRemappingMethod = SpectralElementRemapping(),
 )
-    remapper = Remapper(space; target_hcoords)
+    remapper = Remapper(space; target_hcoords, horizontal_method)
     return interpolate(remapper, field)
 end
