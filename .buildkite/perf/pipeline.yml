@@ -20,7 +20,7 @@ steps:
   - label: "init :GPU:"
     key: "init_gpu_env"
     command:
-      - git clone https://github.com/CliMA/ClimaCoupler.jl.git $COUPLER_PATH && cd $COUPLER_PATH && git checkout $COUPLER_COMMIT
+      - git clone https://github.com/CliMA/ClimaCoupler.jl.git $COUPLER_PATH && bash -c "cd $COUPLER_PATH && git checkout $COUPLER_COMMIT"
       - "echo $$JULIA_DEPOT_PATH"
       - echo "--- Instantiate AMIP env"
       # Instantiate and dev install ClimaCore
