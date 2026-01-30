@@ -1,5 +1,8 @@
 module Utilities
 
+import InteractiveUtils
+
+include("math_mapper.jl")
 include("plushalf.jl")
 include("cache.jl")
 
@@ -60,5 +63,50 @@ function unionall_type(::Type{T}) where {T}
     return T.name.wrapper
 end
 
+"""
+    inferred_result_type(f, types...)
+
+The type of value returned by `f` for arguments of the given types. An error is
+thrown if the concrete result type cannot be inferred, or if no method can be
+found to handle the argument types.
+"""
+function inferred_result_type(f::F, types...) where {F}
+    unrolled_all(!=(Union{}), types) ||
+        throw(ArgumentError("Type of argument $(findfirst(==(Union{}), types)) \
+                             to $f is unknown"))
+    hasmethod(f, Tuple{types...}) || throw(MethodError(f, Tuple{types...}))
+    inferred_type = Core.Compiler.return_type(f, Tuple{types...})
+    isconcretetype(inferred_type) ||
+        throw(ErrorException("Cannot infer type of value returned by $f: \
+                              \n$(inference_string(f, types...))"))
+    return inferred_type
+end
+
+"""
+    inferred_result_value(f, types...)
+
+The value returned by `f` for arguments of the given types, computed by using
+[`inferred_result_type`](@ref) in conjunction with a `Val` wrapper. The value
+returned by a function can only be inferred when it is a compile-time constant
+(i.e., when it is marked as a `Core.Const` in the output of `@code_warntype`).
+"""
+function inferred_result_value(f::F, types...) where {F}
+    inferred_result_type(f, types...) # First check whether the type is inferred
+    inferred_val_type = Core.Compiler.return_type(Val ∘ f, Tuple{types...})
+    isconcretetype(inferred_val_type) ||
+        throw(ErrorException("Cannot infer constant value returned by $f: \
+                              \n$(inference_string(f, types...))"))
+    return val_type_parameter(inferred_val_type)
+end
+
+function inference_string(f, types...)
+    io = IOBuffer()
+    InteractiveUtils.code_warntype(io, f, Tuple{types...})
+    return String(take!(io))
+end
+
+# Wrap values passed between functions in Vals to guarantee constant-propagation
+val_parameter(::Val{constant}) where {constant} = constant
+val_type_parameter(::Type{Val{constant}}) where {constant} = constant
 
 end # module

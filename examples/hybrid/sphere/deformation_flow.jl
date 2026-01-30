@@ -150,70 +150,71 @@ function horizontal_tendency!(Yₜ, Y, cache, t)
     @. Δₕq = hwdiv(hgrad(Y.c.ρq / Y.c.ρ))
     Spaces.weighted_dss!(Δₕq)
     @. Yₜ.c.ρ = -hdiv(Y.c.ρ * u)
-    for n in 1:5 # TODO: update RecursiveApply/Operators to eliminate this loop
-        ρq_n = Y.c.ρq.:($n)
-        ρqₜ_n = Yₜ.c.ρq.:($n)
-        @. ρqₜ_n = -hdiv(ρq_n * u)
-    end
-    @. Yₜ.c.ρq -= D₄ * hwdiv(Y.c.ρ * hgrad(Δₕq))
+    @. Yₜ.c.ρq = -hdiv(Y.c.ρq * u) - D₄ * hwdiv(Y.c.ρ * hgrad(Δₕq))
 end
 
 function vertical_tendency!(Yₜ, Y, cache, t)
-    (; q_n, face_u, face_uₕ, face_uᵥ, fct_op, dt) = cache
+    (; face_u, face_uₕ, face_uᵥ, fct_op, dt) = cache
     face_coord = Fields.coordinate_field(face_u)
     @. face_u = local_velocity(face_coord, t)
     @. face_uₕ = Geometry.project(Geometry.Covariant12Axis(), face_u)
     @. face_uᵥ = Geometry.project(Geometry.Covariant3Axis(), face_u)
     @. Yₜ.c.ρ = -vdivf2c(Ic2f(Y.c.ρ) * face_u)
     ᶜJ = Fields.local_geometry_field(axes(Y.c.ρ)).J
-    for n in 1:5 # TODO: update RecursiveApply/Operators to eliminate this loop
-        ρq_n = Y.c.ρq.:($n)
-        ρqₜ_n = Yₜ.c.ρq.:($n)
-        @. q_n = ρq_n / Y.c.ρ
-        @. ρqₜ_n = -vdivf2c(Ic2f(ρq_n) * face_uₕ)
-        if isnothing(fct_op)
-            @. ρqₜ_n -= vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * face_uᵥ * Ic2f(q_n))
-        elseif fct_op == upwind1
-            @. ρqₜ_n -= vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * upwind1(face_uᵥ, q_n))
-        elseif fct_op == upwind3
-            @. ρqₜ_n -= vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * upwind3(face_uᵥ, q_n))
-        elseif fct_op == FCTBorisBook
-            @. ρqₜ_n -= vdivf2c(
-                ᶠwinterp(ᶜJ, Y.c.ρ) * (
-                    upwind1(face_uᵥ, q_n) + FCTBorisBook(
-                        upwind3(face_uᵥ, q_n) - upwind1(face_uᵥ, q_n),
-                        q_n / dt -
-                        vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * upwind1(face_uᵥ, q_n)) / Y.c.ρ,
-                    )
-                ),
-            )
-        elseif fct_op == FCTZalesak
-            @. ρqₜ_n -= vdivf2c(
-                ᶠwinterp(ᶜJ, Y.c.ρ) * (
-                    upwind1(face_uᵥ, q_n) + FCTZalesak(
-                        upwind3(face_uᵥ, q_n) - upwind1(face_uᵥ, q_n),
-                        q_n / dt,
-                        q_n / dt -
-                        vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * upwind1(face_uᵥ, q_n)) / Y.c.ρ,
-                    )
-                ),
-            )
-        elseif fct_op == SlopeLimitedFlux
-            @. ρqₜ_n -= vdivf2c(
-                ᶠwinterp(ᶜJ, Y.c.ρ) * (
-                    upwind1(face_uᵥ, q_n) + SlopeLimitedFlux(
-                        upwind3(face_uᵥ, q_n) - upwind1(face_uᵥ, q_n),
-                        q_n / dt,
-                        face_uᵥ,
-                    )
-                ),
-            )
-        elseif fct_op == LinVanLeerFlux
-            @. ρqₜ_n -=
-                vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * LinVanLeerFlux(face_uᵥ, q_n, dt))
-        else
-            error("unrecognized FCT operator $fct_op")
-        end
+    @. Yₜ.c.ρq = -vdivf2c(Ic2f(Y.c.ρq) * face_uₕ)
+    if isnothing(fct_op)
+        @. Yₜ.c.ρq -=
+            vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * face_uᵥ * Ic2f(Y.c.ρq / Y.c.ρ))
+    elseif fct_op == upwind1
+        @. Yₜ.c.ρq -=
+            vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * upwind1(face_uᵥ, Y.c.ρq / Y.c.ρ))
+    elseif fct_op == upwind3
+        @. Yₜ.c.ρq -=
+            vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * upwind3(face_uᵥ, Y.c.ρq / Y.c.ρ))
+    elseif fct_op == FCTBorisBook
+        @. Yₜ.c.ρq -= vdivf2c(
+            ᶠwinterp(ᶜJ, Y.c.ρ) * (
+                upwind1(face_uᵥ, Y.c.ρq / Y.c.ρ) + FCTBorisBook(
+                    upwind3(face_uᵥ, Y.c.ρq / Y.c.ρ) -
+                    upwind1(face_uᵥ, Y.c.ρq / Y.c.ρ),
+                    Y.c.ρq / (Y.c.ρ * dt) -
+                    vdivf2c(
+                        ᶠwinterp(ᶜJ, Y.c.ρ) * upwind1(face_uᵥ, Y.c.ρq / Y.c.ρ),
+                    ) / Y.c.ρ,
+                )
+            ),
+        )
+    elseif fct_op == FCTZalesak
+        @. Yₜ.c.ρq -= vdivf2c(
+            ᶠwinterp(ᶜJ, Y.c.ρ) * (
+                upwind1(face_uᵥ, Y.c.ρq / Y.c.ρ) + FCTZalesak(
+                    upwind3(face_uᵥ, Y.c.ρq / Y.c.ρ) -
+                    upwind1(face_uᵥ, Y.c.ρq / Y.c.ρ),
+                    Y.c.ρq / (Y.c.ρ * dt),
+                    Y.c.ρq / (Y.c.ρ * dt) -
+                    vdivf2c(
+                        ᶠwinterp(ᶜJ, Y.c.ρ) * upwind1(face_uᵥ, Y.c.ρq / Y.c.ρ),
+                    ) / Y.c.ρ,
+                )
+            ),
+        )
+    elseif fct_op == SlopeLimitedFlux
+        @. Yₜ.c.ρq -= vdivf2c(
+            ᶠwinterp(ᶜJ, Y.c.ρ) * (
+                upwind1(face_uᵥ, Y.c.ρq / Y.c.ρ) + SlopeLimitedFlux(
+                    upwind3(face_uᵥ, Y.c.ρq / Y.c.ρ) -
+                    upwind1(face_uᵥ, Y.c.ρq / Y.c.ρ),
+                    Y.c.ρq / (Y.c.ρ * dt),
+                    face_uᵥ,
+                )
+            ),
+        )
+    elseif fct_op == LinVanLeerFlux
+        @. Yₜ.c.ρq -= vdivf2c(
+            ᶠwinterp(ᶜJ, Y.c.ρ) * LinVanLeerFlux(face_uᵥ, Y.c.ρq / Y.c.ρ, dt),
+        )
+    else
+        error("unrecognized FCT operator $fct_op")
     end
 end
 
@@ -290,7 +291,6 @@ function run_deformation_flow(use_limiter, fct_op, dt)
     cache = (;
         u = Fields.Field(Geometry.UVWVector{FT}, cent_space),
         Δₕq = Fields.Field(NTuple{5, FT}, cent_space),
-        q_n = Fields.Field(FT, cent_space),
         face_u = Fields.Field(Geometry.UVWVector{FT}, face_space),
         face_uₕ = Fields.Field(Geometry.Covariant12Vector{FT}, face_space),
         face_uᵥ = Fields.Field(Geometry.Covariant3Vector{FT}, face_space),

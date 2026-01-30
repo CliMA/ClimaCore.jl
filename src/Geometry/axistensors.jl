@@ -515,11 +515,9 @@ end
 end
 
 """
-    outer(x, y)
     x ⊗ y
 
-Compute the outer product of `x` and `y`. Typically `x` will be a vector, and
-`y` can be either a number, vector or tuple/named tuple.
+Shorthand for the outer product `x * y'`.
 
 ```julia
 # vector ⊗ scalar = vector
@@ -533,21 +531,6 @@ julia> [1.0,2.0] ⊗ [1.0,3.0]
 2×2 Matrix{Float64}:
  1.0  3.0
  2.0  6.0
-
-# vector ⊗ tuple = recursion
-julia> [1.0,2.0] ⊗ (1.0, (a=2.0, b=3.0))
-([1.0, 2.0], (a = [2.0, 4.0], b = [3.0, 6.0]))
 ```
 """
-function outer end
-const ⊗ = outer
-
-@inline function outer(x::AbstractVector, y::AbstractVector)
-    x * y'
-end
-@inline function outer(x::AbstractVector, y::Number)
-    x * y
-end
-@inline function outer(x::AbstractVector, y)
-    RecursiveApply.rmap(y -> x ⊗ y, y)
-end
+⊗(x, y) = x * y'

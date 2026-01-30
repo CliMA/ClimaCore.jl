@@ -556,7 +556,7 @@ e³ = Geometry.Covariant3Vector(1)
 ᶜᶠmat2 = fill(BidiagonalMatrixRow(4.3, 1.7), center_space)
 ᶜᶜmat3_uₕ_scalar = ᶜᶜmat3 .* (e¹²,)
 ρχ_unit = (;ρq_liq = 1.0, ρq_ice = 1.0)
-ᶜᶠmat2_ρχ_u₃ = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit ⊠ e₃')), ᶜᶠmat2)
+ᶜᶠmat2_ρχ_u₃ = map(Base.Fix1(map, Base.Fix2(*, ρχ_unit * e₃')), ᶜᶠmat2)
 
 A = MatrixFields.FieldMatrix(
     (@name(c.ρχ), @name(f.u₃)) => ᶜᶠmat2_ρχ_u₃,

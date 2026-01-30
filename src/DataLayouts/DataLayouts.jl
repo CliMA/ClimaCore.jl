@@ -71,7 +71,7 @@ import MultiBroadcastFusion as MBF
 import Adapt
 import UnrolledUtilities: unrolled_foreach, unrolled_all, unrolled_findfirst
 
-import ..Utilities: PlusHalf, unionall_type
+import ..Utilities: PlusHalf, unionall_type, inferred_result_type
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..slab, ..slab_args, ..column, ..column_args, ..level, ..level_args
 export slab,

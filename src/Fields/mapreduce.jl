@@ -14,10 +14,9 @@ function local_sum(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
     dev::ClimaComms.AbstractCPUDevice,
 )
-    result = Base.reduce(
-        RecursiveApply.radd,
+    result = Base.sum(
         Base.Broadcast.broadcasted(
-            RecursiveApply.rmul,
+            *,
             Spaces.weighted_jacobian(axes(field)),
             todata(field),
         ),
@@ -122,7 +121,7 @@ function Statistics.mean(
         DataLayouts.DataF((local_sum(field), Spaces.local_area(space)))
     ClimaComms.allreduce!(context, parent(data_combined), +)
     sum_v, area_v = data_combined[]
-    RecursiveApply.rdiv(sum_v, area_v)
+    return sum_v / area_v
 end
 Statistics.mean(fn, field::Field, ::ClimaComms.AbstractCPUDevice) =
     Statistics.mean(Base.Broadcast.broadcasted(fn, field))

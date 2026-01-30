@@ -340,6 +340,9 @@ Base.Broadcast.BroadcastStyle(
 
 Base.Broadcast.broadcastable(data::AbstractData) = data
 
+Base.eltype(bc::Base.Broadcast.Broadcasted{<:DataStyle}) =
+    inferred_result_type(bc.f, unrolled_map(eltype, bc.args)...)
+
 Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,

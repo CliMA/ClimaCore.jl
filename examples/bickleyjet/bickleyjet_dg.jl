@@ -7,12 +7,10 @@ import ClimaCore:
     Geometry,
     Meshes,
     Operators,
-    RecursiveApply,
     Spaces,
     Quadratures,
     Topologies
 import ClimaCore.Geometry: ⊗
-import ClimaCore.RecursiveApply: ⊞, rdiv, rmap
 
 using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 
@@ -106,7 +104,7 @@ roe_average(ρ⁻, ρ⁺, var⁻, var⁺) =
     (sqrt(ρ⁻) * var⁻ + sqrt(ρ⁺) * var⁺) / (sqrt(ρ⁻) + sqrt(ρ⁺))
 
 function roeflux(n, (y⁻, parameters⁻), (y⁺, parameters⁺))
-    Favg = rdiv(flux(y⁻, parameters⁻) ⊞ flux(y⁺, parameters⁺), 2)
+    Favg = (flux(y⁻, parameters⁻) + flux(y⁺, parameters⁺)) / 2
 
     λ = sqrt(parameters⁻.g)
 
@@ -161,7 +159,7 @@ function roeflux(n, (y⁻, parameters⁻), (y⁺, parameters⁺))
     fluxᵀn_ρθ = ((w1 + w2) * θ + w5) * 0.5
 
     Δf = (ρ = -fluxᵀn_ρ, ρu = -fluxᵀn_ρu, ρθ = -fluxᵀn_ρθ)
-    rmap(f -> f' * n, Favg) ⊞ Δf
+    return Favg' * n + Δf
 end
 
 
@@ -205,9 +203,8 @@ function rhs!(dydt, y, (parameters, numflux), t)
     end
 
     # 6. Solve for final result
-    dydt_data = Fields.field_values(dydt)
-    dydt_data .=
-        RecursiveApply.rdiv.(dydt_data, Spaces.local_geometry_data(space).WJ)
+    dydt_data =
+        Fields.field_values(dydt) ./ Spaces.local_geometry_data(space).WJ
     M = Quadratures.cutoff_filter_matrix(
         Float64,
         Spaces.quadrature_style(space),

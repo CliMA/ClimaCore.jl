@@ -435,7 +435,7 @@ Base.@propagate_inbounds function stencil_interior(
 )
     a⁺ = getidx(space, arg, idx + half, hidx)
     a⁻ = getidx(space, arg, idx - half, hidx)
-    RecursiveApply.rdiv(a⁺ ⊞ a⁻, 2)
+    (a⁺ + a⁻) / 2
 end
 
 boundary_width(::InterpolateF2C, ::AbstractBoundaryCondition) = 0
@@ -494,7 +494,7 @@ Base.@propagate_inbounds function stencil_interior(
 )
     a⁺ = getidx(space, arg, idx + half, hidx)
     a⁻ = getidx(space, arg, idx - half, hidx)
-    RecursiveApply.rdiv(a⁺ ⊞ a⁻, 2)
+    (a⁺ + a⁻) / 2
 end
 boundary_width(::InterpolateC2F, ::AbstractBoundaryCondition) = 1
 
@@ -535,7 +535,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
         getidx(space, bc.val, nothing, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
-    a⁺ ⊟ RecursiveApply.rdiv(v₃, 2)
+    a⁺ - v₃ / 2
 end
 Base.@propagate_inbounds function stencil_right_boundary(
     ::InterpolateC2F,
@@ -551,7 +551,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
         getidx(space, bc.val, nothing, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
-    a⁻ ⊞ RecursiveApply.rdiv(v₃, 2)
+    a⁻ + v₃ / 2
 end
 
 Base.@propagate_inbounds function stencil_left_boundary(
@@ -1071,7 +1071,7 @@ end
 
 abstract type WeightedInterpolationOperator <: InterpolationOperator end
 # TODO: this is not in general correct and the return type
-# should be based on the component operator types (rdiv, rmul) but we don't have a good way
+# should be based on the component operator types (/, *) but we don't have a good way
 # of creating ex. one(field_type) for complex fields for inference
 return_eltype(::WeightedInterpolationOperator, weights, arg) = eltype(arg)
 
@@ -1121,7 +1121,7 @@ Base.@propagate_inbounds function stencil_interior(
     w⁻ = getidx(space, weight, idx - half, hidx)
     a⁺ = getidx(space, arg, idx + half, hidx)
     a⁻ = getidx(space, arg, idx - half, hidx)
-    RecursiveApply.rdiv((w⁺ ⊠ a⁺) ⊞ (w⁻ ⊠ a⁻), (w⁺ ⊞ w⁻))
+    (w⁺ * a⁺ + w⁻ * a⁻) / (w⁺ + w⁻)
 end
 
 boundary_width(::WeightedInterpolateF2C, ::AbstractBoundaryCondition) = 0
@@ -1181,7 +1181,7 @@ Base.@propagate_inbounds function stencil_interior(
     w⁻ = getidx(space, weight, idx - half, hidx)
     a⁺ = getidx(space, arg, idx + half, hidx)
     a⁻ = getidx(space, arg, idx - half, hidx)
-    RecursiveApply.rdiv((w⁺ ⊠ a⁺) ⊞ (w⁻ ⊠ a⁻), (w⁺ ⊞ w⁻))
+    (w⁺ * a⁺ + w⁻ * a⁻) / (w⁺ + w⁻)
 end
 
 boundary_width(::WeightedInterpolateC2F, ::AbstractBoundaryCondition) = 1
@@ -1225,7 +1225,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
         getidx(space, bc.val, nothing, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
-    a⁺ ⊟ RecursiveApply.rdiv(v₃, 2)
+    a⁺ - v₃ / 2
 end
 Base.@propagate_inbounds function stencil_right_boundary(
     ::WeightedInterpolateC2F,
@@ -1242,7 +1242,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
         getidx(space, bc.val, nothing, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
-    a⁻ ⊞ RecursiveApply.rdiv(v₃, 2)
+    a⁻ + v₃ / 2
 end
 
 Base.@propagate_inbounds function stencil_left_boundary(
@@ -1331,13 +1331,7 @@ return_space(
     arg_space::AllCenterFiniteDifferenceSpace,
 ) = velocity_space
 
-function upwind_biased_product(v, a⁻, a⁺)
-    RecursiveApply.rdiv(
-        ((v ⊞ RecursiveApply.rmap(abs, v)) ⊠ a⁻) ⊞
-        ((v ⊟ RecursiveApply.rmap(abs, v)) ⊠ a⁺),
-        2,
-    )
-end
+upwind_biased_product(v, a⁻, a⁺) = ((v + abs(v)) * a⁻ + (v - abs(v)) * a⁺) / 2
 
 stencil_interior_width(::UpwindBiasedProductC2F, velocity, arg) =
     ((0, 0), (-half, half))
@@ -1504,11 +1498,11 @@ function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::MonotoneHarmonic)
     if sign(a⁰ - a⁻) == sign(a⁺ - a⁰) && Δ𝜙_avg != 0
         return ((a⁰ - a⁻) * (a⁺ - a⁰)) / (Δ𝜙_avg) * (1 - c)
     else
-        return eltype(v)(0)
+        return zero(v)
     end
 end
 
-posdiff(x, y) = ifelse(x - y ≥ 0, x - y, eltype(x)(0))
+posdiff(x, y) = ifelse(x - y ≥ 0, x - y, zero(x))
 
 function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::PositiveDefinite)
     Δ𝜙_avg = ((a⁰ - a⁻) + (a⁺ - a⁰)) / 2
@@ -1529,11 +1523,11 @@ function slope_limited_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺, dt, constraint)
     if v >= 0
         # Eqn (2,5a,5b,5c)
         Δ𝛼 = compute_Δ𝛼_linvanleer(a⁻⁻, a⁻, a⁺, v, dt, constraint)
-        return v ⊠ (a⁻ ⊞ RecursiveApply.rdiv(Δ𝛼, 2))
+        return v * (a⁻ + Δ𝛼 / 2)
     else
         # Eqn (2,5a,5b,5c)
         Δ𝛼 = compute_Δ𝛼_linvanleer(a⁻, a⁺, a⁺⁺, v, dt, constraint)
-        return v ⊠ (a⁺ ⊟ RecursiveApply.rdiv(Δ𝛼, 2))
+        return v * (a⁺ - Δ𝛼 / 2)
     end
 end
 
@@ -1699,13 +1693,11 @@ return_space(
     arg_space::AllCenterFiniteDifferenceSpace,
 ) = velocity_space
 
-function upwind_3rdorder_biased_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺)
-    RecursiveApply.rdiv(
-        (v ⊠ (7 ⊠ (a⁺ + a⁻) ⊟ (a⁺⁺ + a⁻⁻))) ⊟
-        (RecursiveApply.rmap(abs, v) ⊠ (3 ⊠ (a⁺ - a⁻) ⊟ (a⁺⁺ - a⁻⁻))),
-        12,
-    )
-end
+upwind_3rdorder_biased_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺) =
+    (
+        v * (7 * (a⁺ + a⁻) - (a⁺⁺ + a⁻⁻)) -
+        abs(v) * (3 * (a⁺ - a⁻) - (a⁺⁺ - a⁻⁻))
+    ) / 12
 
 stencil_interior_width(::Upwind3rdOrderBiasedProductC2F, velocity, arg) =
     ((0, 0), (-half - 1, half + 1))
@@ -1864,33 +1856,13 @@ return_space(
     arg_space::AllCenterFiniteDifferenceSpace,
 ) = velocity_space
 
-function fct_boris_book(v, a⁻⁻, a⁻, a⁺, a⁺⁺)
-    if v != zero(eltype(v))
-        sign(v) ⊠ (RecursiveApply.rmap(
-            max,
-            zero(eltype(v)),
-            RecursiveApply.rmap(
-                min,
-                RecursiveApply.rmap(abs, v),
-                RecursiveApply.rmap(
-                    min,
-                    sign(v) ⊠ (a⁺⁺ - a⁺),
-                    sign(v) ⊠ (a⁻ - a⁻⁻),
-                ),
-            ),
-        ))
-    else
-        RecursiveApply.rmap(
-            max,
-            zero(eltype(v)),
-            RecursiveApply.rmap(
-                min,
-                v,
-                RecursiveApply.rmap(min, (a⁺⁺ - a⁺), (a⁻ - a⁻⁻)),
-            ),
-        )
-    end
-end
+fct_boris_book(v, a⁻⁻, a⁻, a⁺, a⁺⁺) =
+    ifelse(
+        iszero(v),
+        max(v, min(v, a⁺⁺ - a⁺, a⁻ - a⁻⁻)),
+        sign(v) *
+        max(zero(v), min(abs(v), sign(v) * (a⁺⁺ - a⁺), sign(v) * (a⁻ - a⁻⁻))),
+    )
 
 stencil_interior_width(::FCTBorisBook, velocity, arg) =
     ((0, 0), (-half - 1, half + 1))
@@ -2436,8 +2408,8 @@ Base.@propagate_inbounds function stencil_interior(
         getidx(space, velocity, idx, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
-    ∂θ₃ = RecursiveApply.rdiv(θ⁺ ⊟ θ⁻, 2)
-    return w³ ⊠ ∂θ₃
+    ∂θ₃ = (θ⁺ - θ⁻) / 2
+    return w³ * ∂θ₃
 end
 boundary_width(::AdvectionF2F, ::AbstractBoundaryCondition) = 1
 
@@ -2502,9 +2474,9 @@ Base.@propagate_inbounds function stencil_interior(
         getidx(space, velocity, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    ∂θ₃⁺ = θ⁺ ⊟ θ
-    ∂θ₃⁻ = θ ⊟ θ⁻
-    return RecursiveApply.rdiv((w³⁺ ⊠ ∂θ₃⁺) ⊞ (w³⁻ ⊠ ∂θ₃⁻), 2)
+    ∂θ₃⁺ = θ⁺ - θ
+    ∂θ₃⁻ = θ - θ⁻
+    return (w³⁺ * ∂θ₃⁺ + w³⁻ * ∂θ₃⁻) / 2
 end
 
 boundary_width(::AdvectionC2C, ::AbstractBoundaryCondition) = 1
@@ -2529,9 +2501,9 @@ Base.@propagate_inbounds function stencil_left_boundary(
         getidx(space, velocity, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    ∂θ₃⁺ = θ⁺ ⊟ θ
-    ∂θ₃⁻ = 2 ⊠ (θ ⊟ θ⁻)
-    return RecursiveApply.rdiv((w³⁺ ⊠ ∂θ₃⁺) ⊞ (w³⁻ ⊠ ∂θ₃⁻), 2)
+    ∂θ₃⁺ = θ⁺ - θ
+    ∂θ₃⁻ = 2 * (θ - θ⁻)
+    return (w³⁺ * ∂θ₃⁺ + w³⁻ * ∂θ₃⁻) / 2
 end
 Base.@propagate_inbounds function stencil_right_boundary(
     ::AdvectionC2C,
@@ -2554,9 +2526,9 @@ Base.@propagate_inbounds function stencil_right_boundary(
         getidx(space, velocity, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    ∂θ₃⁺ = 2 ⊠ (θ⁺ ⊟ θ)
-    ∂θ₃⁻ = θ ⊟ θ⁻
-    return RecursiveApply.rdiv((w³⁺ ⊠ ∂θ₃⁺) ⊞ (w³⁻ ⊠ ∂θ₃⁻), 2)
+    ∂θ₃⁺ = 2 * (θ⁺ - θ)
+    ∂θ₃⁻ = θ - θ⁻
+    return (w³⁺ * ∂θ₃⁺ + w³⁻ * ∂θ₃⁻) / 2
 end
 
 Base.@propagate_inbounds function stencil_left_boundary(
@@ -2575,8 +2547,8 @@ Base.@propagate_inbounds function stencil_left_boundary(
         getidx(space, velocity, idx + half, hidx),
         Geometry.LocalGeometry(space, idx + half, hidx),
     )
-    ∂θ₃⁺ = θ⁺ ⊟ θ
-    return (w³⁺ ⊠ ∂θ₃⁺)
+    ∂θ₃⁺ = θ⁺ - θ
+    return (w³⁺ * ∂θ₃⁺)
 end
 Base.@propagate_inbounds function stencil_right_boundary(
     ::AdvectionC2C,
@@ -2594,8 +2566,8 @@ Base.@propagate_inbounds function stencil_right_boundary(
         getidx(space, velocity, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    ∂θ₃⁻ = θ ⊟ θ⁻
-    return (w³⁻ ⊠ ∂θ₃⁻)
+    ∂θ₃⁻ = θ - θ⁻
+    return (w³⁻ * ∂θ₃⁻)
 end
 
 """
@@ -2651,9 +2623,9 @@ Base.@propagate_inbounds function stencil_interior(
         getidx(space, velocity, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    ∂θ₃⁺ = θ⁺ ⊟ θ
-    ∂θ₃⁻ = θ ⊟ θ⁻
-    return (abs(w³⁺) ⊠ ∂θ₃⁺) ⊟ (abs(w³⁻) ⊠ ∂θ₃⁻)
+    ∂θ₃⁺ = θ⁺ - θ
+    ∂θ₃⁻ = θ - θ⁻
+    return abs(w³⁺) * ∂θ₃⁺ - abs(w³⁻) * ∂θ₃⁻
 end
 
 boundary_width(::FluxCorrectionC2C, ::AbstractBoundaryCondition) = 1
@@ -2673,8 +2645,8 @@ Base.@propagate_inbounds function stencil_left_boundary(
         getidx(space, velocity, idx + half, hidx),
         Geometry.LocalGeometry(space, idx + half, hidx),
     )
-    ∂θ₃⁺ = θ⁺ ⊟ θ
-    return (abs(w³⁺) ⊠ ∂θ₃⁺)
+    ∂θ₃⁺ = θ⁺ - θ
+    return abs(w³⁺) * ∂θ₃⁺
 end
 Base.@propagate_inbounds function stencil_right_boundary(
     ::FluxCorrectionC2C,
@@ -2692,8 +2664,8 @@ Base.@propagate_inbounds function stencil_right_boundary(
         getidx(space, velocity, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    ∂θ₃⁻ = θ ⊟ θ⁻
-    return ⊟(abs(w³⁻) ⊠ ∂θ₃⁻)
+    ∂θ₃⁻ = θ - θ⁻
+    return -abs(w³⁻) * ∂θ₃⁻
 end
 
 """
@@ -2749,9 +2721,9 @@ Base.@propagate_inbounds function stencil_interior(
         getidx(space, velocity, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    ∂θ₃⁺ = θ⁺ ⊟ θ
-    ∂θ₃⁻ = θ ⊟ θ⁻
-    return (abs(w³⁺) ⊠ ∂θ₃⁺) ⊟ (abs(w³⁻) ⊠ ∂θ₃⁻)
+    ∂θ₃⁺ = θ⁺ - θ
+    ∂θ₃⁻ = θ - θ⁻
+    return abs(w³⁺) * ∂θ₃⁺ - abs(w³⁻) * ∂θ₃⁻
 end
 
 boundary_width(::FluxCorrectionF2F, ::AbstractBoundaryCondition) = 1
@@ -2771,8 +2743,8 @@ Base.@propagate_inbounds function stencil_left_boundary(
         getidx(space, velocity, idx + half, hidx),
         Geometry.LocalGeometry(space, idx + half, hidx),
     )
-    ∂θ₃⁺ = θ⁺ ⊟ θ
-    return (abs(w³⁺) ⊠ ∂θ₃⁺)
+    ∂θ₃⁺ = θ⁺ - θ
+    return abs(w³⁺) * ∂θ₃⁺
 end
 Base.@propagate_inbounds function stencil_right_boundary(
     ::FluxCorrectionF2F,
@@ -2790,8 +2762,8 @@ Base.@propagate_inbounds function stencil_right_boundary(
         getidx(space, velocity, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    ∂θ₃⁻ = θ ⊟ θ⁻
-    return ⊟(abs(w³⁻) ⊠ ∂θ₃⁻)
+    ∂θ₃⁻ = θ - θ⁻
+    return -abs(w³⁻) * ∂θ₃⁻
 end
 
 
@@ -2905,7 +2877,7 @@ Base.@propagate_inbounds function stencil_interior(
     arg,
 )
     Geometry.Covariant3Vector(1) ⊗ (
-        getidx(space, arg, idx + half, hidx) ⊟
+        getidx(space, arg, idx + half, hidx) -
         getidx(space, arg, idx - half, hidx)
     )
 end
@@ -2923,7 +2895,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
 )
     @assert idx == left_center_boundary_idx(space)
     Geometry.Covariant3Vector(1) ⊗ (
-        getidx(space, arg, idx + half, hidx) ⊟
+        getidx(space, arg, idx + half, hidx) -
         getidx(space, bc.val, nothing, hidx)
     )
 end
@@ -2937,7 +2909,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
 )
     @assert idx == right_center_boundary_idx(space)
     Geometry.Covariant3Vector(1) ⊗ (
-        getidx(space, bc.val, nothing, hidx) ⊟
+        getidx(space, bc.val, nothing, hidx) -
         getidx(space, arg, idx - half, hidx)
     )
 end
@@ -3017,7 +2989,7 @@ Base.@propagate_inbounds function stencil_interior(
     arg,
 )
     Geometry.Covariant3Vector(1) ⊗ (
-        getidx(space, arg, idx + half, hidx) ⊟
+        getidx(space, arg, idx + half, hidx) -
         getidx(space, arg, idx - half, hidx)
     )
 end
@@ -3034,7 +3006,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
     @assert idx == left_face_boundary_idx(space)
     # ∂x[i] = 2(∂x[i + half] - val)
     Geometry.Covariant3Vector(2) ⊗ (
-        getidx(space, arg, idx + half, hidx) ⊟
+        getidx(space, arg, idx + half, hidx) -
         getidx(space, bc.val, nothing, hidx)
     )
 end
@@ -3048,7 +3020,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
 )
     @assert idx == right_face_boundary_idx(space)
     Geometry.Covariant3Vector(2) ⊗ (
-        getidx(space, bc.val, nothing, hidx) ⊟
+        getidx(space, bc.val, nothing, hidx) -
         getidx(space, arg, idx - half, hidx)
     )
 end
@@ -3156,7 +3128,7 @@ Base.@propagate_inbounds function stencil_interior(
         Geometry.LocalGeometry(space, idx, hidx),
     )
     return Geometry.Covariant3Vector(1) ⊗
-           ((1 - sign(v)) / 2 ⊠ a⁺ + sign(v) ⊠ a - (1 + sign(v)) / 2 ⊠ a⁻)
+           ((1 - sign(v)) / 2 * a⁺ + sign(v) * a - (1 + sign(v)) / 2 * a⁻)
 end
 
 boundary_width(::UpwindBiasedGradient, ::AbstractBoundaryCondition) = 1
@@ -3171,7 +3143,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
     @assert idx == left_face_boundary_idx(space)
     a⁺ = getidx(space, arg, idx + 1, hidx)
     a = getidx(space, arg, idx, hidx)
-    return Geometry.Covariant3Vector(1) ⊗ (a⁺ ⊟ a)
+    return Geometry.Covariant3Vector(1) ⊗ (a⁺ - a)
 end
 Base.@propagate_inbounds function stencil_right_boundary(
     ::UpwindBiasedGradient,
@@ -3184,7 +3156,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
     @assert idx == right_face_boundary_idx(space)
     a = getidx(space, arg, idx, hidx)
     a⁻ = getidx(space, arg, idx - 1, hidx)
-    return Geometry.Covariant3Vector(1) ⊗ (a ⊟ a⁻)
+    return Geometry.Covariant3Vector(1) ⊗ (a - a⁻)
 end
 
 abstract type DivergenceOperator <: FiniteDifferenceOperator end
@@ -3253,7 +3225,7 @@ Base.@propagate_inbounds function stencil_interior(
         getidx(space, arg, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    (Ju³₊ ⊟ Ju³₋) ⊠ local_geometry.invJ
+    (Ju³₊ - Ju³₋) * local_geometry.invJ
 end
 
 boundary_width(::DivergenceF2C, ::AbstractBoundaryCondition) = 0
@@ -3276,7 +3248,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
         getidx(space, bc.val, nothing, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    (Ju³₊ ⊟ Ju³₋) ⊠ local_geometry.invJ
+    (Ju³₊ - Ju³₋) * local_geometry.invJ
 end
 Base.@propagate_inbounds function stencil_right_boundary(
     ::DivergenceF2C,
@@ -3296,7 +3268,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
         getidx(space, arg, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    (Ju³₊ ⊟ Ju³₋) ⊠ local_geometry.invJ
+    (Ju³₊ - Ju³₋) * local_geometry.invJ
 end
 
 boundary_width(::DivergenceF2C, ::SetDivergence) = 1
@@ -3425,7 +3397,7 @@ Base.@propagate_inbounds function stencil_interior(
         getidx(space, arg, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    (Ju³₊ ⊟ Ju³₋) ⊠ local_geometry.invJ
+    (Ju³₊ - Ju³₋) * local_geometry.invJ
 end
 
 boundary_width(::DivergenceC2F, ::AbstractBoundaryCondition) = 1
@@ -3448,7 +3420,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
         getidx(space, bc.val, nothing, hidx),
         local_geometry,
     )
-    (Ju³₊ ⊟ Ju³) ⊠ (2 * local_geometry.invJ)
+    (Ju³₊ - Ju³) * (2 * local_geometry.invJ)
 end
 Base.@propagate_inbounds function stencil_right_boundary(
     ::DivergenceC2F,
@@ -3468,7 +3440,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
         getidx(space, arg, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    (Ju³ ⊟ Ju³₋) ⊠ (2 * local_geometry.invJ)
+    (Ju³ - Ju³₋) * (2 * local_geometry.invJ)
 end
 
 # left / right SetDivergence boundary conditions
@@ -3895,7 +3867,7 @@ Base.@propagate_inbounds function getidx(parent_space, bc::Fields.Field, idx)
     field_data = Fields.field_values(bc)
     space = reconstruct_placeholder_space(axes(bc), parent_space)
     v = vidx(space, idx)
-    return @inbounds field_data[vindex(v)]
+    return @inbounds nested_math_mapper(field_data[vindex(v)])
 end
 Base.@propagate_inbounds function getidx(
     parent_space,
@@ -3907,15 +3879,19 @@ Base.@propagate_inbounds function getidx(
     space = reconstruct_placeholder_space(axes(bc), parent_space)
     v = vidx(space, idx)
     i, j, h = hidx
-    return @inbounds field_data[CartesianIndex(i, j, 1, v, h)]
+    return @inbounds nested_math_mapper(
+        field_data[CartesianIndex(i, j, 1, v, h)],
+    )
 end
 
 
 # unwap boxed scalars
 @inline getidx(parent_space, scalar::Tuple{T}, idx, hidx) where {T} = scalar[1]
 @inline getidx(parent_space, scalar::Ref, idx, hidx) = scalar[]
-@inline getidx(parent_space, field::Fields.PointField, idx, hidx) = field[]
-@inline getidx(parent_space, field::Fields.PointField, idx) = field[]
+@inline getidx(parent_space, field::Fields.PointField, idx, hidx) =
+    nested_math_mapper(field[])
+@inline getidx(parent_space, field::Fields.PointField, idx) =
+    nested_math_mapper(field[])
 
 # recursive fallback for scalar, just return
 @inline getidx(parent_space, scalar, idx, hidx) = scalar
@@ -4138,17 +4114,6 @@ Base.@propagate_inbounds function apply_stencil!(
     end
     return field_out
 end
-# Compute slope ratio 𝜃 and limiter coefficient 𝜙
-#𝜃 = compute_slope_ratio(a⁻, a⁻⁻, a⁺, a⁺⁺, v)
-#𝜙 = compute_limiter_coeff(𝜃, method)
-
-
-#@assert 0 <= 𝜙 <= 2
-#if v >= 0
-#    return v ⊠ (a⁻ ⊞ RecursiveApply.rdiv((a⁺ - a⁻) ⊠ 𝜙 ,2))
-#else
-#    return v ⊠ (a⁺ ⊟ RecursiveApply.rdiv((a⁺ - a⁻) ⊠ 𝜙 ,2)) # Current working solution
-#end
 
 """
     fd_shmem_is_supported(bc::Base.Broadcast.AbstractBroadcasted)

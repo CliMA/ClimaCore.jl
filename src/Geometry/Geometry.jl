@@ -1,6 +1,5 @@
 module Geometry
 
-using ..RecursiveApply
 import LinearAlgebra
 import UnrolledUtilities: unrolled_findfirst
 
@@ -22,7 +21,8 @@ include("axistensors.jl")
 include("localgeometry.jl")
 include("conversions.jl")
 include("globalgeometry.jl")
-include("rmul_with_projection.jl")
+include("mul_with_projection.jl")
+include("math_mapper_methods.jl")
 
 """
     Δz_metric_component(::Type{<:AbstractPoint})

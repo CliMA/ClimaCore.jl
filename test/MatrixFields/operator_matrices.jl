@@ -5,7 +5,6 @@ using Revise; include(joinpath("test", "MatrixFields", "operator_matrices.jl"))
 
 import LinearAlgebra: I
 
-import ClimaCore.RecursiveApply: rzero
 import ClimaCore
 import ClimaCore.Operators:
     SetValue,
@@ -62,7 +61,7 @@ function test_op_matrix(
 
     # Use zeroed-out boundary conditions to avoid affine operator warnings.
     op_bc = if BC <: SetValue
-        BC(rzero(eltype(args[end])))
+        BC(zero(eltype(args[end])))
     elseif BC <: SetGradient
         BC(zero(Geometry.Covariant3Vector{FT}))
     elseif BC <: SetDivergence
@@ -87,7 +86,7 @@ function test_op_matrix(
     # This boundary condition doesn't matter, since it's applied after the
     # operator. It is zeroed out for simplicity, but it does not need to be.
     boundary_op = if requires_boundary_values
-        boundary_op_bc = SetValue(rzero(return_eltype(op, args...)))
+        boundary_op_bc = SetValue(zero(return_eltype(op, args...)))
         SetBoundaryOperator(; bottom = boundary_op_bc, top = boundary_op_bc)
     else
         nothing
@@ -197,7 +196,7 @@ end
 
     set_scalar_values =
         (; bottom = SetValue(zero(FT)), top = SetValue(zero(FT)))
-    nested_zero = rzero(NestedType{FT})
+    nested_zero = zero(NestedType{FT})
     set_nested_values =
         (; bottom = SetValue(nested_zero), top = SetValue(nested_zero))
     c12_zero = zero(Geometry.Covariant12Vector{FT})

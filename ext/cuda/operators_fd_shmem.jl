@@ -1,8 +1,7 @@
-import ClimaCore: DataLayouts, Spaces, Geometry, RecursiveApply, DataLayouts
+import ClimaCore: DataLayouts, Spaces, Geometry, DataLayouts
 import CUDA
 import ClimaCore.Operators: return_eltype, get_local_geometry
 import ClimaCore.Geometry: ⊗
-import ClimaCore.RecursiveApply: ⊟, ⊞
 
 Base.@propagate_inbounds function fd_operator_shmem(
     space,
@@ -75,7 +74,7 @@ Base.@propagate_inbounds function fd_operator_evaluate(
         if !on_boundary(idx, space, op)
             Ju³₋ = Ju³[vt]   # corresponds to idx - half
             Ju³₊ = Ju³[vt + 1] # corresponds to idx + half
-            return (Ju³₊ ⊟ Ju³₋) ⊠ lg.invJ
+            return (Ju³₊ - Ju³₋) * lg.invJ
         else
             bloc =
                 on_left_boundary(idx, space, op) ?
@@ -87,7 +86,7 @@ Base.@propagate_inbounds function fd_operator_evaluate(
                 if bc isa Operators.SetValue
                     Ju³₋ = lJu³[1]   # corresponds to idx - half
                     Ju³₊ = Ju³[vt + 1] # corresponds to idx + half
-                    return (Ju³₊ ⊟ Ju³₋) ⊠ lg.invJ
+                    return (Ju³₊ - Ju³₋) * lg.invJ
                 else
                     # @assert bc isa Operators.SetDivergence
                     return lJu³[1]
@@ -97,7 +96,7 @@ Base.@propagate_inbounds function fd_operator_evaluate(
                 if bc isa Operators.SetValue
                     Ju³₋ = Ju³[vt]   # corresponds to idx - half
                     Ju³₊ = rJu³[1] # corresponds to idx + half
-                    return (Ju³₊ ⊟ Ju³₋) ⊠ lg.invJ
+                    return (Ju³₊ - Ju³₋) * lg.invJ
                 else
                     @assert bc isa Operators.SetDivergence
                     return rJu³[1]
@@ -174,7 +173,7 @@ Base.@propagate_inbounds function fd_operator_evaluate(
         if !on_boundary(idx, space, op)
             u₋ = u[vt - 1]   # corresponds to idx - half
             u₊ = u[vt] # corresponds to idx + half
-            return u₊ ⊟ u₋
+            return u₊ - u₋
         else
             bloc =
                 on_left_boundary(idx, space, op) ?
@@ -186,14 +185,14 @@ Base.@propagate_inbounds function fd_operator_evaluate(
                 if bc isa Operators.SetValue
                     u₋ = 2 * lb[1]   # corresponds to idx - half
                     u₊ = 2 * u[vt] # corresponds to idx + half
-                    return u₊ ⊟ u₋
+                    return u₊ - u₋
                 end
             else
                 @assert on_right_boundary(idx, space)
                 if bc isa Operators.SetValue
                     u₋ = 2 * u[vt - 1]   # corresponds to idx - half
                     u₊ = 2 * rb[1] # corresponds to idx + half
-                    return u₊ ⊟ u₋
+                    return u₊ - u₋
                 end
             end
         end
@@ -273,7 +272,7 @@ Base.@propagate_inbounds function fd_operator_evaluate(
         if !on_boundary(idx, space, op)
             u₋ = u[ᶜidx - 1]   # corresponds to idx - half
             u₊ = u[ᶜidx] # corresponds to idx + half
-            return RecursiveApply.rdiv(u₊ ⊞ u₋, 2)
+            return (u₊ + u₋) / 2
         else
             bloc =
                 on_left_boundary(idx, space, op) ?
@@ -289,7 +288,7 @@ Base.@propagate_inbounds function fd_operator_evaluate(
                 elseif bc isa Operators.SetGradient
                     u₋ = lb[1]   # corresponds to idx - half
                     u₊ = u[ᶜidx] # corresponds to idx + half
-                    return u₊ ⊟ RecursiveApply.rdiv(u₋, 2)
+                    return u₊ - u₋ / 2
                 else
                     @assert bc isa Operators.Extrapolate
                     return u[ᶜidx]
@@ -301,7 +300,7 @@ Base.@propagate_inbounds function fd_operator_evaluate(
                 elseif bc isa Operators.SetGradient
                     u₋ = u[ᶜidx - 1] # corresponds to idx - half
                     u₊ = rb[1]   # corresponds to idx + half
-                    return u₋ ⊞ RecursiveApply.rdiv(u₊, 2)
+                    return u₋ + u₊ / 2
                 else
                     @assert bc isa Operators.Extrapolate
                     return u[ᶜidx - 1]

@@ -17,8 +17,7 @@ import ..Topologies
 import ..Meshes
 import ..Grids
 import ..Fields: Fields, Field
-
-using ..RecursiveApply
+import ..Utilities: nested_math_mapper
 
 include("common.jl")
 include("spectralelement.jl")

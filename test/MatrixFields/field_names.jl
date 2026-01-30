@@ -1,5 +1,4 @@
 import LinearAlgebra: I
-import ClimaCore.RecursiveApply: rzero
 import ClimaCore.DataLayouts: replace_basetype
 import ClimaCore.MatrixFields: @name, is_subset_that_covers_set
 
@@ -727,10 +726,10 @@ end
     CT3XC3 = typeof(zero(CT3) * zero(C3)')
     C12XCT12 = typeof(zero(C12) * zero(CT12)')
     CT3XCT12 = typeof(zero(CT3) * zero(CT12)')
-    x_C12 = rzero(replace_basetype(Int, C12, typeof(x)))
-    x_CT3 = rzero(replace_basetype(Int, CT3, typeof(x)))
-    x_C12XC3 = rzero(replace_basetype(Int, C12XC3, typeof(x)))
-    x_CT3XCT12 = rzero(replace_basetype(Int, CT3XCT12, typeof(x)))
+    x_C12 = zero(replace_basetype(Int, C12, typeof(x)))
+    x_CT3 = zero(replace_basetype(Int, CT3, typeof(x)))
+    x_C12XC3 = zero(replace_basetype(Int, C12XC3, typeof(x)))
+    x_CT3XCT12 = zero(replace_basetype(Int, CT3XCT12, typeof(x)))
     I_CT3XC3 = DiagonalMatrixRow(Geometry.AxisTensor(axes(CT3XC3), I))
     I_C12XCT12 = DiagonalMatrixRow(Geometry.AxisTensor(axes(C12XCT12), I))
 
