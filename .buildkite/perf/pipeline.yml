@@ -10,6 +10,7 @@ env:
   GKSwstype: 100
   SLURM_KILL_BAD_EXIT: 1
   COUPLER_PATH: ".buildkite/perf/ClimaCoupler.jl"
+  COUPLER_COMMIT: "74e724d8d86c216b90f0bd4dbaf2ec8d0eb63c36"
   CONFIG_PATH: "$COUPLER_PATH/config/nightly_configs"
   BENCHMARK_CONFIG_PATH: "$COUPLER_PATH/config/benchmark_configs"
 
@@ -19,7 +20,7 @@ steps:
   - label: "init :GPU:"
     key: "init_gpu_env"
     command:
-      - git submodule update --init --recursive .buildkite/perf/ClimaCoupler.jl
+      - git clone https://github.com/CliMA/ClimaCoupler.jl.git $COUPLER_PATH && cd $COUPLER_PATH && git checkout $COUPLER_COMMIT
       - "echo $$JULIA_DEPOT_PATH"
       - echo "--- Instantiate AMIP env"
       # Instantiate and dev install ClimaCore
