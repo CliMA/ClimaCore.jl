@@ -16,24 +16,8 @@ env:
 timeout_in_minutes: 840
 
 steps:
-  - label: "Check if pipeline should run :mag:"
-    key: "check_changes"
-    soft_fail: true
-    command:
-      - git submodule update --init --recursive .buildkite/perf/ClimaCoupler.jl
-      - |
-        # Check if files in src, ext, or .buildkite/perf have changed
-        if git diff --quiet origin/main...HEAD -- src ext .buildkite/perf; then
-          echo "⏭️ No relevant changes detected, skipping downstream checks"
-          exit 1
-        else
-          echo "✅ Relevant changes detected, running downstream checks"
-          exit 0
-        fi
-
   - label: "init :GPU:"
     key: "init_gpu_env"
-    depends_on: "check_changes"
     command:
       - "echo $$JULIA_DEPOT_PATH"
       - echo "--- Instantiate AMIP env"
