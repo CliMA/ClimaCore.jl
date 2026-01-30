@@ -265,34 +265,55 @@ end
 Return the total number of shared memory (in bytes) for the given
 broadcast expression.
 """
-@inline fd_shmem_needed_per_column(bc) = fd_shmem_needed_per_column(0, bc)
-@inline fd_shmem_needed_per_column(shmem_bytes, obj) = shmem_bytes
+@inline function fd_operator_shmem_size(op, Nv, args...)
+    RT = return_eltype(op, args...)
+    # Default: Nv elements for interior, 1 for each boundary (left/right) -> Nv + 2
+    return (Nv + 2) * sizeof(RT)
+end
+
+@inline function fd_operator_shmem_size(op::Operators.DivergenceF2C, Nv, args...)
+    RT = return_eltype(op, args...)
+    FT = eltype(RT)
+    # DivergenceF2C: (Nv + 2) * sizeof(RT) for Ju lines + Nv * sizeof(FT) for invJ cache
+    return (Nv + 2) * sizeof(RT) + Nv * sizeof(FT)
+end
+
+"""
+    fd_shmem_needed_per_column(Nv, bc)
+
+Return the total number of shared memory (in bytes) for the given
+broadcast expression per column (i,j).
+"""
+@inline fd_shmem_needed_per_column(Nv, bc) = fd_shmem_needed_per_column(0, Nv, bc)
+@inline fd_shmem_needed_per_column(shmem_bytes, Nv, obj) = shmem_bytes
 @inline fd_shmem_needed_per_column(
     shmem_bytes,
+    Nv,
     bc::Broadcasted{Style},
 ) where {Style} =
-    shmem_bytes + _fd_shmem_needed_per_column(shmem_bytes, bc.args)
+    shmem_bytes + _fd_shmem_needed_per_column(shmem_bytes, Nv, bc.args)
 
 @inline function fd_shmem_needed_per_column(
     shmem_bytes,
+    Nv,
     sbc::StencilBroadcasted{Style},
 ) where {Style}
-    shmem_bytes₀ = _fd_shmem_needed_per_column(shmem_bytes, sbc.args)
+    shmem_bytes₀ = _fd_shmem_needed_per_column(shmem_bytes, Nv, sbc.args)
     return if Operators.fd_shmem_is_supported(sbc)
-        sizeof(return_eltype(sbc.op, sbc.args...)) + shmem_bytes₀
+        fd_operator_shmem_size(sbc.op, Nv, sbc.args...) + shmem_bytes₀
     else
         shmem_bytes₀
     end
 end
 
-@inline _fd_shmem_needed_per_column(shmem_bytes::Integer, ::Tuple{}) =
+@inline _fd_shmem_needed_per_column(shmem_bytes::Integer, Nv, ::Tuple{}) =
     shmem_bytes
-@inline _fd_shmem_needed_per_column(shmem_bytes::Integer, args::Tuple{Any}) =
-    shmem_bytes + fd_shmem_needed_per_column(shmem_bytes::Integer, args[1])
-@inline _fd_shmem_needed_per_column(shmem_bytes::Integer, args::Tuple) =
+@inline _fd_shmem_needed_per_column(shmem_bytes::Integer, Nv, args::Tuple{Any}) =
+    shmem_bytes + fd_shmem_needed_per_column(shmem_bytes::Integer, Nv, args[1])
+@inline _fd_shmem_needed_per_column(shmem_bytes::Integer, Nv, args::Tuple) =
     shmem_bytes +
-    fd_shmem_needed_per_column(shmem_bytes::Integer, args[1]) +
-    _fd_shmem_needed_per_column(shmem_bytes::Integer, Base.tail(args))
+    fd_shmem_needed_per_column(shmem_bytes::Integer, Nv, args[1]) +
+    _fd_shmem_needed_per_column(shmem_bytes::Integer, Nv, Base.tail(args))
 
 
 get_arg_space(bc::StencilBroadcasted, args::Tuple{}) = axes(bc)
