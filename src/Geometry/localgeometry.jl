@@ -63,8 +63,22 @@ struct SurfaceGeometry{FT, N}
     normal::N
 end
 
+"""
+    CoordinateOnlyGeometry
+
+The necessary coordinates information defined at each node.
+
+This is currently used for constructing spaces with pressure as the vertical
+coordinate.
+"""
+struct CoordinateOnlyGeometry{C <: AbstractPoint}
+    "Coordinates of the current point"
+    coordinates::C
+end
+
 undertype(::Type{<:LocalGeometry{I, C, FT}}) where {I, C, FT} = FT
 undertype(::Type{SurfaceGeometry{FT, N}}) where {FT, N} = FT
+undertype(::Type{<:CoordinateOnlyGeometry{C}}) where {C} = eltype(C)
 
 """
     blockmat(m11, m22[, m12])

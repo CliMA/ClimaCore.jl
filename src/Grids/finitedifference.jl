@@ -137,6 +137,37 @@ function fd_geometry_data(
     return (center_local_geometry, face_local_geometry)
 end
 
+function fd_geometry_data(
+    center_coordinates::DataLayouts.AbstractData{Geometry.PPoint{FT}},
+    face_coordinates::DataLayouts.AbstractData{Geometry.PPoint{FT}},
+    ::Val{periodic},
+) where {FT, periodic}
+    CT = Geometry.PPoint{FT}
+
+    LG = Geometry.CoordinateOnlyGeometry{CT}
+    (Ni, Nj, Nk, Nv, Nh) = size(face_coordinates)
+    Nv_face = Nv - periodic
+    Nv_cent = Nv - 1
+    center_local_geometry = similar(center_coordinates, LG, Val(Nv_cent))
+    face_local_geometry = similar(face_coordinates, LG, Val(Nv_face))
+    cent_coord(args...) =
+        Geometry.component(center_coordinates[CartesianIndex(args...)], 1)
+    face_coord(args...) =
+        Geometry.component(face_coordinates[CartesianIndex(args...)], 1)
+    for h in 1:Nh, k in 1:Nk, j in 1:Nj, i in 1:Ni
+        for v in 1:Nv_cent
+            x = CT(cent_coord(i, j, k, v, h))
+            center_local_geometry[CartesianIndex(i, j, k, v, h)] =
+                Geometry.CoordinateOnlyGeometry(x)
+        end
+        for v in 1:Nv_face
+            x = CT(face_coord(i, j, k, v, h))
+            face_local_geometry[CartesianIndex(i, j, k, v, h)] =
+                Geometry.CoordinateOnlyGeometry(x)
+        end
+    end
+    return (center_local_geometry, face_local_geometry)
+end
 
 FiniteDifferenceGrid(
     device::ClimaComms.AbstractDevice,
