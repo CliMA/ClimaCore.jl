@@ -79,10 +79,13 @@ function construct_pressure_space(
 ) where {FT}
     device = ClimaComms.device(space)
     pfull_grid = construct_pfull_grid(FT, pressure_levels, device)
+    # Since fields constructed from the pressure space is a container for
+    # values, the hypsography does not need to be the same as the hypsography of
+    # the space passed in
     grid = Grids.ExtrudedFiniteDifferenceGrid(
         space.grid.horizontal_grid,
         pfull_grid,
-        space.grid.hypsography,
+        Grids.Flat(),
         space.grid.global_geometry,
     )
     pressure_space = Spaces.ExtrudedFiniteDifferenceSpace(
