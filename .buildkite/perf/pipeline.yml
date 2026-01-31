@@ -10,31 +10,17 @@ env:
   GKSwstype: 100
   SLURM_KILL_BAD_EXIT: 1
   COUPLER_PATH: ".buildkite/perf/ClimaCoupler.jl"
+  COUPLER_COMMIT: "74e724d8d86c216b90f0bd4dbaf2ec8d0eb63c36"
   CONFIG_PATH: "$COUPLER_PATH/config/nightly_configs"
   BENCHMARK_CONFIG_PATH: "$COUPLER_PATH/config/benchmark_configs"
 
 timeout_in_minutes: 840
 
 steps:
-  - label: "Check if pipeline should run :mag:"
-    key: "check_changes"
-    soft_fail: true
-    command:
-      - git submodule update --init --recursive .buildkite/perf/ClimaCoupler.jl
-      - |
-        # Check if files in src, ext, or .buildkite/perf have changed
-        if git diff --quiet origin/main...HEAD -- src ext .buildkite/perf; then
-          echo "⏭️ No relevant changes detected, skipping downstream checks"
-          exit 1
-        else
-          echo "✅ Relevant changes detected, running downstream checks"
-          exit 0
-        fi
-
   - label: "init :GPU:"
     key: "init_gpu_env"
-    depends_on: "check_changes"
     command:
+      - git clone https://github.com/CliMA/ClimaCoupler.jl.git $COUPLER_PATH && bash -c "cd $COUPLER_PATH && git checkout $COUPLER_COMMIT"
       - "echo $$JULIA_DEPOT_PATH"
       - echo "--- Instantiate AMIP env"
       # Instantiate and dev install ClimaCore
