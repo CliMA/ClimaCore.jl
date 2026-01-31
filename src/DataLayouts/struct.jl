@@ -25,6 +25,21 @@ end
 is_valid_basetype(::Type{T}, ::Type{<:T}) where {T} = true
 
 """
+    first_invalid_primitive_type(::Type{T}, ::Type{S})
+
+Returns the first primitive subtype of `S` that cannot be represented using
+base type `T`, or `nothing` if `T` is a valid base type for `S`.
+"""
+first_invalid_primitive_type(::Type{T}, ::Type{S}) where {T, S} =
+    is_valid_basetype(T, S) ? nothing :
+    Base.isprimitivetype(S) ? S :
+    first_invalid_primitive_type(T, fieldtypes(S)...)
+first_invalid_primitive_type(::Type{T}, ::Type{S}, Ss...) where {T, S} =
+    isnothing(first_invalid_primitive_type(T, S)) ?
+    first_invalid_primitive_type(T, Ss...) :
+    first_invalid_primitive_type(T, S)
+
+"""
     check_basetype(::Type{T}, ::Type{S})
 
 Check whether the types `T` and `S` have well-defined sizes, and whether an
@@ -39,7 +54,9 @@ function check_basetype(::Type{T}, ::Type{S}) where {T, S}
             estr = "Struct type $S has indeterminate size"
             :(error($estr))
         elseif !is_valid_basetype(T, S)
-            estr = "Struct type $S cannot be represented using base type $T"
+            P = first_invalid_primitive_type(T, S)
+            estr = "Struct type $S contains subtype $P, \
+                    which cannot be represented using base type $T"
             :(error($estr))
         else
             :(return nothing)
@@ -47,8 +64,10 @@ function check_basetype(::Type{T}, ::Type{S}) where {T, S}
     else
         isbitstype(T) || error("Base type $T has indeterminate size")
         isbitstype(S) || error("Struct type $S has indeterminate size")
+        P = first_invalid_primitive_type(T, S)
         is_valid_basetype(T, S) ||
-            error("Struct type $S cannot be represented using base type $T")
+            error("Struct type $S contains subtype $P, \
+                   which cannot be represented using base type $T")
         return nothing
     end
 end
