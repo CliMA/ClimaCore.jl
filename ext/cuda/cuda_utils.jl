@@ -209,6 +209,40 @@ function threads_via_occupancy(f!::F!, args) where {F!}
 end
 
 """
+    config_via_occupancy(f!::F!, nitems, args) where {F!}
+
+Returns a named tuple of `(:threads, :blocks)` that contains an approximate
+optimal launch configuration for the kernel `f!` with arguments `args`, given
+`nitems` total items to process.
+
+If the number of items is greater than the minimal number of threads required for the config
+suggested by `CUDA.launch_configuration` to be valid, that config is returned. Otherwise,
+the threads are spread out across more SMs to improve occupancy.
+"""
+function config_via_occupancy(f!::F!, nitems, args) where {F!}
+    kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
+    config = CUDA.launch_configuration(kernel.fun)
+    SM_count = CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT)
+    max_block_size = CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X)
+    if cld(nitems, config.threads) < config.blocks
+        # gpu will not saturate, so spread out threads across more SMs
+        even_distribution_threads = cld(nitems, SM_count)
+        # Ensure we don't exceed max block size (usually limited by register pressure)
+        # If so, attempt to halve the number of threads
+        even_distribution_threads =
+            even_distribution_threads > max_block_size ? div(even_distribution_threads, 2) :
+            even_distribution_threads
+        # it should be safe to assume even_distribution_threads < config.threads here
+        threads = min(even_distribution_threads, config.threads)
+        blocks = cld(nitems, threads)
+    else
+        threads = min(nitems, config.threads)
+        blocks = cld(nitems, threads)
+    end
+    return (; threads, blocks)
+end
+
+"""
     thread_index()
 
 Return the threadindex:
