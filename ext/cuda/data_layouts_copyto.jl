@@ -21,6 +21,20 @@ function knl_copyto_linear!(dest, src, us)
     return nothing
 end
 
+"""
+    knl_copyto_VIJFH_64!(dest, src, ::Val{P})
+
+Kernel for pointwise broadcasts on VIJFHStyle{63,4} and VIJFHStyle{64,4} datalayouts. P is a boolean
+indicating if the column is padded (true for 63, false for 64).
+"""
+function knl_copyto_VIJFH_64!(dest, src, ::Val{P}) where {P}
+    # P is a boolean, indicating if the column is padded
+    P && threadIdx().x == 64 && return nothing
+    I = CartesianIndex(blockIdx().x, blockIdx().y, 1, threadIdx().x, blockIdx().z)
+    @inbounds dest[I] = src[I]
+    return nothing
+end
+
 if VERSION ≥ v"1.11.0-beta"
     # https://github.com/JuliaLang/julia/issues/56295
     # Julia 1.11's Base.Broadcast currently requires
@@ -102,6 +116,44 @@ else
         call_post_op_callback() && post_op_callback(dest, dest, bc, to, mask)
         return dest
     end
+end
+
+# Specialized kernel launch for VIJFHStyle{63,4} and VIJFHStyle{64,4} arrays. This uses block and grid indices
+# instead of computing cartesian indices from a linear index. The threads are launched so that
+# a set 64 threads covers a column.
+function Base.copyto!(
+    dest::AbstractData,
+    bc::BC,
+    to::ToCUDA,
+    mask::NoMask = NoMask(),
+) where {BC <: Base.Broadcast.Broadcasted{<:ClimaCore.DataLayouts.VIJFHStyle{63, 4}}}
+    (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(dest)
+    Nv > 0 && Nh > 0 || return dest # copied from above
+    args = (dest, bc, Val(true))
+    auto_launch!(
+        knl_copyto_VIJFH_64!,
+        args;
+        threads_s = (64, 1, 1),
+        blocks_s = (Ni, Nj, Nh),
+    )
+    return dest
+end
+function Base.copyto!(
+    dest::AbstractData,
+    bc::BC,
+    to::ToCUDA,
+    mask::NoMask = NoMask(),
+) where {BC <: Base.Broadcast.Broadcasted{<:ClimaCore.DataLayouts.VIJFHStyle{64, 4}}}
+    (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(dest)
+    Nv > 0 && Nh > 0 || return dest # copied from above
+    args = (dest, bc, Val(false))
+    auto_launch!(
+        knl_copyto_VIJFH_64!,
+        args;
+        threads_s = (64, 1, 1),
+        blocks_s = (Ni, Nj, Nh),
+    )
+    return dest
 end
 
 # broadcasting scalar assignment

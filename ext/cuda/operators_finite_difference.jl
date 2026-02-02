@@ -78,6 +78,25 @@ function Base.copyto!(
         )
     else
         bc′ = disable_shmem_style(bc)
+        (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(out_fv)
+        #  Specialized kernel launch for common case.  This uses block and grid indices
+        # instead of computing cartesian indices from a linear index
+        if (Nv == 64 || Nv == 63) && mask isa NoMask && Ni == 4 && Nj == 4 && Nh >= 1500
+            args = (
+                strip_space(out, space),
+                strip_space(bc′, space),
+                axes(out),
+                bounds,
+                Val(Nv == 63),
+            )
+            auto_launch!(
+                copyto_stencil_kernel_64!,
+                args;
+                threads_s = (64, 1, 1),
+                blocks_s = (Ni, Nj, Nh),
+            )
+            return out
+        end
         @assert !any_fd_shmem_style(bc′)
         cart_inds = if mask isa NoMask
             cartesian_indices(us)
@@ -102,7 +121,6 @@ function Base.copyto!(
         else
             masked_partition(mask, n_max_threads, us)
         end
-
         auto_launch!(
             copyto_stencil_kernel!,
             args;
@@ -114,6 +132,47 @@ function Base.copyto!(
     return out
 end
 import ClimaCore.DataLayouts: get_N, get_Nv, get_Nij, get_Nij, get_Nh
+
+"""
+    copyto_stencil_kernel_64!(
+        out,
+        bc::Union{
+            StencilBroadcasted{CUDAColumnStencilStyle},
+            Broadcasted{CUDAColumnStencilStyle},
+        },
+        space,
+        bds,
+        ::Val{P},
+    )
+
+Kernel for fd operators on VIJFHStyle{63,4} and VIJFHStyle{64,4} datalayouts. P is a boolean
+indicating if the column is padded (true for 63, false for 64).
+"""
+function copyto_stencil_kernel_64!(
+    out,
+    bc::Union{
+        StencilBroadcasted{CUDAColumnStencilStyle},
+        Broadcasted{CUDAColumnStencilStyle},
+    },
+    space,
+    bds,
+    ::Val{P},
+) where {P}
+    @inbounds begin
+        # P is a boolean, indicating if the column is padded
+        P && threadIdx().x == 64 && return nothing
+        i = blockIdx().x
+        j = blockIdx().y
+        v = threadIdx().x
+        h = blockIdx().z
+        hidx = (i, j, h)
+        (li, lw, rw, ri) = bds
+        idx = v - 1 + li
+        val = Operators.getidx(space, bc, idx, hidx)
+        setidx!(space, out, idx, hidx, val)
+    end
+    return nothing
+end
 
 function copyto_stencil_kernel!(
     out,
