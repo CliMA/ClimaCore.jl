@@ -29,6 +29,7 @@ since they already exist in global memory.
 struct EagerGlobalCaching <: VarCachingStrategy end
 
 add_to_global_cache(::EagerGlobalCaching, ::Base.AbstractBroadcasted) = true
+add_to_global_cache(::EagerGlobalCaching, ::LazyBroadcast.LazyBroadcasted) = true
 add_to_global_cache(::EagerGlobalCaching, _) = false
 
 """
@@ -55,11 +56,11 @@ add_to_global_cache(::NoCaching, _) = false
 Stores computed variables and tendencies during graph evaluation.
 
 # Fields
-- `vars::Dict{FieldName, Union{Field, Base.AbstractBroadcasted}}`: Maps variable names to their computed values
+- `vars::Dict{FieldName, Union{Field, Base.AbstractBroadcasted, LazyBroadcast.LazyBroadcasted}}`: Maps variable names to their computed values
 - `cache_fields::Dict{FieldName, Field}`: Pre-allocated cache fields for materialization
 """
 struct VarCache
-    vars::Dict{FieldName, Union{Field, Base.AbstractBroadcasted}}
+    vars::Dict{FieldName, Union{Field, Base.AbstractBroadcasted, LazyBroadcast.LazyBroadcasted}}
     cache_fields::Dict{FieldName, Field}
 end
 
@@ -107,6 +108,9 @@ function allocate_cache_field(result::Base.AbstractBroadcasted, space)
     return Field(T, space)
 end
 
+allocate_cache_field(result::LazyBroadcast.LazyBroadcasted, space) =
+    allocate_cache_field(result.value, space)
+
 allocate_cache_field(result::Field, _) = similar(result)
 
 """
@@ -116,6 +120,11 @@ Materializes a lazy broadcast result into a pre-allocated cache field.
 """
 function materialize_to_cache!(cache_field::Field, result::Base.AbstractBroadcasted)
     Base.Broadcast.materialize!(cache_field, result)
+    return cache_field
+end
+
+function materialize_to_cache!(cache_field::Field, result::LazyBroadcast.LazyBroadcasted)
+    materialize_to_cache!(cache_field, result.value)
     return cache_field
 end
 
@@ -131,13 +140,28 @@ end
 """
     _extract_space(bc::Base.AbstractBroadcasted)
 
-Extracts the space from a broadcast expression by finding a Field argument.
+Extracts the output space from a broadcast. Uses axes(bc) when available (correct
+for space-changing ops like ᶠinterp). For nested broadcasts, uses axes(arg) to get
+the output space of each arg, not the first Field (which would be an input).
 """
 function _extract_space(bc::Base.AbstractBroadcasted)
+    # 1. Try the broadcast's own output axes
+    space = _axes_to_space(bc)
+    !isnothing(space) && return space
+    # 2. For each arg: prefer axes(arg) for broadcasts (output), else Field axes
     for arg in bc.args
         if arg isa Field
             return axes(arg)
         elseif arg isa Base.AbstractBroadcasted
+            space = _axes_to_space(arg)
+            if !isnothing(space)
+                return space
+            end
+            space = _extract_space(arg)
+            if !isnothing(space)
+                return space
+            end
+        elseif arg isa LazyBroadcast.LazyBroadcasted
             space = _extract_space(arg)
             if !isnothing(space)
                 return space
@@ -147,7 +171,17 @@ function _extract_space(bc::Base.AbstractBroadcasted)
     return nothing
 end
 
+function _axes_to_space(bc)
+    axs = axes(bc)
+    # ClimaCore Fields and OperatorBroadcasted return space directly; Base uses Tuple
+    axs isa Spaces.AbstractSpace && return axs
+    axs isa Tuple && !isempty(axs) && first(axs) isa Spaces.AbstractSpace && return first(axs)
+
+    return nothing
+end
+
 _extract_space(field::Field) = axes(field)
+_extract_space(x::LazyBroadcast.LazyBroadcasted) = _extract_space(x.value)
 _extract_space(_) = nothing
 
 """

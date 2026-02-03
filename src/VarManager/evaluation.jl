@@ -115,6 +115,8 @@ function _store_tendency!(Yₜ::FieldVector, name::FieldName, result)
     dest = _get_field_from_fieldvector(Yₜ, name)
     if result isa Base.AbstractBroadcasted
         Base.Broadcast.materialize!(dest, result)
+    elseif result isa LazyBroadcast.LazyBroadcasted
+        Base.Broadcast.materialize!(dest, result.value)
     else
         dest .= result
     end

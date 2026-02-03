@@ -37,11 +37,11 @@ VarManager.tendency_dependencies(::@Name(c.ρ), model) =
     (@name(f.ρw),)
 
 function VarManager.compute_var(::@Name(f.ρw), model, vars, t)
-    return @. ᶠinterp(vars.c.ρ) * vars.f.u₃
+    return @lazy @. ᶠinterp(vars.c.ρ) * vars.f.u₃
 end
 
 function VarManager.compute_tendency(::@Name(c.ρ), model, vars, t)
-    return @. -(ᶜdivᵥ(vars.f.ρw))
+    return @lazy @. -(ᶜdivᵥ(vars.f.ρw))
 end
 
 function run_example()
