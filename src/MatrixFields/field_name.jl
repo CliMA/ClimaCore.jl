@@ -34,6 +34,20 @@ macro name(expr)
     return :(FieldName($(name_chain_exprs(expr)...)))
 end
 
+"""
+    @Name(expr)
+
+Returns the type `FieldName{(...)}` (not an instance). Use in type signatures for
+readability, e.g. `::@Name(f.ρw)` instead of `::FieldName{(:f, :ρw)}`.
+"""
+macro Name()
+    return :(FieldName{()})
+end
+macro Name(expr)
+    chain = name_chain_exprs(expr)
+    return Expr(:curly, :FieldName, Expr(:tuple, chain...))
+end
+
 name_chain_exprs(expr) =
     expr isa Symbol ? (QuoteNode(expr),) :
     expr isa Union{Integer, QuoteNode} ? (expr,) :
