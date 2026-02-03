@@ -4,10 +4,14 @@ import ClimaComms
 using CUDA: @cuda
 import ClimaCore.Utilities: half
 import ClimaCore.Operators
+import ClimaCore: Operators
 import ClimaCore.Operators: AbstractStencilStyle, strip_space
 import ClimaCore.Operators: setidx!, getidx
 import ClimaCore.Operators: StencilBroadcasted
 import ClimaCore.Operators: LeftBoundaryWindow, RightBoundaryWindow, Interior
+import ClimaCore.MatrixFields: FaceToCenter, CenterToFace, Square
+using UnrolledUtilities
+
 
 struct CUDAColumnStencilStyle <: AbstractStencilStyle end
 struct CUDAWithShmemColumnStencilStyle <: AbstractStencilStyle end
@@ -20,7 +24,8 @@ Base.Broadcast.BroadcastStyle(
 ) = y
 
 include("operators_fd_shmem_is_supported.jl")
-
+# include("newmm.jl")
+# include("matmul.jl")
 struct ShmemParams{Nv} end
 interior_size(::ShmemParams{Nv}) where {Nv} = (Nv,)
 boundary_size(::ShmemParams{Nv}) where {Nv} = (1,)
@@ -37,6 +42,7 @@ function Base.copyto!(
 )
     space = axes(out)
     bounds = Operators.window_bounds(space, bc)
+    # @show bounds
     out_fv = Fields.field_values(out)
     us = DataLayouts.UniversalSize(out_fv)
 
@@ -81,7 +87,31 @@ function Base.copyto!(
         (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(out_fv)
         #  Specialized kernel launch for common case.  This uses block and grid indices
         # instead of computing cartesian indices from a linear index
-        if (Nv == 64 || Nv == 63) && mask isa NoMask && Ni == 4 && Nj == 4 && Nh >= 1500
+        if false && (Nv == 64 || Nv == 63) && mask isa NoMask && Ni == 4 && Nj == 4 && Nh >= 1500# && !has_lin_vanleer(bc′)
+             # if mask isa NoMask &&  !any(x -> x isa Base.Broadcast.Broadcasted{CUDAColumnStencilStyle} || x isa StencilBroadcasted, bc′.args) && (Nv == 64 || Nv == 63)
+             if  true && mask isa NoMask# && eltype(out) <: ClimaCore.MatrixFields.BandMatrixRow && typeof(bc′) <: Union{ClimaCore.Operators.StencilBroadcasted{ClimaCoreCUDAExt.CUDAColumnStencilStyle, ClimaCore.MatrixFields.MultiplyColumnwiseBandMatrixField}, Base.Broadcast.Broadcasted}#&& length(bc′.args) == 2 && bc′ isa StencilBroadcasted && bc′.op isa ClimaCore.MatrixFields.MultiplyColumnwiseBandMatrixField && length(bc′.args) == 2
+                args = (
+                    strip_space(out, space),
+                    strip_space(bc′, space),
+                    axes(out),
+                )
+                # @show typeof(bc′)
+                # if bc′ isa StencilBroadcasted
+                #     @show bc′.op
+                # else
+                #     @show bc′.f
+                #     if bc′.f == ClimaCore.RecursiveApply.radd
+                #         # @show Main.@infiltrate
+                #         # error("yeeee")
+                #     end
+                # end
+                # println("\n")
+                # @show bc′.args
+                @show "aaaaaaa"
+                CUDA.@cuda always_inline = true threads = (64, 1, 1) blocks = (4, 4, Nh) shmem = 64*8*4 new_stencil_entry!(args...)
+                # println("\n\n\n\n")
+                return out
+             end
             args = (
                 strip_space(out, space),
                 strip_space(bc′, space),
@@ -89,6 +119,7 @@ function Base.copyto!(
                 bounds,
                 Val(Nv == 63),
             )
+            @show "bbbbbbbb"
             auto_launch!(
                 copyto_stencil_kernel_64!,
                 args;
@@ -103,7 +134,7 @@ function Base.copyto!(
         else
             cartesian_indicies_mask(us, mask)
         end
-
+        # @show "here"
         args = (
             strip_space(out, space),
             strip_space(bc′, space),
@@ -133,6 +164,15 @@ function Base.copyto!(
 end
 import ClimaCore.DataLayouts: get_N, get_Nv, get_Nij, get_Nij, get_Nh
 
+function has_lin_vanleer(bc::Broadcasted)
+    return UnrolledUtilities.unrolled_any(has_lin_vanleer, bc.args)
+end
+
+function has_lin_vanleer(bc::StencilBroadcasted)
+    bc.op isa Operators.LinVanLeerC2F && return true
+    return unrolled_any(has_lin_vanleer, bc.args)
+end
+has_lin_vanleer(_) = false
 """
     copyto_stencil_kernel_64!(
         out,
