@@ -30,6 +30,7 @@ struct PressureInterpolator{
     FACE <: Fields.Field,
     SPACE <: Spaces.AbstractSpace,
     LEVELS,
+    EXTRAPOLATE <: ClimaInterpolations.Interpolation1D.Extrapolate1D,
 }
     """A ClimaCore.Field representing pressure on center space. This field is
     defined on a space with height (z) as the vertical coordinate, not
@@ -51,6 +52,10 @@ struct PressureInterpolator{
     """A 1D vector of pressure coordinates to interpolate onto for every
     column"""
     pressure_levels::LEVELS
+
+    """Extrapolation condition when interpolating outside of the pressure
+    range"""
+    extrapolate::EXTRAPOLATE
 end
 
 """
@@ -130,7 +135,11 @@ function construct_pfull_grid(::Type{FT}, pressure_levels, device) where {FT}
 end
 
 """
-    PressureInterpolator(pfull_field::Fields.Field, pressure_levels)
+    PressureInterpolator(
+        pfull_field::Fields.Field,
+        pressure_levels;
+        extrapolate = ClimaInterpolations.Interpolation1D.Flat(),
+    )
 
 Construct a `PressureInterpolator` from `pfull_field`, a pressure field defined
 on a center space and `pressure_levels`, a vector of pressure levels to
@@ -138,7 +147,11 @@ interpolate to.
 
 The pressure levels must be in ascending or descending order.
 """
-function PressureInterpolator(pfull_field::Fields.Field, pressure_levels)
+function PressureInterpolator(
+    pfull_field::Fields.Field,
+    pressure_levels;
+    extrapolate = ClimaInterpolations.Interpolation1D.Flat(),
+)
     if issorted(pressure_levels, rev = true)
         pressure_levels = sort(pressure_levels)
     end
@@ -150,7 +163,8 @@ function PressureInterpolator(pfull_field::Fields.Field, pressure_levels)
     pressure_space = construct_pressure_space(FT, space, pressure_levels)
     return PressureInterpolator(
         pfull_field,
-        pressure_space,
+        pressure_space;
+        extrapolate,
     )
 end
 
@@ -160,18 +174,22 @@ end
         pressure_space::Union{
             Spaces.AbstractFiniteDifferenceSpace,
             Spaces.ExtrudedFiniteDifferenceSpace,
-        },
+        };
+        extrapolate = ClimaInterpolations.Interpolation1D.Flat()
     )
 
 Construct a `PressureInterpolator` from `pfull_field`, a pressure field, and
 `pressure_space`, a space with pressure as the vertical coordinate.
+
+The default extrapolation behavior is constant extrapolation.
 """
 function PressureInterpolator(
     pfull_field::Fields.Field,
     pressure_space::Union{
         Spaces.AbstractFiniteDifferenceSpace,
         Spaces.ExtrudedFiniteDifferenceSpace,
-    },
+    };
+    extrapolate = ClimaInterpolations.Interpolation1D.Flat(),
 )
     axes(pfull_field).staggering isa Grids.CellCenter || error("The staggering of the
     pressure field must be cell center")
@@ -197,6 +215,7 @@ function PressureInterpolator(
         scratch_face_pressure_field,
         pressure_space,
         pressure_levels,
+        extrapolate,
     )
 end
 
@@ -258,8 +277,7 @@ end
 """
     interpolate_pressure(
         field::Fields.Field,
-        pfull_intp::PressureInterpolator;
-        extrapolate = ClimaInterpolations.Interpolation1D.Flat(),
+        pfull_intp::PressureInterpolator,
     )
 
 Vertically interpolate field onto a space identical to that of field, but with
@@ -267,12 +285,11 @@ pressure as the vertical coordinate and return the interpolated field.
 """
 function interpolate_pressure(
     field::Fields.Field,
-    pfull_intp::PressureInterpolator;
-    extrapolate = ClimaInterpolations.Interpolation1D.Flat(),
+    pfull_intp::PressureInterpolator,
 )
     (; pfull_field) = pfull_intp
     dest = fill(one(eltype(pfull_field)), pfull_intp.pressure_space)
-    Remapping.interpolate_pressure!(dest, field, pfull_intp; extrapolate)
+    Remapping.interpolate_pressure!(dest, field, pfull_intp)
     return dest
 end
 
@@ -281,7 +298,6 @@ end
         dest::Fields.Field,
         field::Fields.Field,
         pfull_intp::PressureInterpolator;
-        extrapolate = ClimaInterpolations.Interpolation1D.Flat(),
     )
 
 Vertically interpolate `field` onto `dest` and return `nothing`.
@@ -291,10 +307,14 @@ The vertical coordinate of the space of `dest` must be in pressure.
 function interpolate_pressure!(
     dest::Fields.Field,
     field::Fields.Field,
-    pfull_intp::PressureInterpolator;
-    extrapolate = ClimaInterpolations.Interpolation1D.Flat(),
+    pfull_intp::PressureInterpolator,
 )
-    (; scratch_center_pressure_field, scratch_face_pressure_field, pressure_levels) =
+    (;
+        scratch_center_pressure_field,
+        scratch_face_pressure_field,
+        pressure_levels,
+        extrapolate,
+    ) =
         pfull_intp
     scratch_pfull_array = if axes(field).staggering isa Grids.CellCenter
         Fields.field2array(scratch_center_pressure_field)

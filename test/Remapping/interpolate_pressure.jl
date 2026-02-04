@@ -66,12 +66,12 @@ for FT in (Float32, Float64)
             pfull_field = fill(FT(1.0), space)
             pfull_field_array = Fields.field2array(pfull_field)
             pfull_field_array .= collect(10:-1:1)
-            pfull_levels = [0.0, 1.0, 5.5, 10.0, 12.0]
+            pressure_levels = [0.0, 1.0, 5.5, 10.0, 12.0]
 
             # Pressures should be in sorted order
             @test_throws ErrorException PressureInterpolator(pfull_field, [5.5, 10.0, 1.0])
 
-            pfull_intp = PressureInterpolator(pfull_field, pfull_levels)
+            pfull_intp = PressureInterpolator(pfull_field, pressure_levels)
             pfull_field_array = Fields.field2array(Remapping.pfull_field(pfull_intp))
 
             # Check the pressures along each column is sorted in descending
@@ -106,6 +106,22 @@ for FT in (Float32, Float64)
 
             interpolate_pressure!(dest2, dummy_field, pfull_intp)
             @test dest2 == dest
+
+            # Test linear extrapolation
+            pressure_levels = [-100.0, 100.0]
+            extrapolate = ClimaInterpolations.Interpolation1D.LinearExtrapolation()
+            linear_pfull_intp =
+                PressureInterpolator(pfull_field, pressure_levels; extrapolate)
+            dummy_field = fill(FT(1.0), space)
+            dummy_field_array = Fields.field2array(dummy_field)
+            dummy_field_array .= collect(10:-1:1)
+            dest = interpolate_pressure(dummy_field, linear_pfull_intp)
+            dest_array = Fields.field2array(dest)
+            @test dest_array == repeat(
+                [-100.0, 100.0],
+                1,
+                size(pfull_field_array, 2),
+            )
         end
     end
 
