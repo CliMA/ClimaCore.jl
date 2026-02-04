@@ -30,6 +30,7 @@ struct EagerGlobalCaching <: VarCachingStrategy end
 
 add_to_global_cache(::EagerGlobalCaching, ::Base.AbstractBroadcasted) = true
 add_to_global_cache(::EagerGlobalCaching, ::LazyBroadcast.LazyBroadcasted) = true
+add_to_global_cache(::EagerGlobalCaching, ::Field) = true
 add_to_global_cache(::EagerGlobalCaching, _) = false
 
 """

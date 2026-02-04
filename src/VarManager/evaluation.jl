@@ -60,8 +60,8 @@ Either a `Field` or a lazy broadcast expression (`Base.AbstractBroadcasted`).
 # Example
 
 ```julia
-compute_tendency(::FieldName{(:c, :ρ)}, ::MyModel, vars, t) =
-    @. lazy(-(ᶜdivᵥ(vars[@name(f.ρ)] * vars[@name(f.u³)])))
+compute_tendency(::@Name(c.ρ), ::MyModel, vars, t) =
+    @. lazy(-(ᶜdivᵥ(vars.f.ρ) * vars.f.u³))
 ```
 """
 function compute_tendency(name::FieldName{chain}, model, vars, t) where {chain}

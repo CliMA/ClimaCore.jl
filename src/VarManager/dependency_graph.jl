@@ -163,16 +163,6 @@ function _add_tendency_node!(edges, node_types, tendency_edges, name, model, vis
     # Get and store dependencies for this tendency (separate from var edges)
     deps = tendency_dependencies(name, model)
     
-    # Warn if user listed prognostic variables in tendency_dependencies
-    # (they're always available, so listing them is unnecessary)
-    for dep in deps
-        if dep in prognostic_names
-            @warn """Prognostic variable $dep listed in tendency_dependencies for $name.
-            Prognostic variables are always available in the cache and don't need to be listed.
-            Only list computed variables that the tendency depends on.""" maxlog=1
-        end
-    end
-    
     tendency_edges[name] = collect(deps)
     
     # Recurse on dependencies to build the var graph
@@ -302,10 +292,13 @@ Validates that the dependency graph is well-formed:
 - All var dependencies reference nodes that exist in the graph
 - All tendency dependencies reference nodes that exist in the graph
 - No self-references in computed vars
+- No circular dependencies between computed variables
 
 Returns `nothing` if valid, throws an error otherwise.
 """
 function validate_dependencies(graph::DependencyGraph)
+    # Detect cycles via topological sort (throws if cycle exists)
+    topological_sort(graph)
     all_nodes = Set(keys(graph.edges))
     
     # Validate computed var edges
@@ -317,9 +310,7 @@ function validate_dependencies(graph::DependencyGraph)
         
         # Check all dependencies exist
         for dep in deps
-            if !(dep in all_nodes)
-                error("Missing dependency: $name depends on $dep, but $dep is not in the graph")
-            end
+            !(dep in all_nodes) && error("Missing dependency: $name depends on $dep, but $dep is not in the graph")
         end
     end
     
@@ -331,10 +322,6 @@ function validate_dependencies(graph::DependencyGraph)
             end
         end
         
-        if isempty(deps)
-            @warn "Tendency $name has no dependencies - is this intentional?"
-        end
+        isempty(deps) && @warn "Tendency $name has no dependencies - is this intentional?"
     end
-    
-    return nothing
 end
