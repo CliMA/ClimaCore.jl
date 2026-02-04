@@ -59,4 +59,6 @@ Thermodynamics = "b60c26fb-14c3-4610-9d3e-2d17fe7ff00c"
 ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 
 [compat]
+JET = "0.9.18"
+PrettyTables = "2"
 SnoopCompileCore = "3"
