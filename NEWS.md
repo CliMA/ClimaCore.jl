@@ -3,9 +3,17 @@ ClimaCore.jl Release Notes
 
 main
 -------
+
+v0.14.49
+-------
+- Add `PressureInterpolator` [2422](https://github.com/CliMA/ClimaCore.jl/pull/2422)
+- Add Buildkite pipeline to check flagship AMIP performance [2438](https://github.com/CliMA/ClimaCore.jl/pull/2438)
+- Fix conservation of split divergence [2432](https://github.com/CliMA/ClimaCore.jl/pull/2432)
+
 v0.14.48
 -------
 - Add `VerticalMassBorrowingLimiter` [2383](https://github.com/CliMA/ClimaCore.jl/pull/2383)
+
 v0.14.47
 -------
 - Use space-filling curve for CubedSphereGrid and ExtrudedCubedSphereGrid
