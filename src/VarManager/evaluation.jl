@@ -210,7 +210,7 @@ function evaluate_graph!(
     # Then, compute all tendencies (they depend on computed vars and prognostics)
     for name in graph.tendency_names
         deps = graph.tendency_edges[name]
-        result = _safe_compute_tendency(name, model, cache, t, deps)
+        result = compute_tendency(name, model, cache, t)
         _store_tendency!(Yₜ, name, result)
     end
     

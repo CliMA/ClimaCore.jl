@@ -1,22 +1,3 @@
-"""
-    ComputationError
-
-An error type that provides user-friendly error messages when variable
-or tendency computation fails.
-
-# Fields
-- `name::FieldName`: The variable or tendency that failed to compute
-- `is_tendency::Bool`: Whether this was a tendency (true) or variable (false)
-- `original_error::Exception`: The underlying error that was caught
-- `dependency_chain::Vector{FieldName}`: The chain of dependencies leading to this computation
-"""
-struct ComputationError <: Exception
-    name::FieldName
-    is_tendency::Bool
-    original_error::Exception
-    dependency_chain::Vector{FieldName}
-end
-
 function Base.showerror(io::IO, e::ComputationError)
     type_str = e.is_tendency ? "tendency" : "variable"
     println(io, "ComputationError: Failed to compute $type_str $(e.name)")
@@ -66,46 +47,6 @@ function _show_filtered_error(io::IO, error::Exception)
 end
 
 """
-    _safe_compute_var(name, model, cache, t, dependencies)
-
-Safely computes a variable, wrapping any errors in a ComputationError
-that includes the dependency chain for debugging.
-"""
-function _safe_compute_var(name::FieldName, model, cache::VarCache, t, dependencies::Vector{FieldName})
-    try
-        return compute_var(name, model, cache, t)
-    catch e
-        if e isa ComputationError
-            # Propagate with extended chain
-            throw(ComputationError(name, false, e.original_error, 
-                                   vcat([e.name], e.dependency_chain)))
-        else
-            throw(ComputationError(name, false, e, collect(dependencies)))
-        end
-    end
-end
-
-"""
-    _safe_compute_tendency(name, model, cache, t, dependencies)
-
-Safely computes a tendency, wrapping any errors in a ComputationError
-that includes the dependency chain for debugging.
-"""
-function _safe_compute_tendency(name::FieldName, model, cache::VarCache, t, dependencies::Vector{FieldName})
-    try
-        return compute_tendency(name, model, cache, t)
-    catch e
-        if e isa ComputationError
-            # Propagate with extended chain
-            throw(ComputationError(name, true, e.original_error,
-                                   vcat([e.name], e.dependency_chain)))
-        else
-            throw(ComputationError(name, true, e, collect(dependencies)))
-        end
-    end
-end
-
-"""
     print_graph(io::IO, graph::DependencyGraph)
     print_graph(graph::DependencyGraph)
 
@@ -126,7 +67,7 @@ function print_graph(io::IO, graph::DependencyGraph)
     end
 end
 
-function _print_deps(io::IO, graph::DependencyGraph, deps::Vector{FieldName}, prefix::String)
+function _print_deps(io::IO, graph, deps, prefix)
     for (j, dep) in enumerate(deps)
         is_last = (j == length(deps))
         connector = is_last ? "└── " : "├── "

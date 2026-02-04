@@ -35,7 +35,7 @@ export VarCachingStrategy, EagerGlobalCaching, NoCaching
 export DependencyGraph, build_dependency_graph, topological_sort, prognostic_names, validate_dependencies
 export var_dependencies, tendency_dependencies
 export compute_var, compute_tendency
-export evaluate_graph, evaluate_graph!, ComputationError
+export evaluate_graph, evaluate_graph!, evaluate_tendency, evaluate_tendency!, ComputationError
 export VarCache, VarCacheValue, get_cached
 export print_graph, print_evaluation_order
 
