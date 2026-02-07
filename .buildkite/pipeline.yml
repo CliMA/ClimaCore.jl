@@ -48,6 +48,14 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Unit: runtest cuda"
+        key: unit_runtest_cuda
+        command:
+          - "julia --project=test test/runtests.jl"
+        agents:
+          slurm_gpus: 1
+          slurm_mem: 20G
+
   - group: "Unit: RecursiveApply"
     steps:
 
