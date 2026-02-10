@@ -113,6 +113,7 @@ UnitTest("Array interpolation"                     ,"Remapping/distributed_remap
 UnitTest("Aqua"                                    ,"aqua.jl"),
 UnitTest("Deprecations"                            ,"deprecations.jl"),
 UnitTest("GPU - cuda"                              ,"gpu/cuda.jl";meta=:gpu_only),
+UnitTest("GPU - LocalGeometry CUDA resources"      ,"gpu/local_geometry_cuda_resources.jl";meta=:gpu_only),
 UnitTest("GPU - data"                              ,"DataLayouts/cuda.jl";meta=:gpu_only),
 UnitTest("Operators - spectral element CUDA"       ,"Operators/spectralelement/rectilinear_cuda.jl";meta=:gpu_only),
 UnitTest("Operators - finite difference CUDA"      ,"Operators/hybrid/unit_cuda.jl";meta=:gpu_only),
