@@ -48,6 +48,16 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Unit: LocalGeometry CUDA resources"
+        key: unit_local_geometry_cuda_resources
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/gpu/local_geometry_cuda_resources.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
   - group: "Unit: RecursiveApply"
     steps:
 
