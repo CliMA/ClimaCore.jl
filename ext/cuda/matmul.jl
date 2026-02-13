@@ -6,7 +6,7 @@ import ClimaCore.Utilities: half
 import ClimaCore.Operators
 import ClimaCore: Operators
 import ClimaCore.Geometry: ⊗
-import ClimaCore.RecursiveApply: rzero, ⊞
+import ClimaCore.RecursiveApply: rzero, ⊞, ⊠
 import ClimaCore.Operators: AbstractStencilStyle, strip_space
 import ClimaCore.Operators: setidx!, getidx
 import ClimaCore.Operators: StencilBroadcasted
@@ -278,13 +278,16 @@ end
         ri = 63
 
         zero_entry = rzero(prod_eltype)
-        # return UnrolledUtilities.unrolled_mapreduce(⊞, ld1:ud1; init=zero_entry) do mat1_row_d
-        #     if (0 <  v + mat1_row_d + half <= 64)
-        #         mat1_row[mat1_row_d] ⊗ matrix2[v + mat1_row_d + half]
-        #     else
-        #         zero_entry
-        #     end
-        # end
+        #   v == 1 && blockIdx().x == 1 && blockIdx().y == 1 && blockIdx().z == 1 && @cushow eltype(matrix2)
+        # v == 1 &&  blockIdx().x == 1 && blockIdx().y == 1 && blockIdx().z == 1 && @cushow eltype(mat1_row)
+        #   v == 1 &&  blockIdx().x == 1 && blockIdx().y == 1 && blockIdx().z == 1 && @cushow prod_eltype
+        return UnrolledUtilities.unrolled_mapreduce(⊞, ld1:ud1; init=zero_entry) do mat1_row_d
+            if (0 <  v + mat1_row_d + half <= 64)
+                bb = mat1_row[mat1_row_d] ⊗ matrix2[v + mat1_row_d + half]
+            else
+                zero_entry
+            end
+        end
     end
 end
 
@@ -306,15 +309,18 @@ end
         #     end
         # end
         # return val
+        # v == 1 && blockIdx().x == 1 && blockIdx().y == 1 && blockIdx().z == 1 && @cushow eltype(matrix2)
+        # v == 1 &&  blockIdx().x == 1 && blockIdx().y == 1 && blockIdx().z == 1 && @cushow typeof(mat1_row)
+        #   v == 1 &&  blockIdx().x == 1 && blockIdx().y == 1 && blockIdx().z == 1 && @cushow prod_eltype
         return UnrolledUtilities.unrolled_mapreduce(⊞, ld1:ud1; init=zero_entry) do mat1_row_d
             if (0 <  v + mat1_row_d - half < 64)
                 # zero_entry
-                # v == 1 && blockIdx().x == 1 && blockIdx().y == 1 && blockIdx().z == 1 && @cushow typeof(matrix2[v + mat1_row_d - half])
-                # v == 1 &&  blockIdx().x == 1 && blockIdx().y == 1 && blockIdx().z == 1 && @cushow typeof(mat1_row[mat1_row_d])
+                
                 # if prod_eltype <: Union{Tuple, NamedTuple}
                     mat1_row[mat1_row_d] ⊗ matrix2[v + mat1_row_d - half]
                 # else
-                #     mat1_row[mat1_row_d] * matrix2[v + mat1_row_d - half]
+                #     #  zero_entry
+                #     mat1_row[mat1_row_d] ⊠ matrix2[v + mat1_row_d - half]
                 # end
                 # zero_entry
             else

@@ -551,3 +551,47 @@ end
 @inline function outer(x::AbstractVector, y)
     RecursiveApply.rmap(y -> x ⊗ y, y)
 end
+
+@inline function outer(x::Number, y::Tuple)
+    RecursiveApply.rmap(y -> x ⊗ y, y)
+end
+
+@inline function outer(x::Number, y::NamedTuple)
+    RecursiveApply.rmap(y -> x ⊗ y, y)
+end
+
+@inline function outer(x::Number, y::Number)
+    x * y
+end
+
+@inline function outer(x::Number, y::AbstractVector)
+    x * y
+end
+
+@inline function outer(x::Number, y::AdjointAxisVector)
+    x * y
+end
+
+@inline function outer(x::AdjointAxisVector, y::Number)
+    x * y
+end
+
+@inline function outer(x::AdjointAxisVector, y::AbstractVector)
+    x * y
+end
+
+@inline function outer(x::AdjointAxisVector, y::AdjointAxis2Tensor)
+    x * y
+end
+
+@inline function outer(x::AdjointAxisVector, y::Axis2Tensor)
+    (x * y)'
+end
+
+@inline function outer(x::Axis2TensorOrAdj, y::AbstractVector)
+    x * y
+end
+
+@inline function outer(x::Axis2TensorOrAdj, y::Number)
+    x * y
+end

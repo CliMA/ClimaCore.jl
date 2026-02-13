@@ -62,18 +62,49 @@ operator_input_space(
     space::Spaces.ExtrudedFiniteDifferenceSpace,
 ) = Spaces.FaceExtrudedFiniteDifferenceSpace(space)
 
-has_affine_bc(op) = any(
+has_affine_bc(op) = unrolled_any(
     bc ->
         bc isa Union{
             Operators.SetValue,
             Operators.SetGradient,
             Operators.SetDivergence,
             Operators.SetCurl,
-        } && bc.val != rzero(typeof(bc.val)),
+        } && ((typeof(bc.val) <: Fields.Field) || bc.val != rzero(typeof(bc.val))),
     op.bcs,
 )
 
+function needs_composition(op::Operators.StencilBroadcasted)
+    op.op isa Operators.AdvectionOperator &&  return true
+    op.op isa Operators.GradientOperator && unrolled_any(arg -> eltype(arg) <: Geometry.AxisVector , op.args) &&  return true
+    return unrolled_any(arg -> needs_composition(arg), op.args)
+end
+needs_composition(op::Base.Broadcast.Broadcasted) =  unrolled_any(arg -> needs_composition(arg), op.args)
+needs_composition(op::Operators.AdvectionOperator, _) = true
+needs_composition(op::Operators.GradientOperator, args) = unrolled_any(arg -> eltype(arg) <: Geometry.AxisVector , args)
+needs_composition(_, args) = unrolled_any(arg -> needs_composition(arg), args)
+needs_composition(op) = false
 uses_extrapolate(op) = unrolled_any(Base.Fix2(isa, Operators.Extrapolate), op.bcs)
+
+function Operators.StencilBroadcasted{Style}(
+    op::Op,
+    args::Args,
+    ax::Axes = nothing,
+    work::Work = nothing,
+) where {Style, Op <: OneArgFDOperator, Args, Axes, Work}
+    if !has_affine_bc(op) && !needs_composition(op, args)
+        # unrolled_any(arg -> arg isa Operators.StencilBroadcasted && arg.op isa Union{Operators.Upwind3rdOrderBiasedProductC2F, Operators.LinVanLeerC2F}, args) && !( !unrolled_any(arg -> arg isa Base.Broadcast.Broadcasted && arg.f isa Union{Operators.Upwind3rdOrderBiasedProductC2F, Operators.LinVanLeerC2F}, args))
+        opmat = Base.Broadcast.broadcasted(
+            FDOperatorMatrix(op),
+            Fields.local_geometry_field(operator_input_space(op, axes(args[1]))),
+        )
+
+        new_args = (opmat, args[1], )
+        newop = MultiplyColumnwiseBandMatrixField()
+        return Operators.StencilBroadcasted{Style, typeof(newop), typeof(new_args), Axes, Work}(newop, new_args, ax, work)
+    else
+        return Operators.StencilBroadcasted{Style, Op, Args, Axes, Work}(op, args, ax, work)
+    end
+end
 
 ################################################################################
 
@@ -266,7 +297,12 @@ Operators.return_space(op_matrix::FDOperatorMatrix, spaces...) =
 
 function Operators.return_eltype(op_matrix::FDOperatorMatrix, args...)
     args′ = args[1:(end - 1)]
-    FT = Geometry.undertype(eltype(args[end]))
+    #  FT = Geometry.undertype(eltype(args[end]))
+    if typeof(args[end]) <: Spaces.AbstractSpace
+        FT = Spaces.undertype(args[end])
+    else
+        FT = Geometry.undertype(eltype(args[end]))
+    end
     return op_matrix_row_type(op_matrix.op, FT, args′...)
 end
 

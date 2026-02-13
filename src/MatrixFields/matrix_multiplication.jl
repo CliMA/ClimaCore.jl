@@ -278,6 +278,12 @@ function Operators.return_eltype(
     matrix1,
     arg,
 )
+    if (matrix1 isa Operators.StencilBroadcasted && matrix1.op isa FDOperatorMatrix && !(eltype(arg) <: BandMatrixRow))
+       return Operators.return_eltype(matrix1.op.op, arg)
+    end
+    # if (matrix1 isa Base.Broadcast.Broadcasted  && matrix1.f isa FDOperatorMatrix)
+    #    return eltype(matrix1)
+    # end
     et_mat1 = eltype(matrix1)
     et_arg = eltype(arg)
     et_mat1 <: BandMatrixRow || error(
