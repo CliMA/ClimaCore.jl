@@ -71,7 +71,13 @@ using ..Geometry:
     rmul_with_projection,
     mul_with_projection,
     axis_tensor_type,
-    rmul_return_type
+    rmul_return_type,
+    project,
+    dual,
+    SingleValue,
+    AdjointAxisVector,
+    Axis2TensorOrAdj,
+    AxisTensor
 
 export DiagonalMatrixRow,
     BidiagonalMatrixRow,
@@ -111,18 +117,24 @@ const FieldOrStencilStyleType = Union{
     LazyOperatorBroadcasted,
 }
 
-Base.Broadcast.broadcasted(
+function Base.Broadcast.broadcasted(
     ::typeof(*),
     field_or_broadcasted::FieldOrStencilStyleType,
     args...,
-) =
+)
+# @show "ppppppp"
+
     unrolled_reduce(args; init = field_or_broadcasted) do arg1, arg2
         arg1_isa_matrix =
-            eltype(arg1) <: BandMatrixRow || arg1 isa LazyOperatorBroadcasted
+            eltype(arg1) <: BandMatrixRow || (arg1 isa LazyOperatorBroadcasted)
+        if arg1 isa LazyOperatorBroadcasted && length(arg1.args) > 0
+            arg1_isa_matrix = eltype(arg1.args[1]) <: BandMatrixRow || arg1.args[1] isa LazyOperatorBroadcasted
+        end
         use_matrix_mul_op = arg1_isa_matrix && arg2 isa FieldOrStencilStyleType
         op = use_matrix_mul_op ? MultiplyColumnwiseBandMatrixField() : ⊠
         Base.Broadcast.broadcasted(op, arg1, arg2)
     end
+end
 Base.Broadcast.broadcasted(
     ::typeof(*),
     single_value_or_broadcasted::SingleValueStyleType,
@@ -160,5 +172,18 @@ function Base.show(io::IO, field::ColumnwiseBandMatrixField)
         Fields._show_compact_field(io, field, "  ", true)
     end
 end
+
+
+project_for_mul(x, y::BandMatrixRow, lg) = map(y_component -> project_for_mul(x, y_component, lg), y)
+project_for_mul(x::BandMatrixRow, y::BandMatrixRow, lg) = map(y_component -> project_for_mul(x.entries[1], y_component, lg), y)
+project_for_mul(x::BandMatrixRow, y::SingleValue, lg) = project_for_mul(x.entries[1], y, lg)
+project_for_mul(x::BandMatrixRow, y, lg) = rmap(y′ -> project_for_mul(x.entries[1], y′, lg), y)
+project_for_mul(x, y, lg) = rmap((x′, y′) -> project_for_mul(x′, y′, lg), x, y)
+project_for_mul(x::SingleValue, y, lg) = rmap(y′ -> project_for_mul(x, y′, lg), y)
+project_for_mul(x, y::SingleValue, lg) = rmap(x′ -> project_for_mul(x′, y, lg), y)
+project_for_mul(x::SingleValue, y::SingleValue, lg) = maybe_project(x, y, lg)
+maybe_project(_, y, _) = y
+maybe_project(x::Union{AdjointAxisVector, Axis2TensorOrAdj}, y::AxisTensor, lg) =
+    project(dual(axes(x)[2]), y, lg)
 
 end
