@@ -85,24 +85,65 @@ needs_composition(_, args) = unrolled_any(arg -> needs_composition(arg), args)
 needs_composition(op) = false
 uses_extrapolate(op) = unrolled_any(Base.Fix2(isa, Operators.Extrapolate), op.bcs)
 
-function Operators.StencilBroadcasted{Style}(
+revert_op(arg) = arg
+function revert_op(arg::Operators.StencilBroadcasted{Style, Op}) where {Style, Op <: MultiplyColumnwiseBandMatrixField}
+  oldop = arg.args[1].op.op
+  newargs = (revert_op(arg.args[2]),)
+  return Operators.StencilBroadcasted{Style, typeof(oldop), typeof(newargs), typeof(arg.axes), typeof(arg.work)}(oldop, newargs, arg.axes, arg.work)
+end
+
+function revert_op(bc::Operators.StencilBroadcasted{Style}) where {Style}
+  newargs = unrolled_map(arg -> revert_op(arg), bc.args)
+  return Operators.StencilBroadcasted{Style, typeof(bc.op), typeof(newargs), typeof(bc.axes), typeof(bc.work)}(bc.op, newargs, bc.axes, bc.work)
+end
+
+function revert_op(bc::Base.Broadcast.Broadcasted)
+  newargs = unrolled_map(arg -> revert_op(arg), bc.args)
+  return Base.Broadcast.Broadcasted(bc.f, newargs)
+end
+
+#  revert_op(arg::Operators.StencilBroadcasted) = 
+
+# function Operators.StencilBroadcasted{Style}(
+#     op::Op,
+#     args::Args,
+#     ax::Axes = nothing,
+#     work::Work = nothing,
+# ) where {Style, Op <: OneArgFDOperator, Args, Axes, Work}
+#     if !has_affine_bc(op) && !needs_composition(op, args)
+#         # unrolled_any(arg -> arg isa Operators.StencilBroadcasted && arg.op isa Union{Operators.Upwind3rdOrderBiasedProductC2F, Operators.LinVanLeerC2F}, args) && !( !unrolled_any(arg -> arg isa Base.Broadcast.Broadcasted && arg.f isa Union{Operators.Upwind3rdOrderBiasedProductC2F, Operators.LinVanLeerC2F}, args))
+#         opmat = Base.Broadcast.broadcasted(
+#             FDOperatorMatrix(op),
+#             Fields.local_geometry_field(operator_input_space(op, axes(args[1]))),
+#         )
+
+#         new_args = (opmat, args[1], )
+#         newop = MultiplyColumnwiseBandMatrixField()
+#         return Operators.StencilBroadcasted{Style, typeof(newop), typeof(new_args), Axes, Work}(newop, new_args, ax, work)
+#     else
+#         newargs = unrolled_map(arg -> revert_op(arg), args)
+#         return Operators.StencilBroadcasted{Style, Op, typeof(newargs), Axes, Work}(op, newargs, ax, work)
+#     end
+# end
+
+function Base.Broadcast.broadcasted(
+    ::Style,
     op::Op,
-    args::Args,
-    ax::Axes = nothing,
-    work::Work = nothing,
-) where {Style, Op <: OneArgFDOperator, Args, Axes, Work}
-    if !has_affine_bc(op) && !needs_composition(op, args)
-        # unrolled_any(arg -> arg isa Operators.StencilBroadcasted && arg.op isa Union{Operators.Upwind3rdOrderBiasedProductC2F, Operators.LinVanLeerC2F}, args) && !( !unrolled_any(arg -> arg isa Base.Broadcast.Broadcasted && arg.f isa Union{Operators.Upwind3rdOrderBiasedProductC2F, Operators.LinVanLeerC2F}, args))
+    args...,
+) where {Style <: Operators.AbstractStencilStyle,  Op <: OneArgFDOperator}
+     if !has_affine_bc(op) && !needs_composition(op, args)
         opmat = Base.Broadcast.broadcasted(
             FDOperatorMatrix(op),
-            Fields.local_geometry_field(operator_input_space(op, axes(args[1]))),
+            Fields.local_geometry_field(operator_input_space(op, axes(args[end]))),
         )
 
-        new_args = (opmat, args[1], )
+        new_args = (opmat, args...)
         newop = MultiplyColumnwiseBandMatrixField()
-        return Operators.StencilBroadcasted{Style, typeof(newop), typeof(new_args), Axes, Work}(newop, new_args, ax, work)
+        return Operators.StencilBroadcasted{Style}(newop, new_args)
     else
-        return Operators.StencilBroadcasted{Style, Op, Args, Axes, Work}(op, args, ax, work)
+        FT = Spaces.undertype(axes(Operators.StencilBroadcasted{Style}(op, args)))
+        newargs = unrolled_map(arg -> revert_op(arg), args)
+        Operators.StencilBroadcasted{Style}( Operators.promote_bcs(op, FT), newargs)
     end
 end
 
