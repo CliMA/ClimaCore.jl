@@ -67,8 +67,30 @@ rmap(fn::F, X::Tuple, Y) where {F} =
     (rmap(fn, first(X), Y), rmap(fn, Base.tail(X), Y)...)
 
 function rmap(fn::F, X::NamedTuple, Y::NamedTuple) where {F}
-    @assert nt_names(X) === nt_names(Y)
-    return NamedTuple{nt_names(X)}(rmap(fn, Tuple(X), Tuple(Y)))
+    # @assert nt_names(X) === nt_names(Y)
+    # return NamedTuple{nt_names(X)}(rmap(fn, Tuple(X), Tuple(Y)))
+    x_names = nt_names(X)
+    y_names = nt_names(Y)
+    
+    # Check if Y names are a subset of X names
+    if !issubset(y_names, x_names)
+        throw(ArgumentError("Names in Y must be a subset of names in X. Y has names: $y_names, X has names: $x_names"))
+    end
+    
+    # Create a new NamedTuple with the same structure as X
+    # For matching names, apply fn to the corresponding values
+    # For non-matching names, keep the original values from X
+    result_values = map(x_names) do name
+        if name in y_names
+            # Apply fn to the matching values
+            rmap(fn, getproperty(X, name), getproperty(Y, name))
+        else
+            # Keep the original value from X
+            getproperty(X, name)
+        end
+    end
+    
+    return NamedTuple{x_names}(result_values)
 end
 rmap(fn::F, X::NamedTuple, Y) where {F} =
     NamedTuple{nt_names(X)}(rmap(fn, Tuple(X), Y))
