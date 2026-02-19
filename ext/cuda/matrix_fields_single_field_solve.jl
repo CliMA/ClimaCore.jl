@@ -13,7 +13,18 @@ import ClimaCore.MatrixFields: _single_field_solve!
 import ClimaCore.MatrixFields: band_matrix_solve!, unzip_tuple_field_values
 
 function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
-    Ni, Nj, _, _, Nh = size(Fields.field_values(A))
+
+    Ni, Nj, _, Nv, Nh = size(Fields.field_values(A))
+
+    # Tridiagonal solvers are handled by special implementation
+    # The special solver is limited in Nv by the number of threads per block
+    # hence it cannot be used for very large matrices.
+    # 512 should run on most GPUs
+    if eltype(A) <: MatrixFields.TridiagonalMatrixRow && Nv <= 512
+        single_field_solve_tridiagonal!(cache, x, A, b)
+        return
+    end
+
     us = UniversalSize(Fields.field_values(A))
     mask = Spaces.get_mask(axes(x))
     cart_inds = cartesian_indices_columnwise(us)
