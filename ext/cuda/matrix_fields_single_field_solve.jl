@@ -14,6 +14,13 @@ import ClimaCore.MatrixFields: band_matrix_solve!, unzip_tuple_field_values
 import ClimaCore.RecursiveApply: ⊠, ⊞, ⊟, rmap, rzero, rdiv
 
 function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
+
+    # Tridiagonal solvers are handled by special implementation
+    if eltype(A) <: MatrixFields.TridiagonalMatrixRow
+        single_field_solve_tridiagonal!(cache, x, A, b)
+        return
+    end
+
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
     us = UniversalSize(Fields.field_values(A))
     mask = Spaces.get_mask(axes(x))

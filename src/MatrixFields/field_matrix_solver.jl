@@ -279,9 +279,15 @@ function run_field_matrix_solver!(
     case1 = length(names) == 1
     case2 = all(name -> cheap_inv(A[name, name]), names.values)
     case3 = any(name -> cheap_inv(A[name, name]), names.values)
+
+    # Direct all TridiagonalMatrixRow cases to `single_field_solve` path so
+    # they can be redirected to a specialised solver
+    # TODO: Group multiple Tridiagonals to the special 'multiple_field' solver
+    case4 = any(name -> eltype(A[name, name]) <: TridiagonalMatrixRow, names.values)
+
     # TODO: remove case3 and implement _single_field_solve_diag_matrix_row!
     #       in multiple_field_solve!
-    if case1 || case2 || case3
+    if case1 || case2 || case3 || case4
         foreach(names) do name
             single_field_solve!(cache[name], x[name], A[name, name], b[name])
         end
