@@ -356,8 +356,7 @@ end
 
 Return a pointer to the input space's coordinates `Field`.
 """
-coordinate_field(space::AbstractSpace) =
-    Field(Spaces.coordinates_data(space), space)
+coordinate_field(space::AbstractSpace) = Field(Spaces.coordinates_data(space), space)
 coordinate_field(field::Field) = coordinate_field(axes(field))
 
 """
@@ -365,8 +364,7 @@ coordinate_field(field::Field) = coordinate_field(axes(field))
 
 Return a pointer to the input space's `LocalGeometry` `Field`.
 """
-local_geometry_field(space::AbstractSpace) =
-    Field(Spaces.local_geometry_data(space), space)
+local_geometry_field(space::AbstractSpace) = Field(Spaces.local_geometry_data(space), space)
 local_geometry_field(field::Field) = local_geometry_field(axes(field))
 
 Fields.local_geometry_field(bc::Base.Broadcast.Broadcasted) =
