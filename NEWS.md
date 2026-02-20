@@ -4,6 +4,9 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.50
+-------
+
 - Add support for bilinear interpolation for diagnostics to the Remapper. [2455](https://github.com/CliMA/ClimaCore.jl/pull/2455)
 
 v0.14.49
