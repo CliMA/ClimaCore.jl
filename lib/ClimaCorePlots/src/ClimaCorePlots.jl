@@ -19,9 +19,11 @@ import ClimaCore:
     Quadratures,
     Topologies,
     Spaces,
-    Utilities
+    Utilities,
+    Remapping
 
 using StaticArrays
+
 
 RecipesBase.@recipe function f(
     field::Fields.SpectralElementField1D;
@@ -492,26 +494,63 @@ end
 RecipesBase.@recipe function f(
     field::Fields.CubedSphereSpectralElementField2D;
     interpolate = 10,
+    remap_to_latlon = false,
+    nlat = 180,
+    nlon = 180,
 )
-    @assert interpolate ≥ 1 "number of element quadrature points for uniform interpolation must be ≥ 1"
+    FT = eltype(field)
 
-    unfolded_panels = _unfolded_pannel_matrix(field, interpolate)
+    if remap_to_latlon
 
-    # construct the title for info about the field space
-    space = axes(field)
-    nelem = Topologies.nlocalelems(Spaces.topology(space))
-    quad_from = Spaces.quadrature_style(space)
-    dof_in = Quadratures.degrees_of_freedom(quad_from)
-    quad_from_name = Base.typename(typeof(quad_from)).name
+        Δh_scale = Spaces.node_horizontal_length_scale(Spaces.axes(field))
+        planet_radius = FT(6.378e6)
+        npts = Int(round(2π * planet_radius / Δh_scale))
+        npts = ifelse(rem(npts, 2) == 0, npts, npts + 1)
+        npts *= 4
+        longpts = range(FT(-180), FT(180.0), Int(nlon))
+        latpts = range(FT(-90), FT(90), Int(nlat))
+        hcoords = [
+            Geometry.LatLongPoint(lat, long) for long in longpts, lat in latpts
+        ]
 
-    # set the plot attributes
-    seriestype := :heatmap
-    title --> "$nelem $quad_from_name{$dof_in} element space"
-    xguide --> "panel x1"
-    yguide --> "panel x2"
-    seriescolor --> :balance
+        # @Main.infiltrate
 
-    (unfolded_panels)
+        # hcoords = Remapping.default_target_hcoords(axes(field))
+
+        remapper = Remapping.Remapper(axes(field), hcoords)
+        remapped = Array(Remapping.interpolate(remapper, field))
+
+        # Set plot attributes
+        seriestype := :heatmap
+        xguide --> "Longitude"
+        yguide --> "Latitude"
+        seriescolor --> :balance
+        title --> "Lat-Lon Remapped Field ($nlat × $nlon)"
+
+        return (longpts, latpts, transpose(remapped))
+
+    else
+        # Original panel plotting branch
+        @assert interpolate ≥ 1 "number of element quadrature points for uniform interpolation must be ≥ 1"
+
+        unfolded_panels = _unfolded_pannel_matrix(field, interpolate)
+
+        # construct the title for info about the field space
+        space = axes(field)
+        nelem = Topologies.nlocalelems(Spaces.topology(space))
+        quad_from = Spaces.quadrature_style(space)
+        dof_in = Quadratures.degrees_of_freedom(quad_from)
+        quad_from_name = Base.typename(typeof(quad_from)).name
+
+        # set the plot attributes
+        seriestype := :heatmap
+        title --> "$nelem $quad_from_name{$dof_in} element space"
+        xguide --> "panel x1"
+        yguide --> "panel x2"
+        seriescolor --> :balance
+
+        (unfolded_panels)
+    end
 end
 
 RecipesBase.@recipe function f(
