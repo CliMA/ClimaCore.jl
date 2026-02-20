@@ -233,12 +233,15 @@ function interpolate_slab_level!(
 end
 
 """
-    interpolate_array(field, xpts, ypts)
-    interpolate_array(field, xpts, ypts, zpts)
+    interpolate_array(field, xpts, ypts; horizontal_method = SpectralElementRemapping())
+    interpolate_array(field, xpts, ypts, zpts; horizontal_method = SpectralElementRemapping())
 
 Interpolate a field to a regular array using pointwise interpolation.
 
 This is primarily used for plotting and diagnostics.
+
+`horizontal_method`: `SpectralElementRemapping()` (default; uses spectral element quadrature weights)
+or `BilinearRemapping()` (bilinear on the 2-point cell containing (ξ₁,ξ₂)).
 
 # Examples
 
@@ -258,7 +261,8 @@ function interpolate_array end
 function interpolate_array(
     field::Fields.ExtrudedFiniteDifferenceField,
     xpts,
-    zpts,
+    zpts;
+    horizontal_method::AbstractRemappingMethod = SpectralElementRemapping(),
 )
     space = axes(field)
     @assert ClimaComms.context(space) isa ClimaComms.SingletonCommsContext
@@ -279,7 +283,7 @@ function interpolate_array(
         helem = Meshes.containing_element(horz_mesh, hcoord)
         quad = Spaces.quadrature_style(space)
         quad_points, _ = Quadratures.quadrature_points(FT, quad)
-        weights = interpolation_weights(horz_mesh, hcoord, quad_points)
+        weights = interpolation_weights(horz_mesh, hcoord, quad_points, horizontal_method)
         h = helem
 
         interpolate_slab_level!(
@@ -297,7 +301,8 @@ function interpolate_array(
     field::Fields.ExtrudedFiniteDifferenceField,
     xpts,
     ypts,
-    zpts,
+    zpts;
+    horizontal_method::AbstractRemappingMethod = SpectralElementRemapping(),
 )
     space = axes(field)
     @assert ClimaComms.context(space) isa ClimaComms.SingletonCommsContext
@@ -320,7 +325,7 @@ function interpolate_array(
         helem = Meshes.containing_element(horz_mesh, hcoord)
         quad = Spaces.quadrature_style(space)
         quad_points, _ = Quadratures.quadrature_points(FT, quad)
-        weights = interpolation_weights(horz_mesh, hcoord, quad_points)
+        weights = interpolation_weights(horz_mesh, hcoord, quad_points, horizontal_method)
         gidx = horz_topology.orderindex[helem]
         h = gidx
 
@@ -335,11 +340,53 @@ function interpolate_array(
     return array
 end
 
-"""
-    interpolation_weights(horz_mesh, hcoord, quad_points)
+function interpolate_array(
+    field::Fields.SpectralElementField2D,
+    xpts,
+    ypts;
+    horizontal_method::AbstractRemappingMethod = SpectralElementRemapping(),
+)
+    space = axes(field)
+    @assert ClimaComms.context(space) isa ClimaComms.SingletonCommsContext
 
-Return the weights (tuple of arrays) to interpolate fields onto `hcoord` on the
-given mesh and quadrature points.
+    horz_topology = Spaces.topology(space)
+    horz_mesh = horz_topology.mesh
+
+    T = eltype(field)
+    array = zeros(T, length(xpts), length(ypts))
+
+    FT = Spaces.undertype(space)
+    quad = Spaces.quadrature_style(space)
+    quad_points, _ = Quadratures.quadrature_points(FT, quad)
+
+    @inbounds for (iy, ycoord) in enumerate(ypts),
+        (ix, xcoord) in enumerate(xpts)
+
+        hcoord = Geometry.product_coordinates(xcoord, ycoord)
+        helem = Meshes.containing_element(horz_mesh, hcoord)
+        weights = interpolation_weights(horz_mesh, hcoord, quad_points, horizontal_method)
+        gidx = horz_topology.orderindex[helem]
+        h = gidx
+
+        (I1, I2) = weights
+        Nq1, Nq2 = length(I1), length(I2)
+        val = zero(FT)
+        for j in 1:Nq2, i in 1:Nq1
+            ij = CartesianIndex((i, j))
+            slabidx = Fields.SlabIndex(nothing, h)
+            val += I1[i] * I2[j] * Operators.get_node(space, field, ij, slabidx)
+        end
+        array[ix, iy] = val
+    end
+    return array
+end
+
+"""
+    interpolation_weights(horz_mesh, hcoord, quad_points, method::AbstractRemappingMethod)
+
+Return weights (tuple of arrays) to interpolate onto `hcoord`.
+- `SpectralElementRemapping()`: uses spectral element quadrature weights.
+- `BilinearRemapping()`: Bilinear on the 2-point cell containing (ξ1, ξ2).
 """
 function interpolation_weights end
 
@@ -347,6 +394,7 @@ function interpolation_weights(
     horz_mesh::Meshes.AbstractMesh2D,
     hcoord,
     quad_points,
+    ::SpectralElementRemapping,
 )
     helem = Meshes.containing_element(horz_mesh, hcoord)
     ξ1, ξ2 = Meshes.reference_coordinates(horz_mesh, helem, hcoord)
@@ -356,12 +404,48 @@ function interpolation_weights(
 end
 
 function interpolation_weights(
+    horz_mesh::Meshes.AbstractMesh2D,
+    hcoord,
+    quad_points,
+    ::BilinearRemapping,
+)
+    helem = Meshes.containing_element(horz_mesh, hcoord)
+    ξ1, ξ2 = Meshes.reference_coordinates(horz_mesh, helem, hcoord)
+    Nq = length(quad_points)
+    FT = promote_type(typeof(ξ1), eltype(quad_points))
+    # 2-point cell containing (ξ1, ξ2): linear weights (1-s,s) and (1-t,t).
+    i = clamp(searchsortedlast(quad_points, ξ1), 1, Nq - 1)
+    j = clamp(searchsortedlast(quad_points, ξ2), 1, Nq - 1)
+    s = (ξ1 - quad_points[i]) / (quad_points[i + 1] - quad_points[i])
+    t = (ξ2 - quad_points[j]) / (quad_points[j + 1] - quad_points[j])
+    WI1 = ntuple(k -> k == i ? 1 - s : (k == i + 1 ? s : zero(FT)), Nq)
+    WI2 = ntuple(k -> k == j ? 1 - t : (k == j + 1 ? t : zero(FT)), Nq)
+    return (SVector(WI1), SVector(WI2))
+end
+
+function interpolation_weights(
     horz_mesh::Meshes.AbstractMesh1D,
     hcoord,
     quad_points,
+    ::SpectralElementRemapping,
 )
     helem = Meshes.containing_element(horz_mesh, hcoord)
     ξ1, = Meshes.reference_coordinates(horz_mesh, helem, hcoord)
     WI1 = Quadratures.interpolation_matrix(SVector(ξ1), quad_points)
     return (WI1,)
+end
+
+function interpolation_weights(
+    horz_mesh::Meshes.AbstractMesh1D,
+    hcoord,
+    quad_points,
+    ::BilinearRemapping,
+)
+    helem = Meshes.containing_element(horz_mesh, hcoord)
+    ξ1, = Meshes.reference_coordinates(horz_mesh, helem, hcoord)
+    Nq = length(quad_points)
+    FT = promote_type(typeof(ξ1), eltype(quad_points))
+    i = clamp(searchsortedlast(quad_points, ξ1), 1, Nq - 1)
+    s = (ξ1 - quad_points[i]) / (quad_points[i + 1] - quad_points[i])
+    (SVector(ntuple(k -> k == i ? 1 - s : (k == i + 1 ? s : zero(FT)), Nq)),)
 end
