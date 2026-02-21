@@ -1,4 +1,4 @@
-import ClimaCore: DataLayouts, Spaces, Geometry, RecursiveApply, DataLayouts
+import ClimaCore: DataLayouts, Spaces, Geometry, DataLayouts
 import CUDA
 import ClimaCore.Operators:
     Divergence,
@@ -51,11 +51,8 @@ Base.@propagate_inbounds function operator_fill_shmem!(
     vt = threadIdx().z
     local_geometry = get_local_geometry(space, ij, slabidx)
     i, _ = ij.I
-    Jv¹[i, vt] =
-        local_geometry.J ⊠ RecursiveApply.rmap(
-            v -> Geometry.contravariant1(v, local_geometry),
-            arg,
-        )
+    (; J) = local_geometry
+    Jv¹[i, vt] = J * Geometry.contravariant1(arg, local_geometry)
 end
 Base.@propagate_inbounds function operator_fill_shmem!(
     op::Divergence{(1, 2)},
@@ -68,17 +65,9 @@ Base.@propagate_inbounds function operator_fill_shmem!(
     vt = threadIdx().z
     local_geometry = get_local_geometry(space, ij, slabidx)
     i, j = ij.I
-
-    Jv¹[i, j, vt] =
-        local_geometry.J ⊠ RecursiveApply.rmap(
-            v -> Geometry.contravariant1(v, local_geometry),
-            arg,
-        )
-    Jv²[i, j, vt] =
-        local_geometry.J ⊠ RecursiveApply.rmap(
-            v -> Geometry.contravariant2(v, local_geometry),
-            arg,
-        )
+    (; J) = local_geometry
+    Jv¹[i, j, vt] = J * Geometry.contravariant1(arg, local_geometry)
+    Jv²[i, j, vt] = J * Geometry.contravariant2(arg, local_geometry)
 end
 
 Base.@propagate_inbounds function operator_shmem(
@@ -124,11 +113,8 @@ Base.@propagate_inbounds function operator_fill_shmem!(
     vt = threadIdx().z
     local_geometry = get_local_geometry(space, ij, slabidx)
     i, _ = ij.I
-    WJv¹[i, vt] =
-        local_geometry.WJ ⊠ RecursiveApply.rmap(
-            v -> Geometry.contravariant1(v, local_geometry),
-            arg,
-        )
+    (; WJ) = local_geometry
+    WJv¹[i, vt] = WJ * Geometry.contravariant1(arg, local_geometry)
 end
 Base.@propagate_inbounds function operator_fill_shmem!(
     op::WeakDivergence{(1, 2)},
@@ -141,17 +127,9 @@ Base.@propagate_inbounds function operator_fill_shmem!(
     vt = threadIdx().z
     local_geometry = get_local_geometry(space, ij, slabidx)
     i, j = ij.I
-
-    WJv¹[i, j, vt] =
-        local_geometry.WJ ⊠ RecursiveApply.rmap(
-            v -> Geometry.contravariant1(v, local_geometry),
-            arg,
-        )
-    WJv²[i, j, vt] =
-        local_geometry.WJ ⊠ RecursiveApply.rmap(
-            v -> Geometry.contravariant2(v, local_geometry),
-            arg,
-        )
+    (; WJ) = local_geometry
+    WJv¹[i, j, vt] = WJ * Geometry.contravariant1(arg, local_geometry)
+    WJv²[i, j, vt] = WJ * Geometry.contravariant2(arg, local_geometry)
 end
 
 Base.@propagate_inbounds function operator_shmem(
@@ -200,11 +178,8 @@ Base.@propagate_inbounds function operator_fill_shmem!(
     vt = threadIdx().z
     local_geometry = get_local_geometry(space, ij, slabidx)
     i, _ = ij.I
-    Ju1[i, vt] =
-        local_geometry.J ⊠ RecursiveApply.rmap(
-            u -> Geometry.contravariant1(u, local_geometry),
-            arg1,
-        )
+    (; J) = local_geometry
+    Ju1[i, vt] = J * Geometry.contravariant1(arg1, local_geometry)
     psi[i, vt] = arg2
 end
 
@@ -220,16 +195,9 @@ Base.@propagate_inbounds function operator_fill_shmem!(
     vt = threadIdx().z
     local_geometry = get_local_geometry(space, ij, slabidx)
     i, j = ij.I
-    Ju1[i, j, vt] =
-        local_geometry.J ⊠ RecursiveApply.rmap(
-            u -> Geometry.contravariant1(u, local_geometry),
-            arg1,
-        )
-    Ju2[i, j, vt] =
-        local_geometry.J ⊠ RecursiveApply.rmap(
-            u -> Geometry.contravariant2(u, local_geometry),
-            arg1,
-        )
+    (; J) = local_geometry
+    Ju1[i, j, vt] = J * Geometry.contravariant1(arg1, local_geometry)
+    Ju2[i, j, vt] = J * Geometry.contravariant2(arg1, local_geometry)
     psi[i, j, vt] = arg2
 end
 
@@ -320,7 +288,7 @@ Base.@propagate_inbounds function operator_fill_shmem!(
     local_geometry = get_local_geometry(space, ij, slabidx)
     W = local_geometry.WJ * local_geometry.invJ
     i, _ = ij.I
-    Wf[i, vt] = W ⊠ arg
+    Wf[i, vt] = W * arg
 end
 Base.@propagate_inbounds function operator_fill_shmem!(
     op::WeakGradient{(1, 2)},
@@ -334,7 +302,7 @@ Base.@propagate_inbounds function operator_fill_shmem!(
     local_geometry = get_local_geometry(space, ij, slabidx)
     W = local_geometry.WJ * local_geometry.invJ
     i, j = ij.I
-    Wf[i, j, vt] = W ⊠ arg
+    Wf[i, j, vt] = W * arg
 end
 
 Base.@propagate_inbounds function operator_shmem(
@@ -517,14 +485,14 @@ Base.@propagate_inbounds function operator_fill_shmem!(
     RT = operator_return_eltype(op, typeof(arg))
     if RT <: Geometry.Contravariant3Vector
         _, Wv₂ = work
-        Wv₂[i, vt] = W ⊠ Geometry.covariant2(arg, local_geometry)
+        Wv₂[i, vt] = W * Geometry.covariant2(arg, local_geometry)
     elseif RT <: Geometry.Contravariant2Vector
         (Wv₃,) = work
-        Wv₃[i, vt] = W ⊠ Geometry.covariant3(arg, local_geometry)
+        Wv₃[i, vt] = W * Geometry.covariant3(arg, local_geometry)
     else
         _, Wv₂, Wv₃ = work
-        Wv₂[i, vt] = W ⊠ Geometry.covariant2(arg, local_geometry)
-        Wv₃[i, vt] = W ⊠ Geometry.covariant3(arg, local_geometry)
+        Wv₂[i, vt] = W * Geometry.covariant2(arg, local_geometry)
+        Wv₃[i, vt] = W * Geometry.covariant3(arg, local_geometry)
     end
 end
 Base.@propagate_inbounds function operator_fill_shmem!(
@@ -542,15 +510,15 @@ Base.@propagate_inbounds function operator_fill_shmem!(
     RT = operator_return_eltype(op, typeof(arg))
     if RT <: Geometry.Contravariant3Vector
         Wv₁, Wv₂ = work
-        Wv₁[i, j, vt] = W ⊠ Geometry.covariant1(arg, local_geometry)
-        Wv₂[i, j, vt] = W ⊠ Geometry.covariant2(arg, local_geometry)
+        Wv₁[i, j, vt] = W * Geometry.covariant1(arg, local_geometry)
+        Wv₂[i, j, vt] = W * Geometry.covariant2(arg, local_geometry)
     elseif RT <: Geometry.Contravariant12Vector
         (Wv₃,) = work
-        Wv₃[i, j, vt] = W ⊠ Geometry.covariant3(arg, local_geometry)
+        Wv₃[i, j, vt] = W * Geometry.covariant3(arg, local_geometry)
     else
         Wv₁, Wv₂, Wv₃ = work
-        Wv₁[i, j, vt] = W ⊠ Geometry.covariant1(arg, local_geometry)
-        Wv₂[i, j, vt] = W ⊠ Geometry.covariant2(arg, local_geometry)
-        Wv₃[i, j, vt] = W ⊠ Geometry.covariant3(arg, local_geometry)
+        Wv₁[i, j, vt] = W * Geometry.covariant1(arg, local_geometry)
+        Wv₂[i, j, vt] = W * Geometry.covariant2(arg, local_geometry)
+        Wv₃[i, j, vt] = W * Geometry.covariant3(arg, local_geometry)
     end
 end

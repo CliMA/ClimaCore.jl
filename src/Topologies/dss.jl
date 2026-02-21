@@ -66,7 +66,7 @@ create_dss_buffer(
     local_geometry::Union{DSSTypes2D, Nothing} = nothing,
     dss_weights::Union{DSSTypes2D, Nothing} = nothing,
 ) = create_dss_buffer(
-    data,
+    Base.broadcastable(data),
     topology,
     DataLayouts.VIFH,
     local_geometry,
@@ -168,12 +168,6 @@ end
 
 Base.eltype(::DSSBuffer{S}) where {S} = S
 
-assert_same_eltype(::DataLayouts.AbstractData, ::DSSBuffer) =
-    error("Incorrect buffer eltype")
-assert_same_eltype(::DataLayouts.AbstractData{S}, ::DSSBuffer{S}) where {S} =
-    nothing
-assert_same_eltype(::DataLayouts.AbstractData, ::Nothing) = nothing
-
 """
     dss_transform!(
         device::ClimaComms.AbstractDevice,
@@ -213,7 +207,7 @@ function dss_transform!(
         dss_transform!(
             device,
             dss_buffer.perimeter_data,
-            data,
+            Base.broadcastable(data),
             perimeter,
             local_geometry,
             dss_weights,
@@ -222,27 +216,6 @@ function dss_transform!(
     end
     return nothing
 end
-
-# `dss_transform` of a `Covariant12Vector` returns a
-# `UVWVector`, however, we only need to store a `UVVector`
-# in `perimeter_data`. Therefore, we drop the vertical dimension:
-# via `drop_vert_dim`
-"""
-    drop_vert_dim(::Type{T}, X)
-
-Convert the type of `X` to type `T` recursively
-using `_drop_vert_dim`, which converts from `UVWVector`
-to `UVVector` if `T <: UVVector`.
-"""
-@inline drop_vert_dim(::Type{T}, X) where {T} =
-    RecursiveApply.rmap(RecursiveApply.rzero(T), X) do zero_value, x
-        _drop_vert_dim(typeof(zero_value), x)
-    end
-@inline _drop_vert_dim(
-    ::Type{T},
-    x::Geometry.UVWVector,
-) where {T <: Geometry.UVVector} = Geometry.UVVector(x.u, x.v)
-@inline _drop_vert_dim(::Type{T}, x::T) where {T} = x
 
 """
     function dss_transform!(
@@ -289,9 +262,7 @@ function dss_transform!(
                     local_geometry[loc],
                     dss_weights[loc],
                 )
-                perimeter_data[CI(p, 1, 1, level, elem)] =
-                    drop_vert_dim(eltype(perimeter_data), src)
-
+                perimeter_data[CI(p, 1, 1, level, elem)] = src
             end
         end
     end
@@ -334,7 +305,7 @@ function dss_untransform!(
     dss_untransform!(
         device,
         perimeter_data,
-        data,
+        Base.broadcastable(data),
         local_geometry,
         perimeter,
         localelems,
@@ -466,9 +437,9 @@ function dss_local_vertices!(
         for level in 1:Nv
             # gather: compute sum over shared vertices
             sum_data = mapreduce(
-                ⊞,
+                +,
                 vertex;
-                init = RecursiveApply.rzero(eltype(slab(perimeter_data, 1, 1))),
+                init = zero(eltype(slab(perimeter_data, 1, 1))),
             ) do (lidx, vert)
                 ip = perimeter_vertex_node_index(vert)
                 perimeter_slab = slab(perimeter_data, level, lidx)
@@ -502,7 +473,7 @@ function dss_local_faces!(
             perimeter_slab2 = slab(perimeter_data, level, lidx2)
             for (ip1, ip2) in zip(pr1, pr2)
                 val =
-                    perimeter_slab1[slab_index(ip1)] ⊞
+                    perimeter_slab1[slab_index(ip1)] +
                     perimeter_slab2[slab_index(ip2)]
                 perimeter_slab1[slab_index(ip1)] = val
                 perimeter_slab2[slab_index(ip2)] = val
@@ -538,11 +509,9 @@ function dss_local_ghost!(
             for level in 1:Nv
                 # gather: compute sum over shared vertices
                 sum_data = mapreduce(
-                    ⊞,
+                    +,
                     vertex;
-                    init = RecursiveApply.rzero(
-                        eltype(slab(perimeter_data, 1, 1)),
-                    ),
+                    init = zero(eltype(slab(perimeter_data, 1, 1))),
                 ) do (isghost, idx, vert)
                     ip = perimeter_vertex_node_index(vert)
                     if !isghost
@@ -550,10 +519,7 @@ function dss_local_ghost!(
                         perimeter_slab = slab(perimeter_data, level, lidx)
                         perimeter_slab[slab_index(ip)]
                     else
-                        RecursiveApply.rmap(
-                            zero,
-                            slab(perimeter_data, 1, 1)[slab_index(1)],
-                        )
+                        zero(slab(perimeter_data, 1, 1)[slab_index(1)])
                     end
                 end
                 for (isghost, idx, vert) in vertex
@@ -680,7 +646,7 @@ Computed unweighted/pure DSS of `data`.
 function dss!(data::DSSTypes1D, topology::IntervalTopology)
     sizeof(eltype(data)) > 0 || return nothing
     device = ClimaComms.device(topology)
-    dss_1d!(device, data, topology)
+    dss_1d!(device, Base.broadcastable(data), topology)
     return nothing
 end
 function dss!(data::DSSTypes2D, topology::Topology2D)
@@ -726,7 +692,7 @@ function dss_1d!(
         left_idx = CartesianIndex(Ni, 1, 1, level, left_face_elem)
         right_idx = CartesianIndex(1, 1, 1, level, right_face_elem)
         val =
-            dss_transform(data, local_geometry, dss_weights, left_idx) ⊞
+            dss_transform(data, local_geometry, dss_weights, left_idx) +
             dss_transform(data, local_geometry, dss_weights, right_idx)
         data[left_idx] = dss_untransform(T, val, local_geometry, left_idx)
         data[right_idx] = dss_untransform(T, val, local_geometry, right_idx)

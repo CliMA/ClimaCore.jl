@@ -8,7 +8,6 @@ using ClimaCore:
     Spaces,
     Limiters,
     Quadratures
-using ClimaCore.RecursiveApply
 using ClimaCore: slab
 using Test
 
@@ -67,12 +66,12 @@ q = map(
     coord -> (x = 1.2 * coord.x, y = 1.5 * coord.y),
     Fields.coordinate_field(hv_center_space),
 )
-ρq = ρ .⊠ q
+ρq = ρ .* q
 q_ref = map(
     coord -> (x = coord.x, y = coord.y),
     Fields.coordinate_field(hv_center_space),
 )
-ρq_ref = ρ .⊠ q_ref
+ρq_ref = ρ .* q_ref
 
 total_ρq = sum(ρq)
 
@@ -80,7 +79,7 @@ limiter = Limiters.QuasiMonotoneLimiter(ρq)
 
 Limiters.compute_bounds!(limiter, ρq_ref, ρ)
 Limiters.apply_limiter!(ρq, ρ, limiter)
-q = RecursiveApply.rdiv.(ρq, ρ)
+q = ρq ./ ρ
 
 @test sum(ρq.x) ≈ total_ρq.x
 @test sum(ρq.y) ≈ total_ρq.y

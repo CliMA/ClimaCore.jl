@@ -66,12 +66,13 @@ module DataLayouts
 import Base: Base, @propagate_inbounds
 import StaticArrays: SOneTo, MArray, SArray
 import ClimaComms
-import UnrolledUtilities: unrolled_map, unrolled_all
 import MultiBroadcastFusion as MBF
 import Adapt
-import UnrolledUtilities: unrolled_foreach, unrolled_all, unrolled_findfirst
+using UnrolledUtilities
 
-import ..Utilities: PlusHalf, unionall_type
+import ..Utilities: PlusHalf, unionall_type, inferred_type, broadcast_eltype
+import ..Utilities:
+    is_auto_broadcastable, enable_auto_broadcasting, disable_auto_broadcasting
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..slab, ..slab_args, ..column, ..column_args, ..level, ..level_args
 export slab,
@@ -1688,6 +1689,9 @@ rebuild(data::AbstractData, ::Type{DA}) where {DA} =
 
 Base.copy(data::AbstractData) =
     union_all(singleton(data)){type_params(data)...}(copy(parent(data)))
+
+Base.reinterpret(::Type{S}, data::AbstractData) where {S} =
+    union_all(singleton(data)){S, type_params(data)[2:end]...}(parent(data))
 
 # broadcast machinery
 include("non_extruded_broadcasted.jl")

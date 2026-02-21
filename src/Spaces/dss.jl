@@ -1,7 +1,6 @@
 import ..Topologies:
     DSSBuffer,
     create_dss_buffer,
-    assert_same_eltype,
     dss!,
     dss_1d!,
     dss_transform!,
@@ -89,7 +88,6 @@ function weighted_dss!(
     space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
     dss_buffer::Union{DSSBuffer, Nothing},
 )
-    assert_same_eltype(data, dss_buffer)
     weighted_dss_start!(data, space, dss_buffer)
     weighted_dss_internal!(data, space, dss_buffer)
     weighted_dss_ghost!(data, space, dss_buffer)
@@ -109,7 +107,6 @@ function weighted_dss_prepare!(
     },
     dss_buffer::DSSBuffer,
 )
-    assert_same_eltype(data, dss_buffer)
     device = ClimaComms.device(topology(space))
     hspace = horizontal_space(space)
     dss_transform!(
@@ -228,12 +225,11 @@ function weighted_dss_internal!(
 )
     Quadratures.requires_dss(quadrature_style(space)) || return nothing
     sizeof(eltype(data)) > 0 || return nothing
-    assert_same_eltype(data, dss_buffer)
     device = ClimaComms.device(topology(hspace))
     if hspace isa SpectralElementSpace1D
         dss_1d!(
             device,
-            data,
+            Base.broadcastable(data),
             topology(hspace),
             local_geometry_data(space),
             dss_weights(space),
@@ -313,7 +309,6 @@ function weighted_dss_ghost!(
 )
     Quadratures.requires_dss(quadrature_style(space)) || return data
     sizeof(eltype(data)) > 0 || return data
-    assert_same_eltype(data, dss_buffer)
     ClimaComms.finish(dss_buffer.graph_context)
     device = ClimaComms.device(topology(hspace))
     load_from_recv_buffer!(device, dss_buffer)

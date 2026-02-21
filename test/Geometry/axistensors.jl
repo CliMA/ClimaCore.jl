@@ -1,5 +1,6 @@
 using Test, JET
 using ClimaCore.Geometry, ClimaCore.DataLayouts
+using ClimaCore.Utilities: auto_broadcast
 using LinearAlgebra, StaticArrays
 import ClimaCore
 
@@ -54,7 +55,7 @@ import ClimaCore
     @test Geometry.components(inv(M) * M) == @SMatrix [1.0 0.0; 0.0 1.0]
 
     @test x ⊗ 3 == Geometry.Covariant12Vector(3.0, 6.0)
-    @test x ⊗ (1, (a = 2, b = 3)) == (
+    @test auto_broadcast(⊗)(x, (1, (a = 2, b = 3))) == (
         Geometry.Covariant12Vector(1.0, 2.0),
         (
             a = Geometry.Covariant12Vector(2.0, 4.0),

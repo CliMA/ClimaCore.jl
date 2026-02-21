@@ -78,27 +78,6 @@ end
     Spaces.weighted_dss!(x)
 
     @test Array(parent(x)) ≈ ones(size(parent(x))) # TODO: improve the quality of this test
-
-    wrong_field = map(Fields.coordinate_field(space)) do cf
-        (; a = Float64(0))
-    end
-    wrong_buffer = Spaces.create_dss_buffer(wrong_field)
-    @test_throws ErrorException("Incorrect buffer eltype") Spaces.weighted_dss!(
-        x,
-        wrong_buffer,
-    )
-    @test_throws ErrorException("Incorrect buffer eltype") Spaces.weighted_dss_start!(
-        x,
-        wrong_buffer,
-    )
-    @test_throws ErrorException("Incorrect buffer eltype") Spaces.weighted_dss_internal!(
-        x,
-        wrong_buffer,
-    )
-    @test_throws ErrorException("Incorrect buffer eltype") Spaces.weighted_dss_ghost!(
-        x,
-        wrong_buffer,
-    )
 end
 
 @testset "DSS of Covariant12Vector & Covariant123Vector on extruded Cubed Sphere mesh (ne = 3, serial run)" begin

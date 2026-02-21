@@ -1,4 +1,4 @@
-import UnrolledUtilities: unrolled_map
+import UnrolledUtilities: unrolled_foreach, unrolled_map
 
 """
     AbstractOperator
@@ -24,7 +24,6 @@ Base.Broadcast.BroadcastStyle(
     ::Type{<:OperatorBroadcasted{Style}},
 ) where {Style} = Style()
 
-
 # recursively unwrap axes broadcast arguments in a way that is statically reducible by the optimizer
 @inline axes_args(args::Tuple) = unrolled_map(axes, args)
 
@@ -38,17 +37,21 @@ function Base.axes(opbc::OperatorBroadcasted)
         opbc.axes
     end
 end
-function Base.similar(opbc::OperatorBroadcasted, ::Type{Eltype}) where {Eltype}
-    space = axes(opbc)
-    return Field(Eltype, space)
-end
-function Base.copy(opbc::OperatorBroadcasted)
-    # figure out return type
-    dest = similar(opbc, eltype(opbc))
-    # allocate dest
-    copyto!(dest, opbc)
-end
 Base.Broadcast.broadcastable(opbc::OperatorBroadcasted) = opbc
+Base.copy(opbc::OperatorBroadcasted) = copyto!(similar(opbc), opbc)
+Base.similar(opbc::OperatorBroadcasted, ::Type{Eltype}) where {Eltype} =
+    Field(Eltype, axes(opbc))
+
+function Fields.call_with_first(opbc::OperatorBroadcasted)
+    unrolled_foreach(Fields.call_with_first, opbc.args)
+    return zero(eltype(opbc))
+end
+
+# Define similar to match the behavior of Broadcasted{<:AbstractFieldStyle}.
+function Base.similar(opbc::OperatorBroadcasted)
+    isconcretetype(eltype(opbc)) || Fields.call_with_first(opbc)
+    return similar(opbc, inferred_type(disable_auto_broadcasting, eltype(opbc)))
+end
 
 function Base.Broadcast.materialize(opbc::OperatorBroadcasted)
     copy(Base.Broadcast.instantiate(opbc))

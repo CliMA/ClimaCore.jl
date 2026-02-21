@@ -1,5 +1,4 @@
 import ..Topologies: Topology2D
-using ..RecursiveApply
 import UnrolledUtilities: unrolled_map
 
 """
@@ -35,20 +34,11 @@ Base.@propagate_inbounds dss_transform(
 )
     ()
 end
-@inline function dss_transform(
-    args::Tuple,
+@inline dss_transform(
+    arg::AutoBroadcaster,
     local_geometry::Geometry.LocalGeometry,
     weight,
-)
-    unrolled_map(arg -> dss_transform(arg, local_geometry, weight), args)
-end
-@inline function dss_transform(
-    arg::NamedTuple{names},
-    local_geometry::Geometry.LocalGeometry,
-    weight,
-) where {names}
-    NamedTuple{names}(dss_transform(Tuple(arg), local_geometry, weight))
-end
+) = (arg -> dss_transform(arg, local_geometry, weight)).(arg)
 @inline dss_transform(
     arg::Number,
     local_geometry::Geometry.LocalGeometry,
@@ -137,36 +127,14 @@ Base.@propagate_inbounds dss_untransform(
 ) where {T} = dss_untransform(T, targ, local_geometry[I])
 @inline dss_untransform(::Type{T}, targ, local_geometry::Nothing, I) where {T} =
     dss_untransform(T, targ, local_geometry)
-@inline function dss_untransform(
-    ::Type{NamedTuple{names, T}},
-    targ::NamedTuple{names},
-    local_geometry,
-) where {names, T}
-    NamedTuple{names}(dss_untransform(T, Tuple(targ), local_geometry))
-end
 @inline dss_untransform(
-    ::Type{Tuple{}},
-    targ::Tuple{},
-    local_geometry::Geometry.LocalGeometry,
-) = ()
-@inline function dss_untransform(
     ::Type{T},
-    targ::Tuple,
+    targ::AutoBroadcaster,
     local_geometry::Geometry.LocalGeometry,
-) where {T <: Tuple}
-    (
-        dss_untransform(
-            Base.tuple_type_head(T),
-            Base.first(targ),
-            local_geometry,
-        ),
-        dss_untransform(
-            Base.tuple_type_tail(T),
-            Base.tail(targ),
-            local_geometry,
-        )...,
-    )
-end
+) where {T <: AutoBroadcaster} =
+    broadcast(zero(T), targ) do tzero, targ
+        dss_untransform(typeof(tzero), targ, local_geometry)
+    end
 
 @inline dss_untransform(::Type{T}, targ::T, local_geometry) where {T} = targ
 @inline dss_untransform(

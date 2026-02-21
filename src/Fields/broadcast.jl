@@ -43,6 +43,23 @@ Base.Broadcast.BroadcastStyle(
     ::FieldStyle{DS2},
 ) where {DS1, DS2} = FieldStyle(Base.Broadcast.BroadcastStyle(DS1(), DS2()))
 
+"""
+    FieldConflict
+
+Analogue of the built-in `Broadcast.ArrayConflict` for Fields. Used in place of
+`Broadcast.Unknown` to call `Broadcast.broadcasted(::AbstractFieldStyle, ...)`.
+Without this broadcast style, such `broadcasted` methods would need more complex
+definitions that specialize on argument types, rather than just the style type.
+"""
+struct FieldConflict <: AbstractFieldStyle end
+
+Base.Broadcast.result_join(
+    ::AbstractFieldStyle,
+    ::AbstractFieldStyle,
+    ::Base.Broadcast.Unknown,
+    ::Base.Broadcast.Unknown,
+) = FieldConflict()
+
 # Override the recursive unrolling used in combine_styles (which can lead to
 # inference failures in broadcast expressions with more than 10 arguments) with
 # manual unrolling (which can have higher latency but is always inferrable).
@@ -57,66 +74,51 @@ Base.Broadcast.combine_styles(
     (arg1, arg2, arg3, args...),
 )
 
-Base.Broadcast.broadcastable(field::Field) = field
+# Define broadcastable, broadcasted, and eltype to match DataStyle broadcasting.
+Base.Broadcast.broadcastable(field::Field) =
+    Field(Base.Broadcast.broadcastable(field_values(field)), axes(field))
+Base.Broadcast.broadcastable(
+    bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle},
+) =
+    is_auto_broadcastable(eltype(bc)) ?
+    Base.Broadcast.broadcasted(bc.style, enable_auto_broadcasting, bc) : bc
+
+Base.Broadcast.broadcasted(fs::AbstractFieldStyle, f::F, args...) where {F} =
+    Base.Broadcast.Broadcasted(fs, f, unrolled_map(broadcast_arg, args))
 
 Base.eltype(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
-    Base.Broadcast.combine_eltypes(bc.f, bc.args)
+    broadcast_eltype(bc)
 
-# _first: recursively get the first element
-function _first end
+# Define copy to match DataStyle broadcasting, but with the addition of a mask.
+Base.copy(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
+    copyto!(similar(bc), bc, Spaces.get_mask(axes(bc)))
 
-# If we haven't caught the datatype, then this
-# may just result in a method error-- but all
-# we're trying to do is throw a more helpful
-# error message. So, let's throw it here instead.
-_first(bc, ::Any) = throw(BroadcastInferenceError(bc))
-_first_data_layout(data::DataLayouts.VF) = data[CartesianIndex(1, 1, 1, 1, 1)]
-_first_data_layout(data::DataLayouts.DataF) = data[]
-_first(bc, x::Real) = x
-_first(bc, x::Geometry.LocalGeometry) = x
-_first(bc, data::DataLayouts.VF) = data[]
-_first(bc, field::Field) =
-    _first_data_layout(field_values(column(field, 1, 1, 1)))
-_first(bc, space::Spaces.AbstractSpace) =
-    _first_data_layout(field_values(column(space, 1, 1, 1)))
-_first(bc, x::Base.Broadcast.Broadcasted) = _first(bc, copy(x))
-_first(bc, x::Ref{T}) where {T} = x.x
-_first(bc, x::Tuple{T}) where {T} = x[1]
+"""
+    call_with_first(bc)
 
-function call_with_first(bc)
-    # Try calling with first applied to all arguments:
-    bc′ = Base.Broadcast.preprocess(nothing, bc)
-    first_args = map(arg -> _first(bc, arg), bc′.args)
-    bc.f(first_args...)
+Tries to evaluate a broadcast expression at a single index, throwing an error
+from the first function call whose result type cannot be inferred. Each call is
+first checked for runtime errors, and then it is checked for type instabilities.
+"""
+function call_with_first(bc::Base.Broadcast.Broadcasted)
+    args_at_single_index = unrolled_map(call_with_first, bc.args)
+    result_at_single_index = bc.f(args_at_single_index...)
+    arg_types = unrolled_map(typeof, args_at_single_index)
+    inferred_type(bc.f, arg_types...) # throws an error if type inference fails
+    return result_at_single_index
 end
-
-# we implement our own to avoid the type-widening code, and throw a more useful error
-struct BroadcastInferenceError <: Exception
-    bc::Base.Broadcast.Broadcasted
-end
-
-function Base.showerror(io::IO, err::BroadcastInferenceError)
-    print(io, "BroadcastInferenceError: cannot infer eltype.\n")
-    bc = err.bc
-    f = bc.f
-    eltypes = map(eltype, bc.args)
-    if !hasmethod(f, eltypes)
-        print(io, "  function $(f) does not have a method for $(eltypes)")
-    else
-        InteractiveUtils.code_warntype(io, f, eltypes)
+call_with_first(field::Field) =
+    ClimaComms.allowscalar(ClimaComms.device(field)) do
+        field_values(field)[CartesianIndex(1, 1, 1, 1, 1)]
     end
-end
+call_with_first(tup::Tuple) = tup[1]
+call_with_first(ref::Ref) = ref[]
+call_with_first(obj) = obj
 
-function Base.copy(
-    bc::Base.Broadcast.Broadcasted{Style},
-) where {Style <: AbstractFieldStyle}
-    ElType = eltype(bc)
-    if !Base.isconcretetype(ElType)
-        call_with_first(bc)
-        throw(BroadcastInferenceError(bc))
-    end
-    # We can trust it and defer to the simpler `copyto!`
-    return copyto!(similar(bc, ElType), bc, Spaces.get_mask(axes(bc)))
+# Define similar to match DataStyle broadcasting, but with extra error handling.
+function Base.similar(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle})
+    isconcretetype(eltype(bc)) || call_with_first(bc)
+    return similar(bc, inferred_type(disable_auto_broadcasting, eltype(bc)))
 end
 
 Base.@propagate_inbounds function slab(
@@ -216,15 +218,15 @@ Base.axes(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
 _axes(bc, ::Nothing) = Base.Broadcast.combine_axes(bc.args...)
 _axes(bc, axes) = axes
 
-function Base.similar(
+Base.similar(
     bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle},
     ::Type{Eltype},
-) where {Eltype}
-    return Field(similar(todata(bc), Eltype), axes(bc))
-end
+) where {Eltype} = Field(Eltype, axes(bc))
 
-Base.similar(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
-    Base.similar(bc, eltype(bc))
+Base.similar(
+    bc::Base.Broadcast.Broadcasted{<:FieldStyle},
+    ::Type{Eltype},
+) where {Eltype} = Field(similar(todata(bc), Eltype), axes(bc))
 
 @inline function Base.copyto!(
     dest::Field,
@@ -360,33 +362,13 @@ end
     return nothing
 end
 
+# By default, broadcasted Vals are put in Refs, leading to type instabilities
 Base.Broadcast.broadcasted(
     ::typeof(Base.literal_pow),
     ::typeof(^),
     f::Union{Field, Base.Broadcast.Broadcasted{<:AbstractFieldStyle}},
     ::Val{n},
 ) where {n} = Base.Broadcast.broadcasted(x -> Base.literal_pow(^, x, Val(n)), f)
-
-# Specialize handling of +, *, muladd, so that we can support broadcasting over NamedTuple element types
-# Required for ODE solvers
-
-Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(+), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveApply.:⊞, args...)
-
-Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(-), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveApply.:⊟, args...)
-
-Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(*), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveApply.:⊠, args...)
-
-Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(/), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveApply.rdiv, args...)
-
-Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(muladd), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveApply.rmuladd, args...)
-
-Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(zero), arg) =
-    Base.Broadcast.broadcasted(fs, RecursiveApply.rzero, arg)
 
 # Specialize handling of vector-based functions to automatically add LocalGeometry information
 function Base.Broadcast.broadcasted(

@@ -10,6 +10,7 @@ import ..DataLayouts:
     DataStyle,
     FusedMultiBroadcast,
     @fused_direct,
+    broadcast_arg,
     isascalar,
     check_fused_broadcast_axes,
     ToCPU,
@@ -25,14 +26,15 @@ import ..Spaces: nlevels, ncolumns
 import ..Spaces: get_mask, set_mask!
 import ..DataLayouts: AbstractMask
 import ..Geometry: Geometry, Cartesian12Vector
-import ..Utilities: PlusHalf, half
+import ..Utilities: PlusHalf, half, inferred_type, broadcast_eltype
+import ..Utilities:
+    is_auto_broadcastable, enable_auto_broadcasting, disable_auto_broadcasting
 
-using ..RecursiveApply
+using UnrolledUtilities
 using ClimaComms
 import Adapt
-import UnrolledUtilities: unrolled_map, unrolled_mapreduce, unrolled_findfirst, unrolled_all
 
-import StaticArrays, LinearAlgebra, Statistics, InteractiveUtils
+import StaticArrays, LinearAlgebra, Statistics
 
 """
     Field(values, space)

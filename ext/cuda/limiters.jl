@@ -23,8 +23,12 @@ function compute_element_bounds!(
     ρ,
     dev::ClimaComms.CUDADevice,
 )
-    ρ_values = Fields.field_values(Operators.strip_space(ρ, axes(ρ)))
-    ρq_values = Fields.field_values(Operators.strip_space(ρq, axes(ρq)))
+    ρ_values = Base.broadcastable(
+        Fields.field_values(Operators.strip_space(ρ, axes(ρ))),
+    )
+    ρq_values = Base.broadcastable(
+        Fields.field_values(Operators.strip_space(ρq, axes(ρq))),
+    )
     (_, _, _, Nv, Nh) = DataLayouts.universal_size(ρ_values)
     nthreads, nblocks = config_threadblock(Nv, Nh)
 
@@ -53,13 +57,13 @@ function compute_element_bounds_kernel!(limiter, ρq, ρ)
         slab_ρ = slab(ρ, v, h)
         for j in 1:Nj
             for i in 1:Ni
-                q = rdiv(slab_ρq[slab_index(i, j)], slab_ρ[slab_index(i, j)])
+                q = slab_ρq[slab_index(i, j)] / slab_ρ[slab_index(i, j)]
                 if i == 1 && j == 1
                     q_min = q
                     q_max = q
                 else
-                    q_min = rmin(q_min, q)
-                    q_max = rmax(q_max, q)
+                    q_min = min(q_min, q)
+                    q_max = max(q_max, q)
                 end
             end
         end
@@ -107,7 +111,8 @@ function compute_neighbor_bounds_local_kernel!(
     tidx = thread_index()
     @inbounds if valid_range(tidx, prod(n))
         (v, h) = kernel_indexes(tidx, n).I
-        (; q_bounds, q_bounds_nbr, ghost_buffer, rtol) = limiter
+        (; q_bounds_nbr, ghost_buffer, rtol) = limiter
+        q_bounds = Base.broadcastable(limiter.q_bounds)
         slab_q_bounds = slab(q_bounds, v, h)
         q_min = slab_q_bounds[slab_index(1)]
         q_max = slab_q_bounds[slab_index(2)]
@@ -115,8 +120,8 @@ function compute_neighbor_bounds_local_kernel!(
             local_neighbor_elem_offset[h]:(local_neighbor_elem_offset[h + 1] - 1)
             h_nbr = local_neighbor_elem[lne]
             slab_q_bounds = slab(q_bounds, v, h_nbr)
-            q_min = rmin(q_min, slab_q_bounds[slab_index(1)])
-            q_max = rmax(q_max, slab_q_bounds[slab_index(2)])
+            q_min = min(q_min, slab_q_bounds[slab_index(1)])
+            q_max = max(q_max, slab_q_bounds[slab_index(2)])
         end
         slab_q_bounds_nbr = slab(q_bounds_nbr, v, h)
         slab_q_bounds_nbr[slab_index(1)] = q_min

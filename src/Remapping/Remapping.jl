@@ -19,8 +19,6 @@ import ..DataLayouts,
 import ClimaCore.Utilities: half
 import ClimaCore.Spaces: cuda_synchronize
 
-using ..RecursiveApply
-
 include("remapping_utils.jl")
 include("interpolate_array.jl")
 include("distributed_remapping.jl")
