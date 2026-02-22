@@ -94,10 +94,21 @@ From here, one can investigate where the most important allocations are coming f
    - Another example: defining a new variable `a = c .+ b`. Here, `a` is a newly allocated variable. It could be put into a cache and computed in-place via `a .= c .+ b`, which is non-allocating for Julia-native types (e.g., Arrays).
  - Type instabilities. Sometimes type-instabilities can trigger the compiler to perform runtime inference, which results in allocations. So, fixing type instabilities is one way to fix / remove allocations.
 
+## Geometry traits for broadcast
+
+Broadcasted field operations default to using minimal local geometry data to reduce memory traffic. If a broadcasted function needs full metric tensors, declare it with the geometry requirement trait:
+
+```julia
+import ClimaCore.Geometry: geometry_requirement, NeedsFull
+
+geometry_requirement(::typeof(my_metric_op)) = NeedsFull()
+```
+
+When unsure, start with `NeedsFull()` and relax later after validation.
+
 ## References
 
  - General julia-specific [performance tips](https://docs.julialang.org/en/v1/manual/performance-tips/)
  - [Code-coverage while tracking allocations](https://github.com/JuliaCI/Coverage.jl#code-coverage)
 
  - CliMA's [ReportMetrics.jl](https://github.com/CliMA/ReportMetrics.jl)
-

@@ -74,6 +74,7 @@ _first_data_layout(data::DataLayouts.VF) = data[CartesianIndex(1, 1, 1, 1, 1)]
 _first_data_layout(data::DataLayouts.DataF) = data[]
 _first(bc, x::Real) = x
 _first(bc, x::Geometry.LocalGeometry) = x
+_first(bc, x::Geometry.MinimalGeometry) = x
 _first(bc, data::DataLayouts.VF) = data[]
 _first(bc, field::Field) =
     _first_data_layout(field_values(column(field, 1, 1, 1)))
@@ -231,6 +232,7 @@ Base.similar(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle},
     mask = get_mask(axes(dest)),
 )
+    bc = _maybe_minimize_geometry(bc)
     copyto!(field_values(dest), Base.Broadcast.instantiate(todata(bc)), mask)
     return dest
 end
@@ -241,7 +243,8 @@ function Base.copyto!(
 ) where {N, T <: NTuple{N, Pair{<:Field, <:Any}}}
     fmb_data = FusedMultiBroadcast(
         map(fmbc.pairs) do pair
-            bc = Base.Broadcast.instantiate(todata(pair.second))
+            bc = _maybe_minimize_geometry(pair.second)
+            bc = Base.Broadcast.instantiate(todata(bc))
             Pair(field_values(pair.first), bc)
         end,
     )
@@ -387,6 +390,63 @@ Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(muladd), args...) =
 
 Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(zero), arg) =
     Base.Broadcast.broadcasted(fs, RecursiveApply.rzero, arg)
+
+Geometry.geometry_requirement(bc::DataLayouts.NonExtrudedBroadcasted) =
+    Geometry.geometry_requirement(DataLayouts.to_broadcasted(bc))
+
+@inline function _maybe_minimize_geometry(bc::Base.AbstractBroadcasted)
+    req = Geometry.geometry_requirement(bc)
+    if req isa Geometry.NeedsMinimal
+        return _replace_local_geometry(bc)
+    end
+    return bc
+end
+
+@inline _maybe_minimize_geometry(x) = x
+
+@inline function _replace_local_geometry(
+    bc::Base.Broadcast.Broadcasted{Style},
+) where {Style}
+    if bc.f === Geometry.minimal
+        return bc
+    end
+    args = _replace_local_geometry_args(bc.args)
+    return Base.Broadcast.Broadcasted{Style}(bc.f, args, bc.axes)
+end
+
+@inline function _replace_local_geometry(
+    bc::DataLayouts.NonExtrudedBroadcasted{Style},
+) where {Style}
+    if bc.f === Geometry.minimal
+        return bc
+    end
+    args = _replace_local_geometry_args(bc.args)
+    return DataLayouts.NonExtrudedBroadcasted{Style}(bc.f, args, bc.axes)
+end
+
+@inline function _replace_local_geometry_args(args::Tuple)
+    unrolled_map(args) do arg
+        _replace_local_geometry_arg(arg)
+    end
+end
+
+@inline function _replace_local_geometry_arg(arg::Field)
+    if eltype(arg) <: Geometry.MinimalGeometry
+        return arg
+    end
+    if eltype(arg) <: Geometry.LocalGeometry
+        return Fields.minimal_local_geometry_field(axes(arg))
+    end
+    return arg
+end
+
+@inline _replace_local_geometry_arg(arg::Base.Broadcast.Broadcasted) =
+    _replace_local_geometry(arg)
+
+@inline _replace_local_geometry_arg(arg::DataLayouts.NonExtrudedBroadcasted) =
+    _replace_local_geometry(arg)
+
+@inline _replace_local_geometry_arg(arg) = arg
 
 # Specialize handling of vector-based functions to automatically add LocalGeometry information
 function Base.Broadcast.broadcasted(

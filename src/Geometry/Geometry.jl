@@ -14,6 +14,8 @@ export Covariant1Vector, Covariant2Vector, Covariant3Vector,
 export Contravariant1Vector, Contravariant2Vector, Contravariant3Vector,
     Contravariant12Vector, Contravariant13Vector, Contravariant23Vector,
     Contravariant123Vector
+export GeometryRequirement, NeedsMinimal, NeedsMetric, NeedsFull
+export geometry_requirement
 
 
 
@@ -21,6 +23,7 @@ include("coordinates.jl")
 include("axistensors.jl")
 include("localgeometry.jl")
 include("conversions.jl")
+include("traits.jl")
 include("globalgeometry.jl")
 include("rmul_with_projection.jl")
 

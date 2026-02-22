@@ -4,11 +4,18 @@ isapproxsymmetric(A::AbstractMatrix{T}; rtol = 10 * eps(T)) where {T} =
     Base.isapprox(A, A'; rtol)
 
 """
+    AbstractLocalGeometry
+
+Abstract supertype for local geometry data.
+"""
+abstract type AbstractLocalGeometry{FT} end
+
+"""
     LocalGeometry
 
 The necessary local metric information defined at each node.
 """
-struct LocalGeometry{I, C <: AbstractPoint, FT, ∂x∂ξT, ∂ξ∂xT, gⁱʲT, gᵢⱼT}
+struct LocalGeometry{I, C <: AbstractPoint, FT, ∂x∂ξT, ∂ξ∂xT, gⁱʲT, gᵢⱼT} <: AbstractLocalGeometry{FT}
     "Coordinates of the current point"
     coordinates::C
     "Jacobian determinant of the transformation `ξ` to `x`"
@@ -25,6 +32,22 @@ struct LocalGeometry{I, C <: AbstractPoint, FT, ∂x∂ξT, ∂ξ∂xT, gⁱʲT,
     gⁱʲ::gⁱʲT #::Axis2Tensor{FT, Tuple{ContravariantAxis{I}, ContravariantAxis{I}}, S}
     "Covariant metric tensor (gᵢⱼ), transforms contravariant to covariant vector components"
     gᵢⱼ::gᵢⱼT #::Axis2Tensor{FT, Tuple{CovariantAxis{I}, CovariantAxis{I}}, S}
+end
+
+"""
+    MinimalGeometry
+
+The minimal local metric information commonly needed for pointwise operations.
+"""
+struct MinimalGeometry{C <: AbstractPoint, FT} <: AbstractLocalGeometry{FT}
+    "Coordinates of the current point"
+    coordinates::C
+    "Jacobian determinant of the transformation `ξ` to `x`"
+    J::FT
+    "Metric terms: `J` multiplied by the quadrature weights"
+    WJ::FT
+    "inverse Jacobian"
+    invJ::FT
 end
 
 const FullLocalGeometry{I, C, FT, S} = LocalGeometry{
@@ -49,6 +72,9 @@ const FullLocalGeometry{I, C, FT, S} = LocalGeometry{
     isapproxsymmetric(components(gᵢⱼ)) || error("gᵢⱼ is not symmetric.")
     return FullLocalGeometry{I, C, FT, S}(coordinates, J, WJ, Jinv, ∂x∂ξ, ∂ξ∂x, gⁱʲ, gᵢⱼ)
 end
+
+@inline minimal(lg::LocalGeometry) =
+    MinimalGeometry(lg.coordinates, lg.J, lg.WJ, lg.invJ)
 
 
 """
@@ -77,6 +103,7 @@ struct CoordinateOnlyGeometry{C <: AbstractPoint}
 end
 
 undertype(::Type{<:LocalGeometry{I, C, FT}}) where {I, C, FT} = FT
+undertype(::Type{<:MinimalGeometry{C, FT}}) where {C, FT} = FT
 undertype(::Type{SurfaceGeometry{FT, N}}) where {FT, N} = FT
 undertype(::Type{<:CoordinateOnlyGeometry{C}}) where {C} = eltype(C)
 
