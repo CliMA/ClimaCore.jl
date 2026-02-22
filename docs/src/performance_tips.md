@@ -96,15 +96,38 @@ From here, one can investigate where the most important allocations are coming f
 
 ## Geometry traits for broadcast
 
-Broadcasted field operations default to using minimal local geometry data to reduce memory traffic. If a broadcasted function needs full metric tensors, declare it with the geometry requirement trait:
+Broadcasted field operations can be optimized to use minimal local geometry data
+(coordinates, J, WJ, invJ) instead of the full LocalGeometry structure, reducing
+memory traffic on GPUs.
+
+**By default, operations use full geometry** (conservative approach). To opt into
+the optimization for operations that don't need metric tensors or coordinate
+transformations, declare:
 
 ```julia
-import ClimaCore.Geometry: geometry_requirement, NeedsFull
+import ClimaCore.Geometry: geometry_requirement, NeedsMinimal
 
-geometry_requirement(::typeof(my_metric_op)) = NeedsFull()
+geometry_requirement(::typeof(simple_arithmetic_op)) = NeedsMinimal()
 ```
 
-When unsure, start with `NeedsFull()` and relax later after validation.
+### When to use NeedsMinimal
+
+Use `NeedsMinimal()` only for operations that:
+- Perform simple arithmetic on field values
+- Only need point coordinates (e.g., for height-dependent formulas)
+- Don't perform vector coordinate transformations
+
+### When to keep default (NeedsFull)
+
+Keep the default for operations that:
+- Convert between coordinate systems (Covariant ↔ Contravariant ↔ Local)
+- Compute norms, cross products, or projections
+- Use metric tensors (∂x∂ξ, ∂ξ∂x, gⁱʲ)
+
+### Incremental optimization approach
+
+Start with the default (`NeedsFull`) and incrementally mark safe operations as
+`NeedsMinimal()` after validating correctness and measuring performance gains.
 
 ## References
 
