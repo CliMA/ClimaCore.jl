@@ -15,6 +15,10 @@ struct NeedsFull <: GeometryRequirement end
 # Default to full geometry (conservative)
 geometry_requirement(::Any) = NeedsFull()
 
+# Argument-level requirement: non-broadcasted values don't add geometry needs.
+geometry_requirement_arg(::Any) = NeedsMinimal()
+geometry_requirement_arg(arg::Base.AbstractBroadcasted) = geometry_requirement(arg)
+
 # Basic arithmetic operations only need minimal geometry
 # These operations don't involve coordinate transformations
 geometry_requirement(::typeof(+)) = NeedsMinimal()
@@ -69,7 +73,7 @@ max_requirement(::NeedsMinimal, ::NeedsMetric) = NeedsMetric()
 function geometry_requirement(bc::Base.Broadcast.Broadcasted)
     req = geometry_requirement(bc.f)
     for arg in bc.args
-        req = max_requirement(req, geometry_requirement(arg))
+        req = max_requirement(req, geometry_requirement_arg(arg))
     end
     return req
 end
