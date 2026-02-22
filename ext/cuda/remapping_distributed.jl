@@ -2,7 +2,280 @@ import ClimaCore: Topologies, Spaces, Fields
 import ClimaComms
 import CUDA
 using CUDA: @cuda
-import ClimaCore.Remapping: _set_interpolated_values_device!
+import ClimaCore.Remapping: _set_interpolated_values_device!, bilinear, linear
+
+function ClimaCore.Remapping._set_interpolated_values_bilinear!(
+    out::CUDA.CuArray,
+    fields::AbstractArray{<:Fields.Field},
+    scratch_corners,
+    local_horiz_indices,
+    vert_interpolation_weights::AbstractArray,
+    vert_bounding_indices::AbstractArray,
+    local_bilinear_s,
+    ::Nothing,
+    local_bilinear_i,
+    ::Nothing,
+)
+    field_values = tuple(map(f -> Fields.field_values(f), fields)...)
+    num_horiz = length(local_horiz_indices)
+    num_vert = length(vert_bounding_indices)
+    num_fields = length(field_values)
+    nitems = length(out)
+    args = (
+        out,
+        local_horiz_indices,
+        local_bilinear_s,
+        local_bilinear_i,
+        vert_interpolation_weights,
+        vert_bounding_indices,
+        field_values,
+    )
+    threads = threads_via_occupancy(set_interpolated_values_linear_2d_kernel!, args)
+    p = linear_partition(nitems, threads)
+    auto_launch!(
+        set_interpolated_values_linear_2d_kernel!,
+        args;
+        threads_s = (p.threads,),
+        blocks_s = (p.blocks,),
+    )
+end
+
+function set_interpolated_values_linear_2d_kernel!(
+    out,
+    local_horiz_indices,
+    local_bilinear_s,
+    local_bilinear_i,
+    vert_interpolation_weights,
+    vert_bounding_indices,
+    field_values,
+)
+    num_horiz = length(local_horiz_indices)
+    num_vert = length(vert_bounding_indices)
+    num_fields = length(field_values)
+    inds = (num_horiz, num_vert, num_fields)
+    i_thread = thread_index()
+    1 ≤ i_thread ≤ prod(inds) || return nothing
+    (i_out, j_v, k) = CartesianIndices(map(x -> Base.OneTo(x), inds))[i_thread].I
+    @inbounds begin
+        CI = CartesianIndex
+        h = local_horiz_indices[i_out]
+        v_lo, v_hi = vert_bounding_indices[j_v]
+        A, B = vert_interpolation_weights[j_v]
+        s, ii = local_bilinear_s[i_out], local_bilinear_i[i_out]
+        fvals = field_values[k]
+        out[i_out, j_v, k] =
+            A * linear(fvals[CI(ii, 1, 1, v_lo, h)], fvals[CI(ii + 1, 1, 1, v_lo, h)], s) +
+            B * linear(fvals[CI(ii, 1, 1, v_hi, h)], fvals[CI(ii + 1, 1, 1, v_hi, h)], s)
+    end
+    return nothing
+end
+
+function ClimaCore.Remapping._set_interpolated_values_bilinear!(
+    out::CUDA.CuArray,
+    fields::AbstractArray{<:Fields.Field},
+    scratch_corners,
+    local_horiz_indices,
+    vert_interpolation_weights::AbstractArray,
+    vert_bounding_indices::AbstractArray,
+    local_bilinear_s,
+    local_bilinear_t,
+    local_bilinear_i,
+    local_bilinear_j,
+)
+    field_values = tuple(map(f -> Fields.field_values(f), fields)...)
+    num_horiz = length(local_horiz_indices)
+    num_vert = length(vert_bounding_indices)
+    num_fields = length(field_values)
+    nitems = length(out)
+    args = (
+        out,
+        local_horiz_indices,
+        local_bilinear_s,
+        local_bilinear_t,
+        local_bilinear_i,
+        local_bilinear_j,
+        vert_interpolation_weights,
+        vert_bounding_indices,
+        field_values,
+    )
+    threads = threads_via_occupancy(set_interpolated_values_bilinear_3d_kernel!, args)
+    p = linear_partition(nitems, threads)
+    auto_launch!(
+        set_interpolated_values_bilinear_3d_kernel!,
+        args;
+        threads_s = (p.threads,),
+        blocks_s = (p.blocks,),
+    )
+end
+
+function set_interpolated_values_bilinear_3d_kernel!(
+    out,
+    local_horiz_indices,
+    local_bilinear_s,
+    local_bilinear_t,
+    local_bilinear_i,
+    local_bilinear_j,
+    vert_interpolation_weights,
+    vert_bounding_indices,
+    field_values,
+)
+    num_horiz = length(local_horiz_indices)
+    num_vert = length(vert_bounding_indices)
+    num_fields = length(field_values)
+    inds = (num_horiz, num_vert, num_fields)
+    i_thread = thread_index()
+    1 ≤ i_thread ≤ prod(inds) || return nothing
+    (i_out, j_v, k) = CartesianIndices(map(x -> Base.OneTo(x), inds))[i_thread].I
+    @inbounds begin
+        CI = CartesianIndex
+        h = local_horiz_indices[i_out]
+        v_lo, v_hi = vert_bounding_indices[j_v]
+        A, B = vert_interpolation_weights[j_v]
+        s = local_bilinear_s[i_out]
+        t = local_bilinear_t[i_out]
+        ii = local_bilinear_i[i_out]
+        jj = local_bilinear_j[i_out]
+        fvals = field_values[k]
+        # Horizontal bilinear at v_lo (level by level), then at v_hi, then vertical blend
+        c11_lo = fvals[CI(ii, jj, 1, v_lo, h)]
+        c21_lo = fvals[CI(ii + 1, jj, 1, v_lo, h)]
+        c22_lo = fvals[CI(ii + 1, jj + 1, 1, v_lo, h)]
+        c12_lo = fvals[CI(ii, jj + 1, 1, v_lo, h)]
+        f_lo = bilinear(c11_lo, c21_lo, c22_lo, c12_lo, s, t)
+        c11_hi = fvals[CI(ii, jj, 1, v_hi, h)]
+        c21_hi = fvals[CI(ii + 1, jj, 1, v_hi, h)]
+        c22_hi = fvals[CI(ii + 1, jj + 1, 1, v_hi, h)]
+        c12_hi = fvals[CI(ii, jj + 1, 1, v_hi, h)]
+        f_hi = bilinear(c11_hi, c21_hi, c22_hi, c12_hi, s, t)
+        out[i_out, j_v, k] = A * f_lo + B * f_hi
+    end
+    return nothing
+end
+
+# 1D linear: horizontal-only.
+function ClimaCore.Remapping._set_interpolated_values_bilinear!(
+    out::CUDA.CuArray,
+    fields::AbstractArray{<:Fields.Field},
+    scratch_corners,
+    local_horiz_indices,
+    ::Nothing,
+    ::Nothing,
+    local_bilinear_s,
+    ::Nothing,
+    local_bilinear_i,
+    ::Nothing,
+)
+    field_values = tuple(map(f -> Fields.field_values(f), fields)...)
+    num_horiz = length(local_horiz_indices)
+    num_fields = length(field_values)
+    nitems = length(out)
+    args = (
+        out,
+        local_horiz_indices,
+        local_bilinear_s,
+        local_bilinear_i,
+        field_values,
+    )
+    threads = threads_via_occupancy(set_interpolated_values_linear_1d_kernel!, args)
+    p = linear_partition(nitems, threads)
+    auto_launch!(
+        set_interpolated_values_linear_1d_kernel!,
+        args;
+        threads_s = (p.threads,),
+        blocks_s = (p.blocks,),
+    )
+end
+
+function set_interpolated_values_linear_1d_kernel!(
+    out,
+    local_horiz_indices,
+    local_bilinear_s,
+    local_bilinear_i,
+    field_values,
+)
+    num_horiz = length(local_horiz_indices)
+    num_fields = length(field_values)
+    inds = (num_horiz, num_fields)
+    i_thread = thread_index()
+    1 ≤ i_thread ≤ prod(inds) || return nothing
+    (i_out, k) = CartesianIndices(map(x -> Base.OneTo(x), inds))[i_thread].I
+    @inbounds begin
+        CI = CartesianIndex
+        h, s, ii =
+            local_horiz_indices[i_out], local_bilinear_s[i_out], local_bilinear_i[i_out]
+        fvals = field_values[k]
+        out[i_out, k] = linear(fvals[CI(ii, 1, 1, 1, h)], fvals[CI(ii + 1, 1, 1, 1, h)], s)
+    end
+    return nothing
+end
+
+function ClimaCore.Remapping._set_interpolated_values_bilinear!(
+    out::CUDA.CuArray,
+    fields::AbstractArray{<:Fields.Field},
+    scratch_corners,
+    local_horiz_indices,
+    ::Nothing,
+    ::Nothing,
+    local_bilinear_s,
+    local_bilinear_t,
+    local_bilinear_i,
+    local_bilinear_j,
+)
+    field_values = tuple(map(f -> Fields.field_values(f), fields)...)
+    num_horiz = length(local_horiz_indices)
+    num_fields = length(field_values)
+    nitems = length(out)
+    args = (
+        out,
+        local_horiz_indices,
+        local_bilinear_s,
+        local_bilinear_t,
+        local_bilinear_i,
+        local_bilinear_j,
+        field_values,
+    )
+    threads = threads_via_occupancy(set_interpolated_values_bilinear_2d_kernel!, args)
+    p = linear_partition(nitems, threads)
+    auto_launch!(
+        set_interpolated_values_bilinear_2d_kernel!,
+        args;
+        threads_s = (p.threads,),
+        blocks_s = (p.blocks,),
+    )
+end
+
+function set_interpolated_values_bilinear_2d_kernel!(
+    out,
+    local_horiz_indices,
+    local_bilinear_s,
+    local_bilinear_t,
+    local_bilinear_i,
+    local_bilinear_j,
+    field_values,
+)
+    num_horiz = length(local_horiz_indices)
+    num_fields = length(field_values)
+    inds = (num_horiz, num_fields)
+    i_thread = thread_index()
+    1 ≤ i_thread ≤ prod(inds) || return nothing
+    (i_out, k) = CartesianIndices(map(x -> Base.OneTo(x), inds))[i_thread].I
+    @inbounds begin
+        CI = CartesianIndex
+        h = local_horiz_indices[i_out]
+        s = local_bilinear_s[i_out]
+        t = local_bilinear_t[i_out]
+        ii = local_bilinear_i[i_out]
+        jj = local_bilinear_j[i_out]
+        fvals = field_values[k]
+        # Four nodes of 2-point cell: (ii,jj), (ii+1,jj), (ii+1,jj+1), (ii,jj+1)
+        c11 = fvals[CI(ii, jj, 1, 1, h)]
+        c21 = fvals[CI(ii + 1, jj, 1, 1, h)]
+        c22 = fvals[CI(ii + 1, jj + 1, 1, 1, h)]
+        c12 = fvals[CI(ii, jj + 1, 1, 1, h)]
+        out[i_out, k] = bilinear(c11, c21, c22, c12, s, t)
+    end
+    return nothing
+end
 
 
 function _set_interpolated_values_device!(
@@ -68,9 +341,7 @@ function set_interpolated_values_kernel!(
     num_fields = length(field_values)
 
     @inbounds begin
-        i_thread =
-            (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x +
-            CUDA.threadIdx().x
+        i_thread = thread_index()
         inds = (num_vert, num_horiz, num_fields)
 
         1 ≤ i_thread ≤ prod(inds) || return nothing
@@ -113,9 +384,7 @@ function set_interpolated_values_kernel!(
     num_fields = length(field_values)
 
     @inbounds begin
-        i_thread =
-            (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x +
-            CUDA.threadIdx().x
+        i_thread = thread_index()
         inds = (num_vert, num_horiz, num_fields)
 
         1 ≤ i_thread ≤ prod(inds) || return nothing
@@ -154,9 +423,7 @@ function set_interpolated_values_kernel!(
     num_vert = length(vert_bounding_indices)
 
     @inbounds begin
-        i_thread =
-            (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x +
-            CUDA.threadIdx().x
+        i_thread = thread_index()
         inds = (num_vert, num_fields)
 
         1 ≤ i_thread ≤ prod(inds) || return nothing
@@ -227,9 +494,7 @@ function set_interpolated_values_kernel!(
     num_fields = length(field_values)
 
     @inbounds begin
-        i_thread =
-            (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x +
-            CUDA.threadIdx().x
+        i_thread = thread_index()
         inds = (num_horiz, num_fields)
 
         1 ≤ i_thread ≤ prod(inds) || return nothing
@@ -261,9 +526,7 @@ function set_interpolated_values_kernel!(
     num_fields = length(field_values)
 
     @inbounds begin
-        i_thread =
-            (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x +
-            CUDA.threadIdx().x
+        i_thread = thread_index()
         inds = (num_horiz, num_fields)
 
         1 ≤ i_thread ≤ prod(inds) || return nothing
