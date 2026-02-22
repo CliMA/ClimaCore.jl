@@ -15,6 +15,41 @@ struct NeedsFull <: GeometryRequirement end
 # Default to full geometry (conservative)
 geometry_requirement(::Any) = NeedsFull()
 
+# Basic arithmetic operations only need minimal geometry
+# These operations don't involve coordinate transformations
+geometry_requirement(::typeof(+)) = NeedsMinimal()
+geometry_requirement(::typeof(-)) = NeedsMinimal()
+geometry_requirement(::typeof(*)) = NeedsMinimal()
+geometry_requirement(::typeof(/)) = NeedsMinimal()
+geometry_requirement(::typeof(^)) = NeedsMinimal()
+
+# Common math functions
+import Base: abs, sqrt, exp, log, sin, cos, max, min
+geometry_requirement(::typeof(abs)) = NeedsMinimal()
+geometry_requirement(::typeof(sqrt)) = NeedsMinimal()
+geometry_requirement(::typeof(exp)) = NeedsMinimal()
+geometry_requirement(::typeof(log)) = NeedsMinimal()
+geometry_requirement(::typeof(sin)) = NeedsMinimal()
+geometry_requirement(::typeof(cos)) = NeedsMinimal()
+geometry_requirement(::typeof(max)) = NeedsMinimal()
+geometry_requirement(::typeof(min)) = NeedsMinimal()
+
+# Comparison operators  
+geometry_requirement(::typeof(<)) = NeedsMinimal()
+geometry_requirement(::typeof(>)) = NeedsMinimal()
+geometry_requirement(::typeof(<=)) = NeedsMinimal()
+geometry_requirement(::typeof(>=)) = NeedsMinimal()
+geometry_requirement(::typeof(==)) = NeedsMinimal()
+
+# RecursiveApply operations (used extensively in broadcasts)
+import ..RecursiveApply: rmul, radd, rsub, rdiv
+geometry_requirement(::typeof(RecursiveApply.rmul)) = NeedsMinimal()
+geometry_requirement(::typeof(RecursiveApply.radd)) = NeedsMinimal()
+geometry_requirement(::typeof(RecursiveApply.rsub)) = NeedsMinimal()
+geometry_requirement(::typeof(RecursiveApply.rdiv)) = NeedsMinimal()
+geometry_requirement(::typeof(RecursiveApply.rzero)) = NeedsMinimal()
+geometry_requirement(::typeof(RecursiveApply.rmap)) = NeedsMinimal()
+
 # Max requirement hierarchy: Full > Metric > Minimal
 # Same types return themselves
 max_requirement(::NeedsFull, ::NeedsFull) = NeedsFull()
