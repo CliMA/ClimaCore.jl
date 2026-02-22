@@ -397,6 +397,30 @@ Geometry.geometry_requirement(bc::DataLayouts.NonExtrudedBroadcasted) =
 @inline _log_minimal_geometry_enabled() =
     get(ENV, "CLIMA_LOG_MIN_GEOM", "0") == "1"
 
+@inline _min_geom_log_limit() =
+    try
+        parse(Int, get(ENV, "CLIMA_LOG_MIN_GEOM_LIMIT", "5"))
+    catch
+        5
+    end
+
+const _min_geom_log_count = Ref(0)
+
+function _log_min_geom_replacement(field::Field)
+    if !_log_minimal_geometry_enabled()
+        return
+    end
+    limit = _min_geom_log_limit()
+    if limit <= 0
+        return
+    end
+    count = _min_geom_log_count[]
+    if count < limit
+        _min_geom_log_count[] = count + 1
+        @info "Replacing LocalGeometry with MinimalGeometry" field_eltype = eltype(field) axes = typeof(axes(field))
+    end
+end
+
 function _has_local_geometry_arg(arg)
     return false
 end
@@ -461,6 +485,7 @@ end
         return arg
     end
     if eltype(arg) <: Geometry.LocalGeometry
+        _log_min_geom_replacement(arg)
         return Fields.minimal_local_geometry_field(axes(arg))
     end
     return arg
