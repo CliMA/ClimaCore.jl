@@ -394,9 +394,35 @@ Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(zero), arg) =
 Geometry.geometry_requirement(bc::DataLayouts.NonExtrudedBroadcasted) =
     Geometry.geometry_requirement(DataLayouts.to_broadcasted(bc))
 
+@inline _log_minimal_geometry_enabled() =
+    get(ENV, "CLIMA_LOG_MIN_GEOM", "0") == "1"
+
+function _has_local_geometry_arg(arg)
+    return false
+end
+
+function _has_local_geometry_arg(arg::Field)
+    return eltype(arg) <: Geometry.LocalGeometry
+end
+
+function _has_local_geometry_arg(arg::Base.Broadcast.Broadcasted)
+    return _has_local_geometry_args(arg.args)
+end
+
+function _has_local_geometry_arg(arg::DataLayouts.NonExtrudedBroadcasted)
+    return _has_local_geometry_args(arg.args)
+end
+
+function _has_local_geometry_args(args::Tuple)
+    return any(_has_local_geometry_arg, args)
+end
+
 @inline function _maybe_minimize_geometry(bc::Base.AbstractBroadcasted)
     req = Geometry.geometry_requirement(bc)
     if req isa Geometry.NeedsMinimal
+        if _log_minimal_geometry_enabled() && _has_local_geometry_args(bc.args)
+            @info "Using MinimalGeometry for broadcast" f = bc.f
+        end
         return _replace_local_geometry(bc)
     end
     return bc
