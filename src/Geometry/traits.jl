@@ -38,7 +38,7 @@ geometry_requirement(::typeof(cos)) = NeedsMinimal()
 geometry_requirement(::typeof(max)) = NeedsMinimal()
 geometry_requirement(::typeof(min)) = NeedsMinimal()
 
-# Comparison operators  
+# Comparison operators
 geometry_requirement(::typeof(<)) = NeedsMinimal()
 geometry_requirement(::typeof(>)) = NeedsMinimal()
 geometry_requirement(::typeof(<=)) = NeedsMinimal()
