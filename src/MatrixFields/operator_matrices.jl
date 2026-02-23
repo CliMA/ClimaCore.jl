@@ -147,6 +147,27 @@ function Base.Broadcast.broadcasted(
     end
 end
 
+# function Base.Broadcast.broadcasted(
+#     ::Style,
+#     op::Op,
+#     args...,
+# ) where {Style <: Operators.AbstractStencilStyle,  Op <: TwoArgFDOperator}
+#      if !has_affine_bc(op) && !needs_composition(op, args)
+#         opmat = Base.Broadcast.broadcasted(
+#             FDOperatorMatrix(op),
+#             Fields.local_geometry_field(operator_input_space(op, axes(args[end]))),
+#         )
+
+#         new_args = (opmat, args...)
+#         newop = MultiplyColumnwiseBandMatrixField()
+#         return Operators.StencilBroadcasted{Style}(newop, new_args)
+#     else
+#         FT = Spaces.undertype(axes(Operators.StencilBroadcasted{Style}(op, args)))
+#         newargs = unrolled_map(arg -> revert_op(arg), args)
+#         Operators.StencilBroadcasted{Style}( Operators.promote_bcs(op, FT), newargs)
+#     end
+# end
+
 ################################################################################
 
 struct FDOperatorMatrix{O <: Operators.FiniteDifferenceOperator} <:

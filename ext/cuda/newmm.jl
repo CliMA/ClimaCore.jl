@@ -30,7 +30,6 @@ function new_stencil_entry!(out, bc::BC, space,) where {BC}
     hidx = (i, j, h)
     val = calc_level_val(bc, space)
     if space.staggering isa ClimaCore.Grids.CellFace
-        # v == 1 && hidx == (1, 1, 1) && @cushow typeof(val)
         setidx!(space, out,  v - half, hidx, val)
     else
         v != 64 && setidx!(space, out,  v , hidx, val)
@@ -45,7 +44,6 @@ end
     h = blockIdx().z
     resolved_args = @inbounds UnrolledUtilities.unrolled_map(bc.args) do arg
         if typeof(arg) <: Union{Broadcasted, StencilBroadcasted, ClimaCore.Fields.Field}
-            # return calc_level_val(arg, space)
             if space isa ClimaCore.Spaces.AbstractSpace
                 arg_space = ClimaCore.Operators.reconstruct_placeholder_space(axes(arg), space)
                 @inbounds calc_level_val(arg, arg_space)
@@ -63,8 +61,6 @@ end
     if space isa ClimaCore.Spaces.AbstractSpace && space.staggering isa ClimaCore.Spaces.CellCenter
         v == 64 && return ClimaCore.RecursiveApply.rzero(eltype(bc))
     end
-    # v ==1 && h == 1 && i ==1 && j ==1 && @cushow typeof(resolved_args)
-    # return rzero(eltype(bc))
     return @inbounds bc.f(resolved_args...)
 end
 
@@ -76,8 +72,7 @@ not_twoarg(arg) = !(arg isa ClimaCore.Operators.StencilBroadcasted && typeof(arg
     v = threadIdx().x
     h = blockIdx().z
     hidx = (i, j, h)
-    if false #&& bc.op isa ClimaCore.MatrixFields.OneArgFDOperator && !(ClimaCore.MatrixFields.has_affine_bc(bc.op))
-        # return rzero(eltype(bc))
+    if false
         mat1_row = get_op_row(bc.op, (), space)
         CUDA.sync_warp()
         arg = bc.args[1]
@@ -95,7 +90,7 @@ not_twoarg(arg) = !(arg isa ClimaCore.Operators.StencilBroadcasted && typeof(arg
         
         mat2_row_converted = project_row2_for_mul(mat1_row, mat2_row, arg_space)
         CUDA.sync_threads()
-        mat2 = CUDA.CuDynamicSharedArray(typeof(mat2_row_converted), 64)
+        mat2 = CUDA.CuStaticSharedArray(typeof(mat2_row_converted), 64)
         @inbounds mat2[v] = mat2_row_converted
         CUDA.sync_threads()
         space isa ClimaCore.Spaces.CellCenter && v == 64 && return rzero(eltype(bc))
@@ -104,7 +99,6 @@ not_twoarg(arg) = !(arg isa ClimaCore.Operators.StencilBroadcasted && typeof(arg
         # then dump in shmem
         # then matbec mul
     elseif bc.op isa ClimaCore.MatrixFields.MultiplyColumnwiseBandMatrixField && not_twoarg(bc.args[1]) && not_twoarg(bc.args[2])
-        # kk = bc.args[1] isa ClimaCore.Operators.StencilBroadcasted && typeof(bc.args[1].op) <: ClimaCore.MatrixFields.FDOperatorMatrix && bc.args[1].op.op isa ClimaCore.MatrixFields.TwoArgFDOperator
         mat1_space =  ClimaCore.Operators.reconstruct_placeholder_space(axes(bc.args[1]), space)
 
         mat2_space =  ClimaCore.Operators.reconstruct_placeholder_space(axes(bc.args[2]), space)
@@ -113,7 +107,7 @@ not_twoarg(arg) = !(arg isa ClimaCore.Operators.StencilBroadcasted && typeof(arg
         mat2_row = calc_level_val(bc.args[2], mat2_space)
         mat2_row_converted = project_row2_for_mul(mat1_row, mat2_row, mat2_space)
         CUDA.sync_threads()
-        mat2 = CUDA.CuDynamicSharedArray(typeof(mat2_row_converted), 64)
+        mat2 = CUDA.CuStaticSharedArray(typeof(mat2_row_converted), 64)
         @inbounds mat2[v] = mat2_row_converted
         CUDA.sync_threads()
         mat1_space.staggering isa ClimaCore.Spaces.CellCenter && v == 64 && return rzero(eltype(bc))
@@ -159,7 +153,7 @@ end
     return @inbounds data[CartesianIndex(i, j, 1, v, h)]
 end
 
-@inline calc_level_val(arg::S, space) where {S} = arg# <: Union{ClimaCore.MatrixFields.BandMatrixRow, ClimaCore.Geometry.SingleValue}} = arg
+@inline calc_level_val(arg::S, space) where {S} = arg
 
 
 
@@ -205,14 +199,13 @@ end
         raw_val =  ClimaCore.Operators.stencil_right_boundary(op_matrix, right_bndry, space, v_half, hidx, args...)
         val =  convert(row_type, raw_val)
     else
-        
         raw_val =  ClimaCore.Operators.stencil_interior(op_matrix, space, v_half, hidx, args...)
         val =  convert(row_type, raw_val)
     end
-    
     return val
 end
 
+# TODO:
 function get_two_arg_op_row(op, args, space)
     FT = ClimaCore.Spaces.undertype(space)
     i = blockIdx().x
