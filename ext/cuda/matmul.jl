@@ -19,7 +19,7 @@ using LinearAlgebra
 import UnrolledUtilities
 
 
-@inline function row_mul_mat!(::Type{P}, mat1_row, matrix2,  ::FaceToCenter, ::CenterToFace) where {P}
+Base.@propagate_inbounds function row_mul_mat!(::Type{P}, mat1_row, matrix2,  ::FaceToCenter, ::CenterToFace) where {P}
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
@@ -29,8 +29,8 @@ import UnrolledUtilities
         ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
         pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
 
-        li = 1
-        ri = 63
+        li = Int32(1)
+        ri = Int32(63)
 
         zero_entry = rzero(eltype(prod_eltype))
         prod_entries = UnrolledUtilities.unrolled_map(pd1:pd2) do pd
@@ -38,8 +38,8 @@ import UnrolledUtilities
                 zero_entry
             else
                 UnrolledUtilities.unrolled_sum( ld1:ud1) do mat1_row_d
-                    if ld2 <= pd - mat1_row_d <= ud2 && (0 <  v + mat1_row_d + half <= 64)
-                        mat1_row[mat1_row_d] * matrix2[v + mat1_row_d + half][pd - mat1_row_d]
+                    if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) <  v + mat1_row_d + half <= Int32(64))
+                        @inbounds mat1_row[mat1_row_d] * matrix2[v + mat1_row_d + half][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -50,7 +50,7 @@ import UnrolledUtilities
     end
 end
 
-@inline function row_mul_mat!(::Type{P}, mat1_row, matrix2, ::CenterToFace, ::FaceToCenter) where {P}
+Base.@propagate_inbounds function row_mul_mat!(::Type{P}, mat1_row, matrix2, ::CenterToFace, ::FaceToCenter) where {P}
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
@@ -60,8 +60,8 @@ end
         ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
         pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
 
-        li = 1
-        ri = 64
+        li = Int32(1)
+        ri = Int32(64)
 
         zero_entry = rzero(eltype(prod_eltype))
         prod_entries = UnrolledUtilities.unrolled_map(pd1:pd2) do pd
@@ -69,8 +69,8 @@ end
                 zero_entry
             else
                 UnrolledUtilities.unrolled_sum( ld1:ud1) do mat1_row_d
-                    if ld2 <= pd - mat1_row_d <= ud2 && (0 <  v + mat1_row_d - half < 64)
-                        mat1_row[mat1_row_d] * matrix2[v + mat1_row_d - half][pd - mat1_row_d]
+                    if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) <  v + mat1_row_d - half < Int32(64))
+                        @inbounds mat1_row[mat1_row_d] * matrix2[v + mat1_row_d - half][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -81,7 +81,7 @@ end
     end
 end
 
-@inline function row_mul_mat!(::Type{P}, mat1_row, matrix2, ::CenterToCenter, ::CenterToCenter) where {P}
+Base.@propagate_inbounds function row_mul_mat!(::Type{P}, mat1_row, matrix2, ::CenterToCenter, ::CenterToCenter) where {P}
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
@@ -91,8 +91,8 @@ end
         ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
         pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
 
-        li = 1
-        ri = 63
+        li = Int32(1)
+        ri = Int32(63)
 
         zero_entry = rzero(eltype(prod_eltype))
         prod_entries = UnrolledUtilities.unrolled_map(pd1:pd2) do pd
@@ -100,8 +100,8 @@ end
                 zero_entry
             else
                 UnrolledUtilities.unrolled_sum( ld1:ud1) do mat1_row_d
-                    if ld2 <= pd - mat1_row_d <= ud2 && (0 <  v + mat1_row_d  <= 63)
-                        mat1_row[mat1_row_d] * matrix2[v + mat1_row_d][pd - mat1_row_d]
+                    if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) <  v + mat1_row_d  <= Int32(63))
+                        @inbounds mat1_row[mat1_row_d] * matrix2[v + mat1_row_d][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -112,7 +112,7 @@ end
     end
 end
 
-@inline function row_mul_mat!(::Type{P}, mat1_row, matrix2, ::FaceToFace, ::FaceToFace) where {P}
+Base.@propagate_inbounds function row_mul_mat!(::Type{P}, mat1_row, matrix2, ::FaceToFace, ::FaceToFace) where {P}
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
@@ -122,8 +122,8 @@ end
         ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
         pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
 
-        li = 1
-        ri = 64
+        li = Int32(1)
+        ri = Int32(64)
 
         zero_entry = rzero(eltype(prod_eltype))
         prod_entries = UnrolledUtilities.unrolled_map(pd1:pd2) do pd
@@ -131,8 +131,8 @@ end
                 zero_entry
             else
                 UnrolledUtilities.unrolled_sum( ld1:ud1) do mat1_row_d
-                    if ld2 <= pd - mat1_row_d <= ud2 && (0 <  v + mat1_row_d  <= 64)
-                        mat1_row[mat1_row_d] * matrix2[v + mat1_row_d][pd - mat1_row_d]
+                    if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) <  v + mat1_row_d  <= Int32(64))
+                        @inbounds mat1_row[mat1_row_d] * matrix2[v + mat1_row_d][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -143,7 +143,7 @@ end
     end
 end
 
-@inline function row_mul_mat!(::Type{P}, mat1_row, matrix2, ::FaceToCenter, ::FaceToFace) where {P}
+Base.@propagate_inbounds function row_mul_mat!(::Type{P}, mat1_row, matrix2, ::FaceToCenter, ::FaceToFace) where {P}
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
@@ -153,8 +153,8 @@ end
         ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
         pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
 
-        li = 1
-        ri = 64
+        li = Int32(1)
+        ri = Int32(64)
 
         zero_entry = rzero(eltype(prod_eltype))
         prod_entries = UnrolledUtilities.unrolled_map(pd1:pd2) do pd
@@ -162,8 +162,8 @@ end
                 zero_entry
             else
                 UnrolledUtilities.unrolled_sum( ld1:ud1) do mat1_row_d
-                    if ld2 <= pd - mat1_row_d <= ud2 && (0 <  v + mat1_row_d + half  <= 64)
-                        mat1_row[mat1_row_d] * matrix2[v + mat1_row_d + half][pd - mat1_row_d]
+                    if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) <  v + mat1_row_d + half  <= Int32(64))
+                        @inbounds mat1_row[mat1_row_d] * matrix2[v + mat1_row_d + half][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -174,7 +174,7 @@ end
     end
 end
 
-@inline function row_mul_mat!(::Type{P}, mat1_row, matrix2, ::CenterToFace, ::CenterToCenter) where {P}
+Base.@propagate_inbounds function row_mul_mat!(::Type{P}, mat1_row, matrix2, ::CenterToFace, ::CenterToCenter) where {P}
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
@@ -184,8 +184,8 @@ end
         ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
         pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
 
-        li = 1
-        ri = 64
+        li = Int32(1)
+        ri = Int32(64)
 
         zero_entry = rzero(eltype(prod_eltype))
         prod_entries = UnrolledUtilities.unrolled_map(pd1:pd2) do pd
@@ -193,8 +193,8 @@ end
                 zero_entry
             else
                 UnrolledUtilities.unrolled_sum( ld1:ud1) do mat1_row_d
-                    if ld2 <= pd - mat1_row_d <= ud2 && (0 <  v + mat1_row_d - half  < 64)
-                        mat1_row[mat1_row_d] * matrix2[v + mat1_row_d - half][pd - mat1_row_d]
+                    if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) <  v + mat1_row_d - half  < Int32(64))
+                        @inbounds mat1_row[mat1_row_d] * matrix2[v + mat1_row_d - half][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -205,7 +205,7 @@ end
     end
 end
 
-@inline function row_mul_mat!(::Type{P}, mat1_row, matrix2, ::FaceToFace, ::CenterToFace) where {P}
+Base.@propagate_inbounds function row_mul_mat!(::Type{P}, mat1_row, matrix2, ::FaceToFace, ::CenterToFace) where {P}
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
@@ -215,8 +215,8 @@ end
         ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
         pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
 
-        li = 1
-        ri = 64
+        li = Int32(1)
+        ri = Int32(64)
 
         zero_entry = rzero(eltype(prod_eltype))
         prod_entries = UnrolledUtilities.unrolled_map(pd1:pd2) do pd
@@ -224,8 +224,8 @@ end
                 zero_entry
             else
                 UnrolledUtilities.unrolled_sum( ld1:ud1) do mat1_row_d
-                    if ld2 <= pd - mat1_row_d <= ud2 && (0 <  v + mat1_row_d  <= 64)
-                        mat1_row[mat1_row_d] * matrix2[v + mat1_row_d][pd - mat1_row_d]
+                    if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) <  v + mat1_row_d  <= Int32(64))
+                        @inbounds mat1_row[mat1_row_d] * matrix2[v + mat1_row_d][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -236,7 +236,7 @@ end
     end
 end
 
-@inline function row_mul_mat!(::Type{P}, mat1_row, matrix2,  ::CenterToCenter, ::FaceToCenter) where {P}
+Base.@propagate_inbounds function row_mul_mat!(::Type{P}, mat1_row, matrix2,  ::CenterToCenter, ::FaceToCenter) where {P}
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
@@ -246,8 +246,8 @@ end
         ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
         pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
 
-        li = 1
-        ri = 64
+        li = Int32(1)
+        ri = Int32(64)
 
         zero_entry = rzero(eltype(prod_eltype))
         prod_entries = UnrolledUtilities.unrolled_map(pd1:pd2) do pd
@@ -255,8 +255,8 @@ end
                 zero_entry
             else
                 UnrolledUtilities.unrolled_sum( ld1:ud1) do mat1_row_d
-                    if ld2 <= pd - mat1_row_d <= ud2 && (0 <  v + mat1_row_d  < 64)
-                        mat1_row[mat1_row_d] * matrix2[v + mat1_row_d][pd - mat1_row_d]
+                    if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) <  v + mat1_row_d  < Int32(64))
+                        @inbounds mat1_row[mat1_row_d] * matrix2[v + mat1_row_d][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -267,20 +267,20 @@ end
     end
 end
 
-@inline function row_mul_vec!(::Type{P}, mat1_row, matrix2,  ::FaceToCenter) where {P}
+Base.@propagate_inbounds function row_mul_vec!(::Type{P}, mat1_row, matrix2,  ::FaceToCenter) where {P}
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
         mat1_eltype = typeof(mat1_row)
         mat2_eltype = eltype(matrix2)
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
-        li = 1
-        ri = 63
+        li = Int32(1)
+        ri = Int32(63)
 
         zero_entry = rzero(prod_eltype)
         return UnrolledUtilities.unrolled_mapreduce(⊞, ld1:ud1; init=zero_entry) do mat1_row_d
-            if (0 <  v + mat1_row_d + half <= 64)
-                bb = mat1_row[mat1_row_d] ⊗ matrix2[v + mat1_row_d + half]
+            if (Int32(0) <  v + mat1_row_d + half <= Int32(64))
+                @inbounds bb = mat1_row[mat1_row_d] ⊗ matrix2[v + mat1_row_d + half]
             else
                 zero_entry
             end
@@ -288,21 +288,21 @@ end
     end
 end
 
-@inline function row_mul_vec!(::Type{P}, mat1_row, matrix2,  ::CenterToFace) where {P}
+Base.@propagate_inbounds function row_mul_vec!(::Type{P}, mat1_row, matrix2,  ::CenterToFace) where {P}
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
         mat1_eltype = typeof(mat1_row)
         mat2_eltype = eltype(matrix2)
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
-        li = 1
-        ri = 64
+        li = Int32(1)
+        ri = Int32(64)
 
         zero_entry = rzero(prod_eltype)
         val = zero_entry
         return UnrolledUtilities.unrolled_mapreduce(⊞, ld1:ud1; init=zero_entry) do mat1_row_d
-            if (0 <  v + mat1_row_d - half < 64)
-                    mat1_row[mat1_row_d] ⊗ matrix2[v + mat1_row_d - half]
+            if (Int32(0) <  v + mat1_row_d - half < Int32(64))
+                    @inbounds mat1_row[mat1_row_d] ⊗ matrix2[v + mat1_row_d - half]
             else
                 zero_entry
             end
@@ -310,20 +310,20 @@ end
     end
 end
 
-@inline function row_mul_vec!(::Type{P}, mat1_row, matrix2,  ::CenterToCenter) where {P}
+Base.@propagate_inbounds function row_mul_vec!(::Type{P}, mat1_row, matrix2,  ::CenterToCenter) where {P}
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
         mat1_eltype = typeof(mat1_row)
         mat2_eltype = eltype(matrix2)
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
-        li = 1
-        ri = 63
+        li = Int32(1)
+        ri = Int32(63)
 
         zero_entry = rzero(prod_eltype)
         return UnrolledUtilities.unrolled_mapreduce(⊞, ld1:ud1; init=zero_entry) do mat1_row_d
-            if (0 <  v + mat1_row_d  <= 63)
-                mat1_row[mat1_row_d] ⊗ matrix2[v + mat1_row_d]
+            if (Int32(0) <  v + mat1_row_d  <= Int32(63))
+                @inbounds mat1_row[mat1_row_d] ⊗ matrix2[v + mat1_row_d]
             else
                 zero_entry
             end
@@ -331,20 +331,20 @@ end
     end
 end
 
-@inline function row_mul_vec!(::Type{P}, mat1_row, matrix2,  ::FaceToFace) where {P}
+Base.@propagate_inbounds function row_mul_vec!(::Type{P}, mat1_row, matrix2,  ::FaceToFace) where {P}
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
         mat1_eltype = typeof(mat1_row)
         mat2_eltype = eltype(matrix2)
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
-        li = 1
-        ri = 64
+        li = Int32(1)
+        ri = Int32(64)
 
         zero_entry = rzero(prod_eltype)
         return UnrolledUtilities.unrolled_mapreduce(⊞, ld1:ud1; init=zero_entry) do mat1_row_d
-            if (0 <  v + mat1_row_d  <= 64)
-                mat1_row[mat1_row_d] ⊗ matrix2[v + mat1_row_d ]
+            if (Int32(0) <  v + mat1_row_d  <= Int32(64))
+                @inbounds mat1_row[mat1_row_d] ⊗ matrix2[v + mat1_row_d ]
             else
                 zero_entry
             end
