@@ -138,10 +138,15 @@ function Base.Broadcast.instantiate(sbc::SpectralBroadcasted)
         return Broadcast.broadcasted(Returns(zero(RT)), Fields.coordinate_field(axes))
     end
     # If we've already instantiated, then we need to strip the type parameters,
-    # for example, `Divergence{()}(axes)`.
-    op = unionall_type(typeof(op)){()}(axes)
+    # for example, `Divergence{()}(axes)`. FluxDifferencingVolume carries f̂ and
+    # parameters so we concretize without dropping them (see _concretize_operator below).
+    op = _concretize_operator(op, axes)
     Style = AbstractSpectralStyle(ClimaComms.device(axes))
     return SpectralBroadcasted{Style}(op, args, axes)
+end
+
+function _concretize_operator(op::SpectralElementOperator, axes)
+    return unionall_type(typeof(op)){()}(axes)
 end
 
 function Base.Broadcast.instantiate(
@@ -158,13 +163,13 @@ function Base.Broadcast.instantiate(
     end
     # For FiniteDifferenceSpace with operators, return zeros for horizontal operators
     if axes isa Spaces.FiniteDifferenceSpace && bc.f isa SpectralElementOperator
-        op = unionall_type(typeof(bc.f)){()}(axes)
+        op = bc.f isa FluxDifferencingVolume ? bc.f : unionall_type(typeof(bc.f)){()}(axes)
         RT = operator_return_eltype(op, map(eltype, args)...)
         return Broadcast.broadcasted(Returns(zero(RT)), Fields.coordinate_field(axes))
     end
 
     if bc.f isa SpectralElementOperator
-        op = unionall_type(typeof(bc.f)){()}(axes)
+        op = _concretize_operator(bc.f, axes)
         Style = AbstractSpectralStyle(ClimaComms.device(axes))
         return Base.Broadcast.Broadcasted{Style}(op, args, axes)
     else
@@ -817,6 +822,104 @@ function apply_operator(op::SplitDivergence{(1, 2)}, space, slabidx, arg1, arg2)
     end
 
     return Field(SArray(out), space)
+end
+
+"""
+    flux_diff_vol = FluxDifferencingVolume(f̂, parameters)
+    flux_diff_vol.(y)
+
+Volume term in split-form (flux-differencing) entropy-conservative DG. Computes
+``-div(F)`` using the two-point flux `f̂(normal, y⁻, y⁺, p⁻, p⁺)` so that the
+volume term is entropy conservative when `f̂` is entropy conservative (e.g.
+[`EntropyConservativeNumericalFlux`](@ref)). Use the same `f̂` at interfaces
+with added dissipation for entropy-stable DG.
+"""
+struct FluxDifferencingVolume{I, F, P} <: SpectralElementOperator{I}
+    f̂::F
+    parameters::P
+end
+FluxDifferencingVolume(f̂, parameters) =
+    FluxDifferencingVolume{(), typeof(f̂), typeof(parameters)}(f̂, parameters)
+
+operator_return_eltype(::FluxDifferencingVolume{I}, ::Type{S}) where {I, S} = S
+
+function _unit_normal_ref_direction(local_geometry, d)
+    M = Geometry.components(local_geometry.∂x∂ξ)
+    v = SVector(M[1, d], M[2, d])
+    n = v / LinearAlgebra.norm(v)
+    return Geometry.UVVector(n[1], n[2])
+end
+
+function apply_operator(
+    op::FluxDifferencingVolume{()},
+    space,
+    slabidx,
+    arg,
+)
+    @assert operator_axes(space) == (1, 2) "FluxDifferencingVolume is 2D only"
+    return apply_operator(
+        FluxDifferencingVolume{(1, 2)}(op.f̂, op.parameters),
+        space,
+        slabidx,
+        arg,
+    )
+end
+
+function apply_operator(
+    op::FluxDifferencingVolume{(1, 2)},
+    space,
+    slabidx,
+    arg,
+)
+    FT = Spaces.undertype(space)
+    QS = Spaces.quadrature_style(space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    D = Quadratures.differentiation_matrix(FT, QS)
+    f̂ = op.f̂
+    p = op.parameters
+    RT = operator_return_eltype(op, eltype(arg))
+    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    fill!(parent(out), zero(FT))
+
+    @inbounds for j in 1:Nq, i in 1:Nq
+        ij = CartesianIndex((i, j))
+        lg_ij = get_local_geometry(space, ij, slabidx)
+        n1 = _unit_normal_ref_direction(lg_ij, 1)
+        n2 = _unit_normal_ref_direction(lg_ij, 2)
+        y_ij = get_node(space, arg, ij, slabidx)
+
+        # direction 1: sum_k D[i,k] * F̂(y_ij, y_kj)
+        for k in 1:Nq
+            kj = CartesianIndex((k, j))
+            y_kj = get_node(space, arg, kj, slabidx)
+            F̂ = f̂(n1, (y_ij, p), (y_kj, p))
+            out[slab_index(i, j)] = out[slab_index(i, j)] ⊞ (D[i, k] ⊠ F̂)
+        end
+        # direction 2: sum_k D[j,k] * F̂(y_ij, y_ik)
+        for k in 1:Nq
+            ik = CartesianIndex((i, k))
+            y_ik = get_node(space, arg, ik, slabidx)
+            F̂ = f̂(n2, (y_ij, p), (y_ik, p))
+            out[slab_index(i, j)] = out[slab_index(i, j)] ⊞ (D[j, k] ⊠ F̂)
+        end
+    end
+
+    @inbounds for j in 1:Nq, i in 1:Nq
+        ij = CartesianIndex((i, j))
+        local_geometry = get_local_geometry(space, ij, slabidx)
+        out[slab_index(i, j)] =
+            RecursiveApply.rmul(out[slab_index(i, j)], ⊟(local_geometry.invJ))
+    end
+    return Field(SArray(out), space)
+end
+
+function _concretize_operator(op::FluxDifferencingVolume{()}, axes)
+    ax = operator_axes(axes)
+    ax == (1, 2) || error("FluxDifferencingVolume is 2D only, got axes $ax")
+    return FluxDifferencingVolume{(1, 2), typeof(op.f̂), typeof(op.parameters)}(
+        op.f̂,
+        op.parameters,
+    )
 end
 
 """

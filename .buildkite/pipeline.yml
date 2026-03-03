@@ -1696,6 +1696,18 @@ steps:
         artifact_paths:
           - "examples/bickleyjet/output/dg_roe_noslip/*"
 
+      - label: ":flower_playing_cards: Bickley jet DG rusanov (CUDA)"
+        key: "gpu_bickleyjet_dg_rusanov"
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite examples/bickleyjet/bickleyjet_dg.jl rusanov"
+        artifact_paths:
+          - "examples/bickleyjet/output/dg_rusanov/*"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
       - label: ":computer: Plane limiters advection cosine bells"
         key: "cpu_cg_plane_advection_limiter_cosine_bells"
         command:

@@ -1,4 +1,5 @@
 using ClimaComms
+ClimaComms.@import_required_backends
 using LinearAlgebra
 
 import ClimaCore:
@@ -20,7 +21,7 @@ using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
-const context = ClimaComms.SingletonCommsContext()
+const context = ClimaComms.context()
 
 const parameters = (
     ϵ = 0.1,  # perturbation size for initial condition
@@ -109,6 +110,10 @@ function total_energy(y, parameters)
     sum(state -> energy(state, parameters), y)
 end
 
+function total_entropy(y, parameters)
+    sum(state -> entropy(state, parameters), y)
+end
+
 # numerical fluxes
 wavespeed(y, parameters) = sqrt(parameters.g)
 
@@ -191,9 +196,10 @@ struct DGFluxConfig
     numflux
     overintegrate_volume::Bool
     overintegrate_faces::Bool
+    use_split_form::Bool  # volume = FluxDifferencingVolume(entropy-conservative flux)
 end
 
-dg_config = DGFluxConfig(numflux, true, false)
+dg_config = DGFluxConfig(numflux, true, false, numflux_name == "kep")
 
 function rhs!(dydt, y, param_tuple, t)
 
@@ -213,23 +219,35 @@ function rhs!(dydt, y, param_tuple, t)
     #  J = Jacobian determinant of the transformation `ξ` to `x`
     #
     wdiv = Operators.WeakDivergence()
-
     local_geometry_field = Fields.local_geometry_field(y)
 
-    vol_flux = flux.(y, Ref(parameters))
-
-    wdiv_flux = if config.overintegrate_volume
-        # interpolate flux to higher-order space, apply weak divergence there,
-        # then restrict back to the original space
-        interp = Operators.Interpolate(Ispace)
-        restr = Operators.Restrict(space)
-        vol_flux_hi = interp.(vol_flux)
-        wdiv.(vol_flux_hi) |> x -> restr.(x)
+    if config.use_split_form
+        # Split-form volume: flux differencing with same two-point entropy-conservative
+        # flux as used at interfaces (KEP adds dissipation only at faces).
+        flux_diff_vol = Operators.FluxDifferencingVolume(
+            Operators.EntropyConservativeNumericalFlux(),
+            parameters,
+        )
+        vol_term = if config.overintegrate_volume
+            interp = Operators.Interpolate(Ispace)
+            restr = Operators.Restrict(space)
+            restr.(flux_diff_vol.(interp.(y)))
+        else
+            flux_diff_vol.(y)
+        end
+        dydt .= vol_term .* (.-(local_geometry_field.WJ))
     else
-        wdiv.(vol_flux)
+        vol_flux = flux.(y, Ref(parameters))
+        wdiv_flux = if config.overintegrate_volume
+            interp = Operators.Interpolate(Ispace)
+            restr = Operators.Restrict(space)
+            vol_flux_hi = interp.(vol_flux)
+            wdiv.(vol_flux_hi) |> x -> restr.(x)
+        else
+            wdiv.(vol_flux)
+        end
+        dydt .= wdiv_flux .* (.-(local_geometry_field.WJ))
     end
-
-    dydt .= wdiv_flux .* (.-(local_geometry_field.WJ))
 
     Operators.add_numerical_flux_internal!(config.numflux, dydt, y, parameters)
     Operators.add_numerical_flux_boundary!(
@@ -286,6 +304,9 @@ xpts =
 ypts =
     range(Geometry.YPoint(-2π), Geometry.YPoint(2π), length = Ninterp)
 
+# Copy to CPU when on GPU so Plots and scalar comparisons work (handles 0-dim reduction results)
+_cpu(x) = x isa Number ? x : (a = Array(x); ndims(a) == 0 ? a[] : a)
+
 anim = Plots.@animate for u in sol.u
     # apply weighted DSS for plotting only, to recover a visually continuous field
     θ_plot = copy(u.ρθ)
@@ -297,7 +318,7 @@ anim = Plots.@animate for u in sol.u
         ypts;
         horizontal_method = Remapping.BilinearRemapping(),
     )
-    θ2 = θ_array
+    θ2 = _cpu(θ_array)
     Plots.heatmap(
         [p.x for p in xpts],
         [p.y for p in ypts],
@@ -308,8 +329,18 @@ anim = Plots.@animate for u in sol.u
 end
 Plots.mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
 
-Es = [total_energy(u, parameters) for u in sol.u]
+Es = [_cpu(total_energy(u, parameters)) for u in sol.u]
 Plots.png(Plots.plot(Es), joinpath(path, "energy.png"))
+
+# Entropy monitor: for split-form KEP (periodic, inviscid), total entropy is
+# non-increasing (constant with entropy-conservative volume + no dissipation;
+# decreases when interface dissipation is applied).
+if numflux_name == "kep"
+    Ss = [_cpu(total_entropy(u, parameters)) for u in sol.u]
+    Plots.png(Plots.plot(Ss, title = "Total entropy"), joinpath(path, "entropy.png"))
+    # Optional: assert entropy did not increase (entropy-stable scheme)
+    @assert Ss[end] <= Ss[1] + 1e-12 "Entropy should not increase (got $(Ss[1]) -> $(Ss[end]))"
+end
 
 function linkfig(figpath, alt = "")
     # buildkite-agent upload figpath

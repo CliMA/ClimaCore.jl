@@ -162,6 +162,50 @@ function (fn::RusanovNumericalFlux)(normal, argvals⁻, argvals⁺)
 end
 
 """
+    EntropyConservativeNumericalFlux()
+
+Entropy-conservative (kinetic-energy-preserving) two-point flux **without** dissipation.
+Use this as the two-point flux in the volume flux-differencing term and as the
+base for an entropy-stable interface flux (e.g. add Rusanov dissipation at faces).
+
+Same symmetric form as the core of [`KineticEnergyPreservingNumericalFlux`](@ref):
+mass flux m̂ₙ, momentum flux m̂ₙ û + p̄ n, tracer flux m̂ₙ θ̂.
+"""
+struct EntropyConservativeNumericalFlux <: AbstractNumericalFlux end
+
+function (::EntropyConservativeNumericalFlux)(normal, (y⁻, p⁻), (y⁺, p⁺))
+    return _kep_flux_core(normal, y⁻, y⁺, p⁻, p⁺)
+end
+
+"""
+    _kep_flux_core(normal, y⁻, y⁺, p⁻, p⁺)
+
+Entropy-conservative two-point flux (KEP core): symmetric averages for mass, momentum
+(velocity and pressure), and tracer. Used by both EntropyConservativeNumericalFlux
+and KineticEnergyPreservingNumericalFlux (which adds dissipation).
+"""
+function _kep_flux_core(normal, y⁻, y⁺, p⁻, p⁺)
+    ρ⁻, ρu⁻, ρθ⁻ = y⁻.ρ, y⁻.ρu, y⁻.ρθ
+    ρ⁺, ρu⁺, ρθ⁺ = y⁺.ρ, y⁺.ρu, y⁺.ρθ
+    u⁻ = ρu⁻ / ρ⁻
+    u⁺ = ρu⁺ / ρ⁺
+    θ⁻ = ρθ⁻ / ρ⁻
+    θ⁺ = ρθ⁺ / ρ⁺
+    uₙ⁻ = u⁻' * normal
+    uₙ⁺ = u⁺' * normal
+    m̂ₙ = (ρ⁻ * uₙ⁻ + ρ⁺ * uₙ⁺) / 2
+    û = (u⁻ + u⁺) / 2
+    pL = pressure_from_state(y⁻, p⁻)
+    pR = pressure_from_state(y⁺, p⁺)
+    p̄ = (pL + pR) / 2
+    θ̂ = (θ⁻ + θ⁺) / 2
+    flux_ρ  = m̂ₙ
+    flux_ρu = m̂ₙ * û + p̄ * normal
+    flux_ρθ = m̂ₙ * θ̂
+    return (ρ = flux_ρ, ρu = flux_ρu, ρθ = flux_ρθ)
+end
+
+"""
     KineticEnergyPreservingNumericalFlux()
 
 Kinetic-energy-preserving numerical flux for the Bickley jet system.
@@ -210,50 +254,15 @@ function (::KineticEnergyPreservingNumericalFlux)(
     (y⁻, p⁻),
     (y⁺, p⁺),
 )
-    ρ⁻, ρu⁻, ρθ⁻ = y⁻.ρ, y⁻.ρu, y⁻.ρθ
-    ρ⁺, ρu⁺, ρθ⁺ = y⁺.ρ, y⁺.ρu, y⁺.ρθ
-
-    u⁻ = ρu⁻ / ρ⁻
-    u⁺ = ρu⁺ / ρ⁺
-
-    θ⁻ = ρθ⁻ / ρ⁻
-    θ⁺ = ρθ⁺ / ρ⁺
-
+    F_core = _kep_flux_core(normal, y⁻, y⁺, p⁻, p⁺)
+    u⁻ = (y⁻.ρu) / y⁻.ρ
+    u⁺ = (y⁺.ρu) / y⁺.ρ
     uₙ⁻ = u⁻' * normal
     uₙ⁺ = u⁺' * normal
-
-    # normal mass flux (symmetric average)
-    mₙ⁻ = ρ⁻ * uₙ⁻
-    mₙ⁺ = ρ⁺ * uₙ⁺
-    m̂ₙ = (mₙ⁻ + mₙ⁺) / 2
-
-    # averaged velocity and pressure
-    û = (u⁻ + u⁺) / 2
-
-    # pressure from equation of state (can be overloaded by users)
-    pL = pressure_from_state(y⁻, p⁻)
-    pR = pressure_from_state(y⁺, p⁺)
-    p̄ = (pL + pR) / 2
-
-    # averaged tracer
-    θ̂ = (θ⁻ + θ⁺) / 2
-
-    # fluxes already dotted with the normal (entropy-conservative core)
-    flux_ρ  = m̂ₙ
-    flux_ρu = m̂ₙ * û + p̄ * normal
-    flux_ρθ = m̂ₙ * θ̂
-
-    F_core = (ρ = flux_ρ, ρu = flux_ρu, ρθ = flux_ρθ)
-
-    # entropy-stabilizing dissipation term (Rusanov-type, added to KE-preserving core)
     cL = sound_speed_from_state(y⁻, p⁻)
     cR = sound_speed_from_state(y⁺, p⁺)
-    λL = abs(uₙ⁻) + cL
-    λR = abs(uₙ⁺) + cR
-    λ  = max(λL, λR)
-
+    λ  = max(abs(uₙ⁻) + cL, abs(uₙ⁺) + cR)
     diss = (λ / 2) ⊠ (y⁻ ⊟ y⁺)
-
     return F_core ⊞ diss
 end
 
