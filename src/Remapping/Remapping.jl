@@ -2,6 +2,8 @@ module Remapping
 
 using LinearAlgebra, StaticArrays
 
+export AbstractRemappingMethod, SpectralElementRemapping, BilinearRemapping
+
 import ClimaComms
 import ..DataLayouts,
     ..Geometry,

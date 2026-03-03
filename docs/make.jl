@@ -66,6 +66,7 @@ withenv("GKSwstype" => "nul") do
         doctest = true,
         modules = [
             ClimaCore,
+            ClimaCore.Remapping,
             ClimaCoreVTK,
             ClimaCoreSpectra,
             ClimaCorePlots,
