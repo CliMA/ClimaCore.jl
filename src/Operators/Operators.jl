@@ -23,6 +23,7 @@ using ..RecursiveApply
 include("common.jl")
 include("spectralelement.jl")
 include("numericalflux.jl")
+include("numericalflux_kernels.jl")
 include("finitedifference.jl")
 include("remapping.jl")
 include("integrals.jl")

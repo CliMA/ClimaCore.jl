@@ -1,4 +1,20 @@
 import .DataLayouts: slab_index
+
+"""
+    AbstractNumericalFlux
+
+Abstract supertype for all numerical flux functors used by
+[`add_numerical_flux_internal!`](@ref) and
+[`add_numerical_flux_boundary!`](@ref).
+
+Concrete subtypes must be callable with
+
+    (normal, argvals⁻, argvals⁺)
+
+and return the net flux from the \"minus\" side to the \"plus\" side.
+"""
+abstract type AbstractNumericalFlux end
+
 """
     add_numerical_flux_internal!(fn, dydt, args...)
 
@@ -73,7 +89,7 @@ end
 
 Evaluates the central numerical flux using `fluxfn`.
 """
-struct CentralNumericalFlux{F}
+struct CentralNumericalFlux{F} <: AbstractNumericalFlux
     fluxfn::F
 end
 
@@ -88,7 +104,7 @@ end
 
 Evaluates the Rusanov numerical flux using `fluxfn` with wavespeed `wavespeedfn`
 """
-struct RusanovNumericalFlux{F, W}
+struct RusanovNumericalFlux{F, W} <: AbstractNumericalFlux
     fluxfn::F
     wavespeedfn::W
 end
@@ -100,6 +116,102 @@ function (fn::RusanovNumericalFlux)(normal, argvals⁻, argvals⁺)
         RecursiveApply.rdiv(fn.fluxfn(argvals⁻...) ⊞ fn.fluxfn(argvals⁺...), 2)
     λ = max(fn.wavespeedfn(argvals⁻...), fn.wavespeedfn(argvals⁺...))
     return RecursiveApply.rmap(f -> f' * normal, Favg) ⊞ (λ / 2) ⊠ (y⁻ ⊟ y⁺)
+end
+
+"""
+    KineticEnergyPreservingNumericalFlux()
+
+Kinetic-energy-preserving numerical flux for the Bickley jet system.
+
+This flux is based on a symmetric two-point form:
+- mass flux is an average normal mass flux,
+- momentum flux uses the averaged velocity dotted with the averaged mass flux
+  plus an averaged pressure contribution,
+- tracer flux uses the averaged specific tracer.
+
+It is designed so that, when combined with a suitable split / SBP volume
+discretization, the discrete kinetic energy is preserved in the inviscid,
+periodic case (up to machine precision), following the kinetic-energy-preserving
+fluxes discussed in the entropy-stable DG literature (e.g. Souza et al., 2022).
+"""
+struct KineticEnergyPreservingNumericalFlux <: AbstractNumericalFlux end
+
+"""
+    pressure_from_state(state, parameters)
+
+Default equation of state used by kinetic-energy-preserving fluxes.
+
+Users may extend this method for their own state/parameter types to supply
+an appropriate pressure law.
+"""
+pressure_from_state(state, parameters) = parameters.g * state.ρ^2 / 2
+
+"""
+    sound_speed_from_state(state, parameters)
+
+Default approximate sound speed used by entropy-stable fluxes.
+
+By default this assumes an effective relation c² ≈ 2p/ρ, which is exact for
+the shallow-water-like law p = g ρ² / 2 and a reasonable proxy otherwise.
+Users may overload this for more accurate thermodynamics.
+"""
+function sound_speed_from_state(state, parameters)
+    p = pressure_from_state(state, parameters)
+    ρ = state.ρ
+    T = real(eltype(ρ))
+    return sqrt(max(eps(T), (2 * p) / ρ))
+end
+
+function (::KineticEnergyPreservingNumericalFlux)(
+    normal,
+    (y⁻, p⁻),
+    (y⁺, p⁺),
+)
+    ρ⁻, ρu⁻, ρθ⁻ = y⁻.ρ, y⁻.ρu, y⁻.ρθ
+    ρ⁺, ρu⁺, ρθ⁺ = y⁺.ρ, y⁺.ρu, y⁺.ρθ
+
+    u⁻ = ρu⁻ / ρ⁻
+    u⁺ = ρu⁺ / ρ⁺
+
+    θ⁻ = ρθ⁻ / ρ⁻
+    θ⁺ = ρθ⁺ / ρ⁺
+
+    uₙ⁻ = u⁻' * normal
+    uₙ⁺ = u⁺' * normal
+
+    # normal mass flux (symmetric average)
+    mₙ⁻ = ρ⁻ * uₙ⁻
+    mₙ⁺ = ρ⁺ * uₙ⁺
+    m̂ₙ = (mₙ⁻ + mₙ⁺) / 2
+
+    # averaged velocity and pressure
+    û = (u⁻ + u⁺) / 2
+
+    # pressure from equation of state (can be overloaded by users)
+    pL = pressure_from_state(y⁻, p⁻)
+    pR = pressure_from_state(y⁺, p⁺)
+    p̄ = (pL + pR) / 2
+
+    # averaged tracer
+    θ̂ = (θ⁻ + θ⁺) / 2
+
+    # fluxes already dotted with the normal (entropy-conservative core)
+    flux_ρ  = m̂ₙ
+    flux_ρu = m̂ₙ * û + p̄ * normal
+    flux_ρθ = m̂ₙ * θ̂
+
+    F_core = (ρ = flux_ρ, ρu = flux_ρu, ρθ = flux_ρθ)
+
+    # entropy-stabilizing dissipation term (Rusanov-type, added to KE-preserving core)
+    cL = sound_speed_from_state(y⁻, p⁻)
+    cR = sound_speed_from_state(y⁺, p⁺)
+    λL = abs(uₙ⁻) + cL
+    λR = abs(uₙ⁺) + cR
+    λ  = max(λL, λR)
+
+    diss = (λ / 2) ⊠ (y⁻ ⊟ y⁺)
+
+    return F_core ⊞ diss
 end
 
 

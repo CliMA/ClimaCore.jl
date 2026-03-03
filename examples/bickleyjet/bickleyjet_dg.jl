@@ -10,8 +10,10 @@ import ClimaCore:
     RecursiveApply,
     Spaces,
     Quadratures,
-    Topologies
+    Topologies,
+    Remapping
 import ClimaCore.Geometry: ⊗
+import ClimaCore.Remapping: BilinearRemapping, SpectralElementRemapping
 import ClimaCore.RecursiveApply: ⊞, rdiv, rmap
 
 using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
@@ -55,8 +57,20 @@ grid_topology = Topologies.Topology2D(context, mesh)
 quad = Quadratures.GLL{Nq}()
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
+# higher-order space that can be used for over-integration
 Iquad = Quadratures.GLL{Nqh}()
 Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
+
+# simple 1-level vertical space for remapping onto a regular grid
+vertdomain = Domains.IntervalDomain(
+    Geometry.ZPoint(0.0),
+    Geometry.ZPoint(1.0);
+    boundary_names = (:bottom, :top),
+)
+vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 1)
+verttopo = Topologies.IntervalTopology(context, vertmesh)
+vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopo)
+hv_space = Spaces.ExtrudedFiniteDifferenceSpace(space, vert_center_space)
 
 function init_state(coord, p)
     x, y = coord.x, coord.y
@@ -93,6 +107,14 @@ function energy(state, p)
     ρ, ρu = state.ρ, state.ρu
     u = ρu / ρ
     return ρ * (u.u^2 + u.v^2) / 2 + p.g * ρ^2 / 2
+end
+
+entropy(state, p) = -energy(state, p)
+
+function entropy_flux(state, p, n)
+    η = entropy(state, p)
+    u = state.ρu / state.ρ
+    return η * (u' * n)
 end
 
 function total_energy(y, parameters)
@@ -171,9 +193,23 @@ elseif numflux_name == "rusanov"
     Operators.RusanovNumericalFlux(flux, wavespeed)
 elseif numflux_name == "roe"
     roeflux
+elseif numflux_name == "kep"
+    Operators.KineticEnergyPreservingNumericalFlux()
+else
+    error("Unknown numerical flux name: $numflux_name")
 end
 
-function rhs!(dydt, y, (parameters, numflux), t)
+struct DGFluxConfig
+    numflux
+    overintegrate_volume::Bool
+    overintegrate_faces::Bool
+end
+
+dg_config = DGFluxConfig(numflux, true, false)
+
+function rhs!(dydt, y, param_tuple, t)
+
+    parameters, config = param_tuple
 
     # ϕ' K' W J K dydt =  -ϕ' K' I' [DH' WH JH flux.(I K y)]
     #  =>   K dydt = - K inv(K' WJ K) K' I' [DH' WH JH flux.(I K y)]
@@ -192,16 +228,29 @@ function rhs!(dydt, y, (parameters, numflux), t)
 
     local_geometry_field = Fields.local_geometry_field(y)
 
-    dydt .= wdiv.(flux.(y, Ref(parameters))) .* (.-(local_geometry_field.WJ))
+    vol_flux = flux.(y, Ref(parameters))
 
-    Operators.add_numerical_flux_internal!(numflux, dydt, y, parameters)
+    wdiv_flux = if config.overintegrate_volume
+        # interpolate flux to higher-order space, apply weak divergence there,
+        # then restrict back to the original space
+        interp = Operators.Interpolate(Ispace)
+        restr = Operators.Restrict(space)
+        vol_flux_hi = interp.(vol_flux)
+        wdiv.(vol_flux_hi) |> x -> restr.(x)
+    else
+        wdiv.(vol_flux)
+    end
+
+    dydt .= wdiv_flux .* (.-(local_geometry_field.WJ))
+
+    Operators.add_numerical_flux_internal!(config.numflux, dydt, y, parameters)
     Operators.add_numerical_flux_boundary!(
         dydt,
         y,
         parameters,
     ) do normal, (y⁻, parameters)
         y⁺ = (ρ = y⁻.ρ, ρu = y⁻.ρu - dot(y⁻.ρu, normal) * normal, ρθ = y⁻.ρθ)
-        numflux(normal, (y⁻, parameters), (y⁺, parameters))
+        config.numflux(normal, (y⁻, parameters), (y⁺, parameters))
     end
 
     # 6. Solve for final result
@@ -218,10 +267,10 @@ function rhs!(dydt, y, (parameters, numflux), t)
 end
 
 dydt = Fields.Field(similar(Fields.field_values(y0)), space)
-rhs!(dydt, y0, (parameters, numflux), 0.0);
+rhs!(dydt, y0, (parameters, dg_config), 0.0);
 
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 200.0), (parameters, numflux))
+prob = ODEProblem(rhs!, y0, (0.0, 200.0), (parameters, dg_config))
 sol = solve(
     prob,
     SSPRK33(),
@@ -242,8 +291,38 @@ end
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
+# remap tracer to a uniformly spaced horizontal grid for plotting, using bilinear remapping
+const Ninterp = 256
+xpts =
+    range(Geometry.XPoint(-2π), Geometry.XPoint(2π), length = Ninterp)
+ypts =
+    range(Geometry.YPoint(-2π), Geometry.YPoint(2π), length = Ninterp)
+zpts =
+    range(Geometry.ZPoint(0.5), Geometry.ZPoint(0.5), length = 1) # single level
+
+interp_to_hv = Operators.Interpolate(hv_space)
+
 anim = Plots.@animate for u in sol.u
-    Plots.plot(u.ρθ, clim = (-1, 1))
+    # apply weighted DSS for plotting only, to recover a visually continuous field
+    θ_plot = copy(u.ρθ)
+    Spaces.weighted_dss!(θ_plot)
+    θ_hv = interp_to_hv.(θ_plot)
+    θ_array =
+        Remapping.interpolate_array(
+            θ_hv,
+            xpts,
+            ypts,
+            zpts;
+            horizontal_method = BilinearRemapping(),
+        )
+    θ2 = θ_array[:, :, 1]
+    Plots.heatmap(
+        [p.x for p in xpts],
+        [p.y for p in ypts],
+        θ2';
+        clim = (-1, 1),
+        c = :RdBu,
+    )
 end
 Plots.mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
 
