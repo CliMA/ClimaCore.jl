@@ -13,7 +13,6 @@ import ClimaCore:
     Topologies,
     Remapping
 import ClimaCore.Geometry: ⊗
-import ClimaCore.Remapping: BilinearRemapping, SpectralElementRemapping
 import ClimaCore.RecursiveApply: ⊞, rdiv, rmap
 
 using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
@@ -49,7 +48,7 @@ domain = Domains.RectangleDomain(
     ),
 )
 
-n1, n2 = 16, 16
+n1, n2 = 32,32
 Nq = 4
 Nqh = 7
 mesh = Meshes.RectilinearMesh(domain, n1, n2)
@@ -60,17 +59,6 @@ space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 # higher-order space that can be used for over-integration
 Iquad = Quadratures.GLL{Nqh}()
 Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
-
-# simple 1-level vertical space for remapping onto a regular grid
-vertdomain = Domains.IntervalDomain(
-    Geometry.ZPoint(0.0),
-    Geometry.ZPoint(1.0);
-    boundary_names = (:bottom, :top),
-)
-vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 1)
-verttopo = Topologies.IntervalTopology(context, vertmesh)
-vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopo)
-hv_space = Spaces.ExtrudedFiniteDifferenceSpace(space, vert_center_space)
 
 function init_state(coord, p)
     x, y = coord.x, coord.y
@@ -274,7 +262,7 @@ prob = ODEProblem(rhs!, y0, (0.0, 200.0), (parameters, dg_config))
 sol = solve(
     prob,
     SSPRK33(),
-    dt = 0.02,
+    dt = 0.01,
     saveat = collect(0.0:1.0:200.0),
     progress = true,
     progress_message = (dt, u, p, t) -> t,
@@ -297,25 +285,19 @@ xpts =
     range(Geometry.XPoint(-2π), Geometry.XPoint(2π), length = Ninterp)
 ypts =
     range(Geometry.YPoint(-2π), Geometry.YPoint(2π), length = Ninterp)
-zpts =
-    range(Geometry.ZPoint(0.5), Geometry.ZPoint(0.5), length = 1) # single level
-
-interp_to_hv = Operators.Interpolate(hv_space)
 
 anim = Plots.@animate for u in sol.u
     # apply weighted DSS for plotting only, to recover a visually continuous field
     θ_plot = copy(u.ρθ)
     Spaces.weighted_dss!(θ_plot)
-    θ_hv = interp_to_hv.(θ_plot)
-    θ_array =
-        Remapping.interpolate_array(
-            θ_hv,
-            xpts,
-            ypts,
-            zpts;
-            horizontal_method = BilinearRemapping(),
-        )
-    θ2 = θ_array[:, :, 1]
+    # remap directly from GLL quadrature to uniformly spaced grid
+    θ_array = Remapping.interpolate_array(
+        θ_plot,
+        xpts,
+        ypts;
+        horizontal_method = Remapping.BilinearRemapping(),
+    )
+    θ2 = θ_array
     Plots.heatmap(
         [p.x for p in xpts],
         [p.y for p in ypts],

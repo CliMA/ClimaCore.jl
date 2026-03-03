@@ -507,3 +507,39 @@ function add_numerical_flux_boundary_kernel!(
     end
     return nothing
 end
+
+"""
+When on CUDA, dispatch `add_numerical_flux_internal!` for `RusanovNumericalFlux` to the
+GPU kernel; otherwise invoke the generic (CPU) implementation.
+"""
+function add_numerical_flux_internal!(
+    fn::RusanovNumericalFlux,
+    dydt,
+    args...,
+)
+    space = axes(dydt)
+    device = ClimaComms.device(space)
+    if device isa ClimaComms.CUDADevice
+        kernel = RusanovNumericalFluxKernel(fn.fluxfn, fn.wavespeedfn)
+        y_data = Fields.todata(args[1])
+        parameters_data = length(args) > 1 ? args[2] : nothing
+        add_numerical_flux_internal_kernel!(
+            device,
+            kernel,
+            Fields.field_values(dydt),
+            y_data,
+            parameters_data,
+            Spaces.grid(space).internal_surface_geometry,
+            Spaces.topology(space),
+            space,
+        )
+        return
+    end
+    invoke(
+        add_numerical_flux_internal!,
+        Tuple{Any, typeof(dydt), Vararg{Any}},
+        fn,
+        dydt,
+        args...,
+    )
+end

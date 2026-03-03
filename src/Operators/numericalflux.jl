@@ -1,4 +1,28 @@
 import .DataLayouts: slab_index
+import ..Topologies: interior_faces, boundary_tags, boundary_faces, face_node_index
+
+"""
+    Numerical flux application and DSS hooks
+
+Interior and boundary numerical fluxes use the **same topology hooks** as the
+DSS (Direct Stiffness Summation) path:
+
+- **Interior faces**: Same iteration as `Topologies.dss_local_faces!` — both
+  loop over `Topologies.interior_faces(topology)` to get
+  `(elem⁻, face⁻, elem⁺, face⁺, reversed)` and use `face_node_index` to map
+  face quadrature points to element DoFs. DSS then sums state and scatters the
+  same value to both sides (continuity); DG computes a numerical flux and
+  scatters opposite contributions (dydt⁻ -= sWJ·F̂, dydt⁺ += sWJ·F̂).
+
+- **Boundary faces**: Same iteration as boundary handling in the DSS path —
+  both use `Topologies.boundary_faces(topology, boundarytag)` per
+  `Topologies.boundary_tags(topology)`. DG applies the boundary numerical flux
+  and scatters into the element adjacent to the boundary.
+
+So "interior of elements" is updated by the volume term (e.g. weak divergence);
+"between elements" and "on the boundary" are updated by these face loops,
+using the same topology and surface geometry as DSS.
+"""
 
 """
     AbstractNumericalFlux
@@ -38,49 +62,68 @@ For consistency, it should satisfy the property that
 See also:
 - [`CentralNumericalFlux`](@ref)
 - [`RusanovNumericalFlux`](@ref)
+- Same topology hook as `Topologies.dss_local_faces!`: `interior_faces(topology)`.
 """
 function add_numerical_flux_internal!(fn, dydt, args...)
     space = axes(dydt)
-    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
-    topology = Spaces.topology(space)
-    internal_surface_geometry = Spaces.grid(space).internal_surface_geometry
-
-    for (iface, (elem⁻, face⁻, elem⁺, face⁺, reversed)) in
-        enumerate(Topologies.interior_faces(topology))
-
-        internal_surface_geometry_slab = slab(internal_surface_geometry, iface)
+    _foreach_interior_face(space) do iface, elem⁻, face⁻, elem⁺, face⁺, reversed,
+        Nq, internal_surface_geometry_slab
 
         arg_slabs⁻ = map(arg -> slab(Fields.todata(arg), elem⁻), args)
         arg_slabs⁺ = map(arg -> slab(Fields.todata(arg), elem⁺), args)
-
         dydt_slab⁻ = slab(Fields.field_values(dydt), elem⁻)
         dydt_slab⁺ = slab(Fields.field_values(dydt), elem⁺)
 
         for q in 1:Nq
             sgeom⁻ = internal_surface_geometry_slab[slab_index(q)]
-
-            i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
-            i⁺, j⁺ = Topologies.face_node_index(face⁺, Nq, q, reversed)
-
+            i⁻, j⁻ = face_node_index(face⁻, Nq, q, false)
+            i⁺, j⁺ = face_node_index(face⁺, Nq, q, reversed)
             numflux⁻ = fn(
                 sgeom⁻.normal,
                 map(
-                    slab ->
-                        slab isa DataSlab2D ? slab[slab_index(i⁻, j⁻)] : slab,
+                    s ->
+                        s isa DataSlab2D ? s[slab_index(i⁻, j⁻)] : s,
                     arg_slabs⁻,
                 ),
                 map(
-                    slab ->
-                        slab isa DataSlab2D ? slab[slab_index(i⁺, j⁺)] : slab,
+                    s ->
+                        s isa DataSlab2D ? s[slab_index(i⁺, j⁺)] : s,
                     arg_slabs⁺,
                 ),
             )
-
             dydt_slab⁻[slab_index(i⁻, j⁻)] =
                 dydt_slab⁻[slab_index(i⁻, j⁻)] ⊟ (sgeom⁻.sWJ ⊠ numflux⁻)
             dydt_slab⁺[slab_index(i⁺, j⁺)] =
                 dydt_slab⁺[slab_index(i⁺, j⁺)] ⊞ (sgeom⁻.sWJ ⊠ numflux⁻)
         end
+    end
+end
+
+"""
+    _foreach_interior_face(space, body)
+
+Iterate over interior faces using the same topology hook as `dss_local_faces!`:
+`interior_faces(topology)`. For each face, call
+
+    body(iface, elem⁻, face⁻, elem⁺, face⁺, reversed, Nq, internal_surface_geometry_slab)
+"""
+function _foreach_interior_face(body, space)
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    topology = Spaces.topology(space)
+    internal_surface_geometry = Spaces.grid(space).internal_surface_geometry
+    for (iface, (elem⁻, face⁻, elem⁺, face⁺, reversed)) in
+        enumerate(interior_faces(topology))
+        internal_surface_geometry_slab = slab(internal_surface_geometry, iface)
+        body(
+            iface,
+            elem⁻,
+            face⁻,
+            elem⁺,
+            face⁺,
+            reversed,
+            Nq,
+            internal_surface_geometry_slab,
+        )
     end
 end
 
@@ -217,36 +260,55 @@ end
 
 function add_numerical_flux_boundary!(fn, dydt, args...)
     space = axes(dydt)
-    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
-    topology = Spaces.topology(space)
-    boundary_surface_geometries = Spaces.grid(space).boundary_surface_geometries
+    _foreach_boundary_face(space) do iboundary, _boundarytag, iface, elem⁻, face⁻,
+        Nq, boundary_surface_geometry_slab
 
-    for (iboundary, boundarytag) in
-        enumerate(Topologies.boundary_tags(topology))
-        for (iface, (elem⁻, face⁻)) in
-            enumerate(Topologies.boundary_faces(topology, boundarytag))
-            boundary_surface_geometry_slab =
-                surface_geometry_slab =
-                    slab(boundary_surface_geometries[iboundary], iface)
-
-            arg_slabs⁻ = map(arg -> slab(Fields.todata(arg), elem⁻), args)
-            dydt_slab⁻ = slab(Fields.field_values(dydt), elem⁻)
-            for q in 1:Nq
-                sgeom⁻ = boundary_surface_geometry_slab[slab_index(q)]
-                i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
-                numflux⁻ = fn(
-                    sgeom⁻.normal,
-                    map(
-                        slab ->
-                            slab isa DataSlab2D ? slab[slab_index(i⁻, j⁻)] :
-                            slab,
-                        arg_slabs⁻,
-                    ),
-                )
-                dydt_slab⁻[slab_index(i⁻, j⁻)] =
-                    dydt_slab⁻[slab_index(i⁻, j⁻)] ⊟ (sgeom⁻.sWJ ⊠ numflux⁻)
-            end
+        arg_slabs⁻ = map(arg -> slab(Fields.todata(arg), elem⁻), args)
+        dydt_slab⁻ = slab(Fields.field_values(dydt), elem⁻)
+        for q in 1:Nq
+            sgeom⁻ = boundary_surface_geometry_slab[slab_index(q)]
+            i⁻, j⁻ = face_node_index(face⁻, Nq, q, false)
+            numflux⁻ = fn(
+                sgeom⁻.normal,
+                map(
+                    s ->
+                        s isa DataSlab2D ? s[slab_index(i⁻, j⁻)] : s,
+                    arg_slabs⁻,
+                ),
+            )
+            dydt_slab⁻[slab_index(i⁻, j⁻)] =
+                dydt_slab⁻[slab_index(i⁻, j⁻)] ⊟ (sgeom⁻.sWJ ⊠ numflux⁻)
         end
     end
     return dydt
+end
+
+"""
+    _foreach_boundary_face(space, body)
+
+Iterate over boundary faces using the same topology hook as boundary handling
+in the DSS path: `boundary_faces(topology, boundarytag)` for each
+`boundary_tags(topology)`. For each face, call
+
+    body(iboundary, boundarytag, iface, elem⁻, face⁻, Nq, boundary_surface_geometry_slab)
+"""
+function _foreach_boundary_face(body, space)
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    topology = Spaces.topology(space)
+    boundary_surface_geometries = Spaces.grid(space).boundary_surface_geometries
+    for (iboundary, boundarytag) in enumerate(boundary_tags(topology))
+        boundary_surface_geometry = boundary_surface_geometries[iboundary]
+        for (iface, (elem⁻, face⁻)) in enumerate(boundary_faces(topology, boundarytag))
+            boundary_surface_geometry_slab = slab(boundary_surface_geometry, iface)
+            body(
+                iboundary,
+                boundarytag,
+                iface,
+                elem⁻,
+                face⁻,
+                Nq,
+                boundary_surface_geometry_slab,
+            )
+        end
+    end
 end
