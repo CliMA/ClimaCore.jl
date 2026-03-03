@@ -221,9 +221,14 @@ function rhs!(dydt, y, param_tuple, t)
     wdiv = Operators.WeakDivergence()
     local_geometry_field = Fields.local_geometry_field(y)
 
-    if config.use_split_form
+    # FluxDifferencingVolume has no GPU kernel (would pass non-bitstype to CUDA); use standard volume on GPU.
+    use_split_form_volume =
+        config.use_split_form &&
+        (ClimaComms.device(axes(y)) isa ClimaComms.AbstractCPUDevice)
+
+    if use_split_form_volume
         # Split-form volume: flux differencing with same two-point entropy-conservative
-        # flux as used at interfaces (KEP adds dissipation only at faces).
+        # flux as used at interfaces (KEP adds dissipation only at faces). CPU only.
         flux_diff_vol = Operators.FluxDifferencingVolume(
             Operators.EntropyConservativeNumericalFlux(),
             parameters,
