@@ -226,7 +226,6 @@ function add_numerical_flux_internal_rusanov_kernel!(
 end
 
 # --- Kinetic-energy-preserving numerical flux (GPU) ---
-
 function add_numerical_flux_internal_kernel!(
     ::ClimaComms.CUDADevice,
     ::KineticEnergyPreservingNumericalFlux,
@@ -377,7 +376,7 @@ function ClimaCore.Operators.add_numerical_flux_internal!(
     if device isa ClimaComms.CUDADevice
         y_data = Fields.todata(args[1])
         parameters_data = length(args) > 1 ? args[2] : nothing
-        ClimaCore.Operators.add_numerical_flux_internal_kernel!(
+        add_numerical_flux_internal_kernel!(
             device,
             fn,
             Fields.field_values(dydt),
