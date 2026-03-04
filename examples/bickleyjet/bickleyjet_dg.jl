@@ -49,7 +49,7 @@ domain = Domains.RectangleDomain(
     ),
 )
 
-n1, n2 = 32,32
+n1, n2 = 16,16
 Nq = 4
 Nqh = 7
 mesh = Meshes.RectilinearMesh(domain, n1, n2)
@@ -202,7 +202,10 @@ end
 # Overintegration uses Interpolate/Restrict, which is not currently CUDA-kernel safe
 # for this example (those operators carry full `space` objects). Disable it on GPU.
 is_cpu_device = ClimaComms.device(context) isa ClimaComms.AbstractCPUDevice
-dg_config = DGFluxConfig(numflux, is_cpu_device, false, numflux_name == "kep")
+# KEP at faces only (standard volume): use_split_form = false. This was the working setup.
+# use_split_form = true would use FluxDifferencingVolume in the volume (entropy-stable
+# split form, CPU only) and needs separate validation.
+dg_config = DGFluxConfig(numflux, is_cpu_device, false, false)
 
 function rhs!(dydt, y, param_tuple, t)
 
@@ -269,13 +272,7 @@ function rhs!(dydt, y, param_tuple, t)
 
     # 6. Solve for final result
     dydt_data = Fields.field_values(dydt)
-    wj = Spaces.local_geometry_data(space).WJ
-    # On GPU, materialize WJ so the rdiv broadcast gets a contiguous array (avoids
-    # SubArray in kernel and possible runtime exception in knl_copyto!).
-    if ClimaComms.device(axes(dydt)) isa ClimaComms.CUDADevice
-        wj = copy(wj)
-    end
-    dydt_data .= RecursiveApply.rdiv.(dydt_data, wj)
+    dydt_data .= RecursiveApply.rdiv.(dydt_data, Spaces.local_geometry_data(space).WJ)
     M = Quadratures.cutoff_filter_matrix(
         Float64,
         Spaces.quadrature_style(space),
