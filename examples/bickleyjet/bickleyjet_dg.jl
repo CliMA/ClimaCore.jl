@@ -199,7 +199,10 @@ struct DGFluxConfig
     use_split_form::Bool  # volume = FluxDifferencingVolume(entropy-conservative flux)
 end
 
-dg_config = DGFluxConfig(numflux, true, false, numflux_name == "kep")
+# Overintegration uses Interpolate/Restrict, which is not currently CUDA-kernel safe
+# for this example (those operators carry full `space` objects). Disable it on GPU.
+is_cpu_device = ClimaComms.device(context) isa ClimaComms.AbstractCPUDevice
+dg_config = DGFluxConfig(numflux, is_cpu_device, false, numflux_name == "kep")
 
 function rhs!(dydt, y, param_tuple, t)
 
