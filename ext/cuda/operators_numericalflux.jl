@@ -284,10 +284,13 @@ end
 @inline function _compute_kep_flux(normal, y⁻, y⁺, p⁻, p⁺)
     ρ⁻, ρu⁻, ρθ⁻ = y⁻.ρ, y⁻.ρu, y⁻.ρθ
     ρ⁺, ρu⁺, ρθ⁺ = y⁺.ρ, y⁺.ρu, y⁺.ρθ
-    u⁻ = ρu⁻ / ρ⁻
-    u⁺ = ρu⁺ / ρ⁺
-    θ⁻ = ρθ⁻ / ρ⁻
-    θ⁺ = ρθ⁺ / ρ⁺
+    T = real(eltype(ρ⁻))
+    ρ⁻_safe = max(ρ⁻, eps(T))
+    ρ⁺_safe = max(ρ⁺, eps(T))
+    u⁻ = ρu⁻ / ρ⁻_safe
+    u⁺ = ρu⁺ / ρ⁺_safe
+    θ⁻ = ρθ⁻ / ρ⁻_safe
+    θ⁺ = ρθ⁺ / ρ⁺_safe
     uₙ⁻ = u⁻' * normal
     uₙ⁺ = u⁺' * normal
     m̂ₙ = (ρ⁻ * uₙ⁻ + ρ⁺ * uₙ⁺) / 2

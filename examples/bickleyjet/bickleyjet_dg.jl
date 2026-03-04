@@ -269,8 +269,13 @@ function rhs!(dydt, y, param_tuple, t)
 
     # 6. Solve for final result
     dydt_data = Fields.field_values(dydt)
-    dydt_data .=
-        RecursiveApply.rdiv.(dydt_data, Spaces.local_geometry_data(space).WJ)
+    wj = Spaces.local_geometry_data(space).WJ
+    # On GPU, materialize WJ so the rdiv broadcast gets a contiguous array (avoids
+    # SubArray in kernel and possible runtime exception in knl_copyto!).
+    if ClimaComms.device(axes(dydt)) isa ClimaComms.CUDADevice
+        wj = copy(wj)
+    end
+    dydt_data .= RecursiveApply.rdiv.(dydt_data, wj)
     M = Quadratures.cutoff_filter_matrix(
         Float64,
         Spaces.quadrature_style(space),
