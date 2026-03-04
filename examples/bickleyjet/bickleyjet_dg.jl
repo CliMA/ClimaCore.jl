@@ -202,9 +202,8 @@ end
 # Overintegration uses Interpolate/Restrict, which is not currently CUDA-kernel safe
 # for this example (those operators carry full `space` objects). Disable it on GPU.
 is_cpu_device = ClimaComms.device(context) isa ClimaComms.AbstractCPUDevice
-# KEP at faces only (standard volume): use_split_form = false. This was the working setup.
-# use_split_form = true would use FluxDifferencingVolume in the volume (entropy-stable
-# split form, CPU only) and needs separate validation.
+# use_split_form = false: use standard volume (WeakDivergence(flux)) for all flux types.
+# KEP then applies only at faces. Set true to use FluxDifferencingVolume for kep (CPU only).
 dg_config = DGFluxConfig(numflux, is_cpu_device, false, false)
 
 function rhs!(dydt, y, param_tuple, t)
