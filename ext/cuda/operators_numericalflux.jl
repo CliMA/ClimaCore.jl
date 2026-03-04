@@ -237,7 +237,9 @@ function add_numerical_flux_internal_kernel!(
     space,
 )
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
-    interior_faces_array = Array(interior_faces(topology))
+    # Use topology.interior_faces as-is (CuArray on GPU); Array() would create a host Vector
+    # that cannot be passed to the kernel (non-bitstype).
+    interior_faces_array = interior_faces(topology)
     nfaces = length(interior_faces_array)
     nitems = nfaces * Nq
 
