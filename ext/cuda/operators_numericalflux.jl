@@ -275,19 +275,26 @@ end
 @inline function _pressure_from_state_kep(state, parameters)
     return parameters.g * state.ρ^2 / 2
 end
+# Sound speed is physically non-negative; ensure non-negative return (safeguard only).
 @inline function _sound_speed_from_state_kep(state, parameters)
     p = _pressure_from_state_kep(state, parameters)
     ρ = state.ρ
     T = real(eltype(ρ))
-    return sqrt(max(eps(T), (2 * p) / ρ))
+    ρ_safe = max(ρ, eps(T))
+    c² = (2 * p) / ρ_safe
+    return sqrt(max(eps(T), c²))
 end
+# ρ safeguards: avoid Inf/NaN only; not a fix for the real flux values.
 @inline function _compute_kep_flux(normal, y⁻, y⁺, p⁻, p⁺)
     ρ⁻, ρu⁻, ρθ⁻ = y⁻.ρ, y⁻.ρu, y⁻.ρθ
     ρ⁺, ρu⁺, ρθ⁺ = y⁺.ρ, y⁺.ρu, y⁺.ρθ
-    u⁻ = ρu⁻ / ρ⁻
-    u⁺ = ρu⁺ / ρ⁺
-    θ⁻ = ρθ⁻ / ρ⁻
-    θ⁺ = ρθ⁺ / ρ⁺
+    T = real(eltype(ρ⁻))
+    ρ⁻_ = max(ρ⁻, eps(T))
+    ρ⁺_ = max(ρ⁺, eps(T))
+    u⁻ = ρu⁻ / ρ⁻_
+    u⁺ = ρu⁺ / ρ⁺_
+    θ⁻ = ρθ⁻ / ρ⁻_
+    θ⁺ = ρθ⁺ / ρ⁺_
     uₙ⁻ = u⁻' * normal
     uₙ⁺ = u⁺' * normal
     m̂ₙ = (ρ⁻ * uₙ⁻ + ρ⁺ * uₙ⁺) / 2

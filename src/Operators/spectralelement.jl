@@ -850,6 +850,22 @@ function _unit_normal_ref_direction(local_geometry, d)
     return Geometry.UVVector(n[1], n[2])
 end
 
+# Scale (norm of ∂x/∂ξ column d) to convert physical flux·n to contravariant component.
+# WeakDivergence uses WJ * contravariant_d(flux); contravariant_d(F) = (F·n_d) / scale_d.
+function _scale_ref_direction(local_geometry, d)
+    M = Geometry.components(local_geometry.∂x∂ξ)
+    v = SVector(M[1, d], M[2, d])
+    return LinearAlgebra.norm(v)
+end
+
+# Return true iff the two-point flux NamedTuple (ρ, ρu, ρθ) has all finite components (used to avoid NaN in volume).
+function _flux_finite(F̂)
+    isfinite(F̂.ρ) || return false
+    isfinite(F̂.ρθ) || return false
+    v = F̂.ρu
+    return all(i -> isfinite(v[i]), 1:length(v))
+end
+
 function apply_operator(
     op::FluxDifferencingVolume{()},
     space,
@@ -881,6 +897,8 @@ function apply_operator(
     out = DataLayouts.IJF{RT, Nq}(MArray, FT)
     fill!(parent(out), zero(FT))
 
+    # WJ-weighted flux differencing to match WeakDivergence: (1/(-WJ)) * Dᵀ·(WJ*F̂).
+    # WeakDivergence uses D^T (out[ii] += D[i, ii]*...); weight flux by WJ at the other node, then divide by (-WJ).
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         lg_ij = get_local_geometry(space, ij, slabidx)
@@ -888,28 +906,51 @@ function apply_operator(
         n2 = _unit_normal_ref_direction(lg_ij, 2)
         y_ij = get_node(space, arg, ij, slabidx)
 
-        # direction 1: sum_k D[i,k] * F̂(y_ij, y_kj)
+        # direction 1 (ξ): sum_k D[k,i] * WJ_{k,j} * F̂^1_ik (D^T convention).
+        # f̂ returns physical flux·n; convert to contravariant so result matches WeakDivergence: F^1 = (F·n)/scale.
         for k in 1:Nq
             kj = CartesianIndex((k, j))
+            lg_kj = get_local_geometry(space, kj, slabidx)
             y_kj = get_node(space, arg, kj, slabidx)
-            F̂ = f̂(n1, (y_ij, p), (y_kj, p))
-            out[slab_index(i, j)] = out[slab_index(i, j)] ⊞ (D[i, k] ⊠ F̂)
+            if i <= k
+                F̂ = f̂(n1, (y_ij, p), (y_kj, p))
+            else
+                F̂ = RecursiveApply.rmul(f̂(n1, (y_kj, p), (y_ij, p)), -1)
+            end
+            if _flux_finite(F̂)
+                scale₁ = max(_scale_ref_direction(lg_kj, 1), eps(FT))
+                F̂¹ = RecursiveApply.rdiv(F̂, scale₁)
+                out[slab_index(i, j)] =
+                    out[slab_index(i, j)] ⊞ (D[k, i] ⊠ (lg_kj.WJ ⊠ F̂¹))
+            end
         end
-        # direction 2: sum_k D[j,k] * F̂(y_ij, y_ik)
+        # direction 2 (η): sum_k D[k,j] * WJ_{i,k} * F̂^2_jk.
         for k in 1:Nq
             ik = CartesianIndex((i, k))
+            lg_ik = get_local_geometry(space, ik, slabidx)
             y_ik = get_node(space, arg, ik, slabidx)
-            F̂ = f̂(n2, (y_ij, p), (y_ik, p))
-            out[slab_index(i, j)] = out[slab_index(i, j)] ⊞ (D[j, k] ⊠ F̂)
+            if j <= k
+                F̂ = f̂(n2, (y_ij, p), (y_ik, p))
+            else
+                F̂ = RecursiveApply.rmul(f̂(n2, (y_ik, p), (y_ij, p)), -1)
+            end
+            if _flux_finite(F̂)
+                scale₂ = max(_scale_ref_direction(lg_ik, 2), eps(FT))
+                F̂² = RecursiveApply.rdiv(F̂, scale₂)
+                out[slab_index(i, j)] =
+                    out[slab_index(i, j)] ⊞ (D[k, j] ⊠ (lg_ik.WJ ⊠ F̂²))
+            end
         end
     end
 
+    # Match WeakDivergence: divide by (-WJ) so RHS (vol_term * (-WJ)) / WJ gives D·(WJ*F̂)/WJ.
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[slab_index(i, j)] =
-            RecursiveApply.rmul(out[slab_index(i, j)], ⊟(local_geometry.invJ))
+            RecursiveApply.rdiv(out[slab_index(i, j)], ⊟(local_geometry.WJ))
     end
+
     return Field(SArray(out), space)
 end
 

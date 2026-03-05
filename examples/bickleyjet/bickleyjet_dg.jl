@@ -33,7 +33,10 @@ const parameters = (
 )
 
 numflux_name = get(ARGS, 1, "rusanov")
-boundary_name = get(ARGS, 2, "")
+# Second arg is boundary (e.g. "noslip"); "nosplit" is a flag to disable split-form volume for kep.
+_boundary_arg = get(ARGS, 2, "")
+boundary_name = _boundary_arg == "nosplit" ? "" : _boundary_arg
+force_nosplit = "nosplit" in ARGS
 
 domain = Domains.RectangleDomain(
     Domains.IntervalDomain(
@@ -202,13 +205,24 @@ end
 # Overintegration uses Interpolate/Restrict, which is not currently CUDA-kernel safe
 # for this example (those operators carry full `space` objects). Disable it on GPU.
 is_cpu_device = ClimaComms.device(context) isa ClimaComms.AbstractCPUDevice
-# use_split_form = false: use standard volume (WeakDivergence(flux)) for all flux types.
-# KEP then applies only at faces. Set true to use FluxDifferencingVolume for kep (CPU only).
-dg_config = DGFluxConfig(numflux, is_cpu_device, false, false)
+# use_split_form = true for kep unless force_nosplit (to confirm non-split-form is stable).
+dg_config = DGFluxConfig(
+    numflux,
+    is_cpu_device,
+    false,
+    (numflux_name == "kep") && !force_nosplit,
+)
+
+# One-time diagnostic: which RHS stage first produced NaN (used when use_split_form is true).
+const _rhs_nan_stage_reported = Ref(false)
+_rhs_nan_stage_reported[] = false
 
 function rhs!(dydt, y, param_tuple, t)
 
     parameters, config = param_tuple
+
+    # Helper for NaN diagnostic (split-form only): IJFH stores one array; use parent to get it
+    _has_nan_inf(f) = any(!isfinite, parent(Fields.field_values(f)))
 
     # ϕ' K' W J K dydt =  -ϕ' K' I' [DH' WH JH flux.(I K y)]
     #  =>   K dydt = - K inv(K' WJ K) K' I' [DH' WH JH flux.(I K y)]
@@ -259,6 +273,16 @@ function rhs!(dydt, y, param_tuple, t)
         dydt .= wdiv_flux .* (.-(local_geometry_field.WJ))
     end
 
+    # Diagnostic: where does first NaN appear? (split-form CPU only, one-time report)
+    if config.use_split_form &&
+       (ClimaComms.device(axes(y)) isa ClimaComms.AbstractCPUDevice) &&
+       !_rhs_nan_stage_reported[]
+        if _has_nan_inf(dydt)
+            @warn "RHS NaN/Inf first appears after volume term" t
+            _rhs_nan_stage_reported[] = true
+        end
+    end
+
     Operators.add_numerical_flux_internal!(config.numflux, dydt, y, parameters)
     Operators.add_numerical_flux_boundary!(
         dydt,
@@ -267,6 +291,15 @@ function rhs!(dydt, y, param_tuple, t)
     ) do normal, (y⁻, parameters)
         y⁺ = (ρ = y⁻.ρ, ρu = y⁻.ρu - dot(y⁻.ρu, normal) * normal, ρθ = y⁻.ρθ)
         config.numflux(normal, (y⁻, parameters), (y⁺, parameters))
+    end
+
+    if config.use_split_form &&
+       (ClimaComms.device(axes(y)) isa ClimaComms.AbstractCPUDevice) &&
+       !_rhs_nan_stage_reported[]
+        if _has_nan_inf(dydt)
+            @warn "RHS NaN/Inf first appears after face terms" t
+            _rhs_nan_stage_reported[] = true
+        end
     end
 
     # 6. Solve for final result
@@ -278,6 +311,16 @@ function rhs!(dydt, y, param_tuple, t)
         3,
     )
     Operators.tensor_product!(dydt_data, M)
+
+    if config.use_split_form &&
+       (ClimaComms.device(axes(y)) isa ClimaComms.AbstractCPUDevice) &&
+       !_rhs_nan_stage_reported[]
+        if _has_nan_inf(dydt)
+            @warn "RHS NaN/Inf first appears after mass solve" t
+            _rhs_nan_stage_reported[] = true
+        end
+    end
+
     return dydt
 end
 
@@ -302,6 +345,9 @@ Plots.GRBackend()
 dir = "dg_$(numflux_name)"
 if boundary_name != ""
     dir = "$(dir)_$(boundary_name)"
+end
+if force_nosplit
+    dir = "$(dir)_nosplit"
 end
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
@@ -341,14 +387,21 @@ Plots.mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
 Es = [_cpu(total_energy(u, parameters)) for u in sol.u]
 Plots.png(Plots.plot(Es), joinpath(path, "energy.png"))
 
-# Entropy monitor: for split-form KEP (periodic, inviscid), total entropy is
-# non-increasing (constant with entropy-conservative volume + no dissipation;
-# decreases when interface dissipation is applied).
+# Entropy monitor: for split-form KEP, total entropy is non-increasing.
 if numflux_name == "kep"
     Ss = [_cpu(total_entropy(u, parameters)) for u in sol.u]
     Plots.png(Plots.plot(Ss, title = "Total entropy"), joinpath(path, "entropy.png"))
-    # Optional: assert entropy did not increase (entropy-stable scheme)
-    @assert Ss[end] <= Ss[1] + 1e-12 "Entropy should not increase (got $(Ss[1]) -> $(Ss[end]))"
+    # Assert entropy did not increase only for split-form (non-split-form volume is not entropy-conservative).
+    if !force_nosplit && isfinite(Ss[1]) && isfinite(Ss[end])
+        @assert Ss[end] <= Ss[1] + 1e-12 "Entropy should not increase (got $(Ss[1]) -> $(Ss[end]))"
+    elseif !force_nosplit && !isfinite(Ss[end])
+        first_bad = findfirst(!isfinite, Ss)
+        if first_bad !== nothing
+            @warn "Solution produced NaN/Inf; first at save index $first_bad, t = $(sol.t[first_bad])"
+        else
+            @warn "Solution produced NaN/Inf; entropy assertion skipped"
+        end
+    end
 end
 
 function linkfig(figpath, alt = "")

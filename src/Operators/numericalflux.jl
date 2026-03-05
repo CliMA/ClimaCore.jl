@@ -187,13 +187,18 @@ and KineticEnergyPreservingNumericalFlux (which adds dissipation).
 function _kep_flux_core(normal, y⁻, y⁺, p⁻, p⁺)
     ρ⁻, ρu⁻, ρθ⁻ = y⁻.ρ, y⁻.ρu, y⁻.ρθ
     ρ⁺, ρu⁺, ρθ⁺ = y⁺.ρ, y⁺.ρu, y⁺.ρθ
-    u⁻ = ρu⁻ / ρ⁻
-    u⁺ = ρu⁺ / ρ⁺
-    θ⁻ = ρθ⁻ / ρ⁻
-    θ⁺ = ρθ⁺ / ρ⁺
+    T = real(eltype(ρ⁻))
+    # Safeguard only (avoids Inf/NaN from division); not a fix for the real flux—if ρ goes bad, the underlying formulation is wrong.
+    ρ⁻_ = max(ρ⁻, eps(T))
+    ρ⁺_ = max(ρ⁺, eps(T))
+    u⁻ = ρu⁻ / ρ⁻_
+    u⁺ = ρu⁺ / ρ⁺_
+    θ⁻ = ρθ⁻ / ρ⁻_
+    θ⁺ = ρθ⁺ / ρ⁺_
     uₙ⁻ = u⁻' * normal
     uₙ⁺ = u⁺' * normal
-    m̂ₙ = (ρ⁻ * uₙ⁻ + ρ⁺ * uₙ⁺) / 2
+    # Use ρ⁻_, ρ⁺_ so m̂ₙ stays finite when ρ is small (avoids ρ·(ρu/ρ) → 0*∞ → NaN in split-form volume).
+    m̂ₙ = (ρ⁻_ * uₙ⁻ + ρ⁺_ * uₙ⁺) / 2
     û = (u⁻ + u⁺) / 2
     pL = pressure_from_state(y⁻, p⁻)
     pR = pressure_from_state(y⁺, p⁺)
@@ -202,6 +207,17 @@ function _kep_flux_core(normal, y⁻, y⁺, p⁻, p⁺)
     flux_ρ  = m̂ₙ
     flux_ρu = m̂ₙ * û + p̄ * normal
     flux_ρθ = m̂ₙ * θ̂
+    # Sanitize so split-form volume accumulation never sees Inf/NaN (e.g. from huge û/θ̂ when ρ is tiny).
+    T_flux = real(eltype(flux_ρ))
+    ρu_finite = let v = flux_ρu
+        n = length(v)
+        all(i -> isfinite(v[i]), 1:n)
+    end
+    if !isfinite(flux_ρ) || !ρu_finite || !isfinite(flux_ρθ)
+        flux_ρ = zero(T_flux)
+        flux_ρu = RecursiveApply.rmul(flux_ρu, 0)  # preserve type (e.g. UVVector) for ⊞ in FluxDifferencingVolume
+        flux_ρθ = zero(T_flux)
+    end
     return (ρ = flux_ρ, ρu = flux_ρu, ρθ = flux_ρθ)
 end
 
@@ -231,12 +247,18 @@ Default equation of state used by kinetic-energy-preserving fluxes.
 Users may extend this method for their own state/parameter types to supply
 an appropriate pressure law.
 """
-pressure_from_state(state, parameters) = parameters.g * state.ρ^2 / 2
+function pressure_from_state(state, parameters)
+    ρ = state.ρ
+    isfinite(ρ) && ρ > 0 || return zero(ρ)
+    return parameters.g * ρ^2 / 2
+end
 
 """
     sound_speed_from_state(state, parameters)
 
-Default approximate sound speed used by entropy-stable fluxes.
+Default approximate sound speed used by entropy-stable fluxes. Sound speed is
+physically non-negative; we ensure a non-negative return (safeguards only—do not
+fix invalid states).
 
 By default this assumes an effective relation c² ≈ 2p/ρ, which is exact for
 the shallow-water-like law p = g ρ² / 2 and a reasonable proxy otherwise.
@@ -246,7 +268,10 @@ function sound_speed_from_state(state, parameters)
     p = pressure_from_state(state, parameters)
     ρ = state.ρ
     T = real(eltype(ρ))
-    return sqrt(max(eps(T), (2 * p) / ρ))
+    ρ_safe = max(ρ, eps(T))
+    c² = (2 * p) / ρ_safe
+    # Sound speed is physically ≥ 0; ensure non-negative input to sqrt (safeguard only).
+    return sqrt(max(eps(T), c²))
 end
 
 function (::KineticEnergyPreservingNumericalFlux)(
@@ -255,8 +280,12 @@ function (::KineticEnergyPreservingNumericalFlux)(
     (y⁺, p⁺),
 )
     F_core = _kep_flux_core(normal, y⁻, y⁺, p⁻, p⁺)
-    u⁻ = (y⁻.ρu) / y⁻.ρ
-    u⁺ = (y⁺.ρu) / y⁺.ρ
+    # Safeguard only: avoid Inf/NaN when computing λ; not a fix for the real flux values.
+    T = real(eltype(y⁻.ρ))
+    ρ⁻_ = max(y⁻.ρ, eps(T))
+    ρ⁺_ = max(y⁺.ρ, eps(T))
+    u⁻ = (y⁻.ρu) / ρ⁻_
+    u⁺ = (y⁺.ρu) / ρ⁺_
     uₙ⁻ = u⁻' * normal
     uₙ⁺ = u⁺' * normal
     cL = sound_speed_from_state(y⁻, p⁻)
