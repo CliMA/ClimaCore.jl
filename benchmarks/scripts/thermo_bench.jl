@@ -38,10 +38,13 @@ using JET
 import ClimaCore: Spaces, Fields
 import ClimaCore.Domains: Geometry
 
+@inline function make_thermo_state(thermo_params, ρ, e_int, q_tot)
+    sa = TD.saturation_adjustment(thermo_params, TD.ρe(), ρ, e_int, q_tot; maxiter = 3)
+    p = TD.air_pressure(thermo_params, sa.T, ρ, q_tot, sa.q_liq, sa.q_ice)
+    return (; ρ = ρ, p = p, T = sa.T, e_int = e_int, q_tot = q_tot)
+end
 @inline ts_gs(thermo_params, e_tot, q_tot, K, Φ, ρ) =
-    thermo_state(thermo_params, e_tot - K - Φ, q_tot, ρ)
-@inline thermo_state(thermo_params, ρ, e_int, q_tot) =
-    TD.PhaseEquil_ρeq(thermo_params,ρ,e_int,q_tot, 3, eltype(thermo_params)(0.003))
+    make_thermo_state(thermo_params, ρ, e_tot - K - Φ, q_tot)
 
 import Thermodynamics as TD
 
@@ -115,7 +118,7 @@ using ClimaCore
 import ClimaCore: Spaces, Fields
 import ClimaCore.Domains: Geometry
 
-ENV["CLIMACOMMS_DEVICE"] = "CUDA";
+ENV["CLIMACOMMS_DEVICE"] = get(ENV, "CLIMACOMMS_DEVICE", "CPU");
 ClimaComms.@import_required_backends
 using BenchmarkTools
 @isdefined(TU) || include(
@@ -149,7 +152,7 @@ using Test
         q_tot = FT(0),
         T = FT(0),
     )
-    x = fill((; ts = zero(TD.PhaseEquil{FT}), nt_core...), cspace)
+    x = fill((; ts = nt_ts, nt_core...), cspace)
     xv = fill((; ts = nt_ts, nt_core...), cspace)
     (_, Nij, _, Nv, Nh) = size(Fields.field_values(x.ts))
     us = TB.UniversalSizesStatic(Nv, Nij, Nh)
