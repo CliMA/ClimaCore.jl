@@ -139,11 +139,6 @@ function implicit_tendency_bc!(Yₜ, Y, p, t)
     return nothing
 end
 
-function thermo_state(thermo_params, ᶜρ, ᶜρe_tot, ᶜK, grav, ᶜz)
-    return @. lazy(
-        TD.PhaseDry_ρe(thermo_params, ᶜρ, ᶜρe_tot / ᶜρ - ᶜK - Φ(grav, ᶜz)),
-    )
-end
 
 function ᶜimplicit_tendency_bc(ᶜY, ᶠY, p, t)
     (; rayleigh_sponge, dt, zmax, thermo_params) = p
@@ -158,10 +153,11 @@ function ᶜimplicit_tendency_bc(ᶜY, ᶠY, p, t)
     ᶠu₃ = ᶠY.u₃
 
     ᶜK = compute_kinetic(ᶜuₕ, ᶠu₃)
-    ᶜts = thermo_state(thermo_params, ᶜρ, ᶜρe_tot, ᶜK, grav, ᶜz)
-    ᶜp = @. lazy(TD.air_pressure(thermo_params, ᶜts))
+    ᶜe_int = @. lazy(ᶜρe_tot / ᶜρ - ᶜK - Φ(grav, ᶜz))
+    ᶜT = @. lazy(TD.air_temperature(thermo_params, ᶜe_int))
+    ᶜp = @. lazy(TD.air_pressure(thermo_params, ᶜT, ᶜρ))
     ᶜh_tot =
-        @. lazy(TD.total_specific_enthalpy(thermo_params, ᶜts, ᶜρe_tot / ᶜρ))
+        @. lazy(TD.total_enthalpy(thermo_params, ᶜρe_tot / ᶜρ, ᶜT))
     # Central advection of active tracers (e_tot and q_tot)
     ᶠuₕ³ = @. lazy(ᶠwinterp(ᶜρ * ᶜJ, CT3(ᶜuₕ)))
     ᶠu³ = @. lazy(ᶠuₕ³ + CT3(ᶠu₃))
@@ -183,8 +179,9 @@ function ᶠimplicit_tendency_bc(ᶜY, ᶠY, p, t)
     ᶜuₕ = ᶜY.uₕ
     ᶠu₃ = ᶠY.u₃
     ᶜK = compute_kinetic(ᶜuₕ, ᶠu₃)
-    ᶜts = thermo_state(thermo_params, ᶜρ, ᶜρe_tot, ᶜK, grav, ᶜz)
-    ᶜp = @. lazy(TD.air_pressure(thermo_params, ᶜts))
+    ᶜe_int = @. lazy(ᶜρe_tot / ᶜρ - ᶜK - Φ(grav, ᶜz))
+    ᶜT = @. lazy(TD.air_temperature(thermo_params, ᶜe_int))
+    ᶜp = @. lazy(TD.air_pressure(thermo_params, ᶜT, ᶜρ))
     bc1 = @. lazy(-(ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) + ᶠgradᵥ(Φ(grav, ᶜz))))
     bc2 = @. lazy(-β_rayleigh_w(rayleigh_sponge, ᶠz, zmax) * ᶠu₃)
     return @. lazy(ᶠtendencies(bc1 + bc2))
@@ -199,7 +196,7 @@ end
 
 function set_precomputed_quantities!(Y, p, t)
     (; thermo_params) = p
-    (; ᶜu, ᶠu³, ᶠu, ᶜK, ᶜts, ᶜp) = p.precomputed
+    (; ᶜu, ᶠu³, ᶠu, ᶜK, ᶜT, ᶜp) = p.precomputed
 
     ᶜρ = Y.c.ρ
     ᶜuₕ = Y.c.uₕ
@@ -211,16 +208,13 @@ function set_precomputed_quantities!(Y, p, t)
     ᶠu³ .= compute_ᶠuₕ³(ᶜuₕ, ᶜρ) .+ CT3.(ᶠu₃)
     ᶜK .= compute_kinetic(ᶜuₕ, ᶠu₃)
 
-    @. ᶜts = TD.PhaseDry_ρe(
-        thermo_params,
-        Y.c.ρ,
-        Y.c.ρe_tot / Y.c.ρ - ᶜK - Φ(grav, ᶜz),
-    )
-    @. ᶜp = TD.air_pressure(thermo_params, ᶜts)
+    ᶜe_int = @. Y.c.ρe_tot / Y.c.ρ - ᶜK - Φ(grav, ᶜz)
+    @. ᶜT = TD.air_temperature(thermo_params, ᶜe_int)
+    @. ᶜp = TD.air_pressure(thermo_params, ᶜT, Y.c.ρ)
 
     (; ᶜh_tot) = p.precomputed
     @. ᶜh_tot =
-        TD.total_specific_enthalpy(thermo_params, ᶜts, Y.c.ρe_tot / Y.c.ρ)
+        TD.total_enthalpy(thermo_params, Y.c.ρe_tot / Y.c.ρ, ᶜT)
     return nothing
 end
 
@@ -300,7 +294,7 @@ precomputed = (;
     ᶠu³ = Fields.Field(CT3{FT}, ᶠspace),
     ᶜp = Fields.Field(FT, ᶜspace),
     ᶜK = Fields.Field(FT, ᶜspace),
-    ᶜts = Fields.Field(TD.PhaseDry{FT}, ᶜspace),
+    ᶜT = Fields.Field(FT, ᶜspace),
     ᶠu = Fields.Field(C123{FT}, ᶠspace),
     ᶜu = Fields.Field(C123{FT}, ᶜspace),
 )
