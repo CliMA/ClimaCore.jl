@@ -137,6 +137,7 @@ Base.convert(::Type{T}, a::AxisTensor) where {T <: AxisTensor} = T(a)
 
 Base.axes(a::AxisTensor) = getfield(a, :axes)
 Base.axes(::Type{AxisTensor{T, N, A, S}}) where {T, N, A, S} = A.instance
+Base.axes(::Type{Adjoint{T, AxisTensor{T, N, A, S}}}) where {T, N, A, S} = reverse(A.instance)
 Base.size(a::AxisTensor) = map(length, axes(a))
 
 Base.rand(::Type{AxisTensor{T, N, A, S}}) where {T, N, A, S} =
@@ -215,6 +216,7 @@ import Base: +, -, *, /, \, ==
 
 # vectors
 const AxisVector{T, A1, S} = AxisTensor{T, 1, Tuple{A1}, S}
+Base.axes(::Type{Adjoint{T, AxisVector{T, A, S}}}) where {T, A, S}  = (Base.OneTo(1), A.instance)
 
 AxisVector(ax::A1, v::SVector{N, T}) where {A1 <: AbstractAxis, N, T} =
     AxisVector{T, A1, SVector{N, T}}((ax,), v)
@@ -595,3 +597,5 @@ end
 @inline function outer(x::Axis2TensorOrAdj, y::Number)
     x * y
 end
+
+Base.iszero(x::AxisTensor) = iszero(components(x))

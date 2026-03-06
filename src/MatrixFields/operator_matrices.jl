@@ -73,34 +73,8 @@ has_affine_bc(op) = unrolled_any(
     op.bcs,
 )
 
-function needs_composition(op::Operators.StencilBroadcasted)
-    op.op isa Operators.AdvectionOperator &&  return true
-    op.op isa Operators.GradientOperator && unrolled_any(arg -> eltype(arg) <: Geometry.AxisVector , op.args) &&  return true
-    return unrolled_any(arg -> needs_composition(arg), op.args)
-end
-needs_composition(op::Base.Broadcast.Broadcasted) =  unrolled_any(arg -> needs_composition(arg), op.args)
-needs_composition(op::Operators.AdvectionOperator, _) = true
-needs_composition(op::Operators.GradientOperator, args) = unrolled_any(arg -> eltype(arg) <: Geometry.AxisVector , args)
-needs_composition(_, args) = unrolled_any(arg -> needs_composition(arg), args)
-needs_composition(op) = false
 uses_extrapolate(op) = unrolled_any(Base.Fix2(isa, Operators.Extrapolate), op.bcs)
 
-revert_op(arg) = arg
-function revert_op(arg::Operators.StencilBroadcasted{Style, Op}) where {Style, Op <: MultiplyColumnwiseBandMatrixField}
-  oldop = arg.args[1].op.op
-  newargs = (revert_op(arg.args[2]),)
-  return Operators.StencilBroadcasted{Style, typeof(oldop), typeof(newargs), typeof(arg.axes), typeof(arg.work)}(oldop, newargs, arg.axes, arg.work)
-end
-
-function revert_op(bc::Operators.StencilBroadcasted{Style}) where {Style}
-  newargs = unrolled_map(arg -> revert_op(arg), bc.args)
-  return Operators.StencilBroadcasted{Style, typeof(bc.op), typeof(newargs), typeof(bc.axes), typeof(bc.work)}(bc.op, newargs, bc.axes, bc.work)
-end
-
-function revert_op(bc::Base.Broadcast.Broadcasted)
-  newargs = unrolled_map(arg -> revert_op(arg), bc.args)
-  return Base.Broadcast.Broadcasted(bc.f, newargs)
-end
 
 #  revert_op(arg::Operators.StencilBroadcasted) = 
 
@@ -126,33 +100,12 @@ end
 #     end
 # end
 
-function Base.Broadcast.broadcasted(
-    ::Style,
-    op::Op,
-    args...,
-) where {Style <: Operators.AbstractStencilStyle,  Op <: OneArgFDOperator}
-     if !has_affine_bc(op) && !needs_composition(op, args)
-        opmat = Base.Broadcast.broadcasted(
-            FDOperatorMatrix(op),
-            Fields.local_geometry_field(operator_input_space(op, axes(args[end]))),
-        )
-
-        new_args = (opmat, args...)
-        newop = MultiplyColumnwiseBandMatrixField()
-        return Operators.StencilBroadcasted{Style}(newop, new_args)
-    else
-        FT = Spaces.undertype(axes(Operators.StencilBroadcasted{Style}(op, args)))
-        newargs = unrolled_map(arg -> revert_op(arg), args)
-        Operators.StencilBroadcasted{Style}( Operators.promote_bcs(op, FT), newargs)
-    end
-end
-
 # function Base.Broadcast.broadcasted(
 #     ::Style,
 #     op::Op,
 #     args...,
-# ) where {Style <: Operators.AbstractStencilStyle,  Op <: TwoArgFDOperator}
-#      if !has_affine_bc(op) && !needs_composition(op, args)
+# ) where {Style <: Operators.AbstractStencilStyle,  Op <: OneArgFDOperator}
+#      if !has_affine_bc(op) #&& !needs_composition(op, args)
 #         opmat = Base.Broadcast.broadcasted(
 #             FDOperatorMatrix(op),
 #             Fields.local_geometry_field(operator_input_space(op, axes(args[end]))),
@@ -163,9 +116,30 @@ end
 #         return Operators.StencilBroadcasted{Style}(newop, new_args)
 #     else
 #         FT = Spaces.undertype(axes(Operators.StencilBroadcasted{Style}(op, args)))
-#         newargs = unrolled_map(arg -> revert_op(arg), args)
-#         Operators.StencilBroadcasted{Style}( Operators.promote_bcs(op, FT), newargs)
+#         # newargs = unrolled_map(arg -> revert_op(arg), args)
+#         Operators.StencilBroadcasted{Style}( Operators.promote_bcs(op, FT), args)
 #     end
+# end
+
+# function Base.Broadcast.broadcasted(
+#     ::Style,
+#     op::Op,
+#     args...,
+# ) where {Style <: Operators.AbstractStencilStyle,  Op <: TwoArgFDOperator}
+#      if !has_affine_bc(op) #&& !needs_composition(op, args)
+#         opmat = Base.Broadcast.broadcasted(
+#             FDOperatorMatrix(op),
+#             args[1],
+#             # Fields.local_geometry_field(operator_input_space(op, axes(args[end]))),
+#         )
+
+#         new_args = (opmat, args[end])
+#         newop = MultiplyColumnwiseBandMatrixField()
+#         return Operators.StencilBroadcasted{Style}(newop, new_args)
+#     else
+#         FT = Spaces.undertype(axes(Operators.StencilBroadcasted{Style}(op, args)))
+#         # newargs = unrolled_map(arg -> revert_op(arg), args)
+#         Operators.StencilBroadcasted{Style}( Operators.promote_bcs(op, FT), args)    end
 # end
 
 ################################################################################
