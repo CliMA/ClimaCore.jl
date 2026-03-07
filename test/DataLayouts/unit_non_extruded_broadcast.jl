@@ -37,7 +37,7 @@ end
     @test !DataLayouts.isascalar(bc)
     bc = DataLayouts.to_non_extruded_broadcasted(bc)
     @test !DataLayouts.isascalar(bc)
-    @test_throws MethodError bc[1]
+    @test bc[1] == bc[]
     @test bc[] == 10.0
 end
 
