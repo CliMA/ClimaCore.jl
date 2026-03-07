@@ -4,6 +4,7 @@ using Revise; include(joinpath("test", "DataLayouts", "unit_copyto.jl"))
 =#
 using Test
 using ClimaCore.DataLayouts
+import ClimaCore.RecursiveApply: ⊞
 import ClimaCore.Geometry
 import ClimaComms
 using StaticArrays
@@ -11,155 +12,87 @@ ClimaComms.@import_required_backends
 import Random
 Random.seed!(1234)
 
-function test_copyto_float!(data)
-    Random.seed!(1234)
-    # Normally we'd use `similar` here, but https://github.com/CliMA/ClimaCore.jl/issues/1803
+all_layouts(ArrayType, S; Ni = 3, Nij = 3, Nv = 4, Nh = 5, Nk = 6) = (
+    DataF{S}(ArrayType, zeros),
+    VF{S}(ArrayType, zeros; Nv),
+    IF{S}(ArrayType, zeros; Ni),
+    IJF{S}(ArrayType, zeros; Nij),
+    IFH{S}(ArrayType, zeros; Ni, Nh),
+    IHF{S}(ArrayType, zeros; Ni, Nh),
+    IJFH{S}(ArrayType, zeros; Nij, Nh),
+    IJHF{S}(ArrayType, zeros; Nij, Nh),
+    VIFH{S}(ArrayType, zeros; Nv, Ni, Nh),
+    VIHF{S}(ArrayType, zeros; Nv, Ni, Nh),
+    VIJFH{S}(ArrayType, zeros; Nv, Nij, Nh),
+    VIJHF{S}(ArrayType, zeros; Nv, Nij, Nh),
+    # DataLayouts.IJKFVH{S}(ArrayType, zeros; Nij, Nk, Nv, Nh),
+    # DataLayouts.IH1JH2{S}(ArrayType, zeros; Nij),
+)
+
+function test_copyto_single_F!(data)
+    # Avoid using similar here due to https://github.com/CliMA/ClimaCore.jl/issues/1803
     rand_data = DataLayouts.rebuild(data, similar(parent(data)))
-    ArrayType = ClimaComms.array_type(ClimaComms.device())
-    parent(rand_data) .=
-        ArrayType(rand(eltype(parent(data)), DataLayouts.farray_size(data)))
-    Base.copyto!(data, rand_data) # test copyto!(::AbstractData, ::AbstractData)
-    @test all(parent(data) .== parent(rand_data))
-    Base.copyto!(data, Base.Broadcast.broadcasted(+, rand_data, 1)) # test copyto!(::AbstractData, ::Broadcasted)
-    @test all(parent(data) .== parent(rand_data) .+ 1)
+    Random.rand!(parent(rand_data))
+    to_data(array) = DataLayouts.bitcast_struct.(eltype(data), array)
+
+    Base.copyto!(data, rand_data)
+    @test all(to_data(parent(data)) .== to_data(parent(rand_data)))
+
+    Base.copyto!(data, Base.Broadcast.broadcasted(⊞, rand_data, 0x1))
+    @test all(to_data(parent(data)) .== to_data(parent(rand_data)) .⊞ 0x1)
 end
 
-function test_copyto!(data)
-    Random.seed!(1234)
-    # Normally we'd use `similar` here, but https://github.com/CliMA/ClimaCore.jl/issues/1803
+function test_copyto_multiple_F!(data)
+    # Avoid using similar here due to https://github.com/CliMA/ClimaCore.jl/issues/1803
     rand_data = DataLayouts.rebuild(data, similar(parent(data)))
-    ArrayType = ClimaComms.array_type(ClimaComms.device())
-    parent(rand_data) .=
-        ArrayType(rand(eltype(parent(data)), DataLayouts.farray_size(data)))
-    Base.copyto!(data, rand_data) # test copyto!(::AbstractData, ::AbstractData)
-    @test all(parent(data.:1) .== parent(rand_data.:1))
+    Random.rand!(parent(rand_data))
+    to_data(array) = DataLayouts.bitcast_struct.(eltype(data.:1), array)
+
+    Base.copyto!(data, rand_data)
+    @test all(to_data(parent(data.:1)) .== to_data(parent(rand_data.:1)))
     @test all(parent(data.:2) .== parent(rand_data.:2))
-    @test all(parent(data) .== parent(rand_data))
-    Base.copyto!(data.:1, Base.Broadcast.broadcasted(+, rand_data.:1, 1)) # test copyto!(::AbstractData, ::Broadcasted)
-    Base.copyto!(data.:2, Base.Broadcast.broadcasted(+, rand_data.:2, 1)) # test copyto!(::AbstractData, ::Broadcasted)
-    @test all(parent(data.:1) .== parent(rand_data.:1) .+ 1)
-    @test all(parent(data.:2) .== parent(rand_data.:2) .+ 1)
+    # No need to convert the second component, since it has no internal padding
+
+    Base.copyto!(data, Base.Broadcast.broadcasted(⊞, rand_data, 0x1))
+    @test all(to_data(parent(data.:1)) .== to_data(parent(rand_data.:1)) .⊞ 0x1)
+    # Do not test the second component, since it spans multiple array indices
 end
 
-@testset "copyto! with Nf = 1" begin
-    device = ClimaComms.device()
-    ArrayType = ClimaComms.array_type(device)
-    FT = Float64
-    S = FT
-    Nv = 4
-    Ni = Nij = 3
-    Nh = 5
-    Nk = 6
-    data = DataF{S}(ArrayType{FT}, zeros)
-    test_copyto_float!(data)
-    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
-    test_copyto_float!(data)
-    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
-    test_copyto_float!(data)
-    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
-    test_copyto_float!(data)
-    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
-    test_copyto_float!(data)
-    data = IJF{S}(ArrayType{FT}, zeros; Nij)
-    test_copyto_float!(data)
-    data = IF{S}(ArrayType{FT}, zeros; Ni)
-    test_copyto_float!(data)
-    data = VF{S}(ArrayType{FT}, zeros; Nv)
-    test_copyto_float!(data)
-    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
-    test_copyto_float!(data)
-    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
-    test_copyto_float!(data)
-    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
-    test_copyto_float!(data)
-    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
-    test_copyto_float!(data)
-    # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_copyto_float!(data) # TODO: test
-    # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);          test_copyto_float!(data) # TODO: test
-end
-
-@testset "copyto! with Nf > 1" begin
-    device = ClimaComms.device()
-    ArrayType = ClimaComms.array_type(device)
-    FT = Float64
-    S = Tuple{FT, FT}
-    Nv = 4
-    Ni = Nij = 3
-    Nh = 5
-    Nk = 6
-    data = DataF{S}(ArrayType{FT}, zeros)
-    test_copyto!(data)
-    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
-    test_copyto!(data)
-    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
-    test_copyto!(data)
-    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
-    test_copyto!(data)
-    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
-    test_copyto!(data)
-    data = IJF{S}(ArrayType{FT}, zeros; Nij)
-    test_copyto!(data)
-    data = IF{S}(ArrayType{FT}, zeros; Ni)
-    test_copyto!(data)
-    data = VF{S}(ArrayType{FT}, zeros; Nv)
-    test_copyto!(data)
-    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
-    test_copyto!(data)
-    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
-    test_copyto!(data)
-    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
-    test_copyto!(data)
-    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
-    test_copyto!(data)
-    # TODO: test this
-    # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_copyto!(data) # TODO: test
-    # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);          test_copyto!(data) # TODO: test
-end
-
-@testset "copyto! views with Nf > 1" begin
-    device = ClimaComms.device()
-    ArrayType = ClimaComms.array_type(device)
-    data_view(data) = DataLayouts.rebuild(
-        data,
-        SubArray(
-            parent(data),
-            ntuple(
-                i -> Base.Slice(Base.OneTo(DataLayouts.farray_size(data, i))),
-                ndims(data),
-            ),
+data_view(data) = DataLayouts.rebuild(
+    data,
+    SubArray(
+        parent(data),
+        ntuple(
+            i -> Base.Slice(Base.OneTo(DataLayouts.farray_size(data, i))),
+            ndims(data),
         ),
-    )
-    FT = Float64
-    S = Tuple{FT, FT}
-    Nv = 4
-    Ni = Nij = 3
-    Nh = 5
-    Nk = 6
-    # Rather than using level/slab/column, let's just make views/SubArrays
-    # directly so that we can easily test all cases:
-    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
-    test_copyto!(data_view(data))
-    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
-    test_copyto!(data_view(data))
-    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
-    test_copyto!(data_view(data))
-    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
-    test_copyto!(data_view(data))
-    data = IJF{S}(ArrayType{FT}, zeros; Nij)
-    test_copyto!(data_view(data))
-    data = IF{S}(ArrayType{FT}, zeros; Ni)
-    test_copyto!(data_view(data))
-    data = VF{S}(ArrayType{FT}, zeros; Nv)
-    test_copyto!(data_view(data))
-    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
-    test_copyto!(data_view(data))
-    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
-    test_copyto!(data_view(data))
-    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
-    test_copyto!(data_view(data))
-    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
-    test_copyto!(data_view(data))
-    # TODO: test this
-    # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_copyto!(data) # TODO: test
-    # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);          test_copyto!(data) # TODO: test
+    ),
+)
+
+@testset "copyto!" begin
+    ArrayType = ClimaComms.array_type(ClimaComms.device()){Float64}
+    @testset "Nf = 1 (uniform)" begin
+        for data in all_layouts(ArrayType, Float64)
+            test_copyto_single_F!(data)
+            test_copyto_single_F!(data_view(data))
+        end
+    end
+    @testset "Nf = 1 (nonuniform)" begin
+        for data in all_layouts(ArrayType, Tuple{Int32, UInt8})
+            test_copyto_single_F!(data)
+            test_copyto_single_F!(data_view(data))
+        end
+    end
+    @testset "Nf = 3 (uniform)" begin
+        for data in all_layouts(ArrayType, Tuple{Float64, NTuple{2, Float64}})
+            test_copyto_multiple_F!(data)
+            test_copyto_multiple_F!(data_view(data))
+        end
+    end
+    @testset "Nf = 3 (nonuniform)" begin
+        for data in all_layouts(ArrayType, Tuple{Tuple{Int32, UInt8}, UInt128})
+            test_copyto_multiple_F!(data)
+            test_copyto_multiple_F!(data_view(data))
+        end
+    end
 end

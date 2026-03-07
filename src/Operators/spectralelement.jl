@@ -1503,7 +1503,7 @@ function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
     else
         error("invalid return type")
     end
-    for j in 1:Nq, i in 1:Nq
+    @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[slab_index(i, j)] =
