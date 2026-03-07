@@ -105,7 +105,7 @@ function create_dss_buffer(
     else
         _transformed_type(data, local_geometry, dss_weights, DA) # extract transformed type
     end
-    Nf = DataLayouts.typesize(T, TS)
+    Nf = DataLayouts.storage_length(T, TS)
 
     perimeter_data = if !isnothing(local_geometry)
         fdim = DataLayouts.field_dim(DataLayouts.singleton(local_geometry))

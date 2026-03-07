@@ -1,5 +1,7 @@
 module Utilities
 
+import UnrolledUtilities: unrolled_map
+
 include("plushalf.jl")
 include("cache.jl")
 
@@ -60,5 +62,21 @@ function unionall_type(::Type{T}) where {T}
     return T.name.wrapper
 end
 
+map_over_type_parameters(f::F, ::Type{T}) where {F, T} =
+    unionall_type(T){unrolled_map(f, Tuple(T.parameters))...}
+
+"""
+    replace_type_parameter(T, P, P′)
+
+Recursively modifies the parameters of `T`, replacing every subtype of `P` with
+`P′`. This is like constructing a value of type `T` and converting subfields of
+type `P` to type `P′`, though no constructors are actually called or compiled.
+"""
+replace_type_parameter(T, P, P′) = _replace_type_parameter(T, Val(Tuple{P, P′}))
+_replace_type_parameter(not_a_type, _) = not_a_type
+_replace_type_parameter(::Type{<:P}, val::Val{Tuple{P, P′}}) where {P, P′} = P′
+_replace_type_parameter(::Type{T}, val::Val{Tuple{P, P′}}) where {T, P, P′} =
+    isempty(T.parameters) ? T :
+    map_over_type_parameters(Base.Fix2(_replace_type_parameter, val), T)
 
 end # module

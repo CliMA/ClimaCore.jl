@@ -5,43 +5,32 @@ using Revise; include(joinpath("test", "DataLayouts", "data2d.jl"))
 using Test
 using ClimaComms
 using ClimaCore.DataLayouts
-using StaticArrays
-using ClimaCore.DataLayouts: check_basetype, get_struct, set_struct!, slab_index
+using ClimaCore.DataLayouts: check_basetype, slab_index
 
 device = ClimaComms.device()
 ArrayType = ClimaComms.array_type(device)
 @testset "check_basetype" begin
+    @test_throws Exception check_basetype(Real, Real)
     @test_throws Exception check_basetype(Real, Float64)
     @test_throws Exception check_basetype(Float64, Real)
 
     @test isnothing(check_basetype(Float64, Float64))
-    @test isnothing(check_basetype(Float64, Complex{Float64}))
+    @test isnothing(check_basetype(Float32, Float64))
+    @test_throws Exception check_basetype(Float64, Float32)
 
-    @test_throws Exception check_basetype(Float32, Float64)
-    @test_throws Exception check_basetype(Float64, Complex{Float32})
-
-    @test isnothing(check_basetype(Float64, Tuple{}))
     @test isnothing(check_basetype(Tuple{}, Tuple{}))
+    @test isnothing(check_basetype(Float64, Tuple{}))
     @test_throws Exception check_basetype(Tuple{}, Float64)
 
-    @test isnothing(check_basetype(Int, Tuple{Int, Complex{Int}}))
-    @test isnothing(check_basetype(Float64, typeof(SA[1.0 2.0; 3.0 4.0])))
-
     S = typeof((a = ((1.0, 2.0f0), (3.0, 4.0f0)), b = (5.0, 6.0f0)))
+    @test isnothing(check_basetype(Float32, S))
     @test isnothing(check_basetype(Tuple{Float64, Float32}, S))
+    @test_throws Exception check_basetype(Float64, S)
 
     S = typeof(((), (1.0 + 2.0im, NamedTuple()), 3.0 + 4.0im, ()))
+    @test isnothing(check_basetype(Float32, S))
     @test isnothing(check_basetype(Float64, S))
     @test isnothing(check_basetype(Complex{Float64}, S))
-end
-
-@testset "get_struct / set_struct!" begin
-    array = [1.0, 2.0, 3.0]
-    S = Tuple{Complex{Float64}, Float64}
-    @test get_struct(array, S, Val(1), CartesianIndex(1)) == (1.0 + 2.0im, 3.0)
-    set_struct!(array, (4.0 + 2.0im, 6.0), Val(1), CartesianIndex(1))
-    @test array == [4.0, 2.0, 6.0]
-    @test get_struct(array, S, Val(1), CartesianIndex(1)) == (4.0 + 2.0im, 6.0)
 end
 
 @testset "IJFH" begin

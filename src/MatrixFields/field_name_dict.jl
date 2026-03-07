@@ -248,7 +248,7 @@ function get_internal_entry(
         field_offset_and_type(name_pair, T, S, name_pair)
     if isa(index_method, Val{:view})
         @assert target_type <: T
-        band_element_size = DataLayouts.typesize(T, S)
+        band_element_size = DataLayouts.storage_length(T, S)
         singleton_datalayout = DataLayouts.singleton(Fields.field_values(entry))
         scalar_band_type =
             band_matrix_row_type(outer_diagonals(eltype(entry))..., target_type)
@@ -398,40 +398,30 @@ function field_offset_and_type(
            extract_first(name_pair[1]) in fieldnames(S) # index with first part of name_pair[1]
         remaining_field_chain = (drop_first(name_pair[1]), name_pair[2])
         child_type = fieldtype(S, extract_first(name_pair[1]))
-        field_index = unrolled_filter(
-            i -> fieldname(S, i) == extract_first(name_pair[1]),
-            1:fieldcount(S),
-        )[1]
         (remaining_offset, end_type, index_method) = field_offset_and_type(
             remaining_field_chain,
             T,
             child_type,
             full_key,
         )
-        return (
-            DataLayouts.fieldtypeoffset(T, S, field_index) + remaining_offset,
-            end_type,
-            index_method,
-        )
+        F = unrolled_findfirst(==(extract_first(name_pair[1])), fieldnames(S))
+        offset_of_field_F =
+            DataLayouts.storage_length(T, Tuple{fieldtypes(S)[1:(F - 1)]...})
+        return (remaining_offset + offset_of_field_F, end_type, index_method)
     elseif name_pair[2] != @name() &&
            extract_first(name_pair[2]) in fieldnames(S) # index with first part of name_pair[2]
         remaining_field_chain = name_pair[1], drop_first(name_pair[2])
         child_type = fieldtype(S, extract_first(name_pair[2]))
-        field_index = unrolled_filter(
-            i -> fieldname(S, i) == extract_first(name_pair[2]),
-            1:fieldcount(S),
-        )[1]
         (remaining_offset, end_type, index_method) = field_offset_and_type(
             remaining_field_chain,
             T,
             child_type,
             full_key,
         )
-        return (
-            DataLayouts.fieldtypeoffset(T, S, field_index) + remaining_offset,
-            end_type,
-            index_method,
-        )
+        F = unrolled_findfirst(==(extract_first(name_pair[2])), fieldnames(S))
+        offset_of_field_F =
+            DataLayouts.storage_length(T, Tuple{fieldtypes(S)[1:(F - 1)]...})
+        return (remaining_offset + offset_of_field_F, end_type, index_method)
     elseif !any(isequal(@name()), name_pair) # implicit tensor structure optimization
         (remaining_offset, end_type, index_method) = field_offset_and_type(
             (drop_first(name_pair[1]), drop_first(name_pair[2])),

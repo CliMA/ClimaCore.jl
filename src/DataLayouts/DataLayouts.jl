@@ -64,14 +64,14 @@ leverage efficient linear indexing:
 module DataLayouts
 
 import Base: Base, @propagate_inbounds
-import StaticArrays: SOneTo, MArray, SArray
+import StaticArrays: SOneTo, MArray, SArray, Size
 import ClimaComms
-import UnrolledUtilities: unrolled_map, unrolled_all
 import MultiBroadcastFusion as MBF
 import Adapt
-import UnrolledUtilities: unrolled_foreach, unrolled_all, unrolled_findfirst
+import UnrolledUtilities: generic_getindex
+using UnrolledUtilities
 
-import ..Utilities: PlusHalf, unionall_type
+import ..Utilities: PlusHalf, unionall_type, replace_type_parameter
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..slab, ..slab_args, ..column, ..column_args, ..level, ..level_args
 export slab,
@@ -131,6 +131,7 @@ struct IJHMask{B, NT, V} <: AbstractMask
 end
 
 include("struct.jl")
+include("bitcast_struct.jl")
 
 abstract type AbstractData{S} end
 
@@ -316,90 +317,45 @@ end
 
 Base.parent(data::AbstractData) = getfield(data, :array)
 
-Base.similar(data::AbstractData{S}) where {S} = similar(data, S)
-
 @inline Base.:(==)(data1::D, data2::D) where {D <: AbstractData} =
     parent(data1) == parent(data2)
 
-@inline function ncomponents(data::AbstractData{S}) where {S}
-    typesize(eltype(parent(data)), S)
+@inline ncomponents(data::AbstractData{S}) where {S} =
+    storage_length(eltype(parent(data)), S)
+
+@inline function field_index_view(data::AbstractData{S}, ::Val{F}) where {S, F}
+    1 <= F <= fieldcount(S) || throw(ArgumentError("Type $S has no field $F"))
+    D = field_dim(singleton(data))
+    params = Base.tail(type_params(data))
+    array_view = @inbounds struct_field_view(parent(data), S, Val(F), Val(D))
+    return union_all(singleton(data)){fieldtype(S, F), params...}(array_view)
 end
 
-@inline _getproperty(data::AbstractData, ::Val{Name}) where {Name} =
-    _getproperty(data, Val(Name), Name)
+@inline field_name_view(data::AbstractData{S}, ::Val{name}) where {S, name} =
+    name in fieldnames(S) ?
+    field_index_view(data, Val(unrolled_findfirst(==(name), fieldnames(S)))) :
+    throw(ArgumentError("Type $S has no field $name"))
 
-@generated function _getproperty(
-    data::AbstractData{S},
-    ::Val{Name},
-    name,
-) where {S, Name}
-    i = findfirst(isequal(Name), fieldnames(S))
-    static_idx = Val{i}()
-    return :(
-        Base.@_inline_meta; DataLayouts._property_view(data, $static_idx, name)
-    )
+@inline Base.dotgetproperty(data::AbstractData, prop) = getproperty(data, prop)
+@inline Base.getproperty(data::AbstractData, i::Integer) =
+    field_index_view(data, Val(i))
+@inline Base.getproperty(data::AbstractData, name::Symbol) =
+    field_name_view(data, Val(name))
+
+function replace_storage(data::AbstractData, ::Type{S}, ::Type{B}) where {S, B}
+    D = field_dim(singleton(data))
+    params = Base.tail(type_params(data))
+    new_array_size = Base.setindex(size(parent(data)), storage_length(B, S), D)
+    new_array = similar(parent(data), B, new_array_size...)
+    return union_all(singleton(data)){S, params...}(new_array)
 end
 
-@inline function Base.getproperty(data::AbstractData{S}, name::Symbol) where {S}
-    _getproperty(data, Val{name}(), name)
-end
-@inline function Base.dotgetproperty(
-    data::AbstractData{S},
-    name::Symbol,
-) where {S}
-    _getproperty(data, Val{name}(), name)
-end
+replace_basetype(data::AbstractData{S}, ::Type{B}) where {S, B} =
+    replace_storage(data, replace_type_parameter(S, eltype(parent(data)), B), B)
 
-Base.@propagate_inbounds function Base.getproperty(
-    data::AbstractData{S},
-    i::Integer,
-) where {S}
-    array = parent(data)
-    T = eltype(array)
-    SS = fieldtype(S, i)
-    offset = fieldtypeoffset(T, S, i)
-    nbytes = typesize(T, SS)
-    fdim = field_dim(singleton(data))
-    Ipre = ntuple(i -> Colon(), Val(fdim - 1))
-    Ipost = ntuple(i -> Colon(), Val(ndims(data) - fdim))
-    dataview =
-        @inbounds view(array, Ipre..., (offset + 1):(offset + nbytes), Ipost...)
-    union_all(singleton(data)){SS, Base.tail(type_params(data))...}(dataview)
-end
-
-@noinline _property_view(
-    data::AbstractData{S},
-    ::Val{nothing},
-    name,
-) where {S} = error("Invalid field name `$name` for type `$(S)`.")
-
-# In the past, we've sometimes needed a generated function
-# for inference and constant propagation:
-Base.@propagate_inbounds @generated function _property_view(
-    data::AD,
-    ::Val{Idx},
-    name,
-) where {S, Idx, AD <: AbstractData{S}}
-    SS = fieldtype(S, Idx)
-    T = eltype(parent_array_type(AD))
-    offset = fieldtypeoffset(T, S, Val(Idx))
-    nbytes = typesize(T, SS)
-    fdim = field_dim(AD.name.wrapper)
-    Ipre = ntuple(i -> Colon(), Val(fdim - 1))
-    Ipost = ntuple(i -> Colon(), Val(ndims(data) - fdim))
-    field_byterange = (offset + 1):(offset + nbytes)
-    return :($(AD.name.wrapper){$SS, $(Base.tail(type_params(AD)))...}(
-        @inbounds view(parent(data), $Ipre..., $field_byterange, $Ipost...)
-    ))
-end
-
-function replace_basetype(data::AbstractData{S}, ::Type{T}) where {S, T}
-    array = parent(data)
-    S′ = replace_basetype(eltype(array), T, S)
-    return union_all(singleton(data)){S′, Base.tail(type_params(data))...}(
-        similar(array, T),
-    )
-end
+Base.similar(data::AbstractData{S}) where {S} = similar(data, S)
+Base.similar(data::AbstractData, ::Type{S}) where {S} =
+    replace_storage(data, S, checked_valid_basetype(eltype(parent(data)), S))
 
 maybe_populate!(array, ::typeof(similar)) = nothing
 maybe_populate!(array, ::typeof(ones)) = fill!(array, 1)
@@ -466,7 +422,7 @@ function IJKFVH{S, Nij, Nk, Nv}(
     @assert size(array, 1) == Nij
     @assert size(array, 2) == Nij
     @assert size(array, 3) == Nk
-    @assert size(array, 4) == typesize(T, S)
+    @assert size(array, 4) == storage_length(T, S)
     @assert size(array, 5) == Nv
     IJKFVH{S, Nij, Nk, Nv, typeof(array)}(array)
 end
@@ -479,7 +435,7 @@ function IJKFVH{S}(
     Nk::Integer,
     Nh::Integer,
 ) where {S, ArrayType}
-    Nf = typesize(eltype(ArrayType), S)
+    Nf = storage_length(eltype(ArrayType), S)
     array = similar(ArrayType, Nij, Nij, Nk, Nf, Nv, Nh)
     maybe_populate!(array, fun)
     IJKFVH{S, Nij, Nk, Nv}(array)
@@ -530,7 +486,7 @@ function IJFH{S, Nij}(array::AbstractArray{T, 4}) where {S, Nij, T}
     check_basetype(T, S)
     @assert size(array, 1) == Nij
     @assert size(array, 2) == Nij
-    @assert size(array, 3) == typesize(T, S)
+    @assert size(array, 3) == storage_length(T, S)
     IJFH{S, Nij, typeof(array)}(array)
 end
 
@@ -540,7 +496,7 @@ function IJFH{S}(
     Nij::Integer,
     Nh::Integer,
 ) where {S, ArrayType}
-    Nf = typesize(eltype(ArrayType), S)
+    Nf = storage_length(eltype(ArrayType), S)
     array = similar(ArrayType, Nij, Nij, Nf, Nh)
     maybe_populate!(array, fun)
     IJFH{S, Nij}(array)
@@ -551,7 +507,7 @@ end
 
 function IJFH{S, Nij}(::Type{ArrayType}, Nh::Integer) where {S, Nij, ArrayType}
     T = eltype(ArrayType)
-    IJFH{S, Nij}(ArrayType(undef, Nij, Nij, typesize(T, S), Nh))
+    IJFH{S, Nij}(ArrayType(undef, Nij, Nij, storage_length(T, S), Nh))
 end
 
 Base.length(data::IJFH) = get_Nh_dynamic(data)
@@ -623,7 +579,7 @@ function IJHF{S, Nij}(array::AbstractArray{T, 4}) where {S, Nij, T}
     check_basetype(T, S)
     @assert size(array, 1) == Nij
     @assert size(array, 2) == Nij
-    @assert size(array, 4) == typesize(T, S)
+    @assert size(array, 4) == storage_length(T, S)
     IJHF{S, Nij, typeof(array)}(array)
 end
 
@@ -633,7 +589,7 @@ function IJHF{S}(
     Nij::Integer,
     Nh::Integer,
 ) where {S, ArrayType}
-    Nf = typesize(eltype(ArrayType), S)
+    Nf = storage_length(eltype(ArrayType), S)
     array = similar(ArrayType, Nij, Nij, Nh, Nf)
     maybe_populate!(array, fun)
     IJHF{S, Nij}(array)
@@ -644,7 +600,7 @@ end
 
 function IJHF{S, Nij}(::Type{ArrayType}, Nh::Integer) where {S, Nij, ArrayType}
     T = eltype(ArrayType)
-    IJHF{S, Nij}(ArrayType(undef, Nij, Nij, Nh, typesize(T, S)))
+    IJHF{S, Nij}(ArrayType(undef, Nij, Nij, Nh, storage_length(T, S)))
 end
 
 Base.length(data::IJHF) = get_Nh_dynamic(data)
@@ -722,7 +678,7 @@ end
 function IFH{S, Ni}(array::AbstractArray{T, 3}) where {S, Ni, T}
     check_basetype(T, S)
     @assert size(array, 1) == Ni
-    @assert size(array, 2) == typesize(T, S)
+    @assert size(array, 2) == storage_length(T, S)
     IFH{S, Ni, typeof(array)}(array)
 end
 
@@ -732,7 +688,7 @@ function IFH{S}(
     Ni::Integer,
     Nh::Integer,
 ) where {S, ArrayType}
-    Nf = typesize(eltype(ArrayType), S)
+    Nf = storage_length(eltype(ArrayType), S)
     array = similar(ArrayType, Ni, Nf, Nh)
     maybe_populate!(array, fun)
     IFH{S, Ni}(array)
@@ -740,7 +696,7 @@ end
 
 function IFH{S, Ni}(::Type{ArrayType}, Nh::Integer) where {S, Ni, ArrayType}
     T = eltype(ArrayType)
-    IFH{S, Ni}(ArrayType(undef, Ni, typesize(T, S), Nh))
+    IFH{S, Ni}(ArrayType(undef, Ni, storage_length(T, S), Nh))
 end
 
 @inline universal_size(data::IFH{S, Ni}) where {S, Ni} =
@@ -801,7 +757,7 @@ end
 function IHF{S, Ni}(array::AbstractArray{T, 3}) where {S, Ni, T}
     check_basetype(T, S)
     @assert size(array, 1) == Ni
-    @assert size(array, 3) == typesize(T, S)
+    @assert size(array, 3) == storage_length(T, S)
     IHF{S, Ni, typeof(array)}(array)
 end
 
@@ -811,7 +767,7 @@ function IHF{S}(
     Ni::Integer,
     Nh::Integer,
 ) where {S, ArrayType}
-    Nf = typesize(eltype(ArrayType), S)
+    Nf = storage_length(eltype(ArrayType), S)
     array = similar(ArrayType, Ni, Nh, Nf)
     maybe_populate!(array, fun)
     IHF{S, Ni}(array)
@@ -819,7 +775,7 @@ end
 
 function IHF{S, Ni}(::Type{ArrayType}, Nh::Integer) where {S, Ni, ArrayType}
     T = eltype(ArrayType)
-    IHF{S, Ni}(ArrayType(undef, Ni, Nh, typesize(T, S)))
+    IHF{S, Ni}(ArrayType(undef, Ni, Nh, storage_length(T, S)))
 end
 
 @inline universal_size(data::IHF{S, Ni}) where {S, Ni} =
@@ -866,60 +822,31 @@ end
 
 function DataF{S}(array::AbstractVector{T}) where {S, T}
     check_basetype(T, S)
-    @assert size(array, 1) == typesize(T, S)
+    @assert size(array, 1) == storage_length(T, S)
     DataF{S, typeof(array)}(array)
 end
 
 function DataF{S}(::Type{ArrayType}, fun = similar;) where {S, ArrayType}
-    Nf = typesize(eltype(ArrayType), S)
+    Nf = storage_length(eltype(ArrayType), S)
     array = similar(ArrayType, Nf)
     maybe_populate!(array, fun)
     DataF{S}(array)
 end
 
 function DataF(x::T) where {T}
-    if is_valid_basetype(Float64, T)
-        d = DataF{T}(Array{Float64})
-        d[] = x
-        return d
-    elseif is_valid_basetype(Float32, T)
-        d = DataF{T}(Array{Float32})
-        d[] = x
-        return d
-    else
-        check_basetype(Float64, T)
-    end
+    d = DataF{T}(Array{default_basetype(T)})
+    d[] = x
+    return d
 end
 
-Base.@propagate_inbounds function Base.getindex(data::DataF{S}) where {S}
-    @inbounds get_struct(
-        parent(data),
-        S,
-        Val(field_dim(singleton(data))),
-        CartesianIndex(1),
-    )
-end
+@propagate_inbounds Base.getindex(data::DataF) =
+    get_struct(parent(data), eltype(data))
+@propagate_inbounds Base.getindex(data::DataF, I::CartesianIndex{5}) = data[]
 
-@propagate_inbounds function Base.getindex(col::Data0D, I::CartesianIndex{5})
-    @inbounds col[]
-end
-
-Base.@propagate_inbounds function Base.setindex!(data::DataF{S}, val) where {S}
-    @inbounds set_struct!(
-        parent(data),
-        convert(S, val),
-        Val(field_dim(singleton(data))),
-        CartesianIndex(1),
-    )
-end
-
-@propagate_inbounds function Base.setindex!(
-    col::Data0D,
-    val,
-    I::CartesianIndex{5},
-)
-    @inbounds col[] = val
-end
+@propagate_inbounds Base.setindex!(data::DataF{S}, val) where {S} =
+    set_struct!(parent(data), convert(eltype(data), val))
+@propagate_inbounds Base.setindex!(data::DataF, val, I::CartesianIndex{5}) =
+    data[] = val
 
 # ======================
 # DataSlab2D DataLayout
@@ -968,7 +895,7 @@ function IJF{S, Nij}(array::AbstractArray{T, 3}) where {S, Nij, T}
     @assert size(array, 1) == Nij
     @assert size(array, 2) == Nij
     check_basetype(T, S)
-    @assert size(array, 3) == typesize(T, S)
+    @assert size(array, 3) == storage_length(T, S)
     IJF{S, Nij, typeof(array)}(array)
 end
 
@@ -977,14 +904,14 @@ function IJF{S}(
     fun = similar;
     Nij::Integer,
 ) where {S, ArrayType}
-    Nf = typesize(eltype(ArrayType), S)
+    Nf = storage_length(eltype(ArrayType), S)
     array = similar(ArrayType, Nij, Nij, Nf)
     maybe_populate!(array, fun)
     IJF{S, Nij}(array)
 end
 
 function IJF{S, Nij}(::Type{MArray}, ::Type{T}) where {S, Nij, T}
-    Nf = typesize(T, S)
+    Nf = storage_length(T, S)
     array = MArray{Tuple{Nij, Nij, Nf}, T, 3, Nij * Nij * Nf}(undef)
     IJF{S, Nij}(array)
 end
@@ -1047,7 +974,7 @@ end
 function IF{S, Ni}(array::AbstractArray{T, 2}) where {S, Ni, T}
     @assert size(array, 1) == Ni
     check_basetype(T, S)
-    @assert size(array, 2) == typesize(T, S)
+    @assert size(array, 2) == storage_length(T, S)
     IF{S, Ni, typeof(array)}(array)
 end
 
@@ -1056,14 +983,14 @@ function IF{S}(
     fun = similar;
     Ni::Integer,
 ) where {S, ArrayType}
-    Nf = typesize(eltype(ArrayType), S)
+    Nf = storage_length(eltype(ArrayType), S)
     array = similar(ArrayType, Ni, Nf)
     maybe_populate!(array, fun)
     IF{S, Ni}(array)
 end
 
 function IF{S, Ni}(::Type{MArray}, ::Type{T}) where {S, Ni, T}
-    Nf = typesize(T, S)
+    Nf = storage_length(T, S)
     array = MArray{Tuple{Ni, Nf}, T, 2, Ni * Nf}(undef)
     IF{S, Ni}(array)
 end
@@ -1115,7 +1042,7 @@ end
 function VF{S, Nv}(array::AbstractArray{T, 2}) where {S, Nv, T}
     check_basetype(T, S)
     @assert size(array, 1) == Nv
-    @assert size(array, 2) == typesize(T, S)
+    @assert size(array, 2) == storage_length(T, S)
     VF{S, Nv, typeof(array)}(array)
 end
 
@@ -1124,7 +1051,7 @@ function VF{S}(
     fun = similar;
     Nv::Integer,
 ) where {S, ArrayType}
-    Nf = typesize(eltype(ArrayType), S)
+    Nf = storage_length(eltype(ArrayType), S)
     array = similar(ArrayType, Nv, Nf)
     maybe_populate!(array, fun)
     VF{S, Nv}(array)
@@ -1132,22 +1059,19 @@ end
 
 function VF{S, Nv}(array::AbstractVector{T}) where {S, Nv, T}
     check_basetype(T, S)
-    @assert typesize(T, S) == 1
+    @assert storage_length(T, S) == 1
     VF{S, Nv}(reshape(array, (:, 1)))
 end
 
 function VF{S, Nv}(::Type{ArrayType}, nelements) where {S, Nv, ArrayType}
     T = eltype(ArrayType)
     check_basetype(T, S)
-    VF{S, Nv}(ArrayType(undef, nelements, typesize(T, S)))
+    VF{S, Nv}(ArrayType(undef, nelements, storage_length(T, S)))
 end
 
 Base.lastindex(data::VF) = length(data)
 
 nlevels(::VF{S, Nv}) where {S, Nv} = Nv
-
-Base.@propagate_inbounds Base.getproperty(data::VF, i::Integer) =
-    _property_view(data, Val(i), i)
 
 Base.@propagate_inbounds column(data::VF, i, h) = column(data, i, 1, h)
 
@@ -1201,7 +1125,7 @@ function VIJFH{S, Nv, Nij}(array::AbstractArray{T, 5}) where {S, Nv, Nij, T}
     check_basetype(T, S)
     @assert size(array, 1) == Nv
     @assert size(array, 2) == size(array, 3) == Nij
-    @assert size(array, 4) == typesize(T, S)
+    @assert size(array, 4) == storage_length(T, S)
     VIJFH{S, Nv, Nij, typeof(array)}(array)
 end
 
@@ -1212,7 +1136,7 @@ function VIJFH{S}(
     Nij::Integer,
     Nh::Integer,
 ) where {S, ArrayType}
-    Nf = typesize(eltype(ArrayType), S)
+    Nf = storage_length(eltype(ArrayType), S)
     array = similar(ArrayType, Nv, Nij, Nij, Nf, Nh)
     maybe_populate!(array, fun)
     VIJFH{S, Nv, Nij, typeof(array)}(array)
@@ -1308,7 +1232,7 @@ function VIJHF{S, Nv, Nij}(array::AbstractArray{T, 5}) where {S, Nv, Nij, T}
     check_basetype(T, S)
     @assert size(array, 1) == Nv
     @assert size(array, 2) == size(array, 3) == Nij
-    @assert size(array, 5) == typesize(T, S)
+    @assert size(array, 5) == storage_length(T, S)
     VIJHF{S, Nv, Nij, typeof(array)}(array)
 end
 
@@ -1319,7 +1243,7 @@ function VIJHF{S}(
     Nij::Integer,
     Nh::Integer,
 ) where {S, ArrayType}
-    Nf = typesize(eltype(ArrayType), S)
+    Nf = storage_length(eltype(ArrayType), S)
     array = similar(ArrayType, Nv, Nij, Nij, Nh, Nf)
     maybe_populate!(array, fun)
     VIJHF{S, Nv, Nij, typeof(array)}(array)
@@ -1419,7 +1343,7 @@ function VIFH{S, Nv, Ni}(array::AbstractArray{T, 4}) where {S, Nv, Ni, T}
     check_basetype(T, S)
     @assert size(array, 1) == Nv
     @assert size(array, 2) == Ni
-    @assert size(array, 3) == typesize(T, S)
+    @assert size(array, 3) == storage_length(T, S)
     VIFH{S, Nv, Ni, typeof(array)}(array)
 end
 
@@ -1430,7 +1354,7 @@ function VIFH{S}(
     Ni::Integer,
     Nh::Integer,
 ) where {S, ArrayType}
-    Nf = typesize(eltype(ArrayType), S)
+    Nf = storage_length(eltype(ArrayType), S)
     array = similar(ArrayType, Nv, Ni, Nf, Nh)
     maybe_populate!(array, fun)
     VIFH{S, Nv, Ni, typeof(array)}(array)
@@ -1511,7 +1435,7 @@ function VIHF{S, Nv, Ni}(array::AbstractArray{T, 4}) where {S, Nv, Ni, T}
     check_basetype(T, S)
     @assert size(array, 1) == Nv
     @assert size(array, 2) == Ni
-    @assert size(array, 4) == typesize(T, S)
+    @assert size(array, 4) == storage_length(T, S)
     VIHF{S, Nv, Ni, typeof(array)}(array)
 end
 
@@ -1522,7 +1446,7 @@ function VIHF{S}(
     Ni::Integer,
     Nh::Integer,
 ) where {S, ArrayType}
-    Nf = typesize(eltype(ArrayType), S)
+    Nf = storage_length(eltype(ArrayType), S)
     array = similar(ArrayType, Nv, Ni, Nh, Nf)
     maybe_populate!(array, fun)
     VIHF{S, Nv, Ni, typeof(array)}(array)
@@ -1781,17 +1705,18 @@ type parameters.
 @inline h_dim(::VIFHSingleton) = 4
 @inline h_dim(::VIHFSingleton) = 3
 
-@inline to_data_specific(::VFSingleton, I::Tuple) = (I[4], 1)
-@inline to_data_specific(::IFSingleton, I::Tuple) = (I[1], 1)
-@inline to_data_specific(::IJFSingleton, I::Tuple) = (I[1], I[2], 1)
-@inline to_data_specific(::IJFHSingleton, I::Tuple) = (I[1], I[2], 1, I[5])
-@inline to_data_specific(::IJHFSingleton, I::Tuple) = (I[1], I[2], I[5], 1)
-@inline to_data_specific(::IFHSingleton, I::Tuple) = (I[1], 1, I[5])
-@inline to_data_specific(::IHFSingleton, I::Tuple) = (I[1], I[5], 1)
-@inline to_data_specific(::VIJFHSingleton, I::Tuple) = (I[4], I[1], I[2], 1, I[5])
-@inline to_data_specific(::VIJHFSingleton, I::Tuple) = (I[4], I[1], I[2], I[5], 1)
-@inline to_data_specific(::VIFHSingleton, I::Tuple) = (I[4], I[1], 1, I[5])
-@inline to_data_specific(::VIHFSingleton, I::Tuple) = (I[4], I[1], I[5], 1)
+@inline data_specific_index(::DataF, I) = CartesianIndex()
+@inline data_specific_index(::VF, I) = CartesianIndex(I[4])
+@inline data_specific_index(::IF, I) = CartesianIndex(I[1])
+@inline data_specific_index(::IJF, I) = CartesianIndex(I[1], I[2])
+@inline data_specific_index(::IJFH, I) = CartesianIndex(I[1], I[2], I[5])
+@inline data_specific_index(::IJHF, I) = CartesianIndex(I[1], I[2], I[5])
+@inline data_specific_index(::IFH, I) = CartesianIndex(I[1], I[5])
+@inline data_specific_index(::IHF, I) = CartesianIndex(I[1], I[5])
+@inline data_specific_index(::VIJFH, I) = CartesianIndex(I[4], I[1], I[2], I[5])
+@inline data_specific_index(::VIJHF, I) = CartesianIndex(I[4], I[1], I[2], I[5])
+@inline data_specific_index(::VIFH, I) = CartesianIndex(I[4], I[1], I[5])
+@inline data_specific_index(::VIHF, I) = CartesianIndex(I[4], I[1], I[5])
 
 @inline to_data_specific_field(::DataFSingleton, I::Tuple) = (I[3],)
 @inline to_data_specific_field(::VFSingleton, I::Tuple) = (I[4], I[3])
@@ -1970,34 +1895,30 @@ Base.ndims(data::AbstractData) = Base.ndims(typeof(data))
 Base.ndims(::Type{T}) where {T <: AbstractData} =
     Base.ndims(parent_array_type(T))
 
-@inline function Base.getindex(
-    data::Union{IJF, IJFH, IJHF, IFH, IHF, VIJFH, VIJHF, VIFH, VIHF, VF, IF},
-    I::CartesianIndex,
-)
-    @boundscheck bounds_condition(data, I) || throw(BoundsError(data, I))
-    s = singleton(data)
-    return get_struct(
+@propagate_inbounds Base.getindex(data::AbstractData, I::CartesianIndex) =
+    get_struct(
         parent(data),
         eltype(data),
-        Val(field_dim(s)),
-        CartesianIndex(to_data_specific(s, I.I)),
+        data_specific_index(data, I),
+        Val(field_dim(singleton(data))),
     )
-end
+@propagate_inbounds Base.getindex(data::AbstractData, i::Integer) =
+    get_struct(parent(data), eltype(data), i, Val(field_dim(singleton(data))))
 
-@inline function Base.setindex!(
-    data::Union{IJF, IJFH, IJHF, IFH, IHF, VIJFH, VIJHF, VIFH, VIHF, VF, IF},
-    val,
-    I::CartesianIndex,
-)
-    @boundscheck bounds_condition(data, I) || throw(BoundsError(data, I))
-    s = singleton(data)
-    @inbounds set_struct!(
+@propagate_inbounds Base.setindex!(data::AbstractData, val, I::CartesianIndex) =
+    set_struct!(
         parent(data),
         convert(eltype(data), val),
-        Val(field_dim(s)),
-        CartesianIndex(to_data_specific(s, I.I)),
+        data_specific_index(data, I),
+        Val(field_dim(singleton(data))),
     )
-end
+@propagate_inbounds Base.setindex!(data::AbstractData, val, i::Integer) =
+    set_struct!(
+        parent(data),
+        convert(eltype(data), val),
+        i,
+        Val(field_dim(singleton(data))),
+    )
 
 """
     CartesianFieldIndex{N} <: Base.AbstractCartesianIndex{N}
@@ -2155,26 +2076,6 @@ if VERSION ≥ v"1.11.0-beta"
     @inline to_universal_index(::AbstractDataSingleton, I::NTuple{5}) = I
     #! format: on
     ### ---------------
-else
-    # Only support datalayouts that end with fields, since those
-    # are the only layouts where we can efficiently compute the
-    # strides.
-    @propagate_inbounds function Base.getindex(
-        data::EndsWithField{S},
-        I::Integer,
-    ) where {S}
-        s_array = farray_size(data)
-        @inbounds get_struct_linear(parent(data), S, I, s_array)
-    end
-    @propagate_inbounds function Base.setindex!(
-        data::EndsWithField{S},
-        val,
-        I::Integer,
-    ) where {S}
-        s_array = farray_size(data)
-        @inbounds set_struct_linear!(parent(data), convert(S, val), I, s_array)
-    end
-
 end
 
 """
@@ -2269,8 +2170,6 @@ include("copyto.jl")
 include("fused_copyto.jl")
 include("fill.jl")
 include("mapreduce.jl")
-
-include("struct_linear_indexing.jl")
 
 
 """
