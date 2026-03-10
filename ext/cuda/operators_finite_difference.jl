@@ -32,45 +32,6 @@ struct ShmemParams{Nv} end
 interior_size(::ShmemParams{Nv}) where {Nv} = (Nv,)
 boundary_size(::ShmemParams{Nv}) where {Nv} = (1,)
 
-function call_tree(bc::Broadcasted)
-    return string(nameof(bc.f)) * "(" * join(map(call_tree, bc.args), ", ") * ")"
-end
-
-function call_tree(bc::StencilBroadcasted)
-    return string(nameof(typeof(bc.op))) * "(" * join(map(call_tree, bc.args), ", ") * ")"
-end
-summary_string(entry) = summary_string(entry, 0)
-summary_string(entry, indent_level) = "$("    "^indent_level)$entry"
-function summary_string(field::Fields.Field, indent_level)
-    staggering_string =
-        hasproperty(axes(field), :staggering) ?
-        string(typeof(axes(field).staggering).name.name) : "Single Level"
-    return "$("    "^indent_level)Field{$(eltype(field)), $staggering_string}"
-end
-function summary_string(bc::Base.AbstractBroadcasted, indent_level)
-    func = bc isa Operators.OperatorBroadcasted ? bc.op : bc.f
-    bc isa Operators.OperatorBroadcasted || @info methods(func)[1]
-    arg_strings = map(arg -> summary_string(arg, indent_level + 1), bc.args)
-    tab = "    "^indent_level
-    return "$(tab)Broadcasted{$func}(\n$(join(arg_strings, ",\n")),\n$tab)"
-end
-
-
-function print_datatypes(T)
-    if fieldcount(T) == 0
-        # println(T)
-         return
-    end
-    for t_i in 1:fieldcount(T)
-        t = fieldtype(T, t_i)
-        println(fieldname(T, t_i), ": ", t, " (", sizeof(t), " bytes)")
-        println("")
-        print_datatypes(t)
-    end
-    println("\n")
-end
-
-call_tree(x) = string(nameof(eltype(x)))
 function Base.copyto!(
     out::Field,
     bc::Union{
@@ -128,41 +89,16 @@ function Base.copyto!(
         (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(out_fv)
         #  Specialized kernel launch for common case.  This uses block and grid indices
         # instead of computing cartesian indices from a linear index
-        if true && (Nv == 64 || Nv == 63) && mask isa NoMask && Ni == 4 && Nj == 4 && Nh >= 1500# && !has_lin_vanleer(bc′)
-             if true && !Topologies.isperiodic(space) #&& !(bc′ isa Broadcasted && bc′.f == identity)# && eltype(out) <: ClimaCore.MatrixFields.BandMatrixRow && typeof(bc′) <: Union{ClimaCore.Operators.StencilBroadcasted{ClimaCoreCUDAExt.CUDAColumnStencilStyle, ClimaCore.MatrixFields.MultiplyColumnwiseBandMatrixField}, Base.Broadcast.Broadcasted}#&& length(bc′.args) == 2 && bc′ isa StencilBroadcasted && bc′.op isa ClimaCore.MatrixFields.MultiplyColumnwiseBandMatrixField && length(bc′.args) == 2
+        if (Nv == 64 || Nv == 63) && mask isa NoMask && Ni == 4 && Nj == 4 && Nh >= 1500
+             if true && !Topologies.isperiodic(space)
                 new_bc = recursively_replace_fd_ops(bc′)
                 args = (
                     strip_space(out, space),
                     strip_space(new_bc, space),
                     axes(out),
                 )
-                # converted_args = map(CUDA.cudaconvert, args)
-                # @show sizeof(typeof(converted_args))
-                # print_datatypes(typeof(converted_args[2]))
-                # println(summary_string(new_bc))
-                # println("\n")
-                # println(summary_string(bc′))
-                mykr = CUDA.@cuda  always_inline = true launch=false fastmath=true new_stencil_entry!(args...)
-                # println("\n")
-                mykr(args...; threads = (64, 1, 1), blocks = (4, 4, Nh), shmem = 64*9*4 )
+                mykr = CUDA.@cuda  always_inline = true fastmath=true  threads = (64, 1, 1) blocks = (4, 4, Nh) shmem = 64*9*4 new_stencil_entry!(args...)
                 return out
-                # @show CUDA.memory(mykr)
-                #  @show CUDA.registers(mykr)
-                #  println(summary_string(strip_space(bc′, space)))
-                # if CUDA.memory(mykr).local > 100
-                #     @show  CUDA.memory(mykr).local
-                #     println(summary_string(strip_space(new_bc, space)))
-                # end
-                # println("\n\n")
-                #  && println(summary_string(strip_space(bc′, space)))
-                # if CUDA.memory(mykr).local < 100
-                #     # @show CUDA.memory(mykr).local
-                #     # @show CUDA.memory(mykr)
-                #     # CUDA.@cuda  always_inline = true launch=true fastmath=true threads = (64, 1, 1) blocks = (4, 4, Nh) shmem = 64*8*4 new_stencil_entry!(args...)
-                #     # mykr(args...; threads = (64, 1, 1), blocks = (4, 4, Nh), shmem = 64*9*4 )
-                #     # mykr(args...; threads = (64, 1, 1), blocks = (4, 4, Nh))
-                    # return out
-                # end
              end
 
             args = (
