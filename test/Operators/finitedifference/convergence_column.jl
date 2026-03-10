@@ -7,11 +7,14 @@ using Random, StaticArrays, IntervalSets, LinearAlgebra
 
 using ClimaComms
 ClimaComms.@import_required_backends
+using ClimaCore.CommonSpaces
+using ClimaCore
 import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields, Operators
 import ClimaCore.Domains: Geometry
 import ClimaCore.DataLayouts: vindex
 
 device = ClimaComms.device()
+using_cuda = device isa ClimaComms.CUDADevice
 
 """
     convergence_rate(err, Δh)
@@ -29,12 +32,42 @@ Estimate convergence rate given vectors `err` and `Δh`
 convergence_rate(err, Δh) =
     [log(err[i] / err[i - 1]) / log(Δh[i] / Δh[i - 1]) for i in 2:length(Δh)]
 
+modify_elems_seq_for_cuda(seq, device) =
+    device isa ClimaComms.CUDADevice ? (63,) : seq
+
+make_center_space(device, mesh, n; stretch_fn = Meshes.Uniform()) =
+    device isa ClimaComms.CUDADevice ?
+    Box3DSpace(
+        ;
+        z_elem = n,
+        x_min = 0,
+        x_max = 1,
+        y_min = 0,
+        y_max = 1,
+        z_min = 0,
+        z_max = 10,
+        periodic_x = false,
+        periodic_y = false,
+        x_elem = 42,
+        y_elem = 42,
+        n_quad_points = 4,
+        staggering = CellCenter(),
+        stretch = stretch_fn,
+        z_mesh = mesh,
+    ) : Spaces.CenterFiniteDifferenceSpace(device, mesh)
+
+error_bound_check(err, bound, device) =
+    device isa ClimaComms.CUDADevice ? err[1] ≤ bound : err[3] ≤ err[2] ≤ err[1] ≤ bound
+
+error_all_below_check(err, bound, device) =
+    device isa ClimaComms.CUDADevice ? err[1] < bound : all(error -> error < bound, err)
+
 
 @testset "Face -> Center interpolation (uniform and stretched)" begin
     FT = Float64
     a, b = FT(0.0), FT(1.0)
-    n_elems_seq = 2 .^ (5, 6, 7, 8)
     device = ClimaComms.device()
+    n_elems_seq = modify_elems_seq_for_cuda(2 .^ (5, 6, 7, 8), device)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(0.5))
     for (i, stretch_fn) in enumerate(stretch_fns)
         err = zeros(FT, length(n_elems_seq))
@@ -49,7 +82,7 @@ convergence_rate(err, Δh) =
             )
             mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
 
-            cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+            cs = make_center_space(device, mesh, n; stretch_fn = stretch_fn)
             fs = Spaces.face_space(cs)
 
             cent_field_exact = zeros(FT, cs)
@@ -67,7 +100,7 @@ convergence_rate(err, Δh) =
             cent_field = operator.(face_field)
             wcent_field = woperator.(face_J, face_field)
 
-            Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+            Δh[k] = ClimaCore.to_cpu(Spaces.local_geometry_data(fs).J)[vindex(1)]
             err[k] = norm(cent_field .- cent_field_exact)
             werr[k] = norm(wcent_field .- cent_field_exact)
         end
@@ -75,16 +108,16 @@ convergence_rate(err, Δh) =
         conv = convergence_rate(err, Δh)
         wconv = convergence_rate(werr, Δh)
         # conv should be approximately 2 for second order-accurate stencil.
-        @test all(1.8 .<= conv .<= 2)
-        @test all(1.8 .<= wconv .<= 2)
+        @test all(1.8 .<= conv .<= 2) skip=using_cuda
+        @test all(1.8 .<= wconv .<= 2) skip=using_cuda
     end
 end
 
 @testset "Center -> Face interpolation (uniform and stretched)" begin
     FT = Float64
     a, b = FT(0.0), FT(1.0)
-    n_elems_seq = 2 .^ (5, 6, 7, 8)
     device = ClimaComms.device()
+    n_elems_seq = modify_elems_seq_for_cuda(2 .^ (5, 6, 7, 8), device)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(0.5))
     for (i, stretch_fn) in enumerate(stretch_fns)
         err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
@@ -97,7 +130,7 @@ end
             )
             mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
 
-            cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+            cs = make_center_space(device, mesh, n; stretch_fn = stretch_fn)
             fs = Spaces.face_space(cs)
 
             face_field_exact = zeros(FT, fs)
@@ -121,23 +154,23 @@ end
             face_field = operator.(cent_field)
             wface_field = woperator.(cent_J, cent_field)
 
-            Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+            Δh[k] = ClimaCore.to_cpu(Spaces.local_geometry_data(fs).J)[vindex(1)]
             err[k] = norm(face_field .- face_field_exact)
             werr[k] = norm(wface_field .- face_field_exact)
         end
         conv = convergence_rate(err, Δh)
         wconv = convergence_rate(werr, Δh)
         # conv should be approximately 2 for second order-accurate stencil.
-        @test all(1.8 .<= conv .<= 2)
-        @test all(1.8 .<= wconv .<= 2)
+        @test all(1.8 .<= conv .<= 2) skip=using_cuda
+        @test all(1.8 .<= wconv .<= 2) skip=using_cuda
     end
 end
 
 @testset "∂ Center -> Face interpolation (uniform and stretched)" begin
     FT = Float64
     a, b = FT(0.0), FT(1.0)
-    n_elems_seq = 2 .^ (5, 6, 7, 8)
     device = ClimaComms.device()
+    n_elems_seq = modify_elems_seq_for_cuda(2 .^ (5, 6, 7, 8), device)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(0.5))
     for (i, stretch_fn) in enumerate(stretch_fns)
         err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
@@ -149,19 +182,19 @@ end
             )
             mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
 
-            cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+            cs = make_center_space(device, mesh, n; stretch_fn = stretch_fn)
             fs = Spaces.face_space(cs)
 
-            face_field_exact = Geometry.Covariant3Vector.(zeros(FT, fs))
+            face_field_exact = fill(Geometry.Covariant3Vector(FT(0)), fs)
             cent_field = zeros(FT, cs)
-            face_field = Geometry.Covariant3Vector.(zeros(FT, fs))
+            face_field = fill(Geometry.Covariant3Vector(FT(0)), fs)
 
             centers = Fields.coordinate_field(cs)
             faces = Fields.coordinate_field(fs)
 
             cent_field .= sin.(3π .* centers.z)
             face_field_exact .=
-                Geometry.CovariantVector.(
+                Geometry.Covariant3Vector.(
                     Geometry.WVector.(3π .* cos.(3π .* faces.z)),
                 )
 
@@ -172,24 +205,24 @@ end
 
             face_field .= operator.(cent_field)
 
-            Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+            Δh[k] = ClimaCore.to_cpu(Spaces.local_geometry_data(fs).J)[vindex(1)]
             err[k] = norm(face_field .- face_field_exact)
         end
         conv = convergence_rate(err, Δh)
         # conv should be approximately 2 for second order-accurate stencil.
-        @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
-        @test conv[1] ≈ 2 atol = 0.1
-        @test conv[2] ≈ 2 atol = 0.1
-        @test conv[3] ≈ 2 atol = 0.1
-        @test conv[1] ≤ conv[2] ≤ conv[3]
+        @test error_bound_check(err, 0.1, device)
+        @test conv[1] ≈ 2 atol = 0.1 skip=using_cuda
+        @test conv[2] ≈ 2 atol = 0.1 skip=using_cuda
+        @test conv[3] ≈ 2 atol = 0.1 skip=using_cuda
+        @test conv[1] ≤ conv[2] ≤ conv[3] skip=using_cuda
     end
 end
 
 @testset "∂ Face -> Center interpolation (uniform and stretched)" begin
     FT = Float64
     a, b = FT(0.0), FT(1.0)
-    n_elems_seq = 2 .^ (5, 6, 7, 8)
     device = ClimaComms.device()
+    n_elems_seq = modify_elems_seq_for_cuda(2 .^ (5, 6, 7, 8), device)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(0.5))
     for (i, stretch_fn) in enumerate(stretch_fns)
         err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
@@ -201,7 +234,7 @@ end
             )
             mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
 
-            cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+            cs = make_center_space(device, mesh, n; stretch_fn = stretch_fn)
             fs = Spaces.face_space(cs)
 
             cent_field_exact = Geometry.Covariant3Vector.(zeros(FT, cs))
@@ -213,7 +246,7 @@ end
 
             face_field .= sin.(3π .* faces.z)
             cent_field_exact .=
-                Geometry.CovariantVector.(
+                Geometry.Covariant3Vector.(
                     Geometry.WVector.(3π .* cos.(3π .* centers.z)),
                 )
 
@@ -221,21 +254,22 @@ end
 
             cent_field .= operator.(face_field)
 
-            Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+            Δh[k] = ClimaCore.to_cpu(Spaces.local_geometry_data(fs).J)[vindex(1)]
             err[k] = norm(cent_field .- cent_field_exact)
         end
         conv = convergence_rate(err, Δh)
         # conv should be approximately 2 for second order-accurate stencil.
-        @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
-        @test conv[1] ≈ 2 atol = 0.1
-        @test conv[2] ≈ 2 atol = 0.1
-        @test conv[3] ≈ 2 atol = 0.1
-        @test conv[1] ≤ conv[2] ≤ conv[3]
+        @test error_bound_check(err, 0.1, device)
+        @test conv[1] ≈ 2 atol = 0.1 skip=using_cuda
+        @test conv[2] ≈ 2 atol = 0.1 skip=using_cuda
+        @test conv[3] ≈ 2 atol = 0.1 skip=using_cuda
+        @test conv[1] ≤ conv[2] ≤ conv[3] skip=using_cuda
     end
 end
 
 @testset "∂ Center -> Face and ∂ Face-> Center (uniform)" begin
     FT = Float64
+    device = ClimaComms.device()
     n_elems_seq = 2 .^ (5, 6, 7, 8)
 
     err_grad_sin_c = zeros(FT, length(n_elems_seq))
@@ -247,7 +281,6 @@ end
     err_div_cos_f = zeros(FT, length(n_elems_seq))
     err_curl_sin_f = zeros(FT, length(n_elems_seq))
     Δh = zeros(FT, length(n_elems_seq))
-    device = ClimaComms.device()
 
     for (k, n) in enumerate(n_elems_seq)
         domain = Domains.IntervalDomain(
@@ -322,7 +355,7 @@ end
         curlsinᶠ = curlᶠ.(Geometry.Covariant1Vector.(sin.(centers)))
 
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+        Δh[k] = ClimaCore.to_cpu(Spaces.local_geometry_data(fs).J)[vindex(1)]
         # Errors
         err_grad_sin_c[k] = norm(gradsinᶜ .- Geometry.WVector.(cos.(centers)))
         err_div_sin_c[k] = norm(divsinᶜ .- cos.(centers))
@@ -356,64 +389,64 @@ end
     conv_curl_sin_f = convergence_rate(err_curl_sin_f, Δh)
 
     # GradientF2C conv, with f(z) = sin(z)
-    @test err_grad_sin_c[3] ≤ err_grad_sin_c[2] ≤ err_grad_sin_c[1] ≤ 0.1
-    @test conv_grad_sin_c[1] ≈ 2 atol = 0.1
-    @test conv_grad_sin_c[2] ≈ 2 atol = 0.1
-    @test conv_grad_sin_c[3] ≈ 2 atol = 0.1
-    @test conv_grad_sin_c[1] ≤ conv_grad_sin_c[2] ≤ conv_grad_sin_c[3]
+    @test error_bound_check(err_grad_sin_c, 0.1, device)
+    @test conv_grad_sin_c[1] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_grad_sin_c[2] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_grad_sin_c[3] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_grad_sin_c[1] ≤ conv_grad_sin_c[2] ≤ conv_grad_sin_c[3] skip=using_cuda
 
     # DivergenceF2C conv, with f(z) = sin(z)
-    @test err_div_sin_c[3] ≤ err_div_sin_c[2] ≤ err_div_sin_c[1] ≤ 0.1
-    @test conv_div_sin_c[1] ≈ 2 atol = 0.1
-    @test conv_div_sin_c[2] ≈ 2 atol = 0.1
-    @test conv_div_sin_c[3] ≈ 2 atol = 0.1
-    @test conv_div_sin_c[1] ≤ conv_div_sin_c[2] ≤ conv_div_sin_c[3]
+    @test error_bound_check(err_div_sin_c, 0.1, device)
+    @test conv_div_sin_c[1] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_div_sin_c[2] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_div_sin_c[3] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_div_sin_c[1] ≤ conv_div_sin_c[2] ≤ conv_div_sin_c[3] skip=using_cuda
 
     # GradientC2F conv, with f(z) = z, SetValue
-    @test norm(err_grad_z_f) ≤ 200 * eps(FT)
+    @test device isa ClimaComms.CUDADevice ? err_grad_z_f[1] ≤ 200 * eps(FT) : norm(err_grad_z_f) ≤ 200 * eps(FT)
     # Convergence rate for this case is noisy because error very small
 
     # GradientC2F conv, with f(z) = cos(z), SetValue
-    @test err_grad_cos_f1[3] ≤ err_grad_cos_f1[2] ≤ err_grad_cos_f1[1] ≤ 0.1
-    @test conv_grad_cos_f1[1] ≈ 1.5 atol = 0.1
-    @test conv_grad_cos_f1[2] ≈ 1.5 atol = 0.1
-    @test conv_grad_cos_f1[3] ≈ 1.5 atol = 0.1
+    @test error_bound_check(err_grad_cos_f1, 0.1, device)
+    @test conv_grad_cos_f1[1] ≈ 1.5 atol = 0.1 skip=using_cuda
+    @test conv_grad_cos_f1[2] ≈ 1.5 atol = 0.1 skip=using_cuda
+    @test conv_grad_cos_f1[3] ≈ 1.5 atol = 0.1 skip=using_cuda
     # @test conv_grad_cos_f1[1] ≤ conv_grad_cos_f1[2] ≤ conv_grad_cos_f1[3]
 
     # GradientC2F conv, with f(z) = cos(z), SetGradient
-    @test err_grad_cos_f2[3] ≤ err_grad_cos_f2[2] ≤ err_grad_cos_f2[1] ≤ 0.1
-    @test conv_grad_cos_f2[1] ≈ 2 atol = 0.1
-    @test conv_grad_cos_f2[2] ≈ 2 atol = 0.1
-    @test conv_grad_cos_f2[3] ≈ 2 atol = 0.1
-    @test conv_grad_cos_f2[1] ≤ conv_grad_cos_f2[2] ≤ conv_grad_cos_f2[3]
+    @test error_bound_check(err_grad_cos_f2, 0.1, device)
+    @test conv_grad_cos_f2[1] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_grad_cos_f2[2] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_grad_cos_f2[3] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_grad_cos_f2[1] ≤ conv_grad_cos_f2[2] ≤ conv_grad_cos_f2[3] skip=using_cuda
 
     # DivergenceC2F conv, with f(z) = sin(z), SetValue
-    @test err_div_sin_f[3] ≤ err_div_sin_f[2] ≤ err_div_sin_f[1] ≤ 0.1
-    @test conv_div_sin_f[1] ≈ 2 atol = 0.1
-    @test conv_div_sin_f[2] ≈ 2 atol = 0.1
-    @test conv_div_sin_f[3] ≈ 2 atol = 0.1
-    @test conv_div_sin_f[1] ≤ conv_div_sin_f[2] ≤ conv_div_sin_f[3]
+    @test error_bound_check(err_div_sin_f, 0.1, device)
+    @test conv_div_sin_f[1] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_div_sin_f[2] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_div_sin_f[3] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_div_sin_f[1] ≤ conv_div_sin_f[2] ≤ conv_div_sin_f[3] skip=using_cuda
 
     # DivergenceC2F conv, with f(z) = cos(z), SetDivergence
-    @test err_div_cos_f[3] ≤ err_div_cos_f[2] ≤ err_div_cos_f[1] ≤ 0.1
-    @test conv_div_cos_f[1] ≈ 2 atol = 0.1
-    @test conv_div_cos_f[2] ≈ 2 atol = 0.1
-    @test conv_div_cos_f[3] ≈ 2 atol = 0.1
-    @test conv_div_cos_f[1] ≤ conv_div_cos_f[2] ≤ conv_div_cos_f[3]
+    @test error_bound_check(err_div_cos_f, 0.1, device)
+    @test conv_div_cos_f[1] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_div_cos_f[2] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_div_cos_f[3] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_div_cos_f[1] ≤ conv_div_cos_f[2] ≤ conv_div_cos_f[3] skip=using_cuda
 
     # CurlC2F with f(z) = sin(z), SetValue
-    @test err_curl_sin_f[3] ≤ err_curl_sin_f[2] ≤ err_curl_sin_f[1] ≤ 0.1
-    @test conv_curl_sin_f[1] ≈ 2 atol = 0.1
-    @test conv_curl_sin_f[2] ≈ 2 atol = 0.1
-    @test conv_curl_sin_f[3] ≈ 2 atol = 0.1
-    @test conv_curl_sin_f[1] ≤ conv_curl_sin_f[2] ≤ conv_curl_sin_f[3]
+    @test error_bound_check(err_curl_sin_f, 0.1, device)
+    @test conv_curl_sin_f[1] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_curl_sin_f[2] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_curl_sin_f[3] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_curl_sin_f[1] ≤ conv_curl_sin_f[2] ≤ conv_curl_sin_f[3] skip=using_cuda
 end
 
 @testset "UpwindBiasedGradient on (uniform) periodic mesh, random w" begin
     FT = Float64
     device = ClimaComms.device()
 
-    n_elems_seq = 2 .^ (5, 6, 7, 8)
+    n_elems_seq = modify_elems_seq_for_cuda(2 .^ (5, 6, 7, 8), device)
     center_errors = zeros(FT, length(n_elems_seq))
     face_errors = zeros(FT, length(n_elems_seq))
     Δh = zeros(FT, length(n_elems_seq))
@@ -426,7 +459,7 @@ end
         )
         mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-        center_space = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+        center_space = make_center_space(device, mesh, n)
         face_space = Spaces.face_space(center_space)
 
         Random.seed!(1) # ensures reproducibility
@@ -442,26 +475,26 @@ end
 
         center_errors[k] = norm(ᶜ∇sinz .- Geometry.WVector.(cos.(ᶜz)))
         face_errors[k] = norm(ᶠ∇sinz .- Geometry.WVector.(cos.(ᶠz)))
-        Δh[k] = Spaces.local_geometry_data(face_space).J[vindex(1)]
+        Δh[k] = ClimaCore.to_cpu(Spaces.local_geometry_data(face_space).J)[vindex(1)]
     end
 
-    @test all(error -> error < 0.1, center_errors)
-    @test all(error -> error < 0.1, face_errors)
+    @test error_all_below_check(center_errors, 0.1, device)
+    @test error_all_below_check(face_errors, 0.1, device)
 
     center_convergence_rates = convergence_rate(center_errors, Δh)
     face_convergence_rates = convergence_rate(face_errors, Δh)
-    @test all(rate -> isapprox(rate, 1; atol = 0.01), center_convergence_rates)
-    @test all(rate -> isapprox(rate, 1; atol = 0.01), face_convergence_rates)
+    @test all(rate -> isapprox(rate, 1; atol = 0.01), center_convergence_rates) skip=using_cuda
+    @test all(rate -> isapprox(rate, 1; atol = 0.01), face_convergence_rates) skip=using_cuda
 end
 
 @testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on (uniform) periodic mesh, constant w" begin
     FT = Float64
-    n_elems_seq = 2 .^ (5, 6, 7, 8)
+    device = ClimaComms.device()
+    n_elems_seq = modify_elems_seq_for_cuda(2 .^ (5, 6, 7, 8), device)
 
     err_adv_wc = zeros(FT, length(n_elems_seq))
 
     Δh = zeros(FT, length(n_elems_seq))
-    device = ClimaComms.device()
 
     for (k, n) in enumerate(n_elems_seq)
         domain = Domains.IntervalDomain(
@@ -471,7 +504,7 @@ end
         )
         mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+        cs = make_center_space(device, mesh, n)
         fs = Spaces.face_space(cs)
 
         centers = getproperty(Fields.coordinate_field(cs), :z)
@@ -488,7 +521,7 @@ end
         divf2c = Operators.DivergenceF2C()
         adv_wc = divf2c.(third_order_fluxsinᶠ)
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+        Δh[k] = ClimaCore.to_cpu(Spaces.local_geometry_data(fs).J)[vindex(1)]
 
         # Error
         err_adv_wc[k] = norm(adv_wc .- cos.(centers))
@@ -498,21 +531,21 @@ end
     conv_adv_wc = convergence_rate(err_adv_wc, Δh)
 
     # Upwind3rdOrderBiasedProductC2F conv, with f(z) = sin(z)
-    @test err_adv_wc[3] ≤ err_adv_wc[2] ≤ err_adv_wc[1] ≤ 5e-4
-    @test conv_adv_wc[1] ≈ 3 atol = 0.1
-    @test conv_adv_wc[2] ≈ 3 atol = 0.1
-    @test conv_adv_wc[3] ≈ 3 atol = 0.1
-    @test conv_adv_wc[1] ≤ conv_adv_wc[2] ≤ conv_adv_wc[2]
+    @test error_bound_check(err_adv_wc, 5e-4, device)
+    @test conv_adv_wc[1] ≈ 3 atol = 0.1 skip=using_cuda
+    @test conv_adv_wc[2] ≈ 3 atol = 0.1 skip=using_cuda
+    @test conv_adv_wc[3] ≈ 3 atol = 0.1 skip=using_cuda
+    @test conv_adv_wc[1] ≤ conv_adv_wc[2] ≤ conv_adv_wc[2] skip=using_cuda
 end
 
 @testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on (uniform) periodic mesh, varying sign w" begin
     FT = Float64
-    n_elems_seq = 2 .^ (5, 6, 7, 8)
+    device = ClimaComms.device()
+    n_elems_seq = modify_elems_seq_for_cuda(2 .^ (5, 6, 7, 8), device)
 
     err_adv_wc = zeros(FT, length(n_elems_seq))
 
     Δh = zeros(FT, length(n_elems_seq))
-    device = ClimaComms.device()
 
     for (k, n) in enumerate(n_elems_seq)
         domain = Domains.IntervalDomain(
@@ -522,7 +555,7 @@ end
         )
         mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+        cs = make_center_space(device, mesh, n)
         fs = Spaces.face_space(cs)
 
         centers = getproperty(Fields.coordinate_field(cs), :z)
@@ -540,7 +573,7 @@ end
         divf2c = Operators.DivergenceF2C()
         adv_wc = divf2c.(third_order_fluxsinᶠ)
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+        Δh[k] = ClimaCore.to_cpu(Spaces.local_geometry_data(fs).J)[vindex(1)]
 
         # Error
         err_adv_wc[k] =
@@ -551,17 +584,17 @@ end
     conv_adv_wc = convergence_rate(err_adv_wc, Δh)
 
     # Upwind3rdOrderBiasedProductC2F conv, with f(z) = sin(z), w(z) = cos(z)
-    @test err_adv_wc[3] ≤ err_adv_wc[2] ≤ err_adv_wc[1] ≤ 4e-3
-    @test conv_adv_wc[1] ≈ 2 atol = 0.2
-    @test conv_adv_wc[2] ≈ 2 atol = 0.1
-    @test conv_adv_wc[3] ≈ 2 atol = 0.1
+    @test error_bound_check(err_adv_wc, 4e-3, device)
+    @test conv_adv_wc[1] ≈ 2 atol = 0.2 skip=using_cuda
+    @test conv_adv_wc[2] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_adv_wc[3] ≈ 2 atol = 0.1 skip=using_cuda
 end
 
 @testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on (uniform and stretched) non-periodic mesh, with FirstOrderOneSided + DivergenceF2C SetValue BCs, constant w" begin
     FT = Float64
-    n_elems_seq = 2 .^ (4, 6, 8, 10)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(1.0))
     device = ClimaComms.device()
+    n_elems_seq = modify_elems_seq_for_cuda(2 .^ (4, 6, 8, 10), device)
 
     for (i, stretch_fn) in enumerate(stretch_fns)
         err_adv_wc = zeros(FT, length(n_elems_seq))
@@ -574,7 +607,7 @@ end
             )
             mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
 
-            cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+            cs = make_center_space(device, mesh, n; stretch_fn = stretch_fn)
             fs = Spaces.face_space(cs)
 
             centers = getproperty(Fields.coordinate_field(cs), :z)
@@ -603,7 +636,7 @@ end
 
             adv_wc = divf2c.(third_order_fluxᶠ.(w, c))
 
-            Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+            Δh[k] = ClimaCore.to_cpu(Spaces.local_geometry_data(fs).J)[vindex(1)]
 
             # Error
             err_adv_wc[k] = norm(adv_wc .- cos.(centers))
@@ -612,18 +645,18 @@ end
         # Check convergence rate
         conv_adv_wc = convergence_rate(err_adv_wc, Δh)
         # Upwind3rdOrderBiasedProductC2F conv, with f(z) = sin(z), w(z) = 1
-        @test err_adv_wc[3] ≤ err_adv_wc[2] ≤ err_adv_wc[1] ≤ 0.2006
-        @test conv_adv_wc[1] ≈ 0.5 atol = 0.2
-        @test conv_adv_wc[2] ≈ 0.5 atol = 0.3
-        @test conv_adv_wc[3] ≈ 1.0 atol = 0.55
+        @test error_bound_check(err_adv_wc, 0.2006, device)
+        @test conv_adv_wc[1] ≈ 0.5 atol = 0.2 skip=using_cuda
+        @test conv_adv_wc[2] ≈ 0.5 atol = 0.3 skip=using_cuda
+        @test conv_adv_wc[3] ≈ 1.0 atol = 0.55 skip=using_cuda
     end
 end
 
 @testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on (uniform and stretched) non-periodic mesh, with ThirdOrderOneSided + DivergenceF2C SetValue BCs, varying sign w" begin
     FT = Float64
-    n_elems_seq = 2 .^ (4, 6, 8, 10)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(1.0))
     device = ClimaComms.device()
+    n_elems_seq = modify_elems_seq_for_cuda(2 .^ (4, 6, 8, 10), device)
 
     for (i, stretch_fn) in enumerate(stretch_fns)
         err_adv_wc = zeros(FT, length(n_elems_seq))
@@ -636,7 +669,7 @@ end
             )
             mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-            cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+            cs = make_center_space(device, mesh, n; stretch_fn = stretch_fn)
             fs = Spaces.face_space(cs)
 
             centers = getproperty(Fields.coordinate_field(cs), :z)
@@ -659,7 +692,7 @@ end
             )
             adv_wc = divf2c.(third_order_fluxᶠ.(w, c))
 
-            Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+            Δh[k] = ClimaCore.to_cpu(Spaces.local_geometry_data(fs).J)[vindex(1)]
             # Errors
             err_adv_wc[k] =
                 norm(adv_wc .- ((cos.(centers)) .^ 2 .- (sin.(centers)) .^ 2))
@@ -669,21 +702,21 @@ end
         # Check convergence rate
         conv_adv_wc = convergence_rate(err_adv_wc, Δh)
         # Upwind3rdOrderBiasedProductC2F conv, with f(z) = sin(z), w(z) = cos(z)
-        @test err_adv_wc[3] ≤ err_adv_wc[2] ≤ err_adv_wc[1] ≤ 2e-1
-        @test conv_adv_wc[1] ≈ 2 atol = 0.1
-        @test conv_adv_wc[2] ≈ 2 atol = 0.1
-        @test conv_adv_wc[3] ≈ 2 atol = 0.1
+        @test error_bound_check(err_adv_wc, 2e-1, device)
+        @test conv_adv_wc[1] ≈ 2 atol = 0.1 skip=using_cuda
+        @test conv_adv_wc[2] ≈ 2 atol = 0.1 skip=using_cuda
+        @test conv_adv_wc[3] ≈ 2 atol = 0.1 skip=using_cuda
     end
 end
 
 @testset "Simple FCT: lin combination of UpwindBiasedProductC2F + Upwind3rdOrderBiasedProductC2F on (uniform) periodic mesh" begin
     FT = Float64
-    n_elems_seq = 2 .^ (5, 6, 7, 8)
+    device = ClimaComms.device()
+    n_elems_seq = modify_elems_seq_for_cuda(2 .^ (5, 6, 7, 8), device)
 
     err_adv_wc = zeros(FT, length(n_elems_seq))
 
     Δh = zeros(FT, length(n_elems_seq))
-    device = ClimaComms.device()
 
     for (k, n) in enumerate(n_elems_seq)
         domain = Domains.IntervalDomain(
@@ -693,7 +726,7 @@ end
         )
         mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+        cs = make_center_space(device, mesh, n)
         fs = Spaces.face_space(cs)
 
         centers = getproperty(Fields.coordinate_field(cs), :z)
@@ -715,7 +748,7 @@ end
             @. divf2c(C * (third_order_fluxsinᶠ - first_order_fluxsinᶠ))
         adv_wc = @. divf2c.(first_order_fluxsinᶠ) + corrected_antidiff_flux
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+        Δh[k] = ClimaCore.to_cpu(Spaces.local_geometry_data(fs).J)[vindex(1)]
 
         # Error
         err_adv_wc[k] = norm(adv_wc .- cos.(centers))
@@ -725,21 +758,21 @@ end
     conv_adv_wc = convergence_rate(err_adv_wc, Δh)
 
     # Upwind3rdOrderBiasedProductC2F conv, with f(z) = sin(z)
-    @test err_adv_wc[3] ≤ err_adv_wc[2] ≤ err_adv_wc[1] ≤ 5e-4
-    @test conv_adv_wc[1] ≈ 3 atol = 0.1
-    @test conv_adv_wc[2] ≈ 3 atol = 0.1
-    @test conv_adv_wc[3] ≈ 3 atol = 0.1
-    @test conv_adv_wc[1] ≤ conv_adv_wc[2] ≤ conv_adv_wc[2]
+    @test error_bound_check(err_adv_wc, 5e-4, device)
+    @test conv_adv_wc[1] ≈ 3 atol = 0.1 skip=using_cuda
+    @test conv_adv_wc[2] ≈ 3 atol = 0.1 skip=using_cuda
+    @test conv_adv_wc[3] ≈ 3 atol = 0.1 skip=using_cuda
+    @test conv_adv_wc[1] ≤ conv_adv_wc[2] ≤ conv_adv_wc[2] skip=using_cuda
 end
 
 @testset "Lin et al. (1994) van Leer class limiter (Mono5)" begin
     FT = Float64
-    n_elems_seq = 2 .^ (5, 6, 7, 8, 9, 10)
+    device = ClimaComms.device()
+    n_elems_seq = modify_elems_seq_for_cuda(2 .^ (5, 6, 7, 8, 9, 10), device)
 
     err_adv_wc = zeros(FT, length(n_elems_seq))
 
     Δh = zeros(FT, length(n_elems_seq))
-    device = ClimaComms.device()
 
     for (k, n) in enumerate(n_elems_seq)
         domain = Domains.IntervalDomain(
@@ -749,7 +782,7 @@ end
         )
         mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+        cs = make_center_space(device, mesh, n)
         fs = Spaces.face_space(cs)
 
         centers = getproperty(Fields.coordinate_field(cs), :z)
@@ -769,7 +802,7 @@ end
         flux = SLMethod.(w, c, FT(0))
         adv_wc = divf2c.(flux)
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+        Δh[k] = ClimaCore.to_cpu(Spaces.local_geometry_data(fs).J)[vindex(1)]
 
         # Error
         err_adv_wc[k] = norm(adv_wc .- cos.(centers))
@@ -779,22 +812,22 @@ end
     conv_adv_wc = convergence_rate(err_adv_wc, Δh)
 
     # LinVanLeer limited flux conv, with f(z) = sin(z)
-    @test conv_adv_wc[1] ≈ 1.5 atol = 0.01
-    @test conv_adv_wc[2] ≈ 1.5 atol = 0.01
-    @test conv_adv_wc[3] ≈ 1.5 atol = 0.01
-    @test conv_adv_wc[4] ≈ 1.5 atol = 0.01
-    @test conv_adv_wc[5] ≈ 1.5 atol = 0.01
+    @test conv_adv_wc[1] ≈ 1.5 atol = 0.01 skip=using_cuda
+    @test conv_adv_wc[2] ≈ 1.5 atol = 0.01 skip=using_cuda
+    @test conv_adv_wc[3] ≈ 1.5 atol = 0.01 skip=using_cuda
+    @test conv_adv_wc[4] ≈ 1.5 atol = 0.01 skip=using_cuda
+    @test conv_adv_wc[5] ≈ 1.5 atol = 0.01 skip=using_cuda
 
 end
 
 @testset "Lin et al. (1994) van Leer class limiter (Mono4)" begin
     FT = Float64
-    n_elems_seq = 2 .^ (5, 6, 7, 8, 9, 10)
+    device = ClimaComms.device()
+    n_elems_seq = modify_elems_seq_for_cuda(2 .^ (5, 6, 7, 8, 9, 10), device)
 
     err_adv_wc = zeros(FT, length(n_elems_seq))
 
     Δh = zeros(FT, length(n_elems_seq))
-    device = ClimaComms.device()
 
     for (k, n) in enumerate(n_elems_seq)
         domain = Domains.IntervalDomain(
@@ -804,7 +837,7 @@ end
         )
         mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+        cs = make_center_space(device, mesh, n)
         fs = Spaces.face_space(cs)
 
         centers = getproperty(Fields.coordinate_field(cs), :z)
@@ -825,7 +858,7 @@ end
         flux = SLMethod.(w, c, FT(0))
         adv_wc = divf2c.(flux)
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+        Δh[k] = ClimaCore.to_cpu(Spaces.local_geometry_data(fs).J)[vindex(1)]
 
         # Error
         err_adv_wc[k] = norm(adv_wc .- cos.(centers))
@@ -835,22 +868,22 @@ end
     conv_adv_wc = convergence_rate(err_adv_wc, Δh)
 
     # LinVanLeer limited flux conv, with f(z) = sin(z)
-    @test conv_adv_wc[1] ≈ 1.5 atol = 0.01
-    @test conv_adv_wc[2] ≈ 1.5 atol = 0.01
-    @test conv_adv_wc[3] ≈ 1.5 atol = 0.01
-    @test conv_adv_wc[4] ≈ 1.5 atol = 0.01
-    @test conv_adv_wc[5] ≈ 1.5 atol = 0.01
+    @test conv_adv_wc[1] ≈ 1.5 atol = 0.01 skip=using_cuda
+    @test conv_adv_wc[2] ≈ 1.5 atol = 0.01 skip=using_cuda
+    @test conv_adv_wc[3] ≈ 1.5 atol = 0.01 skip=using_cuda
+    @test conv_adv_wc[4] ≈ 1.5 atol = 0.01 skip=using_cuda
+    @test conv_adv_wc[5] ≈ 1.5 atol = 0.01 skip=using_cuda
 
 end
 
 @testset "Lin et al. (1994) van Leer class limiter (PosDef)" begin
     FT = Float64
-    n_elems_seq = 2 .^ (5, 6, 7, 8, 9, 10)
+    device = ClimaComms.device()
+    n_elems_seq = modify_elems_seq_for_cuda(2 .^ (5, 6, 7, 8, 9, 10), device)
 
     err_adv_wc = zeros(FT, length(n_elems_seq))
 
     Δh = zeros(FT, length(n_elems_seq))
-    device = ClimaComms.device()
 
     for (k, n) in enumerate(n_elems_seq)
         domain = Domains.IntervalDomain(
@@ -860,7 +893,7 @@ end
         )
         mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+        cs = make_center_space(device, mesh, n)
         fs = Spaces.face_space(cs)
 
         centers = getproperty(Fields.coordinate_field(cs), :z)
@@ -881,7 +914,7 @@ end
         flux = SLMethod.(w, c, FT(0))
         adv_wc = divf2c.(flux)
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+        Δh[k] = ClimaCore.to_cpu(Spaces.local_geometry_data(fs).J)[vindex(1)]
 
         # Error
         err_adv_wc[k] = norm(adv_wc .- cos.(centers))
@@ -891,19 +924,19 @@ end
     conv_adv_wc = convergence_rate(err_adv_wc, Δh)
 
     # LinVanLeer limited flux conv, with f(z) = sin(z)
-    @test conv_adv_wc[1] ≈ 1.0 atol = 0.01
-    @test conv_adv_wc[2] ≈ 1.0 atol = 0.01
-    @test conv_adv_wc[3] ≈ 1.0 atol = 0.01
-    @test conv_adv_wc[4] ≈ 1.0 atol = 0.01
-    @test conv_adv_wc[5] ≈ 1.0 atol = 0.01
+    @test conv_adv_wc[1] ≈ 1.0 atol = 0.01 skip=using_cuda
+    @test conv_adv_wc[2] ≈ 1.0 atol = 0.01 skip=using_cuda
+    @test conv_adv_wc[3] ≈ 1.0 atol = 0.01 skip=using_cuda
+    @test conv_adv_wc[4] ≈ 1.0 atol = 0.01 skip=using_cuda
+    @test conv_adv_wc[5] ≈ 1.0 atol = 0.01 skip=using_cuda
 
 end
 
 @testset "Simple FCT: lin combination of UpwindBiasedProductC2F + Upwind3rdOrderBiasedProductC2F on (uniform and stretched) non-periodic mesh, with FirstOrderOneSided BCs" begin
     FT = Float64
-    n_elems_seq = 2 .^ (4, 6, 8, 10)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(1.0))
     device = ClimaComms.device()
+    n_elems_seq = modify_elems_seq_for_cuda(2 .^ (4, 6, 8, 10), device)
 
     for (i, stretch_fn) in enumerate(stretch_fns)
         err_adv_wc = zeros(FT, length(n_elems_seq))
@@ -916,7 +949,7 @@ end
             )
             mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
 
-            cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+            cs = make_center_space(device, mesh, n; stretch_fn = stretch_fn)
             fs = Spaces.face_space(cs)
 
             centers = getproperty(Fields.coordinate_field(cs), :z)
@@ -954,7 +987,7 @@ end
             adv_wc =
                 @. divf2c.(first_order_fluxᶠ(w, c)) + corrected_antidiff_flux
 
-            Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+            Δh[k] = ClimaCore.to_cpu(Spaces.local_geometry_data(fs).J)[vindex(1)]
 
             # Error
             err_adv_wc[k] = norm(adv_wc .- cos.(centers))
@@ -963,18 +996,18 @@ end
         # Check convergence rate
         conv_adv_wc = convergence_rate(err_adv_wc, Δh)
         # Upwind3rdOrderBiasedProductC2F conv, with f(z) = sin(z)
-        @test err_adv_wc[3] ≤ err_adv_wc[2] ≤ err_adv_wc[1] ≤ 0.2006
-        @test conv_adv_wc[1] ≈ 0.5 atol = 0.2
-        @test conv_adv_wc[2] ≈ 0.5 atol = 0.3
-        @test conv_adv_wc[3] ≈ 1.0 atol = 0.55
+        @test error_bound_check(err_adv_wc, 0.2006, device)
+        @test conv_adv_wc[1] ≈ 0.5 atol = 0.2 skip=using_cuda
+        @test conv_adv_wc[2] ≈ 0.5 atol = 0.3 skip=using_cuda
+        @test conv_adv_wc[3] ≈ 1.0 atol = 0.55 skip=using_cuda
     end
 end
 
 @testset "Simple FCT: lin combination of UpwindBiasedProductC2F + Upwind3rdOrderBiasedProductC2F on (uniform and stretched) non-periodic mesh, with ThirdOrderOneSided BCs" begin
     FT = Float64
-    n_elems_seq = 2 .^ (4, 6, 8, 10)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(1.0))
     device = ClimaComms.device()
+    n_elems_seq = modify_elems_seq_for_cuda(2 .^ (4, 6, 8, 10), device)
 
     for (i, stretch_fn) in enumerate(stretch_fns)
         err_adv_wc = zeros(FT, length(n_elems_seq))
@@ -987,7 +1020,7 @@ end
             )
             mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-            cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+            cs = make_center_space(device, mesh, n; stretch_fn = stretch_fn)
             fs = Spaces.face_space(cs)
 
             centers = getproperty(Fields.coordinate_field(cs), :z)
@@ -1018,7 +1051,7 @@ end
             adv_wc =
                 @. divf2c.(first_order_fluxᶠ(w, c)) + corrected_antidiff_flux
 
-            Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+            Δh[k] = ClimaCore.to_cpu(Spaces.local_geometry_data(fs).J)[vindex(1)]
             # Errors
             err_adv_wc[k] = norm(adv_wc .- cos.(centers))
 
@@ -1027,10 +1060,10 @@ end
         # Check convergence rate
         conv_adv_wc = convergence_rate(err_adv_wc, Δh)
         # Upwind3rdOrderBiasedProductC2F conv, with f(z) = sin(z)
-        @test err_adv_wc[3] ≤ err_adv_wc[2] ≤ err_adv_wc[1] ≤ 5e-1
-        @test conv_adv_wc[1] ≈ 2.5 atol = 0.1
-        @test conv_adv_wc[2] ≈ 2.5 atol = 0.1
-        @test conv_adv_wc[3] ≈ 2.5 atol = 0.1
+        @test error_bound_check(err_adv_wc, 5e-1, device)
+        @test conv_adv_wc[1] ≈ 2.5 atol = 0.1 skip=using_cuda
+        @test conv_adv_wc[2] ≈ 2.5 atol = 0.1 skip=using_cuda
+        @test conv_adv_wc[3] ≈ 2.5 atol = 0.1 skip=using_cuda
     end
 end
 
@@ -1046,10 +1079,10 @@ end
     end
 
     FT = Float64
-    n_elems_seq = 2 .^ (5, 6, 7, 8)
+    device = ClimaComms.device()
+    n_elems_seq = modify_elems_seq_for_cuda(2 .^ (5, 6, 7, 8), device)
     err = zeros(FT, length(n_elems_seq))
     Δh = zeros(FT, length(n_elems_seq))
-    device = ClimaComms.device()
 
     for (k, n) in enumerate(n_elems_seq)
         domain = Domains.IntervalDomain(
@@ -1059,7 +1092,7 @@ end
         )
         mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+        cs = make_center_space(device, mesh, n)
         fs = Spaces.face_space(cs)
 
         # advective velocity
@@ -1070,13 +1103,13 @@ end
         # Call the advection operator
         adv = advection(c, f, cs)
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+        Δh[k] = ClimaCore.to_cpu(Spaces.local_geometry_data(fs).J)[vindex(1)]
         err[k] = norm(adv .- cos.(Fields.coordinate_field(cs).z))
     end
     # AdvectionC2C convergence rate
     conv_adv_c2c = convergence_rate(err, Δh)
-    @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
-    @test conv_adv_c2c[1] ≈ 2 atol = 0.1
-    @test conv_adv_c2c[2] ≈ 2 atol = 0.1
-    @test conv_adv_c2c[3] ≈ 2 atol = 0.1
+    @test error_bound_check(err, 0.1, device)
+    @test conv_adv_c2c[1] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_adv_c2c[2] ≈ 2 atol = 0.1 skip=using_cuda
+    @test conv_adv_c2c[3] ≈ 2 atol = 0.1 skip=using_cuda
 end

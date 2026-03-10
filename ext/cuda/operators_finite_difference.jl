@@ -129,7 +129,7 @@ function Base.copyto!(
         #  Specialized kernel launch for common case.  This uses block and grid indices
         # instead of computing cartesian indices from a linear index
         if true && (Nv == 64 || Nv == 63) && mask isa NoMask && Ni == 4 && Nj == 4 && Nh >= 1500# && !has_lin_vanleer(bc′)
-             if true && mask isa NoMask #&& !(bc′ isa Broadcasted && bc′.f == identity)# && eltype(out) <: ClimaCore.MatrixFields.BandMatrixRow && typeof(bc′) <: Union{ClimaCore.Operators.StencilBroadcasted{ClimaCoreCUDAExt.CUDAColumnStencilStyle, ClimaCore.MatrixFields.MultiplyColumnwiseBandMatrixField}, Base.Broadcast.Broadcasted}#&& length(bc′.args) == 2 && bc′ isa StencilBroadcasted && bc′.op isa ClimaCore.MatrixFields.MultiplyColumnwiseBandMatrixField && length(bc′.args) == 2
+             if true && !Topologies.isperiodic(space) #&& !(bc′ isa Broadcasted && bc′.f == identity)# && eltype(out) <: ClimaCore.MatrixFields.BandMatrixRow && typeof(bc′) <: Union{ClimaCore.Operators.StencilBroadcasted{ClimaCoreCUDAExt.CUDAColumnStencilStyle, ClimaCore.MatrixFields.MultiplyColumnwiseBandMatrixField}, Base.Broadcast.Broadcasted}#&& length(bc′.args) == 2 && bc′ isa StencilBroadcasted && bc′.op isa ClimaCore.MatrixFields.MultiplyColumnwiseBandMatrixField && length(bc′.args) == 2
                 new_bc = recursively_replace_fd_ops(bc′)
                 args = (
                     strip_space(out, space),
@@ -145,14 +145,14 @@ function Base.copyto!(
                 mykr = CUDA.@cuda  always_inline = true launch=false fastmath=true new_stencil_entry!(args...)
                 # println("\n")
                 mykr(args...; threads = (64, 1, 1), blocks = (4, 4, Nh), shmem = 64*9*4 )
-                
+                return out
                 # @show CUDA.memory(mykr)
                 #  @show CUDA.registers(mykr)
                 #  println(summary_string(strip_space(bc′, space)))
-                if CUDA.memory(mykr).local > 100
-                    @show  CUDA.memory(mykr).local
-                    println(summary_string(strip_space(new_bc, space)))
-                end
+                # if CUDA.memory(mykr).local > 100
+                #     @show  CUDA.memory(mykr).local
+                #     println(summary_string(strip_space(new_bc, space)))
+                # end
                 # println("\n\n")
                 #  && println(summary_string(strip_space(bc′, space)))
                 # if CUDA.memory(mykr).local < 100
@@ -161,7 +161,7 @@ function Base.copyto!(
                 #     # CUDA.@cuda  always_inline = true launch=true fastmath=true threads = (64, 1, 1) blocks = (4, 4, Nh) shmem = 64*8*4 new_stencil_entry!(args...)
                 #     # mykr(args...; threads = (64, 1, 1), blocks = (4, 4, Nh), shmem = 64*9*4 )
                 #     # mykr(args...; threads = (64, 1, 1), blocks = (4, 4, Nh))
-                    return out
+                    # return out
                 # end
              end
 
