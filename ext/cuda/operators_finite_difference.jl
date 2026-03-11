@@ -26,8 +26,6 @@ Base.Broadcast.BroadcastStyle(
 
 include("operators_fd_shmem_is_supported.jl")
 include("newmm.jl")
-# include("exps.jl")
-# include("matmul.jl")
 struct ShmemParams{Nv} end
 interior_size(::ShmemParams{Nv}) where {Nv} = (Nv,)
 boundary_size(::ShmemParams{Nv}) where {Nv} = (1,)
@@ -151,15 +149,6 @@ function Base.copyto!(
 end
 import ClimaCore.DataLayouts: get_N, get_Nv, get_Nij, get_Nij, get_Nh
 
-function has_lin_vanleer(bc::Broadcasted)
-    return UnrolledUtilities.unrolled_any(has_lin_vanleer, bc.args)
-end
-
-function has_lin_vanleer(bc::StencilBroadcasted)
-    bc.op isa Operators.LinVanLeerC2F && return true
-    return unrolled_any(has_lin_vanleer, bc.args)
-end
-has_lin_vanleer(_) = false
 """
     copyto_stencil_kernel_64!(
         out,

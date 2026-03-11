@@ -285,9 +285,6 @@ function Operators.return_eltype(
             return Operators.return_eltype(matrix1.op.op, matrix1.args[1], arg)
         end
     end
-    # if (matrix1 isa Base.Broadcast.Broadcasted  && matrix1.f isa FDOperatorMatrix)
-    #    return eltype(matrix1)
-    # end
     et_mat1 = eltype(matrix1)
     et_arg = eltype(arg)
     et_mat1 <: BandMatrixRow || error(

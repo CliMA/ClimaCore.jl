@@ -48,21 +48,8 @@ function recursively_replace_fd_ops(bc::StencilBroadcasted{Style, Op, Args, Axes
         new_args = (opmat, recursively_replace_fd_ops(bc.args[end]))
         newop = MultiplyColumnwiseBandMatrixField()
         return StencilBroadcasted{Style, typeof(newop), typeof(new_args), Axes, Work}(newop, new_args, bc.axes, bc.work)
-    # elseif check_if_fits_in_shmem(bc.args[end])
-    #     return bc
-    #     opmat = Base.Broadcast.broadcasted(
-    #         FDOperatorMatrix(unionall_type(typeof(bc.op))()),
-    #         recursively_replace_fd_ops(bc.args[1]),
-    #     )
-    #     new_args = (opmat, recursively_replace_fd_ops(bc.args[end]))
-    #     newop = MultiplyColumnwiseBandMatrixField()
-    #     inner_bc =  StencilBroadcasted{Style, typeof(newop), typeof(new_args), Axes, Work}(newop, new_args, bc.axes, bc.work)
-    #     outer_op = Operators.SetBoundaryOperator(bc.op.bcs...)
-        # new_args = UnrolledUtilities.unrolled_map(recursively_replace_fd_ops, bc.args)
-        # return StencilBroadcasted{Style, Op, typeof(new_args), Axes, Work}(bc.op, new_args, bc.axes, bc.work)
     else
-        @show bc.op.bcs
-        println("\n")
+        # TODO: add SetValue bc support for this case as well
         return bc
     end
 end
@@ -99,11 +86,8 @@ function recursively_replace_fd_ops(bc::StencilBroadcasted{Style, Op, Args, Axes
             outer_args = (opmat, inner_bc)
             outer_op = MultiplyColumnwiseBandMatrixField()
             return StencilBroadcasted{Style, typeof(outer_op), typeof(outer_args), Axes, Work}(outer_op, outer_args, bc.axes, bc.work)
-            return bc
         end
     else
-        @show bc.op.bcs
-        println("\n")
         return bc
     end
 end
@@ -115,9 +99,7 @@ Base.@propagate_inbounds function new_stencil_entry!(out, bc::BC, space,) where 
     v = threadIdx().x
     h = blockIdx().z
     hidx = (i, j, h)
-    # v == 1 && hidx == (1, 1, 1) && @cushow eltype(bc)
     val = @inbounds @inline calc_level_val(bc, space)
-    # val = @inline @inbounds ClimaCore.RecursiveApply.rzero(eltype(bc))
     if space.staggering isa ClimaCore.Grids.CellFace
         @inline @inbounds setidx!(space, out,  v - half, hidx, val)
     else
@@ -138,7 +120,6 @@ Base.@propagate_inbounds function calc_level_val(bc::BC, space) where {BC <: Bas
     if space isa ClimaCore.Spaces.AbstractSpace && space.staggering isa ClimaCore.Spaces.CellCenter
         v == Int32(64) && return @inline @inbounds ClimaCore.RecursiveApply.rzero(eltype(bc))
     end
-    
     return @inline @inbounds bc.f(resolved_args...)
 end
 
@@ -307,6 +288,7 @@ Base.@propagate_inbounds function project_row2_for_mul(mat1_row, mat2_row, space
     return @inline @inbounds ClimaCore.MatrixFields.recursively_project(projection_tuple, mat2_row)
 end
 
+# TODO: maybe delete this
 if hasfield(Method, :recursion_relation)
     dont_limit = (args...) -> true
     for m in methods(calc_level_val)
