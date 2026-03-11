@@ -651,6 +651,16 @@ steps:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_column.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/convergence_column.jl"
 
+      - label: "Unit: gpu column"
+        key: unit_gpu_column
+        command:
+          # - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_column.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/convergence_column.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: fd tensor"
         key: unit_fd_tensor
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/tensor.jl"

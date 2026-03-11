@@ -87,7 +87,7 @@ function Base.copyto!(
         # instead of computing cartesian indices from a linear index
         if n_face_levels == 64 && mask isa NoMask && Ni == 4 && Nj == 4 &&
            Nh >= 1500
-            if true && !Topologies.isperiodic(space)
+            if !Topologies.isperiodic(space)
                 new_bc = recursively_replace_fd_ops(bc′)
                 args = (
                     strip_space(out, space),
