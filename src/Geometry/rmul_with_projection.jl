@@ -47,14 +47,22 @@ axis2(::Type{<:AdjointAxis2Tensor{<:Any, <:Tuple{A, Any}}}) where {A} = A
 
 
 needs_projection(::Type{X}, ::Type{Y}) where {X <: SingleValue, Y <: SingleValue} = false
-needs_projection(::Type{X}, ::Type{Y}) where {X <: Union{AdjointAxisVector, Axis2TensorOrAdj}, Y <: AxisTensor} =
+needs_projection(
+    ::Type{X},
+    ::Type{Y},
+) where {X <: Union{AdjointAxisVector, Axis2TensorOrAdj}, Y <: AxisTensor} =
     axes(X)[2] != Geometry.dual(axes(Y)[1])
-needs_projection(::Type{X}, ::Type{Y}) where {X <: SingleValue, Y} = needs_projection(X, eltype(Y))
-needs_projection(::Type{X}, ::Type{Y}) where {X, Y <: SingleValue} = needs_projection(eltype(X), Y)
+needs_projection(::Type{X}, ::Type{Y}) where {X <: SingleValue, Y} =
+    needs_projection(X, eltype(Y))
+needs_projection(::Type{X}, ::Type{Y}) where {X, Y <: SingleValue} =
+    needs_projection(eltype(X), Y)
 needs_projection(::Type{X}, ::Type{Y}) where {X, Y} = needs_projection(eltype(X), eltype(Y))
-    
-recursively_find_dual_axes_for_projection(::Type{X}) where {X <: Union{AdjointAxisVector, Axis2TensorOrAdj}} = dual(axes(X)[2])
-recursively_find_dual_axes_for_projection(::Type{X}) where {X} = recursively_find_dual_axes_for_projection(eltype(X))
+
+recursively_find_dual_axes_for_projection(
+    ::Type{X},
+) where {X <: Union{AdjointAxisVector, Axis2TensorOrAdj}} = dual(axes(X)[2])
+recursively_find_dual_axes_for_projection(::Type{X}) where {X} =
+    recursively_find_dual_axes_for_projection(eltype(X))
 
 
 """

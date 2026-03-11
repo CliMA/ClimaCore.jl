@@ -87,17 +87,20 @@ function Base.copyto!(
         (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(out_fv)
         #  Specialized kernel launch for common case.  This uses block and grid indices
         # instead of computing cartesian indices from a linear index
-        if true && (Nv == 64 || Nv == 63) && mask isa NoMask && Ni == 4 && Nj == 4 && Nh >= 1500
-             if true && !Topologies.isperiodic(space)
+        if true && (Nv == 64 || Nv == 63) && mask isa NoMask && Ni == 4 && Nj == 4 &&
+           Nh >= 1500
+            if true && !Topologies.isperiodic(space)
                 new_bc = recursively_replace_fd_ops(bc′)
                 args = (
                     strip_space(out, space),
                     strip_space(new_bc, space),
                     axes(out),
                 )
-                mykr = CUDA.@cuda  always_inline = true fastmath=true  threads = (64, 1, 1) blocks = (4, 4, Nh) shmem = 64*9*4 new_stencil_entry!(args...)
+                mykr =
+                    CUDA.@cuda always_inline = true fastmath = true threads = (64, 1, 1) blocks =
+                        (4, 4, Nh) shmem = 64 * 9 * 4 new_stencil_entry!(args...)
                 return out
-             end
+            end
 
             args = (
                 strip_space(out, space),

@@ -27,8 +27,28 @@ struct LocalGeometry{I, C <: AbstractPoint, FT, ∂x∂ξT, ∂ξ∂xT, gⁱʲT,
     gᵢⱼ::gᵢⱼT #::Axis2Tensor{FT, Tuple{CovariantAxis{I}, CovariantAxis{I}}, S}
 end
 
-Base.zero(::Type{LG}) where {I, C, FT, ∂x∂ξT, ∂ξ∂xT, gⁱʲT, gᵢⱼT, LG <: LocalGeometry{I, C, FT, ∂x∂ξT, ∂ξ∂xT, gⁱʲT, gᵢⱼT}} =
-    LocalGeometry{I, C, FT, ∂x∂ξT, ∂ξ∂xT, gⁱʲT, gᵢⱼT}(zero(C), zero(FT), zero(FT), zero(FT), zero(∂x∂ξT), zero(∂ξ∂xT), zero(gⁱʲT), zero(gᵢⱼT))
+Base.zero(
+    ::Type{LG},
+) where {
+    I,
+    C,
+    FT,
+    ∂x∂ξT,
+    ∂ξ∂xT,
+    gⁱʲT,
+    gᵢⱼT,
+    LG <: LocalGeometry{I, C, FT, ∂x∂ξT, ∂ξ∂xT, gⁱʲT, gᵢⱼT},
+} =
+    LocalGeometry{I, C, FT, ∂x∂ξT, ∂ξ∂xT, gⁱʲT, gᵢⱼT}(
+        zero(C),
+        zero(FT),
+        zero(FT),
+        zero(FT),
+        zero(∂x∂ξT),
+        zero(∂ξ∂xT),
+        zero(gⁱʲT),
+        zero(gᵢⱼT),
+    )
 
 const FullLocalGeometry{I, C, FT, S} = LocalGeometry{
     I,

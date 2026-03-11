@@ -278,7 +278,10 @@ function Operators.return_eltype(
     matrix1,
     arg,
 )
-    if (matrix1 isa Operators.StencilBroadcasted && matrix1.op isa FDOperatorMatrix && !(eltype(arg) <: BandMatrixRow))
+    if (
+        matrix1 isa Operators.StencilBroadcasted && matrix1.op isa FDOperatorMatrix &&
+        !(eltype(arg) <: BandMatrixRow)
+    )
         if matrix1.op.op isa OneArgFDOperator
             return Operators.return_eltype(matrix1.op.op, arg)
         else

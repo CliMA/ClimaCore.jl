@@ -74,7 +74,8 @@ macro pointtype(name, fields...)
             $name{FT}(pt::$name) where {FT} = convert($name{FT}, pt)
             Base.eltype(::$name{FT}) where {FT} = FT
             Base.eltype(::Type{$name{FT}}) where {FT} = FT
-            Base.zero(::Type{$name{FT}}) where {FT} =  $name{FT}((zero(FT) for field in $fields)...)
+            Base.zero(::Type{$name{FT}}) where {FT} =
+                $name{FT}((zero(FT) for field in $fields)...)
             unionalltype(::$name{FT}) where {FT} = $name
             unionalltype(::Type{$name{FT}}) where {FT} = $name
             function Base.:(==)(x::$name, y::$name)

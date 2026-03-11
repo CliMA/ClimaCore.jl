@@ -122,13 +122,14 @@ function Base.Broadcast.broadcasted(
     field_or_broadcasted::FieldOrStencilStyleType,
     args...,
 )
-# @show "ppppppp"
 
     unrolled_reduce(args; init = field_or_broadcasted) do arg1, arg2
         arg1_isa_matrix =
             eltype(arg1) <: BandMatrixRow || (arg1 isa LazyOperatorBroadcasted)
         if arg1 isa LazyOperatorBroadcasted && length(arg1.args) > 0
-            arg1_isa_matrix = eltype(arg1.args[1]) <: BandMatrixRow || arg1.args[1] isa LazyOperatorBroadcasted
+            arg1_isa_matrix =
+                eltype(arg1.args[1]) <: BandMatrixRow ||
+                arg1.args[1] isa LazyOperatorBroadcasted
         end
         use_matrix_mul_op = arg1_isa_matrix && arg2 isa FieldOrStencilStyleType
         op = use_matrix_mul_op ? MultiplyColumnwiseBandMatrixField() : ⊠
@@ -174,8 +175,15 @@ function Base.show(io::IO, field::ColumnwiseBandMatrixField)
 end
 
 # TODO: move into CUDAExt
-Base.@propagate_inbounds recursively_project(projection_tuple::T, y::Y) where {T, Y <: BandMatrixRow} = map(Base.Fix1(recursively_project, projection_tuple), y)
-Base.@propagate_inbounds recursively_project(projection_tuple::T, y::Y) where {T, Y} =  rmap(Base.Fix1(recursively_project, projection_tuple), y)
-Base.@propagate_inbounds recursively_project(projection_tuple::T, y::Y) where {T, Y <: AxisTensor} = project(projection_tuple[1], y, projection_tuple[2])
+Base.@propagate_inbounds recursively_project(
+    projection_tuple::T,
+    y::Y,
+) where {T, Y <: BandMatrixRow} = map(Base.Fix1(recursively_project, projection_tuple), y)
+Base.@propagate_inbounds recursively_project(projection_tuple::T, y::Y) where {T, Y} =
+    rmap(Base.Fix1(recursively_project, projection_tuple), y)
+Base.@propagate_inbounds recursively_project(
+    projection_tuple::T,
+    y::Y,
+) where {T, Y <: AxisTensor} = project(projection_tuple[1], y, projection_tuple[2])
 
 end
