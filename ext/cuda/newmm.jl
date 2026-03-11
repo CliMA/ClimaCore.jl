@@ -1,7 +1,6 @@
 import ClimaCore: Spaces, Quadratures, Topologies
 import Base.Broadcast: Broadcasted
 import ClimaComms
-using CUDA: @cuda
 import ClimaCore.Utilities: half
 import ClimaCore.Operators
 import ClimaCore: Operators
@@ -24,12 +23,29 @@ import UnrolledUtilities
 
 
 include("matmul.jl")
-recursively_replace_fd_ops(val) = val
 
+"""
+    check_if_fits_in_shmem(x)
+
+Check if `x`, or the `eltype(x)` can fit in shared memory with the current config.
+"""
 check_if_fits_in_shmem(bc::Union{StencilBroadcasted, Broadcasted, ClimaCore.Fields.Field}) =
     sizeof(eltype(bc)) <= 36
 check_if_fits_in_shmem(val) = sizeof(typeof(val)) <= 36
 
+
+"""
+    recursively_replace_fd_ops(val)
+
+Recursively replace any `OneArgFDOperator` or `TwoArgFDOperator` in `val` with a
+`MultiplyColumnwiseBandMatrixField` with the corresponding `FDOperatorMatrix`, if the operator
+does not have affine BCs and the operator matrix fits in shared memory.
+
+`OneArgFDOperator`s with affine BCs are also replaced with `MultiplyColumnwiseBandMatrixField`s
+if all the BCs are `SetValue`s
+
+"""
+recursively_replace_fd_ops(val) = val
 
 function recursively_replace_fd_ops(
     bc::Base.Broadcast.Broadcasted{Style, Axes, F, ARGS},
@@ -95,6 +111,7 @@ function recursively_replace_fd_ops(
         Base.Fix2(isa, ClimaCore.Operators.SetValue),
         values(bc.op.bcs),
     )
+        # SetBoundaryOperator is either the inner or outer depending on if the operator takes input from faces or centers
         if bc.op isa MatrixFields.OneArgFDOperatorWithCenterInput
             opmat = Base.Broadcast.broadcasted(
                 FDOperatorMatrix(bc.op),
@@ -162,11 +179,19 @@ function recursively_replace_fd_ops(
             )
         end
     else
+        # affine BCs with non-SetValue BCs, or values that won't fit in shmmem
         return bc
     end
 end
 
+"""
+    new_stencil_entry!(out, bc::BC, space)
 
+CUDA kernel to compute the value of a `Broadcasted` or `StencilBroadcasted` at a single index.
+This should only be used when there are 63 vertical elements.
+This calls `calc_level_val(bc, space)`, which  computes the value of the broadcasted expression at the given index,
+and then copies the result into `out`.
+"""
 Base.@propagate_inbounds function new_stencil_entry!(out, bc::BC, space) where {BC}
     i = blockIdx().x
     j = blockIdx().y
@@ -184,7 +209,13 @@ Base.@propagate_inbounds function new_stencil_entry!(out, bc::BC, space) where {
     return nothing
 end
 
+# All the functions below this line should not be used outside of this file
 
+"""
+    calc_level_val(bc, space)
+
+Call `calc_level_val` on all the arguments of `bc`, and then apply the function `bc.f` to the results.
+"""
 Base.@propagate_inbounds function calc_level_val(
     bc::BC,
     space,
@@ -205,6 +236,13 @@ Base.@propagate_inbounds function calc_level_val(
     return @inline @inbounds bc.f(resolved_args...)
 end
 
+"""
+    reconstruct_space_and_call_calc_level_val(arg, space)
+
+If `arg` is a `Broadcasted`, `StencilBroadcasted`, or `ClimaCore.Fields.Field`,
+reconstruct the space for the argument and call `calc_level_val` on it. This allows
+us to use Base.Fix2.
+"""
 Base.@propagate_inbounds reconstruct_space_and_call_calc_level_val(
     arg::A,
     space::S,
@@ -217,9 +255,23 @@ Base.@propagate_inbounds reconstruct_space_and_call_calc_level_val(
     space::S,
 ) where {A, S} = calc_level_val(arg, space)
 
+"""
+    calc_level_val(val::T, space)
+
+If `val` is not a `Broadcasted`, `StencilBroadcasted`, or `ClimaCore.Fields.Field`, just return `val`.
+If it is a `Ref`, return `val[]`. If it is a one element tuple, return the element.
+"""
 Base.@propagate_inbounds calc_level_val(val::T, space) where {T <: Ref} = val[]
 Base.@propagate_inbounds calc_level_val(val::T, space) where {V, T <: Tuple{V}} =
     val[Int32(1)]
+calc_level_val(arg::S, space) where {S} = arg
+
+"""
+    calc_level_val(bc::StencilBroadcasted{<:Any, <: MultiplyColumnwiseBandMatrixField}, space)
+
+Call `calc_level_val` on both args of `bc`, place the result of the second arg into shared memory,
+and then perform the multiplication.
+"""
 Base.@propagate_inbounds function calc_level_val(
     bc::BC,
     space,
@@ -278,6 +330,11 @@ Base.@propagate_inbounds function calc_level_val(
     end
 end
 
+"""
+    calc_level_val(bc::StencilBroadcasted{<:Any, <: SetBoundaryOperator}, space)
+
+Special case of `calc_level_val` for `SetBoundaryOperator`s, which just applies the BC.
+"""
 Base.@propagate_inbounds function calc_level_val(
     bc::BC,
     space,
@@ -303,7 +360,35 @@ Base.@propagate_inbounds function calc_level_val(
     end
 end
 
+"""
+    calc_level_val(bc::StencilBroadcasted{<:Any, <: LinVanLeerC2F}, space)
 
+Special case of `calc_level_val` for `LinVanLeerC2F`s, which makes the
+top and bottom face values not use the fallback `Operators.getidx`, since that
+will error if the operator is eagerly evaluated at the boundaries.
+"""
+Base.@propagate_inbounds function calc_level_val(
+    bc::BC,
+    space,
+) where {S, Op <: Operators.LinVanLeerC2F, BC <: StencilBroadcasted{S, Op}}
+    i = blockIdx().x
+    j = blockIdx().y
+    v = threadIdx().x
+    h = blockIdx().z
+    hidx = (i, j, h)
+    if v == Int32(1)  || v == Int32(64)
+        return zero(eltype(bc))
+    end
+    idx = v - half
+     return @inline @inbounds Operators.getidx(space, bc, idx, hidx)
+end
+
+"""
+    calc_level_val(bc::StencilBroadcasted, space)
+
+Fallback case of `calc_level_val` that calls `Operators.getidx`. This is used for
+affine BCs with non-SetValue BCs, or values that won't fit in shmmem.
+"""
 Base.@propagate_inbounds function calc_level_val(
     bc::BC,
     space,
@@ -322,6 +407,12 @@ Base.@propagate_inbounds function calc_level_val(
     return @inline @inbounds Operators.getidx(space, bc, idx, hidx)
 end
 
+"""
+    calc_level_val(f::Field, space)
+
+Returns the value of the field `f` at the thread's index.
+When the staggering of `space` is `CellCenter`, the thread with `v == 64` returns `rzero(eltype(f))`
+"""
 Base.@propagate_inbounds function calc_level_val(
     arg::F,
     space,
@@ -332,18 +423,16 @@ Base.@propagate_inbounds function calc_level_val(
     v = threadIdx().x
     h = blockIdx().z
     if space.staggering isa ClimaCore.Spaces.CellCenter
-        # if eltype(data) <: ClimaCore.Geometry.LocalGeometry
-        #     v == Int32(64) && return @inline @inbounds data[CartesianIndex(i, j, Int32(1), Int32(63), h)]
-        # end
         v == Int32(64) && return @inline @inbounds rzero(eltype(data))
     end
     return @inline @inbounds data[CartesianIndex(i, j, Int32(1), v, h)]
 end
 
-calc_level_val(arg::S, space) where {S} = arg
+"""
+    calc_level_val(bc::StencilBroadcasted{<:Any, <: FDOperatorMatrix}, space)
 
-
-
+Return the correct row of the operator matrix for the current thread
+"""
 Base.@propagate_inbounds function calc_level_val(
     bc::BC,
     space,
@@ -359,6 +448,11 @@ Base.@propagate_inbounds function calc_level_val(
     return val
 end
 
+"""
+    get_op_row(op, args, space)
+
+Get the correct row of the operator matrix for the current thread, taking into account boundary conditions.
+"""
 
 Base.@propagate_inbounds function get_op_row(op, args, space)
     FT = ClimaCore.Spaces.undertype(space)
@@ -412,7 +506,11 @@ Base.@propagate_inbounds function get_op_row(op, args, space)
 end
 
 
+"""
+    project_row2_for_mul
 
+Project's `mat2_row` onto the correct axis for multiplication with `mat1_row` if necessary, and returns the projected row.
+"""
 Base.@propagate_inbounds function project_row2_for_mul(mat1_row, mat2_row, space)
 
     if !ClimaCore.Geometry.needs_projection(typeof(mat1_row), typeof(mat2_row))
@@ -426,9 +524,8 @@ Base.@propagate_inbounds function project_row2_for_mul(mat1_row, mat2_row, space
     hidx = (i, j, h)
     project_onto =
         ClimaCore.Geometry.recursively_find_dual_axes_for_projection(typeof(mat1_row))
-    # # this is a hack to get the correct type for the 64th lvl on a cc grid
     if space.staggering isa ClimaCore.Spaces.CellCenter && v == Int32(64)
-        @inbounds lg = Geometry.LocalGeometry(space, Int32(63), hidx)
+        lg = rzero(ClimaCore.Spaces.local_geometry_type(typeof(space)))
     else
         v_maybe_half = space.staggering isa ClimaCore.Spaces.CellFace ? v - half : v
         @inbounds lg = Geometry.LocalGeometry(space, v_maybe_half, hidx)

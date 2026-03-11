@@ -9,9 +9,7 @@ import ClimaCore.Operators: AbstractStencilStyle, strip_space
 import ClimaCore.Operators: setidx!, getidx
 import ClimaCore.Operators: StencilBroadcasted
 import ClimaCore.Operators: LeftBoundaryWindow, RightBoundaryWindow, Interior
-import ClimaCore.MatrixFields: FaceToCenter, CenterToFace, Square
 using UnrolledUtilities
-using Statistics
 
 
 struct CUDAColumnStencilStyle <: AbstractStencilStyle end
@@ -87,7 +85,7 @@ function Base.copyto!(
         (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(out_fv)
         #  Specialized kernel launch for common case.  This uses block and grid indices
         # instead of computing cartesian indices from a linear index
-        if true && (Nv == 64 || Nv == 63) && mask isa NoMask && Ni == 4 && Nj == 4 &&
+        if n_face_levels == 64 && mask isa NoMask && Ni == 4 && Nj == 4 &&
            Nh >= 1500
             if true && !Topologies.isperiodic(space)
                 new_bc = recursively_replace_fd_ops(bc′)
@@ -98,7 +96,7 @@ function Base.copyto!(
                 )
                 mykr =
                     CUDA.@cuda always_inline = true fastmath = true threads = (64, 1, 1) blocks =
-                        (4, 4, Nh) shmem = 64 * 9 * 4 new_stencil_entry!(args...)
+                        (Ni, Nj, Nh) shmem = 64 * 9 * 4 new_stencil_entry!(args...)
                 return out
             end
 

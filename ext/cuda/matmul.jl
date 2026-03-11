@@ -1,7 +1,6 @@
 import ClimaCore: Spaces, Quadratures, Topologies
 import Base.Broadcast: Broadcasted
 import ClimaComms
-using CUDA: @cuda
 import ClimaCore.Utilities: half
 import ClimaCore.Operators
 import ClimaCore: Operators
@@ -19,6 +18,7 @@ using ClimaCore.MatrixFields
 using LinearAlgebra
 import UnrolledUtilities
 
+# DO NOT COPY ANY PATTERNS SEEN HERE. This could all be written in two functions.
 
 Base.@propagate_inbounds function row_mul_mat!(
     ::Type{P},
