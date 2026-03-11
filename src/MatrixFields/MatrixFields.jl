@@ -173,35 +173,9 @@ function Base.show(io::IO, field::ColumnwiseBandMatrixField)
     end
 end
 
-
-Base.@propagate_inbounds project_for_mul(x, y::BandMatrixRow, lg) = map(y_component -> project_for_mul(x, y_component, lg), y)
-Base.@propagate_inbounds project_for_mul(x::BandMatrixRow, y::BandMatrixRow, lg) = map(y_component -> project_for_mul(x.entries[1], y_component, lg), y)
-Base.@propagate_inbounds project_for_mul(x::BandMatrixRow, y::SingleValue, lg) = project_for_mul(x.entries[1], y, lg)
-Base.@propagate_inbounds project_for_mul(x::BandMatrixRow, y, lg) = rmap(y′ -> project_for_mul(x.entries[1], y′, lg), y)
-Base.@propagate_inbounds project_for_mul(x, y, lg) = rmap((x′, y′) -> project_for_mul(x′, y′, lg), x, y)
-Base.@propagate_inbounds project_for_mul(x::SingleValue, y, lg) = rmap(y′ -> project_for_mul(x, y′, lg), y)
-Base.@propagate_inbounds project_for_mul(x, y::SingleValue, lg) = rmap(x′ -> project_for_mul(x′, y, lg), y)
-Base.@propagate_inbounds project_for_mul(x::SingleValue, y::SingleValue, lg) = maybe_project(x, y, lg)
-Base.@propagate_inbounds maybe_project(_, y, _) = y
-Base.@propagate_inbounds maybe_project(x::Union{AdjointAxisVector, Axis2TensorOrAdj}, y::AxisTensor, lg) =
-    project(dual(axes(x)[2]), y, lg)
-
+# TODO: move into CUDAExt
 Base.@propagate_inbounds recursively_project(projection_tuple::T, y::Y) where {T, Y <: BandMatrixRow} = map(Base.Fix1(recursively_project, projection_tuple), y)
 Base.@propagate_inbounds recursively_project(projection_tuple::T, y::Y) where {T, Y} =  rmap(Base.Fix1(recursively_project, projection_tuple), y)
 Base.@propagate_inbounds recursively_project(projection_tuple::T, y::Y) where {T, Y <: AxisTensor} = project(projection_tuple[1], y, projection_tuple[2])
-
-
-# Base.@propagate_inbounds recursively_find_axes_for_projection(x::T) where {T <: Union{AdjointAxisVector, Axis2TensorOrAdj}} = 
-# needs_projection(x::SingleValue, y::SingleValue) = false
-# needs_projection(x::BandMatrixRow, y::BandMatrixRow) = needs_projection(x.entries[1], y.entries[1])
-# needs_projection(x::BandMatrixRow, y) = needs_projection(x.entries[1], y)
-# needs_projection(x, y::BandMatrixRow) = needs_projection(x, y.entries[1])
-# needs_projection(x, y) = UnrolledUtilities.unrolled_any(rmap(needs_projection, x, y))
-# needs_projection(x::Union{AdjointAxisVector, Axis2TensorOrAdj}, y::AxisTensor) 
-# needs_projection(x::SingleValue, y::SingleValue) = axes(x, 1) != Geometry.dual(axes(y, 1))
-# needs_projection(x::BandMatrixRow, y::BandMatrixRow) = needs_projection(x.entries[1], y.entries[1])
-# needs_projection(x::BandMatrixRow, y) = needs_projection(x.entries[1], y)
-# needs_projection(x, y::BandMatrixRow) = needs_projection(x, y.entries[1])
-# needs_projection(x, y) = rmap((x′, y′) -> needs_projection(x′, y′), x, y) |> any
 
 end
