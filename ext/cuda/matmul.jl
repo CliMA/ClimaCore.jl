@@ -280,7 +280,7 @@ Base.@propagate_inbounds function row_mul_vec!(::Type{P}, mat1_row, matrix2,  ::
         zero_entry = rzero(prod_eltype)
         return UnrolledUtilities.unrolled_mapreduce(⊞, ld1:ud1; init=zero_entry) do mat1_row_d
             if (Int32(0) <  v + mat1_row_d + half <= Int32(64))
-                @inbounds bb = mat1_row[mat1_row_d] ⊗ matrix2[v + mat1_row_d + half]
+                @inbounds outer_or_mul(mat1_row[mat1_row_d], matrix2[v + mat1_row_d + half])
             else
                 zero_entry
             end
@@ -302,7 +302,7 @@ Base.@propagate_inbounds function row_mul_vec!(::Type{P}, mat1_row, matrix2,  ::
         val = zero_entry
         return UnrolledUtilities.unrolled_mapreduce(⊞, ld1:ud1; init=zero_entry) do mat1_row_d
             if (Int32(0) <  v + mat1_row_d - half < Int32(64))
-                    @inbounds mat1_row[mat1_row_d] ⊗ matrix2[v + mat1_row_d - half]
+                    @inbounds outer_or_mul( mat1_row[mat1_row_d], matrix2[v + mat1_row_d - half])
             else
                 zero_entry
             end
@@ -323,7 +323,7 @@ Base.@propagate_inbounds function row_mul_vec!(::Type{P}, mat1_row, matrix2,  ::
         zero_entry = rzero(prod_eltype)
         return UnrolledUtilities.unrolled_mapreduce(⊞, ld1:ud1; init=zero_entry) do mat1_row_d
             if (Int32(0) <  v + mat1_row_d  <= Int32(63))
-                @inbounds mat1_row[mat1_row_d] ⊗ matrix2[v + mat1_row_d]
+                @inbounds outer_or_mul(mat1_row[mat1_row_d], matrix2[v + mat1_row_d])
             else
                 zero_entry
             end
@@ -344,10 +344,16 @@ Base.@propagate_inbounds function row_mul_vec!(::Type{P}, mat1_row, matrix2,  ::
         zero_entry = rzero(prod_eltype)
         return UnrolledUtilities.unrolled_mapreduce(⊞, ld1:ud1; init=zero_entry) do mat1_row_d
             if (Int32(0) <  v + mat1_row_d  <= Int32(64))
-                @inbounds mat1_row[mat1_row_d] ⊗ matrix2[v + mat1_row_d ]
+                @inbounds outer_or_mul(mat1_row[mat1_row_d], matrix2[v + mat1_row_d ])
             else
                 zero_entry
             end
         end
     end
 end
+
+Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1 <: AbstractVector, T2} = x ⊗ y
+Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1 , T2} = x * y
+Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1 , T2 <: Union{Tuple, NamedTuple}} =  RecursiveApply.rmap(Base.Fix1(*, x), y)
+Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1 <: AbstractVector, T2 <: Union{Tuple, NamedTuple}} =  RecursiveApply.rmap(Base.Fix1(outer_or_mul, x), y)
+Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1 <: Geometry.AdjointAxisVector, T2 <: Geometry.Axis2Tensor} = (x * y)'

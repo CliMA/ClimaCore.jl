@@ -89,7 +89,7 @@ function Base.copyto!(
         (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(out_fv)
         #  Specialized kernel launch for common case.  This uses block and grid indices
         # instead of computing cartesian indices from a linear index
-        if (Nv == 64 || Nv == 63) && mask isa NoMask && Ni == 4 && Nj == 4 && Nh >= 1500
+        if true && (Nv == 64 || Nv == 63) && mask isa NoMask && Ni == 4 && Nj == 4 && Nh >= 1500
              if true && !Topologies.isperiodic(space)
                 new_bc = recursively_replace_fd_ops(bc′)
                 args = (
