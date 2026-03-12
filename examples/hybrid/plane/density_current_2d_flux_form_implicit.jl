@@ -504,8 +504,8 @@ ode_algo = CTS.IMEXAlgorithm(CTS.ARS343(), newtons_method)
 
 T_imp! = SciMLBase.ODEFunction(rhs!; jac_prototype = jac, Wfact = wfact!)
 
-Δt = parse(Float64, get(ENV, "DT", "1.0"))
-t_end = parse(Float64, get(ENV, "T_END", "100.0"))
+Δt = parse(Float64, get(ENV, "DT", "25.0"))
+t_end = parse(Float64, get(ENV, "T_END", "900.0"))
 
 problem = SciMLBase.ODEProblem(
     CTS.ClimaODEFunction(;
