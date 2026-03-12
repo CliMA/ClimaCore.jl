@@ -228,11 +228,6 @@ Base.@propagate_inbounds function calc_level_val(
         Base.Fix2(reconstruct_space_and_call_calc_level_val, space),
         bc.args,
     )
-    if space isa ClimaCore.Spaces.AbstractSpace &&
-       space.staggering isa ClimaCore.Spaces.CellCenter
-        v == Int32(64) &&
-            return @inline @inbounds ClimaCore.RecursiveApply.rzero(eltype(bc))
-    end
     return @inline @inbounds bc.f(resolved_args...)
 end
 
