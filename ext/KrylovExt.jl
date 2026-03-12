@@ -4,7 +4,6 @@ import ClimaComms
 import ClimaCore: Fields
 import Krylov
 
-Krylov.ktypeof(x::Fields.FieldVector) =
-    ClimaComms.array_type(x){eltype(parent(x)), 1}
+Krylov.ktypeof(x::Fields.FieldVector) = typeof(x)
 
 end

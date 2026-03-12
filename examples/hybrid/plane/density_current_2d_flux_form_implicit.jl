@@ -1,7 +1,9 @@
 #=
 Density current 2D (flux form) with fully implicit timestepping.
 
-Uses ClimaTimeSteppers IMEXAlgorithm with ARS343 (implicit-only, T_exp! = nothing).
+Uses ClimaTimeSteppers IMEXAlgorithm with ARS233 (implicit-only, T_exp! = nothing).
+Note: ARS233 has 2 implicit stages (vs 3 for ARS343), reducing Newton solves per
+step by ~33%. This trades temporal accuracy order for reduced per-step cost.
 Newton's method uses JFNK (Jacobian-Free Newton-Krylov):
   - GMRES (Krylov.jl) resolves horizontal acoustic coupling
   - Vertical-only analytical Jacobian as preconditioner (BlockArrowheadSolve)
@@ -198,9 +200,67 @@ const ᶜinterp_matrix = MatrixFields.operator_matrix(ᶜinterp)
 const ᶠinterp_matrix = MatrixFields.operator_matrix(ᶠinterp)
 
 # ---------------------------------------------------------------------------
+# Pre-allocated cache for rhs! temporaries
+# ---------------------------------------------------------------------------
+function build_cache(Y)
+    return (;
+        # center fields (types must match element types)
+        uₕ = similar(Y.c.ρuₕ),   # UVector
+        p = similar(Y.c.ρ),       # scalar
+        θ = similar(Y.c.ρ),       # scalar
+        # face fields
+        w = similar(Y.f.ρw),      # C3
+        Yfρ = similar(Y.c.ρ, axes(Y.f.ρw)),  # scalar on face space
+        uₕf = similar(Y.c.ρuₕ, axes(Y.f.ρw)), # UVector on face space
+    )
+end
+
+# Operators (created once, reused)
+const hdiv = Operators.Divergence()
+const hgrad = Operators.Gradient()
+const hwdiv = Operators.WeakDivergence()
+const hwgrad = Operators.WeakGradient()
+
+const vdivf2c = Operators.DivergenceF2C(
+    bottom = Operators.SetValue(C3(FT(0))),
+    top = Operators.SetValue(C3(FT(0))),
+)
+const vvdivc2f = Operators.DivergenceC2F(
+    bottom = Operators.SetDivergence(C3(FT(0))),
+    top = Operators.SetDivergence(C3(FT(0))),
+)
+const uvdivf2c = Operators.DivergenceF2C(
+    bottom = Operators.SetValue(
+        C3(FT(0)) ⊗ Geometry.UVector(0.0),
+    ),
+    top = Operators.SetValue(C3(FT(0)) ⊗ Geometry.UVector(0.0)),
+)
+const If = Operators.InterpolateC2F(
+    bottom = Operators.Extrapolate(),
+    top = Operators.Extrapolate(),
+)
+const Ic = Operators.InterpolateF2C()
+const ∂ = Operators.DivergenceF2C(
+    bottom = Operators.SetValue(C3(FT(0))),
+    top = Operators.SetValue(C3(FT(0))),
+)
+const ∂f = Operators.GradientC2F()
+const ∂c = Operators.GradientF2C()
+const B = Operators.SetBoundaryOperator(
+    bottom = Operators.SetValue(C3(FT(0))),
+    top = Operators.SetValue(C3(FT(0))),
+)
+const Ih = Ref(
+    Geometry.Axis2Tensor(
+        (Geometry.UAxis(), Geometry.UAxis()),
+        @SMatrix [1.0]
+    ),
+)
+
+# ---------------------------------------------------------------------------
 # RHS function (adapted for c/f state vector with C3 ρw)
 # ---------------------------------------------------------------------------
-function rhs!(dY, Y, _, t)
+function rhs!(dY, Y, cache, t)
     ρ = Y.c.ρ
     ρθ = Y.c.ρθ
     ρuₕ = Y.c.ρuₕ
@@ -211,49 +271,14 @@ function rhs!(dY, Y, _, t)
     dρuₕ = dY.c.ρuₕ
     dρw = dY.f.ρw
 
-    # spectral horizontal operators
-    hdiv = Operators.Divergence()
-    hgrad = Operators.Gradient()
-    hwdiv = Operators.WeakDivergence()
-    hwgrad = Operators.WeakGradient()
+    # Pre-allocated temporaries
+    (; uₕ, w, p, θ, Yfρ, uₕf) = cache
 
-    # vertical FD operators with BCs
-    vdivf2c = Operators.DivergenceF2C(
-        bottom = Operators.SetValue(C3(FT(0))),
-        top = Operators.SetValue(C3(FT(0))),
-    )
-    vvdivc2f = Operators.DivergenceC2F(
-        bottom = Operators.SetDivergence(C3(FT(0))),
-        top = Operators.SetDivergence(C3(FT(0))),
-    )
-    uvdivf2c = Operators.DivergenceF2C(
-        bottom = Operators.SetValue(
-            C3(FT(0)) ⊗ Geometry.UVector(0.0),
-        ),
-        top = Operators.SetValue(C3(FT(0)) ⊗ Geometry.UVector(0.0)),
-    )
-    If = Operators.InterpolateC2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-    Ic = Operators.InterpolateF2C()
-    ∂ = Operators.DivergenceF2C(
-        bottom = Operators.SetValue(C3(FT(0))),
-        top = Operators.SetValue(C3(FT(0))),
-    )
-    ∂f = Operators.GradientC2F()
-    ∂c = Operators.GradientF2C()
-    B = Operators.SetBoundaryOperator(
-        bottom = Operators.SetValue(C3(FT(0))),
-        top = Operators.SetValue(C3(FT(0))),
-    )
-
-    uₕ = @. ρuₕ / ρ
-    w = @. ρw / If(ρ)
-    wc = @. Ic(ρw) / ρ
-    p = @. pressure(ρθ)
-    θ = @. ρθ / ρ
-    Yfρ = @. If(ρ)
+    @. uₕ = ρuₕ / ρ
+    @. w = ρw / If(ρ)
+    @. p = pressure(ρθ)
+    @. θ = ρθ / ρ
+    @. Yfρ = If(ρ)
 
     ### HYPERVISCOSITY
     @. dρθ = hwdiv(hgrad(θ))
@@ -276,22 +301,16 @@ function rhs!(dY, Y, _, t)
     @. dρθ -= hdiv(uₕ * ρθ)
 
     # horizontal momentum
-    Ih = Ref(
-        Geometry.Axis2Tensor(
-            (Geometry.UAxis(), Geometry.UAxis()),
-            @SMatrix [1.0]
-        ),
-    )
     @. dρuₕ += -uvdivf2c(ρw ⊗ If(uₕ))
     @. dρuₕ -= hdiv(ρuₕ ⊗ uₕ + p * Ih)
 
-    # vertical momentum (C3 form, no Geometry.transform needed)
+    # vertical momentum (C3 form)
     z = coords.z
     @. dρw += B(
         -(∂f(p)) - If(ρ) * ∂f(Φ(z)) -
         vvdivc2f(Ic(ρw ⊗ w)),
     )
-    uₕf = @. If(ρuₕ / ρ)
+    @. uₕf = If(ρuₕ / ρ)
     @. dρw -= hdiv(uₕf ⊗ ρw)
 
     ### DIFFUSION
@@ -316,19 +335,18 @@ function rhs!(dY, Y, _, t)
     return dY
 end
 
-# Verify rhs! works
+# Build cache and verify rhs! works
+const rhs_cache = build_cache(Y)
 dYdt = similar(Y);
-rhs!(dYdt, Y, nothing, 0.0);
+rhs!(dYdt, Y, rhs_cache, 0.0);
 
 # ---------------------------------------------------------------------------
 # Implicit Equation Jacobian (vertical-only preconditioner)
 # ---------------------------------------------------------------------------
-struct ImplicitEquationJacobian{TJ, RJ, V}
+struct ImplicitEquationJacobian{TJ, RJ}
     ∂Yₜ∂Y::TJ
     ∂R∂Y::RJ
     transform::Bool
-    R_field_vector::V
-    δY_field_vector::V
 end
 
 function ImplicitEquationJacobian(Y, transform)
@@ -367,8 +385,6 @@ function ImplicitEquationJacobian(Y, transform)
         ∂Yₜ∂Y,
         MatrixFields.FieldMatrixWithSolver(∂R∂Y, Y, alg),
         transform,
-        similar(Y),
-        similar(Y),
     )
 end
 
@@ -376,16 +392,12 @@ Base.similar(j::ImplicitEquationJacobian) = ImplicitEquationJacobian(
     similar(j.∂Yₜ∂Y),
     similar(j.∂R∂Y),
     j.transform,
-    j.R_field_vector,
-    j.δY_field_vector,
 )
 
 Base.zero(j::ImplicitEquationJacobian) = ImplicitEquationJacobian(
     zero(j.∂Yₜ∂Y),
     zero(j.∂R∂Y),
     j.transform,
-    j.R_field_vector,
-    j.δY_field_vector,
 )
 
 # ldiv! for FieldVector (Newton's method from CTS)
@@ -395,16 +407,7 @@ ldiv!(
     R::Fields.FieldVector,
 ) = ldiv!(δY, j.∂R∂Y, R)
 
-# ldiv! for AbstractVector (Krylov.jl compatibility)
-function ldiv!(
-    δY::AbstractVector,
-    j::ImplicitEquationJacobian,
-    R::AbstractVector,
-)
-    j.R_field_vector .= R
-    ldiv!(j.δY_field_vector, j, j.R_field_vector)
-    δY .= j.δY_field_vector
-end
+# Note: dense-vector ldiv! removed — Krylov.jl now operates directly on FieldVectors
 
 # ---------------------------------------------------------------------------
 # wfact! — update the preconditioner Jacobian
@@ -477,30 +480,56 @@ function wfact!(j, Y, p, δtγ, t)
 end
 
 # ---------------------------------------------------------------------------
+# Override CTS.allocate_cache to use Krylov's prototype-based constructor
+# (FieldVector can't be constructed via S(undef, n), but supports similar())
+# ---------------------------------------------------------------------------
+import Krylov: KrylovConstructor
+
+function CTS.allocate_cache(alg::CTS.KrylovMethod, x_prototype::Fields.FieldVector)
+    (; jacobian_free_jvp, forcing_term, kwargs, debugger) = alg
+    type = CTS.solver_type(alg)
+    kc = KrylovConstructor(similar(x_prototype))
+    return (;
+        jacobian_free_jvp_cache = isnothing(jacobian_free_jvp) ? nothing :
+                                  CTS.allocate_cache(jacobian_free_jvp, x_prototype),
+        forcing_term_cache = CTS.allocate_cache(forcing_term, x_prototype),
+        solver = type(kc; kwargs...),
+        debugger_cache = isnothing(debugger) ? nothing : CTS.allocate_cache(debugger, x_prototype),
+    )
+end
+
+# ---------------------------------------------------------------------------
 # ODE problem setup with JFNK
 # ---------------------------------------------------------------------------
 jac = ImplicitEquationJacobian(Y, false)
 
-# JFNK: Krylov GMRES resolves horizontal coupling; vertical preconditioner
-# accelerates convergence of fast vertical acoustic-gravity modes.
-# EisenstatWalkerForcing adapts Krylov tolerance to avoid oversolving.
-newtons_method = CTS.NewtonsMethod(;
-    max_iters = 10,
-    krylov_method = CTS.KrylovMethod(;
-        jacobian_free_jvp = CTS.ForwardDiffJVP(;
-            step_adjustment = FT(1),
+# Newton solver: JFNK (with Krylov GMRES) or direct (vertical preconditioner only).
+# Set SOLVER=direct for direct Newton, SOLVER=jfnk for JFNK (default).
+if get(ENV, "SOLVER", "jfnk") == "direct"
+    newtons_method = CTS.NewtonsMethod(; max_iters = 10)
+else
+    # JFNK: GMRES resolves horizontal coupling; vertical preconditioner
+    # accelerates convergence of fast vertical acoustic-gravity modes.
+    newtons_method = CTS.NewtonsMethod(;
+        max_iters = 10,
+        krylov_method = CTS.KrylovMethod(;
+            jacobian_free_jvp = CTS.ForwardDiffJVP(;
+                step_adjustment = FT(1),
+            ),
+            forcing_term = CTS.EisenstatWalkerForcing(;
+                initial_rtol = FT(0.5),
+                γ = FT(1),
+                α = FT(2),
+            ),
+            args = (),
+            kwargs = (; memory = 30),
         ),
-        forcing_term = CTS.EisenstatWalkerForcing(;
-            initial_rtol = FT(0.5),
-            γ = FT(1),
-            α = FT(2),
-        ),
-        args = (),
-        kwargs = (; memory = 30),
-    ),
-)
+    )
+end
 
-ode_algo = CTS.IMEXAlgorithm(CTS.ARS343(), newtons_method)
+# ARS233: 2 implicit stages (vs 3 for ARS343) — fewer Newton solves per step.
+# For higher temporal accuracy, switch to CTS.ARS343().
+ode_algo = CTS.IMEXAlgorithm(CTS.ARS233(), newtons_method)
 
 T_imp! = SciMLBase.ODEFunction(rhs!; jac_prototype = jac, Wfact = wfact!)
 
@@ -517,14 +546,15 @@ problem = SciMLBase.ODEProblem(
     ),
     Y,
     (0.0, t_end),
-    nothing,
+    rhs_cache,
 )
 
 integrator = SciMLBase.init(
     problem,
     ode_algo;
     dt = Δt,
-    saveat = collect(0.0:50.0:t_end),
+    saveat = t_end <= 100 ? collect(range(0.0, t_end, step = max(Δt, t_end / 20))) :
+                            collect(0.0:50.0:t_end),
     adaptive = false,
     progress = true,
     progress_steps = 1,

@@ -429,6 +429,30 @@ function LinearAlgebra.norm(x::FieldVector)
     sqrt(LinearAlgebra.norm_sqr(x))
 end
 
+# dot product (needed by Krylov.jl's kdot)
+function LinearAlgebra.dot(x::FieldVector, y::FieldVector)
+    sum(unrolled_map((vx, vy) -> LinearAlgebra.dot(backing_array(vx), backing_array(vy)),
+                     _values(x), _values(y)))
+end
+
+# axpy!: y += α*x (needed by Krylov.jl's kaxpy!)
+function LinearAlgebra.axpy!(α, x::FieldVector, y::FieldVector)
+    y .= α .* x .+ y
+    return y
+end
+
+# axpby!: y = α*x + β*y (needed by Krylov.jl's kaxpby!)
+function LinearAlgebra.axpby!(α, x::FieldVector, β, y::FieldVector)
+    y .= α .* x .+ β .* y
+    return y
+end
+
+# rmul!: x *= α (needed by Krylov.jl's kscal!)
+function LinearAlgebra.rmul!(x::FieldVector, α::Number)
+    x .*= α
+    return x
+end
+
 import ClimaComms
 
 ClimaComms.array_type(x::FieldVector) =
