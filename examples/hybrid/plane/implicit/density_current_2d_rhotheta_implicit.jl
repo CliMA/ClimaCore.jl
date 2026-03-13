@@ -212,6 +212,8 @@ function build_cache(Y)
         w = similar(Y.f.ρw),      # C3
         Yfρ = similar(Y.c.ρ, axes(Y.f.ρw)),  # scalar on face space
         uₕf = similar(Y.c.ρuₕ, axes(Y.f.ρw)), # UVector on face space
+        # Constant fields (computed once at init)
+        ᶜΦ = Φ.(coords.z),
     )
 end
 
@@ -451,7 +453,7 @@ function wfact!(j, Y, p, δtγ, t)
     # Only the gravity term depends on ρ: -ᶠinterp(ρ)*ᶠgradᵥ(Φ)
     # ᶠgradᵥ(Φ) is constant, so:
     # ∂(ρwₜ)/∂(ρ) = -diag(ᶠgradᵥ(Φ)) * ᶠinterp_matrix()
-    ᶜΦ = @. Φ(coords.z)
+    ᶜΦ = p.ᶜΦ
     @. ∂ᶠρwₜ∂ᶜρ = -DiagonalMatrixRow(ᶠgradᵥ(ᶜΦ)) * ᶠinterp_matrix()
 
     # --- Block (f.ρw, c.ρθ): ∂ᶠρwₜ/∂ᶜρθ ---
@@ -460,12 +462,17 @@ function wfact!(j, Y, p, δtγ, t)
     @. ∂ᶠρwₜ∂ᶜρθ = -(ᶠgradᵥ_matrix()) * DiagonalMatrixRow(∂p∂ρθ(ᶜρθ))
 
     # --- Block (f.ρw, f.ρw): ∂ᶠρwₜ/∂ᶠρw ---
-    # From vertical advection term: -vvdivc2f(Ic(ρw ⊗ w))
-    # This is complex; approximate via kinetic energy contribution.
-    # ᶜK_vert ≈ |Ic(ρw)|² / (2ρ²)
-    # ∂ᶜK_vert/∂ᶠρw ≈ diag(ACT3(ᶜinterp(ᶠρw)) / ᶜρ²) * ᶜinterp_matrix()
-    # ∂ᶠρwₜ/∂ᶠρw ≈ -ᶠgradᵥ_matrix() * ∂ᶜK_vert/∂ᶠρw  (not present in momentum form)
-    # For simplicity, set to zero — the preconditioner doesn't need to be exact.
+    # Set to zero. The vertical advection self-coupling through kinetic energy
+    # is omitted — the preconditioner doesn't need to be exact.
+    #
+    # Alternative (may help at large DT by reducing GMRES iterations, but the
+    # triple matrix product is expensive per wfact! call):
+    #   @. p.w = ᶠρw / If(ᶜρ)
+    #   @. ∂ᶠρwₜ∂ᶠρw =
+    #       -(ᶠgradᵥ_matrix()) *
+    #       DiagonalMatrixRow(adjoint(CT3(ᶜinterp(p.w)))) *
+    #       ᶜinterp_matrix()
+    # (Ref: staggered_nonhydrostatic_model.jl, lines 580-581)
     TridiagonalRow_C3xACT3 =
         TridiagonalMatrixRow{typeof(C3(FT(0)) * CT3(FT(0))')}
     ∂ᶠρwₜ∂ᶠρw .= Ref(zero(TridiagonalRow_C3xACT3))

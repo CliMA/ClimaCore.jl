@@ -286,6 +286,214 @@ end
 
 additional_tendency!(Yₜ, Y, p, t) = nothing
 
+# ==========================================================================
+# Fully implicit tendency: all terms in one function for T_imp! with JFNK.
+#
+# Usage:
+#   T_imp! = SciMLBase.ODEFunction(
+#       fully_implicit_tendency!;
+#       jac_prototype = jac,
+#       Wfact = implicit_equation_jacobian!,
+#   )
+#   prob = SciMLBase.ODEProblem(
+#       CTS.ClimaODEFunction(; T_imp!, dss! = ...),
+#       Y, tspan, cache,
+#   )
+#
+# The existing implicit_equation_jacobian! serves as the vertical-only
+# preconditioner for JFNK (GMRES resolves horizontal coupling).
+# ==========================================================================
+function fully_implicit_tendency!(Yₜ, Y, p, t)
+    ᶜρ = Y.c.ρ
+    ᶜuₕ = Y.c.uₕ
+    ᶠw = Y.f.w
+    (; ᶜuvw, ᶜK, ᶜΦ, ᶜp, ᶜω³, ᶠω¹², ᶠu¹², ᶠu³, ᶜf) = p
+    (; ᶠupwind_product) = p
+    point_type = eltype(Fields.local_geometry_field(axes(Y.c)).coordinates)
+
+    @. ᶜuvw = C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))
+    @. ᶜK = norm_sqr(ᶜuvw) / 2
+
+    # === Mass conservation ===
+    # Vertical flux
+    @. Yₜ.c.ρ = -(ᶜdivᵥ(ᶠinterp(ᶜρ) * ᶠw))
+    # Horizontal flux
+    @. Yₜ.c.ρ -= split_divₕ(ᶜρ * ᶜuvw, 1)
+    @. Yₜ.c.ρ -= ᶜdivᵥ(ᶠinterp(ᶜρ * ᶜuₕ))
+
+    # === Energy conservation ===
+    if :ρθ in propertynames(Y.c)
+        ᶜρθ = Y.c.ρθ
+        @. ᶜp = pressure_ρθ(ᶜρθ)
+
+        # Vertical flux (with optional upwinding)
+        if isnothing(ᶠupwind_product)
+            @. Yₜ.c.ρθ = -(ᶜdivᵥ(ᶠinterp(ᶜρθ) * ᶠw))
+        else
+            @. Yₜ.c.ρθ =
+                -(ᶜdivᵥ(ᶠinterp(ᶜρ) * ᶠupwind_product(ᶠw, ᶜρθ / ᶜρ)))
+        end
+        # Horizontal flux
+        @. Yₜ.c.ρθ -= split_divₕ(ᶜρ * ᶜuvw, ᶜρθ / ᶜρ)
+        @. Yₜ.c.ρθ -= ᶜdivᵥ(ᶠinterp(ᶜρθ * ᶜuₕ))
+
+    elseif :ρe in propertynames(Y.c)
+        ᶜρe = Y.c.ρe
+        @. ᶜp = pressure_ρe(ᶜρe, ᶜK, ᶜΦ, ᶜρ)
+
+        # Vertical flux (with optional upwinding)
+        if isnothing(ᶠupwind_product)
+            @. Yₜ.c.ρe = -(ᶜdivᵥ(ᶠinterp(ᶜρe + ᶜp) * ᶠw))
+        else
+            @. Yₜ.c.ρe = -(ᶜdivᵥ(
+                ᶠinterp(ᶜρ) * ᶠupwind_product(ᶠw, (ᶜρe + ᶜp) / ᶜρ),
+            ))
+        end
+        # Horizontal flux
+        @. Yₜ.c.ρe -= split_divₕ(ᶜρ * ᶜuvw, (ᶜρe + ᶜp) / ᶜρ)
+        @. Yₜ.c.ρe -= ᶜdivᵥ(ᶠinterp((ᶜρe + ᶜp) * ᶜuₕ))
+
+    elseif :ρe_int in propertynames(Y.c)
+        ᶜρe_int = Y.c.ρe_int
+        @. ᶜp = pressure_ρe_int(ᶜρe_int, ᶜρ)
+
+        # Vertical flux (with pdV work correction, optional upwinding)
+        if isnothing(ᶠupwind_product)
+            @. Yₜ.c.ρe_int = -(
+                ᶜdivᵥ(ᶠinterp(ᶜρe_int + ᶜp) * ᶠw) -
+                ᶜinterp(dot(ᶠgradᵥ(ᶜp), CT3(ᶠw)))
+            )
+        else
+            @. Yₜ.c.ρe_int = -(
+                ᶜdivᵥ(
+                    ᶠinterp(ᶜρ) *
+                    ᶠupwind_product(ᶠw, (ᶜρe_int + ᶜp) / ᶜρ),
+                ) - ᶜinterp(dot(ᶠgradᵥ(ᶜp), CT3(ᶠw)))
+            )
+        end
+        # Horizontal flux (with pressure work correction)
+        if point_type <: Geometry.Abstract3DPoint
+            @. Yₜ.c.ρe_int -=
+                split_divₕ(ᶜρ * ᶜuvw, (ᶜρe_int + ᶜp) / ᶜρ) -
+                dot(gradₕ(ᶜp), CT12(ᶜuₕ))
+        else
+            @. Yₜ.c.ρe_int -=
+                split_divₕ(ᶜρ * ᶜuvw, (ᶜρe_int + ᶜp) / ᶜρ) -
+                dot(gradₕ(ᶜp), CT1(ᶜuₕ))
+        end
+        @. Yₜ.c.ρe_int -= ᶜdivᵥ(ᶠinterp((ᶜρe_int + ᶜp) * ᶜuₕ))
+    end
+
+    # === Momentum conservation ===
+    # Vorticity terms
+    if point_type <: Geometry.Abstract3DPoint
+        @. ᶜω³ = curlₕ(ᶜuₕ)
+        @. ᶠω¹² = curlₕ(ᶠw)
+    elseif point_type <: Geometry.Abstract2DPoint
+        ᶜω³ .= (zero(eltype(ᶜω³)),)
+        @. ᶠω¹² = CT12(curlₕ(ᶠw))
+    end
+    @. ᶠω¹² += ᶠcurlᵥ(ᶜuₕ)
+
+    @. ᶠu¹² = CT12(ᶠinterp(ᶜuₕ))
+    @. ᶠu³ = CT3(ᶠw)
+
+    # Horizontal momentum: vorticity + Coriolis + pressure gradient + KE gradient
+    @. Yₜ.c.uₕ = -(ᶜinterp(ᶠω¹² × ᶠu³) + (ᶜf + ᶜω³) × CT12(ᶜuₕ))
+    if point_type <: Geometry.Abstract3DPoint
+        @. Yₜ.c.uₕ -= gradₕ(ᶜp) / ᶜρ + gradₕ(ᶜK + ᶜΦ)
+    elseif point_type <: Geometry.Abstract2DPoint
+        @. Yₜ.c.uₕ -= C12(gradₕ(ᶜp) / ᶜρ + gradₕ(ᶜK + ᶜΦ))
+    end
+
+    # Vertical momentum: pressure gradient + gravity + kinetic energy gradient
+    @. Yₜ.f.w = -(ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) + ᶠgradᵥ(ᶜK + ᶜΦ))
+    # Horizontal vorticity × velocity (cross-component coupling)
+    @. Yₜ.f.w -= ᶠω¹² × ᶠu¹²
+
+    # === Hyperdiffusion ===
+    if hasproperty(p, :κ₄) && p.κ₄ > 0
+        _fully_implicit_hyperdiffusion!(Yₜ, Y, p, t)
+    end
+
+    # === Additional tendency (user-defined) ===
+    additional_tendency!(Yₜ, Y, p, t)
+
+    # === DSS (required for spectral element consistency) ===
+    Spaces.weighted_dss_start!(Yₜ.c, p.ghost_buffer.c)
+    Spaces.weighted_dss_start!(Yₜ.f, p.ghost_buffer.f)
+    Spaces.weighted_dss_internal!(Yₜ.c, p.ghost_buffer.c)
+    Spaces.weighted_dss_internal!(Yₜ.f, p.ghost_buffer.f)
+    Spaces.weighted_dss_ghost!(Yₜ.c, p.ghost_buffer.c)
+    Spaces.weighted_dss_ghost!(Yₜ.f, p.ghost_buffer.f)
+
+    return Yₜ
+end
+
+# Hyperdiffusion for fully_implicit_tendency! (inlined to avoid separate file)
+function _fully_implicit_hyperdiffusion!(Yₜ, Y, p, t)
+    ᶜρ = Y.c.ρ
+    ᶜuₕ = Y.c.uₕ
+    (; ᶜp, ᶜχ, ᶜχuₕ) = p
+    (; ghost_buffer, κ₄, divergence_damping_factor, use_tempest_mode) = p
+    point_type = eltype(Fields.local_geometry_field(axes(Y.c)).coordinates)
+
+    if use_tempest_mode
+        @. ᶜχ = wdivₕ(gradₕ(ᶜρ))
+        Spaces.weighted_dss!(ᶜχ, ghost_buffer.χ)
+        @. Yₜ.c.ρ -= κ₄ * wdivₕ(gradₕ(ᶜχ))
+
+        if :ρθ in propertynames(Y.c)
+            @. ᶜχ = wdivₕ(gradₕ(Y.c.ρθ))
+            Spaces.weighted_dss!(ᶜχ, ghost_buffer.χ)
+            @. Yₜ.c.ρθ -= κ₄ * wdivₕ(gradₕ(ᶜχ))
+        else
+            error("use_tempest_mode must be false when not using ρθ")
+        end
+
+        (; ᶠχw_data) = p
+        @. ᶠχw_data = wdivₕ(gradₕ(Y.f.w.components.data.:1))
+        Spaces.weighted_dss!(ᶠχw_data, ghost_buffer.χ)
+        @. Yₜ.f.w.components.data.:1 -= κ₄ * wdivₕ(gradₕ(ᶠχw_data))
+    else
+        if :ρθ in propertynames(Y.c)
+            @. ᶜχ = wdivₕ(gradₕ(Y.c.ρθ / ᶜρ))
+            Spaces.weighted_dss!(ᶜχ, ghost_buffer.χ)
+            @. Yₜ.c.ρθ -= κ₄ * wdivₕ(ᶜρ * gradₕ(ᶜχ))
+        elseif :ρe in propertynames(Y.c)
+            @. ᶜχ = wdivₕ(gradₕ((Y.c.ρe + ᶜp) / ᶜρ))
+            Spaces.weighted_dss!(ᶜχ, ghost_buffer.χ)
+            @. Yₜ.c.ρe -= κ₄ * wdivₕ(ᶜρ * gradₕ(ᶜχ))
+        elseif :ρe_int in propertynames(Y.c)
+            @. ᶜχ = wdivₕ(gradₕ((Y.c.ρe_int + ᶜp) / ᶜρ))
+            Spaces.weighted_dss!(ᶜχ, ghost_buffer.χ)
+            @. Yₜ.c.ρe_int -= κ₄ * wdivₕ(ᶜρ * gradₕ(ᶜχ))
+        end
+    end
+
+    if point_type <: Geometry.Abstract3DPoint
+        @. ᶜχuₕ =
+            wgradₕ(divₕ(ᶜuₕ)) - Geometry.Covariant12Vector(
+                wcurlₕ(Geometry.Covariant3Vector(curlₕ(ᶜuₕ))),
+            )
+        Spaces.weighted_dss!(ᶜχuₕ, ghost_buffer.χuₕ)
+        @. Yₜ.c.uₕ -=
+            κ₄ * (
+                divergence_damping_factor * wgradₕ(divₕ(ᶜχuₕ)) -
+                Geometry.Covariant12Vector(
+                    wcurlₕ(Geometry.Covariant3Vector(curlₕ(ᶜχuₕ))),
+                )
+            )
+    elseif point_type <: Geometry.Abstract2DPoint
+        @. ᶜχuₕ = Geometry.Covariant12Vector(wgradₕ(divₕ(ᶜuₕ)))
+        Spaces.weighted_dss!(ᶜχuₕ, ghost_buffer.χuₕ)
+        @. Yₜ.c.uₕ -=
+            κ₄ *
+            divergence_damping_factor *
+            Geometry.Covariant12Vector(wgradₕ(divₕ(ᶜχuₕ)))
+    end
+end
+
 function implicit_equation_jacobian!(j, Y, p, δtγ, t)
     (; ∂Yₜ∂Y, ∂R∂Y, transform, flags) = j
     ᶜρ = Y.c.ρ

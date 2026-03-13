@@ -266,6 +266,13 @@ const ᶠinterp_matrix = MatrixFields.operator_matrix(ᶠinterp)
 # Pre-allocated cache for rhs! temporaries
 # ---------------------------------------------------------------------------
 function build_cache(Y)
+    # Pre-compute bottom-boundary terrain metric for set_bottom_w!
+    bottom_lg = Fields.level(
+        Fields.local_geometry_field(hv_face_space),
+        ClimaCore.Utilities.half,
+    )
+    bottom_g33 = bottom_lg.gⁱʲ.components.data.:4
+
     return (;
         uₕ = similar(Y.c.ρuₕ),   # UVector
         p = similar(Y.c.ρ),       # scalar (pressure)
@@ -274,6 +281,15 @@ function build_cache(Y)
         w = similar(Y.f.ρw),      # C3
         Yfρ = similar(Y.c.ρ, axes(Y.f.ρw)),  # scalar on face space
         uₕf = similar(Y.c.ρuₕ, axes(Y.f.ρw)), # UVector on face space
+        # Constant fields (computed once at init)
+        ᶜΦ = Φ.(coords.z),
+        ᶜ∂p∂ρe_field = fill!(similar(Y.c.ρ), R_d / C_v),
+        # Sponge coefficients (constant, depend only on geometry)
+        β_sponge = rayleigh_sponge.(coords.z),
+        βf_sponge = rayleigh_sponge.(face_coords.z),
+        # Bottom boundary terrain metrics (constant)
+        bottom_lg = bottom_lg,
+        bottom_g33 = bottom_g33,
     )
 end
 
@@ -322,23 +338,14 @@ const Ih = Ref(
 # ---------------------------------------------------------------------------
 # Bottom boundary w condition (terrain-following: w_3 = -g^31/g^33 * u_1)
 # ---------------------------------------------------------------------------
-function set_bottom_w!(fw, cuₕ)
+function set_bottom_w!(fw, cuₕ, cache)
     fuₕ = If.(cuₕ)
     u₁_bc =
         Geometry.contravariant3.(
             Fields.level(fuₕ, ClimaCore.Utilities.half),
-            Fields.level(
-                Fields.local_geometry_field(hv_face_space),
-                ClimaCore.Utilities.half,
-            ),
+            cache.bottom_lg,
         )
-    gⁱʲ =
-        Fields.level(
-            Fields.local_geometry_field(hv_face_space),
-            ClimaCore.Utilities.half,
-        ).gⁱʲ
-    g33 = gⁱʲ.components.data.:4
-    u₃_bc = Geometry.Covariant3Vector.(-1 .* u₁_bc ./ g33)
+    u₃_bc = Geometry.Covariant3Vector.(-1 .* u₁_bc ./ cache.bottom_g33)
     apply_boundary_w =
         Operators.SetBoundaryOperator(bottom = Operators.SetValue(u₃_bc))
     @. fw = apply_boundary_w(fw)
@@ -365,10 +372,10 @@ function rhs!(dY, Y, cache, t)
 
     z = coords.z
 
-    # Set bottom boundary condition on w for terrain-following coords
-    set_bottom_w!(ρw, ρuₕ ./ ρ)
-
     @. uₕ = ρuₕ / ρ
+
+    # Set bottom boundary condition on w for terrain-following coords
+    set_bottom_w!(ρw, uₕ, cache)
     @. w = ρw / If(ρ)
     @. K = (norm(uₕ)^2 + norm(Ic(w))^2) / 2
     @. p = pressure_from_ρe(ρ, ρe, K, z)
@@ -413,10 +420,9 @@ function rhs!(dY, Y, cache, t)
     @. dρw -= hdiv(uₕf ⊗ ρw)
 
     # Rayleigh sponge (relax momentum toward initial state near top)
-    β = @. rayleigh_sponge(z)
-    βf = @. rayleigh_sponge(face_coords.z)
-    @. dρuₕ -= ρ * β * (uₕ - u_init)
-    @. dρw -= If(ρ) * βf * w
+    # Use pre-computed sponge coefficients from cache (constant fields)
+    @. dρuₕ -= ρ * cache.β_sponge * (uₕ - u_init)
+    @. dρw -= If(ρ) * cache.βf_sponge * w
 
     Spaces.weighted_dss!(dY.c)
     Spaces.weighted_dss!(dY.f)
@@ -524,34 +530,45 @@ function wfact!(j, Y, p, δtγ, t)
     z = coords.z
 
     # Evaluate kinetic energy at current state for linearized derivatives.
-    ᶜuₕ = @. ᶜρuₕ / ᶜρ
-    ᶜw = @. Ic(ᶠρw / If(ᶜρ))
-    ᶜK = @. (norm(ᶜuₕ)^2 + norm(ᶜw)^2) / 2
+    # Use pre-allocated cache fields (shared with rhs!) to avoid allocations.
+    @. p.uₕ = ᶜρuₕ / ᶜρ
+    @. p.w = ᶠρw / If(ᶜρ)
+    @. p.K = (norm(p.uₕ)^2 + norm(Ic(p.w))^2) / 2
 
     # Total enthalpy for energy flux Jacobian
-    ᶜp = @. pressure_from_ρe(ᶜρ, ᶜρe, ᶜK, z)
-    ᶜh_tot = @. (ᶜρe + ᶜp) / ᶜρ
+    @. p.p = pressure_from_ρe(ᶜρ, ᶜρe, p.K, z)
+    @. p.h_tot = (ᶜρe + p.p) / ᶜρ
 
     # --- Block (c.ρ, f.ρw): ∂ᶜρₜ/∂ᶠρw ---
     @. ∂ᶜρₜ∂ᶠρw = -(ᶜdivᵥ_matrix()) * DiagonalMatrixRow(g³³(ᶠgⁱʲ))
 
     # --- Block (c.ρe, f.ρw): ∂ᶜρeₜ/∂ᶠρw ---
     @. ∂ᶜρeₜ∂ᶠρw =
-        -(ᶜdivᵥ_matrix()) * DiagonalMatrixRow(ᶠinterp(ᶜh_tot) * g³³(ᶠgⁱʲ))
+        -(ᶜdivᵥ_matrix()) * DiagonalMatrixRow(ᶠinterp(p.h_tot) * g³³(ᶠgⁱʲ))
 
     # --- Block (f.ρw, c.ρ): ∂ᶠρwₜ/∂ᶜρ ---
-    # Gravity: -diag(ᶠgradᵥ(Φ)) * ᶠinterp_matrix
-    # Pressure: -ᶠgradᵥ_matrix * diag(∂p/∂ρ)
-    ᶜΦ = @. Φ(z)
+    # Gravity term: -diag(ᶠgradᵥ(Φ)) * ᶠinterp_matrix
+    # Pressure term: -ᶠgradᵥ_matrix * diag(∂p/∂ρ)
+    ᶜΦ = p.ᶜΦ
     @. ∂ᶠρwₜ∂ᶜρ = -DiagonalMatrixRow(ᶠgradᵥ(ᶜΦ)) * ᶠinterp_matrix()
-    @. ∂ᶠρwₜ∂ᶜρ -= (ᶠgradᵥ_matrix()) * DiagonalMatrixRow(∂p∂ρ(z, ᶜK))
+    @. ∂ᶠρwₜ∂ᶜρ -= (ᶠgradᵥ_matrix()) * DiagonalMatrixRow(∂p∂ρ(z, p.K))
 
     # --- Block (f.ρw, c.ρe): ∂ᶠρwₜ/∂ᶜρe ---
-    # ∂p/∂ρe = R_d/Cv (constant)
-    ᶜ∂p∂ρe = @. FT(∂p∂ρe) + ᶜρe * FT(0)
-    @. ∂ᶠρwₜ∂ᶜρe = -(ᶠgradᵥ_matrix()) * DiagonalMatrixRow(ᶜ∂p∂ρe)
+    # ∂p/∂ρe = R_d/Cv (constant, pre-computed in cache)
+    @. ∂ᶠρwₜ∂ᶜρe = -(ᶠgradᵥ_matrix()) * DiagonalMatrixRow(p.ᶜ∂p∂ρe_field)
 
-    # --- Block (f.ρw, f.ρw): set to zero ---
+    # --- Block (f.ρw, f.ρw): ∂ᶠρwₜ/∂ᶠρw ---
+    # Set to zero. The vertical advection self-coupling and pressure-K coupling
+    # are omitted — the preconditioner doesn't need to be exact.
+    #
+    # Alternative (may help at large DT by reducing GMRES iterations, but the
+    # triple matrix product is expensive per wfact! call):
+    #   @. ∂ᶠρwₜ∂ᶠρw =
+    #       -(ᶠgradᵥ_matrix()) *
+    #       DiagonalMatrixRow(-(ᶜρ * R_d / C_v) * adjoint(CT3(ᶜinterp(p.w)))) *
+    #       ᶜinterp_matrix()
+    # For rhoe, ∂p/∂K = -ρ R_d/Cv couples pressure to kinetic energy.
+    # (Ref: staggered_nonhydrostatic_model.jl, lines 582-588)
     TridiagonalRow_C3xACT3 =
         TridiagonalMatrixRow{typeof(C3(FT(0)) * CT3(FT(0))')}
     ∂ᶠρwₜ∂ᶠρw .= Ref(zero(TridiagonalRow_C3xACT3))
