@@ -1,5 +1,9 @@
 #=
-Density current 2D (flux form) with fully implicit timestepping.
+Rising bubble 2D (flux form) with fully implicit timestepping.
+
+Identical to density_current_2d_flux_form_implicit.jl except for domain size and
+initial conditions: uses the dry rising thermal bubble (Straka et al. 1993 style)
+on domain x ∈ [-500, 500] m, z ∈ [0, 1000] m.
 
 Uses ClimaTimeSteppers IMEXAlgorithm with ARS233 (implicit-only, T_exp! = nothing).
 Note: ARS233 has 2 implicit stages (vs 3 for ARS343), reducing Newton solves per
@@ -15,7 +19,7 @@ The vertical preconditioner captures acoustic-gravity wave coupling:
 Horizontal coupling (pressure ↔ uₕ) is resolved by GMRES iterations.
 
 Run:
-    julia --project=.buildkite examples/hybrid/plane/density_current_2d_flux_form_implicit.jl
+    julia --project=.buildkite examples/hybrid/plane/rising_bubble_2d_flux_form_implicit.jl
 =#
 
 using Test
@@ -91,7 +95,8 @@ function hvspace_2D(
     return (hv_center_space, hv_face_space)
 end
 
-hv_center_space, hv_face_space = hvspace_2D((-25600, 25600), (0, 6400))
+# Rising bubble domain: x ∈ [-500, 500] m, z ∈ [0, 1000] m (Straka et al. 1993)
+hv_center_space, hv_face_space = hvspace_2D((-500, 500), (0, 1000), 10, 40)
 
 # ---------------------------------------------------------------------------
 # Physical constants
@@ -118,23 +123,18 @@ end
 ∂p∂ρθ(ρθ) = ρθ > 0 ? γ * R_d * (R_d * ρθ / MSLP)^(γ - 1) : FT(0)
 
 # ---------------------------------------------------------------------------
-# Initial conditions
+# Initial conditions (dry rising thermal bubble, Straka et al. 1993 style)
 # ---------------------------------------------------------------------------
-# Reference: https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml, Section 5a
-function init_density_current_2d(x, z)
+function init_rising_bubble_2d(x, z)
     x_c = 0.0
-    z_c = 3000.0
-    r_c = 1.0
-    x_r = 4000.0
-    z_r = 2000.0
+    z_c = 350.0
+    r_c = 250.0
     θ_b = 300.0
-    θ_c = -15.0
+    θ_c = 0.5
     cp_d = C_p
-    cv_d = C_v
     p_0 = MSLP
-    g = grav
 
-    r = sqrt((x - x_c)^2 / x_r^2 + (z - z_c)^2 / z_r^2)
+    r = sqrt((x - x_c)^2 + (z - z_c)^2)
     θ_p = r < r_c ? 0.5 * θ_c * (1.0 + cospi(r / r_c)) : 0.0
 
     θ = θ_b + θ_p
@@ -151,7 +151,7 @@ face_coords = Fields.coordinate_field(hv_face_space)
 
 function center_initial_condition(local_geometry)
     (; x, z) = local_geometry.coordinates
-    ic = init_density_current_2d(x, z)
+    ic = init_rising_bubble_2d(x, z)
     ρuₕ = ic.ρ * Geometry.UVector(FT(0))
     return (; ρ = ic.ρ, ρθ = ic.ρθ, ρuₕ)
 end
@@ -314,7 +314,7 @@ function rhs!(dY, Y, cache, t)
     @. dρw -= hdiv(uₕf ⊗ ρw)
 
     ### DIFFUSION
-    κ₂ = 75.0 # m^2/s
+    κ₂ = 5.0 # m^2/s
     #  1a) horizontal div of horizontal grad of horiz momentum
     @. dρuₕ += hwdiv(κ₂ * (ρ * hgrad(ρuₕ / ρ)))
     #  1b) vertical div of vertical grad of horiz momentum
@@ -590,7 +590,7 @@ ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
 
-dir = "dc_fluxform_implicit"
+dir = "bubble_fluxform_implicit"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
