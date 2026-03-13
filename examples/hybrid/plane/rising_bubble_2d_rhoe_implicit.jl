@@ -301,7 +301,7 @@ function rhs!(dY, Y, cache, t)
     @. dρuₕ = hwdiv(hgrad(uₕ))
     Spaces.weighted_dss!(dY.c)
 
-    κ₄ = 5.0 # m^4/s
+    κ₄ = 10.0 # m^4/s
     @. dρe = -κ₄ * hwdiv(ρ * hgrad(dρe))
     @. dρuₕ = -κ₄ * hwdiv(ρ * hgrad(dρuₕ))
 
@@ -542,7 +542,7 @@ ode_algo = CTS.IMEXAlgorithm(CTS.ARS233(), newtons_method)
 
 T_imp! = SciMLBase.ODEFunction(rhs!; jac_prototype = jac, Wfact = wfact!)
 
-Δt = parse(Float64, get(ENV, "DT", "0.5"))
+Δt = parse(Float64, get(ENV, "DT", "1.0"))
 t_end = parse(Float64, get(ENV, "T_END", "1200.0"))
 
 problem = SciMLBase.ODEProblem(
