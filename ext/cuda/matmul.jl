@@ -40,11 +40,11 @@ Base.@propagate_inbounds function row_mul_mat!(
         ri = Int32(63)
 
         zero_entry = rzero(eltype(prod_eltype))
-        prod_entries = UnrolledUtilities.unrolled_map(pd1:pd2) do pd
+        prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
             if v + pd < li || v + pd > ri
                 zero_entry
             else
-                UnrolledUtilities.unrolled_sum(ld1:ud1) do mat1_row_d
+                UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
                     if ld2 <= pd - mat1_row_d <= ud2 &&
                        (Int32(0) < v + mat1_row_d + half <= Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
@@ -79,11 +79,11 @@ Base.@propagate_inbounds function row_mul_mat!(
         ri = Int32(64)
 
         zero_entry = rzero(eltype(prod_eltype))
-        prod_entries = UnrolledUtilities.unrolled_map(pd1:pd2) do pd
+        prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
             if v + pd < li || v + pd > ri
                 zero_entry
             else
-                UnrolledUtilities.unrolled_sum(ld1:ud1) do mat1_row_d
+                UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
                     if ld2 <= pd - mat1_row_d <= ud2 &&
                        (Int32(0) < v + mat1_row_d - half < Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
@@ -118,11 +118,11 @@ Base.@propagate_inbounds function row_mul_mat!(
         ri = Int32(63)
 
         zero_entry = rzero(eltype(prod_eltype))
-        prod_entries = UnrolledUtilities.unrolled_map(pd1:pd2) do pd
+        prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
             if v + pd < li || v + pd > ri
                 zero_entry
             else
-                UnrolledUtilities.unrolled_sum(ld1:ud1) do mat1_row_d
+                UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
                     if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) < v + mat1_row_d <= Int32(63))
                         @inbounds mat1_row[mat1_row_d] *
                                   matrix2[v + mat1_row_d][pd - mat1_row_d]
@@ -156,11 +156,11 @@ Base.@propagate_inbounds function row_mul_mat!(
         ri = Int32(64)
 
         zero_entry = rzero(eltype(prod_eltype))
-        prod_entries = UnrolledUtilities.unrolled_map(pd1:pd2) do pd
+        prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
             if v + pd < li || v + pd > ri
                 zero_entry
             else
-                UnrolledUtilities.unrolled_sum(ld1:ud1) do mat1_row_d
+                UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
                     if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) < v + mat1_row_d <= Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
                                   matrix2[v + mat1_row_d][pd - mat1_row_d]
@@ -194,11 +194,11 @@ Base.@propagate_inbounds function row_mul_mat!(
         ri = Int32(64)
 
         zero_entry = rzero(eltype(prod_eltype))
-        prod_entries = UnrolledUtilities.unrolled_map(pd1:pd2) do pd
+        prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
             if v + pd + half < li || v + pd + half > ri
                 zero_entry
             else
-                UnrolledUtilities.unrolled_sum(ld1:ud1) do mat1_row_d
+                UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
                     if ld2 <= pd - mat1_row_d <= ud2 &&
                        (Int32(0) < v + mat1_row_d + half <= Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
@@ -233,11 +233,11 @@ Base.@propagate_inbounds function row_mul_mat!(
         ri = Int32(64)
 
         zero_entry = rzero(eltype(prod_eltype))
-        prod_entries = UnrolledUtilities.unrolled_map(pd1:pd2) do pd
+        prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
             if v + pd + half < li || v + pd + half > ri
                 zero_entry
             else
-                UnrolledUtilities.unrolled_sum(ld1:ud1) do mat1_row_d
+                UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
                     if ld2 <= pd - mat1_row_d <= ud2 &&
                        (Int32(0) < v + mat1_row_d - half < Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
@@ -272,11 +272,11 @@ Base.@propagate_inbounds function row_mul_mat!(
         ri = Int32(64)
 
         zero_entry = rzero(eltype(prod_eltype))
-        prod_entries = UnrolledUtilities.unrolled_map(pd1:pd2) do pd
+        prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
             if v + pd + half < li || v + pd + half > ri
                 zero_entry
             else
-                UnrolledUtilities.unrolled_sum(ld1:ud1) do mat1_row_d
+                UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
                     if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) < v + mat1_row_d <= Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
                                   matrix2[v + mat1_row_d][pd - mat1_row_d]
@@ -310,11 +310,11 @@ Base.@propagate_inbounds function row_mul_mat!(
         ri = Int32(64)
 
         zero_entry = rzero(eltype(prod_eltype))
-        prod_entries = UnrolledUtilities.unrolled_map(pd1:pd2) do pd
+        prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
             if v + pd + half < li || v + pd + half > ri
                 zero_entry
             else
-                UnrolledUtilities.unrolled_sum(ld1:ud1) do mat1_row_d
+                UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
                     if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) < v + mat1_row_d < Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
                                   matrix2[v + mat1_row_d][pd - mat1_row_d]
