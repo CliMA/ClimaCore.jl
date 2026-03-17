@@ -358,6 +358,7 @@ function multiarg_test(nargs::Int)
         "\n    ",
     )
     args_list = join(["f$i" for i in 1:nargs], ", ")
+    bench_args_list = join(["\$f$i" for i in 1:nargs], ", ")
 
     # Build operation: (f1 + f2 + ...) / (f_last + 1)
     sum_expr = join(["f$i" for i in 1:(nargs - 1)], " + ")
@@ -374,7 +375,7 @@ function multiarg_test(nargs::Int)
     _ = op.($args_list)
 
     # Benchmark ClimaCore's generated kernel
-    trial = @benchmark \$op.(\$$args_list) samples=10 evals=1
+    trial = @benchmark \$op.($bench_args_list) samples=10 evals=1
 
     time_μs = minimum(trial.times) / 1000.0
     @printf "TIMING: multiarg_$(nargs)_args = %.6f s\\n" time_μs / 1e6
@@ -390,19 +391,29 @@ Generate test code for composed mathematical functions.
 ClimaCore automatically generates kernels from the broadcast operation.
 """
 function functions_test(funcs::Vector{String}, depth::Int)
-    # Build nested function composition
-    if depth == 1
-        expr = "$(funcs[1])(x + 0.5)"
+    label = if funcs == ["log"]
+        "log"
+    elseif funcs == ["sqrt"]
+        "sqrt"
+    elseif funcs == ["log", "sqrt", "abs"]
+        "mixed"
     else
-        expr = funcs[1] * "("
-        for i in 2:depth
-            expr *= funcs[i] * "("
+        join(funcs, "_")
+    end
+
+    test_name = "functions_$(label)_depth_$(depth)"
+
+    # Build nested function composition with domain-safe wrappers for real-valued log/sqrt
+    expr = "x + 0.5"
+    for i in depth:-1:1
+        func = funcs[mod1(i, length(funcs))]
+        if func == "log"
+            expr = "log(abs($expr) + 1.5)"
+        elseif func == "sqrt"
+            expr = "sqrt(abs($expr) + 1.5)"
+        else
+            expr = "$func($expr)"
         end
-        expr *= "x + 0.5"
-        for _ in 2:depth
-            expr *= ")"
-        end
-        expr *= ")"
     end
 
     test_impl = create_spectral_space() * """
@@ -420,14 +431,11 @@ function functions_test(funcs::Vector{String}, depth::Int)
     trial = @benchmark \$op.(\$f) samples=10 evals=1
 
     time_μs = minimum(trial.times) / 1000.0
-    func_desc = join($(repr(funcs)), "_")
-    @printf "TIMING: functions_\$(func_desc)_depth_$(depth) = %.6f s\\n" time_μs / 1e6
+    timing_name = $(repr(test_name))
+    @printf "TIMING: %s = %.6f s\\n" timing_name time_μs / 1e6
     """
 
-    return generate_field_test_code(
-        "functions_$(join(funcs, "_"))_depth_$(depth)",
-        test_impl,
-    )
+    return generate_field_test_code(test_name, test_impl)
 end
 
 """
