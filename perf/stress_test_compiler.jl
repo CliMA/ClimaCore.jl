@@ -113,7 +113,10 @@ function run_test_subprocess(test_code::String, test_name::String)
 
         try
             # Use withenv to set environment variables
-            output = withenv("CLIMACOMMS_DEVICE" => DEVICE) do
+            output = withenv(
+                "CLIMACOMMS_DEVICE" => DEVICE,
+                "CLIMACORE_COLLECT_KERNEL_STATS" => (has_cuda_env() ? "1" : "0"),
+            ) do
                 read(cmd, String)
             end
             return (true, output, "")
@@ -165,6 +168,66 @@ function parse_cuda_profile_from_output(output::String)
         end
     end
     return profiles
+end
+
+function parse_cuda_profile_metrics(profile::String)
+    metrics = Dict{String, String}()
+    payload = strip(replace(profile, "CUDA_PROFILE:" => ""))
+    for token in split(payload)
+        if contains(token, '=')
+            key, value = split(token, '='; limit = 2)
+            metrics[key] = value
+        end
+    end
+    return metrics
+end
+
+function summarize_cuda_profiles(profiles::Vector{String})
+    isempty(profiles) && return String[]
+
+    parsed_profiles =
+        [(profile, parse_cuda_profile_metrics(profile)) for profile in profiles]
+
+    function metric_int(metrics::Dict{String, String}, key::String)
+        try
+            return parse(Int, get(metrics, key, "0"))
+        catch
+            return 0
+        end
+    end
+
+    primary_profile, primary_metrics = parsed_profiles[1]
+    primary_score = (
+        metric_int(primary_metrics, "registers"),
+        metric_int(primary_metrics, "local"),
+        metric_int(primary_metrics, "shared"),
+    )
+    for candidate in parsed_profiles[2:end]
+        _, metrics = candidate
+        candidate_score = (
+            metric_int(metrics, "registers"),
+            metric_int(metrics, "local"),
+            metric_int(metrics, "shared"),
+        )
+        if candidate_score > primary_score
+            primary_profile, primary_metrics = candidate
+            primary_score = candidate_score
+        end
+    end
+
+    spill_count = count(parsed_profiles) do (_, metrics)
+        metric_int(metrics, "local") > 0
+    end
+
+    registers = get(primary_metrics, "registers", "?")
+    local_bytes = metric_int(primary_metrics, "local")
+    shared_bytes = get(primary_metrics, "shared", "?")
+    kernel_name = get(primary_metrics, "kernel", "unknown")
+    status = local_bytes > 0 ? "spill_detected" : "no_spill"
+
+    return [
+        "CUDA_PROFILE: primary_kernel=$(kernel_name) registers=$(registers) local=$(local_bytes) shared=$(shared_bytes) status=$(status) spill_kernels=$(spill_count)/$(length(parsed_profiles))",
+    ]
 end
 
 # ============================================================================
@@ -473,8 +536,8 @@ function curl_test(n::Int)
     using ClimaCore.Operators
 
     curl_op = Operators.Curl()
-    v = Fields.Field(Geometry.Contravariant12Vector{FT}, space)
-    fill!(Fields.field_values(v), Geometry.Contravariant12Vector(1.0, 2.0))
+    v = Fields.Field(Geometry.Covariant12Vector{FT}, space)
+    fill!(Fields.field_values(v), Geometry.Covariant12Vector(1.0, 2.0))
 
     # Warm up: $n curl calls in one expression
     _ = $warm
@@ -728,7 +791,8 @@ function run_test(test_def::TestDef)
     success, output, error = run_test_subprocess(test_code, test_def.name)
 
     if success
-        result.cuda_profiles = parse_cuda_profile_from_output(output)
+        result.cuda_profiles =
+            summarize_cuda_profiles(parse_cuda_profile_from_output(output))
         # Parse timing from output
         timings = parse_timings_from_output(output)
         if haskey(timings, test_def.name)
