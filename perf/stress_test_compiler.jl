@@ -16,22 +16,28 @@ compiler fails altogether. The test suite covers:
 4. **Function composition** - log, sqrt, and other transcendental functions
    How do special functions interact with inlining?
 
+5. **Divergence operations** - differential operator on vector fields
+   How does the divergence operator compilation scale with mesh complexity?
+
+6. **Curl operations** - differential operator on vector fields
+   How does the curl operator compilation scale with mesh complexity?
+
 Each test is run in a subprocess to avoid compilation state leakage.
 The Julia project is automatically instantiated before running tests.
 Uses the `.buildkite` project environment for reproducibility.
 
 USAGE EXAMPLES:
   # Run all tests on CPU (default)
-  julia perf/stress_test_compiler.jl
+  julia --project=.buildkite perf/stress_test_compiler.jl
 
   # Run tests matching a filter on CPU
-  julia perf/stress_test_compiler.jl arithmetic
+  julia --project=.buildkite perf/stress_test_compiler.jl arithmetic
 
   # Run on CUDA with GPU reservation
-  CLIMACOMMS_DEVICE=CUDA srun --gpus=1 julia perf/stress_test_compiler.jl
+  CLIMACOMMS_DEVICE=CUDA srun --mpi=none --gpus=1 julia --project=.buildkite perf/stress_test_compiler.jl
 
   # Run a single specific test
-  julia perf/stress_test_compiler.jl arithmetic_depth_5
+  julia --project=.buildkite perf/stress_test_compiler.jl arithmetic_depth_5
 
 NOTE: The script automatically detects and uses the `.buildkite` project directory,
 so it should be run from the ClimaCore.jl root or from the perf/ directory.
@@ -84,14 +90,26 @@ has_cuda_env() = DEVICE == "CUDA"
 
 Run a test in a subprocess to avoid compilation state leakage.
 Returns a tuple of (success, stdout, stderr).
+
+If already running under srun (detected via SLURM_* environment variables),
+subprocesses inherit the parent's GPU allocation and don't request their own.
+Otherwise, subprocesses request their own GPU allocation via srun.
 """
 function run_test_subprocess(test_code::String, test_name::String)
     tmp_file = tempname() * ".jl"
     try
         write(tmp_file, test_code)
 
-        # Always use srun with one GPU for subprocess isolation on SLURM systems.
-        cmd = `srun --mpi=none --gpus=1 $(Base.julia_cmd()) --startup-file=no --project=$(PROJECT_DIR) $tmp_file`
+        # Check if we're already in a srun environment
+        in_srun = !isempty(get(ENV, "SLURM_JOB_ID", ""))
+
+        # Build command: skip srun if parent is already in srun to avoid resource contention
+        if in_srun
+            cmd = `$(Base.julia_cmd()) --startup-file=no --project=$(PROJECT_DIR) $tmp_file`
+        else
+            # Need to allocate GPU for standalone subprocess
+            cmd = `srun --mpi=none --gpus=1 $(Base.julia_cmd()) --startup-file=no --project=$(PROJECT_DIR) $tmp_file`
+        end
 
         try
             # Use withenv to set environment variables
@@ -103,7 +121,7 @@ function run_test_subprocess(test_code::String, test_name::String)
             return (false, "", sprint(showerror, e))
         end
     finally
-        rm(tmp_file, force=true)
+        rm(tmp_file, force = true)
     end
 end
 
@@ -121,7 +139,7 @@ function parse_timings_from_output(output::String)
                 name = strip(split(parts[1], ':')[2])
                 value_str = strip(parts[2])
                 if endswith(value_str, "s")
-                    value_str = value_str[1:end-1]
+                    value_str = value_str[1:(end - 1)]
                 end
                 try
                     timings[name] = parse(Float64, value_str)
@@ -228,6 +246,7 @@ end
     arithmetic_test(depth::Int) -> String
 
 Generate test code for arithmetic operations with given nesting depth.
+ClimaCore automatically generates kernels from the broadcast operation.
 """
 function arithmetic_test(depth::Int)
     # Build expression with `depth` levels of nesting
@@ -239,43 +258,6 @@ function arithmetic_test(depth::Int)
         expr = "($expr $op $val.0)"
     end
 
-    kernel_expr = replace(expr, "x" => "v")
-
-    cuda_profile = has_cuda_env() ? """
-    if ClimaComms.device(space) isa ClimaComms.CUDADevice
-        x_d = CUDA.fill(1.5, 4096)
-        y_d = similar(x_d)
-
-        function profile_kernel!(y, x, reps)
-            i = (blockIdx().x - 1) * blockDim().x + threadIdx().x
-            if i <= length(x)
-                @inbounds v = x[i]
-                @inbounds for _ in 1:reps
-                    v = $kernel_expr
-                end
-                @inbounds y[i] = v
-            end
-            return
-        end
-
-        reps = $(max(depth, 1))
-        k = @cuda launch=false profile_kernel!(y_d, x_d, reps)
-        cfg = CUDA.launch_configuration(k.fun)
-        threads = min(length(x_d), cfg.threads)
-        blocks = cld(length(x_d), threads)
-        attrs = CUDA.attributes(k.fun)
-        regs_per_thread = attrs[CUDA.CU_FUNC_ATTRIBUTE_NUM_REGS]
-        static_smem_bytes = attrs[CUDA.CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES]
-        local_mem_bytes = attrs[CUDA.CU_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES]
-        max_threads_per_block = attrs[CUDA.CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK]
-        warp = CUDA.warpsize(CUDA.device())
-
-        CUDA.@sync @cuda threads=threads blocks=blocks profile_kernel!(y_d, x_d, reps)
-
-        @printf "CUDA_PROFILE: test=arithmetic_depth_$(depth) regs_per_thread=%d static_smem_bytes=%d local_mem_bytes=%d max_threads_per_block=%d launch_threads=%d launch_blocks=%d warp_size=%d\\n" regs_per_thread static_smem_bytes local_mem_bytes max_threads_per_block threads blocks warp
-    end
-    """ : ""
-
     test_impl = create_spectral_space() * """
 
     f = Fields.Field(FT, space)
@@ -283,11 +265,12 @@ function arithmetic_test(depth::Int)
 
     op(x) = $expr
 
-    # Compile and benchmark
+    # Warm up compilation
     _ = op(1.5)
-    trial = @benchmark \$op.(\$f) samples=10 evals=1
+    _ = op.(f)
 
-    $cuda_profile
+    # Benchmark ClimaCore's generated kernel
+    trial = @benchmark \$op.(\$f) samples=10 evals=1
 
     time_μs = minimum(trial.times) / 1000.0
     @printf "TIMING: arithmetic_depth_$(depth) = %.6f s\\n" time_μs / 1e6
@@ -299,50 +282,23 @@ end
 """
     multiarg_test(nargs::Int) -> String
 
-Generate test code for operations with multiple arguments (fields).
+Generate test code for operations with multiple field arguments.
+ClimaCore automatically generates kernels from the broadcast operation.
 """
 function multiarg_test(nargs::Int)
     # Build argument list
-    args_decl = join(["f$i = Fields.Field(FT, space);\n    fill!(Fields.field_values(f$i), $(Float64(i)))" for i in 1:nargs], "\n    ")
+    args_decl = join(
+        [
+            "f$i = Fields.Field(FT, space);\n    fill!(Fields.field_values(f$i), $(Float64(i)))"
+            for i in 1:nargs
+        ],
+        "\n    ",
+    )
     args_list = join(["f$i" for i in 1:nargs], ", ")
 
     # Build operation: (f1 + f2 + ...) / (f_last + 1)
-    sum_expr = join(["f$i" for i in 1:(nargs-1)], " + ")
+    sum_expr = join(["f$i" for i in 1:(nargs - 1)], " + ")
     op_expr = "($sum_expr) / (f$nargs + 1.0)"
-
-    cuda_profile = has_cuda_env() ? """
-    if ClimaComms.device(space) isa ClimaComms.CUDADevice
-        x_d = CUDA.fill(1.5, 4096)
-        y_d = similar(x_d)
-
-        function profile_kernel!(y, x)
-            i = (blockIdx().x - 1) * blockDim().x + threadIdx().x
-            if i <= length(x)
-                @inbounds v = x[i]
-                @inbounds for j in 1:$(nargs)
-                    v = (v + j) / (v + 1.0)
-                end
-                @inbounds y[i] = v
-            end
-            return
-        end
-
-        k = @cuda launch=false profile_kernel!(y_d, x_d)
-        cfg = CUDA.launch_configuration(k.fun)
-        threads = min(length(x_d), cfg.threads)
-        blocks = cld(length(x_d), threads)
-        attrs = CUDA.attributes(k.fun)
-        regs_per_thread = attrs[CUDA.CU_FUNC_ATTRIBUTE_NUM_REGS]
-        static_smem_bytes = attrs[CUDA.CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES]
-        local_mem_bytes = attrs[CUDA.CU_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES]
-        max_threads_per_block = attrs[CUDA.CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK]
-        warp = CUDA.warpsize(CUDA.device())
-
-        CUDA.@sync @cuda threads=threads blocks=blocks profile_kernel!(y_d, x_d)
-
-        @printf "CUDA_PROFILE: test=multiarg_$(nargs)_args regs_per_thread=%d static_smem_bytes=%d local_mem_bytes=%d max_threads_per_block=%d launch_threads=%d launch_blocks=%d warp_size=%d\\n" regs_per_thread static_smem_bytes local_mem_bytes max_threads_per_block threads blocks warp
-    end
-    """ : ""
 
     test_impl = create_spectral_space() * """
 
@@ -350,11 +306,12 @@ function multiarg_test(nargs::Int)
 
     op($args_list) = $op_expr
 
-    # Compile and benchmark
+    # Warm up compilation
     _ = op($(join(["$(Float64(i))" for i in 1:nargs], ", ")))
-    trial = @benchmark \$op.(\$$args_list) samples=10 evals=1
+    _ = op.($args_list)
 
-    $cuda_profile
+    # Benchmark ClimaCore's generated kernel
+    trial = @benchmark \$op.(\$$args_list) samples=10 evals=1
 
     time_μs = minimum(trial.times) / 1000.0
     @printf "TIMING: multiarg_$(nargs)_args = %.6f s\\n" time_μs / 1e6
@@ -367,6 +324,7 @@ end
     functions_test(funcs::Vector{String}, depth::Int) -> String
 
 Generate test code for composed mathematical functions.
+ClimaCore automatically generates kernels from the broadcast operation.
 """
 function functions_test(funcs::Vector{String}, depth::Int)
     # Build nested function composition
@@ -384,40 +342,6 @@ function functions_test(funcs::Vector{String}, depth::Int)
         expr *= ")"
     end
 
-    kernel_expr = replace(expr, "x" => "v")
-
-    cuda_profile = has_cuda_env() ? """
-    if ClimaComms.device(space) isa ClimaComms.CUDADevice
-        x_d = CUDA.fill(1.5, 4096)
-        y_d = similar(x_d)
-
-        function profile_kernel!(y, x)
-            i = (blockIdx().x - 1) * blockDim().x + threadIdx().x
-            if i <= length(x)
-                @inbounds v = x[i]
-                @inbounds v = $kernel_expr
-                @inbounds y[i] = v
-            end
-            return
-        end
-
-        k = @cuda launch=false profile_kernel!(y_d, x_d)
-        cfg = CUDA.launch_configuration(k.fun)
-        threads = min(length(x_d), cfg.threads)
-        blocks = cld(length(x_d), threads)
-        attrs = CUDA.attributes(k.fun)
-        regs_per_thread = attrs[CUDA.CU_FUNC_ATTRIBUTE_NUM_REGS]
-        static_smem_bytes = attrs[CUDA.CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES]
-        local_mem_bytes = attrs[CUDA.CU_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES]
-        max_threads_per_block = attrs[CUDA.CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK]
-        warp = CUDA.warpsize(CUDA.device())
-
-        CUDA.@sync @cuda threads=threads blocks=blocks profile_kernel!(y_d, x_d)
-
-        @printf "CUDA_PROFILE: test=functions_$(join(funcs, "_"))_depth_$(depth) regs_per_thread=%d static_smem_bytes=%d local_mem_bytes=%d max_threads_per_block=%d launch_threads=%d launch_blocks=%d warp_size=%d\\n" regs_per_thread static_smem_bytes local_mem_bytes max_threads_per_block threads blocks warp
-    end
-    """ : ""
-
     test_impl = create_spectral_space() * """
 
     f = Fields.Field(FT, space)
@@ -425,83 +349,251 @@ function functions_test(funcs::Vector{String}, depth::Int)
 
     op(x) = $expr
 
-    # Compile and benchmark
+    # Warm up compilation
     _ = op(1.5)
-    trial = @benchmark \$op.(\$f) samples=10 evals=1
+    _ = op.(f)
 
-    $cuda_profile
+    # Benchmark ClimaCore's generated kernel
+    trial = @benchmark \$op.(\$f) samples=10 evals=1
 
     time_μs = minimum(trial.times) / 1000.0
     func_desc = join($(repr(funcs)), "_")
     @printf "TIMING: functions_\$(func_desc)_depth_$(depth) = %.6f s\\n" time_μs / 1e6
     """
 
-    return generate_field_test_code("functions_$(join(funcs, "_"))_depth_$(depth)", test_impl)
+    return generate_field_test_code(
+        "functions_$(join(funcs, "_"))_depth_$(depth)",
+        test_impl,
+    )
 end
 
 """
     projection_test(complexity::Int) -> String
 
 Generate test code for projection operations on geometric objects.
+ClimaCore automatically generates kernels from the broadcast operation.
 """
 function projection_test(complexity::Int)
     # Build multiple chained projections
-    proj_chain = join(["Geometry.project(Geometry.Covariant12Axis(), v)" for _ in 1:complexity], " + ")
-
-    cuda_profile = has_cuda_env() ? """
-    if ClimaComms.device(space) isa ClimaComms.CUDADevice
-        x_d = CUDA.fill(1.5, 4096)
-        y_d = similar(x_d)
-
-        function profile_kernel!(y, x)
-            i = (blockIdx().x - 1) * blockDim().x + threadIdx().x
-            if i <= length(x)
-                @inbounds v = x[i]
-                @inbounds for _ in 1:$(complexity)
-                    v = v * 1.1 + 0.5
-                end
-                @inbounds y[i] = v
-            end
-            return
-        end
-
-        k = @cuda launch=false profile_kernel!(y_d, x_d)
-        cfg = CUDA.launch_configuration(k.fun)
-        threads = min(length(x_d), cfg.threads)
-        blocks = cld(length(x_d), threads)
-        attrs = CUDA.attributes(k.fun)
-        regs_per_thread = attrs[CUDA.CU_FUNC_ATTRIBUTE_NUM_REGS]
-        static_smem_bytes = attrs[CUDA.CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES]
-        local_mem_bytes = attrs[CUDA.CU_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES]
-        max_threads_per_block = attrs[CUDA.CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK]
-        warp = CUDA.warpsize(CUDA.device())
-
-        CUDA.@sync @cuda threads=threads blocks=blocks profile_kernel!(y_d, x_d)
-
-        @printf "CUDA_PROFILE: test=projection_$(complexity)x regs_per_thread=%d static_smem_bytes=%d local_mem_bytes=%d max_threads_per_block=%d launch_threads=%d launch_blocks=%d warp_size=%d\\n" regs_per_thread static_smem_bytes local_mem_bytes max_threads_per_block threads blocks warp
-    end
-    """ : ""
+    proj_chain = join(
+        ["Geometry.project(Geometry.Covariant12Axis(), v)" for _ in 1:complexity],
+        " + ",
+    )
 
     test_impl = create_spectral_space() * """
-
-    v_type = typeof(Fields.field_values(Fields.Field(Geometry.Contravariant12Vector{FT}, space))[1])
 
     v = Fields.Field(Geometry.Contravariant12Vector{FT}, space)
     fill!(Fields.field_values(v), Geometry.Contravariant12Vector(1.0, 2.0))
 
     op(v) = $proj_chain
 
-    # Compile and benchmark
+    # Warm up compilation
     _ = op(v)
-    trial = @benchmark \$op.(\$v) samples=10 evals=1
+    _ = op.(v)
 
-    $cuda_profile
+    # Benchmark ClimaCore's generated kernel
+    trial = @benchmark \$op.(\$v) samples=10 evals=1
 
     time_μs = minimum(trial.times) / 1000.0
     @printf "TIMING: projection_$(complexity)x = %.6f s\\n" time_μs / 1e6
     """
 
     return generate_field_test_code("projection_$(complexity)x", test_impl)
+end
+
+"""
+    create_column_space()
+
+Helper function to create a vertical column (finite difference) space setup code string.
+Produces both center and face spaces needed for C2F/F2C operators.
+"""
+function create_column_space()
+    return """
+    FT = Float64
+    context = ClimaComms.context()
+    if context isa ClimaComms.MPICommsContext
+        ClimaComms.init(context)
+    end
+
+    col_domain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(0.0),
+        Geometry.ZPoint{FT}(1.0);
+        boundary_names = (:bottom, :top),
+    )
+    col_mesh = Meshes.IntervalMesh(col_domain; nelems = 16)
+    col_topology = Topologies.IntervalTopology(context, col_mesh)
+    center_space = Spaces.CenterFiniteDifferenceSpace(col_topology)
+    face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
+    """
+end
+
+"""
+    div_test(n::Int) -> String
+
+Generate test code that packs n Divergence calls into a single broadcast expression.
+Tests how many spectral-element divergences the compiler can inline before giving up.
+"""
+function div_test(n::Int)
+    warm = join(["div_op.(v .* $(i).0)" for i in 1:n], " .+ ")
+    bench = join(["\$div_op.(\$v .* $(i).0)" for i in 1:n], " .+ ")
+
+    test_impl = create_spectral_space() * """
+
+    using ClimaCore.Operators
+
+    div_op = Operators.Divergence()
+    v = Fields.Field(Geometry.Contravariant12Vector{FT}, space)
+    fill!(Fields.field_values(v), Geometry.Contravariant12Vector(1.0, 2.0))
+
+    # Warm up: $n divergence calls in one expression
+    _ = $warm
+
+    # Benchmark ClimaCore's kernel: $n divergence calls fused into one expression
+    trial = @benchmark $bench samples=10 evals=1
+
+    time_μs = minimum(trial.times) / 1000.0
+    @printf "TIMING: div_$(n)_ops = %.6f s\\n" time_μs / 1e6
+    """
+
+    return generate_field_test_code("div_$(n)_ops", test_impl)
+end
+
+"""
+    curl_test(n::Int) -> String
+
+Generate test code that packs n Curl calls into a single broadcast expression.
+Tests how many spectral-element curls the compiler can inline before giving up.
+"""
+function curl_test(n::Int)
+    warm = join(["curl_op.(v .* $(i).0)" for i in 1:n], " .+ ")
+    bench = join(["\$curl_op.(\$v .* $(i).0)" for i in 1:n], " .+ ")
+
+    test_impl = create_spectral_space() * """
+
+    using ClimaCore.Operators
+
+    curl_op = Operators.Curl()
+    v = Fields.Field(Geometry.Contravariant12Vector{FT}, space)
+    fill!(Fields.field_values(v), Geometry.Contravariant12Vector(1.0, 2.0))
+
+    # Warm up: $n curl calls in one expression
+    _ = $warm
+
+    # Benchmark ClimaCore's kernel: $n curl calls fused into one expression
+    trial = @benchmark $bench samples=10 evals=1
+
+    time_μs = minimum(trial.times) / 1000.0
+    @printf "TIMING: curl_$(n)_ops = %.6f s\\n" time_μs / 1e6
+    """
+
+    return generate_field_test_code("curl_$(n)_ops", test_impl)
+end
+
+"""
+    interp_test(n::Int) -> String
+
+Generate test code that packs n InterpolateC2F calls into a single broadcast expression.
+Tests how many center-to-face interpolations the compiler can inline before giving up.
+"""
+function interp_test(n::Int)
+    warm = join(["interp.(ᶜf .* $(i).0)" for i in 1:n], " .+ ")
+    bench = join(["\$interp.(\$ᶜf .* $(i).0)" for i in 1:n], " .+ ")
+
+    test_impl = create_column_space() * """
+
+    using ClimaCore.Operators
+
+    interp = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶜf = Fields.Field(FT, center_space)
+    fill!(Fields.field_values(ᶜf), 1.5)
+
+    # Warm up: $n InterpolateC2F calls in one expression
+    _ = $warm
+
+    # Benchmark ClimaCore's kernel: $n C2F interpolations fused into one expression
+    trial = @benchmark $bench samples=10 evals=1
+
+    time_μs = minimum(trial.times) / 1000.0
+    @printf "TIMING: interp_c2f_$(n)_ops = %.6f s\\n" time_μs / 1e6
+    """
+
+    return generate_field_test_code("interp_c2f_$(n)_ops", test_impl)
+end
+
+"""
+    weighted_interp_test(n::Int) -> String
+
+Generate test code that packs n WeightedInterpolateC2F calls into a single broadcast expression.
+Tests how many weighted center-to-face interpolations the compiler can inline before giving up.
+"""
+function weighted_interp_test(n::Int)
+    warm = join(["winterp.(ᶜw, ᶜf .* $(i).0)" for i in 1:n], " .+ ")
+    bench = join(["\$winterp.(\$ᶜw, \$ᶜf .* $(i).0)" for i in 1:n], " .+ ")
+
+    test_impl = create_column_space() * """
+
+    using ClimaCore.Operators
+
+    winterp = Operators.WeightedInterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶜw = Fields.Field(FT, center_space)
+    ᶜf = Fields.Field(FT, center_space)
+    fill!(Fields.field_values(ᶜw), 1.0)
+    fill!(Fields.field_values(ᶜf), 1.5)
+
+    # Warm up: $n WeightedInterpolateC2F calls in one expression
+    _ = $warm
+
+    # Benchmark ClimaCore's kernel: $n weighted C2F interpolations fused into one expression
+    trial = @benchmark $bench samples=10 evals=1
+
+    time_μs = minimum(trial.times) / 1000.0
+    @printf "TIMING: weighted_interp_c2f_$(n)_ops = %.6f s\\n" time_μs / 1e6
+    """
+
+    return generate_field_test_code("weighted_interp_c2f_$(n)_ops", test_impl)
+end
+
+"""
+    upwinding_test(n::Int) -> String
+
+Generate test code that packs n Upwind3rdOrderBiasedProductC2F calls into a single
+broadcast expression. Tests how many 3rd-order upwind flux evaluations the compiler
+can inline before giving up.
+"""
+function upwinding_test(n::Int)
+    warm = join(["upwind.(ᶠv, ᶜf .* $(i).0)" for i in 1:n], " .+ ")
+    bench = join(["\$upwind.(\$ᶠv, \$ᶜf .* $(i).0)" for i in 1:n], " .+ ")
+
+    test_impl = create_column_space() * """
+
+    using ClimaCore.Operators
+
+    upwind = Operators.Upwind3rdOrderBiasedProductC2F(
+        bottom = Operators.ThirdOrderOneSided(),
+        top = Operators.ThirdOrderOneSided(),
+    )
+    ᶠv = Fields.Field(Geometry.WVector{FT}, face_space)
+    ᶜf = Fields.Field(FT, center_space)
+    fill!(Fields.field_values(ᶠv), Geometry.WVector(1.0))
+    fill!(Fields.field_values(ᶜf), 1.5)
+
+    # Warm up: $n Upwind3rdOrderBiasedProductC2F calls in one expression
+    _ = $warm
+
+    # Benchmark ClimaCore's kernel: $n 3rd-order upwind calls fused into one expression
+    trial = @benchmark $bench samples=10 evals=1
+
+    time_μs = minimum(trial.times) / 1000.0
+    @printf "TIMING: upwinding_3rdorder_$(n)_ops = %.6f s\\n" time_μs / 1e6
+    """
+
+    return generate_field_test_code("upwinding_3rdorder_$(n)_ops", test_impl)
 end
 
 # ============================================================================
@@ -516,7 +608,7 @@ Definition of a single test case for generation and execution.
 struct TestDef
     name::String
     description::String
-    operation_type::String    # "arithmetic", "projection", "multiarg", "functions"
+    operation_type::String    # "arithmetic", "projection", "multiarg", "functions", "divergence", "curl", "interpolate", "weighted_interpolate", "upwinding"
     complexity::Int           # nesting depth or argument count
     num_args::Int
     uses_geometry::Bool
@@ -524,35 +616,83 @@ struct TestDef
 end
 
 # Create test definitions
-const ALL_TESTS = [
-    # Arithmetic with varying depth
-    [TestDef("arithmetic_depth_$i", "Arithmetic operations with depth $i",
-             "arithmetic", i, 1, false,
-             () -> arithmetic_test(i)) for i in [1, 3, 5, 7, 10]]
+const ALL_TESTS =
+    [
+        # Arithmetic with varying depth
+        [
+            TestDef("arithmetic_depth_$i", "Arithmetic operations with depth $i",
+                "arithmetic", i, 1, false,
+                () -> arithmetic_test(i)) for i in [1, 3, 5, 7, 10]
+        ]
 
-    # Multiple arguments
-    [TestDef("multiarg_$(i)_args", "Operations with $i field arguments",
-             "multiarg", 1, i, false,
-             () -> multiarg_test(i)) for i in [2, 3, 4, 6, 8]]
+        # Multiple arguments
+        [
+            TestDef("multiarg_$(i)_args", "Operations with $i field arguments",
+                "multiarg", 1, i, false,
+                () -> multiarg_test(i)) for i in [2, 3, 4, 6, 8]
+        ]
 
-    # Function compositions
-    [TestDef("functions_log_depth_$i", "Log function composed $i times",
-             "functions", i, 1, false,
-             () -> functions_test(["log"], i)) for i in [1, 2, 3]]
+        # Function compositions
+        [
+            TestDef("functions_log_depth_$i", "Log function composed $i times",
+                "functions", i, 1, false,
+                () -> functions_test(["log"], i)) for i in [1, 2, 3]
+        ]
+        [
+            TestDef("functions_sqrt_depth_$i", "Sqrt function composed $i times",
+                "functions", i, 1, false,
+                () -> functions_test(["sqrt"], i)) for i in [1, 2, 3]
+        ]
+        [
+            TestDef("functions_mixed_depth_$i", "Mixed functions (log, sqrt, abs) depth $i",
+                "functions", i, 1, false,
+                () -> functions_test(["log", "sqrt", "abs"], i)) for i in [1, 2]
+        ]
 
-    [TestDef("functions_sqrt_depth_$i", "Sqrt function composed $i times",
-             "functions", i, 1, false,
-             () -> functions_test(["sqrt"], i)) for i in [1, 2, 3]]
+        # Projection operations
+        [
+            TestDef("projection_$(i)x_chained", "Chained projection operations x$i",
+                "projection", i, 1, true,
+                () -> projection_test(i)) for i in [1, 2, 3, 5]
+        ]
 
-    [TestDef("functions_mixed_depth_$i", "Mixed functions (log, sqrt, abs) depth $i",
-             "functions", i, 1, false,
-             () -> functions_test(["log", "sqrt", "abs"], i)) for i in [1, 2]]
+        # Divergence operations: pack N calls into one expression
+        [
+            TestDef("div_$(i)_ops", "$i Divergence calls in one expression",
+                "divergence", i, 1, true,
+                () -> div_test(i)) for i in [1, 2, 4, 6, 8]
+        ]
 
-    # Projection operations
-    [TestDef("projection_$(i)x_chained", "Chained projection operations x$i",
-             "projection", i, 1, true,
-             () -> projection_test(i)) for i in [1, 2, 3, 5]]
-] |> vec
+        # Curl operations: pack N calls into one expression
+        [
+            TestDef("curl_$(i)_ops", "$i Curl calls in one expression",
+                "curl", i, 1, true,
+                () -> curl_test(i)) for i in [1, 2, 4, 6, 8]
+        ]
+
+        # C2F interpolation: pack N calls into one expression
+        [
+            TestDef("interp_c2f_$(i)_ops", "$i InterpolateC2F calls in one expression",
+                "interpolate", i, 1, false,
+                () -> interp_test(i)) for i in [1, 2, 4, 6, 8]
+        ]
+
+        # Weighted C2F interpolation: pack N calls into one expression
+        [
+            TestDef("weighted_interp_c2f_$(i)_ops",
+                "$i WeightedInterpolateC2F calls in one expression",
+                "weighted_interpolate", i, 1, false,
+                () -> weighted_interp_test(i)) for i in [1, 2, 4, 6, 8]
+        ]
+
+        # Van Leer upwinding: pack N calls into one expression
+        [
+            TestDef("upwinding_3rdorder_$(i)_ops",
+                "$i Upwind3rdOrderBiasedProductC2F calls in one expression",
+                "upwinding", i, 1, false,
+                () -> upwinding_test(i)) for i in [1, 2, 4, 6, 8]
+        ]
+    ] |> vec
 
 # ============================================================================
 # EXECUTION AND REPORTING
@@ -632,12 +772,12 @@ end
 
 Run all tests and produce a report.
 """
-function main(; test_filter::Union{String, Nothing}=nothing)
-    println("=" ^ 90)
+function main(; test_filter::Union{String, Nothing} = nothing)
+    println("="^90)
     println("ClimaCore Compiler Stress Test Suite - Pointwise/Broadcast Operations")
     println("Device: $(DEVICE)")
     has_cuda_env() && println("CUDA warnings disabled to catch only actual failures")
-    println("=" ^ 90)
+    println("="^90)
     println()
 
     # Filter tests if requested
@@ -682,9 +822,9 @@ function main(; test_filter::Union{String, Nothing}=nothing)
     end
 
     println()
-    println("=" ^ 90)
+    println("="^90)
     println("Results")
-    println("=" ^ 90)
+    println("="^90)
     println()
 
     # Group by operation type
@@ -704,7 +844,7 @@ function main(; test_filter::Union{String, Nothing}=nothing)
 
         println("$op_type operations ($successful/$(length(type_results)) successful):")
 
-        for result in sort(type_results, by=r -> r.test_def.complexity)
+        for result in sort(type_results, by = r -> r.test_def.complexity)
             print_result(result)
         end
 
@@ -714,9 +854,9 @@ function main(; test_filter::Union{String, Nothing}=nothing)
     # Summary statistics
     successful = filter(r -> r.success, results)
     if !isempty(successful)
-        println("=" ^ 90)
+        println("="^90)
         println("Performance Summary")
-        println("=" ^ 90)
+        println("="^90)
 
         times = [r.time_seconds * 1e6 for r in successful]  # convert to microseconds
 
