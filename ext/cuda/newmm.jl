@@ -193,7 +193,7 @@ This calls `calc_level_val(bc, space)`, which  computes the value of the broadca
 and then copies the result into `out`.
 """
 Base.@propagate_inbounds function new_stencil_entry!(out, bc::BC, space) where {BC}
-    i = blockIdx().x
+    i = threadIdx().y
     j = blockIdx().y
     v = threadIdx().x
     h = blockIdx().z
@@ -220,7 +220,7 @@ Base.@propagate_inbounds function calc_level_val(
     bc::BC,
     space,
 ) where {BC <: Base.Broadcast.Broadcasted}
-    i = blockIdx().x
+    i = threadIdx().y
     j = blockIdx().y
     v = threadIdx().x
     h = blockIdx().z
@@ -276,6 +276,7 @@ Base.@propagate_inbounds function calc_level_val(
     BC <: StencilBroadcasted{S, Op},
 }
     v = threadIdx().x
+    i = threadIdx().y
     mat1_space =
         ClimaCore.Operators.reconstruct_placeholder_space(axes(bc.args[Int32(1)]), space)
 
@@ -287,8 +288,8 @@ Base.@propagate_inbounds function calc_level_val(
     mat2_row_converted =
         @inline @inbounds project_row2_for_mul(mat1_row, mat2_row, mat2_space)
     CUDA.sync_threads()
-    mat2 = CUDA.CuDynamicSharedArray(typeof(mat2_row_converted), Int32(64))
-    @inbounds mat2[v] = mat2_row_converted
+    mat2 = CUDA.CuDynamicSharedArray(typeof(mat2_row_converted), Int32(64), Int32(4))
+    @inbounds mat2[v, i] = mat2_row_converted
     CUDA.sync_threads()
     mat1_space.staggering isa ClimaCore.Spaces.CellCenter && v == Int32(64) &&
         return rzero(eltype(bc))
@@ -334,7 +335,7 @@ Base.@propagate_inbounds function calc_level_val(
     bc::BC,
     space,
 ) where {S, Op <: Operators.SetBoundaryOperator, BC <: StencilBroadcasted{S, Op}}
-    i = blockIdx().x
+    i = threadIdx().y
     j = blockIdx().y
     v = threadIdx().x
     h = blockIdx().z
@@ -366,7 +367,7 @@ Base.@propagate_inbounds function calc_level_val(
     bc::BC,
     space,
 ) where {S, Op <: Operators.LinVanLeerC2F, BC <: StencilBroadcasted{S, Op}}
-    i = blockIdx().x
+    i = threadIdx().y
     j = blockIdx().y
     v = threadIdx().x
     h = blockIdx().z
@@ -388,8 +389,7 @@ Base.@propagate_inbounds function calc_level_val(
     bc::BC,
     space,
 ) where {BC <: StencilBroadcasted}
-
-    i = blockIdx().x
+    i = threadIdx().y
     j = blockIdx().y
     v = threadIdx().x
     h = blockIdx().z
@@ -413,7 +413,7 @@ Base.@propagate_inbounds function calc_level_val(
     space,
 ) where {F <: ClimaCore.Fields.Field}
     data = ClimaCore.Fields.field_values(arg)
-    i = blockIdx().x
+    i = threadIdx().y
     j = blockIdx().y
     v = threadIdx().x
     h = blockIdx().z
@@ -451,7 +451,7 @@ Get the correct row of the operator matrix for the current thread, taking into a
 
 Base.@propagate_inbounds function get_op_row(op, args, space)
     FT = ClimaCore.Spaces.undertype(space)
-    i = blockIdx().x
+    i = threadIdx().y
     j = blockIdx().y
     v = threadIdx().x
     h = blockIdx().z
@@ -512,7 +512,7 @@ Base.@propagate_inbounds function project_row2_for_mul(mat1_row, mat2_row, space
         return mat2_row
     end
     v = threadIdx().x
-    i = blockIdx().x
+    i = threadIdx().y
     j = blockIdx().y
     v = threadIdx().x
     h = blockIdx().z
@@ -531,12 +531,4 @@ Base.@propagate_inbounds function project_row2_for_mul(mat1_row, mat2_row, space
         projection_tuple,
         mat2_row,
     )
-end
-
-# TODO: maybe delete this
-if hasfield(Method, :recursion_relation)
-    dont_limit = (args...) -> true
-    for m in methods(calc_level_val)
-        m.recursion_relation = dont_limit
-    end
 end

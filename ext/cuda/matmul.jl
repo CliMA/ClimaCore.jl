@@ -5,7 +5,7 @@ import ClimaCore.Utilities: half
 import ClimaCore.Operators
 import ClimaCore: Operators
 import ClimaCore.Geometry: ⊗
-import ClimaCore.RecursiveApply: rzero, ⊞, ⊠
+import ClimaCore.RecursiveApply: rzero, ⊞, ⊠, rmuladd, rmap
 import ClimaCore.Operators: AbstractStencilStyle, strip_space
 import ClimaCore.Operators: setidx!, getidx
 import ClimaCore.Operators: StencilBroadcasted
@@ -30,6 +30,7 @@ Base.@propagate_inbounds function row_mul_mat!(
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
+        i = threadIdx().y
         mat1_eltype = typeof(mat1_row)
         mat2_eltype = eltype(matrix2)
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
@@ -48,7 +49,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                     if ld2 <= pd - mat1_row_d <= ud2 &&
                        (Int32(0) < v + mat1_row_d + half <= Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
-                                  matrix2[v + mat1_row_d + half][pd - mat1_row_d]
+                                  matrix2[v + mat1_row_d + half, i][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -69,6 +70,7 @@ Base.@propagate_inbounds function row_mul_mat!(
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
+        i = threadIdx().y
         mat1_eltype = typeof(mat1_row)
         mat2_eltype = eltype(matrix2)
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
@@ -87,7 +89,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                     if ld2 <= pd - mat1_row_d <= ud2 &&
                        (Int32(0) < v + mat1_row_d - half < Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
-                                  matrix2[v + mat1_row_d - half][pd - mat1_row_d]
+                                  matrix2[v + mat1_row_d - half, i][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -108,6 +110,7 @@ Base.@propagate_inbounds function row_mul_mat!(
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
+        i = threadIdx().y
         mat1_eltype = typeof(mat1_row)
         mat2_eltype = eltype(matrix2)
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
@@ -125,7 +128,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                 UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
                     if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) < v + mat1_row_d <= Int32(63))
                         @inbounds mat1_row[mat1_row_d] *
-                                  matrix2[v + mat1_row_d][pd - mat1_row_d]
+                                  matrix2[v + mat1_row_d, i][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -146,6 +149,7 @@ Base.@propagate_inbounds function row_mul_mat!(
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
+        i = threadIdx().y
         mat1_eltype = typeof(mat1_row)
         mat2_eltype = eltype(matrix2)
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
@@ -163,7 +167,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                 UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
                     if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) < v + mat1_row_d <= Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
-                                  matrix2[v + mat1_row_d][pd - mat1_row_d]
+                                  matrix2[v + mat1_row_d, i][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -184,6 +188,7 @@ Base.@propagate_inbounds function row_mul_mat!(
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
+        i = threadIdx().y
         mat1_eltype = typeof(mat1_row)
         mat2_eltype = eltype(matrix2)
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
@@ -202,7 +207,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                     if ld2 <= pd - mat1_row_d <= ud2 &&
                        (Int32(0) < v + mat1_row_d + half <= Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
-                                  matrix2[v + mat1_row_d + half][pd - mat1_row_d]
+                                  matrix2[v + mat1_row_d + half, i][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -223,6 +228,7 @@ Base.@propagate_inbounds function row_mul_mat!(
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
+        i = threadIdx().y
         mat1_eltype = typeof(mat1_row)
         mat2_eltype = eltype(matrix2)
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
@@ -241,7 +247,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                     if ld2 <= pd - mat1_row_d <= ud2 &&
                        (Int32(0) < v + mat1_row_d - half < Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
-                                  matrix2[v + mat1_row_d - half][pd - mat1_row_d]
+                                  matrix2[v + mat1_row_d - half, i][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -262,6 +268,7 @@ Base.@propagate_inbounds function row_mul_mat!(
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
+        i = threadIdx().y
         mat1_eltype = typeof(mat1_row)
         mat2_eltype = eltype(matrix2)
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
@@ -279,7 +286,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                 UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
                     if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) < v + mat1_row_d <= Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
-                                  matrix2[v + mat1_row_d][pd - mat1_row_d]
+                                  matrix2[v + mat1_row_d, i][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -300,6 +307,7 @@ Base.@propagate_inbounds function row_mul_mat!(
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
+        i = threadIdx().y
         mat1_eltype = typeof(mat1_row)
         mat2_eltype = eltype(matrix2)
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
@@ -317,7 +325,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                 UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
                     if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) < v + mat1_row_d < Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
-                                  matrix2[v + mat1_row_d][pd - mat1_row_d]
+                                  matrix2[v + mat1_row_d, i][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -337,6 +345,7 @@ Base.@propagate_inbounds function row_mul_vec!(
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
+        i = threadIdx().y
         mat1_eltype = typeof(mat1_row)
         mat2_eltype = eltype(matrix2)
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
@@ -350,7 +359,7 @@ Base.@propagate_inbounds function row_mul_vec!(
             init = zero_entry,
         ) do mat1_row_d
             if (Int32(0) < v + mat1_row_d + half <= Int32(64))
-                @inbounds outer_or_mul(mat1_row[mat1_row_d], matrix2[v + mat1_row_d + half])
+                @inbounds outer_or_mul(mat1_row[mat1_row_d], matrix2[v + mat1_row_d + half, i])
             else
                 zero_entry
             end
@@ -367,6 +376,7 @@ Base.@propagate_inbounds function row_mul_vec!(
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
+        i = threadIdx().y
         mat1_eltype = typeof(mat1_row)
         mat2_eltype = eltype(matrix2)
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
@@ -381,7 +391,7 @@ Base.@propagate_inbounds function row_mul_vec!(
             init = zero_entry,
         ) do mat1_row_d
             if (Int32(0) < v + mat1_row_d - half < Int32(64))
-                @inbounds outer_or_mul(mat1_row[mat1_row_d], matrix2[v + mat1_row_d - half])
+                @inbounds outer_or_mul(mat1_row[mat1_row_d], matrix2[v + mat1_row_d - half, i])
             else
                 zero_entry
             end
@@ -398,6 +408,7 @@ Base.@propagate_inbounds function row_mul_vec!(
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
+        i = threadIdx().y
         mat1_eltype = typeof(mat1_row)
         mat2_eltype = eltype(matrix2)
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
@@ -411,7 +422,7 @@ Base.@propagate_inbounds function row_mul_vec!(
             init = zero_entry,
         ) do mat1_row_d
             if (Int32(0) < v + mat1_row_d <= Int32(63))
-                @inbounds outer_or_mul(mat1_row[mat1_row_d], matrix2[v + mat1_row_d])
+                @inbounds outer_or_mul(mat1_row[mat1_row_d], matrix2[v + mat1_row_d, i])
             else
                 zero_entry
             end
@@ -428,6 +439,7 @@ Base.@propagate_inbounds function row_mul_vec!(
     @inbounds begin
         prod_eltype = P
         v = threadIdx().x
+        i = threadIdx().y
         mat1_eltype = typeof(mat1_row)
         mat2_eltype = eltype(matrix2)
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
@@ -441,13 +453,16 @@ Base.@propagate_inbounds function row_mul_vec!(
             init = zero_entry,
         ) do mat1_row_d
             if (Int32(0) < v + mat1_row_d <= Int32(64))
-                @inbounds outer_or_mul(mat1_row[mat1_row_d], matrix2[v + mat1_row_d])
+                @inbounds outer_or_mul(mat1_row[mat1_row_d], matrix2[v + mat1_row_d, i])
             else
                 zero_entry
             end
         end
     end
 end
+
+# Base.@propagate_inbounds outer_or_mul_add(y::Y, mul_tuple::T) where {Y, W <: AbstractVector, X, T <: Tuple{W,X}} = rmuladd(mul_tuple[1], mul_tuple[2], y)
+# Base.@propagate_inbounds outer_or_mul_add(y::Y, mul_tuple::T) where {Y, W, X, T <: Tuple{W,Y}} = rmap(x -> rmuladd(mul_tuple[1], mul_tuple[2]), x)
 
 Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1 <: AbstractVector, T2} = x ⊗ y
 Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1, T2} = x * y
