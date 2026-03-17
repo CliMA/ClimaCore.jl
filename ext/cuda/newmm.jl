@@ -1,19 +1,16 @@
-import ClimaCore: Spaces, Quadratures, Topologies
+import ClimaCore: Spaces, Quadratures, Topologies, Operators
 import Base.Broadcast: Broadcasted
+import ClimaCore.Fields: Field, field_values
 import ClimaComms
 import ClimaCore.Utilities: half
 import ClimaCore.Operators
-import ClimaCore: Operators
 import ClimaCore.Geometry: ⊗
-import ClimaCore.RecursiveApply: rzero, ⊞
-import ClimaCore.Operators: AbstractStencilStyle, strip_space
-import ClimaCore.Operators: setidx!, getidx
-import ClimaCore.Operators: StencilBroadcasted
-import ClimaCore.Operators: LeftBoundaryWindow, RightBoundaryWindow, Interior
+import ClimaCore.RecursiveApply: rzero, ⊞, ⊠, rmuladd, rmap
+import ClimaCore.Operators: StencilBroadcasted, setidx!, getidx, reconstruct_placeholder_space
 import ClimaCore.MatrixFields: FaceToCenter, CenterToFace, Square, CenterToCenter,
     FaceToFace, TwoArgFDOperator, OneArgFDOperator, has_affine_bc, FDOperatorMatrix,
-    MultiplyColumnwiseBandMatrixField, operator_input_space
-import ClimaCore.MatrixFields
+    MultiplyColumnwiseBandMatrixField, operator_input_space, op_matrix_row_type, BandMatrixRow
+using ClimaCore.MatrixFields
 import ClimaCore.Utilities
 import ClimaCore
 using ClimaCore.MatrixFields
@@ -29,7 +26,7 @@ include("matmul.jl")
 
 Check if `x`, or the `eltype(x)` can fit in shared memory with the current config.
 """
-check_if_fits_in_shmem(bc::Union{StencilBroadcasted, Broadcasted, ClimaCore.Fields.Field}) =
+check_if_fits_in_shmem(bc::Union{StencilBroadcasted, Broadcasted, Field}) =
     sizeof(eltype(bc)) <= 36
 check_if_fits_in_shmem(val) = sizeof(typeof(val)) <= 36
 
@@ -56,7 +53,7 @@ end
 
 recursively_replace_fd_ops(
     bc::StencilBroadcasted{Style, Op, Args, Axes, Work},
-) where {Style, Op <: MatrixFields.FDOperatorMatrix, Args, Axes, Work} = bc
+) where {Style, Op <: FDOperatorMatrix, Args, Axes, Work} = bc
 function recursively_replace_fd_ops(
     bc::StencilBroadcasted{Style, Op, Args, Axes, Work},
 ) where {Style, Op, Args, Axes, Work}
@@ -108,7 +105,7 @@ function recursively_replace_fd_ops(
             bc.work,
         )
     elseif check_if_fits_in_shmem(bc.args[1]) && UnrolledUtilities.unrolled_all(
-        Base.Fix2(isa, ClimaCore.Operators.SetValue),
+        Base.Fix2(isa, Operators.SetValue),
         values(bc.op.bcs),
     )
         # SetBoundaryOperator is either the inner or outer depending on if the operator takes input from faces or centers
@@ -234,7 +231,7 @@ end
 """
     reconstruct_space_and_call_calc_level_val(arg, space)
 
-If `arg` is a `Broadcasted`, `StencilBroadcasted`, or `ClimaCore.Fields.Field`,
+If `arg` is a `Broadcasted`, `StencilBroadcasted`, or `Field`,
 reconstruct the space for the argument and call `calc_level_val` on it. This allows
 us to use Base.Fix2.
 """
@@ -242,9 +239,9 @@ Base.@propagate_inbounds reconstruct_space_and_call_calc_level_val(
     arg::A,
     space::S,
 ) where {
-    A <: Union{Base.Broadcast.Broadcasted, StencilBroadcasted, ClimaCore.Fields.Field},
+    A <: Union{Base.Broadcast.Broadcasted, StencilBroadcasted, Field},
     S,
-} = calc_level_val(arg, ClimaCore.Operators.reconstruct_placeholder_space(axes(arg), space))
+} = calc_level_val(arg, reconstruct_placeholder_space(axes(arg), space))
 Base.@propagate_inbounds reconstruct_space_and_call_calc_level_val(
     arg::A,
     space::S,
@@ -253,7 +250,7 @@ Base.@propagate_inbounds reconstruct_space_and_call_calc_level_val(
 """
     calc_level_val(val::T, space)
 
-If `val` is not a `Broadcasted`, `StencilBroadcasted`, or `ClimaCore.Fields.Field`, just return `val`.
+If `val` is not a `Broadcasted`, `StencilBroadcasted`, or `Field`, just return `val`.
 If it is a `Ref`, return `val[]`. If it is a one element tuple, return the element.
 """
 Base.@propagate_inbounds calc_level_val(val::T, space) where {T <: Ref} = val[]
@@ -272,28 +269,31 @@ Base.@propagate_inbounds function calc_level_val(
     space,
 ) where {
     S,
-    Op <: ClimaCore.MatrixFields.MultiplyColumnwiseBandMatrixField,
+    Op <: MultiplyColumnwiseBandMatrixField,
     BC <: StencilBroadcasted{S, Op},
 }
     v = threadIdx().x
     i = threadIdx().y
     mat1_space =
-        ClimaCore.Operators.reconstruct_placeholder_space(axes(bc.args[Int32(1)]), space)
-
+        reconstruct_placeholder_space(axes(bc.args[Int32(1)]), space)
     @inline @inbounds mat2_space =
-        ClimaCore.Operators.reconstruct_placeholder_space(axes(bc.args[Int32(2)]), space)
+        reconstruct_placeholder_space(axes(bc.args[Int32(2)]), space)
 
     mat2_row = @inline @inbounds calc_level_val(bc.args[Int32(2)], mat2_space)
     mat1_row = @inline @inbounds calc_level_val(bc.args[Int32(1)], mat1_space)
+    # project before placing in shared memory to avoid projecting multiple times
     mat2_row_converted =
         @inline @inbounds project_row2_for_mul(mat1_row, mat2_row, mat2_space)
+    # It should be possible to use static shared memory here, but it allocates new shared memory
+    # for each layer of recursion
     CUDA.sync_threads()
-    mat2 = CUDA.CuDynamicSharedArray(typeof(mat2_row_converted), Int32(64), Int32(4))
+    mat2 = CUDA.CuDynamicSharedArray(typeof(mat2_row_converted), Int32(64), CUDA.blockDim().y)
     @inbounds mat2[v, i] = mat2_row_converted
     CUDA.sync_threads()
-    mat1_space.staggering isa ClimaCore.Spaces.CellCenter && v == Int32(64) &&
+    # if the output is on centers, the 64th thread can just return 0
+    mat1_space.staggering isa Spaces.CellCenter && v == Int32(64) &&
         return rzero(eltype(bc))
-    if mat1_space.staggering isa ClimaCore.Spaces.CellCenter
+    if mat1_space.staggering isa Spaces.CellCenter
         mat1_shape =
             eltype(ClimaCore.MatrixFields.outer_diagonals(typeof(mat1_row))) <:
             ClimaCore.Utilities.PlusHalf ? FaceToCenter() : CenterToCenter()
@@ -304,7 +304,8 @@ Base.@propagate_inbounds function calc_level_val(
     end
 
     if mat2_row_converted isa ClimaCore.MatrixFields.BandMatrixRow
-        if mat2_space.staggering isa ClimaCore.Spaces.CellCenter
+        # mat * mat case
+        if mat2_space.staggering isa Spaces.CellCenter
             mat2_shape =
                 eltype(ClimaCore.MatrixFields.outer_diagonals(typeof(mat2_row))) <:
                 ClimaCore.Utilities.PlusHalf ? FaceToCenter() : CenterToCenter()
@@ -313,7 +314,6 @@ Base.@propagate_inbounds function calc_level_val(
                 eltype(ClimaCore.MatrixFields.outer_diagonals(typeof(mat2_row))) <:
                 ClimaCore.Utilities.PlusHalf ? CenterToFace() : FaceToFace()
         end
-
         return @inline @inbounds row_mul_mat!(
             eltype(bc),
             mat1_row,
@@ -322,6 +322,7 @@ Base.@propagate_inbounds function calc_level_val(
             mat2_shape,
         )
     else
+        # mat * vec case
         return @inline @inbounds row_mul_vec!(eltype(bc), mat1_row, mat2, mat1_shape)
     end
 end
@@ -343,13 +344,13 @@ Base.@propagate_inbounds function calc_level_val(
     # we know it is on face staggered space
     v_half = v - half
     inner_val = @inline @inbounds calc_level_val(bc.args[Int32(1)], space)
-    if ClimaCore.Operators.should_call_left_boundary(v_half, space, bc.op, nothing)
-        lloc = ClimaCore.Operators.left_boundary_window(space)
-        left_bndry = ClimaCore.Operators.get_boundary(bc.op, lloc)
+    if Operators.should_call_left_boundary(v_half, space, bc.op, nothing)
+        lloc = Operators.left_boundary_window(space)
+        left_bndry = Operators.get_boundary(bc.op, lloc)
         return @inbounds @inline calc_level_val(left_bndry.val, space)
-    elseif ClimaCore.Operators.should_call_right_boundary(v_half, space, bc.op, nothing)
-        rroc = ClimaCore.Operators.right_boundary_window(space)
-        right_bndry = ClimaCore.Operators.get_boundary(bc.op, rroc)
+    elseif Operators.should_call_right_boundary(v_half, space, bc.op, nothing)
+        rroc = Operators.right_boundary_window(space)
+        right_bndry = Operators.get_boundary(bc.op, rroc)
         return @inbounds @inline calc_level_val(right_bndry.val, space)
     else
         return @inbounds @inline inner_val
@@ -376,7 +377,7 @@ Base.@propagate_inbounds function calc_level_val(
         return zero(eltype(bc))
     end
     idx = v - half
-     return @inline @inbounds Operators.getidx(space, bc, idx, hidx)
+    return @inline @inbounds getidx(space, bc, idx, hidx)
 end
 
 """
@@ -394,12 +395,12 @@ Base.@propagate_inbounds function calc_level_val(
     v = threadIdx().x
     h = blockIdx().z
     hidx = (i, j, h)
-    if space.staggering isa ClimaCore.Spaces.CellCenter
+    if space.staggering isa Spaces.CellCenter
         v == Int32(64) && return @inline @inbounds rzero(eltype(bc))
     end
-    li = space.staggering isa ClimaCore.Spaces.CellCenter ? Int32(1) : half
+    li = space.staggering isa Spaces.CellCenter ? Int32(1) : half
     idx = v - Int32(1) + li
-    return @inline @inbounds Operators.getidx(space, bc, idx, hidx)
+    return @inline @inbounds getidx(space, bc, idx, hidx)
 end
 
 """
@@ -411,13 +412,13 @@ When the staggering of `space` is `CellCenter`, the thread with `v == 64` return
 Base.@propagate_inbounds function calc_level_val(
     arg::F,
     space,
-) where {F <: ClimaCore.Fields.Field}
-    data = ClimaCore.Fields.field_values(arg)
+) where {F <: Field}
+    data = field_values(arg)
     i = threadIdx().y
     j = blockIdx().y
     v = threadIdx().x
     h = blockIdx().z
-    if space.staggering isa ClimaCore.Spaces.CellCenter
+    if space.staggering isa Spaces.CellCenter
         v == Int32(64) && return @inline @inbounds rzero(eltype(data))
     end
     return @inline @inbounds data[CartesianIndex(i, j, Int32(1), v, h)]
@@ -434,7 +435,7 @@ Base.@propagate_inbounds function calc_level_val(
 ) where {
     S,
     BC <:
-    ClimaCore.Operators.StencilBroadcasted{S, <:ClimaCore.MatrixFields.FDOperatorMatrix},
+    StencilBroadcasted{S, <:FDOperatorMatrix},
 }
     op = bc.op.op
     args = bc.args
@@ -450,7 +451,7 @@ Get the correct row of the operator matrix for the current thread, taking into a
 """
 
 Base.@propagate_inbounds function get_op_row(op, args, space)
-    FT = ClimaCore.Spaces.undertype(space)
+    FT = Spaces.undertype(space)
     i = threadIdx().y
     j = blockIdx().y
     v = threadIdx().x
@@ -458,20 +459,20 @@ Base.@propagate_inbounds function get_op_row(op, args, space)
     hidx = (i, j, h)
 
     outputs_to_face = space.staggering isa ClimaCore.Grids.CellFace
-    row_type = ClimaCore.MatrixFields.op_matrix_row_type(op, FT, args[1:(end - 1)]...)
+    row_type = op_matrix_row_type(op, FT, args[1:(end - 1)]...)
     if !outputs_to_face && v == Int32(64)
         return rzero(row_type)
     end
     v_half = outputs_to_face ? v - half : v
-    in_left_bnd = ClimaCore.Operators.should_call_left_boundary(v_half, space, op, nothing)
+    in_left_bnd = Operators.should_call_left_boundary(v_half, space, op, nothing)
     in_right_bnd =
-        ClimaCore.Operators.should_call_right_boundary(v_half, space, op, nothing)
-    op_matrix = ClimaCore.MatrixFields.FDOperatorMatrix(op)
-
+        Operators.should_call_right_boundary(v_half, space, op, nothing)
+    op_matrix = FDOperatorMatrix(op)
+    # boundaries can return different row types
     if in_left_bnd
-        lloc = ClimaCore.Operators.left_boundary_window(space)
-        left_bndry = ClimaCore.Operators.get_boundary(op, lloc)
-        raw_val = ClimaCore.Operators.stencil_left_boundary(
+        lloc = Operators.left_boundary_window(space)
+        left_bndry = Operators.get_boundary(op, lloc)
+        raw_val = Operators.stencil_left_boundary(
             op_matrix,
             left_bndry,
             space,
@@ -481,9 +482,9 @@ Base.@propagate_inbounds function get_op_row(op, args, space)
         )
         val = convert(row_type, raw_val)
     elseif in_right_bnd
-        rroc = ClimaCore.Operators.right_boundary_window(space)
-        right_bndry = ClimaCore.Operators.get_boundary(op, rroc)
-        raw_val = ClimaCore.Operators.stencil_right_boundary(
+        rroc = Operators.right_boundary_window(space)
+        right_bndry = Operators.get_boundary(op, rroc)
+        raw_val = Operators.stencil_right_boundary(
             op_matrix,
             right_bndry,
             space,
@@ -494,7 +495,7 @@ Base.@propagate_inbounds function get_op_row(op, args, space)
         val = convert(row_type, raw_val)
     else
         raw_val =
-            ClimaCore.Operators.stencil_interior(op_matrix, space, v_half, hidx, args...)
+            Operators.stencil_interior(op_matrix, space, v_half, hidx, args...)
         val = convert(row_type, raw_val)
     end
     return val
@@ -507,7 +508,6 @@ end
 Project's `mat2_row` onto the correct axis for multiplication with `mat1_row` if necessary, and returns the projected row.
 """
 Base.@propagate_inbounds function project_row2_for_mul(mat1_row, mat2_row, space)
-
     if !ClimaCore.Geometry.needs_projection(typeof(mat1_row), typeof(mat2_row))
         return mat2_row
     end
@@ -519,10 +519,10 @@ Base.@propagate_inbounds function project_row2_for_mul(mat1_row, mat2_row, space
     hidx = (i, j, h)
     project_onto =
         ClimaCore.Geometry.recursively_find_dual_axes_for_projection(typeof(mat1_row))
-    if space.staggering isa ClimaCore.Spaces.CellCenter && v == Int32(64)
-        lg = rzero(ClimaCore.Spaces.local_geometry_type(typeof(space)))
+    if space.staggering isa Spaces.CellCenter && v == Int32(64)
+        lg = rzero(Spaces.local_geometry_type(typeof(space)))
     else
-        v_maybe_half = space.staggering isa ClimaCore.Spaces.CellFace ? v - half : v
+        v_maybe_half = space.staggering isa Spaces.CellFace ? v - half : v
         @inbounds lg = Geometry.LocalGeometry(space, v_maybe_half, hidx)
     end
     # put needed info into tuple so we can use Base.Fix2

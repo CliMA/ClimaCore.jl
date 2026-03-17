@@ -1,25 +1,7 @@
-import ClimaCore: Spaces, Quadratures, Topologies
-import Base.Broadcast: Broadcasted
-import ClimaComms
-import ClimaCore.Utilities: half
-import ClimaCore.Operators
-import ClimaCore: Operators
-import ClimaCore.Geometry: ⊗
-import ClimaCore.RecursiveApply: rzero, ⊞, ⊠, rmuladd, rmap
-import ClimaCore.Operators: AbstractStencilStyle, strip_space
-import ClimaCore.Operators: setidx!, getidx
-import ClimaCore.Operators: StencilBroadcasted
-import ClimaCore.Operators: LeftBoundaryWindow, RightBoundaryWindow, Interior
-import ClimaCore.MatrixFields:
-    FaceToCenter, CenterToFace, Square, CenterToCenter, FaceToFace
-import ClimaCore.MatrixFields
-import ClimaCore
-using ClimaCore.MatrixFields
-using LinearAlgebra
-import UnrolledUtilities
-
-# DO NOT COPY ANY PATTERNS SEEN HERE. This could all be written in two functions.
-
+# row_mul_mat! handles banded matrix * banded matrix. There are 8 methods, but they all have the
+# same structure, so we they could be written as a single method.
+# The others can be obtained by copy-pasting and changing the indices appropriately.
+# Note that these are all specialized for 64 faces , so the indices are hardcoded.
 Base.@propagate_inbounds function row_mul_mat!(
     ::Type{P},
     mat1_row,
@@ -36,10 +18,8 @@ Base.@propagate_inbounds function row_mul_mat!(
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
         ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
         pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
-
         li = Int32(1)
         ri = Int32(63)
-
         zero_entry = rzero(eltype(prod_eltype))
         prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
             if v + pd < li || v + pd > ri
@@ -56,7 +36,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                 end
             end
         end
-        return ClimaCore.MatrixFields.BandMatrixRow{pd1}(prod_entries...)
+        return BandMatrixRow{pd1}(prod_entries...)
     end
 end
 
@@ -76,10 +56,8 @@ Base.@propagate_inbounds function row_mul_mat!(
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
         ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
         pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
-
         li = Int32(1)
         ri = Int32(64)
-
         zero_entry = rzero(eltype(prod_eltype))
         prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
             if v + pd < li || v + pd > ri
@@ -96,7 +74,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                 end
             end
         end
-        return ClimaCore.MatrixFields.BandMatrixRow{pd1}(prod_entries...)
+        return BandMatrixRow{pd1}(prod_entries...)
     end
 end
 
@@ -116,10 +94,8 @@ Base.@propagate_inbounds function row_mul_mat!(
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
         ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
         pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
-
         li = Int32(1)
         ri = Int32(63)
-
         zero_entry = rzero(eltype(prod_eltype))
         prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
             if v + pd < li || v + pd > ri
@@ -135,7 +111,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                 end
             end
         end
-        return ClimaCore.MatrixFields.BandMatrixRow{pd1}(prod_entries...)
+        return BandMatrixRow{pd1}(prod_entries...)
     end
 end
 
@@ -174,7 +150,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                 end
             end
         end
-        return ClimaCore.MatrixFields.BandMatrixRow{pd1}(prod_entries...)
+        return BandMatrixRow{pd1}(prod_entries...)
     end
 end
 
@@ -194,10 +170,8 @@ Base.@propagate_inbounds function row_mul_mat!(
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
         ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
         pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
-
         li = Int32(1)
         ri = Int32(64)
-
         zero_entry = rzero(eltype(prod_eltype))
         prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
             if v + pd + half < li || v + pd + half > ri
@@ -214,7 +188,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                 end
             end
         end
-        return ClimaCore.MatrixFields.BandMatrixRow{pd1}(prod_entries...)
+        return BandMatrixRow{pd1}(prod_entries...)
     end
 end
 
@@ -234,10 +208,8 @@ Base.@propagate_inbounds function row_mul_mat!(
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
         ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
         pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
-
         li = Int32(1)
         ri = Int32(64)
-
         zero_entry = rzero(eltype(prod_eltype))
         prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
             if v + pd + half < li || v + pd + half > ri
@@ -254,7 +226,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                 end
             end
         end
-        return ClimaCore.MatrixFields.BandMatrixRow{pd1}(prod_entries...)
+        return BandMatrixRow{pd1}(prod_entries...)
     end
 end
 
@@ -274,10 +246,8 @@ Base.@propagate_inbounds function row_mul_mat!(
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
         ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
         pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
-
         li = Int32(1)
         ri = Int32(64)
-
         zero_entry = rzero(eltype(prod_eltype))
         prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
             if v + pd + half < li || v + pd + half > ri
@@ -293,7 +263,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                 end
             end
         end
-        return ClimaCore.MatrixFields.BandMatrixRow{pd1}(prod_entries...)
+        return BandMatrixRow{pd1}(prod_entries...)
     end
 end
 
@@ -313,10 +283,8 @@ Base.@propagate_inbounds function row_mul_mat!(
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
         ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
         pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
-
         li = Int32(1)
         ri = Int32(64)
-
         zero_entry = rzero(eltype(prod_eltype))
         prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
             if v + pd + half < li || v + pd + half > ri
@@ -332,10 +300,14 @@ Base.@propagate_inbounds function row_mul_mat!(
                 end
             end
         end
-        return ClimaCore.MatrixFields.BandMatrixRow{pd1}(prod_entries...)
+        return BandMatrixRow{pd1}(prod_entries...)
     end
 end
 
+# row_mul_vec! handles banded matrix * vector. There are four methods, but they all have the
+# same structure, so we they could be written as a single method.
+# The others can be obtained by copy-pasting and changing the indices appropriately.
+# Note that these are all specialized for 64 faces , so the indices are hardcoded.
 Base.@propagate_inbounds function row_mul_vec!(
     ::Type{P},
     mat1_row,
@@ -351,7 +323,6 @@ Base.@propagate_inbounds function row_mul_vec!(
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
         li = Int32(1)
         ri = Int32(63)
-
         zero_entry = rzero(prod_eltype)
         return UnrolledUtilities.unrolled_mapreduce(
             ⊞,
@@ -382,7 +353,6 @@ Base.@propagate_inbounds function row_mul_vec!(
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
         li = Int32(1)
         ri = Int32(64)
-
         zero_entry = rzero(prod_eltype)
         val = zero_entry
         return UnrolledUtilities.unrolled_mapreduce(
@@ -414,7 +384,6 @@ Base.@propagate_inbounds function row_mul_vec!(
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
         li = Int32(1)
         ri = Int32(63)
-
         zero_entry = rzero(prod_eltype)
         return UnrolledUtilities.unrolled_mapreduce(
             ⊞,
@@ -445,7 +414,6 @@ Base.@propagate_inbounds function row_mul_vec!(
         ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
         li = Int32(1)
         ri = Int32(64)
-
         zero_entry = rzero(prod_eltype)
         return UnrolledUtilities.unrolled_mapreduce(
             ⊞,
@@ -461,11 +429,12 @@ Base.@propagate_inbounds function row_mul_vec!(
     end
 end
 
-# Base.@propagate_inbounds outer_or_mul_add(y::Y, mul_tuple::T) where {Y, W <: AbstractVector, X, T <: Tuple{W,X}} = rmuladd(mul_tuple[1], mul_tuple[2], y)
-# Base.@propagate_inbounds outer_or_mul_add(y::Y, mul_tuple::T) where {Y, W, X, T <: Tuple{W,Y}} = rmap(x -> rmuladd(mul_tuple[1], mul_tuple[2]), x)
-
-Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1 <: AbstractVector, T2} = x ⊗ y
+# Handles multiplication in row_mul_vec!.
+# Basically rmul, but some operators matrices require special handling
+# general case
 Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1, T2} = x * y
+# case for grad of a vec
+Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1 <: AbstractVector, T2} = x ⊗ y
 Base.@propagate_inbounds outer_or_mul(
     x::T1,
     y::T2,
@@ -475,6 +444,7 @@ Base.@propagate_inbounds outer_or_mul(
     y::T2,
 ) where {T1 <: AbstractVector, T2 <: Union{Tuple, NamedTuple}} =
     RecursiveApply.rmap(Base.Fix1(outer_or_mul, x), y)
+# case for divgrad of a vec?
 Base.@propagate_inbounds outer_or_mul(
     x::T1,
     y::T2,

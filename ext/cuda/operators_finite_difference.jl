@@ -86,7 +86,7 @@ function Base.copyto!(
         #  Specialized kernel launch for common case.  This uses block and grid indices
         # instead of computing cartesian indices from a linear index
         if !Topologies.isperiodic(space) && mask isa NoMask && n_face_levels == 64
-            if true && Ni <= 4
+            if true
                 new_bc = recursively_replace_fd_ops(bc′)
                 args = (
                     strip_space(out, space),
@@ -95,7 +95,7 @@ function Base.copyto!(
                 )
                 mykr =
                     CUDA.@cuda always_inline = true fastmath = true threads = (64, Ni, 1) blocks =
-                        (1, Nj, Nh) shmem = 64 * 4 * 9 * 4 new_stencil_entry!(args...)
+                        (1, Nj, Nh) shmem = 64 * Ni * 9 * 4 new_stencil_entry!(args...)
                 return out
             end
 
