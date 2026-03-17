@@ -1,88 +1,86 @@
 using ClimaCore, CUDA, LinearAlgebra
 import ClimaCore: Operators, Fields, Geometry, Grids, Meshes
 
+# --- Setup: Minimal ClimaCore Context ---
 function setup_context()
     domain = Geometry.SphereDomain(6.37122e6)
     mesh = Meshes.EquiangularCubedSphere(domain, 4)
     grid_obj = Grids.LevelGrid(mesh, 4)
-
-    # State: Scalar (rho), Velocity (u), and a Weight field (w)
     ftype = NamedTuple{(:rho, :u, :w), NTuple{3, Float64}}
-    field = Fields.zeros(ftype, grid_obj)
-    return field
+    return Fields.zeros(ftype, grid_obj)
 end
 
+# --- Expression Factory ---
 function apply_ops(field, depth, mode)
     if depth <= 0
         return field
     end
-
-    # --- Operators ---
-    I = Operators.InterpolateC2F()
-    # Upwinding requires a "velocity" or direction
     U = Operators.UpwindBiasedProductC2F()
-    # Weighted interpolation uses a third field as a weight
     WI = Operators.WeightedInterpolateC2F()
-
     prev = apply_ops(field, depth - 1, mode)
 
     if mode == :upwind
-        # Upwinding increases register pressure by tracking 'upwind' and 'downwind' states
         return @. U(field.u, prev.rho)
     elseif mode == :weighted
-        # WeightedInterpolate requires more registers to store the weight intermediate
         return @. WI(field.w, prev.rho)
     elseif mode == :clima_chaos
-        # Combining everything: The "Ultimate Stressor"
-        # Nested Upwinding inside a Weighted Interpolation
-        return @. U(field.u, WI(field.w, prev.rho))
+        # Combining non-local operators with math
+        return @. U(field.u, WI(field.w, prev.rho)) + sin(prev.rho)
     end
 end
 
-function get_register_count(ptx_string)
-    m = match(r"\.reg\s+\.\w+\s+%\w+<(\d+)>", ptx_string)
-    return m === nothing ? "N/A" : m.captures[1]
+# --- PTX Introspection ---
+function analyze_ptx(ptx_string)
+    # 1. Extract Register Count
+    reg_match = match(r"\.reg\s+\.\w+\s+%\w+<(\d+)>", ptx_string)
+    regs = reg_match === nothing ? "0" : reg_match.captures[1]
+
+    # 2. Extract Local (Stack) Memory Usage
+    # Look for ".local .align 8 .b8 __local_depot0[128];"
+    local_match = match(r"\.local\s+\.align\s+\d+\s+\.\w+\s+\w+\[(\d+)\]", ptx_string)
+    stack_bytes = local_match === nothing ? "0" : local_match.captures[1]
+
+    return regs, stack_bytes
 end
 
-function run_comprehensive_analysis()
+# --- The Analysis Loop ---
+function run_deep_analysis()
     field = setup_context()
-    modes = [:upwind, :weighted, :clima_chaos]
+    modes = [:upwind, :clima_chaos]
 
-    println(rpad("Mode", 15), "| Depth | Registers | Time (s) | Status")
-    println("-"^55)
+    println(rpad("Mode", 12), "| Depth | Regs | Stack (B) | Time (s) | Status")
+    println("-"^60)
 
     for mode in modes
-        for d in 1:10
-            # We add a random float to the expression to 'poison' the cache
-            # This ensures the compiler sees a unique expression every time
-            poison = rand()
-
+        for d in 1:15
+            # Invalidate compiler cache by generating a unique type
+            # We use a wrapper with a unique integer to force a fresh compile
             t_start = time()
-            reg_count = "Error"
+            regs, stack = "0", "0"
             status = "Success"
 
             try
                 ptx = CUDA.code_ptx() do
-                    # Adding poison forces a re-compile if you were to run this twice
-                    res = @. apply_ops(field, d, mode) + poison
+                    # The broadcast kernel we want to inspect
+                    res = apply_ops(field, d, mode)
                     CUDA.@sync res
                 end
-                reg_count = get_register_count(ptx)
+                regs, stack = analyze_ptx(ptx)
             catch e
-                status = "Compiler Fail"
-                reg_count = ">255"
+                status = "COMPILER FAIL"
             end
 
             elapsed = round(time() - t_start, digits = 2)
+
+            # Highlight if spilling is occurring
+            stack_display = parse(Int, stack) > 0 ? "! $stack !" : stack
+
             println(
-                rpad(mode, 15),
-                " | ",
-                rpad(d, 5),
-                " | ",
-                rpad(reg_count, 9),
-                " | ",
-                rpad(elapsed, 8),
-                " | ",
+                rpad(mode, 12), " | ",
+                rpad(d, 5), " | ",
+                rpad(regs, 4), " | ",
+                rpad(stack_display, 9), " | ",
+                rpad(elapsed, 8), " | ",
                 status,
             )
 
@@ -93,4 +91,4 @@ function run_comprehensive_analysis()
     end
 end
 
-run_comprehensive_analysis()
+run_deep_analysis()
