@@ -445,31 +445,29 @@ Generate test code for projection operations on geometric objects.
 ClimaCore automatically generates kernels from the broadcast operation.
 """
 function projection_test(complexity::Int)
-    # Build multiple chained projections
-    proj_chain = join(
+    # Use @. macro so ClimaCore can supply LocalGeometry during the fused broadcast
+    proj_terms = join(
         ["Geometry.project(Geometry.Covariant12Axis(), v)" for _ in 1:complexity],
-        " + ",
+        " .+ ",
     )
+    test_name = "projection_$(complexity)x_chained"
 
     test_impl = create_spectral_space() * """
 
-    v = Fields.Field(Geometry.Contravariant12Vector{FT}, space)
-    fill!(Fields.field_values(v), Geometry.Contravariant12Vector(1.0, 2.0))
-
-    op(v) = $proj_chain
+    v = Fields.Field(Geometry.Covariant12Vector{FT}, space)
+    fill!(Fields.field_values(v), Geometry.Covariant12Vector(1.0, 2.0))
 
     # Warm up compilation
-    _ = op(v)
-    _ = op.(v)
+    _ = @. $proj_terms
 
-    # Benchmark ClimaCore's generated kernel
-    trial = @benchmark \$op.(\$v) samples=10 evals=1
+    # Benchmark: $complexity fused project calls in one @. expression
+    trial = @benchmark (v = \$v; @. $proj_terms) samples=10 evals=1
 
     time_μs = minimum(trial.times) / 1000.0
-    @printf "TIMING: projection_$(complexity)x = %.6f s\\n" time_μs / 1e6
+    @printf "TIMING: $(test_name) = %.6f s\\n" time_μs / 1e6
     """
 
-    return generate_field_test_code("projection_$(complexity)x", test_impl)
+    return generate_field_test_code(test_name, test_impl)
 end
 
 """
