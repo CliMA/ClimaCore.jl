@@ -13,9 +13,7 @@ import ClimaCore:
     Spaces,
     Quadratures,
     Topologies,
-    DataLayouts,
-    RecursiveApply
-
+    DataLayouts
 const C1 = ClimaCore.Geometry.Covariant1Vector
 const C2 = ClimaCore.Geometry.Covariant2Vector
 const C3 = ClimaCore.Geometry.Covariant3Vector
@@ -24,8 +22,6 @@ const C123 = ClimaCore.Geometry.Covariant123Vector
 const CT123 = Geometry.Contravariant123Vector
 const ᶜinterp = Operators.InterpolateF2C()
 const ᶠinterp = Operators.InterpolateC2F()
-
-const ⊞ = RecursiveApply.radd
 
 init_uθ(ϕ, z, R) = 1.0 / R
 init_vθ(ϕ, z, R) = 1.0 / R

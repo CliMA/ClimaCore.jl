@@ -1,8 +1,4 @@
 import LinearAlgebra: Adjoint, AdjointAbsVec
-import .RecursiveApply: rmap, rmaptype
-# import LinearAlgebra: I, UniformScaling, Adjoint, AdjointAbsVec
-# Types that are treated as single values when using matrix fields.
-const SingleValue = Union{Number, AxisTensor, AdjointAxisTensor}
 
 """
     mul_with_projection(x, y, lg)
@@ -16,17 +12,6 @@ be projected onto the dual of the last axis of `x`.
 mul_with_projection(x, y, _) = x * y
 mul_with_projection(x::Union{AdjointAxisVector, Axis2TensorOrAdj}, y::AxisTensor, lg) =
     x * project(dual(axes(x)[2]), y, lg)
-
-"""
-    rmul_with_projection(x, y, lg)
-
-Similar to `rmul(x, y)`, except that this version calls `mul_with_projection`
-instead of `*`.
-"""
-rmul_with_projection(x, y, lg) = rmap((x′, y′) -> mul_with_projection(x′, y′, lg), x, y)
-rmul_with_projection(x::SingleValue, y, lg) = rmap(y′ -> mul_with_projection(x, y′, lg), y)
-rmul_with_projection(x, y::SingleValue, lg) = rmap(x′ -> mul_with_projection(x′, y, lg), x)
-rmul_with_projection(x::SingleValue, y::SingleValue, lg) = mul_with_projection(x, y, lg)
 
 axis_tensor_type(::Type{T}, ::Type{Tuple{A1}}) where {T, A1} =
     AxisVector{T, A1, SVector{_length(A1), T}}
@@ -105,22 +90,3 @@ mul_return_type(
     ::Type{X}, ::Type{Y},
 ) where {T1, T2, X <: Axis2TensorOrAdj{T1}, Y <: Axis2TensorOrAdj{T2}} =
     axis_tensor_type(promote_type(T1, T2), Tuple{axis1(X), axis2(Y)})
-
-"""
-    rmul_return_type(X, Y)
-
-Computes the return type of `rmul_with_projection(x, y, lg)`, where `x isa X`
-and `y isa Y`. This can also be used to obtain the return type of `rmul(x, y)`,
-although `rmul(x, y)` will throw an error when projection is necessary.
-
-Note that this is equivalent to calling the internal function `_return_type`:
-`Base._return_type(rmul_with_projection, Tuple{X, Y, LG})`, where `lg isa LG`.
-"""
-rmul_return_type(::Type{X}, ::Type{Y}) where {X, Y} =
-    rmaptype((X′, Y′) -> mul_return_type(X′, Y′), X, Y)
-rmul_return_type(::Type{X}, ::Type{Y}) where {X <: SingleValue, Y} =
-    rmaptype(Y′ -> mul_return_type(X, Y′), Y)
-rmul_return_type(::Type{X}, ::Type{Y}) where {X, Y <: SingleValue} =
-    rmaptype(X′ -> mul_return_type(X′, Y), X)
-rmul_return_type(::Type{X}, ::Type{Y}) where {X <: SingleValue, Y <: SingleValue} =
-    mul_return_type(X, Y)

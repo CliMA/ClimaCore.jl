@@ -16,9 +16,9 @@ for them:
 - Matrix-matrix multiplication, e.g., `@. matrix_field1 * matrix_field2`
 - Compatibility with `LinearAlgebra.I`, e.g., `@. matrix_field = (4I,)` or
     `@. matrix_field - (4I,)`
-- Integration with `RecursiveApply`, e.g., the entries of `matrix_field` can be
-    `Tuple`s or `NamedTuple`s instead of single values, which allows
-    `matrix_field` to represent multiple band matrices at the same time
+- Compatibility with generic data types, e.g., the entries of `matrix_field` can
+    be iterators instead of single values, which allows `matrix_field` to
+    represent multiple band matrices at the same time
 - Integration with `Operators`, e.g., the `matrix_field` that gets applied to
     the argument of any `FiniteDifferenceOperator` `op` can be obtained using
     the `FiniteDifferenceOperator` `operator_matrix(op)`
@@ -35,9 +35,6 @@ multiples of `LinearAlgebra.I`. This comes with the following functionality:
 - Addition and subtraction, e.g., `@. field_matrix1 + field_matrix2`
 - Matrix-vector multiplication, e.g., `@. field_matrix * field_vector`
 - Matrix-matrix multiplication, e.g., `@. field_matrix1 * field_matrix2`
-- Integration with `RecursiveApply`, e.g., the entries of `field_matrix` can be
-    specified either as matrix `Field`s of `Tuple`s or `NamedTuple`s, or as
-    separate matrix `Field`s of single values
 - The ability to solve linear equations using `FieldMatrixSolver`, which is a
     generalization of `ldiv!` that is designed to optimize solver performance
 """
@@ -54,12 +51,10 @@ import NVTX
 import Adapt
 using UnrolledUtilities
 
-import ..Utilities: PlusHalf, half
-import ..RecursiveApply:
-    rmap, rmaptype, rpromote_type, rzero, rconvert, radd, rsub, rmul, rdiv
-import ..RecursiveApply: ⊠, ⊞, ⊟
+import ..Utilities: PlusHalf, half, AutoBroadcaster, is_auto_broadcastable
+import ..Utilities: enable_auto_broadcasting, disable_auto_broadcasting
 import ..DataLayouts
-import ..DataLayouts: AbstractData
+import ..DataLayouts: AbstractData, broadcast_arg
 import ..DataLayouts: vindex
 import ..Geometry
 import ..Topologies
@@ -67,11 +62,7 @@ import ..Spaces
 import ..Spaces: local_geometry_type
 import ..Fields
 import ..Operators
-using ..Geometry:
-    rmul_with_projection,
-    mul_with_projection,
-    axis_tensor_type,
-    rmul_return_type
+using ..Geometry: mul_with_projection, mul_return_type, axis_tensor_type
 
 export DiagonalMatrixRow,
     BidiagonalMatrixRow,
@@ -80,6 +71,9 @@ export DiagonalMatrixRow,
     PentadiagonalMatrixRow
 export FieldVectorKeys, FieldMatrixKeys, FieldVectorView, FieldMatrix
 export FieldMatrixWithSolver, ⋅
+
+const SingleValue =
+    Union{Number, Geometry.AxisTensor, Geometry.AdjointAxisTensor}
 
 include("band_matrix_row.jl")
 
@@ -104,36 +98,17 @@ include("field_matrix_solver.jl")
 include("field_matrix_iterative_solver.jl")
 include("field_matrix_with_solver.jl")
 
-const FieldOrStencilStyleType = Union{
-    Fields.Field,
-    Base.Broadcast.Broadcasted{<:Fields.AbstractFieldStyle},
-    Operators.StencilBroadcasted,
-    LazyOperatorBroadcasted,
-}
-
-Base.Broadcast.broadcasted(
-    ::typeof(*),
-    field_or_broadcasted::FieldOrStencilStyleType,
-    args...,
-) =
-    unrolled_reduce(args; init = field_or_broadcasted) do arg1, arg2
-        arg1_isa_matrix =
-            eltype(arg1) <: BandMatrixRow || arg1 isa LazyOperatorBroadcasted
-        use_matrix_mul_op = arg1_isa_matrix && arg2 isa FieldOrStencilStyleType
-        op = use_matrix_mul_op ? MultiplyColumnwiseBandMatrixField() : ⊠
-        Base.Broadcast.broadcasted(op, arg1, arg2)
+Base.broadcasted(::Fields.AbstractFieldStyle, ::typeof(*), args...) =
+    unrolled_reduce(reverse(args)) do y, x
+        (is_field_broadcasted(x) && eltype(x) <: BandMatrixRow) &&
+            is_field_broadcasted(y) ?
+        Base.broadcasted(MultiplyColumnwiseBandMatrixField(), x, y) :
+        Base.Broadcast.Broadcasted(
+            Base.Broadcast.combine_styles(x, y),
+            *,
+            (broadcast_arg(x), broadcast_arg(y)),
+        )
     end
-Base.Broadcast.broadcasted(
-    ::typeof(*),
-    single_value_or_broadcasted::SingleValueStyleType,
-    field_or_broadcasted::FieldOrStencilStyleType,
-    args...,
-) = Base.Broadcast.broadcasted(
-    ⊠,
-    single_value_or_broadcasted,
-    Base.Broadcast.broadcasted(*, field_or_broadcasted, args...),
-)
-# TODO: Generalize this to handle, e.g., @. scalar * scalar * matrix * matrix.
 
 function Base.show(io::IO, field::ColumnwiseBandMatrixField)
     print(io, eltype(field), "-valued Field")

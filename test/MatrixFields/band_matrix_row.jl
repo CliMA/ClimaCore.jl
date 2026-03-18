@@ -1,4 +1,5 @@
 using LinearAlgebra: I
+using ClimaCore.Utilities: enable_auto_broadcasting
 
 include("matrix_field_test_utils.jl")
 
@@ -29,7 +30,7 @@ include("matrix_field_test_utils.jl")
               TridiagonalMatrixRow(1, 0, 1) / 2 - I ==
               zero(PentadiagonalMatrixRow{Int})
 
-    NT = nested_type
+    NT = enable_auto_broadcasting ∘ nested_type
     @test_all QuaddiagonalMatrixRow(NT(0.5), NT(1), NT(1), NT(1 // 2)) +
               BidiagonalMatrixRow(NT(-0.5), NT(-1 // 2)) ==
               QuaddiagonalMatrixRow(NT(1), NT(1), NT(1), NT(1)) / 2

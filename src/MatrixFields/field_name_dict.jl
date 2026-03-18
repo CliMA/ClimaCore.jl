@@ -75,9 +75,7 @@ is_field_broadcasted(bc) =
 check_entry(::Type{FieldName}, entry::Base.AbstractBroadcasted) =
     is_field_broadcasted(entry)
 check_entry(::Type{FieldNamePair}, entry::Base.AbstractBroadcasted) =
-    is_field_broadcasted(entry) # && eltype(entry) <: BandMatrixRow
-# TODO: Adding the eltype check introduces JET failures to several FieldMatrix
-# test cases in CI. We may to implement our own version of eltype to avoid this.
+    is_field_broadcasted(entry) && eltype(entry) <: BandMatrixRow
 
 is_diagonal_matrix_entry(::ScalingFieldMatrixEntry) = true
 is_diagonal_matrix_entry(entry) = eltype(entry) <: DiagonalMatrixRow
@@ -276,7 +274,10 @@ function get_internal_entry(
     else # fallback to broadcasted indexing on each element, currently no support for view_of_blocks
         return Base.broadcasted(entry) do matrix_row
             map(matrix_row) do matrix_row_entry
-                get_internal_entry(matrix_row_entry, name_pair)
+                get_internal_entry(
+                    disable_auto_broadcasting(matrix_row_entry),
+                    name_pair,
+                )
             end
         end
     end
@@ -556,7 +557,7 @@ e³ = Geometry.Covariant3Vector(1)
 ᶜᶠmat2 = fill(BidiagonalMatrixRow(4.3, 1.7), center_space)
 ᶜᶜmat3_uₕ_scalar = ᶜᶜmat3 .* (e¹²,)
 ρχ_unit = (;ρq_liq = 1.0, ρq_ice = 1.0)
-ᶜᶠmat2_ρχ_u₃ = map(Base.Fix1(map, Base.Fix2(⊠, ρχ_unit ⊠ e₃')), ᶜᶠmat2)
+ᶜᶠmat2_ρχ_u₃ = map(Base.Fix1(map, Base.Fix2(*, ρχ_unit * e₃')), ᶜᶠmat2)
 
 A = MatrixFields.FieldMatrix(
     (@name(c.ρχ), @name(f.u₃)) => ᶜᶠmat2_ρχ_u₃,
@@ -640,7 +641,7 @@ the entries required to solve `matrix * x = b` for `x` if `matrix` is sparse.
 """
 function identity_field_matrix(x::Fields.FieldVector)
     single_field_names = filtered_names(x) do field
-        field isa Fields.Field && eltype(field) <: Geometry.SingleValue
+        field isa Fields.Field && eltype(field) <: SingleValue
     end
     single_field_keys = FieldVectorKeys(single_field_names, FieldNameTree(x))
     entries = map(single_field_keys) do name
@@ -724,7 +725,8 @@ const SingleValueStyle =
 
 const SingleValueStyleType = Union{
     Number,
-    Tuple{Geometry.SingleValue},
+    Ref{SingleValue},
+    Tuple{SingleValue},
     Base.Broadcast.Broadcasted{<:SingleValueStyle},
 }
 

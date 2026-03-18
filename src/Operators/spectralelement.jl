@@ -174,16 +174,6 @@ function Base.Broadcast.instantiate(
     end
 end
 
-function Base.similar(
-    bc::Base.Broadcast.Broadcasted{<:AbstractSpectralStyle},
-    ::Type{Eltype},
-) where {Eltype}
-    space = axes(bc)
-    return Field(Eltype, space)
-end
-
-
-
 # Functions for SlabBlockSpectralStyle
 function Base.copyto!(
     out::Field,
@@ -546,7 +536,7 @@ Divergence() = Divergence{()}()
 Divergence{()}(space) = Divergence{operator_axes(space)}()
 
 operator_return_eltype(op::Divergence{I}, ::Type{S}) where {I, S} =
-    RecursiveApply.rmaptype(Geometry.divergence_result_type, S)
+    Geometry.divergence_result_type(S)
 
 function apply_operator(op::Divergence{(1,)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
@@ -561,20 +551,15 @@ function apply_operator(op::Divergence{(1,)}, space, slabidx, arg)
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
-        Jv¹ =
-            local_geometry.J ⊠ RecursiveApply.rmap(
-                v -> Geometry.contravariant1(v, local_geometry),
-                v,
-            )
+        Jv¹ = local_geometry.J * Geometry.contravariant1(v, local_geometry)
         for ii in 1:Nq
-            out[slab_index(ii)] = out[slab_index(ii)] ⊞ (D[ii, i] ⊠ Jv¹)
+            out[slab_index(ii)] += D[ii, i] * Jv¹
         end
     end
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i)] =
-            RecursiveApply.rmul(out[slab_index(i)], local_geometry.invJ)
+        out[slab_index(i)] *= local_geometry.invJ
     end
     return Field(SArray(out), space)
 end
@@ -597,28 +582,19 @@ Base.@propagate_inbounds function apply_operator(
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
-        Jv¹ =
-            local_geometry.J ⊠ RecursiveApply.rmap(
-                v -> Geometry.contravariant1(v, local_geometry),
-                v,
-            )
+        Jv¹ = local_geometry.J * Geometry.contravariant1(v, local_geometry)
         for ii in 1:Nq
-            out[slab_index(ii, j)] = out[slab_index(ii, j)] ⊞ (D[ii, i] ⊠ Jv¹)
+            out[slab_index(ii, j)] += D[ii, i] * Jv¹
         end
-        Jv² =
-            local_geometry.J ⊠ RecursiveApply.rmap(
-                v -> Geometry.contravariant2(v, local_geometry),
-                v,
-            )
+        Jv² = local_geometry.J * Geometry.contravariant2(v, local_geometry)
         for jj in 1:Nq
-            out[slab_index(i, jj)] = out[slab_index(i, jj)] ⊞ (D[jj, j] ⊠ Jv²)
+            out[slab_index(i, jj)] += D[jj, j] * Jv²
         end
     end
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i, j)] =
-            RecursiveApply.rmul(out[slab_index(i, j)], local_geometry.invJ)
+        out[slab_index(i, j)] *= local_geometry.invJ
     end
     return Field(SArray(out), space)
 end
@@ -711,11 +687,12 @@ struct SplitDivergence{I} <: SpectralElementOperator{I} end
 SplitDivergence() = SplitDivergence{()}()
 SplitDivergence{()}(space) = SplitDivergence{operator_axes(space)}()
 
-operator_return_eltype(::SplitDivergence{I}, ::Type{S1}, ::Type{S2}) where {I, S1, S2} =
-    Geometry.rmul_return_type(
-        RecursiveApply.rmaptype(Geometry.divergence_result_type, S1),
-        S2,
-    )
+operator_return_eltype(
+    ::SplitDivergence{I},
+    ::Type{S1},
+    ::Type{S2},
+) where {I, S1, S2} =
+    Geometry.mul_return_type(Geometry.divergence_result_type(S1), S2)
 
 function apply_operator(op::SplitDivergence{(1,)}, space, slabidx, arg1, arg2)
     FT = Spaces.undertype(space)
@@ -730,11 +707,9 @@ function apply_operator(op::SplitDivergence{(1,)}, space, slabidx, arg1, arg2)
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
+        u = get_node(space, arg1, ij, slabidx)
         Ju1[slab_index(i)] =
-            local_geometry.J ⊠ RecursiveApply.rmap(
-                u -> Geometry.contravariant1(u, local_geometry),
-                get_node(space, arg1, ij, slabidx),
-            )
+            local_geometry.J * Geometry.contravariant1(u, local_geometry)
         psi[slab_index(i)] = get_node(space, arg2, ij, slabidx)
     end
 
@@ -742,19 +717,19 @@ function apply_operator(op::SplitDivergence{(1,)}, space, slabidx, arg1, arg2)
     fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
         for j in 1:(i - 1) # loop over half the indices, since F1[i,j] = F1[j,i]
-            F1 = RecursiveApply.rdiv(
-                (Ju1[slab_index(i)] ⊞ Ju1[slab_index(j)]) ⊠
-                (psi[slab_index(i)] ⊞ psi[slab_index(j)]),
-                2,
-            )
-            out[slab_index(i)] = out[slab_index(i)] ⊞ D[i, j] ⊠ F1
-            out[slab_index(j)] = out[slab_index(j)] ⊞ D[j, i] ⊠ F1
+            F1 =
+                (
+                    (Ju1[slab_index(i)] + Ju1[slab_index(j)]) *
+                    (psi[slab_index(i)] + psi[slab_index(j)])
+                ) / 2
+            out[slab_index(i)] += D[i, j] * F1
+            out[slab_index(j)] += D[j, i] * F1
         end
     end
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i)] = out[slab_index(i)] ⊠ local_geometry.invJ
+        out[slab_index(i)] *= local_geometry.invJ
     end
 
     return Field(SArray(out), space)
@@ -776,15 +751,9 @@ function apply_operator(op::SplitDivergence{(1, 2)}, space, slabidx, arg1, arg2)
         local_geometry = get_local_geometry(space, ij, slabidx)
         u = get_node(space, arg1, ij, slabidx)
         Ju1[slab_index(i, j)] =
-            local_geometry.J ⊠ RecursiveApply.rmap(
-                u -> Geometry.contravariant1(u, local_geometry),
-                u,
-            )
+            local_geometry.J * Geometry.contravariant1(u, local_geometry)
         Ju2[slab_index(i, j)] =
-            local_geometry.J ⊠ RecursiveApply.rmap(
-                u -> Geometry.contravariant2(u, local_geometry),
-                u,
-            )
+            local_geometry.J * Geometry.contravariant2(u, local_geometry)
         psi[slab_index(i, j)] = get_node(space, arg2, ij, slabidx)
     end
 
@@ -792,28 +761,28 @@ function apply_operator(op::SplitDivergence{(1, 2)}, space, slabidx, arg1, arg2)
     fill!(parent(out), zero(FT))
     @inbounds for j in 1:Nq, i in 1:Nq
         for k in 1:(i - 1) # loop over half the indices, since F1[i,k] = F1[k,i]
-            F1 = RecursiveApply.rdiv(
-                (Ju1[slab_index(i, j)] ⊞ Ju1[slab_index(k, j)]) ⊠
-                (psi[slab_index(i, j)] ⊞ psi[slab_index(k, j)]),
-                2,
-            )
-            out[slab_index(i, j)] = out[slab_index(i, j)] ⊞ D[i, k] ⊠ F1
-            out[slab_index(k, j)] = out[slab_index(k, j)] ⊞ D[k, i] ⊠ F1
+            F1 =
+                (
+                    (Ju1[slab_index(i, j)] + Ju1[slab_index(k, j)]) *
+                    (psi[slab_index(i, j)] + psi[slab_index(k, j)])
+                ) / 2
+            out[slab_index(i, j)] += D[i, k] * F1
+            out[slab_index(k, j)] += D[k, i] * F1
         end
         for k in 1:(j - 1) # loop over half the indices, since F2[j,k] = F2[k,j]
-            F2 = RecursiveApply.rdiv(
-                (Ju2[slab_index(i, j)] ⊞ Ju2[slab_index(i, k)]) ⊠
-                (psi[slab_index(i, j)] ⊞ psi[slab_index(i, k)]),
-                2,
-            )
-            out[slab_index(i, j)] = out[slab_index(i, j)] ⊞ D[j, k] ⊠ F2
-            out[slab_index(i, k)] = out[slab_index(i, k)] ⊞ D[k, j] ⊠ F2
+            F2 =
+                (
+                    (Ju2[slab_index(i, j)] + Ju2[slab_index(i, k)]) *
+                    (psi[slab_index(i, j)] + psi[slab_index(i, k)])
+                ) / 2
+            out[slab_index(i, j)] += D[j, k] * F2
+            out[slab_index(i, k)] += D[k, j] * F2
         end
     end
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i, j)] = out[slab_index(i, j)] ⊠ local_geometry.invJ
+        out[slab_index(i, j)] *= local_geometry.invJ
     end
 
     return Field(SArray(out), space)
@@ -861,7 +830,7 @@ WeakDivergence() = WeakDivergence{()}()
 WeakDivergence{()}(space) = WeakDivergence{operator_axes(space)}()
 
 operator_return_eltype(::WeakDivergence{I}, ::Type{S}) where {I, S} =
-    RecursiveApply.rmaptype(Geometry.divergence_result_type, S)
+    Geometry.divergence_result_type(S)
 
 function apply_operator(op::WeakDivergence{(1,)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
@@ -876,20 +845,15 @@ function apply_operator(op::WeakDivergence{(1,)}, space, slabidx, arg)
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
-        WJv¹ =
-            local_geometry.WJ ⊠ RecursiveApply.rmap(
-                v -> Geometry.contravariant1(v, local_geometry),
-                v,
-            )
+        WJv¹ = local_geometry.WJ * Geometry.contravariant1(v, local_geometry)
         for ii in 1:Nq
-            out[slab_index(ii)] = out[slab_index(ii)] ⊞ (D[i, ii] ⊠ WJv¹)
+            out[slab_index(ii)] += D[i, ii] * WJv¹
         end
     end
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i)] =
-            RecursiveApply.rdiv(out[slab_index(i)], ⊟(local_geometry.WJ))
+        out[slab_index(i)] /= -local_geometry.WJ
     end
     return Field(SArray(out), space)
 end
@@ -907,28 +871,19 @@ function apply_operator(op::WeakDivergence{(1, 2)}, space, slabidx, arg)
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
-        WJv¹ =
-            local_geometry.WJ ⊠ RecursiveApply.rmap(
-                v -> Geometry.contravariant1(v, local_geometry),
-                v,
-            )
+        WJv¹ = local_geometry.WJ * Geometry.contravariant1(v, local_geometry)
         for ii in 1:Nq
-            out[slab_index(ii, j)] = out[slab_index(ii, j)] ⊞ (D[i, ii] ⊠ WJv¹)
+            out[slab_index(ii, j)] += D[i, ii] * WJv¹
         end
-        WJv² =
-            local_geometry.WJ ⊠ RecursiveApply.rmap(
-                v -> Geometry.contravariant2(v, local_geometry),
-                v,
-            )
+        WJv² = local_geometry.WJ * Geometry.contravariant2(v, local_geometry)
         for jj in 1:Nq
-            out[slab_index(i, jj)] = out[slab_index(i, jj)] ⊞ (D[j, jj] ⊠ WJv²)
+            out[slab_index(i, jj)] += D[j, jj] * WJv²
         end
     end
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i, j)] =
-            RecursiveApply.rdiv(out[slab_index(i, j)], ⊟(local_geometry.WJ))
+        out[slab_index(i, j)] /= -local_geometry.WJ
     end
     return Field(SArray(out), space)
 end
@@ -960,7 +915,7 @@ Gradient() = Gradient{()}()
 Gradient{()}(space) = Gradient{operator_axes(space)}()
 
 operator_return_eltype(::Gradient{I}, ::Type{S}) where {I, S} =
-    RecursiveApply.rmaptype(T -> Geometry.gradient_result_type(Val(I), T), S)
+    Geometry.gradient_result_type(Val(I), S)
 
 function apply_operator(op::Gradient{(1,)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
@@ -1002,11 +957,11 @@ Base.@propagate_inbounds function apply_operator(
         x = get_node(space, arg, ij, slabidx)
         for ii in 1:Nq
             ∂f∂ξ₁ = Geometry.Covariant12Vector(D[ii, i], zero(eltype(D))) ⊗ x
-            out[slab_index(ii, j)] = out[slab_index(ii, j)] ⊞ ∂f∂ξ₁
+            out[slab_index(ii, j)] += ∂f∂ξ₁
         end
         for jj in 1:Nq
             ∂f∂ξ₂ = Geometry.Covariant12Vector(zero(eltype(D)), D[jj, j]) ⊗ x
-            out[slab_index(i, jj)] = out[slab_index(i, jj)] ⊞ ∂f∂ξ₂
+            out[slab_index(i, jj)] += ∂f∂ξ₂
         end
     end
     return Field(SArray(out), space)
@@ -1051,7 +1006,7 @@ WeakGradient() = WeakGradient{()}()
 WeakGradient{()}(space) = WeakGradient{operator_axes(space)}()
 
 operator_return_eltype(::WeakGradient{I}, ::Type{S}) where {I, S} =
-    RecursiveApply.rmaptype(T -> Geometry.gradient_result_type(Val(I), T), S)
+    Geometry.gradient_result_type(Val(I), S)
 
 function apply_operator(op::WeakGradient{(1,)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
@@ -1066,17 +1021,17 @@ function apply_operator(op::WeakGradient{(1,)}, space, slabidx, arg)
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
         W = local_geometry.WJ * local_geometry.invJ
-        Wx = W ⊠ get_node(space, arg, ij, slabidx)
+        Wx = W * get_node(space, arg, ij, slabidx)
         for ii in 1:Nq
             Dᵀ₁Wf = Geometry.Covariant1Vector(D[i, ii]) ⊗ Wx
-            out[slab_index(ii)] = out[slab_index(ii)] ⊟ Dᵀ₁Wf
+            out[slab_index(ii)] -= Dᵀ₁Wf
         end
     end
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
         W = local_geometry.WJ * local_geometry.invJ
-        out[slab_index(i)] = RecursiveApply.rdiv(out[slab_index(i)], W)
+        out[slab_index(i)] /= W
     end
     return Field(SArray(out), space)
 end
@@ -1095,21 +1050,21 @@ function apply_operator(op::WeakGradient{(1, 2)}, space, slabidx, arg)
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
         W = local_geometry.WJ * local_geometry.invJ
-        Wx = W ⊠ get_node(space, arg, ij, slabidx)
+        Wx = W * get_node(space, arg, ij, slabidx)
         for ii in 1:Nq
             Dᵀ₁Wf = Geometry.Covariant12Vector(D[i, ii], zero(eltype(D))) ⊗ Wx
-            out[slab_index(ii, j)] = out[slab_index(ii, j)] ⊟ Dᵀ₁Wf
+            out[slab_index(ii, j)] -= Dᵀ₁Wf
         end
         for jj in 1:Nq
             Dᵀ₂Wf = Geometry.Covariant12Vector(zero(eltype(D)), D[j, jj]) ⊗ Wx
-            out[slab_index(i, jj)] = out[slab_index(i, jj)] ⊟ Dᵀ₂Wf
+            out[slab_index(i, jj)] -= Dᵀ₂Wf
         end
     end
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
         W = local_geometry.WJ * local_geometry.invJ
-        out[slab_index(i, j)] = RecursiveApply.rdiv(out[slab_index(i, j)], W)
+        out[slab_index(i, j)] /= W
     end
     return Field(SArray(out), space)
 end
@@ -1162,7 +1117,7 @@ Curl() = Curl{()}()
 Curl{()}(space) = Curl{operator_axes(space)}()
 
 operator_return_eltype(::Curl{I}, ::Type{S}) where {I, S} =
-    RecursiveApply.rmaptype(T -> Geometry.curl_result_type(Val(I), T), S)
+    Geometry.curl_result_type(Val(I), S)
 
 function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
@@ -1180,9 +1135,8 @@ function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
             v = get_node(space, arg, ij, slabidx)
             v₃ = Geometry.covariant3(v, local_geometry)
             for ii in 1:Nq
-                D₁v₃ = D[ii, i] ⊠ v₃
-                out[slab_index(ii)] =
-                    out[slab_index(ii)] ⊞ Geometry.Contravariant2Vector(⊟(D₁v₃))
+                D₁v₃ = D[ii, i] * v₃
+                out[slab_index(ii)] += Geometry.Contravariant2Vector(-D₁v₃)
             end
         end
     elseif RT <: Geometry.Contravariant3Vector
@@ -1192,9 +1146,8 @@ function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
             v = get_node(space, arg, ij, slabidx)
             v₂ = Geometry.covariant2(v, local_geometry)
             for ii in 1:Nq
-                D₁v₂ = D[ii, i] ⊠ v₂
-                out[slab_index(ii)] =
-                    out[slab_index(ii)] ⊞ Geometry.Contravariant3Vector(D₁v₂)
+                D₁v₂ = D[ii, i] * v₂
+                out[slab_index(ii)] += Geometry.Contravariant3Vector(D₁v₂)
             end
         end
     elseif RT <: Geometry.Contravariant23Vector
@@ -1205,11 +1158,10 @@ function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
             v₂ = Geometry.covariant2(v, local_geometry)
             v₃ = Geometry.covariant3(v, local_geometry)
             for ii in 1:Nq
-                D₁v₃ = D[ii, i] ⊠ v₃
-                D₁v₂ = D[ii, i] ⊠ v₂
-                out[slab_index(ii)] =
-                    out[slab_index(ii)] ⊞
-                    Geometry.Contravariant23Vector(⊟(D₁v₃), D₁v₂)
+                D₁v₃ = D[ii, i] * v₃
+                D₁v₂ = D[ii, i] * v₂
+                out[slab_index(ii)] +=
+                    Geometry.Contravariant23Vector(-D₁v₃, D₁v₂)
             end
         end
     else
@@ -1218,8 +1170,7 @@ function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i)] =
-            RecursiveApply.rmul(out[slab_index(i)], local_geometry.invJ)
+        out[slab_index(i)] *= local_geometry.invJ
     end
     return Field(SArray(out), space)
 end
@@ -1242,16 +1193,13 @@ function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
             v = get_node(space, arg, ij, slabidx)
             v₁ = Geometry.covariant1(v, local_geometry)
             for jj in 1:Nq
-                D₂v₁ = D[jj, j] ⊠ v₁
-                out[slab_index(i, jj)] =
-                    out[slab_index(i, jj)] ⊞
-                    Geometry.Contravariant3Vector(⊟(D₂v₁))
+                D₂v₁ = D[jj, j] * v₁
+                out[slab_index(i, jj)] += Geometry.Contravariant3Vector(-D₂v₁)
             end
             v₂ = Geometry.covariant2(v, local_geometry)
             for ii in 1:Nq
-                D₁v₂ = D[ii, i] ⊠ v₂
-                out[slab_index(ii, j)] =
-                    out[slab_index(ii, j)] ⊞ Geometry.Contravariant3Vector(D₁v₂)
+                D₁v₂ = D[ii, i] * v₂
+                out[slab_index(ii, j)] += Geometry.Contravariant3Vector(D₁v₂)
             end
         end
         # input data is a Covariant3Vector field
@@ -1262,15 +1210,13 @@ function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
             v = get_node(space, arg, ij, slabidx)
             v₃ = Geometry.covariant3(v, local_geometry)
             for ii in 1:Nq
-                D₁v₃ = D[ii, i] ⊠ v₃
-                out[slab_index(ii, j)] =
-                    out[slab_index(ii, j)] ⊞
-                    Geometry.Contravariant12Vector(zero(D₁v₃), ⊟(D₁v₃))
+                D₁v₃ = D[ii, i] * v₃
+                out[slab_index(ii, j)] +=
+                    Geometry.Contravariant12Vector(zero(D₁v₃), -D₁v₃)
             end
             for jj in 1:Nq
-                D₂v₃ = D[jj, j] ⊠ v₃
-                out[slab_index(i, jj)] =
-                    out[slab_index(i, jj)] ⊞
+                D₂v₃ = D[jj, j] * v₃
+                out[slab_index(i, jj)] +=
                     Geometry.Contravariant12Vector(D₂v₃, zero(D₂v₃))
             end
         end
@@ -1283,18 +1229,16 @@ function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
             v₂ = Geometry.covariant2(v, local_geometry)
             v₃ = Geometry.covariant3(v, local_geometry)
             for ii in 1:Nq
-                D₁v₃ = D[ii, i] ⊠ v₃
-                D₁v₂ = D[ii, i] ⊠ v₂
-                out[slab_index(ii, j)] =
-                    out[slab_index(ii, j)] ⊞
-                    Geometry.Contravariant123Vector(zero(D₁v₃), ⊟(D₁v₃), D₁v₂)
+                D₁v₃ = D[ii, i] * v₃
+                D₁v₂ = D[ii, i] * v₂
+                out[slab_index(ii, j)] +=
+                    Geometry.Contravariant123Vector(zero(D₁v₃), -D₁v₃, D₁v₂)
             end
             for jj in 1:Nq
-                D₂v₃ = D[jj, j] ⊠ v₃
-                D₂v₁ = D[jj, j] ⊠ v₁
-                out[slab_index(i, jj)] =
-                    out[slab_index(i, jj)] ⊞
-                    Geometry.Contravariant123Vector(D₂v₃, zero(D₂v₃), ⊟(D₂v₁))
+                D₂v₃ = D[jj, j] * v₃
+                D₂v₁ = D[jj, j] * v₁
+                out[slab_index(i, jj)] +=
+                    Geometry.Contravariant123Vector(D₂v₃, zero(D₂v₃), -D₂v₁)
             end
         end
     else
@@ -1303,8 +1247,7 @@ function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i, j)] =
-            RecursiveApply.rmul(out[slab_index(i, j)], local_geometry.invJ)
+        out[slab_index(i, j)] *= local_geometry.invJ
     end
     return Field(SArray(out), space)
 end
@@ -1350,7 +1293,7 @@ WeakCurl() = WeakCurl{()}()
 WeakCurl{()}(space) = WeakCurl{operator_axes(space)}()
 
 operator_return_eltype(::WeakCurl{I}, ::Type{S}) where {I, S} =
-    RecursiveApply.rmaptype(T -> Geometry.curl_result_type(Val(I), T), S)
+    Geometry.curl_result_type(Val(I), S)
 
 function apply_operator(op::WeakCurl{(1,)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
@@ -1368,11 +1311,10 @@ function apply_operator(op::WeakCurl{(1,)}, space, slabidx, arg)
             local_geometry = get_local_geometry(space, ij, slabidx)
             v = get_node(space, arg, ij, slabidx)
             W = local_geometry.WJ * local_geometry.invJ
-            Wv₃ = W ⊠ Geometry.covariant3(v, local_geometry)
+            Wv₃ = W * Geometry.covariant3(v, local_geometry)
             for ii in 1:Nq
-                Dᵀ₁Wv₃ = D[i, ii] ⊠ Wv₃
-                out[slab_index(ii)] =
-                    out[slab_index(ii)] ⊞ Geometry.Contravariant2Vector(Dᵀ₁Wv₃)
+                Dᵀ₁Wv₃ = D[i, ii] * Wv₃
+                out[slab_index(ii)] += Geometry.Contravariant2Vector(Dᵀ₁Wv₃)
             end
         end
     elseif RT <: Geometry.Contravariant3Vector
@@ -1381,12 +1323,10 @@ function apply_operator(op::WeakCurl{(1,)}, space, slabidx, arg)
             local_geometry = get_local_geometry(space, ij, slabidx)
             v = get_node(space, arg, ij, slabidx)
             W = local_geometry.WJ * local_geometry.invJ
-            Wv₂ = W ⊠ Geometry.covariant2(v, local_geometry)
+            Wv₂ = W * Geometry.covariant2(v, local_geometry)
             for ii in 1:Nq
-                Dᵀ₁Wv₂ = D[i, ii] ⊠ Wv₂
-                out[slab_index(ii)] =
-                    out[slab_index(ii)] ⊞
-                    Geometry.Contravariant3Vector(⊟(Dᵀ₁Wv₂))
+                Dᵀ₁Wv₂ = D[i, ii] * Wv₂
+                out[slab_index(ii)] += Geometry.Contravariant3Vector(-Dᵀ₁Wv₂)
             end
         end
     elseif RT <: Geometry.Contravariant23Vector
@@ -1395,14 +1335,13 @@ function apply_operator(op::WeakCurl{(1,)}, space, slabidx, arg)
             local_geometry = get_local_geometry(space, ij, slabidx)
             v = get_node(space, arg, ij, slabidx)
             W = local_geometry.WJ * local_geometry.invJ
-            Wv₃ = W ⊠ Geometry.covariant3(v, local_geometry)
-            Wv₂ = W ⊠ Geometry.covariant2(v, local_geometry)
+            Wv₃ = W * Geometry.covariant3(v, local_geometry)
+            Wv₂ = W * Geometry.covariant2(v, local_geometry)
             for ii in 1:Nq
-                Dᵀ₁Wv₃ = D[i, ii] ⊠ Wv₃
-                Dᵀ₁Wv₂ = D[i, ii] ⊠ Wv₂
-                out[slab_index(ii)] =
-                    out[slab_index(ii)] ⊞
-                    Geometry.Contravariant23Vector(Dᵀ₁Wv₃, ⊟(Dᵀ₁Wv₂))
+                Dᵀ₁Wv₃ = D[i, ii] * Wv₃
+                Dᵀ₁Wv₂ = D[i, ii] * Wv₂
+                out[slab_index(ii)] +=
+                    Geometry.Contravariant23Vector(Dᵀ₁Wv₃, -Dᵀ₁Wv₂)
             end
         end
     else
@@ -1411,8 +1350,7 @@ function apply_operator(op::WeakCurl{(1,)}, space, slabidx, arg)
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i)] =
-            RecursiveApply.rdiv(out[slab_index(i)], local_geometry.WJ)
+        out[slab_index(i)] /= local_geometry.WJ
     end
     return Field(SArray(out), space)
 end
@@ -1434,19 +1372,17 @@ function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
             local_geometry = get_local_geometry(space, ij, slabidx)
             v = get_node(space, arg, ij, slabidx)
             W = local_geometry.WJ * local_geometry.invJ
-            Wv₁ = W ⊠ Geometry.covariant1(v, local_geometry)
+            Wv₁ = W * Geometry.covariant1(v, local_geometry)
             for jj in 1:Nq
-                Dᵀ₂Wv₁ = D[j, jj] ⊠ Wv₁
-                out[slab_index(i, jj)] =
-                    out[slab_index(i, jj)] ⊞
+                Dᵀ₂Wv₁ = D[j, jj] * Wv₁
+                out[slab_index(i, jj)] +=
                     Geometry.Contravariant3Vector(Dᵀ₂Wv₁)
             end
-            Wv₂ = W ⊠ Geometry.covariant2(v, local_geometry)
+            Wv₂ = W * Geometry.covariant2(v, local_geometry)
             for ii in 1:Nq
-                Dᵀ₁Wv₂ = D[i, ii] ⊠ Wv₂
-                out[slab_index(ii, j)] =
-                    out[slab_index(ii, j)] ⊞
-                    Geometry.Contravariant3Vector(⊟(Dᵀ₁Wv₂))
+                Dᵀ₁Wv₂ = D[i, ii] * Wv₂
+                out[slab_index(ii, j)] +=
+                    Geometry.Contravariant3Vector(-Dᵀ₁Wv₂)
             end
         end
         # input data is a Covariant3Vector field
@@ -1456,18 +1392,16 @@ function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
             local_geometry = get_local_geometry(space, ij, slabidx)
             v = get_node(space, arg, ij, slabidx)
             W = local_geometry.WJ * local_geometry.invJ
-            Wv₃ = W ⊠ Geometry.covariant3(v, local_geometry)
+            Wv₃ = W * Geometry.covariant3(v, local_geometry)
             for ii in 1:Nq
-                Dᵀ₁Wv₃ = D[i, ii] ⊠ Wv₃
-                out[slab_index(ii, j)] =
-                    out[slab_index(ii, j)] ⊞
+                Dᵀ₁Wv₃ = D[i, ii] * Wv₃
+                out[slab_index(ii, j)] +=
                     Geometry.Contravariant12Vector(zero(Dᵀ₁Wv₃), Dᵀ₁Wv₃)
             end
             for jj in 1:Nq
-                Dᵀ₂Wv₃ = D[j, jj] ⊠ Wv₃
-                out[slab_index(i, jj)] =
-                    out[slab_index(i, jj)] ⊞
-                    Geometry.Contravariant12Vector(⊟(Dᵀ₂Wv₃), zero(Dᵀ₂Wv₃))
+                Dᵀ₂Wv₃ = D[j, jj] * Wv₃
+                out[slab_index(i, jj)] +=
+                    Geometry.Contravariant12Vector(-Dᵀ₂Wv₃, zero(Dᵀ₂Wv₃))
             end
         end
     elseif RT <: Geometry.Contravariant123Vector
@@ -1476,25 +1410,24 @@ function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
             local_geometry = get_local_geometry(space, ij, slabidx)
             v = get_node(space, arg, ij, slabidx)
             W = local_geometry.WJ * local_geometry.invJ
-            Wv₁ = W ⊠ Geometry.covariant1(v, local_geometry)
-            Wv₂ = W ⊠ Geometry.covariant2(v, local_geometry)
-            Wv₃ = W ⊠ Geometry.covariant3(v, local_geometry)
+            Wv₁ = W * Geometry.covariant1(v, local_geometry)
+            Wv₂ = W * Geometry.covariant2(v, local_geometry)
+            Wv₃ = W * Geometry.covariant3(v, local_geometry)
             for ii in 1:Nq
-                Dᵀ₁Wv₃ = D[i, ii] ⊠ Wv₃
-                Dᵀ₁Wv₂ = D[i, ii] ⊠ Wv₂
-                out[slab_index(ii, j)] =
-                    out[slab_index(ii, j)] ⊞ Geometry.Contravariant123Vector(
-                        zero(Dᵀ₁Wv₃),
-                        Dᵀ₁Wv₃,
-                        ⊟(Dᵀ₁Wv₂),
-                    )
+                Dᵀ₁Wv₃ = D[i, ii] * Wv₃
+                Dᵀ₁Wv₂ = D[i, ii] * Wv₂
+                out[slab_index(ii, j)] += Geometry.Contravariant123Vector(
+                    zero(Dᵀ₁Wv₃),
+                    Dᵀ₁Wv₃,
+                    -Dᵀ₁Wv₂,
+                )
             end
             for jj in 1:Nq
-                Dᵀ₂Wv₃ = D[j, jj] ⊠ Wv₃
-                Dᵀ₂Wv₁ = D[j, jj] ⊠ Wv₁
-                out[slab_index(i, jj)] =
-                    out[slab_index(i, jj)] ⊞ Geometry.Contravariant123Vector(
-                        ⊟(Dᵀ₂Wv₃),
+                Dᵀ₂Wv₃ = D[j, jj] * Wv₃
+                Dᵀ₂Wv₁ = D[j, jj] * Wv₁
+                out[slab_index(i, jj)] +=
+                    Geometry.Contravariant123Vector(
+                        -Dᵀ₂Wv₃,
                         zero(Dᵀ₂Wv₃),
                         Dᵀ₂Wv₁,
                     )
@@ -1506,8 +1439,7 @@ function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
     for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i, j)] =
-            RecursiveApply.rdiv(out[slab_index(i, j)], local_geometry.WJ)
+        out[slab_index(i, j)] /= local_geometry.WJ
     end
     return Field(SArray(out), space)
 end
@@ -1552,10 +1484,10 @@ function apply_operator(op::Interpolate{(1,)}, space_out, slabidx, arg)
     @inbounds for i in 1:Nq_out
         # manually inlined rmatmul with slab_getnode
         ij = CartesianIndex((1,))
-        r = Imat[i, 1] ⊠ get_node(space_in, arg, ij, slabidx)
+        r = Imat[i, 1] * get_node(space_in, arg, ij, slabidx)
         for ii in 2:Nq_in
             ij = CartesianIndex((ii,))
-            r = RecursiveApply.rmuladd(
+            r = muladd(
                 Imat[i, ii],
                 get_node(space_in, arg, ij, slabidx),
                 r,
@@ -1582,10 +1514,10 @@ function apply_operator(op::Interpolate{(1, 2)}, space_out, slabidx, arg)
         # manually inlined rmatmul1 with slab get_node
         # we do this to remove one allocated intermediate array
         ij = CartesianIndex((1, j))
-        r = Imat[i, 1] ⊠ get_node(space_in, arg, ij, slabidx)
+        r = Imat[i, 1] * get_node(space_in, arg, ij, slabidx)
         for ii in 2:Nq_in
             ij = CartesianIndex((ii, j))
-            r = RecursiveApply.rmuladd(
+            r = muladd(
                 Imat[i, ii],
                 get_node(space_in, arg, ij, slabidx),
                 r,
@@ -1643,19 +1575,19 @@ function apply_operator(op::Restrict{(1,)}, space_out, slabidx, arg)
         # manually inlined rmatmul with slab get_node
         ij = CartesianIndex((1,))
         WJ = get_local_geometry(space_in, ij, slabidx).WJ
-        r = ImatT[i, 1] ⊠ (WJ ⊠ get_node(space_in, arg, ij, slabidx))
+        r = ImatT[i, 1] * (WJ * get_node(space_in, arg, ij, slabidx))
         for ii in 2:Nq_in
             ij = CartesianIndex((ii,))
             WJ = get_local_geometry(space_in, ij, slabidx).WJ
-            r = RecursiveApply.rmuladd(
+            r = muladd(
                 ImatT[i, ii],
-                WJ ⊠ get_node(space_in, arg, ij, slabidx),
+                WJ * get_node(space_in, arg, ij, slabidx),
                 r,
             )
         end
         ij_out = CartesianIndex((i,))
         WJ_out = get_local_geometry(space_out, ij_out, slabidx).WJ
-        out[slab_index(i)] = RecursiveApply.rdiv(r, WJ_out)
+        out[slab_index(i)] = r / WJ_out
     end
     return Field(SArray(out), space_out)
 end
@@ -1676,13 +1608,13 @@ function apply_operator(op::Restrict{(1, 2)}, space_out, slabidx, arg)
         # manually inlined rmatmul1 with slab get_node
         ij = CartesianIndex((1, j))
         WJ = get_local_geometry(space_in, ij, slabidx).WJ
-        r = ImatT[i, 1] ⊠ (WJ ⊠ get_node(space_in, arg, ij, slabidx))
+        r = ImatT[i, 1] * (WJ * get_node(space_in, arg, ij, slabidx))
         for ii in 2:Nq_in
             ij = CartesianIndex((ii, j))
             WJ = get_local_geometry(space_in, ij, slabidx).WJ
-            r = RecursiveApply.rmuladd(
+            r = muladd(
                 ImatT[i, ii],
-                WJ ⊠ get_node(space_in, arg, ij, slabidx),
+                WJ * get_node(space_in, arg, ij, slabidx),
                 r,
             )
         end
@@ -1691,8 +1623,7 @@ function apply_operator(op::Restrict{(1, 2)}, space_out, slabidx, arg)
     @inbounds for j in 1:Nq_out, i in 1:Nq_out
         ij_out = CartesianIndex((i, j))
         WJ_out = get_local_geometry(space_out, ij_out, slabidx).WJ
-        out[slab_index(i, j)] =
-            RecursiveApply.rdiv(rmatmul2(ImatT, temp, i, j), WJ_out)
+        out[slab_index(i, j)] = rmatmul2(ImatT, temp, i, j) / WJ_out
     end
     return Field(SArray(out), space_out)
 end
@@ -1719,9 +1650,9 @@ function tensor_product!(
         in_slab = slab(indata, v, h)
         out_slab = slab(out, v, h)
         for i in 1:Ni_out
-            r = M[i, 1] ⊠ in_slab[slab_index(1)]
+            r = M[i, 1] * in_slab[slab_index(1)]
             for ii in 2:Ni_in
-                r = RecursiveApply.rmuladd(M[i, ii], in_slab[slab_index(ii)], r)
+                r = muladd(M[i, ii], in_slab[slab_index(ii)], r)
             end
             out_slab[slab_index(i)] = r
         end
@@ -1774,7 +1705,8 @@ function tensor_product!(
     inout::Data2D{S, Nij},
     M::SMatrix{Nij, Nij},
 ) where {S, Nij}
-    tensor_product!(inout, inout, M)
+    inout_bc = Base.broadcastable(inout)
+    tensor_product!(inout_bc, inout_bc, M)
 end
 
 """
@@ -1834,14 +1766,14 @@ import .Spaces: slab_type
 
 Recursive matrix product along the 1st dimension of `S`. Equivalent to:
 
-    mapreduce(⊠, ⊞, W[i,:], S[:,j])
+    mapreduce(*, +, W[i,:], S[:,j])
 
 """
 function rmatmul1(W, S, i, j)
     Nq = size(W, 2)
-    @inbounds r = W[i, 1] ⊠ S[slab_index(1, j)]
+    @inbounds r = W[i, 1] * S[slab_index(1, j)]
     @inbounds for ii in 2:Nq
-        r = RecursiveApply.rmuladd(W[i, ii], S[slab_index(ii, j)], r)
+        r = muladd(W[i, ii], S[slab_index(ii, j)], r)
     end
     return r
 end
@@ -1851,13 +1783,13 @@ end
 
 Recursive matrix product along the 2nd dimension `S`. Equivalent to:
 
-    mapreduce(⊠, ⊞, W[j,:], S[i, :])
+    mapreduce(*, +, W[j,:], S[i, :])
 """
 function rmatmul2(W, S, i, j)
     Nq = size(W, 2)
-    @inbounds r = W[j, 1] ⊠ S[slab_index(i, 1)]
+    @inbounds r = W[j, 1] * S[slab_index(i, 1)]
     @inbounds for jj in 2:Nq
-        r = RecursiveApply.rmuladd(W[j, jj], S[slab_index(i, jj)], r)
+        r = muladd(W[j, jj], S[slab_index(i, jj)], r)
     end
     return r
 end

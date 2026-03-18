@@ -338,7 +338,31 @@ Base.Broadcast.BroadcastStyle(
 ) where {Nv, Nij, A1, A2} =
     VIJHFStyle{Nv, Nij, promote_parent_array_type(A1, A2)}()
 
-Base.Broadcast.broadcastable(data::AbstractData) = data
+broadcast_arg(arg) = arg
+broadcast_arg(arg::Ref) = Ref(enable_auto_broadcasting(arg[]))
+broadcast_arg(arg::Tuple{<:Any}) = (enable_auto_broadcasting(arg[1]),)
+
+# Enable automatic broadcasting over supported types of iterators, in addition
+# to the default broadcasting over array indices.
+Base.Broadcast.broadcastable(data::AbstractData) =
+    is_auto_broadcastable(eltype(data)) ?
+    reinterpret(inferred_type(enable_auto_broadcasting, eltype(data)), data) :
+    data
+Base.Broadcast.broadcastable(bc::Base.Broadcast.Broadcasted{<:DataStyle}) =
+    is_auto_broadcastable(eltype(bc)) ?
+    Base.Broadcast.broadcasted(bc.style, enable_auto_broadcasting, bc) : bc
+
+Base.Broadcast.broadcasted(ds::DataStyle, f::F, args...) where {F} =
+    Base.Broadcast.Broadcasted(ds, f, unrolled_map(broadcast_arg, args))
+
+Base.eltype(bc::Base.Broadcast.Broadcasted{<:DataStyle}) = broadcast_eltype(bc)
+
+Base.copy(bc::Base.Broadcast.Broadcasted{<:DataStyle}) =
+    copyto!(similar(bc), bc)
+
+# Remove all AutoBroadcaster wrappers before allocating a new AbstractData.
+Base.similar(bc::Base.Broadcast.Broadcasted{<:DataStyle}) =
+    similar(bc, inferred_type(disable_auto_broadcasting, eltype(bc)))
 
 Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{DS},

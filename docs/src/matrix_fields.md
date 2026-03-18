@@ -218,7 +218,7 @@ to represent a collection of banded matrices, where there is one band matrix for
 of the space the `Field` is on. Beyond only storing the diagonals of the band matrix, an `entry`
 can be optimized to use less memory. Each optimized representation can be indexed equivalently to
 non optimized representations, and used in addition, subtraction, matrix-vector multiplication,
-Matrix-matrix multiplication, `RecursiveApply`, and `FieldMatrixSolver`.
+matrix-matrix multiplication, and solving linear systems via `FieldMatrixSolver`.
 
 For the following sections, `space` is a column space with $N_v$ levels. A column space is
 used for simplicity in this example, but the optimizations work with any space with columns.

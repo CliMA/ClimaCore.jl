@@ -21,6 +21,7 @@ Geometry.LocalGeometry
 
 ```@docs
 Geometry.Δz_metric_component
+Geometry.:⊗
 ```
 
 ## Coordinates

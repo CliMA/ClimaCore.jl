@@ -289,42 +289,11 @@ function Operators.return_eltype(
         ld1, ud1 = outer_diagonals(et_mat1)
         ld2, ud2 = outer_diagonals(et_arg)
         prod_ld, prod_ud = ld1 + ld2, ud1 + ud2
-        prod_value_type = rmul_return_type(eltype(et_mat1), eltype(et_arg))
+        prod_value_type = mul_return_type(eltype(et_mat1), eltype(et_arg))
         return band_matrix_row_type(prod_ld, prod_ud, prod_value_type)
     else # matrix-vector multiplication
         vector = arg
-        return rmul_return_type(eltype(et_mat1), et_arg)
-    end
-end
-
-function Operators.return_eltype(
-    ::MultiplyColumnwiseBandMatrixField,
-    matrix1,
-    arg,
-    ::Type{LG},
-) where {LG}
-    et_mat1 = eltype(matrix1)
-    et_arg = eltype(arg)
-    et_mat1 <: BandMatrixRow || error(
-        "The first argument of MultiplyColumnwiseBandMatrixField must have
-         elements of type BandMatrixRow, but the given argument has $et_mat1",
-    )
-    if et_arg <: BandMatrixRow # matrix-matrix multiplication
-        matrix2 = arg
-        ld1, ud1 = outer_diagonals(et_mat1)
-        ld2, ud2 = outer_diagonals(et_arg)
-        prod_ld, prod_ud = ld1 + ld2, ud1 + ud2
-        prod_value_type = Base.promote_op(
-            rmul_with_projection,
-            eltype(et_mat1),
-            eltype(et_arg),
-            LG,
-        )
-        return band_matrix_row_type(prod_ld, prod_ud, prod_value_type)
-    else # matrix-vector multiplication
-        vector = arg
-        prod_value_type =
-            Base.promote_op(rmul_with_projection, eltype(et_mat1), et_arg, LG)
+        return mul_return_type(eltype(et_mat1), et_arg)
     end
 end
 
@@ -358,13 +327,11 @@ function multiply_matrix_at_index(
     bc,
     ::Type{T},
 ) where {T <: BandMatrixRow}
-    # T = eltype(arg)
     lg = Geometry.LocalGeometry(space, idx, hidx)
     prod_type = Operators.return_eltype(
         MultiplyColumnwiseBandMatrixField(),
         matrix1,
         arg,
-        typeof(lg),
     )
 
     column_space1 = column_axes(matrix1, space)
@@ -404,7 +371,7 @@ function multiply_matrix_at_index(
 
     # Precompute the zero value to avoid inference issues caused by passing
     # prod_type into the function closure below.
-    zero_value = rzero(eltype(prod_type))
+    zero_value = zero(eltype(prod_type))
 
     # Compute the entries of the product matrix row. To avoid inference
     # issues at boundary points, this is implemented as a padded map from
@@ -424,10 +391,7 @@ function multiply_matrix_at_index(
                 value1 = matrix1_row[d]
                 value2 = matrix2_rows_wrapper[d][prod_d - d]
                 value2_lg = Geometry.LocalGeometry(space, idx + d, hidx)
-                prod_entry = radd(
-                    prod_entry,
-                    rmul_with_projection(value1, value2, value2_lg),
-                )
+                prod_entry += mul_with_projection(value1, value2, value2_lg)
             end # Using a for-loop is currently faster than using mapreduce.
             prod_entry
         else
@@ -446,13 +410,11 @@ function multiply_matrix_at_index(
     bc,
     ::Type{T},
 ) where {T}
-    # T = eltype(arg)
     lg = Geometry.LocalGeometry(space, idx, hidx)
     prod_type = Operators.return_eltype(
         MultiplyColumnwiseBandMatrixField(),
         matrix1,
         arg,
-        typeof(lg),
     )
 
     column_space1 = column_axes(matrix1, space)
@@ -465,13 +427,12 @@ function multiply_matrix_at_index(
     matrix1_row = @inbounds Operators.getidx(space, matrix1, idx, hidx)
 
     vector = arg
-    prod_value = rzero(prod_type)
+    prod_value = zero(prod_type)
     @inbounds for d in boundary_modified_ld1:boundary_modified_ud1
         value1 = matrix1_row[d]
         value2 = Operators.getidx(space, vector, idx + d, hidx)
         value2_lg = Geometry.LocalGeometry(space, idx + d, hidx)
-        prod_value =
-            radd(prod_value, rmul_with_projection(value1, value2, value2_lg))
+        prod_value += mul_with_projection(value1, value2, value2_lg)
     end # Using a for-loop is currently faster than using mapreduce.
     return prod_value
 end
