@@ -42,7 +42,14 @@ Adapt.adapt_structure(to::CUDA.KernelAdaptor, space::Spaces.PointSpace) =
 Adapt.adapt_structure(
     to::CUDA.KernelAdaptor,
     topology::Topologies.IntervalTopology,
-) = Topologies.DeviceIntervalTopology(topology.boundaries)
+) = Topologies.IntervalTopology(
+    Adapt.adapt(
+        to,
+        ClimaComms.SingletonCommsContext(ClimaComms.device(topology.context)),
+    ),
+    Adapt.adapt(to, topology.mesh),
+    Adapt.adapt(to, topology.boundaries),
+)
 
 Adapt.adapt_structure(
     to::CUDA.KernelAdaptor,
