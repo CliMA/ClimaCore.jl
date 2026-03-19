@@ -257,11 +257,13 @@ end
 
 function collect_run_metadata(test_filter::Union{String, Nothing})
     git_status = _command_lines(_git_cmd("status", "--porcelain"))
-    gpu_lines = has_cuda_env() ?
+    gpu_lines =
+        has_cuda_env() ?
         _command_lines(`nvidia-smi --query-gpu=name,uuid --format=csv,noheader`) :
         String[]
     visible_gpu_env = get(ENV, "CUDA_VISIBLE_DEVICES", "")
-    allocated_gpu_ids = isempty(strip(visible_gpu_env)) ? String[] : split(visible_gpu_env, ',')
+    allocated_gpu_ids =
+        isempty(strip(visible_gpu_env)) ? String[] : split(visible_gpu_env, ',')
 
     return Dict{String, Any}(
         "timestamp_utc" => Dates.format(now(UTC), dateformat"yyyy-mm-ddTHH:MM:SSZ"),
@@ -270,11 +272,18 @@ function collect_run_metadata(test_filter::Union{String, Nothing})
         "hostname" => gethostname(),
         "julia_version" => string(VERSION),
         "test_filter" => something(test_filter, "all"),
-        "git_commit" => something(_command_output(_git_cmd("rev-parse", "HEAD")), "unknown"),
+        "git_commit" =>
+            something(_command_output(_git_cmd("rev-parse", "HEAD")), "unknown"),
         "git_branch" =>
-            something(_command_output(_git_cmd("rev-parse", "--abbrev-ref", "HEAD")), "unknown"),
+            something(
+                _command_output(_git_cmd("rev-parse", "--abbrev-ref", "HEAD")),
+                "unknown",
+            ),
         "git_describe" =>
-            something(_command_output(_git_cmd("describe", "--always", "--dirty", "--tags")), "unknown"),
+            something(
+                _command_output(_git_cmd("describe", "--always", "--dirty", "--tags")),
+                "unknown",
+            ),
         "git_dirty" => !isempty(git_status),
         "git_status" => git_status,
         "slurm_job_id" => get(ENV, "SLURM_JOB_ID", nothing),
@@ -323,7 +332,7 @@ function render_test_expression(test)
         expr = arithmetic_expression(test.complexity)
         return "op(x) = $expr\nop.(f)"
     elseif test.operation_type == "multiarg"
-        args = ["f$i" for i in 1:test.num_args]
+        args = ["f$i" for i in 1:(test.num_args)]
         sum_expr = join(args[1:(end - 1)], " + ")
         op_expr = "($sum_expr) / ($(last(args)) + 1.0)"
         return "op($(join(args, ", "))) = $op_expr\nop.($(join(args, ", ")))"
@@ -339,20 +348,23 @@ function render_test_expression(test)
         return "op(x) = $expr\nop.(f)"
     elseif test.operation_type == "projection"
         proj_terms = join(
-            ["Geometry.project(Geometry.Covariant12Axis(), v)" for _ in 1:test.complexity],
+            [
+                "Geometry.project(Geometry.Covariant12Axis(), v)" for
+                _ in 1:(test.complexity)
+            ],
             " .+ ",
         )
         return "@. $proj_terms"
     elseif test.operation_type == "divergence"
-        return join(["div_op.(v .* $(i).0)" for i in 1:test.complexity], " .+ ")
+        return join(["div_op.(v .* $(i).0)" for i in 1:(test.complexity)], " .+ ")
     elseif test.operation_type == "curl"
-        return join(["curl_op.(v .* $(i).0)" for i in 1:test.complexity], " .+ ")
+        return join(["curl_op.(v .* $(i).0)" for i in 1:(test.complexity)], " .+ ")
     elseif test.operation_type == "interpolate"
-        return join(["interp.(ᶜf .* $(i).0)" for i in 1:test.complexity], " .+ ")
+        return join(["interp.(ᶜf .* $(i).0)" for i in 1:(test.complexity)], " .+ ")
     elseif test.operation_type == "weighted_interpolate"
-        return join(["winterp.(ᶜw, ᶜf .* $(i).0)" for i in 1:test.complexity], " .+ ")
+        return join(["winterp.(ᶜw, ᶜf .* $(i).0)" for i in 1:(test.complexity)], " .+ ")
     elseif test.operation_type == "upwinding"
-        return join(["upwind.(ᶠv, ᶜf .* $(i).0)" for i in 1:test.complexity], " .+ ")
+        return join(["upwind.(ᶠv, ᶜf .* $(i).0)" for i in 1:(test.complexity)], " .+ ")
     else
         return test.description
     end
@@ -375,13 +387,26 @@ function result_to_record(result)
         "uses_geometry" => result.test_def.uses_geometry,
         "success" => result.success,
         "time_seconds" => result.time_seconds,
-        "time_microseconds" => isnothing(result.time_seconds) ? nothing : result.time_seconds * 1e6,
+        "time_microseconds" =>
+            isnothing(result.time_seconds) ? nothing : result.time_seconds * 1e6,
         "error_msg" => result.error_msg,
         "expression" => render_test_expression(result.test_def),
         "primary_kernel" => get(metrics, "primary_kernel", nothing),
-        "registers" => try parse(Int, get(metrics, "registers", "0")) catch; nothing end,
-        "local_bytes" => try parse(Int, get(metrics, "local", "0")) catch; nothing end,
-        "shared_bytes" => try parse(Int, get(metrics, "shared", "0")) catch; nothing end,
+        "registers" => try
+            parse(Int, get(metrics, "registers", "0"))
+        catch
+            nothing
+        end,
+        "local_bytes" => try
+            parse(Int, get(metrics, "local", "0"))
+        catch
+            nothing
+        end,
+        "shared_bytes" => try
+            parse(Int, get(metrics, "shared", "0"))
+        catch
+            nothing
+        end,
         "local_memory_status" => get(metrics, "status", nothing),
         "local_memory_kernels" => local_memory_kernels,
         "cuda_profile_lines" => result.cuda_profiles,
@@ -398,10 +423,13 @@ function build_report(results, test_filter::Union{String, Nothing})
             "total_tests" => length(results),
             "successful_tests" => length(successful),
             "failed_tests" => length(results) - length(successful),
-            "minimum_time_microseconds" => isempty(times_μs) ? nothing : minimum(times_μs),
-            "maximum_time_microseconds" => isempty(times_μs) ? nothing : maximum(times_μs),
+            "minimum_time_microseconds" =>
+                isempty(times_μs) ? nothing : minimum(times_μs),
+            "maximum_time_microseconds" =>
+                isempty(times_μs) ? nothing : maximum(times_μs),
             "mean_time_microseconds" => isempty(times_μs) ? nothing : mean(times_μs),
-            "median_time_microseconds" => length(times_μs) < 2 ? nothing : median(times_μs),
+            "median_time_microseconds" =>
+                length(times_μs) < 2 ? nothing : median(times_μs),
         ),
         "results" => [result_to_record(result) for result in results],
     )
@@ -446,7 +474,8 @@ function ensure_parent_dir(path::AbstractString)
     return nothing
 end
 
-resolve_output_path(path::AbstractString) = isabspath(path) ? path : joinpath(PROJECT_ROOT, path)
+resolve_output_path(path::AbstractString) =
+    isabspath(path) ? path : joinpath(PROJECT_ROOT, path)
 
 function write_json_report(path::AbstractString, report::Dict{String, Any})
     path = resolve_output_path(path)
@@ -462,12 +491,17 @@ function html_escape(s::AbstractString)
 end
 
 function markdown_expression_cell(expr::AbstractString)
-    escaped = html_escape(expr)
+    # Replace newlines with &#10; so the entire <details> element stays on one line.
+    # Markdown table parsers (including VS Code) treat literal newlines inside a cell
+    # as row breaks, which creates phantom blank rows in the rendered table.
+    escaped = replace(html_escape(expr), "\n" => "&#10;")
     return "<details><summary>show</summary><pre><code class=\"language-julia\">$(escaped)</code></pre></details>"
 end
 
 function markdown_table_row(record::Dict{String, Any}, comparison_by_test = nothing)
-    cmp = isnothing(comparison_by_test) ? nothing : get(comparison_by_test, record["name"], nothing)
+    cmp =
+        isnothing(comparison_by_test) ? nothing :
+        get(comparison_by_test, record["name"], nothing)
     baseline_time = "-"
     delta_time = "-"
     baseline_regs = "-"
@@ -491,7 +525,11 @@ function markdown_table_row(record::Dict{String, Any}, comparison_by_test = noth
     end
 end
 
-function write_markdown_report(path::AbstractString, report::Dict{String, Any}; comparison::Union{Dict{String, Any}, Nothing} = nothing)
+function write_markdown_report(
+    path::AbstractString,
+    report::Dict{String, Any};
+    comparison::Union{Dict{String, Any}, Nothing} = nothing,
+)
     path = resolve_output_path(path)
     ensure_parent_dir(path)
     metadata = report["run_metadata"]
@@ -536,19 +574,38 @@ function write_markdown_report(path::AbstractString, report::Dict{String, Any}; 
     push!(lines, "- Successful tests: $(summary["successful_tests"])")
     push!(lines, "- Failed tests: $(summary["failed_tests"])")
     if !isnothing(summary["minimum_time_microseconds"])
-        push!(lines, "- Minimum time (μs): $(@sprintf("%.3f", summary["minimum_time_microseconds"]))")
-        push!(lines, "- Maximum time (μs): $(@sprintf("%.3f", summary["maximum_time_microseconds"]))")
-        push!(lines, "- Mean time (μs): $(@sprintf("%.3f", summary["mean_time_microseconds"]))")
+        push!(
+            lines,
+            "- Minimum time (μs): $(@sprintf("%.3f", summary["minimum_time_microseconds"]))",
+        )
+        push!(
+            lines,
+            "- Maximum time (μs): $(@sprintf("%.3f", summary["maximum_time_microseconds"]))",
+        )
+        push!(
+            lines,
+            "- Mean time (μs): $(@sprintf("%.3f", summary["mean_time_microseconds"]))",
+        )
     end
     if !isnothing(summary["median_time_microseconds"])
-        push!(lines, "- Median time (μs): $(@sprintf("%.3f", summary["median_time_microseconds"]))")
+        push!(
+            lines,
+            "- Median time (μs): $(@sprintf("%.3f", summary["median_time_microseconds"]))",
+        )
     end
     push!(lines, "")
     push!(lines, "## Results")
     push!(lines, "")
-    push!(lines, "| Test | Type | Time (μs) | Baseline (μs) | Δ Time | Primary kernel | Regs | Base Regs | Local B | Base Local B | Shared B | Local memory | Local-memory kernels | Expression |")
-    push!(lines, "| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- | --- |")
-    comparison_by_test = isnothing(comparison) ? nothing : get(comparison, "by_test_name", nothing)
+    push!(
+        lines,
+        "| Test | Type | Time (μs) | Baseline (μs) | Δ Time | Primary kernel | Regs | Base Regs | Local B | Base Local B | Shared B | Local memory | Local-memory kernels | Expression |",
+    )
+    push!(
+        lines,
+        "| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- | --- |",
+    )
+    comparison_by_test =
+        isnothing(comparison) ? nothing : get(comparison, "by_test_name", nothing)
     for record in records
         push!(lines, markdown_table_row(record, comparison_by_test))
     end
@@ -598,7 +655,9 @@ function parse_cli_args(args::Vector{String})
         elseif isnothing(test_filter)
             test_filter = arg
         else
-            error("Multiple positional arguments provided; expected at most one test filter")
+            error(
+                "Multiple positional arguments provided; expected at most one test filter",
+            )
         end
         i += 1
     end
@@ -793,7 +852,9 @@ function compare_reports(current::Dict{String, Any}, baseline::Dict{String, Any}
         rec_cur = current_records[name]
         rec_base = get(baseline_records, name, nothing)
         cur_time = _to_float_or_nothing(get(rec_cur, "time_microseconds", nothing))
-        base_time = isnothing(rec_base) ? nothing : _to_float_or_nothing(get(rec_base, "time_microseconds", nothing))
+        base_time =
+            isnothing(rec_base) ? nothing :
+            _to_float_or_nothing(get(rec_base, "time_microseconds", nothing))
         delta_pct = if !isnothing(cur_time) && !isnothing(base_time) && base_time != 0
             100.0 * (cur_time - base_time) / base_time
         else
@@ -801,13 +862,16 @@ function compare_reports(current::Dict{String, Any}, baseline::Dict{String, Any}
         end
         by_name[name] = Dict{String, Any}(
             "baseline_found" => !isnothing(rec_base),
-            "baseline_success" => isnothing(rec_base) ? nothing : get(rec_base, "success", false),
+            "baseline_success" =>
+                isnothing(rec_base) ? nothing : get(rec_base, "success", false),
             "baseline_time_microseconds" => base_time,
             "current_time_microseconds" => cur_time,
             "delta_time_percent" => delta_pct,
-            "baseline_registers" => isnothing(rec_base) ? nothing : get(rec_base, "registers", nothing),
+            "baseline_registers" =>
+                isnothing(rec_base) ? nothing : get(rec_base, "registers", nothing),
             "current_registers" => get(rec_cur, "registers", nothing),
-            "baseline_local_bytes" => isnothing(rec_base) ? nothing : get(rec_base, "local_bytes", nothing),
+            "baseline_local_bytes" =>
+                isnothing(rec_base) ? nothing : get(rec_base, "local_bytes", nothing),
             "current_local_bytes" => get(rec_cur, "local_bytes", nothing),
         )
     end
@@ -1432,7 +1496,12 @@ end
 
 Run all tests and produce a report.
 """
-function main(; test_filter::Union{String, Nothing} = nothing, output_json::Union{String, Nothing} = nothing, output_markdown::Union{String, Nothing} = nothing, compare_against::Union{String, Nothing} = nothing)
+function main(;
+    test_filter::Union{String, Nothing} = nothing,
+    output_json::Union{String, Nothing} = nothing,
+    output_markdown::Union{String, Nothing} = nothing,
+    compare_against::Union{String, Nothing} = nothing,
+)
     println("="^90)
     println("ClimaCore Compiler Stress Test Suite - Pointwise/Broadcast Operations")
     println("Device: $(DEVICE)")
