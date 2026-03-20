@@ -4,10 +4,13 @@ import ClimaComms
 using CUDA: @cuda
 import ClimaCore.Utilities: half
 import ClimaCore.Operators
+import ClimaCore: Operators
 import ClimaCore.Operators: AbstractStencilStyle, strip_space
 import ClimaCore.Operators: setidx!, getidx
 import ClimaCore.Operators: StencilBroadcasted
 import ClimaCore.Operators: LeftBoundaryWindow, RightBoundaryWindow, Interior
+using UnrolledUtilities
+
 
 struct CUDAColumnStencilStyle <: AbstractStencilStyle end
 struct CUDAWithShmemColumnStencilStyle <: AbstractStencilStyle end
@@ -20,7 +23,7 @@ Base.Broadcast.BroadcastStyle(
 ) = y
 
 include("operators_fd_shmem_is_supported.jl")
-
+include("newmm.jl")
 struct ShmemParams{Nv} end
 interior_size(::ShmemParams{Nv}) where {Nv} = (Nv,)
 boundary_size(::ShmemParams{Nv}) where {Nv} = (1,)
@@ -37,6 +40,7 @@ function Base.copyto!(
 )
     space = axes(out)
     bounds = Operators.window_bounds(space, bc)
+    # @show bounds
     out_fv = Fields.field_values(out)
     us = DataLayouts.UniversalSize(out_fv)
 
@@ -81,7 +85,18 @@ function Base.copyto!(
         (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(out_fv)
         #  Specialized kernel launch for common case.  This uses block and grid indices
         # instead of computing cartesian indices from a linear index
-        if (Nv == 64 || Nv == 63) && mask isa NoMask && Ni == 4 && Nj == 4 && Nh >= 1500
+        if !Topologies.isperiodic(space) && mask isa NoMask && n_face_levels == 64
+                new_bc = recursively_replace_fd_ops(bc′)
+                args = (
+                    strip_space(out, space),
+                    strip_space(new_bc, space),
+                    axes(out),
+                )
+                mykr =
+                    CUDA.@cuda always_inline = true threads = (64, 4, 1) blocks =
+                        (1, Nj, Nh) shmem = 64 * 4 * 9 * 4 new_stencil_entry!(args...)
+                return out
+
             args = (
                 strip_space(out, space),
                 strip_space(bc′, space),
@@ -103,7 +118,6 @@ function Base.copyto!(
         else
             cartesian_indicies_mask(us, mask)
         end
-
         args = (
             strip_space(out, space),
             strip_space(bc′, space),
