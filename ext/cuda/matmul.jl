@@ -29,7 +29,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                     if ld2 <= pd - mat1_row_d <= ud2 &&
                        (Int32(0) < v + mat1_row_d + half <= Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
-                                  matrix2[v + mat1_row_d + half, i][pd - mat1_row_d]
+                                  matrix2[v + mat1_row_d + half+ (i - Int32(1)) * Int32(64)][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -67,7 +67,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                     if ld2 <= pd - mat1_row_d <= ud2 &&
                        (Int32(0) < v + mat1_row_d - half < Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
-                                  matrix2[v + mat1_row_d - half, i][pd - mat1_row_d]
+                                  matrix2[v + mat1_row_d - half+ (i - Int32(1)) * Int32(64)][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -104,7 +104,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                 UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
                     if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) < v + mat1_row_d <= Int32(63))
                         @inbounds mat1_row[mat1_row_d] *
-                                  matrix2[v + mat1_row_d, i][pd - mat1_row_d]
+                                  matrix2[v + mat1_row_d+ (i - Int32(1)) * Int32(64)][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -143,7 +143,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                 UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
                     if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) < v + mat1_row_d <= Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
-                                  matrix2[v + mat1_row_d, i][pd - mat1_row_d]
+                                  matrix2[v + mat1_row_d+ (i - Int32(1)) * Int32(64)][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -181,7 +181,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                     if ld2 <= pd - mat1_row_d <= ud2 &&
                        (Int32(0) < v + mat1_row_d + half <= Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
-                                  matrix2[v + mat1_row_d + half, i][pd - mat1_row_d]
+                                  matrix2[v + mat1_row_d + half+ (i - Int32(1)) * Int32(64)][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -219,7 +219,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                     if ld2 <= pd - mat1_row_d <= ud2 &&
                        (Int32(0) < v + mat1_row_d - half < Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
-                                  matrix2[v + mat1_row_d - half, i][pd - mat1_row_d]
+                                  matrix2[v + mat1_row_d - half+ (i - Int32(1)) * Int32(64)][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -256,7 +256,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                 UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
                     if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) < v + mat1_row_d <= Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
-                                  matrix2[v + mat1_row_d, i][pd - mat1_row_d]
+                                  matrix2[v + mat1_row_d+ (i - Int32(1)) * Int32(64)][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -293,7 +293,7 @@ Base.@propagate_inbounds function row_mul_mat!(
                 UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
                     if ld2 <= pd - mat1_row_d <= ud2 && (Int32(0) < v + mat1_row_d < Int32(64))
                         @inbounds mat1_row[mat1_row_d] *
-                                  matrix2[v + mat1_row_d, i][pd - mat1_row_d]
+                                  matrix2[v + mat1_row_d+ (i - Int32(1)) * Int32(64)][pd - mat1_row_d]
                     else
                         zero_entry
                     end
@@ -330,7 +330,7 @@ Base.@propagate_inbounds function row_mul_vec!(
             init = zero_entry,
         ) do mat1_row_d
             if (Int32(0) < v + mat1_row_d + half <= Int32(64))
-                @inbounds outer_or_mul(mat1_row[mat1_row_d], matrix2[v + mat1_row_d + half, i])
+                @inbounds outer_or_mul(mat1_row[mat1_row_d], matrix2[v + mat1_row_d + half+ (i - Int32(1)) * Int32(64)])
             else
                 zero_entry
             end
@@ -361,7 +361,7 @@ Base.@propagate_inbounds function row_mul_vec!(
             init = zero_entry,
         ) do mat1_row_d
             if (Int32(0) < v + mat1_row_d - half < Int32(64))
-                @inbounds outer_or_mul(mat1_row[mat1_row_d], matrix2[v + mat1_row_d - half, i])
+                @inbounds outer_or_mul(mat1_row[mat1_row_d], matrix2[v + mat1_row_d - half + (i - Int32(1)) * Int32(64)])
             else
                 zero_entry
             end
@@ -391,7 +391,7 @@ Base.@propagate_inbounds function row_mul_vec!(
             init = zero_entry,
         ) do mat1_row_d
             if (Int32(0) < v + mat1_row_d <= Int32(63))
-                @inbounds outer_or_mul(mat1_row[mat1_row_d], matrix2[v + mat1_row_d, i])
+                @inbounds outer_or_mul(mat1_row[mat1_row_d], matrix2[v + mat1_row_d+ (i - Int32(1)) * Int32(64)])
             else
                 zero_entry
             end
@@ -421,7 +421,7 @@ Base.@propagate_inbounds function row_mul_vec!(
             init = zero_entry,
         ) do mat1_row_d
             if (Int32(0) < v + mat1_row_d <= Int32(64))
-                @inbounds outer_or_mul(mat1_row[mat1_row_d], matrix2[v + mat1_row_d, i])
+                @inbounds outer_or_mul(mat1_row[mat1_row_d], matrix2[v + mat1_row_d+ (i - Int32(1)) * Int32(64)])
             else
                 zero_entry
             end

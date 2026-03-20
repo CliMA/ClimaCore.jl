@@ -287,8 +287,10 @@ Base.@propagate_inbounds function calc_level_val(
     # It should be possible to use static shared memory here, but it allocates new shared memory
     # for each layer of recursion
     CUDA.sync_threads()
-    mat2 = CUDA.CuDynamicSharedArray(typeof(mat2_row_converted), Int32(64), CUDA.blockDim().y)
-    @inbounds mat2[v, i] = mat2_row_converted
+    # it should be possible to use a multi dim shared array here as well, but it seems to
+    # cause some weird issues with the indexing, so I'm just using a 1D array and indexing manually
+    mat2 = CUDA.CuDynamicSharedArray(typeof(mat2_row_converted), Int32(256))
+    @inbounds mat2[v  + (i - 1) * 64] = mat2_row_converted
     CUDA.sync_threads()
     # if the output is on centers, the 64th thread can just return 0
     mat1_space.staggering isa Spaces.CellCenter && v == Int32(64) &&
@@ -323,7 +325,14 @@ Base.@propagate_inbounds function calc_level_val(
         )
     else
         # mat * vec case
-        return @inline @inbounds row_mul_vec!(eltype(bc), mat1_row, mat2, mat1_shape)
+        out = @inline @inbounds row_mul_vec!(eltype(bc), mat1_row, mat2, mat1_shape)
+        # v==64 && blockIdx().z == 1 && i == 1 && blockIdx().y == 1  && @cushow out
+        # if !(-0.001f0 < out - mat2_row_converted < 0.001f0)
+        #     blockIdx().z == 1 && i == 1 && blockIdx().y == 1  && @cushow v
+        #     blockIdx().z == 1 && i == 1 && blockIdx().y == 1  && @cushow out
+        #     # blockIdx().z == 1 && i == 1 && blockIdx().y == 1  && @cushow out - mat2_row_converted
+        # end
+        return out
     end
 end
 
