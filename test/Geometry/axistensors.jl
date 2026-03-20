@@ -73,7 +73,7 @@ import ClimaCore
     @test_throws DimensionMismatch M * x
     @test_throws DimensionMismatch M \ x
 
-    @test DataLayouts.typesize(Float64, typeof(x)) == 2
+    @test DataLayouts.storage_length(Float64, typeof(x)) == 2
 end
 
 @testset "Printing" begin
