@@ -59,9 +59,13 @@ using Sockets
 # Set up logging to suppress info messages during testing
 disable_logging(Logging.Info)
 
-# Determine project root and buildkite directory
-const PROJECT_ROOT = dirname(dirname(abspath(PROGRAM_FILE)))
-const PROJECT_DIR = joinpath(PROJECT_ROOT, ".buildkite")
+# Determine project root and buildkite directory.
+# Use @__DIR__ so this works both when run as a script and when included from notebooks.
+const PROJECT_ROOT = dirname(@__DIR__)
+const PROJECT_DIR = begin
+    buildkite_dir = joinpath(PROJECT_ROOT, ".buildkite")
+    isdir(buildkite_dir) ? buildkite_dir : PROJECT_ROOT
+end
 
 # Default to CUDA; can still be overridden explicitly by environment
 const DEVICE = get(ENV, "CLIMACOMMS_DEVICE", "CUDA")
@@ -160,23 +164,45 @@ function parse_timings_from_output(output::String)
     return timings
 end
 
-"""
-    parse_cuda_profile_from_output(output::String) -> Vector{String}
-
-Parse CUDA profile lines from subprocess output.
-Expected format: "CUDA_PROFILE: ...".
-"""
-function parse_cuda_profile_from_output(output::String)
-    profiles = String[]
-    for line in split(output, '\n')
-        if startswith(line, "CUDA_PROFILE:")
-            push!(profiles, strip(line))
-        end
-    end
-    return profiles
+struct CUDAKernelProfile
+    kernel::String
+    registers::Int
+    local_bytes::Int
+    shared_bytes::Int
+    raw_line::String
 end
 
-function parse_cuda_profile_metrics(profile::String)
+function Base.show(io::IO, p::CUDAKernelProfile)
+    println(io, "CUDAKernelProfile(")
+    println(io, "  kernel       = ", repr(p.kernel))
+    println(io, "  registers    = ", p.registers)
+    println(io, "  local_bytes  = ", p.local_bytes)
+    println(io, "  shared_bytes = ", p.shared_bytes)
+    print(io, ")")
+end
+
+struct CUDAProfileSummary
+    primary_kernel::String
+    registers::Int
+    local_bytes::Int
+    shared_bytes::Int
+    status::String
+    local_memory_kernels::Int
+    total_kernels::Int
+end
+
+function Base.show(io::IO, s::CUDAProfileSummary)
+    println(io, "CUDAProfileSummary(")
+    println(io, "  primary_kernel        = ", repr(s.primary_kernel))
+    println(io, "  registers             = ", s.registers)
+    println(io, "  local_bytes           = ", s.local_bytes)
+    println(io, "  shared_bytes          = ", s.shared_bytes)
+    println(io, "  status                = ", repr(s.status))
+    println(io, "  local_memory_kernels  = ", s.local_memory_kernels, "/", s.total_kernels)
+    print(io, ")")
+end
+
+function parse_cuda_profile_metrics(profile::AbstractString)
     metrics = Dict{String, String}()
     payload = strip(replace(profile, "CUDA_PROFILE:" => ""))
     for token in split(payload)
@@ -188,52 +214,74 @@ function parse_cuda_profile_metrics(profile::String)
     return metrics
 end
 
-function summarize_cuda_profiles(profiles::Vector{String})
-    isempty(profiles) && return String[]
+function _metric_int(metrics::Dict{String, String}, key::String)
+    try
+        return parse(Int, get(metrics, key, "0"))
+    catch
+        return 0
+    end
+end
 
-    parsed_profiles =
-        [(profile, parse_cuda_profile_metrics(profile)) for profile in profiles]
+function _parse_cuda_profile_line(line::AbstractString)
+    metrics = parse_cuda_profile_metrics(line)
+    return CUDAKernelProfile(
+        get(metrics, "kernel", "unknown"),
+        _metric_int(metrics, "registers"),
+        _metric_int(metrics, "local"),
+        _metric_int(metrics, "shared"),
+        String(line),
+    )
+end
 
-    function metric_int(metrics::Dict{String, String}, key::String)
-        try
-            return parse(Int, get(metrics, key, "0"))
-        catch
-            return 0
+"""
+    parse_cuda_profile_from_output(output::String) -> Vector{CUDAKernelProfile}
+
+Parse CUDA profile lines from subprocess output.
+Expected format: "CUDA_PROFILE: ...".
+"""
+function parse_cuda_profile_from_output(output::String)
+    profiles = CUDAKernelProfile[]
+    for line in split(output, '\n')
+        if startswith(line, "CUDA_PROFILE:")
+            push!(profiles, _parse_cuda_profile_line(strip(line)))
         end
     end
+    return profiles
+end
 
-    primary_profile, primary_metrics = parsed_profiles[1]
-    primary_score = (
-        metric_int(primary_metrics, "registers"),
-        metric_int(primary_metrics, "local"),
-        metric_int(primary_metrics, "shared"),
-    )
-    for candidate in parsed_profiles[2:end]
-        _, metrics = candidate
+function summarize_cuda_profiles(profiles::Vector{CUDAKernelProfile})
+    isempty(profiles) && return nothing
+
+    primary = first(profiles)
+    primary_score = (primary.registers, primary.local_bytes, primary.shared_bytes)
+    for candidate in profiles[2:end]
         candidate_score = (
-            metric_int(metrics, "registers"),
-            metric_int(metrics, "local"),
-            metric_int(metrics, "shared"),
+            candidate.registers,
+            candidate.local_bytes,
+            candidate.shared_bytes,
         )
         if candidate_score > primary_score
-            primary_profile, primary_metrics = candidate
+            primary = candidate
             primary_score = candidate_score
         end
     end
 
-    local_memory_count = count(parsed_profiles) do (_, metrics)
-        metric_int(metrics, "local") > 0
-    end
+    local_memory_count = count(p -> p.local_bytes > 0, profiles)
+    status = primary.local_bytes > 0 ? "local_memory_used" : "no_local_memory"
 
-    registers = get(primary_metrics, "registers", "?")
-    local_bytes = metric_int(primary_metrics, "local")
-    shared_bytes = get(primary_metrics, "shared", "?")
-    kernel_name = get(primary_metrics, "kernel", "unknown")
-    status = local_bytes > 0 ? "local_memory_used" : "no_local_memory"
+    return CUDAProfileSummary(
+        primary.kernel,
+        primary.registers,
+        primary.local_bytes,
+        primary.shared_bytes,
+        status,
+        local_memory_count,
+        length(profiles),
+    )
+end
 
-    return [
-        "CUDA_PROFILE: primary_kernel=$(kernel_name) registers=$(registers) local=$(local_bytes) shared=$(shared_bytes) status=$(status) local_memory_kernels=$(local_memory_count)/$(length(parsed_profiles))",
-    ]
+function format_cuda_profile(summary::CUDAProfileSummary)
+    return "CUDA_PROFILE: primary_kernel=$(summary.primary_kernel) registers=$(summary.registers) local=$(summary.local_bytes) shared=$(summary.shared_bytes) status=$(summary.status) local_memory_kernels=$(summary.local_memory_kernels)/$(summary.total_kernels)"
 end
 
 function _command_output(cmd::Cmd)
@@ -370,14 +418,13 @@ function render_test_expression(test)
     end
 end
 
-function result_profile_metrics(result)
-    isempty(result.cuda_profiles) && return Dict{String, String}()
-    return parse_cuda_profile_metrics(first(result.cuda_profiles))
-end
+result_profile_summary(result) = result.cuda_profile_summary
 
 function result_to_record(result)
-    metrics = result_profile_metrics(result)
-    local_memory_kernels = get(metrics, "local_memory_kernels", "0/0")
+    summary = result_profile_summary(result)
+    local_memory_kernels =
+        isnothing(summary) ? "0/0" :
+        "$(summary.local_memory_kernels)/$(summary.total_kernels)"
     return Dict{String, Any}(
         "name" => result.test_def.name,
         "description" => result.test_def.description,
@@ -391,25 +438,14 @@ function result_to_record(result)
             isnothing(result.time_seconds) ? nothing : result.time_seconds * 1e6,
         "error_msg" => result.error_msg,
         "expression" => render_test_expression(result.test_def),
-        "primary_kernel" => get(metrics, "primary_kernel", nothing),
-        "registers" => try
-            parse(Int, get(metrics, "registers", "0"))
-        catch
-            nothing
-        end,
-        "local_bytes" => try
-            parse(Int, get(metrics, "local", "0"))
-        catch
-            nothing
-        end,
-        "shared_bytes" => try
-            parse(Int, get(metrics, "shared", "0"))
-        catch
-            nothing
-        end,
-        "local_memory_status" => get(metrics, "status", nothing),
+        "primary_kernel" => isnothing(summary) ? nothing : summary.primary_kernel,
+        "registers" => isnothing(summary) ? nothing : summary.registers,
+        "local_bytes" => isnothing(summary) ? nothing : summary.local_bytes,
+        "shared_bytes" => isnothing(summary) ? nothing : summary.shared_bytes,
+        "local_memory_status" => isnothing(summary) ? nothing : summary.status,
         "local_memory_kernels" => local_memory_kernels,
-        "cuda_profile_lines" => result.cuda_profiles,
+        "cuda_profile_lines" =>
+            isnothing(summary) ? String[] : [format_cuda_profile(summary)],
     )
 end
 
@@ -1431,9 +1467,28 @@ mutable struct TestResult
     success::Bool
     time_seconds::Union{Float64, Nothing}
     error_msg::String
-    cuda_profiles::Vector{String}
+    cuda_profile_summary::Union{CUDAProfileSummary, Nothing}
 
-    TestResult(test_def) = new(test_def, false, nothing, "", String[])
+    TestResult(test_def) = new(test_def, false, nothing, "", nothing)
+end
+
+function Base.show(io::IO, r::TestResult)
+    println(io, "TestResult(")
+    println(io, "  name    = ", repr(r.test_def.name))
+    println(io, "  success = ", r.success)
+    if r.success && !isnothing(r.time_seconds)
+        @printf io "  time_μs = %.3f\n" r.time_seconds * 1e6
+    end
+    if !isempty(r.error_msg)
+        println(io, "  error   = ", repr(r.error_msg))
+    end
+    if !isnothing(r.cuda_profile_summary)
+        # Indent the nested struct by prepending two spaces to each of its lines
+        profile_str = sprint(show, r.cuda_profile_summary)
+        indented = join("  " .* split(profile_str, '\n'), '\n')
+        println(io, "  cuda_profile = ", indented)
+    end
+    print(io, ")")
 end
 
 """
@@ -1451,7 +1506,7 @@ function run_test(test_def::TestDef)
     success, output, error = run_test_subprocess(test_code, test_def.name)
 
     if success
-        result.cuda_profiles =
+        result.cuda_profile_summary =
             summarize_cuda_profiles(parse_cuda_profile_from_output(output))
         # Parse timing from output
         timings = parse_timings_from_output(output)
@@ -1483,8 +1538,8 @@ function print_result(result::TestResult)
             print(" [geometry]")
         end
         println()
-        for line in result.cuda_profiles
-            println("    " * line)
+        if !isnothing(result.cuda_profile_summary)
+            println("    " * format_cuda_profile(result.cuda_profile_summary))
         end
     else
         @printf "  %-45s ERROR: %s\n" test.name result.error_msg
