@@ -7,7 +7,7 @@ const reported_stats = Dict()
 const kernel_names = IdDict()
 # Call via ClimaCore.DataLayouts.empty_kernel_stats()
 empty_kernel_stats(::ClimaComms.CUDADevice) = empty!(reported_stats)
-collect_kernel_stats() = _getenv_bool("CLIMACORE_COLLECT_KERNEL_STATS"; default = false)
+collect_kernel_stats() = _getenv_bool("CLIMA_COLLECT_CUDA_KERNEL_STATS"; default = false)
 
 function _memory_bytes(memory, key::Symbol)
     if hasproperty(memory, key)
@@ -200,18 +200,16 @@ function auto_launch!(
             s *= "     maxthreads:     $(CUDA.maxthreads(kernel))\n"
             s *= "     registers:      $(CUDA.registers(kernel))\n"
             isnothing(threads_s) || ( s *= "     threads_s_frac: $(prod(threads_s)/CUDA.maxthreads(kernel))\n")
-            s *= "     memory:         $(CUDA.memory(kernel))\n"
-            @info s
             memory = CUDA.memory(kernel)
             local_bytes = _memory_bytes(memory, :local)
             shared_bytes = _memory_bytes(memory, :shared)
             const_bytes = _memory_bytes(memory, :constant)
-            println(
-                "CUDA_PROFILE: kernel=$(something(kernel_name, nameof(F!))) " *
-                "registers=$(CUDA.registers(kernel)) " *
-                "local=$(local_bytes) shared=$(shared_bytes) constant=$(const_bytes) " *
-                "maxthreads=$(CUDA.maxthreads(kernel))",
-            )
+            s *= "     memory:         $(memory)\n"
+            s *= "     CUDA_PROFILE:   kernel=$(something(kernel_name, nameof(F!))) " *
+                 "registers=$(CUDA.registers(kernel)) " *
+                 "local=$(local_bytes) shared=$(shared_bytes) constant=$(const_bytes) " *
+                 "maxthreads=$(CUDA.maxthreads(kernel))\n"
+            @info s
 #! format: on
             reported_stats[key] = true
             # error("Oops") # for debugging

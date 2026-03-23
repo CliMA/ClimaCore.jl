@@ -125,7 +125,7 @@ function run_test_subprocess(test_code::String, test_name::String)
             # Use withenv to set environment variables
             output = withenv(
                 "CLIMACOMMS_DEVICE" => DEVICE,
-                "CLIMACORE_COLLECT_KERNEL_STATS" => (has_cuda_env() ? "1" : "0"),
+                "CLIMA_COLLECT_CUDA_KERNEL_STATS" => (has_cuda_env() ? "1" : "0"),
             ) do
                 read(cmd, String)
             end
@@ -204,7 +204,7 @@ end
 
 function parse_cuda_profile_metrics(profile::AbstractString)
     metrics = Dict{String, String}()
-    payload = strip(replace(profile, "CUDA_PROFILE:" => ""))
+    payload = strip(split(profile, "CUDA_PROFILE:"; limit = 2)[2])
     for token in split(payload)
         if contains(token, '=')
             key, value = split(token, '='; limit = 2)
@@ -237,12 +237,12 @@ end
     parse_cuda_profile_from_output(output::String) -> Vector{CUDAKernelProfile}
 
 Parse CUDA profile lines from subprocess output.
-Expected format: "CUDA_PROFILE: ...".
+Expected format: an info-log line containing "CUDA_PROFILE: ...".
 """
 function parse_cuda_profile_from_output(output::String)
     profiles = CUDAKernelProfile[]
     for line in split(output, '\n')
-        if startswith(line, "CUDA_PROFILE:")
+        if occursin("CUDA_PROFILE:", line)
             push!(profiles, _parse_cuda_profile_line(strip(line)))
         end
     end
