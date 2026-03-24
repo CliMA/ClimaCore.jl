@@ -62,19 +62,18 @@ operator_input_space(
     space::Spaces.ExtrudedFiniteDifferenceSpace,
 ) = Spaces.FaceExtrudedFiniteDifferenceSpace(space)
 
-has_affine_bc(op) = any(
+has_affine_bc(op) = unrolled_any(
     bc ->
         bc isa Union{
             Operators.SetValue,
             Operators.SetGradient,
             Operators.SetDivergence,
             Operators.SetCurl,
-        } && bc.val != rzero(typeof(bc.val)),
+        } && ((typeof(bc.val) <: Fields.Field) || bc.val != rzero(typeof(bc.val))),
     op.bcs,
 )
 
 uses_extrapolate(op) = unrolled_any(Base.Fix2(isa, Operators.Extrapolate), op.bcs)
-
 ################################################################################
 
 struct FDOperatorMatrix{O <: Operators.FiniteDifferenceOperator} <:
@@ -266,7 +265,11 @@ Operators.return_space(op_matrix::FDOperatorMatrix, spaces...) =
 
 function Operators.return_eltype(op_matrix::FDOperatorMatrix, args...)
     args′ = args[1:(end - 1)]
-    FT = Geometry.undertype(eltype(args[end]))
+    if typeof(args[end]) <: Spaces.AbstractSpace
+        FT = Spaces.undertype(args[end])
+    else
+        FT = Geometry.undertype(eltype(args[end]))
+    end
     return op_matrix_row_type(op_matrix.op, FT, args′...)
 end
 
