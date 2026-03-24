@@ -1,7 +1,7 @@
 import ClimaCore: Spaces, Quadratures, Topologies
 import Base.Broadcast: Broadcasted
 import ClimaComms
-using CUDA: @cuda
+using CUDA: @cuda, i32
 import ClimaCore.Utilities: half
 import ClimaCore.Operators
 import ClimaCore.Operators: AbstractStencilStyle, strip_space
@@ -81,16 +81,22 @@ function Base.copyto!(
         (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(out_fv)
         #  Specialized kernel launch for common case.  This uses block and grid indices
         # instead of computing cartesian indices from a linear index
-        if  !Topologies.isperiodic(space) && mask isa NoMask && n_face_levels * Ni <= 1024
-                new_bc = recursively_replace_fd_ops(bc′)
+        max_block_size = CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X)
+        if  !Topologies.isperiodic(space) && mask isa NoMask && n_face_levels * Ni <= max_block_size
+                new_bc = replace_fd_ops(bc′)
                 args = (
                     strip_space(out, space),
                     strip_space(new_bc, space),
                     axes(out),
                 )
-                mykr =
-                    CUDA.@cuda always_inline = true threads = (n_face_levels, Ni, 1) blocks =
-                        (1, Nj, Nh) shmem = n_face_levels * Ni * 9 * 4 new_stencil_entry!(args...)
+                auto_launch!(
+                    eager_copyto_stencil_kernel!,
+                    args;
+                    threads_s = (n_face_levels, Ni, 1),
+                    blocks_s = (1, Nj, Nh),
+                    always_inline = true,
+                    shmem = n_face_levels * Ni * 9 * 4, # see `check_if_fits_in_shmem` for how this is calculated
+                )
                 return out
 
             args = (
