@@ -79,7 +79,8 @@ end
         auto = false,
         threads_s,
         blocks_s,
-        always_inline = true
+        always_inline = true,
+        shmem = 0,
     )
 
 Launch a cuda kernel, using `CUDA.launch_configuration` (if `auto=true`)
@@ -97,6 +98,7 @@ function auto_launch!(
     blocks_s = nothing,
     always_inline = true,
     caller = :unknown,
+    shmem = 0,
 ) where {F!}
     # If desired, compute a kernel name from the stack trace and store in
     # a global Dict, which serves as an in memory cache
@@ -163,7 +165,7 @@ function auto_launch!(
     else
         kernel =
             CUDA.@cuda name = kernel_name always_inline = always_inline threads =
-                threads_s blocks = blocks_s f!(args...)
+                threads_s blocks = blocks_s shmem = shmem f!(args...)
     end
 
     if collect_kernel_stats() # only for development use
