@@ -278,6 +278,7 @@ function Operators.return_eltype(
     matrix1,
     arg,
 )
+    # this is needed to support the divergence operator matrix applied to a Axis2Tensor field
     if (
         matrix1 isa Operators.StencilBroadcasted && matrix1.op isa FDOperatorMatrix &&
         !(eltype(arg) <: BandMatrixRow)

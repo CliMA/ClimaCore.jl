@@ -50,6 +50,8 @@ axis2(::Type{<:AdjointAxis2Tensor{<:Any, <:Tuple{A, Any}}}) where {A} = A
 
 Returns `true` if multiplying an object of type `X` with an object of type `Y` would require projection
 """
+needs_projection(::Type{X}, ::Type{Y}) where {X <: Number, Y <: SingleValue} = false
+needs_projection(::Type{X}, ::Type{Y}) where {X <: Number, Y} = false
 needs_projection(::Type{X}, ::Type{Y}) where {X <: SingleValue, Y <: SingleValue} = false
 needs_projection(
     ::Type{X},
