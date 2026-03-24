@@ -279,27 +279,35 @@ end
     LBC2F = Operators.LeftBiasedC2F(; bottom = Operators.SetValue(10))
     @. cy = cos(zc)
     @. fy = LBC2F(cy)
-    fy_ref = [FT(10), [cyp[i] for i in 1:length(cyp)]...]
-    @test all(fy_ref .== fyp)
+    fy_ref = ClimaComms.allowscalar(device) do
+        [FT(10), [cyp[i] for i in 1:length(cyp)]...]
+    end
+    @test all(fy_ref .== parent(ClimaCore.to_cpu(fy)))
 
     RBC2F = Operators.RightBiasedC2F(; top = Operators.SetValue(10))
     @. cy = cos(zc)
     @. fy = RBC2F(cy)
-    fy_ref = [[cyp[i] for i in 1:length(cyp)]..., FT(10)]
-    @test all(fy_ref .== fyp)
+    fy_ref = ClimaComms.allowscalar(device) do
+        [[cyp[i] for i in 1:length(cyp)]..., FT(10)]
+    end
+    @test all(fy_ref .== parent(ClimaCore.to_cpu(fy)))
 
     # F2C biased operators
     LBF2C = Operators.LeftBiasedF2C(; bottom = Operators.SetValue(10))
     @. cy = cos(zc)
     @. cy = LBF2C(fy)
-    cy_ref = [i == 1 ? FT(10) : fyp[i] for i in 1:length(cyp)]
-    @test all(cy_ref .== cyp)
+    cy_ref = ClimaComms.allowscalar(device) do
+        [i == 1 ? FT(10) : fyp[i] for i in 1:length(cyp)]
+    end
+    @test all(cy_ref .== parent(ClimaCore.to_cpu(cy)))
 
     RBF2C = Operators.RightBiasedF2C(; top = Operators.SetValue(10))
     @. cy = cos(zc)
     @. cy = RBF2C(fy)
-    cy_ref = [i == length(cyp) ? FT(10) : fyp[i + 1] for i in 1:length(cyp)]
-    @test all(cy_ref .== cyp)
+    cy_ref = ClimaComms.allowscalar(device) do
+        [i == length(cyp) ? FT(10) : fyp[i + 1] for i in 1:length(cyp)]
+    end
+    @test all(cy_ref .== parent(ClimaCore.to_cpu(cy)))
 end
 
 # https://github.com/CliMA/ClimaCore.jl/issues/994
