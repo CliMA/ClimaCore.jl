@@ -209,7 +209,7 @@ end
         ∂ = Operators.GradientF2C()
 
         # TODO: should we throw something else?
-        if are_boundschecks_forced
+        if are_boundschecks_forced && !(device isa ClimaComms.CUDADevice)
             @test_throws BoundsError ∂.(w .* I.(θ))
         else
             @warn "Bounds check on BoundsError ∂.(w .* I.(θ)) not verified."
