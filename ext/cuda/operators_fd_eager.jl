@@ -482,3 +482,16 @@ Base.@propagate_inbounds recursively_project(
     @inbounds @inline project(projection_tuple[1], y, projection_tuple[2])
 
 @generated new_struct(::Type{T}) where {T} = Expr(:new, :T)
+
+if hasfield(Method, :recursion_relation)
+    dont_limit = (args...) -> true
+    for m in methods(recursively_project)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(calc_level_val)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(outer_or_mul)
+        m.recursion_relation = dont_limit
+    end
+end
