@@ -421,7 +421,7 @@ end
 # Handles multiplication in row_mul_vec!.
 # Basically rmul, but some operators matrices require special handling
 # general case
-Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1, T2} = x * y
+Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1, T2} = x ⊠ y
 # case for grad of a vec
 Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1 <: AbstractVector, T2} = x ⊗ y
 Base.@propagate_inbounds outer_or_mul(
