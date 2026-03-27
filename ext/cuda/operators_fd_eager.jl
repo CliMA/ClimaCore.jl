@@ -223,64 +223,79 @@ Base.@propagate_inbounds function calc_level_val(
     Op <: MultiplyColumnwiseBandMatrixField,
     BC <: StencilBroadcasted{S, Op},
 }
-    v = threadIdx().x
-    i = threadIdx().y
-    mat1_space =
-        reconstruct_placeholder_space(axes(bc.args[1i32]), space)
-    mat2_space =
-        reconstruct_placeholder_space(axes(bc.args[2i32]), space)
+    if check_if_fits_in_shmem(bc.args[2i32])
+        v = threadIdx().x
+        i = threadIdx().y
+        mat1_space =
+            reconstruct_placeholder_space(axes(bc.args[1i32]), space)
+        mat2_space =
+            reconstruct_placeholder_space(axes(bc.args[2i32]), space)
 
-    mat2_row = calc_level_val(bc.args[2i32], mat2_space)
-    mat1_row = calc_level_val(bc.args[1i32], mat1_space)
-    # project before placing in shared memory to avoid projecting multiple times
-    mat2_row_converted =
-        @inbounds @inline project_row2_for_mul(mat1_row, mat2_row, mat2_space)
-    # It should be possible to use static shared memory here, but it allocates new shared memory
-    # for each layer of recursion
-    CUDA.sync_threads()
-    # it should be possible to use a multi dim shared array here as well, but it seems to
-    # cause some weird issues with the indexing, so I'm just using a 1D array and indexing manually
-    mat2 = CUDA.CuDynamicSharedArray(
-        typeof(mat2_row_converted),
-        CUDA.blockDim().x * CUDA.blockDim().y,
-    )
-    @inbounds mat2[v + (i - 1) * CUDA.blockDim().x] = mat2_row_converted
-    CUDA.sync_threads()
-    # if the output is on centers, the CUDA.blockDim().xth thread can just return 0
-    mat1_space.staggering isa Spaces.CellCenter && v == CUDA.blockDim().x &&
-        return new_struct(eltype(bc))
-    if mat1_space.staggering isa Spaces.CellCenter
-        mat1_shape =
-            eltype(ClimaCore.MatrixFields.outer_diagonals(typeof(mat1_row))) <:
-            ClimaCore.Utilities.PlusHalf ? FaceToCenter() : CenterToCenter()
-    else
-        mat1_shape =
-            eltype(ClimaCore.MatrixFields.outer_diagonals(typeof(mat1_row))) <:
-            ClimaCore.Utilities.PlusHalf ? CenterToFace() : FaceToFace()
-    end
-
-    if mat2_row_converted isa ClimaCore.MatrixFields.BandMatrixRow
-        # mat * mat case
-        if mat2_space.staggering isa Spaces.CellCenter
-            mat2_shape =
-                eltype(ClimaCore.MatrixFields.outer_diagonals(typeof(mat2_row))) <:
+        mat2_row = calc_level_val(bc.args[2i32], mat2_space)
+        mat1_row = calc_level_val(bc.args[1i32], mat1_space)
+        # project before placing in shared memory to avoid projecting multiple times
+        mat2_row_converted =
+            @inbounds @inline project_row2_for_mul(mat1_row, mat2_row, mat2_space)
+        # It should be possible to use static shared memory here, but it allocates new shared memory
+        # for each layer of recursion
+        CUDA.sync_threads()
+        # it should be possible to use a multi dim shared array here as well, but it seems to
+        # cause some weird issues with the indexing, so I'm just using a 1D array and indexing manually
+        mat2 = CUDA.CuDynamicSharedArray(
+            typeof(mat2_row_converted),
+            CUDA.blockDim().x * CUDA.blockDim().y,
+        )
+        @inbounds mat2[v + (i - 1) * CUDA.blockDim().x] = mat2_row_converted
+        CUDA.sync_threads()
+        # if the output is on centers, the CUDA.blockDim().xth thread can just return 0
+        mat1_space.staggering isa Spaces.CellCenter && v == CUDA.blockDim().x &&
+            return new_struct(eltype(bc))
+        if mat1_space.staggering isa Spaces.CellCenter
+            mat1_shape =
+                eltype(ClimaCore.MatrixFields.outer_diagonals(typeof(mat1_row))) <:
                 ClimaCore.Utilities.PlusHalf ? FaceToCenter() : CenterToCenter()
         else
-            mat2_shape =
-                eltype(ClimaCore.MatrixFields.outer_diagonals(typeof(mat2_row))) <:
+            mat1_shape =
+                eltype(ClimaCore.MatrixFields.outer_diagonals(typeof(mat1_row))) <:
                 ClimaCore.Utilities.PlusHalf ? CenterToFace() : FaceToFace()
         end
-        return @inbounds @inline row_mul_mat!(
-            eltype(bc),
-            mat1_row,
-            mat2,
-            mat1_shape,
-            mat2_shape,
-        )
+
+        if mat2_row_converted isa ClimaCore.MatrixFields.BandMatrixRow
+            # mat * mat case
+            if mat2_space.staggering isa Spaces.CellCenter
+                mat2_shape =
+                    eltype(ClimaCore.MatrixFields.outer_diagonals(typeof(mat2_row))) <:
+                    ClimaCore.Utilities.PlusHalf ? FaceToCenter() : CenterToCenter()
+            else
+                mat2_shape =
+                    eltype(ClimaCore.MatrixFields.outer_diagonals(typeof(mat2_row))) <:
+                    ClimaCore.Utilities.PlusHalf ? CenterToFace() : FaceToFace()
+            end
+            return @inbounds @inline row_mul_mat!(
+                eltype(bc),
+                mat1_row,
+                mat2,
+                mat1_shape,
+                mat2_shape,
+            )
+        else
+            # mat * vec case
+            out = @inbounds @inline row_mul_vec!(eltype(bc), mat1_row, mat2, mat1_shape)
+            return out
+        end
     else
-        # mat * vec case
-        out = @inbounds @inline row_mul_vec!(eltype(bc), mat1_row, mat2, mat1_shape)
-        return out
+        # values that won't fit in shmmem should just call getidx
+        i = threadIdx().y
+        j = blockIdx().y
+        v = threadIdx().x
+        h = blockIdx().z
+        hidx = (i, j, h)
+        if space.staggering isa Spaces.CellCenter
+            v == CUDA.blockDim().x && return @inline @inbounds new_struct(eltype(bc))
+        end
+        li = space.staggering isa Spaces.CellCenter ? 1i32 : half
+        idx = v - 1i32 + li
+        return @inbounds @inline getidx(space, bc, idx, hidx)
     end
 end
 
