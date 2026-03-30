@@ -24,10 +24,10 @@ Base.@propagate_inbounds function row_mul_mat!(
         if v + pd < li || v + pd > ri
             zero_entry
         else
-            UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
+            UnrolledUtilities.unrolled_mapreduce(⊞, (ld1:ud1...,)) do mat1_row_d
                 if ld2 <= pd - mat1_row_d <= ud2 &&
                    (0i32 < v + mat1_row_d + half <= CUDA.blockDim().x)
-                    @inbounds mat1_row[mat1_row_d] *
+                    @inbounds mat1_row[mat1_row_d] ⊠
                               matrix2[v + mat1_row_d + half + (i - 1i32) * CUDA.blockDim().x][pd - mat1_row_d]
                 else
                     zero_entry
@@ -60,10 +60,10 @@ Base.@propagate_inbounds function row_mul_mat!(
         if v + pd < li || v + pd > ri
             zero_entry
         else
-            UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
+            UnrolledUtilities.unrolled_mapreduce(⊞, (ld1:ud1...,)) do mat1_row_d
                 if ld2 <= pd - mat1_row_d <= ud2 &&
                    (0i32 < v + mat1_row_d - half < CUDA.blockDim().x)
-                    @inbounds mat1_row[mat1_row_d] *
+                    @inbounds mat1_row[mat1_row_d] ⊠
                               matrix2[v + mat1_row_d - half + (i - 1i32) * CUDA.blockDim().x][pd - mat1_row_d]
                 else
                     zero_entry
@@ -96,10 +96,10 @@ Base.@propagate_inbounds function row_mul_mat!(
         if v + pd < li || v + pd > ri
             zero_entry
         else
-            UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
+            UnrolledUtilities.unrolled_mapreduce(⊞, (ld1:ud1...,)) do mat1_row_d
                 if ld2 <= pd - mat1_row_d <= ud2 &&
                    (0i32 < v + mat1_row_d <= CUDA.blockDim().x - 1i32)
-                    @inbounds mat1_row[mat1_row_d] *
+                    @inbounds mat1_row[mat1_row_d] ⊠
                               matrix2[v + mat1_row_d + (i - 1i32) * CUDA.blockDim().x][pd - mat1_row_d]
                 else
                     zero_entry
@@ -134,9 +134,9 @@ Base.@propagate_inbounds function row_mul_mat!(
         if v + pd < li || v + pd > ri
             zero_entry
         else
-            UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
+            UnrolledUtilities.unrolled_mapreduce(⊞, (ld1:ud1...,)) do mat1_row_d
                 if ld2 <= pd - mat1_row_d <= ud2 && (0i32 < v + mat1_row_d <= CUDA.blockDim().x)
-                    @inbounds mat1_row[mat1_row_d] *
+                    @inbounds mat1_row[mat1_row_d] ⊠
                               matrix2[v + mat1_row_d + (i - 1i32) * CUDA.blockDim().x][pd - mat1_row_d]
                 else
                     zero_entry
@@ -169,10 +169,10 @@ Base.@propagate_inbounds function row_mul_mat!(
         if v + pd + half < li || v + pd + half > ri
             zero_entry
         else
-            UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
+            UnrolledUtilities.unrolled_mapreduce(⊞, (ld1:ud1...,)) do mat1_row_d
                 if ld2 <= pd - mat1_row_d <= ud2 &&
                    (0i32 < v + mat1_row_d + half <= CUDA.blockDim().x)
-                    @inbounds mat1_row[mat1_row_d] *
+                    @inbounds mat1_row[mat1_row_d] ⊠
                               matrix2[v + mat1_row_d + half + (i - 1i32) * CUDA.blockDim().x][pd - mat1_row_d]
                 else
                     zero_entry
@@ -205,10 +205,10 @@ Base.@propagate_inbounds function row_mul_mat!(
         if v + pd + half < li || v + pd + half > ri
             zero_entry
         else
-            UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
+            UnrolledUtilities.unrolled_mapreduce(⊞, (ld1:ud1...,)) do mat1_row_d
                 if ld2 <= pd - mat1_row_d <= ud2 &&
                    (0i32 < v + mat1_row_d - half < CUDA.blockDim().x)
-                    @inbounds mat1_row[mat1_row_d] *
+                    @inbounds mat1_row[mat1_row_d] ⊠
                               matrix2[v + mat1_row_d - half + (i - 1i32) * CUDA.blockDim().x][pd - mat1_row_d]
                 else
                     zero_entry
@@ -241,9 +241,9 @@ Base.@propagate_inbounds function row_mul_mat!(
         if v + pd + half < li || v + pd + half > ri
             zero_entry
         else
-            UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
+            UnrolledUtilities.unrolled_mapreduce(⊞, (ld1:ud1...,)) do mat1_row_d
                 if ld2 <= pd - mat1_row_d <= ud2 && (0i32 < v + mat1_row_d <= CUDA.blockDim().x)
-                    @inbounds mat1_row[mat1_row_d] *
+                    @inbounds mat1_row[mat1_row_d] ⊠
                               matrix2[v + mat1_row_d + (i - 1i32) * CUDA.blockDim().x][pd - mat1_row_d]
                 else
                     zero_entry
@@ -276,9 +276,9 @@ Base.@propagate_inbounds function row_mul_mat!(
         if v + pd + half < li || v + pd + half > ri
             zero_entry
         else
-            UnrolledUtilities.unrolled_sum((ld1:ud1...,)) do mat1_row_d
+            UnrolledUtilities.unrolled_mapreduce(⊞, (ld1:ud1...,)) do mat1_row_d
                 if ld2 <= pd - mat1_row_d <= ud2 && (0i32 < v + mat1_row_d < CUDA.blockDim().x)
-                    @inbounds mat1_row[mat1_row_d] *
+                    @inbounds mat1_row[mat1_row_d] ⊠
                               matrix2[v + mat1_row_d + (i - 1i32) * CUDA.blockDim().x][pd - mat1_row_d]
                 else
                     zero_entry
@@ -338,8 +338,7 @@ Base.@propagate_inbounds function row_mul_vec!(
     ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
     li = 1i32
     ri = CUDA.blockDim().x
-    new_P = Base.promote_op(outer_or_mul, eltype(mat1_row), eltype(matrix2))
-    zero_entry = rzero(new_P)
+    zero_entry = rzero(prod_eltype)
     return UnrolledUtilities.unrolled_mapreduce(
         ⊞,
         ld1:ud1;
@@ -427,7 +426,12 @@ Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1 <: AbstractVector,
 Base.@propagate_inbounds outer_or_mul(
     x::T1,
     y::T2,
-) where {T1, T2 <: Union{Tuple, NamedTuple}} = RecursiveApply.rmap(Base.Fix1(*, x), y)
+) where {T1, T2 <: Union{Tuple, NamedTuple}} =
+    RecursiveApply.rmap(Base.Fix1(outer_or_mul, x), y)
+Base.@propagate_inbounds outer_or_mul(
+    x::T1,
+    y::T2,
+) where {T1 <: Union{Tuple, NamedTuple}, T2 <: Union{Tuple, NamedTuple}} = x ⊠ y
 Base.@propagate_inbounds outer_or_mul(
     x::T1,
     y::T2,

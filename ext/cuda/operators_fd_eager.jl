@@ -453,7 +453,9 @@ end
 Projects `mat2_row` onto the correct axis for multiplication with `mat1_row` if necessary, and returns the projected row.
 """
 Base.@propagate_inbounds function project_row2_for_mul(mat1_row, mat2_row, space)
-    if !ClimaCore.Geometry.needs_projection(typeof(mat1_row), typeof(mat2_row))
+    mat1_et = mat1_row isa BandMatrixRow ? eltype(mat1_row) : typeof(mat1_row)
+    mat2_et = mat2_row isa BandMatrixRow ? eltype(mat2_row) : typeof(mat2_row)
+    if !ClimaCore.Geometry.needs_projection(mat1_et, mat2_et)
         return mat2_row
     end
     v = threadIdx().x
@@ -463,7 +465,7 @@ Base.@propagate_inbounds function project_row2_for_mul(mat1_row, mat2_row, space
     h = blockIdx().z
     hidx = (i, j, h)
     project_onto =
-        ClimaCore.Geometry.recursively_find_dual_axes_for_projection(typeof(mat1_row))
+        ClimaCore.Geometry.recursively_find_dual_axes_for_projection(mat1_et)
     if space.staggering isa Spaces.CellCenter && v == CUDA.blockDim().x
         lg = new_struct(Spaces.local_geometry_type(typeof(space)))
     else
