@@ -25,6 +25,10 @@ compiler fails altogether. The test suite covers:
 7. **Nested call operations** - helper functions that call other helper functions
     How does compilation behave as the call chain depth increases?
 
+8. **Function-argument subexpressions** - inline `max`/`ifelse` argument logic
+    Does compilation remain robust when function-call arguments contain
+    nontrivial subexpressions instead of precomputed intermediates?
+
 Each test is run in a subprocess to avoid compilation state leakage.
 The Julia project is automatically instantiated before running tests.
 Uses the `.buildkite` project environment for reproducibility.
@@ -49,9 +53,9 @@ USAGE EXAMPLES:
   julia --project=.buildkite perf/stress_test_compiler.jl arithmetic_depth_5
 
   # Run with sbatch
-  mkdir -p perf/logs && sbatch --job-name=cc-stress-suite-v2 \
-    --output=perf/logs/stress_suite_v2_%j.log --gpus=1 \
-    --wrap='cd /home/pbachant/dev/ClimaCore.jl && CLIMACOMMS_DEVICE=CUDA julia --project=.buildkite perf/stress_test_compiler.jl'
+  mkdir -p perf/logs && sbatch --job-name=cc-stress-suite \
+    --output=perf/logs/stress_suite_%j.log --gpus=1 \
+    --wrap='CLIMACOMMS_DEVICE=CUDA julia --project=.buildkite perf/stress_test_compiler.jl'
 
 NOTE: The script automatically detects and uses the `.buildkite` project directory,
 so it should be run from the ClimaCore.jl root or from the perf/ directory.
@@ -415,6 +419,14 @@ function nested_call_expression(depth::Int)
     return join(defs, "\n")
 end
 
+function subexpression_args_expression(mode::String)
+    if mode == "inline"
+        return "@. loglambda = my_get_distribution_loglambda(scheme, max(zero(rhoq_ice), rhoq_ice), max(zero(rhon_ice), rhon_ice), ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhoq_ice), ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhob_rim))"
+    else
+        return "@. rhoq_ice_pos = max(zero(rhoq_ice), rhoq_ice)\n@. rhon_ice_pos = max(zero(rhon_ice), rhon_ice)\n@. rim_over_ice = ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhoq_ice)\n@. rim_over_bulk = ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhob_rim)\n@. loglambda = my_get_distribution_loglambda(scheme, rhoq_ice_pos, rhon_ice_pos, rim_over_ice, rim_over_bulk)"
+    end
+end
+
 function render_test_expression(test)
     if test.operation_type == "arithmetic"
         expr = arithmetic_expression(test.complexity)
@@ -436,6 +448,9 @@ function render_test_expression(test)
         return "op(x) = $expr\nop.(f)"
     elseif test.operation_type == "nested_calls"
         return nested_call_expression(test.complexity)
+    elseif test.operation_type == "subexpression_args"
+        mode = occursin("inline", test.name) ? "inline" : "precomputed"
+        return subexpression_args_expression(mode)
     elseif test.operation_type == "projection"
         proj_terms = join(
             [
@@ -1203,6 +1218,71 @@ function nested_calls_test(depth::Int)
 end
 
 """
+    subexpression_args_test(mode::String) -> String
+
+Generate test code for the pattern where function-call arguments contain inline
+subexpressions (`max`, `ifelse`, ratios) versus precomputed intermediates.
+This mirrors the precipitation-velocity microphysics use case.
+"""
+function subexpression_args_test(mode::String)
+    mode in ("precomputed", "inline") || error("Unknown mode: $mode")
+    test_name = "subexpression_args_$(mode)"
+
+    bench_expr = if mode == "inline"
+        "@. loglambda = my_get_distribution_loglambda(scheme, max(zero(rhoq_ice), rhoq_ice), max(zero(rhon_ice), rhon_ice), ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhoq_ice), ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhob_rim))"
+    else
+        "@. loglambda = my_get_distribution_loglambda(scheme, rhoq_ice_pos, rhon_ice_pos, rim_over_ice, rim_over_bulk)"
+    end
+
+    precompute_block = if mode == "precomputed"
+        """
+    @. rhoq_ice_pos = max(zero(rhoq_ice), rhoq_ice)
+    @. rhon_ice_pos = max(zero(rhon_ice), rhon_ice)
+    @. rim_over_ice = ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhoq_ice)
+    @. rim_over_bulk = ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhob_rim)
+        """
+    else
+        ""
+    end
+
+    test_impl = create_spectral_space() * """
+
+    rhoq_ice = Fields.Field(FT, space)
+    rhon_ice = Fields.Field(FT, space)
+    rhoq_rim = Fields.Field(FT, space)
+    rhob_rim = Fields.Field(FT, space)
+    loglambda = Fields.Field(FT, space)
+    rhoq_ice_pos = Fields.Field(FT, space)
+    rhon_ice_pos = Fields.Field(FT, space)
+    rim_over_ice = Fields.Field(FT, space)
+    rim_over_bulk = Fields.Field(FT, space)
+
+    fill!(Fields.field_values(rhoq_ice), 1.5)
+    fill!(Fields.field_values(rhon_ice), 0.5)
+    fill!(Fields.field_values(rhoq_rim), 0.75)
+    fill!(Fields.field_values(rhob_rim), 2.0)
+    fill!(Fields.field_values(loglambda), 0.0)
+
+    scheme = (; c1 = FT(0.7), c2 = FT(1.1), c3 = FT(0.4))
+    my_get_distribution_loglambda(s, q, n, rqi, rqb) =
+        log(abs(s.c1 * q + s.c2 * n) + 1) + s.c3 * (rqi - rqb)
+
+    $precompute_block
+
+    # Warm up compilation
+    _ = $bench_expr
+
+    # Benchmark ClimaCore's generated kernel
+    trial = @benchmark $bench_expr samples=10 evals=1
+
+    time_μs = minimum(trial.times) / 1000.0
+    @printf "TIMING: $(test_name) = %.6f s\\n" time_μs / 1e6
+    """
+
+    return generate_field_test_code(test_name, test_impl)
+end
+
+"""
     projection_test(complexity::Int) -> String
 
 Generate test code for projection operations on geometric objects.
@@ -1439,7 +1519,7 @@ Definition of a single test case for generation and execution.
 struct TestDef
     name::String
     description::String
-    operation_type::String    # "arithmetic", "multiarg", "functions", "nested_calls", "projection", "divergence", "curl", "interpolate", "weighted_interpolate", "upwinding"
+    operation_type::String    # "arithmetic", "multiarg", "functions", "nested_calls", "subexpression_args", "projection", "divergence", "curl", "interpolate", "weighted_interpolate", "upwinding"
     complexity::Int           # nesting depth or argument count
     num_args::Int
     uses_geometry::Bool
@@ -1485,6 +1565,18 @@ const ALL_TESTS =
             TestDef("nested_calls_depth_$i", "Helper-function call chain depth $i",
                 "nested_calls", i, 1, false,
                 () -> nested_calls_test(i)) for i in [1, 3, 5, 7, 10]
+        ]
+
+        # Function-call args with inline subexpressions vs precomputed intermediates
+        [
+            TestDef("subexpression_args_precomputed",
+                "Function-call args use precomputed intermediates",
+                "subexpression_args", 1, 5, false,
+                () -> subexpression_args_test("precomputed"))
+            TestDef("subexpression_args_inline",
+                "Function-call args use inline max/ifelse subexpressions",
+                "subexpression_args", 2, 5, false,
+                () -> subexpression_args_test("inline"))
         ]
 
         # Projection operations
