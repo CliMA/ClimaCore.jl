@@ -22,9 +22,18 @@ compiler fails altogether. The test suite covers:
 6. **Curl operations** - differential operator on vector fields
    How does the curl operator compilation scale with mesh complexity?
 
+7. **Nested call operations** - helper functions that call other helper functions
+    How does compilation behave as the call chain depth increases?
+
 Each test is run in a subprocess to avoid compilation state leakage.
 The Julia project is automatically instantiated before running tests.
 Uses the `.buildkite` project environment for reproducibility.
+
+Benchmarking note: each test constructs spaces/fields and fills inputs before the
+timed region. The `@benchmark` expression only times the broadcast/pointwise
+operation under test. On CUDA, the profiled primary kernel may still be
+`knl_fill!` for some test expressions; this reflects the kernel generated for the
+operation itself, not benchmark inclusion of setup work.
 
 USAGE EXAMPLES:
   # Run all tests on CPU (default)
@@ -375,6 +384,37 @@ function functions_expression(funcs::Vector{String}, depth::Int)
     return expr
 end
 
+function nested_call_definitions(depth::Int)
+    defs = String[]
+    ops = ["+", "*", "/", "-"]
+    for i in 1:depth
+        op = ops[mod1(i, length(ops))]
+        rhs = if i == 1
+            "x"
+        else
+            "helper_$(i - 1)(x)"
+        end
+        expr = if op == "+"
+            "($rhs + $(i).0)"
+        elseif op == "*"
+            "($rhs * $(i + 1).0)"
+        elseif op == "/"
+            "($rhs / $(i + 1).0)"
+        else
+            "($rhs - $(i).0)"
+        end
+        push!(defs, "helper_$i(x) = $expr")
+    end
+    return defs
+end
+
+function nested_call_expression(depth::Int)
+    defs = nested_call_definitions(depth)
+    push!(defs, "op(x) = helper_$(depth)(x)")
+    push!(defs, "op.(f)")
+    return join(defs, "\n")
+end
+
 function render_test_expression(test)
     if test.operation_type == "arithmetic"
         expr = arithmetic_expression(test.complexity)
@@ -394,6 +434,8 @@ function render_test_expression(test)
         end
         expr = functions_expression(funcs, test.complexity)
         return "op(x) = $expr\nop.(f)"
+    elseif test.operation_type == "nested_calls"
+        return nested_call_expression(test.complexity)
     elseif test.operation_type == "projection"
         proj_terms = join(
             [
@@ -949,6 +991,8 @@ function generate_field_test_code(test_name::String, test_impl::String)
 
     using ClimaCore
     using ClimaCore.Fields
+    using ClimaCore.CommonSpaces
+    using ClimaCore.Grids
     using ClimaCore.Spaces
     using ClimaCore.Domains
     using ClimaCore.Meshes
@@ -979,19 +1023,17 @@ Helper function to create a reusable spectral element space setup code string.
 function create_spectral_space()
     return """
     FT = Float64
-    context = ClimaComms.context()
-    if context isa ClimaComms.MPICommsContext
-        ClimaComms.init(context)
-    end
-
-    domain = Domains.RectangleDomain(
-        Domains.IntervalDomain(Geometry.XPoint(-1.0), Geometry.XPoint(1.0); periodic=true),
-        Domains.IntervalDomain(Geometry.YPoint(-1.0), Geometry.YPoint(1.0); periodic=true),
+    space = CommonSpaces.RectangleXYSpace(FT;
+        x_min = -1.0,
+        x_max = 1.0,
+        y_min = -1.0,
+        y_max = 1.0,
+        periodic_x = true,
+        periodic_y = true,
+        n_quad_points = 4,
+        x_elem = 1,
+        y_elem = 1,
     )
-    mesh = Meshes.RectilinearMesh(domain, 1, 1)
-    grid_topology = Topologies.Topology2D(context, mesh)
-    quad = Quadratures.GLL{4}()
-    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     """
 end
 
@@ -1129,6 +1171,38 @@ function functions_test(funcs::Vector{String}, depth::Int)
 end
 
 """
+    nested_calls_test(depth::Int) -> String
+
+Generate test code for a chain of helper functions where each helper calls the
+previous one, then broadcast the outermost function across a field.
+"""
+function nested_calls_test(depth::Int)
+    test_name = "nested_calls_depth_$(depth)"
+    helper_defs = join(nested_call_definitions(depth), "\n    ")
+
+    test_impl = create_spectral_space() * """
+
+    f = Fields.Field(FT, space)
+    fill!(Fields.field_values(f), 1.5)
+
+    $helper_defs
+    op(x) = helper_$(depth)(x)
+
+    # Warm up compilation
+    _ = op(1.5)
+    _ = op.(f)
+
+    # Benchmark ClimaCore's generated kernel
+    trial = @benchmark \$op.(\$f) samples=10 evals=1
+
+    time_μs = minimum(trial.times) / 1000.0
+    @printf "TIMING: $(test_name) = %.6f s\\n" time_μs / 1e6
+    """
+
+    return generate_field_test_code(test_name, test_impl)
+end
+
+"""
     projection_test(complexity::Int) -> String
 
 Generate test code for projection operations on geometric objects.
@@ -1169,20 +1243,18 @@ Produces both center and face spaces needed for C2F/F2C operators.
 function create_column_space()
     return """
     FT = Float64
-    context = ClimaComms.context()
-    if context isa ClimaComms.MPICommsContext
-        ClimaComms.init(context)
-    end
-
-    col_domain = Domains.IntervalDomain(
-        Geometry.ZPoint{FT}(0.0),
-        Geometry.ZPoint{FT}(1.0);
-        boundary_names = (:bottom, :top),
+    center_space = CommonSpaces.ColumnSpace(FT;
+        z_min = 0.0,
+        z_max = 1.0,
+        z_elem = 16,
+        staggering = Grids.CellCenter(),
     )
-    col_mesh = Meshes.IntervalMesh(col_domain; nelems = 16)
-    col_topology = Topologies.IntervalTopology(context, col_mesh)
-    center_space = Spaces.CenterFiniteDifferenceSpace(col_topology)
-    face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
+    face_space = CommonSpaces.ColumnSpace(FT;
+        z_min = 0.0,
+        z_max = 1.0,
+        z_elem = 16,
+        staggering = Grids.CellFace(),
+    )
     """
 end
 
@@ -1367,7 +1439,7 @@ Definition of a single test case for generation and execution.
 struct TestDef
     name::String
     description::String
-    operation_type::String    # "arithmetic", "projection", "multiarg", "functions", "divergence", "curl", "interpolate", "weighted_interpolate", "upwinding"
+    operation_type::String    # "arithmetic", "multiarg", "functions", "nested_calls", "projection", "divergence", "curl", "interpolate", "weighted_interpolate", "upwinding"
     complexity::Int           # nesting depth or argument count
     num_args::Int
     uses_geometry::Bool
@@ -1406,6 +1478,13 @@ const ALL_TESTS =
             TestDef("functions_mixed_depth_$i", "Mixed functions (log, sqrt, abs) depth $i",
                 "functions", i, 1, false,
                 () -> functions_test(["log", "sqrt", "abs"], i)) for i in [1, 2]
+        ]
+
+        # Nested helper-function call chains
+        [
+            TestDef("nested_calls_depth_$i", "Helper-function call chain depth $i",
+                "nested_calls", i, 1, false,
+                () -> nested_calls_test(i)) for i in [1, 3, 5, 7, 10]
         ]
 
         # Projection operations
