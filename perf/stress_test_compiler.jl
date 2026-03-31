@@ -420,10 +420,18 @@ function nested_call_expression(depth::Int)
 end
 
 function subexpression_args_expression(mode::String)
-    if mode == "inline"
+    if mode == "bare_namedtuple"
+        # Passes a bare NamedTuple as the first argument inside @.
+        # Julia refuses to broadcast over NamedTuples, so this FAILS.
         return "@. loglambda = my_get_distribution_loglambda(scheme, max(zero(rhoq_ice), rhoq_ice), max(zero(rhon_ice), rhon_ice), ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhoq_ice), ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhob_rim))"
-    else
-        return "@. rhoq_ice_pos = max(zero(rhoq_ice), rhoq_ice)\n@. rhon_ice_pos = max(zero(rhon_ice), rhon_ice)\n@. rim_over_ice = ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhoq_ice)\n@. rim_over_bulk = ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhob_rim)\n@. loglambda = my_get_distribution_loglambda(scheme, rhoq_ice_pos, rhon_ice_pos, rim_over_ice, rim_over_bulk)"
+    elseif mode == "closure_wrapped"
+        # Wraps the NamedTuple in a closure so broadcast never sees it.
+        # This is the minimal fix for the ClimaAtmos precipitation-velocity bug.
+        return "fn_with_scheme = let s = scheme\n    (q, n, rqi, rqb) -> log(abs(s.c1 * q + s.c2 * n) + 1) + s.c3 * (rqi - rqb)\nend\n@. loglambda = fn_with_scheme(max(zero(rhoq_ice), rhoq_ice), max(zero(rhon_ice), rhon_ice), ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhoq_ice), ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhob_rim))"
+    else  # precomputed
+        # Precomputes all subexpressions into separate fields, then calls the
+        # function with plain field arguments — no inline subexpressions at all.
+        return "@. rhoq_ice_pos = max(zero(rhoq_ice), rhoq_ice)\n@. rhon_ice_pos = max(zero(rhon_ice), rhon_ice)\n@. rim_over_ice = ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhoq_ice)\n@. rim_over_bulk = ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhob_rim)\nfn_with_scheme = let s = scheme\n    (q, n, rqi, rqb) -> log(abs(s.c1 * q + s.c2 * n) + 1) + s.c3 * (rqi - rqb)\nend\n@. loglambda = fn_with_scheme(rhoq_ice_pos, rhon_ice_pos, rim_over_ice, rim_over_bulk)"
     end
 end
 
@@ -449,7 +457,13 @@ function render_test_expression(test)
     elseif test.operation_type == "nested_calls"
         return nested_call_expression(test.complexity)
     elseif test.operation_type == "subexpression_args"
-        mode = occursin("inline", test.name) ? "inline" : "precomputed"
+        mode = if occursin("bare_namedtuple", test.name)
+            "bare_namedtuple"
+        elseif occursin("closure_wrapped", test.name)
+            "closure_wrapped"
+        else
+            "precomputed"
+        end
         return subexpression_args_expression(mode)
     elseif test.operation_type == "projection"
         proj_terms = join(
@@ -508,7 +522,7 @@ end
 
 function build_report(results, test_filter::Union{String, Nothing})
     successful = filter(r -> r.success, results)
-    times_μs = [r.time_seconds * 1e6 for r in successful]
+    times_μs = [r.time_seconds * 1e6 for r in successful if !isnothing(r.time_seconds)]
     return Dict{String, Any}(
         "schema_version" => 1,
         "run_metadata" => collect_run_metadata(test_filter),
@@ -610,9 +624,11 @@ function markdown_table_row(record::Dict{String, Any}, comparison_by_test = noth
         baseline_local = isnothing(bl) ? "-" : string(bl)
     end
 
-    if record["success"]
+    if record["success"] && !isnothing(record["time_microseconds"])
         time_cell = @sprintf("%.3f", record["time_microseconds"])
         return "| $(record["name"]) | $(record["operation_type"]) | $(time_cell) | $(baseline_time) | $(delta_time) | $(something(record["primary_kernel"], "-")) | $(something(record["registers"], "-")) | $(baseline_regs) | $(something(record["local_bytes"], "-")) | $(baseline_local) | $(something(record["shared_bytes"], "-")) | $(something(record["local_memory_status"], "-")) | $(record["local_memory_kernels"]) | $(markdown_expression_cell(record["expression"])) |"
+    elseif record["success"]
+        return "| $(record["name"]) | $(record["operation_type"]) | expected failure | $(baseline_time) | $(delta_time) | - | - | $(baseline_regs) | - | $(baseline_local) | - | - | - | $(markdown_expression_cell(record["expression"])) |"
     else
         return "| $(record["name"]) | $(record["operation_type"]) | FAILED | $(baseline_time) | $(delta_time) | - | - | $(baseline_regs) | - | $(baseline_local) | - | - | - | $(markdown_expression_cell(record["expression"])) |"
     end
@@ -1220,18 +1236,43 @@ end
 """
     subexpression_args_test(mode::String) -> String
 
-Generate test code for the pattern where function-call arguments contain inline
-subexpressions (`max`, `ifelse`, ratios) versus precomputed intermediates.
-This mirrors the precipitation-velocity microphysics use case.
+Generate test code comparing three strategies for passing a NamedTuple parameter
+alongside field arguments inside a broadcast expression:
+
+- `bare_namedtuple`: passes the NamedTuple directly inside `@.`; Julia refuses to
+  broadcast over NamedTuples and this **fails at runtime** with
+  `ArgumentError: broadcasting over dictionaries and NamedTuples is reserved`.
+  This reproduces the original ClimaAtmos microphysics precipitation-velocity bug.
+
+- `closure_wrapped`: captures the NamedTuple in a `let` closure so broadcast
+  never sees it; all subexpressions remain inline.  This is the minimal fix.
+
+- `precomputed`: evaluates each subexpression into a separate field first, then
+  calls through the same closure.  Maximally explicit; fewest inline operations.
 """
 function subexpression_args_test(mode::String)
-    mode in ("precomputed", "inline") || error("Unknown mode: $mode")
+    mode in ("bare_namedtuple", "closure_wrapped", "precomputed") ||
+        error("Unknown mode: $mode")
     test_name = "subexpression_args_$(mode)"
 
-    bench_expr = if mode == "inline"
-        "@. loglambda = my_get_distribution_loglambda(scheme, max(zero(rhoq_ice), rhoq_ice), max(zero(rhon_ice), rhon_ice), ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhoq_ice), ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhob_rim))"
+    # bare_namedtuple passes scheme directly and must fail.
+    # The other two modes wrap it in a closure so broadcast never touches scheme.
+    closure_setup = if mode == "bare_namedtuple"
+        ""  # no closure — scheme is passed directly and will error
     else
-        "@. loglambda = my_get_distribution_loglambda(scheme, rhoq_ice_pos, rhon_ice_pos, rim_over_ice, rim_over_bulk)"
+        """
+    fn_with_scheme = let s = scheme
+        (q, n, rqi, rqb) -> log(abs(s.c1 * q + s.c2 * n) + 1) + s.c3 * (rqi - rqb)
+    end
+        """
+    end
+
+    bench_expr = if mode == "bare_namedtuple"
+        "@. loglambda = my_get_distribution_loglambda(scheme, max(zero(rhoq_ice), rhoq_ice), max(zero(rhon_ice), rhon_ice), ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhoq_ice), ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhob_rim))"
+    elseif mode == "closure_wrapped"
+        "@. loglambda = fn_with_scheme(max(zero(rhoq_ice), rhoq_ice), max(zero(rhon_ice), rhon_ice), ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhoq_ice), ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / rhob_rim))"
+    else  # precomputed
+        "@. loglambda = fn_with_scheme(rhoq_ice_pos, rhon_ice_pos, rim_over_ice, rim_over_bulk)"
     end
 
     precompute_block = if mode == "precomputed"
@@ -1243,6 +1284,31 @@ function subexpression_args_test(mode::String)
         """
     else
         ""
+    end
+
+    # bare_namedtuple is expected to fail; catch and report rather than crashing.
+    bench_block = if mode == "bare_namedtuple"
+        """
+    try
+        $bench_expr
+        @printf "TIMING: $(test_name) = 0.0 s\\n"  # should not reach here
+    catch _e
+        println("EXPECTED_FAILURE: $(test_name): \$(sprint(showerror, _e))")
+    end
+        """
+    else
+        """
+    # Warm up compilation
+    _ = begin
+        $bench_expr
+    end
+
+    # Time one execution of ClimaCore's generated kernel
+    time_s = @elapsed begin
+        $bench_expr
+    end
+    @printf "TIMING: $(test_name) = %.6f s\\n" time_s
+        """
     end
 
     test_impl = create_spectral_space() * """
@@ -1268,15 +1334,8 @@ function subexpression_args_test(mode::String)
         log(abs(s.c1 * q + s.c2 * n) + 1) + s.c3 * (rqi - rqb)
 
     $precompute_block
-
-    # Warm up compilation
-    _ = $bench_expr
-
-    # Benchmark ClimaCore's generated kernel
-    trial = @benchmark $bench_expr samples=10 evals=1
-
-    time_μs = minimum(trial.times) / 1000.0
-    @printf "TIMING: $(test_name) = %.6f s\\n" time_μs / 1e6
+    $closure_setup
+    $bench_block
     """
 
     return generate_field_test_code(test_name, test_impl)
@@ -1569,14 +1628,18 @@ const ALL_TESTS =
 
         # Function-call args with inline subexpressions vs precomputed intermediates
         [
-            TestDef("subexpression_args_precomputed",
-                "Function-call args use precomputed intermediates",
+            TestDef("subexpression_args_bare_namedtuple",
+                "NamedTuple param passed bare inside @. (expected failure)",
+                "subexpression_args", 0, 5, false,
+                () -> subexpression_args_test("bare_namedtuple"))
+            TestDef("subexpression_args_closure_wrapped",
+                "NamedTuple param captured in let-closure (minimal fix)",
                 "subexpression_args", 1, 5, false,
-                () -> subexpression_args_test("precomputed"))
-            TestDef("subexpression_args_inline",
-                "Function-call args use inline max/ifelse subexpressions",
+                () -> subexpression_args_test("closure_wrapped"))
+            TestDef("subexpression_args_precomputed",
+                "Subexpressions precomputed into separate fields",
                 "subexpression_args", 2, 5, false,
-                () -> subexpression_args_test("inline"))
+                () -> subexpression_args_test("precomputed"))
         ]
 
         # Projection operations
@@ -1684,6 +1747,19 @@ function run_test(test_def::TestDef)
         if haskey(timings, test_def.name)
             result.time_seconds = timings[test_def.name]
             result.success = true
+        elseif any(
+            startswith(l, "EXPECTED_FAILURE: $(test_def.name)") for l in split(output, '\n')
+        )
+            # Expected failure: extract error message
+            for l in split(output, '\n')
+                if startswith(l, "EXPECTED_FAILURE: $(test_def.name)")
+                    result.error_msg =
+                        replace(l, "EXPECTED_FAILURE: $(test_def.name): " => "", count = 1)
+                    break
+                end
+            end
+            result.success = true
+            result.time_seconds = nothing
         else
             result.error_msg = "Failed to parse timing from output"
         end
@@ -1701,7 +1777,7 @@ Pretty-print a test result.
 """
 function print_result(result::TestResult)
     test = result.test_def
-    if result.success
+    if result.success && !isnothing(result.time_seconds)
         time_μs = result.time_seconds * 1e6
         @printf "  %-45s %10.3f μs" test.name time_μs
         @printf " (depth=%d, args=%d)" test.complexity test.num_args
@@ -1712,6 +1788,9 @@ function print_result(result::TestResult)
         if !isnothing(result.cuda_profile_summary)
             println("    " * format_cuda_profile(result.cuda_profile_summary))
         end
+    elseif result.success
+        # Expected-failure case: documented failure mode, no timing.
+        @printf "  %-45s [expected failure: %s]\n" test.name result.error_msg
     else
         @printf "  %-45s ERROR: %s\n" test.name result.error_msg
     end
@@ -1813,14 +1892,18 @@ function main(;
         println("Performance Summary")
         println("="^90)
 
-        times = [r.time_seconds * 1e6 for r in successful]  # convert to microseconds
+        times = [r.time_seconds * 1e6 for r in successful if !isnothing(r.time_seconds)]  # convert to microseconds
 
-        println("Execution times (microseconds):")
-        @printf "  Minimum:     %.3f μs\n" minimum(times)
-        @printf "  Maximum:     %.3f μs\n" maximum(times)
-        @printf "  Mean:        %.3f μs\n" mean(times)
-        if length(times) >= 2
-            @printf "  Median:      %.3f μs\n" median(times)
+        if isempty(times)
+            println("Execution times (microseconds): no timed successes")
+        else
+            println("Execution times (microseconds):")
+            @printf "  Minimum:     %.3f μs\n" minimum(times)
+            @printf "  Maximum:     %.3f μs\n" maximum(times)
+            @printf "  Mean:        %.3f μs\n" mean(times)
+            if length(times) >= 2
+                @printf "  Median:      %.3f μs\n" median(times)
+            end
         end
     end
 
