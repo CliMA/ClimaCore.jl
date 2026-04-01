@@ -120,6 +120,20 @@ placeholder_space(
     ::FacePlaceholderSpace,
     parent_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
 ) = Spaces.FaceExtrudedFiniteDifferenceSpace(parent_space)
+@inline reconstruct_placeholder_space(
+    ::FacePlaceholderSpace,
+    parent_space::Union{
+        Spaces.FaceFiniteDifferenceSpace,
+        Spaces.FaceExtrudedFiniteDifferenceSpace,
+    },
+) = parent_space
+@inline reconstruct_placeholder_space(
+    ::CenterPlaceholderSpace,
+    parent_space::Union{
+        Spaces.CenterFiniteDifferenceSpace,
+        Spaces.CenterExtrudedFiniteDifferenceSpace,
+    },
+) = parent_space
 
 strip_space(obj, parent_space) = obj
 
