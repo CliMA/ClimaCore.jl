@@ -285,16 +285,19 @@ Base.@propagate_inbounds function calc_level_val(
                     eltype(ClimaCore.MatrixFields.outer_diagonals(typeof(mat2_row))) <:
                     ClimaCore.Utilities.PlusHalf ? CenterToFace() : FaceToFace()
             end
-            return @inbounds @inline row_mul_mat!(
+            out = @inbounds @inline row_mul_mat!(
                 eltype(bc),
                 mat1_row,
                 mat2,
                 mat1_shape,
                 mat2_shape,
             )
+            out isa eltype(bc) || return convert(eltype(bc), out)
+            return out
         else
             # mat * vec case
             out = @inbounds @inline row_mul_vec!(eltype(bc), mat1_row, mat2, mat1_shape)
+            out isa eltype(bc) || return convert(eltype(bc), out)
             return out
         end
     else
