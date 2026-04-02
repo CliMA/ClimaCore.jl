@@ -37,6 +37,18 @@ check_if_fits_in_shmem(bc::Union{StencilBroadcasted, Broadcasted, Field}) =
 check_if_fits_in_shmem(val) = sizeof(typeof(val)) <= 36
 
 """
+    has_type_arg(x)
+Check if `x` is a `Type`, or any of its arguments has a `Type` argument.
+This is needed because both the shmem matrix multiplication and the getidx fallback rely on
+`eltype`, and `eltype(::CudaRefType) = Any`
+"""
+has_type_arg(_) = false
+has_type_arg(::Type) = true
+has_type_arg(::Base.RefValue{<:Type}) = true
+has_type_arg(bc::Union{StencilBroadcasted, Broadcasted}) =
+    UnrolledUtilities.unrolled_any(has_type_arg, bc.args)
+
+"""
     replace_fd_ops(val)
 
 Recursively replace any `OneArgFDOperator` or `TwoArgFDOperator` in `val` with a
@@ -76,7 +88,8 @@ end
 function replace_fd_ops(
     bc::StencilBroadcasted{Style, Op},
 ) where {Style, Op <: TwoArgFDOperator}
-    if !has_affine_bc(bc.op) && check_if_fits_in_shmem(bc.args[end])
+    if !has_affine_bc(bc.op) && check_if_fits_in_shmem(bc.args[end]) &&
+       !has_type_arg(bc.args[end])
         opmat = Base.Broadcast.broadcasted(
             FDOperatorMatrix(bc.op),
             replace_fd_ops(bc.args[1]),
@@ -104,7 +117,8 @@ end
 function replace_fd_ops(
     bc::StencilBroadcasted{Style, Op},
 ) where {Style, Op <: OneArgFDOperator}
-    if !has_affine_bc(bc.op) && check_if_fits_in_shmem(bc.args[1])
+    if !has_affine_bc(bc.op) && check_if_fits_in_shmem(bc.args[1]) &&
+       !has_type_arg(bc.args[1])
         opmat = Base.Broadcast.broadcasted(
             FDOperatorMatrix(bc.op),
             Fields.local_geometry_field(operator_input_space(bc.op, axes(bc.args[end]))),
