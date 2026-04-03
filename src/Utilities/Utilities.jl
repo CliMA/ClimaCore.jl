@@ -1,5 +1,7 @@
 module Utilities
 
+import UnrolledUtilities: unrolled_map
+
 include("plushalf.jl")
 include("cache.jl")
 
@@ -60,5 +62,47 @@ function unionall_type(::Type{T}) where {T}
     return T.name.wrapper
 end
 
+"""
+    replace_type_parameter(T, P, P′)
+
+Recursively modifies the parameters of `T`, replacing every subtype of `P` with
+`P′`. This is like constructing a value of type `T` and converting subfields of
+type `P` to type `P′`, though no constructors are actually called or compiled.
+"""
+replace_type_parameter(T, P, P′) = replace_type_parameter(T, Val(Tuple{P, P′}))
+
+# Wrap the two constant types in a Val to guarantee recursive inlining
+replace_type_parameter(not_a_type, _) = not_a_type
+replace_type_parameter(::Type{<:P}, val::Val{Tuple{P, P′}}) where {P, P′} = P′
+replace_type_parameter(::Type{T}, val::Val{Tuple{P, P′}}) where {T, P, P′} =
+    isempty(T.parameters) ? T :
+    unionall_type(T){
+        unrolled_map(Base.Fix2(replace_type_parameter, val), Tuple(T.parameters))...,
+    }
+
+"""
+    fieldtype_vals(T)
+
+Statically inferrable analogue of `Val.(fieldtypes(T))`. Functions of `Type`s
+are specialized upon successful constant propagation, but functions of `Val`s
+are always specialized, so `fieldtype_vals` can be used in place of `fieldtypes`
+to ensure that recursive functions over nested types have inferrable outputs.
+"""
+@inline fieldtype_vals(::Type{T}) where {T} =
+    ntuple(Val ∘ Base.Fix1(fieldtype, T), Val(fieldcount(T)))
+
+"""
+    new(T, [fields])
+
+Exposes the `new` pseudo-function that allocates a value of type `T` with the
+specified fields. Can also be called without a second argument to leave the
+allocated value with uninitialized fields.
+
+In contrast to the pseudo-function, this only asserts that all fields match the
+`fieldtypes` of `T`, rather than automatically converting them to those types.
+"""
+@generated new(::Type{T}) where {T} = Expr(:new, :T)
+@generated new(::Type{T}, fields) where {T} =
+    Expr(:splatnew, :T, :(fields::$(Tuple{fieldtypes(T)...})))
 
 end # module
