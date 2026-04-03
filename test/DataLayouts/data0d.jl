@@ -7,8 +7,6 @@ using JET
 
 using ClimaComms
 using ClimaCore.DataLayouts
-using StaticArrays
-using ClimaCore.DataLayouts: get_struct, set_struct!
 
 TestFloatTypes = (Float32, Float64)
 device = ClimaComms.device()
@@ -46,8 +44,8 @@ end
 @testset "DataF boundscheck" begin
     S = Tuple{Complex{Float64}, Float64}
     data = DataF{S}(ArrayType{Float64}, zeros)
+    @test data[1] == data[]
     @test data[][2] == zero(Float64)
-    @test_throws MethodError data[1]
 end
 
 @testset "DataF type safety" begin
@@ -68,9 +66,7 @@ end
 @testset "DataF error messages" begin
     SA = (; a = 1.0)
     data = DataF{typeof(SA)}(ArrayType{Float64})
-    @test_throws ErrorException(
-        "Invalid field name `oops` for type `$(typeof(SA))`.",
-    ) data.oops
+    @test_throws ArgumentError data.oops
 end
 
 @testset "DataF broadcasting between 0D data objects and scalars" begin

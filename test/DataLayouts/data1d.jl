@@ -7,8 +7,7 @@ using JET
 
 using ClimaComms
 using ClimaCore.DataLayouts
-using StaticArrays
-using ClimaCore.DataLayouts: get_struct, set_struct!, vindex
+using ClimaCore.DataLayouts: vindex
 
 TestFloatTypes = (Float32, Float64)
 device = ClimaComms.device()
