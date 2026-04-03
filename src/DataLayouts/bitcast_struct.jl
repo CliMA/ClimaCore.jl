@@ -3,16 +3,13 @@ field_expr(f, value_expr) = :(Core.getfield($value_expr, $f))
 field_expr(f, array_expr, index_expr) =
     :(@inbounds $array_expr[struct_index($f, $array_expr, $index_expr...)])
 
-all_field_exprs(@nospecialize(S), inputs...) =
-    Base.mapany(f -> field_expr(f, inputs...), 1:fieldcount(S))
-
 # Keep array element read instructions separate unless the full value is needed
 full_value_expr(@nospecialize(S), value_expr) = value_expr
-full_value_expr(@nospecialize(S), array_expr, index_expr) =
-    Expr(:tuple, all_field_exprs(S, array_expr, index_expr)...)
+full_value_expr(@nospecialize(S), inputs...) =
+    Expr(:tuple, (field_expr(f, inputs...) for f in 1:fieldcount(S))...)
 
-# Manually perform SROA (scalar replacement of aggregates) through a recursively
-# generated expression, instead of relying on the compiler to guarantee inlining
+# Manually inline all read instructions into a generated function body, instead
+# of relying on Julia's compiler to inline them during the code lowering stage
 bitcast_struct_expr(@nospecialize(T), @nospecialize(S), inputs...) =
     if T === S
         full_value_expr(S, inputs...)
@@ -32,76 +29,25 @@ bitcast_struct_expr(@nospecialize(T), @nospecialize(S), inputs...) =
     elseif isone(count(!issingletontype, fieldtypes(T)))
         # Use instances to get the singleton fields of T
         T_expr = Expr(:new, T)
-        for F_type in fieldtypes(T)
-            issingletontype(F_type) && push!(T_expr.args, F_type.instance)
-            issingletontype(F_type) && continue
-            push!(T_expr.args, bitcast_struct_expr(F_type, S, inputs...))
+        for field_type in fieldtypes(T)
+            field_value_expr =
+                issingletontype(field_type) ? field_type.instance :
+                bitcast_struct_expr(field_type, S, inputs...)
+            push!(T_expr.args, field_value_expr)
         end
         T_expr
     else
-        T_end = sizeof(T)
-        S_end = sizeof(S)
-        F_starts = map(Base.Fix1(fieldoffset, T), 1:fieldcount(T))
-        F_ends = map(+, F_starts, map(sizeof, fieldtypes(T)))
-        f_starts = map(Base.Fix1(fieldoffset, S), 1:fieldcount(S))
-        f_ends = map(+, f_starts, map(sizeof, fieldtypes(S)))
-        f_ends_padded = push!(f_starts[2:end], S_end)
-        f_exprs = all_field_exprs(S, inputs...)
-        if fieldcount(T) > 1 && (
-            all(F_start -> F_start in f_starts || F_start == S_end, F_starts) &&
-            all(F_end -> F_end in f_ends || F_end == 0, F_ends)
-        )
-            # Partition the fields of S if they are all aligned with fields of T
-            T_expr = Expr(:new, T)
-            for (F_type, F_start, F_end) in zip(fieldtypes(T), F_starts, F_ends)
-                issingletontype(F_type) && push!(T_expr.args, F_type.instance)
-                issingletontype(F_type) && continue
-                f1 = findlast(==(F_start), f_starts)
-                f2 = findfirst(==(F_end), f_ends)
-                f12_type =
-                    f1 == f2 ? fieldtype(S, f1) : Tuple{fieldtypes(S)[f1:f2]...}
-                f12_expr =
-                    f1 == f2 ? f_exprs[f1] : Expr(:tuple, f_exprs[f1:f2]...)
-                F_expr = bitcast_struct_expr(F_type, f12_type, f12_expr)
-                push!(T_expr.args, F_expr)
-            end
-            T_expr
-        elseif fieldcount(S) > 1 && (
-            all(f_start -> f_start in F_starts || f_start == T_end, f_starts) &&
-            all(f_end -> f_end in F_ends || f_end == 0, f_ends)
-        )
-            # Partition the fields of T if they are all aligned with fields of S
-            T_expr = Expr(:splatnew, T, Expr(:tuple))
-            for (f_type, f_start, f_end, f_end_padded, f_expr) in
-                zip(fieldtypes(S), f_starts, f_ends, f_ends_padded, f_exprs)
-                issingletontype(f_type) && continue
-                F1 = findfirst(==(f_start), F_starts)
-                F2 = findfirst(==(f_end), F_ends)
-                F2_padded = findlast(==(f_end_padded), F_ends)
-                F12_type =
-                    F1 == F2 ? fieldtype(T, F1) : Tuple{fieldtypes(T)[F1:F2]...}
-                F12_expr = bitcast_struct_expr(F12_type, f_type, f_expr)
-                non_padding_expr = F1 == F2 ? F12_expr : Expr(:..., F12_expr)
-                push!(T_expr.args[2].args, non_padding_expr)
-                for F_type in fieldtypes(T)[(F2 + 1):F2_padded]
-                    # Leave fields that correspond to padding in S uninitialized
-                    padding_expr = Expr(:new, F_type)
-                    push!(T_expr.args[2].args, padding_expr)
-                end
-            end
-            T_expr
-        else
-            # Use unsafe_load for all other conversions, including turning
-            # non-Bools into Bools; implemented like getindex(v::MArray, i) from
-            # https://github.com/JuliaArrays/StaticArrays.jl/blob/v1.0.0/src/MArray.jl#L85,
-            # but with an LLVMPtr instead of a Ptr for better LLVM optimization
-            isbitstype(T) || error("Cannot bitcast mutable $T in stack memory")
-            isbitstype(S) || error("Cannot bitcast mutable $S in stack memory")
-            quote
-                stack_memory = Ref($(full_value_expr(S, inputs...)))
-                pointer = Core.LLVMPtr{$T, 0}(pointer_from_objref(stack_memory))
-                GC.@preserve stack_memory unsafe_load(pointer)
-            end
+        # Use unsafe_load to convert composite types, and to losslessly turn
+        # non-Bools into Bools; implemented like getindex(v::MArray, i) from
+        # https://github.com/JuliaArrays/StaticArrays.jl/blob/v1.0.0/src/MArray.jl#L85,
+        # but with an LLVMPtr instead of a Ptr so the LLVM compiler can apply
+        # SROA/DCE (scalar replacement of aggregates and dead code elimination)
+        isbitstype(T) || error("Cannot allocate $T in stack memory for bitcast")
+        isbitstype(S) || error("Cannot allocate $S in stack memory for bitcast")
+        quote
+            stack_memory = Ref($(full_value_expr(S, inputs...)))
+            pointer = Core.LLVMPtr{$T, 0}(pointer_from_objref(stack_memory))
+            GC.@preserve stack_memory unsafe_load(pointer)
         end
     end
 
@@ -207,6 +153,5 @@ For more information about `reinterpret` and padding, see the following:
     index...,
 ) where {T, num_indices}
     S = NTuple{num_indices, eltype(array)}
-    bitcast_expr = bitcast_struct_expr(T, S, :array, :index)
-    return Expr(:block, :(Base.@_propagate_inbounds_meta), bitcast_expr)
+    return Expr(:block, :@inline, bitcast_struct_expr(T, S, :array, :index))
 end

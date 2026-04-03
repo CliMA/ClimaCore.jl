@@ -138,12 +138,6 @@ end
 ) where {D} =
     CartesianIndex(Tuple(index)[1:(D - 1)]..., i, Tuple(index)[D:end]...)
 
-@inline struct_indices(array, ::Val{num_indices}, index...) where {num_indices} =
-    ntuple(i -> struct_index(i, array, index...), Val(num_indices))
-
-# Temporary workaround for Fix1 not supporting 3-arg methods prior to Julia 1.12
-@inline unsafe_setindex!(array, (entry, index)) = @inbounds array[index] = entry
-
 """
     set_struct!(array, value, [index], [Val(D)])
 
@@ -190,9 +184,10 @@ julia> set_struct!(zeros(Int64, 4, 2), (Int32(2), Int32(0), Int128(1)), 5, Val(1
 Base.@propagate_inbounds function set_struct!(array, value::S, index...) where {S}
     num_indices = num_basetypes(eltype(array), S)
     @boundscheck check_struct_indices(array, Val(num_indices), index...)
-    indices = struct_indices(array, Val(num_indices), index...)
     entries = bitcast_struct(NTuple{num_indices, eltype(array)}, value)
-    unrolled_foreach(Base.Fix1(unsafe_setindex!, array), zip(entries, indices))
+    unrolled_foreach(enumerate(entries)) do (i, entry)
+        @inbounds array[struct_index(i, array, index...)] = entry
+    end
     return array
 end
 
