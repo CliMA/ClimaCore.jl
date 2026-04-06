@@ -969,22 +969,25 @@ Base.Broadcast.materialize!(
     vector_or_matrix::FieldNameDict,
 ) = Base.Broadcast.materialize!(field_vector_view(dest), vector_or_matrix)
 
-const USE_FUSED_MATRIXFIELDS_COPYTO =
-    get(ENV, "CLIMACORE_MATRIXFIELDS_FUSED_COPYTO", "true") in
-    ("1", "true", "TRUE", "yes", "YES")
+const RUNTIME_DISABLE_FUSED_MATRIXFIELDS_COPYTO = Ref(false)
+
+is_fused_copyto_compile_error(err) =
+    occursin("InvalidIRError", sprint(showerror, err)) ||
+    occursin("unsupported dynamic function invocation", sprint(showerror, err))
 
 function copyto_direct!(
     dest::FieldNameDict,
     vector_or_matrix::FieldNameDict,
 )
-    foreach(keys(vector_or_matrix)) do key
-        entry = vector_or_matrix[key]
-        if dest[key] isa ScalingFieldMatrixEntry
-            dest[key] == entry || error("matrix entry at $key is immutable")
+    unrolled_foreach(pairs(vector_or_matrix)) do pair
+        key, entry = pair
+        dest_entry = dest[key]
+        if dest_entry isa ScalingFieldMatrixEntry
+            dest_entry == entry || error("matrix entry at $key is immutable")
         elseif entry isa ScalingFieldMatrixEntry
-            dest[key] .= (entry,)
+            dest_entry .= (entry,)
         else
-            dest[key] .= entry
+            dest_entry .= entry
         end
     end
 end
@@ -1024,7 +1027,18 @@ function copyto_fused_by_space!(
             pair = first(pairs)
             pair.first .= pair.second
         else
-            Base.copyto!(Fields.FusedMultiBroadcast(Tuple(pairs)))
+            try
+                Base.copyto!(Fields.FusedMultiBroadcast(Tuple(pairs)))
+            catch err
+                if is_fused_copyto_compile_error(err)
+                    RUNTIME_DISABLE_FUSED_MATRIXFIELDS_COPYTO[] = true
+                    for pair in pairs
+                        pair.first .= pair.second
+                    end
+                else
+                    rethrow()
+                end
+            end
         end
     end
 end
@@ -1033,7 +1047,7 @@ function copyto_foreach!(
     dest::FieldNameDict,
     vector_or_matrix::FieldNameDict,
 )
-    if USE_FUSED_MATRIXFIELDS_COPYTO
+    if !RUNTIME_DISABLE_FUSED_MATRIXFIELDS_COPYTO[]
         copyto_fused_by_space!(dest, vector_or_matrix)
     else
         copyto_direct!(dest, vector_or_matrix)
