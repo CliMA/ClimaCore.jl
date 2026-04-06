@@ -969,7 +969,11 @@ Base.Broadcast.materialize!(
     vector_or_matrix::FieldNameDict,
 ) = Base.Broadcast.materialize!(field_vector_view(dest), vector_or_matrix)
 
-NVTX.@annotate function copyto_foreach!(
+const USE_FUSED_MATRIXFIELDS_COPYTO =
+    get(ENV, "CLIMACORE_MATRIXFIELDS_FUSED_COPYTO", "true") in
+    ("1", "true", "TRUE", "yes", "YES")
+
+function copyto_direct!(
     dest::FieldNameDict,
     vector_or_matrix::FieldNameDict,
 )
@@ -982,6 +986,57 @@ NVTX.@annotate function copyto_foreach!(
         else
             dest[key] .= entry
         end
+    end
+end
+
+function copyto_fused_by_space!(
+    dest::FieldNameDict,
+    vector_or_matrix::FieldNameDict,
+)
+    fallback_pairs = Pair{Any, Any}[]
+    fused_groups = IdDict{Any, Vector{Pair{Fields.Field, Any}}}()
+
+    foreach(keys(vector_or_matrix)) do key
+        entry = vector_or_matrix[key]
+        dest_entry = dest[key]
+
+        if dest_entry isa ScalingFieldMatrixEntry
+            dest_entry == entry || error("matrix entry at $key is immutable")
+        elseif entry isa ScalingFieldMatrixEntry
+            push!(fallback_pairs, dest_entry => (entry,))
+        elseif dest_entry isa Fields.Field && entry isa Base.AbstractBroadcasted
+            space = axes(dest_entry)
+            if !haskey(fused_groups, space)
+                fused_groups[space] = Pair{Fields.Field, Any}[]
+            end
+            push!(fused_groups[space], dest_entry => entry)
+        else
+            push!(fallback_pairs, dest_entry => entry)
+        end
+    end
+
+    for pair in fallback_pairs
+        pair.first .= pair.second
+    end
+
+    for pairs in values(fused_groups)
+        if length(pairs) == 1
+            pair = first(pairs)
+            pair.first .= pair.second
+        else
+            Base.copyto!(Fields.FusedMultiBroadcast(Tuple(pairs)))
+        end
+    end
+end
+
+function copyto_foreach!(
+    dest::FieldNameDict,
+    vector_or_matrix::FieldNameDict,
+)
+    if USE_FUSED_MATRIXFIELDS_COPYTO
+        copyto_fused_by_space!(dest, vector_or_matrix)
+    else
+        copyto_direct!(dest, vector_or_matrix)
     end
 end
 
