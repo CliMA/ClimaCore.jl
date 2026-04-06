@@ -55,6 +55,19 @@ steps:
         key: unit_recursive_apply
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/RecursiveApply/unit_recursive_apply.jl"
 
+  - group: "Unit: CUDA utils"
+    steps:
+
+      - label: "Unit: kernel renaming"
+        key: kernel_renaming
+        command:
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/gpu/kernel_renaming.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+          CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE: "true"
+        agents:
+          slurm_gpus: 1
+
   - group: "Unit: Utilities"
     steps:
 
@@ -684,6 +697,16 @@ steps:
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_column.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/convergence_column.jl"
+
+      - label: "Unit: gpu column"
+        key: unit_gpu_column
+        command:
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_column.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/convergence_column.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
 
       - label: "Unit: fd tensor"
         key: unit_fd_tensor
