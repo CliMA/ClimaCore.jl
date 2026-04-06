@@ -46,6 +46,48 @@ axis2(::Type{<:Axis2Tensor{<:Any, <:Tuple{Any, A}}}) where {A} = A
 axis2(::Type{<:AdjointAxis2Tensor{<:Any, <:Tuple{A, Any}}}) where {A} = A
 
 """
+    needs_projection(::Type{X}, ::Type{Y})
+
+Returns `true` if multiplying an object of type `X` with an object of type `Y` would require
+projection. This always returns false if `X` or `Y` are a `Tuple` or `NamedTuple` with
+eltype any.
+"""
+needs_projection(::Type{X}, ::Type{Y}) where {X <: Number, Y <: SingleValue} = false
+needs_projection(::Type{X}, ::Type{Y}) where {X <: SingleValue, Y <: SingleValue} = false
+function needs_projection(::Type{X}, ::Type{Y}) where {X, Y}
+    (eltype(X) === Any || eltype(Y) === Any) && return false
+    needs_projection(eltype(X), eltype(Y))
+end
+needs_projection(
+    ::Type{X},
+    ::Type{Y},
+) where {X <: Union{AdjointAxisVector, Axis2TensorOrAdj}, Y <: AxisTensor} =
+    axes(X)[2] != Geometry.dual(axes(Y)[1])
+function needs_projection(
+    ::Type{X},
+    ::Type{Y},
+) where {X <: SingleValue, Y <: Union{Tuple, NamedTuple}}
+    X <: Number && return false
+    eltype(Y) === Any && return false
+    needs_projection(X, eltype(Y))
+end
+function needs_projection(
+    ::Type{X},
+    ::Type{Y},
+) where {X <: Union{Tuple, NamedTuple}, Y <: SingleValue}
+    Y <: Number && return false
+    eltype(X) === Any && return false
+    needs_projection(eltype(X), Y)
+end
+
+recursively_find_dual_axes_for_projection(
+    ::Type{X},
+) where {X <: Union{AdjointAxisVector, Axis2TensorOrAdj}} = dual(axes(X)[2])
+recursively_find_dual_axes_for_projection(::Type{X}) where {X} =
+    recursively_find_dual_axes_for_projection(eltype(X))
+
+
+"""
     mul_return_type(X, Y)
 
 Computes the return type of `mul_with_projection(x, y, lg)`, where `x isa X`

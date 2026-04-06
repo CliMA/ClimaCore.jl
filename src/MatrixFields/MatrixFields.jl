@@ -111,18 +111,23 @@ const FieldOrStencilStyleType = Union{
     LazyOperatorBroadcasted,
 }
 
-Base.Broadcast.broadcasted(
+function Base.Broadcast.broadcasted(
     ::typeof(*),
     field_or_broadcasted::FieldOrStencilStyleType,
     args...,
-) =
+)
+
     unrolled_reduce(args; init = field_or_broadcasted) do arg1, arg2
         arg1_isa_matrix =
+            arg1 isa LazyOperatorBroadcasted && length(arg1.args) > 0 ?
+            eltype(arg1.args[1]) <: BandMatrixRow ||
+            arg1.args[1] isa LazyOperatorBroadcasted :
             eltype(arg1) <: BandMatrixRow || arg1 isa LazyOperatorBroadcasted
         use_matrix_mul_op = arg1_isa_matrix && arg2 isa FieldOrStencilStyleType
         op = use_matrix_mul_op ? MultiplyColumnwiseBandMatrixField() : ⊠
         Base.Broadcast.broadcasted(op, arg1, arg2)
     end
+end
 Base.Broadcast.broadcasted(
     ::typeof(*),
     single_value_or_broadcasted::SingleValueStyleType,

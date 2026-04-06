@@ -65,9 +65,9 @@ const IGNORE_MODULES = (
 
 # Helper function to check if a stack frame is relevant
 @inline function is_relevant_frame(frame::Base.StackTraces.StackFrame)
-    linfo = frame.linfo
-    linfo isa Core.MethodInstance || return false
-    mod = linfo.def.module::Module
+    frame_method = frame.linfo isa Core.CodeInstance ? frame.linfo.def : frame.linfo
+    frame_method isa Core.MethodInstance || return false
+    mod = frame_method.def.module::Module
     mod_name = fullname(mod)[1]
     return mod_name ∉ IGNORE_MODULES
 end
@@ -89,7 +89,8 @@ end
         auto = false,
         threads_s,
         blocks_s,
-        always_inline = true
+        always_inline = true,
+        shmem = 0,
     )
 
 Launch a cuda kernel, using `CUDA.launch_configuration` (if `auto=true`)
@@ -107,6 +108,7 @@ function auto_launch!(
     blocks_s = nothing,
     always_inline = true,
     caller = :unknown,
+    shmem = 0,
 ) where {F!}
     # If desired, compute a kernel name from the stack trace and store in
     # a global Dict, which serves as an in memory cache
@@ -126,8 +128,10 @@ function auto_launch!(
                 if contains(func_name, "#")
                     func_name = split(func_name, "#")[1]
                 end
+                frame_method =
+                    frame.linfo isa Core.CodeInstance ? frame.linfo.def : frame.linfo
                 fp_split =
-                    splitpath(fpath_from_method_instance(frame.linfo::Core.MethodInstance))
+                    splitpath(fpath_from_method_instance(frame_method::Core.MethodInstance))
                 if "NVTX" in fp_split
                     fp_string = "_NVTX"
                     line_string = ""
@@ -173,7 +177,7 @@ function auto_launch!(
     else
         kernel =
             CUDA.@cuda name = kernel_name always_inline = always_inline threads =
-                threads_s blocks = blocks_s f!(args...)
+                threads_s blocks = blocks_s shmem = shmem f!(args...)
     end
 
     if collect_kernel_stats() # only for development use

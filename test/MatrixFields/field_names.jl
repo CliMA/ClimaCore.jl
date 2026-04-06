@@ -1,6 +1,6 @@
 import LinearAlgebra: I
 import ClimaCore.RecursiveApply: rzero
-import ClimaCore.DataLayouts: replace_basetype
+import ClimaCore.Utilities: replace_type_parameter
 import ClimaCore.MatrixFields: @name, is_subset_that_covers_set
 
 include("matrix_field_test_utils.jl")
@@ -717,7 +717,7 @@ end
 @testset "FieldNameDict Unit Tests" begin
     x = get_x()
     FT = Float64
-    x_FT = convert(replace_basetype(Int, FT, typeof(x)), x)
+    x_FT = convert(replace_type_parameter(typeof(x), Int, FT), x)
 
     C3 = Geometry.Covariant3Vector{FT}
     C12 = Geometry.Covariant12Vector{FT}
@@ -727,10 +727,10 @@ end
     CT3XC3 = typeof(zero(CT3) * zero(C3)')
     C12XCT12 = typeof(zero(C12) * zero(CT12)')
     CT3XCT12 = typeof(zero(CT3) * zero(CT12)')
-    x_C12 = rzero(replace_basetype(Int, C12, typeof(x)))
-    x_CT3 = rzero(replace_basetype(Int, CT3, typeof(x)))
-    x_C12XC3 = rzero(replace_basetype(Int, C12XC3, typeof(x)))
-    x_CT3XCT12 = rzero(replace_basetype(Int, CT3XCT12, typeof(x)))
+    x_C12 = rzero(replace_type_parameter(typeof(x), Int, C12))
+    x_CT3 = rzero(replace_type_parameter(typeof(x), Int, CT3))
+    x_C12XC3 = rzero(replace_type_parameter(typeof(x), Int, C12XC3))
+    x_CT3XCT12 = rzero(replace_type_parameter(typeof(x), Int, CT3XCT12))
     I_CT3XC3 = DiagonalMatrixRow(Geometry.AxisTensor(axes(CT3XC3), I))
     I_C12XCT12 = DiagonalMatrixRow(Geometry.AxisTensor(axes(C12XCT12), I))
 

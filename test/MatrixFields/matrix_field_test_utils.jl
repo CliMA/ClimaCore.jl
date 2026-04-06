@@ -7,6 +7,7 @@ import LazyBroadcast: @lazy
 import BenchmarkTools as BT
 
 import ClimaComms
+import ClimaCore
 import BenchmarkTools as BT
 ClimaComms.@import_required_backends
 import ClimaCore:
@@ -58,7 +59,13 @@ const comms_device = ClimaComms.device()
 const using_cuda = comms_device isa ClimaComms.CUDADevice
 cuda_module(ext) = using_cuda ? ext.CUDA : ext
 const cuda_mod = cuda_module(Base.get_extension(ClimaComms, :ClimaCommsCUDAExt))
-const cuda_frames = using_cuda ? (AnyFrameModule(cuda_mod),) : ()
+const climacore_cuda_mod = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
+const cuda_frames =
+    using_cuda ?
+    (
+        AnyFrameModule(cuda_mod),
+        AnyFrameModule(climacore_cuda_mod),
+    ) : ()
 const cublas_frames = using_cuda ? (AnyFrameModule(cuda_mod.CUBLAS),) : ()
 const invalid_ir_error = using_cuda ? cuda_mod.InvalidIRError : ErrorException
 

@@ -92,7 +92,6 @@ Base.@propagate_inbounds function operator_shmem(
     Nq = Quadratures.degrees_of_freedom(QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    Nf = DataLayouts.typesize(FT, RT)
     WJv¹ = CUDA.CuStaticSharedArray(RT, (Nq, Nvt))
     return (WJv¹,)
 end
@@ -107,7 +106,6 @@ Base.@propagate_inbounds function operator_shmem(
     Nq = Quadratures.degrees_of_freedom(QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    Nf = DataLayouts.typesize(FT, RT)
     WJv¹ = CUDA.CuStaticSharedArray(RT, (Nq, Nq, Nvt))
     WJv² = CUDA.CuStaticSharedArray(RT, (Nq, Nq, Nvt))
     return (WJv¹, WJv²)

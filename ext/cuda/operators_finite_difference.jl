@@ -1,7 +1,7 @@
 import ClimaCore: Spaces, Quadratures, Topologies
 import Base.Broadcast: Broadcasted
 import ClimaComms
-using CUDA: @cuda
+using CUDA: @cuda, i32
 import ClimaCore.Utilities: half
 import ClimaCore.Operators
 import ClimaCore.Operators: AbstractStencilStyle, strip_space
@@ -20,7 +20,7 @@ Base.Broadcast.BroadcastStyle(
 ) = y
 
 include("operators_fd_shmem_is_supported.jl")
-
+include("operators_fd_eager.jl")
 struct ShmemParams{Nv} end
 interior_size(::ShmemParams{Nv}) where {Nv} = (Nv,)
 boundary_size(::ShmemParams{Nv}) where {Nv} = (1,)
@@ -79,21 +79,28 @@ function Base.copyto!(
     else
         bc′ = disable_shmem_style(bc)
         (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(out_fv)
-        #  Specialized kernel launch for common case.  This uses block and grid indices
-        # instead of computing cartesian indices from a linear index
-        if (Nv == 64 || Nv == 63) && mask isa NoMask && Ni == 4 && Nj == 4 && Nh >= 1500
+        # This uses block and grid indices instead of computing cartesian indices from a
+        # linear index. The launch configuration is optimized for common use case of 64 face
+        # levels and Ni = Nj = 4. Periodic toppologies and masks are not currently supported
+        # `eager_copyto_stencil_kernel!` requires a  block size of (n_face_levels, Ni, 1)
+        # this block config is better for VIJFH. It is only used when the total number of
+        # threads in a block is between 32 and 256 to avoid underutilization of the GPU and
+        # errors due to too many registers used when the block size is too large.
+        if !Topologies.isperiodic(space) && mask isa NoMask &&
+           32 <= n_face_levels * Ni <= 256
+            op_matrix_bc = replace_fd_ops(bc′)
             args = (
                 strip_space(out, space),
-                strip_space(bc′, space),
+                strip_space(op_matrix_bc, space),
                 axes(out),
-                bounds,
-                Val(Nv == 63),
             )
             auto_launch!(
-                copyto_stencil_kernel_64!,
+                eager_copyto_stencil_kernel!,
                 args;
-                threads_s = (64, 1, 1),
-                blocks_s = (Ni, Nj, Nh),
+                threads_s = (n_face_levels, Ni, 1),
+                blocks_s = (1, Nj, Nh),
+                always_inline = true,
+                shmem = n_face_levels * Ni * 9 * 4, # see `check_if_fits_in_shmem` for how this is calculated
             )
             return out
         end
@@ -133,46 +140,6 @@ function Base.copyto!(
 end
 import ClimaCore.DataLayouts: get_N, get_Nv, get_Nij, get_Nij, get_Nh
 
-"""
-    copyto_stencil_kernel_64!(
-        out,
-        bc::Union{
-            StencilBroadcasted{CUDAColumnStencilStyle},
-            Broadcasted{CUDAColumnStencilStyle},
-        },
-        space,
-        bds,
-        ::Val{P},
-    )
-
-Kernel for fd operators on VIJFHStyle{63,4} and VIJFHStyle{64,4} datalayouts. P is a boolean
-indicating if the column is padded (true for 63, false for 64).
-"""
-function copyto_stencil_kernel_64!(
-    out,
-    bc::Union{
-        StencilBroadcasted{CUDAColumnStencilStyle},
-        Broadcasted{CUDAColumnStencilStyle},
-    },
-    space,
-    bds,
-    ::Val{P},
-) where {P}
-    @inbounds begin
-        # P is a boolean, indicating if the column is padded
-        P && threadIdx().x == 64 && return nothing
-        i = blockIdx().x
-        j = blockIdx().y
-        v = threadIdx().x
-        h = blockIdx().z
-        hidx = (i, j, h)
-        (li, lw, rw, ri) = bds
-        idx = v - 1 + li
-        val = Operators.getidx(space, bc, idx, hidx)
-        setidx!(space, out, idx, hidx, val)
-    end
-    return nothing
-end
 
 function copyto_stencil_kernel!(
     out,

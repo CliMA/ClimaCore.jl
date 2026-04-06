@@ -56,8 +56,6 @@ function tendency!(yₜ, y, parameters, t)
         method = limiter_method,
     )
 
-    If = Operators.InterpolateC2F()
-
     if limiter_method == "Zalesak"
         @. yₜ.q =
             -divf2c(
@@ -68,8 +66,6 @@ function tendency!(yₜ, y, parameters, t)
                 ),
             )
     else
-        Δfluxₕ = @. w * If(y.q)
-        Δfluxₗ = @. upwind1(w, y.q)
         @. yₜ.q =
             -divf2c(
                 upwind1(w, y.q) +
