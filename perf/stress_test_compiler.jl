@@ -29,6 +29,10 @@ compiler fails altogether. The test suite covers:
     Does compilation remain robust when function-call arguments contain
     nontrivial subexpressions instead of precomputed intermediates?
 
+9. **ClimaAtmos-like column broadcasts** - fused closure-wrapped microphysics-style
+   broadcasts with inline subexpressions, interpolation, and upwinding
+   How close do typical ClimaAtmos column expressions get to compiler failure?
+
 Each test is run in a subprocess to avoid compilation state leakage.
 The Julia project is automatically instantiated before running tests.
 Uses the `.buildkite` project environment for reproducibility.
@@ -435,6 +439,14 @@ function subexpression_args_expression(mode::String)
     end
 end
 
+function climaatmos_column_expression(repeats::Int)
+    blocks = [
+        "fn_with_scheme(winterp(ᶜw, max(zero(rhoq_ice), rhoq_ice + $(i).0 / 10)), winterp(ᶜn, max(zero(rhon_ice), rhon_ice + $(i).0 / 20)), upwind(ᶠv, ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / (rhoq_ice + $(i).0 / 50))), upwind(ᶠv, ifelse(iszero(rhon_ice), zero(rhon_ice), rhob_rim / (rhon_ice + $(i).0 / 40))), interp(max(zero(rhoq_ice), rhoq_ice + $(i).0 / 30)), interp(ifelse(iszero(rhoq_ice), zero(rhoq_ice), rhoq_rim / (rhoq_ice + $(i).0 / 60))))"
+        for i in 1:repeats
+    ]
+    return "@. tendency = " * join(blocks, " + ")
+end
+
 function render_test_expression(test)
     if test.operation_type == "arithmetic"
         expr = arithmetic_expression(test.complexity)
@@ -484,6 +496,8 @@ function render_test_expression(test)
         return join(["winterp.(ᶜw, ᶜf .* $(i).0)" for i in 1:(test.complexity)], " .+ ")
     elseif test.operation_type == "upwinding"
         return join(["upwind.(ᶠv, ᶜf .* $(i).0)" for i in 1:(test.complexity)], " .+ ")
+    elseif test.operation_type == "climaatmos"
+        return climaatmos_column_expression(test.complexity)
     else
         return test.description
     end
@@ -1062,8 +1076,8 @@ function create_spectral_space()
         periodic_x = true,
         periodic_y = true,
         n_quad_points = 4,
-        x_elem = 1,
-        y_elem = 1,
+        x_elem = 16,
+        y_elem = 16,
     )
     """
 end
@@ -1385,13 +1399,13 @@ function create_column_space()
     center_space = CommonSpaces.ColumnSpace(FT;
         z_min = 0.0,
         z_max = 1.0,
-        z_elem = 16,
+        z_elem = 63,
         staggering = Grids.CellCenter(),
     )
     face_space = CommonSpaces.ColumnSpace(FT;
         z_min = 0.0,
         z_max = 1.0,
-        z_elem = 16,
+        z_elem = 63,
         staggering = Grids.CellFace(),
     )
     """
@@ -1566,6 +1580,78 @@ function upwinding_test(n::Int)
     return generate_field_test_code("upwinding_3rdorder_$(n)_ops", test_impl)
 end
 
+"""
+    climaatmos_column_test(repeats::Int) -> String
+
+Generate a ClimaAtmos-like fused column broadcast that mixes closure-wrapped
+microphysics-style subexpressions with interpolation and upwinding. Each repeat
+adds another heavy closure invocation to the same broadcast expression.
+"""
+function climaatmos_column_test(repeats::Int)
+    test_name = "climaatmos_column_$(repeats)x"
+    bench_expr = climaatmos_column_expression(repeats)
+
+    test_impl = create_column_space() * """
+
+    using ClimaCore.Operators
+
+    interp = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    winterp = Operators.WeightedInterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    upwind = Operators.Upwind3rdOrderBiasedProductC2F(
+        bottom = Operators.ThirdOrderOneSided(),
+        top = Operators.ThirdOrderOneSided(),
+    )
+
+    ᶜw = Fields.Field(FT, center_space)
+    ᶜn = Fields.Field(FT, center_space)
+    ᶠv = Fields.Field(Geometry.WVector{FT}, face_space)
+    rhoq_ice = Fields.Field(FT, center_space)
+    rhon_ice = Fields.Field(FT, center_space)
+    rhoq_rim = Fields.Field(FT, center_space)
+    rhob_rim = Fields.Field(FT, center_space)
+    tendency = Fields.Field(FT, face_space)
+
+    fill!(Fields.field_values(ᶜw), 1.0)
+    fill!(Fields.field_values(ᶜn), 0.8)
+    fill!(Fields.field_values(ᶠv), Geometry.WVector(0.75))
+    fill!(Fields.field_values(rhoq_ice), 1.5)
+    fill!(Fields.field_values(rhon_ice), 0.5)
+    fill!(Fields.field_values(rhoq_rim), 0.75)
+    fill!(Fields.field_values(rhob_rim), 2.0)
+    fill!(Fields.field_values(tendency), 0.0)
+
+    scheme = (; c1 = FT(0.7), c2 = FT(1.1), c3 = FT(0.4), c4 = FT(0.2))
+    fn_with_scheme = let s = scheme
+        (qp, np, rim1, rim2, qface, rface) ->
+            log(abs(s.c1 * qp + s.c2 * np + s.c4 * qface) + 1) +
+            sqrt(abs(rim1 - rim2) + 1) +
+            s.c3 * (qface - rface) +
+            abs(rface)
+    end
+
+    # Warm up compilation for the fused column expression.
+    _ = begin
+        $bench_expr
+    end
+
+    # Benchmark the broadcast that resembles ClimaAtmos column microphysics code.
+    trial = @benchmark begin
+        $bench_expr
+    end samples=10 evals=1
+
+    time_μs = minimum(trial.times) / 1000.0
+    @printf "TIMING: $(test_name) = %.6f s\\n" time_μs / 1e6
+    """
+
+    return generate_field_test_code(test_name, test_impl)
+end
+
 # ============================================================================
 # TEST CATALOG: Define all test cases
 # ============================================================================
@@ -1578,7 +1664,7 @@ Definition of a single test case for generation and execution.
 struct TestDef
     name::String
     description::String
-    operation_type::String    # "arithmetic", "multiarg", "functions", "nested_calls", "subexpression_args", "projection", "divergence", "curl", "interpolate", "weighted_interpolate", "upwinding"
+    operation_type::String    # "arithmetic", "multiarg", "functions", "nested_calls", "subexpression_args", "projection", "divergence", "curl", "interpolate", "weighted_interpolate", "upwinding", "climaatmos"
     complexity::Int           # nesting depth or argument count
     num_args::Int
     uses_geometry::Bool
@@ -1592,38 +1678,38 @@ const ALL_TESTS =
         [
             TestDef("arithmetic_depth_$i", "Arithmetic operations with depth $i",
                 "arithmetic", i, 1, false,
-                () -> arithmetic_test(i)) for i in [1, 3, 5, 7, 10]
+                () -> arithmetic_test(i)) for i in [1, 4, 8, 12, 16, 24]
         ]
 
         # Multiple arguments
         [
             TestDef("multiarg_$(i)_args", "Operations with $i field arguments",
                 "multiarg", 1, i, false,
-                () -> multiarg_test(i)) for i in [2, 3, 4, 6, 8]
+                () -> multiarg_test(i)) for i in [2, 4, 8, 12, 16]
         ]
 
         # Function compositions
         [
             TestDef("functions_log_depth_$i", "Log function composed $i times",
                 "functions", i, 1, false,
-                () -> functions_test(["log"], i)) for i in [1, 2, 3]
+                () -> functions_test(["log"], i)) for i in [1, 2, 4, 6]
         ]
         [
             TestDef("functions_sqrt_depth_$i", "Sqrt function composed $i times",
                 "functions", i, 1, false,
-                () -> functions_test(["sqrt"], i)) for i in [1, 2, 3]
+                () -> functions_test(["sqrt"], i)) for i in [1, 2, 4, 6]
         ]
         [
             TestDef("functions_mixed_depth_$i", "Mixed functions (log, sqrt, abs) depth $i",
                 "functions", i, 1, false,
-                () -> functions_test(["log", "sqrt", "abs"], i)) for i in [1, 2]
+                () -> functions_test(["log", "sqrt", "abs"], i)) for i in [1, 2, 4]
         ]
 
         # Nested helper-function call chains
         [
             TestDef("nested_calls_depth_$i", "Helper-function call chain depth $i",
                 "nested_calls", i, 1, false,
-                () -> nested_calls_test(i)) for i in [1, 3, 5, 7, 10]
+                () -> nested_calls_test(i)) for i in [1, 4, 8, 12, 16, 24]
         ]
 
         # Function-call args with inline subexpressions vs precomputed intermediates
@@ -1646,28 +1732,28 @@ const ALL_TESTS =
         [
             TestDef("projection_$(i)x_chained", "Chained projection operations x$i",
                 "projection", i, 1, true,
-                () -> projection_test(i)) for i in [1, 2, 3, 5]
+                () -> projection_test(i)) for i in [1, 2, 4, 8, 12]
         ]
 
         # Divergence operations: pack N calls into one expression
         [
             TestDef("div_$(i)_ops", "$i Divergence calls in one expression",
                 "divergence", i, 1, true,
-                () -> div_test(i)) for i in [1, 2, 4, 6, 8]
+                () -> div_test(i)) for i in [1, 2, 4, 8, 12, 16]
         ]
 
         # Curl operations: pack N calls into one expression
         [
             TestDef("curl_$(i)_ops", "$i Curl calls in one expression",
                 "curl", i, 1, true,
-                () -> curl_test(i)) for i in [1, 2, 4, 6, 8]
+                () -> curl_test(i)) for i in [1, 2, 4, 8, 12, 16]
         ]
 
         # C2F interpolation: pack N calls into one expression
         [
             TestDef("interp_c2f_$(i)_ops", "$i InterpolateC2F calls in one expression",
                 "interpolate", i, 1, false,
-                () -> interp_test(i)) for i in [1, 2, 4, 6, 8]
+                () -> interp_test(i)) for i in [1, 2, 4, 8, 12, 16]
         ]
 
         # Weighted C2F interpolation: pack N calls into one expression
@@ -1675,7 +1761,7 @@ const ALL_TESTS =
             TestDef("weighted_interp_c2f_$(i)_ops",
                 "$i WeightedInterpolateC2F calls in one expression",
                 "weighted_interpolate", i, 1, false,
-                () -> weighted_interp_test(i)) for i in [1, 2, 4, 6, 8]
+                () -> weighted_interp_test(i)) for i in [1, 2, 4, 8, 12, 16]
         ]
 
         # Van Leer upwinding: pack N calls into one expression
@@ -1683,7 +1769,15 @@ const ALL_TESTS =
             TestDef("upwinding_3rdorder_$(i)_ops",
                 "$i Upwind3rdOrderBiasedProductC2F calls in one expression",
                 "upwinding", i, 1, false,
-                () -> upwinding_test(i)) for i in [1, 2, 4, 6, 8]
+                () -> upwinding_test(i)) for i in [1, 2, 4, 8, 12, 16]
+        ]
+
+        # ClimaAtmos-like fused column broadcasts
+        [
+            TestDef("climaatmos_column_$(i)x",
+                "ClimaAtmos-like fused column broadcast repeated x$i",
+                "climaatmos", i, 6, false,
+                () -> climaatmos_column_test(i)) for i in [1, 2, 4, 6]
         ]
     ] |> vec
 
