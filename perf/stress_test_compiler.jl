@@ -590,7 +590,11 @@ function _is_timed_success(record::Dict{String, Any})
            !isnothing(get(record, "time_microseconds", nothing))
 end
 
-function _soft_fail_reasons(prev::Dict{String, Any}, cur::Dict{String, Any})
+function _soft_fail_reasons(
+    prev::Dict{String, Any},
+    cur::Dict{String, Any};
+    complexity_gap::Union{Int, Nothing} = nothing,
+)
     reasons = String[]
 
     prev_regs = _as_int_or_nothing(get(prev, "registers", nothing))
@@ -598,7 +602,14 @@ function _soft_fail_reasons(prev::Dict{String, Any}, cur::Dict{String, Any})
     if !isnothing(prev_regs) && !isnothing(cur_regs) && prev_regs > 0
         reg_jump_abs = cur_regs - prev_regs
         reg_jump_rel = cur_regs / prev_regs
-        if reg_jump_abs >= 16 || reg_jump_rel >= 1.35
+        # For sparse sampling (e.g. 1 -> 12), avoid over-sensitive cliff labels.
+        sparse_gap = !isnothing(complexity_gap) && complexity_gap > 4
+        register_cliff = if sparse_gap
+            reg_jump_abs >= 32 || reg_jump_rel >= 2.00
+        else
+            reg_jump_abs >= 16 || reg_jump_rel >= 1.35
+        end
+        if register_cliff
             push!(
                 reasons,
                 "register_cliff(prev=$(prev_regs), cur=$(cur_regs), jump=$(reg_jump_abs), ratio=$(@sprintf("%.2f", reg_jump_rel)))",
@@ -673,7 +684,19 @@ function annotate_soft_failures!(records::Vector{Dict{String, Any}})
             end
 
             if !isnothing(prev_timed)
-                reasons = _soft_fail_reasons(prev_timed, record)
+                prev_complexity = _as_int_or_nothing(get(prev_timed, "complexity", nothing))
+                cur_complexity = _as_int_or_nothing(get(record, "complexity", nothing))
+                complexity_gap =
+                    if !isnothing(prev_complexity) && !isnothing(cur_complexity)
+                        max(0, cur_complexity - prev_complexity)
+                    else
+                        nothing
+                    end
+                reasons = _soft_fail_reasons(
+                    prev_timed,
+                    record;
+                    complexity_gap = complexity_gap,
+                )
                 if !isempty(reasons)
                     record["soft_fail"] = true
                     record["soft_fail_reasons"] = reasons
@@ -1872,38 +1895,38 @@ const ALL_TESTS =
         [
             TestDef("arithmetic_depth_$i", "Arithmetic operations with depth $i",
                 "arithmetic", i, 1, false,
-            () -> arithmetic_test(i)) for i in [1, 24]
+                () -> arithmetic_test(i)) for i in [1, 24]
         ]
 
         # Multiple arguments: low and high fan-in
         [
             TestDef("multiarg_$(i)_args", "Operations with $i field arguments",
                 "multiarg", 1, i, false,
-            () -> multiarg_test(i)) for i in [2, 16]
+                () -> multiarg_test(i)) for i in [2, 16]
         ]
 
         # Function compositions: low and high depth
         [
             TestDef("functions_log_depth_$i", "Log function composed $i times",
                 "functions", i, 1, false,
-            () -> functions_test(["log"], i)) for i in [1, 6]
+                () -> functions_test(["log"], i)) for i in [1, 6]
         ]
         [
             TestDef("functions_sqrt_depth_$i", "Sqrt function composed $i times",
                 "functions", i, 1, false,
-            () -> functions_test(["sqrt"], i)) for i in [1, 6]
+                () -> functions_test(["sqrt"], i)) for i in [1, 6]
         ]
         [
             TestDef("functions_mixed_depth_$i", "Mixed functions (log, sqrt, abs) depth $i",
                 "functions", i, 1, false,
-            () -> functions_test(["log", "sqrt", "abs"], i)) for i in [1, 4]
+                () -> functions_test(["log", "sqrt", "abs"], i)) for i in [1, 4]
         ]
 
         # Nested helper-function call chains: shallow and deep
         [
             TestDef("nested_calls_depth_$i", "Helper-function call chain depth $i",
                 "nested_calls", i, 1, false,
-            () -> nested_calls_test(i)) for i in [1, 24]
+                () -> nested_calls_test(i)) for i in [1, 24]
         ]
 
         # Function-call args with inline subexpressions vs precomputed intermediates
@@ -1922,48 +1945,48 @@ const ALL_TESTS =
                 () -> subexpression_args_test("precomputed"))
         ]
 
-        # Projection operations: shallow and edge chain lengths
+        # Projection operations: include one intermediate near edge
         [
             TestDef("projection_$(i)x_chained", "Chained projection operations x$i",
                 "projection", i, 1, true,
-            () -> projection_test(i)) for i in [1, 12]
+                () -> projection_test(i)) for i in [1, 8, 12]
         ]
 
-        # Divergence operations: include known edge where failures can occur
+        # Divergence operations: add near-edge points to better resolve the cliff
         [
             TestDef("div_$(i)_ops", "$i Divergence calls in one expression",
                 "divergence", i, 1, true,
-            () -> div_test(i)) for i in [1, 12, 16]
+                () -> div_test(i)) for i in [1, 8, 12, 14, 16]
         ]
 
-        # Curl operations: include known edge where failures can occur
+        # Curl operations: add near-edge points to better resolve the cliff
         [
             TestDef("curl_$(i)_ops", "$i Curl calls in one expression",
                 "curl", i, 1, true,
-            () -> curl_test(i)) for i in [1, 12, 16]
+                () -> curl_test(i)) for i in [1, 8, 12, 14, 16]
         ]
 
-        # C2F interpolation: sanity, near-edge, and edge
+        # C2F interpolation: include intermediate and near-edge points
         [
             TestDef("interp_c2f_$(i)_ops", "$i InterpolateC2F calls in one expression",
                 "interpolate", i, 1, false,
-            () -> interp_test(i)) for i in [1, 12, 16]
+                () -> interp_test(i)) for i in [1, 8, 12, 14, 16]
         ]
 
-        # Weighted C2F interpolation: sanity, near-edge, and edge
+        # Weighted C2F interpolation: include intermediate and near-edge points
         [
             TestDef("weighted_interp_c2f_$(i)_ops",
                 "$i WeightedInterpolateC2F calls in one expression",
                 "weighted_interpolate", i, 1, false,
-            () -> weighted_interp_test(i)) for i in [1, 12, 16]
+                () -> weighted_interp_test(i)) for i in [1, 8, 12, 14, 16]
         ]
 
-        # Van Leer upwinding: sanity, near-edge, and edge
+        # Van Leer upwinding: include intermediate and near-edge points
         [
             TestDef("upwinding_3rdorder_$(i)_ops",
                 "$i Upwind3rdOrderBiasedProductC2F calls in one expression",
                 "upwinding", i, 1, false,
-            () -> upwinding_test(i)) for i in [1, 12, 16]
+                () -> upwinding_test(i)) for i in [1, 8, 12, 14, 16]
         ]
 
         # ClimaAtmos-like fused column broadcasts: shallow and deep
@@ -1971,7 +1994,7 @@ const ALL_TESTS =
             TestDef("climaatmos_column_$(i)x",
                 "ClimaAtmos-like fused column broadcast repeated x$i",
                 "climaatmos", i, 6, false,
-            () -> climaatmos_column_test(i)) for i in [1, 6]
+                () -> climaatmos_column_test(i)) for i in [1, 6]
         ]
     ] |> vec
 
