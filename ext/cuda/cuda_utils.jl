@@ -209,11 +209,14 @@ function auto_launch!(
             shared_bytes = _memory_bytes(memory, :shared)
             const_bytes = _memory_bytes(memory, :constant)
             s *= "     memory:         $(memory)\n"
-            s *= "     CUDA_PROFILE:   kernel=$(something(kernel_name, nameof(F!))) " *
-                 "registers=$(CUDA.registers(kernel)) " *
-                 "local=$(local_bytes) shared=$(shared_bytes) constant=$(const_bytes) " *
-                 "maxthreads=$(CUDA.maxthreads(kernel))\n"
+            profile_line =
+                "CUDA_PROFILE: kernel=$(something(kernel_name, nameof(F!))) " *
+                "registers=$(CUDA.registers(kernel)) " *
+                "local=$(local_bytes) shared=$(shared_bytes) constant=$(const_bytes) " *
+                "maxthreads=$(CUDA.maxthreads(kernel))"
+            s *= "     $(profile_line)\n"
             @info s
+            println(profile_line)
 #! format: on
             reported_stats[key] = true
             # error("Oops") # for debugging

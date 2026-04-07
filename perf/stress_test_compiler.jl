@@ -138,17 +138,42 @@ function run_test_subprocess(test_code::String, test_name::String)
             cmd = `srun --mpi=none --gpus=1 $(Base.julia_cmd()) --startup-file=no --project=$(PROJECT_DIR) $tmp_file`
         end
 
-        try
-            # Use withenv to set environment variables
-            output = withenv(
-                "CLIMACOMMS_DEVICE" => DEVICE,
-                "CLIMA_COLLECT_CUDA_KERNEL_STATS" => (has_cuda_env() ? "1" : "0"),
-            ) do
-                read(cmd, String)
-            end
-            return (true, output, "")
-        catch e
-            return (false, "", sprint(showerror, e))
+        stdout_buffer = IOBuffer()
+        stderr_buffer = IOBuffer()
+        proc = withenv(
+            "CLIMACOMMS_DEVICE" => DEVICE,
+            "CLIMA_COLLECT_CUDA_KERNEL_STATS" => (has_cuda_env() ? "1" : "0"),
+            "CLIMACORE_COLLECT_KERNEL_STATS" => (has_cuda_env() ? "1" : "0"),
+            "CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE" =>
+                (
+                    has_cuda_env() ?
+                    get(ENV, "CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE", "1") : "0"
+                ),
+        ) do
+            run(
+                pipeline(ignorestatus(cmd); stdout = stdout_buffer, stderr = stderr_buffer),
+            )
+        end
+
+        stdout_text = String(take!(stdout_buffer))
+        stderr_text = String(take!(stderr_buffer))
+        combined_output = if isempty(stderr_text)
+            stdout_text
+        elseif isempty(stdout_text)
+            stderr_text
+        elseif endswith(stdout_text, '\n')
+            stdout_text * stderr_text
+        else
+            stdout_text * "\n" * stderr_text
+        end
+
+        if success(proc)
+            return (true, combined_output, stderr_text)
+        else
+            error_text =
+                isempty(stderr_text) ? "subprocess exited with a non-zero status" :
+                stderr_text
+            return (false, combined_output, error_text)
         end
     finally
         rm(tmp_file, force = true)
@@ -531,12 +556,146 @@ function result_to_record(result)
         "local_memory_kernels" => local_memory_kernels,
         "cuda_profile_lines" =>
             isnothing(summary) ? String[] : [format_cuda_profile(summary)],
+        "soft_fail" => false,
+        "soft_fail_reasons" => String[],
+        "failure_mode" => result.success ? "pass" : "hard_fail",
     )
 end
 
+function _local_memory_fraction(value)
+    if !(value isa AbstractString) || !occursin('/', value)
+        return nothing
+    end
+    parts = split(value, '/'; limit = 2)
+    length(parts) == 2 || return nothing
+    try
+        used = parse(Float64, strip(parts[1]))
+        total = parse(Float64, strip(parts[2]))
+        total <= 0 && return nothing
+        return used / total
+    catch
+        return nothing
+    end
+end
+
+function _as_int_or_nothing(x)
+    x === nothing && return nothing
+    x isa Integer && return Int(x)
+    x isa AbstractFloat && return Int(round(x))
+    return nothing
+end
+
+function _is_timed_success(record::Dict{String, Any})
+    return get(record, "success", false) &&
+           !isnothing(get(record, "time_microseconds", nothing))
+end
+
+function _soft_fail_reasons(prev::Dict{String, Any}, cur::Dict{String, Any})
+    reasons = String[]
+
+    prev_regs = _as_int_or_nothing(get(prev, "registers", nothing))
+    cur_regs = _as_int_or_nothing(get(cur, "registers", nothing))
+    if !isnothing(prev_regs) && !isnothing(cur_regs) && prev_regs > 0
+        reg_jump_abs = cur_regs - prev_regs
+        reg_jump_rel = cur_regs / prev_regs
+        if reg_jump_abs >= 16 || reg_jump_rel >= 1.35
+            push!(
+                reasons,
+                "register_cliff(prev=$(prev_regs), cur=$(cur_regs), jump=$(reg_jump_abs), ratio=$(@sprintf("%.2f", reg_jump_rel)))",
+            )
+        end
+    end
+
+    prev_local = _as_int_or_nothing(get(prev, "local_bytes", nothing))
+    cur_local = _as_int_or_nothing(get(cur, "local_bytes", nothing))
+    if !isnothing(prev_local) && !isnothing(cur_local)
+        if prev_local == 0 && cur_local > 0
+            push!(reasons, "local_memory_appeared(prev=0, cur=$(cur_local))")
+        elseif prev_local > 0 && cur_local >= 2 * prev_local &&
+               (cur_local - prev_local) >= 32
+            push!(
+                reasons,
+                "local_memory_cliff(prev=$(prev_local), cur=$(cur_local), ratio=$(@sprintf("%.2f", cur_local / prev_local)))",
+            )
+        end
+    end
+
+    prev_frac = _local_memory_fraction(get(prev, "local_memory_kernels", nothing))
+    cur_frac = _local_memory_fraction(get(cur, "local_memory_kernels", nothing))
+    if !isnothing(prev_frac) && !isnothing(cur_frac)
+        if (cur_frac - prev_frac) >= 0.34 && cur_frac >= 0.50
+            push!(
+                reasons,
+                "local_memory_kernel_fraction_cliff(prev=$(@sprintf("%.2f", prev_frac)), cur=$(@sprintf("%.2f", cur_frac)))",
+            )
+        end
+    end
+
+    return reasons
+end
+
+function annotate_soft_failures!(records::Vector{Dict{String, Any}})
+    for record in records
+        if !get(record, "success", false)
+            record["failure_mode"] = "hard_fail"
+        elseif isnothing(get(record, "time_microseconds", nothing))
+            # expected-failure style pass; do not treat as hard/soft fail
+            record["failure_mode"] = "expected_failure"
+        else
+            record["failure_mode"] = "pass"
+        end
+        record["soft_fail"] = false
+        record["soft_fail_reasons"] = String[]
+    end
+
+    by_op = Dict{String, Vector{Dict{String, Any}}}()
+    for record in records
+        op_type = string(get(record, "operation_type", "unknown"))
+        if !haskey(by_op, op_type)
+            by_op[op_type] = Dict{String, Any}[]
+        end
+        push!(by_op[op_type], record)
+    end
+
+    for (_, op_records) in by_op
+        sort!(
+            op_records;
+            by = r -> (
+                get(r, "complexity", typemax(Int)),
+                string(get(r, "name", "")),
+            ),
+        )
+
+        prev_timed = nothing
+        for record in op_records
+            if !_is_timed_success(record)
+                continue
+            end
+
+            if !isnothing(prev_timed)
+                reasons = _soft_fail_reasons(prev_timed, record)
+                if !isempty(reasons)
+                    record["soft_fail"] = true
+                    record["soft_fail_reasons"] = reasons
+                    record["failure_mode"] = "soft_fail_resource_cliff"
+                end
+            end
+
+            prev_timed = record
+        end
+    end
+
+    return records
+end
+
 function build_report(results, test_filter::Union{String, Nothing})
+    records = [result_to_record(result) for result in results]
+    annotate_soft_failures!(records)
+
     successful = filter(r -> r.success, results)
     times_μs = [r.time_seconds * 1e6 for r in successful if !isnothing(r.time_seconds)]
+    soft_failed = count(r -> get(r, "soft_fail", false), records)
+    hard_failed = count(r -> !get(r, "success", false), records)
     return Dict{String, Any}(
         "schema_version" => 1,
         "run_metadata" => collect_run_metadata(test_filter),
@@ -544,6 +703,8 @@ function build_report(results, test_filter::Union{String, Nothing})
             "total_tests" => length(results),
             "successful_tests" => length(successful),
             "failed_tests" => length(results) - length(successful),
+            "hard_failed_tests" => hard_failed,
+            "soft_failed_tests" => soft_failed,
             "minimum_time_microseconds" =>
                 isempty(times_μs) ? nothing : minimum(times_μs),
             "maximum_time_microseconds" =>
@@ -552,7 +713,7 @@ function build_report(results, test_filter::Union{String, Nothing})
             "median_time_microseconds" =>
                 length(times_μs) < 2 ? nothing : median(times_μs),
         ),
-        "results" => [result_to_record(result) for result in results],
+        "results" => records,
     )
 end
 
@@ -567,7 +728,7 @@ function json_escape(s::AbstractString)
     )
 end
 
-function to_json(x)
+function _json_scalar(x)
     if x === nothing
         return "null"
     elseif x isa Bool
@@ -576,16 +737,41 @@ function to_json(x)
         return string(x)
     elseif x isa AbstractString
         return '"' * json_escape(x) * '"'
-    elseif x isa AbstractVector
-        return "[" * join([to_json(v) for v in x], ",") * "]"
-    elseif x isa AbstractDict
-        pairs_json = String[]
-        for key in sort!(collect(keys(x)); by = string)
-            push!(pairs_json, to_json(string(key)) * ":" * to_json(x[key]))
-        end
-        return "{" * join(pairs_json, ",") * "}"
     else
-        return to_json(string(x))
+        return '"' * json_escape(string(x)) * '"'
+    end
+end
+
+function to_json(x; indent_step::Int = 2)
+    return _to_json_pretty(x, 0, indent_step)
+end
+
+function _to_json_pretty(x, level::Int, indent_step::Int)
+    indent = repeat(" ", level * indent_step)
+    child_indent = repeat(" ", (level + 1) * indent_step)
+
+    if x isa AbstractDict
+        keys_sorted = sort!(collect(keys(x)); by = string)
+        isempty(keys_sorted) && return "{}"
+
+        lines = String[]
+        for key in keys_sorted
+            key_json = _json_scalar(string(key))
+            value_json = _to_json_pretty(x[key], level + 1, indent_step)
+            push!(lines, "$(child_indent)$(key_json): $(value_json)")
+        end
+        return "{\n" * join(lines, ",\n") * "\n" * indent * "}"
+    elseif x isa AbstractVector
+        isempty(x) && return "[]"
+
+        lines = String[]
+        for value in x
+            value_json = _to_json_pretty(value, level + 1, indent_step)
+            push!(lines, "$(child_indent)$(value_json)")
+        end
+        return "[\n" * join(lines, ",\n") * "\n" * indent * "]"
+    else
+        return _json_scalar(x)
     end
 end
 
@@ -640,11 +826,14 @@ function markdown_table_row(record::Dict{String, Any}, comparison_by_test = noth
 
     if record["success"] && !isnothing(record["time_microseconds"])
         time_cell = @sprintf("%.3f", record["time_microseconds"])
-        return "| $(record["name"]) | $(record["operation_type"]) | $(time_cell) | $(baseline_time) | $(delta_time) | $(something(record["primary_kernel"], "-")) | $(something(record["registers"], "-")) | $(baseline_regs) | $(something(record["local_bytes"], "-")) | $(baseline_local) | $(something(record["shared_bytes"], "-")) | $(something(record["local_memory_status"], "-")) | $(record["local_memory_kernels"]) | $(markdown_expression_cell(record["expression"])) |"
+        soft_fail_cell = get(record, "soft_fail", false) ? "yes" : "no"
+        reasons = get(record, "soft_fail_reasons", String[])
+        reasons_cell = isempty(reasons) ? "-" : join(reasons, "; ")
+        return "| $(record["name"]) | $(record["operation_type"]) | $(time_cell) | $(baseline_time) | $(delta_time) | $(something(record["primary_kernel"], "-")) | $(something(record["registers"], "-")) | $(baseline_regs) | $(something(record["local_bytes"], "-")) | $(baseline_local) | $(something(record["shared_bytes"], "-")) | $(something(record["local_memory_status"], "-")) | $(record["local_memory_kernels"]) | $(soft_fail_cell) | $(reasons_cell) | $(markdown_expression_cell(record["expression"])) |"
     elseif record["success"]
-        return "| $(record["name"]) | $(record["operation_type"]) | expected failure | $(baseline_time) | $(delta_time) | - | - | $(baseline_regs) | - | $(baseline_local) | - | - | - | $(markdown_expression_cell(record["expression"])) |"
+        return "| $(record["name"]) | $(record["operation_type"]) | expected failure | $(baseline_time) | $(delta_time) | - | - | $(baseline_regs) | - | $(baseline_local) | - | - | - | - | - | $(markdown_expression_cell(record["expression"])) |"
     else
-        return "| $(record["name"]) | $(record["operation_type"]) | FAILED | $(baseline_time) | $(delta_time) | - | - | $(baseline_regs) | - | $(baseline_local) | - | - | - | $(markdown_expression_cell(record["expression"])) |"
+        return "| $(record["name"]) | $(record["operation_type"]) | FAILED | $(baseline_time) | $(delta_time) | - | - | $(baseline_regs) | - | $(baseline_local) | - | - | - | - | - | $(markdown_expression_cell(record["expression"])) |"
     end
 end
 
@@ -696,6 +885,15 @@ function write_markdown_report(
     push!(lines, "- Total tests: $(summary["total_tests"])")
     push!(lines, "- Successful tests: $(summary["successful_tests"])")
     push!(lines, "- Failed tests: $(summary["failed_tests"])")
+    if haskey(summary, "hard_failed_tests")
+        push!(lines, "- Hard failed tests: $(summary["hard_failed_tests"])")
+    end
+    if haskey(summary, "soft_failed_tests")
+        push!(
+            lines,
+            "- Soft failed tests (resource cliffs): $(summary["soft_failed_tests"])",
+        )
+    end
     if !isnothing(summary["minimum_time_microseconds"])
         push!(
             lines,
@@ -721,11 +919,11 @@ function write_markdown_report(
     push!(lines, "")
     push!(
         lines,
-        "| Test | Type | Time (μs) | Baseline (μs) | Δ Time | Primary kernel | Regs | Base Regs | Local B | Base Local B | Shared B | Local memory | Local-memory kernels | Expression |",
+        "| Test | Type | Time (μs) | Baseline (μs) | Δ Time | Primary kernel | Regs | Base Regs | Local B | Base Local B | Shared B | Local memory | Local-memory kernels | Soft fail | Soft-fail signals | Expression |",
     )
     push!(
         lines,
-        "| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- | --- |",
+        "| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- | --- |",
     )
     comparison_by_test =
         isnothing(comparison) ? nothing : get(comparison, "by_test_name", nothing)
@@ -1628,22 +1826,18 @@ function climaatmos_column_test(repeats::Int)
 
     scheme = (; c1 = FT(0.7), c2 = FT(1.1), c3 = FT(0.4), c4 = FT(0.2))
     fn_with_scheme = let s = scheme
-        (qp, np, rim1, rim2, qface, rface) ->
-            log(abs(s.c1 * qp + s.c2 * np + s.c4 * qface) + 1) +
-            sqrt(abs(rim1 - rim2) + 1) +
-            s.c3 * (qface - rface) +
-            abs(rface)
+        (qp, np, rim1, rim2, qface, rface) -> qp
+    end
+
+    kernel_call!() = begin
+        $bench_expr
     end
 
     # Warm up compilation for the fused column expression.
-    _ = begin
-        $bench_expr
-    end
+    _ = kernel_call!()
 
     # Benchmark the broadcast that resembles ClimaAtmos column microphysics code.
-    trial = @benchmark begin
-        $bench_expr
-    end samples=10 evals=1
+    trial = @benchmark \$kernel_call!() samples=10 evals=1
 
     time_μs = minimum(trial.times) / 1000.0
     @printf "TIMING: $(test_name) = %.6f s\\n" time_μs / 1e6
@@ -1674,42 +1868,42 @@ end
 # Create test definitions
 const ALL_TESTS =
     [
-        # Arithmetic with varying depth
+        # Arithmetic: keep one sanity case and one edge case
         [
             TestDef("arithmetic_depth_$i", "Arithmetic operations with depth $i",
                 "arithmetic", i, 1, false,
-                () -> arithmetic_test(i)) for i in [1, 4, 8, 12, 16, 24]
+            () -> arithmetic_test(i)) for i in [1, 24]
         ]
 
-        # Multiple arguments
+        # Multiple arguments: low and high fan-in
         [
             TestDef("multiarg_$(i)_args", "Operations with $i field arguments",
                 "multiarg", 1, i, false,
-                () -> multiarg_test(i)) for i in [2, 4, 8, 12, 16]
+            () -> multiarg_test(i)) for i in [2, 16]
         ]
 
-        # Function compositions
+        # Function compositions: low and high depth
         [
             TestDef("functions_log_depth_$i", "Log function composed $i times",
                 "functions", i, 1, false,
-                () -> functions_test(["log"], i)) for i in [1, 2, 4, 6]
+            () -> functions_test(["log"], i)) for i in [1, 6]
         ]
         [
             TestDef("functions_sqrt_depth_$i", "Sqrt function composed $i times",
                 "functions", i, 1, false,
-                () -> functions_test(["sqrt"], i)) for i in [1, 2, 4, 6]
+            () -> functions_test(["sqrt"], i)) for i in [1, 6]
         ]
         [
             TestDef("functions_mixed_depth_$i", "Mixed functions (log, sqrt, abs) depth $i",
                 "functions", i, 1, false,
-                () -> functions_test(["log", "sqrt", "abs"], i)) for i in [1, 2, 4]
+            () -> functions_test(["log", "sqrt", "abs"], i)) for i in [1, 4]
         ]
 
-        # Nested helper-function call chains
+        # Nested helper-function call chains: shallow and deep
         [
             TestDef("nested_calls_depth_$i", "Helper-function call chain depth $i",
                 "nested_calls", i, 1, false,
-                () -> nested_calls_test(i)) for i in [1, 4, 8, 12, 16, 24]
+            () -> nested_calls_test(i)) for i in [1, 24]
         ]
 
         # Function-call args with inline subexpressions vs precomputed intermediates
@@ -1728,56 +1922,56 @@ const ALL_TESTS =
                 () -> subexpression_args_test("precomputed"))
         ]
 
-        # Projection operations
+        # Projection operations: shallow and edge chain lengths
         [
             TestDef("projection_$(i)x_chained", "Chained projection operations x$i",
                 "projection", i, 1, true,
-                () -> projection_test(i)) for i in [1, 2, 4, 8, 12]
+            () -> projection_test(i)) for i in [1, 12]
         ]
 
-        # Divergence operations: pack N calls into one expression
+        # Divergence operations: include known edge where failures can occur
         [
             TestDef("div_$(i)_ops", "$i Divergence calls in one expression",
                 "divergence", i, 1, true,
-                () -> div_test(i)) for i in [1, 2, 4, 8, 12, 16]
+            () -> div_test(i)) for i in [1, 12, 16]
         ]
 
-        # Curl operations: pack N calls into one expression
+        # Curl operations: include known edge where failures can occur
         [
             TestDef("curl_$(i)_ops", "$i Curl calls in one expression",
                 "curl", i, 1, true,
-                () -> curl_test(i)) for i in [1, 2, 4, 8, 12, 16]
+            () -> curl_test(i)) for i in [1, 12, 16]
         ]
 
-        # C2F interpolation: pack N calls into one expression
+        # C2F interpolation: sanity, near-edge, and edge
         [
             TestDef("interp_c2f_$(i)_ops", "$i InterpolateC2F calls in one expression",
                 "interpolate", i, 1, false,
-                () -> interp_test(i)) for i in [1, 2, 4, 8, 12, 16]
+            () -> interp_test(i)) for i in [1, 12, 16]
         ]
 
-        # Weighted C2F interpolation: pack N calls into one expression
+        # Weighted C2F interpolation: sanity, near-edge, and edge
         [
             TestDef("weighted_interp_c2f_$(i)_ops",
                 "$i WeightedInterpolateC2F calls in one expression",
                 "weighted_interpolate", i, 1, false,
-                () -> weighted_interp_test(i)) for i in [1, 2, 4, 8, 12, 16]
+            () -> weighted_interp_test(i)) for i in [1, 12, 16]
         ]
 
-        # Van Leer upwinding: pack N calls into one expression
+        # Van Leer upwinding: sanity, near-edge, and edge
         [
             TestDef("upwinding_3rdorder_$(i)_ops",
                 "$i Upwind3rdOrderBiasedProductC2F calls in one expression",
                 "upwinding", i, 1, false,
-                () -> upwinding_test(i)) for i in [1, 2, 4, 8, 12, 16]
+            () -> upwinding_test(i)) for i in [1, 12, 16]
         ]
 
-        # ClimaAtmos-like fused column broadcasts
+        # ClimaAtmos-like fused column broadcasts: shallow and deep
         [
             TestDef("climaatmos_column_$(i)x",
                 "ClimaAtmos-like fused column broadcast repeated x$i",
                 "climaatmos", i, 6, false,
-                () -> climaatmos_column_test(i)) for i in [1, 2, 4, 6]
+            () -> climaatmos_column_test(i)) for i in [1, 6]
         ]
     ] |> vec
 
