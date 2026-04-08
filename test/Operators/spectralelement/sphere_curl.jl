@@ -48,10 +48,14 @@ wcurl = Operators.WeakCurl()
     curl_uw = wcurl.(u)
     Spaces.weighted_dss!(curl_uw)
 
-    curl_exact = @. Geometry.Contravariant3Vector(
-        -2 * sind(coords.long) * cosd(coords.lat) / radius,
-    )
-
+    curl_scalar =
+        @. -2 * sind(coords.long) * cosd(coords.lat) / radius
+    curl_exact =
+        Geometry.Contravariant123Vector.(
+            zero.(curl_scalar),
+            zero.(curl_scalar),
+            curl_scalar,
+        )
 
     @test curl_us ≈ curl_exact rtol = 1e-2
     @test curl_uw ≈ curl_exact rtol = 1e-2
@@ -106,9 +110,14 @@ convergence_rate(err, Δh) =
             curl_uw = wcurl.(u)
             Spaces.weighted_dss!(curl_uw)
 
-            curl_exact = @. Geometry.Contravariant3Vector(
-                -2 * sind(coords.long) * cosd(coords.lat) / radius,
-            )
+            curl_scalar =
+                @. -2 * sind(coords.long) * cosd(coords.lat) / radius
+            curl_exact =
+                Geometry.Contravariant123Vector.(
+                    zero.(curl_scalar),
+                    zero.(curl_scalar),
+                    curl_scalar,
+                )
 
             err_scurl[Ie] = norm(curl_us .- curl_exact)
             err_wcurl[Ie] = norm(curl_uw .- curl_exact)

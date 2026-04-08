@@ -1235,7 +1235,7 @@ julia> interpolate(field, target_hcoords, target_zcoords)
 
 If you need the array of coordinates, you can call `default_target_hcoords` (or
 `default_target_zcoords`) passing `axes(field)`. This will return an array of
-`Geometry.Point`s. The functions `Geometry.Components` and `Geometry.Component`
+`Geometry.Point`s. The functions `Geometry.components` and `Geometry.component`
 can be used to extract the components as numeric values. For example,
 ```julia
 julia> Geometry.components.(Geometry.components.([

@@ -1137,44 +1137,18 @@ function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
     RT = operator_return_eltype(op, eltype(arg))
     out = DataLayouts.IF{RT, Nq}(MArray, FT)
     fill!(parent(out), zero(FT))
-    if RT <: Geometry.Contravariant2Vector
-        @inbounds for i in 1:Nq
-            ij = CartesianIndex((i,))
-            local_geometry = get_local_geometry(space, ij, slabidx)
-            v = get_node(space, arg, ij, slabidx)
-            v₃ = Geometry.covariant3(v, local_geometry)
-            for ii in 1:Nq
-                D₁v₃ = D[ii, i] * v₃
-                out[slab_index(ii)] += Geometry.Contravariant2Vector(-D₁v₃)
-            end
+    @inbounds for i in 1:Nq
+        ij = CartesianIndex((i,))
+        local_geometry = get_local_geometry(space, ij, slabidx)
+        v = get_node(space, arg, ij, slabidx)
+        v₂ = Geometry.covariant2(v, local_geometry)
+        v₃ = Geometry.covariant3(v, local_geometry)
+        for ii in 1:Nq
+            D₁v₂ = D[ii, i] * v₂
+            D₁v₃ = D[ii, i] * v₃
+            out[slab_index(ii)] +=
+                Geometry.Contravariant123Vector(zero(FT), -D₁v₃, D₁v₂)
         end
-    elseif RT <: Geometry.Contravariant3Vector
-        @inbounds for i in 1:Nq
-            ij = CartesianIndex((i,))
-            local_geometry = get_local_geometry(space, ij, slabidx)
-            v = get_node(space, arg, ij, slabidx)
-            v₂ = Geometry.covariant2(v, local_geometry)
-            for ii in 1:Nq
-                D₁v₂ = D[ii, i] * v₂
-                out[slab_index(ii)] += Geometry.Contravariant3Vector(D₁v₂)
-            end
-        end
-    elseif RT <: Geometry.Contravariant23Vector
-        @inbounds for i in 1:Nq
-            ij = CartesianIndex((i,))
-            local_geometry = get_local_geometry(space, ij, slabidx)
-            v = get_node(space, arg, ij, slabidx)
-            v₂ = Geometry.covariant2(v, local_geometry)
-            v₃ = Geometry.covariant3(v, local_geometry)
-            for ii in 1:Nq
-                D₁v₃ = D[ii, i] * v₃
-                D₁v₂ = D[ii, i] * v₂
-                out[slab_index(ii)] +=
-                    Geometry.Contravariant23Vector(-D₁v₃, D₁v₂)
-            end
-        end
-    else
-        error("invalid return type: $RT")
     end
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
@@ -1193,65 +1167,25 @@ function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
     RT = operator_return_eltype(op, eltype(arg))
     out = DataLayouts.IJF{RT, Nq}(MArray, FT)
     fill!(parent(out), zero(FT))
-
-    # input data is a Covariant12Vector field
-    if RT <: Geometry.Contravariant3Vector
-        @inbounds for j in 1:Nq, i in 1:Nq
-            ij = CartesianIndex((i, j))
-            local_geometry = get_local_geometry(space, ij, slabidx)
-            v = get_node(space, arg, ij, slabidx)
-            v₁ = Geometry.covariant1(v, local_geometry)
-            for jj in 1:Nq
-                D₂v₁ = D[jj, j] * v₁
-                out[slab_index(i, jj)] += Geometry.Contravariant3Vector(-D₂v₁)
-            end
-            v₂ = Geometry.covariant2(v, local_geometry)
-            for ii in 1:Nq
-                D₁v₂ = D[ii, i] * v₂
-                out[slab_index(ii, j)] += Geometry.Contravariant3Vector(D₁v₂)
-            end
+    @inbounds for j in 1:Nq, i in 1:Nq
+        ij = CartesianIndex((i, j))
+        local_geometry = get_local_geometry(space, ij, slabidx)
+        v = get_node(space, arg, ij, slabidx)
+        v₁ = Geometry.covariant1(v, local_geometry)
+        v₂ = Geometry.covariant2(v, local_geometry)
+        v₃ = Geometry.covariant3(v, local_geometry)
+        for ii in 1:Nq
+            D₁v₃ = D[ii, i] * v₃
+            D₁v₂ = D[ii, i] * v₂
+            out[slab_index(ii, j)] +=
+                Geometry.Contravariant123Vector(zero(FT), -D₁v₃, D₁v₂)
         end
-        # input data is a Covariant3Vector field
-    elseif RT <: Geometry.Contravariant12Vector
-        @inbounds for j in 1:Nq, i in 1:Nq
-            ij = CartesianIndex((i, j))
-            local_geometry = get_local_geometry(space, ij, slabidx)
-            v = get_node(space, arg, ij, slabidx)
-            v₃ = Geometry.covariant3(v, local_geometry)
-            for ii in 1:Nq
-                D₁v₃ = D[ii, i] * v₃
-                out[slab_index(ii, j)] +=
-                    Geometry.Contravariant12Vector(zero(D₁v₃), -D₁v₃)
-            end
-            for jj in 1:Nq
-                D₂v₃ = D[jj, j] * v₃
-                out[slab_index(i, jj)] +=
-                    Geometry.Contravariant12Vector(D₂v₃, zero(D₂v₃))
-            end
+        for jj in 1:Nq
+            D₂v₃ = D[jj, j] * v₃
+            D₂v₁ = D[jj, j] * v₁
+            out[slab_index(i, jj)] +=
+                Geometry.Contravariant123Vector(D₂v₃, zero(FT), -D₂v₁)
         end
-    elseif RT <: Geometry.Contravariant123Vector
-        @inbounds for j in 1:Nq, i in 1:Nq
-            ij = CartesianIndex((i, j))
-            local_geometry = get_local_geometry(space, ij, slabidx)
-            v = get_node(space, arg, ij, slabidx)
-            v₁ = Geometry.covariant1(v, local_geometry)
-            v₂ = Geometry.covariant2(v, local_geometry)
-            v₃ = Geometry.covariant3(v, local_geometry)
-            for ii in 1:Nq
-                D₁v₃ = D[ii, i] * v₃
-                D₁v₂ = D[ii, i] * v₂
-                out[slab_index(ii, j)] +=
-                    Geometry.Contravariant123Vector(zero(D₁v₃), -D₁v₃, D₁v₂)
-            end
-            for jj in 1:Nq
-                D₂v₃ = D[jj, j] * v₃
-                D₂v₁ = D[jj, j] * v₁
-                out[slab_index(i, jj)] +=
-                    Geometry.Contravariant123Vector(D₂v₃, zero(D₂v₃), -D₂v₁)
-            end
-        end
-    else
-        error("invalid return type")
     end
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
@@ -1313,48 +1247,19 @@ function apply_operator(op::WeakCurl{(1,)}, space, slabidx, arg)
     RT = operator_return_eltype(op, eltype(arg))
     out = DataLayouts.IF{RT, Nq}(MArray, FT)
     fill!(parent(out), zero(FT))
-    # input data is a Covariant3Vector field
-    if RT <: Geometry.Contravariant2Vector
-        @inbounds for i in 1:Nq
-            ij = CartesianIndex((i,))
-            local_geometry = get_local_geometry(space, ij, slabidx)
-            v = get_node(space, arg, ij, slabidx)
-            W = local_geometry.WJ * local_geometry.invJ
-            Wv₃ = W * Geometry.covariant3(v, local_geometry)
-            for ii in 1:Nq
-                Dᵀ₁Wv₃ = D[i, ii] * Wv₃
-                out[slab_index(ii)] += Geometry.Contravariant2Vector(Dᵀ₁Wv₃)
-            end
+    @inbounds for i in 1:Nq
+        ij = CartesianIndex((i,))
+        local_geometry = get_local_geometry(space, ij, slabidx)
+        v = get_node(space, arg, ij, slabidx)
+        W = local_geometry.WJ * local_geometry.invJ
+        Wv₂ = W * Geometry.covariant2(v, local_geometry)
+        Wv₃ = W * Geometry.covariant3(v, local_geometry)
+        for ii in 1:Nq
+            Dᵀ₁Wv₂ = D[i, ii] * Wv₂
+            Dᵀ₁Wv₃ = D[i, ii] * Wv₃
+            out[slab_index(ii)] +=
+                Geometry.Contravariant123Vector(zero(FT), Dᵀ₁Wv₃, -Dᵀ₁Wv₂)
         end
-    elseif RT <: Geometry.Contravariant3Vector
-        @inbounds for i in 1:Nq
-            ij = CartesianIndex((i,))
-            local_geometry = get_local_geometry(space, ij, slabidx)
-            v = get_node(space, arg, ij, slabidx)
-            W = local_geometry.WJ * local_geometry.invJ
-            Wv₂ = W * Geometry.covariant2(v, local_geometry)
-            for ii in 1:Nq
-                Dᵀ₁Wv₂ = D[i, ii] * Wv₂
-                out[slab_index(ii)] += Geometry.Contravariant3Vector(-Dᵀ₁Wv₂)
-            end
-        end
-    elseif RT <: Geometry.Contravariant23Vector
-        @inbounds for i in 1:Nq
-            ij = CartesianIndex((i,))
-            local_geometry = get_local_geometry(space, ij, slabidx)
-            v = get_node(space, arg, ij, slabidx)
-            W = local_geometry.WJ * local_geometry.invJ
-            Wv₃ = W * Geometry.covariant3(v, local_geometry)
-            Wv₂ = W * Geometry.covariant2(v, local_geometry)
-            for ii in 1:Nq
-                Dᵀ₁Wv₃ = D[i, ii] * Wv₃
-                Dᵀ₁Wv₂ = D[i, ii] * Wv₂
-                out[slab_index(ii)] +=
-                    Geometry.Contravariant23Vector(Dᵀ₁Wv₃, -Dᵀ₁Wv₂)
-            end
-        end
-    else
-        error("invalid return type: $RT")
     end
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
@@ -1373,77 +1278,26 @@ function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
     RT = operator_return_eltype(op, eltype(arg))
     out = DataLayouts.IJF{RT, Nq}(MArray, FT)
     fill!(parent(out), zero(FT))
-
-    # input data is a Covariant12Vector field
-    if RT <: Geometry.Contravariant3Vector
-        @inbounds for j in 1:Nq, i in 1:Nq
-            ij = CartesianIndex((i, j))
-            local_geometry = get_local_geometry(space, ij, slabidx)
-            v = get_node(space, arg, ij, slabidx)
-            W = local_geometry.WJ * local_geometry.invJ
-            Wv₁ = W * Geometry.covariant1(v, local_geometry)
-            for jj in 1:Nq
-                Dᵀ₂Wv₁ = D[j, jj] * Wv₁
-                out[slab_index(i, jj)] +=
-                    Geometry.Contravariant3Vector(Dᵀ₂Wv₁)
-            end
-            Wv₂ = W * Geometry.covariant2(v, local_geometry)
-            for ii in 1:Nq
-                Dᵀ₁Wv₂ = D[i, ii] * Wv₂
-                out[slab_index(ii, j)] +=
-                    Geometry.Contravariant3Vector(-Dᵀ₁Wv₂)
-            end
+    @inbounds for j in 1:Nq, i in 1:Nq
+        ij = CartesianIndex((i, j))
+        local_geometry = get_local_geometry(space, ij, slabidx)
+        v = get_node(space, arg, ij, slabidx)
+        W = local_geometry.WJ * local_geometry.invJ
+        Wv₁ = W * Geometry.covariant1(v, local_geometry)
+        Wv₂ = W * Geometry.covariant2(v, local_geometry)
+        Wv₃ = W * Geometry.covariant3(v, local_geometry)
+        for ii in 1:Nq
+            Dᵀ₁Wv₃ = D[i, ii] * Wv₃
+            Dᵀ₁Wv₂ = D[i, ii] * Wv₂
+            out[slab_index(ii, j)] +=
+                Geometry.Contravariant123Vector(zero(FT), Dᵀ₁Wv₃, -Dᵀ₁Wv₂)
         end
-        # input data is a Covariant3Vector field
-    elseif RT <: Geometry.Contravariant12Vector
-        @inbounds for j in 1:Nq, i in 1:Nq
-            ij = CartesianIndex((i, j))
-            local_geometry = get_local_geometry(space, ij, slabidx)
-            v = get_node(space, arg, ij, slabidx)
-            W = local_geometry.WJ * local_geometry.invJ
-            Wv₃ = W * Geometry.covariant3(v, local_geometry)
-            for ii in 1:Nq
-                Dᵀ₁Wv₃ = D[i, ii] * Wv₃
-                out[slab_index(ii, j)] +=
-                    Geometry.Contravariant12Vector(zero(Dᵀ₁Wv₃), Dᵀ₁Wv₃)
-            end
-            for jj in 1:Nq
-                Dᵀ₂Wv₃ = D[j, jj] * Wv₃
-                out[slab_index(i, jj)] +=
-                    Geometry.Contravariant12Vector(-Dᵀ₂Wv₃, zero(Dᵀ₂Wv₃))
-            end
+        for jj in 1:Nq
+            Dᵀ₂Wv₃ = D[j, jj] * Wv₃
+            Dᵀ₂Wv₁ = D[j, jj] * Wv₁
+            out[slab_index(i, jj)] +=
+                Geometry.Contravariant123Vector(-Dᵀ₂Wv₃, zero(FT), Dᵀ₂Wv₁)
         end
-    elseif RT <: Geometry.Contravariant123Vector
-        @inbounds for j in 1:Nq, i in 1:Nq
-            ij = CartesianIndex((i, j))
-            local_geometry = get_local_geometry(space, ij, slabidx)
-            v = get_node(space, arg, ij, slabidx)
-            W = local_geometry.WJ * local_geometry.invJ
-            Wv₁ = W * Geometry.covariant1(v, local_geometry)
-            Wv₂ = W * Geometry.covariant2(v, local_geometry)
-            Wv₃ = W * Geometry.covariant3(v, local_geometry)
-            for ii in 1:Nq
-                Dᵀ₁Wv₃ = D[i, ii] * Wv₃
-                Dᵀ₁Wv₂ = D[i, ii] * Wv₂
-                out[slab_index(ii, j)] += Geometry.Contravariant123Vector(
-                    zero(Dᵀ₁Wv₃),
-                    Dᵀ₁Wv₃,
-                    -Dᵀ₁Wv₂,
-                )
-            end
-            for jj in 1:Nq
-                Dᵀ₂Wv₃ = D[j, jj] * Wv₃
-                Dᵀ₂Wv₁ = D[j, jj] * Wv₁
-                out[slab_index(i, jj)] +=
-                    Geometry.Contravariant123Vector(
-                        -Dᵀ₂Wv₃,
-                        zero(Dᵀ₂Wv₃),
-                        Dᵀ₂Wv₁,
-                    )
-            end
-        end
-    else
-        error("invalid return type")
     end
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
