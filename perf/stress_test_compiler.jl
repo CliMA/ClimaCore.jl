@@ -56,6 +56,16 @@ USAGE EXAMPLES:
   # Run a single specific test
   julia --project=.buildkite perf/stress_test_compiler.jl arithmetic_depth_5
 
+  # Write reports to JSON and Markdown (both option forms are supported)
+  julia --project=.buildkite perf/stress_test_compiler.jl \
+        --output-json perf/results/stress_latest.json \
+        --output-markdown=perf/results/stress_latest.md
+
+  # Filter + report outputs
+  julia --project=.buildkite perf/stress_test_compiler.jl curl \
+        --output-json=perf/results/curl_latest.json \
+        --output-markdown=perf/results/curl_latest.md
+
   # Run with sbatch
   mkdir -p perf/logs && sbatch --job-name=cc-stress-suite \
     --output=perf/logs/stress_suite_%j.log --gpus=1 \
@@ -63,6 +73,18 @@ USAGE EXAMPLES:
 
 NOTE: The script automatically detects and uses the `.buildkite` project directory,
 so it should be run from the ClimaCore.jl root or from the perf/ directory.
+
+REPORT OUTPUT OPTIONS:
+  --output-json PATH
+      Write the full structured report (run metadata, summary, per-test records)
+      to PATH as JSON.
+
+  --output-markdown PATH
+      Write a human-readable Markdown report table to PATH.
+
+  Option syntax:
+      Both `--flag value` and `--flag=value` are accepted.
+      Relative paths are resolved from the repository root.
 """
 
 using Pkg
