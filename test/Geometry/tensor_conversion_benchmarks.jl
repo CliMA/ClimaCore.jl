@@ -1,16 +1,32 @@
+# Tensor conversion FLOP / correctness audit.
+#
+# For every entry in `method_info.jl`, this measures the FLOP count of a
+# Geometry conversion (`project`, `transform`, `contravariant{1,2,3}`,
+# `Jcontravariant3`) on a representative `LocalGeometry`, and asserts it is
+# `≤` the budget recorded in `method_info.jl`. Each result is also checked
+# against a reference implementation in `ref_funcs.jl` for correctness.
+#
+# Files in this test:
+#   method_info.jl              — table of (args..., expected_flops) per fn
+#   func_args.jl                — turns arg types into concrete instances
+#   ref_funcs.jl                — generic, unoptimized reference impls
+#   regenerate_flop_budgets.jl  — re-measures and rewrites method_info.jl
 using Test, StaticArrays
 #! format: off
 import Random, BenchmarkTools, StatsBase,
     DataStructures, LinearAlgebra, CountFlops
-using ClimaCore.Geometry:Geometry, AbstractAxis, CovariantAxis,
-    AxisVector, ContravariantAxis, LocalAxis, CartesianAxis, AxisTensor,
-    Covariant1Vector, Covariant13Vector, UVVector, UWVector, UVector,
-    WVector, Covariant12Vector, UVWVector, Covariant123Vector, Covariant3Vector,
+using ClimaCore.Geometry: Geometry, 
+    Covariant1Axis, UVAxis, UWAxis, UAxis,
+    WAxis, Covariant12Axis, UVWAxis, Covariant123Axis, Covariant3Axis, Contravariant1Axis, Covariant13Axis,
+    Contravariant12Axis, Contravariant3Axis, Contravariant123Axis, 
+    Contravariant13Axis, Contravariant2Axis, Contravariant3Axis,
+    Covariant1Vector, UVVector, UWVector, UVector,
+    WVector, Covariant12Vector, UVWVector, Covariant123Vector, Covariant3Vector, Covariant13Vector,
     Contravariant12Vector, Contravariant3Vector, Contravariant123Vector,
-    Contravariant13Vector, Contravariant2Vector, Axis2Tensor, Contravariant3Axis,
-    LocalGeometry, CovariantTensor, CartesianTensor, LocalTensor, ContravariantTensor,
+    Contravariant13Vector, Contravariant2Vector, Contravariant3Vector,
+    LocalGeometry, CovariantTensor, ContravariantTensor,
     XZPoint, XYZPoint, LatLongZPoint, XYPoint, ZPoint, LatLongPoint, XPoint,
-    Contravariant1Axis, Contravariant2Axis, FullLocalGeometry
+    BasisType, Basis, Tensor, Orthonormal, Covariant, Contravariant, OrthonormalTensor, AbstractTensor, Metric
 
 include("ref_funcs.jl") # compact, generic but unoptimized reference
 include("method_info.jl")
@@ -142,11 +158,11 @@ reference_func(::typeof(Geometry.transform)) = ref_transform
 
 # Correctness comparisons
 components(x::T) where {T <: Real} = x
-components(x) = Geometry.components(x)
+components(x) = parent(x)
 compare(x::T, y::T) where {T<: Real} = x ≈ y || (x < eps(T)/100 && y < eps(T)/100)
 compare(x::T, y::T) where {T <: SMatrix} = all(compare.(x, y))
 compare(x::T, y::T) where {T <: SVector} = all(compare.(x, y))
-compare(x::T, y::T) where {T <: AxisTensor} = compare(components(x), components(y))
+compare(x::T, y::T) where {T <: AbstractTensor} = compare(components(x), components(y))
 
 function test_optimized_functions(::Type{FT}; print_method_info=false) where {FT}
     @info "Testing optimized functions with $FT"

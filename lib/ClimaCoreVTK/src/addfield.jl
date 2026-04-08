@@ -53,7 +53,7 @@ function addfield!(
     field,
     dataspace,
     ::Type{T},
-) where {T <: Geometry.AxisVector}
+) where {T <: Geometry.AbstractTensor{1}}
     interp = Operators.Interpolate(dataspace)
     # should we convert then interpolate, or vice versa?
     ifield = interp.(Geometry.Cartesian123Vector.(field))
