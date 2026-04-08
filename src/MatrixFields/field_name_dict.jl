@@ -982,7 +982,7 @@ const RUNTIME_FUSED_MATRIXFIELDS_FALLBACK_STATS =
     Dict{Any, MatrixFieldsFusedCopytoFallbackStats}()
 const RUNTIME_WARNED_FUSED_MATRIXFIELDS_FALLBACK = Set{Any}()
 const RUNTIME_WARNED_FUSED_MATRIXFIELDS_NONFUSIBLE = Set{Any}()
-const MATRIXFIELDS_FUSED_COPYTO_EXCLUDED_FUNCTION_KEY_SUBSTRINGS = (
+const MATRIXFIELDS_FUSED_COPYTO_RISKY_FUNCTION_KEY_SUBSTRINGS = (
     "RecursiveApply.rsub",
     "RecursiveApply.radd",
     "ClimaCore.MatrixFields.MultiplyColumnwiseBandMatrixField",
@@ -999,9 +999,9 @@ is_fused_copyto_nonfusible_error(err) =
 matrixfields_fused_copyto_function_key(entry::Base.AbstractBroadcasted) =
     typeof(entry isa Operators.OperatorBroadcasted ? entry.op : entry.f)
 
-function matrixfields_fused_copyto_excluded(entry::Base.AbstractBroadcasted)
+function matrixfields_fused_copyto_is_risky(entry::Base.AbstractBroadcasted)
     function_key_string = string(matrixfields_fused_copyto_function_key(entry))
-    for key_substring in MATRIXFIELDS_FUSED_COPYTO_EXCLUDED_FUNCTION_KEY_SUBSTRINGS
+    for key_substring in MATRIXFIELDS_FUSED_COPYTO_RISKY_FUNCTION_KEY_SUBSTRINGS
         if occursin(key_substring, function_key_string)
             return true
         end
@@ -1058,6 +1058,8 @@ function copyto_fused_by_space!(
 )
     fallback_pairs = Pair{Any, Any}[]
     fused_groups = IdDict{Any, Vector{Pair{Fields.Field, Any}}}()
+    risky_groups =
+        IdDict{Any, Dict{Any, Vector{Pair{Fields.Field, Any}}}}()
 
     foreach(keys(vector_or_matrix)) do key
         entry = vector_or_matrix[key]
@@ -1068,10 +1070,17 @@ function copyto_fused_by_space!(
         elseif entry isa ScalingFieldMatrixEntry
             push!(fallback_pairs, dest_entry => (entry,))
         elseif dest_entry isa Fields.Field && entry isa Base.AbstractBroadcasted
-            if matrixfields_fused_copyto_excluded(entry)
-                push!(fallback_pairs, dest_entry => entry)
+            space = axes(dest_entry)
+            if matrixfields_fused_copyto_is_risky(entry)
+                function_key = matrixfields_fused_copyto_function_key(entry)
+                if !haskey(risky_groups, space)
+                    risky_groups[space] = Dict{Any, Vector{Pair{Fields.Field, Any}}}()
+                end
+                if !haskey(risky_groups[space], function_key)
+                    risky_groups[space][function_key] = Pair{Fields.Field, Any}[]
+                end
+                push!(risky_groups[space][function_key], dest_entry => entry)
             else
-                space = axes(dest_entry)
                 if !haskey(fused_groups, space)
                     fused_groups[space] = Pair{Fields.Field, Any}[]
                 end
@@ -1138,6 +1147,68 @@ function copyto_fused_by_space!(
                     end
                 else
                     rethrow()
+                end
+            end
+        end
+    end
+
+    for function_groups in values(risky_groups)
+        for (function_key, pairs) in function_groups
+            signature_key = matrixfields_fused_copyto_signature_key(pairs)
+            if haskey(
+                RUNTIME_DISABLE_FUSED_MATRIXFIELDS_COPYTO_FOR_SIGNATURE,
+                signature_key,
+            )
+                stats = get!(
+                    MatrixFieldsFusedCopytoFallbackStats,
+                    RUNTIME_FUSED_MATRIXFIELDS_FALLBACK_STATS,
+                    function_key,
+                )
+                stats.skipped_groups += 1
+                stats.skipped_pairs += length(pairs)
+                for pair in pairs
+                    pair.first .= pair.second
+                end
+            elseif length(pairs) == 1
+                pair = first(pairs)
+                pair.first .= pair.second
+            else
+                try
+                    Base.copyto!(Fields.FusedMultiBroadcast(Tuple(pairs)))
+                catch err
+                    if is_fused_copyto_compile_error(err)
+                        RUNTIME_DISABLE_FUSED_MATRIXFIELDS_COPYTO_FOR_SIGNATURE[signature_key] =
+                            true
+                        stats = get!(
+                            MatrixFieldsFusedCopytoFallbackStats,
+                            RUNTIME_FUSED_MATRIXFIELDS_FALLBACK_STATS,
+                            function_key,
+                        )
+                        stats.compile_failures += 1
+                        stats.skipped_groups += 1
+                        stats.skipped_pairs += length(pairs)
+                        matrixfields_fused_copyto_warn_once(function_key, err)
+                        for pair in pairs
+                            pair.first .= pair.second
+                        end
+                    elseif is_fused_copyto_nonfusible_error(err)
+                        stats = get!(
+                            MatrixFieldsFusedCopytoFallbackStats,
+                            RUNTIME_FUSED_MATRIXFIELDS_FALLBACK_STATS,
+                            function_key,
+                        )
+                        stats.nonfusible_groups += 1
+                        stats.nonfusible_pairs += length(pairs)
+                        matrixfields_fused_copyto_nonfusible_warn_once(
+                            function_key,
+                            err,
+                        )
+                        for pair in pairs
+                            pair.first .= pair.second
+                        end
+                    else
+                        rethrow()
+                    end
                 end
             end
         end
