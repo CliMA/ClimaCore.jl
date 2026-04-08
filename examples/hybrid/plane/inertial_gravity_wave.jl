@@ -109,8 +109,8 @@ function center_initial_condition(ᶜlocal_geometry)
     if is_discrete_hydrostatic_balance
         face_space =
             Spaces.FaceExtrudedFiniteDifferenceSpace(axes(ᶜlocal_geometry))
-        ᶠΔz = Fields.local_geometry_field(face_space).∂x∂ξ.components.data.:4
-        ᶜΔz = ᶜlocal_geometry.∂x∂ξ.components.data.:4
+        ᶠΔz = Fields.local_geometry_field(face_space).metric.tensor.components.data.:4
+        ᶜΔz = ᶜlocal_geometry.metric.tensor.components.data.:4
         ᶜp = discrete_hydrostatic_balance!(ᶠΔz, ᶜΔz, grav)
     else
         ᶜp = @. p₀(ᶜz)
