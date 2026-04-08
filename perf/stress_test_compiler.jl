@@ -605,9 +605,13 @@ function _soft_fail_reasons(
         # For sparse sampling (e.g. 1 -> 12), avoid over-sensitive cliff labels.
         sparse_gap = !isnothing(complexity_gap) && complexity_gap > 4
         register_cliff = if sparse_gap
-            reg_jump_abs >= 32 || reg_jump_rel >= 2.00
+            # For coarse complexity gaps, require both a substantial absolute and
+            # relative jump (or a very large relative jump on its own).
+            (reg_jump_abs >= 32 && reg_jump_rel >= 1.25) || reg_jump_rel >= 2.00
         else
-            reg_jump_abs >= 16 || reg_jump_rel >= 1.35
+            # For neighboring points, require a moderate relative increase when
+            # using absolute jump checks to avoid high-register false positives.
+            (reg_jump_abs >= 16 && reg_jump_rel >= 1.20) || reg_jump_rel >= 1.35
         end
         if register_cliff
             push!(
