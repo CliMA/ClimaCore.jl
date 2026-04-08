@@ -22,7 +22,6 @@ import ClimaCore.Grids
 import ClimaCore
 import ClimaCore.Geometry
 import ClimaCore.MatrixFields: @name, ⋅
-import LinearAlgebra: Adjoint
 import LinearAlgebra: adjoint
 import LinearAlgebra as LA
 import ClimaCore: Operators, Topologies, DataLayouts
