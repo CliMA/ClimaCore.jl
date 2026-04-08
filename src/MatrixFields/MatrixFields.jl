@@ -70,7 +70,6 @@ import ..Operators
 using ..Geometry:
     rmul_with_projection,
     mul_with_projection,
-    axis_tensor_type,
     rmul_return_type
 
 export DiagonalMatrixRow,

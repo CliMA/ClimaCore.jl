@@ -1,7 +1,3 @@
-using UnrolledUtilities
-import StaticArrays: SArray
-import LinearAlgebra: AdjointAbsVec, det, dot, norm, norm_sqr
-
 ##############################################
 ## Basis Vectors in Generalized Coordinates ##
 ##############################################
@@ -177,8 +173,6 @@ cob_arg_types(row_type, col_type, tensor) = (
 # - Contravariant -> Orthonormal: (∂r/∂ξ)
 # - Covariant -> Contravariant:   (∂ξ/∂r) * (∂ξ/∂r)'
 # - Contravariant -> Covariant:   (∂r/∂ξ)' * (∂r/∂ξ)
-function cob_tensor(src_type, dest_type, g_src_type, g_dest_type, tensor) end
-
 for (T1, T2) in ((:Covariant, :Contravariant), (:Contravariant, :Covariant))
     T3 = :Orthonormal
     @eval cob_requires_inv(::$T1, ::$T3, ::$T2, ::$T3) = true
@@ -467,3 +461,181 @@ Base.:*((; x, g)::VectorWithAnyBasis, y::AbstractCovector) = g * (x * y)
 
 Base.:/(x::AbstractTensor, y::AbstractTensor{2}) = x * inv(y)
 Base.:\(y::AbstractTensor{2}, x::AbstractTensor) = inv(y) * x
+
+###############################################
+## Concrete Aliases, Constructors, & Extras ##
+###############################################
+
+# coordinate_axis: maps point types to basis vector name tuples
+coordinate_axis(::Type{<:XPoint}) = (1,)
+coordinate_axis(::Type{<:YPoint}) = (2,)
+coordinate_axis(::Type{<:ZPoint}) = (3,)
+coordinate_axis(::Type{<:XYPoint}) = (1, 2)
+coordinate_axis(::Type{<:XZPoint}) = (1, 3)
+coordinate_axis(::Type{<:XYZPoint}) = (1, 2, 3)
+coordinate_axis(::Type{<:Cartesian1Point}) = (1,)
+coordinate_axis(::Type{<:Cartesian2Point}) = (2,)
+coordinate_axis(::Type{<:Cartesian3Point}) = (3,)
+coordinate_axis(::Type{<:Cartesian123Point}) = (1, 2, 3)
+coordinate_axis(::Type{<:LatLongZPoint}) = (1, 2, 3)
+coordinate_axis(::Type{<:Cartesian13Point}) = (1, 3)
+coordinate_axis(::Type{<:LatLongPoint}) = (1, 2)
+coordinate_axis(coord::AbstractPoint) = coordinate_axis(typeof(coord))
+
+# Generic vector/tensor type aliases
+const CovariantVector{T, I, S} = Tensor{1, T, Tuple{Basis{Covariant, I}}, S}
+const ContravariantVector{T, I, S} = Tensor{1, T, Tuple{Basis{Contravariant, I}}, S}
+const LocalVector{T, I, S} = Tensor{1, T, Tuple{Basis{Orthonormal, I}}, S}
+
+# Union types for dispatch
+const CovariantTensor = Union{
+    Tensor{1, <:Any, <:Tuple{Basis{Covariant}}},
+    Tensor{2, <:Any, <:Tuple{Basis{Covariant}, <:AbstractBasis}},
+}
+const ContravariantTensor = Union{
+    Tensor{1, <:Any, <:Tuple{Basis{Contravariant}}},
+    Tensor{2, <:Any, <:Tuple{Basis{Contravariant}, <:AbstractBasis}},
+}
+const OrthonormalTensor = Union{
+    Tensor{1, <:Any, <:Tuple{Basis{Orthonormal}}},
+    Tensor{2, <:Any, <:Tuple{Basis{Orthonormal}, <:AbstractBasis}},
+}
+
+# Concrete axis and vector aliases for all dimension combinations
+for I in [(), (1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
+    strI = isempty(I) ? "Null" : join(I)
+    N = length(I)
+    strUVW = isempty(I) ? "Null" : join(map(i -> [:U, :V, :W][i], I))
+
+    # Axis aliases (Basis singletons)
+    @eval const $(Symbol(:Covariant, strI, :Axis)) = Basis{Covariant, $I}
+    @eval const $(Symbol(:Contravariant, strI, :Axis)) = Basis{Contravariant, $I}
+    @eval const $(Symbol(strUVW, :Axis)) = Basis{Orthonormal, $I}
+
+    # Vector aliases
+    @eval const $(Symbol(:Covariant, strI, :Vector)){T} =
+        CovariantVector{T, $I, SVector{$N, T}}
+    @eval const $(Symbol(:Contravariant, strI, :Vector)){T} =
+        ContravariantVector{T, $I, SVector{$N, T}}
+    @eval const $(Symbol(strUVW, :Vector)){T} =
+        LocalVector{T, $I, SVector{$N, T}}
+
+    # Splatted constructors (e.g., Covariant12Vector(1.0, 2.0))
+    # These are needed because Julia does not dispatch UnionAll type aliases
+    # to the generic Tensor constructors defined below.
+    @eval $(Symbol(:Covariant, strI, :Vector))(args::Vararg{Real, $N}) =
+        Tensor(SVector{$N}(args...), ($(Symbol(:Covariant, strI, :Axis))(),))
+    @eval $(Symbol(:Contravariant, strI, :Vector))(args::Vararg{Real, $N}) =
+        Tensor(SVector{$N}(args...), ($(Symbol(:Contravariant, strI, :Axis))(),))
+    @eval $(Symbol(strUVW, :Vector))(args::Vararg{Real, $N}) =
+        Tensor(SVector{$N}(args...), ($(Symbol(strUVW, :Axis))(),))
+end
+
+# Named property access for vectors (e.g., v.u₁, v.u², v.u)
+_symbols(::Covariant) = (:u₁, :u₂, :u₃)
+_symbols(::Contravariant) = (:u¹, :u², :u³)
+_symbols(::Orthonormal) = (:u, :v, :w)
+
+@inline function _sym_to_index(
+    syms::NTuple{3, Symbol}, names::NTuple{N, Int}, name::Symbol,
+) where {N}
+    for n in 1:N
+        i = names[n]
+        if i <= 3 && name === syms[i]
+            return n
+        end
+    end
+    return nothing
+end
+
+Base.propertynames(x::Tensor{1}) = _symbols(basis_type(x.bases[1]))
+
+@inline function Base.getproperty(x::Tensor{1}, name::Symbol)
+    # Pass through to getfield for actual struct fields
+    name === :components && return getfield(x, :components)
+    name === :bases && return getfield(x, :bases)
+    # Named component access: v.u₁, v.u², v.u, etc.
+    b = x.bases[1]
+    syms = _symbols(basis_type(b))
+    idx = _sym_to_index(syms, basis_vector_names(b), name)
+    isnothing(idx) ? zero(eltype(x)) : @inbounds x.components[idx]
+end
+
+# Constructors for named vectors (e.g., Covariant12Vector(1.0, 2.0))
+(::Type{Tensor{1, T, Tuple{B}, SVector{0, T}}} where {T})(
+) where {B <: Basis} = Tensor(SVector{0, T}(), (B.instance,))
+
+(::Type{Tensor{1, T, Tuple{B}, SVector{1, T}}} where {T})(
+    arg1::Real,
+) where {B <: Basis} = Tensor(SVector(arg1), (B.instance,))
+
+(::Type{Tensor{1, T, Tuple{B}, SVector{2, T}}} where {T})(
+    arg1::Real, arg2::Real,
+) where {B <: Basis} = Tensor(SVector(arg1, arg2), (B.instance,))
+
+(::Type{Tensor{1, T, Tuple{B}, SVector{3, T}}} where {T})(
+    arg1::Real, arg2::Real, arg3::Real,
+) where {B <: Basis} = Tensor(SVector(arg1, arg2, arg3), (B.instance,))
+
+# project and transform as wrappers around reshape
+
+"""
+    project(basis, v)
+    project(basis, v, local_geometry)
+
+Project the first axis of vector/tensor `v` onto `basis`, zero-filling
+components not present in the source. When `local_geometry` is provided,
+performs a change of basis type (e.g., Covariant → Contravariant) via the metric.
+"""
+@inline project(b::Basis, v::AbstractTensor{1}) = reshape(v, (b,))
+@inline project(b::Basis, v::AbstractTensor{2}) = reshape(v, (b, axes(v, 2)))
+@inline function project(b::Basis, v::AbstractTensor{2}, b2::Basis)
+    reshape(v, (b, b2))
+end
+@inline project(v::AbstractTensor{2}, b::Basis) = reshape(v, (axes(v, 1), b))
+
+"""
+    transform(basis, v)
+
+Transform the first axis of vector/tensor `v` to `basis`. Throws an error
+if the conversion is not exact (i.e., if any dropped component is nonzero).
+"""
+@inline function transform(b::Basis, v::AbstractTensor{1})
+    result = reshape(v, (b,))
+    # Check that no components were dropped
+    src_names = basis_vector_names(axes(v, 1))
+    dest_names = basis_vector_names(b)
+    T = eltype(v)
+    for n in 1:length(src_names)
+        i = src_names[n]
+        if !(i in dest_names) && parent(v)[n] != zero(T)
+            throw(InexactError(:transform, typeof(b), v))
+        end
+    end
+    return result
+end
+
+# outer product
+"""
+    outer(x, y)
+    x ⊗ y
+
+Compute the outer product of `x` and `y`.
+"""
+function outer end
+const ⊗ = outer
+
+@inline outer(x::AbstractVector, y::AbstractVector) = x * y'
+@inline outer(x::AbstractVector, y::Number) = x * y
+@inline outer(x::AbstractVector, y) = RecursiveApply.rmap(y -> x ⊗ y, y)
+
+cross(x::UVVector, y::WVector) = UVVector(x.v * y.w, -x.u * y.w)
+cross(y::WVector, x::UVVector) = UVVector(-x.v * y.w, x.u * y.w)
+
+# UniformScaling support
+function Base.:(+)(A::Tensor{2}, b::UniformScaling)
+    Tensor(parent(A) + b, axes(A))
+end
+function Base.:(-)(A::Tensor{2}, b::UniformScaling)
+    Tensor(parent(A) - b, axes(A))
+end

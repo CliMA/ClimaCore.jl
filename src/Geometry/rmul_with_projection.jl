@@ -1,21 +1,21 @@
 import LinearAlgebra: Adjoint, AdjointAbsVec
 import .RecursiveApply: rmap, rmaptype
-# import LinearAlgebra: I, UniformScaling, Adjoint, AdjointAbsVec
+
 # Types that are treated as single values when using matrix fields.
-const SingleValue = Union{Number, AxisTensor, AdjointAxisTensor}
+const SingleValue = Union{Number, AbstractTensor}
 
 """
     mul_with_projection(x, y, lg)
 
 Similar to `x * y`, except that this version automatically projects `y` to avoid
-`DimensionMismatch` errors for `AxisTensor`s. For example, if `x` is a covector
+`DimensionMismatch` errors for `Tensor`s. For example, if `x` is a covector
 along the `Covariant3Axis` (e.g., `Covariant3Vector(1)'`), then `y` will be
 projected onto the `Contravariant3Axis`. In general, the first axis of `y` will
 be projected onto the dual of the last axis of `x`.
 """
 mul_with_projection(x, y, _) = x * y
-mul_with_projection(x::Union{AdjointAxisVector, Axis2TensorOrAdj}, y::AxisTensor, lg) =
-    x * project(dual(axes(x)[2]), y, lg)
+mul_with_projection(x::Tensor{2}, y::AbstractTensor, lg) =
+    x * project(dual(axes(x, 2)), y, lg)
 
 """
     rmul_with_projection(x, y, lg)
@@ -28,22 +28,17 @@ rmul_with_projection(x::SingleValue, y, lg) = rmap(y′ -> mul_with_projection(x
 rmul_with_projection(x, y::SingleValue, lg) = rmap(x′ -> mul_with_projection(x′, y, lg), x)
 rmul_with_projection(x::SingleValue, y::SingleValue, lg) = mul_with_projection(x, y, lg)
 
-axis_tensor_type(::Type{T}, ::Type{Tuple{A1}}) where {T, A1} =
-    AxisVector{T, A1, SVector{_length(A1), T}}
-function axis_tensor_type(::Type{T}, ::Type{Tuple{A1, A2}}) where {T, A1, A2}
-    N1 = _length(A1)
-    N2 = _length(A2)
-    return Axis2Tensor{T, Tuple{A1, A2}, SMatrix{N1, N2, T, N1 * N2}}
+# Construct a Tensor type from element type and bases tuple type
+tensor_type(::Type{T}, ::Type{Tuple{B1}}) where {T, B1 <: Basis} =
+    Tensor{1, T, Tuple{B1}, SVector{length(B1.instance), T}}
+function tensor_type(::Type{T}, ::Type{Tuple{B1, B2}}) where {T, B1 <: Basis, B2 <: Basis}
+    N1 = length(B1.instance)
+    N2 = length(B2.instance)
+    return Tensor{2, T, Tuple{B1, B2}, SMatrix{N1, N2, T, N1 * N2}}
 end
 
-adjoint_type(::Type{A}) where {A} = Adjoint{eltype(A), A}
-adjoint_type(::Type{A}) where {T, S, A <: Adjoint{T, S}} = S
-
-axis1(::Type{<:Axis2Tensor{<:Any, <:Tuple{A, Any}}}) where {A} = A
-axis1(::Type{<:AdjointAxis2Tensor{<:Any, <:Tuple{Any, A}}}) where {A} = A
-
-axis2(::Type{<:Axis2Tensor{<:Any, <:Tuple{Any, A}}}) where {A} = A
-axis2(::Type{<:AdjointAxis2Tensor{<:Any, <:Tuple{A, Any}}}) where {A} = A
+basis1(::Type{<:Tensor{2, <:Any, <:Tuple{B, Any}}}) where {B} = B
+basis2(::Type{<:Tensor{2, <:Any, <:Tuple{Any, B}}}) where {B} = B
 
 """
     needs_projection(::Type{X}, ::Type{Y})
@@ -107,46 +102,44 @@ mul_return_type(::Type{X}, ::Type{Y}) where {X, Y} = error(
 # Methods from Base:
 mul_return_type(::Type{X}, ::Type{Y}) where {X <: Number, Y <: Number} =
     promote_type(X, Y)
-mul_return_type(::Type{X}, ::Type{Y}) where {X <: AdjointAbsVec, Y <: AbstractMatrix} =
-    adjoint_type(mul_return_type(adjoint_type(Y), adjoint_type(X)))
 
-# Methods from ClimaCore: 
+# Number * Tensor = Tensor (same bases, promoted element type)
 mul_return_type(
     ::Type{X}, ::Type{Y},
-) where {T, N, A, X <: Number, Y <: AxisTensor{T, N, A}} =
-    axis_tensor_type(promote_type(X, T), A)
+) where {T, B, X <: Number, Y <: Tensor{<:Any, T, B}} =
+    tensor_type(promote_type(X, T), B)
 mul_return_type(
     ::Type{X}, ::Type{Y},
-) where {T, N, A, X <: AxisTensor{T, N, A}, Y <: Number} =
-    axis_tensor_type(promote_type(T, Y), A)
+) where {T, B, X <: Tensor{<:Any, T, B}, Y <: Number} =
+    tensor_type(promote_type(T, Y), B)
+
+# Covector * Vector = scalar (dot product)
 mul_return_type(
     ::Type{X}, ::Type{Y},
-) where {T, N, A, X <: Number, Y <: AdjointAxisTensor{T, N, A}} =
-    adjoint_type(axis_tensor_type(promote_type(X, T), A))
-mul_return_type(
-    ::Type{X}, ::Type{Y},
-) where {T, N, A, X <: AdjointAxisTensor{T, N, A}, Y <: Number} =
-    adjoint_type(axis_tensor_type(promote_type(T, Y), A))
-mul_return_type(
-    ::Type{X}, ::Type{Y},
-) where {T1, T2, X <: AdjointAxisVector{T1}, Y <: AxisVector{T2}} =
-    promote_type(T1, T2) # This comes from the definition of dot.
+) where {T1, T2, X <: Covector{T1}, Y <: Tensor{1, T2}} =
+    promote_type(T1, T2)
+
+# Vector * Covector = 2-tensor (outer product)
 mul_return_type(
     ::Type{X}, ::Type{Y},
 ) where {
-    T1, T2,
-    A1, A2,
-    X <: AxisVector{T1, A1},
-    Y <: AdjointAxisVector{T2, A2},
-} = axis_tensor_type(promote_type(T1, T2), Tuple{A1, A2})
+    T1, T2, B1, B2,
+    X <: Tensor{1, T1, Tuple{B1}},
+    Y <: Covector{T2, <:Tuple{<:Any, B2}},
+} =
+    tensor_type(promote_type(T1, T2), Tuple{B1, B2})
+
+# 2-Tensor * Vector = Vector
 mul_return_type(
     ::Type{X}, ::Type{Y},
-) where {T1, T2, X <: Axis2TensorOrAdj{T1}, Y <: AxisVector{T2}} =
-    axis_tensor_type(promote_type(T1, T2), Tuple{axis1(X)})
+) where {T1, T2, X <: Tensor{2, T1}, Y <: Tensor{1, T2}} =
+    tensor_type(promote_type(T1, T2), Tuple{basis1(X)})
+
+# 2-Tensor * 2-Tensor = 2-Tensor
 mul_return_type(
     ::Type{X}, ::Type{Y},
-) where {T1, T2, X <: Axis2TensorOrAdj{T1}, Y <: Axis2TensorOrAdj{T2}} =
-    axis_tensor_type(promote_type(T1, T2), Tuple{axis1(X), axis2(Y)})
+) where {T1, T2, X <: Tensor{2, T1}, Y <: Tensor{2, T2}} =
+    tensor_type(promote_type(T1, T2), Tuple{basis1(X), basis2(Y)})
 
 """
     rmul_return_type(X, Y)

@@ -339,16 +339,17 @@ const UpperBidiagonalSquareMatrixRow = BandMatrixRow{0, 2}  #  0, 1
 
 const C3{T} = Geometry.Covariant3Vector{T}
 const CT3{T} = Geometry.Contravariant3Vector{T}
-const CT12_CT12{T} = Geometry.Axis2Tensor{
+const CT12_CT12{T} = Geometry.Tensor{
+    2,
     T,
     Tuple{Geometry.Contravariant12Axis, Geometry.Contravariant12Axis},
     SMatrix{2, 2, T, 4},
 }
 
 # Levi-Civita symbol in 2D
-const εⁱʲ = Geometry.AxisTensor(
-    (Geometry.Contravariant12Axis(), Geometry.Contravariant12Axis()),
+const εⁱʲ = Geometry.Tensor(
     SMatrix{2, 2}(0, 1, -1, 0),
+    (Geometry.Contravariant12Axis(), Geometry.Contravariant12Axis()),
 )
 
 Base.@propagate_inbounds ct3_data(velocity, space, idx, hidx) =

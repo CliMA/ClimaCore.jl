@@ -55,27 +55,7 @@ end
     weight,
 ) = arg * weight
 @inline dss_transform(
-    arg::Geometry.AxisTensor{T, N, <:Tuple{Vararg{Geometry.CartesianAxis}}},
-    local_geometry::Geometry.LocalGeometry,
-    weight,
-) where {T, N} = arg * weight
-@inline dss_transform(
-    arg::Geometry.CartesianVector,
-    local_geometry::Geometry.LocalGeometry,
-    weight,
-) = arg * weight
-@inline dss_transform(
-    arg::Geometry.AxisTensor{T, N, <:Tuple{Vararg{Geometry.LocalAxis}}},
-    local_geometry::Geometry.LocalGeometry,
-    weight,
-) where {T, N} = arg * weight
-@inline dss_transform(
-    arg::Geometry.AxisTensor{T, N, <:Tuple{}},
-    local_geometry::Geometry.LocalGeometry,
-    weight,
-) where {T, N} = arg * weight
-@inline dss_transform(
-    arg::Geometry.LocalVector,
+    arg::Geometry.OrthonormalTensor,
     local_geometry::Geometry.LocalGeometry,
     weight,
 ) = arg * weight
@@ -86,7 +66,7 @@ end
 ) = arg * weight
 
 @inline function dss_transform(
-    arg::Geometry.AxisVector,
+    arg::Geometry.AbstractTensor{1},
     local_geometry::Geometry.LocalGeometry,
     weight,
 )
@@ -109,14 +89,13 @@ end
     end
     # workaround for using a Covariant12Vector in a UW space
     if ax isa Geometry.UWAxis && axfrom isa Geometry.Covariant12Axis
-        # return Geometry.transform(Geometry.UVWAxis(), arg, local_geometry)
-        u₁, v = Geometry.components(arg)
+        u₁, v = parent(arg)
         uw_vector = Geometry.project(
             Geometry.UWAxis(),
             Geometry.Covariant13Vector(u₁, zero(u₁)),
             local_geometry,
         )
-        u, w = Geometry.components(uw_vector)
+        u, w = parent(uw_vector)
         return Geometry.UVWVector(u, v, w) * weight
     end
     Geometry.project(ax, arg, local_geometry) * weight
@@ -173,25 +152,25 @@ end
     ::Type{T},
     targ::T,
     local_geometry::Geometry.LocalGeometry,
-) where {T <: Geometry.AxisVector} = targ
+) where {T <: Geometry.AbstractTensor{1}} = targ
 @inline function dss_untransform(
-    ::Type{Geometry.AxisVector{T, A1, S}},
-    targ::Geometry.AxisVector,
+    ::Type{Geometry.Tensor{1, T, Tuple{B}, S}},
+    targ::Geometry.AbstractTensor{1},
     local_geometry::Geometry.LocalGeometry,
-) where {T, A1, S}
-    ax = A1()
+) where {T, B <: Geometry.Basis, S}
+    ax = B()
     # workaround for using a Covariant12Vector in a UW space
     if (
         axes(local_geometry.∂x∂ξ, 1) isa Geometry.UWAxis &&
         ax isa Geometry.Covariant12Axis
     )
-        u, u₂, w = Geometry.components(targ)
+        u, u₂, w = parent(targ)
         u₁_vector = Geometry.transform(
             Geometry.Covariant1Axis(),
             Geometry.UWVector(u, w),
             local_geometry,
         )
-        u₁, = Geometry.components(u₁_vector)
+        u₁, = parent(u₁_vector)
         return Geometry.Covariant12Vector(u₁, u₂)
     end
     Geometry.transform(ax, targ, local_geometry)

@@ -47,10 +47,10 @@ function isa_12_covariant_field(
     f::Type{CF},
 ) where {
     FT,
-    CF <: Geometry.AxisTensor{
-        FT,
+    CF <: Geometry.Tensor{
         1,
-        Tuple{Geometry.CovariantAxis{(1, 2)}},
+        FT,
+        Tuple{Geometry.Covariant12Axis},
         StaticArrays.SVector{2, FT},
     },
 }
@@ -61,10 +61,10 @@ function isa_3_covariant_field(
     f::Type{CF},
 ) where {
     FT,
-    CF <: Geometry.AxisTensor{
-        FT,
+    CF <: Geometry.Tensor{
         1,
-        Tuple{Geometry.CovariantAxis{(3,)}},
+        FT,
+        Tuple{Geometry.Covariant3Axis},
         StaticArrays.SVector{1, FT},
     },
 }

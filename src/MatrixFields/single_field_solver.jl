@@ -6,11 +6,10 @@ inv_return_type(::Type{X}) where {X} = error(
      non-invertible type $X",
 )
 inv_return_type(::Type{X}) where {X <: Union{Number, SMatrix}} = X
-inv_return_type(::Type{X}) where {T, X <: Geometry.Axis2TensorOrAdj{T}} =
-    axis_tensor_type(
-        T,
-        Tuple{dual_type(Geometry.axis2(X)), dual_type(Geometry.axis1(X))},
-    )
+inv_return_type(::Type{X}) where {T, X <: Geometry.Tensor{2, T}} =
+    tensor_type(T, Tuple{dual_type(basis2(X)), dual_type(basis1(X))})
+inv_return_type(::Type{X}) where {Inner <: Geometry.Tensor{2}, X <: Adjoint{<:Any, Inner}} =
+    inv_return_type(Inner)
 
 x_eltype(A::ScalingFieldMatrixEntry, b) = x_eltype(eltype(A), eltype(b))
 x_eltype(A::ColumnwiseBandMatrixField, b) =
