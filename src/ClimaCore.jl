@@ -5,9 +5,9 @@ const VERSION = PkgVersion.@Version
 import ClimaComms
 
 include("DebugOnly/DebugOnly.jl")
+include("Utilities/Utilities.jl")
 include("interface.jl")
 include("devices.jl")
-include("Utilities/Utilities.jl")
 include("RecursiveApply/RecursiveApply.jl")
 include("DataLayouts/DataLayouts.jl")
 include("Geometry/Geometry.jl")

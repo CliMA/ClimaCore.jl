@@ -140,11 +140,11 @@ Base.@propagate_inbounds function _broadcast_getindex(
 end
 @inline _broadcast_getindex_evalf(f::Tf, args::Vararg{Any, N}) where {Tf, N} =
     f(args...)  # not propagate_inbounds
-Base.@propagate_inbounds function _getindex(args::Tuple, I)
-    unrolled_map(args) do arg
+Base.@propagate_inbounds _getindex(args::Tuple, I) =
+    unrolled_map_with_inbounds(args) do arg
+        Base.@_propagate_inbounds_meta
         _broadcast_getindex(arg, I)
     end
-end
 
 @inline Base.axes(bc::NonExtrudedBroadcasted) = _axes(bc, bc.axes)
 _axes(::NonExtrudedBroadcasted, axes::Tuple) = axes

@@ -1,4 +1,5 @@
 import UnrolledUtilities: unrolled_map
+import ..Utilities.Unrolled: unrolled_map_with_inbounds
 
 abstract type AbstractSpectralStyle <: Fields.AbstractFieldStyle end
 
@@ -233,25 +234,23 @@ Base.@propagate_inbounds function resolve_operator(
     bc::SpectralBroadcasted{SlabBlockSpectralStyle},
     slabidx,
 )
-    args = _resolve_operator_args(slabidx, bc.args)
+    args = _resolve_operator(slabidx, bc.args)
     apply_operator(bc.op, bc.axes, slabidx, args...)
 end
 Base.@propagate_inbounds function resolve_operator(
     bc::Base.Broadcast.Broadcasted{SlabBlockSpectralStyle},
     slabidx,
 )
-    args = _resolve_operator_args(slabidx, bc.args)
+    args = _resolve_operator(slabidx, bc.args)
     Base.Broadcast.Broadcasted{SlabBlockSpectralStyle}(bc.f, args, bc.axes)
 end
 @inline resolve_operator(x, slabidx) = x
 
-"""
-    _resolve_operator_args(slabidx, args)
-
-Calls `resolve_operator(arg, slabidx)` for each `arg` in `args`
-"""
-Base.@propagate_inbounds _resolve_operator_args(slabidx, args) =
-    unrolled_map(arg -> resolve_operator(arg, slabidx), args)
+Base.@propagate_inbounds _resolve_operator(slabidx, args) =
+    unrolled_map_with_inbounds(args) do arg
+        Base.@_propagate_inbounds_meta
+        resolve_operator(arg, slabidx)
+    end
 
 function strip_space(bc::SpectralBroadcasted{Style}, parent_space) where {Style}
     current_space = axes(bc)
@@ -329,8 +328,11 @@ end
     return slabidx.v + half <= Nv
 end
 
-Base.@propagate_inbounds _get_node(space, ij, slabidx, args::Tuple) =
-    unrolled_map(arg -> get_node(space, arg, ij, slabidx), args)
+Base.@propagate_inbounds _get_node(space, ij, slabidx, args) =
+    unrolled_map_with_inbounds(args) do arg
+        Base.@_propagate_inbounds_meta
+        get_node(space, arg, ij, slabidx)
+    end
 
 Base.@propagate_inbounds function get_node(space, scalar, ij, slabidx)
     scalar[]
