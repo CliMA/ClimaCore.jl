@@ -431,19 +431,22 @@ end
 
 import ClimaComms
 
-ClimaComms.array_type(x::FieldVector) =
-    promote_type(unrolled_map(ClimaComms.array_type, _values(x))...)
-
-ClimaComms.device(x::FieldVector) = ClimaComms.device(ClimaComms.context(x))
-function ClimaComms.context(x::FieldVector)
-    isempty(_values(x)) && error("Empty FieldVector has no device or context")
-    # We don't have promotion for devices or contexts, so we use the first value
-    # that isn't a PointField (a PointField's data can be stored on a different
-    # device from other Fields to avoid scalar indexing on GPUs). If there is no
-    # such value, fall back to using the first PointField.
-    index = unrolled_findfirst(Base.Fix1(!isa, PointField), _values(x))
-    return ClimaComms.context(_values(x)[isnothing(index) ? 1 : index])
+# To infer the ClimaComms device and its properties, use the first Field in a
+# FieldVector that isn't a PointField, since a PointField's data can be stored
+# on a different device from other Fields to avoid scalar indexing on GPUs. If
+# the FieldVector only contains PointFields, fall back to using the first one.
+function representative_field(x)
+    all_fields = _values(x)
+    isempty(all_fields) && error("Empty FieldVector has no ClimaComms device")
+    field_index = unrolled_findfirst(Base.Fix2(!isa, PointField), all_fields)
+    return all_fields[isnothing(field_index) ? 1 : field_index]
 end
+
+ClimaComms.array_type(x::FieldVector) =
+    ClimaComms.array_type(representative_field(x))
+ClimaComms.device(x::FieldVector) = ClimaComms.device(representative_field(x))
+ClimaComms.context(x::FieldVector) = ClimaComms.context(representative_field(x))
+
 
 function __rprint_diff(
     io::IO,
