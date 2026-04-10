@@ -12,7 +12,7 @@ import .TestUtilities as TU;
 import ClimaCore: Spaces, Geometry, Operators, Fields, MatrixFields
 using LinearAlgebra: Adjoint
 import StaticArrays: SArray
-import ClimaCore.Geometry: AxisTensor, CovariantAxis, ContravariantAxis
+import ClimaCore.Geometry: AbstractTensor, CovariantAxis, ContravariantAxis
 using ClimaCore.MatrixFields:
     BandMatrixRow,
     DiagonalMatrixRow,
@@ -38,11 +38,11 @@ fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
 ∂ᶠu₃ʲ_err_∂ᶠu₃ʲ_type = BandMatrixRow{
     -1,
     3,
-    AxisTensor{
-        GFT,
+    Tensor{
         2,
-        Tuple{CovariantAxis{(3,)}, ContravariantAxis{(3,)}},
-        SArray{Tuple{1, 1}, GFT, 2, 1},
+        GFT,
+        Tuple{Basis{Covariant, (3,)}, Basis{Contravariant, (3,)}},
+        SMatrix{1, 1, GFT, 1},
     },
 }
 

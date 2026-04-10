@@ -145,7 +145,7 @@ components(x) = Geometry.components(x)
 compare(x::T, y::T) where {T<: Real} = x ≈ y || (x < eps(T)/100 && y < eps(T)/100)
 compare(x::T, y::T) where {T <: SMatrix} = all(compare.(x, y))
 compare(x::T, y::T) where {T <: SVector} = all(compare.(x, y))
-compare(x::T, y::T) where {T <: AxisTensor} = compare(components(x), components(y))
+compare(x::T, y::T) where {T <: AbstractTensor} = compare(components(x), components(y))
 
 function test_optimized_functions(::Type{FT}; print_method_info=false) where {FT}
     @info "Testing optimized functions with $FT"

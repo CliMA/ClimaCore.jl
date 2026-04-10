@@ -155,11 +155,11 @@ function Base.show(io::IO, field::ColumnwiseBandMatrixField)
         end
     else
         # When a BandedMatrix with non-number entries is printed, it currently
-        # either prints in an illegible format (e.g., if it has AxisTensor or
-        # AdjointAxisTensor entries) or crashes during the evaluation of
-        # isassigned (e.g., if it has Tuple or NamedTuple entries). So, for
-        # matrix fields with non-number entries, we fall back to the default
-        # function for printing fields.
+        # either prints in an illegible format (e.g., if it has Tensor or
+        # Adjoint{<:Any,<:AbstractTensor} entries) or crashes during the
+        # evaluation of isassigned (e.g., if it has Tuple or NamedTuple
+        # entries). So, for matrix fields with non-number entries, we fall back
+        # to the default function for printing fields.
         print(io, ":")
         Fields._show_compact_field(io, field, "  ", true)
     end

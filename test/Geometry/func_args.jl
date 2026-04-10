@@ -5,6 +5,15 @@ to call different functions with.
 
 #! format: off
 
+# Aliases for backward-compat in test tables
+import ClimaCore.Geometry
+const ContravariantAxis{I} = Geometry.Basis{Geometry.Contravariant, I}
+const CovariantAxis{I}     = Geometry.Basis{Geometry.Covariant, I}
+const LocalAxis{I}         = Geometry.Basis{Geometry.Orthonormal, I}
+const FullLocalGeometry{I, C, FT, S} = Geometry.LocalGeometry{I, C, FT,
+    Geometry.Metric{Geometry.Tensor{2, FT,
+        Tuple{Geometry.Basis{Geometry.Orthonormal, I}, Geometry.Basis{Geometry.Covariant, I}}, S}}}
+
 #####
 ##### Helpers
 #####
@@ -16,7 +25,8 @@ Base.rand(::Type{T}) where {FT, T <: ZPoint{FT}} = T(rand(FT))
 Base.rand(::Type{T}) where {FT, T <: LatLongPoint{FT}} = T(rand(FT),rand(FT))
 Base.rand(::Type{T}) where {FT, T <: XPoint{FT}} = T(rand(FT))
 
-get_∂x∂ξ(::Type{FT}, I, ::Type{S}) where {FT, S} = rand(Axis2Tensor{FT, Tuple{LocalAxis{I}, CovariantAxis{I}}, S})
+get_∂x∂ξ(::Type{FT}, I, ::Type{S}) where {FT, S} =
+    Geometry.Tensor(rand(S), (Geometry.Basis{Geometry.Orthonormal, I}(), Geometry.Basis{Geometry.Covariant, I}()))
 
 get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{2, 2, FT, 4}, C <: XZPoint{FT}       , T <: FullLocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
 get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{3, 3, FT, 9}, C <: XYZPoint{FT}      , T <: FullLocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))

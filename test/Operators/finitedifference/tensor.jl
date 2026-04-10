@@ -62,7 +62,7 @@ for FT in (Float32, Float64)
     S_ref = fill(S_scalar, fspace)
     @test S ≈ S_ref
 
-    @test norm(S_scalar) ≈ norm(Geometry.components(S_scalar))
+    @test norm(S_scalar) ≈ norm(Geometry.parent(S_scalar))
     @test norm.(S) ≈ fill(norm(S_scalar), fspace)
 
     divf2c = Operators.DivergenceF2C()

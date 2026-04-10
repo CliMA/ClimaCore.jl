@@ -3,7 +3,7 @@ using ClimaCore.Geometry, ClimaCore.DataLayouts
 using LinearAlgebra, StaticArrays
 import ClimaCore
 
-@testset "AxisTensors" begin
+@testset "Tensors" begin
     x = Geometry.Covariant12Vector(1.0, 2.0)
     y = Geometry.Contravariant12Vector(1.0, 4.0)
 

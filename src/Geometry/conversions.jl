@@ -157,17 +157,31 @@ end
 
 # Standard same-dimension conversions:
 
+# Use explicit `where {names}` on matrix-product methods so Julia captures the
+# names type parameter and can infer concrete return types (see comment at top).
 @inline ContravariantVector(u::ContravariantTensor, ::LocalGeometry) = u
-@inline ContravariantVector(u::OrthonormalTensor, lg::LocalGeometry) = lg.∂ξ∂x * u
-@inline ContravariantVector(u::CovariantTensor, lg::LocalGeometry) = lg.gⁱʲ * u
+@inline ContravariantVector(
+    u::Tensor{1, <:Any, <:Tuple{Basis{Orthonormal, names}}}, lg::LocalGeometry,
+) where {names} = lg.∂ξ∂x * u
+@inline ContravariantVector(
+    u::Tensor{1, <:Any, <:Tuple{Basis{Covariant, names}}}, lg::LocalGeometry,
+) where {names} = lg.gⁱʲ * u
 
 @inline CovariantVector(u::CovariantTensor, ::LocalGeometry) = u
-@inline CovariantVector(u::OrthonormalTensor, lg::LocalGeometry) = lg.∂x∂ξ' * u
-@inline CovariantVector(u::ContravariantTensor, lg::LocalGeometry) = lg.gᵢⱼ * u
+@inline CovariantVector(
+    u::Tensor{1, <:Any, <:Tuple{Basis{Orthonormal, names}}}, lg::LocalGeometry,
+) where {names} = lg.∂x∂ξ' * u
+@inline CovariantVector(
+    u::Tensor{1, <:Any, <:Tuple{Basis{Contravariant, names}}}, lg::LocalGeometry,
+) where {names} = lg.gᵢⱼ * u
 
 @inline LocalVector(u::OrthonormalTensor, ::LocalGeometry) = u
-@inline LocalVector(u::ContravariantTensor, lg::LocalGeometry) = lg.∂x∂ξ * u
-@inline LocalVector(u::CovariantTensor, lg::LocalGeometry) = lg.∂ξ∂x' * u
+@inline LocalVector(
+    u::Tensor{1, <:Any, <:Tuple{Basis{Contravariant, names}}}, lg::LocalGeometry,
+) where {names} = lg.∂x∂ξ * u
+@inline LocalVector(
+    u::Tensor{1, <:Any, <:Tuple{Basis{Covariant, names}}}, lg::LocalGeometry,
+) where {names} = lg.∂ξ∂x' * u
 
 # UVWVector(u, lg) — convert any vector to the UVW (full-3D Orthonormal) basis.
 # LocalVector is identity for OrthonormalTensor, so no specialization needed.
@@ -388,7 +402,7 @@ _norm_sqr(x, lg::LocalGeometry) = sum(x -> _norm_sqr(x, lg), x)
 _norm_sqr(x::Number, ::LocalGeometry) = norm_sqr(x)
 _norm_sqr(x::AbstractArray, ::LocalGeometry) = norm_sqr(x)
 
-function _norm_sqr(uᵢ::Union{CovariantTensor, ContravariantTensor}, lg::LocalGeometry)
+function _norm_sqr(uᵢ::Union{CovariantVector, ContravariantVector}, lg::LocalGeometry)
     norm_sqr(parent(LocalVector(uᵢ, lg)))
 end
 function _norm_sqr(uᵢ::OrthonormalTensor, ::LocalGeometry)

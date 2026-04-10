@@ -339,6 +339,12 @@ const UpperBidiagonalSquareMatrixRow = BandMatrixRow{0, 2}  #  0, 1
 
 const C3{T} = Geometry.Covariant3Vector{T}
 const CT3{T} = Geometry.Contravariant3Vector{T}
+# Covector (row-vector) type for C3: result of adjoint(C3{T}(x))
+const C3Cov{T} = Geometry.Tensor{
+    2, T,
+    Tuple{Geometry.ScalarBasis, Geometry.Basis{Geometry.Covariant, (3,)}},
+    Adjoint{T, SVector{1, T}},
+}
 const CT12_CT12{T} = Geometry.Tensor{
     2,
     T,
@@ -768,8 +774,8 @@ op_matrix_last_row(
 ) where {FT} = LowerTridiagonalMatrixRow(-C3(FT(1)), C3(FT(1)), C3(FT(0)))
 
 op_matrix_row_type(op::Operators.DivergenceOperator, ::Type{FT}) where {FT} =
-    uses_extrapolate(op) ? QuaddiagonalMatrixRow{Adjoint{FT, C3{FT}}} :
-    BidiagonalMatrixRow{Adjoint{FT, C3{FT}}}
+    uses_extrapolate(op) ? QuaddiagonalMatrixRow{C3Cov{FT}} :
+    BidiagonalMatrixRow{C3Cov{FT}}
 Base.@propagate_inbounds function op_matrix_interior_row(
     ::Operators.DivergenceOperator,
     space,

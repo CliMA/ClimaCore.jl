@@ -62,13 +62,18 @@ function combine_bases(b1::Basis, b2::Basis)
 end
 combine_bases(b1::Basis, b2::Basis, rest::Basis...) =
     combine_bases(combine_bases(b1, b2), rest...)
-function overlap_bases(b1::Basis, b2::Basis)
-    check_same_type(basis_type(b1), basis_type(b2))
-    b1 == b2 && return b1 # fast path avoids unrolled_filter union return type
-    return Basis(
-        basis_type(b1),
-        unrolled_filter(in(basis_vector_names(b2)), basis_vector_names(b1)),
-    )
+# @generated so the filter is computed at macro expansion time from the
+# Basis type parameters. A non-generated version using
+# `unrolled_filter(in(basis_vector_names(b2)), basis_vector_names(b1))`
+# hits a union return type: `Base.Fix2(in, tuple)` stores the tuple as a
+# runtime field (not a type parameter), so `unrolled_filter` cannot
+# constant-fold the predicate and the return type widens.
+@generated function overlap_bases(
+    b1::Basis{T1, names1}, b2::Basis{T2, names2},
+) where {T1, T2, names1, names2}
+    T1 === T2 || return :(check_same_type(basis_type(b1), basis_type(b2))) # throws
+    overlap = Tuple(n for n in names1 if n in names2)
+    return :(Basis{$T1, $overlap}())
 end
 
 # Indices of vectors in src_basis matching the vectors in dest_basis, with
@@ -107,10 +112,22 @@ Tensor(components::C, bases::B) where {C, B} =
                              does not match dimensions of tensor \
                              bases, $(unrolled_map(length, bases))"))
 
+# Allow UniformScaling as components for square 2-tensors (materializes into SMatrix)
+function Tensor(s::UniformScaling, bases::NTuple{2, Basis})
+    N1 = length(bases[1])
+    N2 = length(bases[2])
+    N1 == N2 ||
+        throw(DimensionMismatch("UniformScaling requires square tensor, got $(N1)×$(N2)"))
+    T = typeof(s.λ)
+    Tensor(SMatrix{N1, N2, T}(s), bases)
+end
+
 Base.parent(x::Tensor) = x.components
 Base.axes(x::Tensor) = x.bases
 
 Base.zero(x::Tensor) = zero(typeof(x))
+Base.zero(x::Adjoint{<:Any, <:AbstractTensor}) = adjoint(zero(parent(x)))
+Base.zero(::Type{Adjoint{T, V}}) where {T, V <: AbstractTensor} = adjoint(zero(V))
 Base.one(x::Tensor) = one(typeof(x))
 
 Base.zero(::Type{Tensor{N, T, B, C}}) where {N, T, B, C} =
@@ -307,7 +324,7 @@ check_ndims(x, N) =
 function Base.reshape(x::Tensor, bases::Bases)
     check_ndims(x, length(bases))
     axes(x) == bases && return x
-    components_constructor = SArray{Tuple{unrolled_map(length, bases)...}}
+    components_constructor = SArray{Tuple{unrolled_map(length, bases)...}, eltype(x)}
     component_indices = unrolled_product(
         unrolled_map(matching_basis_vector_indices, bases, axes(x))...,
     )
@@ -674,4 +691,10 @@ function Base.:(+)(A::Tensor{2}, b::UniformScaling)
 end
 function Base.:(-)(A::Tensor{2}, b::UniformScaling)
     Tensor(parent(A) - b, axes(A))
+end
+function Base.:(+)(a::UniformScaling, B::Tensor{2})
+    Tensor(a + parent(B), axes(B))
+end
+function Base.:(-)(a::UniformScaling, B::Tensor{2})
+    Tensor(a - parent(B), axes(B))
 end

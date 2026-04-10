@@ -324,8 +324,7 @@ function Base.one(matrix::FieldMatrix)
             if T <: Number
                 UniformScaling(one(T))
             elseif T <: Geometry.Tensor{2}
-                tensor_data = UniformScaling(one(eltype(T)))
-                DiagonalMatrixRow(Geometry.Tensor(tensor_data, axes(T)))
+                DiagonalMatrixRow(one(T))
             else
                 error("Unsupported diagonal FieldMatrix entry type: $T")
             end
@@ -639,11 +638,10 @@ function identity_field_matrix(x::Fields.FieldVector)
         if T <: Number
             UniformScaling(one(T))
         elseif T <: Geometry.AbstractTensor{1}
-            # TODO: Add methods for +(::UniformScaling, ::Tensor{2}) and
-            # -(::UniformScaling, ::Tensor{2}) to simplify this.
-            tensor_bases = (axes(T)[1], Geometry.dual(axes(T)[1]))
-            tensor_data = UniformScaling(one(eltype(T)))
-            DiagonalMatrixRow(Geometry.Tensor(tensor_data, tensor_bases))
+            b = axes(zero(T))[1]
+            DiagonalMatrixRow(
+                Geometry.Tensor(UniformScaling(one(eltype(T))), (b, Geometry.dual(b))),
+            )
         else
             I # default value for elements that are neither scalars nor vectors
         end

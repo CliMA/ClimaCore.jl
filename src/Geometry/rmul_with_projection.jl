@@ -2,7 +2,10 @@ import LinearAlgebra: Adjoint, AdjointAbsVec
 import .RecursiveApply: rmap, rmaptype
 
 # Types that are treated as single values when using matrix fields.
-const SingleValue = Union{Number, AbstractTensor}
+# AbstractCovector (Tensor{2} with ScalarBasis) is already covered by AbstractTensor.
+# Adjoint{T, <:AbstractTensor} covers the case where adjoint() returns a Julia Adjoint
+# wrapper rather than our Covector type (e.g., from composition or old codepaths).
+const SingleValue = Union{Number, AbstractTensor, Adjoint{<:Any, <:AbstractTensor}}
 
 """
     mul_with_projection(x, y, lg)
@@ -64,7 +67,7 @@ needs_projection(
     ::Type{X},
     ::Type{Y},
 ) where {X <: Tensor{2}, Y <: AbstractTensor} =
-    axes(X)[2] != Geometry.dual(axes(Y)[1])
+    axes(X.instance)[2] != Geometry.dual(axes(Y.instance)[1])
 function needs_projection(
     ::Type{X},
     ::Type{Y},
