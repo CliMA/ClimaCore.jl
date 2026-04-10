@@ -512,7 +512,7 @@ Base.@propagate_inbounds recursively_project(projection_tuple::T, y::Y) where {T
 Base.@propagate_inbounds recursively_project(
     projection_tuple::T,
     y::Y,
-) where {T, Y <: AxisTensor} =
+) where {T, Y <: AbstractTensor} =
     @inbounds @inline project(projection_tuple[1], y, projection_tuple[2])
 
 @generated new_struct(::Type{T}) where {T} = Expr(:new, :T)

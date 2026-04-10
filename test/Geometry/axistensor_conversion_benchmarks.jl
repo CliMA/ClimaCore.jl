@@ -2,15 +2,14 @@ using Test, StaticArrays
 #! format: off
 import Random, BenchmarkTools, StatsBase,
     DataStructures, LinearAlgebra, CountFlops
-using ClimaCore.Geometry:Geometry, AbstractAxis, CovariantAxis,
-    AxisVector, ContravariantAxis, LocalAxis, CartesianAxis, AxisTensor,
+using ClimaCore.Geometry: Geometry, 
     Covariant1Vector, Covariant13Vector, UVVector, UWVector, UVector,
     WVector, Covariant12Vector, UVWVector, Covariant123Vector, Covariant3Vector,
     Contravariant12Vector, Contravariant3Vector, Contravariant123Vector,
-    Contravariant13Vector, Contravariant2Vector, Axis2Tensor, Contravariant3Axis,
-    LocalGeometry, CovariantTensor, CartesianTensor, LocalTensor, ContravariantTensor,
+    Contravariant13Vector, Contravariant2Vector, Contravariant3Axis,
+    LocalGeometry, CovariantTensor, ContravariantTensor,
     XZPoint, XYZPoint, LatLongZPoint, XYPoint, ZPoint, LatLongPoint, XPoint,
-    Contravariant1Axis, Contravariant2Axis, FullLocalGeometry
+    Contravariant1Axis, Contravariant2Axis
 
 include("ref_funcs.jl") # compact, generic but unoptimized reference
 include("method_info.jl")

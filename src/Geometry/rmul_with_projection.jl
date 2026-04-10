@@ -36,6 +36,13 @@ function tensor_type(::Type{T}, ::Type{Tuple{B1, B2}}) where {T, B1 <: Basis, B2
     N2 = length(B2.instance)
     return Tensor{2, T, Tuple{B1, B2}, SMatrix{N1, N2, T, N1 * N2}}
 end
+# Covector storage uses Adjoint{T, SVector} rather than SMatrix{1, N}
+function tensor_type(
+    ::Type{T}, ::Type{Tuple{ScalarBasis, B2}},
+) where {T, B2 <: Basis}
+    N2 = length(B2.instance)
+    return Tensor{2, T, Tuple{ScalarBasis, B2}, Adjoint{T, SVector{N2, T}}}
+end
 
 basis1(::Type{<:Tensor{2, <:Any, <:Tuple{B, Any}}}) where {B} = B
 basis2(::Type{<:Tensor{2, <:Any, <:Tuple{Any, B}}}) where {B} = B
@@ -56,7 +63,7 @@ end
 needs_projection(
     ::Type{X},
     ::Type{Y},
-) where {X <: Union{AdjointAxisVector, Axis2TensorOrAdj}, Y <: AxisTensor} =
+) where {X <: Tensor{2}, Y <: AbstractTensor} =
     axes(X)[2] != Geometry.dual(axes(Y)[1])
 function needs_projection(
     ::Type{X},
@@ -77,7 +84,7 @@ end
 
 recursively_find_dual_axes_for_projection(
     ::Type{X},
-) where {X <: Union{AdjointAxisVector, Axis2TensorOrAdj}} = dual(axes(X)[2])
+) where {X <: Tensor{2}} = dual(axes(X)[2])
 recursively_find_dual_axes_for_projection(::Type{X}) where {X} =
     recursively_find_dual_axes_for_projection(eltype(X))
 
@@ -104,14 +111,16 @@ mul_return_type(::Type{X}, ::Type{Y}) where {X <: Number, Y <: Number} =
     promote_type(X, Y)
 
 # Number * Tensor = Tensor (same bases, promoted element type)
+# For covectors (component storage is Adjoint), preserve the exact type rather
+# than reconstructing via tensor_type (which would use SMatrix instead of Adjoint).
 mul_return_type(
     ::Type{X}, ::Type{Y},
-) where {T, B, X <: Number, Y <: Tensor{<:Any, T, B}} =
-    tensor_type(promote_type(X, T), B)
+) where {T, B, C, X <: Number, Y <: Tensor{<:Any, T, B, C}} =
+    Tensor{ndims(Y), promote_type(X, T), B, C}
 mul_return_type(
     ::Type{X}, ::Type{Y},
-) where {T, B, X <: Tensor{<:Any, T, B}, Y <: Number} =
-    tensor_type(promote_type(T, Y), B)
+) where {T, B, C, X <: Tensor{<:Any, T, B, C}, Y <: Number} =
+    Tensor{ndims(X), promote_type(T, Y), B, C}
 
 # Covector * Vector = scalar (dot product)
 mul_return_type(

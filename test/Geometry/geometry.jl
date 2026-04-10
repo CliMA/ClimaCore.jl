@@ -125,7 +125,8 @@ end
     @test_throws Exception wᵢ * uᵏ
 
     T = uᵏ ⊗ uᵏ
-    @test uᵏ ⊗ uᵏ isa Geometry.Contravariant2Tensor
+    @test uᵏ ⊗ uᵏ isa
+          Geometry.Tensor{2, <:Any, <:Tuple{Geometry.Basis{Geometry.Contravariant}, <:Any}}
 
     @test T * wᵢ == Geometry.Contravariant12Vector(5.0, 10.0)
     @test_throws Exception T * uᵏ
@@ -141,9 +142,9 @@ end
     end
     @test flux(state, 10.0) == (
         ρ = Geometry.UVVector(1.0, 2.0),
-        ρu = Geometry.Axis2Tensor(
-            (Geometry.UVAxis(), Geometry.UVAxis()),
+        ρu = Geometry.Tensor(
             SMatrix{2, 2}(0.5 + 20.0, 1.0, 1.0, 2.0 + 20.0),
+            (Geometry.UVAxis(), Geometry.UVAxis()),
         ),
         ρθ = Geometry.UVVector(0.25, 0.5),
     )
@@ -754,173 +755,85 @@ end
 
 @testset "UVW -> Cartesian spherical vector conversions" begin
     global_geom = Geometry.SphericalGlobalGeometry(2.0)
+    ltc(coord) = Geometry.local_to_cartesian(global_geom, coord)
 
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(1.0, 0.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(0.0, 0.0),
-    ) == Geometry.Cartesian123Vector(0.0, 1.0, 0.0)
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(0.0, 1.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(0.0, 0.0),
-    ) == Geometry.Cartesian123Vector(0.0, 0.0, 1.0)
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(0.0, 0.0, 1.0),
-        global_geom,
-        Geometry.LatLongPoint(0.0, 0.0),
-    ) == Geometry.Cartesian123Vector(1.0, 0.0, 0.0)
+    @test ltc(Geometry.LatLongPoint(0.0, 0.0)) * Geometry.UVWVector(1.0, 0.0, 0.0) ==
+          Geometry.UVWVector(0.0, 1.0, 0.0)
+    @test ltc(Geometry.LatLongPoint(0.0, 0.0)) * Geometry.UVWVector(0.0, 1.0, 0.0) ==
+          Geometry.UVWVector(0.0, 0.0, 1.0)
+    @test ltc(Geometry.LatLongPoint(0.0, 0.0)) * Geometry.UVWVector(0.0, 0.0, 1.0) ==
+          Geometry.UVWVector(1.0, 0.0, 0.0)
 
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(1.0, 0.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(45.0, 0.0),
-    ) == Geometry.Cartesian123Vector(0.0, 1.0, 0.0)
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(0.0, 1.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(45.0, 0.0),
-    ) == Geometry.Cartesian123Vector(-sqrt(0.5), 0.0, sqrt(0.5))
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(0.0, 0.0, 1.0),
-        global_geom,
-        Geometry.LatLongPoint(45.0, 0.0),
-    ) == Geometry.Cartesian123Vector(sqrt(0.5), 0.0, sqrt(0.5))
+    @test ltc(Geometry.LatLongPoint(45.0, 0.0)) * Geometry.UVWVector(1.0, 0.0, 0.0) ==
+          Geometry.UVWVector(0.0, 1.0, 0.0)
+    @test ltc(Geometry.LatLongPoint(45.0, 0.0)) * Geometry.UVWVector(0.0, 1.0, 0.0) ==
+          Geometry.UVWVector(-sqrt(0.5), 0.0, sqrt(0.5))
+    @test ltc(Geometry.LatLongPoint(45.0, 0.0)) * Geometry.UVWVector(0.0, 0.0, 1.0) ==
+          Geometry.UVWVector(sqrt(0.5), 0.0, sqrt(0.5))
 
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(1.0, 0.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(-45.0, 0.0),
-    ) == Geometry.Cartesian123Vector(0.0, 1.0, 0.0)
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(0.0, 1.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(-45.0, 0.0),
-    ) == Geometry.Cartesian123Vector(sqrt(0.5), 0.0, sqrt(0.5))
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(0.0, 0.0, 1.0),
-        global_geom,
-        Geometry.LatLongPoint(-45.0, 0.0),
-    ) == Geometry.Cartesian123Vector(sqrt(0.5), 0.0, -sqrt(0.5))
+    @test ltc(Geometry.LatLongPoint(-45.0, 0.0)) * Geometry.UVWVector(1.0, 0.0, 0.0) ==
+          Geometry.UVWVector(0.0, 1.0, 0.0)
+    @test ltc(Geometry.LatLongPoint(-45.0, 0.0)) * Geometry.UVWVector(0.0, 1.0, 0.0) ==
+          Geometry.UVWVector(sqrt(0.5), 0.0, sqrt(0.5))
+    @test ltc(Geometry.LatLongPoint(-45.0, 0.0)) * Geometry.UVWVector(0.0, 0.0, 1.0) ==
+          Geometry.UVWVector(sqrt(0.5), 0.0, -sqrt(0.5))
 
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(1.0, 0.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(0.0, 90.0),
-    ) == Geometry.Cartesian123Vector(-1.0, 0.0, 0.0)
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(0.0, 1.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(0.0, 90.0),
-    ) == Geometry.Cartesian123Vector(0.0, 0.0, 1.0)
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(0.0, 0.0, 1.0),
-        global_geom,
-        Geometry.LatLongPoint(0.0, 90.0),
-    ) == Geometry.Cartesian123Vector(0.0, 1.0, 0.0)
+    @test ltc(Geometry.LatLongPoint(0.0, 90.0)) * Geometry.UVWVector(1.0, 0.0, 0.0) ==
+          Geometry.UVWVector(-1.0, 0.0, 0.0)
+    @test ltc(Geometry.LatLongPoint(0.0, 90.0)) * Geometry.UVWVector(0.0, 1.0, 0.0) ==
+          Geometry.UVWVector(0.0, 0.0, 1.0)
+    @test ltc(Geometry.LatLongPoint(0.0, 90.0)) * Geometry.UVWVector(0.0, 0.0, 1.0) ==
+          Geometry.UVWVector(0.0, 1.0, 0.0)
 
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(1.0, 0.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(0.0, 180.0),
-    ) == Geometry.Cartesian123Vector(0.0, -1.0, 0.0)
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(0.0, 1.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(0.0, 180.0),
-    ) == Geometry.Cartesian123Vector(0.0, 0.0, 1.0)
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(0.0, 0.0, 1.0),
-        global_geom,
-        Geometry.LatLongPoint(0.0, 180.0),
-    ) == Geometry.Cartesian123Vector(-1.0, 0.0, 0.0)
+    @test ltc(Geometry.LatLongPoint(0.0, 180.0)) * Geometry.UVWVector(1.0, 0.0, 0.0) ==
+          Geometry.UVWVector(0.0, -1.0, 0.0)
+    @test ltc(Geometry.LatLongPoint(0.0, 180.0)) * Geometry.UVWVector(0.0, 1.0, 0.0) ==
+          Geometry.UVWVector(0.0, 0.0, 1.0)
+    @test ltc(Geometry.LatLongPoint(0.0, 180.0)) * Geometry.UVWVector(0.0, 0.0, 1.0) ==
+          Geometry.UVWVector(-1.0, 0.0, 0.0)
 
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(1.0, 0.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(0.0, -180.0),
-    ) == Geometry.Cartesian123Vector(0.0, -1.0, 0.0)
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(0.0, 1.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(0.0, -180.0),
-    ) == Geometry.Cartesian123Vector(0.0, 0.0, 1.0)
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(0.0, 0.0, 1.0),
-        global_geom,
-        Geometry.LatLongPoint(0.0, -180.0),
-    ) == Geometry.Cartesian123Vector(-1.0, 0.0, 0.0)
+    @test ltc(Geometry.LatLongPoint(0.0, -180.0)) * Geometry.UVWVector(1.0, 0.0, 0.0) ==
+          Geometry.UVWVector(0.0, -1.0, 0.0)
+    @test ltc(Geometry.LatLongPoint(0.0, -180.0)) * Geometry.UVWVector(0.0, 1.0, 0.0) ==
+          Geometry.UVWVector(0.0, 0.0, 1.0)
+    @test ltc(Geometry.LatLongPoint(0.0, -180.0)) * Geometry.UVWVector(0.0, 0.0, 1.0) ==
+          Geometry.UVWVector(-1.0, 0.0, 0.0)
 
     # north pole
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(1.0, 0.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(90.0, 0.0),
-    ) == Geometry.Cartesian123Vector(0.0, 1.0, 0.0)
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(0.0, 1.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(90.0, 0.0),
-    ) == Geometry.Cartesian123Vector(-1.0, 0.0, 0.0)
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(0.0, 0.0, 1.0),
-        global_geom,
-        Geometry.LatLongPoint(90.0, 0.0),
-    ) == Geometry.Cartesian123Vector(0.0, 0.0, 1.0)
+    @test ltc(Geometry.LatLongPoint(90.0, 0.0)) * Geometry.UVWVector(1.0, 0.0, 0.0) ==
+          Geometry.UVWVector(0.0, 1.0, 0.0)
+    @test ltc(Geometry.LatLongPoint(90.0, 0.0)) * Geometry.UVWVector(0.0, 1.0, 0.0) ==
+          Geometry.UVWVector(-1.0, 0.0, 0.0)
+    @test ltc(Geometry.LatLongPoint(90.0, 0.0)) * Geometry.UVWVector(0.0, 0.0, 1.0) ==
+          Geometry.UVWVector(0.0, 0.0, 1.0)
 
     # south pole
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(1.0, 0.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(-90.0, 0.0),
-    ) == Geometry.Cartesian123Vector(0.0, 1.0, 0.0)
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(0.0, 1.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(-90.0, 0.0),
-    ) == Geometry.Cartesian123Vector(1.0, 0.0, 0.0)
-    @test Geometry.CartesianVector(
-        Geometry.UVWVector(0.0, 0.0, 1.0),
-        global_geom,
-        Geometry.LatLongPoint(-90.0, 0.0),
-    ) == Geometry.Cartesian123Vector(0.0, 0.0, -1.0)
+    @test ltc(Geometry.LatLongPoint(-90.0, 0.0)) * Geometry.UVWVector(1.0, 0.0, 0.0) ==
+          Geometry.UVWVector(0.0, 1.0, 0.0)
+    @test ltc(Geometry.LatLongPoint(-90.0, 0.0)) * Geometry.UVWVector(0.0, 1.0, 0.0) ==
+          Geometry.UVWVector(1.0, 0.0, 0.0)
+    @test ltc(Geometry.LatLongPoint(-90.0, 0.0)) * Geometry.UVWVector(0.0, 0.0, 1.0) ==
+          Geometry.UVWVector(0.0, 0.0, -1.0)
 end
 
 @testset "Cartesian -> UVW spherical vector conversions" begin
     global_geom = Geometry.SphericalGlobalGeometry(2.0)
+    ltc(coord) = Geometry.local_to_cartesian(global_geom, coord)
 
     # north pole
-    @test Geometry.LocalVector(
-        Geometry.Cartesian123Vector(0.0, 1.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(90.0, 0.0),
-    ) == Geometry.UVWVector(1.0, 0.0, 0.0)
-    @test Geometry.LocalVector(
-        Geometry.Cartesian123Vector(-1.0, 0.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(90.0, 0.0),
-    ) == Geometry.UVWVector(0.0, 1.0, 0.0)
-    @test Geometry.LocalVector(
-        Geometry.Cartesian123Vector(0.0, 0.0, 1.0),
-        global_geom,
-        Geometry.LatLongPoint(90.0, 0.0),
-    ) == Geometry.UVWVector(0.0, 0.0, 1.0)
+    @test ltc(Geometry.LatLongPoint(90.0, 0.0))' * Geometry.UVWVector(0.0, 1.0, 0.0) ==
+          Geometry.UVWVector(1.0, 0.0, 0.0)
+    @test ltc(Geometry.LatLongPoint(90.0, 0.0))' * Geometry.UVWVector(-1.0, 0.0, 0.0) ==
+          Geometry.UVWVector(0.0, 1.0, 0.0)
+    @test ltc(Geometry.LatLongPoint(90.0, 0.0))' * Geometry.UVWVector(0.0, 0.0, 1.0) ==
+          Geometry.UVWVector(0.0, 0.0, 1.0)
 
     # south pole
-    @test Geometry.LocalVector(
-        Geometry.Cartesian123Vector(0.0, 1.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(-90.0, 0.0),
-    ) == Geometry.UVWVector(1.0, 0.0, 0.0)
-    @test Geometry.LocalVector(
-        Geometry.Cartesian123Vector(1.0, 0.0, 0.0),
-        global_geom,
-        Geometry.LatLongPoint(-90.0, 0.0),
-    ) == Geometry.UVWVector(0.0, 1.0, 0.0)
-    @test Geometry.LocalVector(
-        Geometry.Cartesian123Vector(0.0, 0.0, -1.0),
-        global_geom,
-        Geometry.LatLongPoint(-90.0, 0.0),
-    ) == Geometry.UVWVector(0.0, 0.0, 1.0)
+    @test ltc(Geometry.LatLongPoint(-90.0, 0.0))' * Geometry.UVWVector(0.0, 1.0, 0.0) ==
+          Geometry.UVWVector(1.0, 0.0, 0.0)
+    @test ltc(Geometry.LatLongPoint(-90.0, 0.0))' * Geometry.UVWVector(1.0, 0.0, 0.0) ==
+          Geometry.UVWVector(0.0, 1.0, 0.0)
+    @test ltc(Geometry.LatLongPoint(-90.0, 0.0))' * Geometry.UVWVector(0.0, 0.0, -1.0) ==
+          Geometry.UVWVector(0.0, 0.0, 1.0)
 
 end

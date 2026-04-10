@@ -100,7 +100,7 @@ function _SpectralElementGrid1D(
                 x,
                 J,
                 WJ,
-                Geometry.Tensor(∂x∂ξ, _∂x∂ξ_bases),
+                Geometry.Tensor(SMatrix{1, 1}(∂x∂ξ), _∂x∂ξ_bases),
             )
         end
     end

@@ -49,7 +49,7 @@ function PointSpace(
         FT(1.0),
         FT(1.0),
         Geometry.Tensor(
-            FT(1.0),
+            SMatrix{1, 1}(FT(1.0)),
             (
                 Geometry.Basis{Geometry.Orthonormal, AIdx}(),
                 Geometry.Basis{Geometry.Covariant, AIdx}(),

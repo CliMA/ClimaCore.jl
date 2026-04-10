@@ -19,23 +19,22 @@ struct LocalGeometry{I, C <: AbstractPoint, FT, MT <: Metric}
     metric::MT
 end
 
-@inline function Base.getproperty(lg::LocalGeometry, name::Symbol)
-    if name === :invJ
-        return inv(getfield(lg, :J))
-    elseif name === :∂x∂ξ
-        return getfield(lg, :metric).tensor
-    elseif name === :∂ξ∂x
-        return inv(getfield(lg, :metric).tensor)
-    elseif name === :gⁱʲ
-        ∂ξ∂x = inv(getfield(lg, :metric).tensor)
-        return ∂ξ∂x * ∂ξ∂x'
-    elseif name === :gᵢⱼ
-        ∂x∂ξ = getfield(lg, :metric).tensor
-        return ∂x∂ξ' * ∂x∂ξ
-    else
-        return getfield(lg, name)
-    end
+@inline Base.getproperty(lg::LocalGeometry, name::Symbol) =
+    _getproperty(lg, Val(name))
+
+@inline _getproperty(lg::LocalGeometry, ::Val{:invJ}) = inv(getfield(lg, :J))
+@inline _getproperty(lg::LocalGeometry, ::Val{:∂x∂ξ}) = getfield(lg, :metric).tensor
+@inline _getproperty(lg::LocalGeometry, ::Val{:∂ξ∂x}) = inv(getfield(lg, :metric).tensor)
+@inline _getproperty(lg::LocalGeometry, ::Val{:gⁱʲ}) = begin
+    ∂ξ∂x = inv(getfield(lg, :metric).tensor)
+    ∂ξ∂x * ∂ξ∂x'
 end
+@inline _getproperty(lg::LocalGeometry, ::Val{:gᵢⱼ}) = begin
+    ∂x∂ξ = getfield(lg, :metric).tensor
+    ∂x∂ξ' * ∂x∂ξ
+end
+@inline _getproperty(lg::LocalGeometry, ::Val{name}) where {name} =
+    getfield(lg, name)
 
 # Primary constructor: accepts a Tensor{2} with Orthonormal/Covariant bases
 @inline function LocalGeometry(

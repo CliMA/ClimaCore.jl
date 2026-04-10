@@ -50,26 +50,36 @@ scalar_error(T) =
 check_same_type(::T1, ::T2) where {T1, T2} = T1 == T2 || no_metric_error(T1, T2)
 check_same_type(::OneScalar, ::T) where {T} = T == OneScalar || scalar_error(T)
 check_same_type(::T, ::OneScalar) where {T} = T == OneScalar || scalar_error(T)
+check_same_type(::OneScalar, ::OneScalar) = true
 
-combine_bases(b1::Basis, b2::Basis) =
-    check_same_type(basis_type(b1), basis_type(b2)) && Basis(
+function combine_bases(b1::Basis, b2::Basis)
+    check_same_type(basis_type(b1), basis_type(b2))
+    b1 == b2 && return b1 # fast path avoids unrolled_unique union return type
+    return Basis(
         basis_type(b1),
         unrolled_unique((basis_vector_names(b1)..., basis_vector_names(b2)...)),
     )
-overlap_bases(b1::Basis, b2::Basis) =
-    check_same_type(basis_type(b1), basis_type(b2)) && Basis(
+end
+combine_bases(b1::Basis, b2::Basis, rest::Basis...) =
+    combine_bases(combine_bases(b1, b2), rest...)
+function overlap_bases(b1::Basis, b2::Basis)
+    check_same_type(basis_type(b1), basis_type(b2))
+    b1 == b2 && return b1 # fast path avoids unrolled_filter union return type
+    return Basis(
         basis_type(b1),
         unrolled_filter(in(basis_vector_names(b2)), basis_vector_names(b1)),
     )
+end
 
 # Indices of vectors in src_basis matching the vectors in dest_basis, with
 # `nothing` denoting vectors present in dest_basis but missing from src_basis
-matching_basis_vector_indices(dest_basis, src_basis) =
-    check_same_type(basis_type(dest_basis), basis_type(src_basis)) &&
-    unrolled_map(
+function matching_basis_vector_indices(dest_basis, src_basis)
+    check_same_type(basis_type(dest_basis), basis_type(src_basis))
+    return unrolled_map(
         Base.Fix2(unrolled_findfirst, basis_vector_names(src_basis)) ∘ ==,
         basis_vector_names(dest_basis),
     )
+end
 
 ########################################
 ## Tensors in Generalized Coordinates ##
@@ -105,6 +115,9 @@ Base.one(x::Tensor) = one(typeof(x))
 
 Base.zero(::Type{Tensor{N, T, B, C}}) where {N, T, B, C} =
     Tensor(zero(C), B.instance)
+# Adjoint{T,P} has no type-level zero; unwrap, zero the parent, re-wrap.
+Base.zero(::Type{Tensor{N, T, B, Adjoint{T, P}}}) where {N, T, B, P} =
+    Tensor(adjoint(zero(P)), B.instance)
 Base.one(::Type{Tensor{N, T, B, C}}) where {N, T, B, C} =
     Tensor(one(C), B.instance)
 Base.convert(::Type{Tensor{N, T, B, C}}, x::AbstractTensor) where {N, T, B, C} =
@@ -372,10 +385,14 @@ end
 Base.map(f::F, args::AbstractTensor...) where {F} =
     reshape_and_apply_f(Base.Fix1(map, f), args...)
 
+# Use method dispatch instead of a ternary to avoid polluting the return type:
+# Julia must infer both branches of a ternary, and the AnyBasis branch recurses
+# with parent(x)::SMatrix which has no overlap_bases method, widening to Any.
 new_basis_for_product(x, y) =
-    axes(x, ndims(x)) == axes(y, 1) == AnyBasis() ?
-    new_basis_for_product(parent(x), y) :
-    overlap_bases(axes(x, ndims(x)), dual(axes(y, 1)))
+    _new_basis_for_product(axes(x, ndims(x)), axes(y, 1), x, y)
+_new_basis_for_product(ax, ay, _, _) = overlap_bases(ax, dual(ay))
+_new_basis_for_product(::AnyBasis, ::AnyBasis, x, y) =
+    new_basis_for_product(parent(x), y)
 
 x_and_y_bases_for_product(x, y) = (
     Base.setindex(axes(x), new_basis_for_product(x, y), ndims(x)),
@@ -404,12 +421,12 @@ Base.:*(g::Metric, (; x)::TensorWithAnyBasis{1}) = g * x
 
 Base.adjoint(x::Covector) = Tensor(parent(x)', (axes(x, 2),))
 Base.adjoint(x::Tensor{1}) = Tensor(parent(x)', (ScalarBasis(), axes(x, 1)))
-Base.adjoint(x::Tensor{2}) = Tensor(parent(x)', reverse(axes(x)))
+Base.adjoint(x::Tensor{2}) = Tensor(parent(x)', (axes(x, 2), axes(x, 1)))
 Base.adjoint((; x, g)::TensorWithAnyBasis{1}) = x' * g
 Base.adjoint((; x, g)::TensorWithAnyBasis{2}) = g * x'
 
 Base.inv(x::Tensor{2}) =
-    Tensor(inv(parent(x)), unrolled_map(dual, reverse(axes(x))))
+    Tensor(inv(parent(x)), (dual(axes(x, 2)), dual(axes(x, 1))))
 Base.inv((; x, g)::TensorWithAnyBasis{1}) = inv(x) * g
 Base.inv((; x, g)::TensorWithAnyBasis{2}) = g * inv(x)
 
@@ -432,8 +449,11 @@ norm_sqr(x::AbstractTensor) = norm_sqr(parent(reshape_for_norm(x)))
 
 Base.:+(args::AbstractTensor...) = reshape_and_apply_f(+, args...)
 Base.:-(x::AbstractTensor, y::AbstractTensor) = reshape_and_apply_f(-, x, y)
-Base.:(==)(x::AbstractTensor, y::AbstractTensor) = reshape_and_apply_f(==, x, y)
+Base.:(==)(x::AbstractTensor, y::AbstractTensor) =
+    unrolled_map(basis_type, axes(x)) == unrolled_map(basis_type, axes(y)) &&
+    reshape_and_apply_f(==, x, y)
 Base.isapprox(x::AbstractTensor, y::AbstractTensor; kwargs...) =
+    unrolled_map(basis_type, axes(x)) == unrolled_map(basis_type, axes(y)) &&
     reshape_and_apply_f((x, y) -> isapprox(x, y; kwargs...), x, y)
 
 Base.:*(::AbstractTensor{1}, ::AbstractTensor) =
@@ -555,10 +575,12 @@ Base.propertynames(x::Tensor{1}) = _symbols(basis_type(x.bases[1]))
     name === :components && return getfield(x, :components)
     name === :bases && return getfield(x, :bases)
     # Named component access: v.u₁, v.u², v.u, etc.
-    b = x.bases[1]
+    # Use getfield directly to avoid recursive getproperty calls, which would
+    # cause Julia to infer a union return type for b, making basis_type a runtime dispatch.
+    b = getfield(x, :bases)[1]
     syms = _symbols(basis_type(b))
     idx = _sym_to_index(syms, basis_vector_names(b), name)
-    isnothing(idx) ? zero(eltype(x)) : @inbounds x.components[idx]
+    isnothing(idx) ? zero(eltype(x)) : @inbounds getfield(x, :components)[idx]
 end
 
 # Constructors for named vectors (e.g., Covariant12Vector(1.0, 2.0))
@@ -597,8 +619,8 @@ end
 """
     transform(basis, v)
 
-Transform the first axis of vector/tensor `v` to `basis`. Throws an error
-if the conversion is not exact (i.e., if any dropped component is nonzero).
+Transform the first axis of vector or 2-tensor `v` to `basis`. Unlike
+`project`, throws an `InexactError` if any dropped component is nonzero.
 """
 @inline function transform(b::Basis, v::AbstractTensor{1})
     result = reshape(v, (b,))
@@ -609,6 +631,20 @@ if the conversion is not exact (i.e., if any dropped component is nonzero).
     for n in 1:length(src_names)
         i = src_names[n]
         if !(i in dest_names) && parent(v)[n] != zero(T)
+            throw(InexactError(:transform, typeof(b), v))
+        end
+    end
+    return result
+end
+@inline function transform(b::Basis, v::AbstractTensor{2})
+    result = reshape(v, (b, axes(v, 2)))
+    # Check that no row components were dropped
+    src_names = basis_vector_names(axes(v, 1))
+    dest_names = basis_vector_names(b)
+    T = eltype(v)
+    for n in 1:length(src_names)
+        i = src_names[n]
+        if !(i in dest_names) && any(!=(zero(T)), parent(v)[n, :])
             throw(InexactError(:transform, typeof(b), v))
         end
     end
