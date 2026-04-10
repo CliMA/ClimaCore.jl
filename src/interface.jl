@@ -1,5 +1,5 @@
 # Toplevel interface functions for recurisve broadcast expressions
-import UnrolledUtilities: unrolled_map
+import ..Utilities.Unrolled: unrolled_map_with_inbounds
 
 """
     slab(data::AbstractData, h::Integer)
@@ -13,13 +13,11 @@ function slab end
 Base.@propagate_inbounds slab(x, inds...) = x
 Base.@propagate_inbounds slab(tup::Tuple, inds...) = slab_args(tup, inds...)
 
-# Recursively call slab() on broadcast arguments in a way that is statically reducible by the optimizer
-# see Base.Broadcast.preprocess_args
-Base.@propagate_inbounds function slab_args(args::Tuple, inds...)
-    unrolled_map(args) do arg
+Base.@propagate_inbounds slab_args(args::Tuple, inds...) =
+    unrolled_map_with_inbounds(args) do arg
+        Base.@_propagate_inbounds_meta
         slab(arg, inds...)
     end
-end
 Base.@propagate_inbounds slab_args(args::NamedTuple, inds...) =
     NamedTuple{keys(args)}(slab_args(values(args), inds...))
 
@@ -35,21 +33,19 @@ function column end
 Base.@propagate_inbounds column(x, inds...) = x
 Base.@propagate_inbounds column(tup::Tuple, inds...) = column_args(tup, inds...)
 
-# Recursively call column() on broadcast arguments in a way that is statically reducible by the optimizer
-# see Base.Broadcast.preprocess_args
-Base.@propagate_inbounds function column_args(args::Tuple, inds...)
-    unrolled_map(args) do arg
+Base.@propagate_inbounds column_args(args::Tuple, inds...) =
+    unrolled_map_with_inbounds(args) do arg
+        Base.@_propagate_inbounds_meta
         column(arg, inds...)
     end
-end
 Base.@propagate_inbounds column_args(args::NamedTuple, inds...) =
     NamedTuple{keys(args)}(column_args(values(args), inds...))
 
 function level end
 
 Base.@propagate_inbounds level(x, inds...) = x
-Base.@propagate_inbounds function level_args(args::Tuple, inds...)
-    unrolled_map(args) do arg
+Base.@propagate_inbounds level_args(args::Tuple, inds...) =
+    unrolled_map_with_inbounds(args) do arg
+        Base.@_propagate_inbounds_meta
         level(arg, inds...)
     end
-end

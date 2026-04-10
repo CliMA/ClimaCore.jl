@@ -71,6 +71,8 @@ import MultiBroadcastFusion as MBF
 import Adapt
 using UnrolledUtilities
 
+import ..Utilities.Unrolled:
+    unrolled_setindex, unrolled_insert, unrolled_map_with_inbounds
 import ..Utilities:
     PlusHalf, unionall_type, replace_type_parameter, fieldtype_vals
 import ..DebugOnly: call_post_op_callback, post_op_callback
@@ -346,8 +348,8 @@ end
 function replace_storage(data::AbstractData, ::Type{S}, ::Type{T}) where {S, T}
     D = field_dim(singleton(data))
     params = Base.tail(type_params(data))
-    new_array_size = Base.setindex(size(parent(data)), num_basetypes(T, S), D)
-    new_array = similar(parent(data), T, new_array_size...)
+    new_size = unrolled_setindex(size(parent(data)), num_basetypes(T, S), Val(D))
+    new_array = similar(parent(data), T, new_size...)
     return union_all(singleton(data)){S, params...}(new_array)
 end
 

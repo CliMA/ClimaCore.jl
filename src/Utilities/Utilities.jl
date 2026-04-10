@@ -5,6 +5,33 @@ import UnrolledUtilities: unrolled_map
 include("plushalf.jl")
 include("cache.jl")
 
+module Unrolled # TODO: Move all of these functions into UnrolledUtilities.jl
+
+# Alternative to Base.setindex with guaranteed constant propagation
+@inline unrolled_setindex(x::Tuple, value, ::Val{i}) where {i} =
+    ntuple(n -> n == i ? value : x[n], Val(length(x)))
+
+# Analogue of insert! that follows the same pattern as unrolled_setindex
+@inline unrolled_insert(x::Tuple, value, ::Val{i}) where {i} =
+    ntuple(n -> n == i ? value : x[n < i ? n : n - 1], Val(length(x) + 1))
+
+# Same as UnrolledUtilities.unrolled_map, but annotated with @propagate_inbounds
+@generated unrolled_map_with_inbounds(f, x::NTuple{N, Any}) where {N} = quote
+    Base.@_propagate_inbounds_meta
+    return Base.Cartesian.@ntuple $N n -> f(x[n])
+end
+
+# Remove each function's recursion limit for better type inference on Julia 1.10
+if hasfield(Method, :recursion_relation)
+    for f in (unrolled_setindex, unrolled_insert, unrolled_map_with_inbounds)
+        for m in methods(f)
+            m.recursion_relation = Returns(true)
+        end
+    end
+end
+
+end
+
 """
     cart_ind(n::NTuple, i::Integer)
 
