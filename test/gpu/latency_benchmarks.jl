@@ -30,7 +30,7 @@ import LazyBroadcast: lazy
     CUDA.synchronize()
     latency = minimum(@benchmark $scalar_field_1 .= $scalar_field_1 .+ $scalar_field_2).time
     # update this value if the kernel launch time changes significantly and it is expected
-    baseline_latency = 13000
+    baseline_latency = 12000
     @test latency ≈ baseline_latency atol = 2000
     percent_change_latency =
         round(Int, (latency - baseline_latency) / baseline_latency * 100)
@@ -44,7 +44,7 @@ import LazyBroadcast: lazy
                 $scalar_field_1 .+ $scalar_field_2 .+ $scalar_field_1 .+ $scalar_field_2
         ).time
     # update this value if the kernel launch time changes significantly and it is expected
-    baseline_latency = 16000
+    baseline_latency = 13300
     @test latency ≈ baseline_latency atol = 2000
     percent_change_latency =
         round(Int, (latency - baseline_latency) / baseline_latency * 100)
@@ -57,7 +57,7 @@ import LazyBroadcast: lazy
     CUDA.synchronize()
     latency = minimum(@benchmark $scalar_field_1 .= $lazy_sum_3).time
     # update this value if the kernel launch time changes significantly and it is expected
-    baseline_latency = 20000
+    baseline_latency = 16000
     @test latency ≈ baseline_latency atol = 2000
     percent_change_latency =
         round(Int, (latency - baseline_latency) / baseline_latency * 100)
