@@ -99,7 +99,7 @@ function get_space_and_buffers3(::Type{FT}; context) where {FT}
     return (; space, y12, y123, y3, dss_buffer)
 end
 
-@testset "DSS of AxisTensors on Cubed Sphere" begin
+@testset "DSS of Tensors on Cubed Sphere" begin
     FT = Float64
     device = ClimaComms.device()
     nt = get_space_and_buffers3(FT; context = ClimaComms.context(device))

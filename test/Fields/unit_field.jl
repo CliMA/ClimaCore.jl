@@ -628,7 +628,7 @@ end
     coord = Geometry.XPoint(FT(π))
     space = Spaces.PointSpace(context, coord)
     @test parent(Spaces.local_geometry_data(space)) ==
-          FT[Geometry.component(coord, 1), 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+          FT[Geometry.component(coord, 1), 1.0, 1.0, 1.0]
     field = Fields.coordinate_field(space)
     @test field isa Fields.PointField
     @test Fields.field_values(field)[] == coord
@@ -1009,14 +1009,10 @@ end
 Base.broadcastable(x::InferenceFoo) = Ref(x)
 @testset "Inference failure message" begin
     function ics_foo(::Type{FT}, lg, foo) where {FT}
-        uv = Geometry.UVVector(FT(0), FT(0))
-        z = Geometry.Covariant12Vector(uv, lg)
         y = foo.bingo
         return (; x = FT(0) + y)
     end
     function ics_foo_with_field(::Type{FT}, lg, foo, f) where {FT}
-        uv = Geometry.UVVector(FT(0), FT(0))
-        z = Geometry.Covariant12Vector(uv, lg)
         ζ = f.a
         y = foo.baz
         return (; x = FT(0) + y - ζ)
@@ -1073,12 +1069,13 @@ end
         Geometry.Cartesian123Point(x1, x2, x3),
     ]
     all_components = [
-        SMatrix{1, 1}(FT[1]),
-        SMatrix{2, 2}(FT[1 2; 3 4]),
-        SMatrix{3, 3}(FT[1 2 10; 4 5 6; 7 8 9]),
-        SMatrix{3, 3}(FT[1 2 10; 4 5 6; 7 8 9]),
-        SMatrix{2, 2}(FT[1 2; 3 4]),
-        SMatrix{3, 3}(FT[1 2 10; 4 5 6; 7 8 9]),
+        SMatrix{1, 1}(FT[1]),                          # ZPoint (1D)
+        SMatrix{2, 2}(FT[1 2; 3 4]),                   # XZPoint (2D), [2,2]=4
+        SMatrix{3, 3}(FT[1 2 10; 4 5 6; 7 8 9]),       # XYZPoint (3D), [3,3]=9
+        SMatrix{3, 3}(FT[1 2 10; 4 5 6; 7 8 9]),       # LatLongZPoint (3D), [3,3]=9
+        SMatrix{1, 1}(FT[1]),                          # Cartesian3Point (1D), [1,1]=1
+        SMatrix{2, 2}(FT[1 3; 2 2]),                   # Cartesian13Point (2D), [2,2]=2
+        SMatrix{3, 3}(FT[1 2 10; 4 5 6; 7 8 9]),       # Cartesian123Point (3D), [3,3]=9
     ]
 
     expected_dzs = [1.0, 4.0, 9.0, 9.0, 1.0, 2.0, 9.0]
@@ -1087,9 +1084,12 @@ end
         zip(all_components, coords, expected_dzs)
         CoordType = typeof(coord)
         AIdx = Geometry.coordinate_axis(CoordType)
-        at = Geometry.AxisTensor(
-            (Geometry.LocalAxis{AIdx}(), Geometry.CovariantAxis{AIdx}()),
+        at = Geometry.Tensor(
             components,
+            (
+                Geometry.Basis{Geometry.Orthonormal, AIdx}(),
+                Geometry.Basis{Geometry.Covariant, AIdx}(),
+            ),
         )
         local_geometry = Geometry.LocalGeometry(coord, FT(1.0), FT(1.0), at)
         space = Spaces.PointSpace(context, local_geometry)

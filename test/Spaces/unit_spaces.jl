@@ -195,9 +195,9 @@ end
     dss_weights_slab = Adapt.adapt(Array, slab(space.grid.dss_weights, 1))
 
     for i in 1:4
-        @test Geometry.components(local_geometry_slab[slab_index(i)].∂x∂ξ) ≈
+        @test parent(local_geometry_slab[slab_index(i)].∂x∂ξ) ≈
               @SMatrix [8 / 2]
-        @test Geometry.components(local_geometry_slab[slab_index(i)].∂ξ∂x) ≈
+        @test parent(local_geometry_slab[slab_index(i)].∂ξ∂x) ≈
               @SMatrix [2 / 8]
         @test local_geometry_slab[slab_index(i)].J ≈ (8 / 2)
         @test local_geometry_slab[slab_index(i)].WJ ≈ (8 / 2) * weights[i]
@@ -389,9 +389,9 @@ end
     end
 
     for i in 1:4, j in 1:4
-        @test Geometry.components(local_geometry_slab[slab_index(i, j)].∂x∂ξ) ≈
+        @test parent(local_geometry_slab[slab_index(i, j)].∂x∂ξ) ≈
               @SMatrix [8/2 0; 0 10/2]
-        @test Geometry.components(local_geometry_slab[slab_index(i, j)].∂ξ∂x) ≈
+        @test parent(local_geometry_slab[slab_index(i, j)].∂ξ∂x) ≈
               @SMatrix [2/8 0; 0 2/10]
         @test local_geometry_slab[slab_index(i, j)].J ≈ (10 / 2) * (8 / 2)
         @test local_geometry_slab[slab_index(i, j)].WJ ≈

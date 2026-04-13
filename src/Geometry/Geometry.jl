@@ -1,9 +1,11 @@
 module Geometry
 
 using ..RecursiveApply
-import LinearAlgebra
-import UnrolledUtilities: unrolled_findfirst
-
+import LinearAlgebra: det, dot, norm, norm_sqr, cross, UniformScaling, Adjoint
+import Random
+import UnrolledUtilities: unrolled_findfirst, unrolled_map, unrolled_foreach,
+    unrolled_unique, unrolled_allunique, unrolled_in, unrolled_filter, unrolled_product,
+    unrolled_any
 using StaticArrays
 
 export ⊗
@@ -18,7 +20,7 @@ export Contravariant1Vector, Contravariant2Vector, Contravariant3Vector,
 
 
 include("coordinates.jl")
-include("axistensors.jl")
+include("tensors.jl")
 include("localgeometry.jl")
 include("conversions.jl")
 include("globalgeometry.jl")
@@ -28,7 +30,7 @@ include("rmul_with_projection.jl")
     Δz_metric_component(::Type{<:AbstractPoint})
 
 The index of the z-component of an abstract point
-in an `AxisTensor`.
+in a `Tensor`.
 """
 Δz_metric_component(::Type{<:LatLongZPoint}) = 9
 Δz_metric_component(::Type{<:Cartesian3Point}) = 1

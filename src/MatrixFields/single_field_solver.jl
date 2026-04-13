@@ -6,11 +6,10 @@ inv_return_type(::Type{X}) where {X} = error(
      non-invertible type $X",
 )
 inv_return_type(::Type{X}) where {X <: Union{Number, SMatrix}} = X
-inv_return_type(::Type{X}) where {T, X <: Geometry.Axis2TensorOrAdj{T}} =
-    axis_tensor_type(
-        T,
-        Tuple{dual_type(Geometry.axis2(X)), dual_type(Geometry.axis1(X))},
-    )
+inv_return_type(::Type{X}) where {T, X <: Geometry.Tensor{2, T}} =
+    tensor_type(T, Tuple{dual_type(basis2(X)), dual_type(basis1(X))})
+inv_return_type(::Type{X}) where {Inner <: Geometry.Tensor{2}, X <: Adjoint{<:Any, Inner}} =
+    inv_return_type(Inner)
 
 x_eltype(A::ScalingFieldMatrixEntry, b) = x_eltype(eltype(A), eltype(b))
 x_eltype(A::ColumnwiseBandMatrixField, b) =
@@ -264,10 +263,10 @@ is not necessarily commutative). So, the following are all valid combinations of
 eltype(x), eltype(A), and eltype(b):
 - Number, Number, and Number
 - SVector{N}, SMatrix{N, N}, and SVector{N}
-- AxisVector with axis A1, Axis2TensorOrAdj with axes (A2, dual(A1)), and
-  AxisVector with axis A2
+- Tensor{1} with Basis B1, Tensor{2} (or its adjoint) with bases (B2, dual(B1)),
+  and Tensor{1} with Basis B2
 - nested type (Tuple or NamedTuple), scalar type (Number, SMatrix, or
-  Axis2TensorOrAdj), nested type (Tuple or NamedTuple)
+  Tensor{2}/adjoint thereof), nested type (Tuple or NamedTuple)
 
 We might eventually want a single general method for band_matrix_solve!, similar
 to the BLAS.gbsv function. For now, though, the methods above should be enough.

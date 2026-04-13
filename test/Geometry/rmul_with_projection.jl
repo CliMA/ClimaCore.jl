@@ -42,9 +42,12 @@ end
 
     FT = Float64
     coord = Geometry.LatLongZPoint(rand(FT), rand(FT), rand(FT))
-    ∂x∂ξ = Geometry.AxisTensor(
-        (Geometry.LocalAxis{(1, 2, 3)}(), Geometry.CovariantAxis{(1, 2, 3)}()),
+    ∂x∂ξ = Geometry.Tensor(
         (@SMatrix rand(FT, 3, 3)),
+        (
+            Geometry.Basis{Geometry.Orthonormal, (1, 2, 3)}(),
+            Geometry.Basis{Geometry.Covariant, (1, 2, 3)}(),
+        ),
     )
     lg = Geometry.LocalGeometry(coord, rand(FT), rand(FT), ∂x∂ξ)
 

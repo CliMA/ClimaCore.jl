@@ -4236,22 +4236,22 @@ promote_bc(bc::SetCurl{<:Integer}, ::Type{FT}) where {FT} = SetCurl(FT(bc.val))
 sconvert(::Type{T}, x::SArray{S}) where {T, S} = SArray{S, T}(x...)
 
 function promote_axis_tensor(
-    at::Geometry.AxisTensor{T, N, A, S},
+    at::Geometry.Tensor{N, T, B, S},
     ::Type{FT},
-) where {T, N, A, S, FT}
-    fc = sconvert(FT, Geometry.components(at))
-    return Geometry.AxisTensor{FT, N, A, typeof(fc)}(axes(at), fc)
+) where {N, T, B, S, FT}
+    fc = sconvert(FT, parent(at))
+    return Geometry.Tensor(fc, axes(at))
 end
 
-promote_axis_tensor(at::Geometry.AxisTensor{FT}, ::Type{FT}) where {FT} = at
+promote_axis_tensor(at::Geometry.Tensor{<:Any, FT}, ::Type{FT}) where {FT} = at
 
-promote_bc(bc::SetValue{<:Geometry.AxisTensor}, ::Type{FT}) where {FT} =
+promote_bc(bc::SetValue{<:Geometry.AbstractTensor}, ::Type{FT}) where {FT} =
     SetValue(promote_axis_tensor(bc.val, FT))
-promote_bc(bc::SetGradient{<:Geometry.AxisTensor}, ::Type{FT}) where {FT} =
+promote_bc(bc::SetGradient{<:Geometry.AbstractTensor}, ::Type{FT}) where {FT} =
     SetGradient(promote_axis_tensor(bc.val, FT))
-promote_bc(bc::SetDivergence{<:Geometry.AxisTensor}, ::Type{FT}) where {FT} =
+promote_bc(bc::SetDivergence{<:Geometry.AbstractTensor}, ::Type{FT}) where {FT} =
     SetDivergence(promote_axis_tensor(bc.val, FT))
-promote_bc(bc::SetCurl{<:Geometry.AxisTensor}, ::Type{FT}) where {FT} =
+promote_bc(bc::SetCurl{<:Geometry.AbstractTensor}, ::Type{FT}) where {FT} =
     SetCurl(promote_axis_tensor(bc.val, FT))
 
 

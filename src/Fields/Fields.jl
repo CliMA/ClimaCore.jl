@@ -24,7 +24,7 @@ import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace, cuda_synchronize
 import ..Spaces: nlevels, ncolumns
 import ..Spaces: get_mask, set_mask!
 import ..DataLayouts: AbstractMask
-import ..Geometry: Geometry, Cartesian12Vector
+import ..Geometry
 import ..Utilities: PlusHalf, half
 
 using ..RecursiveApply

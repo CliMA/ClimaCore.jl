@@ -98,7 +98,7 @@ end
             )
         gradfv = Geometry.transform.(Ref(Geometry.UVAxis()), grad.(fv))
         Spaces.weighted_dss!(gradfv)
-        @test eltype(gradfv) <: Geometry.Axis2Tensor
+        @test eltype(gradfv) <: Geometry.Tensor{2}
     end
 end
 

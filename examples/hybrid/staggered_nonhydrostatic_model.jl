@@ -310,9 +310,12 @@ function implicit_equation_jacobian!(j, Y, p, δtγ, t)
     ∂ᶠ𝕄ₜ∂ᶠ𝕄 = ∂Yₜ∂Y[ᶠ𝕄_name, ᶠ𝕄_name]
 
     ᶠgⁱʲ = Fields.local_geometry_field(ᶠw).gⁱʲ
-    g³³(gⁱʲ) = Geometry.AxisTensor(
-        (Geometry.Contravariant3Axis(), Geometry.Contravariant3Axis()),
-        Geometry.components(gⁱʲ)[end],
+    g³³(gⁱʲ) = Geometry.Tensor(
+        SMatrix{1, 1}(parent(gⁱʲ)[end]),
+        (
+            Geometry.Basis{Geometry.Contravariant, (3,)}(),
+            Geometry.Basis{Geometry.Contravariant, (3,)}(),
+        ),
     )
 
     # If ∂(ᶜχ)/∂(ᶠw) = 0, then
