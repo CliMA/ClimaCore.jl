@@ -68,6 +68,15 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Unit: kernel latency benchmarks"
+        key: latency_benchmarks
+        command:
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/gpu/latency_benchmarks.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
   - group: "Unit: Utilities"
     steps:
 

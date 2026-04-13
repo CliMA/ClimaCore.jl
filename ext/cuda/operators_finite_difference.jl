@@ -111,7 +111,7 @@ function Base.copyto!(
             cartesian_indicies_mask(us, mask)
         end
 
-        args = (
+        args = cudaconvert((
             strip_space(out, space),
             strip_space(bc′, space),
             axes(out),
@@ -119,7 +119,7 @@ function Base.copyto!(
             us,
             mask,
             cart_inds,
-        )
+        ))
 
         threads = threads_via_occupancy(copyto_stencil_kernel!, args)
         n_max_threads = min(threads, get_N(us))

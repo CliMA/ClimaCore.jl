@@ -26,7 +26,7 @@ function Base.fill!(dest::AbstractData, bc, to::ToCUDA, mask = NoMask())
         if !(VERSION ≥ v"1.11.0-beta") &&
            dest isa DataLayouts.EndsWithField &&
            mask isa NoMask
-            args = (dest, bc, us)
+            args = cudaconvert((dest, bc, us))
             threads = threads_via_occupancy(knl_fill_linear!, args)
             n_max_threads = min(threads, get_N(us))
             p = linear_partition(prod(size(dest)), n_max_threads)
@@ -42,7 +42,7 @@ function Base.fill!(dest::AbstractData, bc, to::ToCUDA, mask = NoMask())
             else
                 cartesian_indicies_mask(us, mask)
             end
-            args = (dest, bc, us, mask, cart_inds)
+            args = cudaconvert((dest, bc, us, mask, cart_inds))
             threads = threads_via_occupancy(knl_fill!, args)
             n_max_threads = min(threads, get_N(us))
             p = if mask isa NoMask
