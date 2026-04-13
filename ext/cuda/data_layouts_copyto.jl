@@ -53,13 +53,8 @@ if VERSION ≥ v"1.11.0-beta"
                 cartesian_indicies_mask(us, mask)
             end
             args = cudaconvert((dest, bc, us, mask, cart_inds))
-            threads = threads_via_occupancy(knl_copyto!, args)
-            n_max_threads = min(threads, get_N(us))
-            p = if mask isa NoMask
-                linear_partition(prod(size(dest)), n_max_threads)
-            else
-                masked_partition(mask, n_max_threads, us)
-            end
+            nitems = length(cart_inds)
+            p = config_via_occupancy(knl_copyto!, nitems, args)
             auto_launch!(
                 knl_copyto!,
                 args;
@@ -82,9 +77,8 @@ else
                     DataLayouts.to_non_extruded_broadcasted(bc),
                 )
                 args = cudaconvert((dest, bc′, us))
-                threads = threads_via_occupancy(knl_copyto_linear!, args)
-                n_max_threads = min(threads, get_N(us))
-                p = linear_partition(prod(size(dest)), n_max_threads)
+                nitems = prod(size(dest))
+                p = config_via_occupancy(knl_copyto_linear!, nitems, args)
                 auto_launch!(
                     knl_copyto_linear!,
                     args;
@@ -98,13 +92,8 @@ else
                     cartesian_indicies_mask(us, mask)
                 end
                 args = cudaconvert((dest, bc, us, mask, cart_inds))
-                threads = threads_via_occupancy(knl_copyto!, args)
-                n_max_threads = min(threads, get_N(us))
-                p = if mask isa NoMask
-                    linear_partition(prod(size(dest)), n_max_threads)
-                else
-                    masked_partition(mask, n_max_threads, us)
-                end
+                nitems = length(cart_inds)
+                p = config_via_occupancy(knl_copyto!, nitems, args)
                 auto_launch!(
                     knl_copyto!,
                     args;
@@ -190,9 +179,7 @@ function DataLayouts.copyto_per_field!(
     nitems = prod(size(array))
     N = prod(size(array))
     args = cudaconvert((array, bc′, N))
-    threads = threads_via_occupancy(copyto_per_field_kernel!, args)
-    n_max_threads = min(threads, nitems)
-    p = linear_partition(nitems, n_max_threads)
+    p = config_via_occupancy(copyto_per_field_kernel!, nitems, args)
     auto_launch!(
         copyto_per_field_kernel!,
         args;
@@ -226,9 +213,7 @@ function DataLayouts.copyto_per_field_scalar!(
     nitems = prod(size(array))
     N = prod(size(array))
     args = cudaconvert((array, bc′, N))
-    threads = threads_via_occupancy(copyto_per_field_kernel_0D!, args)
-    n_max_threads = min(threads, nitems)
-    p = linear_partition(nitems, n_max_threads)
+    p = config_via_occupancy(copyto_per_field_kernel_0D!, nitems, args)
     auto_launch!(
         copyto_per_field_kernel_0D!,
         args;
@@ -250,9 +235,7 @@ function DataLayouts.copyto_per_field_scalar!(
     nitems = prod(size(array))
     N = prod(size(array))
     args = cudaconvert((array, bc′, N))
-    threads = threads_via_occupancy(copyto_per_field_kernel_0D!, args)
-    n_max_threads = min(threads, nitems)
-    p = linear_partition(nitems, n_max_threads)
+    p = config_via_occupancy(copyto_per_field_kernel_0D!, nitems, args)
     auto_launch!(
         copyto_per_field_kernel_0D!,
         args;
