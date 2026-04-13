@@ -2,6 +2,7 @@ module Geometry
 
 using ..RecursiveApply
 import LinearAlgebra: det, dot, norm, norm_sqr, cross, UniformScaling, Adjoint
+import Random
 import UnrolledUtilities: unrolled_findfirst, unrolled_map, unrolled_foreach,
     unrolled_unique, unrolled_allunique, unrolled_in, unrolled_filter, unrolled_product,
     unrolled_any

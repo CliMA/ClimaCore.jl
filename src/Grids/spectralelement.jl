@@ -74,10 +74,7 @@ function _SpectralElementGrid1D(
         Geometry.Basis{Geometry.Orthonormal, AIdx}(),
         Geometry.Basis{Geometry.Covariant, AIdx}(),
     )
-    LG = Geometry.LocalGeometry{
-        AIdx, CoordType, FT,
-        Geometry.Metric{Geometry.Tensor{2, FT, typeof(_∂x∂ξ_bases), SMatrix{1, 1, FT, 1}}},
-    }
+    LG = Geometry.LocalGeometryType(CoordType, FT, AIdx)
     local_geometry = horizontal_layout_type{LG, Nq}(Array{FT}, Nh)
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
@@ -303,14 +300,7 @@ function _SpectralElementGrid2D(
         Geometry.Basis{Geometry.Orthonormal, AIdx}(),
         Geometry.Basis{Geometry.Covariant, AIdx}(),
     )
-    LG = Geometry.LocalGeometry{
-        AIdx,
-        CoordType2D,
-        FT,
-        Geometry.Metric{
-            Geometry.Tensor{2, FT, typeof(_∂x∂ξ_bases2D), SMatrix{2, 2, FT, 4}},
-        },
-    }
+    LG = Geometry.LocalGeometryType(CoordType2D, FT, AIdx)
 
     local_geometry = horizontal_layout_type{LG, Nq}(Array{FT}, Nh)
     mask = if enable_mask

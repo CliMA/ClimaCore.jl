@@ -3,13 +3,17 @@ using Test, StaticArrays
 import Random, BenchmarkTools, StatsBase,
     DataStructures, LinearAlgebra, CountFlops
 using ClimaCore.Geometry: Geometry, 
-    Covariant1Vector, Covariant13Vector, UVVector, UWVector, UVector,
-    WVector, Covariant12Vector, UVWVector, Covariant123Vector, Covariant3Vector,
+    Covariant1Axis, UVAxis, UWAxis, UAxis,
+    WAxis, Covariant12Axis, UVWAxis, Covariant123Axis, Covariant3Axis, Contravariant1Axis, Covariant13Axis,
+    Contravariant12Axis, Contravariant3Axis, Contravariant123Axis, 
+    Contravariant13Axis, Contravariant2Axis, Contravariant3Axis,
+    Covariant1Vector, UVVector, UWVector, UVector,
+    WVector, Covariant12Vector, UVWVector, Covariant123Vector, Covariant3Vector, Covariant13Vector,
     Contravariant12Vector, Contravariant3Vector, Contravariant123Vector,
-    Contravariant13Vector, Contravariant2Vector, Contravariant3Axis,
+    Contravariant13Vector, Contravariant2Vector, Contravariant3Vector,
     LocalGeometry, CovariantTensor, ContravariantTensor,
     XZPoint, XYZPoint, LatLongZPoint, XYPoint, ZPoint, LatLongPoint, XPoint,
-    Contravariant1Axis, Contravariant2Axis
+    BasisType, Basis, Tensor, Orthonormal, Covariant, Contravariant, OrthonormalTensor, AbstractTensor, Metric
 
 include("ref_funcs.jl") # compact, generic but unoptimized reference
 include("method_info.jl")
@@ -141,7 +145,7 @@ reference_func(::typeof(Geometry.transform)) = ref_transform
 
 # Correctness comparisons
 components(x::T) where {T <: Real} = x
-components(x) = Geometry.components(x)
+components(x) = Geometry.parent(x)
 compare(x::T, y::T) where {T<: Real} = x ≈ y || (x < eps(T)/100 && y < eps(T)/100)
 compare(x::T, y::T) where {T <: SMatrix} = all(compare.(x, y))
 compare(x::T, y::T) where {T <: SVector} = all(compare.(x, y))

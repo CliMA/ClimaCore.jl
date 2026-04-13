@@ -151,6 +151,23 @@ end
     return transform(b, _to_local(v, lg))
 end
 
+# 2-tensor transforms: change basis type for the first axis
+@inline function transform(
+    b::Basis{Contravariant}, v::Tensor{2}, lg::LocalGeometry,
+)
+    return transform(b, _to_contravariant_2t(v, lg))
+end
+@inline function transform(
+    b::Basis{Covariant}, v::Tensor{2}, lg::LocalGeometry,
+)
+    return transform(b, _to_covariant_2t(v, lg))
+end
+@inline function transform(
+    b::Basis{Orthonormal}, v::Tensor{2}, lg::LocalGeometry,
+)
+    return transform(b, _to_local_2t(v, lg))
+end
+
 ###############################################################################
 ## Vector type constructors with LocalGeometry
 ###############################################################################

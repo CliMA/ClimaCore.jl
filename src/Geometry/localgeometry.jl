@@ -8,33 +8,31 @@ isapproxsymmetric(A::AbstractMatrix{T}; rtol = 10 * eps(T)) where {T} =
 
 The necessary local metric information defined at each node.
 """
-struct LocalGeometry{I, C <: AbstractPoint, FT, MT <: Metric}
+struct LocalGeometry{I, C <: AbstractPoint, FT, TX, TG1, TG2}
     "Coordinates of the current point"
     coordinates::C
     "Jacobian determinant of the transformation `ξ` (reference space) to `x` (physical space)"
     J::FT
     "Metric terms: `J` multiplied by the quadrature weights"
     WJ::FT
-    "Riemannian metric (wraps ∂x∂ξ as a Tensor with Orthonormal/Covariant bases)"
-    metric::MT
+    "∂x/∂ξ tensor (Orthonormal row × Covariant column bases)"
+    ∂x∂ξ::TX
+    "Contravariant metric tensor gⁱʲ = (∂ξ/∂x)(∂ξ/∂x)ᵀ"
+    gⁱʲ::TG1
+    "Covariant metric tensor gᵢⱼ = (∂x/∂ξ)ᵀ(∂x/∂ξ)"
+    gᵢⱼ::TG2
 end
+# TODO: Benchmark which properties should be stored, which should be computed on the fly
 
-@inline Base.getproperty(lg::LocalGeometry, name::Symbol) =
-    _getproperty(lg, Val(name))
-
-@inline _getproperty(lg::LocalGeometry, ::Val{:invJ}) = inv(getfield(lg, :J))
-@inline _getproperty(lg::LocalGeometry, ::Val{:∂x∂ξ}) = getfield(lg, :metric).tensor
-@inline _getproperty(lg::LocalGeometry, ::Val{:∂ξ∂x}) = inv(getfield(lg, :metric).tensor)
-@inline _getproperty(lg::LocalGeometry, ::Val{:gⁱʲ}) = begin
-    ∂ξ∂x = inv(getfield(lg, :metric).tensor)
-    ∂ξ∂x * ∂ξ∂x'
+@inline function Base.getproperty(lg::LocalGeometry, name::Symbol)
+    return if name === :invJ
+        inv(getfield(lg, :J))
+    elseif name === :∂ξ∂x
+        inv(getfield(lg, :∂x∂ξ))
+    else
+        getfield(lg, name)
+    end
 end
-@inline _getproperty(lg::LocalGeometry, ::Val{:gᵢⱼ}) = begin
-    ∂x∂ξ = getfield(lg, :metric).tensor
-    ∂x∂ξ' * ∂x∂ξ
-end
-@inline _getproperty(lg::LocalGeometry, ::Val{name}) where {name} =
-    getfield(lg, name)
 
 # Primary constructor: accepts a Tensor{2} with Orthonormal/Covariant bases
 @inline function LocalGeometry(
@@ -44,12 +42,33 @@ end
     ∂x∂ξ::Tensor{2},
 ) where {C, FT}
     names = basis_vector_names(axes(∂x∂ξ, 1))
-    g = Metric(∂x∂ξ)
-    gⁱʲ = change_of_basis_tensor(g, Contravariant(), Contravariant())
-    gᵢⱼ = change_of_basis_tensor(g, Covariant(), Covariant())
-    isapproxsymmetric(parent(gⁱʲ)) || error("gⁱʲ is not symmetric.")
-    isapproxsymmetric(parent(gᵢⱼ)) || error("gᵢⱼ is not symmetric.")
-    return LocalGeometry{names, C, FT, typeof(g)}(coordinates, J, WJ, g)
+    # Use A'A and BB' forms (where B = A⁻¹) to guarantee exact symmetry in
+    # floating point, unlike change_of_basis_tensor which computes inv(A'A).
+    ∂ξ∂x = inv(∂x∂ξ)
+    _gᵢⱼ = ∂x∂ξ' * ∂x∂ξ
+    _gⁱʲ = ∂ξ∂x * ∂ξ∂x'
+    isapproxsymmetric(parent(_gⁱʲ)) || error("gⁱʲ is not symmetric.")
+    isapproxsymmetric(parent(_gᵢⱼ)) || error("gᵢⱼ is not symmetric.")
+    return LocalGeometry{names, C, FT, typeof(∂x∂ξ), typeof(_gⁱʲ), typeof(_gᵢⱼ)}(
+        coordinates, J, WJ, ∂x∂ξ, _gⁱʲ, _gᵢⱼ,
+    )
+end
+
+"""
+    LocalGeometryType(::Type{C}, ::Type{FT}, I)
+
+Compute the concrete `LocalGeometry` type for coordinate type `C`, float type `FT`,
+and index tuple `I`. Useful for pre-allocating DataLayouts with the correct element type.
+"""
+function LocalGeometryType(::Type{C}, ::Type{FT}, I::Tuple) where {C <: AbstractPoint, FT}
+    N = length(I)
+    _∂x∂ξ_bases = (Basis{Orthonormal, I}(), Basis{Covariant, I}())
+    _gⁱʲ_bases = (Basis{Contravariant, I}(), Basis{Contravariant, I}())
+    _gᵢⱼ_bases = (Basis{Covariant, I}(), Basis{Covariant, I}())
+    TX = Tensor{2, FT, typeof(_∂x∂ξ_bases), SMatrix{N, N, FT, N * N}}
+    TG1 = Tensor{2, FT, typeof(_gⁱʲ_bases), SMatrix{N, N, FT, N * N}}
+    TG2 = Tensor{2, FT, typeof(_gᵢⱼ_bases), SMatrix{N, N, FT, N * N}}
+    return LocalGeometry{I, C, FT, TX, TG1, TG2}
 end
 
 """

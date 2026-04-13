@@ -139,6 +139,8 @@ Base.one(::Type{Tensor{N, T, B, C}}) where {N, T, B, C} =
     Tensor(one(C), B.instance)
 Base.convert(::Type{Tensor{N, T, B, C}}, x::AbstractTensor) where {N, T, B, C} =
     Tensor(convert(C, parent(reshape(x, B.instance))), B.instance)
+Random.rand(rng::Random.AbstractRNG, ::Type{Tensor{N, T, B, C}}) where {N, T, B, C} =
+    Tensor(rand(rng, C), B.instance)
 
 Base.show(io::IO, x::Tensor) =
     print(io, "Tensor(", parent(x), ", ", axes(x), ")")

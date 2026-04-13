@@ -263,10 +263,10 @@ is not necessarily commutative). So, the following are all valid combinations of
 eltype(x), eltype(A), and eltype(b):
 - Number, Number, and Number
 - SVector{N}, SMatrix{N, N}, and SVector{N}
-- AxisVector with axis A1, Axis2TensorOrAdj with axes (A2, dual(A1)), and
-  AxisVector with axis A2
+- Tensor{1} with Basis B1, Tensor{2} (or its adjoint) with bases (B2, dual(B1)),
+  and Tensor{1} with Basis B2
 - nested type (Tuple or NamedTuple), scalar type (Number, SMatrix, or
-  Axis2TensorOrAdj), nested type (Tuple or NamedTuple)
+  Tensor{2}/adjoint thereof), nested type (Tuple or NamedTuple)
 
 We might eventually want a single general method for band_matrix_solve!, similar
 to the BLAS.gbsv function. For now, though, the methods above should be enough.

@@ -92,12 +92,7 @@ function fd_geometry_data(
         Geometry.Basis{Geometry.Orthonormal, AIdx}(),
         Geometry.Basis{Geometry.Covariant, AIdx}(),
     )
-    LG = Geometry.LocalGeometry{
-        AIdx,
-        CT,
-        FT,
-        Geometry.Metric{Geometry.Tensor{2, FT, typeof(∂x∂ξ_bases), SMatrix{1, 1, FT, 1}}},
-    }
+    LG = Geometry.LocalGeometryType(CT, FT, AIdx)
     (Ni, Nj, Nk, Nv, Nh) = size(face_coordinates)
     Nv_face = Nv - periodic
     Nv_cent = Nv - 1

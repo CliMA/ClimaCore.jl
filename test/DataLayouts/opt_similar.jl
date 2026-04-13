@@ -7,7 +7,6 @@ using Test
 using ClimaCore.DataLayouts
 using ClimaCore: DataLayouts, Geometry
 import ClimaComms
-using StaticArrays: SMatrix
 ClimaComms.@import_required_backends
 using JET
 
@@ -16,7 +15,7 @@ function test_similar!(data)
         FT = eltype(parent(data))
         CT = Geometry.ZPoint{FT}
         AIdx = (3,)
-        LG = Geometry.FullLocalGeometry{AIdx, CT, FT, SMatrix{1, 1, FT, 1}}
+        LG = Geometry.LocalGeometryType(CT, FT, AIdx)
         (_, _, _, Nv, _) = size(data)
         similar(data, LG, Val(Nv))
         @test_opt similar(data, LG, Val(Nv))

@@ -317,7 +317,6 @@ function Base.one(matrix::FieldMatrix)
         if !(key in keys(matrix))
             I # default value for missing diagonal entries in a sparse matrix
         else
-            # TODO: Add method for one(::Axis2Tensor) to simplify this.
             T =
                 matrix[key] isa ScalingFieldMatrixEntry ?
                 eltype(matrix[key]) : eltype(eltype(matrix[key]))
@@ -348,7 +347,7 @@ The third return value is one of the following:
 - `Val(:broadcasted_zero)`: indexing with a view is not possible, and the `name_pair` indexes
 off diagonal with implicit tensor structure optimization (see MatrixFields docs)
 
-When `S` is a `Geometry.Axis2Tensor`, and the name pair indexes to a slice of
+When `S` is a `Geometry.Tensor{2}`, and the name pair indexes to a slice of
 the tensor, an offset of `-1` is returned . In other words, the name pair cannot index into a slice.
 
 If neither element of `name_pair` is `@name()`, the first name in the pair is indexed with

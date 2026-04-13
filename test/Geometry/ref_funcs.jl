@@ -1,24 +1,21 @@
 @inline function ref_transform(
-    ato::Ato,
-    x::AxisVector{T, Afrom, SVector{N, T}},
-) where {Ato <: AbstractAxis{I}, Afrom <: AbstractAxis{I}} where {I, T, N}
+    ::Basis{Tto, I},
+    x::Tensor{1, T, Tuple{Basis{Tfrom, I}}, SVector{N, T}},
+) where {Tto <: BasisType, Tfrom <: BasisType, I, T, N}
     x
 end
 
 @inline function ref_project(
-    ato::Ato,
-    x::AxisVector{T, Afrom, SVector{N, T}},
-) where {Ato <: AbstractAxis{I}, Afrom <: AbstractAxis{I}} where {I, T, N}
+    ::Basis{Tto, I},
+    x::Tensor{1, T, Tuple{Basis{Tfrom, I}}, SVector{N, T}},
+) where {Tto <: BasisType, Tfrom <: BasisType, I, T, N}
     x
 end
 
 @generated function ref_transform(
-    ato::Ato,
-    x::AxisVector{T, Afrom, SVector{N, T}},
-) where {
-    Ato <: AbstractAxis{Ito},
-    Afrom <: AbstractAxis{Ifrom},
-} where {Ito, Ifrom, T, N}
+    ato::Basis{Tto, Ito},
+    x::Tensor{1, T, Tuple{Basis{Tfrom, Ifrom}}, SVector{N, T}},
+) where {Tto <: BasisType, Ito, Tfrom <: BasisType, Ifrom, T, N}
     errcond = false
     for n in 1:N
         i = Ifrom[n]
@@ -37,22 +34,20 @@ end
         end
         push!(vals, val)
     end
+    Nto = length(Ito)
     quote
         Base.@_propagate_inbounds_meta
         if $errcond
-            throw(InexactError(:transform, Ato, x))
+            throw(InexactError(:transform, typeof(ato), x))
         end
-        @inbounds AxisVector(ato, SVector($(vals...)))
+        @inbounds Tensor(SVector{$Nto, T}($(vals...)), (ato,))
     end
 end
 
 @generated function ref_project(
-    ato::Ato,
-    x::AxisVector{T, Afrom, SVector{N, T}},
-) where {
-    Ato <: AbstractAxis{Ito},
-    Afrom <: AbstractAxis{Ifrom},
-} where {Ito, Ifrom, T, N}
+    ato::Basis{Tto, Ito},
+    x::Tensor{1, T, Tuple{Basis{Tfrom, Ifrom}}, SVector{N, T}},
+) where {Tto <: BasisType, Ito, Tfrom <: BasisType, Ifrom, T, N}
     vals = []
     for i in Ito
         val = :(zero(T))
@@ -64,39 +59,28 @@ end
         end
         push!(vals, val)
     end
-    return :(@inbounds AxisVector(ato, SVector($(vals...))))
+    Nto = length(Ito)
+    return :(@inbounds Tensor(SVector{$Nto, T}($(vals...)), (ato,)))
 end
 
 @inline function ref_transform(
-    ato::Ato,
-    x::Axis2Tensor{T, Tuple{Afrom, A2}},
-) where {
-    Ato <: AbstractAxis{I},
-    Afrom <: AbstractAxis{I},
-    A2 <: AbstractAxis{J},
-} where {I, J, T}
+    ::Basis{Tto, I},
+    x::Tensor{2, T, Tuple{Basis{Tfrom, I}, Basis{T2, J}}},
+) where {Tto <: BasisType, Tfrom <: BasisType, T2 <: BasisType, I, J, T}
     x
 end
 
 @inline function ref_project(
-    ato::Ato,
-    x::Axis2Tensor{T, Tuple{Afrom, A2}},
-) where {
-    Ato <: AbstractAxis{I},
-    Afrom <: AbstractAxis{I},
-    A2 <: AbstractAxis{J},
-} where {I, J, T}
+    ::Basis{Tto, I},
+    x::Tensor{2, T, Tuple{Basis{Tfrom, I}, Basis{T2, J}}},
+) where {Tto <: BasisType, Tfrom <: BasisType, T2 <: BasisType, I, J, T}
     x
 end
 
 @generated function ref_transform(
-    ato::Ato,
-    x::Axis2Tensor{T, Tuple{Afrom, A2}},
-) where {
-    Ato <: AbstractAxis{Ito},
-    Afrom <: AbstractAxis{Ifrom},
-    A2 <: AbstractAxis{J},
-} where {Ito, Ifrom, J, T}
+    ato::Basis{Tto, Ito},
+    x::Tensor{2, T, Tuple{Basis{Tfrom, Ifrom}, Basis{T2, J}}},
+) where {Tto <: BasisType, Ito, Tfrom <: BasisType, Ifrom, T2 <: BasisType, J, T}
     N = length(Ifrom)
     M = length(J)
     errcond = false
@@ -121,26 +105,20 @@ end
             push!(vals, val)
         end
     end
+    Nto = length(Ito)
     quote
         Base.@_propagate_inbounds_meta
         if $errcond
-            throw(InexactError(:transform, Ato, x))
+            throw(InexactError(:transform, typeof(ato), x))
         end
-        @inbounds Axis2Tensor(
-            (ato, axes(x, 2)),
-            SMatrix{$(length(Ito)), $M}($(vals...)),
-        )
+        @inbounds Tensor(SMatrix{$Nto, $M, T}($(vals...)), (ato, axes(x, 2)))
     end
 end
 
 @generated function ref_project(
-    ato::Ato,
-    x::Axis2Tensor{T, Tuple{Afrom, A2}},
-) where {
-    Ato <: AbstractAxis{Ito},
-    Afrom <: AbstractAxis{Ifrom},
-    A2 <: AbstractAxis{J},
-} where {Ito, Ifrom, J, T}
+    ato::Basis{Tto, Ito},
+    x::Tensor{2, T, Tuple{Basis{Tfrom, Ifrom}, Basis{T2, J}}},
+) where {Tto <: BasisType, Ito, Tfrom <: BasisType, Ifrom, T2 <: BasisType, J, T}
     N = length(Ifrom)
     M = length(J)
     vals = []
@@ -156,18 +134,16 @@ end
             push!(vals, val)
         end
     end
-    return :(@inbounds Axis2Tensor(
-        (ato, axes(x, 2)),
-        SMatrix{$(length(Ito)), $M}($(vals...)),
-    ))
+    Nto = length(Ito)
+    return :(@inbounds Tensor(SMatrix{$Nto, $M, T}($(vals...)), (ato, axes(x, 2))))
 end
 
 
 for op in (:ref_transform, :ref_project)
     @eval begin
-        # Covariant <-> Cartesian
+        # Orthonormal <-> Covariant
         @inline $op(
-            ax::CartesianAxis,
+            ax::Basis{Orthonormal},
             v::CovariantTensor,
             local_geometry::LocalGeometry,
         ) = $op(
@@ -176,26 +152,8 @@ for op in (:ref_transform, :ref_project)
             $op(Geometry.dual(axes(local_geometry.∂ξ∂x, 1)), v),
         )
         @inline $op(
-            ax::CovariantAxis,
-            v::CartesianTensor,
-            local_geometry::LocalGeometry,
-        ) = $op(
-            ax,
-            local_geometry.∂x∂ξ' *
-            $op(Geometry.dual(axes(local_geometry.∂x∂ξ, 1)), v),
-        )
-        @inline $op(
-            ax::LocalAxis,
-            v::CovariantTensor,
-            local_geometry::LocalGeometry,
-        ) = $op(
-            ax,
-            local_geometry.∂ξ∂x' *
-            $op(Geometry.dual(axes(local_geometry.∂ξ∂x, 1)), v),
-        )
-        @inline $op(
-            ax::CovariantAxis,
-            v::LocalTensor,
+            ax::Basis{Covariant},
+            v::OrthonormalTensor,
             local_geometry::LocalGeometry,
         ) = $op(
             ax,
@@ -203,10 +161,10 @@ for op in (:ref_transform, :ref_project)
             $op(Geometry.dual(axes(local_geometry.∂x∂ξ, 1)), v),
         )
 
-        # Contravariant <-> Cartesian
+        # Contravariant <-> Orthonormal
         @inline $op(
-            ax::ContravariantAxis,
-            v::CartesianTensor,
+            ax::Basis{Contravariant},
+            v::OrthonormalTensor,
             local_geometry::LocalGeometry,
         ) = $op(
             ax,
@@ -214,26 +172,7 @@ for op in (:ref_transform, :ref_project)
             $op(Geometry.dual(axes(local_geometry.∂ξ∂x, 2)), v),
         )
         @inline $op(
-            ax::CartesianAxis,
-            v::ContravariantTensor,
-            local_geometry::LocalGeometry,
-        ) = $op(
-            ax,
-            local_geometry.∂x∂ξ *
-            $op(Geometry.dual(axes(local_geometry.∂x∂ξ, 2)), v),
-        )
-        @inline $op(
-            ax::ContravariantAxis,
-            v::LocalTensor,
-            local_geometry::LocalGeometry,
-        ) = $op(
-            ax,
-            local_geometry.∂ξ∂x *
-            $op(Geometry.dual(axes(local_geometry.∂ξ∂x, 2)), v),
-        )
-
-        @inline $op(
-            ax::LocalAxis,
+            ax::Basis{Orthonormal},
             v::ContravariantTensor,
             local_geometry::LocalGeometry,
         ) = $op(
@@ -244,7 +183,7 @@ for op in (:ref_transform, :ref_project)
 
         # Covariant <-> Contravariant
         @inline $op(
-            ax::ContravariantAxis,
+            ax::Basis{Contravariant},
             v::CovariantTensor,
             local_geometry::LocalGeometry,
         ) = $op(
@@ -254,7 +193,7 @@ for op in (:ref_transform, :ref_project)
             $op(Geometry.dual(axes(local_geometry.∂ξ∂x, 1)), v),
         )
         @inline $op(
-            ax::CovariantAxis,
+            ax::Basis{Covariant},
             v::ContravariantTensor,
             local_geometry::LocalGeometry,
         ) = $op(
@@ -264,39 +203,37 @@ for op in (:ref_transform, :ref_project)
             $op(Geometry.dual(axes(local_geometry.∂x∂ξ, 2)), v),
         )
 
-        @inline $op(ato::CovariantAxis, v::CovariantTensor, ::LocalGeometry) =
+        @inline $op(ato::Basis{Covariant}, v::CovariantTensor, ::LocalGeometry) =
             $op(ato, v)
         @inline $op(
-            ato::ContravariantAxis,
+            ato::Basis{Contravariant},
             v::ContravariantTensor,
             ::LocalGeometry,
         ) = $op(ato, v)
-        @inline $op(ato::CartesianAxis, v::CartesianTensor, ::LocalGeometry) =
-            $op(ato, v)
-        @inline $op(ato::LocalAxis, v::LocalTensor, ::LocalGeometry) =
+        @inline $op(ato::Basis{Orthonormal}, v::OrthonormalTensor, ::LocalGeometry) =
             $op(ato, v)
     end
 end
 
-@inline ref_contravariant1(u::AxisVector, local_geometry::LocalGeometry) =
+@inline ref_contravariant1(u::AbstractTensor{1}, local_geometry::LocalGeometry) =
     @inbounds ref_project(Contravariant1Axis(), u, local_geometry)[1]
-@inline ref_contravariant2(u::AxisVector, local_geometry::LocalGeometry) =
+@inline ref_contravariant2(u::AbstractTensor{1}, local_geometry::LocalGeometry) =
     @inbounds ref_project(Contravariant2Axis(), u, local_geometry)[1]
-@inline ref_contravariant3(u::AxisVector, local_geometry::LocalGeometry) =
+@inline ref_contravariant3(u::AbstractTensor{1}, local_geometry::LocalGeometry) =
     @inbounds ref_project(Contravariant3Axis(), u, local_geometry)[1]
 
-@inline ref_contravariant1(u::Axis2Tensor, local_geometry::LocalGeometry) =
+@inline ref_contravariant1(u::AbstractTensor{2}, local_geometry::LocalGeometry) =
     @inbounds ref_project(Contravariant1Axis(), u, local_geometry)[1, :]
-@inline ref_contravariant2(u::Axis2Tensor, local_geometry::LocalGeometry) =
+@inline ref_contravariant2(u::AbstractTensor{2}, local_geometry::LocalGeometry) =
     @inbounds ref_project(Contravariant2Axis(), u, local_geometry)[1, :]
-@inline ref_contravariant3(u::Axis2Tensor, local_geometry::LocalGeometry) =
+@inline ref_contravariant3(u::AbstractTensor{2}, local_geometry::LocalGeometry) =
     @inbounds ref_project(Contravariant3Axis(), u, local_geometry)[1, :]
 
-@inline ref_covariant1(u::AxisVector, local_geometry::LocalGeometry) =
+@inline ref_covariant1(u::AbstractTensor{1}, local_geometry::LocalGeometry) =
     CovariantVector(u, local_geometry).u₁
-@inline ref_covariant2(u::AxisVector, local_geometry::LocalGeometry) =
+@inline ref_covariant2(u::AbstractTensor{1}, local_geometry::LocalGeometry) =
     CovariantVector(u, local_geometry).u₂
-@inline ref_covariant3(u::AxisVector, local_geometry::LocalGeometry) =
+@inline ref_covariant3(u::AbstractTensor{1}, local_geometry::LocalGeometry) =
     CovariantVector(u, local_geometry).u₃
 
 Base.@propagate_inbounds ref_Jcontravariant3(

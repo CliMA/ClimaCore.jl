@@ -70,7 +70,7 @@ import ..Operators
 using ..Geometry:
     rmul_with_projection,
     mul_with_projection,
-    rmul_return_type
+    rmul_return_type, basis1, basis2, tensor_type
 
 export DiagonalMatrixRow,
     BidiagonalMatrixRow,
