@@ -2,10 +2,9 @@ import ClimaCore: Spaces, Quadratures, Topologies, Operators
 import Base.Broadcast: Broadcasted
 import ClimaCore.Fields: Field, field_values
 import ClimaComms
-import ClimaCore.Utilities: half
+import ClimaCore.Utilities: half, new
 import ClimaCore.Operators
 import ClimaCore.Geometry: ⊗, project
-import ClimaCore.RecursiveApply: rzero, ⊞, ⊠, rmuladd, rmap
 import ClimaCore.Operators:
     StencilBroadcasted, setidx!, getidx, reconstruct_placeholder_space
 import ClimaCore.MatrixFields: FaceToCenter, CenterToFace, Square, CenterToCenter,
@@ -263,7 +262,7 @@ Base.@propagate_inbounds function calc_level_val(
         CUDA.sync_threads()
         # if the output is on centers, the CUDA.blockDim().xth thread can just return 0
         mat1_space.staggering isa Spaces.CellCenter && v == CUDA.blockDim().x &&
-            return new_struct(eltype(bc))
+            return new(eltype(bc))
         if mat1_space.staggering isa Spaces.CellCenter
             mat1_shape =
                 eltype(ClimaCore.MatrixFields.outer_diagonals(typeof(mat1_row))) <:
@@ -308,7 +307,7 @@ Base.@propagate_inbounds function calc_level_val(
         h = blockIdx().z
         hidx = (i, j, h)
         if space.staggering isa Spaces.CellCenter
-            v == CUDA.blockDim().x && return @inline @inbounds new_struct(eltype(bc))
+            v == CUDA.blockDim().x && return @inline @inbounds new(eltype(bc))
         end
         li = space.staggering isa Spaces.CellCenter ? 1i32 : half
         idx = v - 1i32 + li
@@ -355,7 +354,7 @@ Base.@propagate_inbounds function calc_level_val(
     h = blockIdx().z
     hidx = (i, j, h)
     if space.staggering isa Spaces.CellCenter
-        v == CUDA.blockDim().x && return @inline @inbounds new_struct(eltype(bc))
+        v == CUDA.blockDim().x && return @inline @inbounds new(eltype(bc))
     end
     li = space.staggering isa Spaces.CellCenter ? 1i32 : half
     idx = v - 1i32 + li
@@ -366,7 +365,7 @@ end
     calc_level_val(f::Field, space)
 
 Returns the value of the field `f` at the thread's index.
-When the staggering of `space` is `CellCenter`, the thread with `v == CUDA.blockDim().x` returns `new_struct(eltype(f))`
+When the staggering of `space` is `CellCenter`, the thread with `v == CUDA.blockDim().x` returns `new(eltype(f))`
 """
 Base.@propagate_inbounds function calc_level_val(
     arg::F,
@@ -380,7 +379,7 @@ Base.@propagate_inbounds function calc_level_val(
     if space isa
        Union{Spaces.ExtrudedFiniteDifferenceSpace, Spaces.FiniteDifferenceSpace} &&
        space.staggering isa Spaces.CellCenter
-        v == CUDA.blockDim().x && return @inline @inbounds new_struct(eltype(data))
+        v == CUDA.blockDim().x && return @inline @inbounds new(eltype(data))
     end
     return @inline @inbounds data[CartesianIndex(i, j, 1i32, v, h)]
 end
@@ -421,7 +420,7 @@ Base.@propagate_inbounds function get_op_row(op, args, space)
     outputs_to_face = space.staggering isa ClimaCore.Grids.CellFace
     row_type = @inbounds @inline op_matrix_row_type(op, FT, args[1:(end - 1)]...)
     if !outputs_to_face && v == CUDA.blockDim().x
-        return new_struct(row_type)
+        return new(row_type)
     end
     v_half = outputs_to_face ? v - half : v
     in_left_bnd = Operators.should_call_left_boundary(v_half, space, op, nothing)
@@ -484,7 +483,7 @@ Base.@propagate_inbounds function project_row2_for_mul(mat1_row, mat2_row, space
     project_onto =
         ClimaCore.Geometry.recursively_find_dual_axes_for_projection(mat1_et)
     if space.staggering isa Spaces.CellCenter && v == CUDA.blockDim().x
-        lg = new_struct(Spaces.local_geometry_type(typeof(space)))
+        lg = new(Spaces.local_geometry_type(typeof(space)))
     else
         v_maybe_half = space.staggering isa Spaces.CellFace ? v - half : v
         @inbounds lg = Geometry.LocalGeometry(space, v_maybe_half, hidx)
@@ -503,19 +502,13 @@ end
 Recursively project `y` onto the axes in `projection_tuple[1]` using the local geometry in
 `projection_tuple[2]`.
 """
-Base.@propagate_inbounds recursively_project(
-    projection_tuple::T,
-    y::Y,
-) where {T, Y <: BandMatrixRow} = map(Base.Fix1(recursively_project, projection_tuple), y)
 Base.@propagate_inbounds recursively_project(projection_tuple::T, y::Y) where {T, Y} =
-    rmap(Base.Fix1(recursively_project, projection_tuple), y)
+    map(Base.Fix1(recursively_project, projection_tuple), y)
 Base.@propagate_inbounds recursively_project(
     projection_tuple::T,
     y::Y,
 ) where {T, Y <: AxisTensor} =
     @inbounds @inline project(projection_tuple[1], y, projection_tuple[2])
-
-@generated new_struct(::Type{T}) where {T} = Expr(:new, :T)
 
 if hasfield(Method, :recursion_relation)
     dont_limit = (args...) -> true

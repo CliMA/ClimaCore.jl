@@ -4,15 +4,22 @@ function mapreduce_cuda end
 function Base.mapreduce(
     fn::F,
     op::Op,
-    bc::BroadcastedUnionDataF{<:Any, A},
-) where {F, Op, A}
-    mapreduce(op, 1) do v
-        Base.@_inline_meta
-        @inbounds fn(bc[])
-    end
+    data::Union{AbstractData, Base.Broadcast.Broadcasted{<:DataStyle}},
+) where {F, Op}
+    fn′ = EnableAutoBroadcasting(fn)
+    op′ = EnableAutoBroadcasting(op)
+    return drop_auto_broadcasters(mapreduce_data(fn′, op′, data))
 end
 
-function Base.mapreduce(
+function mapreduce_data(
+    fn::F,
+    op::Op,
+    bc::BroadcastedUnionDataF{<:Any, A},
+) where {F, Op, A}
+    @inbounds fn(bc[])
+end
+
+function mapreduce_data(
     fn::F,
     op::Op,
     bc::Union{
@@ -25,11 +32,11 @@ function Base.mapreduce(
     mapreduce(op, 1:Nh) do h
         Base.@_inline_meta
         slabview = @inbounds slab(bc, h)
-        mapreduce(fn, op, slabview)
+        mapreduce_data(fn, op, slabview)
     end
 end
 
-function Base.mapreduce(
+function mapreduce_data(
     fn::F,
     op::Op,
     bc::Union{
@@ -42,11 +49,15 @@ function Base.mapreduce(
     mapreduce(op, 1:Nh) do h
         Base.@_inline_meta
         slabview = @inbounds slab(bc, h)
-        mapreduce(fn, op, slabview)
+        mapreduce_data(fn, op, slabview)
     end
 end
 
-function Base.mapreduce(fn::F, op::Op, bc::IJF{S, Nij}) where {F, Op, S, Nij}
+function mapreduce_data(
+    fn::F,
+    op::Op,
+    bc::BroadcastedUnionIJF{<:Any, Nij, A},
+) where {F, Op, Nij, A}
     # mapreduce across DataSlab2D nodes
     mapreduce(op, Iterators.product(1:Nij, 1:Nij)) do (i, j)
         Base.@_inline_meta
@@ -56,7 +67,11 @@ function Base.mapreduce(fn::F, op::Op, bc::IJF{S, Nij}) where {F, Op, S, Nij}
     end
 end
 
-function Base.mapreduce(fn::F, op::Op, bc::IF{S, Ni}) where {F, Op, S, Ni}
+function mapreduce_data(
+    fn::F,
+    op::Op,
+    bc::BroadcastedUnionIF{<:Any, Ni, A},
+) where {F, Op, Ni, A}
     # mapreduce across DataSlab1D nodes
     mapreduce(op, 1:Ni) do i
         Base.@_inline_meta
@@ -66,7 +81,7 @@ function Base.mapreduce(fn::F, op::Op, bc::IF{S, Ni}) where {F, Op, S, Ni}
     end
 end
 
-function Base.mapreduce(
+function mapreduce_data(
     fn::F,
     op::Op,
     bc::BroadcastedUnionVF{<:Any, Nv, A},
@@ -80,7 +95,7 @@ function Base.mapreduce(
     end
 end
 
-function Base.mapreduce(
+function mapreduce_data(
     fn::F,
     op::Op,
     bc::Union{
@@ -93,11 +108,11 @@ function Base.mapreduce(
     mapreduce(op, Iterators.product(1:Ni, 1:Nh)) do (i, h)
         Base.@_inline_meta
         columnview = @inbounds column(bc, i, h)
-        mapreduce(fn, op, columnview)
+        mapreduce_data(fn, op, columnview)
     end
 end
 
-function Base.mapreduce(
+function mapreduce_data(
     fn::F,
     op::Op,
     bc::Union{
@@ -110,6 +125,6 @@ function Base.mapreduce(
     mapreduce(op, Iterators.product(1:Nij, 1:Nij, 1:Nh)) do (i, j, h)
         Base.@_inline_meta
         columnview = @inbounds column(bc, i, j, h)
-        mapreduce(fn, op, columnview)
+        mapreduce_data(fn, op, columnview)
     end
 end

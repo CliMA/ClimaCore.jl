@@ -438,8 +438,8 @@ Base.@propagate_inbounds function op_matrix_interior_row(
 )
     w⁻ = Operators.getidx(space, weight, idx - half, hidx)
     w⁺ = Operators.getidx(space, weight, idx + half, hidx)
-    denominator = radd(w⁻, w⁺)
-    return BidiagonalMatrixRow(rdiv(w⁻, denominator), rdiv(w⁺, denominator))
+    denominator = w⁻ + w⁺
+    return BidiagonalMatrixRow(w⁻ / denominator, w⁺ / denominator)
 end
 op_matrix_first_row(
     ::Operators.WeightedInterpolateC2F,

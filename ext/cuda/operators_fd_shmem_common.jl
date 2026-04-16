@@ -1,4 +1,4 @@
-import ClimaCore: DataLayouts, Spaces, Geometry, RecursiveApply, DataLayouts
+import ClimaCore: DataLayouts, Spaces, Geometry, DataLayouts
 import CUDA
 import ClimaCore.Operators: return_eltype, get_local_geometry
 import ClimaCore.Operators: getidx

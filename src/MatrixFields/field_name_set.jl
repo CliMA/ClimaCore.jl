@@ -188,7 +188,7 @@ end
 
 #=
 There are four cases that we need to support in order to be compatible with
-RecursiveApply (i.e., with rmul):
+generic data types:
 1. (_, name) * name or
    (_, name) * (name, _)
 2. (_, name_child) * name      -> (_, name_child) * name_child or

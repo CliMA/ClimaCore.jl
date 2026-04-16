@@ -8,6 +8,7 @@ import Base.Broadcast: Broadcasted
 
 import ..slab, ..slab_args, ..column, ..column_args
 import ClimaComms
+import ..Utilities: safe_eltype, add_auto_broadcasters, drop_auto_broadcasters
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..DataLayouts: DataLayouts, Data2D, DataSlab2D
 import ..DataLayouts: vindex
@@ -17,8 +18,6 @@ import ..Topologies
 import ..Meshes
 import ..Grids
 import ..Fields: Fields, Field
-
-using ..RecursiveApply
 
 include("common.jl")
 include("spectralelement.jl")

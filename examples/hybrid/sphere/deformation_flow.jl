@@ -150,11 +150,11 @@ function horizontal_tendency!(Yₜ, Y, cache, t)
     @. Δₕq = hwdiv(hgrad(Y.c.ρq / Y.c.ρ))
     Spaces.weighted_dss!(Δₕq)
     @. Yₜ.c.ρ = -hdiv(Y.c.ρ * u)
-    for n in 1:5 # TODO: update RecursiveApply/Operators to eliminate this loop
+    for n in 1:5
         ρq_n = Y.c.ρq.:($n)
         ρqₜ_n = Yₜ.c.ρq.:($n)
         @. ρqₜ_n = -hdiv(ρq_n * u)
-    end
+    end # FIXME: Parallelizing this loop blows up compilation time on Julia 1.10
     @. Yₜ.c.ρq -= D₄ * hwdiv(Y.c.ρ * hgrad(Δₕq))
 end
 
@@ -166,7 +166,7 @@ function vertical_tendency!(Yₜ, Y, cache, t)
     @. face_uᵥ = Geometry.project(Geometry.Covariant3Axis(), face_u)
     @. Yₜ.c.ρ = -vdivf2c(Ic2f(Y.c.ρ) * face_u)
     ᶜJ = Fields.local_geometry_field(axes(Y.c.ρ)).J
-    for n in 1:5 # TODO: update RecursiveApply/Operators to eliminate this loop
+    for n in 1:5
         ρq_n = Y.c.ρq.:($n)
         ρqₜ_n = Yₜ.c.ρq.:($n)
         @. q_n = ρq_n / Y.c.ρ
@@ -214,7 +214,7 @@ function vertical_tendency!(Yₜ, Y, cache, t)
         else
             error("unrecognized FCT operator $fct_op")
         end
-    end
+    end # FIXME: Parallelizing this loop blows up compilation time on Julia 1.10
 end
 
 function lim!(Y, cache, t, Y_ref)
