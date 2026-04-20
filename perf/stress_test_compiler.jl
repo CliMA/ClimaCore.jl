@@ -1484,6 +1484,7 @@ function generate_field_test_code(test_name::String, test_impl::String)
     try
         $test_impl
     catch e
+        println("COMPILE_FAILURE: $test_name reason=\$(sprint(showerror, e))")
         @error "Test failed: \$e"
         rethrow()
     end
@@ -1717,16 +1718,10 @@ function subexpression_args_test(mode::String)
         """
     else
         """
-    # Warm up compilation
-    _ = begin
+    kernel_call!() = begin
         $bench_expr
     end
-
-    # Time one execution of ClimaCore's generated kernel
-    time_s = @elapsed begin
-        $bench_expr
-    end
-    @printf "TIMING: $(test_name) = %.6f s\\n" time_s
+    run_stress_kernel_test("$(test_name)", kernel_call!)
         """
     end
 
@@ -2179,16 +2174,43 @@ const ALL_TESTS =
         ]
 
         # Depth-vs-breadth fused expressions (depth is the primary stress axis)
+        # Breadth=2 series: probe the depth cliff with fine resolution
         [
             TestDef(
-                "depth_breadth_d$(d)_b$(b)",
-                "Nested expression depth=$(d), breadth=$(b)",
+                "depth_breadth_d$(d)_b2",
+                "Nested expression depth=$(d), breadth=2",
                 "depth_breadth",
                 d,
-                b,
+                2,
                 false,
-                () -> depth_breadth_test(d, b),
-            ) for (d, b) in [(1, 2), (4, 2), (8, 2), (12, 2), (8, 8), (12, 8)]
+                () -> depth_breadth_test(d, 2),
+            ) for d in [1, 4, 8, 12, 16, 20, 24, 32]
+        ]
+
+        # Breadth=4 series: moderate fan-in at each layer
+        [
+            TestDef(
+                "depth_breadth_d$(d)_b4",
+                "Nested expression depth=$(d), breadth=4",
+                "depth_breadth",
+                d,
+                4,
+                false,
+                () -> depth_breadth_test(d, 4),
+            ) for d in [1, 4, 8, 12, 16]
+        ]
+
+        # Breadth=8 series: high fan-in, test interaction of breadth × depth
+        [
+            TestDef(
+                "depth_breadth_d$(d)_b8",
+                "Nested expression depth=$(d), breadth=8",
+                "depth_breadth",
+                d,
+                8,
+                false,
+                () -> depth_breadth_test(d, 8),
+            ) for d in [1, 4, 8, 12]
         ]
     ] |> vec
 
@@ -2276,7 +2298,20 @@ function run_test(test_def::TestDef, analysis_mode::String)
             result.error_msg = "Failed to parse timing from output"
         end
     else
-        result.error_msg = error
+        # Subprocess failed: try to extract a structured COMPILE_FAILURE line from
+        # combined output before falling back to raw stderr.
+        compile_failure_msg = nothing
+        for l in split(output, '\n')
+            if startswith(l, "COMPILE_FAILURE: $(test_def.name) reason=")
+                compile_failure_msg =
+                    replace(l, "COMPILE_FAILURE: $(test_def.name) reason=" => "", count = 1)
+                break
+            end
+        end
+        result.error_msg =
+            !isnothing(compile_failure_msg) ? compile_failure_msg : error
+        # LLVM analysis may have been emitted before the failure — capture it.
+        result.llvm_analysis_summary = parse_llvm_analysis_from_output(output)
     end
 
     return result
