@@ -109,6 +109,10 @@ end
 # Default to CUDA; can still be overridden explicitly by environment
 const DEVICE = get(ENV, "CLIMACOMMS_DEVICE", "CUDA")
 
+const VALID_ANALYSIS_MODES = ("timing", "compile")
+
+is_compile_analysis_mode(mode::AbstractString) = mode == "compile"
+
 """
     initialize_project()
 
@@ -144,7 +148,11 @@ If already running under srun (detected via SLURM_* environment variables),
 subprocesses inherit the parent's GPU allocation and don't request their own.
 Otherwise, subprocesses request their own GPU allocation via srun.
 """
-function run_test_subprocess(test_code::String, test_name::String)
+function run_test_subprocess(
+    test_code::String,
+    test_name::String,
+    analysis_mode::String,
+)
     tmp_file = tempname() * ".jl"
     try
         write(tmp_file, test_code)
@@ -166,6 +174,7 @@ function run_test_subprocess(test_code::String, test_name::String)
             "CLIMACOMMS_DEVICE" => DEVICE,
             "CLIMA_COLLECT_CUDA_KERNEL_STATS" => (has_cuda_env() ? "1" : "0"),
             "CLIMACORE_COLLECT_KERNEL_STATS" => (has_cuda_env() ? "1" : "0"),
+            "CLIMACORE_STRESS_ANALYSIS_MODE" => analysis_mode,
             "CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE" =>
                 (
                     has_cuda_env() ?
@@ -253,6 +262,53 @@ struct CUDAProfileSummary
     status::String
     local_memory_kernels::Int
     total_kernels::Int
+end
+
+struct LLVMAnalysisSummary
+    call_count::Int
+    invoke_count::Int
+    line_count::Int
+    status::String
+end
+
+function Base.show(io::IO, s::LLVMAnalysisSummary)
+    println(io, "LLVMAnalysisSummary(")
+    println(io, "  call_count   = ", s.call_count)
+    println(io, "  invoke_count = ", s.invoke_count)
+    println(io, "  line_count   = ", s.line_count)
+    print(io, "  status       = ", repr(s.status), ")")
+end
+
+function _parse_llvm_analysis_line(line::AbstractString)
+    parts = split(line)
+    startswith(line, "LLVM_ANALYSIS:") || return nothing
+    metrics = Dict{String, String}()
+    for token in parts
+        if contains(token, '=')
+            key, value = split(token, '='; limit = 2)
+            metrics[key] = value
+        end
+    end
+
+    call_count = _metric_int(metrics, "calls")
+    invoke_count = _metric_int(metrics, "invokes")
+    line_count = _metric_int(metrics, "lines")
+    status = invoke_count > 0 ? "invoke_present" : "no_invoke"
+    return LLVMAnalysisSummary(call_count, invoke_count, line_count, status)
+end
+
+function parse_llvm_analysis_from_output(output::String)
+    for line in split(output, '\n')
+        if startswith(strip(line), "LLVM_ANALYSIS:")
+            parsed = _parse_llvm_analysis_line(strip(line))
+            !isnothing(parsed) && return parsed
+        end
+    end
+    return nothing
+end
+
+function format_llvm_analysis(summary::LLVMAnalysisSummary)
+    return "LLVM_ANALYSIS: calls=$(summary.call_count) invokes=$(summary.invoke_count) lines=$(summary.line_count) status=$(summary.status)"
 end
 
 function Base.show(io::IO, s::CUDAProfileSummary)
@@ -367,7 +423,7 @@ function _git_cmd(args...)
     return Cmd(vcat(["git", "-C", PROJECT_ROOT], collect(args)))
 end
 
-function collect_run_metadata(test_filter::Union{String, Nothing})
+function collect_run_metadata(test_filter::Union{String, Nothing}, analysis_mode::String)
     git_status = _command_lines(_git_cmd("status", "--porcelain"))
     gpu_lines =
         has_cuda_env() ?
@@ -383,6 +439,7 @@ function collect_run_metadata(test_filter::Union{String, Nothing})
         "device" => DEVICE,
         "hostname" => gethostname(),
         "julia_version" => string(VERSION),
+        "analysis_mode" => analysis_mode,
         "test_filter" => something(test_filter, "all"),
         "git_commit" =>
             something(_command_output(_git_cmd("rev-parse", "HEAD")), "unknown"),
@@ -470,6 +527,16 @@ function nested_call_expression(depth::Int)
     return join(defs, "\n")
 end
 
+function depth_breadth_expression(depth::Int, breadth::Int)
+    args = ["a$i" for i in 1:breadth]
+    layer = "(" * join(args, " + ") * ") / $(breadth).0"
+    for d in 1:depth
+        weighted = "(" * join(["$(i + d).0 * a$i" for i in 1:breadth], " + ") * ")"
+        layer = "sqrt(abs(($layer) + ($weighted)) + 1.0)"
+    end
+    return args, layer
+end
+
 function subexpression_args_expression(mode::String)
     if mode == "bare_namedtuple"
         # Passes a bare NamedTuple as the first argument inside @.
@@ -492,6 +559,12 @@ function climaatmos_column_expression(repeats::Int)
         for i in 1:repeats
     ]
     return "@. tendency = " * join(blocks, " + ")
+end
+
+function _depth_breadth_params_from_test_name(name::String)
+    m = match(r"depth_breadth_d(\d+)_b(\d+)", name)
+    isnothing(m) && return nothing
+    return parse(Int, m.captures[1]), parse(Int, m.captures[2])
 end
 
 function render_test_expression(test)
@@ -545,15 +618,25 @@ function render_test_expression(test)
         return join(["upwind.(ᶠv, ᶜf .* $(i).0)" for i in 1:(test.complexity)], " .+ ")
     elseif test.operation_type == "climaatmos"
         return climaatmos_column_expression(test.complexity)
+    elseif test.operation_type == "depth_breadth"
+        params = _depth_breadth_params_from_test_name(test.name)
+        if isnothing(params)
+            return test.description
+        end
+        depth, breadth = params
+        args, expr = depth_breadth_expression(depth, breadth)
+        return "op($(join(args, ", "))) = $expr\nop.($(join(["f$i" for i in 1:breadth], ", ")))"
     else
         return test.description
     end
 end
 
 result_profile_summary(result) = result.cuda_profile_summary
+result_llvm_summary(result) = result.llvm_analysis_summary
 
 function result_to_record(result)
     summary = result_profile_summary(result)
+    llvm_summary = result_llvm_summary(result)
     local_memory_kernels =
         isnothing(summary) ? "0/0" :
         "$(summary.local_memory_kernels)/$(summary.total_kernels)"
@@ -578,6 +661,13 @@ function result_to_record(result)
         "local_memory_kernels" => local_memory_kernels,
         "cuda_profile_lines" =>
             isnothing(summary) ? String[] : [format_cuda_profile(summary)],
+        "llvm_call_count" => isnothing(llvm_summary) ? nothing : llvm_summary.call_count,
+        "llvm_invoke_count" =>
+            isnothing(llvm_summary) ? nothing : llvm_summary.invoke_count,
+        "llvm_line_count" => isnothing(llvm_summary) ? nothing : llvm_summary.line_count,
+        "llvm_status" => isnothing(llvm_summary) ? nothing : llvm_summary.status,
+        "llvm_analysis_lines" =>
+            isnothing(llvm_summary) ? String[] : [format_llvm_analysis(llvm_summary)],
         "soft_fail" => false,
         "soft_fail_reasons" => String[],
         "failure_mode" => result.success ? "pass" : "hard_fail",
@@ -608,8 +698,17 @@ function _as_int_or_nothing(x)
 end
 
 function _is_timed_success(record::Dict{String, Any})
-    return get(record, "success", false) &&
-           !isnothing(get(record, "time_microseconds", nothing))
+    timed = get(record, "time_microseconds", nothing)
+    return get(record, "success", false) && !isnothing(timed) && timed > 0
+end
+
+function _llvm_soft_fail_reasons(record::Dict{String, Any})
+    reasons = String[]
+    invokes = _as_int_or_nothing(get(record, "llvm_invoke_count", nothing))
+    if !isnothing(invokes) && invokes > 0
+        push!(reasons, "llvm_invoke_present(count=$(invokes))")
+    end
+    return reasons
 end
 
 function _soft_fail_reasons(
@@ -734,10 +833,28 @@ function annotate_soft_failures!(records::Vector{Dict{String, Any}})
         end
     end
 
+    for record in records
+        if get(record, "success", false)
+            llvm_reasons = _llvm_soft_fail_reasons(record)
+            if !isempty(llvm_reasons)
+                record["soft_fail"] = true
+                record["soft_fail_reasons"] =
+                    vcat(record["soft_fail_reasons"], llvm_reasons)
+                if record["failure_mode"] == "pass"
+                    record["failure_mode"] = "soft_fail_inlining_signal"
+                end
+            end
+        end
+    end
+
     return records
 end
 
-function build_report(results, test_filter::Union{String, Nothing})
+function build_report(
+    results,
+    test_filter::Union{String, Nothing},
+    analysis_mode::String,
+)
     records = [result_to_record(result) for result in results]
     annotate_soft_failures!(records)
 
@@ -747,7 +864,7 @@ function build_report(results, test_filter::Union{String, Nothing})
     hard_failed = count(r -> !get(r, "success", false), records)
     return Dict{String, Any}(
         "schema_version" => 1,
-        "run_metadata" => collect_run_metadata(test_filter),
+        "run_metadata" => collect_run_metadata(test_filter, analysis_mode),
         "summary" => Dict{String, Any}(
             "total_tests" => length(results),
             "successful_tests" => length(successful),
@@ -878,11 +995,11 @@ function markdown_table_row(record::Dict{String, Any}, comparison_by_test = noth
         soft_fail_cell = get(record, "soft_fail", false) ? "yes" : "no"
         reasons = get(record, "soft_fail_reasons", String[])
         reasons_cell = isempty(reasons) ? "-" : join(reasons, "; ")
-        return "| $(record["name"]) | $(record["operation_type"]) | $(time_cell) | $(baseline_time) | $(delta_time) | $(something(record["primary_kernel"], "-")) | $(something(record["registers"], "-")) | $(baseline_regs) | $(something(record["local_bytes"], "-")) | $(baseline_local) | $(something(record["shared_bytes"], "-")) | $(something(record["local_memory_status"], "-")) | $(record["local_memory_kernels"]) | $(soft_fail_cell) | $(reasons_cell) | $(markdown_expression_cell(record["expression"])) |"
+        return "| $(record["name"]) | $(record["operation_type"]) | $(time_cell) | $(baseline_time) | $(delta_time) | $(something(record["primary_kernel"], "-")) | $(something(record["registers"], "-")) | $(baseline_regs) | $(something(record["local_bytes"], "-")) | $(baseline_local) | $(something(record["shared_bytes"], "-")) | $(something(record["local_memory_status"], "-")) | $(record["local_memory_kernels"]) | $(something(record["llvm_call_count"], "-")) | $(something(record["llvm_invoke_count"], "-")) | $(soft_fail_cell) | $(reasons_cell) | $(markdown_expression_cell(record["expression"])) |"
     elseif record["success"]
-        return "| $(record["name"]) | $(record["operation_type"]) | expected failure | $(baseline_time) | $(delta_time) | - | - | $(baseline_regs) | - | $(baseline_local) | - | - | - | - | - | $(markdown_expression_cell(record["expression"])) |"
+        return "| $(record["name"]) | $(record["operation_type"]) | expected failure | $(baseline_time) | $(delta_time) | - | - | $(baseline_regs) | - | $(baseline_local) | - | - | - | $(something(record["llvm_call_count"], "-")) | $(something(record["llvm_invoke_count"], "-")) | - | - | $(markdown_expression_cell(record["expression"])) |"
     else
-        return "| $(record["name"]) | $(record["operation_type"]) | FAILED | $(baseline_time) | $(delta_time) | - | - | $(baseline_regs) | - | $(baseline_local) | - | - | - | - | - | $(markdown_expression_cell(record["expression"])) |"
+        return "| $(record["name"]) | $(record["operation_type"]) | FAILED | $(baseline_time) | $(delta_time) | - | - | $(baseline_regs) | - | $(baseline_local) | - | - | - | $(something(record["llvm_call_count"], "-")) | $(something(record["llvm_invoke_count"], "-")) | - | - | $(markdown_expression_cell(record["expression"])) |"
     end
 end
 
@@ -910,6 +1027,7 @@ function write_markdown_report(
     push!(lines, "- Hostname: $(metadata["hostname"])")
     push!(lines, "- Julia version: $(metadata["julia_version"])")
     push!(lines, "- Device backend: $(metadata["device"])")
+    push!(lines, "- Analysis mode: $(metadata["analysis_mode"])")
     push!(lines, "- Test filter: $(metadata["test_filter"])")
     push!(lines, "- Allocated GPU count: $(metadata["allocated_gpu_count"])")
     if !isempty(metadata["allocated_gpu_ids"])
@@ -968,11 +1086,11 @@ function write_markdown_report(
     push!(lines, "")
     push!(
         lines,
-        "| Test | Type | Time (μs) | Baseline (μs) | Δ Time | Primary kernel | Regs | Base Regs | Local B | Base Local B | Shared B | Local memory | Local-memory kernels | Soft fail | Soft-fail signals | Expression |",
+        "| Test | Type | Time (μs) | Baseline (μs) | Δ Time | Primary kernel | Regs | Base Regs | Local B | Base Local B | Shared B | Local memory | Local-memory kernels | LLVM calls | LLVM invokes | Soft fail | Soft-fail signals | Expression |",
     )
     push!(
         lines,
-        "| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- | --- |",
+        "| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- | ---: | ---: | --- | --- | --- |",
     )
     comparison_by_test =
         isnothing(comparison) ? nothing : get(comparison, "by_test_name", nothing)
@@ -991,6 +1109,7 @@ struct CliOptions
     output_json::Union{String, Nothing}
     output_markdown::Union{String, Nothing}
     compare_against::Union{String, Nothing}
+    analysis_mode::String
 end
 
 function parse_cli_args(args::Vector{String})
@@ -998,6 +1117,7 @@ function parse_cli_args(args::Vector{String})
     output_json = nothing
     output_markdown = nothing
     compare_against = nothing
+    analysis_mode = "timing"
 
     i = 1
     while i <= length(args)
@@ -1020,6 +1140,12 @@ function parse_cli_args(args::Vector{String})
             i += 1
             i > length(args) && error("Missing path after --compare-against")
             compare_against = args[i]
+        elseif startswith(arg, "--analysis-mode=")
+            analysis_mode = split(arg, "="; limit = 2)[2]
+        elseif arg == "--analysis-mode"
+            i += 1
+            i > length(args) && error("Missing value after --analysis-mode")
+            analysis_mode = args[i]
         elseif startswith(arg, "--")
             error("Unknown option: $arg")
         elseif isnothing(test_filter)
@@ -1032,7 +1158,18 @@ function parse_cli_args(args::Vector{String})
         i += 1
     end
 
-    return CliOptions(test_filter, output_json, output_markdown, compare_against)
+    analysis_mode in VALID_ANALYSIS_MODES ||
+        error(
+            "Invalid --analysis-mode=$(analysis_mode). Valid values: $(join(VALID_ANALYSIS_MODES, ", "))",
+        )
+
+    return CliOptions(
+        test_filter,
+        output_json,
+        output_markdown,
+        compare_against,
+        analysis_mode,
+    )
 end
 
 function _skip_ws(s::AbstractString, i::Int)
@@ -1278,6 +1415,7 @@ function generate_field_test_code(test_name::String, test_impl::String)
     import Pkg
     using Printf
     using BenchmarkTools
+    using InteractiveUtils
     import ClimaComms
     ClimaComms.@import_required_backends
 
@@ -1297,6 +1435,51 @@ function generate_field_test_code(test_name::String, test_impl::String)
     # Suppress informational logging
     using Logging
     disable_logging(Logging.Info)
+
+    const ANALYSIS_MODE = get(ENV, "CLIMACORE_STRESS_ANALYSIS_MODE", "timing")
+    analysis_compile_only() = ANALYSIS_MODE == "compile"
+
+    function _count_llvm_calls(llvm_ir::AbstractString)
+        calls = 0
+        invokes = 0
+        for line in split(llvm_ir, '\n')
+            stripped = strip(line)
+            startswith(stripped, ";") && continue
+            occursin(" call ", stripped) && (calls += 1)
+            occursin(" invoke ", stripped) && (invokes += 1)
+        end
+        return calls, invokes, length(split(llvm_ir, '\n'))
+    end
+
+    function emit_llvm_analysis(test_name::AbstractString, thunk::Function)
+        llvm_ir = sprint(
+            io -> code_llvm(io, thunk, Tuple{}; optimize = true, debuginfo = :none, raw = true),
+        )
+        calls, invokes, line_count = _count_llvm_calls(llvm_ir)
+        println(
+            "LLVM_ANALYSIS: test=\$(test_name) calls=\$(calls) invokes=\$(invokes) lines=\$(line_count)",
+        )
+        return nothing
+    end
+
+    function run_stress_kernel_test(test_name::AbstractString, kernel_call!::Function)
+        emit_llvm_analysis(test_name, kernel_call!)
+
+        if analysis_compile_only()
+            # CUDA-first compile diagnostics: execute once so device kernels are
+            # actually compiled and kernel profile stats are emitted.
+            _ = kernel_call!()
+            println("TIMING: \$(test_name) = 0.000000 s")
+            return
+        end
+
+        # Warmup is intentionally skipped in compile-only mode to avoid running kernels.
+        _ = kernel_call!()
+
+        trial = @benchmark \$kernel_call!() samples=10 evals=1
+        time_μs = minimum(trial.times) / 1000.0
+        @printf "TIMING: %s = %.6f s\\n" test_name time_μs / 1e6
+    end
 
     try
         $test_impl
@@ -1352,15 +1535,9 @@ function arithmetic_test(depth::Int)
 
     op(x) = $expr
 
-    # Warm up compilation
     _ = op(1.5)
-    _ = op.(f)
-
-    # Benchmark ClimaCore's generated kernel
-    trial = @benchmark \$op.(\$f) samples=10 evals=1
-
-    time_μs = minimum(trial.times) / 1000.0
-    @printf "TIMING: arithmetic_depth_$(depth) = %.6f s\\n" time_μs / 1e6
+    kernel_call!() = op.(f)
+    run_stress_kernel_test("arithmetic_depth_$(depth)", kernel_call!)
     """
 
     return generate_field_test_code("arithmetic_depth_$(depth)", test_impl)
@@ -1394,15 +1571,9 @@ function multiarg_test(nargs::Int)
 
     op($args_list) = $op_expr
 
-    # Warm up compilation
     _ = op($(join(["$(Float64(i))" for i in 1:nargs], ", ")))
-    _ = op.($args_list)
-
-    # Benchmark ClimaCore's generated kernel
-    trial = @benchmark \$op.($bench_args_list) samples=10 evals=1
-
-    time_μs = minimum(trial.times) / 1000.0
-    @printf "TIMING: multiarg_$(nargs)_args = %.6f s\\n" time_μs / 1e6
+    kernel_call!() = op.($args_list)
+    run_stress_kernel_test("multiarg_$(nargs)_args", kernel_call!)
     """
 
     return generate_field_test_code("multiarg_$(nargs)_args", test_impl)
@@ -1447,16 +1618,9 @@ function functions_test(funcs::Vector{String}, depth::Int)
 
     op(x) = $expr
 
-    # Warm up compilation
     _ = op(1.5)
-    _ = op.(f)
-
-    # Benchmark ClimaCore's generated kernel
-    trial = @benchmark \$op.(\$f) samples=10 evals=1
-
-    time_μs = minimum(trial.times) / 1000.0
-    timing_name = $(repr(test_name))
-    @printf "TIMING: %s = %.6f s\\n" timing_name time_μs / 1e6
+    kernel_call!() = op.(f)
+    run_stress_kernel_test($(repr(test_name)), kernel_call!)
     """
 
     return generate_field_test_code(test_name, test_impl)
@@ -1480,15 +1644,9 @@ function nested_calls_test(depth::Int)
     $helper_defs
     op(x) = helper_$(depth)(x)
 
-    # Warm up compilation
     _ = op(1.5)
-    _ = op.(f)
-
-    # Benchmark ClimaCore's generated kernel
-    trial = @benchmark \$op.(\$f) samples=10 evals=1
-
-    time_μs = minimum(trial.times) / 1000.0
-    @printf "TIMING: $(test_name) = %.6f s\\n" time_μs / 1e6
+    kernel_call!() = op.(f)
+    run_stress_kernel_test("$(test_name)", kernel_call!)
     """
 
     return generate_field_test_code(test_name, test_impl)
@@ -1621,14 +1779,10 @@ function projection_test(complexity::Int)
     v = Fields.Field(Geometry.Covariant12Vector{FT}, space)
     fill!(Fields.field_values(v), Geometry.Covariant12Vector(1.0, 2.0))
 
-    # Warm up compilation
-    _ = @. $proj_terms
-
-    # Benchmark: $complexity fused project calls in one @. expression
-    trial = @benchmark (v = \$v; @. $proj_terms) samples=10 evals=1
-
-    time_μs = minimum(trial.times) / 1000.0
-    @printf "TIMING: $(test_name) = %.6f s\\n" time_μs / 1e6
+    kernel_call!() = begin
+        @. $proj_terms
+    end
+    run_stress_kernel_test("$(test_name)", kernel_call!)
     """
 
     return generate_field_test_code(test_name, test_impl)
@@ -1676,14 +1830,10 @@ function div_test(n::Int)
     v = Fields.Field(Geometry.Contravariant12Vector{FT}, space)
     fill!(Fields.field_values(v), Geometry.Contravariant12Vector(1.0, 2.0))
 
-    # Warm up: $n divergence calls in one expression
-    _ = $warm
-
-    # Benchmark ClimaCore's kernel: $n divergence calls fused into one expression
-    trial = @benchmark $bench samples=10 evals=1
-
-    time_μs = minimum(trial.times) / 1000.0
-    @printf "TIMING: div_$(n)_ops = %.6f s\\n" time_μs / 1e6
+    kernel_call!() = begin
+        $warm
+    end
+    run_stress_kernel_test("div_$(n)_ops", kernel_call!)
     """
 
     return generate_field_test_code("div_$(n)_ops", test_impl)
@@ -1707,14 +1857,10 @@ function curl_test(n::Int)
     v = Fields.Field(Geometry.Covariant12Vector{FT}, space)
     fill!(Fields.field_values(v), Geometry.Covariant12Vector(1.0, 2.0))
 
-    # Warm up: $n curl calls in one expression
-    _ = $warm
-
-    # Benchmark ClimaCore's kernel: $n curl calls fused into one expression
-    trial = @benchmark $bench samples=10 evals=1
-
-    time_μs = minimum(trial.times) / 1000.0
-    @printf "TIMING: curl_$(n)_ops = %.6f s\\n" time_μs / 1e6
+    kernel_call!() = begin
+        $warm
+    end
+    run_stress_kernel_test("curl_$(n)_ops", kernel_call!)
     """
 
     return generate_field_test_code("curl_$(n)_ops", test_impl)
@@ -1741,14 +1887,10 @@ function interp_test(n::Int)
     ᶜf = Fields.Field(FT, center_space)
     fill!(Fields.field_values(ᶜf), 1.5)
 
-    # Warm up: $n InterpolateC2F calls in one expression
-    _ = $warm
-
-    # Benchmark ClimaCore's kernel: $n C2F interpolations fused into one expression
-    trial = @benchmark $bench samples=10 evals=1
-
-    time_μs = minimum(trial.times) / 1000.0
-    @printf "TIMING: interp_c2f_$(n)_ops = %.6f s\\n" time_μs / 1e6
+    kernel_call!() = begin
+        $warm
+    end
+    run_stress_kernel_test("interp_c2f_$(n)_ops", kernel_call!)
     """
 
     return generate_field_test_code("interp_c2f_$(n)_ops", test_impl)
@@ -1777,14 +1919,10 @@ function weighted_interp_test(n::Int)
     fill!(Fields.field_values(ᶜw), 1.0)
     fill!(Fields.field_values(ᶜf), 1.5)
 
-    # Warm up: $n WeightedInterpolateC2F calls in one expression
-    _ = $warm
-
-    # Benchmark ClimaCore's kernel: $n weighted C2F interpolations fused into one expression
-    trial = @benchmark $bench samples=10 evals=1
-
-    time_μs = minimum(trial.times) / 1000.0
-    @printf "TIMING: weighted_interp_c2f_$(n)_ops = %.6f s\\n" time_μs / 1e6
+    kernel_call!() = begin
+        $warm
+    end
+    run_stress_kernel_test("weighted_interp_c2f_$(n)_ops", kernel_call!)
     """
 
     return generate_field_test_code("weighted_interp_c2f_$(n)_ops", test_impl)
@@ -1814,14 +1952,10 @@ function upwinding_test(n::Int)
     fill!(Fields.field_values(ᶠv), Geometry.WVector(1.0))
     fill!(Fields.field_values(ᶜf), 1.5)
 
-    # Warm up: $n Upwind3rdOrderBiasedProductC2F calls in one expression
-    _ = $warm
-
-    # Benchmark ClimaCore's kernel: $n 3rd-order upwind calls fused into one expression
-    trial = @benchmark $bench samples=10 evals=1
-
-    time_μs = minimum(trial.times) / 1000.0
-    @printf "TIMING: upwinding_3rdorder_$(n)_ops = %.6f s\\n" time_μs / 1e6
+    kernel_call!() = begin
+        $warm
+    end
+    run_stress_kernel_test("upwinding_3rdorder_$(n)_ops", kernel_call!)
     """
 
     return generate_field_test_code("upwinding_3rdorder_$(n)_ops", test_impl)
@@ -1882,14 +2016,35 @@ function climaatmos_column_test(repeats::Int)
         $bench_expr
     end
 
-    # Warm up compilation for the fused column expression.
-    _ = kernel_call!()
+    run_stress_kernel_test("$(test_name)", kernel_call!)
+    """
 
-    # Benchmark the broadcast that resembles ClimaAtmos column microphysics code.
-    trial = @benchmark \$kernel_call!() samples=10 evals=1
+    return generate_field_test_code(test_name, test_impl)
+end
 
-    time_μs = minimum(trial.times) / 1000.0
-    @printf "TIMING: $(test_name) = %.6f s\\n" time_μs / 1e6
+function depth_breadth_test(depth::Int, breadth::Int)
+    args, op_expr = depth_breadth_expression(depth, breadth)
+    fields_decl = join(
+        [
+            "f$i = Fields.Field(FT, space)\n    fill!(Fields.field_values(f$i), $(0.75 + 0.1 * i))"
+            for i in 1:breadth
+        ],
+        "\n    ",
+    )
+    args_list = join(args, ", ")
+    field_list = join(["f$i" for i in 1:breadth], ", ")
+    scalar_warmup = join(["$(1.0 + 0.1 * i)" for i in 1:breadth], ", ")
+    test_name = "depth_breadth_d$(depth)_b$(breadth)"
+
+    test_impl = create_spectral_space() * """
+
+    $fields_decl
+
+    op($args_list) = $op_expr
+    _ = op($scalar_warmup)
+
+    kernel_call!() = op.($field_list)
+    run_stress_kernel_test("$(test_name)", kernel_call!)
     """
 
     return generate_field_test_code(test_name, test_impl)
@@ -1907,7 +2062,7 @@ Definition of a single test case for generation and execution.
 struct TestDef
     name::String
     description::String
-    operation_type::String    # "arithmetic", "multiarg", "functions", "nested_calls", "subexpression_args", "projection", "divergence", "curl", "interpolate", "weighted_interpolate", "upwinding", "climaatmos"
+    operation_type::String    # "arithmetic", "multiarg", "functions", "nested_calls", "subexpression_args", "projection", "divergence", "curl", "interpolate", "weighted_interpolate", "upwinding", "climaatmos", "depth_breadth"
     complexity::Int           # nesting depth or argument count
     num_args::Int
     uses_geometry::Bool
@@ -2022,6 +2177,19 @@ const ALL_TESTS =
                 "climaatmos", i, 6, false,
                 () -> climaatmos_column_test(i)) for i in [1, 6]
         ]
+
+        # Depth-vs-breadth fused expressions (depth is the primary stress axis)
+        [
+            TestDef(
+                "depth_breadth_d$(d)_b$(b)",
+                "Nested expression depth=$(d), breadth=$(b)",
+                "depth_breadth",
+                d,
+                b,
+                false,
+                () -> depth_breadth_test(d, b),
+            ) for (d, b) in [(1, 2), (4, 2), (8, 2), (12, 2), (8, 8), (12, 8)]
+        ]
     ] |> vec
 
 # ============================================================================
@@ -2039,8 +2207,9 @@ mutable struct TestResult
     time_seconds::Union{Float64, Nothing}
     error_msg::String
     cuda_profile_summary::Union{CUDAProfileSummary, Nothing}
+    llvm_analysis_summary::Union{LLVMAnalysisSummary, Nothing}
 
-    TestResult(test_def) = new(test_def, false, nothing, "", nothing)
+    TestResult(test_def) = new(test_def, false, nothing, "", nothing, nothing)
 end
 
 function Base.show(io::IO, r::TestResult)
@@ -2059,6 +2228,11 @@ function Base.show(io::IO, r::TestResult)
         indented = join("  " .* split(profile_str, '\n'), '\n')
         println(io, "  cuda_profile = ", indented)
     end
+    if !isnothing(r.llvm_analysis_summary)
+        llvm_str = sprint(show, r.llvm_analysis_summary)
+        indented_llvm = join("  " .* split(llvm_str, '\n'), '\n')
+        println(io, "  llvm_analysis = ", indented_llvm)
+    end
     print(io, ")")
 end
 
@@ -2067,18 +2241,19 @@ end
 
 Run a single test case in a subprocess and collect results.
 """
-function run_test(test_def::TestDef)
+function run_test(test_def::TestDef, analysis_mode::String)
     result = TestResult(test_def)
 
     # Generate test code
     test_code = test_def.code_generator()
 
     # Run in subprocess
-    success, output, error = run_test_subprocess(test_code, test_def.name)
+    success, output, error = run_test_subprocess(test_code, test_def.name, analysis_mode)
 
     if success
         result.cuda_profile_summary =
             summarize_cuda_profiles(parse_cuda_profile_from_output(output))
+        result.llvm_analysis_summary = parse_llvm_analysis_from_output(output)
         # Parse timing from output
         timings = parse_timings_from_output(output)
         if haskey(timings, test_def.name)
@@ -2125,6 +2300,9 @@ function print_result(result::TestResult)
         if !isnothing(result.cuda_profile_summary)
             println("    " * format_cuda_profile(result.cuda_profile_summary))
         end
+        if !isnothing(result.llvm_analysis_summary)
+            println("    " * format_llvm_analysis(result.llvm_analysis_summary))
+        end
     elseif result.success
         # Expected-failure case: documented failure mode, no timing.
         @printf "  %-45s [expected failure: %s]\n" test.name result.error_msg
@@ -2143,10 +2321,12 @@ function main(;
     output_json::Union{String, Nothing} = nothing,
     output_markdown::Union{String, Nothing} = nothing,
     compare_against::Union{String, Nothing} = nothing,
+    analysis_mode::String = "timing",
 )
     println("="^90)
     println("ClimaCore Compiler Stress Test Suite - Pointwise/Broadcast Operations")
     println("Device: $(DEVICE)")
+    println("Analysis mode: $(analysis_mode)")
     has_cuda_env() && println("CUDA warnings disabled to catch only actual failures")
     println("="^90)
     println()
@@ -2182,7 +2362,7 @@ function main(;
         @printf "[%2d/%2d] %-45s ... " i length(tests) test.name
         flush(stdout)
 
-        result = run_test(test)
+        result = run_test(test, analysis_mode)
         push!(results, result)
 
         if result.success
@@ -2254,7 +2434,7 @@ function main(;
         println("✗ $(num_failed) test(s) failed out of $(length(results)) total")
     end
 
-    report = build_report(results, test_filter)
+    report = build_report(results, test_filter, analysis_mode)
     comparison = nothing
     if !isnothing(compare_against)
         baseline_path = resolve_output_path(compare_against)
@@ -2291,5 +2471,6 @@ if abspath(PROGRAM_FILE) == @__FILE__
         output_json = options.output_json,
         output_markdown = options.output_markdown,
         compare_against = options.compare_against,
+        analysis_mode = options.analysis_mode,
     )
 end
