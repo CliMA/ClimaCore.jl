@@ -229,21 +229,19 @@ function tridiag_pcr_kernel!(
         return nothing
     end
 
-    T = eltype(a)
-    n_shared = typeof(n)(cld(n, 32) * 32)  # Round n to next multiple to avoid bank conflicts (?)
-    s_a = CUDA.CuStaticSharedArray(T, n_shared)
-    s_b = CUDA.CuStaticSharedArray(T, n_shared)
-    s_c = CUDA.CuStaticSharedArray(T, n_shared)
-    s_d = CUDA.CuStaticSharedArray(T, n_shared)
+    s_a = CUDA.CuStaticSharedArray(eltype(a), n)
+    s_b = CUDA.CuStaticSharedArray(eltype(b), n)
+    s_c = CUDA.CuStaticSharedArray(eltype(c), n)
+    s_d = CUDA.CuStaticSharedArray(eltype(d), n)
 
     idx = CartesianIndex(idx_i, idx_j, 1, i, idx_h)
 
     # Load into shared memory
     @inbounds begin
-        local_ai = getindex_field(a, idx)
-        local_bi = getindex_field(b, idx)
-        local_ci = getindex_field(c, idx)
-        local_di = getindex_field(d, idx)
+        local_ai = a[idx]
+        local_bi = b[idx]
+        local_ci = c[idx]
+        local_di = d[idx]
 
         s_a[i] = local_ai
         s_b[i] = local_bi
@@ -261,14 +259,14 @@ function tridiag_pcr_kernel!(
 
         # Compute elimination factors
         @inbounds begin
-            k1 = (i > stride) ? -local_ai / s_b[i_minus] : zero(T)
-            k2 = (i <= n - stride) ? -local_ci / s_b[i_plus] : zero(T)
+            k1 = (i > stride) ? -local_ai ⊠ inv(s_b[i_minus]) : zero(eltype(a))
+            k2 = (i <= n - stride) ? -local_ci ⊠ inv(s_b[i_plus]) : zero(eltype(a))
 
             # Update coefficients
-            local_ai = k1 * s_a[i_minus]
-            local_bi = local_bi + k1 * s_c[i_minus] + k2 * s_a[i_plus]
-            local_ci = k2 * s_c[i_plus]
-            local_di = local_di + k1 * s_d[i_minus] + k2 * s_d[i_plus]
+            local_ai = k1 ⊠ s_a[i_minus]
+            local_bi = local_bi ⊞ k1 ⊠ s_c[i_minus] ⊞ k2 ⊠ s_a[i_plus]
+            local_ci = k2 ⊠ s_c[i_plus]
+            local_di = local_di ⊞ k1 ⊠ s_d[i_minus] ⊞ k2 ⊠ s_d[i_plus]
         end
 
         CUDA.sync_threads()
@@ -286,7 +284,7 @@ function tridiag_pcr_kernel!(
     end
 
     #  Final solve into x
-    @inbounds setindex_field!(x, local_di / local_bi, idx)
+    @inbounds x[idx] = inv(s_b[i]) ⊠ s_d[i]
     return nothing
 end
 
