@@ -527,14 +527,34 @@ function nested_call_expression(depth::Int)
     return join(defs, "\n")
 end
 
-function depth_breadth_expression(depth::Int, breadth::Int)
-    args = ["a$i" for i in 1:breadth]
-    layer = "(" * join(args, " + ") * ") / $(breadth).0"
+function lazy_broadcast_tree_expression(depth::Int, breadth::Int)
+    args = ["f$i" for i in 1:breadth]
+    layer = "(" * join(args, " .+ ") * ") ./ $(breadth).0"
     for d in 1:depth
-        weighted = "(" * join(["$(i + d).0 * a$i" for i in 1:breadth], " + ") * ")"
-        layer = "sqrt(abs(($layer) + ($weighted)) + 1.0)"
+        terms = [
+            "sqrt.(abs.(($layer) .+ $(i + d).0 .* f$i) .+ 1.0)" for i in 1:breadth
+        ]
+        layer = "(" * join(terms, " .+ ") * ") ./ $(breadth).0"
     end
     return args, layer
+end
+
+function lazy_broadcast_tree_builder(depth::Int, breadth::Int)
+    fields = ["f$i" for i in 1:breadth]
+    tree = "Base.Broadcast.broadcasted(/, Base.Broadcast.broadcasted(+, $(join(fields, ", "))), $(breadth).0)"
+    lines = ["tree = $(tree)"]
+    for d in 1:depth
+        terms = [
+            "Base.Broadcast.broadcasted(x -> sqrt(abs(x) + 1.0), Base.Broadcast.broadcasted(+, tree, Base.Broadcast.broadcasted(*, $(i + d).0, f$i)))"
+            for i in 1:breadth
+        ]
+        push!(
+            lines,
+            "tree = Base.Broadcast.broadcasted(/, Base.Broadcast.broadcasted(+, $(join(terms, ", "))), $(breadth).0)",
+        )
+    end
+    push!(lines, "tree")
+    return join(lines, "\n    ")
 end
 
 function subexpression_args_expression(mode::String)
@@ -561,8 +581,8 @@ function climaatmos_column_expression(repeats::Int)
     return "@. tendency = " * join(blocks, " + ")
 end
 
-function _depth_breadth_params_from_test_name(name::String)
-    m = match(r"depth_breadth_d(\d+)_b(\d+)", name)
+function _lazy_broadcast_params_from_test_name(name::String)
+    m = match(r"lazy_broadcast_d(\d+)_b(\d+)", name)
     isnothing(m) && return nothing
     return parse(Int, m.captures[1]), parse(Int, m.captures[2])
 end
@@ -618,14 +638,14 @@ function render_test_expression(test)
         return join(["upwind.(ᶠv, ᶜf .* $(i).0)" for i in 1:(test.complexity)], " .+ ")
     elseif test.operation_type == "climaatmos"
         return climaatmos_column_expression(test.complexity)
-    elseif test.operation_type == "depth_breadth"
-        params = _depth_breadth_params_from_test_name(test.name)
+    elseif test.operation_type == "lazy_broadcast_tree"
+        params = _lazy_broadcast_params_from_test_name(test.name)
         if isnothing(params)
             return test.description
         end
         depth, breadth = params
-        args, expr = depth_breadth_expression(depth, breadth)
-        return "op($(join(args, ", "))) = $expr\nop.($(join(["f$i" for i in 1:breadth], ", ")))"
+        args, expr = lazy_broadcast_tree_expression(depth, breadth)
+        return "$(join(args, ", ")) -> $expr"
     else
         return test.description
     end
@@ -2017,8 +2037,8 @@ function climaatmos_column_test(repeats::Int)
     return generate_field_test_code(test_name, test_impl)
 end
 
-function depth_breadth_test(depth::Int, breadth::Int)
-    args, op_expr = depth_breadth_expression(depth, breadth)
+function lazy_broadcast_tree_test(depth::Int, breadth::Int)
+    tree_builder = lazy_broadcast_tree_builder(depth, breadth)
     fields_decl = join(
         [
             "f$i = Fields.Field(FT, space)\n    fill!(Fields.field_values(f$i), $(0.75 + 0.1 * i))"
@@ -2026,19 +2046,18 @@ function depth_breadth_test(depth::Int, breadth::Int)
         ],
         "\n    ",
     )
-    args_list = join(args, ", ")
-    field_list = join(["f$i" for i in 1:breadth], ", ")
-    scalar_warmup = join(["$(1.0 + 0.1 * i)" for i in 1:breadth], ", ")
-    test_name = "depth_breadth_d$(depth)_b$(breadth)"
+    test_name = "lazy_broadcast_d$(depth)_b$(breadth)"
 
     test_impl = create_spectral_space() * """
 
     $fields_decl
 
-    op($args_list) = $op_expr
-    _ = op($scalar_warmup)
-
-    kernel_call!() = op.($field_list)
+    kernel_call!() = begin
+        tree = begin
+            $tree_builder
+        end
+        Base.copy(tree)
+    end
     run_stress_kernel_test("$(test_name)", kernel_call!)
     """
 
@@ -2057,7 +2076,7 @@ Definition of a single test case for generation and execution.
 struct TestDef
     name::String
     description::String
-    operation_type::String    # "arithmetic", "multiarg", "functions", "nested_calls", "subexpression_args", "projection", "divergence", "curl", "interpolate", "weighted_interpolate", "upwinding", "climaatmos", "depth_breadth"
+    operation_type::String    # "arithmetic", "multiarg", "functions", "nested_calls", "subexpression_args", "projection", "divergence", "curl", "interpolate", "weighted_interpolate", "upwinding", "climaatmos", "lazy_broadcast_tree"
     complexity::Int           # nesting depth or argument count
     num_args::Int
     uses_geometry::Bool
@@ -2173,43 +2192,43 @@ const ALL_TESTS =
                 () -> climaatmos_column_test(i)) for i in [1, 6]
         ]
 
-        # Depth-vs-breadth fused expressions (depth is the primary stress axis)
-        # Breadth=2 series: probe the depth cliff with fine resolution
+        # Nested lazy-broadcast trees (depth = number of broadcasted layers)
+        # Breadth=2 series: fine-grained depth sweep to find inlining cliffs
         [
             TestDef(
-                "depth_breadth_d$(d)_b2",
-                "Nested expression depth=$(d), breadth=2",
-                "depth_breadth",
+                "lazy_broadcast_d$(d)_b2",
+                "Nested lazy broadcast depth=$(d), breadth=2",
+                "lazy_broadcast_tree",
                 d,
                 2,
                 false,
-                () -> depth_breadth_test(d, 2),
+                () -> lazy_broadcast_tree_test(d, 2),
             ) for d in [1, 4, 8, 12, 16, 20, 24, 32]
         ]
 
-        # Breadth=4 series: moderate fan-in at each layer
+        # Breadth=4 series: moderate fan-in per lazy layer
         [
             TestDef(
-                "depth_breadth_d$(d)_b4",
-                "Nested expression depth=$(d), breadth=4",
-                "depth_breadth",
+                "lazy_broadcast_d$(d)_b4",
+                "Nested lazy broadcast depth=$(d), breadth=4",
+                "lazy_broadcast_tree",
                 d,
                 4,
                 false,
-                () -> depth_breadth_test(d, 4),
+                () -> lazy_broadcast_tree_test(d, 4),
             ) for d in [1, 4, 8, 12, 16]
         ]
 
-        # Breadth=8 series: high fan-in, test interaction of breadth × depth
+        # Breadth=8 series: higher fan-in interaction with lazy depth
         [
             TestDef(
-                "depth_breadth_d$(d)_b8",
-                "Nested expression depth=$(d), breadth=8",
-                "depth_breadth",
+                "lazy_broadcast_d$(d)_b8",
+                "Nested lazy broadcast depth=$(d), breadth=8",
+                "lazy_broadcast_tree",
                 d,
                 8,
                 false,
-                () -> depth_breadth_test(d, 8),
+                () -> lazy_broadcast_tree_test(d, 8),
             ) for d in [1, 4, 8, 12]
         ]
     ] |> vec
