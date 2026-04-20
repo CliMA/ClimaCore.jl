@@ -143,7 +143,6 @@ function rhs_invariant!(dY, Y, _, t)
     dρ .= 0 .* cρ
 
     cw = If2c.(fw)
-    fuₕ = Ic2f.(cuₕ)
     cuw = Geometry.Covariant13Vector.(cuₕ) .+ Geometry.Covariant13Vector.(cw)
 
     ce = @. cρe / cρ
