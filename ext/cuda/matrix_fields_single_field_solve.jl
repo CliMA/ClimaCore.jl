@@ -221,7 +221,7 @@ end
 
 
 function tridiag_pcr_kernel!(
-    x, a, b, c, d, ::Val{n}, ::Val{n_iter}
+    x, a, b, c, d, ::Val{n}, ::Val{n_iter},
 ) where {n, n_iter}
     (idx_i, idx_j, idx_h) = blockIdx()
     i = threadIdx().x
@@ -302,7 +302,7 @@ function single_field_solve_tridiagonal!(cache, x, A, b)
     device isa ClimaComms.CUDADevice || error("This solver supports only CUDA devices.")
 
     eltype(A) <: MatrixFields.TridiagonalMatrixRow || error(
-        "This function expects a tridiagonal matrix field, but got a field with element type $(eltype(A))"
+        "This function expects a tridiagonal matrix field, but got a field with element type $(eltype(A))",
     )
 
     # Get field dimensions
