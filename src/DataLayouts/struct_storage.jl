@@ -97,7 +97,7 @@ can be specified through a `Val` that contains its index `D`.
     num_D_indices = num_basetypes(eltype(array), fieldtype(S, F))
     last_D_index = num_basetypes(eltype(array), Tuple{fieldtypes(S)[1:F]...})
     D_indices = (last_D_index - num_D_indices + 1):last_D_index
-    all_indices = Base.setindex(axes(array), D_indices, D)
+    all_indices = unrolled_setindex(axes(array), D_indices, Val(D))
     @boundscheck checkbounds(array, all_indices...)
     return Base.unsafe_view(array, all_indices...)
 end
@@ -119,8 +119,9 @@ end
     index::CartesianIndex,
     ::Val{D} = Val(ndims(array)),
 ) where {num_indices, D}
-    start = CartesianIndex(Tuple(index)[1:(D - 1)]..., 1, Tuple(index)[D:end]...)
-    checkbounds(array, start:Base.setindex(start, num_indices, D))
+    start = CartesianIndex(unrolled_insert(Tuple(index), 1, Val(D)))
+    stop = CartesianIndex(unrolled_insert(Tuple(index), num_indices, Val(D)))
+    checkbounds(array, start:stop)
 end
 
 @inline struct_index(i, array) = i
@@ -135,8 +136,7 @@ end
     array,
     index::CartesianIndex,
     ::Val{D} = Val(ndims(array)),
-) where {D} =
-    CartesianIndex(Tuple(index)[1:(D - 1)]..., i, Tuple(index)[D:end]...)
+) where {D} = CartesianIndex(unrolled_insert(Tuple(index), i, Val(D)))
 
 """
     set_struct!(array, value, [index], [Val(D)])
