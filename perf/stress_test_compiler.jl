@@ -173,7 +173,6 @@ function run_test_subprocess(
         proc = withenv(
             "CLIMACOMMS_DEVICE" => DEVICE,
             "CLIMA_COLLECT_CUDA_KERNEL_STATS" => (has_cuda_env() ? "1" : "0"),
-            "CLIMACORE_COLLECT_KERNEL_STATS" => (has_cuda_env() ? "1" : "0"),
             "CLIMACORE_STRESS_ANALYSIS_MODE" => analysis_mode,
             "CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE" =>
                 (
@@ -1458,6 +1457,32 @@ function generate_field_test_code(test_name::String, test_impl::String)
 
     const ANALYSIS_MODE = get(ENV, "CLIMACORE_STRESS_ANALYSIS_MODE", "timing")
     analysis_compile_only() = ANALYSIS_MODE == "compile"
+
+    function _env_truthy(var::AbstractString)
+        raw = get(ENV, var, nothing)
+        raw === nothing && return false
+        s = lowercase(strip(String(raw)))
+        if s in ("1", "true", "t", "yes", "y", "on")
+            return true
+        elseif s in ("0", "false", "f", "no", "n", "off")
+            return false
+        else
+            parsed = tryparse(Int, s)
+            return !isnothing(parsed) && parsed != 0
+        end
+    end
+
+    function maybe_enable_cuda_kernel_stats!()
+        enabled = _env_truthy("CLIMA_COLLECT_CUDA_KERNEL_STATS")
+        enabled || return nothing
+
+        ext = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
+        isnothing(ext) && return nothing
+        Core.eval(ext, :(collect_kernel_stats() = true))
+        return nothing
+    end
+
+    maybe_enable_cuda_kernel_stats!()
 
     function _count_llvm_calls(llvm_ir::AbstractString)
         calls = 0

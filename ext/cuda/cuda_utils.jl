@@ -5,9 +5,10 @@ import ClimaCore.DataLayouts: empty_kernel_stats
 
 const reported_stats = Dict()
 const kernel_names = IdDict()
+
 # Call via ClimaCore.DataLayouts.empty_kernel_stats()
 empty_kernel_stats(::ClimaComms.CUDADevice) = empty!(reported_stats)
-collect_kernel_stats() = _getenv_bool("CLIMA_COLLECT_CUDA_KERNEL_STATS"; default = false)
+collect_kernel_stats() = false
 
 function _memory_bytes(memory, key::Symbol)
     if hasproperty(memory, key)
