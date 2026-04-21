@@ -11,8 +11,8 @@ import .TestUtilities as TU;
 
 import ClimaCore: Spaces, Geometry, Operators, Fields, MatrixFields
 using LinearAlgebra: Adjoint
-import StaticArrays: SArray
-import ClimaCore.Geometry: AbstractTensor, CovariantAxis, ContravariantAxis
+import StaticArrays: SArray, SMatrix
+import ClimaCore.Geometry: AbstractTensor, Tensor, Basis, Covariant, Contravariant
 using ClimaCore.MatrixFields:
     BandMatrixRow,
     DiagonalMatrixRow,

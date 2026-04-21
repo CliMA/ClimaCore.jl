@@ -1,4 +1,4 @@
-using ClimaCorePlots, Plots
+# using ClimaCorePlots, Plots
 using ClimaCore.DataLayouts
 
 include("baroclinic_wave_utilities.jl")
@@ -32,9 +32,9 @@ function postprocessing(sol, output_dir)
     @info "L₂ norm of ρe at t = $(sol.t[1]): $(norm(sol.u[1].c.ρe))"
     @info "L₂ norm of ρe at t = $(sol.t[end]): $(norm(sol.u[end].c.ρe))"
 
-    anim = Plots.@animate for Y in sol.u
-        ᶜv = Geometry.UVVector.(Y.c.uₕ).components.data.:2
-        Plots.plot(ᶜv, level = 3, clim = (-6, 6))
-    end
-    Plots.mp4(anim, joinpath(output_dir, "v.mp4"), fps = 5)
+    # anim = Plots.@animate for Y in sol.u
+    #     ᶜv = Geometry.UVVector.(Y.c.uₕ).components.data.:2
+    #     Plots.plot(ᶜv, level = 3, clim = (-6, 6))
+    # end
+    # Plots.mp4(anim, joinpath(output_dir, "v.mp4"), fps = 5)
 end

@@ -254,7 +254,8 @@ function rhs!(dY, Y, _, t)
     @. dρuₕ += -uvdivf2c(ρw ⊗ If(uₕ))
     Ih = Ref(
         Geometry.Tensor(
-            @SMatrix [1.0 0.0; 0.0 1.0], (Geometry.UVAxis(), Geometry.UVAxis())
+            (@SMatrix [1.0 0.0; 0.0 1.0]),
+            (Geometry.UVAxis(), Geometry.UVAxis()),
         ),
     )
     @. dρuₕ -= hdiv(ρuₕ ⊗ uₕ + p * Ih)
