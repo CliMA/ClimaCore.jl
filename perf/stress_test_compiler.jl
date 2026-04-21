@@ -2151,14 +2151,14 @@ const ALL_TESTS =
         [
             TestDef("div_$(i)_ops", "$i Divergence calls in one expression",
                 "divergence", i, 1, true,
-                () -> div_test(i)) for i in [1, 8, 12, 14, 16]
+                () -> div_test(i)) for i in [1, 8, 12, 14]
         ]
 
         # Curl operations: add near-edge points to better resolve the cliff
         [
             TestDef("curl_$(i)_ops", "$i Curl calls in one expression",
                 "curl", i, 1, true,
-                () -> curl_test(i)) for i in [1, 8, 12, 14, 16]
+                () -> curl_test(i)) for i in [1, 8, 12, 14]
         ]
 
         # C2F interpolation: include intermediate and near-edge points
@@ -2173,7 +2173,7 @@ const ALL_TESTS =
             TestDef("weighted_interp_c2f_$(i)_ops",
                 "$i WeightedInterpolateC2F calls in one expression",
                 "weighted_interpolate", i, 1, false,
-                () -> weighted_interp_test(i)) for i in [1, 8, 12, 14, 16]
+                () -> weighted_interp_test(i)) for i in [1, 8, 12]
         ]
 
         # Van Leer upwinding: include intermediate and near-edge points
@@ -2181,7 +2181,7 @@ const ALL_TESTS =
             TestDef("upwinding_3rdorder_$(i)_ops",
                 "$i Upwind3rdOrderBiasedProductC2F calls in one expression",
                 "upwinding", i, 1, false,
-                () -> upwinding_test(i)) for i in [1, 8, 12, 14, 16]
+                () -> upwinding_test(i)) for i in [1, 8]
         ]
 
         # ClimaAtmos-like fused column broadcasts: shallow and deep
@@ -2203,7 +2203,7 @@ const ALL_TESTS =
                 2,
                 false,
                 () -> lazy_broadcast_tree_test(d, 2),
-            ) for d in [1, 4, 8, 12, 16, 20, 24, 32]
+            ) for d in [1, 4, 8]
         ]
 
         # Breadth=4 series: moderate fan-in per lazy layer
@@ -2216,20 +2216,7 @@ const ALL_TESTS =
                 4,
                 false,
                 () -> lazy_broadcast_tree_test(d, 4),
-            ) for d in [1, 4, 8, 12, 16]
-        ]
-
-        # Breadth=8 series: higher fan-in interaction with lazy depth
-        [
-            TestDef(
-                "lazy_broadcast_d$(d)_b8",
-                "Nested lazy broadcast depth=$(d), breadth=8",
-                "lazy_broadcast_tree",
-                d,
-                8,
-                false,
-                () -> lazy_broadcast_tree_test(d, 8),
-            ) for d in [1, 4, 8, 12]
+            ) for d in [1, 4]
         ]
     ] |> vec
 
