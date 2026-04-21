@@ -86,7 +86,10 @@ function Base.copyto!(
         # this block config is better for VIJFH. It is only used when the total number of
         # threads in a block is between 32 and 256 to avoid underutilization of the GPU and
         # errors due to too many registers used when the block size is too large.
-        if !Topologies.isperiodic(space) && mask isa NoMask &&
+        # TODO: the eager path crashes on pure 1D FiniteDifferenceSpaces
+        # (Ni = 1), e.g. convergence_column.jl. Restricted to extruded spaces (Ni > 1)
+        # until the 1D-column codepath through eager_copyto_stencil_kernel! is fixed.
+        if !Topologies.isperiodic(space) && mask isa NoMask && Ni > 1 &&
            32 <= n_face_levels * Ni <= 256
             op_matrix_bc = replace_fd_ops(bc′)
             args = (

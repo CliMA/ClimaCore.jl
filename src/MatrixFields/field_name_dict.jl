@@ -192,6 +192,20 @@ function get_internal_entry(
             (drop_first(internal_row_name), drop_first(internal_col_name)),
             full_key,
         )
+    elseif T <: Geometry.Covector &&
+           name_pair[1] == @name() &&
+           is_child_name(name_pair[2], @name(components.data))
+        # A Covector (Tensor{2} with a ScalarBasis row axis) has no row
+        # sub-components. Collapse the row axis with index 1 so we return
+        # the scalar directly instead of a Tensor{1}(ScalarBasis) slice
+        internal_col_name =
+            extract_internal_name(name_pair[2], @name(components.data))
+        col_index = extract_first(internal_col_name)
+        return get_internal_entry(
+            entry[1, col_index],
+            (name_pair[1], drop_first(internal_col_name)),
+            full_key,
+        )
     elseif T <: Geometry.Tensor{2} && # slicing a 2d tensor
            is_child_name(name_pair[1], @name(components.data))
         internal_row_name =
@@ -483,6 +497,19 @@ function get_scalar_keys(::Type{T}, ::Val{FT}) where {T, FT}
         return ((@name(), @name()),)
     elseif T <: BandMatrixRow
         return get_scalar_keys(eltype(T), Val(FT))
+    elseif T <: Geometry.Covector
+        # A Covector is a Tensor{2} with a ScalarBasis on the row axis; the
+        # row field (e.g. a scalar like c.ρ) has no sub-components, so only
+        # the column key gets a component index appended.
+        return unrolled_map(1:length(axes(T)[2])) do col_component
+            (
+                @name(),
+                append_internal_name(
+                    @name(components.data),
+                    FieldName(col_component),
+                ),
+            )
+        end
     elseif T <: Geometry.Tensor{2}
         return unrolled_flatmap(1:length(axes(T)[1])) do row_component
             unrolled_map(1:length(axes(T)[2])) do col_component

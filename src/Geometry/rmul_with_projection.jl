@@ -67,7 +67,7 @@ needs_projection(
     ::Type{X},
     ::Type{Y},
 ) where {X <: Tensor{2}, Y <: AbstractTensor} =
-    axes(X.instance)[2] != Geometry.dual(axes(Y.instance)[1])
+    axes(X)[2] != Geometry.dual(axes(Y)[1])
 function needs_projection(
     ::Type{X},
     ::Type{Y},

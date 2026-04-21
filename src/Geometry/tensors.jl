@@ -124,6 +124,11 @@ end
 
 Base.parent(x::Tensor) = x.components
 Base.axes(x::Tensor) = x.bases
+# Type-level axes: extracts the bases tuple from the type parameter B without
+# needing an instance. Used by MatrixFields to enumerate tensor components from
+# a type alone (e.g., when computing scalar keys for a Tensor{2} matrix entry).
+Base.axes(::Type{Tensor{N, T, B, C}}) where {N, T, B, C} = B.instance
+
 
 Base.zero(x::Tensor) = zero(typeof(x))
 Base.zero(x::Adjoint{<:Any, <:AbstractTensor}) = adjoint(zero(parent(x)))
