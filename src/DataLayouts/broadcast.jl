@@ -338,7 +338,22 @@ Base.Broadcast.BroadcastStyle(
 ) where {Nv, Nij, A1, A2} =
     VIJHFStyle{Nv, Nij, promote_parent_array_type(A1, A2)}()
 
-Base.Broadcast.broadcastable(data::AbstractData) = data
+# Enable automatic nested broadcasting over supported types of iterators, in
+# addition to the standard broadcasting over array indices.
+Base.Broadcast.broadcastable(data::AbstractData) =
+    reinterpret(add_auto_broadcasters(eltype(data)), data)
+Base.Broadcast.broadcasted(style::DataStyle, f::F, args...) where {F} =
+    allow_auto_broadcasting(Base.Broadcast.Broadcasted(style, f, args))
+
+Base.eltype(bc::Base.Broadcast.Broadcasted{<:DataStyle}) = unsafe_eltype(bc)
+
+# Remove all AutoBroadcaster wrappers when allocating a new AbstractData.
+Base.similar(bc::Base.Broadcast.Broadcasted{<:DataStyle}) =
+    similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
+
+# Only allocate a new AbstractData if its concrete element type can be inferred.
+Base.copy(bc::Base.Broadcast.Broadcasted{<:DataStyle}) =
+    copyto!(similar(bc), bc)
 
 Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{DS},

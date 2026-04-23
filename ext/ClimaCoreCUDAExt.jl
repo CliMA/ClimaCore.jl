@@ -15,10 +15,7 @@ import ClimaCore.DataLayouts: mapreduce_cuda
 import ClimaCore.DataLayouts: ToCUDA
 import ClimaCore.DataLayouts: NoMask, IJHMask
 import ClimaCore.DataLayouts: slab, column
-import ClimaCore.Utilities: half
-import ClimaCore.Utilities: cart_ind, linear_ind
-import ClimaCore.RecursiveApply:
-    ⊠, ⊞, ⊟, radd, rmul, rsub, rdiv, rmap, rzero, rmin, rmax
+import ClimaCore.Utilities: half, new, cart_ind, linear_ind
 import ClimaCore.DataLayouts: get_N, get_Nv, get_Nij, get_Nij, get_Nh
 import ClimaCore.DataLayouts: UniversalSize
 

@@ -1,7 +1,5 @@
 import LinearAlgebra: Adjoint, AdjointAbsVec
-import .RecursiveApply: rmap, rmaptype
-# import LinearAlgebra: I, UniformScaling, Adjoint, AdjointAbsVec
-# Types that are treated as single values when using matrix fields.
+
 const SingleValue = Union{Number, AxisTensor, AdjointAxisTensor}
 
 """
@@ -16,17 +14,6 @@ be projected onto the dual of the last axis of `x`.
 mul_with_projection(x, y, _) = x * y
 mul_with_projection(x::Union{AdjointAxisVector, Axis2TensorOrAdj}, y::AxisTensor, lg) =
     x * project(dual(axes(x)[2]), y, lg)
-
-"""
-    rmul_with_projection(x, y, lg)
-
-Similar to `rmul(x, y)`, except that this version calls `mul_with_projection`
-instead of `*`.
-"""
-rmul_with_projection(x, y, lg) = rmap((x′, y′) -> mul_with_projection(x′, y′, lg), x, y)
-rmul_with_projection(x::SingleValue, y, lg) = rmap(y′ -> mul_with_projection(x, y′, lg), y)
-rmul_with_projection(x, y::SingleValue, lg) = rmap(x′ -> mul_with_projection(x′, y, lg), x)
-rmul_with_projection(x::SingleValue, y::SingleValue, lg) = mul_with_projection(x, y, lg)
 
 axis_tensor_type(::Type{T}, ::Type{Tuple{A1}}) where {T, A1} =
     AxisVector{T, A1, SVector{_length(A1), T}}
@@ -48,37 +35,15 @@ axis2(::Type{<:AdjointAxis2Tensor{<:Any, <:Tuple{A, Any}}}) where {A} = A
 """
     needs_projection(::Type{X}, ::Type{Y})
 
-Returns `true` if multiplying an object of type `X` with an object of type `Y` would require
-projection. This always returns false if `X` or `Y` are a `Tuple` or `NamedTuple` with
-eltype any.
+Returns `true` if multiplying an object of type `X` with an object of type `Y`
+would require projection.
 """
-needs_projection(::Type{X}, ::Type{Y}) where {X <: Number, Y <: SingleValue} = false
-needs_projection(::Type{X}, ::Type{Y}) where {X <: SingleValue, Y <: SingleValue} = false
-function needs_projection(::Type{X}, ::Type{Y}) where {X, Y}
-    (eltype(X) === Any || eltype(Y) === Any) && return false
-    needs_projection(eltype(X), eltype(Y))
-end
+needs_projection(::Type{X}, ::Type{Y}) where {X, Y} = false
 needs_projection(
     ::Type{X},
     ::Type{Y},
 ) where {X <: Union{AdjointAxisVector, Axis2TensorOrAdj}, Y <: AxisTensor} =
     axes(X)[2] != Geometry.dual(axes(Y)[1])
-function needs_projection(
-    ::Type{X},
-    ::Type{Y},
-) where {X <: SingleValue, Y <: Union{Tuple, NamedTuple}}
-    X <: Number && return false
-    eltype(Y) === Any && return false
-    needs_projection(X, eltype(Y))
-end
-function needs_projection(
-    ::Type{X},
-    ::Type{Y},
-) where {X <: Union{Tuple, NamedTuple}, Y <: SingleValue}
-    Y <: Number && return false
-    eltype(X) === Any && return false
-    needs_projection(eltype(X), Y)
-end
 
 recursively_find_dual_axes_for_projection(
     ::Type{X},
@@ -147,22 +112,3 @@ mul_return_type(
     ::Type{X}, ::Type{Y},
 ) where {T1, T2, X <: Axis2TensorOrAdj{T1}, Y <: Axis2TensorOrAdj{T2}} =
     axis_tensor_type(promote_type(T1, T2), Tuple{axis1(X), axis2(Y)})
-
-"""
-    rmul_return_type(X, Y)
-
-Computes the return type of `rmul_with_projection(x, y, lg)`, where `x isa X`
-and `y isa Y`. This can also be used to obtain the return type of `rmul(x, y)`,
-although `rmul(x, y)` will throw an error when projection is necessary.
-
-Note that this is equivalent to calling the internal function `_return_type`:
-`Base._return_type(rmul_with_projection, Tuple{X, Y, LG})`, where `lg isa LG`.
-"""
-rmul_return_type(::Type{X}, ::Type{Y}) where {X, Y} =
-    rmaptype((X′, Y′) -> mul_return_type(X′, Y′), X, Y)
-rmul_return_type(::Type{X}, ::Type{Y}) where {X <: SingleValue, Y} =
-    rmaptype(Y′ -> mul_return_type(X, Y′), Y)
-rmul_return_type(::Type{X}, ::Type{Y}) where {X, Y <: SingleValue} =
-    rmaptype(X′ -> mul_return_type(X′, Y), X)
-rmul_return_type(::Type{X}, ::Type{Y}) where {X <: SingleValue, Y <: SingleValue} =
-    mul_return_type(X, Y)

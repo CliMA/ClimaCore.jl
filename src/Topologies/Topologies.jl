@@ -3,7 +3,7 @@ module Topologies
 import ClimaComms, Adapt
 
 import ..ClimaCore
-import ..Utilities: Cache, cart_ind, linear_ind
+import ..Utilities: Cache, cart_ind, linear_ind, AutoBroadcaster
 import ..Geometry
 import ..Domains: Domains, coordinate_type
 import ..Meshes: Meshes, domain, coordinates
