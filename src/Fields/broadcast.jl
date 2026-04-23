@@ -471,26 +471,10 @@ function Base.Broadcast.broadcasted(
     fs::AbstractFieldStyle,
     ::Type{V},
     arg,
-) where {V <: Geometry.AxisVector}
+) where {V <: Geometry.AbstractTensor{1}}
     space = Fields.axes(arg)
     # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
     Base.Broadcast.broadcasted(fs, V, arg, local_geometry_field(space))
-end
-
-function Base.Broadcast.broadcasted(
-    fs::AbstractFieldStyle,
-    ::Type{V},
-    arg,
-) where {V <: Geometry.CartesianVector}
-    space = Fields.axes(arg)
-    # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
-    Base.Broadcast.broadcasted(
-        fs,
-        V,
-        arg,
-        tuple(Spaces.global_geometry(space)),
-        local_geometry_field(space),
-    )
 end
 
 function Base.copyto!(

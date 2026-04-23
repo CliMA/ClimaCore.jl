@@ -253,9 +253,9 @@ function rhs!(dY, Y, _, t)
     # Horizontal momentum
     @. dρuₕ += -uvdivf2c(ρw ⊗ If(uₕ))
     Ih = Ref(
-        Geometry.Axis2Tensor(
+        Geometry.Tensor(
+            (@SMatrix [1.0 0.0; 0.0 1.0]),
             (Geometry.UVAxis(), Geometry.UVAxis()),
-            @SMatrix [1.0 0.0; 0.0 1.0]
         ),
     )
     @. dρuₕ -= hdiv(ρuₕ ⊗ uₕ + p * Ih)

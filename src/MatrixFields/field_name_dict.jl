@@ -178,7 +178,7 @@ function get_internal_entry(
 ) where {T}
     if name_pair == (@name(), @name())
         return entry
-    elseif T <: Geometry.Axis2Tensor &&
+    elseif T <: Geometry.Tensor{2} &&
            all(n -> is_child_name(n, @name(components.data)), name_pair)
         # two indices needed to index into a 2d tensor (one can be Colon())
         internal_row_name =
@@ -192,7 +192,21 @@ function get_internal_entry(
             (drop_first(internal_row_name), drop_first(internal_col_name)),
             full_key,
         )
-    elseif T <: Geometry.Axis2Tensor && # slicing a 2d tensor
+    elseif T <: Geometry.Covector &&
+           name_pair[1] == @name() &&
+           is_child_name(name_pair[2], @name(components.data))
+        # A Covector (Tensor{2} with a ScalarBasis row axis) has no row
+        # sub-components. Collapse the row axis with index 1 so we return
+        # the scalar directly instead of a Tensor{1}(ScalarBasis) slice
+        internal_col_name =
+            extract_internal_name(name_pair[2], @name(components.data))
+        col_index = extract_first(internal_col_name)
+        return get_internal_entry(
+            entry[1, col_index],
+            (name_pair[1], drop_first(internal_col_name)),
+            full_key,
+        )
+    elseif T <: Geometry.Tensor{2} && # slicing a 2d tensor
            is_child_name(name_pair[1], @name(components.data))
         internal_row_name =
             extract_internal_name(name_pair[1], @name(components.data))
@@ -201,7 +215,7 @@ function get_internal_entry(
             (drop_first(internal_row_name), name_pair[2]),
             full_key,
         )
-    elseif T <: Geometry.Axis2Tensor && # slicing a 2d tensor
+    elseif T <: Geometry.Tensor{2} && # slicing a 2d tensor
            is_child_name(name_pair[2], @name(components.data))
         internal_col_name =
             extract_internal_name(name_pair[2], @name(components.data))
@@ -210,7 +224,7 @@ function get_internal_entry(
             (name_pair[1], drop_first(internal_col_name)),
             full_key,
         )
-    elseif T <: Geometry.AdjointAxisVector # bypass parent for adjoint vectors
+    elseif T <: Adjoint{<:Any, <:Geometry.AbstractTensor{1}} # bypass parent for adjoint vectors
         return get_internal_entry(getfield(entry, :parent), name_pair, full_key)
     elseif name_pair[1] != @name() &&
            extract_first(name_pair[1]) in fieldnames(T)
@@ -317,15 +331,13 @@ function Base.one(matrix::FieldMatrix)
         if !(key in keys(matrix))
             I # default value for missing diagonal entries in a sparse matrix
         else
-            # TODO: Add method for one(::Axis2Tensor) to simplify this.
             T =
                 matrix[key] isa ScalingFieldMatrixEntry ?
                 eltype(matrix[key]) : eltype(eltype(matrix[key]))
             if T <: Number
                 UniformScaling(one(T))
-            elseif T <: Geometry.Axis2Tensor
-                tensor_data = UniformScaling(one(eltype(T)))
-                DiagonalMatrixRow(Geometry.AxisTensor(axes(T), tensor_data))
+            elseif T <: Geometry.Tensor{2}
+                DiagonalMatrixRow(one(T))
             else
                 error("Unsupported diagonal FieldMatrix entry type: $T")
             end
@@ -349,7 +361,7 @@ The third return value is one of the following:
 - `Val(:broadcasted_zero)`: indexing with a view is not possible, and the `name_pair` indexes
 off diagonal with implicit tensor structure optimization (see MatrixFields docs)
 
-When `S` is a `Geometry.Axis2Tensor`, and the name pair indexes to a slice of
+When `S` is a `Geometry.Tensor{2}`, and the name pair indexes to a slice of
 the tensor, an offset of `-1` is returned . In other words, the name pair cannot index into a slice.
 
 If neither element of `name_pair` is `@name()`, the first name in the pair is indexed with
@@ -366,7 +378,7 @@ function field_offset_and_type(
     if name_pair == (@name(), @name()) # recursion base case
         # if S <: T, then its possible to construct a strided view in the indexing function
         return (0, S, S <: T ? Val(:view) : Val(:view_of_blocks))
-    elseif S <: Geometry.Axis2Tensor &&
+    elseif S <: Geometry.Tensor{2} &&
            any(n -> is_child_name(n, @name(components.data)), name_pair) # special case to calculate index
         all(n -> is_child_name(n, @name(components.data)), name_pair) ||
             return (0, S, Val{:broadcasted_fallback}())
@@ -392,7 +404,7 @@ function field_offset_and_type(
             end_type,
             index_method,
         )
-    elseif S <: Geometry.AdjointAxisVector # bypass adjoint because indexing parent is equivalent
+    elseif S <: Adjoint{<:Any, <:Geometry.AbstractTensor{1}} # bypass adjoint because indexing parent is equivalent
         return field_offset_and_type(name_pair, T, fieldtype(S, 1), full_key)
     elseif name_pair[1] != @name() &&
            extract_first(name_pair[1]) in fieldnames(S) # index with first part of name_pair[1]
@@ -485,7 +497,20 @@ function get_scalar_keys(::Type{T}, ::Val{FT}) where {T, FT}
         return ((@name(), @name()),)
     elseif T <: BandMatrixRow
         return get_scalar_keys(eltype(T), Val(FT))
-    elseif T <: Geometry.Axis2Tensor
+    elseif T <: Geometry.Covector
+        # A Covector is a Tensor{2} with a ScalarBasis on the row axis; the
+        # row field (e.g. a scalar like c.ρ) has no sub-components, so only
+        # the column key gets a component index appended.
+        return unrolled_map(1:length(axes(T)[2])) do col_component
+            (
+                @name(),
+                append_internal_name(
+                    @name(components.data),
+                    FieldName(col_component),
+                ),
+            )
+        end
+    elseif T <: Geometry.Tensor{2}
         return unrolled_flatmap(1:length(axes(T)[1])) do row_component
             unrolled_map(1:length(axes(T)[2])) do col_component
                 append_internal_name.(
@@ -494,13 +519,13 @@ function get_scalar_keys(::Type{T}, ::Val{FT}) where {T, FT}
                 )
             end
         end
-    elseif T <: Geometry.AdjointAxisVector
+    elseif T <: Adjoint{<:Any, <:Geometry.AbstractTensor{1}}
         return unrolled_map(
             get_scalar_keys(fieldtype(T, :parent), Val(FT)),
         ) do inner_key
             (inner_key[2], inner_key[1]) # assumes that adjoints only appear with d/dvec
         end
-    elseif T <: Geometry.AxisVector # special case to avoid recursing into the axis field
+    elseif T <: Geometry.AbstractTensor{1} # special case to avoid recursing into the basis fields
         return unrolled_map(
             get_scalar_keys(fieldtype(T, :components), Val(FT)),
         ) do inner_key
@@ -638,12 +663,11 @@ function identity_field_matrix(x::Fields.FieldVector)
         T = eltype(get_field(x, name))
         if T <: Number
             UniformScaling(one(T))
-        elseif T <: Geometry.AxisVector
-            # TODO: Add methods for +(::UniformScaling, ::Axis2Tensor) and
-            # -(::UniformScaling, ::Axis2Tensor) to simplify this.
-            tensor_axes = (axes(T)[1], Geometry.dual(axes(T)[1]))
-            tensor_data = UniformScaling(one(eltype(T)))
-            DiagonalMatrixRow(Geometry.AxisTensor(tensor_axes, tensor_data))
+        elseif T <: Geometry.AbstractTensor{1}
+            b = axes(zero(T))[1]
+            DiagonalMatrixRow(
+                Geometry.Tensor(UniformScaling(one(eltype(T))), (b, Geometry.dual(b))),
+            )
         else
             I # default value for elements that are neither scalars nor vectors
         end

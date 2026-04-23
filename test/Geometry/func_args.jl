@@ -5,6 +5,9 @@ to call different functions with.
 
 #! format: off
 
+# Aliases for backward-compat in test tables
+import ClimaCore.Geometry
+
 #####
 ##### Helpers
 #####
@@ -16,15 +19,13 @@ Base.rand(::Type{T}) where {FT, T <: ZPoint{FT}} = T(rand(FT))
 Base.rand(::Type{T}) where {FT, T <: LatLongPoint{FT}} = T(rand(FT),rand(FT))
 Base.rand(::Type{T}) where {FT, T <: XPoint{FT}} = T(rand(FT))
 
-get_∂x∂ξ(::Type{FT}, I, ::Type{S}) where {FT, S} = rand(Axis2Tensor{FT, Tuple{LocalAxis{I}, CovariantAxis{I}}, S})
+get_∂x∂ξ(::Type{FT}, I, ::Type{S}) where {FT, S} =
+    Geometry.Tensor(rand(S), (Geometry.Basis{Geometry.Orthonormal, I}(), Geometry.Basis{Geometry.Covariant, I}()))
 
-get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{2, 2, FT, 4}, C <: XZPoint{FT}       , T <: FullLocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
-get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{3, 3, FT, 9}, C <: XYZPoint{FT}      , T <: FullLocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
-get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{3, 3, FT, 9}, C <: LatLongZPoint{FT} , T <: FullLocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
-get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{2, 2, FT, 4}, C <: XYPoint{FT}       , T <: FullLocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
-get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{1, 1, FT, 1}, C <: ZPoint{FT}        , T <: FullLocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
-get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{2, 2, FT, 4}, C <: LatLongPoint{FT}  , T <: FullLocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
-get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{1, 1, FT, 1}, C <: XPoint{FT}        , T <: FullLocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
+function get_lg_instance(::Type{T}) where {I, C, FT, TX, T <: Geometry.LocalGeometry{I, C, FT, TX}}
+    S = TX.parameters[4]
+    LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
+end
 
 #####
 ##### func args
@@ -45,11 +46,10 @@ end
 function func_args(FT, f::typeof(Geometry.transform))
     result = map(method_info(FT, f)) do minfo
         at, flops = minfo[1:end-1],last(minfo)
-        # TODO: don't use zeros, since this invalidates the correctness tests.
         if length(at) == 3
-            (at[1](), zeros(at[2]), get_lg_instance(at[3]), flops) # 3-argument method
+            (at[1](), zero(at[2]), get_lg_instance(at[3]), flops) # 3-argument method
         else
-            (at[1](), zeros(at[2]), flops) # 2-argument method
+            (at[1](), zero(at[2]), flops) # 2-argument method
         end
     end
     map(x->(x[1:end-1], x[end]), result)

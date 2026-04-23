@@ -5,7 +5,7 @@ import ClimaCore.Limiters
 import ClimaComms
 import ClimaCore: DataLayouts, Grids, Spaces, Fields
 import ClimaCore: Geometry
-import ClimaCore.Geometry: AxisTensor
+import ClimaCore.Geometry: AbstractTensor
 import CUDA
 using CUDA
 using CUDA: threadIdx, blockIdx, blockDim

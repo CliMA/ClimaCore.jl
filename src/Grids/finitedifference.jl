@@ -88,8 +88,11 @@ function fd_geometry_data(
 ) where {FT, periodic}
     CT = Geometry.ZPoint{FT}
     AIdx = (3,)
-    LG = Geometry.FullLocalGeometry{AIdx, CT, FT, SMatrix{1, 1, FT, 1}}
-    ∂x∂ξ_axes = (Geometry.LocalAxis{AIdx}(), Geometry.CovariantAxis{AIdx}())
+    ∂x∂ξ_bases = (
+        Geometry.Basis{Geometry.Orthonormal, AIdx}(),
+        Geometry.Basis{Geometry.Covariant, AIdx}(),
+    )
+    LG = Geometry.LocalGeometryType(CT, FT, AIdx)
     (Ni, Nj, Nk, Nv, Nh) = size(face_coordinates)
     Nv_face = Nv - periodic
     Nv_cent = Nv - 1
@@ -104,7 +107,7 @@ function fd_geometry_data(
             J = face_coord(i, j, k, v + 1, h) - face_coord(i, j, k, v, h)
             WJ = J
             x = CT(cent_coord(i, j, k, v, h))
-            ∂x∂ξ = Geometry.AxisTensor(∂x∂ξ_axes, SMatrix{1, 1}(J))
+            ∂x∂ξ = Geometry.Tensor(SMatrix{1, 1}(J), ∂x∂ξ_bases)
             center_local_geometry[CartesianIndex(i, j, k, v, h)] =
                 Geometry.LocalGeometry(x, J, WJ, ∂x∂ξ)
         end
@@ -129,7 +132,7 @@ function fd_geometry_data(
                 WJ = J
             end
             x = CT(face_coord(i, j, k, v, h))
-            ∂x∂ξ = Geometry.AxisTensor(∂x∂ξ_axes, SMatrix{1, 1}(J))
+            ∂x∂ξ = Geometry.Tensor(SMatrix{1, 1}(J), ∂x∂ξ_bases)
             face_local_geometry[CartesianIndex(i, j, k, v, h)] =
                 Geometry.LocalGeometry(x, J, WJ, ∂x∂ξ)
         end

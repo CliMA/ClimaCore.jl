@@ -731,8 +731,8 @@ end
     x_CT3 = rzero(replace_type_parameter(typeof(x), Int, CT3))
     x_C12XC3 = rzero(replace_type_parameter(typeof(x), Int, C12XC3))
     x_CT3XCT12 = rzero(replace_type_parameter(typeof(x), Int, CT3XCT12))
-    I_CT3XC3 = DiagonalMatrixRow(Geometry.AxisTensor(axes(CT3XC3), I))
-    I_C12XCT12 = DiagonalMatrixRow(Geometry.AxisTensor(axes(C12XCT12), I))
+    I_CT3XC3 = DiagonalMatrixRow(Geometry.Tensor(I, axes(zero(CT3XC3))))
+    I_C12XCT12 = DiagonalMatrixRow(Geometry.Tensor(I, axes(zero(C12XCT12))))
 
     center_space, face_space = test_spaces(FT)
 

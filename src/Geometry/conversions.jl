@@ -1,516 +1,379 @@
-(AxisVector{T, A, SVector{1, T}} where {T})(
-    a::Real,
-    ::LocalGeometry,
-) where {A} = AxisVector(A.instance, SVector(a))
+###############################################################################
+## Basis-type conversion helpers (private)
+###############################################################################
 
-# standard conversions
-ContravariantVector(u::ContravariantVector, ::LocalGeometry) = u
-CovariantVector(u::CovariantVector, ::LocalGeometry) = u
-LocalVector(u::LocalVector, ::LocalGeometry) = u
-# conversions between Covariant/Contravariant vectors and local vectors
-ContravariantVector(u::LocalVector{T, I}, local_geometry::LocalGeometry{I}) where {T, I} =
-    local_geometry.∂ξ∂x * u
-LocalVector(u::ContravariantVector{T, I}, local_geometry::LocalGeometry{I}) where {T, I} =
-    local_geometry.∂x∂ξ * u
-CovariantVector(u::LocalVector{T, I}, local_geometry::LocalGeometry{I}) where {T, I} =
-    local_geometry.∂x∂ξ' * u
-LocalVector(u::CovariantVector{T, I}, local_geometry::LocalGeometry{I}) where {T, I} =
-    local_geometry.∂ξ∂x' * u
+# Union type aliases like CovariantTensor use Basis{Covariant} without the
+# `names` type parameter, so functions dispatching on them lose `names` at
+# compile time. Any method that performs a matrix-vector product must instead
+# dispatch on Tensor{1, <:Any, <:Tuple{Basis{BT, names}}} where {names} so
+# that Julia captures `names` as a type parameter and avoids runtime dispatch
+# in basis overlap/dual computations. 
 
-# conversions between Covariant and Contravariant vectors
-Contravariant123Vector(
-    u::CovariantVector{T, (1, 2)},
-    local_geometry::LocalGeometry{(1, 2, 3)},
-) where {T} = local_geometry.gⁱʲ * Covariant123Vector(u[1], u[2], zero(u[1]))
+# Convert any Tensor{1} to the Contravariant basis of lg
+@inline _to_contravariant(v::ContravariantTensor, ::LocalGeometry) = v
+@inline _to_contravariant(
+    v::Tensor{1, <:Any, <:Tuple{Basis{Orthonormal, names}}}, lg::LocalGeometry,
+) where {names} = lg.∂ξ∂x * v
+@inline _to_contravariant(
+    v::Tensor{1, <:Any, <:Tuple{Basis{Covariant, names}}}, lg::LocalGeometry,
+) where {names} = lg.gⁱʲ * v
 
-Contravariant123Vector(
-    u::CovariantVector{T, (3,)},
-    local_geometry::LocalGeometry{(1, 2, 3)},
-) where {T} =
-    local_geometry.gⁱʲ * Covariant123Vector(zero(u[1]), zero(u[1]), u[1])
+# Convert any Tensor{1} to the Covariant basis of lg
+@inline _to_covariant(v::CovariantTensor, ::LocalGeometry) = v
+@inline _to_covariant(
+    v::Tensor{1, <:Any, <:Tuple{Basis{Orthonormal, names}}}, lg::LocalGeometry,
+) where {names} = lg.∂x∂ξ' * v
+@inline _to_covariant(
+    v::Tensor{1, <:Any, <:Tuple{Basis{Contravariant, names}}}, lg::LocalGeometry,
+) where {names} = lg.gᵢⱼ * v
 
+# Convert any Tensor{1} to the Orthonormal (local) basis of lg
+@inline _to_local(v::OrthonormalTensor, ::LocalGeometry) = v
+@inline _to_local(
+    v::Tensor{1, <:Any, <:Tuple{Basis{Contravariant, names}}}, lg::LocalGeometry,
+) where {names} = lg.∂x∂ξ * v
+@inline _to_local(
+    v::Tensor{1, <:Any, <:Tuple{Basis{Covariant, names}}}, lg::LocalGeometry,
+) where {names} = lg.∂ξ∂x' * v
 
-ContravariantVector(
-    u::CovariantVector{T, I},
-    local_geometry::LocalGeometry{I},
-) where {T, I} = local_geometry.gⁱʲ * u
+###############################################################################
+## project(basis, v, local_geometry)  — 3-argument form using metric
+###############################################################################
 
-CovariantVector(
-    u::ContravariantVector{T, I},
-    local_geometry::LocalGeometry{I},
-) where {T, I} = local_geometry.gᵢⱼ * u
+"""
+    project(basis, V, local_geometry)
 
-# Converting to specific dimension types
-@inline (::Type{<:ContravariantVector{<:Any, I}})(
-    u::ContravariantVector{<:Any, I},
-    ::LocalGeometry{I},
-) where {I} = u
+Project the first axis of vector or tensor `V` onto `basis`, performing a
+change of basis type via the metric if necessary.  Missing components are
+zero-filled; extra components are dropped (no error even if they are nonzero).
+"""
+@inline function project(
+    b::Basis{Contravariant}, v::AbstractTensor{1}, lg::LocalGeometry,
+)
+    return _project_with_passthrough(b, Contravariant(), _to_contravariant(v, lg), v)
+end
+@inline function project(
+    b::Basis{Covariant}, v::AbstractTensor{1}, lg::LocalGeometry,
+)
+    return _project_with_passthrough(b, Covariant(), _to_covariant(v, lg), v)
+end
+@inline function project(
+    b::Basis{Orthonormal}, v::AbstractTensor{1}, lg::LocalGeometry,
+)
+    return _project_with_passthrough(b, Orthonormal(), _to_local(v, lg), v)
+end
 
-@inline (::Type{<:ContravariantVector{<:Any, I}})(
-    u::ContravariantVector,
-    ::LocalGeometry,
-) where {I} = project(ContravariantAxis{I}(), u)
+# 2-tensor projections: change basis type for the first axis
+@inline function project(
+    b::Basis{Contravariant}, v::Tensor{2}, lg::LocalGeometry,
+)
+    return _project_with_passthrough(b, Contravariant(), _to_contravariant_2t(v, lg), v)
+end
+@inline function project(
+    b::Basis{Covariant}, v::Tensor{2}, lg::LocalGeometry,
+)
+    return _project_with_passthrough(b, Covariant(), _to_covariant_2t(v, lg), v)
+end
+@inline function project(
+    b::Basis{Orthonormal}, v::Tensor{2}, lg::LocalGeometry,
+)
+    return _project_with_passthrough(b, Orthonormal(), _to_local_2t(v, lg), v)
+end
 
-@inline (::Type{<:ContravariantVector{<:Any, I}})(
-    u::AxisVector,
-    local_geometry::LocalGeometry,
-) where {I} =
-    project(ContravariantAxis{I}(), ContravariantVector(u, local_geometry))
+# Helper: reshape `converted` to `b`, but for components in `b` that are
+# missing from the metric conversion yet present in `source`, pass them through
+# directly.
+#
+# This arises in extruded geometries: the horizontal `LocalGeometry` has a 2D
+# metric (dimensions 1,2 only), so `gⁱʲ * Covariant123` yields `Contravariant12`
+# — the metric knows nothing about dimension 3. But the vertical direction is
+# orthogonal with unit arc-length by construction (reference and physical
+# coordinates coincide there), giving g^{33} = g_{33} = 1. Therefore
+# u³ = u₃ = u (all three representations are equal), and projecting a
+# `Covariant123` source to `Contravariant123` should copy component 3 as-is
+# rather than zero-filling it.
+@inline function _project_with_passthrough(
+    b::Basis{BT}, ::BT, converted::AbstractTensor{N}, source::AbstractTensor{N},
+) where {BT <: BasisType, N}
+    converted_names = basis_vector_names(axes(converted, 1))
+    src_names = basis_vector_names(axes(source, 1))
+    dest_names = basis_vector_names(b)
+    extra_names = unrolled_filter(
+        n -> !unrolled_in(n, converted_names) && unrolled_in(n, src_names),
+        dest_names,
+    )
+    other_converted_axes = Base.tail(axes(converted))
+    result = reshape(converted, (b, other_converted_axes...))
+    isempty(extra_names) && return result
+    # Extract source components for extra names (covariant/contravariant values
+    # are equal for identity-metric dimensions) and relabel as target basis type.
+    src_extra_basis = Basis(basis_type(axes(source, 1)), extra_names)
+    other_source_axes = Base.tail(axes(source))
+    src_extra = reshape(source, (src_extra_basis, other_source_axes...))
+    # Relabel as target basis type (same values, g^{ii}=1 assumption)
+    tgt_extra = Tensor(parent(src_extra), (Basis{BT, extra_names}(), other_source_axes...))
+    other_result_axes = Base.tail(axes(result))
+    return result + reshape(tgt_extra, (b, other_result_axes...))
+end
 
-@inline (::Type{<:CovariantVector{<:Any, I}})(
-    u::CovariantVector{<:Any, I},
-    ::LocalGeometry{I},
-) where {I} = u
+# 2-tensor basis-type conversion for the first axis
+@inline _to_contravariant_2t(v::ContravariantTensor, ::LocalGeometry) = v
+@inline _to_contravariant_2t(v::OrthonormalTensor, lg::LocalGeometry) = lg.∂ξ∂x * v
+@inline _to_contravariant_2t(v::CovariantTensor, lg::LocalGeometry) = lg.gⁱʲ * v
 
-@inline (::Type{<:CovariantVector{<:Any, I}})(
-    u::CovariantVector,
-    ::LocalGeometry,
-) where {I} = project(CovariantAxis{I}(), u)
+@inline _to_covariant_2t(v::CovariantTensor, ::LocalGeometry) = v
+@inline _to_covariant_2t(v::OrthonormalTensor, lg::LocalGeometry) = lg.∂x∂ξ' * v
+@inline _to_covariant_2t(v::ContravariantTensor, lg::LocalGeometry) = lg.gᵢⱼ * v
 
-@inline (::Type{<:CovariantVector{<:Any, I}})(
-    u::AxisVector,
-    local_geometry::LocalGeometry,
-) where {I} = project(CovariantAxis{I}(), CovariantVector(u, local_geometry))
+@inline _to_local_2t(v::OrthonormalTensor, ::LocalGeometry) = v
+@inline _to_local_2t(v::ContravariantTensor, lg::LocalGeometry) = lg.∂x∂ξ * v
+@inline _to_local_2t(v::CovariantTensor, lg::LocalGeometry) = lg.∂ξ∂x' * v
 
-@inline (::Type{<:LocalVector{<:Any, I}})(
-    u::LocalVector{<:Any, I},
-    ::LocalGeometry{I},
-) where {I} = u
+"""
+    transform(basis, V, local_geometry)
 
-@inline (::Type{<:LocalVector{<:Any, I}})(
-    u::LocalVector,
-    ::LocalGeometry,
-) where {I} = project(LocalAxis{I}(), u)
+Like `project(basis, V, local_geometry)`, but throws an `InexactError` if any
+dropped component is nonzero.
+"""
+@inline function transform(
+    b::Basis{Contravariant}, v::AbstractTensor{1}, lg::LocalGeometry,
+)
+    return transform(b, _to_contravariant(v, lg))
+end
+@inline function transform(
+    b::Basis{Covariant}, v::AbstractTensor{1}, lg::LocalGeometry,
+)
+    return transform(b, _to_covariant(v, lg))
+end
+@inline function transform(
+    b::Basis{Orthonormal}, v::AbstractTensor{1}, lg::LocalGeometry,
+)
+    return transform(b, _to_local(v, lg))
+end
 
-@inline (::Type{<:LocalVector{<:Any, I}})(
-    u::AxisVector,
-    local_geometry::LocalGeometry,
-) where {I} = project(LocalAxis{I}(), LocalVector(u, local_geometry))
+# 2-tensor transforms: change basis type for the first axis
+@inline function transform(
+    b::Basis{Contravariant}, v::Tensor{2}, lg::LocalGeometry,
+)
+    return transform(b, _to_contravariant_2t(v, lg))
+end
+@inline function transform(
+    b::Basis{Covariant}, v::Tensor{2}, lg::LocalGeometry,
+)
+    return transform(b, _to_covariant_2t(v, lg))
+end
+@inline function transform(
+    b::Basis{Orthonormal}, v::Tensor{2}, lg::LocalGeometry,
+)
+    return transform(b, _to_local_2t(v, lg))
+end
 
-# Generic N-axis conversion functions,
-# Convert to specific local geometry dimension then convert vector type
-@inline LocalVector(u::CovariantVector, local_geometry::LocalGeometry{I}) where {I} =
-    project(LocalAxis{I}(), project(CovariantAxis{I}(), u), local_geometry)
+###############################################################################
+## Vector type constructors with LocalGeometry
+###############################################################################
 
-@inline LocalVector(u::ContravariantVector, local_geometry::LocalGeometry{I}) where {I} =
-    project(LocalAxis{I}(), project(ContravariantAxis{I}(), u), local_geometry)
+# Standard same-dimension conversions:
 
-@inline CovariantVector(u::LocalVector, local_geometry::LocalGeometry{I}) where {I} =
-    project(CovariantAxis{I}(), project(LocalAxis{I}(), u), local_geometry)
+# Use explicit `where {names}` on matrix-product methods so Julia captures the
+# names type parameter and can infer concrete return types (see comment at top).
+@inline ContravariantVector(u::ContravariantTensor, ::LocalGeometry) = u
+@inline ContravariantVector(
+    u::Tensor{1, <:Any, <:Tuple{Basis{Orthonormal, names}}}, lg::LocalGeometry,
+) where {names} = lg.∂ξ∂x * u
+@inline ContravariantVector(
+    u::Tensor{1, <:Any, <:Tuple{Basis{Covariant, names}}}, lg::LocalGeometry,
+) where {names} = lg.gⁱʲ * u
 
+@inline CovariantVector(u::CovariantTensor, ::LocalGeometry) = u
 @inline CovariantVector(
-    u::ContravariantVector,
-    local_geometry::LocalGeometry{I},
-) where {I} =
-    project(CovariantAxis{I}(), project(ContravariantAxis{I}(), u), local_geometry)
+    u::Tensor{1, <:Any, <:Tuple{Basis{Orthonormal, names}}}, lg::LocalGeometry,
+) where {names} = lg.∂x∂ξ' * u
+@inline CovariantVector(
+    u::Tensor{1, <:Any, <:Tuple{Basis{Contravariant, names}}}, lg::LocalGeometry,
+) where {names} = lg.gᵢⱼ * u
 
-@inline ContravariantVector(
-    u::LocalVector,
-    local_geometry::LocalGeometry{I},
-) where {I} =
-    project(ContravariantAxis{I}(), project(LocalAxis{I}(), u), local_geometry)
+@inline LocalVector(u::OrthonormalTensor, ::LocalGeometry) = u
+@inline LocalVector(
+    u::Tensor{1, <:Any, <:Tuple{Basis{Contravariant, names}}}, lg::LocalGeometry,
+) where {names} = lg.∂x∂ξ * u
+@inline LocalVector(
+    u::Tensor{1, <:Any, <:Tuple{Basis{Covariant, names}}}, lg::LocalGeometry,
+) where {names} = lg.∂ξ∂x' * u
 
-@inline ContravariantVector(
-    u::CovariantVector,
-    local_geometry::LocalGeometry{I},
-) where {I} =
-    project(ContravariantAxis{I}(), project(CovariantAxis{I}(), u), local_geometry)
+# UVWVector(u, lg) — convert any vector to the UVW (full-3D Orthonormal) basis.
+# LocalVector is identity for OrthonormalTensor, so no specialization needed.
+@inline UVWVector(u::AbstractTensor{1}, lg::LocalGeometry) =
+    reshape(LocalVector(u, lg), (UVWAxis(),))
 
-# In order to make curls and cross products work in 2D, we define the 3rd
-# dimension to be orthogonal to the exisiting dimensions, and have unit length
-# (so covariant, contravariant and local axes are equal)
-ContravariantVector(u::LocalVector{<:Any, (3,)}, ::LocalGeometry{(1, 2)}) =
-    AxisVector(Contravariant3Axis(), components(u))
-ContravariantVector(u::CovariantVector{<:Any, (3,)}, ::LocalGeometry{(1, 2)}) =
-    AxisVector(Contravariant3Axis(), components(u))
+# 2D cross-dimension conversions for (3,) vectors in a (1,2) geometry.
+# The 3rd dimension is orthogonal with unit length: covariant ≡ contravariant ≡ local,
+# so conversion is just a relabeling of components (no metric needed).
+const _dest_info = [
+    (Covariant, :CovariantVector, :Covariant3Vector),
+    (Contravariant, :ContravariantVector, :Contravariant3Vector),
+    (Orthonormal, :LocalVector, :WVector),
+]
+for (dest_T, fn, constructor) in _dest_info
+    for src_T in (Covariant, Contravariant, Orthonormal)
+        if src_T === dest_T
+            @eval @inline $fn(
+                u::Tensor{1, <:Any, Tuple{Basis{$src_T, (3,)}}},
+                ::LocalGeometry{(1, 2)},
+            ) = u
+        else
+            @eval @inline $fn(
+                u::Tensor{1, <:Any, Tuple{Basis{$src_T, (3,)}}},
+                ::LocalGeometry{(1, 2)},
+            ) = $constructor(parent(u)...)
+        end
+    end
+end
 
-CovariantVector(u::LocalVector{<:Any, (3,)}, ::LocalGeometry{(1, 2)}) =
-    AxisVector(Covariant3Axis(), components(u))
-CovariantVector(u::ContravariantVector{<:Any, (3,)}, ::LocalGeometry{(1, 2)}) =
-    AxisVector(Covariant3Axis(), components(u))
 
-LocalVector(u::CovariantVector{<:Any, (3,)}, ::LocalGeometry{(1, 2)}) =
-    AxisVector(WAxis(), components(u))
-LocalVector(u::ContravariantVector{<:Any, (3,)}, ::LocalGeometry{(1, 2)}) =
-    AxisVector(WAxis(), components(u))
+###############################################################################
+## Scalar constructor for 1D vectors (e.g. WVector(1.0, lg))
+###############################################################################
 
+# 1D vector types can be constructed from a scalar + LocalGeometry.
+# The LocalGeometry is ignored — the scalar is wrapped directly.
+for I in [(1,), (2,), (3,)]
+    strI = string(I[1])
+    strUVW = string([:U, :V, :W][I[1]])
+    for sym in [Symbol(:Covariant, strI, :Vector),
+        Symbol(:Contravariant, strI, :Vector),
+        Symbol(strUVW, :Vector)]
+        @eval @inline $sym(a::Real, ::LocalGeometry) = $sym(a)
+    end
+end
 
-@inline covariant1(u::AxisVector, local_geometry::LocalGeometry) =
-    CovariantVector(u, local_geometry).u₁
-@inline covariant2(u::AxisVector, local_geometry::LocalGeometry) =
-    CovariantVector(u, local_geometry).u₂
-@inline covariant3(u::AxisVector, local_geometry::LocalGeometry) =
-    CovariantVector(u, local_geometry).u₃
+###############################################################################
+## Callable type constructors (e.g. Contravariant1Vector(u, lg))
+###############################################################################
 
-@inline contravariant1(u::AxisVector, local_geometry::LocalGeometry) =
-    @inbounds project(Contravariant1Axis(), u, local_geometry)[1]
-@inline contravariant2(u::AxisVector, local_geometry::LocalGeometry) =
-    @inbounds project(Contravariant2Axis(), u, local_geometry)[1]
-@inline contravariant3(u::AxisVector, local_geometry::LocalGeometry) =
-    @inbounds project(Contravariant3Axis(), u, local_geometry)[1]
+for (BT, VecType, fn) in (
+    (Covariant, :CovariantVector, :CovariantVector),
+    (Contravariant, :ContravariantVector, :ContravariantVector),
+    (Orthonormal, :LocalVector, :LocalVector),
+)
+    # General: convert to full basis type, then project to requested dimensions
+    @eval @inline (::Type{<:$VecType{<:Any, I}})(
+        u::AbstractTensor{1}, lg::LocalGeometry,
+    ) where {I} = project(Basis{$BT, I}(), $fn(u, lg))
 
-@inline contravariant1(u::Axis2Tensor, local_geometry::LocalGeometry) =
-    @inbounds project(Contravariant1Axis(), u, local_geometry)[1, :]
-@inline contravariant2(u::Axis2Tensor, local_geometry::LocalGeometry) =
-    @inbounds project(Contravariant2Axis(), u, local_geometry)[1, :]
-@inline contravariant3(u::Axis2Tensor, local_geometry::LocalGeometry) =
-    @inbounds project(Contravariant3Axis(), u, local_geometry)[1, :]
+    # Identity: already in the right basis type and dimension
+    @eval @inline (::Type{<:$VecType{<:Any, I}})(
+        u::$VecType{<:Any, I}, ::LocalGeometry{I},
+    ) where {I} = u
+end
 
-@inline Jcontravariant3(u::AxisTensor, local_geometry::LocalGeometry) =
-    local_geometry.J * contravariant3(u, local_geometry)
+###############################################################################
+## Scalar component extractors
+###############################################################################
 
-# Extracting the element from a single element mat-vec multiply
-# results in a non-fused FMA with CUDA, so we specialize these cases
-# to use scalar operations, resulting in fused FMA. Yields up to 25%
-# speedup for metric term FD operators.
-@inline Jcontravariant3(u::Covariant3Vector, local_geometry::LocalGeometry{(3,)}) =
-    @inbounds local_geometry.J * local_geometry.gⁱʲ[1, 1] * u[1]
+for (n, cov_sym, con_sym) in ((1, :u₁, :u¹), (2, :u₂, :u²), (3, :u₃, :u³))
+    @eval @inline $(Symbol(:covariant, n))(u::AbstractTensor{1}, lg::LocalGeometry) =
+        CovariantVector(u, lg).$cov_sym
+    @eval @inline $(Symbol(:contravariant, n))(u::AbstractTensor{1}, lg::LocalGeometry) =
+        project($(Symbol(:Contravariant, n, :Axis))(), u, lg)[1]
+    @eval @inline $(Symbol(:contravariant, n))(u::Tensor{2}, lg::LocalGeometry) =
+        project($(Symbol(:Contravariant, n, :Axis))(), u, lg)[1, :]
+end
 
-@inline Jcontravariant3(u::WVector, local_geometry::LocalGeometry{(3,)}) =
-    @inbounds local_geometry.J * local_geometry.∂ξ∂x[1, 1] * u[1]
+@inline Jcontravariant3(u::AbstractTensor, lg::LocalGeometry) =
+    lg.J * contravariant3(u, lg)
 
-@inline Jcontravariant3(u::Covariant3Vector, local_geometry::LocalGeometry{(1, 2, 3)}) =
-    @inbounds local_geometry.J * local_geometry.gⁱʲ[3, 3] * u[1]
-
-@inline Jcontravariant3(u::WVector, local_geometry::LocalGeometry{(1, 2, 3)}) =
-    @inbounds local_geometry.J * local_geometry.∂ξ∂x[3, 3] * u[1]
-
+# Specialized scalar FMA-friendly versions (avoids extra mat-vec allocation on CUDA)
+for (geom_I, mat_idx) in (((3,), 1), ((1, 2, 3), 3))
+    @eval @inline Jcontravariant3(u::Covariant3Vector, lg::LocalGeometry{$geom_I}) =
+        @inbounds lg.J * lg.gⁱʲ[$mat_idx, $mat_idx] * parent(u)[1]
+    @eval @inline Jcontravariant3(u::WVector, lg::LocalGeometry{$geom_I}) =
+        @inbounds lg.J * lg.∂ξ∂x[$mat_idx, $mat_idx] * parent(u)[1]
+end
 
 # required for curl-curl
-@inline covariant3(u::Contravariant3Vector, local_geometry::LocalGeometry{(1, 2)}) =
-    contravariant3(u, local_geometry)
+@inline covariant3(u::Contravariant3Vector, lg::LocalGeometry{(1, 2)}) =
+    contravariant3(u, lg)
 
-# workarounds for using a Covariant12Vector/Covariant123Vector in a UW space:
+###############################################################################
+## Special workarounds for mixed-dimension geometries
+###############################################################################
+
+# Covariant123Vector in a UW (1,3) geometry: treat v (index 2) as orthonormal
 function LocalVector(
     vector::CovariantVector{<:Any, (1, 2, 3)},
-    local_geometry::LocalGeometry{(1, 3)},
+    lg::LocalGeometry{(1, 3)},
 )
-    u₁, v, u₃ = components(vector)
+    u₁, v, u₃ = parent(vector)
     vector2 = Covariant13Vector(u₁, u₃)
-    u, w = components(project(LocalAxis{(1, 3)}(), vector2, local_geometry))
+    u, w = parent(project(Basis{Orthonormal, (1, 3)}(), vector2, lg))
     return UVWVector(u, v, w)
 end
+
 function contravariant1(
     vector::CovariantVector{<:Any, (1, 2, 3)},
-    local_geometry::LocalGeometry{(1, 3)},
+    lg::LocalGeometry{(1, 3)},
 )
-    u₁, _, u₃ = components(vector)
-    vector2 = Covariant13Vector(u₁, u₃)
-    return project(Contravariant13Axis(), vector2, local_geometry).u¹
+    pv = parent(vector)
+    vector2 = Covariant13Vector(pv[1], pv[3])
+    return project(Contravariant13Axis(), vector2, lg).u¹
 end
+
 function contravariant3(
     vector::CovariantVector{<:Any, (1, 2)},
-    local_geometry::LocalGeometry{(1, 3)},
+    lg::LocalGeometry{(1, 3)},
 )
-    u₁, _ = components(vector)
+    u₁ = parent(vector)[1]
     vector2 = Covariant13Vector(u₁, zero(u₁))
-    return project(Contravariant13Axis(), vector2, local_geometry).u³
+    return project(Contravariant13Axis(), vector2, lg).u³
 end
+
 function ContravariantVector(
     vector::CovariantVector{<:Any, (1, 2)},
-    local_geometry::LocalGeometry{(1, 3)},
+    lg::LocalGeometry{(1, 3)},
 )
-    u₁, v = components(vector)
+    u₁, v = parent(vector)
     vector2 = Covariant1Vector(u₁)
-    vector3 = project(
-        ContravariantAxis{(1, 3)}(),
-        project(CovariantAxis{(1, 3)}(), vector2),
-        local_geometry,
-    )
-    u¹, u³ = components(vector3)
+    vector3 = project(Contravariant13Axis(), project(Covariant13Axis(), vector2), lg)
+    u¹, u³ = parent(vector3)
     return Contravariant123Vector(u¹, v, u³)
 end
 
-"""
-    transform(axis, V[, local_geometry])
-
-Transform the first axis of the vector or tensor `V` to `axis`. This will throw
-an error if the conversion is not exact.
-
-The conversion rules are defined as:
-
-- `v::Covariant` => `Local`:     `∂ξ∂x' * v`
-- `v::Local` => `Contravariant`: `∂ξ∂x  * v`
-- `v::Contravariant` => `Local`: `∂x∂ξ  * v`
-- `v::Local` => `Covariant`:     `∂x∂ξ' * v`
-- `v::Covariant` => `Contravariant`:  `∂ξ∂x * (∂ξ∂x' * v) = gⁱʲ * v`
-- `v::Contravariant` => `Covariant`:  `∂x∂ξ' * ∂x∂ξ * v   = gᵢⱼ * v`
-
-# Example
-Consider the conversion from a  `Covariant12Vector` to a `Contravariant12Axis`.
-Mathematically, we can write this as
-
-```
-[ v¹ ]   [g¹¹  g¹²  g¹³ ]   [ v₁ ]
-[ v² ] = [g²¹  g²²  g²³ ] * [ v₂ ]
-[ v³ ]   [g³¹  g³²  g³³ ]   [ 0  ]
-```
-
-`project` will drop v³ term no matter what the value is, i.e. it returns
-
-```
-[ v¹ ]   [g¹¹ v₁  + g¹² v₂ ]
-[ v² ] = [g²¹ v₁  + g²² v₂ ]
-[ 0  ]   [<drops this>]
-```
-
-`transform` will drop the v³ term, but throw an error if it is non-zero (i.e. if
-the conversion is not exact)
-
-```
-[ v¹ ]   [g¹¹ v₁  + g¹² v₂ ]
-[ v² ] = [g²¹ v₁  + g²² v₂ ]
-[ 0  ]   [<asserts g²³ v₁  + g²³ v₂ == 0>]
-```
-
-"""
-function transform end
-
-"""
-    project(axis, V[, local_geometry])
-
-Project the first axis component of the vector or tensor `V` to `axis`
-
-This is equivalent to [`transform`](@ref), but will not throw an error if the
-conversion is not exact.
-"""
-function project end
-
-for op in (:transform, :project)
-    @eval begin
-        # Covariant <-> Cartesian
-        $op(ax::CartesianAxis, v::CovariantTensor, local_geometry::LocalGeometry) =
-            $op(ax, local_geometry.∂ξ∂x' * $op(dual(axes(local_geometry.∂ξ∂x, 1)), v))
-        $op(ax::CovariantAxis, v::CartesianTensor, local_geometry::LocalGeometry) =
-            $op(ax, local_geometry.∂x∂ξ' * $op(dual(axes(local_geometry.∂x∂ξ, 1)), v))
-        $op(ax::LocalAxis, v::CovariantTensor, local_geometry::LocalGeometry) =
-            $op(ax, local_geometry.∂ξ∂x' * $op(dual(axes(local_geometry.∂ξ∂x, 1)), v))
-        $op(ax::CovariantAxis, v::LocalTensor, local_geometry::LocalGeometry) =
-            $op(ax, local_geometry.∂x∂ξ' * $op(dual(axes(local_geometry.∂x∂ξ, 1)), v))
-
-        # Contravariant <-> Cartesian
-        $op(ax::ContravariantAxis, v::CartesianTensor, local_geometry::LocalGeometry) =
-            $op(ax, local_geometry.∂ξ∂x * $op(dual(axes(local_geometry.∂ξ∂x, 2)), v))
-        $op(ax::CartesianAxis, v::ContravariantTensor, local_geometry::LocalGeometry) =
-            $op(ax, local_geometry.∂x∂ξ * $op(dual(axes(local_geometry.∂x∂ξ, 2)), v))
-        $op(ax::ContravariantAxis, v::LocalTensor, local_geometry::LocalGeometry) =
-            $op(ax, local_geometry.∂ξ∂x * $op(dual(axes(local_geometry.∂ξ∂x, 2)), v))
-
-        $op(ax::LocalAxis, v::ContravariantTensor, local_geometry::LocalGeometry) =
-            $op(ax, local_geometry.∂x∂ξ * $op(dual(axes(local_geometry.∂x∂ξ, 2)), v))
-
-        # Covariant <-> Contravariant
-        #=
-        $op(ax::ContravariantAxis, v::CovariantTensor, local_geometry::LocalGeometry) = 
-            $op(ax,
-                local_geometry.∂ξ∂x * local_geometry.∂ξ∂x' *
-                $op(dual(axes(local_geometry.∂ξ∂x, 1)), v),
-            )
-        =#
-        $op(
-            ax::CovariantAxis, v::ContravariantTensor, local_geometry::LocalGeometry{I},
-        ) where {I} =
-            $op(ax, local_geometry.gᵢⱼ * $op(ContravariantAxis{I}(), v))
-
-        $op(ato::CovariantAxis, v::CovariantTensor, ::LocalGeometry) = $op(ato, v)
-        $op(ato::ContravariantAxis, v::ContravariantTensor, ::LocalGeometry) = $op(ato, v)
-        $op(ato::CartesianAxis, v::CartesianTensor, ::LocalGeometry) = $op(ato, v)
-        $op(ato::LocalAxis, v::LocalTensor, ::LocalGeometry) = $op(ato, v)
-    end
-end
-
-transform(
-    ax::ContravariantAxis, v::CovariantTensor, local_geometry::LocalGeometry{I},
-) where {I} = project(ax, local_geometry.gⁱʲ * project(CovariantAxis{I}(), v))
-
-@generated function project(
-    ax::ContravariantAxis{Ito}, v::CovariantVector{T, Ifrom},
-    local_geometry::LocalGeometry{J},
-) where {T, Ito, Ifrom, J}
-    Nfrom = length(Ifrom)
-    Nto = length(Ito)
-    NJ = length(J)
-
-    vals = []
-    for i in Ito
-        if i ∈ J
-            # e.g. i = 2, J = (1,2,3)
-            IJ = intersect(J, Ifrom)
-            if isempty(IJ)
-                val = 0
-            else
-                niJ = findfirst(==(i), J)
-                val = Expr(:call, :+,
-                    [
-                        :(
-                            local_geometry.gⁱʲ[$niJ, $(findfirst(==(j), J))] *
-                            v[$(findfirst(==(j), Ifrom))]
-                        ) for j in IJ
-                    ]...,
-                )
-            end
-        elseif i ∈ Ifrom
-            # e.g. i = 2, J = (1,3), Ifrom = (2,)
-            ni = findfirst(==(i), Ifrom)
-            val = :(v[$ni])
-        else
-            # e.g. i = 2, J = (1,3), Ifrom = (1,)
-            val = 0
-        end
-        push!(vals, val)
-    end
-    quote
-        Base.@_propagate_inbounds_meta
-        AxisVector(ContravariantAxis{$Ito}(), SVector{$Nto, $T}($(vals...)))
-    end
-end
-@generated function project(
-    ax::ContravariantAxis{Ito},
-    v::Contravariant2Tensor{T, Tuple{CovariantAxis{Ifrom}, A}},
-    local_geometry::LocalGeometry{J},
-) where {T, Ito, Ifrom, A, J}
-    Nfrom = length(Ifrom)
-    Nto = length(Ito)
-    NJ = length(J)
-    NA = length(A.instance)
-
-    vals = []
-    for na in 1:NA
-        for i in Ito
-            if i ∈ J
-                # e.g. i = 2, J = (1,2,3)
-                IJ = intersect(J, Ifrom)
-                if isempty(IJ)
-                    val = 0
-                else
-                    niJ = findfirst(==(i), J)
-                    val = Expr(
-                        :call,
-                        :+,
-                        [
-                            :(
-                                local_geometry.gⁱʲ[
-                                    $niJ,
-                                    $(findfirst(==(j), J)),
-                                ] * v[$(findfirst(==(j), Ifrom)), $na]
-                            ) for j in IJ
-                        ]...,
-                    )
-                end
-            elseif i ∈ Ifrom
-                # e.g. i = 2, J = (1,3), Ifrom = (2,)
-                ni = findfirst(==(i), Ifrom)
-                val = :(v[$ni, $na])
-            else
-                # e.g. i = 2, J = (1,3), Ifrom = (1,)
-                val = 0
-            end
-            push!(vals, val)
-        end
-    end
-    quote
-        Base.@_propagate_inbounds_meta
-        AxisTensor(
-            (ContravariantAxis{$Ito}(), A.instance),
-            SMatrix{$Nto, $NA, $T, $(Nto * NA)}($(vals...)),
-        )
-    end
-end
-
-# A few other expensive ones:
-#! format: off
-function project(
-    ax::ContravariantAxis{(1,)},
-    v::AxisTensor{FT,2,Tuple{LocalAxis{(1, 2)},LocalAxis{(1, 2)}},SMatrix{2,2,FT,4}},
-    lg::FullLocalGeometry{(1, 2, 3),XYZPoint{FT},FT,SMatrix{3,3,FT,9}}
-) where {FT}
-    AxisTensor(
-        (ContravariantAxis{(1,)}(), LocalAxis{(1, 2)}()),
-        @inbounds @SMatrix [
-            lg.∂ξ∂x[1, 1]*v[1, 1]+lg.∂ξ∂x[1, 2]*v[2, 1] lg.∂ξ∂x[1, 1]*v[1, 2]+lg.∂ξ∂x[1, 2]*v[2, 2]
-        ])
-end
-function project(
-    ax::ContravariantAxis{(2,)},
-    v::AxisTensor{FT,2,Tuple{LocalAxis{(1,2)},LocalAxis{(1,2)}},SMatrix{2,2,FT,4}},
-    lg::FullLocalGeometry{(1,2,3),XYZPoint{FT},FT,SMatrix{3,3,FT,9}}
-) where {FT}
-    AxisTensor(
-        (ContravariantAxis{(2,)}(), LocalAxis{(1, 2)}()),
-        @inbounds @SMatrix [
-            lg.∂ξ∂x[2, 1]*v[1, 1]+lg.∂ξ∂x[2, 2]*v[2, 1] lg.∂ξ∂x[2, 1]*v[1, 2]+lg.∂ξ∂x[2, 2]*v[2, 2]
-        ]
-    )
-end
-function project(
-    ax::ContravariantAxis{(3,)},
-    v::AxisTensor{FT,2,Tuple{LocalAxis{(3,)},LocalAxis{(1,2)}},SMatrix{1,2,FT,2}},
-    lg::FullLocalGeometry{(1,2,3),XYZPoint{FT},FT,SMatrix{3,3,FT,9}}
-) where {FT}
-    AxisTensor(
-        (ContravariantAxis{(3,)}(), LocalAxis{(1, 2)}()),
-        @inbounds @SMatrix [lg.∂ξ∂x[3, 3]*v[1, 1] lg.∂ξ∂x[3, 3]*v[1, 2]]
-    )
-end
-#! format: on
-
+###############################################################################
+## Operator result types
+###############################################################################
 
 """
     divergence_result_type(V)
 
-The return type when taking the divergence of a field of `V`.
-
-Required for statically infering the result type of the divergence operation for `AxisVector` subtypes.
+Return type when taking the divergence of a field of `V`.
 """
-@inline divergence_result_type(::Type{V}) where {V <: AxisVector} = eltype(V)
-
-# this isn't quite right: it only is true when the Christoffel symbols are zero
+@inline divergence_result_type(::Type{V}) where {V <: AbstractTensor{1}} = eltype(V)
 @inline divergence_result_type(
-    ::Type{Axis2Tensor{FT, Tuple{A1, A2}, S}},
-) where {FT, A1, A2 <: AbstractAxis, S <: StaticMatrix{S1, S2}} where {S1, S2} =
-    AxisVector{FT, A2, SVector{S2, FT}}
+    ::Type{Tensor{2, FT, Tuple{A1, A2}, S}},
+) where {FT, A1, A2 <: AbstractBasis, S <: StaticMatrix{S1, S2}} where {S1, S2} =
+    Tensor{1, FT, Tuple{A2}, SVector{S2, FT}}
 
 """
     gradient_result_type(Val(I), V)
 
-The return type when taking the gradient along dimension `I` of a field `V`.
-
-Required for statically infering the result type of the gradient operation for `AxisVector` subtypes.
-    """
+Return type when taking the gradient along dimension `I` of a field of type `V`.
+"""
 @inline function gradient_result_type(::Val{I}, ::Type{V}) where {I, V <: Number}
     N = length(I)
-    AxisVector{V, CovariantAxis{I}, SVector{N, V}}
+    CovariantVector{V, I, SVector{N, V}}
 end
 @inline function gradient_result_type(
-    ::Val{I}, ::Type{V},
-) where {I, V <: Geometry.AxisVector{T, A, SVector{N, T}}} where {T, A, N}
+    ::Val{I},
+    ::Type{Tensor{1, T, Tuple{A}, SVector{N, T}}},
+) where {I, T, A, N}
     M = length(I)
-    Axis2Tensor{T, Tuple{CovariantAxis{I}, A}, SMatrix{M, N, T, M * N}}
+    Tensor{2, T, Tuple{Basis{Covariant, I}, A}, SMatrix{M, N, T, M * N}}
 end
 
 """
     curl_result_type(Val(I), Val(L), V)
 
-The return type when taking the curl along dimensions `I` of a field of eltype `V`, defined on dimensions `L`
-
-Required for statically infering the result type of the curl operation for `AxisVector` subtypes.
-Curl is only defined for `CovariantVector`` field input types.
-
-| Input Vector | Operator direction | Curl output vector |
-| ------------ | ------------------ | -------------- |
-|  Covariant12Vector | (1,2) | Contravariant3Vector |
-|  Covariant3Vector | (1,2) | Contravariant12Vector |
-|  Covariant123Vector | (1,2) | Contravariant123Vector |
-|  Covariant1Vector | (1,) | ContravariantNullVector |
-|  Covariant2Vector | (1,) | Contravariant3Vector |
-|  Covariant3Vector | (1,) | Contravariant2Vector |
-|  Covariant13Vector | (1,) | Contravariant2Vector |
-|  Covariant123Vector | (1,) | Contravariant23Vector |
-|  Covariant12Vector | (3,) | Contravariant12Vector |
-|  Covariant1Vector | (3,) | Contravariant2Vector |
-|  Covariant2Vector | (3,) | Contravariant1Vector |
-|  Covariant3Vector | (3,) | Contravariant3Vector |
-|  Any CovariantVector | () | ContravariantNullVector |
+Return type when taking the curl along dimensions `I` of a field of type `V`.
 """
 @inline curl_result_type(::Val{(1, 2)}, ::Type{Covariant3Vector{FT}}) where {FT} =
     Contravariant12Vector{FT}
@@ -542,60 +405,83 @@ Curl is only defined for `CovariantVector`` field input types.
 @inline curl_result_type(_, ::Type{<:CovariantVector{FT}}) where {FT} =
     ContravariantNullVector{FT}
 
-_norm_sqr(x, local_geometry::LocalGeometry) = sum(x -> _norm_sqr(x, local_geometry), x)
-_norm_sqr(x::Number, ::LocalGeometry) = LinearAlgebra.norm_sqr(x)
-_norm_sqr(x::AbstractArray, ::LocalGeometry) = LinearAlgebra.norm_sqr(x)
+###############################################################################
+## Norm and cross-product (used in broadcast.jl)
+##
+## These are metric-aware versions of norm and cross that take a LocalGeometry.
+## broadcast.jl routes `norm(field)` and `cross(field1, field2)` here so that
+## the correct geometric magnitude is computed regardless of what basis the
+## vectors are stored in. Unlike LinearAlgebra.norm / LinearAlgebra.cross, these
+## convert to the local Orthonormal frame (or Contravariant for cross) first.
+###############################################################################
 
-function _norm_sqr(uᵢ::CovariantVector, local_geometry::LocalGeometry)
-    LinearAlgebra.norm_sqr(LocalVector(uᵢ, local_geometry))
+_norm_sqr(x, lg::LocalGeometry) = sum(x -> _norm_sqr(x, lg), x)
+_norm_sqr(x::Number, ::LocalGeometry) = norm_sqr(x)
+_norm_sqr(x::AbstractArray, ::LocalGeometry) = norm_sqr(x)
+
+function _norm_sqr(uᵢ::Union{CovariantVector, ContravariantVector}, lg::LocalGeometry)
+    norm_sqr(parent(LocalVector(uᵢ, lg)))
+end
+function _norm_sqr(uᵢ::OrthonormalTensor, ::LocalGeometry)
+    norm_sqr(parent(uᵢ))
 end
 
-function _norm_sqr(uᵢ::ContravariantVector, local_geometry::LocalGeometry)
-    LinearAlgebra.norm_sqr(LocalVector(uᵢ, local_geometry))
+# Specialized for common 1D cases to avoid unnecessary matrix operations
+_norm_sqr(u::Contravariant2Vector, ::LocalGeometry{(1,)}) = norm_sqr(u.u²)
+_norm_sqr(u::Contravariant2Vector, ::LocalGeometry{(3,)}) = norm_sqr(u.u²)
+_norm_sqr(u::Contravariant2Vector, ::LocalGeometry{(1, 3)}) = norm_sqr(u.u²)
+_norm_sqr(u::Contravariant3Vector, ::LocalGeometry{(1,)}) = norm_sqr(u.u³)
+_norm_sqr(u::Contravariant3Vector, ::LocalGeometry{(1, 2)}) = norm_sqr(u.u³)
+
+function _norm_sqr(
+    u::Tensor{2, T, <:Tuple{Basis{Orthonormal, <:Any}, Basis{Orthonormal, <:Any}}},
+    ::LocalGeometry,
+) where {T}
+    norm_sqr(parent(u))
 end
 
-_norm_sqr(u::Contravariant2Vector, ::LocalGeometry{(1,)}) = LinearAlgebra.norm_sqr(u.u²)
-_norm_sqr(u::Contravariant2Vector, ::LocalGeometry{(3,)}) = LinearAlgebra.norm_sqr(u.u²)
-_norm_sqr(u::Contravariant2Vector, ::LocalGeometry{(1, 3)}) = LinearAlgebra.norm_sqr(u.u²)
+_norm(u::AbstractTensor, lg::LocalGeometry) = sqrt(_norm_sqr(u, lg))
 
-_norm_sqr(u::Contravariant3Vector, ::LocalGeometry{(1,)}) = LinearAlgebra.norm_sqr(u.u³)
-_norm_sqr(u::Contravariant3Vector, ::LocalGeometry{(1, 2)}) = LinearAlgebra.norm_sqr(u.u³)
-
-
-_norm_sqr(
-    u::Axis2Tensor{T, A, S}, local_geometry::LocalGeometry,
-) where {T, A <: Tuple{LocalAxis, LocalAxis}, S} =
-    LinearAlgebra.norm_sqr(components(u))
-_norm_sqr(
-    u::Axis2Tensor{T, A, S}, local_geometry::LocalGeometry,
-) where {T, A <: Tuple{CartesianAxis, CartesianAxis}, S} =
-    LinearAlgebra.norm_sqr(components(u))
-
-_norm(u::AxisTensor, local_geometry::LocalGeometry) = sqrt(_norm_sqr(u, local_geometry))
-
-_cross(u::AxisVector, v::AxisVector, local_geometry::LocalGeometry) = _cross(
-    ContravariantVector(u, local_geometry), ContravariantVector(v, local_geometry),
-    local_geometry,
+function _cross(
+    u::AbstractTensor{1}, v::AbstractTensor{1}, lg::LocalGeometry,
 )
+    _cross(ContravariantVector(u, lg), ContravariantVector(v, lg), lg)
+end
 
-_cross(x::ContravariantVector, y::ContravariantVector, local_geometry::LocalGeometry) =
-    local_geometry.J * Covariant123Vector(
+function _cross(
+    x::ContravariantVector, y::ContravariantVector, lg::LocalGeometry,
+)
+    lg.J * Covariant123Vector(
         x.u² * y.u³ - x.u³ * y.u²,
         x.u³ * y.u¹ - x.u¹ * y.u³,
         x.u¹ * y.u² - x.u² * y.u¹,
     )
-_cross(x::Contravariant12Vector, y::Contravariant12Vector, local_geometry::LocalGeometry) =
-    local_geometry.J * Covariant3Vector(x.u¹ * y.u² - x.u² * y.u¹)
-_cross(x::Contravariant2Vector, y::Contravariant1Vector, local_geometry::LocalGeometry) =
-    local_geometry.J * Covariant3Vector(-x.u² * y.u¹)
-_cross(x::Contravariant12Vector, y::Contravariant3Vector, local_geometry::LocalGeometry) =
-    local_geometry.J * Covariant12Vector(x.u² * y.u³, -x.u¹ * y.u³)
-_cross(x::Contravariant3Vector, y::Contravariant12Vector, local_geometry::LocalGeometry) =
-    local_geometry.J * Covariant12Vector(-x.u³ * y.u², x.u³ * y.u¹)
+end
+function _cross(
+    x::Contravariant12Vector, y::Contravariant12Vector, lg::LocalGeometry,
+)
+    lg.J * Covariant3Vector(x.u¹ * y.u² - x.u² * y.u¹)
+end
+function _cross(
+    x::Contravariant2Vector, y::Contravariant1Vector, lg::LocalGeometry,
+)
+    lg.J * Covariant3Vector(-x.u² * y.u¹)
+end
+function _cross(
+    x::Contravariant12Vector, y::Contravariant3Vector, lg::LocalGeometry,
+)
+    lg.J * Covariant12Vector(x.u² * y.u³, -x.u¹ * y.u³)
+end
+function _cross(
+    x::Contravariant3Vector, y::Contravariant12Vector, lg::LocalGeometry,
+)
+    lg.J * Covariant12Vector(-x.u³ * y.u², x.u³ * y.u¹)
+end
+function _cross(
+    x::Contravariant2Vector, y::Contravariant3Vector, lg::LocalGeometry,
+)
+    lg.J * Covariant1Vector(x.u² * y.u³)
+end
 
-_cross(x::Contravariant2Vector, y::Contravariant3Vector, local_geometry::LocalGeometry) =
-    local_geometry.J * Covariant1Vector(x.u² * y.u³)
-
-
-_cross(u::CartesianVector, v::CartesianVector, ::LocalGeometry) = LinearAlgebra.cross(u, v)
-_cross(u::LocalVector, v::LocalVector, ::LocalGeometry) = LinearAlgebra.cross(u, v)
+_cross(u::OrthonormalTensor, v::OrthonormalTensor, ::LocalGeometry) =
+    cross(u, v)

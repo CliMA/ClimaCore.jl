@@ -9,20 +9,12 @@ abstract type AbstractGlobalGeometry end
 Cartesian123Point(pt::AbstractPoint, global_geometry::AbstractGlobalGeometry) =
     Cartesian123Point(CartesianPoint(pt, global_geometry))
 
-(::Type{<:CartesianVector{<:Any, I}})(
-    u::AxisVector,
-    global_geometry::AbstractGlobalGeometry,
-    local_geometry::LocalGeometry,
-) where {I} =
-    project(CartesianAxis{I}(), CartesianVector(u, global_geometry, local_geometry))
-
-
 """
     CartesianGlobalGeometry()
 
 Specifies that the local coordinates align with the Cartesian coordinates, e.g.
 `XYZPoint` aligns with `Cartesian123Point`, and `UVWVector` aligns with
-`Cartesian123Vector`.
+the Cartesian vector basis.
 """
 struct CartesianGlobalGeometry <: AbstractGlobalGeometry end
 
@@ -37,21 +29,6 @@ CartesianPoint(pt::XZPoint{FT}, ::CartesianGlobalGeometry) where {FT} =
     Cartesian13Point{FT}(pt.x, pt.z)
 CartesianPoint(pt::XYZPoint{FT}, ::CartesianGlobalGeometry) where {FT} =
     Cartesian123Point{FT}(pt.x, pt.y, pt.z)
-
-# vectors
-CartesianVector(u::CartesianVector, ::CartesianGlobalGeometry, ::LocalGeometry) = u
-function CartesianVector(
-    u::AxisVector, ::CartesianGlobalGeometry, local_geometry::LocalGeometry{I},
-) where {I}
-    u_local = LocalVector(u, local_geometry)
-    AxisVector(CartesianAxis{I}(), components(u_local))
-end
-
-
-#=
-LocalVector(u::CartesianVector{T,I}, ::CartesianGlobalGeometry) where {T,I} =
-    AxisVector(LocalAxis{I}(), components(u))
-=#
 
 abstract type AbstractSphericalGlobalGeometry <: AbstractGlobalGeometry end
 Base.broadcastable(x::AbstractSphericalGlobalGeometry) = tuple(x)
@@ -196,6 +173,7 @@ function great_circle_distance(
     )
 end
 
+
 """
     euclidean_distance(pt1::XYPoint, pt2::XYPoint)
 
@@ -208,13 +186,6 @@ function euclidean_distance(
     return hypot((components(pt1) .- components(pt2))...)
 end
 
-# vectors
-CartesianVector(u::CartesianVector, ::AbstractSphericalGlobalGeometry, ::LocalGeometry) = u
-CartesianVector(
-    u::AxisVector, global_geometry::SphericalGlobalGeometry, local_geometry::LocalGeometry,
-) = CartesianVector(
-    UVWVector(u, local_geometry), global_geometry, local_geometry.coordinates,
-)
 function local_to_cartesian(
     ::AbstractSphericalGlobalGeometry, coord::Union{LatLongPoint, LatLongZPoint},
 )
@@ -229,25 +200,7 @@ function local_to_cartesian(
         cosλ -sinλ*sinϕ sinλ*cosϕ
         0 cosϕ sinϕ
     ]
-    AxisTensor((Cartesian123Axis(), UVWAxis()), G)
-end
-
-
-function CartesianVector(
-    u::UVWVector,
-    geom::AbstractSphericalGlobalGeometry,
-    coord::Union{LatLongPoint, LatLongZPoint},
-)
-    G = local_to_cartesian(geom, coord)
-    G * u
-end
-function LocalVector(
-    u::Cartesian123Vector,
-    geom::AbstractSphericalGlobalGeometry,
-    coord::Union{LatLongPoint, LatLongZPoint},
-)
-    G = local_to_cartesian(geom, coord)
-    G' * u
+    Tensor(G, (UVWAxis(), UVWAxis()))
 end
 
 function product_geometry(

@@ -25,7 +25,7 @@ UnitTest("DataLayouts 2dx"                         ,"DataLayouts/data2dx.jl"),
 UnitTest("DataLayouts mapreduce"                   ,"DataLayouts/unit_mapreduce.jl"),
 UnitTest("Geometry"                                ,"Geometry/geometry.jl"),
 UnitTest("rmul_with_projection"                    ,"Geometry/rmul_with_projection.jl"),
-UnitTest("AxisTensors"                             ,"Geometry/axistensors.jl"),
+UnitTest("Tensors"                             ,"Geometry/tensors.jl"),
 UnitTest("Interval mesh"                           ,"Meshes/interval.jl"),
 UnitTest("Rectangle mesh"                          ,"Meshes/rectangle.jl"),
 UnitTest("Cubedsphere mesh"                        ,"Meshes/cubedsphere.jl"),
@@ -43,7 +43,7 @@ UnitTest("dss"                                     ,"Spaces/unit_dss.jl"),
 UnitTest("Spaces - serial CPU DSS"                 ,"Spaces/ddss1.jl"),
 UnitTest("Spaces - DSS cubed sphere"               ,"Spaces/ddss1_cs.jl"),
 UnitTest("Sphere spaces"                           ,"Spaces/sphere.jl"),
-# UnitTest("Terrain warp"                            ,"Spaces/terrain_warp.jl"), # appears to hang on GHA
+UnitTest("Terrain warp"                            ,"Spaces/terrain_warp.jl"), # appears to hang on GHA
 UnitTest("Fields"                                  ,"Fields/unit_field.jl"), # has benchmarks
 UnitTest("Reinstantiate broadcasted"               ,"Operators/unit_reinstantiate_bc.jl"),
 UnitTest("Placeholder Fields"                      ,"Operators/unit_common.jl"),

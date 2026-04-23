@@ -181,6 +181,12 @@ Base.@propagate_inbounds function resolve_shmem!(obj, ij, slabidx)
     nothing
 end
 
+# Extract the first basis of a Tensor type statically from its type parameter,
+# avoiding a runtime `axes(::Type)` call
+@inline _tensor_row_axis(
+    ::Type{<:Geometry.Tensor{N, T, B, C}},
+) where {N, T, B, C} = B.instance[1]
+
 Base.@propagate_inbounds function operator_evaluate(
     op::Divergence{(1,)},
     (Jv¹,),
@@ -370,10 +376,10 @@ Base.@propagate_inbounds function operator_evaluate(
     end
     if eltype(input) <: Number
         return Geometry.Covariant1Vector(∂f∂ξ₁)
-    elseif eltype(input) <: Geometry.AxisVector
-        tensor_axes = (Geometry.Covariant1Axis(), axes(eltype(input))[1])
-        tensor_components = hcat(Geometry.components(∂f∂ξ₁))'
-        return Geometry.AxisTensor(tensor_axes, tensor_components)
+    elseif eltype(input) <: Geometry.AbstractTensor{1}
+        tensor_axes = (Geometry.Covariant1Axis(), _tensor_row_axis(eltype(input)))
+        tensor_components = hcat(parent(∂f∂ξ₁))'
+        return Geometry.Tensor(tensor_components, tensor_axes)
     else
         error("Unsupported input type for gradient operator: $(eltype(input))")
     end
@@ -403,11 +409,11 @@ Base.@propagate_inbounds function operator_evaluate(
     end
     if eltype(input) <: Number
         return Geometry.Covariant12Vector(∂f∂ξ₁, ∂f∂ξ₂)
-    elseif eltype(input) <: Geometry.AxisVector
-        tensor_axes = (Geometry.Covariant12Axis(), axes(eltype(input))[1])
+    elseif eltype(input) <: Geometry.AbstractTensor{1}
+        tensor_axes = (Geometry.Covariant12Axis(), _tensor_row_axis(eltype(input)))
         tensor_components =
-            hcat(Geometry.components(∂f∂ξ₁), Geometry.components(∂f∂ξ₂))'
-        return Geometry.AxisTensor(tensor_axes, tensor_components)
+            hcat(parent(∂f∂ξ₁), parent(∂f∂ξ₂))'
+        return Geometry.Tensor(tensor_components, tensor_axes)
     else
         error("Unsupported input type for gradient operator: $(eltype(input))")
     end

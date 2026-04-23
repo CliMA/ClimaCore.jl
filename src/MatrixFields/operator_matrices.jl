@@ -339,16 +339,23 @@ const UpperBidiagonalSquareMatrixRow = BandMatrixRow{0, 2}  #  0, 1
 
 const C3{T} = Geometry.Covariant3Vector{T}
 const CT3{T} = Geometry.Contravariant3Vector{T}
-const CT12_CT12{T} = Geometry.Axis2Tensor{
+# Covector (row-vector) type for C3: result of adjoint(C3{T}(x))
+const C3Cov{T} = Geometry.Tensor{
+    2, T,
+    Tuple{Geometry.ScalarBasis, Geometry.Basis{Geometry.Covariant, (3,)}},
+    Adjoint{T, SVector{1, T}},
+}
+const CT12_CT12{T} = Geometry.Tensor{
+    2,
     T,
     Tuple{Geometry.Contravariant12Axis, Geometry.Contravariant12Axis},
     SMatrix{2, 2, T, 4},
 }
 
 # Levi-Civita symbol in 2D
-const εⁱʲ = Geometry.AxisTensor(
-    (Geometry.Contravariant12Axis(), Geometry.Contravariant12Axis()),
+const εⁱʲ = Geometry.Tensor(
     SMatrix{2, 2}(0, 1, -1, 0),
+    (Geometry.Contravariant12Axis(), Geometry.Contravariant12Axis()),
 )
 
 Base.@propagate_inbounds ct3_data(velocity, space, idx, hidx) =
@@ -767,8 +774,8 @@ op_matrix_last_row(
 ) where {FT} = LowerTridiagonalMatrixRow(-C3(FT(1)), C3(FT(1)), C3(FT(0)))
 
 op_matrix_row_type(op::Operators.DivergenceOperator, ::Type{FT}) where {FT} =
-    uses_extrapolate(op) ? QuaddiagonalMatrixRow{Adjoint{FT, C3{FT}}} :
-    BidiagonalMatrixRow{Adjoint{FT, C3{FT}}}
+    uses_extrapolate(op) ? QuaddiagonalMatrixRow{C3Cov{FT}} :
+    BidiagonalMatrixRow{C3Cov{FT}}
 Base.@propagate_inbounds function op_matrix_interior_row(
     ::Operators.DivergenceOperator,
     space,
