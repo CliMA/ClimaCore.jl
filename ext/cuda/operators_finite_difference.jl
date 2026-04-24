@@ -25,6 +25,31 @@ struct ShmemParams{Nv} end
 interior_size(::ShmemParams{Nv}) where {Nv} = (Nv,)
 boundary_size(::ShmemParams{Nv}) where {Nv} = (1,)
 
+struct ShmemIndex{T}
+    v::T
+    col_id::T
+end
+@inline function FDShmemIndex()
+    v = threadIdx().x
+    return ShmemIndex(v, typeof(v)(1))
+end
+@inline function FDShmemIndex(v)
+    return ShmemIndex(v, typeof(v)(1))
+end
+@inline FDShmemBoundaryIndex() = ShmemIndex(1, 1)
+
+# Base.getindex(a::AbstractArray, si::ShmemIndex) = Base.getindex(a, si.v, si.col_id)
+# Base.setindex!(a::AbstractArray, val, si::ShmemIndex) = Base.setindex!(a, val, si.v, si.col_id)
+Base.@propagate_inbounds Base.getindex(a::AbstractArray, si::ShmemIndex) =
+    Base.getindex(a, si.v)
+Base.@propagate_inbounds Base.setindex!(a::AbstractArray, val, si::ShmemIndex) =
+    Base.setindex!(a, val, si.v)
+
+@inline Base.:+(si::ShmemIndex{T}, i::Integer) where {T} =
+    ShmemIndex{T}(si.v + T(i), si.col_id)
+@inline Base.:-(si::ShmemIndex{T}, i::Integer) where {T} =
+    ShmemIndex{T}(si.v - T(i), si.col_id)
+
 function Base.copyto!(
     out::Field,
     bc::Union{
