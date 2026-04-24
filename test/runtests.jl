@@ -116,6 +116,7 @@ UnitTest("Vertical interpolation"                  ,"Remapping/interpolate_press
 UnitTest("Aqua"                                    ,"aqua.jl"),
 UnitTest("Deprecations"                            ,"deprecations.jl"),
 UnitTest("GPU - cuda"                              ,"gpu/cuda.jl";meta=:gpu_only),
+UnitTest("GPU - compiler stress regression"        ,"gpu/compiler_stress_regression.jl";meta=:gpu_only),
 UnitTest("GPU - data"                              ,"DataLayouts/cuda.jl";meta=:gpu_only),
 UnitTest("Operators - spectral element CUDA"       ,"Operators/spectralelement/rectilinear_cuda.jl";meta=:gpu_only),
 UnitTest("Operators - finite difference CUDA"      ,"Operators/hybrid/unit_cuda.jl";meta=:gpu_only),

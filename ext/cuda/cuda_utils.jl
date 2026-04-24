@@ -5,9 +5,20 @@ import ClimaCore.DataLayouts: empty_kernel_stats
 
 const reported_stats = Dict()
 const kernel_names = IdDict()
+
 # Call via ClimaCore.DataLayouts.empty_kernel_stats()
 empty_kernel_stats(::ClimaComms.CUDADevice) = empty!(reported_stats)
 collect_kernel_stats() = false
+
+function _memory_bytes(memory, key::Symbol)
+    if hasproperty(memory, key)
+        return Int(getproperty(memory, key))
+    elseif memory isa NamedTuple && haskey(memory, key)
+        return Int(memory[key])
+    else
+        return 0
+    end
+end
 
 # Robustly parse boolean-like environment variables
 function _getenv_bool(var::AbstractString; default::Bool = false)
@@ -175,27 +186,38 @@ function auto_launch!(
         # CUDA.registers(kernel) > 50 || return nothing # for debugging
         # occursin("single_field_solve_kernel", string(nameof(F!))) || return nothing
         if !haskey(reported_stats, key)
-            @assert !isnothing(nitems)
             kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
             config = CUDA.launch_configuration(kernel.fun)
-            threads = min(nitems, config.threads)
-            blocks = cld(nitems, threads)
+            threads = isnothing(nitems) ? nothing : min(nitems, config.threads)
+            blocks = isnothing(nitems) ? nothing : cld(nitems, threads)
             # For now, let's just collect info, later we can benchmark
 #! format: off
             s = ""
             s *= "Launching kernel $f! with following config:\n"
-            s *= "     nitems:         $(nitems)\n"
+            nitems_str = isnothing(nitems) ? "unknown" : string(nitems)
+            s *= "     nitems:         $(nitems_str)\n"
             isnothing(threads_s) || (s *= "     threads_s:      $(threads_s)\n")
             isnothing(blocks_s) || (s *= "     blocks_s:       $(blocks_s)\n")
-            s *= "     threads:        $(threads)\n"
-            s *= "     blocks:         $(blocks)\n"
-            isnothing(threads_s) || (s *= "     Δthreads:       $(threads - prod(threads_s))\n")
-            isnothing(blocks_s) || (s *= "     Δblocks:        $(blocks - prod(blocks_s))\n")
+            isnothing(threads) || (s *= "     threads:        $(threads)\n")
+            isnothing(blocks) || (s *= "     blocks:         $(blocks)\n")
+            (isnothing(threads_s) || isnothing(threads)) || (s *= "     Δthreads:       $(threads - prod(threads_s))\n")
+            (isnothing(blocks_s) || isnothing(blocks)) || (s *= "     Δblocks:        $(blocks - prod(blocks_s))\n")
             s *= "     maxthreads:     $(CUDA.maxthreads(kernel))\n"
             s *= "     registers:      $(CUDA.registers(kernel))\n"
             isnothing(threads_s) || ( s *= "     threads_s_frac: $(prod(threads_s)/CUDA.maxthreads(kernel))\n")
-            s *= "     memory:         $(CUDA.memory(kernel))\n"
+            memory = CUDA.memory(kernel)
+            local_bytes = _memory_bytes(memory, :local)
+            shared_bytes = _memory_bytes(memory, :shared)
+            const_bytes = _memory_bytes(memory, :constant)
+            s *= "     memory:         $(memory)\n"
+            profile_line =
+                "CUDA_PROFILE: kernel=$(something(kernel_name, nameof(F!))) " *
+                "registers=$(CUDA.registers(kernel)) " *
+                "local=$(local_bytes) shared=$(shared_bytes) constant=$(const_bytes) " *
+                "maxthreads=$(CUDA.maxthreads(kernel))"
+            s *= "     $(profile_line)\n"
             @info s
+            println(profile_line)
 #! format: on
             reported_stats[key] = true
             # error("Oops") # for debugging

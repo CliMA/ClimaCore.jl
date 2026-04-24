@@ -48,6 +48,15 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Unit: compiler stress regression"
+        key: unit_compiler_stress_regression
+        command:
+          - "julia --color=yes --project=.buildkite test/gpu/compiler_stress_regression.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
   - group: "Unit: RecursiveApply"
     steps:
 
