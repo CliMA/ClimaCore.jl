@@ -106,7 +106,7 @@ function fused_copyto!(
     (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest1)
     (Nv > 0 && Nh > 0) || return nothing # short circuit
 
-    if pkgversion(MultiBroadcastFusion) >= v"0.3.3"
+    if pkgversion(MultiBroadcastFusion) >= v"0.3.3" && MBFCUDA !== nothing
         # Automatically split kernels by available parameter memory space:
         fmbs = MBFCUDA.partition_kernels(
             fmb,
