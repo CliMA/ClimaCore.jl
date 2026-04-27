@@ -1419,6 +1419,20 @@ end
 
 Generate a complete test code block that can be run in a subprocess.
 Includes ClimaCore setup and proper device handling.
+
+# Arguments
+- `test_name`: Unique identifier for the test case; used in error/compile-failure
+  messages and as the label passed to `run_stress_kernel_test`.
+- `test_impl`: Julia source code (as a string) containing the body of the test.
+  It is interpolated verbatim into the generated script after all imports and
+  boilerplate are emitted. A typical `test_impl` string:
+  1. Constructs the ClimaCore space (e.g. via `create_spectral_space()` or
+     `create_column_space()`).
+  2. Allocates and initialises the fields under test.
+  3. Defines a zero-argument closure `kernel_call!()` that performs the
+     broadcast / operator expression to benchmark.
+  4. Calls `run_stress_kernel_test(test_name, kernel_call!)` to drive timing
+     and LLVM analysis.
 """
 function generate_field_test_code(test_name::String, test_impl::String)
     device_init = if has_cuda_env()
