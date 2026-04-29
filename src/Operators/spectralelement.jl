@@ -683,13 +683,15 @@ of ``\\rho \\mathbf{u} \\psi``.
 
 ## Two-Point
 A more compact representation of the discretized operator can be obtained with
-the symmetric two-point flux, whose values in one dimension are
+the symmetric two-point flux, with the analogous two-point flux form
 ```math
 (F^1)_{ij} =
-    \\frac{1}{2} (\\rho_i J_i (u^1)_i + \\rho_j J_j (u^1)_j) (\\psi_i + \\psi_j)
+    \\frac{1}{4} \\left(J_i \\mathbf{a}^1_i + J_j \\mathbf{a}^1_j\\right) \\cdot \\left((\\rho \\mathbf{u})_i + (\\rho \\mathbf{u})_j\\right) (\\psi_i + \\psi_j)
 ```
-With ``D`` denoting the spectral derivative matrix, the split operator in one
-dimension can be expressed as
+where ``\\mathbf{a}^1 = \\nabla \\xi^1`` is the contravariant basis vector. Note that the
+metric terms are averaged independently of the transport vector field to preserve the
+freestream on curvilinear grids, avoiding metric aliasing errors (see Gassner et al., 2016). In one
+dimension, the operator can be expressed as
 ```math
 \\textrm{split_div}(\\rho \\mathbf{u}, \\psi)_i =
     \\frac{1}{J_i} \\sum_{j \\neq i} D_{ij} (F^1)_{ij}
@@ -727,16 +729,11 @@ function apply_operator(op::SplitDivergence{(1,)}, space, slabidx, arg1, arg2)
     JT = operator_return_eltype(op, eltype(arg1), FT)
     RT = operator_return_eltype(op, eltype(arg1), eltype(arg2))
 
-    Ju1 = IF{JT, Nq}(MArray, FT)
+    U = IF{eltype(arg1), Nq}(MArray, eltype(arg1))
     psi = IF{eltype(arg2), Nq}(MArray, eltype(arg2))
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        Ju1[slab_index(i)] =
-            local_geometry.J ⊠ RecursiveApply.rmap(
-                u -> Geometry.contravariant1(u, local_geometry),
-                get_node(space, arg1, ij, slabidx),
-            )
+        U[slab_index(i)] = get_node(space, arg1, ij, slabidx)
         psi[slab_index(i)] = get_node(space, arg2, ij, slabidx)
     end
 
@@ -744,11 +741,18 @@ function apply_operator(op::SplitDivergence{(1,)}, space, slabidx, arg1, arg2)
     fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
         for j in 1:(i - 1) # loop over half the indices, since F1[i,j] = F1[j,i]
-            F1 = RecursiveApply.rdiv(
-                (Ju1[slab_index(i)] ⊞ Ju1[slab_index(j)]) ⊠
-                (psi[slab_index(i)] ⊞ psi[slab_index(j)]),
-                2,
-            )
+            # Metric-aware split form (Gassner et al. 2016)
+            # To preserve freestream on curvilinear grids and avoid metric aliasing,
+            # the metric terms must be averaged independently of the state vector:
+            # F_{ij} = 1/4 * (J_i a^1_i + J_j a^1_j) ⋅ (u_i + u_j) * (ψ_i + ψ_j)
+            u_avg = U[slab_index(i)] ⊞ U[slab_index(j)]
+            geom_i = get_local_geometry(space, CartesianIndex((i,)), slabidx)
+            geom_j = get_local_geometry(space, CartesianIndex((j,)), slabidx)
+            Ju1_i = geom_i.J ⊠ RecursiveApply.rmap(u -> Geometry.contravariant1(u, geom_i), u_avg)
+            Ju1_j = geom_j.J ⊠ RecursiveApply.rmap(u -> Geometry.contravariant1(u, geom_j), u_avg)
+            avg_Ju1 = RecursiveApply.rdiv(Ju1_i ⊞ Ju1_j, 4)
+            
+            F1 = avg_Ju1 ⊠ (psi[slab_index(i)] ⊞ psi[slab_index(j)])
             out[slab_index(i)] = out[slab_index(i)] ⊞ D[i, j] ⊠ F1
             out[slab_index(j)] = out[slab_index(j)] ⊞ D[j, i] ⊠ F1
         end
@@ -770,23 +774,11 @@ function apply_operator(op::SplitDivergence{(1, 2)}, space, slabidx, arg1, arg2)
     JT = operator_return_eltype(op, eltype(arg1), FT)
     RT = operator_return_eltype(op, eltype(arg1), eltype(arg2))
 
-    Ju1 = DataLayouts.IJF{JT, Nq}(MArray, FT)
-    Ju2 = DataLayouts.IJF{JT, Nq}(MArray, FT)
+    U = DataLayouts.IJF{eltype(arg1), Nq}(MArray, eltype(arg1))
     psi = DataLayouts.IJF{eltype(arg2), Nq}(MArray, eltype(arg2))
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        u = get_node(space, arg1, ij, slabidx)
-        Ju1[slab_index(i, j)] =
-            local_geometry.J ⊠ RecursiveApply.rmap(
-                u -> Geometry.contravariant1(u, local_geometry),
-                u,
-            )
-        Ju2[slab_index(i, j)] =
-            local_geometry.J ⊠ RecursiveApply.rmap(
-                u -> Geometry.contravariant2(u, local_geometry),
-                u,
-            )
+        U[slab_index(i, j)] = get_node(space, arg1, ij, slabidx)
         psi[slab_index(i, j)] = get_node(space, arg2, ij, slabidx)
     end
 
@@ -794,20 +786,32 @@ function apply_operator(op::SplitDivergence{(1, 2)}, space, slabidx, arg1, arg2)
     fill!(parent(out), zero(FT))
     @inbounds for j in 1:Nq, i in 1:Nq
         for k in 1:(i - 1) # loop over half the indices, since F1[i,k] = F1[k,i]
-            F1 = RecursiveApply.rdiv(
-                (Ju1[slab_index(i, j)] ⊞ Ju1[slab_index(k, j)]) ⊠
-                (psi[slab_index(i, j)] ⊞ psi[slab_index(k, j)]),
-                2,
-            )
+            # Metric-aware split form (Gassner et al. 2016)
+            # To preserve freestream on curvilinear grids and avoid metric aliasing,
+            # the metric terms must be averaged independently of the state vector:
+            # F_{ik} = 1/4 * (J_i a^1_i + J_k a^1_k) ⋅ (u_i + u_k) * (ψ_i + ψ_k)
+            u_avg = U[slab_index(i, j)] ⊞ U[slab_index(k, j)]
+            geom_i = get_local_geometry(space, CartesianIndex((i, j)), slabidx)
+            geom_k = get_local_geometry(space, CartesianIndex((k, j)), slabidx)
+            Ju1_i = geom_i.J ⊠ RecursiveApply.rmap(u -> Geometry.contravariant1(u, geom_i), u_avg)
+            Ju1_k = geom_k.J ⊠ RecursiveApply.rmap(u -> Geometry.contravariant1(u, geom_k), u_avg)
+            avg_Ju1 = RecursiveApply.rdiv(Ju1_i ⊞ Ju1_k, 4)
+            
+            F1 = avg_Ju1 ⊠ (psi[slab_index(i, j)] ⊞ psi[slab_index(k, j)])
             out[slab_index(i, j)] = out[slab_index(i, j)] ⊞ D[i, k] ⊠ F1
             out[slab_index(k, j)] = out[slab_index(k, j)] ⊞ D[k, i] ⊠ F1
         end
         for k in 1:(j - 1) # loop over half the indices, since F2[j,k] = F2[k,j]
-            F2 = RecursiveApply.rdiv(
-                (Ju2[slab_index(i, j)] ⊞ Ju2[slab_index(i, k)]) ⊠
-                (psi[slab_index(i, j)] ⊞ psi[slab_index(i, k)]),
-                2,
-            )
+            # Metric-aware split form along the second dimension
+            # F_{jk} = 1/4 * (J_j a^2_j + J_k a^2_k) ⋅ (u_j + u_k) * (ψ_j + ψ_k)
+            u_avg = U[slab_index(i, j)] ⊞ U[slab_index(i, k)]
+            geom_j = get_local_geometry(space, CartesianIndex((i, j)), slabidx)
+            geom_k = get_local_geometry(space, CartesianIndex((i, k)), slabidx)
+            Ju2_j = geom_j.J ⊠ RecursiveApply.rmap(u -> Geometry.contravariant2(u, geom_j), u_avg)
+            Ju2_k = geom_k.J ⊠ RecursiveApply.rmap(u -> Geometry.contravariant2(u, geom_k), u_avg)
+            avg_Ju2 = RecursiveApply.rdiv(Ju2_j ⊞ Ju2_k, 4)
+            
+            F2 = avg_Ju2 ⊠ (psi[slab_index(i, j)] ⊞ psi[slab_index(i, k)])
             out[slab_index(i, j)] = out[slab_index(i, j)] ⊞ D[j, k] ⊠ F2
             out[slab_index(i, k)] = out[slab_index(i, k)] ⊞ D[k, j] ⊠ F2
         end
