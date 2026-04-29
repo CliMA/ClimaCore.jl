@@ -692,7 +692,7 @@ With ``D`` denoting the spectral derivative matrix, the split operator in one
 dimension can be expressed as
 ```math
 \\textrm{split_div}(\\rho \\mathbf{u}, \\psi)_i =
-    \\frac{1}{J_i} \\sum_{j} D_{ij} (F^1)_{ij}
+    \\frac{1}{J_i} \\sum_{j \\neq i} D_{ij} (F^1)_{ij}
 ```
 In two dimensions, ``F^1`` and the analogous quantity ``F^2`` provide a similar
 expression for the split divergence, with the one-dimensional operator applied
@@ -743,9 +743,6 @@ function apply_operator(op::SplitDivergence{(1,)}, space, slabidx, arg1, arg2)
     out = IF{RT, Nq}(MArray, FT)
     fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
-        # diagonal term: F1[i,i] = 2 * Ju1[i] * psi[i]
-        F1_diag = Ju1[slab_index(i)] ⊠ psi[slab_index(i)]
-        out[slab_index(i)] = out[slab_index(i)] ⊞ (2 ⊠ D[i, i] ⊠ F1_diag)
         for j in 1:(i - 1) # loop over half the indices, since F1[i,j] = F1[j,i]
             F1 = RecursiveApply.rdiv(
                 (Ju1[slab_index(i)] ⊞ Ju1[slab_index(j)]) ⊠
@@ -796,11 +793,6 @@ function apply_operator(op::SplitDivergence{(1, 2)}, space, slabidx, arg1, arg2)
     out = DataLayouts.IJF{RT, Nq}(MArray, FT)
     fill!(parent(out), zero(FT))
     @inbounds for j in 1:Nq, i in 1:Nq
-        # diagonal terms: F1[i,i] and F2[j,j]
-        F1_diag = Ju1[slab_index(i, j)] ⊠ psi[slab_index(i, j)]
-        out[slab_index(i, j)] = out[slab_index(i, j)] ⊞ (2 ⊠ D[i, i] ⊠ F1_diag)
-        F2_diag = Ju2[slab_index(i, j)] ⊠ psi[slab_index(i, j)]
-        out[slab_index(i, j)] = out[slab_index(i, j)] ⊞ (2 ⊠ D[j, j] ⊠ F2_diag)
         for k in 1:(i - 1) # loop over half the indices, since F1[i,k] = F1[k,i]
             F1 = RecursiveApply.rdiv(
                 (Ju1[slab_index(i, j)] ⊞ Ju1[slab_index(k, j)]) ⊠
