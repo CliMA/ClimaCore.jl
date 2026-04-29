@@ -179,7 +179,7 @@ function weighted_dss_start!(
     sizeof(eltype(data)) > 0 || return nothing
     device = ClimaComms.device(topology(space))
     weighted_dss_prepare!(data, space, dss_buffer)
-    cuda_synchronize(device; blocking = true)
+    isempty(dss_buffer.perimeter_elems) || cuda_synchronize(device; blocking = true)
     ClimaComms.start(dss_buffer.graph_context)
     return nothing
 end
