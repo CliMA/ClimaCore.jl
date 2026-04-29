@@ -154,7 +154,7 @@ cuda_synchronize(device::ClimaComms.AbstractDevice; kwargs...) = nothing
 
 It comprises of the following steps:
 
-1). Apply [`Spaces.dss_transform!`](@ref) on perimeter elements. This weights and tranforms vector
+1). Apply [`Spaces.dss_transform!`](@ref) on perimeter elements. This weights and transforms vector
 fields to physical basis if needed. Scalar fields are weighted. The transformed and/or weighted
 perimeter `data` is stored in `perimeter_data`.
 
