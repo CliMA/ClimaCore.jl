@@ -1030,8 +1030,10 @@ function _collect_interpolated_values!(
     index_field_end::Int;
     only_one_field,
 )
+    # Sync streams before MPI calls if we are on GPU and we have more than one
+    # process, to ensure that the data is ready
     ClimaComms.nprocs(remapper.comms_ctx) > 1 &&
-        cuda_synchronize(ClimaComms.device(remapper.comms_ctx))   # Sync streams before MPI calls
+        cuda_synchronize(ClimaComms.device(remapper.comms_ctx))
     if only_one_field
         ClimaComms.reduce!(
             remapper.comms_ctx,
