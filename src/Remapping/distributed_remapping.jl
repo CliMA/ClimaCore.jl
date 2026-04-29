@@ -1030,7 +1030,7 @@ function _collect_interpolated_values!(
     index_field_end::Int;
     only_one_field,
 )
-    cuda_synchronize(ClimaComms.device(remapper.comms_ctx))   # Sync streams before MPI calls
+    ClimaComms.nprocs(remapper.comms_ctx) > 1 && cuda_synchronize(ClimaComms.device(remapper.comms_ctx))   # Sync streams before MPI calls
     if only_one_field
         ClimaComms.reduce!(
             remapper.comms_ctx,
