@@ -1,6 +1,6 @@
 import ClimaCore: Spaces, Quadratures, Topologies, Operators
 import Base.Broadcast: Broadcasted
-import ClimaCore.Fields: Field, field_values
+import ClimaCore.Fields: Field, field_values, AbstractFieldStyle
 import ClimaComms
 import ClimaCore.Utilities: half
 import ClimaCore.Operators
@@ -204,7 +204,7 @@ Base.@propagate_inbounds reconstruct_space_and_call_calc_level_val(
     arg::A,
     space::S,
 ) where {
-    A <: Union{Base.Broadcast.Broadcasted, StencilBroadcasted, Field},
+    A <: Union{Base.Broadcast.Broadcasted{<:AbstractFieldStyle}, StencilBroadcasted, Field},
     S,
 } = @inbounds @inline calc_level_val(arg, reconstruct_placeholder_space(axes(arg), space))
 Base.@propagate_inbounds reconstruct_space_and_call_calc_level_val(

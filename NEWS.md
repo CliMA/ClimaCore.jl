@@ -8,7 +8,7 @@ v0.14.51
 -------
 
 - Add support for nonuniform data structures [2464](https://github.com/CliMA/ClimaCore.jl/pull/2464)
-- Add shared memory stencil support in CUDAExt (for spaces with non-periodic topologies and no masks) [2466](https://github.com/CliMA/ClimaCore.jl/pull/2466/commits)
+- Add shared memory stencil support in CUDAExt (for spaces with non-periodic topologies and no masks) [2466](https://github.com/CliMA/ClimaCore.jl/pull/2466)
 
 v0.14.50
 -------

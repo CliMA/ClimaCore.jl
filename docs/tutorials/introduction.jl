@@ -275,10 +275,13 @@ plot(map(x -> x.w, ClimaCore.Geometry.WVector.(∇cosz)), ylim = (0, 10))
 
 sinz = sin.(column_center_coords.z)
 gradc2f = ClimaCore.Operators.GradientC2F()
-## ∇sinz = gradc2f.(sinz) ## this would throw an error
+# this throws an error when julia is launched with --check-bounds=yes
+# if ran with nomrally (auto bounds checking), behavior at the boundary is undefined
+# (i.e. it will read some random memory outside the array)
+# ∇sinz = gradc2f.(sinz) ## undefined behavior at boundary
 #----------------------------------------------------------------------------
 
-# This throws an error because face values at the boundary are _not_ well-defined:
+# This throws an error when bounds checking is enabled because face values at the boundary are _not_ well-defined:
 #
 # ```
 # ...

@@ -48,6 +48,15 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Unit: compiler stress regression"
+        key: unit_compiler_stress_regression
+        command:
+          - "julia --color=yes --project=.buildkite test/gpu/compiler_stress_regression.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
   - group: "Unit: RecursiveApply"
     steps:
 
@@ -65,6 +74,15 @@ steps:
         env:
           CLIMACOMMS_DEVICE: "CUDA"
           CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE: "true"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Unit: kernel latency benchmarks"
+        key: latency_benchmarks
+        command:
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/gpu/latency_benchmarks.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -1186,6 +1204,15 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_16
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_16.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+          slurm_mem: 10GB
+
+      - label: "Unit: matrix field broadcasting (GPU)"
+        key: unit_matrix_field_broadcasting_gpu_scalar_17
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_17.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
