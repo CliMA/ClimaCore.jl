@@ -68,17 +68,13 @@ for FT in (Float32, Float64)
                 parent(u) .= rand.(FT)
 
                 # Test consistency with full forms of split divergence operator
-                # This pointwise equivalence only holds strictly when metrics are non-aliasing (e.g. affine grids)
-                # On curved grids (SphereSpace), the metric-aware SplitDivergence is distinct from pointwise forms
-                if HorizontalSpace == SpectralElem2D
-                    uʰ = Geometry.Contravariant12Vector.(u)
-                    full_form_div_1 =
-                        @. (wdiv(u * psi) + psi * wdiv(u) + dot(uʰ, grad(psi))) / 2
-                    full_form_div_2 =
-                        @. (wdiv(u * psi) + psi * div(u) + dot(uʰ, wgrad(psi))) / 2
-                    @test norm(split_div.(u, psi) .- full_form_div_1) < 40 * eps(FT)
-                    @test norm(split_div.(u, psi) .- full_form_div_2) < 40 * eps(FT)
-                end
+                uʰ = Geometry.Contravariant12Vector.(u)
+                full_form_div_1 =
+                    @. (wdiv(u * psi) + psi * wdiv(u) + dot(uʰ, grad(psi))) / 2
+                full_form_div_2 =
+                    @. (wdiv(u * psi) + psi * div(u) + dot(uʰ, wgrad(psi))) / 2
+                @test norm(split_div.(u, psi) .- full_form_div_1) < 40 * eps(FT)
+                @test norm(split_div.(u, psi) .- full_form_div_2) < 40 * eps(FT)
 
                 # Test conservation in comparison to weak divergence operator
                 @test abs(sum(split_div.(u, psi))) < 200 * eps(FT)
