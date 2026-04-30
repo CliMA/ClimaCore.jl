@@ -216,7 +216,7 @@ we might want to parallelize it in the future).
 If `Aₙₙ` is a diagonal matrix, the equation `Aₙₙ * xₙ = bₙ` is solved by making a
 single pass over the data, setting each `xₙ[i]` to `inv(Aₙₙ[i, i]) * bₙ[i]`.
 
-Otherwise, the equation `Aₙₙ * xₙ = bₙ` is solved using Gaussian elimination
+Otherwise, on a CPU, the equation `Aₙₙ * xₙ = bₙ` is solved using Gaussian elimination
 (without pivoting), which makes two passes over the data. This is currently only
 implemented for tri-diagonal and penta-diagonal matrices `Aₙₙ`. In Gaussian
 elimination, `Aₙₙ` is effectively factorized into the product `Lₙ * Dₙ * Uₙ`,
@@ -229,6 +229,17 @@ is referred to as "back substitution". These operations can become numerically
 unstable when `Aₙₙ` has entries with large disparities in magnitude, but avoiding
 this would require swapping the rows of `Aₙₙ` (i.e., replacing `Dₙ` with a
 partial pivoting matrix).
+
+For performance reasons, on a GPU different solver is used for tri-diagonal systems
+that makes use of parallel cyclic reduction (PCR) method. This is to make better use of
+the GPU parallelism and shared memory. Since in this solver we need to launch
+a thread per each row of the matrix, it is used only for systems smaller than 512
+as to not violate CUDA limitations. Above that size, the code will fall back to
+the Gaussian elimination method used for CPU (and may show degraded performance).
+
+PCR method works by recursively decomposing a larger tridiagonal system into two
+system of half the size. This process is continued until we are left with a system
+of size 1, which can be solved directly.
 """
 struct BlockDiagonalSolve <: FieldMatrixSolverAlgorithm end
 
