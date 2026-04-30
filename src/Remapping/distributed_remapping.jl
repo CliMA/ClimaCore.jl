@@ -384,7 +384,7 @@ function _Remapper(
     if horiz_method isa BilinearRemapping
         quad_pts = quad_points
         if num_hdims == 1
-            # 1D: linear on 2-point cell. 
+            # 1D: linear on 2-point cell.
             ξ1s = ξs_split[1]
             i_arr = [clamp(searchsortedlast(quad_pts, ξ1), 1, Nq - 1) for ξ1 in ξ1s]
             s_arr = [
@@ -396,7 +396,7 @@ function _Remapper(
             local_bilinear_t = local_bilinear_j = nothing
             local_horiz_interpolation_weights = nothing
         else
-            # 2D: bilinear on 2×2 cell. 
+            # 2D: bilinear on 2×2 cell.
             n = length(ξs_split[1])
             s_arr = Vector{FT}(undef, n)
             t_arr = Vector{FT}(undef, n)
@@ -632,7 +632,7 @@ function _set_interpolated_values_bilinear!(
     for (field_index, field) in enumerate(fields)
         fv = Fields.field_values(field)
         # out_index = horizontal target point
-        # vindex = vertical target level 
+        # vindex = vertical target level
         # h = element index
         # (i, s) = 1D linear stencil.
         @inbounds for (vindex, (A, B)) in enumerate(vert_interpolation_weights)
@@ -1030,7 +1030,10 @@ function _collect_interpolated_values!(
     index_field_end::Int;
     only_one_field,
 )
-    cuda_synchronize(ClimaComms.device(remapper.comms_ctx))   # Sync streams before MPI calls
+    # Sync streams before MPI calls if we are on GPU and we have more than one
+    # process, to ensure that the data is ready
+    ClimaComms.nprocs(remapper.comms_ctx) > 1 &&
+        cuda_synchronize(ClimaComms.device(remapper.comms_ctx))
     if only_one_field
         ClimaComms.reduce!(
             remapper.comms_ctx,

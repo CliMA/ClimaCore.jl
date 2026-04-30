@@ -464,7 +464,14 @@ function Spaces.weighted_dss!(
         )
     end
 
-    cuda_synchronize(device; blocking = true)
+    needs_sync =
+        dss_buffer1 isa Topologies.DSSBuffer &&
+        !isempty(dss_buffer1.perimeter_elems) ||
+        any(
+            b isa Topologies.DSSBuffer && !isempty(b.perimeter_elems)
+            for (_, b) in field_buffer_pairs
+        )
+    needs_sync && cuda_synchronize(device; blocking = true)
     dss_buffer1 isa Topologies.DSSBuffer &&
         ClimaComms.start(dss_buffer1.graph_context)
     for (field, dss_buffer) in field_buffer_pairs

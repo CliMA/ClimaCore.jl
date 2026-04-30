@@ -64,12 +64,15 @@ const IGNORE_MODULES = (
     :ClimaCoreCUDAExt,
 )
 
+CLIMACORE_IGNORE_FUNCS =
+    (:materialize, :foreach, :unrolled_foreach, Symbol("macro expansion"))
 # Helper function to check if a stack frame is relevant
 @inline function is_relevant_frame(frame::Base.StackTraces.StackFrame)
     frame_method = frame.linfo isa Core.CodeInstance ? frame.linfo.def : frame.linfo
     frame_method isa Core.MethodInstance || return false
     mod = frame_method.def.module::Module
     mod_name = fullname(mod)[1]
+    mod_name == :ClimaCore && frame.func::Symbol ∈ CLIMACORE_IGNORE_FUNCS && return false
     return mod_name ∉ IGNORE_MODULES
 end
 
