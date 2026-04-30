@@ -21,6 +21,21 @@ Base.@propagate_inbounds function rcopyto_at_linear!(pairs::Tuple, I)
     unrolled_foreach(Base.Fix2(rcopyto_at_linear!, I), pairs)
 end
 
+# Normalize a scalar Broadcasted (0-dimensional) so it can be indexed with a
+# scalar index. Uses type dispatch so the return type equals the input type —
+# no Union is produced, keeping concrete types through the map closure below.
+@inline _normalize_bc(bc) = bc
+@inline _normalize_bc(
+    bc::Base.Broadcast.Broadcasted{Style},
+) where {
+    Style <: Union{
+        Base.Broadcast.AbstractArrayStyle{0},
+        Base.Broadcast.Style{Tuple},
+    },
+} = Base.Broadcast.instantiate(
+    Base.Broadcast.Broadcasted(bc.style, bc.f, bc.args, ()),
+)
+
 # Fused multi-broadcast entry point for DataLayouts
 function Base.copyto!(
     fmbc::FusedMultiBroadcast{T},
@@ -28,15 +43,7 @@ function Base.copyto!(
     dest1 = first(fmbc.pairs).first
     fmb_inst = FusedMultiBroadcast(
         map(fmbc.pairs) do pair
-            bc = pair.second
-            bc′ = if isascalar(bc)
-                Base.Broadcast.instantiate(
-                    Base.Broadcast.Broadcasted(bc.style, bc.f, bc.args, ()),
-                )
-            else
-                bc
-            end
-            Pair(pair.first, bc′)
+            Pair(pair.first, _normalize_bc(pair.second))
         end,
     )
     # check_fused_broadcast_axes(fmbc) # we should already have checked the axes
