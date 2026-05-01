@@ -153,14 +153,22 @@ Base.@propagate_inbounds function eager_copyto_stencil_kernel!(
     out,
     bc::BC,
     cart_inds,
+    mask,
     space,
 ) where {BC}
-    # i = threadIdx().y
-    # j = blockIdx().y
     v = threadIdx().x
-    (i, j, h) = cart_inds[threadIdx().y + (blockIdx().x - 1) * blockDim().y].I
-
-    # h = blockIdx().z
+    col_idx = threadIdx().y + (blockIdx().x - 1) * blockDim().y
+    (i, j, h) = if mask isa NoMask
+        col_idx > length(cart_inds) && return nothing
+        @inbounds cart_inds[col_idx].I
+    else
+        (; i_map, j_map, h_map) = mask
+        @inbounds mask.is_active[col_idx] || return nothing
+        @inbounds i = i_map[col_idx]
+        @inbounds j = j_map[col_idx]
+        @inbounds h = h_map[col_idx]
+        (i, j, h)
+    end
     hidx = (i, j, h)
     val = @inbounds @inline calc_level_val(bc, hidx, space)
     if space.staggering isa ClimaCore.Grids.CellFace
