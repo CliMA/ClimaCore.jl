@@ -12,8 +12,8 @@ inv_return_type(::Type{X}) where {T, X <: Geometry.Tensor{2, T}} =
 x_eltype(A::ScalingFieldMatrixEntry, b) =
     x_type(eltype(A), eltype(Base.broadcastable(b)))
 x_eltype(A::ColumnwiseBandMatrixField, b) =
-    x_eltype(eltype(eltype(A)), eltype(b))
-x_eltype(::Type{T_A}, ::Type{T_b}) where {T_A, T_b} =
+    x_type(eltype(eltype(A)), eltype(Base.broadcastable(b)))
+x_type(::Type{T_A}, ::Type{T_b}) where {T_A, T_b} =
     mul_return_type(inv_return_type(T_A), T_b)
 
 ################################################################################
