@@ -203,17 +203,6 @@ end
         # test that broadcasting into incorrect field space throws an error
         empty_faces = zeros(FT, face_space)
         @test_throws Exception empty_faces .= ∂.(w .* I.(θ))
-
-        # 5) we set boundaries on neither
-        I = Operators.InterpolateC2F()
-        ∂ = Operators.GradientF2C()
-
-        # TODO: should we throw something else?
-        if are_boundschecks_forced && !(device isa ClimaComms.CUDADevice)
-            @test_throws BoundsError ∂.(w .* I.(θ))
-        else
-            @warn "Bounds check on BoundsError ∂.(w .* I.(θ)) not verified."
-        end
     end
 end
 

@@ -12,19 +12,12 @@ inv_return_type(::Type{X}) where {T, X <: Geometry.Axis2TensorOrAdj{T}} =
         Tuple{dual_type(Geometry.axis2(X)), dual_type(Geometry.axis1(X))},
     )
 
-x_eltype(A::ScalingFieldMatrixEntry, b) = x_eltype(eltype(A), eltype(b))
+x_eltype(A::ScalingFieldMatrixEntry, b) =
+    x_type(eltype(A), eltype(Base.broadcastable(b)))
 x_eltype(A::ColumnwiseBandMatrixField, b) =
-    x_eltype(eltype(eltype(A)), eltype(b))
-x_eltype(::Type{T_A}, ::Type{T_b}) where {T_A, T_b} =
-    rmul_return_type(inv_return_type(T_A), T_b)
-# Base.promote_op(rmul_with_projection, inv_return_type(T_A), T_b, LG)
-
-unit_eltype(A::ScalingFieldMatrixEntry) = eltype(A)
-unit_eltype(A::ColumnwiseBandMatrixField) =
-    unit_eltype(eltype(eltype(A)), local_geometry_type(A))
-unit_eltype(::Type{T_A}, ::Type{LG}) where {T_A, LG} =
-    rmul_return_type(inv_return_type(T_A), T_A)
-# Base.promote_op(rmul_with_projection, inv_return_type(T_A), T_A, LG)
+    x_type(eltype(eltype(A)), eltype(Base.broadcastable(b)))
+x_type(::Type{T_A}, ::Type{T_b}) where {T_A, T_b} =
+    mul_return_type(inv_return_type(T_A), T_b)
 
 ################################################################################
 
@@ -43,32 +36,22 @@ end
 single_field_solver_cache(::ScalingFieldMatrixEntry, b) = similar(b, Tuple{})
 function single_field_solver_cache(A::ColumnwiseBandMatrixField, b)
     ud = outer_diagonals(eltype(A))[2]
-    cache_eltype =
-        ud == 0 ? Tuple{} :
-        Tuple{x_eltype(A, b), ntuple(_ -> unit_eltype(A), Val(ud))...}
-    return similar(b, cache_eltype)
+    ud == 0 && return similar(b, Tuple{})
+    T_U = mul_return_type(inv_return_type(eltype(eltype(A))), eltype(eltype(A)))
+    return similar(b, Tuple{x_eltype(A, b), ntuple(Returns(T_U), Val(ud))...})
 end
 
-function single_field_solve_diag_matrix_row!(
-    cache,
-    x,
-    A::ColumnwiseBandMatrixField,
-    b,
-)
-    # Use fields here, and not field values, so that this operation is
-    # mask-aware.
-    A₀ = A.entries.:1
-    @. x = inv(A₀) ⊠ b
-end
 single_field_solve!(_, x, A::ScalingFieldMatrixEntry, b) =
     x .= (inv(scaling_value(A)),) .* b
-function single_field_solve!(cache, x, A::ColumnwiseBandMatrixField, b)
+single_field_solve!(cache, x, A::ColumnwiseBandMatrixField, b) =
     if eltype(A) <: MatrixFields.DiagonalMatrixRow
-        single_field_solve_diag_matrix_row!(cache, x, A, b)
+        A₀ = A.entries.:1
+        @. x = inv(A₀) * b
     else
-        single_field_solve!(ClimaComms.device(axes(A)), cache, x, A, b)
+        x_bc = Base.broadcastable(x)
+        b_bc = Base.broadcastable(b)
+        single_field_solve!(ClimaComms.device(axes(A)), cache, x_bc, A, b_bc)
     end
-end
 
 single_field_solve!(::ClimaComms.AbstractCPUDevice, cache, x, A, b) =
     _single_field_solve!(ClimaComms.device(axes(A)), cache, x, A, b)
@@ -85,13 +68,12 @@ function _single_field_solve!(
     mask = Spaces.get_mask(space)
     if space isa Spaces.FiniteDifferenceSpace
         @assert mask isa DataLayouts.NoMask
-        _single_field_solve_col!(device, cache, x, A, b)
+        single_field_solve_col!(cache, x, A, b)
     else
         Fields.bycolumn(space) do colidx
             I = Fields.universal_index(colidx)
             if DataLayouts.should_compute(mask, I)
-                _single_field_solve_col!(
-                    device,
+                single_field_solve_col!(
                     cache[colidx],
                     x[colidx],
                     A[colidx],
@@ -102,28 +84,15 @@ function _single_field_solve!(
     end
 end
 
-function _single_field_solve_col!(
-    ::ClimaComms.AbstractCPUDevice,
-    cache,
-    x,
-    A,
-    b,
-)
-    if A isa Fields.ColumnField
-        band_matrix_solve!(
-            eltype(A),
-            unzip_tuple_field_values(Fields.field_values(cache)),
-            Fields.field_values(x),
-            unzip_tuple_field_values(Fields.field_values(A.entries)),
-            Fields.field_values(b),
-            vindex,
-        )
-    elseif A isa ScalingFieldMatrixEntry
-        x .= (inv(scaling_value(A)),) .* b
-    else
-        error("uncaught case")
-    end
-end
+single_field_solve_col!(cache, x, A, b) =
+    band_matrix_solve!(
+        eltype(A),
+        unzip_tuple_field_values(Fields.field_values(cache)),
+        Fields.field_values(x),
+        unzip_tuple_field_values(Fields.field_values(A.entries)),
+        Fields.field_values(b),
+        vindex,
+    )
 
 unzip_tuple_field_values(data) =
     ntuple(i -> data.:($i), Val(length(propertynames(data))))
@@ -132,7 +101,7 @@ function band_matrix_solve!(::Type{<:DiagonalMatrixRow}, _, x, Aⱼs, b, vi)
     (A₀,) = Aⱼs
     n = length(x)
     @inbounds for i in 1:n
-        x[vi(i)] = inv(A₀[vi(i)]) ⊠ b[vi(i)]
+        x[vi(i)] = inv(A₀[vi(i)]) * b[vi(i)]
     end
 end
 
@@ -163,18 +132,18 @@ function band_matrix_solve!(
     n = length(x)
     @inbounds begin
         inv_D₀ = inv(A₀[vi(1)])
-        U₊₁ᵢ₋₁ = inv_D₀ ⊠ A₊₁[vi(1)]
-        Uxᵢ₋₁ = inv_D₀ ⊠ b[vi(1)]
+        U₊₁ᵢ₋₁ = inv_D₀ * A₊₁[vi(1)]
+        Uxᵢ₋₁ = inv_D₀ * b[vi(1)]
         Ux[vi(1)] = Uxᵢ₋₁
         U₊₁[vi(1)] = U₊₁ᵢ₋₁
 
         for i in 2:n
             A₋₁ᵢ = A₋₁[vi(i)]
-            inv_D₀ = inv(A₀[vi(i)] ⊟ A₋₁ᵢ ⊠ U₊₁ᵢ₋₁)
-            Uxᵢ₋₁ = inv_D₀ ⊠ (b[vi(i)] ⊟ A₋₁ᵢ ⊠ Uxᵢ₋₁)
+            inv_D₀ = inv(A₀[vi(i)] - A₋₁ᵢ * U₊₁ᵢ₋₁)
+            Uxᵢ₋₁ = inv_D₀ * (b[vi(i)] - A₋₁ᵢ * Uxᵢ₋₁)
             Ux[vi(i)] = Uxᵢ₋₁
             if i < n
-                U₊₁ᵢ₋₁ = inv_D₀ ⊠ A₊₁[vi(i)] # U₊₁[n] is outside the matrix.
+                U₊₁ᵢ₋₁ = inv_D₀ * A₊₁[vi(i)] # U₊₁[n] is outside the matrix.
                 U₊₁[vi(i)] = U₊₁ᵢ₋₁
             end
         end
@@ -184,7 +153,7 @@ function band_matrix_solve!(
         i = (n - 1)
         # for i in (n - 1):-1:1
         while i ≥ 1
-            x[vi(i)] = Ux[vi(i)] ⊟ U₊₁[vi(i)] ⊠ x[vi(i + 1)]
+            x[vi(i)] = Ux[vi(i)] - U₊₁[vi(i)] * x[vi(i + 1)]
             i -= 1
         end
     end
@@ -222,36 +191,36 @@ function band_matrix_solve!(
     n = length(x)
     @inbounds begin
         inv_D₀ = inv(A₀[vi(1)])
-        Ux[vi(1)] = inv_D₀ ⊠ b[vi(1)]
-        U₊₁[vi(1)] = inv_D₀ ⊠ A₊₁[vi(1)]
-        U₊₂[vi(1)] = inv_D₀ ⊠ A₊₂[vi(1)]
+        Ux[vi(1)] = inv_D₀ * b[vi(1)]
+        U₊₁[vi(1)] = inv_D₀ * A₊₁[vi(1)]
+        U₊₂[vi(1)] = inv_D₀ * A₊₂[vi(1)]
 
-        inv_D₀ = inv(A₀[vi(2)] ⊟ A₋₁[vi(2)] ⊠ U₊₁[vi(1)])
-        Ux[vi(2)] = inv_D₀ ⊠ (b[vi(2)] ⊟ A₋₁[vi(2)] ⊠ Ux[vi(1)])
-        U₊₁[vi(2)] = inv_D₀ ⊠ (A₊₁[vi(2)] ⊟ A₋₁[vi(2)] ⊠ U₊₂[vi(1)])
-        U₊₂[vi(2)] = inv_D₀ ⊠ A₊₂[vi(2)]
+        inv_D₀ = inv(A₀[vi(2)] - A₋₁[vi(2)] * U₊₁[vi(1)])
+        Ux[vi(2)] = inv_D₀ * (b[vi(2)] - A₋₁[vi(2)] * Ux[vi(1)])
+        U₊₁[vi(2)] = inv_D₀ * (A₊₁[vi(2)] - A₋₁[vi(2)] * U₊₂[vi(1)])
+        U₊₂[vi(2)] = inv_D₀ * A₊₂[vi(2)]
 
         for i in 3:n
-            L₋₁ = A₋₁[vi(i)] ⊟ A₋₂[vi(i)] ⊠ U₊₁[vi(i - 2)]
+            L₋₁ = A₋₁[vi(i)] - A₋₂[vi(i)] * U₊₁[vi(i - 2)]
             inv_D₀ = inv(
-                A₀[vi(i)] ⊟ L₋₁ ⊠ U₊₁[vi(i - 1)] ⊟ A₋₂[vi(i)] ⊠ U₊₂[vi(i - 2)],
+                A₀[vi(i)] - L₋₁ * U₊₁[vi(i - 1)] - A₋₂[vi(i)] * U₊₂[vi(i - 2)],
             )
             Ux[vi(i)] =
-                inv_D₀ ⊠
-                (b[vi(i)] ⊟ L₋₁ ⊠ Ux[vi(i - 1)] ⊟ A₋₂[vi(i)] ⊠ Ux[vi(i - 2)])
-            i < n && (U₊₁[vi(i)] = inv_D₀ ⊠ (A₊₁[vi(i)] ⊟ L₋₁ ⊠ U₊₂[vi(i - 1)]))
-            i < n - 1 && (U₊₂[vi(i)] = inv_D₀ ⊠ A₊₂[vi(i)])
+                inv_D₀ *
+                (b[vi(i)] - L₋₁ * Ux[vi(i - 1)] - A₋₂[vi(i)] * Ux[vi(i - 2)])
+            i < n && (U₊₁[vi(i)] = inv_D₀ * (A₊₁[vi(i)] - L₋₁ * U₊₂[vi(i - 1)]))
+            i < n - 1 && (U₊₂[vi(i)] = inv_D₀ * A₊₂[vi(i)])
         end
 
         x[vi(n)] = Ux[vi(n)]
-        x[vi(n - 1)] = Ux[vi(n - 1)] ⊟ U₊₁[vi(n - 1)] ⊠ x[vi(n)]
+        x[vi(n - 1)] = Ux[vi(n - 1)] - U₊₁[vi(n - 1)] * x[vi(n)]
         # Avoid steprange on GPU: https://cuda.juliagpu.org/stable/tutorials/performance/#Avoiding-StepRange
         # for i in (n - 2):-1:1
         i = (n - 2)
         while i ≥ 1
             x[vi(i)] =
-                Ux[vi(i)] ⊟ U₊₁[vi(i)] ⊠ x[vi(i + 1)] ⊟
-                U₊₂[vi(i)] ⊠ x[vi(i + 2)]
+                Ux[vi(i)] - U₊₁[vi(i)] * x[vi(i + 1)] -
+                U₊₂[vi(i)] * x[vi(i + 2)]
             i -= 1
         end
     end
@@ -266,8 +235,6 @@ eltype(x), eltype(A), and eltype(b):
 - SVector{N}, SMatrix{N, N}, and SVector{N}
 - AxisVector with axis A1, Axis2TensorOrAdj with axes (A2, dual(A1)), and
   AxisVector with axis A2
-- nested type (Tuple or NamedTuple), scalar type (Number, SMatrix, or
-  Axis2TensorOrAdj), nested type (Tuple or NamedTuple)
 
 We might eventually want a single general method for band_matrix_solve!, similar
 to the BLAS.gbsv function. For now, though, the methods above should be enough.
