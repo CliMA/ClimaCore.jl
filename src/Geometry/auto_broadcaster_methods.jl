@@ -4,7 +4,7 @@ import ..Utilities:
 # TODO: Avoid defining these methods by refactoring the Geometry module so that
 # all relevant functionality is expressed in terms of standard math operations
 
-(::Type{T})(x::AutoBroadcaster) where {T <: AxisTensor} = nested_broadcast(T, x)
+(::Type{T})(x::AutoBroadcaster) where {T <: AbstractTensor} = nested_broadcast(T, x)
 
 for f in (:covariant, :contravariant), n in (1, 2, 3)
     @eval $(Symbol(f, n))(x::AutoBroadcaster, lg) =

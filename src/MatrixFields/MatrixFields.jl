@@ -64,7 +64,8 @@ import ..Spaces
 import ..Spaces: local_geometry_type
 import ..Fields
 import ..Operators
-using ..Geometry: mul_with_projection, basis1, basis2, tensor_type
+using ..Geometry:
+    mul_with_projection, mul_return_type, basis1, basis2, tensor_type
 
 export DiagonalMatrixRow,
     BidiagonalMatrixRow,
