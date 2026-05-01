@@ -43,14 +43,10 @@ Base.@propagate_inbounds dss_transform(
     weight,
 ) = arg * weight
 
-const NonTransformedAxis = Union{
-    Geometry.LocalAxis,
-    Geometry.CartesianAxis,
-    Geometry.Covariant3Axis,
-    Geometry.Contravariant3Axis,
-}
+const NonTransformedAxis =
+    Union{Geometry.Covariant3Axis, Geometry.Contravariant3Axis}
 @inline dss_transform(
-    arg::Geometry.AxisVector{<:Any, <:NonTransformedAxis},
+    arg::Geometry.Tensor{1, <:Any, <:Tuple{<:NonTransformedAxis}},
     local_geometry::Geometry.LocalGeometry,
     weight,
 ) = arg * weight
