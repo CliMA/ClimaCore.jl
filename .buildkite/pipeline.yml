@@ -2489,9 +2489,10 @@ steps:
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
         artifact_paths:
-          - "examples/hybrid/sphere/output/held_suarez_rhoe/Float32/*"
+          - "examples/hybrid/sphere/output/held_suarez_rhoe/Float64/*"
         env:
           TEST_NAME: "sphere/held_suarez_rhoe"
+          FLOAT_TYPE: "Float64"
 
       - label: ":computer: Float64 3D sphere dry Held-Suarez (ρθ)"
         key: "cpu_held_suarez_rho_theta_float64"

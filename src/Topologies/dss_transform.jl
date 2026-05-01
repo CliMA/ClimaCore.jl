@@ -33,6 +33,14 @@ Base.@propagate_inbounds dss_transform(
     weight,
 ) = arg * weight
 @inline dss_transform(
+    arg::AutoBroadcaster,
+    local_geometry::Geometry.LocalGeometry,
+    weight,
+) =
+    nested_broadcast(arg) do leaf
+        dss_transform(leaf, local_geometry, weight)
+    end
+@inline dss_transform(
     arg::Geometry.OrthonormalTensor,
     local_geometry::Geometry.LocalGeometry,
     weight,
@@ -122,6 +130,11 @@ Base.@propagate_inbounds dss_untransform(
     targ::Geometry.AbstractTensor{1},
     local_geometry::Geometry.LocalGeometry,
 ) where {T, B <: Geometry.Basis, S}
+    # If `targ` already has the destination basis, dss_transform left it
+    # untouched and there is nothing to undo. (Required so the workaround
+    # below — which assumes dss_transform turned the input into a UVWVector —
+    # doesn't fire when no transform happened.)
+    targ isa Geometry.Tensor{1, T, Tuple{B}, S} && return targ
     ax = B()
     # workaround for using a Covariant12Vector in a UW space
     if (
@@ -137,7 +150,7 @@ Base.@propagate_inbounds dss_untransform(
         u₁, = parent(u₁_vector)
         return Geometry.Covariant12Vector(u₁, u₂)
     end
-    Geometry.transform(ax, targ, local_geometry)
+    Geometry.project(ax, targ, local_geometry)
 end
 
 # helper functions for DSS2

@@ -632,7 +632,7 @@ const ⊗ = outer
 
 @inline outer(x::AbstractVector, y::AbstractVector) = x * y'
 @inline outer(x::AbstractVector, y::Number) = x * y
-@inline outer(x::AbstractVector, y) = RecursiveApply.rmap(y -> x ⊗ y, y)
+@inline outer(x::AbstractVector, y) = nested_broadcast(y -> x ⊗ y, y)
 
 # Cross product of two orthonormal vectors. Reshapes both inputs to the full
 # UVW basis (zero-filling missing dims), then applies the standard 3D formula.
