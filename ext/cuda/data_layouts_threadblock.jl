@@ -18,10 +18,10 @@ computed from CUDA's `threadIdx`,
 function universal_index end
 
 ##### Masked
-@inline cartesian_indicies_mask(us::DataLayouts.UniversalSize, mask::IJHMask) =
-    cartesian_indicies_mask(us, typeof(mask), mask.N[1])
+@inline cartesian_indices_mask(us::DataLayouts.UniversalSize, mask::IJHMask) =
+    cartesian_indices_mask(us, typeof(mask), mask.N[1])
 
-@inline function cartesian_indicies_mask(
+@inline function cartesian_indices_mask(
     us::DataLayouts.UniversalSize,
     ::Type{<:IJHMask},
     n_active_columns::Integer,

@@ -108,7 +108,7 @@ function Base.copyto!(
         cart_inds = if mask isa NoMask
             cartesian_indices(us)
         else
-            cartesian_indicies_mask(us, mask)
+            cartesian_indices_mask(us, mask)
         end
 
         args = (

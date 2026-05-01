@@ -40,7 +40,7 @@ abstract type SpectralElementOperator{I} <: AbstractOperator end
 """
     operator_axes(space)
 
-Return a tuple of the axis indicies a given field operator works over.
+Return a tuple of the axis indices a given field operator works over.
 """
 function operator_axes end
 
