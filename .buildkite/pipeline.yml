@@ -37,12 +37,17 @@ steps:
       - label: "Unit: aqua"
         key: unit_aqua
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/aqua.jl"
+        retry: &retry_policy
+          automatic:
+            - exit_status: -1  # Retry on agent lost
+              limit: 1
 
       - label: "Unit: cuda"
         key: unit_cuda_functional
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/gpu/cuda.jl CUDA"
+        retry: *retry_policy
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -50,6 +55,7 @@ steps:
 
       - label: "Unit: compiler stress regression"
         key: unit_compiler_stress_regression
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite test/gpu/compiler_stress_regression.jl"
         env:
@@ -62,6 +68,7 @@ steps:
 
       - label: "Unit: kernel renaming"
         key: kernel_renaming
+        retry: *retry_policy
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/gpu/kernel_renaming.jl"
         env:
@@ -72,6 +79,7 @@ steps:
 
       - label: "Unit: kernel latency benchmarks"
         key: latency_benchmarks
+        retry: *retry_policy
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/gpu/latency_benchmarks.jl"
         env:
@@ -84,10 +92,12 @@ steps:
 
       - label: "Unit: plushalf"
         key: unit_plushalf
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Utilities/unit_plushalf.jl"
 
       - label: "Unit: auto_broadcaster"
         key: unit_auto_broadcaster
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Utilities/unit_auto_broadcaster.jl"
 
   - group: "Unit: DataLayouts"
@@ -95,62 +105,77 @@ steps:
 
       - label: "Unit: data0d"
         key: unit_data0d
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/data0d.jl"
 
       - label: "Unit: data_fill"
         key: unit_data_fill
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_fill.jl"
 
       - label: "Unit: data_copyto"
         key: unit_data_copyto
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_copyto.jl"
 
       - label: "Unit: cartesian_field_index"
         key: unit_data_cartesian_field_index
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_cartesian_field_index.jl"
 
       - label: "Unit: non_extruded_broadcast"
         key: unit_non_extruded_broadcast
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_non_extruded_broadcast.jl"
 
       - label: "Unit: mapreduce"
         key: unit_data_mapreduce
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_mapreduce.jl"
 
       - label: "Unit: data_opt_similar"
         key: data_opt_similar
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/opt_similar.jl"
 
       - label: "Unit: opt_universal_size"
         key: opt_universal_size
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/opt_universal_size.jl"
 
       - label: "Unit: data_ndims"
         key: unit_data_ndims
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_ndims.jl"
 
       - label: "Unit: unit_data2array"
         key: unit_data2array
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_data2array.jl"
 
       - label: "Unit: data1d"
         key: unit_data1d
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/data1d.jl"
 
       - label: "Unit: data2d"
         key: unit_data2d
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/data2d.jl"
 
       - label: "Unit: data1dx"
         key: unit_data1dx
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/data1dx.jl"
 
       - label: "Unit: data2dx"
         key: unit_data2dx
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/data2dx.jl"
 
       - label: "Unit: data cuda"
         key: unit_data_cuda
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/cuda.jl CUDA"
@@ -161,6 +186,7 @@ steps:
 
       - label: "Unit: data cuda threadblocks"
         key: unit_data_threadblock
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_cuda_threadblocks.jl"
@@ -171,6 +197,7 @@ steps:
 
       - label: "Unit: data fill"
         key: gpu_unit_data_fill
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_fill.jl"
@@ -181,6 +208,7 @@ steps:
 
       - label: "Unit: data mapreduce"
         key: gpu_unit_data_mapreduce
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_mapreduce.jl"
@@ -191,6 +219,7 @@ steps:
 
       - label: "Unit: data mapreduce (2 gpus)"
         key: gpu_2_unit_data_mapreduce
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_mapreduce.jl"
@@ -205,6 +234,7 @@ steps:
 
       - label: "Unit: data copyto"
         key: gpu_unit_data_copyto
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_copyto.jl"
@@ -218,14 +248,17 @@ steps:
 
       - label: "Unit: geometry"
         key: unit_geometry
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/geometry.jl"
 
       - label: "Unit: axistensors"
         key: unit_axistensors
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/axistensors.jl"
 
       - label: "Unit: mul_with_projection"
         key: unit_mul_with_projection
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/mul_with_projection.jl"
 
   - group: "Unit: Meshes"
@@ -233,18 +266,22 @@ steps:
 
       - label: "Unit: interval"
         key: unit_interval
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Meshes/interval.jl"
 
       - label: "Unit: meshes rectangle"
         key: unit_meshes_rectangle
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Meshes/rectangle.jl"
 
       - label: "Unit: meshes opt"
         key: unit_meshes_opt
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Meshes/opt_meshes.jl"
 
       - label: "Unit: meshes cubedsphere"
         key: unit_meshes_cubed_sphere
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Meshes/cubedsphere.jl"
 
   - group: "Unit: Topologies"
@@ -252,26 +289,32 @@ steps:
 
       - label: "Unit: topo interval"
         key: unit_topo_interval
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Topologies/interval.jl"
 
       - label: "Unit: topo rectangle"
         key: unit_topo_rectangle
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Topologies/rectangle.jl"
 
       - label: "Unit: rectangle sfc"
         key: unit_rectangle_sfc
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Topologies/rectangle_sfc.jl"
 
       - label: "Unit: cubedsphere"
         key: unit_cubedsphere
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Topologies/cubedsphere.jl"
 
       - label: "Unit: cubedsphere sfc"
         key: unit_cubedsphere_sfc
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Topologies/cubedsphere_sfc.jl"
 
       - label: "Unit: topologies distributed"
         key: unit_topologies_distributed
+        retry: *retry_policy
         command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Topologies/dtopo4.jl"
         env:
           CLIMACOMMS_CONTEXT: "MPI"
@@ -285,10 +328,12 @@ steps:
 
       - label: "Unit: Quadratures"
         key: unit_quadrature
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Quadratures/Quadratures.jl"
 
       - label: "Unit: spaces"
         key: unit_spaces
+        retry: *retry_policy
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/unit_spaces.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/opt_spaces.jl"
@@ -296,6 +341,7 @@ steps:
 
       - label: "Unit: cuda spaces"
         key: "gpu_cuda_spaces"
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/unit_spaces.jl"
@@ -308,6 +354,7 @@ steps:
 
       - label: "Unit: common spaces with CUDA"
         key: "gpu_common_cuda_spaces"
+        retry: *retry_policy
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/CommonSpaces/unit_common_spaces.jl"
         env:
@@ -317,6 +364,7 @@ steps:
 
       - label: "Unit: common spaces with CUDA and MPI"
         key: "gpu_common_cuda_mpi_spaces"
+        retry: *retry_policy
         command:
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/CommonSpaces/unit_common_spaces.jl"
         env:
@@ -330,6 +378,7 @@ steps:
 
       - label: "Unit: common spaces with MPI"
         key: "common_cuda_mpi_spaces"
+        retry: *retry_policy
         command:
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/CommonSpaces/unit_common_spaces.jl"
         env:
@@ -341,6 +390,7 @@ steps:
 
       - label: "Unit: distributed cuda spaces"
         key: "gpu_distributed_extruded_cuda_spaces"
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/distributed_cuda/space_construction.jl CUDA"
@@ -354,6 +404,7 @@ steps:
 
       - label: "Unit: ddss1"
         key: unit_ddss1
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/ddss1.jl"
@@ -364,10 +415,12 @@ steps:
 
       - label: "Unit: ddss1 cs"
         key: unit_cuda_ddss1_cs
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/ddss1_cs.jl"
 
       - label: "Unit: ddss1 cs"
         key: unit_ddss1_cs
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/ddss1_cs.jl"
@@ -378,14 +431,17 @@ steps:
 
       - label: "Unit: sphere"
         key: unit_sphere
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/sphere.jl"
 
       - label: "Unit: terrain warp"
         key: unit_terrain_warp
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/terrain_warp.jl"
 
       - label: "Unit: distributed dss2"
         key: unit_distributed_dss2
+        retry: *retry_policy
         command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/distributed/ddss2.jl"
         env:
           CLIMACOMMS_CONTEXT: "MPI"
@@ -396,6 +452,7 @@ steps:
 
       - label: "Unit: distributed dss3"
         key: unit_distributed_dss3
+        retry: *retry_policy
         command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/distributed/ddss3.jl"
         env:
           CLIMACOMMS_CONTEXT: "MPI"
@@ -406,6 +463,7 @@ steps:
 
       - label: "Unit: distributed dss4"
         key: unit_distributed_dss4
+        retry: *retry_policy
         command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/distributed/ddss4.jl"
         env:
           CLIMACOMMS_CONTEXT: "MPI"
@@ -416,12 +474,14 @@ steps:
 
       - label: "Unit: distributed remapping (1 process)"
         key: distributed_remapping_1proc
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Remapping/distributed_remapping.jl"
         env:
           CLIMACOMMS_DEVICE: "CPU"
 
       - label: "Unit: distributed remapping (2 processes)"
         key: distributed_remapping_2procs
+        retry: *retry_policy
         command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Remapping/distributed_remapping.jl"
         env:
           CLIMACOMMS_CONTEXT: "MPI"
@@ -433,6 +493,7 @@ steps:
 
       - label: "Unit: distributed remapping with CUDA (1 process)"
         key: distributed_remapping_gpu_1proc
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Remapping/distributed_remapping.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -441,6 +502,7 @@ steps:
 
       - label: "Unit: distributed remapping with CUDA (2 processes)"
         key: distributed_remapping_gpu_2procs
+        retry: *retry_policy
         command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Remapping/distributed_remapping.jl"
         soft_fail: true
         env:
@@ -452,6 +514,7 @@ steps:
 
       - label: "Unit: distributed gather"
         key: unit_distributed_gather4
+        retry: *retry_policy
         command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/distributed/gather4.jl"
         env:
           CLIMACOMMS_CONTEXT: "MPI"
@@ -462,6 +525,7 @@ steps:
 
       - label: "Unit: cuda extruded spaces"
         key: "extruded_spaces_cuda"
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/extruded_cuda.jl CUDA"
         artifact_paths:
           - output/extruded_spaces_cuda
@@ -472,6 +536,7 @@ steps:
 
       - label: "Unit: cuda point spaces"
         key: "point_space_cuda"
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/point_cuda.jl CUDA"
         artifact_paths:
           - output/point_cuda
@@ -482,6 +547,7 @@ steps:
 
       - label: "Unit: cuda dss 2-process test"
         key: "gpu_ddss2_test"
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/distributed_cuda/ddss2.jl"
@@ -497,6 +563,7 @@ steps:
 
       - label: "Unit: cuda dss 3-process test"
         key: "gpu_ddss3_test"
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/distributed_cuda/ddss3.jl"
@@ -512,6 +579,7 @@ steps:
 
       - label: "Unit: cuda dss 4-process test"
         key: "gpu_ddss4_test"
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/distributed_cuda/ddss4.jl"
@@ -527,6 +595,7 @@ steps:
 
       - label: "Unit: cuda Cubed Sphere dss; ne = 32; 2-process test"
         key: "gpu_ddss_ne32_cs_2processes"
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
@@ -542,6 +611,7 @@ steps:
 
       - label: "Unit: cuda Cubed Sphere dss; ne = 32; 3-process test"
         key: "gpu_ddss_ne32_cs_3processes"
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
@@ -557,6 +627,7 @@ steps:
 
       - label: "Unit: cuda Cubed Sphere dss; ne = 32; 4-process test"
         key: "gpu_ddss_ne32_cs_4processes"
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
@@ -575,6 +646,7 @@ steps:
 
       - label: "Unit: field"
         key: unit_field
+        retry: *retry_policy
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/unit_field.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_fieldvectors.jl"
@@ -586,6 +658,7 @@ steps:
 
       - label: "Unit: field cuda"
         key: unit_field_cuda
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/unit_field.jl"
@@ -600,6 +673,7 @@ steps:
 
       - label: "Unit: reduction cuda"
         key: unit_reduction_cuda
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/reduction_cuda.jl CUDA"
@@ -610,6 +684,7 @@ steps:
 
       - label: "Unit: distributed reduction cuda"
         key: unit_distributed_reduction_cuda
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/reduction_cuda_distributed.jl"
@@ -626,56 +701,69 @@ steps:
 
       - label: "Unit: rectilinear"
         key: unit_rectilinear
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/rectilinear.jl"
 
       - label: "Unit: diffusion2d"
         key: unit_diffusion2d
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/unit_diffusion2d.jl"
 
       - label: "Unit: sphere geometry"
         key: unit_sphere_geometry
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/sphere_geometry.jl"
 
       - label: "Unit: sphere gradient"
         key: unit_sphere_gradient
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/sphere_gradient.jl"
 
       - label: "Unit: sphere divergence"
         key: unit_sphere_divergence
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/sphere_divergence.jl"
 
       - label: "Unit: sphere curl"
         key: unit_sphere_curl
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/sphere_curl.jl"
 
       - label: "Unit: sphere diffusion"
         key: unit_sphere_diffusion
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/sphere_diffusion.jl"
 
       - label: "Unit: sphere diffusion vec"
         key: unit_sphere_diffusion_vec
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/sphere_diffusion_vec.jl"
 
       - label: "Unit: sphere hyperdiffusion"
         key: unit_sphere_hyperdiffusion
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/unit_sphere_hyperdiffusion.jl"
 
       - label: "Unit: sphere hyperdiffusion vec"
         key: unit_sphere_hyperdiffusion_vec
+        retry: *retry_policy
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/unit_sphere_hyperdiffusion_vec.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/convergence_sphere_hyperdiffusion_vec.jl"
 
       - label: "Unit: spec ops plane"
         key: unit_spec_ops_plane
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/plane.jl"
 
       - label: "Unit: split divergence"
         key: unit_split_divergence
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/split_divergence.jl"
 
       - label: "Unit: split divergence cuda"
         key: unit_split_divergence_cuda
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/split_divergence.jl"
@@ -686,6 +774,7 @@ steps:
 
       - label: "Unit: FD operator (shmem)"
         key: unit_fd_operator_shmem
+        retry: *retry_policy
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_fd_ops_shared_memory.jl"
           - "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_fd_ops_shared_memory.jl"
@@ -696,6 +785,7 @@ steps:
 
       - label: "Unit: gpu columnwise"
         key: unit_gpu_columnwise
+        retry: *retry_policy
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_columnwise.jl"
         env:
@@ -705,16 +795,19 @@ steps:
 
       - label: "Unit: columnwise"
         key: unit_columnwise
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_columnwise.jl"
 
       - label: "Unit: column"
         key: unit_column
+        retry: *retry_policy
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_column.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/convergence_column.jl"
 
       - label: "Unit: gpu column"
         key: unit_gpu_column
+        retry: *retry_policy
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_column.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/convergence_column.jl"
@@ -725,21 +818,25 @@ steps:
 
       - label: "Unit: fd tensor"
         key: unit_fd_tensor
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/tensor.jl"
 
       - label: "Unit: advection operator convergence"
         key: unit_adv_conv
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/convergence_advection_diffusion1d.jl"
         soft_fail: true
 
       - label: "Unit: hyb ops 2d"
         key: unit_hyb_ops_2d
+        retry: *retry_policy
         command:
            - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_2d.jl"
            - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/convergence_2d.jl"
 
       - label: "Unit: hyb ops 2d CUDA"
         key: unit_hyb_ops_2d_cuda
+        retry: *retry_policy
         command:
            - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_2d.jl"
            - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/convergence_2d.jl"
@@ -750,6 +847,7 @@ steps:
 
       - label: "Unit: hyb ops 3d"
         key: unit_hyb_ops_3d
+        retry: *retry_policy
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_3d.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/convergence_3d.jl"
@@ -757,6 +855,7 @@ steps:
 
       - label: "Unit: hyb ops 3d CUDA"
         key: unit_hyb_ops_3d_cuda
+        retry: *retry_policy
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_3d.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/convergence_3d.jl"
@@ -768,10 +867,12 @@ steps:
 
       - label: "Unit: remapping"
         key: unit_remapping
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/remapping.jl"
 
       - label: "Unit: run sphere geometry distributed (2)"
         key: unit_run_sphere_geometry_distributed2
+        retry: *retry_policy
         command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/sphere_geometry_distributed.jl"
         env:
           CLIMACOMMS_CONTEXT: "MPI"
@@ -781,6 +882,7 @@ steps:
 
       - label: "Unit: run sphere geometry distributed (3)"
         key: unit_run_sphere_geometry_distributed3
+        retry: *retry_policy
         command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/sphere_geometry_distributed.jl"
         env:
           CLIMACOMMS_CONTEXT: "MPI"
@@ -792,6 +894,7 @@ steps:
 
       - label: "Unit: run sphere geometry distributed (4)"
         key: unit_run_sphere_geometry_distributed4
+        retry: *retry_policy
         command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/sphere_geometry_distributed.jl"
         env:
           CLIMACOMMS_CONTEXT: "MPI"
@@ -803,6 +906,7 @@ steps:
 
       - label: "Unit: rectilinear cuda"
         key: unit_rectilinear_cuda
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/rectilinear_cuda.jl CUDA"
@@ -813,6 +917,7 @@ steps:
 
       - label: "Unit: operators on levels and extruded spaces"
         key: unit_cuda_operators_example
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/unit_operators_examples.jl"
@@ -823,6 +928,7 @@ steps:
 
       - label: "Unit: velocity grad tensor ops"
         key: unit_spectral_tensor_op_cuda
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/covar_deriv_ops.jl CUDA"
@@ -833,6 +939,7 @@ steps:
 
       - label: "Unit: hybrid operators cuda"
         key: unit_ops_cuda
+        retry: *retry_policy
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_cuda.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/simulation_cuda.jl"
@@ -843,6 +950,7 @@ steps:
 
       - label: "Unit: extruded sphere cuda"
         key: unit_extruded_sphere_cuda
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/extruded_sphere_cuda.jl CUDA"
@@ -853,6 +961,7 @@ steps:
 
       - label: "Unit: extruded 3dbox cuda"
         key: unit_extruded_3dbox_cuda
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/extruded_3dbox_cuda.jl CUDA"
@@ -863,11 +972,13 @@ steps:
 
       - label: "Unit: Integrals (CPU)"
         key: "cpu_integrals"
+        retry: *retry_policy
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/integrals.jl"
 
       - label: "Unit: Integrals (GPU)"
         key: "gpu_integrals"
+        retry: *retry_policy
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/integrals.jl"
         env:
@@ -880,22 +991,27 @@ steps:
 
       - label: "Unit: BandMatrixRow"
         key: unit_band_matrix_row
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/band_matrix_row.jl"
 
       - label: "Unit: field2arrays"
         key: unit_field2arrays
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/field2arrays.jl"
 
       - label: "Unit: matrix multiplication at boundaries"
         key: unit_matrix_multiplication_at_boundaries
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_multiplication_at_boundaries.jl"
 
       - label: "Unit: operator matrices (CPU)"
         key: unit_operator_matrices_cpu
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/operator_matrices.jl"
 
       - label: "Unit: operator matrices (GPU)"
         key: unit_operator_matrices_gpu
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/MatrixFields/operator_matrices.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -905,16 +1021,19 @@ steps:
 
       - label: "Unit: field names"
         key: unit_field_names
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/field_names.jl"
 
       - label: "Unit: field matrix solvers (CPU)"
         key: unit_field_matrix_solvers_cpu
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/field_matrix_solvers.jl"
         agents:
           slurm_mem: 40GB
 
       - label: "Unit: field matrix solvers (GPU)"
         key: unit_field_matrix_solvers_gpu
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/MatrixFields/field_matrix_solvers.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -924,10 +1043,12 @@ steps:
 
       - label: "Unit: bidiag matrix row example (CPU)"
         key: cpu_gpu_compat_bidiag_matrix_row
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/gpu_compat_bidiag_matrix_row.jl"
 
       - label: "Unit: bidiag matrix row example (GPU)"
         key: gpu_compat_bidiag_matrix_row
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/MatrixFields/gpu_compat_bidiag_matrix_row.jl"
         soft_fail: true
         env:
@@ -937,6 +1058,7 @@ steps:
 
       - label: "Unit: multiple field solve example (GPU)"
         key: gpu_multiple_field_solve_example
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/MatrixFields/multiple_field_solve_reproducer_1.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -945,10 +1067,12 @@ steps:
 
       - label: "Unit: matrix multiplication recursion example (CPU)"
         key: cpu_matrix_multiplication_recursion
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_multiplication_recursion.jl"
 
       - label: "Unit: matrix multiplication recursion example (GPU)"
         key: gpu_matrix_multiplication_recursion
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/MatrixFields/matrix_multiplication_recursion.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -957,10 +1081,12 @@ steps:
 
       - label: "Unit: field_matrix_indexing (CPU)"
         key: cpu_field_matrix_indexing
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/field_matrix_indexing.jl"
 
       - label: "Unit: field_matrix_indexing (GPU)"
         key: gpu_field_matrix_indexing
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/MatrixFields/field_matrix_indexing.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -973,87 +1099,108 @@ steps:
         # scalar
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_scalar_1
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_1.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_scalar_2
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_2.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_scalar_3
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_3.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_scalar_4
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_4.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_scalar_5
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_5.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_scalar_6
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_6.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_scalar_7
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_7.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_scalar_8
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_8.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_scalar_9
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_9.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_scalar_10
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_10.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_scalar_11
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_11.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_scalar_12
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_12.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_scalar_13
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_13.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_scalar_14
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_14.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_scalar_15
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_15.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_scalar_16
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_16.jl"
 
         # non-scalar
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_non_scalar_1
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_1.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_non_scalar_2
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_2.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_non_scalar_3
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_3.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_non_scalar_4
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_4.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_non_scalar_5
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_5.jl"
         soft_fail: true
 
@@ -1063,6 +1210,7 @@ steps:
         # scalar
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_1
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_1.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1072,6 +1220,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_2
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_2.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1081,6 +1230,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_3
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_3.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1090,6 +1240,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_4
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_4.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1099,6 +1250,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_5
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_5.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1108,6 +1260,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_6
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_6.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1117,6 +1270,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_7
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_7.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1126,6 +1280,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_8
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_8.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1135,6 +1290,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_9
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_9.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1144,6 +1300,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_10
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_10.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1153,6 +1310,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_11
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_11.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1162,6 +1320,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_12
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_12.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1171,6 +1330,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_13
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_13.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1180,6 +1340,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_14
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_14.jl"
         soft_fail: true
         env:
@@ -1190,6 +1351,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_15
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_15.jl"
         soft_fail: true
         env:
@@ -1200,6 +1362,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_16
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_16.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1209,6 +1372,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_17
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_17.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1219,6 +1383,7 @@ steps:
         # non-scalar
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_non_scalar_1
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_1.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1228,6 +1393,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_non_scalar_2
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_2.jl"
         soft_fail: true
         env:
@@ -1238,6 +1404,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_non_scalar_3
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_3.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1247,6 +1414,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_non_scalar_4
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_4.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1256,6 +1424,7 @@ steps:
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_non_scalar_5
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_5.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1268,10 +1437,12 @@ steps:
 
       - label: "Unit: hypsography 2d"
         key: unit_hypsography_2d
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Hypsography/2d.jl"
 
       - label: "Unit: 3dsphere"
         key: unit_3dsphere
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Hypsography/3dsphere.jl"
 
   - group: "Unit: InputOutput"
@@ -1279,6 +1450,7 @@ steps:
 
       - label: "Unit: read_type"
         key: unit_read_type
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_read_type.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1288,10 +1460,12 @@ steps:
 
       - label: "Unit: spectralelement2d"
         key: unit_spectralelement2d
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_spectralelement2d.jl"
 
       - label: "Unit: spectralelement2d"
         key: unit_spectralelement2d_gpu
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_spectralelement2d.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1300,30 +1474,37 @@ steps:
 
       - label: "Unit: hybrid2dbox"
         key: unit_hybrid2dbox
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid2dbox.jl"
 
       - label: "Unit: hybrid2dbox topography"
         key: unit_hybrid2dbox_topography
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid2dbox_topography.jl"
 
       - label: "Unit: hybrid2dbox stretched"
         key: unit_hybrid2dbox_stretched
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid2dbox_stretched.jl"
 
       - label: "Unit: hybrid3dbox"
         key: unit_hybrid3dbox
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid3dbox.jl"
 
       - label: "Unit: hybrid3dcubedsphere"
         key: unit_hybrid3dcubedsphere
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid3dcubedsphere.jl"
 
       - label: "Unit: hybrid3dcubedsphere topography"
         key: unit_hybrid3dcubedsphere_topography
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid3dcubedsphere_topography.jl"
 
       - label: "Unit: hybrid3dcubedsphere topography"
         key: unit_hybrid3dcubedsphere_topography_gpu
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid3dcubedsphere_topography.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -1332,6 +1513,7 @@ steps:
 
       - label: "Unit: finitedifference"
         key: unit_finitedifference
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_finitedifference.jl"
 
       - label: "Unit: Parallel HDF5 IO tests"
@@ -1353,6 +1535,7 @@ steps:
 
       - label: "Unit: interpolate array"
         key: unit_interpolate_array
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Remapping/interpolate_array.jl"
 
   - group: "Unit: Limiters"
@@ -1360,10 +1543,12 @@ steps:
 
       - label: "Unit: limiter"
         key: unit_limiter
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Limiters/limiter.jl"
 
       - label: "Unit: limiter cuda"
         key: unit_limiter_gpu
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/Limiters/limiter.jl"
@@ -1374,6 +1559,7 @@ steps:
 
       - label: "Unit: distributed limiters"
         key: unit_limiters_distributed
+        retry: *retry_policy
         command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Limiters/distributed/dlimiter.jl"
         env:
           CLIMACOMMS_CONTEXT: "MPI"
@@ -1384,12 +1570,14 @@ steps:
 
       - label: "Unit: limiter mass borrowing"
         key: unit_limiter_mass_borrowing
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Limiters/vertical_mass_borrowing_limiter.jl"
         artifact_paths:
           - "test/Limiters/output/vert_mass_borrow/CPU/*"
 
       - label: "Unit: mass borrowing limiter cuda"
         key: unit_limiter_mass_borrowing_gpu
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/Limiters/vertical_mass_borrowing_limiter.jl"
@@ -1402,12 +1590,14 @@ steps:
 
       - label: "Unit: limiter mass borrowing advection"
         key: unit_limiter_mass_borrowing_advection
+        retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Limiters/vertical_mass_borrowing_limiter_advection.jl"
         artifact_paths:
           - "test/Limiters/output/vert_mass_borrow_advection/CPU/*"
 
       - label: "Unit: mass borrowing limiter advection cuda"
         key: unit_limiter_mass_borrowing_advection_gpu
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/Limiters/vertical_mass_borrowing_limiter_advection.jl"
@@ -1425,6 +1615,7 @@ steps:
 
       - label: "Perf: Axis tensor conversion benchmarks"
         key: "cpu_axis_tensor_conversion_perf_bm"
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/Geometry/axistensor_conversion_benchmarks.jl"
 
   - group: "Perf: DataLayouts"
@@ -1432,14 +1623,17 @@ steps:
 
       - label: "Perf: DataLayouts fill"
         key: "cpu_datalayouts_fill"
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_fill.jl"
 
       - label: "Perf: DataLayouts copyto!"
         key: "cpu_datalayouts_copyto"
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_copyto.jl"
 
       - label: "Perf: DataLayouts fill"
         key: "gpu_datalayouts_fill"
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_fill.jl"
@@ -1450,6 +1644,7 @@ steps:
 
       - label: "Perf: DataLayouts copyto"
         key: "gpu_datalayouts_copyto"
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_copyto.jl"
@@ -1463,6 +1658,7 @@ steps:
 
       - label: "Perf: Field broadcast"
         key: "cpu_field_perf"
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/Fields/field_opt.jl"
 
   - group: "Perf: Benchmark scripts"
@@ -1470,6 +1666,7 @@ steps:
 
       - label: "Perf: benchmark scripts index_swapping"
         key: perf_index_swapping
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite benchmarks/scripts/index_swapping.jl"
@@ -1480,6 +1677,7 @@ steps:
 
       - label: "Perf: benchmark scripts indexing_and_static_ndranges"
         key: indexing_and_static_ndranges
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite benchmarks/scripts/indexing_and_static_ndranges.jl"
@@ -1490,6 +1688,7 @@ steps:
 
       - label: "Perf: benchmark scripts thermo_bench_bw"
         key: thermo_bench_bw
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite benchmarks/scripts/thermo_bench_bw.jl"
@@ -1500,6 +1699,7 @@ steps:
 
       - label: "Perf: benchmark scripts benchmark_offset"
         key: benchmark_offset
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite benchmarks/scripts/benchmark_offset.jl"
@@ -1510,6 +1710,7 @@ steps:
 
       - label: "Perf: benchmark scripts benchmark_field_last"
         key: benchmark_field_last
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite benchmarks/scripts/benchmark_field_last.jl"
@@ -1523,21 +1724,25 @@ steps:
 
       - label: "Perf: SEM operators"
         key: perf_SEM
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/Operators/spectralelement/opt.jl"
 
       - label: "Perf: FD operators"
         key: perf_FD
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/Operators/finitedifference/opt.jl"
 
         # TODO: combine this with FD operators above
       - label: "Perf: FD operators from the wild"
         key: perf_FD_ops_examples
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite test/Operators/finitedifference/opt_examples.jl"
           - "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_examples.jl"
 
       - label: "Perf: FD operators from the wild (gpu)"
         key: perf_FD_ops_examples_gpu
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/Operators/finitedifference/opt_examples.jl"
@@ -1549,20 +1754,24 @@ steps:
 
       - label: "Perf: dss"
         key: perf_dss
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/Operators/hybrid/dss_opt.jl"
 
       - label: "Perf: hybrid operators"
         key: perf_hybrid_ops
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/Operators/hybrid/opt.jl"
 
       - label: "Perf: FD operator stencil benchmarks"
         key: "perf_fd_ops"
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_stencils.jl"
         agents:
           slurm_mem: 20GB
 
       - label: "Perf: GPU FD operator stencil benchmarks"
         key: "gpu_perf_fd_ops"
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_stencils.jl"
@@ -1573,6 +1782,7 @@ steps:
 
       - label: "Perf: SEM operator benchmarks (cuda Float32)"
         key: "perf_gpu_spectral_ops_cuda_float32"
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --float-type Float32"
@@ -1583,10 +1793,12 @@ steps:
 
       - label: "Perf: SEM operator benchmarks (CPU Float32)"
         key: "perf_gpu_spectral_ops_cpu_float32"
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --float-type Float32"
 
       - label: "Perf: SEM operator benchmarks (cuda Float64)"
         key: "perf_gpu_spectral_ops_cuda_float64"
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --float-type Float64"
@@ -1597,14 +1809,17 @@ steps:
 
       - label: "Perf: SEM operator benchmarks (CPU Float64)"
         key: "perf_gpu_spectral_ops_cpu_float64"
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --float-type Float64"
 
       - label: "Perf: SEM operator benchmarks (extruded CPU Float64)"
         key: "perf_gpu_spectral_ops_extruded_cpu_float64"
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --float-type Float64 --space-type ExtrudedFiniteDifferenceSpace"
 
       - label: "Perf: SEM operator benchmarks"
         key: "perf_gpu_spectral_ops"
+        retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl"
@@ -1615,6 +1830,7 @@ steps:
 
       - label: "Perf: Integrals (CPU)"
         key: "cpu_integrals_perf"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite test/Operators/integrals.jl"
 
@@ -1623,6 +1839,7 @@ steps:
 
       - label: ":computer: Column Heat Diffusion Eq"
         key: "cpu_column_heat"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/column/heat.jl"
         artifact_paths:
@@ -1630,6 +1847,7 @@ steps:
 
       - label: ":computer: Column Advection Step Eq"
         key: "cpu_column_step_advect"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/column/step.jl"
         artifact_paths:
@@ -1637,6 +1855,7 @@ steps:
 
       - label: ":computer: Column Advection Eq"
         key: "cpu_column_advect"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/column/advect.jl"
         artifact_paths:
@@ -1644,6 +1863,7 @@ steps:
 
       - label: ":computer: Column FCT Advection Eq"
         key: "cpu_fct_column_advect"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/column/fct_advection.jl"
         artifact_paths:
@@ -1651,6 +1871,7 @@ steps:
 
       - label: ":computer: Column TVD Slope-limited Advection Eq"
         key: "cpu_tvd_column_advect"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/column/tvd_advection.jl"
         artifact_paths:
@@ -1658,6 +1879,7 @@ steps:
 
       - label: ":computer: Column Lin vanLeer Limiter Advection Eq"
         key: "cpu_lvl_column_advect"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/column/vanleer_advection.jl"
         artifact_paths:
@@ -1665,6 +1887,7 @@ steps:
 
       - label: ":computer: Column Lin vanLeer Limiter Advection Eq cuda"
         key: "gpu_lvl_column_advect"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/column/vanleer_advection.jl"
         artifact_paths:
@@ -1676,6 +1899,7 @@ steps:
 
       - label: ":computer: Column BB FCT Advection Eq"
         key: "cpu_bb_fct_column_advect"
+        retry: *retry_policy
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite examples/column/bb_fct_advection.jl"
         artifact_paths:
@@ -1683,6 +1907,7 @@ steps:
 
       - label: ":computer: Column Zalesak FCT Advection Eq"
         key: "cpu_zalesak_fct_column_advect"
+        retry: *retry_policy
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite examples/column/zalesak_fct_advection.jl"
         artifact_paths:
@@ -1690,6 +1915,7 @@ steps:
 
       - label: ":computer: Column Advection Diffusion Eq"
         key: "cpu_column_advect_diff"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/column/advect_diffusion.jl"
         artifact_paths:
@@ -1697,6 +1923,7 @@ steps:
 
       - label: ":computer: Column Ekman Eq"
         key: "cpu_column_ekman"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/column/ekman.jl"
         artifact_paths:
@@ -1704,6 +1931,7 @@ steps:
 
       - label: ":computer: Column Hydrostatic Ekman Eq"
         key: "cpu_column_hydrostatic_ekman"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/column/hydrostatic_ekman.jl"
         artifact_paths:
@@ -1711,6 +1939,7 @@ steps:
 
       - label: ":computer: Column Wave Eq"
         key: "cpu_column_wave"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/column/wave.jl"
         artifact_paths:
@@ -1718,6 +1947,7 @@ steps:
 
       - label: ":computer: Column Hydrostatic Balance Eq"
         key: "cpu_column_hydrostatic"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/column/hydrostatic.jl"
         artifact_paths:
@@ -1725,6 +1955,7 @@ steps:
 
       - label: ":computer: Column Hydrostatic Balance Eq with discretely balanced initial condition"
         key: "cpu_column_hydrostatic_discrete"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/column/hydrostatic_discrete.jl"
         artifact_paths:
@@ -1734,6 +1965,7 @@ steps:
     steps:
       - label: ":computer: Bickley jet CG"
         key: "cpu_bickleyjet_cg"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/bickleyjet/bickleyjet_cg.jl"
         artifact_paths:
@@ -1741,6 +1973,7 @@ steps:
 
       - label: ":computer: Bickley jet CG unstructured mesh"
         key: "cpu_bickleyjet_cg_unsmesh"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/bickleyjet/bickleyjet_cg_unsmesh.jl"
         artifact_paths:
@@ -1748,6 +1981,7 @@ steps:
 
       - label: ":computer: Bickley jet CG vector invariant hyperviscosity"
         key: "cpu_bickleyjet_cg_invariant_hypervisc"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/bickleyjet/bickleyjet_cg_invariant_hypervisc.jl"
         artifact_paths:
@@ -1755,6 +1989,7 @@ steps:
 
       - label: ":computer: MPI Bickley jet CG vector invariant hyperviscosity"
         key: "cpu_mpi_bickleyjet_cg_invariant_hypervisc"
+        retry: *retry_policy
         command:
           - "srun julia --color=yes --project=.buildkite examples/bickleyjet/bickleyjet_cg_invariant_hypervisc.jl"
         artifact_paths:
@@ -1768,6 +2003,7 @@ steps:
 
       - label: ":computer: Bickley jet DG rusanov"
         key: "cpu_bickleyjet_dg_rusanov"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/bickleyjet/bickleyjet_dg.jl rusanov"
         artifact_paths:
@@ -1775,6 +2011,7 @@ steps:
 
       - label: ":computer: Bickley jet DG roe"
         key: "cpu_bickleyjet_dg_roe"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/bickleyjet/bickleyjet_dg.jl roe"
         artifact_paths:
@@ -1782,6 +2019,7 @@ steps:
 
       - label: ":computer: Bickley jet DG roe noslip"
         key: "cpu_bickleyjet_dg_roe_noslip"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/bickleyjet/bickleyjet_dg.jl roe noslip"
         artifact_paths:
@@ -1789,6 +2027,7 @@ steps:
 
       - label: ":computer: Plane limiters advection cosine bells"
         key: "cpu_cg_plane_advection_limiter_cosine_bells"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/plane/limiters_advection.jl"
         artifact_paths:
@@ -1796,6 +2035,7 @@ steps:
 
       - label: ":computer: Plane limiters advection Gaussian bells"
         key: "cpu_cg_plane_advection_limiter_gaussian_bells"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/plane/limiters_advection.jl gaussian_bells"
         artifact_paths:
@@ -1803,6 +2043,7 @@ steps:
 
       - label: ":computer: Plane limiters advection cylinders"
         key: "cpu_cg_plane_advection_limiter_cylinders"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/plane/limiters_advection.jl cylinders"
         artifact_paths:
@@ -1813,6 +2054,7 @@ steps:
 
       - label: ":computer: 3D Box limiters advection cosine bells"
         key: "cpu_box_advection_limiter_cosine_bells"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/box/limiters_advection.jl"
         artifact_paths:
@@ -1820,6 +2062,7 @@ steps:
 
       - label: ":computer: 3D Box limiters advection Gaussian bells"
         key: "cpu_box_advection_limiter_gaussian_bells"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/box/limiters_advection.jl gaussian_bells"
         artifact_paths:
@@ -1827,6 +2070,7 @@ steps:
 
       - label: ":computer: 3D Box limiters advection Gaussian bells GPU"
         key: "gpu_box_advection_limiter_gaussian_bells"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/box/limiters_advection.jl gaussian_bells"
         artifact_paths:
@@ -1838,6 +2082,7 @@ steps:
 
       - label: ":computer: Float 32 3D sphere baroclinic wave (ρe) HF datalayout GPU"
         key: "gpu_baroclinic_wave_rho_e_float32_hf"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
         artifact_paths:
@@ -1852,6 +2097,7 @@ steps:
 
       - label: ":computer: 3D Box limiters advection slotted spheres"
         key: "cpu_box_advection_limiter_slotted_spheres"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/box/limiters_advection.jl slotted_spheres"
         artifact_paths:
@@ -1859,6 +2105,7 @@ steps:
 
       - label: ":computer: Isothermal channel flow 2D hybrid (ρe)"
         key: "cpu_isothermal_channel_2d_hybrid_rhoe"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/plane/isothermal_channel.jl"
         artifact_paths:
@@ -1866,6 +2113,7 @@ steps:
 
       - label: ":computer: Rising Bubble 3D hybrid (ρθ)"
         key: "cpu_rising_bubble_3d_hybrid_rhotheta"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/box/bubble_3d_rhotheta.jl"
         artifact_paths:
@@ -1873,6 +2121,7 @@ steps:
 
       - label: ":computer: Rising Bubble 2D hybrid invariant (ρe)"
         key: "cpu_rising_bubble_2d_hybrid_invariant_rhoe"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/plane/bubble_2d_invariant_rhoe.jl"
         artifact_paths:
@@ -1880,6 +2129,7 @@ steps:
 
       - label: ":computer: Rising Bubble 3D hybrid invariant (ρθ)"
         key: "cpu_rising_bubble_3d_hybrid_invariant_rhotheta"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/box/bubble_3d_invariant_rhotheta.jl"
         artifact_paths:
@@ -1887,6 +2137,7 @@ steps:
 
       - label: ":computer: Rising Bubble 3D hybrid invariant (ρe)"
         key: "cpu_rising_bubble_3d_hybrid_invariant_rhoe"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/box/bubble_3d_invariant_rhoe.jl"
         artifact_paths:
@@ -1894,6 +2145,7 @@ steps:
 
       - label: ":flower_playing_cards: Rising Bubble 3D hybrid invariant (ρe)"
         key: "gpu_rising_bubble_3d_hybrid_invariant_rhoe"
+        retry: *retry_policy
         command:
 #          - "nsys profile --trace=nvtx,cuda --output=output/$$BUILDKITE_STEP_KEY/report julia --color=yes --project=.buildkite examples/hybrid/box/bubble_3d_invariant_rhoe.jl"
           - "julia --color=yes --project=.buildkite examples/hybrid/box/bubble_3d_invariant_rhoe.jl"
@@ -1906,6 +2158,7 @@ steps:
 
       - label: ":flower_playing_cards: Rising Bubble 3D hybrid invariant (ρe), custom resolution"
         key: "gpu_rising_bubble_3d_hybrid_invariant_rhoe_custom"
+        retry: *retry_policy
         command:
 #          - "nsys profile --trace=nvtx,cuda --output=output/$$BUILDKITE_STEP_KEY/report julia --color=yes --project=.buildkite examples/hybrid/box/bubble_3d_invariant_rhoe.jl Float64 custom 1000 1000 4 16 3 0.05 700.0"
           - "julia --color=yes --project=.buildkite examples/hybrid/box/bubble_3d_invariant_rhoe.jl Float64 custom 1000 1000 4 16 3 0.05 700.0"
@@ -1918,6 +2171,7 @@ steps:
 
       - label: ":computer: Density current 2D hybrid invariant total energy"
         key: "cpu_density_current_2d_hybrid_invariant_total_energy"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/plane/density_current_2dinvariant_rhoe.jl"
         artifact_paths:
@@ -1925,6 +2179,7 @@ steps:
 
       - label: ":computer: Nonhydrostatic Agnesi Mountain total energy (topography mesh interface)"
         key: "cpu_agnesi_mtn_2d_hybrid_invariant_total_energy_topography"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/plane/topo_agnesi_nh.jl"
         artifact_paths:
@@ -1932,6 +2187,7 @@ steps:
 
       - label: ":computer: Schar Mountain total energy (topography mesh interface)"
         key: "cpu_schaer_mtn_2d_hybrid_invariant_total_energy_topography"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/plane/topo_schar_nh.jl"
         artifact_paths:
@@ -1939,6 +2195,7 @@ steps:
 
       - label: ":computer: Density current 2D hybrid conservative form potential temperature"
         key: "cpu_density_current_2d_hybrid_conservative_potential_temperature"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/plane/density_current_2d_flux_form.jl"
         artifact_paths:
@@ -1946,6 +2203,7 @@ steps:
 
       - label: ":computer: MPI Rising Bubble 3D hybrid invariant (ρe)"
         key: "cpu_mpi_rising_bubble_3d_hybrid_invariant_rhoe"
+        retry: *retry_policy
         command:
           - "srun julia --color=yes --project=.buildkite examples/hybrid/box/bubble_3d_invariant_rhoe.jl"
         artifact_paths:
@@ -1962,6 +2220,7 @@ steps:
 
       - label: ":computer: Solid body sphere cosine bell alpha0"
         key: "cpu_solidbody_cg_sphere_cosine_bell_alpha0"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/sphere/solidbody.jl"
         artifact_paths:
@@ -1969,6 +2228,7 @@ steps:
 
       - label: ":computer: Solid body sphere cosine bell alpha45"
         key: "cpu_solidbody_cg_sphere_cosine_bell_alpha45"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/sphere/solidbody.jl cosine_bell alpha45"
         artifact_paths:
@@ -1976,6 +2236,7 @@ steps:
 
       - label: ":computer: Solid body sphere Gaussian bell alpha0"
         key: "cpu_solidbody_cg_sphere_gaussian_bell_alpha0"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/sphere/solidbody.jl gaussian_bell"
         artifact_paths:
@@ -1983,6 +2244,7 @@ steps:
 
       - label: ":computer: Solid body sphere Gaussian bell alpha45"
         key: "cpu_solidbody_cg_sphere_gaussian_bell_alpha45"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/sphere/solidbody.jl gaussian_bell alpha45"
         artifact_paths:
@@ -1990,6 +2252,7 @@ steps:
 
       - label: ":computer: Sphere limiters advection cosine bells"
         key: "cpu_cg_sphere_advection_limiter_cosine_bells"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/sphere/limiters_advection.jl"
         artifact_paths:
@@ -1997,6 +2260,7 @@ steps:
 
       - label: ":computer: Sphere limiters advection Gaussian bells"
         key: "cpu_cg_advection_limiter_gaussian_bells"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/sphere/limiters_advection.jl gaussian_bells"
         artifact_paths:
@@ -2004,6 +2268,7 @@ steps:
 
       - label: ":computer: Sphere limiters advection cylinders"
         key: "cpu_cg_advection_limiter_cylinders"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/sphere/limiters_advection.jl cylinders"
         artifact_paths:
@@ -2011,6 +2276,7 @@ steps:
 
       - label: ":computer: Steady-state shallow water 2D sphere alpha0"
         key: "cpu_shallowwater_2d_cg_sphere_alpha0"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl"
         artifact_paths:
@@ -2018,6 +2284,7 @@ steps:
 
       - label: ":computer: Shallow-water 2D sphere steady-state alpha45"
         key: "cpu_shallowwater_2d_cg_sphere_alpha45"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl steady_state alpha45"
         artifact_paths:
@@ -2025,6 +2292,7 @@ steps:
 
       - label: ":computer: Shallow-water 2D sphere steady-state with compact support alpha0"
         key: "cpu_shallowwater_2d_cg_sphere_compact_alpha0"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl steady_state_compact"
         artifact_paths:
@@ -2032,6 +2300,7 @@ steps:
 
       - label: ":computer: Shallow-water 2D sphere steady-state with compact support alpha60"
         key: "cpu_shallowwater_2d_cg_sphere_compact_alpha60"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl steady_state_compact alpha60"
         artifact_paths:
@@ -2039,6 +2308,7 @@ steps:
 
       - label: ":computer: Shallow-water 2D sphere barotropic instability alpha0"
         key: "cpu_shallowwater_2d_cg_sphere_barotropic_alpha0"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl barotropic_instability"
         artifact_paths:
@@ -2046,6 +2316,7 @@ steps:
 
       - label: ":computer: MPI Shallow-water 2D sphere barotropic instability alpha0"
         key: "cpu_mpi_shallowwater_2d_cg_sphere_barotropic_alpha0"
+        retry: *retry_policy
         command:
 #          - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/report.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl barotropic_instability"
           - "srun julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl barotropic_instability"
@@ -2062,6 +2333,7 @@ steps:
 
       - label: ":computer: Shallow-water 2D sphere barotropic instability alpha30"
         key: "cpu_shallowwater_2d_cg_sphere_barotropic_alpha30"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl barotropic_instability alpha30"
         artifact_paths:
@@ -2069,6 +2341,7 @@ steps:
 
       - label: ":computer: Shallow-water 2D sphere mountain alpha0"
         key: "cpu_nonuniform_shallowwater_2d_cg_sphere"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl mountain"
         artifact_paths:
@@ -2076,6 +2349,7 @@ steps:
 
       - label: ":computer: Shallow-water 2D sphere Rossby Haurwitz"
         key: "cpu_rossbyhaurwitz_2d_cg_sphere"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl rossby_haurwitz"
         artifact_paths:
@@ -2083,6 +2357,7 @@ steps:
 
       - label: ":flower_playing_cards: CUDA Shallow-water 2D sphere"
         key: "cuda_shallowwater_2d_cg_sphere"
+        retry: *retry_policy
         command:
           - mkdir -p output/$$BUILDKITE_STEP_KEY
 #          - nsys profile --trace=nvtx,cuda --output=output/$$BUILDKITE_STEP_KEY/report julia --color=yes --project=.buildkite examples/sphere/shallow_water_cuda.jl
@@ -2099,6 +2374,7 @@ steps:
 
       - label: ":computer: 3D sphere deformation flow w/ limiter & FCT"
         key: "cpu_3d_deformation_flow"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/sphere/deformation_flow.jl"
         artifact_paths:
@@ -2106,6 +2382,7 @@ steps:
 
       - label: ":computer: 3D sphere Hadley circulation"
         key: "cpu_3d_hadley_circulation"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/sphere/hadley_circulation.jl"
         artifact_paths:
@@ -2115,6 +2392,7 @@ steps:
 
       - label: ":computer: Float 64 3D sphere baroclinic wave (ρe)"
         key: "cpu_baroclinic_wave_rho_e_float64"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
         artifact_paths:
@@ -2125,6 +2403,7 @@ steps:
 
       - label: ":computer: Float 64 3D sphere baroclinic wave (ρe) HF datalayout"
         key: "cpu_baroclinic_wave_rho_e_float64_hf"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
         artifact_paths:
@@ -2136,6 +2415,7 @@ steps:
 
       - label: ":computer: 3D sphere baroclinic wave (ρe)"
         key: "cpu_baroclinic_wave_rho_e"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
         artifact_paths:
@@ -2145,6 +2425,7 @@ steps:
 
       - label: ":computer: MPI 3D sphere baroclinic wave (ρe)"
         key: "cpu_mpi_baroclinic_wave_rho_e"
+        retry: *retry_policy
         command:
           - "srun julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
         artifact_paths:
@@ -2160,6 +2441,7 @@ steps:
 
       - label: ":computer: 3D sphere baroclinic wave (ρθ)"
         key: "cpu_baroclinic_wave_rho_theta"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
         artifact_paths:
@@ -2169,6 +2451,7 @@ steps:
 
       - label: ":computer: 3D sphere nonhydrostatic gravity wave"
         key: "cpu_nonhydrostatic_gravity_wave"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/sphere/nonhydrostatic_gravity_wave.jl"
         artifact_paths:
@@ -2176,11 +2459,13 @@ steps:
 
       - label: ":computer: 3D sphere solid-body rotation"
         key: "cpu_solid_body_rotation"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/sphere/solid_body_rotation_3d.jl"
 
       - label: ":computer: 3D sphere hydrostatically and geostrophically balanced flow (ρe)"
         key: "cpu_balanced_flow_rho_e"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
         artifact_paths:
@@ -2190,6 +2475,7 @@ steps:
 
       - label: ":computer: 3D sphere hydrostatically and geostrophically balanced flow (ρθ)"
         key: "cpu_balanced_flow_rho_theta"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
         artifact_paths:
@@ -2199,6 +2485,7 @@ steps:
 
       - label: ":computer: 3D sphere dry Held-Suarez (ρe)"
         key: "cpu_held_suarez_rho_e"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
         artifact_paths:
@@ -2208,6 +2495,7 @@ steps:
 
       - label: ":computer: Float64 3D sphere dry Held-Suarez (ρθ)"
         key: "cpu_held_suarez_rho_theta_float64"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
         artifact_paths:
@@ -2218,6 +2506,7 @@ steps:
 
       - label: ":computer: 3D sphere dry Held-Suarez (ρθ)"
         key: "cpu_held_suarez_rho_theta"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
         artifact_paths:
@@ -2227,6 +2516,7 @@ steps:
 
       - label: ":computer: 3D sphere dry Held-Suarez (ρe_int)"
         key: "cpu_held_suarez_rho_e_int"
+        retry: *retry_policy
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
         artifact_paths:
@@ -2239,6 +2529,7 @@ steps:
 
       - label: ":computer: 2D plane inertial gravity wave"
         key: "cpu_inertial_gravity_wave"
+        retry: *retry_policy
         command:
           - "julia --threads 8 --color=yes --project=.buildkite examples/hybrid/driver.jl"
         artifact_paths:
@@ -2251,6 +2542,7 @@ steps:
 
       - label: ":computer: stretched 2D plane inertial gravity wave"
         key: "cpu_stretch_inertial_gravity_wave"
+        retry: *retry_policy
         command:
           - "julia --threads 8 --color=yes --project=.buildkite examples/hybrid/driver.jl"
         artifact_paths:
@@ -2267,21 +2559,25 @@ steps:
 
       - label: "Analysis: Flamegraph profile"
         key: "cpu_flamegraph"
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite perf/flame.jl"
         artifact_paths:
           - "perf/output/*"
 
       - label: "Analysis: Benchmark step!"
         key: "cpu_benchmark"
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite perf/benchmark.jl"
 
       - label: "Analysis: Invalidations"
         key: "cpu_invalidations"
+        retry: *retry_policy
         command: "julia --color=yes --project=.buildkite perf/invalidations.jl"
 
   - wait
 
   - label: ":chart_with_downwards_trend: build history"
+    retry: *retry_policy
     command:
       - "build_history staging"
     artifact_paths:
