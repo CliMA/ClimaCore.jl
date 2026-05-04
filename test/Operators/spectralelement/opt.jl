@@ -61,14 +61,8 @@ function opt_WeakDivergence(field)
     return wdiv.(field)
 end
 
-function opt_ScalarDSS(field)
-    Spaces.weighted_dss!(@. opt_Gradient(field))
-    return grad
-end
-
-function opt_VectorDss_Curl(field)
-    return Spaces.weighted_dss!(@. opt_Curl(field))
-end
+opt_ScalarDSS(field) = Spaces.weighted_dss!(opt_Gradient(field))
+opt_VectorDss_Curl(field) = Spaces.weighted_dss!(opt_Curl(field))
 
 function opt_VectorDss_DivGrad(field)
     sdiv = Operators.Divergence()

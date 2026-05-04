@@ -40,7 +40,7 @@ function Base.fill!(dest::AbstractData, bc, to::ToCUDA, mask = NoMask())
             cart_inds = if mask isa NoMask
                 cartesian_indices(us)
             else
-                cartesian_indicies_mask(us, mask)
+                cartesian_indices_mask(us, mask)
             end
             args = (dest, bc, us, mask, cart_inds)
             threads = threads_via_occupancy(knl_fill!, args)

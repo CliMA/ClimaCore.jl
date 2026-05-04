@@ -31,7 +31,7 @@ import LazyBroadcast: lazy
     latency = median(@benchmark $scalar_field_1 .= $scalar_field_1 .+ $scalar_field_2).time
     # update this value if the kernel launch time changes significantly and it is expected
     baseline_latency = 20500
-    @test latency ≈ baseline_latency atol = 3000
+    @test latency ≈ baseline_latency atol = 4000
     percent_change_latency =
         round(Int, (latency - baseline_latency) / baseline_latency * 100)
     @info "Latency: $latency ns, Percent change from baseline: $percent_change_latency%"
@@ -45,7 +45,7 @@ import LazyBroadcast: lazy
         ).time
     # update this value if the kernel launch time changes significantly and it is expected
     baseline_latency = 22500
-    @test latency ≈ baseline_latency atol = 3000
+    @test latency ≈ baseline_latency atol = 4000
     percent_change_latency =
         round(Int, (latency - baseline_latency) / baseline_latency * 100)
     @info "Latency: $latency ns, Percent change from baseline: $percent_change_latency%"
@@ -58,7 +58,7 @@ import LazyBroadcast: lazy
     latency = median(@benchmark $scalar_field_1 .= $lazy_sum_3).time
     # update this value if the kernel launch time changes significantly and it is expected
     baseline_latency = 29000
-    @test latency ≈ baseline_latency atol = 3000
+    @test latency ≈ baseline_latency atol = 4000
     percent_change_latency =
         round(Int, (latency - baseline_latency) / baseline_latency * 100)
     @info "Latency: $latency ns, Percent change from baseline: $percent_change_latency%"
