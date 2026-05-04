@@ -27,11 +27,11 @@ import LazyBroadcast: lazy
     scalar_field_2 = fill(1.0f0, space)
     # basic expression
     # intentionally benchmark without a sync between each trial
-    # CUDA.synchronize()
-    latency = median(@benchmark $scalar_field_1 .= $scalar_field_1 .+ $scalar_field_2).time
+    CUDA.synchronize()
+    latency = minimum(@benchmark $scalar_field_1 .= $scalar_field_1 .+ $scalar_field_2).time
     # update this value if the kernel launch time changes significantly and it is expected
-    baseline_latency = 20500
-    @test latency ≈ baseline_latency atol = 4000
+    baseline_latency = 13000
+    @test latency ≈ baseline_latency atol = 2000
     percent_change_latency =
         round(Int, (latency - baseline_latency) / baseline_latency * 100)
     @info "Latency: $latency ns, Percent change from baseline: $percent_change_latency%"
@@ -39,13 +39,13 @@ import LazyBroadcast: lazy
     # repeated args expression
     CUDA.synchronize()
     latency =
-        median(
+        minimum(
             @benchmark $scalar_field_1 .=
                 $scalar_field_1 .+ $scalar_field_2 .+ $scalar_field_1 .+ $scalar_field_2
         ).time
     # update this value if the kernel launch time changes significantly and it is expected
-    baseline_latency = 22500
-    @test latency ≈ baseline_latency atol = 4000
+    baseline_latency = 16000
+    @test latency ≈ baseline_latency atol = 2000
     percent_change_latency =
         round(Int, (latency - baseline_latency) / baseline_latency * 100)
     @info "Latency: $latency ns, Percent change from baseline: $percent_change_latency%"
@@ -55,10 +55,10 @@ import LazyBroadcast: lazy
     lazy_sum_2 = @. lazy(lazy_sum_1 + lazy_sum_1)
     lazy_sum_3 = @. lazy(lazy_sum_2 + lazy_sum_2)
     CUDA.synchronize()
-    latency = median(@benchmark $scalar_field_1 .= $lazy_sum_3).time
+    latency = minimum(@benchmark $scalar_field_1 .= $lazy_sum_3).time
     # update this value if the kernel launch time changes significantly and it is expected
-    baseline_latency = 29000
-    @test latency ≈ baseline_latency atol = 4000
+    baseline_latency = 20000
+    @test latency ≈ baseline_latency atol = 2000
     percent_change_latency =
         round(Int, (latency - baseline_latency) / baseline_latency * 100)
     @info "Latency: $latency ns, Percent change from baseline: $percent_change_latency%"
