@@ -262,14 +262,14 @@ function tridiag_pcr_kernel!(
 
         # Compute elimination factors
         @inbounds begin
-            k1 = (i > stride) ? -local_ai ⊠ inv(s_b[i_minus]) : zero(eltype(a))
-            k2 = (i <= Nv - stride) ? -local_ci ⊠ inv(s_b[i_plus]) : zero(eltype(a))
+            k1 = (i > stride) ? -local_ai * inv(s_b[i_minus]) : zero(eltype(a))
+            k2 = (i <= Nv - stride) ? -local_ci * inv(s_b[i_plus]) : zero(eltype(a))
 
             # Update coefficients
-            local_ai = k1 ⊠ s_a[i_minus]
-            local_bi = local_bi ⊞ k1 ⊠ s_c[i_minus] ⊞ k2 ⊠ s_a[i_plus]
-            local_ci = k2 ⊠ s_c[i_plus]
-            local_di = local_di ⊞ k1 ⊠ s_d[i_minus] ⊞ k2 ⊠ s_d[i_plus]
+            local_ai = k1 * s_a[i_minus]
+            local_bi = local_bi + k1 * s_c[i_minus] + k2 * s_a[i_plus]
+            local_ci = k2 * s_c[i_plus]
+            local_di = local_di + k1 * s_d[i_minus] + k2 * s_d[i_plus]
         end
 
         CUDA.sync_threads()
@@ -287,7 +287,7 @@ function tridiag_pcr_kernel!(
     end
 
     #  Final solve into x
-    @inbounds x[idx] = inv(s_b[i]) ⊠ s_d[i]
+    @inbounds x[idx] = inv(s_b[i]) * s_d[i]
     return nothing
 end
 
