@@ -971,18 +971,54 @@ Base.Broadcast.materialize!(
     vector_or_matrix::FieldNameDict,
 ) = Base.Broadcast.materialize!(field_vector_view(dest), vector_or_matrix)
 
+# Pairs are eligible for fused multi-broadcast when both sides are plain Fields
+# of the same concrete type (so axes / data layout / element type all match) —
+# this keeps the GPU codegen for `_newindex` static.
+@inline _is_fusable_pair(dest_entry::F, entry::F) where {F <: Fields.Field} =
+    true
+@inline _is_fusable_pair(_, _) = false
+
 NVTX.@annotate function copyto_foreach!(
     dest::FieldNameDict,
     vector_or_matrix::FieldNameDict,
 )
-    foreach(keys(vector_or_matrix)) do key
-        entry = vector_or_matrix[key]
-        if dest[key] isa ScalingFieldMatrixEntry
-            dest[key] == entry || error("matrix entry at $key is immutable")
+    key_values = keys(vector_or_matrix).values
+    triples = unrolled_map(key_values) do key
+        (key, dest[key], vector_or_matrix[key])
+    end
+    fusable = unrolled_filter(triples) do t
+        _is_fusable_pair(t[2], t[3])
+    end
+    non_fusable = unrolled_filter(triples) do t
+        !_is_fusable_pair(t[2], t[3])
+    end
+    # All fusable triples must share the same concrete destination type for
+    # FusedMultiBroadcast (its `check_mismatched_spaces` requires uniform space
+    # types across pairs, and uniform `_newindex` types across pairs).
+    uniform_fusable = if length(fusable) > 1
+        F1 = typeof(fusable[1][2])
+        unrolled_all(t -> typeof(t[2]) === F1, fusable)
+    else
+        false
+    end
+    if uniform_fusable
+        pairs = unrolled_map(fusable) do t
+            Pair(t[2], Base.broadcasted(identity, t[3]))
+        end
+        Base.copyto!(Fields.FusedMultiBroadcast(pairs))
+    else
+        unrolled_foreach(fusable) do t
+            t[2] .= t[3]
+        end
+    end
+    unrolled_foreach(non_fusable) do t
+        key, dest_entry, entry = t
+        if dest_entry isa ScalingFieldMatrixEntry
+            dest_entry == entry || error("matrix entry at $key is immutable")
         elseif entry isa ScalingFieldMatrixEntry
-            dest[key] .= (entry,)
+            dest_entry .= (entry,)
         else
-            dest[key] .= entry
+            dest_entry .= entry
         end
     end
 end
