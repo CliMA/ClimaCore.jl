@@ -1,60 +1,14 @@
 ## Basis-type conversion helpers (private)
 
-# Relabel the first-axis basis type in place. For dimensions orthogonal to
-# `lg`'s geometry, the metric is identity by convention (u_i ≡ u^i ≡ u), so
-# only the label changes — component values stay put.
-@inline function _relabel(::BT, v::AbstractTensor) where {BT <: BasisType}
-    names = basis_vector_names(axes(v, 1))
-    new_bases = (Basis(BT(), names), Base.tail(axes(v))...)
-    return Tensor(parent(v), new_bases)
-end
-
-# Pick the change-of-basis tensor that performs each (target ← source)
-# conversion. `gⁱʲ` is cached on `LocalGeometry`; the others are derived via
-# `getproperty` (`∂x∂ξ` is a free field read, `∂ξ∂x` and `gᵢⱼ` invoke
-# `inv` on the cached SMatrix — small constant cost the JIT typically
-# hoists when the result feeds a sparse matvec). The single-matvec form is
-# kept because rewriting these as two matvecs explodes FLOPs for partial-dim
-# inputs (e.g. `WVector` in 3D LG): the second matvec is dense even when
-# the first is sparse, doubling cost on hot paths like vertical advection.
-@inline _apply_metric(::Contravariant, v::CovariantTensor, lg::LocalGeometry) =
-    lg.gⁱʲ * v
-@inline _apply_metric(::Covariant, v::ContravariantTensor, lg::LocalGeometry) =
-    lg.gᵢⱼ * v
-@inline _apply_metric(::Contravariant, v::OrthonormalTensor, lg::LocalGeometry) =
-    lg.∂ξ∂x * v
-@inline _apply_metric(::Covariant, v::OrthonormalTensor, lg::LocalGeometry) =
-    lg.∂x∂ξ' * v
-@inline _apply_metric(::Orthonormal, v::ContravariantTensor, lg::LocalGeometry) =
-    lg.∂x∂ξ * v
-@inline _apply_metric(::Orthonormal, v::CovariantTensor, lg::LocalGeometry) =
-    lg.∂ξ∂x' * v
-
-# Convert the first axis of `v` to `target` basis type. Source names that fall
-# inside `lg`'s geometry dims `I` go through the cached metric tensor via
-# `_apply_metric`; names outside `I` are along dimensions orthogonal to `lg`
-# (identity metric u_i ≡ u^i ≡ u), so they pass through with only a basis-type
-# relabel. Mixed cases split `v` along axis 1, convert each piece, and sum in
-# the shared target basis.
-@inline function _to_basis_type(
-    target::BasisType, v::AbstractTensor, lg::LocalGeometry{I},
-) where {I}
-    src_basis = axes(v, 1)
-    src_bt = basis_type(src_basis)
-    src_bt === target && return v  # already in target basis
-    # Partition source names by whether `lg`'s metric covers them.
-    src_names = basis_vector_names(src_basis)
-    metric_names = unrolled_filter(n -> unrolled_in(n, I), src_names)
-    passthrough_names = unrolled_filter(n -> !unrolled_in(n, I), src_names)
-    # Pure passthrough - no name is in `lg`'s geometry, just relabel.
-    isempty(metric_names) && return _relabel(target, v)
-    # Pure metric - every name is in `lg`'s geometry, apply the metric to all of `v`.
-    isempty(passthrough_names) && return _apply_metric(target, v, lg)
-    # Mixed - split `v` along axis 1, convert each piece, sum in the target basis.
-    tail_axes = Base.tail(axes(v))
-    v_metric = reshape(v, (Basis(src_bt, metric_names), tail_axes...))
-    v_passthrough = reshape(v, (Basis(src_bt, passthrough_names), tail_axes...))
-    return _apply_metric(target, v_metric, lg) + _relabel(target, v_passthrough)
+# Convert `v`'s first axis to `target` basis type. The conversion matrix is
+# derived algebraically from `lg.metric` (the canonical ∂x∂ξ) via
+# `change_of_basis_tensor`, materializing matmuls / inverses per call. The
+# padded metric (identity in directions orthogonal to `lg`'s geometry `I`)
+# means a single matvec covers all source-name configurations.
+@inline function _to_basis_type(target::BasisType, v::AbstractTensor, lg::LocalGeometry)
+    src_bt = basis_type(axes(v, 1))
+    src_bt === target && return v
+    return change_of_basis_tensor(lg.metric, target, dual_basis_type(src_bt)) * v
 end
 
 ## project(basis, v, local_geometry)  — 3-argument form using metric

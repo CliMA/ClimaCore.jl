@@ -236,6 +236,9 @@ Base.axes(x::Tensor) = x.bases
     bases_type = Base.unwrap_unionall(T).parameters[3]
     return :($(bases_type.instance))
 end
+# TODO: replace generated func above with this:
+# unwrap(thing::UnionALl) = unwrap(thing.inner)
+# unwrap(thing) = thing
 
 
 Base.zero(x::Tensor) = zero(typeof(x))
@@ -293,10 +296,10 @@ Base.@propagate_inbounds Base.view(x::Tensor, indices::TensorIndex...) =
 
 Storage wrapper around the canonical local metric tensor `∂x/∂ξ`
 (`Orthonormal` rows × `Covariant` columns). Held as a field of
-[`LocalGeometry`](@ref); read directly via `lg.∂x∂ξ` from the
-basis-conversion code in `conversions.jl`. The wrapper exists only so that
-`LocalGeometry`'s metric slot has a distinct type from cached derived
-tensors like `gⁱʲ`.
+[`LocalGeometry`](@ref); read directly via `lg.∂x∂ξ`. The wrapped tensor is
+identity-padded to full `(UVWAxis, Covariant123Axis)` shape regardless of
+the source geometry's `I`, so a single matvec covers every conversion case
+— directions outside `I` ride the identity block. See [`pad_metric_tensor`](@ref).
 """
 struct Metric{T <: AbstractTensor{2}}
     tensor::T
@@ -311,6 +314,91 @@ Base.convert(::Type{Metric{T}}, g::Metric) where {T} =
     Metric(convert(T, g.tensor))
 
 Base.show(io::IO, g::Metric) = print(io, "Metric(", g.tensor, ")")
+
+"""
+    pad_metric_tensor(∂x∂ξ::Tensor{2})
+
+Pads an N×N metric tensor with axes `(Basis{Orthonormal, I}, Basis{Covariant, I})`
+to a full 3×3 tensor with axes `(UVWAxis, Covariant123Axis)`, putting `1`
+on diagonal entries for dimensions outside `I` and `0` on cross-coupling
+entries. The padded form encodes the "identity metric in directions
+orthogonal to `I`" convention as actual matrix entries, so a single matvec
+`padded_M * v` covers all source-name configurations without partition
+logic. Idempotent for `I == (1, 2, 3)`.
+"""
+function pad_metric_tensor(∂x∂ξ::Tensor{2})
+    src_names = basis_vector_names(axes(∂x∂ξ, 1))
+    src_names == (1, 2, 3) && return ∂x∂ξ
+    sm = _pad_metric_components(parent(∂x∂ξ), Val(src_names))
+    return Tensor(sm, (UVWAxis(), Covariant123Axis()))
+end
+
+# Unrolled per (N, src_names): the SMatrix constructor is a flat tuple of
+# either field reads, `one(FT)`, or `zero(FT)` literals — all known at
+# compile time.
+@generated function _pad_metric_components(
+    components::SMatrix{N, N, FT, NN}, ::Val{src_names},
+) where {N, NN, FT, src_names}
+    full_dims = (1, 2, 3)
+    elems = Expr[]
+    for j in 1:3, i in 1:3                       # column-major SMatrix
+        di, dj = full_dims[i], full_dims[j]
+        idx_i = findfirst(==(di), src_names)
+        idx_j = findfirst(==(dj), src_names)
+        if idx_i !== nothing && idx_j !== nothing
+            push!(elems, :(components[$idx_i, $idx_j]))
+        elseif di == dj
+            push!(elems, :(one(FT)))
+        else
+            push!(elems, :(zero(FT)))
+        end
+    end
+    return :(SMatrix{3, 3, FT, 9}($(elems...)))
+end
+
+# Algebraic change-of-basis lookup. Given a `Metric` storing the canonical
+# `∂x∂ξ::(Orth, Cov)`, return the matrix that maps `dual(col_type) →
+# row_type` derived via matmul / inv on the stored tensor. Same-type pairs
+# collapse to identity (returns 1).
+
+# `(row_type, col_type)` of a 2-tensor that maps `dual(col) → row`.
+src_and_dest_types(row_type, col_type) = (dual_basis_type(col_type), row_type)
+cob_arg_types(row_type, col_type, tensor) = (
+    src_and_dest_types(row_type, col_type)...,
+    src_and_dest_types(unrolled_map(basis_type, axes(tensor))...)...,
+)
+
+for (T1, T2) in ((:Covariant, :Contravariant), (:Contravariant, :Covariant))
+    T3 = :Orthonormal
+    @eval cob_tensor(::$T1, ::$T3, ::$T3, ::$T2, tensor) = tensor'
+    @eval cob_tensor(::$T3, ::$T1, ::$T2, ::$T3, tensor) = tensor'
+    @eval cob_tensor(::$T1, ::$T3, ::$T2, ::$T3, tensor) = inv(tensor')
+    @eval cob_tensor(::$T3, ::$T1, ::$T3, ::$T2, tensor) = inv(tensor')
+    @eval cob_tensor(::$T1, ::$T2, ::$T3, ::$T2, tensor) = tensor * tensor'
+    @eval cob_tensor(::$T1, ::$T2, ::$T1, ::$T3, tensor) = tensor' * tensor
+    @eval cob_tensor(::$T1, ::$T2, ::$T3, ::$T1, tensor) = inv(tensor * tensor')
+    @eval cob_tensor(::$T1, ::$T2, ::$T2, ::$T3, tensor) = inv(tensor' * tensor)
+end
+
+cob_tensor(::T1, ::T1, _, _, _) where {T1} = 1
+cob_tensor(::T1, ::T1, ::T1, ::T1, _) where {T1} = 1  # disambiguate
+cob_tensor(::T1, ::T2, ::T1, ::T2, tensor) where {T1, T2} = tensor
+cob_tensor(::T1, ::T2, ::T2, ::T1, tensor) where {T1, T2} = inv(tensor)
+cob_tensor(::T1, ::T2, ::T3, ::T4, tensor) where {T1, T2, T3, T4} =
+    throw(DimensionMismatch("Cannot compute $T1-to-$T2 change of basis tensor \
+                             from $T3-to-$T4 metric representation $tensor"))
+
+"""
+    change_of_basis_tensor(g::Metric, row_type, col_type)
+
+Returns the change-of-basis 2-tensor with the requested `row_type` and
+`col_type` basis types, derived algebraically from `g.tensor` via
+`cob_tensor`. The `(row, col)` axes name what the result tensor's axes
+*are*, not source/target — to map `src → target`, ask for
+`change_of_basis_tensor(g, target, dual_basis_type(src))`.
+"""
+change_of_basis_tensor(g::Metric, row_type, col_type) =
+    cob_tensor(cob_arg_types(row_type, col_type, g.tensor)..., g.tensor)
 
 #################################
 ## Covector and Vector Aliases ##
