@@ -22,10 +22,11 @@ Base.rand(::Type{T}) where {FT, T <: XPoint{FT}} = T(rand(FT))
 get_∂x∂ξ(::Type{FT}, I, ::Type{S}) where {FT, S} =
     Geometry.Tensor(rand(S), (Geometry.Basis{Geometry.Orthonormal, I}(), Geometry.Basis{Geometry.Covariant, I}()))
 
-function get_lg_instance(::Type{T}) where {I, C, FT, TMet, T <: Geometry.LocalGeometry{I, C, FT, TMet}}
-    # TMet = Metric{Tensor{2, FT, Tuple{Orth, Cov}, SMatrix{N, N, FT, N²}}}.
-    # Drill through the Metric wrapper to get the SMatrix component type.
-    S = TMet.parameters[1].parameters[4]
+function get_lg_instance(::Type{T}) where {I, C, FT, T <: Geometry.LocalGeometry{I, C, FT}}
+    # Build an N×N ∂x∂ξ for the geometry's `I`; LocalGeometry's constructor
+    # pads it to a uniform 3×3 internally.
+    N = length(I)
+    S = SMatrix{N, N, FT, N * N}
     LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
 end
 
