@@ -3396,9 +3396,9 @@ return_space(::CurlC2F, space::AllCenterFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellFace())
 
 fd3_curl(u₊::Geometry.Covariant1Vector, u₋::Geometry.Covariant1Vector, invJ) =
-    Geometry.Contravariant2Vector((u₊.u₁ - u₋.u₁) * invJ)
+    Geometry.Contravariant12Vector(zero(invJ), (u₊.u₁ - u₋.u₁) * invJ)
 fd3_curl(u₊::Geometry.Covariant2Vector, u₋::Geometry.Covariant2Vector, invJ) =
-    Geometry.Contravariant1Vector(-(u₊.u₂ - u₋.u₂) * invJ)
+    Geometry.Contravariant12Vector(-(u₊.u₂ - u₋.u₂) * invJ, zero(invJ))
 fd3_curl(::Geometry.Covariant3Vector, ::Geometry.Covariant3Vector, invJ) =
     Geometry.Contravariant3Vector(zero(eltype(invJ)))
 fd3_curl(u₊::Geometry.Covariant12Vector, u₋::Geometry.Covariant12Vector, invJ) =
