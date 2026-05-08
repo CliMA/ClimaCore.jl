@@ -599,8 +599,12 @@ function compute_surface_geometry(
     end
     sWJ = norm(n)
     n = n / sWJ
+    n = Geometry.project(_orth_basis(local_geometry), n)
     return Geometry.SurfaceGeometry(sWJ, n)
 end
+
+@inline _orth_basis(::Geometry.LocalGeometry{I}) where {I} =
+    Geometry.Basis{Geometry.Orthonormal, I}()
 
 function compute_dss_weights(local_geometry, topology, quadrature_style)
     Quadratures.requires_dss(quadrature_style) || return nothing
