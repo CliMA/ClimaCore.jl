@@ -17,23 +17,24 @@ struct LocalGeometry{I, C <: AbstractPoint, FT}
     WJ::FT
     "Canonical metric ∂x/∂ξ wrapped in [`Metric`](@ref). Identity-padded to
     full (UVWAxis, Covariant123Axis) shape so a single matvec covers every
-    conversion regardless of `I`. Derived metrics (`gⁱʲ`, `gᵢⱼ`, `∂ξ∂x`)
-    are computed algebraically on access via [`change_of_basis_tensor`](@ref)."
+    conversion regardless of `I`."
     metric::Metric{Tensor{2, FT, Tuple{UVWAxis, Covariant123Axis}, SMatrix{3, 3, FT, 9}}}
+    "Contravariant metric tensor gⁱʲ. Identity-padded to full
+    (Contravariant123, Contravariant123) shape; cached as a real field so
+    Field-level property access (`Fields.local_geometry_field(space).gⁱʲ`)
+    works through DataLayouts."
+    gⁱʲ::Tensor{2, FT, Tuple{Contravariant123Axis, Contravariant123Axis}, SMatrix{3, 3, FT, 9}}
 end
 
 @inline function Base.getproperty(lg::LocalGeometry, name::Symbol)
-    g = getfield(lg, :metric)
     return if name === :invJ
         inv(getfield(lg, :J))
     elseif name === :∂x∂ξ
-        g.tensor
+        getfield(lg, :metric).tensor
     elseif name === :∂ξ∂x
-        change_of_basis_tensor(g, Contravariant(), Orthonormal())
-    elseif name === :gⁱʲ
-        change_of_basis_tensor(g, Contravariant(), Contravariant())
+        inv(getfield(lg, :metric).tensor)
     elseif name === :gᵢⱼ
-        change_of_basis_tensor(g, Covariant(), Covariant())
+        inv(getfield(lg, :gⁱʲ))
     else
         getfield(lg, name)
     end
@@ -49,10 +50,11 @@ end
 ) where {C, FT}
     names = basis_vector_names(axes(∂x∂ξ, 1))
     padded = pad_metric_tensor(∂x∂ξ)
-    isapproxsymmetric(parent(inv(padded) * inv(padded)')) ||
-        error("gⁱʲ is not symmetric.")
+    ∂ξ∂x = inv(padded)
+    gⁱʲ = ∂ξ∂x * ∂ξ∂x'
+    isapproxsymmetric(parent(gⁱʲ)) || error("gⁱʲ is not symmetric.")
     @assert isapproxsymmetric(parent(padded' * padded)) "gᵢⱼ is not symmetric."
-    return LocalGeometry{names, C, FT}(coordinates, J, WJ, Metric(padded))
+    return LocalGeometry{names, C, FT}(coordinates, J, WJ, Metric(padded), gⁱʲ)
 end
 
 """

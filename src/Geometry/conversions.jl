@@ -1,15 +1,19 @@
 ## Basis-type conversion helpers (private)
 
-# Convert `v`'s first axis to `target` basis type. The conversion matrix is
-# derived algebraically from `lg.metric` (the canonical ∂x∂ξ) via
-# `change_of_basis_tensor`, materializing matmuls / inverses per call. The
-# padded metric (identity in directions orthogonal to `lg`'s geometry `I`)
-# means a single matvec covers all source-name configurations.
-@inline function _to_basis_type(target::BasisType, v::AbstractTensor, lg::LocalGeometry)
-    src_bt = basis_type(axes(v, 1))
-    src_bt === target && return v
-    return change_of_basis_tensor(lg.metric, target, dual_basis_type(src_bt)) * v
-end
+# Metrics are identity-padded to full (1,2,3) shape on `LocalGeometry`, so
+# every conversion is a single matvec — names outside `lg`'s geometry `I`
+# ride the identity block of the padded matrix automatically. Same-type
+# pairs are explicit no-ops; cross-type pairs pick the appropriate cached
+# matrix.
+@inline _to_basis_type(::Contravariant, v::ContravariantTensor, ::LocalGeometry) = v
+@inline _to_basis_type(::Covariant,     v::CovariantTensor,     ::LocalGeometry) = v
+@inline _to_basis_type(::Orthonormal,   v::OrthonormalTensor,   ::LocalGeometry) = v
+@inline _to_basis_type(::Contravariant, v::CovariantTensor,     lg::LocalGeometry) = lg.gⁱʲ * v
+@inline _to_basis_type(::Covariant,     v::ContravariantTensor, lg::LocalGeometry) = lg.gᵢⱼ * v
+@inline _to_basis_type(::Contravariant, v::OrthonormalTensor,   lg::LocalGeometry) = lg.∂ξ∂x * v
+@inline _to_basis_type(::Covariant,     v::OrthonormalTensor,   lg::LocalGeometry) = lg.∂x∂ξ' * v
+@inline _to_basis_type(::Orthonormal,   v::ContravariantTensor, lg::LocalGeometry) = lg.∂x∂ξ * v
+@inline _to_basis_type(::Orthonormal,   v::CovariantTensor,     lg::LocalGeometry) = lg.∂ξ∂x' * v
 
 ## project(basis, v, local_geometry)  — 3-argument form using metric
 
