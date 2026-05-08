@@ -356,50 +356,6 @@ end
     return :(SMatrix{3, 3, FT, 9}($(elems...)))
 end
 
-# Algebraic change-of-basis lookup. Given a `Metric` storing the canonical
-# `∂x∂ξ::(Orth, Cov)`, return the matrix that maps `dual(col_type) →
-# row_type` derived via matmul / inv on the stored tensor. Same-type pairs
-# collapse to identity (returns 1).
-
-# `(row_type, col_type)` of a 2-tensor that maps `dual(col) → row`.
-src_and_dest_types(row_type, col_type) = (dual_basis_type(col_type), row_type)
-cob_arg_types(row_type, col_type, tensor) = (
-    src_and_dest_types(row_type, col_type)...,
-    src_and_dest_types(unrolled_map(basis_type, axes(tensor))...)...,
-)
-
-for (T1, T2) in ((:Covariant, :Contravariant), (:Contravariant, :Covariant))
-    T3 = :Orthonormal
-    @eval cob_tensor(::$T1, ::$T3, ::$T3, ::$T2, tensor) = tensor'
-    @eval cob_tensor(::$T3, ::$T1, ::$T2, ::$T3, tensor) = tensor'
-    @eval cob_tensor(::$T1, ::$T3, ::$T2, ::$T3, tensor) = inv(tensor')
-    @eval cob_tensor(::$T3, ::$T1, ::$T3, ::$T2, tensor) = inv(tensor')
-    @eval cob_tensor(::$T1, ::$T2, ::$T3, ::$T2, tensor) = tensor * tensor'
-    @eval cob_tensor(::$T1, ::$T2, ::$T1, ::$T3, tensor) = tensor' * tensor
-    @eval cob_tensor(::$T1, ::$T2, ::$T3, ::$T1, tensor) = inv(tensor * tensor')
-    @eval cob_tensor(::$T1, ::$T2, ::$T2, ::$T3, tensor) = inv(tensor' * tensor)
-end
-
-cob_tensor(::T1, ::T1, _, _, _) where {T1} = 1
-cob_tensor(::T1, ::T1, ::T1, ::T1, _) where {T1} = 1  # disambiguate
-cob_tensor(::T1, ::T2, ::T1, ::T2, tensor) where {T1, T2} = tensor
-cob_tensor(::T1, ::T2, ::T2, ::T1, tensor) where {T1, T2} = inv(tensor)
-cob_tensor(::T1, ::T2, ::T3, ::T4, tensor) where {T1, T2, T3, T4} =
-    throw(DimensionMismatch("Cannot compute $T1-to-$T2 change of basis tensor \
-                             from $T3-to-$T4 metric representation $tensor"))
-
-"""
-    change_of_basis_tensor(g::Metric, row_type, col_type)
-
-Returns the change-of-basis 2-tensor with the requested `row_type` and
-`col_type` basis types, derived algebraically from `g.tensor` via
-`cob_tensor`. The `(row, col)` axes name what the result tensor's axes
-*are*, not source/target — to map `src → target`, ask for
-`change_of_basis_tensor(g, target, dual_basis_type(src))`.
-"""
-change_of_basis_tensor(g::Metric, row_type, col_type) =
-    cob_tensor(cob_arg_types(row_type, col_type, g.tensor)..., g.tensor)
-
 #################################
 ## Covector and Vector Aliases ##
 #################################
