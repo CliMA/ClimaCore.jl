@@ -233,11 +233,26 @@ function product_geometry(
     )
     J = horizontal_local_geometry.J * vertical_local_geometry.J
     WJ = horizontal_local_geometry.WJ * vertical_local_geometry.WJ
-    ∂x∂ξ_h = horizontal_local_geometry.∂x∂ξ
-    ∂x∂ξ_v = vertical_local_geometry.∂x∂ξ
+    # Reshape h and v ∂x∂ξ back to their native unpadded `I` axes before
+    # combining, so the resulting LG records the correct `I = I_h ∪ I_v`
+    # (rather than `(1,2,3)` inherited from the padded form). The LG
+    # constructor re-pads to the canonical 3×3 storage.
+    ∂x∂ξ_h = _unpadded_metric_tensor(
+        horizontal_local_geometry, horizontal_local_geometry.∂x∂ξ,
+    )
+    ∂x∂ξ_v = _unpadded_metric_tensor(
+        vertical_local_geometry, vertical_local_geometry.∂x∂ξ,
+    )
     ∂x∂ξ = isnothing(∇z) ? ∂x∂ξ_h + ∂x∂ξ_v : ∂x∂ξ_h + ∂x∂ξ_v + ∇z
     return Geometry.LocalGeometry(coordinates, J, WJ, ∂x∂ξ)
 end
+
+# Reshape an identity-padded 3×3 metric tensor back to its native I-sized
+# form (axes `(Orth(I), Cov(I))`), recovering the geometric block from the
+# padded storage so combinations preserve the proper `I`.
+@inline _unpadded_metric_tensor(::LocalGeometry{I}, ∂x∂ξ) where {I} =
+    reshape(∂x∂ξ, (Basis{Orthonormal, I}(), Basis{Covariant, I}()))
+
 function product_geometry(
     horizontal_local_geometry::Geometry.LocalGeometry,
     vertical_local_geometry::Geometry.LocalGeometry,
@@ -254,8 +269,15 @@ function product_geometry(
     )
     J = scale^2 * horizontal_local_geometry.J * vertical_local_geometry.J
     WJ = scale^2 * horizontal_local_geometry.WJ * vertical_local_geometry.WJ
-    ∂x∂ξ_h = scale * horizontal_local_geometry.∂x∂ξ
-    ∂x∂ξ_v = vertical_local_geometry.∂x∂ξ
+    # Reshape to unpadded I-sized blocks before combining (see comment on
+    # the first product_geometry method). Scaling by `scale` then applies
+    # only to the actual horizontal block, not to padded identity.
+    ∂x∂ξ_h = scale * _unpadded_metric_tensor(
+        horizontal_local_geometry, horizontal_local_geometry.∂x∂ξ,
+    )
+    ∂x∂ξ_v = _unpadded_metric_tensor(
+        vertical_local_geometry, vertical_local_geometry.∂x∂ξ,
+    )
     ∂x∂ξ = isnothing(∇z) ? ∂x∂ξ_h + ∂x∂ξ_v : ∂x∂ξ_h + ∂x∂ξ_v + ∇z
     return Geometry.LocalGeometry(coordinates, J, WJ, ∂x∂ξ)
 end
