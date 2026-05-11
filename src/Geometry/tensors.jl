@@ -224,21 +224,12 @@ end
 
 Base.parent(x::Tensor) = x.components
 Base.axes(x::Tensor) = x.bases
-# Type-level analog of `axes`: extracts the bases tuple from a Tensor type
-# without needing an instance. Used by MatrixFields to enumerate tensor
-# components from a type alone, and by the generic vararg constructor below
-# to handle UnionAll aliases like `Covariant12Vector` (where T-eltype and the
-# component-storage type are still free, so a method dispatching on the fully
-# concrete `Type{Tensor{N, T, B, C}}` would not match). `unwrap_unionall`
-# strips the UnionAll wrapper, exposing the bases tuple type even when other
-# parameters are unbound.
-@generated function tensor_bases(::Type{T}) where {T <: Tensor}
-    bases_type = Base.unwrap_unionall(T).parameters[3]
-    return :($(bases_type.instance))
-end
-# TODO: replace generated func above with this:
-# unwrap(thing::UnionALl) = unwrap(thing.inner)
-# unwrap(thing) = thing
+
+@inline _unwrap(t::UnionAll) = _unwrap(t.body)
+@inline _unwrap(t::DataType) = t
+
+@inline tensor_bases(::Type{T}) where {T <: Tensor} =
+    _unwrap(T).parameters[3].instance
 
 
 Base.zero(x::Tensor) = zero(typeof(x))
@@ -329,31 +320,27 @@ logic. Idempotent for `I == (1, 2, 3)`.
 function pad_metric_tensor(∂x∂ξ::Tensor{2})
     src_names = basis_vector_names(axes(∂x∂ξ, 1))
     src_names == (1, 2, 3) && return ∂x∂ξ
-    sm = _pad_metric_components(parent(∂x∂ξ), Val(src_names))
-    return Tensor(sm, (UVWAxis(), Covariant123Axis()))
+    full_bases = (UVWAxis(), Covariant123Axis())
+    # `reshape` to the full bases zero-fills rows/cols whose name isn't in
+    # `src_names`. We then add `1` on diagonal entries at dims not in
+    # `src_names` to recover the identity-padding convention.
+    padded_zeros = reshape(∂x∂ξ, full_bases)
+    iso = _orthogonal_identity(Val(src_names), eltype(∂x∂ξ))
+    return Tensor(parent(padded_zeros) + iso, full_bases)
 end
 
-# Unrolled per (N, src_names): the SMatrix constructor is a flat tuple of
-# either field reads, `one(FT)`, or `zero(FT)` literals — all known at
-# compile time.
-@generated function _pad_metric_components(
-    components::SMatrix{N, N, FT, NN}, ::Val{src_names},
-) where {N, NN, FT, src_names}
-    full_dims = (1, 2, 3)
-    elems = Expr[]
-    for j in 1:3, i in 1:3                       # column-major SMatrix
-        di, dj = full_dims[i], full_dims[j]
-        idx_i = findfirst(==(di), src_names)
-        idx_j = findfirst(==(dj), src_names)
-        if idx_i !== nothing && idx_j !== nothing
-            push!(elems, :(components[$idx_i, $idx_j]))
-        elseif di == dj
-            push!(elems, :(one(FT)))
-        else
-            push!(elems, :(zero(FT)))
-        end
-    end
-    return :(SMatrix{3, 3, FT, 9}($(elems...)))
+# 3×3 SMatrix with `1` on the diagonal at positions outside `src_names`,
+# `0` elsewhere. `unrolled_in` is compile-time foldable for tuple
+# arguments, so each diagonal entry resolves to a literal at the call
+# site and the SMatrix is built without runtime branching.
+@inline function _orthogonal_identity(
+    ::Val{src_names}, ::Type{FT},
+) where {src_names, FT}
+    z, o = zero(FT), one(FT)
+    d1 = unrolled_in(1, src_names) ? z : o
+    d2 = unrolled_in(2, src_names) ? z : o
+    d3 = unrolled_in(3, src_names) ? z : o
+    SMatrix{3, 3, FT, 9}(d1, z, z, z, d2, z, z, z, d3)
 end
 
 #################################
@@ -588,26 +575,20 @@ _symbols(::Orthonormal) = (:u, :v, :w)
 
 Base.propertynames(x::Tensor{1}) = _symbols(basis_type(x.bases[1]))
 
-# `@generated` ensures the body is emitted as a direct `parent(x)[idx]` read (or
-# a literal zero) with no runtime loop over `names` or `Union{Nothing, Int}`
-# return.
-@generated function Base.getproperty(
+# `unrolled_findfirst` walks the compile-time `I` tuple, so the search
+# inlines to a flat chain of `name === :u_k` comparisons that fold to a
+# direct `parent(x)[idx]` read for the matching name or `zero(T)`.
+@inline function Base.getproperty(
     x::Tensor{1, T, <:Tuple{Basis{BT, I}}}, name::Symbol,
 ) where {T, BT, I}
+    name === :components && return getfield(x, :components)
+    name === :bases && return getfield(x, :bases)
     syms = _symbols(BT())
-    body = :(zero(T))
-    for (component_idx, dim) in enumerate(I)
-        dim <= 3 || continue
-        sym = syms[dim]
-        body = :(
-            name === $(QuoteNode(sym)) ?
-            @inbounds(getfield(x, :components)[$component_idx]) : $body
-        )
+    idx = unrolled_findfirst(I) do dim
+        dim <= 3 && name === syms[dim]
     end
-    Expr(:block, :(Base.@_inline_meta),
-        :(name === :components && return getfield(x, :components)),
-        :(name === :bases && return getfield(x, :bases)),
-        body)
+    return idx === nothing ? zero(T) :
+        @inbounds getfield(x, :components)[idx]
 end
 
 (::Type{T})(args::Number...) where {T <: Tensor{1}} =
