@@ -175,7 +175,7 @@ function rhs_invariant!(dY, Y, _, t)
         ).gⁱʲ
     g13 = gⁱʲ.components.data.:3
     g11 = gⁱʲ.components.data.:1
-    g33 = gⁱʲ.components.data.:4
+    g33 = gⁱʲ.components.data.:9
     u₃_bc =
         Geometry.Covariant3Vector.(-1 .* g13 .* u₁_bc.components.data.:1 ./ g33)
     apply_boundary_w =
