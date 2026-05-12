@@ -189,8 +189,8 @@ end
 
         # 3) we set boundaries on both: 2nd should take precedence
         I = Operators.InterpolateC2F(
-            left = Operators.SetValue(FT(NaN)),
-            right = Operators.SetValue(FT(NaN)),
+            left = Operators.SetValue(FT(1)),
+            right = Operators.SetValue(FT(1)),
         )
         ∂ = Operators.GradientF2C(
             left = Operators.SetValue(FT(0)),

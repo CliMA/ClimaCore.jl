@@ -533,9 +533,9 @@ Curl is only defined for `CovariantVector`` field input types.
 @inline curl_result_type(::Val{(3,)}, ::Type{Covariant12Vector{FT}}) where {FT} =
     Contravariant12Vector{FT}
 @inline curl_result_type(::Val{(3,)}, ::Type{Covariant1Vector{FT}}) where {FT} =
-    Contravariant2Vector{FT}
+    Contravariant12Vector{FT}
 @inline curl_result_type(::Val{(3,)}, ::Type{Covariant2Vector{FT}}) where {FT} =
-    Contravariant1Vector{FT}
+    Contravariant12Vector{FT}
 @inline curl_result_type(::Val{(3,)}, ::Type{Covariant3Vector{FT}}) where {FT} =
     Contravariant3Vector{FT}
 
