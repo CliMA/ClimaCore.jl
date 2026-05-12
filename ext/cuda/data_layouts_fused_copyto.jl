@@ -81,7 +81,7 @@ function knl_fused_copyto_linear!(fmbc::FusedMultiBroadcast, us)
     return nothing
 end
 import MultiBroadcastFusion
-const MBFCUDA =
+mbf_cuda_ext() =
     Base.get_extension(MultiBroadcastFusion, :MultiBroadcastFusionCUDAExt)
 # https://github.com/JuliaLang/julia/issues/56295
 # Julia 1.11's Base.Broadcast currently requires
@@ -107,14 +107,25 @@ function fused_copyto!(
     (Nv > 0 && Nh > 0) || return nothing # short circuit
 
     if pkgversion(MultiBroadcastFusion) >= v"0.3.3"
-        # Automatically split kernels by available parameter memory space:
-        fmbs = MBFCUDA.partition_kernels(
-            fmb,
-            FusedMultiBroadcast,
-            fused_multibroadcast_args,
-        )
-        for fmb in fmbs
+        mbfcuda = mbf_cuda_ext()
+        # Check if the fused kernel fits within parameter memory limits.
+        # If it fits, launch directly with the concrete-typed fmb to preserve
+        # type information through the CUDA kernel compilation. Calling through
+        # partition_kernels erases the fmb type (returns Any), which causes
+        # dynamic dispatch inside the GPU kernel.
+        if mbfcuda.param_usage_args(fused_multibroadcast_args(fmb)) ≤
+           mbfcuda.get_param_lim()
             launch_fused_copyto!(fmb)
+        else
+            # Rare: FMB too large for one kernel — split, accepting type erasure.
+            fmbs = mbfcuda.partition_kernels(
+                fmb,
+                FusedMultiBroadcast,
+                fused_multibroadcast_args,
+            )
+            for fmb_split in fmbs
+                launch_fused_copyto!(fmb_split)
+            end
         end
     else
         launch_fused_copyto!(fmb)
