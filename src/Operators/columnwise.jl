@@ -134,7 +134,7 @@ function columnwise_kernel!(
     ᶠTS = DataLayouts.num_basetypes(FT, eltype(ᶠY_fv))
     ᶜlg = Spaces.local_geometry_data(axes(_ᶜY))
     ᶠlg = Spaces.local_geometry_data(axes(_ᶠY))
-    SLG = partial_lg_type(eltype(ᶜlg))
+    SLG = eltype(ᶜlg)
     ᶜTS_lg = DataLayouts.num_basetypes(FT, SLG)
 
     ᶜui = universal_index_columnwise(device, UI, ᶜus)
@@ -169,8 +169,8 @@ function columnwise_kernel!(
     if localmem_lg
         ᶜlg_col = Spaces.local_geometry_data(ᶜspace_col)
         ᶠlg_col = Spaces.local_geometry_data(ᶠspace_col)
-        is_valid_index_cw(ᶜus, ᶜui) && (ᶜlg_col[ᶜui] = partial_lg(ᶜlg[ᶜui]))
-        is_valid_index_cw(ᶠus, ᶠui) && (ᶠlg_col[ᶠui] = partial_lg(ᶠlg[ᶠui]))
+        is_valid_index_cw(ᶜus, ᶜui) && (ᶜlg_col[ᶜui] = ᶜlg[ᶜui])
+        is_valid_index_cw(ᶠus, ᶠui) && (ᶠlg_col[ᶠui] = ᶠlg[ᶠui])
     end
 
     device_sync_threads(device)
@@ -194,24 +194,6 @@ function columnwise_kernel!(
     return nothing
 end
 
-partial_lg_type(
-    ::Type{LocalGeometry{I, C, FT, ∂x∂ξT, ∂ξ∂xT, gⁱʲT, gᵢⱼT}},
-) where {I, C, FT, ∂x∂ξT, ∂ξ∂xT, gⁱʲT, gᵢⱼT} =
-    Geometry.LocalGeometry{I, C, FT, Nothing, Nothing, gⁱʲT, gᵢⱼT}
-
-partial_lg(
-    lg::LocalGeometry{I, C, FT, ∂x∂ξT, ∂ξ∂xT, gⁱʲT, gᵢⱼT},
-) where {I, C, FT, ∂x∂ξT, ∂ξ∂xT, gⁱʲT, gᵢⱼT} =
-    Geometry.LocalGeometry{I, C, FT, Nothing, Nothing, gⁱʲT, gᵢⱼT}(
-        lg.coordinates,
-        lg.J,
-        lg.WJ,
-        lg.invJ,
-        nothing, # lg.∂x∂ξ,
-        nothing, # lg.∂ξ∂x,
-        lg.gⁱʲ,
-        lg.gᵢⱼ,
-    )
 
 __size(args::Tuple) = Tuple{args...}
 __size(i::Int) = Tuple{i}

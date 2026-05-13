@@ -251,10 +251,10 @@ steps:
         retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/geometry.jl"
 
-      - label: "Unit: axistensors"
-        key: unit_axistensors
+      - label: "Unit: tensors"
+        key: unit_tensors
         retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/axistensors.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/tensors.jl"
 
       - label: "Unit: mul_with_projection"
         key: unit_mul_with_projection
@@ -1079,12 +1079,12 @@ steps:
         agents:
           slurm_gpus: 1
 
-      - label: "Unit: field_matrix_indexing (CPU)"
+      - label: "Unit: field matrix indexing (CPU)"
         key: cpu_field_matrix_indexing
         retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/field_matrix_indexing.jl"
 
-      - label: "Unit: field_matrix_indexing (GPU)"
+      - label: "Unit: field matrix indexing (GPU)"
         key: gpu_field_matrix_indexing
         retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/MatrixFields/field_matrix_indexing.jl"
@@ -1616,7 +1616,7 @@ steps:
       - label: "Perf: Axis tensor conversion benchmarks"
         key: "cpu_axis_tensor_conversion_perf_bm"
         retry: *retry_policy
-        command: "julia --color=yes --project=.buildkite test/Geometry/axistensor_conversion_benchmarks.jl"
+        command: "julia --color=yes --project=.buildkite test/Geometry/tensor_conversion_benchmarks.jl"
 
   - group: "Perf: DataLayouts"
     steps:
@@ -2489,9 +2489,10 @@ steps:
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
         artifact_paths:
-          - "examples/hybrid/sphere/output/held_suarez_rhoe/Float32/*"
+          - "examples/hybrid/sphere/output/held_suarez_rhoe/Float64/*"
         env:
           TEST_NAME: "sphere/held_suarez_rhoe"
+          FLOAT_TYPE: "Float64"
 
       - label: ":computer: Float64 3D sphere dry Held-Suarez (ρθ)"
         key: "cpu_held_suarez_rho_theta_float64"

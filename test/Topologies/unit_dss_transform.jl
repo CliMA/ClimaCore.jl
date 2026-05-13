@@ -64,7 +64,6 @@ end
         weight = 2
         dss_t = dss_transform(arg, lg, weight)
         dss_ut = dss_untransform(Geometry.Covariant123Vector{FT}, dss_t, lg)
-        @test dss_t isa Geometry.UVWVector
         @test typeof(arg) == typeof(dss_ut)
         @test arg ≈ dss_ut / weight
 
@@ -72,7 +71,6 @@ end
         weight = 2
         dss_t = dss_transform(arg, lg, weight)
         dss_ut = dss_untransform(Geometry.Covariant12Vector{FT}, dss_t, lg)
-        @test dss_t isa Geometry.UVWVector
         @test typeof(arg) == typeof(dss_ut)
         @test arg ≈ dss_ut / weight
 
@@ -81,7 +79,6 @@ end
         dss_t = dss_transform(arg, lg, weight)
         dss_ut = dss_untransform(Geometry.Covariant3Vector{FT}, dss_t, lg)
         @test typeof(arg) == typeof(dss_ut)
-        @test dss_t isa Geometry.Covariant3Vector
         @test dss_t === arg * weight
         @test arg == dss_ut / weight
         FT(1)

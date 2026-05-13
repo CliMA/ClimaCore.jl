@@ -258,7 +258,7 @@ function rhs_invariant!(dY, Y, _, t)
             Fields.local_geometry_field(hv_face_space),
             ClimaCore.Utilities.half,
         ).gⁱʲ
-    g33 = gⁱʲ.components.data.:4
+    g33 = gⁱʲ.components.data.:9
     u₃_bc = Geometry.Covariant3Vector.(-1 .* u₁_bc ./ g33)  # fw = -g^31 cuₕ/ g^33
     apply_boundary_w =
         Operators.SetBoundaryOperator(bottom = Operators.SetValue(u₃_bc))

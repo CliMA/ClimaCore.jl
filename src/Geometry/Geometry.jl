@@ -1,9 +1,9 @@
 module Geometry
 
-import LinearAlgebra
-import UnrolledUtilities: unrolled_findfirst
-
-using StaticArrays
+using ..Utilities: AutoBroadcaster, nested_broadcast, nested_broadcast_result_type
+import LinearAlgebra: det, dot, norm, norm_sqr, cross, UniformScaling, Adjoint
+import Random
+using StaticArrays, UnrolledUtilities
 
 export ⊗
 export UVector, VVector, WVector, UVVector, UWVector, VWVector, UVWVector
@@ -17,7 +17,7 @@ export Contravariant1Vector, Contravariant2Vector, Contravariant3Vector,
 
 
 include("coordinates.jl")
-include("axistensors.jl")
+include("tensors.jl")
 include("localgeometry.jl")
 include("conversions.jl")
 include("globalgeometry.jl")
@@ -28,14 +28,8 @@ include("auto_broadcaster_methods.jl")
     Δz_metric_component(::Type{<:AbstractPoint})
 
 The index of the z-component of an abstract point
-in an `AxisTensor`.
+in a `Tensor`.
 """
-Δz_metric_component(::Type{<:LatLongZPoint}) = 9
-Δz_metric_component(::Type{<:Cartesian3Point}) = 1
-Δz_metric_component(::Type{<:Cartesian13Point}) = 4
-Δz_metric_component(::Type{<:Cartesian123Point}) = 9
-Δz_metric_component(::Type{<:XYZPoint}) = 9
-Δz_metric_component(::Type{<:ZPoint}) = 1
-Δz_metric_component(::Type{<:XZPoint}) = 4
+Δz_metric_component(::Any) = 9
 
 end # module
