@@ -108,7 +108,9 @@ scalar_field_matrix
 A FieldMatrix entry can be:
 
 - A `UniformScaling`, which contains a `Number`
-- A `DiagonalMatrixRow`, which can contain either a `Number` or a rank-2 tensor (represented as a `Geometry.Tensor{2}`)
+- A `DiagonalMatrixRow` containing a `Number` or a `Geometry.Tensor{2}`. The
+  tensor's basis is whatever the user supplies; there's no padding convention
+  imposed here.
 - A `ColumnwiseBandMatrixField`, where each value is a [`BandMatrixRow`](@ref) with entries of any type that can be represented using the field's base number type.
 
 If an entry contains a composite type, the fields of that type can be extracted.

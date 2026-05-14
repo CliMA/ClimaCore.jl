@@ -24,12 +24,4 @@ include("globalgeometry.jl")
 include("mul_with_projection.jl")
 include("auto_broadcaster_methods.jl")
 
-"""
-    Δz_metric_component(::Type{<:AbstractPoint})
-
-The index of the z-component of an abstract point
-in a `Tensor`.
-"""
-Δz_metric_component(::Any) = 9
-
 end # module

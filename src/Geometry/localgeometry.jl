@@ -8,7 +8,7 @@ isapproxsymmetric(A::AbstractMatrix{T}; rtol = 10 * eps(T)) where {T <: Abstract
 
 The necessary local metric information defined at each node.
 """
-struct LocalGeometry{I, C <: AbstractPoint, FT}
+struct LocalGeometry{I, C <: AbstractPoint, FT, M, G}
     "Coordinates of the current point"
     coordinates::C
     "Jacobian determinant of the transformation `ξ` (reference space) to `x` (physical space)"
@@ -18,12 +18,12 @@ struct LocalGeometry{I, C <: AbstractPoint, FT}
     "Canonical metric ∂x/∂ξ wrapped in [`Metric`](@ref). Identity-padded to
     full (UVWAxis, Covariant123Axis) shape so a single matvec covers every
     conversion regardless of `I`."
-    metric::Metric{Tensor{2, FT, Tuple{UVWAxis, Covariant123Axis}, SMatrix{3, 3, FT, 9}}}
+    metric::M
     "Contravariant metric tensor gⁱʲ. Identity-padded to full
     (Contravariant123, Contravariant123) shape; cached as a real field so
     Field-level property access (`Fields.local_geometry_field(space).gⁱʲ`)
     works through DataLayouts."
-    gⁱʲ::Tensor{2, FT, Tuple{Contravariant123Axis, Contravariant123Axis}, SMatrix{3, 3, FT, 9}}
+    gⁱʲ::G
 end
 
 @inline function Base.getproperty(lg::LocalGeometry, name::Symbol)
@@ -57,6 +57,11 @@ end
     return LocalGeometry{names, C, FT}(coordinates, J, WJ, Metric(padded), gⁱʲ)
 end
 
+const PaddedCovariantMetric{FT} =
+    Metric{Tensor{2, FT, Tuple{UVWAxis, Covariant123Axis}, SMatrix{3, 3, FT, 9}}}
+const PaddedContravariantMetric{FT} =
+    Tensor{2, FT, Tuple{Contravariant123Axis, Contravariant123Axis}, SMatrix{3, 3, FT, 9}}
+
 """
     LocalGeometryType(::Type{C}, ::Type{FT}, I)
 
@@ -64,7 +69,11 @@ Compute the concrete `LocalGeometry` type for coordinate type `C`, float type `F
 and index tuple `I`. Useful for pre-allocating DataLayouts with the correct element type.
 """
 function LocalGeometryType(::Type{C}, ::Type{FT}, I::Tuple) where {C <: AbstractPoint, FT}
-    return LocalGeometry{I, C, FT}
+    return LocalGeometry{
+        I, C, FT,
+        PaddedCovariantMetric{FT},
+        PaddedContravariantMetric{FT},
+    }
 end
 
 """

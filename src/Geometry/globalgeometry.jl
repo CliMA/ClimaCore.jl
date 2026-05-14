@@ -272,9 +272,10 @@ function product_geometry(
     # Reshape to unpadded I-sized blocks before combining (see comment on
     # the first product_geometry method). Scaling by `scale` then applies
     # only to the actual horizontal block, not to padded identity.
-    ∂x∂ξ_h = scale * _unpadded_metric_tensor(
-        horizontal_local_geometry, horizontal_local_geometry.∂x∂ξ,
-    )
+    ∂x∂ξ_h =
+        scale * _unpadded_metric_tensor(
+            horizontal_local_geometry, horizontal_local_geometry.∂x∂ξ,
+        )
     ∂x∂ξ_v = _unpadded_metric_tensor(
         vertical_local_geometry, vertical_local_geometry.∂x∂ξ,
     )

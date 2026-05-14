@@ -31,8 +31,8 @@ function tensor_type(
     return Tensor{2, T, Tuple{ScalarBasis, B2}, Adjoint{T, SVector{N2, T}}}
 end
 
-basis1(::Type{<:Tensor{2, <:Any, <:Tuple{B, Any}}}) where {B} = B
-basis2(::Type{<:Tensor{2, <:Any, <:Tuple{Any, B}}}) where {B} = B
+basis1(::Type{<:AbstractTensor{2, <:Any, <:Tuple{B, Any}}}) where {B} = B
+basis2(::Type{<:AbstractTensor{2, <:Any, <:Tuple{Any, B}}}) where {B} = B
 
 """
     needs_projection(::Type{X}, ::Type{Y})

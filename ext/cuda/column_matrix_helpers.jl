@@ -427,4 +427,4 @@ Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1 <: AbstractVector,
 Base.@propagate_inbounds outer_or_mul(
     x::T1,
     y::T2,
-) where {T1 <: Geometry.AbstractCovector, T2 <: Geometry.Tensor{2}} = (x * y)'
+) where {T1 <: Geometry.AbstractCovector, T2 <: Geometry.AbstractTensor{2}} = (x * y)'

@@ -588,7 +588,7 @@ Base.propertynames(x::Tensor{1}) = _symbols(basis_type(x.bases[1]))
         dim <= 3 && name === syms[dim]
     end
     return idx === nothing ? zero(T) :
-        @inbounds getfield(x, :components)[idx]
+           @inbounds getfield(x, :components)[idx]
 end
 
 (::Type{T})(args::Number...) where {T <: Tensor{1}} =
@@ -655,9 +655,7 @@ Compute the outer product of `x` and `y`.
 function outer end
 const ⊗ = outer
 
-@inline outer(x::AbstractVector, y::AbstractVector) = x * y'
-@inline outer(x::AbstractVector, y::Number) = x * y
-@inline outer(x::AbstractVector, y) = nested_broadcast(y -> x ⊗ y, y)
+@inline outer(x, y) = x * y'
 
 # Cross product of two orthonormal vectors. Reshapes both inputs to the full
 # UVW basis (zero-filling missing dims), then applies the standard 3D formula.

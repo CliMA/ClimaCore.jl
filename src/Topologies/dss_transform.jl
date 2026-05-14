@@ -45,12 +45,6 @@ Base.@propagate_inbounds dss_transform(
     local_geometry::Geometry.LocalGeometry,
     weight,
 ) = arg * weight
-@inline dss_transform(
-    arg::Geometry.Covariant3Vector,
-    local_geometry::Geometry.LocalGeometry,
-    weight,
-) = arg * weight
-
 const NonTransformedAxis =
     Union{Geometry.Covariant3Axis, Geometry.Contravariant3Axis}
 @inline dss_transform(

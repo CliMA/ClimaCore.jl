@@ -117,10 +117,7 @@ A DataLayout containing the `Δz` on a given space `space`.
 """
 function Δz_data(space::AbstractSpace)
     lg = local_geometry_data(space)
-    return getproperty(
-        lg.metric.tensor.components.data,
-        Geometry.Δz_metric_component(eltype(lg.coordinates)),
-    )
+    return lg.metric.tensor.components.data.:9
 end
 
 function left_boundary_name(space::AbstractSpace)

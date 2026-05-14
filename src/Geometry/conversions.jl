@@ -6,14 +6,16 @@
 # pairs are explicit no-ops; cross-type pairs pick the appropriate cached
 # matrix.
 @inline _to_basis_type(::Contravariant, v::ContravariantTensor, ::LocalGeometry) = v
-@inline _to_basis_type(::Covariant,     v::CovariantTensor,     ::LocalGeometry) = v
-@inline _to_basis_type(::Orthonormal,   v::OrthonormalTensor,   ::LocalGeometry) = v
-@inline _to_basis_type(::Contravariant, v::CovariantTensor,     lg::LocalGeometry) = lg.gⁱʲ * v
-@inline _to_basis_type(::Covariant,     v::ContravariantTensor, lg::LocalGeometry) = lg.gᵢⱼ * v
-@inline _to_basis_type(::Contravariant, v::OrthonormalTensor,   lg::LocalGeometry) = lg.∂ξ∂x * v
-@inline _to_basis_type(::Covariant,     v::OrthonormalTensor,   lg::LocalGeometry) = lg.∂x∂ξ' * v
-@inline _to_basis_type(::Orthonormal,   v::ContravariantTensor, lg::LocalGeometry) = lg.∂x∂ξ * v
-@inline _to_basis_type(::Orthonormal,   v::CovariantTensor,     lg::LocalGeometry) = lg.∂ξ∂x' * v
+@inline _to_basis_type(::Covariant, v::CovariantTensor, ::LocalGeometry) = v
+@inline _to_basis_type(::Orthonormal, v::OrthonormalTensor, ::LocalGeometry) = v
+@inline _to_basis_type(::Contravariant, v::CovariantTensor, lg::LocalGeometry) = lg.gⁱʲ * v
+@inline _to_basis_type(::Covariant, v::ContravariantTensor, lg::LocalGeometry) = lg.gᵢⱼ * v
+@inline _to_basis_type(::Contravariant, v::OrthonormalTensor, lg::LocalGeometry) =
+    lg.∂ξ∂x * v
+@inline _to_basis_type(::Covariant, v::OrthonormalTensor, lg::LocalGeometry) = lg.∂x∂ξ' * v
+@inline _to_basis_type(::Orthonormal, v::ContravariantTensor, lg::LocalGeometry) =
+    lg.∂x∂ξ * v
+@inline _to_basis_type(::Orthonormal, v::CovariantTensor, lg::LocalGeometry) = lg.∂ξ∂x' * v
 
 ## project(basis, v, local_geometry)  — 3-argument form using metric
 
@@ -53,29 +55,20 @@ dropped component is nonzero.
 
 ## Scalar constructor for 1D vectors (e.g. WVector(1.0, lg))
 
-# 1D vector types can be constructed from a scalar + LocalGeometry.
-# The LocalGeometry is ignored — the scalar is wrapped directly.
-for I in [(1,), (2,), (3,)]
-    strI = string(I[1])
-    strUVW = string([:U, :V, :W][I[1]])
-    for sym in [Symbol(:Covariant, strI, :Vector),
-        Symbol(:Contravariant, strI, :Vector),
-        Symbol(strUVW, :Vector)]
-        @eval @inline $sym(a::Real, ::LocalGeometry) = $sym(a)
-    end
-end
+# A 1D vector type built from a scalar doesn't need the metric — drop the lg.
+@inline (::Type{T})(a::Real, ::LocalGeometry) where {T <: Tensor{1}} = T(a)
 
 ## Callable type constructors (e.g. Contravariant1Vector(u, lg))
 
-for (BT, VecType, fn) in (
-    (Covariant, :CovariantVector, :CovariantVector),
-    (Contravariant, :ContravariantVector, :ContravariantVector),
-    (Orthonormal, :LocalVector, :LocalVector),
+for (BT, VecType) in (
+    (Covariant, :CovariantVector),
+    (Contravariant, :ContravariantVector),
+    (Orthonormal, :LocalVector),
 )
     # General: convert to full basis type, then project to requested dimensions
     @eval @inline (::Type{<:$VecType{<:Any, I}})(
         u::AbstractTensor{1}, lg::LocalGeometry,
-    ) where {I} = project(Basis{$BT, I}(), $fn(u, lg))
+    ) where {I} = project(Basis{$BT, I}(), $VecType(u, lg))
 
     # Identity: already in the right basis type and dimension
     @eval @inline (::Type{<:$VecType{<:Any, I}})(
@@ -85,26 +78,23 @@ end
 
 ## Scalar component extractors
 
-for (n, cov_sym, con_sym) in ((1, :u₁, :u¹), (2, :u₂, :u²), (3, :u₃, :u³))
+for n in 1:3
     @eval @inline $(Symbol(:covariant, n))(u::AbstractTensor{1}, lg::LocalGeometry) =
-        CovariantVector(u, lg).$cov_sym
+        project($(Symbol(:Covariant, n, :Axis))(), u, lg)[1]
     @eval @inline $(Symbol(:contravariant, n))(u::AbstractTensor{1}, lg::LocalGeometry) =
         project($(Symbol(:Contravariant, n, :Axis))(), u, lg)[1]
-    @eval @inline $(Symbol(:contravariant, n))(u::Tensor{2}, lg::LocalGeometry) =
+    @eval @inline $(Symbol(:contravariant, n))(u::AbstractTensor{2}, lg::LocalGeometry) =
         project($(Symbol(:Contravariant, n, :Axis))(), u, lg)[1, :]
 end
 
 @inline Jcontravariant3(u::AbstractTensor, lg::LocalGeometry) =
     lg.J * contravariant3(u, lg)
 
-# required for curl-curl
-@inline covariant3(u::Contravariant3Vector, lg::LocalGeometry{(1, 2)}) =
-    contravariant3(u, lg)
-
 ## Operator result types
 
 """
     divergence_result_type(V)
+
 
 Return type when taking the divergence of a field of `V`.
 """
@@ -132,39 +122,15 @@ end
 end
 
 """
-    curl_result_type(Val(I), Val(L), V)
+    curl_result_type(Val(I), V)
 
 Return type when taking the curl along dimensions `I` of a field of type `V`.
+Always returns the full `Contravariant123Vector`; dimensions outside the
+actual curl range carry zeros, consistent with the identity-padded metric
+convention used throughout `LocalGeometry`.
 """
-@inline curl_result_type(::Val{(1, 2)}, ::Type{Covariant3Vector{FT}}) where {FT} =
-    Contravariant12Vector{FT}
-@inline curl_result_type(::Val{(1, 2)}, ::Type{Covariant12Vector{FT}}) where {FT} =
-    Contravariant3Vector{FT}
-@inline curl_result_type(::Val{(1, 2)}, ::Type{Covariant123Vector{FT}}) where {FT} =
-    Contravariant123Vector{FT}
-
-@inline curl_result_type(::Val{(1,)}, ::Type{Covariant1Vector{FT}}) where {FT} =
-    ContravariantNullVector{FT}
-@inline curl_result_type(::Val{(1,)}, ::Type{Covariant2Vector{FT}}) where {FT} =
-    Contravariant3Vector{FT}
-@inline curl_result_type(::Val{(1,)}, ::Type{Covariant3Vector{FT}}) where {FT} =
-    Contravariant2Vector{FT}
-@inline curl_result_type(::Val{(1,)}, ::Type{Covariant13Vector{FT}}) where {FT} =
-    Contravariant2Vector{FT}
-@inline curl_result_type(::Val{(1,)}, ::Type{Covariant123Vector{FT}}) where {FT} =
-    Contravariant23Vector{FT}
-
-@inline curl_result_type(::Val{(3,)}, ::Type{Covariant12Vector{FT}}) where {FT} =
-    Contravariant12Vector{FT}
-@inline curl_result_type(::Val{(3,)}, ::Type{Covariant1Vector{FT}}) where {FT} =
-    Contravariant2Vector{FT}
-@inline curl_result_type(::Val{(3,)}, ::Type{Covariant2Vector{FT}}) where {FT} =
-    Contravariant1Vector{FT}
-@inline curl_result_type(::Val{(3,)}, ::Type{Covariant3Vector{FT}}) where {FT} =
-    Contravariant3Vector{FT}
-
 @inline curl_result_type(_, ::Type{<:CovariantVector{FT}}) where {FT} =
-    ContravariantNullVector{FT}
+    Contravariant123Vector{FT}
 
 ## Norm and cross-product (used in broadcast.jl)
 ##
@@ -178,9 +144,8 @@ _norm_sqr(x, lg::LocalGeometry) = sum(x -> _norm_sqr(x, lg), x)
 _norm_sqr(x::Number, ::LocalGeometry) = norm_sqr(x)
 _norm_sqr(x::AbstractArray, ::LocalGeometry) = norm_sqr(x)
 _norm_sqr(uᵢ::AbstractTensor{1}, lg::LocalGeometry) =
-    norm_sqr(parent(LocalVector(uᵢ, lg)))
-_norm_sqr(uᵢ::OrthonormalTensor, ::LocalGeometry) =
-    norm_sqr(parent(uᵢ))
+    norm_sqr(LocalVector(uᵢ, lg))
+_norm_sqr(uᵢ::OrthonormalTensor, ::LocalGeometry) = norm_sqr(uᵢ)
 
 _norm(u::AbstractTensor, lg::LocalGeometry) = sqrt(_norm_sqr(u, lg))
 
