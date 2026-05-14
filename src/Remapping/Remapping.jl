@@ -18,6 +18,7 @@ import ..DataLayouts,
     ..Hypsography
 import ClimaCore.Utilities: half
 import ClimaCore.Spaces: cuda_synchronize
+import Adapt
 
 include("remapping_utils.jl")
 include("interpolate_array.jl")

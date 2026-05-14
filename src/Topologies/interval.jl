@@ -18,15 +18,10 @@ end
 
 Adapt.@adapt_structure IntervalTopology
 
-## gpu
-struct DeviceIntervalTopology{B} <: AbstractIntervalTopology
-    boundaries::B
-end
+ClimaComms.context(topology::IntervalTopology) = topology.context
+ClimaComms.device(topology::IntervalTopology) =
+    ClimaComms.device(topology.context)
 
-ClimaComms.context(topology::DeviceIntervalTopology) = DeviceSideContext()
-ClimaComms.device(topology::DeviceIntervalTopology) = DeviceSideDevice()
-
-ClimaComms.device(topology::IntervalTopology) = topology.context.device
 ClimaComms.array_type(topology::IntervalTopology) =
     ClimaComms.array_type(topology.context.device)
 
@@ -46,12 +41,16 @@ function _IntervalTopology(
 )
     # currently only support SingletonCommsContext
     @assert context isa ClimaComms.SingletonCommsContext
-    if Domains.isperiodic(mesh.domain)
+    domain = mesh.domain
+    if Domains.isperiodic(domain)
         boundaries = NamedTuple()
-    elseif mesh.domain.boundary_names[1] == mesh.domain.boundary_names[2]
-        boundaries = NamedTuple{(mesh.domain.boundary_names[1],)}(1)
     else
-        boundaries = NamedTuple{mesh.domain.boundary_names}((1, 2))
+        bn = Domains.boundary_names(domain)
+        boundaries = if bn[1] == bn[2]
+            NamedTuple{(bn[1],)}(1)
+        else
+            NamedTuple{bn}((1, 2))
+        end
     end
     IntervalTopology(context, mesh, boundaries)
 end

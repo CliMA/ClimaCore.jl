@@ -73,7 +73,7 @@ function _FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
     )
 
     return FiniteDifferenceGrid(
-        topology,
+        Adapt.adapt(ArrayType, topology),
         global_geometry,
         Adapt.adapt(ArrayType, center_local_geometry),
         Adapt.adapt(ArrayType, face_local_geometry),

@@ -17,4 +17,5 @@ Domains.SphereDomain
 
 ```@docs
 Domains.boundary_names
+Domains.unique_boundary_names
 ```
