@@ -1610,14 +1610,6 @@ steps:
 
   # TODO: improve performance label: [inference, allocs, flops, latency, benchmark, boundscheck]
   # TODO: use perf env for perf jobs, or merge test/perf envs
-  - group: "Perf: Geometry"
-    steps:
-
-      - label: "Perf: Axis tensor conversion benchmarks"
-        key: "cpu_axis_tensor_conversion_perf_bm"
-        retry: *retry_policy
-        command: "julia --color=yes --project=.buildkite test/Geometry/tensor_conversion_benchmarks.jl"
-
   - group: "Perf: DataLayouts"
     steps:
 
