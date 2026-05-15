@@ -3395,17 +3395,13 @@ end
 return_space(::CurlC2F, space::AllCenterFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellFace())
 
-fd3_curl(u₊::Geometry.Covariant1Vector, u₋::Geometry.Covariant1Vector, invJ) =
-    Geometry.Contravariant2Vector((u₊.u₁ - u₋.u₁) * invJ)
-fd3_curl(u₊::Geometry.Covariant2Vector, u₋::Geometry.Covariant2Vector, invJ) =
-    Geometry.Contravariant1Vector(-(u₊.u₂ - u₋.u₂) * invJ)
-fd3_curl(::Geometry.Covariant3Vector, ::Geometry.Covariant3Vector, invJ) =
-    Geometry.Contravariant3Vector(zero(eltype(invJ)))
-fd3_curl(u₊::Geometry.Covariant12Vector, u₋::Geometry.Covariant12Vector, invJ) =
-    Geometry.Contravariant12Vector(
+function fd3_curl(u₊::CV, u₋::CV, invJ) where {CV <: Geometry.CovariantVector}
+    Geometry.Contravariant123Vector(
         -(u₊.u₂ - u₋.u₂) * invJ,
         (u₊.u₁ - u₋.u₁) * invJ,
+        zero(eltype(invJ)),
     )
+end
 
 stencil_interior_width(::CurlC2F, arg) = ((-half, half),)
 Base.@propagate_inbounds function stencil_interior(
@@ -3449,6 +3445,8 @@ Base.@propagate_inbounds function stencil_right_boundary(
     return fd3_curl(u, u₋, local_geometry.invJ * 2)
 end
 
+# Project the user-supplied curl value onto the full Contravariant123 axis so
+# the boundary output matches `return_eltype` (uniformly Contravariant123Vector).
 Base.@propagate_inbounds function stencil_left_boundary(
     ::CurlC2F,
     bc::SetCurl,
@@ -3457,7 +3455,10 @@ Base.@propagate_inbounds function stencil_left_boundary(
     hidx,
     arg,
 )
-    return getidx(space, bc.val, nothing, hidx)
+    return Geometry.project(
+        Geometry.Contravariant123Axis(),
+        getidx(space, bc.val, nothing, hidx),
+    )
 end
 Base.@propagate_inbounds function stencil_right_boundary(
     ::CurlC2F,
@@ -3467,7 +3468,10 @@ Base.@propagate_inbounds function stencil_right_boundary(
     hidx,
     arg,
 )
-    return getidx(space, bc.val, nothing, hidx)
+    return Geometry.project(
+        Geometry.Contravariant123Axis(),
+        getidx(space, bc.val, nothing, hidx),
+    )
 end
 
 
@@ -4046,22 +4050,22 @@ promote_bc(bc::SetCurl{<:Integer}, ::Type{FT}) where {FT} = SetCurl(FT(bc.val))
 sconvert(::Type{T}, x::SArray{S}) where {T, S} = SArray{S, T}(x...)
 
 function promote_axis_tensor(
-    at::Geometry.AxisTensor{T, N, A, S},
+    at::Geometry.Tensor,
     ::Type{FT},
-) where {T, N, A, S, FT}
-    fc = sconvert(FT, Geometry.components(at))
-    return Geometry.AxisTensor{FT, N, A, typeof(fc)}(axes(at), fc)
+) where {FT}
+    fc = sconvert(FT, parent(at))
+    return Geometry.Tensor(fc, axes(at))
 end
 
-promote_axis_tensor(at::Geometry.AxisTensor{FT}, ::Type{FT}) where {FT} = at
+promote_axis_tensor(at::Geometry.Tensor{<:Any, FT}, ::Type{FT}) where {FT} = at
 
-promote_bc(bc::SetValue{<:Geometry.AxisTensor}, ::Type{FT}) where {FT} =
+promote_bc(bc::SetValue{<:Geometry.AbstractTensor}, ::Type{FT}) where {FT} =
     SetValue(promote_axis_tensor(bc.val, FT))
-promote_bc(bc::SetGradient{<:Geometry.AxisTensor}, ::Type{FT}) where {FT} =
+promote_bc(bc::SetGradient{<:Geometry.AbstractTensor}, ::Type{FT}) where {FT} =
     SetGradient(promote_axis_tensor(bc.val, FT))
-promote_bc(bc::SetDivergence{<:Geometry.AxisTensor}, ::Type{FT}) where {FT} =
+promote_bc(bc::SetDivergence{<:Geometry.AbstractTensor}, ::Type{FT}) where {FT} =
     SetDivergence(promote_axis_tensor(bc.val, FT))
-promote_bc(bc::SetCurl{<:Geometry.AxisTensor}, ::Type{FT}) where {FT} =
+promote_bc(bc::SetCurl{<:Geometry.AbstractTensor}, ::Type{FT}) where {FT} =
     SetCurl(promote_axis_tensor(bc.val, FT))
 
 

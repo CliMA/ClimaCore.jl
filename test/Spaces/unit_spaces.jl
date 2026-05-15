@@ -194,11 +194,13 @@ end
         Adapt.adapt(Array, slab(Spaces.local_geometry_data(space), 1))
     dss_weights_slab = Adapt.adapt(Array, slab(space.grid.dss_weights, 1))
 
+    # ∂x∂ξ and ∂ξ∂x are identity-padded to 3×3; the original 1D scalar lives
+    # at position (1,1), other diagonals are 1, off-diagonals are 0.
     for i in 1:4
-        @test Geometry.components(local_geometry_slab[slab_index(i)].∂x∂ξ) ≈
-              @SMatrix [8 / 2]
-        @test Geometry.components(local_geometry_slab[slab_index(i)].∂ξ∂x) ≈
-              @SMatrix [2 / 8]
+        @test parent(local_geometry_slab[slab_index(i)].∂x∂ξ) ≈
+              @SMatrix [8/2 0 0; 0 1 0; 0 0 1]
+        @test parent(local_geometry_slab[slab_index(i)].∂ξ∂x) ≈
+              @SMatrix [2/8 0 0; 0 1 0; 0 0 1]
         @test local_geometry_slab[slab_index(i)].J ≈ (8 / 2)
         @test local_geometry_slab[slab_index(i)].WJ ≈ (8 / 2) * weights[i]
         if i in (1, 4)
@@ -388,11 +390,12 @@ end
         @test ClimaComms.device(adapted_space) == DeviceSideDevice()
     end
 
+    # ∂x∂ξ and ∂ξ∂x are identity-padded from 2×2 (I=(1,2)) to full 3×3.
     for i in 1:4, j in 1:4
-        @test Geometry.components(local_geometry_slab[slab_index(i, j)].∂x∂ξ) ≈
-              @SMatrix [8/2 0; 0 10/2]
-        @test Geometry.components(local_geometry_slab[slab_index(i, j)].∂ξ∂x) ≈
-              @SMatrix [2/8 0; 0 2/10]
+        @test parent(local_geometry_slab[slab_index(i, j)].∂x∂ξ) ≈
+              @SMatrix [8/2 0 0; 0 10/2 0; 0 0 1]
+        @test parent(local_geometry_slab[slab_index(i, j)].∂ξ∂x) ≈
+              @SMatrix [2/8 0 0; 0 2/10 0; 0 0 1]
         @test local_geometry_slab[slab_index(i, j)].J ≈ (10 / 2) * (8 / 2)
         @test local_geometry_slab[slab_index(i, j)].WJ ≈
               (10 / 2) * (8 / 2) * weights[i] * weights[j]

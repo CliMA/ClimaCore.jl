@@ -70,7 +70,11 @@ function _SpectralElementGrid1D(
     FT = eltype(CoordType)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
-    LG = Geometry.FullLocalGeometry{AIdx, CoordType, FT, SMatrix{1, 1, FT, 1}}
+    _∂x∂ξ_bases = (
+        Geometry.Basis{Geometry.Orthonormal, AIdx}(),
+        Geometry.Basis{Geometry.Covariant, AIdx}(),
+    )
+    LG = Geometry.LocalGeometryType(CoordType, FT, AIdx)
     local_geometry = horizontal_layout_type{LG, Nq}(Array{FT}, Nh)
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
@@ -93,13 +97,7 @@ function _SpectralElementGrid1D(
                 x,
                 J,
                 WJ,
-                Geometry.AxisTensor(
-                    (
-                        Geometry.LocalAxis{AIdx}(),
-                        Geometry.CovariantAxis{AIdx}(),
-                    ),
-                    ∂x∂ξ,
-                ),
+                Geometry.Tensor(SMatrix{1, 1}(∂x∂ξ), _∂x∂ξ_bases),
             )
         end
     end
@@ -293,12 +291,10 @@ function _SpectralElementGrid2D(
     end
     CoordType2D = get_CoordType2D(topology)
     AIdx = Geometry.coordinate_axis(CoordType2D)
-    ngelems = Topologies.nghostelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
     high_order_quadrature_style = Quadratures.GLL{Nq * 2}()
     high_order_Nq = Quadratures.degrees_of_freedom(high_order_quadrature_style)
-
-    LG = Geometry.FullLocalGeometry{AIdx, CoordType2D, FT, SMatrix{2, 2, FT, 4}}
+    LG = Geometry.LocalGeometryType(CoordType2D, FT, AIdx)
 
     local_geometry = horizontal_layout_type{LG, Nq}(Array{FT}, Nh)
     mask = if enable_mask
@@ -329,7 +325,7 @@ function _SpectralElementGrid2D(
         # high-order quadrature loop for computing geometric element face area.
         for i in 1:high_order_Nq, j in 1:high_order_Nq
             u, ∂u∂ξ = local_geometry_at_nodal_point(high_order_lg_args..., i, j)
-            J_high_order = det(Geometry.components(∂u∂ξ))
+            J_high_order = det(parent(∂u∂ξ))
             WJ_high_order =
                 J_high_order *
                 high_order_quad_weights[i] *
@@ -339,7 +335,7 @@ function _SpectralElementGrid2D(
         # low-order quadrature loop for computing numerical element face area
         for i in 1:Nq, j in 1:Nq
             u, ∂u∂ξ = local_geometry_at_nodal_point(lg_args..., i, j)
-            J = det(Geometry.components(∂u∂ξ))
+            J = det(parent(∂u∂ξ))
             WJ = J * quad_weights[i] * quad_weights[j]
             elem_area += WJ
             if !enable_bubble
@@ -353,7 +349,7 @@ function _SpectralElementGrid2D(
             if abs(elem_area - high_order_elem_area) ≤ eps(FT)
                 for i in 1:Nq, j in 1:Nq
                     u, ∂u∂ξ = local_geometry_at_nodal_point(lg_args..., i, j)
-                    J = det(Geometry.components(∂u∂ξ))
+                    J = det(parent(∂u∂ξ))
                     WJ = J * quad_weights[i] * quad_weights[j]
                     local_geometry_slab[slab_index(i, j)] =
                         Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
@@ -376,7 +372,7 @@ function _SpectralElementGrid2D(
                     for i in 1:Nq, j in 1:Nq
                         u, ∂u∂ξ =
                             local_geometry_at_nodal_point(lg_args..., i, j)
-                        J = det(Geometry.components(∂u∂ξ))
+                        J = det(parent(∂u∂ξ))
                         J += Δarea / Nq^2
                         WJ = J * quad_weights[i] * quad_weights[j]
                         local_geometry_slab[slab_index(i, j)] =
@@ -386,7 +382,7 @@ function _SpectralElementGrid2D(
                     for i in 2:(Nq - 1), j in 2:(Nq - 1)
                         u, ∂u∂ξ =
                             local_geometry_at_nodal_point(lg_args..., i, j)
-                        J = det(Geometry.components(∂u∂ξ))
+                        J = det(parent(∂u∂ξ))
                         WJ = J * quad_weights[i] * quad_weights[j]
                         interior_elem_area += WJ
                     end
@@ -401,7 +397,7 @@ function _SpectralElementGrid2D(
                     for i in 1:Nq, j in 1:Nq
                         u, ∂u∂ξ =
                             local_geometry_at_nodal_point(lg_args..., i, j)
-                        J = det(Geometry.components(∂u∂ξ))
+                        J = det(parent(∂u∂ξ))
                         # Modify J only for interior nodes
                         if i != 1 && j != 1 && i != Nq && j != Nq
                             J *= (1 + rel_interior_elem_area_Δ)
@@ -418,7 +414,7 @@ function _SpectralElementGrid2D(
 
     SG = Geometry.SurfaceGeometry{
         FT,
-        Geometry.AxisVector{FT, Geometry.LocalAxis{AIdx}, SVector{2, FT}},
+        Geometry.LocalVector{FT, AIdx, SVector{2, FT}},
     }
     interior_faces = Array(Topologies.interior_faces(topology))
 
@@ -539,15 +535,15 @@ function local_geometry_at_nodal_point(
     AIdx = Geometry.coordinate_axis(get_CoordType2D(topology))
     ξ = ξ_at_nodal_point(FT, quadrature_style, i, j)
     x = Meshes.coordinates(topology.mesh, elem, ξ)
-    ∂x∂ξ = Geometry.AxisTensor(
-        (Geometry.Cartesian123Axis(), Geometry.CovariantAxis{AIdx}()),
+    ∂x∂ξ = Geometry.Tensor(
         ∂f∂ξ_at_nodal_point(FT, quadrature_style, autodiff_metric, i, j) do ξ
             Geometry.components(Meshes.coordinates(topology.mesh, elem, ξ))
         end,
+        (Geometry.UVWAxis(), Geometry.Basis{Geometry.Covariant, AIdx}()),
     )
     u = Geometry.LatLongPoint(x, global_geometry)
     G = Geometry.local_to_cartesian(global_geometry, u)
-    ∂u∂ξ = Geometry.project(Geometry.LocalAxis{AIdx}(), G' * ∂x∂ξ)
+    ∂u∂ξ = Geometry.project(Geometry.Basis{Geometry.Orthonormal, AIdx}(), G' * ∂x∂ξ)
     return u, ∂u∂ξ
 end
 function local_geometry_at_nodal_point(
@@ -563,11 +559,14 @@ function local_geometry_at_nodal_point(
     AIdx = Geometry.coordinate_axis(get_CoordType2D(topology))
     ξ = ξ_at_nodal_point(FT, quadrature_style, i, j)
     u = Meshes.coordinates(topology.mesh, elem, ξ)
-    ∂u∂ξ = Geometry.AxisTensor(
-        (Geometry.LocalAxis{AIdx}(), Geometry.CovariantAxis{AIdx}()),
+    ∂u∂ξ = Geometry.Tensor(
         ∂f∂ξ_at_nodal_point(FT, quadrature_style, autodiff_metric, i, j) do ξ
             Geometry.components(Meshes.coordinates(topology.mesh, elem, ξ))
         end,
+        (
+            Geometry.Basis{Geometry.Orthonormal, AIdx}(),
+            Geometry.Basis{Geometry.Covariant, AIdx}(),
+        ),
     )
     return u, ∂u∂ξ
 end
@@ -600,8 +599,12 @@ function compute_surface_geometry(
     end
     sWJ = norm(n)
     n = n / sWJ
+    n = Geometry.project(_orth_basis(local_geometry), n)
     return Geometry.SurfaceGeometry(sWJ, n)
 end
+
+@inline _orth_basis(::Geometry.LocalGeometry{I}) where {I} =
+    Geometry.Basis{Geometry.Orthonormal, I}()
 
 function compute_dss_weights(local_geometry, topology, quadrature_style)
     Quadratures.requires_dss(quadrature_style) || return nothing

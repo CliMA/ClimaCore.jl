@@ -1,4 +1,4 @@
-using LinearAlgebra: ×, norm, norm_sqr, dot, Adjoint
+using LinearAlgebra: ×, norm, norm_sqr, dot
 using ClimaCore: Operators, Fields
 
 include("implicit_equation_jacobian.jl")
@@ -120,7 +120,7 @@ function default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode)
         ᶜf,
         ∂ᶜK∂ᶠw = similar(
             ᶜlocal_geometry,
-            BidiagonalMatrixRow{Adjoint{FT, CT3{FT}}},
+            BidiagonalMatrixRow{typeof(CT3(FT(0))')},
         ),
         ᶠupwind_product,
         ᶠupwind_product_matrix,
@@ -310,11 +310,11 @@ function implicit_equation_jacobian!(j, Y, p, δtγ, t)
     ∂ᶠ𝕄ₜ∂ᶠ𝕄 = ∂Yₜ∂Y[ᶠ𝕄_name, ᶠ𝕄_name]
 
     ᶠgⁱʲ = Fields.local_geometry_field(ᶠw).gⁱʲ
-    g³³(gⁱʲ) = Geometry.AxisTensor(
-        (Geometry.Contravariant3Axis(), Geometry.Contravariant3Axis()),
-        Geometry.components(gⁱʲ)[end],
+    g³³(gⁱʲ) = reshape(
+        gⁱʲ,
+        Geometry.Contravariant3Axis(),
+        Geometry.Contravariant3Axis(),
     )
-
     # If ∂(ᶜχ)/∂(ᶠw) = 0, then
     # ∂(ᶠupwind_product(ᶠw, ᶜχ))/∂(ᶠw) =
     #     ∂(ᶠupwind_product(ᶠw, ᶜχ))/∂(CT3(ᶠw)) * ∂(CT3(ᶠw))/∂(ᶠw) =

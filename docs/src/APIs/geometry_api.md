@@ -20,7 +20,6 @@ Geometry.LocalGeometry
 ## Internals
 
 ```@docs
-Geometry.Δz_metric_component
 Geometry.:⊗
 ```
 
