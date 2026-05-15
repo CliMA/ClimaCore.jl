@@ -3395,17 +3395,13 @@ end
 return_space(::CurlC2F, space::AllCenterFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellFace())
 
-fd3_curl(u₊::Geometry.Covariant1Vector, u₋::Geometry.Covariant1Vector, invJ) =
-    Geometry.Contravariant2Vector((u₊.u₁ - u₋.u₁) * invJ)
-fd3_curl(u₊::Geometry.Covariant2Vector, u₋::Geometry.Covariant2Vector, invJ) =
-    Geometry.Contravariant1Vector(-(u₊.u₂ - u₋.u₂) * invJ)
-fd3_curl(::Geometry.Covariant3Vector, ::Geometry.Covariant3Vector, invJ) =
-    Geometry.Contravariant3Vector(zero(eltype(invJ)))
-fd3_curl(u₊::Geometry.Covariant12Vector, u₋::Geometry.Covariant12Vector, invJ) =
-    Geometry.Contravariant12Vector(
+function fd3_curl(u₊::CV, u₋::CV, invJ) where {CV <: Geometry.CovariantVector}
+    Geometry.Contravariant123Vector(
         -(u₊.u₂ - u₋.u₂) * invJ,
         (u₊.u₁ - u₋.u₁) * invJ,
+        zero(eltype(invJ)),
     )
+end
 
 stencil_interior_width(::CurlC2F, arg) = ((-half, half),)
 Base.@propagate_inbounds function stencil_interior(
@@ -3449,6 +3445,8 @@ Base.@propagate_inbounds function stencil_right_boundary(
     return fd3_curl(u, u₋, local_geometry.invJ * 2)
 end
 
+# Project the user-supplied curl value onto the full Contravariant123 axis so
+# the boundary output matches `return_eltype` (uniformly Contravariant123Vector).
 Base.@propagate_inbounds function stencil_left_boundary(
     ::CurlC2F,
     bc::SetCurl,
@@ -3457,7 +3455,10 @@ Base.@propagate_inbounds function stencil_left_boundary(
     hidx,
     arg,
 )
-    return getidx(space, bc.val, nothing, hidx)
+    return Geometry.project(
+        Geometry.Contravariant123Axis(),
+        getidx(space, bc.val, nothing, hidx),
+    )
 end
 Base.@propagate_inbounds function stencil_right_boundary(
     ::CurlC2F,
@@ -3467,7 +3468,10 @@ Base.@propagate_inbounds function stencil_right_boundary(
     hidx,
     arg,
 )
-    return getidx(space, bc.val, nothing, hidx)
+    return Geometry.project(
+        Geometry.Contravariant123Axis(),
+        getidx(space, bc.val, nothing, hidx),
+    )
 end
 
 
