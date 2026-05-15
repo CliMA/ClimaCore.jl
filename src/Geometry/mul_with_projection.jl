@@ -34,38 +34,11 @@ end
 basis1(::Type{<:AbstractTensor{2, <:Any, <:Tuple{B, Any}}}) where {B} = B
 basis2(::Type{<:AbstractTensor{2, <:Any, <:Tuple{Any, B}}}) where {B} = B
 
-"""
-    needs_projection(::Type{X}, ::Type{Y})
-
-Returns `true` if multiplying an object of type `X` with an object of type `Y`
-would require projection.
-"""
-needs_projection(::Type{X}, ::Type{Y}) where {X, Y} = false
-needs_projection(
-    ::Type{X},
-    ::Type{Y},
-) where {X <: Tensor{2}, Y <: AbstractTensor} =
-    Geometry.tensor_bases(X)[2] != Geometry.dual(Geometry.tensor_bases(Y)[1])
-function needs_projection(
-    ::Type{X},
-    ::Type{Y},
-) where {X <: SingleValue, Y <: Union{Tuple, NamedTuple}}
-    X <: Number && return false
-    eltype(Y) === Any && return false
-    needs_projection(X, eltype(Y))
-end
-function needs_projection(
-    ::Type{X},
-    ::Type{Y},
-) where {X <: Union{Tuple, NamedTuple}, Y <: SingleValue}
-    Y <: Number && return false
-    eltype(X) === Any && return false
-    needs_projection(eltype(X), Y)
-end
-
 recursively_find_dual_axes_for_projection(
     ::Type{X},
 ) where {X <: Tensor{2}} = dual(Geometry.tensor_bases(X)[2])
+# No `Tensor{2}` to project against → signal "skip projection".
+recursively_find_dual_axes_for_projection(::Type{<:Number}) = nothing
 recursively_find_dual_axes_for_projection(::Type{X}) where {X} =
     recursively_find_dual_axes_for_projection(eltype(X))
 
@@ -73,12 +46,19 @@ recursively_find_dual_axes_for_projection(::Type{X}) where {X} =
 """
     mul_return_type(X, Y)
 
-Computes the return type of `mul_with_projection(x, y, lg)`, where `x isa X`
-and `y isa Y`. This can also be used to obtain the return type of `x * y`,
-although `x * y` will throw an error when projection is necessary.
+Return type of `mul_with_projection(x, y, lg)`. Equivalent to
+`Base._return_type(mul_with_projection, Tuple{X, Y, LG})` but explicit so
+that MatrixFields' eltype inference always sees a concrete type — internal
+`_return_type` can widen to `Union`/`Any` and is unstable across Julia versions.
 
-Note that this is equivalent to calling the internal function `_return_type`:
-`Base._return_type(mul_with_projection, Tuple{X, Y, LG})`, where `lg isa LG`.
+The methods cover six distinct result shapes (scalar×scalar, scalar×tensor,
+covector×vector, vector×covector, 2-tensor×vector, 2-tensor×2-tensor) where
+the output `ndims` goes up, down, or stays the same — no single formula
+fits all of them.
+
+Future cleanup: try replacing with `Base._return_type` and keep only methods
+that fail; collapse the two `Tensor{2}*Tensor{N}` cases via
+`Base.tail(axes(Y))`; move `tensor_type`/`basis1`/`basis2` to `tensors.jl`.
 """
 mul_return_type(::Type{X}, ::Type{Y}) where {X, Y} = error(
     "Unable to infer return type: Multiplying an object of type $X with an \

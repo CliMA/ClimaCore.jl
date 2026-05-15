@@ -54,7 +54,10 @@ end
     gⁱʲ = ∂ξ∂x * ∂ξ∂x'
     isapproxsymmetric(parent(gⁱʲ)) || error("gⁱʲ is not symmetric.")
     @assert isapproxsymmetric(parent(padded' * padded)) "gᵢⱼ is not symmetric."
-    return LocalGeometry{names, C, FT}(coordinates, J, WJ, Metric(padded), gⁱʲ)
+    metric = Metric(padded)
+    return LocalGeometry{names, C, FT, typeof(metric), typeof(gⁱʲ)}(
+        coordinates, J, WJ, metric, gⁱʲ,
+    )
 end
 
 const PaddedCovariantMetric{FT} =
