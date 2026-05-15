@@ -46,7 +46,7 @@ w = map(
     Fields.coordinate_field(cspace),
 )
 @test curl.(Geometry.Covariant3Vector.(w)) ≈ map(
-    coord -> Geometry.Contravariant2Vector(-1.0),
+    coord -> Geometry.Contravariant123Vector(0.0, -1.0, 0.0),
     Fields.coordinate_field(cspace),
 )
 

@@ -37,10 +37,11 @@ basis2(::Type{<:AbstractTensor{2, <:Any, <:Tuple{Any, B}}}) where {B} = B
 recursively_find_dual_axes_for_projection(
     ::Type{X},
 ) where {X <: Tensor{2}} = dual(Geometry.tensor_bases(X)[2])
-# No `Tensor{2}` to project against → signal "skip projection".
-recursively_find_dual_axes_for_projection(::Type{<:Number}) = nothing
-recursively_find_dual_axes_for_projection(::Type{X}) where {X} =
-    recursively_find_dual_axes_for_projection(eltype(X))
+@inline function recursively_find_dual_axes_for_projection(::Type{X}) where {X}
+    Y = eltype(X)
+    Y === X && return nothing
+    return recursively_find_dual_axes_for_projection(Y)
+end
 
 
 """

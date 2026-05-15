@@ -130,11 +130,16 @@ end
         curl = Operators.Curl()
         curlv = curl.(Geometry.Covariant12Vector.(v))
         Spaces.weighted_dss!(curlv)
-        curlv_ref =
-            Geometry.Contravariant3Vector.(
-                .-3 .* sin.(3 .* coords.x .+ 4 .* coords.y) .-
-                2 .* cos.(coords.x .+ 2 .* coords.y),
-            )
+        # `curl_result_type` is now always `Contravariant123Vector`; the
+        # 1st/2nd slots are zero for a Curl{(1,2)}(Cov12) input.
+        curl_scalar =
+            .-3 .* sin.(3 .* coords.x .+ 4 .* coords.y) .-
+            2 .* cos.(coords.x .+ 2 .* coords.y)
+        curlv_ref = Geometry.Contravariant123Vector.(
+            zero.(curl_scalar),
+            zero.(curl_scalar),
+            curl_scalar,
+        )
 
         @test curlv ≈ curlv_ref rtol = 1e-2
     end
@@ -220,7 +225,13 @@ end
             .-3 .* sin.(3 .* coords.x .+ 4 .* coords.y) .-
             2 .* cos.(coords.x .+ 2 .* coords.y)
 
-        @test curlv ≈ Geometry.Contravariant3Vector.(curlv_ref) rtol = 1e-2
+        # `curl_result_type` is now always `Contravariant123Vector`; pad the
+        # reference scalar into the 3rd slot.
+        @test curlv ≈ Geometry.Contravariant123Vector.(
+            zero.(curlv_ref),
+            zero.(curlv_ref),
+            curlv_ref,
+        ) rtol = 1e-2
     end
 end
 

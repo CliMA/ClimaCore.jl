@@ -504,6 +504,10 @@ Base.@propagate_inbounds recursively_project(projection_tuple::T, y::Y) where {T
 Base.@propagate_inbounds recursively_project(
     projection_tuple::T,
     y::Y,
+) where {T, Y <: Number} = y
+Base.@propagate_inbounds recursively_project(
+    projection_tuple::T,
+    y::Y,
 ) where {T, Y <: AbstractTensor} =
     @inbounds @inline project(projection_tuple[1], y, projection_tuple[2])
 
