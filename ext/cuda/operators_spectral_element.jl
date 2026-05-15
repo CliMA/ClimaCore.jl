@@ -473,30 +473,14 @@ Base.@propagate_inbounds function operator_evaluate(
     D = Quadratures.differentiation_matrix(FT, QS)
     local_geometry = get_local_geometry(space, ij, slabidx)
 
-    if length(work) == 2
-        _, v₂ = work
-        D₁v₂ = D[i, 1] * v₂[1, vt]
-        for k in 2:Nq
-            D₁v₂ += D[i, k] * v₂[k, vt]
-        end
-        result = Geometry.Contravariant3Vector(D₁v₂)
-    elseif length(work) == 1
-        (v₃,) = work
-        D₁v₃ = D[i, 1] * v₃[1, vt]
-        for k in 2:Nq
-            D₁v₃ += D[i, k] * v₃[k, vt]
-        end
-        result = Geometry.Contravariant2Vector(-D₁v₃)
-    else
-        _, v₂, v₃ = work
-        D₁v₂ = D[i, 1] * v₂[1, vt]
-        D₁v₃ = D[i, 1] * v₃[1, vt]
-        @simd for k in 2:Nq
-            D₁v₂ += D[i, k] * v₂[k, vt]
-            D₁v₃ += D[i, k] * v₃[k, vt]
-        end
-        result = Geometry.Contravariant23Vector(-D₁v₃, D₁v₂)
+    _, v₂, v₃ = work
+    D₁v₂ = D[i, 1] * v₂[1, vt]
+    D₁v₃ = D[i, 1] * v₃[1, vt]
+    @simd for k in 2:Nq
+        D₁v₂ += D[i, k] * v₂[k, vt]
+        D₁v₃ += D[i, k] * v₃[k, vt]
     end
+    result = Geometry.Contravariant123Vector(zero(FT), -D₁v₃, D₁v₂)
     return result * local_geometry.invJ
 end
 Base.@propagate_inbounds function operator_evaluate(
@@ -515,38 +499,18 @@ Base.@propagate_inbounds function operator_evaluate(
     D = Quadratures.differentiation_matrix(FT, QS)
     local_geometry = get_local_geometry(space, ij, slabidx)
 
-    if length(work) == 2
-        v₁, v₂ = work
-        D₁v₂ = D[i, 1] * v₂[1, j, vt]
-        D₂v₁ = D[j, 1] * v₁[i, 1, vt]
-        for k in 2:Nq
-            D₁v₂ += D[i, k] * v₂[k, j, vt]
-            D₂v₁ += D[j, k] * v₁[i, k, vt]
-        end
-        result = Geometry.Contravariant3Vector(D₁v₂ - D₂v₁)
-    elseif length(work) == 1
-        (v₃,) = work
-        D₁v₃ = D[i, 1] * v₃[1, j, vt]
-        D₂v₃ = D[j, 1] * v₃[i, 1, vt]
-        for k in 2:Nq
-            D₁v₃ += D[i, k] * v₃[k, j, vt]
-            D₂v₃ += D[j, k] * v₃[i, k, vt]
-        end
-        result = Geometry.Contravariant12Vector(D₂v₃, -D₁v₃)
-    else
-        v₁, v₂, v₃ = work
-        D₁v₂ = D[i, 1] * v₂[1, j, vt]
-        D₂v₁ = D[j, 1] * v₁[i, 1, vt]
-        D₁v₃ = D[i, 1] * v₃[1, j, vt]
-        D₂v₃ = D[j, 1] * v₃[i, 1, vt]
-        @simd for k in 2:Nq
-            D₁v₂ += D[i, k] * v₂[k, j, vt]
-            D₂v₁ += D[j, k] * v₁[i, k, vt]
-            D₁v₃ += D[i, k] * v₃[k, j, vt]
-            D₂v₃ += D[j, k] * v₃[i, k, vt]
-        end
-        result = Geometry.Contravariant123Vector(D₂v₃, -D₁v₃, D₁v₂ - D₂v₁)
+    v₁, v₂, v₃ = work
+    D₁v₂ = D[i, 1] * v₂[1, j, vt]
+    D₂v₁ = D[j, 1] * v₁[i, 1, vt]
+    D₁v₃ = D[i, 1] * v₃[1, j, vt]
+    D₂v₃ = D[j, 1] * v₃[i, 1, vt]
+    @simd for k in 2:Nq
+        D₁v₂ += D[i, k] * v₂[k, j, vt]
+        D₂v₁ += D[j, k] * v₁[i, k, vt]
+        D₁v₃ += D[i, k] * v₃[k, j, vt]
+        D₂v₃ += D[j, k] * v₃[i, k, vt]
     end
+    result = Geometry.Contravariant123Vector(D₂v₃, -D₁v₃, D₁v₂ - D₂v₁)
     return result * local_geometry.invJ
 end
 
@@ -566,30 +530,14 @@ Base.@propagate_inbounds function operator_evaluate(
     D = Quadratures.differentiation_matrix(FT, QS)
     local_geometry = get_local_geometry(space, ij, slabidx)
 
-    if length(work) == 2
-        _, Wv₂ = work
-        Dᵀ₁Wv₂ = D[1, i] * Wv₂[1, vt]
-        for k in 2:Nq
-            Dᵀ₁Wv₂ += D[k, i] * Wv₂[k, vt]
-        end
-        result = Geometry.Contravariant3Vector(-Dᵀ₁Wv₂)
-    elseif length(work) == 1
-        (Wv₃,) = work
-        Dᵀ₁Wv₃ = D[1, i] * Wv₃[1, vt]
-        for k in 2:Nq
-            Dᵀ₁Wv₃ += D[k, i] * Wv₃[k, vt]
-        end
-        result = Geometry.Contravariant2Vector(Dᵀ₁Wv₃)
-    else
-        _, Wv₂, Wv₃ = work
-        Dᵀ₁Wv₂ = D[1, i] * Wv₂[1, vt]
-        Dᵀ₁Wv₃ = D[1, i] * Wv₃[1, vt]
-        @simd for k in 2:Nq
-            Dᵀ₁Wv₂ += D[k, i] * Wv₂[k, vt]
-            Dᵀ₁Wv₃ += D[k, i] * Wv₃[k, vt]
-        end
-        result = Geometry.Contravariant23Vector(Dᵀ₁Wv₃, -Dᵀ₁Wv₂)
+    _, Wv₂, Wv₃ = work
+    Dᵀ₁Wv₂ = D[1, i] * Wv₂[1, vt]
+    Dᵀ₁Wv₃ = D[1, i] * Wv₃[1, vt]
+    @simd for k in 2:Nq
+        Dᵀ₁Wv₂ += D[k, i] * Wv₂[k, vt]
+        Dᵀ₁Wv₃ += D[k, i] * Wv₃[k, vt]
     end
+    result = Geometry.Contravariant123Vector(zero(FT), Dᵀ₁Wv₃, -Dᵀ₁Wv₂)
     return result / local_geometry.WJ
 end
 Base.@propagate_inbounds function operator_evaluate(
@@ -608,37 +556,17 @@ Base.@propagate_inbounds function operator_evaluate(
     D = Quadratures.differentiation_matrix(FT, QS)
     local_geometry = get_local_geometry(space, ij, slabidx)
 
-    if length(work) == 2
-        Wv₁, Wv₂ = work
-        Dᵀ₁Wv₂ = D[1, i] * Wv₂[1, j, vt]
-        Dᵀ₂Wv₁ = D[1, j] * Wv₁[i, 1, vt]
-        for k in 2:Nq
-            Dᵀ₁Wv₂ += D[k, i] * Wv₂[k, j, vt]
-            Dᵀ₂Wv₁ += D[k, j] * Wv₁[i, k, vt]
-        end
-        result = Geometry.Contravariant3Vector(Dᵀ₂Wv₁ - Dᵀ₁Wv₂)
-    elseif length(work) == 1
-        (Wv₃,) = work
-        Dᵀ₁Wv₃ = D[1, i] * Wv₃[1, j, vt]
-        Dᵀ₂Wv₃ = D[1, j] * Wv₃[i, 1, vt]
-        for k in 2:Nq
-            Dᵀ₁Wv₃ += D[k, i] * Wv₃[k, j, vt]
-            Dᵀ₂Wv₃ += D[k, j] * Wv₃[i, k, vt]
-        end
-        result = Geometry.Contravariant12Vector(-Dᵀ₂Wv₃, Dᵀ₁Wv₃)
-    else
-        Wv₁, Wv₂, Wv₃ = work
-        Dᵀ₁Wv₂ = D[1, i] * Wv₂[1, j, vt]
-        Dᵀ₂Wv₁ = D[1, j] * Wv₁[i, 1, vt]
-        Dᵀ₁Wv₃ = D[1, i] * Wv₃[1, j, vt]
-        Dᵀ₂Wv₃ = D[1, j] * Wv₃[i, 1, vt]
-        @simd for k in 2:Nq
-            Dᵀ₁Wv₂ += D[k, i] * Wv₂[k, j, vt]
-            Dᵀ₂Wv₁ += D[k, j] * Wv₁[i, k, vt]
-            Dᵀ₁Wv₃ += D[k, i] * Wv₃[k, j, vt]
-            Dᵀ₂Wv₃ += D[k, j] * Wv₃[i, k, vt]
-        end
-        result = Geometry.Contravariant123Vector(-Dᵀ₂Wv₃, Dᵀ₁Wv₃, Dᵀ₂Wv₁ - Dᵀ₁Wv₂)
+    Wv₁, Wv₂, Wv₃ = work
+    Dᵀ₁Wv₂ = D[1, i] * Wv₂[1, j, vt]
+    Dᵀ₂Wv₁ = D[1, j] * Wv₁[i, 1, vt]
+    Dᵀ₁Wv₃ = D[1, i] * Wv₃[1, j, vt]
+    Dᵀ₂Wv₃ = D[1, j] * Wv₃[i, 1, vt]
+    @simd for k in 2:Nq
+        Dᵀ₁Wv₂ += D[k, i] * Wv₂[k, j, vt]
+        Dᵀ₂Wv₁ += D[k, j] * Wv₁[i, k, vt]
+        Dᵀ₁Wv₃ += D[k, i] * Wv₃[k, j, vt]
+        Dᵀ₂Wv₃ += D[k, j] * Wv₃[i, k, vt]
     end
+    result = Geometry.Contravariant123Vector(-Dᵀ₂Wv₃, Dᵀ₁Wv₃, Dᵀ₂Wv₁ - Dᵀ₁Wv₂)
     return result / local_geometry.WJ
 end
