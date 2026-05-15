@@ -283,30 +283,6 @@ Base.@propagate_inbounds Base.view(x::Tensor, indices::TensorIndex...) =
 #############################################
 
 """
-    Metric(tensor::AbstractTensor{2})
-
-Storage wrapper around the canonical local metric tensor `∂x/∂ξ`
-(`Orthonormal` rows × `Covariant` columns). Held as a field of
-[`LocalGeometry`](@ref); read directly via `lg.∂x∂ξ`. The wrapped tensor is
-identity-padded to full `(UVWAxis, Covariant123Axis)` shape regardless of
-the source geometry's `I`, so a single matvec covers every conversion case
-— directions outside `I` ride the identity block. See [`pad_metric_tensor`](@ref).
-"""
-struct Metric{T <: AbstractTensor{2}}
-    tensor::T
-end
-
-Base.zero(g::Metric) = zero(typeof(g))
-Base.one(g::Metric) = one(typeof(g))
-
-Base.zero(::Type{Metric{T}}) where {T} = Metric(zero(T))
-Base.one(::Type{Metric{T}}) where {T} = Metric(one(T))
-Base.convert(::Type{Metric{T}}, g::Metric) where {T} =
-    Metric(convert(T, g.tensor))
-
-Base.show(io::IO, g::Metric) = print(io, "Metric(", g.tensor, ")")
-
-"""
     pad_metric_tensor(∂x∂ξ::Tensor{2})
 
 Pads an N×N metric tensor with axes `(Basis{Orthonormal, I}, Basis{Covariant, I})`

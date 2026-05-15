@@ -135,11 +135,12 @@ end
         curl_scalar =
             .-3 .* sin.(3 .* coords.x .+ 4 .* coords.y) .-
             2 .* cos.(coords.x .+ 2 .* coords.y)
-        curlv_ref = Geometry.Contravariant123Vector.(
-            zero.(curl_scalar),
-            zero.(curl_scalar),
-            curl_scalar,
-        )
+        curlv_ref =
+            Geometry.Contravariant123Vector.(
+                zero.(curl_scalar),
+                zero.(curl_scalar),
+                curl_scalar,
+            )
 
         @test curlv ≈ curlv_ref rtol = 1e-2
     end
@@ -227,7 +228,8 @@ end
 
         # `curl_result_type` is now always `Contravariant123Vector`; pad the
         # reference scalar into the 3rd slot.
-        @test curlv ≈ Geometry.Contravariant123Vector.(
+        @test curlv ≈
+              Geometry.Contravariant123Vector.(
             zero.(curlv_ref),
             zero.(curlv_ref),
             curlv_ref,

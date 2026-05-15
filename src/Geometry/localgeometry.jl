@@ -15,24 +15,20 @@ struct LocalGeometry{I, C <: AbstractPoint, FT, M, G}
     J::FT
     "Metric terms: `J` multiplied by the quadrature weights"
     WJ::FT
-    "Canonical metric ∂x/∂ξ wrapped in [`Metric`](@ref). Identity-padded to
-    full (UVWAxis, Covariant123Axis) shape so a single matvec covers every
+    "Canonical metric ∂x/∂ξ. Identity-padded to full
+    (UVWAxis, Covariant123Axis) shape so a single matvec covers every
     conversion regardless of `I`."
-    metric::M
+    ∂x∂ξ::M
     "Contravariant metric tensor gⁱʲ. Identity-padded to full
-    (Contravariant123, Contravariant123) shape; cached as a real field so
-    Field-level property access (`Fields.local_geometry_field(space).gⁱʲ`)
-    works through DataLayouts."
+    (Contravariant123, Contravariant123) shape."
     gⁱʲ::G
 end
 
 @inline function Base.getproperty(lg::LocalGeometry, name::Symbol)
     return if name === :invJ
         inv(getfield(lg, :J))
-    elseif name === :∂x∂ξ
-        getfield(lg, :metric).tensor
     elseif name === :∂ξ∂x
-        inv(getfield(lg, :metric).tensor)
+        inv(getfield(lg, :∂x∂ξ))
     elseif name === :gᵢⱼ
         inv(getfield(lg, :gⁱʲ))
     else
@@ -54,14 +50,13 @@ end
     gⁱʲ = ∂ξ∂x * ∂ξ∂x'
     isapproxsymmetric(parent(gⁱʲ)) || error("gⁱʲ is not symmetric.")
     @assert isapproxsymmetric(parent(padded' * padded)) "gᵢⱼ is not symmetric."
-    metric = Metric(padded)
-    return LocalGeometry{names, C, FT, typeof(metric), typeof(gⁱʲ)}(
-        coordinates, J, WJ, metric, gⁱʲ,
+    return LocalGeometry{names, C, FT, typeof(padded), typeof(gⁱʲ)}(
+        coordinates, J, WJ, padded, gⁱʲ,
     )
 end
 
-const PaddedCovariantMetric{FT} =
-    Metric{Tensor{2, FT, Tuple{UVWAxis, Covariant123Axis}, SMatrix{3, 3, FT, 9}}}
+const Padded∂x∂ξ{FT} =
+    Tensor{2, FT, Tuple{UVWAxis, Covariant123Axis}, SMatrix{3, 3, FT, 9}}
 const PaddedContravariantMetric{FT} =
     Tensor{2, FT, Tuple{Contravariant123Axis, Contravariant123Axis}, SMatrix{3, 3, FT, 9}}
 
@@ -74,7 +69,7 @@ and index tuple `I`. Useful for pre-allocating DataLayouts with the correct elem
 function LocalGeometryType(::Type{C}, ::Type{FT}, I::Tuple) where {C <: AbstractPoint, FT}
     return LocalGeometry{
         I, C, FT,
-        PaddedCovariantMetric{FT},
+        Padded∂x∂ξ{FT},
         PaddedContravariantMetric{FT},
     }
 end
