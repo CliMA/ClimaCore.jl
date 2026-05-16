@@ -277,3 +277,56 @@ const ExtrudedRectilinearSpectralElementSpace3D = ExtrudedFiniteDifferenceSpace{
 const ExtrudedCubedSphereSpectralElementSpace3D = ExtrudedFiniteDifferenceSpace{
     <:Grids.ExtrudedCubedSphereSpectralElementGrid3D,
 }
+
+# PointCloudSpace: ExtrudedFiniteDifferenceSpace backed by a PointCloudGrid.
+# N independent columns at arbitrary (lat, lon) locations; no horizontal operators.
+const PointCloudSpace = ExtrudedFiniteDifferenceSpace{
+    <:Grids.ExtrudedFiniteDifferenceGrid{<:Grids.PointCloudGrid},
+}
+const ExtrudedPointCloudSpace = PointCloudSpace  # alias used in indices.jl
+
+"""
+    ncolumns(space::PointCloudSpace)
+
+Number of columns (i.e. distinct (lat, lon) points) in a `PointCloudSpace`.
+"""
+ncolumns(space::PointCloudSpace) =
+    size(Grids.local_geometry_data(grid(space).horizontal_grid, nothing), 5) # Nh is the 5th dimension of IFH
+
+horizontal_space(space::PointCloudSpace) =
+    error("PointCloudSpace has no horizontal spectral element space")
+
+# PointCloudSpace has no topology/mask machinery — use NoMask and route
+# set_mask! directly to the horizontal grid (not through horizontal_space).
+get_mask(space::PointCloudSpace) = DataLayouts.NoMask()
+set_mask!(fn, space::PointCloudSpace) = set_mask!(fn, grid(space).horizontal_grid)
+
+# PointCloudGrid is 1D (Ni=1 per column), so slab type is IF.
+slab_type(space::PointCloudSpace) = DataLayouts.IF
+
+function Base.show(io::IO, space::PointCloudSpace)
+    indent = get(io, :indent, 0)
+    iio = IOContext(io, :indent => indent + 2)
+    println(
+        io,
+        space isa CenterExtrudedFiniteDifferenceSpace ?
+        "CenterExtrudedFiniteDifferenceSpace (PointCloud)" :
+        "FaceExtrudedFiniteDifferenceSpace (PointCloud)",
+        ":",
+    )
+    print(iio, " "^(indent + 2), "context: ")
+    Topologies.print_context(iio, ClimaComms.context(space))
+    println(iio)
+    println(iio, " "^(indent + 2), "columns: ", ncolumns(space))
+    if has_vertical(space)
+        println(iio, " "^(indent + 2), "vertical:")
+        print(iio, " "^(indent + 4), "mesh: ", vertical_topology(space).mesh)
+    end
+end
+
+function column(space::PointCloudSpace, colidx::Grids.ColumnIndex)
+    column_grid = Grids.column(grid(space), colidx)
+    FiniteDifferenceSpace(column_grid, space.staggering)
+end
+column(space::PointCloudSpace, i, h) =
+    column(space, Grids.ColumnIndex((i,), h))

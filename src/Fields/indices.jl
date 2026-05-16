@@ -103,6 +103,28 @@ bycolumn(
     device::ClimaComms.AbstractCPUDevice,
 ) = bycolumn(fn, Spaces.horizontal_space(space), device)
 
+function bycolumn(
+    fn,
+    space::Spaces.PointCloudSpace,
+    ::ClimaComms.CPUSingleThreaded,
+)
+    N = Spaces.ncolumns(space)
+    @inbounds for h in 1:N
+        fn(ColumnIndex((1,), h))
+    end
+    return nothing
+end
+function bycolumn(
+    fn,
+    space::Spaces.PointCloudSpace,
+    ::ClimaComms.CPUMultiThreaded,
+)
+    N = Spaces.ncolumns(space)
+    @inbounds Threads.@threads for h in 1:N
+        fn(ColumnIndex((1,), h))
+    end
+    return nothing
+end
 
 
 """
