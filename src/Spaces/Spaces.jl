@@ -61,6 +61,24 @@ abstract type AbstractSpace end
 function grid end
 function staggering end
 
+function Base.show(io::IO, ::MIME"text/plain", x::Type{T}) where {T<:AbstractSpace}
+    Base.show(io, x)
+end
+
+function Base.show(io::IO, x::Type{T}) where {T<:AbstractSpace}
+    compact = get(io, :compact, true)
+    (compact && x isa DataType) || return Base._show_type(io, x)
+    Base.show_typealias(io, x) && return
+    Base.show_type_name(io, x.name)
+    print(io, "{")
+    first_param = true
+    for param in x.parameters
+        first_param || print(io, ", ")
+        Base.show_type_name(io, param.name)
+        first_param = false
+    end
+    print(io, "}")
+end
 
 ClimaComms.context(space::AbstractSpace) = ClimaComms.context(grid(space))
 ClimaComms.device(space::AbstractSpace) = ClimaComms.device(grid(space))
