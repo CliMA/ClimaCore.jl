@@ -98,7 +98,7 @@ end
 """
     has_horizontal(::AbstractGrid)
 
-Returns a bool indicating that the grid has a vertical part.
+Returns a bool indicating that the grid has a horizontal part.
 """
 function has_horizontal end
 has_horizontal(::AbstractGrid) = false
@@ -110,7 +110,7 @@ has_horizontal(::SpectralElementGrid1D) = true
 """
     has_vertical(::AbstractGrid)
 
-Returns a bool indicating that the space has a vertical part.
+Returns a bool indicating that the grid has a vertical part.
 """
 function has_vertical end
 has_vertical(::AbstractGrid) = false
