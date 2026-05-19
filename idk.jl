@@ -20,6 +20,11 @@ points = [
 ]
 N = length(points)
 
+# TODO: I don't know what the topology of this is (via Grids.topology(grid))
+# TODO: ClimaCore.Spaces.horizontal_space(ᶜspace) crashes too
+# I feel like this should be hard to make horizontal space work for this
+# This is confusing since for a ExtrudedFiniteDifferenceSpace this is done
+# by getting a level
 ᶜspace = PointColumnEnsembleSpace(FT;
     points  = points,
     z_elem  = 10,
@@ -153,6 +158,7 @@ end
     ᶠz = Fields.coordinate_field(ᶠspace).z
 
     # Each level slice has N values (one per column)
+    # TODO: Is the space that lev1 is defined on correct?
     lev1 = Fields.level(ᶜz, 1)
     @test length(parent(lev1)) == N
 

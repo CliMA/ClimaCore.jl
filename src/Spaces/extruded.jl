@@ -280,6 +280,7 @@ const ExtrudedCubedSphereSpectralElementSpace3D = ExtrudedFiniteDifferenceSpace{
 
 # PointCloudSpace: ExtrudedFiniteDifferenceSpace backed by a PointCloudGrid.
 # N independent columns at arbitrary (lat, lon) locations; no horizontal operators.
+# TODO: This doesn't feel like a good name
 const PointCloudSpace = ExtrudedFiniteDifferenceSpace{
     <:Grids.ExtrudedFiniteDifferenceGrid{<:Grids.PointCloudGrid},
 }
@@ -293,11 +294,20 @@ Number of columns (i.e. distinct (lat, lon) points) in a `PointCloudSpace`.
 ncolumns(space::PointCloudSpace) =
     size(Grids.local_geometry_data(grid(space).horizontal_grid, nothing), 5) # Nh is the 5th dimension of IFH
 
-horizontal_space(space::PointCloudSpace) =
-    error("PointCloudSpace has no horizontal spectral element space")
+# TODO: Maybe I need a CloudSpace for points too?
+# This is horizontal_space(space::FiniteDifferenceSpace) = level(space, 1)
+# I think this is wrong and I need a new space for this?
+#  TODO: This is a poor name since PointCloudSpace makes me think of points
+# and not columns
+# TODO: I think I just need to define a space right now?
+# space(grid(full_space).horizontal_grid, nothing)
+# This currently return a ClimaCore.Spaces.SpectralElementSpace1D which I am
+# not sure if that is right or now
+horizontal_space(full_space::PointCloudSpace) = level(full_space, 1)
 
 # PointCloudSpace has no topology/mask machinery — use NoMask and route
 # set_mask! directly to the horizontal grid (not through horizontal_space).
+# TODO: Is this even necessary since you choose which points to work with?
 get_mask(space::PointCloudSpace) = DataLayouts.NoMask()
 set_mask!(fn, space::PointCloudSpace) = set_mask!(fn, grid(space).horizontal_grid)
 
