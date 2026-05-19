@@ -25,7 +25,6 @@ N = length(points)
     z_elem  = 10,
     z_min   = FT(0),
     z_max   = FT(10_000),
-    radius  = FT(6.371229e6),
     staggering = CellCenter(),
 )
 ᶠspace = Spaces.face_space(ᶜspace)
@@ -251,7 +250,6 @@ end
         z_elem     = 10,
         z_min      = FT(0),
         z_max      = FT(10_000),
-        radius     = FT(6.371229e6),
         staggering = CellCenter(),
     )
     ᶠsp1 = Spaces.face_space(ᶜsp1)

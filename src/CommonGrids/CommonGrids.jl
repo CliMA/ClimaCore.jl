@@ -764,7 +764,6 @@ function PointColumnEnsembleGrid(
     z_elem::Integer,
     z_min::Real,
     z_max::Real,
-    radius::Real,
     device::ClimaComms.AbstractDevice = ClimaComms.device(),
     context::ClimaComms.AbstractCommsContext = ClimaComms.SingletonCommsContext(device),
     stretch::Meshes.StretchingRule = Meshes.Uniform(),
@@ -772,7 +771,7 @@ function PointColumnEnsembleGrid(
 ) where {FT}
     @assert context isa ClimaComms.SingletonCommsContext "PointColumnEnsembleGrid only supports SingletonCommsContext."
     @assert ClimaComms.device(context) == device "The given device and context device do not match."
-    h_grid = Grids.PointCloudGrid(points; radius, device, context)
+    h_grid = Grids.PointCloudGrid(points; device, context)
     z_topology = Topologies.IntervalTopology(
         ClimaComms.SingletonCommsContext(device),
         z_mesh,

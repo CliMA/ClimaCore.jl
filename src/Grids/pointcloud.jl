@@ -59,14 +59,13 @@ Convenience constructor: build a `PointCloudGrid` from a vector of
 """
 function PointCloudGrid(
     points::AbstractVector{Geometry.LatLongPoint{FT}};
-    radius::Real,
     device::ClimaComms.AbstractDevice = ClimaComms.device(),
     context::ClimaComms.AbstractCommsContext = ClimaComms.SingletonCommsContext(device),
 ) where {FT}
     @assert context isa ClimaComms.SingletonCommsContext "PointCloudGrid only supports SingletonCommsContext."
 
     N = length(points)
-    global_geometry = Geometry.ShallowSphericalGlobalGeometry{FT}(FT(radius))
+    global_geometry = Geometry.CartesianGlobalGeometry()
 
     AIdx = Geometry.coordinate_axis(Geometry.LatLongPoint{FT})  # (1, 2)
     LG = Geometry.FullLocalGeometry{
