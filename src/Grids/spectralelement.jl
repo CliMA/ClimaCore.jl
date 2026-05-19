@@ -117,9 +117,9 @@ end
 
 
 """
-    SpectralElementSpace2D <: AbstractSpace
+    SpectralElementGrid2D <: AbstractSpectralElementGrid
 
-A two-dimensional space: within each element the space is represented as a polynomial.
+A two-dimensional grid: within each element the space is represented as a polynomial.
 """
 mutable struct SpectralElementGrid2D{
     T,
@@ -150,7 +150,7 @@ local_geometry_type(
 ) where {T, Q, GG, LG, D, IS, BS, M} = eltype(LG) # calls eltype from DataLayouts
 
 """
-    SpectralElementSpace2D(
+    SpectralElementGrid2D(
         topology,
         quadrature_style;
         enable_bubble,
@@ -159,7 +159,7 @@ local_geometry_type(
         enable_mask::Bool,
     )
 
-Construct a `SpectralElementSpace2D` instance given a `topology` and `quadrature`. The
+Construct a `SpectralElementGrid2D` instance given a `topology` and `quadrature`. The
 flag `enable_bubble` enables the `bubble correction` for more accurate element areas.
 The flag `autodiff_metric` enables the use of automatic differentiation instead of the
 SEM for computing metric terms.

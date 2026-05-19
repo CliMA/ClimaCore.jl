@@ -198,7 +198,7 @@ has_vertical(::FiniteDifferenceSpace) = false
 """
     has_horizontal(::AbstractSpace)
 
-Returns a bool indicating that the space has a vertical grid.
+Returns a bool indicating that the space has a horizontal grid.
 """
 function has_horizontal end
 has_horizontal(::AbstractSpace) = false
