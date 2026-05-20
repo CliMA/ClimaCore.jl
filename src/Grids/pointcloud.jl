@@ -76,6 +76,7 @@ function PointCloudGrid(
     }
 
     # Ni = 1 (one node per "column element"), Nh = N
+    # TODO: I part looks weird
     local_geometry = DataLayouts.IFH{LG, 1}(Array{FT}, N)
 
     I2 = SMatrix{2, 2, FT, 4}(one(FT), zero(FT), zero(FT), one(FT))

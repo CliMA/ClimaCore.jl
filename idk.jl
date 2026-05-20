@@ -25,6 +25,7 @@ N = length(points)
 # I feel like this should be hard to make horizontal space work for this
 # This is confusing since for a ExtrudedFiniteDifferenceSpace this is done
 # by getting a level
+# TODO: Get rid of the extruded part
 ᶜspace = PointColumnEnsembleSpace(FT;
     points = points,
     z_elem = 10,
