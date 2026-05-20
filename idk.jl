@@ -14,7 +14,7 @@ ClimaComms.@import_required_backends
 # Compare with a single ColumnSpace for behaviour parity.
 # ---------------------------------------------------------------
 points = [
-    Geometry.LatLongPoint(FT(0),  FT(0)),
+    Geometry.LatLongPoint(FT(0), FT(0)),
     Geometry.LatLongPoint(FT(10), FT(20)),
     Geometry.LatLongPoint(FT(-5), FT(90)),
 ]
@@ -26,10 +26,10 @@ N = length(points)
 # This is confusing since for a ExtrudedFiniteDifferenceSpace this is done
 # by getting a level
 ᶜspace = PointColumnEnsembleSpace(FT;
-    points  = points,
-    z_elem  = 10,
-    z_min   = FT(0),
-    z_max   = FT(10_000),
+    points = points,
+    z_elem = 10,
+    z_min = FT(0),
+    z_max = FT(10_000),
     staggering = CellCenter(),
 )
 ᶠspace = Spaces.face_space(ᶜspace)
@@ -82,18 +82,18 @@ end
 @testset "PointColumnEnsembleSpace – lat/lon coordinate field" begin
     ᶜcoords = Fields.coordinate_field(ᶜspace)
 
-    ᶜlat  = ᶜcoords.lat
+    ᶜlat = ᶜcoords.lat
     ᶜlong = ᶜcoords.long
 
-    lat_arr  = parent(ᶜlat)   # shape: (Nv, 1, 1, N)
+    lat_arr = parent(ᶜlat)   # shape: (Nv, 1, 1, N)
     long_arr = parent(ᶜlong)
 
     # Each column's lat/lon should be constant across all vertical levels
     # and match the corresponding input point.
     for h in 1:N
-        expected_lat  = FT(points[h].lat)
+        expected_lat = FT(points[h].lat)
         expected_long = FT(points[h].long)
-        @test all(≈(expected_lat),  lat_arr[:, 1, 1, h])
+        @test all(≈(expected_lat), lat_arr[:, 1, 1, h])
         @test all(≈(expected_long), long_arr[:, 1, 1, h])
     end
 
@@ -147,7 +147,7 @@ end
 end
 
 @testset "PointColumnEnsembleSpace – face_space / center_space round-trip" begin
-    @test Spaces.center_space(ᶠspace) === ᶜspace  ||
+    @test Spaces.center_space(ᶠspace) === ᶜspace ||
           Spaces.grid(Spaces.center_space(ᶠspace)) === Spaces.grid(ᶜspace)
     @test Spaces.face_space(ᶜspace) === ᶠspace ||
           Spaces.grid(Spaces.face_space(ᶜspace)) === Spaces.grid(ᶠspace)
@@ -191,7 +191,7 @@ end
     # GradientC2F: gradient of z should be ≈ 1 everywhere (dz/dz = 1)
     grad = Operators.GradientC2F(
         bottom = Operators.SetGradient(Geometry.Covariant3Vector(FT(1))),
-        top    = Operators.SetGradient(Geometry.Covariant3Vector(FT(1))),
+        top = Operators.SetGradient(Geometry.Covariant3Vector(FT(1))),
     )
     ᶠgrad_z = @. grad(ᶜz)
     # Covariant3 component should be ~1 (dz/dξ₃ scaling)
@@ -200,7 +200,7 @@ end
     # DivergenceF2C: divergence of a face field
     div = Operators.DivergenceF2C(
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
-        top    = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
+        top = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
     )
     ᶜdiv = @. div(Geometry.Contravariant3Vector(ᶠz))
     # result should be finite
@@ -209,7 +209,7 @@ end
     # InterpolateC2F / InterpolateF2C round-trip
     interp_c2f = Operators.InterpolateC2F(
         bottom = Operators.Extrapolate(),
-        top    = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
     )
     interp_f2c = Operators.InterpolateF2C()
     ᶠᶜz = @. interp_c2f(ᶜz)
@@ -252,10 +252,10 @@ end
 @testset "single-point PointColumnEnsembleSpace ≡ CenterFiniteDifferenceSpace" begin
     # Build a single-point ensemble on the same z mesh as col_cspace
     ᶜsp1 = PointColumnEnsembleSpace(FT;
-        points     = [Geometry.LatLongPoint(FT(0), FT(0))],
-        z_elem     = 10,
-        z_min      = FT(0),
-        z_max      = FT(10_000),
+        points = [Geometry.LatLongPoint(FT(0), FT(0))],
+        z_elem = 10,
+        z_min = FT(0),
+        z_max = FT(10_000),
         staggering = CellCenter(),
     )
     ᶠsp1 = Spaces.face_space(ᶜsp1)
@@ -263,21 +263,21 @@ end
     # Flatten field data to a plain Vector{FT} for shape-agnostic comparison
     fvec(f) = vec(Array(parent(f)))
 
-    ᶜz1   = Fields.coordinate_field(ᶜsp1).z
-    ᶠz1   = Fields.coordinate_field(ᶠsp1).z
+    ᶜz1 = Fields.coordinate_field(ᶜsp1).z
+    ᶠz1 = Fields.coordinate_field(ᶠsp1).z
     ᶜzcol = Fields.coordinate_field(col_cspace).z
     ᶠzcol = Fields.coordinate_field(col_fspace).z
 
     # ── 1. FD operators ──────────────────────────────────────────────────────
     grad = Operators.GradientC2F(
         bottom = Operators.SetGradient(Geometry.Covariant3Vector(FT(1))),
-        top    = Operators.SetGradient(Geometry.Covariant3Vector(FT(1))),
+        top = Operators.SetGradient(Geometry.Covariant3Vector(FT(1))),
     )
     @test fvec(@. grad(ᶜz1)) ≈ fvec(@. grad(ᶜzcol))
 
     div_ct3 = Operators.DivergenceF2C(
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
-        top    = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
+        top = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
     )
     @test fvec(@. div_ct3(Geometry.Contravariant3Vector(ᶠz1))) ≈
           fvec(@. div_ct3(Geometry.Contravariant3Vector(ᶠzcol)))
@@ -294,7 +294,7 @@ end
     #                                    vs J * gⁱʲ[1,1] * u[1] (column)
     div_cov3 = Operators.DivergenceF2C(
         bottom = Operators.SetValue(Geometry.Covariant3Vector(FT(0))),
-        top    = Operators.SetValue(Geometry.Covariant3Vector(FT(0))),
+        top = Operators.SetValue(Geometry.Covariant3Vector(FT(0))),
     )
     @test fvec(@. div_cov3(Geometry.Covariant3Vector(ᶠz1))) ≈
           fvec(@. div_cov3(Geometry.Covariant3Vector(ᶠzcol)))
@@ -303,101 +303,132 @@ end
     #                           vs J * ∂ξ∂x[1,1] * u[1] (column)
     div_wvec = Operators.DivergenceF2C(
         bottom = Operators.SetValue(Geometry.WVector(FT(0))),
-        top    = Operators.SetValue(Geometry.WVector(FT(0))),
+        top = Operators.SetValue(Geometry.WVector(FT(0))),
     )
     @test fvec(@. div_wvec(Geometry.WVector(ᶠz1))) ≈
           fvec(@. div_wvec(Geometry.WVector(ᶠzcol)))
 
     # ── 3. Metric-tensor scalars and tensor diagonal ──────────────────────────
     # J, WJ, invJ are scalar fields on both spaces; they must be identical.
-    lg_1   = Fields.local_geometry_field(ᶜsp1)
+    lg_1 = Fields.local_geometry_field(ᶜsp1)
     lg_col = Fields.local_geometry_field(col_cspace)
-    @test fvec(lg_1.J)    ≈ fvec(lg_col.J)
-    @test fvec(lg_1.WJ)   ≈ fvec(lg_col.WJ)
+    @test fvec(lg_1.J) ≈ fvec(lg_col.J)
+    @test fvec(lg_1.WJ) ≈ fvec(lg_col.WJ)
     @test fvec(lg_1.invJ) ≈ fvec(lg_col.invJ)
 
     # Δz_data extracts ∂x∂ξ[3,3] for the ensemble (LatLongZPoint, idx=9)
     # and ∂x∂ξ[1,1] for the column (ZPoint, idx=1); both equal Δz.
-    Δz_1   = vec(Array(parent(Spaces.Δz_data(ᶜsp1))))
+    Δz_1 = vec(Array(parent(Spaces.Δz_data(ᶜsp1))))
     Δz_col = vec(Array(parent(Spaces.Δz_data(col_cspace))))
     @test Δz_1 ≈ Δz_col
 
     # Same index-selection trick for gⁱʲ: vertical diagonal entry = (1/Δz)².
     # For ensemble (3×3 gⁱʲ): component 9 = (3,3); for column (1×1): component 1.
-    _gij_zz(sp) = let lg = Spaces.local_geometry_data(sp)
-        getproperty(
-            lg.gⁱʲ.components.data,
-            Geometry.Δz_metric_component(eltype(lg.coordinates)),
-        )
-    end
+    _gij_zz(sp) =
+        let lg = Spaces.local_geometry_data(sp)
+            getproperty(
+                lg.gⁱʲ.components.data,
+                Geometry.Δz_metric_component(eltype(lg.coordinates)),
+            )
+        end
     @test vec(Array(parent(_gij_zz(ᶜsp1)))) ≈ vec(Array(parent(_gij_zz(col_cspace))))
 
     # ── 4. Space properties ───────────────────────────────────────────────────
-    @test Spaces.nlevels(ᶜsp1)   == Spaces.nlevels(col_cspace)
-    @test Spaces.ncolumns(ᶜsp1)  == Spaces.ncolumns(col_cspace)
-    @test Spaces.left_boundary_name(ᶜsp1)  == Spaces.left_boundary_name(col_cspace)
+    @test Spaces.nlevels(ᶜsp1) == Spaces.nlevels(col_cspace)
+    @test Spaces.ncolumns(ᶜsp1) == Spaces.ncolumns(col_cspace)
+    @test Spaces.left_boundary_name(ᶜsp1) == Spaces.left_boundary_name(col_cspace)
     @test Spaces.right_boundary_name(ᶜsp1) == Spaces.right_boundary_name(col_cspace)
 
     # ── 5. Face-space metrics ─────────────────────────────────────────────────
-    lg1f   = Fields.local_geometry_field(ᶠsp1)
+    lg1f = Fields.local_geometry_field(ᶠsp1)
     lgcolf = Fields.local_geometry_field(col_fspace)
-    @test fvec(lg1f.J)    ≈ fvec(lgcolf.J)
-    @test fvec(lg1f.WJ)   ≈ fvec(lgcolf.WJ)
+    @test fvec(lg1f.J) ≈ fvec(lgcolf.J)
+    @test fvec(lg1f.WJ) ≈ fvec(lgcolf.WJ)
     @test fvec(lg1f.invJ) ≈ fvec(lgcolf.invJ)
 
     # ── 6. GradientF2C ────────────────────────────────────────────────────────
     grad_f2c = Operators.GradientF2C(
         bottom = Operators.SetValue(FT(0)),
-        top    = Operators.SetValue(FT(10_000)),
+        top = Operators.SetValue(FT(10_000)),
     )
     @test fvec(@. grad_f2c(ᶠz1)) ≈ fvec(@. grad_f2c(ᶠzcol))
 
     # ── 7. Biased interpolation (C2F) ─────────────────────────────────────────
     lb_c2f = Operators.LeftBiasedC2F(bottom = Operators.SetValue(FT(0)))
-    rb_c2f = Operators.RightBiasedC2F(top   = Operators.SetValue(FT(10_000)))
+    rb_c2f = Operators.RightBiasedC2F(top = Operators.SetValue(FT(10_000)))
     @test fvec(@. lb_c2f(ᶜz1)) ≈ fvec(@. lb_c2f(ᶜzcol))
     @test fvec(@. rb_c2f(ᶜz1)) ≈ fvec(@. rb_c2f(ᶜzcol))
 
     # Biased interpolation (F2C)
     lb_f2c = Operators.LeftBiasedF2C(bottom = Operators.SetValue(FT(0)))
-    rb_f2c = Operators.RightBiasedF2C(top   = Operators.SetValue(FT(10_000)))
+    rb_f2c = Operators.RightBiasedF2C(top = Operators.SetValue(FT(10_000)))
     @test fvec(@. lb_f2c(ᶠz1)) ≈ fvec(@. lb_f2c(ᶠzcol))
     @test fvec(@. rb_f2c(ᶠz1)) ≈ fvec(@. rb_f2c(ᶠzcol))
 
     # ── 8. Weighted interpolation ─────────────────────────────────────────────
     # Use ones as weight so the result is a regular average (non-zero everywhere).
-    ᶠones1   = Fields.ones(ᶠsp1)
+    ᶠones1 = Fields.ones(ᶠsp1)
     ᶠonescol = Fields.ones(col_fspace)
-    ᶜones1   = Fields.ones(ᶜsp1)
+    ᶜones1 = Fields.ones(ᶜsp1)
     ᶜonescol = Fields.ones(col_cspace)
 
     wt_f2c = Operators.WeightedInterpolateF2C()
     wt_c2f = Operators.WeightedInterpolateC2F(
         bottom = Operators.Extrapolate(),
-        top    = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
     )
-    @test fvec(@. wt_f2c(ᶠones1, ᶠz1))     ≈ fvec(@. wt_f2c(ᶠonescol, ᶠzcol))
-    @test fvec(@. wt_c2f(ᶜones1, ᶜz1))     ≈ fvec(@. wt_c2f(ᶜonescol, ᶜzcol))
+    @test fvec(@. wt_f2c(ᶠones1, ᶠz1)) ≈ fvec(@. wt_f2c(ᶠonescol, ᶠzcol))
+    @test fvec(@. wt_c2f(ᶜones1, ᶜz1)) ≈ fvec(@. wt_c2f(ᶜonescol, ᶜzcol))
 
     # ── 9. AdvectionC2C ───────────────────────────────────────────────────────
     # Uniform unit Contravariant3 velocity; θ = z.
     # A(v, θ)[i] = ½ { (θ[i+1]-θ[i]) v³[i+½] + (θ[i]-θ[i-1]) v³[i-½] }
     adv = Operators.AdvectionC2C(
         bottom = Operators.SetValue(FT(0)),
-        top    = Operators.SetValue(FT(0)),
+        top = Operators.SetValue(FT(0)),
     )
-    ᶠv1   = fill(Geometry.Contravariant3Vector(FT(1)), ᶠsp1)
+    ᶠv1 = fill(Geometry.Contravariant3Vector(FT(1)), ᶠsp1)
     ᶠvcol = fill(Geometry.Contravariant3Vector(FT(1)), col_fspace)
-    adv1   = similar(ᶜz1);   @. adv1   = adv(ᶠv1,   ᶜz1)
-    advcol = similar(ᶜzcol); @. advcol = adv(ᶠvcol, ᶜzcol)
+    adv1 = similar(ᶜz1)
+    @. adv1 = adv(ᶠv1, ᶜz1)
+    advcol = similar(ᶜzcol)
+    @. advcol = adv(ᶠvcol, ᶜzcol)
     @test fvec(adv1) ≈ fvec(advcol)
 
     # ── 10. Fields.sum (weighted integral ∫ f WJ dξ) ─────────────────────────
     # WJ is identical for both spaces (= Δz for a uniform mesh), so the
     # integral of any function of z must agree.
-    @test sum(ᶜz1)            ≈ sum(ᶜzcol)
+    @test sum(ᶜz1) ≈ sum(ᶜzcol)
     @test sum(x -> x^2, ᶜz1) ≈ sum(x -> x^2, ᶜzcol)
 
     # ── 11. Fields.Δz_field ───────────────────────────────────────────────────
     @test fvec(Fields.Δz_field(ᶜsp1)) ≈ fvec(Fields.Δz_field(col_cspace))
+end
+
+# Technically, we don't need this right now, since we don't save to NetCDF
+# files for land calibration
+@testset "Remapping" begin
+    field_multiple_cols = zeros(ᶜspace)
+    field_single_col = zeros(col_cspace)
+
+    ClimaCore.Remapping.interpolate(field_multiple_cols)
+    ClimaCore.Remapping.interpolate(field_single_col)
+
+    ClimaCore.Remapping.Remapper(
+        ᶜspace;
+        target_hcoords = ClimaCore.Remapping.default_target_hcoords(
+            ᶜspace,
+        ),
+        target_zcoords = ClimaCore.Remapping.default_target_zcoords(
+            ᶜspace,
+        ),
+    )
+
+    arr = field_multiple_cols |> Fields.field2array
+    arr[:,1] .= 10.0
+    arr[:, 2] .= 20.0
+    arr[:, 3] .= 30.0
+
+    ClimaCore.Remapping.interpolate(field_multiple_cols)
+    ClimaCore.Remapping.interpolate(field_single_col)
 end

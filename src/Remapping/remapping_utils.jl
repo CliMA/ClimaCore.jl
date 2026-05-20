@@ -227,6 +227,8 @@ function default_target_hcoords(
     hresolution = 180,
 )
     topology = Spaces.topology(space)
+    # TODO: Better solution?
+    isnothing(topology) && return nothing
     PointType = Topologies.coordinate_type(topology)
     return PointType.(default_target_hcoords_as_vectors(space; hresolution))
 end

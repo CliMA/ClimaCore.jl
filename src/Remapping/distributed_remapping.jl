@@ -534,7 +534,7 @@ end
 
 # Constructor for the case with vertical spaces (horizontal_method accepted, ignored)
 function _Remapper(
-    space::Spaces.FiniteDifferenceSpace;
+    space::Union{Spaces.FiniteDifferenceSpace, Spaces.PointCloudSpace};
     target_zcoords::AbstractArray,
     target_hcoords::Nothing,
     buffer_length::Int = 1,
@@ -549,11 +549,22 @@ function _Remapper(
     vert_bounding_indices =
         ArrayType(vertical_bounding_indices(space, target_zcoords))
 
+    # Main.@infiltrate
+    if space isa Spaces.PointCloudSpace
+        num_cols = size(Fields.field2array(zeros(space)))[2]
+        local_interpolated_values =
+        ArrayType(zeros(FT, (length(target_zcoords), num_cols, buffer_length)))
+    interpolated_values =
+        ArrayType(zeros(FT, (length(target_zcoords), num_cols, buffer_length)))
+    colons = (:,:)
+    else
     local_interpolated_values =
         ArrayType(zeros(FT, (length(target_zcoords), buffer_length)))
     interpolated_values =
         ArrayType(zeros(FT, (length(target_zcoords), buffer_length)))
     colons = (:,)
+
+    end
 
     return Remapper(
         comms_ctx,
@@ -603,6 +614,7 @@ function _set_interpolated_values!(
 end
 
 function _set_interpolated_values!(::SpectralElementRemapping, remapper::Remapper, fields)
+    # Main.@infiltrate
     _set_interpolated_values!(
         remapper._local_interpolated_values,
         fields,
@@ -812,6 +824,7 @@ function set_interpolated_values_cpu_kernel!(
     vert_bounding_indices,
     ::Nothing,
 )
+    # Main.@infiltrate
     space = axes(first(fields))
     FT = Spaces.undertype(space)
     for (field_index, field) in enumerate(fields)
@@ -820,17 +833,25 @@ function set_interpolated_values_cpu_kernel!(
         # Reading values from field_values is expensive, so we try to limit the number of reads. We can do
         # this because multiple target points might be all contained in the same element.
         prev_vindex = -1
+
+        hindices = ndims(out) == 2 ? Base.OneTo(1) : Base.OneTo(1:size(out)[2])
+        # Main.@infiltrate
+        # I think this is right, but the output is wrong because maybe the output
+        # is being overwritten
+        @info hindices
+        @inbounds for hindex in hindices
         @inbounds for (vindex, (A, B)) in enumerate(vert_interpolation_weights)
             (v_lo, v_hi) = vert_bounding_indices[vindex]
             # If we are no longer in the same element, read the field values again
             if prev_vindex != vindex
-                out[vindex, field_index] = (
-                    A * field_values[CartesianIndex(1, 1, 1, v_lo, 1)] +
-                    B * field_values[CartesianIndex(1, 1, 1, v_hi, 1)]
+                out[vindex, hindex, field_index] = (
+                    A * field_values[CartesianIndex(1, 1, 1, v_lo, hindex)] +
+                    B * field_values[CartesianIndex(1, 1, 1, v_hi, hindex)]
                 )
                 prev_vindex = vindex
             end
         end
+    end
     end
 end
 
@@ -889,6 +910,7 @@ function _set_interpolated_values!(
     vert_interpolation_weights::AbstractArray,
     vert_bounding_indices::AbstractArray,
 )
+    # Main.@infiltrate
     _set_interpolated_values_device!(
         out,
         fields,
@@ -1023,6 +1045,7 @@ function _reset_interpolated_values!(remapper::Remapper)
     fill!(remapper._interpolated_values, 0)
 end
 
+# TODO: This doesn't work for some reason?
 function _collect_interpolated_values!(
     dest,
     remapper::Remapper,
@@ -1032,6 +1055,7 @@ function _collect_interpolated_values!(
 )
     cuda_synchronize(ClimaComms.device(remapper.comms_ctx))   # Sync streams before MPI calls
     if only_one_field
+        # Main.@infiltrate
         ClimaComms.reduce!(
             remapper.comms_ctx,
             view(remapper._interpolated_values, remapper.colons..., 1),
@@ -1114,6 +1138,7 @@ function interpolate(remapper::Remapper, fields)
 
     allocate_extra = only_one_field ? () : (length(fields),)
     dest = ArrayType(zeros(FT, interpolated_values_dim..., allocate_extra...))
+    # Main.@infiltrate
 
     # interpolate! has an MPI call, so it is important to return after it is
     # called, not before!
@@ -1133,7 +1158,7 @@ function interpolate!(
     if only_one_field
         fields = [fields]
     end
-    isa_vertical_space = remapper.space isa Spaces.FiniteDifferenceSpace
+    isa_vertical_space = remapper.space isa Union{Spaces.FiniteDifferenceSpace, Spaces.PointCloudSpace}
 
     for field in fields
         axes(field) == remapper.space ||
@@ -1167,10 +1192,12 @@ function interpolate!(
         # with a + reduction.
         _reset_interpolated_values!(remapper)
         # Perform the interpolations (horizontal and vertical)
+        # Main.@infiltrate
         _set_interpolated_values!(
             remapper,
             view(fields, index_field_begin:index_field_end),
         )
+        # Main.@infiltrate
 
         if !isa_vertical_space
             # For spaces with an horizontal component, reshape the output so that it is a nice grid.
@@ -1189,6 +1216,7 @@ function interpolate!(
             index_field_end;
             only_one_field,
         )
+        # Main.@infiltrate
 
         index_field_end != length(fields) || break
         index_field_begin = index_field_begin + remapper.buffer_length

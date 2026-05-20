@@ -307,6 +307,7 @@ function _set_interpolated_values_device!(
     )
     threads = threads_via_occupancy(set_interpolated_values_kernel!, args)
     p = linear_partition(nitems, threads)
+    # Main.@infiltrate
     auto_launch!(
         set_interpolated_values_kernel!,
         args;
@@ -422,21 +423,23 @@ function set_interpolated_values_kernel!(
     num_fields = length(field_values)
     num_vert = length(vert_bounding_indices)
 
+    # TODO: This need to be updated for multiple columns
+    # Is there an easy way of getting the number of columns?
     @inbounds begin
         i_thread = thread_index()
-        inds = (num_vert, num_fields)
+        inds = (num_vert, num_fields, size(out)[2])
 
         1 ≤ i_thread ≤ prod(inds) || return nothing
 
         # TODO: Check the memory access pattern, we should maximize coalesced memory
-        (j, k) = CartesianIndices(map(x -> Base.OneTo(x), inds))[i_thread].I
+        (j, k, l) = CartesianIndices(map(x -> Base.OneTo(x), inds))[i_thread].I
 
         CI = CartesianIndex
         v_lo, v_hi = vert_bounding_indices[j]
         A, B = vert_interpolation_weights[j]
-        out[j, k] = (
-            A * field_values[k][CI(1, 1, 1, v_lo, 1)] +
-            B * field_values[k][CI(1, 1, 1, v_hi, 1)]
+        out[j, l, k] = (
+            A * field_values[k][CI(1, 1, 1, v_lo, l)] +
+            B * field_values[k][CI(1, 1, 1, v_hi, l)]
         )
     end
     return nothing
