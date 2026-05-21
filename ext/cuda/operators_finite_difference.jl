@@ -79,16 +79,15 @@ function Base.copyto!(
     else
         bc′ = disable_shmem_style(bc)
         (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(out_fv)
-        # This uses block and grid indices instead of computing cartesian indices from a
-        # linear index. The launch configuration is optimized for common use case of 64 face
-        # levels and Ni = Nj = 4. Periodic toppologies and masks are not currently supported
-        # `eager_copyto_stencil_kernel!` requires a  block size of (n_face_levels, Ni, 1)
-        # this block config is better for VIJFH. It is only used when the total number of
-        # threads in a block is between 32 and 256 to avoid underutilization of the GPU and
-        # errors due to too many registers used when the block size is too large.
+        # This uses a 2d block and 1d grid
+        # the block x dim is the number of vertical faces
+        # the block y dim is the number of columns per block, which is selected to
+        # increase block size to as close to 256 as possible without exceeding it (256 comes from a register pressure constraint)
         # TODO: auto reduce max reg usage when needed because of high res columns
-        if !Topologies.isperiodic(space) && n_face_levels ≤ 256
-            #    32 <= n_face_levels * Ni <= 256
+        # TODO: figure out max shmem needed ???
+        if !Topologies.isperiodic(space)
+            # this adds support for high res columns, but limiting the registers causes a slowdown
+            maxregs = n_face_levels ≤ 256 ? nothing : 32
             n_columns = mask isa NoMask ? Ni * Nj * Nh : mask.N[1]
             # 108 is the number of SMs in an A100. TODO: get this value from CUDA.jl to better optimize for different GPUs
             threads_dim_y = n_columns > 256 * 108 ? div(256, n_face_levels) : 1
@@ -114,6 +113,7 @@ function Base.copyto!(
                 blocks_s = (block_dim_x, 1, 1),
                 always_inline = true,
                 shmem = n_face_levels * threads_dim_y * 9 * 4, # see `check_if_fits_in_shmem` for how this is calculated
+                maxregs = maxregs,
             )
             return out
         end
