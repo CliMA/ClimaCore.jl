@@ -45,14 +45,32 @@ end
 # stack trace
 const NAME_KERNELS_FROM_STACK_TRACE = Ref{Bool}(false)
 
+# Optional ptxas --maxrregcount override (via CLIMA_KERNEL_MAXREGS env var).
+# nothing => no override; an Int => passed as `maxregs=N` to CUDA.@cuda for
+# every auto_launch! kernel. Probe knob for testing whether the column
+# broadcast kernel is register-pressure / occupancy bound.
+const KERNEL_MAXREGS = Ref{Union{Nothing, Int}}(nothing)
+
 # Always reload when module is imported so precompilation doesn't make it "stick"
 function __init__()
     NAME_KERNELS_FROM_STACK_TRACE[] = _getenv_bool(
         "CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE"; default = false,
     )
+    raw = get(ENV, "CLIMA_KERNEL_MAXREGS", nothing)
+    KERNEL_MAXREGS[] = if raw === nothing || isempty(strip(String(raw)))
+        nothing
+    else
+        try
+            parse(Int, strip(String(raw)))
+        catch
+            @warn "Unrecognized CLIMA_KERNEL_MAXREGS value; ignoring" val = raw
+            nothing
+        end
+    end
 end
 
 name_kernels_from_stack_trace() = NAME_KERNELS_FROM_STACK_TRACE[]
+kernel_maxregs() = KERNEL_MAXREGS[]
 
 # Modules to ignore when constructing kernel names from stack traces
 const IGNORE_MODULES = (
@@ -168,21 +186,35 @@ function auto_launch!(
         kernel_name = kernel_names[key]
     end
 
+    maxregs = kernel_maxregs()
     if auto
         @assert !isnothing(nitems)
         if nitems ≥ 0
             # Note: `name = nothing` here will revert to default behavior
-            kernel = CUDA.@cuda name = kernel_name always_inline = true launch =
-                false f!(args...)
+            if isnothing(maxregs)
+                kernel = CUDA.@cuda name = kernel_name always_inline = true launch =
+                    false f!(args...)
+            else
+                kernel = CUDA.@cuda name = kernel_name always_inline = true maxregs =
+                    maxregs launch = false f!(args...)
+            end
             config = CUDA.launch_configuration(kernel.fun)
             threads = min(nitems, config.threads)
             blocks = cld(nitems, threads)
             kernel(args...; threads, blocks) # This knows to use always_inline from above.
         end
     else
-        kernel =
-            CUDA.@cuda name = kernel_name always_inline = always_inline threads =
-                threads_s blocks = blocks_s shmem = shmem f!(args...)
+        if isnothing(maxregs)
+            kernel =
+                CUDA.@cuda name = kernel_name always_inline = always_inline threads =
+                    threads_s blocks = blocks_s shmem = shmem f!(args...)
+        else
+            kernel =
+                CUDA.@cuda name = kernel_name always_inline = always_inline maxregs =
+                    maxregs threads = threads_s blocks = blocks_s shmem = shmem f!(
+                    args...,
+                )
+        end
     end
 
     if collect_kernel_stats() # only for development use
