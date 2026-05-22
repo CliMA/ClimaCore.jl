@@ -4,6 +4,8 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- Add a specialized shared memory-based tridiagonal solver that uses PCR algorithm for CUDA backend. [2486](https://github.com/CliMA/ClimaCore.jl/pull/2486) 
+
 v0.14.51
 -------
 

@@ -36,8 +36,7 @@ import ClimaCore.Operators:
     GradientF2C,
     DivergenceC2F,
     DivergenceF2C,
-    CurlC2F,
-    return_eltype
+    CurlC2F
 
 include("matrix_field_test_utils.jl")
 
@@ -87,7 +86,9 @@ function test_op_matrix(
     # This boundary condition doesn't matter, since it's applied after the
     # operator. It is zeroed out for simplicity, but it does not need to be.
     boundary_op = if requires_boundary_values
-        boundary_op_bc = SetValue(rzero(return_eltype(op, args...)))
+        boundary_op_bc = SetValue(
+            rzero(eltype(Base.Broadcast.broadcasted(op, args...))),
+        )
         SetBoundaryOperator(; bottom = boundary_op_bc, top = boundary_op_bc)
     else
         nothing

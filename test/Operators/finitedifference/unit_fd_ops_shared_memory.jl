@@ -89,7 +89,7 @@ end
         top = Operators.Extrapolate(),
     )
     bc = @. lazy(div(Geometry.WVector(ᶠwinterp(ϕ, ρ))))
-    test_center_windows(bc)
+    test_face_windows(bc)
     # highly nested cases
     ᶜinterp = Operators.InterpolateF2C()
     ᶠinterp = Operators.InterpolateC2F(

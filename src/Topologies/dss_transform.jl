@@ -1,5 +1,4 @@
 import ..Topologies: Topology2D
-using ..RecursiveApply
 import UnrolledUtilities: unrolled_map
 
 """
@@ -28,63 +27,28 @@ Base.@propagate_inbounds dss_transform(
     I,
 ) = arg[I]
 
-@inline function dss_transform(
-    arg::Tuple{},
-    local_geometry::Geometry.LocalGeometry,
-    weight,
-)
-    ()
-end
-@inline function dss_transform(
-    args::Tuple,
-    local_geometry::Geometry.LocalGeometry,
-    weight,
-)
-    unrolled_map(arg -> dss_transform(arg, local_geometry, weight), args)
-end
-@inline function dss_transform(
-    arg::NamedTuple{names},
-    local_geometry::Geometry.LocalGeometry,
-    weight,
-) where {names}
-    NamedTuple{names}(dss_transform(Tuple(arg), local_geometry, weight))
-end
 @inline dss_transform(
-    arg::Number,
+    arg,
     local_geometry::Geometry.LocalGeometry,
     weight,
 ) = arg * weight
 @inline dss_transform(
-    arg::Geometry.AxisTensor{T, N, <:Tuple{Vararg{Geometry.CartesianAxis}}},
+    arg::AutoBroadcaster,
     local_geometry::Geometry.LocalGeometry,
     weight,
-) where {T, N} = arg * weight
-@inline dss_transform(
-    arg::Geometry.CartesianVector,
-    local_geometry::Geometry.LocalGeometry,
-    weight,
-) = arg * weight
-@inline dss_transform(
-    arg::Geometry.AxisTensor{T, N, <:Tuple{Vararg{Geometry.LocalAxis}}},
-    local_geometry::Geometry.LocalGeometry,
-    weight,
-) where {T, N} = arg * weight
-@inline dss_transform(
-    arg::Geometry.AxisTensor{T, N, <:Tuple{}},
-    local_geometry::Geometry.LocalGeometry,
-    weight,
-) where {T, N} = arg * weight
-@inline dss_transform(
-    arg::Geometry.LocalVector,
-    local_geometry::Geometry.LocalGeometry,
-    weight,
-) = arg * weight
-@inline dss_transform(
-    arg::Geometry.Covariant3Vector,
-    local_geometry::Geometry.LocalGeometry,
-    weight,
-) = arg * weight
+) = nested_broadcast(arg -> dss_transform(arg, local_geometry, weight), arg)
 
+const NonTransformedAxis = Union{
+    Geometry.LocalAxis,
+    Geometry.CartesianAxis,
+    Geometry.Covariant3Axis,
+    Geometry.Contravariant3Axis,
+}
+@inline dss_transform(
+    arg::Geometry.AxisVector{<:Any, <:NonTransformedAxis},
+    local_geometry::Geometry.LocalGeometry,
+    weight,
+) = arg * weight
 @inline function dss_transform(
     arg::Geometry.AxisVector,
     local_geometry::Geometry.LocalGeometry,
@@ -137,38 +101,17 @@ Base.@propagate_inbounds dss_untransform(
 ) where {T} = dss_untransform(T, targ, local_geometry[I])
 @inline dss_untransform(::Type{T}, targ, local_geometry::Nothing, I) where {T} =
     dss_untransform(T, targ, local_geometry)
-@inline function dss_untransform(
-    ::Type{NamedTuple{names, T}},
-    targ::NamedTuple{names},
-    local_geometry,
-) where {names, T}
-    NamedTuple{names}(dss_untransform(T, Tuple(targ), local_geometry))
-end
-@inline dss_untransform(
-    ::Type{Tuple{}},
-    targ::Tuple{},
-    local_geometry::Geometry.LocalGeometry,
-) = ()
-@inline function dss_untransform(
-    ::Type{T},
-    targ::Tuple,
-    local_geometry::Geometry.LocalGeometry,
-) where {T <: Tuple}
-    (
-        dss_untransform(
-            Base.tuple_type_head(T),
-            Base.first(targ),
-            local_geometry,
-        ),
-        dss_untransform(
-            Base.tuple_type_tail(T),
-            Base.tail(targ),
-            local_geometry,
-        )...,
-    )
-end
 
 @inline dss_untransform(::Type{T}, targ::T, local_geometry) where {T} = targ
+@inline dss_untransform(
+    ::Type{T},
+    targ::AutoBroadcaster,
+    local_geometry::Geometry.LocalGeometry,
+) where {T <: AutoBroadcaster} =
+    nested_broadcast(zero(T), targ) do zero_value, targ
+        dss_untransform(typeof(zero_value), targ, local_geometry)
+    end
+
 @inline dss_untransform(
     ::Type{T},
     targ::T,

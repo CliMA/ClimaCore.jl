@@ -28,17 +28,20 @@ function add_numerical_flux_internal!(fn, dydt, args...)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     topology = Spaces.topology(space)
     internal_surface_geometry = Spaces.grid(space).internal_surface_geometry
+    dydt_bc = Base.broadcastable(dydt)
+    args_bc =
+        map(arg -> arg isa Fields.Field ? Base.broadcastable(arg) : arg, args)
 
     for (iface, (elem⁻, face⁻, elem⁺, face⁺, reversed)) in
         enumerate(Topologies.interior_faces(topology))
 
         internal_surface_geometry_slab = slab(internal_surface_geometry, iface)
 
-        arg_slabs⁻ = map(arg -> slab(Fields.todata(arg), elem⁻), args)
-        arg_slabs⁺ = map(arg -> slab(Fields.todata(arg), elem⁺), args)
+        arg_slabs⁻ = map(arg -> slab(Fields.todata(arg), elem⁻), args_bc)
+        arg_slabs⁺ = map(arg -> slab(Fields.todata(arg), elem⁺), args_bc)
 
-        dydt_slab⁻ = slab(Fields.field_values(dydt), elem⁻)
-        dydt_slab⁺ = slab(Fields.field_values(dydt), elem⁺)
+        dydt_slab⁻ = slab(Fields.field_values(dydt_bc), elem⁻)
+        dydt_slab⁺ = slab(Fields.field_values(dydt_bc), elem⁺)
 
         for q in 1:Nq
             sgeom⁻ = internal_surface_geometry_slab[slab_index(q)]
@@ -46,24 +49,21 @@ function add_numerical_flux_internal!(fn, dydt, args...)
             i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
             i⁺, j⁺ = Topologies.face_node_index(face⁺, Nq, q, reversed)
 
-            numflux⁻ = fn(
-                sgeom⁻.normal,
-                map(
-                    slab ->
-                        slab isa DataSlab2D ? slab[slab_index(i⁻, j⁻)] : slab,
-                    arg_slabs⁻,
-                ),
-                map(
-                    slab ->
-                        slab isa DataSlab2D ? slab[slab_index(i⁺, j⁺)] : slab,
-                    arg_slabs⁺,
-                ),
+            argvals⁻ = map(
+                slab -> slab isa DataSlab2D ? slab[slab_index(i⁻, j⁻)] : slab,
+                arg_slabs⁻,
             )
+            argvals⁺ = map(
+                slab -> slab isa DataSlab2D ? slab[slab_index(i⁺, j⁺)] : slab,
+                arg_slabs⁺,
+            )
+            numflux⁻ =
+                add_auto_broadcasters(fn(sgeom⁻.normal, argvals⁻, argvals⁺))
 
             dydt_slab⁻[slab_index(i⁻, j⁻)] =
-                dydt_slab⁻[slab_index(i⁻, j⁻)] ⊟ (sgeom⁻.sWJ ⊠ numflux⁻)
+                dydt_slab⁻[slab_index(i⁻, j⁻)] - (sgeom⁻.sWJ * numflux⁻)
             dydt_slab⁺[slab_index(i⁺, j⁺)] =
-                dydt_slab⁺[slab_index(i⁺, j⁺)] ⊞ (sgeom⁻.sWJ ⊠ numflux⁻)
+                dydt_slab⁺[slab_index(i⁺, j⁺)] + (sgeom⁻.sWJ * numflux⁻)
         end
     end
 end
@@ -78,9 +78,9 @@ struct CentralNumericalFlux{F}
 end
 
 function (fn::CentralNumericalFlux)(normal, argvals⁻, argvals⁺)
-    Favg =
-        RecursiveApply.rdiv(fn.fluxfn(argvals⁻...) ⊞ fn.fluxfn(argvals⁺...), 2)
-    return RecursiveApply.rmap(f -> f' * normal, Favg)
+    F⁻ = add_auto_broadcasters(fn.fluxfn(argvals⁻...))
+    F⁺ = add_auto_broadcasters(fn.fluxfn(argvals⁺...))
+    return ((F⁻ + F⁺) / 2)' * normal
 end
 
 """
@@ -96,10 +96,10 @@ end
 function (fn::RusanovNumericalFlux)(normal, argvals⁻, argvals⁺)
     y⁻ = argvals⁻[1]
     y⁺ = argvals⁺[1]
-    Favg =
-        RecursiveApply.rdiv(fn.fluxfn(argvals⁻...) ⊞ fn.fluxfn(argvals⁺...), 2)
+    F⁻ = add_auto_broadcasters(fn.fluxfn(argvals⁻...))
+    F⁺ = add_auto_broadcasters(fn.fluxfn(argvals⁺...))
     λ = max(fn.wavespeedfn(argvals⁻...), fn.wavespeedfn(argvals⁺...))
-    return RecursiveApply.rmap(f -> f' * normal, Favg) ⊞ (λ / 2) ⊠ (y⁻ ⊟ y⁺)
+    return ((F⁻ + F⁺) / 2)' * normal + (λ / 2) * (y⁻ - y⁺)
 end
 
 
@@ -108,6 +108,9 @@ function add_numerical_flux_boundary!(fn, dydt, args...)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     topology = Spaces.topology(space)
     boundary_surface_geometries = Spaces.grid(space).boundary_surface_geometries
+    dydt_bc = Base.broadcastable(dydt)
+    args_bc =
+        map(arg -> arg isa Fields.Field ? Base.broadcastable(arg) : arg, args)
 
     for (iboundary, boundarytag) in
         enumerate(Topologies.boundary_tags(topology))
@@ -117,22 +120,19 @@ function add_numerical_flux_boundary!(fn, dydt, args...)
                 surface_geometry_slab =
                     slab(boundary_surface_geometries[iboundary], iface)
 
-            arg_slabs⁻ = map(arg -> slab(Fields.todata(arg), elem⁻), args)
-            dydt_slab⁻ = slab(Fields.field_values(dydt), elem⁻)
+            arg_slabs⁻ = map(arg -> slab(Fields.todata(arg), elem⁻), args_bc)
+            dydt_slab⁻ = slab(Fields.field_values(dydt_bc), elem⁻)
             for q in 1:Nq
                 sgeom⁻ = boundary_surface_geometry_slab[slab_index(q)]
                 i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
-                numflux⁻ = fn(
-                    sgeom⁻.normal,
-                    map(
-                        slab ->
-                            slab isa DataSlab2D ? slab[slab_index(i⁻, j⁻)] :
-                            slab,
-                        arg_slabs⁻,
-                    ),
+                argvals⁻ = map(
+                    slab ->
+                        slab isa DataSlab2D ? slab[slab_index(i⁻, j⁻)] : slab,
+                    arg_slabs⁻,
                 )
+                numflux⁻ = add_auto_broadcasters(fn(sgeom⁻.normal, argvals⁻))
                 dydt_slab⁻[slab_index(i⁻, j⁻)] =
-                    dydt_slab⁻[slab_index(i⁻, j⁻)] ⊟ (sgeom⁻.sWJ ⊠ numflux⁻)
+                    dydt_slab⁻[slab_index(i⁻, j⁻)] - (sgeom⁻.sWJ * numflux⁻)
             end
         end
     end

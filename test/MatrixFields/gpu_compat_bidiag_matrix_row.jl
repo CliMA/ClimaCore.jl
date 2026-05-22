@@ -70,8 +70,6 @@ const ᶜright_bias_matrix = MatrixFields.operator_matrix(ᶜright_bias)
 one_C3xACT3(::Type{_FT}) where {_FT} = C3(_FT(1)) * CT3(_FT(1))'
 get_I_u₃(::Type{_FT}) where {_FT} = DiagonalMatrixRow(one_C3xACT3(_FT))
 
-conv(::Type{_FT}, ᶜbias_matrix) where {_FT} =
-    convert(BidiagonalMatrixRow{_FT}, ᶜbias_matrix)
 function foo(c, f)
     (; ᶠtridiagonal_matrix_c3, ᶠu₃, ∂ᶠu₃ʲ_err_∂ᶠu₃ʲ, adj_u₃) = f
     (; ᶜu₃ʲ, bdmr_l, bdmr_r, bdmr) = c
@@ -79,6 +77,7 @@ function foo(c, f)
     FT = Spaces.undertype(space)
     I_u₃ = get_I_u₃(FT)
     dtγ = FT(1)
+    to_bidiagonal_row = Base.Fix1(convert, BidiagonalMatrixRow{FT})
 
     @. ∂ᶠu₃ʲ_err_∂ᶠu₃ʲ =
         dtγ * ᶠtridiagonal_matrix_c3 * DiagonalMatrixRow(adjoint(CT3(ᶠu₃))) -
@@ -90,14 +89,14 @@ function foo(c, f)
     @. ᶠtridiagonal_matrix_c3 =
         -(ᶠgradᵥ_matrix()) * ifelse(
             ᶜu₃ʲ.components.data.:1 > 0,
-            convert(BidiagonalMatrixRow{FT}, ᶜleft_bias_matrix()),
-            convert(BidiagonalMatrixRow{FT}, ᶜright_bias_matrix()),
+            to_bidiagonal_row(ᶜleft_bias_matrix()),
+            to_bidiagonal_row(ᶜright_bias_matrix()),
         )
 
     # However, this can be decomposed into simpler broadcast
     # expressions that will run on gpus:
-    @. bdmr_l = convert(BidiagonalMatrixRow{FT}, ᶜleft_bias_matrix())
-    @. bdmr_r = convert(BidiagonalMatrixRow{FT}, ᶜright_bias_matrix())
+    @. bdmr_l = to_bidiagonal_row(ᶜleft_bias_matrix())
+    @. bdmr_r = to_bidiagonal_row(ᶜright_bias_matrix())
     @. bdmr = ifelse(ᶜu₃ʲ.components.data.:1 > 0, bdmr_l, bdmr_r)
     @. ᶠtridiagonal_matrix_c3 = -(ᶠgradᵥ_matrix()) * bdmr
 

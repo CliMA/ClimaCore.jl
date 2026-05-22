@@ -1,7 +1,3 @@
-
-
-
-
 """
     ColumnIndex(ij,h)
 
@@ -22,11 +18,11 @@ end
 
 """
     ColumnGrid(
-        full_grid :: ExtrudedFiniteDifferenceGrid, 
+        full_grid :: ExtrudedFiniteDifferenceGrid,
         colidx    :: ColumnIndex,
     )
 
-A view into a column of a `ExtrudedFiniteDifferenceGrid`. This can be used as an
+A view into a column of a `ExtrudedFiniteDifferenceGrid`.
 """
 struct ColumnGrid{
     G <: AbstractExtrudedFiniteDifferenceGrid,
