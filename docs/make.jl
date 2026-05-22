@@ -104,6 +104,7 @@ withenv("GKSwstype" => "nul") do
                 "DebugOnly" => "APIs/debug_only_api.md",
             ],
             "Developer docs" => [
+                "Developer Guides" => "dev_guides.md",
                 "Performance tips" => "performance_tips.md",
                 "Shared memory design" => "shmem_design.md",
             ],
