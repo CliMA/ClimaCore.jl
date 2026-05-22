@@ -52,7 +52,7 @@ Tests are defined in `test/runtests.jl` using the `UnitTest` / `tabulated_tests`
 |:---|:---|
 | CPU unit tests | 104 tests covering DataLayouts, Geometry, Meshes, Topologies, Quadratures, Spaces, Fields, Operators (spectral element + finite-difference), MatrixFields, Hypsography, Limiters, Remapping, InputOutput, Aqua, deprecations |
 | GPU tests (`:gpu_only`) | 9 tests: CUDA kernels, compiler stress regression, DataLayout GPU ops, spectral element CUDA, finite-difference CUDA, extruded sphere/3dbox CUDA, field map-reduce CUDA |
-| Buildkite CI | Heavyweight GPU integration tests on HPC cluster, defined in `.buildkite/pipeline.yml` |
+| Buildkite CI | Runs the unit tests on an HPC cluster with CUDA, defined in `.buildkite/pipeline.yml` |
 | Lib CI workflows | Separate GitHub Actions per companion package: ClimaCoreMakie, ClimaCorePlots, ClimaCoreSpectra, ClimaCoreTempestRemap, ClimaCoreVTK |
 
 ## Repo-specific conventions
