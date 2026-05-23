@@ -3,6 +3,10 @@
 Thank you for considering contributing to `ClimaCore.jl`! We hope this guide
 helps you make a contribution.
 
+> [!IMPORTANT]
+> **Developer Guides**
+> ClimaCore.jl follows the shared [CliMA Developer Guides](https://github.com/CliMA/DeveloperGuides). Please review the local copy at `docs/dev-guides/` or the [Developer Guides documentation page](dev_guides.md) for ecosystem-wide architecture, performance, and workflow standards before contributing.
+
 ## What to contribute?
 
 - The easiest way to contribute is by running `ClimaCore.jl`, identifying
