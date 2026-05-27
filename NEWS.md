@@ -79,6 +79,25 @@ v0.15.0
   (`Operators.use_fd_shmem()` returns `false`), so default behavior and performance are unchanged.
   Downstream code that opted in by defining `Operators.use_fd_shmem() = true` will no longer
   see any effect from doing so. [2526](https://github.com/CliMA/ClimaCore.jl/pull/2526)
+- ![][badge-💥breaking] Removed unused finite difference operators and boundary
+  conditions [2521](https://github.com/CliMA/ClimaCore.jl/pull/2521)
+  - Removed `SetValue` from `GradientC2F`, `DivergenceC2F`, `CurlC2F` and
+    `UpwindBiasedProductC2F`
+  - Removed `SetGradient` from `InterpolateC2F` and `WeightedInterpolateC2F`
+  - Removed the `AdvectionC2C`, `AdvectionF2F`, `FluxCorrectionC2C` and
+    `FluxCorrectionF2F` operators
+  - Removed the `UpwindBiasedGradient` operator, which had no downstream users
+
+  Each of these can be written in terms of the remaining operators and boundary
+  conditions; `test/Operators/finitedifference/unit_column.jl` contains a
+  testset ("Replacements for removed operators and boundary conditions") that
+  pins the replacements against the stencils they replace. For example, a
+  `SetValue(x₀)` boundary on `GradientC2F` is the same as
+  `SetGradient(Covariant3Vector(2 * (x[1] - x₀)))`, and `AdvectionC2C(v, θ)` is
+  `InterpolateF2C()(dot(Contravariant3Vector(v), GradientC2F()(θ)))`.
+  `MatrixFields.operator_matrix` now reports `LinVanLeerC2F` as a nonlinear
+  operator instead of failing with a `MethodError`.
+
 - ![][badge-🔥behavioralΔ] Unified strong/weak spectral element operator variants
   via a `FormType` parameter. `Divergence`, `Gradient`, and `Curl` now carry a
   second type parameter (`StrongForm` or `WeakForm`), and `WeakDivergence`,

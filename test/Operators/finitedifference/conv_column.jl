@@ -1,5 +1,5 @@
 using Test
-using Random, StaticArrays, IntervalSets, LinearAlgebra
+using StaticArrays, IntervalSets, LinearAlgebra
 
 using ClimaComms
 ClimaComms.@import_required_backends
@@ -234,9 +234,7 @@ end
     err_grad_sin_c = zeros(FT, length(n_elems_seq))
     err_div_sin_c = zeros(FT, length(n_elems_seq))
     err_grad_z_f = zeros(FT, length(n_elems_seq))
-    err_grad_cos_f1 = zeros(FT, length(n_elems_seq))
     err_grad_cos_f2 = zeros(FT, length(n_elems_seq))
-    err_div_sin_f = zeros(FT, length(n_elems_seq))
     err_div_cos_f = zeros(FT, length(n_elems_seq))
     err_curl_sin_f = zeros(FT, length(n_elems_seq))
     Δh = zeros(FT, length(n_elems_seq))
@@ -268,21 +266,13 @@ end
         divsinᶜ = divᶜ.(Geometry.WVector.(sin.(faces)))
 
         # Center -> Face operators:
-        # GradientC2F, SetValue
+        # GradientC2F, SetGradient
         # f(z) = z
         ∇ᶠ⁰ = Operators.GradientC2F(
-            left = Operators.SetValue(FT(0)),
-            right = Operators.SetValue(FT(pi)),
+            left = Operators.SetGradient(Geometry.WVector(one(FT))),
+            right = Operators.SetGradient(Geometry.WVector(one(FT))),
         )
         ∂zᶠ = Geometry.WVector.(∇ᶠ⁰.(centers))
-
-        # GradientC2F, SetValue
-        # f(z) = cos(z)
-        ∇ᶠ¹ = Operators.GradientC2F(
-            left = Operators.SetValue(FT(1)),
-            right = Operators.SetValue(FT(-1)),
-        )
-        gradcosᶠ¹ = Geometry.WVector.(∇ᶠ¹.(cos.(centers)))
 
         # GradientC2F, SetGradient
         # f(z) = cos(z)
@@ -291,14 +281,6 @@ end
             right = Operators.SetGradient(Geometry.WVector(FT(0))),
         )
         gradcosᶠ² = Geometry.WVector.(∇ᶠ².(cos.(centers)))
-
-        # DivergenceC2F, SetValue
-        # f(z) = sin(z)
-        divᶠ⁰ = Operators.DivergenceC2F(
-            left = Operators.SetValue(Geometry.WVector(zero(FT))),
-            right = Operators.SetValue(Geometry.WVector(zero(FT))),
-        )
-        divsinᶠ = divᶠ⁰.(Geometry.WVector.(sin.(centers)))
 
         # DivergenceC2F, SetDivergence
         # f(z) = cos(z)
@@ -309,8 +291,12 @@ end
         divcosᶠ = divᶠ¹.(Geometry.WVector.(cos.(centers)))
 
         curlᶠ = Operators.CurlC2F(
-            left = Operators.SetValue(Geometry.Covariant12Vector(zero(FT), zero(FT))),
-            right = Operators.SetValue(Geometry.Covariant12Vector(zero(FT), zero(FT))),
+            left = Operators.SetCurl(
+                Geometry.Contravariant12Vector(zero(FT), one(FT)),
+            ),
+            right = Operators.SetCurl(
+                Geometry.Contravariant12Vector(zero(FT), -one(FT)),
+            ),
         )
         curlsinᶠ = curlᶠ.(Geometry.Covariant12Vector.(sin.(centers), zero(FT)))
 
@@ -322,10 +308,7 @@ end
         err_grad_sin_c[k] = norm(gradsinᶜ .- Geometry.WVector.(cos.(centers)))
         err_div_sin_c[k] = norm(divsinᶜ .- cos.(centers))
         err_grad_z_f[k] = norm(∂zᶠ .- Geometry.WVector.(ones(FT, fs)))
-        err_grad_cos_f1[k] = norm(gradcosᶠ¹ .- Geometry.WVector.(.-sin.(faces)))
         err_grad_cos_f2[k] = norm(gradcosᶠ² .- Geometry.WVector.(.-sin.(faces)))
-        err_div_sin_f[k] =
-            norm(divsinᶠ .- (Geometry.WVector.(cos.(faces))).components.data.:1)
         err_div_cos_f[k] = norm(
             divcosᶠ .- (Geometry.WVector.(.-sin.(faces))).components.data.:1,
         )
@@ -337,17 +320,13 @@ end
     conv_grad_sin_c = convergence_rate(err_grad_sin_c, Δh)
     # DivergenceF2C conv, with f(z) = sin(z)
     conv_div_sin_c = convergence_rate(err_div_sin_c, Δh)
-    # GradientC2F conv, with f(z) = z, SetValue
+    # GradientC2F conv, with f(z) = z, SetGradient
     conv_grad_z = convergence_rate(err_grad_z_f, Δh)
-    # GradientC2F conv, with f(z) = cos(z), SetValue
-    conv_grad_cos_f1 = convergence_rate(err_grad_cos_f1, Δh)
     # GradientC2F conv, with f(z) = cos(z), SetGradient
     conv_grad_cos_f2 = convergence_rate(err_grad_cos_f2, Δh)
-    # DivergenceC2F conv, with f(z) = sin(z), SetValue
-    conv_div_sin_f = convergence_rate(err_div_sin_f, Δh)
     # DivergenceC2F conv, with f(z) = cos(z), SetDivergence
     conv_div_cos_f = convergence_rate(err_div_cos_f, Δh)
-    # CurlC2F with f(z) = sin(z), SetValue
+    # CurlC2F with f(z) = sin(z), SetCurl
     conv_curl_sin_f = convergence_rate(err_curl_sin_f, Δh)
 
     # GradientF2C conv, with f(z) = sin(z)
@@ -364,16 +343,9 @@ end
     @test conv_div_sin_c[3] ≈ 2 atol = 0.1
     @test conv_div_sin_c[1] ≤ conv_div_sin_c[2] ≤ conv_div_sin_c[3]
 
-    # GradientC2F conv, with f(z) = z, SetValue
+    # GradientC2F conv, with f(z) = z, SetGradient
     @test norm(err_grad_z_f) ≤ 200 * eps(FT)
     # Convergence rate for this case is noisy because error very small
-
-    # GradientC2F conv, with f(z) = cos(z), SetValue
-    @test err_grad_cos_f1[3] ≤ err_grad_cos_f1[2] ≤ err_grad_cos_f1[1] ≤ 0.1
-    @test conv_grad_cos_f1[1] ≈ 1.5 atol = 0.1
-    @test conv_grad_cos_f1[2] ≈ 1.5 atol = 0.1
-    @test conv_grad_cos_f1[3] ≈ 1.5 atol = 0.1
-    # @test conv_grad_cos_f1[1] ≤ conv_grad_cos_f1[2] ≤ conv_grad_cos_f1[3]
 
     # GradientC2F conv, with f(z) = cos(z), SetGradient
     @test err_grad_cos_f2[3] ≤ err_grad_cos_f2[2] ≤ err_grad_cos_f2[1] ≤ 0.1
@@ -382,13 +354,6 @@ end
     @test conv_grad_cos_f2[3] ≈ 2 atol = 0.1
     @test conv_grad_cos_f2[1] ≤ conv_grad_cos_f2[2] ≤ conv_grad_cos_f2[3]
 
-    # DivergenceC2F conv, with f(z) = sin(z), SetValue
-    @test err_div_sin_f[3] ≤ err_div_sin_f[2] ≤ err_div_sin_f[1] ≤ 0.1
-    @test conv_div_sin_f[1] ≈ 2 atol = 0.1
-    @test conv_div_sin_f[2] ≈ 2 atol = 0.1
-    @test conv_div_sin_f[3] ≈ 2 atol = 0.1
-    @test conv_div_sin_f[1] ≤ conv_div_sin_f[2] ≤ conv_div_sin_f[3]
-
     # DivergenceC2F conv, with f(z) = cos(z), SetDivergence
     @test err_div_cos_f[3] ≤ err_div_cos_f[2] ≤ err_div_cos_f[1] ≤ 0.1
     @test conv_div_cos_f[1] ≈ 2 atol = 0.1
@@ -396,59 +361,12 @@ end
     @test conv_div_cos_f[3] ≈ 2 atol = 0.1
     @test conv_div_cos_f[1] ≤ conv_div_cos_f[2] ≤ conv_div_cos_f[3]
 
-    # CurlC2F with f(z) = sin(z), SetValue
+    # CurlC2F with f(z) = sin(z), SetCurl
     @test err_curl_sin_f[3] ≤ err_curl_sin_f[2] ≤ err_curl_sin_f[1] ≤ 0.1
     @test conv_curl_sin_f[1] ≈ 2 atol = 0.1
     @test conv_curl_sin_f[2] ≈ 2 atol = 0.1
     @test conv_curl_sin_f[3] ≈ 2 atol = 0.1
     @test conv_curl_sin_f[1] ≤ conv_curl_sin_f[2] ≤ conv_curl_sin_f[3]
-end
-
-@testset "UpwindBiasedGradient on (uniform) periodic mesh, random w" begin
-    FT = Float64
-    device = ClimaComms.device()
-
-    n_elems_seq = 2 .^ (5, 6, 7, 8)
-    center_errors = zeros(FT, length(n_elems_seq))
-    face_errors = zeros(FT, length(n_elems_seq))
-    Δh = zeros(FT, length(n_elems_seq))
-
-    for (k, n) in enumerate(n_elems_seq)
-        domain = Domains.IntervalDomain(
-            Geometry.ZPoint{FT}(-pi),
-            Geometry.ZPoint{FT}(pi);
-            periodic = true,
-        )
-        mesh = Meshes.IntervalMesh(domain; nelems = n)
-
-        center_space = Spaces.CenterFiniteDifferenceSpace(device, mesh)
-        face_space = Spaces.face_space(center_space)
-
-        Random.seed!(1) # ensures reproducibility
-        ᶜw = Geometry.WVector.(map(_ -> 2 * rand() - 1, ones(center_space)))
-        ᶠw = Geometry.WVector.(map(_ -> 2 * rand() - 1, ones(face_space)))
-
-        ᶜz = Fields.coordinate_field(center_space).z
-        ᶠz = Fields.coordinate_field(face_space).z
-
-        upwind_biased_grad = Operators.UpwindBiasedGradient()
-        ᶜ∇sinz = Geometry.WVector.(upwind_biased_grad.(ᶜw, sin.(ᶜz)))
-        ᶠ∇sinz = Geometry.WVector.(upwind_biased_grad.(ᶠw, sin.(ᶠz)))
-
-        center_errors[k] = norm(ᶜ∇sinz .- Geometry.WVector.(cos.(ᶜz)))
-        face_errors[k] = norm(ᶠ∇sinz .- Geometry.WVector.(cos.(ᶠz)))
-        ClimaComms.allowscalar(device) do
-            Δh[k] = Spaces.local_geometry_data(face_space).J[1]
-        end
-    end
-
-    @test all(error -> error < 0.1, center_errors)
-    @test all(error -> error < 0.1, face_errors)
-
-    center_convergence_rates = convergence_rate(center_errors, Δh)
-    face_convergence_rates = convergence_rate(face_errors, Δh)
-    @test all(rate -> isapprox(rate, 1; atol = 0.02), center_convergence_rates)
-    @test all(rate -> isapprox(rate, 1; atol = 0.02), face_convergence_rates)
 end
 
 @testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on (uniform) periodic mesh, constant w" begin
@@ -1051,15 +969,18 @@ end
     end
 end
 
-@testset "Center -> Center Advection" begin
+@testset "Center -> Face -> Center Advection" begin
 
     function advection(c, f, cs)
         adv = zeros(eltype(f), cs)
-        A = Operators.AdvectionC2C(
-            bottom = Operators.SetValue(0.0),
-            top = Operators.Extrapolate(),
+        gradc2f = Operators.GradientC2F(
+            bottom = Operators.SetGradient(Geometry.WVector(FT(1))),
+            top = Operators.SetGradient(Geometry.WVector(FT(1))),
         )
-        return @. adv = A(c, f)
+        interpf2c = Operators.InterpolateF2C()
+        return @. adv = interpf2c(
+            LinearAlgebra.dot(Geometry.Contravariant3Vector(c), gradc2f(f)),
+        )
     end
 
     FT = Float64
@@ -1092,7 +1013,7 @@ end
         end
         err[k] = norm(adv .- cos.(Fields.coordinate_field(cs).z))
     end
-    # AdvectionC2C convergence rate
+    # Center -> face -> center advection convergence rate
     conv_adv_c2c = convergence_rate(err, Δh)
     @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
     @test conv_adv_c2c[1] ≈ 2 atol = 0.1
