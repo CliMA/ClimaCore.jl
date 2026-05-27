@@ -25,6 +25,7 @@ import ClimaCore:
     Hypsography
 using ClimaCore.Geometry
 using ClimaCore.Utilities: half
+import LazyBroadcast: lazy
 
 
 using Logging: global_logger
@@ -226,10 +227,7 @@ function rhs_invariant!(dY, Y, _, t)
         top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
     )
-    vdivc2f = Operators.DivergenceC2F(
-        top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-        bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-    )
+    vdivc2f = Operators.DivergenceC2F()
     # we want the total u³ at the boundary to be zero: we can either constrain
     # both to be zero, or allow one to be non-zero and set the other to be its
     # negation
@@ -305,13 +303,44 @@ function rhs_invariant!(dY, Y, _, t)
     ᶠ∇ₕw = @. hgrad(fw.components.data.:1)
     ᶜ∇ₕh_tot = @. hgrad(h_tot)
 
+    # `DivergenceC2F` no longer takes `SetValue` boundary conditions, so
+    # evaluate its stencil on the boundary faces here, with the argument set to
+    # zero outside of the domain, and impose the result with a
+    # `SetBoundaryOperator`.
+    lg_field_faces = Fields.local_geometry_field(axes(fw))
+    lg_field_centers = Fields.local_geometry_field(axes(cρ))
+    # `LeftBiasedF2C(x)[i] = x[i-half]`, so its first level is the bottom face,
+    # and `RightBiasedF2C(x)[i] = x[i+half]`, so its last level is the top face.
+    lg_bottom_face = Fields.level(Operators.LeftBiasedF2C().(lg_field_faces), 1)
+    lg_top_face = Fields.level(
+        Operators.RightBiasedF2C().(lg_field_faces),
+        Fields.nlevels(lg_field_centers),
+    )
+    lg_bottom_center = Fields.level(lg_field_centers, 1)
+    lg_top_center =
+        Fields.level(lg_field_centers, Fields.nlevels(lg_field_centers))
+    ᶜ∇ᵥw_bottom = Fields.level(ᶜ∇ᵥw, 1)
+    ᶜ∇ᵥw_top = Fields.level(ᶜ∇ᵥw, Fields.nlevels(ᶜ∇ᵥw))
+    bottom_divergence = @. lazy(
+        Geometry.Jcontravariant3(κ₂ * ᶜ∇ᵥw_bottom, lg_bottom_center) *
+        (2 * inv(lg_bottom_face.J)),
+    )
+    top_divergence = @. lazy(
+        Geometry.Jcontravariant3(κ₂ * ᶜ∇ᵥw_top, lg_top_center) *
+        (-2 * inv(lg_top_face.J)),
+    )
+    set_bcs = Operators.SetBoundaryOperator(
+        bottom = Operators.SetValue(bottom_divergence),
+        top = Operators.SetValue(top_divergence),
+    )
+
     dfw = dY.w.components.data.:1
     dcu = dY.uₕ.components.data.:1
 
     @. dcu += hwdiv(κ₂ * ᶜ∇ₕuₕ)
     @. dcu += vdivf2c(κ₂ * ᶠ∇ᵥuₕ)
     @. dfw += hwdiv(κ₂ * ᶠ∇ₕw)
-    @. dfw += vdivc2f(κ₂ * ᶜ∇ᵥw)
+    @. dfw += set_bcs(vdivc2f(κ₂ * ᶜ∇ᵥw))
     @. dρe += hwdiv(cρ * κ₂ * ᶜ∇ₕh_tot)
     @. dρe += vdivf2c(fρ * κ₂ * ᶠ∇ᵥh_tot)
 
