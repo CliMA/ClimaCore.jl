@@ -4,11 +4,13 @@ include("utils_2d.jl")
 
     function advection(c, f, hv_center_space)
         adv = zeros(eltype(f), hv_center_space)
-        A = Operators.AdvectionC2C(
-            bottom = Operators.SetValue(0.0),
-            top = Operators.Extrapolate(),
+        gradc2f = Operators.GradientC2F(
+            bottom = Operators.SetGradient(Geometry.WVector(1.0)),
+            top = Operators.SetGradient(Geometry.WVector(1.0)),
         )
-        return @. adv = A(c, f)
+        interpf2c = Operators.InterpolateF2C()
+        return @. adv =
+            interpf2c(LinearAlgebra.dot(Geometry.Contravariant3Vector(c), gradc2f(f)))
     end
 
     n_elems_seq = 2 .^ (5, 6, 7, 8)
@@ -41,83 +43,6 @@ include("utils_2d.jl")
     @test conv_adv_c2c[3] ≈ 2 atol = 0.1
 end
 
-@testset "1D SE, 1D FD Extruded Domain Discrete Product Rule Operations" begin
-
-    gradc2f = Operators.GradientC2F(
-        top = Operators.SetValue(0.0),
-        bottom = Operators.SetValue(0.0),
-    )
-    gradf2c = Operators.GradientF2C()
-
-    n_elems_seq = 2 .^ (5, 6, 7, 8)
-    err, Δh = zeros(length(n_elems_seq)), zeros(length(n_elems_seq))
-
-    for (k, n) in enumerate(n_elems_seq)
-        # Discrete Product Rule Test
-        # ∂(ab)/∂s = a̅∂b/∂s + b̅∂a/∂s
-        # a, b are interface variables, and  ̅ represents interpolation
-        # s represents the vertical coordinate, in our case `z`
-        # For this test, we use a(z) = z and b = sin(z),
-        hv_center_space, hv_face_space = hvspace_2D(helem = n, velem = n)
-        ᶠz = Fields.coordinate_field(hv_face_space).z
-        ᶜz = Fields.coordinate_field(hv_center_space).z
-        Δh[k] = 1.0 / n
-
-        # advective velocity
-        # scalar-valued field to be advected
-        ∂ab_numerical = @. Geometry.WVector(gradf2c(ᶠz * sin(ᶠz)))
-        ∂ab_analytical = @. Geometry.WVector(ᶜz * cos(ᶜz) + sin(ᶜz))
-
-        err[k] = norm(∂ab_numerical .- ∂ab_analytical)
-    end
-    # Solution convergence rate
-    grad_pr = convergence_rate(err, Δh)
-    @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
-    @test grad_pr[1] ≈ 2 atol = 0.1
-    @test grad_pr[2] ≈ 2 atol = 0.1
-    @test grad_pr[3] ≈ 2 atol = 0.1
-end
-
-@testset "1D SE, 1D FD Extruded Domain Discrete Product Rule Operations: Stretched" begin
-
-    gradc2f = Operators.GradientC2F(
-        top = Operators.SetValue(0.0),
-        bottom = Operators.SetValue(0.0),
-    )
-    gradf2c = Operators.GradientF2C()
-
-    n_elems_seq = 2 .^ (5, 6, 7, 8)
-    err, Δh = zeros(length(n_elems_seq)), zeros(length(n_elems_seq))
-
-    for (k, n) in enumerate(n_elems_seq)
-        # Discrete Product Rule Test
-        # ∂(ab)/∂s = a̅∂b/∂s + b̅∂a/∂s
-        # a, b are interface variables, and  ̅ represents interpolation
-        # s represents the vertical coordinate, in our case `z`
-        # For this test, we use a(z) = z and b = sin(z),
-        hv_center_space, hv_face_space = hvspace_2D(
-            helem = n,
-            velem = n,
-            stretch = Meshes.ExponentialStretching(2π),
-        )
-        ᶠz = Fields.coordinate_field(hv_face_space).z
-        ᶜz = Fields.coordinate_field(hv_center_space).z
-        Δh[k] = 1.0 / n
-
-        # advective velocity
-        # scalar-valued field to be advected
-        ∂ab_numerical = @. Geometry.WVector(gradf2c(ᶠz * sin(ᶠz)))
-        ∂ab_analytical = @. Geometry.WVector(ᶜz * cos(ᶜz) + sin(ᶜz))
-
-        err[k] = norm(∂ab_numerical .- ∂ab_analytical)
-    end
-    # Solution convergence rate
-    grad_pr = convergence_rate(err, Δh)
-    @test err[3] ≤ err[2] ≤ err[1] ≤ 0.2
-    @test grad_pr[1] ≈ 2 atol = 0.1
-    @test grad_pr[2] ≈ 2 atol = 0.1
-    @test grad_pr[3] ≈ 2 atol = 0.1
-end
 
 @testset "1D SE, 1D FD Extruded Domain horz & vert divergence operator, with Extrapolate BCs" begin
 

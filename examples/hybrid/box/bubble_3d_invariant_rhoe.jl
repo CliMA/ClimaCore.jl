@@ -36,6 +36,7 @@ using Logging
 
 using CUDA
 CUDA.allowscalar(false)
+include("../flux_correction_utils.jl")
 
 """
     SimulationParameters{FT}
@@ -330,19 +331,8 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
     @. dρe -= hdiv(cuvw * (cρe + cp))
     @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
     @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
-
-    fcc = Operators.FluxCorrectionC2C(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-    fcf = Operators.FluxCorrectionF2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-
-    @. dρ += fcc(fw, cρ)
-    @. dρe += fcc(fw, cρe)
-    # dYc.ρuₕ += fcc(w, Yc.ρuₕ)
+    add_flux_correction_c2c(dρe, fw, cρe)
+    add_flux_correction_c2c(dρ, fw, cρ)
 
     Spaces.weighted_dss_start!(dY.Yc, ghost_buffer.Yc)
     Spaces.weighted_dss_start!(dY.uₕ, ghost_buffer.uₕ)

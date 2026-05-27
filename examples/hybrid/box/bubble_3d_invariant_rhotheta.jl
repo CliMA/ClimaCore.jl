@@ -23,6 +23,7 @@ import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 const context = ClimaComms.SingletonCommsContext()
+include("../flux_correction_utils.jl")
 
 function hvspace_3D(
     xlim = (-π, π),
@@ -279,18 +280,8 @@ function rhs_invariant!(dY, Y, _, t)
     @. dρθ -= vdivf2c(fw * Ic2f(cρθ))
     @. dρθ -= vdivf2c(Ic2f(cuₕ * cρθ))
 
-    fcc = Operators.FluxCorrectionC2C(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-    fcf = Operators.FluxCorrectionF2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-
-    @. dρ += fcc(fw, cρ)
-    @. dρθ += fcc(fw, cρθ)
-    # dYc.ρuₕ += fcc(w, Yc.ρuₕ)
+    add_flux_correction_c2c(dρ, fw, cρ)
+    add_flux_correction_c2c(dρθ, fw, cρθ)
 
     Spaces.weighted_dss!(dY.Yc)
     Spaces.weighted_dss!(dY.uₕ)

@@ -22,6 +22,7 @@ import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 const context = ClimaComms.SingletonCommsContext()
+include("../flux_correction_utils.jl")
 # set up function space
 
 function hvspace_3D(
@@ -213,14 +214,6 @@ function rhs!(dY, Y, _, t)
         top = Operators.SetValue(Geometry.WVector(0.0)),
     )
 
-    fcc = Operators.FluxCorrectionC2C(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-    fcf = Operators.FluxCorrectionF2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
 
     uₕ = @. ρuₕ / ρ
     w = @. ρw / If(ρ)
@@ -272,10 +265,11 @@ function rhs!(dY, Y, _, t)
     ### UPWIND FLUX CORRECTION
     upwind_correction = true
     if upwind_correction
-        @. dρ += fcc(w, ρ)
-        @. dρθ += fcc(w, ρθ)
-        @. dρuₕ += fcc(w, ρuₕ)
-        @. dρw += fcf(wc, ρw)
+        add_flux_correction_c2c(dρ, w, ρ)
+        add_flux_correction_c2c(dρθ, w, ρθ)
+        add_flux_correction_c2c(dρuₕ, w, ρuₕ)
+        add_flux_correction_f2f(dρw, wc, ρw)
+        add_flux_correction_f2f(dρw, wc, ρw)
     end
 
     ### DIFFUSION

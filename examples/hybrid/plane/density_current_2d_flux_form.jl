@@ -20,6 +20,7 @@ import ClimaCore.Geometry: ⊗
 import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
+include("../flux_correction_utils.jl")
 
 # set up function space
 function hvspace_2D(
@@ -201,15 +202,6 @@ function rhs!(dY, Y, _, t)
         top = Operators.SetValue(Geometry.WVector(0.0)),
     )
 
-    fcc = Operators.FluxCorrectionC2C(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-    fcf = Operators.FluxCorrectionF2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-
     uₕ = @. ρuₕ / ρ
     w = @. ρw / If(ρ)
     wc = @. Ic(ρw) / ρ
@@ -254,15 +246,6 @@ function rhs!(dY, Y, _, t)
     )
     uₕf = @. If(ρuₕ / ρ) # requires boundary conditions
     @. dρw -= hdiv(uₕf ⊗ ρw)
-
-    ### UPWIND FLUX CORRECTION
-    upwind_correction = false
-    if upwind_correction
-        @. dρ += fcc(w, ρ)
-        @. dρθ += fcc(w, ρθ)
-        @. dρuₕ += fcc(w, ρuₕ)
-        @. dρw += fcf(wc, ρw)
-    end
 
     ### DIFFUSION
     κ₂ = 75.0 # m^2/s
