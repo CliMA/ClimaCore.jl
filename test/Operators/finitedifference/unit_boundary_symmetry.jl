@@ -60,11 +60,20 @@ import .TestUtilities as TU
         arr_fc = parent(res_fc)
         @test arr_fc ≈ reverse(arr_fc)
 
-        # B. Gradient C2F: symmetric input with symmetric SetValue BCs produces anti-symmetric gradient
-        # grad(f)(-z) == -grad(f)(z)
+        # B. Gradient C2F: symmetric input with symmetric boundary values
+        # produces anti-symmetric gradient: grad(f)(-z) == -grad(f)(z).
+        # The boundary value x₀ = 0 is imposed through `SetGradient`, since the
+        # covariant gradient on the bottom face is 2 (x[1] - x₀) and on the top
+        # face is 2 (x₀ - x[end]).
+        f_bottom = Fields.level(fc, 1)
+        f_top = Fields.level(fc, Fields.nlevels(fc))
         grad_c2f = Operators.GradientC2F(
-            bottom = Operators.SetValue(FT(0)),
-            top = Operators.SetValue(FT(0)),
+            bottom = Operators.SetGradient(
+                Geometry.Covariant3Vector.(2 .* f_bottom),
+            ),
+            top = Operators.SetGradient(
+                Geometry.Covariant3Vector.(-2 .* f_top),
+            ),
         )
         res_grad_c2f = Geometry.WVector.(grad_c2f.(fc))
         arr_grad_c2f = parent(res_grad_c2f)

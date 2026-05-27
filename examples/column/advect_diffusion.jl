@@ -20,6 +20,7 @@ import ClimaCore:
     Spaces
 
 import ClimaTimeSteppers as CTS
+import LazyBroadcast: lazy
 
 import Logging
 import TerminalLoggers
@@ -60,18 +61,43 @@ velocity = Geometry.WVector.(w .* ones(FT, fspace))
 function tendency!(dT, T, _, t)
     # The exact solution supplies the inflow value at the bottom and the
     # outflow gradient at the top, so nothing the discretization does to the
-    # interior can be blamed on the boundary treatment.
-    bc_bottom = Operators.SetValue(gaussian(z_bottom, t))
-    bc_gradient_top = Operators.SetGradient(Geometry.WVector(∇gaussian(z_top, t)))
-
-    advect = Operators.AdvectionC2C(
-        bottom = bc_bottom,
-        top = Operators.Extrapolate(),
+    # interior can be blamed on the boundary treatment. The Dirichlet condition
+    # T = gaussian(z_bottom, t) on the bottom boundary face is imposed through
+    # `SetGradient`: the covariant gradient there is 2 (T[1] - T₀).
+    T_bottom = Fields.level(T, 1)
+    bc_gradient_bottom = Operators.SetGradient(
+        @. lazy(Geometry.Covariant3Vector(2 * (T_bottom - gaussian(z_bottom, t))))
     )
-    gradc2f = Operators.GradientC2F(bottom = bc_bottom, top = bc_gradient_top)
+    bc_gradient_top =
+        Operators.SetGradient(Geometry.WVector(∇gaussian(z_top, t)))
+
+    # The advective form is an interpolated center-to-face gradient; the
+    # gradient on the top boundary face is extrapolated from the closest
+    # interior faces.
+    T_top = Fields.level(T, Fields.nlevels(T))
+    T_top_m1 = Fields.level(T, Fields.nlevels(T) - 1)
+    bc_gradient_top_extrapolated = Operators.SetGradient(
+        @. lazy(Geometry.Covariant3Vector(T_top - T_top_m1))
+    )
+
+    gradc2f = Operators.GradientC2F(
+        bottom = bc_gradient_bottom,
+        top = bc_gradient_top,
+    )
+    gradc2f_advect = Operators.GradientC2F(
+        bottom = bc_gradient_bottom,
+        top = bc_gradient_top_extrapolated,
+    )
+    interpf2c = Operators.InterpolateF2C()
     divf2c = Operators.DivergenceF2C()
 
-    return @. dT = divf2c(ν * gradc2f(T)) - advect(velocity, T)
+    return @. dT =
+        divf2c(ν * gradc2f(T)) - interpf2c(
+            Geometry.dot(
+                Geometry.Contravariant3Vector(velocity),
+                gradc2f_advect(T),
+            ),
+        )
 end
 
 tendency!(similar(T), T, nothing, t_start)

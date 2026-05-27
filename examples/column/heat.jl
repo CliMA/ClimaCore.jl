@@ -19,6 +19,7 @@ import ClimaCore:
     Spaces
 
 import ClimaTimeSteppers as CTS
+import LazyBroadcast: lazy
 
 import Logging
 import TerminalLoggers
@@ -46,7 +47,12 @@ T = Fields.zeros(FT, cspace)
 # Solve Heat Equation: ∂_t T = α ∇²T
 function tendency!(dT, T, _, t)
 
-    bcs_bottom = Operators.SetValue(T_bottom)
+    # the Dirichlet condition T = T_bottom on the bottom boundary face: the
+    # covariant gradient there is 2 (T[1] - T_bottom)
+    bottom_level_T = Fields.level(T, 1)
+    bcs_bottom = Operators.SetGradient(
+        @. lazy(Geometry.Covariant3Vector(2 * (bottom_level_T - T_bottom)))
+    )
     bcs_top = Operators.SetGradient(Geometry.WVector(dTdz_top))
 
     gradc2f = Operators.GradientC2F(bottom = bcs_bottom, top = bcs_top)
