@@ -116,8 +116,8 @@ function fd_c2f_results(center_space, face_space)
     zc = Fields.coordinate_field(center_space).z
     f = @. zc^2 + 1
     gradc2f = Operators.GradientC2F(
-        bottom = Operators.SetValue(FT(1)),
-        top = Operators.SetValue(FT(2)),
+        bottom = Operators.SetGradient(Geometry.WVector(FT(1))),
+        top = Operators.SetGradient(Geometry.WVector(FT(2))),
     )
     interpc2f = Operators.InterpolateC2F(
         bottom = Operators.Extrapolate(),
