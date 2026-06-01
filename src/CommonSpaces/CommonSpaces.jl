@@ -435,7 +435,6 @@ RectangleXYSpace(::Type{FT}; kwargs...) where {FT} =
         z_elem::Integer,
         z_min::Real,
         z_max::Real,
-        radius::Real,
         device::ClimaComms.AbstractDevice = ClimaComms.device(),
         context::ClimaComms.AbstractCommsContext = ClimaComms.SingletonCommsContext(device),
         stretch::Meshes.StretchingRule = Meshes.Uniform(),
@@ -452,7 +451,6 @@ locations on a sphere, given:
  - `z_elem` the number of z-points
  - `z_min` the domain minimum along the z-direction
  - `z_max` the domain maximum along the z-direction
- - `radius` the radius of the sphere
  - `device` the `ClimaComms.device`
  - `context` the `ClimaComms.context` (must be a `SingletonCommsContext`)
  - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
@@ -472,7 +470,6 @@ space = PointColumnEnsembleSpace(;
     z_elem  = 10,
     z_min   = 0,
     z_max   = 10_000,
-    radius  = 6.371229e6,
     staggering = CellCenter()
 )
 ```
@@ -480,7 +477,7 @@ space = PointColumnEnsembleSpace(;
 function PointColumnEnsembleSpace end
 PointColumnEnsembleSpace(; kwargs...) = PointColumnEnsembleSpace(Float64; kwargs...)
 PointColumnEnsembleSpace(::Type{FT}; staggering::Staggering, kwargs...) where {FT} =
-    Spaces.ExtrudedFiniteDifferenceSpace(
+    Spaces.MultiColumnFiniteDifferenceSpace(
         PointColumnEnsembleGrid(FT; kwargs...),
         staggering,
     )

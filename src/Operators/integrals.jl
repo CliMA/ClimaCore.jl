@@ -18,7 +18,7 @@ function column_integral_definite!(ϕ_top, ᶜ∂ϕ∂z, ϕ_bot = broadcast_zero
     f_space = Spaces.face_space(axes(ᶜ∂ϕ∂z))
     J_bot = Fields.level(Fields.local_geometry_field(f_space).J, half)
     Δz_bot = Fields.level(Fields.Δz_field(f_space), half)
-    ΔA_bot = Base.broadcasted(/, J_bot, Δz_bot)
+    ΔA_bot = Base.broadcasted(/, J_bot, Δz_bot) |> Base.materialize
     ᶜΔϕ = Base.broadcasted(*, ᶜ∂ϕ∂z, Base.broadcasted(/, ᶜJ, ΔA_bot))
     column_reduce!(+, ϕ_top, ᶜΔϕ; init = ϕ_bot)
 end

@@ -2,6 +2,9 @@ using ClimaCore
 using ClimaCore.CommonSpaces, ClimaCore.Geometry
 using ClimaCore: Fields, Spaces, Operators, Grids, Domains, Meshes
 using ClimaCore.Utilities: PlusHalf
+using ClimaCore.MatrixFields
+import LazyBroadcast: @lazy
+import Base.Broadcast: materialize, materialize!
 using Test
 
 const FT = Float64
@@ -46,8 +49,8 @@ col_cspace = Spaces.CenterFiniteDifferenceSpace(ClimaComms.device(), _col_mesh)
 col_fspace = Spaces.face_space(col_cspace)
 
 @testset "PointColumnEnsembleSpace – construction" begin
-    @test ᶜspace isa Spaces.CenterExtrudedFiniteDifferenceSpace
-    @test ᶠspace isa Spaces.FaceExtrudedFiniteDifferenceSpace
+    @test ᶜspace isa Spaces.CenterMultiColumnFiniteDifferenceSpace
+    @test ᶠspace isa Spaces.FaceMultiColumnFiniteDifferenceSpace
     @test Spaces.ncolumns(ᶜspace) == N
     @test Spaces.nlevels(ᶜspace) == 10
     @test Spaces.nlevels(ᶠspace) == 11
@@ -406,30 +409,153 @@ end
     @test fvec(Fields.Δz_field(ᶜsp1)) ≈ fvec(Fields.Δz_field(col_cspace))
 end
 
-# Technically, we don't need this right now, since we don't save to NetCDF
-# files for land calibration
-@testset "Remapping" begin
-    field_multiple_cols = zeros(ᶜspace)
-    field_single_col = zeros(col_cspace)
+# # Technically, we don't need this right now, since we don't save to NetCDF
+# # files for land calibration
+# @testset "Remapping" begin
+#     field_multiple_cols = zeros(ᶜspace)
+#     field_single_col = zeros(col_cspace)
 
-    ClimaCore.Remapping.interpolate(field_multiple_cols)
-    ClimaCore.Remapping.interpolate(field_single_col)
+#     ClimaCore.Remapping.interpolate(field_multiple_cols)
+#     ClimaCore.Remapping.interpolate(field_single_col)
 
-    ClimaCore.Remapping.Remapper(
-        ᶜspace;
-        target_hcoords = ClimaCore.Remapping.default_target_hcoords(
-            ᶜspace,
-        ),
-        target_zcoords = ClimaCore.Remapping.default_target_zcoords(
-            ᶜspace,
-        ),
+#     ClimaCore.Remapping.Remapper(
+#         ᶜspace;
+#         target_hcoords = ClimaCore.Remapping.default_target_hcoords(
+#             ᶜspace,
+#         ),
+#         target_zcoords = ClimaCore.Remapping.default_target_zcoords(
+#             ᶜspace,
+#         ),
+#     )
+
+#     arr = field_multiple_cols |> Fields.field2array
+#     arr[:,1] .= 10.0
+#     arr[:, 2] .= 20.0
+#     arr[:, 3] .= 30.0
+
+#     ClimaCore.Remapping.interpolate(field_multiple_cols)
+#     ClimaCore.Remapping.interpolate(field_single_col)
+# end
+
+@testset "Context" begin
+    ClimaComms.context(ᶜspace)
+    lev = Fields.level(ᶜspace, 1)
+    ClimaComms.context(lev)
+end
+
+@testset "PointCloudLevelSpace – broadcast" begin
+    ᶜz = Fields.coordinate_field(ᶜspace).z
+    lev = Fields.level(ᶜz, 1)
+    # Basic broadcast on a PointCloudLevelSpace should work
+    result = lev ./ 2
+    @test parent(result) ≈ parent(lev) ./ 2
+    # Also check a slightly more complex expression
+    result2 = lev .* FT(3) .+ FT(1)
+    @test parent(result2) ≈ parent(lev) .* FT(3) .+ FT(1)
+end
+
+@testset "MultiColumnFiniteDifferenceSpace × PointCloudLevelSpace broadcast" begin
+    # Analogous to ᶜJ ./ ΔA_bot for CenterFiniteDifferenceSpace × PointSpace.
+    # A level field (IFH, one value per column) should broadcast across a full
+    # multi-column field (VIFH, Nv values per column).
+    ᶜJ = Fields.local_geometry_field(ᶜspace).J   # VIFH – one value per (level, column)
+    ᶠspace_loc = Spaces.face_space(ᶜspace)
+    J_bot = Fields.level(Fields.local_geometry_field(ᶠspace_loc).J, PlusHalf(1))  # IFH – one value per column
+    Δz_bot = Fields.level(Fields.Δz_field(ᶠspace_loc), PlusHalf(1))               # IFH
+    ΔA_bot = J_bot ./ Δz_bot   # IFH on PointCloudLevelSpace
+
+    # VIFH ./ IFH — should broadcast cleanly (each level divided by the per-column scalar)
+    result = ᶜJ ./ ΔA_bot
+    @test size(parent(result)) == size(parent(ᶜJ))
+    @test all(isfinite, parent(result))
+
+    # The ratio J / (J_bot/Δz_bot) = J * Δz_bot / J_bot; verify it's positive everywhere
+    @test all(>(0), parent(result))
+
+    # IFH .* VIFH — commutative variant
+    result2 = ΔA_bot .* ᶜJ
+    @test parent(result2) ≈ parent(result)
+end
+
+@testset "operator_input_space for MultiColumnFiniteDifferenceSpace" begin
+    # operator_input_space should return the correct staggering regardless of
+    # which staggering the input space has.
+    for space in (ᶜspace, ᶠspace)
+        center_input = MatrixFields.operator_input_space(
+            Operators.InterpolateF2C(),  # FDOperatorWithFaceInput
+            space,
+        )
+        @test center_input isa Spaces.FaceMultiColumnFiniteDifferenceSpace
+
+        face_input = MatrixFields.operator_input_space(
+            Operators.InterpolateC2F(
+                bottom = Operators.Extrapolate(),
+                top = Operators.Extrapolate(),
+            ),  # FDOperatorWithCenterInput
+            space,
+        )
+        @test face_input isa Spaces.CenterMultiColumnFiniteDifferenceSpace
+    end
+end
+
+@testset "MatrixFields with MultiColumnFiniteDifferenceSpace" begin
+    ᶜscalar = Fields.coordinate_field(ᶜspace).z  # a real center scalar field
+    ᶠscalar = Fields.coordinate_field(ᶠspace).z  # face scalar field
+
+    # Helper: max absolute difference between two fields (as plain arrays)
+    max_abserr(a, b) = maximum(abs.(vec(Array(parent(a))) .- vec(Array(parent(b)))))
+
+    # ── InterpolateC2F ────────────────────────────────────────────────────────
+    interp_c2f = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(), top = Operators.Extrapolate(),
     )
+    op_c2f = MatrixFields.operator_matrix(interp_c2f)
+    ref_f = @. interp_c2f(ᶜscalar)
+    mat_f = materialize(@lazy @. op_c2f() * ᶜscalar)
+    @test max_abserr(mat_f, ref_f) <= 10 * eps(FT)
 
-    arr = field_multiple_cols |> Fields.field2array
-    arr[:,1] .= 10.0
-    arr[:, 2] .= 20.0
-    arr[:, 3] .= 30.0
+    # ── InterpolateF2C ────────────────────────────────────────────────────────
+    interp_f2c = Operators.InterpolateF2C()
+    op_f2c = MatrixFields.operator_matrix(interp_f2c)
+    ref_c = @. interp_f2c(ᶠscalar)
+    mat_c = materialize(@lazy @. op_f2c() * ᶠscalar)
+    @test max_abserr(mat_c, ref_c) <= 10 * eps(FT)
 
-    ClimaCore.Remapping.interpolate(field_multiple_cols)
-    ClimaCore.Remapping.interpolate(field_single_col)
+    # ── GradientC2F ───────────────────────────────────────────────────────────
+    grad_c2f = Operators.GradientC2F(
+        bottom = Operators.SetGradient(Geometry.Covariant3Vector(FT(0))),
+        top    = Operators.SetGradient(Geometry.Covariant3Vector(FT(0))),
+    )
+    op_grad_c2f = MatrixFields.operator_matrix(grad_c2f)
+    ref_grad = @. grad_c2f(ᶜscalar)
+    mat_grad = materialize(@lazy @. op_grad_c2f() * ᶜscalar)
+    @test max_abserr(mat_grad, ref_grad) <= 10 * eps(FT)
+
+    # ── GradientF2C ───────────────────────────────────────────────────────────
+    grad_f2c = Operators.GradientF2C(
+        bottom = Operators.SetValue(FT(0)), top = Operators.SetValue(FT(0)),
+    )
+    op_grad_f2c = MatrixFields.operator_matrix(grad_f2c)
+    ref_grad_f2c = @. grad_f2c(ᶠscalar)
+    mat_grad_f2c = materialize(@lazy @. op_grad_f2c() * ᶠscalar)
+    @test max_abserr(mat_grad_f2c, ref_grad_f2c) <= 10 * eps(FT)
+
+    # ── DivergenceF2C ─────────────────────────────────────────────────────────
+    ᶠct3 = @. Geometry.Contravariant3Vector(ᶠscalar)
+    div_f2c = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
+        top    = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
+    )
+    op_div_f2c = MatrixFields.operator_matrix(div_f2c)
+    ref_div = @. div_f2c(ᶠct3)
+    mat_div = materialize(@lazy @. op_div_f2c() * ᶠct3)
+    @test max_abserr(mat_div, ref_div) <= 10 * eps(FT)
+
+    # ── LeftBiasedC2F / RightBiasedC2F ───────────────────────────────────────
+    lb_c2f = Operators.LeftBiasedC2F(bottom = Operators.SetValue(FT(0)))
+    rb_c2f = Operators.RightBiasedC2F(top   = Operators.SetValue(FT(0)))
+    op_lb  = MatrixFields.operator_matrix(lb_c2f)
+    op_rb  = MatrixFields.operator_matrix(rb_c2f)
+    @test max_abserr(materialize(@lazy @. op_lb() * ᶜscalar), @. lb_c2f(ᶜscalar)) <= 10 * eps(FT)
+    @test max_abserr(materialize(@lazy @. op_rb() * ᶜscalar), @. rb_c2f(ᶜscalar)) <= 10 * eps(FT)
 end

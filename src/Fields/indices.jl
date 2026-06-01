@@ -126,6 +126,29 @@ function bycolumn(
     return nothing
 end
 
+function bycolumn(
+    fn,
+    space::Spaces.MultiColumnFiniteDifferenceSpace,
+    ::ClimaComms.CPUSingleThreaded,
+)
+    N = Spaces.ncolumns(space)
+    @inbounds for h in 1:N
+        fn(ColumnIndex((1,), h))
+    end
+    return nothing
+end
+function bycolumn(
+    fn,
+    space::Spaces.MultiColumnFiniteDifferenceSpace,
+    ::ClimaComms.CPUMultiThreaded,
+)
+    N = Spaces.ncolumns(space)
+    @inbounds Threads.@threads for h in 1:N
+        fn(ColumnIndex((1,), h))
+    end
+    return nothing
+end
+
 
 """
     ncolumns(::Field)

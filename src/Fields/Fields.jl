@@ -116,6 +116,23 @@ const CenterExtrudedFiniteDifferenceField{V, S} = Field{
     S,
 } where {V <: AbstractData, S <: Spaces.CenterExtrudedFiniteDifferenceSpace}
 
+# MultiColumn (N-column generalisation of FiniteDifferenceSpace)
+const MultiColumnFiniteDifferenceField{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.MultiColumnFiniteDifferenceSpace}
+const FaceMultiColumnFiniteDifferenceField{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.FaceMultiColumnFiniteDifferenceSpace}
+const CenterMultiColumnFiniteDifferenceField{V, S} = Field{
+    V,
+    S,
+} where {
+    V <: AbstractData,
+    S <: Spaces.CenterMultiColumnFiniteDifferenceSpace,
+}
+
 #
 const SpectralElementField1D{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace1D}
@@ -497,6 +514,7 @@ Base.@propagate_inbounds function level(
     field::Union{
         CenterFiniteDifferenceField,
         CenterExtrudedFiniteDifferenceField,
+        CenterMultiColumnFiniteDifferenceField,
     },
     v::Int,
 )
@@ -505,7 +523,7 @@ Base.@propagate_inbounds function level(
     Field(data, hspace)
 end
 Base.@propagate_inbounds function level(
-    field::Union{FaceFiniteDifferenceField, FaceExtrudedFiniteDifferenceField},
+    field::Union{FaceFiniteDifferenceField, FaceExtrudedFiniteDifferenceField, FaceMultiColumnFiniteDifferenceField},
     v::PlusHalf,
 )
     hspace = level(axes(field), v)

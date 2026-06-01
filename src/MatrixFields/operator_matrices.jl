@@ -62,6 +62,16 @@ operator_input_space(
     space::Spaces.ExtrudedFiniteDifferenceSpace,
 ) = Spaces.FaceExtrudedFiniteDifferenceSpace(space)
 
+# TODO: Write tests for this???
+operator_input_space(
+    ::FDOperatorWithCenterInput,
+    space::Spaces.MultiColumnFiniteDifferenceSpace,
+) = Spaces.CenterMultiColumnFiniteDifferenceSpace(space)
+operator_input_space(
+    ::FDOperatorWithFaceInput,
+    space::Spaces.MultiColumnFiniteDifferenceSpace,
+) = Spaces.FaceMultiColumnFiniteDifferenceSpace(space)
+
 has_affine_bc(op) = unrolled_any(
     bc ->
         bc isa Union{
