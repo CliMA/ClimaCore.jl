@@ -224,7 +224,7 @@ end
 
 
 function tridiag_pcr_kernel!(
-    x, a, b, c, d, ::Val{Nv}, ::Val{n_iter},
+    x, a, b, c, d, mask, ::Val{Nv}, ::Val{n_iter},
 ) where {Nv, n_iter}
     (idx_i, idx_j, idx_h) = blockIdx()
     i = threadIdx().x
@@ -238,6 +238,8 @@ function tridiag_pcr_kernel!(
     s_d = CUDA.CuStaticSharedArray(eltype(d), Nv)
 
     idx = CartesianIndex(idx_i, idx_j, 1, i, idx_h)
+    ui = CartesianIndex(idx_i, idx_j, 1, 1, idx_h)
+    DataLayouts.should_compute(mask, ui) || return nothing
 
     # Load into shared memory
     @inbounds begin
@@ -322,7 +324,8 @@ function single_field_solve_tridiagonal!(cache, x, A, b)
     # Solve
     threads_per_block = Nv
     n_iter = ceil(Int, log2(Nv))
-    args = (x_data, A₋₁, A₀, A₊₁, b_data, Val(Nv), Val(n_iter))
+    mask = Spaces.get_mask(axes(x))
+    args = (x_data, A₋₁, A₀, A₊₁, b_data, mask, Val(Nv), Val(n_iter))
 
     auto_launch!(
         tridiag_pcr_kernel!,
