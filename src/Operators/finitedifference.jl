@@ -3635,7 +3635,7 @@ end
 
 Base.@propagate_inbounds function getidx(
     parent_space,
-    bc::Union{StencilBroadcasted, Base.Broadcast.Broadcasted},
+    bc::Union{StencilBroadcasted, Base.Broadcast.Broadcasted{<:Fields.AbstractFieldStyle}},
     idx,
     hidx,
 )
@@ -3743,6 +3743,15 @@ end
 @inline getidx(parent_space, scalar::Ref, idx, hidx) = scalar[]
 @inline getidx(parent_space, field::Fields.PointField, idx, hidx) = field[]
 @inline getidx(parent_space, field::Fields.PointField, idx) = field[]
+@inline getidx(
+    parent_space,
+    bc::BC,
+    idx,
+    hidx,
+) where {
+    BCS,
+    BC <: Base.Broadcast.Broadcasted{BCS},
+} = bc[]
 
 # enable automatic nested broadcasting over single-valued boundary conditions
 @inline getidx(parent_space, scalar, idx, hidx) = add_auto_broadcasters(scalar)

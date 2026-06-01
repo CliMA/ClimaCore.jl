@@ -17,6 +17,13 @@ import ClimaCore.Operators:
 );
 import .TestUtilities as TU;
 
+const climacore_cuda_mod = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
+const cuda_frames =
+    (
+        AnyFrameModule(CUDA),
+        AnyFrameModule(climacore_cuda_mod),
+    )
+
 are_boundschecks_forced = Base.JLOptions().check_bounds == 1
 center_to_face_space(center_space::Spaces.CenterFiniteDifferenceSpace) =
     Spaces.FaceFiniteDifferenceSpace(center_space)
@@ -45,8 +52,8 @@ function test_column_integral_definite!(center_space)
     max_relative_error = maximum(@. abs((ref_array - test_array) / ref_array))
     @test max_relative_error <= 0.006 # Less than 0.6% error.
 
-    cuda = (AnyFrameModule(CUDA),)
-    @test_opt ignored_modules = cuda column_integral_definite!(∫u_test, ᶜu)
+
+    @test_opt ignored_modules = cuda_frames column_integral_definite!(∫u_test, ᶜu)
 
     test_allocs(@allocated column_integral_definite!(∫u_test, ᶜu))
 end
@@ -65,8 +72,7 @@ function test_column_integral_indefinite!(center_space)
     max_relative_error = maximum(@. abs((ref_array - test_array) / ref_array))
     @test max_relative_error <= 0.006 # Less than 0.6% error at the top level.
 
-    cuda = (AnyFrameModule(CUDA),)
-    @test_opt ignored_modules = cuda column_integral_indefinite!(ᶠ∫u_test, ᶜu)
+    @test_opt ignored_modules = cuda_frames column_integral_indefinite!(ᶠ∫u_test, ᶜu)
 
     test_allocs(@allocated column_integral_indefinite!(ᶠ∫u_test, ᶜu))
 end
@@ -88,8 +94,7 @@ function test_column_integral_indefinite_fn!(center_space)
             maximum(@. abs((ref_array - test_array) / ref_array))
         @test max_relative_error <= 0.006 # Less than 0.6% error at the top level.
 
-        cuda = (AnyFrameModule(CUDA),)
-        @test_opt ignored_modules = cuda column_integral_indefinite!(
+        @test_opt ignored_modules = cuda_frames column_integral_indefinite!(
             fn,
             ᶠ∫u_test,
         )
@@ -128,7 +133,7 @@ function test_column_reduce_and_accumulate!(center_space)
         set_output! = () -> column_reduce!(f, output, input; init, transform)
         set_output!()
         @test output == reference_output
-        @test_opt ignored_modules = (AnyFrameModule(CUDA),) set_output!()
+        @test_opt ignored_modules = cuda_frames set_output!()
         test_allocs(@allocated set_output!())
     end
 
@@ -144,7 +149,7 @@ function test_column_reduce_and_accumulate!(center_space)
             () -> column_accumulate!(f, output, input; init, transform)
         set_output!()
         @test output == reference_output
-        @test_opt ignored_modules = (AnyFrameModule(CUDA),) set_output!()
+        @test_opt ignored_modules = cuda_frames set_output!()
         test_allocs(@allocated set_output!())
     end
 end
