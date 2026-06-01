@@ -9,7 +9,7 @@ import ClimaComms
 import ClimaCore.Utilities: half
 import ClimaCore.MatrixFields: @name
 import ClimaCore:
-    Spaces, MatrixFields, Fields, Domains, Meshes, Topologies, Geometry
+    Spaces, MatrixFields, Fields, Domains, Meshes, Topologies, Geometry, Grids, CommonSpaces
 
 include("matrix_field_test_utils.jl")
 
@@ -508,4 +508,45 @@ end
 
     # Run matrix solve
     ldiv!(x, A′, b)
+end
+
+@testset "FieldMatrixSolver Unit Tests" begin
+    FT = Float64
+    space = CommonSpaces.ExtrudedCubedSphereSpace(
+        FT;
+        z_elem = 15,
+        z_min = 0,
+        z_max = 1,
+        radius = 10,
+        h_elem = 10,
+        n_quad_points = 1,
+        staggering = Grids.CellCenter(),
+        enable_mask = true,
+        quad = ClimaCore.Quadratures.GL{1}(),
+    )
+
+    hcoords = Fields.coordinate_field(Spaces.horizontal_space(space))
+    mask = Spaces.get_mask(space)
+    is_active = similar(mask.is_active)
+    parent(is_active) .= parent(hcoords.lat) .> 0.5
+    Spaces.set_mask!(space, is_active)
+
+    tridiag_type = MatrixFields.TridiagonalMatrixRow
+    tridiag_field = fill(tridiag_type(0.0, -1.0, 0.0), space)
+
+    # Set up objects for matrix solve
+    A = MatrixFields.FieldMatrix((@name(_), @name(_)) => tridiag_field)
+    field = Fields.ones(space)
+    parent(field) .= 1.0
+    b = Fields.FieldVector(; _ = field)
+    x = similar(b)
+    parent(x._) .= 0.0
+    A′ = FieldMatrixWithSolver(A, b)
+
+    # Run matrix solve
+    ldiv!(x, A′, b)
+    col_active = Array(parent(is_active))[:]
+    col_inactive = .!col_active
+    @test extrema(parent(x._)[:, 1, 1, 1, col_active]) == (-1.0, -1.0)
+    @test extrema(parent(x._)[:, 1, 1, 1, col_inactive]) == (0.0, 0.0)
 end
