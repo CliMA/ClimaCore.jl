@@ -816,6 +816,16 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Unit: gpu broadcasting"
+        key: unit_gpu_broadcasting
+        retry: *retry_policy
+        command:
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/broadcasting_edge_cases.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: fd tensor"
         key: unit_fd_tensor
         retry: *retry_policy
