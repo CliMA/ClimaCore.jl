@@ -55,18 +55,18 @@ end
 const comms_device = ClimaComms.device()
 # comms_device = ClimaComms.CPUSingleThreaded()
 @show comms_device
-const using_cuda = comms_device isa ClimaComms.CUDADevice
-cuda_module(ext) = using_cuda ? ext.CUDA : ext
-const cuda_mod = cuda_module(Base.get_extension(ClimaComms, :ClimaCommsCUDAExt))
-const climacore_cuda_mod = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
-const cuda_frames =
-    using_cuda ?
+const USING_CUDA = comms_device isa ClimaComms.CUDADevice
+cuda_module(ext) = USING_CUDA ? ext.CUDA : ext
+const CUDA_MOD = cuda_module(Base.get_extension(ClimaComms, :ClimaCommsCUDAExt))
+const CLIMACORE_CUDA_MOD = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
+const CUDA_FRAMES =
+    USING_CUDA ?
     (
-        AnyFrameModule(cuda_mod),
-        AnyFrameModule(climacore_cuda_mod),
+        AnyFrameModule(CUDA_MOD),
+        AnyFrameModule(CLIMACORE_CUDA_MOD),
     ) : ()
-const cublas_frames = using_cuda ? (AnyFrameModule(cuda_mod.CUBLAS),) : ()
-const invalid_ir_error = using_cuda ? cuda_mod.InvalidIRError : ErrorException
+const cublas_frames = USING_CUDA ? (AnyFrameModule(CUDA_MOD.CUBLAS),) : ()
+const invalid_ir_error = USING_CUDA ? CUDA_MOD.InvalidIRError : ErrorException
 
 # Test the allocating and non-allocating versions of a field broadcast against
 # a reference non-allocating implementation. Ensure that they are performant,
@@ -83,7 +83,7 @@ function test_field_broadcast(;
     test_broken_with_cuda = false,
 )
     @testset "$test_name" begin
-        if test_broken_with_cuda && using_cuda
+        if test_broken_with_cuda && USING_CUDA
             @test_throws invalid_ir_error materialize(get_result)
             @warn "$test_name:\n\tCUDA.InvalidIRError"
             return
@@ -127,18 +127,18 @@ function test_field_broadcast(;
         # Test get_result and set_result! for type instabilities, and test
         # set_result! for allocations. Ignore the type instabilities in CUDA and
         # the allocations they incur.
-        @test_opt ignored_modules = cuda_frames materialize(get_result)
-        @test_opt ignored_modules = cuda_frames materialize!(result, set_result)
-        using_cuda || @test (@allocated materialize!(result, set_result)) == 0
+        @test_opt ignored_modules = CUDA_FRAMES materialize(get_result)
+        @test_opt ignored_modules = CUDA_FRAMES materialize!(result, set_result)
+        USING_CUDA || @test (@allocated materialize!(result, set_result)) == 0
 
         if !isnothing(ref_set_result)
             # Test ref_set_result! for type instabilities and allocations to
             # ensure that the performance comparison is fair.
-            @test_opt ignored_modules = cuda_frames materialize!(
+            @test_opt ignored_modules = CUDA_FRAMES materialize!(
                 ref_result,
                 ref_set_result,
             )
-            using_cuda ||
+            USING_CUDA ||
                 @test (@allocated materialize!(ref_result, ref_set_result)) == 0
         end
     end
@@ -369,7 +369,7 @@ function test_spaces(::Type{FT}) where {FT}
     vspace = Spaces.CenterFiniteDifferenceSpace(vtopology)
     sfc_coord = Fields.coordinate_field(hspace)
     hypsography =
-        using_cuda ? Hypsography.Flat() :
+        USING_CUDA ? Hypsography.Flat() :
         Hypsography.LinearAdaption(
             Geometry.ZPoint.(@. cosd(sfc_coord.lat) + cosd(sfc_coord.long) + 1),
         ) # TODO: FD operators don't currently work with hypsography on GPUs.

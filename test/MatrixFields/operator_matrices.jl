@@ -298,7 +298,7 @@ end
         ),
     )
     # this test is will fail because of incorrect results, not InvalidIRError
-    using_cuda || test_field_broadcast(;
+    USING_CUDA || test_field_broadcast(;
         test_name = "applying six operators to a nested field using operator \
                      matrices, but with forced right associativity",
         get_result = @lazy(
@@ -360,7 +360,7 @@ end
         ),
     )
         materialize(get_result)
-        @test_opt ignored_modules = cuda_frames materialize(get_result)
+        @test_opt ignored_modules = CUDA_FRAMES materialize(get_result)
     end
 
     test_field_broadcast(;

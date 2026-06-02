@@ -277,8 +277,9 @@ function tabulate_summary(summary)
 
     PrettyTables.pretty_table(
         table_data;
-        header,
-        crop = :none,
+        column_labels = [header...],
+        fit_table_in_display_horizontally = false,
+        fit_table_in_display_vertically = false,
         alignment = vcat(:l, repeat([:r], length(header[1]) - 1)),
     )
 end

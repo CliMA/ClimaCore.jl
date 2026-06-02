@@ -139,10 +139,10 @@ function tabulate_tests(
     end
     PrettyTables.pretty_table(
         data;
-        title,
-        header,
+        title = String(title),
+        column_labels = header,
         alignment = :l,
-        crop = :horizontal,
+        fit_table_in_display_horizontally = false,
     )
 end
 
