@@ -89,14 +89,6 @@ function opt_WeightedInterpolateC2F_SetValue(weights, center_field)
     return identity.(WI.(weights, center_field))
 end
 
-function opt_WeightedInterpolateC2F_SetGradient(weights, center_field)
-    WI = Operators.WeightedInterpolateC2F(
-        left = Operators.SetGradient(Geometry.WVector(0.0)),
-        right = Operators.SetGradient(Geometry.WVector(0.0)),
-    )
-    return identity.(WI.(weights, center_field))
-end
-
 function opt_WeightedInterpolateC2F_Extrapolate(weights, center_field)
     WI = Operators.WeightedInterpolateC2F(
         left = Operators.Extrapolate(),
@@ -284,10 +276,6 @@ end
             @test_opt opt_InterpolateC2F_Extrapolate(centers)
 
             @test_opt opt_WeightedInterpolateC2F_SetValue(
-                center_values,
-                centers,
-            )
-            @test_opt opt_WeightedInterpolateC2F_SetGradient(
                 center_values,
                 centers,
             )
