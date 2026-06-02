@@ -3749,8 +3749,7 @@ end
     idx,
     hidx,
 ) where {
-    BCS,
-    BC <: Base.Broadcast.Broadcasted{BCS},
+    BC <: Base.Broadcast.Broadcasted,
 } = bc[]
 
 # enable automatic nested broadcasting over single-valued boundary conditions

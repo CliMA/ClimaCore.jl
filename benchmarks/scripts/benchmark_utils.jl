@@ -128,7 +128,14 @@ function tabulate_benchmark(bm)
     title = strip(
         "$problem_size_str$n_reads_writes_str$nreps_str Float_type = $(bm.float_type), $device_bandwidth_GBs_str",
     )
-    PrettyTables.pretty_table(data; title, header, alignment = :l, crop = :none)
+    PrettyTables.pretty_table(
+        data;
+        title = String(title),
+        column_labels = header,
+        alignment = :l,
+        fit_table_in_display_horizontally = false,
+        fit_table_in_display_vertically = false,
+    )
 end
 
 push_info(

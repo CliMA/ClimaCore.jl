@@ -79,7 +79,8 @@ steps:
 
       - label: "Unit: kernel latency benchmarks"
         key: latency_benchmarks
-        retry: *retry_policy
+        retry:
+          automatic: true
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/gpu/latency_benchmarks.jl"
         env:

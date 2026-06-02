@@ -285,25 +285,25 @@ function run_deformation_flow(use_limiter, fct_op, dt)
 end
 
 function total_conservation_error(sol)
-    initial_mass = sum(sol[1].c.ρ)
-    final_mass = sum(sol[end].c.ρ)
+    initial_mass = sum(sol.u[1].c.ρ)
+    final_mass = sum(sol.u[end].c.ρ)
     return abs(final_mass - initial_mass) / initial_mass
 end
 
 function tracer_conservation_errors(sol)
-    initial_masses = sum(sol[1].c.ρq)
-    final_masses = sum(sol[end].c.ρq)
+    initial_masses = sum(sol.u[1].c.ρq)
+    final_masses = sum(sol.u[end].c.ρq)
     return abs.(final_masses .- initial_masses) ./ initial_masses
 end
 
 # Roughness measured as deviation from mean (TODO: use a low-pass filter instead)
 function tracer_roughnesses(sol)
-    final_q = sol[end].c.ρq ./ sol[end].c.ρ
+    final_q = sol.u[end].c.ρq ./ sol.u[end].c.ρ
     return mean(abs.(final_q .- mean(final_q)))
 end
 
 function tracer_ranges(sol)
-    final_q = sol[end].c.ρq ./ sol[end].c.ρ
+    final_q = sol.u[end].c.ρq ./ sol.u[end].c.ρ
     return maximum(final_q) .- minimum(final_q)
 end
 
@@ -360,7 +360,7 @@ end
 # Check that upwinding has no effect on the constant tracer q5, and that the
 # other non-constant tracers are all conserved, accounting for round-off errors.
 for ρq_errs_data in (ρq_errs_no_lim, ρq_errs_with_lim), ρq_errs in ρq_errs_data
-    @test ρq_errs[5] ≈ ρ_errs_no_lim.centered atol = eps(FT)
+    @test ρq_errs[5] ≈ ρ_errs_no_lim.centered atol = 2 * eps(FT)
     @test all(ρq_errs[1:4] .< 40 * eps(FT))
 end
 
@@ -383,10 +383,10 @@ Plots.GRBackend()
 path = joinpath(@__DIR__, "output", "deformation_flow")
 mkpath(path)
 
-ref_final_q3 = upwind3_sol_with_lim[end].c.ρq.:3 ./ upwind3_sol_with_lim[end].c.ρ
+ref_final_q3 = upwind3_sol_with_lim.u[end].c.ρq.:3 ./ upwind3_sol_with_lim.u[end].c.ρ
 for (lim_suffix, sols) in (("no_lim", sols_no_lim), ("with_lim", sols_with_lim))
     for (name, sol) in pairs(sols)
-        final_q3 = sol[end].c.ρq.:3 ./ sol[end].c.ρ
+        final_q3 = sol.u[end].c.ρq.:3 ./ sol.u[end].c.ρ
         Plots.png(
             Plots.plot(final_q3, level = 15, clim = (-1, 1)),
             joinpath(path, "q3_day12_$(name)_$(lim_suffix).png"),

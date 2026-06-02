@@ -4,6 +4,12 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.53
+-------
+
+- Bug fix for broadcasting gpu errors [2517](https://github.com/CliMA/ClimaCore.jl/issues/2517). [2518](https://github.com/CliMA/ClimaCore.jl/pull/2519)
+- Make specialized shared memory-based tridiagonal solver mask aware [2518](https://github.com/CliMA/ClimaCore.jl/issues/2518). [2518](https://github.com/CliMA/ClimaCore.jl/pull/2519)
+
 v0.14.52
 -------
 
