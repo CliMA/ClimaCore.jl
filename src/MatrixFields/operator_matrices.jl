@@ -460,16 +460,6 @@ op_matrix_last_row(
 ) where {FT} = LowerDiagonalMatrixRow(FT(0))
 op_matrix_first_row(
     ::Operators.WeightedInterpolateC2F,
-    ::Operators.SetGradient,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(FT(1))
-op_matrix_last_row(
-    ::Operators.WeightedInterpolateC2F,
-    ::Operators.SetGradient,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(FT(1))
-op_matrix_first_row(
-    ::Operators.WeightedInterpolateC2F,
     ::Operators.Extrapolate,
     ::Type{FT},
 ) where {FT} = UpperDiagonalMatrixRow(FT(1))

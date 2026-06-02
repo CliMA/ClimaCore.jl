@@ -1070,7 +1070,6 @@ WI(w, x)[i] = \\frac{
 Supported boundary conditions are:
 
 - [`SetValue(val)`](@ref): set the value at the boundary face to be `val`.
-- [`SetGradient`](@ref): set the value at the boundary such that the gradient is `val`.
 - [`Extrapolate`](@ref): use the closest interior point as the boundary value.
 
 These have the same stencil as in [`InterpolateC2F`](@ref).
@@ -1081,7 +1080,7 @@ struct WeightedInterpolateC2F{BCS} <: WeightedInterpolationOperator
         assert_valid_bcs(
             "WeightedInterpolateC2F",
             kwargs,
-            (SetValue, SetGradient, Extrapolate),
+            (SetValue, Extrapolate),
         )
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
@@ -1135,41 +1134,6 @@ Base.@propagate_inbounds function stencil_right_boundary(
 )
     @assert idx == right_face_boundary_idx(space)
     getidx(space, bc.val, nothing, hidx)
-end
-
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::WeightedInterpolateC2F,
-    bc::SetGradient,
-    space,
-    idx,
-    hidx,
-    weight,
-    arg,
-)
-    @assert idx == left_face_boundary_idx(space)
-    a⁺ = getidx(space, arg, idx + half, hidx)
-    v₃ = Geometry.covariant3(
-        getidx(space, bc.val, nothing, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    a⁺ - v₃ / 2
-end
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::WeightedInterpolateC2F,
-    bc::SetGradient,
-    space,
-    idx,
-    hidx,
-    weight,
-    arg,
-)
-    @assert idx == right_face_boundary_idx(space)
-    a⁻ = getidx(space, arg, idx - half, hidx)
-    v₃ = Geometry.covariant3(
-        getidx(space, bc.val, nothing, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    a⁻ + v₃ / 2
 end
 
 Base.@propagate_inbounds function stencil_left_boundary(
