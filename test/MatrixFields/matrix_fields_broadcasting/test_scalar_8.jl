@@ -11,7 +11,7 @@ test_opt = get(ENV, "BUILDKITE", "") == "true"
                  tri-diagonal matrix times quad-diagonal matrix, but with \
                  forced right-associativity" begin
     bc = @lazy @. ᶜᶜmat * (ᶜᶠmat * (ᶠᶠmat * ᶠᶜmat))
-    if using_cuda
+    if USING_CUDA
         @test_throws invalid_ir_error materialize(bc)
         @warn "cuda is broken for this test, exiting."
         exit(0)
@@ -33,7 +33,7 @@ test_opt = get(ENV, "BUILDKITE", "") == "true"
         input_fields,
         temp_value_fields,
         ref_set_result!,
-        using_cuda,
+        USING_CUDA,
         allowed_max_eps_error = 10,
     )
     test_opt && opt_test_field_broadcast_against_array_reference(
@@ -42,7 +42,7 @@ test_opt = get(ENV, "BUILDKITE", "") == "true"
         input_fields,
         temp_value_fields,
         ref_set_result!,
-        using_cuda,
+        USING_CUDA,
     )
-    test_opt && !using_cuda && perf_getidx(bc)
+    test_opt && !USING_CUDA && perf_getidx(bc)
 end

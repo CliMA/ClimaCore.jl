@@ -17,13 +17,13 @@ test_opt = get(ENV, "BUILDKITE", "") == "true"
         result,
         bc;
         input_fields,
-        using_cuda,
+        USING_CUDA,
     )
     test_opt && opt_test_field_broadcast_against_array_reference(
         result,
         bc;
         input_fields,
-        using_cuda,
+        USING_CUDA,
     )
-    test_opt && !using_cuda && perf_getidx(bc)
+    test_opt && !USING_CUDA && perf_getidx(bc)
 end

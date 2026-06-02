@@ -19,7 +19,7 @@ import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields, Operators
 import ClimaCore.Domains: Geometry
 
 import ClimaCore.Operators: half, PlusHalf
-const using_cuda = ClimaComms.device() isa ClimaComms.CUDADevice
+const USING_CUDA = ClimaComms.device() isa ClimaComms.CUDADevice
 
 const n_tuples = 3
 
@@ -37,18 +37,18 @@ function alloc_test_f2c_interp(cfield, ffield)
         @. cfield.cz = cfield.cx * cfield.cy * Ic(ffield.fy) * Ic(ffield.fx) * cfield.cϕ * cfield.cψ
     end
     #! format: off
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
     @. cz = cx * cy * Ic(fy) * Ic(fx) * cϕ * cψ
     p = @allocated begin
         @. cz = cx * cy * Ic(fy) * Ic(fx) * cϕ * cψ
     end
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
     closure() = @. cz = cx * cy * Ic(fy) * Ic(fx) * cϕ * cψ
     closure()
     p = @allocated begin
         closure()
     end
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
 end
 
 function jet_test_f2c_interp2(cfield, ffield)
@@ -70,18 +70,18 @@ function alloc_test_c2f_interp(cfield, ffield, If)
         @. ffield.fz = ffield.fx * ffield.fy * If(cfield.cy) * If(cfield.cx) * ffield.fϕ * ffield.fψ
     end
     #! format: on
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
     @. fz = fx * fy * If(cy) * If(cx) * fϕ * fψ
     p = @allocated begin
         @. fz = fx * fy * If(cy) * If(cx) * fϕ * fψ
     end
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
     fclosure() = @. fz = fx * fy * If(cy) * If(cx) * fϕ * fψ
     fclosure()
     p = @allocated begin
         fclosure()
     end
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
 end
 
 function alloc_test_derivative(cfield, ffield, ∇c, ∇f)
@@ -97,18 +97,18 @@ function alloc_test_derivative(cfield, ffield, ∇c, ∇f)
         @. cfield.cz = cfield.cx * cfield.cy * ∇c(wvec(ffield.fy)) * ∇c(wvec(ffield.fx)) * cfield.cϕ * cfield.cψ
     end
     #! format: on
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
     @. cz = cx * cy * ∇c(wvec(fy)) * ∇c(wvec(fx)) * cϕ * cψ
     p = @allocated begin
         @. cz = cx * cy * ∇c(wvec(fy)) * ∇c(wvec(fx)) * cϕ * cψ
     end
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
     c∇closure() = @. cz = cx * cy * ∇c(wvec(fy)) * ∇c(wvec(fx)) * cϕ * cψ
     c∇closure()
     p = @allocated begin
         c∇closure()
     end
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
 
     ##### C2F
     # wvec = Geometry.WVector # cannot re-define, otherwise many allocations
@@ -118,7 +118,7 @@ function alloc_test_derivative(cfield, ffield, ∇c, ∇f)
     p = @allocated begin
         @. fz = fx * fy * ∇f(wvec(cy)) * ∇f(wvec(cx)) * fϕ * fψ
     end
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
 end
 
 function alloc_test_redefined_operators(cfield, ffield)
@@ -172,13 +172,13 @@ function alloc_test_operators_in_loops(cfield, ffield)
         p = @allocated begin
             @. cz = cx * cy * ∇c(wvec(fy)) * ∇c(wvec(fx)) * cϕ * cψ
         end
-        @test p == 0 broken = using_cuda
+        @test p == 0 broken = USING_CUDA
         c∇closure() = @. cz = cx * cy * ∇c(wvec(fy)) * ∇c(wvec(fx)) * cϕ * cψ
         c∇closure()
         p = @allocated begin
             c∇closure()
         end
-        @test p == 0 broken = using_cuda
+        @test p == 0 broken = USING_CUDA
     end
 end
 function alloc_test_nested_expressions_1(cfield, ffield)
@@ -191,7 +191,7 @@ function alloc_test_nested_expressions_1(cfield, ffield)
     p = @allocated begin
         @. cz = cx * cy * ∇c(wvec(LB(cy))) * ∇c(wvec(LB(cx))) * cϕ * cψ
     end
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
 end
 
 function alloc_test_nested_expressions_2(cfield, ffield)
@@ -204,7 +204,7 @@ function alloc_test_nested_expressions_2(cfield, ffield)
     p = @allocated begin
         @. cz = cx * cy * ∇c(wvec(RB(cy))) * ∇c(wvec(RB(cx))) * cϕ * cψ
     end
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
 end
 
 function alloc_test_nested_expressions_3(cfield, ffield)
@@ -220,7 +220,7 @@ function alloc_test_nested_expressions_3(cfield, ffield)
         @. cz = cx * cy * ∇c(wvec(LB(Ic(fy) * cx))) * ∇c(wvec(LB(Ic(fy) * cx))) * cϕ * cψ
     end
     #! format: on
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
 end
 
 function alloc_test_nested_expressions_4(cfield, ffield)
@@ -242,7 +242,7 @@ function alloc_test_nested_expressions_4(cfield, ffield)
         @. fz = fx * fy * ∇f(wvec(LB(If(cy) * fx))) * ∇f(wvec(LB(If(cy) * fx))) * fϕ * fψ
     end
     #! format: on
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
 end
 
 function alloc_test_nested_expressions_5(cfield, ffield)
@@ -260,7 +260,7 @@ function alloc_test_nested_expressions_5(cfield, ffield)
         @. cz = cx * cy * ∇c(wvec(If(cy) * fx)) * ∇c(wvec(If(cy) * fx)) * cϕ * cψ
     end
     #! format: off
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
 end
 
 function alloc_test_nested_expressions_6(cfield, ffield)
@@ -278,7 +278,7 @@ function alloc_test_nested_expressions_6(cfield, ffield)
         @. fz = fx * fy * ∇f(wvec(Ic(fy) * cx)) * ∇f(wvec(Ic(fy) * cx)) * fϕ * fψ
     end
     #! format: on
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
 end
 
 function alloc_test_nested_expressions_7(cfield, ffield)
@@ -290,7 +290,7 @@ function alloc_test_nested_expressions_7(cfield, ffield)
     p = @allocated begin
         @. cz = cx * cy * Ic(fy) * Ic(fy) * cϕ * cψ
     end
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
 end
 
 function alloc_test_nested_expressions_8(cfield, ffield)
@@ -302,7 +302,7 @@ function alloc_test_nested_expressions_8(cfield, ffield)
     p = @allocated begin
         @. cz = cx * cy * abs(Ic(fy)) * abs(Ic(fy)) * cϕ * cψ
     end
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
 end
 
 function alloc_test_nested_expressions_9(cfield, ffield)
@@ -314,7 +314,7 @@ function alloc_test_nested_expressions_9(cfield, ffield)
     p = @allocated begin
         @. cz = Int(cx < cy) * abs(Ic(fy)) * abs(Ic(fy)) * cϕ * cψ
     end
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
 end
 
 function alloc_test_nested_expressions_10(cfield, ffield)
@@ -325,7 +325,7 @@ function alloc_test_nested_expressions_10(cfield, ffield)
     p = @allocated begin
         @. cz = ifelse(cx < cy, abs(Ic(fy)) * abs(Ic(fy)) * cϕ * cψ, 0)
     end
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
 end
 
 function alloc_test_nested_expressions_11(cfield, ffield)
@@ -339,7 +339,7 @@ function alloc_test_nested_expressions_11(cfield, ffield)
     p = @allocated begin
         @. fz = fx * fy * abs(If(cy * cx)) * abs(If(cy * cx)) * fϕ * fψ
     end
-    @test p == 0 broken = using_cuda
+    @test p == 0 broken = USING_CUDA
 end
 
 function alloc_test_nested_expressions_12(cfield, ffield, ntcfield, ntffield)
@@ -386,7 +386,7 @@ function alloc_test_nested_expressions_12(cfield, ffield, ntcfield, ntffield)
         p = @allocated begin
             @. cznt = cxnt * cynt * Ic(fynt) * Ic(fynt) * cϕnt * cψnt
         end
-        @test p == 0 broken = using_cuda
+        @test p == 0 broken = USING_CUDA
     end
 end
 
@@ -449,7 +449,7 @@ function alloc_test_nested_expressions_13(
                 fψ
         end
         #! format: on
-        @test p_i == 0 broken = using_cuda
+        @test p_i == 0 broken = USING_CUDA
     end
 end
 

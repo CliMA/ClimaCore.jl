@@ -85,13 +85,13 @@ function opt_test_field_broadcast(result, bc; ref_set_result!)
     # Test get_result and set_result! for type instabilities, and test
     # set_result! for allocations. Ignore the type instabilities in CUDA and
     # the allocations they incur.
-    @test_opt ignored_modules = cuda_frames materialize(bc)
-    @test_opt ignored_modules = cuda_frames set_result!(result, bc)
-    using_cuda || @test (@allocated set_result!(result, bc)) == 0
+    @test_opt ignored_modules = CUDA_FRAMES materialize(bc)
+    @test_opt ignored_modules = CUDA_FRAMES set_result!(result, bc)
+    USING_CUDA || @test (@allocated set_result!(result, bc)) == 0
 
     # Test ref_set_result! for type instabilities and allocations to
     # ensure that the performance comparison is fair.
-    @test_opt ignored_modules = cuda_frames ref_set_result!(ref_result)
-    using_cuda || @test (@allocated ref_set_result!(ref_result)) == 0
+    @test_opt ignored_modules = CUDA_FRAMES ref_set_result!(ref_result)
+    USING_CUDA || @test (@allocated ref_set_result!(ref_result)) == 0
     return nothing
 end

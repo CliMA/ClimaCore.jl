@@ -55,19 +55,19 @@ function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
         # In addition to ignoring the type instabilities from CUDA, ignore those
         # from CUBLAS (norm), KrylovKit (eigsolve), and CoreLogging (@debug).
         ignored = (
-            cuda_frames...,
+            CUDA_FRAMES...,
             cublas_frames...,
             AnyFrameModule(MatrixFields.KrylovKit),
             AnyFrameModule(Base.CoreLogging),
         )
-        using_cuda ||
+        USING_CUDA ||
             @test_opt ignored_modules = ignored FieldMatrixWithSolver(A, b, alg)
-        using_cuda || @test_opt ignored_modules = ignored ldiv!(x, A′, b)
+        USING_CUDA || @test_opt ignored_modules = ignored ldiv!(x, A′, b)
         @test_opt ignored_modules = ignored mul!(b_test, A′, x)
 
         # TODO: fix broken test when Nv is added to the type space
-        using_cuda || @test @allocated(ldiv!(x, A′, b)) ≤ 1536
-        using_cuda || @test @allocated(mul!(b_test, A′, x)) == 0
+        USING_CUDA || @test @allocated(ldiv!(x, A′, b)) ≤ 1536
+        USING_CUDA || @test @allocated(mul!(b_test, A′, x)) == 0
     end
 end
 
@@ -119,14 +119,14 @@ end
     # TODO: Add a simple test where typeof(x) != typeof(b).
 
     # Note: The round-off error of StationaryIterativeSolve can be much larger
-    # on GPUs, so n_iters often has to be increased when using_cuda is true.
+    # on GPUs, so n_iters often has to be increased when USING_CUDA is true.
 
     for alg in (
         MatrixFields.BlockDiagonalSolve(),
         MatrixFields.BlockLowerTriangularSolve(@name(c)),
         MatrixFields.BlockArrowheadSolve(@name(c)),
         MatrixFields.ApproximateBlockArrowheadIterativeSolve(@name(c)),
-        MatrixFields.StationaryIterativeSolve(; n_iters = using_cuda ? 28 : 18),
+        MatrixFields.StationaryIterativeSolve(; n_iters = USING_CUDA ? 28 : 18),
     )
         test_field_matrix_solver(;
             test_name = "$(typeof(alg).name.name) for a block diagonal matrix \
@@ -204,7 +204,7 @@ end
         (
             "no (identity matrix)",
             MatrixFields.StationaryIterativeSolve(;
-                n_iters = using_cuda ? 10 : 7,
+                n_iters = USING_CUDA ? 10 : 7,
             ),
         ), # ρ(I - P⁻¹ * A) ≈ 0.3777
         (
@@ -213,14 +213,14 @@ end
                 P_alg = MatrixFields.CustomPreconditioner(
                     scaled_identity_matrix(FT(1.12)),
                 ),
-                n_iters = using_cuda ? 8 : 7,
+                n_iters = USING_CUDA ? 8 : 7,
             ),
         ), # ρ(I - P⁻¹ * A) ≈ 0.2294
         (
             "Jacobi (diagonal)",
             MatrixFields.StationaryIterativeSolve(;
                 P_alg = MatrixFields.MainDiagonalPreconditioner(),
-                n_iters = using_cuda ? 8 : 6,
+                n_iters = USING_CUDA ? 8 : 6,
             ),
         ), # ρ(I - P⁻¹ * A) ≈ 0.3241
         (
@@ -230,7 +230,7 @@ end
                     scaled_identity_matrix(FT(1.08)),
                     MatrixFields.MainDiagonalPreconditioner(),
                 ),
-                n_iters = using_cuda ? 8 : 7,
+                n_iters = USING_CUDA ? 8 : 7,
             ),
         ), # ρ(I - P⁻¹ * A) ≈ 0.2249
         (
@@ -330,7 +330,7 @@ end
             # Compare the debugging logs to RegEx strings. Note that debugging the
             # spectral radius is currently not possible on GPUs.
             spectral_radius_logs =
-                using_cuda ? () : ((:debug, r"ρ\(I \- inv\(P\) \* A\) ≈"),)
+                USING_CUDA ? () : ((:debug, r"ρ\(I \- inv\(P\) \* A\) ≈"),)
             error_norm_logs = (
                 (:debug, r"||x[0] - x'||₂ ≈"),
                 (:debug, r"||x[1] - x'||₂ ≈"),

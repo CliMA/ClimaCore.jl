@@ -45,7 +45,7 @@ test_opt = get(ENV, "BUILDKITE", "") == "true"
         input_fields,
         temp_value_fields,
         ref_set_result!,
-        using_cuda,
+        USING_CUDA,
         allowed_max_eps_error = 10,
     )
     test_opt && opt_test_field_broadcast_against_array_reference(
@@ -54,7 +54,7 @@ test_opt = get(ENV, "BUILDKITE", "") == "true"
         input_fields,
         temp_value_fields,
         ref_set_result!,
-        using_cuda,
+        USING_CUDA,
     )
-    test_opt && !using_cuda && perf_getidx(bc)
+    test_opt && !USING_CUDA && perf_getidx(bc)
 end

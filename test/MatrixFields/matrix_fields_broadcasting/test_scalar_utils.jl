@@ -21,7 +21,7 @@ function unit_test_field_broadcast_vs_array_reference(
     bc;
     input_fields,
     temp_value_fields = (),
-    using_cuda,
+    USING_CUDA,
     ref_set_result! = mul!,
     allowed_max_eps_error = 0,
 )
@@ -51,7 +51,7 @@ function opt_test_field_broadcast_against_array_reference(
     input_fields,
     temp_value_fields = (),
     ref_set_result!::F = mul!,
-    using_cuda,
+    USING_CUDA,
 ) where {F}
     temp_values_arrays = map(MatrixFields.field2arrays, temp_value_fields)
     inputs_arrays = map(MatrixFields.field2arrays, input_fields)
@@ -68,19 +68,19 @@ function opt_test_field_broadcast_against_array_reference(
     # Test get_result and set_result! for type instabilities, and test
     # set_result! for allocations. Ignore the type instabilities in CUDA and
     # the allocations they incur.
-    @test_opt ignored_modules = cuda_frames materialize(bc)
-    @test_opt ignored_modules = cuda_frames set_result!(result, bc)
-    using_cuda || @test (@allocated set_result!(result, bc)) == 0
+    @test_opt ignored_modules = CUDA_FRAMES materialize(bc)
+    @test_opt ignored_modules = CUDA_FRAMES set_result!(result, bc)
+    USING_CUDA || @test (@allocated set_result!(result, bc)) == 0
 
     # Test ref_set_result! for type instabilities and allocations to ensure
     # that the performance comparison is fair.
-    @test_opt ignored_modules = cuda_frames call_ref_set_result!(
+    @test_opt ignored_modules = CUDA_FRAMES call_ref_set_result!(
         ref_set_result!,
         ref_result_arrays,
         inputs_arrays,
         temp_values_arrays,
     )
-    using_cuda || @test (@allocated call_ref_set_result!(
+    USING_CUDA || @test (@allocated call_ref_set_result!(
         ref_set_result!,
         ref_result_arrays,
         inputs_arrays,
