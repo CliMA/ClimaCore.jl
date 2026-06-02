@@ -15,6 +15,7 @@ Adapt.adapt_structure(
 
 # PointCloudGrid has no quadrature_style field; pass nothing so that FD
 # operators on PointColumnEnsembleSpace work on CUDA.
+# TODO: This should be removed
 Adapt.adapt_structure(
     to::CUDA.KernelAdaptor,
     grid::Grids.ExtrudedFiniteDifferenceGrid{<:Grids.PointCloudGrid},
@@ -48,6 +49,12 @@ Adapt.adapt_structure(
 
 Adapt.adapt_structure(to::CUDA.KernelAdaptor, space::Spaces.PointSpace) =
     Spaces.PointSpace(
+        ClimaCore.DeviceSideContext(),
+        Adapt.adapt(to, Spaces.local_geometry_data(space)),
+    )
+
+Adapt.adapt_structure(to::CUDA.KernelAdaptor, space::Spaces.PointCloudLevelSpace) =
+    Spaces.PointCloudLevelSpace(
         ClimaCore.DeviceSideContext(),
         Adapt.adapt(to, Spaces.local_geometry_data(space)),
     )

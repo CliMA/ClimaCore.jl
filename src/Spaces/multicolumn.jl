@@ -107,6 +107,8 @@ function column(
 end
 column(space::MultiColumnFiniteDifferenceSpace, i, h) =
     column(space, Grids.ColumnIndex((i,), h))
+column(space::MultiColumnFiniteDifferenceSpace, i, j, h) =
+    column(space, Grids.ColumnIndex((i,), h))
 
 """
     level(space::MultiColumnFiniteDifferenceSpace, v)
