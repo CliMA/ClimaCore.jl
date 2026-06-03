@@ -58,13 +58,13 @@ function _FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
     Nv_face = length(mesh.faces)
     Nv_cent = Nv_face - 1
     # construct on CPU, adapt to GPU
-    center_coordinates = DataLayouts.VF{CT, Nv_cent}(Array{FT}, Nv_cent)
-    face_coordinates = DataLayouts.VF{CT, Nv_face}(Array{FT}, Nv_face)
+    center_coordinates = DataLayouts.VIJFH{CT, Nv_cent, 1, 1, 1}(Array{FT})
+    face_coordinates = DataLayouts.VIJFH{CT, Nv_face, 1, 1, 1}(Array{FT})
     for v in 1:Nv_cent
-        center_coordinates[vindex(v)] = (mesh.faces[v] + mesh.faces[v + 1]) / 2
+        center_coordinates[v] = (mesh.faces[v] + mesh.faces[v + 1]) / 2
     end
     for v in 1:Nv_face
-        face_coordinates[vindex(v)] = mesh.faces[v]
+        face_coordinates[v] = mesh.faces[v]
     end
     center_local_geometry, face_local_geometry = fd_geometry_data(
         center_coordinates,
@@ -82,8 +82,8 @@ end
 
 # called by the FiniteDifferenceGrid constructor, and the ExtrudedFiniteDifferenceGrid constructor with Hypsography
 function fd_geometry_data(
-    center_coordinates::DataLayouts.AbstractData{Geometry.ZPoint{FT}},
-    face_coordinates::DataLayouts.AbstractData{Geometry.ZPoint{FT}},
+    center_coordinates::DataLayouts.VIJHWithF{Geometry.ZPoint{FT}},
+    face_coordinates::DataLayouts.VIJHWithF{Geometry.ZPoint{FT}},
     ::Val{periodic},
 ) where {FT, periodic}
     CT = Geometry.ZPoint{FT}
@@ -93,84 +93,57 @@ function fd_geometry_data(
         Geometry.Components{Geometry.Covariant, AIdx}(),
     )
     LG = Geometry.LocalGeometryType(CT, FT, AIdx)
-    (Ni, Nj, Nk, Nv, Nh) = size(face_coordinates)
+    (Nv, Ni, Nj, Nh) = size(face_coordinates)
     Nv_face = Nv - periodic
     Nv_cent = Nv - 1
-    center_local_geometry = similar(center_coordinates, LG, Val(Nv_cent))
-    face_local_geometry = similar(face_coordinates, LG, Val(Nv_face))
-    cent_coord(args...) =
-        Geometry.component(center_coordinates[CartesianIndex(args...)], 1)
-    face_coord(args...) =
-        Geometry.component(face_coordinates[CartesianIndex(args...)], 1)
-    for h in 1:Nh, k in 1:Nk, j in 1:Nj, i in 1:Ni
+    center_local_geometry = similar(center_coordinates, LG)
+    face_local_geometry = similar(face_coordinates, LG)
+    cent_coord(args...) = Geometry.component(center_coordinates[args...], 1)
+    face_coord(args...) = Geometry.component(face_coordinates[args...], 1)
+    for h in 1:Nh, j in 1:Nj, i in 1:Ni
         for v in 1:Nv_cent
-            J = face_coord(i, j, k, v + 1, h) - face_coord(i, j, k, v, h)
+            J = face_coord(v + 1, i, j, h) - face_coord(v, i, j, h)
             WJ = J
-            x = CT(cent_coord(i, j, k, v, h))
+            x = CT(cent_coord(v, i, j, h))
             ∂x∂ξ = Geometry.Tensor(SMatrix{1, 1}(J), ∂x∂ξ_bases)
-            center_local_geometry[CartesianIndex(i, j, k, v, h)] =
-                Geometry.LocalGeometry(x, J, WJ, ∂x∂ξ)
+            center_local_geometry[v, i, j, h] = Geometry.LocalGeometry(x, J, WJ, ∂x∂ξ)
         end
         for v in 1:Nv_face
             if periodic && v == 1
                 # periodic boundary face
-                J⁺ = face_coord(i, j, k, 2, h) - face_coord(i, j, k, 1, h)
-                J⁻ = face_coord(i, j, k, Nv, h) - face_coord(i, j, k, Nv - 1, h)
+                J⁺ = face_coord(2, i, j, h) - face_coord(1, i, j, h)
+                J⁻ = face_coord(Nv, i, j, h) - face_coord(Nv - 1, i, j, h)
                 J = (J⁺ + J⁻) / 2
                 WJ = J
             elseif !periodic && v == 1
                 # bottom face
-                J = face_coord(i, j, k, 2, h) - face_coord(i, j, k, 1, h)
+                J = face_coord(2, i, j, h) - face_coord(1, i, j, h)
                 WJ = J / 2
             elseif v == Nv
                 # top face
                 @assert !periodic
-                J = face_coord(i, j, k, Nv, h) - face_coord(i, j, k, Nv - 1, h)
+                J = face_coord(Nv, i, j, h) - face_coord(Nv - 1, i, j, h)
                 WJ = J / 2
             else
-                J = cent_coord(i, j, k, v, h) - cent_coord(i, j, k, v - 1, h)
+                J = cent_coord(v, i, j, h) - cent_coord(v - 1, i, j, h)
                 WJ = J
             end
-            x = CT(face_coord(i, j, k, v, h))
+            x = CT(face_coord(v, i, j, h))
             ∂x∂ξ = Geometry.Tensor(SMatrix{1, 1}(J), ∂x∂ξ_bases)
-            face_local_geometry[CartesianIndex(i, j, k, v, h)] =
-                Geometry.LocalGeometry(x, J, WJ, ∂x∂ξ)
+            face_local_geometry[v, i, j, h] = Geometry.LocalGeometry(x, J, WJ, ∂x∂ξ)
         end
     end
     return (center_local_geometry, face_local_geometry)
 end
 
-function fd_geometry_data(
-    center_coordinates::DataLayouts.AbstractData{Geometry.PPoint{FT}},
-    face_coordinates::DataLayouts.AbstractData{Geometry.PPoint{FT}},
-    ::Val{periodic},
-) where {FT, periodic}
-    CT = Geometry.PPoint{FT}
-
-    LG = Geometry.CoordinateOnlyGeometry{CT}
-    (Ni, Nj, Nk, Nv, Nh) = size(face_coordinates)
-    Nv_face = Nv - periodic
-    Nv_cent = Nv - 1
-    center_local_geometry = similar(center_coordinates, LG, Val(Nv_cent))
-    face_local_geometry = similar(face_coordinates, LG, Val(Nv_face))
-    cent_coord(args...) =
-        Geometry.component(center_coordinates[CartesianIndex(args...)], 1)
-    face_coord(args...) =
-        Geometry.component(face_coordinates[CartesianIndex(args...)], 1)
-    for h in 1:Nh, k in 1:Nk, j in 1:Nj, i in 1:Ni
-        for v in 1:Nv_cent
-            x = CT(cent_coord(i, j, k, v, h))
-            center_local_geometry[CartesianIndex(i, j, k, v, h)] =
-                Geometry.CoordinateOnlyGeometry(x)
-        end
-        for v in 1:Nv_face
-            x = CT(face_coord(i, j, k, v, h))
-            face_local_geometry[CartesianIndex(i, j, k, v, h)] =
-                Geometry.CoordinateOnlyGeometry(x)
-        end
-    end
-    return (center_local_geometry, face_local_geometry)
-end
+fd_geometry_data(
+    center_coordinates::DataLayouts.VIJHWithF{<:Geometry.PPoint},
+    face_coordinates::DataLayouts.VIJHWithF{<:Geometry.PPoint},
+    _,
+) = (
+    map(Geometry.CoordinateOnlyGeometry, center_coordinates),
+    map(Geometry.CoordinateOnlyGeometry, face_coordinates),
+)
 
 FiniteDifferenceGrid(
     device::ClimaComms.AbstractDevice,

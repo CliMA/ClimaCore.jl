@@ -320,75 +320,38 @@ end
     dest::FieldVector,
     bc::Union{FieldVector, Base.Broadcast.Broadcasted{FieldVectorStyle}},
 )
-    copyto_per_field!(dest, bc)
-    call_post_op_callback() && post_op_callback(dest, dest, bc)
-    return dest
-end
-
-@inline function copyto_per_field!(
-    dest::FieldVector,
-    bc::Union{FieldVector, Base.Broadcast.Broadcasted{FieldVectorStyle}},
-)
-    map(propertynames(dest)) do symb
-        Base.@_inline_meta
+    unrolled_foreach(propertynames(dest)) do symb
         array = parent(getfield(_values(dest), symb))
         bct = transform_broadcasted(bc, symb, axes(array))
-        if array isa FieldVector # recurse
-            copyto_per_field!(array, bct)
-        else
-            copyto_per_field!(
-                array,
-                Base.Broadcast.instantiate(bct),
-                DataLayouts.device_dispatch(array),
-            )
-        end
+        array isa FieldVector ? copyto!(array, bct) :
+        copyto!(array, Base.Broadcast.instantiate(bct), DataLayouts.device_dispatch(array))
     end
-    return dest
-end
-
-@inline function Base.copyto!(
-    dest::FieldVector,
-    bc::Base.Broadcast.Broadcasted{<:Base.Broadcast.Style{Tuple}},
-)
-    copyto_per_field_scalar!(dest, bc)
     call_post_op_callback() && post_op_callback(dest, dest, bc)
     return dest
 end
 
 @inline function Base.copyto!(
     dest::FieldVector,
-    bc::Base.Broadcast.Broadcasted{<:Base.Broadcast.AbstractArrayStyle{0}},
-)
-    copyto_per_field_scalar!(dest, bc)
-    call_post_op_callback() && post_op_callback(dest, dest, bc)
-    return dest
-end
-
-@inline function Base.copyto!(dest::FieldVector, bc::Real)
-    copyto_per_field_scalar!(dest, bc)
-    call_post_op_callback() && post_op_callback(dest, dest, bc)
-    return dest
-end
-
-@inline function copyto_per_field_scalar!(dest::FieldVector, bc)
-    map(propertynames(dest)) do symb
-        Base.@_inline_meta
+    bc::Base.Broadcast.Broadcasted{S},
+) where {S <: Union{Base.Broadcast.Style{Tuple}, Base.Broadcast.AbstractArrayStyle{0}}}
+    unrolled_foreach(propertynames(dest)) do symb
         array = parent((getfield(_values(dest), symb)))
-        if array isa FieldVector # recurse
-            copyto_per_field_scalar!(array, bc)
-        else
-            copyto_per_field_scalar!(
-                array,
-                Base.Broadcast.instantiate(bc),
-                DataLayouts.device_dispatch(array),
-            )
-        end
-        nothing
+        array isa FieldVector ? copyto!(array, bc) :
+        copyto!(array, Base.Broadcast.instantiate(bc), DataLayouts.device_dispatch(array))
     end
+    call_post_op_callback() && post_op_callback(dest, dest, bc)
     return dest
 end
 
-Base.fill!(dest::FieldVector, value) = dest .= value
+@inline function Base.fill!(dest::FieldVector, value)
+    unrolled_foreach(propertynames(dest)) do symb
+        array = parent((getfield(_values(dest), symb)))
+        array isa FieldVector ? fill!(array, value) :
+        fill!(array, value, DataLayouts.device_dispatch(array))
+    end
+    call_post_op_callback() && post_op_callback(dest, dest, value)
+    return dest
+end
 
 Base.mapreduce(f, op, fv::FieldVector) =
     mapreduce(x -> mapreduce(f, op, backing_array(x)), op, _values(fv))
@@ -452,7 +415,7 @@ function __rprint_diff(
     pc,
     xname,
     yname,
-) where {T <: Union{FieldVector, Field, DataLayouts.AbstractData, NamedTuple}}
+) where {T <: Union{FieldVector, Field, DataLayouts.DataLayout, NamedTuple}}
     for pn in propertynames(x)
         pc_full = (pc..., ".", pn)
         xi = getproperty(x, pn)
@@ -514,7 +477,7 @@ end
 # Recursively compare contents of similar fieldvectors
 _rcompare(pass, x::T, y::T; strict) where {T <: Field} =
     pass && _rcompare(pass, field_values(x), field_values(y); strict)
-_rcompare(pass, x::T, y::T; strict) where {T <: DataLayouts.AbstractData} =
+_rcompare(pass, x::T, y::T; strict) where {T <: DataLayouts.DataLayout} =
     pass && (parent(x) == parent(y))
 _rcompare(pass, x::T, y::T; strict) where {T} = pass && (x == y)
 

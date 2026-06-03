@@ -4,10 +4,6 @@ import RecipesBase
 import TriplotBase
 
 import ClimaComms
-# Keep in sync with definition(s) in ClimaCore.DataLayouts.
-@inline slab_index(i::T, j::T) where {T} =
-    CartesianIndex(i, j, T(1), T(1), T(1))
-@inline slab_index(i::T) where {T} = CartesianIndex(i, T(1), T(1), T(1), T(1))
 
 import ClimaCore:
     ClimaCore,
@@ -102,7 +98,7 @@ end
 RecipesBase.@recipe function f(space::Spaces.ExtrudedFiniteDifferenceSpace)
     coord_field = Fields.coordinate_field(space)
     data = Fields.field_values(coord_field)
-    Ni, Nj, _, Nv, Nh = size(data)
+    Nv, Ni, Nj, Nh = size(data)
 
     #TODO: assumes VIFH layout
     @assert Nj == 1 "plotting only defined for 1D extruded fields"
@@ -201,7 +197,7 @@ end
 
 function _slice_triplot(field, hinterpolate, ncolors)
     data = Fields.field_values(field)
-    Ni, Nj, _, Nv, Nh = size(data)
+    Nv, Ni, Nj, Nh = size(data)
 
     space = axes(field)
     htopology = Spaces.topology(space)
@@ -313,7 +309,7 @@ function _slice_along(field, coord)
     hdata = ClimaCore.slab(hcoord_data, hidx)
     hnode_idx = 1
     for i in axes(hdata)[axis]
-        pt = axis == 1 ? hdata[slab_index(i, 1)] : hdata[slab_index(1, i)]
+        pt = axis == 1 ? hdata[1, i, 1, 1] : hdata[1, 1, i, 1]
         axis_value = Geometry.component(pt, axis)
         coord_value = Geometry.component(coord, 1)
         if axis_value > coord_value
@@ -358,9 +354,8 @@ function _slice_along(field, coord)
             islab = ClimaCore.slab(ortho_data, v, i)
             # copy the nodal data
             for ni in 1:size(islab)[1]
-                islab[slab_index(ni)] =
-                    axis == 1 ? ijslab[slab_index(hnode_idx, ni)] :
-                    ijslab[slab_index(ni, hnode_idx)]
+                islab[ni] =
+                    axis == 1 ? ijslab[1, hnode_idx, ni, 1] : ijslab[1, ni, hnode_idx, 1]
             end
         end
     end
@@ -434,9 +429,9 @@ function _unfolded_pannel_matrix(field, interpolate)
     field_data = Fields.field_values(field)
     fdim = DataLayouts.field_dim(DataLayouts.singleton(field_data))
     interpolated_data_type = if fdim == ndims(field_data)
-        DataLayouts.IJHF
+        DataLayouts.VIJHF
     else
-        DataLayouts.IJFH
+        DataLayouts.VIJFH
     end
     interpolated_data =
         interpolated_data_type{FT, interpolate}(Array{FT}, nelem)

@@ -76,7 +76,7 @@ end
         @test pt_sem(DL{S}(args...; Nv = 10, Nij = 4, Nh = get_Nh(100))) == (; threads = (4, 4, 64), blocks = (60000, 1), Nvthreads = 64)
         @test pt_sem(DL{S}(args...; Nv = 100, Nij = 4, Nh = get_Nh(100))) == (; threads = (4, 4, 64), blocks = (60000, 2), Nvthreads = 64)
     end
-    for DL in (IJFH, IJHF)
+    for DL in (VIJFH, VIJHF)
         @test pt_sem(DL{S}(args...; Nij = 1, Nh = get_Nh(100))) == (; threads = (1, 1, 64), blocks = (60000, 1), Nvthreads = 64) # can/should we reduce # of blocks?
         @test pt_sem(DL{S}(args...; Nij = 4, Nh = get_Nh(100))) == (; threads = (4, 4, 64), blocks = (60000, 1), Nvthreads = 64) # can/should we reduce # of blocks?
     end

@@ -1,6 +1,3 @@
-import ..Topologies: Topology2D
-import UnrolledUtilities: unrolled_map
-
 """
     dss_transform(arg, local_geometry, weight, I)
 
@@ -147,39 +144,6 @@ Base.@propagate_inbounds dss_untransform(
     Geometry.project(ax, targ, local_geometry)
 end
 
-# helper functions for DSS2
-
-function _representative_slab(
-    data::Union{DataLayouts.AbstractData, Nothing},
-    ::Type{DA},
-) where {DA}
-    rebuild_flag = DA isa Array ? false : true
-    if isnothing(data)
-        return nothing
-    elseif rebuild_flag
-        return DataLayouts.rebuild(
-            slab(data, CartesianIndex(1, 1, 1, 1, 1)),
-            Array,
-        )
-    else
-        return slab(data, CartesianIndex(1, 1, 1, 1, 1))
-    end
-end
-
-_transformed_type(
-    data::DataLayouts.AbstractData,
-    local_geometry::Union{DataLayouts.AbstractData, Nothing},
-    dss_weights::Union{DataLayouts.AbstractData, Nothing},
-    ::Type{DA},
-) where {DA} = typeof(
-    dss_transform(
-        _representative_slab(data, DA),
-        _representative_slab(local_geometry, DA),
-        _representative_slab(dss_weights, DA),
-        CartesianIndex(1, 1, 1, 1, 1),
-    ),
-)
-
 # currently only used in limiters (but not actually functional)
 # see https://github.com/CliMA/ClimaCore.jl/issues/1511
 struct GhostBuffer{G, D}
@@ -190,40 +154,17 @@ end
 
 recv_buffer(ghost::GhostBuffer) = ghost.recv_data
 
-create_ghost_buffer(data, topology::Topologies.AbstractTopology) = nothing
-
-create_ghost_buffer(
-    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, <:Any, Nij}},
-    topology::Topologies.Topology2D,
-) where {S, Nij} = create_ghost_buffer(
-    data,
-    topology,
-    Topologies.nsendelems(topology),
-    Topologies.nrecvelems(topology),
-)
-
+create_ghost_buffer(data, topology::AbstractTopology) = nothing
 
 function create_ghost_buffer(
-    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, <:Any, Nij}},
-    topology::Topologies.Topology2D,
-    Nhsend,
-    Nhrec,
-) where {S, Nij}
-    if data isa DataLayouts.IJFH
-        send_data = DataLayouts.IJFH{S, Nij}(typeof(parent(data)), Nhsend)
-        recv_data = DataLayouts.IJFH{S, Nij}(typeof(parent(data)), Nhrec)
-    else
-        Nv = DataLayouts.nlevels(data)
-        Nf = DataLayouts.ncomponents(data)
-        send_data = DataLayouts.VIJFH{S, Nv, Nij}(
-            similar(parent(data), (Nv, Nij, Nij, Nf, Nhsend)),
-        )
-        recv_data = DataLayouts.VIJFH{S, Nv, Nij}(
-            similar(parent(data), (Nv, Nij, Nij, Nf, Nhrec)),
-        )
-    end
-    k = stride(parent(send_data), DataLayouts.h_dim(data))
-
+    data::DataLayouts.VIJHWithF,
+    topology::Topology2D,
+    Nhsend = nsendelems(topology),
+    Nhrec = nrecvelems(topology),
+)
+    send_data = similar(data, Base.setindex(size(data), Nhsend, 4))
+    recv_data = similar(data, Base.setindex(size(data), Nhrec, 4))
+    k = stride(parent(send_data), DataLayouts.f_dim(data) == 5 ? 4 : 5)
     graph_context = ClimaComms.graph_context(
         topology.context,
         parent(send_data),

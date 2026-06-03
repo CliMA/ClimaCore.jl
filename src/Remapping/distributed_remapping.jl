@@ -628,7 +628,6 @@ function _set_interpolated_values_bilinear!(
     local_bilinear_i,
     ::Nothing,
 )
-    CI = CartesianIndex
     for (field_index, field) in enumerate(fields)
         fv = Fields.field_values(field)
         # out_index = horizontal target point
@@ -640,8 +639,8 @@ function _set_interpolated_values_bilinear!(
             for (out_index, h) in enumerate(local_horiz_indices)
                 i, s = local_bilinear_i[out_index], local_bilinear_s[out_index]
                 out[out_index, vindex, field_index] =
-                    A * linear(fv[CI(i, 1, 1, v_lo, h)], fv[CI(i + 1, 1, 1, v_lo, h)], s) +
-                    B * linear(fv[CI(i, 1, 1, v_hi, h)], fv[CI(i + 1, 1, 1, v_hi, h)], s)
+                    A * linear(fv[v_lo, i, 1, h], fv[v_lo, i + 1, 1, h], s) +
+                    B * linear(fv[v_hi, i, 1, h], fv[v_hi, i + 1, 1, h], s)
             end
         end
     end
@@ -661,7 +660,6 @@ function _set_interpolated_values_bilinear!(
     local_bilinear_i,
     local_bilinear_j,
 )
-    CI = CartesianIndex
     for (field_index, field) in enumerate(fields)
         field_values = Fields.field_values(field)
         @inbounds for (vindex, (A, B)) in enumerate(vert_interpolation_weights)
@@ -670,10 +668,10 @@ function _set_interpolated_values_bilinear!(
                 i, j = local_bilinear_i[out_index], local_bilinear_j[out_index]
                 s, t = local_bilinear_s[out_index], local_bilinear_t[out_index]
                 # Horizontal bilinear at v_lo (level by level, no vertical yet)
-                scratch_corners[1, 1] = field_values[CI(i, j, 1, v_lo, h)]
-                scratch_corners[2, 1] = field_values[CI(i + 1, j, 1, v_lo, h)]
-                scratch_corners[2, 2] = field_values[CI(i + 1, j + 1, 1, v_lo, h)]
-                scratch_corners[1, 2] = field_values[CI(i, j + 1, 1, v_lo, h)]
+                scratch_corners[1, 1] = field_values[v_lo, i, j, h]
+                scratch_corners[2, 1] = field_values[v_lo, i + 1, j, 1, h]
+                scratch_corners[2, 2] = field_values[v_lo, i + 1, j + 1, 1, h]
+                scratch_corners[1, 2] = field_values[v_lo, i, j + 1, 1, h]
                 f_lo = bilinear(
                     scratch_corners[1, 1],
                     scratch_corners[2, 1],
@@ -683,10 +681,10 @@ function _set_interpolated_values_bilinear!(
                     t,
                 )
                 # Horizontal bilinear at v_hi
-                scratch_corners[1, 1] = field_values[CI(i, j, 1, v_hi, h)]
-                scratch_corners[2, 1] = field_values[CI(i + 1, j, 1, v_hi, h)]
-                scratch_corners[2, 2] = field_values[CI(i + 1, j + 1, 1, v_hi, h)]
-                scratch_corners[1, 2] = field_values[CI(i, j + 1, 1, v_hi, h)]
+                scratch_corners[1, 1] = field_values[v_hi, i, j, h]
+                scratch_corners[2, 1] = field_values[v_hi, i + 1, j, 1, h]
+                scratch_corners[2, 2] = field_values[v_hi, i + 1, j + 1, 1, h]
+                scratch_corners[1, 2] = field_values[v_hi, i, j + 1, 1, h]
                 f_hi = bilinear(
                     scratch_corners[1, 1],
                     scratch_corners[2, 1],
@@ -715,13 +713,11 @@ function _set_interpolated_values_bilinear!(
     local_bilinear_i,
     ::Nothing,
 )
-    CI = CartesianIndex
     for (field_index, field) in enumerate(fields)
         fv = Fields.field_values(field)
         @inbounds for (out_index, h) in enumerate(local_horiz_indices)
             i, s = local_bilinear_i[out_index], local_bilinear_s[out_index]
-            out[out_index, field_index] =
-                linear(fv[CI(i, 1, 1, 1, h)], fv[CI(i + 1, 1, 1, 1, h)], s)
+            out[out_index, field_index] = linear(fv[1, i, 1, h], fv[1, i + 1, 1, h], s)
         end
     end
 end
@@ -739,15 +735,14 @@ function _set_interpolated_values_bilinear!(
     local_bilinear_i,
     local_bilinear_j,
 )
-    CI = CartesianIndex
     for (field_index, field) in enumerate(fields)
         field_values = Fields.field_values(field)
         @inbounds for (out_index, h) in enumerate(local_horiz_indices)
             i, j = local_bilinear_i[out_index], local_bilinear_j[out_index]
-            c11 = field_values[CI(i, j, 1, 1, h)]
-            c21 = field_values[CI(i + 1, j, 1, 1, h)]
-            c22 = field_values[CI(i + 1, j + 1, 1, 1, h)]
-            c12 = field_values[CI(i, j + 1, 1, 1, h)]
+            c11 = field_values[1, i, j, h]
+            c21 = field_values[1, i + 1, j, h]
+            c22 = field_values[1, i + 1, j + 1, h]
+            c12 = field_values[1, i, j + 1, h]
             s, t = local_bilinear_s[out_index], local_bilinear_t[out_index]
             out[out_index, field_index] = bilinear(c11, c21, c22, c12, s, t)
         end
@@ -780,10 +775,9 @@ function set_interpolated_values_cpu_kernel!(
                 # If we are no longer in the same element, read the field values again
                 if prev_lidx != h || prev_vindex != vindex
                     for j in 1:Nq, i in 1:Nq
-                        scratch_field_values[i, j] = (
-                            A * field_values[CartesianIndex(i, j, 1, v_lo, h)] +
-                            B * field_values[CartesianIndex(i, j, 1, v_hi, h)]
-                        )
+                        scratch_field_values[i, j] =
+                            A * field_values[v_lo, i, j, h] +
+                            B * field_values[v_hi, i, j, h]
                     end
                     prev_vindex, prev_lidx = vindex, h
                 end
@@ -824,10 +818,8 @@ function set_interpolated_values_cpu_kernel!(
             (v_lo, v_hi) = vert_bounding_indices[vindex]
             # If we are no longer in the same element, read the field values again
             if prev_vindex != vindex
-                out[vindex, field_index] = (
-                    A * field_values[CartesianIndex(1, 1, 1, v_lo, 1)] +
-                    B * field_values[CartesianIndex(1, 1, 1, v_hi, 1)]
-                )
+                out[vindex, field_index] =
+                    A * field_values[v_lo, 1, 1, 1] + B * field_values[v_hi, 1, 1, 1]
                 prev_vindex = vindex
             end
         end
@@ -861,10 +853,9 @@ function set_interpolated_values_cpu_kernel!(
                 # If we are no longer in the same element, read the field values again
                 if prev_lidx != h || prev_vindex != vindex
                     for i in 1:Nq
-                        scratch_field_values[i] = (
-                            A * field_values[CartesianIndex(i, 1, 1, v_lo, h)] +
-                            B * field_values[CartesianIndex(i, 1, 1, v_hi, h)]
-                        )
+                        scratch_field_values[i] =
+                            A * field_values[v_lo, i, 1, h] +
+                            B * field_values[v_hi, i, 1, h]
                     end
                     prev_vindex, prev_lidx = vindex, h
                 end
@@ -971,13 +962,13 @@ function _set_interpolated_values_device!(
                     out[out_index, field_index] +=
                         local_horiz_interpolation_weights[1][out_index, i] *
                         local_horiz_interpolation_weights[2][out_index, j] *
-                        field_values[CartesianIndex(i, j, 1, 1, h)]
+                        field_values[1, i, j, h]
                 end
             elseif hdims == 1
                 for i in 1:Nq
                     out[out_index, field_index] +=
                         local_horiz_interpolation_weights[1][out_index, i] *
-                        field_values[CartesianIndex(i, 1, 1, 1, h)]
+                        field_values[1, i, 1, h]
                 end
             end
         end

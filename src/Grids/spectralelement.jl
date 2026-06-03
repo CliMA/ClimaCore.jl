@@ -32,74 +32,51 @@ local_geometry_type(
 function SpectralElementGrid1D(
     topology::Topologies.IntervalTopology,
     quadrature_style::Quadratures.QuadratureStyle;
-    horizontal_layout_type = DataLayouts.IFH,
+    VIJH::Type{<:DataLayouts.VIJHWithF} = DataLayouts.VIJFH,
 )
     get!(
         Cache.OBJECT_CACHE,
         (SpectralElementGrid1D, topology, quadrature_style),
     ) do
-        _SpectralElementGrid1D(
-            topology,
-            quadrature_style,
-            horizontal_layout_type,
-        )
+        _SpectralElementGrid1D(topology, quadrature_style, VIJH)
     end
 end
 
-_SpectralElementGrid1D(
-    topology::Topologies.IntervalTopology,
-    quadrature_style::Quadratures.QuadratureStyle,
-    horizontal_layout_type = DataLayouts.IFH,
-) = _SpectralElementGrid1D(
-    topology,
-    quadrature_style,
-    Val(Topologies.nlocalelems(topology)),
-    horizontal_layout_type,
-)
-
-function _SpectralElementGrid1D(
-    topology::Topologies.IntervalTopology,
-    quadrature_style::Quadratures.QuadratureStyle,
-    ::Val{Nh},
-    ::Type{horizontal_layout_type},
-) where {Nh, horizontal_layout_type}
+function _SpectralElementGrid1D(topology, quadrature_style, ::Type{VIJH}) where {VIJH}
     DA = ClimaComms.array_type(topology)
     global_geometry = Geometry.CartesianGlobalGeometry()
     CoordType = Topologies.coordinate_type(topology)
     AIdx = Geometry.coordinate_axis(CoordType)
     FT = eltype(CoordType)
+    Nh = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
-
-    _∂x∂ξ_bases = (
+    ∂x∂ξ_bases = (
         Geometry.Components{Geometry.Orthonormal, AIdx}(),
         Geometry.Components{Geometry.Covariant, AIdx}(),
     )
     LG = Geometry.LocalGeometryType(CoordType, FT, AIdx)
-    local_geometry = horizontal_layout_type{LG, Nq}(Array{FT}, Nh)
+    local_geometry = VIJH{LG, 1, Nq, 1, missing}(Array{FT}, Nh)
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
 
-    for elem in 1:Nh
-        local_geometry_slab = slab(local_geometry, elem)
-        for i in 1:Nq
-            ξ = quad_points[i]
-            # TODO: we need to massage the coordinate points because the grid is assumed 2D
-            vcoords = Topologies.vertex_coordinates(topology, elem)
-            x = Geometry.linear_interpolate(vcoords, ξ)
-            ∂x∂ξ =
-                (
-                    Geometry.component(vcoords[2], 1) -
-                    Geometry.component(vcoords[1], 1)
-                ) / 2
-            J = abs(∂x∂ξ)
-            WJ = J * quad_weights[i]
-            local_geometry_slab[slab_index(i)] = Geometry.LocalGeometry(
-                x,
-                J,
-                WJ,
-                Geometry.Tensor(SMatrix{1, 1}(∂x∂ξ), _∂x∂ξ_bases),
-            )
-        end
+    for h in 1:Nh, i in 1:Nq
+        ξ = quad_points[i]
+        # TODO: we need to massage the coordinate points because the grid is assumed 2D
+        vcoords = Topologies.vertex_coordinates(topology, h)
+        x = Geometry.linear_interpolate(vcoords, ξ)
+        ∂x∂ξ =
+            (
+                Geometry.component(vcoords[2], 1) -
+                Geometry.component(vcoords[1], 1)
+            ) / 2
+        J = abs(∂x∂ξ)
+        WJ = J * quad_weights[i]
+        local_geometry[1, i, 1, h] = Geometry.LocalGeometry(
+            x,
+            J,
+            WJ,
+            Geometry.Tensor(SMatrix{1, 1}(∂x∂ξ), ∂x∂ξ_bases),
+        )
     end
 
     device_local_geometry = DataLayouts.rebuild(local_geometry, DA)
@@ -153,7 +130,7 @@ local_geometry_type(
         quadrature_style;
         enable_bubble,
         autodiff_metric,
-        horizontal_layout_type = DataLayouts.IJFH
+        VIJH,
         enable_mask::Bool,
     )
 
@@ -167,7 +144,7 @@ SEM for computing metric terms.
 - quadrature_style: QuadratureStyle
 - enable_bubble: Bool
 - autodiff_metric: Bool
-- horizontal_layout_type: Type{<:AbstractData}
+- VIJH: subtype of DataLayouts.VIJHWithF with a specific F axis
 - enable_mask: Boolean used to skip operations where the space's mask is 0
 
 The idea behind the so-called `bubble_correction` is that the numerical area
@@ -194,7 +171,7 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
 function SpectralElementGrid2D(
     topology::Topologies.Topology2D,
     quadrature_style::Quadratures.QuadratureStyle;
-    horizontal_layout_type = DataLayouts.IJFH,
+    VIJH::Type{<:DataLayouts.VIJHWithF} = DataLayouts.VIJFH,
     enable_bubble::Bool = false,
     autodiff_metric::Bool = true,
     enable_mask::Bool = false,
@@ -207,14 +184,14 @@ function SpectralElementGrid2D(
             quadrature_style,
             enable_bubble,
             autodiff_metric,
-            horizontal_layout_type,
+            VIJH,
             enable_mask,
         ),
     ) do
         _SpectralElementGrid2D(
             topology,
             quadrature_style,
-            horizontal_layout_type;
+            VIJH;
             enable_bubble,
             autodiff_metric,
             enable_mask,
@@ -232,40 +209,14 @@ function get_CoordType2D(topology)
     end
 end
 
-_SpectralElementGrid2D(
-    topology::Topologies.Topology2D,
-    quadrature_style::Quadratures.QuadratureStyle,
-    horizontal_layout_type = DataLayouts.IJFH;
-    enable_bubble::Bool,
-    autodiff_metric::Bool,
-    enable_mask::Bool = false,
-) = _SpectralElementGrid2D(
+function _SpectralElementGrid2D(
     topology,
     quadrature_style,
-    Val(Topologies.nlocalelems(topology)),
-    horizontal_layout_type;
+    ::Type{VIJH};
     enable_bubble,
     autodiff_metric,
     enable_mask,
-)
-
-function _SpectralElementGrid2D(
-    topology::Topologies.Topology2D,
-    quadrature_style::Quadratures.QuadratureStyle,
-    ::Val{Nh},
-    ::Type{horizontal_layout_type};
-    enable_bubble::Bool,
-    autodiff_metric::Bool,
-    enable_mask::Bool = false,
-) where {Nh, horizontal_layout_type}
-    @assert horizontal_layout_type <: Union{DataLayouts.IJHF, DataLayouts.IJFH}
-    surface_layout_type = if horizontal_layout_type <: DataLayouts.IJFH
-        DataLayouts.IFH
-    elseif horizontal_layout_type <: DataLayouts.IJHF
-        DataLayouts.IHF
-    else
-        error("Uncaught case")
-    end
+) where {VIJH}
     # 1. compute localgeom for local elememts
     # 2. ghost exchange of localgeom
     # 3. do a round of dss on WJs
@@ -291,17 +242,14 @@ function _SpectralElementGrid2D(
     end
     CoordType2D = get_CoordType2D(topology)
     AIdx = Geometry.coordinate_axis(CoordType2D)
+    Nh = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
     high_order_quadrature_style = Quadratures.GLL{Nq * 2}()
     high_order_Nq = Quadratures.degrees_of_freedom(high_order_quadrature_style)
     LG = Geometry.LocalGeometryType(CoordType2D, FT, AIdx)
 
-    local_geometry = horizontal_layout_type{LG, Nq}(Array{FT}, Nh)
-    mask = if enable_mask
-        DataLayouts.ColumnMask(FT, horizontal_layout_type, DA, Val(Nq), Val(Nh))
-    else
-        DataLayouts.NoMask()
-    end
+    local_geometry = VIJH{LG, 1, Nq, Nq, missing}(Array{FT}, Nh)
+    mask = enable_mask ? DataLayouts.IJHMask(local_geometry) : DataLayouts.NoMask()
 
     _, quad_weights = Quadratures.quadrature_points(FT, quadrature_style)
     _, high_order_quad_weights =
@@ -312,7 +260,6 @@ function _SpectralElementGrid2D(
         Δarea = zero(FT)
         interior_elem_area = zero(FT)
         rel_interior_elem_area_Δ = zero(FT)
-        local_geometry_slab = slab(local_geometry, lidx)
         lg_args =
             (global_geometry, topology, quadrature_style, autodiff_metric, elem)
         high_order_lg_args = (
@@ -339,8 +286,7 @@ function _SpectralElementGrid2D(
             WJ = J * quad_weights[i] * quad_weights[j]
             elem_area += WJ
             if !enable_bubble
-                local_geometry_slab[slab_index(i, j)] =
-                    Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
+                local_geometry[1, i, j, lidx] = Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
             end
         end
 
@@ -351,8 +297,7 @@ function _SpectralElementGrid2D(
                     u, ∂u∂ξ = local_geometry_at_nodal_point(lg_args..., i, j)
                     J = det(parent(∂u∂ξ))
                     WJ = J * quad_weights[i] * quad_weights[j]
-                    local_geometry_slab[slab_index(i, j)] =
-                        Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
+                    local_geometry[1, i, j, lidx] = Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
                 end
             else
                 # The idea behind the so-called `bubble_correction` is that
@@ -375,7 +320,7 @@ function _SpectralElementGrid2D(
                         J = det(parent(∂u∂ξ))
                         J += Δarea / Nq^2
                         WJ = J * quad_weights[i] * quad_weights[j]
-                        local_geometry_slab[slab_index(i, j)] =
+                        local_geometry[1, i, j, lidx] =
                             Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
                     end
                 else # Higher-order elements: Use HOMME bubble correction for the interior nodes
@@ -404,7 +349,7 @@ function _SpectralElementGrid2D(
                         end
                         WJ = J * quad_weights[i] * quad_weights[j]
                         # Finally allocate local geometry
-                        local_geometry_slab[slab_index(i, j)] =
+                        local_geometry[1, i, j, lidx] =
                             Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
                     end
                 end
@@ -420,14 +365,10 @@ function _SpectralElementGrid2D(
 
     if quadrature_style isa Quadratures.GLL
         internal_surface_geometry =
-            surface_layout_type{SG, Nq}(Array{FT}, length(interior_faces))
-        for (iface, (lidx⁻, face⁻, lidx⁺, face⁺, reversed)) in
-            enumerate(interior_faces)
-            internal_surface_geometry_slab =
-                slab(internal_surface_geometry, iface)
-
-            local_geometry_slab⁻ = slab(local_geometry, lidx⁻)
-            local_geometry_slab⁺ = slab(local_geometry, lidx⁺)
+            VIJH{SG, 1, Nq, 1, missing}(Array{FT}, length(interior_faces))
+        for (iface, (lidx⁻, face⁻, lidx⁺, face⁺, reversed)) in enumerate(interior_faces)
+            local_geometry_slab⁻ = slab(local_geometry, 1, lidx⁻)
+            local_geometry_slab⁺ = slab(local_geometry, 1, lidx⁺)
 
             for q in 1:Nq
                 sgeom⁻ = compute_surface_geometry(
@@ -448,7 +389,7 @@ function _SpectralElementGrid2D(
                 @assert sgeom⁻.sWJ ≈ sgeom⁺.sWJ
                 @assert sgeom⁻.normal ≈ -sgeom⁺.normal
 
-                internal_surface_geometry_slab[slab_index(q)] = sgeom⁻
+                internal_surface_geometry[1, q, 1, iface] = sgeom⁻
             end
         end
         internal_surface_geometry =
@@ -458,16 +399,14 @@ function _SpectralElementGrid2D(
             map(Topologies.boundary_tags(topology)) do boundarytag
                 boundary_faces =
                     Topologies.boundary_faces(topology, boundarytag)
-                boundary_surface_geometry = surface_layout_type{SG, Nq}(
+                boundary_surface_geometry = VIJH{SG, 1, Nq, 1, missing}(
                     Array{FT},
                     length(boundary_faces),
                 )
                 for (iface, (elem, face)) in enumerate(boundary_faces)
-                    boundary_surface_geometry_slab =
-                        slab(boundary_surface_geometry, iface)
-                    local_geometry_slab = slab(local_geometry, elem)
+                    local_geometry_slab = slab(local_geometry, 1, elem)
                     for q in 1:Nq
-                        boundary_surface_geometry_slab[slab_index(q)] =
+                        boundary_surface_geometry[1, q, 1, iface] =
                             compute_surface_geometry(
                                 local_geometry_slab,
                                 quad_weights,
@@ -579,10 +518,10 @@ function compute_surface_geometry(
     reversed = false,
 )
     Nq = length(quad_weights)
-    @assert size(local_geometry_slab) == (Nq, Nq, 1, 1, 1)
+    @assert size(local_geometry_slab) == (1, Nq, Nq, 1)
     i, j = Topologies.face_node_index(face, Nq, q, reversed)
 
-    local_geometry = local_geometry_slab[slab_index(i, j)]
+    local_geometry = local_geometry_slab[1, i, j, 1]
     (; J, ∂ξ∂x) = local_geometry
 
     # surface mass matrix

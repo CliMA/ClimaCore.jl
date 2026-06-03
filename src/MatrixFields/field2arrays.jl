@@ -90,16 +90,9 @@ function column_field2array_view(field::Fields.FiniteDifferenceField)
     end
 end
 
-all_columns(::Fields.ColumnField) = (((1, 1), 1),)
-all_columns(field) = all_columns(axes(field))
-all_columns(space::Spaces.ExtrudedFiniteDifferenceSpace) =
-    Spaces.all_nodes(Spaces.horizontal_space(space))
-
-# TODO: Unify FiniteDifferenceField and ColumnField so that we can use this
-# version instead.
-# all_columns(::Fields.FiniteDifferenceField) = (((1, 1), 1),)
-# all_columns(field::Fields.ExtrudedFiniteDifferenceField) =
-#     Spaces.all_nodes(Spaces.horizontal_space(axes(field)))
+all_columns(::Fields.FiniteDifferenceField) = (((1, 1), 1),)
+all_columns(field::Fields.ExtrudedFiniteDifferenceField) =
+    Spaces.all_nodes(Spaces.horizontal_space(axes(field)))
 
 column_map(f::F, field) where {F} =
     Iterators.map(all_columns(field)) do ((i, j), h)

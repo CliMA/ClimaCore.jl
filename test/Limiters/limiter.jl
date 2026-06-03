@@ -14,11 +14,9 @@ using ClimaCore:
     Spaces,
     Limiters,
     Quadratures
-import ClimaCore.DataLayouts: slab_index
 using ClimaCore: slab
 using Test
 
-si = slab_index
 # 2D mesh setup
 function rectangular_mesh_space(
     n1,
@@ -140,10 +138,10 @@ end
             (h1, h2, slab(limiter.q_bounds, h1 + n1 * (h2 - 1)))
         end
         ClimaComms.allowscalar(device) do
-            @test all(map(T -> T[3][si(1)].x ≈ 2 * (T[1] - 1), S)) # q_min
-            @test all(map(T -> T[3][si(1)].y ≈ 3 * (T[2] - 1), S)) # q_min
-            @test all(map(T -> T[3][si(2)].x ≈ 2 * T[1], S)) # q_max
-            @test all(map(T -> T[3][si(2)].y ≈ 3 * T[2], S)) # q_max
+            @test all(map(T -> T[3][1].x ≈ 2 * (T[1] - 1), S)) # q_min
+            @test all(map(T -> T[3][1].y ≈ 3 * (T[2] - 1), S)) # q_min
+            @test all(map(T -> T[3][2].x ≈ 2 * T[1], S)) # q_max
+            @test all(map(T -> T[3][2].y ≈ 3 * T[2], S)) # q_max
         end
 
         Limiters.compute_neighbor_bounds_local!(limiter, ρ)
@@ -151,10 +149,10 @@ end
             (h1, h2, slab(limiter.q_bounds_nbr, h1 + n1 * (h2 - 1)))
         end
         ClimaComms.allowscalar(device) do
-            @test all(map(T -> T[3][si(1)].x ≈ 2 * max(T[1] - 2, 0), SN))  # q_min
-            @test all(map(T -> T[3][si(1)].y ≈ 3 * max(T[2] - 2, 0), SN))  # q_min
-            @test all(map(T -> T[3][si(2)].x ≈ 2 * min(T[1] + 1, n1), SN))  # q_max
-            @test all(map(T -> T[3][si(2)].y ≈ 3 * min(T[2] + 1, n2), SN))  # q_max
+            @test all(map(T -> T[3][1].x ≈ 2 * max(T[1] - 2, 0), SN))  # q_min
+            @test all(map(T -> T[3][1].y ≈ 3 * max(T[2] - 2, 0), SN))  # q_min
+            @test all(map(T -> T[3][2].x ≈ 2 * min(T[1] + 1, n1), SN))  # q_max
+            @test all(map(T -> T[3][2].y ≈ 3 * min(T[2] + 1, n2), SN))  # q_max
         end
     end
 end
@@ -171,8 +169,8 @@ end
         q_min = (FT(3.2), FT(3.0))
         q_max = (FT(5.2), FT(5.0))
         q_bounds = DataLayouts.IF{Tuple{FT, FT}, 2}(zeros(FT, 2, 2))
-        q_bounds[si(1)] = q_min
-        q_bounds[si(2)] = q_max
+        q_bounds[1] = q_min
+        q_bounds[2] = q_max
 
 
         ρq_new = deepcopy(ρq)
@@ -180,8 +178,8 @@ end
 
         q_new = ρq_new ./ ρ
         for j in 1:5, i in 1:5
-            @test q_min[1] <= q_new[si(i, j)][1] <= q_max[1]
-            @test q_min[2] <= q_new[si(i, j)][2] <= q_max[2]
+            @test q_min[1] <= q_new[1, i, j, 1][1] <= q_max[1]
+            @test q_min[2] <= q_new[1, i, j, 1][2] <= q_max[2]
         end
         @test sum(ρq_new.:1 .* WJ) ≈ sum(ρq.:1 .* WJ)
         @test sum(ρq_new.:2 .* WJ) ≈ sum(ρq.:2 .* WJ)

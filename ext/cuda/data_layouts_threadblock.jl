@@ -1,7 +1,3 @@
-const CI5 = CartesianIndex{5}
-# using ClimaCartesianIndices: FastCartesianIndices
-FastCartesianIndices(x) = CartesianIndices(x)
-
 maximum_allowable_threads() = (
     CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X),
     CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Y),
@@ -9,7 +5,7 @@ maximum_allowable_threads() = (
 )
 
 """
-    universal_index(::AbstractData)
+    universal_index(::DataLayout)
 
 Returns a universal cartesian index,
 computed from CUDA's `threadIdx`,
@@ -27,7 +23,7 @@ function universal_index end
     n_active_columns::Integer,
 )
     (Ni, _, _, Nv, Nh) = DataLayouts.universal_size(us)
-    return FastCartesianIndices((1:Nv, 1:n_active_columns))
+    return CartesianIndices((1:Nv, 1:n_active_columns))
 end
 @inline masked_partition(mask::IJHMask, n_max_threads, us) =
     masked_partition(typeof(mask), mask.N[1], n_max_threads, us)
@@ -50,7 +46,7 @@ end
     @inbounds i = i_map[ijh]
     @inbounds j = j_map[ijh]
     @inbounds h = h_map[ijh]
-    return CartesianIndex((i, j, 1, v, h))
+    return CartesianIndex((v, i, j, h))
 end
 
 #####
@@ -66,7 +62,7 @@ end
 end
 @inline function cartesian_indices(us::UniversalSize)
     inds = DataLayouts.universal_size(us)
-    return FastCartesianIndices(map(Base.OneTo, inds))
+    return CartesianIndices(map(Base.OneTo, inds))
 end
 @inline linear_is_valid_index(i::Integer, us::UniversalSize) =
     1 ≤ i ≤ DataLayouts.get_N(us)
@@ -75,7 +71,7 @@ end
 @inline function cartesian_indices_columnwise(us::DataLayouts.UniversalSize)
     (Ni, Nj, _, _, Nh) = DataLayouts.universal_size(us)
     inds = (Ni, Nj, Nh)
-    return FastCartesianIndices(map(Base.OneTo, inds))
+    return CartesianIndices(map(Base.OneTo, inds))
 end
 
 ##### Element-wise (e.g., limiters)
@@ -88,15 +84,8 @@ end
 )
     (Ni, Nj, _, _, Nh) = DataLayouts.universal_size(us)
     inds = (Ni, Nj, Nh, Nnames)
-    return FastCartesianIndices(map(Base.OneTo, inds))
+    return CartesianIndices(map(Base.OneTo, inds))
 end
-@inline function multiple_field_solve_universal_index(us::UniversalSize)
-    (i, j, iname) = CUDA.threadIdx()
-    (h,) = CUDA.blockIdx()
-    return (CartesianIndex((i, j, 1, 1, h)), iname)
-end
-@inline multiple_field_solve_is_valid_index(I::CI5, us::UniversalSize) =
-    1 ≤ I[5] ≤ DataLayouts.get_Nh(us)
 
 ##### spectral kernel partition
 @inline function spectral_partition(
@@ -129,11 +118,6 @@ end
     slabidx = Fields.SlabIndex(v, h)
     return (ij, slabidx)
 end
-@inline spectral_is_valid_index(
-    space::Spaces.AbstractSpectralElementSpace,
-    ij,
-    slabidx,
-) = Operators.is_valid_index(space, ij, slabidx)
 
 ##### shmem fd kernel partition
 @inline function fd_shmem_stencil_partition(
@@ -160,10 +144,10 @@ end
     v = tv + (bv - 1) * CUDA.blockDim().x
     (Ni, Nj, _, _, _) = DataLayouts.universal_size(us)
     if Ni * Nj < ij
-        return CartesianIndex((-1, -1, 1, -1, -1))
+        return CartesianIndex((-1, -1, -1, -1))
     end
     @inbounds (i, j) = CartesianIndices((Ni, Nj))[ij].I
-    return CartesianIndex((i, j, 1, v, h))
+    return CartesianIndex((v, i, j, h))
 end
-@inline fd_shmem_stencil_is_valid_index(I::CI5, us::UniversalSize) =
+@inline fd_shmem_stencil_is_valid_index(I, us::UniversalSize) =
     1 ≤ I[5] ≤ DataLayouts.get_Nh(us)

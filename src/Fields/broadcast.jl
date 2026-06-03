@@ -26,7 +26,7 @@ FieldSlabStyle(::Type{S}) where {DS, S <: FieldStyle{DS}} =
     FieldStyle{DataLayouts.DataSlabStyle(DS)}
 
 Base.Broadcast.BroadcastStyle(::Type{Field{V, S}}) where {V, S} =
-    FieldStyle(DataStyle(V))
+    FieldStyle(Base.Broadcast.BroadcastStyle(V))
 
 # Broadcasting over scalars (Ref or Tuple)
 Base.Broadcast.BroadcastStyle(
@@ -101,16 +101,6 @@ Base.@propagate_inbounds function slab(
     Base.Broadcast.Broadcasted{_Style}(bc.f, _args, _axes)
 end
 
-Base.@propagate_inbounds function slab(
-    bc::DataLayouts.NonExtrudedBroadcasted{Style},
-    inds...,
-) where {Style <: AbstractFieldStyle}
-    _Style = FieldSlabStyle(Style)
-    _args = slab_args(bc.args, inds...)
-    _axes = slab(axes(bc), inds...)
-    DataLayouts.NonExtrudedBroadcasted{_Style}(bc.f, _args, _axes)
-end
-
 Base.@propagate_inbounds function level(
     bc::Base.Broadcast.Broadcasted{Style},
     inds...,
@@ -121,16 +111,6 @@ Base.@propagate_inbounds function level(
     Base.Broadcast.Broadcasted{_Style}(bc.f, _args, _axes)
 end
 
-Base.@propagate_inbounds function level(
-    bc::DataLayouts.NonExtrudedBroadcasted{Style},
-    inds...,
-) where {Style <: AbstractFieldStyle}
-    _Style = FieldLevelStyle(Style)
-    _args = level_args(bc.args, inds...)
-    _axes = level(axes(bc), inds...)
-    DataLayouts.NonExtrudedBroadcasted{_Style}(bc.f, _args, _axes)
-end
-
 Base.@propagate_inbounds function column(
     bc::Base.Broadcast.Broadcasted{Style},
     inds...,
@@ -139,16 +119,6 @@ Base.@propagate_inbounds function column(
     _args = column_args(bc.args, inds...)
     _axes = column(axes(bc), inds...)
     Base.Broadcast.Broadcasted{_Style}(bc.f, _args, _axes)
-end
-
-Base.@propagate_inbounds function column(
-    bc::DataLayouts.NonExtrudedBroadcasted{Style},
-    inds...,
-) where {Style <: AbstractFieldStyle}
-    _Style = FieldColumnStyle(Style)
-    _args = column_args(bc.args, inds...)
-    _axes = column(axes(bc), inds...)
-    DataLayouts.NonExtrudedBroadcasted{_Style}(bc.f, _args, _axes)
 end
 
 # Return underlying DataLayout object, DataStyle of broadcasted
@@ -168,16 +138,6 @@ end
 function todata(bc::Base.Broadcast.Broadcasted{Style}) where {Style}
     _args = _todata_args(bc.args)
     Base.Broadcast.Broadcasted{Style}(bc.f, _args)
-end
-function todata(
-    bc::DataLayouts.NonExtrudedBroadcasted{FieldStyle{DS}},
-) where {DS}
-    _args = _todata_args(bc.args)
-    DataLayouts.NonExtrudedBroadcasted{DS}(bc.f, _args)
-end
-function todata(bc::DataLayouts.NonExtrudedBroadcasted{Style}) where {Style}
-    _args = _todata_args(bc.args)
-    DataLayouts.NonExtrudedBroadcasted{Style}(bc.f, _args)
 end
 
 field_values(bc::Base.AbstractBroadcasted) = todata(bc)
@@ -203,7 +163,7 @@ Base.similar(
     bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle},
     mask = get_mask(axes(dest)),
 )
-    copyto!(field_values(dest), Base.Broadcast.instantiate(todata(bc)), mask)
+    copyto!(field_values(dest), Base.Broadcast.instantiate(todata(bc)); mask)
     return dest
 end
 
@@ -218,7 +178,6 @@ function Base.copyto!(
         end,
     )
     check_mismatched_spaces(fmbc)
-    check_fused_broadcast_axes(fmbc)
     Base.copyto!(fmb_data) # forward to DataLayouts
 end
 
@@ -434,7 +393,7 @@ function Base.copyto!(
     bc::Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}},
 )
     mask = get_mask(axes(field))
-    copyto!(Fields.field_values(field), todata(bc), mask)
+    copyto!(Fields.field_values(field), todata(bc); mask)
     return field
 end
 function Base.copyto!(
@@ -442,7 +401,7 @@ function Base.copyto!(
     bc::Base.Broadcast.Broadcasted{Base.Broadcast.Style{Tuple}},
 )
     mask = get_mask(axes(field))
-    copyto!(Fields.field_values(field), todata(bc), mask)
+    copyto!(Fields.field_values(field), todata(bc); mask)
     return field
 end
 
@@ -454,7 +413,7 @@ function Base.copyto!(field::Field, nt::NamedTuple)
             identity,
             (nt,),
             axes(field),
-        ),
+        );
         mask,
     )
 end

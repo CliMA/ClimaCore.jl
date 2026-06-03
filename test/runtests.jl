@@ -7,21 +7,9 @@ include("tabulated_tests.jl")
 
 #! format: off
 unit_tests = [
-UnitTest("DataLayouts fill"                        ,"DataLayouts/unit_fill.jl"),
-UnitTest("DataLayouts ndims"                       ,"DataLayouts/unit_ndims.jl"),
-UnitTest("DataLayouts array<->data"                ,"DataLayouts/unit_data2array.jl"),
 UnitTest("DataLayouts get_struct"                  ,"DataLayouts/unit_struct.jl"),
-UnitTest("DataLayouts get/set_index_field"         ,"DataLayouts/unit_cartesian_field_index.jl"),
-UnitTest("DataLayouts has_uniform_datalayouts"     ,"DataLayouts/unit_has_uniform_datalayouts.jl"),
-UnitTest("DataLayouts non_extruded_broadcast"      ,"DataLayouts/unit_non_extruded_broadcast.jl"),
-UnitTest("DataLayouts linear indexing"             ,"DataLayouts/unit_linear_indexing.jl"),
 UnitTest("PlusHalf"                                ,"Utilities/unit_plushalf.jl"),
 UnitTest("AutoBroadcaster"                         ,"Utilities/unit_auto_broadcaster.jl"),
-UnitTest("DataLayouts 0D"                          ,"DataLayouts/data0d.jl"),
-UnitTest("DataLayouts 1D"                          ,"DataLayouts/data1d.jl"),
-UnitTest("DataLayouts 2D"                          ,"DataLayouts/data2d.jl"),
-UnitTest("DataLayouts 1dx"                         ,"DataLayouts/data1dx.jl"),
-UnitTest("DataLayouts 2dx"                         ,"DataLayouts/data2dx.jl"),
 UnitTest("DataLayouts mapreduce"                   ,"DataLayouts/unit_mapreduce.jl"),
 UnitTest("Geometry"                                ,"Geometry/geometry.jl"),
 UnitTest("mul_with_projection"                     ,"Geometry/mul_with_projection.jl"),

@@ -1,4 +1,3 @@
-import .DataLayouts: slab_index
 """
     add_numerical_flux_internal!(fn, dydt, args...)
 
@@ -44,26 +43,26 @@ function add_numerical_flux_internal!(fn, dydt, args...)
         dydt_slab⁺ = slab(Fields.field_values(dydt_bc), elem⁺)
 
         for q in 1:Nq
-            sgeom⁻ = internal_surface_geometry_slab[slab_index(q)]
+            sgeom⁻ = internal_surface_geometry_slab[q]
 
             i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
             i⁺, j⁺ = Topologies.face_node_index(face⁺, Nq, q, reversed)
 
             argvals⁻ = map(
-                slab -> slab isa DataSlab2D ? slab[slab_index(i⁻, j⁻)] : slab,
+                slab -> slab isa DataSlab2D ? slab[1, i⁻, j⁻, 1] : slab,
                 arg_slabs⁻,
             )
             argvals⁺ = map(
-                slab -> slab isa DataSlab2D ? slab[slab_index(i⁺, j⁺)] : slab,
+                slab -> slab isa DataSlab2D ? slab[1, i⁺, j⁺, 1] : slab,
                 arg_slabs⁺,
             )
             numflux⁻ =
                 add_auto_broadcasters(fn(sgeom⁻.normal, argvals⁻, argvals⁺))
 
-            dydt_slab⁻[slab_index(i⁻, j⁻)] =
-                dydt_slab⁻[slab_index(i⁻, j⁻)] - (sgeom⁻.sWJ * numflux⁻)
-            dydt_slab⁺[slab_index(i⁺, j⁺)] =
-                dydt_slab⁺[slab_index(i⁺, j⁺)] + (sgeom⁻.sWJ * numflux⁻)
+            dydt_slab⁻[1, i⁻, j⁻, 1] =
+                dydt_slab⁻[1, i⁻, j⁻, 1] - (sgeom⁻.sWJ * numflux⁻)
+            dydt_slab⁺[1, i⁺, j⁺, 1] =
+                dydt_slab⁺[1, i⁺, j⁺, 1] + (sgeom⁻.sWJ * numflux⁻)
         end
     end
 end
@@ -123,16 +122,16 @@ function add_numerical_flux_boundary!(fn, dydt, args...)
             arg_slabs⁻ = map(arg -> slab(Fields.todata(arg), elem⁻), args_bc)
             dydt_slab⁻ = slab(Fields.field_values(dydt_bc), elem⁻)
             for q in 1:Nq
-                sgeom⁻ = boundary_surface_geometry_slab[slab_index(q)]
+                sgeom⁻ = boundary_surface_geometry_slab[q]
                 i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
                 argvals⁻ = map(
                     slab ->
-                        slab isa DataSlab2D ? slab[slab_index(i⁻, j⁻)] : slab,
+                        slab isa DataSlab2D ? slab[1, i⁻, j⁻, 1] : slab,
                     arg_slabs⁻,
                 )
                 numflux⁻ = add_auto_broadcasters(fn(sgeom⁻.normal, argvals⁻))
-                dydt_slab⁻[slab_index(i⁻, j⁻)] =
-                    dydt_slab⁻[slab_index(i⁻, j⁻)] - (sgeom⁻.sWJ * numflux⁻)
+                dydt_slab⁻[1, i⁻, j⁻, 1] =
+                    dydt_slab⁻[1, i⁻, j⁻, 1] - (sgeom⁻.sWJ * numflux⁻)
             end
         end
     end

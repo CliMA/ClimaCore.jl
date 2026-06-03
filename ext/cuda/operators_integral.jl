@@ -19,7 +19,7 @@ function column_reduce_device!(
     space,
     reverse,
 ) where {F, T}
-    Ni, Nj, _, _, Nh = size(Fields.field_values(output))
+    _, Ni, Nj, Nh = size(Fields.field_values(output))
     us = UniversalSize(Fields.field_values(output))
     mask = Spaces.get_mask(space)
     if !(mask isa DataLayouts.NoMask) && space isa Spaces.FiniteDifferenceSpace
@@ -119,7 +119,7 @@ function bycolumn_kernel!(
         if linear_is_valid_index(tidx, us) && tidx ≤ length(unval(cart_inds))
             I = unval(cart_inds)[tidx]
             (i, j, h) = I.I
-            ui = CartesianIndex((i, j, 1, 1, h))
+            ui = CartesianIndex((1, i, j, h))
             DataLayouts.should_compute(mask, ui) || return nothing
             single_column_function!(
                 f,

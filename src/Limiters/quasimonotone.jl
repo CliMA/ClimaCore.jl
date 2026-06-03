@@ -1,6 +1,5 @@
 import ClimaComms
 import ..Operators
-import ..DataLayouts: slab_index
 import Adapt
 
 
@@ -137,35 +136,12 @@ function QuasiMonotoneLimiter(
     )
 end
 
-function make_q_bounds(
-    ρq::Union{DataLayouts.IFH{S}, DataLayouts.IJFH{S}},
-) where {S}
+function make_q_bounds(ρq::DataLayouts.VIJHWithF{S}) where {S}
+    (; Nv, Nh, F) = DataLayouts.shape_params(ρq)
     Nf = DataLayouts.ncomponents(ρq)
-    _, _, _, _, Nh = size(ρq)
-    return DataLayouts.IFH{S, 2}(similar(parent(ρq), (2, Nf, Nh)))
+    array = similar(parent(ρq), DataLayouts.add_f_dim((Nv, 2, 1, size(ρq, 4)), Nf, Val(F)))
+    return DataLayouts.VIJHWithF{S, Nv, 2, 1, Nh, F}(array)
 end
-function make_q_bounds(
-    ρq::Union{DataLayouts.IHF{S}, DataLayouts.IJHF{S}},
-) where {S}
-    Nf = DataLayouts.ncomponents(ρq)
-    _, _, _, _, Nh = size(ρq)
-    return DataLayouts.IHF{S, 2}(similar(parent(ρq), (2, Nh, Nf)))
-end
-function make_q_bounds(
-    ρq::Union{DataLayouts.VIFH{S}, DataLayouts.VIJFH{S}},
-) where {S}
-    Nf = DataLayouts.ncomponents(ρq)
-    _, _, _, Nv, Nh = size(ρq)
-    return DataLayouts.VIFH{S, Nv, 2}(similar(parent(ρq), (Nv, 2, Nf, Nh)))
-end
-function make_q_bounds(
-    ρq::Union{DataLayouts.VIHF{S}, DataLayouts.VIJHF{S}},
-) where {S}
-    Nf = DataLayouts.ncomponents(ρq)
-    _, _, _, Nv, Nh = size(ρq)
-    return DataLayouts.VIHF{S, Nv, 2}(similar(parent(ρq), (Nv, 2, Nh, Nf)))
-end
-
 
 """
     compute_element_bounds!(limiter::QuasiMonotoneLimiter, ρq, ρ)
@@ -188,7 +164,7 @@ function compute_element_bounds!(
     ρ_data = Base.broadcastable(Fields.field_values(ρ))
     ρq_data = Base.broadcastable(Fields.field_values(ρq))
     q_bounds = limiter.q_bounds
-    (Ni, Nj, _, Nv, Nh) = size(ρq_data)
+    (Nv, Ni, Nj, Nh) = size(ρq_data)
     for h in 1:Nh
         for v in 1:Nv
             slab_ρq = slab(ρq_data, v, h)
@@ -196,7 +172,7 @@ function compute_element_bounds!(
             local q_min, q_max
             for j in 1:Nj
                 for i in 1:Ni
-                    q = slab_ρq[slab_index(i, j)] / slab_ρ[slab_index(i, j)]
+                    q = slab_ρq[1, i, j, 1] / slab_ρ[1, i, j, 1]
                     if i == 1 && j == 1
                         q_min = q
                         q_max = q
@@ -207,8 +183,8 @@ function compute_element_bounds!(
                 end
             end
             slab_q_bounds = slab(q_bounds, v, h)
-            slab_q_bounds[slab_index(1)] = q_min
-            slab_q_bounds[slab_index(2)] = q_max
+            slab_q_bounds[1] = q_min
+            slab_q_bounds[2] = q_max
         end
     end
     call_post_op_callback() &&
@@ -235,20 +211,20 @@ function compute_neighbor_bounds_local!(
     topology = Spaces.topology(axes(ρ))
     q_bounds = Base.broadcastable(limiter.q_bounds)
     q_bounds_nbr = limiter.q_bounds_nbr
-    (_, _, _, Nv, Nh) = size(q_bounds_nbr)
+    (Nv, _, _, Nh) = size(q_bounds_nbr)
     for h in 1:Nh
         for v in 1:Nv
             slab_q_bounds = slab(q_bounds, v, h)
-            q_min = slab_q_bounds[slab_index(1)]
-            q_max = slab_q_bounds[slab_index(2)]
+            q_min = slab_q_bounds[1]
+            q_max = slab_q_bounds[2]
             for h_nbr in Topologies.local_neighboring_elements(topology, h)
                 slab_q_bounds = slab(q_bounds, v, h_nbr)
-                q_min = min(q_min, slab_q_bounds[slab_index(1)])
-                q_max = max(q_max, slab_q_bounds[slab_index(2)])
+                q_min = min(q_min, slab_q_bounds[1])
+                q_max = max(q_max, slab_q_bounds[2])
             end
             slab_q_bounds_nbr = slab(q_bounds_nbr, v, h)
-            slab_q_bounds_nbr[slab_index(1)] = q_min
-            slab_q_bounds_nbr[slab_index(2)] = q_max
+            slab_q_bounds_nbr[1] = q_min
+            slab_q_bounds_nbr[2] = q_max
         end
     end
     call_post_op_callback() &&
@@ -269,22 +245,22 @@ function compute_neighbor_bounds_ghost!(
     topology::Topologies.AbstractTopology,
 )
     q_bounds_nbr = limiter.q_bounds_nbr
-    (_, _, _, Nv, Nh) = size(q_bounds_nbr)
+    (Nv, _, _, Nh) = size(q_bounds_nbr)
     if limiter.ghost_buffer isa Topologies.GhostBuffer
         q_bounds_ghost = Base.broadcastable(limiter.ghost_buffer.recv_data)
         for h in 1:Nh
             for v in 1:Nv
                 slab_q_bounds = slab(q_bounds_nbr, v, h)
-                q_min = slab_q_bounds[slab_index(1)]
-                q_max = slab_q_bounds[slab_index(2)]
+                q_min = slab_q_bounds[1]
+                q_max = slab_q_bounds[2]
                 for gidx in Topologies.ghost_neighboring_elements(topology, h)
                     ghost_slab_q_bounds = slab(q_bounds_ghost, v, gidx)
-                    q_min = min(q_min, ghost_slab_q_bounds[slab_index(1)])
-                    q_max = max(q_max, ghost_slab_q_bounds[slab_index(2)])
+                    q_min = min(q_min, ghost_slab_q_bounds[1])
+                    q_max = max(q_max, ghost_slab_q_bounds[2])
                 end
                 slab_q_bounds_nbr = slab(q_bounds_nbr, v, h)
-                slab_q_bounds_nbr[slab_index(1)] = q_min
-                slab_q_bounds_nbr[slab_index(2)] = q_max
+                slab_q_bounds_nbr[1] = q_min
+                slab_q_bounds_nbr[2] = q_max
             end
         end
     end
@@ -363,7 +339,7 @@ function apply_limiter!(
     converged = true
     max_rel_err = zero(rtol)
     min_tracer_mass = Inf
-    (_, _, _, Nv, Nh) = size(ρq_data)
+    (Nv, _, _, Nh) = size(ρq_data)
     for h in 1:Nh
         for v in 1:Nv
             slab_ρ = slab(ρ_data, v, h)
@@ -402,7 +378,7 @@ satisfied.
 """
 function apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
     Nf = DataLayouts.ncomponents(slab_ρq)
-    (Ni, Nj, _, _, _) = size(slab_ρq)
+    (_, Ni, Nj, _) = size(slab_ρq)
     maxiter = Ni * Nj
 
     array_ρq = parent(slab_ρq)

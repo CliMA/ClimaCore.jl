@@ -86,7 +86,7 @@ an unstuctured mesh of Lagrange polynomial cells, suitable for passing to
 function vtk_cells_lagrange(gspace::Spaces.SpectralElementSpace2D)
     quad = Spaces.quadrature_style(gspace)
     @assert quad isa Quadratures.ClosedUniform
-    Nq = Quadratures.degrees_of_freedom(quad)    # TODO: this should depend on the backing DataLayouts (e.g. IJFH)
+    Nq = Quadratures.degrees_of_freedom(quad)    # TODO: this should depend on the backing DataLayouts (e.g. VIJFH)
     con_map = vtk_connectivity_map_lagrange(Nq, Nq)
     [
         MeshCell(

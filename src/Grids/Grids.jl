@@ -2,9 +2,7 @@ module Grids
 
 import ClimaComms, Adapt, ForwardDiff, LinearAlgebra
 import LinearAlgebra: det, norm
-import ..DataLayouts: slab_index, vindex
-import ..DataLayouts,
-    ..Domains, ..Meshes, ..Topologies, ..Geometry, ..Quadratures
+import ..DataLayouts, ..Domains, ..Meshes, ..Topologies, ..Geometry, ..Quadratures
 import ..Utilities: PlusHalf, half, Cache
 import ..slab, ..column, ..level
 import ..DeviceSideDevice, ..DeviceSideContext
@@ -127,7 +125,7 @@ get_mask(grid::ExtrudedFiniteDifferenceGrid) = grid.horizontal_grid.mask
 
 """
     set_mask!(fn::Function, grid)
-    set_mask!(grid, ::DataLayouts.AbstractData)
+    set_mask!(grid, ::DataLayouts.DataLayout)
 
 Set the mask using the function `fn`, which is called for all coordinates on the
 given grid.
@@ -136,10 +134,7 @@ function set_mask! end
 
 set_mask!(fn, grid::ExtrudedFiniteDifferenceGrid) =
     set_mask!(fn, grid.horizontal_grid)
-function set_mask!(
-    fn,
-    grid::Union{SpectralElementGrid2D, ExtrudedFiniteDifferenceGrid},
-)
+function set_mask!(fn, grid::SpectralElementGrid2D)
     if !(grid.mask isa DataLayouts.NoMask)
         @. grid.mask.is_active = fn(grid.local_geometry.coordinates)
         DataLayouts.set_mask_maps!(grid.mask)
@@ -147,9 +142,9 @@ function set_mask!(
     return nothing
 end
 
-set_mask!(grid::ExtrudedFiniteDifferenceGrid, data::DataLayouts.AbstractData) =
+set_mask!(grid::ExtrudedFiniteDifferenceGrid, data::DataLayouts.DataLayout) =
     set_mask!(grid.horizontal_grid, data)
-function set_mask!(grid::SpectralElementGrid2D, data::DataLayouts.AbstractData)
+function set_mask!(grid::SpectralElementGrid2D, data::DataLayouts.DataLayout)
     if !(grid.mask isa DataLayouts.NoMask)
         @. grid.mask.is_active = data
         DataLayouts.set_mask_maps!(grid.mask)

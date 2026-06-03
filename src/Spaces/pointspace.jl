@@ -9,7 +9,7 @@ A zero-dimensional space.
 """
 struct PointSpace{
     C <: ClimaComms.AbstractCommsContext,
-    LG <: DataLayouts.Data0D,
+    LG <: DataLayouts.DataLayout{<:Any, 0},
 } <: AbstractPointSpace
     context::C
     local_geometry::LG

@@ -56,8 +56,7 @@ import ..Utilities: PlusHalf, half, new
 import ..Utilities: AutoBroadcaster, is_auto_broadcastable, auto_broadcasted
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters
 import ..DataLayouts
-import ..DataLayouts: AbstractData
-import ..DataLayouts: vindex
+import ..DataLayouts: DataLayout
 import ..Geometry
 import ..Topologies
 import ..Spaces
@@ -80,7 +79,7 @@ include("band_matrix_row.jl")
 const ColumnwiseBandMatrixField{V, S} = Fields.Field{
     V, S,
 } where {
-    V <: AbstractData{<:BandMatrixRow},
+    V <: DataLayout{<:BandMatrixRow},
     S <: Union{Spaces.AbstractSpace, Operators.PlaceholderSpace}, # so that this can exist inside cuda kernels
 }
 

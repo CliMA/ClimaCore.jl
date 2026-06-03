@@ -8,7 +8,6 @@ using StaticArrays, IntervalSets
 import ClimaCore
 import ClimaComms
 import ClimaCore.Utilities: PlusHalf, half
-import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
     Fields,
     slab,

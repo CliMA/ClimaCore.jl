@@ -20,9 +20,6 @@ export ExtrudedCubedSphereSpace,
 
 import ClimaComms
 
-import ..DataLayouts,
-    ..Meshes, ..Topologies, ..Geometry, ..Domains, ..Quadratures, ..Grids
-
 import ..Grids: Staggering, CellCenter, CellFace
 import ..Spaces
 import ..CommonGrids
@@ -53,7 +50,7 @@ import ..Spaces: face_space, center_space
         quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
         h_mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain{FT}(radius), h_elem),
         h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(context, h_mesh),
-        horizontal_layout_type = DataLayouts.IJFH,
+        VIJH = DataLayouts.VIJFH,
         z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
         enable_bubble::Bool = false
         staggering::Staggering,
@@ -77,7 +74,7 @@ cubed sphere configuration, given:
  - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
  - `h_mesh` the horizontal mesh (defaults to `Meshes.EquiangularCubedSphere`)
  - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
- - `horizontal_layout_type` the horizontal DataLayout type (defaults to `DataLayouts.IJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
+ - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
  - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
  - `enable_bubble` enables the "bubble correction" for more accurate element areas when computing the spectral element space. See [`Grids.SpectralElementGrid2D`](@ref) for more information.
  - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
@@ -138,7 +135,7 @@ ExtrudedCubedSphereSpace(
         quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
         h_mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain{FT}(radius), h_elem),
         h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(context, h_mesh),
-        horizontal_layout_type = DataLayouts.IJFH,
+        VIJH = DataLayouts.VIJFH,
     )
 
 Construct a [`Spaces.SpectralElementSpace2D`](@ref) for a
@@ -153,7 +150,7 @@ cubed sphere configuration, given:
  - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
  - `h_mesh` the horizontal mesh (defaults to `Meshes.EquiangularCubedSphere`)
  - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
- - `horizontal_layout_type` the horizontal DataLayout type (defaults to `DataLayouts.IJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
+ - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
 
 Note that these arguments are all the same as [`CommonGrids.CubedSphereGrid`](@ref).
 
@@ -239,7 +236,7 @@ ColumnSpace(::Type{FT}; staggering::Staggering, kwargs...) where {FT} =
         hypsography_fun = (h_grid, z_grid) -> Grids.Flat(),
         global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
         quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
-        horizontal_layout_type = DataLayouts.IJFH,
+        VIJH = DataLayouts.VIJFH,
         [h_topology::Topologies.AbstractDistributedTopology], # optional
         [z_mesh::Meshes.IntervalMesh], # optional
         enable_bubble::Bool = false,
@@ -270,7 +267,7 @@ configuration, given:
  - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
  - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
  - `enable_bubble` enables the "bubble correction" for more accurate element areas when computing the spectral element space. See [`Grids.SpectralElementGrid2D`](@ref) for more information.
- - `horizontal_layout_type` the horizontal DataLayout type (defaults to `DataLayouts.IJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
+ - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
  - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
 
 Note that these arguments are all  the same as [`CommonGrids.Box3DGrid`]

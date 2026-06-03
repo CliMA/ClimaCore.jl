@@ -55,7 +55,7 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     i, j, h = hidx
     local_geom =
         Grids.local_geometry_data(Spaces.grid(space), Grids.CellCenter())
-    return @inbounds local_geom[CartesianIndex(i, j, 1, v, h)]
+    return @inbounds local_geom[v, i, j, h]
 end
 Base.@propagate_inbounds function Geometry.LocalGeometry(
     space::AllFiniteDifferenceSpace,
@@ -68,7 +68,7 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     end
     i, j, h = hidx
     local_geom = Grids.local_geometry_data(Spaces.grid(space), Grids.CellFace())
-    return @inbounds local_geom[CartesianIndex(i, j, 1, v, h)]
+    return @inbounds local_geom[v, i, j, h]
 end
 
 
@@ -3727,7 +3727,7 @@ Base.@propagate_inbounds function getidx(parent_space, bc::Fields.Field, idx)
     field_data = Fields.field_values(bc)
     space = reconstruct_placeholder_space(axes(bc), parent_space)
     v = vidx(space, idx)
-    return @inbounds field_data[vindex(v)]
+    return @inbounds field_data[v]
 end
 Base.@propagate_inbounds function getidx(
     parent_space,
@@ -3739,7 +3739,7 @@ Base.@propagate_inbounds function getidx(
     space = reconstruct_placeholder_space(axes(bc), parent_space)
     v = vidx(space, idx)
     i, j, h = hidx
-    return @inbounds field_data[CartesianIndex(i, j, 1, v, h)]
+    return @inbounds field_data[v, i, j, h]
 end
 
 # unwap boxed scalars
@@ -3794,7 +3794,7 @@ Base.@propagate_inbounds function setidx!(
     v = vidx(space, idx)
     field_data = Fields.field_values(field)
     i, j, h = hidx
-    @inbounds field_data[CartesianIndex(i, j, 1, v, h)] = val
+    @inbounds field_data[v, i, j, h] = val
     val
 end
 
@@ -3880,7 +3880,7 @@ function _serial_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
     bcs = bc # strip_space(bc, space)
     mask = Spaces.get_mask(axes(field_out))
     @inbounds for h in 1:Nh, j in 1:Nj, i in 1:Ni
-        DataLayouts.should_compute(mask, CartesianIndex(i, j, 1, 1, h)) ||
+        DataLayouts.should_compute(mask, CartesianIndex(1, i, j, h)) ||
             continue
         apply_stencil!(space, field_out, bcs, (i, j, h), bounds)
     end
@@ -3899,7 +3899,7 @@ function _threaded_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
             for j in 1:Nj, i in 1:Ni
                 DataLayouts.should_compute(
                     mask,
-                    CartesianIndex(i, j, 1, 1, h),
+                    CartesianIndex(1, i, j, h),
                 ) || continue
                 apply_stencil!(space, field_out, bcs, (i, j, h), bounds)
             end
@@ -3920,7 +3920,7 @@ function Base.copyto!(
 )
     space = axes(bc)
     local_geometry = Spaces.local_geometry_data(space)
-    (Ni, Nj, _, _, Nh) = size(local_geometry)
+    (_, Ni, Nj, Nh) = size(local_geometry)
     context = ClimaComms.context(axes(field_out))
     device = ClimaComms.device(context)
     if (device isa ClimaComms.CPUMultiThreaded) && Nh > 1

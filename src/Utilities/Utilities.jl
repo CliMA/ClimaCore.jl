@@ -64,34 +64,22 @@ Base.@propagate_inbounds linear_ind(n::NTuple, loc::NTuple) =
     linear_ind(n, CartesianIndex(loc))
 
 """
-    unionall_type(::Type{T})
+    unionall_type(T)
 
-Extract the type of the input, and strip it of any type parameters.
+Drops all parameters from the type `T`. If the input argument is not a `Type`,
+its type is used instead.
 
-This is useful when one needs the generic constructor for a given type.
-
-Example
-=======
+# Examples
 ```julia
 julia> unionall_type(typeof([1, 2, 3]))
 Array
 
-julia> struct Foo{A, B}
-               a::A
-               b::B
-       end
-
-julia> unionall_type(typeof(Foo(1,2)))
-Foo
+julia> unionall_type((; a = 1, b = 2))
+NamedTuple
 ```
 """
-function unionall_type(::Type{T}) where {T}
-    # NOTE: As of version 1.12, there is no simple, user-friendly way to extract
-    # the generic type of T, so we need to reach for the internals in Julia.
-    # Hopefully, Julia will introduce a simpler, more stable way to do this in a
-    # future release.
-    return T.name.wrapper
-end
+unionall_type(::Type{T}) where {T} = Base.typename(T).wrapper
+unionall_type(x) = unionall_type(typeof(x))
 
 """
     replace_type_parameter(T, P, P′)
@@ -180,6 +168,36 @@ julia> new(@NamedTuple{a::DataType, b::Int, c::Complex{Int}}, (Int, 1, 1 + 2im))
 @inline nested_new(::Val{T}) where {names, T <: NamedTuple{names}} =
     NamedTuple{names}(unrolled_map(maybe_nested_new, fieldtype_vals(T)))
 
+struct InferenceError <: Exception
+    f::Any
+    args_type::Type{<:Tuple}
+end
+function Base.showerror(io::IO, (; f, args_type)::InferenceError)
+    println(io, "Concrete type of result could not be inferred:\n")
+    InteractiveUtils.code_warntype(io, f, args_type)
+end
+
+"""
+    is_inferred_type(T)
+
+Checks if `T` either satisfies `isconcretetype` or is a `Type{..}` value (or the
+more generic `DataType` value).
+"""
+@inline is_inferred_type(::Type{T}) where {T} =
+    T != Union{} && (isconcretetype(T) || T <: Type)
+
+"""
+    return_type(f, T)
+
+Equivalent to `Core.Compiler.return_type(f, T)`, but with an additional check to
+ensure that the result satisfies [`is_inferred_type`](@ref) whenever `T` does.
+Used in place of `Core.Compiler.return_type` to flag deteriorations in type
+inference before they can lead to behavioral changes.
+"""
+@inline return_type(f::F, ::Type{T}) where {F, T} =
+    is_inferred_type(T) && !is_inferred_type(Core.Compiler.return_type(f, T)) ?
+    throw(InferenceError(f, T)) : Core.Compiler.return_type(f, T)
+
 """
     unsafe_eltype(itr)
 
@@ -194,27 +212,16 @@ checks, and may potentially return non-concrete types (like an empty `Union{}`).
 
 @inline has_inferred_error(itr) = unsafe_eltype(itr) == Union{}
 
-struct InferenceError <: Exception
-    f::Any
-    args_type::Type{<:Tuple}
-end
-function Base.showerror(io::IO, (; f, args_type)::InferenceError)
-    println(io, "Concrete type of result could not be inferred:\n")
-    InteractiveUtils.code_warntype(io, f, args_type)
-end
-
 """
     safe_eltype(itr)
 
 Analogue of `eltype` with support for un-materialized broadcast expressions,
-adapted from `Base.Broadcast.combine_eltypes`. Throws an error when the concrete
-element type of a broadcast expression cannot be inferred, indicating which part
-of the expression first encounters a type instability or error during inference.
+adapted from `Base.Broadcast.combine_eltypes`. Throws an error when the result
+does not satisfy [`is_inferred_type`](@ref), indicating which part of the
+expression first encounters a type instability or an error during inference.
 """
 @inline safe_eltype(itr) =
-    has_inferred_error(itr) ||
-    !(isconcretetype(unsafe_eltype(itr)) || unsafe_eltype(itr) <: Type) ?
-    eltype_error(itr) : unsafe_eltype(itr)
+    is_inferred_type(unsafe_eltype(itr)) ? unsafe_eltype(itr) : eltype_error(itr)
 
 eltype_error(itr) = throw(InferenceError(eltype, Tuple{typeof(itr)}))
 eltype_error(bc::Base.Broadcast.Broadcasted) =

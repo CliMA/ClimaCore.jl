@@ -116,7 +116,7 @@ function CenterExtrudedFiniteDifferenceSpace(
     deep = false,
     topography = false,
     autodiff_metric = true,
-    horizontal_layout_type = DataLayouts.IJFH,
+    VIJH = DataLayouts.VIJFH,
 ) where {FT}
     radius = FT(128)
     zlim = (FT(0), FT(1))

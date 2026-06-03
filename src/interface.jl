@@ -2,7 +2,7 @@
 import ..Utilities.Unrolled: unrolled_map_with_inbounds
 
 """
-    slab(data::AbstractData, h::Integer)
+    slab(data::DataLayout, h::Integer)
 
 A "pancake" view into an underlying
 data layout `data` at location `h`.
@@ -22,7 +22,7 @@ Base.@propagate_inbounds slab_args(args::NamedTuple, inds...) =
     NamedTuple{keys(args)}(slab_args(values(args), inds...))
 
 """
-    column(data::AbstractData, i::Integer)
+    column(data::DataLayout, i::Integer)
 
 A contiguous "column" view into an underlying
 data layout `data` at nodal point index `i`.

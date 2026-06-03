@@ -6,6 +6,19 @@ import ClimaCore.Fields: Field, FieldStyle
 import ClimaCore.Fields: AbstractFieldStyle, bycolumn
 import ClimaCore.Spaces: AbstractSpace, cuda_synchronize
 
+function mapreduce_cuda(
+    f::F,
+    op::O,
+    arg::DataLayouts.DataLayout;
+    weighted_jacobian = nothing,
+)
+    unweighted_data = Broadcast.broadcasted(f, arg)
+    weighted_data =
+        isnothing(weighted_jacobian) ? unweighted_data :
+        Broadcast.broadcasted(*, unweighted_data, weighted_jacobian)
+    return reduce(op, weighted_data)
+end
+
 function bycolumn(fn, space::AbstractSpace, ::ClimaComms.CUDADevice)
     fn(:)
     return nothing

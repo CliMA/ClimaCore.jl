@@ -534,12 +534,12 @@ end
 """
     write!(
         writer::HDF5Writer,
-        values::DataLayouts.AbstractData,
+        values::DataLayouts.DataLayout,
         name::AbstractString,
         topology::Topologies.AbstractTopology,
     )
 
-Write an object of type `AbstractData` and name `name` to the HDF5 file.
+Write an object of type `DataLayout` and name `name` to the HDF5 file.
 
 The `values` should belong to a `Field` whose `space`'s topology is
 `topology(axes(field))`.
@@ -547,7 +547,7 @@ The `values` should belong to a `Field` whose `space`'s topology is
 function write!(
     writer::HDF5Writer,
     group,
-    values::DataLayouts.AbstractData,
+    values::DataLayouts.DataLayout,
     name::AbstractString,
     topology::Topologies.AbstractTopology,
 )
@@ -574,7 +574,7 @@ end
 """
     _write_mpi!(
         writer::HDF5Writer,
-        data::DataLayouts.AbstractData,
+        data::DataLayouts.DataLayout,
         name::AbstractString,
         nelems,
         local_elem_gidx
@@ -587,7 +587,7 @@ This method should be used for distributed datalayouts.
 """
 function _write_mpi!(
     group,
-    values::DataLayouts.AbstractData,
+    values::DataLayouts.DataLayout,
     name::AbstractString;
     nelems,
     local_elem_gidx,
@@ -613,7 +613,7 @@ end
 """
     _write!(
         writer::HDF5Writer,
-        data::DataLayouts.AbstractData,
+        data::DataLayouts.DataLayout,
         name::AbstractString,
     )
 
@@ -622,7 +622,7 @@ HDF5 file.
 
 This method should be used when this is not a distributed datalayout.
 """
-function _write!(group, values::DataLayouts.AbstractData, name::AbstractString;)
+function _write!(group, values::DataLayouts.DataLayout, name::AbstractString;)
     h_dim = DataLayouts.h_dim(DataLayouts.singleton(values))
     array = parent(values)
     dataset = write_plain_array!(group, array, name)

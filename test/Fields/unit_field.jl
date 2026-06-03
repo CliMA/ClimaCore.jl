@@ -13,7 +13,7 @@ import ClimaCore
 import ClimaCore.InputOutput
 import ClimaCore.Utilities: PlusHalf
 import ClimaCore.DataLayouts
-import ClimaCore.DataLayouts: IJFH
+import ClimaCore.DataLayouts: VIJFH
 import ClimaCore:
     Fields,
     slab,
@@ -62,7 +62,7 @@ end
     device = ClimaComms.device(space)
     ArrayType = ClimaComms.array_type(device)
 
-    data = IJFH{ComplexF64}(ArrayType{Float64}, ones; Nij, Nh = n1 * n2)
+    data = VIJFH{ComplexF64}(ArrayType{Float64}, ones; Nij, Nh = n1 * n2)
     field = Fields.Field(data, space)
 
     @test sum(field) ≈ Complex(1.0, 1.0) * 8.0 * 10.0 rtol = 10eps()
@@ -275,7 +275,7 @@ end
     device = ClimaComms.device(context)
     ArrayType = ClimaComms.array_type(device)
     FT = Spaces.undertype(space)
-    data = IJFH{S}(ArrayType{FT}, ones; Nij, Nh)
+    data = VIJFH{S}(ArrayType{FT}, ones; Nij, Nh)
 
     nt_field = Fields.Field(data, space)
 
@@ -1219,7 +1219,7 @@ end
     hspace = Spaces.SpectralElementSpace2D(
         htopology,
         quad;
-        horizontal_layout_type = DataLayouts.IJHF,
+        horizontal_layout_type = DataLayouts.VIJHF,
     )
     cspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
 

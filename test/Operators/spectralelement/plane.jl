@@ -1,7 +1,6 @@
 using Test
 using StaticArrays
 using ClimaComms
-import ClimaCore.DataLayouts: IJFH, VF
 import ClimaCore:
     Geometry,
     Fields,
