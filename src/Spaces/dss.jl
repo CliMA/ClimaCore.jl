@@ -9,69 +9,28 @@ import ..Topologies:
     dss_local_ghost!,
     dss_ghost!,
     fill_send_buffer!,
-    load_from_recv_buffer!,
-    DSSTypesAll,
-    DSSTypes2D,
-    DSSPerimeterTypes
-
+    load_from_recv_buffer!
 
 perimeter(space::AbstractSpectralElementSpace) = Topologies.Perimeter2D(
     Quadratures.degrees_of_freedom(quadrature_style(space)),
 )
-
 
 """
     create_dss_buffer(data, space)
 
 Creates a [`DSSBuffer`](@ref) for the field data corresponding to `data`
 """
-function create_dss_buffer(
-    data::Union{
-        DataLayouts.IJFH,
-        DataLayouts.IJHF,
-        DataLayouts.VIJFH,
-        DataLayouts.VIJHF,
-    },
-    space,
-)
+create_dss_buffer(data::DataLayouts.VIJHWithF, space) =
+    isone(size(data, 3)) ? nothing :
     create_dss_buffer(
         data,
         topology(space),
         local_geometry_data(space),
         dss_weights(space),
     )
-end
-
-function create_dss_buffer(
-    data::Union{
-        DataLayouts.IFH,
-        DataLayouts.IHF,
-        DataLayouts.VIFH,
-        DataLayouts.VIHF,
-    },
-    space,
-)
-    nothing
-end
 
 """
-    function weighted_dss!(
-        data::Union{
-            DataLayouts.IFH,
-            DataLayouts.IHF,
-            DataLayouts.VIFH,
-            DataLayouts.VIHF,
-            DataLayouts.IJFH,
-            DataLayouts.IJHF,
-            DataLayouts.VIJFH,
-            DataLayouts.VIJHF,
-        },
-        space::Union{
-            AbstractSpectralElementSpace,
-            ExtrudedFiniteDifferenceSpace,
-        },
-        dss_buffer::Union{DSSBuffer, Nothing},
-    )
+    function weighted_dss!(data, space, dss_buffer)
 
 Computes weighted dss of `data`. 
 
@@ -83,30 +42,15 @@ It comprises of the following steps:
 
 3). [`Spaces.weighted_dss_ghost!`](@ref)
 """
-function weighted_dss!(
-    data::DSSTypesAll,
-    space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
-    dss_buffer::Union{DSSBuffer, Nothing},
-)
+function weighted_dss!(data::DataLayouts.VIJHWithF, space, dss_buffer)
     weighted_dss_start!(data, space, dss_buffer)
     weighted_dss_internal!(data, space, dss_buffer)
     weighted_dss_ghost!(data, space, dss_buffer)
     call_post_op_callback() && post_op_callback(data, data, space, dss_buffer)
 end
 
-
-function weighted_dss_prepare!(data, space, dss_buffer::Nothing)
-    return nothing
-end
-
-function weighted_dss_prepare!(
-    data::DSSTypes2D,
-    space::Union{
-        Spaces.SpectralElementSpace2D,
-        Spaces.ExtrudedFiniteDifferenceSpace,
-    },
-    dss_buffer::DSSBuffer,
-)
+function weighted_dss_prepare!(data, space, dss_buffer)
+    isnothing(dss_buffer) && return nothing
     device = ClimaComms.device(topology(space))
     hspace = horizontal_space(space)
     dss_transform!(
@@ -115,39 +59,23 @@ function weighted_dss_prepare!(
         data,
         local_geometry_data(space),
         dss_weights(space),
-        Spaces.perimeter(hspace),
+        perimeter(hspace),
         dss_buffer.perimeter_elems,
     )
     dss_local_ghost!(
         device,
         dss_buffer.perimeter_data,
-        Spaces.perimeter(hspace),
+        perimeter(hspace),
         topology(hspace),
     )
-    fill_send_buffer!(device, dss_buffer; synchronize = false)
+    fill_send_buffer!(device, dss_buffer)
     return nothing
 end
 
 cuda_synchronize(device::ClimaComms.AbstractDevice; kwargs...) = nothing
 
 """
-    weighted_dss_start!(
-        data::Union{
-            DataLayouts.IFH,
-            DataLayouts.IHF,
-            DataLayouts.VIFH,
-            DataLayouts.VIHF,
-            DataLayouts.IJFH,
-            DataLayouts.IJHF,
-            DataLayouts.VIJFH,
-            DataLayouts.VIJHF,
-        },
-        space::Union{
-            AbstractSpectralElementSpace,
-            ExtrudedFiniteDifferenceSpace,
-        },
-        dss_buffer::Union{DSSBuffer, Nothing},
-    )
+    weighted_dss_start!(data, space, dss_buffer)
 
 It comprises of the following steps:
 
@@ -164,14 +92,8 @@ representative ghost vertices which store result of "ghost local" DSS are loaded
 
 4). Start DSS communication with neighboring processes
 """
-function weighted_dss_start!(
-    data::DSSTypes2D,
-    space::Union{
-        Spaces.SpectralElementSpace2D,
-        Spaces.ExtrudedFiniteDifferenceSpace,
-    },
-    dss_buffer::DSSBuffer,
-)
+function weighted_dss_start!(data, space, dss_buffer)
+    isnothing(dss_buffer) && return nothing
     Quadratures.requires_dss(quadrature_style(space)) || return nothing
     sizeof(eltype(data)) > 0 || return nothing
     device = ClimaComms.device(topology(space))
@@ -181,27 +103,8 @@ function weighted_dss_start!(
     return nothing
 end
 
-weighted_dss_start!(data, space, dss_buffer::Nothing) = nothing
-
-
 """
-    weighted_dss_internal!(
-        data::Union{
-            DataLayouts.IFH,
-            DataLayouts.IHF,
-            DataLayouts.VIFH,
-            DataLayouts.VIHF,
-            DataLayouts.IJFH,
-            DataLayouts.IJHF,
-            DataLayouts.VIJFH,
-            DataLayouts.VIJHF,
-        },
-        space::Union{
-            AbstractSpectralElementSpace,
-            ExtrudedFiniteDifferenceSpace,
-        },
-        dss_buffer::DSSBuffer,
-    )
+    weighted_dss_internal!(data, space, dss_buffer)
 
 1). Apply [`Spaces.dss_transform!`](@ref) on interior elements. Local elements are split into interior 
 and perimeter elements to facilitate overlapping of communication with computation.
@@ -210,21 +113,10 @@ and perimeter elements to facilitate overlapping of communication with computati
 
 3). [`Spaces.dss_local!`](@ref) computes the weighted DSS on local vertices and faces.
 """
-weighted_dss_internal!(
-    data::DSSTypesAll,
-    space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
-    dss_buffer::Union{DSSBuffer, Nothing},
-) = weighted_dss_internal!(data, space, horizontal_space(space), dss_buffer)
-
-
-function weighted_dss_internal!(
-    data::DSSTypesAll,
-    space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
-    hspace::AbstractSpectralElementSpace,
-    dss_buffer::Union{DSSBuffer, Nothing},
-)
+function weighted_dss_internal!(data, space, dss_buffer)
     Quadratures.requires_dss(quadrature_style(space)) || return nothing
     sizeof(eltype(data)) > 0 || return nothing
+    hspace = horizontal_space(space)
     device = ClimaComms.device(topology(hspace))
     if hspace isa SpectralElementSpace1D
         dss_1d!(
@@ -241,13 +133,13 @@ function weighted_dss_internal!(
             data,
             local_geometry_data(space),
             dss_weights(space),
-            Spaces.perimeter(hspace),
+            perimeter(hspace),
             dss_buffer.internal_elems,
         )
         dss_local!(
             device,
             dss_buffer.perimeter_data,
-            Spaces.perimeter(hspace),
+            perimeter(hspace),
             topology(hspace),
         )
         dss_untransform!(
@@ -255,32 +147,15 @@ function weighted_dss_internal!(
             dss_buffer,
             data,
             local_geometry_data(space),
-            Spaces.perimeter(hspace),
+            perimeter(hspace),
             dss_buffer.internal_elems,
         )
     end
     return nothing
 end
 
-
 """
-    weighted_dss_ghost!(
-        data::Union{
-            DataLayouts.IFH,
-            DataLayouts.IHF,
-            DataLayouts.VIFH,
-            DataLayouts.VIHF,
-            DataLayouts.IJFH,
-            DataLayouts.IJHF,
-            DataLayouts.VIJFH,
-            DataLayouts.VIJHF,
-        },
-        space::Union{
-            AbstractSpectralElementSpace,
-            ExtrudedFiniteDifferenceSpace,
-        },
-        dss_buffer::Union{DSSBuffer, Nothing},
-    )
+    weighted_dss_ghost!(data, space, dss_buffer)
 
 1). Finish communications.
 
@@ -293,29 +168,18 @@ then scattered to other local vertices corresponding to each unique ghost vertex
 This transforms the DSS'd local vectors back to Covariant12 vectors, and copies the DSS'd data from the
 `perimeter_data` to `data`.
 """
-weighted_dss_ghost!(
-    data::DSSTypesAll,
-    space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
-    dss_buffer::Union{DSSBuffer, Nothing},
-) = weighted_dss_ghost!(data, space, horizontal_space(space), dss_buffer)
-
-
-
-function weighted_dss_ghost!(
-    data::DSSTypes2D,
-    space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
-    hspace::SpectralElementSpace2D,
-    dss_buffer::DSSBuffer,
-)
+function weighted_dss_ghost!(data, space, dss_buffer)
+    isnothing(dss_buffer) && return data
     Quadratures.requires_dss(quadrature_style(space)) || return data
     sizeof(eltype(data)) > 0 || return data
     ClimaComms.finish(dss_buffer.graph_context)
+    hspace = horizontal_space(space)
     device = ClimaComms.device(topology(hspace))
     load_from_recv_buffer!(device, dss_buffer)
     dss_ghost!(
         device,
         dss_buffer.perimeter_data,
-        Spaces.perimeter(hspace),
+        perimeter(hspace),
         topology(hspace),
     )
     dss_untransform!(
@@ -323,10 +187,8 @@ function weighted_dss_ghost!(
         dss_buffer,
         data,
         local_geometry_data(space),
-        Spaces.perimeter(hspace),
+        perimeter(hspace),
         dss_buffer.perimeter_elems,
     )
     return data
 end
-
-weighted_dss_ghost!(data, space, hspace, dss_buffer) = data

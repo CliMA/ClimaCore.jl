@@ -140,13 +140,13 @@ only when the `condition` is true (in this case `has_nans || has_inf`).
 Now, when we run our example, we will see
 ```julia
 julia> renormalized_energy(myrho, myP, myu)
-Infiltrating post_op_callback(::ClimaCore.DataLayouts.IJFH{Float64, 4, Array{Float64, 4}}, ::ClimaCore.DataLayouts.IJFH{Float64, 4, Array{Float64, 4}}, ::Vararg{Any}; kwargs::@Kwargs{})
+Infiltrating post_op_callback(::ClimaCore.DataLayouts.VIJFH{...}, ::ClimaCore.DataLayouts.VIJFH{...}, ::Vararg{Any}; kwargs::@Kwargs{})
   at REPL[40]:4
 infil>
 ```
 Here, we are dropped into a new REPL with full access to the variables in the scope where the `NaN` occurred. However, because of how `post_op_callback`, this is at a low level within `ClimaCore`, which is typically not useful. Hence, the next step is to type `@trace`, which prints out
 ```julia
-[1] post_op_callback(::ClimaCore.DataLayouts.IJFH{…}, ::ClimaCore.DataLayouts.IJFH{…}, ::Vararg{…}; kwargs::@Kwargs{})
+[1] post_op_callback(::ClimaCore.DataLayouts.VIJFH{…}, ::ClimaCore.DataLayouts.VIJFH{…}, ::Vararg{…}; kwargs::@Kwargs{})
     at REPL[40]:4
 [2] post_op_callback
     at REPL[40]:1
@@ -250,7 +250,7 @@ parts of the broadcasted object contains NaNs:
 ```julia
 using StructuredPrinting
 import ClimaCore: DataLayouts
-highlight_nans(x::DataLayouts.AbstractData) = any(y->isnan(y), parent(x));
+highlight_nans(x::DataLayouts.DataLayout) = any(y->isnan(y), parent(x));
 highlight_nans(_) = false;
 bc = Infiltrator.safehouse.args[2]; # we know that argument 2 is the broadcasted object
 (; result) = Infiltrator.safehouse; # get the result

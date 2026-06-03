@@ -36,7 +36,7 @@ ClimaComms.init(ClimaComms.context())
         radius = 10,
         h_elem = 10,
         n_quad_points = 4,
-        horizontal_layout_type = DataLayouts.IJHF,
+        horizontal_layout_type = DataLayouts.VIJHF,
         staggering = CellCenter(),
     )
     grid = Spaces.grid(space)

@@ -206,43 +206,11 @@ function _scan_quadrature_style(quadraturestring::AbstractString, npts)
 end
 
 function _scan_data_layout(layoutstring::AbstractString)
-    @assert layoutstring ∈ (
-        "IJFH",
-        "IJHF",
-        "IJF",
-        "IFH",
-        "IHF",
-        "IF",
-        "VF",
-        "VIJFH",
-        "VIJHF",
-        "VIFH",
-        "VIHF",
-        "DataF",
-    ) "datalayout is $layoutstring"
-    layoutstring == "IJFH" && return DataLayouts.IJFH
-    layoutstring == "IJHF" && return DataLayouts.IJHF
-    layoutstring == "IJF" && return DataLayouts.IJF
-    layoutstring == "IFH" && return DataLayouts.IFH
-    layoutstring == "IHF" && return DataLayouts.IHF
-    layoutstring == "IF" && return DataLayouts.IF
-    layoutstring == "VF" && return DataLayouts.VF
+    @assert layoutstring ∈ ("VIJFH", "VIJHF", "DataF")
     layoutstring == "VIJFH" && return DataLayouts.VIJFH
     layoutstring == "VIJHF" && return DataLayouts.VIJHF
-    layoutstring == "DataF" && return DataLayouts.DataF
-    return DataLayouts.VIFH
+    return DataLayouts.DataF
 end
-
-# for when Nh is in type-domain
-# function Nh_dim(layoutstring::AbstractString)
-#     @assert layoutstring ∈ ("IJFH", "IJF", "IFH", "IF", "VIJFH", "VIFH")
-#     layoutstring == "IJFH" && return 4
-#     layoutstring == "IJF" && return -1
-#     layoutstring == "IFH" && return 3
-#     layoutstring == "IF" && return -1
-#     layoutstring == "VIJFH" && return 5
-#     return 4
-# end
 
 """
     matrix_to_cartesianindices(elemorder_matrix)

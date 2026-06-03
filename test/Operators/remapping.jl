@@ -12,7 +12,6 @@ using ClimaCore:
 using ClimaCore.Operators: local_weights, LinearRemap, remap, remap!
 using ClimaCore.Topologies: Topology2D
 using ClimaCore.Spaces: AbstractSpace
-using ClimaCore.DataLayouts: IJFH
 using IntervalSets, LinearAlgebra, SparseArrays
 
 FT = Float64

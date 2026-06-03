@@ -26,11 +26,6 @@ end
 ClimaComms.context(topology::DeviceIntervalTopology) = DeviceSideContext()
 ClimaComms.device(topology::DeviceIntervalTopology) = DeviceSideDevice()
 
-ClimaComms.device(topology::IntervalTopology) = topology.context.device
-ClimaComms.array_type(topology::IntervalTopology) =
-    ClimaComms.array_type(topology.context.device)
-
-
 function IntervalTopology(
     context::ClimaComms.AbstractCommsContext,
     mesh::Meshes.IntervalMesh,

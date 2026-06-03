@@ -9,8 +9,7 @@ import ClimaCore:
     Operators,
     Spaces,
     Topologies,
-    Quadratures,
-    DataLayouts
+    Quadratures
 using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 
 using Logging
@@ -163,7 +162,7 @@ sol_global = []
 if usempi
     for sol_step in sol.u
         sol_step_values_global =
-            DataLayouts.gather(context, Fields.field_values(sol_step))
+            ClimaComms.gather(context, Fields.field_values(sol_step))
         if ClimaComms.iamroot(context)
             sol_step_global = Fields.Field(sol_step_values_global, global_space)
             push!(sol_global, sol_step_global)

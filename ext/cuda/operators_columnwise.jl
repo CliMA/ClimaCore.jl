@@ -79,7 +79,7 @@ end
     (v,) = CUDA.threadIdx()
     (h, ij) = CUDA.blockIdx()
     (Ni, Nj, _, _, _) = DataLayouts.universal_size(us)
-    Ni * Nj < ij && return CartesianIndex((-1, -1, 1, -1, -1))
+    Ni * Nj < ij && return CartesianIndex((-1, -1, -1, -1))
     @inbounds (i, j) = CartesianIndices((Ni, Nj))[ij].I
-    return CartesianIndex((i, j, 1, v, h))
+    return CartesianIndex((v, i, j, h))
 end

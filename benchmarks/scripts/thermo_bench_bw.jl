@@ -180,7 +180,7 @@ using Test
     )
     x = fill((; ts = zero(TBB.PhaseEquil{FT}), nt_core...), cspace)
     xv = fill((; ts = nt_ts, nt_core...), cspace)
-    (_, Nij, _, Nv, Nh) = size(Fields.field_values(x.ts))
+    (Nv, Nij, _, Nh) = size(Fields.field_values(x.ts))
     us = TBB.UniversalSizesStatic(Nv, Nij, Nh)
     function to_vec(ξ)
         pns = propertynames(ξ)

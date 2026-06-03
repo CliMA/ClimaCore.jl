@@ -19,7 +19,7 @@ NVTX.@annotate function multiple_field_solve!(
     x1 = first(values(x))
     names = MatrixFields.matrix_row_keys(keys(A))
     Nnames = length(names)
-    Ni, Nj, _, _, Nh = size(Fields.field_values(x1))
+    _, Ni, Nj, Nh = size(Fields.field_values(x1))
     sscache = Operators.strip_space(cache)
     mask = Spaces.get_mask(axes(x1))
     ssx = Operators.strip_space(x)
@@ -91,7 +91,7 @@ function multiple_field_solve_kernel!(
         tidx = linear_thread_idx()
         if linear_is_valid_index(tidx, us) && tidx ≤ length(unval(cart_inds))
             (i, j, h, iname) = unval(cart_inds)[tidx].I
-            ui = CartesianIndex((i, j, 1, 1, h))
+            ui = CartesianIndex((1, i, j, h))
             DataLayouts.should_compute(mask, ui) || return nothing
             generated_single_field_solve!(
                 device,

@@ -133,15 +133,6 @@ end
 
 local_geometry_type(::Type{SpectralElementSpaceSlab{Q, G}}) where {Q, G} =
     eltype(G) # calls eltype from DataLayouts
-const SpectralElementSpaceSlab1D =
-    SpectralElementSpaceSlab{Q, DL} where {Q, DL <: DataLayouts.DataSlab1D}
-
-const SpectralElementSpaceSlab2D =
-    SpectralElementSpaceSlab{Q, DL} where {Q, DL <: DataLayouts.DataSlab2D}
-
-nlevels(space::SpectralElementSpaceSlab1D) = 1
-nlevels(space::SpectralElementSpaceSlab2D) = 1
-
 
 """
     Spaces.node_horizontal_length_scale(space::AbstractSpectralElementSpace)

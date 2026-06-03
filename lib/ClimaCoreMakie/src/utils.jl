@@ -86,12 +86,12 @@ end
 Return a triangulation of `space`, as a vector of `GLTriangleFace`s.
 """
 function plot_triangles(space::ClimaCore.Spaces.SpectralElementSpace2D)
-    (Ni, Nj, _, _, Nh) = size(ClimaCore.Spaces.local_geometry_data(space))
+    (_, Ni, Nj, Nh) = size(ClimaCore.Spaces.local_geometry_data(space))
     a, b, c = ClimaCore.Spaces.triangles(Ni, Nj, Nh)
     return GLTriangleFace.(a, b, c)
 end
 function plot_triangles(space::ClimaCore.Spaces.ExtrudedFiniteDifferenceSpace)
-    (Ni, _, _, Nv, Nh) = size(ClimaCore.Spaces.local_geometry_data(space))
+    (Nv, Ni, _, Nh) = size(ClimaCore.Spaces.local_geometry_data(space))
     a, b, c = ClimaCore.Spaces.triangles(Nv, Ni, Nh)
     return GLTriangleFace.(a, b, c)
 end
@@ -102,14 +102,14 @@ end
 Return a triangulation of `space`, as an `3 x n` `Matrix{Int}`
 """
 function plot_triangles_matrix(space::ClimaCore.Spaces.SpectralElementSpace2D)
-    (Ni, Nj, _, _, Nh) = size(ClimaCore.Spaces.local_geometry_data(space))
+    (_, Ni, Nj, Nh) = size(ClimaCore.Spaces.local_geometry_data(space))
     a, b, c = ClimaCore.Spaces.triangles(Ni, Nj, Nh)
     return vcat(a', b', c')
 end
 function plot_triangles_matrix(
     space::ClimaCore.Spaces.ExtrudedFiniteDifferenceSpace,
 )
-    (Ni, _, _, Nv, Nh) = size(ClimaCore.Spaces.local_geometry_data(space))
+    (Nv, Ni, _, Nh) = size(ClimaCore.Spaces.local_geometry_data(space))
     a, b, c = ClimaCore.Spaces.triangles(Nv, Ni, Nh)
     return vcat(a', b', c')
 end

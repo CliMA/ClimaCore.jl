@@ -13,8 +13,7 @@ import ClimaCore:
     Operators,
     Spaces,
     Quadratures,
-    Topologies,
-    DataLayouts
+    Topologies
 
 using ClimaComms
 ClimaComms.@import_required_backends

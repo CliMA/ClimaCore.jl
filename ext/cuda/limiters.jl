@@ -7,7 +7,7 @@ import ClimaCore.Limiters:
     column_massborrow!
 import ClimaCore.Fields
 import ClimaCore: DataLayouts, Spaces, Topologies, Fields
-import ClimaCore.DataLayouts: slab_index, getindex_field, setindex_field!, column
+import ClimaCore.DataLayouts: getindex_field, setindex_field!, column
 using CUDA
 
 function config_threadblock(Nv, Nh)
@@ -57,7 +57,7 @@ function compute_element_bounds_kernel!(limiter, ρq, ρ)
         slab_ρ = slab(ρ, v, h)
         for j in 1:Nj
             for i in 1:Ni
-                q = slab_ρq[slab_index(i, j)] / slab_ρ[slab_index(i, j)]
+                q = slab_ρq[1, i, j, 1] / slab_ρ[1, i, j, 1]
                 if i == 1 && j == 1
                     q_min = q
                     q_max = q
@@ -68,8 +68,8 @@ function compute_element_bounds_kernel!(limiter, ρq, ρ)
             end
         end
         slab_q_bounds = slab(q_bounds, v, h)
-        slab_q_bounds[slab_index(1)] = q_min
-        slab_q_bounds[slab_index(2)] = q_max
+        slab_q_bounds[1] = q_min
+        slab_q_bounds[2] = q_max
     end
     return nothing
 end
@@ -114,18 +114,18 @@ function compute_neighbor_bounds_local_kernel!(
         (; q_bounds_nbr, ghost_buffer, rtol) = limiter
         q_bounds = Base.broadcastable(limiter.q_bounds)
         slab_q_bounds = slab(q_bounds, v, h)
-        q_min = slab_q_bounds[slab_index(1)]
-        q_max = slab_q_bounds[slab_index(2)]
+        q_min = slab_q_bounds[1]
+        q_max = slab_q_bounds[2]
         for lne in
             local_neighbor_elem_offset[h]:(local_neighbor_elem_offset[h + 1] - 1)
             h_nbr = local_neighbor_elem[lne]
             slab_q_bounds = slab(q_bounds, v, h_nbr)
-            q_min = min(q_min, slab_q_bounds[slab_index(1)])
-            q_max = max(q_max, slab_q_bounds[slab_index(2)])
+            q_min = min(q_min, slab_q_bounds[1])
+            q_max = max(q_max, slab_q_bounds[2])
         end
         slab_q_bounds_nbr = slab(q_bounds_nbr, v, h)
-        slab_q_bounds_nbr[slab_index(1)] = q_min
-        slab_q_bounds_nbr[slab_index(2)] = q_max
+        slab_q_bounds_nbr[1] = q_min
+        slab_q_bounds_nbr[2] = q_max
     end
     return nothing
 end

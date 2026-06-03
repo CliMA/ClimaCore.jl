@@ -83,10 +83,10 @@ function columnwise!(
             for j in 1:Nj, i in 1:Ni
                 DataLayouts.should_compute(
                     mask,
-                    CartesianIndex(i, j, 1, 1, h),
+                    CartesianIndex(1, i, j, h),
                 ) || continue
                 for v in 1:ᶠNv
-                    UI = CartesianIndex((i, j, 1, v, h))
+                    UI = CartesianIndex((v, i, j, h))
                     columnwise_kernel!(
                         device,
                         ᶜf,
@@ -216,49 +216,8 @@ end
 
 
 # Drop everything except Nv and S:
-#! format: off
-@inline column_type_params(data::DataLayouts.AbstractData) = column_type_params(typeof(data))
-@inline column_type_params(::Type{DataLayouts.IJFH{S, Nij, A}}) where {S, Nij, A} = (S, )
-@inline column_type_params(::Type{DataLayouts.IJHF{S, Nij, A}}) where {S, Nij, A} = (S, )
-@inline column_type_params(::Type{DataLayouts.IFH{S, Ni, A}}) where {S, Ni, A} = (S, )
-@inline column_type_params(::Type{DataLayouts.IHF{S, Ni, A}}) where {S, Ni, A} = (S, )
-@inline column_type_params(::Type{DataLayouts.DataF{S, A}}) where {S, A} = (S,)
-@inline column_type_params(::Type{DataLayouts.IJF{S, Nij, A}}) where {S, Nij, A} = (S, )
-@inline column_type_params(::Type{DataLayouts.IF{S, Ni, A}}) where {S, Ni, A} = (S, )
-@inline column_type_params(::Type{DataLayouts.VF{S, Nv, A}}) where {S, Nv, A} = (S, Nv)
-@inline column_type_params(::Type{DataLayouts.VIJFH{S, Nv, Nij, A}}) where {S, Nv, Nij, A} = (S, Nv)
-@inline column_type_params(::Type{DataLayouts.VIJHF{S, Nv, Nij, A}}) where {S, Nv, Nij, A} = (S, Nv)
-@inline column_type_params(::Type{DataLayouts.VIFH{S, Nv, Ni, A}}) where {S, Nv, Ni, A} = (S, Nv)
-@inline column_type_params(::Type{DataLayouts.VIHF{S, Nv, Ni, A}}) where {S, Nv, Ni, A} = (S, Nv)
-
-@inline s_column_type_params(::Type{S}, data::DataLayouts.AbstractData) where {S} = s_column_type_params(S, typeof(data))
-@inline s_column_type_params(::Type{S}, ::Type{DataLayouts.IJFH{S′, Nij, A}}) where {S, S′, Nij, A} = (S, )
-@inline s_column_type_params(::Type{S}, ::Type{DataLayouts.IJHF{S′, Nij, A}}) where {S, S′, Nij, A} = (S, )
-@inline s_column_type_params(::Type{S}, ::Type{DataLayouts.IFH{S′, Ni, A}}) where {S, S′, Ni, A} = (S, )
-@inline s_column_type_params(::Type{S}, ::Type{DataLayouts.IHF{S′, Ni, A}}) where {S, S′, Ni, A} = (S, )
-@inline s_column_type_params(::Type{S}, ::Type{DataLayouts.DataF{S′, A}}) where {S, S′, A} = (S,)
-@inline s_column_type_params(::Type{S}, ::Type{DataLayouts.IJF{S′, Nij, A}}) where {S, S′, Nij, A} = (S, )
-@inline s_column_type_params(::Type{S}, ::Type{DataLayouts.IF{S′, Ni, A}}) where {S, S′, Ni, A} = (S, )
-@inline s_column_type_params(::Type{S}, ::Type{DataLayouts.VF{S′, Nv, A}}) where {S, S′, Nv, A} = (S, Nv)
-@inline s_column_type_params(::Type{S}, ::Type{DataLayouts.VIJFH{S′, Nv, Nij, A}}) where {S, S′, Nv, Nij, A} = (S, Nv)
-@inline s_column_type_params(::Type{S}, ::Type{DataLayouts.VIJHF{S′, Nv, Nij, A}}) where {S, S′, Nv, Nij, A} = (S, Nv)
-@inline s_column_type_params(::Type{S}, ::Type{DataLayouts.VIFH{S′, Nv, Ni, A}}) where {S, S′, Nv, Ni, A} = (S, Nv)
-@inline s_column_type_params(::Type{S}, ::Type{DataLayouts.VIHF{S′, Nv, Ni, A}}) where {S, S′, Nv, Ni, A} = (S, Nv)
-#! format: on
-
-# Drop everything except V and F:
-@inline column_singleton(::DataLayouts.IJFH) = DataLayouts.DataFSingleton()
-@inline column_singleton(::DataLayouts.IJHF) = DataLayouts.DataFSingleton()
-@inline column_singleton(::DataLayouts.IFH) = DataLayouts.DataFSingleton()
-@inline column_singleton(::DataLayouts.IHF) = DataLayouts.DataFSingleton()
-@inline column_singleton(::DataLayouts.DataF) = DataLayouts.DataFSingleton()
-@inline column_singleton(::DataLayouts.IJF) = DataLayouts.DataFSingleton()
-@inline column_singleton(::DataLayouts.IF) = DataLayouts.DataFSingleton()
-@inline column_singleton(::DataLayouts.VF) = DataLayouts.VFSingleton()
-@inline column_singleton(::DataLayouts.VIJFH) = DataLayouts.VFSingleton()
-@inline column_singleton(::DataLayouts.VIJHF) = DataLayouts.VFSingleton()
-@inline column_singleton(::DataLayouts.VIFH) = DataLayouts.VFSingleton()
-@inline column_singleton(::DataLayouts.VIHF) = DataLayouts.VFSingleton()
+@inline column_type_params(data) = (eltype(data), DataLayouts.nlevels(data))
+@inline s_column_type_params(::Type{S}, data) where {S} = (S, DataLayouts.nlevels(data))
 
 """
 	rebuild_column(data, lg_arr)

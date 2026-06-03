@@ -124,7 +124,7 @@ function sphere_op_2mul_1add_cuda_kernel!(
         tidx = thread_index()
         if valid_range(tidx, N)
             I = kernel_indexes(tidx, Nv, Nij, Nh)
-            x[I] = D[I] * y[I] + U[I] * y[I + CartesianIndex(1, 0, 0, 0, 0)]
+            x[I] = D[I] * y[I] + U[I] * y[I + CartesianIndex(1, 0, 0, 0)]
         end
     end
     return nothing

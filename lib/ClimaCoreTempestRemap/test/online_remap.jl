@@ -15,10 +15,7 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 reshapes and broadcasts a sparse matrix data array (e.g., output from TempestRemap) into a Field object
 """
 function reshape_sparse_to_field!(field::Fields.Field, in_array::Array, R)
-    field_array = parent(field)
-
-    fill!(field_array, zero(eltype(field_array)))
-    Nf = size(field_array, 3)
+    fill!(Fields.field_values(field), zero(eltype(field)))
 
     f = 1
     for (n, row) in enumerate(R.row_indices)
@@ -27,9 +24,7 @@ function reshape_sparse_to_field!(field::Fields.Field, in_array::Array, R)
             view(R.target_local_idxs[2], n),
             view(R.target_local_idxs[3], n),
         )
-        for f in 1:Nf
-            field_array[it, jt, f, et] .= in_array[row]
-        end
+        Fields.field_values(field)[1, it, jt, et] .= in_array[row]
     end
     # broadcast to the redundant nodes using unweighted dss
     topology = Spaces.topology(axes(field))
@@ -122,7 +117,7 @@ end
         nothing
     end
 
-    ## for test below, apply offline map, read in the resulting field and reshape it to the IJFH format
+    ## for test below, apply offline map, read in the resulting field and reshape it to the VIJFH format
     datafile_out = joinpath(OUTPUT_DIR, "data_out.nc")
     apply_remap(datafile_out, datafile_in, weightfile, ["sinlong"])
 

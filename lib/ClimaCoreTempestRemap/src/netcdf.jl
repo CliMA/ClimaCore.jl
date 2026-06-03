@@ -98,7 +98,7 @@ function def_space_coord(
     coords = Spaces.coordinates_data(space)
 
     for (col, ((i, j), e)) in enumerate(nodes)
-        coord = slab(coords, e)[slab_index(i, j)]
+        coord = slab(coords, e)[1, i, j, 1]
         X[col] = coord.x
         Y[col] = coord.y
     end
@@ -150,7 +150,7 @@ function def_space_coord(
     coords = Spaces.coordinates_data(space)
 
     for (col, ((i, j), e)) in enumerate(nodes)
-        coord = slab(coords, e)[slab_index(i, j)]
+        coord = slab(coords, e)[1, i, j, 1]
         lon[col] = coord.long
         lat[col] = coord.lat
     end
@@ -329,7 +329,7 @@ function Base.setindex!(
     end
     data = Fields.field_values(field)
     for (col, ((i, j), e)) in enumerate(nodes)
-        var[col, extraidx...] = slab(data, e)[slab_index(i, j)]
+        var[col, extraidx...] = slab(data, e)[1, i, j, 1]
     end
     return var
 end
