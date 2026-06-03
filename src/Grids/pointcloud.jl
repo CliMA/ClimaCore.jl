@@ -13,8 +13,9 @@ This is the horizontal component used by a "point cloud" extruded space (N indep
 columns at user-chosen sphere locations).
 
 The `local_geometry` is stored as an `IFH{LG, 1, N}` data layout — one node per
-"element" (`Ni = 1`), N "elements" (`Nh = N`). The horizontal Jacobian is set to 1 and
-`∂x∂ξ` is the 2×2 identity, since horizontal metric terms are not used.
+"element" (`Ni = 1`), N "elements" (`Nh = N`). The horizontal Jacobian `∂x∂ξ` is the
+diagonal matrix `diag(R·π/180, R·cosd(lat)·π/180)` reflecting the sphere metric at
+each point, and `J = R²·cosd(lat)·(π/180)²`.
 """
 struct PointCloudGrid{
     C <: ClimaComms.AbstractCommsContext,
@@ -54,18 +55,20 @@ quadrature_style(::PointCloudGrid) =
     )
 
 Convenience constructor: build a `PointCloudGrid` from a vector of
-`LatLongPoint`s and a sphere `radius`. Coordinates are stored in the
-`local_geometry` field; the horizontal Jacobian is set to 1.
+`LatLongPoint`s and a sphere `radius`. The horizontal metric terms in
+`local_geometry` are set from the sphere geometry at each point:
+`∂x∂ξ = diag(R·π/180, R·cosd(lat)·π/180)`, `J = R²·cosd(lat)·(π/180)²`.
 """
 function PointCloudGrid(
     points::AbstractVector{Geometry.LatLongPoint{FT}};
+    radius::Real,
     device::ClimaComms.AbstractDevice = ClimaComms.device(),
     context::ClimaComms.AbstractCommsContext = ClimaComms.SingletonCommsContext(device),
 ) where {FT}
     @assert context isa ClimaComms.SingletonCommsContext "PointCloudGrid only supports SingletonCommsContext."
 
     N = length(points)
-    global_geometry = Geometry.CartesianGlobalGeometry()
+    global_geometry = Geometry.SphericalGlobalGeometry(FT(radius))
 
     AIdx = Geometry.coordinate_axis(Geometry.LatLongPoint{FT})  # (1, 2)
     LG = Geometry.FullLocalGeometry{
@@ -76,22 +79,29 @@ function PointCloudGrid(
     }
 
     # Ni = 1 (one node per "column element"), Nh = N
-    # TODO: I part looks weird
     local_geometry = DataLayouts.IFH{LG, 1}(Array{FT}, N)
 
-    I2 = SMatrix{2, 2, FT, 4}(one(FT), zero(FT), zero(FT), one(FT))
     ∂x∂ξ_axes = (
         Geometry.LocalAxis{AIdx}(),
         Geometry.CovariantAxis{AIdx}(),
     )
+    deg2rad = FT(π) / 180
 
     for (h, pt) in enumerate(points)
+        # Sphere metric: arc length per degree in each coordinate direction.
+        # ∂x∂ξ is diagonal: (R·π/180) in the lat direction,
+        #                    (R·cosd(lat)·π/180) in the lon direction.
+        s_lat = FT(radius) * deg2rad
+        s_lon = FT(radius) * deg2rad * cosd(pt.lat)
+        J = s_lat * s_lon   # det of diagonal Jacobian
+        ∂x∂ξ_mat = SMatrix{2, 2, FT, 4}(s_lat, zero(FT), zero(FT), s_lon)
+
         lg_slab = slab(local_geometry, h)
         lg_slab[slab_index(1)] = Geometry.LocalGeometry(
             pt,
-            one(FT),   # J  — no horizontal metric scaling
-            one(FT),   # WJ — weight × J
-            Geometry.AxisTensor(∂x∂ξ_axes, I2),
+            J,
+            J,   # WJ — unit quadrature weight × J
+            Geometry.AxisTensor(∂x∂ξ_axes, ∂x∂ξ_mat),
         )
     end
 
