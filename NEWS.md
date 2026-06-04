@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.54
+-------
+
+- Refactor Geometry module [2457](https://github.com/CliMA/ClimaCore.jl/pull/2457)
+
 v0.14.53
 -------
 
