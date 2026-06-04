@@ -4,10 +4,42 @@
 
 abstract type BasisType end
 
-# FIXME: Swap Covariant and Contravariant definitions in future breaking release
-# (current definition is based on how components transform, not basis vectors)
-struct Covariant <: BasisType end     # Basis vector i is given by eⁱ = ∇ξⁱ
-struct Contravariant <: BasisType end # Basis vector i is given by eᵢ = ∂r/∂ξⁱ
+# Bases are named after how their basis vectors transform under a change of
+# generalized coordinates:
+#  - A covariant basis is associated with the vector space V. Its basis
+#    vectors `eᵢ = ∂r/∂ξⁱ` transform linearly with the coordinates.
+#  - A contravariant basis is associated with the dual vector space V*. Its
+#    basis vectors `eⁱ = ∇ξⁱ` transform inversely.
+#
+# Tensors (and vectors) are named after how their components transform. Since
+# components transform opposite to the basis they sit in, a tensor's label
+# is opposite to the label of the basis it uses:
+#  - A covariant tensor `CovariantTensor{1}` has covariant components `vᵢ`.
+#    Each component pairs with an element of the *contravariant* basis `eⁱ`,
+#    so it lives in V*: `v = vᵢ eⁱ`.
+#  - A contravariant tensor `ContravariantTensor{1}` has contravariant
+#    components `vⁱ`. Each component pairs with an element of the *covariant*
+#    basis `eᵢ`, so it lives in V: `v = vⁱ eᵢ`.
+#
+# A vector field at each point of the domain (usually ℝ³) can be represented in
+# either V or V*. A field of `CovariantTensor{1}` maps each point to V*; a field
+# of `ContravariantTensor{1}` maps each point to V. Both representations
+# describe the same physical field, as the underlying vector at each point has
+# the same length and direction in both V and V*. Only the numerical components
+# and the basis differ.
+#
+# In the code below, the `Covariant` / `Contravariant` singletons label the
+# basis used by their like-named tensor alias. So `Basis{Covariant, …}` is
+# the *contravariant* basis `{eⁱ}` of V* (the basis used by a covariant
+# vector), and `Basis{Contravariant, …}` is the *covariant* basis `{eᵢ}` of
+# V. The vector/tensor aliases pair same-name (`CovariantVector` uses
+# `Basis{Covariant, …}` etc.), so user-facing names mirror the mathematical
+# convention above.
+#
+# Source: https://cns.gatech.edu/~predrag/courses/PHYS-6124-12/StGoChap10.pdf
+struct Covariant <: BasisType end     # Basis used by a covariant vector: eⁱ = ∇ξⁱ
+struct Contravariant <: BasisType end # Basis used by a contravariant vector: eᵢ = ∂r/∂ξⁱ
+
 struct Orthonormal <: BasisType end   # Any basis of orthogonal unit vectors
 struct OneScalar <: BasisType end     # Basis for scalar field of a vector space
 
@@ -529,10 +561,15 @@ for I in [(), (1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
     @eval const $(Symbol(:Contravariant, strI, :Axis)) = Basis{Contravariant, $I}
     @eval const $(Symbol(strUVW, :Axis)) = Basis{Orthonormal, $I}
 
-    # Vector aliases. Splatted constructors like `Covariant12Vector(1.0, 2.0)`
-    # are handled by the generic `(::Type{T})(args::Number...)` defined below,
-    # which uses the `@generated tensor_bases(T)` to extract the basis tuple
-    # even when `T` is a UnionAll with free eltype/storage parameters.
+    # A `CovariantNVector` lives in V* and has covariant components `vᵢ`
+    # expressed in the contravariant basis `{eⁱ}`. A `ContravariantNVector`
+    # lives in V and has contravariant components `vⁱ` expressed in the
+    # covariant basis `{eᵢ}`. See the convention block at the top of this
+    # file for the full naming explanation. Splatted constructors like
+    # `Covariant12Vector(1.0, 2.0)` are handled by the generic
+    # `(::Type{T})(args::Number...)` defined below for `T <: Tensor{1}`,
+    # which uses `tensor_bases(T)` to extract the basis tuple even when `T`
+    # is a UnionAll with free eltype/storage parameters.
     @eval const $(Symbol(:Covariant, strI, :Vector)){T} =
         CovariantVector{T, $I, SVector{$N, T}}
     @eval const $(Symbol(:Contravariant, strI, :Vector)){T} =
