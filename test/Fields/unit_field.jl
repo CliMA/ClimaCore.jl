@@ -1090,8 +1090,8 @@ end
         at = Geometry.Tensor(
             components,
             (
-                Geometry.Basis{Geometry.Orthonormal, AIdx}(),
-                Geometry.Basis{Geometry.Covariant, AIdx}(),
+                Geometry.Components{Geometry.Orthonormal, AIdx}(),
+                Geometry.Components{Geometry.Covariant, AIdx}(),
             ),
         )
         local_geometry = Geometry.LocalGeometry(coord, FT(1.0), FT(1.0), at)

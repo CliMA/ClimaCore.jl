@@ -44,7 +44,7 @@ end
     WJ::FT,
     ∂x∂ξ::Tensor{2},
 ) where {C, FT}
-    names = basis_vector_names(axes(∂x∂ξ, 1))
+    names = component_names(axes(∂x∂ξ, 1))
     padded = pad_metric_tensor(∂x∂ξ)
     ∂ξ∂x = inv(padded)
     gⁱʲ = ∂ξ∂x * ∂ξ∂x'

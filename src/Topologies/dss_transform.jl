@@ -123,7 +123,7 @@ Base.@propagate_inbounds dss_untransform(
     ::Type{Geometry.Tensor{1, T, Tuple{B}, S}},
     targ::Geometry.AbstractTensor{1},
     local_geometry::Geometry.LocalGeometry,
-) where {T, B <: Geometry.Basis, S}
+) where {T, B <: Geometry.Components, S}
     # If `targ` already has the destination basis, dss_transform left it
     # untouched and there is nothing to undo. (Required so the workaround
     # below — which assumes dss_transform turned the input into a UVWVector —

@@ -230,8 +230,8 @@ is not necessarily commutative). So, the following are all valid combinations of
 eltype(x), eltype(A), and eltype(b):
 - Number, Number, and Number
 - SVector{N}, SMatrix{N, N}, and SVector{N}
-- Tensor{1} with Basis B1, Tensor{2} (or its adjoint) with bases (B2, dual(B1)),
-  and Tensor{1} with Basis B2
+- Tensor{1} with Components B1, Tensor{2} (or its adjoint) with bases (B2, dual(B1)),
+  and Tensor{1} with Components B2
 - nested type (Tuple or NamedTuple), scalar type (Number, SMatrix, or
   Tensor{2}/adjoint thereof), nested type (Tuple or NamedTuple)
 

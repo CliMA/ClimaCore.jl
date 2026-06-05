@@ -51,8 +51,8 @@ function PointSpace(
         Geometry.Tensor(
             FT(1) * I,
             (
-                Geometry.Basis{Geometry.Orthonormal, AIdx}(),
-                Geometry.Basis{Geometry.Covariant, AIdx}(),
+                Geometry.Components{Geometry.Orthonormal, AIdx}(),
+                Geometry.Components{Geometry.Covariant, AIdx}(),
             ),
         ),
     )

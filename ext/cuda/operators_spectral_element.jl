@@ -364,7 +364,7 @@ Base.@propagate_inbounds function operator_evaluate(
     if eltype(input) <: Number
         return Geometry.Covariant1Vector(∂f∂ξ₁)
     elseif eltype(input) <: Geometry.AbstractTensor{1}
-        tensor_axes = (Geometry.Covariant1Axis(), Geometry.tensor_bases(eltype(input))[1])
+        tensor_axes = (Geometry.Covariant1Axis(), Geometry.tensor_axes(eltype(input))[1])
         tensor_components = hcat(parent(∂f∂ξ₁))'
         return Geometry.Tensor(tensor_components, tensor_axes)
     else
@@ -397,7 +397,7 @@ Base.@propagate_inbounds function operator_evaluate(
     if eltype(input) <: Number
         return Geometry.Covariant12Vector(∂f∂ξ₁, ∂f∂ξ₂)
     elseif eltype(input) <: Geometry.AbstractTensor{1}
-        tensor_axes = (Geometry.Covariant12Axis(), Geometry.tensor_bases(eltype(input))[1])
+        tensor_axes = (Geometry.Covariant12Axis(), Geometry.tensor_axes(eltype(input))[1])
         tensor_components =
             hcat(parent(∂f∂ξ₁), parent(∂f∂ξ₂))'
         return Geometry.Tensor(tensor_components, tensor_axes)

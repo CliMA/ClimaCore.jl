@@ -89,8 +89,8 @@ function fd_geometry_data(
     CT = Geometry.ZPoint{FT}
     AIdx = (3,)
     ∂x∂ξ_bases = (
-        Geometry.Basis{Geometry.Orthonormal, AIdx}(),
-        Geometry.Basis{Geometry.Covariant, AIdx}(),
+        Geometry.Components{Geometry.Orthonormal, AIdx}(),
+        Geometry.Components{Geometry.Covariant, AIdx}(),
     )
     LG = Geometry.LocalGeometryType(CT, FT, AIdx)
     (Ni, Nj, Nk, Nv, Nh) = size(face_coordinates)

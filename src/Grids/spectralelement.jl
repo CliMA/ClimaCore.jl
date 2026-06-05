@@ -71,8 +71,8 @@ function _SpectralElementGrid1D(
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
     _∂x∂ξ_bases = (
-        Geometry.Basis{Geometry.Orthonormal, AIdx}(),
-        Geometry.Basis{Geometry.Covariant, AIdx}(),
+        Geometry.Components{Geometry.Orthonormal, AIdx}(),
+        Geometry.Components{Geometry.Covariant, AIdx}(),
     )
     LG = Geometry.LocalGeometryType(CoordType, FT, AIdx)
     local_geometry = horizontal_layout_type{LG, Nq}(Array{FT}, Nh)
@@ -539,11 +539,11 @@ function local_geometry_at_nodal_point(
         ∂f∂ξ_at_nodal_point(FT, quadrature_style, autodiff_metric, i, j) do ξ
             Geometry.components(Meshes.coordinates(topology.mesh, elem, ξ))
         end,
-        (Geometry.UVWAxis(), Geometry.Basis{Geometry.Covariant, AIdx}()),
+        (Geometry.UVWAxis(), Geometry.Components{Geometry.Covariant, AIdx}()),
     )
     u = Geometry.LatLongPoint(x, global_geometry)
     G = Geometry.local_to_cartesian(global_geometry, u)
-    ∂u∂ξ = Geometry.project(Geometry.Basis{Geometry.Orthonormal, AIdx}(), G' * ∂x∂ξ)
+    ∂u∂ξ = Geometry.project(Geometry.Components{Geometry.Orthonormal, AIdx}(), G' * ∂x∂ξ)
     return u, ∂u∂ξ
 end
 function local_geometry_at_nodal_point(
@@ -564,8 +564,8 @@ function local_geometry_at_nodal_point(
             Geometry.components(Meshes.coordinates(topology.mesh, elem, ξ))
         end,
         (
-            Geometry.Basis{Geometry.Orthonormal, AIdx}(),
-            Geometry.Basis{Geometry.Covariant, AIdx}(),
+            Geometry.Components{Geometry.Orthonormal, AIdx}(),
+            Geometry.Components{Geometry.Covariant, AIdx}(),
         ),
     )
     return u, ∂u∂ξ
@@ -599,12 +599,12 @@ function compute_surface_geometry(
     end
     sWJ = norm(n)
     n = n / sWJ
-    n = Geometry.project(_orth_basis(local_geometry), n)
+    n = Geometry.project(_orth_axis(local_geometry), n)
     return Geometry.SurfaceGeometry(sWJ, n)
 end
 
-@inline _orth_basis(::Geometry.LocalGeometry{I}) where {I} =
-    Geometry.Basis{Geometry.Orthonormal, I}()
+@inline _orth_axis(::Geometry.LocalGeometry{I}) where {I} =
+    Geometry.Components{Geometry.Orthonormal, I}()
 
 function compute_dss_weights(local_geometry, topology, quadrature_style)
     Quadratures.requires_dss(quadrature_style) || return nothing

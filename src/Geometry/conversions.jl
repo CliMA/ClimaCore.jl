@@ -1,21 +1,21 @@
-## Basis-type conversion helpers (private)
+## Components-type conversion helpers (private)
 
 # Metrics are identity-padded to full (1,2,3) shape on `LocalGeometry`, so
 # every conversion is a single matvec — names outside `lg`'s geometry `I`
 # ride the identity block of the padded matrix automatically. Same-type
 # pairs are explicit no-ops; cross-type pairs pick the appropriate cached
 # matrix.
-@inline _to_basis_type(::Contravariant, v::ContravariantTensor, ::LocalGeometry) = v
-@inline _to_basis_type(::Covariant, v::CovariantTensor, ::LocalGeometry) = v
-@inline _to_basis_type(::Orthonormal, v::OrthonormalTensor, ::LocalGeometry) = v
-@inline _to_basis_type(::Contravariant, v::CovariantTensor, lg::LocalGeometry) = lg.gⁱʲ * v
-@inline _to_basis_type(::Covariant, v::ContravariantTensor, lg::LocalGeometry) = lg.gᵢⱼ * v
-@inline _to_basis_type(::Contravariant, v::OrthonormalTensor, lg::LocalGeometry) =
+@inline _to_components_type(::Contravariant, v::ContravariantTensor, ::LocalGeometry) = v
+@inline _to_components_type(::Covariant, v::CovariantTensor, ::LocalGeometry) = v
+@inline _to_components_type(::Orthonormal, v::OrthonormalTensor, ::LocalGeometry) = v
+@inline _to_components_type(::Contravariant, v::CovariantTensor, lg::LocalGeometry) = lg.gⁱʲ * v
+@inline _to_components_type(::Covariant, v::ContravariantTensor, lg::LocalGeometry) = lg.gᵢⱼ * v
+@inline _to_components_type(::Contravariant, v::OrthonormalTensor, lg::LocalGeometry) =
     lg.∂ξ∂x * v
-@inline _to_basis_type(::Covariant, v::OrthonormalTensor, lg::LocalGeometry) = lg.∂x∂ξ' * v
-@inline _to_basis_type(::Orthonormal, v::ContravariantTensor, lg::LocalGeometry) =
+@inline _to_components_type(::Covariant, v::OrthonormalTensor, lg::LocalGeometry) = lg.∂x∂ξ' * v
+@inline _to_components_type(::Orthonormal, v::ContravariantTensor, lg::LocalGeometry) =
     lg.∂x∂ξ * v
-@inline _to_basis_type(::Orthonormal, v::CovariantTensor, lg::LocalGeometry) = lg.∂ξ∂x' * v
+@inline _to_components_type(::Orthonormal, v::CovariantTensor, lg::LocalGeometry) = lg.∂ξ∂x' * v
 
 ## project(basis, v, local_geometry)  — 3-argument form using metric
 
@@ -27,12 +27,12 @@ change of basis type via the metric if necessary.  Missing components are
 zero-filled; extra components are dropped (no error even if they are nonzero).
 Identity-metric passthrough on dimensions orthogonal to `local_geometry`'s
 geometry (e.g. dim 3 in a horizontal `(1,2)` `LocalGeometry`) is handled by
-`_to_basis_type`, which preserves every source name in the converted result; the
+`_to_components_type`, which preserves every source name in the converted result; the
 final `reshape` then zero-fills any remaining destination names that aren't
 in the source.
 """
-@inline project(b::Basis{BT}, v::AbstractTensor, lg::LocalGeometry) where {BT} =
-    reshape(_to_basis_type(BT(), v, lg), (b, Base.tail(axes(v))...))
+@inline project(b::Components{BT}, v::AbstractTensor, lg::LocalGeometry) where {BT} =
+    reshape(_to_components_type(BT(), v, lg), (b, Base.tail(axes(v))...))
 
 """
     transform(basis, V, local_geometry)
@@ -40,18 +40,18 @@ in the source.
 Like `project(basis, V, local_geometry)`, but throws an `InexactError` if any
 dropped component is nonzero.
 """
-@inline transform(b::Basis{BT}, v::AbstractTensor, lg::LocalGeometry) where {BT} =
-    transform(b, _to_basis_type(BT(), v, lg))
+@inline transform(b::Components{BT}, v::AbstractTensor, lg::LocalGeometry) where {BT} =
+    transform(b, _to_components_type(BT(), v, lg))
 
 ## Vector type constructors with LocalGeometry
 
-# Standard same-dimension conversions: forward to the private `_to_basis_type`.
+# Standard same-dimension conversions: forward to the private `_to_components_type`.
 @inline ContravariantVector(u::AbstractTensor{1}, lg::LocalGeometry) =
-    _to_basis_type(Contravariant(), u, lg)
+    _to_components_type(Contravariant(), u, lg)
 @inline CovariantVector(u::AbstractTensor{1}, lg::LocalGeometry) =
-    _to_basis_type(Covariant(), u, lg)
+    _to_components_type(Covariant(), u, lg)
 @inline LocalVector(u::AbstractTensor{1}, lg::LocalGeometry) =
-    _to_basis_type(Orthonormal(), u, lg)
+    _to_components_type(Orthonormal(), u, lg)
 
 ## Scalar constructor for 1D vectors (e.g. WVector(1.0, lg))
 
@@ -68,7 +68,7 @@ for (BT, VecType) in (
     # General: convert to full basis type, then project to requested dimensions
     @eval @inline (::Type{<:$VecType{<:Any, I}})(
         u::AbstractTensor{1}, lg::LocalGeometry,
-    ) where {I} = project(Basis{$BT, I}(), $VecType(u, lg))
+    ) where {I} = project(Components{$BT, I}(), $VecType(u, lg))
 
     # Identity: already in the right basis type and dimension
     @eval @inline (::Type{<:$VecType{<:Any, I}})(
@@ -101,7 +101,7 @@ Return type when taking the divergence of a field of `V`.
 @inline divergence_result_type(::Type{V}) where {V <: AbstractTensor{1}} = eltype(V)
 @inline divergence_result_type(
     ::Type{Tensor{2, FT, Tuple{A1, A2}, S}},
-) where {FT, A1, A2 <: AbstractBasis, S <: StaticMatrix{S1, S2}} where {S1, S2} =
+) where {FT, A1, A2 <: AbstractComponents, S <: StaticMatrix{S1, S2}} where {S1, S2} =
     Tensor{1, FT, Tuple{A2}, SVector{S2, FT}}
 
 """
@@ -118,7 +118,7 @@ end
     ::Type{Tensor{1, T, Tuple{A}, SVector{N, T}}},
 ) where {I, T, A, N}
     M = length(I)
-    Tensor{2, T, Tuple{Basis{Covariant, I}, A}, SMatrix{M, N, T, M * N}}
+    Tensor{2, T, Tuple{Components{Covariant, I}, A}, SMatrix{M, N, T, M * N}}
 end
 
 """

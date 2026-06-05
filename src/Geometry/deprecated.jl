@@ -1,7 +1,7 @@
 # Backwards-compatibility shims for the pre-`Tensor` Geometry API.
 #
 # The PR collapses `AxisTensor` / `AxisVector` / `Axis2Tensor` and the
-# `*Axis{I}` aliases into the single `Tensor` / `Basis` types. Downstream
+# `*Axis{I}` aliases into the single `Tensor` / `Components` types. Downstream
 # packages (ClimaAtmos, user code) that haven't migrated yet can keep
 # referring to the old names through the aliases below.
 #
@@ -17,10 +17,10 @@ const AxisTensor{T, N, B, S} = Tensor{N, T, B, S}
 const AxisVector{T, A, S} = Tensor{1, T, Tuple{A}, S}
 const Axis2Tensor{T, B, S} = Tensor{2, T, B, S}
 
-const CovariantAxis{I} = Basis{Covariant, I}
-const ContravariantAxis{I} = Basis{Contravariant, I}
-const LocalAxis{I} = Basis{Orthonormal, I}
-const CartesianAxis{I} = Basis{Orthonormal, I}
+const CovariantAxis{I} = Components{Covariant, I}
+const ContravariantAxis{I} = Components{Contravariant, I}
+const LocalAxis{I} = Components{Orthonormal, I}
+const CartesianAxis{I} = Components{Orthonormal, I}
 
 @inline AxisTensor(bases::Tuple, components) = Tensor(components, bases)
 @inline components(x::AbstractTensor) = parent(x)

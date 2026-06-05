@@ -1,124 +1,140 @@
-##############################################
-## Basis Vectors in Generalized Coordinates ##
-##############################################
+####################################################
+## Tensor Components in Generalized Coordinates   ##
+####################################################
 
-abstract type BasisType end
+abstract type ComponentsType end
 
-# Bases are named after how their basis vectors transform under a change of
-# generalized coordinates:
-#  - A covariant basis is associated with the vector space V. Its basis
-#    vectors `eᵢ = ∂r/∂ξⁱ` transform linearly with the coordinates.
-#  - A contravariant basis is associated with the dual vector space V*. Its
-#    basis vectors `eⁱ = ∇ξⁱ` transform inversely.
+# A `Components{T <: ComponentsType, names}` labels a tensor axis by the
+# variance of its components. Variance refers to the way components scale under
+# a change of generalized coordinates ξⁱ, whose two reciprocal bases they
+# multiply:
+#  - the tangent basis `eᵢ = ∂r/∂ξⁱ`, tangent to the coordinate lines: spans V,
+#    transforms linearly with the coordinates.
+#  - the dual basis `eⁱ = ∇ξⁱ`, with `eⁱ · eⱼ = δⁱⱼ`: spans V*, transforms
+#    inversely.
+
+# A tensor is named after the `ComponentsType` of its first axis:
+#  - A `CovariantTensor`'s first axis is covariant, and its components `vᵢ`
+#    multiply the dual basis; for a vector, `v = vᵢ eⁱ`, v ∈ V*. 
+#  - A `ContravariantTensor`'s first axis is contravariant, and its components
+#    `vⁱ` multiply the tangent basis; for a vector, `v = vⁱ eᵢ`, v ∈ V.
+
+# Precisely (Stone & Goldbart): given two bases `eⱼ` and `e′ᵢ` over the same
+# space, expand one in the other - `eⱼ = aⁱⱼ e′ᵢ` (10.1), for some matrix `a`. A
+# vector `v` is invariant (only its components change with the basis), so the
+# new components `v′ⁱ` follow from the old `vʲ`: 
+#       `v = v′ⁱ e′ᵢ = vʲ eⱼ = vʲ aⁱⱼ e′ᵢ` 
+# and comparing coefficients of `e′ᵢ` gives `v′ⁱ = aⁱⱼ vʲ` (10.4). The same
+# matrix `a` appears in both laws but in opposite directions, since 10.1 writes
+# the old basis via the new, 10.4 writes the new components via the old. The
+# components vary inversely or contravariantly to the basis, cancelling its
+# change to keep `v = vⁱ eᵢ` fixed. Covariant components are projections onto
+# the basis, `vᵢ = v · eᵢ`, so substituting `eᵢ = aʲᵢ e′ⱼ` gives `vᵢ = aʲᵢ (v ·
+# e′ⱼ) = aʲᵢ v′ⱼ` (10.6) - the same form as 10.1, so they vary with the basis.
+
+# In the code, these two laws are the two `ComponentsType`s: a
+# `Components{Contravariant}` axis stores the `vⁱ` (10.4), a
+# `Components{Covariant}` axis stores the `vᵢ` (10.6). A `Tensor`'s first axis
+# is one such `Components`: a `ContravariantVector` is a rank-1 `Tensor` over
+# `Components{Contravariant}` is a ``, a `CovariantVector` is one over
+# `Components{Covariant}`.
+
+# Both forms describe the same physical vector at each point of the domain
+# (usually ℝ³) - identical length and direction, differing only in their
+# numerical components and the basis those components are multiplied by.
+
+# Changing an axis's component type (`Components{Covariant}` ⟺
+# `Components{Contravariant}`) raises or lowers an index with the metric `gᵢⱼ =
+# eᵢ · eⱼ` - `vᵢ = gᵢⱼ vʲ` to lower, `vⁱ = gⁱʲ vⱼ` to raise (`gⁱʲ` the inverse)
+# - which comes from a `LocalGeometry`; see `project` / `transform` in
+# conversions.jl. Reordering, dropping, or zero-filling the component `names`
+# within a single component type needs no metric and is what `reshape` does.
 #
-# Tensors (and vectors) are named after how their components transform. Since
-# components transform opposite to the basis they sit in, a tensor's label
-# is opposite to the label of the basis it uses:
-#  - A covariant tensor `CovariantTensor{1}` has covariant components `vᵢ`.
-#    Each component pairs with an element of the *contravariant* basis `eⁱ`,
-#    so it lives in V*: `v = vᵢ eⁱ`.
-#  - A contravariant tensor `ContravariantTensor{1}` has contravariant
-#    components `vⁱ`. Each component pairs with an element of the *covariant*
-#    basis `eᵢ`, so it lives in V: `v = vⁱ eᵢ`.
-#
-# A vector field at each point of the domain (usually ℝ³) can be represented in
-# either V or V*. A field of `CovariantTensor{1}` maps each point to V*; a field
-# of `ContravariantTensor{1}` maps each point to V. Both representations
-# describe the same physical field, as the underlying vector at each point has
-# the same length and direction in both V and V*. Only the numerical components
-# and the basis differ.
-#
-# In the code below, the `Covariant` / `Contravariant` singletons label the
-# basis used by their like-named tensor alias. So `Basis{Covariant, …}` is
-# the *contravariant* basis `{eⁱ}` of V* (the basis used by a covariant
-# vector), and `Basis{Contravariant, …}` is the *covariant* basis `{eᵢ}` of
-# V. The vector/tensor aliases pair same-name (`CovariantVector` uses
-# `Basis{Covariant, …}` etc.), so user-facing names mirror the mathematical
-# convention above.
-#
-# Source: https://cns.gatech.edu/~predrag/courses/PHYS-6124-12/StGoChap10.pdf
-struct Covariant <: BasisType end     # Basis used by a covariant vector: eⁱ = ∇ξⁱ
-struct Contravariant <: BasisType end # Basis used by a contravariant vector: eᵢ = ∂r/∂ξⁱ
+# Source: M. Stone and P. Goldbart, Mathematics for Physics (Cambridge
+# University Press, Cambridge 2004),
+# https://cns.gatech.edu/~predrag/courses/PHYS-6124-12/StGoChap10.pdf
+struct Covariant <: ComponentsType end     # covariant components vᵢ = v · eᵢ
+struct Contravariant <: ComponentsType end # contravariant components vⁱ = v · eⁱ
 
-struct Orthonormal <: BasisType end   # Any basis of orthogonal unit vectors
-struct OneScalar <: BasisType end     # Basis for scalar field of a vector space
+struct Orthonormal <: ComponentsType end   # components in an orthonormal basis (co = contra)
+struct OneScalar <: ComponentsType end     # the trivial scalar axis (a covector's row)
 
-dual_basis_type(::Covariant) = Contravariant()
-dual_basis_type(::Contravariant) = Covariant()
-dual_basis_type(::Orthonormal) = Orthonormal()
-dual_basis_type(::OneScalar) = OneScalar()
+dual_components_type(::Covariant) = Contravariant()
+dual_components_type(::Contravariant) = Covariant()
+dual_components_type(::Orthonormal) = Orthonormal()
+dual_components_type(::OneScalar) = OneScalar()
 
-abstract type AbstractBasis end
+abstract type AbstractComponents end
 
 """
-    Basis{T <: BasisType, names}()
-    Basis(basis_type::BasisType, names::Tuple)
+    Components{T <: ComponentsType, names}()
+    Components(components_type::ComponentsType, names::Tuple)
 
 Type-level description of a single tensor axis. The parameter `T` selects the
-kind of basis ([`Covariant`](@ref), [`Contravariant`](@ref),
+component convention ([`Covariant`](@ref), [`Contravariant`](@ref),
 [`Orthonormal`](@ref), or [`OneScalar`](@ref)), and `names` is a tuple of
-identifiers for the basis vectors along the axis (typically dimension indices
+identifiers for the components along the axis (typically dimension indices
 like `(1, 3)` for the ξ¹/ξ³ directions, or `(nothing,)` for the scalar row
-of a covector; see [`ScalarBasis`](@ref)).
+of a covector; see [`ScalarComponents`](@ref)).
 
-A `Basis` is a singleton: all information lives in the type parameters, so
+A `Components` is a singleton: all information lives in the type parameters, so
 instances are free at runtime and available for multiple dispatch. Named aliases
-such as `Covariant13Axis`, `UWAxis`, and `ScalarBasis` are defined for every
+such as `Covariant13Axis`, `UWAxis`, and `ScalarComponents` are defined for every
 supported dimension combination.
 
 # Role in `reshape`
 
-`Basis` objects (as opposed to bare `BasisType`s) carry the basis-vector
+`Components` objects (as opposed to bare `ComponentsType`s) carry the component
 names, so they are what lets `reshape` reorder, drop, or zero-fill components
-along an axis. Passing `Bases` to `reshape` cannot change the underlying
-`BasisType` of a concrete `Tensor`; for that, use the basis-conversion
+along an axis. Passing `Axes` to `reshape` cannot change the underlying
+`ComponentsType` of a concrete `Tensor`; for that, use the component-conversion
 helpers in `conversions.jl` (e.g. `project`, `transform`), which apply the
 appropriate metric from a `LocalGeometry`.
 
 # Examples
 ```julia
 julia> Covariant13Axis()
-Covariant13Basis()
+Covariant13Components()
 
 julia> length(Covariant13Axis())
 2
 
 julia> dual(Covariant13Axis())
-Contravariant13Basis()
+Contravariant13Components()
 
-# reshape(tensor, (Basis, ...)) reorders and zero-fills by `names`:
+# reshape(tensor, (Components, ...)) reorders and zero-fills by `names`:
 julia> v = Covariant12Vector(1.0, 2.0);
 
 julia> reshape(v, (Covariant123Axis(),))         # zero-fill the missing u₃
-Tensor([1.0, 2.0, 0.0], (Covariant123Basis(),))
+Tensor([1.0, 2.0, 0.0], (Covariant123Components(),))
 
 julia> reshape(v, (Covariant2Axis(),))           # drop u₁, keep u₂
-Tensor([2.0], (Covariant2Basis(),))
+Tensor([2.0], (Covariant2Components(),))
 ```
 """
-struct Basis{T <: BasisType, names} <: AbstractBasis end
-const ScalarBasis = Basis{OneScalar, (nothing,)} # Used in row axes of covectors
+struct Components{T <: ComponentsType, names} <: AbstractComponents end
+const ScalarComponents = Components{OneScalar, (nothing,)} # Used in row axes of covectors
 
-Basis(::T, names) where {T} =
-    unrolled_allunique(names) ? Basis{T, names}() :
-    throw(ArgumentError("Basis vector names are not all unique: $names"))
-Basis(::OneScalar, names) =
-    names == (nothing,) ? ScalarBasis() :
+Components(::T, names) where {T} =
+    unrolled_allunique(names) ? Components{T, names}() :
+    throw(ArgumentError("Component names are not all unique: $names"))
+Components(::OneScalar, names) =
+    names == (nothing,) ? ScalarComponents() :
     throw(ArgumentError("OneScalar basis must contain a single unnamed scalar"))
 
-basis_type(::Basis{T}) where {T} = T()
-basis_vector_names(::Basis{<:Any, names}) where {names} = names
+components_type(::Components{T}) where {T} = T()
+component_names(::Components{<:Any, names}) where {names} = names
 
-dual(b::Basis) = Basis(dual_basis_type(basis_type(b)), basis_vector_names(b))
+dual(b::Components) = Components(dual_components_type(components_type(b)), component_names(b))
 
-Base.length(b::Basis) = length(basis_vector_names(b))
+Base.length(b::Components) = length(component_names(b))
 
 # Extend internal Base.unitrange to support the default show(io, mime, ::Tensor)
-Base.unitrange(b::Basis) = Base.OneTo(length(b))
+Base.unitrange(b::Components) = Base.OneTo(length(b))
 
-Base.show(io::IO, b::Basis) =
-    print(io, typeof(basis_type(b)), join(basis_vector_names(b)), "Basis()")
-Base.show(io::IO, ::ScalarBasis) = print(io, "ScalarBasis()")
+Base.show(io::IO, b::Components) =
+    print(io, typeof(components_type(b)), join(component_names(b)), "Components()")
+Base.show(io::IO, ::ScalarComponents) = print(io, "ScalarComponents()")
 
 no_metric_error(T1, T2) =
     throw(DimensionMismatch("Metric is needed for change of basis: $T1 vs $T2"))
@@ -130,29 +146,29 @@ check_same_type(::OneScalar, ::T) where {T} = scalar_error(T)
 check_same_type(::T, ::OneScalar) where {T} = scalar_error(T)
 check_same_type(::OneScalar, ::OneScalar) = true
 
-combine_bases(b::B, ::B) where {B <: Basis} = b
-combine_bases(b1::Basis, b2::Basis) =
-    check_same_type(basis_type(b1), basis_type(b2)) &&
-    Basis(
-        basis_type(b1),
-        unrolled_unique((basis_vector_names(b1)..., basis_vector_names(b2)...)),
+combine_components(b::B, ::B) where {B <: Components} = b
+combine_components(b1::Components, b2::Components) =
+    check_same_type(components_type(b1), components_type(b2)) &&
+    Components(
+        components_type(b1),
+        unrolled_unique((component_names(b1)..., component_names(b2)...)),
     )
-combine_bases(b::Basis, bases::Basis...) =
-    unrolled_reduce(combine_bases, bases; init = b)
-function overlap_bases(b1::Basis, b2::Basis)
-    check_same_type(basis_type(b1), basis_type(b2))
-    names2 = basis_vector_names(b2)
-    overlap = unrolled_filter(n -> unrolled_in(n, names2), basis_vector_names(b1))
-    return Basis(basis_type(b1), overlap)
+combine_components(b::Components, bases::Components...) =
+    unrolled_reduce(combine_components, bases; init = b)
+function overlap_components(b1::Components, b2::Components)
+    check_same_type(components_type(b1), components_type(b2))
+    names2 = component_names(b2)
+    overlap = unrolled_filter(n -> unrolled_in(n, names2), component_names(b1))
+    return Components(components_type(b1), overlap)
 end
 
-# Indices of vectors in src_basis matching the vectors in dest_basis, with
-# `nothing` denoting vectors present in dest_basis but missing from src_basis
-function matching_basis_vector_indices(dest_basis, src_basis)
-    check_same_type(basis_type(dest_basis), basis_type(src_basis))
+# Indices of vectors in src_axis matching the vectors in dest_axis, with
+# `nothing` denoting vectors present in dest_axis but missing from src_axis
+function matching_component_indices(dest_axis, src_axis)
+    check_same_type(components_type(dest_axis), components_type(src_axis))
     return unrolled_map(
-        Base.Fix2(unrolled_findfirst, basis_vector_names(src_basis)) ∘ ==,
-        basis_vector_names(dest_basis),
+        Base.Fix2(unrolled_findfirst, component_names(src_axis)) ∘ ==,
+        component_names(dest_axis),
     )
 end
 
@@ -160,20 +176,20 @@ end
 ## Tensors in Generalized Coordinates ##
 ########################################
 
-const AbstractBases{N} = NTuple{N, AbstractBasis}
-const Bases{N} = NTuple{N, Basis}
-const BasisTypes{N} = NTuple{N, BasisType}
+const AbstractAxes{N} = NTuple{N, AbstractComponents}
+const Axes{N} = NTuple{N, Components}
+const ComponentsTypes{N} = NTuple{N, ComponentsType}
 
 # Generic tensor whose components can be expressed in different bases; stores
 # its bases as a type parameter to facilitate basis-dependent multiple dispatch
-abstract type AbstractTensor{N, T, B <: AbstractBases{N}} <: AbstractArray{T, N} end
+abstract type AbstractTensor{N, T, B <: AbstractAxes{N}} <: AbstractArray{T, N} end
 
 """
-    Tensor(components, bases::NTuple{N, Basis})
-    Tensor(s::UniformScaling, bases::NTuple{2, Basis})
+    Tensor(components, bases::NTuple{N, Components})
+    Tensor(s::UniformScaling, bases::NTuple{2, Components})
 
 `N`-dimensional tensor whose entries in `components` are interpreted with
-respect to the given `bases`. Each entry of `bases` is a [`Basis`](@ref), and
+respect to the given `bases`. Each entry of `bases` is a [`Components`](@ref), and
 the shape of `components` must match `length.(bases)`. The bases are
 stored as a type parameter so that operations can dispatch on the kind of
 basis (covariant, contravariant, orthonormal, or scalar) at compile time.
@@ -184,21 +200,21 @@ colon-indexing yields a smaller `Tensor` over the remaining non-colon axes.
 
 # Shapes that `Tensor` takes in practice
 
-- `Tensor{1}` (a vector): `components::SVector`, `bases::Tuple{Basis}`.
-- `Tensor{2}` covector (a row-vector): the first axis is [`ScalarBasis`](@ref)
+- `Tensor{1}` (a vector): `components::SVector`, `bases::Tuple{Components}`.
+- `Tensor{2}` covector (a row-vector): the first axis is [`ScalarComponents`](@ref)
   and `components::Adjoint{T, SVector}`. This is what `v'` produces for a
   `Tensor{1}` `v`.
 - `Tensor{2}` square tensor: `components::SMatrix`.
 
 The `UniformScaling` constructor is a convenience that converts
 `s = λ * I` (where `λ = s.λ` is the scalar stored in Julia's
-`LinearAlgebra.UniformScaling`) into an `SMatrix` of the appropriate size —
+`LinearAlgebra.UniformScaling`) into an `SMatrix` of the appropriate size -
 e.g., `Tensor(2I, (b, b))` builds a diagonal tensor with `2` on the diagonal.
 
 # Role in `reshape`
 
-`reshape(x::Tensor, bases::NTuple{N, Basis})` changes basis-vector
-*names* along each axis, zero-filling gaps. Changing the `BasisType` of a
+`reshape(x::Tensor, bases::NTuple{N, Components})` changes basis-vector
+*names* along each axis, zero-filling gaps. Changing the `ComponentsType` of a
 concrete `Tensor` is not possible through `reshape` alone; attempting it
 throws a `DimensionMismatch`:
 
@@ -213,7 +229,7 @@ which apply the appropriate metric from a `LocalGeometry`.
 # Examples
 ```julia
 julia> v = Covariant12Vector(1.0, 2.0)
-Tensor([1.0, 2.0], (Covariant12Basis(),))
+Tensor([1.0, 2.0], (Covariant12Components(),))
 
 julia> parent(v)
 2-element SVector{2, Float64} with indices SOneTo(2):
@@ -221,18 +237,16 @@ julia> parent(v)
  2.0
 
 julia> axes(v)
-(Covariant12Basis(),)
+(Covariant12Components(),)
 
 julia> v[1], v.u₁                                # indexed and named access
 (1.0, 1.0)
 
 julia> reshape(v, (Covariant123Axis(),))         # names-only reshape
-Tensor([1.0, 2.0, 0.0], (Covariant123Basis(),))
+Tensor([1.0, 2.0, 0.0], (Covariant123Components(),))
 ```
 """
-# Tensor represented by its components in a specific set of bases, which can be
-# reshaped to have new basis_vector_names, but cannot be given new BasisTypes
-struct Tensor{N, T, B <: Bases{N}, C} <: AbstractTensor{N, T, B}
+struct Tensor{N, T, B <: Axes{N}, C} <: AbstractTensor{N, T, B}
     components::C
     bases::B
 end
@@ -245,7 +259,7 @@ Tensor(components::C, bases::B) where {C, B} =
                              bases, $(unrolled_map(length, bases))"))
 
 # Allow UniformScaling as components for square 2-tensors (converted into SMatrix)
-function Tensor(s::UniformScaling, bases::NTuple{2, Basis})
+function Tensor(s::UniformScaling, bases::NTuple{2, Components})
     N1 = length(bases[1])
     N2 = length(bases[2])
     N1 == N2 ||
@@ -260,16 +274,15 @@ Base.axes(x::Tensor) = x.bases
 @inline _unwrap(t::UnionAll) = _unwrap(t.body)
 @inline _unwrap(t::DataType) = t
 
-@inline tensor_bases(::Type{T}) where {T <: Tensor} =
+@inline tensor_axes(::Type{T}) where {T <: Tensor} =
     _unwrap(T).parameters[3].instance
-
 
 Base.zero(x::Tensor) = zero(typeof(x))
 Base.one(x::Tensor) = one(typeof(x))
 
 Base.zero(::Type{Tensor{N, T, B, C}}) where {N, T, B, C} =
     Tensor(zero(C), B.instance)
-# The Covector representation (Tensor{2} with ScalarBasis row) stores its
+# The Covector representation (Tensor{2} with ScalarComponents row) stores its
 # components as an `Adjoint{T, SVector}`; since that type has no type-level
 # zero, we unwrap to the SVector, zero it, then re-wrap with adjoint.
 Base.zero(::Type{Tensor{N, T, B, Adjoint{T, P}}}) where {N, T, B, P} =
@@ -299,16 +312,16 @@ Base.@propagate_inbounds Base.setindex(x::Tensor, v, indices::Integer...) =
 
 const TensorIndex = Union{Colon, Integer}
 
-function bases_at_colons(bases, indices)
-    basis_index_pairs = unrolled_map(tuple, bases, indices)
-    basis_colon_pairs = unrolled_filter(==(Colon()) ∘ last, basis_index_pairs)
-    return unrolled_map(first, basis_colon_pairs)
+function axes_at_colons(bases, indices)
+    axis_index_pairs = unrolled_map(tuple, bases, indices)
+    axis_colon_pairs = unrolled_filter(==(Colon()) ∘ last, axis_index_pairs)
+    return unrolled_map(first, axis_colon_pairs)
 end
 
 Base.@propagate_inbounds Base.getindex(x::Tensor, indices::TensorIndex...) =
-    Tensor(parent(x)[indices...], bases_at_colons(axes(x), indices))
+    Tensor(parent(x)[indices...], axes_at_colons(axes(x), indices))
 Base.@propagate_inbounds Base.view(x::Tensor, indices::TensorIndex...) =
-    Tensor(view(parent(x), indices...), bases_at_colons(axes(x), indices))
+    Tensor(view(parent(x), indices...), axes_at_colons(axes(x), indices))
 
 #############################################
 ## Metric Terms in Generalized Coordinates ##
@@ -317,7 +330,7 @@ Base.@propagate_inbounds Base.view(x::Tensor, indices::TensorIndex...) =
 """
     pad_metric_tensor(∂x∂ξ::Tensor{2})
 
-Pads an N×N metric tensor with axes `(Basis{Orthonormal, I}, Basis{Covariant, I})`
+Pads an N×N metric tensor with axes `(Components{Orthonormal, I}, Components{Covariant, I})`
 to a full 3×3 tensor with axes `(UVWAxis, Covariant123Axis)`, putting `1`
 on diagonal entries for dimensions outside `I` and `0` on cross-coupling
 entries. The padded form encodes the "identity metric in directions
@@ -326,15 +339,15 @@ orthogonal to `I`" convention as actual matrix entries, so a single matvec
 logic. Idempotent for `I == (1, 2, 3)`.
 """
 function pad_metric_tensor(∂x∂ξ::Tensor{2})
-    src_names = basis_vector_names(axes(∂x∂ξ, 1))
+    src_names = component_names(axes(∂x∂ξ, 1))
     src_names == (1, 2, 3) && return ∂x∂ξ
-    full_bases = (UVWAxis(), Covariant123Axis())
+    full_axes = (UVWAxis(), Covariant123Axis())
     # `reshape` to the full bases zero-fills rows/cols whose name isn't in
     # `src_names`. We then add `1` on diagonal entries at dims not in
     # `src_names` to recover the identity-padding convention.
-    padded_zeros = reshape(∂x∂ξ, full_bases)
+    padded_zeros = reshape(∂x∂ξ, full_axes)
     iso = _orthogonal_identity(Val(src_names), eltype(∂x∂ξ))
-    return Tensor(parent(padded_zeros) + iso, full_bases)
+    return Tensor(parent(padded_zeros) + iso, full_axes)
 end
 
 # 3×3 SMatrix with `1` on the diagonal at positions outside `src_names`,
@@ -356,42 +369,42 @@ end
 #################################
 
 const AbstractCovector =
-    AbstractTensor{2, <:Any, <:Tuple{ScalarBasis, AbstractBasis}}
-const Covector = Tensor{2, <:Any, <:Tuple{ScalarBasis, Basis}}
+    AbstractTensor{2, <:Any, <:Tuple{ScalarComponents, AbstractComponents}}
+const Covector = Tensor{2, <:Any, <:Tuple{ScalarComponents, Components}}
 
 #####################################
-## Modifying the Bases of a Tensor ##
+## Modifying the Axes of a Tensor ##
 #####################################
 
 check_ndims(x, N) =
     ndims(x) == N ||
     throw(DimensionMismatch("Cannot reshape $(ndims(x))-tensor into $N-tensor"))
 
-# Change the basis_vector_names, and, if possible, change the BasisTypes as well
-function Base.reshape(x::Tensor, bases::Bases)
+# Change the component_names, and, if possible, change the ComponentsTypes as well
+function Base.reshape(x::Tensor, bases::Axes)
     check_ndims(x, length(bases))
     axes(x) == bases && return x
     components_constructor = SArray{Tuple{unrolled_map(length, bases)...}, eltype(x)}
     component_indices = unrolled_product(
-        unrolled_map(matching_basis_vector_indices, bases, axes(x))...,
+        unrolled_map(matching_component_indices, bases, axes(x))...,
     )
     component_values = unrolled_map(component_indices) do indices
         unrolled_any(isnothing, indices) ? zero(eltype(x)) : x[indices...]
     end
     return Tensor(components_constructor(component_values), bases)
 end
-Base.reshape(x::AbstractTensor, bases::Basis...) = reshape(x, bases)
+Base.reshape(x::AbstractTensor, bases::Components...) = reshape(x, bases)
 
-# Change the BasisTypes without constraining the basis_vector_names
-Base.reshape(x::Tensor, types::BasisTypes) =
+# Change the ComponentsTypes without constraining the component_names
+Base.reshape(x::Tensor, types::ComponentsTypes) =
     check_ndims(x, length(types)) &&
-    unrolled_map(basis_type, axes(x)) == types ? x :
+    unrolled_map(components_type, axes(x)) == types ? x :
     throw(DimensionMismatch("Metric is needed for change of basis: \
-                             $(unrolled_map(basis_type, axes(x))) vs $types"))
-Base.reshape(x::AbstractTensor, types::BasisType...) = reshape(x, types)
+                             $(unrolled_map(components_type, axes(x))) vs $types"))
+Base.reshape(x::AbstractTensor, types::ComponentsType...) = reshape(x, types)
 
-# Change all bases to a single BasisType
-Base.reshape(x::AbstractTensor, type::BasisType) =
+# Change all bases to a single ComponentsType
+Base.reshape(x::AbstractTensor, type::ComponentsType) =
     reshape(x, ntuple(Returns(type), Val(ndims(x))))
 
 reshape_for_norm(x::AbstractTensor) = reshape(x, Orthonormal())
@@ -405,7 +418,7 @@ apply_f(f, x::Tensor) = Tensor(f(parent(x)), axes(x))
 
 function reshape_and_apply_f(f::F, args...) where {F}
     unrolled_foreach(Base.Fix2(check_ndims, ndims(args[1])), args)
-    bases = unrolled_map(combine_bases, unrolled_map(axes, args)...)
+    bases = unrolled_map(combine_components, unrolled_map(axes, args)...)
     components = f(unrolled_map(x -> parent(reshape(x, bases)), args)...)
     components isa AbstractArray || return components  # return scalar values
     return Tensor(components, bases)               # add bases to non-scalars
@@ -416,11 +429,11 @@ Base.map(f::F, args::AbstractTensor...) where {F} =
     reshape_and_apply_f((xs...) -> map(f, xs...), args...)
 
 # The contracted-axis basis for `x * y`.
-new_basis_for_product(x, y) = overlap_bases(axes(x, ndims(x)), dual(axes(y, 1)))
+new_components_for_product(x, y) = overlap_components(axes(x, ndims(x)), dual(axes(y, 1)))
 
-x_and_y_bases_for_product(x, y) = (
-    Base.setindex(axes(x), new_basis_for_product(x, y), ndims(x)),
-    Base.setindex(axes(y), dual(new_basis_for_product(x, y)), 1),
+x_and_y_axes_for_product(x, y) = (
+    Base.setindex(axes(x), new_components_for_product(x, y), ndims(x)),
+    Base.setindex(axes(y), dual(new_components_for_product(x, y)), 1),
 )
 
 ###################################
@@ -449,7 +462,7 @@ Base.:\(a::Number, x::Tensor{N, T, B, <:Adjoint}) where {N, T, B} =
     Tensor(adjoint(a \ adjoint(parent(x))), axes(x))
 
 Base.adjoint(x::Covector) = Tensor(parent(x)', (axes(x, 2),))
-Base.adjoint(x::Tensor{1}) = Tensor(parent(x)', (ScalarBasis(), axes(x, 1)))
+Base.adjoint(x::Tensor{1}) = Tensor(parent(x)', (ScalarComponents(), axes(x, 1)))
 Base.adjoint(x::Tensor{2}) = Tensor(parent(x)', (axes(x, 2), axes(x, 1)))
 
 Base.inv(x::Tensor{2}) =
@@ -459,7 +472,7 @@ function Base.:^(x::AbstractTensor{2}, p::Integer)
     p == 1 && return x
     p < 0 && return inv(x)^(-p)
     p == 0 && return Tensor(one(parent(x)), (dual(axes(x, 2)), axes(x, 2)))
-    bases = (dual(new_basis_for_product(x, x)), new_basis_for_product(x, x))
+    bases = (dual(new_components_for_product(x, x)), new_components_for_product(x, x))
     return apply_f(Base.Fix2(^, p), reshape(x, bases))
 end
 
@@ -494,15 +507,15 @@ Base.isapprox(x::AbstractTensor, y::AbstractTensor; kwargs...) =
 Base.:*(::AbstractTensor{1}, ::AbstractTensor) =
     throw(ArgumentError("Adjoint is needed to multiply a vector by a tensor"))
 function Base.:*(x::AbstractTensor{2}, y::AbstractTensor)
-    (x_bases, y_bases) = x_and_y_bases_for_product(x, y)
-    components = parent(reshape(x, x_bases)) * parent(reshape(y, y_bases))
+    (x_axes, y_axes) = x_and_y_axes_for_product(x, y)
+    components = parent(reshape(x, x_axes)) * parent(reshape(y, y_axes))
     return Tensor(components, Base.setindex(axes(y), axes(x, 1), 1))
 end
 
 Base.:*(x::AbstractCovector, y::AbstractTensor{1}) = dot(x', y)
 function dot(x::AbstractTensor{1}, y::AbstractTensor{1})
-    (x_bases, y_bases) = x_and_y_bases_for_product(x, y)
-    return dot(parent(reshape(x, x_bases)), parent(reshape(y, y_bases)))
+    (x_axes, y_axes) = x_and_y_axes_for_product(x, y)
+    return dot(parent(reshape(x, x_axes)), parent(reshape(y, y_axes)))
 end
 
 Base.:*(x::Tensor{1}, y::Covector) =
@@ -532,22 +545,22 @@ coordinate_axis(::Type{<:LatLongPoint}) = (1, 2)
 coordinate_axis(coord::AbstractPoint) = coordinate_axis(typeof(coord))
 
 # Generic vector/tensor type aliases
-const CovariantVector{T, I, S} = Tensor{1, T, Tuple{Basis{Covariant, I}}, S}
-const ContravariantVector{T, I, S} = Tensor{1, T, Tuple{Basis{Contravariant, I}}, S}
-const LocalVector{T, I, S} = Tensor{1, T, Tuple{Basis{Orthonormal, I}}, S}
+const CovariantVector{T, I, S} = Tensor{1, T, Tuple{Components{Covariant, I}}, S}
+const ContravariantVector{T, I, S} = Tensor{1, T, Tuple{Components{Contravariant, I}}, S}
+const LocalVector{T, I, S} = Tensor{1, T, Tuple{Components{Orthonormal, I}}, S}
 
 # Union types for dispatch
 const CovariantTensor = Union{
-    Tensor{1, <:Any, <:Tuple{Basis{Covariant}}},
-    Tensor{2, <:Any, <:Tuple{Basis{Covariant}, <:AbstractBasis}},
+    Tensor{1, <:Any, <:Tuple{Components{Covariant}}},
+    Tensor{2, <:Any, <:Tuple{Components{Covariant}, <:AbstractComponents}},
 }
 const ContravariantTensor = Union{
-    Tensor{1, <:Any, <:Tuple{Basis{Contravariant}}},
-    Tensor{2, <:Any, <:Tuple{Basis{Contravariant}, <:AbstractBasis}},
+    Tensor{1, <:Any, <:Tuple{Components{Contravariant}}},
+    Tensor{2, <:Any, <:Tuple{Components{Contravariant}, <:AbstractComponents}},
 }
 const OrthonormalTensor = Union{
-    Tensor{1, <:Any, <:Tuple{Basis{Orthonormal}}},
-    Tensor{2, <:Any, <:Tuple{Basis{Orthonormal}, <:AbstractBasis}},
+    Tensor{1, <:Any, <:Tuple{Components{Orthonormal}}},
+    Tensor{2, <:Any, <:Tuple{Components{Orthonormal}, <:AbstractComponents}},
 }
 
 # Concrete axis and vector aliases for all dimension combinations
@@ -556,10 +569,10 @@ for I in [(), (1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
     N = length(I)
     strUVW = isempty(I) ? "Null" : join(map(i -> [:U, :V, :W][i], I))
 
-    # Axis aliases (Basis singletons)
-    @eval const $(Symbol(:Covariant, strI, :Axis)) = Basis{Covariant, $I}
-    @eval const $(Symbol(:Contravariant, strI, :Axis)) = Basis{Contravariant, $I}
-    @eval const $(Symbol(strUVW, :Axis)) = Basis{Orthonormal, $I}
+    # Axis aliases (Components singletons)
+    @eval const $(Symbol(:Covariant, strI, :Axis)) = Components{Covariant, $I}
+    @eval const $(Symbol(:Contravariant, strI, :Axis)) = Components{Contravariant, $I}
+    @eval const $(Symbol(strUVW, :Axis)) = Components{Orthonormal, $I}
 
     # A `CovariantNVector` lives in V* and has covariant components `vᵢ`
     # expressed in the contravariant basis `{eⁱ}`. A `ContravariantNVector`
@@ -568,7 +581,7 @@ for I in [(), (1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
     # file for the full naming explanation. Splatted constructors like
     # `Covariant12Vector(1.0, 2.0)` are handled by the generic
     # `(::Type{T})(args::Number...)` defined below for `T <: Tensor{1}`,
-    # which uses `tensor_bases(T)` to extract the basis tuple even when `T`
+    # which uses `tensor_axes(T)` to extract the basis tuple even when `T`
     # is a UnionAll with free eltype/storage parameters.
     @eval const $(Symbol(:Covariant, strI, :Vector)){T} =
         CovariantVector{T, $I, SVector{$N, T}}
@@ -578,7 +591,7 @@ for I in [(), (1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
         LocalVector{T, $I, SVector{$N, T}}
     @eval const $(Symbol(:Cartesian, strI, :Vector)){T} =
         LocalVector{T, $I, SVector{$N, T}}
-    @eval const $(Symbol(:Cartesian, strI, :Axis)) = Basis{Orthonormal, $I}
+    @eval const $(Symbol(:Cartesian, strI, :Axis)) = Components{Orthonormal, $I}
 end
 
 # Named property access for vectors (e.g., v.u₁, v.u², v.u)
@@ -586,13 +599,13 @@ _symbols(::Covariant) = (:u₁, :u₂, :u₃)
 _symbols(::Contravariant) = (:u¹, :u², :u³)
 _symbols(::Orthonormal) = (:u, :v, :w)
 
-Base.propertynames(x::Tensor{1}) = _symbols(basis_type(x.bases[1]))
+Base.propertynames(x::Tensor{1}) = _symbols(components_type(x.bases[1]))
 
 # `unrolled_findfirst` walks the compile-time `I` tuple, so the search
 # inlines to a flat chain of `name === :u_k` comparisons that fold to a
 # direct `parent(x)[idx]` read for the matching name or `zero(T)`.
 @inline function Base.getproperty(
-    x::Tensor{1, T, <:Tuple{Basis{BT, I}}}, name::Symbol,
+    x::Tensor{1, T, <:Tuple{Components{BT, I}}}, name::Symbol,
 ) where {T, BT, I}
     name === :components && return getfield(x, :components)
     name === :bases && return getfield(x, :bases)
@@ -605,7 +618,7 @@ Base.propertynames(x::Tensor{1}) = _symbols(basis_type(x.bases[1]))
 end
 
 (::Type{T})(args::Number...) where {T <: Tensor{1}} =
-    Tensor(SVector(args...), tensor_bases(T))
+    Tensor(SVector(args...), tensor_axes(T))
 
 """
     project(basis, v)
@@ -615,12 +628,12 @@ Project the first axis of vector/tensor `v` onto `basis`, zero-filling
 components not present in the source. When `local_geometry` is provided,
 performs a change of basis type (e.g., Covariant → Contravariant) via the metric.
 """
-@inline project(b::Basis, v::AbstractTensor{1}) = reshape(v, (b,))
-@inline project(b::Basis, v::AbstractTensor{2}) = reshape(v, (b, axes(v, 2)))
-@inline function project(b::Basis, v::AbstractTensor{2}, b2::Basis)
+@inline project(b::Components, v::AbstractTensor{1}) = reshape(v, (b,))
+@inline project(b::Components, v::AbstractTensor{2}) = reshape(v, (b, axes(v, 2)))
+@inline function project(b::Components, v::AbstractTensor{2}, b2::Components)
     reshape(v, (b, b2))
 end
-@inline project(v::AbstractTensor{2}, b::Basis) = reshape(v, (axes(v, 1), b))
+@inline project(v::AbstractTensor{2}, b::Components) = reshape(v, (axes(v, 1), b))
 
 """
     transform(basis, v)
@@ -628,13 +641,13 @@ end
 Transform the first axis of vector or 2-tensor `v` to `basis`. Unlike
 `project`, throws an `InexactError` if any dropped component is nonzero.
 """
-@inline function transform(b::Basis, v::AbstractTensor{1})
+@inline function transform(b::Components, v::AbstractTensor{1})
     result = reshape(v, (b,))
     # Check that no nonzero components were dropped. `unrolled_all` over a
     # static index tuple lets the compiler elide the check entirely when
     # `src_names ⊆ dest_names` (so every iteration's left disjunct is `true`).
-    src_names = basis_vector_names(axes(v, 1))
-    dest_names = basis_vector_names(b)
+    src_names = component_names(axes(v, 1))
+    dest_names = component_names(b)
     pv = parent(v)
     indices = ntuple(identity, Val(length(src_names)))
     unrolled_all(indices) do n
@@ -642,12 +655,12 @@ Transform the first axis of vector or 2-tensor `v` to `basis`. Unlike
     end || throw(InexactError(:transform, typeof(b), v))
     return result
 end
-@inline function transform(b::Basis, v::AbstractTensor{2})
+@inline function transform(b::Components, v::AbstractTensor{2})
     result = reshape(v, (b, axes(v, 2)))
     # Same idea as the Tensor{1} case, with an inner unrolled_all over the
     # row entries: a dropped row only passes if every column entry is zero.
-    src_names = basis_vector_names(axes(v, 1))
-    dest_names = basis_vector_names(b)
+    src_names = component_names(axes(v, 1))
+    dest_names = component_names(b)
     pv = parent(v)
     rows = ntuple(identity, Val(length(src_names)))
     cols = ntuple(identity, Val(size(pv, 2)))
@@ -675,8 +688,8 @@ const ⊗ = outer
 # Always returns a `UVWVector`, regardless of which orthonormal sub-bases the
 # inputs occupy (UV × W, U × VW, UVW × UVW, etc.).
 function cross(
-    x::Tensor{1, <:Any, <:Tuple{Basis{Orthonormal}}},
-    y::Tensor{1, <:Any, <:Tuple{Basis{Orthonormal}}},
+    x::Tensor{1, <:Any, <:Tuple{Components{Orthonormal}}},
+    y::Tensor{1, <:Any, <:Tuple{Components{Orthonormal}}},
 )
     a = reshape(x, (UVWAxis(),))
     b = reshape(y, (UVWAxis(),))

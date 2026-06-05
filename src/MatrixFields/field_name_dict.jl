@@ -193,9 +193,9 @@ function get_internal_entry(
     elseif T <: Geometry.Covector &&
            name_pair[1] == @name() &&
            is_child_name(name_pair[2], @name(components.data))
-        # A Covector (Tensor{2} with a ScalarBasis row axis) has no row
+        # A Covector (Tensor{2} with a ScalarComponents row axis) has no row
         # sub-components. Collapse the row axis with index 1 so we return
-        # the scalar directly instead of a Tensor{1}(ScalarBasis) slice
+        # the scalar directly instead of a Tensor{1}(ScalarComponents) slice
         internal_col_name =
             extract_internal_name(name_pair[2], @name(components.data))
         col_index = extract_first(internal_col_name)
@@ -391,7 +391,7 @@ function field_offset_and_type(
             throw(KeyError(full_key))
         (n_rows, n_cols) =
             S <: Geometry.AbstractTensor ?
-            map(length, Geometry.tensor_bases(S)) : map(length, axes(S))
+            map(length, Geometry.tensor_axes(S)) : map(length, axes(S))
         (remaining_offset, end_type, index_method) = field_offset_and_type(
             (drop_first(internal_row_name), drop_first(internal_col_name)),
             T,
@@ -497,10 +497,10 @@ function get_scalar_keys(::Type{T}, ::Val{FT}) where {T, FT}
     elseif T <: BandMatrixRow
         return get_scalar_keys(eltype(T), Val(FT))
     elseif T <: Geometry.Covector
-        # A Covector is a Tensor{2} with a ScalarBasis on the row axis; the
+        # A Covector is a Tensor{2} with a ScalarComponents on the row axis; the
         # row field (e.g. a scalar like c.ρ) has no sub-components, so only
         # the column key gets a component index appended.
-        return unrolled_map(1:length(Geometry.tensor_bases(T)[2])) do col_component
+        return unrolled_map(1:length(Geometry.tensor_axes(T)[2])) do col_component
             (
                 @name(),
                 append_internal_name(
@@ -510,8 +510,8 @@ function get_scalar_keys(::Type{T}, ::Val{FT}) where {T, FT}
             )
         end
     elseif T <: Geometry.Tensor{2}
-        return unrolled_flatmap(1:length(Geometry.tensor_bases(T)[1])) do row_component
-            unrolled_map(1:length(Geometry.tensor_bases(T)[2])) do col_component
+        return unrolled_flatmap(1:length(Geometry.tensor_axes(T)[1])) do row_component
+            unrolled_map(1:length(Geometry.tensor_axes(T)[2])) do col_component
                 append_internal_name.(
                     Ref(@name(components.data)),
                     (FieldName(row_component), FieldName(col_component)),

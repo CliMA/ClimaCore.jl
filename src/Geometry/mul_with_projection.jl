@@ -16,19 +16,19 @@ mul_with_projection(x::Tensor{2}, y::AbstractTensor, lg) =
     x * project(dual(axes(x, 2)), y, lg)
 
 # Construct a Tensor type from element type and bases tuple type
-tensor_type(::Type{T}, ::Type{Tuple{B1}}) where {T, B1 <: Basis} =
+tensor_type(::Type{T}, ::Type{Tuple{B1}}) where {T, B1 <: Components} =
     Tensor{1, T, Tuple{B1}, SVector{length(B1.instance), T}}
-function tensor_type(::Type{T}, ::Type{Tuple{B1, B2}}) where {T, B1 <: Basis, B2 <: Basis}
+function tensor_type(::Type{T}, ::Type{Tuple{B1, B2}}) where {T, B1 <: Components, B2 <: Components}
     N1 = length(B1.instance)
     N2 = length(B2.instance)
     return Tensor{2, T, Tuple{B1, B2}, SMatrix{N1, N2, T, N1 * N2}}
 end
 # Covector storage uses Adjoint{T, SVector} rather than SMatrix{1, N}
 function tensor_type(
-    ::Type{T}, ::Type{Tuple{ScalarBasis, B2}},
-) where {T, B2 <: Basis}
+    ::Type{T}, ::Type{Tuple{ScalarComponents, B2}},
+) where {T, B2 <: Components}
     N2 = length(B2.instance)
-    return Tensor{2, T, Tuple{ScalarBasis, B2}, Adjoint{T, SVector{N2, T}}}
+    return Tensor{2, T, Tuple{ScalarComponents, B2}, Adjoint{T, SVector{N2, T}}}
 end
 
 basis1(::Type{<:AbstractTensor{2, <:Any, <:Tuple{B, Any}}}) where {B} = B
@@ -36,7 +36,7 @@ basis2(::Type{<:AbstractTensor{2, <:Any, <:Tuple{Any, B}}}) where {B} = B
 
 recursively_find_dual_axes_for_projection(
     ::Type{X},
-) where {X <: Tensor{2}} = dual(Geometry.tensor_bases(X)[2])
+) where {X <: Tensor{2}} = dual(Geometry.tensor_axes(X)[2])
 @inline function recursively_find_dual_axes_for_projection(::Type{X}) where {X}
     Y = eltype(X)
     Y === X && return nothing
