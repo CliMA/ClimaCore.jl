@@ -1091,7 +1091,7 @@ end
             components,
             (
                 Geometry.Basis{Geometry.Orthonormal, AIdx}(),
-                Geometry.Basis{Geometry.Covariant, AIdx}(),
+                Geometry.Basis{Geometry.DualBasis, AIdx}(),
             ),
         )
         local_geometry = Geometry.LocalGeometry(coord, FT(1.0), FT(1.0), at)

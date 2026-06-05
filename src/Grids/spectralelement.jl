@@ -72,7 +72,7 @@ function _SpectralElementGrid1D(
 
     _∂x∂ξ_bases = (
         Geometry.Basis{Geometry.Orthonormal, AIdx}(),
-        Geometry.Basis{Geometry.Covariant, AIdx}(),
+        Geometry.Basis{Geometry.DualBasis, AIdx}(),
     )
     LG = Geometry.LocalGeometryType(CoordType, FT, AIdx)
     local_geometry = horizontal_layout_type{LG, Nq}(Array{FT}, Nh)
@@ -539,7 +539,7 @@ function local_geometry_at_nodal_point(
         ∂f∂ξ_at_nodal_point(FT, quadrature_style, autodiff_metric, i, j) do ξ
             Geometry.components(Meshes.coordinates(topology.mesh, elem, ξ))
         end,
-        (Geometry.UVWAxis(), Geometry.Basis{Geometry.Covariant, AIdx}()),
+        (Geometry.UVWAxis(), Geometry.Basis{Geometry.DualBasis, AIdx}()),
     )
     u = Geometry.LatLongPoint(x, global_geometry)
     G = Geometry.local_to_cartesian(global_geometry, u)
@@ -565,7 +565,7 @@ function local_geometry_at_nodal_point(
         end,
         (
             Geometry.Basis{Geometry.Orthonormal, AIdx}(),
-            Geometry.Basis{Geometry.Covariant, AIdx}(),
+            Geometry.Basis{Geometry.DualBasis, AIdx}(),
         ),
     )
     return u, ∂u∂ξ

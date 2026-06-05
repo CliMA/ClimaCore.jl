@@ -70,14 +70,14 @@ end
         Float64,
         Tuple{
             Geometry.Basis{Geometry.Orthonormal, (1, 2)},
-            Geometry.Basis{Geometry.Covariant, (1, 2)},
+            Geometry.Basis{Geometry.DualBasis, (1, 2)},
         },
         SMatrix{2, 2, Float64, 4},
     }
     components = SMatrix{2, 2, Float64, 4}([4.0 0.0; 0.0 5.0])
     bases = (
         Geometry.Basis{Geometry.Orthonormal, (1, 2)}(),
-        Geometry.Basis{Geometry.Covariant, (1, 2)}(),
+        Geometry.Basis{Geometry.DualBasis, (1, 2)}(),
     )
     ats = T(components, bases)
     s = sprint(show, ats)
@@ -86,7 +86,7 @@ end
     if !Sys.iswindows()
         @test occursin("Tensor(", s)
         @test occursin("Orthonormal", s)
-        @test occursin("Covariant", s)
+        @test occursin("DualBasis", s)
     end
 end
 

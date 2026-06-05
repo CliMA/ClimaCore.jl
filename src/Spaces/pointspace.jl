@@ -52,7 +52,7 @@ function PointSpace(
             FT(1) * I,
             (
                 Geometry.Basis{Geometry.Orthonormal, AIdx}(),
-                Geometry.Basis{Geometry.Covariant, AIdx}(),
+                Geometry.Basis{Geometry.DualBasis, AIdx}(),
             ),
         ),
     )

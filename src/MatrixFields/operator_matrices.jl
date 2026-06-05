@@ -352,7 +352,7 @@ const CT3{T} = Geometry.Contravariant3Vector{T}
 # Covector (row-vector) type for C3: result of adjoint(C3{T}(x))
 const C3Cov{T} = Geometry.Tensor{
     2, T,
-    Tuple{Geometry.ScalarBasis, Geometry.Basis{Geometry.Covariant, (3,)}},
+    Tuple{Geometry.ScalarBasis, Geometry.Basis{Geometry.DualBasis, (3,)}},
     Adjoint{T, SVector{1, T}},
 }
 const CT12_CT12{T} = Geometry.Tensor{

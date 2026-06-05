@@ -4,47 +4,41 @@
 
 abstract type BasisType end
 
-# Bases are named after how their basis vectors transform under a change of
-# generalized coordinates:
-#  - A covariant basis is associated with the vector space V. Its basis
-#    vectors `eᵢ = ∂r/∂ξⁱ` transform linearly with the coordinates.
-#  - A contravariant basis is associated with the dual vector space V*. Its
-#    basis vectors `eⁱ = ∇ξⁱ` transform inversely.
+# A `Basis{T, names}` labels a tensor axis by the basis its components multiply.
+# Generalized coordinates ξⁱ come with two reciprocal bases, and a
+# `BasisType` names which one:
+#  - `TangentBasis`: the basis vectors `eᵢ = ∂r/∂ξⁱ` tangent to the coordinate
+#    lines. They span V and transform linearly with the coordinates.
+#  - `DualBasis`: the reciprocal basis vectors `eⁱ = ∇ξⁱ`, defined by
+#    `eⁱ · eⱼ = δⁱⱼ`. They span the dual space V* and transform inversely.
 #
-# Tensors (and vectors) are named after how their components transform. Since
-# components transform opposite to the basis they sit in, a tensor's label
-# is opposite to the label of the basis it uses:
-#  - A covariant tensor `CovariantTensor{1}` has covariant components `vᵢ`.
-#    Each component pairs with an element of the *contravariant* basis `eⁱ`,
-#    so it lives in V*: `v = vᵢ eⁱ`.
-#  - A contravariant tensor `ContravariantTensor{1}` has contravariant
-#    components `vⁱ`. Each component pairs with an element of the *covariant*
-#    basis `eᵢ`, so it lives in V: `v = vⁱ eᵢ`.
+# A tensor is named after how its components scale under a change of
+# coordinates, which is opposite to the basis vectors those components multiply:
+#  - A `CovariantTensor`'s first axis is covariant, and its components `vᵢ`
+#    multiply the dual basis; for a vector, `v = vᵢ eⁱ`, v ∈ V*. Hence its first
+#    axis is `Basis{DualBasis}`.
+#  - A `ContravariantTensor`'s first axis is contravariant, and its components
+#    `vⁱ` multiply the tangent basis; for a vector, `v = vⁱ eᵢ`, v ∈ V. Hence its
+#    first axis is `Basis{TangentBasis}`.
 #
-# A vector field at each point of the domain (usually ℝ³) can be represented in
-# either V or V*. A field of `CovariantTensor{1}` maps each point to V*; a field
-# of `ContravariantTensor{1}` maps each point to V. Both representations
-# describe the same physical field, as the underlying vector at each point has
-# the same length and direction in both V and V*. Only the numerical components
-# and the basis differ.
+# This convention is why the alias name and the basis tag are duals:
+# `CovariantVector` uses `Basis{DualBasis}`, `ContravariantVector` uses
+# `Basis{TangentBasis}`.
 #
-# In the code below, the `Covariant` / `Contravariant` singletons label the
-# basis used by their like-named tensor alias. So `Basis{Covariant, …}` is
-# the *contravariant* basis `{eⁱ}` of V* (the basis used by a covariant
-# vector), and `Basis{Contravariant, …}` is the *covariant* basis `{eᵢ}` of
-# V. The vector/tensor aliases pair same-name (`CovariantVector` uses
-# `Basis{Covariant, …}` etc.), so user-facing names mirror the mathematical
-# convention above.
+# The same physical vector at each point of the domain (usually ℝ³) can be
+# expanded in either basis: `v = vⁱ eᵢ ​= vᵢ eⁱ`. A field of covariant vectors
+# and a field of contravariant vectors can therefore represent the same physical
+# field.
 #
 # Source: https://cns.gatech.edu/~predrag/courses/PHYS-6124-12/StGoChap10.pdf
-struct Covariant <: BasisType end     # Basis used by a covariant vector: eⁱ = ∇ξⁱ
-struct Contravariant <: BasisType end # Basis used by a contravariant vector: eᵢ = ∂r/∂ξⁱ
+struct TangentBasis <: BasisType end # tangent to coordinates:    eᵢ = ∂r/∂ξⁱ  (spans V)
+struct DualBasis <: BasisType end    # reciprocal to coordinates: eⁱ = ∇ξⁱ   (spans V*)
 
-struct Orthonormal <: BasisType end   # Any basis of orthogonal unit vectors
-struct OneScalar <: BasisType end     # Basis for scalar field of a vector space
+struct Orthonormal <: BasisType end  # orthonormal physical basis (covariant = contravariant)
+struct OneScalar <: BasisType end    # trivial scalar basis (a covector's row axis)
 
-dual_basis_type(::Covariant) = Contravariant()
-dual_basis_type(::Contravariant) = Covariant()
+dual_basis_type(::DualBasis) = TangentBasis()
+dual_basis_type(::TangentBasis) = DualBasis()
 dual_basis_type(::Orthonormal) = Orthonormal()
 dual_basis_type(::OneScalar) = OneScalar()
 
@@ -55,7 +49,7 @@ abstract type AbstractBasis end
     Basis(basis_type::BasisType, names::Tuple)
 
 Type-level description of a single tensor axis. The parameter `T` selects the
-kind of basis ([`Covariant`](@ref), [`Contravariant`](@ref),
+kind of basis ([`DualBasis`](@ref), [`TangentBasis`](@ref),
 [`Orthonormal`](@ref), or [`OneScalar`](@ref)), and `names` is a tuple of
 identifiers for the basis vectors along the axis (typically dimension indices
 like `(1, 3)` for the ξ¹/ξ³ directions, or `(nothing,)` for the scalar row
@@ -78,22 +72,22 @@ appropriate metric from a `LocalGeometry`.
 # Examples
 ```julia
 julia> Covariant13Axis()
-Covariant13Basis()
+Covariant13Axis()
 
 julia> length(Covariant13Axis())
 2
 
 julia> dual(Covariant13Axis())
-Contravariant13Basis()
+Contravariant13Axis()
 
 # reshape(tensor, (Basis, ...)) reorders and zero-fills by `names`:
 julia> v = Covariant12Vector(1.0, 2.0);
 
 julia> reshape(v, (Covariant123Axis(),))         # zero-fill the missing u₃
-Tensor([1.0, 2.0, 0.0], (Covariant123Basis(),))
+Tensor([1.0, 2.0, 0.0], (Covariant123Axis(),))
 
 julia> reshape(v, (Covariant2Axis(),))           # drop u₁, keep u₂
-Tensor([2.0], (Covariant2Basis(),))
+Tensor([2.0], (Covariant2Axis(),))
 ```
 """
 struct Basis{T <: BasisType, names} <: AbstractBasis end
@@ -116,14 +110,28 @@ Base.length(b::Basis) = length(basis_vector_names(b))
 # Extend internal Base.unitrange to support the default show(io, mime, ::Tensor)
 Base.unitrange(b::Basis) = Base.OneTo(length(b))
 
+# A `Basis` is typed by its geometric tag (`DualBasis`, …), but users refer to it
+# by component variance (`Covariant`, …). These map the tag to that public name so
+# `show` and error messages speak the user's vocabulary, not the raw tag.
+_variance_name(::DualBasis) = "Covariant"
+_variance_name(::TangentBasis) = "Contravariant"
+_variance_name(::Orthonormal) = "Orthonormal"
+_variance_name(::OneScalar) = "Scalar"
+
+# Full alias name for display, e.g. Covariant13Axis, UWAxis, ScalarBasis.
+_show_name(bt::BasisType, names) = string(_variance_name(bt), join(names), "Axis")
+_show_name(::Orthonormal, names) = string(join(getindex.(Ref("UVW"), names)), "Axis")
+_show_name(::OneScalar, _names) = "ScalarBasis"
+
 Base.show(io::IO, b::Basis) =
-    print(io, typeof(basis_type(b)), join(basis_vector_names(b)), "Basis()")
+    print(io, _show_name(basis_type(b), basis_vector_names(b)), "()")
 Base.show(io::IO, ::ScalarBasis) = print(io, "ScalarBasis()")
 
-no_metric_error(T1, T2) =
-    throw(DimensionMismatch("Metric is needed for change of basis: $T1 vs $T2"))
-scalar_error(T) =
-    throw(DimensionMismatch("Incompatible bases: one scalar vs $T vectors"))
+no_metric_error(T1, T2) = throw(DimensionMismatch(
+    "Metric is needed for change of basis: \
+     $(_variance_name(T1())) vs $(_variance_name(T2()))"))
+scalar_error(T) = throw(DimensionMismatch(
+    "Incompatible bases: one scalar vs $(_variance_name(T())) vectors"))
 
 check_same_type(::T1, ::T2) where {T1, T2} = T1 == T2 || no_metric_error(T1, T2)
 check_same_type(::OneScalar, ::T) where {T} = scalar_error(T)
@@ -213,7 +221,7 @@ which apply the appropriate metric from a `LocalGeometry`.
 # Examples
 ```julia
 julia> v = Covariant12Vector(1.0, 2.0)
-Tensor([1.0, 2.0], (Covariant12Basis(),))
+Tensor([1.0, 2.0], (Covariant12Axis(),))
 
 julia> parent(v)
 2-element SVector{2, Float64} with indices SOneTo(2):
@@ -221,17 +229,15 @@ julia> parent(v)
  2.0
 
 julia> axes(v)
-(Covariant12Basis(),)
+(Covariant12Axis(),)
 
 julia> v[1], v.u₁                                # indexed and named access
 (1.0, 1.0)
 
 julia> reshape(v, (Covariant123Axis(),))         # names-only reshape
-Tensor([1.0, 2.0, 0.0], (Covariant123Basis(),))
+Tensor([1.0, 2.0, 0.0], (Covariant123Axis(),))
 ```
 """
-# Tensor represented by its components in a specific set of bases, which can be
-# reshaped to have new basis_vector_names, but cannot be given new BasisTypes
 struct Tensor{N, T, B <: Bases{N}, C} <: AbstractTensor{N, T, B}
     components::C
     bases::B
@@ -317,7 +323,7 @@ Base.@propagate_inbounds Base.view(x::Tensor, indices::TensorIndex...) =
 """
     pad_metric_tensor(∂x∂ξ::Tensor{2})
 
-Pads an N×N metric tensor with axes `(Basis{Orthonormal, I}, Basis{Covariant, I})`
+Pads an N×N metric tensor with axes `(Basis{Orthonormal, I}, Basis{DualBasis, I})`
 to a full 3×3 tensor with axes `(UVWAxis, Covariant123Axis)`, putting `1`
 on diagonal entries for dimensions outside `I` and `0` on cross-coupling
 entries. The padded form encodes the "identity metric in directions
@@ -387,7 +393,8 @@ Base.reshape(x::Tensor, types::BasisTypes) =
     check_ndims(x, length(types)) &&
     unrolled_map(basis_type, axes(x)) == types ? x :
     throw(DimensionMismatch("Metric is needed for change of basis: \
-                             $(unrolled_map(basis_type, axes(x))) vs $types"))
+                             $(join(map(_variance_name, unrolled_map(basis_type, axes(x))), ", ")) \
+                             vs $(join(map(_variance_name, types), ", "))"))
 Base.reshape(x::AbstractTensor, types::BasisType...) = reshape(x, types)
 
 # Change all bases to a single BasisType
@@ -532,18 +539,18 @@ coordinate_axis(::Type{<:LatLongPoint}) = (1, 2)
 coordinate_axis(coord::AbstractPoint) = coordinate_axis(typeof(coord))
 
 # Generic vector/tensor type aliases
-const CovariantVector{T, I, S} = Tensor{1, T, Tuple{Basis{Covariant, I}}, S}
-const ContravariantVector{T, I, S} = Tensor{1, T, Tuple{Basis{Contravariant, I}}, S}
+const CovariantVector{T, I, S} = Tensor{1, T, Tuple{Basis{DualBasis, I}}, S}
+const ContravariantVector{T, I, S} = Tensor{1, T, Tuple{Basis{TangentBasis, I}}, S}
 const LocalVector{T, I, S} = Tensor{1, T, Tuple{Basis{Orthonormal, I}}, S}
 
 # Union types for dispatch
 const CovariantTensor = Union{
-    Tensor{1, <:Any, <:Tuple{Basis{Covariant}}},
-    Tensor{2, <:Any, <:Tuple{Basis{Covariant}, <:AbstractBasis}},
+    Tensor{1, <:Any, <:Tuple{Basis{DualBasis}}},
+    Tensor{2, <:Any, <:Tuple{Basis{DualBasis}, <:AbstractBasis}},
 }
 const ContravariantTensor = Union{
-    Tensor{1, <:Any, <:Tuple{Basis{Contravariant}}},
-    Tensor{2, <:Any, <:Tuple{Basis{Contravariant}, <:AbstractBasis}},
+    Tensor{1, <:Any, <:Tuple{Basis{TangentBasis}}},
+    Tensor{2, <:Any, <:Tuple{Basis{TangentBasis}, <:AbstractBasis}},
 }
 const OrthonormalTensor = Union{
     Tensor{1, <:Any, <:Tuple{Basis{Orthonormal}}},
@@ -557,8 +564,8 @@ for I in [(), (1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
     strUVW = isempty(I) ? "Null" : join(map(i -> [:U, :V, :W][i], I))
 
     # Axis aliases (Basis singletons)
-    @eval const $(Symbol(:Covariant, strI, :Axis)) = Basis{Covariant, $I}
-    @eval const $(Symbol(:Contravariant, strI, :Axis)) = Basis{Contravariant, $I}
+    @eval const $(Symbol(:Covariant, strI, :Axis)) = Basis{DualBasis, $I}
+    @eval const $(Symbol(:Contravariant, strI, :Axis)) = Basis{TangentBasis, $I}
     @eval const $(Symbol(strUVW, :Axis)) = Basis{Orthonormal, $I}
 
     # A `CovariantNVector` lives in V* and has covariant components `vᵢ`
@@ -582,8 +589,8 @@ for I in [(), (1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
 end
 
 # Named property access for vectors (e.g., v.u₁, v.u², v.u)
-_symbols(::Covariant) = (:u₁, :u₂, :u₃)
-_symbols(::Contravariant) = (:u¹, :u², :u³)
+_symbols(::DualBasis) = (:u₁, :u₂, :u₃)
+_symbols(::TangentBasis) = (:u¹, :u², :u³)
 _symbols(::Orthonormal) = (:u, :v, :w)
 
 Base.propertynames(x::Tensor{1}) = _symbols(basis_type(x.bases[1]))

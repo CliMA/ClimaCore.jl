@@ -90,7 +90,7 @@ function fd_geometry_data(
     AIdx = (3,)
     ∂x∂ξ_bases = (
         Geometry.Basis{Geometry.Orthonormal, AIdx}(),
-        Geometry.Basis{Geometry.Covariant, AIdx}(),
+        Geometry.Basis{Geometry.DualBasis, AIdx}(),
     )
     LG = Geometry.LocalGeometryType(CT, FT, AIdx)
     (Ni, Nj, Nk, Nv, Nh) = size(face_coordinates)

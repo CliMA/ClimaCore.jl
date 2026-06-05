@@ -179,7 +179,7 @@ Base.eltype(::DSSBuffer{S}) where {S} = S
         localelems::AbstractVector{Int},
     )
 
-Transforms vectors from Covariant axes to physical (local axis), weights the data at perimeter nodes, 
+Transforms vectors from DualBasis axes to physical (local axis), weights the data at perimeter nodes, 
 and stores result in the `perimeter_data` array. This function calls the appropriate version of 
 `dss_transform!` based on the data layout of the input arguments.
 
@@ -228,7 +228,7 @@ end
         localelems::Vector{Int},
     )
 
-Transforms vectors from Covariant axes to physical (local axis), weights
+Transforms vectors from DualBasis axes to physical (local axis), weights
 the data at perimeter nodes, and stores result in the `perimeter_data` array.
 
 Arguments:

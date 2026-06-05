@@ -19,7 +19,7 @@ struct LocalGeometry{I, C <: AbstractPoint, FT, M, G}
     (UVWAxis, Covariant123Axis) shape so a single matvec covers every
     conversion regardless of `I`."
     ∂x∂ξ::M
-    "Contravariant metric tensor gⁱʲ. Identity-padded to full
+    "TangentBasis metric tensor gⁱʲ. Identity-padded to full
     (Contravariant123, Contravariant123) shape."
     gⁱʲ::G
 end
@@ -36,7 +36,7 @@ end
     end
 end
 
-# Primary constructor: accepts a Tensor{2} with Orthonormal/Covariant bases
+# Primary constructor: accepts a Tensor{2} with Orthonormal/DualBasis bases
 # of any size; pads to full 3×3 internally.
 @inline function LocalGeometry(
     coordinates::C,

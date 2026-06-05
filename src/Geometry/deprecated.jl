@@ -17,8 +17,8 @@ const AxisTensor{T, N, B, S} = Tensor{N, T, B, S}
 const AxisVector{T, A, S} = Tensor{1, T, Tuple{A}, S}
 const Axis2Tensor{T, B, S} = Tensor{2, T, B, S}
 
-const CovariantAxis{I} = Basis{Covariant, I}
-const ContravariantAxis{I} = Basis{Contravariant, I}
+const CovariantAxis{I} = Basis{DualBasis, I}
+const ContravariantAxis{I} = Basis{TangentBasis, I}
 const LocalAxis{I} = Basis{Orthonormal, I}
 const CartesianAxis{I} = Basis{Orthonormal, I}
 

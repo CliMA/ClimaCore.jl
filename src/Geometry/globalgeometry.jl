@@ -251,7 +251,7 @@ end
 # form (axes `(Orth(I), Cov(I))`), recovering the geometric block from the
 # padded storage so combinations preserve the proper `I`.
 @inline _unpadded_metric_tensor(::LocalGeometry{I}, ∂x∂ξ) where {I} =
-    reshape(∂x∂ξ, (Basis{Orthonormal, I}(), Basis{Covariant, I}()))
+    reshape(∂x∂ξ, (Basis{Orthonormal, I}(), Basis{DualBasis, I}()))
 
 function product_geometry(
     horizontal_local_geometry::Geometry.LocalGeometry,

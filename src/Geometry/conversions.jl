@@ -5,14 +5,14 @@
 # ride the identity block of the padded matrix automatically. Same-type
 # pairs are explicit no-ops; cross-type pairs pick the appropriate cached
 # matrix.
-@inline _to_basis_type(::Contravariant, v::ContravariantTensor, ::LocalGeometry) = v
-@inline _to_basis_type(::Covariant, v::CovariantTensor, ::LocalGeometry) = v
+@inline _to_basis_type(::TangentBasis, v::ContravariantTensor, ::LocalGeometry) = v
+@inline _to_basis_type(::DualBasis, v::CovariantTensor, ::LocalGeometry) = v
 @inline _to_basis_type(::Orthonormal, v::OrthonormalTensor, ::LocalGeometry) = v
-@inline _to_basis_type(::Contravariant, v::CovariantTensor, lg::LocalGeometry) = lg.gⁱʲ * v
-@inline _to_basis_type(::Covariant, v::ContravariantTensor, lg::LocalGeometry) = lg.gᵢⱼ * v
-@inline _to_basis_type(::Contravariant, v::OrthonormalTensor, lg::LocalGeometry) =
+@inline _to_basis_type(::TangentBasis, v::CovariantTensor, lg::LocalGeometry) = lg.gⁱʲ * v
+@inline _to_basis_type(::DualBasis, v::ContravariantTensor, lg::LocalGeometry) = lg.gᵢⱼ * v
+@inline _to_basis_type(::TangentBasis, v::OrthonormalTensor, lg::LocalGeometry) =
     lg.∂ξ∂x * v
-@inline _to_basis_type(::Covariant, v::OrthonormalTensor, lg::LocalGeometry) = lg.∂x∂ξ' * v
+@inline _to_basis_type(::DualBasis, v::OrthonormalTensor, lg::LocalGeometry) = lg.∂x∂ξ' * v
 @inline _to_basis_type(::Orthonormal, v::ContravariantTensor, lg::LocalGeometry) =
     lg.∂x∂ξ * v
 @inline _to_basis_type(::Orthonormal, v::CovariantTensor, lg::LocalGeometry) = lg.∂ξ∂x' * v
@@ -47,9 +47,9 @@ dropped component is nonzero.
 
 # Standard same-dimension conversions: forward to the private `_to_basis_type`.
 @inline ContravariantVector(u::AbstractTensor{1}, lg::LocalGeometry) =
-    _to_basis_type(Contravariant(), u, lg)
+    _to_basis_type(TangentBasis(), u, lg)
 @inline CovariantVector(u::AbstractTensor{1}, lg::LocalGeometry) =
-    _to_basis_type(Covariant(), u, lg)
+    _to_basis_type(DualBasis(), u, lg)
 @inline LocalVector(u::AbstractTensor{1}, lg::LocalGeometry) =
     _to_basis_type(Orthonormal(), u, lg)
 
@@ -61,8 +61,8 @@ dropped component is nonzero.
 ## Callable type constructors (e.g. Contravariant1Vector(u, lg))
 
 for (BT, VecType) in (
-    (Covariant, :CovariantVector),
-    (Contravariant, :ContravariantVector),
+    (DualBasis, :CovariantVector),
+    (TangentBasis, :ContravariantVector),
     (Orthonormal, :LocalVector),
 )
     # General: convert to full basis type, then project to requested dimensions
@@ -118,7 +118,7 @@ end
     ::Type{Tensor{1, T, Tuple{A}, SVector{N, T}}},
 ) where {I, T, A, N}
     M = length(I)
-    Tensor{2, T, Tuple{Basis{Covariant, I}, A}, SMatrix{M, N, T, M * N}}
+    Tensor{2, T, Tuple{Basis{DualBasis, I}, A}, SMatrix{M, N, T, M * N}}
 end
 
 """
@@ -138,7 +138,7 @@ convention used throughout `LocalGeometry`.
 ## broadcast.jl routes `norm(field)` and `cross(field1, field2)` here so that
 ## the correct geometric magnitude is computed regardless of what basis the
 ## vectors are stored in. Unlike LinearAlgebra.norm / LinearAlgebra.cross, these
-## convert to the local Orthonormal frame (or Contravariant for cross) first.
+## convert to the local Orthonormal frame (or TangentBasis for cross) first.
 
 _norm_sqr(x, lg::LocalGeometry) = sum(x -> _norm_sqr(x, lg), x)
 _norm_sqr(x::Number, ::LocalGeometry) = norm_sqr(x)

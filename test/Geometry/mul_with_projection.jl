@@ -47,7 +47,7 @@ end
         (@SMatrix rand(FT, 3, 3)),
         (
             Geometry.Basis{Geometry.Orthonormal, (1, 2, 3)}(),
-            Geometry.Basis{Geometry.Covariant, (1, 2, 3)}(),
+            Geometry.Basis{Geometry.DualBasis, (1, 2, 3)}(),
         ),
     )
     lg = Geometry.LocalGeometry(coord, rand(FT), rand(FT), ∂x∂ξ)
