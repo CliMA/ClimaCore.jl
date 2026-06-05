@@ -1,4 +1,9 @@
-DataLayouts.device_dispatch(x::CUDA.CuArray) = ToCUDA()
+# We need to cover all arrays in all memory spaces
+DataLayouts.device_dispatch(::CUDA.CuArray) = ToCUDA()
+# Shared memory arrays are still CuDeviceArray with diffrent
+# memory space parameter
+# TODO: Texture memory backed arrays may still dispatch to to CPU
+DataLayouts.device_dispatch(::CUDA.CuDeviceArray) = ToCUDA()
 
 function knl_copyto!(dest, src, us, mask, cart_inds)
     tidx = linear_thread_idx()
