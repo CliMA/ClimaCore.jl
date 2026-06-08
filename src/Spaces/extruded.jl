@@ -1,4 +1,3 @@
-
 """
     ExtrudedFiniteDifferenceSpace(grid, staggering)
 

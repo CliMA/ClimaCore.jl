@@ -67,7 +67,12 @@ grid = ExtrudedCubedSphereGrid(;
 module CommonGrids
 
 export ExtrudedCubedSphereGrid,
-    CubedSphereGrid, ColumnGrid, Box3DGrid, SliceXZGrid, RectangleXYGrid
+    CubedSphereGrid,
+    ColumnGrid,
+    Box3DGrid,
+    SliceXZGrid,
+    RectangleXYGrid,
+    PointColumnEnsembleGrid
 
 import ClimaComms
 import ..DataLayouts,
@@ -704,6 +709,79 @@ function RectangleXYGrid(
         enable_bubble,
         enable_mask,
     )
+end
+
+"""
+    PointColumnEnsembleGrid(
+        ::Type{<:AbstractFloat}; # defaults to Float64
+        points::AbstractVector{Geometry.LatLongPoint{FT}},
+        z_elem::Integer,
+        z_min::Real,
+        z_max::Real,
+        radius::Real,
+        device::ClimaComms.AbstractDevice = ClimaComms.device(),
+        context::ClimaComms.AbstractCommsContext = ClimaComms.SingletonCommsContext(device),
+        stretch::Meshes.StretchingRule = Meshes.Uniform(),
+        z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
+    )
+
+A convenience constructor that builds an
+[`Grids.ExtrudedFiniteDifferenceGrid`](@ref) for N independent columns at
+arbitrary (lat, lon) locations on a sphere, given:
+
+ - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`],
+ - `points` a vector of `Geometry.LatLongPoint` specifying each column
+   location,
+ - `z_elem` the number of z-points,
+ - `z_min` the domain minimum along the z-direction,
+ - `z_max` the domain maximum along the z-direction,
+ - `radius` the radius of the sphere,
+ - `device` the `ClimaComms.device`,
+ - `context` the `ClimaComms.context` (must be a `SingletonCommsContext`),
+ - `stretch` the mesh `Meshes.StretchingRule` (defaults to
+   [`Meshes.Uniform`](@ref)),
+ - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z`
+   with given `stretch`.
+
+There is no horizontal connectivity between columns. Horizontal operators are
+not supported. Use [`ClimaCore.Fields.bycolumn`](@ref) to iterate over columns.
+
+# Example usage
+
+```julia
+using ClimaCore.CommonGrids, ClimaCore.Geometry
+points = [LatLongPoint(0.0, 0.0), LatLongPoint(10.0, 20.0), LatLongPoint(-5.0, 90.0)]
+grid = PointColumnEnsembleGrid(;
+    points  = points,
+    z_elem  = 10,
+    z_min   = 0,
+    z_max   = 10_000,
+    radius  = 6.371229e6,
+)
+```
+"""
+PointColumnEnsembleGrid(; kwargs...) = PointColumnEnsembleGrid(Float64; kwargs...)
+function PointColumnEnsembleGrid(
+    ::Type{FT};
+    points::AbstractVector{Geometry.LatLongPoint{FT}},
+    z_elem::Integer,
+    z_min::Real,
+    z_max::Real,
+    radius::Real = 6.371229e6,
+    device::ClimaComms.AbstractDevice = ClimaComms.device(),
+    context::ClimaComms.AbstractCommsContext = ClimaComms.SingletonCommsContext(device),
+    stretch::Meshes.StretchingRule = Meshes.Uniform(),
+    z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
+) where {FT}
+    @assert context isa ClimaComms.SingletonCommsContext "PointColumnEnsembleGrid only supports SingletonCommsContext."
+    @assert ClimaComms.device(context) == device "The given device and context device do not match."
+    h_grid = Grids.PointCloudGrid(points; radius, device, context)
+    z_topology = Topologies.IntervalTopology(
+        ClimaComms.SingletonCommsContext(device),
+        z_mesh,
+    )
+    z_grid = Grids.FiniteDifferenceGrid(z_topology)
+    return Grids.ExtrudedFiniteDifferenceGrid(h_grid, z_grid)
 end
 
 end # module

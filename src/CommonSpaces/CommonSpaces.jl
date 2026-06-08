@@ -13,6 +13,7 @@ export ExtrudedCubedSphereSpace,
     Box3DSpace,
     SliceXZSpace,
     RectangleXYSpace,
+    PointColumnEnsembleSpace,
     CellCenter,
     CellFace,
     face_space,
@@ -32,7 +33,8 @@ import ..CommonGrids:
     ColumnGrid,
     Box3DGrid,
     SliceXZGrid,
-    RectangleXYGrid
+    RectangleXYGrid,
+    PointColumnEnsembleGrid
 import ..Spaces: face_space, center_space
 
 
@@ -425,5 +427,59 @@ function RectangleXYSpace end
 RectangleXYSpace(; kwargs...) = RectangleXYSpace(Float64; kwargs...)
 RectangleXYSpace(::Type{FT}; kwargs...) where {FT} =
     Spaces.SpectralElementSpace2D(RectangleXYGrid(FT; kwargs...))
+
+"""
+	PointColumnEnsembleSpace(
+        ::Type{<:AbstractFloat}; # defaults to Float64
+        points::AbstractVector{Geometry.LatLongPoint{FT}},
+        z_elem::Integer,
+        z_min::Real,
+        z_max::Real,
+        device::ClimaComms.AbstractDevice = ClimaComms.device(),
+        context::ClimaComms.AbstractCommsContext = ClimaComms.SingletonCommsContext(device),
+        stretch::Meshes.StretchingRule = Meshes.Uniform(),
+        z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
+        staggering::Staggering,
+    )
+
+Construct a [`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) (aliased as
+`Spaces.MultiColumnFiniteDifferenceSpace`) for N independent columns at arbitrary (lat, lon)
+locations on a sphere, given:
+
+ - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
+ - `points` a vector of `Geometry.LatLongPoint` specifying each column location
+ - `z_elem` the number of z-points
+ - `z_min` the domain minimum along the z-direction
+ - `z_max` the domain maximum along the z-direction
+ - `device` the `ClimaComms.device`
+ - `context` the `ClimaComms.context` (must be a `SingletonCommsContext`)
+ - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
+ - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
+ - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
+
+Note that these arguments are all the same as [`CommonGrids.PointColumnEnsembleGrid`](@ref),
+except for `staggering`.
+
+# Example usage
+
+```julia
+using ClimaCore.CommonSpaces, ClimaCore.Geometry
+points = [LatLongPoint(0.0, 0.0), LatLongPoint(10.0, 20.0), LatLongPoint(-5.0, 90.0)]
+space = PointColumnEnsembleSpace(;
+    points  = points,
+    z_elem  = 10,
+    z_min   = 0,
+    z_max   = 10_000,
+    staggering = CellCenter()
+)
+```
+"""
+function PointColumnEnsembleSpace end
+PointColumnEnsembleSpace(; kwargs...) = PointColumnEnsembleSpace(Float64; kwargs...)
+PointColumnEnsembleSpace(::Type{FT}; staggering::Staggering, kwargs...) where {FT} =
+    Spaces.MultiColumnFiniteDifferenceSpace(
+        PointColumnEnsembleGrid(FT; kwargs...),
+        staggering,
+    )
 
 end # module

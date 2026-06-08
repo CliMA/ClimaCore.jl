@@ -1181,6 +1181,7 @@ end
     FT = Float64
     for space in TU.all_spaces(FT)
         TU.bycolumnable(space) || continue
+        space isa Spaces.MultiColumnFiniteDifferenceSpace && continue
         hspace = Spaces.horizontal_space(space)
         Nh = Topologies.nlocalelems(hspace)
         Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(hspace))

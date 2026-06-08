@@ -71,6 +71,7 @@ Meshes.domain(grid::AbstractGrid) = Meshes.domain(topology(grid))
 
 include("finitedifference.jl")
 include("spectralelement.jl")
+include("pointcloud.jl")
 include("extruded.jl")
 include("column.jl")
 include("level.jl")
@@ -106,6 +107,7 @@ has_horizontal(::ExtrudedFiniteDifferenceGrid) = true
 has_horizontal(::DeviceSpectralElementGrid2D) = true
 has_horizontal(::SpectralElementGrid2D) = true
 has_horizontal(::SpectralElementGrid1D) = true
+has_horizontal(::PointCloudGrid) = true
 
 """
     has_vertical(::AbstractGrid)

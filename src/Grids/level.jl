@@ -15,6 +15,9 @@ level(
 
 topology(levelgrid::LevelGrid) = topology(levelgrid.full_grid)
 
+ClimaComms.context(levelgrid::LevelGrid) = ClimaComms.context(levelgrid.full_grid)
+ClimaComms.device(levelgrid::LevelGrid) = ClimaComms.device(levelgrid.full_grid)
+
 # The DSS weights for extruded spaces are currently the same as the weights for
 # horizontal spaces. If we ever need to use extruded weights, this method will
 # need to extract the weights at a particular level.
