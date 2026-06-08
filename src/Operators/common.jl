@@ -86,12 +86,20 @@ placeholder_space(
     parent_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
 ) = CenterPlaceholderSpace()
 placeholder_space(
+    current_space::Spaces.CenterMultiColumnFiniteDifferenceSpace,
+    parent_space::Spaces.FaceMultiColumnFiniteDifferenceSpace,
+) = CenterPlaceholderSpace()
+placeholder_space(
     current_space::Spaces.FaceFiniteDifferenceSpace,
     parent_space::Spaces.CenterFiniteDifferenceSpace,
 ) = FacePlaceholderSpace()
 placeholder_space(
     current_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
     parent_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+) = FacePlaceholderSpace()
+placeholder_space(
+    current_space::Spaces.FaceMultiColumnFiniteDifferenceSpace,
+    parent_space::Spaces.CenterMultiColumnFiniteDifferenceSpace,
 ) = FacePlaceholderSpace()
 
 @inline reconstruct_placeholder_space(current_space, parent_space) =
@@ -129,6 +137,23 @@ placeholder_space(
         Spaces.CenterFiniteDifferenceSpace,
         Spaces.CenterExtrudedFiniteDifferenceSpace,
     },
+) = parent_space
+
+@inline reconstruct_placeholder_space(
+    ::CenterPlaceholderSpace,
+    parent_space::Spaces.FaceMultiColumnFiniteDifferenceSpace,
+) = Spaces.CenterMultiColumnFiniteDifferenceSpace(parent_space)
+@inline reconstruct_placeholder_space(
+    ::FacePlaceholderSpace,
+    parent_space::Spaces.CenterMultiColumnFiniteDifferenceSpace,
+) = Spaces.FaceMultiColumnFiniteDifferenceSpace(parent_space)
+@inline reconstruct_placeholder_space(
+    ::FacePlaceholderSpace,
+    parent_space::Spaces.FaceMultiColumnFiniteDifferenceSpace,
+) = parent_space
+@inline reconstruct_placeholder_space(
+    ::CenterPlaceholderSpace,
+    parent_space::Spaces.CenterMultiColumnFiniteDifferenceSpace,
 ) = parent_space
 
 strip_space(obj, parent_space) = obj

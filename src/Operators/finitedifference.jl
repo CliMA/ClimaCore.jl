@@ -2,15 +2,20 @@ import ..Utilities: PlusHalf, half, unionall_type
 import ..DebugOnly: allow_mismatched_spaces_unsafe
 import UnrolledUtilities: unrolled_map
 
-const AllFiniteDifferenceSpace =
-    Union{Spaces.FiniteDifferenceSpace, Spaces.ExtrudedFiniteDifferenceSpace}
+const AllFiniteDifferenceSpace = Union{
+    Spaces.FiniteDifferenceSpace,
+    Spaces.ExtrudedFiniteDifferenceSpace,
+    Spaces.MultiColumnFiniteDifferenceSpace,
+}
 const AllFaceFiniteDifferenceSpace = Union{
     Spaces.FaceFiniteDifferenceSpace,
     Spaces.FaceExtrudedFiniteDifferenceSpace,
+    Spaces.FaceMultiColumnFiniteDifferenceSpace,
 }
 const AllCenterFiniteDifferenceSpace = Union{
     Spaces.CenterFiniteDifferenceSpace,
     Spaces.CenterExtrudedFiniteDifferenceSpace,
+    Spaces.CenterMultiColumnFiniteDifferenceSpace,
 }
 
 Topologies.isperiodic(space::AllFiniteDifferenceSpace) =

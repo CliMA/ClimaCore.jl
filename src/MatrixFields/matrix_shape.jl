@@ -27,7 +27,11 @@ matrix_shape(matrix_field, matrix_space) = _matrix_shape(
 
 function matrix_shape(
     matrix_field,
-    matrix_space::Union{Spaces.AbstractSpectralElementSpace, Spaces.PointSpace},
+    matrix_space::Union{
+        Spaces.AbstractSpectralElementSpace,
+        Spaces.PointSpace,
+        Spaces.PointCloudSpace,
+    },
 )
     @assert eltype(matrix_field) <: DiagonalMatrixRow
     Square()
