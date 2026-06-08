@@ -48,9 +48,12 @@ function PointSpace(
         coord,
         FT(1.0),
         FT(1.0),
-        Geometry.AxisTensor(
-            (Geometry.LocalAxis{AIdx}(), Geometry.CovariantAxis{AIdx}()),
-            FT(1.0),
+        Geometry.Tensor(
+            FT(1) * I,
+            (
+                Geometry.Components{Geometry.Orthonormal, AIdx}(),
+                Geometry.Components{Geometry.Covariant, AIdx}(),
+            ),
         ),
     )
     return PointSpace(context, local_geometry)

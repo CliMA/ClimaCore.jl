@@ -62,14 +62,14 @@ function ImplicitEquationJacobian(Y, transform, flags = (;))
     ᶠ𝕄_name = @name(f.w)
 
     BidiagonalRow_C3 = BidiagonalMatrixRow{C3{FT}}
-    BidiagonalRow_ACT3 = BidiagonalMatrixRow{Adjoint{FT, CT3{FT}}}
-    QuaddiagonalRow_ACT3 = QuaddiagonalMatrixRow{Adjoint{FT, CT3{FT}}}
+    BidiagonalRow_ACT3 = BidiagonalMatrixRow{typeof(CT3(FT(0))')}
+    QuaddiagonalRow_ACT3 = QuaddiagonalMatrixRow{typeof(CT3(FT(0))')}
     TridiagonalRow_C3xACT3 =
         TridiagonalMatrixRow{typeof(C3(FT(0)) * CT3(FT(0))')}
     ∂ᶜ𝔼ₜ∂ᶠ𝕄_Row_ACT3 =
         flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :exact && :ρe in propertynames(Y.c) ?
         QuaddiagonalRow_ACT3 : BidiagonalRow_ACT3
-    ∂Yₜ∂Y = FieldMatrix(
+    ∂Yₜ∂Y = MatrixFields.FieldMatrix(
         (ᶜρ_name, ᶠ𝕄_name) => zeros(BidiagonalRow_ACT3, axes(Y.c)),
         (ᶜ𝔼_name, ᶠ𝕄_name) => zeros(∂ᶜ𝔼ₜ∂ᶠ𝕄_Row_ACT3, axes(Y.c)),
         (ᶠ𝕄_name, ᶜρ_name) => zeros(BidiagonalRow_C3, axes(Y.f)),

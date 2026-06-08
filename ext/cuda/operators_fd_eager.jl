@@ -470,18 +470,15 @@ Projects `mat2_row` onto the correct axis for multiplication with `mat1_row` if 
 """
 Base.@propagate_inbounds function project_row2_for_mul(mat1_row, mat2_row, space)
     mat1_et = mat1_row isa BandMatrixRow ? eltype(mat1_row) : typeof(mat1_row)
-    mat2_et = mat2_row isa BandMatrixRow ? eltype(mat2_row) : typeof(mat2_row)
-    if !ClimaCore.Geometry.needs_projection(mat1_et, mat2_et)
-        return mat2_row
-    end
+    project_onto =
+        ClimaCore.Geometry.recursively_find_dual_axes_for_projection(mat1_et)
+    isnothing(project_onto) && return mat2_row
     v = threadIdx().x
     i = threadIdx().y
     j = blockIdx().y
     v = threadIdx().x
     h = blockIdx().z
     hidx = (i, j, h)
-    project_onto =
-        ClimaCore.Geometry.recursively_find_dual_axes_for_projection(mat1_et)
     if space.staggering isa Spaces.CellCenter && v == CUDA.blockDim().x
         lg = new(Spaces.local_geometry_type(typeof(space)))
     else
@@ -507,7 +504,11 @@ Base.@propagate_inbounds recursively_project(projection_tuple::T, y::Y) where {T
 Base.@propagate_inbounds recursively_project(
     projection_tuple::T,
     y::Y,
-) where {T, Y <: AxisTensor} =
+) where {T, Y <: Number} = y
+Base.@propagate_inbounds recursively_project(
+    projection_tuple::T,
+    y::Y,
+) where {T, Y <: AbstractTensor} =
     @inbounds @inline project(projection_tuple[1], y, projection_tuple[2])
 
 if hasfield(Method, :recursion_relation)

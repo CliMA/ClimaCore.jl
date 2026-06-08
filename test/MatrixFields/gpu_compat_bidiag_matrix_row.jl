@@ -10,9 +10,8 @@ ClimaComms.@import_required_backends
 import .TestUtilities as TU;
 
 import ClimaCore: Spaces, Geometry, Operators, Fields, MatrixFields
-using LinearAlgebra: Adjoint
-import StaticArrays: SArray
-import ClimaCore.Geometry: AxisTensor, CovariantAxis, ContravariantAxis
+import StaticArrays: SArray, SMatrix
+import ClimaCore.Geometry: AbstractTensor, Tensor, Components, Covariant, Contravariant
 using ClimaCore.MatrixFields:
     BandMatrixRow,
     DiagonalMatrixRow,
@@ -38,12 +37,7 @@ fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
 ∂ᶠu₃ʲ_err_∂ᶠu₃ʲ_type = BandMatrixRow{
     -1,
     3,
-    AxisTensor{
-        GFT,
-        2,
-        Tuple{CovariantAxis{(3,)}, ContravariantAxis{(3,)}},
-        SArray{Tuple{1, 1}, GFT, 2, 1},
-    },
+    typeof(C3(GFT(0)) * CT3(GFT(0))'),
 }
 
 f = (;
@@ -53,7 +47,7 @@ f = (;
         fspace,
     ),
     ᶠu₃ = Fields.Field(C3{GFT}, fspace),
-    adj_u₃ = Fields.Field(DiagonalMatrixRow{Adjoint{GFT, CT3{GFT}}}, fspace),
+    adj_u₃ = Fields.Field(DiagonalMatrixRow{typeof(CT3(GFT(0))')}, fspace),
 )
 c = (;
     ᶜu₃ʲ = Fields.Field(C3{GFT}, cspace),
