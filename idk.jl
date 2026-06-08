@@ -39,6 +39,7 @@ N = length(points)
 ᶠspace = Spaces.face_space(ᶜspace)
 
 # CenterFiniteDifferenceSpace reference for single-column behaviour
+# TODO: Replace this with what is used in ClimaLand
 _col_domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(FT(0)),
     Geometry.ZPoint{FT}(FT(10_000)),
