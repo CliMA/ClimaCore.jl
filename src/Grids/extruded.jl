@@ -45,7 +45,7 @@ local_geometry_type(
 ) where {H, V, A, GG, CLG, FLG} = eltype(CLG) # calls eltype from DataLayouts
 
 function ExtrudedFiniteDifferenceGrid(
-    horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
+    horizontal_grid::AbstractSpectralElementGrid,
     vertical_grid::FiniteDifferenceGrid,
     hypsography::HypsographyAdaption = Flat();
     deep = false,
@@ -70,7 +70,7 @@ end
 
 # memoized constructor
 function ExtrudedFiniteDifferenceGrid(
-    horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
+    horizontal_grid::AbstractSpectralElementGrid,
     vertical_grid::FiniteDifferenceGrid,
     hypsography::HypsographyAdaption,
     global_geometry::Geometry.AbstractGlobalGeometry,
@@ -96,7 +96,7 @@ end
 
 # Non-memoized constructor. Should not generally be called, but can be defined for other Hypsography types
 function _ExtrudedFiniteDifferenceGrid(
-    horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
+    horizontal_grid::AbstractSpectralElementGrid,
     vertical_grid::FiniteDifferenceGrid,
     hypsography::Flat,
     global_geometry::Geometry.AbstractGlobalGeometry,
@@ -125,6 +125,11 @@ function _ExtrudedFiniteDifferenceGrid(
 end
 
 topology(grid::ExtrudedFiniteDifferenceGrid) = topology(grid.horizontal_grid)
+
+ClimaComms.context(grid::ExtrudedFiniteDifferenceGrid) =
+    ClimaComms.context(grid.horizontal_grid)
+ClimaComms.device(grid::ExtrudedFiniteDifferenceGrid) =
+    ClimaComms.device(grid.horizontal_grid)
 
 vertical_topology(grid::ExtrudedFiniteDifferenceGrid) =
     topology(grid.vertical_grid)
@@ -157,9 +162,8 @@ struct DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, CLG, FLG} <:
     face_local_geometry::FLG
 end
 
-# Specialize to allow on-device call of `device` for `DeviceExtrudedFiniteDifferenceGrid`
-ClimaComms.device(grid::DeviceExtrudedFiniteDifferenceGrid) =
-    ClimaComms.device(vertical_topology(grid))
+ClimaComms.device(::DeviceExtrudedFiniteDifferenceGrid) = DeviceSideDevice()
+ClimaComms.context(::DeviceExtrudedFiniteDifferenceGrid) = DeviceSideContext()
 
 local_geometry_type(
     ::Type{DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, CLG, FLG}},
@@ -180,3 +184,16 @@ const ExtrudedRectilinearSpectralElementGrid3D =
     ExtrudedFiniteDifferenceGrid{<:RectilinearSpectralElementGrid2D}
 const ExtrudedCubedSphereSpectralElementGrid3D =
     ExtrudedFiniteDifferenceGrid{<:CubedSphereSpectralElementGrid2D}
+const ExtrudedPointCloudGrid = ExtrudedFiniteDifferenceGrid{<:PointCloudGrid}
+
+# The show method for `AbstractGrid` calls `topology(grid)`, which errors for
+# a point-cloud horizontal grid, so print the point-cloud fields directly
+function Base.show(io::IO, grid::ExtrudedPointCloudGrid)
+    indent = get(io, :indent, 0)
+    iio = IOContext(io, :indent => indent + 2)
+    println(io, nameof(typeof(grid)), ":")
+    print_pointcloud_horizontal(iio, grid.horizontal_grid, indent)
+    println(iio)
+    println(iio, " "^(indent + 2), "vertical:")
+    print(iio, " "^(indent + 4), "mesh: ", vertical_topology(grid).mesh)
+end
