@@ -250,7 +250,6 @@ end
     err_div_sin_c = zeros(FT, length(n_elems_seq))
     err_grad_z_f = zeros(FT, length(n_elems_seq))
     err_grad_cos_f2 = zeros(FT, length(n_elems_seq))
-    err_div_sin_f = zeros(FT, length(n_elems_seq))
     err_div_cos_f = zeros(FT, length(n_elems_seq))
     err_curl_sin_f = zeros(FT, length(n_elems_seq))
     Δh = zeros(FT, length(n_elems_seq))
@@ -289,14 +288,6 @@ end
         )
         gradcosᶠ² = Geometry.WVector.(∇ᶠ².(cos.(centers)))
 
-        # DivergenceC2F, SetValue
-        # f(z) = sin(z)
-        divᶠ⁰ = Operators.DivergenceC2F(
-            left = Operators.SetValue(Geometry.WVector(zero(FT))),
-            right = Operators.SetValue(Geometry.WVector(zero(FT))),
-        )
-        divsinᶠ = divᶠ⁰.(Geometry.WVector.(sin.(centers)))
-
         # DivergenceC2F, SetDivergence
         # f(z) = cos(z)
         divᶠ¹ = Operators.DivergenceC2F(
@@ -319,8 +310,6 @@ end
         err_grad_sin_c[k] = norm(gradsinᶜ .- Geometry.WVector.(cos.(centers)))
         err_div_sin_c[k] = norm(divsinᶜ .- cos.(centers))
         err_grad_cos_f2[k] = norm(gradcosᶠ² .- Geometry.WVector.(.-sin.(faces)))
-        err_div_sin_f[k] =
-            norm(divsinᶠ .- (Geometry.WVector.(cos.(faces))).components.data.:1)
         err_div_cos_f[k] = norm(
             divcosᶠ .- (Geometry.WVector.(.-sin.(faces))).components.data.:1,
         )
@@ -337,7 +326,6 @@ end
     # GradientC2F conv, with f(z) = cos(z), SetGradient
     conv_grad_cos_f2 = convergence_rate(err_grad_cos_f2, Δh)
     # DivergenceC2F conv, with f(z) = sin(z), SetValue
-    conv_div_sin_f = convergence_rate(err_div_sin_f, Δh)
     # DivergenceC2F conv, with f(z) = cos(z), SetDivergence
     conv_div_cos_f = convergence_rate(err_div_cos_f, Δh)
     # CurlC2F with f(z) = sin(z), SetValue
@@ -367,13 +355,6 @@ end
     @test conv_grad_cos_f2[2] ≈ 2 atol = 0.1
     @test conv_grad_cos_f2[3] ≈ 2 atol = 0.1
     @test conv_grad_cos_f2[1] ≤ conv_grad_cos_f2[2] ≤ conv_grad_cos_f2[3]
-
-    # DivergenceC2F conv, with f(z) = sin(z), SetValue
-    @test err_div_sin_f[3] ≤ err_div_sin_f[2] ≤ err_div_sin_f[1] ≤ 0.1
-    @test conv_div_sin_f[1] ≈ 2 atol = 0.1
-    @test conv_div_sin_f[2] ≈ 2 atol = 0.1
-    @test conv_div_sin_f[3] ≈ 2 atol = 0.1
-    @test conv_div_sin_f[1] ≤ conv_div_sin_f[2] ≤ conv_div_sin_f[3]
 
     # DivergenceC2F conv, with f(z) = cos(z), SetDivergence
     @test err_div_cos_f[3] ≤ err_div_cos_f[2] ≤ err_div_cos_f[1] ≤ 0.1

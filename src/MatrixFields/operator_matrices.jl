@@ -743,28 +743,6 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     J⁺ = Geometry.LocalGeometry(space, idx + half, hidx).J
     return BidiagonalMatrixRow(-C3(J⁻)', C3(J⁺)') * invJ
 end
-Base.@propagate_inbounds function op_matrix_first_row(
-    ::Operators.DivergenceC2F,
-    ::Operators.SetValue,
-    space,
-    idx,
-    hidx,
-)
-    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
-    J⁺ = Geometry.LocalGeometry(space, idx + half, hidx).J
-    return UpperDiagonalMatrixRow(C3(J⁺)') * 2invJ
-end
-Base.@propagate_inbounds function op_matrix_last_row(
-    ::Operators.DivergenceC2F,
-    ::Operators.SetValue,
-    space,
-    idx,
-    hidx,
-)
-    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
-    J⁻ = Geometry.LocalGeometry(space, idx - half, hidx).J
-    return LowerDiagonalMatrixRow(-C3(J⁻)') * 2invJ
-end
 op_matrix_first_row(
     ::Operators.DivergenceC2F,
     ::Operators.SetDivergence,

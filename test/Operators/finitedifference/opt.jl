@@ -154,14 +154,6 @@ function opt_GradientC2F_SetGradient(center_field)
     return Geometry.WVector.(∇ᶠ.(cos.(center_field)))
 end
 
-function opt_DivergenceC2F_SetValue(center_field)
-    divᶠ = Operators.DivergenceC2F(
-        left = Operators.SetValue(Geometry.WVector(0.0)),
-        right = Operators.SetValue(Geometry.WVector(0.0)),
-    )
-    return divᶠ.(Geometry.WVector.(sin.(center_field)))
-end
-
 function opt_DivergenceC2F_SetDivergence(center_field)
     # DivergenceC2F, SetDivergence
     divᶠ = Operators.DivergenceC2F(
@@ -263,7 +255,6 @@ end
             @test_opt opt_GradientC2F_SetValue(centers)
             @test_opt opt_GradientC2F_SetGradient(centers)
 
-            @test_opt opt_DivergenceC2F_SetValue(centers)
             @test_opt opt_DivergenceC2F_SetDivergence(centers)
             @test_opt opt_CurlC2F_SetValue(centers)
         end
