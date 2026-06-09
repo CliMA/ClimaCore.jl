@@ -1848,22 +1848,6 @@ steps:
         artifact_paths:
           - "examples/column/output/heat/*"
 
-      - label: ":computer: Column Advection Step Eq"
-        key: "cpu_column_step_advect"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/column/step.jl"
-        artifact_paths:
-          - "examples/column/output/advect_step_function/*"
-
-      - label: ":computer: Column Advection Eq"
-        key: "cpu_column_advect"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/column/advect.jl"
-        artifact_paths:
-          - "examples/column/output/advect/*"
-
       - label: ":computer: Column FCT Advection Eq"
         key: "cpu_fct_column_advect"
         retry: *retry_policy
