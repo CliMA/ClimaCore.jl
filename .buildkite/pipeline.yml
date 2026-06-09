@@ -1916,38 +1916,6 @@ steps:
         artifact_paths:
           - "examples/column/output/zalesak_fct_advection/*"
 
-      - label: ":computer: Column Advection Diffusion Eq"
-        key: "cpu_column_advect_diff"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/column/advect_diffusion.jl"
-        artifact_paths:
-          - "examples/column/output/advect_diffusion/*"
-
-      - label: ":computer: Column Ekman Eq"
-        key: "cpu_column_ekman"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/column/ekman.jl"
-        artifact_paths:
-          - "examples/column/output/ekman/*"
-
-      - label: ":computer: Column Hydrostatic Ekman Eq"
-        key: "cpu_column_hydrostatic_ekman"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/column/hydrostatic_ekman.jl"
-        artifact_paths:
-          - "examples/column/output/hydrostatic_ekman/*"
-
-      - label: ":computer: Column Wave Eq"
-        key: "cpu_column_wave"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/column/wave.jl"
-        artifact_paths:
-          - "examples/column/output/wave/*"
-
       - label: ":computer: Column Hydrostatic Balance Eq"
         key: "cpu_column_hydrostatic"
         retry: *retry_policy

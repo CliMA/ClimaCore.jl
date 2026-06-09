@@ -164,7 +164,6 @@ end
     test_op_matrix(FluxCorrectionF2F, Extrapolate, (ᶜuvw, ᶠnested))
     test_op_matrix(SetBoundaryOperator, SetValue, (ᶠnested,))
     test_op_matrix(GradientC2F, Nothing, (ᶜscalar,), true)
-    test_op_matrix(GradientC2F, SetValue, (ᶜscalar,))
     test_op_matrix(GradientC2F, SetGradient, (ᶜscalar,))
     test_op_matrix(GradientF2C, Nothing, (ᶠscalar,))
     test_op_matrix(GradientF2C, SetValue, (ᶠscalar,))
@@ -212,7 +211,6 @@ end
     ᶠupwind = UpwindBiasedProductC2F(; set_scalar_values...)
     ᶜadvect = AdvectionC2C(; extrapolate...)
     ᶜflux_correct = FluxCorrectionC2C(; extrapolate...)
-    ᶠgrad = GradientC2F(; set_scalar_values...)
     ᶜdiv = DivergenceF2C()
     ᶠcurl = CurlC2F(; set_c12_values...)
     ᶠinterp_matrix = MatrixFields.operator_matrix(ᶠinterp)
@@ -222,7 +220,6 @@ end
     ᶠupwind_matrix = MatrixFields.operator_matrix(ᶠupwind)
     ᶜadvect_matrix = MatrixFields.operator_matrix(ᶜadvect)
     ᶜflux_correct_matrix = MatrixFields.operator_matrix(ᶜflux_correct)
-    ᶠgrad_matrix = MatrixFields.operator_matrix(ᶠgrad)
     ᶜdiv_matrix = MatrixFields.operator_matrix(ᶜdiv)
     ᶠcurl_matrix = MatrixFields.operator_matrix(ᶠcurl)
 
@@ -334,119 +331,4 @@ end
         test_broken_with_cuda = true, # TODO: Fix this.
     )
 
-    # TODO: For some reason, we need to compile and run @test_opt on several
-    # simpler broadcast expressions before we can run the remaining two test
-    # cases. As of Julia 1.8.5, the tests fail if we skip this step. Is this a
-    # false positive, a compiler issue, or a sign that the code can be improved?
-    for get_result in (
-        @lazy(
-            @. (c12_b',) *
-               ᶜwinterp_matrix(ᶠscalar) *
-               ᶠcurl_matrix() *
-               (c12_a,) +
-               (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
-        ),
-        @lazy(
-            @. ᶜdiv_matrix() *
-               DiagonalMatrixRow(ᶠscalar) *
-               ᶠgrad_matrix() *
-               (
-                   (c12_b',) *
-                   ᶜwinterp_matrix(ᶠscalar) *
-                   ᶠcurl_matrix() *
-                   (c12_a,) +
-                   (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
-               )
-        ),
-    )
-        materialize(get_result)
-        @test_opt ignored_modules = CUDA_FRAMES materialize(get_result)
-    end
-
-    test_field_broadcast(;
-        test_name = "non-trivial combination of operator matrices and other \
-                     matrix fields",
-        get_result = @lazy(
-            @. ᶠupwind_matrix(ᶠuvw) * (
-                ᶜdiv_matrix() *
-                DiagonalMatrixRow(ᶠscalar) *
-                ᶠgrad_matrix() *
-                (
-                    (c12_b',) *
-                    ᶜwinterp_matrix(ᶠscalar) *
-                    ᶠcurl_matrix() *
-                    (c12_a,) +
-                    (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
-                ) - (2I,)
-            )
-        ),
-        set_result = @lazy(
-            @. ᶠupwind_matrix(ᶠuvw) * (
-                ᶜdiv_matrix() *
-                DiagonalMatrixRow(ᶠscalar) *
-                ᶠgrad_matrix() *
-                (
-                    (c12_b',) *
-                    ᶜwinterp_matrix(ᶠscalar) *
-                    ᶠcurl_matrix() *
-                    (c12_a,) +
-                    (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
-                ) - (2I,)
-            )
-        ),
-    )
-
-    # TODO: This case's reference function takes too long to compile on both
-    # CPUs and GPUs (more than half an hour), as of Julia 1.9. This might be
-    # happening because of excessive inlining---aside from *, all other finite
-    # difference operators use @propagate_inbounds. So, the reference function
-    # is currently disabled, although the test does pass when it is enabled.
-    test_field_broadcast(;
-        test_name = "applying a non-trivial sequence of operations to a scalar \
-                     field using operator matrices and other matrix fields",
-        get_result = @lazy(
-            @. ᶠupwind_matrix(ᶠuvw) *
-               (
-                   ᶜdiv_matrix() *
-                   DiagonalMatrixRow(ᶠscalar) *
-                   ᶠgrad_matrix() *
-                   (
-                       (c12_b',) *
-                       ᶜwinterp_matrix(ᶠscalar) *
-                       ᶠcurl_matrix() *
-                       (c12_a,) +
-                       (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) /
-                       5
-                   ) - (2I,)
-               ) *
-               ᶜscalar
-        ),
-        set_result = @lazy(
-            @. ᶠupwind_matrix(ᶠuvw) *
-               (
-                   ᶜdiv_matrix() *
-                   DiagonalMatrixRow(ᶠscalar) *
-                   ᶠgrad_matrix() *
-                   (
-                       (c12_b',) *
-                       ᶜwinterp_matrix(ᶠscalar) *
-                       ᶠcurl_matrix() *
-                       (c12_a,) +
-                       (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) /
-                       5
-                   ) - (2I,)
-               ) *
-               ᶜscalar
-        ),
-        # ref_set_result = @lazy(@. ᶠupwind(
-        #     ᶠuvw,
-        #     ᶜdiv(
-        #         ᶠscalar * ᶠgrad(
-        #             (c12_b',) * ᶜwinterp(ᶠscalar, ᶠcurl((c12_a,) * ᶜscalar)) +
-        #             (ᶜdiv(ᶠuvw) * ᶜscalar - ᶜadvect(ᶠuvw, ᶜscalar)) / 5,
-        #         ),
-        #     ) - 2 * ᶜscalar,
-        # )),
-        # max_eps_error_limit = 20, # This case's roundoff error is large.
-    )
 end

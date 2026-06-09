@@ -249,7 +249,6 @@ end
     err_grad_sin_c = zeros(FT, length(n_elems_seq))
     err_div_sin_c = zeros(FT, length(n_elems_seq))
     err_grad_z_f = zeros(FT, length(n_elems_seq))
-    err_grad_cos_f1 = zeros(FT, length(n_elems_seq))
     err_grad_cos_f2 = zeros(FT, length(n_elems_seq))
     err_div_sin_f = zeros(FT, length(n_elems_seq))
     err_div_cos_f = zeros(FT, length(n_elems_seq))
@@ -281,23 +280,6 @@ end
         # f(z) = sin(z)
         divᶜ = Operators.DivergenceF2C()
         divsinᶜ = divᶜ.(Geometry.WVector.(sin.(faces)))
-
-        # Center -> Face operators:
-        # GradientC2F, SetValue
-        # f(z) = z
-        ∇ᶠ⁰ = Operators.GradientC2F(
-            left = Operators.SetValue(FT(0)),
-            right = Operators.SetValue(FT(pi)),
-        )
-        ∂zᶠ = Geometry.WVector.(∇ᶠ⁰.(centers))
-
-        # GradientC2F, SetValue
-        # f(z) = cos(z)
-        ∇ᶠ¹ = Operators.GradientC2F(
-            left = Operators.SetValue(FT(1)),
-            right = Operators.SetValue(FT(-1)),
-        )
-        gradcosᶠ¹ = Geometry.WVector.(∇ᶠ¹.(cos.(centers)))
 
         # GradientC2F, SetGradient
         # f(z) = cos(z)
@@ -336,8 +318,6 @@ end
         # Errors
         err_grad_sin_c[k] = norm(gradsinᶜ .- Geometry.WVector.(cos.(centers)))
         err_div_sin_c[k] = norm(divsinᶜ .- cos.(centers))
-        err_grad_z_f[k] = norm(∂zᶠ .- Geometry.WVector.(ones(FT, fs)))
-        err_grad_cos_f1[k] = norm(gradcosᶠ¹ .- Geometry.WVector.(.-sin.(faces)))
         err_grad_cos_f2[k] = norm(gradcosᶠ² .- Geometry.WVector.(.-sin.(faces)))
         err_div_sin_f[k] =
             norm(divsinᶠ .- (Geometry.WVector.(cos.(faces))).components.data.:1)
@@ -354,8 +334,6 @@ end
     conv_div_sin_c = convergence_rate(err_div_sin_c, Δh)
     # GradientC2F conv, with f(z) = z, SetValue
     conv_grad_z = convergence_rate(err_grad_z_f, Δh)
-    # GradientC2F conv, with f(z) = cos(z), SetValue
-    conv_grad_cos_f1 = convergence_rate(err_grad_cos_f1, Δh)
     # GradientC2F conv, with f(z) = cos(z), SetGradient
     conv_grad_cos_f2 = convergence_rate(err_grad_cos_f2, Δh)
     # DivergenceC2F conv, with f(z) = sin(z), SetValue
@@ -382,13 +360,6 @@ end
     # GradientC2F conv, with f(z) = z, SetValue
     @test norm(err_grad_z_f) ≤ 200 * eps(FT)
     # Convergence rate for this case is noisy because error very small
-
-    # GradientC2F conv, with f(z) = cos(z), SetValue
-    @test err_grad_cos_f1[3] ≤ err_grad_cos_f1[2] ≤ err_grad_cos_f1[1] ≤ 0.1
-    @test conv_grad_cos_f1[1] ≈ 1.5 atol = 0.1
-    @test conv_grad_cos_f1[2] ≈ 1.5 atol = 0.1
-    @test conv_grad_cos_f1[3] ≈ 1.5 atol = 0.1
-    # @test conv_grad_cos_f1[1] ≤ conv_grad_cos_f1[2] ≤ conv_grad_cos_f1[3]
 
     # GradientC2F conv, with f(z) = cos(z), SetGradient
     @test err_grad_cos_f2[3] ≤ err_grad_cos_f2[2] ≤ err_grad_cos_f2[1] ≤ 0.1

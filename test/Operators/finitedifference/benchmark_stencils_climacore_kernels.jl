@@ -82,13 +82,6 @@ function op_Upwind3rdOrderBiasedProductC2F!(c, f, bcs = (;))
 end
 n_reads_writes(::Type{typeof(op_Upwind3rdOrderBiasedProductC2F!)}) = -1 # todo
 #### Simple composed (non-exhaustive due to combinatorial explosion)
-function op_divgrad_CC!(c, f, bcs)
-    grad = Operators.GradientC2F(bcs.inner)
-    div = Operators.DivergenceF2C(bcs.outer)
-    @. c.y = div(grad(c.x))
-    return nothing
-end
-n_reads_writes(::Type{typeof(op_divgrad_CC!)}) = 3 # 1 write, 2 reads (1 metric term)
 function op_divgrad_FF!(c, f, bcs)
     grad = Operators.GradientF2C(bcs.inner)
     div = Operators.DivergenceC2F(bcs.outer)

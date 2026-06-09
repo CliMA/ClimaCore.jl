@@ -143,7 +143,9 @@ function tendency!(dY, Y, _, t)
 
     # uv
     bcs_bottom = Operators.SetValue(Geometry.WVector(Cd * u_wind) ⊗ uv_1)
-    bcs_top = Operators.SetValue(uvg)
+    uv_top = Fields.level(uv, Fields.nlevels(uv))
+    uv_top_val = Fields.field_values(uv_top)[]
+    bcs_top = Operators.SetGradient(Geometry.Covariant3Vector(1) ⊗ ((uvg - uv_top_val)))
     ∂c = Operators.DivergenceF2C(bottom = bcs_bottom)
     ∂f = Operators.GradientC2F(top = bcs_top)
     duv .= (uv .- Ref(uvg)) .× Ref(Geometry.WVector(f))
