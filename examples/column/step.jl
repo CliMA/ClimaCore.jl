@@ -49,13 +49,33 @@ function tendency1!(dθ, θ, _, t)
         left = Operators.Extrapolate(),
         right = Operators.Extrapolate(),
     )
-    UB = Operators.UpwindBiasedProductC2F(
-        left = Operators.SetValue(sin(a.z - t)),
-        right = Operators.SetValue(sin(b.z - t)),
+    lg_field = Fields.local_geometry_field(fs)
+    lg_left = Fields.level(lg_field, Utilities.PlusHalf(0))
+    lg_right = Fields.level(lg_field, Fields.nlevels(lg_field) - Utilities.PlusHalf(0))
+    v_left = Fields.field_values(
+        Geometry.contravariant3.(Fields.level(V, Utilities.PlusHalf(0)), lg_left),
+    )[]
+    aᴸᴮ = sin(a.z - t)
+    aᴸ = Fields.field_values(Fields.level(θ, 1))[]
+    left_bc = Operators.SetValue(
+        Geometry.Contravariant3Vector(Operators.upwind_biased_product(v_left, aᴸᴮ, aᴸ)),
     )
+    v_right = Fields.field_values(
+        Geometry.contravariant3.(
+            Fields.level(V, Fields.nlevels(V) - Utilities.PlusHalf(0)),
+            lg_right,
+        ),
+    )[]
+    aᴿᴮ = sin(b.z - t)
+    aᴿ = Fields.field_values(Fields.level(θ, Fields.nlevels(θ)))[]
+    right_bc = Operators.SetValue(
+        Geometry.Contravariant3Vector(Operators.upwind_biased_product(v_right, aᴿ, aᴿᴮ)),
+    )
+    set_bcs = Operators.SetBoundaryOperator(; left = left_bc, right = right_bc)
+    UB = Operators.UpwindBiasedProductC2F()
     ∂ = Operators.DivergenceF2C()
 
-    return @. dθ = -∂(UB(V, θ))
+    return @. dθ = -∂(set_bcs(UB(V, θ)))
 end
 function tendency2!(dθ, θ, _, t)
     fcc = Operators.FluxCorrectionC2C(
@@ -66,12 +86,32 @@ function tendency2!(dθ, θ, _, t)
         left = Operators.Extrapolate(),
         right = Operators.Extrapolate(),
     )
-    UB = Operators.UpwindBiasedProductC2F(
-        left = Operators.SetValue(sin(a.z - t)),
-        right = Operators.SetValue(sin(b.z - t)),
+    lg_field = Fields.local_geometry_field(fs)
+    lg_left = Fields.level(lg_field, Utilities.PlusHalf(0))
+    lg_right = Fields.level(lg_field, Fields.nlevels(lg_field) - Utilities.PlusHalf(0))
+    v_left = Fields.field_values(
+        Geometry.contravariant3.(Fields.level(V, Utilities.PlusHalf(0)), lg_left),
+    )[]
+    aᴸᴮ = sin(a.z - t)
+    aᴸ = Fields.field_values(Fields.level(θ, 1))[]
+    left_bc = Operators.SetValue(
+        Geometry.Contravariant3Vector(Operators.upwind_biased_product(v_left, aᴸᴮ, aᴸ)),
     )
+    v_right = Fields.field_values(
+        Geometry.contravariant3.(
+            Fields.level(V, Fields.nlevels(V) - Utilities.PlusHalf(0)),
+            lg_right,
+        ),
+    )[]
+    aᴿᴮ = sin(b.z - t)
+    aᴿ = Fields.field_values(Fields.level(θ, Fields.nlevels(θ)))[]
+    right_bc = Operators.SetValue(
+        Geometry.Contravariant3Vector(Operators.upwind_biased_product(v_right, aᴿ, aᴿᴮ)),
+    )
+    set_bcs = Operators.SetBoundaryOperator(; left = left_bc, right = right_bc)
+    UB = Operators.UpwindBiasedProductC2F()
     ∂ = Operators.DivergenceF2C()
-    return @. dθ = -∂(UB(V, θ)) + fcc(V, θ)
+    return @. dθ = -∂(set_bcs(UB(V, θ))) + fcc(V, θ)
 end
 # use the advection operator
 function tendency3!(dθ, θ, _, t)

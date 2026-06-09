@@ -489,30 +489,6 @@ Base.@propagate_inbounds function op_matrix_interior_row(
 end
 Base.@propagate_inbounds function op_matrix_first_row(
     ::Operators.UpwindBiasedProductC2F,
-    ::Operators.SetValue,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    v³ = CT3(ct3_data(velocity, space, idx, hidx))
-    av³ = CT3(abs(v³.u³))
-    return UpperDiagonalMatrixRow(v³ - av³) / 2
-end
-Base.@propagate_inbounds function op_matrix_last_row(
-    ::Operators.UpwindBiasedProductC2F,
-    ::Operators.SetValue,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    v³ = CT3(ct3_data(velocity, space, idx, hidx))
-    av³ = CT3(abs(v³.u³))
-    return LowerDiagonalMatrixRow(v³ + av³) / 2
-end
-Base.@propagate_inbounds function op_matrix_first_row(
-    ::Operators.UpwindBiasedProductC2F,
     ::Operators.Extrapolate,
     space,
     idx,

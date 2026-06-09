@@ -1185,15 +1185,6 @@ U(\\boldsymbol{v},x)[i] = \\begin{cases}
 where ``\\boldsymbol{e}_3`` is the 3rd covariant basis vector.
 
 Supported boundary conditions are:
-- [`SetValue(x₀)`](@ref): set the value of `x` to be `x₀` in a hypothetical
-  ghost cell on the other side of the boundary. On the left boundary the stencil
-  is
-  ```math
-  U(\\boldsymbol{v},x)[\\tfrac{1}{2}] = \\begin{cases}
-    v^3[\\tfrac{1}{2}] x_0  \\boldsymbol{e}_3 \\textrm{, if }  v^3[\\tfrac{1}{2}] > 0 \\\\
-    v^3[\\tfrac{1}{2}] x[1] \\boldsymbol{e}_3 \\textrm{, if }  v^3[\\tfrac{1}{2}] < 0
-    \\end{cases}
-  ```
 - [`Extrapolate()`](@ref): set the value of `x` to be the same as the closest
   interior point. On the left boundary, the stencil is
   ```math
@@ -1206,7 +1197,7 @@ struct UpwindBiasedProductC2F{BCS} <: AdvectionOperator
         assert_valid_bcs(
             "UpwindBiasedProductC2F",
             kwargs,
-            (SetValue, Extrapolate),
+            (Extrapolate,),
         )
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
@@ -1245,44 +1236,6 @@ Base.@propagate_inbounds function stencil_interior(
 end
 
 boundary_width(::UpwindBiasedProductC2F, ::AbstractBoundaryCondition) = 1
-
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::UpwindBiasedProductC2F,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    @assert idx == left_face_boundary_idx(space)
-    aᴸᴮ = getidx(space, bc.val, nothing, hidx)
-    a⁺ = stencil_interior(RightBiasedC2F(), space, idx, hidx, arg)
-    vᶠ = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    return Geometry.Contravariant3Vector(upwind_biased_product(vᶠ, aᴸᴮ, a⁺))
-end
-
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::UpwindBiasedProductC2F,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    @assert idx == right_face_boundary_idx(space)
-    a⁻ = stencil_interior(LeftBiasedC2F(), space, idx, hidx, arg)
-    aᴿᴮ = getidx(space, bc.val, nothing, hidx)
-    vᶠ = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    return Geometry.Contravariant3Vector(upwind_biased_product(vᶠ, a⁻, aᴿᴮ))
-end
 
 Base.@propagate_inbounds function stencil_left_boundary(
     op::UpwindBiasedProductC2F,

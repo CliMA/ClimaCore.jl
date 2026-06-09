@@ -107,14 +107,6 @@ function opt_RightBiasedC2F(center_field)
     return RB.(identity.(center_field))
 end
 
-function opt_UpwindBiasedProductC2F_SetValue(face_vel, center_field)
-    UB = Operators.UpwindBiasedProductC2F(
-        left = Operators.SetValue(0.0),
-        right = Operators.SetValue(0.0),
-    )
-    return UB.(face_vel, identity.(center_field))
-end
-
 function opt_UpwindBiasedProductC2F_Extrapolate(face_vel, center_field)
     UB = Operators.UpwindBiasedProductC2F(
         left = Operators.Extrapolate(),
@@ -287,10 +279,6 @@ end
             @test_opt opt_LeftBiasedC2F(centers)
             @test_opt opt_RightBiasedC2F(centers)
 
-            @test_opt opt_UpwindBiasedProductC2F_SetValue(
-                face_velocities,
-                centers,
-            )
             @test_opt opt_UpwindBiasedProductC2F_Extrapolate(
                 face_velocities,
                 centers,
