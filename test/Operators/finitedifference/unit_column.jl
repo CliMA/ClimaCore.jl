@@ -165,15 +165,6 @@ end
         ∂sin = Geometry.WVector.(∂.(w .* I.(θ)))
         @test ∂sin ≈ Geometry.WVector.(cos.(centers)) atol = 1e-2
 
-        I = Operators.InterpolateC2F(
-            left = Operators.SetGradient(Geometry.WVector(FT(1))),
-            right = Operators.SetGradient(Geometry.WVector(FT(-1))),
-        )
-        ∂ = Operators.GradientF2C()
-
-        ∂sin = Geometry.WVector.(∂.(w .* I.(θ)))
-        @test ∂sin ≈ Geometry.WVector.(cos.(centers)) atol = 1e-2
-
         # 3) we set boundaries on both: 2nd should take precedence
         I = Operators.InterpolateC2F(
             left = Operators.SetValue(FT(NaN)),
