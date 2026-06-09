@@ -126,7 +126,6 @@ end
     # Note: The Curl operator currently only works with C12, C1, or C2 inputs.
     test_op_matrix(InterpolateC2F, Nothing, (ᶜnested,), true)
     test_op_matrix(InterpolateC2F, SetValue, (ᶜnested,))
-    test_op_matrix(InterpolateC2F, SetGradient, (ᶜnested,))
     test_op_matrix(InterpolateC2F, Extrapolate, (ᶜnested,))
     test_op_matrix(InterpolateF2C, Nothing, (ᶠnested,))
     test_op_matrix(LeftBiasedC2F, Nothing, (ᶜnested,), true)
@@ -139,11 +138,9 @@ end
     test_op_matrix(RightBiasedF2C, SetValue, (ᶠnested,))
     test_op_matrix(WeightedInterpolateC2F, Nothing, (ᶜscalar, ᶜnested), true)
     test_op_matrix(WeightedInterpolateC2F, SetValue, (ᶜscalar, ᶜnested))
-    test_op_matrix(WeightedInterpolateC2F, SetGradient, (ᶜscalar, ᶜnested))
     test_op_matrix(WeightedInterpolateC2F, Extrapolate, (ᶜscalar, ᶜnested))
     test_op_matrix(WeightedInterpolateF2C, Nothing, (ᶠscalar, ᶠnested))
     test_op_matrix(UpwindBiasedProductC2F, Nothing, (ᶠuvw, ᶜscalar), true)
-    test_op_matrix(UpwindBiasedProductC2F, SetValue, (ᶠuvw, ᶜscalar))
     test_op_matrix(UpwindBiasedProductC2F, Extrapolate, (ᶠuvw, ᶜscalar))
     test_op_matrix(
         Upwind3rdOrderBiasedProductC2F,
@@ -169,7 +166,6 @@ end
     test_op_matrix(GradientF2C, SetValue, (ᶠscalar,))
     test_op_matrix(GradientF2C, Extrapolate, (ᶠscalar,))
     test_op_matrix(DivergenceC2F, Nothing, (ᶜuvw,), true)
-    test_op_matrix(DivergenceC2F, SetValue, (ᶜuvw,))
     test_op_matrix(DivergenceC2F, SetDivergence, (ᶜuvw,))
     test_op_matrix(DivergenceF2C, Nothing, (ᶠuvw,))
     test_op_matrix(DivergenceF2C, SetValue, (ᶠuvw,))

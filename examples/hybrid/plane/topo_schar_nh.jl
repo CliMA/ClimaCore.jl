@@ -308,10 +308,6 @@ function rhs_invariant!(dY, Y, _, t)
         top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
     )
-    vdivc2f = Operators.DivergenceC2F(
-        top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-        bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-    )
     # we want the total u³ at the boundary to be zero: we can either constrain
     # both to be zero, or allow one to be non-zero and set the other to be its
     # negation
@@ -475,10 +471,6 @@ if tendency_plots
             top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
             bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
         )
-        vdivc2f = Operators.DivergenceC2F(
-            top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-            bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-        )
 
         cw = @. If2c(fw)
         fuₕ = @. Ic2f(cuₕ)
@@ -590,10 +582,6 @@ if tendency_plots
             top = Operators.SetCurl(Geometry.Contravariant2Vector(0.0)),
         )
         vdivf2c = Operators.DivergenceF2C(
-            top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-            bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-        )
-        vdivc2f = Operators.DivergenceC2F(
             top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
             bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
         )

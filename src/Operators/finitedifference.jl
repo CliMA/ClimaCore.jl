@@ -3074,11 +3074,6 @@ where `Jv³` is the Jacobian multiplied by the third contravariant component of
 `v`.
 
 The following boundary conditions are supported:
-- [`SetValue(v₀)`](@ref): calculate the divergence assuming the value at the
-   boundary is `v₀`. For the left boundary, this becomes:
-  ```math
-  D(v)[\\tfrac{1}{2}] = \\frac{1}{2} (Jv³[1] - Jv³₀) / J[i]
-  ```
 - [`SetDivergence(x)`](@ref): set the value of the divergence at the boundary to be `x`.
   ```math
   D(v)[\\tfrac{1}{2}] = x
@@ -3117,48 +3112,6 @@ Base.@propagate_inbounds function stencil_interior(
 end
 
 boundary_width(::DivergenceC2F, ::AbstractBoundaryCondition) = 1
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::DivergenceC2F,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    @assert idx == left_face_boundary_idx(space)
-    # ∂x[i] = 2(∂x[i + half] - val)
-    local_geometry = Geometry.LocalGeometry(space, idx, hidx)
-    Ju³₊ = Geometry.Jcontravariant3(
-        getidx(space, arg, idx + half, hidx),
-        Geometry.LocalGeometry(space, idx + half, hidx),
-    )
-    Ju³ = Geometry.Jcontravariant3(
-        getidx(space, bc.val, nothing, hidx),
-        local_geometry,
-    )
-    (Ju³₊ - Ju³) * (2 * local_geometry.invJ)
-end
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::DivergenceC2F,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    @assert idx == right_face_boundary_idx(space)
-    local_geometry = Geometry.LocalGeometry(space, idx, hidx)
-    Ju³ = Geometry.Jcontravariant3(
-        getidx(space, bc.val, nothing, hidx),
-        local_geometry,
-    )
-    Ju³₋ = Geometry.Jcontravariant3(
-        getidx(space, arg, idx - half, hidx),
-        Geometry.LocalGeometry(space, idx - half, hidx),
-    )
-    (Ju³ - Ju³₋) * (2 * local_geometry.invJ)
-end
-
 # left / right SetDivergence boundary conditions
 Base.@propagate_inbounds function stencil_left_boundary(
     ::DivergenceC2F,
