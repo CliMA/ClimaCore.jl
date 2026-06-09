@@ -73,14 +73,6 @@ function opt_InterpolateC2F_SetValue(center_field)
     return I.(identity.(center_field))
 end
 
-function opt_InterpolateC2F_SetGradient(center_field)
-    I = Operators.InterpolateC2F(
-        left = Operators.SetGradient(Geometry.WVector(0.0)),
-        right = Operators.SetGradient(Geometry.WVector(0.0)),
-    )
-    return I.(identity.(center_field))
-end
-
 function opt_InterpolateC2F_Extrapolate(center_field)
     I = Operators.InterpolateC2F(
         left = Operators.Extrapolate(),
@@ -289,7 +281,6 @@ end
             @test_opt function_filter = filter sum(sin.(centers))
 
             @test_opt opt_InterpolateC2F_SetValue(centers)
-            @test_opt opt_InterpolateC2F_SetGradient(centers)
             @test_opt opt_InterpolateC2F_Extrapolate(centers)
 
             @test_opt opt_WeightedInterpolateC2F_SetValue(

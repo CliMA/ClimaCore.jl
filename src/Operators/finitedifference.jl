@@ -422,11 +422,6 @@ Supported boundary conditions are:
 ```math
 I(x)[\\tfrac{1}{2}] = x₀
 ```
-- [`SetGradient(v)`](@ref): set the value at the boundary such that the gradient
-  is `v`. At the left boundary the stencil is
-```math
-I(x)[\\tfrac{1}{2}] = x[1] - \\frac{1}{2} v³
-```
 - [`Extrapolate`](@ref): use the closest interior point as the boundary value.
   At the left boundary the stencil is
 ```math
@@ -439,7 +434,7 @@ struct InterpolateC2F{BCS} <: InterpolationOperator
         assert_valid_bcs(
             "InterpolateC2F",
             kwargs,
-            (SetValue, SetGradient, Extrapolate),
+            (SetValue, Extrapolate),
         )
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
@@ -484,39 +479,6 @@ Base.@propagate_inbounds function stencil_right_boundary(
 )
     @assert idx == right_face_boundary_idx(space)
     getidx(space, bc.val, nothing, hidx)
-end
-
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::InterpolateC2F,
-    bc::SetGradient,
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    @assert idx == left_face_boundary_idx(space)
-    a⁺ = getidx(space, arg, idx + half, hidx)
-    v₃ = Geometry.covariant3(
-        getidx(space, bc.val, nothing, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    a⁺ - v₃ / 2
-end
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::InterpolateC2F,
-    bc::SetGradient,
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    @assert idx == right_face_boundary_idx(space)
-    a⁻ = getidx(space, arg, idx - half, hidx)
-    v₃ = Geometry.covariant3(
-        getidx(space, bc.val, nothing, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    a⁻ + v₃ / 2
 end
 
 Base.@propagate_inbounds function stencil_left_boundary(
