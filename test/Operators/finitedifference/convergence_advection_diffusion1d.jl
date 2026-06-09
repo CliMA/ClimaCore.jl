@@ -73,6 +73,12 @@ convergence_rate(err, Δh) =
                 bottom = bc_vb,
                 top = Operators.Extrapolate(),
             )
+            bc_vb = Operators.SetGradient(
+                Geometry.WVector(
+                    FT(∇gaussian(z₀, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)),
+                ),
+            )
+            # TODO: Delete this test??
             gradc2f = Operators.GradientC2F(; bottom = bc_vb, top = bc_gt)
             divf2c = Operators.DivergenceF2C()
             return @. dT = divf2c(ν * gradc2f(T)) - A(V, T)

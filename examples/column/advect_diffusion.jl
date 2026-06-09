@@ -77,9 +77,13 @@ function ∑tendencies!(dT, T, z, t)
     #   return @. dT = -∂(UB(V, ic2f(T)))
 
     A = Operators.AdvectionC2C(bottom = bc_vb, top = Operators.Extrapolate())
-
-
-    gradc2f = Operators.GradientC2F(bottom = bc_vb, top = bc_gt)
+    T_bottom = Fields.level(T, 1)
+    bc_vb_T = Operators.SetGradient(
+        Geometry.Covariant3Vector.(
+            2 .* (Fields.level(T, 1) .- FT(gaussian(z₀, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)))
+        ),
+    )
+    gradc2f = Operators.GradientC2F(bottom = bc_vb_T, top = bc_gt)
     divf2c = Operators.DivergenceF2C()
 
     return @. dT = divf2c(ν * gradc2f(T)) - A(V, T)

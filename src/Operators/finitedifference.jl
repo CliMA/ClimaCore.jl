@@ -2829,11 +2829,6 @@ G(x)[i]^3 = x[i+\\tfrac{1}{2}] - x[i-\\tfrac{1}{2}]
 ```
 
 The following boundary conditions are supported:
-- [`SetValue(x₀)`](@ref): calculate the gradient assuming the value at the
-  boundary is `x₀`. For the left boundary, this becomes:
-  ```math
-  G(x)[\\tfrac{1}{2}]³ = 2 (x[1] - x₀)
-  ```
 - [`SetGradient(v₀)`](@ref): set the value of the gradient at the boundary to be
   `v₀`. For the left boundary, this becomes:
   ```math
@@ -2843,7 +2838,7 @@ The following boundary conditions are supported:
 struct GradientC2F{BC} <: GradientOperator
     bcs::BC
     function GradientC2F(; kwargs...)
-        assert_valid_bcs("GradientC2F", kwargs, (SetValue, SetGradient))
+        assert_valid_bcs("GradientC2F", kwargs, (SetGradient,))
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     GradientC2F(bcs) = GradientC2F(; bcs...)
@@ -2867,36 +2862,6 @@ Base.@propagate_inbounds function stencil_interior(
 end
 
 boundary_width(::GradientC2F, ::AbstractBoundaryCondition) = 1
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::GradientC2F,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    @assert idx == left_face_boundary_idx(space)
-    # ∂x[i] = 2(∂x[i + half] - val)
-    Geometry.Covariant3Vector(2) ⊗ (
-        getidx(space, arg, idx + half, hidx) -
-        getidx(space, bc.val, nothing, hidx)
-    )
-end
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::GradientC2F,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    @assert idx == right_face_boundary_idx(space)
-    Geometry.Covariant3Vector(2) ⊗ (
-        getidx(space, bc.val, nothing, hidx) -
-        getidx(space, arg, idx - half, hidx)
-    )
-end
-
 
 # left / right SetGradient boundary conditions
 Base.@propagate_inbounds function stencil_left_boundary(

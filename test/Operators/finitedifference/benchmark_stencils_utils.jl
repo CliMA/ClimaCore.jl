@@ -216,8 +216,6 @@ bcs_tested(c, ::typeof(op_Upwind3rdOrderBiasedProductC2F!)) = (set_upwind_biased
 # Composed operators (bcs handled case-by-case)
 bcs_tested(c, ::typeof(op_divUpwind3rdOrderBiasedProductC2F!)) =
     ((; inner = set_upwind_biased_3_bcs(c), outer = set_value_contra3_bcs(c)), )
-bcs_tested(c, ::typeof(op_divgrad_CC!)) =
-    ((; inner = set_value_bcs(c), outer = (;)), )
 bcs_tested(c, ::typeof(op_divgrad_FF!)) =
     ((; inner = (;), outer = set_divergence_bcs(c)), )
 bcs_tested(c, ::typeof(op_div_interp_CC!)) =
@@ -406,7 +404,6 @@ function benchmark_operators_base(bm, trials, t_min, cfield, ffield, name; compi
         # op_Upwind3rdOrderBiasedProductC2F!, # TODO: do we need to test this for different w values?
         #### Composed
         op_divUpwind3rdOrderBiasedProductC2F!,
-        op_divgrad_CC!,
         op_divgrad_FF!,
         op_div_interp_CC!,
         op_div_interp_FF!,
@@ -454,7 +451,6 @@ function test_results_column(t_min)
     [(op_UpwindBiasedProductC2F!, :SetValue, :SetValue), 754.856*ns*buffer],
     [(op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate), 765.401*ns*buffer],
     [(op_divUpwind3rdOrderBiasedProductC2F!, :ThirdOrderOneSided, :ThirdOrderOneSided, :SetValue, :SetValue), 2.540*μs*buffer],
-    [(op_divgrad_CC!, :SetValue, :SetValue, :none), 924.147*ns*buffer],
     [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 876.510*ns*buffer],
     [(op_div_interp_CC!, :SetValue, :SetValue, :none), 721.119*ns*buffer],
     [(op_div_interp_FF!, :none, :SetValue, :SetValue), 686.581*ns*buffer],
@@ -500,7 +496,6 @@ function test_results_sphere(t_min)
     [(op_UpwindBiasedProductC2F!, :SetValue, :SetValue), 3.444*ms*buffer],
     [(op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate), 3.432*ms*buffer],
     [(op_divUpwind3rdOrderBiasedProductC2F!, :ThirdOrderOneSided, :ThirdOrderOneSided, :SetValue, :SetValue), 5.650*ms*buffer],
-    [(op_divgrad_CC!, :SetValue, :SetValue, :none), 4.474*ms*buffer],
     [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 4.470*ms*buffer],
     [(op_div_interp_CC!, :SetValue, :SetValue, :none), 3.566*ms*buffer],
     [(op_div_interp_FF!, :none, :SetValue, :SetValue), 3.663*ms*buffer],

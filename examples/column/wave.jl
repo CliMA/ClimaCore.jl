@@ -40,10 +40,11 @@ function tendency!(dY, Y, _, t)
 
     du = dY.u
     dp = dY.p
-
+    u_left = Fields.field_values(Fields.level(u, 1))[]
+    u_right = Fields.field_values(Fields.level(u, Fields.nlevels(u)))[]
     ∂f = Operators.GradientC2F(
-        left = Operators.SetValue(0.0),
-        right = Operators.SetValue(0.0),
+        left = Operators.SetGradient(Geometry.Covariant3Vector(2 * u_left)),
+        right = Operators.SetGradient(Geometry.Covariant3Vector(-2 * u_right)),
     )
     ∂c = Operators.DivergenceF2C()
 

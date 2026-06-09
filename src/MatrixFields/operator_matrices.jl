@@ -744,16 +744,6 @@ op_matrix_interior_row(::Operators.GradientOperator, ::Type{FT}) where {FT} =
     BidiagonalMatrixRow(-C3(FT(1)), C3(FT(1)))
 op_matrix_first_row(
     ::Operators.GradientC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(C3(FT(2)))
-op_matrix_last_row(
-    ::Operators.GradientC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(-C3(FT(2)))
-op_matrix_first_row(
-    ::Operators.GradientC2F,
     ::Operators.SetGradient,
     ::Type{FT},
 ) where {FT} = UpperDiagonalMatrixRow(C3(FT(0)))
