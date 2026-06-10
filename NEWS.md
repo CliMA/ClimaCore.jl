@@ -4,6 +4,13 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- Removed the unused shared-memory finite difference operator code path on GPUs
+  (`CUDAWithShmemColumnStencilStyle` and the `operators_fd_shmem*.jl` files in the
+  CUDA extension), along with its tests, benchmarks, CI job, and the
+  `shmem_design.md` documentation page. This path was already disabled by default
+  (`Operators.use_fd_shmem()` returns `false`), so default behavior and performance are unchanged.
+  Downstream code that opted in by defining `Operators.use_fd_shmem() = true` will no longer
+  see any effect from doing so. [2526](https://github.com/CliMA/ClimaCore.jl/pull/2526)
 - ![][badge-🔥behavioralΔ] Unified strong/weak spectral element operator variants
   via a `FormType` parameter. `Divergence`, `Gradient`, and `Curl` now carry a
   second type parameter (`StrongForm` or `WeakForm`), and `WeakDivergence`,

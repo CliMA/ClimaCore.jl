@@ -106,7 +106,6 @@ withenv("GKSwstype" => "nul") do
             "Developer docs" => [
                 "Developer Guides" => "dev_guides.md",
                 "Performance tips" => "performance_tips.md",
-                "Shared memory design" => "shmem_design.md",
             ],
             "Tutorials" => [
                 joinpath("tutorials", tutorial * ".md") for
