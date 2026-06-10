@@ -172,7 +172,6 @@ end
     test_op_matrix(DivergenceF2C, SetDivergence, (ᶠuvw,))
     test_op_matrix(DivergenceF2C, Extrapolate, (ᶠuvw,))
     test_op_matrix(CurlC2F, Nothing, (ᶜc12,), true)
-    test_op_matrix(CurlC2F, SetValue, (ᶜc12,))
     test_op_matrix(CurlC2F, SetCurl, (ᶜc12,))
 
     @test_throws "nonlinear" MatrixFields.operator_matrix(FCTBorisBook())
@@ -197,7 +196,6 @@ end
     set_nested_values =
         (; bottom = SetValue(nested_zero), top = SetValue(nested_zero))
     c12_zero = zero(Geometry.Covariant12Vector{FT})
-    set_c12_values = (; bottom = SetValue(c12_zero), top = SetValue(c12_zero))
     extrapolate = (; bottom = Extrapolate(), top = Extrapolate())
 
     ᶠinterp = InterpolateC2F(; set_nested_values...)
@@ -207,7 +205,6 @@ end
     ᶜadvect = AdvectionC2C(; extrapolate...)
     ᶜflux_correct = FluxCorrectionC2C(; extrapolate...)
     ᶜdiv = DivergenceF2C()
-    ᶠcurl = CurlC2F(; set_c12_values...)
     ᶠinterp_matrix = MatrixFields.operator_matrix(ᶠinterp)
     ᶜlbias_matrix = MatrixFields.operator_matrix(ᶜlbias)
     ᶠrbias_matrix = MatrixFields.operator_matrix(ᶠrbias)
@@ -215,7 +212,6 @@ end
     ᶜadvect_matrix = MatrixFields.operator_matrix(ᶜadvect)
     ᶜflux_correct_matrix = MatrixFields.operator_matrix(ᶜflux_correct)
     ᶜdiv_matrix = MatrixFields.operator_matrix(ᶜdiv)
-    ᶠcurl_matrix = MatrixFields.operator_matrix(ᶠcurl)
 
     @test_throws "does not contain any Fields" @. ᶜlbias_matrix() *
                                                   ᶠinterp_matrix()

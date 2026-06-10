@@ -3082,7 +3082,7 @@ The following boundary conditions are supported:
 struct DivergenceC2F{BC} <: DivergenceOperator
     bcs::BC
     function DivergenceC2F(; kwargs...)
-        assert_valid_bcs("DivergenceC2F", kwargs, (SetValue, SetDivergence))
+        assert_valid_bcs("DivergenceC2F", kwargs, (SetDivergence,))
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     DivergenceC2F(bcs) = DivergenceC2F(; bcs...)
@@ -3171,19 +3171,13 @@ where ``v₁`` and ``v₂`` are the 1st and 2nd covariant components of ``v``, a
 
 The following boundary conditions are supported:
 
-- [`SetValue(v₀)`](@ref): calculate the curl assuming the value of ``v`` at the
-   boundary is `v₀`. For the left boundary, this becomes:
-  ```math
-  C(v)[\\tfrac{1}{2}]^1 = -\\frac{2}{J[i]} (v_2[1] - (v₀)_2)
-  C(v)[\\tfrac{1}{2}]^2 = \\frac{2}{J[i]} (v_1[1] - (v₀)_1)
-  ```
 - [`SetCurl(v⁰)`](@ref): enforce the curl operator output at the boundary to be
   the contravariant vector `v⁰`.
 """
 struct CurlC2F{BC} <: CurlFiniteDifferenceOperator
     bcs::BC
     function CurlC2F(; kwargs...)
-        assert_valid_bcs("CurlC2F", kwargs, (SetValue, SetCurl))
+        assert_valid_bcs("CurlC2F", kwargs, (SetCurl,))
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     CurlC2F(bcs) = CurlC2F(; bcs...)
@@ -3215,32 +3209,6 @@ Base.@propagate_inbounds function stencil_interior(
 end
 
 boundary_width(::CurlC2F, ::AbstractBoundaryCondition) = 1
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::CurlC2F,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    u₊ = getidx(space, arg, idx + half, hidx)
-    u = getidx(space, bc.val, nothing, hidx)
-    local_geometry = Geometry.LocalGeometry(space, idx, hidx)
-    return fd3_curl(u₊, u, local_geometry.invJ * 2)
-end
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::CurlC2F,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    u = getidx(space, bc.val, nothing, hidx)
-    u₋ = getidx(space, arg, idx - half, hidx)
-    local_geometry = Geometry.LocalGeometry(space, idx, hidx)
-    return fd3_curl(u, u₋, local_geometry.invJ * 2)
-end
 
 # Project the user-supplied curl value onto the full Contravariant123 axis so
 # the boundary output matches `return_eltype` (uniformly Contravariant123Vector).
