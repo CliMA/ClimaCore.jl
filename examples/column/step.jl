@@ -9,7 +9,8 @@ import ClimaCore:
     DataLayouts,
     Operators,
     Geometry,
-    Spaces
+    Spaces,
+    Utilities
 
 using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 

@@ -297,8 +297,8 @@ end
         divcosᶠ = divᶠ¹.(Geometry.WVector.(cos.(centers)))
 
         curlᶠ = Operators.CurlC2F(
-            left = Operators.SetValue(Geometry.Covariant12Vector(zero(FT), zero(FT))),
-            right = Operators.SetValue(Geometry.Covariant12Vector(zero(FT), zero(FT))),
+            left = Operators.SetCurl(Geometry.Contravariant12Vector(zero(FT), one(FT))),
+            right = Operators.SetCurl(Geometry.Contravariant12Vector(zero(FT), -one(FT))),
         )
         curlsinᶠ = curlᶠ.(Geometry.Covariant12Vector.(sin.(centers), zero(FT)))
 
@@ -328,7 +328,7 @@ end
     # DivergenceC2F conv, with f(z) = sin(z), SetValue
     # DivergenceC2F conv, with f(z) = cos(z), SetDivergence
     conv_div_cos_f = convergence_rate(err_div_cos_f, Δh)
-    # CurlC2F with f(z) = sin(z), SetValue
+    # CurlC2F with f(z) = sin(z), SetCurl
     conv_curl_sin_f = convergence_rate(err_curl_sin_f, Δh)
 
     # GradientF2C conv, with f(z) = sin(z)
@@ -363,7 +363,7 @@ end
     @test conv_div_cos_f[3] ≈ 2 atol = 0.1
     @test conv_div_cos_f[1] ≤ conv_div_cos_f[2] ≤ conv_div_cos_f[3]
 
-    # CurlC2F with f(z) = sin(z), SetValue
+    # CurlC2F with f(z) = sin(z), SetCurl
     @test err_curl_sin_f[3] ≤ err_curl_sin_f[2] ≤ err_curl_sin_f[1] ≤ 0.1
     @test conv_curl_sin_f[1] ≈ 2 atol = 0.1
     @test conv_curl_sin_f[2] ≈ 2 atol = 0.1

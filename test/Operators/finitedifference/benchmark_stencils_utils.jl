@@ -164,13 +164,6 @@ function set_curl_bcs(c)
              top = Operators.SetCurl(contra12(FT(0), FT(0))))
 end
 
-function set_curl_value_bcs(c)
-    FT = Spaces.undertype(axes(c))
-    cov12 = Geometry.Covariant12Vector
-    return (;bottom = Operators.SetValue(cov12(FT(0), FT(0))),
-             top = Operators.SetValue(cov12(FT(0), FT(0))))
-end
-
 function bc_name(bcs::NamedTuple)
     if haskey(bcs, :inner) && haskey(bcs, :outer)
         return (bc_name_base(bcs.inner)..., bc_name_base(bcs.outer)...)
@@ -200,7 +193,7 @@ bcs_tested(c, ::typeof(op_broadcast_example1!)) = ((;), )
 bcs_tested(c, ::typeof(op_broadcast_example2!)) = ((;), )
 
 bcs_tested(c, ::typeof(op_GradientF2C!)) = ((;), set_value_bcs(c))
-bcs_tested(c, ::typeof(op_GradientC2F!)) = (set_gradient_value_bcs(c), set_value_bcs(c))
+bcs_tested(c, ::typeof(op_GradientC2F!)) = (set_gradient_value_bcs(c),)
 bcs_tested(c, ::typeof(op_DivergenceF2C!)) = ((;), extrapolate_bcs(c))
 bcs_tested(c, ::typeof(op_DivergenceC2F!)) = (set_divergence_bcs(c), )
 bcs_tested(c, ::typeof(op_InterpolateF2C!)) = ((;), )
@@ -209,8 +202,8 @@ bcs_tested(c, ::typeof(op_LeftBiasedC2F!)) = (set_bot_value_bc(c),)
 bcs_tested(c, ::typeof(op_LeftBiasedF2C!)) = ((;), set_bot_value_bc(c))
 bcs_tested(c, ::typeof(op_RightBiasedC2F!)) = (set_top_value_bc(c),)
 bcs_tested(c, ::typeof(op_RightBiasedF2C!)) = ((;), set_top_value_bc(c))
-bcs_tested(c, ::typeof(op_CurlC2F!)) = (set_curl_bcs(c), set_curl_value_bcs(c))
-bcs_tested(c, ::typeof(op_UpwindBiasedProductC2F!)) = (set_value_bcs(c), extrapolate_bcs(c))
+bcs_tested(c, ::typeof(op_CurlC2F!)) = (set_curl_bcs(c),)
+bcs_tested(c, ::typeof(op_UpwindBiasedProductC2F!)) = (extrapolate_bcs(c),)
 bcs_tested(c, ::typeof(op_Upwind3rdOrderBiasedProductC2F!)) = (set_upwind_biased_3_bcs(c), extrapolate_bcs(c))
 
 # Composed operators (bcs handled case-by-case)
@@ -221,7 +214,7 @@ bcs_tested(c, ::typeof(op_divgrad_FF!)) =
 bcs_tested(c, ::typeof(op_div_interp_CC!)) =
     ((; inner = set_value_contra3_bcs(c), outer = (;)), )
 bcs_tested(c, ::typeof(op_div_interp_FF!)) =
-    ((; inner = (;), outer = set_value_contra3_bcs(c)), )
+    ((; inner = (;), outer = set_divergence_bcs(c)), )
 bcs_tested(c, ::typeof(op_divgrad_uₕ!)) =
     (
         (; inner = (;), outer = set_value_divgrad_uₕ_bcs(c)),
@@ -432,7 +425,6 @@ function test_results_column(t_min)
     [(op_GradientF2C!, :none), 253.100*ns*buffer],
     [(op_GradientF2C!, :SetValue, :SetValue), 270.448*ns*buffer],
     [(op_GradientC2F!, :SetGradient, :SetGradient), 242.053*ns*buffer],
-    [(op_GradientC2F!, :SetValue, :SetValue), 241.647*ns*buffer],
     [(op_DivergenceF2C!, :none), 1.005*μs*buffer],
     [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), 1.076*μs*buffer],
     [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), 878.028*ns*buffer],
@@ -447,13 +439,11 @@ function test_results_column(t_min)
     [(op_RightBiasedF2C!, :none), 142.120*ns*buffer],
     [(op_RightBiasedF2C!, :SetValue), 141.446*ns*buffer],
     [(op_CurlC2F!, :SetCurl, :SetCurl), 1.692*μs*buffer],
-    [(op_CurlC2F!, :SetValue, :SetValue), 1.616*μs*buffer],
-    [(op_UpwindBiasedProductC2F!, :SetValue, :SetValue), 754.856*ns*buffer],
     [(op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate), 765.401*ns*buffer],
     [(op_divUpwind3rdOrderBiasedProductC2F!, :ThirdOrderOneSided, :ThirdOrderOneSided, :SetValue, :SetValue), 2.540*μs*buffer],
     [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 876.510*ns*buffer],
     [(op_div_interp_CC!, :SetValue, :SetValue, :none), 721.119*ns*buffer],
-    [(op_div_interp_FF!, :none, :SetValue, :SetValue), 686.581*ns*buffer],
+    [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), 686.581*ns*buffer],
     [(op_divgrad_uₕ!, :none, :SetValue, :Extrapolate), 4.960*μs*buffer],
     [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), 5.047*μs*buffer],
     ]
@@ -475,7 +465,6 @@ function test_results_sphere(t_min)
     [(op_GradientF2C!, :none), 1.746*ms*buffer],
     [(op_GradientF2C!, :SetValue, :SetValue), 1.754*ms*buffer],
     [(op_GradientC2F!, :SetGradient, :SetGradient), 1.899*ms*buffer],
-    [(op_GradientC2F!, :SetValue, :SetValue), 1.782*ms*buffer],
     [(op_DivergenceF2C!, :none), 6.792*ms*buffer],
     [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), 6.776*ms*buffer],
     [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), 6.720*ms*buffer],
@@ -492,13 +481,11 @@ function test_results_sphere(t_min)
     [(op_RightBiasedF2C!, :none), 1.582*ms*buffer],
     [(op_RightBiasedF2C!, :SetValue), 1.551*ms*buffer],
     [(op_CurlC2F!, :SetCurl, :SetCurl), 4.669*ms*buffer],
-    [(op_CurlC2F!, :SetValue, :SetValue), 4.568*ms*buffer],
-    [(op_UpwindBiasedProductC2F!, :SetValue, :SetValue), 3.444*ms*buffer],
     [(op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate), 3.432*ms*buffer],
     [(op_divUpwind3rdOrderBiasedProductC2F!, :ThirdOrderOneSided, :ThirdOrderOneSided, :SetValue, :SetValue), 5.650*ms*buffer],
     [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 4.470*ms*buffer],
     [(op_div_interp_CC!, :SetValue, :SetValue, :none), 3.566*ms*buffer],
-    [(op_div_interp_FF!, :none, :SetValue, :SetValue), 3.663*ms*buffer],
+    [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), 3.663*ms*buffer],
     [(op_divgrad_uₕ!, :none, :SetValue, :Extrapolate), 7.470*ms*buffer],
     [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), 7.251*ms*buffer],
     ]
