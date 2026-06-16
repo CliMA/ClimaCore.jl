@@ -164,7 +164,8 @@ function tendency!(dY, Y, _, t)
     )
     ∂f = Operators.GradientC2F()
     ∂c = Operators.GradientF2C()
-    Af = Operators.AdvectionF2F()
+    gradf2c = Operators.GradientF2C()
+    interpc2f = Operators.InterpolateC2F()
     divf = Operators.DivergenceC2F()
     B = Operators.SetBoundaryOperator(
         bottom = Operators.SetValue(Geometry.WVector(zero(FT))),
@@ -172,7 +173,8 @@ function tendency!(dY, Y, _, t)
     )
     @. dw = B(
         Geometry.WVector(-(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - ∂f(Φ(zc.z))) +
-        divf(ν * ∂c(w)) - Af(w, w),
+        divf(ν * ∂c(w)) -
+        adjoint(interpc2f(adjoint(Geometry.Contravariant3Vector(uv)) * gradf2c(w))),
     )
 
     return dY

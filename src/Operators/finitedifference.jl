@@ -2115,55 +2115,6 @@ Base.@propagate_inbounds function stencil_right_boundary(
     return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
 end
 
-"""
-    A = AdvectionF2F(;boundaries)
-    A.(v, θ)
-
-Vertical advection operator at cell faces, for a face-valued velocity field `v` and face-valued
-variables `θ`, approximating ``v^3 \\partial_3 \\theta``.
-
-It uses the following stencil
-```math
-A(v,θ)[i] = \\frac{1}{2} (θ[i+1] - θ[i-1]) v³[i]
-```
-
-No boundary conditions are currently supported.
-"""
-struct AdvectionF2F{BCS <: @NamedTuple{}} <: AdvectionOperator
-    bcs::BCS
-end
-
-function AdvectionF2F(; kwargs...)
-    assert_no_bcs("AdvectionF2F", kwargs)
-    AdvectionF2F(NamedTuple(kwargs))
-end
-
-return_space(
-    ::AdvectionF2F,
-    velocity_space::AllFaceFiniteDifferenceSpace,
-    arg_space::AllFaceFiniteDifferenceSpace,
-) = arg_space
-
-stencil_interior_width(::AdvectionF2F, velocity, arg) = ((0, 0), (-1, 1))
-Base.@propagate_inbounds function stencil_interior(
-    ::AdvectionF2F,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    θ⁺ = getidx(space, arg, idx + 1, hidx)
-    θ⁻ = getidx(space, arg, idx - 1, hidx)
-    w³ = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    ∂θ₃ = (θ⁺ - θ⁻) / 2
-    return w³ * ∂θ₃
-end
-boundary_width(::AdvectionF2F, ::AbstractBoundaryCondition) = 1
-
 
 """
     A = FluxCorrectionC2C(;boundaries)

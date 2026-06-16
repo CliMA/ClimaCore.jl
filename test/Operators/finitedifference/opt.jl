@@ -33,11 +33,6 @@ function opt_RightBiasedF2C(face_field)
     return RB.(identity.(face_field))
 end
 
-function opt_AdvectionF2F(face_vel, face_field)
-    A = Operators.AdvectionF2F()
-    return A.(face_vel, identity.(face_field))
-end
-
 function opt_FluxCorrectionF2F_Extrapolate(face_vel, face_field)
     FC = Operators.FluxCorrectionF2F(
         left = Operators.Extrapolate(),
@@ -182,8 +177,6 @@ end
 
             @test_opt opt_LeftBiasedF2C(faces)
             @test_opt opt_RightBiasedF2C(faces)
-
-            # @test_opt opt_AdvectionF2F(face_velocities, faces)
 
             @test_opt opt_FluxCorrectionF2F_Extrapolate(
                 center_velocities,

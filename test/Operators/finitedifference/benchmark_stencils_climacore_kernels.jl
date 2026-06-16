@@ -187,7 +187,6 @@ LeftBiased3rdOrderC2F  # unused
 LeftBiased3rdOrderF2C  # unused
 RightBiased3rdOrderC2F # unused
 RightBiased3rdOrderF2C # unused
-AdvectionF2F           # only used in ClimaAtmos src/
 FluxCorrectionC2C      # unused at the moment
 FluxCorrectionF2F      # only used in ClimaAtmos src/
 ```
