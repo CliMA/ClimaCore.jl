@@ -23,7 +23,6 @@ const TwoArgFDOperatorWithCenterInput = Union{
 }
 const TwoArgFDOperatorWithFaceInput = Union{
     Operators.WeightedInterpolateF2C,
-    Operators.AdvectionF2F,
     Operators.FluxCorrectionF2F,
 }
 const ErroneousFDOperator = Union{
@@ -578,17 +577,6 @@ end
 
 op_matrix_row_type(::Operators.AdvectionOperator, ::Type{FT}, _) where {FT} =
     TridiagonalMatrixRow{FT}
-Base.@propagate_inbounds function op_matrix_interior_row(
-    ::Operators.AdvectionF2F,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    FT = Spaces.undertype(space)
-    v³_data = ct3_data(velocity, space, idx, hidx)
-    return TridiagonalMatrixRow(-v³_data, FT(0), v³_data) / 2
-end
 Base.@propagate_inbounds function op_matrix_interior_row(
     ::Union{Operators.FluxCorrectionC2C, Operators.FluxCorrectionF2F},
     space,

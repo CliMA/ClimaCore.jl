@@ -27,7 +27,6 @@ import ClimaCore.Operators:
     Upwind3rdOrderBiasedProductC2F,
     FCTBorisBook,
     FCTZalesak,
-    AdvectionF2F,
     FluxCorrectionC2C,
     FluxCorrectionF2F,
     SetBoundaryOperator,
@@ -153,7 +152,6 @@ end
         (ᶠuvw, ᶜscalar),
         true,
     )
-    test_op_matrix(AdvectionF2F, Nothing, (ᶠuvw, ᶠnested), true)
     test_op_matrix(FluxCorrectionC2C, Extrapolate, (ᶠuvw, ᶜnested))
     test_op_matrix(FluxCorrectionF2F, Extrapolate, (ᶜuvw, ᶠnested))
     test_op_matrix(SetBoundaryOperator, SetValue, (ᶠnested,))
