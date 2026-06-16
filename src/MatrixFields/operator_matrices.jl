@@ -19,7 +19,6 @@ const TwoArgFDOperatorWithCenterInput = Union{
     Operators.WeightedInterpolateC2F,
     Operators.UpwindBiasedProductC2F,
     Operators.Upwind3rdOrderBiasedProductC2F,
-    Operators.AdvectionC2C,
     Operators.FluxCorrectionC2C,
 }
 const TwoArgFDOperatorWithFaceInput = Union{
@@ -579,63 +578,6 @@ end
 op_matrix_row_type(::Operators.AdvectionOperator, ::Type{FT}, _) where {FT} =
     TridiagonalMatrixRow{FT}
 Base.@propagate_inbounds function op_matrix_interior_row(
-    ::Operators.AdvectionC2C,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    v³⁻_data = ct3_data(velocity, space, idx - half, hidx)
-    v³⁺_data = ct3_data(velocity, space, idx + half, hidx)
-    return TridiagonalMatrixRow(-v³⁻_data, v³⁻_data - v³⁺_data, v³⁺_data) / 2
-end
-Base.@propagate_inbounds function op_matrix_first_row(
-    ::Operators.AdvectionC2C,
-    ::Operators.SetValue,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    v³⁻_data = ct3_data(velocity, space, idx - half, hidx)
-    v³⁺_data = ct3_data(velocity, space, idx + half, hidx)
-    return UpperBidiagonalSquareMatrixRow(2v³⁻_data - v³⁺_data, v³⁺_data) / 2
-end
-Base.@propagate_inbounds function op_matrix_last_row(
-    ::Operators.AdvectionC2C,
-    ::Operators.SetValue,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    v³⁻_data = ct3_data(velocity, space, idx - half, hidx)
-    v³⁺_data = ct3_data(velocity, space, idx + half, hidx)
-    return LowerBidiagonalSquareMatrixRow(-v³⁻_data, v³⁻_data - 2v³⁺_data) / 2
-end
-Base.@propagate_inbounds function op_matrix_first_row(
-    ::Operators.AdvectionC2C,
-    ::Operators.Extrapolate,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    v³⁺_data = ct3_data(velocity, space, idx + half, hidx)
-    return UpperBidiagonalSquareMatrixRow(-v³⁺_data, v³⁺_data)
-end
-Base.@propagate_inbounds function op_matrix_last_row(
-    ::Operators.AdvectionC2C,
-    ::Operators.Extrapolate,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    v³⁻_data = ct3_data(velocity, space, idx - half, hidx)
-    return LowerBidiagonalSquareMatrixRow(-v³⁻_data, v³⁻_data)
-end
-Base.@propagate_inbounds function op_matrix_interior_row(
     ::Operators.AdvectionF2F,
     space,
     idx,
@@ -826,26 +768,6 @@ Base.@propagate_inbounds function op_matrix_interior_row(
 )
     invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
     return BidiagonalMatrixRow(-εⁱʲ, εⁱʲ) * invJ
-end
-Base.@propagate_inbounds function op_matrix_first_row(
-    ::Operators.CurlC2F,
-    ::Operators.SetValue,
-    space,
-    idx,
-    hidx,
-)
-    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
-    return UpperDiagonalMatrixRow(εⁱʲ) * 2invJ
-end
-Base.@propagate_inbounds function op_matrix_last_row(
-    ::Operators.CurlC2F,
-    ::Operators.SetValue,
-    space,
-    idx,
-    hidx,
-)
-    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
-    return LowerDiagonalMatrixRow(-εⁱʲ) * 2invJ
 end
 op_matrix_first_row(
     ::Operators.CurlC2F,

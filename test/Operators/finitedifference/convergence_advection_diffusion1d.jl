@@ -61,27 +61,26 @@ convergence_rate(err, Δh) =
         V = Geometry.WVector.(ones(FT, fs))
 
         function ∑tendencies!(dT, T, z, t)
-            bc_vb = Operators.SetValue(
-                FT(gaussian(z₀, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)),
+            bc_gb = Operators.SetGradient(
+                Geometry.WVector(FT(∇gaussian(z₀, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ))),
             )
             bc_gt = Operators.SetGradient(
-                Geometry.WVector(
-                    FT(∇gaussian(z₁, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)),
-                ),
+                Geometry.WVector(FT(∇gaussian(z₁, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ))),
             )
-            A = Operators.AdvectionC2C(
-                bottom = bc_vb,
-                top = Operators.Extrapolate(),
-            )
-            bc_vb = Operators.SetGradient(
-                Geometry.WVector(
-                    FT(∇gaussian(z₀, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)),
-                ),
-            )
-            # TODO: Delete this test??
-            gradc2f = Operators.GradientC2F(; bottom = bc_vb, top = bc_gt)
+            top_center_left_biased_grad =
+                Geometry.Covariant3Vector.(
+                    Fields.level(T, Fields.nlevels(T)) .-
+                    Fields.level(T, Fields.nlevels(T) - 1)
+                )
+
+            bc_gt_lb = Operators.SetGradient(top_center_left_biased_grad)
+            gradc2f = Operators.GradientC2F(bottom = bc_gb, top = bc_gt)
+            gradc2f_advect = Operators.GradientC2F(bottom = bc_gb, top = bc_gt_lb)
+            interpf2c = Operators.InterpolateF2C()
             divf2c = Operators.DivergenceF2C()
-            return @. dT = divf2c(ν * gradc2f(T)) - A(V, T)
+            return @. dT =
+                divf2c(ν * gradc2f(T)) -
+                interpf2c(Geometry.dot(Geometry.Contravariant3Vector(V), gradc2f_advect(T)))
         end
 
         # Solve the ODE operator

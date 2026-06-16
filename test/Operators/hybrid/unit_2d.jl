@@ -86,21 +86,11 @@ end
     # => C ∂_z F = cos(z)
     hv_center_space, hv_face_space = hvspace_2D()
 
-    function advect(f)
-        advf = zeros(eltype(f), hv_center_space)
-        A = Operators.AdvectionC2C(
-            bottom = Operators.SetValue(Geometry.UVector(0.0)), # value of f at the boundary (UVector field)
-            top = Operators.Extrapolate(),
-        )
-        @. advf = A(vC, f)
-    end
-
     # Vertical advective velocity
     vC = Geometry.WVector.(ones(Float64, hv_face_space),)
     # vector-valued field to be advected (one component only, a UVector)
     f = Geometry.UVector.(sin.(Fields.coordinate_field(hv_center_space).z),)
 
-    advf = advect(f)
 
     function div!(F)
         vecdivf = zeros(eltype(F), hv_center_space)

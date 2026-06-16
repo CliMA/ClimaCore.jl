@@ -40,14 +40,6 @@ V = Geometry.WVector.(ones(FT, fs))
 
 # upwinding
 function tendency1!(dθ, θ, _, t)
-    fcc = Operators.FluxCorrectionC2C(
-        left = Operators.Extrapolate(),
-        right = Operators.Extrapolate(),
-    )
-    fcf = Operators.FluxCorrectionF2F(
-        left = Operators.Extrapolate(),
-        right = Operators.Extrapolate(),
-    )
     lg_field = Fields.local_geometry_field(fs)
     lg_left = Fields.level(lg_field, Utilities.PlusHalf(0))
     lg_right = Fields.level(lg_field, Fields.nlevels(lg_field) - Utilities.PlusHalf(0))
@@ -81,10 +73,6 @@ function tendency2!(dθ, θ, _, t)
         left = Operators.Extrapolate(),
         right = Operators.Extrapolate(),
     )
-    fcf = Operators.FluxCorrectionF2F(
-        left = Operators.Extrapolate(),
-        right = Operators.Extrapolate(),
-    )
     lg_field = Fields.local_geometry_field(fs)
     lg_left = Fields.level(lg_field, Utilities.PlusHalf(0))
     lg_right = Fields.level(lg_field, Fields.nlevels(lg_field) - Utilities.PlusHalf(0))
@@ -114,20 +102,18 @@ function tendency2!(dθ, θ, _, t)
 end
 # use the advection operator
 function tendency3!(dθ, θ, _, t)
-
-    fcc = Operators.FluxCorrectionC2C(
-        left = Operators.Extrapolate(),
-        right = Operators.Extrapolate(),
-    )
-    fcf = Operators.FluxCorrectionF2F(
-        left = Operators.Extrapolate(),
-        right = Operators.Extrapolate(),
-    )
-    A = Operators.AdvectionC2C(
-        left = Operators.SetValue(sin(-t)),
-        right = Operators.Extrapolate(),
-    )
-    return @. dθ = -A(V, θ)
+    left_center = Fields.level(θ, 1)
+    right_center_left_biased_grad =
+        Geometry.Covariant3Vector.(
+            Fields.level(θ, Fields.nlevels(θ)) .- Fields.level(θ, Fields.nlevels(θ) - 1)
+        )
+    left_gradient =
+        Operators.SetGradient(@. Geometry.Covariant3Vector(2 * (left_center - sin(-t))))
+    right_gradient = Operators.SetGradient(right_center_left_biased_grad)
+    gradc2f = Operators.GradientC2F(left = left_gradient, right = right_gradient)
+    interpf2c = Operators.InterpolateF2C()
+    return @. dθ =
+        -1 * interpf2c(Geometry.dot(Geometry.Contravariant3Vector(V), gradc2f(θ)))
 end
 # use the advection operator
 function tendency4!(dθ, θ, _, t)
@@ -136,15 +122,19 @@ function tendency4!(dθ, θ, _, t)
         left = Operators.Extrapolate(),
         right = Operators.Extrapolate(),
     )
-    fcf = Operators.FluxCorrectionF2F(
-        left = Operators.Extrapolate(),
-        right = Operators.Extrapolate(),
-    )
-    A = Operators.AdvectionC2C(
-        left = Operators.SetValue(sin(-t)),
-        right = Operators.Extrapolate(),
-    )
-    return @. dθ = -A(V, θ) + fcc(V, θ)
+    left_center = Fields.level(θ, 1)
+    right_center_left_biased_grad =
+        Geometry.Covariant3Vector.(
+            Fields.level(θ, Fields.nlevels(θ)) .- Fields.level(θ, Fields.nlevels(θ) - 1)
+        )
+    left_gradient =
+        Operators.SetGradient(@. Geometry.Covariant3Vector(2 * (left_center - sin(-t))))
+    right_gradient = Operators.SetGradient(right_center_left_biased_grad)
+    gradc2f = Operators.GradientC2F(left = left_gradient, right = right_gradient)
+    interpf2c = Operators.InterpolateF2C()
+    return @. dθ =
+        -1 * interpf2c(Geometry.dot(Geometry.Contravariant3Vector(V), gradc2f(θ))) +
+        fcc(V, θ)
 end
 
 # use the advection operator

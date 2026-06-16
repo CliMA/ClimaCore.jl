@@ -27,7 +27,6 @@ import ClimaCore.Operators:
     Upwind3rdOrderBiasedProductC2F,
     FCTBorisBook,
     FCTZalesak,
-    AdvectionC2C,
     AdvectionF2F,
     FluxCorrectionC2C,
     FluxCorrectionF2F,
@@ -154,8 +153,6 @@ end
         (ᶠuvw, ᶜscalar),
         true,
     )
-    test_op_matrix(AdvectionC2C, SetValue, (ᶠuvw, ᶜnested))
-    test_op_matrix(AdvectionC2C, Extrapolate, (ᶠuvw, ᶜnested))
     test_op_matrix(AdvectionF2F, Nothing, (ᶠuvw, ᶠnested), true)
     test_op_matrix(FluxCorrectionC2C, Extrapolate, (ᶠuvw, ᶜnested))
     test_op_matrix(FluxCorrectionF2F, Extrapolate, (ᶜuvw, ᶠnested))
@@ -202,14 +199,12 @@ end
     ᶜlbias = LeftBiasedF2C()
     ᶠrbias = RightBiasedC2F(; set_nested_values.top)
     ᶜwinterp = WeightedInterpolateF2C()
-    ᶜadvect = AdvectionC2C(; extrapolate...)
     ᶜflux_correct = FluxCorrectionC2C(; extrapolate...)
     ᶜdiv = DivergenceF2C()
     ᶠinterp_matrix = MatrixFields.operator_matrix(ᶠinterp)
     ᶜlbias_matrix = MatrixFields.operator_matrix(ᶜlbias)
     ᶠrbias_matrix = MatrixFields.operator_matrix(ᶠrbias)
     ᶜwinterp_matrix = MatrixFields.operator_matrix(ᶜwinterp)
-    ᶜadvect_matrix = MatrixFields.operator_matrix(ᶜadvect)
     ᶜflux_correct_matrix = MatrixFields.operator_matrix(ᶜflux_correct)
     ᶜdiv_matrix = MatrixFields.operator_matrix(ᶜdiv)
 
@@ -237,7 +232,6 @@ end
         test_name = "product of six operator matrices",
         get_result = @lazy(
             @. ᶜflux_correct_matrix(ᶠuvw) *
-               ᶜadvect_matrix(ᶠuvw) *
                ᶜwinterp_matrix(ᶠscalar) *
                ᶠrbias_matrix() *
                ᶜlbias_matrix() *
@@ -245,7 +239,6 @@ end
         ),
         set_result = @lazy(
             @. ᶜflux_correct_matrix(ᶠuvw) *
-               ᶜadvect_matrix(ᶠuvw) *
                ᶜwinterp_matrix(ᶠscalar) *
                ᶠrbias_matrix() *
                ᶜlbias_matrix() *
@@ -258,7 +251,6 @@ end
                      matrices",
         get_result = @lazy(
             @. ᶜflux_correct_matrix(ᶠuvw) *
-               ᶜadvect_matrix(ᶠuvw) *
                ᶜwinterp_matrix(ᶠscalar) *
                ᶠrbias_matrix() *
                ᶜlbias_matrix() *
@@ -267,7 +259,6 @@ end
         ),
         set_result = @lazy(
             @. ᶜflux_correct_matrix(ᶠuvw) *
-               ᶜadvect_matrix(ᶠuvw) *
                ᶜwinterp_matrix(ᶠscalar) *
                ᶠrbias_matrix() *
                ᶜlbias_matrix() *
@@ -277,10 +268,7 @@ end
         ref_set_result = @lazy(
             @. ᶜflux_correct(
                 ᶠuvw,
-                ᶜadvect(
-                    ᶠuvw,
-                    ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested)))),
-                ),
+                ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested)))),
             )
         ),
     )
@@ -290,31 +278,28 @@ end
                      matrices, but with forced right associativity",
         get_result = @lazy(
             @. ᶜflux_correct_matrix(ᶠuvw) * (
-                ᶜadvect_matrix(ᶠuvw) * (
-                    ᶜwinterp_matrix(ᶠscalar) * (
-                        ᶠrbias_matrix() *
-                        (ᶜlbias_matrix() * (ᶠinterp_matrix() * ᶜnested))
-                    )
+                (
+                ᶜwinterp_matrix(ᶠscalar) * (
+                    ᶠrbias_matrix() *
+                    (ᶜlbias_matrix() * (ᶠinterp_matrix() * ᶜnested))
                 )
+            )
             )
         ),
         set_result = @lazy(
             @. ᶜflux_correct_matrix(ᶠuvw) * (
-                ᶜadvect_matrix(ᶠuvw) * (
-                    ᶜwinterp_matrix(ᶠscalar) * (
-                        ᶠrbias_matrix() *
-                        (ᶜlbias_matrix() * (ᶠinterp_matrix() * ᶜnested))
-                    )
+                (
+                ᶜwinterp_matrix(ᶠscalar) * (
+                    ᶠrbias_matrix() *
+                    (ᶜlbias_matrix() * (ᶠinterp_matrix() * ᶜnested))
                 )
+            )
             )
         ),
         ref_set_result = @lazy(
             @. ᶜflux_correct(
                 ᶠuvw,
-                ᶜadvect(
-                    ᶠuvw,
-                    ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested)))),
-                ),
+                ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested)))),
             )
         ),
         time_ratio_limit = 30, # This case's ref function is fast on Buildkite.
