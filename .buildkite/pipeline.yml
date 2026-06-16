@@ -252,6 +252,11 @@ steps:
         retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/geometry.jl"
 
+      - label: "Unit: tensors"
+        key: unit_tensors
+        retry: *retry_policy
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/tensors.jl"
+
       - label: "Unit: mul_with_projection"
         key: unit_mul_with_projection
         retry: *retry_policy
