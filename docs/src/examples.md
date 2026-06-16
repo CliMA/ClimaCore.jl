@@ -81,9 +81,9 @@ The example code solves the equation for 4 different tendencies with the followi
   where $\textrm{fcc}(v, \theta)$ is the [`center-to-center flux correction`](https://github.com/CliMA/ClimaCore.jl/blob/main/src/Operators/finitedifference.jl#L2617) operator.
 - Tendency 3:
 
-  $$D = A,$$  
+  $$D =  v \cdot G(T)$$  
    
-  where $A$ is the [`center-to-center vertical advection`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.AdvectionC2C) operator.
+  where``G`` is the [center-to-face gradient](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.GradientC2F) operator, called `gradc2f` in the example code
 - Tendency 4:
 
   $$D = A + \textrm{fcc}(v, \theta),$$  

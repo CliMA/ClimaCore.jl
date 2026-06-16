@@ -75,7 +75,6 @@ AbstractTVDSlopeLimiter
 GradientF2C
 GradientC2F
 AdvectionF2F
-AdvectionC2C
 DivergenceF2C
 DivergenceC2F
 CurlC2F

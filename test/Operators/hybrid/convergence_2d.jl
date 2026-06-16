@@ -1,45 +1,5 @@
 include("utils_2d.jl")
 
-@testset "1D SE, 1D FD Extruded Domain vertical advection operator" begin
-
-    function advection(c, f, hv_center_space)
-        adv = zeros(eltype(f), hv_center_space)
-        A = Operators.AdvectionC2C(
-            bottom = Operators.SetValue(0.0),
-            top = Operators.Extrapolate(),
-        )
-        return @. adv = A(c, f)
-    end
-
-    n_elems_seq = 2 .^ (5, 6, 7, 8)
-    err, Δh = zeros(length(n_elems_seq)), zeros(length(n_elems_seq))
-
-    for (k, n) in enumerate(n_elems_seq)
-        # Advection Operator
-        # c ∂_z f
-        # for this test, we use f(z) = sin(z) and c = 1, a WVector
-        # => c ∂_z f = cos(z)
-        hv_center_space, hv_face_space = hvspace_2D(helem = n, velem = n)
-
-        Δh[k] = 1.0 / n
-
-        # advective velocity
-        c = Geometry.WVector.(ones(Float64, hv_face_space),)
-        # scalar-valued field to be advected
-        f = sin.(Fields.coordinate_field(hv_center_space).z)
-
-        # Call the advection operator
-        adv = advection(c, f, hv_center_space)
-
-        err[k] = norm(adv .- cos.(Fields.coordinate_field(hv_center_space).z))
-    end
-    # AdvectionC2C convergence rate
-    conv_adv_c2c = convergence_rate(err, Δh)
-    @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
-    @test conv_adv_c2c[1] ≈ 2 atol = 0.1
-    @test conv_adv_c2c[2] ≈ 2 atol = 0.1
-    @test conv_adv_c2c[3] ≈ 2 atol = 0.1
-end
 
 @testset "1D SE, 1D FD Extruded Domain horz & vert divergence operator, with Extrapolate BCs" begin
 

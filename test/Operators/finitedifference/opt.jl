@@ -114,22 +114,6 @@ function opt_UpwindBiasedProductC2F_Extrapolate(face_vel, center_field)
     return UB.(face_vel, identity.(center_field))
 end
 
-function opt_AdvectionC2C_SetValue(face_vel, center_field)
-    A = Operators.AdvectionC2C(
-        left = Operators.SetValue(0.0),
-        right = Operators.SetValue(0.0),
-    )
-    return A.(face_vel, identity.(center_field))
-end
-
-function opt_AdvectionC2C_Extrapolate(face_vel, center_field)
-    A = Operators.AdvectionC2C(
-        left = Operators.Extrapolate(),
-        right = Operators.Extrapolate(),
-    )
-    return A.(face_vel, identity.(center_field))
-end
-
 function opt_FluxCorrectionC2C_Extrapolate(face_vel, center_field)
     FC = Operators.FluxCorrectionC2C(
         left = Operators.Extrapolate(),
@@ -234,9 +218,6 @@ end
                 face_velocities,
                 centers,
             )
-
-            @test_opt opt_AdvectionC2C_SetValue(face_velocities, centers)
-            @test_opt opt_AdvectionC2C_Extrapolate(face_velocities, centers)
 
             @test_opt opt_FluxCorrectionC2C_Extrapolate(
                 face_velocities,

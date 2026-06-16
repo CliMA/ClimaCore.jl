@@ -52,41 +52,31 @@ end
 T = gaussian.(zc.z, -0; μ = μ, δ = δ, ν = ν, 𝓌 = 𝓌)
 V = Geometry.WVector.(ones(FT, fs))
 
-# Solve Adv-Diff Equation: ∂_t T = α ∇²T
+# Solve Adv-Diff Equation: ∂_t T = α ∇²T - v⋅∇T
 z₀ = FT(0)
 z₁ = FT(10)
 
 function ∑tendencies!(dT, T, z, t)
-
-    ic2f = Operators.InterpolateC2F()
-    bc_vb = Operators.SetValue(FT(gaussian(z₀, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)))
-    bc_vt = Operators.SetValue(FT(gaussian(z₁, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)))
     bc_gb = Operators.SetGradient(
         Geometry.WVector(FT(∇gaussian(z₀, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ))),
     )
     bc_gt = Operators.SetGradient(
         Geometry.WVector(FT(∇gaussian(z₁, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ))),
     )
-
-    #   Upwind Biased Product
-    #   UB = Operators.UpwindBiasedProductC2F(
-    #       bottom = Operators.Extrapolate(),
-    #       top = bc_vt,
-    #   )
-    #   ∂ = Operators.GradientF2C()
-    #   return @. dT = -∂(UB(V, ic2f(T)))
-
-    A = Operators.AdvectionC2C(bottom = bc_vb, top = Operators.Extrapolate())
-    T_bottom = Fields.level(T, 1)
-    bc_vb_T = Operators.SetGradient(
+    top_center_left_biased_grad =
         Geometry.Covariant3Vector.(
-            2 .* (Fields.level(T, 1) .- FT(gaussian(z₀, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)))
-        ),
-    )
-    gradc2f = Operators.GradientC2F(bottom = bc_vb_T, top = bc_gt)
+            Fields.level(T, Fields.nlevels(T)) .- Fields.level(T, Fields.nlevels(T) - 1)
+        )
+
+    bc_gt_lb = Operators.SetGradient(top_center_left_biased_grad)
+    gradc2f = Operators.GradientC2F(bottom = bc_gb, top = bc_gt)
+    gradc2f_advect = Operators.GradientC2F(bottom = bc_gb, top = bc_gt_lb)
+    interpf2c = Operators.InterpolateF2C()
     divf2c = Operators.DivergenceF2C()
 
-    return @. dT = divf2c(ν * gradc2f(T)) - A(V, T)
+    return @. dT =
+        divf2c(ν * gradc2f(T)) -
+        interpf2c(Geometry.dot(Geometry.Contravariant3Vector(V), gradc2f_advect(T)))
 end
 
 @show ∑tendencies!(similar(T), T, nothing, 0.0);
