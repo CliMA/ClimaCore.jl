@@ -32,7 +32,8 @@ const ErroneousFDOperator = Union{
     Operators.RightBiased3rdOrderC2F,
     Operators.RightBiased3rdOrderF2C,
 }
-const NonlinearFDOperator = Union{Operators.FCTBorisBook, Operators.FCTZalesak}
+const NonlinearFDOperator =
+    Union{Operators.FCTBorisBook, Operators.FCTZalesak, Operators.LinVanLeerC2F}
 
 const OneArgFDOperator =
     Union{OneArgFDOperatorWithCenterInput, OneArgFDOperatorWithFaceInput}
