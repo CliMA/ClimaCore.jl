@@ -22,7 +22,6 @@ const TwoArgFDOperatorWithCenterInput = Union{
 }
 const TwoArgFDOperatorWithFaceInput = Union{
     Operators.WeightedInterpolateF2C,
-    Operators.FluxCorrectionF2F,
 }
 const ErroneousFDOperator = Union{
     Operators.LeftBiased3rdOrderC2F,

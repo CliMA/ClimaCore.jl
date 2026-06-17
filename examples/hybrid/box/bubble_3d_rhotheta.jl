@@ -214,10 +214,6 @@ function rhs!(dY, Y, _, t)
         top = Operators.SetValue(Geometry.WVector(0.0)),
     )
 
-    fcf = Operators.FluxCorrectionF2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
 
     uₕ = @. ρuₕ / ρ
     w = @. ρw / If(ρ)
@@ -272,8 +268,10 @@ function rhs!(dY, Y, _, t)
         add_flux_correction_c2c(dρ, w, ρ)
         add_flux_correction_c2c(dρθ, w, ρθ)
         add_flux_correction_c2c(dρuₕ, w, ρuₕ)
-        @. dρw += fcf(wc, ρw)
-        @. dρw += fcf(wc, ρw)
+        add_flux_correction_f2f(dρw, wc, ρw)
+        add_flux_correction_f2f(dρw, wc, ρw)
+        # @. dρw += fcf(wc, ρw)
+        # @. dρw += fcf(wc, ρw)
     end
 
     ### DIFFUSION

@@ -33,14 +33,6 @@ function opt_RightBiasedF2C(face_field)
     return RB.(identity.(face_field))
 end
 
-function opt_FluxCorrectionF2F_Extrapolate(face_vel, face_field)
-    FC = Operators.FluxCorrectionF2F(
-        left = Operators.Extrapolate(),
-        right = Operators.Extrapolate(),
-    )
-    return FC.(face_vel, identity.(face_field))
-end
-
 function opt_GradientF2C(face_field)
     ∇ᶜ = Operators.GradientF2C()
     return Geometry.WVector.(∇ᶜ.(sin.(face_field)))
@@ -170,11 +162,6 @@ end
 
             @test_opt opt_LeftBiasedF2C(faces)
             @test_opt opt_RightBiasedF2C(faces)
-
-            @test_opt opt_FluxCorrectionF2F_Extrapolate(
-                center_velocities,
-                faces,
-            )
 
             @test_opt opt_GradientF2C(faces)
             @test_opt opt_DivergenceF2C(faces)
