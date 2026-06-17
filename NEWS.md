@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- Removed unused finite difference operators and boundary condition [2521](https://github.com/CliMA/ClimaCore.jl/pull/2521)
+  - Removed `SetValue` from `GradientC2F`, `DivergenceC2F`, `CurlC2F`, `UpwindBiasedProductC2F`
+  - Removed `SetGradient` from `InterpolateC2F` and `WeightedInterpolateC2F`
+  - Removed `AdvectionC2C`, `AdvectionF2F`, `FluxCorrectionF2F`, and `FluxCorrectionC2C` operators
+
 v0.14.54
 -------
 

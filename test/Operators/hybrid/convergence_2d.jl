@@ -5,8 +5,8 @@ include("utils_2d.jl")
     function advection(c, f, hv_center_space)
         adv = zeros(eltype(f), hv_center_space)
         gradc2f = Operators.GradientC2F(
-            bottom = Operators.SetGradient(Geometry.WVector(FT(1))),
-            top = Operators.SetGradient(Geometry.WVector(FT(1))),
+            bottom = Operators.SetGradient(Geometry.WVector(1.0)),
+            top = Operators.SetGradient(Geometry.WVector(1.0)),
         )
         interpf2c = Operators.InterpolateF2C()
         return @. adv =

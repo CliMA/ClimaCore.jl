@@ -12,6 +12,8 @@ import ClimaCore:
     Utilities
 
 using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+using ClimaCorePlots
+using Plots
 
 import Logging
 import TerminalLoggers
@@ -228,7 +230,7 @@ for (fn, mesh) in zip(("sin", "step"), (mesh_sin, mesh_step))
     )
 
     ENV["GKSwstype"] = "nul"
-    using ClimaCorePlots, Plots
+
     Plots.GRBackend()
 
     sim_type = fn == "sin" ? "advect" : "advect_step_function"
