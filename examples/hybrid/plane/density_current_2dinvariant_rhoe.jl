@@ -257,9 +257,9 @@ function rhs_invariant!(dY, Y, _, t)
     ᶜ∇ᵥw_bottom = Fields.level(ᶜ∇ᵥw, 1)
     ᶜ∇ᵥw_top = Fields.level(ᶜ∇ᵥw, Fields.nlevels(ᶜ∇ᵥw))
     bottom_divergence = @. Geometry.Jcontravariant3(ᶜ∇ᵥw_bottom, lg_bottom_center) *
-       (2 * lg_bottom_face.invJ)
+       (2 * inv(lg_bottom_face.J))
     top_divergence =
-        @. Geometry.Jcontravariant3(ᶜ∇ᵥw_top, lg_top_center) * (-2 * lg_top_face.invJ)
+        @. Geometry.Jcontravariant3(ᶜ∇ᵥw_top, lg_top_center) * (-2 * inv(lg_top_face.J))
     set_bcs = Operators.SetBoundaryOperator(
         bottom = Operators.SetValue(bottom_divergence),
         top = Operators.SetValue(top_divergence),
