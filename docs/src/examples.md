@@ -40,6 +40,9 @@ This is discretized using the following
 
 This test case is set up in a 1D column domain ``z \in [0, 1]`` and discretized into a mesh of 10 elements. A homogeneous Dirichlet boundary condition is set at the bottom boundary, `bcs_bottom`, setting the temperature to 0. A Neumann boundary condition is applied to the top boundary, `bcs_top`, setting the temperature gradient to 1. 
 
+### Advection equation
+
+The 1D Column advection example in [`examples/column/advect.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/column/advect.jl).
 
 #### Equations and Discretizations
 

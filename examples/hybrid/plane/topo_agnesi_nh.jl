@@ -319,7 +319,7 @@ function rhs_invariant!(dY, Y, _, t)
         bottom = Operators.SetValue(bottom_divergence),
         top = Operators.SetValue(top_divergence),
     )
-    vκ₂∇²w = @. vdivc2f(κ₂ * ᶜ∇ᵥw)
+    vκ₂∇²w = @. set_bcs(vdivc2f(κ₂ * ᶜ∇ᵥw))
     hκ₂∇²h_tot = @. hwdiv(cρ * κ₂ * ᶜ∇ₕh_tot)
     vκ₂∇²h_tot = @. vdivf2c(fρ * κ₂ * ᶠ∇ᵥh_tot)
 
