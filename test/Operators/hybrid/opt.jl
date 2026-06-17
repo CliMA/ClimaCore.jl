@@ -110,14 +110,6 @@ function opt_UpwindBiasedProductC2F_Extrapolate(face_vel, center_field)
     return UB.(face_vel, identity.(center_field))
 end
 
-function opt_FluxCorrectionC2C_Extrapolate(face_vel, center_field)
-    FC = Operators.FluxCorrectionC2C(
-        left = Operators.Extrapolate(),
-        right = Operators.Extrapolate(),
-    )
-    return FC.(face_vel, identity.(center_field))
-end
-
 function opt_GradientC2F_SetValue(center_field)
     ∇ᶠ = Operators.GradientC2F(
         left = Operators.SetValue(1.0),
@@ -243,13 +235,6 @@ end
                 face_velocities,
                 centers,
             )
-
-
-            @test_opt opt_FluxCorrectionC2C_Extrapolate(
-                face_velocities,
-                centers,
-            )
-
             @test_opt opt_GradientC2F_SetValue(centers)
             @test_opt opt_GradientC2F_SetGradient(centers)
 

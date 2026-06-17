@@ -228,18 +228,6 @@ function rhs_invariant!(dY, Y, _, t)
     @. dρe -= vdivf2c((Ic2f(cρ) * third_order_upwind_c2f(fw, (cρe + cp) / cρ)))
     @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 
-    fcc = Operators.FluxCorrectionC2C(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-    fcf = Operators.FluxCorrectionF2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-
-    # Flux correction (Upwind Correction to Central scheme)
-    # @. dρ += fcc(fw, cρ)
-    # @. dρe += fcc(fw, cρe)
 
     Spaces.weighted_dss!(dY.Yc)
     Spaces.weighted_dss!(dY.uₕ)
