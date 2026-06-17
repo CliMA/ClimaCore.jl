@@ -7,6 +7,7 @@ using Random, StaticArrays, IntervalSets, LinearAlgebra
 
 using ClimaComms
 ClimaComms.@import_required_backends
+import ClimaCore
 import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields, Operators
 import ClimaCore.Domains: Geometry
 import ClimaCore.DataLayouts: vindex
@@ -1016,4 +1017,55 @@ end
         @test conv_adv_wc[2] ≈ 2.5 atol = 0.1
         @test conv_adv_wc[3] ≈ 2.5 atol = 0.1
     end
+end
+
+@testset "Center -> Face -> Center Advection" begin
+
+    function advection(c, f, cs)
+        adv = zeros(eltype(f), cs)
+        gradc2f = Operators.GradientC2F(
+            bottom = Operators.SetGradient(Geometry.WVector(FT(1))),
+            top = Operators.SetGradient(Geometry.WVector(FT(1))),
+        )
+        interpf2c = Operators.InterpolateF2C()
+        return @. adv =
+            interpf2c(LinearAlgebra.dot(Geometry.Contravariant3Vector(c), gradc2f(f)))
+    end
+
+    FT = Float64
+    n_elems_seq = 2 .^ (5, 6, 7, 8)
+    err = zeros(FT, length(n_elems_seq))
+    Δh = zeros(FT, length(n_elems_seq))
+    device = ClimaComms.device()
+
+    for (k, n) in enumerate(n_elems_seq)
+        domain = Domains.IntervalDomain(
+            Geometry.ZPoint{FT}(0.0),
+            Geometry.ZPoint{FT}(4π);
+            boundary_names = (:bottom, :top),
+        )
+        mesh = Meshes.IntervalMesh(domain; nelems = n)
+
+        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+        fs = Spaces.face_space(cs)
+
+        # advective velocity
+        c = Geometry.WVector.(ones(Float64, fs),)
+        # scalar-valued field to be advected
+        f = sin.(Fields.coordinate_field(cs).z)
+
+        # Call the advection operator
+        adv = advection(c, f, cs)
+
+        ClimaComms.allowscalar(device) do
+            Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+        end
+        err[k] = norm(adv .- cos.(Fields.coordinate_field(cs).z))
+    end
+    # AdvectionC2C convergence rate
+    conv_adv_c2c = convergence_rate(err, Δh)
+    @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
+    @test conv_adv_c2c[1] ≈ 2 atol = 0.1
+    @test conv_adv_c2c[2] ≈ 2 atol = 0.1
+    @test conv_adv_c2c[3] ≈ 2 atol = 0.1
 end
