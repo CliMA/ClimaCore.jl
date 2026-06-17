@@ -19,7 +19,6 @@ const TwoArgFDOperatorWithCenterInput = Union{
     Operators.WeightedInterpolateC2F,
     Operators.UpwindBiasedProductC2F,
     Operators.Upwind3rdOrderBiasedProductC2F,
-    Operators.FluxCorrectionC2C,
 }
 const TwoArgFDOperatorWithFaceInput = Union{
     Operators.WeightedInterpolateF2C,
@@ -577,39 +576,6 @@ end
 
 op_matrix_row_type(::Operators.AdvectionOperator, ::Type{FT}, _) where {FT} =
     TridiagonalMatrixRow{FT}
-Base.@propagate_inbounds function op_matrix_interior_row(
-    ::Union{Operators.FluxCorrectionC2C, Operators.FluxCorrectionF2F},
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    av³⁻_data = abs(ct3_data(velocity, space, idx - half, hidx))
-    av³⁺_data = abs(ct3_data(velocity, space, idx + half, hidx))
-    return TridiagonalMatrixRow(av³⁻_data, -av³⁻_data - av³⁺_data, av³⁺_data)
-end
-Base.@propagate_inbounds function op_matrix_first_row(
-    ::Union{Operators.FluxCorrectionC2C, Operators.FluxCorrectionF2F},
-    ::Operators.Extrapolate,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    av³⁺_data = abs(ct3_data(velocity, space, idx + half, hidx))
-    return UpperBidiagonalSquareMatrixRow(-av³⁺_data, av³⁺_data)
-end
-Base.@propagate_inbounds function op_matrix_last_row(
-    ::Union{Operators.FluxCorrectionC2C, Operators.FluxCorrectionF2F},
-    ::Operators.Extrapolate,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    av³⁻_data = abs(ct3_data(velocity, space, idx - half, hidx))
-    return LowerBidiagonalSquareMatrixRow(av³⁻_data, -av³⁻_data)
-end
 
 op_matrix_interior_row(::Operators.SetBoundaryOperator, ::Type{FT}) where {FT} =
     DiagonalMatrixRow(FT(1))

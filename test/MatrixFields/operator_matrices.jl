@@ -27,7 +27,6 @@ import ClimaCore.Operators:
     Upwind3rdOrderBiasedProductC2F,
     FCTBorisBook,
     FCTZalesak,
-    FluxCorrectionC2C,
     FluxCorrectionF2F,
     SetBoundaryOperator,
     GradientC2F,
@@ -152,7 +151,6 @@ end
         (ᶠuvw, ᶜscalar),
         true,
     )
-    test_op_matrix(FluxCorrectionC2C, Extrapolate, (ᶠuvw, ᶜnested))
     test_op_matrix(FluxCorrectionF2F, Extrapolate, (ᶜuvw, ᶠnested))
     test_op_matrix(SetBoundaryOperator, SetValue, (ᶠnested,))
     test_op_matrix(GradientC2F, Nothing, (ᶜscalar,), true)
@@ -197,13 +195,11 @@ end
     ᶜlbias = LeftBiasedF2C()
     ᶠrbias = RightBiasedC2F(; set_nested_values.top)
     ᶜwinterp = WeightedInterpolateF2C()
-    ᶜflux_correct = FluxCorrectionC2C(; extrapolate...)
     ᶜdiv = DivergenceF2C()
     ᶠinterp_matrix = MatrixFields.operator_matrix(ᶠinterp)
     ᶜlbias_matrix = MatrixFields.operator_matrix(ᶜlbias)
     ᶠrbias_matrix = MatrixFields.operator_matrix(ᶠrbias)
     ᶜwinterp_matrix = MatrixFields.operator_matrix(ᶜwinterp)
-    ᶜflux_correct_matrix = MatrixFields.operator_matrix(ᶜflux_correct)
     ᶜdiv_matrix = MatrixFields.operator_matrix(ᶜdiv)
 
     @test_throws "does not contain any Fields" @. ᶜlbias_matrix() *
@@ -229,15 +225,13 @@ end
     test_field_broadcast(;
         test_name = "product of six operator matrices",
         get_result = @lazy(
-            @. ᶜflux_correct_matrix(ᶠuvw) *
-               ᶜwinterp_matrix(ᶠscalar) *
+            @. ᶜwinterp_matrix(ᶠscalar) *
                ᶠrbias_matrix() *
                ᶜlbias_matrix() *
                ᶠinterp_matrix()
         ),
         set_result = @lazy(
-            @. ᶜflux_correct_matrix(ᶠuvw) *
-               ᶜwinterp_matrix(ᶠscalar) *
+            @. ᶜwinterp_matrix(ᶠscalar) *
                ᶠrbias_matrix() *
                ᶜlbias_matrix() *
                ᶠinterp_matrix()
@@ -248,26 +242,21 @@ end
         test_name = "applying six operators to a nested field using operator \
                      matrices",
         get_result = @lazy(
-            @. ᶜflux_correct_matrix(ᶠuvw) *
-               ᶜwinterp_matrix(ᶠscalar) *
+            @. ᶜwinterp_matrix(ᶠscalar) *
                ᶠrbias_matrix() *
                ᶜlbias_matrix() *
                ᶠinterp_matrix() *
                ᶜnested
         ),
         set_result = @lazy(
-            @. ᶜflux_correct_matrix(ᶠuvw) *
-               ᶜwinterp_matrix(ᶠscalar) *
+            @. ᶜwinterp_matrix(ᶠscalar) *
                ᶠrbias_matrix() *
                ᶜlbias_matrix() *
                ᶠinterp_matrix() *
                ᶜnested
         ),
         ref_set_result = @lazy(
-            @. ᶜflux_correct(
-                ᶠuvw,
-                ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested)))),
-            )
+            @. ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested))))
         ),
     )
     # this test is will fail because of incorrect results, not InvalidIRError
@@ -275,7 +264,7 @@ end
         test_name = "applying six operators to a nested field using operator \
                      matrices, but with forced right associativity",
         get_result = @lazy(
-            @. ᶜflux_correct_matrix(ᶠuvw) * (
+            @. (
                 (
                 ᶜwinterp_matrix(ᶠscalar) * (
                     ᶠrbias_matrix() *
@@ -285,7 +274,7 @@ end
             )
         ),
         set_result = @lazy(
-            @. ᶜflux_correct_matrix(ᶠuvw) * (
+            @. (
                 (
                 ᶜwinterp_matrix(ᶠscalar) * (
                     ᶠrbias_matrix() *
@@ -295,10 +284,7 @@ end
             )
         ),
         ref_set_result = @lazy(
-            @. ᶜflux_correct(
-                ᶠuvw,
-                ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested)))),
-            )
+            @. ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested))))
         ),
         time_ratio_limit = 30, # This case's ref function is fast on Buildkite.
         test_broken_with_cuda = true, # TODO: Fix this.
