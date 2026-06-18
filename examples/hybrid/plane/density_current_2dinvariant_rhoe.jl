@@ -19,6 +19,7 @@ import ClimaCore:
     Operators,
     Utilities
 using ClimaCore.Geometry
+import LazyBroadcast: lazy
 
 using Logging: global_logger
 using TerminalLoggers: TerminalLogger
@@ -256,10 +257,14 @@ function rhs_invariant!(dY, Y, _, t)
     lg_top_center = Fields.level(lg_field_centers, Fields.nlevels(lg_field_centers))
     ᶜ∇ᵥw_bottom = Fields.level(ᶜ∇ᵥw, 1)
     ᶜ∇ᵥw_top = Fields.level(ᶜ∇ᵥw, Fields.nlevels(ᶜ∇ᵥw))
-    bottom_divergence = @. Geometry.Jcontravariant3(ᶜ∇ᵥw_bottom, lg_bottom_center) *
-       (2 * inv(lg_bottom_face.J))
+    bottom_divergence = @. lazy(
+        Geometry.Jcontravariant3(ᶜ∇ᵥw_bottom, lg_bottom_center) *
+        (2 * inv(lg_bottom_face.J)),
+    )
     top_divergence =
-        @. Geometry.Jcontravariant3(ᶜ∇ᵥw_top, lg_top_center) * (-2 * inv(lg_top_face.J))
+        @. lazy(
+            Geometry.Jcontravariant3(ᶜ∇ᵥw_top, lg_top_center) * (-2 * inv(lg_top_face.J)),
+        )
     set_bcs = Operators.SetBoundaryOperator(
         bottom = Operators.SetValue(bottom_divergence),
         top = Operators.SetValue(top_divergence),

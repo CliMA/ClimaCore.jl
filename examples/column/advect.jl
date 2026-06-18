@@ -11,6 +11,7 @@ import ClimaCore:
     Spaces,
     Utilities
 
+import LazyBroadcast: lazy
 using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 using ClimaCorePlots
 using Plots
@@ -121,15 +122,14 @@ for (fn, mesh) in zip(("sin", "step"), (mesh_sin, mesh_step))
         UB = Operators.UpwindBiasedProductC2F()
         ∂ = Operators.DivergenceF2C()
         left_center = Fields.level(θ, 1)
+        θ_top = Fields.level(θ, Fields.nlevels(θ))
+        θ_top_m1 = Fields.level(θ, Fields.nlevels(θ) - 1)
         right_center_left_biased_grad =
-            Geometry.Covariant3Vector.(
-                Fields.level(θ, Fields.nlevels(θ)) .-
-                Fields.level(θ, Fields.nlevels(θ) - 1)
-            )
+            @. lazy(Geometry.Covariant3Vector(θ_top - θ_top_m1))
         right_gradient_extrapolate = Operators.SetGradient(right_center_left_biased_grad)
-        left_gradient_extrapolate = Operators.SetGradient(
-            Geometry.Covariant3Vector.(Fields.level(θ, 2) .- left_center),
-        )
+        θ_2 = Fields.level(θ, 2)
+        _left_lazy_grad2 = @. lazy(Geometry.Covariant3Vector(θ_2 - left_center))
+        left_gradient_extrapolate = Operators.SetGradient(_left_lazy_grad2)
         gradc2f_fcc = Operators.GradientC2F(
             left = left_gradient_extrapolate,
             right = right_gradient_extrapolate,
@@ -144,13 +144,14 @@ for (fn, mesh) in zip(("sin", "step"), (mesh_sin, mesh_step))
     # use the advection operator
     function tendency3!(dθ, θ, _, t)
         left_center = Fields.level(θ, 1)
+        θ_top = Fields.level(θ, Fields.nlevels(θ))
+        θ_top_m1 = Fields.level(θ, Fields.nlevels(θ) - 1)
         right_center_left_biased_grad =
-            Geometry.Covariant3Vector.(
-                Fields.level(θ, Fields.nlevels(θ)) .-
-                Fields.level(θ, Fields.nlevels(θ) - 1)
-            )
+            @. lazy(Geometry.Covariant3Vector(θ_top - θ_top_m1))
         left_gradient =
-            Operators.SetGradient(@. Geometry.Covariant3Vector(2 * (left_center - sin(-t))))
+            Operators.SetGradient(
+                @. lazy(Geometry.Covariant3Vector(2 * (left_center - sin(-t))))
+            )
         right_gradient = Operators.SetGradient(right_center_left_biased_grad)
         gradc2f = Operators.GradientC2F(left = left_gradient, right = right_gradient)
         interpf2c = Operators.InterpolateF2C()
@@ -160,20 +161,21 @@ for (fn, mesh) in zip(("sin", "step"), (mesh_sin, mesh_step))
     # use the advection operator
     function tendency4!(dθ, θ, _, t)
         left_center = Fields.level(θ, 1)
+        θ_top = Fields.level(θ, Fields.nlevels(θ))
+        θ_top_m1 = Fields.level(θ, Fields.nlevels(θ) - 1)
         right_center_left_biased_grad =
-            Geometry.Covariant3Vector.(
-                Fields.level(θ, Fields.nlevels(θ)) .-
-                Fields.level(θ, Fields.nlevels(θ) - 1)
-            )
+            @. lazy(Geometry.Covariant3Vector(θ_top - θ_top_m1))
         left_gradient =
-            Operators.SetGradient(@. Geometry.Covariant3Vector(2 * (left_center - sin(-t))))
+            Operators.SetGradient(
+                @. lazy(Geometry.Covariant3Vector(2 * (left_center - sin(-t))))
+            )
         right_gradient_extrapolate = Operators.SetGradient(right_center_left_biased_grad)
         gradc2f =
             Operators.GradientC2F(left = left_gradient, right = right_gradient_extrapolate)
         interpf2c = Operators.InterpolateF2C()
-        left_gradient_extrapolate = Operators.SetGradient(
-            Geometry.Covariant3Vector.(Fields.level(θ, 2) .- left_center),
-        )
+        θ_2 = Fields.level(θ, 2)
+        _left_lazy_grad4 = @. lazy(Geometry.Covariant3Vector(θ_2 - left_center))
+        left_gradient_extrapolate = Operators.SetGradient(_left_lazy_grad4)
         gradc2f_fcc = Operators.GradientC2F(
             left = left_gradient_extrapolate,
             right = right_gradient_extrapolate,
