@@ -111,6 +111,15 @@ Base.broadcasted(style::Fields.AbstractFieldStyle, ::typeof(*), x, y) =
     Base.broadcasted(MultiplyColumnwiseBandMatrixField(), x, y) :
     auto_broadcasted(style, *, (x, y))
 
+function Base.broadcasted(
+    ::MultiplyColumnwiseBandMatrixField,
+    x::Fields.PointField,
+    y,
+)
+    @assert eltype(x) <: DiagonalMatrixRow
+    auto_broadcasted(*, (x.entries.:1, y))
+end
+
 function Base.show(io::IO, field::ColumnwiseBandMatrixField)
     print(io, eltype(field), "-valued Field")
     if eltype(eltype(field)) <: Number
