@@ -10,6 +10,7 @@ import ClimaCore:
     Geometry,
     Spaces
 
+import LazyBroadcast: lazy
 using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 
 import Logging
@@ -63,10 +64,9 @@ function ∑tendencies!(dT, T, z, t)
     bc_gt = Operators.SetGradient(
         Geometry.WVector(FT(∇gaussian(z₁, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ))),
     )
-    top_center_left_biased_grad =
-        Geometry.Covariant3Vector.(
-            Fields.level(T, Fields.nlevels(T)) .- Fields.level(T, Fields.nlevels(T) - 1)
-        )
+    T_top = Fields.level(T, Fields.nlevels(T))
+    T_top_m1 = Fields.level(T, Fields.nlevels(T) - 1)
+    top_center_left_biased_grad = @. lazy(Geometry.Covariant3Vector(T_top - T_top_m1))
 
     bc_gt_lb = Operators.SetGradient(top_center_left_biased_grad)
     gradc2f = Operators.GradientC2F(bottom = bc_gb, top = bc_gt)

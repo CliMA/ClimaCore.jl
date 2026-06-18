@@ -13,6 +13,7 @@ import ClimaCore:
 
 using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 
+import LazyBroadcast: lazy
 import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
@@ -89,11 +90,14 @@ function tendency!(dY, Y, _, t)
     bcs_bottom = Operators.SetValue(Geometry.WVector(Cd * u_wind * u_1))  # Eq. 4.16
     u_top = Fields.level(u, Fields.nlevels(u))
     u_bottom = Fields.level(u, 1)
-    bcs_top = Operators.SetGradient(@. Geometry.Covariant3Vector(2 * (FT(ug) - u_top)))  # Eq. 4.18
+    bcs_top =
+        Operators.SetGradient(@. lazy(Geometry.Covariant3Vector(2 * (FT(ug) - u_top))))  # Eq. 4.18
     gradc2f = Operators.GradientC2F(top = bcs_top)
     divf2c = Operators.DivergenceF2C(bottom = bcs_bottom)
-    bcs_bottom_advection = Operators.SetGradient(@. Geometry.Covariant3Vector(2 * u_bottom))
-    bcs_top_advection = Operators.SetGradient(@. Geometry.Covariant3Vector(-2 * u_top))
+    bcs_bottom_advection =
+        Operators.SetGradient(@. lazy(Geometry.Covariant3Vector(2 * u_bottom)))
+    bcs_top_advection =
+        Operators.SetGradient(@. lazy(Geometry.Covariant3Vector(-2 * u_top)))
     interpf2c = Operators.InterpolateF2C()
     gradc2f_advect =
         Operators.GradientC2F(top = bcs_top_advection, bottom = bcs_bottom_advection)
@@ -105,11 +109,14 @@ function tendency!(dY, Y, _, t)
     bcs_bottom = Operators.SetValue(Geometry.WVector(Cd * u_wind * v_1))  # Eq. 4.17
     v_top = Fields.level(v, Fields.nlevels(v))
     v_bottom = Fields.level(v, 1)
-    bcs_top = Operators.SetGradient(@. Geometry.Covariant3Vector(2 * (FT(vg) - v_top)))  # Eq. 4.19
+    bcs_top =
+        Operators.SetGradient(@. lazy(Geometry.Covariant3Vector(2 * (FT(vg) - v_top))))  # Eq. 4.19
     gradc2f = Operators.GradientC2F(top = bcs_top)
     divf2c = Operators.DivergenceF2C(bottom = bcs_bottom)
-    bcs_bottom_advection = Operators.SetGradient(@. Geometry.Covariant3Vector(2 * v_bottom))
-    bcs_top_advection = Operators.SetGradient(@. Geometry.Covariant3Vector(-2 * v_top))
+    bcs_bottom_advection =
+        Operators.SetGradient(@. lazy(Geometry.Covariant3Vector(2 * v_bottom)))
+    bcs_top_advection =
+        Operators.SetGradient(@. lazy(Geometry.Covariant3Vector(-2 * v_top)))
     gradc2f_advect =
         Operators.GradientC2F(top = bcs_top_advection, bottom = bcs_bottom_advection)
     @. dv =
