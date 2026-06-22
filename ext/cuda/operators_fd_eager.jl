@@ -163,7 +163,7 @@ Base.@propagate_inbounds function eager_copyto_stencil_kernel!(
         @inbounds cart_inds[col_idx].I
     else
         (; i_map, j_map, h_map) = mask
-        @inbounds mask.is_active[col_idx] || return nothing
+        @inbounds col_idx > length(i_map) && return nothing
         @inbounds i = i_map[col_idx]
         @inbounds j = j_map[col_idx]
         @inbounds h = h_map[col_idx]
