@@ -163,13 +163,16 @@ function Operators.StencilBroadcasted{Style}(
             work,
         )
     end
-    if length(op.bcs) == 0 || op isa Operators.SetBoundaryOperator
+    if length(op.bcs) == 0
+        maybe_adjointed =
+            op isa Operators.GradientOperator ?
+            Base.Broadcast.broadcasted(adjoint, args[1]) : args[1]
         new_args = (
             Base.Broadcast.broadcasted(
                 FDOperatorMatrix(op),
                 Fields.local_geometry_field(operator_input_space(op, axes)),
-            ), args[1])
-        return Operators.StencilBroadcasted{
+            ), maybe_adjointed)
+        raw_mul_bc = Operators.StencilBroadcasted{
             Style,
             MultiplyColumnwiseBandMatrixField,
             typeof(new_args),
@@ -181,6 +184,8 @@ function Operators.StencilBroadcasted{Style}(
             axes,
             work,
         )
+        return op isa Operators.DivergenceOperator ?
+               Base.Broadcast.broadcasted(adjoint, raw_mul_bc) : raw_mul_bc
     end
     has_two_bcs = length(op.bcs) == 2
     remove_bc1 = modifies_input(op, op.bcs[1]) || modifies_output(op, op.bcs[1])
@@ -228,6 +233,9 @@ function Operators.StencilBroadcasted{Style}(
     else
         wrapped_inner_arg = args[1]
     end
+    maybe_adjointed_wrapped_inner =
+        op isa Operators.GradientOperator ?
+        Base.Broadcast.broadcasted(adjoint, wrapped_inner_arg) : wrapped_inner_arg
     new_args = (op_mat, wrapped_inner_arg)
     new_broadcasted_op = Operators.StencilBroadcasted{
         Style,
@@ -268,7 +276,7 @@ function Operators.StencilBroadcasted{Style}(
             axes,
             work,
         )
-        return Operators.StencilBroadcasted{
+        raw_mul_with_setbcs = Operators.StencilBroadcasted{
             Style,
             typeof(outer_op),
             Tuple{typeof(new_broadcasted_op)},
@@ -281,8 +289,10 @@ function Operators.StencilBroadcasted{Style}(
             work,
         )
     else
-        return new_broadcasted_op
+        raw_mul_with_setbcs = new_broadcasted_op
     end
+    return op isa Operators.DivergenceOperator ?
+           Base.Broadcast.broadcasted(adjoint, raw_mul_with_setbcs) : raw_mul_with_setbcs
 end
 
 
@@ -489,7 +499,7 @@ Operators.stencil_left_boundary(
     idx,
     hidx,
     args...,
-) = error("aaaa")#Operators.stencil_interior(op_matrix, space, idx, hidx, args...)
+) = Operators.stencil_interior(op_matrix, space, idx, hidx, args...)
 Operators.stencil_right_boundary(
     op_matrix::FDOperatorMatrix,
     ::Operators.NullBoundaryCondition,
@@ -497,7 +507,7 @@ Operators.stencil_right_boundary(
     idx,
     hidx,
     args...,
-) = error("aaaa")#Operators.stencil_interior(op_matrix, space, idx, hidx, args...)
+) = Operators.stencil_interior(op_matrix, space, idx, hidx, args...)
 
 ################################################################################
 
