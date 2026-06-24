@@ -2120,14 +2120,18 @@ abstract type BoundaryOperator <: FiniteDifferenceOperator end
 """
     SetBoundaryOperator(;boundaries...)
 
-This operator only modifies the values at the boundary:
+This operator only modifies the values at the boundary faces, or the center cells adjacent to the boundary faces:
 
  - [`SetValue(val)`](@ref): set the value to be `val` on the boundary.
 """
 struct SetBoundaryOperator{BCS} <: BoundaryOperator
     bcs::BCS
     function SetBoundaryOperator(; kwargs...)
-        assert_valid_bcs("SetBoundaryOperator", kwargs, (SetValue,))
+        assert_valid_bcs(
+            "SetBoundaryOperator",
+            kwargs,
+            (SetValue, SetGradient, SetCurl, SetDivergence),
+        )
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     SetBoundaryOperator(bcs) = SetBoundaryOperator(; bcs...)
@@ -2144,29 +2148,58 @@ Base.@propagate_inbounds stencil_interior(
     arg,
 ) = getidx(space, arg, idx, hidx)
 
-boundary_width(::SetBoundaryOperator, ::AbstractBoundaryCondition) = 0
-boundary_width(::SetBoundaryOperator, ::SetValue) = 1
+boundary_width(::SetBoundaryOperator, ::AbstractBoundaryCondition) = 1
 Base.@propagate_inbounds function stencil_left_boundary(
     ::SetBoundaryOperator,
-    bc::SetValue,
+    bc::Union{SetValue, SetGradient, SetCurl, SetDivergence},
     space,
     idx,
     hidx,
     arg,
 )
-    @assert idx == left_face_boundary_idx(space)
-    getidx(space, bc.val, nothing, hidx)
+    @assert idx == left_idx(space)
+    val = getidx(space, bc.val, nothing, hidx)
+    if bc isa SetGradient
+        # val = Geometry.gradient_result_type(Val((3,)), eltype(val))(val)
+        return Geometry.project(
+            Geometry.Covariant3Axis(),
+            val,
+            Geometry.LocalGeometry(space, idx, hidx),
+        )
+    elseif bc isa SetCurl
+        return Geometry.project(
+            Geometry.Contravariant123Axis(),
+            val,
+            Geometry.LocalGeometry(space, idx, hidx),
+        )
+    end
+    return val
 end
 Base.@propagate_inbounds function stencil_right_boundary(
     ::SetBoundaryOperator,
-    bc::SetValue,
+    bc::Union{SetValue, SetGradient, SetCurl, SetDivergence},
     space,
     idx,
     hidx,
     arg,
 )
-    @assert idx == right_face_boundary_idx(space)
-    getidx(space, bc.val, nothing, hidx)
+    @assert idx == right_idx(space)
+    val = getidx(space, bc.val, nothing, hidx)
+    if bc isa SetGradient
+        # val = Geometry.gradient_result_type(Val((3,)), eltype(val))(val)
+        return Geometry.project(
+            Geometry.Covariant3Axis(),
+            val,
+            Geometry.LocalGeometry(space, idx, hidx),
+        )
+    elseif bc isa SetCurl
+        return Geometry.project(
+            Geometry.Contravariant123Axis(),
+            val,
+            Geometry.LocalGeometry(space, idx, hidx),
+        )
+    end
+    return val
 end
 
 
@@ -2980,10 +3013,13 @@ end
 @inline function should_call_left_boundary(idx, space, op, args...)
     Topologies.isperiodic(space) && return false
     loc = left_boundary_window(space)
+    boundary_condition = Operators.get_boundary(op, loc)
+    op isa SetBoundaryOperator && boundary_condition isa NullBoundaryCondition &&
+        return false
     return idx < Operators.left_interior_idx(
         space,
         op,
-        Operators.get_boundary(op, loc),
+        boundary_condition,
         args...,
     )
 end
@@ -2991,6 +3027,9 @@ end
 @inline function should_call_right_boundary(idx, space, op, args...)
     Topologies.isperiodic(space) && return false
     loc = right_boundary_window(space)
+    boundary_condition = Operators.get_boundary(op, loc)
+    op isa SetBoundaryOperator && boundary_condition isa NullBoundaryCondition &&
+        return false
     return idx > Operators.right_interior_idx(
         space,
         op,
@@ -3029,7 +3068,6 @@ Base.@propagate_inbounds function getidx(
         return call_bc_f(bc.f, space, idx, hidx, args...)
     end
     op = bc.op
-
     if should_call_left_boundary(idx, space, bc.op, bc.args...)
         stencil_left_boundary(
             op,

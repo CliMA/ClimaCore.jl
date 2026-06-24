@@ -115,6 +115,177 @@ Base.Broadcast.broadcasted(
     Fields.local_geometry_field(operator_input_space(op_matrix.op, axes(arg))),
 )
 
+modifies_output(
+    op,
+    boundary_condition::BC,
+) where {BC <: Union{
+        Operators.SetGradient,
+        Operators.SetDivergence,
+        Operators.SetCurl,
+    }} = true
+modifies_output(
+    op::Operators.InterpolationOperator,
+    boundary_condition::Operators.SetValue,
+) = true
+modifies_output(
+    op::Union{Operators.GradientF2C, Operators.DivergenceF2C},
+    boundary_condition::Operators.SetValue,
+) = false
+modifies_output(op, boundary_condition::Operators.SetValue) = true
+modifies_output(op, boundary_condition) = false
+
+
+modifies_input(
+    op::Union{Operators.GradientF2C, Operators.DivergenceF2C},
+    boundary_condition::Operators.SetValue,
+) = true
+modifies_input(op, boundary_condition) = false
+
+
+function Operators.StencilBroadcasted{Style}(
+    op::OneArgFDOperator,
+    args::Args,
+    axes::Spaces.AbstractSpace,
+    work::Work = nothing,
+) where {Style, Args, Work}
+    # can have 0, 1, or 2 boundary conds
+    if op isa Operators.SetBoundaryOperator
+        return Operators.StencilBroadcasted{
+            Style,
+            typeof(op),
+            Args,
+            typeof(axes),
+            Work,
+        }(
+            op,
+            args,
+            axes,
+            work,
+        )
+    end
+    if length(op.bcs) == 0 || op isa Operators.SetBoundaryOperator
+        new_args = (
+            Base.Broadcast.broadcasted(
+                FDOperatorMatrix(op),
+                Fields.local_geometry_field(operator_input_space(op, axes)),
+            ), args[1])
+        return Operators.StencilBroadcasted{
+            Style,
+            MultiplyColumnwiseBandMatrixField,
+            typeof(new_args),
+            typeof(axes),
+            Work,
+        }(
+            MultiplyColumnwiseBandMatrixField(),
+            new_args,
+            axes,
+            work,
+        )
+    end
+    has_two_bcs = length(op.bcs) == 2
+    remove_bc1 = modifies_input(op, op.bcs[1]) || modifies_output(op, op.bcs[1])
+    if has_two_bcs
+        remove_bc2 = modifies_input(op, op.bcs[2]) || modifies_output(op, op.bcs[2])
+        new_bcs =
+            remove_bc1 && remove_bc2 ? NamedTuple{}() :
+            remove_bc1 ? NamedTuple{(keys(op.bcs)[2],)}((op.bcs[2],)) :
+            remove_bc2 ? NamedTuple{(keys(op.bcs)[1],)}((op.bcs[1],)) :
+            op.bcs
+    else
+        new_bcs = remove_bc1 ? NamedTuple{}() : op.bcs
+    end
+    op_mat = Base.Broadcast.broadcasted(
+        FDOperatorMatrix(Base.typename(typeof(op)).wrapper(new_bcs)),
+        Fields.local_geometry_field(operator_input_space(op, axes)),
+    )
+    # Base.typename(typeof(bc.op)).wrapper()
+    if modifies_input(op, op.bcs[1]) || (has_two_bcs && modifies_input(op, op.bcs[2]))
+        if modifies_input(op, op.bcs[1])
+            if has_two_bcs && modifies_input(op, op.bcs[2])
+                inner_op = Operators.SetBoundaryOperator(op.bcs)
+            else
+                inner_op =
+                    Operators.SetBoundaryOperator(
+                        NamedTuple{(keys(op.bcs)[1],)}((op.bcs[1],)),
+                    )
+            end
+        else
+            inner_op =
+                Operators.SetBoundaryOperator(NamedTuple{(keys(op.bcs)[2],)}((op.bcs[2],)))
+        end
+        wrapped_inner_arg = Operators.StencilBroadcasted{
+            Style,
+            typeof(inner_op),
+            Args,
+            typeof(Base.axes(args[1])),
+            Nothing,
+        }(
+            inner_op,
+            args,
+            Base.axes(args[1]),
+            nothing,
+        )
+    else
+        wrapped_inner_arg = args[1]
+    end
+    new_args = (op_mat, wrapped_inner_arg)
+    new_broadcasted_op = Operators.StencilBroadcasted{
+        Style,
+        MultiplyColumnwiseBandMatrixField,
+        typeof(new_args),
+        typeof(axes),
+        Work,
+    }(
+        MultiplyColumnwiseBandMatrixField(),
+        new_args,
+        axes,
+        work,
+    )
+
+    if modifies_output(op, op.bcs[1]) || (has_two_bcs && modifies_output(op, op.bcs[2]))
+        if modifies_output(op, op.bcs[1])
+            if has_two_bcs && modifies_output(op, op.bcs[2])
+                outer_op = Operators.SetBoundaryOperator(op.bcs)
+            else
+                outer_op =
+                    Operators.SetBoundaryOperator(
+                        NamedTuple{(keys(op.bcs)[1],)}((op.bcs[1],)),
+                    )
+            end
+        else
+            outer_op =
+                Operators.SetBoundaryOperator(NamedTuple{(keys(op.bcs)[2],)}((op.bcs[2],)))
+        end
+        bb = Operators.StencilBroadcasted{
+            Style,
+            typeof(outer_op),
+            Tuple{typeof(new_broadcasted_op)},
+            typeof(axes),
+            Work,
+        }(
+            outer_op,
+            (new_broadcasted_op,),
+            axes,
+            work,
+        )
+        return Operators.StencilBroadcasted{
+            Style,
+            typeof(outer_op),
+            Tuple{typeof(new_broadcasted_op)},
+            typeof(axes),
+            Work,
+        }(
+            outer_op,
+            (new_broadcasted_op,),
+            axes,
+            work,
+        )
+    else
+        return new_broadcasted_op
+    end
+end
+
+
 """
     operator_matrix(op)
 
@@ -315,18 +486,18 @@ Operators.stencil_left_boundary(
     op_matrix::FDOperatorMatrix,
     ::Operators.NullBoundaryCondition,
     space,
-    _,
-    _,
+    idx,
+    hidx,
     args...,
-) = zero(Operators.return_eltype(op_matrix, args...))
+) = error("aaaa")#Operators.stencil_interior(op_matrix, space, idx, hidx, args...)
 Operators.stencil_right_boundary(
     op_matrix::FDOperatorMatrix,
     ::Operators.NullBoundaryCondition,
     space,
-    _,
-    _,
+    idx,
+    hidx,
     args...,
-) = zero(Operators.return_eltype(op_matrix, args...))
+) = error("aaaa")#Operators.stencil_interior(op_matrix, space, idx, hidx, args...)
 
 ################################################################################
 
