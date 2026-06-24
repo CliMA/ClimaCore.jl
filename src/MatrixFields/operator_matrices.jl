@@ -560,16 +560,6 @@ op_matrix_interior_row(
 ) where {FT} = BidiagonalMatrixRow(FT(1), FT(1)) / 2
 op_matrix_first_row(
     ::Operators.InterpolateC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(FT(0))
-op_matrix_last_row(
-    ::Operators.InterpolateC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(FT(0))
-op_matrix_first_row(
-    ::Operators.InterpolateC2F,
     ::Operators.Extrapolate,
     ::Type{FT},
 ) where {FT} = UpperDiagonalMatrixRow(FT(1))
@@ -583,31 +573,11 @@ op_matrix_interior_row(
     ::Union{Operators.LeftBiasedC2F, Operators.LeftBiasedF2C},
     ::Type{FT},
 ) where {FT} = LowerDiagonalMatrixRow(FT(1))
-op_matrix_first_row(
-    ::Operators.LeftBiasedC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = LowerEmptyMatrixRow()
-op_matrix_first_row(
-    ::Operators.LeftBiasedF2C,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(FT(0))
 
 op_matrix_interior_row(
     ::Union{Operators.RightBiasedC2F, Operators.RightBiasedF2C},
     ::Type{FT},
 ) where {FT} = UpperDiagonalMatrixRow(FT(1))
-op_matrix_last_row(
-    ::Operators.RightBiasedC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = UpperEmptyMatrixRow()
-op_matrix_last_row(
-    ::Operators.RightBiasedF2C,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(FT(0))
 
 op_matrix_row_type(
     ::Operators.WeightedInterpolationOperator,
@@ -626,16 +596,6 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     denominator = w⁻ + w⁺
     return BidiagonalMatrixRow(w⁻ / denominator, w⁺ / denominator)
 end
-op_matrix_first_row(
-    ::Operators.WeightedInterpolateC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(FT(0))
-op_matrix_last_row(
-    ::Operators.WeightedInterpolateC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(FT(0))
 op_matrix_first_row(
     ::Operators.WeightedInterpolateC2F,
     ::Operators.Extrapolate,
@@ -759,42 +719,12 @@ op_matrix_row_type(::Operators.AdvectionOperator, ::Type{FT}, _) where {FT} =
 
 op_matrix_interior_row(::Operators.SetBoundaryOperator, ::Type{FT}) where {FT} =
     DiagonalMatrixRow(FT(1))
-op_matrix_first_row(
-    ::Operators.SetBoundaryOperator,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = DiagonalMatrixRow(FT(0))
-op_matrix_last_row(
-    ::Operators.SetBoundaryOperator,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = DiagonalMatrixRow(FT(0))
 
 op_matrix_row_type(op::Operators.GradientOperator, ::Type{FT}) where {FT} =
     uses_extrapolate(op) ? QuaddiagonalMatrixRow{C3{FT}} :
     BidiagonalMatrixRow{C3{FT}}
 op_matrix_interior_row(::Operators.GradientOperator, ::Type{FT}) where {FT} =
     BidiagonalMatrixRow(-C3(FT(1)), C3(FT(1)))
-op_matrix_first_row(
-    ::Operators.GradientC2F,
-    ::Operators.SetGradient,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(C3(FT(0)))
-op_matrix_last_row(
-    ::Operators.GradientC2F,
-    ::Operators.SetGradient,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(C3(FT(0)))
-op_matrix_first_row(
-    ::Operators.GradientF2C,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = BidiagonalMatrixRow(C3(FT(0)), C3(FT(1)))
-op_matrix_last_row(
-    ::Operators.GradientF2C,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = BidiagonalMatrixRow(-C3(FT(1)), C3(FT(0)))
 op_matrix_first_row(
     ::Operators.GradientF2C,
     ::Operators.Extrapolate,
@@ -820,50 +750,6 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     J⁺ = Geometry.LocalGeometry(space, idx + half, hidx).J
     return BidiagonalMatrixRow(-C3(J⁻)', C3(J⁺)') * invJ
 end
-op_matrix_first_row(
-    ::Operators.DivergenceC2F,
-    ::Operators.SetDivergence,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(C3(FT(0))')
-op_matrix_last_row(
-    ::Operators.DivergenceC2F,
-    ::Operators.SetDivergence,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(C3(FT(0))')
-Base.@propagate_inbounds function op_matrix_first_row(
-    ::Operators.DivergenceF2C,
-    ::Operators.SetValue,
-    space,
-    idx,
-    hidx,
-)
-    FT = Spaces.undertype(space)
-    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
-    J⁺ = Geometry.LocalGeometry(space, idx + half, hidx).J
-    return BidiagonalMatrixRow(C3(FT(0))', C3(J⁺)') * invJ
-end
-Base.@propagate_inbounds function op_matrix_last_row(
-    ::Operators.DivergenceF2C,
-    ::Operators.SetValue,
-    space,
-    idx,
-    hidx,
-)
-    FT = Spaces.undertype(space)
-    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
-    J⁻ = Geometry.LocalGeometry(space, idx - half, hidx).J
-    return BidiagonalMatrixRow(-C3(J⁻)', C3(FT(0))') * invJ
-end
-op_matrix_first_row(
-    ::Operators.DivergenceF2C,
-    ::Operators.SetDivergence,
-    ::Type{FT},
-) where {FT} = BidiagonalMatrixRow(C3(FT(0))', C3(FT(0))')
-op_matrix_last_row(
-    ::Operators.DivergenceF2C,
-    ::Operators.SetDivergence,
-    ::Type{FT},
-) where {FT} = BidiagonalMatrixRow(C3(FT(0))', C3(FT(0))')
 Base.@propagate_inbounds function op_matrix_first_row(
     ::Operators.DivergenceF2C,
     ::Operators.Extrapolate,
@@ -904,13 +790,3 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
     return BidiagonalMatrixRow(-εⁱʲ, εⁱʲ) * invJ
 end
-op_matrix_first_row(
-    ::Operators.CurlC2F,
-    ::Operators.SetCurl,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(zero(CT12_CT12{FT}))
-op_matrix_last_row(
-    ::Operators.CurlC2F,
-    ::Operators.SetCurl,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(zero(CT12_CT12{FT}))
