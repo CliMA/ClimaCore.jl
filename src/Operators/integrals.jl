@@ -267,6 +267,7 @@ function column_accumulate!(
     input::Union{Fields.Field, PointwiseOrColumnwiseBroadcasted};
     init = UnspecifiedInit(),
     transform::T = identity,
+    reverse::Bool = false,
 ) where {F, T}
     device = ClimaComms.device(output)
     space = axes(input)
@@ -274,7 +275,7 @@ function column_accumulate!(
         Spaces.staggering(space) == Spaces.CellCenter() &&
         Spaces.staggering(axes(output)) == Spaces.CellFace() &&
         error("init must be specified for center-to-face accumulation")
-    column_accumulate_device!(device, f, transform, output, input, init, space)
+    column_accumulate_device!(device, f, transform, output, input, init, space, reverse)
 end
 
 function column_accumulate_device!(
@@ -285,11 +286,12 @@ function column_accumulate_device!(
     input,
     init,
     space,
+    reverse
 ) where {F, T}
     mask = Spaces.get_mask(space)
     if space isa Spaces.FiniteDifferenceSpace
         @assert mask isa DataLayouts.NoMask
-        single_column_accumulate!(f, transform, output, input, init, space)
+        single_column_accumulate!(f, transform, output, input, init, space, reverse)
     else
         Fields.bycolumn(space) do colidx
             I = Fields.universal_index(colidx)
@@ -301,6 +303,7 @@ function column_accumulate_device!(
                     input[colidx],
                     init,
                     space[colidx],
+                    reverse
                 )
             end
         end
@@ -315,6 +318,7 @@ function single_column_accumulate!(
     _input,
     init,
     space,
+    reverse,
 ) where {F, T}
     device = ClimaComms.device(space)
     first_level = left_idx(space)
@@ -337,7 +341,12 @@ function single_column_accumulate!(
     @inbounds if !isnothing(init_output_level)
         Fields.level(output, init_output_level)[] = transform(accumulated_value)
     end
-    @inbounds for level in next_level:last_level
+    indices = if reverse
+        last_level:-1:next_level
+    else
+        next_level:last_level
+    end
+    @inbounds for level in indices
         accumulated_value =
             f(accumulated_value, get_level_value(space, _input, level))
         output_level =
