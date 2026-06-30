@@ -106,9 +106,12 @@ end
 function test_column_reduce_and_accumulate!(center_space)
     face_space = center_to_face_space(center_space)
     ᶜwhole_number = ones(center_space)
+    ᶜwhole_number_reverse = ones(center_space)
     column_accumulate!(+, ᶜwhole_number, ᶜwhole_number) # 1:Nv per column
+    column_accumulate!(+, ᶜwhole_number_reverse, ᶜwhole_number_reverse; reverse = true)
     ᶠwhole_number = ones(face_space)
-    column_accumulate!(+, ᶠwhole_number, ᶠwhole_number) # 1:(Nv + 1) per column
+    ᶠwhole_number_reverse = ones(face_space)
+    column_accumulate!(+, ᶠwhole_number_reverse, ᶠwhole_number_reverse; reverse = true) # 1:(Nv + 1) per column
 
     safe_binomial(n, k) = binomial(Int32(n), Int32(k)) # GPU-compatible binomial
 
@@ -139,19 +142,26 @@ function test_column_reduce_and_accumulate!(center_space)
 
     ᶜoutput = similar(ᶜwhole_number)
     ᶠoutput = similar(ᶠwhole_number)
-    for (input, output, reference_output) in (
-        (ᶜwhole_number, ᶜoutput, motzkin_number.(ᶜwhole_number)),
-        (ᶠwhole_number, ᶠoutput, motzkin_number.(ᶠwhole_number)),
-        (ᶠwhole_number, ᶜoutput, motzkin_number.(ᶜwhole_number .+ 1)),
-        (ᶜwhole_number, ᶠoutput, motzkin_number.(ᶠwhole_number .- 1)),
+    for (input, output, reference_output, reverse) in (
+        (ᶜwhole_number, ᶜoutput, motzkin_number.(ᶜwhole_number), false),
+        (ᶠwhole_number, ᶠoutput, motzkin_number.(ᶠwhole_number), false),
+        (ᶠwhole_number, ᶜoutput, motzkin_number.(ᶜwhole_number .+ 1), false),
+        (ᶜwhole_number, ᶠoutput, motzkin_number.(ᶠwhole_number .- 1), false),
+        (ᶜwhole_number_reverse, ᶜoutput, motzkin_number.(ᶜwhole_number_reverse), true),
+        (ᶠwhole_number_reverse, ᶠoutput, motzkin_number.(ᶠwhole_number_reverse), true),
+        (ᶠwhole_number_reverse, ᶜoutput, motzkin_number.(ᶜwhole_number_reverse .+ 1), true),
+        (ᶜwhole_number_reverse, ᶠoutput, motzkin_number.(ᶠwhole_number_reverse .- 1), true),
     )
+
         set_output! =
-            () -> column_accumulate!(f, output, input; init, transform)
+            () -> column_accumulate!(f, output, input; init, transform, reverse)
         set_output!()
         @test output == reference_output
         @test_opt ignored_modules = CUDA_FRAMES set_output!()
         test_allocs(@allocated set_output!())
     end
+
+
 end
 
 function test_fubinis_theorem(space)
