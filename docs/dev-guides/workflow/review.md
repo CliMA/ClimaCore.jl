@@ -33,7 +33,8 @@ Work in this order:
 
 - [ ] Check API and config compatibility: keys, defaults, diagnostics/output names, initialization, restart/reproducibility behavior, and downstream public APIs.
 - [ ] Check concrete performance risks in hot paths (see [gpu_performance.md](../performance/gpu_performance.md) for the definition of hot path): allocations, type instability, repeated work, and scaling regressions.
-- [ ] Flag data-dependent `if/else` inside GPU kernels as `high` (thread divergence).
+- [ ] Flag data-dependent `if/else` inside GPU kernels as `high` (thread divergence). See the [Branchless Code Guide](../performance/branchless_code.md).
+- [ ] Flag convergence-based or unbounded iterative solves (`while err > tol`, early-exit `break`) on a per-grid-point path as `high` (thread divergence); a fixed iteration count chosen by an offline test is preferred ([Branchless Code Guide §4–5](../performance/branchless_code.md)).
 - [ ] Flag closures passed to any `integrate`, `quadrature`, or `bycolumn` call as `high` (functor required).
 - [ ] Flag Float32 literals (`1.0`, `Inf`, integer-base exponentiation like `6^x`) in functions touched by Float32 simulations as `medium`.
 - [ ] Flag new `where {FT}` annotations on non-constructor physics functions as `low` (AD compatibility).

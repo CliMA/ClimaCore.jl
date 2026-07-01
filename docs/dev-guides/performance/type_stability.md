@@ -63,7 +63,7 @@ function compute(params::MyParams)
     end
 end
 
-# ✅ Compile-time dispatch — branch eliminated
+# ✅ Compile-time dispatch: branch eliminated
 function compute(params::MyParams{Nothing})
     # warm-only logic
 end

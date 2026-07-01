@@ -45,7 +45,7 @@ At the `infil>` prompt you can read locals, call functions, and continue with `@
 
 For step-through execution, [Debugger.jl](https://github.com/JuliaDebug/Debugger.jl)'s `@enter f(args...)` works for small functions but is slow on the interpreter; Infiltrator is faster for most CliMA hot-path debugging.
 
-## 3. "Why is *that* method being called?" — dispatch debugging
+## 3. Dispatch debugging: why is *that* method being called?
 
 Subtle bugs often come from a function being called with a slightly wrong argument type, dispatching to a more generic method that returns the wrong thing. Three quick introspection moves:
 
@@ -58,7 +58,7 @@ import InteractiveUtils
 InteractiveUtils.methodswith(typeof(arg1), my_func)  # all methods of my_func taking arg1's type
 ```
 
-If `@which` points at a more abstract method than you expected, the argument's static type is the culprit — track back to where it lost its concrete type. For type-instability tooling (`@code_warntype`, `JET.@report_opt`) see [allocation_debugging.md §§3–4](../performance/allocation_debugging.md).
+If `@which` points at a more abstract method than you expected, the argument's static type is the culprit; track back to where it lost its concrete type. For type-instability tooling (`@code_warntype`, `JET.@report_opt`) see [allocation_debugging.md §§3–4](../performance/allocation_debugging.md).
 
 ## 4. Plotting `ClimaCore.Field`s
 
@@ -90,11 +90,11 @@ For Oceananigans state inspection, the [ClimaCoupler debugging guide](https://cl
 | Symptom                                          | Likely cause                                                         |
 |:-------------------------------------------------|:---------------------------------------------------------------------|
 | A field is zero where it should be updated      | The writer was never wired into the integrator (the tendency function exists but no caller assigns into `Yₜ.<field>`) |
-| A field carries stale values across stages       | A tendency function reads from `Yₜ` instead of writing to it — `Yₜ` must be write-only per [ecosystem_conventions.md §2](../architecture/ecosystem_conventions.md) |
-| Result differs by `~eps` from a reference        | Reordered floating-point arithmetic from a refactor — usually harmless, but flag with `🤖precisionΔ` ([changelogs_and_versions.md §1.4](../code-quality/changelogs_and_versions.md)) |
-| Float32 simulation diverges where Float64 is fine | A `1.0`/`Inf`/`6^x` literal promoted to Float64 — see [type_stability.md §1](../performance/type_stability.md) |
-| NaN appears only on GPU                          | A scalar-indexing fallback that returns garbage, or a non-`isbits` arg in a kernel — see [gpu_performance.md §§7–8](../performance/gpu_performance.md) |
-| Result depends on MPI rank count                 | A non-associative reduction or per-rank random state — see [clima_comms.md §2](../infrastructure/clima_comms.md) |
+| A field carries stale values across stages       | A tendency function reads from `Yₜ` instead of writing to it; `Yₜ` must be write-only per [ecosystem_conventions.md §2](../architecture/ecosystem_conventions.md) |
+| Result differs by `~eps` from a reference        | Reordered floating-point arithmetic from a refactor, usually harmless, but flag with `🤖precisionΔ` ([changelogs_and_versions.md §1.4](../code-quality/changelogs_and_versions.md)) |
+| Float32 simulation diverges where Float64 is fine | A `1.0`/`Inf`/`6^x` literal promoted to Float64, see [type_stability.md §1](../performance/type_stability.md) |
+| NaN appears only on GPU                          | A scalar-indexing fallback that returns garbage, or a non-`isbits` arg in a kernel, see [gpu_performance.md §§7–8](../performance/gpu_performance.md) |
+| Result depends on MPI rank count                 | A non-associative reduction or per-rank random state: see [clima_comms.md §2](../infrastructure/clima_comms.md) |
 
 ## 6. Other common pitfalls
 

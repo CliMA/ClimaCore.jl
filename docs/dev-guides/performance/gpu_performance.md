@@ -13,18 +13,18 @@ If a function is called in either context, treat every rule in this file and in 
 
 ## 1. SIMT and thread divergence
 
-On GPU architectures (CUDA, ROCm), threads are grouped into warps (typically 32 threads). All threads in a warp execute the same instruction in lockstep. When a data-dependent `if/else` branch causes different threads to take different paths, the hardware must execute both branches sequentially — this is **thread divergence** and it can halve (or worse) throughput.
+On GPU architectures (CUDA, ROCm), threads are grouped into warps (typically 32 threads). All threads in a warp execute the same instruction in lockstep. When a data-dependent `if/else` branch causes different threads to take different paths, the hardware must execute both branches sequentially: this is **thread divergence** and it can halve (or worse) throughput.
 
 ### The remedy: `ifelse`
 
-Use `ifelse(cond, a, b)` to remove the divergent branch predicate. See [SDP 17](../code-quality/software_design_patterns.md) for the canonical pattern.
+Use `ifelse(cond, a, b)` to remove the divergent branch predicate. See [SDP 17](../code-quality/software_design_patterns.md) for the canonical pattern, and the [Branchless Code Guide](branchless_code.md) for the broader discipline: why rare branches are not rare at 10⁶+ grid points, physical case splits, and fixed-iteration solvers.
 
-**Underlying principle**: `ifelse` is an ordinary function call. Both `a` and `b` are evaluated to a value *on every thread* before the call; `ifelse` only selects which value to return. Using `ifelse` does **not** save the work of the un-taken branch — its purpose is to eliminate the warp-divergent predicate, not to skip computation. If one branch is significantly more expensive than the other, every thread still pays its cost; sometimes a divergent `if/else` is the better trade and you should measure.
+**Underlying principle**: `ifelse` is an ordinary function call. Both `a` and `b` are evaluated to a value *on every thread* before the call; `ifelse` only selects which value to return. Using `ifelse` does **not** save the work of the un-taken branch; its purpose is to eliminate the warp-divergent predicate, not to skip computation. If one branch is significantly more expensive than the other, every thread still pays its cost; sometimes a divergent `if/else` is the better trade and you should measure.
 
 Three consequences follow:
 
 - **Guard mathematically invalid operations** (`log` of a non-positive, `sqrt` of a negative, division by a possibly-zero denominator) *before* the `ifelse`. See [Numerical Robustness §1–2](numerical_robustness.md) for how to choose the floor (it is not `eps(FT)` in general).
-- **No `begin...end` blocks in arguments.** Statements inside `begin...end` run unconditionally — they are not "guarded" by the condition.
+- **No `begin...end` blocks in arguments.** Statements inside `begin...end` run unconditionally: they are not "guarded" by the condition.
 - **No recursion through `ifelse`.** Since both branches evaluate, using `ifelse` to choose between a base case and a recursive call produces unbounded recursion. Use a plain `if` for recursion.
 
 ```julia
@@ -55,7 +55,7 @@ Closures that capture local variables produce heap allocations ("boxed variables
 
 ### When to use `lazy()`
 
-`lazy` is exported by the [`LazyBroadcast.jl`](https://github.com/CliMA/LazyBroadcast.jl) package (`import LazyBroadcast: lazy`) and is re-exported through `ClimaCore`. Use `@. lazy(expr)` for any intermediate computed quantity that is consumed by a subsequent broadcast — it prevents heap allocation of a temporary `Field`.
+`lazy` is exported by the [`LazyBroadcast.jl`](https://github.com/CliMA/LazyBroadcast.jl) package (`import LazyBroadcast: lazy`) and is re-exported through `ClimaCore`. Use `@. lazy(expr)` for any intermediate computed quantity that is consumed by a subsequent broadcast: it prevents heap allocation of a temporary `Field`.
 
 ```julia
 # ✅ Lazy: no temporary Field allocated
@@ -71,20 +71,20 @@ result = @. lazy(physics_func(ᶜT, Y.c.ρ))
 A `lazy()` wrapper returns a `Broadcasted` object, not a real `NamedTuple`. Accessing `.field_name` on it outside a fused broadcast fails with `ERROR: type Broadcasted has no field X`.
 
 ```julia
-# ❌ FAILS — lazy object is not a NamedTuple
+# ❌ FAILS: lazy object is not a NamedTuple
 limited = @. lazy(limit_tendencies(A, B, C))
 @. Yₜ.c.ρq_liq += limited.Sqₗᵐ  # ERROR
 ```
 
 ### Materialization pattern
 
-When you need to extract multiple fields from a function's `NamedTuple` result, remove `lazy()` to materialize into a pre-allocated `Field`. **Do not** create a new temporary field inline each timestep — this allocates on every call. Instead, use a scratch field from the cache that was allocated once during model construction.
+When you need to extract multiple fields from a function's `NamedTuple` result, remove `lazy()` to materialize into a pre-allocated `Field`. **Do not** create a new temporary field inline each timestep: this allocates on every call. Instead, use a scratch field from the cache that was allocated once during model construction.
 
 ```julia
 # ❌ Allocates a new Field every timestep
 limited_field = @. limit_tendencies(A, B, C)
 
-# ✅ Write into a pre-allocated cache field — zero allocations per timestep
+# ✅ Write into a pre-allocated cache field: zero allocations per timestep
 @. p.scratch.ᶜlimited = limit_tendencies(A, B, C)
 @. Yₜ.c.ρq_liq += p.scratch.ᶜlimited.Sqₗᵐ
 @. Yₜ.c.ρq_ice += p.scratch.ᶜlimited.Sqᵢᵐ
@@ -94,7 +94,7 @@ limited_field = @. limit_tendencies(A, B, C)
 
 ### Multi-field updates
 
-ClimaCore's broadcast machinery does not support a tuple of `Field`s on the LHS — `@. (Yₜ.c.ρq_liq, Yₜ.c.ρq_ice) += f(...)` fails in `check_broadcast_shape` / `copyto!`. Use the scratch-field pattern from the previous section: materialize the multi-field result into a pre-allocated `NamedTuple`-of-`Field`s in the cache, then issue one `@.` per target. The cost of repeating the broadcast is paid back because the RHS is just a field load, not a recomputation.
+ClimaCore's broadcast machinery does not support a tuple of `Field`s on the LHS: `@. (Yₜ.c.ρq_liq, Yₜ.c.ρq_ice) += f(...)` fails in `check_broadcast_shape` / `copyto!`. Use the scratch-field pattern from the previous section: materialize the multi-field result into a pre-allocated `NamedTuple`-of-`Field`s in the cache, then issue one `@.` per target. The cost of repeating the broadcast is paid back because the RHS is just a field load, not a recomputation.
 
 ## 4. `@.` broadcast rules
 
@@ -113,7 +113,7 @@ Use `$expr` to prevent the `@.` macro from broadcasting over a subexpression. Th
 
 ### Parameter extraction
 
-Extract non-`Field` arguments to local variables before the `@.` block — see [SDP 20](../code-quality/software_design_patterns.md) for the rule and rationale.
+Extract non-`Field` arguments to local variables before the `@.` block; see [SDP 20](../code-quality/software_design_patterns.md) for the rule and rationale.
 
 ## 5. Register pressure and function size
 
@@ -121,9 +121,9 @@ Large functions (roughly > 200–300 lines) may exceed the Julia compiler's inli
 
 **Solution**: extract complex logical blocks into smaller `@inline` helper functions. Keeping the parent function small allows the compiler to stay within its heuristics threshold, ensuring all broadcasts are correctly fused.
 
-## 6. Fixed iteration solvers (advisory)
+## 6. Fixed iteration solvers
 
-Convergence-based loops (`while err > tol`) cause thread divergence when different threads converge at different rates. Where the physics allows it, prefer a fixed number of iterations. See [SDP 19](../code-quality/software_design_patterns.md).
+Convergence-based loops (`while err > tol`) cause thread divergence when different threads converge at different rates. Where the physics allows it, prefer a fixed number of iterations, chosen by physical adequacy and validated with an offline test. See the [Branchless Code Guide §4–5](branchless_code.md) and [SDP 19](../code-quality/software_design_patterns.md).
 
 ## 7. GPU-safe error handling
 
@@ -131,7 +131,7 @@ Use `error("static message")` instead of `@assert`, and do not interpolate runti
 
 ## 8. `isbits` requirement
 
-Anything passed into a GPU kernel must be `isbits` *after device adaptation*. That is the actual contract — not that the host-side object is `isbits`. Many ClimaCore objects (notably `Field`, `Space`, and anything wrapping a `CuArray`) are deliberately not `isbits` on the host because they hold `Array`/`CuArray` payloads; they become `isbits` only after `Adapt.adapt(CUDA.KernelAdaptor(), x)` (equivalently `CUDA.cudaconvert(x)`) rewrites the array fields into device-side `CuDeviceArray`s and similar.
+Anything passed into a GPU kernel must be `isbits` *after device adaptation*. That is the actual contract, not that the host-side object is `isbits`. Many ClimaCore objects (notably `Field`, `Space`, and anything wrapping a `CuArray`) are deliberately not `isbits` on the host because they hold `Array`/`CuArray` payloads; they become `isbits` only after `Adapt.adapt(CUDA.KernelAdaptor(), x)` (equivalently `CUDA.cudaconvert(x)`) rewrites the array fields into device-side `CuDeviceArray`s and similar.
 
 ```julia
 julia> a = fill(0.0f0, axes(Y.c));   # ClimaCore Field
