@@ -114,6 +114,7 @@ function auto_launch!(
     always_inline = true,
     caller = :unknown,
     shmem = 0,
+    fastmath = true,
 ) where {F!}
     # If desired, compute a kernel name from the stack trace and store in
     # a global Dict, which serves as an in memory cache
@@ -172,7 +173,7 @@ function auto_launch!(
         @assert !isnothing(nitems)
         if nitems ≥ 0
             # Note: `name = nothing` here will revert to default behavior
-            kernel = CUDA.@cuda name = kernel_name always_inline = true launch =
+            kernel = CUDA.@cuda name = kernel_name always_inline = true fastmath = fastmath  launch =
                 false f!(args...)
             config = CUDA.launch_configuration(kernel.fun)
             threads = min(nitems, config.threads)
@@ -182,7 +183,7 @@ function auto_launch!(
     else
         kernel =
             CUDA.@cuda name = kernel_name always_inline = always_inline threads =
-                threads_s blocks = blocks_s shmem = shmem f!(args...)
+                threads_s blocks = blocks_s shmem = shmem fastmath = fastmath f!(args...)
     end
 
     if collect_kernel_stats() # only for development use
