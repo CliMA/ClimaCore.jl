@@ -14,11 +14,11 @@ This guide covers patterns for writing Julia code that is compatible with Automa
 ## Before / after example
 
 ```julia
-# ❌ AD-fragile — `where {FT}` forces x and y to share a type, so a mixed call
+# ❌ AD-fragile: `where {FT}` forces x and y to share a type, so a mixed call
 # like compute(Dual(1.0), 2.0) will throw a MethodError
 @inline compute(x::FT, y::FT) where {FT} = y > FT(0) ? FT(1) - x^2 : FT(0)
 
-# ✅ AD-compatible — x and y can have different types, but the result always
+# ✅ AD-compatible: x and y can have different types, but the result always
 # matches the type of x
 @inline compute(x, y) = y > zero(y) ? one(x) - x^2 : zero(x)
 ```
@@ -29,18 +29,18 @@ This example can be rewritten even more efficiently using the `ifelse` function:
 @inline compute(x, y) = ifelse(y > zero(y), one(x) - x^2, zero(x))
 ```
 
-Using `ifelse` is not strictly necessary for ForwardDiff or Enzyme — conditional branches can be differentiated separately — but it is preferred over generic `if/else` and `?/:` constructs to avoid thread divergence on GPUs (see [SDP 17](../code-quality/software_design_patterns.md)).
+Using `ifelse` is not strictly necessary for ForwardDiff or Enzyme (conditional branches can be differentiated separately), but it is preferred over generic `if/else` and `?/:` constructs to avoid thread divergence on GPUs (see [SDP 17](../code-quality/software_design_patterns.md) and the [Branchless Code Guide](branchless_code.md)).
 
 ## When type constraints are OK
 
 Type annotations are acceptable in these specific contexts:
 
-- **Struct constructors**: `MySGS(::Type{FT}; ...)` — `FT` determines the element type of arrays (`SVector`, `SMatrix`) or parameter sets.
-- **Dispatch on non-numeric types**: `method(::GaussianSGS, ...)` — dispatching on a distribution type or model type is fine because these are not numeric values that AD would differentiate through.
+- **Struct constructors**: `MySGS(::Type{FT}; ...)`, where `FT` determines the element type of arrays (`SVector`, `SMatrix`) or parameter sets.
+- **Dispatch on non-numeric types**: `method(::GaussianSGS, ...)`; dispatching on a distribution type or model type is fine because these are not numeric values that AD would differentiate through.
 
 ## AD-compatible clamping
 
-Standard `clamp(x, low, high)` is generally safe for AD. For zero-clamping the simplest idiom — used in `CloudMicrophysics.Utilities.clamp_to_nonneg` — is:
+Standard `clamp(x, low, high)` is generally safe for AD. For zero-clamping the simplest idiom (used in `CloudMicrophysics.Utilities.clamp_to_nonneg`) is:
 
 ```julia
 @inline clamp_to_nonneg(x) = max(zero(x), x)
