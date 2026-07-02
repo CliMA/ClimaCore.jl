@@ -1,6 +1,6 @@
 # Glossary
 
-In addition to the variables defined in `variable_list.md`, there are some general terms and conventions that are used within CliMA. This glossary defines those terms and conventions.
+In addition to the variables defined in [variable_list.md](variable_list.md), there are some general terms and conventions that are used within CliMA. This glossary defines those terms and conventions.
 
 ## Software Terminology
 
@@ -24,3 +24,7 @@ In addition to the variables defined in `variable_list.md`, there are some gener
 - **DSS**: [Direct Stiffness Summation](https://clima.github.io/ClimaCore.jl/dev/tutorials/introduction/#2.1.1-Direct-stiffness-summation)
 - **ILAMB**: International Land Model Benchmarking, a project that provides standardized benchmarking for land models.
 - **SYPD**: Simulated Years Per Day, a common performance metric for climate models that indicates how many years of simulation can be completed in one day of wall-clock time.
+
+## Self-correction
+
+If this guide is discovered to be stale or missing a term, update it.

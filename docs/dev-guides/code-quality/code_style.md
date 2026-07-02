@@ -10,7 +10,7 @@ The root `.JuliaFormatter.toml` is the authoritative source of truth for code fo
 julia -e 'using JuliaFormatter; format(".")'
 ```
 
-or install JuliaFormatter as an app and use directly from the command-line:
+or, on Julia 1.12+ (`Pkg.Apps` does not exist on 1.11 or earlier, including the 1.10 LTS; check with `isdefined(Pkg, :Apps)`), install JuliaFormatter as an app and use directly from the command-line:
 
 ```julia-repl
 julia> import Pkg; Pkg.Apps.add("JuliaFormatter")
@@ -34,13 +34,54 @@ Match the JuliaFormatter version used in CI to prevent unnecessary diff churn. R
     version: '1'   # JuliaFormatter major version; check the repo's workflow file
 ```
 
-Note: the JuliaFormatter major version is not uniform across CliMA repos — some pin `'1'`, others `'2'`, and some leave the default. Always cross-check `.github/workflows/JuliaFormatter.yml` (or `julia_formatter.yml`) in the repo you're working in before formatting. Run the formatter with `julia -e 'using JuliaFormatter; format(".")'` from the repo root.
+Note: the JuliaFormatter major version is not uniform across CliMA repos. Some pin `'1'`, others `'2'`, and some leave the default. Always cross-check `.github/workflows/JuliaFormatter.yml` (or `julia_formatter.yml`) in the repo you're working in before formatting. Run the formatter with `julia -e 'using JuliaFormatter; format(".")'` from the repo root.
+
+### Pre-commit hooks with prek
+
+If you want formatter checks to run automatically on commit, you can follow the
+same general pattern used in ClimaAtmos.jl:
+
+- add a `.pre-commit-config.yaml` at repo root,
+- optionally use a dedicated formatter environment (for example `.dev/format/`),
+- keep your CI formatter check and local hook behavior aligned.
+
+Use [`prek`](https://prek.j178.dev) to manage hooks:
+
+```sh
+# Install uv (https://docs.astral.sh/uv/getting-started/installation/)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install prek
+uv tool install prek
+
+# From your repo root: install git hooks once
+prek install
+```
+
+After that, hooks run automatically on each `git commit` (staged files).
+
+For manual runs:
+
+- `prek run` checks the files selected by normal hook matching.
+- `prek run --all-files` checks the whole repository.
+
+Use this when you want a full-repo sweep:
+
+```sh
+prek run --all-files
+```
+
+`pre-commit` also works if you already use it; `prek` is a drop-in replacement.
+
+> [!NOTE]
+> If a hook reformats staged files, the commit is aborted and files are left
+> modified on disk. Review, `git add`, and commit again.
 
 ### Avoiding formatting noise
 
 Do not manually format code inconsistently with the formatter. If the formatter produces unwanted results, adjust `.JuliaFormatter.toml` rather than overriding manually.
 
-Be cautious with `git checkout -- .` to undo formatting changes — this also undoes any uncommitted functional changes. Prefer `git checkout -p` or `git add -i` for selective staging.
+Be cautious with `git checkout -- .` to undo formatting changes; this also undoes any uncommitted functional changes. Prefer `git checkout -p` or `git add -i` for selective staging.
 
 ## 2. Variable locality
 
@@ -78,7 +119,7 @@ The `test/` directory structure should mirror `src/`:
 - Modules, structs, and types use `TitleCase`.
 - Functions and variables use `snake_case` (lowercase, words separated by underscores).
 - Constants use `SCREAMING_SNAKE_CASE`.
-- Functions that mutate one of their arguments (conventionally the first) end in `!` — e.g. `update!`, `compute_tendency!`.
+- Functions that mutate one of their arguments (conventionally the first) end in `!`, e.g. `update!`, `compute_tendency!`.
 
 ### Function names
 
@@ -94,12 +135,12 @@ The `test/` directory structure should mirror `src/`:
   - `…Method` / `…Algorithm`: algorithmic choice (e.g. `JacobianAlgorithm`, `TracerNonnegativityMethod`).
   - `…Parameters` or `…Params`: immutable bag of numerical parameters (e.g. `ThermodynamicsParameters`).
   - `…Cache`: mutable workspace or precomputed state (e.g. `AtmosCache`).
-- **Avoid generic `…Type` or `…Helper` suffixes** — they don't tell the reader what kind of thing they are looking at.
+- **Avoid generic `…Type` or `…Helper` suffixes**: they don't tell the reader what kind of thing they are looking at.
 
 ### Variables
 
 - Follow the conventions in the [Variable List](variable_list.md).
-- Avoid one-character names like `l` (lowercase el), `O` (uppercase oh), or `I` (uppercase eye) — they are visually ambiguous.
+- Avoid one-character names like `l` (lowercase el), `O` (uppercase oh), or `I` (uppercase eye); they are visually ambiguous.
 - One-letter names from physics/math (`T`, `ρ`, `χ`, `Φ`) are fine when they match standard notation in the surrounding code.
 
 ### Unicode
