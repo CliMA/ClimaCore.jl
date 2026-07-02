@@ -11,20 +11,20 @@ qualifiers. The canonical example (from the group-meeting discussion on
 getting an overview across CliMA) is open issues/PRs labelled "bug 🐞",
 shown here in all three forms:
 
-- **Web UI** — paste into the box at <https://github.com/search>:
+- **Web UI**: paste into the box at <https://github.com/search>:
 
   ```text
   org:CliMA state:open label:"bug 🐞"
   ```
 
-- **Bookmarkable URL** — spaces become `+`; add `&type=issues` to land on
+- **Bookmarkable URL**: spaces become `+`; add `&type=issues` to land on
   the Issues tab:
 
   ```text
   https://github.com/search?q=org:CliMA+state:open+label:"bug+🐞"&type=issues
   ```
 
-- **CLI / agents** — `gh search` returns the same set as machine-readable
+- **CLI / agents**: `gh search` returns the same set as machine-readable
   text; use it for scripts and scheduled jobs:
 
   ```bash
@@ -33,7 +33,7 @@ shown here in all three forms:
   ```
 
 Labels with spaces or emoji **must be quoted** (`label:"bug 🐞"`); the
-emoji is part of the string — copy it from an existing labelled issue.
+emoji is part of the string. Copy it from an existing labelled issue.
 
 ## 2. Filter recipes
 
