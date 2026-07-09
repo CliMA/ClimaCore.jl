@@ -380,6 +380,7 @@ include("compat_diffeq.jl")
 include("fieldvector.jl")
 include("field_iterator.jl")
 include("indices.jl")
+include("soa_broadcast.jl")
 
 function interpcoord(elemrange, x::Real)
     n = length(elemrange) - 1
