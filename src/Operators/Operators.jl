@@ -7,6 +7,7 @@ using StaticArrays
 import Base.Broadcast: Broadcasted
 
 import ..slab, ..slab_args, ..column, ..column_args
+import ..USE_FAKE_CUDA
 import ClimaComms
 import ..Utilities:
     new, is_auto_broadcastable, add_auto_broadcasters, drop_auto_broadcasters

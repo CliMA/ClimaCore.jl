@@ -2,6 +2,16 @@
 import ..Utilities.Unrolled: unrolled_map_with_inbounds
 
 """
+    ClimaCore.USE_FAKE_CUDA
+
+Set at package load from the `CLIMACORE_USE_FAKE_CUDA` environment variable.
+When `true`, `DataLayouts.device_dispatch` returns `ToFakeCUDA()` for CPU-backed
+arrays and `Operators.AbstractStencilStyle` returns `FakeCUDAColumnStencilStyle`,
+forcing GPU-style dispatch on CPU arrays. Requires a Julia restart to change.
+"""
+const USE_FAKE_CUDA = get(ENV, "CLIMACORE_USE_FAKE_CUDA", "false") == "true"
+
+"""
     slab(data::AbstractData, h::Integer)
 
 A "pancake" view into an underlying

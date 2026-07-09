@@ -35,6 +35,34 @@ function knl_copyto_VIJFH_64!(dest, src, ::Val{P}) where {P}
     return nothing
 end
 
+function Base.copyto!(dest::AbstractData, bc, to::ClimaCore.DataLayouts.ToFakeCUDA, mask = NoMask())
+   
+    (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest)
+    us = DataLayouts.UniversalSize(dest)
+    if Nv > 0 && Nh > 0
+        cart_inds = if mask isa NoMask
+            cartesian_indices(us)
+        else
+            cartesian_indices_mask(us, mask)
+        end
+         raw_args = (dest, bc, us, mask, cart_inds)
+        converted_arg_types = Core.Compiler.return_type(CUDA.cu, Tuple{typeof(raw_args)})
+        @show converted_arg_types
+        @show CUDA.cufunction(knl_copyto!, converted_arg_types)
+        # @cuda launch = false knl_copyto(knl_copyto)
+        # nitems = length(cart_inds)
+        # p = config_via_occupancy(knl_copyto!, nitems, args)
+        # auto_launch!(
+        #     knl_copyto!,
+        #     args;
+        #     threads_s = p.threads,
+        #     blocks_s = p.blocks,
+        # )
+    end
+    # call_post_op_callback() && post_op_callback(dest, dest, bc, to, mask)
+    return dest
+end
+
 if VERSION ≥ v"1.11.0-beta"
     # https://github.com/JuliaLang/julia/issues/56295
     # Julia 1.11's Base.Broadcast currently requires

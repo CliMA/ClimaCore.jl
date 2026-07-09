@@ -18,6 +18,9 @@ function knl_fill_linear!(dest, val, us)
     end
     return nothing
 end
+function Base.fill!(dest::AbstractData, bc, to::ClimaCore.DataLayouts.ToFakeCUDA, mask = NoMask())
+    return dest
+end
 
 function Base.fill!(dest::AbstractData, bc, to::ToCUDA, mask = NoMask())
     (Ni, Nj, Nv, _, Nh) = DataLayouts.universal_size(dest)

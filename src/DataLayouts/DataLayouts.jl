@@ -77,6 +77,7 @@ import ..Utilities: PlusHalf, unionall_type, replace_type_parameter
 import ..Utilities: fieldtype_vals, safe_eltype, unsafe_eltype, auto_broadcasted
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters
 import ..DebugOnly: call_post_op_callback, post_op_callback
+import ..USE_FAKE_CUDA
 import ..slab, ..slab_args, ..column, ..column_args, ..level, ..level_args
 export slab,
     column,
@@ -98,6 +99,7 @@ export slab,
 abstract type AbstractDispatchToDevice end
 struct ToCPU <: AbstractDispatchToDevice end
 struct ToCUDA <: AbstractDispatchToDevice end
+struct ToFakeCUDA <: AbstractDispatchToDevice end
 
 """
     AbstractMask
@@ -2070,14 +2072,18 @@ array2data(array::AbstractArray{T}, data::AbstractData) where {T} =
 
 Returns an `ToCPU` or a `ToCUDA` for CPU
 and CUDA-backed arrays accordingly.
+
+When [`ClimaCore.USE_FAKE_CUDA`](@ref) is `true` (set via the
+`CLIMACORE_USE_FAKE_CUDA` environment variable at load time), CPU-backed arrays
+return `ToFakeCUDA()` instead of `ToCPU()`.
 """
-device_dispatch(x::AbstractArray) = ToCPU()
-device_dispatch(x::Array) = ToCPU()
+device_dispatch(x::AbstractArray) = USE_FAKE_CUDA ? ToFakeCUDA() : ToCPU()
+device_dispatch(x::Array) = USE_FAKE_CUDA ? ToFakeCUDA() : ToCPU()
 device_dispatch(x::SubArray) = device_dispatch(parent(x))
 device_dispatch(x::Base.ReshapedArray) = device_dispatch(parent(x))
 device_dispatch(x::AbstractData) = device_dispatch(parent(x))
-device_dispatch(x::SArray) = ToCPU()
-device_dispatch(x::MArray) = ToCPU()
+device_dispatch(x::SArray) = USE_FAKE_CUDA ? ToFakeCUDA() : ToCPU()
+device_dispatch(x::MArray) = USE_FAKE_CUDA ? ToFakeCUDA() : ToCPU()
 
 @inline singleton(@nospecialize(::IJKFVH)) = IJKFVHSingleton()
 @inline singleton(@nospecialize(::IJFH)) = IJFHSingleton()

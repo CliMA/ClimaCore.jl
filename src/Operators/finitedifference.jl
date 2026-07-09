@@ -219,8 +219,10 @@ strip_space(op::FiniteDifferenceOperator, parent_space) =
 abstract type AbstractStencilStyle <: Fields.AbstractFieldStyle end
 
 struct ColumnStencilStyle <: AbstractStencilStyle end
+struct FakeCUDAColumnStencilStyle <: AbstractStencilStyle end
 
-AbstractStencilStyle(bc, ::ClimaComms.AbstractCPUDevice) = ColumnStencilStyle
+AbstractStencilStyle(bc, ::ClimaComms.AbstractCPUDevice) =
+    USE_FAKE_CUDA ? FakeCUDAColumnStencilStyle : ColumnStencilStyle
 
 """
     StencilBroadcasted{Style}(op, args[,axes[, work]])
