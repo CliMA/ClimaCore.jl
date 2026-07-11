@@ -10,7 +10,7 @@ import ClimaCore.Operators:
 import ClimaCore.MatrixFields: FaceToCenter, CenterToFace, Square, CenterToCenter,
     FaceToFace, TwoArgFDOperator, OneArgFDOperator, has_affine_bc, FDOperatorMatrix,
     MultiplyColumnwiseBandMatrixField, operator_input_space, op_matrix_row_type,
-    BandMatrixRow
+    BandMatrixRow, band_matrix_d
 using ClimaCore.MatrixFields
 import ClimaCore.Utilities
 import ClimaCore

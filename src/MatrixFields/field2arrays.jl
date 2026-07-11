@@ -6,7 +6,7 @@ band_matrix_n_cols(n_rows, ::CenterToFace) = n_rows - 1
 # Converts the diagonal index of a matrix field, which can be either an Int or a
 # PlusHalf{Int}, to the corresponding diagonal index of a matrix (represented by
 # a BandedMatrix), which must be an Int.
-band_matrix_d(field_d, ::Square) = field_d
+band_matrix_d(field_d, ::Union{Square, FaceToFace, CenterToCenter}) = field_d
 band_matrix_d(field_d, ::FaceToCenter) = field_d + half
 band_matrix_d(field_d, ::CenterToFace) = field_d - half
 
