@@ -1,10 +1,13 @@
 name: Unit Tests
 
 on:
-  pull_request:
+  push:
     branches:
       - main
     tags: '*'
+  pull_request:
+    branches:
+      - main
 
 # Needed to allow julia-actions/cache to delete old caches that it has created
 permissions:
