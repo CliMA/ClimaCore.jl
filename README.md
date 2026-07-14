@@ -28,8 +28,8 @@ The dynamical core (_dycore_) of the CliMA Earth System Model: composable, GPU-c
 [license-img]: https://img.shields.io/badge/license-Apache%202.0-blue.svg
 [license-url]: https://github.com/CliMA/ClimaCore.jl/blob/main/LICENSE
 
-[gha-ci-img]: https://github.com/CliMA/ClimaCore.jl/actions/workflows/UnitTests.yml/badge.svg
-[gha-ci-url]: https://github.com/CliMA/ClimaCore.jl/actions/workflows/UnitTests.yml
+[gha-ci-img]: https://github.com/CliMA/ClimaCore.jl/actions/workflows/UnitTests.yml/badge.svg?branch=main
+[gha-ci-url]: https://github.com/CliMA/ClimaCore.jl/actions/workflows/UnitTests.yml?query=branch%3Amain
 
 [bk-ci-img]: https://badge.buildkite.com/2b63d3c49347804f61bd8e99c8b85e05871253b92612cd1af4.svg?branch=main
 [bk-ci-url]: https://buildkite.com/clima/climacore-ci/builds?branch=main
