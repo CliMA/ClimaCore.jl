@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="docs/src/assets/logo.svg" alt="ClimaCore.jl Logo" width="128" height="128">
+</div>
+
 # ClimaCore.jl
 
 The dynamical core (_dycore_) of the CliMA Earth System Model: composable, GPU-capable tools for discretizing and solving partial differential equations on the sphere and in Cartesian domains.
