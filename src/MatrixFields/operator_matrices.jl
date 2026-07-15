@@ -115,6 +115,7 @@ Base.Broadcast.broadcasted(
     Fields.local_geometry_field(operator_input_space(op_matrix.op, axes(arg))),
 )
 
+# TODO:specify these are only for setvalue
 modifies_output(
     op,
     boundary_condition::BC,
@@ -203,7 +204,6 @@ function Operators.StencilBroadcasted{Style}(
         FDOperatorMatrix(Base.typename(typeof(op)).wrapper(new_bcs)),
         Fields.local_geometry_field(operator_input_space(op, axes)),
     )
-    # Base.typename(typeof(bc.op)).wrapper()
     if modifies_input(op, op.bcs[1]) || (has_two_bcs && modifies_input(op, op.bcs[2]))
         if modifies_input(op, op.bcs[1])
             if has_two_bcs && modifies_input(op, op.bcs[2])
@@ -236,7 +236,7 @@ function Operators.StencilBroadcasted{Style}(
     maybe_adjointed_wrapped_inner =
         op isa Operators.GradientOperator ?
         Base.Broadcast.broadcasted(adjoint, wrapped_inner_arg) : wrapped_inner_arg
-    new_args = (op_mat, wrapped_inner_arg)
+    new_args = (op_mat, maybe_adjointed_wrapped_inner)
     new_broadcasted_op = Operators.StencilBroadcasted{
         Style,
         MultiplyColumnwiseBandMatrixField,
@@ -264,18 +264,6 @@ function Operators.StencilBroadcasted{Style}(
             outer_op =
                 Operators.SetBoundaryOperator(NamedTuple{(keys(op.bcs)[2],)}((op.bcs[2],)))
         end
-        bb = Operators.StencilBroadcasted{
-            Style,
-            typeof(outer_op),
-            Tuple{typeof(new_broadcasted_op)},
-            typeof(axes),
-            Work,
-        }(
-            outer_op,
-            (new_broadcasted_op,),
-            axes,
-            work,
-        )
         raw_mul_with_setbcs = Operators.StencilBroadcasted{
             Style,
             typeof(outer_op),
@@ -294,6 +282,80 @@ function Operators.StencilBroadcasted{Style}(
     return op isa Operators.DivergenceOperator ?
            Base.Broadcast.broadcasted(adjoint, raw_mul_with_setbcs) : raw_mul_with_setbcs
 end
+
+
+function Operators.StencilBroadcasted{Style}(
+    op::TwoArgFDOperator,
+    args::Args,
+    axes::Spaces.AbstractSpace,
+    work::Work = nothing,
+) where {Style, Args, Work}
+    # can have 0, 1, or 2 boundary conds
+    if op isa Operators.WeightedInterpolateC2F && length(op.bcs) > 0 &&
+       any(bc -> bc isa Operators.SetValue, values(op.bcs))
+        has_two_bcs = length(op.bcs) == 2
+        remove_bc1 = modifies_output(op, op.bcs[1])
+        if has_two_bcs
+            remove_bc2 = modifies_output(op, op.bcs[2])
+            new_bcs =
+                remove_bc1 && remove_bc2 ? NamedTuple{}() :
+                remove_bc1 ? NamedTuple{(keys(op.bcs)[2],)}((op.bcs[2],)) :
+                remove_bc2 ? NamedTuple{(keys(op.bcs)[1],)}((op.bcs[1],)) :
+                op.bcs
+            outer_op_bcs =
+                remove_bc1 && remove_bc2 ? op.bcs :
+                remove_bc1 ? NamedTuple{(keys(op.bcs)[1],)}((op.bcs[1],)) :
+                remove_bc2 ? NamedTuple{(keys(op.bcs)[2],)}((op.bcs[2],)) :
+                NamedTuple{}()
+        else
+            new_bcs = remove_bc1 ? NamedTuple{}() : op.bcs
+            outer_op_bcs = remove_bc1 ? op.bcs : NamedTuple{}()
+        end
+        new_op = Base.typename(typeof(op)).wrapper(new_bcs)
+        outer_op =
+            length(outer_op_bcs) > 0 ? Operators.SetBoundaryOperator(outer_op_bcs) : nothing
+    else
+        new_op = op
+        outer_op = nothing
+    end
+
+
+    new_args = (
+        Base.Broadcast.broadcasted(
+            FDOperatorMatrix(new_op),
+            args[1],
+        ), args[2])
+    result_without_setvalue_applied = Operators.StencilBroadcasted{
+        Style,
+        MultiplyColumnwiseBandMatrixField,
+        typeof(new_args),
+        typeof(axes),
+        Work,
+    }(
+        MultiplyColumnwiseBandMatrixField(),
+        new_args,
+        axes,
+        work,
+    )
+
+    if isnothing(outer_op)
+        return result_without_setvalue_applied
+    else
+        Operators.StencilBroadcasted{
+            Style,
+            typeof(outer_op),
+            Tuple{typeof(result_without_setvalue_applied)},
+            typeof(axes),
+            Work,
+        }(
+            outer_op,
+            (result_without_setvalue_applied,),
+            axes,
+            work,
+        )
+    end
+end
+
 
 
 """
@@ -560,16 +622,6 @@ op_matrix_interior_row(
 ) where {FT} = BidiagonalMatrixRow(FT(1), FT(1)) / 2
 op_matrix_first_row(
     ::Operators.InterpolateC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(FT(0))
-op_matrix_last_row(
-    ::Operators.InterpolateC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(FT(0))
-op_matrix_first_row(
-    ::Operators.InterpolateC2F,
     ::Operators.Extrapolate,
     ::Type{FT},
 ) where {FT} = UpperDiagonalMatrixRow(FT(1))
@@ -583,31 +635,11 @@ op_matrix_interior_row(
     ::Union{Operators.LeftBiasedC2F, Operators.LeftBiasedF2C},
     ::Type{FT},
 ) where {FT} = LowerDiagonalMatrixRow(FT(1))
-op_matrix_first_row(
-    ::Operators.LeftBiasedC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = LowerEmptyMatrixRow()
-op_matrix_first_row(
-    ::Operators.LeftBiasedF2C,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(FT(0))
 
 op_matrix_interior_row(
     ::Union{Operators.RightBiasedC2F, Operators.RightBiasedF2C},
     ::Type{FT},
 ) where {FT} = UpperDiagonalMatrixRow(FT(1))
-op_matrix_last_row(
-    ::Operators.RightBiasedC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = UpperEmptyMatrixRow()
-op_matrix_last_row(
-    ::Operators.RightBiasedF2C,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(FT(0))
 
 op_matrix_row_type(
     ::Operators.WeightedInterpolationOperator,
@@ -626,16 +658,6 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     denominator = w⁻ + w⁺
     return BidiagonalMatrixRow(w⁻ / denominator, w⁺ / denominator)
 end
-op_matrix_first_row(
-    ::Operators.WeightedInterpolateC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(FT(0))
-op_matrix_last_row(
-    ::Operators.WeightedInterpolateC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(FT(0))
 op_matrix_first_row(
     ::Operators.WeightedInterpolateC2F,
     ::Operators.Extrapolate,
@@ -759,42 +781,12 @@ op_matrix_row_type(::Operators.AdvectionOperator, ::Type{FT}, _) where {FT} =
 
 op_matrix_interior_row(::Operators.SetBoundaryOperator, ::Type{FT}) where {FT} =
     DiagonalMatrixRow(FT(1))
-op_matrix_first_row(
-    ::Operators.SetBoundaryOperator,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = DiagonalMatrixRow(FT(0))
-op_matrix_last_row(
-    ::Operators.SetBoundaryOperator,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = DiagonalMatrixRow(FT(0))
 
 op_matrix_row_type(op::Operators.GradientOperator, ::Type{FT}) where {FT} =
     uses_extrapolate(op) ? QuaddiagonalMatrixRow{C3{FT}} :
     BidiagonalMatrixRow{C3{FT}}
 op_matrix_interior_row(::Operators.GradientOperator, ::Type{FT}) where {FT} =
     BidiagonalMatrixRow(-C3(FT(1)), C3(FT(1)))
-op_matrix_first_row(
-    ::Operators.GradientC2F,
-    ::Operators.SetGradient,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(C3(FT(0)))
-op_matrix_last_row(
-    ::Operators.GradientC2F,
-    ::Operators.SetGradient,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(C3(FT(0)))
-op_matrix_first_row(
-    ::Operators.GradientF2C,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = BidiagonalMatrixRow(C3(FT(0)), C3(FT(1)))
-op_matrix_last_row(
-    ::Operators.GradientF2C,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = BidiagonalMatrixRow(-C3(FT(1)), C3(FT(0)))
 op_matrix_first_row(
     ::Operators.GradientF2C,
     ::Operators.Extrapolate,
@@ -820,50 +812,6 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     J⁺ = Geometry.LocalGeometry(space, idx + half, hidx).J
     return BidiagonalMatrixRow(-C3(J⁻)', C3(J⁺)') * invJ
 end
-op_matrix_first_row(
-    ::Operators.DivergenceC2F,
-    ::Operators.SetDivergence,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(C3(FT(0))')
-op_matrix_last_row(
-    ::Operators.DivergenceC2F,
-    ::Operators.SetDivergence,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(C3(FT(0))')
-Base.@propagate_inbounds function op_matrix_first_row(
-    ::Operators.DivergenceF2C,
-    ::Operators.SetValue,
-    space,
-    idx,
-    hidx,
-)
-    FT = Spaces.undertype(space)
-    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
-    J⁺ = Geometry.LocalGeometry(space, idx + half, hidx).J
-    return BidiagonalMatrixRow(C3(FT(0))', C3(J⁺)') * invJ
-end
-Base.@propagate_inbounds function op_matrix_last_row(
-    ::Operators.DivergenceF2C,
-    ::Operators.SetValue,
-    space,
-    idx,
-    hidx,
-)
-    FT = Spaces.undertype(space)
-    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
-    J⁻ = Geometry.LocalGeometry(space, idx - half, hidx).J
-    return BidiagonalMatrixRow(-C3(J⁻)', C3(FT(0))') * invJ
-end
-op_matrix_first_row(
-    ::Operators.DivergenceF2C,
-    ::Operators.SetDivergence,
-    ::Type{FT},
-) where {FT} = BidiagonalMatrixRow(C3(FT(0))', C3(FT(0))')
-op_matrix_last_row(
-    ::Operators.DivergenceF2C,
-    ::Operators.SetDivergence,
-    ::Type{FT},
-) where {FT} = BidiagonalMatrixRow(C3(FT(0))', C3(FT(0))')
 Base.@propagate_inbounds function op_matrix_first_row(
     ::Operators.DivergenceF2C,
     ::Operators.Extrapolate,
@@ -904,13 +852,3 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
     return BidiagonalMatrixRow(-εⁱʲ, εⁱʲ) * invJ
 end
-op_matrix_first_row(
-    ::Operators.CurlC2F,
-    ::Operators.SetCurl,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(zero(CT12_CT12{FT}))
-op_matrix_last_row(
-    ::Operators.CurlC2F,
-    ::Operators.SetCurl,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(zero(CT12_CT12{FT}))
