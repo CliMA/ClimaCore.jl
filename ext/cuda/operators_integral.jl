@@ -62,7 +62,7 @@ function column_accumulate_device!(
     input,
     init,
     space,
-    reverse
+    reverse,
 ) where {F, T}
     out_fv = Fields.field_values(output)
     mask = Spaces.get_mask(space)
@@ -126,7 +126,7 @@ function bycolumn_kernel!(
                 column(input, i, j, h),
                 init,
                 column(space, i, j, h),
-                reverse
+                reverse,
             )
         end
     end

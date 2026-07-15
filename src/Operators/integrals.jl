@@ -286,7 +286,7 @@ function column_accumulate_device!(
     input,
     init,
     space,
-    reverse
+    reverse,
 ) where {F, T}
     mask = Spaces.get_mask(space)
     if space isa Spaces.FiniteDifferenceSpace
@@ -303,7 +303,7 @@ function column_accumulate_device!(
                     input[colidx],
                     init,
                     space[colidx],
-                    reverse
+                    reverse,
                 )
             end
         end
