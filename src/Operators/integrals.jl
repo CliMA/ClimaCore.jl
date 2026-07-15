@@ -215,6 +215,8 @@ from the bottom of each column and moving upward, and the result of each
 iteration is passed to the `transform` function before being stored in `output`.
 The `init` value is is optional for center-to-center, face-to-face, and
 face-to-center accumulation, but it is required for center-to-face accumulation.
+When `reverse = true`, accumulation starts at the top boundary and proceeds
+downward, with the corresponding staggered boundary offsets reversed.
 
 With `first_level` and `last_level` denoting the indices of the boundary levels
 of `input`, the accumulation in each column can be summarized as follows:
@@ -327,30 +329,32 @@ function single_column_accumulate!(
     is_c2c_or_f2f = Spaces.staggering(space) == Spaces.staggering(axes(output))
     is_c2f = !is_c2c_or_f2f && Spaces.staggering(space) == Spaces.CellCenter()
     is_f2c = !is_c2c_or_f2f && !is_c2f
+    # With `reverse = true`, start at the top boundary, step downward, and
+    # reverse the center/face half-level offset used by staggered accumulation.
+    start_level, stop_level, direction =
+        reverse ? (last_level, first_level, -1) : (first_level, last_level, 1)
+    stagger = reverse ? -half : half
     @inbounds if init == UnspecifiedInit()
         @assert !is_c2f
-        accumulated_value = get_level_value(space, _input, first_level)
-        next_level = first_level + 1
-        init_output_level = is_c2c_or_f2f ? first_level : nothing
+        accumulated_value = get_level_value(space, _input, start_level)
+        next_level = start_level + direction
+        init_output_level = is_c2c_or_f2f ? start_level : nothing
     else
         accumulated_value =
-            is_f2c ? f(init, get_level_value(space, _input, first_level)) : init
-        next_level = is_f2c ? first_level + 1 : first_level
-        init_output_level = is_c2f ? first_level - half : nothing
+            is_f2c ? f(init, get_level_value(space, _input, start_level)) : init
+        next_level = is_f2c ? start_level + direction : start_level
+        init_output_level = is_c2f ? start_level - stagger : nothing
     end
     @inbounds if !isnothing(init_output_level)
         Fields.level(output, init_output_level)[] = transform(accumulated_value)
     end
-    indices = if reverse
-        last_level:-1:next_level
-    else
-        next_level:last_level
-    end
-    @inbounds for level in indices
+    n_steps = direction * (stop_level - next_level) + 1
+    @inbounds for i in 1:n_steps
+        level = next_level + direction * (i - 1)
         accumulated_value =
             f(accumulated_value, get_level_value(space, _input, level))
         output_level =
-            is_c2c_or_f2f ? level : (is_c2f ? level + half : level - half)
+            is_c2c_or_f2f ? level : (is_c2f ? level + stagger : level - stagger)
         Fields.level(output, output_level)[] = transform(accumulated_value)
     end
 end

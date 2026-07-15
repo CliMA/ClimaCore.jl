@@ -110,6 +110,7 @@ function test_column_reduce_and_accumulate!(center_space)
     column_accumulate!(+, ᶜwhole_number, ᶜwhole_number) # 1:Nv per column
     column_accumulate!(+, ᶜwhole_number_reverse, ᶜwhole_number_reverse; reverse = true)
     ᶠwhole_number = ones(face_space)
+    column_accumulate!(+, ᶠwhole_number, ᶠwhole_number) # 1:(Nv + 1) per column
     ᶠwhole_number_reverse = ones(face_space)
     column_accumulate!(+, ᶠwhole_number_reverse, ᶠwhole_number_reverse; reverse = true) # 1:(Nv + 1) per column
 
