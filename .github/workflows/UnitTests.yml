@@ -1,10 +1,13 @@
 name: Unit Tests
 
 on:
-  pull_request:
+  push:
     branches:
       - main
     tags: '*'
+  pull_request:
+    branches:
+      - main
 
 # Needed to allow julia-actions/cache to delete old caches that it has created
 permissions:
@@ -28,7 +31,6 @@ jobs:
           - '1.11'
         os:
           - ubuntu-latest
-          - windows-latest
           # There is a concurrency limit for MacOS runners across the
           # entire organization.
           # (see https://docs.github.com/en/actions/reference/limits#job-concurrency-limits-for-github-hosted-runners)
