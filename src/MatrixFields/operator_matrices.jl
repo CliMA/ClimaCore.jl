@@ -571,6 +571,23 @@ Operators.stencil_right_boundary(
     args...,
 ) = Operators.stencil_interior(op_matrix, space, idx, hidx, args...)
 
+Operators.stencil_left_boundary(
+    op_matrix::FDOperatorMatrix,
+    ::Union{Operators.SetValue, Operators.SetGradient, Operators.SetDivergence, Operators.SetCurl},
+    space,
+    idx,
+    hidx,
+    args...,
+) = rzero(Operators.return_eltype(op_matrix, args...))
+Operators.stencil_right_boundary(
+    op_matrix::FDOperatorMatrix,
+    ::Union{Operators.SetValue, Operators.SetGradient, Operators.SetDivergence, Operators.SetCurl},
+    space,
+    idx,
+    hidx,
+    args...,
+) = rzero(Operators.return_eltype(op_matrix, args...))
+
 ################################################################################
 
 # Additional aliases for CenterToFace or FaceToCenter matrix rows

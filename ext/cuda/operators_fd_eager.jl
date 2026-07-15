@@ -41,106 +41,13 @@ Check if `x` is a `Type`, or any of its arguments has a `Type` argument.
 This is needed because both the shmem matrix multiplication and the getidx fallback rely on
 `eltype`, and `eltype(::CudaRefType) = Any`
 """
+# TODO:
 has_type_arg(_) = false
 has_type_arg(::Type) = true
 has_type_arg(::Base.RefValue{<:Type}) = true
 has_type_arg(bc::Union{StencilBroadcasted, Broadcasted}) =
     UnrolledUtilities.unrolled_any(has_type_arg, bc.args)
 
-"""
-    replace_fd_ops(val)
-
-Recursively replace any `OneArgFDOperator` or `TwoArgFDOperator` in `val` with a
-`MultiplyColumnwiseBandMatrixField` with the corresponding `FDOperatorMatrix`, if the operator
-does not have affine BCs and the operator matrix fits in shared memory.
-"""
-replace_fd_ops(val) = val
-
-function replace_fd_ops(
-    bc::Base.Broadcast.Broadcasted,
-)
-    new_args = UnrolledUtilities.unrolled_map(replace_fd_ops, bc.args)
-    return Base.Broadcast.Broadcasted{typeof(bc.style)}(bc.f, new_args, bc.axes)
-end
-
-replace_fd_ops(
-    bc::StencilBroadcasted{Style, Op},
-) where {Style, Op <: FDOperatorMatrix} = bc
-function replace_fd_ops(
-    bc::StencilBroadcasted{Style},
-) where {Style}
-    new_args = UnrolledUtilities.unrolled_map(replace_fd_ops, bc.args)
-    return StencilBroadcasted{
-        Style,
-        typeof(bc.op),
-        typeof(new_args),
-        typeof(bc.axes),
-        typeof(bc.work),
-    }(
-        bc.op,
-        new_args,
-        bc.axes,
-        bc.work,
-    )
-end
-
-function replace_fd_ops(
-    bc::StencilBroadcasted{Style, Op},
-) where {Style, Op <: TwoArgFDOperator}
-    if !has_affine_bc(bc.op) && check_if_fits_in_shmem(bc.args[end]) &&
-       !has_type_arg(bc.args[end])
-        opmat = Base.Broadcast.broadcasted(
-            FDOperatorMatrix(bc.op),
-            replace_fd_ops(bc.args[1]),
-        )
-        new_args = (opmat, replace_fd_ops(bc.args[end]))
-        newop = MultiplyColumnwiseBandMatrixField()
-        return StencilBroadcasted{
-            Style,
-            typeof(newop),
-            typeof(new_args),
-            typeof(bc.axes),
-            typeof(bc.work),
-        }(
-            newop,
-            new_args,
-            bc.axes,
-            bc.work,
-        )
-    else
-        # affine BCs or values that won't fit in shmmem
-        return bc
-    end
-end
-
-function replace_fd_ops(
-    bc::StencilBroadcasted{Style, Op},
-) where {Style, Op <: OneArgFDOperator}
-    if !has_affine_bc(bc.op) && check_if_fits_in_shmem(bc.args[1]) &&
-       !has_type_arg(bc.args[1])
-        opmat = Base.Broadcast.broadcasted(
-            FDOperatorMatrix(bc.op),
-            Fields.local_geometry_field(operator_input_space(bc.op, axes(bc.args[end]))),
-        )
-        new_args = (opmat, replace_fd_ops(bc.args[1]))
-        newop = MultiplyColumnwiseBandMatrixField()
-        return StencilBroadcasted{
-            Style,
-            typeof(newop),
-            typeof(new_args),
-            typeof(bc.axes),
-            typeof(bc.work),
-        }(
-            newop,
-            new_args,
-            bc.axes,
-            bc.work,
-        )
-    else
-        # affine BCs or values that won't fit in shmmem
-        return bc
-    end
-end
 
 """
     eager_copyto_stencil_kernel!(out, bc::BC, space)
