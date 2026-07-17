@@ -215,21 +215,22 @@ function single_column_reduce!(
 end
 
 """
-    column_accumulate!(f, output, input; [init], [transform])
+    column_accumulate!(f, output, input; [init], [transform], [reverse])
 
 Applies `accumulate` to `input` along the vertical direction, storing the result
 in `output`. The `input` can be either a `Field` or an `AbstractBroadcasted`
-that performs pointwise or columnwise operations on `Field`s. Each accumulated
-value is computed by iteratively applying `f` to the values in `input`, starting
-from the bottom of each column and moving upward, and the result of each
-iteration is passed to the `transform` function before being stored in `output`.
+that performs pointwise or columnwise operations on `Field`s. By default, each
+accumulated value is computed by iteratively applying `f` to the values in
+`input`, starting from the bottom of each column and moving upward, and the
+result of each iteration is passed to the `transform` function before being
+stored in `output`.
 The `init` value is is optional for center-to-center, face-to-face, and
 face-to-center accumulation, but it is required for center-to-face accumulation.
 When `reverse = true`, accumulation starts at the top boundary and proceeds
 downward, with the corresponding staggered boundary offsets reversed.
 
 With `first_level` and `last_level` denoting the indices of the boundary levels
-of `input`, the accumulation in each column can be summarized as follows:
+of `input`, the default accumulation in each column can be summarized as follows:
   - For center-to-center and face-to-face accumulation with `init` unspecified,
     ```
     accumulated_value = input[first_level]
