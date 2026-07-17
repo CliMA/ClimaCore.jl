@@ -17,6 +17,7 @@ function column_reduce_device!(
     input,
     init,
     space,
+    reverse,
 ) where {F, T}
     Ni, Nj, _, _, Nh = size(Fields.field_values(output))
     us = UniversalSize(Fields.field_values(output))
@@ -36,6 +37,7 @@ function column_reduce_device!(
         us,
         mask,
         cart_inds,
+        reverse,
     )
     nitems = Ni * Nj * Nh
     threads = threads_via_occupancy(bycolumn_kernel!, args)
@@ -49,7 +51,7 @@ function column_reduce_device!(
     )
     call_post_op_callback() && post_op_callback(
         output,
-        (dev, f, transform, output, input, init, space),
+        (dev, f, transform, output, input, init, space, reverse),
         (;),
     )
 end

@@ -107,7 +107,7 @@ Analogue of `Base._InitialValue` for `column_reduce!` and `column_accumulate!`.
 struct UnspecifiedInit end
 
 """
-    column_reduce!(f, output, input; [init], [transform])
+    column_reduce!(f, output, input; [init], [transform], [reverse])
 
 Applies `reduce` to `input` along the vertical direction, storing the result in
 `output`. The `input` can be either a `Field` or an `AbstractBroadcasted` that
@@ -116,10 +116,12 @@ computed by iteratively applying `f` to the values in `input`, starting from the
 bottom of each column and moving upward, and the result of the final iteration
 is passed to the `transform` function before being stored in `output`. If `init`
 is specified, it is used as the initial value of the iteration; otherwise, the
-value at the bottom of each column in `input` is used as the initial value.
+value at the starting boundary of each column in `input` is used as the initial
+value. By default, reduction starts at the bottom boundary and proceeds upward.
+When `reverse = true`, it starts at the top boundary and proceeds downward.
 
 With `first_level` and `last_level` denoting the indices of the boundary levels
-of `input`, the reduction in each column can be summarized as follows:
+of `input`, the default reduction in each column can be summarized as follows:
   - If `init` is unspecified,
     ```
     reduced_value = input[first_level]
@@ -143,10 +145,11 @@ function column_reduce!(
     input::Union{Fields.Field, PointwiseOrColumnwiseBroadcasted};
     init = UnspecifiedInit(),
     transform::T = identity,
+    reverse::Bool = false,
 ) where {F, T}
     device = ClimaComms.device(output)
     space = axes(input)
-    column_reduce_device!(device, f, transform, output, input, init, space)
+    column_reduce_device!(device, f, transform, output, input, init, space, reverse)
 end
 
 function column_reduce_device!(
@@ -157,11 +160,12 @@ function column_reduce_device!(
     input,
     init,
     space,
+    reverse,
 ) where {F, T}
     mask = Spaces.get_mask(space)
     if space isa Spaces.FiniteDifferenceSpace
         @assert mask isa DataLayouts.NoMask
-        single_column_reduce!(f, transform, output, input, init, space)
+        single_column_reduce!(f, transform, output, input, init, space, reverse)
     else
         Fields.bycolumn(space) do colidx
             I = Fields.universal_index(colidx)
@@ -173,6 +177,7 @@ function column_reduce_device!(
                     input[colidx],
                     init,
                     space[colidx],
+                    reverse,
                 )
             end
         end
@@ -187,17 +192,22 @@ function single_column_reduce!(
     _input,
     init,
     space,
+    reverse,
 ) where {F, T}
     first_level = left_idx(space)
     last_level = right_idx(space)
+    start_level, stop_level, direction =
+        reverse ? (last_level, first_level, -1) : (first_level, last_level, 1)
     @inbounds if init == UnspecifiedInit()
-        reduced_value = get_level_value(space, _input, first_level)
-        next_level = first_level + 1
+        reduced_value = get_level_value(space, _input, start_level)
+        next_level = start_level + direction
     else
         reduced_value = init
-        next_level = first_level
+        next_level = start_level
     end
-    @inbounds for level in next_level:last_level
+    n_steps = direction * (stop_level - next_level) + 1
+    @inbounds for i in 1:n_steps
+        level = next_level + direction * (i - 1)
         reduced_value = f(reduced_value, get_level_value(space, _input, level))
     end
     Fields.field_values(_output)[] = transform(reduced_value)

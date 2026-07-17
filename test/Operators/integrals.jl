@@ -129,12 +129,19 @@ function test_column_reduce_and_accumulate!(center_space)
     init = (1, 0) # m₀ = 1, m₋₁ = 0 (m₋₁ can be set to any finite value)
     transform = first # Get mₙ from each (mₙ, mₙ₋₁) pair before saving to output.
 
-    for input in (ᶜwhole_number, ᶠwhole_number)
-        last_input_level = Fields.level(input, Operators.right_idx(axes(input)))
-        output = similar(last_input_level)
-        reference_output = motzkin_number.(last_input_level)
+    for (input, reverse) in (
+        (ᶜwhole_number, false),
+        (ᶠwhole_number, false),
+        (ᶜwhole_number_reverse, true),
+        (ᶠwhole_number_reverse, true),
+    )
+        final_input_idx =
+            reverse ? Operators.left_idx(axes(input)) : Operators.right_idx(axes(input))
+        final_input_level = Fields.level(input, final_input_idx)
+        output = similar(final_input_level)
+        reference_output = motzkin_number.(final_input_level)
 
-        set_output! = () -> column_reduce!(f, output, input; init, transform)
+        set_output! = () -> column_reduce!(f, output, input; init, transform, reverse)
         set_output!()
         @test output == reference_output
         @test_opt ignored_modules = CUDA_FRAMES set_output!()
