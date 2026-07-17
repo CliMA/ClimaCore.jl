@@ -12,6 +12,7 @@ import ClimaCore:
     Quadratures
 import ClimaCore.Operators as O
 import Base.Broadcast as BB
+import LazyBroadcast: lazy
 using LinearAlgebra, IntervalSets
 
 @testset "spectral broadcast style combination" begin
@@ -48,4 +49,7 @@ end
     )
     out = @. wdiv(K * ∇f)
     @test parent(out) ≈ 2 .* parent(ref)
+    ∇f_lazy = @. lazy(grad(f) + grad(f))
+    out_lazy = @. wdiv(K * ∇f_lazy)
+    @test parent(out_lazy) ≈ 2 .* parent(ref)
 end

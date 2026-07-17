@@ -507,10 +507,8 @@ Base.Broadcast.BroadcastStyle(
     ::Fields.AbstractFieldStyle,
 ) = style
 
-# The device-resolved style assigned by `instantiate` takes precedence over the
-# generic construction-time style, so an instantiated spectral broadcast can be
-# used as an argument to a new operator broadcast. See the finite-difference
-# analogue for `ColumnStencilStyle` in the CUDA extension.
+# The device-resolved style assigned by `instantiate` takes precedence over
+# the generic construction-time style.
 Base.Broadcast.BroadcastStyle(
     ::SpectralStyle,
     style::AbstractSpectralStyle,
