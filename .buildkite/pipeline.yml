@@ -705,6 +705,11 @@ steps:
         retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/rectilinear.jl"
 
+      - label: "Unit: lazy composition"
+        key: unit_lazy_composition
+        retry: *retry_policy
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/lazy_composition.jl"
+
       - label: "Unit: diffusion2d"
         key: unit_diffusion2d
         retry: *retry_policy
@@ -921,6 +926,15 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/rectilinear_cuda.jl CUDA"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Unit: lazy composition cuda"
+        key: unit_lazy_composition_cuda
+        retry: *retry_policy
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/lazy_composition.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:

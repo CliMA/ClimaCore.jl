@@ -48,6 +48,7 @@ UnitTest("Fields"                                  ,"Fields/unit_field.jl"), # h
 UnitTest("Reinstantiate broadcasted"               ,"Operators/unit_reinstantiate_bc.jl"),
 UnitTest("Placeholder Fields"                      ,"Operators/unit_common.jl"),
 UnitTest("Spectral elem - rectilinear"             ,"Operators/spectralelement/rectilinear.jl"),
+UnitTest("Spectral elem - lazy composition"        ,"Operators/spectralelement/lazy_composition.jl"),
 UnitTest("Spectral elem - opt"                     ,"Operators/spectralelement/opt.jl"),
 UnitTest("Spectral elem - gradient tensor"         ,"Operators/spectralelement/covar_deriv_ops.jl"),
 UnitTest("Spectral elem - Diffusion 2d"            ,"Operators/spectralelement/unit_diffusion2d.jl"),

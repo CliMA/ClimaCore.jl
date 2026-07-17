@@ -4,6 +4,10 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- Fixed the broadcast-style conflict raised when a spectral-element operator is
+  applied to an instantiated spectral broadcast
+  [2551](https://github.com/CliMA/ClimaCore.jl/pull/2551)
+
 v0.14.54
 -------
 

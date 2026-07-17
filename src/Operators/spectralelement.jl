@@ -112,7 +112,7 @@ function Base.Broadcast.broadcasted(op::SpectralElementOperator, args...)
 end
 
 function Base.Broadcast.broadcasted(
-    ::SpectralStyle,
+    style::AbstractSpectralStyle,
     op::SpectralElementOperator,
     args...,
 )
@@ -121,7 +121,7 @@ function Base.Broadcast.broadcasted(
             is_auto_broadcastable(eltype(arg)) ?
             Base.Broadcast.broadcasted(add_auto_broadcasters, arg) : arg
         end
-    return SpectralBroadcasted{SpectralStyle}(op, args′)
+    return SpectralBroadcasted{typeof(style)}(op, args′)
 end
 
 Base.eltype(sbc::SpectralBroadcasted) =
@@ -505,6 +505,13 @@ Base.Broadcast.BroadcastStyle(
 Base.Broadcast.BroadcastStyle(
     style::AbstractSpectralStyle,
     ::Fields.AbstractFieldStyle,
+) = style
+
+# The device-resolved style assigned by `instantiate` takes precedence over
+# the generic construction-time style.
+Base.Broadcast.BroadcastStyle(
+    ::SpectralStyle,
+    style::AbstractSpectralStyle,
 ) = style
 
 
