@@ -2166,6 +2166,7 @@ return_space(::DivergenceF2C, space::AllFaceFiniteDifferenceSpace) =
 stencil_interior_width(::DivergenceF2C, arg) = ((-half, half),)
 boundary_width(::DivergenceF2C, ::AbstractBoundaryCondition) = 0
 boundary_width(::DivergenceF2C, ::SetValue) = 1
+boundary_width(::DivergenceF2C, ::SetDivergence) = 1
 
 # Extend `adapt_structure` for all boundary conditions containing a `val` field.
 function Adapt.adapt_structure(to, bc::AbstractBoundaryCondition)

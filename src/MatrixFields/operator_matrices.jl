@@ -237,7 +237,7 @@ function Operators.StencilBroadcasted{Style}(
         op isa Operators.GradientOperator ?
         Base.Broadcast.broadcasted(adjoint, wrapped_inner_arg) : wrapped_inner_arg
     new_args = (op_mat, maybe_adjointed_wrapped_inner)
-    new_broadcasted_op = Operators.StencilBroadcasted{
+    new_broadcasted_op_raw = Operators.StencilBroadcasted{
         Style,
         MultiplyColumnwiseBandMatrixField,
         typeof(new_args),
@@ -249,6 +249,10 @@ function Operators.StencilBroadcasted{Style}(
         axes,
         work,
     )
+    new_broadcasted_op =
+        op isa Operators.DivergenceOperator ?
+        Base.Broadcast.broadcasted(adjoint, new_broadcasted_op_raw) :
+        new_broadcasted_op_raw
 
     if modifies_output(op, op.bcs[1]) || (has_two_bcs && modifies_output(op, op.bcs[2]))
         if modifies_output(op, op.bcs[1])
@@ -279,8 +283,7 @@ function Operators.StencilBroadcasted{Style}(
     else
         raw_mul_with_setbcs = new_broadcasted_op
     end
-    return op isa Operators.DivergenceOperator ?
-           Base.Broadcast.broadcasted(adjoint, raw_mul_with_setbcs) : raw_mul_with_setbcs
+    return raw_mul_with_setbcs
 end
 
 
@@ -571,22 +574,48 @@ Operators.stencil_right_boundary(
     args...,
 ) = Operators.stencil_interior(op_matrix, space, idx, hidx, args...)
 
-Operators.stencil_left_boundary(
+Base.@propagate_inbounds function Operators.stencil_left_boundary(
     op_matrix::FDOperatorMatrix,
-    ::Union{Operators.SetValue, Operators.SetGradient, Operators.SetDivergence, Operators.SetCurl},
+    bc::Union{
+        Operators.SetValue,
+        Operators.SetGradient,
+        Operators.SetDivergence,
+        Operators.SetCurl,
+    },
     space,
     idx,
     hidx,
     args...,
-) = rzero(Operators.return_eltype(op_matrix, args...))
-Operators.stencil_right_boundary(
+)
+    if op_matrix.op isa Union{Operators.GradientF2C, Operators.DivergenceF2C} &&
+       bc isa Operators.SetValue
+        args′ = args[1:(end - 1)]
+        row = op_matrix_first_row(op_matrix.op, bc, space, idx, hidx, args′...)
+        return convert(Operators.return_eltype(op_matrix, args...), row)
+    end
+    rzero(Operators.return_eltype(op_matrix, args...))
+end
+Base.@propagate_inbounds function Operators.stencil_right_boundary(
     op_matrix::FDOperatorMatrix,
-    ::Union{Operators.SetValue, Operators.SetGradient, Operators.SetDivergence, Operators.SetCurl},
+    bc::Union{
+        Operators.SetValue,
+        Operators.SetGradient,
+        Operators.SetDivergence,
+        Operators.SetCurl,
+    },
     space,
     idx,
     hidx,
     args...,
-) = rzero(Operators.return_eltype(op_matrix, args...))
+)
+    if op_matrix.op isa Union{Operators.GradientF2C, Operators.DivergenceF2C} &&
+       bc isa Operators.SetValue
+        args′ = args[1:(end - 1)]
+        row = op_matrix_last_row(op_matrix.op, bc, space, idx, hidx, args′...)
+        return convert(Operators.return_eltype(op_matrix, args...), row)
+    end
+    rzero(Operators.return_eltype(op_matrix, args...))
+end
 
 ################################################################################
 
@@ -806,6 +835,16 @@ op_matrix_interior_row(::Operators.GradientOperator, ::Type{FT}) where {FT} =
     BidiagonalMatrixRow(-C3(FT(1)), C3(FT(1)))
 op_matrix_first_row(
     ::Operators.GradientF2C,
+    ::Operators.SetValue,
+    ::Type{FT},
+) where {FT} = BidiagonalMatrixRow(C3(FT(0)), C3(FT(1)))
+op_matrix_last_row(
+    ::Operators.GradientF2C,
+    ::Operators.SetValue,
+    ::Type{FT},
+) where {FT} = BidiagonalMatrixRow(-C3(FT(1)), C3(FT(0)))
+op_matrix_first_row(
+    ::Operators.GradientF2C,
     ::Operators.Extrapolate,
     ::Type{FT},
 ) where {FT} = UpperTridiagonalMatrixRow(C3(FT(0)), -C3(FT(1)), C3(FT(1)))
@@ -854,6 +893,30 @@ Base.@propagate_inbounds function op_matrix_last_row(
     J⁻ = Geometry.LocalGeometry(space, idx - 1 - half, hidx).J
     J⁺ = Geometry.LocalGeometry(space, idx - 1 + half, hidx).J
     return LowerTridiagonalMatrixRow(-C3(J⁻)', C3(J⁺)', C3(FT(0))') * invJ
+end
+Base.@propagate_inbounds function op_matrix_first_row(
+    ::Operators.DivergenceF2C,
+    ::Operators.SetValue,
+    space,
+    idx,
+    hidx,
+)
+    FT = Spaces.undertype(space)
+    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
+    J⁺ = Geometry.LocalGeometry(space, idx + half, hidx).J
+    return BidiagonalMatrixRow(C3(FT(0))', C3(J⁺)') * invJ
+end
+Base.@propagate_inbounds function op_matrix_last_row(
+    ::Operators.DivergenceF2C,
+    ::Operators.SetValue,
+    space,
+    idx,
+    hidx,
+)
+    FT = Spaces.undertype(space)
+    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
+    J⁻ = Geometry.LocalGeometry(space, idx - half, hidx).J
+    return BidiagonalMatrixRow(-C3(J⁻)', C3(FT(0))') * invJ
 end
 
 op_matrix_row_type(
