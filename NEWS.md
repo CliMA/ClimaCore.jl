@@ -4,6 +4,13 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.55
+-------
+
+- Add a `reverse` option to the column integral operators (`column_reduce!` and
+  `column_accumulate!`) so vertical reductions and accumulations can proceed from
+  the top of a column downward. [2531](https://github.com/CliMA/ClimaCore.jl/pull/2531)
+
 v0.14.54
 -------
 
