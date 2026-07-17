@@ -17,6 +17,7 @@ function column_reduce_device!(
     input,
     init,
     space,
+    reverse,
 ) where {F, T}
     Ni, Nj, _, _, Nh = size(Fields.field_values(output))
     us = UniversalSize(Fields.field_values(output))
@@ -36,6 +37,7 @@ function column_reduce_device!(
         us,
         mask,
         cart_inds,
+        reverse,
     )
     nitems = Ni * Nj * Nh
     threads = threads_via_occupancy(bycolumn_kernel!, args)
@@ -49,7 +51,7 @@ function column_reduce_device!(
     )
     call_post_op_callback() && post_op_callback(
         output,
-        (dev, f, transform, output, input, init, space),
+        (dev, f, transform, output, input, init, space, reverse),
         (;),
     )
 end
@@ -62,6 +64,7 @@ function column_accumulate_device!(
     input,
     init,
     space,
+    reverse,
 ) where {F, T}
     out_fv = Fields.field_values(output)
     mask = Spaces.get_mask(space)
@@ -81,6 +84,7 @@ function column_accumulate_device!(
         us,
         mask,
         cart_inds,
+        reverse,
     )
     (Ni, Nj, _, _, Nh) = DataLayouts.universal_size(us)
     nitems = Ni * Nj * Nh
@@ -106,9 +110,10 @@ function bycolumn_kernel!(
     us::DataLayouts.UniversalSize,
     mask,
     cart_inds,
+    reverse,
 ) where {S, F, T}
     if space isa Spaces.FiniteDifferenceSpace
-        single_column_function!(f, transform, output, input, init, space)
+        single_column_function!(f, transform, output, input, init, space, reverse)
     else
         tidx = linear_thread_idx()
         if linear_is_valid_index(tidx, us) && tidx ≤ length(unval(cart_inds))
@@ -123,6 +128,7 @@ function bycolumn_kernel!(
                 column(input, i, j, h),
                 init,
                 column(space, i, j, h),
+                reverse,
             )
         end
     end
