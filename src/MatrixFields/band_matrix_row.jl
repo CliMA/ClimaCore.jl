@@ -163,11 +163,13 @@ is_auto_broadcastable(::Type{BMR}) where {BMR <: BandMatrixRow} =
 add_auto_broadcasters(row::BandMatrixRow) = map(add_auto_broadcasters, row)
 drop_auto_broadcasters(row::BandMatrixRow) = map(drop_auto_broadcasters, row)
 
-
-@generated function (row::BandMatrixRow{ld, bw, T})(args::Vararg{Any, N}) where {ld, bw, T, N}
+function (row::BandMatrixRow{ld, bw, T})(args::Vararg{Any, N}) where {ld, bw, T, N}
     N == bw || error(
-        "BandMatrixRow with bandwidth $bw expected $bw arguments, but got $N"
+        "BandMatrixRow with bandwidth $bw expected $bw arguments, but got $N",
     )
-    terms = [:(row.entries[$i] * args[$i]) for i in 1:bw]
-    return Expr(:call, :+, terms...)
+
+    result = unrolled_sum(Iterators.zip(row.entries, args)) do (entry, arg)
+        entry * arg
+    end
+    return result
 end
