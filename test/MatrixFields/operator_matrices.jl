@@ -240,21 +240,21 @@ end
         test_name = "applying six operators to a nested field using operator \
                      matrices",
         get_result = @lazy(
-            # @. ᶜwinterp_matrix(ᶠscalar) *
-            #    ᶠrbias_matrix() *
-            #    ᶜlbias_matrix() *
-            @. ᶠrbias_matrix() * ᶜlbias_matrix() * ᶠinterp_matrix() *
+            @. ᶜwinterp_matrix(ᶠscalar) *
+               ᶠrbias_matrix() *
+               ᶜlbias_matrix() *
+               ᶠinterp_matrix() *
                ᶜnested
         ),
         set_result = @lazy(
-            # @. ᶜwinterp_matrix(ᶠscalar) *
-            #    ᶠrbias_matrix() *
-            #    ᶜlbias_matrix() *
-            @. ᶠrbias_matrix() * ᶜlbias_matrix() * ᶠinterp_matrix() *
+            @. ᶜwinterp_matrix(ᶠscalar) *
+               ᶠrbias_matrix() *
+               ᶜlbias_matrix() *
+               ᶠinterp_matrix() *
                ᶜnested
         ),
         ref_set_result = @lazy(
-            @. ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested)))# @. ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested))))
+            @. ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested))))
         ),
     )
     # this test is will fail because of incorrect results, not InvalidIRError
