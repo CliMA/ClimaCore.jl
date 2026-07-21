@@ -422,7 +422,4 @@ if hasfield(Method, :recursion_relation)
     for m in methods(calc_level_val)
         m.recursion_relation = dont_limit
     end
-    for m in methods(outer_or_mul)
-        m.recursion_relation = dont_limit
-    end
 end

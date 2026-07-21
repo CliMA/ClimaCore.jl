@@ -84,24 +84,9 @@ Base.@propagate_inbounds function row_mul_vec!(
     ) do mat1_row_d
         vec2_slot = band_matrix_d(v + mat1_row_d, shape1)
         if 0i32 < vec2_slot <= n_column_slots(shape1)
-            @inbounds outer_or_mul(
-                mat1_row[mat1_row_d],
-                vector2[vec2_slot + vec2_offset],
-            )
+            @inbounds mat1_row[mat1_row_d] * vector2[vec2_slot + vec2_offset]
         else
             zero_entry
         end
     end
 end
-
-# Handles multiplication in row_mul_vec!.
-# Basically rmul, but some operators matrices require special handling
-# general case
-Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1, T2} = x * y
-# case for grad of a vec
-Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1 <: AbstractVector, T2} = x ⊗ y
-# case for divgrad of a vec
-Base.@propagate_inbounds outer_or_mul(
-    x::T1,
-    y::T2,
-) where {T1 <: Geometry.AbstractCovector, T2 <: Geometry.AbstractTensor{2}} = (x * y)'
