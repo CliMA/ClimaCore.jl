@@ -59,4 +59,11 @@ include("matrix_field_test_utils.jl")
     @test zero(typeof(DiagonalMatrixRow(1))) == DiagonalMatrixRow(0)
     @test eltype(typeof(DiagonalMatrixRow(1))) == Int
     @test inv(DiagonalMatrixRow(1)) == DiagonalMatrixRow(float(1))
+
+    # Test callable behaviour
+    @test DiagonalMatrixRow(2.0)(10.0) == 20.0
+    @test BidiagonalMatrixRow(1.0, 2.0)(10.0, 5.0) == 20.0
+    @test TridiagonalMatrixRow(-1.0, 2.0, -1.0)(10.0, 25.0, 12.0) == 28.0
+    @test_throws ErrorException TridiagonalMatrixRow(1, 2, 3)(10.0, 5.0)
+    @test_throws ErrorException TridiagonalMatrixRow(1, 2, 3)(10.0, 5.0, 1.0, 2.0)
 end
