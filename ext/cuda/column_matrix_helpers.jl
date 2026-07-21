@@ -314,10 +314,8 @@ Base.@propagate_inbounds function row_mul_vec!(
         init = zero_entry,
     ) do mat1_row_d
         if (0i32 < v + mat1_row_d + half <= CUDA.blockDim().x)
-            @inbounds outer_or_mul(
-                mat1_row[mat1_row_d],
-                matrix2[v + mat1_row_d + half + (block_col_idx - 1i32) * CUDA.blockDim().x],
-            )
+            @inbounds mat1_row[mat1_row_d] *
+                      matrix2[v + mat1_row_d + half + (block_col_idx - 1i32) * CUDA.blockDim().x]
         else
             zero_entry
         end
@@ -345,10 +343,8 @@ Base.@propagate_inbounds function row_mul_vec!(
         init = zero_entry,
     ) do mat1_row_d
         if (0i32 < v + mat1_row_d - half < CUDA.blockDim().x)
-            @inbounds outer_or_mul(
-                mat1_row[mat1_row_d],
-                matrix2[v + mat1_row_d - half + (block_col_idx - 1i32) * CUDA.blockDim().x],
-            )
+            @inbounds mat1_row[mat1_row_d] *
+                      matrix2[v + mat1_row_d - half + (block_col_idx - 1i32) * CUDA.blockDim().x]
         else
             zero_entry
         end
@@ -376,10 +372,8 @@ Base.@propagate_inbounds function row_mul_vec!(
         init = zero_entry,
     ) do mat1_row_d
         if (0i32 < v + mat1_row_d <= CUDA.blockDim().x - 1i32)
-            @inbounds outer_or_mul(
-                mat1_row[mat1_row_d],
-                matrix2[v + mat1_row_d + (block_col_idx - 1i32) * CUDA.blockDim().x],
-            )
+            @inbounds mat1_row[mat1_row_d] *
+                      matrix2[v + mat1_row_d + (block_col_idx - 1i32) * CUDA.blockDim().x]
         else
             zero_entry
         end
@@ -407,24 +401,11 @@ Base.@propagate_inbounds function row_mul_vec!(
         init = zero_entry,
     ) do mat1_row_d
         if (0i32 < v + mat1_row_d <= CUDA.blockDim().x)
-            @inbounds outer_or_mul(
-                mat1_row[mat1_row_d],
-                matrix2[v + mat1_row_d + (block_col_idx - 1i32) * CUDA.blockDim().x],
-            )
+            @inbounds mat1_row[mat1_row_d] *
+                      matrix2[v + mat1_row_d + (block_col_idx - 1i32) * CUDA.blockDim().x]
+
         else
             zero_entry
         end
     end
 end
-
-# Handles multiplication in row_mul_vec!.
-# Basically rmul, but some operators matrices require special handling
-# general case
-Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1, T2} = x * y
-# case for grad of a vec
-Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1 <: AbstractVector, T2} = x ⊗ y
-# case for divgrad of a vec
-Base.@propagate_inbounds outer_or_mul(
-    x::T1,
-    y::T2,
-) where {T1 <: Geometry.AbstractCovector, T2 <: Geometry.AbstractTensor{2}} = (x * y)'
