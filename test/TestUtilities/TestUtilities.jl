@@ -20,6 +20,7 @@ import ClimaCore.Quadratures
 import ClimaCore.Geometry
 import ClimaCore.Meshes
 import ClimaCore.Spaces
+import ClimaCore.CommonSpaces
 import ClimaCore.Topologies
 import ClimaCore.Domains
 import ClimaCore.Hypsography
@@ -164,6 +165,26 @@ function FaceExtrudedFiniteDifferenceSpace(::Type{FT}; kwargs...) where {FT}
     return Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
 end
 
+function PointColumnEnsembleSpace(::Type{FT}; context, zelem = 10, kwargs...) where {FT}
+    staggering = Spaces.CellCenter()
+    lats = FT.([0.0, 1.0, 2.0])
+    longs = FT.([3.0, 4.0, 5.0])
+    points = [Geometry.LatLongPoint(lat, long) for (lat, long) in zip(lats, longs)]
+    z_min = -10.0
+    z_max = 10.0
+    (; device) = context
+    return CommonSpaces.PointColumnEnsembleSpace(
+        FT;
+        z_elem = zelem,
+        staggering,
+        points,
+        z_min,
+        z_max,
+        device,
+        kwargs...,
+    )
+end
+
 function all_spaces(
     ::Type{FT};
     zelem = 10,
@@ -179,6 +200,7 @@ function all_spaces(
         # SpectralElementFiniteDifferenceRectilinearSpace2D(FT; context),
         ColumnCenterFiniteDifferenceSpace(FT; zelem, context),
         ColumnFaceFiniteDifferenceSpace(FT; zelem, context),
+        PointColumnEnsembleSpace(FT; zelem, context),
         SphereSpectralElementSpace(FT; context),
         CenterExtrudedFiniteDifferenceSpace(FT; zelem, context, helem),
         FaceExtrudedFiniteDifferenceSpace(FT; zelem, context, helem),
@@ -194,12 +216,14 @@ end
 bycolumnable(space) = (
     space isa Spaces.ExtrudedFiniteDifferenceSpace ||
     space isa Spaces.SpectralElementSpace1D ||
-    space isa Spaces.SpectralElementSpace2D
+    space isa Spaces.SpectralElementSpace2D ||
+    space isa Spaces.MultiColumnFiniteDifferenceSpace
 )
 
 levelable(space) = (
     space isa Spaces.ExtrudedFiniteDifferenceSpace ||
-    space isa Spaces.FiniteDifferenceSpace
+    space isa Spaces.FiniteDifferenceSpace ||
+    space isa Spaces.MultiColumnFiniteDifferenceSpace
 )
 
 fc_index(
@@ -207,6 +231,7 @@ fc_index(
     ::Union{
         Spaces.FaceExtrudedFiniteDifferenceSpace,
         Spaces.FaceFiniteDifferenceSpace,
+        Spaces.FaceMultiColumnFiniteDifferenceSpace,
     },
 ) = Utilities.PlusHalf(i)
 
@@ -215,6 +240,7 @@ fc_index(
     ::Union{
         Spaces.CenterExtrudedFiniteDifferenceSpace,
         Spaces.CenterFiniteDifferenceSpace,
+        Spaces.CenterMultiColumnFiniteDifferenceSpace,
     },
 ) = i
 

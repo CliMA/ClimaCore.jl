@@ -71,6 +71,7 @@ Meshes.domain(grid::AbstractGrid) = Meshes.domain(topology(grid))
 
 include("finitedifference.jl")
 include("spectralelement.jl")
+include("pointcloud.jl")
 include("extruded.jl")
 include("column.jl")
 include("level.jl")
@@ -106,6 +107,7 @@ has_horizontal(::ExtrudedFiniteDifferenceGrid) = true
 has_horizontal(::DeviceSpectralElementGrid2D) = true
 has_horizontal(::SpectralElementGrid2D) = true
 has_horizontal(::SpectralElementGrid1D) = true
+has_horizontal(::PointCloudGrid) = true
 
 """
     has_vertical(::AbstractGrid)
@@ -124,6 +126,7 @@ Retrieve the mask for the grid (defaults to DataLayouts.NoMask).
 """
 get_mask(::AbstractGrid) = DataLayouts.NoMask()
 get_mask(grid::ExtrudedFiniteDifferenceGrid) = grid.horizontal_grid.mask
+get_mask(::ExtrudedFiniteDifferenceGrid{<:PointCloudGrid}) = DataLayouts.NoMask()
 
 """
     set_mask!(fn::Function, grid)

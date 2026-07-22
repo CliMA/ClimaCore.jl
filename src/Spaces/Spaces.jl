@@ -99,6 +99,7 @@ include("pointspace.jl")
 include("spectralelement.jl")
 include("finitedifference.jl")
 include("extruded.jl")
+include("multicolumn.jl")
 include("triangulation.jl")
 include("dss.jl")
 
@@ -193,6 +194,7 @@ Returns a bool indicating that the space has a vertical grid.
 function has_vertical end
 has_vertical(::AbstractSpace) = false
 has_vertical(::ExtrudedFiniteDifferenceSpace) = true
+has_vertical(::MultiColumnFiniteDifferenceSpace) = true
 has_vertical(::FiniteDifferenceSpace) = false
 
 """

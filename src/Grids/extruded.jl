@@ -45,7 +45,7 @@ local_geometry_type(
 ) where {H, V, A, GG, CLG, FLG} = eltype(CLG) # calls eltype from DataLayouts
 
 function ExtrudedFiniteDifferenceGrid(
-    horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
+    horizontal_grid::AbstractSpectralElementGrid,
     vertical_grid::FiniteDifferenceGrid,
     hypsography::HypsographyAdaption = Flat();
     deep = false,
@@ -70,7 +70,7 @@ end
 
 # memoized constructor
 function ExtrudedFiniteDifferenceGrid(
-    horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
+    horizontal_grid::AbstractSpectralElementGrid,
     vertical_grid::FiniteDifferenceGrid,
     hypsography::HypsographyAdaption,
     global_geometry::Geometry.AbstractGlobalGeometry,
@@ -96,7 +96,7 @@ end
 
 # Non-memoized constructor. Should not generally be called, but can be defined for other Hypsography types
 function _ExtrudedFiniteDifferenceGrid(
-    horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
+    horizontal_grid::AbstractSpectralElementGrid,
     vertical_grid::FiniteDifferenceGrid,
     hypsography::Flat,
     global_geometry::Geometry.AbstractGlobalGeometry,
@@ -125,6 +125,11 @@ function _ExtrudedFiniteDifferenceGrid(
 end
 
 topology(grid::ExtrudedFiniteDifferenceGrid) = topology(grid.horizontal_grid)
+
+ClimaComms.context(grid::ExtrudedFiniteDifferenceGrid) =
+    ClimaComms.context(grid.horizontal_grid)
+ClimaComms.device(grid::ExtrudedFiniteDifferenceGrid) =
+    ClimaComms.device(grid.horizontal_grid)
 
 vertical_topology(grid::ExtrudedFiniteDifferenceGrid) =
     topology(grid.vertical_grid)

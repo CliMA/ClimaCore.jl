@@ -143,4 +143,34 @@ ClimaComms.init(ClimaComms.context())
     grid = Spaces.grid(space)
     @test grid isa Grids.SpectralElementGrid2D
     @test Grids.topology(grid).mesh isa Meshes.RectilinearMesh
+
+    lats = [0.0, 3.0, 5.0]
+    longs = [0.0, 4.0, 7.0]
+    points = [
+        Geometry.LatLongPoint(lat, long) for
+        (lat, long) in zip(lats, longs)]
+    radius = 100
+    z_elem = 10
+    z_min = -10.0
+    z_max = 20.0
+    staggering = Grids.CellCenter()
+    space = PointColumnEnsembleSpace(;
+        points,
+        z_elem,
+        z_min,
+        z_max,
+        radius,
+        staggering,
+    )
+    @test space.staggering isa Grids.CellCenter
+    grid = Spaces.grid(space)
+    @test grid isa Grids.ExtrudedFiniteDifferenceGrid
+    @test grid.horizontal_grid isa Grids.PointCloudGrid
+    @test grid.horizontal_grid.global_geometry.radius == radius
+    @test grid.vertical_grid.topology.mesh.domain.coord_max == Geometry.ZPoint(z_max)
+    @test grid.vertical_grid.topology.mesh.domain.coord_min == Geometry.ZPoint(z_min)
+    @test Meshes.nelements(grid.vertical_grid.topology.mesh) == z_elem
+    @test vec(collect(parent(grid.horizontal_grid.local_geometry.coordinates.lat))) == lats
+    @test vec(collect(parent(grid.horizontal_grid.local_geometry.coordinates.long))) ==
+          longs
 end
