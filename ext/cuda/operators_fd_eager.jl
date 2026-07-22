@@ -2,7 +2,7 @@ import ClimaCore: Spaces, Quadratures, Topologies, Operators
 import Base.Broadcast: Broadcasted
 import ClimaCore.Fields: Field, field_values, AbstractFieldStyle
 import ClimaComms
-import ClimaCore.Utilities: half, new
+import ClimaCore.Utilities: half, new, unsafe_eltype
 import ClimaCore.Operators
 import ClimaCore.Geometry: ⊗, project
 import ClimaCore.Operators:
@@ -32,22 +32,11 @@ memory per thread before theoretical occupancy is limited. We use 36 bytes to al
 3x3 axis tensors
 """
 check_if_fits_in_shmem(bc::Union{StencilBroadcasted, Broadcasted, Field}) =
-    sizeof(eltype(bc)) <= 36
+    sizeof(unsafe_eltype(bc)) <= 36
 check_if_fits_in_shmem(val) = sizeof(typeof(val)) <= 36
 
-"""
-    has_type_arg(x)
-Check if `x` is a `Type`, or any of its arguments has a `Type` argument.
-This is needed because both the shmem matrix multiplication and the getidx fallback rely on
-`eltype`, and `eltype(::CudaRefType) = Any`
-"""
-# TODO:
-has_type_arg(_) = false
-has_type_arg(::Type) = true
-has_type_arg(::Base.RefValue{<:Type}) = true
-has_type_arg(bc::Union{StencilBroadcasted, Broadcasted}) =
-    UnrolledUtilities.unrolled_any(has_type_arg, bc.args)
 
+ClimaCore.Utilities.unsafe_eltype(::CUDA.CuRefType{T}) where {T} = T
 
 """
     eager_copyto_stencil_kernel!(out, bc::BC, space)
