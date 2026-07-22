@@ -436,7 +436,6 @@ RectangleXYSpace(::Type{FT}; kwargs...) where {FT} =
         z_min::Real,
         z_max::Real,
         device::ClimaComms.AbstractDevice = ClimaComms.device(),
-        context::ClimaComms.AbstractCommsContext = ClimaComms.SingletonCommsContext(device),
         stretch::Meshes.StretchingRule = Meshes.Uniform(),
         z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
         staggering::Staggering,
@@ -452,7 +451,6 @@ locations on a sphere, given:
  - `z_min` the domain minimum along the z-direction
  - `z_max` the domain maximum along the z-direction
  - `device` the `ClimaComms.device`
- - `context` the `ClimaComms.context` (must be a `SingletonCommsContext`)
  - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
  - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
  - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]

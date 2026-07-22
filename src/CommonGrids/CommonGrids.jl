@@ -720,7 +720,6 @@ end
         z_max::Real,
         radius::Real,
         device::ClimaComms.AbstractDevice = ClimaComms.device(),
-        context::ClimaComms.AbstractCommsContext = ClimaComms.SingletonCommsContext(device),
         stretch::Meshes.StretchingRule = Meshes.Uniform(),
         z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
     )
@@ -737,7 +736,6 @@ arbitrary (lat, lon) locations on a sphere, given:
  - `z_max` the domain maximum along the z-direction,
  - `radius` the radius of the sphere,
  - `device` the `ClimaComms.device`,
- - `context` the `ClimaComms.context` (must be a `SingletonCommsContext`),
  - `stretch` the mesh `Meshes.StretchingRule` (defaults to
    [`Meshes.Uniform`](@ref)),
  - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z`
@@ -769,13 +767,10 @@ function PointColumnEnsembleGrid(
     z_max::Real,
     radius::Real = 6.371229e6,
     device::ClimaComms.AbstractDevice = ClimaComms.device(),
-    context::ClimaComms.AbstractCommsContext = ClimaComms.SingletonCommsContext(device),
     stretch::Meshes.StretchingRule = Meshes.Uniform(),
     z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
 ) where {FT}
-    @assert context isa ClimaComms.SingletonCommsContext "PointColumnEnsembleGrid only supports SingletonCommsContext."
-    @assert ClimaComms.device(context) == device "The given device and context device do not match."
-    h_grid = Grids.PointCloudGrid(points; radius, device, context)
+    h_grid = Grids.PointCloudGrid(points; radius, device)
     z_topology = Topologies.IntervalTopology(
         ClimaComms.SingletonCommsContext(device),
         z_mesh,

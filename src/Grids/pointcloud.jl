@@ -5,17 +5,20 @@
         points  :: AbstractVector{Geometry.LatLongPoint{FT}},
     )
 
-A horizontal grid consisting of N arbitrary, disconnected (lat, long) locations on a
-sphere. There is no connectivity between columns; no spectral element basis, DSS, or
-horizontal operators are supported on this grid.
+A horizontal grid consisting of N arbitrary, disconnected (lat, long) locations
+on a sphere. There is no connectivity between columns; no spectral element
+basis, DSS, or horizontal operators are supported on this grid.
 
-This is the horizontal component used by a "point cloud" extruded space (N independent
-columns at user-chosen sphere locations).
+This is the horizontal component used by a "point cloud" extruded space (N
+independent columns at user-chosen sphere locations).
 
-The `local_geometry` is stored as an `IFH{LG, 1, N}` data layout — one node per
-"element" (`Ni = 1`), N "elements" (`Nh = N`). The horizontal Jacobian `∂x∂ξ` is the
-diagonal matrix `diag(R·π/180, R·cosd(lat)·π/180)` reflecting the sphere metric at
-each point, and `J = R²·cosd(lat)·(π/180)²`.
+The `local_geometry` is stored as an `IFH{LG, 1, N}` data layout, with each of
+the `N` locations represented by an element with one nodal point. Based on the
+[metric
+tensor](https://en.wikipedia.org/wiki/Metric_tensor#The_round_metric_on_a_sphere)
+of a sphere, the horizontal Jacobian `∂x∂ξ` is given by the diagonal matrix
+`diag(R·π/180, R·cosd(lat)·π/180)`, with the determinant `J =
+R²·cosd(lat)·(π/180)²`.
 """
 struct PointCloudGrid{
     C <: ClimaComms.AbstractCommsContext,
@@ -35,9 +38,9 @@ local_geometry_type(::Type{PointCloudGrid{C, GG, LG}}) where {C, GG, LG} =
 ClimaComms.context(grid::PointCloudGrid) = grid.context
 ClimaComms.device(grid::PointCloudGrid) = ClimaComms.device(grid.context)
 
-# No topology — return nothing. Callers that need a topology (e.g. DSS) should
-# not be called on a PointCloudGrid.
-topology(::PointCloudGrid) = nothing
+topology(::PointCloudGrid) = error(
+    "PointCloudGrid has no topology",
+)
 
 local_geometry_data(grid::PointCloudGrid, ::Nothing) = grid.local_geometry
 
@@ -51,7 +54,6 @@ quadrature_style(::PointCloudGrid) =
         points  :: AbstractVector{Geometry.LatLongPoint{FT}};
         radius  :: Real,
         device  :: ClimaComms.AbstractDevice = ClimaComms.device(),
-        context :: ClimaComms.AbstractCommsContext = ClimaComms.context(device),
     )
 
 Convenience constructor: build a `PointCloudGrid` from a vector of
@@ -63,9 +65,10 @@ function PointCloudGrid(
     points::AbstractVector{Geometry.LatLongPoint{FT}};
     radius::Real,
     device::ClimaComms.AbstractDevice = ClimaComms.device(),
-    context::ClimaComms.AbstractCommsContext = ClimaComms.SingletonCommsContext(device),
 ) where {FT}
-    @assert context isa ClimaComms.SingletonCommsContext "PointCloudGrid only supports SingletonCommsContext."
+    # PointCloudGrid is single-process only; the context is always a
+    # SingletonCommsContext built from the given device.
+    context = ClimaComms.SingletonCommsContext(device)
 
     N = length(points)
     global_geometry = Geometry.SphericalGlobalGeometry(FT(radius))
@@ -89,7 +92,7 @@ function PointCloudGrid(
         s_lat = FT(radius) * deg2rad
         s_lon = FT(radius) * deg2rad * cosd(pt.lat)
         J = s_lat * s_lon   # det of diagonal Jacobian
-        ∂x∂ξ_mat = SMatrix{2, 2, FT, 4}(0, s_lat, s_lon, 0)
+        ∂x∂ξ_mat = SMatrix{2, 2, FT, 4}(zero(FT), s_lat, s_lon, zero(FT))
 
         lg_slab = slab(local_geometry, h)
         lg_slab[slab_index(1)] = Geometry.LocalGeometry(

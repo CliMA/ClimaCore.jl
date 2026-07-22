@@ -1,33 +1,37 @@
 """
-    PointCloudLevelSpace
+    PointCloudSpace
 
 A horizontal space of N independent points (lat, lon, z), produced by taking a
 vertical level of a [`MultiColumnFiniteDifferenceSpace`](@ref).  This is the
 N-column analogue of [`PointSpace`](@ref), which is the single-column level
 space.
 
-`local_geometry` holds an `IFH{LG, 1, N}` data layout.
+`full_grid` references the extruded grid the level was taken from (analogous
+to `Grids.LevelGrid.full_grid`), and `local_geometry` holds an `IFH{LG, 1, N}`
+data layout.
 """
-struct PointCloudLevelSpace{
+struct PointCloudSpace{
     C <: ClimaComms.AbstractCommsContext,
+    G,
     LG,
 } <: AbstractSpace
     context::C
+    full_grid::G  # the AbstractExtrudedFiniteDifferenceGrid this level was sliced from
     local_geometry::LG  # IFH{FullLocalGeometry{(1,2,3), LatLongZPoint, ...}, 1, N}
 end
 
-ClimaComms.context(space::PointCloudLevelSpace) = space.context
-ClimaComms.device(space::PointCloudLevelSpace) =
+ClimaComms.context(space::PointCloudSpace) = space.context
+ClimaComms.device(space::PointCloudSpace) =
     ClimaComms.device(space.context)
 
-local_geometry_data(space::PointCloudLevelSpace) = space.local_geometry
-local_geometry_type(::Type{PointCloudLevelSpace{C, LG}}) where {C, LG} =
+local_geometry_data(space::PointCloudSpace) = space.local_geometry
+local_geometry_type(::Type{PointCloudSpace{C, G, LG}}) where {C, G, LG} =
     eltype(LG)
 
-# PointCloudLevelSpace has no grid/staggering; override the generic
+# PointCloudSpace has no grid/staggering; override the generic
 # local_geometry_data(space) = local_geometry_data(grid(space), staggering(space))
 # so that it works without them.
-local_geometry_data(space::PointCloudLevelSpace, ::Nothing) =
+local_geometry_data(space::PointCloudSpace, ::Nothing) =
     space.local_geometry
 
 """
@@ -39,7 +43,7 @@ locations on a sphere.  This is the N-column generalisation of
 
 - The data layout is `VIFH{LG, Nv, 1, N}` (same vertical structure for every
   column; full 3-D local geometry including lat/lon/z coordinates).
-- [`Spaces.level`](@ref) returns a [`PointCloudLevelSpace`](@ref) (N points
+- [`Spaces.level`](@ref) returns a [`PointCloudSpace`](@ref) (N points
   at that z-level) rather than a spectral-element horizontal space.
 - [`Spaces.column`](@ref) returns a single-column
   [`Spaces.FiniteDifferenceSpace`](@ref).
@@ -111,25 +115,25 @@ column(space::MultiColumnFiniteDifferenceSpace, i, j, h) =
     column(space, Grids.ColumnIndex((i,), h))
 
 """
-    column(space::PointCloudLevelSpace, i, h)
+    column(space::PointCloudSpace, i, h)
 
 Return the single-point [`PointSpace`](@ref) for column `h` of a
-[`PointCloudLevelSpace`](@ref).  This is the analogue of
+[`PointCloudSpace`](@ref).  This is the analogue of
 `column(::SpectralElementSpace1D, i, h)` and enables `field[colidx]` indexing
 inside [`Fields.bycolumn`](@ref) loops over a
 [`MultiColumnFiniteDifferenceSpace`](@ref).
 """
-Base.@propagate_inbounds function column(space::PointCloudLevelSpace, i, h)
+Base.@propagate_inbounds function column(space::PointCloudSpace, i, h)
     local_geometry = column(local_geometry_data(space), i, h)
     PointSpace(ClimaComms.context(space), local_geometry)
 end
-Base.@propagate_inbounds column(space::PointCloudLevelSpace, i, j, h) =
+Base.@propagate_inbounds column(space::PointCloudSpace, i, j, h) =
     column(space, i, h)
 
 """
     level(space::MultiColumnFiniteDifferenceSpace, v)
 
-Return the [`PointCloudLevelSpace`](@ref) (N-point horizontal slice) at
+Return the [`PointCloudSpace`](@ref) (N-point horizontal slice) at
 vertical level `v`.
 """
 Base.@propagate_inbounds function level(
@@ -137,14 +141,14 @@ Base.@propagate_inbounds function level(
     v::Int,
 )
     data = level(local_geometry_data(space), v)
-    PointCloudLevelSpace(ClimaComms.context(space), data)
+    PointCloudSpace(ClimaComms.context(space), grid(space), data)
 end
 Base.@propagate_inbounds function level(
     space::FaceMultiColumnFiniteDifferenceSpace,
     v::PlusHalf,
 )
     data = level(local_geometry_data(space), v.i + 1)
-    PointCloudLevelSpace(ClimaComms.context(space), data)
+    PointCloudSpace(ClimaComms.context(space), grid(space), data)
 end
 
 # ---- space properties --------------------------------------------------
@@ -159,30 +163,25 @@ horizontal_space(space::MultiColumnFiniteDifferenceSpace) =
     level(MultiColumnFiniteDifferenceSpace(grid(space), CellCenter()), 1)
 
 # No DSS / mask machinery needed.
-get_mask(space::PointCloudLevelSpace) = DataLayouts.NoMask()
+get_mask(space::PointCloudSpace) = DataLayouts.NoMask()
 get_mask(space::MultiColumnFiniteDifferenceSpace) = DataLayouts.NoMask()
-set_mask!(fn, space::MultiColumnFiniteDifferenceSpace) =
-    set_mask!(fn, grid(space).horizontal_grid)
+set_mask!(::Any, ::MultiColumnFiniteDifferenceSpace) = nothing
 
-# A PointCloudLevelSpace is a subspace of a MultiColumnFiniteDifferenceSpace
-# when they share the same underlying grid.  This enables broadcasting a level
-# field (IFH) across a full multi-column field (VIFH), analogous to how a
-# PointSpace field can be broadcast with a CenterFiniteDifferenceSpace field.
+# A PointCloudSpace is a subspace of a MultiColumnFiniteDifferenceSpace
+# when it was sliced from the same underlying grid.  This enables broadcasting
+# a level field (IFH) across a full multi-column field (VIFH), analogous to
+# issubspace(::SpectralElementSpace2D{<:LevelGrid}, ::ExtrudedFiniteDifferenceSpace).
 function issubspace(
-    level_space::PointCloudLevelSpace,
+    level_space::PointCloudSpace,
     full_space::MultiColumnFiniteDifferenceSpace,
 )
-    hgrid = grid(full_space).horizontal_grid
-    # local_geometry of the level space is an IFH slice of the full VIFH;
-    # both share the same horizontal grid data array.
-    return size(level_space.local_geometry, 5) == size(
-        Grids.local_geometry_data(hgrid, nothing), 5)
+    return level_space.full_grid === grid(full_space)
 end
 
 """
     obtain_surface_space(cs::CenterMultiColumnFiniteDifferenceSpace)
 
-Return the [`PointCloudLevelSpace`](@ref) corresponding to the top face
+Return the [`PointCloudSpace`](@ref) corresponding to the top face
 (surface) of `cs`.  Mirrors the single-column
 `obtain_surface_space(::CenterFiniteDifferenceSpace)` pattern.
 """

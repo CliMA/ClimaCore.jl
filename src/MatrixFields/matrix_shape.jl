@@ -30,7 +30,7 @@ function matrix_shape(
     matrix_space::Union{
         Spaces.AbstractSpectralElementSpace,
         Spaces.PointSpace,
-        Spaces.PointCloudLevelSpace,
+        Spaces.PointCloudSpace,
     },
 )
     @assert eltype(matrix_field) <: DiagonalMatrixRow

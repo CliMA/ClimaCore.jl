@@ -7,20 +7,8 @@ Adapt.adapt_structure(
     grid::Grids.ExtrudedFiniteDifferenceGrid,
 ) = Grids.DeviceExtrudedFiniteDifferenceGrid(
     Adapt.adapt(to, Grids.vertical_topology(grid)),
+    grid.horizontal_grid isa Grids.PointCloudGrid ? nothing :
     Adapt.adapt(to, grid.horizontal_grid.quadrature_style),
-    Adapt.adapt(to, grid.global_geometry),
-    Adapt.adapt(to, grid.center_local_geometry),
-    Adapt.adapt(to, grid.face_local_geometry),
-)
-
-# PointCloudGrid has no quadrature_style field; pass nothing so that FD
-# operators on PointColumnEnsembleSpace work on CUDA.
-Adapt.adapt_structure(
-    to::CUDA.KernelAdaptor,
-    grid::Grids.ExtrudedFiniteDifferenceGrid{<:Grids.PointCloudGrid},
-) = Grids.DeviceExtrudedFiniteDifferenceGrid(
-    Adapt.adapt(to, Grids.vertical_topology(grid)),
-    nothing,
     Adapt.adapt(to, grid.global_geometry),
     Adapt.adapt(to, grid.center_local_geometry),
     Adapt.adapt(to, grid.face_local_geometry),
@@ -52,9 +40,10 @@ Adapt.adapt_structure(to::CUDA.KernelAdaptor, space::Spaces.PointSpace) =
         Adapt.adapt(to, Spaces.local_geometry_data(space)),
     )
 
-Adapt.adapt_structure(to::CUDA.KernelAdaptor, space::Spaces.PointCloudLevelSpace) =
-    Spaces.PointCloudLevelSpace(
+Adapt.adapt_structure(to::CUDA.KernelAdaptor, space::Spaces.PointCloudSpace) =
+    Spaces.PointCloudSpace(
         ClimaCore.DeviceSideContext(),
+        Adapt.adapt(to, space.full_grid),
         Adapt.adapt(to, Spaces.local_geometry_data(space)),
     )
 
