@@ -773,17 +773,6 @@ steps:
         agents:
           slurm_gpus: 1
 
-      - label: "Unit: FD operator (shmem)"
-        key: unit_fd_operator_shmem
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_fd_ops_shared_memory.jl"
-          - "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_fd_ops_shared_memory.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
       - label: "Unit: gpu columnwise"
         key: unit_gpu_columnwise
         retry: *retry_policy
@@ -1847,14 +1836,6 @@ steps:
           - "julia --color=yes --project=.buildkite examples/column/heat.jl"
         artifact_paths:
           - "examples/column/output/heat/*"
-
-      - label: ":computer: Column Advection Step Eq"
-        key: "cpu_column_step_advect"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/column/step.jl"
-        artifact_paths:
-          - "examples/column/output/advect_step_function/*"
 
       - label: ":computer: Column Advection Eq"
         key: "cpu_column_advect"

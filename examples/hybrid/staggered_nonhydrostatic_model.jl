@@ -53,10 +53,6 @@ const ᶠcurlᵥ = Operators.CurlC2F(
     bottom = Operators.SetCurl(CT12(FT(0), FT(0))),
     top = Operators.SetCurl(CT12(FT(0), FT(0))),
 )
-const ᶜFC = Operators.FluxCorrectionC2C(
-    bottom = Operators.Extrapolate(),
-    top = Operators.Extrapolate(),
-)
 const ᶠupwind_product1 = Operators.UpwindBiasedProductC2F()
 const ᶠupwind_product3 = Operators.Upwind3rdOrderBiasedProductC2F(
     bottom = Operators.ThirdOrderOneSided(),
@@ -189,16 +185,6 @@ function implicit_tendency!(Yₜ, Y, p, t)
     Yₜ.c.uₕ .= (zero(eltype(Yₜ.c.uₕ)),)
 
     @. Yₜ.f.w = -(ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) + ᶠgradᵥ(ᶜK + ᶜΦ))
-
-    # TODO: Add flux correction to the Jacobian
-    # @. Yₜ.c.ρ += ᶜFC(ᶠw, ᶜρ)
-    # if :ρθ in propertynames(Y.c)
-    #     @. Yₜ.c.ρθ += ᶜFC(ᶠw, ᶜρθ)
-    # elseif :ρe in propertynames(Y.c)
-    #     @. Yₜ.c.ρe += ᶜFC(ᶠw, ᶜρe)
-    # elseif :ρe_int in propertynames(Y.c)
-    #     @. Yₜ.c.ρe_int += ᶜFC(ᶠw, ᶜρe_int)
-    # end
 
     return Yₜ
 end

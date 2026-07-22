@@ -136,18 +136,26 @@ function tendency!(dY, Y, _, t)
     uv_1 = Operators.getidx(axes(uv), uv, 1)
     u_wind = LinearAlgebra.norm(uv_1)
 
-    A = Operators.AdvectionC2C(
-        bottom = Operators.SetValue(Geometry.UVVector(0.0, 0.0)),
-        top = Operators.SetValue(Geometry.UVVector(0.0, 0.0)),
-    )
 
     # uv
     bcs_bottom = Operators.SetValue(Geometry.WVector(Cd * u_wind) ⊗ uv_1)
-    bcs_top = Operators.SetValue(uvg)
+    uv_top = Fields.level(uv, Fields.nlevels(uv))
+    uv_top_val = Fields.field_values(uv_top)[]
+    uv_bottom = Fields.level(uv, Fields.nlevels(uv))
+    uv_bottom_val = Fields.field_values(uv_bottom)[]
+    bcs_top = Operators.SetGradient(Geometry.Covariant3Vector(1) ⊗ ((uvg - uv_top_val)))
     ∂c = Operators.DivergenceF2C(bottom = bcs_bottom)
     ∂f = Operators.GradientC2F(top = bcs_top)
+    bcs_bottom_advection =
+        Operators.SetGradient(Geometry.Covariant3Vector(2) ⊗ uv_bottom_val)
+    bcs_top_advection = Operators.SetGradient(Geometry.Covariant3Vector(-2) ⊗ uv_top_val)
+    interpf2c = Operators.InterpolateF2C()
+    gradc2f_advect =
+        Operators.GradientC2F(top = bcs_top_advection, bottom = bcs_bottom_advection)
     duv .= (uv .- Ref(uvg)) .× Ref(Geometry.WVector(f))
-    @. duv += ∂c(ν * ∂f(uv)) - A(w, uv)
+    @. duv +=
+        ∂c(ν * ∂f(uv)) -
+        adjoint(interpf2c(adjoint(Geometry.Contravariant3Vector(w)) * gradc2f_advect(uv)))
 
     # w
     If = Operators.InterpolateC2F(
@@ -156,7 +164,8 @@ function tendency!(dY, Y, _, t)
     )
     ∂f = Operators.GradientC2F()
     ∂c = Operators.GradientF2C()
-    Af = Operators.AdvectionF2F()
+    gradf2c = Operators.GradientF2C()
+    interpc2f = Operators.InterpolateC2F()
     divf = Operators.DivergenceC2F()
     B = Operators.SetBoundaryOperator(
         bottom = Operators.SetValue(Geometry.WVector(zero(FT))),
@@ -164,7 +173,8 @@ function tendency!(dY, Y, _, t)
     )
     @. dw = B(
         Geometry.WVector(-(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - ∂f(Φ(zc.z))) +
-        divf(ν * ∂c(w)) - Af(w, w),
+        divf(ν * ∂c(w)) -
+        adjoint(interpc2f(adjoint(Geometry.Contravariant3Vector(uv)) * gradf2c(w))),
     )
 
     return dY
@@ -175,12 +185,12 @@ dY = tendency!(similar(Y), Y, nothing, 0.0)
 
 Δt = 1.0 / 100.0
 # Solve the ODE operator
-prob = ODEProblem(tendency!, Y, (0.0, 60 * 60))
+prob = ODEProblem(tendency!, Y, (0.0, 60 * 60 * 10))
 sol = solve(
     prob,
     SSPRK33(),
     dt = Δt,
-    saveat = collect(0.0:600:(60 * 60)), # save every hour
+    saveat = collect(0.0:600:(60 * 60 * 10)), # save every hour
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );

@@ -86,21 +86,11 @@ end
     # => C ∂_z F = cos(z)
     hv_center_space, hv_face_space = hvspace_2D()
 
-    function advect(f)
-        advf = zeros(eltype(f), hv_center_space)
-        A = Operators.AdvectionC2C(
-            bottom = Operators.SetValue(Geometry.UVector(0.0)), # value of f at the boundary (UVector field)
-            top = Operators.Extrapolate(),
-        )
-        @. advf = A(vC, f)
-    end
-
     # Vertical advective velocity
     vC = Geometry.WVector.(ones(Float64, hv_face_space),)
     # vector-valued field to be advected (one component only, a UVector)
     f = Geometry.UVector.(sin.(Fields.coordinate_field(hv_center_space).z),)
 
-    advf = advect(f)
 
     function div!(F)
         vecdivf = zeros(eltype(F), hv_center_space)
@@ -145,10 +135,11 @@ end
 
         diffu = zeros(eltype(u), hv_center_space)
         gradc2f = Operators.GradientC2F(
-            top = Operators.SetValue(0.0),
-            bottom = Operators.SetValue(0.0),
         )
-        divf2c = Operators.DivergenceF2C()
+        divf2c = Operators.DivergenceF2C(;
+            top = Operators.SetDivergence(0.0),
+            bottom = Operators.SetDivergence(0.0),
+        )
         @. diffu = divf2c(K * gradc2f(u))
 
         hgrad = Operators.Gradient()
@@ -197,11 +188,11 @@ end
     function vec_diff(K, U)
 
         vec_diff = zeros(eltype(U), hv_center_space)
-        gradc2f = Operators.GradientC2F(
-            top = Operators.SetValue(Geometry.UVector(0.0)),
-            bottom = Operators.SetValue(Geometry.UVector(0.0)),
+        gradc2f = Operators.GradientC2F()
+        divf2c = Operators.DivergenceF2C(;
+            top = Operators.SetDivergence(Geometry.UVector(0.0)),
+            bottom = Operators.SetDivergence(Geometry.UVector(0.0)),
         )
-        divf2c = Operators.DivergenceF2C()
         @. vec_diff = divf2c(K * gradc2f(U))
 
         hgrad = Operators.Gradient()
@@ -262,8 +253,8 @@ end
 
     curl = Operators.Curl()
     curlC2F = Operators.CurlC2F(
-        bottom = Operators.SetValue(Geometry.Covariant1Vector(0.0)),
-        top = Operators.SetValue(Geometry.Covariant1Vector(0.0)),
+        bottom = Operators.SetCurl(Geometry.Contravariant2Vector(2.0)),
+        top = Operators.SetCurl(Geometry.Contravariant2Vector(2.0)),
     )
 
     curlu = curlC2F.(u)
@@ -297,7 +288,7 @@ end
     ccoords = Fields.coordinate_field(hv_center_space)
     fcoords = Fields.coordinate_field(hv_face_space)
     fcoords_1 = Fields.level(fcoords, ClimaCore.Utilities.half)
-    curl_bcfield₁ = Geometry.Covariant1Vector.(0.0 .* fcoords_1.z)
+    curl_bcfield₁ = Geometry.Contravariant2Vector(2.0)
     curl_bcfield² = Geometry.Contravariant2Vector.(0.0 .* fcoords_1.z)
 
     u =
@@ -313,8 +304,8 @@ end
 
     curl = Operators.Curl()
     curlC2F = Operators.CurlC2F(
-        bottom = Operators.SetValue(curl_bcfield₁),
-        top = Operators.SetValue(Geometry.Covariant1Vector(0.0)),
+        bottom = Operators.SetCurl(curl_bcfield₁),
+        top = Operators.SetCurl(Geometry.Contravariant2Vector(2.0)),
     )
 
     curlu = curlC2F.(u)

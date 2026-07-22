@@ -34,19 +34,6 @@ function opt_RightBiasedF2C(face_field)
     return RB.(identity.(face_field))
 end
 
-function opt_AdvectionF2F(face_vel, face_field)
-    A = Operators.AdvectionF2F()
-    return A.(face_vel, identity.(face_field))
-end
-
-function opt_FluxCorrectionF2F_Extrapolate(face_vel, face_field)
-    FC = Operators.FluxCorrectionF2F(
-        left = Operators.Extrapolate(),
-        right = Operators.Extrapolate(),
-    )
-    return FC.(face_vel, identity.(face_field))
-end
-
 function opt_GradientF2C(face_field)
     ∇ᶜ = Operators.GradientF2C()
     return Geometry.WVector.(∇ᶜ.(sin.(face_field)))
@@ -73,14 +60,6 @@ function opt_InterpolateC2F_SetValue(center_field)
     return I.(identity.(center_field))
 end
 
-function opt_InterpolateC2F_SetGradient(center_field)
-    I = Operators.InterpolateC2F(
-        left = Operators.SetGradient(Geometry.WVector(0.0)),
-        right = Operators.SetGradient(Geometry.WVector(0.0)),
-    )
-    return I.(identity.(center_field))
-end
-
 function opt_InterpolateC2F_Extrapolate(center_field)
     I = Operators.InterpolateC2F(
         left = Operators.Extrapolate(),
@@ -93,14 +72,6 @@ function opt_WeightedInterpolateC2F_SetValue(weights, center_field)
     WI = Operators.WeightedInterpolateC2F(
         left = Operators.SetValue(0.0),
         right = Operators.SetValue(0.0),
-    )
-    return identity.(WI.(weights, center_field))
-end
-
-function opt_WeightedInterpolateC2F_SetGradient(weights, center_field)
-    WI = Operators.WeightedInterpolateC2F(
-        left = Operators.SetGradient(Geometry.WVector(0.0)),
-        right = Operators.SetGradient(Geometry.WVector(0.0)),
     )
     return identity.(WI.(weights, center_field))
 end
@@ -123,44 +94,12 @@ function opt_RightBiasedC2F(center_field)
     return RB.(identity.(center_field))
 end
 
-function opt_UpwindBiasedProductC2F_SetValue(face_vel, center_field)
-    UB = Operators.UpwindBiasedProductC2F(
-        left = Operators.SetValue(0.0),
-        right = Operators.SetValue(0.0),
-    )
-    return UB.(face_vel, identity.(center_field))
-end
-
 function opt_UpwindBiasedProductC2F_Extrapolate(face_vel, center_field)
     UB = Operators.UpwindBiasedProductC2F(
         left = Operators.Extrapolate(),
         right = Operators.Extrapolate(),
     )
     return UB.(face_vel, identity.(center_field))
-end
-
-function opt_AdvectionC2C_SetValue(face_vel, center_field)
-    A = Operators.AdvectionC2C(
-        left = Operators.SetValue(0.0),
-        right = Operators.SetValue(0.0),
-    )
-    return A.(face_vel, identity.(center_field))
-end
-
-function opt_AdvectionC2C_Extrapolate(face_vel, center_field)
-    A = Operators.AdvectionC2C(
-        left = Operators.Extrapolate(),
-        right = Operators.Extrapolate(),
-    )
-    return A.(face_vel, identity.(center_field))
-end
-
-function opt_FluxCorrectionC2C_Extrapolate(face_vel, center_field)
-    FC = Operators.FluxCorrectionC2C(
-        left = Operators.Extrapolate(),
-        right = Operators.Extrapolate(),
-    )
-    return FC.(face_vel, identity.(center_field))
 end
 
 function opt_GradientC2F_SetValue(center_field)
@@ -179,14 +118,6 @@ function opt_GradientC2F_SetGradient(center_field)
     return Geometry.WVector.(∇ᶠ.(cos.(center_field)))
 end
 
-function opt_DivergenceC2F_SetValue(center_field)
-    divᶠ = Operators.DivergenceC2F(
-        left = Operators.SetValue(Geometry.WVector(0.0)),
-        right = Operators.SetValue(Geometry.WVector(0.0)),
-    )
-    return divᶠ.(Geometry.WVector.(sin.(center_field)))
-end
-
 function opt_DivergenceC2F_SetDivergence(center_field)
     # DivergenceC2F, SetDivergence
     divᶠ = Operators.DivergenceC2F(
@@ -194,15 +125,6 @@ function opt_DivergenceC2F_SetDivergence(center_field)
         right = Operators.SetDivergence(0.0),
     )
     return divᶠ.(Geometry.WVector.(cos.(center_field)))
-end
-
-function opt_CurlC2F_SetValue(center_field)
-    # DivergenceC2F, SetDivergence
-    curlᶠ = Operators.CurlC2F(
-        left = Operators.SetValue(Geometry.Covariant1Vector(0.0)),
-        right = Operators.SetValue(Geometry.Covariant1Vector(0.0)),
-    )
-    return curlᶠ.(Geometry.Covariant1Vector.(cos.(center_field)))
 end
 
 function hspace1d(FT)
@@ -271,13 +193,6 @@ end
             @test_opt opt_LeftBiasedF2C(faces)
             @test_opt opt_RightBiasedF2C(faces)
 
-            # @test_opt opt_AdvectionF2F(face_velocities, faces)
-
-            @test_opt opt_FluxCorrectionF2F_Extrapolate(
-                center_velocities,
-                faces,
-            )
-
             @test_opt opt_GradientF2C(faces)
             @test_opt opt_GradientF2C(faces)
             @test_opt opt_DivergenceF2C(faces)
@@ -289,14 +204,9 @@ end
             @test_opt function_filter = filter sum(sin.(centers))
 
             @test_opt opt_InterpolateC2F_SetValue(centers)
-            @test_opt opt_InterpolateC2F_SetGradient(centers)
             @test_opt opt_InterpolateC2F_Extrapolate(centers)
 
             @test_opt opt_WeightedInterpolateC2F_SetValue(
-                center_values,
-                centers,
-            )
-            @test_opt opt_WeightedInterpolateC2F_SetGradient(
                 center_values,
                 centers,
             )
@@ -308,29 +218,14 @@ end
             @test_opt opt_LeftBiasedC2F(centers)
             @test_opt opt_RightBiasedC2F(centers)
 
-            @test_opt opt_UpwindBiasedProductC2F_SetValue(
-                face_velocities,
-                centers,
-            )
             @test_opt opt_UpwindBiasedProductC2F_Extrapolate(
                 face_velocities,
                 centers,
             )
-
-            @test_opt opt_AdvectionC2C_SetValue(face_velocities, centers)
-            @test_opt opt_AdvectionC2C_Extrapolate(face_velocities, centers)
-
-            @test_opt opt_FluxCorrectionC2C_Extrapolate(
-                face_velocities,
-                centers,
-            )
-
             @test_opt opt_GradientC2F_SetValue(centers)
             @test_opt opt_GradientC2F_SetGradient(centers)
 
-            @test_opt opt_DivergenceC2F_SetValue(centers)
             @test_opt opt_DivergenceC2F_SetDivergence(centers)
-            @test_opt opt_CurlC2F_SetValue(centers)
         end
     end
 
