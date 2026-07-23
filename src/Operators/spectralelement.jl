@@ -1523,7 +1523,58 @@ function tensor_product!(
     return out
 end
 
+# Device-dispatch seam: CPU methods live here; the CUDA methods are provided
+# by the ClimaCoreCUDAExt extension (ext/cuda/operators_dg.jl).
 function tensor_product!(
+    out::DataLayouts.Data2DX{S, Nv, Nij_out},
+    indata::DataLayouts.Data2DX{S, Nv, Nij_in},
+    M::SMatrix{Nij_out, Nij_in},
+) where {S, Nv, Nij_out, Nij_in}
+    return _tensor_product!(
+        DataLayouts.device_dispatch(parent(out)),
+        out,
+        indata,
+        M,
+    )
+end
+
+function tensor_product!(
+    out::DataLayouts.Data2D{S, Nij_out},
+    indata::DataLayouts.Data2D{S, Nij_in},
+    M::SMatrix{Nij_out, Nij_in},
+) where {S, Nij_out, Nij_in}
+    return _tensor_product!(
+        DataLayouts.device_dispatch(parent(out)),
+        out,
+        indata,
+        M,
+    )
+end
+
+_tensor_product!(dev, out, indata, M) = error(
+    "tensor_product! is not implemented for $dev; load CUDA.jl for CUDA support",
+)
+
+function _tensor_product!(
+    ::DataLayouts.ToCPU,
+    out::DataLayouts.Data2DX{S, Nv, Nij_out},
+    indata::DataLayouts.Data2DX{S, Nv, Nij_in},
+    M::SMatrix{Nij_out, Nij_in},
+) where {S, Nv, Nij_out, Nij_in}
+    (_, _, _, _, Nh_in) = size(indata)
+    (_, _, _, _, Nh_out) = size(out)
+    # TODO: assumes the same number of levels (horizontal only)
+    @assert Nh_in == Nh_out
+    @inbounds for h in 1:Nh_out, v in 1:Nv
+        in_slab = slab(indata, v, h)
+        out_slab = slab(out, v, h)
+        tensor_product!(out_slab, in_slab, M)
+    end
+    return out
+end
+
+function _tensor_product!(
+    ::DataLayouts.ToCPU,
     out::DataLayouts.Data2D{S, Nij_out},
     indata::DataLayouts.Data2D{S, Nij_in},
     M::SMatrix{Nij_out, Nij_in},

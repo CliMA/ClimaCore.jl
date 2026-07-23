@@ -926,6 +926,17 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Unit: extruded sphere DG flux cuda"
+        key: unit_extruded_sphere_dg_cuda
+        retry: *retry_policy
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/extruded_sphere_dg.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: operators on levels and extruded spaces"
         key: unit_cuda_operators_example
         retry: *retry_policy

@@ -9,7 +9,11 @@ import Base.Broadcast: Broadcasted
 import ..slab, ..slab_args, ..column, ..column_args
 import ClimaComms
 import ..Utilities:
-    new, is_auto_broadcastable, add_auto_broadcasters, drop_auto_broadcasters
+    new,
+    is_auto_broadcastable,
+    add_auto_broadcasters,
+    drop_auto_broadcasters,
+    unwrap
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..DataLayouts: DataLayouts, Data2D, DataSlab2D
 import ..DataLayouts: vindex

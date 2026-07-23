@@ -60,6 +60,7 @@ UnitTest("Spectral elem - sphere diffusion vec"    ,"Operators/spectralelement/s
 UnitTest("Spectral elem - split divergence"        ,"Operators/spectralelement/split_divergence.jl"),
 UnitTest("Spectral elem - sphere hyperdiff"        ,"Operators/spectralelement/unit_sphere_hyperdiffusion.jl"),
 UnitTest("Spectral elem - sphere hyperdiff vec"    ,"Operators/spectralelement/unit_sphere_hyperdiffusion_vec.jl"),
+UnitTest("Spectral elem - extruded sphere DG flux" ,"Operators/spectralelement/extruded_sphere_dg.jl"),
 UnitTest("FD ops - column"                         ,"Operators/finitedifference/unit_column.jl"),
 UnitTest("FD ops - opt"                            ,"Operators/finitedifference/opt.jl"),
 UnitTest("Hybrid - 2D"                             ,"Operators/hybrid/unit_2d.jl"),
