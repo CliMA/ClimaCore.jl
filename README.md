@@ -1,61 +1,103 @@
+<div align="center">
+  <img src="docs/src/assets/logo.svg" alt="ClimaCore.jl Logo" width="128" height="128">
+</div>
+
 # ClimaCore.jl
 
-|||
-|---------------------:|:----------------------------------------------|
-| **Docs Build**       | [![docs build][docs-bld-img]][docs-bld-url]   |
-| **Documentation**    | [![dev][docs-dev-img]][docs-dev-url]          |
-| **GHA CI**           | [![gha ci][gha-ci-img]][gha-ci-url]           |
-| **Buildkite CI**     | [![buildkite ci][buildkite-ci-img]][buildkite-ci-url] |
-| **Code Coverage**    | [![codecov][codecov-img]][codecov-url]        |
-| **Downloads**        | [![downloads][downloads-img]][downloads-url]  |
-| **DOI**              | [![zenodo][zenodo-img]][zenodo-url]           |
+The dynamical core (_dycore_) of the CliMA Earth System Model: composable, GPU-capable tools for discretizing and solving partial differential equations on the sphere and in Cartesian domains.
 
-[docs-bld-img]: https://github.com/CliMA/ClimaCore.jl/workflows/Documentation/badge.svg
-[docs-bld-url]: https://github.com/CliMA/ClimaCore.jl/actions?query=workflow%3ADocumentation
+|||
+|------------------:|:------------------------------------------------------------|
+| **Documentation** | [![stable][docs-stable-img]][docs-stable-url] [![dev][docs-dev-img]][docs-dev-url] |
+| **Version**       | [![version][version-img]][version-url]                      |
+| **License**       | [![license][license-img]][license-url]                      |
+| **Tests**         | [![gha ci][gha-ci-img]][gha-ci-url] [![buildkite][bk-ci-img]][bk-ci-url] |
+| **Code Coverage** | [![codecov][codecov-img]][codecov-url]                      |
+| **Downloads**     | [![Downloads][dlt-img]][dlt-url]                            |
+| **DOI**           | [![zenodo][zenodo-img]][zenodo-url]                         |
+
+[docs-stable-img]: https://img.shields.io/badge/docs-stable-blue.svg
+[docs-stable-url]: https://CliMA.github.io/ClimaCore.jl/stable/
 
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
 [docs-dev-url]: https://CliMA.github.io/ClimaCore.jl/dev/
 
-[gha-ci-img]: https://github.com/CliMA/ClimaCore.jl/actions/workflows/UnitTests.yml/badge.svg
-[gha-ci-url]: https://github.com/CliMA/ClimaCore.jl/actions/workflows/UnitTests.yml
+[version-img]: https://juliahub.com/docs/General/ClimaCore/stable/version.svg
+[version-url]: https://juliahub.com/ui/Packages/General/ClimaCore
 
-[buildkite-ci-img]: https://badge.buildkite.com/2b63d3c49347804f61bd8e99c8b85e05871253b92612cd1af4.svg
-[buildkite-ci-url]: https://buildkite.com/clima/climacore-ci
+[license-img]: https://img.shields.io/badge/license-Apache%202.0-blue.svg
+[license-url]: https://github.com/CliMA/ClimaCore.jl/blob/main/LICENSE
+
+[gha-ci-img]: https://github.com/CliMA/ClimaCore.jl/actions/workflows/UnitTests.yml/badge.svg?branch=main
+[gha-ci-url]: https://github.com/CliMA/ClimaCore.jl/actions/workflows/UnitTests.yml?query=branch%3Amain
+
+[bk-ci-img]: https://badge.buildkite.com/2b63d3c49347804f61bd8e99c8b85e05871253b92612cd1af4.svg?branch=main
+[bk-ci-url]: https://buildkite.com/clima/climacore-ci/builds?branch=main
 
 [codecov-img]: https://codecov.io/gh/CliMA/ClimaCore.jl/branch/main/graph/badge.svg
 [codecov-url]: https://codecov.io/gh/CliMA/ClimaCore.jl
 
-[downloads-img]: https://img.shields.io/badge/dynamic/json?url=http%3A%2F%2Fjuliapkgstats.com%2Fapi%2Fv1%2Ftotal_downloads%2FClimaCore&query=total_requests&suffix=%2Ftotal&label=Downloads
-[downloads-url]: http://juliapkgstats.com/pkg/ClimaCore
+[dlt-img]: https://img.shields.io/badge/dynamic/json?url=http%3A%2F%2Fjuliapkgstats.com%2Fapi%2Fv1%2Ftotal_downloads%2FClimaCore&query=total_requests&label=Downloads
+[dlt-url]: https://juliapkgstats.com/pkg/ClimaCore
 
 [zenodo-img]: https://zenodo.org/badge/356355994.svg
 [zenodo-url]: https://zenodo.org/badge/latestdoi/356355994
 
-The Climate Modelling Alliance ([CliMA](https://clima.caltech.edu/)) is developing a new Earth System Model (ESM), entirely written in the [Julia](https://julialang.org/) language. The main goal of the project is to build an ESM that automatically learns from diverse data sources to produce accurate climate predictions with quantified uncertainties. The CliMA model targets both CPU and GPU architectures, using a common codebase. ClimaCore.jl constitutes the dynamical core (_dycore_) of the atmosphere and land models, providing discretization tools to solve the governing equations of the ESM component models.
-ClimaCore.jl's high-level application programming interface (API) facilitates modularity and composition of differential operators and the definition of flexible discretizations. This, in turn, is coupled with low-level APIs that support different data layouts, specialized implementations, and flexible models for threading, to better face high-performance optimization, data storage, and scalability challenges on modern HPC architectures.
+ClimaCore.jl provides the spatial discretization building blocks for the [Climate Modeling Alliance (CliMA)](https://clima.caltech.edu/) Earth System Model, which is written entirely in [Julia](https://julialang.org/). It pairs a high-level API for composing differential operators and defining flexible discretizations with low-level APIs for data layouts, specialized implementations, and threading — targeting both CPU and GPU architectures from a single codebase.
 
-## Technical aims and current support
-* Support both large-eddy simulation (LES) and general circulation model (GCM) configurations for the atmosphere.
-* A suite of tools for constructing space discretizations.
-* Horizontal spectral elements:
-    - Supports both continuous Galerkin (CG) and discontinuous Galerkin (DG) spectral element discretizations.
-* Flexible choice of vertical discretization (currently staggered finite differences)
-* Support for different geometries (Cartesian, spherical), with governing equations discretized in terms of covariant  vectors for curvilinear, non-orthogonal systems and Cartesian vectors for Euclidean spaces.
-* `Field` abstraction:
-    - Scalar, vector or struct-valued
-    - Stores values, geometry, and mesh information
-    - Flexible memory layouts: Array-of-Structs (AoS), Struct-of-Arrays (SoA),Array-of-Struct-of-Arrays (AoSoA)
-    - Useful overloads: `sum` (integral), `norm`, etc.
-    - Compatible with [`DifferentialEquations.jl`](https://diffeq.sciml.ai/stable/) time steppers.
-* Composable operators via broadcasting: apply a function element-wise to an array; scalar values are broadcast over arrays
-* Fusion of multiple operations; can be specialized for custom functions or argument types (e.g. `CuArray` compiles and applies a custom CUDA kernel).
-* Operators (`grad`, `div`, `interpolate`) are “pseudo-functions”: Act like functions when broadcasted over a `Field`; fuse operators and function calls.
-* Add element node size dimensions to type domain
-    - i.e., specialize on polynomial degree
-    - important for GPU kernel performance.
-* Flexible memory layouts allow for flexible threading models (upcoming):
-    - CPU thread over elements
-    - GPU thread over nodes.
+## Features
 
-Versions before and including ClimaCore.jl v0.11.7 relied on WeakValueDicts.jl, which is not thread-safe and no longer maintained.
-These versions are considered unsupported, and newer versions of ClimaCore.jl should be used.
+- **Spectral-element horizontal discretizations**: continuous (CG) and discontinuous (DG) Galerkin spectral elements.
+- **Flexible vertical discretization**: staggered finite differences on center/face grids.
+- **Multiple geometries**: Cartesian and spherical domains, with governing equations expressed in covariant vectors for curvilinear systems and Cartesian vectors for Euclidean spaces.
+- **`Field` abstraction**: scalar-, vector-, or struct-valued fields carrying values, geometry, and mesh information, with flexible memory layouts (AoS, SoA, AoSoA) and useful overloads (`sum`, `norm`, ...).
+- **Composable operators via broadcasting**: differential operators (`grad`, `div`, `interpolate`, ...) act like functions when broadcast over a `Field`, fusing operators and function calls into a single pass.
+- **GPU acceleration**: broadcast expressions compile to custom CUDA kernels, with specialization on polynomial degree for kernel performance.
+- **Time-stepper compatible**: works with [SciML](https://sciml.ai/)/OrdinaryDiffEq time steppers.
+
+## Quick Example
+
+```julia
+import ClimaComms
+ClimaComms.@import_required_backends
+import ClimaCore: Domains, Meshes, Spaces, Fields, Geometry, Operators
+
+FT = Float64
+
+# Build a 1D column: interval domain -> mesh -> finite-difference space
+domain = Domains.IntervalDomain(
+    Geometry.ZPoint{FT}(0),
+    Geometry.ZPoint{FT}(2π),
+    boundary_names = (:bottom, :top),
+)
+mesh = Meshes.IntervalMesh(domain; nelems = 128)
+space = Spaces.CenterFiniteDifferenceSpace(ClimaComms.device(), mesh)
+
+# Define a field over the space and differentiate it with a composed operator
+z = Fields.coordinate_field(space).z
+θ = sin.(z)
+grad = Operators.GradientC2F(
+    bottom = Operators.SetValue(FT(0)),
+    top = Operators.SetValue(FT(0)),
+)
+∂θ = @. Geometry.WVector(grad(θ))   # face-valued vertical gradient (≈ cos(z))
+```
+
+More runnable examples (column, plane, and sphere configurations) are in the [`examples/`](examples/) directory.
+
+## Documentation
+
+- **[Stable docs](https://CliMA.github.io/ClimaCore.jl/stable/)** — installation, introduction, mathematical framework, and API reference
+- **[Dev docs](https://CliMA.github.io/ClimaCore.jl/dev/)** — latest development version
+- **[`examples/`](examples/)** — runnable examples across geometries
+
+## Integration with CliMA models
+
+ClimaCore.jl is the dynamical core used throughout the [CliMA](https://github.com/CliMA) ecosystem, including:
+
+- [ClimaAtmos.jl](https://github.com/CliMA/ClimaAtmos.jl) — atmosphere model
+- [ClimaLand.jl](https://github.com/CliMA/ClimaLand.jl) — land model
+
+## Contributing
+
+Contributors should follow the shared CliMA engineering standards in [`docs/dev-guides/`](docs/dev-guides/), which cover architecture, performance, code quality, documentation, and workflows. These are vendored from [CliMA/DeveloperGuides](https://github.com/CliMA/DeveloperGuides). The repo's [`AGENTS.md`](AGENTS.md) is a starting point for AI agents with repo-specific guidance.

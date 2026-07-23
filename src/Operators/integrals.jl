@@ -107,7 +107,7 @@ Analogue of `Base._InitialValue` for `column_reduce!` and `column_accumulate!`.
 struct UnspecifiedInit end
 
 """
-    column_reduce!(f, output, input; [init], [transform])
+    column_reduce!(f, output, input; [init], [transform], [reverse])
 
 Applies `reduce` to `input` along the vertical direction, storing the result in
 `output`. The `input` can be either a `Field` or an `AbstractBroadcasted` that
@@ -116,10 +116,12 @@ computed by iteratively applying `f` to the values in `input`, starting from the
 bottom of each column and moving upward, and the result of the final iteration
 is passed to the `transform` function before being stored in `output`. If `init`
 is specified, it is used as the initial value of the iteration; otherwise, the
-value at the bottom of each column in `input` is used as the initial value.
+value at the starting boundary of each column in `input` is used as the initial
+value. By default, reduction starts at the bottom boundary and proceeds upward.
+When `reverse = true`, it starts at the top boundary and proceeds downward.
 
 With `first_level` and `last_level` denoting the indices of the boundary levels
-of `input`, the reduction in each column can be summarized as follows:
+of `input`, the default reduction in each column can be summarized as follows:
   - If `init` is unspecified,
     ```
     reduced_value = input[first_level]
@@ -143,10 +145,11 @@ function column_reduce!(
     input::Union{Fields.Field, PointwiseOrColumnwiseBroadcasted};
     init = UnspecifiedInit(),
     transform::T = identity,
+    reverse::Bool = false,
 ) where {F, T}
     device = ClimaComms.device(output)
     space = axes(input)
-    column_reduce_device!(device, f, transform, output, input, init, space)
+    column_reduce_device!(device, f, transform, output, input, init, space, reverse)
 end
 
 function column_reduce_device!(
@@ -157,11 +160,12 @@ function column_reduce_device!(
     input,
     init,
     space,
+    reverse,
 ) where {F, T}
     mask = Spaces.get_mask(space)
     if space isa Spaces.FiniteDifferenceSpace
         @assert mask isa DataLayouts.NoMask
-        single_column_reduce!(f, transform, output, input, init, space)
+        single_column_reduce!(f, transform, output, input, init, space, reverse)
     else
         Fields.bycolumn(space) do colidx
             I = Fields.universal_index(colidx)
@@ -173,6 +177,7 @@ function column_reduce_device!(
                     input[colidx],
                     init,
                     space[colidx],
+                    reverse,
                 )
             end
         end
@@ -187,17 +192,22 @@ function single_column_reduce!(
     _input,
     init,
     space,
+    reverse,
 ) where {F, T}
     first_level = left_idx(space)
     last_level = right_idx(space)
+    start_level, stop_level, direction =
+        reverse ? (last_level, first_level, -1) : (first_level, last_level, 1)
     @inbounds if init == UnspecifiedInit()
-        reduced_value = get_level_value(space, _input, first_level)
-        next_level = first_level + 1
+        reduced_value = get_level_value(space, _input, start_level)
+        next_level = start_level + direction
     else
         reduced_value = init
-        next_level = first_level
+        next_level = start_level
     end
-    @inbounds for level in next_level:last_level
+    n_steps = direction * (stop_level - next_level) + 1
+    @inbounds for i in 1:n_steps
+        level = next_level + direction * (i - 1)
         reduced_value = f(reduced_value, get_level_value(space, _input, level))
     end
     Fields.field_values(_output)[] = transform(reduced_value)
@@ -205,19 +215,22 @@ function single_column_reduce!(
 end
 
 """
-    column_accumulate!(f, output, input; [init], [transform])
+    column_accumulate!(f, output, input; [init], [transform], [reverse])
 
 Applies `accumulate` to `input` along the vertical direction, storing the result
 in `output`. The `input` can be either a `Field` or an `AbstractBroadcasted`
-that performs pointwise or columnwise operations on `Field`s. Each accumulated
-value is computed by iteratively applying `f` to the values in `input`, starting
-from the bottom of each column and moving upward, and the result of each
-iteration is passed to the `transform` function before being stored in `output`.
+that performs pointwise or columnwise operations on `Field`s. By default, each
+accumulated value is computed by iteratively applying `f` to the values in
+`input`, starting from the bottom of each column and moving upward, and the
+result of each iteration is passed to the `transform` function before being
+stored in `output`.
 The `init` value is is optional for center-to-center, face-to-face, and
 face-to-center accumulation, but it is required for center-to-face accumulation.
+When `reverse = true`, accumulation starts at the top boundary and proceeds
+downward, with the corresponding staggered boundary offsets reversed.
 
 With `first_level` and `last_level` denoting the indices of the boundary levels
-of `input`, the accumulation in each column can be summarized as follows:
+of `input`, the default accumulation in each column can be summarized as follows:
   - For center-to-center and face-to-face accumulation with `init` unspecified,
     ```
     accumulated_value = input[first_level]
@@ -267,6 +280,7 @@ function column_accumulate!(
     input::Union{Fields.Field, PointwiseOrColumnwiseBroadcasted};
     init = UnspecifiedInit(),
     transform::T = identity,
+    reverse::Bool = false,
 ) where {F, T}
     device = ClimaComms.device(output)
     space = axes(input)
@@ -274,7 +288,7 @@ function column_accumulate!(
         Spaces.staggering(space) == Spaces.CellCenter() &&
         Spaces.staggering(axes(output)) == Spaces.CellFace() &&
         error("init must be specified for center-to-face accumulation")
-    column_accumulate_device!(device, f, transform, output, input, init, space)
+    column_accumulate_device!(device, f, transform, output, input, init, space, reverse)
 end
 
 function column_accumulate_device!(
@@ -285,11 +299,12 @@ function column_accumulate_device!(
     input,
     init,
     space,
+    reverse,
 ) where {F, T}
     mask = Spaces.get_mask(space)
     if space isa Spaces.FiniteDifferenceSpace
         @assert mask isa DataLayouts.NoMask
-        single_column_accumulate!(f, transform, output, input, init, space)
+        single_column_accumulate!(f, transform, output, input, init, space, reverse)
     else
         Fields.bycolumn(space) do colidx
             I = Fields.universal_index(colidx)
@@ -301,6 +316,7 @@ function column_accumulate_device!(
                     input[colidx],
                     init,
                     space[colidx],
+                    reverse,
                 )
             end
         end
@@ -315,6 +331,7 @@ function single_column_accumulate!(
     _input,
     init,
     space,
+    reverse,
 ) where {F, T}
     device = ClimaComms.device(space)
     first_level = left_idx(space)
@@ -323,25 +340,32 @@ function single_column_accumulate!(
     is_c2c_or_f2f = Spaces.staggering(space) == Spaces.staggering(axes(output))
     is_c2f = !is_c2c_or_f2f && Spaces.staggering(space) == Spaces.CellCenter()
     is_f2c = !is_c2c_or_f2f && !is_c2f
+    # With `reverse = true`, start at the top boundary, step downward, and
+    # reverse the center/face half-level offset used by staggered accumulation.
+    start_level, stop_level, direction =
+        reverse ? (last_level, first_level, -1) : (first_level, last_level, 1)
+    stagger = reverse ? -half : half
     @inbounds if init == UnspecifiedInit()
         @assert !is_c2f
-        accumulated_value = get_level_value(space, _input, first_level)
-        next_level = first_level + 1
-        init_output_level = is_c2c_or_f2f ? first_level : nothing
+        accumulated_value = get_level_value(space, _input, start_level)
+        next_level = start_level + direction
+        init_output_level = is_c2c_or_f2f ? start_level : nothing
     else
         accumulated_value =
-            is_f2c ? f(init, get_level_value(space, _input, first_level)) : init
-        next_level = is_f2c ? first_level + 1 : first_level
-        init_output_level = is_c2f ? first_level - half : nothing
+            is_f2c ? f(init, get_level_value(space, _input, start_level)) : init
+        next_level = is_f2c ? start_level + direction : start_level
+        init_output_level = is_c2f ? start_level - stagger : nothing
     end
     @inbounds if !isnothing(init_output_level)
         Fields.level(output, init_output_level)[] = transform(accumulated_value)
     end
-    @inbounds for level in next_level:last_level
+    n_steps = direction * (stop_level - next_level) + 1
+    @inbounds for i in 1:n_steps
+        level = next_level + direction * (i - 1)
         accumulated_value =
             f(accumulated_value, get_level_value(space, _input, level))
         output_level =
-            is_c2c_or_f2f ? level : (is_c2f ? level + half : level - half)
+            is_c2c_or_f2f ? level : (is_c2f ? level + stagger : level - stagger)
         Fields.level(output, output_level)[] = transform(accumulated_value)
     end
 end
