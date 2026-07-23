@@ -136,7 +136,9 @@ function initial_state_barotropic_instability()
     h_int(γ) =
         abs(γ) < 90 ? (2 * Ω * sind(γ) + uλp(γ) * tand(γ) / R) * uλp(γ) :
         zero(γ)
-    return map(lgeom) do local_geometry
+    # QuadGK's adaptive quadrature cannot compile into a GPU kernel: evaluate
+    # the map on a CPU copy of the geometry, then move the data to the device.
+    Y_cpu = map(ClimaCore.to_cpu(lgeom)) do local_geometry
         (; lat, long) = local_geometry.coordinates
         ϕ, λ = lat, long
         h = h0 - (R / g) * (pi / 180) * QuadGK.quadgk(h_int, -90.0, ϕ)[1]
@@ -151,6 +153,13 @@ function initial_state_barotropic_instability()
         )
         return (h = h, u = u)
     end
+    # Rewrap on the original space so downstream broadcasts see the same
+    # space instance.
+    values = ClimaCore.to_device(
+        ClimaComms.device(context),
+        Fields.field_values(Y_cpu),
+    )
+    return Fields.Field(values, space)
 end
 
 initial_state() =
