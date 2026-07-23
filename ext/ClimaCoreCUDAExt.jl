@@ -31,6 +31,7 @@ include(joinpath("cuda", "operators_columnwise.jl"))
 include(joinpath("cuda", "matrix_fields_single_field_solve.jl"))
 include(joinpath("cuda", "matrix_fields_multiple_field_solve.jl"))
 include(joinpath("cuda", "operators_spectral_element.jl"))
+include(joinpath("cuda", "operators_dg.jl"))
 
 # Lift the recursion limit for the device reduce_points, whose recursion over warps
 # and sub-warps forwards kwargs and looks unbounded to the compiler, which would widen
