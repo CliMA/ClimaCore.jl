@@ -115,7 +115,31 @@ Base.Broadcast.broadcasted(
     Fields.local_geometry_field(operator_input_space(op_matrix.op, axes(arg))),
 )
 
-# TODO:specify these are only for setvalue
+# A boundary condition that fixes a value (SetValue, SetGradient, SetDivergence,
+# or SetCurl) contributes an affine (constant) term that a linear operator matrix
+# cannot produce on its own. When a broadcast is rewritten as a matrix multiply,
+# that term is reinjected with a SetBoundaryOperator, and `modifies_output` /
+# `modifies_input` decide where: `modifies_output` conditions are applied to the
+# result (after the multiply), while `modifies_input` conditions are applied to
+# the argument (before the multiply). A condition that is linear (e.g. Extrapolate)
+# is encoded directly in the matrix and is neither.
+#
+# For nearly every operator such a boundary condition prescribes the operator's
+# *output* at the boundary, so it modifies the output. Examples:
+#  - InterpolateC2F  with SetValue(x₀):    I(x)[½] = x₀
+#  - LeftBiasedF2C   with SetValue(x₀):    L(x)[1] = x₀
+#  - GradientC2F     with SetGradient(v₀): G(x)[½] = v₀
+#
+# GradientF2C and DivergenceF2C are the exception, and the only operators for
+# which `modifies_input` is true. They map faces to centers, so the domain
+# boundary (always a face) is a point of their *input*, not their output. A
+# SetValue there prescribes the argument's boundary-face value, which the
+# derivative stencil then differences against the adjacent interior face:
+#  - GradientF2C   with SetValue(x₀): G(x)[1]³ = x[1+½] - x₀
+#  - DivergenceF2C with SetValue(v₀): D(v)[1]  = (Jv³[1+½] - Jv³₀) / J[1]
+# Because x₀ enters through the input, the operator matrix keeps its ordinary
+# interior stencil and x₀ is written into the argument's boundary face rather than
+# added to the result; hence `modifies_input` is true and `modifies_output` false.
 modifies_output(
     op,
     boundary_condition::BC,
@@ -142,21 +166,53 @@ modifies_input(
 ) = true
 modifies_input(op, boundary_condition) = false
 
+# An operator's boundary conditions are split into three groups. Those that are
+# linear can be encoded directly in the operator matrix; the rest modify the
+# operator's input or output, and must instead be reapplied to the argument
+# (before the matrix multiply) or to the result (after it) using a
+# SetBoundaryOperator. Each boundary condition belongs to exactly one group.
+filter_bcs(f::F, bcs::NamedTuple) where {F} =
+    let kept = unrolled_filter(name -> f(bcs[name]), keys(bcs))
+        NamedTuple{kept}(unrolled_map(name -> bcs[name], kept))
+    end
+matrix_bcs(op) =
+    filter_bcs(bc -> !modifies_input(op, bc) && !modifies_output(op, bc), op.bcs)
+input_bcs(op) = filter_bcs(Base.Fix1(modifies_input, op), op.bcs)
+output_bcs(op) = filter_bcs(Base.Fix1(modifies_output, op), op.bcs)
 
-function Operators.StencilBroadcasted{Style}(
-    op::OneArgFDOperator,
-    args::Args,
-    axes::Spaces.AbstractSpace,
-    work::Work = nothing,
-) where {Style, Args, Work}
-    # can have 0, 1, or 2 boundary conds
-    if op isa Operators.SetBoundaryOperator
-        return Operators.StencilBroadcasted{
+# Returns `op` carrying only the boundary conditions that can be encoded in its
+# operator matrix. Operators without boundary conditions are returned unchanged,
+# avoiding an unnecessary rebuild.
+op_with_matrix_bcs(op) =
+    isempty(op.bcs) ? op : Base.typename(typeof(op)).wrapper(matrix_bcs(op))
+
+# Constructs the `op_matrix * arg` StencilBroadcasted that applies an operator
+# matrix to `arg`.
+multiply_matrix_broadcasted(::Type{Style}, op_matrix, arg, axes, work) where {Style} =
+    let args = (op_matrix, arg)
+        Operators.StencilBroadcasted{
+            Style,
+            MultiplyColumnwiseBandMatrixField,
+            typeof(args),
+            typeof(axes),
+            typeof(work),
+        }(
+            MultiplyColumnwiseBandMatrixField(),
+            args,
+            axes,
+            work,
+        )
+    end
+
+# Wraps `arg` in a StencilBroadcasted that applies the SetBoundaryOperator `op`.
+apply_boundary_operator(::Type{Style}, op, arg, axes, work) where {Style} =
+    let args = (arg,)
+        Operators.StencilBroadcasted{
             Style,
             typeof(op),
-            Args,
+            typeof(args),
             typeof(axes),
-            Work,
+            typeof(work),
         }(
             op,
             args,
@@ -164,201 +220,96 @@ function Operators.StencilBroadcasted{Style}(
             work,
         )
     end
-    if length(op.bcs) == 0
-        maybe_adjointed =
-            op isa Operators.GradientOperator ?
-            Base.Broadcast.broadcasted(adjoint, args[1]) : args[1]
-        new_args = (
-            Base.Broadcast.broadcasted(
-                FDOperatorMatrix(op),
-                Fields.local_geometry_field(operator_input_space(op, axes)),
-            ), maybe_adjointed)
-        raw_mul_bc = Operators.StencilBroadcasted{
-            Style,
-            MultiplyColumnwiseBandMatrixField,
-            typeof(new_args),
-            typeof(axes),
-            Work,
-        }(
-            MultiplyColumnwiseBandMatrixField(),
-            new_args,
-            axes,
-            work,
-        )
-        return op isa Operators.DivergenceOperator ?
-               Base.Broadcast.broadcasted(adjoint, raw_mul_bc) : raw_mul_bc
-    end
-    has_two_bcs = length(op.bcs) == 2
-    remove_bc1 = modifies_input(op, op.bcs[1]) || modifies_output(op, op.bcs[1])
-    if has_two_bcs
-        remove_bc2 = modifies_input(op, op.bcs[2]) || modifies_output(op, op.bcs[2])
-        new_bcs =
-            remove_bc1 && remove_bc2 ? NamedTuple{}() :
-            remove_bc1 ? NamedTuple{(keys(op.bcs)[2],)}((op.bcs[2],)) :
-            remove_bc2 ? NamedTuple{(keys(op.bcs)[1],)}((op.bcs[1],)) :
-            op.bcs
-    else
-        new_bcs = remove_bc1 ? NamedTuple{}() : op.bcs
-    end
-    op_mat = Base.Broadcast.broadcasted(
-        FDOperatorMatrix(Base.typename(typeof(op)).wrapper(new_bcs)),
-        Fields.local_geometry_field(operator_input_space(op, axes)),
-    )
-    if modifies_input(op, op.bcs[1]) || (has_two_bcs && modifies_input(op, op.bcs[2]))
-        if modifies_input(op, op.bcs[1])
-            if has_two_bcs && modifies_input(op, op.bcs[2])
-                inner_op = Operators.SetBoundaryOperator(op.bcs)
-            else
-                inner_op =
-                    Operators.SetBoundaryOperator(
-                        NamedTuple{(keys(op.bcs)[1],)}((op.bcs[1],)),
-                    )
-            end
-        else
-            inner_op =
-                Operators.SetBoundaryOperator(NamedTuple{(keys(op.bcs)[2],)}((op.bcs[2],)))
-        end
-        wrapped_inner_arg = Operators.StencilBroadcasted{
-            Style,
-            typeof(inner_op),
-            Args,
-            typeof(Base.axes(args[1])),
-            Nothing,
-        }(
-            inner_op,
-            args,
-            Base.axes(args[1]),
-            nothing,
-        )
-    else
-        wrapped_inner_arg = args[1]
-    end
-    maybe_adjointed_wrapped_inner =
-        op isa Operators.GradientOperator ?
-        Base.Broadcast.broadcasted(adjoint, wrapped_inner_arg) : wrapped_inner_arg
-    new_args = (op_mat, maybe_adjointed_wrapped_inner)
-    new_broadcasted_op_raw = Operators.StencilBroadcasted{
+
+# Converts a broadcast over a one-argument operator, `op(arg)`, into the
+# equivalent operator matrix expression, `op_matrix() * arg`. Boundary conditions
+# that modify the operator's input or output are stripped from the matrix and
+# reapplied to `arg` or to the result with a SetBoundaryOperator. Gradient and
+# Divergence operators require an additional adjoint on the input and output,
+# respectively.
+function Operators.StencilBroadcasted{Style}(
+    op::OneArgFDOperator,
+    args::Args,
+    axes::Spaces.AbstractSpace,
+    work::Work = nothing,
+) where {Style, Args, Work}
+    # SetBoundaryOperator is not represented by an operator matrix.
+    op isa Operators.SetBoundaryOperator && return Operators.StencilBroadcasted{
         Style,
-        MultiplyColumnwiseBandMatrixField,
-        typeof(new_args),
+        typeof(op),
+        Args,
         typeof(axes),
         Work,
     }(
-        MultiplyColumnwiseBandMatrixField(),
-        new_args,
+        op,
+        args,
         axes,
         work,
     )
-    new_broadcasted_op =
-        op isa Operators.DivergenceOperator ?
-        Base.Broadcast.broadcasted(adjoint, new_broadcasted_op_raw) :
-        new_broadcasted_op_raw
 
-    if modifies_output(op, op.bcs[1]) || (has_two_bcs && modifies_output(op, op.bcs[2]))
-        if modifies_output(op, op.bcs[1])
-            if has_two_bcs && modifies_output(op, op.bcs[2])
-                outer_op = Operators.SetBoundaryOperator(op.bcs)
-            else
-                outer_op =
-                    Operators.SetBoundaryOperator(
-                        NamedTuple{(keys(op.bcs)[1],)}((op.bcs[1],)),
-                    )
-            end
-        else
-            outer_op =
-                Operators.SetBoundaryOperator(NamedTuple{(keys(op.bcs)[2],)}((op.bcs[2],)))
-        end
-        raw_mul_with_setbcs = Operators.StencilBroadcasted{
+    op_matrix = Base.Broadcast.broadcasted(
+        FDOperatorMatrix(op_with_matrix_bcs(op)),
+        Fields.local_geometry_field(operator_input_space(op, axes)),
+    )
+
+    bcs_in = input_bcs(op)
+    arg =
+        isempty(bcs_in) ? args[1] :
+        apply_boundary_operator(
             Style,
-            typeof(outer_op),
-            Tuple{typeof(new_broadcasted_op)},
-            typeof(axes),
-            Work,
-        }(
-            outer_op,
-            (new_broadcasted_op,),
-            axes,
-            work,
+            Operators.SetBoundaryOperator(bcs_in),
+            args[1],
+            Base.axes(args[1]),
+            nothing,
         )
-    else
-        raw_mul_with_setbcs = new_broadcasted_op
-    end
-    return raw_mul_with_setbcs
+    arg =
+        op isa Operators.GradientOperator ?
+        Base.Broadcast.broadcasted(adjoint, arg) : arg
+
+    result = multiply_matrix_broadcasted(Style, op_matrix, arg, axes, work)
+    result =
+        op isa Operators.DivergenceOperator ?
+        Base.Broadcast.broadcasted(adjoint, result) : result
+
+    bcs_out = output_bcs(op)
+    return isempty(bcs_out) ? result :
+           apply_boundary_operator(
+        Style,
+        Operators.SetBoundaryOperator(bcs_out),
+        result,
+        axes,
+        work,
+    )
 end
 
 
+# Converts a broadcast over a two-argument operator, `op(weight, arg)`, into the
+# equivalent operator matrix expression, `op_matrix(weight) * arg`. Only
+# WeightedInterpolateC2F has boundary conditions (SetValue) that modify its
+# output; when present, they are stripped from the matrix and reapplied to the
+# result with a SetBoundaryOperator.
 function Operators.StencilBroadcasted{Style}(
     op::TwoArgFDOperator,
     args::Args,
     axes::Spaces.AbstractSpace,
     work::Work = nothing,
 ) where {Style, Args, Work}
-    # can have 0, 1, or 2 boundary conds
-    if op isa Operators.WeightedInterpolateC2F && length(op.bcs) > 0 &&
-       any(bc -> bc isa Operators.SetValue, values(op.bcs))
-        has_two_bcs = length(op.bcs) == 2
-        remove_bc1 = modifies_output(op, op.bcs[1])
-        if has_two_bcs
-            remove_bc2 = modifies_output(op, op.bcs[2])
-            new_bcs =
-                remove_bc1 && remove_bc2 ? NamedTuple{}() :
-                remove_bc1 ? NamedTuple{(keys(op.bcs)[2],)}((op.bcs[2],)) :
-                remove_bc2 ? NamedTuple{(keys(op.bcs)[1],)}((op.bcs[1],)) :
-                op.bcs
-            outer_op_bcs =
-                remove_bc1 && remove_bc2 ? op.bcs :
-                remove_bc1 ? NamedTuple{(keys(op.bcs)[1],)}((op.bcs[1],)) :
-                remove_bc2 ? NamedTuple{(keys(op.bcs)[2],)}((op.bcs[2],)) :
-                NamedTuple{}()
-        else
-            new_bcs = remove_bc1 ? NamedTuple{}() : op.bcs
-            outer_op_bcs = remove_bc1 ? op.bcs : NamedTuple{}()
-        end
-        new_op = Base.typename(typeof(op)).wrapper(new_bcs)
-        outer_op =
-            length(outer_op_bcs) > 0 ? Operators.SetBoundaryOperator(outer_op_bcs) : nothing
-    else
-        new_op = op
-        outer_op = nothing
-    end
+    split_bcs = op isa Operators.WeightedInterpolateC2F
+    matrix_op = split_bcs ? op_with_matrix_bcs(op) : op
+    op_matrix = Base.Broadcast.broadcasted(FDOperatorMatrix(matrix_op), args[1])
 
+    result = multiply_matrix_broadcasted(Style, op_matrix, args[2], axes, work)
 
-    new_args = (
-        Base.Broadcast.broadcasted(
-            FDOperatorMatrix(new_op),
-            args[1],
-        ), args[2])
-    result_without_setvalue_applied = Operators.StencilBroadcasted{
+    bcs_out = split_bcs ? output_bcs(op) : (;)
+    return isempty(bcs_out) ? result :
+           apply_boundary_operator(
         Style,
-        MultiplyColumnwiseBandMatrixField,
-        typeof(new_args),
-        typeof(axes),
-        Work,
-    }(
-        MultiplyColumnwiseBandMatrixField(),
-        new_args,
+        Operators.SetBoundaryOperator(bcs_out),
+        result,
         axes,
         work,
     )
-
-    if isnothing(outer_op)
-        return result_without_setvalue_applied
-    else
-        Operators.StencilBroadcasted{
-            Style,
-            typeof(outer_op),
-            Tuple{typeof(result_without_setvalue_applied)},
-            typeof(axes),
-            Work,
-        }(
-            outer_op,
-            (result_without_setvalue_applied,),
-            axes,
-            work,
-        )
-    end
 end
-
 
 
 """
@@ -574,6 +525,23 @@ Operators.stencil_right_boundary(
     args...,
 ) = Operators.stencil_interior(op_matrix, space, idx, hidx, args...)
 
+# Boundary rows for value-fixing boundary conditions that are still attached to
+# the operator matrix. This only happens through the explicit `operator_matrix(op)`
+# API (`@. op_matrix() * arg`), which keeps `op`'s boundary conditions inside the
+# FDOperatorMatrix. The automatic `@. op(arg)` conversion instead strips these
+# conditions from the matrix and reapplies them with a SetBoundaryOperator (see
+# `modifies_input` / `modifies_output`), so in that case the matrix carries no
+# boundary condition and the NullBoundaryCondition methods above are used instead.
+#
+# An operator matrix can only capture the *linear* part of the operator; the
+# constant contributed by the boundary value is zeroed out (see `has_affine_bc`).
+# For every operator except GradientF2C/DivergenceF2C, a value-fixing condition
+# prescribes the *output* at the boundary as a pure constant, so its linear part is
+# zero and the boundary row is empty (`rzero`). GradientF2C/DivergenceF2C with a
+# SetValue are the exception (as with `modifies_input`): the condition fixes an
+# *input* value, and the near-boundary output still depends linearly on the
+# adjacent interior input, so the row is the genuine boundary stencil (with the
+# fixed input's coefficient dropped) rather than zero.
 Base.@propagate_inbounds function Operators.stencil_left_boundary(
     op_matrix::FDOperatorMatrix,
     bc::Union{
@@ -595,6 +563,7 @@ Base.@propagate_inbounds function Operators.stencil_left_boundary(
     end
     rzero(Operators.return_eltype(op_matrix, args...))
 end
+# Mirror of stencil_left_boundary above, for the right boundary.
 Base.@propagate_inbounds function Operators.stencil_right_boundary(
     op_matrix::FDOperatorMatrix,
     bc::Union{
