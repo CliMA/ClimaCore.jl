@@ -43,7 +43,13 @@ rhs!(dY, Y, nothing, 0.0)
 
 const dt_save = parse(FT, get(ENV, "DT_SAVE", string(min(t_end, 21600.0))))
 prob = ODEProblem(rhs!, Y, (FT(0), t_end))
-sol = solve(prob, SSPRK33(), dt = Δt, saveat = dt_save)
+sol = solve(
+    prob,
+    SSPRK33(),
+    dt = Δt,
+    saveat = dt_save,
+    internalnorm = fieldvector_norm,
+)
 
 @info "Conservation" mass_rel = (sum(sol.u[end].Yc.ρ) - mass_0) / mass_0 energy_rel =
     (sum(sol.u[end].Yc.ρe) - energy_0) / energy_0
