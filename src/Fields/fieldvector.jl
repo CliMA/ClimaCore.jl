@@ -390,8 +390,12 @@ end
 
 Base.fill!(dest::FieldVector, value) = dest .= value
 
-Base.mapreduce(f, op, fv::FieldVector) =
-    mapreduce(x -> mapreduce(f, op, backing_array(x)), op, _values(fv))
+# Accept kwargs (e.g. `init`): kwarg calls only dispatch to kwarg-accepting
+# methods, so without this a `mapreduce(f, op, fv; init)` call (as in
+# DiffEqBase's ODE_DEFAULT_NORM) falls back to Base's scalar-iterating method,
+# which is disallowed scalar indexing on GPU backing arrays.
+Base.mapreduce(f, op, fv::FieldVector; kwargs...) =
+    mapreduce(x -> mapreduce(f, op, backing_array(x)), op, _values(fv); kwargs...)
 
 Base.any(f, fv::FieldVector) = any(x -> any(f, backing_array(x)), _values(fv))
 Base.any(f::Function, fv::FieldVector) = # avoid ambiguities
