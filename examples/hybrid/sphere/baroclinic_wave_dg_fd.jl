@@ -66,15 +66,16 @@ import Plots, ClimaCorePlots
 output_dir = joinpath(@__DIR__, "output", "baroclinic_wave_dg_fd")
 mkpath(output_dir)
 
-# Plot recipes index into field data, so move results to the CPU first.
-ᶜv_end = ClimaCore.to_cpu(Geometry.UVVector.(sol.u[end].uₕ).components.data.:2)
+# Plot recipes index into field data, so move results to the CPU first
+# (move the plain prognostic field, then extract components on the CPU).
+ᶜv_end = Geometry.UVVector.(ClimaCore.to_cpu(sol.u[end].uₕ)).components.data.:2
 Plots.png(
     Plots.plot(ᶜv_end, level = 3, clim = (-6, 6)),
     joinpath(output_dir, "v_end.png"),
 )
 if length(sol.u) > 2
     anim = Plots.@animate for Yi in sol.u
-        ᶜv = ClimaCore.to_cpu(Geometry.UVVector.(Yi.uₕ).components.data.:2)
+        ᶜv = Geometry.UVVector.(ClimaCore.to_cpu(Yi.uₕ)).components.data.:2
         Plots.plot(ᶜv, level = 3, clim = (-6, 6))
     end
     Plots.mp4(anim, joinpath(output_dir, "v.mp4"), fps = 5)

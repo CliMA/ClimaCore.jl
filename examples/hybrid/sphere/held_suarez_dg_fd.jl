@@ -53,15 +53,16 @@ import Plots, ClimaCorePlots
 output_dir = joinpath(@__DIR__, "output", "held_suarez_dg_fd")
 mkpath(output_dir)
 
-# Plot recipes index into field data, so move results to the CPU first.
-ᶜu_end = ClimaCore.to_cpu(Geometry.UVVector.(sol.u[end].uₕ).components.data.:1)
+# Plot recipes index into field data, so move results to the CPU first
+# (move the plain prognostic field, then extract components on the CPU).
+ᶜu_end = Geometry.UVVector.(ClimaCore.to_cpu(sol.u[end].uₕ)).components.data.:1
 Plots.png(
     Plots.plot(ᶜu_end, level = 3),
     joinpath(output_dir, "u_end.png"),
 )
 if length(sol.u) > 2
     anim = Plots.@animate for Yi in sol.u
-        ᶜu = ClimaCore.to_cpu(Geometry.UVVector.(Yi.uₕ).components.data.:1)
+        ᶜu = Geometry.UVVector.(ClimaCore.to_cpu(Yi.uₕ)).components.data.:1
         Plots.plot(ᶜu, level = 3)
     end
     Plots.mp4(anim, joinpath(output_dir, "u.mp4"), fps = 5)
