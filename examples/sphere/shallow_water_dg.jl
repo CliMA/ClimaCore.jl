@@ -40,6 +40,7 @@ using LinearAlgebra: norm, norm_sqr, ×
 import ClimaComms
 ClimaComms.@import_required_backends
 
+import ClimaCore
 import ClimaCore:
     Domains,
     Fields,
@@ -295,7 +296,14 @@ ENV["GKSwstype"] = "nul"
 import Plots, ClimaCorePlots
 output_dir = joinpath(@__DIR__, "output", "shallow_water_dg_$case")
 mkpath(output_dir)
-Plots.png(Plots.plot(Yend.h), joinpath(output_dir, "h_end.png"))
+# Plot recipes index into field data, so move results to the CPU first.
+Plots.png(
+    Plots.plot(ClimaCore.to_cpu(Yend.h)),
+    joinpath(output_dir, "h_end.png"),
+)
 ζ_end = @. Geometry.WVector(hcurl(Yend.u)).components.data.:1
-Plots.png(Plots.plot(ζ_end), joinpath(output_dir, "vorticity_end.png"))
+Plots.png(
+    Plots.plot(ClimaCore.to_cpu(ζ_end)),
+    joinpath(output_dir, "vorticity_end.png"),
+)
 @info "Output written to $output_dir"
