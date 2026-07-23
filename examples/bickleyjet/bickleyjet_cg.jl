@@ -122,12 +122,12 @@ rhs!(dydt, y0, nothing, 0.0)
 
 
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 80.0))
+prob = ODEProblem(rhs!, y0, (0.0, 1000.0))
 sol = solve(
     prob,
     SSPRK33(),
     dt = 0.02,
-    saveat = collect(0.0:1.0:80.0),
+    saveat = collect(0.0:10.0:1000.0),
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 )

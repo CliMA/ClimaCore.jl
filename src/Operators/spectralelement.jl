@@ -1560,6 +1560,8 @@ function tensor_product!(
     return out
 end
 
+# CUDA overloads for CuArray-backed VIJHWithF live in ClimaCoreCUDAExt
+# (ext/cuda/operators_dg.jl) and win by parent-array specialization.
 function tensor_product!(
     out::DataLayouts.VIJHWithF{S, 1, Nij_out, Nij_out},
     indata::DataLayouts.VIJHWithF{S, 1, Nij_in, Nij_in},
