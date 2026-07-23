@@ -56,6 +56,17 @@ import ClimaCore:
 
 using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 
+# DiffEqBase's default internal norm reduces a FieldVector state by iterating
+# it element-by-element — disallowed scalar indexing on GPU backing arrays.
+# Pass this to `solve` via `internalnorm`: it reduces over each component's
+# contiguous backing array instead (with fixed-dt SSP-RK3 it is only
+# evaluated once, at solver init).
+fieldvector_norm(u::Fields.FieldVector, t) = sqrt(
+    sum(x -> sum(abs2, Fields.backing_array(x)), Tuple(Fields._values(u))) /
+    length(u),
+)
+fieldvector_norm(u, t) = abs(u)
+
 import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
