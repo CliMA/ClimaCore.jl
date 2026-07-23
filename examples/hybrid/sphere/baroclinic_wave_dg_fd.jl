@@ -1,8 +1,10 @@
 #=
 Baroclinic wave (Ullrich et al. 2014 dry variant, as in the CG example
 `baroclinic_wave_rhoe.jl`) on a cubed-sphere shell with DG horizontal
-spectral elements (no DSS) and FD vertical staggering, fully explicit SSP-RK3.
-See `sphere_dg_fd_model.jl` for the discretization.
+spectral elements (no DSS) and FD vertical staggering. Fully explicit
+SSP-RK3 by default; STEPPER=hevi selects IMEX ARK with implicit vertical
+acoustics (much larger Δt). See `sphere_dg_fd_model.jl` for the
+discretization.
 
 Defaults: h_elem = 4, npoly = 4, z_elem = 10, z_top = 30 km, dt = 4 s,
 t_end = 1 day (the explicit acoustic dt makes 10 days ≈ 216k steps; override
@@ -14,7 +16,8 @@ Run:
 Balanced-state check (perturbation off, 1 h):
   PERTURB=0 T_END=3600 julia --project=.buildkite examples/hybrid/sphere/baroclinic_wave_dg_fd.jl
 
-Environment: HELEM, NPOLY, ZELEM, ZMAX, DT, T_END, DT_SAVE, KAPPA4, FILTER, PERTURB
+Environment: HELEM, NPOLY, ZELEM, ZMAX, DT, T_END, DT_SAVE, KAPPA4, FILTER,
+PERTURB, STEPPER
 =#
 
 const FT = Float64
@@ -42,14 +45,7 @@ rhs!(dY, Y, nothing, 0.0)
     maximum(abs, parent(dY.w))
 
 const dt_save = parse(FT, get(ENV, "DT_SAVE", string(min(t_end, 21600.0))))
-prob = ODEProblem(rhs!, Y, (FT(0), t_end))
-sol = solve(
-    prob,
-    SSPRK33(),
-    dt = Δt,
-    saveat = dt_save,
-    internalnorm = fieldvector_norm,
-)
+sol = run_simulation(Y; dt_save)
 
 @info "Conservation" mass_rel = (sum(sol.u[end].Yc.ρ) - mass_0) / mass_0 energy_rel =
     (sum(sol.u[end].Yc.ρe) - energy_0) / energy_0

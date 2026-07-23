@@ -23,6 +23,11 @@ cubed-sphere panel edges, where covariant components are not):
     (λ = |uₕ| + c) through the same lifting.
 Vertical FD: mass via face mass flux; energy via Lin–van Leer upwind;
 w = 0 and ∂z(·) = 0 at top/bottom (CG-model boundary conditions).
+Time stepping (STEPPER): "explicit" = fully explicit SSP-RK3 (Δt limited by
+the vertical acoustic CFL); "hevi" = IMEX ARK with the vertical acoustic
+terms implicit (column-wise Newton solve with the analytic Jacobian from
+`sphere_dg_fd_jacobian.jl`; central implicit vertical energy flux instead
+of Lin–van Leer; Δt limited by the horizontal DG acoustic CFL).
 Stabilization: κ₄ biharmonic hyperdiffusion ONLY (no κ₂), two-pass:
 element-local first Laplacian, then SIPG (LDG penalty) second pass for
 inter-element damping; applied to h_tot = (ρe+p)/ρ and the geographic
@@ -35,7 +40,8 @@ The including driver must define (before `include`):
   const is_balanced_flow    # Bool: disable the baroclinic-wave perturbation
   const t_end_default       # default simulation length [s]
 
-Environment overrides: HELEM, NPOLY, ZELEM, ZMAX, DT, T_END, KAPPA4, FILTER
+Environment overrides: HELEM, NPOLY, ZELEM, ZMAX, DT, T_END, KAPPA4, FILTER,
+STEPPER
 =#
 
 using LinearAlgebra: ×, norm, norm_sqr, dot
@@ -55,6 +61,8 @@ import ClimaCore:
     Topologies
 
 using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import SciMLBase
+import ClimaTimeSteppers as CTS
 
 # DiffEqBase's default internal norm reduces a FieldVector state by iterating
 # it element-by-element — disallowed scalar indexing on GPU backing arrays.
@@ -100,11 +108,12 @@ const helem = parse(Int, get(ENV, "HELEM", "4"))
 const npoly = parse(Int, get(ENV, "NPOLY", "4"))
 const zelem = parse(Int, get(ENV, "ZELEM", "10"))
 const zmax = parse(FT, get(ENV, "ZMAX", "30e3"))
-# Vertical acoustic limit: SSP-RK3 needs c·π·Δt/Δz ≲ √3 (Δz = 3 km, c ≈ 350
-# m/s ⇒ Δt ≲ 4.7 s); the horizontal DG limit is far looser at these
-# resolutions.
-const Δt = parse(FT, get(ENV, "DT", "4.0"))
 const t_end = parse(FT, get(ENV, "T_END", string(t_end_default)))
+# STEPPER selects the time integrator: "explicit" (fully explicit SSP-RK3) or
+# "hevi" (IMEX ARK: horizontal DG terms explicit, vertical acoustics implicit
+# with a column-wise Newton solve).
+const stepper = lowercase(get(ENV, "STEPPER", "explicit"))
+stepper in ("explicit", "hevi") || error("STEPPER must be explicit or hevi")
 
 function sphere_hv_spaces()
     context = ClimaComms.context()
@@ -132,6 +141,25 @@ end
 horzspace, hv_center_space, hv_face_space = sphere_hv_spaces()
 ccoords = Fields.coordinate_field(hv_center_space)
 fcoords = Fields.coordinate_field(hv_face_space)
+
+# Explicit stepping is limited by the vertical acoustic CFL: SSP-RK3 needs
+# c·π·Δt/Δz ≲ √3 (Δz = 3 km, c ≈ 350 m/s ⇒ Δt ≲ 4.7 s); the horizontal DG
+# limit is far looser at these resolutions. HEVI removes the vertical limit,
+# so its default Δt is set by the horizontal DG acoustic CFL instead,
+# h_node / (c (2p + 1)).
+const Δt = if haskey(ENV, "DT")
+    parse(FT, ENV["DT"])
+elseif stepper == "hevi"
+    FT(max(
+        1,
+        floor(
+            Spaces.node_horizontal_length_scale(horzspace) /
+            (350 * (2 * npoly + 1)),
+        ),
+    ))
+else
+    FT(4.0)
+end
 
 const ᶜΦ = @. grav * ccoords.z
 const ᶜf_cor = @. CT3(Geometry.WVector(2 * Ω * sind(ccoords.lat)))
@@ -302,7 +330,12 @@ const Bw = Operators.SetBoundaryOperator(
     top = Operators.SetValue(C3(FT(0))),
 )
 
-function rhs!(dY, Y, _, t)
+# Shared tendency core. With `vertical_transport = true` this is the full
+# (explicit) tendency; with `false` it is the HEVI explicit part, i.e.
+# everything except the vertical acoustic terms handled by
+# `implicit_tendency!` (vertical (ρ, ρe) transport and the pressure-gradient
+# + buoyancy terms of the w equation).
+function compute_tendency!(dY, Y, t, vertical_transport::Bool)
     ρ = Y.Yc.ρ
     ρe = Y.Yc.ρe
     uₕ = Y.uₕ
@@ -356,10 +389,12 @@ function rhs!(dY, Y, _, t)
     @. dYc.ρ = dy_mw.ρ / lgeom_c.WJ
     @. dYc.ρe = dy_mw.ρe / lgeom_c.WJ
 
-    # --- (ρ, ρe): vertical FD ---
-    w_vec = @. Geometry.WVector(w)
-    @. dYc.ρ -= vdivf2c(ρ_f * w_vec)
-    @. dYc.ρe -= vdivf2c(ρ_f * VanLeer(w_vec, h_tot, Δt))
+    # --- (ρ, ρe): vertical FD (implicit under HEVI) ---
+    if vertical_transport
+        w_vec = @. Geometry.WVector(w)
+        @. dYc.ρ -= vdivf2c(ρ_f * w_vec)
+        @. dYc.ρe -= vdivf2c(ρ_f * VanLeer(w_vec, h_tot, Δt))
+    end
 
     # --- Vorticities (element-local strong curl + central face lifting) ---
     ω³_sc = @. Geometry.WVector(hcurl(uₕ)).components.data.:1
@@ -407,9 +442,13 @@ function rhs!(dY, Y, _, t)
         Geometry.UVVector(pen_u, pen_v),
     )
 
-    # --- Vertical momentum ---
-    @. dw = -(ᶠgradᵥ(p) / If(ρ) + ᶠgradᵥ(K + ᶜΦ))
-    @. dw -= ᶠω¹² × ᶠu¹²
+    # --- Vertical momentum (acoustic terms implicit under HEVI) ---
+    if vertical_transport
+        @. dw = -(ᶠgradᵥ(p) / If(ρ) + ᶠgradᵥ(K + ᶜΦ))
+        @. dw -= ᶠω¹² × ᶠu¹²
+    else
+        @. dw = -(ᶠω¹² × ᶠu¹²)
+    end
     pen_w = Operators.lifting_correction(Operators.jump_penalty_lift, FT, w_sc, λ_f)
     @. dw += C3(Geometry.WVector(pen_w), lgeom_f)
     @. dw = Bw(dw)
@@ -471,6 +510,76 @@ function rhs!(dY, Y, _, t)
     return dY
 end
 
+# Fully explicit RHS (SSP-RK3 path) and the HEVI explicit part.
+rhs!(dY, Y, p, t) = compute_tendency!(dY, Y, t, true)
+remaining_tendency!(dY, Y, p, t) = compute_tendency!(dY, Y, t, false)
+
+# HEVI implicit part: vertical acoustics (column-local, no DG coupling).
+# The implicit vertical energy flux is the central If(ρe + p)·w of the CG
+# staggered model — the TVD VanLeer flux of the fully explicit path is
+# nonlinear in w and cannot be used inside the linearized Newton solve.
+function implicit_tendency!(dY, Y, p, t)
+    ρ = Y.Yc.ρ
+    ρe = Y.Yc.ρe
+    uₕ = Y.uₕ
+    w = Y.w
+
+    uv = @. Geometry.UVVector(uₕ)
+    w_c = @. Ic(Geometry.WVector(w))
+    K = @. (norm_sqr(uv) + norm_sqr(w_c)) / 2
+    p_thermo = @. pressure_ρe(ρe, K, ᶜΦ, ρ)
+
+    w_vec = @. Geometry.WVector(w)
+    @. dY.Yc.ρ = -vdivf2c(If(ρ) * w_vec)
+    @. dY.Yc.ρe = -vdivf2c(If(ρe + p_thermo) * w_vec)
+    dY.uₕ .= (zero(eltype(dY.uₕ)),)
+    # ᶠgradᵥ's SetGradient(0) boundary conditions zero the boundary-face rows,
+    # consistent with the Bw treatment of the explicit path.
+    @. dY.w = -(ᶠgradᵥ(p_thermo) / If(ρ) + ᶠgradᵥ(K + ᶜΦ))
+    return dY
+end
+
+include("sphere_dg_fd_jacobian.jl")
+
+# ---------------------------------------------------------------------------
+# Time integration (STEPPER = explicit | hevi)
+# ---------------------------------------------------------------------------
+function run_simulation(Y; dt_save)
+    if stepper == "hevi"
+        jacobian = DGImplicitEquationJacobian(Y)
+        prob = SciMLBase.ODEProblem(
+            CTS.ClimaODEFunction(;
+                T_imp! = SciMLBase.ODEFunction(
+                    implicit_tendency!;
+                    jac_prototype = jacobian,
+                    Wfact = implicit_equation_jacobian!,
+                ),
+                T_exp! = remaining_tendency!,
+            ),
+            Y,
+            (FT(0), t_end),
+            nothing,
+        )
+        ode_algo =
+            CTS.IMEXAlgorithm(CTS.ARS343(), CTS.NewtonsMethod(; max_iters = 2))
+        return SciMLBase.solve(
+            prob,
+            ode_algo;
+            dt = Δt,
+            saveat = collect(FT(0):dt_save:t_end),
+        )
+    else
+        prob = ODEProblem(rhs!, Y, (FT(0), t_end))
+        return solve(
+            prob,
+            SSPRK33(),
+            dt = Δt,
+            saveat = dt_save,
+            internalnorm = fieldvector_norm,
+        )
+    end
+end
+
 # ---------------------------------------------------------------------------
 # Startup diagnostics
 # ---------------------------------------------------------------------------
@@ -478,7 +587,7 @@ let
     h_node = Spaces.node_horizontal_length_scale(horzspace)
     Δz = zmax / zelem
     c_max = sqrt(γ * R_d * T_e)
-    @info "DG-FD sphere setup" helem npoly zelem Δt t_end κ₄ κ₄_cfl_cap filter_Nc h_node
+    @info "DG-FD sphere setup" stepper helem npoly zelem Δt t_end κ₄ κ₄_cfl_cap filter_Nc h_node
     @info "Acoustic CFL estimates" vertical = c_max * Δt / Δz horizontal =
         c_max * Δt / h_node
 end

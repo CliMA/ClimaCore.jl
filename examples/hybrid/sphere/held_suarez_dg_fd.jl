@@ -1,7 +1,8 @@
 #=
 Held–Suarez (1994) forced dry dynamical core on a cubed-sphere shell with DG
 horizontal spectral elements (no DSS) and FD vertical staggering, fully
-explicit SSP-RK3. Same dynamics as `baroclinic_wave_dg_fd.jl` (see
+explicit SSP-RK3 by default (STEPPER=hevi for IMEX ARK with implicit
+vertical acoustics). Same dynamics as `baroclinic_wave_dg_fd.jl` (see
 `sphere_dg_fd_model.jl`) plus Rayleigh low-level drag and Newtonian
 temperature relaxation; starts from the balanced zonal jet (no perturbation).
 
@@ -12,7 +13,8 @@ cap) m⁴/s, no κ₂.
 Run:
   julia --project=.buildkite examples/hybrid/sphere/held_suarez_dg_fd.jl
 
-Environment: HELEM, NPOLY, ZELEM, ZMAX, DT, T_END, DT_SAVE, KAPPA4, FILTER
+Environment: HELEM, NPOLY, ZELEM, ZMAX, DT, T_END, DT_SAVE, KAPPA4, FILTER,
+STEPPER
 =#
 
 const FT = Float64
@@ -39,14 +41,7 @@ rhs!(dY, Y, nothing, 0.0)
     maximum(abs, parent(dY.w))
 
 const dt_save = parse(FT, get(ENV, "DT_SAVE", string(min(t_end, 21600.0))))
-prob = ODEProblem(rhs!, Y, (FT(0), t_end))
-sol = solve(
-    prob,
-    SSPRK33(),
-    dt = Δt,
-    saveat = dt_save,
-    internalnorm = fieldvector_norm,
-)
+sol = run_simulation(Y; dt_save)
 
 @info "Conservation (energy is forced, mass should be conserved)" mass_rel =
     (sum(sol.u[end].Yc.ρ) - mass_0) / mass_0 energy_rel =
