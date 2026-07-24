@@ -221,6 +221,60 @@ Base.@propagate_inbounds function calc_level_val(
 end
 
 """
+    calc_level_val(bc::StencilBroadcasted{<:Any, <: SetBoundaryOperator}, space)
+
+A `SetBoundaryOperator` only modifies the two boundary faces, and is the identity
+in the interior. At the boundaries we dispatch to `stencil_left_boundary` /
+`stencil_right_boundary` (which extract and project the boundary value), and in the
+interior we reuse the eagerly-computed value of the argument.
+"""
+Base.@propagate_inbounds function calc_level_val(
+    bc::BC,
+    hidx,
+    space,
+) where {
+    S,
+    Op <: Operators.SetBoundaryOperator,
+    BC <: StencilBroadcasted{S, Op},
+}
+    op = bc.op
+    v = threadIdx().x
+    val_no_bcs = @inline @inbounds calc_level_val(bc.args[1i32], hidx, space)
+    # A `SetBoundaryOperator` only ever outputs to faces. Gating the boundary logic on
+    # the (compile-time) staggering type ensures that when this method is compiled for a
+    # center-output space, the whole face-boundary branch -- including
+    # `should_call_left_boundary`, whose `idx < left_interior_idx` comparison would
+    # otherwise mix a `PlusHalf` face index with an integer center index and pull in
+    # non-GPU-compatible error-formatting code -- is dropped as dead code.
+
+    idx = space.staggering isa Spaces.CellFace ? (v - half) : v
+    if Operators.should_call_left_boundary(idx, space, op, bc.args...)
+        lbw = Operators.left_boundary_window(space)
+        return @inbounds @inline Operators.stencil_left_boundary(
+            op,
+            Operators.get_boundary(op, lbw),
+            space,
+            idx,
+            hidx,
+            bc.args...,
+        )
+    elseif (!(space.staggering isa Spaces.CellCenter && v == blockDim().x)) &&
+           Operators.should_call_right_boundary(idx, space, op, bc.args...)
+        rbw = Operators.right_boundary_window(space)
+        return @inbounds @inline Operators.stencil_right_boundary(
+            op,
+            Operators.get_boundary(op, rbw),
+            space,
+            idx,
+            hidx,
+            bc.args...,
+        )
+    end
+
+    return val_no_bcs
+end
+
+"""
     calc_level_val(bc::StencilBroadcasted{<:Any, <: LinVanLeerC2F}, space)
 
 Special case of `calc_level_val` for `LinVanLeerC2F`s, which makes the

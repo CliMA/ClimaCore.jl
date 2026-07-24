@@ -1865,7 +1865,7 @@ struct SetBoundaryOperator{BCS} <: BoundaryOperator
     SetBoundaryOperator(bcs) = SetBoundaryOperator(; bcs...)
 end
 
-return_space(::SetBoundaryOperator, space::AllFaceFiniteDifferenceSpace) = space
+return_space(::SetBoundaryOperator, space) = space
 
 stencil_interior_width(::SetBoundaryOperator, arg) = ((0, 0),)
 Base.@propagate_inbounds stencil_interior(
@@ -1888,7 +1888,6 @@ Base.@propagate_inbounds function stencil_left_boundary(
     @assert idx == left_idx(space)
     val = getidx(space, bc.val, nothing, hidx)
     if bc isa SetGradient
-        # val = Geometry.gradient_result_type(Val((3,)), eltype(val))(val)
         return Geometry.project(
             Geometry.Covariant3Axis(),
             val,
@@ -1914,7 +1913,6 @@ Base.@propagate_inbounds function stencil_right_boundary(
     @assert idx == right_idx(space)
     val = getidx(space, bc.val, nothing, hidx)
     if bc isa SetGradient
-        # val = Geometry.gradient_result_type(Val((3,)), eltype(val))(val)
         return Geometry.project(
             Geometry.Covariant3Axis(),
             val,
