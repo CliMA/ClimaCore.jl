@@ -26,8 +26,10 @@ w = 0 and ∂z(·) = 0 at top/bottom (CG-model boundary conditions).
 Time stepping (STEPPER): "explicit" = fully explicit SSP-RK3 (Δt limited by
 the vertical acoustic CFL); "hevi" = IMEX ARK with the vertical acoustic
 terms implicit (column-wise Newton solve with the analytic Jacobian from
-`sphere_dg_fd_jacobian.jl`; central implicit vertical energy flux instead
-of Lin–van Leer; Δt limited by the horizontal DG acoustic CFL).
+`sphere_dg_fd_jacobian.jl`; central implicit vertical energy flux plus an
+explicit Lin–van Leer upwind correction, ClimaAtmos-style, so the total
+vertical energy flux matches the explicit path; Δt limited by the
+horizontal DG acoustic CFL).
 Stabilization: κ₄ biharmonic hyperdiffusion ONLY (no κ₂), two-pass:
 element-local first Laplacian, then SIPG (LDG penalty) second pass for
 inter-element damping; applied to h_tot = (ρe+p)/ρ and the geographic
@@ -390,10 +392,24 @@ function compute_tendency!(dY, Y, t, vertical_transport::Bool)
     @. dYc.ρe = dy_mw.ρe / lgeom_c.WJ
 
     # --- (ρ, ρe): vertical FD (implicit under HEVI) ---
+    w_vec = @. Geometry.WVector(w)
     if vertical_transport
-        w_vec = @. Geometry.WVector(w)
         @. dYc.ρ -= vdivf2c(ρ_f * w_vec)
         @. dYc.ρe -= vdivf2c(ρ_f * VanLeer(w_vec, h_tot, Δt))
+    else
+        # HEVI explicit part: Lin–VanLeer upwind correction to the central
+        # implicit vertical energy flux (the ClimaAtmos pattern: implicit
+        # flux and its Jacobian stay central/linear; the explicit correction
+        # (VanLeer − central) restores the TVD total flux, so the HEVI total
+        # equals the fully explicit path exactly). The correction is
+        # advective-scale, so it is not limited by the vertical acoustic CFL.
+        # Without it the purely central vertical energy flux leaves near-lid
+        # computational modes undamped: on the balanced state they drive a
+        # secular top-level density drain that reaches ρ ≤ 0 at t ≈ 54,000 s
+        # regardless of Δt (60 s and 30 s) and Newton iterations.
+        @. dYc.ρe -=
+            vdivf2c(ρ_f * VanLeer(w_vec, h_tot, Δt)) -
+            vdivf2c(ρ_f * w_vec * If(h_tot))
     end
 
     # --- Vorticities (element-local strong curl + central face lifting) ---
@@ -515,9 +531,11 @@ rhs!(dY, Y, p, t) = compute_tendency!(dY, Y, t, true)
 remaining_tendency!(dY, Y, p, t) = compute_tendency!(dY, Y, t, false)
 
 # HEVI implicit part: vertical acoustics (column-local, no DG coupling).
-# The implicit vertical energy flux is the central If(ρe + p)·w of the CG
-# staggered model — the TVD VanLeer flux of the fully explicit path is
-# nonlinear in w and cannot be used inside the linearized Newton solve.
+# The implicit vertical energy flux is the central, factored
+# If(ρ)·w·If(h_tot) of ClimaAtmos (`vertical_transport(..., Val(:none))`) —
+# the TVD VanLeer flux of the fully explicit path is nonlinear in w and
+# cannot be used inside the linearized Newton solve, so the explicit part
+# carries the (VanLeer − central) correction instead.
 function implicit_tendency!(dY, Y, p, t)
     ρ = Y.Yc.ρ
     ρe = Y.Yc.ρe
@@ -528,10 +546,11 @@ function implicit_tendency!(dY, Y, p, t)
     w_c = @. Ic(Geometry.WVector(w))
     K = @. (norm_sqr(uv) + norm_sqr(w_c)) / 2
     p_thermo = @. pressure_ρe(ρe, K, ᶜΦ, ρ)
+    h_tot = @. (ρe + p_thermo) / ρ
 
     w_vec = @. Geometry.WVector(w)
     @. dY.Yc.ρ = -vdivf2c(If(ρ) * w_vec)
-    @. dY.Yc.ρe = -vdivf2c(If(ρe + p_thermo) * w_vec)
+    @. dY.Yc.ρe = -vdivf2c(If(ρ) * w_vec * If(h_tot))
     dY.uₕ .= (zero(eltype(dY.uₕ)),)
     # ᶠgradᵥ's SetGradient(0) boundary conditions zero the boundary-face rows,
     # consistent with the Bw treatment of the explicit path.

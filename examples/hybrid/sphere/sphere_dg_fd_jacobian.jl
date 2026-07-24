@@ -6,8 +6,10 @@ here without pulling in the CG model). The implicit part is purely vertical
 FD and column-local — the DG horizontal discretization never enters it.
 
 State layout: (Y.Yc.ρ, Y.Yc.ρe, Y.uₕ, Y.w), 𝔼 = ρe, central implicit
-vertical energy flux If(ρe + p)·w. The residual convention is the
-ClimaTimeSteppers one (transform = false):
+vertical energy flux If(ρ)·w·If(h_tot) (ClimaAtmos `Val(:none)` transport;
+the Lin–VanLeer upwind correction lives in the explicit tendency and does
+not enter the Jacobian). The residual convention is the ClimaTimeSteppers
+one (transform = false):
 
     R(Y) = Yᵖʳᵉᵛ + δtγ·Yₜ(Y) − Y,   ∂R/∂Y = δtγ·∂Yₜ/∂Y − I
 
@@ -113,6 +115,7 @@ function implicit_equation_jacobian!(j::DGImplicitEquationJacobian, Y, p, δtγ,
     w_c = @. Ic(Geometry.WVector(w))
     K = @. (norm_sqr(uv) + norm_sqr(w_c)) / 2
     p_thermo = @. pressure_ρe(ρe, K, ᶜΦ, ρ)
+    h_tot = @. (ρe + p_thermo) / ρ
 
     ᶠgⁱʲ = Fields.local_geometry_field(w).gⁱʲ
     g³³(gⁱʲ) = reshape(
@@ -129,24 +132,25 @@ function implicit_equation_jacobian!(j::DGImplicitEquationJacobian, Y, p, δtγ,
     # ∂(ᶜρₜ)/∂(ᶠw) = -ᶜdivᵥ_matrix() * ᶠinterp(ᶜρ) * ᶠg³³
     @. ∂ᶜρₜ∂ᶠ𝕄 = -(ᶜdivᵥ_matrix()) * DiagonalMatrixRow(If(ρ) * g³³(ᶠgⁱʲ))
 
-    # ᶜρeₜ = -ᶜdivᵥ(ᶠinterp(ᶜρe + ᶜp) * ᶠw)
+    # ᶜρeₜ = -ᶜdivᵥ(ᶠinterp(ᶜρ) * ᶠw * ᶠinterp(ᶜh_tot))
+    # (ClimaAtmos central form; the VanLeer correction is explicit)
     if flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :exact
         # ∂(ᶜρeₜ)/∂(ᶠw) = -ᶜdivᵥ_matrix() * (
-        #     ᶠinterp(ᶜρe + ᶜp) * ᶠg³³ +
-        #     CT3(ᶠw) * ᶠinterp_matrix() * ∂(ᶜp)/∂(ᶜK) * ∂(ᶜK)/∂(ᶠw)
-        # ), with ∂(ᶜp)/∂(ᶜK) = -ᶜρ * R_d / cv_d
+        #     ᶠinterp(ᶜρ) * ᶠinterp(ᶜh_tot) * ᶠg³³ +
+        #     CT3(ᶠw) * ᶠinterp(ᶜρ) * ᶠinterp_matrix() *
+        #         ∂(ᶜh_tot)/∂(ᶜK) * ∂(ᶜK)/∂(ᶠw)
+        # ), with ∂(ᶜh_tot)/∂(ᶜK) = ∂(ᶜp)/∂(ᶜK) / ᶜρ = -R_d / cv_d
         @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
             -(ᶜdivᵥ_matrix()) * (
-                DiagonalMatrixRow(If(ρe + p_thermo) * g³³(ᶠgⁱʲ)) +
-                DiagonalMatrixRow(CT3(w)) *
+                DiagonalMatrixRow(If(ρ) * If(h_tot) * g³³(ᶠgⁱʲ)) +
+                DiagonalMatrixRow(CT3(w) * If(ρ)) *
                 ᶠinterp_matrix() *
-                DiagonalMatrixRow(-(ρ * R_d / cv_d)) *
-                ∂ᶜK∂ᶠw
+                (-R_d / cv_d * ∂ᶜK∂ᶠw)
             )
-    else # :no_∂ᶜp∂ᶜK — approximate ∂(ᶜp)/∂(ᶜK) = 0
+    else # :no_∂ᶜp∂ᶜK — approximate ∂(ᶜh_tot)/∂(ᶜK) = 0 (ClimaAtmos default)
         @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
             -(ᶜdivᵥ_matrix()) *
-            DiagonalMatrixRow(If(ρe + p_thermo) * g³³(ᶠgⁱʲ))
+            DiagonalMatrixRow(If(ρ) * If(h_tot) * g³³(ᶠgⁱʲ))
     end
 
     # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥ(ᶜK + ᶜΦ)
