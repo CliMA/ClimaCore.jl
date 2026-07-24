@@ -27,13 +27,13 @@ right_idx(space::AllFaceFiniteDifferenceSpace) = right_face_boundary_idx(space)
 left_center_boundary_idx(space::AllFiniteDifferenceSpace) = 1
 right_center_boundary_idx(space::AllFiniteDifferenceSpace) = size(
     Spaces.local_geometry_data(Spaces.space(space, Spaces.CellCenter())),
-    4,
+    1,
 )
 left_face_boundary_idx(space::AllFiniteDifferenceSpace) = half
 right_face_boundary_idx(space::AllFiniteDifferenceSpace) =
     size(
         Spaces.local_geometry_data(Spaces.space(space, Spaces.CellFace())),
-        4,
+        1,
     ) - half
 
 
@@ -52,7 +52,7 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     if Topologies.isperiodic(space)
         v = mod1(v, Spaces.nlevels(space))
     end
-    i, j, h = hidx
+    i, j, h = hindices(space, hidx)
     local_geom =
         Grids.local_geometry_data(Spaces.grid(space), Grids.CellCenter())
     return @inbounds local_geom[v, i, j, h]
@@ -66,7 +66,7 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     if Topologies.isperiodic(space)
         v = mod1(v, Spaces.nlevels(space))
     end
-    i, j, h = hidx
+    i, j, h = hindices(space, hidx)
     local_geom = Grids.local_geometry_data(Spaces.grid(space), Grids.CellFace())
     return @inbounds local_geom[v, i, j, h]
 end
@@ -3637,7 +3637,19 @@ end
     )
 end
 
-Base.@propagate_inbounds function getidx(
+# When bounds checks are forced with check-bounds=yes, avoid inlining stencil
+# nodes of a broadcast expression through @propagate_inbounds. If each stencil
+# node inlines its interior and boundary subexpressions, the size of the
+# @propagate_inbounds expression grows exponentially with operator depth. With a
+# bounds check in every array access, LLVM can take tens of minutes to compile
+# flux-corrected transport examples. The check_bounds flag is constant and
+# precompilation caches are keyed on it, so each variant gets its own cache. If
+# bounds checks aren't forced, @propagate_inbounds improves runtime performance.
+macro maybe_propagate_inbounds(expr)
+    esc(isone(Base.JLOptions().check_bounds) ? expr : :(Base.@propagate_inbounds $expr))
+end
+
+@maybe_propagate_inbounds function getidx(
     parent_space,
     bc::Union{StencilBroadcasted, Base.Broadcast.Broadcasted{<:Fields.AbstractFieldStyle}},
     idx,
@@ -3723,6 +3735,11 @@ function vidx(space::AbstractSpace, idx)
     return 1
 end
 
+# Fields on a column space only have data at a single horizontal index, so the
+# horizontal indices from the broadcast expression do not apply to them.
+@inline hindices(::Spaces.FiniteDifferenceSpace, hidx) = (1, 1, 1)
+@inline hindices(space, hidx) = hidx
+
 Base.@propagate_inbounds function getidx(parent_space, bc::Fields.Field, idx)
     field_data = Fields.field_values(bc)
     space = reconstruct_placeholder_space(axes(bc), parent_space)
@@ -3738,7 +3755,7 @@ Base.@propagate_inbounds function getidx(
     field_data = Fields.field_values(bc)
     space = reconstruct_placeholder_space(axes(bc), parent_space)
     v = vidx(space, idx)
-    i, j, h = hidx
+    i, j, h = hindices(space, hidx)
     return @inbounds field_data[v, i, j, h]
 end
 
@@ -3915,7 +3932,7 @@ function Base.copyto!(
     bc::Union{
         StencilBroadcasted{ColumnStencilStyle},
         Broadcasted{ColumnStencilStyle},
-    },
+    };
     mask = DataLayouts.NoMask(),
 )
     space = axes(bc)

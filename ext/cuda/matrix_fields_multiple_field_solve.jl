@@ -32,9 +32,9 @@ NVTX.@annotate function multiple_field_solve!(
 
     device = ClimaComms.device(x[first(names)])
 
-    us = UniversalSize(Fields.field_values(x1))
-    cart_inds = cartesian_indices_multiple_field_solve(us; Nnames)
-    args = (device, caches, xs, As, bs, us, mask, cart_inds, Val(Nnames))
+    cart_inds =
+        cartesian_indices_multiple_field_solve(Fields.field_values(x1); Nnames)
+    args = (device, caches, xs, As, bs, mask, cart_inds, Val(Nnames))
 
     nitems = Ni * Nj * Nh * Nnames
     (; threads, blocks) = config_via_occupancy(multiple_field_solve_kernel!, nitems, args)
@@ -82,14 +82,13 @@ function multiple_field_solve_kernel!(
     xs,
     As,
     bs,
-    us::UniversalSize,
     mask,
     cart_inds,
     ::Val{Nnames},
 ) where {Nnames}
     @inbounds begin
         tidx = linear_thread_idx()
-        if linear_is_valid_index(tidx, us) && tidx ≤ length(unval(cart_inds))
+        if linear_is_valid_index(tidx, unval(cart_inds))
             (i, j, h, iname) = unval(cart_inds)[tidx].I
             ui = CartesianIndex((1, i, j, h))
             DataLayouts.should_compute(mask, ui) || return nothing

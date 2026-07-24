@@ -8,6 +8,7 @@ import InteractiveUtils
 include("plushalf.jl")
 include("auto_broadcaster.jl")
 include("cache.jl")
+include("safe_mapreduce.jl")
 
 module Unrolled # TODO: Move all of these functions into UnrolledUtilities.jl
 
@@ -62,6 +63,47 @@ Base.@propagate_inbounds linear_ind(n::NTuple, ci::CartesianIndex) =
     @inbounds LinearIndices(map(x -> Base.OneTo(x), n))[ci]
 Base.@propagate_inbounds linear_ind(n::NTuple, loc::NTuple) =
     linear_ind(n, CartesianIndex(loc))
+
+"""
+    stable_view(array, indices...)
+
+Like `view`, but with two modifications that avoid expensive operations:
+- Every view is a `SubArray`, even when `array` is a GPU array. GPUArrays
+  replaces each contiguous view of a `CuArray` with a new `CuArray` derived
+  from the same memory buffer, and the derived array's type is not inferrable,
+  which makes all host code that builds slice or property views type-unstable.
+  The `SubArray`s constructed here have fully inferred types, and they are
+  converted to `SubArray`s of `CuDeviceArray`s when passed to kernels.
+- A view along the linear indices of a multidimensional `array` (a single
+  `Integer` or range of `Integer`s) wraps the `array` in a 1-dimensional
+  `ReshapedArray`, instead of using `reshape` like Base's `view` does, which
+  allocates a new object whenever it is applied to an `Array`. If the `array`
+  is already a `ReshapedArray`, its parent gets wrapped instead, since a
+  reshape stores the same values in the same linear order as its parent.
+
+```julia-repl
+julia> array = rand(3, 1, 4);
+
+julia> parent(view(array, 4:6))
+12-element Vector{Float64}
+
+julia> parent(stable_view(array, 4:6))
+12-element reshape(::Array{Float64, 3}, 12) with eltype Float64
+```
+"""
+Base.@propagate_inbounds function stable_view(array::AbstractArray, indices...)
+    if indices isa Tuple{Union{Integer, AbstractRange{<:Integer}}} &&
+       ndims(array) != 1
+        array isa Base.ReshapedArray &&
+            return stable_view(parent(array), first(indices))
+        flat_array = Base.ReshapedArray(array, (length(array),), ())
+        return stable_view(flat_array, first(indices))
+    end
+    converted = Base.to_indices(array, indices)
+    @boundscheck checkbounds(array, converted...)
+    reshaped = Base._maybe_reshape_parent(array, Base.index_ndims(converted...))
+    return Base.unsafe_view(reshaped, converted...)
+end
 
 """
     unionall_type(T)

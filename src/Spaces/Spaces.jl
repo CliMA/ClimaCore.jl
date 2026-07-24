@@ -193,7 +193,7 @@ Returns a bool indicating that the space has a vertical grid.
 function has_vertical end
 has_vertical(::AbstractSpace) = false
 has_vertical(::ExtrudedFiniteDifferenceSpace) = true
-has_vertical(::FiniteDifferenceSpace) = false
+has_vertical(::FiniteDifferenceSpace) = true
 
 """
     has_horizontal(::AbstractSpace)
@@ -209,6 +209,7 @@ has_horizontal(::SpectralElementSpace2D) = true
 set_mask!(fn, space::AbstractSpace) = set_mask!(fn, grid(space))
 set_mask!(fn, space::ExtrudedFiniteDifferenceSpace) =
     set_mask!(fn, grid(horizontal_space(space)))
-set_mask!(space::AbstractSpace, data) = set_mask!(grid(space), data)
+set_mask!(space::AbstractSpace, data::DataLayouts.DataLayout) =
+    set_mask!(grid(space), data)
 
 end # module

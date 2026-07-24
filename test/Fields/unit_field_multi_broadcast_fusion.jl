@@ -104,7 +104,7 @@ end
         zelem = 3,
         helem = 4,
         context = ClimaComms.context(device),
-        horizontal_layout_type = DataLayouts.VIJHF,
+        VIJH = DataLayouts.VIJHF,
     )
     X = Fields.FieldVector(
         x1 = rand_field(FT, space),

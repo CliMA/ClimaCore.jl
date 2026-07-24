@@ -368,6 +368,28 @@ function apply_limiter!(
     return ρq
 end
 
+# One scalar view per component of a layout's element type, or the layout
+# itself when its element type has no fields (a single scalar component). The
+# views are wrapped in Vals because property_view requires a type-domain field
+# index, so a runtime index would trigger dynamic dispatch in GPU kernels.
+@inline component_views(data) =
+    iszero(fieldcount(eltype(data))) ? (data,) :
+    unrolled_map(
+        i -> DataLayouts.property_view(data, i),
+        ntuple(Val, Val(fieldcount(eltype(data)))),
+    )
+
+# Compute ∫ρ in its own function, so that the total is not reassigned in
+# apply_limit_slab!, where its capture by the unrolled_map closure would
+# require it to be wrapped in a Core.Box
+@inline function slab_total_mass(slab_ρ, slab_WJ, Ni, Nj)
+    total_mass = zero(eltype(parent(slab_ρ)))
+    for j in 1:Nj, i in 1:Ni
+        total_mass += slab_ρ[1, i, j, 1] * slab_WJ[1, i, j, 1]
+    end
+    return total_mass
+end
+
 """
     apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
 
@@ -377,112 +399,134 @@ and relative tolerance `rtol`. Return whether the tolerance condition could be
 satisfied.
 """
 function apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
-    Nf = DataLayouts.ncomponents(slab_ρq)
     (_, Ni, Nj, _) = size(slab_ρq)
+
+    total_mass = slab_total_mass(slab_ρ, slab_WJ, Ni, Nj)
+    @assert total_mass > 0
+
+    field_results = unrolled_map(
+        (field_ρq, field_q_bounds) -> apply_limit_slab_field!(
+            field_ρq,
+            slab_ρ,
+            slab_WJ,
+            field_q_bounds,
+            total_mass,
+            rtol,
+        ),
+        component_views(slab_ρq),
+        component_views(slab_q_bounds),
+    )
+    return unrolled_reduce(field_results) do result1, result2
+        (
+            result1[1] && result2[1],
+            max(result1[2], result2[2]),
+            min(result1[3], result2[3]),
+        )
+    end
+end
+
+# Apply the limit for one component of ρq, given views of that component in
+# slab_ρq and slab_q_bounds. Return whether the tolerance condition could be
+# satisfied, along with the maximum relative error and the minimum tracer mass.
+function apply_limit_slab_field!(
+    field_ρq,
+    slab_ρ,
+    slab_WJ,
+    field_q_bounds,
+    total_mass,
+    rtol,
+)
+    FT = eltype(parent(field_ρq))
+    (_, Ni, Nj, _) = size(field_ρq)
     maxiter = Ni * Nj
 
-    array_ρq = parent(slab_ρq)
-    array_ρ = parent(slab_ρ)
-    array_w = parent(slab_WJ)
-    array_q_bounds = parent(slab_q_bounds)
-    FT = eltype(array_ρq)
-
-    # 1) compute ∫ρ
-    total_mass = zero(FT)
-    for j in 1:Nj, i in 1:Ni
-        total_mass += array_ρ[i, j, 1] * array_w[i, j, 1]
-    end
-
-    @assert total_mass > 0
+    q_min = field_q_bounds[1, 1, 1, 1]
+    q_max = field_q_bounds[1, 2, 1, 1]
 
     converged = true
     max_rel_err = zero(rtol)
     min_tracer_mass = FT(Inf)
     rel_err = zero(FT)
-    for f in 1:Nf
-        q_min = array_q_bounds[1, f]
-        q_max = array_q_bounds[2, f]
 
-        # 2) compute ∫ρq
-        tracer_mass = zero(eltype(array_ρq))
+    # 2) compute ∫ρq
+    tracer_mass = zero(FT)
+    for j in 1:Nj, i in 1:Ni
+        tracer_mass += field_ρq[1, i, j, 1] * slab_WJ[1, i, j, 1]
+    end
+
+    # TODO: Should this condition be enforced? (It isn't in HOMME.)
+    # @assert tracer_mass >= 0
+
+    # 3) set bounds
+    q_avg = tracer_mass / total_mass
+    q_min = min(q_min, q_avg)
+    q_max = max(q_max, q_avg)
+
+    # 3) modify ρq
+    for iter in 1:maxiter
+        Δtracer_mass = zero(FT)
         for j in 1:Nj, i in 1:Ni
-            tracer_mass += array_ρq[i, j, f] * array_w[i, j, 1]
+            ρ = slab_ρ[1, i, j, 1]
+            ρq = field_ρq[1, i, j, 1]
+            ρq_max = ρ * q_max
+            ρq_min = ρ * q_min
+            w = slab_WJ[1, i, j, 1]
+            if ρq > ρq_max
+                Δtracer_mass += (ρq - ρq_max) * w
+                field_ρq[1, i, j, 1] = ρq_max
+            elseif ρq < ρq_min
+                Δtracer_mass += (ρq - ρq_min) * w
+                field_ρq[1, i, j, 1] = ρq_min
+            end
         end
 
-        # TODO: Should this condition be enforced? (It isn't in HOMME.)
-        # @assert tracer_mass >= 0
+        rel_err = abs(Δtracer_mass) / abs(tracer_mass)
+        max_rel_err = max(max_rel_err, rel_err)
+        min_tracer_mass = min(min_tracer_mass, abs(tracer_mass))
+        if rel_err <= rtol
+            break
+        end
 
-        # 3) set bounds
-        q_avg = tracer_mass / total_mass
-        q_min = min(q_min, q_avg)
-        q_max = max(q_max, q_avg)
-
-        # 3) modify ρq
-        for iter in 1:maxiter
-            Δtracer_mass = zero(eltype(array_ρq))
+        if Δtracer_mass > 0 # add mass
+            total_mass_at_Δ_points = zero(FT)
             for j in 1:Nj, i in 1:Ni
-                ρ = array_ρ[i, j, 1]
-                ρq = array_ρq[i, j, f]
-                ρq_max = ρ * q_max
-                ρq_min = ρ * q_min
-                w = array_w[i, j]
-                if ρq > ρq_max
-                    Δtracer_mass += (ρq - ρq_max) * w
-                    array_ρq[i, j, f] = ρq_max
-                elseif ρq < ρq_min
-                    Δtracer_mass += (ρq - ρq_min) * w
-                    array_ρq[i, j, f] = ρq_min
+                ρ = slab_ρ[1, i, j, 1]
+                ρq = field_ρq[1, i, j, 1]
+                w = slab_WJ[1, i, j, 1]
+                if ρq < ρ * q_max
+                    total_mass_at_Δ_points += ρ * w
                 end
             end
+            Δq_at_Δ_points = Δtracer_mass / total_mass_at_Δ_points
+            for j in 1:Nj, i in 1:Ni
+                ρ = slab_ρ[1, i, j, 1]
+                ρq = field_ρq[1, i, j, 1]
+                if ρq < ρ * q_max
+                    field_ρq[1, i, j, 1] += ρ * Δq_at_Δ_points
+                end
+            end
+        else # remove mass
+            total_mass_at_Δ_points = zero(FT)
+            for j in 1:Nj, i in 1:Ni
+                ρ = slab_ρ[1, i, j, 1]
+                ρq = field_ρq[1, i, j, 1]
+                w = slab_WJ[1, i, j, 1]
+                if ρq > ρ * q_min
+                    total_mass_at_Δ_points += ρ * w
+                end
+            end
+            Δq_at_Δ_points = Δtracer_mass / total_mass_at_Δ_points
+            for j in 1:Nj, i in 1:Ni
+                ρ = slab_ρ[1, i, j, 1]
+                ρq = field_ρq[1, i, j, 1]
+                if ρq > ρ * q_min
+                    field_ρq[1, i, j, 1] += ρ * Δq_at_Δ_points
+                end
+            end
+        end
 
-            rel_err = abs(Δtracer_mass) / abs(tracer_mass)
-            max_rel_err = max(max_rel_err, rel_err)
-            min_tracer_mass = min(min_tracer_mass, abs(tracer_mass))
-            if rel_err <= rtol
-                break
-            end
-
-            if Δtracer_mass > 0 # add mass
-                total_mass_at_Δ_points = zero(eltype(array_ρ))
-                for j in 1:Nj, i in 1:Ni
-                    ρ = array_ρ[i, j, 1]
-                    ρq = array_ρq[i, j, f]
-                    w = array_w[i, j]
-                    if ρq < ρ * q_max
-                        total_mass_at_Δ_points += ρ * w
-                    end
-                end
-                Δq_at_Δ_points = Δtracer_mass / total_mass_at_Δ_points
-                for j in 1:Nj, i in 1:Ni
-                    ρ = array_ρ[i, j, 1]
-                    ρq = array_ρq[i, j, f]
-                    if ρq < ρ * q_max
-                        array_ρq[i, j, f] += ρ * Δq_at_Δ_points
-                    end
-                end
-            else # remove mass
-                total_mass_at_Δ_points = zero(eltype(array_ρ))
-                for j in 1:Nj, i in 1:Ni
-                    ρ = array_ρ[i, j, 1]
-                    ρq = array_ρq[i, j, f]
-                    w = array_w[i, j]
-                    if ρq > ρ * q_min
-                        total_mass_at_Δ_points += ρ * w
-                    end
-                end
-                Δq_at_Δ_points = Δtracer_mass / total_mass_at_Δ_points
-                for j in 1:Nj, i in 1:Ni
-                    ρ = array_ρ[i, j, 1]
-                    ρq = array_ρq[i, j, f]
-                    if ρq > ρ * q_min
-                        array_ρq[i, j, f] += ρ * Δq_at_Δ_points
-                    end
-                end
-            end
-
-            if iter == maxiter
-                converged = false
-            end
+        if iter == maxiter
+            converged = false
         end
     end
     return (converged, max_rel_err, min_tracer_mass)

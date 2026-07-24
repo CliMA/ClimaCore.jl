@@ -177,9 +177,10 @@ x_se = Float64[]
 y_se = Float64[]
 vals_se = Float64[]
 Fields.byslab(space) do slabidx
-    x_data = parent(Fields.slab(coords.x, slabidx))
-    y_data = parent(Fields.slab(coords.y, slabidx))
-    f_data = parent(Fields.slab(field, slabidx))
+    # The parents of these scalar slabs have size (1, Nq, Nq, 1, 1).
+    x_data = reshape(parent(Fields.slab(coords.x, slabidx)), Nq, Nq)
+    y_data = reshape(parent(Fields.slab(coords.y, slabidx)), Nq, Nq)
+    f_data = reshape(parent(Fields.slab(field, slabidx)), Nq, Nq)
     for j in 1:Nq, i in 1:Nq
         push!(x_se, x_data[i, j])
         push!(y_se, y_data[i, j])

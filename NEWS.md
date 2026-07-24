@@ -7,6 +7,16 @@ main
 v0.14.55
 -------
 
+- Refactor DataLayouts module [2522](https://github.com/CliMA/ClimaCore.jl/pull/2522)
+  - All data layout types are unified into a single `DataLayout` type, and all
+    loops over data go through two communication primitives (`foreach_slice` and
+    `reduce_points`) that work the same way on CPUs, multi-threaded CPUs, and
+    GPUs. Runtime performance on CPUs and GPUs matches the previous release.
+  - Data in a `Field` is now indexed in the order `[v, i, j, h]`, and every
+    parent array has the same 5-dimensional shape, with one axis for the fields
+    of a struct. Code that indexes into `parent(field)` arrays must be updated.
+  - Commonly used old names (`DataLayouts.AbstractData`, `DataLayouts.IJFH`,
+    `DataLayouts.IJHF`, `Fields.ColumnField`) remain available as aliases.
 - Add a `reverse` option to the column integral operators (`column_reduce!` and
   `column_accumulate!`) so vertical reductions and accumulations can proceed from
   the top of a column downward. [2531](https://github.com/CliMA/ClimaCore.jl/pull/2531)

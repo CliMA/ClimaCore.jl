@@ -9,7 +9,6 @@ Topologies.dss_transform
 Topologies.dss_transform!
 Topologies.dss_untransform!
 Topologies.dss_untransform
-Topologies.dss_local_vertices!
 Topologies.dss_local!
 Topologies.dss_local_ghost!
 Topologies.dss_ghost!

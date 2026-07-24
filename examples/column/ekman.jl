@@ -131,8 +131,8 @@ dir = "ekman"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
-z_centers = parent(Fields.coordinate_field(cspace))
-z_faces = parent(Fields.coordinate_field(fspace))
+z_centers = vec(parent(Fields.coordinate_field(cspace)))
+z_faces = vec(parent(Fields.coordinate_field(fspace)))
 
 function ekman_plot(u; title = "", size = (1024, 600))
     u_ref =
@@ -146,7 +146,7 @@ function ekman_plot(u; title = "", size = (1024, 600))
         xlabel = "u",
         label = "Ref",
     )
-    sub_plt1 = Plots.plot!(sub_plt1, parent(u.Yc.u), z_centers, label = "Comp")
+    sub_plt1 = Plots.plot!(sub_plt1, vec(parent(u.Yc.u)), z_centers, label = "Comp")
 
     v_ref =
         vg .+
@@ -159,7 +159,7 @@ function ekman_plot(u; title = "", size = (1024, 600))
         xlabel = "v",
         label = "Ref",
     )
-    sub_plt2 = Plots.plot!(sub_plt2, parent(u.Yc.v), z_centers, label = "Comp")
+    sub_plt2 = Plots.plot!(sub_plt2, vec(parent(u.Yc.v)), z_centers, label = "Comp")
 
     return Plots.plot(
         sub_plt1,

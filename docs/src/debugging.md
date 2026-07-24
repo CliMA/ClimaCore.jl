@@ -69,7 +69,7 @@ function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
 end
 
 FT = Float64
-data = ClimaCore.DataLayouts.VIJFH{FT}(Array{FT}, zeros; Nv=5, Nij=2, Nh=2)
+data = ClimaCore.DataLayouts.VIJFH{FT, 5, 2, 2, 2}(Array{FT})
 @. data = NaN
 ClimaCore.DebugOnly.call_post_op_callback() = false # hide
 ```
@@ -221,8 +221,10 @@ function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
 end
 
 FT = Float64
-data = ClimaCore.DataLayouts.VIJFH{FT}(Array{FT}, zeros; Nv=5, Nij=2, Nh=2)
-x = ClimaCore.DataLayouts.VIJFH{FT}(Array{FT}, zeros; Nv=5, Nij=2, Nh=2)
+data = ClimaCore.DataLayouts.VIJFH{FT, 5, 2, 2, 2}(Array{FT})
+x = ClimaCore.DataLayouts.VIJFH{FT, 5, 2, 2, 2}(Array{FT})
+fill!(parent(data), 0)
+fill!(parent(x), 0)
 parent(x)[1] = NaN # emulate incorrect initialization
 @. data = x + 1
 # Let's see what happened

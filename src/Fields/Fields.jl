@@ -4,7 +4,8 @@ import ClimaComms
 import MultiBroadcastFusion as MBF
 import ..slab, ..slab_args, ..column, ..column_args, ..level, ..level_args
 import ..DebugOnly: call_post_op_callback, post_op_callback
-import ..DataLayouts: DataLayouts, DataLayout, DataStyle, FusedMultiBroadcast
+import ..DataLayouts:
+    DataLayouts, DataLayout, DataStyle, FusedMultiBroadcast, @fused_direct
 import ..Domains
 import ..Topologies
 import ..Quadratures
@@ -63,6 +64,12 @@ const SpectralElementField2D{V, S} =
 
 const FiniteDifferenceField{V, S} =
     Field{V, S} where {V <: DataLayout, S <: Spaces.FiniteDifferenceSpace}
+# Backwards-compatibility alias for the pre-rewrite ColumnField, which was a
+# Field with DataLayouts.DataColumn values. Single-column fields are now
+# identified by their space (a FiniteDifferenceSpace, which may wrap a
+# ColumnGrid returned by `column(::ExtrudedFiniteDifferenceSpace, ...)`), so
+# the old ColumnField is the same set of fields as FiniteDifferenceField.
+const ColumnField = FiniteDifferenceField
 const FaceFiniteDifferenceField{V, S} =
     Field{V, S} where {V <: DataLayout, S <: Spaces.FaceFiniteDifferenceSpace}
 const CenterFiniteDifferenceField{V, S} = Field{
@@ -159,7 +166,9 @@ Base.@propagate_inbounds slab(field::Field, inds...) =
     Field(slab(field_values(field), inds...), slab(axes(field), inds...))
 
 Base.@propagate_inbounds function column(field::Field, inds...)
-    Field(column(field_values(field), inds...), column(axes(field), inds...))
+    column_space = column(axes(field), inds...)
+    column_data = column(field_values(field), inds...)
+    Field(level_data(column_space, column_data), column_space)
 end
 @inline column(field::FiniteDifferenceField, inds...) = field
 
@@ -231,7 +240,7 @@ function Base.copyto!(dest::Field, src::Field; mask = get_mask(axes(dest)))
 end
 
 """
-    fill!(field::Field, value, mask = get_mask(axes(field)))
+    fill!(field::Field, value; mask = get_mask(axes(field)))
 
 Fill `field` with `value`. The mask is extracted from the field's space,
 and `fill!` is only applied where the `mask` is true.
@@ -250,9 +259,15 @@ Base.fill(value::FT, space::AbstractSpace) where {FT} = fill!(Field(FT, space), 
 """
     zeros(space::AbstractSpace)
 
-Create a new field on `space` that is zero everywhere.
+Create a new field on `space` that is zero everywhere. Unlike `fill`, this also
+zeroes out data at points that are masked out, so that the field does not
+contain any uninitialized values.
 """
-Base.zeros(::Type{FT}, space::AbstractSpace) where {FT} = fill(zero(FT), space)
+function Base.zeros(::Type{FT}, space::AbstractSpace) where {FT}
+    field = Field(FT, space)
+    fill!(parent(field), zero(eltype(parent(field))))
+    return field
+end
 Base.zeros(space::AbstractSpace) = zeros(Spaces.undertype(space), space)
 
 """
@@ -260,10 +275,18 @@ Base.zeros(space::AbstractSpace) = zeros(Spaces.undertype(space), space)
 
 Create a new field on `space` that is one everywhere.
 """
-Base.ones(::Type{FT}, space::AbstractSpace) where {FT} = fill(one(FT), space)
+function Base.ones(::Type{FT}, space::AbstractSpace) where {FT}
+    field = Field(FT, space)
+    fill!(parent(field), one(eltype(parent(field))))
+    return field
+end
 Base.ones(space::AbstractSpace) = ones(Spaces.undertype(space), space)
 
-Base.zero(field::Field) = zeros(eltype(field), axes(field))
+function Base.zero(field::Field)
+    zfield = similar(field)
+    fill!(parent(zfield), zero(eltype(parent(zfield))))
+    return zfield
+end
 
 
 """
@@ -425,7 +448,7 @@ Base.@propagate_inbounds function level(
 )
     hspace = level(axes(field), v)
     data = level(field_values(field), v)
-    Field(data, hspace)
+    Field(level_data(hspace, data), hspace)
 end
 Base.@propagate_inbounds function level(
     field::Union{FaceFiniteDifferenceField, FaceExtrudedFiniteDifferenceField},
@@ -433,8 +456,14 @@ Base.@propagate_inbounds function level(
 )
     hspace = level(axes(field), v)
     data = level(field_values(field), v.i + 1)
-    Field(data, hspace)
+    Field(level_data(hspace, data), hspace)
 end
+
+# Levels of fields on column spaces are single points, so their data is
+# converted to a DataF to match the local geometry of a PointSpace.
+Base.@propagate_inbounds level_data(::Spaces.AbstractPointSpace, data) =
+    Spaces.point_data(data)
+@inline level_data(hspace, data) = data
 
 Base.getindex(field::Field, ::Colon) = field
 
@@ -553,10 +582,12 @@ to simplify the process of getting and setting values in an `RRTMGPModel`; e.g.
 
 The struct type of the resulting `Field` is set to the array's element type.
 """
-array2field(array, space) = Field(
-    DataLayouts.rebuild(Spaces.local_geometry_data(space), array, eltype(array)),
-    space,
-)
+function array2field(array, space)
+    data = Spaces.local_geometry_data(space)
+    array_size = DataLayouts.add_f_dim(size(data), 1, Val(DataLayouts.f_dim(data)))
+    parent_array = reshape(array, array_size)
+    return Field(DataLayouts.rebuild(data, parent_array, eltype(array)), space)
+end
 
 """
     field2array(field)
@@ -569,8 +600,9 @@ simplify the process of getting and setting values in an `RRTMGPModel`; e.g.
 ```
 
 The dimensions of the resulting array are `([number of vertical nodes], number
-of horizontal nodes)`. Also, `field` must be a `Field` of scalars, so that the
-element type of the array is the same as the struct type of `field`.
+of horizontal nodes)`, with the first dimension dropped for fields defined over
+horizontal spaces. Only fields of scalars are supported; i.e., the element type
+of the array must be the same as the struct type of `field`.
 """
 function field2array(field::Field)
     if sizeof(eltype(field)) != sizeof(eltype(parent(field)))
@@ -578,6 +610,7 @@ function field2array(field::Field)
         error("unable to use field2array because each Field element is \
                represented by $f_axis_size array elements (must be 1)")
     end
+    Spaces.has_vertical(axes(field)) || return vec(parent(field))
     return reshape(parent(field), nlevels(axes(field)), :)
 end
 

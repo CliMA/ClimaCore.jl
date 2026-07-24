@@ -564,9 +564,9 @@ end
             # Expectation: ≈zero difference between unwarped and warped coordinates for η >= ηₕ, where η = z / zₜ
             r1 =
                 (
-                    parent(ʷᶜcoords)[8:10, :, 2, :] .-
-                    parent(ᶜcoords)[8:10, :, 2, :]
-                ) ./ parent(ᶜcoords)[8:10, :, 2, :]
+                    parent(ʷᶜcoords)[8:10, :, 1, 2, :] .-
+                    parent(ᶜcoords)[8:10, :, 1, 2, :]
+                ) ./ parent(ᶜcoords)[8:10, :, 1, 2, :]
             @test maximum(r1) <= FT(0.015)
         end
     end

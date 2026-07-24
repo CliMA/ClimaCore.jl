@@ -52,8 +52,12 @@ function create_dss_buffer(
     if context isa ClimaComms.SingletonCommsContext
         graph_context = ClimaComms.SingletonGraphContext(context)
         send_data = recv_data = FT[]
-        send_buf_idx = recv_buf_idx = perimeter_elems = Int[]
-        internal_elems = Base.OneTo(nelems(topology))
+        send_buf_idx = recv_buf_idx = Int[]
+        # internal_elems and perimeter_elems are indexed by the DSS kernels, so
+        # they must be device arrays (as in the multi-process branch below); the
+        # host send/recv buffer indices are only used off-device and stay host.
+        perimeter_elems = DA(Int[])
+        internal_elems = DA(collect(Base.OneTo(nelems(topology))))
     else
         (; comm_vertex_lengths, comm_face_lengths) = topology
         vertex_buffer_lengths = comm_vertex_lengths .* (Nv * Nf)
@@ -142,10 +146,11 @@ dss_transform!(
     localelems,
 ) =
     @inbounds for h in localelems, (p, (i, j)) in enumerate(perimeter), v in axes(data, 1)
+        # dss_weights only vary in the horizontal, so their level index is 1
         perimeter_data[v, p, 1, h] = dss_transform(
             data[v, i, j, h],
             local_geometry[v, i, j, h],
-            dss_weights[v, i, j, h],
+            dss_weights[1, i, j, h],
         )
     end
 
@@ -236,9 +241,12 @@ function dss_local!(
     topology::Topology2D,
 )
     @inbounds for vertex in local_vertices(topology), v in axes(perimeter_data, 1)
-        sum_data = sum(vertex) do (h, vert)
+        # Accumulate in a loop instead of calling sum with a closure, since the
+        # empty-collection error path of sum contains a runtime dispatch.
+        sum_data = zero(eltype(perimeter_data))
+        for (h, vert) in vertex
             p = perimeter_vertex_node_index(vert)
-            perimeter_data[v, p, 1, h]
+            sum_data += perimeter_data[v, p, 1, h]
         end
         for (h, vert) in vertex
             p = perimeter_vertex_node_index(vert)
@@ -273,9 +281,13 @@ dss_local_ghost!(
     topology::Topology2D,
 ) =
     @inbounds for vertex in ghost_vertices(topology), v in axes(perimeter_data, 1)
-        sum_data = sum(vertex) do (isghost, h, vert)
+        # Accumulate in a loop instead of calling sum with a closure, since the
+        # empty-collection error path of sum contains a runtime dispatch.
+        sum_data = zero(eltype(perimeter_data))
+        for (isghost, h, vert) in vertex
+            isghost && continue
             p = perimeter_vertex_node_index(vert)
-            isghost ? zero(eltype(perimeter_data)) : perimeter_data[v, p, 1, h]
+            sum_data += perimeter_data[v, p, 1, h]
         end
         for (isghost, h, vert) in vertex
             isghost && continue
@@ -323,6 +335,7 @@ function fill_send_buffer!(
     ::ClimaComms.AbstractCPUDevice,
     (; perimeter_data, send_data, send_buf_idx)::DSSBuffer,
 )
+    isempty(send_buf_idx) && return nothing
     buffer_index = 1
     @inbounds for (h, p) in eachrow(send_buf_idx), v in axes(perimeter_data, 1)
         DataLayouts.set_struct!(send_data, perimeter_data[v, p, 1, h], buffer_index, Val(1))
@@ -343,6 +356,7 @@ function load_from_recv_buffer!(
     ::ClimaComms.AbstractCPUDevice,
     (; perimeter_data, recv_data, recv_buf_idx)::DSSBuffer,
 )
+    isempty(recv_buf_idx) && return nothing
     buffer_index = 1
     @inbounds for (h, p) in eachrow(recv_buf_idx), v in axes(perimeter_data, 1)
         perimeter_data[v, p, 1, h] +=

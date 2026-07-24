@@ -1,3 +1,5 @@
+import ClimaCore: Fields, Spaces
+
 import ClimaCore.Operators:
     columnwise!,
     device_sync_threads,
@@ -30,9 +32,7 @@ function columnwise!(
     ᶠspace = Spaces.face_space(ᶜspace)
     ᶠNv = Spaces.nlevels(ᶠspace)
     ᶜcf = Fields.coordinate_field(ᶜspace)
-    us = DataLayouts.UniversalSize(Fields.field_values(ᶜcf))
-    (Ni, Nj, _, _, Nh) = DataLayouts.universal_size(us)
-    nitems = Ni * Nj * 1 * ᶠNv * Nh
+    (_, Ni, Nj, Nh) = size(Fields.field_values(ᶜcf))
     kernel = CUDA.@cuda(
         always_inline = true,
         launch = false,
@@ -74,11 +74,11 @@ end
 @inline function universal_index_columnwise(
     device::ClimaComms.CUDADevice,
     UI,
-    us,
+    data,
 )
     (v,) = CUDA.threadIdx()
     (h, ij) = CUDA.blockIdx()
-    (Ni, Nj, _, _, _) = DataLayouts.universal_size(us)
+    (_, Ni, Nj, _) = size(data)
     Ni * Nj < ij && return CartesianIndex((-1, -1, -1, -1))
     @inbounds (i, j) = CartesianIndices((Ni, Nj))[ij].I
     return CartesianIndex((v, i, j, h))

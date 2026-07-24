@@ -1,4 +1,4 @@
-import ClimaCore: Topologies, Spaces, Fields
+import ClimaCore: Topologies, Spaces, Fields, Quadratures
 import ClimaComms
 import CUDA
 using CUDA: @cuda
@@ -422,7 +422,8 @@ function set_interpolated_values_kernel!(
 
         v_lo, v_hi = vert_bounding_indices[j]
         A, B = vert_interpolation_weights[j]
-        out[j, k] = A * field_values[k][v_lo] + B * field_values[k][v_hi]
+        out[j, k] =
+            A * field_values[k][v_lo, 1, 1, 1] + B * field_values[k][v_hi, 1, 1, 1]
     end
     return nothing
 end

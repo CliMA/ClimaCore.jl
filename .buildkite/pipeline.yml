@@ -114,6 +114,16 @@ steps:
         retry: *retry_policy
         command: "julia --threads=4 --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_fill_and_copyto.jl"
 
+      - label: "Unit: data loops (1 thread)"
+        key: unit_data_loops
+        retry: *retry_policy
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_loops.jl"
+
+      - label: "Unit: data loops (4 threads)"
+        key: threaded_unit_data_loops
+        retry: *retry_policy
+        command: "julia --threads=4 --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_loops.jl"
+
       - label: "Unit: mapreduce (1 thread)"
         key: unit_data_mapreduce
         retry: *retry_policy
@@ -1567,6 +1577,22 @@ steps:
   # TODO: use perf env for perf jobs, or merge test/perf envs
   - group: "Perf: DataLayouts"
     steps:
+
+      - label: "Perf: DataLayouts fill!"
+        key: "cpu_datalayouts_fill"
+        retry: *retry_policy
+        command: "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_fill.jl"
+
+      - label: "Perf: DataLayouts fill"
+        key: "gpu_datalayouts_fill"
+        retry: *retry_policy
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_fill.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
 
       - label: "Perf: DataLayouts copyto!"
         key: "cpu_datalayouts_copyto"

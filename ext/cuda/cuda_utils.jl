@@ -69,6 +69,7 @@ const CLIMACORE_IGNORE_FUNCS =
     frame_method = frame.linfo isa Core.CodeInstance ? frame.linfo.def : frame.linfo
     frame_method isa Core.MethodInstance || return false
     mod = frame_method.def.module::Module
+    mod === DataLayouts && return false # loop machinery below user-facing calls
     mod_name = fullname(mod)[1]
     mod_name == :ClimaCore && frame.func::Symbol ∈ CLIMACORE_IGNORE_FUNCS && return false
     return mod_name ∉ IGNORE_MODULES
@@ -290,6 +291,7 @@ function max_resident_blocks(threads_per_block)
     SM_count = CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT)
     return fld(max_resident_warps_per_SM, warps_per_block) * SM_count
 end
+# TODO: Register pressure and shared memory pressure need to be included here.
 
 """
     thread_index()

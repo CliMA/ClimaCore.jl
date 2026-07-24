@@ -64,13 +64,13 @@ function plot_vertices(
     face_coords = ClimaCore.Spaces.coordinates_data(face_space)
     nf = ClimaCore.Spaces.nlevels(face_space)
     bottom_coords = ClimaCore.level(face_coords, 1)
-    vertices[1, :, :, :] =
+    vertices[1, :, :, :, :] =
         Makie.Point2f.(
             parent(getproperty(bottom_coords, 1)),
             parent(getproperty(bottom_coords, 2)),
         )
     top_coords = ClimaCore.level(face_coords, nf)
-    vertices[end, :, :, :] =
+    vertices[end, :, :, :, :] =
         Makie.Point2f.(
             parent(getproperty(top_coords, 1)),
             parent(getproperty(top_coords, 2)),

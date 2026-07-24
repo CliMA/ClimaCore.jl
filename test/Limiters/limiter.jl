@@ -160,15 +160,19 @@ end
 
 @testset "apply_limit_slab!" begin
     for FT in (Float64, Float32)
-        q = DataLayouts.IJF{Tuple{FT, FT}, 5}(
-            FT[i + f for i in 1:5, j in 1:5, f in 1:2],
+        q = DataLayouts.VIJFH{Tuple{FT, FT}, 1, 5, 5, 1}(
+            FT[i + f for v in 1:1, i in 1:5, j in 1:5, f in 1:2, h in 1:1],
         )
-        ρ = DataLayouts.IJF{FT, 5}(FT[j / 2 for i in 1:5, j in 1:5, f in 1:1])
+        ρ = DataLayouts.VIJFH{FT, 1, 5, 5, 1}(
+            FT[j / 2 for v in 1:1, i in 1:5, j in 1:5, f in 1:1, h in 1:1],
+        )
         ρq = ρ .* q
-        WJ = DataLayouts.IJF{FT, 5}(ones(FT, 5, 5, 1))
+        WJ = DataLayouts.VIJFH{FT, 1, 5, 5, 1}(ones(FT, 1, 5, 5, 1, 1))
         q_min = (FT(3.2), FT(3.0))
         q_max = (FT(5.2), FT(5.0))
-        q_bounds = DataLayouts.IF{Tuple{FT, FT}, 2}(zeros(FT, 2, 2))
+        q_bounds = DataLayouts.VIJFH{Tuple{FT, FT}, 1, 2, 1, 1}(
+            zeros(FT, 1, 2, 1, 2, 1),
+        )
         q_bounds[1] = q_min
         q_bounds[2] = q_max
 
@@ -201,7 +205,7 @@ end
         # Initialize fields
         ρ = ones(FT, space)
         q = ones(FT, space)
-        parent(q)[:, :, 1, 1] = [FT(-0.2) FT(0.00001); FT(1.1) FT(1)]
+        parent(q)[1, :, :, 1, 1] = [FT(-0.2) FT(0.00001); FT(1.1) FT(1)]
 
         ρq = @. ρ .* q
 
@@ -210,13 +214,13 @@ end
 
         # Initialize variables needed for limiters
         q_ref = ones(FT, space)
-        parent(q_ref)[:, :, 1, 1] = [FT(0) FT(0.00001); FT(1) FT(1)]
+        parent(q_ref)[1, :, :, 1, 1] = [FT(0) FT(0.00001); FT(1) FT(1)]
         ρq_ref = ρ .* q_ref
 
         Limiters.compute_bounds!(limiter, ρq_ref, ρ)
         Limiters.apply_limiter!(ρq, ρ, limiter)
 
-        @test Array(parent(ρq))[:, :, 1, 1] ≈
+        @test Array(parent(ρq))[1, :, :, 1, 1] ≈
               [FT(0.0) FT(0.0); FT(0.950005) FT(0.950005)] rtol = 10eps(FT)
         # Check mass conservation after application of limiter
         @test sum(ρq) ≈ initial_Q_mass rtol = 10eps(FT)

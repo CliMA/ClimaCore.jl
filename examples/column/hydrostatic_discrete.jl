@@ -159,37 +159,37 @@ dir = "hydrostatic_discretely_balanced"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
-z_centers = parent(Fields.coordinate_field(cspace))
-z_faces = parent(Fields.coordinate_field(fspace))
+z_centers = vec(parent(Fields.coordinate_field(cspace)))
+z_faces = vec(parent(Fields.coordinate_field(fspace)))
 
 function hydrostatic_plot(u; title = "", size = (1024, 600))
     sub_plt1 = Plots.plot(
-        parent(Y_init.ρ),
+        vec(parent(Y_init.ρ)),
         z_centers,
         marker = :circle,
         xlabel = "ρ",
         label = "T=0",
     )
-    sub_plt1 = Plots.plot!(sub_plt1, parent(u.Yc.ρ), z_centers, label = "T")
+    sub_plt1 = Plots.plot!(sub_plt1, vec(parent(u.Yc.ρ)), z_centers, label = "T")
 
     sub_plt2 = Plots.plot(
-        parent(w_init),
+        vec(parent(w_init)),
         z_faces,
         marker = :circle,
         xlim = (-1e-10, 1e-10),
         xlabel = "ω",
         label = "T=0",
     )
-    sub_plt2 = Plots.plot!(sub_plt2, parent(u.w), z_faces, label = "T")
+    sub_plt2 = Plots.plot!(sub_plt2, vec(parent(u.w)), z_faces, label = "T")
 
     sub_plt3 = Plots.plot(
-        parent(Y_init.ρθ),
+        vec(parent(Y_init.ρθ)),
         z_centers,
         marker = :circle,
         xlabel = "ρθ",
         label = "T=0",
     )
-    sub_plt3 = Plots.plot!(sub_plt3, parent(u.Yc.ρθ), z_centers, label = "T")
+    sub_plt3 = Plots.plot!(sub_plt3, vec(parent(u.Yc.ρθ)), z_centers, label = "T")
 
     return Plots.plot(
         sub_plt1,

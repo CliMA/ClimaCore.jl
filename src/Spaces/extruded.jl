@@ -244,7 +244,7 @@ level(space::ExtrudedFiniteDifferenceSpace, v) =
     SpectralElementSpace1D(level(grid(space), v))
 
 nlevels(space::ExtrudedFiniteDifferenceSpace) =
-    size(local_geometry_data(space), 4)
+    size(local_geometry_data(space), 1)
 
 function left_boundary_name(space::ExtrudedFiniteDifferenceSpace)
     boundaries = Topologies.boundaries(Spaces.vertical_topology(space))

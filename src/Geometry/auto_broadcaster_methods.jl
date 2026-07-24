@@ -20,16 +20,6 @@ mul_with_projection(x::AutoBroadcaster, y, lg) =
 mul_with_projection(x, y::AutoBroadcaster, lg) =
     nested_broadcast(y -> mul_with_projection(x, y, lg), y)
 
-needs_projection(
-    ::Type{X},
-    ::Type{Y},
-) where {X <: AutoBroadcaster, Y <: AutoBroadcaster} =
-    needs_projection(eltype(X), eltype(Y))
-needs_projection(::Type{X}, ::Type{Y}) where {X <: AutoBroadcaster, Y} =
-    needs_projection(eltype(X), Y)
-needs_projection(::Type{X}, ::Type{Y}) where {X, Y <: AutoBroadcaster} =
-    needs_projection(X, eltype(Y))
-
 mul_return_type(
     ::Type{X},
     ::Type{Y},

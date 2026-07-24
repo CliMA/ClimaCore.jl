@@ -669,9 +669,9 @@ function _set_interpolated_values_bilinear!(
                 s, t = local_bilinear_s[out_index], local_bilinear_t[out_index]
                 # Horizontal bilinear at v_lo (level by level, no vertical yet)
                 scratch_corners[1, 1] = field_values[v_lo, i, j, h]
-                scratch_corners[2, 1] = field_values[v_lo, i + 1, j, 1, h]
-                scratch_corners[2, 2] = field_values[v_lo, i + 1, j + 1, 1, h]
-                scratch_corners[1, 2] = field_values[v_lo, i, j + 1, 1, h]
+                scratch_corners[2, 1] = field_values[v_lo, i + 1, j, h]
+                scratch_corners[2, 2] = field_values[v_lo, i + 1, j + 1, h]
+                scratch_corners[1, 2] = field_values[v_lo, i, j + 1, h]
                 f_lo = bilinear(
                     scratch_corners[1, 1],
                     scratch_corners[2, 1],
@@ -682,9 +682,9 @@ function _set_interpolated_values_bilinear!(
                 )
                 # Horizontal bilinear at v_hi
                 scratch_corners[1, 1] = field_values[v_hi, i, j, h]
-                scratch_corners[2, 1] = field_values[v_hi, i + 1, j, 1, h]
-                scratch_corners[2, 2] = field_values[v_hi, i + 1, j + 1, 1, h]
-                scratch_corners[1, 2] = field_values[v_hi, i, j + 1, 1, h]
+                scratch_corners[2, 1] = field_values[v_hi, i + 1, j, h]
+                scratch_corners[2, 2] = field_values[v_hi, i + 1, j + 1, h]
+                scratch_corners[1, 2] = field_values[v_hi, i, j + 1, h]
                 f_hi = bilinear(
                     scratch_corners[1, 1],
                     scratch_corners[2, 1],

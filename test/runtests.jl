@@ -8,7 +8,9 @@ include("tabulated_tests.jl")
 #! format: off
 unit_tests = [
 UnitTest("DataLayouts get_struct"                  ,"DataLayouts/unit_struct.jl"),
+UnitTest("DataLayouts loops"                       ,"DataLayouts/unit_loops.jl"),
 UnitTest("PlusHalf"                                ,"Utilities/unit_plushalf.jl"),
+UnitTest("Stable views"                            ,"Utilities/unit_stable_view.jl"),
 UnitTest("AutoBroadcaster"                         ,"Utilities/unit_auto_broadcaster.jl"),
 UnitTest("DataLayouts mapreduce"                   ,"DataLayouts/unit_mapreduce.jl"),
 UnitTest("Geometry"                                ,"Geometry/geometry.jl"),

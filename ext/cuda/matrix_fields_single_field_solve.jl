@@ -24,10 +24,9 @@ function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
         return
     end
 
-    us = UniversalSize(Fields.field_values(A))
     mask = Spaces.get_mask(axes(x))
-    cart_inds = cartesian_indices_columnwise(us)
-    args = (device, cache, x, A, b, us, mask, cart_inds)
+    cart_inds = cartesian_indices_columnwise(Fields.field_values(A))
+    args = (device, cache, x, A, b, mask, cart_inds)
     nitems = Ni * Nj * Nh
     (; threads, blocks) = config_via_occupancy(single_field_solve_kernel!, nitems, args)
     auto_launch!(
@@ -39,9 +38,9 @@ function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
     call_post_op_callback() && post_op_callback(x, device, cache, x, A, b)
 end
 
-function single_field_solve_kernel!(device, cache, x, A, b, us, mask, cart_inds)
+function single_field_solve_kernel!(device, cache, x, A, b, mask, cart_inds)
     tidx = linear_thread_idx()
-    if linear_is_valid_index(tidx, us) && tidx ≤ length(unval(cart_inds))
+    if linear_is_valid_index(tidx, unval(cart_inds))
         I = unval(cart_inds)[tidx]
         (i, j, h) = I.I
         ui = CartesianIndex((1, i, j, h))
@@ -60,11 +59,11 @@ end
 @inline unrolled_unzip_tuple_field_values(data) =
     unrolled_unzip_tuple_field_values(data, propertynames(data))
 @inline unrolled_unzip_tuple_field_values(data, pn::Tuple) = (
-    getproperty(data, Val(first(pn))),
+    getproperty(data, first(pn)),
     unrolled_unzip_tuple_field_values(data, Base.tail(pn))...,
 )
 @inline unrolled_unzip_tuple_field_values(data, pn::Tuple{Any}) =
-    (getproperty(data, Val(first(pn))),)
+    (getproperty(data, first(pn)),)
 @inline unrolled_unzip_tuple_field_values(data, pn::Tuple{}) = ()
 
 # TODO: get this working, it doesn't work yet due to InvalidIR
@@ -159,7 +158,7 @@ function band_matrix_solve_local_mem!(
     end
     cache_local = (Ux_local, U₊₁_local)
     Aⱼs_local = (A₋₁_local, A₀_local, A₊₁_local)
-    band_matrix_solve!(t, cache_local, x_local, Aⱼs_local, b_local, identity)
+    band_matrix_solve!(t, cache_local, x_local, Aⱼs_local, b_local)
     @inbounds for v in 1:Nv
         x[v] = x_local[v]
     end
@@ -196,7 +195,7 @@ function band_matrix_solve_local_mem!(
     end
     cache_local = (Ux_local, U₊₁_local, U₊₂_local)
     Aⱼs_local = (A₋₂_local, A₋₁_local, A₀_local, A₊₁_local, A₊₂_local)
-    band_matrix_solve!(t, cache_local, x_local, Aⱼs_local, b_local, identity)
+    band_matrix_solve!(t, cache_local, x_local, Aⱼs_local, b_local)
     @inbounds for v in 1:Nv
         x[v] = x_local[v]
     end
@@ -309,7 +308,7 @@ function single_field_solve_tridiagonal!(cache, x, A, b)
     )
 
     # Get field dimensions
-    Ni, Nj, _, Nv, Nh = universal_size(Fields.field_values(A))
+    Nv, Ni, Nj, Nh = size(Fields.field_values(A))
 
     # Prepare data
     Aⱼs = unzip_tuple_field_values(Fields.field_values(A.entries))

@@ -24,15 +24,16 @@ function Topologies.dss_transform!(
         dss_config(nitems)...,
     ) do perimeter_data, data, local_geometry, dss_weights, localelems
         gidx = DataLayouts.thread_rank(ThisKernel())
-        if gidx <= nitems
+        @inbounds if gidx <= nitems
             (v, p, elem_index) =
                 CartesianIndices((Nv, length(perimeter), length(localelems)))[gidx].I
             (i, j) = perimeter[p]
             h = localelems[elem_index]
+            # dss_weights only vary in the horizontal, so their level index is 1
             perimeter_data[v, p, 1, h] = Topologies.dss_transform(
                 data[v, i, j, h],
                 local_geometry[v, i, j, h],
-                dss_weights[v, i, j, h],
+                dss_weights[1, i, j, h],
             )
         end
         nothing
@@ -55,7 +56,7 @@ function Topologies.dss_untransform!(
         dss_config(nitems)...,
     ) do perimeter_data, data, local_geometry, localelems
         gidx = DataLayouts.thread_rank(ThisKernel())
-        if gidx <= nitems
+        @inbounds if gidx <= nitems
             (v, p, elem_index) =
                 CartesianIndices((Nv, length(perimeter), length(localelems)))[gidx].I
             (i, j) = perimeter[p]
@@ -126,10 +127,16 @@ function Topologies.dss_local!(
             (v, vertex_index) = CartesianIndices((Nv, nlocalvertices))[gidx].I
             first_offset = local_vertex_offset[vertex_index]
             last_offset = local_vertex_offset[vertex_index + 1] - 1
-            sum_data = sum(first_offset:last_offset) do offset
+            # Accumulate in a loop: sum with a closure would box v (also assigned in the
+            # other branch), and sum's empty-collection error path cannot be compiled in
+            # a GPU kernel. Every vertex has a local_vertices entry, so the loop is nonempty.
+            (h, vert) = local_vertices[first_offset]
+            p = Topologies.perimeter_vertex_node_index(vert)
+            sum_data = perimeter_data[v, p, 1, h]
+            for offset in (first_offset + 1):last_offset
                 (h, vert) = local_vertices[offset]
                 p = Topologies.perimeter_vertex_node_index(vert)
-                perimeter_data[v, p, 1, h]
+                sum_data += perimeter_data[v, p, 1, h]
             end
             for offset in first_offset:last_offset
                 (h, vert) = local_vertices[offset]
@@ -163,7 +170,7 @@ function Topologies.dss_local_ghost!(
     nghostvertices = length(ghost_vertex_offset) - 1
     nitems = Nv * nghostvertices
     iszero(nitems) && return nothing
-    auto_launch(
+    auto_launch!(
         (perimeter_data, ghost_vertices, ghost_vertex_offset);
         dss_config(nitems)...,
     ) do perimeter_data, ghost_vertices, ghost_vertex_offset
@@ -172,10 +179,15 @@ function Topologies.dss_local_ghost!(
             (v, vertex_index) = CartesianIndices((Nv, nghostvertices))[gidx].I
             first_offset = ghost_vertex_offset[vertex_index]
             last_offset = ghost_vertex_offset[vertex_index + 1] - 1
-            sum_data = sum(first_offset:last_offset) do offset
+            # Accumulate in a loop instead of calling sum with a closure, since
+            # the empty-collection error path of sum cannot be compiled in a
+            # GPU kernel.
+            sum_data = zero(eltype(perimeter_data))
+            for offset in first_offset:last_offset
                 (isghost, h, vert) = ghost_vertices[offset]
+                isghost && continue
                 p = Topologies.perimeter_vertex_node_index(vert)
-                isghost ? zero(eltype(perimeter_data)) : perimeter_data[v, p, 1, h]
+                sum_data += perimeter_data[v, p, 1, h]
             end
             for offset in first_offset:last_offset
                 (isghost, h, vert) = ghost_vertices[offset]
@@ -198,7 +210,7 @@ function Topologies.dss_ghost!(
     nghostvertices = length(ghost_vertex_offset) - 1
     nitems = Nv * nghostvertices
     iszero(nitems) && return nothing
-    auto_launch(
+    auto_launch!(
         (perimeter_data, ghost_vertices, ghost_vertex_offset, repr_ghost_vertex);
         dss_config(nitems)...,
     ) do perimeter_data, ghost_vertices, ghost_vertex_offset, repr_ghost_vertex
@@ -237,9 +249,10 @@ function Topologies.fill_send_buffer!(
         gidx = DataLayouts.thread_rank(ThisKernel())
         @inbounds if gidx <= nitems
             (v, send_index) = CartesianIndices((Nv, nsend))[gidx].I
-            (h, p) = send_buf_idx[send_index, :]
+            # Avoid indexing with a colon, which would allocate in the kernel.
+            (h, p) = (send_buf_idx[send_index, 1], send_buf_idx[send_index, 2])
             item = perimeter_data[v, p, 1, h]
-            buffer_index = v + (send_index - 1) * Nv * Nf
+            buffer_index = (v - 1) * Nf + 1 + (send_index - 1) * Nv * Nf
             DataLayouts.set_struct!(send_data, item, buffer_index, Val(1))
         end
         nothing
@@ -264,13 +277,14 @@ function Topologies.load_from_recv_buffer!(
         @inbounds if gidx <= nitems
             T = eltype(perimeter_data)
             (v, recv_index) = CartesianIndices((Nv, nrecv))[gidx].I
-            (h, p) = recv_buf_idx[recv_index, :]
-            buffer_index = v + (recv_index - 1) * Nv * Nf
+            # Avoid indexing with a colon, which would allocate in the kernel.
+            (h, p) = (recv_buf_idx[recv_index, 1], recv_buf_idx[recv_index, 2])
+            buffer_index = (v - 1) * Nf + 1 + (recv_index - 1) * Nv * Nf
             item_view = DataLayouts.view_struct(recv_data, T, buffer_index, Val(1))
             parent_view = parent(view(perimeter_data, v, p, 1, h))
             for f in 1:Nf
                 CUDA.@atomic parent_view[f] += item_view[f]
-            end
+            end # TODO: Find some way to avoid the nondeterminism of @atomic.
         end
         nothing
     end
@@ -288,6 +302,7 @@ function Topologies.dss_1d!(
     Nh = DataLayouts.nelems(data)
     nfaces = Topologies.isperiodic(topology) ? Nh : Nh - 1
     nitems = Nv * nfaces
+    iszero(nitems) && return nothing
     auto_launch!(
         (Base.broadcastable(data), local_geometry, dss_weights);
         dss_config(nitems)...,

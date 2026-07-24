@@ -1,6 +1,18 @@
+macro simd_if(condition_expr, loop_expr)
+    esc(:($condition_expr ? $(:(@simd $loop_expr)) : $loop_expr))
+end
+
+# Whether a point loop over these indices should run under @simd. This requires
+# an indexable iterator, and it only pays off when LLVM can vectorize across
+# many contiguous points, like in the flattened CartesianIndices iterations of
+# CPU loops. GPU scopes override this for their strided index subsets: each GPU
+# thread only iterates a few points, and @simd's loop restructuring just adds
+# branches and index arithmetic to every kernel.
+@inline simd_over_indices(indices) = indices isa AbstractArray
+
 @inline is_valid_slice_mask(::NoMask, _) = true
-@inline is_valid_slice_mask(::IJHMask, ::typeof(column)) = true
 @inline is_valid_slice_mask(::IJHMask, ::typeof(view)) = true
+@inline is_valid_slice_mask(::IJHMask, ::typeof(column)) = true
 @inline is_valid_slice_mask(::IJHMask, _) = false
 
 @inline each_maskable_slice_index(_, op::O, args...) where {O} =
@@ -18,11 +30,16 @@ end
 @generated invalid_mask_string(::M, ::O) where {M, O} =
     "$M cannot be applied to $(O.instance) slices"
 
-@inline function inferred_slice_length(op::O, arg) where {O}
-    index = one(eltype(each_slice_index(op, arg)))
-    slice_type = return_type(op, typeof((arg, Tuple(index)...)))
-    has_inferred_size(slice_type) && return prod(inferred_size(slice_type))
-    throw(ArgumentError("Size of view from slice operator must be inferrable"))
+# A view slice contains one point by definition, so its size is known without
+# constructing a slice. The generic method cannot handle point slices of fused
+# broadcasts, whose 0-dimensional DataF args and dimension-preserving
+# Broadcasted args have inconsistent values of inferred_size.
+@inline num_slice_points(::typeof(view), arg) = 1
+@inline function num_slice_points(op::O, arg) where {O}
+    isempty(each_slice_index(op, arg)) && return 0
+    first_slice = @inbounds op(arg, Tuple(first(each_slice_index(op, arg)))...)
+    has_inferred_size(first_slice) && return prod(inferred_size(first_slice))
+    throw(ArgumentError("Size of slice operator result must be inferrable"))
 end
 
 """
@@ -37,9 +54,9 @@ the largest subset is used in order to minimize the number of points per thread.
 @inline function slice_subscope(scope, op::O, args...) where {O}
     subscope = partition(scope)
     subscope == ThisThread() && return subscope
-    max_slice_points = unrolled_maximum(Base.Fix1(inferred_slice_length, op), args)
+    max_slice_points = unrolled_maximum(Base.Fix1(num_slice_points, op), args)
     max_slice_points > num_threads(partition(subscope)) && return subscope
-    return slice_subscope(op, subscope, args...)
+    return slice_subscope(subscope, op, args...)
 end
 
 """
@@ -60,24 +77,39 @@ also be used to skip over a particular subset of slices.
 @inline foreach_slice(op::O, f::F, args...; mask = NoMask()) where {O, F} =
     foreach_slice(DataScope(args...), op, f, args...; mask)
 
-# Change the scope to ThisThread when given only one thread.
+# Change the scope to ThisThread when given only one thread, which compiles the
+# simplest possible loop.
 @inline foreach_slice(scope::DataScope, op::O, f::F, args...; mask) where {O, F} =
     isone(num_threads(scope)) ? foreach_slice(ThisThread(), op, f, args...; mask) :
-    parallelize_over(scope) do
-        subscope = slice_subscope(scope, op, args...)
-        for index in subscope_slice_indices(subscope, scope, mask, op, args...)
-            slices = unrolled_map(args) do arg
-                @inbounds reassign(op(arg, Tuple(index)...), subscope)
-            end
-            f(slices...)
-        end
-    end
+    parallelize_over(() -> slice_loop(scope, op, f, mask, args...), scope)
 
+# Run the loop without parallelize_over when the scope is ThisThread. Since each
+# slice is reassigned to its subscope, nested loops in f dispatch here
+# statically. This avoids both the runtime thread-count check and the
+# parallelize_over closure, which the compiler does not always remove, causing
+# an allocation at every slice of the outer loop.
 @inline foreach_slice(::ThisThread, op::O, f::F, args...; mask) where {O, F} =
-    for index in subscope_slice_indices(ThisThread(), ThisThread(), mask, op, args...)
-        slices = unrolled_map(arg -> (@inbounds op(arg, Tuple(index)...)), args)
-        f(slices...)
+    slice_loop(ThisThread(), op, f, mask, args...)
+
+# Point loops need @simd and an inlined call to f for vectorization, since LLVM
+# cannot vectorize across a flattened CartesianIndices iterator unless @simd
+# splits it into an outer loop and a unit-stride inner loop, and Julia's inliner
+# gives up on point closures over large broadcast expressions, which forces
+# every argument slice to be materialized at each point. Without @simd and
+# @inline, pointwise loops are several times slower than ordinary Array
+# broadcasts. Lazy iterators such as Iterators.filter or Iterators.map do not
+# support @simd, and operations on non-point slices typically do too much work
+# per slice for vectorization to be worthwhile.
+@inline function slice_loop(scope, op::O, f::F, mask, args...) where {O, F}
+    subscope = slice_subscope(scope, op, args...)
+    indices = subscope_slice_indices(subscope, scope, mask, op, args...)
+    @simd_if (op == view && simd_over_indices(indices)) for index in indices
+        slices = unrolled_map(args) do arg
+            @inbounds reassign(op(arg, Tuple(index)...), subscope)
+        end
+        @inline f(slices...)
     end
+end
 
 """
     foreach_point(f, args...; [mask])
@@ -129,10 +161,20 @@ disables every point, or if there are no points in `arg` to begin with, the
     return reduce(op, results)
 end
 
-@inline function reduce_points(::ThisThread, op::O, arg; mask, init...) where {O}
-    point_indices = subscope_slice_indices(ThisThread(), DataScope(arg), mask, view, arg)
-    return mapreduce(index -> (@inbounds arg[index]), op, point_indices; init...)
-end
+# Reduce all unmasked points by folding over their indices, which are nonempty
+# since the launcher assigns every thread at least one point. Use safe_mapreduce
+# instead of Base's pairwise mapreduce to avoid the empty-collection error path,
+# whose string cannot be compiled in GPU kernels. Masked reductions require an
+# init, and mapreduce's empty path is only reached without one. Masked indices
+# are equivalent to what the slice index machinery uses for single-point views.
+@inline reduce_points(::ThisThread, op::O, arg; mask, init...) where {O} =
+    if mask == NoMask()
+        indices = @inbounds subscope_indices(ThisThread(), DataScope(arg), eachindex(arg))
+        safe_mapreduce(index -> (@inbounds arg[index]), op, indices; init...)
+    else
+        indices = subscope_slice_indices(ThisThread(), DataScope(arg), mask, view, arg)
+        mapreduce(index -> (@inbounds arg[index]), op, indices; init...)
+    end
 
 """
     column_reduce!(op, dest, arg; [mask], [flip], [init])
@@ -148,23 +190,53 @@ the order of reduction from left-associative (default) to right-associative.
     end
 # TODO: Extend this to column_accumulate!, column_stencil!, and slab_convolve!
 
+# Convert the value before the fill! loop. Even though setindex! converts at
+# every point, the compiler does not hoist the conversion, and filling a Float64
+# layout with an Int is measurably slower if the conversion isn't done first.
+# The converted value is passed to GPU kernels as parent array entries because
+# Int128 and UInt128 fields in kernel arguments crash LLVM's NVPTX backend prior
+# to LLVM 20 (llvm/llvm-project#49221). 128-bit integers are only safe in
+# registers, like the ones bitcast_struct uses to reconstruct the value.
 function Base.fill!(dest::DataLayout, value; kwargs...)
-    foreach_point(dest_point -> (@inbounds dest_point[] = value), dest; kwargs...)
+    B = eltype(parent(dest))
+    converted_value = convert(eltype(dest), value)
+    entries = bitcast_struct(NTuple{num_basetypes(B, eltype(dest)), B}, converted_value)
+    foreach_point(dest; kwargs...) do dest_point
+        @inbounds dest_point[] = bitcast_struct(eltype(dest_point), entries)
+    end
     call_post_op_callback() && post_op_callback(dest, dest, value; kwargs...)
     return dest
 end
 
-# Replicate the scalar broadcast method from Base's copyto! for AbstractArrays.
-# Add a StaticArrayStyle{0} method to resolve an ambiguity with StaticArrays.
-for S in (:(<:Broadcast.AbstractArrayStyle{0}), :(<:StaticArrays.StaticArrayStyle{0}))
-    @eval function Base.copyto!(dest::DataLayout, bc::Broadcast.Broadcasted{$S}; kwargs...)
-        (bc.f == identity && isone(length(bc.args)) && Broadcast.isflat(bc)) &&
-            return fill!(dest, first(bc.args); kwargs...)
-        foreach_point(dest_point -> (@inbounds dest_point[] = bc[]), dest; kwargs...)
-        call_post_op_callback() && post_op_callback(dest, dest, bc; kwargs...)
-        return dest
-    end
+# Replicate Base's scalar broadcast copyto!, where data .= value becomes fill!,
+# and any other scalar broadcast becomes a pointwise loop. Since materialize!
+# attaches dest's axes, but foreach_point strips dest of its axes, the scalar
+# broadcast must also have its axes dropped, mirroring how Base's instantiate
+# drops scalar broadcast axes. The StaticArrayStyle{0} and AbstractBlockStyle{0}
+# methods avoid ambiguities with StaticArrays and BlockArrays.
+for S in (
+    :(<:Broadcast.AbstractArrayStyle{0}),
+    :(<:StaticArrays.StaticArrayStyle{0}),
+    :(<:BlockArrays.AbstractBlockStyle{0}),
+)
+    @eval @inline Base.copyto!(dest::DataLayout, bc::Broadcast.Broadcasted{$S}; kwargs...) =
+        if bc.f === identity && isone(length(bc.args)) && Broadcast.isflat(bc)
+            @inbounds arg = first(bc.args)
+            @inbounds fill!(dest, arg isa Tuple ? first(arg) : arg[]; kwargs...)
+        else
+            bc_without_axes = Broadcast.Broadcasted(bc.f, bc.args)
+            foreach_point(dest; kwargs...) do dest_point
+                @inbounds dest_point[] = first(bc_without_axes)
+            end
+            call_post_op_callback() && post_op_callback(dest, dest, bc; kwargs...)
+            dest
+        end
 end
+
+@inline is_scalar_or_length_one(arg) = true
+@inline is_scalar_or_length_one(arg::Tuple) = isone(length(arg))
+@inline is_scalar_or_length_one(bc::Broadcast.Broadcasted) =
+    unrolled_all(is_scalar_or_length_one, bc.args)
 
 # Handle single-element tuples in DataLayout broadcasts the same way as Refs.
 # For multi-element tuples, fall back to Base's default copyto! implementation.
@@ -173,10 +245,8 @@ end
     bc::Broadcast.Broadcasted{Broadcast.Style{Tuple}};
     kwargs...,
 )
-    is_length_one(arg::Tuple) = isone(length(arg))
-    is_length_one(bc::Broadcast.Broadcasted) = unrolled_all(is_length_one, bc.args)
-    style = is_length_one(bc) ? Broadcast.DefaultArrayStyle{0}() : nothing
-    return copyto!(dest, convert(Broadcast.Broadcasted{typeof(style)}, bc); kwargs...)
+    style_type = is_scalar_or_length_one(bc) ? Broadcast.DefaultArrayStyle{0} : Nothing
+    return copyto!(dest, convert(Broadcast.Broadcasted{style_type}, bc); kwargs...)
 end
 
 function Base.copyto!(dest::DataLayout, arg::MaybeLazyDataLayout; kwargs...)
@@ -238,12 +308,16 @@ end
     kwargs...,
 ) where {O} = reduce(op, arg; kwargs...)
 
-# Optimize simple, unmasked equality checks by deferring to parent arrays.
+# Optimize unmasked equality checks for similar layouts with the same packed
+# (un-padded) element types by deferring to their parent arrays. Padded values
+# should not be compared in this way, since equality must not depend on padding.
 @inline Base.:(==)(arg1::DataLayout, arg2::DataLayout; mask = NoMask()) =
-    eltype(arg1) == eltype(arg2) &&
-    layout_type(arg1) == layout_type(arg2) &&
-    shape_params(arg1) == shape_params(arg2) &&
-    mask == NoMask() ? parent(arg1) == parent(arg2) :
-    mapreduce(==, &, arg1, arg2; mask, init = true)
+    size(arg1) == size(arg2) && (
+        mask == NoMask() &&
+        eltype(arg1) == eltype(arg2) &&
+        (Base.ispacked(eltype(arg1)) && Base.ispacked(eltype(arg2))) &&
+        (layout_type(arg1) == layout_type(arg2) && f_dim(arg1) == f_dim(arg2)) ?
+        parent(arg1) == parent(arg2) : mapreduce(==, &, arg1, arg2; mask, init = true)
+    )
 @inline Base.:(==)(arg1::MaybeLazyDataLayout, arg2::MaybeLazyDataLayout; mask = NoMask()) =
-    mapreduce(==, &, arg1, arg2; mask, init = true)
+    size(arg1) == size(arg2) && mapreduce(==, &, arg1, arg2; mask, init = true)

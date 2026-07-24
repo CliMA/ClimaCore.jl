@@ -186,7 +186,7 @@ function Base.copyto!(
     sbc::Union{
         SpectralBroadcasted{SlabBlockSpectralStyle},
         Broadcasted{SlabBlockSpectralStyle},
-    },
+    };
     mask = DataLayouts.NoMask(),
 )
     Fields.byslab(axes(out)) do slabidx
@@ -221,8 +221,8 @@ Recursively evaluate any operators in `bc` at `slabidx`, replacing any
 - if `bc` is a regular `Broadcasted` object, return a new `Broadcasted` with `resolve_operator` called on each `arg`
 - if `bc` is a regular `SpectralBroadcasted` object:
  - call `resolve_operator` called on each `arg`
- - call `apply_operator`, returning the resulting "pseudo Field":  a `Field` with an
- `IF`/`IJF` data object.
+ - call `apply_operator`, returning the resulting "pseudo Field":  a `Field` with a
+ [`SlabData`](@ref) data object.
 - if `bc` is a `Field`, return that
 """
 Base.@propagate_inbounds function resolve_operator(
@@ -397,13 +397,53 @@ Base.@propagate_inbounds function get_node(
     args = _get_node(space, ij, slabidx, bc.args)
     bc.f(args...)
 end
+"""
+    SlabData{T}
+
+A [`DataLayouts.DataLayout`](@ref) that stores a single slab of values of type
+`T` (a `VIJHWithF` layout with `Nv = Nh = 1`).
+"""
+const SlabData{T} = DataLayouts.VIJHWithF{T, 1, <:Any, <:Any, 1}
+
+"""
+    slab_data(T, FT, Ni, [Nj])
+
+Mutable temporary storage for one slab of values of type `T`, backed by an
+`MArray` with eltype `FT` (a `VIJFH` layout with `Nv = Nh = 1`).
+"""
+@inline function slab_data(::Type{T}, ::Type{FT}, Ni, Nj = 1) where {T, FT}
+    Nf = DataLayouts.num_basetypes(FT, T)
+    array = MArray{Tuple{1, Ni, Nj, Nf, 1}, FT, 5, Ni * Nj * Nf}(undef)
+    return DataLayouts.VIJFH{T, 1, Ni, Nj, 1}(array)
+end
+
+# Immutable copy of a slab temporary, used to construct pseudo-Fields.
+@inline immutable_slab_data(data::SlabData) =
+    DataLayouts.rebuild(data, SArray(parent(data)))
+
+# Index for one node in a slab of data, with v = h = 1.
+@inline slab_node_index(ij::CartesianIndex{1}) = CartesianIndex(1, ij[1], 1, 1)
+@inline slab_node_index(ij::CartesianIndex{2}) =
+    CartesianIndex(1, ij[1], ij[2], 1)
+
+Base.@propagate_inbounds function get_node(space, data::SlabData, ij, slabidx)
+    data[slab_node_index(ij)]
+end
 Base.@propagate_inbounds function get_node(
     space,
-    data::DataLayouts.VIJHWithF{<:Any, 1, <:Any, <:Any, 1},
-    ij,
+    field::Fields.Field{<:SlabData},
+    ij::CartesianIndex{1},
     slabidx,
 )
-    data[ij]
+    Fields.field_values(field)[slab_node_index(ij)]
+end
+Base.@propagate_inbounds function get_node(
+    space,
+    field::Fields.Field{<:SlabData},
+    ij::CartesianIndex{2},
+    slabidx,
+)
+    Fields.field_values(field)[slab_node_index(ij)]
 end
 Base.@propagate_inbounds function get_node(
     space,
@@ -552,7 +592,7 @@ function apply_operator(op::Divergence{(1,)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = IF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq)
     fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
@@ -568,7 +608,7 @@ function apply_operator(op::Divergence{(1,)}, space, slabidx, arg)
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[i] *= local_geometry.invJ
     end
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 Base.@propagate_inbounds function apply_operator(
@@ -583,7 +623,7 @@ Base.@propagate_inbounds function apply_operator(
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq, Nq)
     fill!(parent(out), zero(FT))
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
@@ -603,7 +643,7 @@ Base.@propagate_inbounds function apply_operator(
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[1, i, j, 1] *= local_geometry.invJ
     end
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 """
@@ -709,8 +749,8 @@ function apply_operator(op::SplitDivergence{(1,)}, space, slabidx, arg1, arg2)
     JT = operator_return_eltype(op, eltype(arg1), FT)
     RT = operator_return_eltype(op, eltype(arg1), eltype(arg2))
 
-    Ju1 = IF{JT, Nq}(MArray, FT)
-    psi = IF{eltype(arg2), Nq}(MArray, eltype(arg2))
+    Ju1 = slab_data(JT, FT, Nq)
+    psi = slab_data(eltype(arg2), eltype(arg2), Nq)
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
@@ -720,7 +760,7 @@ function apply_operator(op::SplitDivergence{(1,)}, space, slabidx, arg1, arg2)
         psi[i] = get_node(space, arg2, ij, slabidx)
     end
 
-    out = IF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq)
     fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
         for j in 1:(i - 1) # loop over half the indices, since F1[i,j] = F1[j,i]
@@ -735,7 +775,7 @@ function apply_operator(op::SplitDivergence{(1,)}, space, slabidx, arg1, arg2)
         out[i] *= local_geometry.invJ
     end
 
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 function apply_operator(op::SplitDivergence{(1, 2)}, space, slabidx, arg1, arg2)
@@ -746,9 +786,9 @@ function apply_operator(op::SplitDivergence{(1, 2)}, space, slabidx, arg1, arg2)
     JT = operator_return_eltype(op, eltype(arg1), FT)
     RT = operator_return_eltype(op, eltype(arg1), eltype(arg2))
 
-    Ju1 = DataLayouts.IJF{JT, Nq}(MArray, FT)
-    Ju2 = DataLayouts.IJF{JT, Nq}(MArray, FT)
-    psi = DataLayouts.IJF{eltype(arg2), Nq}(MArray, eltype(arg2))
+    Ju1 = slab_data(JT, FT, Nq, Nq)
+    Ju2 = slab_data(JT, FT, Nq, Nq)
+    psi = slab_data(eltype(arg2), eltype(arg2), Nq, Nq)
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
@@ -760,7 +800,7 @@ function apply_operator(op::SplitDivergence{(1, 2)}, space, slabidx, arg1, arg2)
         psi[1, i, j, 1] = get_node(space, arg2, ij, slabidx)
     end
 
-    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq, Nq)
     fill!(parent(out), zero(FT))
     @inbounds for j in 1:Nq, i in 1:Nq
         for k in 1:(i - 1) # loop over half the indices, since F1[i,k] = F1[k,i]
@@ -788,7 +828,7 @@ function apply_operator(op::SplitDivergence{(1, 2)}, space, slabidx, arg1, arg2)
         out[1, i, j, 1] *= local_geometry.invJ
     end
 
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 """
@@ -842,7 +882,7 @@ function apply_operator(op::WeakDivergence{(1,)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq)
     fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
@@ -858,7 +898,7 @@ function apply_operator(op::WeakDivergence{(1,)}, space, slabidx, arg)
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[i] /= -local_geometry.WJ
     end
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 function apply_operator(op::WeakDivergence{(1, 2)}, space, slabidx, arg)
@@ -867,7 +907,7 @@ function apply_operator(op::WeakDivergence{(1, 2)}, space, slabidx, arg)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
     RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq, Nq)
     fill!(parent(out), zero(FT))
 
     @inbounds for j in 1:Nq, i in 1:Nq
@@ -888,7 +928,7 @@ function apply_operator(op::WeakDivergence{(1, 2)}, space, slabidx, arg)
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[1, i, j, 1] /= -local_geometry.WJ
     end
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 """
@@ -927,7 +967,7 @@ function apply_operator(op::Gradient{(1,)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq)
     fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
@@ -937,7 +977,7 @@ function apply_operator(op::Gradient{(1,)}, space, slabidx, arg)
             out[ii] += ∂f∂ξ
         end
     end
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 Base.@propagate_inbounds function apply_operator(
@@ -952,7 +992,7 @@ Base.@propagate_inbounds function apply_operator(
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq, Nq)
     fill!(parent(out), zero(FT))
 
     @inbounds for j in 1:Nq, i in 1:Nq
@@ -967,7 +1007,7 @@ Base.@propagate_inbounds function apply_operator(
             out[1, i, jj, 1] += ∂f∂ξ₂
         end
     end
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 """
@@ -1018,7 +1058,7 @@ function apply_operator(op::WeakGradient{(1,)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq)
     fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
@@ -1036,7 +1076,7 @@ function apply_operator(op::WeakGradient{(1,)}, space, slabidx, arg)
         W = local_geometry.WJ * local_geometry.invJ
         out[i] /= W
     end
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 function apply_operator(op::WeakGradient{(1, 2)}, space, slabidx, arg)
@@ -1046,7 +1086,7 @@ function apply_operator(op::WeakGradient{(1, 2)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq, Nq)
     fill!(parent(out), zero(FT))
 
     @inbounds for j in 1:Nq, i in 1:Nq
@@ -1069,7 +1109,7 @@ function apply_operator(op::WeakGradient{(1, 2)}, space, slabidx, arg)
         W = local_geometry.WJ * local_geometry.invJ
         out[1, i, j, 1] /= W
     end
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 abstract type CurlSpectralElementOperator{I} <: SpectralElementOperator{I} end
@@ -1129,7 +1169,7 @@ function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq)
     fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
@@ -1149,7 +1189,7 @@ function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[i] *= local_geometry.invJ
     end
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
@@ -1159,7 +1199,7 @@ function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq, Nq)
     fill!(parent(out), zero(FT))
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
@@ -1186,7 +1226,7 @@ function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[1, i, j, 1] *= local_geometry.invJ
     end
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 """
@@ -1239,7 +1279,7 @@ function apply_operator(op::WeakCurl{(1,)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq)
     fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
@@ -1260,7 +1300,7 @@ function apply_operator(op::WeakCurl{(1,)}, space, slabidx, arg)
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[i] /= local_geometry.WJ
     end
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
@@ -1270,7 +1310,7 @@ function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq, Nq)
     fill!(parent(out), zero(FT))
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
@@ -1298,7 +1338,7 @@ function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[1, i, j, 1] /= local_geometry.WJ
     end
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 # interplation / restriction
@@ -1337,7 +1377,7 @@ function apply_operator(op::Interpolate{(1,)}, space_out, slabidx, arg)
     Nq_out = Quadratures.degrees_of_freedom(QS_out)
     Imat = Quadratures.interpolation_matrix(FT, QS_out, QS_in)
     RT = eltype(arg)
-    out = DataLayouts.IF{RT, Nq_out}(MArray, FT)
+    out = slab_data(RT, FT, Nq_out)
     @inbounds for i in 1:Nq_out
         # manually inlined rmatmul with slab_getnode
         ij = CartesianIndex((1,))
@@ -1352,7 +1392,7 @@ function apply_operator(op::Interpolate{(1,)}, space_out, slabidx, arg)
         end
         out[i] = r
     end
-    return Field(SArray(out), space_out)
+    return Field(immutable_slab_data(out), space_out)
 end
 
 function apply_operator(op::Interpolate{(1, 2)}, space_out, slabidx, arg)
@@ -1365,8 +1405,8 @@ function apply_operator(op::Interpolate{(1, 2)}, space_out, slabidx, arg)
     Imat = Quadratures.interpolation_matrix(FT, QS_out, QS_in)
     RT = eltype(arg)
     # temporary storage
-    temp = DataLayouts.IJF{RT, max(Nq_in, Nq_out)}(MArray, FT)
-    out = DataLayouts.IJF{RT, Nq_out}(MArray, FT)
+    temp = slab_data(RT, FT, max(Nq_in, Nq_out), max(Nq_in, Nq_out))
+    out = slab_data(RT, FT, Nq_out, Nq_out)
     @inbounds for j in 1:Nq_in, i in 1:Nq_out
         # manually inlined rmatmul1 with slab get_node
         # we do this to remove one allocated intermediate array
@@ -1385,7 +1425,7 @@ function apply_operator(op::Interpolate{(1, 2)}, space_out, slabidx, arg)
     @inbounds for j in 1:Nq_out, i in 1:Nq_out
         out[1, i, j, 1] = rmatmul2(Imat, temp, i, j)
     end
-    return Field(SArray(out), space_out)
+    return Field(immutable_slab_data(out), space_out)
 end
 
 
@@ -1427,7 +1467,7 @@ function apply_operator(op::Restrict{(1,)}, space_out, slabidx, arg)
     Nq_out = Quadratures.degrees_of_freedom(QS_out)
     ImatT = Quadratures.interpolation_matrix(FT, QS_in, QS_out)' # transpose
     RT = eltype(arg)
-    out = IF{RT, Nq_out}(MArray, FT)
+    out = slab_data(RT, FT, Nq_out)
     @inbounds for i in 1:Nq_out
         # manually inlined rmatmul with slab get_node
         ij = CartesianIndex((1,))
@@ -1446,7 +1486,7 @@ function apply_operator(op::Restrict{(1,)}, space_out, slabidx, arg)
         WJ_out = get_local_geometry(space_out, ij_out, slabidx).WJ
         out[i] = r / WJ_out
     end
-    return Field(SArray(out), space_out)
+    return Field(immutable_slab_data(out), space_out)
 end
 
 function apply_operator(op::Restrict{(1, 2)}, space_out, slabidx, arg)
@@ -1459,8 +1499,8 @@ function apply_operator(op::Restrict{(1, 2)}, space_out, slabidx, arg)
     ImatT = Quadratures.interpolation_matrix(FT, QS_in, QS_out)' # transpose
     RT = eltype(arg)
     # temporary storage
-    temp = DataLayouts.IJF{RT, max(Nq_in, Nq_out)}(MArray, FT)
-    out = DataLayouts.IJF{RT, Nq_out}(MArray, FT)
+    temp = slab_data(RT, FT, max(Nq_in, Nq_out), max(Nq_in, Nq_out))
+    out = slab_data(RT, FT, Nq_out, Nq_out)
     @inbounds for j in 1:Nq_in, i in 1:Nq_out
         # manually inlined rmatmul1 with slab get_node
         ij = CartesianIndex((1, j))
@@ -1482,7 +1522,7 @@ function apply_operator(op::Restrict{(1, 2)}, space_out, slabidx, arg)
         WJ_out = get_local_geometry(space_out, ij_out, slabidx).WJ
         out[1, i, j, 1] = rmatmul2(ImatT, temp, i, j) / WJ_out
     end
-    return Field(SArray(out), space_out)
+    return Field(immutable_slab_data(out), space_out)
 end
 
 
@@ -1495,12 +1535,15 @@ Computes the tensor product `out = (M ⊗ M) * in` on each element.
 function tensor_product! end
 
 function tensor_product!(
-    out::DataLayouts.VIJHWithF{S, Nv, Ni_out, 1},
+    out::Union{
+        DataLayouts.VIJHWithF{S, Nv, Ni_out, 1},
+        DataLayouts.VIH1{S, Nv, Ni_out},
+    },
     indata::DataLayouts.VIJHWithF{S, Nv, Ni_in, 1},
     M::SMatrix{Ni_out, Ni_in},
 ) where {S, Nv, Ni_out, Ni_in}
-    Nh_in = size(indata, 4)
-    Nh_out = size(out, 4)
+    Nh_in = DataLayouts.nelems(indata)
+    Nh_out = DataLayouts.nelems(out)
     # TODO: assumes the same number of levels (horizontal only)
     @assert Nh_in == Nh_out
     @inbounds for h in 1:Nh_out, v in 1:Nv
@@ -1526,11 +1569,11 @@ function tensor_product!(
     @assert Nh == size(out, 4)
 
     # temporary storage
-    temp = MArray{Tuple{Nij_out, Nij_in}, S, 2, Nij_out * Nij_in}(undef)
+    temp = MArray{Tuple{1, Nij_out, Nij_in, 1}, S, 4, Nij_out * Nij_in}(undef)
 
     @inbounds for h in 1:Nh
-        in_slab = slab(indata, h)
-        out_slab = slab(out, h)
+        in_slab = slab(indata, 1, h)
+        out_slab = slab(out, 1, h)
         for j in 1:Nij_in, i in 1:Nij_out
             temp[1, i, j, 1] = rmatmul1(M, in_slab, i, j)
         end
@@ -1542,12 +1585,36 @@ function tensor_product!(
 end
 
 function tensor_product!(
+    out::DataLayouts.IH1JH2{S, Nij_out, Nij_out},
+    indata::DataLayouts.VIJHWithF{S, 1, Nij_in, Nij_in},
+    M::SMatrix{Nij_out, Nij_in},
+) where {S, Nij_out, Nij_in}
+    Nh = DataLayouts.nelems(indata)
+    @assert Nh == DataLayouts.nelems(out)
+
+    # temporary storage
+    temp = MArray{Tuple{1, Nij_out, Nij_in, 1}, S, 4, Nij_out * Nij_in}(undef)
+
+    @inbounds for h in 1:Nh
+        in_slab = slab(indata, 1, h)
+        out_slab = slab(out, 1, h)
+        for j in 1:Nij_in, i in 1:Nij_out
+            temp[1, i, j, 1] = rmatmul1(M, in_slab, i, j)
+        end
+        for j in 1:Nij_out, i in 1:Nij_out
+            out_slab[i, j] = rmatmul2(M, temp, i, j)
+        end
+    end
+    return out
+end
+
+function tensor_product!(
     out_slab::DataLayouts.VIJHWithF{S, 1, Nij_out, Nij_out, 1},
     in_slab::DataLayouts.VIJHWithF{S, 1, Nij_in, Nij_in, 1},
     M::SMatrix{Nij_out, Nij_in},
 ) where {S, Nij_out, Nij_in}
     # temporary storage
-    temp = MArray{Tuple{Nij_out, Nij_in}, S, 2, Nij_out * Nij_in}(undef)
+    temp = MArray{Tuple{1, Nij_out, Nij_in, 1}, S, 4, Nij_out * Nij_in}(undef)
     @inbounds for j in 1:Nij_in, i in 1:Nij_out
         temp[1, i, j, 1] = rmatmul1(M, in_slab, i, j)
     end
@@ -1584,7 +1651,7 @@ function matrix_interpolate(
     mesh = topology.mesh
     n1, n2 = size(Meshes.elements(mesh))
     interp_data =
-        DataLayouts.IH1JH2{S, Nu}(Matrix{S}(undef, (Nu * n1, Nu * n2)))
+        DataLayouts.IH1JH2{S, Nu, Nu, nothing}(Matrix{S}(undef, (Nu * n1, Nu * n2)))
     M = Quadratures.interpolation_matrix(Float64, Q_interp, quadrature_style)
     Operators.tensor_product!(interp_data, Fields.field_values(field), M)
     return parent(interp_data)
@@ -1599,7 +1666,8 @@ function matrix_interpolate(
     quadrature_style = Spaces.quadrature_style(space)
     nl = Spaces.nlevels(space)
     n1 = Topologies.nlocalelems(Spaces.topology(space))
-    interp_data = DataLayouts.VIH1{S, nl, Nu}(Matrix{S}(undef, (nl, Nu * n1)))
+    interp_data =
+        DataLayouts.VIH1{S, nl, Nu, nothing}(Matrix{S}(undef, (nl, Nu * n1)))
     M = Quadratures.interpolation_matrix(Float64, Q_interp, quadrature_style)
     Operators.tensor_product!(interp_data, Fields.field_values(field), M)
     return parent(interp_data)

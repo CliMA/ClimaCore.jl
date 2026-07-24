@@ -299,7 +299,9 @@ end
 # Roughness measured as deviation from mean (TODO: use a low-pass filter instead)
 function tracer_roughnesses(sol)
     final_q = sol.u[end].c.ρq ./ sol.u[end].c.ρ
-    return mean(abs.(final_q .- mean(final_q)))
+    # Wrap the mean in a Tuple so that it is broadcast like a single value (as
+    # if it were in a Ref), rather than as a collection of separate values.
+    return mean(abs.(final_q .- (mean(final_q),)))
 end
 
 function tracer_ranges(sol)

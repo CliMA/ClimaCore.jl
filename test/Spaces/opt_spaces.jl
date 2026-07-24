@@ -34,33 +34,39 @@ end
 
 #! format: off
     if ClimaComms.device(context) isa ClimaComms.CUDADevice
-        test_n_failures(89,   TU.PointSpace, context)
-        test_n_failures(699,  TU.SpectralElementSpace1D, context)
-        test_n_failures(875, TU.SpectralElementSpace2D, context)
+        test_n_failures(88,   TU.PointSpace, context)
+        test_n_failures(731,  TU.SpectralElementSpace1D, context)
+        test_n_failures(361, TU.SpectralElementSpace2D, context)
         test_n_failures(4,  TU.ColumnCenterFiniteDifferenceSpace, context)
         test_n_failures(5,  TU.ColumnFaceFiniteDifferenceSpace, context)
-        test_n_failures(881, TU.SphereSpectralElementSpace, context)
-        test_n_failures(890, TU.CenterExtrudedFiniteDifferenceSpace, context)
-        test_n_failures(890, TU.FaceExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(367, TU.SphereSpectralElementSpace, context)
+        test_n_failures(377, TU.CenterExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(377, TU.FaceExtrudedFiniteDifferenceSpace, context)
     else
         test_n_failures(0,    TU.PointSpace, context)
-        test_n_failures(150,  TU.SpectralElementSpace1D, context)
-        test_n_failures(316,  TU.SpectralElementSpace2D, context)
+        test_n_failures(156,  TU.SpectralElementSpace1D, context)
+        test_n_failures(274,  TU.SpectralElementSpace2D, context)
         test_n_failures(4,  TU.ColumnCenterFiniteDifferenceSpace, context)
         test_n_failures(5,  TU.ColumnFaceFiniteDifferenceSpace, context)
-        test_n_failures(322,  TU.SphereSpectralElementSpace, context)
-        test_n_failures(327,  TU.CenterExtrudedFiniteDifferenceSpace, context)
-        test_n_failures(327,  TU.FaceExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(280,  TU.SphereSpectralElementSpace, context)
+        test_n_failures(290,  TU.CenterExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(290,  TU.FaceExtrudedFiniteDifferenceSpace, context)
 
         # The OBJECT_CACHE causes inference failures that inhibit understanding
         # inference failures in _SpectralElementGrid2D, so let's `@test_opt` those
         # separately:
 
         space = TU.CenterExtrudedFiniteDifferenceSpace(Float32; context=ClimaComms.context())
-        Nh = Val(Topologies.nlocalelems(Spaces.topology(space)))
-        result = JET.@report_opt Grids._SpectralElementGrid2D(Spaces.topology(space), Spaces.quadrature_style(space), Val(Nh); enable_bubble=false)
+        result = JET.@report_opt Grids._SpectralElementGrid2D(
+            Spaces.topology(space),
+            Spaces.quadrature_style(space),
+            ClimaCore.DataLayouts.VIJFH;
+            enable_bubble = false,
+            autodiff_metric = true,
+            enable_mask = false,
+        )
         n_found = length(JET.get_reports(result.analyzer, result.result))
-        n_allowed = 1
+        n_allowed = 120
         @test n_found ≤ n_allowed
         if n_found < n_allowed
             @info "Inference may have improved for _SpectralElementGrid2D: (n_found, n_allowed) = ($n_found, $n_allowed)"

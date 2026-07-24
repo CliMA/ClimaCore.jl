@@ -29,7 +29,7 @@ end
 
     (Nv, Nij, Nh) = (4, 3, 5)
     for Nh in (1, Nh)
-        Nh_parameter = Nh == 1 ? 1 : missing
+        Nh_parameter = Nh == 1 ? 1 : nothing
         test_similar!(DataLayouts.VIJFH{FT, Nv, Nij, Nij, Nh_parameter}(A, Nh))
         test_similar!(DataLayouts.VIJHF{FT, Nv, Nij, Nij, Nh_parameter}(A, Nh))
         test_similar!(DataLayouts.VIH1{FT, Nv, Nij, Nh_parameter}(A, Nh))

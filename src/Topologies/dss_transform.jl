@@ -10,7 +10,12 @@ Transformations only apply to vector quantities.
 See [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
 Base.@propagate_inbounds dss_transform(arg, local_geometry, weight, I) =
-    dss_transform(arg[I], local_geometry[I], weight[I])
+    dss_transform(
+        arg[I],
+        local_geometry[I],
+        # DSS weights only vary in the horizontal, so their level index is 1.
+        weight[CartesianIndex(1, Base.tail(Tuple(I))...)],
+    )
 Base.@propagate_inbounds dss_transform(
     arg,
     local_geometry,
@@ -162,6 +167,9 @@ function create_ghost_buffer(
     Nhsend = nsendelems(topology),
     Nhrec = nrecvelems(topology),
 )
+    # Ghost exchange is only required for distributed topologies
+    ClimaComms.context(topology) isa ClimaComms.SingletonCommsContext &&
+        return nothing
     send_data = similar(data, Base.setindex(size(data), Nhsend, 4))
     recv_data = similar(data, Base.setindex(size(data), Nhrec, 4))
     k = stride(parent(send_data), DataLayouts.f_dim(data) == 5 ? 4 : 5)

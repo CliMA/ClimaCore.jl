@@ -46,14 +46,15 @@ end
     set_mask_maps!(mask)
 
 Update the maps in an [`IJHMask`](@ref) based on the values in `mask.is_active`.
-This involves memory allocations, so it should only be called infrequently.
+This allocates memory when using GPUs, so it should only be called infrequently.
 """
 function set_mask_maps!(mask::IJHMask)
-    is_active = rebuild(mask.is_active, Array)
+    using_arrays = parent(mask.is_active) isa Array
+    is_active = using_arrays ? mask.is_active : rebuild(mask.is_active, Array)
+    i_map = using_arrays ? mask.i_map : Array(mask.i_map)
+    j_map = using_arrays ? mask.j_map : Array(mask.j_map)
+    h_map = using_arrays ? mask.h_map : Array(mask.h_map)
     n = 1
-    i_map = Array(mask.i_map)
-    j_map = Array(mask.j_map)
-    h_map = Array(mask.h_map)
     @inbounds for index in CartesianIndices(is_active)
         is_active[index] || continue
         i_map[n] = index[2]
@@ -62,11 +63,12 @@ function set_mask_maps!(mask::IJHMask)
         n += 1
     end
     fill!(mask.N, n - 1)
-    if !(mask.i_map isa Array)
+    if !using_arrays
         copyto!(mask.i_map, i_map)
         copyto!(mask.j_map, j_map)
         copyto!(mask.h_map, h_map)
     end
+    return mask
 end
 
 """

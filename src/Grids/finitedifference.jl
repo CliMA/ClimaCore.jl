@@ -97,7 +97,16 @@ function fd_geometry_data(
     Nv_face = Nv - periodic
     Nv_cent = Nv - 1
     center_local_geometry = similar(center_coordinates, LG)
-    face_local_geometry = similar(face_coordinates, LG)
+    # On periodic grids, the face at the top of the domain coincides with the
+    # face at the bottom, so there is one fewer face than face coordinates.
+    face_local_geometry = DataLayouts.layout_constructor(
+        face_coordinates,
+        LG;
+        Nv = Nv_face,
+    )(
+        typeof(parent(face_coordinates)),
+        Nh,
+    )
     cent_coord(args...) = Geometry.component(center_coordinates[args...], 1)
     face_coord(args...) = Geometry.component(face_coordinates[args...], 1)
     for h in 1:Nh, j in 1:Nj, i in 1:Ni
