@@ -2,7 +2,7 @@ import ClimaCore: Spaces, Quadratures, Topologies, Operators
 import Base.Broadcast: Broadcasted
 import ClimaCore.Fields: Field, field_values, AbstractFieldStyle
 import ClimaComms
-import ClimaCore.Utilities: half, new
+import ClimaCore.Utilities: half, new, unsafe_eltype
 import ClimaCore.Operators
 import ClimaCore.Geometry: ⊗, project
 import ClimaCore.Operators:
@@ -32,115 +32,11 @@ memory per thread before theoretical occupancy is limited. We use 36 bytes to al
 3x3 axis tensors
 """
 check_if_fits_in_shmem(bc::Union{StencilBroadcasted, Broadcasted, Field}) =
-    sizeof(eltype(bc)) <= 36
+    sizeof(unsafe_eltype(bc)) <= 36
 check_if_fits_in_shmem(val) = sizeof(typeof(val)) <= 36
 
-"""
-    has_type_arg(x)
-Check if `x` is a `Type`, or any of its arguments has a `Type` argument.
-This is needed because both the shmem matrix multiplication and the getidx fallback rely on
-`eltype`, and `eltype(::CudaRefType) = Any`
-"""
-has_type_arg(_) = false
-has_type_arg(::Type) = true
-has_type_arg(::Base.RefValue{<:Type}) = true
-has_type_arg(bc::Union{StencilBroadcasted, Broadcasted}) =
-    UnrolledUtilities.unrolled_any(has_type_arg, bc.args)
 
-"""
-    replace_fd_ops(val)
-
-Recursively replace any `OneArgFDOperator` or `TwoArgFDOperator` in `val` with a
-`MultiplyColumnwiseBandMatrixField` with the corresponding `FDOperatorMatrix`, if the operator
-does not have affine BCs and the operator matrix fits in shared memory.
-"""
-replace_fd_ops(val) = val
-
-function replace_fd_ops(
-    bc::Base.Broadcast.Broadcasted,
-)
-    new_args = UnrolledUtilities.unrolled_map(replace_fd_ops, bc.args)
-    return Base.Broadcast.Broadcasted{typeof(bc.style)}(bc.f, new_args, bc.axes)
-end
-
-replace_fd_ops(
-    bc::StencilBroadcasted{Style, Op},
-) where {Style, Op <: FDOperatorMatrix} = bc
-function replace_fd_ops(
-    bc::StencilBroadcasted{Style},
-) where {Style}
-    new_args = UnrolledUtilities.unrolled_map(replace_fd_ops, bc.args)
-    return StencilBroadcasted{
-        Style,
-        typeof(bc.op),
-        typeof(new_args),
-        typeof(bc.axes),
-        typeof(bc.work),
-    }(
-        bc.op,
-        new_args,
-        bc.axes,
-        bc.work,
-    )
-end
-
-function replace_fd_ops(
-    bc::StencilBroadcasted{Style, Op},
-) where {Style, Op <: TwoArgFDOperator}
-    if !has_affine_bc(bc.op) && check_if_fits_in_shmem(bc.args[end]) &&
-       !has_type_arg(bc.args[end])
-        opmat = Base.Broadcast.broadcasted(
-            FDOperatorMatrix(bc.op),
-            replace_fd_ops(bc.args[1]),
-        )
-        new_args = (opmat, replace_fd_ops(bc.args[end]))
-        newop = MultiplyColumnwiseBandMatrixField()
-        return StencilBroadcasted{
-            Style,
-            typeof(newop),
-            typeof(new_args),
-            typeof(bc.axes),
-            typeof(bc.work),
-        }(
-            newop,
-            new_args,
-            bc.axes,
-            bc.work,
-        )
-    else
-        # affine BCs or values that won't fit in shmmem
-        return bc
-    end
-end
-
-function replace_fd_ops(
-    bc::StencilBroadcasted{Style, Op},
-) where {Style, Op <: OneArgFDOperator}
-    if !has_affine_bc(bc.op) && check_if_fits_in_shmem(bc.args[1]) &&
-       !has_type_arg(bc.args[1])
-        opmat = Base.Broadcast.broadcasted(
-            FDOperatorMatrix(bc.op),
-            Fields.local_geometry_field(operator_input_space(bc.op, axes(bc.args[end]))),
-        )
-        new_args = (opmat, replace_fd_ops(bc.args[1]))
-        newop = MultiplyColumnwiseBandMatrixField()
-        return StencilBroadcasted{
-            Style,
-            typeof(newop),
-            typeof(new_args),
-            typeof(bc.axes),
-            typeof(bc.work),
-        }(
-            newop,
-            new_args,
-            bc.axes,
-            bc.work,
-        )
-    else
-        # affine BCs or values that won't fit in shmmem
-        return bc
-    end
-end
+ClimaCore.Utilities.unsafe_eltype(::CUDA.CuRefType{T}) where {T} = T
 
 """
     eager_copyto_stencil_kernel!(out, bc::BC, space)
@@ -152,14 +48,25 @@ expression at the given index, and then copies the result into `out`.
 Base.@propagate_inbounds function eager_copyto_stencil_kernel!(
     out,
     bc::BC,
+    cart_inds,
+    mask,
     space,
 ) where {BC}
-    i = threadIdx().y
-    j = blockIdx().y
     v = threadIdx().x
-    h = blockIdx().z
+    col_idx = threadIdx().y + (blockIdx().x - 1) * blockDim().y
+    (i, j, h) = if mask isa NoMask
+        col_idx > length(cart_inds) && return nothing
+        @inbounds cart_inds[col_idx].I
+    else
+        (; i_map, j_map, h_map) = mask
+        @inbounds col_idx > length(i_map) && return nothing
+        @inbounds i = i_map[col_idx]
+        @inbounds j = j_map[col_idx]
+        @inbounds h = h_map[col_idx]
+        (i, j, h)
+    end
     hidx = (i, j, h)
-    val = @inbounds @inline calc_level_val(bc, space)
+    val = @inbounds @inline calc_level_val(bc, hidx, space)
     if space.staggering isa ClimaCore.Grids.CellFace
         @inbounds @inline setidx!(space, out, v - half, hidx, val)
     else
@@ -179,14 +86,11 @@ Call `calc_level_val` on all the arguments of `bc`, and then apply the function 
 """
 Base.@propagate_inbounds function calc_level_val(
     bc::BC,
+    hidx,
     space,
 ) where {BC <: Base.Broadcast.Broadcasted}
-    i = threadIdx().y
-    j = blockIdx().y
-    v = threadIdx().x
-    h = blockIdx().z
     resolved_args = @inbounds @inline UnrolledUtilities.unrolled_map(
-        Base.Fix2(reconstruct_space_and_call_calc_level_val, space),
+        Base.Fix2(reconstruct_space_and_call_calc_level_val, (hidx, space)),
         bc.args,
     )
     return @inline @inbounds bc.f(resolved_args...)
@@ -201,15 +105,19 @@ us to use Base.Fix2.
 """
 Base.@propagate_inbounds reconstruct_space_and_call_calc_level_val(
     arg::A,
-    space::S,
+    space_idx_tpl::S,
 ) where {
     A <: Union{Base.Broadcast.Broadcasted{<:AbstractFieldStyle}, StencilBroadcasted, Field},
     S,
-} = @inbounds @inline calc_level_val(arg, reconstruct_placeholder_space(axes(arg), space))
+} = @inbounds @inline calc_level_val(
+    arg,
+    space_idx_tpl[1],
+    reconstruct_placeholder_space(axes(arg), space_idx_tpl[2]),
+)
 Base.@propagate_inbounds reconstruct_space_and_call_calc_level_val(
     arg::A,
-    space::S,
-) where {A, S} = @inbounds @inline calc_level_val(arg, space)
+    space_idx_tpl::S,
+) where {A, S} = @inbounds @inline calc_level_val(arg, space_idx_tpl[1], space_idx_tpl[2])
 
 """
     calc_level_val(val::T, space)
@@ -217,10 +125,10 @@ Base.@propagate_inbounds reconstruct_space_and_call_calc_level_val(
 If `val` is not a `Broadcasted`, `StencilBroadcasted`, or `Field`, just return `val`.
 If it is a `Ref`, return `val[]`. If it is a one element tuple, return the element.
 """
-Base.@propagate_inbounds calc_level_val(val::T, space) where {T <: Ref} = val[]
-Base.@propagate_inbounds calc_level_val(val::T, space) where {V, T <: Tuple{V}} =
+Base.@propagate_inbounds calc_level_val(val::T, hidx, space) where {T <: Ref} = val[]
+Base.@propagate_inbounds calc_level_val(val::T, hidx, space) where {V, T <: Tuple{V}} =
     first(val)
-Base.@propagate_inbounds calc_level_val(arg::S, space) where {S} = arg
+Base.@propagate_inbounds calc_level_val(arg::S, hidx, space) where {S} = arg
 
 """
     calc_level_val(bc::StencilBroadcasted{<:Any, <: MultiplyColumnwiseBandMatrixField}, space)
@@ -230,6 +138,7 @@ and then perform the multiplication.
 """
 Base.@propagate_inbounds function calc_level_val(
     bc::BC,
+    hidx,
     space,
 ) where {
     S,
@@ -238,17 +147,17 @@ Base.@propagate_inbounds function calc_level_val(
 }
     if check_if_fits_in_shmem(bc.args[2i32])
         v = threadIdx().x
-        i = threadIdx().y
+        block_col_idx = threadIdx().y
         mat1_space =
             reconstruct_placeholder_space(axes(bc.args[1i32]), space)
         mat2_space =
             reconstruct_placeholder_space(axes(bc.args[2i32]), space)
 
-        mat2_row = calc_level_val(bc.args[2i32], mat2_space)
-        mat1_row = calc_level_val(bc.args[1i32], mat1_space)
+        mat2_row = calc_level_val(bc.args[2i32], hidx, mat2_space)
+        mat1_row = calc_level_val(bc.args[1i32], hidx, mat1_space)
         # project before placing in shared memory to avoid projecting multiple times
         mat2_row_converted =
-            @inbounds @inline project_row2_for_mul(mat1_row, mat2_row, mat2_space)
+            @inbounds @inline project_row2_for_mul(mat1_row, mat2_row, hidx, mat2_space)
         # It should be possible to use static shared memory here, but it allocates new shared memory
         # for each layer of recursion
         CUDA.sync_threads()
@@ -258,7 +167,7 @@ Base.@propagate_inbounds function calc_level_val(
             typeof(mat2_row_converted),
             CUDA.blockDim().x * CUDA.blockDim().y,
         )
-        @inbounds mat2[v + (i - 1) * CUDA.blockDim().x] = mat2_row_converted
+        @inbounds mat2[v + (block_col_idx - 1) * CUDA.blockDim().x] = mat2_row_converted
         CUDA.sync_threads()
         # if the output is on centers, the CUDA.blockDim().xth thread can just return 0
         mat1_space.staggering isa Spaces.CellCenter && v == CUDA.blockDim().x &&
@@ -301,11 +210,7 @@ Base.@propagate_inbounds function calc_level_val(
         end
     else
         # values that won't fit in shmmem should just call getidx
-        i = threadIdx().y
-        j = blockIdx().y
         v = threadIdx().x
-        h = blockIdx().z
-        hidx = (i, j, h)
         if space.staggering isa Spaces.CellCenter
             v == CUDA.blockDim().x && return @inline @inbounds new(eltype(bc))
         end
@@ -324,13 +229,10 @@ will error if the operator is eagerly evaluated at the boundaries.
 """
 Base.@propagate_inbounds function calc_level_val(
     bc::BC,
+    hidx,
     space,
 ) where {S, Op <: Operators.LinVanLeerC2F, BC <: StencilBroadcasted{S, Op}}
-    i = threadIdx().y
-    j = blockIdx().y
     v = threadIdx().x
-    h = blockIdx().z
-    hidx = (i, j, h)
     if v == 1i32 || v == CUDA.blockDim().x
         return zero(eltype(bc))
     end
@@ -346,13 +248,10 @@ affine BCs or values that won't fit in shmmem.
 """
 Base.@propagate_inbounds function calc_level_val(
     bc::BC,
+    hidx,
     space,
 ) where {BC <: StencilBroadcasted}
-    i = threadIdx().y
-    j = blockIdx().y
     v = threadIdx().x
-    h = blockIdx().z
-    hidx = (i, j, h)
     if space.staggering isa Spaces.CellCenter
         v == CUDA.blockDim().x && return @inline @inbounds new(eltype(bc))
     end
@@ -369,13 +268,12 @@ When the staggering of `space` is `CellCenter`, the thread with `v == CUDA.block
 """
 Base.@propagate_inbounds function calc_level_val(
     arg::F,
+    hidx,
     space,
 ) where {F <: Field}
     data = field_values(arg)
-    i = threadIdx().y
-    j = blockIdx().y
     v = threadIdx().x
-    h = blockIdx().z
+    (i, j, h) = hidx
     if space isa
        Union{Spaces.ExtrudedFiniteDifferenceSpace, Spaces.FiniteDifferenceSpace} &&
        space.staggering isa Spaces.CellCenter
@@ -391,6 +289,7 @@ Return the correct row of the operator matrix for the current thread
 """
 Base.@propagate_inbounds function calc_level_val(
     bc::BC,
+    hidx,
     space,
 ) where {
     S,
@@ -399,7 +298,7 @@ Base.@propagate_inbounds function calc_level_val(
 }
     op = bc.op.op
     args = bc.args
-    val = @inbounds @inline get_op_row(op, args, space)
+    val = @inbounds @inline get_op_row(op, args, hidx, space)
     return val
 end
 
@@ -409,13 +308,9 @@ end
 Get the correct row of the operator matrix for the current thread, taking into account boundary conditions.
 """
 
-Base.@propagate_inbounds function get_op_row(op, args, space)
+Base.@propagate_inbounds function get_op_row(op, args, hidx, space)
     FT = Spaces.undertype(space)
-    i = threadIdx().y
-    j = blockIdx().y
     v = threadIdx().x
-    h = blockIdx().z
-    hidx = (i, j, h)
 
     outputs_to_face = space.staggering isa ClimaCore.Grids.CellFace
     row_type = @inbounds @inline op_matrix_row_type(op, FT, args[1:(end - 1)]...)
@@ -468,17 +363,14 @@ end
 
 Projects `mat2_row` onto the correct axis for multiplication with `mat1_row` if necessary, and returns the projected row.
 """
-Base.@propagate_inbounds function project_row2_for_mul(mat1_row, mat2_row, space)
+Base.@propagate_inbounds function project_row2_for_mul(mat1_row, mat2_row, hidx, space)
     mat1_et = mat1_row isa BandMatrixRow ? eltype(mat1_row) : typeof(mat1_row)
     project_onto =
         ClimaCore.Geometry.recursively_find_dual_axes_for_projection(mat1_et)
     isnothing(project_onto) && return mat2_row
     v = threadIdx().x
-    i = threadIdx().y
-    j = blockIdx().y
-    v = threadIdx().x
-    h = blockIdx().z
-    hidx = (i, j, h)
+    project_onto =
+        ClimaCore.Geometry.recursively_find_dual_axes_for_projection(mat1_et)
     if space.staggering isa Spaces.CellCenter && v == CUDA.blockDim().x
         lg = new(Spaces.local_geometry_type(typeof(space)))
     else
@@ -517,9 +409,6 @@ if hasfield(Method, :recursion_relation)
         m.recursion_relation = dont_limit
     end
     for m in methods(calc_level_val)
-        m.recursion_relation = dont_limit
-    end
-    for m in methods(outer_or_mul)
         m.recursion_relation = dont_limit
     end
 end

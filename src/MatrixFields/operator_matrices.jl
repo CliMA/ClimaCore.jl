@@ -115,6 +115,203 @@ Base.Broadcast.broadcasted(
     Fields.local_geometry_field(operator_input_space(op_matrix.op, axes(arg))),
 )
 
+# A boundary condition that fixes a value (SetValue, SetGradient, SetDivergence,
+# or SetCurl) contributes an affine (constant) term that a linear operator matrix
+# cannot produce on its own. When a broadcast is rewritten as a matrix multiply,
+# that term is reinjected with a SetBoundaryOperator, and `modifies_output` /
+# `modifies_input` decide where: `modifies_output` conditions are applied to the
+# result (after the multiply), while `modifies_input` conditions are applied to
+# the argument (before the multiply). A condition that is linear (e.g. Extrapolate)
+# is encoded directly in the matrix and is neither.
+#
+# For nearly every operator such a boundary condition prescribes the operator's
+# *output* at the boundary, so it modifies the output. Examples:
+#  - InterpolateC2F  with SetValue(x₀):    I(x)[½] = x₀
+#  - LeftBiasedF2C   with SetValue(x₀):    L(x)[1] = x₀
+#  - GradientC2F     with SetGradient(v₀): G(x)[½] = v₀
+#
+# GradientF2C and DivergenceF2C are the exception, and the only operators for
+# which `modifies_input` is true. They map faces to centers, so the domain
+# boundary (always a face) is a point of their *input*, not their output. A
+# SetValue there prescribes the argument's boundary-face value, which the
+# derivative stencil then differences against the adjacent interior face:
+#  - GradientF2C   with SetValue(x₀): G(x)[1]³ = x[1+½] - x₀
+#  - DivergenceF2C with SetValue(v₀): D(v)[1]  = (Jv³[1+½] - Jv³₀) / J[1]
+# Because x₀ enters through the input, the operator matrix keeps its ordinary
+# interior stencil and x₀ is written into the argument's boundary face rather than
+# added to the result; hence `modifies_input` is true and `modifies_output` false.
+modifies_output(
+    op,
+    boundary_condition::BC,
+) where {BC <: Union{
+        Operators.SetGradient,
+        Operators.SetDivergence,
+        Operators.SetCurl,
+    }} = true
+modifies_output(
+    op::Operators.InterpolationOperator,
+    boundary_condition::Operators.SetValue,
+) = true
+modifies_output(
+    op::Union{Operators.GradientF2C, Operators.DivergenceF2C},
+    boundary_condition::Operators.SetValue,
+) = false
+modifies_output(op, boundary_condition::Operators.SetValue) = true
+modifies_output(op, boundary_condition) = false
+
+
+modifies_input(
+    op::Union{Operators.GradientF2C, Operators.DivergenceF2C},
+    boundary_condition::Operators.SetValue,
+) = true
+modifies_input(op, boundary_condition) = false
+
+# An operator's boundary conditions are split into three groups. Those that are
+# linear can be encoded directly in the operator matrix; the rest modify the
+# operator's input or output, and must instead be reapplied to the argument
+# (before the matrix multiply) or to the result (after it) using a
+# SetBoundaryOperator. Each boundary condition belongs to exactly one group.
+filter_bcs(f::F, bcs::NamedTuple) where {F} =
+    let kept = unrolled_filter(name -> f(bcs[name]), keys(bcs))
+        NamedTuple{kept}(unrolled_map(name -> bcs[name], kept))
+    end
+matrix_bcs(op) =
+    filter_bcs(bc -> !modifies_input(op, bc) && !modifies_output(op, bc), op.bcs)
+input_bcs(op) = filter_bcs(Base.Fix1(modifies_input, op), op.bcs)
+output_bcs(op) = filter_bcs(Base.Fix1(modifies_output, op), op.bcs)
+
+# Returns `op` carrying only the boundary conditions that can be encoded in its
+# operator matrix. Operators without boundary conditions are returned unchanged,
+# avoiding an unnecessary rebuild.
+op_with_matrix_bcs(op) =
+    isempty(op.bcs) ? op : Base.typename(typeof(op)).wrapper(matrix_bcs(op))
+
+# Constructs the `op_matrix * arg` StencilBroadcasted that applies an operator
+# matrix to `arg`.
+multiply_matrix_broadcasted(::Type{Style}, op_matrix, arg, axes, work) where {Style} =
+    let args = (op_matrix, arg)
+        Operators.StencilBroadcasted{
+            Style,
+            MultiplyColumnwiseBandMatrixField,
+            typeof(args),
+            typeof(axes),
+            typeof(work),
+        }(
+            MultiplyColumnwiseBandMatrixField(),
+            args,
+            axes,
+            work,
+        )
+    end
+
+# Wraps `arg` in a StencilBroadcasted that applies the SetBoundaryOperator `op`.
+apply_boundary_operator(::Type{Style}, op, arg, axes, work) where {Style} =
+    let args = (arg,)
+        Operators.StencilBroadcasted{
+            Style,
+            typeof(op),
+            typeof(args),
+            typeof(axes),
+            typeof(work),
+        }(
+            op,
+            args,
+            axes,
+            work,
+        )
+    end
+
+# Converts a broadcast over a one-argument operator, `op(arg)`, into the
+# equivalent operator matrix expression, `op_matrix() * arg`. Boundary conditions
+# that modify the operator's input or output are stripped from the matrix and
+# reapplied to `arg` or to the result with a SetBoundaryOperator. Gradient and
+# Divergence operators require an additional adjoint on the input and output,
+# respectively.
+function Operators.StencilBroadcasted{Style}(
+    op::OneArgFDOperator,
+    args::Args,
+    axes::Spaces.AbstractSpace,
+    work::Work = nothing,
+) where {Style, Args, Work}
+    # SetBoundaryOperator is not represented by an operator matrix.
+    op isa Operators.SetBoundaryOperator && return Operators.StencilBroadcasted{
+        Style,
+        typeof(op),
+        Args,
+        typeof(axes),
+        Work,
+    }(
+        op,
+        args,
+        axes,
+        work,
+    )
+
+    op_matrix = Base.Broadcast.broadcasted(
+        FDOperatorMatrix(op_with_matrix_bcs(op)),
+        Fields.local_geometry_field(operator_input_space(op, axes)),
+    )
+
+    bcs_in = input_bcs(op)
+    arg =
+        isempty(bcs_in) ? args[1] :
+        apply_boundary_operator(
+            Style,
+            Operators.SetBoundaryOperator(bcs_in),
+            args[1],
+            Base.axes(args[1]),
+            nothing,
+        )
+    arg =
+        op isa Operators.GradientOperator ?
+        Base.Broadcast.broadcasted(adjoint, arg) : arg
+
+    result = multiply_matrix_broadcasted(Style, op_matrix, arg, axes, work)
+    result =
+        op isa Operators.DivergenceOperator ?
+        Base.Broadcast.broadcasted(adjoint, result) : result
+
+    bcs_out = output_bcs(op)
+    return isempty(bcs_out) ? result :
+           apply_boundary_operator(
+        Style,
+        Operators.SetBoundaryOperator(bcs_out),
+        result,
+        axes,
+        work,
+    )
+end
+
+
+# Converts a broadcast over a two-argument operator, `op(weight, arg)`, into the
+# equivalent operator matrix expression, `op_matrix(weight) * arg`. Only
+# WeightedInterpolateC2F has boundary conditions (SetValue) that modify its
+# output; when present, they are stripped from the matrix and reapplied to the
+# result with a SetBoundaryOperator.
+function Operators.StencilBroadcasted{Style}(
+    op::TwoArgFDOperator,
+    args::Args,
+    axes::Spaces.AbstractSpace,
+    work::Work = nothing,
+) where {Style, Args, Work}
+    split_bcs = op isa Operators.WeightedInterpolateC2F
+    matrix_op = split_bcs ? op_with_matrix_bcs(op) : op
+    op_matrix = Base.Broadcast.broadcasted(FDOperatorMatrix(matrix_op), args[1])
+
+    result = multiply_matrix_broadcasted(Style, op_matrix, args[2], axes, work)
+
+    bcs_out = split_bcs ? output_bcs(op) : (;)
+    return isempty(bcs_out) ? result :
+           apply_boundary_operator(
+        Style,
+        Operators.SetBoundaryOperator(bcs_out),
+        result,
+        axes,
+        work,
+    )
+end
+
+
 """
     operator_matrix(op)
 
@@ -315,18 +512,79 @@ Operators.stencil_left_boundary(
     op_matrix::FDOperatorMatrix,
     ::Operators.NullBoundaryCondition,
     space,
-    _,
-    _,
+    idx,
+    hidx,
     args...,
-) = zero(Operators.return_eltype(op_matrix, args...))
+) = Operators.stencil_interior(op_matrix, space, idx, hidx, args...)
 Operators.stencil_right_boundary(
     op_matrix::FDOperatorMatrix,
     ::Operators.NullBoundaryCondition,
     space,
-    _,
-    _,
+    idx,
+    hidx,
     args...,
-) = zero(Operators.return_eltype(op_matrix, args...))
+) = Operators.stencil_interior(op_matrix, space, idx, hidx, args...)
+
+# Boundary rows for value-fixing boundary conditions that are still attached to
+# the operator matrix. This only happens through the explicit `operator_matrix(op)`
+# API (`@. op_matrix() * arg`), which keeps `op`'s boundary conditions inside the
+# FDOperatorMatrix. The automatic `@. op(arg)` conversion instead strips these
+# conditions from the matrix and reapplies them with a SetBoundaryOperator (see
+# `modifies_input` / `modifies_output`), so in that case the matrix carries no
+# boundary condition and the NullBoundaryCondition methods above are used instead.
+#
+# An operator matrix can only capture the *linear* part of the operator; the
+# constant contributed by the boundary value is zeroed out (see `has_affine_bc`).
+# For every operator except GradientF2C/DivergenceF2C, a value-fixing condition
+# prescribes the *output* at the boundary as a pure constant, so its linear part is
+# zero and the boundary row is empty (`rzero`). GradientF2C/DivergenceF2C with a
+# SetValue are the exception (as with `modifies_input`): the condition fixes an
+# *input* value, and the near-boundary output still depends linearly on the
+# adjacent interior input, so the row is the genuine boundary stencil (with the
+# fixed input's coefficient dropped) rather than zero.
+Base.@propagate_inbounds function Operators.stencil_left_boundary(
+    op_matrix::FDOperatorMatrix,
+    bc::Union{
+        Operators.SetValue,
+        Operators.SetGradient,
+        Operators.SetDivergence,
+        Operators.SetCurl,
+    },
+    space,
+    idx,
+    hidx,
+    args...,
+)
+    if op_matrix.op isa Union{Operators.GradientF2C, Operators.DivergenceF2C} &&
+       bc isa Operators.SetValue
+        args′ = args[1:(end - 1)]
+        row = op_matrix_first_row(op_matrix.op, bc, space, idx, hidx, args′...)
+        return convert(Operators.return_eltype(op_matrix, args...), row)
+    end
+    rzero(Operators.return_eltype(op_matrix, args...))
+end
+# Mirror of stencil_left_boundary above, for the right boundary.
+Base.@propagate_inbounds function Operators.stencil_right_boundary(
+    op_matrix::FDOperatorMatrix,
+    bc::Union{
+        Operators.SetValue,
+        Operators.SetGradient,
+        Operators.SetDivergence,
+        Operators.SetCurl,
+    },
+    space,
+    idx,
+    hidx,
+    args...,
+)
+    if op_matrix.op isa Union{Operators.GradientF2C, Operators.DivergenceF2C} &&
+       bc isa Operators.SetValue
+        args′ = args[1:(end - 1)]
+        row = op_matrix_last_row(op_matrix.op, bc, space, idx, hidx, args′...)
+        return convert(Operators.return_eltype(op_matrix, args...), row)
+    end
+    rzero(Operators.return_eltype(op_matrix, args...))
+end
 
 ################################################################################
 
@@ -379,16 +637,6 @@ op_matrix_interior_row(
 ) where {FT} = BidiagonalMatrixRow(FT(1), FT(1)) / 2
 op_matrix_first_row(
     ::Operators.InterpolateC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(FT(0))
-op_matrix_last_row(
-    ::Operators.InterpolateC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(FT(0))
-op_matrix_first_row(
-    ::Operators.InterpolateC2F,
     ::Operators.Extrapolate,
     ::Type{FT},
 ) where {FT} = UpperDiagonalMatrixRow(FT(1))
@@ -402,31 +650,11 @@ op_matrix_interior_row(
     ::Union{Operators.LeftBiasedC2F, Operators.LeftBiasedF2C},
     ::Type{FT},
 ) where {FT} = LowerDiagonalMatrixRow(FT(1))
-op_matrix_first_row(
-    ::Operators.LeftBiasedC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = LowerEmptyMatrixRow()
-op_matrix_first_row(
-    ::Operators.LeftBiasedF2C,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(FT(0))
 
 op_matrix_interior_row(
     ::Union{Operators.RightBiasedC2F, Operators.RightBiasedF2C},
     ::Type{FT},
 ) where {FT} = UpperDiagonalMatrixRow(FT(1))
-op_matrix_last_row(
-    ::Operators.RightBiasedC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = UpperEmptyMatrixRow()
-op_matrix_last_row(
-    ::Operators.RightBiasedF2C,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(FT(0))
 
 op_matrix_row_type(
     ::Operators.WeightedInterpolationOperator,
@@ -445,16 +673,6 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     denominator = w⁻ + w⁺
     return BidiagonalMatrixRow(w⁻ / denominator, w⁺ / denominator)
 end
-op_matrix_first_row(
-    ::Operators.WeightedInterpolateC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(FT(0))
-op_matrix_last_row(
-    ::Operators.WeightedInterpolateC2F,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(FT(0))
 op_matrix_first_row(
     ::Operators.WeightedInterpolateC2F,
     ::Operators.Extrapolate,
@@ -578,32 +796,12 @@ op_matrix_row_type(::Operators.AdvectionOperator, ::Type{FT}, _) where {FT} =
 
 op_matrix_interior_row(::Operators.SetBoundaryOperator, ::Type{FT}) where {FT} =
     DiagonalMatrixRow(FT(1))
-op_matrix_first_row(
-    ::Operators.SetBoundaryOperator,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = DiagonalMatrixRow(FT(0))
-op_matrix_last_row(
-    ::Operators.SetBoundaryOperator,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = DiagonalMatrixRow(FT(0))
 
 op_matrix_row_type(op::Operators.GradientOperator, ::Type{FT}) where {FT} =
     uses_extrapolate(op) ? QuaddiagonalMatrixRow{C3{FT}} :
     BidiagonalMatrixRow{C3{FT}}
 op_matrix_interior_row(::Operators.GradientOperator, ::Type{FT}) where {FT} =
     BidiagonalMatrixRow(-C3(FT(1)), C3(FT(1)))
-op_matrix_first_row(
-    ::Operators.GradientC2F,
-    ::Operators.SetGradient,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(C3(FT(0)))
-op_matrix_last_row(
-    ::Operators.GradientC2F,
-    ::Operators.SetGradient,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(C3(FT(0)))
 op_matrix_first_row(
     ::Operators.GradientF2C,
     ::Operators.SetValue,
@@ -639,50 +837,6 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     J⁺ = Geometry.LocalGeometry(space, idx + half, hidx).J
     return BidiagonalMatrixRow(-C3(J⁻)', C3(J⁺)') * invJ
 end
-op_matrix_first_row(
-    ::Operators.DivergenceC2F,
-    ::Operators.SetDivergence,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(C3(FT(0))')
-op_matrix_last_row(
-    ::Operators.DivergenceC2F,
-    ::Operators.SetDivergence,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(C3(FT(0))')
-Base.@propagate_inbounds function op_matrix_first_row(
-    ::Operators.DivergenceF2C,
-    ::Operators.SetValue,
-    space,
-    idx,
-    hidx,
-)
-    FT = Spaces.undertype(space)
-    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
-    J⁺ = Geometry.LocalGeometry(space, idx + half, hidx).J
-    return BidiagonalMatrixRow(C3(FT(0))', C3(J⁺)') * invJ
-end
-Base.@propagate_inbounds function op_matrix_last_row(
-    ::Operators.DivergenceF2C,
-    ::Operators.SetValue,
-    space,
-    idx,
-    hidx,
-)
-    FT = Spaces.undertype(space)
-    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
-    J⁻ = Geometry.LocalGeometry(space, idx - half, hidx).J
-    return BidiagonalMatrixRow(-C3(J⁻)', C3(FT(0))') * invJ
-end
-op_matrix_first_row(
-    ::Operators.DivergenceF2C,
-    ::Operators.SetDivergence,
-    ::Type{FT},
-) where {FT} = BidiagonalMatrixRow(C3(FT(0))', C3(FT(0))')
-op_matrix_last_row(
-    ::Operators.DivergenceF2C,
-    ::Operators.SetDivergence,
-    ::Type{FT},
-) where {FT} = BidiagonalMatrixRow(C3(FT(0))', C3(FT(0))')
 Base.@propagate_inbounds function op_matrix_first_row(
     ::Operators.DivergenceF2C,
     ::Operators.Extrapolate,
@@ -709,6 +863,30 @@ Base.@propagate_inbounds function op_matrix_last_row(
     J⁺ = Geometry.LocalGeometry(space, idx - 1 + half, hidx).J
     return LowerTridiagonalMatrixRow(-C3(J⁻)', C3(J⁺)', C3(FT(0))') * invJ
 end
+Base.@propagate_inbounds function op_matrix_first_row(
+    ::Operators.DivergenceF2C,
+    ::Operators.SetValue,
+    space,
+    idx,
+    hidx,
+)
+    FT = Spaces.undertype(space)
+    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
+    J⁺ = Geometry.LocalGeometry(space, idx + half, hidx).J
+    return BidiagonalMatrixRow(C3(FT(0))', C3(J⁺)') * invJ
+end
+Base.@propagate_inbounds function op_matrix_last_row(
+    ::Operators.DivergenceF2C,
+    ::Operators.SetValue,
+    space,
+    idx,
+    hidx,
+)
+    FT = Spaces.undertype(space)
+    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
+    J⁻ = Geometry.LocalGeometry(space, idx - half, hidx).J
+    return BidiagonalMatrixRow(-C3(J⁻)', C3(FT(0))') * invJ
+end
 
 op_matrix_row_type(
     ::Operators.CurlFiniteDifferenceOperator,
@@ -723,13 +901,3 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
     return BidiagonalMatrixRow(-εⁱʲ, εⁱʲ) * invJ
 end
-op_matrix_first_row(
-    ::Operators.CurlC2F,
-    ::Operators.SetCurl,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(zero(CT12_CT12{FT}))
-op_matrix_last_row(
-    ::Operators.CurlC2F,
-    ::Operators.SetCurl,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(zero(CT12_CT12{FT}))

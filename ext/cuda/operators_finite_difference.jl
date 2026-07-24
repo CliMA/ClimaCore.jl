@@ -86,21 +86,33 @@ function Base.copyto!(
         # this block config is better for VIJFH. It is only used when the total number of
         # threads in a block is between 32 and 256 to avoid underutilization of the GPU and
         # errors due to too many registers used when the block size is too large.
-        if !Topologies.isperiodic(space) && mask isa NoMask &&
-           32 <= n_face_levels * Ni <= 256
-            op_matrix_bc = replace_fd_ops(bc′)
+        # TODO: auto reduce max reg usage when needed because of high res columns
+        if !Topologies.isperiodic(space) && n_face_levels ≤ 256
+            #    32 <= n_face_levels * Ni <= 256
+            n_columns = mask isa NoMask ? Ni * Nj * Nh : mask.N[1]
+            # 108 is the number of SMs in an A100. TODO: get this value from CUDA.jl to better optimize for different GPUs
+            threads_dim_y = n_columns > 256 * 108 ? div(256, n_face_levels) : 1
+            block_dim_x = div(n_columns, threads_dim_y, RoundUp)
+            cart_inds = if mask isa NoMask
+                CartesianIndices(map(Base.OneTo, (Ni, Nj, Nh)))
+            else
+                nothing
+            end
             args = (
                 strip_space(out, space),
-                strip_space(op_matrix_bc, space),
+                strip_space(bc′, space),
+                cart_inds,
+                mask,
                 axes(out),
             )
+
             auto_launch!(
                 eager_copyto_stencil_kernel!,
                 args;
-                threads_s = (n_face_levels, Ni, 1),
-                blocks_s = (1, Nj, Nh),
+                threads_s = (n_face_levels, threads_dim_y, 1),
+                blocks_s = (block_dim_x, 1, 1),
                 always_inline = true,
-                shmem = n_face_levels * Ni * 9 * 4, # see `check_if_fits_in_shmem` for how this is calculated
+                shmem = n_face_levels * threads_dim_y * 9 * 4, # see `check_if_fits_in_shmem` for how this is calculated
             )
             return out
         end
