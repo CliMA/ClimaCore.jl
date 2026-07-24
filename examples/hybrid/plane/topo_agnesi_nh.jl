@@ -16,6 +16,7 @@ import ClimaCore:
     Operators,
     Hypsography
 using ClimaCore.Geometry
+import ClimaCore.Utilities: half
 import LazyBroadcast: lazy
 
 using DiffEqCallbacks
@@ -323,8 +324,8 @@ function rhs_invariant!(dY, Y, _, t)
         (-2 * inv(lg_top_face.J)),
     )
     set_bcs = Operators.SetBoundaryOperator(
-        bottom = Operators.SetValue(bottom_divergence),
-        top = Operators.SetValue(top_divergence),
+        bottom = Operators.SetValue(Fields.Field(bottom_divergence, bottom_face_space)),
+        top = Operators.SetValue(Fields.Field(top_divergence, top_face_space)),
     )
     vκ₂∇²w = @. set_bcs(vdivc2f(κ₂ * ᶜ∇ᵥw))
     hκ₂∇²h_tot = @. hwdiv(cρ * κ₂ * ᶜ∇ₕh_tot)
