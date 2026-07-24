@@ -1,610 +1,177 @@
-import MultiBroadcastFusion as MBF
-import MultiBroadcastFusion: fused_direct
-
-# Make a MultiBroadcastFusion type, `FusedMultiBroadcast`, and macro, `@fused`:
-# via https://github.com/CliMA/MultiBroadcastFusion.jl
-MBF.@make_type FusedMultiBroadcast
-MBF.@make_fused fused_direct FusedMultiBroadcast fused_direct
-
-# Broadcasting of AbstractData objects
-# https://docs.julialang.org/en/v1/manual/interfaces/#Broadcast-Styles
-
-abstract type DataStyle <: Base.BroadcastStyle end
-
-abstract type Data0DStyle <: DataStyle end
-struct DataFStyle{A} <: Data0DStyle end
-DataStyle(::Type{DataF{S, A}}) where {S, A} = DataFStyle{parent_array_type(A)}()
-Data0DStyle(::Type{DataFStyle{A}}) where {A} = DataFStyle{A}
-
-abstract type DataColumnStyle <: DataStyle end
-struct VFStyle{Nv, A} <: DataColumnStyle end
-DataStyle(::Type{VF{S, Nv, A}}) where {S, Nv, A} =
-    VFStyle{Nv, parent_array_type(A)}()
-DataColumnStyle(::Type{VFStyle{Nv, A}}) where {Nv, A} = VFStyle{Nv, A}
-Data0DStyle(::Type{VFStyle{Nv, A}}) where {Nv, A} = DataFStyle{A}
-
-abstract type DataLevelStyle <: DataStyle end
-abstract type Data1DStyle{Ni} <: DataLevelStyle end
-struct IFHStyle{Ni, A} <: Data1DStyle{Ni} end
-DataStyle(::Type{IFH{S, Ni, A}}) where {S, Ni, A} =
-    IFHStyle{Ni, parent_array_type(A)}()
-Data0DStyle(::Type{IFHStyle{Ni, A}}) where {Ni, A} = DataFStyle{A}
-struct IHFStyle{Ni, A} <: Data1DStyle{Ni} end
-DataStyle(::Type{IHF{S, Ni, A}}) where {S, Ni, A} =
-    IHFStyle{Ni, parent_array_type(A)}()
-Data0DStyle(::Type{IHFStyle{Ni, A}}) where {Ni, A} = DataFStyle{A}
-
-abstract type DataSlab1DStyle{Ni} <: DataLevelStyle end
-DataSlab1DStyle(::Type{IFHStyle{Ni, A}}) where {Ni, A} = IFStyle{Ni, A}
-DataSlab1DStyle(::Type{IHFStyle{Ni, A}}) where {Ni, A} = IFStyle{Ni, A}
-
-struct IFStyle{Ni, A} <: DataSlab1DStyle{Ni} end
-DataStyle(::Type{IF{S, Ni, A}}) where {S, Ni, A} =
-    IFStyle{Ni, parent_array_type(A)}()
-Data0DStyle(::Type{IFStyle{Ni, A}}) where {Ni, A} = DataFStyle{A}
-
-abstract type DataSlab2DStyle{Nij} <: DataLevelStyle end
-struct IJFStyle{Nij, A} <: DataSlab2DStyle{Nij} end
-DataStyle(::Type{IJF{S, Nij, A}}) where {S, Nij, A} =
-    IJFStyle{Nij, parent_array_type(A)}()
-Data0DStyle(::Type{IJFStyle{Nij, A}}) where {Nij, A} = DataFStyle{A}
-
-abstract type Data2DStyle{Nij} <: DataLevelStyle end
-struct IJFHStyle{Nij, A} <: Data2DStyle{Nij} end
-DataStyle(::Type{IJFH{S, Nij, A}}) where {S, Nij, A} =
-    IJFHStyle{Nij, parent_array_type(A)}()
-DataSlab2DStyle(::Type{IJFHStyle{Nij, A}}) where {Nij, A} = IJFStyle{Nij, A}
-Data0DStyle(::Type{IJFHStyle{Nij, A}}) where {Nij, A} = DataFStyle{A}
-
-struct IJHFStyle{Nij, A} <: Data2DStyle{Nij} end
-DataStyle(::Type{IJHF{S, Nij, A}}) where {S, Nij, A} =
-    IJHFStyle{Nij, parent_array_type(A)}()
-DataSlab2DStyle(::Type{IJHFStyle{Nij, A}}) where {Nij, A} = IJFStyle{Nij, A}
-Data0DStyle(::Type{IJHFStyle{Nij, A}}) where {Nij, A} = DataFStyle{A}
-
-abstract type Data1DXStyle{Nv, Ni} <: DataStyle end
-struct VIFHStyle{Nv, Ni, A} <: Data1DXStyle{Nv, Ni} end
-DataStyle(::Type{VIFH{S, Nv, Ni, A}}) where {S, Nv, Ni, A} =
-    VIFHStyle{Nv, Ni, parent_array_type(A)}()
-Data1DXStyle(::Type{VIFHStyle{Nv, Ni, A}}) where {Ni, Nv, A} =
-    VIFHStyle{Nv, Ni, A}
-DataLevelStyle(::Type{VIFHStyle{Nv, Ni, A}}) where {Ni, Nv, A} = IFHStyle{Ni, A}
-DataColumnStyle(::Type{VIFHStyle{Nv, Ni, A}}) where {Ni, Nv, A} = VFStyle{Nv, A}
-DataSlab1DStyle(::Type{VIFHStyle{Nv, Ni, A}}) where {Ni, Nv, A} = IFStyle{Ni, A}
-Data0DStyle(::Type{VIFHStyle{Nv, Ni, A}}) where {Nv, Ni, A} = DataFStyle{A}
-
-struct VIHFStyle{Nv, Ni, A} <: Data1DXStyle{Nv, Ni} end
-DataStyle(::Type{VIHF{S, Nv, Ni, A}}) where {S, Nv, Ni, A} =
-    VIHFStyle{Nv, Ni, parent_array_type(A)}()
-Data1DXStyle(::Type{VIHFStyle{Nv, Ni, A}}) where {Ni, Nv, A} =
-    VIHFStyle{Nv, Ni, A}
-DataLevelStyle(::Type{VIHFStyle{Nv, Ni, A}}) where {Ni, Nv, A} = IHFStyle{Ni, A}
-DataColumnStyle(::Type{VIHFStyle{Nv, Ni, A}}) where {Ni, Nv, A} = VFStyle{Nv, A}
-DataSlab1DStyle(::Type{VIHFStyle{Nv, Ni, A}}) where {Ni, Nv, A} = IFStyle{Ni, A}
-Data0DStyle(::Type{VIHFStyle{Nv, Ni, A}}) where {Nv, Ni, A} = DataFStyle{A}
-
-abstract type Data2DXStyle{Nv, Nij} <: DataStyle end
-struct VIJFHStyle{Nv, Nij, A} <: Data2DXStyle{Nv, Nij} end
-DataStyle(::Type{VIJFH{S, Nv, Nij, A}}) where {S, Nv, Nij, A} =
-    VIJFHStyle{Nv, Nij, parent_array_type(A)}()
-Data2DXStyle(::Type{VIJFHStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
-    VIJFHStyle{Nv, Nij, A}
-DataLevelStyle(::Type{VIJFHStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
-    IJFHStyle{Nij, A}
-DataColumnStyle(::Type{VIJFHStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
-    VFStyle{Nv, A}
-DataSlab2DStyle(::Type{VIJFHStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
-    IJFStyle{Nij, A}
-Data0DStyle(::Type{VIJFHStyle{Nv, Nij, A}}) where {Nv, Nij, A} = DataFStyle{A}
-
-struct VIJHFStyle{Nv, Nij, A} <: Data2DXStyle{Nv, Nij} end
-DataStyle(::Type{VIJHF{S, Nv, Nij, A}}) where {S, Nv, Nij, A} =
-    VIJHFStyle{Nv, Nij, parent_array_type(A)}()
-Data2DXStyle(::Type{VIJHFStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
-    VIJHFStyle{Nv, Nij, A}
-DataLevelStyle(::Type{VIJHFStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
-    IJHFStyle{Nij, A}
-DataColumnStyle(::Type{VIJHFStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
-    VFStyle{Nv, A}
-DataSlab2DStyle(::Type{VIJHFStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
-    IJFStyle{Nij, A}
-Data0DStyle(::Type{VIJHFStyle{Nv, Nij, A}}) where {Nv, Nij, A} = DataFStyle{A}
-
-DataLevelStyle(::Type{Style}) where {Style <: DataLevelStyle} = Style
-DataLevelStyle(::Type{Style}) where {Style <: DataColumnStyle} =
-    Data0DStyle(Style)
-DataColumnStyle(::Type{Style}) where {Style <: DataLevelStyle} =
-    Data0DStyle(Style)
-DataSlabStyle(::Type{Style}) where {Style <: Union{Data1DStyle, Data1DXStyle}} =
-    DataSlab1DStyle(Style)
-DataSlabStyle(::Type{Style}) where {Style <: Union{Data2DStyle, Data2DXStyle}} =
-    DataSlab2DStyle(Style)
-
-#####
-##### Union styles
-#####
-
-#! format: off
-const BroadcastedUnionIJFH{S, Nij, A}      = Union{Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}}, IJFH{S, Nij, A}}
-const BroadcastedUnionIJHF{S, Nij, A}      = Union{Base.Broadcast.Broadcasted{IJHFStyle{Nij, A}}, IJHF{S, Nij, A}}
-const BroadcastedUnionIFH{S, Ni, A}        = Union{Base.Broadcast.Broadcasted{IFHStyle{Ni, A}}, IFH{S, Ni, A}}
-const BroadcastedUnionIHF{S, Ni, A}        = Union{Base.Broadcast.Broadcasted{IHFStyle{Ni, A}}, IHF{S, Ni, A}}
-const BroadcastedUnionIJF{S, Nij, A}       = Union{Base.Broadcast.Broadcasted{IJFStyle{Nij, A}}, IJF{S, Nij, A}}
-const BroadcastedUnionIF{S, Ni, A}         = Union{Base.Broadcast.Broadcasted{IFStyle{Ni, A}}, IF{S, Ni, A}}
-const BroadcastedUnionVIFH{S, Nv, Ni, A}   = Union{Base.Broadcast.Broadcasted{VIFHStyle{Nv, Ni, A}}, VIFH{S, Nv, Ni, A}}
-const BroadcastedUnionVIHF{S, Nv, Ni, A}   = Union{Base.Broadcast.Broadcasted{VIHFStyle{Nv, Ni, A}}, VIHF{S, Nv, Ni, A}}
-const BroadcastedUnionVIJFH{S, Nv, Nij, A} = Union{Base.Broadcast.Broadcasted{VIJFHStyle{Nv, Nij, A}}, VIJFH{S, Nv, Nij, A}}
-const BroadcastedUnionVIJHF{S, Nv, Nij, A} = Union{Base.Broadcast.Broadcasted{VIJHFStyle{Nv, Nij, A}}, VIJHF{S, Nv, Nij, A}}
-const BroadcastedUnionVF{S, Nv, A}         = Union{Base.Broadcast.Broadcasted{VFStyle{Nv, A}}, VF{S, Nv, A}}
-const BroadcastedUnionDataF{S, A}          = Union{Base.Broadcast.Broadcasted{DataFStyle{A}}, DataF{S, A}}
-#! format: on
-
-abstract type Data3DStyle <: DataStyle end
-
-Base.Broadcast.BroadcastStyle(::Type{D}) where {D <: AbstractData} =
+"""
     DataStyle(D)
 
-# precedence rules
+`BroadcastStyle` for a [`DataLayout`](@ref) of type `D`, which stores the
+[`layout_type`](@ref) and its corresponding value of `ndims` as type parameters.
+"""
+struct DataStyle{N, D <: DataLayout{<:Any, N}} <: Broadcast.AbstractArrayStyle{N} end
+DataStyle(::Type{D}) where {D} = DataStyle{ndims(D), layout_type(D)}()
 
-# scalars are broadcast over the data object
-Base.Broadcast.BroadcastStyle(
-    ::Base.Broadcast.AbstractArrayStyle{0},
-    ds::DataStyle,
-) = ds
+Base.ndims(::DataStyle{N}) where {N} = N
 
-Base.Broadcast.BroadcastStyle(::Base.Broadcast.Style{Tuple}, ds::DataStyle) = ds
+Broadcast.BroadcastStyle(::Type{D}) where {D <: DataLayout} = DataStyle(D)
 
-Base.Broadcast.BroadcastStyle(
-    ::DataFStyle{A1},
-    ::DataFStyle{A2},
-) where {A1, A2} = DataFStyle{promote_parent_array_type(A1, A2)}()
-Base.Broadcast.BroadcastStyle(
-    ::VFStyle{Nv, A1},
-    ::VFStyle{Nv, A2},
-) where {Nv, A1, A2} = VFStyle{Nv, promote_parent_array_type(A1, A2)}()
-Base.Broadcast.BroadcastStyle(
-    ::IFStyle{Ni, A1},
-    ::IFStyle{Ni, A2},
-) where {Ni, A1, A2} = IFStyle{Ni, promote_parent_array_type(A1, A2)}()
-Base.Broadcast.BroadcastStyle(
-    ::IFHStyle{Ni, A1},
-    ::IFHStyle{Ni, A2},
-) where {Ni, A1, A2} = IFHStyle{Ni, promote_parent_array_type(A1, A2)}()
-Base.Broadcast.BroadcastStyle(
-    ::IHFStyle{Ni, A1},
-    ::IHFStyle{Ni, A2},
-) where {Ni, A1, A2} = IHFStyle{Ni, promote_parent_array_type(A1, A2)}()
-Base.Broadcast.BroadcastStyle(
-    ::VIFHStyle{Nv, Ni, A1},
-    ::VIFHStyle{Nv, Ni, A2},
-) where {Nv, Ni, A1, A2} =
-    VIFHStyle{Nv, Ni, promote_parent_array_type(A1, A2)}()
-Base.Broadcast.BroadcastStyle(
-    ::VIHFStyle{Nv, Ni, A1},
-    ::VIHFStyle{Nv, Ni, A2},
-) where {Nv, Ni, A1, A2} =
-    VIHFStyle{Nv, Ni, promote_parent_array_type(A1, A2)}()
-Base.Broadcast.BroadcastStyle(
-    ::IJFStyle{Nij, A1},
-    ::IJFStyle{Nij, A2},
-) where {Nij, A1, A2} = IJFStyle{Nij, promote_parent_array_type(A1, A2)}()
-Base.Broadcast.BroadcastStyle(
-    ::IJFHStyle{Nij, A1},
-    ::IJFHStyle{Nij, A2},
-) where {Nij, A1, A2} = IJFHStyle{Nij, promote_parent_array_type(A1, A2)}()
-Base.Broadcast.BroadcastStyle(
-    ::IJHFStyle{Nij, A1},
-    ::IJHFStyle{Nij, A2},
-) where {Nij, A1, A2} = IJHFStyle{Nij, promote_parent_array_type(A1, A2)}()
-Base.Broadcast.BroadcastStyle(
-    ::VIJFHStyle{Nv, Nij, A1},
-    ::VIJFHStyle{Nv, Nij, A2},
-) where {Nv, Nij, A1, A2} =
-    VIJFHStyle{Nv, Nij, promote_parent_array_type(A1, A2)}()
-Base.Broadcast.BroadcastStyle(
-    ::VIJHFStyle{Nv, Nij, A1},
-    ::VIJHFStyle{Nv, Nij, A2},
-) where {Nv, Nij, A1, A2} =
-    VIJHFStyle{Nv, Nij, promote_parent_array_type(A1, A2)}()
+# For styles with equal typenames but different dimensionalities, Base's
+# fallback for AbstractArrayStyle calls typeof(style)(Val(N)). DataStyle needs a
+# layout type D in addition to the dimensionality, so it bypasses the fallback.
+Broadcast.BroadcastStyle(style1::DataStyle, style2::DataStyle) =
+    style1 == style2 || iszero(ndims(style2)) ? style1 :
+    iszero(ndims(style1)) ? style2 : Broadcast.Unknown()
 
-Base.Broadcast.BroadcastStyle(
-    ::DataFStyle{A1},
-    ::IFStyle{Ni, A2},
-) where {Ni, A1, A2} = IFStyle{Ni, promote_parent_array_type(A1, A2)}()
+# Pass scalar values in Tuples of length 1 or in 0-dimensional AbstractArrays.
+# Add DefaultArrayStyle{0} and DataStyle{0} methods to avoid ambiguities.
+Broadcast.BroadcastStyle(style::DataStyle, ::Broadcast.Style{Tuple}) = style
+Broadcast.BroadcastStyle(style::DataStyle, ::Broadcast.AbstractArrayStyle{0}) = style
+Broadcast.BroadcastStyle(style::DataStyle, ::Broadcast.DefaultArrayStyle{0}) = style
+Broadcast.BroadcastStyle(style::DataStyle, ::DataStyle{0}) = style
 
-Base.Broadcast.BroadcastStyle(
-    ::DataFStyle{A1},
-    ::IJFStyle{Nij, A2},
-) where {Nij, A1, A2} = IJFStyle{Nij, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::DataFStyle{A1},
-    ::VFStyle{Nv, A2},
-) where {A1, Nv, A2} = VFStyle{Nv, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::DataFStyle{A1},
-    ::IFHStyle{Ni, A2},
-) where {Ni, A1, A2} = IFHStyle{Ni, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::DataFStyle{A1},
-    ::IHFStyle{Ni, A2},
-) where {Ni, A1, A2} = IHFStyle{Ni, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::DataFStyle{A1},
-    ::IJFHStyle{Nij, A2},
-) where {Nij, A1, A2} = IJFHStyle{Nij, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::DataFStyle{A1},
-    ::IJHFStyle{Nij, A2},
-) where {Nij, A1, A2} = IJHFStyle{Nij, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::DataFStyle{A1},
-    ::VIFHStyle{Nv, Ni, A2},
-) where {Nv, Ni, A1, A2} =
-    VIFHStyle{Nv, Ni, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::DataFStyle{A1},
-    ::VIHFStyle{Nv, Ni, A2},
-) where {Nv, Ni, A1, A2} =
-    VIHFStyle{Nv, Ni, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::DataFStyle{A1},
-    ::VIJFHStyle{Nv, Nij, A2},
-) where {Nv, Nij, A1, A2} =
-    VIJFHStyle{Nv, Nij, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::DataFStyle{A1},
-    ::VIJHFStyle{Nv, Nij, A2},
-) where {Nv, Nij, A1, A2} =
-    VIJHFStyle{Nv, Nij, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::VFStyle{Nv, A1},
-    ::IFHStyle{Ni, A2},
-) where {Nv, Ni, A1, A2} =
-    VIFHStyle{Nv, Ni, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::VFStyle{Nv, A1},
-    ::IHFStyle{Ni, A2},
-) where {Nv, Ni, A1, A2} =
-    VIHFStyle{Nv, Ni, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::VFStyle{Nv, A1},
-    ::IJFHStyle{Nij, A2},
-) where {Nv, Nij, A1, A2} =
-    VIJFHStyle{Nv, Nij, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::VFStyle{Nv, A1},
-    ::IJHFStyle{Nij, A2},
-) where {Nv, Nij, A1, A2} =
-    VIJHFStyle{Nv, Nij, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::VFStyle{Nv, A1},
-    ::VIFHStyle{Nv, Ni, A2},
-) where {Nv, Ni, A1, A2} =
-    VIFHStyle{Nv, Ni, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::VFStyle{Nv, A1},
-    ::VIHFStyle{Nv, Ni, A2},
-) where {Nv, Ni, A1, A2} =
-    VIHFStyle{Nv, Ni, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::VFStyle{Nv, A1},
-    ::VIJFHStyle{Nv, Nij, A2},
-) where {Nv, Nij, A1, A2} =
-    VIJFHStyle{Nv, Nij, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::VFStyle{Nv, A1},
-    ::VIJHFStyle{Nv, Nij, A2},
-) where {Nv, Nij, A1, A2} =
-    VIJHFStyle{Nv, Nij, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::IFHStyle{Ni, A1},
-    ::VIFHStyle{Nv, Ni, A2},
-) where {Nv, Ni, A1, A2} =
-    VIFHStyle{Nv, Ni, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::IFHStyle{Ni, A1},
-    ::VIHFStyle{Nv, Ni, A2},
-) where {Nv, Ni, A1, A2} =
-    VIHFStyle{Nv, Ni, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::IJFHStyle{Nij, A1},
-    ::VIJFHStyle{Nv, Nij, A2},
-) where {Nv, Nij, A1, A2} =
-    VIJFHStyle{Nv, Nij, promote_parent_array_type(A1, A2)}()
-
-Base.Broadcast.BroadcastStyle(
-    ::IJHFStyle{Nij, A1},
-    ::VIJHFStyle{Nv, Nij, A2},
-) where {Nv, Nij, A1, A2} =
-    VIJHFStyle{Nv, Nij, promote_parent_array_type(A1, A2)}()
-
-# Enable automatic nested broadcasting over supported types of iterators, in
-# addition to the standard broadcasting over array indices.
-Base.Broadcast.broadcastable(data::AbstractData) =
+# Enable automatic nested broadcasting over supported types of iterators.
+@inline Broadcast.broadcastable(data::DataLayout) =
     reinterpret(add_auto_broadcasters(eltype(data)), data)
-Base.Broadcast.broadcasted(style::DataStyle, f::F, args...) where {F} =
+@inline Broadcast.broadcasted(style::DataStyle, f::F, args...) where {F} =
     auto_broadcasted(style, f, args)
 
-Base.eltype(bc::Base.Broadcast.Broadcasted{<:DataStyle}) = unsafe_eltype(bc)
+"""
+    LazyDataLayout{D}
 
-# Remove all AutoBroadcaster wrappers when allocating a new AbstractData.
-Base.similar(bc::Base.Broadcast.Broadcasted{<:DataStyle}) =
+A [`DataStyle`](@ref) broadcast expression whose [`layout_type`](@ref) is `D`.
+"""
+const LazyDataLayout{D} = Broadcast.Broadcasted{<:DataStyle{<:Any, D}}
+
+# Optimize axes(::LazyDataLayout) with statically inferrable axes when possible.
+@inline Broadcast._axes(bc::LazyDataLayout, ::Nothing) =
+    has_inferred_size(bc) ? unrolled_map(Base.OneTo, inferred_size(bc)) :
+    unrolled_reduce(stable_combine_axes, unrolled_map(axes, bc.args))
+
+# Instead of Base's combine_axes, whose DimensionMismatch error cannot compile
+# on GPUs, use a version that always selects the first non-singleton dimension.
+@inline stable_combine_axes(axes1::Tuple, axes2::Tuple) =
+    isempty(axes2) ? axes1 :
+    isempty(axes1) ? axes2 :
+    (
+        isone(length(first(axes2))) ? first(axes1) : first(axes2),
+        stable_combine_axes(Base.tail(axes1), Base.tail(axes2))...,
+    )
+
+# Make ndims support nested broadcasts whose axes have not been instantiated.
+@inline Base.ndims(::LazyDataLayout{D}) where {D} = ndims(D)
+
+# Allow eltype to return non-concrete types, like an empty Union{}.
+@inline Base.eltype(bc::LazyDataLayout) = unsafe_eltype(bc)
+
+# Remove all AutoBroadcaster wrappers when allocating a new DataLayout.
+@inline Base.similar(bc::LazyDataLayout) =
     similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
-
-# Only allocate a new AbstractData if its concrete element type can be inferred.
-Base.copy(bc::Base.Broadcast.Broadcasted{<:DataStyle}) =
-    copyto!(similar(bc), bc)
-
-Base.@propagate_inbounds function slab(
-    bc::Base.Broadcast.Broadcasted{DS},
-    inds...,
-) where {Ni, DS <: Data1DStyle{Ni}}
-    _args = slab_args(bc.args, inds...)
-    _axes = (SOneTo(Ni),)
-    Base.Broadcast.Broadcasted{DataSlab1DStyle(DS)}(bc.f, _args, _axes)
-end
-
-Base.@propagate_inbounds function slab(
-    bc::Base.Broadcast.Broadcasted{DS},
-    inds...,
-) where {Nv, Ni, DS <: Data1DXStyle{Nv, Ni}}
-    _args = slab_args(bc.args, inds...)
-    _axes = (SOneTo(Ni),)
-    Base.Broadcast.Broadcasted{DataSlab1DStyle(DS)}(bc.f, _args, _axes)
-end
-
-Base.@propagate_inbounds function slab(
-    bc::Base.Broadcast.Broadcasted{DS},
-    inds...,
-) where {Nij, DS <: Data2DStyle{Nij}}
-    _args = slab_args(bc.args, inds...)
-    _axes = (SOneTo(Nij), SOneTo(Nij))
-    Base.Broadcast.Broadcasted{DataSlab2DStyle(DS)}(bc.f, _args, _axes)
-end
-
-Base.@propagate_inbounds function slab(
-    bc::Base.Broadcast.Broadcasted{DS},
-    inds...,
-) where {Nv, Nij, DS <: Data2DXStyle{Nv, Nij}}
-    _args = slab_args(bc.args, inds...)
-    _axes = (SOneTo(Nij), SOneTo(Nij))
-    Base.Broadcast.Broadcasted{DataSlab2DStyle(DS)}(bc.f, _args, _axes)
-end
-
-Base.@propagate_inbounds function level(
-    bc::Base.Broadcast.Broadcasted{DS},
-    inds...,
-) where {DS <: DataStyle}
-    _args = level_args(bc.args, inds...)
-    _axes = nothing
-    bcc = Base.Broadcast.Broadcasted{DataLevelStyle(DS)}(bc.f, _args, _axes)
-    Base.Broadcast.instantiate(bcc)
-end
-
-@inline function level(
-    bc::Base.Broadcast.Broadcasted{DS},
-    inds...,
-) where {DS <: DataLevelStyle}
-    bc
-end
-
-Base.@propagate_inbounds function column(
-    bc::Base.Broadcast.Broadcasted{DS},
-    inds...,
-) where {Nv, N, DS <: Union{Data1DXStyle{Nv, N}, Data2DXStyle{Nv, N}}}
-    _args = column_args(bc.args, inds...)
-    _axes = nothing
-    bcc = Base.Broadcast.Broadcasted{DataColumnStyle(DS)}(bc.f, _args, _axes)
-    Base.Broadcast.instantiate(bcc)
-end
-
-@inline function column(
-    bc::Base.Broadcast.Broadcasted{DS},
-    inds...,
-) where {DS <: DataColumnStyle}
-    bc
-end
-
-Base.@propagate_inbounds function column(
-    bc::Union{Data1D, Base.Broadcast.Broadcasted{<:Data1D}},
-    i,
-    h,
+@inline Base.similar(bc::LazyDataLayout, ::Type{T}) where {T} = similar(
+    layout_type(bc){T, shape_params(bc)..., typeof(DataScope(bc)), parent_type(bc)},
+    size(bc),
 )
-    slab(bc, h)[i]
-end
-Base.@propagate_inbounds function column(
-    bc::Union{Data1D, Base.Broadcast.Broadcasted{<:Data1D}},
-    i,
-    j,
-    h,
+
+# Define a MultiBroadcastFusion type, FusedMultiBroadcast, and a corresponding
+# @fused macro, as outlined in https://github.com/CliMA/MultiBroadcastFusion.jl.
+@make_type FusedMultiBroadcast
+@make_fused fused_direct FusedMultiBroadcast fused_direct
+
+# Adapt does not descend into Base.Pair, so Adapt.@adapt_structure would leave
+# each pair's destination and broadcast unconverted (e.g. as CuArrays instead
+# of CuDeviceArrays in kernel arguments).
+Adapt.adapt_structure(to, fmb::FusedMultiBroadcast) = FusedMultiBroadcast(
+    unrolled_map(fmb.pairs) do pair
+        Pair(Adapt.adapt(to, pair.first), Adapt.adapt(to, pair.second))
+    end,
 )
-    slab(bc, h)[i]
+
+const MaybeLazyDataLayout = Union{DataLayout, LazyDataLayout}
+const MaybeFusedDataLayoutBroadcast = Union{LazyDataLayout, FusedMultiBroadcast}
+
+"""
+    layout_args(bc)
+
+Extracts every [`DataLayout`](@ref) and [`LazyDataLayout`](@ref) from the
+arguments of a broadcast expression.
+"""
+@inline layout_args(bc::LazyDataLayout) =
+    unrolled_filter(Base.Fix2(isa, MaybeLazyDataLayout), bc.args)
+@inline layout_args(bc::FusedMultiBroadcast) =
+    unrolled_filter(Base.Fix2(isa, MaybeLazyDataLayout), unrolled_flatten(bc.pairs))
+
+@inline DataScope(bc::MaybeFusedDataLayoutBroadcast) = DataScope(layout_args(bc)...)
+
+@inline layout_type(::LazyDataLayout{D}) where {D} = D
+
+# Only specify the parent array element type, instead of a concrete array type.
+@inline parent_type(bc::LazyDataLayout) =
+    AbstractArray{promote_type(unrolled_map(eltype ∘ parent_type, layout_args(bc))...)}
+
+# Allow any combination of f_dim values, taking a maximum to resolve conflicts.
+@inline function f_dim(bc::LazyDataLayout)
+    f_dims = unrolled_filter(!isnothing, unrolled_map(f_dim, layout_args(bc)))
+    return isempty(f_dims) ? nothing : max(f_dims...)
 end
 
-Base.@propagate_inbounds function column(
-    bc::Union{Data2D, Base.Broadcast.Broadcasted{<:Data2D}},
-    i,
-    j,
-    h,
-)
-    slab(bc, h)[i, j]
+# Extrude singleton axes like Broadcast.combine_axes when combining vijh_params.
+@inline vijh_params(bc::LazyDataLayout) =
+    unrolled_reduce(unrolled_map(vijh_params, layout_args(bc))) do params1, params2
+        unrolled_map(params1, params2) do N1, N2
+            isnothing(N1) || isnothing(N2) ? nothing :
+            N1 == N2 || isone(N2) ? N1 :
+            isone(N1) ? N2 : Broadcast.throwdm((Base.OneTo(N1),), (Base.OneTo(N2),))
+        end
+    end
+
+# Compute layout-specific shape_params from the generic vijh_params and f_dim.
+@inline shape_params(::LazyDataLayout{DataF}) = (;)
+@inline shape_params(bc::LazyDataLayout{VIJHWithF}) =
+    (; vijh_params(bc)..., F = f_dim(bc))
+@inline shape_params(bc::LazyDataLayout{VIH1}) =
+    (; vijh_params(bc).Nv, vijh_params(bc).Ni, vijh_params(bc).Nh)
+@inline shape_params(bc::LazyDataLayout{IH1JH2}) =
+    (; vijh_params(bc).Ni, vijh_params(bc).Nj, vijh_params(bc).Nh)
+
+@inline inferred_size(bc::LazyDataLayout) =
+    inferred_size(layout_type(bc){<:Any, shape_params(bc)...})
+
+@inline function nelems(bc::LazyDataLayout)
+    (; Nv, Ni, Nj, Nh) = vijh_params(bc)
+    return isnothing(Nh) ? length(bc) ÷ (Nv * Ni * Nj) : Nh
 end
 
-function Base.similar(
-    bc::BroadcastedUnionDataF{<:Any, A},
-    ::Type{Eltype},
-) where {A, Eltype}
-    PA = parent_array_type(A, checked_valid_basetype(eltype(A), Eltype))
-    array = similar(PA, (num_basetypes(eltype(PA), Eltype)))
-    return DataF{Eltype}(array)
+# Forward size queries and primitives to the first layout in a fused broadcast.
+const DATA_LAYOUT_PRIMITIVES =
+    (:layout_type, :parent_type, :f_dim, :shape_params, :inferred_size, :nelems)
+for f in (:ndims, :length, :size, :axes, DATA_LAYOUT_PRIMITIVES...)
+    f_with_module_prefix = f in DATA_LAYOUT_PRIMITIVES ? f : :(Base.$f)
+    @eval @inline $f_with_module_prefix(bc::FusedMultiBroadcast) =
+        unrolled_allequal($f, layout_args(bc)) ? $f(first(layout_args(bc))) :
+        throw(DimensionMismatch($("$f is inconsistent among fused broadcasts")))
 end
 
-function Base.similar(
-    bc::BroadcastedUnionIJFH{<:Any, Nij, A},
-    ::Type{Eltype},
-    (_, _, _, _, Nh) = size(bc),
-) where {Nij, A, Eltype}
-    PA = parent_array_type(A, checked_valid_basetype(eltype(A), Eltype))
-    array = similar(PA, (Nij, Nij, num_basetypes(eltype(PA), Eltype), Nh))
-    return IJFH{Eltype, Nij}(array)
+"""
+    modify_args(f, bc, f_args...)
+
+Replaces each of the [`layout_args`](@ref) in a broadcast expression with
+`f(layout_arg, f_args...)`.
+"""
+@propagate_inbounds function modify_args(f::F, bc::LazyDataLayout, f_args...) where {F}
+    modified_args = unrolled_map_with_inbounds(bc.args) do arg
+        Base.@_propagate_inbounds_meta
+        arg isa MaybeLazyDataLayout ? f(arg, f_args...) : arg
+    end
+    return Broadcast.Broadcasted(bc.style, bc.f, modified_args, bc.axes)
+end
+@propagate_inbounds function modify_args(f::F, bc::FusedMultiBroadcast, f_args...) where {F}
+    modified_pairs = unrolled_map_with_inbounds(bc.pairs) do (dest, bc)
+        Base.@_propagate_inbounds_meta
+        Pair(f(dest, f_args...), bc isa MaybeLazyDataLayout ? f(bc, f_args...) : bc)
+    end
+    return FusedMultiBroadcast(modified_pairs)
 end
 
-function Base.similar(
-    bc::BroadcastedUnionIJHF{<:Any, Nij, A},
-    ::Type{Eltype},
-    (_, _, _, _, Nh) = size(bc),
-) where {Nij, A, Eltype}
-    PA = parent_array_type(A, checked_valid_basetype(eltype(A), Eltype))
-    array = similar(PA, (Nij, Nij, Nh, num_basetypes(eltype(PA), Eltype)))
-    return IJHF{Eltype, Nij}(array)
-end
-
-function Base.similar(
-    bc::BroadcastedUnionIFH{<:Any, Ni, A},
-    ::Type{Eltype},
-    (_, _, _, _, Nh) = size(bc),
-) where {Ni, A, Eltype}
-    PA = parent_array_type(A, checked_valid_basetype(eltype(A), Eltype))
-    array = similar(PA, (Ni, num_basetypes(eltype(PA), Eltype), Nh))
-    return IFH{Eltype, Ni}(array)
-end
-
-function Base.similar(
-    bc::BroadcastedUnionIHF{<:Any, Ni, A},
-    ::Type{Eltype},
-    (_, _, _, _, Nh) = size(bc),
-) where {Ni, A, Eltype}
-    PA = parent_array_type(A, checked_valid_basetype(eltype(A), Eltype))
-    array = similar(PA, (Ni, Nh, num_basetypes(eltype(PA), Eltype)))
-    return IHF{Eltype, Ni}(array)
-end
-
-function Base.similar(
-    ::BroadcastedUnionIJF{<:Any, Nij, A},
-    ::Type{Eltype},
-) where {Nij, A, Eltype}
-    T = checked_valid_basetype(eltype(A), Eltype)
-    Nf = num_basetypes(T, Eltype)
-    array = MArray{Tuple{Nij, Nij, Nf}, T, 3, Nij * Nij * Nf}(undef)
-    return IJF{Eltype, Nij}(array)
-end
-
-function Base.similar(
-    ::BroadcastedUnionIF{<:Any, Ni, A},
-    ::Type{Eltype},
-) where {Ni, A, Eltype}
-    T = checked_valid_basetype(eltype(A), Eltype)
-    Nf = num_basetypes(T, Eltype)
-    array = MArray{Tuple{Ni, Nf}, T, 2, Ni * Nf}(undef)
-    return IF{Eltype, Ni}(array)
-end
-
-Base.similar(
-    bc::BroadcastedUnionVF{<:Any, Nv},
-    ::Type{Eltype},
-) where {Nv, Eltype} = Base.similar(bc, Eltype, Val(Nv))
-
-function Base.similar(
-    bc::BroadcastedUnionVF{<:Any, Nv, A},
-    ::Type{Eltype},
-    ::Val{newNv},
-) where {Nv, A, Eltype, newNv}
-    PA = parent_array_type(A, checked_valid_basetype(eltype(A), Eltype))
-    array = similar(PA, (newNv, num_basetypes(eltype(PA), Eltype)))
-    return VF{Eltype, newNv}(array)
-end
-
-Base.similar(
-    bc::Union{BroadcastedUnionVIFH{<:Any, Nv}, BroadcastedUnionVIHF{<:Any, Nv}},
-    ::Type{Eltype},
-) where {Nv, Eltype} = Base.similar(bc, Eltype, Val(Nv))
-
-function Base.similar(
-    bc::BroadcastedUnionVIFH{<:Any, Nv, Ni, A},
-    ::Type{Eltype},
-    ::Val{newNv},
-) where {Nv, Ni, A, Eltype, newNv}
-    (_, _, _, _, Nh) = size(bc)
-    PA = parent_array_type(A, checked_valid_basetype(eltype(A), Eltype))
-    array = similar(PA, (newNv, Ni, num_basetypes(eltype(PA), Eltype), Nh))
-    return VIFH{Eltype, newNv, Ni}(array)
-end
-
-function Base.similar(
-    bc::BroadcastedUnionVIHF{<:Any, Nv, Ni, A},
-    ::Type{Eltype},
-    ::Val{newNv},
-) where {Nv, Ni, A, Eltype, newNv}
-    (_, _, _, _, Nh) = size(bc)
-    PA = parent_array_type(A, checked_valid_basetype(eltype(A), Eltype))
-    array = similar(PA, (newNv, Ni, Nh, num_basetypes(eltype(PA), Eltype)))
-    return VIHF{Eltype, newNv, Ni}(array)
-end
-
-Base.similar(
-    bc::BroadcastedUnionVIJFH{<:Any, Nv, Nij, A},
-    ::Type{Eltype},
-) where {Nv, Nij, A, Eltype} = similar(bc, Eltype, Val(Nv))
-
-Base.similar(
-    bc::BroadcastedUnionVIJHF{<:Any, Nv, Nij, A},
-    ::Type{Eltype},
-) where {Nv, Nij, A, Eltype} = similar(bc, Eltype, Val(Nv))
-
-function Base.similar(
-    bc::BroadcastedUnionVIJFH{<:Any, <:Any, Nij, A},
-    ::Type{Eltype},
-    ::Val{Nv},
-) where {Nij, A, Eltype, Nv}
-    (_, _, _, _, Nh) = size(bc)
-    PA = parent_array_type(A, checked_valid_basetype(eltype(A), Eltype))
-    array = similar(PA, (Nv, Nij, Nij, num_basetypes(eltype(PA), Eltype), Nh))
-    return VIJFH{Eltype, Nv, Nij}(array)
-end
-
-function Base.similar(
-    bc::BroadcastedUnionVIJHF{<:Any, <:Any, Nij, A},
-    ::Type{Eltype},
-    ::Val{Nv},
-) where {Nij, A, Eltype, Nv}
-    (_, _, _, _, Nh) = size(bc)
-    PA = parent_array_type(A, checked_valid_basetype(eltype(A), Eltype))
-    array = similar(PA, (Nv, Nij, Nij, Nh, num_basetypes(eltype(PA), Eltype)))
-    return VIJHF{Eltype, Nv, Nij}(array)
-end
-
-# ============= FusedMultiBroadcast
-
-isascalar(
-    bc::Base.Broadcast.Broadcasted{Style},
-) where {
-    Style <:
-    Union{Base.Broadcast.AbstractArrayStyle{0}, Base.Broadcast.Style{Tuple}},
-} = true
-isascalar(
-    bc::NonExtrudedBroadcasted{Style},
-) where {
-    Style <:
-    Union{Base.Broadcast.AbstractArrayStyle{0}, Base.Broadcast.Style{Tuple}},
-} = true
-isascalar(bc) = false
+@inline reassign(bc::MaybeFusedDataLayoutBroadcast, scope) =
+    modify_args(reassign, bc, scope)
+@propagate_inbounds level_view(bc::MaybeFusedDataLayoutBroadcast, v) =
+    modify_args(level, bc, v)
+@propagate_inbounds slab_view(bc::MaybeFusedDataLayoutBroadcast, v, h) =
+    modify_args(slab, bc, v, h)
+@propagate_inbounds column_view(bc::MaybeFusedDataLayoutBroadcast, i, j, h) =
+    modify_args(column, bc, i, j, h)

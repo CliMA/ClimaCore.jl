@@ -244,7 +244,7 @@ level(space::ExtrudedFiniteDifferenceSpace, v) =
     SpectralElementSpace1D(level(grid(space), v))
 
 nlevels(space::ExtrudedFiniteDifferenceSpace) =
-    size(local_geometry_data(space), 4)
+    size(local_geometry_data(space), 1)
 
 function left_boundary_name(space::ExtrudedFiniteDifferenceSpace)
     boundaries = Topologies.boundaries(Spaces.vertical_topology(space))
@@ -259,13 +259,13 @@ function eachslabindex(cspace::CenterExtrudedFiniteDifferenceSpace)
     h_iter = eachslabindex(Spaces.horizontal_space(cspace))
     center_local_geometry =
         local_geometry_data(grid(cspace), Grids.CellCenter())
-    Nv = size(center_local_geometry, 4)
+    Nv = size(center_local_geometry, 1)
     return Iterators.product(1:Nv, h_iter)
 end
 function eachslabindex(fspace::FaceExtrudedFiniteDifferenceSpace)
     h_iter = eachslabindex(Spaces.horizontal_space(fspace))
     face_local_geometry = local_geometry_data(grid(fspace), Grids.CellFace())
-    Nv = size(face_local_geometry, 4)
+    Nv = size(face_local_geometry, 1)
     return Iterators.product(1:Nv, h_iter)
 end
 

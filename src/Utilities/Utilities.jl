@@ -8,6 +8,7 @@ import InteractiveUtils
 include("plushalf.jl")
 include("auto_broadcaster.jl")
 include("cache.jl")
+include("safe_mapreduce.jl")
 
 module Unrolled # TODO: Move all of these functions into UnrolledUtilities.jl
 
@@ -64,34 +65,63 @@ Base.@propagate_inbounds linear_ind(n::NTuple, loc::NTuple) =
     linear_ind(n, CartesianIndex(loc))
 
 """
-    unionall_type(::Type{T})
+    stable_view(array, indices...)
 
-Extract the type of the input, and strip it of any type parameters.
+Like `view`, but with two modifications that avoid expensive operations:
+- Every view is a `SubArray`, even when `array` is a GPU array. GPUArrays
+  replaces each contiguous view of a `CuArray` with a new `CuArray` derived
+  from the same memory buffer, and the derived array's type is not inferrable,
+  which makes all host code that builds slice or property views type-unstable.
+  The `SubArray`s constructed here have fully inferred types, and they are
+  converted to `SubArray`s of `CuDeviceArray`s when passed to kernels.
+- A view along the linear indices of a multidimensional `array` (a single
+  `Integer` or range of `Integer`s) wraps the `array` in a 1-dimensional
+  `ReshapedArray`, instead of using `reshape` like Base's `view` does, which
+  allocates a new object whenever it is applied to an `Array`. If the `array`
+  is already a `ReshapedArray`, its parent gets wrapped instead, since a
+  reshape stores the same values in the same linear order as its parent.
 
-This is useful when one needs the generic constructor for a given type.
+```julia-repl
+julia> array = rand(3, 1, 4);
 
-Example
-=======
+julia> parent(view(array, 4:6))
+12-element Vector{Float64}
+
+julia> parent(stable_view(array, 4:6))
+12-element reshape(::Array{Float64, 3}, 12) with eltype Float64
+```
+"""
+Base.@propagate_inbounds function stable_view(array::AbstractArray, indices...)
+    if indices isa Tuple{Union{Integer, AbstractRange{<:Integer}}} &&
+       ndims(array) != 1
+        array isa Base.ReshapedArray &&
+            return stable_view(parent(array), first(indices))
+        flat_array = Base.ReshapedArray(array, (length(array),), ())
+        return stable_view(flat_array, first(indices))
+    end
+    converted = Base.to_indices(array, indices)
+    @boundscheck checkbounds(array, converted...)
+    reshaped = Base._maybe_reshape_parent(array, Base.index_ndims(converted...))
+    return Base.unsafe_view(reshaped, converted...)
+end
+
+"""
+    unionall_type(T)
+
+Drops all parameters from the type `T`. If the input argument is not a `Type`,
+its type is used instead.
+
+# Examples
 ```julia
 julia> unionall_type(typeof([1, 2, 3]))
 Array
 
-julia> struct Foo{A, B}
-               a::A
-               b::B
-       end
-
-julia> unionall_type(typeof(Foo(1,2)))
-Foo
+julia> unionall_type((; a = 1, b = 2))
+NamedTuple
 ```
 """
-function unionall_type(::Type{T}) where {T}
-    # NOTE: As of version 1.12, there is no simple, user-friendly way to extract
-    # the generic type of T, so we need to reach for the internals in Julia.
-    # Hopefully, Julia will introduce a simpler, more stable way to do this in a
-    # future release.
-    return T.name.wrapper
-end
+unionall_type(::Type{T}) where {T} = Base.typename(T).wrapper
+unionall_type(x) = unionall_type(typeof(x))
 
 """
     replace_type_parameter(T, P, P′)
@@ -180,6 +210,36 @@ julia> new(@NamedTuple{a::DataType, b::Int, c::Complex{Int}}, (Int, 1, 1 + 2im))
 @inline nested_new(::Val{T}) where {names, T <: NamedTuple{names}} =
     NamedTuple{names}(unrolled_map(maybe_nested_new, fieldtype_vals(T)))
 
+struct InferenceError <: Exception
+    f::Any
+    args_type::Type{<:Tuple}
+end
+function Base.showerror(io::IO, (; f, args_type)::InferenceError)
+    println(io, "Concrete type of result could not be inferred:\n")
+    InteractiveUtils.code_warntype(io, f, args_type)
+end
+
+"""
+    is_inferred_type(T)
+
+Checks if `T` either satisfies `isconcretetype` or is a `Type{..}` value (or the
+more generic `DataType` value).
+"""
+@inline is_inferred_type(::Type{T}) where {T} =
+    T != Union{} && (isconcretetype(T) || T <: Type)
+
+"""
+    return_type(f, T)
+
+Equivalent to `Core.Compiler.return_type(f, T)`, but with an additional check to
+ensure that the result satisfies [`is_inferred_type`](@ref) whenever `T` does.
+Used in place of `Core.Compiler.return_type` to flag deteriorations in type
+inference before they can lead to behavioral changes.
+"""
+@inline return_type(f::F, ::Type{T}) where {F, T} =
+    is_inferred_type(T) && !is_inferred_type(Core.Compiler.return_type(f, T)) ?
+    throw(InferenceError(f, T)) : Core.Compiler.return_type(f, T)
+
 """
     unsafe_eltype(itr)
 
@@ -194,27 +254,16 @@ checks, and may potentially return non-concrete types (like an empty `Union{}`).
 
 @inline has_inferred_error(itr) = unsafe_eltype(itr) == Union{}
 
-struct InferenceError <: Exception
-    f::Any
-    args_type::Type{<:Tuple}
-end
-function Base.showerror(io::IO, (; f, args_type)::InferenceError)
-    println(io, "Concrete type of result could not be inferred:\n")
-    InteractiveUtils.code_warntype(io, f, args_type)
-end
-
 """
     safe_eltype(itr)
 
 Analogue of `eltype` with support for un-materialized broadcast expressions,
-adapted from `Base.Broadcast.combine_eltypes`. Throws an error when the concrete
-element type of a broadcast expression cannot be inferred, indicating which part
-of the expression first encounters a type instability or error during inference.
+adapted from `Base.Broadcast.combine_eltypes`. Throws an error when the result
+does not satisfy [`is_inferred_type`](@ref), indicating which part of the
+expression first encounters a type instability or an error during inference.
 """
 @inline safe_eltype(itr) =
-    has_inferred_error(itr) ||
-    !(isconcretetype(unsafe_eltype(itr)) || unsafe_eltype(itr) <: Type) ?
-    eltype_error(itr) : unsafe_eltype(itr)
+    is_inferred_type(unsafe_eltype(itr)) ? unsafe_eltype(itr) : eltype_error(itr)
 
 eltype_error(itr) = throw(InferenceError(eltype, Tuple{typeof(itr)}))
 eltype_error(bc::Base.Broadcast.Broadcasted) =

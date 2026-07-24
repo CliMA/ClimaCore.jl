@@ -92,7 +92,7 @@ add_auto_broadcasters(itr) =
     itr isa AutoBroadcaster || is_auto_broadcastable(itr) ?
     AutoBroadcaster(unrolled_map(add_auto_broadcasters, unwrap(itr))) : itr
 add_auto_broadcasters(::Type{T}) where {T} =
-    Core.Compiler.return_type(add_auto_broadcasters, Tuple{T})
+    return_type(add_auto_broadcasters, Tuple{T})
 
 """
     drop_auto_broadcasters(itr)
@@ -106,7 +106,7 @@ drop_auto_broadcasters(itr) =
     itr isa AutoBroadcaster || is_auto_broadcastable(itr) ?
     unrolled_map(drop_auto_broadcasters, unwrap(itr)) : itr
 drop_auto_broadcasters(::Type{T}) where {T} =
-    Core.Compiler.return_type(drop_auto_broadcasters, Tuple{T})
+    return_type(drop_auto_broadcasters, Tuple{T})
 
 """
     auto_broadcasted([style], f, args, [axes])

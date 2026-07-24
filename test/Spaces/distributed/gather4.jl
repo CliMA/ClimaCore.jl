@@ -9,8 +9,7 @@ import ClimaCore:
     Operators,
     Spaces,
     Quadratures,
-    Topologies,
-    DataLayouts
+    Topologies
 
 using Logging
 
@@ -52,7 +51,7 @@ Nv = 1
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 global_space = Spaces.SpectralElementSpace2D(global_grid_topology, quad)
 
-gathered_coord = DataLayouts.gather(
+gathered_coord = ClimaComms.gather(
     comms_ctx,
     Fields.field_values(Fields.coordinate_field(space)),
 )

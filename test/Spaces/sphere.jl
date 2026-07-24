@@ -63,8 +63,14 @@ end
 @testset "Bubble correction Nq robustness" begin
 
     for FT in (Float64, Float32)
-        # Reference rtols without bubble
-        rtols = [FT(35) * FT(0.5)^(FT(2.5) * Nq) for Nq in 2:10]
+        # Reference rtols without bubble. For high polynomial orders, the
+        # quadrature error drops below the roundoff error of summing several
+        # hundred values of type FT, so the rtols need a lower bound of a few
+        # tens of eps (Base's mapreduce only switches from sequential to
+        # pairwise summation for more than 1024 values).
+        rtols = [
+            max(FT(35) * FT(0.5)^(FT(2.5) * Nq), 32 * eps(FT)) for Nq in 2:10
+        ]
 
 
         for (k, Nq) in enumerate(2:10)

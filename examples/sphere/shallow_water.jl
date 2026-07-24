@@ -14,8 +14,7 @@ import ClimaCore:
     Operators,
     Spaces,
     Quadratures,
-    Topologies,
-    DataLayouts
+    Topologies
 
 import QuadGK
 using OrdinaryDiffEqSSPRK: ODEProblem, init, solve!, SSPRK33
@@ -564,7 +563,7 @@ function shallow_water_driver(ARGS, ::Type{FT}) where {FT}
     if !usempi
         Y0_global = deepcopy(Y)
     else
-        Y0_global_values = DataLayouts.gather(context, Fields.field_values(Y))
+        Y0_global_values = ClimaComms.gather(context, Fields.field_values(Y))
         if ClimaComms.iamroot(context)
             Y0_global = Fields.Field(Y0_global_values, global_space)
         end
@@ -602,7 +601,7 @@ function shallow_water_driver(ARGS, ::Type{FT}) where {FT}
     if usempi
         for sol_step in sol.u
             sol_step_values_global =
-                DataLayouts.gather(context, Fields.field_values(sol_step))
+                ClimaComms.gather(context, Fields.field_values(sol_step))
             if ClimaComms.iamroot(context)
                 sol_step_global =
                     Fields.Field(sol_step_values_global, global_space)

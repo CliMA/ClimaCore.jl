@@ -1,5 +1,4 @@
 using ClimaCore.DataLayouts
-using ClimaCore.DataLayouts: CartesianFieldIndex
 using ClimaComms
 
 
@@ -29,7 +28,7 @@ end
 
 
 """
-    remap!(target::IJFH{S, Nqt}, R::LinearMap, source::IJFH{S, Nqs})
+    remap!(target::DataLayout, R::LinearMap, source::DataLayout)
     remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
 
 Applies the remapping `R` to a `source`
@@ -39,13 +38,11 @@ function remap! end
 
 # This version of this function is used for serial remapping
 function remap!(
-    target::IJFH{S, Nqt},
+    target::DataLayouts.DataLayout,
     R::LinearMap,
-    source::IJFH{S, Nqs},
-) where {S, Nqt, Nqs}
+    source::DataLayouts.DataLayout,
+)
     fill!(target, zero(eltype(target)))
-    Nf = DataLayouts.ncomponents(target)
-    CI = CartesianFieldIndex
 
     # ideally we would use the tempestremap dgll (redundant node) representation
     # unfortunately, this doesn't appear to work quite as well (for out_type = dgll) as the cgll
@@ -60,9 +57,7 @@ function remap!(
             view(R.target_local_idxs[2], n)[1],
             view(R.target_local_idxs[3], n)[1],
         )
-        for f in 1:Nf
-            target[CI(it, jt, f, 1, et)] += wt * source[CI(is, js, f, 1, es)]
-        end
+        target[1, it, jt, et] += wt * source[1, is, js, es]
     end
 
     # use unweighted dss to broadcast the so-far unpopulated (redundant) nodes from their unique node counterparts
@@ -90,12 +85,10 @@ function remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
         @assert Spaces.topology(axes(source)).context isa
                 ClimaComms.SingletonCommsContext
 
-        CI = CartesianFieldIndex
         target_values = Fields.field_values(target)
         source_values = Fields.field_values(source)
 
         fill!(target, zero(eltype(target)))
-        Nf = DataLayouts.ncomponents(target)
 
         # ideally we would use the tempestremap dgll (redundant node) representation
         # unfortunately, this doesn't appear to work quite as well (for out_type = dgll) as the cgll
@@ -117,11 +110,7 @@ function remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
             # multiply source data by weights to get target data
             # only use local weights - i.e. et, es != 0
             if (et != 0)
-                for f in 1:Nf
-                    ci_src = CI(is, js, f, 1, es)
-                    ci_tar = CI(it, jt, f, 1, et)
-                    target_values[ci_tar] += wt * source_values[ci_src]
-                end
+                target_values[1, it, jt, et] += wt * source_values[1, is, js, es]
             end
         end
 

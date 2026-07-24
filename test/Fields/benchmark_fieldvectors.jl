@@ -108,7 +108,7 @@ end
         helem = 30,
         Nq = 4,
         context = ClimaComms.context(device),
-        horizontal_layout_type = DataLayouts.IJHF,
+        VIJH = DataLayouts.VIJHF,
     )
     fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
     X = fv_state(cspace, fspace)
@@ -120,7 +120,7 @@ end
         helem = 15,
         Nq = 4,
         context = ClimaComms.context(device),
-        horizontal_layout_type = DataLayouts.IJHF,
+        VIJH = DataLayouts.VIJHF,
     )
     fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
     X = fv_state(cspace, fspace)

@@ -99,7 +99,7 @@ import .Helpers.DefaultRectangleXYMesh
         quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
         h_mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain{FT}(radius), h_elem),
         h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(context, h_mesh),
-        horizontal_layout_type = DataLayouts.IJFH,
+        VIJH = DataLayouts.VIJFH,
         z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
         enable_bubble::Bool = false
         enable_mask::Bool = false
@@ -123,7 +123,7 @@ A convenience constructor, which builds an
  - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
  - `h_mesh` the horizontal mesh (defaults to `Meshes.EquiangularCubedSphere`)
  - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
- - `horizontal_layout_type` the horizontal DataLayout type (defaults to `DataLayouts.IJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
+ - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
  - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
  - `enable_bubble` enables the "bubble correction" for more accurate element areas when computing the spectral element space. See [`Grids.SpectralElementGrid2D`](@ref) for more information.
  - `enable_mask` enables a horizontal mask, for skipping operations on specified
@@ -173,7 +173,7 @@ function ExtrudedCubedSphereGrid(
         h_mesh,
         Topologies.spacefillingcurve(h_mesh),
     ),
-    horizontal_layout_type = DataLayouts.IJFH,
+    VIJH::Type{<:DataLayouts.VIJHWithF} = DataLayouts.VIJFH,
     z_mesh::Meshes.IntervalMesh = DefaultZMesh(
         FT;
         z_min,
@@ -184,14 +184,13 @@ function ExtrudedCubedSphereGrid(
     enable_bubble::Bool = false,
     enable_mask::Bool = false,
 ) where {FT}
-    @assert horizontal_layout_type <: DataLayouts.AbstractData
     @assert ClimaComms.device(context) == device "The given device and context device do not match."
 
     z_boundary_names = (:bottom, :top)
     h_grid = Grids.SpectralElementGrid2D(
         h_topology,
         quad;
-        horizontal_layout_type,
+        VIJH,
         enable_bubble,
         enable_mask,
     )
@@ -219,7 +218,7 @@ end
         quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
         h_mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain{FT}(radius), h_elem),
         h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(context, h_mesh),
-        horizontal_layout_type = DataLayouts.IJFH,
+        VIJH = DataLayouts.VIJFH,
         enable_mask = false,
     )
 
@@ -235,7 +234,7 @@ A convenience constructor, which builds a
  - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
  - `h_mesh` the horizontal mesh (defaults to `Meshes.EquiangularCubedSphere`)
  - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
- - `horizontal_layout_type` the horizontal DataLayout type (defaults to `DataLayouts.IJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
+ - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
  - `enable_mask` enables a horizontal mask, for skipping operations on specified
                  columns via `set_mask!`.
 
@@ -264,15 +263,14 @@ function CubedSphereGrid(
         h_mesh,
         Topologies.spacefillingcurve(h_mesh),
     ),
-    horizontal_layout_type = DataLayouts.IJFH,
+    VIJH::Type{<:DataLayouts.VIJHWithF} = DataLayouts.VIJFH,
     enable_mask::Bool = false,
 ) where {FT}
-    @assert horizontal_layout_type <: DataLayouts.AbstractData
     @assert ClimaComms.device(context) == device "The given device and context device do not match."
     return Grids.SpectralElementGrid2D(
         h_topology,
         quad;
-        horizontal_layout_type,
+        VIJH,
         enable_mask,
     )
 end
@@ -352,7 +350,7 @@ end
         hypsography_fun = (h_grid, z_grid) -> Grids.Flat(),
         global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
         quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
-        horizontal_layout_type = DataLayouts.IJFH,
+        VIJH = DataLayouts.VIJFH,
         [h_topology::Topologies.AbstractDistributedTopology], # optional
         [z_mesh::Meshes.IntervalMesh], # optional
         enable_bubble::Bool = false,
@@ -385,7 +383,7 @@ A convenience constructor, which builds a
  - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
  - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
  - `enable_bubble` enables the "bubble correction" for more accurate element areas when computing the spectral element space. See [`Grids.SpectralElementGrid2D`](@ref) for more information.
- - `horizontal_layout_type` the horizontal DataLayout type (defaults to `DataLayouts.IJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
+ - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
  - `enable_mask` enables a horizontal mask, for skipping operations on specified
                  columns via `set_mask!`.
 
@@ -465,15 +463,14 @@ function Box3DGrid(
         stretch,
     ),
     enable_bubble::Bool = false,
-    horizontal_layout_type = DataLayouts.IJFH,
+    VIJH::Type{<:DataLayouts.VIJHWithF} = DataLayouts.VIJFH,
     enable_mask::Bool = false,
 ) where {FT}
-    @assert horizontal_layout_type <: DataLayouts.AbstractData
     @assert ClimaComms.device(context) == device "The given device and context device do not match."
     h_grid = Grids.SpectralElementGrid2D(
         h_topology,
         quad;
-        horizontal_layout_type,
+        VIJH,
         enable_bubble,
         enable_mask,
     )
@@ -564,7 +561,7 @@ function SliceXZGrid(
     hypsography_fun = (h_grid, z_grid) -> Grids.Flat(),
     global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
     quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
-    horizontal_layout_type = DataLayouts.IFH,
+    VIJH::Type{<:DataLayouts.VIJHWithF} = DataLayouts.VIJFH,
     h_mesh::Meshes.IntervalMesh = DefaultSliceXMesh(
         FT;
         x_min,
@@ -580,7 +577,6 @@ function SliceXZGrid(
         stretch,
     ),
 ) where {FT}
-    @assert horizontal_layout_type <: DataLayouts.AbstractData
     @assert ClimaComms.device(context) == device "The given device and context device do not match."
 
     h_topology = Topologies.IntervalTopology(
@@ -588,7 +584,7 @@ function SliceXZGrid(
         h_mesh,
     )
     h_grid =
-        Grids.SpectralElementGrid1D(h_topology, quad; horizontal_layout_type)
+        Grids.SpectralElementGrid1D(h_topology, quad; VIJH)
     z_topology = Topologies.IntervalTopology(
         ClimaComms.SingletonCommsContext(device),
         z_mesh,
@@ -677,7 +673,7 @@ function RectangleXYGrid(
     hypsography::Grids.HypsographyAdaption = Grids.Flat(),
     global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
     quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
-    horizontal_layout_type = DataLayouts.IJFH,
+    VIJH::Type{<:DataLayouts.VIJHWithF} = DataLayouts.VIJFH,
     h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(
         context,
         DefaultRectangleXYMesh(
@@ -695,12 +691,11 @@ function RectangleXYGrid(
     enable_bubble::Bool = false,
     enable_mask::Bool = false,
 ) where {FT}
-    @assert horizontal_layout_type <: DataLayouts.AbstractData
     @assert ClimaComms.device(context) == device "The given device and context device do not match."
     return Grids.SpectralElementGrid2D(
         h_topology,
         quad;
-        horizontal_layout_type,
+        VIJH,
         enable_bubble,
         enable_mask,
     )

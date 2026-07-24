@@ -41,7 +41,7 @@ ClimaCore.jl provides the dynamical core infrastructure for [CliMA](https://clim
 1. **`Field`** (`src/Fields/`) — the primary data type. A field wraps data on a space and supports broadcast, reductions, and operator application.
 2. **`Space`** (`src/Spaces/`) — represents a discretized function space (spectral element, finite-difference, or extruded hybrid). Constructed from a grid and a quadrature rule.
 3. **Operators** (`src/Operators/`) — lazy differential operators (gradient, divergence, curl, interpolation, restriction) that compose via Julia's broadcast system.
-4. **`DataLayout`** (`src/DataLayouts/`) — the storage backends (IJFH, VIJFH, VF, etc.) that determine memory layout for CPU vs GPU performance.
+4. **`DataLayout`** (`src/DataLayouts/`) — the storage backends (VIJFH, VIJHF, etc.) that determine memory layout for CPU vs GPU performance.
 5. **`MatrixFields`** (`src/MatrixFields/`) — banded-matrix field algebra used for implicit vertical solvers and Jacobian construction.
 
 ## Test groups

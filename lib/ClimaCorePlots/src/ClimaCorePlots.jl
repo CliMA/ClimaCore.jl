@@ -4,10 +4,6 @@ import RecipesBase
 import TriplotBase
 
 import ClimaComms
-# Keep in sync with definition(s) in ClimaCore.DataLayouts.
-@inline slab_index(i::T, j::T) where {T} =
-    CartesianIndex(i, j, T(1), T(1), T(1))
-@inline slab_index(i::T) where {T} = CartesianIndex(i, T(1), T(1), T(1), T(1))
 
 import ClimaCore:
     ClimaCore,
@@ -82,10 +78,9 @@ RecipesBase.@recipe function f(space::Spaces.RectilinearSpectralElementSpace2D;)
     n2 = Meshes.nelements(mesh.intervalmesh2)
 
     coord_field = Fields.coordinate_field(space)
-    x1coord = vec(parent(coord_field)[:, :, 1, :])
-    x2coord = vec(parent(coord_field)[:, :, 2, :])
-
     coord_symbols = propertynames(coord_field)
+    x1coord = vec(parent(getproperty(coord_field, coord_symbols[1])))
+    x2coord = vec(parent(getproperty(coord_field, coord_symbols[2])))
 
     seriestype := :scatter
     title --> "$n1 × $n2 $quad_name{$dof} element space"
@@ -102,7 +97,7 @@ end
 RecipesBase.@recipe function f(space::Spaces.ExtrudedFiniteDifferenceSpace)
     coord_field = Fields.coordinate_field(space)
     data = Fields.field_values(coord_field)
-    Ni, Nj, _, Nv, Nh = size(data)
+    Nv, Ni, Nj, Nh = size(data)
 
     #TODO: assumes VIFH layout
     @assert Nj == 1 "plotting only defined for 1D extruded fields"
@@ -114,8 +109,8 @@ RecipesBase.@recipe function f(space::Spaces.ExtrudedFiniteDifferenceSpace)
     dof = Quadratures.degrees_of_freedom(quad)
 
     coord_symbols = propertynames(coord_field)
-    hcoord = vec(parent(coord_field)[:, :, 1, :])
-    vcoord = vec(parent(coord_field)[:, :, 2, :])
+    hcoord = vec(parent(getproperty(coord_field, coord_symbols[1])))
+    vcoord = vec(parent(getproperty(coord_field, coord_symbols[2])))
 
     stagger = space.staggering isa Spaces.CellCenter ? :center : :face
 
@@ -201,7 +196,7 @@ end
 
 function _slice_triplot(field, hinterpolate, ncolors)
     data = Fields.field_values(field)
-    Ni, Nj, _, Nv, Nh = size(data)
+    Nv, Ni, Nj, Nh = size(data)
 
     space = axes(field)
     htopology = Spaces.topology(space)
@@ -312,8 +307,8 @@ function _slice_along(field, coord)
     hcoord_data = Spaces.local_geometry_data(hspace).coordinates
     hdata = ClimaCore.slab(hcoord_data, hidx)
     hnode_idx = 1
-    for i in axes(hdata)[axis]
-        pt = axis == 1 ? hdata[slab_index(i, 1)] : hdata[slab_index(1, i)]
+    for i in axes(hdata)[axis + 1] # axes(hdata) is (V, I, J, H), so I is axis 2
+        pt = axis == 1 ? hdata[1, i, 1, 1] : hdata[1, 1, i, 1]
         axis_value = Geometry.component(pt, axis)
         coord_value = Geometry.component(coord, 1)
         if axis_value > coord_value
@@ -357,10 +352,9 @@ function _slice_along(field, coord)
             ijslab = ClimaCore.slab(field_data, v, hidx)
             islab = ClimaCore.slab(ortho_data, v, i)
             # copy the nodal data
-            for ni in 1:size(islab)[1]
-                islab[slab_index(ni)] =
-                    axis == 1 ? ijslab[slab_index(hnode_idx, ni)] :
-                    ijslab[slab_index(ni, hnode_idx)]
+            for ni in 1:size(islab, 2) # size(islab) is (Nv, Ni, Nj, Nh)
+                islab[ni] =
+                    axis == 1 ? ijslab[1, hnode_idx, ni, 1] : ijslab[1, ni, hnode_idx, 1]
             end
         end
     end
@@ -432,14 +426,11 @@ function _unfolded_pannel_matrix(field, interpolate)
     panels = [fill(NaN, (panel_size * dof, panel_size * dof)) for _ in 1:6]
 
     field_data = Fields.field_values(field)
-    fdim = DataLayouts.field_dim(DataLayouts.singleton(field_data))
-    interpolated_data_type = if fdim == ndims(field_data)
-        DataLayouts.IJHF
-    else
-        DataLayouts.IJFH
-    end
     interpolated_data =
-        interpolated_data_type{FT, interpolate}(Array{FT}, nelem)
+        DataLayouts.VIJFH{FT, 1, interpolate, interpolate, nothing}(
+            Array{FT},
+            nelem,
+        )
 
     Operators.tensor_product!(interpolated_data, field_data, Imat)
 
@@ -452,7 +443,8 @@ function _unfolded_pannel_matrix(field, interpolate)
         x2_nodal_range = (dof * (ex2 - 1) + 1):(dof * ex2)
         # transpose the data as our plotting axis order is
         # reverse nodal element order (x1 axis varies fastest)
-        data_element = permutedims(parent(interpolated_data)[:, :, 1, lidx])
+        data_element =
+            permutedims([interpolated_data[1, i, j, lidx] for i in 1:dof, j in 1:dof])
         panel_data[x2_nodal_range, x1_nodal_range] = data_element
     end
 

@@ -2,10 +2,11 @@
 import ..Utilities.Unrolled: unrolled_map_with_inbounds
 
 """
-    slab(data::AbstractData, h::Integer)
+    slab(data, v, h)
+    slab(data, h)
 
-A "pancake" view into an underlying
-data layout `data` at location `h`.
+A "pancake" view into an underlying data layout `data` at level `v` and
+horizontal element `h`. If `v` is omitted, it is assumed to be 1.
 """
 function slab end
 
@@ -22,10 +23,12 @@ Base.@propagate_inbounds slab_args(args::NamedTuple, inds...) =
     NamedTuple{keys(args)}(slab_args(values(args), inds...))
 
 """
-    column(data::AbstractData, i::Integer)
+    column(data, i, j, h)
+    column(data, i, h)
 
-A contiguous "column" view into an underlying
-data layout `data` at nodal point index `i`.
+A contiguous "column" view into an underlying data layout `data` at nodal point
+index `(i, j)` of horizontal element `h`. If `j` is omitted, it is assumed to
+be 1.
 """
 function column end
 

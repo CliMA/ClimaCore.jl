@@ -163,10 +163,6 @@ function Adapt.adapt_structure(to, topo::Topology2D)
     )
 end
 
-ClimaComms.device(topology::Topology2D) = ClimaComms.device(topology.context)
-ClimaComms.array_type(topology::Topology2D) =
-    ClimaComms.array_type(topology.context.device)
-
 function Base.show(io::IO, topology::Topology2D)
     indent = get(io, :indent, 0)
     println(io, nameof(typeof(topology)))
@@ -583,13 +579,8 @@ end
 
 perimeter_vertex_node_index(v) = v
 perimeter_face_indices(f, nfacedof, reversed = false) =
-    !reversed ? ((4 + (f - 1) * nfacedof + 1):(4 + f * nfacedof)) :
-    ((4 + f * nfacedof):-1:(4 + (f - 1) * nfacedof + 1))
-perimeter_face_indices_cuda(f, nfacedof, reversed = false) =
-    !reversed ? ((4 + (f - 1) * nfacedof + 1), 1, (4 + f * nfacedof)) :
-    ((4 + f * nfacedof), -1, (4 + (f - 1) * nfacedof + 1))
-
-
+    reversed ? ((4 + f * nfacedof):-1:(4 + (f - 1) * nfacedof + 1)) :
+    ((4 + (f - 1) * nfacedof + 1):1:(4 + f * nfacedof))
 
 function compute_ghost_send_recv_idx(topology::Topology2D, Nq)
     DA = ClimaComms.array_type(topology)

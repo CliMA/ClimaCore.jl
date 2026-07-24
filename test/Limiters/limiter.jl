@@ -14,11 +14,9 @@ using ClimaCore:
     Spaces,
     Limiters,
     Quadratures
-import ClimaCore.DataLayouts: slab_index
 using ClimaCore: slab
 using Test
 
-si = slab_index
 # 2D mesh setup
 function rectangular_mesh_space(
     n1,
@@ -140,10 +138,10 @@ end
             (h1, h2, slab(limiter.q_bounds, h1 + n1 * (h2 - 1)))
         end
         ClimaComms.allowscalar(device) do
-            @test all(map(T -> T[3][si(1)].x ≈ 2 * (T[1] - 1), S)) # q_min
-            @test all(map(T -> T[3][si(1)].y ≈ 3 * (T[2] - 1), S)) # q_min
-            @test all(map(T -> T[3][si(2)].x ≈ 2 * T[1], S)) # q_max
-            @test all(map(T -> T[3][si(2)].y ≈ 3 * T[2], S)) # q_max
+            @test all(map(T -> T[3][1].x ≈ 2 * (T[1] - 1), S)) # q_min
+            @test all(map(T -> T[3][1].y ≈ 3 * (T[2] - 1), S)) # q_min
+            @test all(map(T -> T[3][2].x ≈ 2 * T[1], S)) # q_max
+            @test all(map(T -> T[3][2].y ≈ 3 * T[2], S)) # q_max
         end
 
         Limiters.compute_neighbor_bounds_local!(limiter, ρ)
@@ -151,10 +149,10 @@ end
             (h1, h2, slab(limiter.q_bounds_nbr, h1 + n1 * (h2 - 1)))
         end
         ClimaComms.allowscalar(device) do
-            @test all(map(T -> T[3][si(1)].x ≈ 2 * max(T[1] - 2, 0), SN))  # q_min
-            @test all(map(T -> T[3][si(1)].y ≈ 3 * max(T[2] - 2, 0), SN))  # q_min
-            @test all(map(T -> T[3][si(2)].x ≈ 2 * min(T[1] + 1, n1), SN))  # q_max
-            @test all(map(T -> T[3][si(2)].y ≈ 3 * min(T[2] + 1, n2), SN))  # q_max
+            @test all(map(T -> T[3][1].x ≈ 2 * max(T[1] - 2, 0), SN))  # q_min
+            @test all(map(T -> T[3][1].y ≈ 3 * max(T[2] - 2, 0), SN))  # q_min
+            @test all(map(T -> T[3][2].x ≈ 2 * min(T[1] + 1, n1), SN))  # q_max
+            @test all(map(T -> T[3][2].y ≈ 3 * min(T[2] + 1, n2), SN))  # q_max
         end
     end
 end
@@ -162,17 +160,21 @@ end
 
 @testset "apply_limit_slab!" begin
     for FT in (Float64, Float32)
-        q = DataLayouts.IJF{Tuple{FT, FT}, 5}(
-            FT[i + f for i in 1:5, j in 1:5, f in 1:2],
+        q = DataLayouts.VIJFH{Tuple{FT, FT}, 1, 5, 5, 1}(
+            FT[i + f for v in 1:1, i in 1:5, j in 1:5, f in 1:2, h in 1:1],
         )
-        ρ = DataLayouts.IJF{FT, 5}(FT[j / 2 for i in 1:5, j in 1:5, f in 1:1])
+        ρ = DataLayouts.VIJFH{FT, 1, 5, 5, 1}(
+            FT[j / 2 for v in 1:1, i in 1:5, j in 1:5, f in 1:1, h in 1:1],
+        )
         ρq = ρ .* q
-        WJ = DataLayouts.IJF{FT, 5}(ones(FT, 5, 5, 1))
+        WJ = DataLayouts.VIJFH{FT, 1, 5, 5, 1}(ones(FT, 1, 5, 5, 1, 1))
         q_min = (FT(3.2), FT(3.0))
         q_max = (FT(5.2), FT(5.0))
-        q_bounds = DataLayouts.IF{Tuple{FT, FT}, 2}(zeros(FT, 2, 2))
-        q_bounds[si(1)] = q_min
-        q_bounds[si(2)] = q_max
+        q_bounds = DataLayouts.VIJFH{Tuple{FT, FT}, 1, 2, 1, 1}(
+            zeros(FT, 1, 2, 1, 2, 1),
+        )
+        q_bounds[1] = q_min
+        q_bounds[2] = q_max
 
 
         ρq_new = deepcopy(ρq)
@@ -180,8 +182,8 @@ end
 
         q_new = ρq_new ./ ρ
         for j in 1:5, i in 1:5
-            @test q_min[1] <= q_new[si(i, j)][1] <= q_max[1]
-            @test q_min[2] <= q_new[si(i, j)][2] <= q_max[2]
+            @test q_min[1] <= q_new[1, i, j, 1][1] <= q_max[1]
+            @test q_min[2] <= q_new[1, i, j, 1][2] <= q_max[2]
         end
         @test sum(ρq_new.:1 .* WJ) ≈ sum(ρq.:1 .* WJ)
         @test sum(ρq_new.:2 .* WJ) ≈ sum(ρq.:2 .* WJ)
@@ -203,7 +205,7 @@ end
         # Initialize fields
         ρ = ones(FT, space)
         q = ones(FT, space)
-        parent(q)[:, :, 1, 1] = [FT(-0.2) FT(0.00001); FT(1.1) FT(1)]
+        parent(q)[1, :, :, 1, 1] = [FT(-0.2) FT(0.00001); FT(1.1) FT(1)]
 
         ρq = @. ρ .* q
 
@@ -212,13 +214,13 @@ end
 
         # Initialize variables needed for limiters
         q_ref = ones(FT, space)
-        parent(q_ref)[:, :, 1, 1] = [FT(0) FT(0.00001); FT(1) FT(1)]
+        parent(q_ref)[1, :, :, 1, 1] = [FT(0) FT(0.00001); FT(1) FT(1)]
         ρq_ref = ρ .* q_ref
 
         Limiters.compute_bounds!(limiter, ρq_ref, ρ)
         Limiters.apply_limiter!(ρq, ρ, limiter)
 
-        @test Array(parent(ρq))[:, :, 1, 1] ≈
+        @test Array(parent(ρq))[1, :, :, 1, 1] ≈
               [FT(0.0) FT(0.0); FT(0.950005) FT(0.950005)] rtol = 10eps(FT)
         # Check mass conservation after application of limiter
         @test sum(ρq) ≈ initial_Q_mass rtol = 10eps(FT)

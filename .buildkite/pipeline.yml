@@ -104,75 +104,40 @@ steps:
   - group: "Unit: DataLayouts"
     steps:
 
-      - label: "Unit: data0d"
-        key: unit_data0d
+      - label: "Unit: data fill and copyto (1 thread)"
+        key: unit_data_fill_and_copyto
         retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/data0d.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_fill_and_copyto.jl"
 
-      - label: "Unit: data_fill"
-        key: unit_data_fill
+      - label: "Unit: data fill and copyto (4 threads)"
+        key: threaded_unit_data_fill_and_copyto
         retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_fill.jl"
+        command: "julia --threads=4 --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_fill_and_copyto.jl"
 
-      - label: "Unit: data_copyto"
-        key: unit_data_copyto
+      - label: "Unit: data loops (1 thread)"
+        key: unit_data_loops
         retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_copyto.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_loops.jl"
 
-      - label: "Unit: cartesian_field_index"
-        key: unit_data_cartesian_field_index
+      - label: "Unit: data loops (4 threads)"
+        key: threaded_unit_data_loops
         retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_cartesian_field_index.jl"
+        command: "julia --threads=4 --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_loops.jl"
 
-      - label: "Unit: non_extruded_broadcast"
-        key: unit_non_extruded_broadcast
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_non_extruded_broadcast.jl"
-
-      - label: "Unit: mapreduce"
+      - label: "Unit: mapreduce (1 thread)"
         key: unit_data_mapreduce
         retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_mapreduce.jl"
+
+      - label: "Unit: mapreduce (4 threads)"
+        key: threaded_unit_data_mapreduce
+        retry: *retry_policy
+        command: "julia --threads=4 --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_mapreduce.jl"
 
       - label: "Unit: data_opt_similar"
         key: data_opt_similar
         retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/opt_similar.jl"
-
-      - label: "Unit: opt_universal_size"
-        key: opt_universal_size
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/opt_universal_size.jl"
-
-      - label: "Unit: data_ndims"
-        key: unit_data_ndims
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_ndims.jl"
-
-      - label: "Unit: unit_data2array"
-        key: unit_data2array
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_data2array.jl"
-
-      - label: "Unit: data1d"
-        key: unit_data1d
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/data1d.jl"
-
-      - label: "Unit: data2d"
-        key: unit_data2d
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/data2d.jl"
-
-      - label: "Unit: data1dx"
-        key: unit_data1dx
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/data1dx.jl"
-
-      - label: "Unit: data2dx"
-        key: unit_data2dx
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/data2dx.jl"
 
       - label: "Unit: data cuda"
         key: unit_data_cuda
@@ -196,18 +161,18 @@ steps:
         agents:
           slurm_gpus: 1
 
-      - label: "Unit: data fill"
-        key: gpu_unit_data_fill
+      - label: "Unit: data fill and copyto (1 gpu)"
+        key: gpu_unit_data_fill_and_copyto
         retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_fill.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_fill_and_copyto.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
-      - label: "Unit: data mapreduce"
+      - label: "Unit: data mapreduce (1 gpu)"
         key: gpu_unit_data_mapreduce
         retry: *retry_policy
         command:
@@ -232,17 +197,6 @@ steps:
            slurm_gpus: 2
            modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
         soft_fail: true # remove this after library issues are fixed
-
-      - label: "Unit: data copyto"
-        key: gpu_unit_data_copyto
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_copyto.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
 
   - group: "Unit: Geometry"
     steps:
@@ -1624,15 +1578,10 @@ steps:
   - group: "Perf: DataLayouts"
     steps:
 
-      - label: "Perf: DataLayouts fill"
+      - label: "Perf: DataLayouts fill!"
         key: "cpu_datalayouts_fill"
         retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_fill.jl"
-
-      - label: "Perf: DataLayouts copyto!"
-        key: "cpu_datalayouts_copyto"
-        retry: *retry_policy
-        command: "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_copyto.jl"
 
       - label: "Perf: DataLayouts fill"
         key: "gpu_datalayouts_fill"
@@ -1644,6 +1593,11 @@ steps:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
+
+      - label: "Perf: DataLayouts copyto!"
+        key: "cpu_datalayouts_copyto"
+        retry: *retry_policy
+        command: "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_copyto.jl"
 
       - label: "Perf: DataLayouts copyto"
         key: "gpu_datalayouts_copyto"
@@ -2093,7 +2047,7 @@ steps:
         env:
           TEST_NAME: "sphere/baroclinic_wave_rhoe_hf"
           FLOAT_TYPE: "Float32"
-          horizontal_layout_type: "IJHF"
+          horizontal_layout_type: "VIJHF"
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
@@ -2414,7 +2368,7 @@ steps:
         env:
           TEST_NAME: "sphere/baroclinic_wave_rhoe_hf"
           FLOAT_TYPE: "Float64"
-          horizontal_layout_type: "IJHF"
+          horizontal_layout_type: "VIJHF"
 
       - label: ":computer: 3D sphere baroclinic wave (ρe)"
         key: "cpu_baroclinic_wave_rho_e"

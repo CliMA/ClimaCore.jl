@@ -1,14 +1,8 @@
-#=
-julia --project
-using Revise; include(joinpath("test", "DataLayouts", "benchmark_fill.jl"))
-=#
 using Test
-using ClimaCore
-using ClimaCore.DataLayouts
 using BenchmarkTools
 import ClimaComms
+import ClimaCore: ClimaCore, DataLayouts
 @static pkgversion(ClimaComms) >= v"0.6" && ClimaComms.@import_required_backends
-
 if ClimaComms.device() isa ClimaComms.CUDADevice
     import CUDA
     device_name = CUDA.name(CUDA.device()) # Move to ClimaComms
@@ -19,70 +13,44 @@ end
 include(joinpath(pkgdir(ClimaCore), "benchmarks/scripts/benchmark_utils.jl"))
 
 function benchmarkfill!(bm, device, data, val)
-    caller = string(nameof(typeof(data)))
+    caller = string(DataLayouts.layout_constructor(data))
     @info "Benchmarking $caller..."
     trial = @benchmark ClimaComms.@cuda_sync $device fill!($data, $val)
-    t_min = minimum(trial.times) * 1e-9 # to seconds
+    kernel_time_s = minimum(trial.times) * 1e-9 # to seconds
     nreps = length(trial.times)
+    problem_size = size(data)
     n_reads_writes = DataLayouts.ncomponents(data)
-    push_info(
-        bm;
-        kernel_time_s = t_min,
-        nreps = nreps,
-        caller,
-        problem_size = DataLayouts.array_size(data),
-        n_reads_writes,
-    )
+    push_info(bm; kernel_time_s, nreps, caller, problem_size, n_reads_writes)
 end
 
 @testset "fill! with Nf = 1" begin
     device = ClimaComms.device()
-    ArrayType = ClimaComms.array_type(device)
     FT = Float64
-    S = FT
-    Nv = 63
-    Ni = Nij = 4
-    Nh = 30 * 30 * 6
-    Nk = 6
+    A = ClimaComms.array_type(device){FT}
     bm = Benchmark(; float_type = FT, device_name)
-    data = DataF{S}(ArrayType{FT}, zeros)
-    benchmarkfill!(bm, device, data, 3)
-    @test all(parent(data) .== 3)
-    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
-    benchmarkfill!(bm, device, data, 3)
-    @test all(parent(data) .== 3)
-    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
-    benchmarkfill!(bm, device, data, 3)
-    @test all(parent(data) .== 3)
-    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
-    benchmarkfill!(bm, device, data, 3)
-    @test all(parent(data) .== 3)
-    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
-    benchmarkfill!(bm, device, data, 3)
-    @test all(parent(data) .== 3)
-    data = IJF{S}(ArrayType{FT}, zeros; Nij)
-    benchmarkfill!(bm, device, data, 3)
-    @test all(parent(data) .== 3)
-    data = IF{S}(ArrayType{FT}, zeros; Ni)
-    benchmarkfill!(bm, device, data, 3)
-    @test all(parent(data) .== 3)
-    data = VF{S}(ArrayType{FT}, zeros; Nv)
-    benchmarkfill!(bm, device, data, 3)
-    @test all(parent(data) .== 3)
-    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
-    benchmarkfill!(bm, device, data, 3)
-    @test all(parent(data) .== 3)
-    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
-    benchmarkfill!(bm, device, data, 3)
-    @test all(parent(data) .== 3)
-    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
-    benchmarkfill!(bm, device, data, 3)
-    @test all(parent(data) .== 3)
-    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+
+    data = DataLayouts.DataF{FT}(A)
     benchmarkfill!(bm, device, data, 3)
     @test all(parent(data) .== 3)
 
-    # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); benchmarkfill!(bm, device, data, 3); @test all(parent(data) .== 3) # TODO: test
-    # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);          benchmarkfill!(bm, device, data, 3); @test all(parent(data) .== 3) # TODO: test
+    (Nv, Nij, Nh) = (63, 4, 30 * 30 * 6)
+    for Nv in (1, Nv), (Ni, Nj) in ((1, 1), (Nij, 1), (Nij, Nij)), Nh in (1, Nh)
+        for D in (DataLayouts.VIJFH, DataLayouts.VIJHF)
+            data = D{FT, Nv, Ni, Nj, Nh == 1 ? 1 : nothing}(A, Nh)
+            benchmarkfill!(bm, device, data, 3)
+            @test all(parent(data) .== 3)
+        end
+    end
+    for Nv in (1, Nv), Ni in (1, Nij), Nh in (1, Nh)
+        data = DataLayouts.VIH1{FT, Nv, Ni, Nh == 1 ? 1 : nothing}(A, Nh)
+        benchmarkfill!(bm, device, data, 3)
+        @test all(parent(data) .== 3)
+    end
+    for (Ni, Nj) in ((1, 1), (Nij, 1), (Nij, Nij)), Nh in (1, Nh)
+        data = DataLayouts.IH1JH2{FT, Ni, Nj, Nh == 1 ? 1 : nothing}(A, Nh)
+        benchmarkfill!(bm, device, data, 3)
+        @test all(parent(data) .== 3)
+    end
+
     tabulate_benchmark(bm)
 end

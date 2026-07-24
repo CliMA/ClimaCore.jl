@@ -1,91 +1,74 @@
-#=
-julia -g2 --check-bounds=yes --project=test
-using Revise; include(joinpath("test", "DataLayouts", "cuda.jl"))
-=#
 using Test
-using ClimaComms
-using CUDA
+import ClimaComms
+import ClimaCore: slab
+import ClimaCore.DataLayouts: VIJFH
 ClimaComms.@import_required_backends
-using ClimaCore.DataLayouts
-using ClimaCore.DataLayouts: slab_index
 
-function knl_copy!(dst, src)
-    i = threadIdx().x
-    j = threadIdx().y
-
-    h = blockIdx().x
-
-    p_dst = slab(dst, h)
+function knl_copy!(dest, src)
+    i = CUDA.threadIdx().x
+    j = CUDA.threadIdx().y
+    h = CUDA.blockIdx().x
+    p_dest = slab(dest, h)
     p_src = slab(src, h)
-
-    @inbounds p_dst[slab_index(i, j)] = p_src[slab_index(i, j)]
+    @inbounds p_dest[1, i, j, 1] = p_src[1, i, j, 1]
     return nothing
 end
 
-function test_copy!(dst, src)
-    CUDA.@cuda threads = (4, 4) blocks = (10,) knl_copy!(dst, src)
-end
-
 @testset "data in GPU kernels" begin
-
-    S = Tuple{Complex{Float64}, Float64}
     device = ClimaComms.device()
-    ArrayType = ClimaComms.array_type(device)
-    Nh = 10
-    src = IJFH{S}(ArrayType{Float64}, rand; Nij = 4, Nh)
-    dst = IJFH{S}(ArrayType{Float64}, zeros; Nij = 4, Nh)
-
-    test_copy!(dst, src)
-
-    @test getfield(dst, :array) == getfield(src, :array)
+    FT = Float64
+    A = ClimaComms.array_type(device){FT}
+    T = Tuple{Complex{FT}, FT}
+    (Nv, Nij, Nh) = (1, 4, 10)
+    src = VIJFH{T, Nv, Nij, Nij, nothing}(A, Nh)
+    dest = VIJFH{T, Nv, Nij, Nij, nothing}(A, Nh)
+    CUDA.@cuda threads = (Nij, Nij) blocks = (Nh,) knl_copy!(dest, src)
+    @test parent(dest) == parent(src)
 end
 
 @testset "broadcasting" begin
-    FT = Float64
-    S1 = NamedTuple{(:a, :b), Tuple{Complex{Float64}, Float64}}
-    S2 = Float64
-    Nh = 2
     device = ClimaComms.device()
-    ArrayType = ClimaComms.array_type(device)
-    data1 = IJFH{S1}(ArrayType{FT}, ones; Nij = 2, Nh)
-    data2 = IJFH{S2}(ArrayType{FT}, ones; Nij = 2, Nh)
+    FT = Float64
+    A = ClimaComms.array_type(device){FT}
 
-    f1(a1, a2) = a1.a.re * a2 + a1.b
-    res = f1.(data1, data2)
-    @test res isa IJFH{Float64}
-    @test Array(parent(res)) == FT[2 for i in 1:2, j in 1:2, f in 1:1, h in 1:2]
+    T = NamedTuple{(:a, :b), Tuple{Complex{FT}, FT}}
+    f(a1, a2) = a1.a.re * a2 + a1.b
+    for (Nv, Nij, Nh) in ((1, 2, 2), (33, 4, 2))
+        data1 = VIJFH{T, Nv, Nij, Nij, nothing}(A, Nh)
+        data2 = VIJFH{FT, Nv, Nij, Nij, nothing}(A, Nh)
+        parent(data1) .= 1
+        parent(data2) .= 1
+        @test Array(parent(f.(data1, data2))) == repeat(FT[2], Nv, Nij, Nij, 1, Nh)
+    end
 
-    Nv = 33
-    data1 = VIJFH{S1}(ArrayType{FT}, ones; Nv, Nij = 4, Nh = 2)
-    data2 = VIJFH{S2}(ArrayType{FT}, ones; Nv, Nij = 4, Nh = 2)
-
-    f2(a1, a2) = a1.a.re * a2 + a1.b
-    res = f2.(data1, data2)
-    @test res isa VIJFH{Float64, Nv}
-    @test Array(parent(res)) ==
-          FT[2 for v in 1:Nv, i in 1:4, j in 1:4, f in 1:1, h in 1:2]
+    T = Complex{FT}
+    for (Nv, Nij, Nh) in ((1, 2, 3), (33, 4, 3))
+        data = VIJFH{T, Nv, Nij, Nij, nothing}(A, Nh)
+        data .= Complex(1, 2)
+        @test Array(parent(data.re)) == repeat(FT[1], Nv, Nij, Nij, 1, Nh)
+        @test Array(parent(data.im)) == repeat(FT[2], Nv, Nij, Nij, 1, Nh)
+    end
 end
 
+@testset "kernel argument compaction" begin
+    import ClimaCore
+    import Adapt
+    ext = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
+    FT = Float32
+    T = NamedTuple{(:a, :b, :c), NTuple{3, FT}}
+    data = VIJFH{T, 10, 4, 4, nothing}(CUDA.CuArray{FT}, 20)
+    to = CUDA.KernelAdaptor()
 
-@testset "broadcasting assignment from scalar" begin
-    FT = Float64
-    S = Complex{FT}
-    Nh = 3
-    device = ClimaComms.device()
-    ArrayType = ClimaComms.array_type(device)
-    data = IJFH{S}(ArrayType{FT}; Nij = 2, Nh)
-    data .= Complex(1.0, 2.0)
-    @test Array(parent(data)) ==
-          FT[f == 1 ? 1 : 2 for i in 1:2, j in 1:2, f in 1:2, h in 1:3]
-
-    Nv = 33
-    data = VIJFH{S}(ArrayType{FT}; Nv, Nij = 4, Nh)
-    data .= Complex(1.0, 2.0)
-    @test Array(parent(data)) == FT[
-        f == 1 ? 1 : 2 for v in 1:Nv, i in 1:4, j in 1:4, f in 1:2, h in 1:3
-    ]
-
-    data = DataF{S}(ArrayType{FT})
-    data .= Complex(1.0, 2.0)
-    @test Array(parent(data)) == FT[f == 1 ? 1 : 2 for f in 1:2]
+    # Full arrays pass through unchanged; every view compacts to a
+    # CompactDeviceView whose type is statically inferred from the host types,
+    # so that kernel launches never hit dynamic dispatch.
+    full = @inferred Adapt.adapt(to, data)
+    @test parent(full) isa CUDA.CuDeviceArray
+    for view_data in (data.b, ClimaCore.level(data, 2))
+        compact = @inferred Adapt.adapt(to, view_data)
+        @test parent(compact) isa ext.CompactDeviceView
+        @test size(parent(compact)) == size(parent(view_data))
+        @test sizeof(typeof(parent(compact))) <
+              sizeof(typeof(Adapt.adapt(to, parent(view_data))))
+    end
 end

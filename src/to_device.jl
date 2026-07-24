@@ -3,7 +3,7 @@ import ClimaComms
 
 """
     out = to_device(device, x::Union{
-        DataLayouts.AbstractData,
+        DataLayouts.DataLayout,
         Spaces.AbstractSpace,
         Fields.Field,
         Fields.FieldVector,
@@ -21,7 +21,7 @@ This means that `out === x` will not in general be satisfied.
 function to_device(
     device::ClimaComms.AbstractDevice,
     x::Union{
-        DataLayouts.AbstractData,
+        DataLayouts.DataLayout,
         Spaces.AbstractSpace,
         Fields.Field,
         Fields.FieldVector,
@@ -35,7 +35,7 @@ to_device(::ClimaComms.CPUMultiThreaded, _) = error("Not supported")
 
 """
     out = to_cpu(x::Union{
-        DataLayouts.AbstractData,
+        DataLayouts.DataLayout,
         Spaces.AbstractSpace,
         Fields.Field,
         Fields.FieldVector,
@@ -52,7 +52,7 @@ This means that `out === x` will not in general be satisfied.
 """
 to_cpu(
     x::Union{
-        DataLayouts.AbstractData,
+        DataLayouts.DataLayout,
         Spaces.AbstractSpace,
         Fields.Field,
         Fields.FieldVector,

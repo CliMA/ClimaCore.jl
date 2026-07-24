@@ -1,4 +1,4 @@
-import ClimaCore: DataLayouts, Spaces, Geometry, DataLayouts
+import ClimaCore: DataLayouts, Spaces, Geometry
 import CUDA
 import ClimaCore.Operators: return_eltype, get_local_geometry
 import ClimaCore.Geometry: ⊗

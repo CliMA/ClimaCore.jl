@@ -34,7 +34,7 @@ using Test
         radius = 10,
         h_elem = 10,
         n_quad_points = 4,
-        horizontal_layout_type = DataLayouts.IJHF,
+        VIJH = DataLayouts.VIJHF,
     )
     @test grid isa Grids.ExtrudedFiniteDifferenceGrid
     @test grid.horizontal_grid isa Grids.SpectralElementGrid2D

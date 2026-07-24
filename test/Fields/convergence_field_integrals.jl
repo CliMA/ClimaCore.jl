@@ -12,7 +12,6 @@ import DataStructures
 using StaticArrays, IntervalSets
 import ClimaCore
 import ClimaCore.Utilities: PlusHalf
-import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
     Fields,
     slab,

@@ -228,7 +228,11 @@ end
             center_values = ones(FT, center_space)
             center_velocities = Geometry.WVector.(center_values)
 
-            filter(@nospecialize f) = f !== Base.mapreduce_empty
+            # Also ignore the runtime dispatch in Threads.threading_run as of Julia
+            # 1.10 (UnionAll construction in typejoin, reached through the error
+            # message machinery of sprint), used by parallelize_over
+            filter(@nospecialize f) =
+                f !== Base.mapreduce_empty && f !== Core.UnionAll
 
             # face space operators
             @test_opt function_filter = filter sum(ones(FT, face_space))
