@@ -1,5 +1,9 @@
 import .DataLayouts as DL
 
+# Matrix with one row per level of a column of data, whose columns each
+# correspond to one component of the data's element type
+column_matrix(data) = reshape(parent(data), size(data, 1), :)
+
 """
     VerticalMassBorrowingLimiter(q_min)
 
@@ -63,9 +67,9 @@ function apply_limiter!(
     for f in 1:DataLayouts.ncomponents(q_column_data)
         q_min_component = lim.q_min[f]
         column_massborrow!(
-            (@view parent(q_column_data)[:, f]),
-            (@view parent(ρ_column_data)[:, 1]),
-            (@view parent(ΔV_column_data)[:, 1]),
+            (@view column_matrix(q_column_data)[:, f]),
+            (@view column_matrix(ρ_column_data)[:, 1]),
+            (@view column_matrix(ΔV_column_data)[:, 1]),
             lim.q_min[f],
         )
     end
@@ -87,9 +91,9 @@ function apply_limiter!(
         for f in 1:DataLayouts.ncomponents(q_column_data)
             q_min_component = lim.q_min[f]
             column_massborrow!(
-                (@view parent(q_column_data)[:, f]),
-                (@view parent(ρ_column_data)[:, 1]),
-                (@view parent(ΔV_column_data)[:, 1]),
+                (@view column_matrix(q_column_data)[:, f]),
+                (@view column_matrix(ρ_column_data)[:, 1]),
+                (@view column_matrix(ΔV_column_data)[:, 1]),
                 lim.q_min[f],
             )
         end

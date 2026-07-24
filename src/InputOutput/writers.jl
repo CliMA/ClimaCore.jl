@@ -1,6 +1,24 @@
 abstract type AbstractWriter end
 
 """
+    layout_string(values)
+
+Canonical layout string for a `DataLayout`, stored as the `data_layout`
+attribute of a dataset in an HDF5 file. This matches the layout names used by
+older versions of ClimaCore, so that files written by [`HDF5Writer`](@ref) stay
+backwards-compatible.
+"""
+layout_string(values) =
+    values isa DataLayouts.DataF ? "DataF" :
+    values isa DataLayouts.VIJFH ? "VIJFH" :
+    values isa DataLayouts.VIJHF ? "VIJHF" :
+    error("Cannot write layout $(typeof(values)) to an HDF5 file")
+
+# Axis of the `H` dimension in the parent array of a `VIJHWithF` layout
+parent_h_dim(values::DataLayouts.VIJHWithF) =
+    something(DataLayouts.f_dim(values), 5) == 5 ? 4 : 5
+
+"""
     HDF5Writer(filename::AbstractString[,
                context::ClimaComms.AbstractCommsContext];
                overwrite::Bool = true)
@@ -514,7 +532,7 @@ function write!(
     write_attribute(
         dataset,
         "data_layout",
-        string(nameof(typeof(Fields.field_values(field)))),
+        layout_string(Fields.field_values(field)),
     )
     write_attribute(dataset, "field_eltype", string(eltype(field)))
     local_geometry_dataset = create_dataset(
@@ -592,7 +610,7 @@ function _write_mpi!(
     nelems,
     local_elem_gidx,
 )
-    h_dim = DataLayouts.h_dim(DataLayouts.singleton(values))
+    h_dim = parent_h_dim(values)
     array = parent(values)
     nd = ndims(array)
     dims = ntuple(d -> d == h_dim ? nelems : size(array, d), nd)
@@ -605,7 +623,7 @@ function _write_mpi!(
         dxpl_mpio = :collective,
     )
     dataset[localidx...] = array
-    write_attribute(dataset, "data_layout", string(nameof(typeof(values))))
+    write_attribute(dataset, "data_layout", layout_string(values))
     write_attribute(dataset, "data_eltype", string(eltype(values)))
     return name
 end
@@ -623,10 +641,9 @@ HDF5 file.
 This method should be used when this is not a distributed datalayout.
 """
 function _write!(group, values::DataLayouts.DataLayout, name::AbstractString;)
-    h_dim = DataLayouts.h_dim(DataLayouts.singleton(values))
     array = parent(values)
     dataset = write_plain_array!(group, array, name)
-    write_attribute(dataset, "type", string(nameof(typeof(values))))
+    write_attribute(dataset, "type", layout_string(values))
     write_attribute(dataset, "data_eltype", string(eltype(values)))
     return name
 end
@@ -660,7 +677,8 @@ function write!(
     if topology isa Topologies.Topology2D &&
        !(writer.context isa ClimaComms.SingletonCommsContext)
         nelems = Topologies.nelems(topology)
-        h_dim = DataLayouts.h_dim(DataLayouts.singleton(values))
+        f_dim = DataLayouts.f_dim(values)
+        h_dim = isnothing(f_dim) || f_dim == 5 ? 4 : 5
         dims = ntuple(d -> d == h_dim ? nelems : size(array, d), nd)
         localidx = ntuple(d -> d == h_dim ? topology.local_elem_gidx : (:), nd)
         dataset = create_dataset(
@@ -685,7 +703,7 @@ function write!(
     write_attribute(
         dataset,
         "data_layout",
-        string(nameof(typeof(Fields.field_values(field)))),
+        layout_string(Fields.field_values(field)),
     )
     write_attribute(dataset, "field_eltype", string(eltype(field)))
     write_attribute(dataset, "grid", grid_name)

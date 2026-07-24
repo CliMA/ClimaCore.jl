@@ -1,4 +1,4 @@
-import ClimaCore: Spaces, Quadratures, Topologies
+import ClimaCore: Fields, Spaces, Quadratures, Topologies
 import Base.Broadcast: Broadcasted
 import ClimaComms
 using CUDA: @cuda, i32
@@ -32,13 +32,12 @@ function Base.copyto!(
         StencilBroadcasted{CUDAWithShmemColumnStencilStyle},
         Broadcasted{CUDAColumnStencilStyle},
         Broadcasted{CUDAWithShmemColumnStencilStyle},
-    },
+    };
     mask = Spaces.get_mask(axes(out)),
 )
     space = axes(out)
     bounds = Operators.window_bounds(space, bc)
     out_fv = Fields.field_values(out)
-    us = DataLayouts.UniversalSize(out_fv)
 
     fspace = Spaces.face_space(space)
     n_face_levels = Spaces.nlevels(fspace)
@@ -60,13 +59,12 @@ function Base.copyto!(
        enough_shmem &&
        Operators.use_fd_shmem()
         shmem_params = ShmemParams{n_face_levels}()
-        p = fd_shmem_stencil_partition(us, n_face_levels)
+        p = fd_shmem_stencil_partition(out_fv, n_face_levels)
         args = (
             strip_space(out, space),
             strip_space(bc, space),
             axes(out),
             bounds,
-            us,
             mask,
             shmem_params,
         )
@@ -78,7 +76,7 @@ function Base.copyto!(
         )
     else
         bc′ = disable_shmem_style(bc)
-        (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(out_fv)
+        (_, Ni, Nj, Nh) = size(out_fv)
         # This uses block and grid indices instead of computing cartesian indices from a
         # linear index. The launch configuration is optimized for common use case of 64 face
         # levels and Ni = Nj = 4. Periodic toppologies and masks are not currently supported
@@ -106,9 +104,9 @@ function Base.copyto!(
         end
         @assert !any_fd_shmem_style(bc′)
         cart_inds = if mask isa NoMask
-            cartesian_indices(us)
+            cartesian_indices(out_fv)
         else
-            cartesian_indices_mask(us, mask)
+            cartesian_indices_mask(out_fv, mask)
         end
 
         args = cudaconvert((
@@ -116,17 +114,16 @@ function Base.copyto!(
             strip_space(bc′, space),
             axes(out),
             bounds,
-            us,
             mask,
             cart_inds,
         ))
 
         threads = threads_via_occupancy(copyto_stencil_kernel!, args)
-        n_max_threads = min(threads, get_N(us))
+        n_max_threads = min(threads, length(out_fv))
         p = if mask isa NoMask
             linear_partition(prod(size(out_fv)), n_max_threads)
         else
-            masked_partition(mask, n_max_threads, us)
+            masked_partition(mask, n_max_threads, out_fv)
         end
         auto_launch!(
             copyto_stencil_kernel!,
@@ -138,8 +135,6 @@ function Base.copyto!(
     call_post_op_callback() && post_op_callback(out, out, bc)
     return out
 end
-import ClimaCore.DataLayouts: get_N, get_Nv, get_Nij, get_Nij, get_Nh
-
 
 function copyto_stencil_kernel!(
     out,
@@ -149,21 +144,20 @@ function copyto_stencil_kernel!(
     },
     space,
     bds,
-    us,
     mask,
     cart_inds,
 )
     @inbounds begin
         out_fv = Fields.field_values(out)
         tidx = linear_thread_idx()
-        if linear_is_valid_index(tidx, us) && tidx ≤ length(unval(cart_inds))
+        if linear_is_valid_index(tidx, out_fv) && tidx ≤ length(unval(cart_inds))
             I = if mask isa NoMask
                 unval(cart_inds)[tidx]
             else
                 masked_universal_index(mask, cart_inds)
             end
             (li, lw, rw, ri) = bds
-            (i, j, _, v, h) = I.I
+            (v, i, j, h) = I.I
             hidx = (i, j, h)
             idx = v - 1 + li
             val = Operators.getidx(space, bc, idx, hidx)
@@ -178,17 +172,15 @@ function copyto_stencil_kernel_shmem!(
     bc′::Union{StencilBroadcasted, Broadcasted},
     space,
     bds,
-    us,
     mask,
     shmem_params::ShmemParams,
 )
     @inbounds begin
         out_fv = Fields.field_values(out)
-        us = DataLayouts.UniversalSize(out_fv)
-        I = fd_shmem_stencil_universal_index(space, us)
-        if fd_shmem_stencil_is_valid_index(I, us) # check that hidx is in bounds
+        I = fd_shmem_stencil_universal_index(space, out_fv)
+        if fd_shmem_stencil_is_valid_index(I, out_fv) # check that hidx is in bounds
             (li, lw, rw, ri) = bds
-            (i, j, _, v, h) = I.I
+            (v, i, j, h) = I.I
             hidx = (i, j, h)
             idx = v - 1 + li
             bc = Operators.reconstruct_placeholder_broadcasted(space, bc′)

@@ -1,4 +1,4 @@
-import ClimaCore: DataLayouts, Spaces, Geometry, DataLayouts
+import ClimaCore: DataLayouts, Spaces, Geometry, Operators, Quadratures
 import CUDA
 import ClimaCore.Operators:
     Divergence,

@@ -91,16 +91,16 @@ if haskey(ENV, "RESTART_FILE")
     ᶠlocal_geometry = Fields.local_geometry_field(Y.f)
 else
     t_start = FT(0)
-    horizontal_layout_types = Dict()
-    horizontal_layout_types["VIJFH"] = DataLayouts.VIJFH
-    horizontal_layout_types["VIJHF"] = DataLayouts.VIJHF
-    horizontal_layout_type =
-        horizontal_layout_types[get(ENV, "horizontal_layout_type", "VIJFH")]
+    VIJHs = Dict()
+    VIJHs["VIJFH"] = DataLayouts.VIJFH
+    VIJHs["VIJHF"] = DataLayouts.VIJHF
+    VIJH =
+        VIJHs[get(ENV, "horizontal_layout_type", "VIJFH")]
     h_space = make_horizontal_space(
         horizontal_mesh,
         npoly,
         comms_ctx,
-        horizontal_layout_type,
+        VIJH,
     )
     center_space, face_space =
         make_hybrid_spaces(h_space, z_max, z_elem; z_stretch)

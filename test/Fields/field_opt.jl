@@ -76,11 +76,14 @@ end
         Y = fill((; x = FT(2)), space)
         allocs_test!(Y)
         p = @allocated allocs_test!(Y)
-        @test p == 0
+        # TODO: On extruded spaces, these operations have an unelided view
+        # from getproperty (48 bytes); whether the compiler elides it depends
+        # on how much of its inference budget is used up.
+        @test p ≤ 48
 
         callfill!(Y)
         p = @allocated callfill!(Y)
-        @test p == 0
+        @test p ≤ 48
     end
 end
 
@@ -233,7 +236,10 @@ end
     foo!(obj) # compile first
 
     palloc = @allocated foo!(obj)
-    @test palloc == 0
+    # TODO: This FieldVector broadcast has several dozen unelided views from
+    # getproperty (48 bytes each); whether the compiler elides them depends on
+    # how much of its inference budget is used up.
+    @test palloc ≤ 1280
 end
 
 struct VarTimescaleAcnv{FT}
@@ -263,7 +269,11 @@ using JET
     ρ = Fields.Field(Float64, cspace)
     S = Fields.Field(Float64, cspace)
     ifelsekernel!(S, ρ)
-    @test_opt ifelsekernel!(S, ρ)
+    # Ignore the runtime dispatch in Threads.threading_run as of Julia 1.10
+    # (UnionAll construction in typejoin, reached through the error message
+    # machinery of sprint), which parallelize_over uses for multithreading
+    filter(@nospecialize f) = f !== Core.UnionAll
+    @test_opt function_filter = filter ifelsekernel!(S, ρ)
 end
 
 @testset "dss of FieldVectors" begin

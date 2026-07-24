@@ -294,6 +294,14 @@ function Base.Broadcast.instantiate(
     return Base.Broadcast.Broadcasted{FieldVectorStyle}(bc.f, bc.args, axes)
 end
 
+# Val-wrap property names so broadcast transformations and closures receive type
+# parameters rather than runtime Symbols; deeply nested broadcasts can exhaust the
+# constant-propagation budget before the getfield calls, causing runtime allocations.
+@inline property_name_vals(fv::FieldVector) = property_name_vals(_values(fv))
+@inline property_name_vals(::NamedTuple{names}) where {names} =
+    unrolled_map(Val, names)
+@inline unval(::Val{value}) where {value} = value
+
 # Recursively call transform_bc_args() on broadcast arguments in a way that is statically reducible by the optimizer
 # see Base.Broadcast.preprocess_args
 @inline transform_bc_args(args::Tuple, inds...) =
@@ -303,51 +311,60 @@ end
 
 @inline function transform_broadcasted(
     bc::Base.Broadcast.Broadcasted{FieldVectorStyle},
-    symb,
+    symb_val,
     axes,
 )
     Base.Broadcast.Broadcasted(
         bc.f,
-        transform_bc_args(bc.args, symb, axes),
+        transform_bc_args(bc.args, symb_val, axes),
         axes,
     )
 end
-@inline transform_broadcasted(fv::FieldVector, symb, axes) =
+@inline transform_broadcasted(fv::FieldVector, ::Val{symb}, axes) where {symb} =
     parent(getfield(_values(fv), symb))
-@inline transform_broadcasted(x, symb, axes) = x
+@inline transform_broadcasted(x, symb_val, axes) = x
 
 @inline function Base.copyto!(
     dest::FieldVector,
     bc::Union{FieldVector, Base.Broadcast.Broadcasted{FieldVectorStyle}},
 )
-    unrolled_foreach(propertynames(dest)) do symb
-        array = parent(getfield(_values(dest), symb))
-        bct = transform_broadcasted(bc, symb, axes(array))
+    unrolled_foreach(property_name_vals(dest)) do symb_val
+        array = parent(getfield(_values(dest), unval(symb_val)))
+        bct = transform_broadcasted(bc, symb_val, axes(array))
         array isa FieldVector ? copyto!(array, bct) :
-        copyto!(array, Base.Broadcast.instantiate(bct), DataLayouts.device_dispatch(array))
+        copyto!(array, Base.Broadcast.instantiate(bct))
     end
     call_post_op_callback() && post_op_callback(dest, dest, bc)
     return dest
 end
 
-@inline function Base.copyto!(
-    dest::FieldVector,
-    bc::Base.Broadcast.Broadcasted{S},
-) where {S <: Union{Base.Broadcast.Style{Tuple}, Base.Broadcast.AbstractArrayStyle{0}}}
-    unrolled_foreach(propertynames(dest)) do symb
-        array = parent((getfield(_values(dest), symb)))
-        array isa FieldVector ? copyto!(array, bc) :
-        copyto!(array, Base.Broadcast.instantiate(bc), DataLayouts.device_dispatch(array))
+# Define separate methods for Style{Tuple} and AbstractArrayStyle{0}, instead
+# of a single method for their Union, to avoid a dispatch ambiguity with the
+# method for AbstractArrays in Base.Broadcast.
+for S in
+    (:(Base.Broadcast.Style{Tuple}), :(Base.Broadcast.AbstractArrayStyle{0}))
+    @eval @inline function Base.copyto!(
+        dest::FieldVector,
+        bc::Base.Broadcast.Broadcasted{<:$S},
+    )
+        unrolled_foreach(property_name_vals(dest)) do symb_val
+            array = parent(getfield(_values(dest), unval(symb_val)))
+            array isa FieldVector ? copyto!(array, bc) :
+            copyto!(array, Base.Broadcast.instantiate(bc))
+        end
+        call_post_op_callback() && post_op_callback(dest, dest, bc)
+        return dest
     end
-    call_post_op_callback() && post_op_callback(dest, dest, bc)
-    return dest
 end
+
+# Copying a scalar fills every entry with it, as in fill!. Without this method,
+# Base's fallback would iterate over the scalar and call setindex!, which is a
+# disallowed scalar indexing operation for a FieldVector backed by a GPU array.
+@inline Base.copyto!(dest::FieldVector, value::Number) = fill!(dest, value)
 
 @inline function Base.fill!(dest::FieldVector, value)
-    unrolled_foreach(propertynames(dest)) do symb
-        array = parent((getfield(_values(dest), symb)))
-        array isa FieldVector ? fill!(array, value) :
-        fill!(array, value, DataLayouts.device_dispatch(array))
+    unrolled_foreach(property_name_vals(dest)) do symb_val
+        fill!(parent(getfield(_values(dest), unval(symb_val))), value)
     end
     call_post_op_callback() && post_op_callback(dest, dest, value)
     return dest

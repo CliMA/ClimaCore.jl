@@ -229,7 +229,7 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
     f_comp2_buffer = Spaces.create_dss_buffer(f_comp2)
     f = @. Geometry.Contravariant3Vector(Geometry.WVector(ϕ))
 
-    s = DataLayouts.farray_size(Fields.field_values(ϕ))
+    s = size(parent(Fields.field_values(ϕ)))
     ArrayType = ClimaComms.array_type(device)
     ϕ_arr = ArrayType(fill(FT(1), s))
     ψ_arr = ArrayType(fill(FT(2), s))

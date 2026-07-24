@@ -22,6 +22,11 @@ function band_matrix_info(field)
     return n_rows, n_cols, matrix_ld, matrix_ud
 end
 
+# Matrix with one row per level of a column field, whose adjoint can be
+# reinterpreted as a set of values of the field's element type
+column_parent_matrix(field) =
+    reshape(parent(field), Spaces.nlevels(axes(field)), :)
+
 """
     column_field2array(field)
 
@@ -42,8 +47,12 @@ function column_field2array(field::Fields.FiniteDifferenceField)
         for (index_of_field_entry, matrix_d) in enumerate(matrix_ld:matrix_ud)
             matrix_diagonal = view(matrix, band(matrix_d))
             diagonal_field = field.entries.:($index_of_field_entry)
-            diagonal_data =
-                vec(reinterpret(eltype(eltype(field)), parent(diagonal_field)'))
+            diagonal_data = vec(
+                reinterpret(
+                    eltype(eltype(field)),
+                    column_parent_matrix(diagonal_field)',
+                ),
+            )
 
             # Find the rows for which diagonal_data[row] is in the matrix.
             # Note: The matrix index (1, 1) corresponds to the diagonal index 0,
@@ -53,9 +62,6 @@ function column_field2array(field::Fields.FiniteDifferenceField)
             last_row = matrix_d < n_cols - n_rows ? n_rows : n_cols - matrix_d
 
             diagonal_data_view = view(diagonal_data, first_row:last_row)
-            ClimaComms.allowscalar(ClimaComms.device(field)) do
-                copyto!(matrix_diagonal, diagonal_data_view)
-            end
             ClimaComms.allowscalar(ClimaComms.device(field)) do
                 copyto!(matrix_diagonal, diagonal_data_view)
             end
@@ -79,14 +85,14 @@ function column_field2array_view(field::Fields.FiniteDifferenceField)
     if eltype(field) <: BandMatrixRow # field represents a matrix
         _, n_cols, matrix_ld, matrix_ud = band_matrix_info(field)
         field_data_transpose =
-            reinterpret(eltype(eltype(field)), parent(field)')
+            reinterpret(eltype(eltype(field)), column_parent_matrix(field)')
         matrix_transpose =
             _BandedMatrix(field_data_transpose, n_cols, matrix_ud, -matrix_ld)
         return permutedims(matrix_transpose)
         # TODO: Despite not copying any data, this function still allocates a
         # small amount of memory because of _BandedMatrix and permutedims.
     else # field represents a vector
-        return vec(reinterpret(eltype(field), parent(field)'))
+        return vec(reinterpret(eltype(field), column_parent_matrix(field)'))
     end
 end
 

@@ -7,6 +7,8 @@ values in an `AbstractArray` of type `A`. May also be constructed using an
 instance of an array or any similarly indexable argument, or by combining the
 `DataScope`s from multiple arguments (always selecting the smallest scope).
 
+# Extended Help
+
 `DataScope`s can be compared using [`is_subscope`](@ref), and they define
 methods for the following functions:
  - [`partition`](@ref)
@@ -15,15 +17,6 @@ methods for the following functions:
  - [`parallelize_over`](@ref) and [`synchronize`](@ref)
  - [`scoped_array`](@ref) and [`scoped_static_array`](@ref)
  - [`strided_access`](@ref)
-
-# Extended help
-
-`DataScope`s are device-agnostic generalizations of "cooperative groups"
-from the [`CG`](https://cuda.juliagpu.org/stable/development/kernel/#Cooperative-groups)
-module in `CUDA.jl`, which are built on top of the `cooperative_groups`
-[extension](https://docs.nvidia.com/cuda/cuda-c-programming-guide/#cooperative-groups)
-that comes prepackaged with CUDA. They are used throughout ClimaCore to track
-ownership of data across different levels of parallelization.
 
 Every [`DataLayout`](@ref) is assigned a specific `DataScope`, but the scope of
 a generic `AbstractArray` must be inferred from its type. While some types of
@@ -45,18 +38,22 @@ wrapped in a `DataLayout`.
 abstract type DataScope end
 
 DataScope(::A) where {A <: AbstractArray} = DataScope(A)
-DataScope(::Type{<:StaticArrays.StaticArray}) = ThisThread()
 DataScope(::Type{<:Array}) = ThisThreadPool()
+DataScope(::Type{<:StaticArrays.StaticArray}) = ThisThread()
+DataScope(::Type{<:SubArray{<:Any, <:Any, A}}) where {A} = DataScope(A)
+DataScope(::Type{<:Base.ReshapedArray{<:Any, <:Any, A}}) where {A} = DataScope(A)
+
+# Infer parent types of other AbstractArrays (constant-folding not guaranteed).
 DataScope(::Type{A}) where {A <: AbstractArray} = DataScope(return_type(parent, Tuple{A}))
 
-DataScope(arg1, arg2, args...) =
-    unrolled_reduce(unrolled_map(DataScope, (arg1, arg2, args...))) do scope1, scope2
-        is_subscope(scope1, scope2) ? scope1 :
-        is_subscope(scope2, scope1) ? scope2 :
-        throw(ArgumentError(non_overlapping_scopes_string(scope1, scope2)))
-    end
+DataScope(scope1::DataScope, scope2::DataScope) =
+    is_subscope(scope1, scope2) ? scope1 :
+    is_subscope(scope2, scope1) ? scope2 :
+    throw(ArgumentError(non_overlapping_scopes_string(scope1, scope2)))
 @generated non_overlapping_scopes_string(::S1, ::S2) where {S1, S2} =
     "$S1 and $S2 do not overlap, so they cannot be put in the same DataScope"
+
+DataScope(arg1, arg2, args...) = DataScope(DataScope(arg1), DataScope(arg2, args...))
 
 """
     partition(scope)
@@ -184,17 +181,61 @@ scoped_static_array(::ThisThread, ::Type{T}, dims) where {T} =
     ThisThreadPool()
 
 [`DataScope`](@ref) that represents all available threads on a CPU.
+
+When running in a multithreaded loop located outside of ClimaCore, the pool is
+only given access to one thread, since multithreaded loops cannot be nested in
+each other. Otherwise, it is given access to the entire default thread pool.
 """
 struct ThisThreadPool <: DataScope end
 
-partition(::ThisThreadPool) = ThisThread()
-num_threads(::ThisThreadPool) = Threads.nthreads()
-thread_rank(::ThisThreadPool) = Threads.threadid()
-parallelize_over(f::F, ::ThisThreadPool) where {F} =
-    iszero(ccall(:jl_in_threaded_region, Cint, ())) ? # same logic as `@threads :static ...`
-    Threads.threading_run(_ -> f(), true) :
-    throw(ArgumentError("ThisThreadPool cannot be used in a loop annotated with @threads"))
+# Threads._nthreads_in_pool is two pointer loads of jl_n_threads_per_pool; the public
+# Threads.threadpoolsize wraps _sym_to_tpid, whose unreachable ArgumentError branch has
+# a runtime dispatch (via repr/sprint) that JET flags on Julia 1.10+. Pool IDs follow
+# _sym_to_tpid (0 = :interactive, 1 = :default); fall back to the public API if the
+# internals change.
+@static if isdefined(Threads, :_nthreads_in_pool)
+    default_pool_size() = Int(Threads._nthreads_in_pool(Int8(1)))
+    interactive_pool_size() = Int(Threads._nthreads_in_pool(Int8(0)))
+else
+    default_pool_size() = Threads.threadpoolsize(:default)
+    interactive_pool_size() = Threads.threadpoolsize(:interactive)
+end
 
+# Threads.threading_run compiles faster than an equivalent static Threads.@threads loop
+# (no dividing iterations among threads); fall back to the public API if internals change.
+@static if isdefined(Threads, :threading_run)
+    launch_default_pool_threads(f::F) where {F} =
+        Threads.threading_run(true) do _
+            task_local_storage(:launched_from_climacore, true)
+            f()
+        end
+else
+    launch_default_pool_threads(f::F) where {F} =
+        Threads.@threads :static for _ in Base.OneTo(default_pool_size())
+            task_local_storage(:launched_from_climacore, true)
+            f()
+        end
+end
+
+# Task-local storage marks ClimaCore-launched threads, distinguishing them from external
+# threaded loops; storage is nothing until first set, so storage-less threads are external.
+running_in_threaded_loop() = !iszero(ccall(:jl_in_threaded_region, Cint, ()))
+function running_in_external_threaded_loop()
+    running_in_threaded_loop() || return false
+    storage = current_task().storage
+    return isnothing(storage) ||
+           !haskey(storage::IdDict{Any, Any}, :launched_from_climacore)
+end
+
+partition(::ThisThreadPool) = ThisThread()
+num_threads(::ThisThreadPool) =
+    running_in_external_threaded_loop() ? 1 : default_pool_size()
+thread_rank(::ThisThreadPool) =
+    running_in_external_threaded_loop() ? 1 : Threads.threadid() - interactive_pool_size()
+parallelize_over(f::F, ::ThisThreadPool) where {F} =
+    running_in_external_threaded_loop() ? f() :
+    !running_in_threaded_loop() ? launch_default_pool_threads(f) :
+    throw(ArgumentError("Nested loops over ThisThreadPool are not supported"))
 scoped_array(::ThisThreadPool, ::Type{T}, dims) where {T} = Array{T}(undef, dims)
 strided_access(::ThisThreadPool) = false # Always use contiguous ranges on CPUs.
 
@@ -204,6 +245,12 @@ strided_access(::ThisThreadPool) = false # Always use contiguous ranges on CPUs.
 Divides a collection of indices (either linear or Cartesian) among subsets of a
 [`DataScope`](@ref). The result is a strided range if [`strided_access`](@ref)
 is true for `scope`, or a contiguous range if it is false.
+
+Contiguous ranges are generated by partitioning the indices into chunks whose
+lengths differ from each other by at most 1, which guarantees that every subset
+of the scope gets a nonempty chunk whenever there are at least as many indices
+as subsets. In contrast, always assigning `cld(length(indices), n_subsets)`
+indices to each subset can lead to one or more empty subsets.
 """
 Base.@propagate_inbounds function subscope_indices(subscope, scope, indices)
     subscope == scope && return indices
@@ -215,7 +262,14 @@ Base.@propagate_inbounds function subscope_indices(subscope, scope, indices)
         subscope == ThisThread() ? num_threads(scope) :
         subscope == partition(scope) ? num_partitions(scope) :
         num_subscopes(subscope, scope)
-    N = length(indices)
-    contiguous_range = ((rank - 1) * cld(N, n) + 1):min(rank * cld(N, n), N)
-    return view(indices, strided_access(scope) ? (rank:n:N) : contiguous_range)
+    view_range =
+        strided_access(scope) ? (rank:n:length(indices)) :
+        (length(indices) * (rank - 1) ÷ n + 1):(length(indices) * rank ÷ n)
+    return subscope_index_view(scope, indices, view_range)
 end
+
+# Return a view by default, so iterating over it is as efficient as iterating
+# over the original indices. GPU scopes must override this, since a strided view
+# of CartesianIndices is a ReshapedArray with GPU-incompatible bounds checks.
+Base.@propagate_inbounds subscope_index_view(scope, indices, view_range) =
+    view(indices, view_range)

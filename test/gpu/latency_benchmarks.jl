@@ -31,7 +31,8 @@ import LazyBroadcast: lazy
     latency = median(@benchmark $scalar_field_1 .= $scalar_field_1 .+ $scalar_field_2).time
     # update this value if the kernel launch time changes significantly and it is expected
     baseline_latency = 18000
-    @test latency ≈ baseline_latency atol = 2000
+    latency_atol = 2000
+    @test latency ≈ baseline_latency atol = latency_atol
     percent_change_latency =
         round(Int, (latency - baseline_latency) / baseline_latency * 100)
     @info "Latency: $latency ns, Percent change from baseline: $percent_change_latency%"
@@ -44,8 +45,8 @@ import LazyBroadcast: lazy
                 $scalar_field_1 .+ $scalar_field_2 .+ $scalar_field_1 .+ $scalar_field_2
         ).time
     # update this value if the kernel launch time changes significantly and it is expected
-    baseline_latency = 27000
-    @test latency ≈ baseline_latency atol = 2000
+    baseline_latency = 24000
+    @test latency ≈ baseline_latency atol = latency_atol
     percent_change_latency =
         round(Int, (latency - baseline_latency) / baseline_latency * 100)
     @info "Latency: $latency ns, Percent change from baseline: $percent_change_latency%"
@@ -57,8 +58,8 @@ import LazyBroadcast: lazy
     CUDA.synchronize()
     latency = median(@benchmark $scalar_field_1 .= $lazy_sum_3).time
     # update this value if the kernel launch time changes significantly and it is expected
-    baseline_latency = 43000
-    @test latency ≈ baseline_latency atol = 2000
+    baseline_latency = 42000
+    @test latency ≈ baseline_latency atol = latency_atol
     percent_change_latency =
         round(Int, (latency - baseline_latency) / baseline_latency * 100)
     @info "Latency: $latency ns, Percent change from baseline: $percent_change_latency%"

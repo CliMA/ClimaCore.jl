@@ -100,7 +100,11 @@ end
 
 @static if @isdefined(var"@test_opt")
 
-    filter(@nospecialize f) = f !== Base.mapreduce_empty
+    # Also ignore the runtime dispatch in Threads.threading_run as of Julia
+    # 1.10 (UnionAll construction in typejoin, reached through the error
+    # message machinery of sprint), used by parallelize_over
+    filter(@nospecialize f) =
+        f !== Base.mapreduce_empty && f !== Core.UnionAll
 
     function test_operators(field, vfield)
         @test_opt opt_Gradient(field)

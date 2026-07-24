@@ -1,5 +1,6 @@
 import ClimaCore.Remapping: interpolate_slab!
 import ClimaCore: Topologies, Spaces, Fields, Operators, Quadratures
+import ClimaComms
 import CUDA
 using CUDA: @cuda
 

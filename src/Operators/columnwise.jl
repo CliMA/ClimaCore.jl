@@ -74,8 +74,7 @@ function columnwise!(
     ᶠspace = Spaces.face_space(ᶜspace)
     ᶠNv = Spaces.nlevels(ᶠspace)
     ᶜcf = Fields.coordinate_field(ᶜspace)
-    us = DataLayouts.UniversalSize(Fields.field_values(ᶜcf))
-    (Ni, Nj, _, _, Nh) = DataLayouts.universal_size(us)
+    (_, Ni, Nj, Nh) = size(Fields.field_values(ᶜcf))
 
     mask = Spaces.get_mask(axes(ᶜYₜ))
     @inbounds begin
@@ -108,6 +107,16 @@ function columnwise!(
     return nothing
 end
 
+# Canonical parent-array dimensions for a single-column layout whose values
+# span Nf base types: (Nv, 1, 1, 1) with Nf inserted at the F axis (or dropped
+# when there is no F axis). Layout constructors require canonically shaped
+# parent arrays, so local memory must be allocated accordingly.
+@inline local_mem_dims(data, Nf) = DataLayouts.add_f_dim(
+    (DataLayouts.nlevels(data), 1, 1, 1),
+    Nf,
+    Val(DataLayouts.f_dim(data)),
+)
+
 function columnwise_kernel!(
     device,
     ᶜf,
@@ -125,11 +134,6 @@ function columnwise_kernel!(
     ᶜY_fv = Fields.field_values(_ᶜY)
     ᶠY_fv = Fields.field_values(_ᶠY)
     FT = Spaces.undertype(axes(_ᶜY))
-    ᶜNv = Spaces.nlevels(axes(_ᶜY))
-    ᶠNv = Spaces.nlevels(axes(_ᶠY))
-    ᶜus = DataLayouts.UniversalSize(ᶜY_fv)
-    ᶠus = DataLayouts.UniversalSize(ᶠY_fv)
-    (Ni, Nj, _, _, Nh) = DataLayouts.universal_size(ᶠus)
     ᶜTS = DataLayouts.num_basetypes(FT, eltype(ᶜY_fv))
     ᶠTS = DataLayouts.num_basetypes(FT, eltype(ᶠY_fv))
     ᶜlg = Spaces.local_geometry_data(axes(_ᶜY))
@@ -137,23 +141,23 @@ function columnwise_kernel!(
     SLG = eltype(ᶜlg)
     ᶜTS_lg = DataLayouts.num_basetypes(FT, SLG)
 
-    ᶜui = universal_index_columnwise(device, UI, ᶜus)
-    ᶠui = universal_index_columnwise(device, UI, ᶠus)
-    colidx = Grids.ColumnIndex((ᶠui.I[1], ᶠui.I[2]), ᶠui.I[5])
+    ᶜui = universal_index_columnwise(device, UI, ᶜY_fv)
+    ᶠui = universal_index_columnwise(device, UI, ᶠY_fv)
+    colidx = Grids.ColumnIndex((ᶠui.I[2], ᶠui.I[3]), ᶠui.I[4])
 
     if localmem_state
-        ᶜY_arr = local_mem(device, FT, Val((ᶜNv, ᶜTS)))
-        ᶠY_arr = local_mem(device, FT, Val((ᶠNv, ᶠTS)))
+        ᶜY_arr = local_mem(device, FT, Val(local_mem_dims(ᶜY_fv, ᶜTS)))
+        ᶠY_arr = local_mem(device, FT, Val(local_mem_dims(ᶠY_fv, ᶠTS)))
         ᶜdata_col = rebuild_column(ᶜY_fv, ᶜY_arr)
         ᶠdata_col = rebuild_column(ᶠY_fv, ᶠY_arr)
     else
-        ᶜdata_col = DataLayouts.column(ᶜY_fv, colidx)
-        ᶠdata_col = DataLayouts.column(ᶠY_fv, colidx)
+        ᶜdata_col = DataLayouts.column(ᶜY_fv, colidx.ij..., colidx.h)
+        ᶠdata_col = DataLayouts.column(ᶠY_fv, colidx.ij..., colidx.h)
     end
 
     if localmem_lg
-        ᶜlg_arr = local_mem(device, FT, Val((ᶜNv, ᶜTS_lg)))
-        ᶠlg_arr = local_mem(device, FT, Val((ᶠNv, ᶜTS_lg)))
+        ᶜlg_arr = local_mem(device, FT, Val(local_mem_dims(ᶜlg, ᶜTS_lg)))
+        ᶠlg_arr = local_mem(device, FT, Val(local_mem_dims(ᶠlg, ᶜTS_lg)))
         (ᶜspace_col, ᶠspace_col) =
             column_spaces(_ᶜY, _ᶠY, ᶠui, ᶜlg_arr, ᶠlg_arr, SLG)
     else
@@ -161,21 +165,24 @@ function columnwise_kernel!(
         ᶠspace_col = Spaces.column(axes(_ᶠY), colidx)
     end
 
+    ᶜvi = CartesianIndex(ᶜui.I[1], 1, 1, 1)
+    ᶠvi = CartesianIndex(ᶠui.I[1], 1, 1, 1)
+
     if localmem_state
-        is_valid_index_cw(ᶜus, ᶜui) && (ᶜdata_col[ᶜui] = ᶜY_fv[ᶜui])
-        is_valid_index_cw(ᶠus, ᶠui) && (ᶠdata_col[ᶠui] = ᶠY_fv[ᶠui])
+        is_valid_index_cw(ᶜY_fv, ᶜui) && (ᶜdata_col[ᶜvi] = ᶜY_fv[ᶜui])
+        is_valid_index_cw(ᶠY_fv, ᶠui) && (ᶠdata_col[ᶠvi] = ᶠY_fv[ᶠui])
     end
 
     if localmem_lg
         ᶜlg_col = Spaces.local_geometry_data(ᶜspace_col)
         ᶠlg_col = Spaces.local_geometry_data(ᶠspace_col)
-        is_valid_index_cw(ᶜus, ᶜui) && (ᶜlg_col[ᶜui] = ᶜlg[ᶜui])
-        is_valid_index_cw(ᶠus, ᶠui) && (ᶠlg_col[ᶠui] = ᶠlg[ᶠui])
+        is_valid_index_cw(ᶜY_fv, ᶜui) && (ᶜlg_col[ᶜvi] = ᶜlg[ᶜui])
+        is_valid_index_cw(ᶠY_fv, ᶠui) && (ᶠlg_col[ᶠvi] = ᶠlg[ᶠui])
     end
 
     device_sync_threads(device)
 
-    if is_valid_index_cw(ᶜus, ᶜui)
+    if is_valid_index_cw(ᶜY_fv, ᶜui)
         ᶜY = Fields.Field(ᶜdata_col, ᶜspace_col)
         ᶠY = Fields.Field(ᶠdata_col, ᶠspace_col)
         ᶜbc = ᶜf(ᶜY, ᶠY, p, t)
@@ -183,7 +190,7 @@ function columnwise_kernel!(
         ᶜval = Operators.getidx(axes(ᶜY), ᶜbc, ᶜidx, ᶜhidx)
         Fields.field_values(ᶜYₜ)[ᶜui] = ᶜval
     end
-    if is_valid_index_cw(ᶠus, ᶠui)
+    if is_valid_index_cw(ᶠY_fv, ᶠui)
         ᶜY = Fields.Field(ᶜdata_col, ᶜspace_col)
         ᶠY = Fields.Field(ᶠdata_col, ᶠspace_col)
         ᶠbc = ᶠf(ᶜY, ᶠY, p, t)
@@ -208,26 +215,19 @@ device_sync_threads(device::ClimaComms.AbstractCPUDevice) = nothing
 
 @inline function operator_inds(space, I)
     li = Operators.left_idx(space)
-    (i, j, _, v, h) = I.I
+    (v, i, j, h) = I.I
     hidx = (i, j, h)
     idx = v - 1 + li
     return (idx, hidx)
 end
 
-
-# Drop everything except Nv and S:
-@inline column_type_params(data) = (eltype(data), DataLayouts.nlevels(data))
-@inline s_column_type_params(::Type{S}, data) where {S} = (S, DataLayouts.nlevels(data))
-
 """
-	rebuild_column(data, lg_arr)
+	rebuild_column(data, array)
 
 Returns a new column datalayout, using `array` as its backing data
 """
-function rebuild_column(data, array::AbstractArray)
-    s_column = column_singleton(data)
-    return DataLayouts.union_all(s_column){column_type_params(data)...}(array)
-end
+rebuild_column(data, array::AbstractArray) =
+    new_rebuild_column(eltype(data), data, array)
 
 """
 	new_rebuild_column(::Type{S}, data, lg_arr) where {S}
@@ -236,10 +236,8 @@ Returns a new column datalayout, using `array` as its backing data
 using a new type S.
 """
 function new_rebuild_column(::Type{S}, data, array::AbstractArray) where {S}
-    s_column = column_singleton(data)
-    return DataLayouts.union_all(s_column){s_column_type_params(S, data)...}(
-        array,
-    )
+    params = (; DataLayouts.shape_params(data)..., Ni = 1, Nj = 1, Nh = 1)
+    return DataLayouts.layout_type(data){S, params...}(array)
 end
 
 """
@@ -248,16 +246,15 @@ end
 Returns a new LocalGeometry datalayout, using `lg_arr` as its backing data
 """
 function column_lg_local_mem(space, ui, lg_arr, ::Type{SLG}) where {SLG}
-    (i, j, _, _, h) = ui.I
-    colidx = Grids.ColumnIndex((i, j), h)
+    (_, i, j, h) = ui.I
     lg = Spaces.local_geometry_data(space)
-    lg_col = Spaces.column(lg, colidx)
+    lg_col = DataLayouts.column(lg, i, j, h)
     return new_rebuild_column(SLG, lg_col, lg_arr)
 end
 
 # TODO: this needs to be generalized for other spaces
 function column_spaces(ᶜY, ᶠY, ui, ᶜlg_arr, ᶠlg_arr, ::Type{SLG}) where {SLG}
-    (i, j, _, _, h) = ui.I
+    (_, i, j, h) = ui.I
     colidx = Grids.ColumnIndex((i, j), h)
     ᶜlg_col = column_lg_local_mem(axes(ᶜY), ui, ᶜlg_arr, SLG)
     ᶠlg_col = column_lg_local_mem(axes(ᶠY), ui, ᶠlg_arr, SLG)
@@ -302,10 +299,10 @@ function column_spaces(ᶜY, ᶠY, ui, ᶜlg_arr, ᶠlg_arr, ::Type{SLG}) where 
     return (ᶜspace_col, ᶠspace_col)
 end
 
-@inline is_valid_index_cw(us, ui) = 1 ≤ ui[4] ≤ DataLayouts.get_Nv(us)
+@inline is_valid_index_cw(data, ui) = 1 ≤ ui.I[1] ≤ size(data, 1)
 
 @inline universal_index_columnwise(
     device::ClimaComms.AbstractCPUDevice,
     UI,
-    us,
+    data,
 ) = UI

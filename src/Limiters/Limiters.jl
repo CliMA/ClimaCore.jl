@@ -1,6 +1,7 @@
 module Limiters
 
 import ..DataLayouts, ..Topologies, ..Spaces, ..Fields
+using UnrolledUtilities
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ClimaCore: slab
 
