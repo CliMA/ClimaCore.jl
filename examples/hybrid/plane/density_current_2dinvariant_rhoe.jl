@@ -19,6 +19,7 @@ import ClimaCore:
     Operators,
     Utilities
 using ClimaCore.Geometry
+import ClimaCore.Utilities: half
 import LazyBroadcast: lazy
 
 using Logging: global_logger
@@ -248,26 +249,24 @@ function rhs_invariant!(dY, Y, _, t)
 
     lg_field_faces = Fields.local_geometry_field(axes(fw))
     lg_field_centers = Fields.local_geometry_field(axes(cρ))
-    lg_bottom_face = Operators.Fields.level(Operators.RightBiasedF2C().(lg_field_faces), 1)
-    lg_top_face = Fields.level(
-        Operators.LeftBiasedF2C().(lg_field_faces),
-        Fields.nlevels(lg_field_centers),
-    )
-    lg_bottom_center = Fields.level(lg_field_centers, 1)
-    lg_top_center = Fields.level(lg_field_centers, Fields.nlevels(lg_field_centers))
-    ᶜ∇ᵥw_bottom = Fields.level(ᶜ∇ᵥw, 1)
-    ᶜ∇ᵥw_top = Fields.level(ᶜ∇ᵥw, Fields.nlevels(ᶜ∇ᵥw))
-    bottom_divergence = @. lazy(
-        Geometry.Jcontravariant3(ᶜ∇ᵥw_bottom, lg_bottom_center) *
-        (2 * inv(lg_bottom_face.J)),
-    )
-    top_divergence =
-        @. lazy(
-            Geometry.Jcontravariant3(ᶜ∇ᵥw_top, lg_top_center) * (-2 * inv(lg_top_face.J)),
-        )
+    lg_bottom_face = Fields.field_values(Fields.level(lg_field_faces, half))
+    lg_top_face = Fields.field_values(Fields.level(
+        lg_field_faces,
+        Fields.nlevels(lg_field_centers) + half,
+    ))
+    lg_bottom_center = Fields.field_values(Fields.level(lg_field_centers, 1))
+    lg_top_center = Fields.field_values(Fields.level(lg_field_centers, Fields.nlevels(lg_field_centers)))
+    ᶜ∇ᵥw_bottom = Fields.field_values(Fields.level(ᶜ∇ᵥw, 1))
+    ᶜ∇ᵥw_top = Fields.field_values(Fields.level(ᶜ∇ᵥw, Fields.nlevels(ᶜ∇ᵥw)))
+    top_face_space = Fields.level(axes(fw), Fields.nlevels(axes(fw)) - half)
+    bottom_face_space = Fields.level(axes(fw), half)
+    bottom_divergence = @. Geometry.Jcontravariant3(ᶜ∇ᵥw_bottom, lg_bottom_center) *
+        (2 * inv(lg_bottom_face.J))
+
+    top_divergence = @. Geometry.Jcontravariant3(ᶜ∇ᵥw_top, lg_top_center) * (-2 * inv(lg_top_face.J))
     set_bcs = Operators.SetBoundaryOperator(
-        bottom = Operators.SetValue(bottom_divergence),
-        top = Operators.SetValue(top_divergence),
+        bottom = Operators.SetValue(Fields.Field(bottom_divergence, bottom_face_space)),
+        top = Operators.SetValue(Fields.Field(top_divergence, top_face_space)),
     )
 
     vκ₂∇²w = @. set_bcs(vdivc2f(κ₂ * ᶜ∇ᵥw))
