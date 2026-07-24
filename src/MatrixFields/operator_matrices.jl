@@ -23,12 +23,6 @@ const TwoArgFDOperatorWithCenterInput = Union{
 const TwoArgFDOperatorWithFaceInput = Union{
     Operators.WeightedInterpolateF2C,
 }
-const ErroneousFDOperator = Union{
-    Operators.LeftBiased3rdOrderC2F,
-    Operators.LeftBiased3rdOrderF2C,
-    Operators.RightBiased3rdOrderC2F,
-    Operators.RightBiased3rdOrderF2C,
-}
 const NonlinearFDOperator =
     Union{Operators.FCTBorisBook, Operators.FCTZalesak, Operators.LinVanLeerC2F}
 
@@ -406,10 +400,6 @@ return ``\\textrm{op}'(\\textbf{0})``, where ``\\textbf{0} ={} ```zero.(arg)`.
 """
 operator_matrix(op::OneArgFDOperator) = LazyOneArgFDOperatorMatrix(op)
 operator_matrix(op::TwoArgFDOperator) = FDOperatorMatrix(op)
-operator_matrix(::O) where {O <: ErroneousFDOperator} = error(
-    "$(O.name.name) always throws an AssertionError when it is used, so its \
-     operator matrix has not been implemented",
-)
 operator_matrix(::O) where {O <: NonlinearFDOperator} = error(
     "$(O.name.name) applies a nonlinear transformation to its argument, so it \
      cannot be represented by a matrix",
