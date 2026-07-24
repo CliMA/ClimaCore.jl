@@ -5,12 +5,16 @@ CurrentModule = ClimaCore
 ```
 
 ```@docs
+Utilities.stable_view
 Utilities.unionall_type
 Utilities.replace_type_parameter
 Utilities.fieldtype_vals
 Utilities.new
+Utilities.is_inferred_type
+Utilities.return_type
 Utilities.unsafe_eltype
 Utilities.safe_eltype
+Utilities.safe_mapreduce
 ```
 
 ## Utilities.PlusHalf

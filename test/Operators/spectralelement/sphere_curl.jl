@@ -1,7 +1,6 @@
 using Test
 using ClimaComms
 using StaticArrays, IntervalSets
-import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
     Fields,
     Domains,

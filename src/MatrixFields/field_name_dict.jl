@@ -259,19 +259,16 @@ function get_internal_entry(
     if isa(index_method, Val{:view})
         @assert target_type <: T
         band_element_size = DataLayouts.num_basetypes(T, S)
-        singleton_datalayout = DataLayouts.singleton(Fields.field_values(entry))
+        entry_values = Fields.field_values(entry)
         scalar_band_type =
             band_matrix_row_type(outer_diagonals(eltype(entry))..., target_type)
-        field_dim_size = DataLayouts.ncomponents(Fields.field_values(entry))
-        parent_indices = DataLayouts.to_data_specific_field(
-            singleton_datalayout,
-            (:, :, (start_offset + 1):band_element_size:field_dim_size, :, :),
-        )
+        field_dim_size = DataLayouts.ncomponents(entry_values)
+        f_range = (start_offset + 1):band_element_size:field_dim_size
+        F = DataLayouts.f_dim(entry_values)
+        parent_indices =
+            ntuple(d -> d == F ? f_range : Colon(), ndims(parent(entry)))
         scalar_data = view(parent(entry), parent_indices...)
-        values = DataLayouts.union_all(singleton_datalayout){
-            scalar_band_type,
-            Base.tail(DataLayouts.type_params(Fields.field_values(entry)))...,
-        }(
+        values = DataLayouts.layout_constructor(entry_values, scalar_band_type)(
             scalar_data,
         )
         return Fields.Field(values, axes(entry))

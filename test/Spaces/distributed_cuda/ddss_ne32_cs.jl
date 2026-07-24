@@ -9,8 +9,7 @@ import ClimaCore:
     Operators,
     Spaces,
     Quadratures,
-    Topologies,
-    DataLayouts
+    Topologies
 
 @testset "DSS on Equiangular Cubed Sphere mesh (ne = 32)" begin
     device = ClimaComms.device() #ClimaComms.CUDADevice()

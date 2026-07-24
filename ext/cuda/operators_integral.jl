@@ -1,4 +1,4 @@
-import ClimaCore: Spaces, Fields, level, column
+import ClimaCore: DataLayouts, Spaces, Fields, level, column
 import ClimaCore.Operators:
     left_idx,
     strip_space,
@@ -8,6 +8,14 @@ import ClimaCore.Operators:
     single_column_accumulate!
 import ClimaComms
 using CUDA: @cuda
+
+# The output of `column_reduce!` on a `FiniteDifferenceSpace` is a 0-dimensional
+# `DataF`, so use `size(data, d)` (which is 1 for `d > ndims(data)`) instead of
+# destructuring `size(data)` or calling `cartesian_indices_columnwise(data)`.
+@inline function columnwise_cartesian_indices(data)
+    (Ni, Nj, Nh) = (size(data, 2), size(data, 3), size(data, 4))
+    return CartesianIndices(map(Base.OneTo, (Ni, Nj, Nh)))
+end
 
 function column_reduce_device!(
     dev::ClimaComms.CUDADevice,
@@ -19,13 +27,12 @@ function column_reduce_device!(
     space,
     reverse,
 ) where {F, T}
-    Ni, Nj, _, _, Nh = size(Fields.field_values(output))
-    us = UniversalSize(Fields.field_values(output))
+    out_fv = Fields.field_values(output)
     mask = Spaces.get_mask(space)
     if !(mask isa DataLayouts.NoMask) && space isa Spaces.FiniteDifferenceSpace
         error("Masks not supported for FiniteDifferenceSpace")
     end
-    cart_inds = cartesian_indices_columnwise(us)
+    cart_inds = columnwise_cartesian_indices(out_fv)
     args = (
         single_column_reduce!,
         f,
@@ -34,12 +41,11 @@ function column_reduce_device!(
         strip_space(input, space),
         init,
         space,
-        us,
         mask,
         cart_inds,
         reverse,
     )
-    nitems = Ni * Nj * Nh
+    nitems = length(cart_inds)
     threads = threads_via_occupancy(bycolumn_kernel!, args)
     n_max_threads = min(threads, nitems)
     p = linear_partition(nitems, n_max_threads)
@@ -71,8 +77,7 @@ function column_accumulate_device!(
     if !(mask isa DataLayouts.NoMask) && space isa Spaces.FiniteDifferenceSpace
         error("Masks not supported for FiniteDifferenceSpace")
     end
-    us = UniversalSize(out_fv)
-    cart_inds = cartesian_indices_columnwise(us)
+    cart_inds = columnwise_cartesian_indices(out_fv)
     args = (
         single_column_accumulate!,
         f,
@@ -81,13 +86,11 @@ function column_accumulate_device!(
         strip_space(input, space),
         init,
         space,
-        us,
         mask,
         cart_inds,
         reverse,
     )
-    (Ni, Nj, _, _, Nh) = DataLayouts.universal_size(us)
-    nitems = Ni * Nj * Nh
+    nitems = length(cart_inds)
     threads = threads_via_occupancy(bycolumn_kernel!, args)
     n_max_threads = min(threads, nitems)
     p = linear_partition(nitems, n_max_threads)
@@ -107,7 +110,6 @@ function bycolumn_kernel!(
     input,
     init,
     space,
-    us::DataLayouts.UniversalSize,
     mask,
     cart_inds,
     reverse,
@@ -116,10 +118,10 @@ function bycolumn_kernel!(
         single_column_function!(f, transform, output, input, init, space, reverse)
     else
         tidx = linear_thread_idx()
-        if linear_is_valid_index(tidx, us) && tidx ≤ length(unval(cart_inds))
+        if linear_is_valid_index(tidx, unval(cart_inds))
             I = unval(cart_inds)[tidx]
             (i, j, h) = I.I
-            ui = CartesianIndex((i, j, 1, 1, h))
+            ui = CartesianIndex(1, i, j, h)
             DataLayouts.should_compute(mask, ui) || return nothing
             single_column_function!(
                 f,

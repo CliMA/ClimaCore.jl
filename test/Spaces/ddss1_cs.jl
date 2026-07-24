@@ -14,8 +14,7 @@ import ClimaCore:
     Operators,
     Spaces,
     Quadratures,
-    Topologies,
-    DataLayouts
+    Topologies
 
 function get_space_cs(::Type{FT}; context, R = 300.0) where {FT}
     domain = Domains.SphereDomain{FT}(300.0)

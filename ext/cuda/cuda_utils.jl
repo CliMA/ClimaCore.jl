@@ -1,13 +1,10 @@
 import CUDA
 import ClimaCore.Fields
 import ClimaCore.DataLayouts
-import ClimaCore.DataLayouts: empty_kernel_stats
 
 const reported_stats = Dict()
 const kernel_names = IdDict()
 
-# Call via ClimaCore.DataLayouts.empty_kernel_stats()
-empty_kernel_stats(::ClimaComms.CUDADevice) = empty!(reported_stats)
 collect_kernel_stats() = false
 
 function _memory_bytes(memory, key::Symbol)
@@ -72,6 +69,7 @@ const CLIMACORE_IGNORE_FUNCS =
     frame_method = frame.linfo isa Core.CodeInstance ? frame.linfo.def : frame.linfo
     frame_method isa Core.MethodInstance || return false
     mod = frame_method.def.module::Module
+    mod === DataLayouts && return false # loop machinery below user-facing calls
     mod_name = fullname(mod)[1]
     mod_name == :ClimaCore && frame.func::Symbol ∈ CLIMACORE_IGNORE_FUNCS && return false
     return mod_name ∉ IGNORE_MODULES
@@ -88,7 +86,7 @@ end
             Int,
             NTuple{N, <:Int},
             AbstractArray,
-            AbstractData,
+            DataLayout,
             Field,
         };
         auto = false,
@@ -271,6 +269,29 @@ function config_via_occupancy(f!::F!, nitems, args) where {F!}
     end
     return (; threads, blocks)
 end
+
+"""
+    max_resident_blocks(threads_per_block)
+
+Maximum number of blocks with the specified number of threads that can
+simultaneously be resident on the GPU, based on the warp scheduler's throughput
+limit. Adapted from version 12.9 of the CUDA Runtime Headers
+(https://gitlab.com/nvidia/headers/cuda-individual/cudart/-/blob/main/cuda_occupancy.h#L1282-1330).
+"""
+function max_resident_blocks(threads_per_block)
+    iszero(threads_per_block) && return typemax(Int) # no limit for empty blocks
+    max_threads_per_block =
+        CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
+    threads_per_block > max_threads_per_block && return 0
+    threads_per_warp = CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_WARP_SIZE)
+    warps_per_block = cld(threads_per_block, threads_per_warp)
+    max_resident_threads_per_SM =
+        CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_MULTIPROCESSOR)
+    max_resident_warps_per_SM = fld(max_resident_threads_per_SM, threads_per_warp)
+    SM_count = CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT)
+    return fld(max_resident_warps_per_SM, warps_per_block) * SM_count
+end
+# TODO: Register pressure and shared memory pressure need to be included here.
 
 """
     thread_index()

@@ -33,13 +33,13 @@ function Base.copyto!(
     sbc::Union{
         SpectralBroadcasted{CUDASpectralStyle},
         Broadcasted{CUDASpectralStyle},
-    },
+    };
     mask = DataLayouts.NoMask(),
 )
     space = axes(out)
-    us = UniversalSize(Fields.field_values(out))
+    out_fv = Fields.field_values(out)
     # executed
-    p = spectral_partition(us)
+    p = spectral_partition(out_fv)
     args = (
         strip_space(out, space),
         strip_space(sbc, space),

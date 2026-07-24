@@ -9,7 +9,7 @@ A zero-dimensional space.
 """
 struct PointSpace{
     C <: ClimaComms.AbstractCommsContext,
-    LG <: DataLayouts.Data0D,
+    LG <: DataLayouts.DataLayout{<:Any, 0},
 } <: AbstractPointSpace
     context::C
     local_geometry::LG
@@ -26,6 +26,30 @@ function PointSpace(device::ClimaComms.AbstractDevice, x)
     context = ClimaComms.SingletonCommsContext(device)
     return PointSpace(context, x)
 end
+
+"""
+    point_data(data)
+
+Convert a view of a single point in a `DataLayout` into a `DataF`, without
+copying the underlying data.
+"""
+point_data(data::DataLayouts.DataF) = data
+Base.@propagate_inbounds function point_data(data::DataLayouts.DataLayout)
+    @assert isone(length(data))
+    T = eltype(data)
+    array = DataLayouts.view_struct(
+        parent(data),
+        T,
+        first(CartesianIndices(data)),
+        Val(DataLayouts.f_dim(data)),
+    )
+    return DataLayouts.DataF{T, typeof(DataLayouts.DataScope(data))}(array)
+end
+
+PointSpace(
+    context::ClimaComms.AbstractCommsContext,
+    data::DataLayouts.DataLayout,
+) = PointSpace(context, point_data(data))
 
 function PointSpace(
     context::ClimaComms.AbstractCommsContext,

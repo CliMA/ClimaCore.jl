@@ -1,6 +1,5 @@
 import ClimaComms
 import ..Operators
-import ..DataLayouts: slab_index
 import Adapt
 
 
@@ -137,35 +136,12 @@ function QuasiMonotoneLimiter(
     )
 end
 
-function make_q_bounds(
-    ρq::Union{DataLayouts.IFH{S}, DataLayouts.IJFH{S}},
-) where {S}
+function make_q_bounds(ρq::DataLayouts.VIJHWithF{S}) where {S}
+    (; Nv, Nh, F) = DataLayouts.shape_params(ρq)
     Nf = DataLayouts.ncomponents(ρq)
-    _, _, _, _, Nh = size(ρq)
-    return DataLayouts.IFH{S, 2}(similar(parent(ρq), (2, Nf, Nh)))
+    array = similar(parent(ρq), DataLayouts.add_f_dim((Nv, 2, 1, size(ρq, 4)), Nf, Val(F)))
+    return DataLayouts.VIJHWithF{S, Nv, 2, 1, Nh, F}(array)
 end
-function make_q_bounds(
-    ρq::Union{DataLayouts.IHF{S}, DataLayouts.IJHF{S}},
-) where {S}
-    Nf = DataLayouts.ncomponents(ρq)
-    _, _, _, _, Nh = size(ρq)
-    return DataLayouts.IHF{S, 2}(similar(parent(ρq), (2, Nh, Nf)))
-end
-function make_q_bounds(
-    ρq::Union{DataLayouts.VIFH{S}, DataLayouts.VIJFH{S}},
-) where {S}
-    Nf = DataLayouts.ncomponents(ρq)
-    _, _, _, Nv, Nh = size(ρq)
-    return DataLayouts.VIFH{S, Nv, 2}(similar(parent(ρq), (Nv, 2, Nf, Nh)))
-end
-function make_q_bounds(
-    ρq::Union{DataLayouts.VIHF{S}, DataLayouts.VIJHF{S}},
-) where {S}
-    Nf = DataLayouts.ncomponents(ρq)
-    _, _, _, Nv, Nh = size(ρq)
-    return DataLayouts.VIHF{S, Nv, 2}(similar(parent(ρq), (Nv, 2, Nh, Nf)))
-end
-
 
 """
     compute_element_bounds!(limiter::QuasiMonotoneLimiter, ρq, ρ)
@@ -188,7 +164,7 @@ function compute_element_bounds!(
     ρ_data = Base.broadcastable(Fields.field_values(ρ))
     ρq_data = Base.broadcastable(Fields.field_values(ρq))
     q_bounds = limiter.q_bounds
-    (Ni, Nj, _, Nv, Nh) = size(ρq_data)
+    (Nv, Ni, Nj, Nh) = size(ρq_data)
     for h in 1:Nh
         for v in 1:Nv
             slab_ρq = slab(ρq_data, v, h)
@@ -196,7 +172,7 @@ function compute_element_bounds!(
             local q_min, q_max
             for j in 1:Nj
                 for i in 1:Ni
-                    q = slab_ρq[slab_index(i, j)] / slab_ρ[slab_index(i, j)]
+                    q = slab_ρq[1, i, j, 1] / slab_ρ[1, i, j, 1]
                     if i == 1 && j == 1
                         q_min = q
                         q_max = q
@@ -207,8 +183,8 @@ function compute_element_bounds!(
                 end
             end
             slab_q_bounds = slab(q_bounds, v, h)
-            slab_q_bounds[slab_index(1)] = q_min
-            slab_q_bounds[slab_index(2)] = q_max
+            slab_q_bounds[1] = q_min
+            slab_q_bounds[2] = q_max
         end
     end
     call_post_op_callback() &&
@@ -235,20 +211,20 @@ function compute_neighbor_bounds_local!(
     topology = Spaces.topology(axes(ρ))
     q_bounds = Base.broadcastable(limiter.q_bounds)
     q_bounds_nbr = limiter.q_bounds_nbr
-    (_, _, _, Nv, Nh) = size(q_bounds_nbr)
+    (Nv, _, _, Nh) = size(q_bounds_nbr)
     for h in 1:Nh
         for v in 1:Nv
             slab_q_bounds = slab(q_bounds, v, h)
-            q_min = slab_q_bounds[slab_index(1)]
-            q_max = slab_q_bounds[slab_index(2)]
+            q_min = slab_q_bounds[1]
+            q_max = slab_q_bounds[2]
             for h_nbr in Topologies.local_neighboring_elements(topology, h)
                 slab_q_bounds = slab(q_bounds, v, h_nbr)
-                q_min = min(q_min, slab_q_bounds[slab_index(1)])
-                q_max = max(q_max, slab_q_bounds[slab_index(2)])
+                q_min = min(q_min, slab_q_bounds[1])
+                q_max = max(q_max, slab_q_bounds[2])
             end
             slab_q_bounds_nbr = slab(q_bounds_nbr, v, h)
-            slab_q_bounds_nbr[slab_index(1)] = q_min
-            slab_q_bounds_nbr[slab_index(2)] = q_max
+            slab_q_bounds_nbr[1] = q_min
+            slab_q_bounds_nbr[2] = q_max
         end
     end
     call_post_op_callback() &&
@@ -269,22 +245,22 @@ function compute_neighbor_bounds_ghost!(
     topology::Topologies.AbstractTopology,
 )
     q_bounds_nbr = limiter.q_bounds_nbr
-    (_, _, _, Nv, Nh) = size(q_bounds_nbr)
+    (Nv, _, _, Nh) = size(q_bounds_nbr)
     if limiter.ghost_buffer isa Topologies.GhostBuffer
         q_bounds_ghost = Base.broadcastable(limiter.ghost_buffer.recv_data)
         for h in 1:Nh
             for v in 1:Nv
                 slab_q_bounds = slab(q_bounds_nbr, v, h)
-                q_min = slab_q_bounds[slab_index(1)]
-                q_max = slab_q_bounds[slab_index(2)]
+                q_min = slab_q_bounds[1]
+                q_max = slab_q_bounds[2]
                 for gidx in Topologies.ghost_neighboring_elements(topology, h)
                     ghost_slab_q_bounds = slab(q_bounds_ghost, v, gidx)
-                    q_min = min(q_min, ghost_slab_q_bounds[slab_index(1)])
-                    q_max = max(q_max, ghost_slab_q_bounds[slab_index(2)])
+                    q_min = min(q_min, ghost_slab_q_bounds[1])
+                    q_max = max(q_max, ghost_slab_q_bounds[2])
                 end
                 slab_q_bounds_nbr = slab(q_bounds_nbr, v, h)
-                slab_q_bounds_nbr[slab_index(1)] = q_min
-                slab_q_bounds_nbr[slab_index(2)] = q_max
+                slab_q_bounds_nbr[1] = q_min
+                slab_q_bounds_nbr[2] = q_max
             end
         end
     end
@@ -363,7 +339,7 @@ function apply_limiter!(
     converged = true
     max_rel_err = zero(rtol)
     min_tracer_mass = Inf
-    (_, _, _, Nv, Nh) = size(ρq_data)
+    (Nv, _, _, Nh) = size(ρq_data)
     for h in 1:Nh
         for v in 1:Nv
             slab_ρ = slab(ρ_data, v, h)
@@ -392,6 +368,28 @@ function apply_limiter!(
     return ρq
 end
 
+# One scalar view per component of a layout's element type, or the layout
+# itself when its element type has no fields (a single scalar component). The
+# views are wrapped in Vals because property_view requires a type-domain field
+# index, so a runtime index would trigger dynamic dispatch in GPU kernels.
+@inline component_views(data) =
+    iszero(fieldcount(eltype(data))) ? (data,) :
+    unrolled_map(
+        i -> DataLayouts.property_view(data, i),
+        ntuple(Val, Val(fieldcount(eltype(data)))),
+    )
+
+# Compute ∫ρ in its own function, so that the total is not reassigned in
+# apply_limit_slab!, where its capture by the unrolled_map closure would
+# require it to be wrapped in a Core.Box
+@inline function slab_total_mass(slab_ρ, slab_WJ, Ni, Nj)
+    total_mass = zero(eltype(parent(slab_ρ)))
+    for j in 1:Nj, i in 1:Ni
+        total_mass += slab_ρ[1, i, j, 1] * slab_WJ[1, i, j, 1]
+    end
+    return total_mass
+end
+
 """
     apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
 
@@ -401,112 +399,134 @@ and relative tolerance `rtol`. Return whether the tolerance condition could be
 satisfied.
 """
 function apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
-    Nf = DataLayouts.ncomponents(slab_ρq)
-    (Ni, Nj, _, _, _) = size(slab_ρq)
+    (_, Ni, Nj, _) = size(slab_ρq)
+
+    total_mass = slab_total_mass(slab_ρ, slab_WJ, Ni, Nj)
+    @assert total_mass > 0
+
+    field_results = unrolled_map(
+        (field_ρq, field_q_bounds) -> apply_limit_slab_field!(
+            field_ρq,
+            slab_ρ,
+            slab_WJ,
+            field_q_bounds,
+            total_mass,
+            rtol,
+        ),
+        component_views(slab_ρq),
+        component_views(slab_q_bounds),
+    )
+    return unrolled_reduce(field_results) do result1, result2
+        (
+            result1[1] && result2[1],
+            max(result1[2], result2[2]),
+            min(result1[3], result2[3]),
+        )
+    end
+end
+
+# Apply the limit for one component of ρq, given views of that component in
+# slab_ρq and slab_q_bounds. Return whether the tolerance condition could be
+# satisfied, along with the maximum relative error and the minimum tracer mass.
+function apply_limit_slab_field!(
+    field_ρq,
+    slab_ρ,
+    slab_WJ,
+    field_q_bounds,
+    total_mass,
+    rtol,
+)
+    FT = eltype(parent(field_ρq))
+    (_, Ni, Nj, _) = size(field_ρq)
     maxiter = Ni * Nj
 
-    array_ρq = parent(slab_ρq)
-    array_ρ = parent(slab_ρ)
-    array_w = parent(slab_WJ)
-    array_q_bounds = parent(slab_q_bounds)
-    FT = eltype(array_ρq)
-
-    # 1) compute ∫ρ
-    total_mass = zero(FT)
-    for j in 1:Nj, i in 1:Ni
-        total_mass += array_ρ[i, j, 1] * array_w[i, j, 1]
-    end
-
-    @assert total_mass > 0
+    q_min = field_q_bounds[1, 1, 1, 1]
+    q_max = field_q_bounds[1, 2, 1, 1]
 
     converged = true
     max_rel_err = zero(rtol)
     min_tracer_mass = FT(Inf)
     rel_err = zero(FT)
-    for f in 1:Nf
-        q_min = array_q_bounds[1, f]
-        q_max = array_q_bounds[2, f]
 
-        # 2) compute ∫ρq
-        tracer_mass = zero(eltype(array_ρq))
+    # 2) compute ∫ρq
+    tracer_mass = zero(FT)
+    for j in 1:Nj, i in 1:Ni
+        tracer_mass += field_ρq[1, i, j, 1] * slab_WJ[1, i, j, 1]
+    end
+
+    # TODO: Should this condition be enforced? (It isn't in HOMME.)
+    # @assert tracer_mass >= 0
+
+    # 3) set bounds
+    q_avg = tracer_mass / total_mass
+    q_min = min(q_min, q_avg)
+    q_max = max(q_max, q_avg)
+
+    # 3) modify ρq
+    for iter in 1:maxiter
+        Δtracer_mass = zero(FT)
         for j in 1:Nj, i in 1:Ni
-            tracer_mass += array_ρq[i, j, f] * array_w[i, j, 1]
+            ρ = slab_ρ[1, i, j, 1]
+            ρq = field_ρq[1, i, j, 1]
+            ρq_max = ρ * q_max
+            ρq_min = ρ * q_min
+            w = slab_WJ[1, i, j, 1]
+            if ρq > ρq_max
+                Δtracer_mass += (ρq - ρq_max) * w
+                field_ρq[1, i, j, 1] = ρq_max
+            elseif ρq < ρq_min
+                Δtracer_mass += (ρq - ρq_min) * w
+                field_ρq[1, i, j, 1] = ρq_min
+            end
         end
 
-        # TODO: Should this condition be enforced? (It isn't in HOMME.)
-        # @assert tracer_mass >= 0
+        rel_err = abs(Δtracer_mass) / abs(tracer_mass)
+        max_rel_err = max(max_rel_err, rel_err)
+        min_tracer_mass = min(min_tracer_mass, abs(tracer_mass))
+        if rel_err <= rtol
+            break
+        end
 
-        # 3) set bounds
-        q_avg = tracer_mass / total_mass
-        q_min = min(q_min, q_avg)
-        q_max = max(q_max, q_avg)
-
-        # 3) modify ρq
-        for iter in 1:maxiter
-            Δtracer_mass = zero(eltype(array_ρq))
+        if Δtracer_mass > 0 # add mass
+            total_mass_at_Δ_points = zero(FT)
             for j in 1:Nj, i in 1:Ni
-                ρ = array_ρ[i, j, 1]
-                ρq = array_ρq[i, j, f]
-                ρq_max = ρ * q_max
-                ρq_min = ρ * q_min
-                w = array_w[i, j]
-                if ρq > ρq_max
-                    Δtracer_mass += (ρq - ρq_max) * w
-                    array_ρq[i, j, f] = ρq_max
-                elseif ρq < ρq_min
-                    Δtracer_mass += (ρq - ρq_min) * w
-                    array_ρq[i, j, f] = ρq_min
+                ρ = slab_ρ[1, i, j, 1]
+                ρq = field_ρq[1, i, j, 1]
+                w = slab_WJ[1, i, j, 1]
+                if ρq < ρ * q_max
+                    total_mass_at_Δ_points += ρ * w
                 end
             end
+            Δq_at_Δ_points = Δtracer_mass / total_mass_at_Δ_points
+            for j in 1:Nj, i in 1:Ni
+                ρ = slab_ρ[1, i, j, 1]
+                ρq = field_ρq[1, i, j, 1]
+                if ρq < ρ * q_max
+                    field_ρq[1, i, j, 1] += ρ * Δq_at_Δ_points
+                end
+            end
+        else # remove mass
+            total_mass_at_Δ_points = zero(FT)
+            for j in 1:Nj, i in 1:Ni
+                ρ = slab_ρ[1, i, j, 1]
+                ρq = field_ρq[1, i, j, 1]
+                w = slab_WJ[1, i, j, 1]
+                if ρq > ρ * q_min
+                    total_mass_at_Δ_points += ρ * w
+                end
+            end
+            Δq_at_Δ_points = Δtracer_mass / total_mass_at_Δ_points
+            for j in 1:Nj, i in 1:Ni
+                ρ = slab_ρ[1, i, j, 1]
+                ρq = field_ρq[1, i, j, 1]
+                if ρq > ρ * q_min
+                    field_ρq[1, i, j, 1] += ρ * Δq_at_Δ_points
+                end
+            end
+        end
 
-            rel_err = abs(Δtracer_mass) / abs(tracer_mass)
-            max_rel_err = max(max_rel_err, rel_err)
-            min_tracer_mass = min(min_tracer_mass, abs(tracer_mass))
-            if rel_err <= rtol
-                break
-            end
-
-            if Δtracer_mass > 0 # add mass
-                total_mass_at_Δ_points = zero(eltype(array_ρ))
-                for j in 1:Nj, i in 1:Ni
-                    ρ = array_ρ[i, j, 1]
-                    ρq = array_ρq[i, j, f]
-                    w = array_w[i, j]
-                    if ρq < ρ * q_max
-                        total_mass_at_Δ_points += ρ * w
-                    end
-                end
-                Δq_at_Δ_points = Δtracer_mass / total_mass_at_Δ_points
-                for j in 1:Nj, i in 1:Ni
-                    ρ = array_ρ[i, j, 1]
-                    ρq = array_ρq[i, j, f]
-                    if ρq < ρ * q_max
-                        array_ρq[i, j, f] += ρ * Δq_at_Δ_points
-                    end
-                end
-            else # remove mass
-                total_mass_at_Δ_points = zero(eltype(array_ρ))
-                for j in 1:Nj, i in 1:Ni
-                    ρ = array_ρ[i, j, 1]
-                    ρq = array_ρq[i, j, f]
-                    w = array_w[i, j]
-                    if ρq > ρ * q_min
-                        total_mass_at_Δ_points += ρ * w
-                    end
-                end
-                Δq_at_Δ_points = Δtracer_mass / total_mass_at_Δ_points
-                for j in 1:Nj, i in 1:Ni
-                    ρ = array_ρ[i, j, 1]
-                    ρq = array_ρq[i, j, f]
-                    if ρq > ρ * q_min
-                        array_ρq[i, j, f] += ρ * Δq_at_Δ_points
-                    end
-                end
-            end
-
-            if iter == maxiter
-                converged = false
-            end
+        if iter == maxiter
+            converged = false
         end
     end
     return (converged, max_rel_err, min_tracer_mass)

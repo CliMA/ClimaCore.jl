@@ -13,8 +13,8 @@ ClimaComms.@import_required_backends
 using StaticArrays, IntervalSets
 import ClimaCore
 import ClimaCore.Utilities: PlusHalf
-import ClimaCore.DataLayouts: IJFH, VF, DataF
 import ClimaCore.DataLayouts
+import ClimaCore.DataLayouts: DataF
 import ClimaCore:
     Fields,
     slab,

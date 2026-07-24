@@ -91,16 +91,16 @@ if haskey(ENV, "RESTART_FILE")
     ᶠlocal_geometry = Fields.local_geometry_field(Y.f)
 else
     t_start = FT(0)
-    horizontal_layout_types = Dict()
-    horizontal_layout_types["IJFH"] = DataLayouts.IJFH
-    horizontal_layout_types["IJHF"] = DataLayouts.IJHF
-    horizontal_layout_type =
-        horizontal_layout_types[get(ENV, "horizontal_layout_type", "IJFH")]
+    VIJHs = Dict()
+    VIJHs["VIJFH"] = DataLayouts.VIJFH
+    VIJHs["VIJHF"] = DataLayouts.VIJHF
+    VIJH =
+        VIJHs[get(ENV, "horizontal_layout_type", "VIJFH")]
     h_space = make_horizontal_space(
         horizontal_mesh,
         npoly,
         comms_ctx,
-        horizontal_layout_type,
+        VIJH,
     )
     center_space, face_space =
         make_hybrid_spaces(h_space, z_max, z_elem; z_stretch)
@@ -197,9 +197,9 @@ any(isnan, sol.u[end]) && error("NaNs found in result.")
 
 if is_distributed # replace sol.u on the root processor with the global sol.u
     global_Y_c_1 =
-        DataLayouts.gather(comms_ctx, Fields.field_values(sol.u[1].c))
+        ClimaComms.gather(comms_ctx, Fields.field_values(sol.u[1].c))
     global_Y_f_1 =
-        DataLayouts.gather(comms_ctx, Fields.field_values(sol.u[1].f))
+        ClimaComms.gather(comms_ctx, Fields.field_values(sol.u[1].f))
     if ClimaComms.iamroot(comms_ctx)
         global_h_space = make_horizontal_space(
             horizontal_mesh,
@@ -220,9 +220,9 @@ if is_distributed # replace sol.u on the root processor with the global sol.u
     end
     for i in 1:length(sol.u)
         global_Y_c =
-            DataLayouts.gather(comms_ctx, Fields.field_values(sol.u[i].c))
+            ClimaComms.gather(comms_ctx, Fields.field_values(sol.u[i].c))
         global_Y_f =
-            DataLayouts.gather(comms_ctx, Fields.field_values(sol.u[i].f))
+            ClimaComms.gather(comms_ctx, Fields.field_values(sol.u[i].f))
         if ClimaComms.iamroot(comms_ctx)
             global_sol_u[i] = Fields.FieldVector(
                 c = Fields.Field(global_Y_c, global_center_space),

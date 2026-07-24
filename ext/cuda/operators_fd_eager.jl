@@ -381,7 +381,7 @@ Base.@propagate_inbounds function calc_level_val(
        space.staggering isa Spaces.CellCenter
         v == CUDA.blockDim().x && return @inline @inbounds new(eltype(data))
     end
-    return @inline @inbounds data[CartesianIndex(i, j, 1i32, v, h)]
+    return @inline @inbounds data[v, i, j, h]
 end
 
 """

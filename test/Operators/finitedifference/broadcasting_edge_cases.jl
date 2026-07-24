@@ -15,7 +15,7 @@ ClimaComms.@import_required_backends
 
 @testset "Combined stencil and poinstwise with types in broadcasted args" begin
     FT = Float32
-    horizontal_layout_type = ClimaCore.DataLayouts.IJFH
+    VIJH = ClimaCore.DataLayouts.VIJFH
     helem = 32
     Nq = 2
     # very low resolution does not use eager eval on gpu for now
@@ -25,7 +25,7 @@ ClimaComms.@import_required_backends
             zelem = z_elems,
             helem,
             Nq,
-            horizontal_layout_type,
+            VIJH,
         )
         fspace = ClimaCore.Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
         divf2c_op = Operators.DivergenceF2C()

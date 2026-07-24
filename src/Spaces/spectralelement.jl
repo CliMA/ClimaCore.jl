@@ -133,15 +133,6 @@ end
 
 local_geometry_type(::Type{SpectralElementSpaceSlab{Q, G}}) where {Q, G} =
     eltype(G) # calls eltype from DataLayouts
-const SpectralElementSpaceSlab1D =
-    SpectralElementSpaceSlab{Q, DL} where {Q, DL <: DataLayouts.DataSlab1D}
-
-const SpectralElementSpaceSlab2D =
-    SpectralElementSpaceSlab{Q, DL} where {Q, DL <: DataLayouts.DataSlab2D}
-
-nlevels(space::SpectralElementSpaceSlab1D) = 1
-nlevels(space::SpectralElementSpaceSlab2D) = 1
-
 
 """
     Spaces.node_horizontal_length_scale(space::AbstractSpectralElementSpace)
@@ -176,7 +167,7 @@ Base.@propagate_inbounds slab(space::AbstractSpectralElementSpace, h) =
     @inbounds slab(space, 1, h)
 
 Base.@propagate_inbounds function column(space::SpectralElementSpace1D, i, h)
-    local_geometry = column(local_geometry_data(space), i, h)
+    local_geometry = column(local_geometry_data(space), i, 1, h)
     PointSpace(ClimaComms.context(space), local_geometry)
 end
 Base.@propagate_inbounds column(space::SpectralElementSpace1D, i, j, h) =

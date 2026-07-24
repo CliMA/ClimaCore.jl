@@ -196,8 +196,8 @@ function _ExtrudedFiniteDifferenceGrid(
     vertical_grid::Grids.FiniteDifferenceGrid,
     adaption::HypsographyAdaption,
     global_geometry::Geometry.AbstractGlobalGeometry,
-    center_z::DataLayouts.AbstractData{Geometry.ZPoint{FT}},
-    face_z::DataLayouts.AbstractData{Geometry.ZPoint{FT}},
+    center_z::DataLayouts.DataLayout{Geometry.ZPoint{FT}},
+    face_z::DataLayouts.DataLayout{Geometry.ZPoint{FT}},
 ) where {FT}
     # construct the "flat" grid
     # avoid cached constructor so that it gets cleaned up automatically

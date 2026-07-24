@@ -55,7 +55,7 @@ function profile_animation(sol, output_dir)
     for prop_chain in Fields.property_chains(Y0)
         var_name = join(prop_chain, "_")
         var_space = axes(Fields.single_field(Y0, prop_chain))
-        Ni, Nj, _, _, Nh = size(ClimaCore.Spaces.local_geometry_data(var_space))
+        _, Ni, Nj, Nh = size(ClimaCore.Spaces.local_geometry_data(var_space))
         n_columns = Fields.ncolumns(var_space)
         @info "Creating animation with n_columns = $n_columns, for $var_name"
         anim = Plots.@animate for Y in sol.u

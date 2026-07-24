@@ -205,44 +205,48 @@ function _scan_quadrature_style(quadraturestring::AbstractString, npts)
     return Quadratures.ClosedUniform{npts}()
 end
 
-function _scan_data_layout(layoutstring::AbstractString)
-    @assert layoutstring ∈ (
-        "IJFH",
-        "IJHF",
-        "IJF",
-        "IFH",
-        "IHF",
-        "IF",
-        "VF",
-        "VIJFH",
-        "VIJHF",
-        "VIFH",
-        "VIHF",
-        "DataF",
-    ) "datalayout is $layoutstring"
-    layoutstring == "IJFH" && return DataLayouts.IJFH
-    layoutstring == "IJHF" && return DataLayouts.IJHF
-    layoutstring == "IJF" && return DataLayouts.IJF
-    layoutstring == "IFH" && return DataLayouts.IFH
-    layoutstring == "IHF" && return DataLayouts.IHF
-    layoutstring == "IF" && return DataLayouts.IF
-    layoutstring == "VF" && return DataLayouts.VF
-    layoutstring == "VIJFH" && return DataLayouts.VIJFH
-    layoutstring == "VIJHF" && return DataLayouts.VIJHF
-    layoutstring == "DataF" && return DataLayouts.DataF
-    return DataLayouts.VIFH
+"""
+    _scan_data_layout(layoutstring, T, array)
+
+Construct a `DataLayout` with element type `T` from an `array` read out of an
+HDF5 file, given the `data_layout` string stored in the file. Layout strings
+written by older versions of ClimaCore (e.g. "IJFH" or "VF") are mapped to
+either `VIJFH` or `VIJHF`, depending on the relative order of their `F` and `H`
+axes. Prepending or inserting axes of length 1 does not change how the entries
+of `array` are ordered in memory, so this mapping preserves all data.
+"""
+function _scan_data_layout(
+    layoutstring::AbstractString,
+    ::Type{T},
+    array,
+) where {T}
+    layoutstring == "DataF" && return DataLayouts.DataF{T}(array)
+    f_pos = findfirst('F', layoutstring)
+    h_pos = findfirst('H', layoutstring)
+    i_pos = findfirst('I', layoutstring)
+    j_pos = findfirst('J', layoutstring)
+    Nv = startswith(layoutstring, "V") ? size(array, 1) : 1
+    Ni = isnothing(i_pos) ? 1 : size(array, i_pos)
+    Nj = isnothing(j_pos) ? 1 : size(array, j_pos)
+    Nh = isnothing(h_pos) ? 1 : size(array, h_pos)
+    Nf = DataLayouts.num_basetypes(eltype(array), T)
+    F = !isnothing(h_pos) && !isnothing(f_pos) && h_pos < f_pos ? 5 : 4
+    VIJH = F == 5 ? DataLayouts.VIJHF : DataLayouts.VIJFH
+    array_size = DataLayouts.add_f_dim((Nv, Ni, Nj, Nh), Nf, Val(F))
+    return VIJH{T, Nv, Ni, Nj, nothing}(reshape(array, array_size))
 end
 
-# for when Nh is in type-domain
-# function Nh_dim(layoutstring::AbstractString)
-#     @assert layoutstring ∈ ("IJFH", "IJF", "IFH", "IF", "VIJFH", "VIFH")
-#     layoutstring == "IJFH" && return 4
-#     layoutstring == "IJF" && return -1
-#     layoutstring == "IFH" && return 3
-#     layoutstring == "IF" && return -1
-#     layoutstring == "VIJFH" && return 5
-#     return 4
-# end
+# Axis of the `H` dimension in an array stored with the given layout string.
+_scan_h_dim(layoutstring::AbstractString) = findfirst('H', layoutstring)
+
+# Reconstruct the Nh type parameter used by fields on `space`, so that reading
+# a field is an exact inverse of writing it.
+function _match_space_layout(values, space)
+    lg_data = Spaces.local_geometry_data(space)
+    lg_data isa DataLayouts.DataLayout{<:Any, 0} && return values
+    Nh = DataLayouts.shape_params(lg_data).Nh
+    return DataLayouts.layout_constructor(values; Nh)(parent(values))
+end
 
 """
     matrix_to_cartesianindices(elemorder_matrix)
@@ -431,37 +435,17 @@ This should cooperate with datasets written by `write!` for datalayouts.
 function read_data_layout(dataset, topology)
     ArrayType = ClimaComms.array_type(topology)
     data_layout = HDF5.read_attribute(dataset, "type")
-    has_horizontal = occursin('I', data_layout)
-    DataLayout = _scan_data_layout(data_layout)
     array = HDF5.read(dataset)
-    has_horizontal &&
-        (h_dim = DataLayouts.h_dim(DataLayouts.singleton(DataLayout)))
     if topology isa Topologies.Topology2D
+        h_dim = _scan_h_dim(data_layout)
         nd = ndims(array)
         localidx = ntuple(d -> d == h_dim ? topology.local_elem_gidx : (:), nd)
         data = ArrayType(array[localidx...])
     else
         data = ArrayType(read(array))
     end
-    has_horizontal && (Nij = size(data, findfirst("I", data_layout)[1]))
-    # For when `Nh` is added back to the type space
-    #     Nhd = Nh_dim(data_layout)
-    #     Nht = Nhd == -1 ? () : (size(data, Nhd),)
     ElType = read_type(HDF5.read_attribute(dataset, "data_eltype"))
-    if data_layout in ("VIJFH", "VIFH")
-        Nv = size(data, 1)
-        # values = DataLayout{ElType, Nv, Nij, Nht...}(data) # when Nh is in type-domain
-        values = DataLayout{ElType, Nv, Nij}(data)
-    elseif data_layout in ("VF",)
-        Nv = size(data, 1)
-        values = DataLayout{ElType, Nv}(data)
-    elseif data_layout in ("DataF",)
-        values = DataLayout{ElType}(data)
-    else
-        # values = DataLayout{ElType, Nij, Nht...}(data) # when Nh is in type-domain
-        values = DataLayout{ElType, Nij}(data)
-    end
-    return values
+    return _scan_data_layout(data_layout, ElType, data)
 end
 
 function read_grid_new(reader, name)
@@ -630,11 +614,8 @@ function read_field(reader::HDF5Reader, name::AbstractString)
             ArrayType = ClimaComms.array_type(topology)
         end
         data_layout = attrs(obj)["data_layout"]
-        has_horizontal = occursin('I', data_layout)
-        DataLayout = _scan_data_layout(data_layout)
-        has_horizontal &&
-            (h_dim = DataLayouts.h_dim(DataLayouts.singleton(DataLayout)))
         if topology isa Topologies.Topology2D
+            h_dim = _scan_h_dim(data_layout)
             nd = ndims(obj)
             localidx =
                 ntuple(d -> d == h_dim ? topology.local_elem_gidx : (:), nd)
@@ -642,29 +623,13 @@ function read_field(reader::HDF5Reader, name::AbstractString)
         else
             data = ArrayType(read(obj))
         end
-        has_horizontal && (Nij = size(data, findfirst("I", data_layout)[1]))
-        # For when `Nh` is added back to the type space
-        #     Nhd = Nh_dim(data_layout)
-        #     Nht = Nhd == -1 ? () : (size(data, Nhd),)
         # The `value_type` attribute is deprecated. here we mantain backwards compatibility
         ElType = read_type(
             haskey(attrs(obj), "field_eltype") ?
             attrs(obj)["field_eltype"] : attrs(obj)["value_type"],
         )
-        if data_layout in ("VIJFH", "VIFH")
-            Nv = size(data, 1)
-            # values = DataLayout{ElType, Nv, Nij, Nht...}(data) # when Nh is in type-domain
-            values = DataLayout{ElType, Nv, Nij}(data)
-        elseif data_layout in ("VF",)
-            Nv = size(data, 1)
-            values = DataLayout{ElType, Nv}(data)
-        elseif data_layout in ("DataF",)
-            values = DataLayout{ElType}(data)
-        else
-            # values = DataLayout{ElType, Nij, Nht...}(data) # when Nh is in type-domain
-            values = DataLayout{ElType, Nij}(data)
-        end
-        return Fields.Field(values, space)
+        values = _scan_data_layout(data_layout, ElType, data)
+        return Fields.Field(_match_space_layout(values, space), space)
     elseif type == "FieldVector"
         Fields.FieldVector(;
             [

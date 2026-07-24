@@ -81,24 +81,29 @@ function _single_field_solve!(
     end
 end
 
-single_field_solve_col!(cache, x, A, b) =
+@inline single_field_solve_col!(cache, x, A, b) =
     band_matrix_solve!(
         eltype(A),
         unzip_tuple_field_values(Fields.field_values(cache)),
         Fields.field_values(x),
         unzip_tuple_field_values(Fields.field_values(A.entries)),
         Fields.field_values(b),
-        vindex,
     )
 
-unzip_tuple_field_values(data) =
-    ntuple(i -> data.:($i), Val(length(propertynames(data))))
+# Generate the tuple directly instead of calling ntuple, since the views made
+# by getproperty are only free of allocations when they do not escape through
+# the non-inlined ntuple closure.
+@generated function unzip_tuple_field_values(data)
+    property_exprs =
+        (:(getproperty(data, $i)) for i in 1:fieldcount(eltype(data)))
+    return Expr(:block, Expr(:meta, :inline), Expr(:tuple, property_exprs...))
+end
 
-function band_matrix_solve!(::Type{<:DiagonalMatrixRow}, _, x, Aⱼs, b, vi)
+@inline function band_matrix_solve!(::Type{<:DiagonalMatrixRow}, _, x, Aⱼs, b)
     (A₀,) = Aⱼs
     n = length(x)
     @inbounds for i in 1:n
-        x[vi(i)] = inv(A₀[vi(i)]) * b[vi(i)]
+        x[i] = inv(A₀[i]) * b[i]
     end
 end
 
@@ -116,41 +121,34 @@ Transforms the tri-diagonal matrix into a unit upper bi-diagonal matrix, then
 solves the resulting system using back substitution. The order of
 multiplications has been modified in order to handle block vectors/matrices.
 =#
-function band_matrix_solve!(
-    ::Type{<:TridiagonalMatrixRow},
-    cache,
-    x,
-    Aⱼs,
-    b,
-    vi,
-)
+@inline function band_matrix_solve!(::Type{<:TridiagonalMatrixRow}, cache, x, Aⱼs, b)
     A₋₁, A₀, A₊₁ = Aⱼs
     Ux, U₊₁ = cache
     n = length(x)
     @inbounds begin
-        inv_D₀ = inv(A₀[vi(1)])
-        U₊₁ᵢ₋₁ = inv_D₀ * A₊₁[vi(1)]
-        Uxᵢ₋₁ = inv_D₀ * b[vi(1)]
-        Ux[vi(1)] = Uxᵢ₋₁
-        U₊₁[vi(1)] = U₊₁ᵢ₋₁
+        inv_D₀ = inv(A₀[1])
+        U₊₁ᵢ₋₁ = inv_D₀ * A₊₁[1]
+        Uxᵢ₋₁ = inv_D₀ * b[1]
+        Ux[1] = Uxᵢ₋₁
+        U₊₁[1] = U₊₁ᵢ₋₁
 
         for i in 2:n
-            A₋₁ᵢ = A₋₁[vi(i)]
-            inv_D₀ = inv(A₀[vi(i)] - A₋₁ᵢ * U₊₁ᵢ₋₁)
-            Uxᵢ₋₁ = inv_D₀ * (b[vi(i)] - A₋₁ᵢ * Uxᵢ₋₁)
-            Ux[vi(i)] = Uxᵢ₋₁
+            A₋₁ᵢ = A₋₁[i]
+            inv_D₀ = inv(A₀[i] - A₋₁ᵢ * U₊₁ᵢ₋₁)
+            Uxᵢ₋₁ = inv_D₀ * (b[i] - A₋₁ᵢ * Uxᵢ₋₁)
+            Ux[i] = Uxᵢ₋₁
             if i < n
-                U₊₁ᵢ₋₁ = inv_D₀ * A₊₁[vi(i)] # U₊₁[n] is outside the matrix.
-                U₊₁[vi(i)] = U₊₁ᵢ₋₁
+                U₊₁ᵢ₋₁ = inv_D₀ * A₊₁[i] # U₊₁[n] is outside the matrix.
+                U₊₁[i] = U₊₁ᵢ₋₁
             end
         end
 
-        x[vi(n)] = Ux[vi(n)]
+        x[n] = Ux[n]
         # Avoid steprange on GPU: https://cuda.juliagpu.org/stable/tutorials/performance/#Avoiding-StepRange
         i = (n - 1)
         # for i in (n - 1):-1:1
         while i ≥ 1
-            x[vi(i)] = Ux[vi(i)] - U₊₁[vi(i)] * x[vi(i + 1)]
+            x[i] = Ux[i] - U₊₁[i] * x[i + 1]
             i -= 1
         end
     end
@@ -175,49 +173,36 @@ Transforms the penta-diagonal matrix into a unit upper tri-diagonal matrix, then
 solves the resulting system using back substitution. The order of
 multiplications has been modified in order to handle block vectors/matrices.
 =#
-function band_matrix_solve!(
-    ::Type{<:PentadiagonalMatrixRow},
-    cache,
-    x,
-    Aⱼs,
-    b,
-    vi,
-)
+@inline function band_matrix_solve!(::Type{<:PentadiagonalMatrixRow}, cache, x, Aⱼs, b)
     A₋₂, A₋₁, A₀, A₊₁, A₊₂ = Aⱼs
     Ux, U₊₁, U₊₂ = cache
     n = length(x)
     @inbounds begin
-        inv_D₀ = inv(A₀[vi(1)])
-        Ux[vi(1)] = inv_D₀ * b[vi(1)]
-        U₊₁[vi(1)] = inv_D₀ * A₊₁[vi(1)]
-        U₊₂[vi(1)] = inv_D₀ * A₊₂[vi(1)]
+        inv_D₀ = inv(A₀[1])
+        Ux[1] = inv_D₀ * b[1]
+        U₊₁[1] = inv_D₀ * A₊₁[1]
+        U₊₂[1] = inv_D₀ * A₊₂[1]
 
-        inv_D₀ = inv(A₀[vi(2)] - A₋₁[vi(2)] * U₊₁[vi(1)])
-        Ux[vi(2)] = inv_D₀ * (b[vi(2)] - A₋₁[vi(2)] * Ux[vi(1)])
-        U₊₁[vi(2)] = inv_D₀ * (A₊₁[vi(2)] - A₋₁[vi(2)] * U₊₂[vi(1)])
-        U₊₂[vi(2)] = inv_D₀ * A₊₂[vi(2)]
+        inv_D₀ = inv(A₀[2] - A₋₁[2] * U₊₁[1])
+        Ux[2] = inv_D₀ * (b[2] - A₋₁[2] * Ux[1])
+        U₊₁[2] = inv_D₀ * (A₊₁[2] - A₋₁[2] * U₊₂[1])
+        U₊₂[2] = inv_D₀ * A₊₂[2]
 
         for i in 3:n
-            L₋₁ = A₋₁[vi(i)] - A₋₂[vi(i)] * U₊₁[vi(i - 2)]
-            inv_D₀ = inv(
-                A₀[vi(i)] - L₋₁ * U₊₁[vi(i - 1)] - A₋₂[vi(i)] * U₊₂[vi(i - 2)],
-            )
-            Ux[vi(i)] =
-                inv_D₀ *
-                (b[vi(i)] - L₋₁ * Ux[vi(i - 1)] - A₋₂[vi(i)] * Ux[vi(i - 2)])
-            i < n && (U₊₁[vi(i)] = inv_D₀ * (A₊₁[vi(i)] - L₋₁ * U₊₂[vi(i - 1)]))
-            i < n - 1 && (U₊₂[vi(i)] = inv_D₀ * A₊₂[vi(i)])
+            L₋₁ = A₋₁[i] - A₋₂[i] * U₊₁[i - 2]
+            inv_D₀ = inv(A₀[i] - L₋₁ * U₊₁[i - 1] - A₋₂[i] * U₊₂[i - 2])
+            Ux[i] = inv_D₀ * (b[i] - L₋₁ * Ux[i - 1] - A₋₂[i] * Ux[i - 2])
+            i < n && (U₊₁[i] = inv_D₀ * (A₊₁[i] - L₋₁ * U₊₂[i - 1]))
+            i < n - 1 && (U₊₂[i] = inv_D₀ * A₊₂[i])
         end
 
-        x[vi(n)] = Ux[vi(n)]
-        x[vi(n - 1)] = Ux[vi(n - 1)] - U₊₁[vi(n - 1)] * x[vi(n)]
+        x[n] = Ux[n]
+        x[n - 1] = Ux[n - 1] - U₊₁[n - 1] * x[n]
         # Avoid steprange on GPU: https://cuda.juliagpu.org/stable/tutorials/performance/#Avoiding-StepRange
         # for i in (n - 2):-1:1
         i = (n - 2)
         while i ≥ 1
-            x[vi(i)] =
-                Ux[vi(i)] - U₊₁[vi(i)] * x[vi(i + 1)] -
-                U₊₂[vi(i)] * x[vi(i + 2)]
+            x[i] = Ux[i] - U₊₁[i] * x[i + 1] - U₊₂[i] * x[i + 2]
             i -= 1
         end
     end
