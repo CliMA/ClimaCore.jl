@@ -363,14 +363,14 @@ function benchmark_operators_column(bm; z_elems, helem, Nq, compile::Bool = fals
     return (; bm, trials, t_min)
 end
 
-function benchmark_operators_sphere(bm; z_elems, helem, Nq, compile::Bool = false, horizontal_layout_type)
+function benchmark_operators_sphere(bm; z_elems, helem, Nq, compile::Bool = false, VIJH)
     FT = bm.float_type
     device = ClimaComms.device()
     @show device
     trials = DataStructures.OrderedDict()
     t_min = DataStructures.OrderedDict()
 
-    cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem=z_elems, helem, Nq, horizontal_layout_type)
+    cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem=z_elems, helem, Nq, VIJH)
     fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
     cfield = fill(field_vars(FT), cspace)
     ffield = fill(field_vars(FT), fspace)

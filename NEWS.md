@@ -4,6 +4,17 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- Refactor DataLayouts module [2522](https://github.com/CliMA/ClimaCore.jl/pull/2522)
+  - All data layout types are unified into a single `DataLayout` type, and all
+    loops over data go through two communication primitives (`foreach_slice` and
+    `reduce_points`) that work the same way on CPUs, multi-threaded CPUs, and
+    GPUs. Runtime performance on CPUs and GPUs matches the previous release.
+  - Data in a `Field` is now indexed in the order `[v, i, j, h]`, and every
+    parent array has a 5-dimensional shape, with one axis used to store struct
+    fields. Code that indexes into `parent(field)` arrays must be updated.
+  - Several old names (`AbstractData`, `IJFH`, `IJHF`) are available as aliases,
+    and `[i, j, f, v, h]` indexing is still allowed for backward compatibility.
+
 v0.14.55
 -------
 

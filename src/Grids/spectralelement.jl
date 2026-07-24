@@ -55,7 +55,7 @@ function _SpectralElementGrid1D(topology, quadrature_style, ::Type{VIJH}) where 
         Geometry.Components{Geometry.Covariant, AIdx}(),
     )
     LG = Geometry.LocalGeometryType(CoordType, FT, AIdx)
-    local_geometry = VIJH{LG, 1, Nq, 1, missing}(Array{FT}, Nh)
+    local_geometry = VIJH{LG, 1, Nq, 1, nothing}(Array{FT}, Nh)
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
 
@@ -248,8 +248,7 @@ function _SpectralElementGrid2D(
     high_order_Nq = Quadratures.degrees_of_freedom(high_order_quadrature_style)
     LG = Geometry.LocalGeometryType(CoordType2D, FT, AIdx)
 
-    local_geometry = VIJH{LG, 1, Nq, Nq, missing}(Array{FT}, Nh)
-    mask = enable_mask ? DataLayouts.IJHMask(local_geometry) : DataLayouts.NoMask()
+    local_geometry = VIJH{LG, 1, Nq, Nq, nothing}(Array{FT}, Nh)
 
     _, quad_weights = Quadratures.quadrature_points(FT, quadrature_style)
     _, high_order_quad_weights =
@@ -365,7 +364,7 @@ function _SpectralElementGrid2D(
 
     if quadrature_style isa Quadratures.GLL
         internal_surface_geometry =
-            VIJH{SG, 1, Nq, 1, missing}(Array{FT}, length(interior_faces))
+            VIJH{SG, 1, Nq, 1, nothing}(Array{FT}, length(interior_faces))
         for (iface, (lidx⁻, face⁻, lidx⁺, face⁺, reversed)) in enumerate(interior_faces)
             local_geometry_slab⁻ = slab(local_geometry, 1, lidx⁻)
             local_geometry_slab⁺ = slab(local_geometry, 1, lidx⁺)
@@ -399,7 +398,7 @@ function _SpectralElementGrid2D(
             map(Topologies.boundary_tags(topology)) do boundarytag
                 boundary_faces =
                     Topologies.boundary_faces(topology, boundarytag)
-                boundary_surface_geometry = VIJH{SG, 1, Nq, 1, missing}(
+                boundary_surface_geometry = VIJH{SG, 1, Nq, 1, nothing}(
                     Array{FT},
                     length(boundary_faces),
                 )
@@ -424,6 +423,11 @@ function _SpectralElementGrid2D(
     end
 
     device_local_geometry = DataLayouts.rebuild(local_geometry, DA)
+    # Construct the mask from the device-side geometry, so that its data is
+    # stored on the same device as the rest of the grid.
+    mask =
+        enable_mask ? DataLayouts.IJHMask(device_local_geometry) :
+        DataLayouts.NoMask()
     return SpectralElementGrid2D(
         topology,
         quadrature_style,

@@ -7,22 +7,29 @@
 struct DataStyle{N, D <: DataLayout{<:Any, N}} <: Broadcast.AbstractArrayStyle{N} end
 DataStyle(::Type{D}) where {D} = DataStyle{ndims(D), layout_type(D)}()
 
+Base.ndims(::DataStyle{N}) where {N} = N
+
 Broadcast.BroadcastStyle(::Type{D}) where {D <: DataLayout} = DataStyle(D)
 
-# Pass scalar values by wrapping them in 0-dimensional AbstractArrays or Tuples.
-# Add a DefaultArrayStyle{0} method to avoid ambiguity with a built-in method.
-Broadcast.BroadcastStyle(style::DataStyle, ::Broadcast.DefaultArrayStyle{0}) = style
-Broadcast.BroadcastStyle(style::DataStyle, ::Broadcast.AbstractArrayStyle{0}) = style
+# For styles with equal typenames but different dimensionalities, Base's
+# fallback for AbstractArrayStyle calls typeof(style)(Val(N)). DataStyle needs a
+# layout type D in addition to the dimensionality, so it bypasses the fallback.
+Broadcast.BroadcastStyle(style1::DataStyle, style2::DataStyle) =
+    style1 == style2 || iszero(ndims(style2)) ? style1 :
+    iszero(ndims(style1)) ? style2 : Broadcast.Unknown()
+
+# Pass scalar values in Tuples of length 1 or in 0-dimensional AbstractArrays.
+# Add DefaultArrayStyle{0} and DataStyle{0} methods to avoid ambiguities.
 Broadcast.BroadcastStyle(style::DataStyle, ::Broadcast.Style{Tuple}) = style
+Broadcast.BroadcastStyle(style::DataStyle, ::Broadcast.AbstractArrayStyle{0}) = style
+Broadcast.BroadcastStyle(style::DataStyle, ::Broadcast.DefaultArrayStyle{0}) = style
+Broadcast.BroadcastStyle(style::DataStyle, ::DataStyle{0}) = style
 
 # Enable automatic nested broadcasting over supported types of iterators.
 @inline Broadcast.broadcastable(data::DataLayout) =
     reinterpret(add_auto_broadcasters(eltype(data)), data)
 @inline Broadcast.broadcasted(style::DataStyle, f::F, args...) where {F} =
     auto_broadcasted(style, f, args)
-
-# Allow getindex(::LazyDataLayout, _) to avoid Cartesian indices when possible.
-@inline Broadcast.newindex(::DataLayout, index::Integer) = index
 
 """
     LazyDataLayout{D}
@@ -31,10 +38,23 @@ A [`DataStyle`](@ref) broadcast expression whose [`layout_type`](@ref) is `D`.
 """
 const LazyDataLayout{D} = Broadcast.Broadcasted{<:DataStyle{<:Any, D}}
 
-# Optimize axes(::LazyDataLayout) to use statically inferrable size information.
+# Optimize axes(::LazyDataLayout) with statically inferrable axes when possible.
 @inline Broadcast._axes(bc::LazyDataLayout, ::Nothing) =
     has_inferred_size(bc) ? unrolled_map(Base.OneTo, inferred_size(bc)) :
-    Broadcast.combine_axes(bc.args...)
+    unrolled_reduce(stable_combine_axes, unrolled_map(axes, bc.args))
+
+# Instead of Base's combine_axes, whose DimensionMismatch error cannot compile
+# on GPUs, use a version that always selects the first non-singleton dimension.
+@inline stable_combine_axes(axes1::Tuple, axes2::Tuple) =
+    isempty(axes2) ? axes1 :
+    isempty(axes1) ? axes2 :
+    (
+        isone(length(first(axes2))) ? first(axes1) : first(axes2),
+        stable_combine_axes(Base.tail(axes1), Base.tail(axes2))...,
+    )
+
+# Make ndims support nested broadcasts whose axes have not been instantiated.
+@inline Base.ndims(::LazyDataLayout{D}) where {D} = ndims(D)
 
 # Allow eltype to return non-concrete types, like an empty Union{}.
 @inline Base.eltype(bc::LazyDataLayout) = unsafe_eltype(bc)
@@ -51,7 +71,15 @@ const LazyDataLayout{D} = Broadcast.Broadcasted{<:DataStyle{<:Any, D}}
 # @fused macro, as outlined in https://github.com/CliMA/MultiBroadcastFusion.jl.
 @make_type FusedMultiBroadcast
 @make_fused fused_direct FusedMultiBroadcast fused_direct
-Adapt.@adapt_structure FusedMultiBroadcast
+
+# Adapt does not descend into Base.Pair, so Adapt.@adapt_structure would leave
+# each pair's destination and broadcast unconverted (e.g. as CuArrays instead
+# of CuDeviceArrays in kernel arguments).
+Adapt.adapt_structure(to, fmb::FusedMultiBroadcast) = FusedMultiBroadcast(
+    unrolled_map(fmb.pairs) do pair
+        Pair(Adapt.adapt(to, pair.first), Adapt.adapt(to, pair.second))
+    end,
+)
 
 const MaybeLazyDataLayout = Union{DataLayout, LazyDataLayout}
 const MaybeFusedDataLayoutBroadcast = Union{LazyDataLayout, FusedMultiBroadcast}
@@ -85,7 +113,7 @@ end
 @inline vijh_params(bc::LazyDataLayout) =
     unrolled_reduce(unrolled_map(vijh_params, layout_args(bc))) do params1, params2
         unrolled_map(params1, params2) do N1, N2
-            ismissing(N1) || ismissing(N2) ? missing :
+            isnothing(N1) || isnothing(N2) ? nothing :
             N1 == N2 || isone(N2) ? N1 :
             isone(N1) ? N2 : Broadcast.throwdm((Base.OneTo(N1),), (Base.OneTo(N2),))
         end
@@ -105,7 +133,7 @@ end
 
 @inline function nelems(bc::LazyDataLayout)
     (; Nv, Ni, Nj, Nh) = vijh_params(bc)
-    return ismissing(Nh) ? length(bc) ÷ (Nv * Ni * Nj) : Nh
+    return isnothing(Nh) ? length(bc) ÷ (Nv * Ni * Nj) : Nh
 end
 
 # Forward size queries and primitives to the first layout in a fused broadcast.
@@ -121,8 +149,8 @@ end
 """
     modify_args(f, bc, f_args...)
 
-Modifies a broadcast expression by replacing each of its [`layout_args`](@ref)
-with `f(layout_arg, f_args...)`, optionally passing additional `f_args` to `f`.
+Replaces each of the [`layout_args`](@ref) in a broadcast expression with
+`f(layout_arg, f_args...)`.
 """
 @propagate_inbounds function modify_args(f::F, bc::LazyDataLayout, f_args...) where {F}
     modified_args = unrolled_map_with_inbounds(bc.args) do arg
@@ -140,17 +168,10 @@ end
 end
 
 @inline reassign(bc::MaybeFusedDataLayoutBroadcast, scope) =
-    modify_args(arg -> (Base.@_propagate_inbounds_meta; reassign(arg, scope)), bc)
+    modify_args(reassign, bc, scope)
 @propagate_inbounds level_view(bc::MaybeFusedDataLayoutBroadcast, v) =
-    modify_args(arg -> (Base.@_propagate_inbounds_meta; level(arg, v)), bc)
+    modify_args(level, bc, v)
 @propagate_inbounds slab_view(bc::MaybeFusedDataLayoutBroadcast, v, h) =
-    modify_args(arg -> (Base.@_propagate_inbounds_meta; slab(arg, v, h)), bc)
+    modify_args(slab, bc, v, h)
 @propagate_inbounds column_view(bc::MaybeFusedDataLayoutBroadcast, i, j, h) =
-    modify_args(arg -> (Base.@_propagate_inbounds_meta; column(arg, i, j, h)), bc)
-
-# Use Broadcast.newindex to match the behavior of getindex for LazyDataLayouts.
-@propagate_inbounds Base.view(bc::MaybeFusedDataLayoutBroadcast, index) =
-    modify_args(bc) do arg
-        Base.@_propagate_inbounds_meta
-        view(arg, Broadcast.newindex(arg, index))
-    end
+    modify_args(column, bc, i, j, h)

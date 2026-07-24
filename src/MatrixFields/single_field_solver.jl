@@ -81,7 +81,7 @@ function _single_field_solve!(
     end
 end
 
-single_field_solve_col!(cache, x, A, b) =
+@inline single_field_solve_col!(cache, x, A, b) =
     band_matrix_solve!(
         eltype(A),
         unzip_tuple_field_values(Fields.field_values(cache)),
@@ -90,10 +90,16 @@ single_field_solve_col!(cache, x, A, b) =
         Fields.field_values(b),
     )
 
-unzip_tuple_field_values(data) =
-    ntuple(i -> data.:($i), Val(length(propertynames(data))))
+# Generate the tuple directly instead of calling ntuple, since the views made
+# by getproperty are only free of allocations when they do not escape through
+# the non-inlined ntuple closure.
+@generated function unzip_tuple_field_values(data)
+    property_exprs =
+        (:(getproperty(data, $i)) for i in 1:fieldcount(eltype(data)))
+    return Expr(:block, Expr(:meta, :inline), Expr(:tuple, property_exprs...))
+end
 
-function band_matrix_solve!(::Type{<:DiagonalMatrixRow}, _, x, Aⱼs, b)
+@inline function band_matrix_solve!(::Type{<:DiagonalMatrixRow}, _, x, Aⱼs, b)
     (A₀,) = Aⱼs
     n = length(x)
     @inbounds for i in 1:n
@@ -115,7 +121,7 @@ Transforms the tri-diagonal matrix into a unit upper bi-diagonal matrix, then
 solves the resulting system using back substitution. The order of
 multiplications has been modified in order to handle block vectors/matrices.
 =#
-function band_matrix_solve!(::Type{<:TridiagonalMatrixRow}, cache, x, Aⱼs, b)
+@inline function band_matrix_solve!(::Type{<:TridiagonalMatrixRow}, cache, x, Aⱼs, b)
     A₋₁, A₀, A₊₁ = Aⱼs
     Ux, U₊₁ = cache
     n = length(x)
@@ -167,7 +173,7 @@ Transforms the penta-diagonal matrix into a unit upper tri-diagonal matrix, then
 solves the resulting system using back substitution. The order of
 multiplications has been modified in order to handle block vectors/matrices.
 =#
-function band_matrix_solve!(::Type{<:PentadiagonalMatrixRow}, cache, x, Aⱼs, b)
+@inline function band_matrix_solve!(::Type{<:PentadiagonalMatrixRow}, cache, x, Aⱼs, b)
     A₋₂, A₋₁, A₀, A₊₁, A₊₂ = Aⱼs
     Ux, U₊₁, U₊₂ = cache
     n = length(x)

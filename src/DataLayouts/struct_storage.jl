@@ -74,6 +74,19 @@ Determines how many values of type `B` are required by [`set_struct!`](@ref) and
 """
 @inline num_basetypes(::Type{B}, ::Type{T}) where {B, T} = sizeof(T) ÷ sizeof(B)
 
+# Base's fieldoffset lowers to a ccall that cannot be compiled in GPU kernels,
+# so the generated branch evaluates it at compile time and returns the offset as
+# a constant. The identical non-generated branch is still needed for inference
+# to properly analyze this function when the field index is a runtime value
+# (e.g., data.:(i) in a loop over i), where it infers to an Int and keeps view
+# types concrete; a plain @generated function would infer to Any in that case.
+@inline stable_fieldoffset(::Type{T}, ::Val{i}) where {T, i} =
+    if @generated
+        fieldoffset(T, i)
+    else
+        fieldoffset(T, i)
+    end
+
 """
     struct_field_view(array, T, Val(i), [Val(F)])
 
@@ -90,48 +103,55 @@ dimension, `F` may be replaced with `nothing`.
 @inline function struct_field_view(array, ::Type{T}, ::Val{i}, ::Val{F}) where {T, i, F}
     check_basetype(eltype(array), fieldtype(T, i))
     num_D_indices = num_basetypes(eltype(array), fieldtype(T, i))
-    last_D_index = num_basetypes(eltype(array), Tuple{fieldtypes(T)[1:i]...})
-    D_indices = (last_D_index - num_D_indices + 1):last_D_index
+    first_D_index = Int(stable_fieldoffset(T, Val(i))) ÷ sizeof(eltype(array)) + 1
+    D_indices = first_D_index:(first_D_index + num_D_indices - 1)
+    other_indices = ntuple(Returns(:), Val(ndims(array))) # Use colons for FastSubArray view.
     all_indices =
-        isnothing(F) ? axes(array) :
-        unrolled_setindex(axes(array), D_indices, Val(F))
+        isnothing(F) ? other_indices : unrolled_setindex(other_indices, D_indices, Val(F))
     @boundscheck checkbounds(array, all_indices...)
-    return @inbounds view(array, all_indices...)
+    return @inbounds stable_view(array, all_indices...)
 end
 
-@inline struct_range(array, ::Val{Nf}) where {Nf} = 1:Nf
-@inline struct_range(array, ::Val{Nf}, index::Integer, ::Val{F}) where {Nf, F} =
-    isnothing(F) ?
-    (isone(Nf) ? index : throw(ArgumentError(invalid_f_dim_string(Val(Nf))))) :
-    range(index; step = prod(size(array)[1:(F - 1)]), length = Nf)
-@inline struct_range(array, ::Val{Nf}, index::CartesianIndex, ::Val{F}) where {Nf, F} =
-    isnothing(F) ?
-    (isone(Nf) ? index : throw(ArgumentError(invalid_f_dim_string(Val(Nf))))) :
-    range(
-        CartesianIndex(unrolled_insert(Tuple(index), 1, Val(F))),
-        CartesianIndex(unrolled_insert(Tuple(index), Nf, Val(F))),
-    )
-@generated invalid_f_dim_string(::Val{Nf}) where {Nf} =
-    "Cannot represent value using $Nf basetypes without a separate F axis"
+@inline single_index(index, ::Val{Nf}) where {Nf} =
+    isone(Nf) ? Tuple(index) : throw(ArgumentError("F axis is required unless Nf = 1"))
 
 @inline struct_index(i, array) = i
-@inline struct_index(i, array, index::Integer, ::Val{F}) where {F} =
-    isnothing(F) ? index : index + (i - 1) * prod(size(array)[1:(F - 1)])
+@inline struct_indices(array, ::Val{Nf}) where {Nf} = (Base.OneTo(Nf),)
+
+# Split Cartesian index ranges into scalar components and a range from 1 to Nf;
+# a Cartesian range would build a much costlier view with singleton dimensions.
 @inline struct_index(i, array, index::CartesianIndex, ::Val{F}) where {F} =
     isnothing(F) ? index : CartesianIndex(unrolled_insert(Tuple(index), i, Val(F)))
+@inline struct_indices(array, ::Val{Nf}, index::CartesianIndex, ::Val{F}) where {Nf, F} =
+    isnothing(F) ? single_index(index, Val(Nf)) :
+    unrolled_insert(Tuple(index), Base.OneTo(Nf), Val(F))
+
+@inline struct_index(i, array, index::Integer, ::Val{F}) where {F} =
+    isnothing(F) ? index : struct_index(i, array, index, prod(size(array)[1:(F - 1)]))
+@inline struct_indices(array, ::Val{Nf}, index::Integer, ::Val{F}) where {Nf, F} =
+    isnothing(F) ? single_index(index, Val(Nf)) :
+    struct_indices(array, Val(Nf), index, prod(size(array)[1:(F - 1)]))
+
+@inline struct_index(i, array, index::Integer, stride::Integer) = index + (i - 1) * stride
+@inline struct_indices(array, ::Val{Nf}, index::Integer, stride::Integer) where {Nf} =
+    (range(index; step = stride, length = Nf),)
 
 """
     set_struct!(array, value, [index, Val(F)])
+    set_struct!(array, value, [index, stride])
 
 Populates `array` with data that represents any `isbits` `value`, using
 [`bitcast_struct`](@ref) to convert `value` into entries of the array.
 
 For multidimensional arrays with values stored along a particular dimension, an
 index is used to identify the location of one value, with the dimension
-specified as `Val(F)`. The target location's index should be either an integer
-that corresponds to its start, or a `CartesianIndex` that contains its
-coordinate along every dimension except `F`. When there is no such dimension,
-`F` may be replaced with `nothing`.
+specified as `Val(F)`. The target values's index should be a `CartesianIndex`
+that contains its coordinate along every dimension except `F`. When there is no
+such dimension, `F` may be replaced with `nothing`.
+
+Arrays that support linear indexing can also be accessed using two integers,
+where one corresponds to the start of a value, and another corresponds to the
+stride along the `F` axis between consecutive components of the value.
 
 # Examples
 
@@ -150,22 +170,23 @@ julia> set_struct!(zeros(Int64, 4), (Int32(2), Int32(0), Int128(1)))
  1
  0
 
-julia> set_struct!(zeros(Int64, 2, 4), (Int32(2), Int32(0), Int128(1)), 2)
-2×4 Matrix{Int64}:
- 0  0  0  0
- 2  0  1  0
-
 julia> set_struct!(zeros(Int64, 4, 2), (Int32(2), Int32(0), Int128(1)), 5, Val(1))
 4×2 Matrix{Int64}:
  0  2
  0  0
  0  1
  0  0
+
+julia> set_struct!(zeros(Int64, 3, 4), (Int32(2), Int32(0), Int128(1)), 2, 3)
+3×4 Matrix{Int64}:
+ 0  0  0  0
+ 2  0  1  0
+ 0  0  0  0
 ```
 """
 @inline function set_struct!(array, value::T, index...) where {T}
     Nf = num_basetypes(eltype(array), T)
-    @boundscheck checkbounds(array, struct_range(array, Val(Nf), index...))
+    @boundscheck checkbounds(array, struct_indices(array, Val(Nf), index...)...)
     entries = bitcast_struct(NTuple{Nf, eltype(array)}, value)
     unrolled_foreach(enumerate(entries)) do (i, entry)
         @inbounds array[struct_index(i, array, index...)] = entry
@@ -175,16 +196,20 @@ end
 
 """
     get_struct(array, T, [index, Val(F)])
+    get_struct(array, T, [index, stride])
 
 Loads a value of type `T` that [`set_struct!`](@ref) has stored in `array`,
 using [`bitcast_struct`](@ref) to convert entries of the array into this value.
 
 For multidimensional arrays with values stored along a particular dimension, an
 index is used to identify the location of one value, with the dimension
-specified as `Val(F)`. The target location's index should be either an integer
-that corresponds to its start, or a `CartesianIndex` that contains its
-coordinate along every dimension except `F`. When there is no such dimension,
-`F` may be replaced with `nothing`.
+specified as `Val(F)`. The target values's index should be a `CartesianIndex`
+that contains its coordinate along every dimension except `F`. When there is no
+such dimension, `F` may be replaced with `nothing`.
+
+Arrays that support linear indexing can also be accessed using two integers,
+where one corresponds to the start of a value, and another corresponds to the
+stride along the `F` axis between consecutive components of the value.
 
 # Examples
 
@@ -195,16 +220,16 @@ julia> get_struct(Int8[1, 0, 0, 0], Int32)
 julia> get_struct([2, 0, 1, 0], Tuple{Int32, Int32, Int128})
 (2, 0, 1)
 
-julia> get_struct([0 0 0 0; 2 0 1 0], Tuple{Int32, Int32, Int128}, 2)
+julia> get_struct([0 2; 0 0; 0 1; 0 0], Tuple{Int32, Int32, Int128}, 5, Val(1))
 (2, 0, 1)
 
-julia> get_struct([0 2; 0 0; 0 1; 0 0], Tuple{Int32, Int32, Int128}, 5, Val(1))
+julia> get_struct([0 0 0 0; 2 0 1 0; 0 0 0 0], Tuple{Int32, Int32, Int128}, 2, 3)
 (2, 0, 1)
 ```
 """
 @inline function get_struct(array, ::Type{T}, index...) where {T}
     Nf = num_basetypes(eltype(array), T)
-    @boundscheck checkbounds(array, struct_range(array, Val(Nf), index...))
+    @boundscheck checkbounds(array, struct_indices(array, Val(Nf), index...)...)
     return bitcast_struct(T, array, Val(Nf), index...)
 end
 
@@ -217,6 +242,6 @@ and it can be updated with `set_struct!(struct_view, new_value)`.
 """
 @inline function view_struct(array, ::Type{T}, index...) where {T}
     Nf = num_basetypes(eltype(array), T)
-    @boundscheck checkbounds(array, struct_range(array, Val(Nf), index...))
-    return @inbounds view(array, struct_range(array, Val(Nf), index...))
+    @boundscheck checkbounds(array, struct_indices(array, Val(Nf), index...)...)
+    return @inbounds stable_view(array, struct_indices(array, Val(Nf), index...)...)
 end

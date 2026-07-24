@@ -193,8 +193,8 @@ dir = "hydrostatic_ekman"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
-z_centers = parent(Fields.coordinate_field(cspace))
-z_faces = parent(Fields.coordinate_field(fspace))
+z_centers = vec(parent(Fields.coordinate_field(cspace)))
+z_faces = vec(parent(Fields.coordinate_field(fspace)))
 
 function ekman_plot(u; title = "", size = (1024, 600))
     u_ref =
@@ -211,7 +211,7 @@ function ekman_plot(u; title = "", size = (1024, 600))
     # get u component of uv vector
     sub_plt1 = Plots.plot!(
         sub_plt1,
-        parent(u.Yc.uv.components.data.:1),
+        vec(parent(u.Yc.uv.components.data.:1)),
         z_centers,
         label = "Comp",
     )
@@ -230,7 +230,7 @@ function ekman_plot(u; title = "", size = (1024, 600))
     # get v component of uv vector
     sub_plt2 = Plots.plot!(
         sub_plt2,
-        parent(u.Yc.uv.components.data.:2),
+        vec(parent(u.Yc.uv.components.data.:2)),
         z_centers,
         label = "Comp",
     )

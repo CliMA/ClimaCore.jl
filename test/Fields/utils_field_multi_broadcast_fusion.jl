@@ -14,6 +14,7 @@ using StaticArrays, IntervalSets
 import ClimaCore
 import ClimaCore.Utilities: PlusHalf
 import ClimaCore.DataLayouts
+import ClimaCore.DataLayouts: DataF
 import ClimaCore:
     Fields,
     slab,

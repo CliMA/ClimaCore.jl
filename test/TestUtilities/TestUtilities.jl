@@ -138,7 +138,7 @@ function CenterExtrudedFiniteDifferenceSpace(
         htopology,
         quad;
         autodiff_metric,
-        horizontal_layout_type,
+        VIJH,
     )
 
     hypsography = if topography

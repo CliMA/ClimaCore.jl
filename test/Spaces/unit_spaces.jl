@@ -192,15 +192,16 @@ end
         @test parent(local_geometry.∂ξ∂x) ≈ @SMatrix [2/8 0 0; 0 1 0; 0 0 1]
         @test local_geometry.J ≈ (8 / 2)
         @test local_geometry.WJ ≈ (8 / 2) * weights[i]
-        @test dss_weight ≈ i in (1, 4) ? 1 / 2 : 1
+        @test dss_weight ≈ (i in (1, 4) ? 1 / 2 : 1)
     end
 
     @test Spaces.local_geometry_type(typeof(space)) <: Geometry.LocalGeometry
 
     point_space = Spaces.column(space, 1, 1)
+    point_coord_data = Adapt.adapt(Array, Spaces.coordinates_data(point_space))
     @test point_space isa Spaces.PointSpace
-    @test parent(Spaces.coordinates_data(point_space)) ==
-          parent(Spaces.column(coord_data, 1, 1))
+    @test vec(parent(point_coord_data)) ==
+          vec(parent(Spaces.column(coord_data, 1, 1)))
     @test Spaces.local_geometry_type(typeof(point_space)) <:
           Geometry.LocalGeometry
 end
@@ -374,14 +375,15 @@ end
         @test parent(local_geometry.∂ξ∂x) ≈ @SMatrix [2/8 0 0; 0 2/10 0; 0 0 1]
         @test local_geometry.J ≈ (10 / 2) * (8 / 2)
         @test local_geometry.WJ ≈ (10 / 2) * (8 / 2) * weights[i] * weights[j]
-        @test dss_weight ≈ i in (1, 4) ? 1 / 2 : 1
+        @test dss_weight ≈ (i in (1, 4) ? 1 / 2 : 1)
     end
 
     boundary_surface_geometries = Spaces.grid(space).boundary_surface_geometries
     @test length(boundary_surface_geometries) == 2
     @test keys(boundary_surface_geometries) == (:south, :north)
     @test sum(parent(boundary_surface_geometries.north.sWJ)) ≈ 8
-    @test parent(boundary_surface_geometries.north.normal)[1, :, 1] ≈ [0.0, 1.0]
+    @test parent(boundary_surface_geometries.north.normal)[1, 1, 1, :, 1] ≈
+          [0.0, 1.0]
 
     point_space = Spaces.column(space, 1, 1, 1)
     @test point_space isa Spaces.PointSpace
@@ -433,5 +435,171 @@ end
     ]
     for (p, (ip, jp)) in enumerate(perimeter)
         @test (ip, jp) == reference[p] # face_node_index also counts the bordering vertex dof
+    end
+end
+
+@testset "dss on 2×2 rectangular mesh (unstructured)" begin
+    FT = Float64
+    n1, n2 = 2, 2
+    domain = Domains.RectangleDomain(
+        Geometry.XPoint{FT}(0) .. Geometry.XPoint{FT}(4),
+        Geometry.YPoint{FT}(0) .. Geometry.YPoint{FT}(4),
+        x1periodic = false,
+        x2periodic = false,
+        x1boundary = (:west, :east),
+        x2boundary = (:south, :north),
+    )
+    mesh = Meshes.RectilinearMesh(domain, n1, n2)
+    grid_topology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
+
+    quad = Quadratures.GLL{4}()
+    points, weights = Quadratures.quadrature_points(FT, quad)
+
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+
+    array = parent(Spaces.coordinates_data(space))
+    @test size(array) == (1, 4, 4, 2, 4)
+
+    Nij = length(points)
+    device_array_type = ClimaComms.array_type(ClimaComms.device())
+    data = device_array_type(ones(1, Nij, Nij, 1, n1 * n2))
+    device_field_values = DataLayouts.VIJFH{FT, 1, Nij, Nij, n1 * n2}(data)
+    Topologies.dss!(device_field_values, grid_topology)
+    # Copy the result to the CPU so that its values can be read individually.
+    field_values = DataLayouts.VIJFH{FT, 1, Nij, Nij, n1 * n2}(
+        Array(parent(device_field_values)),
+    )
+
+    @testset "dss should not modify interior degrees of freedom of any element" begin
+        result = true
+        for el in 1:(n1 * n2)
+            slb = slab(field_values, 1, el)
+            for i in 2:(Nij - 1), j in 2:(Nij - 1)
+                if slb[1, i, j, 1] ≠ 1
+                    result = false
+                end
+            end
+        end
+        @test result
+    end
+    s1 = slab(field_values, 1, 1)
+    s2 = slab(field_values, 1, 2)
+    s3 = slab(field_values, 1, 3)
+    s4 = slab(field_values, 1, 4)
+
+    @testset "vertex common to all (4) elements" begin
+        @test (s1[1, Nij, Nij, 1] == s2[1, 1, Nij, 1] == s3[1, Nij, 1, 1] == s4[1, 1, 1, 1])
+    end
+
+    @testset "vertices common to (2) elements" begin
+        @test s1[1, Nij, 1, 1] == s2[1, 1, 1, 1]
+        @test s1[1, 1, Nij, 1] == s3[1, 1, 1, 1]
+        @test s2[1, Nij, Nij, 1] == s4[1, Nij, 1, 1]
+        @test s3[1, Nij, Nij, 1] == s4[1, 1, Nij, 1]
+    end
+
+    @testset "boundary faces" begin
+        for fc in 2:(Nij - 1)
+            @test s1[1, 1, fc, 1] == 1 # element 1 face 1
+            @test s1[1, fc, 1, 1] == 1 # element 1 face 3
+            @test s2[1, Nij, fc, 1] == 1 # element 2 face 2
+            @test s2[1, fc, 1, 1] == 1 # element 2 face 3
+            @test s3[1, 1, fc, 1] == 1 # element 3 face 1
+            @test s3[1, fc, Nij, 1] == 1 # element 3 face 4
+            @test s4[1, Nij, fc, 1] == 1 # element 4 face 2
+            @test s4[1, fc, Nij, 1] == 1 # element 4 face 4
+        end
+    end
+
+    @testset "interior faces" begin
+        for fc in 2:(Nij - 1)
+            @test (s1[1, Nij, fc, 1] == s2[1, 1, fc, 1] == 2) # (e1, f2) == (e2, f1) == 2
+            @test (s1[1, fc, Nij, 1] == s3[1, fc, 1, 1] == 2) # (e1, f4) == (e3, f3) == 2
+            @test (s2[1, fc, Nij, 1] == s4[1, fc, 1, 1] == 2) # (e2, f4) == (e4, f3) == 2
+            @test (s3[1, Nij, fc, 1] == s4[1, 1, fc, 1] == 2) # (e3, f2) == (e4, f1) == 2
+        end
+    end
+end
+
+@testset "dss on 2×2 rectangular mesh" begin
+    FT = Float64
+    n1, n2 = 2, 2
+    Nij = 4
+    domain = Domains.RectangleDomain(
+        Geometry.XPoint{FT}(0) .. Geometry.XPoint{FT}(4),
+        Geometry.YPoint{FT}(0) .. Geometry.YPoint{FT}(4),
+        x1periodic = false,
+        x2periodic = false,
+        x1boundary = (:west, :east),
+        x2boundary = (:south, :north),
+    )
+    mesh = Meshes.RectilinearMesh(domain, n1, n2)
+    grid_topology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
+
+    quad = Quadratures.GLL{Nij}()
+    points, weights = Quadratures.quadrature_points(FT, quad)
+
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+
+    array = parent(Spaces.coordinates_data(space))
+    @test size(array) == (1, Nij, Nij, 2, n1 * n2)
+
+    data = zeros(1, Nij, Nij, 3, n1 * n2)
+    data[1, :, :, 1, :] .= 1:Nij
+    data[1, :, :, 2, :] .= (1:Nij)'
+    data[1, :, :, 3, :] .= reshape(1:(n1 * n2), 1, 1, :)
+    device_array_type = ClimaComms.array_type(ClimaComms.device())
+    field_values = DataLayouts.VIJFH{NTuple{3, FT}, 1, Nij, Nij, n1 * n2}(
+        device_array_type(data),
+    )
+    Topologies.dss!(field_values, grid_topology)
+    # Copy the result to the CPU so that its values can be read individually.
+    data_dss = Array(parent(field_values))
+
+    @testset "slab 1" begin
+        @test data_dss[1, 1:(Nij - 1), 1:(Nij - 1), :, 1] ==
+              data[1, 1:(Nij - 1), 1:(Nij - 1), :, 1]
+        @test data_dss[1, Nij, 1:(Nij - 1), :, 1] ==
+              data[1, Nij, 1:(Nij - 1), :, 1] .+ data[1, 1, 1:(Nij - 1), :, 2]
+        @test data_dss[1, 1:(Nij - 1), Nij, :, 1] ==
+              data[1, 1:(Nij - 1), Nij, :, 1] .+ data[1, 1:(Nij - 1), 1, :, 3]
+        @test data_dss[1, Nij, Nij, :, 1] ==
+              data[1, Nij, Nij, :, 1] .+ data[1, 1, Nij, :, 2] .+
+              data[1, Nij, 1, :, 3] .+ data[1, 1, 1, :, 4]
+    end
+
+    @testset "slab 2" begin
+        @test data_dss[1, 2:Nij, 1:(Nij - 1), :, 2] ==
+              data[1, 2:Nij, 1:(Nij - 1), :, 2]
+        @test data_dss[1, 1, 1:(Nij - 1), :, 2] ==
+              data[1, Nij, 1:(Nij - 1), :, 1] .+ data[1, 1, 1:(Nij - 1), :, 2]
+        @test data_dss[1, 2:Nij, Nij, :, 2] ==
+              data[1, 2:Nij, Nij, :, 2] .+ data[1, 2:Nij, 1, :, 4]
+        @test data_dss[1, 1, Nij, :, 2] ==
+              data[1, Nij, Nij, :, 1] .+ data[1, 1, Nij, :, 2] .+
+              data[1, Nij, 1, :, 3] .+ data[1, 1, 1, :, 4]
+    end
+
+    @testset "slab 3" begin
+        @test data_dss[1, 1:(Nij - 1), 2:Nij, :, 3] ==
+              data[1, 1:(Nij - 1), 2:Nij, :, 3]
+        @test data_dss[1, Nij, 2:Nij, :, 3] ==
+              data[1, Nij, 2:Nij, :, 3] .+ data[1, 1, 2:Nij, :, 4]
+        @test data_dss[1, 1:(Nij - 1), 1, :, 3] ==
+              data[1, 1:(Nij - 1), Nij, :, 1] .+ data[1, 1:(Nij - 1), 1, :, 3]
+        @test data_dss[1, Nij, 1, :, 3] ==
+              data[1, Nij, Nij, :, 1] .+ data[1, 1, Nij, :, 2] .+
+              data[1, Nij, 1, :, 3] .+ data[1, 1, 1, :, 4]
+    end
+
+    @testset "slab 3" begin
+        @test data_dss[1, 2:Nij, 2:Nij, :, 4] == data[1, 2:Nij, 2:Nij, :, 4]
+        @test data_dss[1, 1, 2:Nij, :, 4] ==
+              data[1, Nij, 2:Nij, :, 3] .+ data[1, 1, 2:Nij, :, 4]
+        @test data_dss[1, 2:Nij, 1, :, 4] ==
+              data[1, 2:Nij, Nij, :, 2] .+ data[1, 2:Nij, 1, :, 4]
+        @test data_dss[1, 1, 1, :, 4] ==
+              data[1, Nij, Nij, :, 1] .+ data[1, 1, Nij, :, 2] .+
+              data[1, Nij, 1, :, 3] .+ data[1, 1, 1, :, 4]
     end
 end

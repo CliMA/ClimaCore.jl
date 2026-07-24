@@ -62,7 +62,9 @@ end
     device = ClimaComms.device(space)
     ArrayType = ClimaComms.array_type(device)
 
-    data = VIJFH{ComplexF64}(ArrayType{Float64}, ones; Nij, Nh = n1 * n2)
+    data = VIJFH{ComplexF64, 1, Nij, Nij, n1 * n2}(
+        ArrayType(ones(Float64, 1, Nij, Nij, 2, n1 * n2)),
+    )
     field = Fields.Field(data, space)
 
     @test sum(field) ≈ Complex(1.0, 1.0) * 8.0 * 10.0 rtol = 10eps()
@@ -99,12 +101,14 @@ end
     # test broadcasting
     res = field .+ 1
     @test parent(Fields.field_values(res)) == Float64[
-        f == 1 ? 2 : 1 for i in 1:Nij, j in 1:Nij, f in 1:2, h in 1:(n1 * n2)
+        f == 1 ? 2 : 1 for v in 1:1, i in 1:Nij, j in 1:Nij, f in 1:2,
+        h in 1:(n1 * n2)
     ]
 
     res = field.re .+ 1
-    @test parent(Fields.field_values(res)) ==
-          Float64[2 for i in 1:Nij, j in 1:Nij, f in 1:1, h in 1:(n1 * n2)]
+    @test parent(Fields.field_values(res)) == Float64[
+        2 for v in 1:1, i in 1:Nij, j in 1:Nij, f in 1:1, h in 1:(n1 * n2)
+    ]
 
     # test field slab broadcasting
     f1 = ones(space)
@@ -170,7 +174,10 @@ end
         if space isa Spaces.SpectralElementSpace1D
             @test p_allocated == 0
         else
-            @test p_allocated == 0 broken = (device isa ClimaComms.CUDADevice)
+            # TODO: On extruded spaces, this broadcast has two unelided views
+            # from getproperty (48 bytes each); whether the compiler elides
+            # them depends on how much of its inference budget is used up.
+            @test p_allocated ≤ 96 broken = (device isa ClimaComms.CUDADevice)
         end
     end
 end
@@ -275,7 +282,7 @@ end
     device = ClimaComms.device(context)
     ArrayType = ClimaComms.array_type(device)
     FT = Spaces.undertype(space)
-    data = VIJFH{S}(ArrayType{FT}, ones; Nij, Nh)
+    data = VIJFH{S, 1, Nij, Nij, Nh}(ArrayType(ones(FT, 1, Nij, Nij, 2, Nh)))
 
     nt_field = Fields.Field(data, space)
 
@@ -294,6 +301,47 @@ end
     space = spectral_space_2D()
     u = Geometry.Covariant12Vector.(ones(space), ones(space))
     @test norm.(u) ≈ hypot(4 / 8 / 2, 4 / 10 / 2) .* ones(space)
+end
+
+@testset "Propertynames and equality of zero-size property views" begin
+    space = spectral_space_2D()
+    coords = Fields.coordinate_field(space)
+    vector_field = Geometry.UVVector.(coords.x, coords.y)
+    covector_field = adjoint.(vector_field)
+
+    # Zero-size fields like the bases of Tensors are hidden from propertynames,
+    # so that recursive walks over field properties (e.g. the comparison of
+    # checkpointed states in ClimaAtmos's restart tests) only encounter
+    # properties that contain data.
+    @test propertynames(vector_field) == (:components,)
+    @test propertynames(covector_field) == (:components,)
+    all_property_leaves(field) =
+        isempty(propertynames(field)) ? [field] :
+        mapreduce(
+            name -> all_property_leaves(getproperty(field, name)),
+            vcat,
+            propertynames(field),
+        )
+    for field in (vector_field, covector_field)
+        @test all(leaf -> eltype(leaf) <: Real, all_property_leaves(field))
+    end
+
+    # Zero-size fields are still accessible through getproperty, and the
+    # resulting property views (whose layouts have Nf = 0) can be compared.
+    for field in (vector_field, covector_field), i in 1:2
+        i == 2 && field === vector_field && continue # vectors have one basis
+        basis_field = getproperty(getproperty(field, :bases), i)
+        @test sizeof(eltype(basis_field)) == 0
+        @test isempty(parent(basis_field))
+        @test basis_field == basis_field
+        @test basis_field ==
+              getproperty(getproperty(copy(field), :bases), i)
+    end
+
+    # Fields with different data are still distinguishable by ==.
+    other_field = Geometry.UVVector.(coords.x, coords.y .+ 1)
+    @test vector_field != other_field
+    @test vector_field == copy(vector_field)
 end
 
 @testset "FieldVector" begin
@@ -681,13 +729,19 @@ end
     for space in TU.all_spaces(FT)
         TU.levelable(space) || continue
         field = fill((; x = FT(1)), space)
+        level_space = Spaces.level(space, TU.fc_index(1, space))
+        level_data = Spaces.level(Fields.field_values(field), 1)
         level_of_field = Fields.Field(
-            Spaces.level(Fields.field_values(field), 1),
-            Spaces.level(space, TU.fc_index(1, space)),
+            Fields.level_data(level_space, level_data),
+            level_space,
         )
         @test level_of_field == Spaces.level(field, TU.fc_index(1, space))
-        @test level_of_field == Base.materialize(
-            Spaces.level(lazy.(identity.(field)), TU.fc_index(1, space)),
+        # Compare data instead of Fields, since two PointSpaces constructed by
+        # separate calls to Spaces.level are not identical
+        @test Fields.field_values(level_of_field) == Fields.field_values(
+            Base.materialize(
+                Spaces.level(lazy.(identity.(field)), TU.fc_index(1, space)),
+            ),
         )
     end
 end
@@ -735,13 +789,19 @@ end
         if space isa Union{TwoColumnIndexSpace, ThreeColumnIndexSpace}
             field = fill((; x = FT(1)), space)
             indices = space isa TwoColumnIndexSpace ? (1, 1) : (1, 1, 1)
+            column_space = Spaces.column(space, indices...)
+            column_data = Spaces.column(Fields.field_values(field), indices...)
             column_of_field = Fields.Field(
-                Spaces.column(Fields.field_values(field), indices...),
-                Spaces.column(space, indices...),
+                Fields.level_data(column_space, column_data),
+                column_space,
             )
             @test column_of_field == Spaces.column(field, indices...)
-            @test column_of_field == Base.materialize(
-                Spaces.column(lazy.(identity.(field)), indices...),
+            # Compare data instead of Fields, since two PointSpaces constructed
+            # by separate calls to Spaces.column are not identical
+            @test Fields.field_values(column_of_field) == Fields.field_values(
+                Base.materialize(
+                    Spaces.column(lazy.(identity.(field)), indices...),
+                ),
             )
         end
     end
@@ -764,12 +824,10 @@ end
                 Spaces.slab(Fields.field_values(field), indices...),
                 Spaces.slab(space, indices...),
             )
-            @test slab_of_field == Spaces.slab(field, indices...) broken =
-                is_cuda && space isa OneSlabIndexSpace
+            @test slab_of_field == Spaces.slab(field, indices...)
             @test slab_of_field == Base.materialize(
                 Spaces.slab(lazy.(identity.(field)), indices...),
-            ) broken = is_cuda
-            # TODO: Figure out why some of these tests are broken on GPUs.
+            )
         end
     end
 end
@@ -1219,7 +1277,7 @@ end
     hspace = Spaces.SpectralElementSpace2D(
         htopology,
         quad;
-        horizontal_layout_type = DataLayouts.VIJHF,
+        VIJH = DataLayouts.VIJHF,
     )
     cspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
 
@@ -1289,6 +1347,46 @@ end
         else
             @warn "Bounds check on level(::Field) not verified."
         end
+    end
+end
+
+@testset "array2field and field2array" begin
+    FT = Float32
+    device = ClimaComms.device()
+    context = ClimaComms.SingletonCommsContext(device)
+    ArrayType = ClimaComms.array_type(device)
+    spaces = (
+        TU.PointSpace(FT; context), # DataF
+        TU.ColumnCenterFiniteDifferenceSpace(FT; context), # VF-like
+        TU.ColumnFaceFiniteDifferenceSpace(FT; context), # VF-like
+        TU.SpectralElementSpace2D(FT; context), # IJFH-like
+        TU.CenterExtrudedFiniteDifferenceSpace(FT; context), # VIJFH-like
+    )
+    for space in spaces
+        data_size = size(Spaces.local_geometry_data(space))
+        array_size =
+            Spaces.has_vertical(space) ?
+            (data_size[1], prod(data_size) ÷ data_size[1]) :
+            (prod(data_size),)
+        array = ArrayType(rand(FT, array_size...))
+        field = Fields.array2field(array, space)
+        @test axes(field) === space
+        @test eltype(field) == FT
+        @test size(Fields.field2array(field)) == array_size
+        @test Array(Fields.field2array(field)) == Array(array)
+
+        # Both array2field and field2array should return views, so writing
+        # to the field or the extracted array should modify `array`.
+        field .= FT(1)
+        @test all(==(FT(1)), Array(array))
+        Fields.field2array(field) .= FT(2)
+        @test all(==(FT(2)), Array(array))
+
+        # As on main, any array with the right number of entries is accepted.
+        flat_array = ArrayType(rand(FT, prod(array_size)))
+        flat_field = Fields.array2field(flat_array, space)
+        @test Array(Fields.field2array(flat_field)) ==
+              reshape(Array(flat_array), array_size)
     end
 end
 

@@ -18,12 +18,11 @@ struct FieldStyle{DS <: DataStyle} <: AbstractFieldStyle end
 FieldStyle(::DS) where {DS <: DataStyle} = FieldStyle{DS}()
 FieldStyle(x::Base.Broadcast.Unknown) = x
 
-FieldLevelStyle(::Type{S}) where {DS, S <: FieldStyle{DS}} =
-    FieldStyle{DataLayouts.DataLevelStyle(DS)}
-FieldColumnStyle(::Type{S}) where {DS, S <: FieldStyle{DS}} =
-    FieldStyle{DataLayouts.DataColumnStyle(DS)}
-FieldSlabStyle(::Type{S}) where {DS, S <: FieldStyle{DS}} =
-    FieldStyle{DataLayouts.DataSlabStyle(DS)}
+# Slicing a DataLayout preserves its layout_type and number of dimensions, so
+# slicing a broadcast expression does not change its style.
+FieldLevelStyle(::Type{S}) where {S <: FieldStyle} = S
+FieldColumnStyle(::Type{S}) where {S <: FieldStyle} = S
+FieldSlabStyle(::Type{S}) where {S <: FieldStyle} = S
 
 Base.Broadcast.BroadcastStyle(::Type{Field{V, S}}) where {V, S} =
     FieldStyle(Base.Broadcast.BroadcastStyle(V))
@@ -89,7 +88,7 @@ Base.similar(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
 
 Base.copy(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
-    copyto!(similar(bc), bc, Spaces.get_mask(axes(bc)))
+    copyto!(similar(bc), bc; mask = Spaces.get_mask(axes(bc)))
 
 Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{Style},
@@ -156,20 +155,25 @@ Base.similar(
 Base.similar(
     bc::Base.Broadcast.Broadcasted{<:FieldStyle},
     ::Type{Eltype},
-) where {Eltype} = Field(similar(todata(bc), Eltype), axes(bc))
+) where {Eltype} =
+    Field(level_data(axes(bc), similar(todata(bc), Eltype)), axes(bc))
 
 @inline function Base.copyto!(
     dest::Field,
-    bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle},
+    bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle};
     mask = get_mask(axes(dest)),
 )
     copyto!(field_values(dest), Base.Broadcast.instantiate(todata(bc)); mask)
     return dest
 end
 
-# Fused multi-broadcast entry point for Fields
+# Fused multi-broadcast entry point for Fields. The mask argument must be
+# constrained to DataMask because an unconstrained second argument makes this
+# ambiguous with copyto! methods that only constrain their second arguments,
+# like the ones for Lmul and Rmul in ArrayLayouts.
 function Base.copyto!(
-    fmbc::FusedMultiBroadcast{T},
+    fmbc::FusedMultiBroadcast{T};
+    mask::DataLayouts.DataMask = get_mask(axes(first(fmbc.pairs).first)),
 ) where {N, T <: NTuple{N, Pair{<:Field, <:Any}}}
     fmb_data = FusedMultiBroadcast(
         map(fmbc.pairs) do pair
@@ -178,7 +182,7 @@ function Base.copyto!(
         end,
     )
     check_mismatched_spaces(fmbc)
-    Base.copyto!(fmb_data) # forward to DataLayouts
+    Base.copyto!(fmb_data; mask)
 end
 
 @inline check_mismatched_spaces(fmbc::FusedMultiBroadcast) =
@@ -407,13 +411,6 @@ end
 
 function Base.copyto!(field::Field, nt::NamedTuple)
     mask = get_mask(axes(field))
-    copyto!(
-        field,
-        Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}}(
-            identity,
-            (nt,),
-            axes(field),
-        );
-        mask,
-    )
+    fill!(field_values(field), nt; mask)
+    return field
 end

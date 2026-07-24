@@ -12,17 +12,17 @@ function testable_layouts(A, T)
     layouts = (
         DataLayouts.DataF{T}(A),
         DataLayouts.VIJFH{T, Nv, Nij, Nij, 1}(A),
-        DataLayouts.VIJFH{T, Nv, Nij, Nij, missing}(A, Nh),
+        DataLayouts.VIJFH{T, Nv, Nij, Nij, nothing}(A, Nh),
         DataLayouts.VIJHF{T, Nv, Nij, Nij, 1}(A),
-        DataLayouts.VIJHF{T, Nv, Nij, Nij, missing}(A, Nh),
+        DataLayouts.VIJHF{T, Nv, Nij, Nij, nothing}(A, Nh),
     )
     if sizeof(T) == sizeof(eltype(A))
         layouts = (
             layouts...,
             DataLayouts.VIH1{T, Nv, Nij, 1}(A),
-            DataLayouts.VIH1{T, Nv, Nij, missing}(A, Nh),
+            DataLayouts.VIH1{T, Nv, Nij, nothing}(A, Nh),
             DataLayouts.IH1JH2{T, Nij, Nij, 1}(A),
-            DataLayouts.IH1JH2{T, Nij, Nij, missing}(A, Nh),
+            DataLayouts.IH1JH2{T, Nij, Nij, nothing}(A, Nh),
         )
     end
     return Iterators.flatmap(layouts) do data
@@ -34,13 +34,26 @@ function testable_layouts(A, T)
     end
 end
 
+# Compare a filled layout against the value at the first point of another
+# layout, using copies on the CPU (reading device data directly would require
+# scalar indexing of GPU arrays) and single-point views at every index (the
+# parent of a single-point view is a vector of the point's array entries, which
+# cannot be broadcast against the multidimensional parent of the full layout).
+function test_filled_with_first_point(to_data, data, rand_data)
+    cpu_data = DataLayouts.rebuild(data, Array)
+    cpu_first_point = to_data(parent(view(DataLayouts.rebuild(rand_data, Array), 1)))
+    return all(eachindex(cpu_data)) do index
+        to_data(parent(view(cpu_data, index))) == cpu_first_point
+    end
+end
+
 function test_single_F!(data)
     rand_data = similar(data)
     Random.rand!(parent(rand_data))
     to_data(array) = DataLayouts.bitcast_struct.(eltype(data), array)
 
-    Base.fill!(data, first(rand_data))
-    @test all(to_data(parent(data)) .== to_data(parent(view(rand_data, 1))))
+    Base.fill!(data, first(DataLayouts.rebuild(rand_data, Array)))
+    @test test_filled_with_first_point(to_data, data, rand_data)
 
     Base.copyto!(data, rand_data)
     @test all(to_data(parent(data)) .== to_data(parent(rand_data)))
@@ -54,9 +67,9 @@ function test_multiple_F!(data)
     Random.rand!(parent(rand_data))
     to_data(array) = DataLayouts.bitcast_struct.(eltype(data.:1), array)
 
-    Base.fill!(data, first(rand_data))
-    @test all(to_data(parent(data.:1)) .== to_data(parent(view(rand_data.:1, 1))))
-    @test all(parent(data.:2) .== parent(view(rand_data.:2, 1)))
+    Base.fill!(data, first(DataLayouts.rebuild(rand_data, Array)))
+    @test test_filled_with_first_point(to_data, data.:1, rand_data.:1)
+    @test test_filled_with_first_point(identity, data.:2, rand_data.:2)
     # We do not need to convert the second component, since it has no padding.
 
     Base.copyto!(data, rand_data)
@@ -90,6 +103,15 @@ end
     @testset "Nf = 3 (nonuniform)" begin
         for data in testable_layouts(A, Tuple{Tuple{Int32, UInt8}, UInt128})
             test_multiple_F!(data)
+        end
+    end
+    @testset "scalar broadcasts of impure functions" begin
+        # Functions like rand must be evaluated at every point, so only flat
+        # identity broadcasts can be replaced with a single call to fill!.
+        for data in testable_layouts(A, Float64)
+            length(data) > 1 || continue
+            data .= rand.()
+            @test length(unique(Array(parent(data)))) > 1
         end
     end
 end
