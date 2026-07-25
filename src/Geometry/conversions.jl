@@ -47,6 +47,26 @@ dropped component is nonzero.
 @inline transform(b::Components{BT}, v::AbstractTensor, lg::LocalGeometry) where {BT} =
     transform(b, _to_components_type(BT(), v, lg))
 
+# Fast, exact path for the vertical physical→contravariant projection that the
+# vertical finite-difference operators (e.g. `divᵥ` on a `WVector`) rely on.
+# The generic path computes `lg.∂ξ∂x * v`, materializing the full 3×3 inverse
+# `∂ξ∂x = inv(∂x∂ξ)`, even though only its (3,3) entry survives: for a purely
+# vertical orthonormal vector `v = (0, 0, w)`, `(∂ξ∂x · v)₃ = ∂ξ∂x[3,3]·w`.
+# We compute that single entry as `minor(3,3)/det`, avoiding the other eight
+# cofactors of the inverse. This is exact for *every* geometry — including
+# terrain-following, where the horizontal–vertical coupling enters through the
+# determinant — so it needs no geometry guard (`1/∂x∂ξ[3,3]` would only be valid
+# for an orthogonal vertical and is deliberately not used).
+@inline function project(
+    ::Components{Contravariant, (3,)},
+    v::Tensor{1, FT, <:Tuple{Components{Orthonormal, (3,)}}},
+    lg::LocalGeometry,
+) where {FT}
+    M = parent(getfield(lg, :∂x∂ξ))
+    ∂ξ∂x_33 = (M[1, 1] * M[2, 2] - M[1, 2] * M[2, 1]) / det(M)
+    return Contravariant3Vector(∂ξ∂x_33 * parent(v)[1])
+end
+
 ## Vector type constructors with LocalGeometry
 
 # Standard same-dimension conversions: forward to the private `_to_components_type`.

@@ -4,6 +4,14 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- Speed up the vertical physical→contravariant projection used by the vertical
+  finite-difference operators (e.g. `divᵥ` of a `WVector`). Projecting a
+  `WVector` onto the `Contravariant3Axis` now computes only the single required
+  metric entry `∂ξ∂x[3,3]` (as `minor(3,3)/det`) instead of materializing the
+  full 3×3 inverse `inv(∂x∂ξ)`. This is exact for every geometry, including
+  terrain-following, and reduces register pressure / runtime of vertical
+  divergence kernels.
+
 v0.14.55
 -------
 
