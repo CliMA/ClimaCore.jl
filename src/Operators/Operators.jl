@@ -26,5 +26,6 @@ include("finitedifference.jl")
 include("remapping.jl")
 include("integrals.jl")
 include("columnwise.jl")
+include("column_convolve.jl")
 
 end # module
