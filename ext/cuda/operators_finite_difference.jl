@@ -49,15 +49,15 @@ function Base.copyto!(
         # 108 is the number of SMs in an A100. TODO: get this value from CUDA.jl to better optimize for different GPUs
         threads_dim_y = n_columns > 256 * 108 ? div(256, n_face_levels) : 1
         block_dim_x = div(n_columns, threads_dim_y, RoundUp)
-        cart_inds = if mask isa NoMask
-            CartesianIndices(map(Base.OneTo, (Ni, Nj, Nh)))
-        else
-            nothing
-        end
+        # `us` (a `UniversalSize`) encodes `Nij` in its type, so the kernel
+        # decomposes the linear column index into `(i, j, h)` using a
+        # `CartesianIndices` whose horizontal extents are compile-time
+        # constants. This keeps the per-thread `divrem` a cheap fixed-divisor
+        # operation
         args = (
             strip_space(out, space),
             strip_space(bc, space),
-            cart_inds,
+            us,
             mask,
             axes(out),
         )

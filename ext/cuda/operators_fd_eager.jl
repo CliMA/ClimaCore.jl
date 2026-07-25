@@ -48,13 +48,18 @@ expression at the given index, and then copies the result into `out`.
 Base.@propagate_inbounds function eager_copyto_stencil_kernel!(
     out,
     bc::BC,
-    cart_inds,
+    us,
     mask,
     space,
 ) where {BC}
     v = threadIdx().x
     col_idx = threadIdx().y + (blockIdx().x - 1) * blockDim().y
     (i, j, h) = if mask isa NoMask
+        # `Nij` comes from the type of `us`, so it is a compile-time constant and
+        # the `CartesianIndices` decomposition below uses a fixed-divisor `divrem`.
+        Nij = ClimaCore.DataLayouts.get_Nij(us)
+        Nh = ClimaCore.DataLayouts.get_Nh(us)
+        cart_inds = CartesianIndices((Nij, Nij, Nh))
         col_idx > length(cart_inds) && return nothing
         @inbounds cart_inds[col_idx].I
     else
