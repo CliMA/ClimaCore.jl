@@ -4,6 +4,18 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- Unify strong/weak spectral element operator variants via a `FormType`
+  parameter. `Divergence`, `Gradient`, and `Curl` now carry a second type
+  parameter (`StrongForm` or `WeakForm`), and `WeakDivergence`, `WeakGradient`,
+  and `WeakCurl` are backwards-compatibility aliases for the `WeakForm`
+  variants (e.g. `WeakDivergence{I} = Divergence{I, WeakForm}`), collected in
+  `src/Operators/deprecated.jl` for eventual removal. All constructors and
+  public names are unchanged, and results are bitwise identical to the previous
+  implementations. One behavioral note: `isa` checks against the strong
+  operator types now also match the weak variants (e.g.
+  `WeakDivergence() isa Divergence` is `true`); dispatch that must distinguish
+  forms should use the `FormType` parameter (e.g. `Divergence{I, StrongForm}`).
+
 - Refactor DataLayouts module [2522](https://github.com/CliMA/ClimaCore.jl/pull/2522)
   - All data layout types are unified into a single `DataLayout` type, and all
     loops over data go through two communication primitives (`foreach_slice` and
