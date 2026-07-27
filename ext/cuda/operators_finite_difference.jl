@@ -33,6 +33,11 @@ function Base.copyto!(
 
     fspace = Spaces.face_space(space)
     n_face_levels = Spaces.nlevels(fspace)
+    # https://github.com/JuliaGPU/CUDA.jl/issues/2672
+    max_shmem = CUDA.attribute(
+        device(),
+        CUDA.DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK,
+    )
 
     (_, Ni, Nj, Nh) = size(out_fv)
     # This uses block and grid indices instead of computing cartesian indices from a
@@ -43,12 +48,27 @@ function Base.copyto!(
     # threads in a block is between 32 and 256 to avoid underutilization of the GPU and
     # errors due to too many registers used when the block size is too large.
     # TODO: auto reduce max reg usage when needed because of high res columns
-    if !Topologies.isperiodic(space) && n_face_levels ≤ 256
+    # Size the dynamic shared memory to fit the largest single expression result in
+    # the broadcasted tree (see `max_eager_shmem_per_thread`). If even that does not
+    # fit in the device's per-block shared memory, there is no way to eagerly evaluate
+    # the expression, so error out instead of silently falling back.
+    eager_shmem_per_thread = max_eager_shmem_per_thread(bc)
+    if !Topologies.isperiodic(space)
         #    32 <= n_face_levels * Ni <= 256
         n_columns = mask isa NoMask ? Ni * Nj * Nh : mask.N[1]
         # 108 is the number of SMs in an A100. TODO: get this value from CUDA.jl to better optimize for different GPUs
         threads_dim_y = n_columns > 256 * 108 ? div(256, n_face_levels) : 1
         block_dim_x = div(n_columns, threads_dim_y, RoundUp)
+        eager_shmem = n_face_levels * threads_dim_y * eager_shmem_per_thread
+        eager_shmem ≤ max_shmem || error(
+            "The intermediate results of this broadcasted expression are too \
+             large to fit in GPU shared memory: evaluating it eagerly needs \
+             $(eager_shmem_per_thread) bytes per thread ($(eager_shmem) bytes \
+             per block of $(n_face_levels * threads_dim_y) threads), but the \
+             device only provides $(max_shmem) bytes of shared memory per block. \
+             Split the expression into smaller sub-expressions so that each \
+             intermediate matrix/vector result is smaller.",
+        )
         # `us` (a `UniversalSize`) encodes `Nij` in its type, so the kernel
         # decomposes the linear column index into `(i, j, h)` using a
         # `CartesianIndices` whose horizontal extents are compile-time
@@ -68,7 +88,7 @@ function Base.copyto!(
             threads_s = (n_face_levels, threads_dim_y, 1),
             blocks_s = (block_dim_x, 1, 1),
             always_inline = true,
-            shmem = n_face_levels * threads_dim_y * 9 * 4, # see `check_if_fits_in_shmem` for how this is calculated
+            shmem = eager_shmem,
         )
         return out
     end
