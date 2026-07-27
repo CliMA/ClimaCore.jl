@@ -48,6 +48,8 @@ DataLayouts.num_partitions
 DataLayouts.thread_rank
 DataLayouts.partition_rank
 DataLayouts.parallelize_over
+DataLayouts.resolved_scope
+DataLayouts.release_resolved_scope
 DataLayouts.synchronize
 DataLayouts.scoped_array
 DataLayouts.scoped_static_array

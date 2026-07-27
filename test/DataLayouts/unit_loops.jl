@@ -15,7 +15,7 @@ device_array(device, array) = ClimaComms.array_type(device)(array)
 # which makes comparisons insensitive to how threads partition the data.
 function test_data(device, ::Type{T}, Nf, Nv) where {T}
     (Ni, Nj, Nh) = (4, 4, 5)
-    array = device_array(device, Float64.(rand(1:(2^20), Nv, Ni, Nj, Nf, Nh)))
+    array = device_array(device, Float64.(rand(1:(2 ^ 20), Nv, Ni, Nj, Nf, Nh)))
     return DataLayouts.VIJFH{T, Nv, Ni, Nj, nothing}(array)
 end
 
@@ -174,4 +174,74 @@ end
         @test arg.unit == modified_arg.unit
     end
     @test data.unit != test_data(device, T, 1, 11).unit
+end
+
+@testset "thread pool resolution and sharing" begin
+    device = ClimaComms.device()
+    if device isa ClimaComms.AbstractCPUDevice
+        data = test_data(device, Float64, 1, 64)
+        total = sum(Array(parent(data)))
+        pool_accounting_drained() =
+            DataLayouts.POOL_THREADS_IN_USE[] == 0 &&
+            DataLayouts.PENDING_POOL_LOOPS[] == 0
+
+        # Loops nested in an external threaded loop use one thread each, but they
+        # must still cover every point of their arguments.
+        external_loop_sums = zeros(Threads.nthreads())
+        Threads.@threads for i in eachindex(external_loop_sums)
+            external_loop_sums[i] = sum(identity, data)
+        end
+        @test all(==(total), external_loop_sums)
+        @test pool_accounting_drained()
+
+        # Concurrent loops that divide the pool between them must each compute a
+        # complete result, and small reductions must not disturb the division.
+        point = DataLayouts.DataF{Float64}(device_array(device, rand(1)))
+        concurrent_results = map(Base.OneTo(4)) do _
+            Threads.@spawn begin
+                is_correct = true
+                for _ in Base.OneTo(50)
+                    is_correct &= sum(identity, data) == total
+                    is_correct &= parent(data .+ data) == 2 .* Array(parent(data))
+                    is_correct &= sum(identity, point) == Array(parent(point))[]
+                end
+                is_correct
+            end
+        end
+        @test all(fetch, concurrent_results)
+        @test pool_accounting_drained()
+
+        # Loops launched from tasks outside the default pool must also be complete.
+        interactive_task = Threads.@spawn :interactive sum(identity, data)
+        @test fetch(interactive_task) == total
+        @test pool_accounting_drained()
+
+        # Explicit-scope loops must cover every point without scope resolution.
+        dest = test_data(device, Float64, 1, 64)
+        fill!(parent(dest), 0)
+        copy_point!(d, a) = (@inbounds d[] = a[])
+        DataLayouts.foreach_slice(
+            DataLayouts.ThisThreadPool(),
+            view,
+            copy_point!,
+            dest,
+            data,
+        )
+        @test parent(dest) == parent(data)
+        @test DataLayouts.reduce_points(DataLayouts.ThisThreadPool(), +, data) == total
+        @test pool_accounting_drained()
+
+        # An error thrown from inside a loop must not leak the loop's thread claim.
+        @test_throws Exception DataLayouts.foreach_point(_ -> error("!"), data)
+        @test pool_accounting_drained()
+
+        # Loops over the pool cannot be nested inside its own worker threads.
+        if Threads.threadpoolsize(:default) > 1
+            @test_throws CompositeException DataLayouts.foreach_point(
+                _ -> sum(identity, data),
+                data,
+            )
+            @test pool_accounting_drained()
+        end
+    end
 end

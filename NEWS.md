@@ -14,6 +14,21 @@ main
     fields. Code that indexes into `parent(field)` arrays must be updated.
   - Several old names (`AbstractData`, `IJFH`, `IJHF`) are available as aliases,
     and `[i, j, f, v, h]` indexing is still allowed for backward compatibility.
+- ![][badge-🐛bugfix] Fixed multithreaded CPU loops over `ThisThreadPool` reading
+  Julia's process-global threaded-region flag more than once per loop. A task that
+  concurrently entered a threaded loop could flip the flag in between two of those
+  reads, which either raised a spurious `"Nested loops over ThisThreadPool are not
+  supported"` error or left `num_threads` and `thread_rank` disagreeing about how a
+  loop's indices were divided among threads. Loops now resolve their scope once, up
+  front, with `resolved_scope`, and a thread's rank comes from task-local storage
+  rather than from global state.
+  [2557](https://github.com/CliMA/ClimaCore.jl/pull/2557)
+- ![][badge-🚀performance] Divided the CPU thread pool between multithreaded loops
+  that run at the same time, instead of giving every thread to whichever loop starts
+  first and leaving the rest to run on a single thread each. Broadcasting over
+  `Field`s from several tasks at once, as `ThreadsX.mapreduce` does, is about 2.6x
+  faster with two concurrent tasks on 8 threads, and no slower with one.
+  [2557](https://github.com/CliMA/ClimaCore.jl/pull/2557)
 
 v0.14.55
 -------

@@ -75,11 +75,37 @@ argument. A [`DataMask`](@ref), which by default is set to [`NoMask`](@ref), may
 also be used to skip over a particular subset of slices.
 """
 @inline foreach_slice(op::O, f::F, args...; mask = NoMask()) where {O, F} =
-    foreach_slice(DataScope(args...), op, f, args...; mask)
+    foreach_resolved_slice(DataScope(args...), op, f, args...; mask)
+
+# Scopes that are already resolved can be looped over directly. A thread pool has to be
+# resolved first, and it has to be given back afterward, whether or not the loop was given
+# any of its threads.
+@inline foreach_resolved_slice(scope, op::O, f::F, args...; mask) where {O, F} =
+    foreach_slice(scope, op, f, args...; mask)
+@inline function foreach_resolved_slice(
+    pool::ThisThreadPool,
+    op::O,
+    f::F,
+    args...;
+    mask,
+) where {O, F}
+    scope = resolved_scope(pool)
+    try
+        return foreach_slice(scope, op, f, args...; mask)
+    finally
+        release_resolved_scope()
+    end
+end
 
 # Change the scope to ThisThread when given only one thread, which compiles the
 # simplest possible loop.
-@inline foreach_slice(scope::DataScope, op::O, f::F, args...; mask) where {O, F} =
+@inline foreach_slice(
+    scope::DataScope,
+    op::O,
+    f::F,
+    args...;
+    mask = NoMask(),
+) where {O, F} =
     isone(num_threads(scope)) ? foreach_slice(ThisThread(), op, f, args...; mask) :
     parallelize_over(() -> slice_loop(scope, op, f, mask, args...), scope)
 
@@ -88,7 +114,7 @@ also be used to skip over a particular subset of slices.
 # statically. This avoids both the runtime thread-count check and the
 # parallelize_over closure, which the compiler does not always remove, causing
 # an allocation at every slice of the outer loop.
-@inline foreach_slice(::ThisThread, op::O, f::F, args...; mask) where {O, F} =
+@inline foreach_slice(::ThisThread, op::O, f::F, args...; mask = NoMask()) where {O, F} =
     slice_loop(ThisThread(), op, f, mask, args...)
 
 # Point loops need @simd and an inlined call to f for vectorization, since LLVM
@@ -145,7 +171,32 @@ disables every point, or if there are no points in `arg` to begin with, the
 `init` value must be specified.
 """
 @inline reduce_points(op::O, arg; mask = NoMask(), init...) where {O} =
-    reduce_points(DataScope(arg), op, arg; mask, init...)
+    reduce_resolved_points(DataScope(arg), op, arg; mask, init...)
+
+@inline reduce_resolved_points(scope, op::O, arg; kwargs...) where {O} =
+    reduce_points(scope, op, arg; kwargs...)
+@inline function reduce_resolved_points(
+    pool::ThisThreadPool,
+    op::O,
+    arg;
+    kwargs...,
+) where {O}
+    # Reduce small arguments on this thread, without resolving the pool, so that
+    # reductions over a handful of points do not need to claim any threads.
+    length(arg) <= default_pool_size() &&
+        return reduce_points(ThisThread(), op, reassign(arg, ThisThread()); kwargs...)
+    scope = resolved_scope(pool)
+    try
+        # When the pool resolves to a single thread, the argument must be reassigned to
+        # that thread, since reduce_points only covers the current thread's share of the
+        # argument's scope (which is how each thread of a parallel loop gets its share).
+        return scope == ThisThread() ?
+               reduce_points(ThisThread(), op, reassign(arg, ThisThread()); kwargs...) :
+               reduce_points(scope, op, arg; kwargs...)
+    finally
+        release_resolved_scope()
+    end
+end
 
 # Change the scope to ThisThread when given only one thread or a small argument.
 # Otherwise, reduce each thread's values, then reduce the results in one thread.
@@ -167,7 +218,7 @@ end
 # whose string cannot be compiled in GPU kernels. Masked reductions require an
 # init, and mapreduce's empty path is only reached without one. Masked indices
 # are equivalent to what the slice index machinery uses for single-point views.
-@inline reduce_points(::ThisThread, op::O, arg; mask, init...) where {O} =
+@inline reduce_points(::ThisThread, op::O, arg; mask = NoMask(), init...) where {O} =
     if mask == NoMask()
         indices = @inbounds subscope_indices(ThisThread(), DataScope(arg), eachindex(arg))
         safe_mapreduce(index -> (@inbounds arg[index]), op, indices; init...)
