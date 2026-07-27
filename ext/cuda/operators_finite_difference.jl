@@ -33,6 +33,7 @@ function Base.copyto!(
 
     fspace = Spaces.face_space(space)
     n_face_levels = Spaces.nlevels(fspace)
+    high_resolution = !(n_face_levels ≤ 256)
     # https://github.com/JuliaGPU/CUDA.jl/issues/2672
     max_shmem = CUDA.attribute(
         device(),
@@ -42,7 +43,9 @@ function Base.copyto!(
     (_, Ni, Nj, Nh) = size(out_fv)
     # This uses block and grid indices instead of computing cartesian indices from a
     # linear index. The launch configuration is optimized for common use case of 64 face
-    # levels and Ni = Nj = 4. Periodic toppologies and masks are not currently supported
+    # levels and Ni = Nj = 4. Both periodic and non-periodic vertical topologies are
+    # supported (`has_padding_thread` accounts for the extra face level of non-periodic
+    # spaces); high-resolution columns fall through to `copyto_stencil_kernel!` below.
     # `eager_copyto_stencil_kernel!` requires a  block size of (n_face_levels, Ni, 1)
     # this block config is better for VIJFH. It is only used when the total number of
     # threads in a block is between 32 and 256 to avoid underutilization of the GPU and
@@ -53,7 +56,7 @@ function Base.copyto!(
     # fit in the device's per-block shared memory, there is no way to eagerly evaluate
     # the expression, so error out instead of silently falling back.
     eager_shmem_per_thread = max_eager_shmem_per_thread(bc)
-    if !Topologies.isperiodic(space)
+    if !high_resolution
         #    32 <= n_face_levels * Ni <= 256
         n_columns = mask isa NoMask ? Ni * Nj * Nh : mask.N[1]
         # 108 is the number of SMs in an A100. TODO: get this value from CUDA.jl to better optimize for different GPUs

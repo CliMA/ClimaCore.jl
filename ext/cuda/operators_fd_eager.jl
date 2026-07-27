@@ -53,6 +53,21 @@ _max_eager_shmem_over_args(args::Tuple) = max(
 ClimaCore.Utilities.unsafe_eltype(::CUDA.CuRefType{T}) where {T} = T
 
 """
+    has_padding_thread(space)
+
+The eager kernel launches one thread per face level. For a non-periodic center-output
+space there is one fewer center level than face level, so the last x-thread
+(`v == blockDim().x`) does not map to a valid output level and must be skipped. For face
+output, or for periodic spaces (where the center and face level counts are equal), every
+thread maps to a valid level and none must be skipped.
+
+Both the staggering and `isperiodic` are encoded in the space type, so this is a
+compile-time constant.
+"""
+@inline has_padding_thread(space) =
+    space.staggering isa Spaces.CellCenter && !Topologies.isperiodic(space)
+
+"""
     eager_copyto_stencil_kernel!(out, bc::BC, space)
 
 CUDA kernel to compute the value of a `Broadcasted` or `StencilBroadcasted` at a single index.
@@ -88,10 +103,8 @@ Base.@propagate_inbounds function eager_copyto_stencil_kernel!(
     val = @inbounds @inline calc_level_val(bc, hidx, space)
     if space.staggering isa ClimaCore.Grids.CellFace
         @inbounds @inline setidx!(space, out, v - half, hidx, val)
-    else
-        if v != CUDA.blockDim().x
-            @inbounds @inline setidx!(space, out, v, hidx, val)
-        end
+    elseif !(has_padding_thread(space) && v == CUDA.blockDim().x)
+        @inbounds @inline setidx!(space, out, v, hidx, val)
     end
     return nothing
 end
@@ -169,6 +182,9 @@ Base.@propagate_inbounds function calc_level_val(
     # result of every multiplication is guaranteed to fit and can always be cached.
     v = threadIdx().x
     block_col_idx = threadIdx().y
+    # Whether the vertical topology is periodic. `row_mul_*!` uses this (a compile-time
+    # constant) to wrap operand reads at the column ends instead of zero-padding them.
+    periodic = Topologies.isperiodic(space)
     mat1_space = reconstruct_placeholder_space(axes(bc.args[1i32]), space)
     mat2_space = reconstruct_placeholder_space(axes(bc.args[2i32]), space)
 
@@ -188,8 +204,8 @@ Base.@propagate_inbounds function calc_level_val(
     )
     @inbounds mat2[v + (block_col_idx - 1) * CUDA.blockDim().x] = mat2_row_converted
     CUDA.sync_threads()
-    # if the output is on centers, the CUDA.blockDim().xth thread can just return 0
-    mat1_space.staggering isa Spaces.CellCenter && v == CUDA.blockDim().x &&
+    # if the output is on centers, the padding CUDA.blockDim().xth thread can just return 0
+    has_padding_thread(mat1_space) && v == CUDA.blockDim().x &&
         return new(eltype(bc))
     if mat1_space.staggering isa Spaces.CellCenter
         mat1_shape =
@@ -218,12 +234,13 @@ Base.@propagate_inbounds function calc_level_val(
             mat2,
             mat1_shape,
             mat2_shape,
+            periodic,
         )
         out isa eltype(bc) || return convert(eltype(bc), out)
         return out
     else
         # mat * vec case
-        out = @inbounds @inline row_mul_vec!(eltype(bc), mat1_row, mat2, mat1_shape)
+        out = @inbounds @inline row_mul_vec!(eltype(bc), mat1_row, mat2, mat1_shape, periodic)
         out isa eltype(bc) || return convert(eltype(bc), out)
         return out
     end
@@ -315,7 +332,7 @@ Base.@propagate_inbounds function calc_level_val(
     space,
 ) where {BC <: StencilBroadcasted}
     v = threadIdx().x
-    if space.staggering isa Spaces.CellCenter
+    if has_padding_thread(space)
         v == CUDA.blockDim().x && return @inline @inbounds new(eltype(bc))
     end
     li = space.staggering isa Spaces.CellCenter ? 1i32 : half
@@ -339,7 +356,7 @@ Base.@propagate_inbounds function calc_level_val(
     (i, j, h) = hidx
     if space isa
        Union{Spaces.ExtrudedFiniteDifferenceSpace, Spaces.FiniteDifferenceSpace} &&
-       space.staggering isa Spaces.CellCenter
+       has_padding_thread(space)
         v == CUDA.blockDim().x && return @inline @inbounds new(eltype(data))
     end
     return @inline @inbounds data[v, i, j, h]
@@ -377,7 +394,7 @@ Base.@propagate_inbounds function get_op_row(op, args, hidx, space)
 
     outputs_to_face = space.staggering isa ClimaCore.Grids.CellFace
     row_type = @inbounds @inline op_matrix_row_type(op, FT, args[1:(end - 1)]...)
-    if !outputs_to_face && v == CUDA.blockDim().x
+    if has_padding_thread(space) && v == CUDA.blockDim().x
         return new(row_type)
     end
     v_half = outputs_to_face ? v - half : v
@@ -434,7 +451,7 @@ Base.@propagate_inbounds function project_row2_for_mul(mat1_row, mat2_row, hidx,
     v = threadIdx().x
     project_onto =
         ClimaCore.Geometry.recursively_find_dual_axes_for_projection(mat1_et)
-    if space.staggering isa Spaces.CellCenter && v == CUDA.blockDim().x
+    if has_padding_thread(space) && v == CUDA.blockDim().x
         lg = new(Spaces.local_geometry_type(typeof(space)))
     else
         v_maybe_half = space.staggering isa Spaces.CellFace ? v - half : v
