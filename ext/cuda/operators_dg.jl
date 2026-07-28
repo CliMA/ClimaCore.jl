@@ -198,7 +198,7 @@ function dg_face_flux_kernel!(
 ) where {F, Nq}
     gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
     if gidx ≤ Nq * Nv * nfaces
-        (q, v, f) = cart_ind((Nq, Nv, nfaces), gidx).I
+        (q, v, f) = Utilities.cart_ind((Nq, Nv, nfaces), gidx).I
         elem⁻ = Int(faces[1, f])
         face⁻ = Int(faces[2, f])
         elem⁺ = Int(faces[3, f])
@@ -249,7 +249,7 @@ function dg_face_gather_kernel!(
 )
     gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
     if gidx ≤ nbnodes * Nv
-        (v, n) = cart_ind((Nv, nbnodes), gidx).I
+        (v, n) = Utilities.cart_ind((Nv, nbnodes), gidx).I
         e = Int(node_elem[n])
         i = Int(node_i[n])
         j = Int(node_j[n])
