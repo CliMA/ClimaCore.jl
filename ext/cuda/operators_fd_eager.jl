@@ -86,9 +86,10 @@ Base.@propagate_inbounds function eager_copyto_stencil_kernel!(
     (i, j, h) = if mask isa NoMask
         # `Nij` comes from the type of `us`, so it is a compile-time constant and
         # the `CartesianIndices` decomposition below uses a fixed-divisor `divrem`.
-        Nij = ClimaCore.DataLayouts.get_Nij(us)
+        Nj = ClimaCore.DataLayouts.get_Nj(us)
+        Ni = ClimaCore.DataLayouts.get_Ni(us)
         Nh = ClimaCore.DataLayouts.get_Nh(us)
-        cart_inds = CartesianIndices((Nij, Nij, Nh))
+        cart_inds = CartesianIndices((Ni, Nj, Nh))
         col_idx > length(cart_inds) && return nothing
         @inbounds cart_inds[col_idx].I
     else
