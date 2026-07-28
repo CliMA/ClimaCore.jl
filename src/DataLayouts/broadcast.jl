@@ -157,7 +157,7 @@ Replaces each of the [`layout_args`](@ref) in a broadcast expression with
         Base.@_propagate_inbounds_meta
         arg isa MaybeLazyDataLayout ? f(arg, f_args...) : arg
     end
-    return Broadcast.broadcasted(bc.f, modified_args...)
+    return Broadcast.Broadcasted(bc.style, bc.f, modified_args)
 end
 @propagate_inbounds function modify_args(f::F, bc::FusedMultiBroadcast, f_args...) where {F}
     modified_pairs = unrolled_map_with_inbounds(bc.pairs) do (dest, bc)
