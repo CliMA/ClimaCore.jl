@@ -126,20 +126,6 @@ of this instruction is not necessarily parallelized over all available threads.
 parallelize_over(f::F, _) where {F} = f()
 
 """
-    resolved_scope(scope)
-
-[`DataScope`](@ref) that will run a loop over `scope`. This is smaller than `scope` when
-`scope` cannot be parallelized over at the moment, such as when a CPU thread pool is
-already running a loop launched somewhere else.
-
-Loops must resolve their scope before reading [`num_threads`](@ref) or
-[`thread_rank`](@ref), and must then use the resolved scope everywhere, so that the number
-of threads used to divide up a loop's indices cannot change while the loop is running. By
-default, every scope is already resolved.
-"""
-resolved_scope(scope) = scope
-
-"""
     synchronize(scope)
 
 Synchronizes all threads in a [`DataScope`](@ref), so that no thread can begin
@@ -150,13 +136,39 @@ synchronize(scope) =
     isone(num_threads(scope)) || throw(ArgumentError(invalid_sync_string(scope)))
 @generated invalid_sync_string(scope) = "Cannot synchronize all threads in $scope"
 
+# View of a per-task buffer that holds each thread or block's result during a reduction.
+# Allocating a new array for every reduction is slower than the reduction itself, so one
+# buffer per array and element type is kept for the lifetime of the task that reduces.
+# The buffer only ever grows, and reductions on a task run one after another, so no two
+# live views of it overlap.
+function task_reduction_buffer(::Type{A}, required_length::Int) where {A}
+    storage = current_task().storage
+    stored_buffers =
+        isnothing(storage) ? nothing :
+        get(storage::IdDict{Any, Any}, :climacore_reduction_buffers, nothing)
+    # The type assertion keeps every use of the dictionary below statically dispatched.
+    buffers =
+        isnothing(stored_buffers) ?
+        task_local_storage(:climacore_reduction_buffers, IdDict{Any, Any}()) :
+        stored_buffers::IdDict{Any, Any}
+    buffer = get(buffers, A, nothing)
+    if isnothing(buffer) || length(buffer::A) < required_length
+        # Start at a length that covers the thread and block counts of typical reductions,
+        # so that a buffer is not reallocated every time a larger reduction comes along.
+        buffer = similar(A, max(required_length, 1024))
+        buffers[A] = buffer
+    end
+    return view(buffer::A, Base.OneTo(required_length))
+end
+
 """
-    scoped_array(scope, T, dims)
+    scoped_array(scope, T, dims; [buffer])
 
 Array with the specified element type and size, whose values can be modified by
-every thread in a [`DataScope`](@ref).
+every thread in a [`DataScope`](@ref). When `buffer = true`, a task-local buffer is
+reused instead of allocating a new array.
 """
-scoped_array(scope, ::Type{T}, dims) where {T} =
+scoped_array(scope, ::Type{T}, dims; buffer = false) where {T} =
     throw(ArgumentError(invalid_allocation_string(scope)))
 @generated invalid_allocation_string(scope) = "Cannot allocate array for $scope"
 
@@ -187,7 +199,8 @@ struct ThisThread <: DataScope end
 
 num_threads(::ThisThread) = 1
 thread_rank(::ThisThread) = 1
-scoped_array(::ThisThread, ::Type{T}, dims) where {T} = Array{T}(undef, dims)
+scoped_array(::ThisThread, ::Type{T}, dims; buffer = false) where {T} =
+    buffer ? task_reduction_buffer(Array{T, 1}, dims) : Array{T}(undef, dims)
 scoped_static_array(::ThisThread, ::Type{T}, dims) where {T} =
     StaticArrays.MArray{Tuple{dims...}, T}(undef)
 
@@ -197,7 +210,7 @@ scoped_static_array(::ThisThread, ::Type{T}, dims) where {T} =
 [`DataScope`](@ref) that represents threads from the default thread pool on a CPU.
 
 Loops that run at the same time divide the pool between them, with each loop's
-share of the pool determined by [`resolved_scope`](@ref) when the loop starts. A
+share of the pool determined by [`resolve_pool_threads`](@ref) when it starts. A
 loop that cannot claim more than one thread — because the pool is busy, because
 Julia was started with a single thread, or because the loop is nested in a
 multithreaded loop located outside of ClimaCore — runs on the thread that
@@ -207,15 +220,12 @@ struct ThisThreadPool <: DataScope end
 
 # Threads._nthreads_in_pool is two pointer loads of jl_n_threads_per_pool; the public
 # Threads.threadpoolsize wraps _sym_to_tpid, whose unreachable ArgumentError branch has
-# a runtime dispatch (via repr/sprint) that JET flags on Julia 1.10+. Pool IDs follow
-# _sym_to_tpid (0 = :interactive, 1 = :default); fall back to the public API if the
-# internals change.
+# a runtime dispatch (via repr/sprint) that JET flags on Julia 1.10+. The default pool is
+# pool ID 1 in _sym_to_tpid; fall back to the public API if the internals change.
 @static if isdefined(Threads, :_nthreads_in_pool)
     default_pool_size() = Int(Threads._nthreads_in_pool(Int8(1)))
-    interactive_pool_size() = Int(Threads._nthreads_in_pool(Int8(0)))
 else
     default_pool_size() = Threads.threadpoolsize(:default)
-    interactive_pool_size() = Threads.threadpoolsize(:interactive)
 end
 
 # Threads are launched individually, rather than with Threads.threading_run, because a loop
@@ -282,7 +292,11 @@ const PENDING_POOL_LOOPS = Threads.Atomic{Int}(0)
 # see how many ways the pool still needs to be divided.
 function claim_pool_threads()
     pool_size = default_pool_size()
-    share = max(1, pool_size ÷ (Threads.atomic_add!(PENDING_POOL_LOOPS, 1) + 1))
+    pending = Threads.atomic_add!(PENDING_POOL_LOOPS, 1) + 1
+    # Multithreaded loops cannot be nested in each other, and a pool of one thread has
+    # nothing to divide up.
+    (isone(pool_size) || running_in_threaded_loop()) && return 0
+    share = max(1, pool_size ÷ pending)
     while true
         in_use = POOL_THREADS_IN_USE[]
         n = min(share, pool_size - in_use)
@@ -292,42 +306,52 @@ function claim_pool_threads()
 end
 
 """
-    release_resolved_scope()
+    resolve_pool_threads()
 
-Gives back the threads that [`resolved_scope`](@ref) claimed for the current loop. Every
-loop that resolves a [`ThisThreadPool`](@ref) must call this once it has finished, whether
-or not it was given any threads.
+Number of threads from the default thread pool that the current loop may use, which is 1
+when the loop has to run on the thread that started it. A loop that is given more than one
+thread records the count, so that [`num_threads`](@ref) and [`thread_rank`](@ref) report the
+same division of the loop's indices for as long as it runs.
+
+Every loop that calls this must give its threads back with
+[`release_pool_threads`](@ref) once it has finished.
+
+The count is deliberately not returned as a [`DataScope`](@ref), and
+`jl_in_threaded_region` is only read here, once per loop. A scope whose type is only known
+at run time becomes a union in every call below it, and reading the process-global
+threaded-region flag more than once per loop lets an unrelated task flip it in between,
+either of which would keep pointwise loops from staying allocation free.
 """
-function release_resolved_scope()
+function resolve_pool_threads()
+    pool_thread_info() == (0, 0) ||
+        throw(ArgumentError("Nested loops over ThisThreadPool are not supported"))
+    n = claim_pool_threads()
+    # Only a loop that takes threads from the pool records anything: a loop that runs on the
+    # thread that started it never reads num_threads or thread_rank, and writing to
+    # task-local storage would allocate in every loop that does not need it.
+    iszero(n) || task_local_storage(:climacore_pool_threads, (0, n))
+    return iszero(n) ? 1 : n
+end
+
+"""
+    release_pool_threads()
+
+Gives back the threads that [`resolve_pool_threads`](@ref) claimed for the current loop.
+Every loop that resolves a [`ThisThreadPool`](@ref) must call this once it has finished,
+whether or not it was given any threads.
+"""
+function release_pool_threads()
     n = pool_thread_info()[2]
-    iszero(n) && return nothing
-    task_local_storage(:climacore_pool_threads, (0, 0))
-    n > 0 && Threads.atomic_sub!(POOL_THREADS_IN_USE, n)
+    if n > 1
+        task_local_storage(:climacore_pool_threads, (0, 0))
+        Threads.atomic_sub!(POOL_THREADS_IN_USE, n)
+    end
     Threads.atomic_sub!(PENDING_POOL_LOOPS, 1)
     return nothing
 end
 
-# jl_in_threaded_region is process-global, so it is only read here, once per loop. Reading
-# it more than once per loop lets an unrelated task that concurrently enters a threaded
-# loop flip it in between, which makes num_threads and thread_rank disagree about how the
-# loop's indices were divided among threads.
-@inline function resolved_scope(::ThisThreadPool)
-    # A task that is already launching or running a loop over the pool cannot resolve a
-    # second one: a worker thread cannot launch a nested loop, and a launcher that resolved
-    # again would overwrite the record of its first loop's claim, leaking those threads.
-    pool_thread_info() == (0, 0) ||
-        throw(ArgumentError("Nested loops over ThisThreadPool are not supported"))
-    # Use one thread when there is only one, and when nested in an external threaded loop,
-    # since multithreaded loops cannot be nested in each other.
-    isone(default_pool_size()) && return ThisThread()
-    running_in_threaded_loop() && return ThisThread()
-    n = claim_pool_threads()
-    # A rank of 0 marks the task that launches a loop, and a thread count of -1 marks a
-    # loop that is counted in PENDING_POOL_LOOPS but runs on the task that launched it.
-    task_local_storage(:climacore_pool_threads, (0, iszero(n) ? -1 : n))
-    return iszero(n) ? ThisThread() : ThisThreadPool()
-end
-scoped_array(::ThisThreadPool, ::Type{T}, dims) where {T} = Array{T}(undef, dims)
+scoped_array(::ThisThreadPool, ::Type{T}, dims; buffer = false) where {T} =
+    buffer ? task_reduction_buffer(Array{T, 1}, dims) : Array{T}(undef, dims)
 strided_access(::ThisThreadPool) = false # Always use contiguous ranges on CPUs.
 
 """

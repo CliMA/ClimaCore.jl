@@ -37,7 +37,8 @@ struct ThisHost <: DataLayouts.DataScope end
 
 DataLayouts.num_threads(::ThisHost) = throw(ArgumentError("Cannot get num_threads on host"))
 DataLayouts.thread_rank(::ThisHost) = throw(ArgumentError("Cannot get thread_rank on host"))
-DataLayouts.scoped_array(::ThisHost, ::Type{T}, dims) where {T} =
+DataLayouts.scoped_array(::ThisHost, ::Type{T}, dims; buffer = false) where {T} =
+    buffer ? DataLayouts.task_reduction_buffer(CUDA.CuArray{T, 1}, dims) :
     CUDA.CuArray{T}(undef, dims)
 
 """

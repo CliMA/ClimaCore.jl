@@ -4,6 +4,27 @@ import ClimaCore.DataLayouts
 
 const reported_stats = Dict()
 const kernel_names = IdDict()
+# CUDA.launch_configuration runs an occupancy calculation, which costs far more than the
+# rest of a launch, and its result only depends on the kernel. The blocks and threads are
+# copied into a concrete type of our own, so that the cache stays type stable no matter what
+# CUDA.launch_configuration returns, and so that a lookup does not dynamically dispatch.
+const LaunchConfiguration = @NamedTuple{blocks::Int, threads::Int}
+const OCCUPANCY_CACHE = IdDict{Any, LaunchConfiguration}()
+const OCCUPANCY_CACHE_LOCK = ReentrantLock()
+
+# The cache is only read and written while the lock is held, since an IdDict cannot be read
+# while it is being rehashed. The occupancy calculation runs under the lock as well: it only
+# happens once per kernel, and holding the lock keeps two threads from both running it.
+cached_launch_configuration(fun) =
+    lock(OCCUPANCY_CACHE_LOCK) do
+        get!(OCCUPANCY_CACHE, fun) do
+            config = CUDA.launch_configuration(fun)
+            LaunchConfiguration((
+                Int(config.blocks),
+                Int(config.threads),
+            ))
+        end
+    end::LaunchConfiguration
 
 collect_kernel_stats() = false
 
@@ -172,7 +193,7 @@ function auto_launch!(
             # Note: `name = nothing` here will revert to default behavior
             kernel = CUDA.@cuda name = kernel_name always_inline = true launch =
                 false f!(args...)
-            config = CUDA.launch_configuration(kernel.fun)
+            config = cached_launch_configuration(kernel.fun)
             threads = min(nitems, config.threads)
             blocks = cld(nitems, threads)
             kernel(args...; threads, blocks) # This knows to use always_inline from above.
@@ -189,7 +210,7 @@ function auto_launch!(
         # occursin("single_field_solve_kernel", string(nameof(F!))) || return nothing
         if !haskey(reported_stats, key)
             kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
-            config = CUDA.launch_configuration(kernel.fun)
+            config = cached_launch_configuration(kernel.fun)
             threads = isnothing(nitems) ? nothing : min(nitems, config.threads)
             blocks = isnothing(nitems) ? nothing : cld(nitems, threads)
             # For now, let's just collect info, later we can benchmark
@@ -232,8 +253,54 @@ end
 
 function threads_via_occupancy(f!::F!, args) where {F!}
     kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
-    config = CUDA.launch_configuration(kernel.fun)
+    config = cached_launch_configuration(kernel.fun)
     return config.threads
+end
+
+# Each CUDA.attribute call queries the C driver, which costs more than the rest of a launch
+# configuration put together, so the attributes are only queried once. As in
+# check_device_assumptions, this assumes that every launch from this process targets the
+# same device, which is how ClimaComms assigns devices to processes.
+# The attributes are published through an atomic field, so that a launch on another thread
+# either sees nothing and queries the driver itself, or sees every attribute; an ordinary
+# field would let a reader see the attributes before the values written into them. Two
+# readers can both query before either publishes, which is harmless because they read the
+# same values. The field is untyped because only a pointer-sized field can be atomic, and
+# the type assertion on the value read from it keeps the launch configurations that use the
+# attributes free of the dynamic dispatch that an untyped value would otherwise cause.
+const DeviceAttributes = @NamedTuple{
+    max_block_size::Int,
+    max_threads_per_block::Int,
+    threads_per_warp::Int,
+    max_threads_per_SM::Int,
+    SM_count::Int,
+}
+mutable struct DeviceAttributeCache
+    @atomic attributes::Any
+end
+const CACHED_DEVICE_ATTRIBUTES = DeviceAttributeCache(nothing)
+
+function cached_device_attributes()
+    attributes = @atomic CACHED_DEVICE_ATTRIBUTES.attributes
+    isnothing(attributes) || return attributes::DeviceAttributes
+    device = CUDA.device()
+    device_attribute(name) = Int(CUDA.attribute(device, name))
+    # Named rather than positional, so that no attribute can end up in the wrong field, and
+    # annotated so that a field added here without being added to DeviceAttributes is an
+    # error instead of a silently untyped cache.
+    new_attributes::DeviceAttributes = (;
+        max_block_size = device_attribute(CUDA.DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X),
+        max_threads_per_block = device_attribute(
+            CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK,
+        ),
+        threads_per_warp = device_attribute(CUDA.DEVICE_ATTRIBUTE_WARP_SIZE),
+        max_threads_per_SM = device_attribute(
+            CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_MULTIPROCESSOR,
+        ),
+        SM_count = device_attribute(CUDA.DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT),
+    )
+    @atomic CACHED_DEVICE_ATTRIBUTES.attributes = new_attributes
+    return new_attributes
 end
 
 """
@@ -249,9 +316,8 @@ the threads are spread out across more SMs to improve occupancy.
 """
 function config_via_occupancy(f!::F!, nitems, args) where {F!}
     kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
-    config = CUDA.launch_configuration(kernel.fun)
-    SM_count = CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT)
-    max_block_size = CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X)
+    config = cached_launch_configuration(kernel.fun)
+    (; max_block_size, SM_count) = cached_device_attributes()
     if cld(nitems, config.threads) < config.blocks
         # gpu will not saturate, so spread out threads across more SMs
         even_distribution_threads = cld(nitems, SM_count)
@@ -280,15 +346,11 @@ limit. Adapted from version 12.9 of the CUDA Runtime Headers
 """
 function max_resident_blocks(threads_per_block)
     iszero(threads_per_block) && return typemax(Int) # no limit for empty blocks
-    max_threads_per_block =
-        CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
+    (; max_threads_per_block, threads_per_warp, max_threads_per_SM, SM_count) =
+        cached_device_attributes()
     threads_per_block > max_threads_per_block && return 0
-    threads_per_warp = CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_WARP_SIZE)
     warps_per_block = cld(threads_per_block, threads_per_warp)
-    max_resident_threads_per_SM =
-        CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_MULTIPROCESSOR)
-    max_resident_warps_per_SM = fld(max_resident_threads_per_SM, threads_per_warp)
-    SM_count = CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT)
+    max_resident_warps_per_SM = fld(max_threads_per_SM, threads_per_warp)
     return fld(max_resident_warps_per_SM, warps_per_block) * SM_count
 end
 # TODO: Register pressure and shared memory pressure need to be included here.
