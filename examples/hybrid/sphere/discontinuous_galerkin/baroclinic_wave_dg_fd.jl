@@ -66,23 +66,38 @@ if is_balanced_flow
         maximum(abs, parent(uv_init.components.data.:1))
 end
 
-ENV["GKSwstype"] = "nul"
-import Plots, ClimaCorePlots
+import CairoMakie, ClimaCoreMakie
 output_dir = joinpath(@__DIR__, "output", "baroclinic_wave_dg_fd")
 mkpath(output_dir)
 
-# Plot recipes index into field data, so move results to the CPU first
-# (move the plain prognostic field, then extract components on the CPU).
-ᶜv_end = Geometry.UVVector.(ClimaCore.to_cpu(sol.u[end].uₕ)).components.data.:2
-Plots.png(
-    Plots.plot(ᶜv_end, level = 3, clim = (-6, 6)),
-    joinpath(output_dir, "v_end.png"),
-)
+# Move results to the CPU first (move the plain prognostic field, then extract
+# components on the CPU). ClimaCoreMakie.fieldheatmap plots a 2D field, so slice
+# level 3 out of the extruded field — its coordinates are LatLongPoints, so this
+# renders a long–lat map.
+getv(Yi) = Geometry.UVVector.(ClimaCore.to_cpu(Yi.uₕ)).components.data.:2
+let fig = CairoMakie.Figure()
+    ax = CairoMakie.Axis(fig[1, 1]; xlabel = "long [deg]", ylabel = "lat [deg]")
+    plt = ClimaCoreMakie.fieldheatmap!(
+        ax,
+        Fields.level(getv(sol.u[end]), 3);
+        colorrange = (-6, 6),
+    )
+    CairoMakie.Colorbar(fig[1, 2], plt)
+    CairoMakie.save(joinpath(output_dir, "v_end.png"), fig)
+end
 if length(sol.u) > 2
-    anim = Plots.@animate for Yi in sol.u
-        ᶜv = Geometry.UVVector.(ClimaCore.to_cpu(Yi.uₕ)).components.data.:2
-        Plots.plot(ᶜv, level = 3, clim = (-6, 6))
+    fig = CairoMakie.Figure()
+    ax = CairoMakie.Axis(fig[1, 1]; xlabel = "long [deg]", ylabel = "lat [deg]")
+    frame = CairoMakie.Observable(Fields.level(getv(sol.u[1]), 3))
+    plt = ClimaCoreMakie.fieldheatmap!(ax, frame; colorrange = (-6, 6))
+    CairoMakie.Colorbar(fig[1, 2], plt)
+    CairoMakie.record(
+        fig,
+        joinpath(output_dir, "v.mp4"),
+        sol.u;
+        framerate = 5,
+    ) do Yi
+        frame[] = Fields.level(getv(Yi), 3)
     end
-    Plots.mp4(anim, joinpath(output_dir, "v.mp4"), fps = 5)
 end
 @info "Output written to $output_dir"

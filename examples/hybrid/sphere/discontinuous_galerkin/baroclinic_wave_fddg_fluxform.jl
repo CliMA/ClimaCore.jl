@@ -456,10 +456,7 @@ end
 # ---------------------------------------------------------------------------
 # Plots (v/u at level 3, p/T at level 1; PLOTS=0 disables)
 # ---------------------------------------------------------------------------
-ENV["GKSwstype"] = "nul"
-import Plots, ClimaCorePlots
-# imports stay unconditional: Plots.@animate below is macro-expanded when
-# this block is lowered, i.e. before any runtime condition executes
+import CairoMakie, ClimaCoreMakie
 if get(ENV, "PLOTS", "1") != "0"
 output_dir = joinpath(
     @__DIR__,
@@ -488,27 +485,62 @@ function plot_fields_cpu(Yi)
     )
 end
 
+# ClimaCoreMakie.fieldheatmap plots a 2D field, so slice the requested
+# horizontal level out of the extruded field first. On the cubed sphere the
+# level's coordinates are LatLongPoints, so this renders a long–lat map.
+function save_level_heatmap(path, field, lev; colorrange = nothing)
+    fig = CairoMakie.Figure()
+    ax = CairoMakie.Axis(fig[1, 1]; xlabel = "long [deg]", ylabel = "lat [deg]")
+    kw = isnothing(colorrange) ? (;) : (; colorrange)
+    plt = ClimaCoreMakie.fieldheatmap!(ax, Fields.level(field, lev); kw...)
+    CairoMakie.Colorbar(fig[1, 2], plt)
+    CairoMakie.save(path, fig)
+    return nothing
+end
+
+function save_level_animation(
+    path,
+    states,
+    to_field,
+    lev;
+    colorrange = nothing,
+    framerate = 5,
+)
+    fig = CairoMakie.Figure()
+    ax = CairoMakie.Axis(fig[1, 1]; xlabel = "long [deg]", ylabel = "lat [deg]")
+    frame = CairoMakie.Observable(Fields.level(to_field(first(states)), lev))
+    kw = isnothing(colorrange) ? (;) : (; colorrange)
+    plt = ClimaCoreMakie.fieldheatmap!(ax, frame; kw...)
+    CairoMakie.Colorbar(fig[1, 2], plt)
+    CairoMakie.record(fig, path, states; framerate) do Yi
+        frame[] = Fields.level(to_field(Yi), lev)
+    end
+    return nothing
+end
+
 let f_end = plot_fields_cpu(sol.u[end])
-    Plots.png(
-        Plots.plot(f_end.v, level = 3, clim = (-6, 6)),
+    save_level_heatmap(
         joinpath(output_dir, "v_end.png"),
+        f_end.v,
+        3;
+        colorrange = (-6, 6),
     )
-    Plots.png(
-        Plots.plot(f_end.p, level = 1),
-        joinpath(output_dir, "p_sfc_end.png"),
-    )
+    save_level_heatmap(joinpath(output_dir, "p_sfc_end.png"), f_end.p, 1)
 end
 if length(sol.u) > 2
-    for (name, getfield_fn, kwargs) in (
-        ("v", f -> f.v, (; level = 3, clim = (-6, 6))),
-        ("u", f -> f.u, (; level = 3)),
-        ("p_sfc", f -> f.p, (; level = 1)),
-        ("T_sfc", f -> f.T, (; level = 1)),
+    for (name, getfield_fn, lev, colorrange) in (
+        ("v", f -> f.v, 3, (-6, 6)),
+        ("u", f -> f.u, 3, nothing),
+        ("p_sfc", f -> f.p, 1, nothing),
+        ("T_sfc", f -> f.T, 1, nothing),
     )
-        anim = Plots.@animate for Yi in sol.u
-            Plots.plot(getfield_fn(plot_fields_cpu(Yi)); kwargs...)
-        end
-        Plots.mp4(anim, joinpath(output_dir, "$name.mp4"), fps = 5)
+        save_level_animation(
+            joinpath(output_dir, "$name.mp4"),
+            sol.u,
+            Yi -> getfield_fn(plot_fields_cpu(Yi)),
+            lev;
+            colorrange,
+        )
     end
 end
 
@@ -555,32 +587,43 @@ if apply_held_suarez && length(sol.u) > 1
     Tbar = Tsum ./ wsum
     day_str(i) = string(round(sol.t[i] / 86400; digits = 1))
     span = "days $(day_str(avg_idx[1]))–$(day_str(avg_idx[end]))"
-    Plots.png(
-        Plots.contourf(
-            lat_centers,
-            z_km,
-            ubar;
+    # These are plain (lat × z) matrices, not ClimaCore fields, so use
+    # CairoMakie's contourf directly. Makie expects z of size
+    # (length(x), length(y)) = (nbins, Nv), hence the permutedims.
+    let fig = CairoMakie.Figure()
+        ax = CairoMakie.Axis(
+            fig[1, 1];
             xlabel = "latitude [deg]",
             ylabel = "z [km]",
             title = "zonal-mean u [m/s], $span",
-            color = :balance,
-            linewidth = 0,
-        ),
-        joinpath(output_dir, "u_zonal_mean.png"),
-    )
-    Plots.png(
-        Plots.contourf(
+        )
+        cf = CairoMakie.contourf!(
+            ax,
             lat_centers,
             z_km,
-            Tbar;
+            permutedims(ubar);
+            colormap = :balance,
+        )
+        CairoMakie.Colorbar(fig[1, 2], cf)
+        CairoMakie.save(joinpath(output_dir, "u_zonal_mean.png"), fig)
+    end
+    let fig = CairoMakie.Figure()
+        ax = CairoMakie.Axis(
+            fig[1, 1];
             xlabel = "latitude [deg]",
             ylabel = "z [km]",
             title = "zonal-mean T [K], $span",
-            color = :thermal,
-            linewidth = 0,
-        ),
-        joinpath(output_dir, "T_zonal_mean.png"),
-    )
+        )
+        cf = CairoMakie.contourf!(
+            ax,
+            lat_centers,
+            z_km,
+            permutedims(Tbar);
+            colormap = :thermal,
+        )
+        CairoMakie.Colorbar(fig[1, 2], cf)
+        CairoMakie.save(joinpath(output_dir, "T_zonal_mean.png"), fig)
+    end
     @info "Held–Suarez zonal-mean diagnostics" averaged_snapshots =
         length(avg_idx) window = span
 end
