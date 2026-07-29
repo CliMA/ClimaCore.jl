@@ -1565,17 +1565,11 @@ end
 # Nv-generic (covers single-level 2D data and extruded 3D data level by
 # level; the DataLayouts unification dropped the dedicated 3D CPU methods,
 # which broke every CPU filter path — the CUDA ext has its own fused
-# version). VIJFH and VIJHWithF share type-parameter layout (T, Nv, Ni,
-# Nj, ...) and the unified slab(data, v, h) accessor.
+# version). Leaving the F parameter free covers every field-axis position,
+# including the VIJFH (F = 4) and VIJHF (F = 5) aliases.
 function tensor_product!(
-    out::Union{
-        DataLayouts.VIJHWithF{S, Nv, Nij_out, Nij_out},
-        DataLayouts.VIJFH{S, Nv, Nij_out, Nij_out},
-    },
-    indata::Union{
-        DataLayouts.VIJHWithF{S, Nv, Nij_in, Nij_in},
-        DataLayouts.VIJFH{S, Nv, Nij_in, Nij_in},
-    },
+    out::DataLayouts.VIJHWithF{S, Nv, Nij_out, Nij_out},
+    indata::DataLayouts.VIJHWithF{S, Nv, Nij_in, Nij_in},
     M::SMatrix{Nij_out, Nij_in},
 ) where {S, Nv, Nij_out, Nij_in}
     Nh = size(indata, 4)
