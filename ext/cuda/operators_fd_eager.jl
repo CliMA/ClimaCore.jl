@@ -82,7 +82,6 @@ expression at the given index, and then copies the result into `out`.
 Base.@propagate_inbounds function eager_copyto_stencil_kernel!(
     out,
     bc::BC,
-    us,
     mask,
     space,
 ) where {BC}
@@ -91,9 +90,10 @@ Base.@propagate_inbounds function eager_copyto_stencil_kernel!(
     (i, j, h) = if mask isa NoMask
         # `Nij` comes from the type of `us`, so it is a compile-time constant and
         # the `CartesianIndices` decomposition below uses a fixed-divisor `divrem`.
-        Nj = ClimaCore.DataLayouts.get_Nj(us)
-        Ni = ClimaCore.DataLayouts.get_Ni(us)
-        Nh = ClimaCore.DataLayouts.get_Nh(us)
+        size_params = ClimaCore.DataLayouts.vijh_params(ClimaCore.Fields.field_values(out))
+        Nj = size_params.Nj
+        Ni = size_params.Ni
+        Nh = ClimaCore.DataLayouts.nelems(ClimaCore.Fields.field_values(out))
         cart_inds = CartesianIndices((Ni, Nj, Nh))
         col_idx > length(cart_inds) && return nothing
         @inbounds cart_inds[col_idx].I

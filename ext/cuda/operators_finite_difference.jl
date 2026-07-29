@@ -72,15 +72,13 @@ function Base.copyto!(
              Split the expression into smaller sub-expressions so that each \
              intermediate matrix/vector result is smaller.",
         )
-        # `us` (a `UniversalSize`) encodes `Nij` in its type, so the kernel
-        # decomposes the linear column index into `(i, j, h)` using a
-        # `CartesianIndices` whose horizontal extents are compile-time
-        # constants. This keeps the per-thread `divrem` a cheap fixed-divisor
-        # operation
+        # `axes(out)` is passed so the kernel can recover the output layout's
+        # horizontal extents from its type parameters. The `CartesianIndices` the
+        # kernel builds from them therefore divides by compile-time constants,
+        # keeping the per-thread `divrem` cheap.
         args = (
             strip_space(out, space),
             strip_space(bc, space),
-            us,
             mask,
             axes(out),
         )
