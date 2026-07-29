@@ -19,7 +19,6 @@ main
   `Divergence{()}(space)`-style constructors used to reset operator axes have
   been replaced by `rebuild_operator(op, space)`.
   [2556](https://github.com/CliMA/ClimaCore.jl/pull/2556)
-
 - Refactor DataLayouts module [2522](https://github.com/CliMA/ClimaCore.jl/pull/2522)
   - All data layout types are unified into a single `DataLayout` type, and all
     loops over data go through two communication primitives (`foreach_slice` and

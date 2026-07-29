@@ -70,6 +70,75 @@ Base.@propagate_inbounds function operator_fill_shmem!(
     Jv²[i, j, vt] = jacobian * Geometry.contravariant2(arg, local_geometry)
 end
 
+Base.@propagate_inbounds function operator_shmem(
+    space,
+    ::Val{Nvt},
+    op::SplitDivergence{(1,)},
+    arg1,
+    arg2,
+) where {Nvt}
+    FT = Spaces.undertype(space)
+    QS = Spaces.quadrature_style(space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    JT = operator_return_eltype(op, eltype(arg1), FT)
+    # allocate temp output for Ju1 and psi
+    Ju1 = CUDA.CuStaticSharedArray(JT, (Nq, Nvt))
+    psi = CUDA.CuStaticSharedArray(eltype(arg2), (Nq, Nvt))
+    return (Ju1, psi)
+end
+Base.@propagate_inbounds function operator_shmem(
+    space,
+    ::Val{Nvt},
+    op::SplitDivergence{(1, 2)},
+    arg1,
+    arg2,
+) where {Nvt}
+    FT = Spaces.undertype(space)
+    QS = Spaces.quadrature_style(space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    JT = operator_return_eltype(op, eltype(arg1), FT)
+    # allocate temp output for Ju1, Ju2, and psi
+    Ju1 = CUDA.CuStaticSharedArray(JT, (Nq, Nq, Nvt))
+    Ju2 = CUDA.CuStaticSharedArray(JT, (Nq, Nq, Nvt))
+    psi = CUDA.CuStaticSharedArray(eltype(arg2), (Nq, Nq, Nvt))
+    return (Ju1, Ju2, psi)
+end
+
+Base.@propagate_inbounds function operator_fill_shmem!(
+    op::SplitDivergence{(1,)},
+    (Ju1, psi),
+    space,
+    ij,
+    slabidx,
+    arg1,
+    arg2,
+)
+    vt = threadIdx().z
+    local_geometry = get_local_geometry(space, ij, slabidx)
+    i, _ = ij.I
+    (; J) = local_geometry
+    Ju1[i, vt] = J * Geometry.contravariant1(arg1, local_geometry)
+    psi[i, vt] = arg2
+end
+
+Base.@propagate_inbounds function operator_fill_shmem!(
+    op::SplitDivergence{(1, 2)},
+    (Ju1, Ju2, psi),
+    space,
+    ij,
+    slabidx,
+    arg1,
+    arg2,
+)
+    vt = threadIdx().z
+    local_geometry = get_local_geometry(space, ij, slabidx)
+    i, j = ij.I
+    (; J) = local_geometry
+    Ju1[i, j, vt] = J * Geometry.contravariant1(arg1, local_geometry)
+    Ju2[i, j, vt] = J * Geometry.contravariant2(arg1, local_geometry)
+    psi[i, j, vt] = arg2
+end
+
 # Both forms of the gradient hold the argument in shared memory, so they share these
 # methods; they differ only in the quadrature weighting applied to it (see
 # form_weighted_arg), so the shared array holds f for the strong form and W f for the weak
