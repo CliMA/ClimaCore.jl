@@ -38,10 +38,15 @@ fit and can always be cached.
 max_eager_shmem_per_thread(x) = 0
 max_eager_shmem_per_thread(bc::Union{Broadcasted, StencilBroadcasted}) =
     _max_eager_shmem_over_args(bc.args)
-max_eager_shmem_per_thread(
+function max_eager_shmem_per_thread(
     bc::StencilBroadcasted{S, <:MultiplyColumnwiseBandMatrixField},
-) where {S} =
-    max(sizeof(unsafe_eltype(bc.args[2])), _max_eager_shmem_over_args(bc.args))
+) where {S}
+    raw_arg_type = unsafe_eltype(bc.args[2])
+    # tensors may be projected to contain more components
+    # this is hacky and will sometimes overestimate the size of the projected row
+    modified_arg_size = raw_arg_type <: AbstractTensor ? sizeof(eltype(raw_arg_type)) * 9 : sizeof(raw_arg_type)
+    max(modified_arg_size, _max_eager_shmem_over_args(bc.args))
+end
 
 _max_eager_shmem_over_args(::Tuple{}) = 0
 _max_eager_shmem_over_args(args::Tuple) = max(
