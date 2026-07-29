@@ -1562,20 +1562,31 @@ end
 
 # CUDA overloads for CuArray-backed VIJHWithF live in ClimaCoreCUDAExt
 # (ext/cuda/operators_dg.jl) and win by parent-array specialization.
+# Nv-generic (covers single-level 2D data and extruded 3D data level by
+# level; the DataLayouts unification dropped the dedicated 3D CPU methods,
+# which broke every CPU filter path — the CUDA ext has its own fused
+# version). VIJFH and VIJHWithF share type-parameter layout (T, Nv, Ni,
+# Nj, ...) and the unified slab(data, v, h) accessor.
 function tensor_product!(
-    out::DataLayouts.VIJHWithF{S, 1, Nij_out, Nij_out},
-    indata::DataLayouts.VIJHWithF{S, 1, Nij_in, Nij_in},
+    out::Union{
+        DataLayouts.VIJHWithF{S, Nv, Nij_out, Nij_out},
+        DataLayouts.VIJFH{S, Nv, Nij_out, Nij_out},
+    },
+    indata::Union{
+        DataLayouts.VIJHWithF{S, Nv, Nij_in, Nij_in},
+        DataLayouts.VIJFH{S, Nv, Nij_in, Nij_in},
+    },
     M::SMatrix{Nij_out, Nij_in},
-) where {S, Nij_out, Nij_in}
+) where {S, Nv, Nij_out, Nij_in}
     Nh = size(indata, 4)
     @assert Nh == size(out, 4)
 
     # temporary storage
     temp = MArray{Tuple{1, Nij_out, Nij_in, 1}, S, 4, Nij_out * Nij_in}(undef)
 
-    @inbounds for h in 1:Nh
-        in_slab = slab(indata, 1, h)
-        out_slab = slab(out, 1, h)
+    @inbounds for h in 1:Nh, v in 1:Nv
+        in_slab = slab(indata, v, h)
+        out_slab = slab(out, v, h)
         for j in 1:Nij_in, i in 1:Nij_out
             temp[1, i, j, 1] = rmatmul1(M, in_slab, i, j)
         end
