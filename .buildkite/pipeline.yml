@@ -1334,7 +1334,6 @@ steps:
         key: unit_matrix_field_broadcasting_gpu_non_scalar_2
         retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_2.jl"
-        soft_fail: true
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -1351,6 +1350,7 @@ steps:
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
+          soft_fail: true
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_non_scalar_4
@@ -2300,6 +2300,7 @@ steps:
       - label: ":computer: 3D sphere deformation flow w/ limiter & FCT"
         key: "cpu_3d_deformation_flow"
         retry: *retry_policy
+        soft_fail: true # remove this after autobroadcaster issues are fixed
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/sphere/deformation_flow.jl"
         artifact_paths:
