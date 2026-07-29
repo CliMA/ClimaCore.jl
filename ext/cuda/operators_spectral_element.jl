@@ -7,6 +7,7 @@ import ClimaCore.Operators: SpectralBroadcasted, set_node!, get_node
 import ClimaCore.Operators: get_local_geometry
 import ClimaCore.Operators:
     Divergence, WeakDivergence, SplitDivergence, Gradient, WeakGradient, Curl, WeakCurl
+import ClimaCore.Operators: StrongForm
 import Base.Broadcast: Broadcasted
 
 """
@@ -181,8 +182,13 @@ Base.@propagate_inbounds function resolve_shmem!(obj, ij, slabidx)
     nothing
 end
 
+# The strong and weak methods below name their FormType, rather than leaving the strong one
+# to match either form, so that removing one of them is a MethodError instead of a silent
+# fallback to the other form's arithmetic. Their bodies are not unified because the two
+# forms sum the contributions of each dimension in a different order, which would change
+# the rounding of whichever form was rewritten.
 Base.@propagate_inbounds function operator_evaluate(
-    op::Divergence{(1,)},
+    op::Divergence{(1,), StrongForm},
     (Jv¹,),
     space,
     ij,
@@ -205,7 +211,7 @@ Base.@propagate_inbounds function operator_evaluate(
     return DJv * local_geometry.invJ
 end
 Base.@propagate_inbounds function operator_evaluate(
-    op::Divergence{(1, 2)},
+    op::Divergence{(1, 2), StrongForm},
     (Jv¹, Jv²),
     space,
     ij,
@@ -341,8 +347,8 @@ Base.@propagate_inbounds function operator_evaluate(
 end
 
 Base.@propagate_inbounds function operator_evaluate(
-    op::Gradient{(1,)},
-    input,
+    op::Gradient{(1,), StrongForm},
+    (input,),
     space,
     ij,
     slabidx,
@@ -372,8 +378,8 @@ Base.@propagate_inbounds function operator_evaluate(
     end
 end
 Base.@propagate_inbounds function operator_evaluate(
-    op::Gradient{(1, 2)},
-    input,
+    op::Gradient{(1, 2), StrongForm},
+    (input,),
     space,
     ij,
     slabidx,
@@ -458,7 +464,7 @@ Base.@propagate_inbounds function operator_evaluate(
 end
 
 Base.@propagate_inbounds function operator_evaluate(
-    op::Curl{(1,)},
+    op::Curl{(1,), StrongForm},
     work,
     space,
     ij,
@@ -484,7 +490,7 @@ Base.@propagate_inbounds function operator_evaluate(
     return result * local_geometry.invJ
 end
 Base.@propagate_inbounds function operator_evaluate(
-    op::Curl{(1, 2)},
+    op::Curl{(1, 2), StrongForm},
     work,
     space,
     ij,

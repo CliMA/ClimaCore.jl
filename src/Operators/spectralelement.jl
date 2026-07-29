@@ -108,9 +108,11 @@ which distinguish the variational form of a spectral element operator.
 The strong and weak variants of an operator share the same interior
 computation; they differ only in three form-dependent factors:
  - whether the derivative matrix is applied directly or transposed with a sign
-   flip (from integration by parts); see [`form_deriv_entry`](@ref),
- - whether the argument is weighted by the quadrature weights `W`,
- - whether the result is rescaled by `J` or by `WJ`.
+   flip (from integration by parts); see `form_deriv_entry`,
+ - whether the argument is weighted by the quadrature weights `W` or by the
+   Jacobian factor; see `form_weighted_arg` and `form_jacobian`,
+ - whether the result is rescaled by `J` or by `WJ`; see
+   `form_jacobian_rescale`.
 
 Operators with strong/weak variants carry a `FormType` as their second type
 parameter, e.g. `Divergence{I, StrongForm}`, with the weak variant available
@@ -147,6 +149,42 @@ transpose, with the sign flip from integration by parts) for the weak form.
 """
 @inline form_deriv_entry(::StrongForm, D, ii, i) = D[ii, i]
 @inline form_deriv_entry(::WeakForm, D, ii, i) = -D[i, ii]
+
+"""
+    form_weighted_arg(form, local_geometry, x)
+
+The argument value `x`, weighted as required by an operator of the given
+[`FormType`](@ref) whose weak variant integrates against test functions: `x`
+itself for the strong form, and `W * x` (with the quadrature weights
+`W = WJ * J⁻¹`) for the weak form. Used by [`Gradient`](@ref) and
+[`Curl`](@ref).
+"""
+@inline form_weighted_arg(::StrongForm, local_geometry, x) = x
+@inline form_weighted_arg(::WeakForm, local_geometry, x) =
+    (local_geometry.WJ * local_geometry.invJ) * x
+
+"""
+    form_jacobian(form, local_geometry)
+
+The Jacobian factor that scales the contravariant components summed by an
+operator of the given [`FormType`](@ref): `J` for the strong form, and `WJ`
+for the weak form. Used by [`Divergence`](@ref).
+"""
+@inline form_jacobian(::StrongForm, local_geometry) = local_geometry.J
+@inline form_jacobian(::WeakForm, local_geometry) = local_geometry.WJ
+
+"""
+    form_jacobian_rescale(form, local_geometry, x)
+
+The result value `x`, divided by the `form_jacobian` of the given
+[`FormType`](@ref): `x * J⁻¹` for the strong form (using the precomputed
+inverse), and `x / WJ` for the weak form. Used by [`Divergence`](@ref) and
+[`Curl`](@ref).
+"""
+@inline form_jacobian_rescale(::StrongForm, local_geometry, x) =
+    x * local_geometry.invJ
+@inline form_jacobian_rescale(::WeakForm, local_geometry, x) =
+    x / local_geometry.WJ
 
 """
     rebuild_operator(op, space)
@@ -644,14 +682,9 @@ rebuild_operator(::Divergence{I, F}, space) where {I, F} =
 operator_return_eltype(op::Divergence{I}, ::Type{S}) where {I, S} =
     Geometry.divergence_result_type(S)
 
-# Form-dependent factors: the strong divergence is J⁻¹ ∑ᵢ Dᵢ (J uⁱ), while the
-# weak divergence is -(WJ)⁻¹ ∑ᵢ Dᵢᵀ (WJ uⁱ), with the transpose and sign of
-# the derivative matrix carried by form_deriv_entry.
-@inline div_form_arg_scale(::StrongForm, local_geometry) = local_geometry.J
-@inline div_form_arg_scale(::WeakForm, local_geometry) = local_geometry.WJ
-@inline div_form_rescale(::StrongForm, x, local_geometry) =
-    x * local_geometry.invJ
-@inline div_form_rescale(::WeakForm, x, local_geometry) = x / local_geometry.WJ
+# The strong divergence is J⁻¹ ∑ᵢ Dᵢ (J uⁱ), while the weak divergence is
+# -(WJ)⁻¹ ∑ᵢ Dᵢᵀ (WJ uⁱ); see form_deriv_entry, form_jacobian, and
+# form_jacobian_rescale for the form-dependent factors.
 
 function apply_operator(op::Divergence{(1,), F}, space, slabidx, arg) where {F}
     form = F()
@@ -668,7 +701,7 @@ function apply_operator(op::Divergence{(1,), F}, space, slabidx, arg) where {F}
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
         Jv¹ =
-            div_form_arg_scale(form, local_geometry) *
+            form_jacobian(form, local_geometry) *
             Geometry.contravariant1(v, local_geometry)
         for ii in 1:Nq
             out[ii] += form_deriv_entry(form, D, ii, i) * Jv¹
@@ -677,7 +710,7 @@ function apply_operator(op::Divergence{(1,), F}, space, slabidx, arg) where {F}
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[i] = div_form_rescale(form, out[i], local_geometry)
+        out[i] = form_jacobian_rescale(form, local_geometry, out[i])
     end
     return Field(immutable_slab_data(out), space)
 end
@@ -702,13 +735,13 @@ Base.@propagate_inbounds function apply_operator(
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
         Jv¹ =
-            div_form_arg_scale(form, local_geometry) *
+            form_jacobian(form, local_geometry) *
             Geometry.contravariant1(v, local_geometry)
         for ii in 1:Nq
             out[1, ii, j, 1] += form_deriv_entry(form, D, ii, i) * Jv¹
         end
         Jv² =
-            div_form_arg_scale(form, local_geometry) *
+            form_jacobian(form, local_geometry) *
             Geometry.contravariant2(v, local_geometry)
         for jj in 1:Nq
             out[1, i, jj, 1] += form_deriv_entry(form, D, jj, j) * Jv²
@@ -717,7 +750,7 @@ Base.@propagate_inbounds function apply_operator(
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[1, i, j, 1] = div_form_rescale(form, out[1, i, j, 1], local_geometry)
+        out[1, i, j, 1] = form_jacobian_rescale(form, local_geometry, out[1, i, j, 1])
     end
     return Field(immutable_slab_data(out), space)
 end
@@ -939,12 +972,10 @@ rebuild_operator(::Gradient{I, F}, space) where {I, F} =
 operator_return_eltype(::Gradient{I}, ::Type{S}) where {I, S} =
     Geometry.gradient_result_type(Val(I), S)
 
-# Form-dependent factors: the strong gradient is Dᵢ f, while the weak gradient
-# is -W⁻¹ Dᵢᵀ (W f), with the transpose and sign of the derivative matrix
-# carried by form_deriv_entry. Only the weak form needs the final W⁻¹ rescale.
-@inline grad_form_arg_scale(::StrongForm, local_geometry, x) = x
-@inline grad_form_arg_scale(::WeakForm, local_geometry, x) =
-    (local_geometry.WJ * local_geometry.invJ) * x
+# The strong gradient is Dᵢ f, while the weak gradient is -W⁻¹ Dᵢᵀ (W f); see
+# form_deriv_entry and form_weighted_arg for the form-dependent factors. Only
+# the weak form needs the final W⁻¹ rescale, which stays inlined in each
+# apply_operator so that the strong form can skip that loop entirely.
 
 function apply_operator(op::Gradient{(1,), F}, space, slabidx, arg) where {F}
     form = F()
@@ -959,7 +990,7 @@ function apply_operator(op::Gradient{(1,), F}, space, slabidx, arg) where {F}
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        x = grad_form_arg_scale(form, local_geometry, get_node(space, arg, ij, slabidx))
+        x = form_weighted_arg(form, local_geometry, get_node(space, arg, ij, slabidx))
         for ii in 1:Nq
             ∂f∂ξ =
                 Geometry.Covariant1Vector(form_deriv_entry(form, D, ii, i)) ⊗ x
@@ -996,7 +1027,7 @@ Base.@propagate_inbounds function apply_operator(
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        x = grad_form_arg_scale(form, local_geometry, get_node(space, arg, ij, slabidx))
+        x = form_weighted_arg(form, local_geometry, get_node(space, arg, ij, slabidx))
         for ii in 1:Nq
             ∂f∂ξ₁ =
                 Geometry.Covariant12Vector(
@@ -1077,16 +1108,9 @@ rebuild_operator(::Curl{I, F}, space) where {I, F} =
 operator_return_eltype(::Curl{I}, ::Type{S}) where {I, S} =
     Geometry.curl_result_type(Val(I), S)
 
-# Form-dependent factors: the strong curl is εⁱʲᵏ J⁻¹ Dⱼ uₖ, while the weak
-# curl is -εⁱʲᵏ (WJ)⁻¹ Dⱼᵀ (W uₖ), with the transpose and sign of the
-# derivative matrix carried by form_deriv_entry.
-@inline curl_form_arg_scale(::StrongForm, local_geometry, x) = x
-@inline curl_form_arg_scale(::WeakForm, local_geometry, x) =
-    (local_geometry.WJ * local_geometry.invJ) * x
-@inline curl_form_rescale(::StrongForm, x, local_geometry) =
-    x * local_geometry.invJ
-@inline curl_form_rescale(::WeakForm, x, local_geometry) =
-    x / local_geometry.WJ
+# The strong curl is εⁱʲᵏ J⁻¹ Dⱼ uₖ, while the weak curl is
+# -εⁱʲᵏ (WJ)⁻¹ Dⱼᵀ (W uₖ); see form_deriv_entry, form_weighted_arg, and
+# form_jacobian_rescale for the form-dependent factors.
 
 function apply_operator(op::Curl{(1,), F}, space, slabidx, arg) where {F}
     form = F()
@@ -1102,12 +1126,12 @@ function apply_operator(op::Curl{(1,), F}, space, slabidx, arg) where {F}
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
-        v₂ = curl_form_arg_scale(
+        v₂ = form_weighted_arg(
             form,
             local_geometry,
             Geometry.covariant2(v, local_geometry),
         )
-        v₃ = curl_form_arg_scale(
+        v₃ = form_weighted_arg(
             form,
             local_geometry,
             Geometry.covariant3(v, local_geometry),
@@ -1122,7 +1146,7 @@ function apply_operator(op::Curl{(1,), F}, space, slabidx, arg) where {F}
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[i] = curl_form_rescale(form, out[i], local_geometry)
+        out[i] = form_jacobian_rescale(form, local_geometry, out[i])
     end
     return Field(immutable_slab_data(out), space)
 end
@@ -1141,17 +1165,17 @@ function apply_operator(op::Curl{(1, 2), F}, space, slabidx, arg) where {F}
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
-        v₁ = curl_form_arg_scale(
+        v₁ = form_weighted_arg(
             form,
             local_geometry,
             Geometry.covariant1(v, local_geometry),
         )
-        v₂ = curl_form_arg_scale(
+        v₂ = form_weighted_arg(
             form,
             local_geometry,
             Geometry.covariant2(v, local_geometry),
         )
-        v₃ = curl_form_arg_scale(
+        v₃ = form_weighted_arg(
             form,
             local_geometry,
             Geometry.covariant3(v, local_geometry),
@@ -1172,7 +1196,7 @@ function apply_operator(op::Curl{(1, 2), F}, space, slabidx, arg) where {F}
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[1, i, j, 1] = curl_form_rescale(form, out[1, i, j, 1], local_geometry)
+        out[1, i, j, 1] = form_jacobian_rescale(form, local_geometry, out[1, i, j, 1])
     end
     return Field(immutable_slab_data(out), space)
 end

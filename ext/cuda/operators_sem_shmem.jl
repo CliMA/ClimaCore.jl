@@ -2,25 +2,26 @@ import ClimaCore: DataLayouts, Spaces, Geometry, Operators, Quadratures
 import CUDA
 import ClimaCore.Operators:
     Divergence,
-    WeakDivergence,
     SplitDivergence,
     Gradient,
-    WeakGradient,
-    Curl,
-    WeakCurl
+    Curl
 import ClimaCore.Operators: operator_return_eltype, get_local_geometry
+import ClimaCore.Operators: form_jacobian, form_weighted_arg
 
+# Both forms of the divergence hold one scaled contravariant component per dimension in
+# shared memory, so they share these methods; they differ only in the Jacobian factor that
+# scales the components (see form_jacobian), so the shared arrays named Jv hold J uⁱ for the
+# strong form and WJ uⁱ for the weak form.
 Base.@propagate_inbounds function operator_shmem(
     space,
     ::Val{Nvt},
-    op::Operators.Divergence{(1,)},
+    op::Divergence{(1,)},
     arg,
 ) where {Nvt}
-    FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     # allocate temp output
-    RT = Operators.operator_return_eltype(op, eltype(arg))
+    RT = operator_return_eltype(op, eltype(arg))
     Jv¹ = CUDA.CuStaticSharedArray(RT, (Nq, Nvt))
     return (Jv¹,)
 end
@@ -30,7 +31,6 @@ Base.@propagate_inbounds function operator_shmem(
     op::Divergence{(1, 2)},
     arg,
 ) where {Nvt}
-    FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     # allocate temp output
@@ -41,164 +41,39 @@ Base.@propagate_inbounds function operator_shmem(
 end
 
 Base.@propagate_inbounds function operator_fill_shmem!(
-    op::Divergence{(1,)},
+    op::Divergence{(1,), F},
     (Jv¹,),
     space,
     ij,
     slabidx,
     arg,
-)
+) where {F}
     vt = threadIdx().z
     local_geometry = get_local_geometry(space, ij, slabidx)
     i, _ = ij.I
-    (; J) = local_geometry
-    Jv¹[i, vt] = J * Geometry.contravariant1(arg, local_geometry)
+    jacobian = form_jacobian(F(), local_geometry)
+    Jv¹[i, vt] = jacobian * Geometry.contravariant1(arg, local_geometry)
 end
 Base.@propagate_inbounds function operator_fill_shmem!(
-    op::Divergence{(1, 2)},
+    op::Divergence{(1, 2), F},
     (Jv¹, Jv²),
     space,
     ij,
     slabidx,
     arg,
-)
+) where {F}
     vt = threadIdx().z
     local_geometry = get_local_geometry(space, ij, slabidx)
     i, j = ij.I
-    (; J) = local_geometry
-    Jv¹[i, j, vt] = J * Geometry.contravariant1(arg, local_geometry)
-    Jv²[i, j, vt] = J * Geometry.contravariant2(arg, local_geometry)
+    jacobian = form_jacobian(F(), local_geometry)
+    Jv¹[i, j, vt] = jacobian * Geometry.contravariant1(arg, local_geometry)
+    Jv²[i, j, vt] = jacobian * Geometry.contravariant2(arg, local_geometry)
 end
 
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::WeakDivergence{(1,)},
-    arg,
-) where {Nvt}
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(arg))
-    WJv¹ = CUDA.CuStaticSharedArray(RT, (Nq, Nvt))
-    return (WJv¹,)
-end
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::WeakDivergence{(1, 2)},
-    arg,
-) where {Nvt}
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(arg))
-    WJv¹ = CUDA.CuStaticSharedArray(RT, (Nq, Nq, Nvt))
-    WJv² = CUDA.CuStaticSharedArray(RT, (Nq, Nq, Nvt))
-    return (WJv¹, WJv²)
-end
-
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::WeakDivergence{(1,)},
-    (WJv¹,),
-    space,
-    ij,
-    slabidx,
-    arg,
-)
-    vt = threadIdx().z
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    i, _ = ij.I
-    (; WJ) = local_geometry
-    WJv¹[i, vt] = WJ * Geometry.contravariant1(arg, local_geometry)
-end
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::WeakDivergence{(1, 2)},
-    (WJv¹, WJv²),
-    space,
-    ij,
-    slabidx,
-    arg,
-)
-    vt = threadIdx().z
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    i, j = ij.I
-    (; WJ) = local_geometry
-    WJv¹[i, j, vt] = WJ * Geometry.contravariant1(arg, local_geometry)
-    WJv²[i, j, vt] = WJ * Geometry.contravariant2(arg, local_geometry)
-end
-
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::SplitDivergence{(1,)},
-    arg1,
-    arg2,
-) where {Nvt}
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    JT = operator_return_eltype(op, eltype(arg1), FT)
-    # allocate temp output for Ju1 and psi
-    Ju1 = CUDA.CuStaticSharedArray(JT, (Nq, Nvt))
-    psi = CUDA.CuStaticSharedArray(eltype(arg2), (Nq, Nvt))
-    return (Ju1, psi)
-end
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::SplitDivergence{(1, 2)},
-    arg1,
-    arg2,
-) where {Nvt}
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    JT = operator_return_eltype(op, eltype(arg1), FT)
-    # allocate temp output for Ju1, Ju2, and psi
-    Ju1 = CUDA.CuStaticSharedArray(JT, (Nq, Nq, Nvt))
-    Ju2 = CUDA.CuStaticSharedArray(JT, (Nq, Nq, Nvt))
-    psi = CUDA.CuStaticSharedArray(eltype(arg2), (Nq, Nq, Nvt))
-    return (Ju1, Ju2, psi)
-end
-
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::SplitDivergence{(1,)},
-    (Ju1, psi),
-    space,
-    ij,
-    slabidx,
-    arg1,
-    arg2,
-)
-    vt = threadIdx().z
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    i, _ = ij.I
-    (; J) = local_geometry
-    Ju1[i, vt] = J * Geometry.contravariant1(arg1, local_geometry)
-    psi[i, vt] = arg2
-end
-
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::SplitDivergence{(1, 2)},
-    (Ju1, Ju2, psi),
-    space,
-    ij,
-    slabidx,
-    arg1,
-    arg2,
-)
-    vt = threadIdx().z
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    i, j = ij.I
-    (; J) = local_geometry
-    Ju1[i, j, vt] = J * Geometry.contravariant1(arg1, local_geometry)
-    Ju2[i, j, vt] = J * Geometry.contravariant2(arg1, local_geometry)
-    psi[i, j, vt] = arg2
-end
-
+# Both forms of the gradient hold the argument in shared memory, so they share these
+# methods; they differ only in the quadrature weighting applied to it (see
+# form_weighted_arg), so the shared array holds f for the strong form and W f for the weak
+# form. It is wrapped in a tuple to match the other operators.
 Base.@propagate_inbounds function operator_shmem(
     space,
     ::Val{Nvt},
@@ -207,7 +82,8 @@ Base.@propagate_inbounds function operator_shmem(
 ) where {Nvt}
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
-    return CUDA.CuStaticSharedArray(eltype(arg), (Nq, Nvt))
+    f = CUDA.CuStaticSharedArray(eltype(arg), (Nq, Nvt))
+    return (f,)
 end
 Base.@propagate_inbounds function operator_shmem(
     space,
@@ -217,103 +93,51 @@ Base.@propagate_inbounds function operator_shmem(
 ) where {Nvt}
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
-    return CUDA.CuStaticSharedArray(eltype(arg), (Nq, Nq, Nvt))
+    f = CUDA.CuStaticSharedArray(eltype(arg), (Nq, Nq, Nvt))
+    return (f,)
 end
 
 Base.@propagate_inbounds function operator_fill_shmem!(
-    op::Gradient{(1,)},
-    input,
+    op::Gradient{(1,), F},
+    (f,),
     space,
     ij,
     slabidx,
     arg,
-)
-    vt = threadIdx().z
-    i, _ = ij.I
-    input[i, vt] = arg
-end
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::Gradient{(1, 2)},
-    input,
-    space,
-    ij,
-    slabidx,
-    arg,
-)
-    vt = threadIdx().z
-    i, j = ij.I
-    input[i, j, vt] = arg
-end
-
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::WeakGradient{(1,)},
-    arg,
-) where {Nvt}
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    # allocate temp output
-    IT = eltype(arg)
-    Wf = CUDA.CuStaticSharedArray(IT, (Nq, Nvt))
-    return (Wf,)
-end
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::WeakGradient{(1, 2)},
-    arg,
-) where {Nvt}
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    # allocate temp output
-    IT = eltype(arg)
-    Wf = CUDA.CuStaticSharedArray(IT, (Nq, Nq, Nvt))
-    return (Wf,)
-end
-
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::WeakGradient{(1,)},
-    (Wf,),
-    space,
-    ij,
-    slabidx,
-    arg,
-)
+) where {F}
     vt = threadIdx().z
     local_geometry = get_local_geometry(space, ij, slabidx)
-    W = local_geometry.WJ * local_geometry.invJ
     i, _ = ij.I
-    Wf[i, vt] = W * arg
+    f[i, vt] = form_weighted_arg(F(), local_geometry, arg)
 end
 Base.@propagate_inbounds function operator_fill_shmem!(
-    op::WeakGradient{(1, 2)},
-    (Wf,),
+    op::Gradient{(1, 2), F},
+    (f,),
     space,
     ij,
     slabidx,
     arg,
-)
+) where {F}
     vt = threadIdx().z
     local_geometry = get_local_geometry(space, ij, slabidx)
-    W = local_geometry.WJ * local_geometry.invJ
     i, j = ij.I
-    Wf[i, j, vt] = W * arg
+    f[i, j, vt] = form_weighted_arg(F(), local_geometry, arg)
 end
 
+# Both forms of the curl hold the covariant components of the argument in shared memory, so
+# they share these methods; they differ only in the quadrature weighting applied to those
+# components (see form_weighted_arg). `curl_result_type` always returns a
+# Contravariant123Vector, so all three components are allocated in 2D, while the first is
+# unused in 1D.
 Base.@propagate_inbounds function operator_shmem(
     space,
     ::Val{Nvt},
     op::Curl{(1,)},
     arg,
 ) where {Nvt}
-    FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
-    IT = eltype(arg)
-    ET = eltype(IT)
+    ET = eltype(eltype(arg))
     v₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nvt))
     v₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nvt))
     return (nothing, v₂, v₃)
@@ -324,11 +148,9 @@ Base.@propagate_inbounds function operator_shmem(
     op::Curl{(1, 2)},
     arg,
 ) where {Nvt}
-    FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
-    IT = eltype(arg)
-    ET = eltype(IT)
+    ET = eltype(eltype(arg))
     v₁ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
     v₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
     v₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
@@ -336,102 +158,35 @@ Base.@propagate_inbounds function operator_shmem(
 end
 
 Base.@propagate_inbounds function operator_fill_shmem!(
-    op::Curl{(1,)},
+    op::Curl{(1,), F},
     work,
     space,
     ij,
     slabidx,
     arg,
-)
+) where {F}
     vt = threadIdx().z
     i, _ = ij.I
     local_geometry = get_local_geometry(space, ij, slabidx)
     _, v₂, v₃ = work
-    v₂[i, vt] = Geometry.covariant2(arg, local_geometry)
-    v₃[i, vt] = Geometry.covariant3(arg, local_geometry)
+    weighted(x) = form_weighted_arg(F(), local_geometry, x)
+    v₂[i, vt] = weighted(Geometry.covariant2(arg, local_geometry))
+    v₃[i, vt] = weighted(Geometry.covariant3(arg, local_geometry))
 end
 Base.@propagate_inbounds function operator_fill_shmem!(
-    op::Curl{(1, 2)},
+    op::Curl{(1, 2), F},
     work,
     space,
     ij,
     slabidx,
     arg,
-)
+) where {F}
     vt = threadIdx().z
     i, j = ij.I
     local_geometry = get_local_geometry(space, ij, slabidx)
     v₁, v₂, v₃ = work
-    v₁[i, j, vt] = Geometry.covariant1(arg, local_geometry)
-    v₂[i, j, vt] = Geometry.covariant2(arg, local_geometry)
-    v₃[i, j, vt] = Geometry.covariant3(arg, local_geometry)
-end
-
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::WeakCurl{(1,)},
-    arg,
-) where {Nvt}
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    IT = eltype(arg)
-    ET = eltype(IT)
-    # `curl_result_type` always returns Contravariant123Vector. Wv₁ is unused
-    # for WeakCurl{(1,)}.
-    Wv₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nvt))
-    Wv₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nvt))
-    return (nothing, Wv₂, Wv₃)
-end
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::WeakCurl{(1, 2)},
-    arg,
-) where {Nvt}
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    IT = eltype(arg)
-    ET = eltype(IT)
-    # `curl_result_type` always returns Contravariant123Vector; allocate all three.
-    Wv₁ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-    Wv₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-    Wv₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-    return (Wv₁, Wv₂, Wv₃)
-end
-
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::WeakCurl{(1,)},
-    work,
-    space,
-    ij,
-    slabidx,
-    arg,
-)
-    vt = threadIdx().z
-    i, _ = ij.I
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    W = local_geometry.WJ * local_geometry.invJ
-    _, Wv₂, Wv₃ = work
-    Wv₂[i, vt] = W * Geometry.covariant2(arg, local_geometry)
-    Wv₃[i, vt] = W * Geometry.covariant3(arg, local_geometry)
-end
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::WeakCurl{(1, 2)},
-    work,
-    space,
-    ij,
-    slabidx,
-    arg,
-)
-    vt = threadIdx().z
-    i, j = ij.I
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    W = local_geometry.WJ * local_geometry.invJ
-    Wv₁, Wv₂, Wv₃ = work
-    Wv₁[i, j, vt] = W * Geometry.covariant1(arg, local_geometry)
-    Wv₂[i, j, vt] = W * Geometry.covariant2(arg, local_geometry)
-    Wv₃[i, j, vt] = W * Geometry.covariant3(arg, local_geometry)
+    weighted(x) = form_weighted_arg(F(), local_geometry, x)
+    v₁[i, j, vt] = weighted(Geometry.covariant1(arg, local_geometry))
+    v₂[i, j, vt] = weighted(Geometry.covariant2(arg, local_geometry))
+    v₃[i, j, vt] = weighted(Geometry.covariant3(arg, local_geometry))
 end
