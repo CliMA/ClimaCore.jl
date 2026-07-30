@@ -101,6 +101,7 @@ Returns a bool indicating that the grid has a horizontal part.
 function has_horizontal end
 has_horizontal(::AbstractGrid) = false
 has_horizontal(::ExtrudedFiniteDifferenceGrid) = true
+has_horizontal(::DeviceSpectralElementGrid1D) = true
 has_horizontal(::DeviceSpectralElementGrid2D) = true
 has_horizontal(::SpectralElementGrid2D) = true
 has_horizontal(::SpectralElementGrid1D) = true

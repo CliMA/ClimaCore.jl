@@ -572,6 +572,18 @@ quadrature_style(grid::AbstractSpectralElementGrid) = grid.quadrature_style
 dss_weights(grid::AbstractSpectralElementGrid, ::Nothing) = grid.dss_weights
 
 ## GPU compatibility
+# These drop the fields that a device kernel cannot use (the topology, which is
+# not isbits, and the DSS weights), keeping only what the kernel reads through
+# the `AbstractSpectralElementGrid` accessors above.
+struct DeviceSpectralElementGrid1D{Q, GG, LG} <: AbstractSpectralElementGrid
+    quadrature_style::Q
+    global_geometry::GG
+    local_geometry::LG
+end
+
+ClimaComms.context(grid::DeviceSpectralElementGrid1D) = DeviceSideContext()
+ClimaComms.device(grid::DeviceSpectralElementGrid1D) = DeviceSideDevice()
+
 struct DeviceSpectralElementGrid2D{Q, GG, LG, M} <: AbstractSpectralElementGrid
     quadrature_style::Q
     global_geometry::GG

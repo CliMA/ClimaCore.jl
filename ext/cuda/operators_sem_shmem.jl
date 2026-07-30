@@ -1,261 +1,192 @@
-import ClimaCore: DataLayouts, Spaces, Geometry, Operators, Quadratures
+import ClimaCore: Spaces, Operators, Quadratures
 import CUDA
-import ClimaCore.Operators:
-    Divergence,
-    SplitDivergence,
-    Gradient,
-    Curl
+import UnrolledUtilities: unrolled_map, unrolled_foreach
+import ClimaCore.Operators: Divergence, SplitDivergence, Gradient, Curl
 import ClimaCore.Operators: operator_return_eltype, get_local_geometry
 import ClimaCore.Operators: form_jacobian, form_weighted_arg
+import ClimaCore.Operators:
+    axis_vals,
+    axis_index,
+    contravariant,
+    curl_covariant_components,
+    curl_uses_component,
+    slab_dims
 
-# Both forms of the divergence hold one scaled contravariant component per dimension in
-# shared memory, so they share these methods; they differ only in the Jacobian factor that
-# scales the components (see form_jacobian), so the shared arrays named Jv hold J uⁱ for the
+# These methods serve every dimension and both forms of each operator. The
+# shared-memory work arrays are dimension-generic: an operator over axes `I` uses
+# arrays with one `Nq` per axis in `I`, indexed by the node index truncated to
+# those axes (on the GPU `ij` is always two-dimensional, with `j = 1` for
+# one-dimensional spaces) plus this thread's slab index. See the
+# "Dimension-generic building blocks" section of
+# `src/Operators/spectralelement.jl`, and the `FormType` helpers above it for the
+# strong/weak differences.
+
+"""
+    shmem_dims(op, space, Val(Nvt))
+
+Shape of a shared-memory work array for `op`: one `Nq` per axis it works over,
+plus `Nvt` slabs per block.
+"""
+@inline function shmem_dims(
+    op::Operators.SpectralElementOperator,
+    space,
+    ::Val{Nvt},
+) where {Nvt}
+    QS = Spaces.quadrature_style(space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    return (slab_dims(op, Nq)..., Nvt)
+end
+
+"""
+    sem_shmem(T, op, space, Val(Nvt))
+
+A shared-memory work array with element type `T`, holding one value per node of
+`op`'s slab for each of the `Nvt` slabs in the block.
+"""
+@inline sem_shmem(::Type{T}, op, space, valNvt) where {T} =
+    CUDA.CuStaticSharedArray(T, shmem_dims(op, space, valNvt))
+
+"""
+    sem_shmem_per_axis(T, op, space, Val(Nvt))
+
+One [`sem_shmem`](@ref) array per axis that `op` works over. The tuple is built
+with `unrolled_map`, so each element comes from its own `CuStaticSharedArray`
+call and the allocations are distinct.
+"""
+@inline sem_shmem_per_axis(::Type{T}, op, space, valNvt) where {T} =
+    unrolled_map(_ -> sem_shmem(T, op, space, valNvt), axis_vals(op))
+
+"""
+    shmem_index(op, ij)
+
+Index of node `ij` in a work array allocated by [`sem_shmem`](@ref): the node
+index truncated to the axes `op` works over, plus this thread's slab index.
+"""
+@inline shmem_index(::Operators.SpectralElementOperator{I}, ij) where {I} =
+    CartesianIndex(ntuple(d -> ij[d], Val(length(I)))..., CUDA.threadIdx().z)
+
+# Both forms of the divergence hold one scaled contravariant component per
+# dimension in shared memory; they differ only in the Jacobian factor that scales
+# the components (see form_jacobian), so the arrays named Jv hold J uⁱ for the
 # strong form and WJ uⁱ for the weak form.
 Base.@propagate_inbounds function operator_shmem(
     space,
-    ::Val{Nvt},
-    op::Divergence{(1,)},
+    valNvt::Val{Nvt},
+    op::Divergence{I},
     arg,
-) where {Nvt}
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
+) where {Nvt, I}
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    Jv¹ = CUDA.CuStaticSharedArray(RT, (Nq, Nvt))
-    return (Jv¹,)
-end
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::Divergence{(1, 2)},
-    arg,
-) where {Nvt}
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(arg))
-    Jv¹ = CUDA.CuStaticSharedArray(RT, (Nq, Nq, Nvt))
-    Jv² = CUDA.CuStaticSharedArray(RT, (Nq, Nq, Nvt))
-    return (Jv¹, Jv²)
+    return sem_shmem_per_axis(RT, op, space, valNvt)
 end
 
 Base.@propagate_inbounds function operator_fill_shmem!(
-    op::Divergence{(1,), F},
-    (Jv¹,),
+    op::Divergence{I, F},
+    Jv,
     space,
     ij,
     slabidx,
     arg,
-) where {F}
-    vt = threadIdx().z
+) where {I, F}
     local_geometry = get_local_geometry(space, ij, slabidx)
-    i, _ = ij.I
+    node = shmem_index(op, ij)
     jacobian = form_jacobian(F(), local_geometry)
-    Jv¹[i, vt] = jacobian * Geometry.contravariant1(arg, local_geometry)
-end
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::Divergence{(1, 2), F},
-    (Jv¹, Jv²),
-    space,
-    ij,
-    slabidx,
-    arg,
-) where {F}
-    vt = threadIdx().z
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    i, j = ij.I
-    jacobian = form_jacobian(F(), local_geometry)
-    Jv¹[i, j, vt] = jacobian * Geometry.contravariant1(arg, local_geometry)
-    Jv²[i, j, vt] = jacobian * Geometry.contravariant2(arg, local_geometry)
+    unrolled_foreach(axis_vals(op)) do vd
+        @inbounds Jv[axis_index(vd)][node] =
+            jacobian * contravariant(vd, arg, local_geometry)
+    end
 end
 
 Base.@propagate_inbounds function operator_shmem(
     space,
-    ::Val{Nvt},
-    op::SplitDivergence{(1,)},
+    valNvt::Val{Nvt},
+    op::SplitDivergence{I},
     arg1,
     arg2,
-) where {Nvt}
+) where {Nvt, I}
     FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
     JT = operator_return_eltype(op, eltype(arg1), FT)
-    # allocate temp output for Ju1 and psi
-    Ju1 = CUDA.CuStaticSharedArray(JT, (Nq, Nvt))
-    psi = CUDA.CuStaticSharedArray(eltype(arg2), (Nq, Nvt))
-    return (Ju1, psi)
-end
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::SplitDivergence{(1, 2)},
-    arg1,
-    arg2,
-) where {Nvt}
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    JT = operator_return_eltype(op, eltype(arg1), FT)
-    # allocate temp output for Ju1, Ju2, and psi
-    Ju1 = CUDA.CuStaticSharedArray(JT, (Nq, Nq, Nvt))
-    Ju2 = CUDA.CuStaticSharedArray(JT, (Nq, Nq, Nvt))
-    psi = CUDA.CuStaticSharedArray(eltype(arg2), (Nq, Nq, Nvt))
-    return (Ju1, Ju2, psi)
+    # allocate temp output for the mass flux Juᵈ along each axis, and for psi
+    Ju = sem_shmem_per_axis(JT, op, space, valNvt)
+    psi = sem_shmem(eltype(arg2), op, space, valNvt)
+    return (Ju..., psi)
 end
 
 Base.@propagate_inbounds function operator_fill_shmem!(
-    op::SplitDivergence{(1,)},
-    (Ju1, psi),
+    op::SplitDivergence{I},
+    work,
     space,
     ij,
     slabidx,
     arg1,
     arg2,
-)
-    vt = threadIdx().z
+) where {I}
     local_geometry = get_local_geometry(space, ij, slabidx)
-    i, _ = ij.I
+    node = shmem_index(op, ij)
     (; J) = local_geometry
-    Ju1[i, vt] = J * Geometry.contravariant1(arg1, local_geometry)
-    psi[i, vt] = arg2
+    unrolled_foreach(axis_vals(op)) do vd
+        @inbounds work[axis_index(vd)][node] =
+            J * contravariant(vd, arg1, local_geometry)
+    end
+    @inbounds last(work)[node] = arg2
 end
 
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::SplitDivergence{(1, 2)},
-    (Ju1, Ju2, psi),
-    space,
-    ij,
-    slabidx,
-    arg1,
-    arg2,
-)
-    vt = threadIdx().z
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    i, j = ij.I
-    (; J) = local_geometry
-    Ju1[i, j, vt] = J * Geometry.contravariant1(arg1, local_geometry)
-    Ju2[i, j, vt] = J * Geometry.contravariant2(arg1, local_geometry)
-    psi[i, j, vt] = arg2
-end
-
-# Both forms of the gradient hold the argument in shared memory, so they share these
-# methods; they differ only in the quadrature weighting applied to it (see
-# form_weighted_arg), so the shared array holds f for the strong form and W f for the weak
-# form. It is wrapped in a tuple to match the other operators.
+# Both forms of the gradient hold the argument in shared memory; they differ only
+# in the quadrature weighting applied to it (see form_weighted_arg), so the array
+# holds f for the strong form and W f for the weak form. It is wrapped in a tuple
+# to match the other operators.
 Base.@propagate_inbounds function operator_shmem(
     space,
-    ::Val{Nvt},
-    op::Gradient{(1,)},
+    valNvt::Val{Nvt},
+    op::Gradient{I},
     arg,
-) where {Nvt}
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    f = CUDA.CuStaticSharedArray(eltype(arg), (Nq, Nvt))
-    return (f,)
-end
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::Gradient{(1, 2)},
-    arg,
-) where {Nvt}
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    f = CUDA.CuStaticSharedArray(eltype(arg), (Nq, Nq, Nvt))
+) where {Nvt, I}
+    f = sem_shmem(eltype(arg), op, space, valNvt)
     return (f,)
 end
 
 Base.@propagate_inbounds function operator_fill_shmem!(
-    op::Gradient{(1,), F},
+    op::Gradient{I, F},
     (f,),
     space,
     ij,
     slabidx,
     arg,
-) where {F}
-    vt = threadIdx().z
+) where {I, F}
     local_geometry = get_local_geometry(space, ij, slabidx)
-    i, _ = ij.I
-    f[i, vt] = form_weighted_arg(F(), local_geometry, arg)
-end
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::Gradient{(1, 2), F},
-    (f,),
-    space,
-    ij,
-    slabidx,
-    arg,
-) where {F}
-    vt = threadIdx().z
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    i, j = ij.I
-    f[i, j, vt] = form_weighted_arg(F(), local_geometry, arg)
+    @inbounds f[shmem_index(op, ij)] = form_weighted_arg(F(), local_geometry, arg)
 end
 
-# Both forms of the curl hold the covariant components of the argument in shared memory, so
-# they share these methods; they differ only in the quadrature weighting applied to those
+# Both forms of the curl hold the covariant components of the argument in shared
+# memory; they differ only in the quadrature weighting applied to those
 # components (see form_weighted_arg). `curl_result_type` always returns a
-# Contravariant123Vector, so all three components are allocated in 2D, while the first is
-# unused in 1D.
+# Contravariant123Vector, but a curl over axes `I` only reads the components that
+# `curl_uses_component` selects: the entries of `work` for the others are
+# `nothing`.
 Base.@propagate_inbounds function operator_shmem(
     space,
-    ::Val{Nvt},
-    op::Curl{(1,)},
+    valNvt::Val{Nvt},
+    op::Curl{I},
     arg,
-) where {Nvt}
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
+) where {Nvt, I}
     ET = eltype(eltype(arg))
-    v₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nvt))
-    v₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nvt))
-    return (nothing, v₂, v₃)
-end
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::Curl{(1, 2)},
-    arg,
-) where {Nvt}
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    ET = eltype(eltype(arg))
-    v₁ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-    v₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-    v₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-    return (v₁, v₂, v₃)
+    return unrolled_map((Val(1), Val(2), Val(3))) do vk
+        curl_uses_component(op, vk) ? sem_shmem(ET, op, space, valNvt) : nothing
+    end
 end
 
 Base.@propagate_inbounds function operator_fill_shmem!(
-    op::Curl{(1,), F},
+    op::Curl{I, F},
     work,
     space,
     ij,
     slabidx,
     arg,
-) where {F}
-    vt = threadIdx().z
-    i, _ = ij.I
+) where {I, F}
     local_geometry = get_local_geometry(space, ij, slabidx)
-    _, v₂, v₃ = work
-    weighted(x) = form_weighted_arg(F(), local_geometry, x)
-    v₂[i, vt] = weighted(Geometry.covariant2(arg, local_geometry))
-    v₃[i, vt] = weighted(Geometry.covariant3(arg, local_geometry))
-end
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::Curl{(1, 2), F},
-    work,
-    space,
-    ij,
-    slabidx,
-    arg,
-) where {F}
-    vt = threadIdx().z
-    i, j = ij.I
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    v₁, v₂, v₃ = work
-    weighted(x) = form_weighted_arg(F(), local_geometry, x)
-    v₁[i, j, vt] = weighted(Geometry.covariant1(arg, local_geometry))
-    v₂[i, j, vt] = weighted(Geometry.covariant2(arg, local_geometry))
-    v₃[i, j, vt] = weighted(Geometry.covariant3(arg, local_geometry))
+    node = shmem_index(op, ij)
+    u = curl_covariant_components(op, F(), arg, local_geometry)
+    unrolled_foreach(work, u) do w_k, u_k
+        @inbounds isnothing(w_k) || (w_k[node] = u_k)
+    end
 end

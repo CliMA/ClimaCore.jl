@@ -25,6 +25,15 @@ Adapt.adapt_structure(
 
 Adapt.adapt_structure(
     to::CUDA.KernelAdaptor,
+    grid::Grids.SpectralElementGrid1D,
+) = Grids.DeviceSpectralElementGrid1D(
+    Adapt.adapt(to, grid.quadrature_style),
+    Adapt.adapt(to, grid.global_geometry),
+    Adapt.adapt(to, grid.local_geometry),
+)
+
+Adapt.adapt_structure(
+    to::CUDA.KernelAdaptor,
     grid::Grids.SpectralElementGrid2D,
 ) = Grids.DeviceSpectralElementGrid2D(
     Adapt.adapt(to, grid.quadrature_style),

@@ -1,4 +1,4 @@
-import UnrolledUtilities: unrolled_map
+import UnrolledUtilities: unrolled_map, unrolled_foreach, unrolled_any
 import ..Utilities.Unrolled: unrolled_map_with_inbounds
 
 abstract type AbstractSpectralStyle <: Fields.AbstractFieldStyle end
@@ -659,6 +659,103 @@ Base.Broadcast.BroadcastStyle(
 ) = style
 
 
+##### Dimension-generic building blocks
+#
+# The operators below are tensor-product operators: each applies the same
+# one-dimensional stencil along every axis it works over, accumulating the
+# per-axis contributions. Together with the `FormType` helpers above -- which
+# absorb the differences between an operator's strong and weak variants -- these
+# let one implementation cover any axis tuple `I` (`(1,)` on a
+# `SpectralElementSpace1D`, `(1, 2)` on a `SpectralElementSpace2D`), keeping each
+# axis index in the type domain so that the loop over axes unrolls and the node
+# indices stay statically sized.
+#
+# The per-axis closures below carry two annotations that matter for performance:
+# `@inline`, because the mutable slab temporary they write to would otherwise
+# escape and be heap-allocated once per slab, and `@inbounds`, which a closure
+# body does not inherit from the enclosing `@inbounds` block.
+
+"""
+    axis_vals(op)
+
+Tuple of `Val{d}` for each axis index `d` that `op` works over, e.g.
+`(Val(1), Val(2))`. Iterating over this with `unrolled_foreach`/`unrolled_map`
+unrolls the loop over axes and keeps `d` available as a type parameter.
+"""
+@inline axis_vals(::SpectralElementOperator{I}) where {I} = unrolled_map(Val, I)
+
+"""
+    axis_index(::Val{d})
+
+The axis index `d` itself: `ij[axis_index(vd)]` is the node index along axis `d`.
+"""
+@inline axis_index(::Val{d}) where {d} = d
+
+"""
+    slab_dims(op, Nq)
+
+The shape of one slab of nodes for `op`: `Nq` repeated once per axis it works
+over.
+"""
+@inline slab_dims(::SpectralElementOperator{I}, Nq) where {I} =
+    ntuple(_ -> Nq, Val(length(I)))
+
+"""
+    replace_index(index, ::Val{d}, k)
+
+The Cartesian `index` with its `d`th component replaced by `k`. Used to walk
+along one axis of a slab while holding the other axes fixed.
+"""
+@inline replace_index(index::CartesianIndex{N}, ::Val{d}, k) where {N, d} =
+    CartesianIndex(ntuple(n -> n == d ? k : index[n], Val(N)))
+
+"""
+    contravariant(::Val{d}, u, local_geometry)
+    covariant(::Val{d}, u, local_geometry)
+
+The `d`th contravariant (``u^d``) or covariant (``u_d``) component of `u`.
+"""
+@inline contravariant(::Val{1}, u, lg) = Geometry.contravariant1(u, lg)
+@inline contravariant(::Val{2}, u, lg) = Geometry.contravariant2(u, lg)
+@inline contravariant(::Val{3}, u, lg) = Geometry.contravariant3(u, lg)
+@inline covariant(::Val{1}, u, lg) = Geometry.covariant1(u, lg)
+@inline covariant(::Val{2}, u, lg) = Geometry.covariant2(u, lg)
+@inline covariant(::Val{3}, u, lg) = Geometry.covariant3(u, lg)
+
+"""
+    covariant_components(op)
+
+The covariant components (the axis of a covariant vector) over the axes that `op`
+works over, e.g. `Covariant12Axis()` for axes `(1, 2)`.
+"""
+@inline covariant_components(::SpectralElementOperator{I}) where {I} =
+    Geometry.Components{Geometry.Covariant, I}()
+
+"""
+    covariant_vector(op, components)
+
+A covariant vector over the axes that `op` works over, with the given
+`components`, e.g. `Covariant12Vector(components...)` for axes `(1, 2)`.
+"""
+@inline covariant_vector(op::SpectralElementOperator, components::Tuple) =
+    Geometry.Tensor(SVector(components), (covariant_components(op),))
+
+"""
+    covariant_basis_vector(op, ::Val{d}, c)
+
+`c` times the `d`th covariant basis vector of the axes that `op` works over,
+e.g. `Covariant12Vector(0, c)` for axes `(1, 2)` and `d = 2`.
+"""
+@inline covariant_basis_vector(
+    op::SpectralElementOperator{I},
+    ::Val{d},
+    c,
+) where {I, d} = covariant_vector(
+    op,
+    ntuple(n -> I[n] == d ? c : zero(c), Val(length(I))),
+)
+
+
 
 
 
@@ -704,41 +801,12 @@ operator_return_eltype(op::Divergence{I}, ::Type{S}) where {I, S} =
 # -(WJ)⁻¹ ∑ᵢ Dᵢᵀ (WJ uⁱ); see form_deriv_entry, form_jacobian, and
 # form_jacobian_rescale for the form-dependent factors.
 
-function apply_operator(op::Divergence{(1,), F}, space, slabidx, arg) where {F}
-    form = F()
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(arg))
-    out = slab_data(RT, FT, Nq)
-    fill!(parent(out), zero(FT))
-    @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        v = get_node(space, arg, ij, slabidx)
-        Jv¹ =
-            form_jacobian(form, local_geometry) *
-            Geometry.contravariant1(v, local_geometry)
-        for ii in 1:Nq
-            out[ii] += form_deriv_entry(form, D, ii, i) * Jv¹
-        end
-    end
-    @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        out[i] = form_jacobian_rescale(form, local_geometry, out[i])
-    end
-    return Field(immutable_slab_data(out), space)
-end
-
 Base.@propagate_inbounds function apply_operator(
-    op::Divergence{(1, 2), F},
+    op::Divergence{I, F},
     space,
     slabidx,
     arg,
-) where {F}
+) where {I, F}
     form = F()
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
@@ -746,29 +814,29 @@ Base.@propagate_inbounds function apply_operator(
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = slab_data(RT, FT, Nq, Nq)
+    out = slab_data(RT, FT, slab_dims(op, Nq)...)
     fill!(parent(out), zero(FT))
-    @inbounds for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
+    @inbounds for ij in node_indices(space)
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
-        Jv¹ =
-            form_jacobian(form, local_geometry) *
-            Geometry.contravariant1(v, local_geometry)
-        for ii in 1:Nq
-            out[1, ii, j, 1] += form_deriv_entry(form, D, ii, i) * Jv¹
-        end
-        Jv² =
-            form_jacobian(form, local_geometry) *
-            Geometry.contravariant2(v, local_geometry)
-        for jj in 1:Nq
-            out[1, i, jj, 1] += form_deriv_entry(form, D, jj, j) * Jv²
+        unrolled_foreach(axis_vals(op)) do vd
+            @inline # `out` heap-allocates per slab if this closure is not inlined
+            @inbounds begin
+                i = ij[axis_index(vd)]
+                Jvᵈ =
+                    form_jacobian(form, local_geometry) *
+                    contravariant(vd, v, local_geometry)
+                for k in 1:Nq
+                    out[slab_node_index(replace_index(ij, vd, k))] +=
+                        form_deriv_entry(form, D, k, i) * Jvᵈ
+                end
+            end
         end
     end
-    @inbounds for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
+    @inbounds for ij in node_indices(space)
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[1, i, j, 1] = form_jacobian_rescale(form, local_geometry, out[1, i, j, 1])
+        node = slab_node_index(ij)
+        out[node] = form_jacobian_rescale(form, local_geometry, out[node])
     end
     return Field(immutable_slab_data(out), space)
 end
@@ -868,91 +936,57 @@ operator_return_eltype(
 ) where {I, S1, S2} =
     Geometry.mul_return_type(Geometry.divergence_result_type(S1), S2)
 
-function apply_operator(op::SplitDivergence{(1,)}, space, slabidx, arg1, arg2)
+Base.@propagate_inbounds function apply_operator(
+    op::SplitDivergence{I},
+    space,
+    slabidx,
+    arg1,
+    arg2,
+) where {I}
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
     JT = operator_return_eltype(op, eltype(arg1), FT)
     RT = operator_return_eltype(op, eltype(arg1), eltype(arg2))
+    dims = slab_dims(op, Nq)
 
-    Ju1 = slab_data(JT, FT, Nq)
-    psi = slab_data(eltype(arg2), eltype(arg2), Nq)
-    @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
+    # `Ju[d]` is the mass flux along axis `d`; `psi` is the advected scalar
+    Ju = unrolled_map(_ -> slab_data(JT, FT, dims...), axis_vals(op))
+    psi = slab_data(eltype(arg2), eltype(arg2), dims...)
+    @inbounds for ij in node_indices(space)
+        node = slab_node_index(ij)
         local_geometry = get_local_geometry(space, ij, slabidx)
         u = get_node(space, arg1, ij, slabidx)
-        Ju1[i] =
-            local_geometry.J * Geometry.contravariant1(u, local_geometry)
-        psi[i] = get_node(space, arg2, ij, slabidx)
+        unrolled_foreach(axis_vals(op)) do vd
+            @inline # `Ju` heap-allocates per slab if this closure is not inlined
+            @inbounds Ju[axis_index(vd)][node] =
+                local_geometry.J * contravariant(vd, u, local_geometry)
+        end
+        psi[node] = get_node(space, arg2, ij, slabidx)
     end
 
-    out = slab_data(RT, FT, Nq)
+    out = slab_data(RT, FT, dims...)
     fill!(parent(out), zero(FT))
-    @inbounds for i in 1:Nq
-        for j in 1:(i - 1) # loop over half the indices, since F1[i,j] = F1[j,i]
-            F1 = (Ju1[i] + Ju1[j]) * (psi[i] + psi[j]) / 2
-            out[i] += D[i, j] * F1
-            out[j] += D[j, i] * F1
+    @inbounds for ij in node_indices(space)
+        node = slab_node_index(ij)
+        unrolled_foreach(axis_vals(op)) do vd
+            @inline # `out` heap-allocates per slab if this closure is not inlined
+            @inbounds begin
+                i = ij[axis_index(vd)]
+                Juᵈ = Ju[axis_index(vd)]
+                for k in 1:(i - 1) # loop over half the indices, since F[i,k] = F[k,i]
+                    node_k = slab_node_index(replace_index(ij, vd, k))
+                    F = ((Juᵈ[node] + Juᵈ[node_k]) * (psi[node] + psi[node_k])) / 2
+                    out[node] += D[i, k] * F
+                    out[node_k] += D[k, i] * F
+                end
+            end
         end
     end
-    @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
+    @inbounds for ij in node_indices(space)
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[i] *= local_geometry.invJ
-    end
-
-    return Field(immutable_slab_data(out), space)
-end
-
-function apply_operator(op::SplitDivergence{(1, 2)}, space, slabidx, arg1, arg2)
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    JT = operator_return_eltype(op, eltype(arg1), FT)
-    RT = operator_return_eltype(op, eltype(arg1), eltype(arg2))
-
-    Ju1 = slab_data(JT, FT, Nq, Nq)
-    Ju2 = slab_data(JT, FT, Nq, Nq)
-    psi = slab_data(eltype(arg2), eltype(arg2), Nq, Nq)
-    @inbounds for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        u = get_node(space, arg1, ij, slabidx)
-        Ju1[1, i, j, 1] =
-            local_geometry.J * Geometry.contravariant1(u, local_geometry)
-        Ju2[1, i, j, 1] =
-            local_geometry.J * Geometry.contravariant2(u, local_geometry)
-        psi[1, i, j, 1] = get_node(space, arg2, ij, slabidx)
-    end
-
-    out = slab_data(RT, FT, Nq, Nq)
-    fill!(parent(out), zero(FT))
-    @inbounds for j in 1:Nq, i in 1:Nq
-        for k in 1:(i - 1) # loop over half the indices, since F1[i,k] = F1[k,i]
-            F1 =
-                (
-                    (Ju1[1, i, j, 1] + Ju1[1, k, j, 1]) *
-                    (psi[1, i, j, 1] + psi[1, k, j, 1])
-                ) / 2
-            out[1, i, j, 1] += D[i, k] * F1
-            out[1, k, j, 1] += D[k, i] * F1
-        end
-        for k in 1:(j - 1) # loop over half the indices, since F2[j,k] = F2[k,j]
-            F2 =
-                (
-                    (Ju2[1, i, j, 1] + Ju2[1, i, k, 1]) *
-                    (psi[1, i, j, 1] + psi[1, i, k, 1])
-                ) / 2
-            out[1, i, j, 1] += D[j, k] * F2
-            out[1, i, k, 1] += D[k, j] * F2
-        end
-    end
-    @inbounds for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        out[1, i, j, 1] *= local_geometry.invJ
+        out[slab_node_index(ij)] *= local_geometry.invJ
     end
 
     return Field(immutable_slab_data(out), space)
@@ -994,43 +1028,12 @@ operator_return_eltype(::Gradient{I}, ::Type{S}) where {I, S} =
 # the weak form needs the final W⁻¹ rescale, which stays inlined in each
 # apply_operator so that the strong form can skip that loop entirely.
 
-function apply_operator(op::Gradient{(1,), F}, space, slabidx, arg) where {F}
-    form = F()
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(arg))
-    out = slab_data(RT, FT, Nq)
-    fill!(parent(out), zero(FT))
-    @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        x = form_weighted_arg(form, local_geometry, get_node(space, arg, ij, slabidx))
-        for ii in 1:Nq
-            ∂f∂ξ =
-                Geometry.Covariant1Vector(form_deriv_entry(form, D, ii, i)) ⊗ x
-            out[ii] += ∂f∂ξ
-        end
-    end
-    if F === WeakForm
-        @inbounds for i in 1:Nq
-            ij = CartesianIndex((i,))
-            local_geometry = get_local_geometry(space, ij, slabidx)
-            W = local_geometry.WJ * local_geometry.invJ
-            out[i] /= W
-        end
-    end
-    return Field(immutable_slab_data(out), space)
-end
-
 Base.@propagate_inbounds function apply_operator(
-    op::Gradient{(1, 2), F},
+    op::Gradient{I, F},
     space,
     slabidx,
     arg,
-) where {F}
+) where {I, F}
     form = F()
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
@@ -1038,42 +1041,86 @@ Base.@propagate_inbounds function apply_operator(
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = slab_data(RT, FT, Nq, Nq)
+    out = slab_data(RT, FT, slab_dims(op, Nq)...)
     fill!(parent(out), zero(FT))
-
-    @inbounds for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
+    @inbounds for ij in node_indices(space)
         local_geometry = get_local_geometry(space, ij, slabidx)
         x = form_weighted_arg(form, local_geometry, get_node(space, arg, ij, slabidx))
-        for ii in 1:Nq
-            ∂f∂ξ₁ =
-                Geometry.Covariant12Vector(
-                    form_deriv_entry(form, D, ii, i),
-                    zero(eltype(D)),
-                ) ⊗ x
-            out[1, ii, j, 1] += ∂f∂ξ₁
-        end
-        for jj in 1:Nq
-            ∂f∂ξ₂ =
-                Geometry.Covariant12Vector(
-                    zero(eltype(D)),
-                    form_deriv_entry(form, D, jj, j),
-                ) ⊗ x
-            out[1, i, jj, 1] += ∂f∂ξ₂
+        unrolled_foreach(axis_vals(op)) do vd
+            @inline # `out` heap-allocates per slab if this closure is not inlined
+            @inbounds begin
+                i = ij[axis_index(vd)]
+                for k in 1:Nq
+                    ∂f∂ξᵈ =
+                        covariant_basis_vector(
+                            op,
+                            vd,
+                            form_deriv_entry(form, D, k, i),
+                        ) ⊗ x
+                    out[slab_node_index(replace_index(ij, vd, k))] += ∂f∂ξᵈ
+                end
+            end
         end
     end
+    # the weak form weights its argument by W without a Jacobian factor to divide
+    # out, so it alone needs this pass; see form_weight_rescale
     if F === WeakForm
-        @inbounds for j in 1:Nq, i in 1:Nq
-            ij = CartesianIndex((i, j))
+        @inbounds for ij in node_indices(space)
             local_geometry = get_local_geometry(space, ij, slabidx)
             W = local_geometry.WJ * local_geometry.invJ
-            out[1, i, j, 1] /= W
+            out[slab_node_index(ij)] /= W
         end
     end
     return Field(immutable_slab_data(out), space)
 end
 
 abstract type CurlSpectralElementOperator{I} <: SpectralElementOperator{I} end
+
+"""
+    curl_uses_component(op, ::Val{k})
+
+Whether a curl over the operator's axes uses the `k`th covariant component of its
+argument. Since ``ε^{i d k}`` vanishes unless `k ≠ d`, axis `d` never uses the
+`d`th component: a curl over `(1,)` needs only ``u_2`` and ``u_3``, while a curl
+over `(1, 2)` needs all three.
+"""
+@inline curl_uses_component(
+    ::CurlSpectralElementOperator{I},
+    ::Val{k},
+) where {I, k} = unrolled_any(!=(k), I)
+
+"""
+    curl_covariant_components(op, form, u, local_geometry)
+
+The covariant components of `u` as a 3-tuple, weighted as the `form` requires
+(see [`form_weighted_arg`](@ref)), with `nothing` in place of the components that
+a curl over the operator's axes does not use (see [`curl_uses_component`](@ref)).
+"""
+@inline curl_covariant_components(
+    op::CurlSpectralElementOperator,
+    form,
+    u,
+    lg,
+) =
+    unrolled_map((Val(1), Val(2), Val(3))) do vk
+        curl_uses_component(op, vk) ?
+        form_weighted_arg(form, lg, covariant(vk, u, lg)) : nothing
+    end
+
+"""
+    curl_term(::Val{d}, c, u)
+
+The contribution of axis `d` to a curl, ``ε^{i d k} c u_k``, where `u` holds the
+covariant components of the argument (as returned by
+[`curl_covariant_components`](@ref)) and `c` scales the derivative along axis
+`d`. This is `c * (eᵈ × u)`, so only the components `k ≠ d` are read and the
+others may be `nothing`. The weak form needs no separate expression: its sign
+flip comes from `c` (see [`form_deriv_entry`](@ref)).
+"""
+@inline curl_term(::Val{1}, c, u) =
+    Geometry.Contravariant123Vector(zero(c), -(c * u[3]), c * u[2])
+@inline curl_term(::Val{2}, c, u) =
+    Geometry.Contravariant123Vector(c * u[3], zero(c), -(c * u[1]))
 
 """
     curl = Curl()
@@ -1129,7 +1176,12 @@ operator_return_eltype(::Curl{I}, ::Type{S}) where {I, S} =
 # -εⁱʲᵏ (WJ)⁻¹ Dⱼᵀ (W uₖ); see form_deriv_entry, form_weighted_arg, and
 # form_jacobian_rescale for the form-dependent factors.
 
-function apply_operator(op::Curl{(1,), F}, space, slabidx, arg) where {F}
+Base.@propagate_inbounds function apply_operator(
+    op::Curl{I, F},
+    space,
+    slabidx,
+    arg,
+) where {I, F}
     form = F()
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
@@ -1137,83 +1189,27 @@ function apply_operator(op::Curl{(1,), F}, space, slabidx, arg) where {F}
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = slab_data(RT, FT, Nq)
+    out = slab_data(RT, FT, slab_dims(op, Nq)...)
     fill!(parent(out), zero(FT))
-    @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
+    @inbounds for ij in node_indices(space)
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
-        v₂ = form_weighted_arg(
-            form,
-            local_geometry,
-            Geometry.covariant2(v, local_geometry),
-        )
-        v₃ = form_weighted_arg(
-            form,
-            local_geometry,
-            Geometry.covariant3(v, local_geometry),
-        )
-        for ii in 1:Nq
-            D₁v₂ = form_deriv_entry(form, D, ii, i) * v₂
-            D₁v₃ = form_deriv_entry(form, D, ii, i) * v₃
-            out[ii] +=
-                Geometry.Contravariant123Vector(zero(FT), -D₁v₃, D₁v₂)
+        u = curl_covariant_components(op, form, v, local_geometry)
+        unrolled_foreach(axis_vals(op)) do vd
+            @inline # `out` heap-allocates per slab if this closure is not inlined
+            @inbounds begin
+                i = ij[axis_index(vd)]
+                for k in 1:Nq
+                    out[slab_node_index(replace_index(ij, vd, k))] +=
+                        curl_term(vd, form_deriv_entry(form, D, k, i), u)
+                end
+            end
         end
     end
-    @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
+    @inbounds for ij in node_indices(space)
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[i] = form_jacobian_rescale(form, local_geometry, out[i])
-    end
-    return Field(immutable_slab_data(out), space)
-end
-
-function apply_operator(op::Curl{(1, 2), F}, space, slabidx, arg) where {F}
-    form = F()
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(arg))
-    out = slab_data(RT, FT, Nq, Nq)
-    fill!(parent(out), zero(FT))
-    @inbounds for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        v = get_node(space, arg, ij, slabidx)
-        v₁ = form_weighted_arg(
-            form,
-            local_geometry,
-            Geometry.covariant1(v, local_geometry),
-        )
-        v₂ = form_weighted_arg(
-            form,
-            local_geometry,
-            Geometry.covariant2(v, local_geometry),
-        )
-        v₃ = form_weighted_arg(
-            form,
-            local_geometry,
-            Geometry.covariant3(v, local_geometry),
-        )
-        for ii in 1:Nq
-            D₁v₃ = form_deriv_entry(form, D, ii, i) * v₃
-            D₁v₂ = form_deriv_entry(form, D, ii, i) * v₂
-            out[1, ii, j, 1] +=
-                Geometry.Contravariant123Vector(zero(FT), -D₁v₃, D₁v₂)
-        end
-        for jj in 1:Nq
-            D₂v₃ = form_deriv_entry(form, D, jj, j) * v₃
-            D₂v₁ = form_deriv_entry(form, D, jj, j) * v₁
-            out[1, i, jj, 1] +=
-                Geometry.Contravariant123Vector(D₂v₃, zero(FT), -D₂v₁)
-        end
-    end
-    @inbounds for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        out[1, i, j, 1] = form_jacobian_rescale(form, local_geometry, out[1, i, j, 1])
+        node = slab_node_index(ij)
+        out[node] = form_jacobian_rescale(form, local_geometry, out[node])
     end
     return Field(immutable_slab_data(out), space)
 end

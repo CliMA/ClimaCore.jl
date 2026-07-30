@@ -79,6 +79,9 @@ function SpectralElementSpace1D(
     SpectralElementSpace1D(grid)
 end
 
+Adapt.adapt_structure(to, space::SpectralElementSpace1D) =
+    SpectralElementSpace1D(Adapt.adapt(to, grid(space)))
+
 # 2D
 """
     SpectralElementSpace2D(grid::SpectralElementGrid1D)

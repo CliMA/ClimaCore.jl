@@ -49,6 +49,30 @@ main
   on GPUs, which previously raised an "Unsupported input type" error even though
   both forms already supported them on CPUs.
   [2556](https://github.com/CliMA/ClimaCore.jl/pull/2556)
+- Made the spectral-element operators dimension generic, completing the
+  unification begun above: `Divergence`, `SplitDivergence`, `Gradient` and `Curl`
+  had separate one- and two-dimensional implementations of the same
+  tensor-product stencil, on both the CPU (`apply_operator`) and the GPU
+  (`operator_evaluate` and the shared-memory allocation and fill), and each
+  two-dimensional method repeated its one-dimensional counterpart once per axis.
+  Each operator now has a single implementation that loops over the axes it works
+  over, with the axis index carried in the type domain so the loop unrolls, and
+  it composes with the `FormType` parameter above: one method per operator now
+  covers both dimensions and both forms. CPU results are bitwise unchanged. On
+  GPUs, 40 of the 50 checked operator expressions are bitwise unchanged and the
+  other 10 (two-dimensional `Divergence`, `SplitDivergence`, `Gradient` and
+  `Curl`) differ by a few `eps` of the accumulated terms, from the reassociation
+  and fused-multiply-add selection that follows restructuring the accumulation
+  loops; the largest observed difference is 5.3e-15 on values of order 1 to 20.
+  [2559](https://github.com/CliMA/ClimaCore.jl/pull/2559)
+- ![][badge-🐛bugfix] Fixed spectral-element operators failing to run on the GPU
+  over a `SpectralElementSpace1D`. The space could not be passed to a kernel
+  (`KernelError: passing non-bitstype argument`) because, unlike
+  `SpectralElementGrid2D`, `SpectralElementGrid1D` had no device-side counterpart
+  to convert to. Adds `Grids.DeviceSpectralElementGrid1D` and the corresponding
+  `Adapt` rules. This also makes `to_device` work on a `SpectralElementSpace1D`,
+  where it previously returned the space unchanged.
+  [2559](https://github.com/CliMA/ClimaCore.jl/pull/2559)
 - Refactor DataLayouts module [2522](https://github.com/CliMA/ClimaCore.jl/pull/2522)
   - All data layout types are unified into a single `DataLayout` type, and all
     loops over data go through two communication primitives (`foreach_slice` and

@@ -8,6 +8,14 @@ import ClimaCore.Operators: get_local_geometry
 import ClimaCore.Operators: Divergence, SplitDivergence, Gradient, Curl
 import ClimaCore.Operators:
     form_deriv_entry, form_jacobian_rescale, form_weight_rescale
+import ClimaCore.Operators:
+    axis_vals,
+    axis_index,
+    covariant_components,
+    covariant_vector,
+    curl_term,
+    replace_index
+import UnrolledUtilities: unrolled_map, unrolled_reduce
 import Base.Broadcast: Broadcasted
 
 """
@@ -182,186 +190,141 @@ Base.@propagate_inbounds function resolve_shmem!(obj, ij, slabidx)
     nothing
 end
 
-# The methods below serve both forms of each operator: form_deriv_entry supplies the
-# derivative matrix entries (transposed and sign-flipped for the weak form), and
-# form_jacobian_rescale or form_weight_rescale divides the form's Jacobian or
-# quadrature-weight factor back out of the result. Every operator keeps one accumulator
-# per dimension and combines them once at the end, which keeps the accumulation loops as
-# independent dependency chains.
-Base.@propagate_inbounds function operator_evaluate(
-    op::Divergence{(1,), F},
-    (Jv¹,),
-    space,
-    ij,
-    slabidx,
-) where {F}
-    vt = threadIdx().z
-    i, _ = ij.I
+# The methods below serve every dimension and both forms of each operator:
+# form_deriv_entry supplies the derivative matrix entries (transposed and
+# sign-flipped for the weak form), form_jacobian_rescale or form_weight_rescale
+# divides the form's Jacobian or quadrature-weight factor back out of the result,
+# and the loop over axes is unrolled with one accumulator per dimension, combined
+# once at the end, which keeps the accumulation loops as independent dependency
+# chains.
 
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
+"""
+    apply_stencil(form, D, w, node, ::Val{d}, i, Nq)
 
-    local_geometry = get_local_geometry(space, ij, slabidx)
-
-    D₁Jv¹ = form_deriv_entry(F(), D, i, 1) * Jv¹[1, vt]
+``\\sum_k D[i, k] w_k``, where `w_k` is the value of the shared-memory array `w`
+at `node` with its `d`th index replaced by `k`. This is the one-dimensional
+spectral stencil for output node `i` applied along axis `d`; `form` selects the
+matrix entry, so the weak form transposes `D` and flips its sign.
+"""
+Base.@propagate_inbounds function apply_stencil(form, D, w, node, vd, i, Nq)
+    r = form_deriv_entry(form, D, i, 1) * w[replace_index(node, vd, 1)]
     for k in 2:Nq
-        D₁Jv¹ += form_deriv_entry(F(), D, i, k) * Jv¹[k, vt]
+        r += form_deriv_entry(form, D, i, k) * w[replace_index(node, vd, k)]
     end
-    return form_jacobian_rescale(F(), local_geometry, D₁Jv¹)
+    return r
 end
-Base.@propagate_inbounds function operator_evaluate(
-    op::Divergence{(1, 2), F},
-    (Jv¹, Jv²),
-    space,
-    ij,
-    slabidx,
-) where {F}
-    vt = threadIdx().z
-    i, j = ij.I
 
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
+"""
+    curl_stencil(form, D, work, node, ::Val{d}, i, Nq)
 
-    local_geometry = get_local_geometry(space, ij, slabidx)
-
-    D₁Jv¹ = form_deriv_entry(F(), D, i, 1) * Jv¹[1, j, vt]
-    D₂Jv² = form_deriv_entry(F(), D, j, 1) * Jv²[i, 1, vt]
+``\\sum_k ε^{i d m} D[i, k] u_m``, the axis-`d` contribution of a curl summed over
+the stencil, where `work` holds the covariant components `u_m` in shared memory
+(`nothing` for the components the curl does not use).
+"""
+Base.@propagate_inbounds function curl_stencil(form, D, work, node, vd, i, Nq)
+    r = curl_term(
+        vd,
+        form_deriv_entry(form, D, i, 1),
+        shmem_components(work, replace_index(node, vd, 1)),
+    )
     for k in 2:Nq
-        D₁Jv¹ += form_deriv_entry(F(), D, i, k) * Jv¹[k, j, vt]
-        D₂Jv² += form_deriv_entry(F(), D, j, k) * Jv²[i, k, vt]
+        r += curl_term(
+            vd,
+            form_deriv_entry(form, D, i, k),
+            shmem_components(work, replace_index(node, vd, k)),
+        )
     end
-    return form_jacobian_rescale(F(), local_geometry, D₁Jv¹ + D₂Jv²)
+    return r
 end
 
+# The values of a curl's shared-memory component arrays at `node`, keeping the
+# `nothing`s that mark the components the curl does not use.
+Base.@propagate_inbounds shmem_components(work, node) =
+    unrolled_map(w_k -> isnothing(w_k) ? nothing : (@inbounds w_k[node]), work)
+
+# Sum of the per-axis contributions of an operator, unrolled over its axes.
+@inline sum_over_axes(f, op) = unrolled_reduce(+, unrolled_map(f, axis_vals(op)))
+
 Base.@propagate_inbounds function operator_evaluate(
-    op::SplitDivergence{(1,)},
-    (Ju1, psi),
+    op::Divergence{I, F},
+    Jv,
     space,
     ij,
     slabidx,
-)
-    vt = threadIdx().z
-    i, _ = ij.I
-
+) where {I, F}
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
-    RT = Geometry.mul_return_type(eltype(Ju1), eltype(psi))
 
     local_geometry = get_local_geometry(space, ij, slabidx)
+    node = shmem_index(op, ij)
 
-    result = zero(RT)
-    for j in 1:Nq
-        j == i && continue
-        result +=
-            D[i, j] * (Ju1[i, vt] + Ju1[j, vt]) * (psi[i, vt] + psi[j, vt]) / 2
+    DJv = sum_over_axes(op) do vd
+        d = axis_index(vd)
+        @inbounds apply_stencil(F(), D, Jv[d], node, vd, ij[d], Nq)
     end
-    return result * local_geometry.invJ
+    return form_jacobian_rescale(F(), local_geometry, DJv)
 end
+
 Base.@propagate_inbounds function operator_evaluate(
-    op::SplitDivergence{(1, 2)},
-    (Ju1, Ju2, psi),
+    op::SplitDivergence{I},
+    work,
     space,
     ij,
     slabidx,
-)
-    vt = threadIdx().z
-    i, j = ij.I
-
+) where {I}
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
-    RT = Geometry.mul_return_type(eltype(Ju1), eltype(psi))
 
     local_geometry = get_local_geometry(space, ij, slabidx)
+    node = shmem_index(op, ij)
+    psi = last(work)
 
-    result = zero(RT)
-    for k in 1:Nq
-        k == i && continue
-        result +=
-            D[i, k] *
-            (Ju1[i, j, vt] + Ju1[k, j, vt]) * (psi[i, j, vt] + psi[k, j, vt]) / 2
-    end
-    for k in 1:Nq
-        k == j && continue
-        result +=
-            D[j, k] *
-            (Ju2[i, j, vt] + Ju2[i, k, vt]) * (psi[i, j, vt] + psi[i, k, vt]) / 2
+    result = sum_over_axes(op) do vd
+        d = axis_index(vd)
+        i = ij[d]
+        Juᵈ = work[d]
+        # the two-point flux Fᵈ[i,k] vanishes for k == i
+        r = zero(Geometry.mul_return_type(eltype(Juᵈ), eltype(psi)))
+        @inbounds for k in 1:Nq
+            k == i && continue
+            node_k = replace_index(node, vd, k)
+            r += D[i, k] * (Juᵈ[node] + Juᵈ[node_k]) * (psi[node] + psi[node_k]) / 2
+        end
+        r
     end
     return result * local_geometry.invJ
 end
 
 Base.@propagate_inbounds function operator_evaluate(
-    op::Gradient{(1,), F},
+    op::Gradient{I, F},
     (input,),
     space,
     ij,
     slabidx,
-) where {F}
-    vt = threadIdx().z
-    i, _ = ij.I
-
+) where {I, F}
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
 
     local_geometry = get_local_geometry(space, ij, slabidx)
+    node = shmem_index(op, ij)
 
-    @inbounds begin
-        ∂f∂ξ₁ = form_deriv_entry(F(), D, i, 1) * input[1, vt]
-        for k in 2:Nq
-            ∂f∂ξ₁ += form_deriv_entry(F(), D, i, k) * input[k, vt]
-        end
+    # the covariant components of the gradient are the derivatives along each axis
+    ∂f∂ξ = unrolled_map(axis_vals(op)) do vd
+        d = axis_index(vd)
+        @inbounds apply_stencil(F(), D, input, node, vd, ij[d], Nq)
     end
     result = if eltype(input) <: Number
-        Geometry.Covariant1Vector(∂f∂ξ₁)
+        covariant_vector(op, ∂f∂ξ)
     elseif eltype(input) <: Geometry.AbstractTensor{1}
-        tensor_axes = (Geometry.Covariant1Axis(), Geometry.tensor_axes(eltype(input))[1])
-        tensor_components = hcat(parent(∂f∂ξ₁))'
-        Geometry.Tensor(tensor_components, tensor_axes)
-    else
-        error("Unsupported input type for gradient operator: $(eltype(input))")
-    end
-    return form_weight_rescale(F(), local_geometry, result)
-end
-Base.@propagate_inbounds function operator_evaluate(
-    op::Gradient{(1, 2), F},
-    (input,),
-    space,
-    ij,
-    slabidx,
-) where {F}
-    vt = threadIdx().z
-    i, j = ij.I
-
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-
-    local_geometry = get_local_geometry(space, ij, slabidx)
-
-    @inbounds begin
-        ∂f∂ξ₁ = form_deriv_entry(F(), D, i, 1) * input[1, j, vt]
-        ∂f∂ξ₂ = form_deriv_entry(F(), D, j, 1) * input[i, 1, vt]
-        for k in 2:Nq
-            ∂f∂ξ₁ += form_deriv_entry(F(), D, i, k) * input[k, j, vt]
-            ∂f∂ξ₂ += form_deriv_entry(F(), D, j, k) * input[i, k, vt]
-        end
-    end
-    result = if eltype(input) <: Number
-        Geometry.Covariant12Vector(∂f∂ξ₁, ∂f∂ξ₂)
-    elseif eltype(input) <: Geometry.AbstractTensor{1}
-        tensor_axes = (Geometry.Covariant12Axis(), Geometry.tensor_axes(eltype(input))[1])
-        tensor_components =
-            hcat(parent(∂f∂ξ₁), parent(∂f∂ξ₂))'
+        tensor_axes =
+            (covariant_components(op), Geometry.tensor_axes(eltype(input))[1])
+        tensor_components = hcat(unrolled_map(parent, ∂f∂ξ)...)'
         Geometry.Tensor(tensor_components, tensor_axes)
     else
         error("Unsupported input type for gradient operator: $(eltype(input))")
@@ -370,58 +333,23 @@ Base.@propagate_inbounds function operator_evaluate(
 end
 
 Base.@propagate_inbounds function operator_evaluate(
-    op::Curl{(1,), F},
+    op::Curl{I, F},
     work,
     space,
     ij,
     slabidx,
-) where {F}
-    vt = threadIdx().z
-    i, _ = ij.I
-
+) where {I, F}
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
+
     local_geometry = get_local_geometry(space, ij, slabidx)
+    node = shmem_index(op, ij)
 
-    _, v₂, v₃ = work
-    D₁v₂ = form_deriv_entry(F(), D, i, 1) * v₂[1, vt]
-    D₁v₃ = form_deriv_entry(F(), D, i, 1) * v₃[1, vt]
-    @simd for k in 2:Nq
-        D₁v₂ += form_deriv_entry(F(), D, i, k) * v₂[k, vt]
-        D₁v₃ += form_deriv_entry(F(), D, i, k) * v₃[k, vt]
+    result = sum_over_axes(op) do vd
+        d = axis_index(vd)
+        @inbounds curl_stencil(F(), D, work, node, vd, ij[d], Nq)
     end
-    result = Geometry.Contravariant123Vector(zero(FT), -D₁v₃, D₁v₂)
-    return form_jacobian_rescale(F(), local_geometry, result)
-end
-Base.@propagate_inbounds function operator_evaluate(
-    op::Curl{(1, 2), F},
-    work,
-    space,
-    ij,
-    slabidx,
-) where {F}
-    vt = threadIdx().z
-    i, j = ij.I
-
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    local_geometry = get_local_geometry(space, ij, slabidx)
-
-    v₁, v₂, v₃ = work
-    D₁v₂ = form_deriv_entry(F(), D, i, 1) * v₂[1, j, vt]
-    D₂v₁ = form_deriv_entry(F(), D, j, 1) * v₁[i, 1, vt]
-    D₁v₃ = form_deriv_entry(F(), D, i, 1) * v₃[1, j, vt]
-    D₂v₃ = form_deriv_entry(F(), D, j, 1) * v₃[i, 1, vt]
-    @simd for k in 2:Nq
-        D₁v₂ += form_deriv_entry(F(), D, i, k) * v₂[k, j, vt]
-        D₂v₁ += form_deriv_entry(F(), D, j, k) * v₁[i, k, vt]
-        D₁v₃ += form_deriv_entry(F(), D, i, k) * v₃[k, j, vt]
-        D₂v₃ += form_deriv_entry(F(), D, j, k) * v₃[i, k, vt]
-    end
-    result = Geometry.Contravariant123Vector(D₂v₃, -D₁v₃, D₁v₂ - D₂v₁)
     return form_jacobian_rescale(F(), local_geometry, result)
 end
