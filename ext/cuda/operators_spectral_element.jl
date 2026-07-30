@@ -14,8 +14,9 @@ import ClimaCore.Operators:
     covariant_components,
     covariant_vector,
     curl_term,
-    replace_index
-import UnrolledUtilities: unrolled_map, unrolled_reduce
+    replace_index,
+    sum_axes
+import UnrolledUtilities: unrolled_map
 import Base.Broadcast: Broadcasted
 
 """
@@ -194,9 +195,8 @@ end
 # form_deriv_entry supplies the derivative matrix entries (transposed and
 # sign-flipped for the weak form), form_jacobian_rescale or form_weight_rescale
 # divides the form's Jacobian or quadrature-weight factor back out of the result,
-# and the loop over axes is unrolled with one accumulator per dimension, combined
-# once at the end, which keeps the accumulation loops as independent dependency
-# chains.
+# and `sum_axes` unrolls the loop over axes, keeping one accumulator per
+# dimension.
 
 """
     apply_stencil(form, D, w, node, ::Val{d}, i, Nq)
@@ -242,9 +242,6 @@ end
 Base.@propagate_inbounds shmem_components(work, node) =
     unrolled_map(w_k -> isnothing(w_k) ? nothing : (@inbounds w_k[node]), work)
 
-# Sum of the per-axis contributions of an operator, unrolled over its axes.
-@inline sum_over_axes(f, op) = unrolled_reduce(+, unrolled_map(f, axis_vals(op)))
-
 Base.@propagate_inbounds function operator_evaluate(
     op::Divergence{I, F},
     Jv,
@@ -260,7 +257,8 @@ Base.@propagate_inbounds function operator_evaluate(
     local_geometry = get_local_geometry(space, ij, slabidx)
     node = shmem_index(op, ij)
 
-    DJv = sum_over_axes(op) do vd
+    DJv = sum_axes(op) do vd
+        @inline
         d = axis_index(vd)
         @inbounds apply_stencil(F(), D, Jv[d], node, vd, ij[d], Nq)
     end
@@ -283,7 +281,8 @@ Base.@propagate_inbounds function operator_evaluate(
     node = shmem_index(op, ij)
     psi = last(work)
 
-    result = sum_over_axes(op) do vd
+    result = sum_axes(op) do vd
+        @inline
         d = axis_index(vd)
         i = ij[d]
         Juᵈ = work[d]
@@ -347,7 +346,8 @@ Base.@propagate_inbounds function operator_evaluate(
     local_geometry = get_local_geometry(space, ij, slabidx)
     node = shmem_index(op, ij)
 
-    result = sum_over_axes(op) do vd
+    result = sum_axes(op) do vd
+        @inline
         d = axis_index(vd)
         @inbounds curl_stencil(F(), D, work, node, vd, ij[d], Nq)
     end

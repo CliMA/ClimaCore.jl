@@ -1,4 +1,5 @@
-import UnrolledUtilities: unrolled_map, unrolled_foreach, unrolled_any
+import UnrolledUtilities:
+    unrolled_map, unrolled_foreach, unrolled_reduce, unrolled_any
 import ..Utilities.Unrolled: unrolled_map_with_inbounds
 
 abstract type AbstractSpectralStyle <: Fields.AbstractFieldStyle end
@@ -670,10 +671,11 @@ Base.Broadcast.BroadcastStyle(
 # axis index in the type domain so that the loop over axes unrolls and the node
 # indices stay statically sized.
 #
-# The per-axis closures below carry two annotations that matter for performance:
-# `@inline`, because the mutable slab temporary they write to would otherwise
-# escape and be heap-allocated once per slab, and `@inbounds`, which a closure
-# body does not inherit from the enclosing `@inbounds` block.
+# Loops over axes go through `foreach_axis` and `sum_axes`, which own the
+# inlining discipline the per-axis closures depend on. Their bodies still need
+# their own `@inbounds`: a closure body does not inherit it from the enclosing
+# `@inbounds` block, and only a method (not an anonymous function) can opt into
+# propagating it.
 
 """
     axis_vals(op)
@@ -690,6 +692,32 @@ unrolls the loop over axes and keeps `d` available as a type parameter.
 The axis index `d` itself: `ij[axis_index(vd)]` is the node index along axis `d`.
 """
 @inline axis_index(::Val{d}) where {d} = d
+
+"""
+    foreach_axis(f, op)
+    sum_axes(f, op)
+
+Call `f(Val(d))` for each axis index `d` that `op` works over, unrolled;
+`sum_axes` sums the results, keeping one accumulator per axis and combining them
+once at the end so that the per-axis accumulation loops stay independent
+dependency chains.
+
+Two annotations belong in the body of `f`, and neither can be supplied from here,
+because only a method -- not an anonymous function -- can carry them:
+
+  - `@inline`, as the first statement. Without it the closure is not inlined, so
+    the mutable slab temporary it writes to escapes and is heap-allocated once per
+    slab; that measured 1.1-3.8x slower across the operator kernels. (Forcing the
+    inline from inside these helpers does not work: wrapping `f` in another
+    closure to annotate its call site reintroduces the allocation.)
+  - `@inbounds`, since a closure body does not inherit it from an enclosing
+    `@inbounds` block.
+"""
+@inline foreach_axis(f::F, op::SpectralElementOperator) where {F} =
+    unrolled_foreach(f, axis_vals(op))
+
+@inline sum_axes(f::F, op::SpectralElementOperator) where {F} =
+    unrolled_reduce(+, unrolled_map(f, axis_vals(op)))
 
 """
     slab_dims(op, Nq)
@@ -819,8 +847,8 @@ Base.@propagate_inbounds function apply_operator(
     @inbounds for ij in node_indices(space)
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
-        unrolled_foreach(axis_vals(op)) do vd
-            @inline # `out` heap-allocates per slab if this closure is not inlined
+        foreach_axis(op) do vd
+            @inline
             @inbounds begin
                 i = ij[axis_index(vd)]
                 Jvᵈ =
@@ -958,8 +986,8 @@ Base.@propagate_inbounds function apply_operator(
         node = slab_node_index(ij)
         local_geometry = get_local_geometry(space, ij, slabidx)
         u = get_node(space, arg1, ij, slabidx)
-        unrolled_foreach(axis_vals(op)) do vd
-            @inline # `Ju` heap-allocates per slab if this closure is not inlined
+        foreach_axis(op) do vd
+            @inline
             @inbounds Ju[axis_index(vd)][node] =
                 local_geometry.J * contravariant(vd, u, local_geometry)
         end
@@ -970,8 +998,8 @@ Base.@propagate_inbounds function apply_operator(
     fill!(parent(out), zero(FT))
     @inbounds for ij in node_indices(space)
         node = slab_node_index(ij)
-        unrolled_foreach(axis_vals(op)) do vd
-            @inline # `out` heap-allocates per slab if this closure is not inlined
+        foreach_axis(op) do vd
+            @inline
             @inbounds begin
                 i = ij[axis_index(vd)]
                 Juᵈ = Ju[axis_index(vd)]
@@ -1046,8 +1074,8 @@ Base.@propagate_inbounds function apply_operator(
     @inbounds for ij in node_indices(space)
         local_geometry = get_local_geometry(space, ij, slabidx)
         x = form_weighted_arg(form, local_geometry, get_node(space, arg, ij, slabidx))
-        unrolled_foreach(axis_vals(op)) do vd
-            @inline # `out` heap-allocates per slab if this closure is not inlined
+        foreach_axis(op) do vd
+            @inline
             @inbounds begin
                 i = ij[axis_index(vd)]
                 for k in 1:Nq
@@ -1195,8 +1223,8 @@ Base.@propagate_inbounds function apply_operator(
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
         u = curl_covariant_components(op, form, v, local_geometry)
-        unrolled_foreach(axis_vals(op)) do vd
-            @inline # `out` heap-allocates per slab if this closure is not inlined
+        foreach_axis(op) do vd
+            @inline
             @inbounds begin
                 i = ij[axis_index(vd)]
                 for k in 1:Nq

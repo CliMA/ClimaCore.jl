@@ -7,6 +7,7 @@ import ClimaCore.Operators: form_jacobian, form_weighted_arg
 import ClimaCore.Operators:
     axis_vals,
     axis_index,
+    foreach_axis,
     contravariant,
     curl_covariant_components,
     curl_uses_component,
@@ -91,7 +92,8 @@ Base.@propagate_inbounds function operator_fill_shmem!(
     local_geometry = get_local_geometry(space, ij, slabidx)
     node = shmem_index(op, ij)
     jacobian = form_jacobian(F(), local_geometry)
-    unrolled_foreach(axis_vals(op)) do vd
+    foreach_axis(op) do vd
+        @inline
         @inbounds Jv[axis_index(vd)][node] =
             jacobian * contravariant(vd, arg, local_geometry)
     end
@@ -124,7 +126,8 @@ Base.@propagate_inbounds function operator_fill_shmem!(
     local_geometry = get_local_geometry(space, ij, slabidx)
     node = shmem_index(op, ij)
     (; J) = local_geometry
-    unrolled_foreach(axis_vals(op)) do vd
+    foreach_axis(op) do vd
+        @inline
         @inbounds work[axis_index(vd)][node] =
             J * contravariant(vd, arg1, local_geometry)
     end
