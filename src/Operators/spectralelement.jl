@@ -540,6 +540,19 @@ end
 @inline slab_node_index(ij::CartesianIndex{2}) =
     CartesianIndex(1, ij[1], ij[2], 1)
 
+"""
+    slab_node_index(data, ij)
+
+Index for node `ij` in a single slab of `data`. The four-index `(1, i, j, 1)`
+form above serves the [`SlabData`](@ref) temporaries, the `MArray` temporaries of
+[`tensor_product!`](@ref) and every `VIJHWithF` layout; the layouts that drop a
+dimension are indexed with one index per dimension they keep.
+"""
+@inline slab_node_index(_, ij) = slab_node_index(ij)
+@inline slab_node_index(::DataLayouts.VIH1, ij::CartesianIndex{1}) =
+    CartesianIndex(1, ij[1])
+@inline slab_node_index(::DataLayouts.IH1JH2, ij::CartesianIndex{2}) = ij
+
 Base.@propagate_inbounds function get_node(space, data::SlabData, ij, slabidx)
     data[slab_node_index(ij)]
 end
@@ -721,21 +734,27 @@ because only a method -- not an anonymous function -- can carry them:
 
 """
     slab_dims(op, Nq)
+    slab_dims(axis_vals, Nq)
 
 The shape of one slab of nodes for `op`: `Nq` repeated once per axis it works
-over.
+over. The second form takes the axes as a tuple of `Val`s, for the slabs that
+belong to no operator (see [`tensor_product!`](@ref)).
 """
-@inline slab_dims(::SpectralElementOperator{I}, Nq) where {I} =
-    ntuple(_ -> Nq, Val(length(I)))
+@inline slab_dims(op::SpectralElementOperator, Nq) = slab_dims(axis_vals(op), Nq)
+@inline slab_dims(::NTuple{N, Val}, Nq) where {N} = ntuple(_ -> Nq, Val(N))
 
 """
     replace_index(index, ::Val{d}, k)
 
-The Cartesian `index` with its `d`th component replaced by `k`. Used to walk
-along one axis of a slab while holding the other axes fixed.
+The Cartesian `index` -- or the tuple of extents `index` -- with its `d`th
+component replaced by `k`. Used to walk along one axis of a slab while holding
+the other axes fixed, and to shrink the extent of an axis that has been
+contracted.
 """
-@inline replace_index(index::CartesianIndex{N}, ::Val{d}, k) where {N, d} =
-    CartesianIndex(ntuple(n -> n == d ? k : index[n], Val(N)))
+@inline replace_index(index::CartesianIndex, vd::Val, k) =
+    CartesianIndex(replace_index(Tuple(index), vd, k))
+@inline replace_index(index::NTuple{N, Any}, ::Val{d}, k) where {N, d} =
+    ntuple(n -> n == d ? k : index[n], Val(N))
 
 """
     contravariant(::Val{d}, u, local_geometry)
@@ -750,8 +769,128 @@ The `d`th contravariant (``u^d``) or covariant (``u_d``) component of `u`.
 @inline covariant(::Val{2}, u, lg) = Geometry.covariant2(u, lg)
 @inline covariant(::Val{3}, u, lg) = Geometry.covariant3(u, lg)
 
+# The differential operators above accumulate an independent contribution per
+# axis, so one pass over a slab covers every axis. The tensor-product operators
+# below -- interpolation, restriction and `tensor_product!` -- instead contract
+# their axes *sequentially*, applying the same matrix along one axis at a time,
+# so they fold over the axes rather than looping over them: each contraction
+# reads what the previous one wrote.
 
+"""
+    SlabReader(data)
 
+Reads node `ij` of one slab of `data`, in the form [`contract_axis!`](@ref)
+expects of its source. A callable struct rather than a closure so that the read
+is a method, and can therefore propagate `@inbounds` from its caller.
+"""
+struct SlabReader{D}
+    data::D
+end
+Base.@propagate_inbounds (reader::SlabReader)(ij) =
+    reader.data[slab_node_index(reader.data, ij)]
+
+"""
+    contract_axis!(dst, M, src, post, ::Val{d}, dims_out)
+
+Contract axis `d` with the matrix `M`, writing
+
+    dst[ij] = post(ij, ∑ₖ M[ij[d], k] * src(replace_index(ij, Val(d), k)))
+
+for every node `ij` in `CartesianIndices(dims_out)`, where the sum runs over the
+`size(M, 2)` nodes along axis `d` of the source. `src` reads one node of the
+source by Cartesian index (see [`SlabReader`](@ref) and [`TensorArg`](@ref)), so
+the source may be a slab of data or the argument of an operator, read through
+`get_node` without materialising a slab of it first. `post` rescales the
+contracted value; it is applied here rather than in a second pass over `dst` so
+that the arithmetic keeps the shape it had in the per-dimension methods this
+replaces. Whether a division sits inside or outside the accumulation loop can
+change which of the `muladd`s LLVM contracts into an `fma`, so moving it is not
+free of floating-point consequences even though it computes the same expression.
+"""
+Base.@propagate_inbounds function contract_axis!(
+    dst,
+    M,
+    src::S,
+    post::P,
+    vd,
+    dims_out,
+) where {S, P}
+    Nq_in = size(M, 2)
+    for ij in CartesianIndices(dims_out)
+        i = ij[axis_index(vd)]
+        r = M[i, 1] * src(replace_index(ij, vd, 1))
+        for k in 2:Nq_in
+            r = muladd(M[i, k], src(replace_index(ij, vd, k)), r)
+        end
+        dst[slab_node_index(dst, ij)] = post(ij, r)
+    end
+    return dst
+end
+
+# the `post` of a contraction whose result needs no rescaling
+@inline no_rescale(ij, r) = r
+
+"""
+    contract_axes!(dsts, axis_vals, M, src, post, dims_in)
+
+Contract every axis in `axis_vals` with the matrix `M`, one axis at a time,
+reading the first contraction's source from `src` and each later one from what the
+previous contraction wrote. `dims_in` is the shape of the source slab; each
+contraction shrinks (or grows) the extent of its own axis from `size(M, 2)` to
+`size(M, 1)`.
+
+`dsts` holds one destination per axis: the last contraction writes into
+`last(dsts)`, and the intermediate results go into the temporaries before it (see
+[`contract_temps`](@ref)), so that a single-axis contraction writes straight into
+the output with no temporary at all. `post` rescales the final result only, so
+only the last contraction applies it.
+"""
+Base.@propagate_inbounds contract_axes!(
+    dsts::Tuple{Any},
+    vds::Tuple{Val},
+    M,
+    src,
+    post,
+    dims_in,
+) = contract_axis!(
+    dsts[1],
+    M,
+    src,
+    post,
+    vds[1],
+    replace_index(dims_in, vds[1], size(M, 1)),
+)
+Base.@propagate_inbounds function contract_axes!(
+    dsts::Tuple,
+    vds::Tuple{Val, Vararg{Val}},
+    M,
+    src,
+    post,
+    dims_in,
+)
+    dims_out = replace_index(dims_in, vds[1], size(M, 1))
+    dst = contract_axis!(dsts[1], M, src, no_rescale, vds[1], dims_out)
+    return contract_axes!(
+        Base.tail(dsts),
+        Base.tail(vds),
+        M,
+        SlabReader(dst),
+        post,
+        dims_out,
+    )
+end
+
+"""
+    contract_temps(f, axis_vals)
+
+The temporaries that [`contract_axes!`](@ref) writes its intermediate results
+into: `f()`, once per axis except the last, since the last contraction writes
+straight into the output. Each temporary must be large enough for any
+intermediate extent, because an axis holds `size(M, 2)` nodes until it is
+contracted and `size(M, 1)` afterwards.
+"""
+@inline contract_temps(f::F, ::NTuple{N, Val}) where {F, N} =
+    ntuple(_ -> f(), Val(N - 1))
 
 
 
@@ -1236,67 +1375,6 @@ end
 Interpolate(space) = Interpolate{operator_axes(space), typeof(space)}(space)
 Interpolate{()}(space) = Interpolate{operator_axes(space), typeof(space)}(space)
 
-function apply_operator(op::Interpolate{(1,)}, space_out, slabidx, arg)
-    FT = Spaces.undertype(space_out)
-    space_in = axes(arg)
-    QS_in = Spaces.quadrature_style(space_in)
-    QS_out = Spaces.quadrature_style(space_out)
-    Nq_in = Quadratures.degrees_of_freedom(QS_in)
-    Nq_out = Quadratures.degrees_of_freedom(QS_out)
-    Imat = Quadratures.interpolation_matrix(FT, QS_out, QS_in)
-    RT = eltype(arg)
-    out = slab_data(RT, FT, Nq_out)
-    @inbounds for i in 1:Nq_out
-        # manually inlined rmatmul with slab_getnode
-        ij = CartesianIndex((1,))
-        r = Imat[i, 1] * get_node(space_in, arg, ij, slabidx)
-        for ii in 2:Nq_in
-            ij = CartesianIndex((ii,))
-            r = muladd(
-                Imat[i, ii],
-                get_node(space_in, arg, ij, slabidx),
-                r,
-            )
-        end
-        out[i] = r
-    end
-    return Field(immutable_slab_data(out), space_out)
-end
-
-function apply_operator(op::Interpolate{(1, 2)}, space_out, slabidx, arg)
-    FT = Spaces.undertype(space_out)
-    space_in = axes(arg)
-    QS_in = Spaces.quadrature_style(space_in)
-    QS_out = Spaces.quadrature_style(space_out)
-    Nq_in = Quadratures.degrees_of_freedom(QS_in)
-    Nq_out = Quadratures.degrees_of_freedom(QS_out)
-    Imat = Quadratures.interpolation_matrix(FT, QS_out, QS_in)
-    RT = eltype(arg)
-    # temporary storage
-    temp = slab_data(RT, FT, max(Nq_in, Nq_out), max(Nq_in, Nq_out))
-    out = slab_data(RT, FT, Nq_out, Nq_out)
-    @inbounds for j in 1:Nq_in, i in 1:Nq_out
-        # manually inlined rmatmul1 with slab get_node
-        # we do this to remove one allocated intermediate array
-        ij = CartesianIndex((1, j))
-        r = Imat[i, 1] * get_node(space_in, arg, ij, slabidx)
-        for ii in 2:Nq_in
-            ij = CartesianIndex((ii, j))
-            r = muladd(
-                Imat[i, ii],
-                get_node(space_in, arg, ij, slabidx),
-                r,
-            )
-        end
-        temp[1, i, j, 1] = r
-    end
-    @inbounds for j in 1:Nq_out, i in 1:Nq_out
-        out[1, i, j, 1] = rmatmul2(Imat, temp, i, j)
-    end
-    return Field(immutable_slab_data(out), space_out)
-end
-
-
 """
     r = Restrict(space)
     r.(f)
@@ -1326,170 +1404,191 @@ end
 Restrict(space) = Restrict{operator_axes(space), typeof(space)}(space)
 Restrict{()}(space) = Restrict{operator_axes(space), typeof(space)}(space)
 
-function apply_operator(op::Restrict{(1,)}, space_out, slabidx, arg)
+# Interpolation and restriction contract the same interpolation matrix along every
+# axis, so one implementation covers both, for any axis tuple `I`. They differ only
+# in three factors, in the same way that the strong and weak forms of the
+# differential operators differ in the `form_*` factors above: the matrix
+# contracted along each axis, whether the argument is weighted by the Jacobian
+# factor `WJ` of the input space, and whether the result is divided by the `WJ` of
+# the output space.
+
+"""
+    tensor_matrix(op, FT, QS_out, QS_in)
+
+The matrix that `op` contracts along each of its axes: the barycentric
+interpolation matrix from `QS_in` to `QS_out` for [`Interpolate`](@ref), and the
+transpose of the interpolation matrix from `QS_out` to `QS_in` for
+[`Restrict`](@ref).
+"""
+@inline tensor_matrix(::Interpolate, ::Type{FT}, QS_out, QS_in) where {FT} =
+    Quadratures.interpolation_matrix(FT, QS_out, QS_in)
+@inline tensor_matrix(::Restrict, ::Type{FT}, QS_out, QS_in) where {FT} =
+    Quadratures.interpolation_matrix(FT, QS_in, QS_out)' # transpose
+
+"""
+    tensor_weighted_arg(op, space_in, arg, ij, slabidx)
+
+The value of `arg` at node `ij`, weighted as `op` requires: unweighted for
+[`Interpolate`](@ref), and multiplied by the Jacobian factor `WJ` of the input
+space for [`Restrict`](@ref), which integrates its argument against the test
+functions of the output space.
+"""
+Base.@propagate_inbounds tensor_weighted_arg(
+    ::Interpolate,
+    space_in,
+    arg,
+    ij,
+    slabidx,
+) = get_node(space_in, arg, ij, slabidx)
+Base.@propagate_inbounds tensor_weighted_arg(
+    ::Restrict,
+    space_in,
+    arg,
+    ij,
+    slabidx,
+) =
+    get_local_geometry(space_in, ij, slabidx).WJ *
+    get_node(space_in, arg, ij, slabidx)
+
+"""
+    tensor_rescale(op, space_out, ij, slabidx, x)
+
+The result value `x` at node `ij`, with the weighting that `op` applied to its
+argument divided back out: `x` itself for [`Interpolate`](@ref), and
+`x / WJ` for [`Restrict`](@ref), whose ``(W^* J^*)^{-1}`` factor uses the
+Jacobian factor of the output space.
+"""
+Base.@propagate_inbounds tensor_rescale(::Interpolate, space_out, ij, slabidx, x) = x
+Base.@propagate_inbounds tensor_rescale(::Restrict, space_out, ij, slabidx, x) =
+    x / get_local_geometry(space_out, ij, slabidx).WJ
+
+"""
+    TensorArg(op, space_in, arg, slabidx)
+
+Reads node `ij` of the argument of a [`TensorOperator`](@ref), weighted as the
+operator requires (see [`tensor_weighted_arg`](@ref)), in the form
+[`contract_axis!`](@ref) expects of its source. Reading the argument this way is
+what lets the first contraction consume it directly, without materialising a slab
+of it first.
+"""
+struct TensorArg{O, S, A, SI}
+    op::O
+    space_in::S
+    arg::A
+    slabidx::SI
+end
+Base.@propagate_inbounds (a::TensorArg)(ij) =
+    tensor_weighted_arg(a.op, a.space_in, a.arg, ij, a.slabidx)
+
+"""
+    TensorRescale(op, space_out, slabidx)
+
+Divides the weighting that a [`TensorOperator`](@ref) applied to its argument back
+out of the value at node `ij` (see [`tensor_rescale`](@ref)), in the form
+[`contract_axis!`](@ref) expects of its `post`.
+"""
+struct TensorRescale{O, S, SI}
+    op::O
+    space_out::S
+    slabidx::SI
+end
+Base.@propagate_inbounds (p::TensorRescale)(ij, x) =
+    tensor_rescale(p.op, p.space_out, ij, p.slabidx, x)
+
+Base.@propagate_inbounds function apply_operator(
+    op::TensorOperator{I},
+    space_out,
+    slabidx,
+    arg,
+) where {I}
     FT = Spaces.undertype(space_out)
     space_in = axes(arg)
     QS_in = Spaces.quadrature_style(space_in)
     QS_out = Spaces.quadrature_style(space_out)
     Nq_in = Quadratures.degrees_of_freedom(QS_in)
     Nq_out = Quadratures.degrees_of_freedom(QS_out)
-    ImatT = Quadratures.interpolation_matrix(FT, QS_in, QS_out)' # transpose
+    M = tensor_matrix(op, FT, QS_out, QS_in)
     RT = eltype(arg)
-    out = slab_data(RT, FT, Nq_out)
-    @inbounds for i in 1:Nq_out
-        # manually inlined rmatmul with slab get_node
-        ij = CartesianIndex((1,))
-        WJ = get_local_geometry(space_in, ij, slabidx).WJ
-        r = ImatT[i, 1] * (WJ * get_node(space_in, arg, ij, slabidx))
-        for ii in 2:Nq_in
-            ij = CartesianIndex((ii,))
-            WJ = get_local_geometry(space_in, ij, slabidx).WJ
-            r = muladd(
-                ImatT[i, ii],
-                WJ * get_node(space_in, arg, ij, slabidx),
-                r,
-            )
-        end
-        ij_out = CartesianIndex((i,))
-        WJ_out = get_local_geometry(space_out, ij_out, slabidx).WJ
-        out[i] = r / WJ_out
+    vds = axis_vals(op)
+    out = slab_data(RT, FT, slab_dims(vds, Nq_out)...)
+    # temporary storage, sized for the largest intermediate extent
+    Nq_max = max(Nq_in, Nq_out)
+    temps = contract_temps(vds) do
+        slab_data(RT, FT, slab_dims(vds, Nq_max)...)
     end
+    @inbounds contract_axes!(
+        (temps..., out),
+        vds,
+        M,
+        TensorArg(op, space_in, arg, slabidx),
+        TensorRescale(op, space_out, slabidx),
+        slab_dims(vds, Nq_in),
+    )
     return Field(immutable_slab_data(out), space_out)
 end
 
-function apply_operator(op::Restrict{(1, 2)}, space_out, slabidx, arg)
-    FT = Spaces.undertype(space_out)
-    space_in = axes(arg)
-    QS_in = Spaces.quadrature_style(space_in)
-    QS_out = Spaces.quadrature_style(space_out)
-    Nq_in = Quadratures.degrees_of_freedom(QS_in)
-    Nq_out = Quadratures.degrees_of_freedom(QS_out)
-    ImatT = Quadratures.interpolation_matrix(FT, QS_in, QS_out)' # transpose
-    RT = eltype(arg)
-    # temporary storage
-    temp = slab_data(RT, FT, max(Nq_in, Nq_out), max(Nq_in, Nq_out))
-    out = slab_data(RT, FT, Nq_out, Nq_out)
-    @inbounds for j in 1:Nq_in, i in 1:Nq_out
-        # manually inlined rmatmul1 with slab get_node
-        ij = CartesianIndex((1, j))
-        WJ = get_local_geometry(space_in, ij, slabidx).WJ
-        r = ImatT[i, 1] * (WJ * get_node(space_in, arg, ij, slabidx))
-        for ii in 2:Nq_in
-            ij = CartesianIndex((ii, j))
-            WJ = get_local_geometry(space_in, ij, slabidx).WJ
-            r = muladd(
-                ImatT[i, ii],
-                WJ * get_node(space_in, arg, ij, slabidx),
-                r,
-            )
-        end
-        temp[1, i, j, 1] = r
-    end
-    @inbounds for j in 1:Nq_out, i in 1:Nq_out
-        ij_out = CartesianIndex((i, j))
-        WJ_out = get_local_geometry(space_out, ij_out, slabidx).WJ
-        out[1, i, j, 1] = rmatmul2(ImatT, temp, i, j) / WJ_out
-    end
-    return Field(immutable_slab_data(out), space_out)
-end
 
+"""
+    slab_axis_vals(data)
+
+The axes of one slab of `data`, as a tuple of `Val`s: just `(Val(1),)` for a
+layout with a single node along the second horizontal direction, and
+`(Val(1), Val(2))` otherwise.
+"""
+@inline slab_axis_vals(::DataLayouts.VIJHWithF{<:Any, <:Any, <:Any, 1}) = (Val(1),)
+@inline slab_axis_vals(::DataLayouts.VIJHWithF) = (Val(1), Val(2))
 
 """
     tensor_product!(out, in, M)
     tensor_product!(inout, M)
 
-Computes the tensor product `out = (M ⊗ M) * in` on each element.
+Computes the tensor product `out = (M ⊗ M) * in` on each element, contracting `M`
+along every axis of a slab of `in` (see [`contract_axes!`](@ref)). Unlike
+[`Interpolate`](@ref) this works on data directly rather than on fields, so it can
+write into the plotting layouts that drop a dimension
+([`DataLayouts.VIH1`](@ref) and [`DataLayouts.IH1JH2`](@ref)).
 """
 function tensor_product! end
 
 function tensor_product!(
     out::Union{
-        DataLayouts.VIJHWithF{S, Nv, Ni_out, 1},
+        DataLayouts.VIJHWithF{S, Nv, Ni_out},
         DataLayouts.VIH1{S, Nv, Ni_out},
+        DataLayouts.IH1JH2{S, Ni_out},
     },
-    indata::DataLayouts.VIJHWithF{S, Nv, Ni_in, 1},
+    indata::DataLayouts.VIJHWithF{S, Nv, Ni_in, Nj_in},
     M::SMatrix{Ni_out, Ni_in},
-) where {S, Nv, Ni_out, Ni_in}
+) where {S, Nv, Ni_in, Nj_in, Ni_out}
     Nh_in = DataLayouts.nelems(indata)
     Nh_out = DataLayouts.nelems(out)
     # TODO: assumes the same number of levels (horizontal only)
     @assert Nh_in == Nh_out
+    # the same M is contracted along every axis, so a slab with a second node axis
+    # has to be square, on the way in and on the way out
+    @assert Nj_in == 1 ||
+            (Nj_in == Ni_in && DataLayouts.shape_params(out).Nj == Ni_out)
+    # IH1JH2 keeps a single horizontal plane, so it can only take a single level
+    @assert Nv == 1 || !(out isa DataLayouts.IH1JH2)
+    vds = slab_axis_vals(indata)
+    dims_in = slab_dims(vds, Ni_in)
+    # temporary storage, sized for the largest intermediate extent
+    Nq_max = max(Ni_in, Ni_out)
+    temps = contract_temps(vds) do
+        MArray{Tuple{1, Nq_max, Nq_max, 1}, S, 4, Nq_max * Nq_max}(undef)
+    end
     @inbounds for h in 1:Nh_out, v in 1:Nv
         in_slab = slab(indata, v, h)
         out_slab = slab(out, v, h)
-        for i in 1:Ni_out
-            r = M[i, 1] * in_slab[1]
-            for ii in 2:Ni_in
-                r = muladd(M[i, ii], in_slab[ii], r)
-            end
-            out_slab[i] = r
-        end
+        contract_axes!(
+            (temps..., out_slab),
+            vds,
+            M,
+            SlabReader(in_slab),
+            no_rescale,
+            dims_in,
+        )
     end
     return out
-end
-
-function tensor_product!(
-    out::DataLayouts.VIJHWithF{S, 1, Nij_out, Nij_out},
-    indata::DataLayouts.VIJHWithF{S, 1, Nij_in, Nij_in},
-    M::SMatrix{Nij_out, Nij_in},
-) where {S, Nij_out, Nij_in}
-    Nh = size(indata, 4)
-    @assert Nh == size(out, 4)
-
-    # temporary storage
-    temp = MArray{Tuple{1, Nij_out, Nij_in, 1}, S, 4, Nij_out * Nij_in}(undef)
-
-    @inbounds for h in 1:Nh
-        in_slab = slab(indata, 1, h)
-        out_slab = slab(out, 1, h)
-        for j in 1:Nij_in, i in 1:Nij_out
-            temp[1, i, j, 1] = rmatmul1(M, in_slab, i, j)
-        end
-        for j in 1:Nij_out, i in 1:Nij_out
-            out_slab[1, i, j, 1] = rmatmul2(M, temp, i, j)
-        end
-    end
-    return out
-end
-
-function tensor_product!(
-    out::DataLayouts.IH1JH2{S, Nij_out, Nij_out},
-    indata::DataLayouts.VIJHWithF{S, 1, Nij_in, Nij_in},
-    M::SMatrix{Nij_out, Nij_in},
-) where {S, Nij_out, Nij_in}
-    Nh = DataLayouts.nelems(indata)
-    @assert Nh == DataLayouts.nelems(out)
-
-    # temporary storage
-    temp = MArray{Tuple{1, Nij_out, Nij_in, 1}, S, 4, Nij_out * Nij_in}(undef)
-
-    @inbounds for h in 1:Nh
-        in_slab = slab(indata, 1, h)
-        out_slab = slab(out, 1, h)
-        for j in 1:Nij_in, i in 1:Nij_out
-            temp[1, i, j, 1] = rmatmul1(M, in_slab, i, j)
-        end
-        for j in 1:Nij_out, i in 1:Nij_out
-            out_slab[i, j] = rmatmul2(M, temp, i, j)
-        end
-    end
-    return out
-end
-
-function tensor_product!(
-    out_slab::DataLayouts.VIJHWithF{S, 1, Nij_out, Nij_out, 1},
-    in_slab::DataLayouts.VIJHWithF{S, 1, Nij_in, Nij_in, 1},
-    M::SMatrix{Nij_out, Nij_in},
-) where {S, Nij_out, Nij_in}
-    # temporary storage
-    temp = MArray{Tuple{1, Nij_out, Nij_in, 1}, S, 4, Nij_out * Nij_in}(undef)
-    @inbounds for j in 1:Nij_in, i in 1:Nij_out
-        temp[1, i, j, 1] = rmatmul1(M, in_slab, i, j)
-    end
-    @inbounds for j in 1:Nij_out, i in 1:Nij_out
-        out_slab[1, i, j, 1] = rmatmul2(M, temp, i, j)
-    end
-    return out_slab
 end
 
 function tensor_product!(
@@ -1549,39 +1648,6 @@ Returns a 2D Matrix for plotting / visualizing 2D Fields.
 """
 matrix_interpolate(field::Field, Nu::Integer) =
     matrix_interpolate(field, Quadratures.Uniform{Nu}())
-
-"""
-    rmatmul1(W, S, i, j)
-
-Recursive matrix product along the 1st dimension of `S`. Equivalent to:
-
-    mapreduce(*, +, W[i,:], S[:,j])
-
-"""
-function rmatmul1(W, S, i, j)
-    Nq = size(W, 2)
-    @inbounds r = W[i, 1] * S[1, 1, j, 1]
-    @inbounds for ii in 2:Nq
-        r = muladd(W[i, ii], S[1, ii, j, 1], r)
-    end
-    return r
-end
-
-"""
-    rmatmul2(W, S, i, j)
-
-Recursive matrix product along the 2nd dimension `S`. Equivalent to:
-
-    mapreduce(*, +, W[j,:], S[i, :])
-"""
-function rmatmul2(W, S, i, j)
-    Nq = size(W, 2)
-    @inbounds r = W[j, 1] * S[1, i, 1, 1]
-    @inbounds for jj in 2:Nq
-        r = muladd(W[j, jj], S[1, i, jj, 1], r)
-    end
-    return r
-end
 
 function apply_operator(
     op::SpectralElementOperator{()},
