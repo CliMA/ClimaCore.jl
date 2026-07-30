@@ -112,7 +112,8 @@ computation; they differ only in three form-dependent factors:
  - whether the argument is weighted by the quadrature weights `W` or by the
    Jacobian factor; see `form_weighted_arg` and `form_jacobian`,
  - whether the result is rescaled by `J` or by `WJ`; see
-   `form_jacobian_rescale`.
+   `form_jacobian_rescale`, and by `W` or not at all; see
+   `form_weight_rescale`.
 
 Operators with strong/weak variants carry a `FormType` as their second type
 parameter, e.g. `Divergence{I, StrongForm}`, with the weak variant available
@@ -185,6 +186,23 @@ inverse), and `x / WJ` for the weak form. Used by [`Divergence`](@ref) and
     x * local_geometry.invJ
 @inline form_jacobian_rescale(::WeakForm, local_geometry, x) =
     x / local_geometry.WJ
+
+"""
+    form_weight_rescale(form, local_geometry, x)
+
+The result value `x`, divided by the quadrature weights `W = WJ * J⁻¹` if the
+given [`FormType`](@ref) requires it: `x` itself for the strong form, and
+`x / W` for the weak form. Used by [`Gradient`](@ref), whose weak variant
+weights its argument by `W` without a Jacobian factor to divide out.
+
+The CPU `apply_operator` methods for [`Gradient`](@ref) inline this rescale
+behind an `F === WeakForm` branch instead of calling it, so that the strong form
+skips the loop over quadrature points entirely; on GPUs each thread rescales
+only its own point, so there is no loop to skip.
+"""
+@inline form_weight_rescale(::StrongForm, local_geometry, x) = x
+@inline form_weight_rescale(::WeakForm, local_geometry, x) =
+    x / (local_geometry.WJ * local_geometry.invJ)
 
 """
     rebuild_operator(op, space)
@@ -939,7 +957,6 @@ function apply_operator(op::SplitDivergence{(1, 2)}, space, slabidx, arg1, arg2)
 
     return Field(immutable_slab_data(out), space)
 end
-
 
 """
     grad = Gradient()
