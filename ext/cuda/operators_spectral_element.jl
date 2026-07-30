@@ -11,8 +11,6 @@ import ClimaCore.Operators:
 import ClimaCore.Operators:
     axis_vals,
     axis_index,
-    covariant_components,
-    covariant_vector,
     curl_term,
     replace_index,
     sum_axes
@@ -319,10 +317,10 @@ Base.@propagate_inbounds function operator_evaluate(
         @inbounds apply_stencil(F(), D, input, node, vd, ij[d], Nq)
     end
     result = if eltype(input) <: Number
-        covariant_vector(op, ∂f∂ξ)
+        Geometry.covariant_vector(Val(I), ∂f∂ξ)
     elseif eltype(input) <: Geometry.AbstractTensor{1}
         tensor_axes =
-            (covariant_components(op), Geometry.tensor_axes(eltype(input))[1])
+            (Geometry.covariant_axis(Val(I)), Geometry.tensor_axes(eltype(input))[1])
         tensor_components = hcat(unrolled_map(parent, ∂f∂ξ)...)'
         Geometry.Tensor(tensor_components, tensor_axes)
     else

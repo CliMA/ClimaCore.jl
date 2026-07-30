@@ -750,39 +750,6 @@ The `d`th contravariant (``u^d``) or covariant (``u_d``) component of `u`.
 @inline covariant(::Val{2}, u, lg) = Geometry.covariant2(u, lg)
 @inline covariant(::Val{3}, u, lg) = Geometry.covariant3(u, lg)
 
-"""
-    covariant_components(op)
-
-The covariant components (the axis of a covariant vector) over the axes that `op`
-works over, e.g. `Covariant12Axis()` for axes `(1, 2)`.
-"""
-@inline covariant_components(::SpectralElementOperator{I}) where {I} =
-    Geometry.Components{Geometry.Covariant, I}()
-
-"""
-    covariant_vector(op, components)
-
-A covariant vector over the axes that `op` works over, with the given
-`components`, e.g. `Covariant12Vector(components...)` for axes `(1, 2)`.
-"""
-@inline covariant_vector(op::SpectralElementOperator, components::Tuple) =
-    Geometry.Tensor(SVector(components), (covariant_components(op),))
-
-"""
-    covariant_basis_vector(op, ::Val{d}, c)
-
-`c` times the `d`th covariant basis vector of the axes that `op` works over,
-e.g. `Covariant12Vector(0, c)` for axes `(1, 2)` and `d = 2`.
-"""
-@inline covariant_basis_vector(
-    op::SpectralElementOperator{I},
-    ::Val{d},
-    c,
-) where {I, d} = covariant_vector(
-    op,
-    ntuple(n -> I[n] == d ? c : zero(c), Val(length(I))),
-)
-
 
 
 
@@ -1080,8 +1047,8 @@ Base.@propagate_inbounds function apply_operator(
                 i = ij[axis_index(vd)]
                 for k in 1:Nq
                     ∂f∂ξᵈ =
-                        covariant_basis_vector(
-                            op,
+                        Geometry.covariant_basis_vector(
+                            Val(I),
                             vd,
                             form_deriv_entry(form, D, k, i),
                         ) ⊗ x

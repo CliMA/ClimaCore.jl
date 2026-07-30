@@ -266,3 +266,31 @@ end
         local_geom,
     ) == Contravariant123Vector(0.25, 1.0, 1.0) ⊗ Covariant12Vector(2.0, 8.0)
 end
+
+@testset "dimension-generic covariant constructors" begin
+    # generic forms of the CovariantNAxis / CovariantNVector aliases, used by code
+    # that is generic over the dimensions it works on (e.g. spectral operators)
+    @test Geometry.covariant_axis(Val((1,))) === Geometry.Covariant1Axis()
+    @test Geometry.covariant_axis(Val((1, 2))) === Geometry.Covariant12Axis()
+    @test Geometry.covariant_axis(Val((1, 2, 3))) === Geometry.Covariant123Axis()
+
+    @test Geometry.covariant_vector(Val((1,)), (1.0,)) == Covariant1Vector(1.0)
+    @test Geometry.covariant_vector(Val((1, 2)), (1.0, 2.0)) ==
+          Covariant12Vector(1.0, 2.0)
+    @test Geometry.covariant_vector(Val((1, 2)), (1.0, 2.0)) isa
+          Covariant12Vector{Float64}
+
+    @test Geometry.covariant_basis_vector(Val((1,)), Val(1), 3.0) ==
+          Covariant1Vector(3.0)
+    @test Geometry.covariant_basis_vector(Val((1, 2)), Val(1), 3.0) ==
+          Covariant12Vector(3.0, 0.0)
+    @test Geometry.covariant_basis_vector(Val((1, 2)), Val(2), 3.0) ==
+          Covariant12Vector(0.0, 3.0)
+    # the axis index is a dimension label, not a position: for I = (2, 3),
+    # Val(2) selects the first component
+    @test Geometry.covariant_basis_vector(Val((2, 3)), Val(3), 3.0) ==
+          Geometry.Covariant23Vector(0.0, 3.0)
+
+    @test (@inferred Geometry.covariant_basis_vector(Val((1, 2)), Val(2), 3.0)) isa
+          Covariant12Vector{Float64}
+end

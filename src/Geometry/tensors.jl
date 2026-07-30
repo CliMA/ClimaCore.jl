@@ -595,6 +595,39 @@ for I in [(), (1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
     @eval const $(Symbol(:Cartesian, strI, :Axis)) = Components{Orthonormal, $I}
 end
 
+# Generic counterparts of the aliases above, for code that is generic over the
+# dimensions `I` rather than written against a fixed set (e.g. the spectral
+# element operators, which work over the axes of whichever space they are applied
+# to). `I` is passed as a `Val`, matching `gradient_result_type` and
+# `curl_result_type`.
+
+"""
+    covariant_axis(::Val{I})
+
+The covariant components over the dimensions `I`, i.e. the generic form of the
+`CovariantNAxis` aliases: `covariant_axis(Val((1, 2))) === Covariant12Axis()`.
+"""
+@inline covariant_axis(::Val{I}) where {I} = Components{Covariant, I}()
+
+"""
+    covariant_vector(::Val{I}, components)
+
+A covariant vector over the dimensions `I` with the given `components`, i.e. the
+generic form of the `CovariantNVector` constructors:
+`covariant_vector(Val((1, 2)), (1.0, 2.0)) == Covariant12Vector(1.0, 2.0)`.
+"""
+@inline covariant_vector(valI::Val, components::Tuple) =
+    Tensor(SVector(components), (covariant_axis(valI),))
+
+"""
+    covariant_basis_vector(::Val{I}, ::Val{d}, c)
+
+`c` times the `d`th covariant basis vector over the dimensions `I`:
+`covariant_basis_vector(Val((1, 2)), Val(2), c) == Covariant12Vector(zero(c), c)`.
+"""
+@inline covariant_basis_vector(::Val{I}, ::Val{d}, c) where {I, d} =
+    covariant_vector(Val(I), ntuple(n -> I[n] == d ? c : zero(c), Val(length(I))))
+
 # Named property access for vectors (e.g., v.u₁, v.u², v.u)
 _symbols(::Covariant) = (:u₁, :u₂, :u₃)
 _symbols(::Contravariant) = (:u¹, :u², :u³)
