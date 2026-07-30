@@ -52,19 +52,24 @@ operator_axes(space::Spaces.ExtrudedFiniteDifferenceSpace) =
     operator_axes(Spaces.horizontal_space(space))
 
 
-function node_indices(space::Spaces.SpectralElementSpace1D)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    CartesianIndices((Nq,))
-end
-function node_indices(space::Spaces.SpectralElementSpace2D)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    CartesianIndices((Nq, Nq))
-end
-node_indices(space::Spaces.ExtrudedFiniteDifferenceSpace) =
-    node_indices(Spaces.horizontal_space(space))
+"""
+    node_indices(space)
 
+The indices of the nodes in one slab of `space`: `Nq` of them along each axis that
+an operator on `space` works over (see [`operator_axes`](@ref)).
+"""
+function node_indices(
+    space::Union{
+        Spaces.AbstractSpectralElementSpace,
+        Spaces.ExtrudedFiniteDifferenceSpace,
+    },
+)
+    QS = Spaces.quadrature_style(space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    return CartesianIndices(ntuple(_ -> Nq, Val(length(operator_axes(space)))))
+end
+
+# `operator_axes` is empty here, but a slab still holds the one node of a column
 node_indices(space::Spaces.FiniteDifferenceSpace) = CartesianIndices((1,))
 
 
@@ -454,49 +459,55 @@ Base.@propagate_inbounds function get_node(
 )
     scalar[1]
 end
-Base.@propagate_inbounds function get_node(
-    parent_space,
-    field::Fields.Field,
-    ij::CartesianIndex{1},
-    slabidx,
-)
-    space = reconstruct_placeholder_space(axes(field), parent_space)
-    i, = Tuple(ij)
+"""
+    data_index(ij, v, h)
+
+Index of node `ij` at level `v` of element `h` in a four-index data layout. A node
+index has one component per axis that an operator works over (see
+[`operator_axes`](@ref)), so the axes it leaves out are indexed at 1 -- the only
+node those layouts store along them.
+"""
+@inline data_index(ij::CartesianIndex{N}, v, h) where {N} =
+    CartesianIndex(v, ntuple(d -> d <= N ? ij[d] : 1, Val(2))..., h)
+
+"""
+    slab_level_index(space, slabidx)
+
+The level at which the slab `slabidx` reads `space`: `slabidx.v` for center
+spaces, staggered by [`half`](@ref) for face spaces, and level 1 for the
+horizontal spaces whose slab index carries no level at all (`slabidx.v ===
+nothing`).
+
+The staggering of `space` has to be known, so an unrecognised space is an error
+rather than a silent read of level `slabidx.v`. Both the one- and the
+two-dimensional node accessors used to inline this logic, but only the
+one-dimensional ones handled a bare `FiniteDifferenceSpace`; that is deliberate
+here, since a horizontal operator applied to an extracted column space reaches
+these accessors with a one-dimensional node index over such a space.
+"""
+@inline function slab_level_index(space, slabidx)
     if space isa Spaces.FaceExtrudedFiniteDifferenceSpace ||
        space isa Spaces.FaceFiniteDifferenceSpace
         _v = slabidx.v + half
     elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace ||
-           space isa Spaces.AbstractSpectralElementSpace ||
-           space isa Spaces.CenterFiniteDifferenceSpace
-        _v = slabidx.v
-    else
-        error("invalid space")
-    end
-    h = slabidx.h
-    fv = Fields.field_values(field)
-    v = isnothing(_v) ? 1 : _v
-    return fv[v, i, 1, h]
-end
-Base.@propagate_inbounds function get_node(
-    parent_space,
-    field::Fields.Field,
-    ij::CartesianIndex{2},
-    slabidx,
-)
-    space = reconstruct_placeholder_space(axes(field), parent_space)
-    i, j = Tuple(ij)
-    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
-        _v = slabidx.v + half
-    elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace ||
+           space isa Spaces.CenterFiniteDifferenceSpace ||
            space isa Spaces.AbstractSpectralElementSpace
         _v = slabidx.v
     else
         error("invalid space")
     end
-    h = slabidx.h
+    return isnothing(_v) ? 1 : _v
+end
+
+Base.@propagate_inbounds function get_node(
+    parent_space,
+    field::Fields.Field,
+    ij::CartesianIndex,
+    slabidx,
+)
+    space = reconstruct_placeholder_space(axes(field), parent_space)
     fv = Fields.field_values(field)
-    v = isnothing(_v) ? 1 : _v
-    return fv[v, i, j, h]
+    return fv[data_index(ij, slab_level_index(space, slabidx), slabidx.h)]
 end
 
 
@@ -536,9 +547,7 @@ end
     DataLayouts.rebuild(data, SArray(parent(data)))
 
 # Index for one node in a slab of data, with v = h = 1.
-@inline slab_node_index(ij::CartesianIndex{1}) = CartesianIndex(1, ij[1], 1, 1)
-@inline slab_node_index(ij::CartesianIndex{2}) =
-    CartesianIndex(1, ij[1], ij[2], 1)
+@inline slab_node_index(ij::CartesianIndex) = data_index(ij, 1, 1)
 
 """
     slab_node_index(data, ij)
@@ -559,15 +568,7 @@ end
 Base.@propagate_inbounds function get_node(
     space,
     field::Fields.Field{<:SlabData},
-    ij::CartesianIndex{1},
-    slabidx,
-)
-    Fields.field_values(field)[slab_node_index(ij)]
-end
-Base.@propagate_inbounds function get_node(
-    space,
-    field::Fields.Field{<:SlabData},
-    ij::CartesianIndex{2},
+    ij::CartesianIndex,
     slabidx,
 )
     Fields.field_values(field)[slab_node_index(ij)]
@@ -591,76 +592,22 @@ Base.@propagate_inbounds function get_local_geometry(
         Spaces.AbstractSpectralElementSpace,
         Spaces.ExtrudedFiniteDifferenceSpace,
     },
-    ij::CartesianIndex{1},
+    ij::CartesianIndex,
     slabidx,
 )
-    i, = Tuple(ij)
-    h = slabidx.h
-    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
-        _v = slabidx.v + half
-    else
-        _v = slabidx.v
-    end
     lgd = Spaces.local_geometry_data(space)
-    v = isnothing(_v) ? 1 : _v
-    return lgd[v, i, 1, h]
-end
-Base.@propagate_inbounds function get_local_geometry(
-    space::Union{
-        Spaces.AbstractSpectralElementSpace,
-        Spaces.ExtrudedFiniteDifferenceSpace,
-    },
-    ij::CartesianIndex{2},
-    slabidx,
-)
-    i, j = Tuple(ij)
-    h = slabidx.h
-    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
-        _v = slabidx.v + half
-    else
-        _v = slabidx.v
-    end
-    v = isnothing(_v) ? 1 : _v
-    lgd = Spaces.local_geometry_data(space)
-    return lgd[v, i, j, h]
+    return lgd[data_index(ij, slab_level_index(space, slabidx), slabidx.h)]
 end
 
 Base.@propagate_inbounds function set_node!(
     space,
     field::Fields.Field,
-    ij::CartesianIndex{1},
+    ij::CartesianIndex,
     slabidx,
     val,
 )
-    i, = Tuple(ij)
-    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace ||
-       space isa Spaces.FaceFiniteDifferenceSpace
-        _v = slabidx.v + half
-    else
-        _v = slabidx.v
-    end
-    h = slabidx.h
     fv = Fields.field_values(field)
-    v = isnothing(_v) ? 1 : _v
-    fv[v, i, 1, h] = val
-end
-Base.@propagate_inbounds function set_node!(
-    space,
-    field::Fields.Field,
-    ij::CartesianIndex{2},
-    slabidx,
-    val,
-)
-    i, j = Tuple(ij)
-    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
-        _v = slabidx.v + half
-    else
-        _v = slabidx.v
-    end
-    h = slabidx.h
-    fv = Fields.field_values(field)
-    v = isnothing(_v) ? 1 : _v
-    fv[v, i, j, h] = val
+    fv[data_index(ij, slab_level_index(space, slabidx), slabidx.h)] = val
 end
 
 Base.Broadcast.BroadcastStyle(

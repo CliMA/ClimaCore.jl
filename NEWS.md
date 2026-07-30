@@ -65,6 +65,19 @@ main
   and fused-multiply-add selection that follows restructuring the accumulation
   loops; the largest observed difference is 5.3e-15 on values of order 1 to 20.
   [2559](https://github.com/CliMA/ClimaCore.jl/pull/2559)
+- Unified the remaining duplicated spectral-element operator code, finishing the
+  work above: `Interpolate`, `Restrict` and `tensor_product!` each had one
+  implementation per dimension and now have one that contracts a single axis at a
+  time (`rmatmul1`/`rmatmul2` are removed), and `get_node`, `set_node!`,
+  `get_local_geometry`, `slab_node_index` and `node_indices` lose their
+  per-dimension pairs. Callers should note that the two-dimensional `get_node`
+  and `set_node!` now accept a bare `FiniteDifferenceSpace`, and that
+  `get_local_geometry` and `set_node!` now raise `"invalid space"` for a space of
+  unknown staggering instead of reading level `slabidx.v`. Bitwise unchanged on
+  GPUs and for 73 of the 74 checked CPU expressions; `Restrict` on a
+  `SpectralElementSpace1D` moves 3 of 15 nodes by at most 1 ulp, from
+  fused-multiply-add selection after the loop was made generic (summation order
+  unchanged). [2559](https://github.com/CliMA/ClimaCore.jl/pull/2559)
 - ![][badge-🐛bugfix] Fixed spectral-element operators failing to run on the GPU
   over a `SpectralElementSpace1D`. The space could not be passed to a kernel
   (`KernelError: passing non-bitstype argument`) because, unlike
