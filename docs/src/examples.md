@@ -79,25 +79,29 @@ The example code solves the equation for 4 different tendencies with the followi
   where ``\partial`` is the [`face-to-center divergence`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.DivergenceF2C) and $UB$ is the [`center-to-face upwind biased product`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.UpwindBiasedProductC2F) operator.
 - Tendency 2:
 
-  $$D = \partial(UB) + \textrm{fcc}(v, \theta),$$  
+  $$D = \partial(UB) - \textrm{fcc}(v, \theta),$$  
   
-  where $\textrm{fcc}(v, \theta)$ is the [`center-to-center flux correction`](https://github.com/CliMA/ClimaCore.jl/blob/main/src/Operators/finitedifference.jl#L2617) operator.
+  where $\textrm{fcc}(v, \theta) = \bar{\partial}(|v| G(\theta))$ is a flux correction term, built from the [face-to-center gradient](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.GradientF2C) $\bar{\partial}$ and the [center-to-face gradient](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.GradientC2F) $G$. The gradient of $\theta$ is set to zero on both boundary faces, so that no correction flux passes through them.
 - Tendency 3:
 
-  $$D =  v \cdot G(T)$$  
+  $$D =  \bar{I}(v \cdot G(\theta))$$  
    
-  where``G`` is the [center-to-face gradient](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.GradientC2F) operator, called `gradc2f` in the example code
+  where ``G`` is the [center-to-face gradient](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.GradientC2F) operator (called `gradc2f` in the example code) and $\bar{I}$ is the [face-to-center interpolation](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.InterpolateF2C) operator.
 - Tendency 4:
 
-  $$D = A + \textrm{fcc}(v, \theta),$$  
+  $$D = \bar{I}(v \cdot G(\theta)) - \textrm{fcc}(v, \theta),$$  
   
-  where $\textrm{fcc}(v, \theta)$ is the [`center-to-center flux correction`](https://github.com/CliMA/ClimaCore.jl/blob/main/src/Operators/finitedifference.jl#L2617) operator.
+  combining the discretizations of tendencies 3 and 2.
 
 #### Set Up
 
-This test case is set up in a 1D column domain ``z \in [0, 4\pi]``, discretized into a mesh of 128 elements. The velocity field is defined as a sinusoidal wave. The boundary conditions are operator dependent, so they depend on the tendency. 
-* For tendencies 1 and 2 where the upwind biased operator ``UB`` is used, the left boundary is defined as ``sin(a - t)``. The right boundary is ``sin(b - t)``. Here ``a`` and ``b`` are the left and right bounds of the domain. 
-* For tendencies 3 and 4, where the advection operator ``A`` is used, the left boundary is defined as ``sin(-t)``.  The right boundary is extrapolated, meaning its value is set to the closest interior point.
+The example runs each of the four tendencies on two initial conditions:
+* a smooth one, ``\theta(z, 0) = sin(z)``, on a 1D column domain ``z \in [0, 4\pi]`` discretized into a mesh of 128 elements, and
+* a discontinuous one, a step function, on ``z \in [-20, 20]`` discretized into a mesh of 64 elements.
+
+The velocity field is constant and upward. The boundary conditions are operator dependent, so they depend on the tendency.
+* For tendencies 1 and 2, where the upwind biased operator ``UB`` is used, the value of ``\theta`` outside of the left boundary is ``sin(a - t)`` and outside of the right boundary is ``sin(b - t)``. Here ``a`` and ``b`` are the left and right bounds of the domain. Since `UpwindBiasedProductC2F` no longer takes a `SetValue` boundary condition, the example evaluates the upwind stencil at the boundary faces itself and imposes the result with a [`SetBoundaryOperator`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.SetBoundaryOperator).
+* For tendencies 3 and 4, the gradient ``G(\theta)`` on the left boundary face is set to ``2 (\theta[1] - sin(-t))``, which is the value it takes when ``\theta = sin(-t)`` outside of the boundary. On the right boundary face it is set to the gradient of the closest interior faces, an extrapolation.
 
 ## 2D Cartesian examples
 

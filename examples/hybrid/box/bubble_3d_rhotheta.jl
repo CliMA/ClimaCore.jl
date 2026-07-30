@@ -269,7 +269,6 @@ function rhs!(dY, Y, _, t)
         add_flux_correction_c2c(dρθ, w, ρθ)
         add_flux_correction_c2c(dρuₕ, w, ρuₕ)
         add_flux_correction_f2f(dρw, wc, ρw)
-        add_flux_correction_f2f(dρw, wc, ρw)
     end
 
     ### DIFFUSION

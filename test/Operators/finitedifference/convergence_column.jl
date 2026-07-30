@@ -280,6 +280,15 @@ end
         divᶜ = Operators.DivergenceF2C()
         divsinᶜ = divᶜ.(Geometry.WVector.(sin.(faces)))
 
+        # Center -> Face operators:
+        # GradientC2F, SetGradient
+        # f(z) = z
+        ∇ᶠ⁰ = Operators.GradientC2F(
+            left = Operators.SetGradient(Geometry.WVector(one(FT))),
+            right = Operators.SetGradient(Geometry.WVector(one(FT))),
+        )
+        ∂zᶠ = Geometry.WVector.(∇ᶠ⁰.(centers))
+
         # GradientC2F, SetGradient
         # f(z) = cos(z)
         ∇ᶠ² = Operators.GradientC2F(
@@ -309,6 +318,7 @@ end
         # Errors
         err_grad_sin_c[k] = norm(gradsinᶜ .- Geometry.WVector.(cos.(centers)))
         err_div_sin_c[k] = norm(divsinᶜ .- cos.(centers))
+        err_grad_z_f[k] = norm(∂zᶠ .- Geometry.WVector.(ones(FT, fs)))
         err_grad_cos_f2[k] = norm(gradcosᶠ² .- Geometry.WVector.(.-sin.(faces)))
         err_div_cos_f[k] = norm(
             divcosᶠ .- (Geometry.WVector.(.-sin.(faces))).components.data.:1,
@@ -321,11 +331,10 @@ end
     conv_grad_sin_c = convergence_rate(err_grad_sin_c, Δh)
     # DivergenceF2C conv, with f(z) = sin(z)
     conv_div_sin_c = convergence_rate(err_div_sin_c, Δh)
-    # GradientC2F conv, with f(z) = z, SetValue
+    # GradientC2F conv, with f(z) = z, SetGradient
     conv_grad_z = convergence_rate(err_grad_z_f, Δh)
     # GradientC2F conv, with f(z) = cos(z), SetGradient
     conv_grad_cos_f2 = convergence_rate(err_grad_cos_f2, Δh)
-    # DivergenceC2F conv, with f(z) = sin(z), SetValue
     # DivergenceC2F conv, with f(z) = cos(z), SetDivergence
     conv_div_cos_f = convergence_rate(err_div_cos_f, Δh)
     # CurlC2F with f(z) = sin(z), SetCurl
@@ -345,7 +354,7 @@ end
     @test conv_div_sin_c[3] ≈ 2 atol = 0.1
     @test conv_div_sin_c[1] ≤ conv_div_sin_c[2] ≤ conv_div_sin_c[3]
 
-    # GradientC2F conv, with f(z) = z, SetValue
+    # GradientC2F conv, with f(z) = z, SetGradient
     @test norm(err_grad_z_f) ≤ 200 * eps(FT)
     # Convergence rate for this case is noisy because error very small
 
@@ -1057,7 +1066,7 @@ end
         adv = advection(c, f, cs)
 
         ClimaComms.allowscalar(device) do
-            Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+            Δh[k] = Spaces.local_geometry_data(fs).J[1]
         end
         err[k] = norm(adv .- cos.(Fields.coordinate_field(cs).z))
     end

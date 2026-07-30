@@ -21,30 +21,93 @@ import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 const FT = Float64
 
-a = FT(0.0)
-b = FT(4pi)
-n = 128
 α = FT(0.1)
 
+a_sin = FT(0.0)
+b_sin = FT(4pi)
 domain = Domains.IntervalDomain(
-    Geometry.ZPoint{FT}(a),
-    Geometry.ZPoint{FT}(b),
+    Geometry.ZPoint{FT}(a_sin),
+    Geometry.ZPoint{FT}(b_sin),
     boundary_names = (:left, :right),
 )
-mesh_sin = Meshes.IntervalMesh(domain, nelems = n)
+mesh_sin = Meshes.IntervalMesh(domain, nelems = 128)
 
-a = FT(-20.0)
-b = FT(20.0)
-n = 64
-α = FT(0.1)
+a_step = FT(-20.0)
+b_step = FT(20.0)
 domain = Domains.IntervalDomain(
-    Geometry.ZPoint(a),
-    Geometry.ZPoint(b),
+    Geometry.ZPoint(a_step),
+    Geometry.ZPoint(b_step),
     boundary_names = (:left, :right),
 )
-mesh_step = Meshes.IntervalMesh(domain, nelems = n)
+mesh_step = Meshes.IntervalMesh(domain, nelems = 64)
+
+# `UpwindBiasedProductC2F` no longer takes a `SetValue` boundary condition, so
+# evaluate its stencil on the boundary faces here, using the value of θ outside
+# of the domain, and impose the result with a `SetBoundaryOperator`.
+function upwind_boundary_operator(V, θ, a, b, t)
+    lg_field = Fields.local_geometry_field(axes(V))
+    face_bottom = Utilities.PlusHalf(0)
+    face_top = Fields.nlevels(V) - Utilities.PlusHalf(0)
+    v_left = Fields.field_values(
+        Geometry.contravariant3.(
+            Fields.level(V, face_bottom),
+            Fields.level(lg_field, face_bottom),
+        ),
+    )[]
+    v_right = Fields.field_values(
+        Geometry.contravariant3.(
+            Fields.level(V, face_top),
+            Fields.level(lg_field, face_top),
+        ),
+    )[]
+    θ_left = Fields.field_values(Fields.level(θ, 1))[]
+    θ_right = Fields.field_values(Fields.level(θ, Fields.nlevels(θ)))[]
+    return Operators.SetBoundaryOperator(;
+        left = Operators.SetValue(
+            Geometry.Contravariant3Vector(
+                Operators.upwind_biased_product(v_left, sin(a - t), θ_left),
+            ),
+        ),
+        right = Operators.SetValue(
+            Geometry.Contravariant3Vector(
+                Operators.upwind_biased_product(v_right, θ_right, sin(b - t)),
+            ),
+        ),
+    )
+end
+
+# The gradient on the left boundary face is the one implied by θ = sin(-t)
+# outside of the domain; on the right boundary face it is extrapolated from the
+# closest interior faces.
+function advection_gradient(θ, t)
+    θ_1 = Fields.level(θ, 1)
+    θ_n = Fields.level(θ, Fields.nlevels(θ))
+    θ_nm1 = Fields.level(θ, Fields.nlevels(θ) - 1)
+    return Operators.GradientC2F(
+        left = Operators.SetGradient(
+            @. lazy(Geometry.Covariant3Vector(2 * (θ_1 - sin(-t))))
+        ),
+        right = Operators.SetGradient(
+            @. lazy(Geometry.Covariant3Vector(θ_n - θ_nm1))
+        ),
+    )
+end
+
+# The `Extrapolate` boundary condition of the removed `FluxCorrectionC2C`
+# operator drops the term outside of the boundary, i.e. it sets the flux through
+# the boundary face -- and hence the inner gradient there -- to zero.
+flux_correction_gradient(::Type{FT}) where {FT} = Operators.GradientC2F(
+    left = Operators.SetGradient(Geometry.Covariant3Vector(FT(0))),
+    right = Operators.SetGradient(Geometry.Covariant3Vector(FT(0))),
+)
+
 device = ClimaComms.device()
-for (fn, mesh) in zip(("sin", "step"), (mesh_sin, mesh_step))
+for (fn, mesh, a, b) in zip(
+    ("sin", "step"),
+    (mesh_sin, mesh_step),
+    (a_sin, a_step),
+    (b_sin, b_step),
+)
 
     cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
     fs = Spaces.FaceFiniteDifferenceSpace(cs)
@@ -61,131 +124,52 @@ for (fn, mesh) in zip(("sin", "step"), (mesh_sin, mesh_step))
 
     # Solve advection Equation: ∂θ/dt = -∂(vθ)
 
+    lg_field = Fields.local_geometry_field(fs)
+    ∂ = Operators.DivergenceF2C()
+    UB = Operators.UpwindBiasedProductC2F()
+    gradf2c = Operators.GradientF2C()
+    interpf2c = Operators.InterpolateF2C()
+    gradc2f_fcc = flux_correction_gradient(FT)
+
+    # the flux correction term, equivalent to the removed `FluxCorrectionC2C`
+    # operator with `Extrapolate` boundary conditions
+    fcc(θ) = @. lazy(
+        adjoint(
+            gradf2c(
+                adjoint(gradc2f_fcc(θ)) * Geometry.Contravariant3Vector(
+                    abs(Geometry.contravariant3(V, lg_field)),
+                ),
+            ),
+        ) * Geometry.Contravariant3Vector(1),
+    )
+
     # upwinding
     function tendency1!(dθ, θ, _, t)
-        lg_field = Fields.local_geometry_field(fs)
-        lg_left = Fields.level(lg_field, Utilities.PlusHalf(0))
-        lg_right = Fields.level(lg_field, Fields.nlevels(lg_field) - Utilities.PlusHalf(0))
-        v_left = Fields.field_values(
-            Geometry.contravariant3.(Fields.level(V, Utilities.PlusHalf(0)), lg_left),
-        )[]
-        aᴸᴮ = sin(a - t)
-        aᴸ = Fields.field_values(Fields.level(θ, 1))[]
-        left_bc = Operators.SetValue(
-            Geometry.Contravariant3Vector(Operators.upwind_biased_product(v_left, aᴸᴮ, aᴸ)),
-        )
-        v_right = Fields.field_values(
-            Geometry.contravariant3.(
-                Fields.level(V, Fields.nlevels(V) - Utilities.PlusHalf(0)),
-                lg_right,
-            ),
-        )[]
-        aᴿᴮ = sin(b - t)
-        aᴿ = Fields.field_values(Fields.level(θ, Fields.nlevels(θ)))[]
-        right_bc = Operators.SetValue(
-            Geometry.Contravariant3Vector(
-                Operators.upwind_biased_product(v_right, aᴿ, aᴿᴮ),
-            ),
-        )
-        set_bcs = Operators.SetBoundaryOperator(; left = left_bc, right = right_bc)
-        UB = Operators.UpwindBiasedProductC2F()
-        ∂ = Operators.DivergenceF2C()
-
+        set_bcs = upwind_boundary_operator(V, θ, a, b, t)
         return @. dθ = -∂(set_bcs(UB(V, θ)))
     end
+    # upwinding, with flux correction
     function tendency2!(dθ, θ, _, t)
-        lg_field = Fields.local_geometry_field(fs)
-        lg_left = Fields.level(lg_field, Utilities.PlusHalf(0))
-        lg_right = Fields.level(lg_field, Fields.nlevels(lg_field) - Utilities.PlusHalf(0))
-        v_left = Fields.field_values(
-            Geometry.contravariant3.(Fields.level(V, Utilities.PlusHalf(0)), lg_left),
-        )[]
-        aᴸᴮ = sin(a - t)
-        aᴸ = Fields.field_values(Fields.level(θ, 1))[]
-        left_bc = Operators.SetValue(
-            Geometry.Contravariant3Vector(Operators.upwind_biased_product(v_left, aᴸᴮ, aᴸ)),
-        )
-        v_right = Fields.field_values(
-            Geometry.contravariant3.(
-                Fields.level(V, Fields.nlevels(V) - Utilities.PlusHalf(0)),
-                lg_right,
-            ),
-        )[]
-        aᴿᴮ = sin(b - t)
-        aᴿ = Fields.field_values(Fields.level(θ, Fields.nlevels(θ)))[]
-        right_bc = Operators.SetValue(
-            Geometry.Contravariant3Vector(
-                Operators.upwind_biased_product(v_right, aᴿ, aᴿᴮ),
-            ),
-        )
-        set_bcs = Operators.SetBoundaryOperator(; left = left_bc, right = right_bc)
-        UB = Operators.UpwindBiasedProductC2F()
-        ∂ = Operators.DivergenceF2C()
-        left_center = Fields.level(θ, 1)
-        θ_top = Fields.level(θ, Fields.nlevels(θ))
-        θ_top_m1 = Fields.level(θ, Fields.nlevels(θ) - 1)
-        right_center_left_biased_grad =
-            @. lazy(Geometry.Covariant3Vector(θ_top - θ_top_m1))
-        right_gradient_extrapolate = Operators.SetGradient(right_center_left_biased_grad)
-        θ_2 = Fields.level(θ, 2)
-        _left_lazy_grad2 = @. lazy(Geometry.Covariant3Vector(θ_2 - left_center))
-        left_gradient_extrapolate = Operators.SetGradient(_left_lazy_grad2)
-        gradc2f_fcc = Operators.GradientC2F(
-            left = left_gradient_extrapolate,
-            right = right_gradient_extrapolate,
-        )
-        gradf2c = Operators.GradientF2C()
-        return @. dθ =
-            -∂(set_bcs(UB(V, θ))) +
-            parent(
-                gradf2c(Geometry.dot(Geometry.Contravariant3Vector(V), gradc2f_fcc(θ))),
-            ).data.:1
+        set_bcs = upwind_boundary_operator(V, θ, a, b, t)
+        correction = fcc(θ)
+        return @. dθ = -∂(set_bcs(UB(V, θ))) + correction
     end
-    # use the advection operator
+    # advection, written as an interpolated center-to-face gradient
     function tendency3!(dθ, θ, _, t)
-        left_center = Fields.level(θ, 1)
-        θ_top = Fields.level(θ, Fields.nlevels(θ))
-        θ_top_m1 = Fields.level(θ, Fields.nlevels(θ) - 1)
-        right_center_left_biased_grad =
-            @. lazy(Geometry.Covariant3Vector(θ_top - θ_top_m1))
-        left_gradient =
-            Operators.SetGradient(
-                @. lazy(Geometry.Covariant3Vector(2 * (left_center - sin(-t))))
-            )
-        right_gradient = Operators.SetGradient(right_center_left_biased_grad)
-        gradc2f = Operators.GradientC2F(left = left_gradient, right = right_gradient)
-        interpf2c = Operators.InterpolateF2C()
+        gradc2f = advection_gradient(θ, t)
         return @. dθ =
-            -1 * interpf2c(Geometry.dot(Geometry.Contravariant3Vector(V), gradc2f(θ)))
+            -interpf2c(
+                Geometry.dot(Geometry.Contravariant3Vector(V), gradc2f(θ)),
+            )
     end
-    # use the advection operator
+    # advection, with flux correction
     function tendency4!(dθ, θ, _, t)
-        left_center = Fields.level(θ, 1)
-        θ_top = Fields.level(θ, Fields.nlevels(θ))
-        θ_top_m1 = Fields.level(θ, Fields.nlevels(θ) - 1)
-        right_center_left_biased_grad =
-            @. lazy(Geometry.Covariant3Vector(θ_top - θ_top_m1))
-        left_gradient =
-            Operators.SetGradient(
-                @. lazy(Geometry.Covariant3Vector(2 * (left_center - sin(-t))))
-            )
-        right_gradient_extrapolate = Operators.SetGradient(right_center_left_biased_grad)
-        gradc2f =
-            Operators.GradientC2F(left = left_gradient, right = right_gradient_extrapolate)
-        interpf2c = Operators.InterpolateF2C()
-        θ_2 = Fields.level(θ, 2)
-        _left_lazy_grad4 = @. lazy(Geometry.Covariant3Vector(θ_2 - left_center))
-        left_gradient_extrapolate = Operators.SetGradient(_left_lazy_grad4)
-        gradc2f_fcc = Operators.GradientC2F(
-            left = left_gradient_extrapolate,
-            right = right_gradient_extrapolate,
-        )
-        gradf2c = Operators.GradientF2C()
+        gradc2f = advection_gradient(θ, t)
+        correction = fcc(θ)
         return @. dθ =
-            -1 * interpf2c(Geometry.dot(Geometry.Contravariant3Vector(V), gradc2f(θ))) +
-            parent(
-                gradf2c(Geometry.dot(Geometry.Contravariant3Vector(V), gradc2f_fcc(θ))),
-            ).data.:1
+            -interpf2c(
+                Geometry.dot(Geometry.Contravariant3Vector(V), gradc2f(θ)),
+            ) + correction
     end
 
     # use the advection operator

@@ -247,6 +247,15 @@ function rhs!(dY, Y, _, t)
     uₕf = @. If(ρuₕ / ρ) # requires boundary conditions
     @. dρw -= hdiv(uₕf ⊗ ρw)
 
+    ### UPWIND FLUX CORRECTION
+    upwind_correction = false
+    if upwind_correction
+        add_flux_correction_c2c(dρ, w, ρ)
+        add_flux_correction_c2c(dρθ, w, ρθ)
+        add_flux_correction_c2c(dρuₕ, w, ρuₕ)
+        add_flux_correction_f2f(dρw, wc, ρw)
+    end
+
     ### DIFFUSION
     κ₂ = 75.0 # m^2/s
     #  1a) horizontal div of horizontal grad of horiz momentun

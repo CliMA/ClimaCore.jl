@@ -27,6 +27,7 @@ import ClimaCore.Operators:
     Upwind3rdOrderBiasedProductC2F,
     FCTBorisBook,
     FCTZalesak,
+    LinVanLeerC2F,
     SetBoundaryOperator,
     GradientC2F,
     GradientF2C,
@@ -167,6 +168,13 @@ end
 
     @test_throws "nonlinear" MatrixFields.operator_matrix(FCTBorisBook())
     @test_throws "nonlinear" MatrixFields.operator_matrix(FCTZalesak())
+    @test_throws "nonlinear" MatrixFields.operator_matrix(
+        LinVanLeerC2F(;
+            bottom = FirstOrderOneSided(),
+            top = FirstOrderOneSided(),
+            constraint = ClimaCore.Operators.AlgebraicMean(),
+        ),
+    )
 end
 
 @testset "Operator Matrix Broadcasting" begin
@@ -221,7 +229,7 @@ end
     end
 
     test_field_broadcast(;
-        test_name = "product of six operator matrices",
+        test_name = "product of four operator matrices",
         get_result = @lazy(
             @. ᶜwinterp_matrix(ᶠscalar) *
                ᶠrbias_matrix() *
@@ -237,7 +245,7 @@ end
     )
 
     test_field_broadcast(;
-        test_name = "applying six operators to a nested field using operator \
+        test_name = "applying four operators to a nested field using operator \
                      matrices",
         get_result = @lazy(
             @. ᶜwinterp_matrix(ᶠscalar) *
@@ -257,28 +265,20 @@ end
             @. ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested))))
         ),
     )
-    # this test is will fail because of incorrect results, not InvalidIRError
+    # this test will fail because of incorrect results, not InvalidIRError
     USING_CUDA || test_field_broadcast(;
-        test_name = "applying six operators to a nested field using operator \
+        test_name = "applying four operators to a nested field using operator \
                      matrices, but with forced right associativity",
         get_result = @lazy(
-            @. (
-                (
-                ᶜwinterp_matrix(ᶠscalar) * (
-                    ᶠrbias_matrix() *
-                    (ᶜlbias_matrix() * (ᶠinterp_matrix() * ᶜnested))
-                )
-            )
+            @. ᶜwinterp_matrix(ᶠscalar) * (
+                ᶠrbias_matrix() *
+                (ᶜlbias_matrix() * (ᶠinterp_matrix() * ᶜnested))
             )
         ),
         set_result = @lazy(
-            @. (
-                (
-                ᶜwinterp_matrix(ᶠscalar) * (
-                    ᶠrbias_matrix() *
-                    (ᶜlbias_matrix() * (ᶠinterp_matrix() * ᶜnested))
-                )
-            )
+            @. ᶜwinterp_matrix(ᶠscalar) * (
+                ᶠrbias_matrix() *
+                (ᶜlbias_matrix() * (ᶠinterp_matrix() * ᶜnested))
             )
         ),
         ref_set_result = @lazy(

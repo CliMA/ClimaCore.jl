@@ -248,9 +248,11 @@ function rhs_invariant!(dY, Y, _, t)
 
     lg_field_faces = Fields.local_geometry_field(axes(fw))
     lg_field_centers = Fields.local_geometry_field(axes(cρ))
-    lg_bottom_face = Operators.Fields.level(Operators.RightBiasedF2C().(lg_field_faces), 1)
+    # `LeftBiasedF2C(x)[i] = x[i-half]`, so its first level is the bottom face,
+    # and `RightBiasedF2C(x)[i] = x[i+half]`, so its last level is the top face.
+    lg_bottom_face = Fields.level(Operators.LeftBiasedF2C().(lg_field_faces), 1)
     lg_top_face = Fields.level(
-        Operators.LeftBiasedF2C().(lg_field_faces),
+        Operators.RightBiasedF2C().(lg_field_faces),
         Fields.nlevels(lg_field_centers),
     )
     lg_bottom_center = Fields.level(lg_field_centers, 1)
@@ -258,13 +260,13 @@ function rhs_invariant!(dY, Y, _, t)
     ᶜ∇ᵥw_bottom = Fields.level(ᶜ∇ᵥw, 1)
     ᶜ∇ᵥw_top = Fields.level(ᶜ∇ᵥw, Fields.nlevels(ᶜ∇ᵥw))
     bottom_divergence = @. lazy(
-        Geometry.Jcontravariant3(ᶜ∇ᵥw_bottom, lg_bottom_center) *
+        Geometry.Jcontravariant3(κ₂ * ᶜ∇ᵥw_bottom, lg_bottom_center) *
         (2 * inv(lg_bottom_face.J)),
     )
-    top_divergence =
-        @. lazy(
-            Geometry.Jcontravariant3(ᶜ∇ᵥw_top, lg_top_center) * (-2 * inv(lg_top_face.J)),
-        )
+    top_divergence = @. lazy(
+        Geometry.Jcontravariant3(κ₂ * ᶜ∇ᵥw_top, lg_top_center) *
+        (-2 * inv(lg_top_face.J)),
+    )
     set_bcs = Operators.SetBoundaryOperator(
         bottom = Operators.SetValue(bottom_divergence),
         top = Operators.SetValue(top_divergence),

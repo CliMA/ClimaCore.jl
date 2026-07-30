@@ -37,7 +37,8 @@ T = Fields.zeros(FT, cs)
 # Solve Heat Equation: ∂_t T = α ∇²T
 function ∑tendencies!(dT, T, _, t)
 
-    bcs_bottom = Operators.SetValue(FT(0.0))
+    # a Dirichlet condition, T = 0, on the bottom boundary face: the gradient
+    # there is 2 (T[1] - 0) / Δz
     bottom_level_T = Fields.level(T, 1)
     bottom_grad = @. lazy(2.0 * Geometry.Covariant3Vector(bottom_level_T))
     bcs_bottom = Operators.SetGradient(bottom_grad)

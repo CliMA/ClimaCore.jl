@@ -141,9 +141,9 @@ function tendency!(dY, Y, _, t)
     bcs_bottom = Operators.SetValue(Geometry.WVector(Cd * u_wind) ⊗ uv_1)
     uv_top = Fields.level(uv, Fields.nlevels(uv))
     uv_top_val = Fields.field_values(uv_top)[]
-    uv_bottom = Fields.level(uv, Fields.nlevels(uv))
+    uv_bottom = Fields.level(uv, 1)
     uv_bottom_val = Fields.field_values(uv_bottom)[]
-    bcs_top = Operators.SetGradient(Geometry.Covariant3Vector(1) ⊗ ((uvg - uv_top_val)))
+    bcs_top = Operators.SetGradient(Geometry.Covariant3Vector(2) ⊗ ((uvg - uv_top_val)))
     ∂c = Operators.DivergenceF2C(bottom = bcs_bottom)
     ∂f = Operators.GradientC2F(top = bcs_top)
     bcs_bottom_advection =
@@ -174,7 +174,7 @@ function tendency!(dY, Y, _, t)
     @. dw = B(
         Geometry.WVector(-(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - ∂f(Φ(zc.z))) +
         divf(ν * ∂c(w)) -
-        adjoint(interpc2f(adjoint(Geometry.Contravariant3Vector(uv)) * gradf2c(w))),
+        adjoint(adjoint(Geometry.Contravariant3Vector(w)) * interpc2f(gradf2c(w))),
     )
 
     return dY
@@ -185,12 +185,12 @@ dY = tendency!(similar(Y), Y, nothing, 0.0)
 
 Δt = 1.0 / 100.0
 # Solve the ODE operator
-prob = ODEProblem(tendency!, Y, (0.0, 60 * 60 * 10))
+prob = ODEProblem(tendency!, Y, (0.0, 60 * 60))
 sol = solve(
     prob,
     SSPRK33(),
     dt = Δt,
-    saveat = collect(0.0:600:(60 * 60 * 10)), # save every hour
+    saveat = collect(0.0:600:(60 * 60)), # save every 10 minutes
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
