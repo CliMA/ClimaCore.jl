@@ -1560,13 +1560,6 @@ function tensor_product!(
     return out
 end
 
-# CUDA overloads for CuArray-backed VIJHWithF live in ClimaCoreCUDAExt
-# (ext/cuda/operators_dg.jl) and win by parent-array specialization.
-# Nv-generic (covers single-level 2D data and extruded 3D data level by
-# level; the DataLayouts unification dropped the dedicated 3D CPU methods,
-# which broke every CPU filter path — the CUDA ext has its own fused
-# version). Leaving the F parameter free covers every field-axis position,
-# including the VIJFH (F = 4) and VIJHF (F = 5) aliases.
 function tensor_product!(
     out::DataLayouts.VIJHWithF{S, Nv, Nij_out, Nij_out},
     indata::DataLayouts.VIJHWithF{S, Nv, Nij_in, Nij_in},
