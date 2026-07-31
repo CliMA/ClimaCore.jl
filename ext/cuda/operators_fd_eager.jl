@@ -4,19 +4,16 @@ import ClimaCore.Fields: Field, field_values, AbstractFieldStyle
 import ClimaComms
 import ClimaCore.Utilities: half, new, unsafe_eltype
 import ClimaCore.Operators
-import ClimaCore.Geometry: ⊗, project
+import ClimaCore.Geometry: project
 import ClimaCore.Operators:
     StencilBroadcasted, setidx!, getidx, reconstruct_placeholder_space
-import ClimaCore.MatrixFields: FaceToCenter, CenterToFace, Square, CenterToCenter,
-    FaceToFace, TwoArgFDOperator, OneArgFDOperator, has_affine_bc, FDOperatorMatrix,
-    MultiplyColumnwiseBandMatrixField, operator_input_space, op_matrix_row_type,
-    BandMatrixRow, band_matrix_d
-using ClimaCore.MatrixFields
+import ClimaCore.MatrixFields: FaceToCenter, CenterToFace, CenterToCenter,
+    FaceToFace, FDOperatorMatrix, MultiplyColumnwiseBandMatrixField,
+    op_matrix_row_type, BandMatrixRow, band_matrix_d
 import ClimaCore.Utilities
 import ClimaCore
 using ClimaCore.MatrixFields
 using ClimaCore.Geometry
-using LinearAlgebra
 import UnrolledUtilities
 
 
@@ -279,7 +276,8 @@ Base.@propagate_inbounds function calc_level_val(
         return out
     else
         # mat * vec case
-        out = @inbounds @inline row_mul_vec!(eltype(bc), mat1_row, mat2, mat1_shape, periodic)
+        out =
+            @inbounds @inline row_mul_vec!(eltype(bc), mat1_row, mat2, mat1_shape, periodic)
         out isa eltype(bc) || return convert(eltype(bc), out)
         return out
     end
@@ -324,7 +322,7 @@ Base.@propagate_inbounds function calc_level_val(
             hidx,
             bc.args...,
         )
-    elseif (!(space.staggering isa Spaces.CellCenter && v == blockDim().x)) &&
+    elseif !(has_padding_thread(space) && v == CUDA.blockDim().x) &&
            Operators.should_call_right_boundary(idx, space, op, bc.args...)
         rbw = Operators.right_boundary_window(space)
         return @inbounds @inline Operators.stencil_right_boundary(
@@ -489,8 +487,6 @@ Base.@propagate_inbounds function project_row2_for_mul(mat1_row, mat2_row, hidx,
         ClimaCore.Geometry.recursively_find_dual_axes_for_projection(mat1_et)
     isnothing(project_onto) && return mat2_row
     v = threadIdx().x
-    project_onto =
-        ClimaCore.Geometry.recursively_find_dual_axes_for_projection(mat1_et)
     if has_padding_thread(space) && v == CUDA.blockDim().x
         lg = new(Spaces.local_geometry_type(typeof(space)))
     else

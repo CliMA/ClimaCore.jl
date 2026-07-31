@@ -136,15 +136,11 @@ Base.Broadcast.broadcasted(
 # added to the result; hence `modifies_input` is true and `modifies_output` false.
 modifies_output(
     op,
-    boundary_condition::BC,
-) where {BC <: Union{
+    boundary_condition::Union{
         Operators.SetGradient,
         Operators.SetDivergence,
         Operators.SetCurl,
-    }} = true
-modifies_output(
-    op::Operators.InterpolationOperator,
-    boundary_condition::Operators.SetValue,
+    },
 ) = true
 modifies_output(
     op::Union{Operators.GradientF2C, Operators.DivergenceF2C},
@@ -152,7 +148,6 @@ modifies_output(
 ) = false
 modifies_output(op, boundary_condition::Operators.SetValue) = true
 modifies_output(op, boundary_condition) = false
-
 
 modifies_input(
     op::Union{Operators.GradientF2C, Operators.DivergenceF2C},
