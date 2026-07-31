@@ -4,11 +4,15 @@ ClimaCore.jl Release Notes
 main
 -------
 
-- Fixed a GPU compilation failure (`gpu_gc_pool_alloc` and `jl_f__apply_iterate`
-  in `InvalidIRError`) for kernels over wide or complexly typed broadcast
-  expressions, like the fused EDMFX cloud fraction broadcasts in ClimaAtmos
-  AMIP runs. The broadcast argument traversal functions in `DataLayouts` and
-  the CUDA extension no longer filter arguments with reductions that push into
+
+v0.15.0
+-------
+
+- ![][badge-🐛bugfix] Fixed a GPU compilation failure (`gpu_gc_pool_alloc` and
+  `jl_f__apply_iterate` in `InvalidIRError`) for kernels over wide or complexly
+  typed broadcast expressions, like the fused EDMFX cloud fraction broadcasts in
+  ClimaAtmos AMIP runs. The broadcast argument traversal functions in `DataLayouts`
+  and the CUDA extension no longer filter arguments with reductions that push into
   an accumulator, whose recursively growing type could trigger inference's
   widening heuristics; they now collect layouts with `unrolled_flatmap`, whose
   intermediate types all stay concrete, and `f_dim` reduces with a fixed
@@ -29,24 +33,24 @@ main
   job compiles them through real CUDA kernels. GPU kernel launch latency
   improved by roughly 10%, and the latency benchmark baselines were lowered
   accordingly.
-- Added `Fields.fieldvector2array!` and `Fields.array2fieldvector!`,
-  allocation-free, GPU-safe block-wise copies between a `FieldVector` and a
-  flat vector (plus allocating versions without the `!`). Together with
-  `Krylov.ktypeof(::FieldVector)` (defined in
+- ![][badge-🔥behavioralΔ] Added `Fields.fieldvector2array!` and
+  `Fields.array2fieldvector!`, allocation-free, GPU-safe block-wise copies
+  between a `FieldVector` and a flat vector (plus allocating versions without
+  the `!`). Together with `Krylov.ktypeof(::FieldVector)` (defined in
   `KrylovExt`), these let iterative Krylov solvers keep their workspace vectors
   on the GPU while model code continues to operate on `FieldVector`s.
-- Fixed `zero(::FieldVector)` to preserve scalar (`ScalarWrapper`) components
-  instead of turning them into 0-dimensional `Array`s, and fixed
-  `ClimaComms.array_type(::FieldVector)` (and hence
+- ![][badge-🐛bugfix] Fixed `zero(::FieldVector)` to preserve scalar
+  (`ScalarWrapper`) components instead of turning them into 0-dimensional
+  `Array`s, and fixed `ClimaComms.array_type(::FieldVector)` (and hence
   `Krylov.ktypeof(::FieldVector)`) for `FieldVector`s with plain-array or
   scalar components, which previously threw a `MethodError`.
 - ![][badge-💥breaking] Removed the `Operators.columnwise!` operator, along with
   its CUDA kernels (`ext/cuda/operators_columnwise.jl`), its tests, and its CI
   jobs. It was unused by downstream code.
   [2548](https://github.com/CliMA/ClimaCore.jl/pull/2548)
-- Removed the unused shared-memory finite difference operator code path on GPUs
-  (`CUDAWithShmemColumnStencilStyle` and the `operators_fd_shmem*.jl` files in the
-  CUDA extension), along with its tests, benchmarks, CI job, and the
+- ![][badge-💥breaking] Removed the unused shared-memory finite difference operator
+  code path on GPUs (`CUDAWithShmemColumnStencilStyle` and the `operators_fd_shmem*.jl`
+  files in the CUDA extension), along with its tests, benchmarks, CI job, and the
   `shmem_design.md` documentation page. This path was already disabled by default
   (`Operators.use_fd_shmem()` returns `false`), so default behavior and performance are unchanged.
   Downstream code that opted in by defining `Operators.use_fd_shmem() = true` will no longer
@@ -74,7 +78,8 @@ main
   on GPUs, which previously raised an "Unsupported input type" error even though
   both forms already supported them on CPUs.
   [2556](https://github.com/CliMA/ClimaCore.jl/pull/2556)
-- Refactor DataLayouts module [2522](https://github.com/CliMA/ClimaCore.jl/pull/2522)
+- ![][badge-🔥behavioralΔ] Refactor DataLayouts module
+  [2522](https://github.com/CliMA/ClimaCore.jl/pull/2522)
   - All data layout types are unified into a single `DataLayout` type, and all
     loops over data go through two communication primitives (`foreach_slice` and
     `reduce_points`) that work the same way on CPUs, multi-threaded CPUs, and
@@ -104,8 +109,8 @@ main
   launch, and reused a per-task device buffer for the intermediate results of GPU
   reductions instead of allocating one per reduction.
   [2557](https://github.com/CliMA/ClimaCore.jl/pull/2557)
-- [2572](https://github.com/CliMA/ClimaCore.jl/pull/2572) Fixed DSS for MPI
-  after DataLayouts refactor 
+- ![][badge-🐛bugfix] Fixed DSS for MPI after DataLayouts refactor.
+  [2572](https://github.com/CliMA/ClimaCore.jl/pull/2572)
 
 v0.14.55
 -------
