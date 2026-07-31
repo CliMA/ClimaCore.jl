@@ -1690,6 +1690,32 @@ boundary_width(
     ::SetBoundaryOperator,
     ::Union{SetValue, SetGradient, SetCurl, SetDivergence},
 ) = 1
+# The value a `SetBoundaryOperator` imposes at a boundary. `SetGradient` and `SetCurl`
+# hold values in the axis the operator they were taken from writes its output in, so they
+# are projected onto that axis; `SetValue` and `SetDivergence` are imposed as given.
+Base.@propagate_inbounds imposed_boundary_value(
+    bc::Union{SetValue, SetDivergence},
+    space,
+    idx,
+    hidx,
+) = getidx(space, bc.val, nothing, hidx)
+Base.@propagate_inbounds imposed_boundary_value(
+    bc::SetGradient,
+    space,
+    idx,
+    hidx,
+) = Geometry.project(
+    Geometry.Covariant3Axis(),
+    getidx(space, bc.val, nothing, hidx),
+    Geometry.LocalGeometry(space, idx, hidx),
+)
+Base.@propagate_inbounds imposed_boundary_value(bc::SetCurl, space, idx, hidx) =
+    Geometry.project(
+        Geometry.Contravariant123Axis(),
+        getidx(space, bc.val, nothing, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+
 Base.@propagate_inbounds function stencil_left_boundary(
     ::SetBoundaryOperator,
     bc::Union{SetValue, SetGradient, SetCurl, SetDivergence},
@@ -1699,21 +1725,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
     arg,
 )
     @assert idx == left_idx(space)
-    val = getidx(space, bc.val, nothing, hidx)
-    if bc isa SetGradient
-        return Geometry.project(
-            Geometry.Covariant3Axis(),
-            val,
-            Geometry.LocalGeometry(space, idx, hidx),
-        )
-    elseif bc isa SetCurl
-        return Geometry.project(
-            Geometry.Contravariant123Axis(),
-            val,
-            Geometry.LocalGeometry(space, idx, hidx),
-        )
-    end
-    return val
+    return imposed_boundary_value(bc, space, idx, hidx)
 end
 Base.@propagate_inbounds function stencil_right_boundary(
     ::SetBoundaryOperator,
@@ -1724,21 +1736,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
     arg,
 )
     @assert idx == right_idx(space)
-    val = getidx(space, bc.val, nothing, hidx)
-    if bc isa SetGradient
-        return Geometry.project(
-            Geometry.Covariant3Axis(),
-            val,
-            Geometry.LocalGeometry(space, idx, hidx),
-        )
-    elseif bc isa SetCurl
-        return Geometry.project(
-            Geometry.Contravariant123Axis(),
-            val,
-            Geometry.LocalGeometry(space, idx, hidx),
-        )
-    end
-    return val
+    return imposed_boundary_value(bc, space, idx, hidx)
 end
 
 
@@ -2130,7 +2128,7 @@ end
 The index of the right-most interior point of the operator `op` with boundary
 `bc` when used with arguments `args...`. By default, this is
 ```julia
-right_idx(space) + boundary_width(op, bc)
+right_idx(space) - boundary_width(op, bc)
 ```
 but can be overwritten for specific stencil types (e.g. if the stencil is
 assymetric).
