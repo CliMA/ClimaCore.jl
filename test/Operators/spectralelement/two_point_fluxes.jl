@@ -104,9 +104,10 @@ end
         r = similar(y)
         fill!(parent(r), 0)
         Operators.add_numerical_flux_internal!(numflux, r, y, params)
-        # ρ and ρθ are advected scalars: each interface contributes ∓sWJ·flux to
-        # its two nodes, so the global node sum telescopes to zero. (ρu lives in
-        # rotating local frames and is not summed this way.)
+        # ρ and ρθ are advected scalars: each interface adds ∓sWJ·flux to its two
+        # nodes, and these equal-and-opposite contributions cancel in the global
+        # sum, so each scalar is globally conserved (total node sum is zero). (ρu
+        # lives in rotating local frames and is not summed this way.)
         for comp in (r.ρ, r.ρθ)
             scale = sum(abs, parent(comp))
             @test abs(sum(parent(comp))) < 1e-12 * scale
