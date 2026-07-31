@@ -1660,7 +1660,16 @@ Base.@propagate_inbounds stencil_interior(
     arg,
 ) = getidx(space, arg, idx, hidx)
 
-boundary_width(::SetBoundaryOperator, ::AbstractBoundaryCondition) = 1
+# A side with no boundary condition has no boundary row: the operator is the
+# identity there. Returning 0 (rather than gating on NullBoundaryCondition in the
+# generic windowing code) keeps one-sided SetBoundaryOperators out of the boundary
+# window entirely, so they never reach the NaN-producing NullBoundaryCondition
+# stencil methods.
+boundary_width(::SetBoundaryOperator, ::AbstractBoundaryCondition) = 0
+boundary_width(
+    ::SetBoundaryOperator,
+    ::Union{SetValue, SetGradient, SetCurl, SetDivergence},
+) = 1
 Base.@propagate_inbounds function stencil_left_boundary(
     ::SetBoundaryOperator,
     bc::Union{SetValue, SetGradient, SetCurl, SetDivergence},
@@ -1949,6 +1958,10 @@ stencil_interior_width(::DivergenceF2C, arg) = ((-half, half),)
 boundary_width(::DivergenceF2C, ::AbstractBoundaryCondition) = 0
 boundary_width(::DivergenceF2C, ::SetValue) = 1
 boundary_width(::DivergenceF2C, ::SetDivergence) = 1
+# Without this, `left_interior_idx`/`right_interior_idx` place the boundary
+# centers in the interior window, so `op_matrix_first_row`/`op_matrix_last_row`
+# for `Extrapolate` are never reached and the condition is silently ignored.
+boundary_width(::DivergenceF2C, ::Extrapolate) = 1
 
 # Extend `adapt_structure` for all boundary conditions containing a `val` field.
 function Adapt.adapt_structure(to, bc::AbstractBoundaryCondition)
@@ -2209,8 +2222,6 @@ end
     Topologies.isperiodic(space) && return false
     loc = left_boundary_window(space)
     boundary_condition = Operators.get_boundary(op, loc)
-    op isa SetBoundaryOperator && boundary_condition isa NullBoundaryCondition &&
-        return false
     return idx < Operators.left_interior_idx(
         space,
         op,
@@ -2223,12 +2234,10 @@ end
     Topologies.isperiodic(space) && return false
     loc = right_boundary_window(space)
     boundary_condition = Operators.get_boundary(op, loc)
-    op isa SetBoundaryOperator && boundary_condition isa NullBoundaryCondition &&
-        return false
     return idx > Operators.right_interior_idx(
         space,
         op,
-        Operators.get_boundary(op, loc),
+        boundary_condition,
         args...,
     )
 end

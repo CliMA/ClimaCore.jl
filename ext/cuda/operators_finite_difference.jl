@@ -58,7 +58,11 @@ function Base.copyto!(
     eager_shmem_per_thread = max_eager_shmem_per_thread(bc)
     if !high_resolution
         #    32 <= n_face_levels * Ni <= 256
-        n_columns = mask isa NoMask ? Ni * Nj * Nh : mask.N[1]
+        # mask.N holds the active column count in a one-element device array;
+        # reading it on the host needs @allowscalar.
+        n_columns =
+            mask isa NoMask ? Ni * Nj * Nh :
+            CUDA.@allowscalar(mask.N[1])
         # 108 is the number of SMs in an A100. TODO: get this value from CUDA.jl to better optimize for different GPUs
         threads_dim_y = n_columns > 256 * 108 ? div(256, n_face_levels) : 1
         block_dim_x = div(n_columns, threads_dim_y, RoundUp)

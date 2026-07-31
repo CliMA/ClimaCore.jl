@@ -38,21 +38,52 @@ fit and can always be cached.
 max_eager_shmem_per_thread(x) = 0
 max_eager_shmem_per_thread(bc::Union{Broadcasted, StencilBroadcasted}) =
     _max_eager_shmem_over_args(bc.args)
-function max_eager_shmem_per_thread(
+max_eager_shmem_per_thread(
     bc::StencilBroadcasted{S, <:MultiplyColumnwiseBandMatrixField},
-) where {S}
-    raw_arg_type = unsafe_eltype(bc.args[2])
-    # tensors may be projected to contain more components
-    # this is hacky and will sometimes overestimate the size of the projected row
-    modified_arg_size = raw_arg_type <: AbstractTensor ? sizeof(eltype(raw_arg_type)) * 9 : sizeof(raw_arg_type)
-    max(modified_arg_size, _max_eager_shmem_over_args(bc.args))
-end
+) where {S} =
+    max(sizeof(cached_operand_type(bc)), _max_eager_shmem_over_args(bc.args))
 
 _max_eager_shmem_over_args(::Tuple{}) = 0
 _max_eager_shmem_over_args(args::Tuple) = max(
     max_eager_shmem_per_thread(first(args)),
     _max_eager_shmem_over_args(Base.tail(args)),
 )
+
+"""
+    cached_operand_type(bc)
+
+The type that `calc_level_val` writes into shared memory for the multiplication `bc`,
+i.e. `typeof(project_row2_for_mul(mat1_row, mat2_row, hidx, mat2_space))`.
+
+The size cannot be read off the second operand directly, because
+`project_row2_for_mul` projects every tensor leaf of that operand onto the axis dual
+to the first operand's entries, which changes its size in either direction: a
+`Covariant1Vector` widens to a `Contravariant123Vector`, while a `Covariant12Vector`
+narrows to a `Contravariant1Vector`. For a matrix-matrix product those leaves are also
+nested inside a `BandMatrixRow`, so no property of the operand's outermost type
+bounds the projected size. Mirror `project_row2_for_mul`'s type-level logic instead
+and infer the projected type, so the buffer is always big enough for what the kernel
+writes into it.
+"""
+function cached_operand_type(bc)
+    mat1_type = unsafe_eltype(bc.args[1i32])
+    mat2_type = unsafe_eltype(bc.args[2i32])
+    mat1_et = mat1_type <: BandMatrixRow ? eltype(mat1_type) : mat1_type
+    project_onto =
+        ClimaCore.Geometry.recursively_find_dual_axes_for_projection(mat1_et)
+    isnothing(project_onto) && return mat2_type
+    lg_type = Spaces.local_geometry_type(typeof(axes(bc.args[2i32])))
+    projected_type = ClimaCore.Utilities.return_type(
+        recursively_project,
+        Tuple{Tuple{typeof(project_onto), lg_type}, mat2_type},
+    )
+    isconcretetype(projected_type) || error(
+        "Unable to size the eager finite difference kernel's shared memory: \
+         inference gave the non-concrete type $projected_type for the \
+         projection of a $mat2_type operand onto $project_onto",
+    )
+    return projected_type
+end
 
 
 ClimaCore.Utilities.unsafe_eltype(::CUDA.CuRefType{T}) where {T} = T

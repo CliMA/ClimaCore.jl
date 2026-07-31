@@ -1350,7 +1350,6 @@ steps:
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
-          soft_fail: true
 
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_non_scalar_4
