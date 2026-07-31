@@ -14,15 +14,13 @@ import ClimaCore:
 
 # DG internal-face flux loops on an extruded cubed-sphere shell
 # (SpectralElementSpace2D horizontal × finite-difference vertical):
-# conservation, consistency at continuous fields (exercises reversed faces and
-# panel edges), and equivalence of weak divergence + central numerical flux
-# with the strong divergence (validates sWJ and normal scaling).
+# conservation, consistency at continuous fields  and equivalence of 
+# weak divergence + central numerical flux with the strong divergence 
+# (validates sWJ and normal scaling).
 
+# TODO Extend to FT = (Float32, Float64)
 const FT = Float64
 
-# Device-generic: runs on the CPU by default and on the GPU with
-# CLIMACOMMS_DEVICE=CUDA (all assertions reduce over `parent(...)`, which
-# works for both Array and CuArray backing).
 function extruded_sphere_spaces(;
     radius = FT(6.371e6),
     zmax = FT(30e3),
