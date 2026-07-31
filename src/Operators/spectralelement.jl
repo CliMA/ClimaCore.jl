@@ -99,6 +99,120 @@ Adapt.adapt_structure(to, sbc::SpectralBroadcasted{Style}) where {Style} =
 
 return_space(::SpectralElementOperator, space, args...) = space
 
+"""
+    FormType
+
+Supertype of the singleton types [`StrongForm`](@ref) and [`WeakForm`](@ref),
+which distinguish the variational form of a spectral element operator.
+
+The strong and weak variants of an operator share the same interior
+computation; they differ only in three form-dependent factors:
+ - whether the derivative matrix is applied directly or transposed with a sign
+   flip (from integration by parts); see `form_deriv_entry`,
+ - whether the argument is weighted by the quadrature weights `W` or by the
+   Jacobian factor; see `form_weighted_arg` and `form_jacobian`,
+ - whether the result is rescaled by `J` or by `WJ`; see
+   `form_jacobian_rescale`, and by `W` or not at all; see
+   `form_weight_rescale`.
+
+Operators with strong/weak variants carry a `FormType` as their second type
+parameter, e.g. `Divergence{I, StrongForm}`, with the weak variant available
+under an alias, e.g. `WeakDivergence{I} = Divergence{I, WeakForm}`.
+"""
+abstract type FormType end
+
+"""
+    StrongForm()
+
+The [`FormType`](@ref) of an operator that discretizes a derivative directly at
+the quadrature points (e.g. [`Divergence`](@ref), [`Gradient`](@ref),
+[`Curl`](@ref)).
+"""
+struct StrongForm <: FormType end
+
+"""
+    WeakForm()
+
+The [`FormType`](@ref) of an operator that discretizes the volume-integral
+contribution of the corresponding weak-form expression, obtained after
+integration by parts (e.g. [`WeakDivergence`](@ref), [`WeakGradient`](@ref),
+[`WeakCurl`](@ref)).
+"""
+struct WeakForm <: FormType end
+
+"""
+    form_deriv_entry(form, D, ii, i)
+
+Entry of the derivative matrix `D` applied by an operator of the given
+[`FormType`](@ref) when accumulating the contribution of quadrature point `i`
+to quadrature point `ii`: `D[ii, i]` for the strong form, and `-D[i, ii]` (the
+transpose, with the sign flip from integration by parts) for the weak form.
+"""
+@inline form_deriv_entry(::StrongForm, D, ii, i) = D[ii, i]
+@inline form_deriv_entry(::WeakForm, D, ii, i) = -D[i, ii]
+
+"""
+    form_weighted_arg(form, local_geometry, x)
+
+The argument value `x`, weighted as required by an operator of the given
+[`FormType`](@ref) whose weak variant integrates against test functions: `x`
+itself for the strong form, and `W * x` (with the quadrature weights
+`W = WJ * J⁻¹`) for the weak form. Used by [`Gradient`](@ref) and
+[`Curl`](@ref).
+"""
+@inline form_weighted_arg(::StrongForm, local_geometry, x) = x
+@inline form_weighted_arg(::WeakForm, local_geometry, x) =
+    (local_geometry.WJ * local_geometry.invJ) * x
+
+"""
+    form_jacobian(form, local_geometry)
+
+The Jacobian factor that scales the contravariant components summed by an
+operator of the given [`FormType`](@ref): `J` for the strong form, and `WJ`
+for the weak form. Used by [`Divergence`](@ref).
+"""
+@inline form_jacobian(::StrongForm, local_geometry) = local_geometry.J
+@inline form_jacobian(::WeakForm, local_geometry) = local_geometry.WJ
+
+"""
+    form_jacobian_rescale(form, local_geometry, x)
+
+The result value `x`, divided by the `form_jacobian` of the given
+[`FormType`](@ref): `x * J⁻¹` for the strong form (using the precomputed
+inverse), and `x / WJ` for the weak form. Used by [`Divergence`](@ref) and
+[`Curl`](@ref).
+"""
+@inline form_jacobian_rescale(::StrongForm, local_geometry, x) =
+    x * local_geometry.invJ
+@inline form_jacobian_rescale(::WeakForm, local_geometry, x) =
+    x / local_geometry.WJ
+
+"""
+    form_weight_rescale(form, local_geometry, x)
+
+The result value `x`, divided by the quadrature weights `W = WJ * J⁻¹` if the
+given [`FormType`](@ref) requires it: `x` itself for the strong form, and
+`x / W` for the weak form. Used by [`Gradient`](@ref), whose weak variant
+weights its argument by `W` without a Jacobian factor to divide out.
+
+The CPU `apply_operator` methods for [`Gradient`](@ref) inline this rescale
+behind an `F === WeakForm` branch instead of calling it, so that the strong form
+skips the loop over quadrature points entirely; on GPUs each thread rescales
+only its own point, so there is no loop to skip.
+"""
+@inline form_weight_rescale(::StrongForm, local_geometry, x) = x
+@inline form_weight_rescale(::WeakForm, local_geometry, x) =
+    x / (local_geometry.WJ * local_geometry.invJ)
+
+"""
+    rebuild_operator(op, space)
+
+Reconstruct a `SpectralElementOperator` with its `operator_axes` reset to those
+of `space`, preserving all other type parameters (in particular the
+[`FormType`](@ref) of operators with strong/weak variants).
+"""
+rebuild_operator(op::SpectralElementOperator, space) =
+    unionall_type(typeof(op)){()}(space)
 
 function Base.Broadcast.broadcasted(op::SpectralElementOperator, args...)
     args′ = map(Base.Broadcast.broadcastable, args)
@@ -143,9 +257,8 @@ function Base.Broadcast.instantiate(sbc::SpectralBroadcasted)
         RT = operator_return_eltype(op, map(eltype, args)...)
         return Broadcast.broadcasted(Returns(zero(RT)), Fields.coordinate_field(axes))
     end
-    # If we've already instantiated, then we need to strip the type parameters,
-    # for example, `Divergence{()}(axes)`.
-    op = unionall_type(typeof(op)){()}(axes)
+    # If we've already instantiated, then we need to reset the operator axes.
+    op = rebuild_operator(op, axes)
     Style = AbstractSpectralStyle(ClimaComms.device(axes))
     return SpectralBroadcasted{Style}(op, args, axes)
 end
@@ -164,13 +277,13 @@ function Base.Broadcast.instantiate(
     end
     # For FiniteDifferenceSpace with operators, return zeros for horizontal operators
     if axes isa Spaces.FiniteDifferenceSpace && bc.f isa SpectralElementOperator
-        op = unionall_type(typeof(bc.f)){()}(axes)
+        op = rebuild_operator(bc.f, axes)
         RT = operator_return_eltype(op, map(eltype, args)...)
         return Broadcast.broadcasted(Returns(zero(RT)), Fields.coordinate_field(axes))
     end
 
     if bc.f isa SpectralElementOperator
-        op = unionall_type(typeof(bc.f)){()}(axes)
+        op = rebuild_operator(bc.f, axes)
         Style = AbstractSpectralStyle(ClimaComms.device(axes))
         return Base.Broadcast.Broadcasted{Style}(op, args, axes)
     else
@@ -578,14 +691,21 @@ where ``D_i`` is the derivative matrix along the ``i``th dimension
 ## References
 - [Taylor2010](@cite), equation 15
 """
-struct Divergence{I} <: SpectralElementOperator{I} end
-Divergence() = Divergence{()}()
-Divergence{()}(space) = Divergence{operator_axes(space)}()
+struct Divergence{I, F <: FormType} <: SpectralElementOperator{I} end
+Divergence() = Divergence{(), StrongForm}()
+Divergence{I}() where {I} = Divergence{I, StrongForm}()
+rebuild_operator(::Divergence{I, F}, space) where {I, F} =
+    Divergence{operator_axes(space), F}()
 
 operator_return_eltype(op::Divergence{I}, ::Type{S}) where {I, S} =
     Geometry.divergence_result_type(S)
 
-function apply_operator(op::Divergence{(1,)}, space, slabidx, arg)
+# The strong divergence is J⁻¹ ∑ᵢ Dᵢ (J uⁱ), while the weak divergence is
+# -(WJ)⁻¹ ∑ᵢ Dᵢᵀ (WJ uⁱ); see form_deriv_entry, form_jacobian, and
+# form_jacobian_rescale for the form-dependent factors.
+
+function apply_operator(op::Divergence{(1,), F}, space, slabidx, arg) where {F}
+    form = F()
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -598,25 +718,28 @@ function apply_operator(op::Divergence{(1,)}, space, slabidx, arg)
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
-        Jv¹ = local_geometry.J * Geometry.contravariant1(v, local_geometry)
+        Jv¹ =
+            form_jacobian(form, local_geometry) *
+            Geometry.contravariant1(v, local_geometry)
         for ii in 1:Nq
-            out[ii] += D[ii, i] * Jv¹
+            out[ii] += form_deriv_entry(form, D, ii, i) * Jv¹
         end
     end
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[i] *= local_geometry.invJ
+        out[i] = form_jacobian_rescale(form, local_geometry, out[i])
     end
     return Field(immutable_slab_data(out), space)
 end
 
 Base.@propagate_inbounds function apply_operator(
-    op::Divergence{(1, 2)},
+    op::Divergence{(1, 2), F},
     space,
     slabidx,
     arg,
-)
+) where {F}
+    form = F()
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -629,19 +752,23 @@ Base.@propagate_inbounds function apply_operator(
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
-        Jv¹ = local_geometry.J * Geometry.contravariant1(v, local_geometry)
+        Jv¹ =
+            form_jacobian(form, local_geometry) *
+            Geometry.contravariant1(v, local_geometry)
         for ii in 1:Nq
-            out[1, ii, j, 1] += D[ii, i] * Jv¹
+            out[1, ii, j, 1] += form_deriv_entry(form, D, ii, i) * Jv¹
         end
-        Jv² = local_geometry.J * Geometry.contravariant2(v, local_geometry)
+        Jv² =
+            form_jacobian(form, local_geometry) *
+            Geometry.contravariant2(v, local_geometry)
         for jj in 1:Nq
-            out[1, i, jj, 1] += D[jj, j] * Jv²
+            out[1, i, jj, 1] += form_deriv_entry(form, D, jj, j) * Jv²
         end
     end
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[1, i, j, 1] *= local_geometry.invJ
+        out[1, i, j, 1] = form_jacobian_rescale(form, local_geometry, out[1, i, j, 1])
     end
     return Field(immutable_slab_data(out), space)
 end
@@ -832,106 +959,6 @@ function apply_operator(op::SplitDivergence{(1, 2)}, space, slabidx, arg1, arg2)
 end
 
 """
-    wdiv = WeakDivergence()
-    wdiv.(u)
-
-Computes the "weak divergence" of a vector field `u`.
-
-This is defined as the scalar field ``\\theta \\in \\mathcal{V}_0`` such that
-for all ``\\phi\\in \\mathcal{V}_0``
-```math
-\\int_\\Omega \\phi \\theta \\, d \\Omega
-=
-- \\int_\\Omega (\\nabla \\phi) \\cdot u \\,d \\Omega
-```
-where ``\\mathcal{V}_0`` is the space of ``u``.
-
-This arises as the contribution of the volume integral after applying
-integration by parts to the weak form expression of the divergence
-```math
-\\int_\\Omega \\phi (\\nabla \\cdot u) \\, d \\Omega
-=
-- \\int_\\Omega (\\nabla \\phi) \\cdot u \\,d \\Omega
-+ \\oint_{\\partial \\Omega} \\phi (u \\cdot n) \\,d \\sigma
-```
-
-It can be written in matrix form as
-```math
-ϕ^\\top WJ θ = - \\sum_i (D_i ϕ)^\\top WJ u^i
-```
-which reduces to
-```math
-θ = -(WJ)^{-1} \\sum_i D_i^\\top WJ u^i
-```
-where
- - ``J`` is the diagonal Jacobian matrix
- - ``W`` is the diagonal matrix of quadrature weights
- - ``D_i`` is the derivative matrix along the ``i``th dimension
-"""
-struct WeakDivergence{I} <: SpectralElementOperator{I} end
-WeakDivergence() = WeakDivergence{()}()
-WeakDivergence{()}(space) = WeakDivergence{operator_axes(space)}()
-
-operator_return_eltype(::WeakDivergence{I}, ::Type{S}) where {I, S} =
-    Geometry.divergence_result_type(S)
-
-function apply_operator(op::WeakDivergence{(1,)}, space, slabidx, arg)
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(arg))
-    out = slab_data(RT, FT, Nq)
-    fill!(parent(out), zero(FT))
-    @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        v = get_node(space, arg, ij, slabidx)
-        WJv¹ = local_geometry.WJ * Geometry.contravariant1(v, local_geometry)
-        for ii in 1:Nq
-            out[ii] += D[i, ii] * WJv¹
-        end
-    end
-    @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        out[i] /= -local_geometry.WJ
-    end
-    return Field(immutable_slab_data(out), space)
-end
-
-function apply_operator(op::WeakDivergence{(1, 2)}, space, slabidx, arg)
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    RT = operator_return_eltype(op, eltype(arg))
-    out = slab_data(RT, FT, Nq, Nq)
-    fill!(parent(out), zero(FT))
-
-    @inbounds for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        v = get_node(space, arg, ij, slabidx)
-        WJv¹ = local_geometry.WJ * Geometry.contravariant1(v, local_geometry)
-        for ii in 1:Nq
-            out[1, ii, j, 1] += D[i, ii] * WJv¹
-        end
-        WJv² = local_geometry.WJ * Geometry.contravariant2(v, local_geometry)
-        for jj in 1:Nq
-            out[1, i, jj, 1] += D[j, jj] * WJv²
-        end
-    end
-    @inbounds for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        out[1, i, j, 1] /= -local_geometry.WJ
-    end
-    return Field(immutable_slab_data(out), space)
-end
-
-"""
     grad = Gradient()
     grad.(f)
 
@@ -953,14 +980,22 @@ where ``D_i`` is the derivative matrix along the ``i``th dimension.
 ## References
 - [Taylor2010](@cite), equation 16
 """
-struct Gradient{I} <: SpectralElementOperator{I} end
-Gradient() = Gradient{()}()
-Gradient{()}(space) = Gradient{operator_axes(space)}()
+struct Gradient{I, F <: FormType} <: SpectralElementOperator{I} end
+Gradient() = Gradient{(), StrongForm}()
+Gradient{I}() where {I} = Gradient{I, StrongForm}()
+rebuild_operator(::Gradient{I, F}, space) where {I, F} =
+    Gradient{operator_axes(space), F}()
 
 operator_return_eltype(::Gradient{I}, ::Type{S}) where {I, S} =
     Geometry.gradient_result_type(Val(I), S)
 
-function apply_operator(op::Gradient{(1,)}, space, slabidx, arg)
+# The strong gradient is Dᵢ f, while the weak gradient is -W⁻¹ Dᵢᵀ (W f); see
+# form_deriv_entry and form_weighted_arg for the form-dependent factors. Only
+# the weak form needs the final W⁻¹ rescale, which stays inlined in each
+# apply_operator so that the strong form can skip that loop entirely.
+
+function apply_operator(op::Gradient{(1,), F}, space, slabidx, arg) where {F}
+    form = F()
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -971,21 +1006,32 @@ function apply_operator(op::Gradient{(1,)}, space, slabidx, arg)
     fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
-        x = get_node(space, arg, ij, slabidx)
+        local_geometry = get_local_geometry(space, ij, slabidx)
+        x = form_weighted_arg(form, local_geometry, get_node(space, arg, ij, slabidx))
         for ii in 1:Nq
-            ∂f∂ξ = Geometry.Covariant1Vector(D[ii, i]) ⊗ x
+            ∂f∂ξ =
+                Geometry.Covariant1Vector(form_deriv_entry(form, D, ii, i)) ⊗ x
             out[ii] += ∂f∂ξ
+        end
+    end
+    if F === WeakForm
+        @inbounds for i in 1:Nq
+            ij = CartesianIndex((i,))
+            local_geometry = get_local_geometry(space, ij, slabidx)
+            W = local_geometry.WJ * local_geometry.invJ
+            out[i] /= W
         end
     end
     return Field(immutable_slab_data(out), space)
 end
 
 Base.@propagate_inbounds function apply_operator(
-    op::Gradient{(1, 2)},
+    op::Gradient{(1, 2), F},
     space,
     slabidx,
     arg,
-)
+) where {F}
+    form = F()
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -997,117 +1043,32 @@ Base.@propagate_inbounds function apply_operator(
 
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
-        x = get_node(space, arg, ij, slabidx)
+        local_geometry = get_local_geometry(space, ij, slabidx)
+        x = form_weighted_arg(form, local_geometry, get_node(space, arg, ij, slabidx))
         for ii in 1:Nq
-            ∂f∂ξ₁ = Geometry.Covariant12Vector(D[ii, i], zero(eltype(D))) ⊗ x
+            ∂f∂ξ₁ =
+                Geometry.Covariant12Vector(
+                    form_deriv_entry(form, D, ii, i),
+                    zero(eltype(D)),
+                ) ⊗ x
             out[1, ii, j, 1] += ∂f∂ξ₁
         end
         for jj in 1:Nq
-            ∂f∂ξ₂ = Geometry.Covariant12Vector(zero(eltype(D)), D[jj, j]) ⊗ x
+            ∂f∂ξ₂ =
+                Geometry.Covariant12Vector(
+                    zero(eltype(D)),
+                    form_deriv_entry(form, D, jj, j),
+                ) ⊗ x
             out[1, i, jj, 1] += ∂f∂ξ₂
         end
     end
-    return Field(immutable_slab_data(out), space)
-end
-
-"""
-    wgrad = WeakGradient()
-    wgrad.(f)
-
-Compute the "weak gradient" of `f` on each element.
-
-This is defined as the the vector field ``\\theta \\in \\mathcal{V}_0`` such
-that for all ``\\phi \\in \\mathcal{V}_0``
-```math
-\\int_\\Omega \\phi \\cdot \\theta \\, d \\Omega
-=
-- \\int_\\Omega (\\nabla \\cdot \\phi) f \\, d\\Omega
-```
-where ``\\mathcal{V}_0`` is the space of ``f``.
-
-This arises from the contribution of the volume integral after by applying
-integration by parts to the weak form expression of the gradient
-```math
-\\int_\\Omega \\phi \\cdot (\\nabla f) \\, d \\Omega
-=
-- \\int_\\Omega f (\\nabla \\cdot \\phi) \\, d\\Omega
-+ \\oint_{\\partial \\Omega} f (\\phi \\cdot n) \\, d \\sigma
-```
-
-In matrix form, this becomes
-```math
-{\\phi^i}^\\top W J \\theta_i = - ( J^{-1} D_i J \\phi^i )^\\top W J f
-```
-which reduces to
-```math
-\\theta_i = -W^{-1} D_i^\\top W f
-```
-where ``D_i`` is the derivative matrix along the ``i``th dimension.
-"""
-struct WeakGradient{I} <: SpectralElementOperator{I} end
-WeakGradient() = WeakGradient{()}()
-WeakGradient{()}(space) = WeakGradient{operator_axes(space)}()
-
-operator_return_eltype(::WeakGradient{I}, ::Type{S}) where {I, S} =
-    Geometry.gradient_result_type(Val(I), S)
-
-function apply_operator(op::WeakGradient{(1,)}, space, slabidx, arg)
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(arg))
-    out = slab_data(RT, FT, Nq)
-    fill!(parent(out), zero(FT))
-    @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        W = local_geometry.WJ * local_geometry.invJ
-        Wx = W * get_node(space, arg, ij, slabidx)
-        for ii in 1:Nq
-            Dᵀ₁Wf = Geometry.Covariant1Vector(D[i, ii]) ⊗ Wx
-            out[ii] -= Dᵀ₁Wf
+    if F === WeakForm
+        @inbounds for j in 1:Nq, i in 1:Nq
+            ij = CartesianIndex((i, j))
+            local_geometry = get_local_geometry(space, ij, slabidx)
+            W = local_geometry.WJ * local_geometry.invJ
+            out[1, i, j, 1] /= W
         end
-    end
-    @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        W = local_geometry.WJ * local_geometry.invJ
-        out[i] /= W
-    end
-    return Field(immutable_slab_data(out), space)
-end
-
-function apply_operator(op::WeakGradient{(1, 2)}, space, slabidx, arg)
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(arg))
-    out = slab_data(RT, FT, Nq, Nq)
-    fill!(parent(out), zero(FT))
-
-    @inbounds for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        W = local_geometry.WJ * local_geometry.invJ
-        Wx = W * get_node(space, arg, ij, slabidx)
-        for ii in 1:Nq
-            Dᵀ₁Wf = Geometry.Covariant12Vector(D[i, ii], zero(eltype(D))) ⊗ Wx
-            out[1, ii, j, 1] -= Dᵀ₁Wf
-        end
-        for jj in 1:Nq
-            Dᵀ₂Wf = Geometry.Covariant12Vector(zero(eltype(D)), D[j, jj]) ⊗ Wx
-            out[1, i, jj, 1] -= Dᵀ₂Wf
-        end
-    end
-    @inbounds for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        W = local_geometry.WJ * local_geometry.invJ
-        out[1, i, j, 1] /= W
     end
     return Field(immutable_slab_data(out), space)
 end
@@ -1155,14 +1116,21 @@ Note that unused dimensions will be dropped: e.g. the 2D curl of a
 ## References
 - [Taylor2010](@cite), equation 17
 """
-struct Curl{I} <: CurlSpectralElementOperator{I} end
-Curl() = Curl{()}()
-Curl{()}(space) = Curl{operator_axes(space)}()
+struct Curl{I, F <: FormType} <: CurlSpectralElementOperator{I} end
+Curl() = Curl{(), StrongForm}()
+Curl{I}() where {I} = Curl{I, StrongForm}()
+rebuild_operator(::Curl{I, F}, space) where {I, F} =
+    Curl{operator_axes(space), F}()
 
 operator_return_eltype(::Curl{I}, ::Type{S}) where {I, S} =
     Geometry.curl_result_type(Val(I), S)
 
-function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
+# The strong curl is εⁱʲᵏ J⁻¹ Dⱼ uₖ, while the weak curl is
+# -εⁱʲᵏ (WJ)⁻¹ Dⱼᵀ (W uₖ); see form_deriv_entry, form_weighted_arg, and
+# form_jacobian_rescale for the form-dependent factors.
+
+function apply_operator(op::Curl{(1,), F}, space, slabidx, arg) where {F}
+    form = F()
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -1175,11 +1143,19 @@ function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
-        v₂ = Geometry.covariant2(v, local_geometry)
-        v₃ = Geometry.covariant3(v, local_geometry)
+        v₂ = form_weighted_arg(
+            form,
+            local_geometry,
+            Geometry.covariant2(v, local_geometry),
+        )
+        v₃ = form_weighted_arg(
+            form,
+            local_geometry,
+            Geometry.covariant3(v, local_geometry),
+        )
         for ii in 1:Nq
-            D₁v₂ = D[ii, i] * v₂
-            D₁v₃ = D[ii, i] * v₃
+            D₁v₂ = form_deriv_entry(form, D, ii, i) * v₂
+            D₁v₃ = form_deriv_entry(form, D, ii, i) * v₃
             out[ii] +=
                 Geometry.Contravariant123Vector(zero(FT), -D₁v₃, D₁v₂)
         end
@@ -1187,12 +1163,13 @@ function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[i] *= local_geometry.invJ
+        out[i] = form_jacobian_rescale(form, local_geometry, out[i])
     end
     return Field(immutable_slab_data(out), space)
 end
 
-function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
+function apply_operator(op::Curl{(1, 2), F}, space, slabidx, arg) where {F}
+    form = F()
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -1205,18 +1182,30 @@ function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
-        v₁ = Geometry.covariant1(v, local_geometry)
-        v₂ = Geometry.covariant2(v, local_geometry)
-        v₃ = Geometry.covariant3(v, local_geometry)
+        v₁ = form_weighted_arg(
+            form,
+            local_geometry,
+            Geometry.covariant1(v, local_geometry),
+        )
+        v₂ = form_weighted_arg(
+            form,
+            local_geometry,
+            Geometry.covariant2(v, local_geometry),
+        )
+        v₃ = form_weighted_arg(
+            form,
+            local_geometry,
+            Geometry.covariant3(v, local_geometry),
+        )
         for ii in 1:Nq
-            D₁v₃ = D[ii, i] * v₃
-            D₁v₂ = D[ii, i] * v₂
+            D₁v₃ = form_deriv_entry(form, D, ii, i) * v₃
+            D₁v₂ = form_deriv_entry(form, D, ii, i) * v₂
             out[1, ii, j, 1] +=
                 Geometry.Contravariant123Vector(zero(FT), -D₁v₃, D₁v₂)
         end
         for jj in 1:Nq
-            D₂v₃ = D[jj, j] * v₃
-            D₂v₁ = D[jj, j] * v₁
+            D₂v₃ = form_deriv_entry(form, D, jj, j) * v₃
+            D₂v₁ = form_deriv_entry(form, D, jj, j) * v₁
             out[1, i, jj, 1] +=
                 Geometry.Contravariant123Vector(D₂v₃, zero(FT), -D₂v₁)
         end
@@ -1224,119 +1213,7 @@ function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[1, i, j, 1] *= local_geometry.invJ
-    end
-    return Field(immutable_slab_data(out), space)
-end
-
-"""
-    wcurl = WeakCurl()
-    wcurl.(u)
-
-Computes the "weak curl" on each element of a covariant vector field `u`.
-
-Note: The vector field ``u`` needs to be excliclty converted to a `CovaraintVector`,
-as then the `WeakCurl` is independent of the local metric tensor.
-
-This is defined as the vector field ``\\theta \\in \\mathcal{V}_0`` such that
-for all ``\\phi \\in \\mathcal{V}_0``
-```math
-\\int_\\Omega \\phi \\cdot \\theta \\, d \\Omega
-=
-\\int_\\Omega (\\nabla \\times \\phi) \\cdot u \\,d \\Omega
-```
-where ``\\mathcal{V}_0`` is the space of ``f``.
-
-This arises from the contribution of the volume integral after by applying
-integration by parts to the weak form expression of the curl
-```math
-\\int_\\Omega \\phi \\cdot (\\nabla \\times u) \\,d\\Omega
-=
-\\int_\\Omega (\\nabla \\times \\phi) \\cdot u \\,d \\Omega
-- \\oint_{\\partial \\Omega} (\\phi \\times u) \\cdot n \\,d\\sigma
-```
-
-In matrix form, this becomes
-```math
-{\\phi_i}^\\top W J \\theta^i = (J^{-1} \\epsilon^{kji} D_j \\phi_i)^\\top W J u_k
-```
-which, by using the anti-symmetry of the Levi-Civita symbol, reduces to
-```math
-\\theta^i = - \\epsilon^{ijk} (WJ)^{-1} D_j^\\top W u_k
-```
-"""
-struct WeakCurl{I} <: CurlSpectralElementOperator{I} end
-WeakCurl() = WeakCurl{()}()
-WeakCurl{()}(space) = WeakCurl{operator_axes(space)}()
-
-operator_return_eltype(::WeakCurl{I}, ::Type{S}) where {I, S} =
-    Geometry.curl_result_type(Val(I), S)
-
-function apply_operator(op::WeakCurl{(1,)}, space, slabidx, arg)
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(arg))
-    out = slab_data(RT, FT, Nq)
-    fill!(parent(out), zero(FT))
-    @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        v = get_node(space, arg, ij, slabidx)
-        W = local_geometry.WJ * local_geometry.invJ
-        Wv₂ = W * Geometry.covariant2(v, local_geometry)
-        Wv₃ = W * Geometry.covariant3(v, local_geometry)
-        for ii in 1:Nq
-            Dᵀ₁Wv₂ = D[i, ii] * Wv₂
-            Dᵀ₁Wv₃ = D[i, ii] * Wv₃
-            out[ii] +=
-                Geometry.Contravariant123Vector(zero(FT), Dᵀ₁Wv₃, -Dᵀ₁Wv₂)
-        end
-    end
-    @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        out[i] /= local_geometry.WJ
-    end
-    return Field(immutable_slab_data(out), space)
-end
-
-function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(arg))
-    out = slab_data(RT, FT, Nq, Nq)
-    fill!(parent(out), zero(FT))
-    @inbounds for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        v = get_node(space, arg, ij, slabidx)
-        W = local_geometry.WJ * local_geometry.invJ
-        Wv₁ = W * Geometry.covariant1(v, local_geometry)
-        Wv₂ = W * Geometry.covariant2(v, local_geometry)
-        Wv₃ = W * Geometry.covariant3(v, local_geometry)
-        for ii in 1:Nq
-            Dᵀ₁Wv₃ = D[i, ii] * Wv₃
-            Dᵀ₁Wv₂ = D[i, ii] * Wv₂
-            out[1, ii, j, 1] +=
-                Geometry.Contravariant123Vector(zero(FT), Dᵀ₁Wv₃, -Dᵀ₁Wv₂)
-        end
-        for jj in 1:Nq
-            Dᵀ₂Wv₃ = D[j, jj] * Wv₃
-            Dᵀ₂Wv₁ = D[j, jj] * Wv₁
-            out[1, i, jj, 1] +=
-                Geometry.Contravariant123Vector(-Dᵀ₂Wv₃, zero(FT), Dᵀ₂Wv₁)
-        end
-    end
-    @inbounds for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        out[1, i, j, 1] /= local_geometry.WJ
+        out[1, i, j, 1] = form_jacobian_rescale(form, local_geometry, out[1, i, j, 1])
     end
     return Field(immutable_slab_data(out), space)
 end

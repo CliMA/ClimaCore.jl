@@ -37,6 +37,7 @@ UnitTest("Sphere spaces"                           ,"Spaces/sphere.jl"),
 UnitTest("Fields"                                  ,"Fields/unit_field.jl"), # has benchmarks
 UnitTest("Reinstantiate broadcasted"               ,"Operators/unit_reinstantiate_bc.jl"),
 UnitTest("Placeholder Fields"                      ,"Operators/unit_common.jl"),
+UnitTest("Spectral elem - form types"              ,"Operators/spectralelement/unit_form_types.jl"),
 UnitTest("Spectral elem - rectilinear"             ,"Operators/spectralelement/rectilinear.jl"),
 UnitTest("Spectral elem - opt"                     ,"Operators/spectralelement/opt.jl"),
 UnitTest("Spectral elem - gradient tensor"         ,"Operators/spectralelement/covar_deriv_ops.jl"),

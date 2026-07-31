@@ -4,6 +4,29 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-🔥behavioralΔ] Unified strong/weak spectral element operator variants
+  via a `FormType` parameter. `Divergence`, `Gradient`, and `Curl` now carry a
+  second type parameter (`StrongForm` or `WeakForm`), and `WeakDivergence`,
+  `WeakGradient`, and `WeakCurl` are backwards-compatibility aliases for the
+  `WeakForm` variants (e.g. `WeakDivergence{I} = Divergence{I, WeakForm}`),
+  collected in `src/Operators/deprecated.jl` for eventual removal. All operator
+  names and their public constructors are unchanged. Results are bitwise
+  identical to the previous implementations, with one exception: the strong-form
+  `Divergence` on GPUs in 2D now keeps one accumulator per dimension (matching
+  the other unified operators) instead of summing both dimensions into a single
+  accumulator, which changes results by accumulation roundoff only (verified
+  identical in exact arithmetic; float differences are a few `eps` of the
+  accumulated terms). Two notes for downstream code:
+  `isa` checks against the strong operator types now also match the weak
+  variants (e.g. `WeakDivergence() isa Divergence` is `true`), so dispatch that
+  must distinguish forms should use the `FormType` parameter (e.g.
+  `Divergence{I, StrongForm}`); and the internal
+  `Divergence{()}(space)`-style constructors used to reset operator axes have
+  been replaced by `rebuild_operator(op, space)`. As a side effect of unifying
+  the CUDA `Gradient` kernels, `WeakGradient` now accepts rank-1 tensor fields
+  on GPUs, which previously raised an "Unsupported input type" error even though
+  both forms already supported them on CPUs.
+  [2556](https://github.com/CliMA/ClimaCore.jl/pull/2556)
 - Refactor DataLayouts module [2522](https://github.com/CliMA/ClimaCore.jl/pull/2522)
   - All data layout types are unified into a single `DataLayout` type, and all
     loops over data go through two communication primitives (`foreach_slice` and

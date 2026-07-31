@@ -28,6 +28,18 @@ Curl
 WeakCurl
 ```
 
+### Strong and weak forms
+
+`Divergence`, `Gradient`, and `Curl` each have a strong and a weak variant,
+distinguished by a [`FormType`](@ref) type parameter. The weak variants are also
+available under the names `WeakDivergence`, `WeakGradient`, and `WeakCurl`.
+
+```@docs
+FormType
+StrongForm
+WeakForm
+```
+
 ### Interpolation Operators
 ```@docs
 Interpolate
