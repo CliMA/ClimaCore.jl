@@ -1277,7 +1277,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
     velocity,
     arg,
 )
-    @assert idx <= right_face_boundary_idx(space) - 1
+    @assert idx >= right_face_boundary_idx(space) - 1
 
     vᶠ = Geometry.contravariant3(
         getidx(space, velocity, idx, hidx),
@@ -1429,7 +1429,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
     Φ_field,
     Φᵗᵈ_field,
 )
-    @assert idx <= right_face_boundary_idx(space) - 1
+    @assert idx >= right_face_boundary_idx(space) - 1
 
     return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
 end
@@ -1628,7 +1628,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
     Φ_field,
     𝓊_field,
 )
-    @assert idx <= right_face_boundary_idx(space) - 1
+    @assert idx >= right_face_boundary_idx(space) - 1
 
     return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
 end
