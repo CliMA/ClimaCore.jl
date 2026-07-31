@@ -32,7 +32,9 @@ function DataLayouts.reduce_points(::ThisHost, op::O, arg; kwargs...) where {O}
         return nothing
     end
     T = return_type(op, NTuple{2, eltype(arg)})
-    empty_results = DataLayouts.scoped_array(ThisHost(), T, 0)
+    # Measure occupancy with an empty view of the buffer that the launches below use, since
+    # a kernel is compiled separately for every type of argument it is given.
+    empty_results = DataLayouts.scoped_array(ThisHost(), T, 0; buffer = true)
     # Launch at most one thread per point, so every thread's strided range of
     # indices is nonempty. Threads without values would need warp-shuffle
     # placeholders, which reductions without init values (like min) do not have.
@@ -40,7 +42,7 @@ function DataLayouts.reduce_points(::ThisHost, op::O, arg; kwargs...) where {O}
     threads = min(length(arg), max_threads)
     blocks = max(fld(length(arg), threads), 1)
     num_results = min(max_resident_blocks(threads), blocks)
-    results = similar(empty_results, num_results)
+    results = DataLayouts.scoped_array(ThisHost(), T, num_results; buffer = true)
     auto_launch!(kernel, (results, arg); threads_s = threads, blocks_s = num_results)
     if !isone(num_results)
         threads = min(threads_via_occupancy(kernel, (results, results)), num_results)
