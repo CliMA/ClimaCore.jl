@@ -120,46 +120,11 @@ Base.@kwdef struct HeldSuarezFDDG{FT <: AbstractFloat}
     plots::Bool = true
 end
 
-"""
-    BaroclinicWaveDG(; kwargs...)
-
-Vector-invariant DG-FD baroclinic wave (`baroclinic_wave_dg_fd.jl`).
-Same resolution/time keywords as [`BaroclinicWaveFDDG`](@ref), plus
-- `momentum_adv` (`:vector_invariant`): `:vector_invariant` or
-  `:fluctuation` (Route B KE-compatible horizontal momentum advection)
-- κ₄ / filter defaults follow the driver (`nothing` → cap/10 and npoly):
-  this formulation needs its stabilization.
-"""
-Base.@kwdef struct BaroclinicWaveDG{FT <: AbstractFloat}
-    helem::Int = 4
-    npoly::Int = 4
-    zelem::Int = 10
-    zmax::FT = 30e3
-    stepper::Symbol = :hevi
-    dt::Union{Nothing, FT} = stepper == :hevi ? 60.0 : nothing
-    t_end::FT = 86400.0
-    perturb::Bool = true
-    momentum_adv::Symbol = :vector_invariant
-    κ₄::Union{Nothing, FT} = nothing
-    filter_Nc::Union{Nothing, Int} = nothing
-    # (dz_bottom, dz_top) [m] stretched vertical grid; nothing = uniform.
-    # At zelem ≥ 20 the uniform grid resolves upper-level waves all the way
-    # to the rigid lid — the documented multi-day crash mode; prefer
-    # zstretch = (300.0, 3000.0) + sponge_uh = true there.
-    zstretch::Union{Nothing, Tuple{FT, FT}} = nothing
-    sponge_τ::FT = 1200.0
-    sponge_uh::Bool = false
-    dt_save::FT = 21600.0
-    ndiag::Int = 10
-end
-
 driver_file(::BaroclinicWaveFDDG) = "baroclinic_wave_fddg_fluxform.jl"
 driver_file(::HeldSuarezFDDG) = "baroclinic_wave_fddg_fluxform.jl"
-driver_file(::BaroclinicWaveDG) = "baroclinic_wave_dg_fd.jl"
 
 float_type(::BaroclinicWaveFDDG{FT}) where {FT} = FT
 float_type(::HeldSuarezFDDG{FT}) where {FT} = FT
-float_type(::BaroclinicWaveDG{FT}) where {FT} = FT
 
 function env_settings(p::Union{BaroclinicWaveFDDG, HeldSuarezFDDG})
     env = Dict(
@@ -190,34 +155,10 @@ function env_settings(p::Union{BaroclinicWaveFDDG, HeldSuarezFDDG})
     return env
 end
 
-function env_settings(p::BaroclinicWaveDG)
-    env = Dict(
-        "HELEM" => string(p.helem),
-        "NPOLY" => string(p.npoly),
-        "ZELEM" => string(p.zelem),
-        "ZMAX" => string(p.zmax),
-        "STEPPER" => string(p.stepper),
-        "FLOAT_TYPE" => string(float_type(p)),
-        "T_END" => string(p.t_end),
-        "PERTURB" => p.perturb ? "1" : "0",
-        "DT_SAVE" => string(p.dt_save),
-        "NDIAG" => string(p.ndiag),
-        "MOMENTUM_ADV" => string(p.momentum_adv),
-        "SPONGE_TAU" => string(p.sponge_τ),
-        "SPONGE_UH" => p.sponge_uh ? "1" : "0",
-    )
-    p.dt === nothing || (env["DT"] = string(p.dt))
-    p.κ₄ === nothing || (env["KAPPA4"] = string(p.κ₄))
-    p.filter_Nc === nothing || (env["FILTER"] = string(p.filter_Nc))
-    p.zstretch === nothing ||
-        (env["ZSTRETCH"] = string(p.zstretch[1], ",", p.zstretch[2]))
-    return env
-end
-
 # every key any of the drivers reads — all are scoped (restored after the run)
 const _DG_ENV_KEYS = [
     "HELEM", "NPOLY", "ZELEM", "ZMAX", "DT", "T_END", "STEPPER", "PERTURB",
-    "KAPPA4", "FILTER", "DT_SAVE", "NDIAG", "PLOTS", "MOMENTUM_ADV",
+    "KAPPA4", "FILTER", "DT_SAVE", "NDIAG", "PLOTS",
     "FLOAT_TYPE", "INTERFACE_FLUX", "ZSTRETCH", "SPONGE_TAU", "SPONGE_UH",
     "STATE_FILTER_ALPHA", "STATE_FILTER_KC", "STATE_FILTER_S",
     "HELD_SUAREZ", "HS_SPINUP",

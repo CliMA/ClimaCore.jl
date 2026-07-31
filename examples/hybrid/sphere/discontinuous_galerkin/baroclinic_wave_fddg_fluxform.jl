@@ -117,8 +117,9 @@ let uv0 = Geometry.UVVector.(Y0.uₕ)
         eE1, eN1, eE2, eN2, eE3, eN3,
     )
 end
-# ρw is stored in Covariant3 basis so the HEVI Jacobian reuses the proven
-# MatrixFields machinery (g³³ pairings) of sphere_dg_fd_jacobian.jl verbatim.
+# ρw is stored in Covariant3 basis so the HEVI Jacobian
+# (fddg_fluxform_jacobian.jl) can use the proven MatrixFields machinery (g³³
+# pairings) directly.
 ρw0 = map(_ -> C3(FT(0)), fcoords)
 Y = Fields.FieldVector(Yc = Yc0, ρw = ρw0)
 

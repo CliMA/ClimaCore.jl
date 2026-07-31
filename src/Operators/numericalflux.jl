@@ -1545,16 +1545,6 @@ central_curl3_lift(normal, (u⁻, v⁻), (u⁺, v⁺)) =
     ) / 2
 
 """
-    central_curl12_lift(normal, (w⁻,), (w⁺,))
-
-Central lifting for the horizontal components of ``∇ × (w r̂)``:
-``n̂ × r̂\\,(w^* - w_{side})``, returned as a `UVVector`.
-"""
-central_curl12_lift(normal, (w⁻,), (w⁺,)) =
-    ((w⁺ - w⁻) / 2) *
-    Geometry.UVVector(normal.components.data.:2, -normal.components.data.:1)
-
-"""
     jump_penalty_lift(normal, (q⁻, λ⁻), (q⁺, λ⁺))
 
 λ-scaled interface penalty: each side relaxes toward its neighbor at rate

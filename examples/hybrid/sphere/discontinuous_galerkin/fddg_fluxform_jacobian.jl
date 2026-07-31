@@ -1,8 +1,10 @@
 #=
 Column-wise analytic Jacobian of the HEVI implicit tendency for the FLUX-FORM
 FDDG sphere driver (state: Yc = (ρ, ρe, ρu1, ρu2, ρu3) at centers, ρw as a
-Covariant3 face field). Reuses the operator matrices and thermodynamic
-constants defined by sphere_dg_fd_jacobian.jl (included by the model file).
+Covariant3 face field). Self-contained: the vertical operator matrices and
+the ρ/ρe field-name constants used below are defined here, built on the FD
+operators (If, vdivf2c, ᶠgradᵥ) and thermodynamic constants (R_d, cv_d,
+T_tri) from the model file.
 
 Implicit tendency (vertical acoustic subsystem; everything else explicit):
     ᶜρₜ  = −ᶜdivᵥ(ᶠρw)                       [linear in ρw]
@@ -19,6 +21,17 @@ otherwise independent of ρw):
     ∂ᶠρwₜ/∂ᶜρ  = −ᶠgradᵥ_matrix ⋅ Diag(R_d(−(K+Φ)/cv_d + T_tri))
                  − Diag(ᶠgradᵥ(ᶜΦ)) ⋅ ᶠinterp_matrix
 =#
+
+import LinearAlgebra: ldiv!
+using ClimaCore.MatrixFields
+using ClimaCore.MatrixFields: @name
+
+const ᶜdivᵥ_matrix = MatrixFields.operator_matrix(vdivf2c)
+const ᶠgradᵥ_matrix = MatrixFields.operator_matrix(ᶠgradᵥ)
+const ᶠinterp_matrix = MatrixFields.operator_matrix(If)
+
+const ᶜρ_name = @name(Yc.ρ)
+const ᶜ𝔼_name = @name(Yc.ρe)
 
 const ᶠ𝕄F_name = @name(ρw)
 
