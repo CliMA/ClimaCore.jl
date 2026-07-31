@@ -41,15 +41,14 @@ function Base.copyto!(
     )
 
     (_, Ni, Nj, Nh) = size(out_fv)
-    # This uses block and grid indices instead of computing cartesian indices from a
-    # linear index. The launch configuration is optimized for common use case of 64 face
-    # levels and Ni = Nj = 4. Both periodic and non-periodic vertical topologies are
-    # supported (`has_padding_thread` accounts for the extra face level of non-periodic
-    # spaces); high-resolution columns fall through to `copyto_stencil_kernel!` below.
-    # `eager_copyto_stencil_kernel!` requires a  block size of (n_face_levels, Ni, 1)
-    # this block config is better for VIJFH. It is only used when the total number of
-    # threads in a block is between 32 and 256 to avoid underutilization of the GPU and
-    # errors due to too many registers used when the block size is too large.
+    # `eager_copyto_stencil_kernel!` requires one x-thread per face level, so a block
+    # is (n_face_levels, columns_per_block, 1) and the grid indexes the remaining
+    # columns. Each thread derives a linear column index from its y-thread and block
+    # index and decomposes it into `(i, j, h)`; this layout suits VIJFH, where the
+    # vertical axis is contiguous. Both periodic and non-periodic vertical topologies
+    # are supported (`has_padding_thread` accounts for the extra face level of
+    # non-periodic spaces), as are masked spaces. High-resolution columns (more face
+    # levels than fit in a block) fall through to `copyto_stencil_kernel!` below.
     # TODO: auto reduce max reg usage when needed because of high res columns
     # Size the dynamic shared memory to fit the largest single expression result in
     # the broadcasted tree (see `max_eager_shmem_per_thread`). If even that does not
@@ -57,12 +56,14 @@ function Base.copyto!(
     # the expression, so error out instead of silently falling back.
     eager_shmem_per_thread = max_eager_shmem_per_thread(bc)
     if !high_resolution
-        #    32 <= n_face_levels * Ni <= 256
         # mask.N holds the active column count in a one-element device array;
         # reading it on the host needs @allowscalar.
         n_columns =
             mask isa NoMask ? Ni * Nj * Nh :
             CUDA.@allowscalar(mask.N[1])
+        # One column per block keeps register pressure low, which matters more than
+        # occupancy until there are enough columns to saturate the device; past that,
+        # pack as many columns into each block as 256 threads allow.
         # 108 is the number of SMs in an A100. TODO: get this value from CUDA.jl to better optimize for different GPUs
         threads_dim_y = n_columns > 256 * 108 ? div(256, n_face_levels) : 1
         block_dim_x = div(n_columns, threads_dim_y, RoundUp)
@@ -77,9 +78,9 @@ function Base.copyto!(
              intermediate matrix/vector result is smaller.",
         )
         # `axes(out)` is passed so the kernel can recover the output layout's
-        # horizontal extents from its type parameters. The `CartesianIndices` the
-        # kernel builds from them therefore divides by compile-time constants,
-        # keeping the per-thread `divrem` cheap.
+        # horizontal extents from its type parameters (see `vijh_params`). The
+        # `CartesianIndices` the kernel builds from them therefore divides by
+        # compile-time constants, keeping the per-thread `divrem` cheap.
         args = (
             strip_space(out, space),
             strip_space(bc, space),

@@ -550,8 +550,10 @@ Operators.stencil_right_boundary(
 # An operator matrix can only capture the *linear* part of the operator; the
 # constant contributed by the boundary value is zeroed out (see `has_affine_bc`).
 # For every operator except GradientF2C/DivergenceF2C, a value-fixing condition
-# prescribes the *output* at the boundary as a pure constant, so its linear part is
-# zero and the boundary row is empty (`rzero`).
+# prescribes the *output* at the boundary as a pure constant, so its linear part is zero
+# and the boundary row is all zeros (`rzero` of the row type, which keeps the row's
+# bandwidth and zeroes its entries; the multiply clips the out-of-range band entries at
+# the column ends, so the row need not be narrowed).
 const ValueFixingBoundaryCondition = Union{
     Operators.SetValue,
     Operators.SetGradient,

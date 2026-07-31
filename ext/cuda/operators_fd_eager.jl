@@ -104,10 +104,10 @@ compile-time constant.
     space.staggering isa Spaces.CellCenter && !Topologies.isperiodic(space)
 
 """
-    eager_copyto_stencil_kernel!(out, bc::BC, space)
+    eager_copyto_stencil_kernel!(out, bc::BC, mask, space)
 
 CUDA kernel to compute the value of a `Broadcasted` or `StencilBroadcasted` at a single index.
-This calls `calc_level_val(bc, space)`, which  computes the value of the broadcasted
+This calls `calc_level_val(bc, hidx, space)`, which computes the value of the broadcasted
 expression at the given index, and then copies the result into `out`.
 """
 Base.@propagate_inbounds function eager_copyto_stencil_kernel!(
@@ -119,8 +119,10 @@ Base.@propagate_inbounds function eager_copyto_stencil_kernel!(
     v = threadIdx().x
     col_idx = threadIdx().y + (blockIdx().x - 1) * blockDim().y
     (i, j, h) = if mask isa NoMask
-        # `Nij` comes from the type of `us`, so it is a compile-time constant and
-        # the `CartesianIndices` decomposition below uses a fixed-divisor `divrem`.
+        # `Ni` and `Nj` are read off the output layout's type parameters (see
+        # `vijh_params`), so they are compile-time constants and the `CartesianIndices`
+        # decomposition below is a fixed-divisor `divrem`. Only `Nh` is a runtime value,
+        # and being the last extent it is never divided by.
         size_params = ClimaCore.DataLayouts.vijh_params(ClimaCore.Fields.field_values(out))
         Nj = size_params.Nj
         Ni = size_params.Ni
@@ -149,7 +151,7 @@ end
 # All the functions below this line should not be used outside of this file
 
 """
-    calc_level_val(bc, space)
+    calc_level_val(bc, hidx, space)
 
 Call `calc_level_val` on all the arguments of `bc`, and then apply the function `bc.f` to the results.
 """
@@ -166,7 +168,7 @@ Base.@propagate_inbounds function calc_level_val(
 end
 
 """
-    reconstruct_space_and_call_calc_level_val(arg, space)
+    reconstruct_space_and_call_calc_level_val(arg, (hidx, space))
 
 If `arg` is a `Broadcasted`, `StencilBroadcasted`, or `Field`,
 reconstruct the space for the argument and call `calc_level_val` on it. This allows
@@ -189,7 +191,7 @@ Base.@propagate_inbounds reconstruct_space_and_call_calc_level_val(
 ) where {A, S} = @inbounds @inline calc_level_val(arg, space_idx_tpl[1], space_idx_tpl[2])
 
 """
-    calc_level_val(val::T, space)
+    calc_level_val(val::T, hidx, space)
 
 If `val` is not a `Broadcasted`, `StencilBroadcasted`, or `Field`, just return `val`.
 If it is a `Ref`, return `val[]`. If it is a one element tuple, return the element.
@@ -200,7 +202,7 @@ Base.@propagate_inbounds calc_level_val(val::T, hidx, space) where {V, T <: Tupl
 Base.@propagate_inbounds calc_level_val(arg::S, hidx, space) where {S} = arg
 
 """
-    calc_level_val(bc::StencilBroadcasted{<:Any, <: MultiplyColumnwiseBandMatrixField}, space)
+    calc_level_val(bc::StencilBroadcasted{<:Any, <: MultiplyColumnwiseBandMatrixField}, hidx, space)
 
 Call `calc_level_val` on both args of `bc`, place the result of the second arg into shared memory,
 and then perform the multiplication.
@@ -284,12 +286,12 @@ Base.@propagate_inbounds function calc_level_val(
 end
 
 """
-    calc_level_val(bc::StencilBroadcasted{<:Any, <: SetBoundaryOperator}, space)
+    calc_level_val(bc::StencilBroadcasted{<:Any, <: SetBoundaryOperator}, hidx, space)
 
-A `SetBoundaryOperator` only modifies the two boundary faces, and is the identity
-in the interior. At the boundaries we dispatch to `stencil_left_boundary` /
-`stencil_right_boundary` (which extract and project the boundary value), and in the
-interior we reuse the eagerly-computed value of the argument.
+A `SetBoundaryOperator` only modifies the two boundary levels of the space it is applied
+to, and is the identity in the interior. At the boundaries we dispatch to
+`stencil_left_boundary` / `stencil_right_boundary` (which extract and project the
+boundary value), and in the interior we reuse the eagerly-computed value of the argument.
 """
 Base.@propagate_inbounds function calc_level_val(
     bc::BC,
@@ -303,13 +305,14 @@ Base.@propagate_inbounds function calc_level_val(
     op = bc.op
     v = threadIdx().x
     val_no_bcs = @inline @inbounds calc_level_val(bc.args[1i32], hidx, space)
-    # A `SetBoundaryOperator` only ever outputs to faces. Gating the boundary logic on
-    # the (compile-time) staggering type ensures that when this method is compiled for a
-    # center-output space, the whole face-boundary branch -- including
-    # `should_call_left_boundary`, whose `idx < left_interior_idx` comparison would
-    # otherwise mix a `PlusHalf` face index with an integer center index and pull in
-    # non-GPU-compatible error-formatting code -- is dropped as dead code.
-
+    # A `SetBoundaryOperator` is space-preserving (`return_space(op, space) = space`), so
+    # this method is compiled for both staggerings: the automatic conversion puts one on a
+    # face output (InterpolateC2F + SetValue), on a center output (DivergenceF2C +
+    # SetDivergence), and on a face input (GradientF2C + SetValue). Deriving `idx` from
+    # the compile-time staggering type keeps the two apart, so the `PlusHalf` face index
+    # only reaches `should_call_*_boundary` when compiling for a face space and its
+    # `idx < left_interior_idx` comparison never mixes a `PlusHalf` with an integer center
+    # index -- which would pull in non-GPU-compatible error-formatting code.
     idx = space.staggering isa Spaces.CellFace ? (v - half) : v
     if Operators.should_call_left_boundary(idx, space, op, bc.args...)
         lbw = Operators.left_boundary_window(space)
@@ -338,7 +341,7 @@ Base.@propagate_inbounds function calc_level_val(
 end
 
 """
-    calc_level_val(bc::StencilBroadcasted{<:Any, <: LinVanLeerC2F}, space)
+    calc_level_val(bc::StencilBroadcasted{<:Any, <: LinVanLeerC2F}, hidx, space)
 
 Special case of `calc_level_val` for `LinVanLeerC2F`s, which makes the
 top and bottom face values not use the fallback `Operators.getidx`, since that
@@ -358,7 +361,7 @@ Base.@propagate_inbounds function calc_level_val(
 end
 
 """
-    calc_level_val(bc::StencilBroadcasted, space)
+    calc_level_val(bc::StencilBroadcasted, hidx, space)
 
 Fallback case of `calc_level_val` that calls `Operators.getidx`. This is used for
 affine BCs or values that won't fit in shmmem.
@@ -378,7 +381,7 @@ Base.@propagate_inbounds function calc_level_val(
 end
 
 """
-    calc_level_val(f::Field, space)
+    calc_level_val(arg::Field, hidx, space)
 
 Returns the value of the field `f` at the thread's index.
 When the staggering of `space` is `CellCenter`, the thread with `v == CUDA.blockDim().x` returns `new(eltype(f))`
@@ -400,7 +403,7 @@ Base.@propagate_inbounds function calc_level_val(
 end
 
 """
-    calc_level_val(bc::StencilBroadcasted{<:Any, <: FDOperatorMatrix}, space)
+    calc_level_val(bc::StencilBroadcasted{<:Any, <: FDOperatorMatrix}, hidx, space)
 
 Return the correct row of the operator matrix for the current thread
 """
@@ -420,7 +423,7 @@ Base.@propagate_inbounds function calc_level_val(
 end
 
 """
-    get_op_row(op, args, space)
+    get_op_row(op, args, hidx, space)
 
 Get the correct row of the operator matrix for the current thread, taking into account boundary conditions.
 """
@@ -476,7 +479,7 @@ end
 
 
 """
-    project_row2_for_mul
+    project_row2_for_mul(mat1_row, mat2_row, hidx, space)
 
 Projects `mat2_row` onto the correct axis for multiplication with `mat1_row` if necessary, and returns the projected row.
 """

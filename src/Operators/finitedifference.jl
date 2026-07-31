@@ -1007,9 +1007,11 @@ Base.@propagate_inbounds function stencil_left_boundary(
         getidx(space, velocity, idx, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
-    # `a⁻` is the (deleted) `LeftBiasedC2F` interior stencil, inlined here.
+    # `a⁻` is `LeftBiasedC2F`'s interior stencil, inlined here (the operator remains,
+    # but its `stencil_interior` method is now derived from its operator matrix).
     a⁻ = getidx(space, arg, idx - half, hidx)
-    # `a⁺` is the (deleted) `RightBiased3rdOrderC2F` interior stencil, inlined here.
+    # `a⁺` is the removed `RightBiased3rdOrderC2F` operator's interior stencil, inlined
+    # here because this is now its only remaining use.
     a⁺ =
         (
             4 * getidx(space, arg, idx - half, hidx) +
@@ -1034,14 +1036,16 @@ Base.@propagate_inbounds function stencil_right_boundary(
         getidx(space, velocity, idx, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
-    # `a⁻` is the (deleted) `LeftBiased3rdOrderC2F` interior stencil, inlined here.
+    # `a⁻` is the removed `LeftBiased3rdOrderC2F` operator's interior stencil, inlined
+    # here because this is now its only remaining use.
     a⁻ =
         (
             -2 * getidx(space, arg, idx - 1 - half, hidx) +
             10 * getidx(space, arg, idx - half, hidx) +
             4 * getidx(space, arg, idx + half, hidx)
         ) / 12
-    # `a⁺` is the (deleted) `RightBiasedC2F` interior stencil, inlined here.
+    # `a⁺` is `RightBiasedC2F`'s interior stencil, inlined here (the operator remains,
+    # but its `stencil_interior` method is now derived from its operator matrix).
     a⁺ = getidx(space, arg, idx + half, hidx)
     return Geometry.Contravariant3Vector(upwind_biased_product(v, a⁻, a⁺))
 
@@ -1063,7 +1067,8 @@ Base.@propagate_inbounds function stencil_left_boundary(
         getidx(space, velocity, idx, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
-    # `a` is the (deleted) `RightBiased3rdOrderC2F` interior stencil, inlined here.
+    # `a` is the removed `RightBiased3rdOrderC2F` operator's interior stencil, inlined
+    # here because this is now its only remaining use.
     a =
         (
             4 * getidx(space, arg, idx - half, hidx) +
@@ -1090,7 +1095,8 @@ Base.@propagate_inbounds function stencil_right_boundary(
         getidx(space, velocity, idx, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
-    # `a` is the (deleted) `LeftBiased3rdOrderC2F` interior stencil, inlined here.
+    # `a` is the removed `LeftBiased3rdOrderC2F` operator's interior stencil, inlined
+    # here because this is now its only remaining use.
     a =
         (
             -2 * getidx(space, arg, idx - 1 - half, hidx) +
@@ -1632,9 +1638,23 @@ abstract type BoundaryOperator <: FiniteDifferenceOperator end
 """
     SetBoundaryOperator(;boundaries...)
 
-This operator only modifies the values at the boundary faces, or the center cells adjacent to the boundary faces:
+This operator is the identity in the interior, and replaces the value at each boundary
+for which a condition is given. It preserves the space of its argument, so it modifies
+the boundary faces of a face field or the boundary center cells of a center field. A side
+with no condition is left untouched.
+
+The following boundary conditions are supported:
 
  - [`SetValue(val)`](@ref): set the value to be `val` on the boundary.
+ - [`SetGradient(val)`](@ref): set the value to be `val` on the boundary, projected onto
+   the `Covariant3` axis.
+ - [`SetCurl(val)`](@ref): set the value to be `val` on the boundary, projected onto the
+   `Contravariant123` axis.
+ - [`SetDivergence(val)`](@ref): set the value to be `val` on the boundary.
+
+The projecting conditions exist so that this operator can reapply the boundary conditions
+of the operator it was derived from when a broadcast is rewritten as an operator matrix
+multiply; see `MatrixFields.modifies_output`.
 """
 struct SetBoundaryOperator{BCS} <: BoundaryOperator
     bcs::BCS
