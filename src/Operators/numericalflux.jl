@@ -1301,7 +1301,7 @@ end
     vi_kep_scalars_flux(nvec_a, nvec_b, y_a, y_b)
 
 Two-point volume flux for the (ρ, ρe) subsystem, kinetic-energy compatible
-with the VECTOR-INVARIANT momentum pairing (strong ``∇K`` + central K
+with the vector invariant momentum pairing similar to (strong ``∇K`` + central K
 lifting): ``F_ρ = \\{ρũ\\}`` (average of nodal contravariant mass fluxes —
 NOT the Kennedy-Gruber ``\\{ρ\\}\\{ũ\\}``, which is KEP only for the
 flux-form/fluctuation pairings) and ``F_{ρe} = \\{e\\}F_ρ + \\{p\\}\\{ũ\\}``
