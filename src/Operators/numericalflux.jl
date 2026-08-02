@@ -1300,24 +1300,15 @@ end
 """
     vi_kep_scalars_flux(nvec_a, nvec_b, y_a, y_b)
 
-Two-point volume flux for the (ρ, ρe) subsystem that is kinetic-energy
-compatible with the VECTOR-INVARIANT momentum pairing (element-local strong
-``∇K`` plus central K lifting): the mass flux is the average of the nodal
-contravariant *mass fluxes*, ``F_ρ = \\{ρ ũ\\}`` (average of products — NOT
-the Kennedy-Gruber product of averages ``\\{ρ\\}\\{ũ\\}``, which is KEP only
-for the flux-form and fluctuation-form momentum pairings), and the energy
-flux rides on the same mass flux,
-``F_{ρe} = \\{e\\}\\,F_ρ + \\{p\\}\\{ũ\\}`` (advective part proportional to
-``F_ρ`` so constant-`e` states are transported consistently; central
-pressure work).
-
-SBP ledger (see ClimaAtmos `experiments/dg_dycore/docs/vi_kep_face_terms.md`):
-with ``F_ρ = \\{ρũ\\}`` the antisymmetric part of the paired volume kinetic
-energy production is the difference form ``(KG)_i − (KG)_m``, so the volume
-production telescopes to element-boundary values of the physical KE flux
-``ρ(u·n̂)K``, which the central interface flux
-[`vi_kep_interface_scalars`](@ref) cancels exactly — on flat and
-terrain-warped grids alike (the ledger is metric-transparent).
+Two-point volume flux for the (ρ, ρe) subsystem, kinetic-energy compatible
+with the VECTOR-INVARIANT momentum pairing (strong ``∇K`` + central K
+lifting): ``F_ρ = \\{ρũ\\}`` (average of nodal contravariant mass fluxes —
+NOT the Kennedy-Gruber ``\\{ρ\\}\\{ũ\\}``, which is KEP only for the
+flux-form/fluctuation pairings) and ``F_{ρe} = \\{e\\}F_ρ + \\{p\\}\\{ũ\\}``
+(advective part on ``F_ρ``, so constant-`e` states transport consistently).
+The volume KE production then telescopes to the physical boundary flux
+``ρ(u·n̂)K``, cancelled exactly by [`vi_kep_interface_scalars`](@ref) —
+metric-transparent (flat and terrain-warped alike).
 
 State fields required: `ρ`, `e`, `p`, `uv`.
 """
@@ -1334,14 +1325,12 @@ end
 """
     vi_kep_interface_scalars(normal, argvals⁻, argvals⁺)
 
-Interface flux for the (ρ, ρe) subsystem completing
-[`vi_kep_scalars_flux`](@ref): the central part is the same two-point flux
-evaluated at the face (mass = ``\\{ρ\\,u·n̂\\}``); dissipation is a λ-scaled
-Rusanov penalty on ``[\\![ρe]\\!]`` ONLY. A density-jump penalty produces
-the sign-indefinite face kinetic-energy term ``+λ/2\\,[\\![ρ]\\!][\\![K]\\!]``
-under the vector-invariant pairing, so exact KEP requires the mass flux to
-stay central; velocity-jump dissipation is provided separately by
-[`rho_weighted_jump_penalty_lift`](@ref) and is exactly sign-definite.
+Interface flux completing [`vi_kep_scalars_flux`](@ref): the same central
+flux at the face plus a λ-Rusanov penalty on ``[\\![ρe]\\!]`` ONLY — a
+density-jump penalty produces sign-indefinite face kinetic energy
+(``+λ/2[\\![ρ]\\!][\\![K]\\!]``) under the vector-invariant pairing, so
+exact KEP requires a central mass flux. Velocity dissipation:
+[`rho_weighted_jump_penalty_lift`](@ref).
 """
 function vi_kep_interface_scalars(normal, (y⁻,), (y⁺,))
     λ = max(y⁻.λ, y⁺.λ)
@@ -1350,14 +1339,45 @@ function vi_kep_interface_scalars(normal, (y⁻,), (y⁺,))
 end
 
 """
+    VIESInterfaceScalars(γm1)
+
+Entropy-dissipative (ρ, ρe) interface flux (callable, `γm1 = γ − 1`):
+the [`vi_kep_scalars_flux`](@ref) central part (mass stays central — the
+exact VI KE ledger is preserved) plus ρe dissipation in the entropy
+variable ``v = ∂S/∂ρe|_ρ = −ρ/p``:
+
+    F*_ρe = F_central − (λ/2)\\,w̄\\,(v⁺ − v⁻),   w̄ = p̄²/((γ−1)ρ̄)
+
+Entropy production ``−(λ/2)w̄[\\![v]\\!]² ≤ 0`` by construction; KE-inert;
+reduces to internal-energy Rusanov near constant states (replacing the
+entropy-indefinite ``[\\![ρe]\\!]`` Rusanov of
+[`vi_kep_interface_scalars`](@ref)).
+
+State fields required: `ρ`, `e`, `p`, `λ`, `uv`.
+"""
+struct VIESInterfaceScalars{T} <: AbstractNumericalFlux
+    γm1::T
+end
+
+function (fn::VIESInterfaceScalars)(normal, (y⁻,), (y⁺,))
+    λ = max(y⁻.λ, y⁺.λ)
+    F = vi_kep_scalars_flux(normal, normal, y⁻, y⁺)
+    p̄ = (y⁻.p + y⁺.p) / 2
+    ρ̄ = (y⁻.ρ + y⁺.ρ) / 2
+    w̄ = p̄^2 / (fn.γm1 * ρ̄)
+    v⁻ = -y⁻.ρ / y⁻.p
+    v⁺ = -y⁺.ρ / y⁺.p
+    return (ρ = F.ρ, ρe = F.ρe - λ / 2 * w̄ * (v⁺ - v⁻))
+end
+
+"""
     rho_weighted_jump_penalty_lift(normal, (q⁻, ρ⁻, λ⁻), (q⁺, ρ⁺, λ⁺))
 
-ρ-weighted λ jump penalty for velocity components: each side relaxes toward
-its neighbor at rate ``\\max(λ)/2 · \\{ρ\\}/ρ_{own}``. Contracted with the
-momentum ``ρu`` and summed over both sides of a face, the kinetic-energy
-tendency is ``−\\max(λ)/2\\,\\{ρ\\}\\,|[\\![u]\\!]|² ≤ 0`` EXACTLY (the plain
-[`jump_penalty_lift`](@ref) is dissipative only to ``O([\\![ρ]\\!])``).
-Use through [`lifting_correction`](@ref) with argument fields `(u_c, ρ, λ)`.
+ρ-weighted λ jump penalty for velocity components (rate
+``\\max(λ)/2·\\{ρ\\}/ρ_{own}``): the face kinetic-energy tendency is
+``−\\max(λ)/2\\,\\{ρ\\}|[\\![u]\\!]|² ≤ 0`` EXACTLY (the plain
+[`jump_penalty_lift`](@ref) only to ``O([\\![ρ]\\!])``). Use through
+[`lifting_correction`](@ref) with argument fields `(u_c, ρ, λ)`.
 """
 rho_weighted_jump_penalty_lift(normal, (q⁻, ρ⁻, λ⁻), (q⁺, ρ⁺, λ⁺)) =
     max(λ⁻, λ⁺) / 2 * ((ρ⁻ + ρ⁺) / 2 / ρ⁻) * (q⁺ - q⁻)
