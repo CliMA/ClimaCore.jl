@@ -92,6 +92,22 @@ strip_space(bc::AbstractBoundaryCondition, parent_space) =
     NullBoundaryCondition()
 
 This is used as a placeholder when no other boundary condition can be applied.
+
+Wherever an operator needs a boundary row for this condition (that is, wherever
+[`boundary_width`](@ref) is nonzero for it), the value produced there is a placeholder
+rather than a meaningful result, and which placeholder depends on how the operator is
+evaluated:
+
+ - an operator that is rewritten into an operator matrix multiply gets a zero boundary
+   row, so its boundary output is zero;
+ - any other operator goes through [`stencil_left_boundary`](@ref) /
+   [`stencil_right_boundary`](@ref), which produce `NaN`.
+
+Where `boundary_width` is zero the interior stencil applies instead and nothing special
+happens, so the same operator can give a placeholder at one boundary and an ordinary
+value at the other. Rather than relying on either placeholder, give the operator a
+boundary condition, or overwrite the boundary afterwards with a
+[`SetBoundaryOperator`](@ref).
 """
 struct NullBoundaryCondition <: AbstractBoundaryCondition end
 
@@ -341,8 +357,12 @@ function boundary_width end
 
 The result of stencil operator `op` at horizontal index `hidx` and some vertical
 index `idx` near the left boundary, with boundary condition `bc`. For operators
-that cannot be evaluated without a boundary condition, using the
-`NullBoundaryCondition` will always generate `NaN` values.
+that cannot be evaluated without a boundary condition, a `NullBoundaryCondition`
+generates `NaN` values here.
+
+Operators that are rewritten into an operator matrix multiply do not reach this method:
+their boundary rows come from `MatrixFields` instead, where a `NullBoundaryCondition` row
+is zero rather than `NaN`.
 """
 stencil_left_boundary(op, ::NullBoundaryCondition, space, _, _, args...) =
     new(return_eltype(op, args...)) * Spaces.undertype(space)(NaN)
@@ -352,8 +372,12 @@ stencil_left_boundary(op, ::NullBoundaryCondition, space, _, _, args...) =
 
 The result of stencil operator `op` at horizontal index `hidx` and some vertical
 index `idx` near the right boundary, with boundary condition `bc`. For operators
-that cannot be evaluated without a boundary condition, using the
-`NullBoundaryCondition` will always generate `NaN` values.
+that cannot be evaluated without a boundary condition, a `NullBoundaryCondition`
+generates `NaN` values here.
+
+Operators that are rewritten into an operator matrix multiply do not reach this method:
+their boundary rows come from `MatrixFields` instead, where a `NullBoundaryCondition` row
+is zero rather than `NaN`.
 """
 stencil_right_boundary(op, ::NullBoundaryCondition, space, _, _, args...) =
     new(return_eltype(op, args...)) * Spaces.undertype(space)(NaN)
