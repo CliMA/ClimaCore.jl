@@ -29,13 +29,9 @@ import ClimaCore.MatrixFields
 import ClimaCore.Spaces
 import ClimaCore.Fields
 
-Operators.fd_shmem_is_supported(bc::Base.Broadcast.Broadcasted) = false
-ClimaCore.Operators.use_fd_shmem() = false
-# The existing implementation limits our ability to apply
-# the same expressions from within kernels
 ClimaComms.device(topology::Topologies.DeviceIntervalTopology) =
     ClimaComms.CUDADevice()
-Fields.error_mismatched_spaces(::Type, ::Type) = nothing # causes unsupported dynamic function invocation
+# Fields.error_mismatched_spaces(::Type, ::Type) = nothing # causes unsupported dynamic function invocation
 
 const C1 = Geometry.Covariant1Vector
 const C2 = Geometry.Covariant2Vector
@@ -326,95 +322,17 @@ t₀ = zero(Spaces.undertype(axes(Yc)))
 using Test
 
 dev = ClimaComms.device(axes(Yc))
-Operators.columnwise!(
-    dev,
-    ᶜimplicit_tendency_bc,
-    ᶠimplicit_tendency_bc,
-    Yₜ.c,
-    Yₜ.f,
-    Yc,
-    Yf,
-    p,
-    t₀,
-)
+
 implicit_tendency_bc!(Yₜ_bc, Y, p, t₀)
-abs_err_c = maximum(Array(abs.(parent(Yₜ.c) .- parent(Yₜ_bc.c))))
-abs_err_f = maximum(Array(abs.(parent(Yₜ.f) .- parent(Yₜ_bc.f))))
-results_match = abs_err_c < 6e-9 && abs_err_c < 6e-9
-if !results_match
-    @show norm(Array(parent(Yₜ_bc.c))), norm(Array(parent(Yₜ.c)))
-    @show norm(Array(parent(Yₜ_bc.f))), norm(Array(parent(Yₜ.f)))
-    @show abs_err_c
-    @show abs_err_f
-end
-@test results_match
-#! format: off
-@static if ClimaComms.device() isa ClimaComms.CUDADevice
-    println(
-        CUDA.@profile begin
-            Operators.columnwise!(dev,ᶜimplicit_tendency_bc,ᶠimplicit_tendency_bc,Yₜ.c,Yₜ.f,Yc,Yf,p,t₀)
-            Operators.columnwise!(dev,ᶜimplicit_tendency_bc,ᶠimplicit_tendency_bc,Yₜ.c,Yₜ.f,Yc,Yf,p,t₀)
-            Operators.columnwise!(dev,ᶜimplicit_tendency_bc,ᶠimplicit_tendency_bc,Yₜ.c,Yₜ.f,Yc,Yf,p,t₀)
-            Operators.columnwise!(dev,ᶜimplicit_tendency_bc,ᶠimplicit_tendency_bc,Yₜ.c,Yₜ.f,Yc,Yf,p,t₀)
-        end
-    )
-    println(CUDA.@profile begin
-        @. Yₜ += 1
-        @. Yₜ += 1
-        @. Yₜ += 1
-        @. Yₜ += 1
-    end)
-else
-    @info "CPU timings"
-    @time "columnwise!" Operators.columnwise!(dev,ᶜimplicit_tendency_bc,ᶠimplicit_tendency_bc,Yₜ.c,Yₜ.f,Yc,Yf,p,t₀)
-    @time "columnwise!" Operators.columnwise!(dev,ᶜimplicit_tendency_bc,ᶠimplicit_tendency_bc,Yₜ.c,Yₜ.f,Yc,Yf,p,t₀)
-    @time "implicit_tendency_bc!" implicit_tendency_bc!(Yₜ_bc, Y, p, t₀)
-    @time "implicit_tendency_bc!" implicit_tendency_bc!(Yₜ_bc, Y, p, t₀)
-    @info "Done!"
-end
-#! format: off
-
-#=
-Analysis:
-
-julia> DataLayouts.ncomponents(Fields.field_values(Fields.local_geometry_field(Yₜ.c)))
-42
-julia> DataLayouts.ncomponents(Fields.field_values(Yₜ.c))
-4
-julia> DataLayouts.ncomponents(Fields.field_values(Yₜ.f))
-1
-
-So,
-all LG: 2*42 (faces + centers)
-only needed LG: 12 (found by trial-and-error)
-
-state: 1+4 (faces + centers)
-nreads: 12 + 5 * n_points
-nwrites: 5 * n_points
-
-Conclusion:
- - We first need to (generally) minimize the number of LocalGeometry variables
-   that are read into shared memory. This is possible because we can
-   ahead-of-time scan the broadcasted object and, at compile-time, return a list
-   of components to read into shmem, and unroll the loop over those variables
-
-   Doing this manually yielded:
-
-```
-is_valid_index_cw(ᶜus, ᶜui) && (ᶜlg_col.coordinates.z[ᶜui] = ᶜlg.coordinates.z[ᶜui]) # needed
-is_valid_index_cw(ᶠus, ᶠui) && (ᶠlg_col.coordinates.z[ᶠui] = ᶠlg.coordinates.z[ᶠui]) # needed
-is_valid_index_cw(ᶜus, ᶜui) && (ᶜlg_col.J[ᶜui] = ᶜlg.J[ᶜui]) # needed
-is_valid_index_cw(ᶠus, ᶠui) && (ᶠlg_col.J[ᶠui] = ᶠlg.J[ᶠui]) # needed
-is_valid_index_cw(ᶜus, ᶜui) && (ᶜlg_col.invJ[ᶜui] = ᶜlg.invJ[ᶜui]) # needed
-is_valid_index_cw(ᶜus, ᶜui) && (ᶜlg_col.gⁱʲ.components.data.:1[ᶜui] = ᶜlg.gⁱʲ.components.data.:1[ᶜui]) # needed
-is_valid_index_cw(ᶜus, ᶜui) && (ᶜlg_col.gⁱʲ.components.data.:2[ᶜui] = ᶜlg.gⁱʲ.components.data.:2[ᶜui]) # needed
-is_valid_index_cw(ᶜus, ᶜui) && (ᶜlg_col.gⁱʲ.components.data.:3[ᶜui] = ᶜlg.gⁱʲ.components.data.:3[ᶜui]) # needed
-is_valid_index_cw(ᶜus, ᶜui) && (ᶜlg_col.gⁱʲ.components.data.:4[ᶜui] = ᶜlg.gⁱʲ.components.data.:4[ᶜui]) # needed
-is_valid_index_cw(ᶜus, ᶜui) && (ᶜlg_col.gⁱʲ.components.data.:5[ᶜui] = ᶜlg.gⁱʲ.components.data.:5[ᶜui]) # needed
-is_valid_index_cw(ᶜus, ᶜui) && (ᶜlg_col.gⁱʲ.components.data.:6[ᶜui] = ᶜlg.gⁱʲ.components.data.:6[ᶜui]) # needed
-is_valid_index_cw(ᶠus, ᶠui) && (ᶠlg_col.gⁱʲ.components.data.:9[ᶠui] = ᶠlg.gⁱʲ.components.data.:9[ᶠui]) # needed
-```
-
-=#
+# abs_err_c = maximum(Array(abs.(parent(Yₜ.c) .- parent(Yₜ_bc.c))))
+# abs_err_f = maximum(Array(abs.(parent(Yₜ.f) .- parent(Yₜ_bc.f))))
+# results_match = abs_err_c < 6e-9 && abs_err_c < 6e-9
+# if !results_match
+#     @show norm(Array(parent(Yₜ_bc.c))), norm(Array(parent(Yₜ.c)))
+#     @show norm(Array(parent(Yₜ_bc.f))), norm(Array(parent(Yₜ.f)))
+#     @show abs_err_c
+#     @show abs_err_f
+# end
+# @test results_match
 
 nothing

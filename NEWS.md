@@ -4,6 +4,10 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-💥breaking] Removed the `Operators.columnwise!` operator, along with
+  its CUDA kernels (`ext/cuda/operators_columnwise.jl`), its tests, and its CI
+  jobs. It was unused by downstream code.
+  [2548](https://github.com/CliMA/ClimaCore.jl/pull/2548)
 - Removed the unused shared-memory finite difference operator code path on GPUs
   (`CUDAWithShmemColumnStencilStyle` and the `operators_fd_shmem*.jl` files in the
   CUDA extension), along with its tests, benchmarks, CI job, and the
