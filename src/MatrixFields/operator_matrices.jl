@@ -516,7 +516,17 @@ op_matrix_last_row(op, bc, space, idx, hidx, args...) =
     op_matrix_last_row(op, bc, Spaces.undertype(space))
 
 # Fallback methods for unspecified boundary conditions (need to use zero here
-# instead of NaN to avoid polluting nearby interior rows with NaNs)
+# instead of NaN to avoid polluting nearby interior rows with NaNs).
+#
+# The row must not be the interior row. Only operators whose input is centers reach
+# these methods -- every face-input operator has
+# `boundary_width(op, ::NullBoundaryCondition) == 0`, so no boundary row is requested
+# for it -- and a center-input operator's interior row at the boundary *face* reaches a
+# center outside the domain. The multiply clips those band entries, so the result is
+# unaffected, but merely building the row can read out of range:
+# `DivergenceOperator`'s row evaluates `LocalGeometry(space, idx - half, hidx)`, which
+# is center 0 at the bottom face, and that is a `BoundsError` under
+# `--check-bounds=yes`.
 Operators.stencil_left_boundary(
     op_matrix::FDOperatorMatrix,
     ::Operators.NullBoundaryCondition,
@@ -524,7 +534,7 @@ Operators.stencil_left_boundary(
     idx,
     hidx,
     args...,
-) = Operators.stencil_interior(op_matrix, space, idx, hidx, args...)
+) = rzero(Operators.return_eltype(op_matrix, args...))
 Operators.stencil_right_boundary(
     op_matrix::FDOperatorMatrix,
     ::Operators.NullBoundaryCondition,
@@ -532,7 +542,7 @@ Operators.stencil_right_boundary(
     idx,
     hidx,
     args...,
-) = Operators.stencil_interior(op_matrix, space, idx, hidx, args...)
+) = rzero(Operators.return_eltype(op_matrix, args...))
 
 # Boundary rows for value-fixing boundary conditions that are still attached to
 # the operator matrix. This only happens through the explicit `operator_matrix(op)`
