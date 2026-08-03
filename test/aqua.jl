@@ -30,7 +30,14 @@ end
 
 @testset "Aqua tests (additional)" begin
     Aqua.test_undefined_exports(ClimaCore)
-    Aqua.test_stale_deps(ClimaCore)
+    # julia-downgrade-compat' rewrites the Project.toml, promoting
+    # our `[extras]` test dependencies into `[deps]` so that the resolved floors
+    # survive `Pkg.test`. Those promoted deps aren't loaded by ClimaCore itself,
+    # so they look stale to Aqua; skip this one check under the Downgrade
+    # workflow. The other checks below are unaffected by the rewrite.
+    if get(ENV, "CLIMACORE_DOWNGRADE_TESTS", "false") != "true"
+        Aqua.test_stale_deps(ClimaCore)
+    end
     Aqua.test_deps_compat(ClimaCore)
     Aqua.test_project_extras(ClimaCore)
     # Aqua.test_project_toml_formatting(ClimaCore) # failing

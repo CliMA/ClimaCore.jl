@@ -33,3 +33,7 @@ jobs:
           mode: 'forcedeps'
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest
+        env:
+          # downgrade promotes `[extras]` into `[deps]`, which makes those
+          # test-only deps look stale to Aqua (see test/aqua.jl).
+          CLIMACORE_DOWNGRADE_TESTS: "true"
