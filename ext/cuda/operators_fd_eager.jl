@@ -339,26 +339,6 @@ Base.@propagate_inbounds function calc_level_val(
 end
 
 """
-    calc_level_val(bc::StencilBroadcasted{<:Any, <: LinVanLeerC2F}, hidx, space)
-
-Special case of `calc_level_val` for `LinVanLeerC2F`s, which makes the
-top and bottom face values not use the fallback `Operators.getidx`, since that
-will error if the operator is eagerly evaluated at the boundaries.
-"""
-Base.@propagate_inbounds function calc_level_val(
-    bc::BC,
-    hidx,
-    space,
-) where {S, Op <: Operators.LinVanLeerC2F, BC <: StencilBroadcasted{S, Op}}
-    v = threadIdx().x
-    if v == 1i32 || v == CUDA.blockDim().x
-        return zero(eltype(bc))
-    end
-    idx = v - half
-    return @inbounds @inline getidx(space, bc, idx, hidx)
-end
-
-"""
     calc_level_val(bc::StencilBroadcasted, hidx, space)
 
 Fallback case of `calc_level_val` that calls `Operators.getidx`. This is used for
