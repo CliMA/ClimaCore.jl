@@ -396,6 +396,55 @@ end
     @test occursin("==================== Difference found:", s)
 end
 
+@testset "FieldVector flat-array conversions" begin
+    space = spectral_space_2D()
+    FT = Spaces.undertype(space)
+    u = Geometry.Covariant12Vector.(ones(space), 2 .* ones(space))
+    x = Fields.coordinate_field(space).x
+    y = FT[1, 2, 3]
+    z = FT(4)
+    Y = Fields.FieldVector(u = u, k = (x = x, y = y, z = z))
+
+    # array_type supports plain-array and scalar components.
+    @test ClimaComms.array_type(Y) == Array
+
+    array = zeros(FT, length(Y))
+    @test Fields.fieldvector2array!(array, Y) === array
+    # Entries follow the FieldVector's own linear indexing.
+    @test array == [Y[i] for i in eachindex(Y)]
+
+    # `deepcopy` (not `zero`) is used for the round-trip target because `Y.k.x`
+    # is a property view: `zero` materializes its SubArray parent into an owned
+    # Array, which strict `==` treats as a difference.
+    Y2 = deepcopy(Y)
+    fill!(Y2, 0)
+    @test Fields.array2fieldvector!(Y2, array) === Y2
+    @test Y2 == Y
+    @test Y2.k.z === z
+
+    # zero preserves ScalarWrapper components; without a
+    # `zero(::ScalarWrapper)` method they would become 0-dimensional Arrays,
+    # changing the FieldVector's type and breaking strict equality.
+    Ys = Fields.FieldVector(u = u, z = z)
+    @test typeof(zero(Ys)) == typeof(Ys)
+    @test zero(Ys).z === zero(FT)
+
+    # Round-tripping arbitrary data is exact.
+    array2 = rand(FT, length(Y))
+    Fields.array2fieldvector!(Y2, array2)
+    Fields.fieldvector2array!(array, Y2)
+    @test array == array2
+
+    @test_throws DimensionMismatch Fields.fieldvector2array!(
+        zeros(FT, length(Y) + 1),
+        Y,
+    )
+    @test_throws DimensionMismatch Fields.array2fieldvector!(
+        Y2,
+        zeros(FT, length(Y) + 1),
+    )
+end
+
 @testset "Nested FieldVector broadcasting with permuted order" begin
     FT = Float32
     context = ClimaComms.context()
