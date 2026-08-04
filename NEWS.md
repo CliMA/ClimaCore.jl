@@ -6,7 +6,8 @@ main
 
 - Added `Fields.fieldvector2array!` and `Fields.array2fieldvector!`,
   allocation-free, GPU-safe block-wise copies between a `FieldVector` and a
-  flat vector. Together with `Krylov.ktypeof(::FieldVector)` (defined in
+  flat vector (plus allocating versions without the `!`). Together with
+  `Krylov.ktypeof(::FieldVector)` (defined in
   `KrylovExt`), these let iterative Krylov solvers keep their workspace vectors
   on the GPU while model code continues to operate on `FieldVector`s.
 - Fixed `zero(::FieldVector)` to preserve scalar (`ScalarWrapper`) components

@@ -435,6 +435,15 @@ end
     Fields.fieldvector2array!(array, Y2)
     @test array == array2
 
+    # Allocating versions. Note that `array2fieldvector` builds its result
+    # with `similar`, which materializes view-backed components (like `Y.k.x`)
+    # into owned arrays, so values are compared instead of structures.
+    array3 = Fields.fieldvector2array(Y2)
+    @test array3 isa Vector{FT}
+    @test array3 == array2
+    Y3 = Fields.array2fieldvector(array2, Y)
+    @test Fields.fieldvector2array!(zeros(FT, length(Y)), Y3) == array2
+
     @test_throws DimensionMismatch Fields.fieldvector2array!(
         zeros(FT, length(Y) + 1),
         Y,
@@ -577,6 +586,15 @@ end
     @test ClimaComms.array_type(y) == ClimaComms.array_type(device)
     y = Fields.FieldVector(x = xcenters, y = xcenters)
     @test ClimaComms.array_type(y) == ClimaComms.array_type(device)
+    # Scalar components — including nested FieldVectors of nothing but
+    # scalars, as created by wrap(::NamedTuple) — hold CPU scalars and must
+    # not affect the promoted array type.
+    y = Fields.FieldVector(x = xcenters, z = 1.0f0)
+    @test ClimaComms.array_type(y) == ClimaComms.array_type(device)
+    y = Fields.FieldVector(x = xcenters, c = (a = 1.0f0, b = 2.0f0))
+    @test ClimaComms.array_type(y) == ClimaComms.array_type(device)
+    # A FieldVector of nothing but scalars falls back to Array.
+    @test ClimaComms.array_type(Fields.FieldVector(z = 1.0f0)) == Array
 end
 
 @testset "FieldVector basetype replacement and deepcopy" begin
