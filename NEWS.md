@@ -4,6 +4,17 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- Added `Fields.fieldvector2array!` and `Fields.array2fieldvector!`,
+  allocation-free, GPU-safe block-wise copies between a `FieldVector` and a
+  flat vector (plus allocating versions without the `!`). Together with
+  `Krylov.ktypeof(::FieldVector)` (defined in
+  `KrylovExt`), these let iterative Krylov solvers keep their workspace vectors
+  on the GPU while model code continues to operate on `FieldVector`s.
+- Fixed `zero(::FieldVector)` to preserve scalar (`ScalarWrapper`) components
+  instead of turning them into 0-dimensional `Array`s, and fixed
+  `ClimaComms.array_type(::FieldVector)` (and hence
+  `Krylov.ktypeof(::FieldVector)`) for `FieldVector`s with plain-array or
+  scalar components, which previously threw a `MethodError`.
 - ![][badge-💥breaking] Removed the `Operators.columnwise!` operator, along with
   its CUDA kernels (`ext/cuda/operators_columnwise.jl`), its tests, and its CI
   jobs. It was unused by downstream code.
