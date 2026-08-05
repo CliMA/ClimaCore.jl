@@ -104,6 +104,16 @@ BlockArrays.blockaxes(fv::FieldVector) =
 Base.axes(fv::FieldVector) =
     (BlockArrays.blockedrange(map(length ∘ backing_array, Tuple(_values(fv)))),)
 
+# The AbstractArray fallback computes length from axes, whose blockedrange is
+# not inferrable for nested FieldVectors and allocates on every call; sum the
+# block lengths directly instead (length recurses into nested FieldVectors,
+# whose backing_array is the FieldVector itself).
+Base.length(fv::FieldVector) = unrolled_reduce(
+    (n, value) -> n + length(backing_array(value)),
+    Tuple(_values(fv)),
+    0,
+)
+
 Base.@propagate_inbounds Base.getindex(
     fv::FieldVector,
     block::BlockArrays.Block{1},
@@ -464,7 +474,7 @@ function array2fieldvector!(fv::FieldVector, array::AbstractVector)
              length $(length(fv))",
         ),
     )
-    _array2blocks!(Tuple(_values(fv)), array, 0)
+    _array2blocks!(array, 0, Tuple(_values(fv)))
     return fv
 end
 
@@ -490,11 +500,13 @@ freshly allocated `FieldVector` with the same structure as `fv_prototype`
 array2fieldvector(array::AbstractVector, fv_prototype::FieldVector) =
     array2fieldvector!(similar(fv_prototype), array)
 
-_blocks2array!(array, offset, ::Tuple{}) = offset
-_blocks2array!(array, offset, vals::Tuple) = _blocks2array!(
-    array,
-    _block2array!(array, offset, backing_array(first(vals))),
-    Base.tail(vals),
+# Both directions fold an entry offset over the component blocks with
+# unrolled_reduce; _block2array!/_array2block! copy one block and return the
+# offset advanced past it, recursing into nested FieldVectors.
+_blocks2array!(array, offset, vals::Tuple) = unrolled_reduce(
+    (off, value) -> _block2array!(array, off, backing_array(value)),
+    vals,
+    offset,
 )
 _block2array!(array, offset, block::FieldVector) =
     _blocks2array!(array, offset, Tuple(_values(block)))
@@ -510,15 +522,14 @@ function _block2array!(array, offset, block::AbstractArray{T, 0}) where {T}
     return offset + 1
 end
 
-_array2blocks!(::Tuple{}, array, offset) = offset
-_array2blocks!(vals::Tuple, array, offset) = _array2blocks!(
-    Base.tail(vals),
-    array,
-    _array2block!(backing_array(first(vals)), array, offset),
+_array2blocks!(array, offset, vals::Tuple) = unrolled_reduce(
+    (off, value) -> _array2block!(array, off, backing_array(value)),
+    vals,
+    offset,
 )
-_array2block!(block::FieldVector, array, offset) =
-    _array2blocks!(Tuple(_values(block)), array, offset)
-function _array2block!(block::AbstractArray, array, offset)
+_array2block!(array, offset, block::FieldVector) =
+    _array2blocks!(array, offset, Tuple(_values(block)))
+function _array2block!(array, offset, block::AbstractArray)
     n = length(block)
     copyto!(block, 1, array, offset + 1, n)
     return offset + n
@@ -526,7 +537,7 @@ end
 # Reading a scalar block back requires a scalar getindex on `array`; this is
 # allocation-free on CPU arrays and throws a scalar-indexing error for
 # GPU-backed arrays (see the docstring above).
-function _array2block!(block::AbstractArray{T, 0}, array, offset) where {T}
+function _array2block!(array, offset, block::AbstractArray{T, 0}) where {T}
     block[] = array[offset + 1]
     return offset + 1
 end
@@ -543,10 +554,14 @@ end
 # nesting depth: their contribution is Union{}, the identity of promote_type
 # (which a nested FieldVector of nothing but scalars also promotes to).
 _array_type(x) = ClimaComms.array_type(x) # Fields
+# The splatted form is used instead of unrolled_mapreduce because the latter's
+# init keyword routes through Core.kwcall, which deepens the recursion cycle on
+# nested FieldVectors until inference gives up on optimizing it.
 _array_type(x::FieldVector) =
     promote_type(unrolled_map(_array_type, Tuple(_values(x)))...)
 _array_type(::ScalarWrapper) = Union{}
-_array_type(::A) where {A <: AbstractArray} = Base.typename(A).wrapper
+_array_type(x::A) where {A <: AbstractArray} =
+    parent(x) === x ? Base.typename(A).wrapper : _array_type(parent(x))
 
 ClimaComms.device(x::FieldVector) = ClimaComms.device(ClimaComms.context(x))
 function ClimaComms.context(x::FieldVector)
