@@ -396,6 +396,12 @@ end
     @test occursin("==================== Difference found:", s)
 end
 
+# Allocation measurements run in top-level functions, since the @allocated
+# macro has a small constant overhead when it is used in a local scope.
+fv_length_allocations(Y) = @allocated length(Y)
+fv_to_array_allocations(array, Y) = @allocated Fields.fieldvector2array!(array, Y)
+fv_from_array_allocations(Y, array) = @allocated Fields.array2fieldvector!(Y, array)
+
 @testset "FieldVector flat-array conversions" begin
     space = spectral_space_2D()
     FT = Spaces.undertype(space)
@@ -452,6 +458,21 @@ end
         Y2,
         zeros(FT, length(Y) + 1),
     )
+
+    # The conversions and the length check they perform are allocation-free,
+    # even for nested and scalar components. length has a dedicated FieldVector
+    # method because the AbstractArray fallback computes it through axes, whose
+    # blockedrange allocates for nested FieldVectors.
+    if ClimaComms.device() isa ClimaComms.AbstractCPUDevice
+        for measure! in (
+            () -> fv_length_allocations(Y),
+            () -> fv_to_array_allocations(array, Y),
+            () -> fv_from_array_allocations(Y2, array),
+        )
+            measure!()
+            @test measure!() == 0
+        end
+    end
 end
 
 @testset "Nested FieldVector broadcasting with permuted order" begin
