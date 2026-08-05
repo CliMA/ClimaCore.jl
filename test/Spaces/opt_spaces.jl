@@ -36,21 +36,21 @@ end
     if ClimaComms.device(context) isa ClimaComms.CUDADevice
         test_n_failures(88,   TU.PointSpace, context)
         test_n_failures(731,  TU.SpectralElementSpace1D, context)
-        test_n_failures(361, TU.SpectralElementSpace2D, context)
+        test_n_failures(362, TU.SpectralElementSpace2D, context)
         test_n_failures(4,  TU.ColumnCenterFiniteDifferenceSpace, context)
         test_n_failures(5,  TU.ColumnFaceFiniteDifferenceSpace, context)
-        test_n_failures(367, TU.SphereSpectralElementSpace, context)
-        test_n_failures(377, TU.CenterExtrudedFiniteDifferenceSpace, context)
-        test_n_failures(377, TU.FaceExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(368, TU.SphereSpectralElementSpace, context)
+        test_n_failures(378, TU.CenterExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(378, TU.FaceExtrudedFiniteDifferenceSpace, context)
     else
         test_n_failures(0,    TU.PointSpace, context)
-        test_n_failures(156,  TU.SpectralElementSpace1D, context)
-        test_n_failures(274,  TU.SpectralElementSpace2D, context)
+        test_n_failures(157,  TU.SpectralElementSpace1D, context)
+        test_n_failures(275,  TU.SpectralElementSpace2D, context)
         test_n_failures(4,  TU.ColumnCenterFiniteDifferenceSpace, context)
         test_n_failures(5,  TU.ColumnFaceFiniteDifferenceSpace, context)
-        test_n_failures(280,  TU.SphereSpectralElementSpace, context)
-        test_n_failures(290,  TU.CenterExtrudedFiniteDifferenceSpace, context)
-        test_n_failures(290,  TU.FaceExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(281,  TU.SphereSpectralElementSpace, context)
+        test_n_failures(291,  TU.CenterExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(291,  TU.FaceExtrudedFiniteDifferenceSpace, context)
 
         # The OBJECT_CACHE causes inference failures that inhibit understanding
         # inference failures in _SpectralElementGrid2D, so let's `@test_opt` those
