@@ -288,7 +288,7 @@ end
     ccoords = Fields.coordinate_field(hv_center_space)
     fcoords = Fields.coordinate_field(hv_face_space)
     fcoords_1 = Fields.level(fcoords, ClimaCore.Utilities.half)
-    curl_bcfield₁ = Geometry.Contravariant2Vector(2.0)
+    curl_bcfield₁ = Geometry.Covariant1Vector.(0.0 .* fcoords_1.z)
     curl_bcfield² = Geometry.Contravariant2Vector.(0.0 .* fcoords_1.z)
 
     u =

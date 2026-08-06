@@ -2820,6 +2820,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
     return Geometry.project(
         Geometry.Contravariant123Axis(),
         getidx(space, bc.val, nothing, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
     )
 end
 Base.@propagate_inbounds function stencil_right_boundary(
@@ -2833,6 +2834,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
     return Geometry.project(
         Geometry.Contravariant123Axis(),
         getidx(space, bc.val, nothing, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
     )
 end
 

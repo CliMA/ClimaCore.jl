@@ -499,9 +499,9 @@ end
         # A(v,θ)[i] = |v³[i+1/2]| ∂θ⁺ - |v³[i-1/2]| ∂θ⁻, where `Extrapolate`
         # drops the term outside of the boundary (zero flux through the face)
         ref = map(1:n) do i
-            ⁺ = i == n ? zero(FT) : abs(w³ᶠ[i + 1]) * (tᶜ[i + 1] - tᶜ[i])
-            ⁻ = i == 1 ? zero(FT) : abs(w³ᶠ[i]) * (tᶜ[i] - tᶜ[i - 1])
-            ⁺ - ⁻
+            fc⁺ = i == n ? zero(FT) : abs(w³ᶠ[i + 1]) * (tᶜ[i + 1] - tᶜ[i])
+            fc⁻ = i == 1 ? zero(FT) : abs(w³ᶠ[i]) * (tᶜ[i] - tᶜ[i - 1])
+            fc⁺ - fc⁻
         end
         zero_gradient =
             Operators.SetGradient(Geometry.Covariant3Vector(zero(FT)))

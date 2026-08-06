@@ -189,24 +189,35 @@ end
     c12_a = rand(Geometry.Covariant12Vector{FT})
     c12_b = rand(Geometry.Covariant12Vector{FT})
 
-    set_scalar_values =
-        (; bottom = SetValue(zero(FT)), top = SetValue(zero(FT)))
     nested_zero = rzero(NestedType{FT})
     set_nested_values =
         (; bottom = SetValue(nested_zero), top = SetValue(nested_zero))
-    c12_zero = zero(Geometry.Covariant12Vector{FT})
+    c3_zero = zero(Geometry.Covariant3Vector{FT})
+    set_c3_gradients = (; bottom = SetGradient(c3_zero), top = SetGradient(c3_zero))
+    ct12_zero = zero(Geometry.Contravariant12Vector{FT})
+    set_ct12_curls = (; bottom = SetCurl(ct12_zero), top = SetCurl(ct12_zero))
     extrapolate = (; bottom = Extrapolate(), top = Extrapolate())
 
     ᶠinterp = InterpolateC2F(; set_nested_values...)
     ᶜlbias = LeftBiasedF2C()
     ᶠrbias = RightBiasedC2F(; set_nested_values.top)
     ᶜwinterp = WeightedInterpolateF2C()
+    ᶠwinterp = WeightedInterpolateC2F(; set_nested_values...)
+    ᶜrbias = RightBiasedF2C(; set_nested_values.top)
+    ᶠupwind = UpwindBiasedProductC2F(; extrapolate...)
+    ᶠgrad = GradientC2F(; set_c3_gradients...)
     ᶜdiv = DivergenceF2C()
+    ᶠcurl = CurlC2F(; set_ct12_curls...)
     ᶠinterp_matrix = MatrixFields.operator_matrix(ᶠinterp)
     ᶜlbias_matrix = MatrixFields.operator_matrix(ᶜlbias)
     ᶠrbias_matrix = MatrixFields.operator_matrix(ᶠrbias)
     ᶜwinterp_matrix = MatrixFields.operator_matrix(ᶜwinterp)
+    ᶠwinterp_matrix = MatrixFields.operator_matrix(ᶠwinterp)
+    ᶜrbias_matrix = MatrixFields.operator_matrix(ᶜrbias)
+    ᶠupwind_matrix = MatrixFields.operator_matrix(ᶠupwind)
+    ᶠgrad_matrix = MatrixFields.operator_matrix(ᶠgrad)
     ᶜdiv_matrix = MatrixFields.operator_matrix(ᶜdiv)
+    ᶠcurl_matrix = MatrixFields.operator_matrix(ᶠcurl)
 
     @test_throws "does not contain any Fields" @. ᶜlbias_matrix() *
                                                   ᶠinterp_matrix()
@@ -229,15 +240,19 @@ end
     end
 
     test_field_broadcast(;
-        test_name = "product of four operator matrices",
+        test_name = "product of six operator matrices",
         get_result = @lazy(
-            @. ᶜwinterp_matrix(ᶠscalar) *
+            @. ᶜrbias_matrix() *
+               ᶠwinterp_matrix(ᶜscalar) *
+               ᶜwinterp_matrix(ᶠscalar) *
                ᶠrbias_matrix() *
                ᶜlbias_matrix() *
                ᶠinterp_matrix()
         ),
         set_result = @lazy(
-            @. ᶜwinterp_matrix(ᶠscalar) *
+            @. ᶜrbias_matrix() *
+               ᶠwinterp_matrix(ᶜscalar) *
+               ᶜwinterp_matrix(ᶠscalar) *
                ᶠrbias_matrix() *
                ᶜlbias_matrix() *
                ᶠinterp_matrix()
@@ -245,47 +260,204 @@ end
     )
 
     test_field_broadcast(;
-        test_name = "applying four operators to a nested field using operator \
+        test_name = "applying six operators to a nested field using operator \
                      matrices",
         get_result = @lazy(
-            @. ᶜwinterp_matrix(ᶠscalar) *
+            @. ᶜrbias_matrix() *
+               ᶠwinterp_matrix(ᶜscalar) *
+               ᶜwinterp_matrix(ᶠscalar) *
                ᶠrbias_matrix() *
                ᶜlbias_matrix() *
                ᶠinterp_matrix() *
                ᶜnested
         ),
         set_result = @lazy(
-            @. ᶜwinterp_matrix(ᶠscalar) *
+            @. ᶜrbias_matrix() *
+               ᶠwinterp_matrix(ᶜscalar) *
+               ᶜwinterp_matrix(ᶠscalar) *
                ᶠrbias_matrix() *
                ᶜlbias_matrix() *
                ᶠinterp_matrix() *
                ᶜnested
         ),
         ref_set_result = @lazy(
-            @. ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested))))
+            @. ᶜrbias(
+                ᶠwinterp(
+                    ᶜscalar,
+                    ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested)))),
+                ),
+            )
         ),
     )
     # this test will fail because of incorrect results, not InvalidIRError
     USING_CUDA || test_field_broadcast(;
-        test_name = "applying four operators to a nested field using operator \
+        test_name = "applying six operators to a nested field using operator \
                      matrices, but with forced right associativity",
         get_result = @lazy(
-            @. ᶜwinterp_matrix(ᶠscalar) * (
-                ᶠrbias_matrix() *
-                (ᶜlbias_matrix() * (ᶠinterp_matrix() * ᶜnested))
+            @. ᶜrbias_matrix() * (
+                ᶠwinterp_matrix(ᶜscalar) * (
+                    ᶜwinterp_matrix(ᶠscalar) * (
+                        ᶠrbias_matrix() *
+                        (ᶜlbias_matrix() * (ᶠinterp_matrix() * ᶜnested))
+                    )
+                )
             )
         ),
         set_result = @lazy(
-            @. ᶜwinterp_matrix(ᶠscalar) * (
-                ᶠrbias_matrix() *
-                (ᶜlbias_matrix() * (ᶠinterp_matrix() * ᶜnested))
+            @. ᶜrbias_matrix() * (
+                ᶠwinterp_matrix(ᶜscalar) * (
+                    ᶜwinterp_matrix(ᶠscalar) * (
+                        ᶠrbias_matrix() *
+                        (ᶜlbias_matrix() * (ᶠinterp_matrix() * ᶜnested))
+                    )
+                )
             )
         ),
         ref_set_result = @lazy(
-            @. ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested))))
+            @. ᶜrbias(
+                ᶠwinterp(
+                    ᶜscalar,
+                    ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested)))),
+                ),
+            )
         ),
         time_ratio_limit = 30, # This case's ref function is fast on Buildkite.
         test_broken_with_cuda = true, # TODO: Fix this.
     )
 
+    # The AdvectionC2C operator has been removed, so the center-to-center
+    # advection matrix in the tests below is replaced by the matrix of an
+    # upwinded flux divergence, ᶜdiv_matrix() * ᶠupwind_matrix(ᶠuvw).
+
+    # TODO: For some reason, we need to compile and run @test_opt on several
+    # simpler broadcast expressions before we can run the remaining two test
+    # cases. As of Julia 1.8.5, the tests fail if we skip this step. Is this a
+    # false positive, a compiler issue, or a sign that the code can be improved?
+    for get_result in (
+        @lazy(
+            @. (c12_b',) *
+               ᶜwinterp_matrix(ᶠscalar) *
+               ᶠcurl_matrix() *
+               (c12_a,) +
+               (
+                DiagonalMatrixRow(ᶜdiv(ᶠuvw)) -
+                ᶜdiv_matrix() * ᶠupwind_matrix(ᶠuvw)
+            ) / 5
+        ),
+        @lazy(
+            @. ᶜdiv_matrix() *
+               DiagonalMatrixRow(ᶠscalar) *
+               ᶠgrad_matrix() *
+               (
+                   (c12_b',) *
+                   ᶜwinterp_matrix(ᶠscalar) *
+                   ᶠcurl_matrix() *
+                   (c12_a,) +
+                   (
+                       DiagonalMatrixRow(ᶜdiv(ᶠuvw)) -
+                       ᶜdiv_matrix() * ᶠupwind_matrix(ᶠuvw)
+                   ) / 5
+               )
+        ),
+    )
+        materialize(get_result)
+        @test_opt ignored_modules = CUDA_FRAMES materialize(get_result)
+    end
+
+    test_field_broadcast(;
+        test_name = "non-trivial combination of operator matrices and other \
+                     matrix fields",
+        get_result = @lazy(
+            @. ᶠupwind_matrix(ᶠuvw) * (
+                ᶜdiv_matrix() *
+                DiagonalMatrixRow(ᶠscalar) *
+                ᶠgrad_matrix() *
+                (
+                    (c12_b',) *
+                    ᶜwinterp_matrix(ᶠscalar) *
+                    ᶠcurl_matrix() *
+                    (c12_a,) +
+                    (
+                        DiagonalMatrixRow(ᶜdiv(ᶠuvw)) -
+                        ᶜdiv_matrix() * ᶠupwind_matrix(ᶠuvw)
+                    ) / 5
+                ) - (2I,)
+            )
+        ),
+        set_result = @lazy(
+            @. ᶠupwind_matrix(ᶠuvw) * (
+                ᶜdiv_matrix() *
+                DiagonalMatrixRow(ᶠscalar) *
+                ᶠgrad_matrix() *
+                (
+                    (c12_b',) *
+                    ᶜwinterp_matrix(ᶠscalar) *
+                    ᶠcurl_matrix() *
+                    (c12_a,) +
+                    (
+                        DiagonalMatrixRow(ᶜdiv(ᶠuvw)) -
+                        ᶜdiv_matrix() * ᶠupwind_matrix(ᶠuvw)
+                    ) / 5
+                ) - (2I,)
+            )
+        ),
+    )
+
+    # TODO: This case's reference function takes too long to compile on both
+    # CPUs and GPUs (more than half an hour), as of Julia 1.9. This might be
+    # happening because of excessive inlining---aside from *, all other finite
+    # difference operators use @propagate_inbounds. So, the reference function
+    # is currently disabled, although the test does pass when it is enabled.
+    test_field_broadcast(;
+        test_name = "applying a non-trivial sequence of operations to a scalar \
+                     field using operator matrices and other matrix fields",
+        get_result = @lazy(
+            @. ᶠupwind_matrix(ᶠuvw) *
+               (
+                   ᶜdiv_matrix() *
+                   DiagonalMatrixRow(ᶠscalar) *
+                   ᶠgrad_matrix() *
+                   (
+                       (c12_b',) *
+                       ᶜwinterp_matrix(ᶠscalar) *
+                       ᶠcurl_matrix() *
+                       (c12_a,) +
+                       (
+                           DiagonalMatrixRow(ᶜdiv(ᶠuvw)) -
+                           ᶜdiv_matrix() * ᶠupwind_matrix(ᶠuvw)
+                       ) / 5
+                   ) - (2I,)
+               ) *
+               ᶜscalar
+        ),
+        set_result = @lazy(
+            @. ᶠupwind_matrix(ᶠuvw) *
+               (
+                   ᶜdiv_matrix() *
+                   DiagonalMatrixRow(ᶠscalar) *
+                   ᶠgrad_matrix() *
+                   (
+                       (c12_b',) *
+                       ᶜwinterp_matrix(ᶠscalar) *
+                       ᶠcurl_matrix() *
+                       (c12_a,) +
+                       (
+                           DiagonalMatrixRow(ᶜdiv(ᶠuvw)) -
+                           ᶜdiv_matrix() * ᶠupwind_matrix(ᶠuvw)
+                       ) / 5
+                   ) - (2I,)
+               ) *
+               ᶜscalar
+        ),
+        # ref_set_result = @lazy(@. ᶠupwind(
+        #     ᶠuvw,
+        #     ᶜdiv(
+        #         ᶠscalar * ᶠgrad(
+        #             (c12_b',) * ᶜwinterp(ᶠscalar, ᶠcurl((c12_a,) * ᶜscalar)) +
+        #             (ᶜdiv(ᶠuvw) * ᶜscalar - ᶜdiv(ᶠupwind(ᶠuvw, ᶜscalar))) / 5,
+        #         ),
+        #     ) - 2 * ᶜscalar,
+        # )),
+        # max_eps_error_limit = 20, # This case's roundoff error is large.
+    )
 end
