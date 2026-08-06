@@ -1,23 +1,14 @@
 const THREADS_PER_WARP = 32
 const MAX_WARPS_PER_BLOCK = 32
 
-# Only check the first launch: device attributes are fixed for a given device,
-# and querying them on every launch would add measurable latency.
-const device_assumptions_checked = Ref(false)
+# To reduce latency, only check device attributes before the first launch.
+const DEVICE_ASSUMPTIONS_CHECKED = Ref(false)
 function check_device_assumptions()
-    device_assumptions_checked[] && return nothing
-    device = CUDA.device()
-    if (
-        THREADS_PER_WARP != CUDA.attribute(device, CUDA.DEVICE_ATTRIBUTE_WARP_SIZE) ||
-        MAX_WARPS_PER_BLOCK * THREADS_PER_WARP !=
-        CUDA.attribute(device, CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
-    )
-        major = CUDA.attribute(device, CUDA.DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR)
-        minor = CUDA.attribute(device, CUDA.DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR)
-        throw(ArgumentError("Compute Capability $major.$minor is not supported"))
-    end
-    device_assumptions_checked[] = true
-    return nothing
+    DEVICE_ASSUMPTIONS_CHECKED[] && return true
+    (; threads_per_warp, max_threads_per_block) = device_attributes()
+    @assert THREADS_PER_WARP == threads_per_warp
+    @assert MAX_WARPS_PER_BLOCK * THREADS_PER_WARP == max_threads_per_block
+    DEVICE_ASSUMPTIONS_CHECKED[] = true
 end
 
 DataLayouts.DataScope(::Type{<:CUDA.CuArray}) = ThisHost()
