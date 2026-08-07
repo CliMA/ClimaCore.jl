@@ -39,16 +39,14 @@ DataLayouts.DataScope(
         return Int(array.dynamic_extents[count(r -> r <= d && iszero(E[r]), R)])
     end
 
-@generated function parent_offset(
-    array::CompactDeviceView{<:Any, N, <:Any, R},
+# The search for d runs over type-parameter constants, so it constant-folds to
+# either 0 or a single tuple field access.
+@inline function parent_offset(
+    array::CompactDeviceView{<:Any, <:Any, <:Any, R},
     ::Val{d},
-) where {N, R, d}
-    pos = findfirst(==(d), R)
-    if isnothing(pos)
-        return :(0)
-    else
-        return :(Int(array.offsets[$pos]))
-    end
+) where {R, d}
+    position = findfirst(==(d), R)
+    return isnothing(position) ? 0 : Int(array.offsets[position])
 end
 
 @inline parent_index_dim(array::CompactDeviceView, idx::Integer, ::Val{d}) where {d} =

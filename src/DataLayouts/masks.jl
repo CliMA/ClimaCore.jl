@@ -85,3 +85,35 @@ Check whether a [`DataMask`](@ref) marks the point at some index as active.
     mask.is_active[1, index[1], index[2], index[3]]
 @propagate_inbounds should_compute(mask::IJHMask, index::CartesianIndex{4}) =
     mask.is_active[1, index[2], index[3], index[4]]
+
+struct ActiveColumnIndices{M, V} <: AbstractVector{CartesianIndex{3}}
+    mask::M
+    indices::V
+end
+ActiveColumnIndices(mask) =
+    ActiveColumnIndices(mask, Base.OneTo(Int(@inbounds mask.N[1])))
+Base.size(inds::ActiveColumnIndices) = (length(inds.indices),)
+Base.@propagate_inbounds function Base.getindex(inds::ActiveColumnIndices, n::Int)
+    (; i_map, j_map, h_map) = inds.mask
+    real_n = inds.indices[n]
+    @inbounds CartesianIndex(i_map[real_n], j_map[real_n], h_map[real_n])
+end
+Adapt.@adapt_structure ActiveColumnIndices
+
+struct ActivePointIndices{M, V} <: AbstractVector{CartesianIndex{4}}
+    mask::M
+    indices::V
+    Nv::Int
+end
+ActivePointIndices(mask, Nv::Int) =
+    ActivePointIndices(mask, Base.OneTo(Nv * Int(@inbounds mask.N[1])), Nv)
+Base.size(inds::ActivePointIndices) = (length(inds.indices),)
+Base.@propagate_inbounds function Base.getindex(inds::ActivePointIndices, n::Int)
+    (; i_map, j_map, h_map) = inds.mask
+    idx = inds.indices[n]
+    (n_zero, v_zero) = divrem(idx - 1, inds.Nv)
+    v = v_zero + 1
+    col = n_zero + 1
+    @inbounds CartesianIndex(v, i_map[col], j_map[col], h_map[col])
+end
+Adapt.@adapt_structure ActivePointIndices

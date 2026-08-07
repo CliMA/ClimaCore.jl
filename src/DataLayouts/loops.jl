@@ -24,20 +24,22 @@ end
 # slow, while GPU threads iterate too few points per thread for SIMD to matter.
 @inline each_maskable_slice_index(_, _, op::O, args...) where {O} =
     each_slice_index(op, args...)
+@inline each_maskable_slice_index(_, mask::IJHMask, ::typeof(column), args...) =
+    ActiveColumnIndices(mask)
 @inline each_maskable_slice_index(_, mask::IJHMask, ::typeof(view), args...) =
-    eachindex(IndexStyle(mask.is_active, args...), args...)
+    ActivePointIndices(mask, size(first(args), 1))
+
+# Every valid mask and slice operator combination has indexable slice indices:
+# NoMask uses the full index ranges, and IJHMask (which only supports column
+# and view slices) uses compacted active indices, so no combination requires
+# filtering the indices with a per-slice mask lookup.
+@noinline throw_invalid_slice_mask() = throw(ArgumentError("Invalid slice mask"))
 
 @inline function subscope_slice_indices(subscope, scope, mask, op::O, args...) where {O}
-    is_valid_slice_mask(mask, op) || throw(ArgumentError(invalid_mask_string(mask, op)))
+    is_valid_slice_mask(mask, op) || throw_invalid_slice_mask()
     full_scope_indices = each_maskable_slice_index(scope, mask, op, args...)
-    indices = @inbounds subscope_indices(subscope, scope, full_scope_indices)
-    mask == NoMask() && return indices
-    return Iterators.filter(index -> (@inbounds should_compute(mask, index)), indices)
+    return @inbounds subscope_indices(subscope, scope, full_scope_indices)
 end
-@generated invalid_mask_string(
-    ::M,
-    ::O,
-) where {M, O} = "$M cannot be applied to $(O.instance) slices"
 
 # A view slice contains one point by definition, so its size is known without
 # constructing a slice. The generic method cannot handle point slices of fused
@@ -60,6 +62,9 @@ subset of `scope` that does not require any thread to process more than one
 point from the largest slice returned by `op`. When no such subset is available,
 the largest subset is used in order to minimize the number of points per thread.
 """
+@inline slice_subscope(scope, ::typeof(column), args...) = ThisThread()
+@inline slice_subscope(scope, ::typeof(view), args...) = ThisThread()
+@inline slice_subscope(scope, ::typeof(level), args...) = ThisThread()
 @inline function slice_subscope(scope, op::O, args...) where {O}
     subscope = partition(scope)
     subscope == ThisThread() && return subscope
@@ -152,17 +157,8 @@ end
     isone(threads) ? foreach_slice(ThisThread(), op, f, args...; mask) :
     parallelize_over(() -> slice_loop(pool, op, f, mask, args...), pool)
 
-# Change the scope to ThisThread when given only one thread, which compiles the
-# simplest possible loop.
 @inline foreach_slice(scope::DataScope, op::O, f::F, args...; mask) where {O, F} =
-    isone(num_threads(scope)) ? foreach_slice(ThisThread(), op, f, args...; mask) :
-    parallelize_over(() -> slice_loop(scope, op, f, mask, args...), scope)
-
-# Run the loop without parallelize_over when the scope is ThisThread. Since each
-# slice is reassigned to its subscope, nested loops in f dispatch here
-# statically. This avoids both the runtime thread-count check and the
-# parallelize_over closure, which the compiler does not always remove, causing
-# an allocation at every slice of the outer loop.
+    slice_loop(scope, op, f, mask, args...)
 @inline foreach_slice(::ThisThread, op::O, f::F, args...; mask) where {O, F} =
     slice_loop(ThisThread(), op, f, mask, args...)
 
@@ -191,7 +187,7 @@ end
 
 @inline project_slice_index(op::O, arg, is_singleton, index) where {O} = index
 @inline project_slice_index(::typeof(view), arg, is_singleton, index::Integer) =
-    iszero(ndims(arg)) ? CartesianIndex() : index
+    Broadcast.newindex(arg, index)
 @inline project_slice_index(::typeof(view), arg, is_singleton, index::CartesianIndex) =
     iszero(ndims(arg)) ? CartesianIndex() :
     CartesianIndex(projected_index(is_singleton, Tuple(index)))
@@ -202,18 +198,47 @@ end
 @inline projected_index(::Tuple{}, index::Tuple) = index
 @inline projected_index(::Tuple{}, ::Tuple{}) = ()
 
+@inline slice_arg(op::O, subscope, index, arg) where {O} =
+    @inbounds reassign(
+        op(
+            arg,
+            Tuple(project_slice_index(op, arg, singleton_slice_dims(op, arg), index))...,
+        ),
+        subscope,
+    )
+
+@inline slice_args(op::O, subscope, index, ::Tuple{}) where {O} = ()
+@inline slice_args(op::O, subscope, index, args::Tuple{Any}) where {O} =
+    (slice_arg(op, subscope, index, args[1]),)
+@inline slice_args(op::O, subscope, index, args::Tuple{Any, Any}) where {O} = (
+    slice_arg(op, subscope, index, args[1]),
+    slice_arg(op, subscope, index, args[2]),
+)
+@inline slice_args(op::O, subscope, index, args::Tuple{Any, Any, Any}) where {O} = (
+    slice_arg(op, subscope, index, args[1]),
+    slice_arg(op, subscope, index, args[2]),
+    slice_arg(op, subscope, index, args[3]),
+)
+@inline slice_args(op::O, subscope, index, args::Tuple) where {O} = (
+    slice_arg(op, subscope, index, first(args)),
+    slice_args(op, subscope, index, Base.tail(args))...,
+)
+
+@inline call_f(f::F, (a1,)::Tuple{Any}) where {F} = f(a1)
+@inline call_f(f::F, (a1, a2)::Tuple{Any, Any}) where {F} = f(a1, a2)
+@inline call_f(f::F, (a1, a2, a3)::Tuple{Any, Any, Any}) where {F} = f(a1, a2, a3)
+@inline call_f(f::F, (a1, a2, a3, a4)::Tuple{Any, Any, Any, Any}) where {F} =
+    f(a1, a2, a3, a4)
+@inline call_f(f::F, slices::Tuple) where {F} = f(slices...)
+
 @inline function slice_loop(scope, op::O, f::F, mask, args...) where {O, F}
     subscope = slice_subscope(scope, op, args...)
     indices = subscope_slice_indices(subscope, scope, mask, op, args...)
-    singleton_dims = unrolled_map(Base.Fix1(singleton_slice_dims, op), args)
-    @simd_if (op == view && simd_over_indices(indices)) for index in indices
-        slices = unrolled_map(args, singleton_dims) do arg, is_singleton
-            @inbounds reassign(
-                op(arg, Tuple(project_slice_index(op, arg, is_singleton, index))...),
-                subscope,
-            )
-        end
-        @inline f(slices...)
+    N_indices = length(indices)
+    @simd_if (op == view && simd_over_indices(indices)) for i in 1:N_indices
+        index = @inbounds indices[i]
+        slices = slice_args(op, subscope, index, args)
+        @inline call_f(f, slices)
     end
 end
 
@@ -322,33 +347,64 @@ end
     return reduce(op, results)
 end
 
-# Reduce all unmasked points by folding over their indices, which are nonempty
-# since the launcher assigns every thread at least one point. Use safe_mapreduce
-# instead of Base's pairwise mapreduce to avoid the empty-collection error path,
-# whose string cannot be compiled in GPU kernels. Masked reductions require an
-# init, and mapreduce's empty path is only reached without one. Masked indices
-# are equivalent to what the slice index machinery uses for single-point views.
+# Reduce all points assigned to this thread with safe_mapreduce, whose pairwise
+# splitting keeps single-threaded roundoff error logarithmic in the number of
+# points and whose @simd blocks vectorize CPU reductions; Base's pairwise
+# mapreduce is not used because its empty-collection error path cannot be
+# compiled in GPU kernels. safe_mapreduce reads its first index unchecked when
+# no init value is given, so reductions over potentially empty index subsets
+# require an init: unmasked launchers assign every thread at least one point,
+# and masked reductions (whose active points may not cover every thread) are
+# documented to require an init value. Masked indices are equivalent to what
+# the slice index machinery uses for single-point views.
 @inline reduce_points(::ThisThread, op::O, arg; mask, init...) where {O} =
     if mask == NoMask()
         indices = @inbounds subscope_indices(ThisThread(), DataScope(arg), eachindex(arg))
         safe_mapreduce(index -> (@inbounds arg[index]), op, indices; init...)
     else
         indices = subscope_slice_indices(ThisThread(), DataScope(arg), mask, view, arg)
-        mapreduce(index -> (@inbounds arg[index]), op, indices; init...)
+        safe_mapreduce(index -> (@inbounds arg[index]), op, indices; init...)
     end
 
 """
     column_reduce!(op, dest, arg; [mask], [flip], [init])
 
-Use [`foreach_column`](@ref) to pass each column of `arg` to `reduce`, storing
-the results in corresponding columns of `dest`. Setting `flip` to `true` changes
-the order of reduction from left-associative (default) to right-associative.
+Use [`foreach_column`](@ref) to combine the levels of each column of `arg` with
+`op`, storing the results in corresponding columns of `dest`. Setting `flip` to
+`true` changes the order of reduction from left-associative (default) to
+right-associative, and `init` seeds the fold when it is given.
 """
 @inline column_reduce!(op::O, dest, arg; mask = NoMask(), flip = false, init...) where {O} =
     foreach_column(dest, arg; mask) do dest_column, arg_column
-        maybe_reverse = flip ? reverse : identity
-        fill!(dest_column, reduce(op, maybe_reverse(arg_column); init...))
+        value = column_fold(op, arg_column, flip, values(init))
+        Nv_dest = nlevels(dest_column)
+        v = 1
+        while v <= Nv_dest
+            @inbounds dest_column[v] = value
+            v += 1
+        end
     end
+
+# Left fold over the levels of a column (right fold when flipped), seeded by
+# the init value when one is given and by the first reduced level otherwise.
+# Written as a plain while loop, rather than as a call to reduce over the
+# column slice, so that it compiles in GPU kernels, where each column is
+# reduced by a single thread.
+@inline function column_fold(op::O, column, flip, init::NamedTuple) where {O}
+    Nv = nlevels(column)
+    step = flip ? -1 : 1
+    (value, v) = if init isa NamedTuple{()}
+        v_first = flip ? Nv : 1
+        ((@inbounds column[v_first]), v_first + step)
+    else
+        (init.init, flip ? Nv : 1)
+    end
+    while 1 <= v <= Nv
+        value = op(value, @inbounds column[v])
+        v += step
+    end
+    return value
+end
 # TODO: Extend this to column_accumulate!, column_stencil!, and slab_convolve!
 
 # Convert the value before the fill! loop. Even though setindex! converts at
@@ -358,7 +414,7 @@ the order of reduction from left-associative (default) to right-associative.
 # Int128 and UInt128 fields in kernel arguments crash LLVM's NVPTX backend prior
 # to LLVM 20 (llvm/llvm-project#49221). 128-bit integers are only safe in
 # registers, like the ones bitcast_struct uses to reconstruct the value.
-function Base.fill!(dest::DataLayout, value; kwargs...)
+@inline function Base.fill!(dest::DataLayout, value; kwargs...)
     B = eltype(parent(dest))
     converted_value = convert(eltype(dest), value)
     entries = bitcast_struct(NTuple{num_basetypes(B, eltype(dest)), B}, converted_value)
@@ -433,9 +489,12 @@ end
 
 # Add axes to LazyDataLayouts and AutoBroadcaster wrappers to DataLayouts before
 # reducing them. Remove all AutoBroadcaster wrappers after obtaining the result.
-function Base.reduce(op::O, arg::MaybeLazyDataLayout; kwargs...) where {O}
-    reducible = arg isa LazyDataLayout ? Broadcast.instantiate : Broadcast.broadcastable
-    result = drop_auto_broadcasters(reduce_points(op, reducible(arg); kwargs...))
+@inline function Base.reduce(op::O, arg::MaybeLazyDataLayout; kwargs...) where {O}
+    result = if arg isa LazyDataLayout
+        drop_auto_broadcasters(reduce_points(op, Broadcast.instantiate(arg); kwargs...))
+    else
+        drop_auto_broadcasters(reduce_points(op, Broadcast.broadcastable(arg); kwargs...))
+    end
     call_post_op_callback() && post_op_callback(result, op, arg; kwargs...)
     return result
 end

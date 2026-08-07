@@ -197,30 +197,24 @@ julia> set_struct!(zeros(Int64, 3, 4), (Int32(2), Int32(0), Int128(1)), 2, 3)
     return array
 end
 
-@generated function set_struct!(array::AbstractArray{B}, value::T, index...) where {B, T}
-    Nf = sizeof(T) ÷ sizeof(B)
-    if isone(Nf)
-        return quote
-            Base.@_inline_meta
-            Base.@_propagate_inbounds_meta
-            @boundscheck checkbounds(array, struct_indices(array, Val(1), index...)...)
-            @inbounds array[struct_index(1, array, index...)] =
-                only(bitcast_struct(NTuple{1, B}, value))
-            return array
-        end
-    else
-        exprs = [:(array[struct_index($i, array, index...)] = entries[$i]) for i in 1:Nf]
-        return quote
-            Base.@_inline_meta
-            Base.@_propagate_inbounds_meta
-            @boundscheck checkbounds(array, struct_indices(array, Val($Nf), index...)...)
-            entries = bitcast_struct(NTuple{$Nf, B}, value)
-            @inbounds begin
-                $(exprs...)
-            end
-            return array
-        end
-    end
+@propagate_inbounds function set_struct!(
+    array::AbstractArray{B},
+    value::T,
+    index...,
+) where {B, T}
+    Nf = num_basetypes(B, T)
+    @boundscheck checkbounds(array, struct_indices(array, Val(Nf), index...)...)
+    entries = bitcast_struct(NTuple{Nf, B}, value)
+    return set_struct_entries!(array, entries, 1, index...)
+end
+
+# Store the entries with tuple recursion, which unrolls like a generated
+# function; a closure over array and index is not eliminated in GPU kernels,
+# where it allocates at every point.
+@inline set_struct_entries!(array, ::Tuple{}, i, index...) = array
+@propagate_inbounds function set_struct_entries!(array, entries::Tuple, i, index...)
+    @inbounds array[struct_index(i, array, index...)] = first(entries)
+    return set_struct_entries!(array, Base.tail(entries), i + 1, index...)
 end
 
 """
@@ -265,14 +259,14 @@ julia> get_struct([0 0 0 0; 2 0 1 0; 0 0 0 0], Tuple{Int32, Int32, Int128}, 2, 3
     return @inbounds array[struct_index(1, array, index...)]
 end
 
-@generated function get_struct(array::AbstractArray{B}, ::Type{T}, index...) where {B, T}
-    Nf = sizeof(T) ÷ sizeof(B)
-    return quote
-        Base.@_inline_meta
-        Base.@_propagate_inbounds_meta
-        @boundscheck checkbounds(array, struct_indices(array, Val($Nf), index...)...)
-        return bitcast_struct(T, array, Val($Nf), index...)
-    end
+@propagate_inbounds function get_struct(
+    array::AbstractArray{B},
+    ::Type{T},
+    index...,
+) where {B, T}
+    Nf = num_basetypes(B, T)
+    @boundscheck checkbounds(array, struct_indices(array, Val(Nf), index...)...)
+    return bitcast_struct(T, array, Val(Nf), index...)
 end
 
 """
