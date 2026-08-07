@@ -193,10 +193,9 @@ steps:
            CLIMACOMMS_DEVICE: "CUDA"
            CLIMACOMMS_CONTEXT: "MPI"
         agents:
-           slum_ntasks: 2
+           slurm_ntasks: 2
            slurm_gpus: 2
-           modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+           modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
   - group: "Unit: Geometry"
     steps:
@@ -275,8 +274,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 4
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
   - group: "Unit: Spaces"
     steps:
@@ -328,8 +326,7 @@ steps:
         agents:
           slurm_gpus: 1
           slurm_ntasks: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
       - label: "Unit: common spaces with MPI"
         key: "common_cuda_mpi_spaces"
@@ -340,8 +337,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
       - label: "Unit: distributed cuda spaces"
         key: "gpu_distributed_extruded_cuda_spaces"
@@ -351,11 +347,11 @@ steps:
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/distributed_cuda/space_construction.jl CUDA"
         env:
           CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus_per_task: 1
           slurm_ntasks: 3
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
       - label: "Unit: ddss1"
         key: unit_ddss1
@@ -402,8 +398,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
       - label: "Unit: distributed dss3"
         key: unit_distributed_dss3
@@ -413,8 +408,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 3
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
       - label: "Unit: distributed dss4"
         key: unit_distributed_dss4
@@ -424,8 +418,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 4
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
       - label: "Unit: distributed remapping (1 process)"
         key: distributed_remapping_1proc
@@ -443,8 +436,7 @@ steps:
           CLIMACOMMS_DEVICE: "CPU"
         agents:
           slurm_ntasks: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
       - label: "Unit: distributed remapping with CUDA (1 process)"
         key: distributed_remapping_gpu_1proc
@@ -475,8 +467,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 4
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
       - label: "Unit: cuda extruded spaces"
         key: "extruded_spaces_cuda"
@@ -513,8 +504,7 @@ steps:
         agents:
           slurm_ntasks: 2
           slurm_gpus: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
       - label: "Unit: cuda dss 3-process test"
         key: "gpu_ddss3_test"
@@ -529,8 +519,7 @@ steps:
         agents:
           slurm_ntasks: 3
           slurm_gpus: 3
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
       - label: "Unit: cuda dss 4-process test"
         key: "gpu_ddss4_test"
@@ -545,8 +534,7 @@ steps:
         agents:
           slurm_ntasks: 4
           slurm_gpus: 4
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
       - label: "Unit: cuda Cubed Sphere dss; ne = 32; 2-process test"
         key: "gpu_ddss_ne32_cs_2processes"
@@ -561,8 +549,7 @@ steps:
         agents:
           slurm_ntasks: 2
           slurm_gpus: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
       - label: "Unit: cuda Cubed Sphere dss; ne = 32; 3-process test"
         key: "gpu_ddss_ne32_cs_3processes"
@@ -577,8 +564,7 @@ steps:
         agents:
           slurm_ntasks: 3
           slurm_gpus: 3
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
       - label: "Unit: cuda Cubed Sphere dss; ne = 32; 4-process test"
         key: "gpu_ddss_ne32_cs_4processes"
@@ -593,8 +579,7 @@ steps:
         agents:
           slurm_ntasks: 4
           slurm_gpus: 4
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
   - group: "Unit: Fields"
     steps:
@@ -645,11 +630,11 @@ steps:
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/reduction_cuda_distributed.jl"
         env:
           CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus_per_task: 1
           slurm_ntasks: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
   - group: "Unit: Operators"
     steps:
@@ -828,8 +813,7 @@ steps:
         agents:
           slurm_ntasks: 3
           slurm_mem: 20GB
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
       - label: "Unit: run sphere geometry distributed (4)"
         key: unit_run_sphere_geometry_distributed4
@@ -840,8 +824,7 @@ steps:
         agents:
           slurm_ntasks: 4
           slurm_mem: 20GB
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
       - label: "Unit: rectilinear cuda"
         key: unit_rectilinear_cuda
@@ -1466,8 +1449,7 @@ steps:
         agents:
           slurm_nodes: 3
           slurm_tasks_per_node: 1
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
   - group: "Unit: Remapping"
     steps:
@@ -1504,8 +1486,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 3
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
       - label: "Unit: limiter mass borrowing"
         key: unit_limiter_mass_borrowing
@@ -1929,8 +1910,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 4
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
       - label: ":computer: Bickley jet DG rusanov"
         key: "cpu_bickleyjet_dg_rusanov"
@@ -2143,8 +2123,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
   - group: "Examples: Sphere"
     steps:
@@ -2259,8 +2238,7 @@ steps:
         agents:
           slurm_nodes: 1
           slurm_tasks_per_node: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
       - label: ":computer: Shallow-water 2D sphere barotropic instability alpha30"
         key: "cpu_shallowwater_2d_cg_sphere_barotropic_alpha30"
@@ -2366,8 +2344,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2026_02_18
-        soft_fail: true # remove this after library issues are fixed
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
 
       - label: ":computer: 3D sphere baroclinic wave (ρθ)"
