@@ -43,9 +43,11 @@ end
     isnothing(i) && return throw(ArgumentError(invalid_basetype_string(B, T)))
     return invalid_basetype_error(B, fieldtype(T, i))
 end
-@generated invalid_basetype_string(::Type{B}, ::Type{T}) where {B, T} =
-    "Cannot store value of type $T ($(sizeof(T)) bytes) using values of type \
-     $B ($(sizeof(B)) bytes)"
+@generated invalid_basetype_string(
+    ::Type{B},
+    ::Type{T},
+) where {B, T} = "Cannot store value of type $T ($(sizeof(T)) bytes) using values of type \
+                  $B ($(sizeof(B)) bytes)"
 
 """
     check_basetype(B, T)
@@ -115,8 +117,9 @@ end
 @inline single_index(index, ::Val{Nf}) where {Nf} =
     isone(Nf) ? Tuple(index) : throw(ArgumentError("F axis is required unless Nf = 1"))
 
-@inline struct_index(i, array) = i
-@inline struct_indices(array, ::Val{Nf}) where {Nf} = (Base.OneTo(Nf),)
+@inline struct_index(i, array) = iszero(ndims(array)) ? CartesianIndex() : i
+@inline struct_indices(array, ::Val{Nf}) where {Nf} =
+    iszero(ndims(array)) ? (CartesianIndex(),) : (Base.OneTo(Nf),)
 
 # Split Cartesian index ranges into scalar components and a range from 1 to Nf;
 # a Cartesian range would build a much costlier view with singleton dimensions.
@@ -184,14 +187,40 @@ julia> set_struct!(zeros(Int64, 3, 4), (Int32(2), Int32(0), Int128(1)), 2, 3)
  0  0  0  0
 ```
 """
-@inline function set_struct!(array, value::T, index...) where {T}
-    Nf = num_basetypes(eltype(array), T)
-    @boundscheck checkbounds(array, struct_indices(array, Val(Nf), index...)...)
-    entries = bitcast_struct(NTuple{Nf, eltype(array)}, value)
-    unrolled_foreach(enumerate(entries)) do (i, entry)
-        @inbounds array[struct_index(i, array, index...)] = entry
-    end
+@propagate_inbounds function set_struct!(
+    array::AbstractArray{T},
+    value::T,
+    index...,
+) where {T}
+    @boundscheck checkbounds(array, struct_indices(array, Val(1), index...)...)
+    @inbounds array[struct_index(1, array, index...)] = value
     return array
+end
+
+@generated function set_struct!(array::AbstractArray{B}, value::T, index...) where {B, T}
+    Nf = sizeof(T) ÷ sizeof(B)
+    if isone(Nf)
+        return quote
+            Base.@_inline_meta
+            Base.@_propagate_inbounds_meta
+            @boundscheck checkbounds(array, struct_indices(array, Val(1), index...)...)
+            @inbounds array[struct_index(1, array, index...)] =
+                only(bitcast_struct(NTuple{1, B}, value))
+            return array
+        end
+    else
+        exprs = [:(array[struct_index($i, array, index...)] = entries[$i]) for i in 1:Nf]
+        return quote
+            Base.@_inline_meta
+            Base.@_propagate_inbounds_meta
+            @boundscheck checkbounds(array, struct_indices(array, Val($Nf), index...)...)
+            entries = bitcast_struct(NTuple{$Nf, B}, value)
+            @inbounds begin
+                $(exprs...)
+            end
+            return array
+        end
+    end
 end
 
 """
@@ -227,10 +256,23 @@ julia> get_struct([0 0 0 0; 2 0 1 0; 0 0 0 0], Tuple{Int32, Int32, Int128}, 2, 3
 (2, 0, 1)
 ```
 """
-@inline function get_struct(array, ::Type{T}, index...) where {T}
-    Nf = num_basetypes(eltype(array), T)
-    @boundscheck checkbounds(array, struct_indices(array, Val(Nf), index...)...)
-    return bitcast_struct(T, array, Val(Nf), index...)
+@propagate_inbounds function get_struct(
+    array::AbstractArray{T},
+    ::Type{T},
+    index...,
+) where {T}
+    @boundscheck checkbounds(array, struct_indices(array, Val(1), index...)...)
+    return @inbounds array[struct_index(1, array, index...)]
+end
+
+@generated function get_struct(array::AbstractArray{B}, ::Type{T}, index...) where {B, T}
+    Nf = sizeof(T) ÷ sizeof(B)
+    return quote
+        Base.@_inline_meta
+        Base.@_propagate_inbounds_meta
+        @boundscheck checkbounds(array, struct_indices(array, Val($Nf), index...)...)
+        return bitcast_struct(T, array, Val($Nf), index...)
+    end
 end
 
 """

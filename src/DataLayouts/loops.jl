@@ -15,20 +15,29 @@ end
 @inline is_valid_slice_mask(::IJHMask, ::typeof(column)) = true
 @inline is_valid_slice_mask(::IJHMask, _) = false
 
-@inline each_maskable_slice_index(_, op::O, args...) where {O} =
+# The scope is passed so that GPU scopes can override the indices of unmasked
+# point loops with eachindex, whose linear indices avoid the integer divisions
+# that decompose a thread's index into a CartesianIndex at every point. Host
+# scopes keep the Cartesian each_slice_index for point loops: a view at a
+# linear index wraps its parent in a 1-dimensional ReshapedArray that blocks
+# SIMD (see each_slice_index), which would make single-component CPU broadcasts
+# slow, while GPU threads iterate too few points per thread for SIMD to matter.
+@inline each_maskable_slice_index(_, _, op::O, args...) where {O} =
     each_slice_index(op, args...)
-@inline each_maskable_slice_index(mask::IJHMask, ::typeof(view), args...) =
+@inline each_maskable_slice_index(_, mask::IJHMask, ::typeof(view), args...) =
     eachindex(IndexStyle(mask.is_active, args...), args...)
 
 @inline function subscope_slice_indices(subscope, scope, mask, op::O, args...) where {O}
     is_valid_slice_mask(mask, op) || throw(ArgumentError(invalid_mask_string(mask, op)))
-    full_scope_indices = each_maskable_slice_index(mask, op, args...)
+    full_scope_indices = each_maskable_slice_index(scope, mask, op, args...)
     indices = @inbounds subscope_indices(subscope, scope, full_scope_indices)
     mask == NoMask() && return indices
     return Iterators.filter(index -> (@inbounds should_compute(mask, index)), indices)
 end
-@generated invalid_mask_string(::M, ::O) where {M, O} =
-    "$M cannot be applied to $(O.instance) slices"
+@generated invalid_mask_string(
+    ::M,
+    ::O,
+) where {M, O} = "$M cannot be applied to $(O.instance) slices"
 
 # A view slice contains one point by definition, so its size is known without
 # constructing a slice. The generic method cannot handle point slices of fused
@@ -80,8 +89,36 @@ specified, since that is the only method a loop starts from. Every method that
 takes a `scope` requires a `mask`, so that a loop which passes its keyword
 arguments on cannot quietly drop a mask and compute over the points it excludes.
 """
-@inline foreach_slice(op::O, f::F, args...; mask = NoMask()) where {O, F} =
-    foreach_slice(DataScope(args...), op, f, args...; mask)
+@inline function foreach_slice(op::O, f::F, args...; mask = NoMask()) where {O, F}
+    check_slice_extents(op, args...)
+    return foreach_slice(DataScope(args...), op, f, args...; mask)
+end
+
+# Reject arguments whose slice indices are incompatible before any loop starts.
+# This check must run on the host: each_slice_index is called from GPU kernels,
+# where an error path either fails to compile or traps with an unrelated CUDA
+# error, so it combines incompatible axes instead of throwing. Point slices
+# broadcast like ordinary expressions, so their axes only need to match up to
+# singleton and missing dimensions, which project_slice_index sends to index 1;
+# the other slice operators require exact matches.
+@inline function check_slice_extents(op::O, args...) where {O}
+    combined_axes = axes(each_slice_index(op, args...))
+    valid = unrolled_all(args) do arg
+        compatible_axes(op, axes(each_slice_index(op, arg)), combined_axes)
+    end
+    valid || throw(
+        DimensionMismatch("Inputs to foreach_slice must have compatible dimensions"),
+    )
+    return nothing
+end
+
+@inline compatible_axes(op::O, axes1::Tuple, axes2::Tuple) where {O} = axes1 == axes2
+@inline compatible_axes(::typeof(view), axes1::Tuple, axes2::Tuple) =
+    isempty(axes1) ||
+    (
+        (first(axes1) == first(axes2) || isone(length(first(axes1)))) &&
+        compatible_axes(view, Base.tail(axes1), Base.tail(axes2))
+    )
 
 # A thread pool has to be resolved before looping over it, and given back afterward.
 @inline function foreach_slice(
@@ -138,12 +175,43 @@ end
 # broadcasts. Lazy iterators such as Iterators.filter or Iterators.map do not
 # support @simd, and operations on non-point slices typically do too much work
 # per slice for vectorization to be worthwhile.
+# Project a point index onto one argument, so that arguments which broadcast
+# along a dimension (0-dimensional layouts, or layouts with a singleton extent,
+# like single-level surface data) read their single value instead of an
+# out-of-range one. Only point slices need this: the other slice operators
+# require every argument to have identical slice indices. Each argument's
+# singleton dimensions are recorded in a tuple of Bools before the loop starts,
+# so that the per-point projection only selects on loop-invariant flags, which
+# LLVM folds away, instead of comparing dynamic extents at every point; for
+# equal-shaped arguments, the projection is the identity.
+@inline is_singleton_axis(ax) = isone(length(ax))
+@inline singleton_slice_dims(op::O, arg) where {O} = ()
+@inline singleton_slice_dims(::typeof(view), arg) =
+    unrolled_map(is_singleton_axis, axes(each_slice_index(view, arg)))
+
+@inline project_slice_index(op::O, arg, is_singleton, index) where {O} = index
+@inline project_slice_index(::typeof(view), arg, is_singleton, index::Integer) =
+    iszero(ndims(arg)) ? CartesianIndex() : index
+@inline project_slice_index(::typeof(view), arg, is_singleton, index::CartesianIndex) =
+    iszero(ndims(arg)) ? CartesianIndex() :
+    CartesianIndex(projected_index(is_singleton, Tuple(index)))
+@inline projected_index(is_singleton::Tuple, index::Tuple) = (
+    (first(is_singleton) ? 1 : first(index)),
+    projected_index(Base.tail(is_singleton), Base.tail(index))...,
+)
+@inline projected_index(::Tuple{}, index::Tuple) = index
+@inline projected_index(::Tuple{}, ::Tuple{}) = ()
+
 @inline function slice_loop(scope, op::O, f::F, mask, args...) where {O, F}
     subscope = slice_subscope(scope, op, args...)
     indices = subscope_slice_indices(subscope, scope, mask, op, args...)
+    singleton_dims = unrolled_map(Base.Fix1(singleton_slice_dims, op), args)
     @simd_if (op == view && simd_over_indices(indices)) for index in indices
-        slices = unrolled_map(args) do arg
-            @inbounds reassign(op(arg, Tuple(index)...), subscope)
+        slices = unrolled_map(args, singleton_dims) do arg, is_singleton
+            @inbounds reassign(
+                op(arg, Tuple(project_slice_index(op, arg, is_singleton, index))...),
+                subscope,
+            )
         end
         @inline f(slices...)
     end

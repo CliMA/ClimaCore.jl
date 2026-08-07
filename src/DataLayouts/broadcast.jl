@@ -90,18 +90,22 @@ const MaybeFusedDataLayoutBroadcast = Union{LazyDataLayout, FusedMultiBroadcast}
 Extracts every [`DataLayout`](@ref) and [`LazyDataLayout`](@ref) from the
 arguments of a broadcast expression.
 """
+@inline is_layout_arg(::MaybeLazyDataLayout) = true
+@inline is_layout_arg(::Any) = false
+
 @inline layout_args(bc::LazyDataLayout) =
-    unrolled_filter(Base.Fix2(isa, MaybeLazyDataLayout), bc.args)
+    unrolled_filter(is_layout_arg, bc.args)
 @inline layout_args(bc::FusedMultiBroadcast) =
-    unrolled_filter(Base.Fix2(isa, MaybeLazyDataLayout), unrolled_flatten(bc.pairs))
+    unrolled_filter(is_layout_arg, unrolled_flatten(bc.pairs))
 
 @inline DataScope(bc::MaybeFusedDataLayoutBroadcast) = DataScope(layout_args(bc)...)
 
 @inline layout_type(::LazyDataLayout{D}) where {D} = D
 
 # Only specify the parent array element type, instead of a concrete array type.
+@inline parent_eltype(arg) = eltype(parent_type(arg))
 @inline parent_type(bc::LazyDataLayout) =
-    AbstractArray{promote_type(unrolled_map(eltype ∘ parent_type, layout_args(bc))...)}
+    AbstractArray{promote_type(unrolled_map(parent_eltype, layout_args(bc))...)}
 
 # Allow any combination of f_dim values, taking a maximum to resolve conflicts.
 @inline function f_dim(bc::LazyDataLayout)
@@ -152,17 +156,24 @@ end
 Replaces each of the [`layout_args`](@ref) in a broadcast expression with
 `f(layout_arg, f_args...)`.
 """
+# modify_arg must propagate @inbounds into f: it is applied at every point of a
+# broadcast expression, and without the propagation, the bounds checks that its
+# callers eliminate get re-enabled inside every per-point view and getindex.
+@propagate_inbounds modify_arg(f::F, arg::MaybeLazyDataLayout, f_args...) where {F} =
+    f(arg, f_args...)
+@propagate_inbounds modify_arg(f::F, arg::Any, f_args...) where {F} = arg
+
 @propagate_inbounds function modify_args(f::F, bc::LazyDataLayout, f_args...) where {F}
     modified_args = unrolled_map_with_inbounds(bc.args) do arg
         Base.@_propagate_inbounds_meta
-        arg isa MaybeLazyDataLayout ? f(arg, f_args...) : arg
+        modify_arg(f, arg, f_args...)
     end
     return Broadcast.Broadcasted(bc.style, bc.f, modified_args)
 end
 @propagate_inbounds function modify_args(f::F, bc::FusedMultiBroadcast, f_args...) where {F}
     modified_pairs = unrolled_map_with_inbounds(bc.pairs) do (dest, bc)
         Base.@_propagate_inbounds_meta
-        Pair(f(dest, f_args...), bc isa MaybeLazyDataLayout ? f(bc, f_args...) : bc)
+        Pair(f(dest, f_args...), modify_arg(f, bc, f_args...))
     end
     return FusedMultiBroadcast(modified_pairs)
 end

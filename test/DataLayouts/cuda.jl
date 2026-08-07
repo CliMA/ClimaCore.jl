@@ -1,8 +1,16 @@
+ENV["CLIMACOMMS_DEVICE"] = "CUDA"
 using Test
 import ClimaComms
+using CUDA
+import ClimaCore
 import ClimaCore: slab
 import ClimaCore.DataLayouts: VIJFH
 ClimaComms.@import_required_backends
+
+# Cross-check every launch configuration computed by this test against CUDA's
+# occupancy API. The check is disabled by default so that a tie-breaking
+# difference on an untested device degrades performance instead of crashing.
+Base.get_extension(ClimaCore, :ClimaCoreCUDAExt).VALIDATE_LAUNCH_CONFIGURATIONS[] = true
 
 function knl_copy!(dest, src)
     i = CUDA.threadIdx().x
@@ -52,7 +60,7 @@ end
 
 @testset "kernel argument compaction" begin
     import ClimaCore
-    import Adapt
+    import ClimaCore.Adapt: Adapt
     ext = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
     FT = Float32
     T = NamedTuple{(:a, :b, :c), NTuple{3, FT}}

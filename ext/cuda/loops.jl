@@ -1,4 +1,11 @@
-function DataLayouts.foreach_slice(::ThisHost, op::O, f::F, args...; kwargs...) where {O, F}
+function DataLayouts.foreach_slice(
+    ::ThisHost,
+    op::O,
+    f::F,
+    args...;
+    max_waves = nothing,
+    kwargs...,
+) where {O, F}
     check_device_assumptions()
 
     # Capture the kwargs as a NamedTuple, whose names are type parameters. The
@@ -12,11 +19,23 @@ function DataLayouts.foreach_slice(::ThisHost, op::O, f::F, args...; kwargs...) 
         if DataLayouts.slice_subscope(ThisKernel(), op, args...) == ThisBlock()
             max_slice_points = maximum(Base.Fix1(DataLayouts.num_slice_points, op), args)
             max_slices = length(DataLayouts.each_slice_index(op, first(args)))
-            launch_configuration(kernel_function, args, max_slice_points, max_slices)
+            launch_configuration(
+                kernel_function,
+                args,
+                max_slice_points,
+                max_slices;
+                max_waves,
+            )
         else
             # Extra threads run empty loops, so max_points isn't a strict limit.
             max_points = maximum(length, args)
-            launch_configuration(kernel_function, args, max_points; strict = false)
+            launch_configuration(
+                kernel_function,
+                args,
+                max_points;
+                max_waves,
+                strict = false,
+            )
         end
     auto_launch!(kernel_function, args; threads_s = threads, blocks_s = blocks)
 end

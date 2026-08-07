@@ -113,6 +113,50 @@ end
     @test parent(point .+ data) == parent(data) .+ Array(parent(point))[]
 end
 
+# Point loops broadcast their arguments like ordinary broadcast expressions:
+# 0-dimensional layouts and statically singleton dimensions (e.g. single-level
+# surface data) are expanded to the combined loop bounds, while genuinely
+# mismatched extents are rejected on the host, since the error path can be
+# neither compiled nor cleanly reported in GPU kernels.
+@testset "point loops over arguments with singleton dimensions" begin
+    device = ClimaComms.device()
+    volume = test_data(device, Float64, 1, 10)
+    surface = test_data(device, Float64, 1, 1) # statically singleton Nv
+    point = DataLayouts.DataF{Float64}(device_array(device, rand(1)))
+    dest = test_data(device, Float64, 1, 10)
+
+    # Singleton dimensions inside broadcast expressions expand like Base's.
+    dest .= volume .+ surface
+    @test parent(dest) ==
+          device_array(device, Array(parent(volume)) .+ Array(parent(surface)))
+
+    # Singleton and 0-dimensional layouts may also be top-level loop arguments.
+    fill!(parent(dest), 0)
+    DataLayouts.foreach_point(
+        (d, a, s, p) -> (@inbounds d[] = a[] + s[] + p[]),
+        dest,
+        volume,
+        surface,
+        point,
+    )
+    reference =
+        Array(parent(volume)) .+ Array(parent(surface)) .+ Array(parent(point))[]
+    @test parent(dest) == device_array(device, reference)
+
+    # Reductions over expressions with mixed shapes require Cartesian indices,
+    # which Broadcast.newindex projects onto singleton dimensions; expressions
+    # whose layouts all share a shape permit linear indices.
+    mixed_bc = Base.broadcasted(+, volume, surface)
+    @test Base.IndexStyle(mixed_bc) == IndexCartesian()
+    @test sum(identity, mixed_bc) ==
+          sum(Array(parent(volume)) .+ Array(parent(surface)))
+    @test Base.IndexStyle(Base.broadcasted(+, volume, volume)) == IndexLinear()
+
+    # Genuinely mismatched extents throw before any kernel is launched.
+    mismatched = test_data(device, Float64, 1, 7)
+    @test_throws DimensionMismatch dest .= volume .+ mismatched
+end
+
 # Measure allocations from a top-level function, since the @allocated macro has
 # a small constant overhead when it is used in a local scope.
 assign_scalar!(data) = data .= 0.5
