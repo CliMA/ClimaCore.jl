@@ -242,7 +242,15 @@ Base.reinterpret(::Type{T}, data::DataLayout) where {T} = rebuild(data, parent(d
 
 ClimaComms.gather(::ClimaComms.SingletonCommsContext, data::DataLayout) = data
 ClimaComms.gather(ctx::ClimaComms.AbstractCommsContext, data::DataLayout) =
-    rebuild(data, ClimaComms.gather(ctx, parent(data)))
+    gather_data(ctx, data)
+# Disambiguate from ClimaCommsMPIExt's gather(::MPICommsContext, array)
+ClimaComms.gather(ctx::ClimaComms.MPICommsContext, data::DataLayout) =
+    gather_data(ctx, data)
+function gather_data(ctx, data)
+    gathered_array = ClimaComms.gather(ctx, parent(data))
+    # The array gather only returns data on the root process
+    return ClimaComms.iamroot(ctx) ? rebuild(data, gathered_array) : nothing
+end
 
 @inline add_f_dim(dims, dim, ::Val{F}) where {F} =
     isnothing(F) ? dims : unrolled_insert(dims, dim, Val(F))

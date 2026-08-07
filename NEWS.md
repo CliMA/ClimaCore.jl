@@ -79,6 +79,8 @@ main
   launch, and reused a per-task device buffer for the intermediate results of GPU
   reductions instead of allocating one per reduction.
   [2557](https://github.com/CliMA/ClimaCore.jl/pull/2557)
+- [2572](https://github.com/CliMA/ClimaCore.jl/pull/2572) Fixed DSS for MPI
+  after DataLayouts refactor 
 
 v0.14.55
 -------

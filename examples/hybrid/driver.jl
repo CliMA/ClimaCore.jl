@@ -231,7 +231,7 @@ if is_distributed # replace sol.u on the root processor with the global sol.u
         end
     end
     if ClimaComms.iamroot(comms_ctx)
-        sol = SciMLBase.sensitivity_solution(sol, global_sol_u, sol.t)
+        sol = CTS.ODESolution(sol.t, global_sol_u, sol.prob, sol.alg)
         output_file =
             joinpath(output_dir, "scaling_data_$(nprocs)_processes.jld2")
         println("writing performance data to $output_file")

@@ -193,7 +193,7 @@ steps:
            CLIMACOMMS_DEVICE: "CUDA"
            CLIMACOMMS_CONTEXT: "MPI"
         agents:
-           slum_ntasks: 2
+           slurm_ntasks: 2
            slurm_gpus: 2
            modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
@@ -347,6 +347,7 @@ steps:
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/distributed_cuda/space_construction.jl CUDA"
         env:
           CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus_per_task: 1
           slurm_ntasks: 3
@@ -629,6 +630,7 @@ steps:
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/reduction_cuda_distributed.jl"
         env:
           CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus_per_task: 1
           slurm_ntasks: 2
