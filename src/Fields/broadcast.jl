@@ -73,13 +73,18 @@ Base.Broadcast.combine_styles(
     (arg1, arg2, arg3, args...),
 )
 
-# Define broadcastable/broadcasted/eltype/similar/copy to match DataStyle
-# broadcasting, but with the application of a mask when copying
+# Define broadcastable/broadcasted/newindex/eltype/similar/copy to match
+# DataStyle broadcasting (see broadcast.jl in the DataLayouts module).
 Base.Broadcast.broadcastable(field::Field) =
     Field(Base.Broadcast.broadcastable(field_values(field)), axes(field))
 
 Base.Broadcast.broadcasted(style::AbstractFieldStyle, f::F, args...) where {F} =
     auto_broadcasted(style, f, args)
+
+Base.Broadcast.newindex(
+    bc::Union{Field, Base.Broadcast.Broadcasted{<:AbstractFieldStyle}},
+    index::Integer,
+) = iszero(ndims(bc)) ? CartesianIndex() : index
 
 Base.eltype(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     unsafe_eltype(bc)
@@ -141,6 +146,14 @@ end
 
 field_values(bc::Base.AbstractBroadcasted) = todata(bc)
 
+# Extend the DataLayout methods of IndexStyle and eachindex to Field broadcasts.
+Base.IndexStyle(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
+    IndexStyle(todata(bc))
+Base.eachindex(
+    arg::Union{Field, Base.Broadcast.Broadcasted{<:AbstractFieldStyle}},
+    args::Union{Field, Base.Broadcast.Broadcasted{<:AbstractFieldStyle}}...,
+) = eachindex(todata(arg), unrolled_map(todata, args)...)
+
 # same logic as Base.Broadcast.Broadcasted (which only defines it for Tuples)
 Base.axes(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     _axes(bc, bc.axes)
@@ -155,8 +168,7 @@ Base.similar(
 Base.similar(
     bc::Base.Broadcast.Broadcasted{<:FieldStyle},
     ::Type{Eltype},
-) where {Eltype} =
-    Field(level_data(axes(bc), similar(todata(bc), Eltype)), axes(bc))
+) where {Eltype} = Field(similar(todata(bc), Eltype), axes(bc))
 
 @inline function Base.copyto!(
     dest::Field,
@@ -202,9 +214,7 @@ _check_mismatched_spaces(::T, ::T) where {T <: AbstractSpace} = nothing
 _check_mismatched_spaces(space1, space2) =
     error("FusedMultiBroadcast spaces are not the same.")
 
-@noinline function error_mismatched_spaces(space1::Type, space2::Type)
-    error("Broacasted spaces are not the same.")
-end
+error_mismatched_spaces() = error("Broacasted spaces are not the same.")
 
 @inline function Base.Broadcast.broadcast_shape(
     space1::AbstractSpace,
@@ -216,7 +226,7 @@ end
         elseif Spaces.issubspace(space1, space2)
             return space2
         else
-            error_mismatched_spaces(typeof(space1), typeof(space2))
+            error_mismatched_spaces()
         end
     end
     return space1
@@ -253,7 +263,7 @@ end
            Spaces.issubspace(space1, space2)
             nothing
         else
-            error_mismatched_spaces(typeof(space1), typeof(space2))
+            error_mismatched_spaces()
         end
     end
     return nothing
@@ -262,7 +272,7 @@ end
     space::AbstractSpace,
     ax2::Tuple,
 )
-    error_mismatched_spaces(typeof(space), typeof(ax2))
+    error_mismatched_spaces()
 end
 @inline function Base.Broadcast.check_broadcast_shape(
     ::AbstractSpace,

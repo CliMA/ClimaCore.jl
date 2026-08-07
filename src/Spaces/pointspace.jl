@@ -27,29 +27,8 @@ function PointSpace(device::ClimaComms.AbstractDevice, x)
     return PointSpace(context, x)
 end
 
-"""
-    point_data(data)
-
-Convert a view of a single point in a `DataLayout` into a `DataF`, without
-copying the underlying data.
-"""
-point_data(data::DataLayouts.DataF) = data
-Base.@propagate_inbounds function point_data(data::DataLayouts.DataLayout)
-    @assert isone(length(data))
-    T = eltype(data)
-    array = DataLayouts.view_struct(
-        parent(data),
-        T,
-        first(CartesianIndices(data)),
-        Val(DataLayouts.f_dim(data)),
-    )
-    return DataLayouts.DataF{T, typeof(DataLayouts.DataScope(data))}(array)
-end
-
-PointSpace(
-    context::ClimaComms.AbstractCommsContext,
-    data::DataLayouts.DataLayout,
-) = PointSpace(context, point_data(data))
+PointSpace(context::ClimaComms.AbstractCommsContext, data::DataLayouts.DataLayout) =
+    PointSpace(context, view(data)) # view of a DataLayout is always a DataF
 
 function PointSpace(
     context::ClimaComms.AbstractCommsContext,
@@ -86,3 +65,8 @@ end
 all_nodes(::PointSpace) = (1,)
 
 node_horizontal_length_scale(space::PointSpace) = 1
+
+for f in (:level, :slab, :column)
+    @eval $f(space::PointSpace, indices...) =
+        all(isone, indices) ? space : throw(ArgumentError("Space has only one point"))
+end

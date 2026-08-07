@@ -40,9 +40,16 @@ Base.IndexStyle(::Type{D}) where {D <: DataLayout} =
 # layout types among the args, which exceeds inference's union-splitting
 # limits for heterogeneous broadcast expressions and makes the shape checks
 # dynamic.
+# Layouts are collected recursively, so that a singleton layout nested inside
+# a broadcast expression is seen by the shape checks: a nested broadcast's own
+# merged shape_params would hide it, and a linear index does not project onto
+# singleton dimensions, so reading such a layout at a linear index would go
+# out of range.
 @inline get_non_point_arg_tuple(arg) = is_non_point_arg(arg) ? (arg,) : ()
+@inline get_non_point_arg_tuple(bc::MaybeFusedDataLayoutBroadcast) =
+    unrolled_flatmap(get_non_point_arg_tuple, layout_args(bc))
 
-@inline function equal_layout_shapes(args::Tuple)
+@inline function equal_layout_shapes(args)
     non_point_args = unrolled_flatmap(get_non_point_arg_tuple, args)
     return unrolled_allequal(layout_type, non_point_args) &&
            unrolled_allequal(shape_params, non_point_args)
@@ -55,17 +62,12 @@ end
 @inline Base.IndexStyle(bc::MaybeFusedDataLayoutBroadcast) =
     equal_layout_shapes(layout_args(bc)) ? IndexLinear() : IndexCartesian()
 
-@inline index_style_layouts(::Tuple{}) = IndexLinear()
-@inline index_style_layouts(args::Tuple{Any}) = IndexStyle(first(args))
-@inline index_style_layouts(args::Tuple) =
-    equal_layout_shapes(args) ?
-    unrolled_mapreduce(IndexStyle, IndexStyle, args) : IndexCartesian()
-
 # Allow linear indexing if all DataLayouts in an expression have the same shape.
 # Add DataLayout-only methods to avoid ambiguities with AbstractArray methods.
 for T in (:IndexableData, :DataLayout)
     @eval @inline Base.IndexStyle(arg1::$T, arg2::$T, args::$T...) =
-        index_style_layouts((arg1, arg2, args...))
+        equal_layout_shapes((arg1, arg2, args...)) ?
+        unrolled_mapreduce(IndexStyle, IndexStyle, (arg1, arg2, args...)) : IndexCartesian()
 
     @eval @inline Base.eachindex(arg::$T, args::$T...) =
         eachindex(IndexStyle(arg, args...), arg, args...)
@@ -77,31 +79,15 @@ for T in (:IndexableData, :DataLayout)
         throw(DimensionMismatch("Inputs to eachindex must have the same size"))
 end
 
-@inline slice_axes(op, arg) = axes(each_slice_index(op, arg))
-
 """
-    each_slice_index(op, args...)
+    each_slice_index(op, arg)
 
 Generalization of `eachindex` for the slice operators [`level`](@ref),
 [`slab`](@ref), [`column`](@ref), and `view` (for creating single-point slices).
 The result is always an iterator of Cartesian indices, whose scalar offsets are
 simple enough for SIMD optimization (a `view` at a linear index wraps its parent
 in a 1-dimensional `ReshapedArray`, which blocks SIMD in pointwise loops).
-
-The arguments' axes are combined with `stable_combine_axes`, which expands
-singleton and 0-dimensional axes like broadcasting does and never throws, since
-this function is called from GPU kernels, where an error path either fails to
-compile or traps with an unrelated CUDA error. Arguments whose axes are
-genuinely incompatible are rejected on the host by [`foreach_slice`](@ref)
-before any kernel is launched.
 """
-@inline each_slice_index(op::O, args...) where {O} = CartesianIndices(
-    unrolled_reduce(
-        stable_combine_axes,
-        unrolled_map(Base.Fix1(slice_axes, op), args),
-    ),
-)
-
 @inline each_slice_index(::typeof(view), arg) = CartesianIndices(size(arg))
 @inline each_slice_index(::typeof(level), arg) = CartesianIndices((nlevels(arg),))
 @inline each_slice_index(::typeof(slab), arg) =
@@ -124,10 +110,6 @@ before any kernel is launched.
     1 <= index <= length(bc) || Base.throw_boundserror(bc, (index,))
 @inline Base.checkbounds(bc::LazyDataLayout, ::CartesianIndex{0}) = checkbounds(bc, 1)
 
-# Like single-point broadcasts, single-point layouts (e.g. level slices with one
-# level) are identified by their length, since they keep their dimensions.
-@inline is_single_point(data, index) = isone(length(data)) && index == CartesianIndex()
-
 # Avoid unnecessary indexing arithmetic whenever possible. Base's default array
 # access methods use Cartesian-to-linear index conversions, without any constant
 # propagation of array dimensions. Even worse, Base's default SubArray access
@@ -136,40 +118,6 @@ before any kernel is launched.
 # and it uses a linear index to access the parent of a constant-stride SubArray.
 @inline field_offset(array::SubArray, ::Val{F}) where {F} =
     first(parentindices(array)[F]) - 1
-
-@propagate_inbounds function array_and_index_args(data::DataLayout, index::Integer)
-    array = parent(data)
-    is_single_point(data, index) && return (array, ())
-    F = f_dim(data)
-    isnothing(F) && return (array, (CartesianIndices(data)[index], Val(F)))
-    # The strides below are computed from runtime sizes rather than from
-    # inferred_size, so that layouts with dynamic extents (every field has a
-    # dynamic Nh) can use the linear fast paths; LLVM constant-folds the
-    # products whenever the sizes are statically known. Converting the index
-    # with CartesianIndices is only needed when a multi-component layout is
-    # given a linear point index, since its parent cannot be accessed linearly.
-    if is_constant_stride_view_type(typeof(array), Val(F))
-        stride = prod(size(data)[1:(F - 1)])
-        f0 = field_offset(array, Val(F))
-        Nf_parent = size(parent(array), F)
-        h0 = (index - 1) ÷ stride
-        p0 = (index - 1) % stride
-        parent_idx = p0 + f0 * stride + h0 * (stride * Nf_parent) + 1
-        return (parent(array), (parent_idx, stride))
-    elseif IndexStyle(data) == IndexLinear()
-        stride = prod(size(data)[1:(F - 1)])
-        return (array, (index, stride))
-    else
-        return (array, (CartesianIndices(data)[index], Val(F)))
-    end
-end
-
-@propagate_inbounds function array_and_index_args(data::DataLayout, index::CartesianIndex)
-    array = parent(data)
-    is_single_point(data, index) && return (array, ())
-    F = f_dim(data)
-    return (array, (index, Val(F)))
-end
 
 # Constant-folded Cartesian-to-linear index conversion for array of size `dims`.
 # The init value is passed positionally instead of as a keyword argument
@@ -184,42 +132,46 @@ end
     return offset + 1
 end
 
-@propagate_inbounds safe_index(data, index) =
-    IndexStyle(data) == IndexCartesian() && index isa Integer ?
-    CartesianIndices(data)[index] : index
+# Propagate all Cartesian indices that are specified by the user, without any
+# Cartesian-to-linear conversion. Avoid linear-to-Cartesian conversion unless it
+# is necessary, using a single integer division to access any constant-stride
+# parent array. Avoid the need to reshape single-point views, converting empty
+# Cartesian indices into full-rank indices for multidimensional parent arrays.
+@propagate_inbounds function array_and_index_args(data, index)
+    array = parent(data)
+    F = f_dim(data)
+    (index == CartesianIndex() && isone(length(data))) &&
+        return (array, isone(ndims(array)) ? () : (first(CartesianIndices(data)), Val(F)))
+    (index isa CartesianIndex || isnothing(F)) && return (array, (index, Val(F)))
+    IndexStyle(data) == IndexCartesian() &&
+        return (array, (CartesianIndices(data)[index], Val(F)))
+    stride = prod(size(data)[1:(F - 1)])
+    IndexStyle(array) == IndexLinear() && return (array, (index, stride))
+    index_for_dims_after_F, offset_for_dims_before_F = divrem(index - 1, stride)
+    parent_Nf = size(parent(array), F)
+    parent_f = field_offset(array, Val(F))
+    num_strides_in_parent = index_for_dims_after_F * parent_Nf + parent_f
+    parent_index = num_strides_in_parent * stride + offset_for_dims_before_F + 1
+    return (parent(array), (parent_index, stride))
+end
 
 # Always convert to the element type of a DataLayout when modifying its values.
 @propagate_inbounds function Base.setindex!(data::DataLayout, value, index::PointIndex)
-    (array, index_args) = array_and_index_args(data, safe_index(data, index))
+    (array, index_args) = array_and_index_args(data, index)
     return set_struct!(array, convert(eltype(data), value), index_args...)
 end
 
 @propagate_inbounds function Base.getindex(data::DataLayout, index::PointIndex)
-    (array, index_args) = array_and_index_args(data, safe_index(data, index))
+    (array, index_args) = array_and_index_args(data, index)
     return get_struct(array, eltype(data), index_args...)
 end
 
 # Represent every single-point DataLayout view using a zero-dimensional DataF.
-@propagate_inbounds Base.view(data::DataLayout, index::PointIndex) =
-    is_single_point(data, index) ? data :
-    DataF{eltype(data), typeof(DataScope(data))}(
-        view_point_struct(data, safe_index(data, index)),
-    )
-
-@propagate_inbounds view_point_struct(data, index) =
-    view_struct(parent(data), eltype(data), index, Val(f_dim(data)))
-
-# A point view at a linear index is built from the same array and index
-# arguments as getindex and setindex!, so that linearly indexable data gets a
-# strided view of its parent's linear indices (at most one integer division,
-# on constant-stride field views) instead of a linear-to-Cartesian index
-# conversion (one division per dimension); point loops construct a view of
-# every argument at every point, so this conversion would otherwise dominate
-# the index arithmetic of GPU broadcast kernels. Data that requires Cartesian
-# indices is converted by array_and_index_args.
-@propagate_inbounds function view_point_struct(data, index::Integer)
+@propagate_inbounds function Base.view(data::DataLayout, index::PointIndex)
     (array, index_args) = array_and_index_args(data, index)
-    return view_struct(array, eltype(data), index_args...)
+    return DataF{eltype(data), typeof(DataScope(data))}(
+        view_struct(array, eltype(data), index_args...),
+    )
 end
 
 # Use Broadcast.newindex to match the behavior of getindex for LazyDataLayouts.

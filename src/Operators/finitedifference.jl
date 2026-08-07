@@ -3720,25 +3720,13 @@ Base.Broadcast.BroadcastStyle(
 
 Base.eltype(bc::StencilBroadcasted) = return_eltype(bc.op, bc.args...)
 
-function vidx(space::AllFaceFiniteDifferenceSpace, idx)
-    @assert idx isa PlusHalf
-    v = idx + half
-    if Topologies.isperiodic(space)
-        v = mod1(v, Spaces.nlevels(space))
-    end
-    return v
-end
-function vidx(space::AllCenterFiniteDifferenceSpace, idx)
-    @assert idx isa Integer
-    v = idx
-    if Topologies.isperiodic(space)
-        v = mod1(v, Spaces.nlevels(space))
-    end
-    return v
-end
-function vidx(space::AbstractSpace, idx)
-    return 1
-end
+vidx(space::AllFaceFiniteDifferenceSpace, idx::Union{Nothing, PlusHalf}) =
+    isnothing(idx) ? 1 :
+    Topologies.isperiodic(space) ? mod1(idx + half, Spaces.nlevels(space)) : idx + half
+vidx(space::AllCenterFiniteDifferenceSpace, idx::Union{Nothing, Integer}) =
+    isnothing(idx) ? 1 :
+    Topologies.isperiodic(space) ? mod1(idx, Spaces.nlevels(space)) : idx
+vidx(space::AbstractSpace, idx) = 1
 
 # Fields on a column space only have data at a single horizontal index, so the
 # horizontal indices from the broadcast expression do not apply to them.

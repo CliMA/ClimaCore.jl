@@ -14,6 +14,7 @@ import ClimaCore.InputOutput
 import ClimaCore.Utilities: PlusHalf
 import ClimaCore.DataLayouts
 import ClimaCore.DataLayouts: VIJFH
+import ClimaCore.DataLayouts: foreach_point, foreach_level, foreach_slab, foreach_column
 import ClimaCore:
     Fields,
     slab,
@@ -817,20 +818,13 @@ end
     for space in TU.all_spaces(FT)
         TU.levelable(space) || continue
         field = fill((; x = FT(1)), space)
-        level_space = Spaces.level(space, TU.fc_index(1, space))
-        level_data = Spaces.level(Fields.field_values(field), 1)
         level_of_field = Fields.Field(
-            Fields.level_data(level_space, level_data),
-            level_space,
+            Spaces.level(Fields.field_values(field), 1),
+            Spaces.level(space, TU.fc_index(1, space)),
         )
         @test level_of_field == Spaces.level(field, TU.fc_index(1, space))
-        # Compare data instead of Fields, since two PointSpaces constructed by
-        # separate calls to Spaces.level are not identical
-        @test Fields.field_values(level_of_field) == Fields.field_values(
-            Base.materialize(
-                Spaces.level(lazy.(identity.(field)), TU.fc_index(1, space)),
-            ),
-        )
+        @test level_of_field ==
+              Base.materialize(Spaces.level(lazy.(identity.(field)), TU.fc_index(1, space)))
     end
 end
 
@@ -877,20 +871,13 @@ end
         if space isa Union{TwoColumnIndexSpace, ThreeColumnIndexSpace}
             field = fill((; x = FT(1)), space)
             indices = space isa TwoColumnIndexSpace ? (1, 1) : (1, 1, 1)
-            column_space = Spaces.column(space, indices...)
-            column_data = Spaces.column(Fields.field_values(field), indices...)
             column_of_field = Fields.Field(
-                Fields.level_data(column_space, column_data),
-                column_space,
+                Spaces.column(Fields.field_values(field), indices...),
+                Spaces.column(space, indices...),
             )
             @test column_of_field == Spaces.column(field, indices...)
-            # Compare data instead of Fields, since two PointSpaces constructed
-            # by separate calls to Spaces.column are not identical
-            @test Fields.field_values(column_of_field) == Fields.field_values(
-                Base.materialize(
-                    Spaces.column(lazy.(identity.(field)), indices...),
-                ),
-            )
+            @test column_of_field ==
+                  Base.materialize(Spaces.column(lazy.(identity.(field)), indices...))
         end
     end
 end
@@ -1476,6 +1463,86 @@ end
         flat_field = Fields.array2field(flat_array, space)
         @test Array(Fields.field2array(flat_field)) ==
               reshape(Array(flat_array), array_size)
+    end
+end
+
+# A subspace argument nested inside an inner broadcast must switch the whole
+# expression to Cartesian indexing; the inner broadcast's own merged shape
+# would otherwise hide the subspace, and unprojected linear indices would read
+# it out of range (a BoundsError with bounds checks, wrong values without).
+@testset "broadcasts over nested subspace arguments" begin
+    FT = Float64
+    context = ClimaComms.context(ClimaComms.device())
+    for space in (
+        TU.PointColumnEnsembleSpace(FT; context),
+        TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
+    )
+        for subspace in (Spaces.level(space, 1), Spaces.column(space, 1, 1, 1))
+            src1 = Fields.Field(Tuple{FT, FT}, space)
+            src2 = Fields.Field(Tuple{FT, FT}, subspace)
+            parent(src1) .= rand.(FT)
+            parent(src2) .= FT(1) # constant, so a same-space reference exists
+            @test (@. sum(src1 + src2)) ≈ (@. sum(src1) + 2)
+            @test (@. sum((sin(src1) + cos(src2))^2) / 2) ≈
+                  (@. ((sin(src1.:1) + cos(FT(1)))^2 + (sin(src1.:2) + cos(FT(1)))^2) / 2)
+        end
+    end
+end
+
+function test_fused_loop(foreach_slice, space, subspace)
+    FT = Spaces.undertype(space)
+    dest = Fields.Field(FT, space)
+    src1 = Fields.Field(Tuple{FT, FT}, space)
+    src2 = Fields.Field(Tuple{FT, FT}, subspace)
+    parent(src1) .= rand.(FT)
+    parent(src2) .= rand.(FT)
+
+    function fused_loop!(dest, src1, src2)
+        @. dest = 0
+        temp1 = @. sin(src1.:1) + cos(src2.:1)
+        @. dest += temp1 * temp1
+        temp2 = @. sin(src1.:2) + cos(src2.:2)
+        @. dest += temp2 * temp2
+        @. dest /= 2
+    end
+
+    foreach_slice(fused_loop!, dest, src1, src2)
+    @test dest ≈ @. sum((sin(src1) + cos(src2))^2) / 2
+
+    CUDA_FRAMES = @isdefined(CUDA) ? (AnyFrameModule(CUDA),) : ()
+    @test_opt ignored_modules = CUDA_FRAMES foreach_slice(fused_loop!, dest, src1, src2)
+end
+
+@testset "foreach_slice pointwise broadcast fusion" begin
+    context = ClimaComms.context(ClimaComms.device())
+
+    for space1 in TU.all_spaces(Float64; context)
+        test_fused_loop(foreach_point, space1, space1)
+        test_fused_loop(foreach_level, space1, space1)
+        test_fused_loop(foreach_slab, space1, space1)
+        test_fused_loop(foreach_column, space1, space1)
+
+        space2 = Spaces.level(space1, 1)
+        if space1 !== space2
+            @test_throws DimensionMismatch test_fused_loop(foreach_point, space1, space2)
+            @test_throws DimensionMismatch test_fused_loop(foreach_level, space1, space2)
+            @test_throws DimensionMismatch test_fused_loop(foreach_slab, space1, space2)
+
+            test_fused_loop(foreach_column, space1, space2)
+        end
+
+        space3 = Spaces.column(space1, 1, 1, 1)
+        if space1 !== space3
+            @test_throws DimensionMismatch test_fused_loop(foreach_point, space1, space3)
+            @test_throws DimensionMismatch test_fused_loop(foreach_column, space1, space3)
+
+            test_fused_loop(foreach_level, space1, space3)
+            if DataLayouts.nelems(Spaces.local_geometry_data(space1)) == 1
+                test_fused_loop(foreach_slab, space1, space3)
+            else
+                @test_throws DimensionMismatch test_fused_loop(foreach_slab, space1, space3)
+            end
+        end
     end
 end
 

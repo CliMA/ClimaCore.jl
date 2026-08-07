@@ -4,6 +4,13 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.15.1
+-------
+
+- Extend kernel fusion interface (`foreach_slice`/`reduce_points`) to `Field`
+  arguments. [2571](https://github.com/CliMA/ClimaCore.jl/pull/2571)
+- Add `PointCloudSpace` and `MultiColumnFiniteDifferenceSpace` for running independent
+  points/columns in parallel. [2525](https://github.com/CliMA/ClimaCore.jl/pull/2525)
 
 v0.15.0
 -------

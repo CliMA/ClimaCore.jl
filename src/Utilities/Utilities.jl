@@ -114,7 +114,7 @@ julia> parent(stable_view(array, 4:6))
 ```
 """
 Base.@propagate_inbounds function stable_view(array::AbstractArray, indices...)
-    if indices isa Tuple{Union{Integer, AbstractRange{<:Integer}}} &&
+    if indices isa Tuple{Union{Integer, AbstractRange{<:Integer}, Colon}} &&
        ndims(array) != 1
         array isa Base.ReshapedArray &&
             return stable_view(parent(array), first(indices))
