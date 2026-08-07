@@ -116,7 +116,11 @@ Base.Broadcast.broadcasted(
 # `modifies_input` decide where: `modifies_output` conditions are applied to the
 # result (after the multiply), while `modifies_input` conditions are applied to
 # the argument (before the multiply). A condition that is linear (e.g. Extrapolate)
-# is encoded directly in the matrix and is neither.
+# is encoded directly in the matrix and is neither. (For advection and derivative
+# operators this widens every matrix row by one diagonal on each side -- see
+# `extrapolate_row_type` -- but reapplying the condition to the result with a
+# SetBoundaryOperator instead benchmarked slower on GPU, because the boundary
+# levels then recompute the multiply through the lazy `getidx` path.)
 #
 # For nearly every operator such a boundary condition prescribes the operator's
 # *output* at the boundary, so it modifies the output. Examples:
@@ -635,18 +639,10 @@ end
 ################################################################################
 
 # Additional aliases for CenterToFace or FaceToCenter matrix rows
-const LowerEmptyMatrixRow = BandMatrixRow{-1 + half, 0}
-const UpperEmptyMatrixRow = BandMatrixRow{half, 0}
 const LowerDiagonalMatrixRow = BandMatrixRow{-1 + half, 1}    # -0.5
 const UpperDiagonalMatrixRow = BandMatrixRow{half, 1}         #  0.5
-const LowerBidiagonalMatrixRow = BandMatrixRow{-2 + half, 2}  # -1.5, -0.5
-const UpperBidiagonalMatrixRow = BandMatrixRow{half, 2}       #  0.5,  1.5
 const LowerTridiagonalMatrixRow = BandMatrixRow{-2 + half, 3} # -1.5, -0.5, 0.5
 const UpperTridiagonalMatrixRow = BandMatrixRow{-1 + half, 3} # -0.5,  0.5, 1.5
-
-# Additional aliases for Square matrix rows
-const LowerBidiagonalSquareMatrixRow = BandMatrixRow{-1, 2} # -1, 0
-const UpperBidiagonalSquareMatrixRow = BandMatrixRow{0, 2}  #  0, 1
 
 const C3{T} = Geometry.Covariant3Vector{T}
 const CT3{T} = Geometry.Contravariant3Vector{T}
@@ -677,20 +673,82 @@ Base.@propagate_inbounds ct3_data(velocity, space, idx, hidx) =
 
 ################################################################################
 
-op_matrix_interior_row(
-    ::Union{Operators.InterpolateC2F, Operators.InterpolateF2C},
-    ::Type{FT},
-) where {FT} = BidiagonalMatrixRow(FT(1), FT(1)) / 2
+# Boundary rows for the Extrapolate boundary condition. Extrapolate has two
+# distinct meanings, depending on the operator:
+#
+#  - Copy the nearest input (interpolation operators): the output at the
+#    boundary face is the input's value at the closest interior point, so the
+#    boundary row is an identity entry pointing at that point. Such a row fits
+#    inside the interior row's band, so the operator's row type is unchanged.
+#
+#  - Replicate the nearest interior output (advection and derivative
+#    operators): the output at the boundary replicates the operator's output at
+#    the closest interior point, so the boundary row is the interior row
+#    evaluated at `idx ± 1`, with its band offsets shifted by `±1` to make them
+#    relative to `idx`. The `convert` in `stencil_left_boundary` /
+#    `stencil_right_boundary` zero-pads the shifted row to the operator's full
+#    row type, which must be one diagonal wider on each side than the interior
+#    row (see `extrapolate_row_type`); the multiply clips band entries that lie
+#    outside the column.
+const CopyInputExtrapolateOp =
+    Union{Operators.InterpolateC2F, Operators.WeightedInterpolateC2F}
+const ReplicateOutputExtrapolateOp = Union{
+    Operators.UpwindBiasedProductC2F,
+    Operators.GradientF2C,
+    Operators.DivergenceF2C,
+}
+
 op_matrix_first_row(
-    ::Operators.InterpolateC2F,
+    ::CopyInputExtrapolateOp,
     ::Operators.Extrapolate,
     ::Type{FT},
 ) where {FT} = UpperDiagonalMatrixRow(FT(1))
 op_matrix_last_row(
-    ::Operators.InterpolateC2F,
+    ::CopyInputExtrapolateOp,
     ::Operators.Extrapolate,
     ::Type{FT},
 ) where {FT} = LowerDiagonalMatrixRow(FT(1))
+
+# Reinterprets a row computed at `idx - shift` as a row at `idx` by shifting
+# its band offsets. The offsets are type-level constants, so the shift happens
+# at compile time.
+shift_row_band(row::BandMatrixRow{ld}, ::Val{shift}) where {ld, shift} =
+    BandMatrixRow{ld + shift}(row.entries...)
+
+Base.@propagate_inbounds op_matrix_first_row(
+    op::ReplicateOutputExtrapolateOp,
+    ::Operators.Extrapolate,
+    space,
+    idx,
+    hidx,
+    args...,
+) = shift_row_band(
+    op_matrix_interior_row(op, space, idx + 1, hidx, args...),
+    Val(1),
+)
+Base.@propagate_inbounds op_matrix_last_row(
+    op::ReplicateOutputExtrapolateOp,
+    ::Operators.Extrapolate,
+    space,
+    idx,
+    hidx,
+    args...,
+) = shift_row_band(
+    op_matrix_interior_row(op, space, idx - 1, hidx, args...),
+    Val(-1),
+)
+
+widen_row_type(::Type{BandMatrixRow{ld, bw, T}}) where {ld, bw, T} =
+    BandMatrixRow{ld - 1, bw + 2, T}
+extrapolate_row_type(op, ::Type{Row}) where {Row <: BandMatrixRow} =
+    uses_extrapolate(op) ? widen_row_type(Row) : Row
+
+################################################################################
+
+op_matrix_interior_row(
+    ::Union{Operators.InterpolateC2F, Operators.InterpolateF2C},
+    ::Type{FT},
+) where {FT} = BidiagonalMatrixRow(FT(1), FT(1)) / 2
 
 op_matrix_interior_row(
     ::Union{Operators.LeftBiasedC2F, Operators.LeftBiasedF2C},
@@ -719,24 +777,12 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     denominator = w⁻ + w⁺
     return BidiagonalMatrixRow(w⁻ / denominator, w⁺ / denominator)
 end
-op_matrix_first_row(
-    ::Operators.WeightedInterpolateC2F,
-    ::Operators.Extrapolate,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(FT(1))
-op_matrix_last_row(
-    ::Operators.WeightedInterpolateC2F,
-    ::Operators.Extrapolate,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(FT(1))
 
 op_matrix_row_type(
     op::Operators.UpwindBiasedProductC2F,
     ::Type{FT},
     _,
-) where {FT} =
-    uses_extrapolate(op) ? QuaddiagonalMatrixRow{CT3{FT}} :
-    BidiagonalMatrixRow{CT3{FT}}
+) where {FT} = extrapolate_row_type(op, BidiagonalMatrixRow{CT3{FT}})
 Base.@propagate_inbounds function op_matrix_interior_row(
     ::Operators.UpwindBiasedProductC2F,
     space,
@@ -747,30 +793,6 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     v³ = CT3(ct3_data(velocity, space, idx, hidx))
     av³ = CT3(abs(v³.u³))
     return BidiagonalMatrixRow(v³ + av³, v³ - av³) / 2
-end
-Base.@propagate_inbounds function op_matrix_first_row(
-    ::Operators.UpwindBiasedProductC2F,
-    ::Operators.Extrapolate,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    v³ = CT3(ct3_data(velocity, space, idx + 1, hidx))
-    av³ = CT3(abs(v³.u³))
-    return UpperBidiagonalMatrixRow(v³ + av³, v³ - av³) / 2
-end
-Base.@propagate_inbounds function op_matrix_last_row(
-    ::Operators.UpwindBiasedProductC2F,
-    ::Operators.Extrapolate,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    v³ = CT3(ct3_data(velocity, space, idx - 1, hidx))
-    av³ = CT3(abs(v³.u³))
-    return LowerBidiagonalMatrixRow(v³ + av³, v³ - av³) / 2
 end
 
 op_matrix_row_type(
@@ -844,8 +866,7 @@ op_matrix_interior_row(::Operators.SetBoundaryOperator, ::Type{FT}) where {FT} =
     DiagonalMatrixRow(FT(1))
 
 op_matrix_row_type(op::Operators.GradientOperator, ::Type{FT}) where {FT} =
-    uses_extrapolate(op) ? QuaddiagonalMatrixRow{C3{FT}} :
-    BidiagonalMatrixRow{C3{FT}}
+    extrapolate_row_type(op, BidiagonalMatrixRow{C3{FT}})
 op_matrix_interior_row(::Operators.GradientOperator, ::Type{FT}) where {FT} =
     BidiagonalMatrixRow(-C3(FT(1)), C3(FT(1)))
 op_matrix_first_row(
@@ -858,20 +879,9 @@ op_matrix_last_row(
     ::Operators.SetValue,
     ::Type{FT},
 ) where {FT} = BidiagonalMatrixRow(-C3(FT(1)), C3(FT(0)))
-op_matrix_first_row(
-    ::Operators.GradientF2C,
-    ::Operators.Extrapolate,
-    ::Type{FT},
-) where {FT} = UpperTridiagonalMatrixRow(C3(FT(0)), -C3(FT(1)), C3(FT(1)))
-op_matrix_last_row(
-    ::Operators.GradientF2C,
-    ::Operators.Extrapolate,
-    ::Type{FT},
-) where {FT} = LowerTridiagonalMatrixRow(-C3(FT(1)), C3(FT(1)), C3(FT(0)))
 
 op_matrix_row_type(op::Operators.DivergenceOperator, ::Type{FT}) where {FT} =
-    uses_extrapolate(op) ? QuaddiagonalMatrixRow{C3Cov{FT}} :
-    BidiagonalMatrixRow{C3Cov{FT}}
+    extrapolate_row_type(op, BidiagonalMatrixRow{C3Cov{FT}})
 Base.@propagate_inbounds function op_matrix_interior_row(
     ::Operators.DivergenceOperator,
     space,
@@ -882,32 +892,6 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     J⁻ = Geometry.LocalGeometry(space, idx - half, hidx).J
     J⁺ = Geometry.LocalGeometry(space, idx + half, hidx).J
     return BidiagonalMatrixRow(-C3(J⁻)', C3(J⁺)') * invJ
-end
-Base.@propagate_inbounds function op_matrix_first_row(
-    ::Operators.DivergenceF2C,
-    ::Operators.Extrapolate,
-    space,
-    idx,
-    hidx,
-)
-    FT = Spaces.undertype(space)
-    invJ = Geometry.LocalGeometry(space, idx + 1, hidx).invJ
-    J⁻ = Geometry.LocalGeometry(space, idx + 1 - half, hidx).J
-    J⁺ = Geometry.LocalGeometry(space, idx + 1 + half, hidx).J
-    return UpperTridiagonalMatrixRow(C3(FT(0))', -C3(J⁻)', C3(J⁺)') * invJ
-end
-Base.@propagate_inbounds function op_matrix_last_row(
-    ::Operators.DivergenceF2C,
-    ::Operators.Extrapolate,
-    space,
-    idx,
-    hidx,
-)
-    FT = Spaces.undertype(space)
-    invJ = Geometry.LocalGeometry(space, idx - 1, hidx).invJ
-    J⁻ = Geometry.LocalGeometry(space, idx - 1 - half, hidx).J
-    J⁺ = Geometry.LocalGeometry(space, idx - 1 + half, hidx).J
-    return LowerTridiagonalMatrixRow(-C3(J⁻)', C3(J⁺)', C3(FT(0))') * invJ
 end
 Base.@propagate_inbounds function op_matrix_first_row(
     ::Operators.DivergenceF2C,

@@ -768,58 +768,11 @@ Base.@propagate_inbounds function stencil_interior(
 end
 
 boundary_width(::WeightedInterpolateC2F, ::AbstractBoundaryCondition) = 1
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::WeightedInterpolateC2F,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    weight,
-    arg,
-)
-    @assert idx == left_face_boundary_idx(space)
-    getidx(space, bc.val, nothing, hidx)
-end
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::WeightedInterpolateC2F,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    weight,
-    arg,
-)
-    @assert idx == right_face_boundary_idx(space)
-    getidx(space, bc.val, nothing, hidx)
-end
-
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::WeightedInterpolateC2F,
-    bc::Extrapolate,
-    space,
-    idx,
-    hidx,
-    weight,
-    arg,
-)
-    @assert idx == left_face_boundary_idx(space)
-    a⁺ = getidx(space, arg, idx + half, hidx)
-    a⁺
-end
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::WeightedInterpolateC2F,
-    bc::Extrapolate,
-    space,
-    idx,
-    hidx,
-    weight,
-    arg,
-)
-    @assert idx == right_face_boundary_idx(space)
-    a⁻ = getidx(space, arg, idx - half, hidx)
-    a⁻
-end
-
+# WeightedInterpolateC2F has no stencil_left_boundary/stencil_right_boundary methods:
+# every broadcast over it is rewritten as an operator matrix multiply when it is
+# instantiated, so its boundary values come from the operator matrix (for Extrapolate)
+# or from a SetBoundaryOperator applied to the result (for SetValue); see
+# MatrixFields/operator_matrices.jl.
 
 abstract type AdvectionOperator <: FiniteDifferenceOperator end
 return_eltype(::AdvectionOperator, velocity, arg) = eltype(arg)
