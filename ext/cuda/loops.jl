@@ -48,23 +48,63 @@ function DataLayouts.reduce_points(::ThisHost, op::O, arg; kwargs...) where {O}
     check_device_assumptions()
 
     kernel_kwargs = values(kwargs)
-    function kernel_function(results, arg)
+    function kernel_function(results, finished_blocks, arg, num_blocks)
         result = DataLayouts.reduce_points(ThisBlock(), op, arg; kernel_kwargs...)
+        
+        block_idx = DataLayouts.partition_rank(ThisKernel())
         if is_first_thread_in(ThisBlock())
-            @inbounds results[DataLayouts.partition_rank(ThisKernel())] = result
+            @inbounds results[block_idx] = result
+        end
+        
+        # Ensure all writes to `results` are globally visible
+        CUDA.threadfence()
+        
+        # Determine if this is the last block
+        is_last = DataLayouts.scoped_static_array(ThisBlock(), Bool, 1)
+        if is_first_thread_in(ThisBlock())
+            old = CUDA.atomic_add!(pointer(finished_blocks, 1), Int32(1))
+            @inbounds is_last[1] = (old == (num_blocks - 1))
+        end
+        DataLayouts.synchronize(ThisBlock())
+        
+        if @inbounds is_last[1]
+            warp_idx = DataLayouts.subscope_rank(ThisWarp(), ThisBlock())
+            if isone(warp_idx)
+                lane_idx = DataLayouts.thread_rank(ThisWarp())
+                num_lanes = THREADS_PER_WARP
+                
+                if lane_idx <= num_blocks
+                    local_val = @inbounds results[lane_idx]
+                    i = lane_idx + num_lanes
+                    while i <= num_blocks
+                        local_val = op(local_val, @inbounds results[i])
+                        i += num_lanes
+                    end
+                    
+                    num_active = min(num_blocks, num_lanes)
+                    final_val = shuffle_reduce(ThisWarp(), op, local_val, num_active)
+                    
+                    if is_first_thread_in(ThisWarp())
+                        @inbounds results[1] = final_val
+                    end
+                end
+            end
         end
         return nothing
     end
 
     T = return_type(op, NTuple{2, eltype(arg)})
     results = DataLayouts.scoped_array(ThisHost(), T, 0; buffer = true)
-    (; threads, blocks) = launch_configuration(kernel_function, (results, arg), length(arg))
+    
+    # We must call auto_launch! with 0 blocks first to get launch_configuration
+    (; threads, blocks) = launch_configuration(kernel_function, (results, CUDA.zeros(Int32, 1), arg, 1), length(arg))
+    
     results = DataLayouts.scoped_array(ThisHost(), T, blocks; buffer = true)
-    auto_launch!(kernel_function, (results, arg); threads_s = threads, blocks_s = blocks)
-    if !isone(blocks)
-        (; threads) = launch_configuration(kernel_function, (results, results), blocks, 1)
-        auto_launch!(kernel_function, (results, results); threads_s = threads, blocks_s = 1)
-    end
+    finished_blocks = DataLayouts.scoped_array(ThisHost(), Int32, 1; buffer = true)
+    CUDA.fill!(finished_blocks, Int32(0))
+    
+    auto_launch!(kernel_function, (results, finished_blocks, arg, Int32(blocks)); threads_s = threads, blocks_s = blocks)
+    
     return CUDA.@allowscalar @inbounds results[1]
 end
 
