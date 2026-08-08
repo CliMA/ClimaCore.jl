@@ -974,7 +974,6 @@ steps:
         key: gpu_compat_bidiag_matrix_row
         retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/MatrixFields/gpu_compat_bidiag_matrix_row.jl"
-        soft_fail: true
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:

@@ -15,6 +15,7 @@ Utilities.return_type
 Utilities.unsafe_eltype
 Utilities.safe_eltype
 Utilities.safe_mapreduce
+Utilities.ConvertTo
 ```
 
 ## Utilities.PlusHalf

@@ -5,6 +5,28 @@ using UnrolledUtilities
 import ForwardDiff
 import InteractiveUtils
 
+"""
+    ConvertTo{T}()
+
+A GPU-compatible callable that converts its argument to type `T`, equivalent to
+`Base.Fix1(convert, T)` but `isbitstype`. `Base.Fix1` stores a `Type{T}` field,
+which is not `isbits`, so it cannot be captured by GPU kernels. `ConvertTo{T}`
+is an empty struct and is always `isbits`, making it safe to use in broadcast
+expressions that run on the GPU.
+
+# Examples
+
+```julia
+julia> isbitstype(typeof(ConvertTo{Float32}()))
+true
+
+julia> isbitstype(typeof(Base.Fix1(convert, Float32))) # cannot enter a kernel
+false
+```
+"""
+struct ConvertTo{T} end
+@inline (::ConvertTo{T})(x) where {T} = convert(T, x)
+
 include("plushalf.jl")
 include("auto_broadcaster.jl")
 include("cache.jl")
