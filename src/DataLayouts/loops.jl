@@ -27,16 +27,19 @@ end
 @inline each_maskable_slice_index(_, mask::IJHMask, ::typeof(column), args...) =
     ActiveColumnIndices(mask)
 @inline each_maskable_slice_index(_, mask::IJHMask, ::typeof(view), args...) =
-    ActivePointIndices(mask, size(first(args), 1))
+    ActivePointIndices{size(first(args), 1)}(mask)
 
 # Every valid mask and slice operator combination has indexable slice indices:
 # NoMask uses the full index ranges, and IJHMask (which only supports column
 # and view slices) uses compacted active indices, so no combination requires
 # filtering the indices with a per-slice mask lookup.
-@noinline throw_invalid_slice_mask() = throw(ArgumentError("Invalid slice mask"))
+@noinline throw_invalid_slice_mask(mask, op::O) where {O} =
+    throw(ArgumentError(invalid_mask_string(mask, op)))
+@generated invalid_mask_string(::M, ::O) where {M, O} =
+    "$M cannot be applied to $(O.instance) slices"
 
 @inline function subscope_slice_indices(subscope, scope, mask, op::O, args...) where {O}
-    is_valid_slice_mask(mask, op) || throw_invalid_slice_mask()
+    is_valid_slice_mask(mask, op) || throw_invalid_slice_mask(mask, op)
     full_scope_indices = each_maskable_slice_index(scope, mask, op, args...)
     return @inbounds subscope_indices(subscope, scope, full_scope_indices)
 end
@@ -198,7 +201,7 @@ end
 @inline projected_index(::Tuple{}, index::Tuple) = index
 @inline projected_index(::Tuple{}, ::Tuple{}) = ()
 
-@inline slice_arg(op::O, subscope, index, arg) where {O} =
+@inline slice_arg((op, subscope, index)::Tuple, arg) =
     @inbounds reassign(
         op(
             arg,
@@ -207,29 +210,9 @@ end
         subscope,
     )
 
-@inline slice_args(op::O, subscope, index, ::Tuple{}) where {O} = ()
-@inline slice_args(op::O, subscope, index, args::Tuple{Any}) where {O} =
-    (slice_arg(op, subscope, index, args[1]),)
-@inline slice_args(op::O, subscope, index, args::Tuple{Any, Any}) where {O} = (
-    slice_arg(op, subscope, index, args[1]),
-    slice_arg(op, subscope, index, args[2]),
-)
-@inline slice_args(op::O, subscope, index, args::Tuple{Any, Any, Any}) where {O} = (
-    slice_arg(op, subscope, index, args[1]),
-    slice_arg(op, subscope, index, args[2]),
-    slice_arg(op, subscope, index, args[3]),
-)
-@inline slice_args(op::O, subscope, index, args::Tuple) where {O} = (
-    slice_arg(op, subscope, index, first(args)),
-    slice_args(op, subscope, index, Base.tail(args))...,
-)
-
-@inline call_f(f::F, (a1,)::Tuple{Any}) where {F} = f(a1)
-@inline call_f(f::F, (a1, a2)::Tuple{Any, Any}) where {F} = f(a1, a2)
-@inline call_f(f::F, (a1, a2, a3)::Tuple{Any, Any, Any}) where {F} = f(a1, a2, a3)
-@inline call_f(f::F, (a1, a2, a3, a4)::Tuple{Any, Any, Any, Any}) where {F} =
-    f(a1, a2, a3, a4)
-@inline call_f(f::F, slices::Tuple) where {F} = f(slices...)
+@inline slice_args(state, ::Tuple{}) = ()
+@inline slice_args(state, args::Tuple) =
+    (slice_arg(state, first(args)), slice_args(state, Base.tail(args))...)
 
 @inline function slice_loop(scope, op::O, f::F, mask, args...) where {O, F}
     subscope = slice_subscope(scope, op, args...)
@@ -237,8 +220,8 @@ end
     N_indices = length(indices)
     @simd_if (op == view && simd_over_indices(indices)) for i in 1:N_indices
         index = @inbounds indices[i]
-        slices = slice_args(op, subscope, index, args)
-        @inline call_f(f, slices)
+        slices = slice_args((op, subscope, index), args)
+        @inline f(slices...)
     end
 end
 
@@ -357,6 +340,10 @@ end
 # and masked reductions (whose active points may not cover every thread) are
 # documented to require an init value. Masked indices are equivalent to what
 # the slice index machinery uses for single-point views.
+# The two branches are not equivalent: eachindex gives unmasked reductions
+# linear indices whenever the argument supports them, which CPU reductions
+# vectorize an order of magnitude better than the Cartesian indices that the
+# slice index machinery produces on host scopes.
 @inline reduce_points(::ThisThread, op::O, arg; mask, init...) where {O} =
     if mask == NoMask()
         indices = @inbounds subscope_indices(ThisThread(), DataScope(arg), eachindex(arg))
@@ -376,35 +363,9 @@ right-associative, and `init` seeds the fold when it is given.
 """
 @inline column_reduce!(op::O, dest, arg; mask = NoMask(), flip = false, init...) where {O} =
     foreach_column(dest, arg; mask) do dest_column, arg_column
-        value = column_fold(op, arg_column, flip, values(init))
-        Nv_dest = nlevels(dest_column)
-        v = 1
-        while v <= Nv_dest
-            @inbounds dest_column[v] = value
-            v += 1
-        end
+        maybe_reverse = flip ? reverse : identity
+        fill!(dest_column, reduce(op, maybe_reverse(arg_column); init...))
     end
-
-# Left fold over the levels of a column (right fold when flipped), seeded by
-# the init value when one is given and by the first reduced level otherwise.
-# Written as a plain while loop, rather than as a call to reduce over the
-# column slice, so that it compiles in GPU kernels, where each column is
-# reduced by a single thread.
-@inline function column_fold(op::O, column, flip, init::NamedTuple) where {O}
-    Nv = nlevels(column)
-    step = flip ? -1 : 1
-    (value, v) = if init isa NamedTuple{()}
-        v_first = flip ? Nv : 1
-        ((@inbounds column[v_first]), v_first + step)
-    else
-        (init.init, flip ? Nv : 1)
-    end
-    while 1 <= v <= Nv
-        value = op(value, @inbounds column[v])
-        v += step
-    end
-    return value
-end
 # TODO: Extend this to column_accumulate!, column_stencil!, and slab_convolve!
 
 # Convert the value before the fill! loop. Even though setindex! converts at
@@ -490,11 +451,8 @@ end
 # Add axes to LazyDataLayouts and AutoBroadcaster wrappers to DataLayouts before
 # reducing them. Remove all AutoBroadcaster wrappers after obtaining the result.
 @inline function Base.reduce(op::O, arg::MaybeLazyDataLayout; kwargs...) where {O}
-    result = if arg isa LazyDataLayout
-        drop_auto_broadcasters(reduce_points(op, Broadcast.instantiate(arg); kwargs...))
-    else
-        drop_auto_broadcasters(reduce_points(op, Broadcast.broadcastable(arg); kwargs...))
-    end
+    reducible = arg isa LazyDataLayout ? Broadcast.instantiate : Broadcast.broadcastable
+    result = drop_auto_broadcasters(reduce_points(op, reducible(arg); kwargs...))
     call_post_op_callback() && post_op_callback(result, op, arg; kwargs...)
     return result
 end

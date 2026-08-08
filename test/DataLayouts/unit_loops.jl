@@ -127,8 +127,7 @@ end
 
     # Singleton dimensions inside broadcast expressions expand like Base's.
     dest .= volume .+ surface
-    @test parent(dest) ==
-          device_array(device, Array(parent(volume)) .+ Array(parent(surface)))
+    @test parent(dest) == parent(volume) .+ parent(surface)
 
     # Singleton and 0-dimensional layouts may also be top-level loop arguments.
     fill!(parent(dest), 0)
@@ -139,17 +138,17 @@ end
         surface,
         point,
     )
-    reference =
-        Array(parent(volume)) .+ Array(parent(surface)) .+ Array(parent(point))[]
-    @test parent(dest) == device_array(device, reference)
+    @test parent(dest) == parent(volume) .+ parent(surface) .+ parent(point)
 
     # Reductions over expressions with mixed shapes require Cartesian indices,
     # which Broadcast.newindex projects onto singleton dimensions; expressions
     # whose layouts all share a shape permit linear indices.
     mixed_bc = Base.broadcasted(+, volume, surface)
     @test Base.IndexStyle(mixed_bc) == IndexCartesian()
-    @test sum(identity, mixed_bc) ==
-          sum(Array(parent(volume)) .+ Array(parent(surface)))
+    @test parent(Base.materialize(mixed_bc)) == parent(volume) .+ parent(surface)
+    # The sum is checked as well, since reductions iterate lazy expressions
+    # directly, without materializing them first.
+    @test sum(identity, mixed_bc) == sum(parent(volume) .+ parent(surface))
     @test Base.IndexStyle(Base.broadcasted(+, volume, volume)) == IndexLinear()
 
     # Genuinely mismatched extents throw before any kernel is launched.

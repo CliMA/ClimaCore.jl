@@ -144,7 +144,9 @@ steps:
         retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/cuda.jl CUDA"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/cuda.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:

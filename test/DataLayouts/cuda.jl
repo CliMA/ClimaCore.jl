@@ -1,4 +1,3 @@
-ENV["CLIMACOMMS_DEVICE"] = "CUDA"
 using Test
 import ClimaComms
 using CUDA
@@ -10,7 +9,7 @@ ClimaComms.@import_required_backends
 # Cross-check every launch configuration computed by this test against CUDA's
 # occupancy API. The check is disabled by default so that a tie-breaking
 # difference on an untested device degrades performance instead of crashing.
-Base.get_extension(ClimaCore, :ClimaCoreCUDAExt).VALIDATE_LAUNCH_CONFIGURATIONS[] = true
+ClimaCore.DataLayouts.VALIDATE_LAUNCH_CONFIGURATIONS[] = true
 
 function knl_copy!(dest, src)
     i = CUDA.threadIdx().x

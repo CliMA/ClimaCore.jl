@@ -7,22 +7,19 @@ const PointIndex = Union{Integer, CartesianIndex}
 # accessors read consecutive parent fields; a StepRange there would silently
 # read the wrong entries.
 @inline is_constant_stride_view_type(::Type{A}, ::Val{F}) where {A, F} = false
-@generated function is_constant_stride_view_type(
+@inline function is_constant_stride_view_type(
     ::Type{<:SubArray{<:Any, <:Any, P, I}},
     ::Val{F},
 ) where {P, I, F}
-    isnothing(F) && return :(false)
-    Base.IndexStyle(P) == Base.IndexLinear() || return :(false)
-    params = I.parameters
-    (1 <= F <= length(params)) || return :(false)
-    params[F] <: AbstractUnitRange || return :(false)
-    for i in 1:(F - 1)
-        params[i] <: Base.Slice || return :(false)
-    end
-    for i in (F + 1):length(params)
-        params[i] <: Base.Slice || return :(false)
-    end
-    return :(true)
+    isnothing(F) && return false
+    Base.IndexStyle(P) == Base.IndexLinear() || return false
+    params = fieldtypes(I)
+    (1 <= F <= length(params)) || return false
+    params[F] <: AbstractUnitRange || return false
+    return unrolled_all(
+        ((i, param),) -> i == F || param <: Base.Slice,
+        unrolled_map(tuple, ntuple(identity, Val(length(params))), params),
+    )
 end
 
 # Allow linear indexing if parent(data)[1:length(data)] has one value per point.
@@ -234,70 +231,24 @@ end
     view(arg, CartesianIndex(indices...))
 
 # Reduce latency by only constructing slice views when necessary.
-@propagate_inbounds function level(arg::VIJHWithF{<:Any, 1}, v)
+@propagate_inbounds function level(arg::IndexableData, v)
+    (; Nv) = vijh_params(arg)
+    Nv == 1 || return level_view(arg, v)
     @boundscheck v == 1 || throw(ArgumentError("DataLayout has only one level"))
     return arg
 end
-@propagate_inbounds level(arg::VIJHWithF, v) = level_view(arg, v)
-
-@propagate_inbounds function slab(arg::VIJHWithF{<:Any, 1, <:Any, <:Any, 1}, v, h)
+@propagate_inbounds function slab(arg::IndexableData, v, h)
+    (; Nv, Nh) = vijh_params(arg)
+    Nv == Nh == 1 || return slab_view(arg, v, h)
     @boundscheck v == h == 1 || throw(ArgumentError("DataLayout has only one slab"))
     return arg
 end
-@propagate_inbounds slab(arg::VIJHWithF, v, h) = slab_view(arg, v, h)
-
-@propagate_inbounds function column(arg::VIJHWithF{<:Any, <:Any, 1, 1, 1}, i, j, h)
+@propagate_inbounds function column(arg::IndexableData, i, j, h)
+    (; Ni, Nj, Nh) = vijh_params(arg)
+    Ni == Nj == Nh == 1 || return column_view(arg, i, j, h)
     @boundscheck i == j == h == 1 || throw(ArgumentError("DataLayout has only one column"))
     return arg
 end
-@propagate_inbounds column(arg::VIJHWithF, i, j, h) = column_view(arg, i, j, h)
-
-@propagate_inbounds function level(arg::DataF, v)
-    @boundscheck v == 1 || throw(ArgumentError("DataLayout has only one level"))
-    return arg
-end
-@propagate_inbounds function slab(arg::DataF, v, h)
-    @boundscheck v == h == 1 || throw(ArgumentError("DataLayout has only one slab"))
-    return arg
-end
-@propagate_inbounds function column(arg::DataF, i, j, h)
-    @boundscheck i == j == h == 1 || throw(ArgumentError("DataLayout has only one column"))
-    return arg
-end
-
-@propagate_inbounds function level(arg::VIH1{<:Any, 1}, v)
-    @boundscheck v == 1 || throw(ArgumentError("DataLayout has only one level"))
-    return arg
-end
-@propagate_inbounds level(arg::VIH1, v) = level_view(arg, v)
-
-@propagate_inbounds function slab(arg::VIH1{<:Any, 1, <:Any, 1}, v, h)
-    @boundscheck v == h == 1 || throw(ArgumentError("DataLayout has only one slab"))
-    return arg
-end
-@propagate_inbounds slab(arg::VIH1, v, h) = slab_view(arg, v, h)
-
-@propagate_inbounds function column(arg::VIH1{<:Any, <:Any, 1, 1}, i, j, h)
-    @boundscheck i == j == h == 1 || throw(ArgumentError("DataLayout has only one column"))
-    return arg
-end
-@propagate_inbounds column(arg::VIH1, i, j, h) = column_view(arg, i, j, h)
-
-@propagate_inbounds function level(arg::IH1JH2, v)
-    @boundscheck v == 1 || throw(ArgumentError("DataLayout has only one level"))
-    return arg
-end
-@propagate_inbounds function slab(arg::IH1JH2{<:Any, <:Any, <:Any, 1}, v, h)
-    @boundscheck v == h == 1 || throw(ArgumentError("DataLayout has only one slab"))
-    return arg
-end
-@propagate_inbounds slab(arg::IH1JH2, v, h) = slab_view(arg, v, h)
-
-@propagate_inbounds function column(arg::IH1JH2{<:Any, 1, 1, 1}, i, j, h)
-    @boundscheck i == j == h == 1 || throw(ArgumentError("DataLayout has only one column"))
-    return arg
-end
-@propagate_inbounds column(arg::IH1JH2, i, j, h) = column_view(arg, i, j, h)
 
 # Convenience methods for data with a single vertical level or a single
 # horizontal dimension, matching the corresponding methods for spaces.

@@ -566,24 +566,6 @@ end
     array = stable_view(parent(data), Ni * (h1 - 1) .+ (i:i), Nj * (h2 - 1) .+ (j:j))
     return IH1JH2{T, 1, 1, 1, S}(array)
 end
-@inline reassign(data::DataF{T, S, A}, scope::NewScope) where {T, S, A, NewScope} =
-    DataF{T, NewScope, A}(parent(data))
-@inline reassign(
-    data::VIJHWithF{T, Nv, Ni, Nj, Nh, F, S, A},
-    scope::NewScope,
-) where {T, Nv, Ni, Nj, Nh, F, S, A, NewScope} =
-    VIJHWithF{T, Nv, Ni, Nj, Nh, F, NewScope, A}(parent(data))
-@inline reassign(
-    data::VIH1{T, Nv, Ni, Nh, S, A},
-    scope::NewScope,
-) where {T, Nv, Ni, Nh, S, A, NewScope} =
-    VIH1{T, Nv, Ni, Nh, NewScope, A}(parent(data))
-@inline reassign(
-    data::IH1JH2{T, Ni, Nj, Nh, S, A},
-    scope::NewScope,
-) where {T, Ni, Nj, Nh, S, A, NewScope} =
-    IH1JH2{T, Ni, Nj, Nh, NewScope, A}(parent(data))
-
 @inline nlevels(::DataF) = 1
 @inline nlevels(
     ::VIJHWithF{T, Nv, Ni, Nj, Nh, F, S, A},

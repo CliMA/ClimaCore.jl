@@ -117,9 +117,8 @@ end
 @inline single_index(index, ::Val{Nf}) where {Nf} =
     isone(Nf) ? Tuple(index) : throw(ArgumentError("F axis is required unless Nf = 1"))
 
-@inline struct_index(i, array) = iszero(ndims(array)) ? CartesianIndex() : i
-@inline struct_indices(array, ::Val{Nf}) where {Nf} =
-    iszero(ndims(array)) ? (CartesianIndex(),) : (Base.OneTo(Nf),)
+@inline struct_index(i, array) = i
+@inline struct_indices(array, ::Val{Nf}) where {Nf} = (Base.OneTo(Nf),)
 
 # Split Cartesian index ranges into scalar components and a range from 1 to Nf;
 # a Cartesian range would build a much costlier view with singleton dimensions.

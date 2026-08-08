@@ -19,7 +19,7 @@ When `init` is available, the reduction is a sequential left fold seeded by
 grows logarithmically rather than linearly with respect to length. Sequential
 reductions use `@simd` loops, meaning that associativity is not guaranteed.
 """
-Base.@propagate_inbounds @inline function safe_mapreduce(
+Base.@propagate_inbounds function safe_mapreduce(
     f::F,
     op::O,
     itr;
@@ -27,6 +27,7 @@ Base.@propagate_inbounds @inline function safe_mapreduce(
 ) where {F, O}
     first_index, last_index = firstindex(itr), lastindex(itr)
     if init isa NoInit
+        @assert first_index <= last_index # itr must be nonempty if init is missing
         return mapreduce_pairwise(f, op, itr, first_index, last_index)
     end
     value = init
@@ -38,7 +39,7 @@ end
 
 # Recursively split a non-empty collection in half until each block is small
 # enough to reduce with a single vectorized sequential loop.
-Base.@propagate_inbounds @inline function mapreduce_pairwise(
+Base.@propagate_inbounds function mapreduce_pairwise(
     f::F,
     op::O,
     itr,

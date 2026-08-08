@@ -150,13 +150,6 @@ for f in (:ndims, :length, :size, :axes, DATA_LAYOUT_PRIMITIVES...)
         throw(DimensionMismatch($("$f is inconsistent among fused broadcasts")))
 end
 
-# modify_arg must propagate @inbounds into f: it is applied at every point of a
-# broadcast expression, and without the propagation, the bounds checks that its
-# callers eliminate get re-enabled inside every per-point view and getindex.
-@propagate_inbounds modify_arg(f::F, arg::MaybeLazyDataLayout, f_args...) where {F} =
-    f(arg, f_args...)
-@propagate_inbounds modify_arg(f::F, arg::Any, f_args...) where {F} = arg
-
 """
     modify_args(f, bc, f_args...)
 
@@ -166,14 +159,14 @@ Replaces each of the [`layout_args`](@ref) in a broadcast expression with
 @propagate_inbounds function modify_args(f::F, bc::LazyDataLayout, f_args...) where {F}
     modified_args = unrolled_map_with_inbounds(bc.args) do arg
         Base.@_propagate_inbounds_meta
-        modify_arg(f, arg, f_args...)
+        arg isa MaybeLazyDataLayout ? f(arg, f_args...) : arg
     end
     return Broadcast.Broadcasted(bc.style, bc.f, modified_args)
 end
 @propagate_inbounds function modify_args(f::F, bc::FusedMultiBroadcast, f_args...) where {F}
     modified_pairs = unrolled_map_with_inbounds(bc.pairs) do (dest, bc)
         Base.@_propagate_inbounds_meta
-        Pair(f(dest, f_args...), modify_arg(f, bc, f_args...))
+        Pair(f(dest, f_args...), bc isa MaybeLazyDataLayout ? f(bc, f_args...) : bc)
     end
     return FusedMultiBroadcast(modified_pairs)
 end

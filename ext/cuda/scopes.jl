@@ -198,14 +198,10 @@ end
 
 @inline function DataLayouts.subscope_index_view(
     ::Union{ThisKernel, ThisCooperativeGroup},
-    indices::DataLayouts.ActivePointIndices,
+    indices::DataLayouts.ActivePointIndices{Nv},
     view_range,
-)
-    return DataLayouts.ActivePointIndices(
-        indices.mask,
-        indices.indices[view_range],
-        indices.Nv,
-    )
+) where {Nv}
+    return DataLayouts.ActivePointIndices{Nv}(indices.mask, indices.indices[view_range])
 end
 
 # A unit range indexed at the positions in view_range is the same range of

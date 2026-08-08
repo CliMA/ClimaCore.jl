@@ -78,6 +78,9 @@ end
 # cudaOccMaxActiveBlocksPerMultiprocessor times the number of multiprocessors,
 # and its limiting factor (num_blocks/num_threads/registers/shared_memory); the
 # block-barrier limit is ignored as ClimaCore does not use asynchronous barriers
+# TODO: The single-launch reduction kernel now synchronizes its block (a
+# threadfence and a sync_threads around the grid counter), so the block-barrier
+# limit should be included here.
 # https://gitlab.com/nvidia/headers/cuda-individual/cudart/-/blob/main/cuda_occupancy.h#L1282-1777
 function max_active_blocks(threads_per_block, regs_per_thread, shmem_per_block)
     attrs = device_attributes()
@@ -125,13 +128,6 @@ function max_active_blocks(threads_per_block, regs_per_thread, shmem_per_block)
 
     return (max_blocks_per_sm * attrs.sm_count, limit)
 end
-
-# Validation of uncached_launch_configuration against CUDA's occupancy API,
-# enabled by GPU tests. The cross-check requires the tie-breaking below to match
-# cudaOccMaxPotentialOccupancyBlockSize for every kernel on every device, so it
-# is disabled by default: a tie broken differently on an untested architecture
-# would crash a simulation whose launch configuration is still valid.
-const VALIDATE_LAUNCH_CONFIGURATIONS = Ref(false)
 
 # cudaOccMaxPotentialOccupancyBlockSize times the maximum number of waves,
 # optimized for single-stream execution of both small and large workloads
@@ -189,7 +185,7 @@ function uncached_launch_configuration(cu_func, strict, default_max_waves, confi
     end
 
     # Compare searches unaffected by config_args against CUDA's implementation.
-    if VALIDATE_LAUNCH_CONFIGURATIONS[] && user_constraints_ignorable
+    if DataLayouts.VALIDATE_LAUNCH_CONFIGURATIONS[] && user_constraints_ignorable
         min_blocks_per_wave = cld(best_num_blocks, max_waves)
         cuda_config = (; blocks = min_blocks_per_wave, threads = best_threads_per_block)
         @assert CUDA.launch_configuration(cu_func) == cuda_config

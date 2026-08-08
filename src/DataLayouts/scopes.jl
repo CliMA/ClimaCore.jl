@@ -75,16 +75,18 @@ Checks if one [`DataScope`](@ref) is equal to another scope, or if it is a
     subscope == scope ||
     partition(scope) != scope && is_subscope(subscope, partition(scope))
 
-@inline @noinline throw_invalid_subscope() = throw(ArgumentError("Invalid subscope"))
+@noinline throw_invalid_subscope(subscope, scope) =
+    throw(ArgumentError(invalid_subscope_string(subscope, scope)))
+@generated invalid_subscope_string(::S1, ::S2) where {S1, S2} = "$S1 is not a subset of $S2"
 
 @inline num_subscopes(subscope, scope) =
     subscope == scope ? 1 :
     is_subscope(subscope, scope) ? cld(num_threads(scope), num_threads(subscope)) :
-    throw_invalid_subscope()
+    throw_invalid_subscope(subscope, scope)
 @inline subscope_rank(subscope, scope) =
     subscope == scope ? 1 :
     is_subscope(subscope, scope) ? fld(thread_rank(scope) - 1, num_threads(subscope)) + 1 :
-    throw_invalid_subscope()
+    throw_invalid_subscope(subscope, scope)
 
 """
     num_threads(scope)
@@ -356,6 +358,16 @@ scoped_array(::ThisThreadPool, ::Type{T}, dims; buffer = false) where {T} =
 strided_access(::ThisThreadPool) = false # Always use contiguous ranges on CPUs.
 
 """
+    VALIDATE_LAUNCH_CONFIGURATIONS
+
+When `true`, device extensions cross-check every kernel launch configuration
+they compute against their device API's occupancy calculator. Disabled by
+default, so that a tie broken differently on an untested device degrades
+performance instead of crashing a simulation; device tests enable it.
+"""
+const VALIDATE_LAUNCH_CONFIGURATIONS = Ref(false)
+
+"""
     subscope_indices(subscope, scope, indices)
 
 Divides a collection of indices (either linear or Cartesian) among subsets of a
@@ -368,23 +380,7 @@ of the scope gets a nonempty chunk whenever there are at least as many indices
 as subsets. In contrast, always assigning `cld(length(indices), n_subsets)`
 indices to each subset can lead to one or more empty subsets.
 """
-Base.@propagate_inbounds @inline subscope_indices(::ThisThread, ::ThisThread, indices) =
-    indices
-Base.@propagate_inbounds @inline subscope_indices(
-    ::S,
-    ::S,
-    indices,
-) where {S <: DataScope} = indices
-Base.@propagate_inbounds @inline function subscope_indices(::ThisThread, scope, indices)
-    scope == ThisThread() && return indices
-    rank = thread_rank(scope)
-    n = num_threads(scope)
-    view_range =
-        strided_access(scope) ? (rank:n:length(indices)) :
-        (length(indices) * (rank - 1) ÷ n + 1):(length(indices) * rank ÷ n)
-    return subscope_index_view(scope, indices, view_range)
-end
-Base.@propagate_inbounds @inline function subscope_indices(subscope, scope, indices)
+Base.@propagate_inbounds function subscope_indices(subscope, scope, indices)
     subscope == scope && return indices
     rank =
         subscope == partition(scope) ? partition_rank(scope) :
