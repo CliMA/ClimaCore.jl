@@ -77,7 +77,13 @@ end
 
 # cudaOccMaxActiveBlocksPerMultiprocessor times the number of multiprocessors,
 # and its limiting factor (num_blocks/num_threads/registers/shared_memory); the
-# block-barrier limit is ignored as ClimaCore does not use asynchronous barriers
+# block-barrier limit is intentionally ignored. CUDA's occupancy calculator
+# counts the named-barrier slots used by PTX `bar.sync N` (N > 0), `mbarrier`,
+# and similar instructions. ClimaCore uses only `sync_threads()` (PTX
+# `bar.sync 0`, the implicit CTA barrier, which does not consume a named-barrier
+# slot), `sync_warp()` (a warp convergence instruction), and `threadfence()` (a
+# memory fence, not a barrier). None of these affects the named-barrier count,
+# so the limit is irrelevant here.
 # https://gitlab.com/nvidia/headers/cuda-individual/cudart/-/blob/main/cuda_occupancy.h#L1282-1777
 function max_active_blocks(threads_per_block, regs_per_thread, shmem_per_block)
     attrs = device_attributes()
@@ -153,9 +159,14 @@ function uncached_launch_configuration(cu_func, strict, default_max_waves, confi
     user_constraints_ignorable = user_max_threads_per_block >= default_max_threads_per_block
     max_threads_per_block = min(user_max_threads_per_block, default_max_threads_per_block)
 
-    # If max_waves has no default value, assume that higher register pressure
-    # leads to uneven load distributions, and launch more waves to compensate.
-    max_waves = something(default_max_waves, fld(regs_per_thread, 48) + 1)
+    # Launch a single wave of blocks unless a caller asks for more. This
+    # replaces a heuristic that launched fld(regs_per_thread, 48) + 1 waves, on
+    # the assumption that higher register pressure leads to uneven load
+    # distributions. An A100 sweep over max_waves in (1, 2, 4) found one wave to
+    # be at least as fast throughout and clearly fastest for reductions, where
+    # the equal-shape lazy reduction went from 145 to 129 us, so that assumption
+    # was costing more in block-scheduling than it recovered.
+    max_waves = something(default_max_waves, 1)
 
     # Iterating from small to large block sizes, prefer configurations with more
     # total threads; on ties, prefer larger blocks (fewer blocks means less
@@ -182,7 +193,7 @@ function uncached_launch_configuration(cu_func, strict, default_max_waves, confi
     end
 
     # Compare searches unaffected by config_args against CUDA's implementation.
-    if user_constraints_ignorable
+    if DataLayouts.VALIDATE_LAUNCH_CONFIGURATIONS[] && user_constraints_ignorable
         min_blocks_per_wave = cld(best_num_blocks, max_waves)
         cuda_config = (; blocks = min_blocks_per_wave, threads = best_threads_per_block)
         @assert CUDA.launch_configuration(cu_func) == cuda_config

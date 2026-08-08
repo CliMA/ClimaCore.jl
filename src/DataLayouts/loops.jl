@@ -8,6 +8,10 @@ end
 # CPU loops. GPU scopes override this for their strided index subsets: each GPU
 # thread only iterates a few points, and @simd's loop restructuring just adds
 # branches and index arithmetic to every kernel.
+# The dispatch is on the index type rather than on the loop's scope, which would
+# read as the more direct question. Taking a scope here regressed GPU kernels
+# when it was tried, and the scope is a weaker discriminator than it looks:
+# ThisThread is the scope of point loops on both hosts and devices.
 @inline simd_over_indices(indices) = indices isa AbstractArray
 
 @inline is_valid_slice_mask(::NoMask, _) = true
@@ -15,20 +19,34 @@ end
 @inline is_valid_slice_mask(::IJHMask, ::typeof(column)) = true
 @inline is_valid_slice_mask(::IJHMask, _) = false
 
-@inline each_maskable_slice_index(_, op::O, args...) where {O} =
+# The scope is passed so that GPU scopes can override the indices of unmasked
+# point loops with eachindex, whose linear indices avoid the integer divisions
+# that decompose a thread's index into a CartesianIndex at every point. Host
+# scopes keep the Cartesian each_slice_index for point loops: a view at a
+# linear index wraps its parent in a 1-dimensional ReshapedArray that blocks
+# SIMD (see each_slice_index), which would make single-component CPU broadcasts
+# slow, while GPU threads iterate too few points per thread for SIMD to matter.
+@inline each_maskable_slice_index(_, _, op::O, args...) where {O} =
     each_slice_index(op, args...)
-@inline each_maskable_slice_index(mask::IJHMask, ::typeof(view), args...) =
-    eachindex(IndexStyle(mask.is_active, args...), args...)
+@inline each_maskable_slice_index(_, mask::IJHMask, ::typeof(column), args...) =
+    ActiveColumnIndices(mask)
+@inline each_maskable_slice_index(_, mask::IJHMask, ::typeof(view), args...) =
+    ActivePointIndices{size(first(args), 1)}(mask)
 
-@inline function subscope_slice_indices(subscope, scope, mask, op::O, args...) where {O}
-    is_valid_slice_mask(mask, op) || throw(ArgumentError(invalid_mask_string(mask, op)))
-    full_scope_indices = each_maskable_slice_index(mask, op, args...)
-    indices = @inbounds subscope_indices(subscope, scope, full_scope_indices)
-    mask == NoMask() && return indices
-    return Iterators.filter(index -> (@inbounds should_compute(mask, index)), indices)
-end
+# Every valid mask and slice operator combination has indexable slice indices:
+# NoMask uses the full index ranges, and IJHMask (which only supports column
+# and view slices) uses compacted active indices, so no combination requires
+# filtering the indices with a per-slice mask lookup.
+@noinline throw_invalid_slice_mask(mask, op::O) where {O} =
+    throw(ArgumentError(invalid_mask_string(mask, op)))
 @generated invalid_mask_string(::M, ::O) where {M, O} =
     "$M cannot be applied to $(O.instance) slices"
+
+@inline function subscope_slice_indices(subscope, scope, mask, op::O, args...) where {O}
+    is_valid_slice_mask(mask, op) || throw_invalid_slice_mask(mask, op)
+    full_scope_indices = each_maskable_slice_index(scope, mask, op, args...)
+    return @inbounds subscope_indices(subscope, scope, full_scope_indices)
+end
 
 # A view slice contains one point by definition, so its size is known without
 # constructing a slice. The generic method cannot handle point slices of fused
@@ -51,6 +69,9 @@ subset of `scope` that does not require any thread to process more than one
 point from the largest slice returned by `op`. When no such subset is available,
 the largest subset is used in order to minimize the number of points per thread.
 """
+@inline slice_subscope(scope, ::typeof(column), args...) = ThisThread()
+@inline slice_subscope(scope, ::typeof(view), args...) = ThisThread()
+@inline slice_subscope(scope, ::typeof(level), args...) = ThisThread()
 @inline function slice_subscope(scope, op::O, args...) where {O}
     subscope = partition(scope)
     subscope == ThisThread() && return subscope
@@ -80,8 +101,36 @@ specified, since that is the only method a loop starts from. Every method that
 takes a `scope` requires a `mask`, so that a loop which passes its keyword
 arguments on cannot quietly drop a mask and compute over the points it excludes.
 """
-@inline foreach_slice(op::O, f::F, args...; mask = NoMask()) where {O, F} =
-    foreach_slice(DataScope(args...), op, f, args...; mask)
+@inline function foreach_slice(op::O, f::F, args...; mask = NoMask()) where {O, F}
+    check_slice_extents(op, args...)
+    return foreach_slice(DataScope(args...), op, f, args...; mask)
+end
+
+# Reject arguments whose slice indices are incompatible before any loop starts.
+# This check must run on the host: each_slice_index is called from GPU kernels,
+# where an error path either fails to compile or traps with an unrelated CUDA
+# error, so it combines incompatible axes instead of throwing. Point slices
+# broadcast like ordinary expressions, so their axes only need to match up to
+# singleton and missing dimensions, which project_slice_index sends to index 1;
+# the other slice operators require exact matches.
+@inline function check_slice_extents(op::O, args...) where {O}
+    combined_axes = axes(each_slice_index(op, args...))
+    valid = unrolled_all(args) do arg
+        compatible_axes(op, axes(each_slice_index(op, arg)), combined_axes)
+    end
+    valid || throw(
+        DimensionMismatch("Inputs to foreach_slice must have compatible dimensions"),
+    )
+    return nothing
+end
+
+@inline compatible_axes(op::O, axes1::Tuple, axes2::Tuple) where {O} = axes1 == axes2
+@inline compatible_axes(::typeof(view), axes1::Tuple, axes2::Tuple) =
+    isempty(axes1) ||
+    (
+        (first(axes1) == first(axes2) || isone(length(first(axes1)))) &&
+        compatible_axes(view, Base.tail(axes1), Base.tail(axes2))
+    )
 
 # A thread pool has to be resolved before looping over it, and given back afterward.
 @inline function foreach_slice(
@@ -115,17 +164,8 @@ end
     isone(threads) ? foreach_slice(ThisThread(), op, f, args...; mask) :
     parallelize_over(() -> slice_loop(pool, op, f, mask, args...), pool)
 
-# Change the scope to ThisThread when given only one thread, which compiles the
-# simplest possible loop.
 @inline foreach_slice(scope::DataScope, op::O, f::F, args...; mask) where {O, F} =
-    isone(num_threads(scope)) ? foreach_slice(ThisThread(), op, f, args...; mask) :
-    parallelize_over(() -> slice_loop(scope, op, f, mask, args...), scope)
-
-# Run the loop without parallelize_over when the scope is ThisThread. Since each
-# slice is reassigned to its subscope, nested loops in f dispatch here
-# statically. This avoids both the runtime thread-count check and the
-# parallelize_over closure, which the compiler does not always remove, causing
-# an allocation at every slice of the outer loop.
+    slice_loop(scope, op, f, mask, args...)
 @inline foreach_slice(::ThisThread, op::O, f::F, args...; mask) where {O, F} =
     slice_loop(ThisThread(), op, f, mask, args...)
 
@@ -138,13 +178,53 @@ end
 # broadcasts. Lazy iterators such as Iterators.filter or Iterators.map do not
 # support @simd, and operations on non-point slices typically do too much work
 # per slice for vectorization to be worthwhile.
+# Project a point index onto one argument, so that arguments which broadcast
+# along a dimension (0-dimensional layouts, or layouts with a singleton extent,
+# like single-level surface data) read their single value instead of an
+# out-of-range one. Only point slices need this: the other slice operators
+# require every argument to have identical slice indices. Each argument's
+# singleton dimensions are recorded in a tuple of Bools before the loop starts,
+# so that the per-point projection only selects on loop-invariant flags, which
+# LLVM folds away, instead of comparing dynamic extents at every point; for
+# equal-shaped arguments, the projection is the identity.
+@inline is_singleton_axis(ax) = isone(length(ax))
+@inline singleton_slice_dims(op::O, arg) where {O} = ()
+@inline singleton_slice_dims(::typeof(view), arg) =
+    unrolled_map(is_singleton_axis, axes(each_slice_index(view, arg)))
+
+@inline project_slice_index(op::O, arg, is_singleton, index) where {O} = index
+@inline project_slice_index(::typeof(view), arg, is_singleton, index::Integer) =
+    Broadcast.newindex(arg, index)
+@inline project_slice_index(::typeof(view), arg, is_singleton, index::CartesianIndex) =
+    iszero(ndims(arg)) ? CartesianIndex() :
+    CartesianIndex(projected_index(is_singleton, Tuple(index)))
+@inline projected_index(is_singleton::Tuple, index::Tuple) = (
+    (first(is_singleton) ? 1 : first(index)),
+    projected_index(Base.tail(is_singleton), Base.tail(index))...,
+)
+@inline projected_index(::Tuple{}, index::Tuple) = index
+@inline projected_index(::Tuple{}, ::Tuple{}) = ()
+
+@inline slice_arg((op, subscope, index)::Tuple, arg) =
+    @inbounds reassign(
+        op(
+            arg,
+            Tuple(project_slice_index(op, arg, singleton_slice_dims(op, arg), index))...,
+        ),
+        subscope,
+    )
+
+@inline slice_args(state, ::Tuple{}) = ()
+@inline slice_args(state, args::Tuple) =
+    (slice_arg(state, first(args)), slice_args(state, Base.tail(args))...)
+
 @inline function slice_loop(scope, op::O, f::F, mask, args...) where {O, F}
     subscope = slice_subscope(scope, op, args...)
     indices = subscope_slice_indices(subscope, scope, mask, op, args...)
-    @simd_if (op == view && simd_over_indices(indices)) for index in indices
-        slices = unrolled_map(args) do arg
-            @inbounds reassign(op(arg, Tuple(index)...), subscope)
-        end
+    N_indices = length(indices)
+    @simd_if (op == view && simd_over_indices(indices)) for i in 1:N_indices
+        index = @inbounds indices[i]
+        slices = slice_args((op, subscope, index), args)
         @inline f(slices...)
     end
 end
@@ -254,27 +334,36 @@ end
     return reduce(op, results)
 end
 
-# Reduce all unmasked points by folding over their indices, which are nonempty
-# since the launcher assigns every thread at least one point. Use safe_mapreduce
-# instead of Base's pairwise mapreduce to avoid the empty-collection error path,
-# whose string cannot be compiled in GPU kernels. Masked reductions require an
-# init, and mapreduce's empty path is only reached without one. Masked indices
-# are equivalent to what the slice index machinery uses for single-point views.
+# Reduce all points assigned to this thread with safe_mapreduce, whose pairwise
+# splitting keeps single-threaded roundoff error logarithmic in the number of
+# points and whose @simd blocks vectorize CPU reductions; Base's pairwise
+# mapreduce is not used because its empty-collection error path cannot be
+# compiled in GPU kernels. safe_mapreduce reads its first index unchecked when
+# no init value is given, so reductions over potentially empty index subsets
+# require an init: unmasked launchers assign every thread at least one point,
+# and masked reductions (whose active points may not cover every thread) are
+# documented to require an init value. Masked indices are equivalent to what
+# the slice index machinery uses for single-point views.
+# The two branches are not equivalent: eachindex gives unmasked reductions
+# linear indices whenever the argument supports them, which CPU reductions
+# vectorize an order of magnitude better than the Cartesian indices that the
+# slice index machinery produces on host scopes.
 @inline reduce_points(::ThisThread, op::O, arg; mask, init...) where {O} =
     if mask == NoMask()
         indices = @inbounds subscope_indices(ThisThread(), DataScope(arg), eachindex(arg))
         safe_mapreduce(index -> (@inbounds arg[index]), op, indices; init...)
     else
         indices = subscope_slice_indices(ThisThread(), DataScope(arg), mask, view, arg)
-        mapreduce(index -> (@inbounds arg[index]), op, indices; init...)
+        safe_mapreduce(index -> (@inbounds arg[index]), op, indices; init...)
     end
 
 """
     column_reduce!(op, dest, arg; [mask], [flip], [init])
 
-Use [`foreach_column`](@ref) to pass each column of `arg` to `reduce`, storing
-the results in corresponding columns of `dest`. Setting `flip` to `true` changes
-the order of reduction from left-associative (default) to right-associative.
+Use [`foreach_column`](@ref) to combine the levels of each column of `arg` with
+`op`, storing the results in corresponding columns of `dest`. Setting `flip` to
+`true` changes the order of reduction from left-associative (default) to
+right-associative, and `init` seeds the fold when it is given.
 """
 @inline column_reduce!(op::O, dest, arg; mask = NoMask(), flip = false, init...) where {O} =
     foreach_column(dest, arg; mask) do dest_column, arg_column
@@ -290,7 +379,7 @@ the order of reduction from left-associative (default) to right-associative.
 # Int128 and UInt128 fields in kernel arguments crash LLVM's NVPTX backend prior
 # to LLVM 20 (llvm/llvm-project#49221). 128-bit integers are only safe in
 # registers, like the ones bitcast_struct uses to reconstruct the value.
-function Base.fill!(dest::DataLayout, value; kwargs...)
+@inline function Base.fill!(dest::DataLayout, value; kwargs...)
     B = eltype(parent(dest))
     converted_value = convert(eltype(dest), value)
     entries = bitcast_struct(NTuple{num_basetypes(B, eltype(dest)), B}, converted_value)
@@ -365,7 +454,7 @@ end
 
 # Add axes to LazyDataLayouts and AutoBroadcaster wrappers to DataLayouts before
 # reducing them. Remove all AutoBroadcaster wrappers after obtaining the result.
-function Base.reduce(op::O, arg::MaybeLazyDataLayout; kwargs...) where {O}
+@inline function Base.reduce(op::O, arg::MaybeLazyDataLayout; kwargs...) where {O}
     reducible = arg isa LazyDataLayout ? Broadcast.instantiate : Broadcast.broadcastable
     result = drop_auto_broadcasters(reduce_points(op, reducible(arg); kwargs...))
     call_post_op_callback() && post_op_callback(result, op, arg; kwargs...)

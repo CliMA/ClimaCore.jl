@@ -43,9 +43,11 @@ end
     isnothing(i) && return throw(ArgumentError(invalid_basetype_string(B, T)))
     return invalid_basetype_error(B, fieldtype(T, i))
 end
-@generated invalid_basetype_string(::Type{B}, ::Type{T}) where {B, T} =
-    "Cannot store value of type $T ($(sizeof(T)) bytes) using values of type \
-     $B ($(sizeof(B)) bytes)"
+@generated invalid_basetype_string(
+    ::Type{B},
+    ::Type{T},
+) where {B, T} = "Cannot store value of type $T ($(sizeof(T)) bytes) using values of type \
+                  $B ($(sizeof(B)) bytes)"
 
 """
     check_basetype(B, T)
@@ -184,14 +186,34 @@ julia> set_struct!(zeros(Int64, 3, 4), (Int32(2), Int32(0), Int128(1)), 2, 3)
  0  0  0  0
 ```
 """
-@inline function set_struct!(array, value::T, index...) where {T}
-    Nf = num_basetypes(eltype(array), T)
-    @boundscheck checkbounds(array, struct_indices(array, Val(Nf), index...)...)
-    entries = bitcast_struct(NTuple{Nf, eltype(array)}, value)
-    unrolled_foreach(enumerate(entries)) do (i, entry)
-        @inbounds array[struct_index(i, array, index...)] = entry
-    end
+@propagate_inbounds function set_struct!(
+    array::AbstractArray{T},
+    value::T,
+    index...,
+) where {T}
+    @boundscheck checkbounds(array, struct_indices(array, Val(1), index...)...)
+    @inbounds array[struct_index(1, array, index...)] = value
     return array
+end
+
+@propagate_inbounds function set_struct!(
+    array::AbstractArray{B},
+    value::T,
+    index...,
+) where {B, T}
+    Nf = num_basetypes(B, T)
+    @boundscheck checkbounds(array, struct_indices(array, Val(Nf), index...)...)
+    entries = bitcast_struct(NTuple{Nf, B}, value)
+    return set_struct_entries!(array, entries, 1, index...)
+end
+
+# Store the entries with tuple recursion, which unrolls like a generated
+# function; a closure over array and index is not eliminated in GPU kernels,
+# where it allocates at every point.
+@inline set_struct_entries!(array, ::Tuple{}, i, index...) = array
+@propagate_inbounds function set_struct_entries!(array, entries::Tuple, i, index...)
+    @inbounds array[struct_index(i, array, index...)] = first(entries)
+    return set_struct_entries!(array, Base.tail(entries), i + 1, index...)
 end
 
 """
@@ -227,8 +249,21 @@ julia> get_struct([0 0 0 0; 2 0 1 0; 0 0 0 0], Tuple{Int32, Int32, Int128}, 2, 3
 (2, 0, 1)
 ```
 """
-@inline function get_struct(array, ::Type{T}, index...) where {T}
-    Nf = num_basetypes(eltype(array), T)
+@propagate_inbounds function get_struct(
+    array::AbstractArray{T},
+    ::Type{T},
+    index...,
+) where {T}
+    @boundscheck checkbounds(array, struct_indices(array, Val(1), index...)...)
+    return @inbounds array[struct_index(1, array, index...)]
+end
+
+@propagate_inbounds function get_struct(
+    array::AbstractArray{B},
+    ::Type{T},
+    index...,
+) where {B, T}
+    Nf = num_basetypes(B, T)
     @boundscheck checkbounds(array, struct_indices(array, Val(Nf), index...)...)
     return bitcast_struct(T, array, Val(Nf), index...)
 end

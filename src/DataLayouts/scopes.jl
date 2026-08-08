@@ -71,33 +71,36 @@ partition(scope) = scope
 Checks if one [`DataScope`](@ref) is equal to another scope, or if it is a
 [`partition`](@ref) of the scope, or a partition of a partition, and so on.
 """
-is_subscope(subscope, scope) =
+@inline is_subscope(subscope, scope) =
     subscope == scope ||
     partition(scope) != scope && is_subscope(subscope, partition(scope))
 
-num_subscopes(subscope, scope) =
-    subscope == scope ? 1 :
-    is_subscope(subscope, scope) ? cld(num_threads(scope), num_threads(subscope)) :
-    throw(ArgumentError(invalid_subscope_string(subscope, scope)))
-subscope_rank(subscope, scope) =
-    subscope == scope ? 1 :
-    is_subscope(subscope, scope) ? fld(thread_rank(scope) - 1, num_threads(subscope)) + 1 :
+@noinline throw_invalid_subscope(subscope, scope) =
     throw(ArgumentError(invalid_subscope_string(subscope, scope)))
 @generated invalid_subscope_string(::S1, ::S2) where {S1, S2} = "$S1 is not a subset of $S2"
+
+@inline num_subscopes(subscope, scope) =
+    subscope == scope ? 1 :
+    is_subscope(subscope, scope) ? cld(num_threads(scope), num_threads(subscope)) :
+    throw_invalid_subscope(subscope, scope)
+@inline subscope_rank(subscope, scope) =
+    subscope == scope ? 1 :
+    is_subscope(subscope, scope) ? fld(thread_rank(scope) - 1, num_threads(subscope)) + 1 :
+    throw_invalid_subscope(subscope, scope)
 
 """
     num_threads(scope)
 
 Number of threads that are part of a [`DataScope`](@ref).
 """
-num_threads(scope) = num_partitions(scope) * num_threads(partition(scope))
+@inline num_threads(scope) = num_partitions(scope) * num_threads(partition(scope))
 
 """
     num_partitions(scope)
 
 Number of partitions (results of [`partition`](@ref)) in a [`DataScope`](@ref).
 """
-num_partitions(scope) = num_subscopes(partition(scope), scope)
+@inline num_partitions(scope) = num_subscopes(partition(scope), scope)
 
 """
     thread_rank(scope)
@@ -105,7 +108,7 @@ num_partitions(scope) = num_subscopes(partition(scope), scope)
 Integer between 1 and [`num_threads`](@ref) used to identify each thread that is
 part of a [`DataScope`](@ref).
 """
-thread_rank(scope) =
+@inline thread_rank(scope) =
     (partition_rank(scope) - 1) * num_threads(partition(scope)) +
     thread_rank(partition(scope))
 
@@ -115,7 +118,7 @@ thread_rank(scope) =
 Integer between 1 and [`num_partitions`](@ref) used to identify each partition
 of a [`DataScope`](@ref).
 """
-partition_rank(scope) = subscope_rank(partition(scope), scope)
+@inline partition_rank(scope) = subscope_rank(partition(scope), scope)
 
 """
     parallelize_over(f, scope)
@@ -355,6 +358,16 @@ scoped_array(::ThisThreadPool, ::Type{T}, dims; buffer = false) where {T} =
 strided_access(::ThisThreadPool) = false # Always use contiguous ranges on CPUs.
 
 """
+    VALIDATE_LAUNCH_CONFIGURATIONS
+
+When `true`, device extensions cross-check every kernel launch configuration
+they compute against their device API's occupancy calculator. Disabled by
+default, so that a tie broken differently on an untested device degrades
+performance instead of crashing a simulation; device tests enable it.
+"""
+const VALIDATE_LAUNCH_CONFIGURATIONS = Ref(false)
+
+"""
     subscope_indices(subscope, scope, indices)
 
 Divides a collection of indices (either linear or Cartesian) among subsets of a
@@ -370,11 +383,9 @@ indices to each subset can lead to one or more empty subsets.
 Base.@propagate_inbounds function subscope_indices(subscope, scope, indices)
     subscope == scope && return indices
     rank =
-        subscope == ThisThread() ? thread_rank(scope) :
         subscope == partition(scope) ? partition_rank(scope) :
         subscope_rank(subscope, scope)
     n =
-        subscope == ThisThread() ? num_threads(scope) :
         subscope == partition(scope) ? num_partitions(scope) :
         num_subscopes(subscope, scope)
     view_range =
@@ -388,3 +399,15 @@ end
 # of CartesianIndices is a ReshapedArray with GPU-incompatible bounds checks.
 Base.@propagate_inbounds subscope_index_view(scope, indices, view_range) =
     view(indices, view_range)
+
+struct StridedCartesianIndices{I, V}
+    indices::I
+    view_range::V
+end
+Base.length(strided::StridedCartesianIndices) = length(strided.view_range)
+Base.firstindex(strided::StridedCartesianIndices) = 1
+Base.lastindex(strided::StridedCartesianIndices) = length(strided.view_range)
+Base.eachindex(strided::StridedCartesianIndices) = Base.OneTo(length(strided))
+Base.size(strided::StridedCartesianIndices) = (length(strided.view_range),)
+Base.@propagate_inbounds Base.getindex(strided::StridedCartesianIndices, n::Int) =
+    strided.indices[strided.view_range[n]]

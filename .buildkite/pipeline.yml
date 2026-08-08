@@ -144,7 +144,9 @@ steps:
         retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/cuda.jl CUDA"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/cuda.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -972,7 +974,6 @@ steps:
         key: gpu_compat_bidiag_matrix_row
         retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/MatrixFields/gpu_compat_bidiag_matrix_row.jl"
-        soft_fail: true
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -1543,6 +1544,11 @@ steps:
         retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_copyto.jl"
 
+      - label: "Perf: DataLayouts loops"
+        key: "cpu_datalayouts_loops"
+        retry: *retry_policy
+        command: "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_loops.jl"
+
       - label: "Perf: DataLayouts fill"
         key: "gpu_datalayouts_fill"
         retry: *retry_policy
@@ -1560,6 +1566,17 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_copyto.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Perf: DataLayouts loops"
+        key: "gpu_datalayouts_loops"
+        retry: *retry_policy
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_loops.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:

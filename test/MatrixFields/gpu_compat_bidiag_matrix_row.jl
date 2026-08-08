@@ -10,6 +10,7 @@ ClimaComms.@import_required_backends
 import .TestUtilities as TU;
 
 import ClimaCore: Spaces, Geometry, Operators, Fields, MatrixFields
+import ClimaCore.Utilities: ConvertTo
 import StaticArrays: SArray, SMatrix
 import ClimaCore.Geometry: AbstractTensor, Tensor, Components, Covariant, Contravariant
 using ClimaCore.MatrixFields:
@@ -71,7 +72,7 @@ function foo(c, f)
     FT = Spaces.undertype(space)
     I_u₃ = get_I_u₃(FT)
     dtγ = FT(1)
-    to_bidiagonal_row = Base.Fix1(convert, BidiagonalMatrixRow{FT})
+    to_bidiagonal_row = ConvertTo{BidiagonalMatrixRow{FT}}()
 
     @. ∂ᶠu₃ʲ_err_∂ᶠu₃ʲ =
         dtγ * ᶠtridiagonal_matrix_c3 * DiagonalMatrixRow(adjoint(CT3(ᶠu₃))) -
@@ -79,7 +80,8 @@ function foo(c, f)
 
     @. ∂ᶠu₃ʲ_err_∂ᶠu₃ʲ = dtγ * ᶠtridiagonal_matrix_c3 * adj_u₃ - (I_u₃,)
 
-    # Fails on gpu
+    # Previously failed on GPU because Base.Fix1 stores a Type field (not isbits).
+    # ConvertTo{T} is an empty isbits struct, so the fused broadcast now compiles:
     @. ᶠtridiagonal_matrix_c3 =
         -(ᶠgradᵥ_matrix()) * ifelse(
             ᶜu₃ʲ.components.data.:1 > 0,
@@ -87,8 +89,7 @@ function foo(c, f)
             to_bidiagonal_row(ᶜright_bias_matrix()),
         )
 
-    # However, this can be decomposed into simpler broadcast
-    # expressions that will run on gpus:
+    # The decomposed form is kept as coverage of the same computation:
     @. bdmr_l = to_bidiagonal_row(ᶜleft_bias_matrix())
     @. bdmr_r = to_bidiagonal_row(ᶜright_bias_matrix())
     @. bdmr = ifelse(ᶜu₃ʲ.components.data.:1 > 0, bdmr_l, bdmr_r)
