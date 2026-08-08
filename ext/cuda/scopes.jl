@@ -221,6 +221,11 @@ end
 # this avoids the integer divisions that decompose a thread's linear index into
 # a CartesianIndex at every point. Host scopes keep Cartesian indices; see
 # each_maskable_slice_index in DataLayouts for why.
+# The signature has to stay restricted to device scopes. The return type below
+# is a union of a linear range and a CartesianIndices that only resolves where
+# the extents are statically known, so covering host scopes as well would make
+# merely loading this extension turn every CPU point loop over a layout with a
+# dynamic extent into a dynamically dispatched one.
 # Layouts are collected recursively, so that a singleton layout nested inside a
 # broadcast expression is seen by the size check below; a nested broadcast's own
 # combined size would hide it, and a linear index does not project onto
@@ -233,7 +238,7 @@ end
 @inline is_device_linear(arg) = Base.IndexStyle(arg) == IndexLinear()
 
 @inline function DataLayouts.each_maskable_slice_index(
-    ::DataLayouts.DataScope,
+    ::Union{ThisKernel, ThisCooperativeGroup},
     ::NoMask,
     ::typeof(view),
     args...,

@@ -8,6 +8,10 @@ end
 # CPU loops. GPU scopes override this for their strided index subsets: each GPU
 # thread only iterates a few points, and @simd's loop restructuring just adds
 # branches and index arithmetic to every kernel.
+# The dispatch is on the index type rather than on the loop's scope, which would
+# read as the more direct question. Taking a scope here regressed GPU kernels
+# when it was tried, and the scope is a weaker discriminator than it looks:
+# ThisThread is the scope of point loops on both hosts and devices.
 @inline simd_over_indices(indices) = indices isa AbstractArray
 
 @inline is_valid_slice_mask(::NoMask, _) = true
