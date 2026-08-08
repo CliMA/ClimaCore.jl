@@ -35,22 +35,22 @@ end
 #! format: off
     if ClimaComms.device(context) isa ClimaComms.CUDADevice
         test_n_failures(88,   TU.PointSpace, context)
-        test_n_failures(731,  TU.SpectralElementSpace1D, context)
-        test_n_failures(362, TU.SpectralElementSpace2D, context)
+        test_n_failures(750,  TU.SpectralElementSpace1D, context)
+        test_n_failures(382, TU.SpectralElementSpace2D, context)
         test_n_failures(4,  TU.ColumnCenterFiniteDifferenceSpace, context)
         test_n_failures(5,  TU.ColumnFaceFiniteDifferenceSpace, context)
-        test_n_failures(368, TU.SphereSpectralElementSpace, context)
-        test_n_failures(378, TU.CenterExtrudedFiniteDifferenceSpace, context)
-        test_n_failures(378, TU.FaceExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(388, TU.SphereSpectralElementSpace, context)
+        test_n_failures(398, TU.CenterExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(398, TU.FaceExtrudedFiniteDifferenceSpace, context)
     else
         test_n_failures(0,    TU.PointSpace, context)
-        test_n_failures(157,  TU.SpectralElementSpace1D, context)
-        test_n_failures(275,  TU.SpectralElementSpace2D, context)
+        test_n_failures(184,  TU.SpectralElementSpace1D, context)
+        test_n_failures(305,  TU.SpectralElementSpace2D, context)
         test_n_failures(4,  TU.ColumnCenterFiniteDifferenceSpace, context)
         test_n_failures(5,  TU.ColumnFaceFiniteDifferenceSpace, context)
-        test_n_failures(281,  TU.SphereSpectralElementSpace, context)
-        test_n_failures(291,  TU.CenterExtrudedFiniteDifferenceSpace, context)
-        test_n_failures(291,  TU.FaceExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(311,  TU.SphereSpectralElementSpace, context)
+        test_n_failures(321,  TU.CenterExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(321,  TU.FaceExtrudedFiniteDifferenceSpace, context)
 
         # The OBJECT_CACHE causes inference failures that inhibit understanding
         # inference failures in _SpectralElementGrid2D, so let's `@test_opt` those
