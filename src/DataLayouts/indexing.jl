@@ -34,8 +34,16 @@ Base.IndexStyle(::Type{D}) where {D <: DataLayout} =
 
 # Whether all non-point layouts share a shape, so that a linear point index
 # denotes the same point in every one of them.
+# The non-point args are collected into a tuple with unrolled_flatmap, which
+# keeps every intermediate type concrete. Folding the checks into a reduction
+# over a reference arg would instead accumulate a union over the distinct
+# layout types among the args, which exceeds inference's union-splitting
+# limits for heterogeneous broadcast expressions and makes the shape checks
+# dynamic.
+@inline get_non_point_arg_tuple(arg) = is_non_point_arg(arg) ? (arg,) : ()
+
 @inline function equal_layout_shapes(args::Tuple)
-    non_point_args = unrolled_filter(is_non_point_arg, args)
+    non_point_args = unrolled_flatmap(get_non_point_arg_tuple, args)
     return unrolled_allequal(layout_type, non_point_args) &&
            unrolled_allequal(shape_params, non_point_args)
 end
@@ -164,10 +172,13 @@ end
 end
 
 # Constant-folded Cartesian-to-linear index conversion for array of size `dims`.
+# The init value is passed positionally instead of as a keyword argument
+# because kwcalls of unrolled_reduce do not always specialize during GPU
+# compilation of wide broadcast expressions, which makes them dynamic.
 @inline function linear_index(dims, indices)
     dim_index_pairs = unrolled_map(tuple, dims, indices)
     (offset, _) =
-        unrolled_reduce(dim_index_pairs; init = (0, 1)) do (offset, stride), (dim, index)
+        unrolled_reduce(dim_index_pairs, (0, 1)) do (offset, stride), (dim, index)
             (offset + (index - 1) * stride, stride * dim)
         end
     return offset + 1

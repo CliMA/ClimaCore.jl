@@ -44,4 +44,43 @@ end
     Aqua.test_piracies(ClimaCore)
 end
 
+# unrolled_filter, unrolled_split, unrolled_unique, and unrolled_allunique are
+# implemented in UnrolledUtilities v0.1.9 as reductions that push items into an
+# accumulator, whose recursively growing type can trigger inference's widening
+# heuristics for wide or complexly typed argument tuples. The widened code
+# requires dynamic dispatch and heap allocation, so a kernel that calls these
+# functions can fail to compile on GPUs (this once broke ClimaAtmos AMIP runs).
+# Kernel-reachable code must use unrolled_flatmap, which maps each item to an
+# empty or singleton tuple based only on that item's type, instead. This check
+# can be removed once ClimaCore requires an UnrolledUtilities version whose
+# functions are all implemented in terms of unrolled_flatmap. Comments are
+# stripped before matching, so the function names can be mentioned in comments.
+@testset "Kernel-reachable unrolled functions" begin
+    kernel_reachable_dirs = [
+        joinpath(pkgdir(ClimaCore), "src", "DataLayouts"),
+        joinpath(pkgdir(ClimaCore), "src", "Geometry"),
+        joinpath(pkgdir(ClimaCore), "src", "Utilities"),
+        joinpath(pkgdir(ClimaCore), "ext", "cuda"),
+    ]
+    forbidden_pattern = r"\bunrolled_(filter|split|unique|allunique)\b"
+    # Keyword arguments like init must be passed to the unrolled functions
+    # positionally, since kwcalls do not always specialize during GPU
+    # compilation of wide broadcast expressions, which makes them dynamic. The
+    # pattern below is a heuristic that tolerates one level of nested
+    # parentheses before the semicolon of a kwcall.
+    kwcall_pattern = r"\bunrolled_(reduce|accumulate)\((?:[^;()]|\([^()]*\))*;"
+    offending_files = String[]
+    for dir in kernel_reachable_dirs, (root, _, files) in walkdir(dir)
+        for file in filter(endswith(".jl"), files)
+            source_lines = readlines(joinpath(root, file))
+            code_lines = map(line -> replace(line, r"#.*" => ""), source_lines)
+            code = join(code_lines, '\n')
+            (contains(code, forbidden_pattern) || contains(code, kwcall_pattern)) &&
+                push!(offending_files, joinpath(root, file))
+        end
+    end
+    isempty(offending_files) || @show offending_files
+    @test isempty(offending_files)
+end
+
 nothing

@@ -1,5 +1,4 @@
-import UnrolledUtilities:
-    unrolled_all, unrolled_allequal, unrolled_filter, unrolled_flatten, unrolled_map
+import UnrolledUtilities: unrolled_all, unrolled_allequal, unrolled_flatmap
 
 const THREADS_PER_WARP = 32
 const MAX_WARPS_PER_BLOCK = 32
@@ -230,10 +229,18 @@ end
 # broadcast expression is seen by the size check below; a nested broadcast's own
 # combined size would hide it, and a linear index does not project onto
 # singleton dimensions.
-@inline get_all_layouts(arg::DataLayouts.DataLayout) = (arg,)
-@inline get_all_layouts(bc::DataLayouts.MaybeFusedDataLayoutBroadcast) =
-    unrolled_flatten(unrolled_map(get_all_layouts, DataLayouts.layout_args(bc)))
-@inline get_all_layouts(other) = ()
+# The layouts are collected into a tuple with unrolled_flatmap, which keeps
+# every intermediate type concrete. Folding the checks into a reduction over a
+# reference layout would instead accumulate a union over the distinct layout
+# types in the broadcast expression, which exceeds inference's union-splitting
+# limits for heterogeneous expressions and makes the size and linearity checks
+# dynamic during GPU compilation.
+@inline get_all_non_point_layouts(arg::DataLayouts.DataLayout) =
+    DataLayouts.is_non_point_arg(arg) ? (arg,) : ()
+@inline get_all_non_point_layouts(
+    bc::DataLayouts.MaybeFusedDataLayoutBroadcast,
+) = unrolled_flatmap(get_all_non_point_layouts, DataLayouts.layout_args(bc))
+@inline get_all_non_point_layouts(other) = ()
 
 @inline is_device_linear(arg) = Base.IndexStyle(arg) == IndexLinear()
 
@@ -243,12 +250,12 @@ end
     ::typeof(view),
     args...,
 )
-    all_layouts = unrolled_flatten(unrolled_map(get_all_layouts, args))
     # 0-dimensional layouts (e.g. DataF args of fused broadcasts) broadcast to
     # every point, so they do not participate in the size or linearity checks.
-    layouts = unrolled_filter(DataLayouts.is_non_point_arg, all_layouts)
+    layouts = unrolled_flatmap(get_all_non_point_layouts, args)
     isempty(layouts) && return Base.OneTo(1)
-    if unrolled_allequal(size, layouts) && unrolled_all(is_device_linear, layouts)
+    if unrolled_allequal(size, layouts) &&
+       unrolled_all(is_device_linear, layouts)
         return Base.OneTo(length(first(layouts)))
     else
         # Singleton and mismatched extents require Cartesian indices, which

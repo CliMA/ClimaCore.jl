@@ -87,6 +87,8 @@ const MaybeFusedDataLayoutBroadcast = Union{LazyDataLayout, FusedMultiBroadcast}
 @inline is_layout_arg(::MaybeLazyDataLayout) = true
 @inline is_layout_arg(::Any) = false
 
+@inline get_layout_arg_tuple(arg) = is_layout_arg(arg) ? (arg,) : ()
+
 """
     layout_args(bc)
 
@@ -94,9 +96,9 @@ Extracts every [`DataLayout`](@ref) and [`LazyDataLayout`](@ref) from the
 arguments of a broadcast expression.
 """
 @inline layout_args(bc::LazyDataLayout) =
-    unrolled_filter(is_layout_arg, bc.args)
+    unrolled_flatmap(get_layout_arg_tuple, bc.args)
 @inline layout_args(bc::FusedMultiBroadcast) =
-    unrolled_filter(is_layout_arg, unrolled_flatten(bc.pairs))
+    unrolled_flatmap(get_layout_arg_tuple, unrolled_flatten(bc.pairs))
 
 @inline DataScope(bc::MaybeFusedDataLayoutBroadcast) = DataScope(layout_args(bc)...)
 
@@ -108,10 +110,15 @@ arguments of a broadcast expression.
     AbstractArray{promote_type(unrolled_map(parent_eltype, layout_args(bc))...)}
 
 # Allow any combination of f_dim values, taking a maximum to resolve conflicts.
-@inline function f_dim(bc::LazyDataLayout)
-    f_dims = unrolled_filter(!isnothing, unrolled_map(f_dim, layout_args(bc)))
-    return isempty(f_dims) ? nothing : max(f_dims...)
-end
+# Reduce with a nothing-or-integer accumulator instead of collecting the
+# non-nothing values into a tuple, so that no intermediate tuples appear in
+# GPU-compiled code. The init value is passed positionally instead of as a
+# keyword argument because kwcalls of unrolled_reduce do not always specialize
+# during GPU compilation of wide broadcast expressions.
+@inline f_dim(bc::LazyDataLayout) =
+    unrolled_reduce(unrolled_map(f_dim, layout_args(bc)), nothing) do dim1, dim2
+        isnothing(dim1) ? dim2 : isnothing(dim2) ? dim1 : max(dim1, dim2)
+    end
 
 # Extrude singleton axes like Broadcast.combine_axes when combining vijh_params.
 @inline vijh_params(bc::LazyDataLayout) =
