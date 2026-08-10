@@ -206,7 +206,7 @@ function rhs_invariant!(dY, Y, _, t)
     # convert to contravariant
     # these will need to be modified with topography
     fu¹² =
-        Geometry.Contravariant1Vector.(Geometry.Covariant13Vector.(Ic2f.(cuₕ)),)
+        Geometry.Contravariant1Vector.(Geometry.Covariant13Vector.(Ic2f.(cuₕ)))
     fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant13Vector.(fw))
     @. dw -= fω¹² × fu¹² # Covariant3Vector on faces
     @. duₕ -= If2c(fω¹² × fu³)

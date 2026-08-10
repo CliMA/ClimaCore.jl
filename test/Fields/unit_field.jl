@@ -850,7 +850,7 @@ end
                 Fields.Field(
                     Spaces.level(Fields.field_values(field.x), 1),
                     Spaces.level(space, TU.fc_index(1, space)),
-                )
+                ),
             )
 
         @test op_on_level_of_field ==

@@ -230,11 +230,11 @@ function _ExtrudedFiniteDifferenceGrid(
             Fields.Field(
                 center_z_local_geometry,
                 center_flat_space,
-            ).coordinates.z
+            ).coordinates.z,
         )
     face_∇Z_field =
         grad.(
-            Fields.Field(face_z_local_geometry, face_flat_space).coordinates.z
+            Fields.Field(face_z_local_geometry, face_flat_space).coordinates.z,
         )
 
     # construct full local geometry

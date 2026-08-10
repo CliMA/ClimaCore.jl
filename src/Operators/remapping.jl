@@ -89,13 +89,13 @@ function overlap(target::SpectralElementSpace2D, source::SpectralElementSpace2D)
     W = spzeros(size(X_ov) .* size(Y_ov))
     # Assemble kronecker products by element.
     for i in 1:Topologies.nlocalelems(target)
-        global_tgt = (Nq_t^2 * (i - 1) + 1):(Nq_t^2 * i) # global indices of target dof
+        global_tgt = (Nq_t ^ 2 * (i - 1) + 1):(Nq_t ^ 2 * i) # global indices of target dof
         meshelem = CartesianIndices(tgt_topo.orderindex)[i]
         ix, iy = meshelem.I
         tgt_x = (Nq_t * (ix - 1) + 1):(Nq_t * ix) # indices of target dof in Xov
         tgt_y = (Nq_t * (iy - 1) + 1):(Nq_t * iy) # indices of target dof in Yov
         for j in 1:Topologies.nlocalelems(source)
-            global_src = (Nq_s^2 * (j - 1) + 1):(Nq_s^2 * j)
+            global_src = (Nq_s ^ 2 * (j - 1) + 1):(Nq_s ^ 2 * j)
             meshelem = CartesianIndices(src_topo.orderindex)[j]
             jx, jy = meshelem.I
             src_x = (Nq_s * (jx - 1) + 1):(Nq_s * jx)

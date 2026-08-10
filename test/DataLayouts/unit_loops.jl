@@ -15,7 +15,7 @@ device_array(device, array) = ClimaComms.array_type(device)(array)
 # which makes comparisons insensitive to how threads partition the data.
 function test_data(device, ::Type{T}, Nf, Nv) where {T}
     (Ni, Nj, Nh) = (4, 4, 5)
-    array = device_array(device, Float64.(rand(1:(2^20), Nv, Ni, Nj, Nf, Nh)))
+    array = device_array(device, Float64.(rand(1:(2 ^ 20), Nv, Ni, Nj, Nf, Nh)))
     return DataLayouts.VIJFH{T, Nv, Ni, Nj, nothing}(array)
 end
 

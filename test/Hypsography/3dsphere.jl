@@ -41,7 +41,7 @@ horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 z_surface =
     Geometry.ZPoint.(
         cosd.(Fields.coordinate_field(horzspace).lat) .+
-        cosd.(Fields.coordinate_field(horzspace).long) .+ 1
+        cosd.(Fields.coordinate_field(horzspace).long) .+ 1,
     )
 
 hv_center_space = Spaces.ExtrudedFiniteDifferenceSpace(
