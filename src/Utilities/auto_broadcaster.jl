@@ -196,17 +196,11 @@ Base.showerror(
     "Arguments have unequal lengths $(join(unique(collect(lengths)), ", ", " and "))",
 )
 
-# Use unrolled_flatmap instead of unrolled_filter because nested_broadcast can
-# be called from GPU kernels; see the "Kernel-reachable unrolled functions"
-# unit test.
-@inline get_auto_broadcastable_tuple(x) = is_auto_broadcastable(x) ? (x,) : ()
-
 # Zip the arguments instead of splatting them to guarantee recursive inlining
 function _nested_broadcast(f::F, args) where {F}
     unrolled_any(Base.Fix2(isa, AutoBroadcaster), args) || return f(args...)
     unwrapped_args = unrolled_map(unwrap, args)
-    broadcastable_args =
-        unrolled_flatmap(get_auto_broadcastable_tuple, unwrapped_args)
+    broadcastable_args = unrolled_filter(is_auto_broadcastable, unwrapped_args)
     lengths = unrolled_map(length, broadcastable_args)
     unrolled_allequal(lengths) ||
         throw(UnequalNestedBroadcastLengthsError{lengths}())

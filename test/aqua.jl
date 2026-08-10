@@ -44,11 +44,13 @@ end
     Aqua.test_piracies(ClimaCore)
 end
 
-# Keyword arguments like init must be passed to the unrolled functions
-# positionally, since kwcalls do not always specialize during GPU
-# compilation of wide broadcast expressions, which makes them dynamic. The
-# pattern below is a heuristic that tolerates one level of nested
-# parentheses before the semicolon of a kwcall.
+# Init values must be passed to the unrolled functions positionally, either
+# directly or wrapped in UnrolledUtilities.Init, since a keyword argument is
+# lowered into a call to Core.kwcall, which does not always specialize during
+# GPU compilation of wide broadcast expressions and is a dynamic invocation
+# when it does not. The pattern below covers every unrolled function that
+# accepts an init value, and it tolerates one level of nested parentheses
+# before the semicolon of a kwcall.
 @testset "Kernel-reachable unrolled functions" begin
     kernel_reachable_dirs = [
         joinpath(pkgdir(ClimaCore), "src", "DataLayouts"),
@@ -56,7 +58,8 @@ end
         joinpath(pkgdir(ClimaCore), "src", "Utilities"),
         joinpath(pkgdir(ClimaCore), "ext", "cuda"),
     ]
-    kwcall_pattern = r"\bunrolled_(reduce|accumulate)\((?:[^;()]|\([^()]*\))*;"
+    kwcall_pattern =
+        r"\bunrolled_(reduce|mapreduce|accumulate|sum|prod)\((?:[^;()]|\([^()]*\))*;"
     offending_files = String[]
     for dir in kernel_reachable_dirs, (root, _, files) in walkdir(dir)
         for file in filter(endswith(".jl"), files)
