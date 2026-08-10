@@ -25,12 +25,14 @@ jobs:
       - name: Install dependencies
         run: >
           julia --project=docs -e 'using Pkg;
-          Pkg.develop(path="lib/ClimaCoreVTK");
-          Pkg.develop(path="lib/ClimaCoreTempestRemap");
-          Pkg.develop(path="lib/ClimaCoreMakie");
-          Pkg.develop(path="lib/ClimaCorePlots");
-          Pkg.develop(path="lib/ClimaCoreSpectra");
-          Pkg.develop(path=".");
+          Pkg.develop([
+            PackageSpec(path="lib/ClimaCoreVTK"),
+            PackageSpec(path="lib/ClimaCoreTempestRemap"),
+            PackageSpec(path="lib/ClimaCoreMakie"),
+            PackageSpec(path="lib/ClimaCorePlots"),
+            PackageSpec(path="lib/ClimaCoreSpectra"),
+            PackageSpec(path="."),
+          ]);
           Pkg.instantiate(;verbose=true)'
       - name: Build and deploy
         env:
