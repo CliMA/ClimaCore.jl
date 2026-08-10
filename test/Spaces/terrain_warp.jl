@@ -634,7 +634,7 @@ end
                 @test maximum(
                     abs.(
                         Fields.field_values(z_extracted) .-
-                        Fields.field_values(z_surface_known)
+                        Fields.field_values(z_surface_known),
                     ),
                 ) <= FT(1e-6)
             end

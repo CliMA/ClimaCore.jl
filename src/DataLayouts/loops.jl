@@ -39,8 +39,10 @@ end
 # filtering the indices with a per-slice mask lookup.
 @noinline throw_invalid_slice_mask(mask, op::O) where {O} =
     throw(ArgumentError(invalid_mask_string(mask, op)))
-@generated invalid_mask_string(::M, ::O) where {M, O} =
-    "$M cannot be applied to $(O.instance) slices"
+@generated invalid_mask_string(
+    ::M,
+    ::O,
+) where {M, O} = "$M cannot be applied to $(O.instance) slices"
 
 @inline function subscope_slice_indices(subscope, scope, mask, op::O, args...) where {O}
     is_valid_slice_mask(mask, op) || throw_invalid_slice_mask(mask, op)

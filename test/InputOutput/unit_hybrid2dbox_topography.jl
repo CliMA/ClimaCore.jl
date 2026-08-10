@@ -51,7 +51,7 @@ function hvspace_2D(
             sinpi.(
                 2 .* (Fields.coordinate_field(horzspace).x .- xlim[1]) ./
                 (xlim[2] - xlim[1]),
-            ) .+ 1
+            ) .+ 1,
         )
 
     hv_center_space = Spaces.ExtrudedFiniteDifferenceSpace(

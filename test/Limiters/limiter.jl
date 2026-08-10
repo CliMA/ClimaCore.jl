@@ -37,15 +37,15 @@ function rectangular_mesh_space(
             Geometry.XPoint{FT}(x1min),
             Geometry.XPoint{FT}(x1max);
             periodic = x1periodic,
-            boundary_names = boundary =
-                x1periodic ? nothing : (:west, :east),
+            boundary_names =  boundary =
+                x1periodic ? nothing : (:west, :east) ,
         ),
         Domains.IntervalDomain(
             Geometry.YPoint{FT}(x2min),
             Geometry.YPoint{FT}(x2max);
             periodic = x2periodic,
-            boundary_names = boundary =
-                x2periodic ? nothing : (:south, :north),
+            boundary_names =  boundary =
+                x2periodic ? nothing : (:south, :north) ,
         ),
     )
     mesh = Meshes.RectilinearMesh(domain, n1, n2)

@@ -96,9 +96,9 @@ end
     end
 
     # Vertical advective velocity
-    vC = Geometry.WVector.(ones(Float64, hv_face_space),)
+    vC = Geometry.WVector.(ones(Float64, hv_face_space))
     # vector-valued field to be advected (one component only, a UVector)
-    f = Geometry.UVector.(sin.(Fields.coordinate_field(hv_center_space).z),)
+    f = Geometry.UVector.(sin.(Fields.coordinate_field(hv_center_space).z))
 
     advf = advect(f)
 
@@ -120,14 +120,14 @@ end
         return vecdivf
     end
 
-    F = Geometry.UVector.(sin.(Fields.coordinate_field(hv_center_space).z),)
+    F = Geometry.UVector.(sin.(Fields.coordinate_field(hv_center_space).z))
 
     # Call the divergence operator
     vecdivf = div!(F)
 
     @test norm(
         vecdivf .-
-        Geometry.UVector.(cos.(Fields.coordinate_field(hv_center_space).z),),
+        Geometry.UVector.(cos.(Fields.coordinate_field(hv_center_space).z)),
     ) ≤ 6.5e-2
 
 end

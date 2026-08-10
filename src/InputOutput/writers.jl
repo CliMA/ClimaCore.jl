@@ -343,11 +343,9 @@ end
 defaultname(::DataLayouts.IJHMask) = "IJHMask"
 defaultname(::Grids.SpectralElementGrid1D) = "horizontal_grid"
 defaultname(::Grids.SpectralElementGrid2D) = "horizontal_grid"
-defaultname(::Grids.ExtrudedFiniteDifferenceGrid) =
-    "extruded_finite_difference_grid"
+defaultname(::Grids.ExtrudedFiniteDifferenceGrid) = "extruded_finite_difference_grid"
 defaultname(grid::Grids.FiniteDifferenceGrid) = defaultname(grid.topology)
-defaultname(grid::Grids.LevelGrid) =
-    "$(defaultname(grid.full_grid)): level $(grid.level)"
+defaultname(grid::Grids.LevelGrid) = "$(defaultname(grid.full_grid)): level $(grid.level)"
 
 """
     write_new!(writer, space, name)

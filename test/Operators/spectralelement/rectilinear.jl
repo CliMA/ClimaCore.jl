@@ -368,10 +368,10 @@ end
         l = 3
 
         yₕ = @. Geometry.Covariant12Vector.(
-            Geometry.UVVector(sin(k * coords.x + l * coords.y), 0.0)
+            Geometry.UVVector(sin(k * coords.x + l * coords.y), 0.0),
         )
         yᵥ = @. Geometry.Covariant3Vector.(
-            Geometry.WVector(sin(k * coords.x + l * coords.y))
+            Geometry.WVector(sin(k * coords.x + l * coords.y)),
         )
 
         curl = Operators.Curl()
@@ -381,13 +381,13 @@ end
               Geometry.Contravariant123Vector.(curl.(yᵥ)) ≈
               curl.(
             Geometry.Covariant123Vector.(yₕ) .+
-            Geometry.Covariant123Vector.(yᵥ)
+            Geometry.Covariant123Vector.(yᵥ),
         )
         @test Geometry.Contravariant123Vector.(wcurl.(yₕ)) .+
               Geometry.Contravariant123Vector.(wcurl.(yᵥ)) ≈
               wcurl.(
             Geometry.Covariant123Vector.(yₕ) .+
-            Geometry.Covariant123Vector.(yᵥ)
+            Geometry.Covariant123Vector.(yᵥ),
         )
 
     end

@@ -19,15 +19,15 @@ function rectangular_mesh(
             Geometry.XPoint(x1min),
             Geometry.XPoint(x1max);
             periodic = x1periodic,
-            boundary_names = boundary =
-                x1periodic ? nothing : (:west, :east),
+            boundary_names =  boundary =
+                x1periodic ? nothing : (:west, :east) ,
         ),
         Domains.IntervalDomain(
             Geometry.YPoint(x2min),
             Geometry.YPoint(x2max);
             periodic = x2periodic,
-            boundary_names = boundary =
-                x2periodic ? nothing : (:south, :north),
+            boundary_names =  boundary =
+                x2periodic ? nothing : (:south, :north) ,
         ),
     )
     return Meshes.RectilinearMesh(domain, n1, n2)

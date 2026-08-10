@@ -430,7 +430,7 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
         fω¹² = Operators.Curl().(Y.w),
         cω³ = Operators.Curl().(Y.uₕ),
         fu¹² = Geometry.Contravariant12Vector.(
-            Geometry.Covariant123Vector.(Ic2f.(Y.uₕ))
+            Geometry.Covariant123Vector.(Ic2f.(Y.uₕ)),
         ),
         fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant123Vector.(Y.w)),
         cuvw = cuvw,

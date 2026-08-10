@@ -113,7 +113,7 @@ end
         @test all(
             entry ->
                 entry isa MatrixFields.UniformScaling ||
-                    eltype(eltype(entry)) <: FT,
+                eltype(eltype(entry)) <: FT,
             MatrixFields.scalar_field_matrix(A).entries,
         )
         test_get(A, entry, key) = A[key] === entry

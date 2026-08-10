@@ -182,7 +182,7 @@ macro timevd(msg, ex)
                 elapsedtime = Base.time_ns() - elapsedtime;
                 Base.cumulative_compile_timing(false);
                 compile_elapsedtimes =
-                    Base.cumulative_compile_time_ns() .- compile_elapsedtimes
+                Base.cumulative_compile_time_ns() .- compile_elapsedtimes
             )
         )
         local diff = Base.GC_Diff(Base.gc_num(), stats)
@@ -280,10 +280,10 @@ nameify(name) = replace(name, "/" => "", ".jl" => "", " " => "")
 gensym_no_hashes(x) = replace(string(gensym(x)), "#" => "")
 modulename(name) = gensym_no_hashes(nameify(name))
 
-test_expr(test) =
-    "@testset \"$(test.name)\" begin include(\"$(test.filename)\")\nend"
-test_expr_safe(test) =
-    "module $(modulename(test.filename))\nusing Test;@testset \"$(test.name)\" begin \ninclude(\"$(test.filename)\")\nend\nend"
+test_expr(test) = "@testset \"$(test.name)\" begin include(\"$(test.filename)\")\nend"
+test_expr_safe(
+    test,
+) = "module $(modulename(test.filename))\nusing Test;@testset \"$(test.name)\" begin \ninclude(\"$(test.filename)\")\nend\nend"
 
 import Dates
 
