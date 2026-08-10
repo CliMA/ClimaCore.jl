@@ -13,6 +13,7 @@ UnitTest("PlusHalf"                                ,"Utilities/unit_plushalf.jl"
 UnitTest("Stable views"                            ,"Utilities/unit_stable_view.jl"),
 UnitTest("AutoBroadcaster"                         ,"Utilities/unit_auto_broadcaster.jl"),
 UnitTest("DataLayouts mapreduce"                   ,"DataLayouts/unit_mapreduce.jl"),
+UnitTest("DataLayouts layout args"                 ,"DataLayouts/unit_layout_args.jl"),
 UnitTest("Geometry"                                ,"Geometry/geometry.jl"),
 UnitTest("mul_with_projection"                     ,"Geometry/mul_with_projection.jl"),
 UnitTest("Tensors"                                 ,"Geometry/tensors.jl"),

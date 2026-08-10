@@ -139,14 +139,28 @@ steps:
         retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/opt_similar.jl"
 
+      - label: "Unit: data layout args"
+        key: unit_data_layout_args
+        retry: *retry_policy
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_layout_args.jl"
+
+      - label: "Unit: data layout args (1 gpu)"
+        key: gpu_unit_data_layout_args
+        retry: *retry_policy
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_layout_args.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: data cuda"
         key: unit_data_cuda
         retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/cuda.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:

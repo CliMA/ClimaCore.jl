@@ -56,9 +56,11 @@ import ClimaCore
     @test M * y == Geometry.UVVector(1.0, 8.5)
     @test M \ Geometry.UVVector(1.0, 8.5) == y
 
-    @test_throws DimensionMismatch dot(x, x)
-    @test_throws DimensionMismatch M * x
-    @test_throws DimensionMismatch M \ x
+    @test_throws Geometry.NoMetricError dot(x, x)
+    @test_throws Geometry.NoMetricError M * x
+    @test_throws Geometry.NoMetricError M \ x
+    @test sprint(showerror, Geometry.NoMetricError{Int, Float64}()) ==
+          "Metric is needed for change of basis: Int64 vs Float64"
 
     @test DataLayouts.num_basetypes(Float64, typeof(x)) == 2
 end

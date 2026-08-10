@@ -46,12 +46,30 @@ DataScope(::Type{<:Base.ReshapedArray{<:Any, <:Any, A}}) where {A} = DataScope(A
 # Infer parent types of other AbstractArrays (constant-folding not guaranteed).
 DataScope(::Type{A}) where {A <: AbstractArray} = DataScope(return_type(parent, Tuple{A}))
 
+# Scope errors are singleton exception types whose messages are only generated
+# by showerror on the host. Interpolating the scope types into a message where
+# the error is thrown would require calling a @generated function, which cannot
+# always be compiled for GPUs.
+struct NonOverlappingScopesError{S1, S2} <: Exception end
+NonOverlappingScopesError(::S1, ::S2) where {S1, S2} =
+    NonOverlappingScopesError{S1, S2}()
+Base.showerror(io::IO, ::NonOverlappingScopesError{S1, S2}) where {S1, S2} =
+    print(
+        io,
+        "$S1 and $S2 do not overlap, so they cannot be put in the same \
+         DataScope",
+    )
+
+struct InvalidSubscopeError{S1, S2} <: Exception end
+InvalidSubscopeError(::S1, ::S2) where {S1, S2} =
+    InvalidSubscopeError{S1, S2}()
+Base.showerror(io::IO, ::InvalidSubscopeError{S1, S2}) where {S1, S2} =
+    print(io, "$S1 is not a subset of $S2")
+
 DataScope(scope1::DataScope, scope2::DataScope) =
     is_subscope(scope1, scope2) ? scope1 :
     is_subscope(scope2, scope1) ? scope2 :
-    throw(ArgumentError(non_overlapping_scopes_string(scope1, scope2)))
-@generated non_overlapping_scopes_string(::S1, ::S2) where {S1, S2} =
-    "$S1 and $S2 do not overlap, so they cannot be put in the same DataScope"
+    throw(NonOverlappingScopesError(scope1, scope2))
 
 DataScope(arg1, arg2, args...) = DataScope(DataScope(arg1), DataScope(arg2, args...))
 
@@ -76,8 +94,7 @@ Checks if one [`DataScope`](@ref) is equal to another scope, or if it is a
     partition(scope) != scope && is_subscope(subscope, partition(scope))
 
 @noinline throw_invalid_subscope(subscope, scope) =
-    throw(ArgumentError(invalid_subscope_string(subscope, scope)))
-@generated invalid_subscope_string(::S1, ::S2) where {S1, S2} = "$S1 is not a subset of $S2"
+    throw(InvalidSubscopeError(subscope, scope))
 
 @inline num_subscopes(subscope, scope) =
     subscope == scope ? 1 :
