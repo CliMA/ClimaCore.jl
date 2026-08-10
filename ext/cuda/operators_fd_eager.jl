@@ -484,24 +484,59 @@ end
 """
     recursively_project(projection_tuple, y)
 
-Recursively project `y` onto the axes in `projection_tuple[1]` using the local geometry in
-`projection_tuple[2]`.
+Recursively project `y` onto the axes in `projection_tuple[1]` using the local geometry
+in `projection_tuple[2]`. The axes are either a single axis, which projects every tensor
+leaf of `y`, or (for multi-component entries like Tuples and AutoBroadcasters) a Tuple
+that pairs componentwise with `y`, with `nothing` marking components that need no
+projection (see `Geometry.recursively_find_dual_axes_for_projection`).
 """
 Base.@propagate_inbounds recursively_project(projection_tuple::T, y::Y) where {T, Y} =
-    map(Base.Fix1(recursively_project, projection_tuple), y)
-Base.@propagate_inbounds recursively_project(
-    projection_tuple::T,
-    y::Y,
-) where {T, Y <: Number} = y
-Base.@propagate_inbounds recursively_project(
-    projection_tuple::T,
-    y::Y,
-) where {T, Y <: AbstractTensor} =
-    @inbounds @inline project(projection_tuple[1], y, projection_tuple[2])
+    project_or_map(projection_tuple[1], projection_tuple[2], y)
+
+# `nothing` marks a component that needs no projection (with disambiguating
+# methods for the leaf types below).
+@inline project_or_map(::Nothing, lg, y) = y
+@inline project_or_map(::Nothing, lg, y::Number) = y
+@inline project_or_map(::Nothing, lg, y::AbstractTensor) = y
+# A Tuple of axes pairs componentwise with a multi-component entry.
+Base.@propagate_inbounds project_or_map(axes_per_component::Tuple, lg, y::Tuple) =
+    paired_projection(axes_per_component, y, lg)
+Base.@propagate_inbounds project_or_map(
+    axes_per_component::Tuple,
+    lg,
+    y::NamedTuple{names},
+) where {names} =
+    NamedTuple{names}(paired_projection(axes_per_component, values(y), lg))
+Base.@propagate_inbounds project_or_map(
+    axes_per_component::Tuple,
+    lg,
+    y::ClimaCore.Utilities.AutoBroadcaster,
+) = ClimaCore.Utilities.AutoBroadcaster(
+    project_or_map(axes_per_component, lg, ClimaCore.Utilities.unwrap(y)),
+)
+# A single axis projects every tensor leaf below it (a container, like a
+# BandMatrixRow, maps the whole projection over its entries).
+Base.@propagate_inbounds project_or_map(axis, lg, y) =
+    map(Base.Fix1(recursively_project, (axis, lg)), y)
+@inline project_or_map(axis, lg, y::Number) = y
+Base.@propagate_inbounds project_or_map(axis, lg, y::AbstractTensor) =
+    @inbounds @inline project(axis, y, lg)
+
+Base.@propagate_inbounds paired_projection(::Tuple{}, ::Tuple{}, lg) = ()
+Base.@propagate_inbounds paired_projection(axes_per_component, ys, lg) = (
+    project_or_map(first(axes_per_component), lg, first(ys)),
+    paired_projection(Base.tail(axes_per_component), Base.tail(ys), lg)...,
+)
 
 if hasfield(Method, :recursion_relation)
     dont_limit = (args...) -> true
     for m in methods(recursively_project)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(project_or_map)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(paired_projection)
         m.recursion_relation = dont_limit
     end
     for m in methods(calc_level_val)

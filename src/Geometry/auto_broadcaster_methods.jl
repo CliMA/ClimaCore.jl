@@ -1,5 +1,5 @@
 import ..Utilities:
-    AutoBroadcaster, nested_broadcast, nested_broadcast_result_type
+    AutoBroadcaster, nested_broadcast, nested_broadcast_result_type, unwrap
 
 # TODO: Avoid defining these methods by refactoring the Geometry module so that
 # all relevant functionality is expressed in terms of standard math operations
@@ -12,6 +12,13 @@ for f in (:covariant, :contravariant), n in (1, 2, 3)
 end
 Jcontravariant3(x::AutoBroadcaster, lg) =
     nested_broadcast(Base.Fix2(Jcontravariant3, lg), x)
+
+# An AutoBroadcaster entry pairs componentwise like its wrapped collection
+# (see `mul_with_projection` below and `recursively_find_dual_axes_for_projection`).
+@inline recursively_find_dual_axes_for_projection(
+    ::Type{X},
+) where {X <: AutoBroadcaster} =
+    recursively_find_dual_axes_for_projection(unwrap(X))
 
 mul_with_projection(x::AutoBroadcaster, y::AutoBroadcaster, lg) =
     nested_broadcast((x, y) -> mul_with_projection(x, y, lg), x, y)
