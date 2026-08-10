@@ -128,8 +128,12 @@ Base.@propagate_inbounds function eager_copyto_stencil_kernel!(
         col_idx > length(cart_inds) && return nothing
         @inbounds cart_inds[col_idx].I
     else
-        (; i_map, j_map, h_map) = mask
-        @inbounds col_idx > length(i_map) && return nothing
+        (; N, i_map, j_map, h_map) = mask
+        # Bound by the active-column count `N`, not `length(i_map)`: the maps
+        # are allocated with one entry per column of the layout, but
+        # `set_mask_maps!` only writes the first `N` entries, and the launch
+        # rounds the grid up to a multiple of `blockDim().y` columns.
+        @inbounds col_idx > N[1] && return nothing
         @inbounds i = i_map[col_idx]
         @inbounds j = j_map[col_idx]
         @inbounds h = h_map[col_idx]
