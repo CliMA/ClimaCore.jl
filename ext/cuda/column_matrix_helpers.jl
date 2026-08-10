@@ -79,8 +79,8 @@ Base.@propagate_inbounds function row_mul_vec!(
     zero_entry = zero(P)
     return UnrolledUtilities.unrolled_mapreduce(
         +,
-        ld1:ud1;
-        init = zero_entry,
+        UnrolledUtilities.Init(zero_entry),
+        ld1:ud1,
     ) do mat1_row_d
         vec2_slot = band_matrix_d(v + mat1_row_d, shape1)
         if 0i32 < vec2_slot <= n_column_slots(shape1)
