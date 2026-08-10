@@ -15,8 +15,8 @@ PkgVersion = "eebad327-c553-4316-9ea0-9fa01ccd7688"
 TempestRemap_jll = "8573a8c5-1df0-515e-a024-abad257ee284"
 
 [compat]
-ClimaComms = "0.5, 0.6"
-ClimaCore = "0.11, 0.12, 0.13, 0.14, 0.15"
+ClimaComms = "0.6"
+ClimaCore = "0.15"
 CommonDataModel = "0.2, 0.3"
 Dates = "1"
 DiskArrays = "<0.4.9" # NCDatasets v0.14.6 does not work with DiskArrays v0.4.9
@@ -25,7 +25,7 @@ NCDatasets = "0.11, 0.12, 0.13, 0.14"
 PkgVersion = "0.1, 0.2, 0.3"
 TempestRemap_jll = "2.2.0"
 Test = "1"
-julia = "1.7"
+julia = "1.10"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
