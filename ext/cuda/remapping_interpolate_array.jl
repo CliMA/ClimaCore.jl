@@ -62,15 +62,16 @@ function interpolate_slab_kernel!(
         I1, I2 = weights[index]
         Nq1, Nq2 = length(I1), length(I2)
 
-        output_array[index] = zero(FT)
+        val = zero(FT)
 
         for j in 1:Nq2, i in 1:Nq1
             ij = CartesianIndex((i, j))
-            output_array[index] +=
+            val +=
                 I1[i] *
                 I2[j] *
                 Operators.get_node(space, field, ij, slab_indices[index])
         end
+        output_array[index] = val
     end
     return nothing
 end
@@ -91,14 +92,15 @@ function interpolate_slab_kernel!(
         I1, = weights[index]
         Nq = length(I1)
 
-        output_array[index] = zero(FT)
+        val = zero(FT)
 
         for i in 1:Nq
             ij = CartesianIndex((i))
-            output_array[index] +=
+            val +=
                 I1[i] *
                 Operators.get_node(space, field, ij, slab_indices[index])
         end
+        output_array[index] = val
     end
     return nothing
 end
