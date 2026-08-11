@@ -39,6 +39,41 @@ max_eager_shmem_per_thread(
     bc::StencilBroadcasted{S, <:MultiplyColumnwiseBandMatrixField},
 ) where {S} =
     max(sizeof(cached_operand_type(bc)), _max_eager_shmem_over_args(bc.args))
+# A LimitedFluxC2F caches all of its arguments' level values simultaneously, so
+# its contribution is the size of the whole cache tuple, not of one value.
+max_eager_shmem_per_thread(
+    bc::StencilBroadcasted{S, <:Operators.LimitedFluxC2F},
+) where {S} =
+    max(sizeof(limited_flux_cache_type(bc)), _max_eager_shmem_over_args(bc.args))
+
+# Whether a gather spec reads neighboring threads' values, and so must be
+# cached in shared memory. `FaceValue`/`RawArg` values are only ever read back
+# by the thread that computed them, so they stay in registers.
+is_window_spec(spec) =
+    spec isa Union{Operators.FaceValueWindow, Operators.CenterWindow}
+
+"""
+    limited_flux_cache_type(bc)
+
+The tuple type that the eager `LimitedFluxC2F` handler writes into shared memory: one
+entry per window-gathered operator argument (see `is_window_spec`), holding the
+argument's level value (face-valued arguments are stored as their scalar
+`contravariant3` component).
+"""
+function limited_flux_cache_type(bc)
+    FT = Spaces.undertype(axes(bc))
+    entry(spec, arg) =
+        spec isa Operators.FaceValueWindow ? FT : unsafe_eltype(arg)
+    specs = Operators.arg_gather_spec(bc.op.kernel)
+    entries = map(entry, specs, bc.args)
+    T = Tuple{(e for (s, e) in zip(specs, entries) if is_window_spec(s))...}
+    isconcretetype(T) || error(
+        "Unable to size the eager finite difference kernel's shared memory: \
+         inference gave the non-concrete type $T for the cached level values \
+         of a $(Operators.operator_name(bc.op.kernel)) operator",
+    )
+    return T
+end
 
 _max_eager_shmem_over_args(::Tuple{}) = 0
 _max_eager_shmem_over_args(args::Tuple) = max(
@@ -461,6 +496,215 @@ end
 
 
 """
+    calc_level_val(bc::StencilBroadcasted{<:Any, <:LimitedFluxC2F}, hidx, space)
+
+Eager evaluation of the nonlinear flux-limited advection operators. Each thread
+evaluates every argument of `bc` at its own level (so nested expressions below the
+operator stay on the eager path), projects face-valued arguments onto their
+Contravariant3 component, caches the window-gathered per-level values in shared memory
+(values only read by their own thread stay in registers), and gathers its stencil
+windows from the neighboring threads' slots after a sync. Window entries whose
+level lies outside the domain are clamped to the boundary level (or wrapped, when the
+topology is periodic); the two faces nearest each boundary pass their clamped windows
+to the kernel's window boundary flux, which matches the lazy boundary stencils.
+"""
+Base.@propagate_inbounds function calc_level_val(
+    bc::BC,
+    hidx,
+    space,
+) where {S, Op <: Operators.LimitedFluxC2F, BC <: StencilBroadcasted{S, Op}}
+    op = bc.op
+    v = threadIdx().x
+    Nf = CUDA.blockDim().x
+    block_col_idx = threadIdx().y
+    periodic = Topologies.isperiodic(space)
+    FT = Spaces.undertype(space)
+    # The output of a LimitedFluxC2F is always on faces (so every thread maps to
+    # a face and none must be skipped), but this method gets speculatively
+    # compiled against center spaces for unrelated operators' kernels (see the
+    # SetBoundaryOperator handler), and a PlusHalf index must not reach the
+    # integer index comparisons below in that case.
+    idx = space.staggering isa Spaces.CellFace ? (v - half) : v
+
+    specs = Operators.arg_gather_spec(op.kernel)
+    levels = @inbounds @inline UnrolledUtilities.unrolled_map(
+        Base.Fix2(reconstruct_space_and_call_calc_level_val, (hidx, space)),
+        bc.args,
+    )
+    lg = Geometry.LocalGeometry(space, idx, hidx)
+    own = @inbounds @inline limited_flux_own_vals(specs, levels, lg)
+    cached = @inline limited_flux_window_vals(specs, own)
+
+    CUDA.sync_threads()
+    buf = CUDA.CuDynamicSharedArray(
+        typeof(cached),
+        CUDA.blockDim().x * CUDA.blockDim().y,
+    )
+    base = (block_col_idx - 1i32) * Nf
+    @inbounds buf[base + v] = cached
+    CUDA.sync_threads()
+
+    gathered = @inbounds @inline limited_flux_gather(
+        specs,
+        own,
+        buf,
+        base,
+        v,
+        Nf,
+        periodic,
+        Val(1),
+        Val(1),
+    )
+
+    if Operators.should_call_left_boundary(idx, space, op, bc.args...)
+        lbw = Operators.left_boundary_window(space)
+        bndry = Operators.get_boundary(op, lbw)
+        return Geometry.Contravariant3Vector(
+            Operators.window_left_boundary_flux(op.kernel, bndry, FT, gathered...),
+        )
+    elseif Operators.should_call_right_boundary(idx, space, op, bc.args...)
+        rbw = Operators.right_boundary_window(space)
+        bndry = Operators.get_boundary(op, rbw)
+        return Geometry.Contravariant3Vector(
+            Operators.window_right_boundary_flux(op.kernel, bndry, FT, gathered...),
+        )
+    end
+    return Geometry.Contravariant3Vector(
+        Operators.kernel_flux(op.kernel, gathered...),
+    )
+end
+
+# The value each thread holds for one argument: face-valued arguments are
+# projected onto their Contravariant3 component at the thread's face.
+Base.@propagate_inbounds limited_flux_own_vals(::Tuple{}, ::Tuple{}, lg) = ()
+Base.@propagate_inbounds limited_flux_own_vals(specs, levels, lg) = (
+    limited_flux_own_val(first(specs), first(levels), lg),
+    limited_flux_own_vals(Base.tail(specs), Base.tail(levels), lg)...,
+)
+Base.@propagate_inbounds limited_flux_own_val(
+    ::Union{Operators.FaceValue, Operators.FaceValueWindow},
+    level,
+    lg,
+) = Geometry.contravariant3(level, lg)
+Base.@propagate_inbounds limited_flux_own_val(spec, level, lg) = level
+
+# The subset of a thread's values that neighboring threads read, written to
+# shared memory (see `limited_flux_cache_type`).
+@inline limited_flux_window_vals(::Tuple{}, ::Tuple{}) = ()
+@inline limited_flux_window_vals(specs, own) =
+    is_window_spec(first(specs)) ?
+    (
+        first(own),
+        limited_flux_window_vals(Base.tail(specs), Base.tail(own))...,
+    ) : limited_flux_window_vals(Base.tail(specs), Base.tail(own))
+
+# Clamp (or wrap, for periodic topologies) a level index into the range of valid
+# levels.
+@inline limited_flux_slot(i, Nv, periodic) =
+    periodic ? mod1(i, Nv) : min(max(i, one(i)), Nv)
+
+# Gathers the `kernel_flux` argument tuple from the per-level values. `Ka` is
+# the position of the current argument (indexing `own`, the thread's register
+# values) and `Kc` its position in the shared-memory cache tuple, which only
+# holds window-gathered arguments (see `is_window_spec`).
+Base.@propagate_inbounds limited_flux_gather(
+    ::Tuple{},
+    own,
+    buf,
+    base,
+    v,
+    Nf,
+    periodic,
+    ::Val,
+    ::Val,
+) = ()
+Base.@propagate_inbounds limited_flux_gather(
+    specs,
+    own,
+    buf,
+    base,
+    v,
+    Nf,
+    periodic,
+    ::Val{Ka},
+    ::Val{Kc},
+) where {Ka, Kc} = (
+    limited_flux_gather_arg(
+        first(specs),
+        own,
+        buf,
+        base,
+        v,
+        Nf,
+        periodic,
+        Val(Ka),
+        Val(Kc),
+    ),
+    limited_flux_gather(
+        Base.tail(specs),
+        own,
+        buf,
+        base,
+        v,
+        Nf,
+        periodic,
+        Val(Ka + 1),
+        is_window_spec(first(specs)) ? Val(Kc + 1) : Val(Kc),
+    )...,
+)
+Base.@propagate_inbounds limited_flux_gather_arg(
+    ::Union{Operators.FaceValue, Operators.RawArg},
+    own,
+    buf,
+    base,
+    v,
+    Nf,
+    periodic,
+    ::Val{Ka},
+    ::Val{Kc},
+) where {Ka, Kc} = own[Ka]
+Base.@propagate_inbounds function limited_flux_gather_arg(
+    ::Operators.FaceValueWindow,
+    own,
+    buf,
+    base,
+    v,
+    Nf,
+    periodic,
+    ::Val{Ka},
+    ::Val{Kc},
+) where {Ka, Kc}
+    s⁻ = limited_flux_slot(v - 1i32, Nf, periodic)
+    s⁺ = limited_flux_slot(v + 1i32, Nf, periodic)
+    return (buf[base + s⁻][Kc], own[Ka], buf[base + s⁺][Kc])
+end
+Base.@propagate_inbounds function limited_flux_gather_arg(
+    ::Operators.CenterWindow,
+    own,
+    buf,
+    base,
+    v,
+    Nf,
+    periodic,
+    ::Val{Ka},
+    ::Val{Kc},
+) where {Ka, Kc}
+    # For a non-periodic topology there is one fewer center level than face
+    # level, and the last thread's center value comes from a padding thread.
+    Nc = periodic ? Nf : Nf - 1i32
+    s1 = limited_flux_slot(v - 2i32, Nc, periodic)
+    s2 = limited_flux_slot(v - 1i32, Nc, periodic)
+    s3 = limited_flux_slot(v, Nc, periodic)
+    s4 = limited_flux_slot(v + 1i32, Nc, periodic)
+    return (
+        buf[base + s1][Kc],
+        buf[base + s2][Kc],
+        buf[base + s3][Kc],
+        buf[base + s4][Kc],
+    )
+end
+
+"""
     project_row2_for_mul(mat1_row, mat2_row, hidx, space)
 
 Projects `mat2_row` onto the correct axis for multiplication with `mat1_row` if necessary, and returns the projected row.
@@ -544,6 +788,15 @@ if hasfield(Method, :recursion_relation)
         m.recursion_relation = dont_limit
     end
     for m in methods(calc_level_val)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(limited_flux_own_vals)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(limited_flux_window_vals)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(limited_flux_gather)
         m.recursion_relation = dont_limit
     end
 end

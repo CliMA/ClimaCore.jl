@@ -225,12 +225,22 @@ get_boundary(
     ::RightBoundaryWindow{name},
 ) where {name} = get_boundary(op.bcs, name)
 
-strip_space(op::FiniteDifferenceOperator, parent_space) =
-    unionall_type(typeof(op))(
-        NamedTuple{keys(op.bcs)}(
-            strip_space_args(values(op.bcs), parent_space),
-        ),
-    )
+"""
+    rebuild_op(op, bcs)
+
+Rebuilds `op` with the boundary conditions `bcs`, preserving any non-bc fields
+(like `LimitedFluxC2F`'s kernel) that `unionall_type(typeof(op))(bcs)` would
+drop. Every generic path that transforms an operator's boundary conditions
+(`strip_space`, `column`, `adapt_fd_operator`, `promote_bcs`) rebuilds through
+this hook.
+"""
+@inline rebuild_op(op::FiniteDifferenceOperator, bcs) =
+    unionall_type(typeof(op))(bcs)
+
+strip_space(op::FiniteDifferenceOperator, parent_space) = rebuild_op(
+    op,
+    NamedTuple{keys(op.bcs)}(strip_space_args(values(op.bcs), parent_space)),
+)
 
 abstract type AbstractStencilStyle <: Fields.AbstractFieldStyle end
 
@@ -823,12 +833,245 @@ return_space(
     arg_space::AllCenterFiniteDifferenceSpace,
 ) = velocity_space
 
-upwind_biased_product(v, a⁻, a⁺) = ((v + abs(v)) * a⁻ + (v - abs(v)) * a⁺) / 2
+"""
+    upwind_select(s, x⁻, x⁺)
+
+The upwind dispatch shared by all advection operators: `x⁻` (the form
+reconstructed from the upwind side for positive flow) when `s >= 0`, and `x⁺`
+otherwise. Every advection operator is `combine(s, upwind_select(s, x⁻, x⁺))`
+for some pair of one-sided forms; `combine` is usually multiplication by `s`.
+"""
+@inline upwind_select(s, x⁻, x⁺) = s >= 0 ? x⁻ : x⁺
+
+"""
+    upwind_biased_product(v, a⁻, a⁺)
+    upwind_biased_product(v, av, a⁻, a⁺)
+
+`v * upwind_select(v, a⁻, a⁺)`, written in a form that is linear in `a⁻` and
+`a⁺` so that it can also blend the matrix rows of the one-sided reconstructions
+(see `MatrixFields.operator_matrices.jl`). The 4-argument form takes the
+precomputed `av = abs(v)`, for callers whose `v` does not support `abs` (like a
+`Contravariant3Vector` matrix entry).
+"""
+upwind_biased_product(v, a⁻, a⁺) = upwind_biased_product(v, abs(v), a⁻, a⁺)
+@inline upwind_biased_product(v, av, a⁻, a⁺) =
+    ((v + av) * a⁻ + (v - av) * a⁺) / 2
+
+"""
+    upwind_symmetric_difference(sgn, a⁻, a, a⁺)
+
+The upwind difference `a - a⁻` when `sgn == 1`, `a⁺ - a` when `sgn == -1`, and
+the centered difference `(a⁺ - a⁻) / 2` when `sgn == 0`.
+"""
+@inline upwind_symmetric_difference(sgn, a⁻, a, a⁺) =
+    (1 - sgn) / 2 * a⁺ + sgn * a - (1 + sgn) / 2 * a⁻
+
+"""
+    left_biased_3rd(a₁, a₂, a₃)
+    right_biased_3rd(a₁, a₂, a₃)
+
+The 3rd-order biased reconstructions of the value at a face from three
+consecutive center values: `left_biased_3rd` reconstructs at the face between
+`a₂` and `a₃` (from mostly-left data), and `right_biased_3rd` at the face
+between `a₁` and `a₂` (from mostly-right data). These are the interior stencils
+of the removed `LeftBiased3rdOrderC2F`/`RightBiased3rdOrderC2F` operators;
+their matrix-row forms are in `MatrixFields`
+(`left/right_biased_3rd_interior_row`).
+"""
+@inline left_biased_3rd(a₁, a₂, a₃) = (-2a₁ + 10a₂ + 4a₃) / 12
+@inline right_biased_3rd(a₁, a₂, a₃) = (4a₁ + 10a₂ - 2a₃) / 12
 
 stencil_interior_width(::UpwindBiasedProductC2F, velocity, arg) =
     ((0, 0), (-half, half))
 
 boundary_width(::UpwindBiasedProductC2F, ::AbstractBoundaryCondition) = 1
+
+"""
+    LimitedFluxC2F(bcs::NamedTuple, kernel)
+
+The single primitive behind the nonlinear (flux-limited) advection operators:
+[`LinVanLeerC2F`](@ref), [`FCTBorisBook`](@ref), [`FCTZalesak`](@ref), and
+[`TVDLimitedFluxC2F`](@ref) are all aliases for `LimitedFluxC2F` with a
+particular `kernel`. At each cell face, the operator gathers a fixed window of
+every argument -- the 4-point window of each center-valued argument and the
+`Contravariant3` component of each face-valued argument, as specified by
+`arg_gather_spec(kernel)` -- and wraps the pure scalar function
+`kernel_flux(kernel, gathered...)` in a `Contravariant3Vector`. The boundary
+conditions each kernel supports are given by `valid_bcs(kernel)`.
+
+These operators apply nonlinear transformations to their arguments, so they
+have no operator matrices, and the flux they produce at the outermost boundary
+faces is only zero or one-sided: they are meant to be composed with an operator
+that does not use those faces, such as a [`DivergenceF2C`](@ref) with
+[`SetValue`](@ref) boundary conditions.
+"""
+struct LimitedFluxC2F{BCS, K} <: AdvectionOperator
+    bcs::BCS
+    kernel::K
+    function LimitedFluxC2F(bcs::NamedTuple, kernel::K) where {K}
+        assert_valid_bcs(operator_name(kernel), bcs, valid_bcs(kernel))
+        new{typeof(bcs), K}(bcs, kernel)
+    end
+end
+
+# `operator_name(kernel)` is the user-facing name of the kernel's operator
+# alias, for error messages; it is defined beside each kernel.
+function operator_name end
+
+rebuild_op(op::LimitedFluxC2F, bcs) = LimitedFluxC2F(bcs, op.kernel)
+
+# Backward compatibility for the replaced structs' public fields:
+# `op.constraint` (LinVanLeerC2F) and `op.method` (TVDLimitedFluxC2F) forward
+# to the kernel.
+@inline Base.getproperty(op::LimitedFluxC2F, name::Symbol) =
+    name === :constraint || name === :method ?
+    getfield(getfield(op, :kernel), name) : getfield(op, name)
+
+# What `stencil_interior` gathers for one argument of a LimitedFluxC2F operator.
+struct FaceValue end        # Contravariant3 component of the argument at the face
+struct FaceValueWindow end  # Contravariant3 components at the face and both neighbors
+struct CenterWindow end     # the 4-point center window (a⁻⁻, a⁻, a⁺, a⁺⁺)
+struct RawArg end           # the argument itself, e.g. a scalar like `dt`
+
+gather_width(::FaceValue) = (0, 0)
+gather_width(::FaceValueWindow) = (-1, 1)
+gather_width(::CenterWindow) = (-half - 1, half + 1)
+gather_width(::RawArg) = (0, 0)
+
+Base.@propagate_inbounds face_ct3(space, arg, idx, hidx) =
+    Geometry.contravariant3(
+        getidx(space, arg, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+
+Base.@propagate_inbounds gather_arg(::FaceValue, space, arg, idx, hidx) =
+    face_ct3(space, arg, idx, hidx)
+Base.@propagate_inbounds gather_arg(::FaceValueWindow, space, arg, idx, hidx) =
+    (
+        face_ct3(space, arg, idx - 1, hidx),
+        face_ct3(space, arg, idx, hidx),
+        face_ct3(space, arg, idx + 1, hidx),
+    )
+Base.@propagate_inbounds gather_arg(::CenterWindow, space, arg, idx, hidx) = (
+    getidx(space, arg, idx - half - 1, hidx),
+    getidx(space, arg, idx - half, hidx),
+    getidx(space, arg, idx + half, hidx),
+    getidx(space, arg, idx + half + 1, hidx),
+)
+gather_arg(::RawArg, space, arg, idx, hidx) = arg
+
+Base.@propagate_inbounds gather_args(::Tuple{}, ::Tuple{}, space, idx, hidx) =
+    ()
+Base.@propagate_inbounds gather_args(specs, args, space, idx, hidx) = (
+    gather_arg(first(specs), space, first(args), idx, hidx),
+    gather_args(Base.tail(specs), Base.tail(args), space, idx, hidx)...,
+)
+
+stencil_interior_width(op::LimitedFluxC2F, args...) =
+    map(gather_width, arg_gather_spec(op.kernel))
+
+Base.@propagate_inbounds function stencil_interior(
+    op::LimitedFluxC2F,
+    space,
+    idx,
+    hidx,
+    args...,
+)
+    gathered = gather_args(arg_gather_spec(op.kernel), args, space, idx, hidx)
+    return Geometry.Contravariant3Vector(kernel_flux(op.kernel, gathered...))
+end
+
+# Exact-arity methods to avoid ambiguity with the generic
+# `return_eltype(::AdvectionOperator, velocity, arg)`.
+return_eltype(::LimitedFluxC2F, V, arg) =
+    Geometry.Contravariant3Vector{eltype(eltype(V))}
+return_eltype(::LimitedFluxC2F, V, arg1, arg2) =
+    Geometry.Contravariant3Vector{eltype(eltype(V))}
+
+# The space staggering each gather spec requires of its argument, replacing the
+# per-operator `return_space` signature constraints of the replaced operators.
+valid_arg_space(::Union{FaceValue, FaceValueWindow}, arg_space) =
+    arg_space isa AllFaceFiniteDifferenceSpace
+valid_arg_space(::CenterWindow, arg_space) =
+    arg_space isa AllCenterFiniteDifferenceSpace
+valid_arg_space(::RawArg, arg_space) = true
+
+function return_space(
+    op::LimitedFluxC2F,
+    flux_space::AllFaceFiniteDifferenceSpace,
+    other_arg_spaces...,
+)
+    specs = arg_gather_spec(op.kernel)
+    arg_spaces = (flux_space, other_arg_spaces...)
+    length(specs) == length(arg_spaces) &&
+        all(map(valid_arg_space, specs, arg_spaces)) || error(
+        "$(operator_name(op.kernel)) was given arguments on the wrong spaces: \
+         its face-valued (velocity or flux) arguments must be on face spaces \
+         and its advected arguments on center spaces",
+    )
+    return flux_space
+end
+
+boundary_width(::LimitedFluxC2F, ::AbstractBoundaryCondition) = 2
+
+Base.@propagate_inbounds function stencil_left_boundary(
+    op::LimitedFluxC2F,
+    bc::Union{FirstOrderOneSided, ThirdOrderOneSided},
+    space,
+    idx,
+    hidx,
+    args...,
+)
+    @assert idx <= left_face_boundary_idx(space) + 1
+    return Geometry.Contravariant3Vector(
+        kernel_left_boundary_flux(op.kernel, bc, space, idx, hidx, args...),
+    )
+end
+Base.@propagate_inbounds function stencil_right_boundary(
+    op::LimitedFluxC2F,
+    bc::Union{FirstOrderOneSided, ThirdOrderOneSided},
+    space,
+    idx,
+    hidx,
+    args...,
+)
+    @assert idx >= right_face_boundary_idx(space) - 1
+    return Geometry.Contravariant3Vector(
+        kernel_right_boundary_flux(op.kernel, bc, space, idx, hidx, args...),
+    )
+end
+
+# For every kernel except LinVanLeer's, FirstOrderOneSided zeroes the flux at
+# the two faces nearest each boundary.
+Base.@propagate_inbounds kernel_left_boundary_flux(
+    kernel,
+    ::FirstOrderOneSided,
+    space,
+    idx,
+    hidx,
+    args...,
+) = zero(eltype(eltype(args[1])))
+Base.@propagate_inbounds kernel_right_boundary_flux(
+    kernel,
+    ::FirstOrderOneSided,
+    space,
+    idx,
+    hidx,
+    args...,
+) = zero(eltype(eltype(args[1])))
+
+abstract type LimiterConstraint end
+struct AlgebraicMean <: LimiterConstraint end
+struct PositiveDefinite <: LimiterConstraint end
+struct MonotoneHarmonic <: LimiterConstraint end
+struct MonotoneLocalExtrema <: LimiterConstraint end
+
+struct LinVanLeerKernel{C <: LimiterConstraint}
+    constraint::C
+end
+operator_name(::LinVanLeerKernel) = "LinVanLeerC2F"
+valid_bcs(::LinVanLeerKernel) = (FirstOrderOneSided, ThirdOrderOneSided)
+arg_gather_spec(::LinVanLeerKernel) = (FaceValue(), CenterWindow(), RawArg())
 
 """
     LinVanLeerC2F
@@ -856,44 +1099,11 @@ Supported boundary conditions include:
  - [`FirstOrderOneSided`](@ref)
  - [`ThirdOrderOneSided`](@ref)
 """
-struct LinVanLeerC2F{BCS, C} <: AdvectionOperator
-    bcs::BCS
-    constraint::C
-    function LinVanLeerC2F(; constraint, kwargs...)
-        assert_valid_bcs(
-            "LinVanLeerC2F",
-            kwargs,
-            (FirstOrderOneSided, ThirdOrderOneSided),
-        )
-        new{typeof(NamedTuple(kwargs)), typeof(constraint)}(
-            NamedTuple(kwargs),
-            constraint,
-        )
-    end
-    LinVanLeerC2F(bcs, constraint) = LinVanLeerC2F(; constraint, bcs...)
-end
-
-abstract type LimiterConstraint end
-struct AlgebraicMean <: LimiterConstraint end
-struct PositiveDefinite <: LimiterConstraint end
-struct MonotoneHarmonic <: LimiterConstraint end
-struct MonotoneLocalExtrema <: LimiterConstraint end
-
-
-strip_space(op::LinVanLeerC2F, parent_space) = LinVanLeerC2F(
-    NamedTuple{keys(op.bcs)}(strip_space_args(values(op.bcs), parent_space)),
-    op.constraint,
-)
-
-return_eltype(::LinVanLeerC2F, V, A, dt) =
-    Geometry.Contravariant3Vector{eltype(eltype(V))}
-
-return_space(
-    ::LinVanLeerC2F,
-    velocity_space::AllFaceFiniteDifferenceSpace,
-    arg_space::AllCenterFiniteDifferenceSpace,
-    dt,
-) = velocity_space
+const LinVanLeerC2F{BCS, C} = LimitedFluxC2F{BCS, LinVanLeerKernel{C}}
+LinVanLeerC2F(; constraint, kwargs...) =
+    LimitedFluxC2F(NamedTuple(kwargs), LinVanLeerKernel(constraint))
+LinVanLeerC2F(bcs, constraint) =
+    LimitedFluxC2F(NamedTuple(bcs), LinVanLeerKernel(constraint))
 
 function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::MonotoneLocalExtrema)
     Δ𝜙_avg = ((a⁰ - a⁻) + (a⁺ - a⁰)) / 2
@@ -931,46 +1141,68 @@ end
 function slope_limited_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺, dt, constraint)
     # Following Lin et al. (1994)
     # https://doi.org/10.1175/1520-0493(1994)122<1575:ACOTVL>2.0.CO;2
-    if v >= 0
-        # Eqn (2,5a,5b,5c)
-        Δ𝛼 = compute_Δ𝛼_linvanleer(a⁻⁻, a⁻, a⁺, v, dt, constraint)
-        return v * (a⁻ + Δ𝛼 / 2)
-    else
-        # Eqn (2,5a,5b,5c)
-        Δ𝛼 = compute_Δ𝛼_linvanleer(a⁻, a⁺, a⁺⁺, v, dt, constraint)
-        return v * (a⁺ - Δ𝛼 / 2)
-    end
+    # Eqn (2,5a,5b,5c): the mismatch Δ𝛼 is computed over the upwind-side window
+    (b⁻, b⁰, b⁺) = upwind_select(v, (a⁻⁻, a⁻, a⁺), (a⁻, a⁺, a⁺⁺))
+    Δ𝛼 = compute_Δ𝛼_linvanleer(b⁻, b⁰, b⁺, v, dt, constraint)
+    return v * upwind_select(v, a⁻ + Δ𝛼 / 2, a⁺ - Δ𝛼 / 2)
 end
 
-stencil_interior_width(::LinVanLeerC2F, velocity, arg, dt) =
-    ((0, 0), (-half - 1, half + 1), (0, 0))
+@inline kernel_flux(k::LinVanLeerKernel, v³, (a⁻⁻, a⁻, a⁺, a⁺⁺), dt) =
+    slope_limited_product(v³, a⁻, a⁻⁻, a⁺, a⁺⁺, dt, k.constraint)
 
-Base.@propagate_inbounds function stencil_interior(
-    op::LinVanLeerC2F,
+# Pure boundary fluxes for LinVanLeerC2F, shared with the eager GPU
+# implementation. `c1, c2, c3` are the values of `arg` at the three centers
+# nearest the face: `(idx - half, idx + half, idx + half + 1)` on the left, and
+# `(idx - half - 1, idx - half, idx + half)` on the right. FirstOrderOneSided
+# blends the 1-point biased value with the opposite-side 3rd-order
+# reconstruction; ThirdOrderOneSided uses the one-sided 3rd-order
+# reconstruction regardless of the flow direction.
+@inline lin_van_leer_left_flux(::FirstOrderOneSided, v³, c1, c2, c3) =
+    upwind_biased_product(v³, c1, right_biased_3rd(c1, c2, c3))
+@inline lin_van_leer_left_flux(::ThirdOrderOneSided, v³, c1, c2, c3) =
+    v³ * right_biased_3rd(c1, c2, c3)
+@inline lin_van_leer_right_flux(::FirstOrderOneSided, v³, c1, c2, c3) =
+    upwind_biased_product(v³, left_biased_3rd(c1, c2, c3), c3)
+@inline lin_van_leer_right_flux(::ThirdOrderOneSided, v³, c1, c2, c3) =
+    v³ * left_biased_3rd(c1, c2, c3)
+
+Base.@propagate_inbounds function lin_van_leer_left_boundary_flux(
+    bc,
     space,
     idx,
     hidx,
     velocity,
     arg,
-    dt,
 )
-    a⁻ = getidx(space, arg, idx - half, hidx)
-    a⁻⁻ = getidx(space, arg, idx - half - 1, hidx)
-    a⁺ = getidx(space, arg, idx + half, hidx)
-    a⁺⁺ = getidx(space, arg, idx + half + 1, hidx)
-    vᶠ = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    return Geometry.Contravariant3Vector(
-        slope_limited_product(vᶠ, a⁻, a⁻⁻, a⁺, a⁺⁺, dt, op.constraint),
-    )
+    v³ = face_ct3(space, velocity, idx, hidx)
+    # At the outermost face, `idx - half` is one center below the domain; clamp
+    # it to the boundary center. (This read used to be out of bounds there.)
+    c1 = getidx(space, arg, max(idx - half, left_center_boundary_idx(space)), hidx)
+    c2 = getidx(space, arg, idx + half, hidx)
+    c3 = getidx(space, arg, idx + half + 1, hidx)
+    return lin_van_leer_left_flux(bc, v³, c1, c2, c3)
+end
+Base.@propagate_inbounds function lin_van_leer_right_boundary_flux(
+    bc,
+    space,
+    idx,
+    hidx,
+    velocity,
+    arg,
+)
+    v³ = face_ct3(space, velocity, idx, hidx)
+    c1 = getidx(space, arg, idx - half - 1, hidx)
+    c2 = getidx(space, arg, idx - half, hidx)
+    # At the outermost face, `idx + half` is one center above the domain; clamp
+    # it to the boundary center. (This read used to be out of bounds there.)
+    c3 = getidx(space, arg, min(idx + half, right_center_boundary_idx(space)), hidx)
+    return lin_van_leer_right_flux(bc, v³, c1, c2, c3)
 end
 
-boundary_width(::LinVanLeerC2F, ::AbstractBoundaryCondition) = 2
-
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::LinVanLeerC2F,
+# Written as one method per boundary condition (rather than one method with a
+# Union) so that each is strictly more specific than the zero-flux fallback.
+Base.@propagate_inbounds kernel_left_boundary_flux(
+    ::LinVanLeerKernel,
     bc::FirstOrderOneSided,
     space,
     idx,
@@ -978,28 +1210,19 @@ Base.@propagate_inbounds function stencil_left_boundary(
     velocity,
     arg,
     dt,
-)
-    @assert idx <= left_face_boundary_idx(space) + 1
-    v = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    # `a⁻` is `LeftBiasedC2F`'s interior stencil, inlined here (the operator remains,
-    # but its `stencil_interior` method is now derived from its operator matrix).
-    a⁻ = getidx(space, arg, idx - half, hidx)
-    # `a⁺` is the removed `RightBiased3rdOrderC2F` operator's interior stencil, inlined
-    # here because this is now its only remaining use.
-    a⁺ =
-        (
-            4 * getidx(space, arg, idx - half, hidx) +
-            10 * getidx(space, arg, idx + half, hidx) -
-            2 * getidx(space, arg, idx + half + 1, hidx)
-        ) / 12
-    return Geometry.Contravariant3Vector(upwind_biased_product(v, a⁻, a⁺))
-end
-
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::LinVanLeerC2F,
+) = lin_van_leer_left_boundary_flux(bc, space, idx, hidx, velocity, arg)
+Base.@propagate_inbounds kernel_left_boundary_flux(
+    ::LinVanLeerKernel,
+    bc::ThirdOrderOneSided,
+    space,
+    idx,
+    hidx,
+    velocity,
+    arg,
+    dt,
+) = lin_van_leer_left_boundary_flux(bc, space, idx, hidx, velocity, arg)
+Base.@propagate_inbounds kernel_right_boundary_flux(
+    ::LinVanLeerKernel,
     bc::FirstOrderOneSided,
     space,
     idx,
@@ -1007,29 +1230,9 @@ Base.@propagate_inbounds function stencil_right_boundary(
     velocity,
     arg,
     dt,
-)
-    @assert idx >= right_face_boundary_idx(space) - 1
-    v = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    # `a⁻` is the removed `LeftBiased3rdOrderC2F` operator's interior stencil, inlined
-    # here because this is now its only remaining use.
-    a⁻ =
-        (
-            -2 * getidx(space, arg, idx - 1 - half, hidx) +
-            10 * getidx(space, arg, idx - half, hidx) +
-            4 * getidx(space, arg, idx + half, hidx)
-        ) / 12
-    # `a⁺` is `RightBiasedC2F`'s interior stencil, inlined here (the operator remains,
-    # but its `stencil_interior` method is now derived from its operator matrix).
-    a⁺ = getidx(space, arg, idx + half, hidx)
-    return Geometry.Contravariant3Vector(upwind_biased_product(v, a⁻, a⁺))
-
-end
-
-Base.@propagate_inbounds function stencil_left_boundary(
-    op::LinVanLeerC2F,
+) = lin_van_leer_right_boundary_flux(bc, space, idx, hidx, velocity, arg)
+Base.@propagate_inbounds kernel_right_boundary_flux(
+    ::LinVanLeerKernel,
     bc::ThirdOrderOneSided,
     space,
     idx,
@@ -1037,52 +1240,58 @@ Base.@propagate_inbounds function stencil_left_boundary(
     velocity,
     arg,
     dt,
-)
-    @assert idx <= left_face_boundary_idx(space) + 1
+) = lin_van_leer_right_boundary_flux(bc, space, idx, hidx, velocity, arg)
 
-    vᶠ = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    # `a` is the removed `RightBiased3rdOrderC2F` operator's interior stencil, inlined
-    # here because this is now its only remaining use.
-    a =
-        (
-            4 * getidx(space, arg, idx - half, hidx) +
-            10 * getidx(space, arg, idx + half, hidx) -
-            2 * getidx(space, arg, idx + half + 1, hidx)
-        ) / 12
-
-    return Geometry.Contravariant3Vector(vᶠ * a)
-end
-
-Base.@propagate_inbounds function stencil_right_boundary(
-    op::LinVanLeerC2F,
-    bc::ThirdOrderOneSided,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
+# Window-based boundary fluxes, used by the eager GPU implementation of
+# LimitedFluxC2F. They take the same gathered argument windows as
+# `kernel_flux`, with window entries whose index lies outside the domain
+# clamped to the boundary (so the values below match the clamped reads in the
+# lazy boundary stencils above). `FT` is the flux scalar type.
+@inline window_left_boundary_flux(kernel, ::FirstOrderOneSided, ::Type{FT}, gathered...) where {FT} =
+    zero(FT)
+@inline window_right_boundary_flux(kernel, ::FirstOrderOneSided, ::Type{FT}, gathered...) where {FT} =
+    zero(FT)
+# With no boundary condition, the flux at the boundary is NaN (as in the
+# generic NullBoundaryCondition stencils).
+@inline window_left_boundary_flux(kernel, ::NullBoundaryCondition, ::Type{FT}, gathered...) where {FT} =
+    FT(NaN)
+@inline window_right_boundary_flux(kernel, ::NullBoundaryCondition, ::Type{FT}, gathered...) where {FT} =
+    FT(NaN)
+# For LinVanLeer, the left boundary flux uses the three lowest centers of the
+# clamped window, `(c0, c1, c2, c3)[2:4]`, and the right boundary flux uses the
+# three highest, matching `lin_van_leer_left/right_boundary_flux`.
+@inline window_left_boundary_flux(
+    k::LinVanLeerKernel,
+    bc::FirstOrderOneSided,
+    ::Type{FT},
+    v³,
+    cwin,
     dt,
-)
-    @assert idx >= right_face_boundary_idx(space) - 1
-
-    vᶠ = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    # `a` is the removed `LeftBiased3rdOrderC2F` operator's interior stencil, inlined
-    # here because this is now its only remaining use.
-    a =
-        (
-            -2 * getidx(space, arg, idx - 1 - half, hidx) +
-            10 * getidx(space, arg, idx - half, hidx) +
-            4 * getidx(space, arg, idx + half, hidx)
-        ) / 12
-
-    return Geometry.Contravariant3Vector(vᶠ * a)
-end
+) where {FT} = lin_van_leer_left_flux(bc, v³, cwin[2], cwin[3], cwin[4])
+@inline window_left_boundary_flux(
+    k::LinVanLeerKernel,
+    bc::ThirdOrderOneSided,
+    ::Type{FT},
+    v³,
+    cwin,
+    dt,
+) where {FT} = lin_van_leer_left_flux(bc, v³, cwin[2], cwin[3], cwin[4])
+@inline window_right_boundary_flux(
+    k::LinVanLeerKernel,
+    bc::FirstOrderOneSided,
+    ::Type{FT},
+    v³,
+    cwin,
+    dt,
+) where {FT} = lin_van_leer_right_flux(bc, v³, cwin[1], cwin[2], cwin[3])
+@inline window_right_boundary_flux(
+    k::LinVanLeerKernel,
+    bc::ThirdOrderOneSided,
+    ::Type{FT},
+    v³,
+    cwin,
+    dt,
+) where {FT} = lin_van_leer_right_flux(bc, v³, cwin[1], cwin[2], cwin[3])
 
 """
     U = Upwind3rdOrderBiasedProductC2F(;boundaries)
@@ -1144,6 +1353,11 @@ stencil_interior_width(::Upwind3rdOrderBiasedProductC2F, velocity, arg) =
 boundary_width(::Upwind3rdOrderBiasedProductC2F, ::AbstractBoundaryCondition) =
     2
 
+struct BorisBookKernel end
+operator_name(::BorisBookKernel) = "FCTBorisBook"
+valid_bcs(::BorisBookKernel) = (FirstOrderOneSided,)
+arg_gather_spec(::BorisBookKernel) = (FaceValue(), CenterWindow())
+
 """
     U = FCTBorisBook(;boundaries)
     U.(v, x)
@@ -1177,91 +1391,27 @@ Supported boundary conditions are:
     composed with another operator that does not make use of this value, e.g. a
     [`DivergenceF2C`](@ref) operator, with a [`SetValue`](@ref) boundary.
 """
-struct FCTBorisBook{BCS} <: AdvectionOperator
-    bcs::BCS
-    function FCTBorisBook(; kwargs...)
-        assert_valid_bcs("FCTBorisBook", kwargs, (FirstOrderOneSided,))
-        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
-    end
-    FCTBorisBook(bcs) = FCTBorisBook(; bcs...)
-end
+const FCTBorisBook{BCS} = LimitedFluxC2F{BCS, BorisBookKernel}
+FCTBorisBook(; kwargs...) = LimitedFluxC2F(NamedTuple(kwargs), BorisBookKernel())
+FCTBorisBook(bcs) = FCTBorisBook(; bcs...)
 
-return_eltype(::FCTBorisBook, V, A) =
-    Geometry.Contravariant3Vector{eltype(eltype(V))}
-
-return_space(
-    ::FCTBorisBook,
-    velocity_space::AllFaceFiniteDifferenceSpace,
-    arg_space::AllCenterFiniteDifferenceSpace,
-) = velocity_space
-
-fct_boris_book(v, a⁻⁻, a⁻, a⁺, a⁺⁺) =
-    ifelse(
-        iszero(v),
-        max(v, min(v, a⁺⁺ - a⁺, a⁻ - a⁻⁻)),
-        sign(v) *
-        max(zero(v), min(abs(v), sign(v) * (a⁺⁺ - a⁺), sign(v) * (a⁻ - a⁻⁻))),
-    )
-
-stencil_interior_width(::FCTBorisBook, velocity, arg) =
-    ((0, 0), (-half - 1, half + 1))
-
-Base.@propagate_inbounds function stencil_interior(
-    ::FCTBorisBook,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
+# Equivalent to the sign-based form
+# `sign(v) * max(0, min(|v|, sign(v)(a⁺⁺ - a⁺), sign(v)(a⁻ - a⁻⁻)))`, including
+# at `v == 0`, where both give 0 (so no special case is needed).
+fct_boris_book(v, a⁻⁻, a⁻, a⁺, a⁺⁺) = upwind_select(
+    v,
+    max(zero(v), min(v, a⁺⁺ - a⁺, a⁻ - a⁻⁻)),
+    min(zero(v), max(v, a⁺⁺ - a⁺, a⁻ - a⁻⁻)),
 )
-    a⁻⁻ = getidx(space, arg, idx - half - 1, hidx)
-    a⁻ = getidx(space, arg, idx - half, hidx)
-    a⁺ = getidx(space, arg, idx + half, hidx)
-    a⁺⁺ = getidx(space, arg, idx + half + 1, hidx)
-    vᶠ = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    return Geometry.Contravariant3Vector(fct_boris_book(vᶠ, a⁻⁻, a⁻, a⁺, a⁺⁺))
-end
 
-boundary_width(::FCTBorisBook, ::AbstractBoundaryCondition) = 2
+@inline kernel_flux(::BorisBookKernel, v³, (a⁻⁻, a⁻, a⁺, a⁺⁺)) =
+    fct_boris_book(v³, a⁻⁻, a⁻, a⁺, a⁺⁺)
 
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::FCTBorisBook,
-    bc::FirstOrderOneSided,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    @assert idx <= left_face_boundary_idx(space) + 1
-
-    vᶠ = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    return Geometry.Contravariant3Vector(zero(eltype(vᶠ)))
-end
-
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::FCTBorisBook,
-    bc::FirstOrderOneSided,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    @assert idx >= right_face_boundary_idx(space) - 1
-
-    vᶠ = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    return Geometry.Contravariant3Vector(zero(eltype(vᶠ)))
-end
+struct ZalesakKernel end
+operator_name(::ZalesakKernel) = "FCTZalesak"
+valid_bcs(::ZalesakKernel) = (FirstOrderOneSided,)
+arg_gather_spec(::ZalesakKernel) =
+    (FaceValueWindow(), CenterWindow(), CenterWindow())
 
 """
     U = FCTZalesak(;boundaries)
@@ -1295,53 +1445,17 @@ Supported boundary conditions are:
     composed with another operator that does not make use of this value, e.g.
     a [`DivergenceF2C`](@ref) operator, with a [`SetValue`](@ref) boundary.
 """
-struct FCTZalesak{BCS} <: AdvectionOperator
-    bcs::BCS
-    function FCTZalesak(; kwargs...)
-        assert_valid_bcs("FCTZalesak", kwargs, (FirstOrderOneSided,))
-        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
-    end
-    FCTZalesak(bcs) = FCTZalesak(; bcs...)
-end
+const FCTZalesak{BCS} = LimitedFluxC2F{BCS, ZalesakKernel}
+FCTZalesak(; kwargs...) = LimitedFluxC2F(NamedTuple(kwargs), ZalesakKernel())
+FCTZalesak(bcs) = FCTZalesak(; bcs...)
 
-return_eltype(::FCTZalesak, A, Φ, Φᵗᵈ) =
-    Geometry.Contravariant3Vector{eltype(eltype(A))}
-
-return_space(
-    ::FCTZalesak,
-    A_space::AllFaceFiniteDifferenceSpace,
-    Φ_space::AllCenterFiniteDifferenceSpace,
-    Φᵗᵈ_space::AllCenterFiniteDifferenceSpace,
-) = A_space
-
-stencil_interior_width(::FCTZalesak, A_space, Φ_space, Φᵗᵈ_space) =
-    ((-1, 1), (-half - 1, half + 1), (-half - 1, half + 1))
-
-Base.@propagate_inbounds function stencil_interior(
-    ::FCTZalesak,
-    space,
-    idx,
-    hidx,
-    A_field,
-    Φ_field,
-    Φᵗᵈ_field,
+@inline function kernel_flux(
+    ::ZalesakKernel,
+    (A₋₁, A, A₊₁),
+    (ϕ₋₃₂, ϕ₋₁₂, ϕ₊₁₂, ϕ₊₃₂),
+    (ϕ₋₃₂ᵗᵈ, ϕ₋₁₂ᵗᵈ, ϕ₊₁₂ᵗᵈ, ϕ₊₃₂ᵗᵈ),
 )
     # 1/dt is in ϕ₋₃₂, ϕ₋₁₂, ϕ₊₁₂, ϕ₊₃₂, ϕ₋₃₂ᵗᵈ, ϕ₋₁₂ᵗᵈ, ϕ₊₁₂ᵗᵈ, ϕ₊₃₂ᵗᵈ
-    ϕ₋₃₂ = getidx(space, Φ_field, idx - half - 1, hidx)
-    ϕ₋₁₂ = getidx(space, Φ_field, idx - half, hidx)
-    ϕ₊₁₂ = getidx(space, Φ_field, idx + half, hidx)
-    ϕ₊₃₂ = getidx(space, Φ_field, idx + half + 1, hidx)
-    ϕ₋₃₂ᵗᵈ = getidx(space, Φᵗᵈ_field, idx - half - 1, hidx)
-    ϕ₋₁₂ᵗᵈ = getidx(space, Φᵗᵈ_field, idx - half, hidx)
-    ϕ₊₁₂ᵗᵈ = getidx(space, Φᵗᵈ_field, idx + half, hidx)
-    ϕ₊₃₂ᵗᵈ = getidx(space, Φᵗᵈ_field, idx + half + 1, hidx)
-
-    lg₋₁ = Geometry.LocalGeometry(space, idx - 1, hidx)
-    lg = Geometry.LocalGeometry(space, idx, hidx)
-    lg₊₁ = Geometry.LocalGeometry(space, idx + 1, hidx)
-    A₋₁ = Geometry.contravariant3(getidx(space, A_field, idx - 1, hidx), lg₋₁)
-    A = Geometry.contravariant3(getidx(space, A_field, idx, hidx), lg)
-    A₊₁ = Geometry.contravariant3(getidx(space, A_field, idx + 1, hidx), lg₊₁)
 
     # 𝒮5.4.2 (1)  Durran (5.32)  Zalesak's cosmetic correction
     # which is usually omitted but used in Durran's textbook
@@ -1375,40 +1489,7 @@ Base.@propagate_inbounds function stencil_interior(
     R₊₁₂⁻ = ifelse(P₊₁₂⁻ > 0, min(1, (ϕ₊₁₂ᵗᵈ - ϕ₊₁₂ᵐⁱⁿ) / P₊₁₂⁻), zero(A))
     R₊₁₂⁺ = ifelse(P₊₁₂⁺ > 0, min(1, (ϕ₊₁₂ᵐᵃˣ - ϕ₊₁₂ᵗᵈ) / P₊₁₂⁺), zero(A))
 
-    A_fct = ifelse(A >= 0, min(R₊₁₂⁺, R₋₁₂⁻), min(R₋₁₂⁺, R₊₁₂⁻)) * A
-    return Geometry.Contravariant3Vector(A_fct)
-end
-
-boundary_width(::FCTZalesak, ::AbstractBoundaryCondition) = 2
-
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::FCTZalesak,
-    bc::FirstOrderOneSided,
-    space,
-    idx,
-    hidx,
-    A_field,
-    Φ_field,
-    Φᵗᵈ_field,
-)
-    @assert idx <= left_face_boundary_idx(space) + 1
-
-    return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
-end
-
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::FCTZalesak,
-    bc::FirstOrderOneSided,
-    space,
-    idx,
-    hidx,
-    A_field,
-    Φ_field,
-    Φᵗᵈ_field,
-)
-    @assert idx >= right_face_boundary_idx(space) - 1
-
-    return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
+    return upwind_select(A, min(R₊₁₂⁺, R₋₁₂⁻), min(R₋₁₂⁺, R₊₁₂⁻)) * A
 end
 
 """
@@ -1492,6 +1573,13 @@ A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
 struct MonotonizedCentralLimiter <: AbstractTVDSlopeLimiter end
 limiter_coeff(r, ::MonotonizedCentralLimiter) = max(0, min(2r, (1 + r) / 2, 2))
 
+struct TVDKernel{M <: AbstractTVDSlopeLimiter}
+    method::M
+end
+operator_name(::TVDKernel) = "TVDLimitedFluxC2F"
+valid_bcs(::TVDKernel) = (FirstOrderOneSided,)
+arg_gather_spec(::TVDKernel) = (FaceValue(), CenterWindow(), FaceValue())
+
 """
     TVDLimitedFluxC2F{BCS, M} <: AdvectionOperator
 
@@ -1527,87 +1615,17 @@ Supported boundary conditions are:
 
  - [`FirstOrderOneSided`](@ref)
 """
-struct TVDLimitedFluxC2F{BCS, M} <: AdvectionOperator
-    bcs::BCS
-    method::M
-    function TVDLimitedFluxC2F(; method, kwargs...)
-        assert_valid_bcs("TVDLimitedFluxC2F", kwargs, (FirstOrderOneSided,))
-        new{typeof(NamedTuple(kwargs)), typeof(method)}(
-            NamedTuple(kwargs),
-            method,
-        )
-    end
-    TVDLimitedFluxC2F(bcs, method) = TVDLimitedFluxC2F(; method, bcs...)
-end
+const TVDLimitedFluxC2F{BCS, M} = LimitedFluxC2F{BCS, TVDKernel{M}}
+TVDLimitedFluxC2F(; method, kwargs...) =
+    LimitedFluxC2F(NamedTuple(kwargs), TVDKernel(method))
+TVDLimitedFluxC2F(bcs, method) =
+    LimitedFluxC2F(NamedTuple(bcs), TVDKernel(method))
 
-return_eltype(::TVDLimitedFluxC2F, A, Φ, 𝓊) =
-    Geometry.Contravariant3Vector{eltype(eltype(A))}
-
-return_space(
-    ::TVDLimitedFluxC2F,
-    A_space::AllFaceFiniteDifferenceSpace,
-    Φ_space::AllCenterFiniteDifferenceSpace,
-    u_space::AllFaceFiniteDifferenceSpace,
-) = A_space
-
-stencil_interior_width(::TVDLimitedFluxC2F, A_space, Φ_space, u_space) =
-    ((-1, 1), (-half - 1, half + 1), (-1, +1))
-
-Base.@propagate_inbounds function stencil_interior(
-    op::TVDLimitedFluxC2F,
-    space,
-    idx,
-    hidx,
-    A_field,
-    Φ_field,
-    𝓊_field,
-)
-    ϕ₋₃₂ = getidx(space, Φ_field, idx - half - 1, hidx)
-    ϕ₋₁₂ = getidx(space, Φ_field, idx - half, hidx)
-    ϕ₊₁₂ = getidx(space, Φ_field, idx + half, hidx)
-    ϕ₊₃₂ = getidx(space, Φ_field, idx + half + 1, hidx)
-
-    lg = Geometry.LocalGeometry(space, idx, hidx)
-    𝓊 = Geometry.contravariant3(getidx(space, 𝓊_field, idx, hidx), lg)
-    A = Geometry.contravariant3(getidx(space, A_field, idx, hidx), lg)
-
+@inline function kernel_flux(k::TVDKernel, A, (ϕ₋₃₂, ϕ₋₁₂, ϕ₊₁₂, ϕ₊₃₂), 𝓊)
     Δϕ = ϕ₊₁₂ - ϕ₋₁₂ + eps(typeof(ϕ₋₁₂))
     # Δϕ_clipped = sign(Δϕ) * max(abs(Δϕ), eps(typeof(Δϕ)))
-    r = ifelse(𝓊 >= 0, ϕ₋₁₂ - ϕ₋₃₂, ϕ₊₃₂ - ϕ₊₁₂) / Δϕ # Δϕ_clipped
-
-    return Geometry.Contravariant3Vector(limiter_coeff(r, op.method) * A)
-end
-
-boundary_width(::TVDLimitedFluxC2F, ::AbstractBoundaryCondition) = 2
-
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::TVDLimitedFluxC2F,
-    bc::FirstOrderOneSided,
-    space,
-    idx,
-    hidx,
-    A_field,
-    Φ_field,
-    𝓊_field,
-)
-    @assert idx <= left_face_boundary_idx(space) + 1
-
-    return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
-end
-
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::TVDLimitedFluxC2F,
-    bc::FirstOrderOneSided,
-    space,
-    idx,
-    hidx,
-    A_field,
-    Φ_field,
-    𝓊_field,
-)
-    @assert idx >= right_face_boundary_idx(space) - 1
-
-    return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
+    r = upwind_select(𝓊, ϕ₋₁₂ - ϕ₋₃₂, ϕ₊₃₂ - ϕ₊₁₂) / Δϕ # Δϕ_clipped
+    return limiter_coeff(r, k.method) * A
 end
 
 abstract type BoundaryOperator <: FiniteDifferenceOperator end
@@ -1869,7 +1887,7 @@ Base.@propagate_inbounds function stencil_interior(
         Geometry.LocalGeometry(space, idx, hidx),
     )
     return Geometry.Covariant3Vector(1) ⊗
-           ((1 - sign(v)) / 2 * a⁺ + sign(v) * a - (1 + sign(v)) / 2 * a⁻)
+           upwind_symmetric_difference(sign(v), a⁻, a, a⁺)
 end
 
 boundary_width(::UpwindBiasedGradient, ::AbstractBoundaryCondition) = 1
@@ -1971,14 +1989,9 @@ end
 Adapt.adapt_structure(to, op::FiniteDifferenceOperator) =
     hasfield(typeof(op), :bcs) ? adapt_fd_operator(to, op, op.bcs) : op
 
-@inline adapt_fd_operator(to, op::LinVanLeerC2F, bcs) =
-    LinVanLeerC2F(adapt_bcs(to, bcs), Adapt.adapt_structure(to, op.constraint))
-
-@inline adapt_fd_operator(to, op::TVDLimitedFluxC2F, bcs) =
-    TVDLimitedFluxC2F(adapt_bcs(to, bcs), Adapt.adapt_structure(to, op.method))
-
-@inline adapt_fd_operator(to, op, bcs) =
-    unionall_type(typeof(op))(; adapt_bcs(to, bcs)...)
+# Kernels and other non-bc fields are isbits, so `rebuild_op` can reuse them
+# as-is.
+@inline adapt_fd_operator(to, op, bcs) = rebuild_op(op, adapt_bcs(to, bcs))
 
 @inline adapt_bcs(to, bcs) = NamedTuple{keys(bcs)}(
     unrolled_map(bc -> Adapt.adapt_structure(to, bc), values(bcs)),
@@ -2396,6 +2409,9 @@ if hasfield(Method, :recursion_relation)
     for m in methods(getidx)
         m.recursion_relation = dont_limit
     end
+    for m in methods(gather_args)
+        m.recursion_relation = dont_limit
+    end
 end
 
 # setidx! methods for copyto!
@@ -2471,7 +2487,7 @@ function Base.Broadcast.materialize!(
 end
 
 Base.@propagate_inbounds column(op::FiniteDifferenceOperator, inds...) =
-    unionall_type(typeof(op))(column_args(op.bcs, inds...))
+    rebuild_op(op, column_args(op.bcs, inds...))
 Base.@propagate_inbounds column(sbc::StencilBroadcasted{S}, inds...) where {S} =
     StencilBroadcasted{S}(
         column(sbc.op, inds...),
@@ -2621,23 +2637,7 @@ This is an internal method.
     ::Type{FT},
 ) where {FT}
     if hasfield(typeof(op), :bcs)
-        unionall_type(typeof(op))(promote_bcs(op.bcs, FT))
-    else
-        op
-    end
-end
-
-@inline function promote_bcs(op::LinVanLeerC2F, ::Type{FT}) where {FT}
-    if hasfield(typeof(op), :bcs)
-        unionall_type(typeof(op))(promote_bcs(op.bcs, FT), op.constraint)
-    else
-        op
-    end
-end
-
-@inline function promote_bcs(op::TVDLimitedFluxC2F, ::Type{FT}) where {FT}
-    if hasfield(typeof(op), :bcs)
-        unionall_type(typeof(op))(promote_bcs(op.bcs, FT), op.method)
+        rebuild_op(op, promote_bcs(op.bcs, FT))
     else
         op
     end

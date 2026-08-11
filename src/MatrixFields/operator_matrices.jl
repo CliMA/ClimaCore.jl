@@ -23,8 +23,7 @@ const TwoArgFDOperatorWithCenterInput = Union{
 const TwoArgFDOperatorWithFaceInput = Union{
     Operators.WeightedInterpolateF2C,
 }
-const NonlinearFDOperator =
-    Union{Operators.FCTBorisBook, Operators.FCTZalesak, Operators.LinVanLeerC2F}
+const NonlinearFDOperator = Operators.LimitedFluxC2F
 
 const OneArgFDOperator =
     Union{OneArgFDOperatorWithCenterInput, OneArgFDOperatorWithFaceInput}
@@ -423,9 +422,9 @@ return ``\\textrm{op}'(\\textbf{0})``, where ``\\textbf{0} ={} ```zero.(arg)`.
 """
 operator_matrix(op::OneArgFDOperator) = LazyOneArgFDOperatorMatrix(op)
 operator_matrix(op::TwoArgFDOperator) = FDOperatorMatrix(op)
-operator_matrix(::O) where {O <: NonlinearFDOperator} = error(
-    "$(O.name.name) applies a nonlinear transformation to its argument, so it \
-     cannot be represented by a matrix",
+operator_matrix(op::NonlinearFDOperator) = error(
+    "$(Operators.operator_name(op.kernel)) applies a nonlinear transformation \
+     to its argument, so it cannot be represented by a matrix",
 )
 operator_matrix(::O) where {O <: Operators.AbstractOperator} =
     error("operator_matrix has not been defined for $(O.name.name)")
@@ -778,6 +777,30 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     return BidiagonalMatrixRow(w⁻ / denominator, w⁺ / denominator)
 end
 
+# The matrix rows of the linear upwind operators are upwind blends of one-sided
+# reconstruction rows: `Operators.upwind_biased_product` is linear in the
+# reconstructions, so the row of `v³ ⋅ upwind_select(v³, row⁻ ⋅ x, row⁺ ⋅ x)` is
+# `upwind_biased_product(v³, |v³|, row⁻, row⁺)` (the 4-argument form takes the
+# precomputed `|v³|`, since `abs` is not defined for the CT3 row entries).
+#
+# The reconstruction rows are derived by applying the scalar reconstructions to
+# unit rows, so the stencil coefficients live only in `Operators.left_biased_3rd`
+# and `right_biased_3rd`. Each row is built in its natural band -- Lower* for the
+# left-biased reconstructions and Upper* for the right-biased ones -- and the `+`
+# in the blend promotes the pair to its band union (Bidiagonal or Quaddiagonal),
+# zero-padding exactly like the previous hand-expanded rows did.
+unit_rows_3(::Type{Row}, ::Type{FT}) where {Row, FT} = (
+    Row(FT(1), FT(0), FT(0)),
+    Row(FT(0), FT(1), FT(0)),
+    Row(FT(0), FT(0), FT(1)),
+)
+left_biased_1st_row(::Type{FT}) where {FT} = LowerDiagonalMatrixRow(FT(1))
+right_biased_1st_row(::Type{FT}) where {FT} = UpperDiagonalMatrixRow(FT(1))
+left_biased_3rd_row(::Type{FT}) where {FT} =
+    Operators.left_biased_3rd(unit_rows_3(LowerTridiagonalMatrixRow, FT)...)
+right_biased_3rd_row(::Type{FT}) where {FT} =
+    Operators.right_biased_3rd(unit_rows_3(UpperTridiagonalMatrixRow, FT)...)
+
 op_matrix_row_type(
     op::Operators.UpwindBiasedProductC2F,
     ::Type{FT},
@@ -790,9 +813,15 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     hidx,
     velocity,
 )
+    FT = Spaces.undertype(space)
     v³ = CT3(ct3_data(velocity, space, idx, hidx))
     av³ = CT3(abs(v³.u³))
-    return BidiagonalMatrixRow(v³ + av³, v³ - av³) / 2
+    return Operators.upwind_biased_product(
+        v³,
+        av³,
+        left_biased_1st_row(FT),
+        right_biased_1st_row(FT),
+    )
 end
 
 op_matrix_row_type(
@@ -807,10 +836,15 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     hidx,
     velocity,
 )
+    FT = Spaces.undertype(space)
     v³ = CT3(ct3_data(velocity, space, idx, hidx))
     av³ = CT3(abs(v³.u³))
-    return QuaddiagonalMatrixRow(-v³ - av³, 7v³ + 3av³, 7v³ - 3av³, -v³ + av³) /
-           12
+    return Operators.upwind_biased_product(
+        v³,
+        av³,
+        left_biased_3rd_row(FT),
+        right_biased_3rd_row(FT),
+    )
 end
 Base.@propagate_inbounds function op_matrix_first_row(
     ::Operators.Upwind3rdOrderBiasedProductC2F,
@@ -820,9 +854,17 @@ Base.@propagate_inbounds function op_matrix_first_row(
     hidx,
     velocity,
 )
+    FT = Spaces.undertype(space)
     v³ = CT3(ct3_data(velocity, space, idx, hidx))
     av³ = CT3(abs(v³.u³))
-    return UpperTridiagonalMatrixRow(8v³ + 4av³, 5v³ - 5av³, -v³ + av³) / 12
+    # blend of the 1-point left-biased value and the 3rd-order right-biased
+    # reconstruction over the boundary window (a⁻, a⁺, a⁺⁺)
+    return Operators.upwind_biased_product(
+        v³,
+        av³,
+        left_biased_1st_row(FT),
+        right_biased_3rd_row(FT),
+    )
 end
 Base.@propagate_inbounds function op_matrix_last_row(
     ::Operators.Upwind3rdOrderBiasedProductC2F,
@@ -832,10 +874,20 @@ Base.@propagate_inbounds function op_matrix_last_row(
     hidx,
     velocity,
 )
+    FT = Spaces.undertype(space)
     v³ = CT3(ct3_data(velocity, space, idx, hidx))
     av³ = CT3(abs(v³.u³))
-    return LowerTridiagonalMatrixRow(-v³ - av³, 5v³ + 5av³, 8v³ - 4av³) / 12
+    # blend of the 3rd-order left-biased reconstruction and the 1-point
+    # right-biased value over the boundary window (a⁻⁻, a⁻, a⁺)
+    return Operators.upwind_biased_product(
+        v³,
+        av³,
+        left_biased_3rd_row(FT),
+        right_biased_1st_row(FT),
+    )
 end
+# ThirdOrderOneSided uses the one-sided 3rd-order reconstruction regardless of
+# the flow direction, so there is no blend.
 Base.@propagate_inbounds function op_matrix_first_row(
     ::Operators.Upwind3rdOrderBiasedProductC2F,
     ::Operators.ThirdOrderOneSided,
@@ -844,8 +896,9 @@ Base.@propagate_inbounds function op_matrix_first_row(
     hidx,
     velocity,
 )
+    FT = Spaces.undertype(space)
     v³ = CT3(ct3_data(velocity, space, idx, hidx))
-    return UpperTridiagonalMatrixRow(4v³, 10v³, -2v³) / 12
+    return v³ * right_biased_3rd_row(FT)
 end
 Base.@propagate_inbounds function op_matrix_last_row(
     ::Operators.Upwind3rdOrderBiasedProductC2F,
@@ -855,8 +908,9 @@ Base.@propagate_inbounds function op_matrix_last_row(
     hidx,
     velocity,
 )
+    FT = Spaces.undertype(space)
     v³ = CT3(ct3_data(velocity, space, idx, hidx))
-    return LowerTridiagonalMatrixRow(-2v³, 10v³, 4v³) / 12
+    return v³ * left_biased_3rd_row(FT)
 end
 
 op_matrix_row_type(::Operators.AdvectionOperator, ::Type{FT}, _) where {FT} =
