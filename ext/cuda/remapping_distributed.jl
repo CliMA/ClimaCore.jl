@@ -52,10 +52,14 @@ function set_interpolated_values_linear_2d_kernel!(
     num_horiz = length(local_horiz_indices)
     num_vert = length(vert_bounding_indices)
     num_fields = length(field_values)
-    inds = (num_horiz, num_vert, num_fields)
+    # The vertical index varies fastest across threads: adjacent threads then
+    # read adjacent `v` in the VIJFH field data (V is its fastest dimension),
+    # so the reads coalesce. The one write per thread is strided instead, but
+    # reads outnumber writes here.
+    inds = (num_vert, num_horiz, num_fields)
     i_thread = thread_index()
     1 ≤ i_thread ≤ prod(inds) || return nothing
-    (i_out, j_v, k) = CartesianIndices(map(x -> Base.OneTo(x), inds))[i_thread].I
+    (j_v, i_out, k) = CartesianIndices(map(x -> Base.OneTo(x), inds))[i_thread].I
     @inbounds begin
         h = local_horiz_indices[i_out]
         v_lo, v_hi = vert_bounding_indices[j_v]
@@ -121,10 +125,14 @@ function set_interpolated_values_bilinear_3d_kernel!(
     num_horiz = length(local_horiz_indices)
     num_vert = length(vert_bounding_indices)
     num_fields = length(field_values)
-    inds = (num_horiz, num_vert, num_fields)
+    # The vertical index varies fastest across threads: adjacent threads then
+    # read adjacent `v` in the VIJFH field data (V is its fastest dimension),
+    # so the reads coalesce. The one write per thread is strided instead, but
+    # reads outnumber writes here.
+    inds = (num_vert, num_horiz, num_fields)
     i_thread = thread_index()
     1 ≤ i_thread ≤ prod(inds) || return nothing
-    (i_out, j_v, k) = CartesianIndices(map(x -> Base.OneTo(x), inds))[i_thread].I
+    (j_v, i_out, k) = CartesianIndices(map(x -> Base.OneTo(x), inds))[i_thread].I
     @inbounds begin
         h = local_horiz_indices[i_out]
         v_lo, v_hi = vert_bounding_indices[j_v]
@@ -342,18 +350,19 @@ function set_interpolated_values_kernel!(
 
         1 ≤ i_thread ≤ prod(inds) || return nothing
 
-        # TODO: Check the memory access pattern, we should maximize coalesced memory
         (j, i, k) = CartesianIndices(map(x -> Base.OneTo(x), inds))[i_thread].I
 
         h = local_horiz_indices[i]
         v_lo, v_hi = vert_bounding_indices[j]
         A, B = vert_interpolation_weights[j]
         fvals = field_values[k]
-        out[i, j, k] = 0
+
+        val = zero(eltype(out))
         for t in 1:Nq, s in 1:Nq
-            out[i, j, k] +=
+            val +=
                 I1[i, t] * I2[i, s] * (A * fvals[v_lo, t, s, h] + B * fvals[v_hi, t, s, h])
         end
+        out[i, j, k] = val
     end
     return nothing
 end
@@ -368,7 +377,6 @@ function set_interpolated_values_kernel!(
     field_values,
     ::Val{Nq},
 ) where {Nq}
-    # TODO: Check the memory access pattern. This was not optimized and likely inefficient!
     num_horiz = length(local_horiz_indices)
     num_vert = length(vert_bounding_indices)
     num_fields = length(field_values)
@@ -379,20 +387,21 @@ function set_interpolated_values_kernel!(
 
         1 ≤ i_thread ≤ prod(inds) || return nothing
 
-        # TODO: Check the memory access pattern, we should maximize coalesced memory
         (j, i, k) = CartesianIndices(map(x -> Base.OneTo(x), inds))[i_thread].I
 
         h = local_horiz_indices[i]
         v_lo, v_hi = vert_bounding_indices[j]
         A, B = vert_interpolation_weights[j]
-        out[i, j, k] = 0
+
+        val = zero(eltype(out))
         for t in 1:Nq
-            out[i, j, k] +=
+            val +=
                 I[i, t] * (
                     A * field_values[k][v_lo, t, 1, h] +
                     B * field_values[k][v_hi, t, 1, h]
                 )
         end
+        out[i, j, k] = val
     end
     return nothing
 end
@@ -407,7 +416,6 @@ function set_interpolated_values_kernel!(
     field_values,
     ::Val{Nq},
 ) where {Nq}
-    # TODO: Check the memory access pattern. This was not optimized and likely inefficient!
     num_fields = length(field_values)
     num_vert = length(vert_bounding_indices)
 
@@ -417,7 +425,6 @@ function set_interpolated_values_kernel!(
 
         1 ≤ i_thread ≤ prod(inds) || return nothing
 
-        # TODO: Check the memory access pattern, we should maximize coalesced memory
         (j, k) = CartesianIndices(map(x -> Base.OneTo(x), inds))[i_thread].I
 
         v_lo, v_hi = vert_bounding_indices[j]
@@ -475,7 +482,6 @@ function set_interpolated_values_kernel!(
     field_values,
     ::Val{Nq},
 ) where {Nq}
-    # TODO: Check the memory access pattern. This was not optimized and likely inefficient!
     num_horiz = length(local_horiz_indices)
     num_fields = length(field_values)
 
@@ -485,17 +491,17 @@ function set_interpolated_values_kernel!(
 
         1 ≤ i_thread ≤ prod(inds) || return nothing
 
-        # TODO: Check the memory access pattern, we should maximize coalesced memory
         (i, k) = CartesianIndices(map(x -> Base.OneTo(x), inds))[i_thread].I
 
         h = local_horiz_indices[i]
-        out[i, k] = 0
+        val = zero(eltype(out))
         for t in 1:Nq, s in 1:Nq
-            out[i, k] +=
+            val +=
                 I1[i, t] *
                 I2[i, s] *
                 field_values[k][1, t, s, h]
         end
+        out[i, k] = val
     end
     return nothing
 end
@@ -507,7 +513,6 @@ function set_interpolated_values_kernel!(
     field_values,
     ::Val{Nq},
 ) where {Nq}
-    # TODO: Check the memory access pattern. This was not optimized and likely inefficient!
     num_horiz = length(local_horiz_indices)
     num_fields = length(field_values)
 
@@ -517,15 +522,15 @@ function set_interpolated_values_kernel!(
 
         1 ≤ i_thread ≤ prod(inds) || return nothing
 
-        # TODO: Check the memory access pattern, we should maximize coalesced memory
         (i, k) = CartesianIndices(map(x -> Base.OneTo(x), inds))[i_thread].I
 
         h = local_horiz_indices[i]
-        out[i, k] = 0
+        val = zero(eltype(out))
         for t in 1:Nq
-            out[i, k] +=
+            val +=
                 I[i, t] * field_values[k][1, t, 1, h]
         end
+        out[i, k] = val
     end
     return nothing
 end
