@@ -390,7 +390,7 @@ Base.mapreduce(f, op, fv::FieldVector) =
 Base.any(f, fv::FieldVector) = any(x -> any(f, backing_array(x)), _values(fv))
 Base.any(f::Function, fv::FieldVector) = # avoid ambiguities
     any(x -> any(f, backing_array(x)), _values(fv))
-Base.any(fv::FieldVector) = any(identity, A)
+Base.any(fv::FieldVector) = any(identity, fv)
 
 Base.all(f, fv::FieldVector) = all(x -> all(f, backing_array(x)), _values(fv))
 Base.all(f::Function, fv::FieldVector) =

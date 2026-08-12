@@ -396,6 +396,28 @@ end
     @test occursin("==================== Difference found:", s)
 end
 
+@testset "FieldVector any/all" begin
+    space = spectral_space_2D()
+    u = Geometry.Covariant12Vector.(ones(space), ones(space))
+    Y = Fields.FieldVector(u = u, k = (y = [1.0, 2.0, 3.0], z = 1.0))
+
+    @test !any(isnan, Y)
+    @test all(isfinite, Y)
+    parent(Y.u)[1] = NaN
+    @test any(isnan, Y)
+    @test !all(isfinite, Y)
+
+    # the zero-argument methods, which forward to `identity`
+    Yb = Fields.FieldVector(b = fill(false, space))
+    @test !any(Yb)
+    @test !all(Yb)
+    parent(Yb.b)[1] = true
+    @test any(Yb)
+    @test !all(Yb)
+    parent(Yb.b) .= true
+    @test all(Yb)
+end
+
 # Allocation measurements run in top-level functions, since the @allocated
 # macro has a small constant overhead when it is used in a local scope.
 fv_length_allocations(Y) = @allocated length(Y)
