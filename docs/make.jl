@@ -1,7 +1,6 @@
 import Documenter, DocumenterCitations, Literate
 import ClimaCore,
     ClimaCoreVTK,
-    ClimaCoreMakie,
     ClimaCorePlots,
     ClimaCoreTempestRemap,
     ClimaCoreSpectra
@@ -67,10 +66,10 @@ withenv("GKSwstype" => "nul") do
         modules = [
             ClimaCore,
             ClimaCore.Remapping,
+            Base.get_extension(ClimaCore, :ClimaCoreMakieExt),
             ClimaCoreVTK,
             ClimaCoreSpectra,
             ClimaCorePlots,
-            ClimaCoreMakie,
             ClimaCoreTempestRemap,
         ],
         pages = Any[
@@ -114,9 +113,9 @@ withenv("GKSwstype" => "nul") do
             "Examples" => "examples.md",
             "Masks" => "masks.md",
             "Debugging" => "debugging.md",
+            "Visualization" => "visualize.md",
             "Libraries" => [
                 joinpath("lib", "ClimaCorePlots.md"),
-                joinpath("lib", "ClimaCoreMakie.md"),
                 joinpath("lib", "ClimaCoreVTK.md"),
                 joinpath("lib", "ClimaCoreTempestRemap.md"),
                 joinpath("lib", "ClimaCoreSpectra.md"),
