@@ -330,8 +330,8 @@ end
 
 [`DataLayout`](@ref) representing a single value of type `T`, which can be
 stored across multiple array indices. This is used in place of a `Ref` to wrap
-data that is stored in any array. May be constructed either from the parent
-array type or the parent array itself.
+data that is stored in any one-dimensional array. May be constructed either from
+the parent array type or the parent array itself.
 """
 struct DataF{T, S, A} <: DataLayout{T, 0, 1, S, A}
     array::A
@@ -342,10 +342,8 @@ DataF{T, S}(::Type{A}) where {T, S, A} =
     DataF{T, S}(similar(A, num_basetypes(eltype(A), T)))
 function DataF{T, S}(array) where {T, S}
     check_basetype(eltype(array), T)
-    length(array) == num_basetypes(eltype(array), T) ||
-        throw(ArgumentError("Array length is not consistent with element type"))
-    linearly_indexable_array = IndexStyle(array) == IndexLinear() ? array : vec(array)
-    return DataF{T, S, typeof(linearly_indexable_array)}(linearly_indexable_array)
+    check_parent(array, num_basetypes(eltype(array), T))
+    return DataF{T, S, typeof(array)}(array)
 end
 
 @inline shape_params(::Type{<:DataF}) = (;)

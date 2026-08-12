@@ -55,16 +55,6 @@ function center_space(space::ExtrudedFiniteDifferenceSpace)
     return ExtrudedFiniteDifferenceSpace(grid(space), CellCenter())
 end
 
-
-#=
-ExtrudedFiniteDifferenceSpace{S}(
-    grid::Grids.ExtrudedFiniteDifferenceGrid,
-) where {S <: Staggering} = ExtrudedFiniteDifferenceSpace(S(), grid)
-ExtrudedFiniteDifferenceSpace{S}(
-    space::ExtrudedFiniteDifferenceSpace,
-) where {S <: Staggering} = ExtrudedFiniteDifferenceSpace{S}(space.grid)
-=#
-
 function ExtrudedFiniteDifferenceSpace(
     horizontal_space::AbstractSpace,
     vertical_space::FiniteDifferenceSpace,
@@ -99,37 +89,6 @@ FiniteDifferenceSpace(space::ExtrudedFiniteDifferenceSpace) =
         Spaces.grid(space).vertical_grid,
         Spaces.staggering(space),
     )
-
-#=
-
-ExtrudedFiniteDifferenceSpace{S}(
-    horizontal_space::AbstractSpace,
-    vertical_space::FiniteDifferenceSpace,
-    hypsography::HypsographyAdaption = Flat(),
-) where {S <: Staggering} = ExtrudedFiniteDifferenceSpace{S}(
-    Grids.ExtrudedFiniteDifferenceGrid(horizontal_space, vertical_space, hypsography),
-)
-=#
-
-function issubspace(
-    hspace::AbstractSpectralElementSpace,
-    extruded_space::ExtrudedFiniteDifferenceSpace,
-)
-    return grid(hspace) === grid(extruded_space).horizontal_grid
-end
-function issubspace(
-    level_space::SpectralElementSpace2D{<:Grids.LevelGrid},
-    extruded_space::ExtrudedFiniteDifferenceSpace,
-)
-    return grid(level_space).full_grid === grid(extruded_space)
-end
-function issubspace(
-    level_space::SpectralElementSpace1D{<:Grids.LevelGrid},
-    extruded_space::ExtrudedFiniteDifferenceSpace,
-)
-    return grid(level_space).full_grid === grid(extruded_space)
-end
-
 
 Adapt.adapt_structure(to, space::ExtrudedFiniteDifferenceSpace) =
     ExtrudedFiniteDifferenceSpace(
@@ -213,34 +172,26 @@ horizontal_space(full_space::ExtrudedFiniteDifferenceSpace) =
 vertical_topology(space::ExtrudedFiniteDifferenceSpace) =
     vertical_topology(grid(space))
 
-function column(space::ExtrudedFiniteDifferenceSpace, colidx::Grids.ColumnIndex)
-    column_grid = column(grid(space), colidx)
-    FiniteDifferenceSpace(column_grid, space.staggering)
-end
+issubspace(subspace::AbstractSpectralElementSpace, space::ExtrudedFiniteDifferenceSpace) =
+    grid(subspace) === grid(space).horizontal_grid ||
+    (grid(subspace) isa Grids.LevelGrid && grid(subspace).full_grid === grid(space))
+issubspace(subspace::FiniteDifferenceSpace, space::ExtrudedFiniteDifferenceSpace) =
+    grid(subspace) === grid(space).vertical_grid ||
+    (grid(subspace) isa Grids.ColumnGrid && grid(subspace).full_grid === grid(space))
 
-Base.@propagate_inbounds function slab(
-    space::ExtrudedFiniteDifferenceSpace,
-    v,
-    h,
-)
+Base.@propagate_inbounds level(space::ExtrudedFiniteDifferenceSpace2D, v) =
+    SpectralElementSpace1D(level(grid(space), staggered_level_index(space, v)))
+Base.@propagate_inbounds level(space::ExtrudedFiniteDifferenceSpace3D, v) =
+    SpectralElementSpace2D(level(grid(space), staggered_level_index(space, v)))
+
+Base.@propagate_inbounds slab(space::ExtrudedFiniteDifferenceSpace, v, h) =
     SpectralElementSpaceSlab(
-        Spaces.quadrature_style(space),
-        slab(local_geometry_data(space), v, h),
+        quadrature_style(space),
+        slab(local_geometry_data(space), integer_level_index(space, v), h),
     )
-end
 
-
-
-# TODO: deprecate these
-column(space::ExtrudedFiniteDifferenceSpace, i, j, h) =
-    column(space, Grids.ColumnIndex((i, j), h))
-column(space::ExtrudedFiniteDifferenceSpace, i, h) =
-    column(space, Grids.ColumnIndex((i,), h))
-
-level(space::ExtrudedFiniteDifferenceSpace, v) =
-    space isa ExtrudedFiniteDifferenceSpace3D ?
-    SpectralElementSpace2D(level(grid(space), v)) :
-    SpectralElementSpace1D(level(grid(space), v))
+Base.@propagate_inbounds column(space::ExtrudedFiniteDifferenceSpace, indices...) =
+    FiniteDifferenceSpace(column(grid(space), indices...), space.staggering)
 
 nlevels(space::ExtrudedFiniteDifferenceSpace) =
     size(local_geometry_data(space), 1)

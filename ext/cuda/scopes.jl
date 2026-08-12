@@ -215,52 +215,12 @@ end
     return @inbounds indices[view_range]
 end
 
-# Unmasked point loops on device scopes iterate eachindex instead of the
-# Cartesian each_slice_index: when every argument supports linear indexing,
-# this avoids the integer divisions that decompose a thread's linear index into
-# a CartesianIndex at every point. Host scopes keep Cartesian indices; see
-# each_maskable_slice_index in DataLayouts for why.
-# The signature has to stay restricted to device scopes. The return type below
-# is a union of a linear range and a CartesianIndices that only resolves where
-# the extents are statically known, so covering host scopes as well would make
-# merely loading this extension turn every CPU point loop over a layout with a
-# dynamic extent into a dynamically dispatched one.
-# Layouts are collected recursively, so that a singleton layout nested inside a
-# broadcast expression is seen by the size check below; a nested broadcast's own
-# combined size would hide it, and a linear index does not project onto
-# singleton dimensions.
-# The layouts are collected into a tuple with unrolled_flatmap, which keeps
-# every intermediate type concrete. Folding the checks into a reduction over a
-# reference layout would instead accumulate a union over the distinct layout
-# types in the broadcast expression, which exceeds inference's union-splitting
-# limits for heterogeneous expressions and makes the size and linearity checks
-# dynamic during GPU compilation.
-@inline get_all_non_point_layouts(arg::DataLayouts.DataLayout) =
-    DataLayouts.is_non_point_arg(arg) ? (arg,) : ()
-@inline get_all_non_point_layouts(
-    bc::DataLayouts.MaybeFusedDataLayoutBroadcast,
-) = unrolled_flatmap(get_all_non_point_layouts, DataLayouts.layout_args(bc))
-@inline get_all_non_point_layouts(other) = ()
-
-@inline is_device_linear(arg) = Base.IndexStyle(arg) == IndexLinear()
-
-@inline function DataLayouts.each_maskable_slice_index(
+# Unmasked point loops on device scopes iterate over eachindex instead of the
+# Cartesian each_slice_index. When every argument supports linear indexing, this
+# avoids the integer divisions required for linear-to-Cartesian conversion.
+@inline DataLayouts.each_maskable_slice_index(
     ::Union{ThisKernel, ThisCooperativeGroup},
     ::NoMask,
     ::typeof(view),
     args...,
-)
-    # 0-dimensional layouts (e.g. DataF args of fused broadcasts) broadcast to
-    # every point, so they do not participate in the size or linearity checks.
-    layouts = unrolled_flatmap(get_all_non_point_layouts, args)
-    isempty(layouts) && return Base.OneTo(1)
-    if unrolled_allequal(size, layouts) &&
-       unrolled_all(is_device_linear, layouts)
-        return Base.OneTo(length(first(layouts)))
-    else
-        # Singleton and mismatched extents require Cartesian indices, which
-        # Broadcast.newindex projects onto each argument's dimensions; genuine
-        # mismatches were already rejected on the host by check_slice_extents.
-        return DataLayouts.each_slice_index(view, args...)
-    end
-end
+) = eachindex(args...)

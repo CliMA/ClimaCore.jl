@@ -97,57 +97,34 @@ Adapt.adapt_structure(to, space::MultiColumnFiniteDifferenceSpace) =
         staggering(space),
     )
 
-# ---- column / level extraction ----------------------------------------
+issubspace(space1::PointCloudSpace, space2::PointCloudSpace) =
+    horizontal_grid(grid(space1)) === horizontal_grid(grid(space2))
+issubspace(subspace::PointCloudSpace, space::MultiColumnFiniteDifferenceSpace) =
+    grid(subspace) === grid(space).horizontal_grid ||
+    (grid(subspace) isa Grids.LevelGrid && grid(subspace).full_grid === grid(space))
+issubspace(subspace::FiniteDifferenceSpace, space::MultiColumnFiniteDifferenceSpace) =
+    grid(subspace) === grid(space).vertical_grid ||
+    (grid(subspace) isa Grids.ColumnGrid && grid(subspace).full_grid === grid(space))
 
-"""
-    column(space::MultiColumnFiniteDifferenceSpace, colidx::Grids.ColumnIndex)
+level(space::PointCloudSpace, v) =
+    isone(v) ? space : throw(ArgumentError("Space only has one level"))
+Base.@propagate_inbounds level(space::MultiColumnFiniteDifferenceSpace, v) =
+    PointCloudSpace(level(grid(space), staggered_level_index(space, v)))
 
-Return a single-column [`FiniteDifferenceSpace`](@ref) for column `colidx`.
-"""
-function column(
-    space::MultiColumnFiniteDifferenceSpace,
-    colidx::Grids.ColumnIndex,
-)
-    column_grid = Grids.column(grid(space), colidx)
-    FiniteDifferenceSpace(column_grid, space.staggering)
-end
-column(space::MultiColumnFiniteDifferenceSpace, i, h) =
-    column(space, Grids.ColumnIndex((i,), h))
-column(space::MultiColumnFiniteDifferenceSpace, i, j, h) =
-    column(space, Grids.ColumnIndex((i,), h))
+Base.@propagate_inbounds slab(space::PointCloudSpace, v, h) =
+    isone(v) ? slab(space, h) : throw(ArgumentError("Space only has one level"))
+Base.@propagate_inbounds slab(space::PointCloudSpace, h) =
+    PointSpace(ClimaComms.context(space), slab(local_geometry_data(space), h))
+Base.@propagate_inbounds slab(space::MultiColumnFiniteDifferenceSpace, v, h) =
+    PointSpace(
+        ClimaComms.context(space),
+        slab(local_geometry_data(space), integer_level_index(space, v), h),
+    )
 
-"""
-    column(space::PointCloudSpace, i, h)
-
-Return the single-point [`PointSpace`](@ref) for column `h` of a
-[`PointCloudSpace`](@ref).  This is the analogue of
-`column(::SpectralElementSpace1D, i, h)` and enables `field[colidx]` indexing
-inside [`Fields.bycolumn`](@ref) loops over a
-[`MultiColumnFiniteDifferenceSpace`](@ref).
-"""
-Base.@propagate_inbounds function column(space::PointCloudSpace, i, h)
-    local_geometry = column(local_geometry_data(space), i, h)
-    PointSpace(ClimaComms.context(space), local_geometry)
-end
-Base.@propagate_inbounds column(space::PointCloudSpace, i, j, h) =
-    column(space, i, h)
-
-"""
-    level(space::MultiColumnFiniteDifferenceSpace, v)
-
-Return the [`PointCloudSpace`](@ref) (N-point horizontal slice) at
-vertical level `v`.
-"""
-Base.@propagate_inbounds level(
-    space::CenterMultiColumnFiniteDifferenceSpace,
-    v::Int,
-) = PointCloudSpace(Grids.level(grid(space), v))
-Base.@propagate_inbounds level(
-    space::FaceMultiColumnFiniteDifferenceSpace,
-    v::PlusHalf,
-) = PointCloudSpace(Grids.level(grid(space), v))
-
-# ---- space properties --------------------------------------------------
+Base.@propagate_inbounds column(space::PointCloudSpace, indices...) =
+    PointSpace(ClimaComms.context(space), column(local_geometry_data(space), indices...))
+Base.@propagate_inbounds column(space::MultiColumnFiniteDifferenceSpace, indices...) =
+    FiniteDifferenceSpace(column(grid(space), indices...), space.staggering)
 
 ncolumns(space::PointCloudSpace) =
     DataLayouts.nelems(local_geometry_data(space))
@@ -167,32 +144,6 @@ horizontal_space(space::MultiColumnFiniteDifferenceSpace) =
 get_mask(space::PointCloudSpace) = DataLayouts.NoMask()
 get_mask(space::MultiColumnFiniteDifferenceSpace) = DataLayouts.NoMask()
 set_mask!(::Any, ::MultiColumnFiniteDifferenceSpace) = nothing
-
-# Subspace relations, mirroring the extruded spectral-element methods in
-# extruded.jl and spectralelement.jl:
-#  - a level slice is a subspace of the full multi-column space it was sliced
-#    from (enables broadcasting a level field across a full 3D field);
-#  - the level-agnostic horizontal space is a subspace of the full space;
-#  - the horizontal space is a subspace of every level slice (enables
-#    broadcasting surface fields against level slices, regardless of level).
-function issubspace(
-    level_space::PointCloudSpace{<:Grids.LevelGrid},
-    full_space::MultiColumnFiniteDifferenceSpace,
-)
-    return grid(level_space).full_grid === grid(full_space)
-end
-function issubspace(
-    hspace::PointCloudSpace{<:Grids.PointCloudGrid},
-    full_space::MultiColumnFiniteDifferenceSpace,
-)
-    return grid(hspace) === grid(full_space).horizontal_grid
-end
-function issubspace(
-    hspace::PointCloudSpace{<:Grids.PointCloudGrid},
-    level_space::PointCloudSpace{<:Grids.LevelGrid},
-)
-    return grid(hspace) === grid(level_space).full_grid.horizontal_grid
-end
 
 """
     obtain_surface_space(cs::CenterMultiColumnFiniteDifferenceSpace)

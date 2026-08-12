@@ -113,47 +113,36 @@ end
     @test parent(point .+ data) == parent(data) .+ Array(parent(point))[]
 end
 
-# Point loops broadcast their arguments like ordinary broadcast expressions:
-# 0-dimensional layouts and statically singleton dimensions (e.g. single-level
-# surface data) are expanded to the combined loop bounds, while genuinely
-# mismatched extents are rejected on the host, since the error path can be
-# neither compiled nor cleanly reported in GPU kernels.
-@testset "point loops over arguments with singleton dimensions" begin
+parent_broadcasted(data::DataLayouts.DataLayout) = parent(data)
+parent_broadcasted(bc::DataLayouts.LazyDataLayout) =
+    Base.broadcasted(bc.f, map(parent_broadcasted, bc.args)...)
+
+# Loops over mixed layouts require Cartesian indices, which are extruded by
+# Broadcast.newindex; loops over layouts with the same shape use linear indices.
+# Point layouts are ignored when deciding between linear and Cartesian indexing.
+@testset "broadcast expression indexing" begin
     device = ClimaComms.device()
     volume = test_data(device, Float64, 1, 10)
-    surface = test_data(device, Float64, 1, 1) # statically singleton Nv
-    point = DataLayouts.DataF{Float64}(device_array(device, rand(1)))
-    dest = test_data(device, Float64, 1, 10)
+    surface = test_data(device, Float64, 1, 1)
+    point = view(volume, 1)
 
-    # Singleton dimensions inside broadcast expressions expand like Base's.
-    dest .= volume .+ surface
-    @test parent(dest) == parent(volume) .+ parent(surface)
-
-    # Singleton and 0-dimensional layouts may also be top-level loop arguments.
-    fill!(parent(dest), 0)
-    DataLayouts.foreach_point(
-        (d, a, s, p) -> (@inbounds d[] = a[] + s[] + p[]),
-        dest,
-        volume,
-        surface,
-        point,
+    for (bc, expected_style) in (
+        (Base.broadcasted(+, volume, volume, volume), IndexLinear()),
+        (Base.broadcasted(+, volume, volume, surface), IndexCartesian()),
+        (Base.broadcasted(+, volume, volume, point), IndexLinear()),
+        (Base.broadcasted(+, volume, surface, point), IndexCartesian()),
+        (Base.broadcasted(abs, Base.broadcasted(+, volume, volume)), IndexLinear()),
+        (Base.broadcasted(abs, Base.broadcasted(+, volume, surface)), IndexCartesian()),
+        (Base.broadcasted(abs, Base.broadcasted(+, volume, point)), IndexLinear()),
     )
-    @test parent(dest) == parent(volume) .+ parent(surface) .+ parent(point)
-
-    # Reductions over expressions with mixed shapes require Cartesian indices,
-    # which Broadcast.newindex projects onto singleton dimensions; expressions
-    # whose layouts all share a shape permit linear indices.
-    mixed_bc = Base.broadcasted(+, volume, surface)
-    @test Base.IndexStyle(mixed_bc) == IndexCartesian()
-    @test parent(Base.materialize(mixed_bc)) == parent(volume) .+ parent(surface)
-    # The sum is checked as well, since reductions iterate lazy expressions
-    # directly, without materializing them first.
-    @test sum(identity, mixed_bc) == sum(parent(volume) .+ parent(surface))
-    @test Base.IndexStyle(Base.broadcasted(+, volume, volume)) == IndexLinear()
+        @test Base.IndexStyle(bc) == expected_style
+        @test parent(Base.materialize(bc)) == Base.materialize(parent_broadcasted(bc))
+        @test sum(bc) == sum(parent_broadcasted(bc))
+    end
 
     # Genuinely mismatched extents throw before any kernel is launched.
-    mismatched = test_data(device, Float64, 1, 7)
-    @test_throws DimensionMismatch dest .= volume .+ mismatched
+    mismatched_volume = test_data(device, Float64, 1, 7)
+    @test_throws DimensionMismatch volume .+ mismatched_volume
 end
 
 # Measure allocations from a top-level function, since the @allocated macro has
@@ -283,21 +272,9 @@ end
         dest = test_data(device, Float64, 1, 64)
         fill!(parent(dest), 0)
         copy_point!(d, a) = (@inbounds d[] = a[])
-        DataLayouts.foreach_slice(
-            DataLayouts.ThisThreadPool(),
-            view,
-            copy_point!,
-            dest,
-            data;
-            mask = DataLayouts.NoMask(),
-        )
+        DataLayouts.foreach_point(copy_point!, dest, data; mask = DataLayouts.NoMask())
         @test parent(dest) == parent(data)
-        @test DataLayouts.reduce_points(
-            DataLayouts.ThisThreadPool(),
-            +,
-            data;
-            mask = DataLayouts.NoMask(),
-        ) == total
+        @test DataLayouts.reduce_points(+, data; mask = DataLayouts.NoMask()) == total
         @test pool_accounting_drained()
 
         # An error thrown from inside a loop must not leak the loop's thread claim.

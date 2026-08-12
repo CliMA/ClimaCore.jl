@@ -114,8 +114,11 @@ dimension, `F` may be replaced with `nothing`.
     return @inbounds stable_view(array, all_indices...)
 end
 
-@inline single_index(index, ::Val{Nf}) where {Nf} =
-    isone(Nf) ? Tuple(index) : throw(ArgumentError("F axis is required unless Nf = 1"))
+# Convert the first index into a range so that point views of layouts without
+# an F axis are one-dimensional, matching point views of layouts with an F axis.
+@inline single_component_struct_indices(index, ::Val{Nf}) where {Nf} =
+    isone(Nf) ? (index[1]:index[1], Base.tail(Tuple(index))...) :
+    throw(ArgumentError("F axis is required unless Nf = 1"))
 
 @inline struct_index(i, array) = i
 @inline struct_indices(array, ::Val{Nf}) where {Nf} = (Base.OneTo(Nf),)
@@ -125,13 +128,13 @@ end
 @inline struct_index(i, array, index::CartesianIndex, ::Val{F}) where {F} =
     isnothing(F) ? index : CartesianIndex(unrolled_insert(Tuple(index), i, Val(F)))
 @inline struct_indices(array, ::Val{Nf}, index::CartesianIndex, ::Val{F}) where {Nf, F} =
-    isnothing(F) ? single_index(index, Val(Nf)) :
+    isnothing(F) ? single_component_struct_indices(index, Val(Nf)) :
     unrolled_insert(Tuple(index), Base.OneTo(Nf), Val(F))
 
 @inline struct_index(i, array, index::Integer, ::Val{F}) where {F} =
     isnothing(F) ? index : struct_index(i, array, index, prod(size(array)[1:(F - 1)]))
 @inline struct_indices(array, ::Val{Nf}, index::Integer, ::Val{F}) where {Nf, F} =
-    isnothing(F) ? single_index(index, Val(Nf)) :
+    isnothing(F) ? single_component_struct_indices(index, Val(Nf)) :
     struct_indices(array, Val(Nf), index, prod(size(array)[1:(F - 1)]))
 
 @inline struct_index(i, array, index::Integer, stride::Integer) = index + (i - 1) * stride

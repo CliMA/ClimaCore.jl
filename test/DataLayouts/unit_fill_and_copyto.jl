@@ -114,4 +114,18 @@ end
             @test length(unique(Array(parent(data)))) > 1
         end
     end
+    @testset "component views across multiple elements" begin
+        # Component views read their parents with a constant stride, which must
+        # step over every component stored in the parent. A wrong step blends
+        # entries of different components, but only at points beyond the first
+        # stride block, so single-element layouts cannot detect it. The values
+        # are written through the multi-component layout, whose reads and
+        # writes do not use the constant-stride view accessors.
+        for data in testable_layouts(A, Tuple{Float64, Float64})
+            length(data) > 1 || continue
+            fill!(data, (1.0, 2.0))
+            @test reduce(+, data.:1) == length(data)
+            @test reduce(+, data.:2) == 2 * length(data)
+        end
+    end
 end

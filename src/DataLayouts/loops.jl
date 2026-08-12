@@ -21,13 +21,14 @@ end
 
 # The scope is passed so that GPU scopes can override the indices of unmasked
 # point loops with eachindex, whose linear indices avoid the integer divisions
-# that decompose a thread's index into a CartesianIndex at every point. Host
-# scopes keep the Cartesian each_slice_index for point loops: a view at a
-# linear index wraps its parent in a 1-dimensional ReshapedArray that blocks
-# SIMD (see each_slice_index), which would make single-component CPU broadcasts
-# slow, while GPU threads iterate too few points per thread for SIMD to matter.
+# required for linear-to-Cartesian conversion. CPU scopes keep the Cartesian
+# each_slice_index for point loops: a view at a linear index wraps its parent in
+# a 1-dimensional ReshapedArray that blocks SIMD (see each_slice_index), which
+# would make single-component CPU broadcasts slow, while GPU threads iterate too
+# few points per thread for SIMD to matter. Although CPU scopes only need one
+# argument, GPU scopes must check every argument for linear indexing support.
 @inline each_maskable_slice_index(_, _, op::O, args...) where {O} =
-    each_slice_index(op, args...)
+    each_slice_index(op, first(args))
 @inline each_maskable_slice_index(_, mask::IJHMask, ::typeof(column), args...) =
     ActiveColumnIndices(mask)
 @inline each_maskable_slice_index(_, mask::IJHMask, ::typeof(view), args...) =
@@ -55,12 +56,9 @@ end
 # broadcasts, whose 0-dimensional DataF args and dimension-preserving
 # Broadcasted args have inconsistent values of inferred_size.
 @inline num_slice_points(::typeof(view), arg) = 1
-@inline function num_slice_points(op::O, arg) where {O}
-    isempty(each_slice_index(op, arg)) && return 0
-    first_slice = @inbounds op(arg, Tuple(first(each_slice_index(op, arg)))...)
-    has_inferred_size(first_slice) && return prod(inferred_size(first_slice))
-    throw(ArgumentError("Size of slice operator result must be inferrable"))
-end
+@inline num_slice_points(op::O, arg) where {O} =
+    isempty(each_slice_index(op, arg)) ? 0 :
+    length(@inbounds op(arg, Tuple(first(each_slice_index(op, arg)))...))
 
 """
     slice_subscope(scope, op, args...)
@@ -71,9 +69,6 @@ subset of `scope` that does not require any thread to process more than one
 point from the largest slice returned by `op`. When no such subset is available,
 the largest subset is used in order to minimize the number of points per thread.
 """
-@inline slice_subscope(scope, ::typeof(column), args...) = ThisThread()
-@inline slice_subscope(scope, ::typeof(view), args...) = ThisThread()
-@inline slice_subscope(scope, ::typeof(level), args...) = ThisThread()
 @inline function slice_subscope(scope, op::O, args...) where {O}
     subscope = partition(scope)
     subscope == ThisThread() && return subscope
@@ -84,7 +79,6 @@ end
 
 """
     foreach_slice(op, f, args...; [mask])
-    foreach_slice(scope, op, f, args...; mask)
 
 Generalization of `eachslice`/`mapslices` that applies `f` to slices of every
 [`DataLayout`](@ref) or similarly indexable argument, where the slice operator
@@ -97,56 +91,25 @@ Each slice is assigned to a [`slice_subscope`](@ref) of `scope`, which by
 default is the largest available [`DataScope`](@ref) that can access every
 argument. A [`DataMask`](@ref) may also be used to skip over a particular subset
 of slices.
-
-The `mask` is only given a default of [`NoMask`](@ref) when no `scope` is
-specified, since that is the only method a loop starts from. Every method that
-takes a `scope` requires a `mask`, so that a loop which passes its keyword
-arguments on cannot quietly drop a mask and compute over the points it excludes.
 """
-@inline function foreach_slice(op::O, f::F, args...; mask = NoMask()) where {O, F}
-    check_slice_extents(op, args...)
-    return foreach_slice(DataScope(args...), op, f, args...; mask)
-end
-
-# Reject arguments whose slice indices are incompatible before any loop starts.
-# This check must run on the host: each_slice_index is called from GPU kernels,
-# where an error path either fails to compile or traps with an unrelated CUDA
-# error, so it combines incompatible axes instead of throwing. Point slices
-# broadcast like ordinary expressions, so their axes only need to match up to
-# singleton and missing dimensions, which project_slice_index sends to index 1;
-# the other slice operators require exact matches.
-@inline function check_slice_extents(op::O, args...) where {O}
-    combined_axes = axes(each_slice_index(op, args...))
-    valid = unrolled_all(args) do arg
-        compatible_axes(op, axes(each_slice_index(op, arg)), combined_axes)
-    end
-    valid || throw(
-        DimensionMismatch("Inputs to foreach_slice must have compatible dimensions"),
-    )
-    return nothing
-end
-
-@inline compatible_axes(op::O, axes1::Tuple, axes2::Tuple) where {O} = axes1 == axes2
-@inline compatible_axes(::typeof(view), axes1::Tuple, axes2::Tuple) =
-    isempty(axes1) ||
-    (
-        (first(axes1) == first(axes2) || isone(length(first(axes1)))) &&
-        compatible_axes(view, Base.tail(axes1), Base.tail(axes2))
-    )
+@inline foreach_slice(op::O, f::F, args...; mask = NoMask()) where {O, F} =
+    unrolled_allequal(Base.Fix1(each_slice_index, op), args) ?
+    foreach_slice(DataScope(args...), op, f, mask, args...) :
+    throw(DimensionMismatch("Inputs to foreach_slice must have compatible dimensions"))
 
 # A thread pool has to be resolved before looping over it, and given back afterward.
 @inline function foreach_slice(
     pool::ThisThreadPool,
     op::O,
     f::F,
-    args...;
     mask,
+    args...,
 ) where {O, F}
     pool_thread_info() == (0, 0) ||
-        return foreach_pool_slice(num_threads(pool), pool, op, f, args...; mask)
+        return foreach_pool_slice(num_threads(pool), pool, op, f, mask, args...)
     threads = resolve_pool_threads()
     try
-        return foreach_pool_slice(threads, pool, op, f, args...; mask)
+        return foreach_pool_slice(threads, pool, op, f, mask, args...)
     finally
         release_pool_threads()
     end
@@ -160,16 +123,24 @@ end
     pool::ThisThreadPool,
     op::O,
     f::F,
-    args...;
     mask,
+    args...,
 ) where {O, F} =
-    isone(threads) ? foreach_slice(ThisThread(), op, f, args...; mask) :
+    isone(threads) ? foreach_slice(ThisThread(), op, f, mask, args...) :
     parallelize_over(() -> slice_loop(pool, op, f, mask, args...), pool)
 
-@inline foreach_slice(scope::DataScope, op::O, f::F, args...; mask) where {O, F} =
+@inline foreach_slice(scope::DataScope, op::O, f::F, mask, args...) where {O, F} =
     slice_loop(scope, op, f, mask, args...)
-@inline foreach_slice(::ThisThread, op::O, f::F, args...; mask) where {O, F} =
-    slice_loop(ThisThread(), op, f, mask, args...)
+
+# The loop body lives behind a function barrier because the generic
+# slice_subscope method branches on a slice size that is only known at run time
+# when a layout extent is dynamic, which widens the subscope to a small Union of
+# scopes. Dispatch on the barrier splits that Union once; without the barrier,
+# the correlated unions of the argument slices must all be split at the call to
+# f, which exceeds inference's union-splitting limit for three or more
+# arguments and makes every slice operation dynamic.
+@inline slice_loop(scope, op::O, f::F, mask, args...) where {O, F} =
+    scoped_slice_loop(slice_subscope(scope, op, args...), scope, op, f, mask, args...)
 
 # Point loops need @simd and an inlined call to f for vectorization, since LLVM
 # cannot vectorize across a flattened CartesianIndices iterator unless @simd
@@ -180,53 +151,14 @@ end
 # broadcasts. Lazy iterators such as Iterators.filter or Iterators.map do not
 # support @simd, and operations on non-point slices typically do too much work
 # per slice for vectorization to be worthwhile.
-# Project a point index onto one argument, so that arguments which broadcast
-# along a dimension (0-dimensional layouts, or layouts with a singleton extent,
-# like single-level surface data) read their single value instead of an
-# out-of-range one. Only point slices need this: the other slice operators
-# require every argument to have identical slice indices. Each argument's
-# singleton dimensions are recorded in a tuple of Bools before the loop starts,
-# so that the per-point projection only selects on loop-invariant flags, which
-# LLVM folds away, instead of comparing dynamic extents at every point; for
-# equal-shaped arguments, the projection is the identity.
-@inline is_singleton_axis(ax) = isone(length(ax))
-@inline singleton_slice_dims(op::O, arg) where {O} = ()
-@inline singleton_slice_dims(::typeof(view), arg) =
-    unrolled_map(is_singleton_axis, axes(each_slice_index(view, arg)))
-
-@inline project_slice_index(op::O, arg, is_singleton, index) where {O} = index
-@inline project_slice_index(::typeof(view), arg, is_singleton, index::Integer) =
-    Broadcast.newindex(arg, index)
-@inline project_slice_index(::typeof(view), arg, is_singleton, index::CartesianIndex) =
-    iszero(ndims(arg)) ? CartesianIndex() :
-    CartesianIndex(projected_index(is_singleton, Tuple(index)))
-@inline projected_index(is_singleton::Tuple, index::Tuple) = (
-    (first(is_singleton) ? 1 : first(index)),
-    projected_index(Base.tail(is_singleton), Base.tail(index))...,
-)
-@inline projected_index(::Tuple{}, index::Tuple) = index
-@inline projected_index(::Tuple{}, ::Tuple{}) = ()
-
-@inline slice_arg((op, subscope, index)::Tuple, arg) =
-    @inbounds reassign(
-        op(
-            arg,
-            Tuple(project_slice_index(op, arg, singleton_slice_dims(op, arg), index))...,
-        ),
-        subscope,
-    )
-
-@inline slice_args(state, ::Tuple{}) = ()
-@inline slice_args(state, args::Tuple) =
-    (slice_arg(state, first(args)), slice_args(state, Base.tail(args))...)
-
-@inline function slice_loop(scope, op::O, f::F, mask, args...) where {O, F}
-    subscope = slice_subscope(scope, op, args...)
+@inline function scoped_slice_loop(subscope, scope, op::O, f::F, mask, args...) where {O, F}
     indices = subscope_slice_indices(subscope, scope, mask, op, args...)
     N_indices = length(indices)
     @simd_if (op == view && simd_over_indices(indices)) for i in 1:N_indices
         index = @inbounds indices[i]
-        slices = slice_args((op, subscope, index), args)
+        slices = unrolled_map(args) do arg
+            @inbounds reassign(op(arg, Tuple(index)...), subscope)
+        end
         @inline f(slices...)
     end
 end
@@ -253,7 +185,6 @@ end
 
 """
     reduce_points(op, arg; [mask], [init])
-    reduce_points(scope, op, arg; mask, [init])
 
 Generalization of `reduce` that uses `op` to combine values stored in a
 [`DataLayout`](@ref) or similarly indexable argument.
@@ -263,10 +194,6 @@ which by default is the largest available [`DataScope`](@ref) that can access
 the argument. A [`DataMask`](@ref) may also be used to skip over a particular
 subset of points. If the `mask` disables every point, or if there are no points
 in `arg` to begin with, the `init` value must be specified.
-
-As in [`foreach_slice`](@ref), the `mask` is only given a default of
-[`NoMask`](@ref) when no `scope` is specified, so that a reduction which passes
-its keyword arguments on cannot quietly drop a mask.
 """
 @inline reduce_points(op::O, arg; mask = NoMask(), init...) where {O} =
     reduce_points(DataScope(arg), op, arg; mask, init...)
@@ -495,13 +422,15 @@ end
 # Optimize unmasked equality checks for similar layouts with the same packed
 # (un-padded) element types by deferring to their parent arrays. Padded values
 # should not be compared in this way, since equality must not depend on padding.
+# Parent arrays with mismatched dimensions are flattened before being compared.
 @inline Base.:(==)(arg1::DataLayout, arg2::DataLayout; mask = NoMask()) =
     size(arg1) == size(arg2) && (
-        mask == NoMask() &&
-        eltype(arg1) == eltype(arg2) &&
-        (Base.ispacked(eltype(arg1)) && Base.ispacked(eltype(arg2))) &&
-        (layout_type(arg1) == layout_type(arg2) && f_dim(arg1) == f_dim(arg2)) ?
-        parent(arg1) == parent(arg2) : mapreduce(==, &, arg1, arg2; mask, init = true)
+        mask != NoMask() ||
+        !(eltype(arg1) == eltype(arg2) && Base.ispacked(eltype(arg1))) ||
+        !(layout_type(arg1) == layout_type(arg2) && f_dim(arg1) == f_dim(arg2)) ?
+        mapreduce(all ∘ ==, &, arg1, arg2; mask, init = true) :
+        ndims(parent(arg1)) == ndims(parent(arg2)) ? parent(arg1) == parent(arg2) :
+        stable_view(parent(arg1), :) == stable_view(parent(arg2), :)
     )
 @inline Base.:(==)(arg1::MaybeLazyDataLayout, arg2::MaybeLazyDataLayout; mask = NoMask()) =
-    size(arg1) == size(arg2) && mapreduce(==, &, arg1, arg2; mask, init = true)
+    size(arg1) == size(arg2) && mapreduce(all ∘ ==, &, arg1, arg2; mask, init = true)

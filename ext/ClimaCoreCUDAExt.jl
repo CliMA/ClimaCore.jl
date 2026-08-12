@@ -3,7 +3,7 @@ module ClimaCoreCUDAExt
 import NVTX
 import ClimaCore.Limiters
 import ClimaComms
-import ClimaCore: DataLayouts, Geometry, Utilities
+import ClimaCore: DataLayouts, Fields, Geometry, Utilities
 import ClimaCore.Geometry: AbstractTensor
 import CUDA
 using CUDA

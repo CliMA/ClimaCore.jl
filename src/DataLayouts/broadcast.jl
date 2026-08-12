@@ -153,7 +153,7 @@ const DATA_LAYOUT_PRIMITIVES =
 for f in (:ndims, :length, :size, :axes, DATA_LAYOUT_PRIMITIVES...)
     f_with_module_prefix = f in DATA_LAYOUT_PRIMITIVES ? f : :(Base.$f)
     @eval @inline $f_with_module_prefix(bc::FusedMultiBroadcast) =
-        unrolled_allequal($f, layout_args(bc)) ? $f(first(layout_args(bc))) :
+        unrolled_allequal($f, unrolled_map(first, bc.pairs)) ? $f(first(first(bc.pairs))) :
         throw(DimensionMismatch($("$f is inconsistent among fused broadcasts")))
 end
 

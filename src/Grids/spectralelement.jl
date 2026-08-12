@@ -572,12 +572,20 @@ quadrature_style(grid::AbstractSpectralElementGrid) = grid.quadrature_style
 dss_weights(grid::AbstractSpectralElementGrid, ::Nothing) = grid.dss_weights
 
 ## GPU compatibility
+struct DeviceSpectralElementGrid1D{Q, GG, LG} <: AbstractSpectralElementGrid
+    quadrature_style::Q
+    global_geometry::GG
+    local_geometry::LG
+end
 struct DeviceSpectralElementGrid2D{Q, GG, LG, M} <: AbstractSpectralElementGrid
     quadrature_style::Q
     global_geometry::GG
     local_geometry::LG
     mask::M
 end
+
+ClimaComms.context(grid::DeviceSpectralElementGrid1D) = DeviceSideContext()
+ClimaComms.device(grid::DeviceSpectralElementGrid1D) = DeviceSideDevice()
 
 ClimaComms.context(grid::DeviceSpectralElementGrid2D) = DeviceSideContext()
 ClimaComms.device(grid::DeviceSpectralElementGrid2D) = DeviceSideDevice()

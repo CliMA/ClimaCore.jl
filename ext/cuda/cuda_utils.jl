@@ -147,7 +147,7 @@ function uncached_launch_configuration(cu_func, strict, default_max_waves, confi
 
     get_user_max_threads_per_block() = attrs.max_block_dim_x
     get_user_max_threads_per_block(user_max_threads) = user_max_threads
-    get_user_max_threads_per_block(_, user_max_threads_per_block) =
+    get_user_max_threads_per_block(user_max_threads_per_block, _) =
         user_max_threads_per_block
 
     get_user_max_blocks(_) = attrs.max_grid_dim_x

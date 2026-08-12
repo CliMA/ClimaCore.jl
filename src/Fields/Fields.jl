@@ -4,8 +4,8 @@ import ClimaComms
 import MultiBroadcastFusion as MBF
 import ..slab, ..slab_args, ..column, ..column_args, ..level, ..level_args
 import ..DebugOnly: call_post_op_callback, post_op_callback
-import ..DataLayouts:
-    DataLayouts, DataLayout, DataStyle, FusedMultiBroadcast, @fused_direct
+import ..DataLayouts: DataLayouts, DataLayout, DataStyle, PointIndex
+import ..DataLayouts: FusedMultiBroadcast, @fused_direct
 import ..Domains
 import ..Topologies
 import ..Quadratures
@@ -34,6 +34,11 @@ struct Field{V <: DataLayout, S <: AbstractSpace}
 end
 Field(::Type{T}, space::AbstractSpace) where {T} =
     Field(similar(Spaces.coordinates_data(space), T), space)
+
+# Ensure that every Field on a PointSpace has a zero-dimensional DataLayout.
+Field(values::DataLayout, space::AbstractPointSpace) = Field(view(values), space)
+Field(values::V, space::S) where {V <: DataLayout{<:Any, 0}, S <: AbstractPointSpace} =
+    Field{V, S}(values, space)
 
 local_geometry_type(::Field{V, S}) where {V, S} = local_geometry_type(S)
 
@@ -166,26 +171,51 @@ ClimaComms.array_type(field::Field) =
     Field(getproperty(field_values(field), name), axes(field))
 
 Base.eltype(::Type{<:Field{V}}) where {V} = eltype(V)
-Base.parent(field::Field) = parent(field_values(field))
+Base.IndexStyle(::Type{<:Field{V}}) where {V} = IndexStyle(V)
 
-# to play nice with DifferentialEquations; may want to revisit this
-# https://github.com/SciML/SciMLBase.jl/blob/697bd0c0c7365e77fa311f2d32eade70f43a8d50/src/solutions/ode_solutions.jl#L31
-Base.size(field::Field) = ()
-Base.length(field::Field) = 1
+for f in (:parent, :size, :length, :ndims)
+    @eval Base.$f(field::Field) = $f(field_values(field))
+end
+for f in (:DataScope, :shape_params, :inferred_size, :nelems)
+    @eval DataLayouts.$f(field::Field) = DataLayouts.$f(field_values(field))
+end
+
+DataLayouts.reassign(field::Field, scope) =
+    Field(DataLayouts.reassign(field_values(field), scope), axes(field))
 
 Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(axes(field))
 
-Base.@propagate_inbounds slab(field::Field, inds...) =
-    Field(slab(field_values(field), inds...), slab(axes(field), inds...))
+Base.@propagate_inbounds Base.setindex!(field::Field, val, indices::PointIndex...) =
+    setindex!(field, val, CartesianIndex(indices...))
+Base.@propagate_inbounds Base.getindex(field::Field, indices::PointIndex...) =
+    getindex(field, CartesianIndex(indices...))
+Base.@propagate_inbounds Base.view(field::Field, indices::PointIndex...) =
+    view(field, CartesianIndex(indices...))
 
-Base.@propagate_inbounds function column(field::Field, inds...)
-    column_space = column(axes(field), inds...)
-    column_data = column(field_values(field), inds...)
-    Field(level_data(column_space, column_data), column_space)
-end
-@inline column(field::FiniteDifferenceField, inds...) = field
+Base.@propagate_inbounds Base.setindex!(field::Field, val, index::PointIndex) =
+    setindex!(field_values(field), val, index)
+Base.@propagate_inbounds Base.getindex(field::Field, index::PointIndex) =
+    getindex(field_values(field), index)
+Base.@propagate_inbounds Base.view(field::Field, index::PointIndex) =
+    Field(view(field_values(field), index), view(axes(field), index))
 
+Base.getindex(field::Field, ::Colon) = field
+Base.view(field::Field, ::Colon) = field
 
+Base.@propagate_inbounds level(field::Field, v) = Field(
+    level(field_values(field), Spaces.integer_level_index(axes(field), v)),
+    level(axes(field), v),
+)
+
+Base.@propagate_inbounds slab(field::Field, h) =
+    Field(slab(field_values(field), h), slab(axes(field), h))
+Base.@propagate_inbounds slab(field::Field, v, h) = Field(
+    slab(field_values(field), Spaces.integer_level_index(axes(field), v), h),
+    slab(axes(field), v, h),
+)
+
+Base.@propagate_inbounds column(field::Field, indices...) =
+    Field(column(field_values(field), indices...), column(axes(field), indices...))
 
 # nice printing
 # follow x-array like printing?
@@ -451,44 +481,6 @@ Create a buffer for communicating neighbour information of `field`.
 """
 Spaces.create_dss_buffer(field::Field) =
     Spaces.create_dss_buffer(field_values(field), axes(field))
-
-Base.@propagate_inbounds function level(
-    field::Union{
-        CenterFiniteDifferenceField,
-        CenterExtrudedFiniteDifferenceField,
-        CenterMultiColumnFiniteDifferenceField,
-    },
-    v::Int,
-)
-    hspace = level(axes(field), v)
-    data = level(field_values(field), v)
-    Field(level_data(hspace, data), hspace)
-end
-Base.@propagate_inbounds function level(
-    field::Union{
-        FaceFiniteDifferenceField,
-        FaceExtrudedFiniteDifferenceField,
-        FaceMultiColumnFiniteDifferenceField,
-    },
-    v::PlusHalf,
-)
-    hspace = level(axes(field), v)
-    data = level(field_values(field), v.i + 1)
-    Field(level_data(hspace, data), hspace)
-end
-
-# Levels of fields on column spaces are single points, so their data is
-# converted to a DataF to match the local geometry of a PointSpace.
-Base.@propagate_inbounds level_data(::Spaces.AbstractPointSpace, data) =
-    Spaces.point_data(data)
-@inline level_data(hspace, data) = data
-
-Base.getindex(field::Field, ::Colon) = field
-
-Base.@propagate_inbounds Base.getindex(field::PointField) =
-    getindex(field_values(field))
-Base.@propagate_inbounds Base.setindex!(field::PointField, val) =
-    setindex!(field_values(field), val)
 
 """
     set!(f::Function, field::Field, args = ())
