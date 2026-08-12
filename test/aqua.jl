@@ -48,9 +48,10 @@ end
 # directly or wrapped in UnrolledUtilities.Init, since a keyword argument is
 # lowered into a call to Core.kwcall, which does not always specialize during
 # GPU compilation of wide broadcast expressions and is a dynamic invocation
-# when it does not. The pattern below covers every unrolled function that
-# accepts an init value, and it tolerates one level of nested parentheses
-# before the semicolon of a kwcall.
+# when it does not. The pattern below lists every unrolled function that takes
+# init as a keyword argument, and it tolerates one level of nested parentheses
+# before the semicolon of a kwcall. Comments are stripped before matching, so
+# these function names can be mentioned in comments.
 @testset "Kernel-reachable unrolled functions" begin
     kernel_reachable_dirs = [
         joinpath(pkgdir(ClimaCore), "src", "DataLayouts"),

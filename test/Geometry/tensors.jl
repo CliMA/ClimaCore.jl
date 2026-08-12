@@ -268,3 +268,87 @@ end
         local_geom,
     ) == Contravariant123Vector(0.25, 1.0, 1.0) ⊗ Covariant12Vector(2.0, 8.0)
 end
+
+# Components carries its component names as a type parameter, and
+# unrolled_allunique, unrolled_unique, unrolled_filter, and unrolled_findfirst
+# all determine the *values* of those names, so the types of their results
+# depend on the values of their inputs. Basis computations are compiled for
+# GPUs, where nothing can be inferred from a run-time value, so these calls are
+# only valid because the names reach them through the type domain and fold. A
+# folding failure would leave the number of selected names unknown, which shows
+# up as an abstract return type and a heap allocation here, and as an
+# InvalidIRError when a kernel that computes a basis is compiled.
+const COVARIANT = Geometry.Covariant()
+const B12 = Geometry.Components(COVARIANT, (1, 2))
+const B23 = Geometry.Components(COVARIANT, (2, 3))
+const B123 = Geometry.Components(COVARIANT, (1, 2, 3))
+const B2 = Geometry.Components(COVARIANT, (2,))
+const V12 = Geometry.Covariant12Vector(1.0, 2.0)
+const V23 = Geometry.Covariant23Vector(2.0, 3.0)
+
+# Every function below takes its bases as arguments, as a kernel would, so that
+# the names are only available to inference through the argument types.
+combine_two(b1, b2) = Geometry.combine_components(b1, b2)
+combine_three(b1, b2, b3) = Geometry.combine_components(b1, b2, b3)
+overlap_two(b1, b2) = Geometry.overlap_components(b1, b2)
+matching_indices(b1, b2) = Geometry.matching_component_indices(b1, b2)
+components_of(b) =
+    Geometry.Components(Geometry.components_type(b), Geometry.component_names(b))
+components_from_names(type, names) = Geometry.Components(type, names)
+widen_basis(v) = reshape(v, (Geometry.Covariant123Axis(),))
+# The result is discarded because returning a tensor that does not fit in the
+# argument registers allocates a boxed copy of it however it is computed.
+discard_result(f::F, args...) where {F} = (f(args...); nothing)
+
+@testset "component names fold into Components type parameters" begin
+    @testset "unrolled_unique through combine_components" begin
+        @test @inferred(combine_two(B12, B23)) === B123
+        @test @inferred(combine_three(B12, B23, B2)) === B123
+        @test_opt combine_two(B12, B23)
+        @test (@allocated combine_two(B12, B23)) == 0
+    end
+
+    @testset "unrolled_filter and unrolled_in through overlap_components" begin
+        @test @inferred(overlap_two(B12, B23)) === B2
+        @test @inferred(overlap_two(B123, B23)) === B23
+        @test_opt overlap_two(B12, B23)
+        @test (@allocated overlap_two(B12, B23)) == 0
+    end
+
+    @testset "unrolled_findfirst through matching_component_indices" begin
+        # The element types depend on which names match, so an unfolded search
+        # cannot produce a concrete Tuple type.
+        @test @inferred(matching_indices(B123, B12)) === (1, 2, nothing)
+        @test isconcretetype(Base.promote_op(matching_indices, typeof(B123), typeof(B12)))
+        @test_opt matching_indices(B123, B12)
+        @test (@allocated matching_indices(B123, B12)) == 0
+    end
+
+    @testset "unrolled_allunique through the Components constructor" begin
+        @test @inferred(components_of(B123)) === B123
+        @test_throws Geometry.DuplicateComponentNamesError Geometry.Components(
+            COVARIANT,
+            (1, 2, 2),
+        )
+        # Names that are only a run-time value cannot fold, because they have to
+        # become a type parameter. This is a property of Components itself, and
+        # it is asserted so that a caller passing non-constant names is caught
+        # here rather than by a GPU compilation failure.
+        @test !isconcretetype(
+            Base.promote_op(components_from_names, typeof(COVARIANT), Tuple{Int, Int}),
+        )
+    end
+
+    @testset "tensor operations that combine and widen bases" begin
+        # Adding vectors with different bases combines their names, and
+        # reshaping to a wider basis zero-fills the names it is missing.
+        @test @inferred(V12 + V23) === Geometry.Covariant123Vector(1.0, 4.0, 3.0)
+        @test @inferred(widen_basis(V12)) === Geometry.Covariant123Vector(1.0, 2.0, 0.0)
+        @test_opt V12 + V23
+        @test_opt widen_basis(V12)
+        discard_result(+, V12, V23)
+        @test (@allocated discard_result(+, V12, V23)) == 0
+        discard_result(widen_basis, V12)
+        @test (@allocated discard_result(widen_basis, V12)) == 0
+    end
+end
