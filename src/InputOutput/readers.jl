@@ -122,7 +122,8 @@ Dict{Any, Any} with 3 entries:
   "face_extruded_finite_difference_space"   => FaceExtrudedFiniteDifferenceSpace:…
 ```
 
-Once "unpacked" as shown above, `ClimaCorePlots` or `ClimaCoreMakie` can be used to visualise
+Once "unpacked" as shown above, `ClimaCorePlots` or the Makie recipes in
+`ClimaCore.Visualize` (enabled by loading a Makie backend) can be used to visualise
 fields. `ClimaCoreTempestRemap` supports interpolation onto user-specified grids if necessary.
 
 """

@@ -1,41 +1,15 @@
 ## ClimaCoreMakie
 
-Makie plot infrastructure for ClimaCore fields for 2D / 3D visualization.
+**This package is now a compatibility shim.** The Makie plotting recipes for
+ClimaCore fields live in ClimaCore itself, as the `ClimaCoreMakieExt` package
+extension, with entry points in the `ClimaCore.Visualize` module. New code
+should not depend on ClimaCoreMakie:
 
-### Use ClimaCoreMakie from the ClimaCore parent package
+    julia> using ClimaCore, CairoMakie  # or GLMakie, WGLMakie, ...
 
-    cd ClimaCore
-    julia --project
+    julia> ClimaCore.Visualize.fieldheatmap(field)
 
-Activate the Pkg repl mode and dev the ClimaCoreMakie subpackge:
-
-    (ClimaCore) pkg> dev lib/ClimaCoreMakie
-
-You can now use ClimaCoreMakie in your ClimaCore pkg environment:
-
-    julia> using ClimaCoreMakie
-
-To visualize a ClimaCore object, you fist need to install a Makie backend:
-
-    (@v1.7) pkg> add GLMakie # 3D
-    (@v1.7) pkg> add CairoMakie # 2D
-
-Then load in the backend:
-
-    julia> using GLMakie
-
-Finally call `fieldheatmap` or `fieldcountourf`:
-
-    julia> ClimaCoreMakie.fieldheatmap(field, ...)
-
-
-### Development of the `ClimaCoreMakie` subpackage
-
-    cd ClimaCore/lib/ClimaCoreMakie
-
-    # Add ClimaCore to subpackage environment
-    julia --project -e 'using Pkg; Pkg.develop(path="../../")'
-
-    # Instantiate ClimaCoreMakie project environment
-    julia --project -e 'using Pkg; Pkg.instantiate()'
-    julia --project -e 'using Pkg; Pkg.test()'
+Loading ClimaCoreMakie continues to work: it re-exports the same functions
+(`fieldheatmap(!)`, `fieldcontourf(!)`) and re-points the recipe types
+(`FieldHeatmap`, `FieldContourf`, `FieldLine`) at the extension, so existing
+code and downstream packages are unaffected.
