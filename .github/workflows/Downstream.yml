@@ -50,12 +50,62 @@ jobs:
       # from the package itself would cause the aqua test to fail. Instead, we install
       # TestEnv into the base environment, activate the test env for the downstream package,
       # and dev ClimaCore before running the test suite from there.
-      - if: (matrix.package != 'ClimaCoupler.jl')
+      - if: (matrix.package != 'ClimaCoupler.jl' && matrix.package != 'ClimaAtmos.jl')
         run: |
           julia --color=yes -e 'using Pkg; Pkg.add("TestEnv")'
           julia --color=yes --project=${{ matrix.package }} -e 'using Pkg; Pkg.instantiate()'
           julia --color=yes --project=${{ matrix.package }} -e 'using TestEnv; TestEnv.activate();\
             using Pkg; Pkg.develop(; path = "."); include("${{ matrix.package }}/test/runtests.jl")'
+
+      # ClimaAtmos.jl's test suite uses too much memory to run in a single process,
+      # so run each test group in its own step, i.e. its own process.
+      - name: Set up ClimaAtmos.jl
+        if: matrix.package == 'ClimaAtmos.jl'
+        run: |
+          julia --color=yes -e 'using Pkg; Pkg.add("TestEnv")'
+          julia --color=yes --project=ClimaAtmos.jl -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Run infrastructure tests
+        if: matrix.package == 'ClimaAtmos.jl'
+        env:
+          TEST_GROUP: infrastructure
+        run: |
+          julia --color=yes --project=ClimaAtmos.jl -e 'using TestEnv; TestEnv.activate(); using Pkg; Pkg.develop(; path = "."); include("ClimaAtmos.jl/test/runtests.jl")'
+
+      - name: Run diagnostics tests
+        if: matrix.package == 'ClimaAtmos.jl'
+        env:
+          TEST_GROUP: diagnostics
+        run: |
+          julia --color=yes --project=ClimaAtmos.jl -e 'using TestEnv; TestEnv.activate(); using Pkg; Pkg.develop(; path = "."); include("ClimaAtmos.jl/test/runtests.jl")'
+
+      - name: Run dynamics tests
+        if: matrix.package == 'ClimaAtmos.jl'
+        env:
+          TEST_GROUP: dynamics
+        run: |
+          julia --color=yes --project=ClimaAtmos.jl -e 'using TestEnv; TestEnv.activate(); using Pkg; Pkg.develop(; path = "."); include("ClimaAtmos.jl/test/runtests.jl")'
+
+      - name: Run parameterizations tests
+        if: matrix.package == 'ClimaAtmos.jl'
+        env:
+          TEST_GROUP: parameterizations
+        run: |
+          julia --color=yes --project=ClimaAtmos.jl -e 'using TestEnv; TestEnv.activate(); using Pkg; Pkg.develop(; path = "."); include("ClimaAtmos.jl/test/runtests.jl")'
+
+      - name: Run restarts tests
+        if: matrix.package == 'ClimaAtmos.jl'
+        env:
+          TEST_GROUP: restarts
+        run: |
+          julia --color=yes --project=ClimaAtmos.jl -e 'using TestEnv; TestEnv.activate(); using Pkg; Pkg.develop(; path = "."); include("ClimaAtmos.jl/test/runtests.jl")'
+
+      - name: Run era5 tests
+        if: matrix.package == 'ClimaAtmos.jl'
+        env:
+          TEST_GROUP: era5
+        run: |
+          julia --color=yes --project=ClimaAtmos.jl -e 'using TestEnv; TestEnv.activate(); using Pkg; Pkg.develop(; path = "."); include("ClimaAtmos.jl/test/runtests.jl")'
 
       - if: matrix.package == 'ClimaCoupler.jl'
         run: |
