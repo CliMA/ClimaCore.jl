@@ -1,6 +1,6 @@
 module ClimaCoreMakieExt
 
-import Makie: Makie, @recipe, lift, GLTriangleFace, Point3f, Observable
+import Makie: Makie, @recipe, GLTriangleFace
 import ClimaCore
 import ClimaCore.Visualize:
     fieldcontourf,
