@@ -2,12 +2,19 @@ module ClimaCoreMakie
 
 export fieldcontourf, fieldcontourf!, fieldheatmap, fieldheatmap!
 
-import Makie: Makie, @recipe, lift, GLTriangleFace, Point3f, Observable
+import Makie
 import ClimaCore
+import ClimaCore.Visualize:
+    fieldcontourf,
+    fieldcontourf!,
+    fieldheatmap,
+    fieldheatmap!,
+    fieldline,
+    fieldline!
 
-include("utils.jl")
-include("fieldline.jl")
-include("fieldheatmap.jl")
-include("fieldcontourf.jl")
+const _ext = Base.get_extension(ClimaCore, :ClimaCoreMakieExt)
+const FieldContourf = _ext.FieldContourf
+const FieldHeatmap = _ext.FieldHeatmap
+const FieldLine = _ext.FieldLine
 
 end # module
