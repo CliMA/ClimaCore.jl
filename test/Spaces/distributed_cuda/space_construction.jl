@@ -14,7 +14,7 @@ import ClimaCore:
     Quadratures
 
 @testset "Distributed extruded CUDA space" begin
-    # initializing MPI
+    # Initializing MPI
     device = ClimaComms.device()
     context = ClimaComms.MPICommsContext(device)
     vcontext = ClimaComms.SingletonCommsContext(device)

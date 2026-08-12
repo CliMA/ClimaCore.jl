@@ -158,7 +158,7 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
 
     if context isa ClimaComms.MPICommsContext &&
        device isa ClimaComms.CUDADevice
-        # assign GPUs based on local rank
+        # Assign GPUs based on local rank
         local_comm = ClimaComms.MPI.Comm_split_type(
             context.mpicomm,
             ClimaComms.MPI.COMM_TYPE_SHARED,
@@ -236,7 +236,7 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
     array_kernel_args = (; ϕ_arr, ψ_arr)
 
     kernel_args = (; ϕ, ψ, u, du, f, ϕψ, nt_ϕψ, nt_ϕψ_ft, f_comp, f_comp2)
-    # buffers cannot reside in CuArray kernels
+    # Buffers cannot reside in CuArray kernels
     buffers = (;
         u_buffer,
         ϕ_buffer,

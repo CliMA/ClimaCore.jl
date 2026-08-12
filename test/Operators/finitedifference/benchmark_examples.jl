@@ -1,7 +1,3 @@
-#=
-julia --project=.buildkite
-using Revise; include(joinpath("test", "Operators", "finitedifference", "benchmark_examples.jl"))
-=#
 import ClimaCore
 using ClimaComms
 ClimaComms.@import_required_backends

@@ -2,10 +2,6 @@
 # these operator broadcasts have several dozen unelided Broadcasted objects
 # and views from getproperty (48-96 bytes each), and whether the compiler
 # elides them depends on how much of its inference budget is used up.
-#=
-julia --project=.buildkite
-using Revise; include("test/Operators/finitedifference/opt_examples.jl")
-=#
 import ClimaCore
 using ClimaComms
 ClimaComms.@import_required_backends
@@ -291,7 +287,7 @@ end
 function alloc_test_nested_expressions_7(cfield, ffield)
     (; fx, fy, fz, fϕ, fψ) = ffield
     (; cx, cy, cz, cϕ, cψ) = cfield
-    # similar to alloc_test_nested_expressions_8
+    # Similar to alloc_test_nested_expressions_8
     Ic = Operators.InterpolateF2C()
     @. cz = cx * cy * Ic(fy) * Ic(fy) * cϕ * cψ # Compile first
     p = @allocated begin
@@ -448,7 +444,7 @@ function alloc_test_nested_expressions_13(
         p_i = @allocated begin
             a_up_bcs = a_bcs(FT, i)
             Iaf2 = Operators.InterpolateC2F(; a_up_bcs...)
-            # add extra parentheses so that we call +(+(a,b,c),d), as +(a,b,c,d) triggers allocations
+            # Add extra parentheses so that we call +(+(a,b,c),d), as +(a,b,c,d) triggers allocations
             @. fynt =
                 (-(∇f(wvec(LBC(Iaf2(cxnt) * fx * fxnt * fxnt)))) +
                 (fx * Iaf2(cxnt) * fxnt * (I0f(cz) * fy - I0f(cy) * fxnt)) +

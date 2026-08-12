@@ -1,8 +1,3 @@
-#=
-julia --project=.buildkite
-ENV["CLIMACOMMS_DEVICE"] = "CUDA"
-using Revise; include("examples/column/vanleer_advection.jl")
-=#
 using Test
 using LinearAlgebra
 import ClimaComms

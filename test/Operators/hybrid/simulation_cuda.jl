@@ -11,7 +11,7 @@ using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
     # here c == 1, integrate t == 2π or one full period
 
     function rhs!(dudt, u, _, t)
-        # horizontal divergence operator applied to all levels
+        # Horizontal divergence operator applied to all levels
         hdiv = Operators.Divergence()
         @. dudt = -hdiv(u * Geometry.UVVector(1.0, 1.0))
         Spaces.weighted_dss!(dudt)

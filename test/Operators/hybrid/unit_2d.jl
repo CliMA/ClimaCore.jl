@@ -56,7 +56,7 @@ end
 
     function divergence(c, f)
         divf = zeros(eltype(f), hv_center_space)
-        # horizontal divergence operator applied to all levels
+        # Horizontal divergence operator applied to all levels
         hdiv = Operators.Divergence()
         divf .= hdiv.(f .* Ref(c)) # Ref is needed to treat c as a scalar for the broadcasting operator
         Spaces.weighted_dss!(divf)
@@ -96,9 +96,9 @@ end
     end
 
     # Vertical advective velocity
-    vC = Geometry.WVector.(ones(Float64, hv_face_space))
-    # vector-valued field to be advected (one component only, a UVector)
-    f = Geometry.UVector.(sin.(Fields.coordinate_field(hv_center_space).z))
+    vC = Geometry.WVector.(ones(Float64, hv_face_space),)
+    # Vector-valued field to be advected (one component only, a UVector)
+    f = Geometry.UVector.(sin.(Fields.coordinate_field(hv_center_space).z),)
 
     advf = advect(f)
 
@@ -111,7 +111,7 @@ end
             ),
             top = Operators.Extrapolate(),
         )
-        # only upward advection
+        # Only upward advection
         @. vecdivf = divf2c(vC ⊗ Ic2f(F))
 
         hdiv = Operators.Divergence()
@@ -159,7 +159,7 @@ end
         return diffu
     end
 
-    # scalar-valued field to be diffused, u = exp(-(coord.x^2 + coord.z^2) / 2)
+    # Scalar-valued field to be diffused, u = exp(-(coord.x^2 + coord.z^2) / 2)
     u = map(Fields.coordinate_field(hv_center_space)) do coord
         exp(-(coord.x^2 + coord.z^2) / 2)
     end
@@ -213,7 +213,7 @@ end
         return vec_diff
     end
 
-    # vector-valued field to be diffused (one component only) u = exp(-(coord.x^2 + coord.z^2) / 2)
+    # Vector-valued field to be diffused (one component only) u = exp(-(coord.x^2 + coord.z^2) / 2)
     U = map(Fields.coordinate_field(hv_center_space)) do coord
         Geometry.UVector(exp(-(coord.x^2 + coord.z^2) / 2))
     end

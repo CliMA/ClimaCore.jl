@@ -1,10 +1,3 @@
-#=
-julia --project=.buildkite
-ARGS = ["cosine_bells"];
-# ARGS = ["gaussian_bells"];
-# ARGS = ["slotted_spheres"];
-using Revise; include(joinpath("examples", "hybrid", "box", "limiters_advection.jl"))
-=#
 using ClimaComms
 ClimaComms.@import_required_backends
 using LinearAlgebra

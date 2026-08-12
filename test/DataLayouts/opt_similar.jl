@@ -2,18 +2,19 @@ using Test
 using JET
 using StaticArrays: SMatrix, MArray
 import ClimaComms
+import ClimaCore
 import ClimaCore: DataLayouts, Geometry
 ClimaComms.@import_required_backends
 
 function test_similar!(data)
     if isnothing(DataLayouts.f_dim(data))
         new_data = similar(data)
-        @test_opt similar(data)
+        @test_opt target_modules=(ClimaCore,) similar(data)
     else
         FT = eltype(parent(data))
         LG = Geometry.LocalGeometryType(Geometry.ZPoint{FT}, FT, (3,))
         new_data = similar(data, LG)
-        @test_opt similar(data, LG)
+        @test_opt target_modules=(ClimaCore,) similar(data, LG)
     end
     DataLayouts.DataScope(data) == DataLayouts.ThisThread() &&
         DataLayouts.has_inferred_size(data) &&

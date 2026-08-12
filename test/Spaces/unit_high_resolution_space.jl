@@ -1,7 +1,3 @@
-#=
-julia --project=.buildkite
-using Revise; include("test/Spaces/unit_high_resolution_space.jl")
-=#
 using Test
 import ClimaComms
 ClimaComms.@import_required_backends

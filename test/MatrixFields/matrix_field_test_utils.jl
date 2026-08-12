@@ -1,14 +1,63 @@
-using Test
-using JET
+if !@isdefined(USING_JET)
+    const USING_JET = try
+        using JET
+        true
+    catch
+        @eval module JET
+        macro test_opt(args...)
+
+            return quote end
+        end
+        macro test_call(args...)
+
+            return quote end
+        end
+        export @test_opt, @test_call
+        end
+        using .JET
+        struct AnyFrameModule
+
+            m::Any
+        end
+        false
+    end
+    # JET is often present but fails to load (e.g. a compat clash with the
+    # active Julia version). The stubs above keep the suite running, but they
+    # silently turn every `@test_opt` into a no-op, so say so once.
+    USING_JET || @warn "JET.jl failed to load: @test_opt/@test_call checks in \
+                        the MatrixFields tests are disabled for this run."
+end
 import Dates
 import Random: seed!
-import Base.Broadcast: materialize, materialize!
-import LazyBroadcast: @lazy
-import BenchmarkTools as BT
-
-import ClimaComms
 import ClimaCore
-import BenchmarkTools as BT
+import ClimaComms
+if !@isdefined(USING_BT)
+    const USING_BT = try
+        import BenchmarkTools as BT
+        true
+    catch
+        @eval module BT
+        macro belapsed(expr)
+            clean = if expr isa Expr && expr.head == :call
+                Expr(
+                    :call,
+                    expr.args[1],
+                    [
+                        a isa Expr && a.head == :$ ? a.args[1] : a for
+                        a in expr.args[2:end]
+                    ]...,
+                )
+            else
+                expr
+            end
+            return quote
+                @elapsed $(esc(clean))
+            end
+        end
+        end
+        false
+    end
+end
 ClimaComms.@import_required_backends
 import ClimaCore:
     Utilities,
@@ -21,10 +70,26 @@ import ClimaCore:
     Fields,
     Operators,
     Quadratures
+using Test
 using ClimaCore.MatrixFields
 import ClimaCore.Utilities: half
 import LinearAlgebra: I, norm, ldiv!, mul!
 import ClimaCore.MatrixFields: @name
+# `@lazy`/`materialize` live in LazyBroadcast; `materialize!` in Base.Broadcast
+# (ClimaCore extends it). Bring them into scope for every file that includes
+# this shared helper (the broadcasting tests and operator_matrices).
+using LazyBroadcast: @lazy, materialize
+import Base.Broadcast: materialize!
+
+# Allocation measurements are made from dedicated `@noinline` functions:
+# measuring `@allocated f(...)` inline makes the result depend on how much of
+# the *caller's* inlining/escape-analysis budget the surrounding code has used
+# up, which can report spurious allocations of a few tens of bytes (see
+# `unit_field_matrix_solvers.jl` for a case where this failed CI).
+@noinline call_allocs(f::F) where {F} = @allocated f()
+@noinline call_allocs(f!::F, x) where {F} = @allocated f!(x)
+@noinline set_result_allocs(result, bc) = @allocated set_result!(result, bc)
+@noinline materialize_allocs(result, bc) = @allocated materialize!(result, bc)
 
 # Test that an expression is true and that it is also type-stable.
 macro test_all(expression)
@@ -34,7 +99,7 @@ macro test_all(expression)
         # TODO: Some operations have an unelided view from getproperty
         # (48 bytes); whether the compiler elides it depends on how much
         # of its inference budget is used up.
-        @test (@allocated test_func()) ≤ 48 # allocations
+        @test call_allocs(test_func) ≤ 48   # allocations
         @test_opt test_func()               # type instabilities
     end
 end
@@ -132,7 +197,7 @@ function test_field_broadcast(;
         # the allocations they incur.
         @test_opt ignored_modules = CUDA_FRAMES materialize(get_result)
         @test_opt ignored_modules = CUDA_FRAMES materialize!(result, set_result)
-        USING_CUDA || @test (@allocated materialize!(result, set_result)) == 0
+        USING_CUDA || @test materialize_allocs(result, set_result) == 0
 
         if !isnothing(ref_set_result)
             # Test ref_set_result! for type instabilities and allocations to
@@ -142,7 +207,7 @@ function test_field_broadcast(;
                 ref_set_result,
             )
             USING_CUDA ||
-                @test (@allocated materialize!(ref_result, ref_set_result)) == 0
+                @test materialize_allocs(ref_result, ref_set_result) == 0
         end
     end
 end
@@ -477,7 +542,6 @@ function get_getidx_args(bc)
     return (; space, bc, idx_l, idx_i, idx_r, hidx)
 end
 
-import JET
 function perf_getidx(bc; broken = false)
     (; space, bc, idx_l, idx_i, idx_r, hidx) = get_getidx_args(bc)
     call_getidx(space, bc, idx_l, hidx)

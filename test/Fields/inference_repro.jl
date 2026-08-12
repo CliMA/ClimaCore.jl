@@ -49,7 +49,7 @@ function make_space(
 end
 
 function call_func(θ_l, hydrology_cm, earth_param_set)
-    # function call_func(hydrology_cm, earth_param_set)
+    # Function call_func(hydrology_cm, earth_param_set)
     # This fails with dynamic function invocation when `LandParameters`
     # and `vanGenuchten` both use `tuple` for broadcasting,
     # This passes when `Ref` is used for either `LandParameters` or `vanGenuchten` broadcasting

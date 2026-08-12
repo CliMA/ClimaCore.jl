@@ -14,7 +14,7 @@ import ClimaCore:
 using ClimaComms
 ClimaComms.@import_required_backends
 
-# initializing MPI
+# Initializing MPI
 const device = ClimaComms.device()
 const context = ClimaComms.MPICommsContext(device)
 pid, nprocs = ClimaComms.init(context)
@@ -56,7 +56,7 @@ partition numbers
     Nq, Nv = 3, 1
     x1min, x1max = -2π, 2π
     x2min, x2max = -2π, 2π
-    # initializing MPI
+    # Initializing MPI
     device = ClimaComms.device()
     context = ClimaComms.MPICommsContext(device)
     pid, nprocs = ClimaComms.init(context)

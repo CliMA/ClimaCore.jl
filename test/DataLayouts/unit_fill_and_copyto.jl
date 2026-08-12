@@ -84,34 +84,40 @@ end
 
 @testset "fill! and copyto!" begin
     device = ClimaComms.device()
-    A = ClimaComms.array_type(device){Float64}
-    @testset "Nf = 1 (uniform)" begin
-        for data in testable_layouts(A, Float64)
-            test_single_F!(data)
+    for FT in (Float32, Float64)
+        A = ClimaComms.array_type(device){FT}
+        @testset "Nf = 1 (uniform) [$FT]" begin
+            for data in testable_layouts(A, FT)
+                test_single_F!(data)
+            end
         end
-    end
-    @testset "Nf = 1 (nonuniform)" begin
-        for data in testable_layouts(A, Tuple{Int32, UInt8})
-            test_single_F!(data)
+        T_nonuniform_1 = FT === Float32 ? Tuple{Int16, UInt8} : Tuple{Int32, UInt8}
+        T_nonuniform_3 =
+            FT === Float32 ? Tuple{Tuple{Int16, UInt8}, UInt64} :
+            Tuple{Tuple{Int32, UInt8}, UInt128}
+        @testset "Nf = 1 (nonuniform) [$FT]" begin
+            for data in testable_layouts(A, T_nonuniform_1)
+                test_single_F!(data)
+            end
         end
-    end
-    @testset "Nf = 3 (uniform)" begin
-        for data in testable_layouts(A, Tuple{Float64, NTuple{2, Float64}})
-            test_multiple_F!(data)
+        @testset "Nf = 3 (uniform) [$FT]" begin
+            for data in testable_layouts(A, Tuple{FT, NTuple{2, FT}})
+                test_multiple_F!(data)
+            end
         end
-    end
-    @testset "Nf = 3 (nonuniform)" begin
-        for data in testable_layouts(A, Tuple{Tuple{Int32, UInt8}, UInt128})
-            test_multiple_F!(data)
+        @testset "Nf = 3 (nonuniform) [$FT]" begin
+            for data in testable_layouts(A, T_nonuniform_3)
+                test_multiple_F!(data)
+            end
         end
-    end
-    @testset "scalar broadcasts of impure functions" begin
-        # Functions like rand must be evaluated at every point, so only flat
-        # identity broadcasts can be replaced with a single call to fill!.
-        for data in testable_layouts(A, Float64)
-            length(data) > 1 || continue
-            data .= rand.()
-            @test length(unique(Array(parent(data)))) > 1
+        @testset "scalar broadcasts of impure functions [$FT]" begin
+            # Functions like rand must be evaluated at every point, so only flat
+            # identity broadcasts can be replaced with a single call to fill!.
+            for data in testable_layouts(A, FT)
+                length(data) > 1 || continue
+                data .= rand.()
+                @test length(unique(Array(parent(data)))) > 1
+            end
         end
     end
     @testset "component views across multiple elements" begin

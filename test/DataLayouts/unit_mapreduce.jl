@@ -1,7 +1,3 @@
-#=
-julia --project
-using Revise; include(joinpath("test", "DataLayouts", "unit_mapreduce.jl"))
-=#
 using Test
 using ClimaCore.DataLayouts
 using ClimaCore
@@ -33,8 +29,7 @@ function test_mapreduce_2!(data)
     )
 end
 
-@testset "mapreduce with Nf = 1" begin
-    FT = Float64
+@testset "mapreduce with Nf = 1 [$FT]" for FT in (Float32, Float64)
     A = ClimaComms.array_type(device){FT}
     (Nv, Nij, Nh) = (3, 4, 5)
     for data in (
@@ -50,8 +45,7 @@ end
     end
 end
 
-@testset "mapreduce with Nf > 1" begin
-    FT = Float64
+@testset "mapreduce with Nf > 1 [$FT]" for FT in (Float32, Float64)
     A = ClimaComms.array_type(device){FT}
     (Nv, Nij, Nh) = (3, 4, 5)
     for data in (
@@ -66,33 +60,35 @@ end
 end
 
 # https://github.com/CliMA/ClimaCore.jl/issues/2097
-@testset "mapreduce with partial blocks" begin
-    space = ClimaCore.CommonSpaces.RectangleXYSpace(;
-        x_min = 0,
-        x_max = 1,
-        y_min = 0,
-        y_max = 1,
+@testset "mapreduce with partial blocks [$FT]" for FT in (Float32, Float64)
+    space = ClimaCore.CommonSpaces.RectangleXYSpace(
+        FT;
+        x_min = FT(0),
+        x_max = FT(1),
+        y_min = FT(0),
+        y_max = FT(1),
         periodic_x = false,
         periodic_y = false,
         n_quad_points = 4,
         x_elem = 129,
         y_elem = 129,
     )
-    @test minimum(ones(space)) == 1
+    @test minimum(ones(space)) == FT(1)
 
     if ClimaComms.context isa ClimaComms.SingletonCommsContext
         # Less than 256 threads
-        space = ClimaCore.CommonSpaces.RectangleXYSpace(;
-            x_min = 0,
-            x_max = 1,
-            y_min = 0,
-            y_max = 1,
+        space = ClimaCore.CommonSpaces.RectangleXYSpace(
+            FT;
+            x_min = FT(0),
+            x_max = FT(1),
+            y_min = FT(0),
+            y_max = FT(1),
             periodic_x = false,
             periodic_y = false,
             n_quad_points = 2,
             x_elem = 2,
             y_elem = 2,
         )
-        @test minimum(ones(space)) == 1
+        @test minimum(ones(space)) == FT(1)
     end
 end

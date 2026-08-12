@@ -1,7 +1,3 @@
-#=
-julia --project
-using Revise; include(joinpath("test", "Meshes", "opt_meshes.jl"))
-=#
 using Test
 using SparseArrays
 using JET

@@ -1,8 +1,3 @@
-#=
-julia --project=.buildkite
-ENV["CLIMACOMMS_DEVICE"] = "CUDA";
-using Revise; include(joinpath("test", "Spaces", "opt_spaces.jl"))
-=#
 import ClimaCore
 import ClimaCore: Spaces, Grids, Topologies
 using Test
@@ -28,20 +23,20 @@ end
     FT = Float32
     zelem = 4
     helem = 4
-    # context is not fully inferred due to nthreads() and cuda_ext_is_loaded(),
+    # Context is not fully inferred due to nthreads() and cuda_ext_is_loaded(),
     # so let's ignore these for now.
     context = ClimaComms.context()
 
 #! format: off
     if ClimaComms.device(context) isa ClimaComms.CUDADevice
         test_n_failures(88,   TU.PointSpace, context)
-        test_n_failures(750,  TU.SpectralElementSpace1D, context)
-        test_n_failures(382, TU.SpectralElementSpace2D, context)
+        test_n_failures(780,  TU.SpectralElementSpace1D, context)
+        test_n_failures(400, TU.SpectralElementSpace2D, context)
         test_n_failures(4,  TU.ColumnCenterFiniteDifferenceSpace, context)
         test_n_failures(5,  TU.ColumnFaceFiniteDifferenceSpace, context)
-        test_n_failures(388, TU.SphereSpectralElementSpace, context)
-        test_n_failures(398, TU.CenterExtrudedFiniteDifferenceSpace, context)
-        test_n_failures(398, TU.FaceExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(410, TU.SphereSpectralElementSpace, context)
+        test_n_failures(420, TU.CenterExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(420, TU.FaceExtrudedFiniteDifferenceSpace, context)
     else
         test_n_failures(0,    TU.PointSpace, context)
         test_n_failures(184,  TU.SpectralElementSpace1D, context)

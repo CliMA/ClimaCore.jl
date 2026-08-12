@@ -1,7 +1,3 @@
-#=
-julia --project=.buildkite
-using Revise; include("test/InputOutput/unit_finitedifference.jl")
-=#
 using Test
 import ClimaCore
 using ClimaCore: Fields, Meshes, Geometry, Grids, CommonSpaces, InputOutput
@@ -43,7 +39,7 @@ end
 
     Y = Fields.FieldVector(; c = center_field, f = face_field)
 
-    # write field vector to hdf5 file
+    # Write field vector to hdf5 file
     InputOutput.HDF5Writer(filename, comms_ctx) do writer
         InputOutput.write!(writer, Y, "Y")
     end
@@ -75,7 +71,7 @@ end
     vspace = Spaces.CenterFiniteDifferenceSpace(vtopology)
     f = Fields.Field(FT, vspace)
 
-    # write field vector to hdf5 file
+    # Write field vector to hdf5 file
     InputOutput.HDF5Writer(filename, comms_ctx) do writer
         InputOutput.write!(writer, f, "f")
     end

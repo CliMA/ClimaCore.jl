@@ -1,7 +1,3 @@
-#=
-julia --project
-using Revise; include(joinpath("test", "deprecations.jl"))
-=#
 using Test
 import ClimaCore
 using ClimaCore:
@@ -24,7 +20,7 @@ ClimaComms.@import_required_backends
     z_max = FT(30e3)
     z_elem = 64
     h_elem = 30
-    # horizontal space
+    # Horizontal space
     domain = Domains.SphereDomain(R)
     horizontal_mesh = Meshes.EquiangularCubedSphere(domain, h_elem)
     horizontal_topology = Topologies.Topology2D(
@@ -35,7 +31,7 @@ ClimaComms.@import_required_backends
     quad = Quadratures.GLL{npoly + 1}()
     h_space = Spaces.SpectralElementSpace2D(horizontal_topology, quad)
 
-    # vertical space
+    # Vertical space
     z_domain = Domains.IntervalDomain(
         Geometry.ZPoint(zero(z_max)),
         Geometry.ZPoint(z_max);
@@ -43,7 +39,7 @@ ClimaComms.@import_required_backends
     )
     z_mesh = Meshes.IntervalMesh(z_domain, nelems = z_elem)
 
-    # deprecated methods:
+    # Deprecated methods:
     @test_deprecated Topologies.IntervalTopology(z_mesh)
     @test_deprecated FaceFiniteDifferenceSpace(z_mesh)
     @test_deprecated CenterFiniteDifferenceSpace(z_mesh)

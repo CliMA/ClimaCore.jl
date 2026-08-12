@@ -1,8 +1,4 @@
 #=
-julia --project=.buildkite
-julia -g2 --check-bounds=yes --project=.buildkite
-using Revise; include(joinpath("benchmarks", "scripts", "index_swapping.jl"))
-
 # Info:
 This script compares the performance
 of our universal index support (for

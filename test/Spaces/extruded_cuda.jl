@@ -1,7 +1,3 @@
-#=
-julia --project
-using Revise; include(joinpath("test", "Spaces", "extruded_cuda.jl"))
-=#
 using LinearAlgebra, IntervalSets
 using ClimaComms
 ClimaComms.@import_required_backends

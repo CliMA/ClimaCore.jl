@@ -49,6 +49,12 @@ jobs:
       - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest
+        env:
+          # The convergence, optimization, allocation, and smoke tiers each run
+          # their code at several resolutions, twice, or end-to-end, and they
+          # have dedicated Buildkite steps. Excluding them here keeps this
+          # cross-version/cross-OS job to the fast tiers.
+          TEST_EXCLUDE_TIER: "conv,opt,allocs,smoke"
       - uses: julia-actions/julia-processcoverage@latest
       - uses: codecov/codecov-action@v7
         if: ${{ matrix.version == '1.10' }} && ${{ matrix.os == 'ubuntu-latest' }}

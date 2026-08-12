@@ -1,8 +1,3 @@
-#=
-julia --check-bounds=yes --project
-julia --project=.buildkite
-using Revise; include(joinpath("test", "Fields", "unit_field.jl"))
-=#
 using Test
 using JET
 
@@ -55,6 +50,8 @@ function spectral_space_2D(; n1 = 1, n2 = 1, Nij = 4)
     return space
 end
 
+##### Construction & broadcasting basics #####
+
 @testset "1×1 2D domain space" begin
     Nij = 4
     n1 = n2 = 1
@@ -99,7 +96,7 @@ end
 
     real_field = field.re
 
-    # test broadcasting
+    # Test broadcasting
     res = field .+ 1
     @test parent(Fields.field_values(res)) == Float64[
         f == 1 ? 2 : 1 for v in 1:1, i in 1:Nij, j in 1:Nij, f in 1:2,
@@ -111,7 +108,7 @@ end
         2 for v in 1:1, i in 1:Nij, j in 1:Nij, f in 1:1, h in 1:(n1 * n2)
     ]
 
-    # test field slab broadcasting
+    # Test field slab broadcasting
     f1 = ones(space)
     f2 = ones(space)
 
@@ -243,10 +240,10 @@ end
     function test_broken_throws(f)
         try
             @. f += 1
-            # we want to throw exception, test is broken
+            # We want to throw exception, test is broken
             @test_broken false
         catch
-            # we want to throw exception, unexpected pass
+            # We want to throw exception, unexpected pass
             @test_broken true
         end
     end
@@ -293,7 +290,7 @@ end
     @test nt_sum.b ≈ 8.0 * 10.0 rtol = 10eps()
     @test norm(nt_field) ≈ sqrt(2.0) rtol = 10eps()
 
-    # test scalar asignment
+    # Test scalar asignment
     nt_field.a .= 0.0
     @test sum(nt_field.a) == 0.0
 end
@@ -344,6 +341,8 @@ end
     @test vector_field != other_field
     @test vector_field == copy(vector_field)
 end
+
+##### FieldVector: construction, conversions, broadcasting #####
 
 @testset "FieldVector" begin
     space = spectral_space_2D()
@@ -429,7 +428,7 @@ fv_from_array_allocations(Y, array) = @allocated Fields.array2fieldvector!(Y, ar
     @test Y2 == Y
     @test Y2.k.z === z
 
-    # zero preserves ScalarWrapper components; without a
+    # Zero preserves ScalarWrapper components; without a
     # `zero(::ScalarWrapper)` method they would become 0-dimensional Arrays,
     # changing the FieldVector's type and breaking strict equality.
     Ys = Fields.FieldVector(u = u, z = z)
@@ -686,6 +685,8 @@ end
     @test axes(deepcopy(object_that_contains_Yf).Yf.field_vf) === space_vf
 end
 
+##### Pointwise access, iteration, and views #####
+
 @testset "Scalar field iterator" begin
     space = spectral_space_2D()
     u = Geometry.Covariant12Vector.(ones(space), ones(space))
@@ -813,6 +814,8 @@ end
     end
 end
 
+##### Levels, columns, and slabs #####
+
 @testset "Levels of Fields and Field broadcasts" begin
     FT = Float64
     for space in TU.all_spaces(FT)
@@ -911,14 +914,14 @@ end
     FT = Float64
     function domain_surface_bc!(x, ᶜz_surf, ᶜx_surf)
         @. x = x + ᶜz_surf
-        # exercises broadcast_shape(PointSpace, PointSpace)
+        # Exercises broadcast_shape(PointSpace, PointSpace)
         @. x = x + (ᶜz_surf * ᶜx_surf)
         nothing
     end
     function column_surface_bc!(x, ᶜz_surf, ᶜx_surf)
         Fields.bycolumn(axes(x)) do colidx
             @. x[colidx] = x[colidx] + ᶜz_surf[colidx]
-            # exercises broadcast_shape(PointSpace, PointSpace)
+            # Exercises broadcast_shape(PointSpace, PointSpace)
             @. x[colidx] = x[colidx] + (ᶜz_surf[colidx] * ᶜx_surf[colidx])
         end
         nothing
@@ -1032,6 +1035,8 @@ function test_adapt_space(cpu_space_in)
         @test parent(Spaces.local_geometry_data(cpu_space_out)) isa Array
     end
 end
+
+##### Device adaptation, spaces, and miscellaneous #####
 
 @testset "Test Adapt" begin
     ecs_space_fn(dev) = ExtrudedCubedSphereSpace(;

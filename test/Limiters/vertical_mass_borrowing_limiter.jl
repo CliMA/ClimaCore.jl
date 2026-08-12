@@ -1,7 +1,3 @@
-#=
-julia --project=.buildkite
-using Revise; include(joinpath("test", "Limiters", "vertical_mass_borrowing_limiter.jl"))
-=#
 using ClimaComms
 ClimaComms.@import_required_backends
 using ClimaCore: Fields, Spaces, Limiters
@@ -28,7 +24,7 @@ function plot_results(f, f₀)
     Plots.plot!(f₀col; label = "initial")
     Plots.savefig(joinpath(path, "lim.png"))
 end
-# usage:
+# Usage:
 # plot_results(ρq, ρq_init)
 
 
