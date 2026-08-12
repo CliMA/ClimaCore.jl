@@ -11,6 +11,11 @@ v0.15.1
   arguments. [2571](https://github.com/CliMA/ClimaCore.jl/pull/2571)
 - Add `PointCloudSpace` and `MultiColumnFiniteDifferenceSpace` for running independent
   points/columns in parallel. [2525](https://github.com/CliMA/ClimaCore.jl/pull/2525)
+- Move the ClimaCoreMakie recipes into ClimaCore as the `ClimaCoreMakieExt`
+  package extension, triggered by loading Makie. The plotting functions
+  (`fieldheatmap(!)`, `fieldcontourf(!)`, `fieldline(!)`) now live in the new
+  `ClimaCore.Visualize` module; ClimaCoreMakie remains as a backward-compatible
+  shim that continues to provide them.
 
 v0.15.0
 -------
