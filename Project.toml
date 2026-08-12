@@ -36,9 +36,11 @@ UnrolledUtilities = "0fe1646c-419e-43be-ac14-22321958931b"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 GPUCompiler = "61eb1bfa-7361-4325-ad38-22787b887f55"
 Krylov = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 
 [extensions]
 ClimaCoreCUDAExt = "CUDA"
+ClimaCoreMakieExt = "Makie"
 KrylovExt = "Krylov"
 
 [compat]
@@ -71,6 +73,7 @@ LLVM = "9"
 LazyBroadcast = "1"
 LinearAlgebra = "1"
 Logging = "1"
+Makie = "0.24"
 MultiBroadcastFusion = "0.3.1, 0.4"
 NVTX = "0.3, 1"
 PkgVersion = "0.1, 0.2, 0.3"
