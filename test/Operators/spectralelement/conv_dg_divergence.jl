@@ -41,19 +41,7 @@ function periodic_plane(::Type{FT}, nelem; L = FT(2π), Nq = 4) where {FT}
     return Spaces.SpectralElementSpace2D(topology, Quadratures.GLL{Nq}())
 end
 
-central_flux(normal, (uv⁻,), (uv⁺,)) = ((uv⁻ + uv⁺) / 2)' * normal
-
-# DG divergence of F: weak divergence in the element interior plus the central
-# numerical flux through element interfaces, normalized by the mass weights.
-function dg_divergence(uv)
-    space = axes(uv)
-    lgeom = Fields.local_geometry_field(space)
-    hwdiv = Operators.WeakDivergence()
-    F = Geometry.transform.(Ref(Geometry.Contravariant12Axis()), uv)
-    r = @. hwdiv(F) * (-(lgeom.WJ))
-    Operators.add_numerical_flux_internal!(central_flux, r, uv)
-    return @. -r / lgeom.WJ
-end
+include("utils_dg.jl") # dg_divergence
 
 @testset "DG divergence h-refinement convergence" begin
     FT = Float64

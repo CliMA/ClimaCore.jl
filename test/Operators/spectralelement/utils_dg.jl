@@ -3,7 +3,14 @@
 # top-level @test (see test/README.md on `utils_` files).
 import ClimaComms
 import ClimaCore:
-    Domains, Meshes, Topologies, Spaces, Quadratures, Geometry
+    Domains,
+    Fields,
+    Geometry,
+    Meshes,
+    Operators,
+    Quadratures,
+    Spaces,
+    Topologies
 
 # The standard cubed-sphere spectral-element space used by the DG tests.
 function dg_sphere_space(
@@ -26,3 +33,21 @@ dg_central_flux(normal, (y⁻,), (y⁺,)) =
 
 # Antisymmetric single-valued jump penalty on a scalar.
 dg_jump_penalty(normal, (q⁻,), (q⁺,)) = (q⁻ - q⁺) / 2
+
+# Central numerical flux of the vector field itself through the face normal.
+dg_central_flux_uv(normal, (uv⁻,), (uv⁺,)) = ((uv⁻ + uv⁺) / 2)' * normal
+
+# DG divergence of a vector field: weak divergence in the element interior
+# plus the central numerical flux through element interfaces, normalized by
+# the mass weights — the element-local form used by the shallow-water DG smoke
+# test. The interface flux completes the weak volume term at element
+# boundaries; DG applies no DSS.
+function dg_divergence(uv)
+    space = axes(uv)
+    lgeom = Fields.local_geometry_field(space)
+    hwdiv = Operators.WeakDivergence()
+    F = Geometry.transform.(Ref(Geometry.Contravariant12Axis()), uv)
+    r = @. hwdiv(F) * (-(lgeom.WJ))
+    Operators.add_numerical_flux_internal!(dg_central_flux_uv, r, uv)
+    return @. -r / lgeom.WJ
+end

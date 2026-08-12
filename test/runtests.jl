@@ -76,6 +76,10 @@ unit_tests = [
     UnitTest("Spectral elem - sphere geometry"         ,"Operators/spectralelement/unit_sphere_geometry.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - sphere gradient"         ,"Operators/spectralelement/conv_sphere_gradient.jl"; tier = :conv, subsystem = :operators),
     UnitTest("Spectral elem - sphere divergence"       ,"Operators/spectralelement/conv_sphere_divergence.jl"; tier = :conv, subsystem = :operators),
+    # :cpu_only: the analytic λ_lm evaluation in utils_vsh_divergence.jl is
+    # host-only; the numerics they check are device-independent.
+    UnitTest("Spectral elem - VSH divergence"          ,"Operators/spectralelement/unit_sphere_vsh_divergence.jl"; meta = :cpu_only, tier = :unit, subsystem = :operators),
+    UnitTest("Spectral elem - divergence jump conv"    ,"Operators/spectralelement/conv_sphere_divergence_jump.jl"; meta = :cpu_only, tier = :conv, subsystem = :operators),
     UnitTest("Spectral elem - sphere curl"             ,"Operators/spectralelement/conv_sphere_curl.jl"; tier = :conv, subsystem = :operators),
     UnitTest("Spectral elem - sphere diffusion"        ,"Operators/spectralelement/unit_sphere_diffusion.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - sphere diffusion vec"    ,"Operators/spectralelement/conv_sphere_diffusion_vec.jl"; tier = :conv, subsystem = :operators),
