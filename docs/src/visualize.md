@@ -31,3 +31,15 @@ Visualize.fieldcontourf!
 Visualize.fieldline
 Visualize.fieldline!
 ```
+
+## Recipe plot types
+
+```@meta
+CurrentModule = Base.get_extension(ClimaCore, :ClimaCoreMakieExt)
+```
+
+```@docs
+FieldHeatmap
+FieldContourf
+FieldLine
+```
