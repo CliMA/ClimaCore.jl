@@ -6,7 +6,7 @@ include(
         "test",
         "Operators",
         "spectralelement",
-        "benchmark_utils.jl",
+        "benchmark_ops_utils.jl",
     ),
 )
 include(

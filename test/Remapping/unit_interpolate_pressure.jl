@@ -65,7 +65,9 @@ for FT in (Float32, Float64)
         for space in (extruded_space, col_space)
             pfull_field = fill(FT(1.0), space)
             pfull_field_array = Fields.field2array(pfull_field)
-            pfull_field_array .= collect(10:-1:1)
+            tmp_pfull_field_array = Array(pfull_field_array)
+            tmp_pfull_field_array .= collect(10:-1:1)
+            copyto!(pfull_field_array, tmp_pfull_field_array)
             pressure_levels = [0.0, 1.0, 5.5, 10.0, 12.0]
 
             # Pressures should be in sorted order
@@ -76,7 +78,8 @@ for FT in (Float32, Float64)
 
             # Check the pressures along each column is sorted in descending
             # order
-            @test pfull_field_array == repeat(FT.(10:-1:1), 1, size(pfull_field_array, 2))
+            @test Array(pfull_field_array) ==
+                  repeat(FT.(10:-1:1), 1, size(pfull_field_array, 2))
 
             dummy_field = fill(FT(1.0), space)
             function preprocess!(field)
@@ -90,7 +93,7 @@ for FT in (Float32, Float64)
 
             dest = interpolate_pressure(dummy_field, pfull_intp)
             dest_field_array = Fields.field2array(dest)
-            @test dest_field_array == repeat(
+            @test Array(dest_field_array) == repeat(
                 [-10000.0, -10000.0, 150.0, 10000.0, 10000.0],
                 1,
                 size(pfull_field_array, 2),
@@ -114,10 +117,12 @@ for FT in (Float32, Float64)
                 PressureInterpolator(pfull_field, pressure_levels; extrapolate)
             dummy_field = fill(FT(1.0), space)
             dummy_field_array = Fields.field2array(dummy_field)
-            dummy_field_array .= collect(10:-1:1)
+            tmp_dummy_field_array = Array(dummy_field_array)
+            tmp_dummy_field_array .= collect(10:-1:1)
+            copyto!(dummy_field_array, tmp_dummy_field_array)
             dest = interpolate_pressure(dummy_field, linear_pfull_intp)
             dest_array = Fields.field2array(dest)
-            @test dest_array == repeat(
+            @test Array(dest_array) == repeat(
                 [-100.0, 100.0],
                 1,
                 size(pfull_field_array, 2),
@@ -129,7 +134,9 @@ for FT in (Float32, Float64)
         for space in (extruded_space, col_space)
             pfull_field = fill(FT(1.0), space)
             pfull_field_view = Fields.field2array(pfull_field)
-            pfull_field_view .= collect(10:-1:1)
+            tmp_pfull_field_view = Array(pfull_field_view)
+            tmp_pfull_field_view .= collect(10:-1:1)
+            copyto!(pfull_field_view, tmp_pfull_field_view)
             pfull_levels = [0.0, 1.5, 6.0, 9.5, 12.0]
 
             pfull_intp = PressureInterpolator(pfull_field, pfull_levels)
@@ -138,7 +145,7 @@ for FT in (Float32, Float64)
                 Fields.field2array(pfull_intp.scratch_face_pressure_field)
             # Test if pfull field defined on face space is extrapolated correctly
             # from pfull_field
-            @test face_pfull_field_array == repeat(
+            @test Array(face_pfull_field_array) == repeat(
                 [10.0, range(9.5, 1.5, step = -1.0)..., 1.0],
                 1,
                 size(face_pfull_field_array, 2),
@@ -159,7 +166,7 @@ for FT in (Float32, Float64)
 
             dest = interpolate_pressure(dummy_field, pfull_intp)
             dest_field_array = Fields.field2array(dest)
-            @test dest_field_array == repeat(
+            @test Array(dest_field_array) == repeat(
                 [-100.0, 2.0, 4.5, 8.0, 100.0],
                 1,
                 size(pfull_field_view, 2),
@@ -180,7 +187,9 @@ for FT in (Float32, Float64)
         for space in (extruded_space, col_space)
             pfull_field = fill(FT(1.0), space)
             pfull_field_view = Fields.field2array(pfull_field)
-            pfull_field_view .= collect(10:-1:1)
+            tmp_pfull_field_view = Array(pfull_field_view)
+            tmp_pfull_field_view .= collect(10:-1:1)
+            copyto!(pfull_field_view, tmp_pfull_field_view)
             pfull_levels = [6.0, 7.5, 9.0]
 
             pfull_intp = PressureInterpolator(pfull_field, pfull_levels)
@@ -193,7 +202,7 @@ for FT in (Float32, Float64)
             update!(pfull_intp)
             scratch_pfull_array =
                 Fields.field2array(pfull_intp.scratch_center_pressure_field)
-            @test scratch_pfull_array == repeat(
+            @test Array(scratch_pfull_array) == repeat(
                 [10.0, 9.0, 6.0, 6.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0],
                 1,
                 size(scratch_pfull_array, 2),
@@ -209,12 +218,12 @@ for FT in (Float32, Float64)
             dest = interpolate_pressure(dummy_field, pfull_intp)
             dest_view = Fields.field2array(dest)
             # Value at 6 (behavior depends on ClimaInterpolations)
-            @test all(dest_view[1, :] .== 500.0)
+            @test all(Array(dest_view)[1, :] .== 500.0)
             # Value at 7.5 (linear interpolation between the values at pressure
             # levels 6.0 and 9.0)
-            @test all(dest_view[2, :] .== 750.0)
+            @test all(Array(dest_view)[2, :] .== 750.0)
             # Value at 9.0
-            @test all(dest_view[3, :] .== 1000.0)
+            @test all(Array(dest_view)[3, :] .== 1000.0)
         end
     end
 end

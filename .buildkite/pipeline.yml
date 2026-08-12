@@ -573,7 +573,7 @@ steps:
         agents:
           slurm_gpus: 1
 
-      - label: "Perf: DataLayouts loops"
+      - label: "Perf: DataLayouts loops (gpu)"
         key: "gpu_datalayouts_loops"
         retry: *retry_policy
         command:

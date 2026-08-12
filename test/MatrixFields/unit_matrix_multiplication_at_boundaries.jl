@@ -4,8 +4,10 @@ include("matrix_field_test_utils.jl")
 function nan_outside_entries!(matrix_field)
     @assert !any(isnan, parent(matrix_field)) # Check that there are no NaNs.
     nan_mask_field = copy(matrix_field)
-    for nan_mask_array_view in MatrixFields.field2arrays_view(nan_mask_field)
-        nan_mask_array_view .*= NaN
+    ClimaComms.allowscalar(ClimaComms.device()) do
+        for nan_mask_array_view in MatrixFields.field2arrays_view(nan_mask_field)
+            nan_mask_array_view .*= NaN
+        end
     end
     flip_nan_mask(nan_mask_entry, matrix_entry) =
         isnan(nan_mask_entry) ? matrix_entry : NaN

@@ -77,10 +77,10 @@ end
             r = zeros(space)
             const_flux(normal, (q⁻,)) = one(q⁻)
             Operators.add_numerical_flux_boundary!(const_flux, r, q)
-            y = parent(Fields.coordinate_field(space).y)
+            y = Array(parent(Fields.coordinate_field(space).y))
             interior = @. abs(abs(y) - Ly / 2) > sqrt(eps(FT))
-            @test all(iszero, parent(r)[interior])
-            @test any(!iszero, parent(r)[.!interior])
+            @test all(iszero, Array(parent(r))[interior])
+            @test any(!iszero, Array(parent(r))[.!interior])
         end
 
         @testset "Boundary normals point outward [$FT]" begin
@@ -88,13 +88,13 @@ end
             ĵ = Geometry.UVVector(FT(0), FT(1))
             normal_flux(normal, (q⁻,)) = ĵ' * normal
             Operators.add_numerical_flux_boundary!(normal_flux, r, q)
-            y = parent(Fields.coordinate_field(space).y)
+            y = Array(parent(Fields.coordinate_field(space).y))
             south = @. abs(y + Ly / 2) <= sqrt(eps(FT))
             north = @. abs(y - Ly / 2) <= sqrt(eps(FT))
             # residual = -sWJ * f: south (n̂ = -ĵ, f = -1) gains +sWJ,
             # north (n̂ = +ĵ, f = +1) gains -sWJ; each wall has length Lx.
-            @test sum(parent(r)[south]) ≈ Lx rtol = sqrt(eps(FT))
-            @test sum(parent(r)[north]) ≈ -Lx rtol = sqrt(eps(FT))
+            @test sum(Array(parent(r))[south]) ≈ Lx rtol = sqrt(eps(FT))
+            @test sum(Array(parent(r))[north]) ≈ -Lx rtol = sqrt(eps(FT))
         end
     end
 end

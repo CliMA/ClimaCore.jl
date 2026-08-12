@@ -86,11 +86,12 @@ for ii in 1:4
 end
 
 # Check against known solution component-wise
-device isa ClimaComms.CUDADevice ? CUDA.allowscalar(true) : nothing
-@test parent(η_test1) ≈ parent(∇𝒻₁.components.data.:1)
-@test parent(η_test2) ≈ parent(∇𝒻₁.components.data.:2)
-@test parent(2 .* η_test1) ≈ parent(∇𝒻₁.components.data.:3)
-@test parent(2 .* η_test2) ≈ parent(∇𝒻₁.components.data.:4)
+ClimaComms.allowscalar(device) do
+    @test parent(η_test1) ≈ parent(∇𝒻₁.components.data.:1)
+    @test parent(η_test2) ≈ parent(∇𝒻₁.components.data.:2)
+    @test parent(2 .* η_test1) ≈ parent(∇𝒻₁.components.data.:3)
+    @test parent(2 .* η_test2) ≈ parent(∇𝒻₁.components.data.:4)
+end
 
 ∇𝒻₂ = @. Geometry.project(Geometry.UVAxis(), ∇(𝒻₂))
 for ii in 1:6
@@ -98,9 +99,11 @@ for ii in 1:6
 end
 
 # Check against known solution component-wise
-@test parent(η_test1) ≈ parent(∇𝒻₂.components.data.:1)
-@test parent(η_test2) ≈ parent(∇𝒻₂.components.data.:2)
-@test parent(2 .* η_test1) ≈ parent(∇𝒻₂.components.data.:3)
-@test parent(2 .* η_test2) ≈ parent(∇𝒻₂.components.data.:4)
-@test parent(3 .* η_test1) ≈ parent(∇𝒻₂.components.data.:5)
-@test parent(3 .* η_test2) ≈ parent(∇𝒻₂.components.data.:6)
+ClimaComms.allowscalar(device) do
+    @test parent(η_test1) ≈ parent(∇𝒻₂.components.data.:1)
+    @test parent(η_test2) ≈ parent(∇𝒻₂.components.data.:2)
+    @test parent(2 .* η_test1) ≈ parent(∇𝒻₂.components.data.:3)
+    @test parent(2 .* η_test2) ≈ parent(∇𝒻₂.components.data.:4)
+    @test parent(3 .* η_test1) ≈ parent(∇𝒻₂.components.data.:5)
+    @test parent(3 .* η_test2) ≈ parent(∇𝒻₂.components.data.:6)
+end

@@ -4,7 +4,8 @@ using ClimaCore: Fields, Meshes, Geometry, Grids, CommonSpaces, InputOutput
 using ClimaCore: Domains, Topologies, Spaces
 
 using ClimaComms
-const comms_ctx = ClimaComms.context(ClimaComms.CPUSingleThreaded())
+ClimaComms.@import_required_backends
+const comms_ctx = ClimaComms.SingletonCommsContext(ClimaComms.device())
 pid, nprocs = ClimaComms.init(comms_ctx)
 filename = ClimaComms.bcast(comms_ctx, tempname(pwd()))
 if ClimaComms.iamroot(comms_ctx)

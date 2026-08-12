@@ -30,7 +30,7 @@ end
 
 function test_dss_count(f::Fields.Field, buff::Topologies.DSSBuffer, nc)
     parent(f) .= one_to_n_dss(parent(f))
-    @test allunique(parent(f))
+    @test allunique(Array(parent(f)))
     cf = copy(f)
     Spaces.weighted_dss!(f => buff)
     n_dss_unaffected = count(parent(f) .== parent(cf))

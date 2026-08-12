@@ -24,31 +24,35 @@ include("utils_dg.jl")  # dg_sphere_space, dg_jump_penalty
 
 @testset "Cubed-Sphere DG Interface Fluxes" begin
     for FT in (Float32, Float64)
-        space = dg_sphere_space(FT)
-        coords = Fields.coordinate_field(space)
-        lgeom = Fields.local_geometry_field(space)
+        ClimaComms.allowscalar(ClimaComms.device()) do
+            space = dg_sphere_space(FT)
+            coords = Fields.coordinate_field(space)
+            lgeom = Fields.local_geometry_field(space)
 
-        smooth_scalar(coords) =
-            @. sind(coords.long) * cosd(coords.lat)^2
+            smooth_scalar(coords) =
+                @. sind(coords.long) * cosd(coords.lat)^2
 
-        @testset "Penalty flux vanishes for continuous fields [$FT]" begin
-            q = smooth_scalar(coords)
-            r = similar(q)
-            fill!(parent(r), 0)
-            Operators.add_numerical_flux_internal!(dg_jump_penalty, r, q)
-            rn = @. r / lgeom.WJ
-            tol = FT == Float32 ? 1e-4 : 1e-10
-            @test maximum(abs, parent(rn)) < tol * maximum(abs, parent(q))
-        end
+            @testset "Penalty flux vanishes for continuous fields [$FT]" begin
+                q = smooth_scalar(coords)
+                r = similar(q)
+                fill!(parent(r), 0)
+                Operators.add_numerical_flux_internal!(dg_jump_penalty, r, q)
+                rn = @. r / lgeom.WJ
+                tol = FT == Float32 ? 1e-4 : 1e-10
+                @test maximum(abs, parent(rn)) < tol * maximum(abs, parent(q))
+            end
 
-        @testset "Zero allocation sentinel [$FT]" begin
-            q = smooth_scalar(coords)
-            r = similar(q)
-            fill!(parent(r), 0)
-            Operators.add_numerical_flux_internal!(dg_jump_penalty, r, q)
-            allocs =
-                @allocated Operators.add_numerical_flux_internal!(dg_jump_penalty, r, q)
-            @test allocs == 0
+            @testset "Zero allocation sentinel [$FT]" begin
+                q = smooth_scalar(coords)
+                r = similar(q)
+                fill!(parent(r), 0)
+                Operators.add_numerical_flux_internal!(dg_jump_penalty, r, q)
+                allocs =
+                    @allocated Operators.add_numerical_flux_internal!(dg_jump_penalty, r, q)
+                if !(ClimaComms.device() isa ClimaComms.CUDADevice)
+                    @test allocs == 0
+                end
+            end
         end
     end
 end

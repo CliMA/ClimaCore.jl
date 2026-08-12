@@ -99,8 +99,15 @@ macro test_all(expression)
         # TODO: Some operations have an unelided view from getproperty
         # (48 bytes); whether the compiler elides it depends on how much
         # of its inference budget is used up.
-        @test call_allocs(test_func) ≤ 48   # allocations
-        @test_opt test_func()               # type instabilities
+        # The byte sentinel is host-side and a CUDA kernel launch allocates
+        # wrappers, so the allocation check is CPU-only — the same split
+        # `test_scalar_utils.jl` and `test_non_scalar_utils.jl` use. The
+        # type-stability check runs on both devices, with CUDA's own frames
+        # excluded as everywhere else in this suite: a type instability is
+        # what breaks GPU compilation, so skipping it there would drop the
+        # coverage that matters most.
+        USING_CUDA || @test call_allocs(test_func) ≤ 48 # allocations
+        @test_opt ignored_modules = CUDA_FRAMES test_func() # type instabilities
     end
 end
 

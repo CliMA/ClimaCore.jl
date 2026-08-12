@@ -92,8 +92,10 @@ end
     parent(u) .= rand.(FT)
     # The boundary terms of the summation by parts vanish iff u is zero on
     # the boundary faces.
-    parent(u)[1] = 0
-    parent(u)[end] = 0
+    _u = Array(parent(u))
+    _u[1] = 0
+    _u[end] = 0
+    parent(u) .= _u
 
     divf2c = Operators.DivergenceF2C()
     gradc2f = Operators.GradientC2F(

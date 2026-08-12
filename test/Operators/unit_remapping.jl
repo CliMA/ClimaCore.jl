@@ -185,13 +185,15 @@ end
 
                 # Test consistent remap
                 target_field = remap(R, source_field)
-                @test vec(parent(target_field)) ≈
+                @test vec(Array(parent(target_field))) ≈
                       ones(length(Spaces.local_geometry_data(target)))
 
                 # Test simple remap
-                vec(parent(source_field)) .= [1.0; 2.0; 3.0; 4.0]
+                _src = Array(parent(source_field))
+                vec(_src) .= [1.0; 2.0; 3.0; 4.0]
+                parent(source_field) .= _src
                 remap!(target_field, R, source_field)
-                @test vec(parent(target_field)) ≈ [1.5; 3.5]
+                @test vec(Array(parent(target_field))) ≈ [1.5; 3.5]
             end
         end
 
@@ -255,13 +257,15 @@ end
 
                 # Test consistent remap
                 target_field = remap(R, source_field)
-                @test vec(parent(target_field)) ≈
+                @test vec(Array(parent(target_field))) ≈
                       ones(length(Spaces.local_geometry_data(target)))
 
                 # Test simple remap
-                vec(parent(source_field)) .= [1.0; 2.0; 3.0; 4.0]
+                _src = Array(parent(source_field))
+                vec(_src) .= [1.0; 2.0; 3.0; 4.0]
+                parent(source_field) .= _src
                 remap!(target_field, R, source_field)
-                @test vec(parent(target_field)) ≈ [2.0; 2.0; 3.0; 3.0]
+                @test vec(Array(parent(target_field))) ≈ [2.0; 2.0; 3.0; 3.0]
             end
         end
     end
@@ -308,13 +312,15 @@ end
 
                 # Test consistent remap
                 target_field = remap(R, source_field)
-                @test vec(parent(target_field)) ≈
+                @test vec(Array(parent(target_field))) ≈
                       ones(length(Spaces.local_geometry_data(target)))
 
                 # Test simple remap
-                vec(parent(source_field)) .= [1.0; 2.0; 3.0; 4.0]
+                _src = Array(parent(source_field))
+                vec(_src) .= [1.0; 2.0; 3.0; 4.0]
+                parent(source_field) .= _src
                 remap!(target_field, R, source_field)
-                @test vec(parent(target_field)) ≈
+                @test vec(Array(parent(target_field))) ≈
                       [1.0; 1.5; 2.0; 2.0; 2.5; 3.0; 3.0; 3.5; 4.0]
             end
         end
@@ -382,13 +388,15 @@ end
 
                 # Test consistent remap
                 target_field = remap(R, source_field)
-                @test vec(parent(target_field)) ≈
+                @test vec(Array(parent(target_field))) ≈
                       ones(length(Spaces.local_geometry_data(target)))
 
                 # Test simple remap
-                vec(parent(source_field)) .= [1.0; 2.0; 3.0; 4.0]
+                _src = Array(parent(source_field))
+                vec(_src) .= [1.0; 2.0; 3.0; 4.0]
+                parent(source_field) .= _src
                 remap!(target_field, R, source_field)
-                @test vec(parent(target_field)) ≈ [1.0; 2.0; 3.0; 4.0]
+                @test vec(Array(parent(target_field))) ≈ [1.0; 2.0; 3.0; 4.0]
             end
         end
     end

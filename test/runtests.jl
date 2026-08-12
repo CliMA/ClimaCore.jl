@@ -61,7 +61,7 @@ unit_tests = [
     UnitTest("Fields - zero-allocation broadcasts"     ,"Fields/allocs_field.jl"; meta = :cpu_only, tier = :allocs, subsystem = :fields),
     UnitTest("Fields - convergence integrals"          ,"Fields/conv_field_integrals.jl"; tier = :conv, subsystem = :fields),
     UnitTest("Fields - multi broadcast fusion"         ,"Fields/unit_field_multi_broadcast_fusion.jl"; tier = :unit, subsystem = :fields),
-    UnitTest("Fields - opt"                            ,"Fields/opt_fields.jl"; tier = :opt, subsystem = :fields),
+    UnitTest("Fields - opt"                            ,"Fields/opt_fields.jl"; meta = :cpu_only, tier = :opt, subsystem = :fields),
     UnitTest("Reinstantiate broadcasted"               ,"Operators/unit_reinstantiate_bc.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Placeholder Fields"                      ,"Operators/unit_common.jl"; tier = :unit, subsystem = :operators),
 

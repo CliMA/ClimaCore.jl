@@ -563,6 +563,7 @@ end
     ldiv!(x, A′, b)
     col_active = Array(parent(is_active))[:]
     col_inactive = .!col_active
-    @test extrema(parent(x._)[:, 1, 1, 1, col_active]) == (-1.0, -1.0)
-    @test extrema(parent(x._)[:, 1, 1, 1, col_inactive]) == (0.0, 0.0)
+    x_parent_host = Array(parent(x._))
+    @test extrema(x_parent_host[:, 1, 1, 1, col_active]) == (-1.0, -1.0)
+    @test extrema(x_parent_host[:, 1, 1, 1, col_inactive]) == (0.0, 0.0)
 end
