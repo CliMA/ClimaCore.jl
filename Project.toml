@@ -51,6 +51,7 @@ AssociatedLegendrePolynomials = "1"
 BandedMatrices = "1"
 BenchmarkTools = "1"
 BlockArrays = "1"
+CairoMakie = "0.15"
 CUDA = "5.5, 6"
 ClimaComms = "0.6.4"
 ClimaInterpolations = "0.1.1"
@@ -96,6 +97,7 @@ Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
 AssociatedLegendrePolynomials = "2119f1ac-fb78-50f5-8cc0-dda848ebdb19"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 CountFlops = "1db9610d-79e1-487a-8d40-77f3295c7593"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 FastBroadcast = "7034ab61-46d4-4ed7-9d0f-46aef9175898"
@@ -111,4 +113,4 @@ TerminalLoggers = "5d786b92-1e48-4d6f-9151-6b4477ca9bed"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Aqua", "ArgParse", "AssociatedLegendrePolynomials", "BenchmarkTools", "CountFlops", "Dates", "FastBroadcast", "Krylov", "JET", "LazyBroadcast", "Logging", "PrettyTables", "Random", "SafeTestsets", "StatsBase", "TerminalLoggers", "Test"]
+test = ["Aqua", "ArgParse", "AssociatedLegendrePolynomials", "BenchmarkTools", "CairoMakie", "CountFlops", "Dates", "FastBroadcast", "Krylov", "JET", "LazyBroadcast", "Logging", "PrettyTables", "Random", "SafeTestsets", "StatsBase", "TerminalLoggers", "Test"]
