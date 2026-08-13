@@ -284,6 +284,175 @@ const kernel_names = IdDict()
 
 collect_kernel_stats() = false
 
+# --- Register pressure diagnostics -------------------------------------------
+#
+# A kernel that reaches the architectural register cap has zero headroom: every
+# additional live value must spill to local (off-chip) memory. That cliff is
+# invisible today -- the model runs, just slowly -- and it is reached by the
+# COMBINATION of what several packages contribute to one fused broadcast, so no
+# single package sees it coming. Making it observable is cheap, because
+# `launch_configuration` already queries register pressure per kernel.
+#
+# Controlled by `CLIMACORE_REGISTER_PRESSURE`:
+#   off   (default) no cost beyond an env lookup
+#   warn            log once per kernel
+#   error           raise, so CI cannot ignore it
+#
+# `CLIMACORE_REGISTER_PRESSURE_LIMIT` sets the register threshold (default 255,
+# the sm_20+ architectural maximum). Lower it to catch kernels approaching the
+# cap rather than sitting on it.
+#
+# `CLIMACORE_REGISTER_PRESSURE_IGNORE` is a comma-separated list of substrings;
+# a kernel whose name matches any of them is skipped. Without an escape hatch a
+# hard error gets switched off wholesale the first time it fires on a kernel
+# somebody already knows about.
+
+const REGISTER_PRESSURE_REPORTED = Set{Any}()
+const REGISTER_PRESSURE_LOCK = ReentrantLock()
+
+# The architectural cap on registers per thread for sm_20 and later. Above this
+# ptxas has no choice but to spill.
+const MAX_REGISTERS_PER_THREAD = 255
+
+function register_pressure_action()
+    raw = lowercase(strip(get(ENV, "CLIMACORE_REGISTER_PRESSURE", "off")))
+    (isempty(raw) || raw in ("off", "false", "0", "no")) && return :off
+    raw in ("warn", "warning", "true", "1", "yes") && return :warn
+    raw in ("error", "strict") && return :error
+    @warn "Unrecognized CLIMACORE_REGISTER_PRESSURE=$(raw); treating as off" maxlog = 1
+    return :off
+end
+
+function register_pressure_limit()
+    raw = get(ENV, "CLIMACORE_REGISTER_PRESSURE_LIMIT", nothing)
+    raw === nothing && return MAX_REGISTERS_PER_THREAD
+    parsed = tryparse(Int, strip(raw))
+    if parsed === nothing || parsed <= 0
+        @warn "Invalid CLIMACORE_REGISTER_PRESSURE_LIMIT=$(raw); using $(MAX_REGISTERS_PER_THREAD)" maxlog =
+            1
+        return MAX_REGISTERS_PER_THREAD
+    end
+    return parsed
+end
+
+function register_pressure_ignored(name)
+    raw = get(ENV, "CLIMACORE_REGISTER_PRESSURE_IGNORE", "")
+    isempty(strip(raw)) && return false
+    s = string(name)
+    return any(p -> !isempty(p) && occursin(p, s), strip.(split(raw, ",")))
+end
+
+"""
+    measure_spill(f!, args)
+
+Exact per-thread spill (stores, loads) in bytes for this kernel, or `nothing`.
+
+`CUDA.memory(k).local` cannot answer this: it is the stack frame INCLUDING spill
+slots, so a kernel with a large returned value looks identical to one that
+spills. Only `ptxas -v` separates them. That costs a recompile, so it runs only
+for kernels that already tripped the register threshold -- a handful per run --
+and the result is cached with the warning.
+
+`dump_module = true` is required: without it only the entry function is emitted,
+ptxas cannot resolve the called device functions, and the register/spill numbers
+that come back are wrong rather than absent.
+"""
+function measure_spill(f!::F!, args) where {F!}
+    ptxas = try
+        only(CUDA.ptxas().exec)
+    catch
+        return nothing
+    end
+    (ptxas === nothing || !isfile(ptxas)) && return nothing
+    try
+        gargs = map(CUDA.cudaconvert, args)
+        tt = Tuple{map(Core.Typeof, gargs)...}
+        io = IOBuffer()
+        CUDA.code_ptx(io, f!, tt; kernel = true, always_inline = true, dump_module = true)
+        ptx_file = tempname() * ".ptx"
+        write(ptx_file, String(take!(io)))
+        cap = CUDA.capability(CUDA.device())
+        arch = "sm_$(cap.major)$(cap.minor)"
+        out, err = IOBuffer(), IOBuffer()
+        cmd = `$ptxas -arch=$arch -v -o $(tempname()).cubin $ptx_file`
+        proc = run(pipeline(ignorestatus(cmd); stdout = out, stderr = err))
+        success(proc) || return nothing
+        log = String(take!(err)) * String(take!(out))
+        grab(re) = (m = match(re, log); m === nothing ? 0 : parse(Int, m[1]))
+        return (
+            stores = grab(r"(\d+) bytes spill stores"),
+            loads = grab(r"(\d+) bytes spill loads"),
+        )
+    catch err
+        @debug "spill measurement failed" err
+        return nothing
+    end
+end
+
+"""
+    check_register_pressure(kernel, kernel_name, f!, args)
+
+Report kernels at or above the register limit, once each.
+
+Reports registers and local memory. NOTE that local memory is the stack frame
+INCLUDING any spill slots, not spill alone -- CUDA.jl exposes no way to separate
+them, and a kernel can carry a large stack frame while spilling nothing (the
+returned value of a microphysics tendency function does exactly that). So this
+flags "no headroom left", which is exact, rather than "is spilling", which is
+not measurable here. Confirm actual spilling with `ptxas -v` or Nsight Compute.
+"""
+function check_register_pressure(kernel, kernel_name, f!::F!, args) where {F!}
+    action = register_pressure_action()
+    action === :off && return nothing
+    name = something(kernel_name, nameof(F!))
+    register_pressure_ignored(name) && return nothing
+
+    registers = CUDA.registers(kernel)
+    registers >= register_pressure_limit() || return nothing
+
+    # Deduplicate warnings only. An error must always raise: otherwise a kernel
+    # that was warned about earlier in the process could never fail the build,
+    # which silently defeats CLIMACORE_REGISTER_PRESSURE=error.
+    if action === :warn
+        key = (objectid(f!), name, registers)
+        lock(REGISTER_PRESSURE_LOCK)
+        try
+            key in REGISTER_PRESSURE_REPORTED && return nothing
+            push!(REGISTER_PRESSURE_REPORTED, key)
+        finally
+            unlock(REGISTER_PRESSURE_LOCK)
+        end
+    end
+
+    local_bytes = _memory_bytes(CUDA.memory(kernel), :local)
+    limit = register_pressure_limit()
+    spill = measure_spill(f!, args)
+    spill_str = if spill === nothing
+        "spill: UNMEASURED (ptxas unavailable); $(local_bytes) bytes local memory, " *
+        "which is stack frame INCLUDING spill slots and so cannot prove spilling"
+    elseif spill.stores > 0
+        "SPILLING $(spill.stores) bytes stored / $(spill.loads) loaded per thread"
+    else
+        "not spilling (0 bytes), but with no headroom left"
+    end
+    msg = join(
+        [
+            "Kernel `$(name)`: $(registers) registers per thread " *
+            "(limit $(limit), architectural max $(MAX_REGISTERS_PER_THREAD)) -- " *
+            "$(spill_str).",
+            "There is no headroom: any further register pressure, from this package " *
+            "or any other package contributing to this broadcast, must spill to " *
+            "off-chip memory.",
+            "Set CLIMACORE_REGISTER_PRESSURE=off to disable, or add a substring of " *
+            "the kernel name to CLIMACORE_REGISTER_PRESSURE_IGNORE.",
+        ],
+        "\n",
+    )
+    action === :error ? error(msg) : @warn msg
+    return nothing
+end
+
+
 function _memory_bytes(memory, key::Symbol)
     if hasproperty(memory, key)
         return Int(getproperty(memory, key))
@@ -453,11 +622,13 @@ function auto_launch!(
             threads = min(nitems, config.threads)
             blocks = cld(nitems, threads)
             kernel(args...; threads, blocks) # This knows to use always_inline from above.
+            check_register_pressure(kernel, kernel_name, f!, args)
         end
     else
         kernel =
             CUDA.@cuda name = kernel_name always_inline = always_inline threads =
                 threads_s blocks = blocks_s shmem = shmem f!(args...)
+        check_register_pressure(kernel, kernel_name, f!, args)
     end
 
     if collect_kernel_stats() # only for development use
