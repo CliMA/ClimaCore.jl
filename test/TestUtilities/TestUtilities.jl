@@ -377,4 +377,19 @@ function test_column_operators(column_space, expect_zero_div = false)
     end
 end
 
+"""
+    allocation_checks_meaningful()
+
+Whether `@allocated` in this process reflects the allocations of optimized
+code.
+
+`--check-bounds=yes` inhibits the optimizations that make ClimaCore's in-place
+broadcasts allocation-free, so under it a zero-allocation sentinel measures the
+flag rather than the code (a spectral-element gradient goes from 0 to ~14 kB).
+The GitHub Actions job runs the suite through `Pkg.test`, which passes
+`--check-bounds=yes`; Buildkite's curated shards do not, so the sentinels still
+gate there.
+"""
+allocation_checks_meaningful() = Base.JLOptions().check_bounds == 0
+
 end

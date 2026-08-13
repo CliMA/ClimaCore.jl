@@ -6,11 +6,13 @@ if !@isdefined(USING_JET)
         @eval module JET
         macro test_opt(args...)
 
-            return quote end
+            return quote
+            end
         end
         macro test_call(args...)
 
-            return quote end
+            return quote
+            end
         end
         export @test_opt, @test_call
         end
@@ -81,11 +83,10 @@ import ClimaCore.MatrixFields: @name
 using LazyBroadcast: @lazy, materialize
 import Base.Broadcast: materialize!
 
-# Allocation measurements are made from dedicated `@noinline` functions:
-# measuring `@allocated f(...)` inline makes the result depend on how much of
-# the *caller's* inlining/escape-analysis budget the surrounding code has used
-# up, which can report spurious allocations of a few tens of bytes (see
-# `unit_field_matrix_solvers.jl` for a case where this failed CI).
+# Allocations are measured from `@noinline` wrappers: an inline
+# `@allocated f(...)` depends on how much of the caller's inlining and escape
+# analysis budget the surrounding code has used, and can report tens of bytes
+# that are not there.
 @noinline call_allocs(f::F) where {F} = @allocated f()
 @noinline call_allocs(f!::F, x) where {F} = @allocated f!(x)
 @noinline set_result_allocs(result, bc) = @allocated set_result!(result, bc)
@@ -97,15 +98,11 @@ macro test_all(expression)
         local test_func() = $(esc(expression))
         @test test_func()                   # correctness
         # TODO: Some operations have an unelided view from getproperty
-        # (48 bytes); whether the compiler elides it depends on how much
-        # of its inference budget is used up.
-        # The byte sentinel is host-side and a CUDA kernel launch allocates
-        # wrappers, so the allocation check is CPU-only — the same split
-        # `test_scalar_utils.jl` and `test_non_scalar_utils.jl` use. The
-        # type-stability check runs on both devices, with CUDA's own frames
-        # excluded as everywhere else in this suite: a type instability is
-        # what breaks GPU compilation, so skipping it there would drop the
-        # coverage that matters most.
+        # (48 bytes); whether the compiler elides it depends on its inference
+        # budget.
+        # The byte sentinel is host-side and a CUDA launch allocates wrappers,
+        # so the allocation check is CPU-only. The type-stability check runs on
+        # both devices, since a type instability is what breaks GPU compilation.
         USING_CUDA || @test call_allocs(test_func) ≤ 48 # allocations
         @test_opt ignored_modules = CUDA_FRAMES test_func() # type instabilities
     end
@@ -139,6 +136,12 @@ const CUDA_FRAMES =
     (
         AnyFrameModule(CUDA_MOD),
         AnyFrameModule(CLIMACORE_CUDA_MOD),
+        # `Field == Field` bottoms out in GPUArrays' generic `==` for device
+        # arrays, whose `mapreduce` accumulator inference cannot resolve. The
+        # dispatches are reported against `Base` frames reached through
+        # GPUArrays, so only `AnyFrameModule`, which matches any frame in the
+        # stack rather than just the innermost, excludes them.
+        AnyFrameModule(CUDA_MOD.GPUArrays),
     ) : ()
 const cublas_frames = USING_CUDA ? (AnyFrameModule(CUDA_MOD.CUBLAS),) : ()
 const invalid_ir_error = USING_CUDA ? CUDA_MOD.InvalidIRError : ErrorException

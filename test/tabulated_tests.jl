@@ -8,7 +8,7 @@ end
 
 
 """
-    UnitTest(name, filename; meta, tier, subsystem)
+    UnitTest(name, filename; meta, tier, subsystem, slow)
 
 A unit test, given:
  - `name::String` the name of the unit test
@@ -16,6 +16,12 @@ A unit test, given:
  - `meta::Any` meta information for the test
  - `tier::Symbol` test tier (:unit, :inference, :allocs, :conv, :opt, :smoke, :gpu, :misc)
  - `subsystem::Symbol` domain subsystem (:datalayouts, :geometry, :domains, :meshes, :topologies, :quadratures, :spaces, :fields, :operators, :matrixfields, :hypsography, :limiters, :io, :remapping, :integration, :gpu, :quality, :utilities, :other)
+ - `slow::Bool` the test costs minutes rather than seconds, from compiling many
+   layout/space specializations or from building large spaces. `tier` says what
+   a test checks; `slow` says what it costs. Buildkite runs these (it shards
+   across parallel agents), but the GitHub Actions job — one slow two-core
+   runner per Julia version, under a wall-clock limit — excludes them with
+   `TEST_EXCLUDE_SLOW`. Mark a test slow only with a measurement to back it up.
 """
 mutable struct UnitTest
     name::String
@@ -27,15 +33,22 @@ mutable struct UnitTest
     meta::Any
     tier::Symbol
     subsystem::Symbol
+    slow::Bool
 end
-UnitTest(name, filename; meta = nothing, tier = :unit, subsystem = :other) =
-    UnitTest(name, filename, 0.0, 0.0, 0.0, 0, meta, tier, subsystem)
+UnitTest(
+    name,
+    filename;
+    meta = nothing,
+    tier = :unit,
+    subsystem = :other,
+    slow = false,
+) = UnitTest(name, filename, 0.0, 0.0, 0.0, 0, meta, tier, subsystem, slow)
 
 """
-    filter_tests(unit_tests::Vector{UnitTest}; tier = nothing, exclude_tier = nothing, subsystem = nothing, tag = nothing, fast::Bool = false)
+    filter_tests(unit_tests::Vector{UnitTest}; tier = nothing, exclude_tier = nothing, subsystem = nothing, tag = nothing, fast::Bool = false, exclude_slow::Bool = false)
 
 Filters unit tests based on tier, excluded tier(s) (comma-separated, e.g.
-`"conv,opt"`), subsystem, or case-insensitive substring match.
+`"conv,opt"`), subsystem, case-insensitive substring match, or `slow`.
 """
 function filter_tests(
     unit_tests::Vector{UnitTest};
@@ -44,6 +57,7 @@ function filter_tests(
     subsystem = nothing,
     tag = nothing,
     fast::Bool = false,
+    exclude_slow::Bool = false,
 )
     excluded_tiers = if isnothing(exclude_tier)
         Symbol[]
@@ -52,6 +66,9 @@ function filter_tests(
     end
     return filter(unit_tests) do t
         if fast && t.tier != :unit
+            return false
+        end
+        if exclude_slow && t.slow
             return false
         end
         if !isnothing(tier) && t.tier != Symbol(tier)

@@ -20,12 +20,10 @@ import ClimaCore:
 );
 import .TestUtilities as TU
 
-# Tests for `add_numerical_flux_boundary!`, the DG boundary-face counterpart of
-# `add_numerical_flux_internal!`. The interior-face machinery is covered by
-# unit_two_point_fluxes.jl / unit_sphere_dg_fluxes.jl / unit_dg_stability.jl,
-# all of which run on boundary-free (periodic or spherical) domains; this file
-# exercises the domain-boundary path on a channel domain (periodic in x,
-# walls at y = ±Ly/2):
+# `add_numerical_flux_boundary!`, the boundary-face counterpart of
+# `add_numerical_flux_internal!`, on a channel domain (periodic in x, walls at
+# y = ±Ly/2). The interior-face path is covered elsewhere, on boundary-free
+# domains:
 #
 #   1. A zero boundary flux leaves the residual untouched.
 #   2. A constant boundary flux c integrates to −c·(total boundary length):

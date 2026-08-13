@@ -294,11 +294,18 @@ Use [`foreach_column`](@ref) to combine the levels of each column of `arg` with
 `true` changes the order of reduction from left-associative (default) to
 right-associative, and `init` seeds the fold when it is given.
 """
-@inline function column_reduce!(op::O, dest, arg; mask = NoMask(), flip = false, init...) where {O}
-    # Split the `flip` branch outside the `foreach_column` closure. This prevents the
-    # closure from capturing `flip` as a runtime `Bool`, avoiding type instability
-    # and preventing the GPU compiler from seeing the allocating `reverse` branch 
-    # when `flip = false`.
+@inline function column_reduce!(
+    op::O,
+    dest,
+    arg;
+    mask = NoMask(),
+    flip = false,
+    init...,
+) where {O}
+    # The `flip` branch sits outside the `foreach_column` closure so that the
+    # closure never captures `flip` as a runtime `Bool`: that is type-unstable,
+    # and it leaves the GPU compiler looking at the allocating `reverse` branch
+    # even when `flip = false`.
     if flip
         foreach_column(dest, arg; mask) do dest_column, arg_column
             fill!(dest_column, reduce(op, reverse(arg_column); init...))

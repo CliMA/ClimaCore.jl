@@ -6,18 +6,14 @@ ClimaComms.@import_required_backends
 import ClimaCore
 import ClimaCore: Fields, Domains, Meshes, Geometry, Spaces, Operators
 
-# End-to-end smoke tests for the vertical (finite-difference) transport
-# schemes, integrating the constant-velocity advection equation
+# End-to-end smoke tests for the vertical transport schemes, integrating
 #
 #     ∂_t q + w ∂_z q = 0
 #
-# over a full advection cycle and asserting the properties each scheme is
-# designed to guarantee: accuracy (L2 error vs the exact translated pulse),
-# mass conservation (flux form is discretely conservative), and — for the
-# van Leer limiter — boundedness / monotonicity, integrated with a hand-rolled SSP RK33 loop.
-#
-# The suite runs Float64 only (the accuracy/mass tolerances below are
-# Float64-calibrated).
+# over a full advection cycle with a hand-rolled SSP RK33 loop and asserting
+# what each scheme guarantees: L2 accuracy against the exact translated pulse,
+# discrete mass conservation for the flux form, and boundedness for the van Leer
+# limiter. Float64 only; the tolerances below are calibrated for it.
 const FT = Float64
 
 @isdefined(TU) || include(

@@ -13,6 +13,12 @@ import ClimaCore:
     Geometry,
     Operators
 
+import ClimaCore  # for `pkgdir` below
+@isdefined(TU) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+);
+import .TestUtilities as TU
+
 @testset "Spectral Element Vector Identities & Integration by Parts" begin
     device = ClimaComms.device()
     for FT in (Float32, Float64)
@@ -80,7 +86,7 @@ import ClimaCore:
         _eval_grad!(target_grad, grad_op, f)
         if device isa ClimaComms.CPUSingleThreaded
             allocs = @allocated _eval_grad!(target_grad, grad_op, f)
-            @test allocs == 0
+            TU.allocation_checks_meaningful() && @test allocs == 0
         end
     end
 

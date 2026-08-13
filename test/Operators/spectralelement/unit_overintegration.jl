@@ -47,7 +47,7 @@ import ClimaCore:
         f_high = interp_op.(f_std)
         f_recovered = restrict_op.(f_high)
 
-        tol = FT == Float32 ? 0.05 : 0.05
+        tol = FT(0.05)
         @test maximum(abs, parent(f_recovered .- f_std)) < tol * maximum(abs, parent(f_std))
 
         # 2. Conservation preservation under projection:

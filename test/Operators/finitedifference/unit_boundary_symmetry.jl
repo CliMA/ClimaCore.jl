@@ -12,6 +12,12 @@ import ClimaCore:
     Geometry,
     Operators
 
+import ClimaCore  # for `pkgdir` below
+@isdefined(TU) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+);
+import .TestUtilities as TU
+
 @testset "Finite Difference Boundary Symmetry Property Tests" begin
     for FT in (Float32, Float64)
         context = ClimaComms.SingletonCommsContext()
@@ -96,6 +102,10 @@ import ClimaCore:
         end
         _eval_interp!(target_f, interp_c2f, fc)
         allocs = @allocated _eval_interp!(target_f, interp_c2f, fc)
-        @test allocs == 0
+        # On GPU the kernel launch itself allocates host memory, so the
+        # zero-allocation sentinel only holds on CPU.
+        ClimaComms.device() isa ClimaComms.CUDADevice ||
+            !TU.allocation_checks_meaningful() ||
+            @test allocs == 0
     end
 end

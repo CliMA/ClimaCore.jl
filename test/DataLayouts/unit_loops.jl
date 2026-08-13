@@ -2,6 +2,12 @@ using Test
 import Random
 import ClimaComms
 import ClimaCore.DataLayouts
+
+import ClimaCore  # for `pkgdir` below
+@isdefined(TU) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+);
+import .TestUtilities as TU
 ClimaComms.@import_required_backends
 Random.seed!(1234)
 
@@ -53,7 +59,7 @@ end
         # end of the DataLayouts module; without them, the inner loops box
         # their arguments and allocate at every column.
         sum_allocs = @allocated sum_of_columns!(dest, arg)
-        @test sum_allocs == 0
+        TU.allocation_checks_meaningful() && @test sum_allocs == 0
     end
 end
 

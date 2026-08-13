@@ -87,10 +87,10 @@ function foo(c, f)
     return nothing
 end
 
-# The upwinded stencil, written as a single fused broadcast expression. This
-# used to fail on GPUs because `Base.Fix1(convert, T)` stores a `Type` field
-# and so is not a bitstype; `ConvertTo{T}` is an empty struct, so the fused
-# form now compiles and runs on every device.
+# The upwinded stencil, written as a single fused broadcast expression. The
+# conversion goes through `ConvertTo{T}`, an empty struct, rather than the
+# obvious `Base.Fix1(convert, T)`: the latter stores a `Type` field and so is
+# not a bitstype, which a fused broadcast cannot compile for the GPU.
 function fused_stencil!(c, f)
     (; ᶠtridiagonal_matrix_c3) = f
     (; ᶜu₃ʲ) = c

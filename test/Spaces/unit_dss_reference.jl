@@ -1,19 +1,17 @@
-# Reference-independent DSS check: `weighted_dss!` must replace the values at
-# every set of nodes that share a physical position with the same J-weighted
-# average of their pre-DSS values,
+# `weighted_dss!` must replace every set of nodes sharing a physical position by
+# the J-weighted average of their pre-DSS values,
 #
 #     v ← Σ_g J_g v_g / Σ_g J_g   over the group g of coincident nodes,
 #
-# and must leave nodes that are not shared unchanged. The reference is computed
-# here by grouping nodes by their physical coordinates, with no knowledge of
-# the topology's connectivity tables, so it also exercises connectivity that is
-# not trivially structured (e.g. the reversed edge orientations at cubed-sphere
-# panel seams). Note that the summation order over a group may differ from the
-# order used by `weighted_dss!`, so the comparison tolerance must accommodate
-# roundoff differences in the sums.
+# and leave unshared nodes alone. The reference groups nodes by coordinate rather
+# than by the topology's connectivity tables, so it also covers connectivity that
+# is not trivially structured, such as the reversed edge orientations at
+# cubed-sphere panel seams. Summation order differs from the one `weighted_dss!`
+# uses, hence the roundoff tolerance.
 using Test
 import ClimaComms
 ClimaComms.@import_required_backends
+import ClimaCore
 import ClimaCore:
     Domains, Meshes, Topologies, Spaces, Fields, Geometry, Quadratures
 import Random: seed!
@@ -36,6 +34,11 @@ end
 # roundoff, while distinct GLL nodes are separated by a finite distance.
 round_position(components...) = round.(components, sigdigits = 8)
 
+# The reference groups nodes in a `Dict`, so its arrays must be on the host;
+# `weighted_dss!` still runs on the device under test. `to_cpu` rather than
+# `Array(parent(_))`: `parent` of a local-geometry component is a strided view.
+host_vec(field) = vec(parent(ClimaCore.to_cpu(field)))
+
 @testset "weighted_dss! vs coordinate-grouped reference (cubed sphere)" begin
     FT = Float64
     context = ClimaComms.context()
@@ -45,8 +48,8 @@ round_position(components...) = round.(components, sigdigits = 8)
     space = Spaces.SpectralElementSpace2D(topology, Quadratures.GLL{4}())
 
     coords = Fields.coordinate_field(space)
-    lat = vec(parent(coords.lat))
-    long = vec(parent(coords.long))
+    lat = host_vec(coords.lat)
+    long = host_vec(coords.long)
     # Group by position on the unit sphere rather than by (lat, long), since
     # longitude wraps at ±180° along one of the panel seams.
     positions = map(
@@ -61,9 +64,9 @@ round_position(components...) = round.(components, sigdigits = 8)
 
     seed!(1)
     field = Fields.Field(FT, space)
-    parent(field) .= rand.(FT)
-    values = copy(vec(parent(field)))
-    weights = vec(parent(Fields.local_geometry_field(space).J))
+    copyto!(parent(field), rand(FT, size(parent(field))))
+    values = host_vec(field)
+    weights = host_vec(Fields.local_geometry_field(space).J)
 
     # Every unique position on this mesh is shared by 1, 2, or 4 nodes
     # (interior, edge, and corner nodes, plus the 3-node cube corners).
@@ -73,12 +76,12 @@ round_position(components...) = round.(components, sigdigits = 8)
 
     Spaces.weighted_dss!(field)
     reference = grouped_dss_reference(positions, values, weights)
-    @test isapprox(vec(parent(field)), reference, rtol = sqrt(eps(FT)))
+    @test isapprox(host_vec(field), reference, rtol = sqrt(eps(FT)))
 
     # DSS is idempotent: the averaged values are already continuous.
-    dss_once = copy(parent(field))
+    dss_once = host_vec(field)
     Spaces.weighted_dss!(field)
-    @test isapprox(parent(field), dss_once, rtol = sqrt(eps(FT)))
+    @test isapprox(host_vec(field), dss_once, rtol = sqrt(eps(FT)))
 end
 
 @testset "weighted_dss! vs coordinate-grouped reference (1D, non-periodic)" begin
@@ -93,14 +96,16 @@ end
     topology = Topologies.IntervalTopology(context, mesh)
     space = Spaces.SpectralElementSpace1D(topology, Quadratures.GLL{5}())
 
-    positions =
-        map(x -> round_position(x, 0.0, 0.0), vec(parent(Fields.coordinate_field(space).x)))
+    positions = map(
+        x -> round_position(x, 0.0, 0.0),
+        host_vec(Fields.coordinate_field(space).x),
+    )
 
     seed!(1)
     field = Fields.Field(FT, space)
-    parent(field) .= rand.(FT)
-    values = copy(vec(parent(field)))
-    weights = vec(parent(Fields.local_geometry_field(space).J))
+    copyto!(parent(field), rand(FT, size(parent(field))))
+    values = host_vec(field)
+    weights = host_vec(Fields.local_geometry_field(space).J)
 
     # Interior element boundaries are shared by exactly two nodes; the two
     # domain endpoints are not shared.
@@ -110,5 +115,5 @@ end
 
     Spaces.weighted_dss!(field)
     reference = grouped_dss_reference(positions, values, weights)
-    @test isapprox(vec(parent(field)), reference, rtol = sqrt(eps(FT)))
+    @test isapprox(host_vec(field), reference, rtol = sqrt(eps(FT)))
 end

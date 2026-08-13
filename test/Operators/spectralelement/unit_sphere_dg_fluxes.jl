@@ -13,6 +13,12 @@ import ClimaCore:
     Geometry,
     Quadratures
 
+import ClimaCore  # for `pkgdir` below
+@isdefined(TU) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+);
+import .TestUtilities as TU
+
 include("utils_dg.jl")  # dg_sphere_space, dg_jump_penalty
 
 # DG interface-flux consistency on the cubed-sphere spectral element space:
@@ -49,7 +55,8 @@ include("utils_dg.jl")  # dg_sphere_space, dg_jump_penalty
                 Operators.add_numerical_flux_internal!(dg_jump_penalty, r, q)
                 allocs =
                     @allocated Operators.add_numerical_flux_internal!(dg_jump_penalty, r, q)
-                if !(ClimaComms.device() isa ClimaComms.CUDADevice)
+                if !(ClimaComms.device() isa ClimaComms.CUDADevice) &&
+                   TU.allocation_checks_meaningful()
                     @test allocs == 0
                 end
             end

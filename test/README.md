@@ -51,6 +51,21 @@ and what is opt-in.
 | `:gpu`       | `gpu_`        | GPU-only tests (CPU-vs-GPU comparison, CUDA kernels). Skipped unless a CUDA device is present. Files under `test/gpu/` need no prefix. |
 | `:misc`      | —             | Quality gates that don't fit above (Aqua, deprecations).                   |
 
+## Cost
+
+`tier` says what a test checks; `slow = true` says what it costs. A slow test
+takes minutes rather than seconds, usually from compiling many layout or space
+specializations, or from building large spaces.
+
+Marking a test slow does not reduce coverage anywhere it matters: Buildkite
+shards the suite across parallel agents and runs everything. The marker is
+read only by the GitHub Actions job, which checks portability across Julia
+versions and operating systems on a single two-core runner per version under a
+wall-clock limit, and which sets `TEST_EXCLUDE_SLOW=true`.
+
+Mark a test slow only with a measurement to back it up, and note the number in
+`runtests.jl` next to the marker so the next person can re-check it.
+
 The `tier =` tag in `runtests.jl` is authoritative; the filename prefix
 should match it for new files. Exceptions: `:misc` files, files under
 `test/gpu/`, distributed files (whose names/folders convey the class, e.g.
@@ -157,6 +172,7 @@ block in `runtests.jl`). Set them in the shell (or via `ENV`) before invoking:
 | `TEST_SUBSYSTEM`        | run only a given subsystem, e.g. `TEST_SUBSYSTEM=operators`   |
 | `TEST_TAG`              | case-insensitive substring match on test name or filename, e.g. `TEST_TAG=dss` |
 | `TEST_FAST=true`        | run only the `:unit` tier (drops conv/opt/smoke/...)          |
+| `TEST_EXCLUDE_SLOW=true` | drop tests marked `slow = true` (see "Cost" below)           |
 | `TEST_FAIL_FAST=false`  | run all tests and summarize failures at the end (default stops at the first failing file) |
 | `CLIMACORE_TEST_OPT=true` | also run the CI-only opt checks (JET + allocation gates) embedded in the MatrixFields broadcasting tests. These default to on only under Buildkite (`ENV["BUILDKITE"]`), so a plain local run skips them — set this before trusting a local green run to predict CI. |
 

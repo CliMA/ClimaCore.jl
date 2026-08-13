@@ -34,24 +34,20 @@ steps:
 
   - wait
 
-  # The curated harness `test/runtests.jl` is the single source of truth for
-  # the test suite. The CPU groups below run it end-to-end:
+  # `test/runtests.jl` is the source of truth for the suite. The CPU groups run
+  # it end-to-end:
   #  - one job per subsystem for the fast tiers (:unit/:inference/:smoke/:misc),
-  #    sharded via TEST_SUBSYSTEM, run under default bounds checking because the
-  #    :unit tier embeds zero-allocation assertions that only hold under the
-  #    production `--check-bounds` setting (forcing `--check-bounds=yes` disables
-  #    @inbounds elision and adds spurious allocations);
-  #  - a dedicated bounds-checked job for the :conv tier (pure numerics with no
-  #    allocation gates, so `--check-bounds=yes` adds out-of-bounds safety);
-  #  - dedicated default-bounds jobs for the :opt (JET, whose optimized-IR
-  #    checks depend on the bounds-check flag) and :allocs (production-flag
-  #    allocation gates) tiers.
-  # GPU-only tests are filtered out on CPU agents and covered by the GPU group;
-  # MPI/multi-GPU tests (meta = :distributed) are filtered out on single-rank
-  # runs and driven by the srun steps below.
+  #    sharded via TEST_SUBSYSTEM, under default bounds checking: the :unit tier
+  #    embeds zero-allocation assertions, and `--check-bounds=yes` disables
+  #    @inbounds elision and adds allocations that are not otherwise there;
+  #  - a bounds-checked job for :conv (pure numerics, no allocation gates);
+  #  - default-bounds jobs for :opt (JET reads optimized IR, which depends on
+  #    the bounds-check flag) and :allocs.
+  # GPU-only tests are filtered out on CPU agents; `meta = :distributed` tests
+  # are filtered out on single-rank runs and driven by the srun steps below.
   - group: "Unit: curated suite (CPU)"
     steps:
-      - label: "Unit: curated suite - {{matrix.subsystem}}"
+      - label: "Unit (CPU) - {{matrix.subsystem}}"
         key: unit_curated_suite_cpu
         retry: &retry_policy
           automatic:
@@ -84,7 +80,7 @@ steps:
         agents:
           slurm_mem: 20G
 
-      - label: "Unit: curated suite - convergence tier"
+      - label: "Unit (CPU) - convergence tier"
         key: unit_curated_suite_conv
         retry: *retry_policy
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/runtests.jl"
@@ -93,7 +89,7 @@ steps:
         agents:
           slurm_mem: 20G
 
-      - label: "Unit: curated suite - opt tier"
+      - label: "Unit (CPU) - opt tier"
         key: unit_curated_suite_opt
         retry: *retry_policy
         # Default bounds: the :opt tier's JET @test_opt checks inspect the
@@ -104,7 +100,7 @@ steps:
         agents:
           slurm_mem: 20G
 
-      - label: "Unit: curated suite - allocs tier"
+      - label: "Unit (CPU) - allocs tier"
         key: unit_curated_suite_allocs
         retry: *retry_policy
         # Default bounds: allocation gates run with production flags.
@@ -114,16 +110,14 @@ steps:
         agents:
           slurm_mem: 20G
 
-  # GPU counterpart of the curated-suite group. The subsystem matrix runs the
-  # same fast-tier tests as the CPU matrix on a GPU agent (the harness drops
-  # `meta = :cpu_only` tests when a CUDA device is active), and the two tier
-  # steps below cover the GPU-only and end-to-end tiers. `:integration` is
-  # absent from the matrix because all of its tests are `:smoke`-tier, which
-  # its own step runs. Multi-GPU / MPI (srun) steps are not harness-runnable
-  # and remain further below.
+  # GPU counterpart of the curated-suite group: the same fast-tier tests on a
+  # GPU agent, where the harness drops `meta = :cpu_only` tests. `:integration`
+  # is absent from the matrix because all of its tests are `:smoke`-tier, which
+  # the tier step below runs. Multi-GPU / MPI (srun) steps are not
+  # harness-runnable and sit further below.
   - group: "Unit: curated suite (GPU)"
     steps:
-      - label: "Unit: curated suite (GPU) - {{matrix.subsystem}}"
+      - label: "Unit (GPU) - {{matrix.subsystem}}"
         key: unit_curated_suite_gpu_matrix
         retry: *retry_policy
         matrix:
@@ -156,7 +150,59 @@ steps:
           slurm_gpus: 1
           slurm_mem: 20G
 
-      - label: "Unit: curated suite (GPU) - :gpu tier"
+      # One job per case. Several take minutes of ptxas time each, and sharing
+      # a process starves the assembler, which gets SIGKILLed partway through
+      # test_scalar_15, so they run here rather than in the curated harness.
+      - label: "Unit (GPU) - broadcasting {{matrix.case}}"
+        key: gpu_matrix_field_broadcasting
+        retry: *retry_policy
+        matrix:
+          setup:
+            case:
+              - "test_scalar_1"
+              - "test_scalar_2"
+              - "test_scalar_3"
+              - "test_scalar_4"
+              - "test_scalar_5"
+              - "test_scalar_6"
+              - "test_scalar_7"
+              - "test_scalar_8"
+              - "test_scalar_9"
+              - "test_scalar_10"
+              - "test_scalar_11"
+              - "test_scalar_12"
+              - "test_scalar_13"
+              - "test_scalar_14"
+              - "test_scalar_15"
+              - "test_scalar_16"
+              - "test_scalar_17"
+              - "test_non_scalar_1"
+              - "test_non_scalar_2"
+              - "test_non_scalar_3"
+              - "test_non_scalar_4"
+              - "test_non_scalar_5"
+          # These three are known to fail on GPU; soft_fail keeps a known
+          # failure from turning the whole matrix red.
+          adjustments:
+            - with:
+                case: "test_scalar_14"
+              soft_fail: true
+            - with:
+                case: "test_scalar_15"
+              soft_fail: true
+            - with:
+                case: "test_non_scalar_2"
+              soft_fail: true
+        command:
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/gpu_matrix_field_broadcasting.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+          MATRIX_FIELD_BROADCASTING_CASE: "{{matrix.case}}"
+        agents:
+          slurm_gpus: 1
+          slurm_mem: 20G
+
+      - label: "Unit (GPU) - :gpu tier"
         key: unit_curated_suite_gpu
         retry: *retry_policy
         command:
@@ -173,7 +219,7 @@ steps:
       # GPU work, but `Spaces/opt_spaces.jl` and
       # `Operators/finitedifference/opt_examples.jl` carry separately
       # calibrated CUDA branches that only this step executes.
-      - label: "Unit: curated suite (GPU) - :opt tier"
+      - label: "Unit (GPU) - :opt tier"
         key: unit_curated_suite_gpu_opt
         retry: *retry_policy
         # Default bounds: the :opt tier's JET @test_opt checks inspect the
@@ -188,7 +234,7 @@ steps:
           slurm_gpus: 1
           slurm_mem: 20G
 
-      - label: "Unit: curated suite (GPU) - :smoke tier"
+      - label: "Unit (GPU) - :smoke tier"
         key: unit_curated_suite_gpu_smoke
         retry: *retry_policy
         command:
@@ -231,9 +277,8 @@ steps:
 
       # GPU twin of the step above. This file needs OrdinaryDiffEqSSPRK, which
       # is not a test-target dependency, so it cannot run through the harness.
-      # Note that only the second of its three testsets picks up
-      # `ClimaComms.device()`; the other two build their spaces with an
-      # explicit `CPUSingleThreaded` device and so stay on the CPU here.
+      # Only the second of its three testsets picks up `ClimaComms.device()`;
+      # the other two build spaces with an explicit `CPUSingleThreaded` device.
       - label: "Unit: hyb ops simulation 3d (GPU)"
         key: unit_hyb_ops_3d_gpu
         retry: *retry_policy
@@ -757,12 +802,11 @@ steps:
         artifact_paths:
           - "examples/column/output/advect/*"
 
-      # NOTE: the fct / bb_fct / zalesak_fct column-advection examples are now
-      # covered by the curated smoke test test/Integration/smoke_column_advection.jl
-      # (same accuracy + mass-conservation assertions), so their CPU example
-      # steps were dropped here. tvd_advection and the van Leer example (which
-      # also covers AlgebraicMean, the stretched mesh, and the GPU path) are not
-      # vendored and remain below.
+      # The fct / bb_fct / zalesak_fct column-advection cases are covered by
+      # test/Integration/smoke_column_advection.jl, with the same accuracy and
+      # mass-conservation assertions. tvd_advection and the van Leer example
+      # (which also covers AlgebraicMean, the stretched mesh, and the GPU path)
+      # are not, so they run here.
       - label: ":computer: Column TVD Slope-limited Advection Eq"
         key: "cpu_tvd_column_advect"
         retry: *retry_policy

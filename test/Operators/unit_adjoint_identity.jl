@@ -1,17 +1,12 @@
-# Adjoint (integration-by-parts) identities between divergence and gradient:
+# Adjoint (integration-by-parts) identities between divergence and gradient,
 #
-#     ⟨f, div(u)⟩ = -⟨grad(f), u⟩
+#     ⟨f, div(u)⟩ = -⟨grad(f), u⟩,   ⟨a, b⟩ = ∫ a b = sum(a .* b).
 #
-# with the L2 inner product ⟨a, b⟩ = ∫ a b = sum(a .* b).
-#
-# For spectral elements, the weak operators are defined by exactly this
-# property: `WeakDivergence` satisfies ⟨φ, wdiv(u)⟩ = -⟨∇φ, u⟩ elementwise
-# (the element boundary integrals are dropped), so the identity holds to
-# roundoff on any mesh, with no DSS and no periodicity required.
-#
-# For the staggered finite difference pair, ⟨f, divf2c(u)⟩ on centers
-# telescopes against -⟨gradc2f(f), u⟩ on faces whenever u vanishes on the
-# boundary faces, so the identity again holds to roundoff.
+# `WeakDivergence` is defined by exactly this property elementwise, with the
+# element boundary integrals dropped, so the identity holds to roundoff on any
+# mesh, without DSS or periodicity. For the staggered finite-difference pair,
+# ⟨f, divf2c(u)⟩ on centers telescopes against -⟨gradc2f(f), u⟩ on faces
+# whenever u vanishes on the boundary faces.
 using Test
 import ClimaComms
 ClimaComms.@import_required_backends
@@ -95,7 +90,9 @@ end
     _u = Array(parent(u))
     _u[1] = 0
     _u[end] = 0
-    parent(u) .= _u
+    # `copyto!` rather than `.=`: broadcasting a host array into a device array
+    # builds a GPU kernel that captures the non-bitstype `Array`.
+    copyto!(parent(u), _u)
 
     divf2c = Operators.DivergenceF2C()
     gradc2f = Operators.GradientC2F(

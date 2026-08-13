@@ -13,11 +13,10 @@ import ClimaCore:
     Quadratures,
     Topologies
 
-# Cross-module End-to-End Integration Smoke Test:
-# Runs Shallow-Water 2D Bickley Jet using both:
-# 1. Continuous Galerkin (CG) with DSS
-# 2. Discontinuous Galerkin (DG) with Rusanov and Central interface fluxes
-# Verifies total mass conservation, numerical stability, and consistency across precision.
+# End-to-end smoke test: the 2D shallow-water Bickley jet, run with continuous
+# Galerkin (with DSS) and with discontinuous Galerkin (Rusanov and central
+# interface fluxes), checking total mass conservation, numerical stability, and
+# agreement across precisions.
 
 struct BickleyInit{P}
     params::P

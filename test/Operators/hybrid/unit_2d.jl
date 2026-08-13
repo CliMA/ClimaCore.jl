@@ -96,9 +96,9 @@ end
     end
 
     # Vertical advective velocity
-    vC = Geometry.WVector.(ones(Float64, hv_face_space),)
+    vC = Geometry.WVector.(ones(Float64, hv_face_space))
     # Vector-valued field to be advected (one component only, a UVector)
-    f = Geometry.UVector.(sin.(Fields.coordinate_field(hv_center_space).z),)
+    f = Geometry.UVector.(sin.(Fields.coordinate_field(hv_center_space).z))
 
     advf = advect(f)
 

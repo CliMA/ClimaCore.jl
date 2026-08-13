@@ -21,22 +21,15 @@ import ClimaCore:
 );
 import .TestUtilities as TU
 
-# Structural-stability tests for the discontinuous Galerkin (DG) interface
-# machinery, complementing the consistency/conservation checks in
-# `unit_two_point_fluxes.jl` and `unit_sphere_dg_fluxes.jl`. The properties
-# exercised here are the ones the flux-differencing DG method (issue #2561)
-# relies on for stability without artificial viscosity:
+# Structural properties the flux-differencing DG method (issue #2561) relies on
+# for stability without artificial viscosity:
 #
-#   1. Summation-by-parts (SBP) / discrete integration-by-parts, for a
-#      *non-constant* flux.
-#   2. Sign-definite interface dissipation: the jump penalty is energy-
-#      dissipative (∑ q·r ≤ 0), strictly so across a genuine discontinuity, and
-#      exactly zero for a continuous field.
+#   1. Summation by parts, for a *non-constant* flux.
+#   2. Sign-definite interface dissipation: the jump penalty satisfies
+#      ∑ q·r ≤ 0, strictly across a genuine discontinuity and exactly zero for
+#      a continuous field.
 #   3. Global conservation: the single-valued interface flux is added
 #      antisymmetrically, so the node sum of the residual is structurally zero.
-#
-# Each property is checked on both the cubed sphere and a periodic Cartesian
-# plane, for Float32 and Float64.
 
 include("utils_dg.jl")  # dg_sphere_space, dg_central_flux, dg_jump_penalty
 

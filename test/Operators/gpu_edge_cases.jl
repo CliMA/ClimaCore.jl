@@ -1,13 +1,11 @@
 # Edge-case meshes for GPU operator kernels, compared against a CPU reference:
-#  - single-element meshes, where every element face is either a periodic
-#    self-neighbor (1x1 rectangle) or a panel seam (ne = 1 cubed sphere), so
-#    DSS and operator kernels get no interior element connectivity;
-#  - boundary-only columns (a single vertical element), where the boundary
-#    windows of a finite difference stencil cover the entire column and the
-#    interior loop is empty.
-# The file runs on any device (on the CPU it degenerates to comparing two CPU
-# runs), but it is registered as a :gpu_only test since its purpose is the
-# CPU-vs-GPU comparison.
+#  - single-element meshes, where every element face is a periodic self-neighbor
+#    (1x1 rectangle) or a panel seam (ne = 1 cubed sphere), so DSS and operator
+#    kernels get no interior element connectivity;
+#  - boundary-only columns, where the boundary windows of a finite difference
+#    stencil cover the whole column and the interior loop is empty.
+# Registered :gpu_only because the point is the CPU-vs-GPU comparison; on a CPU
+# device it degenerates to comparing two CPU runs.
 using Test
 using LinearAlgebra: norm
 import ClimaComms

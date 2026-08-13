@@ -1080,7 +1080,7 @@ end
         fs = Spaces.face_space(cs)
 
         # Advective velocity
-        c = Geometry.WVector.(ones(Float64, fs),)
+        c = Geometry.WVector.(ones(Float64, fs))
         # Scalar-valued field to be advected
         f = sin.(Fields.coordinate_field(cs).z)
 

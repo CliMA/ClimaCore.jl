@@ -13,7 +13,7 @@ unit_tests = [
     UnitTest("AutoBroadcaster"                         ,"Utilities/unit_auto_broadcaster.jl"; tier = :unit, subsystem = :utilities),
     UnitTest("DataLayouts mapreduce"                   ,"DataLayouts/unit_mapreduce.jl"; tier = :unit, subsystem = :datalayouts),
     UnitTest("DataLayouts layout args"                 ,"DataLayouts/unit_layout_args.jl"; tier = :unit, subsystem = :datalayouts),
-    UnitTest("DataLayouts fill and copyto"             ,"DataLayouts/unit_fill_and_copyto.jl"; tier = :unit, subsystem = :datalayouts),
+    UnitTest("DataLayouts fill and copyto"             ,"DataLayouts/unit_fill_and_copyto.jl"; tier = :unit, subsystem = :datalayouts, slow = true), # 1.5 min: ~200 concrete layout types to specialize
     UnitTest("DataLayouts - similar opt"               ,"DataLayouts/opt_similar.jl"; tier = :opt, subsystem = :datalayouts),
     UnitTest("DebugOnly"                               ,"Utilities/unit_debug_only.jl"; tier = :unit, subsystem = :utilities),
 
@@ -52,7 +52,7 @@ unit_tests = [
     UnitTest("Spaces - serial CPU DSS"                 ,"Spaces/unit_serial_cpu_dss.jl"; tier = :unit, subsystem = :spaces),
     UnitTest("Sphere spaces"                           ,"Spaces/unit_sphere_spaces.jl"; tier = :unit, subsystem = :spaces),
     UnitTest("Spaces - high resolution"                ,"Spaces/unit_high_resolution_space.jl"; tier = :unit, subsystem = :spaces),
-    UnitTest("Terrain warp"                            ,"Spaces/unit_terrain_warp.jl"; tier = :unit, subsystem = :spaces),
+    UnitTest("Terrain warp"                            ,"Spaces/unit_terrain_warp.jl"; tier = :unit, subsystem = :spaces, slow = true), # 5.9 min: sweeps npoly/helem up to 10 in 3D
     UnitTest("Spaces - opt"                            ,"Spaces/opt_spaces.jl"; tier = :opt, subsystem = :spaces),
 
     # Fields
@@ -84,11 +84,14 @@ unit_tests = [
     UnitTest("Spectral elem - sphere hyperdiff vec"    ,"Operators/spectralelement/unit_sphere_hyperdiffusion_vec.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - sphere hyperdiff vec conv","Operators/spectralelement/conv_sphere_hyperdiffusion_vec.jl"; tier = :conv, subsystem = :operators),
     UnitTest("Spectral elem - over-integration"        ,"Operators/spectralelement/unit_overintegration.jl"; meta = :cpu_only, tier = :unit, subsystem = :operators),
+    # `add_numerical_flux_internal!`/`_boundary!` walk faces in a host loop and
+    # scalar-index the data, so tests built on them either wrap the calls in a
+    # scoped `allowscalar` (the two below) or are :cpu_only (the three after).
     UnitTest("Spectral elem - DG two-point fluxes"     ,"Operators/spectralelement/unit_two_point_fluxes.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG sphere fluxes"        ,"Operators/spectralelement/unit_sphere_dg_fluxes.jl"; tier = :unit, subsystem = :operators),
-    UnitTest("Spectral elem - DG stability properties" ,"Operators/spectralelement/unit_dg_stability.jl"; tier = :unit, subsystem = :operators),
-    UnitTest("Spectral elem - DG boundary fluxes"      ,"Operators/spectralelement/unit_dg_boundary_fluxes.jl"; tier = :unit, subsystem = :operators),
-    UnitTest("Spectral elem - DG divergence conv"      ,"Operators/spectralelement/conv_dg_divergence.jl"; tier = :conv, subsystem = :operators),
+    UnitTest("Spectral elem - DG stability properties" ,"Operators/spectralelement/unit_dg_stability.jl"; meta = :cpu_only, tier = :unit, subsystem = :operators),
+    UnitTest("Spectral elem - DG boundary fluxes"      ,"Operators/spectralelement/unit_dg_boundary_fluxes.jl"; meta = :cpu_only, tier = :unit, subsystem = :operators),
+    UnitTest("Spectral elem - DG divergence conv"      ,"Operators/spectralelement/conv_dg_divergence.jl"; meta = :cpu_only, tier = :conv, subsystem = :operators),
     UnitTest("Operators - broadcast inference"         ,"Operators/inference_operators.jl"; tier = :inference, subsystem = :operators),
     UnitTest("FD ops - zero-allocation stencils"       ,"Operators/finitedifference/allocs_fd_ops.jl"; meta = :cpu_only, tier = :allocs, subsystem = :operators),
 
@@ -97,7 +100,7 @@ unit_tests = [
     UnitTest("FD ops - tensor"                         ,"Operators/finitedifference/unit_tensor.jl"; tier = :unit, subsystem = :operators),
     UnitTest("FD ops - boundary symmetry"              ,"Operators/finitedifference/unit_boundary_symmetry.jl"; tier = :unit, subsystem = :operators),
     UnitTest("FD ops - upwind schemes"                 ,"Operators/finitedifference/unit_upwind_schemes.jl"; tier = :unit, subsystem = :operators),
-    UnitTest("FD ops - opt"                            ,"Operators/finitedifference/opt_finitedifference.jl"; tier = :opt, subsystem = :operators),
+    UnitTest("FD ops - opt"                            ,"Operators/finitedifference/opt_finitedifference.jl"; meta = :cpu_only, tier = :opt, subsystem = :operators),
     UnitTest("FD ops - opt examples"                   ,"Operators/finitedifference/opt_examples.jl"; tier = :opt, subsystem = :operators),
     # NOTE: conv_advection_diffusion1d.jl and Operators/hybrid/simulation_3d.jl
     # are Buildkite-only (dedicated pipeline steps): they require
@@ -113,22 +116,24 @@ unit_tests = [
     UnitTest("Operators - levels & extruded examples"  ,"Operators/unit_operators_examples.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Operators - integrals"                   ,"Operators/integrals.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Hybrid - dss opt"                        ,"Operators/hybrid/opt_dss.jl"; tier = :opt, subsystem = :operators),
-    UnitTest("Hybrid - opt"                            ,"Operators/hybrid/opt_hybrid.jl"; tier = :opt, subsystem = :operators),
+    # :cpu_only for the same reason as the other opt-tier tests: JET reports the
+    # runtime dispatch in CUDA's kernel-launch path, which is not ours to fix.
+    UnitTest("Hybrid - opt"                            ,"Operators/hybrid/opt_hybrid.jl"; meta = :cpu_only, tier = :opt, subsystem = :operators),
 
     # MatrixFields
     UnitTest("MatrixFields - BandMatrixRow"            ,"MatrixFields/unit_band_matrix_row.jl"; tier = :unit, subsystem = :matrixfields),
     UnitTest("MatrixFields - field2arrays"             ,"MatrixFields/unit_field2arrays.jl"; meta = :cpu_only, tier = :unit, subsystem = :matrixfields),
     UnitTest("MatrixFields - mat mul at boundaries"    ,"MatrixFields/unit_matrix_multiplication_at_boundaries.jl"; tier = :unit, subsystem = :matrixfields),
     UnitTest("MatrixFields - field names"              ,"MatrixFields/unit_field_names.jl"; tier = :unit, subsystem = :matrixfields),
-    UnitTest("MatrixFields - solvers"                  ,"MatrixFields/unit_field_matrix_solvers.jl"; tier = :unit, subsystem = :matrixfields),
-    # Both broadcasting umbrellas (this one and the GPU one under "GPU Only"
-    # below) include all matrix_fields_broadcasting/ files; see the README in
-    # that folder for what each file tests.
-    UnitTest("MatrixFields - broadcasting"             ,"MatrixFields/unit_matrix_field_broadcasting.jl"; tier = :unit, subsystem = :matrixfields),
+    UnitTest("MatrixFields - solvers"                  ,"MatrixFields/unit_field_matrix_solvers.jl"; tier = :unit, subsystem = :matrixfields, slow = true), # 5.3 min
+    # Umbrella over matrix_fields_broadcasting/; see the README there. :cpu_only
+    # because on GPU several cases take minutes to compile apiece and need a
+    # process each; Buildkite runs them as a matrix, one case per job.
+    UnitTest("MatrixFields - broadcasting"             ,"MatrixFields/unit_matrix_field_broadcasting.jl"; meta = :cpu_only, tier = :unit, subsystem = :matrixfields, slow = true), # 3.1 min for all 22 cases
     UnitTest("MatrixFields - multiple field solve"     ,"MatrixFields/multiple_field_solve_reproducer_1.jl"; tier = :unit, subsystem = :matrixfields),
     UnitTest("MatrixFields - flat spaces"              ,"MatrixFields/unit_flat_spaces.jl"; tier = :unit, subsystem = :matrixfields),
     UnitTest("MatrixFields - indexing"                 ,"MatrixFields/unit_field_matrix_indexing.jl"; tier = :unit, subsystem = :matrixfields),
-    UnitTest("MatrixFields - operator matrices"        ,"MatrixFields/unit_operator_matrices.jl"; tier = :unit, subsystem = :matrixfields),
+    UnitTest("MatrixFields - operator matrices"        ,"MatrixFields/unit_operator_matrices.jl"; tier = :unit, subsystem = :matrixfields, slow = true), # 4.3 min
     UnitTest("MatrixFields - mat mul recursion"        ,"MatrixFields/unit_matrix_multiplication_recursion.jl"; tier = :unit, subsystem = :matrixfields),
 
     # Hypsography
@@ -138,7 +143,7 @@ unit_tests = [
     # Limiters, IO, Remapping
     UnitTest("Limiter"                                 ,"Limiters/unit_limiter.jl"; tier = :unit, subsystem = :limiters),
     UnitTest("Limiters - vertical mass borrowing"      ,"Limiters/vertical_mass_borrowing_limiter.jl"; tier = :unit, subsystem = :limiters),
-    UnitTest("Limiters - vertical mass borrowing adv"  ,"Limiters/vertical_mass_borrowing_limiter_advection.jl"; tier = :unit, subsystem = :limiters),
+    UnitTest("Limiters - vertical mass borrowing adv"  ,"Limiters/vertical_mass_borrowing_limiter_advection.jl"; tier = :unit, subsystem = :limiters, slow = true), # 2.3 min
     UnitTest("InputOutput - hdf5"                      ,"InputOutput/unit_hdf5.jl"; tier = :unit, subsystem = :io),
     UnitTest("InputOutput - all-spaces round-trip"     ,"InputOutput/unit_allspaces_roundtrip.jl"; tier = :unit, subsystem = :io),
     UnitTest("InputOutput - parse_type"                ,"InputOutput/unit_read_type.jl"; tier = :unit, subsystem = :io),
@@ -150,7 +155,7 @@ unit_tests = [
     UnitTest("InputOutput - hybrid3dcubedsphere"       ,"InputOutput/unit_hybrid3dcubedsphere.jl"; tier = :unit, subsystem = :io),
     UnitTest("InputOutput - hybrid3dcubedsphere_topo"  ,"InputOutput/unit_hybrid3dcubedsphere_topography.jl"; tier = :unit, subsystem = :io),
     UnitTest("InputOutput - finitedifferences"         ,"InputOutput/unit_finitedifference.jl"; tier = :unit, subsystem = :io),
-    UnitTest("InputOutput - pointspaces"               ,"InputOutput/unit_point.jl"; tier = :unit, subsystem = :io),
+    UnitTest("InputOutput - pointspaces"               ,"InputOutput/unit_point.jl"; meta = :cpu_only, tier = :unit, subsystem = :io),
     UnitTest("Array interpolation"                     ,"Remapping/unit_interpolate_array.jl"; tier = :unit, subsystem = :remapping),
     UnitTest("Distributed remapping"                   ,"Remapping/unit_distributed_remapping.jl"; tier = :unit, subsystem = :remapping),
     UnitTest("Vertical interpolation"                  ,"Remapping/unit_interpolate_pressure.jl"; tier = :unit, subsystem = :remapping),
@@ -182,7 +187,10 @@ unit_tests = [
     UnitTest("Operators - hybrid simulation CUDA"      ,"Operators/hybrid/simulation_cuda.jl"; meta = :gpu_only, tier = :gpu, subsystem = :operators),
     UnitTest("Fields - CUDA mapreduce"                 ,"Fields/gpu_reduction.jl"; meta = :gpu_only, tier = :gpu, subsystem = :gpu),
     UnitTest("MatrixFields - GPU compat bidiag row"    ,"MatrixFields/gpu_compat_bidiag_matrix_row.jl"; meta = :gpu_only, tier = :gpu, subsystem = :matrixfields),
-    UnitTest("MatrixFields - broadcasting (GPU)"       ,"MatrixFields/gpu_matrix_field_broadcasting.jl"; meta = :gpu_only, tier = :gpu, subsystem = :matrixfields),
+    # `MatrixFields/gpu_matrix_field_broadcasting.jl` is absent by design: its
+    # cases need a process apiece, which this harness cannot give, since every
+    # test runs in one process. The `gpu_matrix_field_broadcasting` Buildkite
+    # matrix drives them, one job per case.
 
     # Distributed (MPI) — registered for taxonomy completeness; filtered out on
     # single-process runs and driven by CI at fixed rank counts via srun/mpiexec
@@ -226,15 +234,17 @@ end
 
 # Optional CLI / Environment-based test filtering:
 # e.g. TEST_TIER=unit, TEST_EXCLUDE_TIER=conv,opt, TEST_SUBSYSTEM=operators,
-# TEST_TAG=dg, TEST_FAST=true
+# TEST_TAG=dg, TEST_FAST=true, TEST_EXCLUDE_SLOW=true
 let
     tier_filter = get(ENV, "TEST_TIER", nothing)
     exclude_tier_filter = get(ENV, "TEST_EXCLUDE_TIER", nothing)
     subsystem_filter = get(ENV, "TEST_SUBSYSTEM", nothing)
     tag_filter = get(ENV, "TEST_TAG", nothing)
     fast_filter = get(ENV, "TEST_FAST", "false") == "true"
+    exclude_slow_filter = get(ENV, "TEST_EXCLUDE_SLOW", "false") == "true"
     if !isnothing(tier_filter) || !isnothing(exclude_tier_filter) ||
-       !isnothing(subsystem_filter) || !isnothing(tag_filter) || fast_filter
+       !isnothing(subsystem_filter) || !isnothing(tag_filter) ||
+       fast_filter || exclude_slow_filter
         filtered = filter_tests(
             unit_tests;
             tier = tier_filter,
@@ -242,10 +252,19 @@ let
             subsystem = subsystem_filter,
             tag = tag_filter,
             fast = fast_filter,
+            exclude_slow = exclude_slow_filter,
         )
         empty!(unit_tests)
         append!(unit_tests, filtered)
     end
+end
+
+# The :opt tier pins JET report counts and allocation sentinels to the versions
+# in the current Manifest. Downgrade forces the oldest compatible versions,
+# under which those counts drift for reasons outside this package, so it skips
+# the tier. test/aqua.jl consults the same variable.
+if get(ENV, "CLIMACORE_DOWNGRADE_TESTS", "false") == "true"
+    filter!(test -> test.tier != :opt, unit_tests)
 end
 
 # Fail loudly (and clearly) if the filters selected nothing: a typo in
@@ -255,9 +274,14 @@ if isempty(unit_tests)
     filter_env = filter(
         !isnothing,
         [
-            (k => get(ENV, k, nothing)) for k in
-            ("TEST_TIER", "TEST_EXCLUDE_TIER", "TEST_SUBSYSTEM", "TEST_TAG", "TEST_FAST")
-            if haskey(ENV, k)
+            (k => get(ENV, k, nothing)) for k in (
+                "TEST_TIER",
+                "TEST_EXCLUDE_TIER",
+                "TEST_SUBSYSTEM",
+                "TEST_TAG",
+                "TEST_FAST",
+                "TEST_EXCLUDE_SLOW",
+            ) if haskey(ENV, k)
         ],
     )
     error(

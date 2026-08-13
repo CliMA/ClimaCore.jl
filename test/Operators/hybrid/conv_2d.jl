@@ -24,7 +24,7 @@ include("utils_2d.jl")
         Δh[k] = 1.0 / n
 
         # Advective velocity
-        c = Geometry.WVector.(ones(Float64, hv_face_space),)
+        c = Geometry.WVector.(ones(Float64, hv_face_space))
         # Scalar-valued field to be advected
         f = sin.(Fields.coordinate_field(hv_center_space).z)
 
