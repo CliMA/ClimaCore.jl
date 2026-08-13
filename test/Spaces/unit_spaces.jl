@@ -1,7 +1,3 @@
-#=
-julia --project=.buildkite
-using Revise; include(joinpath("test", "Spaces", "unit_spaces.jl"))
-=#
 using Test
 using ClimaComms
 using StaticArrays, IntervalSets, LinearAlgebra

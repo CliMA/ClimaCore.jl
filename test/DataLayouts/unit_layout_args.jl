@@ -9,14 +9,20 @@ ClimaComms.@import_required_backends
 # since widened code requires dynamic dispatch and heap allocation, neither of
 # which can be compiled for GPUs. The heuristics are only triggered during GPU
 # compilation of wide or complexly typed broadcast expressions, like the fused
-# parameterization broadcasts in ClimaAtmos (CPU inference checks like JET do 
-# not detect them, even for the argument tuples that break GPU compilation), so 
+# parameterization broadcasts in ClimaAtmos (CPU inference checks like JET do
+# not detect them, even for the argument tuples that break GPU compilation), so
 # the fused broadcasts below are materialized at the original failure's scale
 # and this file is run in a 1-GPU Buildkite job. The implementation pattern
 # itself is guarded by the "Kernel-reachable unrolled functions" test in
 # test/aqua.jl.
 
 device = ClimaComms.device()
+context = ClimaComms.context(device)
+ClimaComms.init(context)
+
+# Structural test: what matters is the diversity of layout types in the
+# argument tuples, not the float width, so this stays at a single precision
+# (cf. `unit_scopes.jl`). The FT/CT pair supplies the heterogeneity.
 FT = Float64
 CT = Complex{FT}
 A = ClimaComms.array_type(device){FT}

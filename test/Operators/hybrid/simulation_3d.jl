@@ -48,7 +48,7 @@ end
     # here c == 1, integrate t == 2π or one full period
 
     function rhs!(dudt, u, _, t)
-        # horizontal divergence operator applied to all levels
+        # Horizontal divergence operator applied to all levels
         hdiv = Operators.Divergence()
         @. dudt = -hdiv(u * Geometry.UVVector(1.0, 1.0))
         Spaces.weighted_dss!(dudt)
@@ -107,16 +107,16 @@ end
         h = u.h
         dh = dudt.h
 
-        # vertical advection no inflow at bottom
+        # Vertical advection no inflow at bottom
         # and outflow at top
         Ic2f = Operators.InterpolateC2F(top = Operators.Extrapolate())
         divf2c = Operators.DivergenceF2C(
             bottom = bc_divF2C_bottom!(p.bc, dudt, u, p, t),
         )
-        # only upward advection
+        # Only upward advection
         @. dh = -divf2c(Ic2f(h) * Geometry.UVWVector(0.0, 0.0, 1.0))
 
-        # only horizontal advection
+        # Only horizontal advection
         hdiv = Operators.Divergence()
         @. dh += -hdiv(h * Geometry.UVVector(1.0, 1.0))
         Spaces.weighted_dss!(dh)
@@ -124,7 +124,7 @@ end
         return dudt
     end
 
-    # initial conditions
+    # Initial conditions
     function h_init(x_init, y_init, z_init, A = 1.0, σ = 0.2)
         coords = Fields.coordinate_field(hv_center_space)
         h = map(coords) do coord

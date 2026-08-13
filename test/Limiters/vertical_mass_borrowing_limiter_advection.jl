@@ -1,7 +1,3 @@
-#=
-julia --project=.buildkite
-using Revise; include(joinpath("test", "Limiters", "vertical_mass_borrowing_limiter_advection.jl"))
-=#
 using Test
 using LinearAlgebra
 import ClimaComms
@@ -29,7 +25,7 @@ import ClimaCore:
 # the solution translates to the right at speed w,
 # so at time t, the solution is y(z - w * t)
 
-# visualization artifacts
+# Visualization artifacts
 ENV["GKSwstype"] = "nul"
 import ClimaCorePlots
 import Plots

@@ -294,11 +294,24 @@ Use [`foreach_column`](@ref) to combine the levels of each column of `arg` with
 `true` changes the order of reduction from left-associative (default) to
 right-associative, and `init` seeds the fold when it is given.
 """
-@inline column_reduce!(op::O, dest, arg; mask = NoMask(), flip = false, init...) where {O} =
+@inline function column_reduce!(
+    op::O,
+    dest,
+    arg;
+    mask = NoMask(),
+    flip = false,
+    init...,
+) where {O}
+    # `Val` so that the closure captures the direction in its type rather than
+    # as a runtime `Bool`, which would be type-unstable and would leave the GPU
+    # compiler looking at the allocating `reverse` branch even when
+    # `flip = false`.
+    flip_val = Val(flip)
     foreach_column(dest, arg; mask) do dest_column, arg_column
-        maybe_reverse = flip ? reverse : identity
+        maybe_reverse = flip_val isa Val{true} ? reverse : identity
         fill!(dest_column, reduce(op, maybe_reverse(arg_column); init...))
     end
+end
 # TODO: Extend this to column_accumulate!, column_stencil!, and slab_convolve!
 
 # Convert the value before the fill! loop. Even though setindex! converts at

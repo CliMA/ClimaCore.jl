@@ -197,6 +197,10 @@ Currently HPC cluster integration tests are run using the [Buildkite CI service]
 Tests are parallelized and run as individual [Slurm](https://slurm.schedmd.com/documentation.html)
 batch jobs on the HPC cluster and defined in `.buildkite/pipeline.yml`.
 
+### GPU Kernel Launch Latency
+
+When making changes to the CUDA extension (`ClimaCoreCUDAExt`), contributors should manually check for regressions or improvements in GPU kernel launch latency. We do not run automated CI tests for launch latency because absolute latency measurements tend to be flaky across different hardware nodes and transient loads. You can verify the performance impact of your changes using the benchmark scripts in the `benchmarks/` directory or by profiling the kernels locally.
+
 ## Contributing to Documentation
 
 Documentation is written in Julia-flavored markdown and generated from two sources:

@@ -1,9 +1,3 @@
-#=
-julia --check-bounds=yes --project
-julia -g2 --check-bounds=yes --project
-julia --project
-using Revise; include(joinpath("test", "Fields", "utils_field_multi_broadcast_fusion.jl"))
-=#
 using Test
 using JET
 using BenchmarkTools
@@ -116,31 +110,6 @@ function unfused!(X, Y)
     @. y2 = x1 + x2 + x3
     return nothing
 end
-function fused_bycolumn!(X, Y)
-    (; x1, x2, x3) = X
-    (; y1, y2, y3) = Y
-    var = (2,)
-    Fields.bycolumn(axes(x1)) do colidx
-        @fused_direct begin
-            @. y1[colidx] = x1[colidx] + x2[colidx] + x3[colidx]
-            @. y2[colidx] = var # tests Base.Broadcast.AbstractArrayStyle{0}
-            @. y2[colidx] = x1[colidx] + x2[colidx] + x3[colidx]
-        end
-    end
-    return nothing
-end
-function unfused_bycolumn!(X, Y)
-    (; x1, x2, x3) = X
-    (; y1, y2, y3) = Y
-    var = (2,)
-    Fields.bycolumn(axes(x1)) do colidx
-        @. y1[colidx] = x1[colidx] + x2[colidx] + x3[colidx]
-        @. y2[colidx] = var # tests Base.Broadcast.AbstractArrayStyle{0}
-        @. y2[colidx] = x1[colidx] + x2[colidx] + x3[colidx]
-    end
-    return nothing
-end
-
 function rand_field(FT, space)
     f = Fields.Field(FT, space)
     rand_field!(f)

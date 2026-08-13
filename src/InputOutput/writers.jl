@@ -578,12 +578,13 @@ function write!(
 end
 
 function write_plain_array!(group, array::AbstractArray, name::AbstractString)
-    nd = ndims(array)
-    dims = size(array)
+    array_cpu = array isa Array ? array : Array(array)
+    nd = ndims(array_cpu)
+    dims = size(array_cpu)
     localidx = ntuple(d -> (:), nd)
     dataset =
-        create_dataset(group, name, datatype(eltype(array)), dataspace(dims))
-    dataset[localidx...] = array
+        create_dataset(group, name, datatype(eltype(array_cpu)), dataspace(dims))
+    dataset[localidx...] = array_cpu
     return dataset
 end
 

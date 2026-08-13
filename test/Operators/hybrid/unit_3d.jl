@@ -31,7 +31,7 @@ device = ClimaComms.device()
     quad = Quadratures.GLL{3 + 1}()
     horzgrid = Grids.SpectralElementGrid2D(horztopology, quad)
 
-    # shallow
+    # Shallow
     shallow_grid = Grids.ExtrudedFiniteDifferenceGrid(horzgrid, vertgrid)
 
     coords = Fields.coordinate_field(
@@ -48,7 +48,7 @@ device = ClimaComms.device()
     divf2c = Operators.DivergenceF2C()
     @test divf2c.(y) ≈ zero(coords.z) atol = 100 * eps(FT)
 
-    # deep
+    # Deep
     deep_grid =
         Grids.ExtrudedFiniteDifferenceGrid(horzgrid, vertgrid; deep = true)
 
@@ -59,7 +59,7 @@ device = ClimaComms.device()
     div = Operators.Divergence()
     @test div.(x) ≈ zero(coords.z) atol = 1e-4
 
-    # divergence of a constant outward vector field = 2 w / (r + z)
+    # Divergence of a constant outward vector field = 2 w / (r + z)
     fcoords = Fields.coordinate_field(
         Spaces.FaceExtrudedFiniteDifferenceSpace(deep_grid),
     )

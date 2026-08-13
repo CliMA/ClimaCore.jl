@@ -238,6 +238,13 @@ end
 Update the field `limiter.q_bounds_nbr` based on `limiter.q_bounds` in the ghost
 neighbors. This should be called after the ghost exchange has completed.
 
+!!! note
+    This loop indexes slabs of the receive buffer from the host, so the
+    distributed limiter is only supported on CPUs. Running it with a
+    `CUDADevice` and an `MPICommsContext` would trigger scalar indexing of a
+    `CuArray`. Making distributed limiters work on GPUs requires replacing
+    this loop (and the `q_bounds_nbr` update below) with a kernel.
+
 Part of [`compute_bounds!`](@ref).
 """
 function compute_neighbor_bounds_ghost!(

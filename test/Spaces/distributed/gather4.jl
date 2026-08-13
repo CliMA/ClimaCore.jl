@@ -18,7 +18,7 @@ ClimaComms.@import_required_backends
 const comms_ctx = ClimaComms.MPICommsContext()
 const pid, nprocs = ClimaComms.init(comms_ctx)
 
-# log output only from root process
+# Log output only from root process
 logger_stream = ClimaComms.iamroot(comms_ctx) ? stderr : devnull
 
 prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))

@@ -18,7 +18,7 @@ ClimaComms.@import_required_backends
     VIJH = ClimaCore.DataLayouts.VIJFH
     helem = 32
     Nq = 2
-    # very low resolution does not use eager eval on gpu for now
+    # Low resolution does not use eager eval on gpu for now
     for z_elems in (10, 20)
         cspace = TU.CenterExtrudedFiniteDifferenceSpace(
             FT;

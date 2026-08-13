@@ -2,6 +2,9 @@ import BandedMatrices: band
 import LinearAlgebra: I, mul!
 
 include(joinpath("..", "matrix_field_test_utils.jl"))
+using LazyBroadcast: @lazy, materialize
+using ClimaCore.MatrixFields: @name, DiagonalMatrixRow, BidiagonalMatrixRow,
+    TridiagonalMatrixRow, QuaddiagonalMatrixRow
 
 if !(@isdefined(unit_test_field_broadcast_vs_array_reference))
     const FT = Float64
@@ -70,7 +73,7 @@ function opt_test_field_broadcast_against_array_reference(
     # the allocations they incur.
     @test_opt ignored_modules = CUDA_FRAMES materialize(bc)
     @test_opt ignored_modules = CUDA_FRAMES set_result!(result, bc)
-    USING_CUDA || @test (@allocated set_result!(result, bc)) == 0
+    USING_CUDA || @test set_result_allocs(result, bc) == 0
 
     # Test ref_set_result! for type instabilities and allocations to ensure
     # that the performance comparison is fair.
@@ -80,11 +83,13 @@ function opt_test_field_broadcast_against_array_reference(
         inputs_arrays,
         temp_values_arrays,
     )
-    USING_CUDA || @test (@allocated call_ref_set_result!(
-        ref_set_result!,
-        ref_result_arrays,
-        inputs_arrays,
-        temp_values_arrays,
-    )) == 0
+    USING_CUDA || @test call_allocs(
+        () -> call_ref_set_result!(
+            ref_set_result!,
+            ref_result_arrays,
+            inputs_arrays,
+            temp_values_arrays,
+        ),
+    ) == 0
     return nothing
 end

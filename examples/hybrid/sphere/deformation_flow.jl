@@ -1,7 +1,3 @@
-#=
-julia --project=.buildkite
-using Revise; include("examples/hybrid/sphere/deformation_flow.jl")
-=#
 import ClimaComms
 ClimaComms.@import_required_backends
 using SciMLBase: ODEProblem, init, solve

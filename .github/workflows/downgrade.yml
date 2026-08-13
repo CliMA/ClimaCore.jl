@@ -19,6 +19,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      # Report both versions: without this, a failure on one cancels the other
+      # and hides whether it would have failed too (UnitTests.yml does the same).
+      fail-fast: false
       matrix:
         version: ['1.10', '1.11']
     steps:
@@ -33,7 +36,19 @@ jobs:
           mode: 'forcedeps'
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest
+        with:
+          # Nothing here uploads coverage. Instrumented runs on 1.11 are also
+          # killed partway through Remapping/unit_distributed_remapping.jl, while
+          # uninstrumented ones on the same commit and runner finish.
+          coverage: false
         env:
           # downgrade promotes `[extras]` into `[deps]`, which makes those
-          # test-only deps look stale to Aqua (see test/aqua.jl).
+          # test-only deps look stale to Aqua (see test/aqua.jl). This also
+          # drops the :inference tier, whose JET counts are pinned to the
+          # Manifest and drift under forced-oldest dependencies (see
+          # test/runtests.jl).
           CLIMACORE_DOWNGRADE_TESTS: "true"
+          # Same two-core runners as UnitTests.yml, twice over, so skip the same
+          # tiers and `slow` tests.
+          TEST_EXCLUDE_TIER: "conv,inference,allocs,smoke"
+          TEST_EXCLUDE_SLOW: "true"

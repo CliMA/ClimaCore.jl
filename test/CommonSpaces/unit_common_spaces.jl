@@ -1,7 +1,3 @@
-#=
-julia --project
-using Revise; include(joinpath("test", "CommonSpaces", "unit_common_spaces.jl"))
-=#
 import ClimaComms
 ClimaComms.@import_required_backends
 using ClimaCore.CommonSpaces
@@ -19,27 +15,23 @@ using Test
 # Initialize MPI context
 ClimaComms.init(ClimaComms.context())
 
-@testset "Convenience constructors" begin
-    function warp_surface(coord)
-        # sin²(x) form ground elevation
-        x = Geometry.component(coord, 1)
-        FT = eltype(x)
-        hc = FT(500.0)
-        h = hc * FT(sin(π * x / 25000)^2)
-        return h
-    end
+warp_surface_elev(coord, hc::FT) where {FT} =
+    hc * FT(sin(FT(π) * Geometry.component(coord, 1) / FT(25000))^2)
 
-    space = ExtrudedCubedSphereSpace(;
+@testset "Convenience constructors [$FT]" for FT in (Float32, Float64)
+    space = ExtrudedCubedSphereSpace(
+        FT;
         z_elem = 10,
-        z_min = 0,
-        z_max = 1,
-        radius = 10,
+        z_min = FT(0),
+        z_max = FT(1),
+        radius = FT(10),
         h_elem = 10,
         n_quad_points = 4,
         VIJH = DataLayouts.VIJHF,
         staggering = CellCenter(),
     )
     grid = Spaces.grid(space)
+    @test Spaces.undertype(space) === FT
     @test grid isa Grids.ExtrudedFiniteDifferenceGrid
     @test grid.horizontal_grid isa Grids.SpectralElementGrid2D
     @test Grids.topology(grid.horizontal_grid).mesh isa
@@ -48,56 +40,58 @@ ClimaComms.init(ClimaComms.context())
     function hypsography_fun(h_grid, z_grid)
         h_space = Spaces.SpectralElementSpace2D(h_grid)
         cf = Fields.coordinate_field(h_space)
-        warp_fn = warp_surface # closure
-        z_surface = map(cf) do coord
-            Geometry.ZPoint(warp_fn(coord))
-        end
+        z_surface = @. Geometry.ZPoint(warp_surface_elev(cf, FT(500.0)))
         Hypsography.LinearAdaption(z_surface)
     end
 
-    space = ExtrudedCubedSphereSpace(;
+
+    space = ExtrudedCubedSphereSpace(
+        FT;
         z_elem = 10,
-        z_min = 0,
-        z_max = 1,
-        radius = 10,
+        z_min = FT(0),
+        z_max = FT(1),
+        radius = FT(10),
         h_elem = 10,
         n_quad_points = 4,
         hypsography_fun,
         staggering = CellCenter(),
     )
     grid = Spaces.grid(space)
+    @test Spaces.undertype(space) === FT
     @test grid isa Grids.ExtrudedFiniteDifferenceGrid
     @test grid.horizontal_grid isa Grids.SpectralElementGrid2D
     @test Grids.topology(grid.horizontal_grid).mesh isa
           Meshes.EquiangularCubedSphere
-    @test Grids.topology(grid.horizontal_grid).mesh isa
-          Meshes.EquiangularCubedSphere
 
-    space = CubedSphereSpace(; radius = 10, n_quad_points = 4, h_elem = 10)
+    space = CubedSphereSpace(FT; radius = FT(10), n_quad_points = 4, h_elem = 10)
     grid = Spaces.grid(space)
+    @test Spaces.undertype(space) === FT
     @test grid isa Grids.SpectralElementGrid2D
     @test Grids.topology(grid).mesh isa Meshes.EquiangularCubedSphere
 
     # Column spaces are not supported with MPI
     if !(ClimaComms.context() isa ClimaComms.MPICommsContext)
-        space = ColumnSpace(;
+        space = ColumnSpace(
+            FT;
             z_elem = 10,
-            z_min = 0,
-            z_max = 1,
+            z_min = FT(0),
+            z_max = FT(1),
             staggering = Grids.CellCenter(),
         )
         grid = Spaces.grid(space)
+        @test Spaces.undertype(space) === FT
         @test grid isa Grids.FiniteDifferenceGrid
     end
 
-    space = Box3DSpace(;
+    space = Box3DSpace(
+        FT;
         z_elem = 10,
-        x_min = 0,
-        x_max = 1,
-        y_min = 0,
-        y_max = 1,
-        z_min = 0,
-        z_max = 10,
+        x_min = FT(0),
+        x_max = FT(1),
+        y_min = FT(0),
+        y_max = FT(1),
+        z_min = FT(0),
+        z_max = FT(10),
         periodic_x = false,
         periodic_y = false,
         n_quad_points = 4,
@@ -106,34 +100,38 @@ ClimaComms.init(ClimaComms.context())
         staggering = CellCenter(),
     )
     grid = Spaces.grid(space)
+    @test Spaces.undertype(space) === FT
     @test grid isa Grids.ExtrudedFiniteDifferenceGrid
     @test grid.horizontal_grid isa Grids.SpectralElementGrid2D
     @test Grids.topology(grid.horizontal_grid).mesh isa Meshes.RectilinearMesh
 
     # Slices are currently not compatible with GPU
     if !(ClimaComms.device() isa ClimaComms.CUDADevice)
-        space = SliceXZSpace(;
+        space = SliceXZSpace(
+            FT;
             z_elem = 10,
-            x_min = 0,
-            x_max = 1,
-            z_min = 0,
-            z_max = 1,
+            x_min = FT(0),
+            x_max = FT(1),
+            z_min = FT(0),
+            z_max = FT(1),
             periodic_x = false,
             n_quad_points = 4,
             x_elem = 4,
             staggering = CellCenter(),
         )
         grid = Spaces.grid(space)
+        @test Spaces.undertype(space) === FT
         @test grid isa Grids.ExtrudedFiniteDifferenceGrid
         @test grid.horizontal_grid isa Grids.SpectralElementGrid1D
         @test Grids.topology(grid.horizontal_grid).mesh isa Meshes.IntervalMesh
     end
 
-    space = RectangleXYSpace(;
-        x_min = 0,
-        x_max = 1,
-        y_min = 0,
-        y_max = 1,
+    space = RectangleXYSpace(
+        FT;
+        x_min = FT(0),
+        x_max = FT(1),
+        y_min = FT(0),
+        y_max = FT(1),
         periodic_x = false,
         periodic_y = false,
         n_quad_points = 4,
@@ -141,6 +139,7 @@ ClimaComms.init(ClimaComms.context())
         y_elem = 4,
     )
     grid = Spaces.grid(space)
+    @test Spaces.undertype(space) === FT
     @test grid isa Grids.SpectralElementGrid2D
     @test Grids.topology(grid).mesh isa Meshes.RectilinearMesh
 

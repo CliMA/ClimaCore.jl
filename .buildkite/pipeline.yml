@@ -20,6 +20,9 @@ steps:
 
       - echo "--- Instantiate buildkite env"
       - "julia --project=.buildkite --check-bounds=yes -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true); Pkg.status()'"
+      # Precompile caches are keyed by the bounds-check flag; also warm the
+      # default-bounds cache used by the curated :inference/:allocs tier jobs.
+      - "julia --project=.buildkite -e 'using Pkg; Pkg.precompile(;strict=true)'"
       - "julia --project=.buildkite -e 'using CUDA; CUDA.precompile_runtime()'"
 
     agents:
@@ -31,174 +34,288 @@ steps:
 
   - wait
 
-  - group: "Unit: Package-wide"
+  # `test/runtests.jl` is the source of truth for the suite. The CPU groups run
+  # it end-to-end:
+  #  - one job per subsystem for the fast tiers (:unit/:smoke/:misc),
+  #    split via TEST_SUBSYSTEM, under default bounds checking: the :unit tier
+  #    embeds zero-allocation assertions, and `--check-bounds=yes` disables
+  #    @inbounds elision and adds allocations that are not otherwise there;
+  #  - a bounds-checked job for :conv (pure numerics, no allocation gates);
+  #  - :inference under both bounds settings (JET reads optimized IR, which
+  #    depends on the flag, and an out-of-bounds check that fails to compile
+  #    under only one of them would otherwise go unnoticed);
+  #  - a default-bounds job for :allocs.
+  # GPU-only tests are filtered out on CPU agents; `meta = :distributed` tests
+  # are filtered out on single-rank runs and driven by the srun steps below.
+  - group: "Unit: curated suite (CPU)"
     steps:
-
-      - label: "Unit: aqua"
-        key: unit_aqua
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/aqua.jl"
+      - label: "Unit (CPU) - {{matrix.subsystem}}"
+        key: unit_curated_suite_cpu
         retry: &retry_policy
           automatic:
             - exit_status: -1  # Retry on agent lost
               limit: 1
+        matrix:
+          setup:
+            subsystem:
+              - "datalayouts"
+              - "utilities"
+              - "geometry"
+              - "domains"
+              - "meshes"
+              - "topologies"
+              - "quadratures"
+              - "spaces"
+              - "fields"
+              - "operators"
+              - "matrixfields"
+              - "hypsography"
+              - "limiters"
+              - "io"
+              - "remapping"
+              - "integration"
+              - "quality"
+        command: "julia --color=yes --project=.buildkite test/runtests.jl"
+        env:
+          TEST_SUBSYSTEM: "{{matrix.subsystem}}"
+          TEST_EXCLUDE_TIER: "conv,inference,allocs"
+        agents:
+          slurm_mem: 20G
 
-      - label: "Unit: cuda"
-        key: unit_cuda_functional
+      - label: "Unit (CPU) - convergence tier"
+        key: unit_curated_suite_conv
+        retry: *retry_policy
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/runtests.jl"
+        env:
+          TEST_TIER: "conv"
+        agents:
+          slurm_mem: 20G
+
+      - label: "Unit (CPU) - inference tier"
+        key: unit_curated_suite_inference
+        retry: *retry_policy
+        # JET reads the optimized IR, which changes with the bounds-check flag,
+        # so run the tier under both settings.
+        command: "julia --color=yes --project=.buildkite test/runtests.jl"
+        env:
+          TEST_TIER: "inference"
+        agents:
+          slurm_mem: 20G
+
+      - label: "Unit (CPU) - inference tier (bounds-checked)"
+        key: unit_curated_suite_inference_bc
+        retry: *retry_policy
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/runtests.jl"
+        env:
+          TEST_TIER: "inference"
+        agents:
+          slurm_mem: 20G
+
+      - label: "Unit (CPU) - allocs tier"
+        key: unit_curated_suite_allocs
+        retry: *retry_policy
+        # Default bounds: allocation gates run with production flags.
+        command: "julia --color=yes --project=.buildkite test/runtests.jl"
+        env:
+          TEST_TIER: "allocs"
+        agents:
+          slurm_mem: 20G
+
+  # GPU counterpart of the curated-suite group: the same fast-tier tests on a
+  # GPU agent, where the harness drops `meta = :cpu_only` tests. `:integration`
+  # is absent from the matrix because all of its tests are `:smoke`-tier, which
+  # the tier step below runs. Multi-GPU / MPI (srun) steps are not
+  # harness-runnable and sit further below.
+  - group: "Unit: curated suite (GPU)"
+    steps:
+      - label: "Unit (GPU) - {{matrix.subsystem}}"
+        key: unit_curated_suite_gpu_matrix
+        retry: *retry_policy
+        matrix:
+          setup:
+            subsystem:
+              - "datalayouts"
+              - "utilities"
+              - "geometry"
+              - "domains"
+              - "meshes"
+              - "topologies"
+              - "quadratures"
+              - "spaces"
+              - "fields"
+              - "operators"
+              - "matrixfields"
+              - "hypsography"
+              - "limiters"
+              - "io"
+              - "remapping"
+              - "quality"
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/gpu/cuda.jl CUDA"
-        retry: *retry_policy
+          - "julia --color=yes --project=.buildkite test/runtests.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
+          TEST_SUBSYSTEM: "{{matrix.subsystem}}"
+          TEST_EXCLUDE_TIER: "conv,inference,allocs,gpu,smoke"
         agents:
           slurm_gpus: 1
+          slurm_mem: 20G
 
-      - label: "Unit: compiler stress regression"
-        key: unit_compiler_stress_regression
+      # One job per case. Several take minutes of ptxas time each, and sharing
+      # a process starves the assembler, which gets SIGKILLed partway through
+      # test_scalar_15, so they run here rather than in the curated harness.
+      - label: "Unit (GPU) - broadcasting {{matrix.case}}"
+        key: gpu_matrix_field_broadcasting
+        retry: *retry_policy
+        matrix:
+          setup:
+            case:
+              - "test_scalar_1"
+              - "test_scalar_2"
+              - "test_scalar_3"
+              - "test_scalar_4"
+              - "test_scalar_5"
+              - "test_scalar_6"
+              - "test_scalar_7"
+              - "test_scalar_8"
+              - "test_scalar_9"
+              - "test_scalar_10"
+              - "test_scalar_11"
+              - "test_scalar_12"
+              - "test_scalar_13"
+              - "test_scalar_14"
+              - "test_scalar_15"
+              - "test_scalar_16"
+              - "test_scalar_17"
+              - "test_non_scalar_1"
+              - "test_non_scalar_2"
+              - "test_non_scalar_3"
+              - "test_non_scalar_4"
+              - "test_non_scalar_5"
+          # These three are known to fail on GPU; soft_fail keeps a known
+          # failure from turning the whole matrix red.
+          adjustments:
+            - with:
+                case: "test_scalar_14"
+              soft_fail: true
+            - with:
+                case: "test_scalar_15"
+              soft_fail: true
+            - with:
+                case: "test_non_scalar_2"
+              soft_fail: true
+        command:
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/gpu_matrix_field_broadcasting.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+          MATRIX_FIELD_BROADCASTING_CASE: "{{matrix.case}}"
+        agents:
+          slurm_gpus: 1
+          slurm_mem: 20G
+
+      - label: "Unit (GPU) - :gpu tier"
+        key: unit_curated_suite_gpu
         retry: *retry_policy
         command:
-          - "julia --color=yes --project=.buildkite test/gpu/compiler_stress_regression.jl"
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/runtests.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
+          TEST_TIER: "gpu"
         agents:
           slurm_gpus: 1
+          slurm_mem: 20G
 
-  - group: "Unit: CUDA utils"
-    steps:
-
-      - label: "Unit: kernel renaming"
-        key: kernel_renaming
+      # The :inference tier is JET analysis, which is compile-time work rather than
+      # GPU work, but `Spaces/inference_spaces.jl` and
+      # `Operators/finitedifference/inference_examples.jl` carry separately
+      # calibrated CUDA branches that only this step executes.
+      # Timing only, no assertions: latency has run within ~10-20% across builds,
+      # which is useful for spotting regressions by eye but too loose to gate on.
+      - label: "Perf (GPU) - kernel launch latency"
+        key: gpu_latency_benchmarks
         retry: *retry_policy
         command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/gpu/kernel_renaming.jl"
+          - "julia --color=yes --project=.buildkite test/gpu/latency_benchmarks.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
-          CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE: "true"
         agents:
           slurm_gpus: 1
+          slurm_mem: 20G
 
-      - label: "Unit: kernel latency benchmarks"
-        key: latency_benchmarks
-        retry:
-          automatic: true
+      - label: "Unit (GPU) - :inference tier"
+        key: unit_curated_suite_gpu_inference
+        retry: *retry_policy
+        # Default bounds: JET reads the optimized IR, which changes under
+        # --check-bounds=yes.
         command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/gpu/latency_benchmarks.jl"
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite test/runtests.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
+          TEST_TIER: "inference"
         agents:
           slurm_gpus: 1
+          slurm_mem: 20G
 
-  - group: "Unit: Utilities"
+      - label: "Unit (GPU) - :smoke tier"
+        key: unit_curated_suite_gpu_smoke
+        retry: *retry_policy
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/runtests.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+          TEST_TIER: "smoke"
+        agents:
+          slurm_gpus: 1
+          slurm_mem: 20G
+
+  - group: "Unit: Multithreaded & Special Ops"
     steps:
-
-      - label: "Unit: plushalf"
-        key: unit_plushalf
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Utilities/unit_plushalf.jl"
-
-      - label: "Unit: auto_broadcaster"
-        key: unit_auto_broadcaster
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Utilities/unit_auto_broadcaster.jl"
-
-  - group: "Unit: DataLayouts"
-    steps:
-
-      - label: "Unit: data fill and copyto (1 thread)"
-        key: unit_data_fill_and_copyto
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_fill_and_copyto.jl"
-
       - label: "Unit: data fill and copyto (4 threads)"
         key: threaded_unit_data_fill_and_copyto
         retry: *retry_policy
         command: "julia --threads=4 --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_fill_and_copyto.jl"
-
-      - label: "Unit: data loops (1 thread)"
-        key: unit_data_loops
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_loops.jl"
 
       - label: "Unit: data loops (4 threads)"
         key: threaded_unit_data_loops
         retry: *retry_policy
         command: "julia --threads=4 --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_loops.jl"
 
-      - label: "Unit: mapreduce (1 thread)"
-        key: unit_data_mapreduce
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_mapreduce.jl"
-
       - label: "Unit: mapreduce (4 threads)"
         key: threaded_unit_data_mapreduce
         retry: *retry_policy
         command: "julia --threads=4 --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_mapreduce.jl"
 
-      - label: "Unit: data_opt_similar"
-        key: data_opt_similar
+      - label: "Unit: advection operator convergence"
+        key: unit_adv_conv
         retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/opt_similar.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/conv_advection_diffusion1d.jl"
 
-      - label: "Unit: data layout args"
-        key: unit_data_layout_args
+      - label: "Unit: hyb ops simulation 3d"
+        key: unit_hyb_ops_3d
         retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_layout_args.jl"
+        command:
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/simulation_3d.jl"
 
-      - label: "Unit: data layout args (1 gpu)"
-        key: gpu_unit_data_layout_args
+      # GPU twin of the step above. This file needs OrdinaryDiffEqSSPRK, which
+      # is not a test-target dependency, so it cannot run through the harness.
+      # Only the second of its three testsets picks up `ClimaComms.device()`;
+      # the other two build spaces with an explicit `CPUSingleThreaded` device.
+      - label: "Unit: hyb ops simulation 3d (GPU)"
+        key: unit_hyb_ops_3d_gpu
         retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_layout_args.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/simulation_3d.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
-      - label: "Unit: data cuda"
-        key: unit_data_cuda
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/cuda.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: data cuda threadblocks"
-        key: unit_data_threadblock
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_cuda_threadblocks.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: data fill and copyto (1 gpu)"
-        key: gpu_unit_data_fill_and_copyto
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_fill_and_copyto.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: data mapreduce (1 gpu)"
-        key: gpu_unit_data_mapreduce
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_mapreduce.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
+  - group: "Unit: Distributed (CPU & GPU MPI)"
+    steps:
       - label: "Unit: data mapreduce (2 gpus)"
         key: gpu_2_unit_data_mapreduce
         retry: *retry_policy
@@ -213,75 +330,6 @@ steps:
            slurm_gpus: 2
            modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
-  - group: "Unit: Geometry"
-    steps:
-
-      - label: "Unit: geometry"
-        key: unit_geometry
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/geometry.jl"
-
-      - label: "Unit: tensors"
-        key: unit_tensors
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/tensors.jl"
-
-      - label: "Unit: mul_with_projection"
-        key: unit_mul_with_projection
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/mul_with_projection.jl"
-
-  - group: "Unit: Meshes"
-    steps:
-
-      - label: "Unit: interval"
-        key: unit_interval
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Meshes/interval.jl"
-
-      - label: "Unit: meshes rectangle"
-        key: unit_meshes_rectangle
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Meshes/rectangle.jl"
-
-      - label: "Unit: meshes opt"
-        key: unit_meshes_opt
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Meshes/opt_meshes.jl"
-
-      - label: "Unit: meshes cubedsphere"
-        key: unit_meshes_cubed_sphere
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Meshes/cubedsphere.jl"
-
-  - group: "Unit: Topologies"
-    steps:
-
-      - label: "Unit: topo interval"
-        key: unit_topo_interval
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Topologies/interval.jl"
-
-      - label: "Unit: topo rectangle"
-        key: unit_topo_rectangle
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Topologies/rectangle.jl"
-
-      - label: "Unit: rectangle sfc"
-        key: unit_rectangle_sfc
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Topologies/rectangle_sfc.jl"
-
-      - label: "Unit: cubedsphere"
-        key: unit_cubedsphere
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Topologies/cubedsphere.jl"
-
-      - label: "Unit: cubedsphere sfc"
-        key: unit_cubedsphere_sfc
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Topologies/cubedsphere_sfc.jl"
-
       - label: "Unit: topologies distributed"
         key: unit_topologies_distributed
         retry: *retry_policy
@@ -291,45 +339,6 @@ steps:
         agents:
           slurm_ntasks: 4
           modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
-
-  - group: "Unit: Spaces"
-    steps:
-
-      - label: "Unit: Quadratures"
-        key: unit_quadrature
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Quadratures/Quadratures.jl"
-
-      - label: "Unit: spaces"
-        key: unit_spaces
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/unit_spaces.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/opt_spaces.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/unit_high_resolution_space.jl"
-
-      - label: "Unit: cuda spaces"
-        key: "gpu_cuda_spaces"
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/unit_spaces.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/opt_spaces.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/unit_high_resolution_space.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: common spaces with CUDA"
-        key: "gpu_common_cuda_spaces"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/CommonSpaces/unit_common_spaces.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
 
       - label: "Unit: common spaces with CUDA and MPI"
         key: "gpu_common_cuda_mpi_spaces"
@@ -360,51 +369,14 @@ steps:
         retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/distributed_cuda/space_construction.jl CUDA"
+          - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/distributed_cuda/space_construction.jl"
         env:
-          CLIMACOMMS_CONTEXT: "MPI"
           CLIMACOMMS_DEVICE: "CUDA"
+          CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_gpus_per_task: 1
           slurm_ntasks: 3
           modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
-
-      - label: "Unit: ddss1"
-        key: unit_ddss1
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/ddss1.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: ddss1 cs"
-        key: unit_cuda_ddss1_cs
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/ddss1_cs.jl"
-
-      - label: "Unit: ddss1 cs"
-        key: unit_ddss1_cs
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/ddss1_cs.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: sphere"
-        key: unit_sphere
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/sphere.jl"
-
-      - label: "Unit: terrain warp"
-        key: unit_terrain_warp
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/terrain_warp.jl"
 
       - label: "Unit: distributed dss2"
         key: unit_distributed_dss2
@@ -436,17 +408,10 @@ steps:
           slurm_ntasks: 4
           modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
-      - label: "Unit: distributed remapping (1 process)"
-        key: distributed_remapping_1proc
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Remapping/distributed_remapping.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CPU"
-
       - label: "Unit: distributed remapping (2 processes)"
         key: distributed_remapping_2procs
         retry: *retry_policy
-        command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Remapping/distributed_remapping.jl"
+        command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Remapping/unit_distributed_remapping.jl"
         env:
           CLIMACOMMS_CONTEXT: "MPI"
           CLIMACOMMS_DEVICE: "CPU"
@@ -454,19 +419,10 @@ steps:
           slurm_ntasks: 2
           modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
-      - label: "Unit: distributed remapping with CUDA (1 process)"
-        key: distributed_remapping_gpu_1proc
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Remapping/distributed_remapping.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
       - label: "Unit: distributed remapping with CUDA (2 processes)"
         key: distributed_remapping_gpu_2procs
         retry: *retry_policy
-        command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Remapping/distributed_remapping.jl"
+        command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Remapping/unit_distributed_remapping.jl"
         soft_fail: true
         env:
           CLIMACOMMS_CONTEXT: "MPI"
@@ -484,28 +440,6 @@ steps:
         agents:
           slurm_ntasks: 4
           modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
-
-      - label: "Unit: cuda extruded spaces"
-        key: "extruded_spaces_cuda"
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/extruded_cuda.jl CUDA"
-        artifact_paths:
-          - output/extruded_spaces_cuda
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: cuda point spaces"
-        key: "point_space_cuda"
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/point_cuda.jl CUDA"
-        artifact_paths:
-          - output/point_cuda
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
 
       - label: "Unit: cuda dss 2-process test"
         key: "gpu_ddss2_test"
@@ -597,218 +531,19 @@ steps:
           slurm_gpus: 4
           modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
-  - group: "Unit: Fields"
-    steps:
-
-      - label: "Unit: field"
-        key: unit_field
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/unit_field.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_fieldvectors.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_field_multi_broadcast_fusion.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/convergence_field_integrals.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/inference_repro.jl"
-        agents:
-          slurm_mem: 20GB
-
-      - label: "Unit: field cuda"
-        key: unit_field_cuda
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/unit_field.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_fieldvectors.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_field_multi_broadcast_fusion.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/convergence_field_integrals.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/inference_repro.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: reduction cuda"
-        key: unit_reduction_cuda
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/reduction_cuda.jl CUDA"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
       - label: "Unit: distributed reduction cuda"
         key: unit_distributed_reduction_cuda
         retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/reduction_cuda_distributed.jl"
+          - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/gpu_reduction_distributed.jl"
         env:
-          CLIMACOMMS_CONTEXT: "MPI"
           CLIMACOMMS_DEVICE: "CUDA"
+          CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_gpus_per_task: 1
           slurm_ntasks: 2
           modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
-
-  - group: "Unit: Operators"
-    steps:
-
-      - label: "Unit: rectilinear"
-        key: unit_rectilinear
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/rectilinear.jl"
-
-      - label: "Unit: diffusion2d"
-        key: unit_diffusion2d
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/unit_diffusion2d.jl"
-
-      - label: "Unit: sphere geometry"
-        key: unit_sphere_geometry
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/sphere_geometry.jl"
-
-      - label: "Unit: sphere gradient"
-        key: unit_sphere_gradient
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/sphere_gradient.jl"
-
-      - label: "Unit: sphere divergence"
-        key: unit_sphere_divergence
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/sphere_divergence.jl"
-
-      - label: "Unit: sphere curl"
-        key: unit_sphere_curl
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/sphere_curl.jl"
-
-      - label: "Unit: sphere diffusion"
-        key: unit_sphere_diffusion
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/sphere_diffusion.jl"
-
-      - label: "Unit: sphere diffusion vec"
-        key: unit_sphere_diffusion_vec
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/sphere_diffusion_vec.jl"
-
-      - label: "Unit: sphere hyperdiffusion"
-        key: unit_sphere_hyperdiffusion
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/unit_sphere_hyperdiffusion.jl"
-
-      - label: "Unit: sphere hyperdiffusion vec"
-        key: unit_sphere_hyperdiffusion_vec
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/unit_sphere_hyperdiffusion_vec.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/convergence_sphere_hyperdiffusion_vec.jl"
-
-      - label: "Unit: spec ops plane"
-        key: unit_spec_ops_plane
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/plane.jl"
-
-      - label: "Unit: split divergence"
-        key: unit_split_divergence
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/split_divergence.jl"
-
-      - label: "Unit: split divergence cuda"
-        key: unit_split_divergence_cuda
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/split_divergence.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: column"
-        key: unit_column
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_column.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/convergence_column.jl"
-
-      - label: "Unit: gpu column"
-        key: unit_gpu_column
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_column.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/convergence_column.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: gpu broadcasting"
-        key: unit_gpu_broadcasting
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/broadcasting_edge_cases.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: fd tensor"
-        key: unit_fd_tensor
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/tensor.jl"
-
-      - label: "Unit: advection operator convergence"
-        key: unit_adv_conv
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/convergence_advection_diffusion1d.jl"
-        soft_fail: true
-
-      - label: "Unit: hyb ops 2d"
-        key: unit_hyb_ops_2d
-        retry: *retry_policy
-        command:
-           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_2d.jl"
-           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/convergence_2d.jl"
-
-      - label: "Unit: hyb ops 2d CUDA"
-        key: unit_hyb_ops_2d_cuda
-        retry: *retry_policy
-        command:
-           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_2d.jl"
-           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/convergence_2d.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: hyb ops 3d"
-        key: unit_hyb_ops_3d
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_3d.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/convergence_3d.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/simulation_3d.jl"
-
-      - label: "Unit: hyb ops 3d CUDA"
-        key: unit_hyb_ops_3d_cuda
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_3d.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/convergence_3d.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/simulation_3d.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: remapping"
-        key: unit_remapping
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/remapping.jl"
 
       - label: "Unit: run sphere geometry distributed (2)"
         key: unit_run_sphere_geometry_distributed2
@@ -842,617 +577,6 @@ steps:
           slurm_mem: 20GB
           modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
-      - label: "Unit: rectilinear cuda"
-        key: unit_rectilinear_cuda
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/rectilinear_cuda.jl CUDA"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: operators on levels and extruded spaces"
-        key: unit_cuda_operators_example
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/unit_operators_examples.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: velocity grad tensor ops"
-        key: unit_spectral_tensor_op_cuda
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/covar_deriv_ops.jl CUDA"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: hybrid operators cuda"
-        key: unit_ops_cuda
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_cuda.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/simulation_cuda.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: extruded sphere cuda"
-        key: unit_extruded_sphere_cuda
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/extruded_sphere_cuda.jl CUDA"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: extruded 3dbox cuda"
-        key: unit_extruded_3dbox_cuda
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/extruded_3dbox_cuda.jl CUDA"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: Integrals (CPU)"
-        key: "cpu_integrals"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/integrals.jl"
-
-      - label: "Unit: Integrals (GPU)"
-        key: "gpu_integrals"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/integrals.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-  - group: "Unit: MatrixFields"
-    steps:
-
-      - label: "Unit: BandMatrixRow"
-        key: unit_band_matrix_row
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/band_matrix_row.jl"
-
-      - label: "Unit: field2arrays"
-        key: unit_field2arrays
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/field2arrays.jl"
-
-      - label: "Unit: matrix multiplication at boundaries"
-        key: unit_matrix_multiplication_at_boundaries
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_multiplication_at_boundaries.jl"
-
-      - label: "Unit: operator matrices (CPU)"
-        key: unit_operator_matrices_cpu
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/operator_matrices.jl"
-
-      - label: "Unit: operator matrices (GPU)"
-        key: unit_operator_matrices_gpu
-        retry: *retry_policy
-        command: "julia --color=yes --project=.buildkite test/MatrixFields/operator_matrices.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 40GB
-
-      - label: "Unit: field names"
-        key: unit_field_names
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/field_names.jl"
-
-      - label: "Unit: field matrix solvers (CPU)"
-        key: unit_field_matrix_solvers_cpu
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/field_matrix_solvers.jl"
-        agents:
-          slurm_mem: 40GB
-
-      - label: "Unit: field matrix solvers (GPU)"
-        key: unit_field_matrix_solvers_gpu
-        retry: *retry_policy
-        command: "julia --color=yes --project=.buildkite test/MatrixFields/field_matrix_solvers.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 40GB
-
-      - label: "Unit: bidiag matrix row example (CPU)"
-        key: cpu_gpu_compat_bidiag_matrix_row
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/gpu_compat_bidiag_matrix_row.jl"
-
-      - label: "Unit: bidiag matrix row example (GPU)"
-        key: gpu_compat_bidiag_matrix_row
-        retry: *retry_policy
-        command: "julia --color=yes --project=.buildkite test/MatrixFields/gpu_compat_bidiag_matrix_row.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: multiple field solve example (GPU)"
-        key: gpu_multiple_field_solve_example
-        retry: *retry_policy
-        command: "julia --color=yes --project=.buildkite test/MatrixFields/multiple_field_solve_reproducer_1.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: matrix multiplication recursion example (CPU)"
-        key: cpu_matrix_multiplication_recursion
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_multiplication_recursion.jl"
-
-      - label: "Unit: matrix multiplication recursion example (GPU)"
-        key: gpu_matrix_multiplication_recursion
-        retry: *retry_policy
-        command: "julia --color=yes --project=.buildkite test/MatrixFields/matrix_multiplication_recursion.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: field matrix indexing (CPU)"
-        key: cpu_field_matrix_indexing
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/field_matrix_indexing.jl"
-
-      - label: "Unit: field matrix indexing (GPU)"
-        key: gpu_field_matrix_indexing
-        retry: *retry_policy
-        command: "julia --color=yes --project=.buildkite test/MatrixFields/field_matrix_indexing.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-  - group: "Unit: MatrixFields - broadcasting (CPU)"
-    steps:
-
-        # scalar
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_scalar_1
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_1.jl"
-
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_scalar_2
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_2.jl"
-
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_scalar_3
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_3.jl"
-
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_scalar_4
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_4.jl"
-
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_scalar_5
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_5.jl"
-
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_scalar_6
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_6.jl"
-
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_scalar_7
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_7.jl"
-
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_scalar_8
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_8.jl"
-
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_scalar_9
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_9.jl"
-
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_scalar_10
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_10.jl"
-
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_scalar_11
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_11.jl"
-
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_scalar_12
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_12.jl"
-
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_scalar_13
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_13.jl"
-
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_scalar_14
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_14.jl"
-
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_scalar_15
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_15.jl"
-
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_scalar_16
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_16.jl"
-
-        # non-scalar
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_non_scalar_1
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_1.jl"
-
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_non_scalar_2
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_2.jl"
-
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_non_scalar_3
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_3.jl"
-
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_non_scalar_4
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_4.jl"
-
-      - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_non_scalar_5
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_5.jl"
-        soft_fail: true
-
-  - group: "Unit: MatrixFields - broadcasting (GPU)"
-    steps:
-
-        # scalar
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_scalar_1
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_1.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_scalar_2
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_2.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_scalar_3
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_3.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_scalar_4
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_4.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_scalar_5
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_5.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_scalar_6
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_6.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_scalar_7
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_7.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_scalar_8
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_8.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_scalar_9
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_9.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_scalar_10
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_10.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_scalar_11
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_11.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_scalar_12
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_12.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_scalar_13
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_13.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_scalar_14
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_14.jl"
-        soft_fail: true
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_scalar_15
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_15.jl"
-        soft_fail: true
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_scalar_16
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_16.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_scalar_17
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_17.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-        # non-scalar
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_non_scalar_1
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_1.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_non_scalar_2
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_2.jl"
-        soft_fail: true
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_non_scalar_3
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_3.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_non_scalar_4
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_4.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-      - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_non_scalar_5
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_5.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 10GB
-
-  - group: "Unit: Hypsography"
-    steps:
-
-      - label: "Unit: hypsography 2d"
-        key: unit_hypsography_2d
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Hypsography/2d.jl"
-
-      - label: "Unit: 3dsphere"
-        key: unit_3dsphere
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Hypsography/3dsphere.jl"
-
-  - group: "Unit: InputOutput"
-    steps:
-
-      - label: "Unit: read_type"
-        key: unit_read_type
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_read_type.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-          slurm_mem: 3GB
-
-      - label: "Unit: spectralelement2d"
-        key: unit_spectralelement2d
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_spectralelement2d.jl"
-
-      - label: "Unit: spectralelement2d"
-        key: unit_spectralelement2d_gpu
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_spectralelement2d.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: hybrid2dbox"
-        key: unit_hybrid2dbox
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid2dbox.jl"
-
-      - label: "Unit: hybrid2dbox topography"
-        key: unit_hybrid2dbox_topography
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid2dbox_topography.jl"
-
-      - label: "Unit: hybrid2dbox stretched"
-        key: unit_hybrid2dbox_stretched
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid2dbox_stretched.jl"
-
-      - label: "Unit: hybrid3dbox"
-        key: unit_hybrid3dbox
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid3dbox.jl"
-
-      - label: "Unit: hybrid3dcubedsphere"
-        key: unit_hybrid3dcubedsphere
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid3dcubedsphere.jl"
-
-      - label: "Unit: hybrid3dcubedsphere topography"
-        key: unit_hybrid3dcubedsphere_topography
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid3dcubedsphere_topography.jl"
-
-      - label: "Unit: hybrid3dcubedsphere topography"
-        key: unit_hybrid3dcubedsphere_topography_gpu
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid3dcubedsphere_topography.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: finitedifference"
-        key: unit_finitedifference
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_finitedifference.jl"
-
       - label: "Unit: Parallel HDF5 IO tests"
         key: "cpu_parallel_hdf5"
         command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/InputOutput/unit_hybrid3dcubedsphere.jl"
@@ -1466,33 +590,6 @@ steps:
           slurm_tasks_per_node: 1
           modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
-  - group: "Unit: Remapping"
-    steps:
-
-      - label: "Unit: interpolate array"
-        key: unit_interpolate_array
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Remapping/interpolate_array.jl"
-
-  - group: "Unit: Limiters"
-    steps:
-
-      - label: "Unit: limiter"
-        key: unit_limiter
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Limiters/limiter.jl"
-
-      - label: "Unit: limiter cuda"
-        key: unit_limiter_gpu
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --project=.buildkite test/Limiters/limiter.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
       - label: "Unit: distributed limiters"
         key: unit_limiters_distributed
         retry: *retry_policy
@@ -1502,46 +599,6 @@ steps:
         agents:
           slurm_ntasks: 3
           modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
-
-      - label: "Unit: limiter mass borrowing"
-        key: unit_limiter_mass_borrowing
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Limiters/vertical_mass_borrowing_limiter.jl"
-        artifact_paths:
-          - "test/Limiters/output/vert_mass_borrow/CPU/*"
-
-      - label: "Unit: mass borrowing limiter cuda"
-        key: unit_limiter_mass_borrowing_gpu
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --project=.buildkite test/Limiters/vertical_mass_borrowing_limiter.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-        artifact_paths:
-          - "test/Limiters/output/vert_mass_borrow/GPU/*"
-
-      - label: "Unit: limiter mass borrowing advection"
-        key: unit_limiter_mass_borrowing_advection
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Limiters/vertical_mass_borrowing_limiter_advection.jl"
-        artifact_paths:
-          - "test/Limiters/output/vert_mass_borrow_advection/CPU/*"
-
-      - label: "Unit: mass borrowing limiter advection cuda"
-        key: unit_limiter_mass_borrowing_advection_gpu
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --project=.buildkite test/Limiters/vertical_mass_borrowing_limiter_advection.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-        artifact_paths:
-          - "test/Limiters/output/vert_mass_borrow_advection/GPU/*"
 
   # TODO: improve performance label: [inference, allocs, flops, latency, benchmark, boundscheck]
   # TODO: use perf env for perf jobs, or merge test/perf envs
@@ -1563,7 +620,7 @@ steps:
         retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_loops.jl"
 
-      - label: "Perf: DataLayouts fill"
+      - label: "Perf: DataLayouts fill (gpu)"
         key: "gpu_datalayouts_fill"
         retry: *retry_policy
         command:
@@ -1574,7 +631,7 @@ steps:
         agents:
           slurm_gpus: 1
 
-      - label: "Perf: DataLayouts copyto"
+      - label: "Perf: DataLayouts copyto (gpu)"
         key: "gpu_datalayouts_copyto"
         retry: *retry_policy
         command:
@@ -1585,7 +642,7 @@ steps:
         agents:
           slurm_gpus: 1
 
-      - label: "Perf: DataLayouts loops"
+      - label: "Perf: DataLayouts loops (gpu)"
         key: "gpu_datalayouts_loops"
         retry: *retry_policy
         command:
@@ -1599,10 +656,24 @@ steps:
   - group: "Perf: Fields"
     steps:
 
-      - label: "Perf: Field broadcast"
-        key: "cpu_field_perf"
+      - label: "Perf: FieldVector copyto + broadcast fusion"
+        key: "cpu_field_benchmarks"
         retry: *retry_policy
-        command: "julia --color=yes --project=.buildkite test/Fields/field_opt.jl"
+        command:
+          - "julia --color=yes --project=.buildkite test/Fields/benchmark_fieldvectors.jl"
+          - "julia --color=yes --project=.buildkite test/Fields/benchmark_field_multi_broadcast_fusion.jl"
+
+      - label: "Perf: FieldVector copyto + broadcast fusion (gpu)"
+        key: "gpu_field_benchmarks"
+        retry: *retry_policy
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite test/Fields/benchmark_fieldvectors.jl"
+          - "julia --color=yes --project=.buildkite test/Fields/benchmark_field_multi_broadcast_fusion.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
 
   - group: "Perf: Benchmark scripts"
     steps:
@@ -1624,17 +695,6 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite benchmarks/scripts/indexing_and_static_ndranges.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Perf: benchmark scripts thermo_bench_bw"
-        key: thermo_bench_bw
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --project=.buildkite benchmarks/scripts/thermo_bench_bw.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -1665,22 +725,11 @@ steps:
   - group: "Perf: Operators"
     steps:
 
-      - label: "Perf: SEM operators"
-        key: perf_SEM
-        retry: *retry_policy
-        command: "julia --color=yes --project=.buildkite test/Operators/spectralelement/opt.jl"
-
-      - label: "Perf: FD operators"
-        key: perf_FD
-        retry: *retry_policy
-        command: "julia --color=yes --project=.buildkite test/Operators/finitedifference/opt.jl"
-
-        # TODO: combine this with FD operators above
       - label: "Perf: FD operators from the wild"
         key: perf_FD_ops_examples
         retry: *retry_policy
+        # inference_examples runs in the curated :inference tier job.
         command:
-          - "julia --color=yes --project=.buildkite test/Operators/finitedifference/opt_examples.jl"
           - "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_examples.jl"
 
       - label: "Perf: FD operators from the wild (gpu)"
@@ -1688,22 +737,12 @@ steps:
         retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --project=.buildkite test/Operators/finitedifference/opt_examples.jl"
+          - "julia --color=yes --project=.buildkite test/Operators/finitedifference/inference_examples.jl"
           - "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_examples.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
-
-      - label: "Perf: dss"
-        key: perf_dss
-        retry: *retry_policy
-        command: "julia --color=yes --project=.buildkite test/Operators/hybrid/dss_opt.jl"
-
-      - label: "Perf: hybrid operators"
-        key: perf_hybrid_ops
-        retry: *retry_policy
-        command: "julia --color=yes --project=.buildkite test/Operators/hybrid/opt.jl"
 
       - label: "Perf: FD operator stencil benchmarks"
         key: "perf_fd_ops"
@@ -1760,23 +799,6 @@ steps:
         retry: *retry_policy
         command: "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --float-type Float64 --space-type ExtrudedFiniteDifferenceSpace"
 
-      - label: "Perf: SEM operator benchmarks"
-        key: "perf_gpu_spectral_ops"
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Perf: Integrals (CPU)"
-        key: "cpu_integrals_perf"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite test/Operators/integrals.jl"
-
   - group: "Examples: Column"
     steps:
 
@@ -1804,14 +826,11 @@ steps:
         artifact_paths:
           - "examples/column/output/advect/*"
 
-      - label: ":computer: Column FCT Advection Eq"
-        key: "cpu_fct_column_advect"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/column/fct_advection.jl"
-        artifact_paths:
-          - "examples/column/output/fct_advection/*"
-
+      # The fct / bb_fct / zalesak_fct column-advection cases are covered by
+      # test/Integration/smoke_column_advection.jl, with the same accuracy and
+      # mass-conservation assertions. tvd_advection and the van Leer example
+      # (which also covers AlgebraicMean, the stretched mesh, and the GPU path)
+      # are not, so they run here.
       - label: ":computer: Column TVD Slope-limited Advection Eq"
         key: "cpu_tvd_column_advect"
         retry: *retry_policy
@@ -1839,22 +858,6 @@ steps:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
-
-      - label: ":computer: Column BB FCT Advection Eq"
-        key: "cpu_bb_fct_column_advect"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite examples/column/bb_fct_advection.jl"
-        artifact_paths:
-          - "examples/column/output/bb_fct_advection/*"
-
-      - label: ":computer: Column Zalesak FCT Advection Eq"
-        key: "cpu_zalesak_fct_column_advect"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite examples/column/zalesak_fct_advection.jl"
-        artifact_paths:
-          - "examples/column/output/zalesak_fct_advection/*"
 
       - label: ":computer: Column Advection Diffusion Eq"
         key: "cpu_column_advect_diff"

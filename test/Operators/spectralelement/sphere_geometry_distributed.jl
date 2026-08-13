@@ -31,7 +31,7 @@ end
     context = ClimaComms.MPICommsContext()
     pid, nprocs = ClimaComms.init(context)
     iamroot = ClimaComms.iamroot(context)
-    # log output only from root process
+    # Log output only from root process
     logger_stream = iamroot ? stderr : devnull
     prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
     atexit() do
@@ -41,7 +41,7 @@ end
     if iamroot
         println("running sphere_geometry_distributed using $nprocs processes")
     end
-    # test different combinations of odd/even to ensure pole is correctly
+    # Test different combinations of odd/even to ensure pole is correctly
     # handled
     for Ne in (4, 5), Nq in (4, 5)
         FT = Float64
@@ -56,7 +56,7 @@ end
         )
         quad = Quadratures.GLL{Nq}()
         space = Spaces.SpectralElementSpace2D(grid_topology, quad)
-        # for comparison with serial results
+        # For comparison with serial results
         grid_topology_serial =
             Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
         space_serial = Spaces.SpectralElementSpace2D(grid_topology_serial, quad)
@@ -64,10 +64,10 @@ end
         surface_area = sum(ones(space))
         surface_area_serial = sum(ones(space_serial))
         @test surface_area ≈ 4pi * radius^2 rtol = 1e-3
-        # check if distributed and serial results match
+        # Check if distributed and serial results match
         @test surface_area ≈ surface_area_serial
         for α in [0.0, 45.0, 90.0]
-            # test on divergence
+            # Test on divergence
             div = Operators.Divergence()
             u = rotational_field(space, α)
             divu2 = Spaces.weighted_dss!(div.(deepcopy(u)))
@@ -77,14 +77,14 @@ end
             divu_serial = Spaces.weighted_dss!(div.(u_serial))
             norm_divu_serial = norm(divu_serial)
             @test norm_divu2 < 1e-2
-            # check if distributed and serial results match
+            # Check if distributed and serial results match
             @test norm_divu2 ≈ norm_divu_serial
 
-            # test dss on UVcoordinates
+            # Test dss on UVcoordinates
             uu2 = Spaces.weighted_dss!(deepcopy(u))
             @test norm(uu2 .- u) < 1e-14
 
-            # test dss on Covariant12Vector
+            # Test dss on Covariant12Vector
             uᵢ = Geometry.transform.(Ref(Geometry.Covariant12Axis()), u)
             uuᵢ2 = Spaces.weighted_dss!(deepcopy(uᵢ))
             @test norm(uuᵢ2 .- uᵢ) < 1e-14

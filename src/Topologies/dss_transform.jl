@@ -196,6 +196,11 @@ function fill_send_buffer!(
     data::DataLayouts.DataLayout,
     ghost_buffer::GhostBuffer,
 )
+    # NOTE: this copies one element per iteration, which is a separate kernel
+    # launch per send element when the arrays live on a GPU. That is
+    # inconsequential at the element counts this is currently used with (the
+    # limiter's ghost exchange), but a single gather over `send_elem_lidx`
+    # would be preferable if it is ever used with many send elements.
     # The parent array stores H at dim 4 or 5, depending on where F is
     h_dim = DataLayouts.f_dim(data) == 5 ? 4 : 5
     send_array = parent(ghost_buffer.send_data)
