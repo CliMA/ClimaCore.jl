@@ -293,16 +293,16 @@ collect_kernel_stats() = false
 # single package sees it coming. Making it observable is cheap, because
 # `launch_configuration` already queries register pressure per kernel.
 #
-# Controlled by `CLIMACORE_REGISTER_PRESSURE`:
+# Controlled by `CLIMA_CHECK_REGISTER_PRESSURE`:
 #   off   (default) no cost beyond an env lookup
 #   warn            log once per kernel
 #   error           raise, so CI cannot ignore it
 #
-# `CLIMACORE_REGISTER_PRESSURE_LIMIT` sets the register threshold (default 255,
+# `CLIMA_CHECK_REGISTER_PRESSURE_LIMIT` sets the register threshold (default 255,
 # the sm_20+ architectural maximum). Lower it to catch kernels approaching the
 # cap rather than sitting on it.
 #
-# `CLIMACORE_REGISTER_PRESSURE_IGNORE` is a comma-separated list of substrings;
+# `CLIMA_IGNORE_REGISTER_PRESSURE` is a comma-separated list of substrings;
 # a kernel whose name matches any of them is skipped. Without an escape hatch a
 # hard error gets switched off wholesale the first time it fires on a kernel
 # somebody already knows about.
@@ -315,20 +315,20 @@ const REGISTER_PRESSURE_LOCK = ReentrantLock()
 const MAX_REGISTERS_PER_THREAD = 255
 
 function register_pressure_action()
-    raw = lowercase(strip(get(ENV, "CLIMACORE_REGISTER_PRESSURE", "off")))
+    raw = lowercase(strip(get(ENV, "CLIMA_CHECK_REGISTER_PRESSURE", "off")))
     (isempty(raw) || raw in ("off", "false", "0", "no")) && return :off
     raw in ("warn", "warning", "true", "1", "yes") && return :warn
     raw in ("error", "strict") && return :error
-    @warn "Unrecognized CLIMACORE_REGISTER_PRESSURE=$(raw); treating as off" maxlog = 1
+    @warn "Unrecognized CLIMA_CHECK_REGISTER_PRESSURE=$(raw); treating as off" maxlog = 1
     return :off
 end
 
 function register_pressure_limit()
-    raw = get(ENV, "CLIMACORE_REGISTER_PRESSURE_LIMIT", nothing)
+    raw = get(ENV, "CLIMA_CHECK_REGISTER_PRESSURE_LIMIT", nothing)
     raw === nothing && return MAX_REGISTERS_PER_THREAD
     parsed = tryparse(Int, strip(raw))
     if parsed === nothing || parsed <= 0
-        @warn "Invalid CLIMACORE_REGISTER_PRESSURE_LIMIT=$(raw); using $(MAX_REGISTERS_PER_THREAD)" maxlog =
+        @warn "Invalid CLIMA_CHECK_REGISTER_PRESSURE_LIMIT=$(raw); using $(MAX_REGISTERS_PER_THREAD)" maxlog =
             1
         return MAX_REGISTERS_PER_THREAD
     end
@@ -336,7 +336,7 @@ function register_pressure_limit()
 end
 
 function register_pressure_ignored(name)
-    raw = get(ENV, "CLIMACORE_REGISTER_PRESSURE_IGNORE", "")
+    raw = get(ENV, "CLIMA_IGNORE_REGISTER_PRESSURE", "")
     isempty(strip(raw)) && return false
     s = string(name)
     return any(p -> !isempty(p) && occursin(p, s), strip.(split(raw, ",")))
@@ -412,7 +412,7 @@ function check_register_pressure(kernel, kernel_name, f!::F!, args) where {F!}
 
     # Deduplicate warnings only. An error must always raise: otherwise a kernel
     # that was warned about earlier in the process could never fail the build,
-    # which silently defeats CLIMACORE_REGISTER_PRESSURE=error.
+    # which silently defeats CLIMA_CHECK_REGISTER_PRESSURE=error.
     if action === :warn
         key = (objectid(f!), name, registers)
         lock(REGISTER_PRESSURE_LOCK)
@@ -443,8 +443,8 @@ function check_register_pressure(kernel, kernel_name, f!::F!, args) where {F!}
             "There is no headroom: any further register pressure, from this package " *
             "or any other package contributing to this broadcast, must spill to " *
             "off-chip memory.",
-            "Set CLIMACORE_REGISTER_PRESSURE=off to disable, or add a substring of " *
-            "the kernel name to CLIMACORE_REGISTER_PRESSURE_IGNORE.",
+            "Set CLIMA_CHECK_REGISTER_PRESSURE=off to disable, or add a substring of " *
+            "the kernel name to CLIMA_IGNORE_REGISTER_PRESSURE.",
         ],
         "\n",
     )
