@@ -43,10 +43,9 @@ and what is opt-in.
 | tier         | prefix        | what it is                                                                 |
 |--------------|---------------|----------------------------------------------------------------------------|
 | `:unit`      | `unit_`       | Fast, high-coverage correctness tests (`Float64`, and `Float32` where cheap). The default run. |
-| `:inference` | `inference_`  | Type-stability / `@inferred` / JET regression gates. Kept separate because inference checks are slower. |
+| `:inference` | `inference_`  | Type-stability gates: `@inferred`, JET `@test_opt`, and flop counts. Kept separate because inference checks are slower. Run under both `--check-bounds` settings, since JET reads the optimized IR and an out-of-bounds check that only fails to compile under one setting is what we want to catch. |
 | `:allocs`    | `allocs_`     | Runtime-allocation regression tests (warm-up + `@allocated == 0`). Requires running code twice, so separate from `:unit`. |
 | `:conv`      | `conv_`       | Convergence tests. Run the code at several resolutions to verify a theoretical convergence rate. |
-| `:opt`       | `opt_`        | Optimization / JET `@test_opt` / flop-counting checks. Run with default bounds checking in CI (JET's optimized-IR checks depend on the bounds flag). |
 | `:smoke`     | `smoke_`      | Short end-to-end integrations (a few steps of a real driver) that assert conservation / error bounds. |
 | `:gpu`       | `gpu_`        | GPU-only tests (CPU-vs-GPU comparison, CUDA kernels). Skipped unless a CUDA device is present. Files under `test/gpu/` need no prefix. |
 | `:misc`      | —             | Quality gates that don't fit above (Aqua, deprecations).                   |
@@ -58,7 +57,7 @@ takes minutes rather than seconds, usually from compiling many layout or space
 specializations, or from building large spaces.
 
 Marking a test slow does not reduce coverage anywhere it matters: Buildkite
-shards the suite across parallel agents and runs everything. The marker is
+splits the suite across parallel agents and runs everything. The marker is
 read only by the GitHub Actions job, which checks portability across Julia
 versions and operating systems on a single two-core runner per version under a
 wall-clock limit, and which sets `TEST_EXCLUDE_SLOW=true`.
@@ -126,7 +125,7 @@ folder.
 ## Naming conventions
 
  - Folder = subsystem: `test/<Subsystem>/`.
- - Filename prefix = tier: `unit_`, `inference_`, `allocs_`, `conv_`, `opt_`,
+ - Filename prefix = tier: `unit_`, `inference_`, `allocs_`, `conv_`,
    `smoke_`, `gpu_`, `benchmark_`, or `utils_` for shared helpers.
  - Split argument construction from the test itself. A `utils_*.jl` file (or a
    shared constructor in `TestUtilities`/`CommonSpaces`/`CommonGrids`) should
@@ -168,10 +167,10 @@ block in `runtests.jl`). Set them in the shell (or via `ENV`) before invoking:
 | variable                | effect                                                        |
 |-------------------------|---------------------------------------------------------------|
 | `TEST_TIER`             | run only a given tier, e.g. `TEST_TIER=conv`                  |
-| `TEST_EXCLUDE_TIER`     | drop tiers (comma-separated), e.g. `TEST_EXCLUDE_TIER=conv,opt` |
+| `TEST_EXCLUDE_TIER`     | drop tiers (comma-separated), e.g. `TEST_EXCLUDE_TIER=conv,inference` |
 | `TEST_SUBSYSTEM`        | run only a given subsystem, e.g. `TEST_SUBSYSTEM=operators`   |
 | `TEST_TAG`              | case-insensitive substring match on test name or filename, e.g. `TEST_TAG=dss` |
-| `TEST_FAST=true`        | run only the `:unit` tier (drops conv/opt/smoke/...)          |
+| `TEST_FAST=true`        | run only the `:unit` tier (drops conv/inference/smoke/...)          |
 | `TEST_EXCLUDE_SLOW=true` | drop tests marked `slow = true` (see "Cost" below)           |
 | `TEST_FAIL_FAST=false`  | run all tests and summarize failures at the end (default stops at the first failing file) |
 | `CLIMACORE_TEST_OPT=true` | also run the CI-only opt checks (JET + allocation gates) embedded in the MatrixFields broadcasting tests. These default to on only under Buildkite (`ENV["BUILDKITE"]`), so a plain local run skips them — set this before trusting a local green run to predict CI. |

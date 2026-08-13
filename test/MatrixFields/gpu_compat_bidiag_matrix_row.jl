@@ -88,8 +88,8 @@ function foo(c, f)
 end
 
 # The upwinded stencil, written as a single fused broadcast expression. The
-# conversion goes through `ConvertTo{T}`, an empty struct, rather than the
-# obvious `Base.Fix1(convert, T)`: the latter stores a `Type` field and so is
+# conversion goes through `ConvertTo{T}`, an empty struct, rather than
+# `Base.Fix1(convert, T)`: the latter stores a `Type` field and so is
 # not a bitstype, which a fused broadcast cannot compile for the GPU.
 function fused_stencil!(c, f)
     (; ᶠtridiagonal_matrix_c3) = f

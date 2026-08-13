@@ -121,6 +121,10 @@ end
         end
     end
     @testset "component views across multiple elements" begin
+        # Float64 only: the stride arithmetic under test does not depend on the
+        # element type, and the layouts below are built from `Tuple{Float64,
+        # Float64}`.
+        A = ClimaComms.array_type(device){Float64}
         # Component views read their parents with a constant stride, which must
         # step over every component stored in the parent. A wrong step blends
         # entries of different components, but only at points beyond the first

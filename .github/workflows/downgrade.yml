@@ -44,10 +44,11 @@ jobs:
         env:
           # downgrade promotes `[extras]` into `[deps]`, which makes those
           # test-only deps look stale to Aqua (see test/aqua.jl). This also
-          # drops the :opt tier, whose JET counts are pinned to the Manifest
-          # and drift under forced-oldest dependencies (see test/runtests.jl).
+          # drops the :inference tier, whose JET counts are pinned to the
+          # Manifest and drift under forced-oldest dependencies (see
+          # test/runtests.jl).
           CLIMACORE_DOWNGRADE_TESTS: "true"
           # Same two-core runners as UnitTests.yml, twice over, so skip the same
           # tiers and `slow` tests.
-          TEST_EXCLUDE_TIER: "conv,opt,allocs,smoke"
+          TEST_EXCLUDE_TIER: "conv,inference,allocs,smoke"
           TEST_EXCLUDE_SLOW: "true"

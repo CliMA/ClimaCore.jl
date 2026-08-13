@@ -241,7 +241,7 @@ function CenterExtrudedFiniteDifferenceSpace(
     )
 
     hypsography = if topography
-        # Some non-trivial function of latitude and longitude
+        # A function of latitude and longitude
         H = (zlim[2] - zlim[1]) / zelem
         (; lat, long) = Fields.coordinate_field(hspace)
         surface_elevation =
@@ -387,7 +387,7 @@ code.
 broadcasts allocation-free, so under it a zero-allocation sentinel measures the
 flag rather than the code (a spectral-element gradient goes from 0 to ~14 kB).
 The GitHub Actions job runs the suite through `Pkg.test`, which passes
-`--check-bounds=yes`; Buildkite's curated shards do not, so the sentinels still
+`--check-bounds=yes`; Buildkite's curated jobs do not, so the sentinels still
 gate there.
 """
 allocation_checks_meaningful() = Base.JLOptions().check_bounds == 0

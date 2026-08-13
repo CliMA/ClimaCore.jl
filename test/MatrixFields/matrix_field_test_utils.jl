@@ -140,7 +140,7 @@ const CUDA_FRAMES =
         # arrays, whose `mapreduce` accumulator inference cannot resolve. The
         # dispatches are reported against `Base` frames reached through
         # GPUArrays, so only `AnyFrameModule`, which matches any frame in the
-        # stack rather than just the innermost, excludes them.
+        # stack rather than the innermost, excludes them.
         AnyFrameModule(CUDA_MOD.GPUArrays),
     ) : ()
 const cublas_frames = USING_CUDA ? (AnyFrameModule(CUDA_MOD.CUBLAS),) : ()

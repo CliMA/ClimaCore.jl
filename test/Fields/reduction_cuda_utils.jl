@@ -8,7 +8,7 @@ function set_initial_condition(space)
     return Y
 end
 
-# Set simple field
+# Set field
 function set_simple_field(space)
     α0 = 45.0
     h0 = 1.0

@@ -55,9 +55,9 @@ jobs:
           coverage: ${{ matrix.version == '1.10' && matrix.os == 'ubuntu-latest' }}
         env:
           # Portability check across Julia versions and operating systems, on one
-          # two-core runner each. Buildkite shards the same suite and runs the
+          # two-core runner each. Buildkite splits the same suite and runs the
           # tiers excluded here, which repeat their cases or run end-to-end.
-          TEST_EXCLUDE_TIER: "conv,opt,allocs,smoke"
+          TEST_EXCLUDE_TIER: "conv,inference,allocs,smoke"
           # `slow` marks the multi-minute tests (see test/tabulated_tests.jl).
           TEST_EXCLUDE_SLOW: "true"
       - uses: julia-actions/julia-processcoverage@latest

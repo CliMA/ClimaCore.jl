@@ -1,10 +1,5 @@
 using Test
-const HAVE_PRETTY_TABLES = try
-    using PrettyTables
-    true
-catch
-    false
-end
+using PrettyTables
 
 
 """
@@ -14,13 +9,13 @@ A unit test, given:
  - `name::String` the name of the unit test
  - `filename::String` the filename of the unit test
  - `meta::Any` meta information for the test
- - `tier::Symbol` test tier (:unit, :inference, :allocs, :conv, :opt, :smoke, :gpu, :misc)
+ - `tier::Symbol` test tier (:unit, :inference, :allocs, :conv, :smoke, :gpu, :misc)
  - `subsystem::Symbol` domain subsystem (:datalayouts, :geometry, :domains, :meshes, :topologies, :quadratures, :spaces, :fields, :operators, :matrixfields, :hypsography, :limiters, :io, :remapping, :integration, :gpu, :quality, :utilities, :other)
  - `slow::Bool` the test costs minutes rather than seconds, from compiling many
    layout/space specializations or from building large spaces. `tier` says what
-   a test checks; `slow` says what it costs. Buildkite runs these (it shards
-   across parallel agents), but the GitHub Actions job — one slow two-core
-   runner per Julia version, under a wall-clock limit — excludes them with
+   a test checks; `slow` says what it costs. Buildkite runs these, splitting
+   the suite across parallel agents; the GitHub Actions job is one two-core
+   runner per Julia version under a wall-clock limit, and excludes them with
    `TEST_EXCLUDE_SLOW`. Mark a test slow only with a measurement to back it up.
 """
 mutable struct UnitTest
@@ -48,7 +43,7 @@ UnitTest(
     filter_tests(unit_tests::Vector{UnitTest}; tier = nothing, exclude_tier = nothing, subsystem = nothing, tag = nothing, fast::Bool = false, exclude_slow::Bool = false)
 
 Filters unit tests based on tier, excluded tier(s) (comma-separated, e.g.
-`"conv,opt"`), subsystem, case-insensitive substring match, or `slow`.
+`"conv,inference"`), subsystem, case-insensitive substring match, or `slow`.
 """
 function filter_tests(
     unit_tests::Vector{UnitTest};
@@ -211,20 +206,13 @@ function tabulate_tests(
         data =
             hcat(map(x -> x.name, unit_tests), map(x -> x.filename, unit_tests))
     end
-    if HAVE_PRETTY_TABLES
-        PrettyTables.pretty_table(
-            data;
-            title,
-            column_labels = header,
-            alignment = :l,
-            fit_table_in_display_horizontally = false,
-        )
-    else
-        println("\n=== ", title, " ===")
-        for i in 1:size(data, 1)
-            println(join(data[i, :], " | "))
-        end
-    end
+    PrettyTables.pretty_table(
+        data;
+        title,
+        column_labels = header,
+        alignment = :l,
+        fit_table_in_display_horizontally = false,
+    )
 end
 
 

@@ -98,18 +98,14 @@ end
         # finite difference spaces).
         z = zeros(FT, z_elem)
         z .= Array(parent(c_coords))
-        ClimaComms.allowscalar(ClimaComms.device()) do
-            @test z == [c_coords[v, 1, 1, 1].z for v in 1:z_elem]
-        end
+        @test z == [c_coords[v, 1, 1, 1].z for v in 1:z_elem]
         f_coords = Spaces.coordinates_data(Spaces.FaceFiniteDifferenceSpace(c_space))
         z_bnds = zeros(FT, 2, z_elem)
         f_coords_cpu = Array(parent(f_coords))
         z_bnds[1, :] .= f_coords_cpu[1:(end - 1)]
         z_bnds[2, :] .= f_coords_cpu[2:end]
-        ClimaComms.allowscalar(ClimaComms.device()) do
-            @test z_bnds[1, :] == [f_coords[v, 1, 1, 1].z for v in 1:z_elem]
-            @test z_bnds[2, :] == [f_coords[v + 1, 1, 1, 1].z for v in 1:z_elem]
-        end
+        @test z_bnds[1, :] == [f_coords[v, 1, 1, 1].z for v in 1:z_elem]
+        @test z_bnds[2, :] == [f_coords[v + 1, 1, 1, 1].z for v in 1:z_elem]
 
         # Copying the parent array of a column slice into a matrix row
         # (TempestRemap's setindex!(::CFVariable, ::ExtrudedFiniteDifferenceField,

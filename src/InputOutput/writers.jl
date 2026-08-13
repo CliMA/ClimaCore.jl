@@ -578,7 +578,7 @@ function write!(
 end
 
 function write_plain_array!(group, array::AbstractArray, name::AbstractString)
-    array_cpu = Array(array)
+    array_cpu = array isa Array ? array : Array(array)
     nd = ndims(array_cpu)
     dims = size(array_cpu)
     localidx = ntuple(d -> (:), nd)

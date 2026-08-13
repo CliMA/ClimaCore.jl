@@ -21,7 +21,7 @@ steps:
       - echo "--- Instantiate buildkite env"
       - "julia --project=.buildkite --check-bounds=yes -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true); Pkg.status()'"
       # Precompile caches are keyed by the bounds-check flag; also warm the
-      # default-bounds cache used by the curated :opt/:allocs tier jobs.
+      # default-bounds cache used by the curated :inference/:allocs tier jobs.
       - "julia --project=.buildkite -e 'using Pkg; Pkg.precompile(;strict=true)'"
       - "julia --project=.buildkite -e 'using CUDA; CUDA.precompile_runtime()'"
 
@@ -36,13 +36,15 @@ steps:
 
   # `test/runtests.jl` is the source of truth for the suite. The CPU groups run
   # it end-to-end:
-  #  - one job per subsystem for the fast tiers (:unit/:inference/:smoke/:misc),
-  #    sharded via TEST_SUBSYSTEM, under default bounds checking: the :unit tier
+  #  - one job per subsystem for the fast tiers (:unit/:smoke/:misc),
+  #    split via TEST_SUBSYSTEM, under default bounds checking: the :unit tier
   #    embeds zero-allocation assertions, and `--check-bounds=yes` disables
   #    @inbounds elision and adds allocations that are not otherwise there;
   #  - a bounds-checked job for :conv (pure numerics, no allocation gates);
-  #  - default-bounds jobs for :opt (JET reads optimized IR, which depends on
-  #    the bounds-check flag) and :allocs.
+  #  - :inference under both bounds settings (JET reads optimized IR, which
+  #    depends on the flag, and an out-of-bounds check that fails to compile
+  #    under only one of them would otherwise go unnoticed);
+  #  - a default-bounds job for :allocs.
   # GPU-only tests are filtered out on CPU agents; `meta = :distributed` tests
   # are filtered out on single-rank runs and driven by the srun steps below.
   - group: "Unit: curated suite (CPU)"
@@ -76,7 +78,7 @@ steps:
         command: "julia --color=yes --project=.buildkite test/runtests.jl"
         env:
           TEST_SUBSYSTEM: "{{matrix.subsystem}}"
-          TEST_EXCLUDE_TIER: "conv,opt,allocs"
+          TEST_EXCLUDE_TIER: "conv,inference,allocs"
         agents:
           slurm_mem: 20G
 
@@ -89,14 +91,23 @@ steps:
         agents:
           slurm_mem: 20G
 
-      - label: "Unit (CPU) - opt tier"
-        key: unit_curated_suite_opt
+      - label: "Unit (CPU) - inference tier"
+        key: unit_curated_suite_inference
         retry: *retry_policy
-        # Default bounds: the :opt tier's JET @test_opt checks inspect the
-        # optimized IR, which changes under --check-bounds=yes.
+        # JET reads the optimized IR, which changes with the bounds-check flag,
+        # so run the tier under both settings.
         command: "julia --color=yes --project=.buildkite test/runtests.jl"
         env:
-          TEST_TIER: "opt"
+          TEST_TIER: "inference"
+        agents:
+          slurm_mem: 20G
+
+      - label: "Unit (CPU) - inference tier (bounds-checked)"
+        key: unit_curated_suite_inference_bc
+        retry: *retry_policy
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/runtests.jl"
+        env:
+          TEST_TIER: "inference"
         agents:
           slurm_mem: 20G
 
@@ -145,7 +156,7 @@ steps:
         env:
           CLIMACOMMS_DEVICE: "CUDA"
           TEST_SUBSYSTEM: "{{matrix.subsystem}}"
-          TEST_EXCLUDE_TIER: "conv,opt,allocs,gpu,smoke"
+          TEST_EXCLUDE_TIER: "conv,inference,allocs,gpu,smoke"
         agents:
           slurm_gpus: 1
           slurm_mem: 20G
@@ -215,21 +226,34 @@ steps:
           slurm_gpus: 1
           slurm_mem: 20G
 
-      # The :opt tier is JET analysis, which is compile-time work rather than
-      # GPU work, but `Spaces/opt_spaces.jl` and
-      # `Operators/finitedifference/opt_examples.jl` carry separately
+      # The :inference tier is JET analysis, which is compile-time work rather than
+      # GPU work, but `Spaces/inference_spaces.jl` and
+      # `Operators/finitedifference/inference_examples.jl` carry separately
       # calibrated CUDA branches that only this step executes.
-      - label: "Unit (GPU) - :opt tier"
-        key: unit_curated_suite_gpu_opt
+      # Timing only, no assertions: latency has run within ~10-20% across builds,
+      # which is useful for spotting regressions by eye but too loose to gate on.
+      - label: "Perf (GPU) - kernel launch latency"
+        key: gpu_latency_benchmarks
         retry: *retry_policy
-        # Default bounds: the :opt tier's JET @test_opt checks inspect the
-        # optimized IR, which changes under --check-bounds=yes.
+        command:
+          - "julia --color=yes --project=.buildkite test/gpu/latency_benchmarks.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+          slurm_mem: 20G
+
+      - label: "Unit (GPU) - :inference tier"
+        key: unit_curated_suite_gpu_inference
+        retry: *retry_policy
+        # Default bounds: JET reads the optimized IR, which changes under
+        # --check-bounds=yes.
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/runtests.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
-          TEST_TIER: "opt"
+          TEST_TIER: "inference"
         agents:
           slurm_gpus: 1
           slurm_mem: 20G
@@ -704,7 +728,7 @@ steps:
       - label: "Perf: FD operators from the wild"
         key: perf_FD_ops_examples
         retry: *retry_policy
-        # opt_examples runs in the curated :opt tier job.
+        # inference_examples runs in the curated :inference tier job.
         command:
           - "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_examples.jl"
 
@@ -713,7 +737,7 @@ steps:
         retry: *retry_policy
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --project=.buildkite test/Operators/finitedifference/opt_examples.jl"
+          - "julia --color=yes --project=.buildkite test/Operators/finitedifference/inference_examples.jl"
           - "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_examples.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"

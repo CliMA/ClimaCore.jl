@@ -26,7 +26,7 @@ import .TestUtilities as TU
 #
 #   1. Summation by parts, for a *non-constant* flux.
 #   2. Sign-definite interface dissipation: the jump penalty satisfies
-#      ∑ q·r ≤ 0, strictly across a genuine discontinuity and exactly zero for
+#      ∑ q·r ≤ 0, strictly across a discontinuity and exactly zero for
 #      a continuous field.
 #   3. Global conservation: the single-valued interface flux is added
 #      antisymmetrically, so the node sum of the residual is structurally zero.
@@ -94,7 +94,7 @@ end
             @testset "Interface dissipation is sign-definite [$name, $FT]" begin
                 # Energy rate ∑ q·r from the jump penalty must be ≤ 0, exactly
                 # zero for a continuous (single-valued) field and strictly
-                # negative across a genuine discontinuity.
+                # negative across a discontinuity.
                 rc = similar(q)
                 fill!(parent(rc), 0)
                 Operators.add_numerical_flux_internal!(dg_jump_penalty, rc, q)

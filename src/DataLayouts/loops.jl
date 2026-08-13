@@ -302,18 +302,14 @@ right-associative, and `init` seeds the fold when it is given.
     flip = false,
     init...,
 ) where {O}
-    # The `flip` branch sits outside the `foreach_column` closure so that the
-    # closure never captures `flip` as a runtime `Bool`: that is type-unstable,
-    # and it leaves the GPU compiler looking at the allocating `reverse` branch
-    # even when `flip = false`.
-    if flip
-        foreach_column(dest, arg; mask) do dest_column, arg_column
-            fill!(dest_column, reduce(op, reverse(arg_column); init...))
-        end
-    else
-        foreach_column(dest, arg; mask) do dest_column, arg_column
-            fill!(dest_column, reduce(op, arg_column; init...))
-        end
+    # `Val` so that the closure captures the direction in its type rather than
+    # as a runtime `Bool`, which would be type-unstable and would leave the GPU
+    # compiler looking at the allocating `reverse` branch even when
+    # `flip = false`.
+    flip_val = Val(flip)
+    foreach_column(dest, arg; mask) do dest_column, arg_column
+        maybe_reverse = flip_val isa Val{true} ? reverse : identity
+        fill!(dest_column, reduce(op, maybe_reverse(arg_column); init...))
     end
 end
 # TODO: Extend this to column_accumulate!, column_stencil!, and slab_convolve!

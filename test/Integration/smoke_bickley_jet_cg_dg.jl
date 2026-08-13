@@ -12,12 +12,23 @@ import ClimaCore:
     Spaces,
     Quadratures,
     Topologies
+import ClimaCore.Geometry: ⊗
 
 # End-to-end smoke test: the 2D shallow-water Bickley jet, run with continuous
-# Galerkin (with DSS) and with discontinuous Galerkin (Rusanov and central
-# interface fluxes), checking total mass conservation, numerical stability, and
-# agreement across precisions.
+# Galerkin (weak divergence completed by DSS) and with discontinuous Galerkin
+# (weak divergence completed by a Rusanov interface flux), checking total mass
+# conservation and numerical stability for Float32 and Float64.
+#
+# Both forms build their divergence from the same physical flux function
+# `sw_flux` (components in the local orthonormal (U, V) basis, as in
+# examples/bickleyjet/): the operators apply the metric transform to
+# contravariant components internally, and the interface flux is evaluated
+# against the physical unit normal, so the volume and surface terms are
+# mutually consistent.
 
+# Bickley jet: zonal jet c sech²(y) with a vortical perturbation derived from
+# the streamfunction Ψ′ = exp(-(y + l/10)²/2l²) cos(kx) cos(ky), via
+# (u₁′, u₂′) = (-∂Ψ′/∂y, ∂Ψ′/∂x).
 struct BickleyInit{P}
     params::P
 end
@@ -25,117 +36,54 @@ function (init::BickleyInit)(coord)
     x, y = coord.x, coord.y
     p = init.params
     ρ = p.ρ₀
-    u_x = p.c / (Base.cosh(y)^2)
-    u_y = p.ϵ * p.c * sin(p.k * x) / (Base.cosh(y)^2)
-    u = Geometry.UVVector(u_x, u_y)
-    θ = p.ρ₀ + (typeof(p.ρ₀)(0.1)) * cos(y)
+    U₁ = p.c / Base.cosh(y)^2
+    gaussian = exp(-(y + p.l / 10)^2 / (2 * p.l^2))
+    u₁′ = gaussian * (y + p.l / 10) / p.l^2 * cos(p.k * x) * cos(p.k * y)
+    u₁′ += p.k * gaussian * cos(p.k * x) * sin(p.k * y)
+    u₂′ = -p.k * gaussian * sin(p.k * x) * cos(p.k * y)
+    u = Geometry.UVVector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′)
+    θ = sin(p.k * y)
     return (; ρ = ρ, ρu = ρ * u, ρθ = ρ * θ)
 end
 
-function compute_sw_fluxes(y, params)
-    ρ = y.ρ
-    ρu = y.ρu
-    ρθ = y.ρθ
-    u = @. ρu.components.data.:1 / ρ
-    v = @. ρu.components.data.:2 / ρ
-    p = @. params.g * ρ^2 / 2
-
-    # Mass flux (contravariant vector): [ρu, ρv]
-    F_ρ = @. Geometry.Contravariant12Vector(ρ * u, ρ * v)
-
-    # Momentum fluxes (contravariant vectors for u-momentum and v-momentum)
-    F_u = @. Geometry.Contravariant12Vector(ρ * u * u + p, ρ * u * v)
-    F_v = @. Geometry.Contravariant12Vector(ρ * u * v, ρ * v * v + p)
-
-    # Tracer flux
-    F_θ = @. Geometry.Contravariant12Vector(ρθ * u, ρθ * v)
-
-    return F_ρ, F_u, F_v, F_θ
+# Physical shallow-water fluxes (pressure p = g ρ²/2), in the local
+# orthonormal basis. Used by the volume divergence of both forms and by the
+# Rusanov interface flux of the DG form.
+function sw_flux(state, p)
+    ρ, ρu, ρθ = state.ρ, state.ρu, state.ρθ
+    u = ρu / ρ
+    return (;
+        ρ = ρu,
+        ρu = (ρu ⊗ u) + (p.g * ρ^2 / 2) * LinearAlgebra.I,
+        ρθ = ρθ * u,
+    )
 end
+
+# Upper bound on the normal signal speed |u ⋅ n| + √(g ρ).
+sw_wavespeed(state, p) = sqrt(p.g * state.ρ) + norm(state.ρu / state.ρ)
 
 function shallow_water_rhs_cg!(dydt, y, (space, params), t)
-    sdiv = Operators.Divergence()
-    F_ρ, F_u, F_v, F_θ = compute_sw_fluxes(y, params)
-
-    div_ρ = sdiv.(F_ρ)
-    div_u = sdiv.(F_u)
-    div_v = sdiv.(F_v)
-    div_θ = sdiv.(F_θ)
-
-    @. dydt.ρ = -div_ρ
-    @. dydt.ρu = Geometry.UVVector(-div_u, -div_v)
-    @. dydt.ρθ = -div_θ
-
+    wdiv = Operators.WeakDivergence()
+    rparams = Ref(params)
+    @. dydt = -wdiv(sw_flux(y, rparams))
     Spaces.weighted_dss!(dydt)
     return dydt
-end
-
-function sw_normal_flux(state, p, normal)
-    ρ = state.ρ
-    u = state.ρu.components.data.:1 / ρ
-    v = state.ρu.components.data.:2 / ρ
-    un = u * normal.u + v * normal.v
-    pres = p.g * ρ^2 / 2
-    return (
-        ρ = ρ * un,
-        ρu = Geometry.UVVector(
-            state.ρu.components.data.:1 * un + pres * normal.u,
-            state.ρu.components.data.:2 * un + pres * normal.v,
-        ),
-        ρθ = state.ρθ * un,
-    )
-end
-
-struct ConstantWaveSpeed{FT}
-    speed::FT
-end
-(c::ConstantWaveSpeed)(state, p) = c.speed
-
-struct RusanovSWFlux{W}
-    wavespeedfn::W
-end
-function (fn::RusanovSWFlux)(normal, argvals⁻, argvals⁺)
-    y⁻, params = argvals⁻[1], argvals⁻[2]
-    y⁺ = argvals⁺[1]
-    Fn⁻ = sw_normal_flux(y⁻, params, normal)
-    Fn⁺ = sw_normal_flux(y⁺, params, normal)
-    λ = max(fn.wavespeedfn(y⁻, params), fn.wavespeedfn(y⁺, params))
-    return (
-        ρ = (Fn⁻.ρ + Fn⁺.ρ) / 2 + (λ / 2) * (y⁻.ρ - y⁺.ρ),
-        ρu = (Fn⁻.ρu + Fn⁺.ρu) / 2 + (λ / 2) * (y⁻.ρu - y⁺.ρu),
-        ρθ = (Fn⁻.ρθ + Fn⁺.ρθ) / 2 + (λ / 2) * (y⁻.ρθ - y⁺.ρθ),
-    )
 end
 
 function shallow_water_rhs_dg!(dydt, y, (space, params, numflux), t)
     wdiv = Operators.WeakDivergence()
     lgeom = Fields.local_geometry_field(space)
-    F_ρ, F_u, F_v, F_θ = compute_sw_fluxes(y, params)
 
-    # Volume weak divergence in DG: -wdiv(F) * WJ (since wdiv returns the normalized derivative)
-    dydt_weighted_ρ = @. -wdiv(F_ρ) * lgeom.WJ
-    dydt_weighted_u = @. -wdiv(F_u) * lgeom.WJ
-    dydt_weighted_v = @. -wdiv(F_v) * lgeom.WJ
-    dydt_weighted_θ = @. -wdiv(F_θ) * lgeom.WJ
-
-    dydt_weighted = map(
-        (ρ_w, u_w, v_w, θ_w) -> (; ρ = ρ_w, ρu = Geometry.UVVector(u_w, v_w), ρθ = θ_w),
-        dydt_weighted_ρ,
-        dydt_weighted_u,
-        dydt_weighted_v,
-        dydt_weighted_θ,
-    )
+    # Volume weak divergence, weighted by WJ so the interface flux
+    # contributions can be accumulated directly.
+    rparams = Ref(params)
+    @. dydt = wdiv(sw_flux(y, rparams)) * (-lgeom.WJ)
 
     # Surface numerical flux across element boundaries
-    Operators.add_numerical_flux_internal!(numflux, dydt_weighted, y, params)
+    Operators.add_numerical_flux_internal!(numflux, dydt, y, params)
 
-    # Un-weight by dividing by metric determinant WJ
-    @. dydt.ρ = dydt_weighted.ρ / lgeom.WJ
-    @. dydt.ρu = Geometry.UVVector(
-        dydt_weighted.ρu.components.data.:1 / lgeom.WJ,
-        dydt_weighted.ρu.components.data.:2 / lgeom.WJ,
-    )
-    @. dydt.ρθ = dydt_weighted.ρθ / lgeom.WJ
+    # Un-weight by dividing by the metric determinant WJ
+    @. dydt = dydt / lgeom.WJ
     return dydt
 end
 
@@ -169,7 +117,7 @@ end
             g = FT(10.0),
         )
 
-        # Initial conditions: Bickley Jet profile
+        # Initial conditions: Bickley jet profile
         init_fn = BickleyInit(params)
         y0 = init_fn.(coords)
         mass0 = sum(y0.ρ)
@@ -216,7 +164,7 @@ end
                 y = copy(y0)
                 dydt = similar(y)
                 y_stage = similar(y)
-                numflux = RusanovSWFlux(ConstantWaveSpeed(sqrt(params.g)))
+                numflux = Operators.RusanovNumericalFlux(sw_flux, sw_wavespeed)
 
                 # Warmup step
                 shallow_water_rhs_dg!(dydt, y, (space, params, numflux), FT(0))
