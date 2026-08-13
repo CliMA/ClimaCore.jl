@@ -270,7 +270,7 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
     dw .= fw .* 0
 
     # 1.a) horizontal divergence
-    dρ .-= hdiv.(cρ .* (cuvw))
+    dρ .-= hwdiv.(cρ .* (cuvw))
 
     # 1.b) vertical divergence
     vdivf2c = Operators.DivergenceF2C(
@@ -328,7 +328,7 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
 
     # 3) potential temperature
 
-    @. dρe -= hdiv(cuvw * (cρe + cp))
+    @. dρe -= hwdiv(cuvw * (cρe + cp))
     @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
     @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 

@@ -267,7 +267,6 @@ sol = CTS.solve(
     dt = dt,
     saveat = collect(0:dt:time_end),
     progress = true,
-    adaptive = false,
     progress_message = (dt, u, p, t) -> t,
 )
 

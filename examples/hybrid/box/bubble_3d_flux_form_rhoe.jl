@@ -186,8 +186,10 @@ function rhs!(dY, Y, _, t)
     dρuₕ = dYc.ρuₕ
     dρe = dYc.ρe
 
-    # Spectral horizontal operators
-    hdiv = Operators.Divergence()
+    # Spectral horizontal operators. The weak divergence is the adjoint of the
+    # gradient, so flux divergences built from it conserve the transported
+    # quantity to roundoff on this periodic domain.
+    hwdiv = Operators.WeakDivergence()
     hgrad = Operators.Gradient()
 
     # Vertical finite difference operators, with no flux through the
@@ -237,30 +239,30 @@ function rhs!(dY, Y, _, t)
     # Hyperviscosity: a ∇⁴ operator applied as two successive ∇² passes, with
     # a DSS between them so the intermediate field is continuous.
     e = @. ρe / ρ
-    @. dρe = hdiv(hgrad(e))
-    @. dρuₕ = hdiv(hgrad(uₕ))
-    @. dρw = hdiv(hgrad(w))
+    @. dρe = hwdiv(hgrad(e))
+    @. dρuₕ = hwdiv(hgrad(uₕ))
+    @. dρw = hwdiv(hgrad(w))
     Spaces.weighted_dss!(dYc)
     Spaces.weighted_dss!(dρw)
 
     κ₄ = 100.0   # hyperviscosity coefficient (m⁴/s)
-    @. dρe = -κ₄ * hdiv(ρ * hgrad(dρe))
-    @. dρuₕ = -κ₄ * hdiv(ρ * hgrad(dρuₕ))
-    @. dρw = -κ₄ * hdiv(ρf * hgrad(dρw))
+    @. dρe = -κ₄ * hwdiv(ρ * hgrad(dρe))
+    @. dρuₕ = -κ₄ * hwdiv(ρ * hgrad(dρuₕ))
+    @. dρw = -κ₄ * hwdiv(ρf * hgrad(dρw))
 
     # Continuity
     @. dρ = -vdivf2c(ρw)
-    @. dρ -= hdiv(ρuₕ)
+    @. dρ -= hwdiv(ρuₕ)
 
     # Total energy: advected by the flow and worked on by pressure, so the
     # transported quantity is the enthalpy density ρe + p
     @. dρe += -vdivf2c(ρw * If((ρe + p) / ρ))
-    @. dρe -= hdiv(uₕ * (ρe + p))
+    @. dρe -= hwdiv(uₕ * (ρe + p))
 
     # Horizontal momentum
     @. dρuₕ += -uvdivf2c(ρw ⊗ If(uₕ))
     Ih = Ref(Geometry.Tensor(LinearAlgebra.I, (Geometry.UVAxis(), Geometry.UVAxis())))
-    @. dρuₕ -= hdiv(ρuₕ ⊗ uₕ + p * Ih)
+    @. dρuₕ -= hwdiv(ρuₕ ⊗ uₕ + p * Ih)
 
     # Vertical momentum: pressure gradient and buoyancy, plus advection
     @. dρw += B(
@@ -270,7 +272,7 @@ function rhs!(dY, Y, _, t)
         ) - vdivc2f(Ic(ρw ⊗ w)),
     )
     uₕf = @. If(ρuₕ / ρ)
-    @. dρw -= hdiv(uₕf ⊗ ρw)
+    @. dρw -= hwdiv(uₕf ⊗ ρw)
 
     # Upwind flux correction
     @. dρ += fcc(w, ρ)

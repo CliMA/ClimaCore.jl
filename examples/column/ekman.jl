@@ -23,23 +23,14 @@ Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 const FT = Float64
 
-# https://github.com/CliMA/CLIMAParameters.jl/blob/master/src/Planet/planet_parameters.jl#L5
-const MSLP = 1e5 # mean sea level pressure
-const grav = 9.8 # gravitational constant
-const R_d = 287.058 # R dry (gas constant / mol mass dry air)
-const γ = 1.4 # heat capacity ratio
-const C_p = R_d * γ / (γ - 1) # heat capacity at constant pressure
-const C_v = R_d / (γ - 1) # heat capacit at constant volume
-const R_m = R_d # moist R, assumed to be dry
-
-const f = 5e-5
-const ν = 0.01
-const L = 2e2
+const f = 5e-5              # Coriolis parameter (1/s)
+const ν = 0.01              # eddy viscosity (m²/s)
+const L = 2e2               # domain height (m)
 const nelems = 30
-const Cd = ν / (L / nelems)
-const ug = 1.0
-const vg = 0.0
-const d = sqrt(2 * ν / f)
+const Cd = ν / (L / nelems) # drag coefficient
+const ug = 1.0              # geostrophic wind, u (m/s)
+const vg = 0.0              # geostrophic wind, v (m/s)
+const d = sqrt(2 * ν / f)   # Ekman depth (m)
 domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(0.0),
     Geometry.ZPoint{FT}(L);
@@ -53,18 +44,12 @@ fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
 
 
 
-# https://github.com/CliMA/Thermodynamics.jl/blob/main/src/TemperatureProfiles.jl#L115-L155
-# https://clima.github.io/Thermodynamics.jl/dev/TemperatureProfiles/#DecayingTemperatureProfile
-function adiabatic_temperature_profile(z; T_surf = 300.0, T_min_ref = 230.0)
-    u = FT(ug)
-    v = FT(vg)
-    return (u = u, v = v)
-end
-
-
+# Start from the geostrophic wind everywhere; the spiral forms as surface drag
+# decelerates the lowest levels.
+initial_wind(z) = (u = FT(ug), v = FT(vg))
 
 zc = Fields.coordinate_field(cspace)
-Yc = adiabatic_temperature_profile.(zc.z)
+Yc = initial_wind.(zc.z)
 w = Geometry.WVector.(zeros(Float64, fspace))
 
 Y_init = copy(Yc)
@@ -85,6 +70,10 @@ function tendency!(dY, Y, _, t)
 
     # S 4.4.1: potential temperature density
     # Mass conservation
+
+    # w is carried in the state but not evolved (no subsidence); its tendency
+    # must still be set, not left to whatever the tendency buffer contains.
+    @. dw = Geometry.WVector(zero(FT))
 
     u_1 = parent(u)[1]
     v_1 = parent(v)[1]

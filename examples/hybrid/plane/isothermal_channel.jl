@@ -150,7 +150,7 @@ function rhs_invariant!(dY, Y, _, t)
         Geometry.Covariant3Vector.(-1 .* g13 .* u₁_bc.components.data.:1 ./ g33)
     apply_boundary_w =
         Operators.SetBoundaryOperator(bottom = Operators.SetValue(u₃_bc))
-    @. fw = apply_boundary_w(w)
+    @. fw = apply_boundary_w(fw)
 
     cw = If2c.(fw)
     cuw = Geometry.Covariant13Vector.(cuₕ) .+ Geometry.Covariant13Vector.(cw)
@@ -178,7 +178,7 @@ function rhs_invariant!(dY, Y, _, t)
     dw .= fw .* 0
 
     # 1.a) horizontal divergence
-    dρ .-= hdiv.(cρ .* (cuw))
+    dρ .-= hwdiv.(cρ .* (cuw))
 
     # 1.b) vertical divergence
     vdivf2c = Operators.DivergenceF2C(
@@ -233,9 +233,17 @@ function rhs_invariant!(dY, Y, _, t)
     @. dw -= vgradc2f(cE)
 
     # 3) total energy
-    @. dρe -= hdiv(cuw * (cρe + cp))
+    @. dρe -= hwdiv(cuw * (cρe + cp))
     @. dρe -= vdivf2c(fw * Ic2f(cρe + cρ))
     @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
+
+    # `w` at the surface is fixed by the free-slip terrain constraint applied
+    # above, so the vertical momentum equation must not drive it off that
+    # constraint.
+    apply_boundary_dw = Operators.SetBoundaryOperator(
+        bottom = Operators.SetValue(Geometry.Covariant3Vector(0.0)),
+    )
+    @. dw = apply_boundary_dw(dw)
 
     Spaces.weighted_dss!(dY.Yc)
     Spaces.weighted_dss!(dY.uₕ)
@@ -248,13 +256,13 @@ rhs_invariant!(dYdt, Y, nothing, 0.0);
 
 # run!
 import ClimaTimeSteppers as CTS
-Δt = 0.5
-# `rhs_invariant!` reads the top-level `w` field when it applies the bottom
-# boundary condition, so the integrator must not alias it: integrate a copy of
-# the initial state and leave `w` at its initial value.
+# Δx ≈ 210 m and the sound speed is ≈ 340 m/s, so Δt = 0.5 s sits right at the
+# acoustic CFL limit and eventually goes unstable; halving it is comfortably
+# inside the limit for the three-stage SSP scheme.
+Δt = 0.25
 prob = CTS.ODEProblem(
     CTS.ClimaODEFunction(; T_exp! = rhs_invariant!),
-    copy(Y),
+    Y,
     (0.0, 15000.0),
     nothing,
 )

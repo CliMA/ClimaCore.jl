@@ -31,6 +31,8 @@ global_logger(TerminalLogger())
 const kinematic_viscosity = 75.0 #m²/s
 const hyperdiffusivity = 1e7 #m²/s
 
+const u₀ = 10.0 # initial horizontal wind (m/s)
+
 function warp_surface(coord)
     # Parameters from GMD-9-2007-2016
     # Specification for Agnesi Mountain following 
@@ -46,7 +48,6 @@ end
 # set up 2D domain - doubly periodic box
 const xmin = -72000.0
 const xmax = 72000.0
-const xsponge = xmax - 10000.0
 hv_center_space, hv_face_space =
     hvspace_2D(
         (xmin, xmax),
@@ -71,7 +72,8 @@ function init_advection_over_mountain(x, z)
     θ = @. θ₀ * exp(𝒩^2 * z / g)
     T = @. π_exner * θ # temperature
     ρ = @. p₀ / (R_d * θ) * (π_exner)^(cp_d / R_d)
-    e = @. cv_d * (T - T_0) + Φ(z) + 50.0
+    # total energy: internal + potential + kinetic energy of the initial wind
+    e = @. cv_d * (T - T_0) + Φ(z) + u₀^2 / 2
     ρe = @. ρ * e
     return (ρ = ρ, ρe = ρe)
 end
@@ -85,10 +87,11 @@ face_coords = Fields.coordinate_field(hv_face_space)
 # Retain uₕ and w as separate components of velocity vector (primitive variables)
 Yc = map(coord -> init_advection_over_mountain(coord.x, coord.z), coords)
 w = map(_ -> Geometry.Covariant3Vector(0.0), face_coords)
-uₕ_local = map(_ -> Geometry.UWVector(10.0, 0.0), coords)
+uₕ_local = map(_ -> Geometry.UWVector(u₀, 0.0), coords)
 uₕ = Geometry.Covariant1Vector.(uₕ_local)
 
-const u_init = uₕ
+# A snapshot, not an alias: the sponge relaxes toward the *initial* wind.
+const u_init = copy(uₕ)
 
 ᶜlg = Fields.local_geometry_field(hv_center_space)
 ᶠlg = Fields.local_geometry_field(hv_face_space)
@@ -114,27 +117,6 @@ function rayleigh_sponge_z(
         return eltype(z)(0)
     end
 end
-function rayleigh_sponge_x(
-    x;
-    x_sponge = xsponge,
-    x_max = xmax,
-    α = 0.5,  # Relaxation timescale
-    τ = 0.5,
-    γ = 2.0,
-)
-    if x >= x_sponge
-        r = (x - x_sponge) / (x_max - x_sponge)
-        β_sponge = α * sinpi(τ * r)^γ
-        return β_sponge
-    elseif x <= -x_sponge
-        r = (abs(x) - x_sponge) / (x_max - x_sponge)
-        β_sponge = α * sinpi(τ * r)^γ
-        return β_sponge
-    else
-        return eltype(x)(0)
-    end
-end
-
 function rhs_invariant!(dY, Y, _, t)
 
     cρ = Y.Yc.ρ # scalar on centers
@@ -192,7 +174,7 @@ function rhs_invariant!(dY, Y, _, t)
     dw .= fw .* 0
 
     # 1.a) horizontal divergence
-    dρ .-= hdiv.(cρ .* (cuw))
+    dρ .-= hwdiv.(cρ .* (cuw))
 
     # 1.b) vertical divergence
     vdivf2c = Operators.DivergenceF2C(
@@ -249,7 +231,7 @@ function rhs_invariant!(dY, Y, _, t)
 
     # 3) total energy
 
-    @. dρe -= hdiv(cuw * (cρe + cp))
+    @. dρe -= hwdiv(cuw * (cρe + cp))
     @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
     @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 
@@ -286,8 +268,7 @@ function rhs_invariant!(dY, Y, _, t)
 
     # Sponge tendency
     β = @. rayleigh_sponge_z(coords.z)
-    βx = @. rayleigh_sponge_x(coords.x)
-    @. duₕ -= β * (uₕ - u_init)
+    @. duₕ -= β * (cuₕ - u_init)
     @. dw -= Ic2f(β) * fw
 
     Spaces.weighted_dss!(dY.Yc)

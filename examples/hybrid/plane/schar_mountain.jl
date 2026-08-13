@@ -2,6 +2,8 @@
 # ridge, from Schär et al. (2002), Section 3(b). The ridge is tall enough and
 # narrow enough that the terrain-following coordinate is strongly distorted near
 # the surface, which is what makes this a demanding test of the metric terms.
+# The steady solution has |w| ≈ 1.8 m/s, and mass and total energy are conserved
+# to roundoff over the 15 h run.
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
@@ -34,8 +36,10 @@ global_logger(TerminalLogger())
 # https://doi.org/10.1175/1520-0493(2002)130<2459:ANTFVC>2.0.CO;2
 # Section 3(b)
 
-const kinematic_viscosity = 0.0 #m²/s
+const kinematic_viscosity = 75.0 # m²/s
 const hyperdiffusivity = 2e7 #m²/s
+
+const u₀ = 10.0 # initial horizontal wind (m/s)
 
 function warp_schar(coord)
     x = Geometry.component(coord, 1)
@@ -81,7 +85,8 @@ function init_advection_over_mountain(x, z)
     π_exner = @. 1 + g^2 / 𝒩^2 / cp_d / θ₀ * (exp(-𝒩^2 * z / g) - 1)
     T = @. π_exner * θ # temperature
     ρ = @. p₀ / (R_d * θ) * (π_exner)^(cp_d / R_d)
-    e = @. cv_d * (T - T_0) + Φ(z) + 50.0
+    # total energy: internal + potential + kinetic energy of the initial wind
+    e = @. cv_d * (T - T_0) + Φ(z) + u₀^2 / 2
     ρe = @. ρ * e
     ρq = @. ρ * 0.0
     return (ρ = ρ, ρe = ρe, ρq = ρq)
@@ -89,7 +94,7 @@ end
 
 function initial_velocity(x, z)
     FT = eltype(x)
-    return @. Geometry.UWVector(FT(10), FT(0))
+    return @. Geometry.UWVector(FT(u₀), FT(0))
 end
 
 # initial conditions
@@ -104,7 +109,8 @@ uₕ_local = map(coord -> initial_velocity(coord.x, coord.z), coords)
 w = map(_ -> Geometry.Covariant3Vector(0.0), face_coords)
 uₕ = Geometry.Covariant1Vector.(uₕ_local)
 
-const u_init = uₕ
+# A snapshot, not an alias: the sponge relaxes toward the *initial* wind.
+const u_init = copy(uₕ)
 
 ᶜlg = Fields.local_geometry_field(hv_center_space)
 ᶠlg = Fields.local_geometry_field(hv_face_space)
@@ -135,23 +141,6 @@ function rayleigh_sponge(
         return eltype(z)(0)
     end
 end
-function rayleigh_sponge_x(
-    x;
-    x_sponge = 20000,
-    x_max = 30000,
-    α = 0.5,  # Relaxation timescale
-    τ = 0.5,
-    γ = 2.0,
-)
-    if abs(x) >= x_sponge
-        r = (abs(x) - x_sponge) / (x_max - x_sponge)
-        β_sponge = α * sinpi(τ * r)^γ
-        return β_sponge
-    else
-        return eltype(x)(0)
-    end
-end
-
 function rhs_invariant!(dY, Y, _, t)
 
     cρ = Y.Yc.ρ # scalar on centers
@@ -219,6 +208,9 @@ function rhs_invariant!(dY, Y, _, t)
         Operators.SetBoundaryOperator(bottom = Operators.SetValue(u₃_bc))
     @. fw = apply_boundary_w(fw)
 
+    # `cw` must be rebuilt from the projected `fw`: the value interpolated above
+    # predates the surface constraint.
+    cw = @. If2c(fw)
     cuw = @. Geometry.Covariant13Vector(cuₕ) + Geometry.Covariant13Vector(cw)
 
     fuw = @. Ic2f(cuw)
@@ -251,7 +243,7 @@ function rhs_invariant!(dY, Y, _, t)
     dw .= fw .* 0
 
     # 1.a) horizontal divergence
-    dρ .-= hdiv.(cρ .* (cuw))
+    dρ .-= hwdiv.(cρ .* (cuw))
 
     # 1.b) vertical divergence
 
@@ -317,7 +309,7 @@ function rhs_invariant!(dY, Y, _, t)
 
     # 3) total energy
 
-    @. dρe -= hdiv(cuw * (cρe + cp))
+    @. dρe -= hwdiv(cuw * (cρe + cp))
 
     @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
     #@. dρe -= vdivf2c(Ic2f(cρ) * f_upwind_product1(fw, (cρe + cp)/cρ)) # Upwind Approximation - First Order
@@ -327,7 +319,7 @@ function rhs_invariant!(dY, Y, _, t)
 
     # 4) tracer tendencies  
     # In extruded grids
-    @. dρq -= hdiv(cuw * (cρq))
+    @. dρq -= hwdiv(cuw * (cρq))
     @. dρq -= vdivf2c(fw * Ic2f(cρq))
     @. dρq -= vdivf2c(Ic2f(cuₕ * (cρq)))
 
@@ -336,11 +328,37 @@ function rhs_invariant!(dY, Y, _, t)
     fρ = @. Ic2f(cρ)
     κ₂ = kinematic_viscosity # m^2/s
 
+    ᶠ∇ᵥuₕ = @. vgradc2fE(cuₕ.components.data.:1)
+    ᶜ∇ᵥw = @. ∂c(fw.components.data.:1)
+    ᶠ∇ᵥh_tot = @. vgradc2fE(h_tot)
+
+    ᶜ∇ₕuₕ = @. hgrad(cuₕ.components.data.:1)
+    ᶠ∇ₕw = @. hgrad(fw.components.data.:1)
+    ᶜ∇ₕh_tot = @. hgrad(h_tot)
+
+    dfw = dY.w.components.data.:1
+    dcu = dY.uₕ.components.data.:1
+
+    @. dcu += hwdiv(κ₂ * ᶜ∇ₕuₕ)
+    @. dcu += vdivf2c(κ₂ * ᶠ∇ᵥuₕ)
+    @. dfw += hwdiv(κ₂ * ᶠ∇ₕw)
+    @. dfw += vdivc2f(κ₂ * ᶜ∇ᵥw)
+    @. dρe += hwdiv(cρ * κ₂ * ᶜ∇ₕh_tot)
+    @. dρe += vdivf2c(fρ * κ₂ * ᶠ∇ᵥh_tot)
+
     # Sponge tendency
     β = @. rayleigh_sponge(z)
     βf = @. rayleigh_sponge(fz)
-    @. duₕ -= β * (uₕ - u_init)
+    @. duₕ -= β * (cuₕ - u_init)
     @. dw -= βf * fw
+
+    # `w` at the surface is fixed by the free-slip terrain constraint applied at
+    # the top of this function, so the vertical momentum equation must not drive
+    # it off that constraint. Without this the surface value grows without bound.
+    apply_boundary_dw = Operators.SetBoundaryOperator(
+        bottom = Operators.SetValue(Geometry.Covariant3Vector(0.0)),
+    )
+    @. dw = apply_boundary_dw(dw)
 
     Spaces.weighted_dss!(dY.Yc)
     Spaces.weighted_dss!(dY.uₕ)

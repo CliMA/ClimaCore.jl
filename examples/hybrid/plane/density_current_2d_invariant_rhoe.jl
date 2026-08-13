@@ -135,7 +135,7 @@ function rhs_invariant!(dY, Y, _, t)
     dw .= fw .* 0
 
     # 1.a) horizontal divergence
-    dρ .-= hdiv.(cρ .* (cuw))
+    dρ .-= hwdiv.(cρ .* (cuw))
 
     # 1.b) vertical divergence
     vdivf2c = Operators.DivergenceF2C(
@@ -191,7 +191,7 @@ function rhs_invariant!(dY, Y, _, t)
 
     # 3) total energy
 
-    @. dρe -= hdiv(cuw * (cρe + cp))
+    @. dρe -= hwdiv(cuw * (cρe + cp))
     @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
     @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 
