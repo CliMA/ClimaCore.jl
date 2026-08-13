@@ -1276,6 +1276,26 @@ steps:
         key: "cpu_invalidations"
         retry: *retry_policy
         command: "julia --color=yes --project=.buildkite perf/invalidations.jl"
+  - group: "Downstream tests"
+    steps:
+      # Downstream test: run ClimaAtmos CI against this ClimaCore commit.
+      # ClimaAtmos's pipeline sees UPSTREAM_PACKAGES and
+      # Pkg.adds each `Package#rev` entry at that rev (see ClimaAtmos.jl's
+      # .buildkite/full_pipeline.yml "Downstream test hook"). ClimaCoreSpectra and
+      # ClimaCoreTempestRemap are used in ClimaAtmos CI. They live in this repo's lib/, so
+      # pin them to the same commit to keep the family mutually consistent.
+      - label: ":rocket: Downstream: trigger ClimaAtmos CI"
+        # Deliberately NOT climaatmos-ci: downstream builds run on atmos `main`,
+        # and building them under the same pipeline would pollute climaatmos-ci's
+        # main-branch status badge and build history. climaatmos-downstream uses the same
+        # comfig (pipeline.yml) that climaatmos-ci, but lives in a separate pipeline.
+        trigger: "climaatmos-downstream"
+        build:
+          branch: "main"
+          message: "Downstream test: ClimaCore ${BUILDKITE_BRANCH} @ ${BUILDKITE_COMMIT:0:8}"
+          env:
+            UPSTREAM_PACKAGES: "ClimaCore#${BUILDKITE_COMMIT} ClimaCoreSpectra#${BUILDKITE_COMMIT} ClimaCoreTempestRemap#${BUILDKITE_COMMIT}"
+        soft_fail: true # downstream test failures don't block a merge
 
   - wait
 
