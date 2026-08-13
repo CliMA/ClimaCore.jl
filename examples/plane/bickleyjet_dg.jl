@@ -1,3 +1,8 @@
+# Bickley jet (see `bickleyjet_cg.jl`), discretized with a discontinuous
+# Galerkin spectral element method. Inter-element coupling is through a
+# numerical flux rather than DSS, so this is where the flux choice matters:
+# pass `central`, `rusanov` (default), or `roe` as the first argument, and
+# optionally a boundary condition as the second.
 using ClimaComms
 using LinearAlgebra
 
@@ -12,7 +17,7 @@ import ClimaCore:
     Topologies
 import ClimaCore.Geometry: ⊗
 
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
 
 import Logging
 import TerminalLoggers
@@ -218,10 +223,15 @@ dydt = Fields.Field(similar(Fields.field_values(y0)), space)
 rhs!(dydt, y0, (parameters, numflux), 0.0);
 
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 200.0), (parameters, numflux))
-sol = solve(
+prob = CTS.ODEProblem(
+    CTS.ClimaODEFunction(; T_exp! = rhs!),
+    y0,
+    (0.0, 200.0),
+    (parameters, numflux),
+)
+sol = CTS.solve(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = 0.02,
     saveat = collect(0.0:1.0:200.0),
     progress = true,

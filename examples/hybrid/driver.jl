@@ -1,5 +1,11 @@
-# Test-specific definitions (may be overwritten in each test case file)
-# TODO: Allow some of these to be enironment variables or command line arguments
+# Driver for the `hybrid/` cases built on `staggered_nonhydrostatic_model.jl`.
+# Set `TEST_NAME` to a case file relative to this directory (for example
+# `sphere/baroclinic_wave_rhoe`); the driver includes it, builds the spaces and
+# initial state it declares, and runs it. See `sphere/README.md` for the other
+# environment variables it reads.
+#
+# The defaults below are overwritten by each case file.
+# TODO: Allow some of these to be environment variables or command line arguments
 upwinding_mode = :none
 horizontal_mesh = nothing # must be object of type AbstractMesh
 npoly = 0
@@ -9,7 +15,7 @@ t_end = 0
 dt = 0
 dt_save_to_sol = 0 # 0 means don't save to sol
 dt_save_to_disk = 0 # 0 means don't save to disk
-ode_algorithm = nothing # must be object of type OrdinaryDiffEqAlgorithm
+ode_algorithm = nothing # must be a ClimaTimeSteppers algorithm name
 jacobian_flags = (;) # only required by implicit ODE algorithms
 max_newton_iters = 10 # only required by ODE algorithms that use Newton's method
 show_progress_bar = false
@@ -27,7 +33,6 @@ postprocessing(sol, output_dir) = nothing
 import ClimaTimeSteppers as CTS
 using ClimaComms
 ClimaComms.@import_required_backends
-import SciMLBase
 const comms_ctx = ClimaComms.context()
 is_distributed = comms_ctx isa ClimaComms.MPICommsContext
 using ClimaCore: DataLayouts
@@ -48,13 +53,10 @@ atexit() do
     global_logger(prev_logger)
 end
 
-using SciMLBase
-using DiffEqCallbacks
 using JLD2
 
 const FT = get(ENV, "FLOAT_TYPE", "Float32") == "Float32" ? Float32 : Float64
 
-include("../ordinary_diff_eq_bug_fixes.jl")
 include("../common_spaces.jl")
 
 if get(ENV, "Z_STRETCH", "false") == "true"
@@ -141,39 +143,38 @@ end
 save_to_disk_func =
     make_save_to_disk_func(output_dir, test_file_name, is_distributed)
 
-dss_callback = FunctionCallingCallback(func_start = true) do Y, t, integrator
-    p = integrator.p
+function dss!(Y, p, t)
     Spaces.weighted_dss!(Y.c, p.ghost_buffer.c)
     Spaces.weighted_dss!(Y.f, p.ghost_buffer.f)
 end
-if dt_save_to_disk == 0
-    save_to_disk_callback = nothing
-else
-    save_to_disk_callback = PeriodicCallback(
-        save_to_disk_func,
-        dt_save_to_disk;
-        initial_affect = true,
-    )
-end
-callback = SciMLBase.CallbackSet(
-    dss_callback,
-    save_to_disk_callback,
-    additional_callbacks...,
-)
 
-problem = SciMLBase.ODEProblem(
+# `EveryXSimulationTime` fires the affect at fixed intervals of simulated time,
+# which is what PeriodicCallback provided.
+save_to_disk_callback =
+    dt_save_to_disk == 0 ? () :
+    (
+        CTS.Callbacks.EveryXSimulationTime(
+            save_to_disk_func,
+            dt_save_to_disk;
+            atinit = true,
+        ),
+    )
+callback = CTS.CallbackSet(save_to_disk_callback..., additional_callbacks...)
+
+problem = CTS.ODEProblem(
     CTS.ClimaODEFunction(;
-        T_imp! = ODEFunction(
+        T_imp! = CTS.ODEFunction(
             implicit_tendency!;
             jac_kwargs(ode_algo, Y, jacobian_flags)...,
         ),
         T_exp! = remaining_tendency!,
+        dss!,
     ),
     Y,
     (t_start, t_end),
     p,
 )
-integrator = SciMLBase.init(
+integrator = CTS.init(
     problem,
     ode_algo;
     saveat = dt_save_to_sol == 0 ? [] : collect(t_start:dt_save_to_sol:t_end),
@@ -192,7 +193,7 @@ end
 @info "Running `$test_dir/$test_file_name` test case"
 @info "on a vertical $z_stretch_string grid"
 
-walltime = @elapsed sol = SciMLBase.solve!(integrator)
+walltime = @elapsed sol = CTS.solve!(integrator)
 any(isnan, sol.u[end]) && error("NaNs found in result.")
 
 if is_distributed # replace sol.u on the root processor with the global sol.u

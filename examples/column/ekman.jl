@@ -1,3 +1,7 @@
+# Ekman boundary layer: a rotating column driven by a geostrophic wind, with
+# constant eddy viscosity ν and a drag law at the surface. Its steady state is
+# the analytic Ekman spiral, which the run plots alongside the computed profile
+# so the two can be compared.
 import ClimaComms
 ClimaComms.@import_required_backends
 using LinearAlgebra
@@ -11,7 +15,7 @@ import ClimaCore:
     Geometry,
     Spaces
 
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
 
 import Logging
 import TerminalLoggers
@@ -113,10 +117,15 @@ dY = tendency!(similar(Y), Y, nothing, 0.0)
 Δt = 2.0
 ndays = 0
 # Solve the ODE operator
-prob = ODEProblem(tendency!, Y, (0.0, 60 * 60 * 50))
-sol = solve(
+prob = CTS.ODEProblem(
+    CTS.ClimaODEFunction(; T_exp! = tendency!),
+    Y,
+    (0.0, 60 * 60 * 50),
+    nothing,
+)
+sol = CTS.solve(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = Δt,
     saveat = collect(0.0:600:(60 * 60 * 50)), # save 10 min
     progress = true,
@@ -175,7 +184,7 @@ anim = Plots.@animate for (i, u) in enumerate(sol.u)
 end
 Plots.mp4(anim, joinpath(path, "ekman.mp4"), fps = 10)
 
-Plots.png(ekman_plot(sol[end]), joinpath(path, "ekman_end.png"))
+Plots.png(ekman_plot(sol.u[end]), joinpath(path, "ekman_end.png"))
 
 function linkfig(figpath, alt = "")
     # buildkite-agent upload figpath

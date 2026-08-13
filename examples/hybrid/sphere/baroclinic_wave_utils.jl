@@ -1,3 +1,7 @@
+# Shared setup for the 3D sphere cases driven by `driver.jl`: the physical
+# constants the staggered nonhydrostatic model expects, the cubed-sphere mesh
+# constructor, the baroclinic-wave initial condition (with the perturbation
+# optional, so `balanced_flow_rhoe.jl` can reuse it), and the Rayleigh sponge.
 import ClimaComms
 ClimaComms.@import_required_backends
 
@@ -32,16 +36,6 @@ const V_p = FT(1)
 # Constants required for Rayleigh sponge layer
 const z_D = FT(15e3)
 
-# Constants required for Held-Suarez forcing
-const day = FT(3600 * 24)
-const k_a = 1 / (40 * day)
-const k_f = 1 / day
-const k_s = 1 / (4 * day)
-const ΔT_y = FT(60)
-const Δθ_z = FT(10)
-const T_equator = FT(315)
-const T_min = FT(200)
-const σ_b = FT(7 / 10)
 
 ##
 ## Initial conditions
@@ -82,9 +76,8 @@ cond(λ, ϕ) = (0 < r(λ, ϕ) < d_0) * (r(λ, ϕ) != R * pi)
     cosd(ϕ_c) *
     sind(λ - λ_c) / sin(r(λ, ϕ) / R) * cond(λ, ϕ)
 
-function center_initial_condition(
-    ᶜlocal_geometry,
-    ᶜ𝔼_name;
+function sphere_center_initial_condition(
+    ᶜlocal_geometry;
     is_balanced_flow = false,
 )
     (; lat, long, z) = ᶜlocal_geometry.coordinates
@@ -97,18 +90,9 @@ function center_initial_condition(
     end
     ᶜuₕ_local = @. Geometry.UVVector(u₀, v₀)
     ᶜuₕ = @. Geometry.Covariant12Vector(ᶜuₕ_local, ᶜlocal_geometry)
-    if ᶜ𝔼_name === Val(:ρθ)
-        ᶜρθ = @. ᶜρ * θ(lat, z)
-        return NamedTuple{(:ρ, :ρθ, :uₕ)}.(tuple.(ᶜρ, ᶜρθ, ᶜuₕ))
-    elseif ᶜ𝔼_name === Val(:ρe)
-        ᶜρe = @. ᶜρ * (
-            cv_d * (temp(lat, z) - T_tri) + norm_sqr(ᶜuₕ_local) / 2 + grav * z
-        )
-        return NamedTuple{(:ρ, :ρe, :uₕ)}.(tuple.(ᶜρ, ᶜρe, ᶜuₕ))
-    elseif ᶜ𝔼_name === Val(:ρe_int)
-        ᶜρe_int = @. ᶜρ * cv_d * (temp(lat, z) - T_tri)
-        return NamedTuple{(:ρ, :ρe_int, :uₕ)}.(tuple.(ᶜρ, ᶜρe_int, ᶜuₕ))
-    end
+    ᶜρe = @. ᶜρ *
+             (cv_d * (temp(lat, z) - T_tri) + norm_sqr(ᶜuₕ_local) / 2 + grav * z)
+    return NamedTuple{(:ρ, :ρe, :uₕ)}.(tuple.(ᶜρ, ᶜρe, ᶜuₕ))
 end
 
 function face_initial_condition(local_geometry)
@@ -136,37 +120,4 @@ function rayleigh_sponge_tendency!(Yₜ, Y, p, t)
     (; ᶜβ, ᶠβ) = p
     @. Yₜ.c.uₕ -= ᶜβ * Y.c.uₕ
     @. Yₜ.f.w -= ᶠβ * Y.f.w
-end
-
-held_suarez_cache(ᶜlocal_geometry) = (;
-    ᶜσ = similar(ᶜlocal_geometry, FT),
-    ᶜheight_factor = similar(ᶜlocal_geometry, FT),
-    ᶜΔρT = similar(ᶜlocal_geometry, FT),
-    ᶜφ = deg2rad.(ᶜlocal_geometry.coordinates.lat),
-)
-
-function held_suarez_tendency!(Yₜ, Y, p, t)
-    (; ᶜp, ᶜσ, ᶜheight_factor, ᶜΔρT, ᶜφ) = p # assume that ᶜp has been updated
-
-    @. ᶜσ = ᶜp / p_0
-    @. ᶜheight_factor = max(0, (ᶜσ - σ_b) / (1 - σ_b))
-    @. ᶜΔρT =
-        (k_a + (k_s - k_a) * ᶜheight_factor * cos(ᶜφ)^4) *
-        Y.c.ρ *
-        ( # ᶜT - ᶜT_equil
-            ᶜp / (Y.c.ρ * R_d) - max(
-                T_min,
-                (T_equator - ΔT_y * sin(ᶜφ)^2 - Δθ_z * log(ᶜσ) * cos(ᶜφ)^2) *
-                ᶜσ^(R_d / cp_d),
-            )
-        )
-
-    @. Yₜ.c.uₕ -= (k_f * ᶜheight_factor) * Y.c.uₕ
-    if :ρθ in propertynames(Y.c)
-        @. Yₜ.c.ρθ -= ᶜΔρT * (p_0 / ᶜp)^κ
-    elseif :ρe in propertynames(Y.c)
-        @. Yₜ.c.ρe -= ᶜΔρT * cv_d
-    elseif :ρe_int in propertynames(Y.c)
-        @. Yₜ.c.ρe_int -= ᶜΔρT * cv_d
-    end
 end

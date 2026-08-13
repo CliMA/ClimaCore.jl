@@ -1,8 +1,14 @@
+# Advection over topography: an energy perturbation carried by a prescribed
+# horizontal wind across a sinusoidal hill, in an isothermal atmosphere with
+# gravity switched off (Φ ≡ 0). Isolates the terrain-following metric terms from
+# buoyancy effects, so errors from the coordinate transformation show up on
+# their own.
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaComms
 ClimaComms.@import_required_backends
+include("plane_utils.jl")
 
 import ClimaCore:
     ClimaCore,
@@ -32,53 +38,17 @@ function warp_surface(coord)
     return h
 end
 
-function hvspace_2D(
-    xlim = (-π, π),
-    zlim = (0, 4π),
-    xelem = 30,
-    zelem = 30,
-    npoly = 4,
-    warp_fn = warp_surface,
-)
-    FT = Float64
-    vertdomain = Domains.IntervalDomain(
-        Geometry.ZPoint{FT}(zlim[1]),
-        Geometry.ZPoint{FT}(zlim[2]);
-        boundary_names = (:bottom, :top),
-    )
-    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    context = ClimaComms.context()
-    device = ClimaComms.device(context)
-    vert_face_space = Spaces.FaceFiniteDifferenceSpace(device, vertmesh)
-
-    horzdomain = Domains.IntervalDomain(
-        Geometry.XPoint{FT}(xlim[1]),
-        Geometry.XPoint{FT}(xlim[2]);
-        periodic = true,
-    )
-    horzmesh = Meshes.IntervalMesh(horzdomain, nelems = xelem)
-    horztopology = Topologies.IntervalTopology(device, horzmesh)
-    quad = Quadratures.GLL{npoly + 1}()
-    horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
-    z_surface = Geometry.ZPoint.(warp_fn.(Fields.coordinate_field(horzspace)))
-    hv_face_space = Spaces.ExtrudedFiniteDifferenceSpace(
-        horzspace,
-        vert_face_space,
-        Hypsography.LinearAdaption(z_surface),
-    )
-    hv_center_space = Spaces.CenterExtrudedFiniteDifferenceSpace(hv_face_space)
-    return (hv_center_space, hv_face_space)
-end
 
 # set up 2D domain - doubly periodic box
-hv_center_space, hv_face_space = hvspace_2D((0, 25000), (0, 25000))
+hv_center_space, hv_face_space =
+    hvspace_2D(
+        (0, 25000),
+        (0, 25000);
+        xelem = 30,
+        zelem = 30,
+        warp_fn = warp_surface,
+    )
 
-const MSLP = 1e5 # mean sea level pressure
-const R_d = 287.058 # R dry (gas constant / mol mass dry air)
-const γ = 1.4 # heat capacity ratio
-const C_p = R_d * γ / (γ - 1) # heat capacity at constant pressure
-const C_v = R_d / (γ - 1) # heat capacity at constant volume
-const T_0 = 273.16 # triple point temperature
 
 
 Φ(z) = 0.0
@@ -277,12 +247,20 @@ dYdt = similar(Y);
 rhs_invariant!(dYdt, Y, nothing, 0.0);
 
 # run!
-using OrdinaryDiffEqSSPRK: ODEProblem, init, solve!, SSPRK33
+import ClimaTimeSteppers as CTS
 Δt = 0.5
-prob = ODEProblem(rhs_invariant!, Y, (0.0, 15000.0))
-integrator = init(
+# `rhs_invariant!` reads the top-level `w` field when it applies the bottom
+# boundary condition, so the integrator must not alias it: integrate a copy of
+# the initial state and leave `w` at its initial value.
+prob = CTS.ODEProblem(
+    CTS.ClimaODEFunction(; T_exp! = rhs_invariant!),
+    copy(Y),
+    (0.0, 15000.0),
+    nothing,
+)
+integrator = CTS.init(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = Δt,
     saveat = collect(0.0:30.0:15000.0),
     progress = true,
@@ -293,7 +271,7 @@ if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
     throw(:exit_profile)
 end
 
-sol = @timev solve!(integrator)
+sol = @timev CTS.solve!(integrator)
 
 ENV["GKSwstype"] = "nul"
 import Plots, ClimaCorePlots

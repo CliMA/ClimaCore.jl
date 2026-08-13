@@ -1,3 +1,8 @@
+# Hydrostatic balance on a vertical column. A decaying temperature profile fixes
+# ρθ, and `discrete_hydrostatic_balance!` then integrates the *discrete* balance
+# upward for ρ, so the initial state is at rest to within roundoff rather than to
+# within truncation error. Integrating it forward should therefore leave it at
+# rest; the run plots the evolving profiles over several days.
 import ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore:
@@ -10,12 +15,15 @@ import ClimaCore:
     Geometry,
     Spaces
 
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
 
 import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 const FT = Float64
+
+const z_top = FT(30e3)
+const n_vert = 30
 
 # https://github.com/CliMA/CLIMAParameters.jl/blob/master/src/Planet/planet_parameters.jl#L5
 const MSLP = FT(1e5) # mean sea level pressure
@@ -26,14 +34,13 @@ const C_p = FT(R_d * γ / (γ - 1)) # heat capacity at constant pressure
 const C_v = FT(R_d / (γ - 1)) # heat capacit at constant volume
 const R_m = FT(R_d) # moist R, assumed to be dry
 
-
 domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(0.0),
-    Geometry.ZPoint{FT}(30e3),
+    Geometry.ZPoint{FT}(z_top),
     boundary_names = (:bottom, :top),
 )
 #mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
-mesh = Meshes.IntervalMesh(domain; nelems = 30)
+mesh = Meshes.IntervalMesh(domain; nelems = n_vert)
 device = ClimaComms.device()
 cspace = Spaces.CenterFiniteDifferenceSpace(device, mesh)
 fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
@@ -71,27 +78,37 @@ end
 Π(ρθ) = C_p * (R_d * ρθ / MSLP)^(R_m / C_v)
 Φ(z) = grav * z
 
-function discrete_hydrostatic_balance!(ρ, w, ρθ, Δz::FT, _grav::FT, Π::Function)
-    # compute θ such that
-    #   I(θ)[i+1/2] = -g / ∂f(Π(ρθ))
-    # discretely, then set
-    #   ρ = ρθ/θ
+function discrete_hydrostatic_balance!(ρ, ρθ, Δz::FT, _grav::FT, Π::Function)
     for i in 1:(length(ρ) - 1)
-        #  ρ[i+1] = ρθ[i+1]/(-2Δz*_grav/(Π(ρθ[i+1]) - Π(ρθ[i])) - ρθ[i]/ρ[i])
         ρ[i + 1] =
             ρθ[i + 1] /
             (-2 * _grav / ((Π(ρθ[i + 1]) - Π(ρθ[i])) / Δz) - ρθ[i] / ρ[i])
 
-        ρ[i + 1] =
-            ρθ[i + 1] /
-            (1 / ((-2 * _grav) * (Π(ρθ[i + 1]) - Π(ρθ[i]))Δz) - ρθ[i] / ρ[i])
-
-        ∂Π∂z = (Π(ρθ[i + 1]) - Π(ρθ[i])) / Δz
     end
 end
 
 zc = Fields.coordinate_field(cspace)
+zc_vec = parent(zc)
+
+N = length(zc_vec)
+ρ = zeros(Float64, N)
+ρθ = zeros(Float64, N)
+
+for i in 1:N
+    var = decaying_temperature_profile(
+        zc_vec[i];
+        T_virt_surf = 280.0,
+        T_min_ref = 230.0,
+    )
+    ρ[i] = var.ρ
+    ρθ[i] = var.ρθ
+end
+
+discrete_hydrostatic_balance!(ρ, ρθ, z_top / n_vert, grav, Π)
+
 Yc = decaying_temperature_profile.(zc.z)
+parent(Yc.ρ) .= ρ
+parent(Yc.ρθ) .= ρθ
 w = Geometry.WVector.(zeros(FT, fspace))
 
 Y_init = copy(Yc)
@@ -129,10 +146,15 @@ dY = tendency!(similar(Y), Y, nothing, 0.0)
 ndays = 10
 
 # Solve the ODE operator
-prob = ODEProblem(tendency!, Y, (0.0, 60 * 60 * 24 * ndays))
-sol = solve(
+prob = CTS.ODEProblem(
+    CTS.ClimaODEFunction(; T_exp! = tendency!),
+    Y,
+    (0.0, 60 * 60 * 24 * ndays),
+    nothing,
+)
+sol = CTS.solve(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = Δt,
     saveat = collect(0.0:(60 * 60):(60 * 60 * 24 * ndays)), # save every hour
     progress = true,
@@ -164,7 +186,7 @@ function hydrostatic_plot(u; title = "", size = (1024, 600))
         vec(parent(w_init)),
         z_faces,
         marker = :circle,
-        xlim = (-0.2, 0.2),
+        xlim = (-1e-10, 1e-10),
         xlabel = "ω",
         label = "T=0",
     )
@@ -194,7 +216,7 @@ anim = Plots.@animate for (i, u) in enumerate(sol.u)
 end
 Plots.mp4(anim, joinpath(path, "hydrostatic.mp4"), fps = 10)
 
-Plots.png(hydrostatic_plot(sol[end]), joinpath(path, "hydrostatic_end.png"))
+Plots.png(hydrostatic_plot(sol.u[end]), joinpath(path, "hydrostatic_end.png"))
 
 function linkfig(figpath, alt = "")
     # buildkite-agent upload figpath

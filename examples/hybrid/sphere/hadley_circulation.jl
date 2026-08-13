@@ -1,3 +1,11 @@
+# Hadley-like meridional circulation on the sphere (DCMIP 2012, Test 1-2). A
+# prescribed overturning flow advects a tracer in the latitude-height plane and
+# reverses, so the tracer should return to its initial state. Exercises vertical
+# transport and its coupling to the horizontal, which pure horizontal advection
+# tests leave untouched.
+#
+# Reference: http://www-personal.umich.edu/~cjablono/DCMIP-2012_TestCaseDocument_v1.7.pdf,
+# Section 1.2
 import ClimaComms
 ClimaComms.@import_required_backends
 using Test
@@ -16,8 +24,7 @@ import ClimaCore:
     Operators
 import ClimaCore.Utilities: half
 
-using SciMLBase: ODEProblem, solve
-using ClimaTimeSteppers
+import ClimaTimeSteppers as CTS
 
 using NCDatasets, ClimaCoreTempestRemap
 using Statistics: mean
@@ -27,8 +34,6 @@ import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 const context = ClimaComms.SingletonCommsContext()
-# 3D Hadley-like Meridional Circulation (DCMIP 2012 Test 1-2)
-# Reference: http://www-personal.umich.edu/~cjablono/DCMIP-2012_TestCaseDocument_v1.7.pdf, Section 1.2
 
 
 # visualization artifacts
@@ -205,15 +210,15 @@ parameters = (;
     q1 = Fields.Field(Float64, hv_center_space),
     Δₕq1 = Fields.Field(Float64, hv_center_space),
 )
-prob = ODEProblem(
-    ClimaODEFunction(; T_exp! = tendency!, dss!),
+prob = CTS.ODEProblem(
+    CTS.ClimaODEFunction(; T_exp! = tendency!, dss!),
     y,
     (0.0, T),
     parameters,
 )
-sol = solve(
+sol = CTS.solve(
     prob,
-    ExplicitAlgorithm(SSP33ShuOsher()),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = dt,
     saveat = collect(0.0:dt:T),
 )

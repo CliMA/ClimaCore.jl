@@ -1,3 +1,12 @@
+# Shallow-water equations on the cubed sphere, in vector-invariant form. The
+# test case is selected by command-line argument, each one a standard benchmark
+# from Williamson et al. (1992) or its successors: steady-state geostrophic
+# flow, a mountain in that flow, barotropic instability, and the
+# Rossby-Haurwitz wave. Each `AbstractTest` supplies its own topography,
+# Coriolis parameter, and initial condition.
+#
+# Runs on GPU as well as CPU: set `CLIMACOMMS_DEVICE=CUDA`. Plotting is skipped
+# on GPU, since the plotting backend cannot handle device-resident fields.
 using ClimaComms
 ClimaComms.@import_required_backends
 using LinearAlgebra
@@ -17,7 +26,7 @@ import ClimaCore:
     Topologies
 
 import QuadGK
-using OrdinaryDiffEqSSPRK: ODEProblem, init, solve!, SSPRK33
+import ClimaTimeSteppers as CTS
 
 using Logging
 using ClimaComms
@@ -579,10 +588,10 @@ function shallow_water_driver(ARGS, ::Type{FT}) where {FT}
     dt = 6 * 60
     T = 60 * 60 * 24 * 2
 
-    prob = ODEProblem(rhs!, Y, (0.0, T), parameters)
-    integrator = init(
+    prob = CTS.ODEProblem(CTS.ClimaODEFunction(; T_exp! = rhs!), Y, (0.0, T), parameters)
+    integrator = CTS.init(
         prob,
-        SSPRK33(),
+        CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
         dt = dt,
         saveat = collect(0.0:dt:T),
         progress = true,
@@ -591,10 +600,10 @@ function shallow_water_driver(ARGS, ::Type{FT}) where {FT}
     )
 
     if usempi
-        walltime = @elapsed sol = solve!(integrator)
+        walltime = @elapsed sol = CTS.solve!(integrator)
         ClimaComms.iamroot(context) && println("walltime = $walltime (sec)")
     else
-        sol = @timev solve!(integrator)
+        sol = @timev CTS.solve!(integrator)
     end
     sol_global = []
 
@@ -645,6 +654,14 @@ function postprocessing(test, test_params, solution, Y0_global, T, dt)
     @info "Solution L₂ norm at time t = $(T): ", norm(solution[end].h)
     @info "Fluid volume at time t = 0: ", sum(Y0_global.h)
     @info "Fluid volume at time t = $(T): ", sum(solution[end].h)
+
+    # The diagnostics above use device reductions and so run anywhere. The plots
+    # below move field data to the host, which is not supported for GPU fields,
+    # so they are skipped when the run is on a CUDA device.
+    if ClimaComms.device(solution[end].h) isa ClimaComms.CUDADevice
+        @info "Plotting skipped: not supported for fields on a CUDA device"
+        return nothing
+    end
 
     if test isa SteadyStateTest || test isa SteadyStateCompactTest
         # In these cases, we use the IC as the reference exact solution

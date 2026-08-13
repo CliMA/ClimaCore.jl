@@ -1,3 +1,7 @@
+# The analytic linear solution that the inertial gravity wave case is compared
+# against, evaluated through Bretherton transforms. Kept in its own module,
+# apart from `inertial_gravity_wave.jl`, because the solution is long enough to
+# obscure the case setup.
 module InertialGravityWaveUtils
 
 import ClimaCore.Geometry as Geometry
@@ -150,7 +154,7 @@ end
 function linear_solution!(Y, lin_cache, t, ::Type{FT}) where {FT}
     (; ᶜz, ᶜp₀, ᶜρ₀, ᶜu₀, ᶜv₀, ᶠw₀) = lin_cache
     (; ᶜinterp) = lin_cache
-    (; R_d, ᶜ𝔼_name, x_max, z_max, p_0, cp_d, cv_d, grav, T_tri) = lin_cache
+    (; R_d, x_max, z_max, p_0, cp_d, cv_d, grav, T_tri) = lin_cache
     (; ᶜbretherton_factor_pρ) = lin_cache
     (; ᶜbretherton_factor_uvwT, ᶠbretherton_factor_uvwT) = lin_cache
     (; ᶜpb, ᶜρb, ᶜub, ᶜvb, ᶠwb, ᶜp, ᶜρ, ᶜu, ᶜv, ᶠw, ᶜT) = lin_cache
@@ -166,18 +170,9 @@ function linear_solution!(Y, lin_cache, t, ::Type{FT}) where {FT}
     @. ᶜT = ᶜp / (R_d * ᶜρ)
 
     @. Y.c.ρ = ᶜρ
-    if ᶜ𝔼_name == :ρθ
-        @. Y.c.ρθ = ᶜρ * ᶜT * (p_0 / ᶜp)^(R_d / cp_d)
-    elseif ᶜ𝔼_name == :ρe
-        @. Y.c.ρe =
-            ᶜρ * (
-                cv_d * (ᶜT - T_tri) +
-                (ᶜu^2 + ᶜv^2 + ᶜinterp(ᶠw)^2) / 2 +
-                grav * ᶜz
-            )
-    elseif ᶜ𝔼_name == :ρe_int
-        @. Y.c.ρe_int = ᶜρ * cv_d * (ᶜT - T_tri)
-    end
+    @. Y.c.ρe =
+        ᶜρ *
+        (cv_d * (ᶜT - T_tri) + (ᶜu^2 + ᶜv^2 + ᶜinterp(ᶠw)^2) / 2 + grav * ᶜz)
     # NOTE: The following two lines are a temporary workaround b/c Covariant12Vector won't accept a non-zero second component in an XZ-space.
     # So we temporarily set it to zero and then reassign its intended non-zero value (since in case of large-scale config ᶜv is non-zero)
     @. Y.c.uₕ = Geometry.Covariant12Vector(Geometry.UVVector(ᶜu, FT(0.0)))

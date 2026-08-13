@@ -1,9 +1,15 @@
+# Balanced flow on the 3D sphere: the baroclinic-wave initial state with its
+# perturbation switched off, so the flow is in hydrostatic and gradient-wind
+# balance and should not evolve. The run asserts that density, total energy, and
+# horizontal velocity are unchanged after an hour, which makes this a check on
+# the balance of the discretization itself. Run through `driver.jl` with
+# `TEST_NAME=sphere/balanced_flow_rhoe`.
 using Test
 import ClimaTimeSteppers as CTS
 using ClimaCorePlots, Plots
 using ClimaCore.DataLayouts
 
-include("baroclinic_wave_utilities.jl")
+include("baroclinic_wave_utils.jl")
 
 const sponge = false
 
@@ -20,7 +26,7 @@ ode_algorithm = CTS.SSP33ShuOsher
 jacobian_flags = (; ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode = :exact, ∂ᶠ𝕄ₜ∂ᶜρ_mode = :exact)
 
 additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = merge(
-    hyperdiffusion_cache(ᶜlocal_geometry, ᶠlocal_geometry; κ₄ = FT(2e17)),
+    hyperdiffusion_cache(ᶜlocal_geometry; κ₄ = FT(2e17)),
     sponge ? rayleigh_sponge_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) : (;),
 )
 function additional_tendency!(Yₜ, Y, p, t)
@@ -29,7 +35,7 @@ function additional_tendency!(Yₜ, Y, p, t)
 end
 
 center_initial_condition(local_geometry) =
-    center_initial_condition(local_geometry, Val(:ρe); is_balanced_flow = true)
+    sphere_center_initial_condition(local_geometry; is_balanced_flow = true)
 
 function postprocessing(sol, output_dir)
     @info "L₂ norm of ρe at t = $(sol.t[1]): $(norm(sol.u[1].c.ρe))"

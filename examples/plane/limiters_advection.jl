@@ -1,3 +1,9 @@
+# Solid-body tracer advection on a 2D Cartesian plane, with the bounds-preserving
+# quasimonotone limiter. The flow returns the tracers to where they started, so
+# the final field should match the initial one, and the limiter should keep the
+# tracer within its initial bounds throughout. Run over a sequence of resolutions
+# to give a convergence study. Choose the initial condition with a command-line
+# argument: `cosine_bells` (default), `gaussian_bells`, or `cylinders`.
 using ClimaComms
 using LinearAlgebra
 
@@ -12,8 +18,7 @@ import ClimaCore:
     Limiters,
     Quadratures
 
-using SciMLBase: ODEProblem, solve
-using ClimaTimeSteppers
+import ClimaTimeSteppers as CTS
 
 import Logging
 import TerminalLoggers
@@ -37,9 +42,6 @@ Estimate convergence rate given vectors `err` and `Δh`
 convergence_rate(err, Δh) =
     [log(err[i] / err[i - 1]) / log(Δh[i] / Δh[i - 1]) for i in 2:length(Δh)]
 
-# Advection problem on a 2D Cartesian domain with bounds-preserving quasimonotone limiter.
-# The initial condition can be set via a command line argument.
-# Possible test cases are: cosine_bells (default), gaussian_bells, and cylinders
 
 FT = Float64
 
@@ -192,15 +194,15 @@ for (k, ne) in enumerate(ne_seq)
         Δₕq = Fields.Field(FT, space),
         limiter = Limiters.QuasiMonotoneLimiter(q_init),
     )
-    prob = ODEProblem(
-        ClimaODEFunction(; T_lim! = tendency!, lim!, dss!),
+    prob = CTS.ODEProblem(
+        CTS.ClimaODEFunction(; T_lim! = tendency!, lim!, dss!),
         y,
         (0.0, end_time),
         parameters,
     )
-    sol = solve(
+    sol = CTS.solve(
         prob,
-        ExplicitAlgorithm(SSP33ShuOsher()),
+        CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
         dt = dt,
         saveat = [0.0:(0.99 * 800 * dt):end_time..., end_time],
     )

@@ -1,4 +1,7 @@
-import SciMLBase
+# Maps a ClimaTimeSteppers algorithm name to a configured algorithm, and supplies
+# the Jacobian keyword arguments an IMEX scheme needs. Explicit schemes get no
+# Jacobian; IMEX schemes get an `ImplicitEquationJacobian` and the
+# `implicit_equation_jacobian!` that fills it.
 import ClimaTimeSteppers as CTS
 
 is_explicit_CTS_algo_type(alg_or_tableau) =
@@ -8,21 +11,12 @@ is_imex_CTS_algo_type(alg_or_tableau) =
     alg_or_tableau <: CTS.IMEXARKAlgorithmName
 
 is_imex_CTS_algo(::CTS.IMEXAlgorithm) = true
-is_imex_CTS_algo(::SciMLBase.AbstractODEAlgorithm) = false
-
-use_transform(ode_algo) = !is_imex_CTS_algo(ode_algo)
+is_imex_CTS_algo(_) = false
 
 function jac_kwargs(ode_algo, Y, jacobi_flags)
-    if is_imex_CTS_algo(ode_algo)
-        j = ImplicitEquationJacobian(Y, use_transform(ode_algo), jacobi_flags)
-        if use_transform(ode_algo)
-            return (; jac_prototype = j, Wfact_t = implicit_equation_jacobian!)
-        else
-            return (; jac_prototype = j, Wfact = implicit_equation_jacobian!)
-        end
-    else
-        return NamedTuple()
-    end
+    is_imex_CTS_algo(ode_algo) || return NamedTuple()
+    j = ImplicitEquationJacobian(Y, jacobi_flags)
+    return (; jac_prototype = j, Wfact = implicit_equation_jacobian!)
 end
 
 function ode_configuration(

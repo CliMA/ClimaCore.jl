@@ -1,8 +1,13 @@
+# Schär mountain waves: stratified flow over a sinusoidally modulated Gaussian
+# ridge, from Schär et al. (2002), Section 3(b). The ridge is tall enough and
+# narrow enough that the terrain-following coordinate is strongly distorted near
+# the surface, which is what makes this a demanding test of the metric terms.
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaComms
 ClimaComms.@import_required_backends
+include("plane_utils.jl")
 
 import ClimaCore:
     ClimaCore,
@@ -18,9 +23,7 @@ import ClimaCore:
     Hypsography
 using ClimaCore.Geometry
 using ClimaCore.Utilities: half
-using ClimaCore.Meshes: GeneralizedExponentialStretching
 
-using DiffEqCallbacks
 
 using Logging: global_logger
 using TerminalLoggers: TerminalLogger
@@ -31,13 +34,6 @@ global_logger(TerminalLogger())
 # https://doi.org/10.1175/1520-0493(2002)130<2459:ANTFVC>2.0.CO;2
 # Section 3(b)
 
-const MSLP = 1e5 # mean sea level pressure
-const grav = 9.8 # gravitational constant
-const R_d = 287.058 # R dry (gas constant / mol mass dry air)
-const γ = 1.4 # heat capacity ratio
-const C_p = R_d * γ / (γ - 1) # heat capacity at constant pressure
-const C_v = R_d / (γ - 1) # heat capacity at constant volumehttps://clima.github.io/Thermodynamics.jl/dev/DevDocs/
-const T_0 = 273.16 # triple point temperature
 const kinematic_viscosity = 0.0 #m²/s
 const hyperdiffusivity = 2e7 #m²/s
 
@@ -54,65 +50,24 @@ function warp_schar(coord)
     end
 end
 
-function warp_agnesi(coord)
-    x = coord.x
-    h₀ = 1
-    a = 1000
-    return h₀ * a^2 / (x^2 + a^2)
-end
-
 const nx = 32
 const nz = 40
 const np = 4
 const Lx = 120000
 const Lz = 25000
 
-function hvspace_2D(
-    xlim = (-π, π),
-    zlim = (0, 4π),
+# set up 2D domain - doubly periodic box
+hv_center_space, hv_face_space = hvspace_2D(
+    (-Lx / 2, Lx / 2),
+    (0, Lz);
     xelem = nx,
     zelem = nz,
     npoly = np,
     warp_fn = warp_schar,
 )
-    FT = Float64
-    vertdomain = Domains.IntervalDomain(
-        Geometry.ZPoint{FT}(zlim[1]),
-        Geometry.ZPoint{FT}(zlim[2]);
-        boundary_names = (:bottom, :top),
-    )
-    #vertmesh = Meshes.IntervalMesh(vertdomain, GeneralizedExponentialStretching(500.0, 5000.0), nelems = zelem)
-    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    context = ClimaComms.context()
-    device = ClimaComms.device(context)
-    vert_face_space = Spaces.FaceFiniteDifferenceSpace(device, vertmesh)
-
-    horzdomain = Domains.IntervalDomain(
-        Geometry.XPoint{FT}(xlim[1]),
-        Geometry.XPoint{FT}(xlim[2]);
-        periodic = true,
-    )
-    horzmesh = Meshes.IntervalMesh(horzdomain, nelems = xelem)
-    horztopology = Topologies.IntervalTopology(device, horzmesh)
-    quad = Quadratures.GLL{npoly + 1}()
-    horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
-
-    z_surface = Geometry.ZPoint.(warp_fn.(Fields.coordinate_field(horzspace)))
-    hv_face_space = Spaces.ExtrudedFiniteDifferenceSpace(
-        horzspace,
-        vert_face_space,
-        Hypsography.LinearAdaption(z_surface),
-    )
-    hv_center_space = Spaces.CenterExtrudedFiniteDifferenceSpace(hv_face_space)
-    return (hv_center_space, hv_face_space)
-end
-
-# set up 2D domain - doubly periodic box
-hv_center_space, hv_face_space = hvspace_2D((-Lx / 2, Lx / 2), (0, Lz))
 
 Φ(z) = grav * z
 
-# Reference: https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml, Section 5a
 # Prognostic thermodynamic variable: Total Energy 
 function init_advection_over_mountain(x, z)
     θ₀ = 280.0
@@ -397,35 +352,35 @@ dYdt = similar(Y);
 rhs_invariant!(dYdt, Y, nothing, 0.0);
 
 # run!
-using OrdinaryDiffEqSSPRK: ODEProblem, init, solve!, SSPRK33
+import ClimaTimeSteppers as CTS
 Δt = min(Lx / nx / np / 300, Lz / nz / 300) * 0.50
 @show Δt
 
 timeend = 3600.0 * 15.0
-function make_dss_func()
-    _dss!(x::Fields.Field) = Spaces.weighted_dss!(x)
-    _dss!(::Any) = nothing
-    dss_func(Y, t, integrator) = foreach(_dss!, Fields._values(Y))
-    return dss_func
-end
-dss_func = make_dss_func()
-dss_callback = FunctionCallingCallback(dss_func, func_start = true)
-prob = ODEProblem(rhs_invariant!, Y, (0.0, timeend))
-integrator = init(
+# A `FieldVector` may hold non-`Field` entries, which need no DSS.
+_dss!(x::Fields.Field) = Spaces.weighted_dss!(x)
+_dss!(::Any) = nothing
+dss!(Y, parameters, t) = foreach(_dss!, Fields._values(Y))
+prob = CTS.ODEProblem(
+    CTS.ClimaODEFunction(; T_exp! = rhs_invariant!, dss!),
+    Y,
+    (0.0, timeend),
+    nothing,
+)
+integrator = CTS.init(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = Δt,
     saveat = collect(0.0:500.0:timeend),
     progress = true,
     progress_message = (dt, u, p, t) -> t,
-    callback = dss_callback,
 );
 
 if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
     throw(:exit_profile)
 end
 
-sol = @timev solve!(integrator)
+sol = @timev CTS.solve!(integrator)
 
 ENV["GKSwstype"] = "nul"
 import Plots, ClimaCorePlots

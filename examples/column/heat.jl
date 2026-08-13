@@ -1,3 +1,7 @@
+# 1D heat equation ∂_t T = α ∇²T on a vertical column, discretized with the
+# staggered finite difference operators: `GradientC2F` to faces, `DivergenceF2C`
+# back to centers. Demonstrates the two vertical boundary condition kinds — a
+# Dirichlet value at the bottom and a prescribed gradient at the top.
 import ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore:
@@ -10,7 +14,7 @@ import ClimaCore:
     Geometry,
     Spaces
 
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
 
 import Logging
 import TerminalLoggers
@@ -51,10 +55,11 @@ end
 # Solve the ODE operator
 Δt = 0.02
 
-prob = ODEProblem(∑tendencies!, T, (0.0, 10.0))
-sol = solve(
+prob =
+    CTS.ODEProblem(CTS.ClimaODEFunction(; T_exp! = ∑tendencies!), T, (0.0, 10.0), nothing)
+sol = CTS.solve(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = Δt,
     saveat = collect(0.0:(10 * Δt):10.0),
     progress = true,

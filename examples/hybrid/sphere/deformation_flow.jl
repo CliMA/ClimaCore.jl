@@ -1,6 +1,13 @@
+# 3D deformation flow on the sphere (DCMIP 2012, Test 1-1). A prescribed,
+# time-reversing wind field stretches tracers into thin filaments and then
+# returns them to their initial shape, so the exact solution at the end is the
+# initial condition. Tests how well the transport scheme preserves tracer
+# structure and correlations under strong deformation.
+#
+# Reference: http://www-personal.umich.edu/~cjablono/DCMIP-2012_TestCaseDocument_v1.7.pdf,
+# Section 1.1
 import ClimaComms
 ClimaComms.@import_required_backends
-using SciMLBase: ODEProblem, init, solve
 using Test
 using Statistics: mean
 
@@ -14,17 +21,13 @@ using ClimaCore:
     Operators,
     Limiters,
     Quadratures
-using ClimaTimeSteppers
+import ClimaTimeSteppers as CTS
 
 using Logging
 using TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 const context = ClimaComms.SingletonCommsContext()
-# 3D deformation flow (DCMIP 2012 Test 1-1)
-# Reference:
-# http://www-personal.umich.edu/~cjablono/DCMIP-2012_TestCaseDocument_v1.7.pdf,
-# Section 1.1
 
 const FT = Float64                # floating point type
 const R = FT(6.37122e6)           # radius
@@ -52,7 +55,7 @@ const helem = 4
 const npoly = 4
 const t_end = FT(60 * 60 * 24 * 12) # 12 days of simulation time
 const _dt = FT(60 * 60) # 1 hour timestep
-ode_algorithm = ExplicitAlgorithm(SSP33ShuOsher())
+ode_algorithm = CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher())
 
 # Operators used in increment!
 const hdiv = Operators.Divergence()
@@ -266,13 +269,13 @@ function run_deformation_flow(use_limiter, fct_op, dt)
         dt,
     )
 
-    problem = ODEProblem(
-        ClimaODEFunction(; T_exp_T_lim!, lim!, dss!),
+    problem = CTS.ODEProblem(
+        CTS.ClimaODEFunction(; T_exp_T_lim!, lim!, dss!),
         Y,
         (0, t_end),
         cache,
     )
-    sol = solve(problem, ode_algorithm; dt)
+    sol = CTS.solve(problem, ode_algorithm; dt)
     if !(cache.limiter isa Nothing)
         @show cache.limiter.rtol
         Limiters.print_convergence_stats(cache.limiter)

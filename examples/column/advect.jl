@@ -1,3 +1,9 @@
+# 1D vertical advection of a sine wave, solved four ways: the flux-divergence
+# form built from `UpwindBiasedProductC2F`, and the advective form using
+# `AdvectionC2C`, each with and without a `FluxCorrectionC2C` term. The four
+# tendencies share an initial condition and take their boundary values from the
+# exact solution, so their plots can be compared directly to see how much each
+# formulation damps and disperses the wave.
 import ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore:
@@ -10,7 +16,7 @@ import ClimaCore:
     Geometry,
     Spaces
 
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
 
 import Logging
 import TerminalLoggers
@@ -111,37 +117,37 @@ end
 @show tendency1!(similar(θ), θ, nothing, 0.0)
 # Solve the ODE operator
 Δt = 0.001
-prob1 = ODEProblem(tendency1!, θ, (0.0, 10.0))
-prob2 = ODEProblem(tendency2!, θ, (0.0, 10.0))
-prob3 = ODEProblem(tendency3!, θ, (0.0, 10.0))
-prob4 = ODEProblem(tendency4!, θ, (0.0, 10.0))
-sol1 = solve(
+prob1 = CTS.ODEProblem(CTS.ClimaODEFunction(; T_exp! = tendency1!), θ, (0.0, 10.0), nothing)
+prob2 = CTS.ODEProblem(CTS.ClimaODEFunction(; T_exp! = tendency2!), θ, (0.0, 10.0), nothing)
+prob3 = CTS.ODEProblem(CTS.ClimaODEFunction(; T_exp! = tendency3!), θ, (0.0, 10.0), nothing)
+prob4 = CTS.ODEProblem(CTS.ClimaODEFunction(; T_exp! = tendency4!), θ, (0.0, 10.0), nothing)
+sol1 = CTS.solve(
     prob1,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = Δt,
     saveat = collect(0.0:(10 * Δt):10.0),
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
-sol2 = solve(
+sol2 = CTS.solve(
     prob2,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = Δt,
     saveat = collect(0.0:(10 * Δt):10.0),
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
-sol3 = solve(
+sol3 = CTS.solve(
     prob3,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = Δt,
     saveat = collect(0.0:(10 * Δt):10.0),
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
-sol4 = solve(
+sol4 = CTS.solve(
     prob4,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = Δt,
     saveat = collect(0.0:(10 * Δt):10.0),
     progress = true,

@@ -13,8 +13,9 @@ using Adapt
 using ClimaComms
 ClimaComms.@import_required_backends
 FloatType = eval(Meta.parse(get(ARGS, 1, "Float64")))
-using StaticArrays, IntervalSets, LinearAlgebra, SciMLBase
-using OrdinaryDiffEqSSPRK: SSPRK33
+using StaticArrays, IntervalSets, LinearAlgebra
+import ClimaTimeSteppers as CTS
+import ClimaTimeSteppers as CTS
 using DocStringExtensions
 
 import ClimaCore:
@@ -446,10 +447,15 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
     rhs_invariant!(dYdt, Y, ghost_buffer, 0.0)
     # run!
     Δt = sim_params.Δt
-    prob = ODEProblem(rhs_invariant!, Y, (0.0, sim_params.t_int), ghost_buffer)
-    integrator = SciMLBase.init(
+    prob = CTS.ODEProblem(
+        CTS.ClimaODEFunction(; T_exp! = rhs_invariant!),
+        Y,
+        (0.0, sim_params.t_int),
+        ghost_buffer,
+    )
+    integrator = CTS.init(
         prob,
-        SSPRK33(),
+        CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
         dt = Δt,
         saveat = [0.0:10.0:(sim_params.t_int)..., sim_params.t_int],
         progress = true,
@@ -461,7 +467,7 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
         throw(:exit_profile)
     end
 
-    t_diff = @elapsed sol_invariant = SciMLBase.solve!(integrator)
+    t_diff = @elapsed sol_invariant = CTS.solve!(integrator)
 
     if ClimaComms.iamroot(comms_ctx)
         println("Walltime = $t_diff seconds")

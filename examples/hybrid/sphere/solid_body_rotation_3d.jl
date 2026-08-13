@@ -1,3 +1,9 @@
+# Solid-body rotation on the 3D sphere: an isothermal, hydrostatically balanced
+# atmosphere in rigid rotation with the planet. The exact solution is the initial
+# state, so the run asserts that density and total energy are unchanged at the
+# end. `discrete_hydrostatic_balance!` replaces the analytic profile with one
+# balanced against the *discrete* vertical operators, which is what keeps the
+# state at rest.
 using ClimaComms
 using Test
 using LinearAlgebra
@@ -15,7 +21,7 @@ import ClimaCore:
     Operators
 import ClimaCore.Utilities: half
 
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
 
 import Logging
 import TerminalLoggers
@@ -279,15 +285,15 @@ dYdt = similar(Y)
 rhs!(dYdt, Y, parameters, 0.0)
 
 # run!
-using OrdinaryDiffEqSSPRK: ODEProblem, init, solve!, SSPRK33
+import ClimaTimeSteppers as CTS
 # Solve the ODE
 T = 3600
 dt = 5
-prob = ODEProblem(rhs!, Y, (0.0, T), parameters)
+prob = CTS.ODEProblem(CTS.ClimaODEFunction(; T_exp! = rhs!), Y, (0.0, T), parameters)
 
-integrator = init(
+integrator = CTS.init(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = dt,
     saveat = collect(0.0:dt:T),
     progress = true,
@@ -300,7 +306,7 @@ if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
 end
 
 # solve ode
-sol = @timev solve!(integrator)
+sol = @timev CTS.solve!(integrator)
 
 uₕ_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
 w_phy = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)

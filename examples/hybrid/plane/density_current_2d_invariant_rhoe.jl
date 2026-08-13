@@ -1,3 +1,7 @@
+# Density current in 2D: a cold perturbation sinks, hits the ground, and spreads
+# as a gravity current whose front rolls up into Kelvin-Helmholtz billows. The
+# billow structure is resolution-sensitive, which makes this a sharp test of the
+# advection scheme. Vector-invariant form, total energy prognostic.
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
 using Test
@@ -5,6 +9,7 @@ using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaComms
 ClimaComms.@import_required_backends
+include("plane_utils.jl")
 
 import ClimaCore:
     ClimaCore,
@@ -23,51 +28,11 @@ using Logging: global_logger
 using TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
 
-function hvspace_2D(
-    xlim = (-π, π),
-    zlim = (0, 4π),
-    xelem = 64,
-    zelem = 32,
-    npoly = 4,
-)
-    FT = Float64
-    vertdomain = Domains.IntervalDomain(
-        Geometry.ZPoint{FT}(zlim[1]),
-        Geometry.ZPoint{FT}(zlim[2]);
-        boundary_names = (:bottom, :top),
-    )
-    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    context = ClimaComms.context()
-    device = ClimaComms.device(context)
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(device, vertmesh)
-
-    horzdomain = Domains.IntervalDomain(
-        Geometry.XPoint{FT}(xlim[1]),
-        Geometry.XPoint{FT}(xlim[2]);
-        periodic = true,
-    )
-    horzmesh = Meshes.IntervalMesh(horzdomain, nelems = xelem)
-    horztopology = Topologies.IntervalTopology(device, horzmesh)
-
-    quad = Quadratures.GLL{npoly + 1}()
-    horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
-
-    hv_center_space =
-        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
-    hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
-    return (hv_center_space, hv_face_space)
-end
 
 # set up 2D domain - doubly periodic box
-hv_center_space, hv_face_space = hvspace_2D((-25600, 25600), (0, 6400))
+hv_center_space, hv_face_space =
+    hvspace_2D((-25600, 25600), (0, 6400); xelem = 64, zelem = 32)
 
-const MSLP = 1e5 # mean sea level pressure
-const grav = 9.8 # gravitational constant
-const R_d = 287.058 # R dry (gas constant / mol mass dry air)
-const γ = 1.4 # heat capacity ratio
-const C_p = R_d * γ / (γ - 1) # heat capacity at constant pressure
-const C_v = R_d / (γ - 1) # heat capacity at constant volume
-const T_0 = 273.16 # triple point temperature
 
 Φ(z) = grav * z
 
@@ -272,13 +237,18 @@ dYdt = similar(Y);
 rhs_invariant!(dYdt, Y, nothing, 0.0);
 
 # run!
-using OrdinaryDiffEqSSPRK: ODEProblem, init, solve!, SSPRK33
+import ClimaTimeSteppers as CTS
 timeend = 900.0
 Δt = 0.3
-prob = ODEProblem(rhs_invariant!, Y, (0.0, timeend))
-integrator = init(
+prob = CTS.ODEProblem(
+    CTS.ClimaODEFunction(; T_exp! = rhs_invariant!),
+    Y,
+    (0.0, timeend),
+    nothing,
+)
+integrator = CTS.init(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = Δt,
     saveat = collect(0.0:10.0:timeend),
     progress = true,
@@ -289,7 +259,7 @@ if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
     throw(:exit_profile)
 end
 
-sol = @timev solve!(integrator)
+sol = @timev CTS.solve!(integrator)
 
 ENV["GKSwstype"] = "nul"
 import Plots, ClimaCorePlots

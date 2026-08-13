@@ -1,3 +1,7 @@
+# 1D wave equation written as a first-order system in a center-valued `u` and a
+# face-valued `p`, so the two unknowns sit on the staggered grid that
+# `GradientC2F` and `DivergenceF2C` pair across. Homogeneous Dirichlet
+# conditions on `u` hold the ends fixed; the run animates the standing wave.
 import ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore.Geometry, LinearAlgebra
@@ -11,7 +15,7 @@ import ClimaCore:
     Geometry,
     Spaces
 
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
 
 import Logging
 import TerminalLoggers
@@ -57,10 +61,10 @@ end
 
 # Solve the ODE operator
 Δt = 0.01
-prob = ODEProblem(tendency!, Y, (0.0, 4 * pi))
-sol = solve(
+prob = CTS.ODEProblem(CTS.ClimaODEFunction(; T_exp! = tendency!), Y, (0.0, 4 * pi), nothing)
+sol = CTS.solve(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = Δt,
     saveat = [0.0:(10 * Δt):(4 * pi)..., 4 * pi],
     progress = true,

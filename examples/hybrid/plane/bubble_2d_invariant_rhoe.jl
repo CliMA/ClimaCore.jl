@@ -1,3 +1,8 @@
+# Dry rising thermal bubble in 2D: a warm perturbation in a neutrally stratified
+# atmosphere becomes buoyant and rolls up into a mushroom cloud. A standard
+# check that the nonhydrostatic solver handles strong local buoyancy while
+# conserving mass and energy. Written in vector-invariant form with total energy
+# as the prognostic thermodynamic variable.
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
 using Test
@@ -5,6 +10,7 @@ using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaComms
 ClimaComms.@import_required_backends
+include("plane_utils.jl")
 
 import ClimaCore:
     ClimaCore,
@@ -24,51 +30,11 @@ using Logging: global_logger
 using TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
 
-function hvspace_2D(
-    xlim = (-π, π),
-    zlim = (0, 4π),
-    xelem = 10,
-    zelem = 40,
-    npoly = 4,
-)
-    FT = Float64
-    vertdomain = Domains.IntervalDomain(
-        Geometry.ZPoint{FT}(zlim[1]),
-        Geometry.ZPoint{FT}(zlim[2]);
-        boundary_names = (:bottom, :top),
-    )
-    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    context = ClimaComms.context()
-    device = ClimaComms.device(context)
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(device, vertmesh)
-
-    horzdomain = Domains.IntervalDomain(
-        Geometry.XPoint{FT}(xlim[1]),
-        Geometry.XPoint{FT}(xlim[2]);
-        periodic = true,
-    )
-    horzmesh = Meshes.IntervalMesh(horzdomain, nelems = xelem)
-    horztopology = Topologies.IntervalTopology(device, horzmesh)
-
-    quad = Quadratures.GLL{npoly + 1}()
-    horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
-
-    hv_center_space =
-        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
-    hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
-    return (hv_center_space, hv_face_space)
-end
 
 # set up 2D domain - doubly periodic box
-hv_center_space, hv_face_space = hvspace_2D((-500, 500), (0, 1000))
+hv_center_space, hv_face_space =
+    hvspace_2D((-500, 500), (0, 1000); xelem = 10, zelem = 40)
 
-const MSLP = 1e5 # mean sea level pressure
-const grav = 9.8 # gravitational constant
-const R_d = 287.058 # R dry (gas constant / mol mass dry air)
-const γ = 1.4 # heat capacity ratio
-const C_p = R_d * γ / (γ - 1) # heat capacity at constant pressure
-const C_v = R_d / (γ - 1) # heat capacity at constant volume
-const T_0 = 273.16 # triple point temperature
 
 Φ(z) = grav * z
 
@@ -252,12 +218,17 @@ dYdt = similar(Y);
 rhs_invariant!(dYdt, Y, nothing, 0.0);
 
 # run!
-using OrdinaryDiffEqSSPRK: init, ODEProblem, solve!, SSPRK33
+import ClimaTimeSteppers as CTS
 Δt = 0.04
-prob = ODEProblem(rhs_invariant!, Y, (0.0, 1200.0))
-integrator = init(
+prob = CTS.ODEProblem(
+    CTS.ClimaODEFunction(; T_exp! = rhs_invariant!),
+    Y,
+    (0.0, 1200.0),
+    nothing,
+)
+integrator = CTS.init(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = Δt,
     saveat = collect(0.0:10.0:1200.0),
     progress = true,
@@ -268,7 +239,7 @@ if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
     throw(:exit_profile)
 end
 
-sol = @timev solve!(integrator)
+sol = @timev CTS.solve!(integrator)
 
 ENV["GKSwstype"] = "nul"
 import Plots, ClimaCorePlots

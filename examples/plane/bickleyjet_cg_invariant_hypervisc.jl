@@ -1,3 +1,7 @@
+# Bickley jet (see `bickleyjet_cg.jl`), written in vector-invariant form —
+# the momentum tendency carries a gradient of the Bernoulli function and a
+# vorticity cross product instead of a flux divergence — and stabilized with
+# hyperviscosity rather than relying on the discretization alone.
 using ClimaComms
 using LinearAlgebra
 
@@ -10,7 +14,7 @@ import ClimaCore:
     Spaces,
     Topologies,
     Quadratures
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
 
 using Logging
 ClimaComms.@import_required_backends
@@ -146,12 +150,12 @@ end
 dydt = similar(y0)
 rhs!(dydt, y0, nothing, 0.0)
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 80.0))
-#prob = ODEProblem(rhs!, y0, (0.0, 2.0))
+prob = CTS.ODEProblem(CTS.ClimaODEFunction(; T_exp! = rhs!), y0, (0.0, 80.0), nothing)
+#prob = CTS.ODEProblem(CTS.ClimaODEFunction(; T_exp! = rhs!), y0, (0.0, 2.0), nothing)
 
-sol = solve(
+sol = CTS.solve(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = 0.02,
     saveat = collect(0.0:1.0:80.0),
     progress = true,

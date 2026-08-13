@@ -1,3 +1,10 @@
+# Nonhydrostatic gravity wave on a small-planet sphere: a potential temperature
+# perturbation in a stratified, non-rotating atmosphere radiates gravity waves
+# whose evolution can be compared against a linear analytic solution. The planet
+# radius is reduced so that nonhydrostatic effects are resolvable at practical
+# resolutions.
+#
+# Reference: https://climate.ucdavis.edu/pubs/UJ2012JCP.pdf, Section 5.4
 import ClimaComms
 ClimaComms.@import_required_backends
 using Test
@@ -15,15 +22,13 @@ import ClimaCore:
     Fields,
     Operators
 
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
 
 import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 const context = ClimaComms.SingletonCommsContext()
-# Nonhydrostatic gravity wave
-# Reference: https://climate.ucdavis.edu/pubs/UJ2012JCP.pdf Section 5.4
 
 const R = 6.37122e6 # radius
 const grav = 9.8 # gravitational constant
@@ -251,14 +256,14 @@ dYdt = similar(Y)
 rhs!(dYdt, Y, nothing, 0.0)
 
 # run!
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
 # Solve the ODE
 time_end = 600
 dt = 3
-prob = ODEProblem(rhs!, Y, (0.0, time_end))
-sol = solve(
+prob = CTS.ODEProblem(CTS.ClimaODEFunction(; T_exp! = rhs!), Y, (0.0, time_end), nothing)
+sol = CTS.solve(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = dt,
     saveat = collect(0:dt:time_end),
     progress = true,

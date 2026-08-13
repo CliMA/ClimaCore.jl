@@ -1,7 +1,13 @@
+# Solid-body advection of tracers on a 3D Cartesian box, with the
+# bounds-preserving quasimonotone horizontal limiter. The flow returns the
+# tracers to their starting point, so the final field should match the initial
+# one; the run reports the L₁, L₂, and L∞ errors against the initial field.
+# Choose the initial condition with a command-line argument: `cosine_bells`
+# (default), `gaussian_bells`, or `slotted_spheres`.
 using ClimaComms
 ClimaComms.@import_required_backends
 using LinearAlgebra
-using SciMLBase
+import ClimaTimeSteppers as CTS
 
 import ClimaCore:
     Domains,
@@ -298,7 +304,7 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
         limiter = Limiters.QuasiMonotoneLimiter(q_init),
         params,
     )
-    prob = SciMLBase.ODEProblem(
+    prob = CTS.ODEProblem(
         CTS.ClimaODEFunction(;
             T_lim! = horizontal_tendency!,
             T_exp! = vertical_tendency!,
@@ -309,7 +315,7 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
         (0.0, end_time),
         parameters,
     )
-    sol = SciMLBase.solve(
+    sol = CTS.solve(
         prob,
         CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
         dt = dt,

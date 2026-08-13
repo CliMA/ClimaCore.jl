@@ -17,12 +17,12 @@ catch err
     end
 end
 
-using SciMLBase: step!, solve!
-step!(integrator) # compile first
+import ClimaTimeSteppers as CTS
+CTS.step!(integrator) # compile first
 Profile.clear_malloc_data()
 prof = Profile.@profile begin
     for _ in 1:100
-        step!(integrator)
+        CTS.step!(integrator)
     end
 end
 

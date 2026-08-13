@@ -1,3 +1,10 @@
+# Tracer advection on the cubed sphere, with the bounds-preserving quasimonotone
+# limiter. The wind is the standard deformational flow — a stretching cell
+# modulated by `cos(πt/T)`, superposed on a constant zonal drift — so it deforms
+# the tracers, then reverses and returns them to their initial state at `t = T`.
+# The run reports L₁, L₂, and L∞ errors over a sequence of resolutions. Choose
+# the initial condition with a command-line argument: `cosine_bells` (default),
+# `gaussian_bells`, or `cylinders`.
 using ClimaComms
 using LinearAlgebra
 
@@ -13,7 +20,7 @@ import ClimaCore:
     Quadratures
 
 using Test
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
 
 import Logging
 import TerminalLoggers
@@ -37,9 +44,6 @@ Estimate convergence rate given vectors `err` and `Δh`
 convergence_rate(err, Δh) =
     [log(err[i] / err[i - 1]) / log(Δh[i] / Δh[i - 1]) for i in 2:length(Δh)]
 
-# Advection problem on a sphere with bounds-preserving quasimonotone limiter.
-# The initial condition can be set via a command line argument.
-# Possible test cases are: cosine_bells (default), gaussian_bells, and cylinders
 
 const R = 6.37122e6  # sphere radius
 const r0 = R / 2     # bells radius
@@ -193,8 +197,6 @@ for (k, ne) in enumerate(ne_seq)
             Geometry.UVVector(uu, uv)
         end
 
-        Limiters.compute_bounds!(parameters.limiter, y.ρq, y.ρ)
-
         # Compute hyperviscosity for the tracer equation by splitting it in two diffusion calls
         @. ystar.ρq = wdiv(grad(y.ρq / y.ρ))
         Spaces.weighted_dss!(ystar)
@@ -205,15 +207,15 @@ for (k, ne) in enumerate(ne_seq)
         @. ystar.ρq += -wdiv(y.ρq * u)      # adevtion of tracers equation
     end
 
-    function stage_callback!(ydoublestar, integrator, parameters, t)
+    function lim!(y, parameters, t, y_ref)
         if lim_flag
-            Limiters.apply_limiter!(
-                ydoublestar.ρq,
-                ydoublestar.ρ,
-                parameters.limiter,
-            )
+            Limiters.compute_bounds!(parameters.limiter, y_ref.ρq, y_ref.ρ)
+            Limiters.apply_limiter!(y.ρq, y.ρ, parameters.limiter)
         end
-        Spaces.weighted_dss!(ydoublestar)
+    end
+
+    function dss!(y, parameters, t)
+        Spaces.weighted_dss!(y)
     end
 
     # Set up RHS function
@@ -224,15 +226,17 @@ for (k, ne) in enumerate(ne_seq)
 
     # Solve the ODE
     end_time = T
-    prob = ODEProblem(f!, y0, (0.0, end_time), parameters)
-    sol = solve(
+    prob = CTS.ODEProblem(
+        CTS.ClimaODEFunction(; T_lim! = f!, lim!, dss!),
+        y0,
+        (0.0, end_time),
+        parameters,
+    )
+    sol = CTS.solve(
         prob,
-        SSPRK33(stage_callback!),
+        CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
         dt = dt,
         saveat = [0.0:(10 * dt):end_time..., end_time],
-        progress = true,
-        adaptive = false,
-        progress_message = (dt, u, p, t) -> t,
     )
     L1err[k] = norm(
         (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),

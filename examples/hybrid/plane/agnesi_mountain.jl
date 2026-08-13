@@ -1,8 +1,14 @@
+# Linear mountain waves: uniform stratified flow (N = 0.01 s⁻¹) over a
+# witch-of-Agnesi hill, following Ullrich and Guerra [2016, GMD]. The hill is
+# only 1 m high, so the response stays in the linear regime and can be compared
+# against linear theory. Exercises the terrain-following (`LinearAdaption`) mesh
+# and the sponge layers that absorb waves at the lateral and upper boundaries.
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaComms
 ClimaComms.@import_required_backends
+include("plane_utils.jl")
 import ClimaCore:
     ClimaCore,
     slab,
@@ -17,19 +23,11 @@ import ClimaCore:
     Hypsography
 using ClimaCore.Geometry
 
-using DiffEqCallbacks
 
 using Logging: global_logger
 using TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
 
-const MSLP = 1e5 # mean sea level pressure
-const grav = 9.8 # gravitational constant
-const R_d = 287.058 # R dry (gas constant / mol mass dry air)
-const γ = 1.4 # heat capacity ratio
-const C_p = R_d * γ / (γ - 1) # heat capacity at constant pressure
-const C_v = R_d / (γ - 1) # heat capacity at constant volume
-const T_0 = 273.16 # triple point temperature
 const kinematic_viscosity = 75.0 #m²/s
 const hyperdiffusivity = 1e7 #m²/s
 
@@ -44,54 +42,22 @@ function warp_surface(coord)
     return hc / (1 + (x / ac)^2)
 end
 
-function hvspace_2D(
-    xlim = (-π, π),
-    zlim = (0, 4π),
-    xelem = 32,
-    zelem = 25,
-    npoly = 4,
-    warp_fn = warp_surface,
-)
-    FT = Float64
-    vertdomain = Domains.IntervalDomain(
-        Geometry.ZPoint{FT}(zlim[1]),
-        Geometry.ZPoint{FT}(zlim[2]);
-        boundary_names = (:bottom, :top),
-    )
-    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    context = ClimaComms.context()
-    device = ClimaComms.device(context)
-    vert_face_space = Spaces.FaceFiniteDifferenceSpace(device, vertmesh)
-
-    horzdomain = Domains.IntervalDomain(
-        Geometry.XPoint{FT}(xlim[1]),
-        Geometry.XPoint{FT}(xlim[2]);
-        periodic = true,
-    )
-    horzmesh = Meshes.IntervalMesh(horzdomain, nelems = xelem)
-    horztopology = Topologies.IntervalTopology(device, horzmesh)
-    quad = Quadratures.GLL{npoly + 1}()
-    horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
-
-    z_surface = Geometry.ZPoint.(warp_fn.(Fields.coordinate_field(horzspace)))
-    hv_face_space = Spaces.ExtrudedFiniteDifferenceSpace(
-        horzspace,
-        vert_face_space,
-        Hypsography.LinearAdaption(z_surface),
-    )
-    hv_center_space = Spaces.CenterExtrudedFiniteDifferenceSpace(hv_face_space)
-    return (hv_center_space, hv_face_space)
-end
 
 # set up 2D domain - doubly periodic box
 const xmin = -72000.0
 const xmax = 72000.0
 const xsponge = xmax - 10000.0
-hv_center_space, hv_face_space = hvspace_2D((xmin, xmax), (0, 25000))
+hv_center_space, hv_face_space =
+    hvspace_2D(
+        (xmin, xmax),
+        (0, 25000);
+        xelem = 32,
+        zelem = 25,
+        warp_fn = warp_surface,
+    )
 
 Φ(z) = grav * z
 
-# Reference: https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml, Section 5a
 # Prognostic thermodynamic variable: Total Energy 
 function init_advection_over_mountain(x, z)
     θ₀ = 280.0
@@ -335,33 +301,34 @@ dYdt = similar(Y);
 rhs_invariant!(dYdt, Y, nothing, 0.0);
 
 # run!
-using OrdinaryDiffEqSSPRK: ODEProblem, init, solve!, SSPRK33
+import ClimaTimeSteppers as CTS
 Δt = 1.0
 timeend = 72000.0
-function make_dss_func()
-    _dss!(x::Fields.Field) = Spaces.weighted_dss!(x)
-    _dss!(::Any) = nothing
-    dss_func(Y, t, integrator) = foreach(_dss!, Fields._values(Y))
-    return dss_func
-end
-dss_func = make_dss_func()
-dss_callback = FunctionCallingCallback(dss_func, func_start = true)
-prob = ODEProblem(rhs_invariant!, Y, (0.0, timeend))
-integrator = init(
+# ClimaTimeSteppers calls `dss!` after every stage; a FieldVector may hold
+# non-Field entries (e.g. scalars), which need no DSS.
+_dss!(x::Fields.Field) = Spaces.weighted_dss!(x)
+_dss!(::Any) = nothing
+dss!(Y, parameters, t) = foreach(_dss!, Fields._values(Y))
+prob = CTS.ODEProblem(
+    CTS.ClimaODEFunction(; T_exp! = rhs_invariant!, dss!),
+    Y,
+    (0.0, timeend),
+    nothing,
+)
+integrator = CTS.init(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = Δt,
     saveat = collect(0.0:1800.0:timeend),
     progress = true,
     progress_message = (dt, u, p, t) -> t,
-    callback = dss_callback,
 );
 
 if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
     throw(:exit_profile)
 end
 
-sol = @timev solve!(integrator)
+sol = @timev CTS.solve!(integrator)
 
 ENV["GKSwstype"] = "nul"
 import Plots, ClimaCorePlots

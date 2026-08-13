@@ -1,3 +1,7 @@
+# 1D advection-diffusion on a vertical column, with a travelling Gaussian as the
+# exact solution. Boundary values are evaluated from that Gaussian at each step,
+# so the computed profile can be compared against it to show the discretization
+# transporting and spreading the pulse at the right rate.
 import ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore:
@@ -10,7 +14,7 @@ import ClimaCore:
     Geometry,
     Spaces
 
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
 
 import Logging
 import TerminalLoggers
@@ -90,10 +94,10 @@ end
 # Solve the ODE operator
 Δt = 0.0001
 
-prob = ODEProblem(∑tendencies!, T, (t₀, t₁))
-sol = solve(
+prob = CTS.ODEProblem(CTS.ClimaODEFunction(; T_exp! = ∑tendencies!), T, (t₀, t₁), nothing)
+sol = CTS.solve(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = Δt,
     saveat = collect(t₀:(10000 * Δt):t₁),
     progress = true,

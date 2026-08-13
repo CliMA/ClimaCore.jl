@@ -1,3 +1,9 @@
+# Solid-body rotation of a tracer bell around the cubed sphere: the simplest
+# horizontal transport test, and the one that exposes how the cubed-sphere panel
+# edges affect accuracy. Run over a sequence of resolutions to give a convergence
+# study. The first command-line argument selects the initial condition,
+# `cosine_bell` (default) or `gaussian_bell`; the second selects the rotation
+# axis, `alpha0` (along the equator) or `alpha45` (tilted over the panel corners).
 using ClimaComms
 using LinearAlgebra
 
@@ -11,7 +17,7 @@ import ClimaCore:
     Topologies,
     Quadratures
 
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
 
 import Logging
 import TerminalLoggers
@@ -35,8 +41,6 @@ Estimate convergence rate given vectors `err` and `Δh`
 convergence_rate(err, Δh) =
     [log(err[i] / err[i - 1]) / log(Δh[i] / Δh[i - 1]) for i in 2:length(Δh)]
 
-# Advection problem on a sphere. The initial condition can be set via a command line
-# argument. Possible test cases are: cosine_bell (default) and gaussian_bell
 
 const R = 6.37122e6
 const h0 = 1000.0
@@ -60,7 +64,7 @@ end
 ENV["GKSwstype"] = "nul"
 import ClimaCorePlots, Plots
 Plots.GRBackend()
-dir = "cg_sphere_solidbody_$(test_name)"
+dir = "cg_sphere_solid_body_$(test_name)"
 dir = "$(dir)_$(test_angle_name)"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
@@ -132,10 +136,10 @@ for (k, ne) in enumerate(ne_seq)
     # Solve the ODE
     T = 86400 * 12
     dt = 20 * 60
-    prob = ODEProblem(rhs!, h_init, (0.0, T), u)
-    sol = solve(
+    prob = CTS.ODEProblem(CTS.ClimaODEFunction(; T_exp! = rhs!), h_init, (0.0, T), u)
+    sol = CTS.solve(
         prob,
-        SSPRK33(),
+        CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
         dt = dt,
         saveat = collect(0.0:dt:T),
         progress = true,

@@ -1,7 +1,12 @@
+# Baroclinic wave on the 3D sphere (Ullrich et al., 2014): a balanced jet given a
+# small perturbation, which grows over ~10 days into the familiar breaking wave.
+# The standard benchmark for a dry dynamical core. Total energy is the prognostic
+# thermodynamic variable, and the vertical acoustic terms are treated implicitly
+# (`SSP333`). Run through `driver.jl` with `TEST_NAME=sphere/baroclinic_wave_rhoe`.
 using ClimaCorePlots, Plots
 using ClimaCore.DataLayouts
 
-include("baroclinic_wave_utilities.jl")
+include("baroclinic_wave_utils.jl")
 
 const sponge = false
 
@@ -18,7 +23,7 @@ ode_algorithm = CTS.SSP333
 jacobian_flags = (; ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode = :no_∂ᶜp∂ᶜK, ∂ᶠ𝕄ₜ∂ᶜρ_mode = :exact)
 
 additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = merge(
-    hyperdiffusion_cache(ᶜlocal_geometry, ᶠlocal_geometry; κ₄ = FT(2e17)),
+    hyperdiffusion_cache(ᶜlocal_geometry; κ₄ = FT(2e17)),
     sponge ? rayleigh_sponge_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) : (;),
 )
 function additional_tendency!(Yₜ, Y, p, t)
@@ -27,7 +32,7 @@ function additional_tendency!(Yₜ, Y, p, t)
 end
 
 center_initial_condition(local_geometry) =
-    center_initial_condition(local_geometry, Val(:ρe))
+    sphere_center_initial_condition(local_geometry)
 function postprocessing(sol, output_dir)
     @info "L₂ norm of ρe at t = $(sol.t[1]): $(norm(sol.u[1].c.ρe))"
     @info "L₂ norm of ρe at t = $(sol.t[end]): $(norm(sol.u[end].c.ρe))"

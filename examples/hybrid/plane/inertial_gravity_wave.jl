@@ -11,12 +11,11 @@ ClimaComms.@import_required_backends
 
 # Reference paper: https://rmets.onlinelibrary.wiley.com/doi/pdf/10.1002/qj.2105
 
-include("intertial_gravity_wave_utils.jl")
+include("inertial_gravity_wave_utils.jl")
 import .InertialGravityWaveUtils as IGWU
 
 # Constants for switching between different experiment setups
 const is_small_scale = true
-const ᶜ𝔼_name = :ρe
 const is_discrete_hydrostatic_balance = true # `false` causes large oscillations
 
 # Constants required by "staggered_nonhydrostatic_model.jl"
@@ -68,7 +67,7 @@ t_end = is_small_scale ? FT(60 * 60 * 0.5) : FT(60 * 60 * 8)
 dt_save_to_sol = t_end / (animation_duration * fps)
 ode_algorithm = CTS.SSP333
 jacobian_flags = (;
-    ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode = ᶜ𝔼_name == :ρe ? :no_∂ᶜp∂ᶜK : :exact,
+    ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode = :no_∂ᶜp∂ᶜK,
     ∂ᶠ𝕄ₜ∂ᶜρ_mode = :exact,
 )
 show_progress_bar = true
@@ -119,16 +118,8 @@ function center_initial_condition(ᶜlocal_geometry)
     ᶜρ = @. ᶜp / (R_d * T)
     ᶜuₕ_local = @. Geometry.UVVector(u₀ * one(ᶜz), v₀ * one(ᶜz))
     ᶜuₕ = @. Geometry.Covariant12Vector(ᶜuₕ_local)
-    if ᶜ𝔼_name == :ρθ
-        ᶜρθ = @. ᶜρ * T * (p_0 / ᶜp)^(R_d / cp_d)
-        return NamedTuple{(:ρ, :ρθ, :uₕ)}.(tuple.(ᶜρ, ᶜρθ, uₕ))
-    elseif ᶜ𝔼_name == :ρe
-        ᶜρe = @. ᶜρ * (cv_d * (T - T_tri) + norm_sqr(ᶜuₕ_local) / 2 + grav * ᶜz)
-        return NamedTuple{(:ρ, :ρe, :uₕ)}.(tuple.(ᶜρ, ᶜρe, ᶜuₕ))
-    elseif ᶜ𝔼_name == :ρe_int
-        ᶜρe_int = @. ᶜρ * cv_d * (T - T_tri)
-        return NamedTuple{(:ρ, :ρe_int, :uₕ)}.(tuple.(ᶜρ, ᶜρe_int, ᶜuₕ))
-    end
+    ᶜρe = @. ᶜρ * (cv_d * (T - T_tri) + norm_sqr(ᶜuₕ_local) / 2 + grav * ᶜz)
+    return NamedTuple{(:ρ, :ρe, :uₕ)}.(tuple.(ᶜρ, ᶜρe, ᶜuₕ))
 end
 
 function face_initial_condition(local_geometry)
@@ -145,16 +136,10 @@ function postprocessing(sol, output_dir)
     Y_lin = similar(sol.u[1])
 
     ρ′ = Y -> @. Y.c.ρ - p₀(ᶜlocal_geometry.coordinates.z) / (R_d * T₀)
-    if ᶜ𝔼_name == :ρθ
-        T′ = Y -> @. Y.c.ρθ / Y.c.ρ * (pressure_ρθ(Y.c.ρθ) / p_0)^(R_d / cp_d) - T₀
-    elseif ᶜ𝔼_name == :ρe
-        T′ = Y -> begin
-            ᶜK = @. norm_sqr(C123(Y.c.uₕ) + C123(ᶜinterp(Y.f.w))) / 2
-            ᶜΦ = Fields.coordinate_field(Y.c).z .* grav
-            @. (Y.c.ρe / Y.c.ρ - ᶜK - ᶜΦ) / cv_d + T_tri - T₀
-        end
-    elseif ᶜ𝔼_name == :ρe_int
-        T′ = Y -> @. Y.c.ρe_int / Y.c.ρ / cv_d + T_tri - T₀
+    T′ = Y -> begin
+        ᶜK = @. norm_sqr(C123(Y.c.uₕ) + C123(ᶜinterp(Y.f.w))) / 2
+        ᶜΦ = Fields.coordinate_field(Y.c).z .* grav
+        @. (Y.c.ρe / Y.c.ρ - ᶜK - ᶜΦ) / cv_d + T_tri - T₀
     end
     u′ = Y -> @. Geometry.UVVector(Y.c.uₕ).components.data.:1 - u₀
     v′ = Y -> @. Geometry.UVVector(Y.c.uₕ).components.data.:2 - v₀
@@ -294,7 +279,6 @@ function linear_solution_cache(comms_ctx, ᶜlocal_geometry, ᶠlocal_geometry)
     return (;
         # globals
         R_d,
-        ᶜ𝔼_name,
         x_max,
         z_max,
         p_0,
