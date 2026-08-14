@@ -1343,7 +1343,7 @@ end
 
 Entropy-dissipative (ρ, ρe) interface flux (callable, `γm1 = γ − 1`):
 the [`vi_kep_scalars_flux`](@ref) central part (mass stays central — the
-exact VI KE ledger is preserved) plus ρe dissipation in the entropy
+exact VI kinetic-energy budget is preserved) plus ρe dissipation in the entropy
 variable ``v = ∂S/∂ρe|_ρ = −ρ/p``:
 
     F*_ρe = F_central − (λ/2)\\,w̄\\,(v⁺ − v⁻),   w̄ = p̄²/((γ−1)ρ̄)
@@ -1368,6 +1368,68 @@ function (fn::VIESInterfaceScalars)(normal, (y⁻,), (y⁺,))
     v⁻ = -y⁻.ρ / y⁻.p
     v⁺ = -y⁺.ρ / y⁺.p
     return (ρ = F.ρ, ρe = F.ρe - λ / 2 * w̄ * (v⁺ - v⁻))
+end
+
+"""
+    VIES2InterfaceScalars(γm1)
+
+[`VIESInterfaceScalars`](@ref) plus ACOUSTIC-selective Roe dissipation
+(callable, `γm1 = γ − 1`): the same central flux and entropy-variable ρe
+dissipation, with the two acoustic Roe waves additionally damped at
+``|û_n ± ĉ|``:
+
+    α± = ([[p′]] ± ρ̄ĉ[[u_n]])/(2ĉ²)
+    F*_ρ  −= (s₊α₊ + s₋α₋)/2
+    F*_ρe −= (s₊α₊(h̄ + ĉû_n) + s₋α₋(h̄ − ĉû_n))/2
+
+The CONTACT wave (``α₀ = [[ρ]] − [[p]]/ĉ²``) stays exactly central — a
+density-jump penalty is sign-indefinite in face kinetic energy under the
+vector-invariant pairing (see [`vi_kep_interface_scalars`](@ref)), and the
+shear channel is covered by [`rho_weighted_jump_penalty_lift`](@ref). The
+acoustic channels are what set the explicit horizontal CFL boundary of the
+otherwise-undamped central-mass scheme.
+
+The pressure jump is taken in the state field `p′ = p − p_ref` with `p_ref`
+a hydrostatically composed, single-valued-in-column reference: on
+terrain-following grids the raw ``[[p]]`` across a horizontal face contains
+an O(1) HYDROSTATIC jump (neighbors at different true altitude) that is not
+acoustic and must not be damped.
+
+Properties relative to [`VIESInterfaceScalars`](@ref): mass conservation
+exact (antisymmetric); thermal entropy channel unchanged (provably
+signed); the exact face-KE ledger is relaxed from roundoff to
+O(``s·α·[[K + Φ]]``) — quadratic in acoustic jumps, truncation-small for
+balanced states with the p′ referencing; the acoustic dissipation is
+Roe-type (entropy-dissipative to leading order, not provably signed).
+
+State fields required: `ρ`, `e`, `p`, `p′`, `λ`, `uv`.
+"""
+struct VIES2InterfaceScalars{T} <: AbstractNumericalFlux
+    γm1::T
+end
+
+function (fn::VIES2InterfaceScalars)(normal, (y⁻,), (y⁺,))
+    λ = max(y⁻.λ, y⁺.λ)
+    F = vi_kep_scalars_flux(normal, normal, y⁻, y⁺)
+    p̄ = (y⁻.p + y⁺.p) / 2
+    ρ̄ = (y⁻.ρ + y⁺.ρ) / 2
+    # thermal channel: entropy-variable ρe dissipation (as VIES)
+    w̄ = p̄^2 / (fn.γm1 * ρ̄)
+    Δv = y⁻.ρ / y⁻.p - y⁺.ρ / y⁺.p
+    # acoustic channels: Roe α± from ([[p′]], [[u_n]]); contact central
+    ĉ = sqrt((fn.γm1 + 1) * p̄ / ρ̄)
+    ûₙ = ((y⁻.uv + y⁺.uv)' * normal) / 2
+    Δuₙ = (y⁺.uv - y⁻.uv)' * normal
+    Δp′ = y⁺.p′ - y⁻.p′
+    α₊ = (Δp′ + ρ̄ * ĉ * Δuₙ) / (2 * ĉ^2)
+    α₋ = (Δp′ - ρ̄ * ĉ * Δuₙ) / (2 * ĉ^2)
+    s₊ = abs(ûₙ + ĉ)
+    s₋ = abs(ûₙ - ĉ)
+    h̄ = (y⁻.e + y⁻.p / y⁻.ρ + y⁺.e + y⁺.p / y⁺.ρ) / 2
+    Dρ = s₊ * α₊ + s₋ * α₋
+    Dρe = s₊ * α₊ * (h̄ + ĉ * ûₙ) + s₋ * α₋ * (h̄ - ĉ * ûₙ)
+    # Δv = v⁺ − v⁻ (v = −ρ/p), matching VIESInterfaceScalars' −(λ/2)w̄[[v]]
+    return (ρ = F.ρ - Dρ / 2, ρe = F.ρe - λ / 2 * w̄ * Δv - Dρe / 2)
 end
 
 """
@@ -1521,6 +1583,109 @@ function kennedy_gruber_roe_cartesian(normal, (y⁻,), (y⁺,))
 end
 # dry-air ratio of specific heats used by the Roe linearization
 const γ_dry = 7 / 5
+
+"""
+    logmean(a, b)
+
+Numerically stable logarithmic mean ``(a − b)/(\\log a − \\log b)`` for
+positive arguments (Ismail & Roe 2009, Appendix B): with ``ζ = a/b`` and
+``f = (ζ−1)/(ζ+1)``, ``\\log ζ = 2f(1 + f²/3 + f⁴/5 + …)``, so the mean is
+``(a+b)/(2F)`` with the series used for ``f² < 10⁻²`` (exact limit
+``(a+b)/2`` at ``a = b``) and the closed form elsewhere.
+"""
+@inline function logmean(a, b)
+    ζ = a / b
+    f = (ζ - 1) / (ζ + 1)
+    u = f * f
+    F = if u < oftype(u, 1e-2)
+        1 + u / 3 + u * u / 5 + u * u * u / 7
+    else
+        log(ζ) / (2 * f)
+    end
+    return (a + b) / (2 * F)
+end
+
+"""
+    wb_gravity_cartesian_increment(nvec_a, nvec_b, y_a, y_b)
+
+Non-symmetric two-point FLUCTUATION term for the geopotential (gravity)
+source ``ρ ∂Φ/∂x_c`` of the (ρ, ρe, ρu⃗-Cartesian) system, following
+Waruszewski et al. (2022, JCP 468:111507, Eqs. 73–76): each Cartesian
+momentum component ``c`` receives
+
+    (1/2) ρ̂ (Φ_b − Φ_a) \\{ê_c ⋅ nvec\\},
+    ρ̂ = \\{b\\} \\, \\mathrm{logmean}(ρ_a, ρ_b) / b_a,
+
+with ``b = ρ/(2p)`` the inverse temperature and the OWN node first (the
+[`add_flux_differencing_divergence!`](@ref) row convention — the term is
+genuinely non-symmetric through ``1/b_a``). The geopotential is
+single-valued at element faces, so the fluctuation vanishes there: the term
+is VOLUME-ONLY and the interface fluxes need no change. It also vanishes
+for `y_a == y_b`, so the kernel's own-side boundary lifts contribute
+nothing (pure strong-form fluctuation, like
+[`kg_massflux_fluctuation`](@ref)).
+
+Well-balance: added to a volume flux whose momentum pressure term is the
+arithmetic ``\\{p\\}``, the combined PGF + gravity operator cancels
+PAIRWISE (any node pair) on isothermal hydrostatic states
+``p ∝ \\exp(−Φ/(R_d T₀))``, for which
+``\\mathrm{logmean}(ρ_a, ρ_b)(Φ_b − Φ_a) = −(p_b − p_a)`` is an identity.
+The pair sum then telescopes to ``p_n\\,D(ê_c ⋅ Ja)`` — so the rest state
+is an EXACT discrete steady state wherever the discrete metric identity
+closes for the directions this kernel spans: machine zero on affine 2D
+meshes; the free-stream-level GCL defect on smooth curved 2D meshes. On
+WARPED EXTRUDED grids the horizontal identity alone does not close
+(``Σ_{k=1,2} ∂_{ξ^k}(Ja^k) = −∂_{ξ^3}(Ja³) ≠ 0``, O(slope)): the
+fluctuation removes the pairwise thermodynamic imbalance but the geometric
+remainder requires the vertical (cross-term) direction — supply it in the
+staggered/HEVI vertical discretization to complete 3D well-balance
+(Waruszewski et al.'s scheme is exact because its flux differencing spans
+all three directions). General hydrostatic profiles reduce to the same
+accuracy via the ``p′ = p − p_{ref}`` splitting (isothermal reference in
+the flux, deviation elsewhere).
+
+State fields required: `ρ`, `p`, `Φ`, `E1`, `E2`, `E3`.
+"""
+@inline function wb_gravity_cartesian_increment(nvec_a, nvec_b, y_a, y_b)
+    b_a = y_a.ρ / (2 * y_a.p)
+    b_b = y_b.ρ / (2 * y_b.p)
+    ρ̂ = (b_a + b_b) / 2 * logmean(y_a.ρ, y_b.ρ) / b_a
+    gΔΦ = ρ̂ * (y_b.Φ - y_a.Φ) / 2
+    Ē1n = (y_a.E1' * nvec_a + y_b.E1' * nvec_b) / 2
+    Ē2n = (y_a.E2' * nvec_a + y_b.E2' * nvec_b) / 2
+    Ē3n = (y_a.E3' * nvec_a + y_b.E3' * nvec_b) / 2
+    return (ρu1 = gΔΦ * Ē1n, ρu2 = gΔΦ * Ē2n, ρu3 = gΔΦ * Ē3n)
+end
+
+"""
+    kennedy_gruber_gravity_cartesian_flux(nvec_a, nvec_b, y_a, y_b)
+
+[`kennedy_gruber_cartesian_flux`](@ref) plus the well-balanced geopotential
+fluctuation [`wb_gravity_cartesian_increment`](@ref) in the momentum
+components (the gravity term rides the same ``\\{ê_c ⋅ nvec\\}`` direction
+as the pressure, exactly as ``δ_{ik}(p^* + \\tfrac12 ρ̂ [\\![Φ]\\!])`` in
+Waruszewski et al. 2022, Eq. 76). Retains the KG kinetic-energy property —
+the added term contributes only the physical ``ρ u ⋅ ∇Φ`` KE ↔ PE
+exchange — and total energy remains conservative (the ρe flux is
+untouched; Φ enters it through the specific total energy `e`).
+
+REQUIREMENTS: the specific total energy `e` must INCLUDE the geopotential
+(``ρe ⊃ ρΦ``, so `p` consistently subtracts it), and the caller must NOT
+apply a separate pointwise horizontal gravity source — the fluctuation IS
+the horizontal ``ρ∇Φ`` term, in discretely balanced form. State fields:
+those of [`kennedy_gruber_cartesian_flux`](@ref) plus `Φ`.
+"""
+function kennedy_gruber_gravity_cartesian_flux(nvec_a, nvec_b, y_a, y_b)
+    F = kennedy_gruber_cartesian_flux(nvec_a, nvec_b, y_a, y_b)
+    G = wb_gravity_cartesian_increment(nvec_a, nvec_b, y_a, y_b)
+    return (
+        ρ = F.ρ,
+        ρe = F.ρe,
+        ρu1 = F.ρu1 + G.ρu1,
+        ρu2 = F.ρu2 + G.ρu2,
+        ρu3 = F.ρu3 + G.ρu3,
+    )
+end
 
 """
     kg_massflux_fluctuation(nvec_a, nvec_b, y_a, y_b)
