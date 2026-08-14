@@ -1,4 +1,5 @@
-# From: https://timholy.github.io/SnoopCompile.jl/dev/tutorials/invalidations/#Tutorial-on-@snoop_invalidations
+# From:
+# https://timholy.github.io/SnoopCompile.jl/dev/tutorials/invalidations/#Tutorial-on-@snoop_invalidations
 ENV["TEST_NAME"] = "sphere/baroclinic_wave_rhoe"
 ENV["FLOAT_TYPE"] = "Float64"
 using SnoopCompileCore

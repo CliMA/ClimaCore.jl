@@ -1,7 +1,8 @@
 # Shared setup for the 3D sphere cases driven by `driver.jl`: the physical
 # constants the staggered nonhydrostatic model expects, the cubed-sphere mesh
-# constructor, the baroclinic-wave initial condition (with the perturbation
-# optional, so `balanced_flow_rhoe.jl` can reuse it), and the Rayleigh sponge.
+# constructor, the baroclinic-wave initial condition of Ullrich et al. (2014,
+# QJRMS 140) (with the perturbation optional, so `balanced_flow_rhoe.jl` can
+# reuse it), and the Rayleigh sponge.
 import ClimaComms
 ClimaComms.@import_required_backends
 

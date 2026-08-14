@@ -1,11 +1,13 @@
-# Solid-body tracer advection on a 2D Cartesian plane, with the bounds-preserving
-# quasimonotone limiter. The flow returns the tracers to where they started, so
-# the final field should match the initial one, and the limiter should keep the
-# tracer within its initial bounds throughout. Run over a sequence of resolutions
-# to give a convergence study. Choose the initial condition with a command-line
-# argument: `cosine_bells` (default), `gaussian_bells`, or `cylinders`.
+# Solid-body tracer advection on a 2D Cartesian plane, with the
+# bounds-preserving quasimonotone limiter. The flow returns the tracers to where
+# they started, so the final field should match the initial one, and the limiter
+# should keep the tracer within its initial bounds throughout. Run over a
+# sequence of resolutions to give a convergence study. Choose the initial
+# condition with a command-line argument: `cosine_bells` (default),
+# `gaussian_bells`, or `cylinders`.
 using ClimaComms
 using LinearAlgebra
+using Test
 
 import ClimaCore:
     Domains,
@@ -87,14 +89,7 @@ end
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
-end
+include(joinpath(@__DIR__, "..", "example_utils.jl")) # linkfig
 
 function tendency!(yₜ, y, parameters, t)
     (; u, Δₕq) = parameters
@@ -209,9 +204,18 @@ for (k, ne) in enumerate(ne_seq)
 
     q_final = sol.u[end].ρq ./ sol.u[end].ρ
     Δh[k] = (xmax - xmin) / ne
-    L1err[k] = norm((q_final .- q_init) ./ q_init, 1)
-    L2err[k] = norm((q_final .- q_init) ./ q_init)
-    Linferr[k] = norm((q_final .- q_init) ./ q_init, Inf)
+    # Error norms are normalized by the initial tracer's norm, not pointwise
+    # by `q_init`: the Gaussian bells decay to ~0 away from the centers, and
+    # dividing by that produces unbounded "errors" where nothing is wrong.
+    L1err[k] = norm(q_final .- q_init, 1) / norm(q_init, 1)
+    L2err[k] = norm(q_final .- q_init) / norm(q_init)
+    Linferr[k] = norm(q_final .- q_init, Inf) / norm(q_init, Inf)
+
+    # The quasimonotone limiter must keep the tracer inside its initial range,
+    # and the weak-form flux divergence must conserve tracer mass.
+    @test minimum(q_final) ≥ minimum(q_init) - 1e-6
+    @test maximum(q_final) ≤ maximum(q_init) + 1e-6
+    @test abs(sum(sol.u[end].ρq) - sum(sol.u[1].ρq)) / abs(sum(sol.u[1].ρq)) < 1e-10
 
     @info "Test case: $(test_name)"
     @info "With limiter: $(lim_flag)"
@@ -228,6 +232,21 @@ for (k, ne) in enumerate(ne_seq)
 
     Plots.png(Plots.plot(q_final), joinpath(path, "final_q.png"))
 end
+
+using Test
+# The error must fall as the mesh is refined, and the flow returns the tracer
+# to its start, so the finest run must beat an O(1) error. The bound is set by
+# the initial condition: the cosine bells are smooth and wide (measured L₁:
+# 0.32, 0.11, 0.022); the Gaussian bells are narrow enough that ne = 16 barely
+# resolves them (0.91, 0.49, 0.12); the cylinders are discontinuous, so the
+# limited scheme converges slowly (0.62, 0.32, 0.20).
+final_L1_bound = Dict(
+    cosine_test_name => 0.05,
+    gaussian_test_name => 0.15,
+    cylinder_test_name => 0.25,
+)[test_name]
+@test all(diff(L1err) .< 0)
+@test L1err[end] < final_L1_bound
 
 # Print convergence rate info
 conv = convergence_rate(L2err, Δh)

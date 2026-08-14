@@ -1,9 +1,10 @@
 # Solid-body rotation of a tracer bell around the cubed sphere: the simplest
 # horizontal transport test, and the one that exposes how the cubed-sphere panel
-# edges affect accuracy. Run over a sequence of resolutions to give a convergence
-# study. The first command-line argument selects the initial condition,
-# `cosine_bell` (default) or `gaussian_bell`; the second selects the rotation
-# axis, `alpha0` (along the equator) or `alpha45` (tilted over the panel corners).
+# edges affect accuracy. Run over a sequence of resolutions to give a
+# convergence study. The first command-line argument selects the initial
+# condition, `cosine_bell` (default) or `gaussian_bell`; the second selects the
+# rotation axis, `alpha0` (along the equator) or `alpha45` (tilted over the
+# panel corners).
 using ClimaComms
 using LinearAlgebra
 
@@ -69,14 +70,7 @@ dir = "$(dir)_$(test_angle_name)"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
-end
+include(joinpath(@__DIR__, "..", "example_utils.jl")) # linkfig
 
 FT = Float64
 ne_seq = 2 .^ (2, 3, 4, 5)
@@ -84,6 +78,10 @@ ne_seq = 2 .^ (2, 3, 4, 5)
 L1err, L2err, Linferr = zeros(FT, length(ne_seq)),
 zeros(FT, length(ne_seq)),
 zeros(FT, length(ne_seq))
+# Relative drift of the tracer mass, and the deepest undershoot below the
+# initial minimum of zero, at each resolution.
+mass_drift = zeros(FT, length(ne_seq))
+undershoot = zeros(FT, length(ne_seq))
 Nq = 4
 
 # h-refinement study
@@ -136,7 +134,14 @@ for (k, ne) in enumerate(ne_seq)
     # Solve the ODE
     T = 86400 * 12
     dt = 20 * 60
-    prob = CTS.ODEProblem(CTS.ClimaODEFunction(; T_exp! = rhs!), h_init, (0.0, T), u)
+    # Integrate a copy: `h_init` is the reference for the error norms below,
+    # and ClimaTimeSteppers aliases the state it is given.
+    prob = CTS.ODEProblem(
+        CTS.ClimaODEFunction(; T_exp! = rhs!),
+        copy(h_init),
+        (0.0, T),
+        u,
+    )
     sol = CTS.solve(
         prob,
         CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
@@ -146,6 +151,8 @@ for (k, ne) in enumerate(ne_seq)
         adaptive = false,
         progress_message = (dt, u, p, t) -> t,
     )
+    mass_drift[k] = abs(sum(sol.u[end]) - sum(h_init)) / sum(h_init)
+    undershoot[k] = -minimum(sol.u[end]) / maximum(h_init)
     L1err[k] = norm(sol.u[end] .- h_init, 1)
     L2err[k] = norm(sol.u[end] .- h_init)
     Linferr[k] = norm(sol.u[end] .- h_init, Inf)
@@ -162,6 +169,22 @@ end
 # Print convergence rate info
 conv = convergence_rate(L2err, Δh)
 @info "Converge rates for this test case are: ", conv
+
+using Test
+# The scheme must converge under refinement (measured L₁: 18.9, 7.1, 0.87,
+# 0.11; rates 1.3, 3.0, 2.7) — the bell must arrive back where it started.
+@test all(diff(L1err) .< 0)
+@test L1err[end] < 0.5
+@test all(conv .> 0.8)
+# The transport is a flux divergence over a closed surface, so the tracer mass
+# is conserved at every resolution (measured drift: 4e-15 and below).
+@test all(mass_drift .< 1e-12)
+# It carries no limiter, so the bell's edges ring and the tracer goes negative
+# where the exact solution is zero. That is a resolution error, not a property
+# of the scheme, so it must shrink as the bell is resolved: from 23% of the
+# bell's amplitude at ne = 4 down to 0.5% at ne = 32.
+@test all(diff(undershoot) .< 0)
+@test undershoot[end] < 0.01
 
 # Plot the errors
 # L₁ error Vs number of elements

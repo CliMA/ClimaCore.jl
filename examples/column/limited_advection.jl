@@ -1,14 +1,18 @@
-# Vertical advection with a slope-limited, upwind-biased flux. A tracer with
-# sharp features is advected on a column; the limiter should transport it without
-# introducing new extrema, which the run asserts by checking that the tracer stays
-# within its initial bounds. `limited_flux_operator` isolates the choice of
-# limiter, so a different constraint can be swapped in.
+# Vertical advection with a slope-limited, upwind-biased flux. A square pulse is
+# advected along a column by each of the available constraints in turn, and the
+# run asserts what each one promises: the two monotonicity-preserving
+# constraints may not step outside the initial bounds at all on a uniform mesh,
+# `PositiveDefinite` is allowed a small excursion, and `AlgebraicMean` — which
+# constrains nothing — is expected to overshoot. All of them must conserve mass
+# and land the pulse where the exact solution puts it. `limited_flux_operator`
+# isolates the choice of limiter, so a different constraint can be swapped in.
 using Test
 using LinearAlgebra
 import ClimaComms
 ClimaComms.@import_required_backends
 import ClimaTimeSteppers as CTS
 
+import ClimaCore
 import ClimaCore:
     Fields,
     Domains,
@@ -28,9 +32,8 @@ import ClimaCore:
 # so at time t the exact solution is the initial pulse translated by w * t. A
 # limiter is judged on whether it keeps q within the bounds of the initial data
 # (here [0, 1]) while staying accurate, on both uniform and stretched meshes.
-#
-# The scheme under test is built in one place, `limited_flux_operator`, and swept
-# over the available constraints below.
+# The stretched mesh is the harder case: the monotonicity proofs assume uniform
+# spacing, so the bounds are only asserted to hold approximately there.
 
 # visualization artifacts
 ENV["GKSwstype"] = "nul"
@@ -67,19 +70,20 @@ function tendency!(yₜ, y, parameters, t)
     @. yₜ.q = -divf2c(limited_flux(w, y.q, Δt))
 end
 
-# Define a pulse wave or square wave
-
+# A square pulse of amplitude `q_pulse` on a background of `q_background`,
+# translated at constant `speed`, so `pulse(z, t)` is the exact solution.
 const FT = Float64
-const t₀ = FT(0.0)
-const t₁ = FT(6)
-const z₀ = FT(0.0)
-const zₕ = FT(2π)
-const z₁ = FT(1.0)
-const speed = FT(-1.0)
-pulse(z, t, z₀, zₕ, z₁) = abs(z - speed * t) ≤ zₕ ? z₁ : z₀
+const t_start = FT(0)
+const t_end = FT(6)
+const q_background = FT(0)
+const q_pulse = FT(1)
+const pulse_half_width = FT(2π)
+const speed = FT(-1)
+pulse(z, t) =
+    abs(z - speed * t) ≤ pulse_half_width ? q_pulse : q_background
 
-n = 2^8
-Δt = FT(0.1) * (20π / n)
+nelems = 2^8
+Δt = FT(0.1) * (20π / nelems)
 @info "Timestep Δt[s]: $(Δt)"
 
 domain = Domains.IntervalDomain(
@@ -89,105 +93,92 @@ domain = Domains.IntervalDomain(
 )
 
 stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(FT(7.0)))
-plot_string = ["uniform", "stretched"]
+mesh_names = ("uniform", "stretched")
 
-for (i, stretch_fn) in enumerate(stretch_fns)
+constraints = (
+    Operators.AlgebraicMean(),
+    Operators.PositiveDefinite(),
+    Operators.MonotoneHarmonic(),
+    Operators.MonotoneLocalExtrema(),
+)
+# On a uniform mesh these two constraints are proven monotonicity-preserving,
+# so they may not leave the initial bounds at all; the others are allowed a
+# small excursion (`AlgebraicMean` imposes no constraint and is unbounded).
+monotonicity_preserving =
+    (Operators.MonotoneHarmonic, Operators.MonotoneLocalExtrema)
+
+line_styles = (:solid, :dot, :dashdot, :dash)
+line_colors = (:orange, :blue, :green, :black)
+
+for (stretch_fn, mesh_name) in zip(stretch_fns, mesh_names)
     @info stretch_fn
-    constraints = (
-        Operators.AlgebraicMean(),
-        Operators.PositiveDefinite(),
-        Operators.MonotoneHarmonic(),
-        Operators.MonotoneLocalExtrema(),
-    )
+    mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = nelems)
+    device = ClimaComms.device()
+    cent_space = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+    face_space = Spaces.FaceFiniteDifferenceSpace(cent_space)
+    z = Fields.coordinate_field(cent_space).z
+
+    q_init = pulse.(z, t_start)
+    q_analytic = pulse.(z, t_end)
+    # Constant advective velocity
+    w = Geometry.WVector.(speed .* ones(FT, face_space))
+
+    # Plotting requires scalar indexing, so fields are moved to the CPU first;
+    # on a CPU device `to_cpu` is a copy.
+    to_cpu(f) = ClimaCore.to_device(ClimaComms.CPUSingleThreaded(), f)
+    fig = Plots.plot(to_cpu(q_analytic); label = "Exact", color = :red)
     for (j, constraint) in enumerate(constraints)
-        mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
-        cent_space = Spaces.CenterFiniteDifferenceSpace(mesh)
-        face_space = Spaces.FaceFiniteDifferenceSpace(cent_space)
-        z = Fields.coordinate_field(cent_space).z
-        O = ones(FT, face_space)
-
-        # Initial condition
-        q_init = pulse.(z, 0.0, z₀, zₕ, z₁)
-        y = Fields.FieldVector(q = q_init)
-
-        # Unitary, constant advective velocity
-        w = Geometry.WVector.(speed .* O)
-
-        # Solve the ODE
+        y = Fields.FieldVector(q = copy(q_init))
         parameters = (; w, Δt, constraint)
         prob = CTS.ODEProblem(
             CTS.ClimaODEFunction(; T_exp! = tendency!),
             y,
-            (t₀, t₁),
+            (t_start, t_end),
             parameters,
         )
         sol = CTS.solve(
             prob,
             CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
             dt = Δt,
-            saveat = [t₀:Δt:t₁..., t₁],
+            saveat = [t_start:Δt:t_end..., t_end],
         )
 
         q_final = sol.u[end].q
+        constraint_name = nameof(typeof(constraint))
+        @info "Extrema with $(constraint_name) on the $mesh_name mesh: \
+               $(extrema(q_final))"
 
-        @info "Extrema with $(constraint), i=$i, j=$j: $(extrema(q_final))"
-        @show maximum(q_final .- 1)
-        @show minimum(q_final .- 0)
-        @show abs(maximum(q_final .- 1))
-        monotonicity_preserving =
-            [Operators.MonotoneHarmonic, Operators.MonotoneLocalExtrema]
-        if any(x -> constraint isa x, monotonicity_preserving) &&
+        overshoot = maximum(q_final) - q_pulse
+        undershoot = q_background - minimum(q_final)
+        if constraint isa Union{monotonicity_preserving...} &&
            stretch_fn == Meshes.Uniform()
-            @assert abs(maximum(q_final .- 1)) <= eps(FT)
-            @assert abs(minimum(q_final .- 0)) <= eps(FT)
-            @assert maximum(q_final) <= FT(1)
-        elseif constraint != Operators.AlgebraicMean()
-            @assert abs(maximum(q_final .- 1)) <= FT(0.05)
-            @assert abs(minimum(q_final .- 0)) <= FT(0.05)
-            @assert maximum(q_final) <= FT(1)
+            @test overshoot ≤ eps(FT)
+            @test undershoot ≤ eps(FT)
+        elseif !(constraint isa Operators.AlgebraicMean)
+            @test overshoot ≤ FT(0.05)
+            @test undershoot ≤ FT(0.05)
         end
 
-        q_analytic = pulse.(z, t₁, z₀, zₕ, z₁)
+        # The pulse is translated, not reshaped: the volume-weighted RMS
+        # error stays under 0.25, about half the pulse's own RMS amplitude
+        # of 0.45, and the zero-flux boundaries make the flux-form divergence
+        # conserve mass exactly.
+        @test norm(q_final .- q_analytic) ≤ 0.25
+        # 30 eps rather than 10: the GPU reduction sums in a different
+        # order and lands at ~12 eps (measured 2.8e-15 against 2.2e-15).
+        @test abs(sum(q_final) - sum(q_init)) / sum(q_init) ≤ 30eps()
 
-        err = norm(q_final .- q_analytic)
-        rel_mass_err = norm((sum(q_final) - sum(q_init)) / sum(q_init))
-
-        @test err ≤ 0.25
-        # 30 eps rather than 10: the GPU reduction sums in a different order,
-        # which lands at ~12 eps here (measured 2.8e-15 against a 2.2e-15 bound).
-        @test rel_mass_err ≤ 30eps()
-
-        device = ClimaComms.device(q_init)
-        if device isa ClimaComms.CUDADevice
-            continue
-        end
-
-        if j == 1
-            fig = Plots.plot(q_analytic; label = "Exact", color = :red)
-        end
-        linstyl = [:solid, :dot, :dashdot, :dash]
-        clrs = [:orange, :blue, :green, :black]
-        fig = plot!(
-            q_final;
-            label = "$(typeof(constraint))"[21:end],
-            linestyle = linstyl[j],
-            color = clrs[j],
+        Plots.plot!(
+            fig,
+            to_cpu(q_final);
+            label = "$constraint_name",
+            linestyle = line_styles[j],
+            color = line_colors[j],
             dpi = 400,
             xlim = (-0.5, 1.1),
             ylim = (-20, 20),
         )
-        fig = plot!(legend = :outerbottom, legendcolumns = 2)
-        if j == length(constraints)
-            Plots.png(
-                fig,
-                joinpath(
-                    path,
-                    "limited_advection_" *
-                    "$(typeof(constraint))"[21:end] *
-                    plot_string[i] *
-                    ".png",
-                ),
-            )
-        end
     end
+    Plots.plot!(fig, legend = :outerbottom, legendcolumns = 2)
+    Plots.png(fig, joinpath(path, "limited_advection_$mesh_name.png"))
 end

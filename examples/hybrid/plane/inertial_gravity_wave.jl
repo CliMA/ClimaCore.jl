@@ -4,6 +4,7 @@ ENV["TEST_NAME"] = "plane/inertial_gravity_wave"
 include(joinpath("examples", "hybrid", "driver.jl"))
 =#
 using Printf
+using Test
 using ProgressLogging
 using ClimaCorePlots, Plots
 import ClimaComms
@@ -106,10 +107,10 @@ function center_initial_condition(ᶜlocal_geometry)
     ᶜz = ᶜlocal_geometry.coordinates.z
     # Correct pressure and density if in hydrostatic balance state
     if is_discrete_hydrostatic_balance
-        face_space =
-            Spaces.FaceExtrudedFiniteDifferenceSpace(axes(ᶜlocal_geometry))
-        ᶠΔz = Fields.local_geometry_field(face_space).∂x∂ξ.components.data.:4
-        ᶜΔz = ᶜlocal_geometry.∂x∂ξ.components.data.:4
+        center_space = axes(ᶜlocal_geometry)
+        face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(center_space)
+        ᶠΔz = Fields.Δz_field(face_space)
+        ᶜΔz = Fields.Δz_field(center_space)
         ᶜp = discrete_hydrostatic_balance!(ᶠΔz, ᶜΔz, grav)
     else
         ᶜp = @. p₀(ᶜz)
@@ -163,6 +164,18 @@ function postprocessing(sol, output_dir)
             end
             println()
         end
+    end
+
+    # The wave stays in the linear regime: the initial 0.01 K perturbation may
+    # disperse but must neither blow up nor vanish. A broken discrete
+    # hydrostatic balance drives max|T′| to ~46 K within minutes, so the upper
+    # bound has teeth.
+    @testset "perturbation stays linear" begin
+        Y = sol.u[end]
+        max_T′ = maximum(abs, T′(Y))
+        max_w′ = maximum(abs, w′(Y))
+        @test 1e-4 < max_T′ < 0.02
+        @test max_w′ < 0.02
     end
 
     anim_vars = (

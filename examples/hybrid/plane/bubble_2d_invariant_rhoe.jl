@@ -5,7 +5,6 @@
 # as the prognostic thermodynamic variable.
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
-using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaComms
@@ -36,10 +35,11 @@ hv_center_space, hv_face_space =
     hvspace_2D((-500, 500), (0, 1000); xelem = 10, zelem = 40)
 
 
-Φ(z) = grav * z
+geopotential(z) = grav * z
 
-# Reference: https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml, Section 5a
-# Prognostic thermodynamic variable: Total Energy
+# Reference:
+# https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml,
+# Section 5a Prognostic thermodynamic variable: Total Energy
 function init_dry_rising_bubble_2d(x, z)
     x_c = 0.0
     z_c = 350.0
@@ -112,7 +112,7 @@ function rhs_invariant!(dY, Y, _, t)
     cuw = Geometry.Covariant13Vector.(cuₕ) .+ Geometry.Covariant13Vector.(cw)
 
     ce = @. cρe / cρ
-    cI = @. ce - Φ(z) - (norm(cuw)^2) / 2
+    cI = @. ce - geopotential(z) - (norm(cuw)^2) / 2
     cT = @. cI / C_v + T_0
     cp = @. cρ * R_d * cT
 
@@ -184,7 +184,7 @@ function rhs_invariant!(dY, Y, _, t)
     )
     @. dw -= vgradc2f(cp) / Ic2f(cρ)
 
-    cE = @. (norm(cuw)^2) / 2 + Φ(z)
+    cE = @. (norm(cuw)^2) / 2 + geopotential(z)
     @. duₕ -= hgrad(cE)
     @. dw -= vgradc2f(cE)
 
@@ -241,6 +241,17 @@ end
 
 sol = @timev CTS.solve!(integrator)
 
+using Test
+# The domain is closed, so mass and total energy must be conserved (measured
+# drift: 1e-15 and 4e-13), and the warm bubble must rise at a few m/s
+# (measured max|w| = 3.4) — neither stay still nor blow up.
+@test abs(sum(sol.u[end].Yc.ρ) - sum(sol.u[1].Yc.ρ)) / sum(sol.u[1].Yc.ρ) < 1e-12
+@test abs(sum(sol.u[end].Yc.ρe) - sum(sol.u[1].Yc.ρe)) / sum(sol.u[1].Yc.ρe) < 1e-10
+@testset "bubble rise speed" begin
+    w = maximum(abs, parent(Geometry.WVector.(sol.u[end].w)))
+    @test 1 < w < 10
+end
+
 ENV["GKSwstype"] = "nul"
 import Plots, ClimaCorePlots
 Plots.GRBackend()
@@ -278,20 +289,13 @@ Plots.png(
     joinpath(path, "mass_cons.png"),
 )
 
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
-end
+include(joinpath(@__DIR__, "../..", "example_utils.jl")) # linkfig
 
 linkfig(
-    relpath(joinpath(path, "energy_cons.png"), joinpath(@__DIR__, "../..")),
+    relpath(joinpath(path, "energy_cons.png"), joinpath(@__DIR__, "../../..")),
     "Total Energy",
 )
 linkfig(
-    relpath(joinpath(path, "mass_cons.png"), joinpath(@__DIR__, "../..")),
+    relpath(joinpath(path, "mass_cons.png"), joinpath(@__DIR__, "../../..")),
     "Mass",
 )

@@ -1,6 +1,6 @@
 # Advection over topography: an energy perturbation carried by a prescribed
 # horizontal wind across a sinusoidal hill, in an isothermal atmosphere with
-# gravity switched off (Φ ≡ 0). Isolates the terrain-following metric terms from
+# gravity switched off (geopotential ≡ 0). Isolates the terrain-following metric terms from
 # buoyancy effects, so errors from the coordinate transformation show up on
 # their own.
 using Test
@@ -51,10 +51,9 @@ hv_center_space, hv_face_space =
 
 
 
-Φ(z) = 0.0
+geopotential(z) = 0.0
 
 function init_advection_test(x, z)
-    cp_d = C_p
     cv_d = C_v
     p_0 = MSLP
     # auxiliary quantities
@@ -82,25 +81,40 @@ Ic2f = Operators.InterpolateC2F(
     bottom = Operators.Extrapolate(),
     top = Operators.Extrapolate(),
 )
-# ==========
-u₁_bc = Fields.level(Ic2f.(uₕ), ClimaCore.Utilities.half)
-gⁱʲ =
-    Fields.level(
+# The flow at the sloped lower boundary must be tangent to it: contravariant
+# u³ = g³¹u₁ + g³³u₃ = 0, that is u₃ = -g³¹u₁/g³³. That is a constraint on the
+# state, not a tendency, so it is applied where the timestepper allows the
+# state to be changed — after every stage, next to the DSS — rather than
+# inside `rhs_invariant!`, which would mutate the stage value the integrator
+# is still combining.
+function project_surface_w!(Y)
+    Ic2f = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    face_level = Fields.level(
         Fields.local_geometry_field(hv_face_space),
         ClimaCore.Utilities.half,
-    ).gⁱʲ
-g13 = gⁱʲ.components.data.:3
-g11 = gⁱʲ.components.data.:1
-g33 = gⁱʲ.components.data.:9
-u₃_bc = Geometry.Covariant3Vector.(-1 .* g13 .* u₁_bc.components.data.:1 ./ g33)
-apply_boundary_w =
-    Operators.SetBoundaryOperator(bottom = Operators.SetValue(u₃_bc))
-@. w = apply_boundary_w(w)
-# ==========
+    )
+    u₁_bc = Fields.level(Ic2f.(Y.uₕ), ClimaCore.Utilities.half)
+    gⁱʲ = face_level.gⁱʲ
+    g13 = gⁱʲ.components.data.:3
+    g33 = gⁱʲ.components.data.:9
+    u₃_bc =
+        Geometry.Covariant3Vector.(
+            -1 .* g13 .* u₁_bc.components.data.:1 ./ g33,
+        )
+    apply_boundary_w =
+        Operators.SetBoundaryOperator(bottom = Operators.SetValue(u₃_bc))
+    @. Y.w = apply_boundary_w(Y.w)
+    return Y
+end
+
 Spaces.weighted_dss!(Yc)
 Spaces.weighted_dss!(uₕ)
 Spaces.weighted_dss!(w)
 Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
+project_surface_w!(Y)
 
 energy_0 = sum(Y.Yc.ρe)
 mass_0 = sum(Y.Yc.ρ)
@@ -134,29 +148,11 @@ function rhs_invariant!(dY, Y, _, t)
     dρ .= 0 .* cρ
 
     cw = If2c.(fw)
-    fuₕ = Ic2f.(cuₕ)
 
-    # Enforce no flux boundary condition on bottom `w`
-    u₁_bc = Fields.level(Ic2f.(cuₕ), ClimaCore.Utilities.half)
-    gⁱʲ =
-        Fields.level(
-            Fields.local_geometry_field(hv_face_space),
-            ClimaCore.Utilities.half,
-        ).gⁱʲ
-    g13 = gⁱʲ.components.data.:3
-    g11 = gⁱʲ.components.data.:1
-    g33 = gⁱʲ.components.data.:9
-    u₃_bc =
-        Geometry.Covariant3Vector.(-1 .* g13 .* u₁_bc.components.data.:1 ./ g33)
-    apply_boundary_w =
-        Operators.SetBoundaryOperator(bottom = Operators.SetValue(u₃_bc))
-    @. fw = apply_boundary_w(fw)
-
-    cw = If2c.(fw)
     cuw = Geometry.Covariant13Vector.(cuₕ) .+ Geometry.Covariant13Vector.(cw)
 
     ce = @. cρe / cρ
-    cI = @. ce - Φ(z) - (norm(cuw)^2) / 2
+    cI = @. ce - geopotential(z) - (norm(cuw)^2) / 2
     cT = @. cI / C_v + T_0
     cp = @. cρ * R_d * cT
 
@@ -215,7 +211,6 @@ function rhs_invariant!(dY, Y, _, t)
     fu³ = Geometry.project.(Ref(Geometry.Contravariant3Axis()), fu)
 
     cu = Geometry.Covariant13Vector.(cuₕ) .+ Geometry.Covariant13Vector.(cw)
-    cu¹ = Geometry.project.(Ref(Geometry.Contravariant1Axis()), cu)
     cu³ = Geometry.project.(Ref(Geometry.Contravariant3Axis()), cu)
     @. dw -= fω¹² × fu¹² # Covariant3Vector on faces
     #@. duₕ -= If2c(fω¹²) × If2c(fu³)
@@ -228,13 +223,13 @@ function rhs_invariant!(dY, Y, _, t)
     )
     @. dw -= vgradc2f(cp) / Ic2f(cρ)
 
-    cE = @. (norm(cuₕ)^2 + If2c(norm(fw)^2)) / 2 + Φ(z)
+    cE = @. norm(cu)^2 / 2 + geopotential(z)
     @. duₕ -= hgrad(cE)
     @. dw -= vgradc2f(cE)
 
     # 3) total energy
     @. dρe -= hwdiv(cuw * (cρe + cp))
-    @. dρe -= vdivf2c(fw * Ic2f(cρe + cρ))
+    @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
     @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 
     # `w` at the surface is fixed by the free-slip terrain constraint applied
@@ -260,8 +255,15 @@ import ClimaTimeSteppers as CTS
 # acoustic CFL limit and eventually goes unstable; halving it is comfortably
 # inside the limit for the three-stage SSP scheme.
 Δt = 0.25
+# A `FieldVector` may hold non-`Field` entries, which need no DSS.
+_dss!(x::Fields.Field) = Spaces.weighted_dss!(x)
+_dss!(::Any) = nothing
+function dss!(Y, parameters, t)
+    foreach(_dss!, Fields._values(Y))
+    project_surface_w!(Y)
+end
 prob = CTS.ODEProblem(
-    CTS.ClimaODEFunction(; T_exp! = rhs_invariant!),
+    CTS.ClimaODEFunction(; T_exp! = rhs_invariant!, dss!),
     Y,
     (0.0, 15000.0),
     nothing,
@@ -280,6 +282,13 @@ if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
 end
 
 sol = @timev CTS.solve!(integrator)
+
+# Mass and total energy must be conserved (measured drift: 8e-13 and 2e-9),
+# and with gravity off, w can only be what the terrain forces: u·∇h ≈ 0.1 m/s
+# (measured 0.089). Larger values mean the surface condition is leaking.
+@test abs(sum(sol.u[end].Yc.ρ) - sum(sol.u[1].Yc.ρ)) / sum(sol.u[1].Yc.ρ) < 1e-10
+@test abs(sum(sol.u[end].Yc.ρe) - sum(sol.u[1].Yc.ρe)) / sum(sol.u[1].Yc.ρe) < 1e-7
+@test maximum(abs, parent(Geometry.WVector.(sol.u[end].w))) < 0.5
 
 ENV["GKSwstype"] = "nul"
 import Plots, ClimaCorePlots
@@ -323,20 +332,13 @@ Plots.png(
     joinpath(path, "mass_cons.png"),
 )
 
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
-end
+include(joinpath(@__DIR__, "../..", "example_utils.jl")) # linkfig
 
 linkfig(
-    relpath(joinpath(path, "energy_cons.png"), joinpath(@__DIR__, "../..")),
+    relpath(joinpath(path, "energy_cons.png"), joinpath(@__DIR__, "../../..")),
     "Total Energy",
 )
 linkfig(
-    relpath(joinpath(path, "mass_cons.png"), joinpath(@__DIR__, "../..")),
+    relpath(joinpath(path, "mass_cons.png"), joinpath(@__DIR__, "../../..")),
     "Mass",
 )

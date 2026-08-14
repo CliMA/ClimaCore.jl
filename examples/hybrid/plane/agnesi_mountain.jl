@@ -57,7 +57,7 @@ hv_center_space, hv_face_space =
         warp_fn = warp_surface,
     )
 
-Φ(z) = grav * z
+geopotential(z) = grav * z
 
 # Prognostic thermodynamic variable: Total Energy 
 function init_advection_over_mountain(x, z)
@@ -67,13 +67,15 @@ function init_advection_over_mountain(x, z)
     p₀ = MSLP
     g = grav
 
-    𝒩 = 0.01
-    π_exner = @. exp(-g * z / (cp_d * θ₀))
-    θ = @. θ₀ * exp(𝒩^2 * z / g)
+    N = 0.01
+    θ = @. θ₀ * exp(N^2 * z / g)
+    π_exner = @. 1 + g^2 / N^2 / cp_d / θ₀ * (exp(-N^2 * z / g) - 1)
     T = @. π_exner * θ # temperature
-    ρ = @. p₀ / (R_d * θ) * (π_exner)^(cp_d / R_d)
+    # p = p₀ π^(cp/R) and p = ρ R_d T = ρ R_d π θ, so ρ carries π^(cp/R - 1),
+    # and cp - R_d = cv.
+    ρ = @. p₀ / (R_d * θ) * (π_exner)^(cv_d / R_d)
     # total energy: internal + potential + kinetic energy of the initial wind
-    e = @. cv_d * (T - T_0) + Φ(z) + u₀^2 / 2
+    e = @. cv_d * (T - T_0) + geopotential(z) + u₀^2 / 2
     ρe = @. ρ * e
     return (ρ = ρ, ρe = ρe)
 end
@@ -82,9 +84,9 @@ end
 coords = Fields.coordinate_field(hv_center_space)
 face_coords = Fields.coordinate_field(hv_face_space)
 
-# Assign initial conditions to cell center, cell face variables
-# Group scalars (ρ, ρe) in Yc 
-# Retain uₕ and w as separate components of velocity vector (primitive variables)
+# Assign initial conditions to cell center, cell face variables Group scalars
+# (ρ, ρe) in Yc Retain uₕ and w as separate components of velocity vector
+# (primitive variables)
 Yc = map(coord -> init_advection_over_mountain(coord.x, coord.z), coords)
 w = map(_ -> Geometry.Covariant3Vector(0.0), face_coords)
 uₕ_local = map(_ -> Geometry.UWVector(u₀, 0.0), coords)
@@ -152,7 +154,7 @@ function rhs_invariant!(dY, Y, _, t)
     cuw = Geometry.Covariant13Vector.(cuₕ) .+ Geometry.Covariant13Vector.(cw)
 
     ce = @. cρe / cρ
-    cI = @. ce - Φ(z) - (norm(cuw)^2) / 2
+    cI = @. ce - geopotential(z) - (norm(cuw)^2) / 2
     cT = @. cI / C_v + T_0
     cp = @. cρ * R_d * cT
 
@@ -225,7 +227,7 @@ function rhs_invariant!(dY, Y, _, t)
     )
     @. dw -= vgradc2f(cp) / Ic2f(cρ)
 
-    cE = @. (norm(cuw)^2) / 2 + Φ(z)
+    cE = @. (norm(cuw)^2) / 2 + geopotential(z)
     @. duₕ -= hgrad(cE)
     @. dw -= vgradc2f(cE)
 
@@ -311,6 +313,17 @@ end
 
 sol = @timev CTS.solve!(integrator)
 
+# Mass and total energy must be conserved (measured drift: 8e-14 and 2e-13).
+# The 1 m hill in a 10 m/s flow forces mountain waves of a few mm/s
+# (measured max|w| = 3e-3); an O(1) value means the surface condition broke.
+@test abs(sum(sol.u[end].Yc.ρ) - sum(sol.u[1].Yc.ρ)) / sum(sol.u[1].Yc.ρ) < 1e-11
+@test abs(sum(sol.u[end].Yc.ρe) - sum(sol.u[1].Yc.ρe)) / sum(sol.u[1].Yc.ρe) < 1e-11
+@testset "mountain-wave amplitude" begin
+    w = maximum(abs, parent(Geometry.WVector.(sol.u[end].w)))
+    @info "Peak |w| at the end of the run: $w m/s"
+    @test 1e-4 < w < 0.1
+end
+
 ENV["GKSwstype"] = "nul"
 import Plots, ClimaCorePlots
 Plots.GRBackend()
@@ -351,20 +364,13 @@ Plots.png(
     joinpath(path, "mass_cons.png"),
 )
 
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
-end
+include(joinpath(@__DIR__, "../..", "example_utils.jl")) # linkfig
 
 linkfig(
-    relpath(joinpath(path, "energy_cons.png"), joinpath(@__DIR__, "../..")),
+    relpath(joinpath(path, "energy_cons.png"), joinpath(@__DIR__, "../../..")),
     "Total Energy",
 )
 linkfig(
-    relpath(joinpath(path, "mass_cons.png"), joinpath(@__DIR__, "../..")),
+    relpath(joinpath(path, "mass_cons.png"), joinpath(@__DIR__, "../../..")),
     "Mass",
 )

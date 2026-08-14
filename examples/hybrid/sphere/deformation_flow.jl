@@ -2,9 +2,8 @@
 # time-reversing wind field stretches tracers into thin filaments and then
 # returns them to their initial shape, so the exact solution at the end is the
 # initial condition. Tests how well the transport scheme preserves tracer
-# structure and correlations under strong deformation.
-#
-# Reference: http://www-personal.umich.edu/~cjablono/DCMIP-2012_TestCaseDocument_v1.7.pdf,
+# structure and correlations under strong deformation. Reference:
+# http://www-personal.umich.edu/~cjablono/DCMIP-2012_TestCaseDocument_v1.7.pdf,
 # Section 1.1
 import ClimaComms
 ClimaComms.@import_required_backends
@@ -277,7 +276,7 @@ function run_deformation_flow(use_limiter, fct_op, dt)
     )
     sol = CTS.solve(problem, ode_algorithm; dt)
     if !(cache.limiter isa Nothing)
-        @show cache.limiter.rtol
+        @info "Limiter rtol: $(cache.limiter.rtol)"
         Limiters.print_convergence_stats(cache.limiter)
     end
     return sol
@@ -295,7 +294,8 @@ function tracer_conservation_errors(sol)
     return abs.(final_masses .- initial_masses) ./ initial_masses
 end
 
-# Roughness measured as deviation from mean (TODO: use a low-pass filter instead)
+# Roughness measured as deviation from mean (TODO: use a low-pass filter
+# instead)
 function tracer_roughnesses(sol)
     final_q = sol.u[end].c.ρq ./ sol.u[end].c.ρ
     # Wrap the mean in a Tuple so that it is broadcast like a single value (as

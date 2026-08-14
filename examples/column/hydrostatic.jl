@@ -1,8 +1,11 @@
-# Hydrostatic balance on a vertical column. A decaying temperature profile fixes
+# Hydrostatic balance on a vertical column. This example relies on potential
+# temperature `ρθ` rather than the total energy `ρe` formulation enforced in
+# the hybrid models, as `ρθ` is analytically conserved and simplifies the balance.
+# A decaying temperature profile fixes
 # ρθ, and `discrete_hydrostatic_balance!` then integrates the *discrete* balance
-# upward for ρ, so the initial state is at rest to within roundoff rather than to
-# within truncation error. Integrating it forward should therefore leave it at
-# rest; the run plots the evolving profiles over several days.
+# upward for ρ, so the initial state is at rest to within roundoff rather than
+# to within truncation error. Integrating it forward should therefore leave it
+# at rest; the run plots the evolving profiles over several days.
 import ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore:
@@ -27,11 +30,11 @@ const n_vert = 30
 
 # https://github.com/CliMA/CLIMAParameters.jl/blob/master/src/Planet/planet_parameters.jl#L5
 const MSLP = FT(1e5) # mean sea level pressure
-const grav = FT(9.8) # gravitational constant
+const grav = FT(9.8) # gravitational acceleration (m/s²)
 const R_d = FT(287.058) # R dry (gas constant / mol mass dry air)
 const γ = FT(1.4) # heat capacity ratio
 const C_p = FT(R_d * γ / (γ - 1)) # heat capacity at constant pressure
-const C_v = FT(R_d / (γ - 1)) # heat capacit at constant volume
+const C_v = FT(R_d / (γ - 1)) # heat capacity at constant volume
 const R_m = FT(R_d) # moist R, assumed to be dry
 
 domain = Domains.IntervalDomain(
@@ -39,7 +42,6 @@ domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(z_top),
     boundary_names = (:bottom, :top),
 )
-#mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
 mesh = Meshes.IntervalMesh(domain; nelems = n_vert)
 device = ClimaComms.device()
 cspace = Spaces.CenterFiniteDifferenceSpace(device, mesh)
@@ -88,27 +90,18 @@ function discrete_hydrostatic_balance!(ρ, ρθ, Δz::FT, _grav::FT, Π::Functio
 end
 
 zc = Fields.coordinate_field(cspace)
-zc_vec = parent(zc)
-
-N = length(zc_vec)
-ρ = zeros(Float64, N)
-ρθ = zeros(Float64, N)
-
-for i in 1:N
-    var = decaying_temperature_profile(
-        zc_vec[i];
-        T_virt_surf = 280.0,
-        T_min_ref = 230.0,
-    )
-    ρ[i] = var.ρ
-    ρθ[i] = var.ρθ
-end
-
-discrete_hydrostatic_balance!(ρ, ρθ, z_top / n_vert, grav, Π)
-
 Yc = decaying_temperature_profile.(zc.z)
-parent(Yc.ρ) .= ρ
-parent(Yc.ρθ) .= ρθ
+
+# `ρθ` is left as the analytic profile; `ρ` is overwritten in place by the
+# integration of the discrete balance, which is what makes the initial state
+# rest to roundoff.
+discrete_hydrostatic_balance!(
+    vec(parent(Yc.ρ)),
+    vec(parent(Yc.ρθ)),
+    z_top / n_vert,
+    grav,
+    Π,
+)
 w = Geometry.WVector.(zeros(FT, fspace))
 
 Y_init = copy(Yc)
@@ -161,6 +154,14 @@ sol = CTS.solve(
     progress_message = (dt, u, p, t) -> t,
 );
 
+using Test
+# The initial state is in discrete hydrostatic balance, so ten days of
+# integration must leave the column at rest (measured: max|w| = 7e-12 m/s)
+# with mass and ρθ conserved (measured drift: ~2e-12).
+@test maximum(abs, parent(sol.u[end].w)) < 1e-8
+@test abs(sum(sol.u[end].Yc.ρ) - sum(sol.u[1].Yc.ρ)) / sum(sol.u[1].Yc.ρ) < 1e-10
+@test abs(sum(sol.u[end].Yc.ρθ) - sum(sol.u[1].Yc.ρθ)) / sum(sol.u[1].Yc.ρθ) < 1e-10
+
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
@@ -187,7 +188,7 @@ function hydrostatic_plot(u; title = "", size = (1024, 600))
         z_faces,
         marker = :circle,
         xlim = (-1e-10, 1e-10),
-        xlabel = "ω",
+        xlabel = "w",
         label = "T=0",
     )
     sub_plt2 = Plots.plot!(sub_plt2, vec(parent(u.w)), z_faces, label = "T")
@@ -218,13 +219,6 @@ Plots.mp4(anim, joinpath(path, "hydrostatic.mp4"), fps = 10)
 
 Plots.png(hydrostatic_plot(sol.u[end]), joinpath(path, "hydrostatic_end.png"))
 
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
-end
+include(joinpath(@__DIR__, "..", "example_utils.jl")) # linkfig
 
 linkfig("examples/column/output/$(dir)/hydrostatic_end.png", "Hydrostatic End")

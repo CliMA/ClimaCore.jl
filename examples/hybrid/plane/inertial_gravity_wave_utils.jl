@@ -7,7 +7,7 @@ module InertialGravityWaveUtils
 import ClimaCore.Geometry as Geometry
 
 # min_λx = 2 * (x_max / x_elem) / upsampling_factor # this should include npoly
-# min_λz = 2 * (FT( / z_)elem) / upsampling_factor
+# min_λz = 2 * (z_max / z_elem) / upsampling_factor
 # min_λx = 2 * π / max_kx = x_max / max_ikx
 # min_λz = 2 * π / max_kz = 2 * z_max / max_ikz
 # max_ikx = x_max / min_λx = upsampling_factor * x_elem / 2
@@ -18,9 +18,9 @@ function ρfb_init_coefs!(::Type{FT}, params) where {FT}
     # Since the coefficients are for a modified domain of height 2 * z_max, the
     # unit integral over the domain must be multiplied by 2 to ensure correct
     # normalization. On the other hand, ᶜρb_init is assumed to be 0 outside of
-    # the "true" domain, so the integral of
-    # ᶜintegrand (`ᶜintegrand = ᶜρb_init / ᶜfourier_factor`) should not be modified.
-    # where `ᶜfourier_factor = exp(im * (kx * x + kz * z))`.
+    # the "true" domain, so the integral of ᶜintegrand (`ᶜintegrand = ᶜρb_init /
+    # ᶜfourier_factor`) should not be modified. where `ᶜfourier_factor = exp(im
+    # * (kx * x + kz * z))`.
     @inbounds begin
         Threads.@threads for ikx in (-max_ikx):max_ikx
             for ikz in (-max_ikz):max_ikz

@@ -44,7 +44,7 @@ const S = grav^2 / cp_d / N^2
 const T_0 = 300 # isothermal atmospheric temperature
 const Δθ = 10.0 # maximum potential temperature perturbation
 const R_t = R / 3 # width of the perturbation
-const L_z = 20.0e3 # vertial wave length of the perturbation
+const L_z = 20.0e3 # vertical wave length of the perturbation
 const p_0 = 1.0e5 # reference pressure
 const λ_c = 180.0 # center longitude of the cosine bell
 const ϕ_c = 0.0 # center latitude of the cosine bell
@@ -270,7 +270,15 @@ sol = CTS.solve(
     progress_message = (dt, u, p, t) -> t,
 )
 
-@info "Solution L₂ norm at time t = 0: ", norm(Y.Yc.ρe)
+using Test
+# The domain is closed: mass and total energy must be conserved (measured
+# drift: 4e-16 and 2e-16). The 10 K perturbation radiates gravity waves with
+# max|w| ≈ 2 m/s; an unstable run overshoots this by orders of magnitude.
+@test abs(sum(sol.u[end].Yc.ρ) - sum(sol.u[1].Yc.ρ)) / sum(sol.u[1].Yc.ρ) < 1e-12
+@test abs(sum(sol.u[end].Yc.ρe) - sum(sol.u[1].Yc.ρe)) / sum(sol.u[1].Yc.ρe) < 1e-12
+@test maximum(abs, parent(Geometry.WVector.(sol.u[end].w))) < 10
+
+@info "Solution L₂ norm at time t = 0: ", norm(sol.u[1].Yc.ρe)
 @info "Solution L₂ norm at time t = $(time_end): ", norm(sol.u[end].Yc.ρe)
 
 # TODO: visualization artifacts
@@ -281,12 +289,3 @@ sol = CTS.solve(
 # dir = "nonhydrostatic_gravity_wave"
 # path = joinpath(@__DIR__, "output", dir)
 # mkpath(path)
-
-# function linkfig(figpath, alt = "")
-#     # buildkite-agent upload figpath
-#     # link figure in logs if we are running on CI
-#     if get(ENV, "BUILDKITE", "") == "true"
-#         artifact_url = "artifact://$figpath"
-#         print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-#     end
-# end

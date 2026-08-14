@@ -299,8 +299,8 @@ steps:
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/simulation_3d.jl"
 
-      # GPU twin of the step above. This file needs OrdinaryDiffEqSSPRK, which
-      # is not a test-target dependency, so it cannot run through the harness.
+      # GPU twin of the step above; this file runs as a dedicated step rather
+      # than through the harness.
       # Only the second of its three testsets picks up `ClimaComms.device()`;
       # the other two build spaces with an explicit `CPUSingleThreaded` device.
       - label: "Unit: hyb ops simulation 3d (GPU)"
@@ -810,14 +810,6 @@ steps:
         artifact_paths:
           - "examples/column/output/heat/*"
 
-      - label: ":computer: Column Advection Step Eq"
-        key: "cpu_column_step_advect"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/column/step.jl"
-        artifact_paths:
-          - "examples/column/output/advect_step_function/*"
-
       - label: ":computer: Column Advection Eq"
         key: "cpu_column_advect"
         retry: *retry_policy
@@ -826,34 +818,26 @@ steps:
         artifact_paths:
           - "examples/column/output/advect/*"
 
-      # The fct / bb_fct / zalesak_fct column-advection cases are covered by
-      # test/Integration/smoke_column_advection.jl, with the same accuracy and
-      # mass-conservation assertions. tvd_advection and the van Leer example
-      # (which also covers AlgebraicMean, the stretched mesh, and the GPU path)
-      # are not, so they run here.
-      - label: ":computer: Column TVD Slope-limited Advection Eq"
-        key: "cpu_tvd_column_advect"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/column/tvd_advection.jl"
-        artifact_paths:
-          - "examples/column/output/tvd_advection/*"
+      # The FCT / Boris & Book / Zalesak column-advection cases live in
+      # test/Integration/smoke_column_advection.jl. The remaining limiter
+      # coverage is in the limited advection example below, which sweeps the
+      # constraints on uniform and stretched meshes.
 
-      - label: ":computer: Column Lin vanLeer Limiter Advection Eq"
+      - label: ":computer: Column limited advection"
         key: "cpu_lvl_column_advect"
         retry: *retry_policy
         command:
-          - "julia --color=yes --project=.buildkite examples/column/vanleer_advection.jl"
+          - "julia --color=yes --project=.buildkite examples/column/limited_advection.jl"
         artifact_paths:
-          - "examples/column/output/vanleer_advection/*"
+          - "examples/column/output/limited_advection/*"
 
-      - label: ":computer: Column Lin vanLeer Limiter Advection Eq cuda"
+      - label: ":computer: Column limited advection cuda"
         key: "gpu_lvl_column_advect"
         retry: *retry_policy
         command:
-          - "julia --color=yes --project=.buildkite examples/column/vanleer_advection.jl"
+          - "julia --color=yes --project=.buildkite examples/column/limited_advection.jl"
         artifact_paths:
-          - "examples/column/output/vanleer_advection/*"
+          - "examples/column/output/limited_advection/*"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -875,14 +859,6 @@ steps:
         artifact_paths:
           - "examples/column/output/ekman/*"
 
-      - label: ":computer: Column Hydrostatic Ekman Eq"
-        key: "cpu_column_hydrostatic_ekman"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/column/hydrostatic_ekman.jl"
-        artifact_paths:
-          - "examples/column/output/hydrostatic_ekman/*"
-
       - label: ":computer: Column Wave Eq"
         key: "cpu_column_wave"
         retry: *retry_policy
@@ -899,119 +875,81 @@ steps:
         artifact_paths:
           - "examples/column/output/hydrostatic/*"
 
-      - label: ":computer: Column Hydrostatic Balance Eq with discretely balanced initial condition"
-        key: "cpu_column_hydrostatic_discrete"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/column/hydrostatic_discrete.jl"
-        artifact_paths:
-          - "examples/column/output/hydrostatic_discrete/*"
-
   - group: "Examples: Spectral element"
     steps:
       - label: ":computer: Bickley jet CG"
         key: "cpu_bickleyjet_cg"
         retry: *retry_policy
         command:
-          - "julia --color=yes --project=.buildkite examples/bickleyjet/bickleyjet_cg.jl"
+          - "julia --color=yes --project=.buildkite examples/plane/bickleyjet_cg.jl"
         artifact_paths:
-          - "examples/bickleyjet/output/cg/*"
-
-      - label: ":computer: Bickley jet CG unstructured mesh"
-        key: "cpu_bickleyjet_cg_unsmesh"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/bickleyjet/bickleyjet_cg_unsmesh.jl"
-        artifact_paths:
-          - "examples/bickleyjet/output/cg_unsmesh/*"
+          - "examples/plane/output/cg/*"
 
       - label: ":computer: Bickley jet CG vector invariant hyperviscosity"
         key: "cpu_bickleyjet_cg_invariant_hypervisc"
         retry: *retry_policy
         command:
-          - "julia --color=yes --project=.buildkite examples/bickleyjet/bickleyjet_cg_invariant_hypervisc.jl"
+          - "julia --color=yes --project=.buildkite examples/plane/bickleyjet_cg_invariant_hypervisc.jl"
         artifact_paths:
-          - "examples/bickleyjet/output/cg_invariant_hypervisc/*"
+          - "examples/plane/output/cg_invariant_hypervisc/*"
 
       - label: ":computer: MPI Bickley jet CG vector invariant hyperviscosity"
         key: "cpu_mpi_bickleyjet_cg_invariant_hypervisc"
         retry: *retry_policy
         command:
-          - "srun julia --color=yes --project=.buildkite examples/bickleyjet/bickleyjet_cg_invariant_hypervisc.jl"
+          - "srun julia --color=yes --project=.buildkite examples/plane/bickleyjet_cg_invariant_hypervisc.jl"
         artifact_paths:
-          - "examples/bickleyjet/output/cg_invariant_hypervisc/*"
+          - "examples/plane/output/cg_invariant_hypervisc/*"
         env:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 4
           modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
-      - label: ":computer: Bickley jet DG rusanov"
-        key: "cpu_bickleyjet_dg_rusanov"
+      - label: ":computer: Bickley jet DG {{matrix.case}}"
+        key: "cpu_bickleyjet_dg"
         retry: *retry_policy
+        matrix:
+          setup:
+            case:
+              - "rusanov"
+              - "roe"
+              - "roe noslip"
         command:
-          - "julia --color=yes --project=.buildkite examples/bickleyjet/bickleyjet_dg.jl rusanov"
+          - "julia --color=yes --project=.buildkite examples/plane/bickleyjet_dg.jl {{matrix.case}}"
         artifact_paths:
-          - "examples/bickleyjet/output/dg_rusanov/*"
+          - "examples/plane/output/dg_*/*"
 
-      - label: ":computer: Bickley jet DG roe"
-        key: "cpu_bickleyjet_dg_roe"
+      - label: ":computer: Plane limiters advection {{matrix.case}}"
+        key: "cpu_plane_limiters_advection"
         retry: *retry_policy
+        matrix:
+          setup:
+            case:
+              - "cosine_bells"
+              - "gaussian_bells"
+              - "cylinders"
         command:
-          - "julia --color=yes --project=.buildkite examples/bickleyjet/bickleyjet_dg.jl roe"
+          - "julia --color=yes --project=.buildkite examples/plane/limiters_advection.jl {{matrix.case}}"
         artifact_paths:
-          - "examples/bickleyjet/output/dg_roe/*"
-
-      - label: ":computer: Bickley jet DG roe noslip"
-        key: "cpu_bickleyjet_dg_roe_noslip"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/bickleyjet/bickleyjet_dg.jl roe noslip"
-        artifact_paths:
-          - "examples/bickleyjet/output/dg_roe_noslip/*"
-
-      - label: ":computer: Plane limiters advection cosine bells"
-        key: "cpu_cg_plane_advection_limiter_cosine_bells"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/plane/limiters_advection.jl"
-        artifact_paths:
-          - "examples/plane/output/plane_advection_limiter_cosine_bells_D0/*"
-
-      - label: ":computer: Plane limiters advection Gaussian bells"
-        key: "cpu_cg_plane_advection_limiter_gaussian_bells"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/plane/limiters_advection.jl gaussian_bells"
-        artifact_paths:
-          - "examples/plane/output/plane_advection_limiter_gaussian_bells_D0/*"
-
-      - label: ":computer: Plane limiters advection cylinders"
-        key: "cpu_cg_plane_advection_limiter_cylinders"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/plane/limiters_advection.jl cylinders"
-        artifact_paths:
-          - "examples/plane/output/plane_advection_limiter_cylinders_D0/*"
+          - "examples/plane/output/plane_advection_limiter_*/*"
 
   - group: "Examples: Hybrid"
     steps:
 
-      - label: ":computer: 3D Box limiters advection cosine bells"
-        key: "cpu_box_advection_limiter_cosine_bells"
+      - label: ":computer: 3D Box limiters advection {{matrix.case}}"
+        key: "cpu_box_limiters_advection"
         retry: *retry_policy
+        matrix:
+          setup:
+            case:
+              - "cosine_bells"
+              - "gaussian_bells"
+              - "slotted_spheres"
         command:
-          - "julia --color=yes --project=.buildkite examples/hybrid/box/limiters_advection.jl"
+          - "julia --color=yes --project=.buildkite examples/hybrid/box/limiters_advection.jl {{matrix.case}}"
         artifact_paths:
-          - "examples/hybrid/box/output/box_advection_limiter_cosine_bells_D0/*"
-
-      - label: ":computer: 3D Box limiters advection Gaussian bells"
-        key: "cpu_box_advection_limiter_gaussian_bells"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/hybrid/box/limiters_advection.jl gaussian_bells"
-        artifact_paths:
-          - "examples/hybrid/box/output/box_advection_limiter_gaussian_bells_D0/*"
+          - "examples/hybrid/box/output/box_advection_limiter_*/*"
 
       - label: ":computer: 3D Box limiters advection Gaussian bells GPU"
         key: "gpu_box_advection_limiter_gaussian_bells"
@@ -1031,22 +969,14 @@ steps:
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
         artifact_paths:
-          - "examples/hybrid/sphere/output/baroclinic_wave_rhoe_hf/Float32/*"
+          - "examples/hybrid/sphere/output/baroclinic_wave_rhoe/Float32/*"
         env:
-          TEST_NAME: "sphere/baroclinic_wave_rhoe_hf"
+          TEST_NAME: "sphere/baroclinic_wave_rhoe"
           FLOAT_TYPE: "Float32"
           horizontal_layout_type: "VIJHF"
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
-
-      - label: ":computer: 3D Box limiters advection slotted spheres"
-        key: "cpu_box_advection_limiter_slotted_spheres"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/hybrid/box/limiters_advection.jl slotted_spheres"
-        artifact_paths:
-          - "examples/hybrid/box/output/box_advection_limiter_slotted_spheres_D0/*"
 
       - label: ":computer: Isothermal channel flow 2D hybrid (ρe)"
         key: "cpu_isothermal_channel_2d_hybrid_rhoe"
@@ -1056,14 +986,6 @@ steps:
         artifact_paths:
           - "examples/hybrid/plane/output/iso_channel_2d/*"
 
-      - label: ":computer: Rising Bubble 3D hybrid (ρθ)"
-        key: "cpu_rising_bubble_3d_hybrid_rhotheta"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/hybrid/box/bubble_3d_rhotheta.jl"
-        artifact_paths:
-          - "examples/hybrid/box/output/bubble_3d_rhotheta/*"
-
       - label: ":computer: Rising Bubble 2D hybrid invariant (ρe)"
         key: "cpu_rising_bubble_2d_hybrid_invariant_rhoe"
         retry: *retry_policy
@@ -1072,14 +994,6 @@ steps:
         artifact_paths:
           - "examples/hybrid/plane/output/bubble_2d_invariant_rhoe/*"
 
-      - label: ":computer: Rising Bubble 3D hybrid invariant (ρθ)"
-        key: "cpu_rising_bubble_3d_hybrid_invariant_rhotheta"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/hybrid/box/bubble_3d_invariant_rhotheta.jl"
-        artifact_paths:
-          - "examples/hybrid/box/output/bubble_3d_invariant_rhotheta/*"
-
       - label: ":computer: Rising Bubble 3D hybrid invariant (ρe)"
         key: "cpu_rising_bubble_3d_hybrid_invariant_rhoe"
         retry: *retry_policy
@@ -1087,6 +1001,14 @@ steps:
           - "julia --color=yes --project=.buildkite examples/hybrid/box/bubble_3d_invariant_rhoe.jl"
         artifact_paths:
           - "examples/hybrid/box/output/bubble_3d_invariant_rhoe/*"
+
+      - label: ":computer: Rising Bubble 3D hybrid flux form (ρe)"
+        key: "cpu_rising_bubble_3d_hybrid_flux_form_rhoe"
+        retry: *retry_policy
+        command:
+          - "julia --color=yes --project=.buildkite examples/hybrid/box/bubble_3d_flux_form_rhoe.jl"
+        artifact_paths:
+          - "examples/hybrid/box/output/bubble_3d_flux_form_rhoe/*"
 
       - label: ":flower_playing_cards: Rising Bubble 3D hybrid invariant (ρe)"
         key: "gpu_rising_bubble_3d_hybrid_invariant_rhoe"
@@ -1105,8 +1027,8 @@ steps:
         key: "gpu_rising_bubble_3d_hybrid_invariant_rhoe_custom"
         retry: *retry_policy
         command:
-#          - "nsys profile --trace=nvtx,cuda --output=output/$$BUILDKITE_STEP_KEY/report julia --color=yes --project=.buildkite examples/hybrid/box/bubble_3d_invariant_rhoe.jl Float64 custom 1000 1000 4 16 3 0.05 700.0"
-          - "julia --color=yes --project=.buildkite examples/hybrid/box/bubble_3d_invariant_rhoe.jl Float64 custom 1000 1000 4 16 3 0.05 700.0"
+#          - "nsys profile --trace=nvtx,cuda --output=output/$$BUILDKITE_STEP_KEY/report julia --color=yes --project=.buildkite examples/hybrid/box/bubble_3d_invariant_rhoe.jl Float64 custom 1000 1000 4 16 3 0.05 250.0"
+          - "julia --color=yes --project=.buildkite examples/hybrid/box/bubble_3d_invariant_rhoe.jl Float64 custom 1000 1000 4 16 3 0.05 250.0"
         artifact_paths:
           - "examples/hybrid/box/output/gpu_bubble_3d_invariant_rhoe/*_custom_*"
         env:
@@ -1118,7 +1040,7 @@ steps:
         key: "cpu_density_current_2d_hybrid_invariant_total_energy"
         retry: *retry_policy
         command:
-          - "julia --color=yes --project=.buildkite examples/hybrid/plane/density_current_2dinvariant_rhoe.jl"
+          - "julia --color=yes --project=.buildkite examples/hybrid/plane/density_current_2d_invariant_rhoe.jl"
         artifact_paths:
           - "examples/hybrid/plane/output/dc_invariant_etot/*"
 
@@ -1126,7 +1048,7 @@ steps:
         key: "cpu_agnesi_mtn_2d_hybrid_invariant_total_energy_topography"
         retry: *retry_policy
         command:
-          - "julia --color=yes --project=.buildkite examples/hybrid/plane/topo_agnesi_nh.jl"
+          - "julia --color=yes --project=.buildkite examples/hybrid/plane/agnesi_mountain.jl"
         artifact_paths:
           - "examples/hybrid/plane/output/agnesi_etot_nh/*"
 
@@ -1134,17 +1056,9 @@ steps:
         key: "cpu_schaer_mtn_2d_hybrid_invariant_total_energy_topography"
         retry: *retry_policy
         command:
-          - "julia --color=yes --project=.buildkite examples/hybrid/plane/topo_schar_nh.jl"
+          - "julia --color=yes --project=.buildkite examples/hybrid/plane/schar_mountain.jl"
         artifact_paths:
           - "examples/hybrid/plane/output/schar_etot_nh/*"
-
-      - label: ":computer: Density current 2D hybrid conservative form potential temperature"
-        key: "cpu_density_current_2d_hybrid_conservative_potential_temperature"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/hybrid/plane/density_current_2d_flux_form.jl"
-        artifact_paths:
-          - "examples/hybrid/plane/output/dc_fluxform/*"
 
       - label: ":computer: MPI Rising Bubble 3D hybrid invariant (ρe)"
         key: "cpu_mpi_rising_bubble_3d_hybrid_invariant_rhoe"
@@ -1162,101 +1076,71 @@ steps:
   - group: "Examples: Sphere"
     steps:
 
-      - label: ":computer: Solid body sphere cosine bell alpha0"
-        key: "cpu_solidbody_cg_sphere_cosine_bell_alpha0"
+      - label: ":computer: Solid body sphere {{matrix.case}}"
+        key: "cpu_solid_body_rotation_sphere"
         retry: *retry_policy
+        matrix:
+          setup:
+            case:
+              - "cosine_bell alpha0"
+              - "cosine_bell alpha45"
+              - "gaussian_bell alpha0"
+              - "gaussian_bell alpha45"
         command:
-          - "julia --color=yes --project=.buildkite examples/sphere/solidbody.jl"
+          - "julia --color=yes --project=.buildkite examples/sphere/solid_body_rotation.jl {{matrix.case}}"
         artifact_paths:
-          - "examples/sphere/output/cg_sphere_solidbody_cosine_bell_alpha0/*"
+          - "examples/sphere/output/cg_sphere_solid_body_*/*"
 
-      - label: ":computer: Solid body sphere cosine bell alpha45"
-        key: "cpu_solidbody_cg_sphere_cosine_bell_alpha45"
+      - label: ":computer: Sphere limiters advection {{matrix.case}}"
+        key: "cpu_sphere_limiters_advection"
         retry: *retry_policy
+        matrix:
+          setup:
+            case:
+              - "cosine_bells"
+              - "gaussian_bells"
+              - "cylinders"
         command:
-          - "julia --color=yes --project=.buildkite examples/sphere/solidbody.jl cosine_bell alpha45"
+          - "julia --color=yes --project=.buildkite examples/sphere/limiters_advection.jl {{matrix.case}}"
         artifact_paths:
-          - "examples/sphere/output/cg_sphere_solidbody_cosine_bell_alpha45/*"
+          - "examples/sphere/output/cg_sphere_advection_limiter_*/*"
 
-      - label: ":computer: Solid body sphere Gaussian bell alpha0"
-        key: "cpu_solidbody_cg_sphere_gaussian_bell_alpha0"
+      - label: ":computer: Shallow-water 2D sphere {{matrix.case}}"
+        key: "cpu_shallowwater_2d_cg_sphere"
         retry: *retry_policy
+        matrix:
+          setup:
+            case:
+              - "steady_state alpha0"
+              - "steady_state alpha45"
+              - "steady_state_compact alpha0"
+              - "steady_state_compact alpha60"
+              - "barotropic_instability alpha0"
+              - "barotropic_instability alpha30"
+              - "mountain alpha0"
+              - "rossby_haurwitz alpha0"
         command:
-          - "julia --color=yes --project=.buildkite examples/sphere/solidbody.jl gaussian_bell"
+          - "julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl {{matrix.case}}"
         artifact_paths:
-          - "examples/sphere/output/cg_sphere_solidbody_gaussian_bell_alpha0/*"
+          - "examples/sphere/output/cg_sphere_shallowwater_*/*"
 
-      - label: ":computer: Solid body sphere Gaussian bell alpha45"
-        key: "cpu_solidbody_cg_sphere_gaussian_bell_alpha45"
+      - label: ":flower_playing_cards: Shallow-water 2D sphere {{matrix.case}} (gpu)"
+        key: "gpu_shallowwater_2d_cg_sphere"
         retry: *retry_policy
+        matrix:
+          setup:
+            case:
+              # steady_state only: the barotropic-instability initial
+              # condition integrates with QuadGK inside the kernel, which
+              # does not compile for CUDA.
+              - "steady_state alpha0"
         command:
-          - "julia --color=yes --project=.buildkite examples/sphere/solidbody.jl gaussian_bell alpha45"
-        artifact_paths:
-          - "examples/sphere/output/cg_sphere_solidbody_gaussian_bell_alpha45/*"
-
-      - label: ":computer: Sphere limiters advection cosine bells"
-        key: "cpu_cg_sphere_advection_limiter_cosine_bells"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/sphere/limiters_advection.jl"
-        artifact_paths:
-          - "examples/sphere/output/cg_sphere_advection_limiter_cosine_bells/*"
-
-      - label: ":computer: Sphere limiters advection Gaussian bells"
-        key: "cpu_cg_advection_limiter_gaussian_bells"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/sphere/limiters_advection.jl gaussian_bells"
-        artifact_paths:
-          - "examples/sphere/output/cg_sphere_advection_limiter_gaussian_bells/*"
-
-      - label: ":computer: Sphere limiters advection cylinders"
-        key: "cpu_cg_advection_limiter_cylinders"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/sphere/limiters_advection.jl cylinders"
-        artifact_paths:
-          - "examples/sphere/output/cg_sphere_advection_limiter_cylinders/*"
-
-      - label: ":computer: Steady-state shallow water 2D sphere alpha0"
-        key: "cpu_shallowwater_2d_cg_sphere_alpha0"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl"
-        artifact_paths:
-          - "examples/sphere/output/cg_sphere_shallowwater_steady_state_alpha0/*"
-
-      - label: ":computer: Shallow-water 2D sphere steady-state alpha45"
-        key: "cpu_shallowwater_2d_cg_sphere_alpha45"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl steady_state alpha45"
-        artifact_paths:
-          - "examples/sphere/output/cg_sphere_shallowwater_steady_state_alpha45/*"
-
-      - label: ":computer: Shallow-water 2D sphere steady-state with compact support alpha0"
-        key: "cpu_shallowwater_2d_cg_sphere_compact_alpha0"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl steady_state_compact"
-        artifact_paths:
-          - "examples/sphere/output/cg_sphere_shallowwater_steady_state_compact_alpha0/*"
-
-      - label: ":computer: Shallow-water 2D sphere steady-state with compact support alpha60"
-        key: "cpu_shallowwater_2d_cg_sphere_compact_alpha60"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl steady_state_compact alpha60"
-        artifact_paths:
-          - "examples/sphere/output/cg_sphere_shallowwater_steady_state_compact_alpha60/*"
-
-      - label: ":computer: Shallow-water 2D sphere barotropic instability alpha0"
-        key: "cpu_shallowwater_2d_cg_sphere_barotropic_alpha0"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl barotropic_instability"
-        artifact_paths:
-          - "examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/*"
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl {{matrix.case}}"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
 
       - label: ":computer: MPI Shallow-water 2D sphere barotropic instability alpha0"
         key: "cpu_mpi_shallowwater_2d_cg_sphere_barotropic_alpha0"
@@ -1273,44 +1157,6 @@ steps:
           slurm_nodes: 1
           slurm_tasks_per_node: 2
           modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
-
-      - label: ":computer: Shallow-water 2D sphere barotropic instability alpha30"
-        key: "cpu_shallowwater_2d_cg_sphere_barotropic_alpha30"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl barotropic_instability alpha30"
-        artifact_paths:
-          - "examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha30/*"
-
-      - label: ":computer: Shallow-water 2D sphere mountain alpha0"
-        key: "cpu_nonuniform_shallowwater_2d_cg_sphere"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl mountain"
-        artifact_paths:
-          - "examples/sphere/output/cg_sphere_shallowwater_mountain_alpha0/*"
-
-      - label: ":computer: Shallow-water 2D sphere Rossby Haurwitz"
-        key: "cpu_rossbyhaurwitz_2d_cg_sphere"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/sphere/shallow_water.jl rossby_haurwitz"
-        artifact_paths:
-          - "examples/sphere/output/cg_sphere_shallowwater_rossby_haurwitz_alpha0/*"
-
-      - label: ":flower_playing_cards: CUDA Shallow-water 2D sphere"
-        key: "cuda_shallowwater_2d_cg_sphere"
-        retry: *retry_policy
-        command:
-          - mkdir -p output/$$BUILDKITE_STEP_KEY
-#          - nsys profile --trace=nvtx,cuda --output=output/$$BUILDKITE_STEP_KEY/report julia --color=yes --project=.buildkite examples/sphere/shallow_water_cuda.jl
-          - julia --color=yes --project=.buildkite examples/sphere/shallow_water_cuda.jl
-        artifact_paths:
-          - output/cuda_shallowwater_2d_cg_sphere
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
 
   - group: "Examples: hybrid sphere"
     steps:
@@ -1350,9 +1196,9 @@ steps:
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
         artifact_paths:
-          - "examples/hybrid/sphere/output/baroclinic_wave_rhoe_hf/Float64/*"
+          - "examples/hybrid/sphere/output/baroclinic_wave_rhoe/Float64/*"
         env:
-          TEST_NAME: "sphere/baroclinic_wave_rhoe_hf"
+          TEST_NAME: "sphere/baroclinic_wave_rhoe"
           FLOAT_TYPE: "Float64"
           horizontal_layout_type: "VIJHF"
 
@@ -1381,16 +1227,6 @@ steps:
           modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
 
-      - label: ":computer: 3D sphere baroclinic wave (ρθ)"
-        key: "cpu_baroclinic_wave_rho_theta"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
-        artifact_paths:
-          - "examples/hybrid/sphere/output/baroclinic_wave_rhotheta/Float32/*"
-        env:
-          TEST_NAME: "sphere/baroclinic_wave_rhotheta"
-
       - label: ":computer: 3D sphere nonhydrostatic gravity wave"
         key: "cpu_nonhydrostatic_gravity_wave"
         retry: *retry_policy
@@ -1414,58 +1250,6 @@ steps:
           - "examples/hybrid/sphere/output/balanced_flow_rhoe/Float32/*"
         env:
           TEST_NAME: "sphere/balanced_flow_rhoe"
-
-      - label: ":computer: 3D sphere hydrostatically and geostrophically balanced flow (ρθ)"
-        key: "cpu_balanced_flow_rho_theta"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
-        artifact_paths:
-          - "examples/hybrid/sphere/output/balanced_flow_rhotheta/Float32/*"
-        env:
-          TEST_NAME: "sphere/balanced_flow_rhotheta"
-
-      - label: ":computer: 3D sphere dry Held-Suarez (ρe)"
-        key: "cpu_held_suarez_rho_e"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
-        artifact_paths:
-          - "examples/hybrid/sphere/output/held_suarez_rhoe/Float64/*"
-        env:
-          TEST_NAME: "sphere/held_suarez_rhoe"
-          FLOAT_TYPE: "Float64"
-
-      - label: ":computer: Float64 3D sphere dry Held-Suarez (ρθ)"
-        key: "cpu_held_suarez_rho_theta_float64"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
-        artifact_paths:
-          - "examples/hybrid/sphere/output/held_suarez_rhotheta/Float64/*"
-        env:
-          TEST_NAME: "sphere/held_suarez_rhotheta"
-          FLOAT_TYPE: "Float64"
-
-      - label: ":computer: 3D sphere dry Held-Suarez (ρθ)"
-        key: "cpu_held_suarez_rho_theta"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
-        artifact_paths:
-          - "examples/hybrid/sphere/output/held_suarez_rhotheta/Float32/*"
-        env:
-          TEST_NAME: "sphere/held_suarez_rhotheta"
-
-      - label: ":computer: 3D sphere dry Held-Suarez (ρe_int)"
-        key: "cpu_held_suarez_rho_e_int"
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
-        artifact_paths:
-          - "examples/hybrid/sphere/output/held_suarez_rhoe_int/Float32/*"
-        env:
-          TEST_NAME: "sphere/held_suarez_rhoe_int"
 
   - group: "Examples: hybrid plane"
     steps:

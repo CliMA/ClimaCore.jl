@@ -1,8 +1,10 @@
-# Baroclinic wave on the 3D sphere (Ullrich et al., 2014): a balanced jet given a
-# small perturbation, which grows over ~10 days into the familiar breaking wave.
-# The standard benchmark for a dry dynamical core. Total energy is the prognostic
-# thermodynamic variable, and the vertical acoustic terms are treated implicitly
-# (`SSP333`). Run through `driver.jl` with `TEST_NAME=sphere/baroclinic_wave_rhoe`.
+# Baroclinic wave on the 3D sphere (Ullrich et al., 2014): a balanced jet given
+# a small perturbation, which grows over ~10 days into the familiar breaking
+# wave. The standard benchmark for a dry dynamical core. Total energy is the
+# prognostic thermodynamic variable, and the vertical acoustic terms are treated
+# implicitly (`SSP333`). Run through `driver.jl` with
+# `TEST_NAME=sphere/baroclinic_wave_rhoe`.
+using Test
 using ClimaCorePlots, Plots
 using ClimaCore.DataLayouts
 
@@ -36,6 +38,15 @@ center_initial_condition(local_geometry) =
 function postprocessing(sol, output_dir)
     @info "L₂ norm of ρe at t = $(sol.t[1]): $(norm(sol.u[1].c.ρe))"
     @info "L₂ norm of ρe at t = $(sol.t[end]): $(norm(sol.u[end].c.ρe))"
+
+    # Conservation over the 10-day run (measured drift: 2e-6 in both), and
+    # baroclinic growth: the initial 1 m/s perturbation must amplify into a
+    # wave with meridional winds of several m/s (measured: 0.76 → 6.5).
+    @test abs(sum(sol.u[end].c.ρ) - sum(sol.u[1].c.ρ)) / sum(sol.u[1].c.ρ) < 1e-4
+    @test abs(sum(sol.u[end].c.ρe) - sum(sol.u[1].c.ρe)) / sum(sol.u[1].c.ρe) < 1e-4
+    v_init = maximum(abs, Geometry.UVVector.(sol.u[1].c.uₕ).components.data.:2)
+    v_end = maximum(abs, Geometry.UVVector.(sol.u[end].c.uₕ).components.data.:2)
+    @test v_end > 4 * v_init > 0
 
     anim = Plots.@animate for Y in sol.u
         ᶜv = Geometry.UVVector.(Y.c.uₕ).components.data.:2

@@ -39,15 +39,21 @@ const context = ClimaComms.SingletonCommsContext()
 # Physical parameters
 # ============================================================================
 
-const MSLP = 1e5          # mean sea level pressure (Pa)
-const grav = 9.8          # gravitational acceleration (m/s²)
-const R_d = 287.058       # gas constant for dry air (J/kg/K)
-const γ = 1.4             # heat capacity ratio
-const C_p = R_d * γ / (γ - 1)   # heat capacity at constant pressure
-const C_v = R_d / (γ - 1)       # heat capacity at constant volume
-const T_0 = 273.16        # reference temperature for internal energy (K)
+include(joinpath(@__DIR__, "../..", "example_utils.jl")) # linkfig
+include(joinpath(@__DIR__, "bubble_parameters.jl")) # PhysicalParameters, geopotential
 
-geopotential(z) = grav * z
+# The invariant counterpart threads these through a `PhysicalParameters` value
+# because it also runs on the GPU; this case is CPU-only, so it reads the same
+# defaults into constants and keeps the tendencies free of a parameter
+# argument.
+const params = PhysicalParameters{Float64}()
+const MSLP = params.MSLP
+const grav = params.grav
+const R_d = params.R_d
+const γ = params.γ
+const C_p = params.C_p
+const C_v = params.C_v
+const T_0 = params.T_0
 
 # ============================================================================
 # Spaces
@@ -60,7 +66,7 @@ function hvspace_3D(
     xelem = 4,
     yelem = 4,
     zelem = 16,
-    npoly = 4,
+    npoly = 3, # matches the invariant case, so the two are comparable
 )
     FT = Float64
     device = ClimaComms.device(context)
@@ -125,7 +131,7 @@ function init_dry_rising_bubble_3d(x, y, z)
     T = π_exn * θ                       # temperature
     p = MSLP * π_exn^(C_p / R_d)        # pressure
     ρ = p / R_d / T                     # density
-    e = C_v * (T - T_0) + geopotential(z)   # total energy per unit mass
+    e = C_v * (T - T_0) + geopotential(z, grav)   # total energy per unit mass
     ρe = ρ * e
 
     return (ρ = ρ, ρe = ρe, ρuₕ = ρ * Geometry.UVVector(0.0, 0.0))
@@ -160,7 +166,7 @@ potential contributions from the total energy to obtain the internal energy.
 """
 function pressure(ρ, ρe, ρu, z)
     u = ρu / ρ
-    internal_energy = ρe / ρ - norm(u)^2 / 2 - geopotential(z)
+    internal_energy = ρe / ρ - norm(u)^2 / 2 - geopotential(z, grav)
     T = internal_energy / C_v + T_0
     return ρ * R_d * T
 end
@@ -268,7 +274,7 @@ function rhs!(dY, Y, _, t)
     @. dρw += B(
         Geometry.transform(
             Geometry.WAxis(),
-            -(∂f(p)) - If(ρ) * ∂f(geopotential(z)),
+            -(∂f(p)) - If(ρ) * ∂f(geopotential(z, grav)),
         ) - vdivc2f(Ic(ρw ⊗ w)),
     )
     uₕf = @. If(ρuₕ / ρ)
@@ -294,6 +300,7 @@ rhs!(dYdt, Y, nothing, 0.0)
 
 import ClimaTimeSteppers as CTS
 Δt = 0.05
+# 1 s of integration time, just to verify the code does not crash
 prob = CTS.ODEProblem(CTS.ClimaODEFunction(; T_exp! = rhs!), Y, (0.0, 1.0), nothing)
 integrator = CTS.init(
     prob,
@@ -324,20 +331,28 @@ mkpath(path)
 energies = [total_energy(u) for u in sol.u]
 masses = [sum(u.Yc.ρ) for u in sol.u]
 
+using Test
+# The domain is closed: mass and total energy must be conserved.
+@test abs(masses[end] - mass_0) / mass_0 < 1e-12
+@test abs(energies[end] - energy_0) / energy_0 < 1e-8
+# At t = 1 s the bubble can only just have started to move, and how fast is
+# set by its buoyancy: a θ_c = 0.5 K perturbation on a θ_b = 300 K background
+# accelerates it at g θ_c / θ_b = 0.016 m/s², so after one second ρw cannot
+# exceed ρ × 0.016 ≈ 0.018, and reaches a good fraction of it once the
+# compensating pressure gradient is subtracted (measured: 0.012). The return
+# flow around the bubble is an order of magnitude weaker (measured: -0.0011).
+@testset "updraft and return-flow brackets" begin
+    ρw = vec(parent(sol.u[end].ρw))
+    @test 0.005 < maximum(ρw) < 0.018
+    @test -0.005 < minimum(ρw) < 0
+end
+
 Plots.png(
     Plots.plot((energies .- energy_0) ./ energy_0),
     joinpath(path, "energy.png"),
 )
 Plots.png(Plots.plot((masses .- mass_0) ./ mass_0), joinpath(path, "mass.png"))
 
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
-end
 
 linkfig(
     relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),

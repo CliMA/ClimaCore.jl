@@ -1,6 +1,6 @@
-# Maps a ClimaTimeSteppers algorithm name to a configured algorithm, and supplies
-# the Jacobian keyword arguments an IMEX scheme needs. Explicit schemes get no
-# Jacobian; IMEX schemes get an `ImplicitEquationJacobian` and the
+# Maps a ClimaTimeSteppers algorithm name to a configured algorithm, and
+# supplies the Jacobian keyword arguments an IMEX scheme needs. Explicit schemes
+# get no Jacobian; IMEX schemes get an `ImplicitEquationJacobian` and the
 # `implicit_equation_jacobian!` that fills it.
 import ClimaTimeSteppers as CTS
 

@@ -105,9 +105,9 @@ Geopotential at height `z`.
 geopotential(z) = grav * z
 
 """
-    pressure_from_ρe(ρ, ρe, K, Φ)
+    pressure_from_ρe(ρe, K, Φ, ρ)
 
 Pressure diagnosed from total energy density, given the specific kinetic energy
 `K` and geopotential `Φ`.
 """
-pressure_from_ρe(ρ, ρe, K, Φ) = ρ * R_d * ((ρe / ρ - K - Φ) / C_v + T_0)
+pressure_from_ρe(ρe, K, Φ, ρ) = ρ * R_d * ((ρe / ρ - K - Φ) / C_v + T_0)

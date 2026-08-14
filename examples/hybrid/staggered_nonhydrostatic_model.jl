@@ -271,6 +271,9 @@ function implicit_equation_jacobian!(j, Y, p, δtγ, t)
     # ᶜK =
     #     norm_sqr(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))) / 2 =
     #     ACT12(ᶜuₕ) * ᶜuₕ / 2 + ACT3(ᶜinterp(ᶠw)) * ᶜinterp(ᶠw) / 2
+    # This discrete derivative maps to how the cell-centered kinetic energy
+    # changes with respect to the face-centered vertical velocity, which requires
+    # interpolating the velocity to the cell centers before taking the dot product.
     # ∂(ᶜK)/∂(ᶠw) = ACT3(ᶜinterp(ᶠw)) * ᶜinterp_matrix()
     @. ∂ᶜK∂ᶠw = DiagonalMatrixRow(adjoint(CT3(ᶜinterp(ᶠw)))) * ᶜinterp_matrix()
 

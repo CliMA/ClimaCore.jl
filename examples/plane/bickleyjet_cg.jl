@@ -2,11 +2,13 @@
 # equations on a doubly periodic plane, discretized with a continuous Galerkin
 # spectral element method (flux form, over-integration, DSS). A small
 # perturbation seeds the instability, which rolls the jet up into vortices. The
-# run tracks total energy, which the discretization should very nearly conserve.
+# run tracks total energy, which the discretization should nearly conserve.
 #
 # See `bickleyjet_dg.jl` for the discontinuous Galerkin discretization of the
 # same case, and `bickleyjet_cg_invariant_hypervisc.jl` for the vector-invariant
-# form with hyperviscosity.
+# form with hyperviscosity. This example uses potential temperature `ρθ`
+# instead of the total energy `ρe` formulation enforced in the hybrid models,
+# as `ρθ` is analytically conserved here and simplifies the setup.
 using ClimaComms
 using LinearAlgebra
 
@@ -34,7 +36,6 @@ const parameters = (
     l = 0.5, # Gaussian width
     k = 0.5, # Sinusoidal wavenumber
     ρ₀ = 1.0, # reference density
-    c = 2,
     g = 10,
 )
 
@@ -151,16 +152,39 @@ end
 Plots.mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
 
 Es = [total_energy(u, parameters) for u in sol.u]
+
+using Test
+# The CG discretization conserves total energy up to time-integration error
+# (measured drift over t = 80: +5e-5).
+@test abs(Es[end] - Es[1]) / Es[1] < 1e-3
+
+@testset "conservation and jet roll-up" begin
+    y_start = sol.u[1]
+    y_end = sol.u[end]
+    # The domain is doubly periodic and the divergence is taken in weak form,
+    # so mass and tracer mass are conserved to roundoff (measured: 5e-14
+    # relative in ρ, 2e-12 absolute in ρθ, whose exact integral is zero because
+    # θ = sin(k y) over a whole number of periods).
+    @test abs(sum(y_end.ρ) - sum(y_start.ρ)) / sum(y_start.ρ) < 1e-12
+    @test abs(sum(y_end.ρθ) - sum(y_start.ρθ)) < 1e-10
+    # The shear layer is barotropically unstable, so the seeded perturbation
+    # must grow: the cross-jet velocity amplifies by more than an order of
+    # magnitude as the jet rolls up into vortices (measured max|v|: 0.050 at
+    # t = 0, 0.78 at t = 80). Without this the energy check above is passed
+    # just as well by a flow that never destabilizes.
+    cross_jet_speed(y) =
+        maximum(abs, Geometry.UVVector.(y.ρu ./ y.ρ).components.data.:2)
+    @test cross_jet_speed(y_end) > 10 * cross_jet_speed(y_start)
+    # Rolling the jet up draws the tracer into filaments the mesh cannot
+    # resolve, and this discretization has no limiter, so θ overshoots its
+    # initial [-1, 1] range (measured: [-3.1, 2.7]). See `limiters_advection.jl`
+    # for the limited transport that does hold the bounds.
+    θ_end = y_end.ρθ ./ y_end.ρ
+    @test maximum(abs, θ_end) < 5
+end
 Plots.png(Plots.plot(Es), joinpath(path, "energy.png"))
 
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
-end
+include(joinpath(@__DIR__, "..", "example_utils.jl")) # linkfig
 
 linkfig(
     relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),

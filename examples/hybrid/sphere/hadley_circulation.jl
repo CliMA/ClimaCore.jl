@@ -2,9 +2,8 @@
 # prescribed overturning flow advects a tracer in the latitude-height plane and
 # reverses, so the tracer should return to its initial state. Exercises vertical
 # transport and its coupling to the horizontal, which pure horizontal advection
-# tests leave untouched.
-#
-# Reference: http://www-personal.umich.edu/~cjablono/DCMIP-2012_TestCaseDocument_v1.7.pdf,
+# tests leave untouched. Reference:
+# http://www-personal.umich.edu/~cjablono/DCMIP-2012_TestCaseDocument_v1.7.pdf,
 # Section 1.2
 import ClimaComms
 ClimaComms.@import_required_backends
@@ -44,14 +43,7 @@ dir = "hadley_circulation"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
-end
+include(joinpath(@__DIR__, "../..", "example_utils.jl")) # linkfig
 
 
 # set up function space
@@ -178,7 +170,7 @@ const z₂ = 5000.0          # upper boundary of tracer layer
 const κ₄ = 1.0e16          # hyperviscosity
 
 # time constants
-T = 86400.0 * 1.0
+t_end = τ                  # one full period, so the circulation reverses exactly
 dt = 15.0 * 60.0
 
 # set up 3D domain
@@ -213,30 +205,48 @@ parameters = (;
 prob = CTS.ODEProblem(
     CTS.ClimaODEFunction(; T_exp! = tendency!, dss!),
     y,
-    (0.0, T),
+    (0.0, t_end),
     parameters,
 )
 sol = CTS.solve(
     prob,
     CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = dt,
-    saveat = collect(0.0:dt:T),
+    saveat = collect(0.0:dt:t_end),
 )
 
-q1_error =
-    norm(sol.u[end].ρq1 ./ ρ .- sol.u[1].ρq1 ./ ρ) / norm(sol.u[1].ρq1 ./ ρ)
-initial_mass = sum(sol.u[1].ρq1)
-mass = sum(sol.u[end].ρq1)
-rel_mass_err = norm(mass - initial_mass) / initial_mass
-@test q1_error ≈ 0.0 atol = 0.33
-@test rel_mass_err ≈ 0.0 atol = 6e1eps()
+q1_series = map(u -> u.ρq1 ./ ρ, sol.u)
+q1_deviations =
+    map(q -> norm(q .- q1_series[1]) / norm(q1_series[1]), q1_series)
+q1_error = q1_deviations[end]
+rel_mass_err = abs(sum(sol.u[end].ρq1) - sum(sol.u[1].ρq1)) / sum(sol.u[1].ρq1)
+
+# The overturning cells lift the tracer layer through the first half period and
+# put it back through the second, so the mass-weighted mean height of the tracer
+# traces out an excursion and returns (measured: 3.47 km → 5.22 km → 3.52 km).
+z_center = Fields.coordinate_field(hv_center_space).z
+mean_tracer_height = map(u -> sum(u.ρq1 .* z_center) / sum(u.ρq1), sol.u)
+
+# The flow must displace the tracer: without this the test is
+# passed by a tracer that never moves (measured peak deviation: 1.32, peak
+# height excursion: 1.75 km).
+@test maximum(q1_deviations) > 1
+@test maximum(mean_tracer_height) - mean_tracer_height[1] > 1.5e3
+# Having been displaced, it must come back (measured: 0.30 in the L₂ norm, and
+# to within 56 m of its initial mean height).
+@test q1_error < 0.33
+@test abs(mean_tracer_height[end] - mean_tracer_height[1]) < 100
+# The flux-form transport conserves tracer mass exactly (measured drift: 0).
+@test rel_mass_err ≤ 4eps()
+# The vertical transport is FCT-limited, but the horizontal transport is
+# spectral and unlimited, so the sharp edges of the tracer layer ring: the
+# excursion outside the initial [0, 1] range reaches 36% of the tracer range
+# (with κ₄ = 0 it reaches 210%, so the hyperdiffusion is what contains it).
+@test minimum(minimum, q1_series) > -0.5
+@test maximum(maximum, q1_series) < 1.2
 
 Plots.png(
-    Plots.plot(
-        sol.u[trunc(Int, end / 2)].ρq1 ./ ρ,
-        level = 11,
-        clim = (-0.1, 3.5),
-    ),
+    Plots.plot(q1_series[cld(end, 2)], level = 11, clim = (-0.1, 1.1)),
     joinpath(path, "q1_half_day_level_11.png"),
 )
 
@@ -248,7 +258,8 @@ NCDataset(datafile_cc, "c") do nc
     # defines the appropriate dimensions and variables for a space coordinate
     def_space_coord(nc, hv_center_space, type = "cgll")
     def_space_coord(nc, hv_face_space, type = "cgll")
-    # defines the appropriate dimensions and variables for a time coordinate (by default, unlimited size)
+    # defines the appropriate dimensions and variables for a time coordinate (by
+    # default, unlimited size)
     nc_time = def_time_coord(nc)
     # defines the variable
     nc_q1 = defVar(nc, "q1", Float64, hv_center_space, ("time",))
@@ -306,7 +317,7 @@ calc_zonalave(x) = dropdims(mean(x, dims = 1), dims = 1)
 
 q1_zonalave = calc_zonalave(q1)
 
-times = 0.0:dt:T
+times = 0.0:dt:t_end
 levels = range(0, 1.1; step = 0.1) # contour levels
 anim = Plots.@animate for i in 1:length(times)
     Plots.contourf(

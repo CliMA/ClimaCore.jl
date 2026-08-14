@@ -5,7 +5,7 @@
 # environment variables it reads.
 #
 # The defaults below are overwritten by each case file.
-# TODO: Allow some of these to be environment variables or command line arguments
+# TODO: Allow some of these to be environment variables or CLI arguments
 upwinding_mode = :none
 horizontal_mesh = nothing # must be object of type AbstractMesh
 npoly = 0
@@ -242,8 +242,25 @@ end
 if !is_distributed || ClimaComms.iamroot(comms_ctx)
     println("Walltime = $walltime seconds")
     ENV["GKSwstype"] = "nul" # avoid displaying plots
-    # https://github.com/CliMA/ClimaCore.jl/issues/2058
-    if !(Fields.field_values(sol.u[1].c) isa DataLayouts.VIJHF)
+    # TODO: split `postprocessing` into an assertion hook and a plotting hook,
+    # then delete this skip. Every `@test` a case declares lives inside
+    # `postprocessing` alongside its plots, so skipping the whole hook means
+    # the run asserts nothing at all — it only checks that no NaNs appeared.
+    # The skip exists for https://github.com/CliMA/ClimaCore.jl/issues/2058,
+    # which is about plotting VIJHF fields, not about the assertions.
+    #
+    # The skip is confined to VIJHF on GPU. `sphere/baroclinic_wave_rhoe` is
+    # verified end-to-end on VIJHF on CPU, in both Float32 and Float64,
+    # reductions and level plots alike, so the CPU half of that CI pair asserts
+    # what it is supposed to. #2058 is unverified on GPU, so VIJHF there
+    # skips — but it says so in the log rather than passing silently.
+    skip_postprocessing =
+        Fields.field_values(sol.u[1].c) isa DataLayouts.VIJHF &&
+        comms_ctx.device isa ClimaComms.CUDADevice
+    if skip_postprocessing
+        @warn "Skipping postprocessing on a VIJHF layout on GPU: this run \
+               asserts nothing. See ClimaCore.jl#2058."
+    else
         postprocessing(sol, output_dir)
     end
 end

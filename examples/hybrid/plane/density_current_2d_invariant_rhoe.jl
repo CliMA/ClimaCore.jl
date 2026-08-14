@@ -1,10 +1,9 @@
 # Density current in 2D: a cold perturbation sinks, hits the ground, and spreads
 # as a gravity current whose front rolls up into Kelvin-Helmholtz billows. The
-# billow structure is resolution-sensitive, which makes this a sharp test of the
+# billow structure is resolution-sensitive, which makes this a test of the
 # advection scheme. Vector-invariant form, total energy prognostic.
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
-using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaComms
@@ -34,10 +33,11 @@ hv_center_space, hv_face_space =
     hvspace_2D((-25600, 25600), (0, 6400); xelem = 64, zelem = 32)
 
 
-Φ(z) = grav * z
+geopotential(z) = grav * z
 
-# Reference: https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml, Section 5a
-# Prognostic thermodynamic variable: Total Energy 
+# Reference:
+# https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml,
+# Section 5a Prognostic thermodynamic variable: Total Energy
 function init_dry_density_current_2d(x, z)
     x_c = 0.0
     z_c = 3000.0
@@ -56,11 +56,11 @@ function init_dry_density_current_2d(x, z)
     θ_p = r < r_c ? 0.5 * θ_c * (1.0 + cospi(r / r_c)) : 0.0 # potential temperature perturbation
 
     θ = θ_b + θ_p # potential temperature
-    π_exn = 1.0 - Φ(z) / cp_d / θ # exner function
+    π_exn = 1.0 - geopotential(z) / cp_d / θ # exner function
     T = π_exn * θ # temperature
     p = p_0 * π_exn^(cp_d / R_d) # pressure
     ρ = p / R_d / T # density
-    e = cv_d * (T - T_0) + Φ(z)
+    e = cv_d * (T - T_0) + geopotential(z)
     ρe = ρ * e # total energy
 
     return (ρ = ρ, ρe = ρe)
@@ -113,23 +113,14 @@ function rhs_invariant!(dY, Y, _, t)
     cuw = Geometry.Covariant13Vector.(cuₕ) .+ Geometry.Covariant13Vector.(cw)
 
     ce = @. cρe / cρ
-    cI = @. ce - Φ(z) - (norm(cuw)^2) / 2
+    cI = @. ce - geopotential(z) - (norm(cuw)^2) / 2
     cT = @. cI / C_v + T_0
     cp = @. cρ * R_d * cT
 
     h_tot = @. ce + cp / cρ # Total enthalpy at cell centers
 
-    ### HYPERVISCOSITY
-    # 1) compute hyperviscosity coefficients
-    χe = @. dρe = hwdiv(hgrad(h_tot)) # we store χe in dρe
-    χuₕ = @. duₕ = hwgrad(hdiv(cuₕ))
-
-    Spaces.weighted_dss!(dρe)
-    Spaces.weighted_dss!(duₕ)
-
-    κ₄ = 0.0 # m^4/s
-    @. dρe = -κ₄ * hwdiv(cρ * hgrad(χe))
-    @. duₕ = -κ₄ * (hwgrad(hdiv(χuₕ)))
+    @. dρe = 0 * cρ
+    @. duₕ = Geometry.Covariant12Vector(0.0, 0.0)
 
     # 1) Mass conservation
     dw .= fw .* 0
@@ -185,7 +176,7 @@ function rhs_invariant!(dY, Y, _, t)
     )
     @. dw -= vgradc2f(cp) / Ic2f(cρ)
 
-    cE = @. (norm(cuw)^2) / 2 + Φ(z)
+    cE = @. (norm(cuw)^2) / 2 + geopotential(z)
     @. duₕ -= hgrad(cE)
     @. dw -= vgradc2f(cE)
 
@@ -261,6 +252,17 @@ end
 
 sol = @timev CTS.solve!(integrator)
 
+using Test
+# Mass and total energy must be conserved in the closed domain (measured drift:
+# 6e-15 and 2e-14), and the cold pool must collapse into a gravity current with
+# an O(10 m/s) front (measured max|w| = 16).
+@test abs(sum(sol.u[end].Yc.ρ) - sum(sol.u[1].Yc.ρ)) / sum(sol.u[1].Yc.ρ) < 1e-12
+@test abs(sum(sol.u[end].Yc.ρe) - sum(sol.u[1].Yc.ρe)) / sum(sol.u[1].Yc.ρe) < 1e-10
+@testset "downdraft speed" begin
+    w = maximum(abs, parent(Geometry.WVector.(sol.u[end].w)))
+    @test 5 < w < 30
+end
+
 ENV["GKSwstype"] = "nul"
 import Plots, ClimaCorePlots
 Plots.GRBackend()
@@ -298,20 +300,13 @@ Plots.png(
     joinpath(path, "mass_cons.png"),
 )
 
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
-end
+include(joinpath(@__DIR__, "../..", "example_utils.jl")) # linkfig
 
 linkfig(
-    relpath(joinpath(path, "energy_cons.png"), joinpath(@__DIR__, "../..")),
+    relpath(joinpath(path, "energy_cons.png"), joinpath(@__DIR__, "../../..")),
     "Total Energy",
 )
 linkfig(
-    relpath(joinpath(path, "mass_cons.png"), joinpath(@__DIR__, "../..")),
+    relpath(joinpath(path, "mass_cons.png"), joinpath(@__DIR__, "../../..")),
     "Mass",
 )

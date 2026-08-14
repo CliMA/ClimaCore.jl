@@ -1,7 +1,7 @@
-# Hyperdiffusion for the staggered nonhydrostatic model: a ∇⁴ operator applied to
-# total energy and to horizontal momentum, built as two successive ∇² passes with
-# a DSS in between. It is a numerical closure, present to remove grid-scale noise
-# that the spectral element discretization does not damp on its own, not a
+# Hyperdiffusion for the staggered nonhydrostatic model: a ∇⁴ operator applied
+# to total energy and to horizontal momentum, built as two successive ∇² passes
+# with a DSS in between. It is a numerical closure, present to remove grid-scale
+# noise that the spectral element discretization does not damp on its own, not a
 # physical mixing parameterization.
 hyperdiffusion_cache(
     ᶜlocal_geometry;
