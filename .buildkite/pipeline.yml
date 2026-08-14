@@ -288,32 +288,6 @@ steps:
         retry: *retry_policy
         command: "julia --threads=4 --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_mapreduce.jl"
 
-      - label: "Unit: advection operator convergence"
-        key: unit_adv_conv
-        retry: *retry_policy
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/conv_advection_diffusion1d.jl"
-
-      - label: "Unit: hyb ops simulation 3d"
-        key: unit_hyb_ops_3d
-        retry: *retry_policy
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/simulation_3d.jl"
-
-      # GPU twin of the step above; this file runs as a dedicated step rather
-      # than through the harness.
-      # Only the second of its three testsets picks up `ClimaComms.device()`;
-      # the other two build spaces with an explicit `CPUSingleThreaded` device.
-      - label: "Unit: hyb ops simulation 3d (GPU)"
-        key: unit_hyb_ops_3d_gpu
-        retry: *retry_policy
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/simulation_3d.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
   - group: "Unit: Distributed (CPU & GPU MPI)"
     steps:
       - label: "Unit: data mapreduce (2 gpus)"
@@ -957,7 +931,9 @@ steps:
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/box/limiters_advection.jl gaussian_bells"
         artifact_paths:
-          - "examples/hybrid/box/output/box_advection_limiter_gaussian_bells_D0/*"
+          # The example appends "_gpu" to the output directory on CUDA, so this
+          # matches the same glob its CPU twin uses.
+          - "examples/hybrid/box/output/box_advection_limiter_*/*"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:

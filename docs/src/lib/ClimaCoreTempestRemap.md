@@ -46,7 +46,7 @@ apply_remap
 
 # Example
 
-The following example converts an OrdinaryDiffEq solution object `sol` to a netcdf file, and remaps it to an regular latitude-longitude (RLL) grid.
+The following example converts a time-stepper solution object `sol` to a netcdf file, and remaps it to a regular latitude-longitude (RLL) grid.
 
 ```julia
 using ClimaCore: Geometry, Meshes, Domains, Topologies, Spaces, Quadratures
