@@ -1373,8 +1373,8 @@ end
 """
     VIES2InterfaceScalars(γm1)
 
-[`VIESInterfaceScalars`](@ref) plus ACOUSTIC-selective Roe dissipation
-(callable, `γm1 = γ − 1`): the same central flux and entropy-variable ρe
+[`VIESInterfaceScalars`](@ref) with acoustic Roe dissipation -
+the same central flux and entropy-variable ρe
 dissipation, with the two acoustic Roe waves additionally damped at
 ``|û_n ± ĉ|``:
 
@@ -1382,25 +1382,15 @@ dissipation, with the two acoustic Roe waves additionally damped at
     F*_ρ  −= (s₊α₊ + s₋α₋)/2
     F*_ρe −= (s₊α₊(h̄ + ĉû_n) + s₋α₋(h̄ − ĉû_n))/2
 
-The CONTACT wave (``α₀ = [[ρ]] − [[p]]/ĉ²``) stays exactly central — a
+The contact discontinuity (``α₀ = [[ρ]] − [[p]]/ĉ²``) stays exactly central — a
 density-jump penalty is sign-indefinite in face kinetic energy under the
-vector-invariant pairing (see [`vi_kep_interface_scalars`](@ref)), and the
-shear channel is covered by [`rho_weighted_jump_penalty_lift`](@ref). The
-acoustic channels are what set the explicit horizontal CFL boundary of the
-otherwise-undamped central-mass scheme.
+vector-invariant pairing.
 
 The pressure jump is taken in the state field `p′ = p − p_ref` with `p_ref`
 a hydrostatically composed, single-valued-in-column reference: on
 terrain-following grids the raw ``[[p]]`` across a horizontal face contains
 an O(1) HYDROSTATIC jump (neighbors at different true altitude) that is not
 acoustic and must not be damped.
-
-Properties relative to [`VIESInterfaceScalars`](@ref): mass conservation
-exact (antisymmetric); thermal entropy channel unchanged (provably
-signed); the exact face-KE ledger is relaxed from roundoff to
-O(``s·α·[[K + Φ]]``) — quadratic in acoustic jumps, truncation-small for
-balanced states with the p′ referencing; the acoustic dissipation is
-Roe-type (entropy-dissipative to leading order, not provably signed).
 
 State fields required: `ρ`, `e`, `p`, `p′`, `λ`, `uv`.
 """
