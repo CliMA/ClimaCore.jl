@@ -1,6 +1,9 @@
 include("utils_3d.jl")
 
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
+# Only the second testset below picks up `ClimaComms.device()`; the other
+# two build their spaces with an explicit `CPUSingleThreaded` device, so a
+# CUDA run of this file exercises one of the three.
 device = ClimaComms.device()
 
 @testset "2D SE, 1D FV Extruded Domain ∇ ODE Solve vertical" begin
@@ -23,12 +26,18 @@ device = ClimaComms.device()
     end
 
     U = sin.(Fields.coordinate_field(hv_center_space).z)
-    dudt = zeros(eltype(U), hv_center_space)
-    rhs!(dudt, U, nothing, 0.0)
 
     Δt = 0.01
-    prob = ODEProblem(rhs!, U, (0.0, 2π))
-    sol = solve(prob, SSPRK33(), dt = Δt)
+    # The integrator advances the state it is handed in place, so it gets a
+    # copy: `U` has to stay the initial condition for the comparison below to
+    # mean anything.
+    prob = CTS.ODEProblem(
+        CTS.ClimaODEFunction(; T_exp! = rhs!),
+        copy(U),
+        (0.0, 2π),
+        nothing,
+    )
+    sol = CTS.solve(prob, CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()), dt = Δt)
 
     htopo = Spaces.topology(hv_center_space)
     for h in 1:Topologies.nlocalelems(htopo)
@@ -57,12 +66,18 @@ end
 
     hv_center_space, _ = hvspace_3D()
     U = sin.(Fields.coordinate_field(hv_center_space).x)
-    dudt = zeros(eltype(U), hv_center_space)
-    rhs!(dudt, U, nothing, 0.0)
 
     Δt = 0.01
-    prob = ODEProblem(rhs!, U, (0.0, 2π))
-    sol = solve(prob, SSPRK33(), dt = Δt)
+    # The integrator advances the state it is handed in place, so it gets a
+    # copy: `U` has to stay the initial condition for the comparison below to
+    # mean anything.
+    prob = CTS.ODEProblem(
+        CTS.ClimaODEFunction(; T_exp! = rhs!),
+        copy(U),
+        (0.0, 2π),
+        nothing,
+    )
+    sol = CTS.solve(prob, CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()), dt = Δt)
 
     @test U ≈ sol.u[end] rtol = 1e-6
 end
@@ -145,10 +160,19 @@ end
     t_end = 1.0
     p = (bc = ZeroFlux(),)
     p_fieldbc = (bc = ZeroFieldFlux(),)
-    prob = ODEProblem(rhs!, U, (0.0, t_end), p)
-    prob_fieldbc = ODEProblem(rhs!, U, (0.0, t_end), p_fieldbc)
-    sol = solve(prob, SSPRK33(), dt = Δt)
-    sol_fieldbc = solve(prob_fieldbc, SSPRK33(), dt = Δt)
+    # Each problem needs its own initial state: the integrator advances the
+    # state it is handed in place, so sharing one would start the second solve
+    # from the end of the first.
+    prob = CTS.ODEProblem(CTS.ClimaODEFunction(; T_exp! = rhs!), U, (0.0, t_end), p)
+    prob_fieldbc = CTS.ODEProblem(
+        CTS.ClimaODEFunction(; T_exp! = rhs!),
+        U_fieldbc,
+        (0.0, t_end),
+        p_fieldbc,
+    )
+    sol = CTS.solve(prob, CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()), dt = Δt)
+    sol_fieldbc =
+        CTS.solve(prob_fieldbc, CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()), dt = Δt)
 
     h_end = h_init(0.5 - t_end, 0.5 - t_end, 0.5 - t_end)
     @test h_end ≈ sol.u[end].h rtol = 0.5

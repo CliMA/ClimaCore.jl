@@ -1,5 +1,5 @@
 include("utils_cuda.jl")
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
 
 @testset "2D SE, 1D FD Extruded Domain ∇ ODE Solve horizontal CUDA" begin
 
@@ -24,12 +24,17 @@ using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 
     hv_center_space_gpu, _ = hvspace_3D_box(gpu_context)
     U = sin.(Fields.coordinate_field(hv_center_space_gpu).x)
-    dudt = zeros(eltype(U), hv_center_space_gpu)
-    rhs!(dudt, U, nothing, 0.0)
-
     Δt = 0.01
-    prob = ODEProblem(rhs!, U, (0.0, 2π))
-    sol = solve(prob, SSPRK33(), dt = Δt)
+    # The integrator advances the state it is handed in place, so it gets a
+    # copy: `U` has to stay the initial condition for the comparison below to
+    # mean anything.
+    prob = CTS.ODEProblem(
+        CTS.ClimaODEFunction(; T_exp! = rhs!),
+        copy(U),
+        (0.0, 2π),
+        nothing,
+    )
+    sol = CTS.solve(prob, CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()), dt = Δt)
 
     @test Array(parent(U)) ≈ Array(parent(sol.u[end])) rtol = 1e-6
 end

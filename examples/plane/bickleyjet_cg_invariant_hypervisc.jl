@@ -1,3 +1,7 @@
+# Bickley jet (see `bickleyjet_cg.jl`), written in vector-invariant form —
+# the momentum tendency carries a gradient of the Bernoulli function and a
+# vorticity cross product instead of a flux divergence — and stabilized with
+# hyperviscosity rather than relying on the discretization alone.
 using ClimaComms
 using LinearAlgebra
 
@@ -10,9 +14,11 @@ import ClimaCore:
     Spaces,
     Topologies,
     Quadratures
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
+using Test
 
 using Logging
+include(joinpath(@__DIR__, "..", "example_utils.jl")) # linkfig
 ClimaComms.@import_required_backends
 const context = ClimaComms.context()
 usempi = context isa ClimaComms.MPICommsContext
@@ -37,7 +43,6 @@ const parameters = (
     l = 0.5, # Gaussian width
     k = 0.5, # Sinusoidal wavenumber
     ρ₀ = 1.0, # reference density
-    c = 2,
     g = 10,
 )
 
@@ -76,7 +81,7 @@ function init_state(local_geometry, p)
     # set initial velocity
     U₁ = cosh(y)^(-2)
 
-    # Ψ′ = exp(-(x2 + p.l / 10)^2 / 2p.l^2) * cos(p.k * x) * cos(p.k * y)
+    # Ψ′ = exp(-(y + p.l / 10)^2 / 2p.l^2) * cos(p.k * x) * cos(p.k * y)
     # Vortical velocity fields (u₁′, u₂′) = (-∂²Ψ′, ∂¹Ψ′)
     gaussian = exp(-(y + p.l / 10)^2 / 2p.l^2)
     u₁′ = gaussian * (y + p.l / 10) / p.l^2 * cos(p.k * x) * cos(p.k * y)
@@ -146,12 +151,10 @@ end
 dydt = similar(y0)
 rhs!(dydt, y0, nothing, 0.0)
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 80.0))
-#prob = ODEProblem(rhs!, y0, (0.0, 2.0))
-
-sol = solve(
+prob = CTS.ODEProblem(CTS.ClimaODEFunction(; T_exp! = rhs!), y0, (0.0, 80.0), nothing)
+sol = CTS.solve(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = 0.02,
     saveat = collect(0.0:1.0:80.0),
     progress = true,
@@ -190,16 +193,35 @@ if !usempi || (usempi && ClimaComms.iamroot(context))
 
     Es = [total_energy(u, parameters) for u in solution]
 
+    # Hyperviscosity may only remove energy, and only a little of it at this
+    # resolution.
+    @test Es[end] ≤ Es[1] * (1 + sqrt(eps()))
+    @test abs(Es[end] - Es[1]) / Es[1] < 1e-2
+
+    @testset "conservation and jet roll-up" begin
+        y_start = solution[1]
+        y_end = solution[end]
+        # The domain is doubly periodic and the tracer tendency is a weak-form
+        # divergence, so mass and tracer mass are conserved to roundoff
+        # (measured: 4e-14 relative in ρ, 9e-13 absolute in ρθ, whose exact
+        # integral is zero). Hyperviscosity removes energy but not mass.
+        @test abs(sum(y_end.ρ) - sum(y_start.ρ)) / sum(y_start.ρ) < 1e-12
+        @test abs(sum(y_end.ρθ) - sum(y_start.ρθ)) < 1e-10
+        # The shear layer is barotropically unstable: the seeded perturbation
+        # must roll the jet up (measured max|v|: 0.050 at t = 0, 0.48 at
+        # t = 80 — less than the flux form reaches, because hyperviscosity
+        # damps the small scales that feed the roll-up).
+        cross_jet_speed(y) =
+            maximum(abs, Geometry.UVVector.(y.u).components.data.:2)
+        @test cross_jet_speed(y_end) > 5 * cross_jet_speed(y_start)
+        # Hyperviscosity is not sign-preserving, so the tracer still leaves its
+        # initial [-1, 1] range, but far less than without it (measured:
+        # [-1.22, 1.18] here against [-3.1, 2.7] in `bickleyjet_cg.jl`).
+        @test maximum(abs, y_end.ρθ ./ y_end.ρ) < 1.5
+    end
+
     Plots.png(Plots.plot(Es), joinpath(path, "energy.png"))
 
-    function linkfig(figpath, alt = "")
-        # buildkite-agent upload figpath
-        # link figure in logs if we are running on CI
-        if get(ENV, "BUILDKITE", "") == "true"
-            artifact_url = "artifact://$figpath"
-            print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-        end
-    end
 
     linkfig(
         relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),

@@ -1,8 +1,14 @@
+# Linear mountain waves: uniform stratified flow (N = 0.01 s⁻¹) over a
+# witch-of-Agnesi hill, following Ullrich and Guerra [2016, GMD]. The hill is
+# only 1 m high, so the response stays in the linear regime and can be compared
+# against linear theory. Exercises the terrain-following (`LinearAdaption`) mesh
+# and the sponge layers that absorb waves at the lateral and upper boundaries.
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaComms
 ClimaComms.@import_required_backends
+include("plane_utils.jl")
 import ClimaCore:
     ClimaCore,
     slab,
@@ -17,21 +23,15 @@ import ClimaCore:
     Hypsography
 using ClimaCore.Geometry
 
-using DiffEqCallbacks
 
 using Logging: global_logger
 using TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
 
-const MSLP = 1e5 # mean sea level pressure
-const grav = 9.8 # gravitational constant
-const R_d = 287.058 # R dry (gas constant / mol mass dry air)
-const γ = 1.4 # heat capacity ratio
-const C_p = R_d * γ / (γ - 1) # heat capacity at constant pressure
-const C_v = R_d / (γ - 1) # heat capacity at constant volume
-const T_0 = 273.16 # triple point temperature
 const kinematic_viscosity = 75.0 #m²/s
 const hyperdiffusivity = 1e7 #m²/s
+
+const u₀ = 10.0 # initial horizontal wind (m/s)
 
 function warp_surface(coord)
     # Parameters from GMD-9-2007-2016
@@ -44,54 +44,21 @@ function warp_surface(coord)
     return hc / (1 + (x / ac)^2)
 end
 
-function hvspace_2D(
-    xlim = (-π, π),
-    zlim = (0, 4π),
-    xelem = 32,
-    zelem = 25,
-    npoly = 4,
-    warp_fn = warp_surface,
-)
-    FT = Float64
-    vertdomain = Domains.IntervalDomain(
-        Geometry.ZPoint{FT}(zlim[1]),
-        Geometry.ZPoint{FT}(zlim[2]);
-        boundary_names = (:bottom, :top),
-    )
-    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    context = ClimaComms.context()
-    device = ClimaComms.device(context)
-    vert_face_space = Spaces.FaceFiniteDifferenceSpace(device, vertmesh)
-
-    horzdomain = Domains.IntervalDomain(
-        Geometry.XPoint{FT}(xlim[1]),
-        Geometry.XPoint{FT}(xlim[2]);
-        periodic = true,
-    )
-    horzmesh = Meshes.IntervalMesh(horzdomain, nelems = xelem)
-    horztopology = Topologies.IntervalTopology(device, horzmesh)
-    quad = Quadratures.GLL{npoly + 1}()
-    horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
-
-    z_surface = Geometry.ZPoint.(warp_fn.(Fields.coordinate_field(horzspace)))
-    hv_face_space = Spaces.ExtrudedFiniteDifferenceSpace(
-        horzspace,
-        vert_face_space,
-        Hypsography.LinearAdaption(z_surface),
-    )
-    hv_center_space = Spaces.CenterExtrudedFiniteDifferenceSpace(hv_face_space)
-    return (hv_center_space, hv_face_space)
-end
 
 # set up 2D domain - doubly periodic box
 const xmin = -72000.0
 const xmax = 72000.0
-const xsponge = xmax - 10000.0
-hv_center_space, hv_face_space = hvspace_2D((xmin, xmax), (0, 25000))
+hv_center_space, hv_face_space =
+    hvspace_2D(
+        (xmin, xmax),
+        (0, 25000);
+        xelem = 32,
+        zelem = 25,
+        warp_fn = warp_surface,
+    )
 
-Φ(z) = grav * z
+geopotential(z) = grav * z
 
-# Reference: https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml, Section 5a
 # Prognostic thermodynamic variable: Total Energy 
 function init_advection_over_mountain(x, z)
     θ₀ = 280.0
@@ -100,12 +67,15 @@ function init_advection_over_mountain(x, z)
     p₀ = MSLP
     g = grav
 
-    𝒩 = 0.01
-    π_exner = @. exp(-g * z / (cp_d * θ₀))
-    θ = @. θ₀ * exp(𝒩^2 * z / g)
+    N = 0.01
+    θ = @. θ₀ * exp(N^2 * z / g)
+    π_exner = @. 1 + g^2 / N^2 / cp_d / θ₀ * (exp(-N^2 * z / g) - 1)
     T = @. π_exner * θ # temperature
-    ρ = @. p₀ / (R_d * θ) * (π_exner)^(cp_d / R_d)
-    e = @. cv_d * (T - T_0) + Φ(z) + 50.0
+    # p = p₀ π^(cp/R) and p = ρ R_d T = ρ R_d π θ, so ρ carries π^(cp/R - 1),
+    # and cp - R_d = cv.
+    ρ = @. p₀ / (R_d * θ) * (π_exner)^(cv_d / R_d)
+    # total energy: internal + potential + kinetic energy of the initial wind
+    e = @. cv_d * (T - T_0) + geopotential(z) + u₀^2 / 2
     ρe = @. ρ * e
     return (ρ = ρ, ρe = ρe)
 end
@@ -114,15 +84,16 @@ end
 coords = Fields.coordinate_field(hv_center_space)
 face_coords = Fields.coordinate_field(hv_face_space)
 
-# Assign initial conditions to cell center, cell face variables
-# Group scalars (ρ, ρe) in Yc 
-# Retain uₕ and w as separate components of velocity vector (primitive variables)
+# Assign initial conditions to cell center, cell face variables Group scalars
+# (ρ, ρe) in Yc Retain uₕ and w as separate components of velocity vector
+# (primitive variables)
 Yc = map(coord -> init_advection_over_mountain(coord.x, coord.z), coords)
 w = map(_ -> Geometry.Covariant3Vector(0.0), face_coords)
-uₕ_local = map(_ -> Geometry.UWVector(10.0, 0.0), coords)
+uₕ_local = map(_ -> Geometry.UWVector(u₀, 0.0), coords)
 uₕ = Geometry.Covariant1Vector.(uₕ_local)
 
-const u_init = uₕ
+# A snapshot, not an alias: the sponge relaxes toward the *initial* wind.
+const u_init = copy(uₕ)
 
 ᶜlg = Fields.local_geometry_field(hv_center_space)
 ᶠlg = Fields.local_geometry_field(hv_face_space)
@@ -148,27 +119,6 @@ function rayleigh_sponge_z(
         return eltype(z)(0)
     end
 end
-function rayleigh_sponge_x(
-    x;
-    x_sponge = xsponge,
-    x_max = xmax,
-    α = 0.5,  # Relaxation timescale
-    τ = 0.5,
-    γ = 2.0,
-)
-    if x >= x_sponge
-        r = (x - x_sponge) / (x_max - x_sponge)
-        β_sponge = α * sinpi(τ * r)^γ
-        return β_sponge
-    elseif x <= -x_sponge
-        r = (abs(x) - x_sponge) / (x_max - x_sponge)
-        β_sponge = α * sinpi(τ * r)^γ
-        return β_sponge
-    else
-        return eltype(x)(0)
-    end
-end
-
 function rhs_invariant!(dY, Y, _, t)
 
     cρ = Y.Yc.ρ # scalar on centers
@@ -204,7 +154,7 @@ function rhs_invariant!(dY, Y, _, t)
     cuw = Geometry.Covariant13Vector.(cuₕ) .+ Geometry.Covariant13Vector.(cw)
 
     ce = @. cρe / cρ
-    cI = @. ce - Φ(z) - (norm(cuw)^2) / 2
+    cI = @. ce - geopotential(z) - (norm(cuw)^2) / 2
     cT = @. cI / C_v + T_0
     cp = @. cρ * R_d * cT
 
@@ -226,7 +176,7 @@ function rhs_invariant!(dY, Y, _, t)
     dw .= fw .* 0
 
     # 1.a) horizontal divergence
-    dρ .-= hdiv.(cρ .* (cuw))
+    dρ .-= hwdiv.(cρ .* (cuw))
 
     # 1.b) vertical divergence
     vdivf2c = Operators.DivergenceF2C(
@@ -277,13 +227,13 @@ function rhs_invariant!(dY, Y, _, t)
     )
     @. dw -= vgradc2f(cp) / Ic2f(cρ)
 
-    cE = @. (norm(cuw)^2) / 2 + Φ(z)
+    cE = @. (norm(cuw)^2) / 2 + geopotential(z)
     @. duₕ -= hgrad(cE)
     @. dw -= vgradc2f(cE)
 
     # 3) total energy
 
-    @. dρe -= hdiv(cuw * (cρe + cp))
+    @. dρe -= hwdiv(cuw * (cρe + cp))
     @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
     @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 
@@ -320,8 +270,7 @@ function rhs_invariant!(dY, Y, _, t)
 
     # Sponge tendency
     β = @. rayleigh_sponge_z(coords.z)
-    βx = @. rayleigh_sponge_x(coords.x)
-    @. duₕ -= β * (uₕ - u_init)
+    @. duₕ -= β * (cuₕ - u_init)
     @. dw -= Ic2f(β) * fw
 
     Spaces.weighted_dss!(dY.Yc)
@@ -335,33 +284,45 @@ dYdt = similar(Y);
 rhs_invariant!(dYdt, Y, nothing, 0.0);
 
 # run!
-using OrdinaryDiffEqSSPRK: ODEProblem, init, solve!, SSPRK33
+import ClimaTimeSteppers as CTS
 Δt = 1.0
 timeend = 72000.0
-function make_dss_func()
-    _dss!(x::Fields.Field) = Spaces.weighted_dss!(x)
-    _dss!(::Any) = nothing
-    dss_func(Y, t, integrator) = foreach(_dss!, Fields._values(Y))
-    return dss_func
-end
-dss_func = make_dss_func()
-dss_callback = FunctionCallingCallback(dss_func, func_start = true)
-prob = ODEProblem(rhs_invariant!, Y, (0.0, timeend))
-integrator = init(
+# ClimaTimeSteppers calls `dss!` after every stage; a FieldVector may hold
+# non-Field entries (e.g. scalars), which need no DSS.
+_dss!(x::Fields.Field) = Spaces.weighted_dss!(x)
+_dss!(::Any) = nothing
+dss!(Y, parameters, t) = foreach(_dss!, Fields._values(Y))
+prob = CTS.ODEProblem(
+    CTS.ClimaODEFunction(; T_exp! = rhs_invariant!, dss!),
+    Y,
+    (0.0, timeend),
+    nothing,
+)
+integrator = CTS.init(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = Δt,
     saveat = collect(0.0:1800.0:timeend),
     progress = true,
     progress_message = (dt, u, p, t) -> t,
-    callback = dss_callback,
 );
 
 if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
     throw(:exit_profile)
 end
 
-sol = @timev solve!(integrator)
+sol = @timev CTS.solve!(integrator)
+
+# Mass and total energy must be conserved (measured drift: 8e-14 and 2e-13).
+# The 1 m hill in a 10 m/s flow forces mountain waves of a few mm/s
+# (measured max|w| = 3e-3); an O(1) value means the surface condition broke.
+@test abs(sum(sol.u[end].Yc.ρ) - sum(sol.u[1].Yc.ρ)) / sum(sol.u[1].Yc.ρ) < 1e-11
+@test abs(sum(sol.u[end].Yc.ρe) - sum(sol.u[1].Yc.ρe)) / sum(sol.u[1].Yc.ρe) < 1e-11
+@testset "mountain-wave amplitude" begin
+    w = maximum(abs, parent(Geometry.WVector.(sol.u[end].w)))
+    @info "Peak |w| at the end of the run: $w m/s"
+    @test 1e-4 < w < 0.1
+end
 
 ENV["GKSwstype"] = "nul"
 import Plots, ClimaCorePlots
@@ -403,20 +364,13 @@ Plots.png(
     joinpath(path, "mass_cons.png"),
 )
 
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
-end
+include(joinpath(@__DIR__, "../..", "example_utils.jl")) # linkfig
 
 linkfig(
-    relpath(joinpath(path, "energy_cons.png"), joinpath(@__DIR__, "../..")),
+    relpath(joinpath(path, "energy_cons.png"), joinpath(@__DIR__, "../../..")),
     "Total Energy",
 )
 linkfig(
-    relpath(joinpath(path, "mass_cons.png"), joinpath(@__DIR__, "../..")),
+    relpath(joinpath(path, "mass_cons.png"), joinpath(@__DIR__, "../../..")),
     "Mass",
 )

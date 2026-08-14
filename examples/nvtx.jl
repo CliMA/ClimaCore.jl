@@ -1,9 +1,9 @@
-# Some useful nvtx macros from https://github.com/CliMA/ClimaAtmos.jl/blob/main/examples/hybrid/nvtx.jl
+# NVTX profiling-range macros for the examples.
 using NVTX, Colors
 
 if NVTX.isactive()
     NVTX.enable_gc_hooks()
-    const nvtx_domain = NVTX.Domain("ClimaAtmos")
+    const nvtx_domain = NVTX.Domain("ClimaCore")
 end
 macro nvtx(message, args...)
     block = args[end]

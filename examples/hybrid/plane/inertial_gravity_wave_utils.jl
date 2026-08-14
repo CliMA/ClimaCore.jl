@@ -1,9 +1,13 @@
+# The analytic linear solution that the inertial gravity wave case is compared
+# against, evaluated through Bretherton transforms. Kept in its own module,
+# apart from `inertial_gravity_wave.jl`, because the solution is long enough to
+# obscure the case setup.
 module InertialGravityWaveUtils
 
 import ClimaCore.Geometry as Geometry
 
 # min_λx = 2 * (x_max / x_elem) / upsampling_factor # this should include npoly
-# min_λz = 2 * (FT( / z_)elem) / upsampling_factor
+# min_λz = 2 * (z_max / z_elem) / upsampling_factor
 # min_λx = 2 * π / max_kx = x_max / max_ikx
 # min_λz = 2 * π / max_kz = 2 * z_max / max_ikz
 # max_ikx = x_max / min_λx = upsampling_factor * x_elem / 2
@@ -14,9 +18,9 @@ function ρfb_init_coefs!(::Type{FT}, params) where {FT}
     # Since the coefficients are for a modified domain of height 2 * z_max, the
     # unit integral over the domain must be multiplied by 2 to ensure correct
     # normalization. On the other hand, ᶜρb_init is assumed to be 0 outside of
-    # the "true" domain, so the integral of
-    # ᶜintegrand (`ᶜintegrand = ᶜρb_init / ᶜfourier_factor`) should not be modified.
-    # where `ᶜfourier_factor = exp(im * (kx * x + kz * z))`.
+    # the "true" domain, so the integral of ᶜintegrand (`ᶜintegrand = ᶜρb_init /
+    # ᶜfourier_factor`) should not be modified. where `ᶜfourier_factor = exp(im
+    # * (kx * x + kz * z))`.
     @inbounds begin
         Threads.@threads for ikx in (-max_ikx):max_ikx
             for ikz in (-max_ikz):max_ikz
@@ -150,7 +154,7 @@ end
 function linear_solution!(Y, lin_cache, t, ::Type{FT}) where {FT}
     (; ᶜz, ᶜp₀, ᶜρ₀, ᶜu₀, ᶜv₀, ᶠw₀) = lin_cache
     (; ᶜinterp) = lin_cache
-    (; R_d, ᶜ𝔼_name, x_max, z_max, p_0, cp_d, cv_d, grav, T_tri) = lin_cache
+    (; R_d, x_max, z_max, p_0, cp_d, cv_d, grav, T_tri) = lin_cache
     (; ᶜbretherton_factor_pρ) = lin_cache
     (; ᶜbretherton_factor_uvwT, ᶠbretherton_factor_uvwT) = lin_cache
     (; ᶜpb, ᶜρb, ᶜub, ᶜvb, ᶠwb, ᶜp, ᶜρ, ᶜu, ᶜv, ᶠw, ᶜT) = lin_cache
@@ -166,18 +170,9 @@ function linear_solution!(Y, lin_cache, t, ::Type{FT}) where {FT}
     @. ᶜT = ᶜp / (R_d * ᶜρ)
 
     @. Y.c.ρ = ᶜρ
-    if ᶜ𝔼_name == :ρθ
-        @. Y.c.ρθ = ᶜρ * ᶜT * (p_0 / ᶜp)^(R_d / cp_d)
-    elseif ᶜ𝔼_name == :ρe
-        @. Y.c.ρe =
-            ᶜρ * (
-                cv_d * (ᶜT - T_tri) +
-                (ᶜu^2 + ᶜv^2 + ᶜinterp(ᶠw)^2) / 2 +
-                grav * ᶜz
-            )
-    elseif ᶜ𝔼_name == :ρe_int
-        @. Y.c.ρe_int = ᶜρ * cv_d * (ᶜT - T_tri)
-    end
+    @. Y.c.ρe =
+        ᶜρ *
+        (cv_d * (ᶜT - T_tri) + (ᶜu^2 + ᶜv^2 + ᶜinterp(ᶠw)^2) / 2 + grav * ᶜz)
     # NOTE: The following two lines are a temporary workaround b/c Covariant12Vector won't accept a non-zero second component in an XZ-space.
     # So we temporarily set it to zero and then reassign its intended non-zero value (since in case of large-scale config ᶜv is non-zero)
     @. Y.c.uₕ = Geometry.Covariant12Vector(Geometry.UVVector(ᶜu, FT(0.0)))
