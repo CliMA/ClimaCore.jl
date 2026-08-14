@@ -298,7 +298,7 @@ collect_kernel_stats() = false
 #   warn            log once per kernel
 #   error           raise, so CI cannot ignore it
 #
-# `CLIMA_CHECK_REGISTER_PRESSURE_LIMIT` sets the register threshold (default 255,
+# `CLIMA_REGISTER_PRESSURE_CHECK_LIMIT` sets the register threshold (default 255,
 # the sm_20+ architectural maximum). Lower it to catch kernels approaching the
 # cap rather than sitting on it.
 #
@@ -324,11 +324,11 @@ function register_pressure_action()
 end
 
 function register_pressure_limit()
-    raw = get(ENV, "CLIMA_CHECK_REGISTER_PRESSURE_LIMIT", nothing)
+    raw = get(ENV, "CLIMA_REGISTER_PRESSURE_CHECK_LIMIT", nothing)
     raw === nothing && return MAX_REGISTERS_PER_THREAD
     parsed = tryparse(Int, strip(raw))
     if parsed === nothing || parsed <= 0
-        @warn "Invalid CLIMA_CHECK_REGISTER_PRESSURE_LIMIT=$(raw); using $(MAX_REGISTERS_PER_THREAD)" maxlog =
+        @warn "Invalid CLIMA_REGISTER_PRESSURE_CHECK_LIMIT=$(raw); using $(MAX_REGISTERS_PER_THREAD)" maxlog =
             1
         return MAX_REGISTERS_PER_THREAD
     end
@@ -404,7 +404,15 @@ not measurable here. Confirm actual spilling with `ptxas -v` or Nsight Compute.
 function check_register_pressure(kernel, kernel_name, f!::F!, args) where {F!}
     action = register_pressure_action()
     action === :off && return nothing
-    name = something(kernel_name, nameof(F!))
+    # Name it even when global naming is off: without a name the report cannot
+    # say WHICH broadcast is at the cap, and paying for names on every kernel is
+    # exactly why global naming is opt-in. Only flagged kernels pay here.
+    # NB: computed inside the branch rather than via `something(...)`, which
+    # evaluates every argument and would take a `stacktrace()` we already have.
+    name = kernel_name
+    if name === nothing
+        name = something(compute_kernel_name(f!, args), nameof(F!))
+    end
     register_pressure_ignored(name) && return nothing
 
     registers = CUDA.registers(kernel)
@@ -527,6 +535,70 @@ end
 end
 
 """
+    compute_kernel_name(f!, args)
+
+Kernel name derived from the stack trace, cached per method instance.
+
+Costs a `stacktrace()` on first sight of each kernel, which is why naming is
+opt-in globally via `CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE`. The register
+pressure check calls this on demand for the handful of kernels that trip its
+threshold, so that check reports a usable name without making every kernel pay.
+
+Safe to call from deeper in this file: `ClimaCoreCUDAExt` is in `IGNORE_MODULES`,
+so the frame selected is the same either way.
+"""
+function compute_kernel_name(f!::F!, args) where {F!}
+    kernel_name = nothing
+    # Create a key from the method instance and types of the args
+    key = objectid(CUDA.methodinstance(typeof(f!), typeof(args)))
+    kernel_name_exists = key in keys(kernel_names)
+    if !kernel_name_exists
+        # Construct the kernel name, ignoring modules we don't care about
+        stack = stacktrace()
+        first_relevant_index = findfirst(is_relevant_frame, stack)
+        if !isnothing(first_relevant_index)
+            # Don't include file if this is inside an NVTX annotation
+            frame = stack[first_relevant_index]::Base.StackTraces.StackFrame
+            func_name = string(frame.func)
+            if contains(func_name, "#")
+                func_name = split(func_name, "#")[1]
+            end
+            frame_method =
+                frame.linfo isa Core.CodeInstance ? frame.linfo.def : frame.linfo
+            fp_split =
+                splitpath(fpath_from_method_instance(frame_method::Core.MethodInstance))
+            if "NVTX" in fp_split
+                fp_string = "_NVTX"
+                line_string = ""
+            else
+                # Trim base directory off of file path to shorten
+                package_index = findfirst(fp_split) do part
+                    startswith(part, "Clima")
+                end
+                if isnothing(package_index)
+                    package_index = findfirst(p -> p == ".julia", fp_split)
+                end
+                if isnothing(package_index)
+                    package_index = findfirst(p -> p == "src", fp_split)
+                end
+                if isnothing(package_index)
+                    package_index = 1
+                end
+                fp_string =
+                    "_FILE_" *
+                    string(joinpath(fp_split[package_index:end]...))
+                line_string = "_L" * string(frame.line)
+            end
+            name_str = string(func_name) * fp_string * line_string
+            kernel_name = replace(name_str, r"[^A-Za-z0-9]" => "_")
+        end
+        @debug "Using kernel name: $kernel_name"
+        kernel_names[key] = kernel_name
+    end
+    return kernel_names[key]
+end
+
+"""
     auto_launch!(f!::F!, args,
         ::Union{
             Int,
@@ -559,58 +631,9 @@ function auto_launch!(
     caller = :unknown,
     shmem = 0,
 ) where {F!}
-    # If desired, compute a kernel name from the stack trace and store in
-    # a global Dict, which serves as an in memory cache
-    kernel_name = nothing
-    if name_kernels_from_stack_trace()
-        # Create a key from the method instance and types of the args
-        key = objectid(CUDA.methodinstance(typeof(f!), typeof(args)))
-        kernel_name_exists = key in keys(kernel_names)
-        if !kernel_name_exists
-            # Construct the kernel name, ignoring modules we don't care about
-            stack = stacktrace()
-            first_relevant_index = findfirst(is_relevant_frame, stack)
-            if !isnothing(first_relevant_index)
-                # Don't include file if this is inside an NVTX annotation
-                frame = stack[first_relevant_index]::Base.StackTraces.StackFrame
-                func_name = string(frame.func)
-                if contains(func_name, "#")
-                    func_name = split(func_name, "#")[1]
-                end
-                frame_method =
-                    frame.linfo isa Core.CodeInstance ? frame.linfo.def : frame.linfo
-                fp_split =
-                    splitpath(fpath_from_method_instance(frame_method::Core.MethodInstance))
-                if "NVTX" in fp_split
-                    fp_string = "_NVTX"
-                    line_string = ""
-                else
-                    # Trim base directory off of file path to shorten
-                    package_index = findfirst(fp_split) do part
-                        startswith(part, "Clima")
-                    end
-                    if isnothing(package_index)
-                        package_index = findfirst(p -> p == ".julia", fp_split)
-                    end
-                    if isnothing(package_index)
-                        package_index = findfirst(p -> p == "src", fp_split)
-                    end
-                    if isnothing(package_index)
-                        package_index = 1
-                    end
-                    fp_string =
-                        "_FILE_" *
-                        string(joinpath(fp_split[package_index:end]...))
-                    line_string = "_L" * string(frame.line)
-                end
-                name_str = string(func_name) * fp_string * line_string
-                kernel_name = replace(name_str, r"[^A-Za-z0-9]" => "_")
-            end
-            @debug "Using kernel name: $kernel_name"
-            kernel_names[key] = kernel_name
-        end
-        kernel_name = kernel_names[key]
-    end
+    # If desired, compute a kernel name from the stack trace (cached).
+    kernel_name =
+        name_kernels_from_stack_trace() ? compute_kernel_name(f!, args) : nothing
 
     if auto
         @assert !isnothing(nitems)
