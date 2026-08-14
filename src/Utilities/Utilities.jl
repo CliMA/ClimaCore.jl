@@ -293,4 +293,19 @@ eltype_error(bc::Base.Broadcast.Broadcasted) =
     bc.f(unrolled_map(new ∘ safe_eltype, bc.args)...) : # f throws runtime error
     throw(InferenceError(bc.f, Tuple{unrolled_map(safe_eltype, bc.args)...}))
 
+"""
+    recursive_bottom_eltype(x)
+
+The scalar type underlying `x`, found by following `eltype` until it stops
+changing. For a nested array of arrays this is the type of the numbers at the
+bottom, not the type of the outer element.
+
+```julia
+julia> recursive_bottom_eltype([[1.0, 2.0]])
+Float64
+```
+"""
+recursive_bottom_eltype(a) =
+    a == eltype(a) ? a : recursive_bottom_eltype(eltype(a))
+
 end # module

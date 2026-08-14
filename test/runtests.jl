@@ -108,13 +108,11 @@ unit_tests = [
     UnitTest("FD ops - upwind schemes"                  ,"Operators/finitedifference/unit_upwind_schemes.jl"; tier = :unit, subsystem = :operators),
     UnitTest("FD ops - inference"                       ,"Operators/finitedifference/inference_finitedifference.jl"; meta = :cpu_only, tier = :inference, subsystem = :operators),
     UnitTest("FD ops - inference examples"              ,"Operators/finitedifference/inference_examples.jl"; tier = :inference, subsystem = :operators),
-    # NOTE: conv_advection_diffusion1d.jl and Operators/hybrid/simulation_3d.jl
-    # are Buildkite-only (dedicated pipeline steps): they require
-    # OrdinaryDiffEqTsit5 / OrdinaryDiffEqSSPRK, which are not test-target
-    # dependencies, so they cannot run under `Pkg.test`.
     UnitTest("FD ops - column conv"                     ,"Operators/finitedifference/conv_column.jl"; tier = :conv, subsystem = :operators),
+    UnitTest("FD ops - advection-diffusion conv"        ,"Operators/finitedifference/conv_advection_diffusion1d.jl"; tier = :conv, subsystem = :operators),
     UnitTest("Hybrid - 2D"                              ,"Operators/hybrid/unit_2d.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Hybrid - 3D"                              ,"Operators/hybrid/unit_3d.jl"; tier = :unit, subsystem = :operators),
+    UnitTest("Hybrid - 3D simulation"                   ,"Operators/hybrid/simulation_3d.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Hybrid - 2D convergence"                  ,"Operators/hybrid/conv_2d.jl"; tier = :conv, subsystem = :operators),
     UnitTest("Hybrid - 3D convergence"                  ,"Operators/hybrid/conv_3d.jl"; tier = :conv, subsystem = :operators),
     UnitTest("Operators - remapping"                    ,"Operators/unit_remapping.jl"; tier = :unit, subsystem = :operators),

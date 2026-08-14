@@ -7,9 +7,8 @@ import BlockArrays
 A `FieldVector` is a wrapper around one or more `Field`s that acts like vector
 of the underlying arrays.
 
-It is similar in spirit to [`ArrayPartition` from
-RecursiveArrayTools.jl](https://github.com/SciML/RecursiveArrayTools.jl#arraypartition),
-but allows referring to fields by name.
+Unlike a plain concatenation of the underlying arrays, its fields can be
+referred to by name.
 
 # Constructors
 
@@ -66,12 +65,19 @@ This is called when calling `getproperty` on a `FieldVector` property of element
 type `T`.
 """
 unwrap(x) = x
+
+# The recursion goes through the backing array, not the `DataLayout`: `eltype`
+# of a heterogeneous-`Tuple`-valued layout reaches `Any` (via `eltype(Tuple{A,
+# B})`), which would type the `FieldVector` as `FieldVector{Any}`; the backing
+# array bottoms out at the scalar.
+recursive_bottom_eltype(field::Field) =
+    recursive_bottom_eltype(parent(field))
 unwrap(x::ScalarWrapper) = x[]
 
 function FieldVector(; kwargs...)
     values = map(wrap, NamedTuple(kwargs))
     T = promote_type(
-        map(RecursiveArrayTools.recursive_bottom_eltype, values)...,
+        map(recursive_bottom_eltype, values)...,
     )
     return FieldVector{T}(values)
 end

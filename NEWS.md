@@ -4,6 +4,23 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-💥breaking] Removed the SciML compatibility layer
+  (`src/Fields/compat_diffeq.jl`) and the `RecursiveArrayTools` dependency.
+  Nothing in ClimaCore, ClimaAtmos, ClimaLand, or ClimaCoupler uses it: all of
+  them time-step with ClimaTimeSteppers, which dropped SciMLBase in 0.10.
+  Passing a `Field` or `FieldVector` to an OrdinaryDiffEq integrator is no
+  longer supported: the layer's eight `RecursiveArrayTools` methods are
+  removed, and `recursive_bottom_eltype`, the only one ClimaCore itself used,
+  is now `ClimaCore.Utilities.recursive_bottom_eltype`. Of the four `Base`
+  methods the layer also carried, `any`, `similar(::F, ::Type{F})` and `vec`
+  on `Field` are kept and are used beyond OrdinaryDiffEq; `vec` returns a
+  vector over the field's values now, so its eltype is the field's rather than
+  the backing array's. `muladd(x, ::Field)` is removed: it broadcast a two-argument
+  `muladd` over scalars, which does not exist, so it has thrown a
+  `MethodError` on every call since it was added.
+  [2576](https://github.com/CliMA/ClimaCore.jl/pull/2576)
+
+
 v0.15.1
 -------
 

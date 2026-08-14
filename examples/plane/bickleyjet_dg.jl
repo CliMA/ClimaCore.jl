@@ -1,3 +1,14 @@
+# Bickley jet (see `bickleyjet_cg.jl`), discretized with a discontinuous
+# Galerkin spectral element method. Inter-element coupling is through a
+# numerical flux rather than DSS, so this is where the flux choice matters:
+# pass `central`, `rusanov` (default), or `roe` as the first argument, and
+# optionally a boundary condition as the second.
+#
+# `central` adds no interface dissipation, so it does not survive the roll-up:
+# the filaments the instability produces feed grid-scale energy that nothing
+# removes, and the run goes to NaN. That is the standard reason a DG transport
+# scheme needs an upwind-biased flux, and it is why `rusanov` is the default
+# and why CI runs only `rusanov` and `roe`.
 using ClimaComms
 using LinearAlgebra
 
@@ -12,7 +23,7 @@ import ClimaCore:
     Topologies
 import ClimaCore.Geometry: ⊗
 
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
 
 import Logging
 import TerminalLoggers
@@ -24,7 +35,6 @@ const parameters = (
     l = 0.5, # Gaussian width
     k = 0.5, # Sinusoidal wavenumber
     ρ₀ = 1.0, # reference density
-    c = 2,
     g = 10,
 )
 
@@ -54,7 +64,6 @@ quad = Quadratures.GLL{Nq}()
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
 Iquad = Quadratures.GLL{Nqh}()
-Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
 
 function init_state(coord, p)
     x, y = coord.x, coord.y
@@ -64,10 +73,10 @@ function init_state(coord, p)
     # set initial velocity
     U₁ = cosh(y)^(-2)
 
-    # Ψ′ = exp(-(x2 + p.l / 10)^2 / 2p.l^2) * cos(p.k * x) * cos(p.k * y)
+    # Ψ′ = exp(-(y + p.l / 10)^2 / 2p.l^2) * cos(p.k * x) * cos(p.k * y)
     # Vortical velocity fields (u₁′, u₂′) = (-∂²Ψ′, ∂¹Ψ′)
     gaussian = exp(-(y + p.l / 10)^2 / 2p.l^2)
-    u₁′ = gaussian * (y + p.l / 10) / p.l^2 * cos(p.k * x) * cos(p.k * x)
+    u₁′ = gaussian * (y + p.l / 10) / p.l^2 * cos(p.k * x) * cos(p.k * y)
     u₁′ += p.k * gaussian * cos(p.k * x) * sin(p.k * y)
     u₂′ = -p.k * gaussian * sin(p.k * x) * cos(p.k * y)
 
@@ -169,6 +178,11 @@ elseif numflux_name == "rusanov"
     Operators.RusanovNumericalFlux(flux, wavespeed)
 elseif numflux_name == "roe"
     roeflux
+else
+    # Without this, an unrecognized name leaves `numflux === nothing` and the
+    # run dies inside `add_numerical_flux_internal!` with a `MethodError`.
+    error("Unknown numerical flux $(repr(numflux_name)): pass one of \
+           \"central\", \"rusanov\" or \"roe\".")
 end
 
 function rhs!(dydt, y, (parameters, numflux), t)
@@ -202,9 +216,11 @@ function rhs!(dydt, y, (parameters, numflux), t)
         numflux(normal, (y⁻, parameters), (y⁺, parameters))
     end
 
-    # 6. Solve for final result
-    dydt_data =
-        Fields.field_values(dydt) ./ Spaces.local_geometry_data(space).WJ
+    # 6. Solve for final result. Both steps must land back in `dydt`:
+    # `field_values` is a view, but `./` on it would build a new data layout and
+    # leave `dydt` holding the unnormalized residual.
+    dydt_data = Fields.field_values(dydt)
+    dydt_data .= dydt_data ./ Spaces.local_geometry_data(space).WJ
     M = Quadratures.cutoff_filter_matrix(
         Float64,
         Spaces.quadrature_style(space),
@@ -218,10 +234,15 @@ dydt = Fields.Field(similar(Fields.field_values(y0)), space)
 rhs!(dydt, y0, (parameters, numflux), 0.0);
 
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 200.0), (parameters, numflux))
-sol = solve(
+prob = CTS.ODEProblem(
+    CTS.ClimaODEFunction(; T_exp! = rhs!),
+    y0,
+    (0.0, 200.0),
+    (parameters, numflux),
+)
+sol = CTS.solve(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = 0.02,
     saveat = collect(0.0:1.0:200.0),
     progress = true,
@@ -245,16 +266,64 @@ end
 Plots.mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
 
 Es = [total_energy(u, parameters) for u in sol.u]
-Plots.png(Plots.plot(Es), joinpath(path, "energy.png"))
 
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+using Test
+const is_periodic = boundary_name == ""
+
+# On the periodic domain the numerical flux penalizes the jump across each
+# interface and nothing else touches the energy, so it may only fall (measured
+# drift over t = 200: -3.0e-4 for `rusanov`, -3.3e-4 for `roe` — larger than in
+# the CG cases because the roll-up puts real structure on the interfaces for
+# the penalty to act on). A wall does work on the domain, so that argument does
+# not apply to `noslip`, which gains 4.2e-4 instead. Either way the drift must
+# stay small.
+if is_periodic
+    @test Es[end] ≤ Es[1] * (1 + sqrt(eps()))
+end
+@test abs(Es[end] - Es[1]) / Es[1] < 1e-3
+
+@testset "mass and tracer conservation" begin
+    masses = [sum(y.ρ) for y in sol.u]
+    tracers = [sum(y.ρθ) for y in sol.u]
+    mass_drift = maximum(abs, masses .- masses[1]) / masses[1]
+    tracer_drift = maximum(abs, tracers .- tracers[1])
+    if is_periodic
+        # A conservative numerical flux telescopes across the periodic domain,
+        # so both hold to roundoff — identically for `rusanov` and `roe`, since
+        # conservation is a property of the assembly and not of the flux
+        # (measured: 1.4e-14 relative in ρ, 1e-13 absolute in ρθ, whose exact
+        # integral is zero because θ = sin(k y) over a whole number of periods).
+        @test mass_drift < 1e-12
+        @test tracer_drift < 1e-10
+    else
+        # The wall reflects the normal momentum, which cancels the centered
+        # part of the flux but not its dissipative part, so the wall leaks
+        # (measured over t = 200: 3.5e-4 in mass, 0.054 in tracer mass). That
+        # is a property of this boundary treatment, not of the interior
+        # scheme — see the periodic branch above.
+        @test mass_drift < 1e-3
+        @test tracer_drift < 0.5
     end
 end
+
+@testset "jet roll-up and tracer overshoot" begin
+    cross_jet_speed(y) =
+        maximum(abs, Geometry.UVVector.(y.ρu ./ y.ρ).components.data.:2)
+    # The shear layer is barotropically unstable, so the seeded perturbation
+    # must roll the jet up here as it does in `bickleyjet_cg.jl` (measured
+    # max|v| over the run: 0.050 at t = 0, peaking at 0.66 for `rusanov`, 0.71
+    # for `roe` and 0.65 for `roe noslip`).
+    speeds = cross_jet_speed.(sol.u)
+    @test maximum(speeds) > 5 * speeds[1]
+    # Rolling the jet up draws the tracer into filaments the mesh cannot
+    # resolve, and there is no limiter, so θ overshoots its initial [-1, 1]
+    # range (measured: ±3.7 for `rusanov`, ±2.6 for `roe`, ±2.0 with walls).
+    θ_end = sol.u[end].ρθ ./ sol.u[end].ρ
+    @test maximum(abs, θ_end) < 5
+end
+Plots.png(Plots.plot(Es), joinpath(path, "energy.png"))
+
+include(joinpath(@__DIR__, "..", "example_utils.jl")) # linkfig
 
 linkfig(
     relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),

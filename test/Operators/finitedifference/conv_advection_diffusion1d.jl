@@ -2,7 +2,7 @@ import ClimaComms
 ClimaComms.@import_required_backends
 using Test
 using LinearAlgebra
-using OrdinaryDiffEqTsit5: ODEProblem, solve, Tsit5
+import ClimaTimeSteppers as CTS
 
 import ClimaCore:
     ClimaCore,
@@ -81,15 +81,23 @@ import .TestUtilities: convergence_rate
             return @. dT = divf2c(ν * gradc2f(T)) - A(V, T)
         end
 
-        # Solve the ODE operator
-        Δt = 0.001
-        prob = ODEProblem(∑tendencies!, T, (t₀, t₁))
-        sol = solve(
+        # Solve the ODE operator. The explicit diffusive stability limit is
+        # Δz²/(4ν) times SSPRK33's real-axis stability bound of 2.51, or
+        # 7.7e-4 s on the finest mesh; the step below sits under that for
+        # every mesh in the sequence. Its own third-order temporal error,
+        # ~1e-10, is far below the spatial errors measured here, so what the
+        # convergence rate reflects is the stencil.
+        Δt = 5e-4
+        prob = CTS.ODEProblem(
+            CTS.ClimaODEFunction(; T_exp! = ∑tendencies!),
+            T,
+            (t₀, t₁),
+            nothing,
+        )
+        sol = CTS.solve(
             prob,
-            Tsit5(),
-            reltol = 1e-8,
-            abstol = 1e-8,
-            #dt = Δt,
+            CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
+            dt = Δt,
         )
         computed_result = sol.u[end]
         analytical_result = gaussian.(zp, t₁; μ = μ, δ = δ, ν = ν, 𝓌 = 𝓌)

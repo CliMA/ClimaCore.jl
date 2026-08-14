@@ -15,6 +15,7 @@ import ..Spaces: nlevels, ncolumns
 import ..Spaces: get_mask, set_mask!
 import ..Geometry: Geometry, Cartesian12Vector
 import ..Utilities: PlusHalf, half, safe_eltype, unsafe_eltype
+import ..Utilities: recursive_bottom_eltype
 import ..Utilities: drop_auto_broadcasters, auto_broadcasted
 
 using UnrolledUtilities
@@ -176,6 +177,16 @@ Base.IndexStyle(::Type{<:Field{V}}) where {V} = IndexStyle(V)
 for f in (:parent, :size, :length, :ndims)
     @eval Base.$f(field::Field) = $f(field_values(field))
 end
+
+# Scalar reductions and views on the values of a `Field`. Generic and
+# downstream code (NaN checks, plotting) relies on these. `any` reduces over
+# the backing array rather than the `DataLayout` so that predicates on numbers
+# (`isnan`, `isinf`) work on struct-valued fields, whose entries the predicate
+# could not accept; `vec` iterates the `DataLayout`, so its eltype is the
+# field's.
+Base.any(f, field::Field) = any(f, parent(field))
+Base.similar(field::F, ::Type{F}) where {F <: Field} = similar(field)
+Base.vec(field::Field) = vec(field_values(field))
 for f in (:DataScope, :shape_params, :inferred_size, :nelems)
     @eval DataLayouts.$f(field::Field) = DataLayouts.$f(field_values(field))
 end
@@ -365,7 +376,6 @@ same space as the given field.
 
 include("broadcast.jl")
 include("mapreduce.jl")
-include("compat_diffeq.jl")
 include("fieldvector.jl")
 include("field_iterator.jl")
 include("indices.jl")
