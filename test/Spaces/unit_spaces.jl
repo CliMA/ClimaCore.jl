@@ -324,6 +324,58 @@ end
 
 end
 
+# `level` and `column` have generic identity fallbacks, so a slice method that is
+# typed only on host grids does not error on a device-side space: it silently
+# returns the space it was handed. GPU kernels slice device-side spaces (see
+# Operators.reconstruct_placeholder_space), and a whole extruded space standing in
+# for one of its levels indexes a level field as if it spanned every level.
+@testset "slicing device-side extruded spaces" begin
+    FT = Float64
+    # a space with a 2D horizontal grid, and one with a 1D horizontal grid
+    spaces = (
+        ExtrudedCubedSphereSpace(
+            FT;
+            z_elem = 10,
+            z_min = 0,
+            z_max = 1,
+            radius = 10,
+            h_elem = 2,
+            n_quad_points = 2,
+            staggering = CellFace(),
+        ),
+        SliceXZSpace(
+            FT;
+            z_elem = 10,
+            x_min = 0,
+            x_max = 1,
+            z_min = 0,
+            z_max = 1,
+            periodic_x = false,
+            x_elem = 2,
+            n_quad_points = 2,
+            staggering = CellFace(),
+        ),
+    )
+    for space in spaces
+        expected =
+            space isa Spaces.ExtrudedFiniteDifferenceSpace3D ?
+            Spaces.SpectralElementSpace2D : Spaces.SpectralElementSpace1D
+        @test Spaces.level(space, 1) isa expected
+
+        @static if on_gpu
+            adapted_space = Adapt.adapt(CUDA.KernelAdaptor(), space)
+            adapted_level = Spaces.level(adapted_space, 1)
+            @test adapted_level isa expected
+            # the property the finite difference kernels depend on: one level of
+            # an extruded space holds a single value per column
+            @test Spaces.nlevels(adapted_level) == 1
+
+            adapted_column = Spaces.column(adapted_space, 1, 1, 1)
+            @test adapted_column isa Spaces.FiniteDifferenceSpace
+        end
+    end
+end
+
 @testset "1×1 domain space" begin
     FT = Float32
     context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
