@@ -96,8 +96,8 @@ end
 
 function opt_UpwindBiasedProductC2F_Extrapolate(face_vel, center_field)
     UB = Operators.UpwindBiasedProductC2F(
-        left = Operators.Extrapolate(),
-        right = Operators.Extrapolate(),
+        bottom = Operators.Extrapolate(0),
+        top = Operators.Extrapolate(0),
     )
     return UB.(face_vel, identity.(center_field))
 end

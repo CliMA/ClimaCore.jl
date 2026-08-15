@@ -63,11 +63,8 @@ function tendency!(dT, T, _, t)
     # outflow gradient at the top, so nothing the discretization does to the
     # interior can be blamed on the boundary treatment. The Dirichlet condition
     # T = gaussian(z_bottom, t) on the bottom boundary face is imposed through
-    # `SetGradient`: the covariant gradient there is 2 (T[1] - T₀).
-    T_bottom = Fields.level(T, 1)
-    bc_gradient_bottom = Operators.SetGradient(
-        @. lazy(Geometry.Covariant3Vector(2 * (T_bottom - gaussian(z_bottom, t))))
-    )
+    # the gradient operator by `gradient_c2f_dirichlet`; the top boundary's
+    # gradient is passed through as an explicit `SetGradient`.
     bc_gradient_top =
         Operators.SetGradient(Geometry.WVector(∇gaussian(z_top, t)))
 
@@ -80,22 +77,24 @@ function tendency!(dT, T, _, t)
         @. lazy(Geometry.Covariant3Vector(T_top - T_top_m1))
     )
 
-    gradc2f = Operators.GradientC2F(
-        bottom = bc_gradient_bottom,
+    ∇T = Operators.gradient_c2f_dirichlet(
+        T;
+        bottom = gaussian(z_bottom, t),
         top = bc_gradient_top,
     )
-    gradc2f_advect = Operators.GradientC2F(
-        bottom = bc_gradient_bottom,
+    ∇T_advect = Operators.gradient_c2f_dirichlet(
+        T;
+        bottom = gaussian(z_bottom, t),
         top = bc_gradient_top_extrapolated,
     )
     interpf2c = Operators.InterpolateF2C()
     divf2c = Operators.DivergenceF2C()
 
     return @. dT =
-        divf2c(ν * gradc2f(T)) - interpf2c(
+        divf2c(ν * ∇T) - interpf2c(
             Geometry.dot(
                 Geometry.Contravariant3Vector(velocity),
-                gradc2f_advect(T),
+                ∇T_advect,
             ),
         )
 end

@@ -22,7 +22,6 @@ import ClimaCore:
     Operators,
     Hypsography
 using ClimaCore.Geometry
-import LazyBroadcast: lazy
 
 
 using Logging: global_logger
@@ -34,6 +33,13 @@ const hyperdiffusivity = 1e7 #m²/s
 
 const u₀ = 10.0 # initial horizontal wind (m/s)
 
+# Unlike `schar_mountain.jl`, this case does not project the surface velocity
+# onto the terrain (u₃ = -g³¹u₁/g³³) and does not zero the surface `w`
+# tendency. The hill is 1 m over a 1000 m half-width, so |g³¹/g³³| on the
+# bottom face reaches 7.2e-4 and the coordinate-normal and surface-normal
+# directions agree to that accuracy; the case exists to check the linear
+# mountain-wave response, whose peak |w| is 3e-3 m/s. On the 250 m Schar ridge
+# the same ratio is 0.059, which is why that case imposes the constraint.
 function warp_surface(coord)
     # Parameters from GMD-9-2007-2016
     # Specification for Agnesi Mountain following
@@ -184,7 +190,6 @@ function rhs_invariant!(dY, Y, _, t)
         top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
     )
-    vdivc2f = Operators.DivergenceC2F()
     # we want the total u³ at the boundary to be zero: we can either constrain
     # both to be zero, or allow one to be non-zero and set the other to be its
     # negation
@@ -251,32 +256,15 @@ function rhs_invariant!(dY, Y, _, t)
     hκ₂∇²uₕ = @. hwdiv(κ₂ * ᶜ∇ₕuₕ)
     vκ₂∇²uₕ = @. vdivf2c(κ₂ * ᶠ∇ᵥuₕ)
     hκ₂∇²w = @. hwdiv(κ₂ * ᶠ∇ₕw)
-    lg_field_faces = Fields.local_geometry_field(axes(fw))
-    lg_field_centers = Fields.local_geometry_field(axes(cρ))
-    # `LeftBiasedF2C(x)[i] = x[i-half]`, so its first level is the bottom face,
-    # and `RightBiasedF2C(x)[i] = x[i+half]`, so its last level is the top face.
-    lg_bottom_face = Fields.level(Operators.LeftBiasedF2C().(lg_field_faces), 1)
-    lg_top_face = Fields.level(
-        Operators.RightBiasedF2C().(lg_field_faces),
-        Fields.nlevels(lg_field_centers),
+    # The diffusive flux κ₂ ∇ᵥw is zero at each boundary face; that Dirichlet
+    # value on the divergence's argument is imposed by
+    # `divergence_c2f_dirichlet`.
+    κ₂∇ᵥw = @. κ₂ * ᶜ∇ᵥw
+    vκ₂∇²w = Operators.divergence_c2f_dirichlet(
+        κ₂∇ᵥw;
+        bottom = Geometry.WVector(0.0),
+        top = Geometry.WVector(0.0),
     )
-    lg_bottom_center = Fields.level(lg_field_centers, 1)
-    lg_top_center = Fields.level(lg_field_centers, Fields.nlevels(lg_field_centers))
-    ᶜ∇ᵥw_bottom = Fields.level(ᶜ∇ᵥw, 1)
-    ᶜ∇ᵥw_top = Fields.level(ᶜ∇ᵥw, Fields.nlevels(ᶜ∇ᵥw))
-    bottom_divergence = @. lazy(
-        Geometry.Jcontravariant3(κ₂ * ᶜ∇ᵥw_bottom, lg_bottom_center) *
-        (2 * inv(lg_bottom_face.J)),
-    )
-    top_divergence = @. lazy(
-        Geometry.Jcontravariant3(κ₂ * ᶜ∇ᵥw_top, lg_top_center) *
-        (-2 * inv(lg_top_face.J)),
-    )
-    set_bcs = Operators.SetBoundaryOperator(
-        bottom = Operators.SetValue(bottom_divergence),
-        top = Operators.SetValue(top_divergence),
-    )
-    vκ₂∇²w = @. set_bcs(vdivc2f(κ₂ * ᶜ∇ᵥw))
     hκ₂∇²h_tot = @. hwdiv(cρ * κ₂ * ᶜ∇ₕh_tot)
     vκ₂∇²h_tot = @. vdivf2c(fρ * κ₂ * ᶠ∇ᵥh_tot)
 

@@ -315,19 +315,12 @@ function Operators.return_eltype(
     matrix1,
     arg,
 )
-    # this is needed to support the divergence operator matrix applied to a Tensor field
-    if (
-        matrix1 isa Operators.StencilBroadcasted && matrix1.op isa FDOperatorMatrix &&
-        !(eltype(arg) <: BandMatrixRow)
-    )
-        if matrix1.op.op isa OneArgFDOperator
-            return Operators.return_eltype(matrix1.op.op, arg)
-        else
-            return Operators.return_eltype(matrix1.op.op, matrix1.args[1], arg)
-        end
-    end
     et_mat1 = eltype(matrix1)
     et_arg = eltype(arg)
+    # eltype may be the inference-failure sentinel Union{} when this is called
+    # while probing an expression with unsafe_eltype; propagate it instead of
+    # treating it as a BandMatrixRow (Union{} is a subtype of everything).
+    (et_mat1 == Union{} || et_arg == Union{}) && return Union{}
     et_mat1 <: BandMatrixRow || error(
         "The first argument of MultiplyColumnwiseBandMatrixField must have
          elements of type BandMatrixRow, but the given argument has $et_mat1",
@@ -469,6 +462,17 @@ function multiply_matrix_at_index(
     ld1, ud1 = outer_diagonals(eltype(matrix1))
     boundary_modified_ld1 = boundary_modified_ld(bc, ld1, column_space1, idx)
     boundary_modified_ud1 = boundary_modified_ud(bc, ud1, column_space1, idx)
+    # On columns too short for the interior stencil, the boundary windows are
+    # clamped (`Operators.window_bounds`) and can overlap, so a point in one
+    # boundary's window can also have matrix row entries that reach past the
+    # other end of the column
+    if !isnothing(bc)
+        space2 = axes(arg)
+        boundary_modified_ld1 =
+            max(Operators.left_idx(space2) - idx, boundary_modified_ld1)
+        boundary_modified_ud1 =
+            min(Operators.right_idx(space2) - idx, boundary_modified_ud1)
+    end
 
     # Precompute the row that is needed from matrix1 so that it does not get
     # recomputed multiple times.
