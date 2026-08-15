@@ -33,12 +33,12 @@ function fct_blend_tendency!(dq, q, p, t)
     (; w, C) = p
     FT = Spaces.undertype(axes(q))
     upwind1 = Operators.UpwindBiasedProductC2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
+        bottom = Operators.Extrapolate(0),
+        top = Operators.Extrapolate(0),
     )
     upwind3 = Operators.Upwind3rdOrderBiasedProductC2F(
-        bottom = Operators.ThirdOrderOneSided(),
-        top = Operators.ThirdOrderOneSided(),
+        bottom = Operators.Extrapolate(1),
+        top = Operators.Extrapolate(1),
     )
     divf2c = Operators.DivergenceF2C(
         bottom = Operators.SetValue(Geometry.WVector(FT(0))),
@@ -54,17 +54,14 @@ function boris_book_tendency!(dq, q, p, t)
     (; w, Δt) = p
     FT = Spaces.undertype(axes(q))
     upwind1 = Operators.UpwindBiasedProductC2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
+        bottom = Operators.Extrapolate(0),
+        top = Operators.Extrapolate(0),
     )
     upwind3 = Operators.Upwind3rdOrderBiasedProductC2F(
-        bottom = Operators.ThirdOrderOneSided(),
-        top = Operators.ThirdOrderOneSided(),
+        bottom = Operators.Extrapolate(1),
+        top = Operators.Extrapolate(1),
     )
-    fct = Operators.FCTBorisBook(
-        bottom = Operators.FirstOrderOneSided(),
-        top = Operators.FirstOrderOneSided(),
-    )
+    fct = Operators.FCTBorisBook()
     divf2c = Operators.DivergenceF2C(
         bottom = Operators.SetValue(Geometry.WVector(FT(0))),
         top = Operators.SetValue(Geometry.WVector(FT(0))),
@@ -83,17 +80,14 @@ function zalesak_tendency!(dq, q, p, t)
     (; w, Δt) = p
     FT = Spaces.undertype(axes(q))
     upwind1 = Operators.UpwindBiasedProductC2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
+        bottom = Operators.Extrapolate(0),
+        top = Operators.Extrapolate(0),
     )
     upwind3 = Operators.Upwind3rdOrderBiasedProductC2F(
-        bottom = Operators.ThirdOrderOneSided(),
-        top = Operators.ThirdOrderOneSided(),
+        bottom = Operators.Extrapolate(1),
+        top = Operators.Extrapolate(1),
     )
-    fct = Operators.FCTZalesak(
-        bottom = Operators.FirstOrderOneSided(),
-        top = Operators.FirstOrderOneSided(),
-    )
+    fct = Operators.FCTZalesak()
     divf2c = Operators.DivergenceF2C(
         bottom = Operators.SetValue(Geometry.WVector(FT(0))),
         top = Operators.SetValue(Geometry.WVector(FT(0))),
@@ -102,8 +96,7 @@ function zalesak_tendency!(dq, q, p, t)
         -divf2c(
             upwind1(w, q) + fct(
                 upwind3(w, q) - upwind1(w, q),
-                q / Δt,
-                q / Δt - divf2c(upwind1(w, q)),
+                tuple(q / Δt, q / Δt - divf2c(upwind1(w, q))),
             ),
         )
     return dq
@@ -183,11 +176,7 @@ function vanleer_tendency!(dq, q, p, t)
         bottom = Operators.SetValue(Geometry.WVector(FT(0))),
         top = Operators.SetValue(Geometry.WVector(FT(0))),
     )
-    vanleer = Operators.LinVanLeerC2F(
-        bottom = Operators.FirstOrderOneSided(),
-        top = Operators.FirstOrderOneSided(),
-        constraint = constraint,
-    )
+    vanleer = Operators.LinVanLeerC2F(constraint = constraint)
     @. dq = -divf2c(vanleer(w, q, Δt))
     return dq
 end

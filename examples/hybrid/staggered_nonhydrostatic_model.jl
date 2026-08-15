@@ -61,8 +61,8 @@ const ᶠcurlᵥ = Operators.CurlC2F(
 )
 const ᶠupwind_product1 = Operators.UpwindBiasedProductC2F()
 const ᶠupwind_product3 = Operators.Upwind3rdOrderBiasedProductC2F(
-    bottom = Operators.ThirdOrderOneSided(),
-    top = Operators.ThirdOrderOneSided(),
+    bottom = Operators.Extrapolate(1),
+    top = Operators.Extrapolate(1),
 )
 
 const ᶜinterp_matrix = MatrixFields.operator_matrix(ᶜinterp)

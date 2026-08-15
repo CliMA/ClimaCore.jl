@@ -143,8 +143,8 @@ function rhs_invariant!(dY, Y, _, t)
     )
     # 1.c) vertical upwinding
     third_order_upwind_c2f = Operators.Upwind3rdOrderBiasedProductC2F(
-        bottom = Operators.ThirdOrderOneSided(),
-        top = Operators.ThirdOrderOneSided(),
+        bottom = Operators.Extrapolate(1),
+        top = Operators.Extrapolate(1),
     )
     # we want the total u³ at the boundary to be zero: we can either constrain
     # both to be zero, or allow one to be non-zero and set the other to be its

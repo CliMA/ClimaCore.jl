@@ -207,16 +207,10 @@ end
     Nf = num_basetypes(B, T)
     @boundscheck checkbounds(array, struct_indices(array, Val(Nf), index...)...)
     entries = bitcast_struct(NTuple{Nf, B}, value)
-    return set_struct_entries!(array, entries, 1, index...)
-end
-
-# Store the entries with tuple recursion, which unrolls like a generated
-# function; a closure over array and index is not eliminated in GPU kernels,
-# where it allocates at every point.
-@inline set_struct_entries!(array, ::Tuple{}, i, index...) = array
-@propagate_inbounds function set_struct_entries!(array, entries::Tuple, i, index...)
-    @inbounds array[struct_index(i, array, index...)] = first(entries)
-    return set_struct_entries!(array, Base.tail(entries), i + 1, index...)
+    unrolled_foreach(enumerate(entries)) do (i, entry)
+        @inbounds array[struct_index(i, array, index...)] = entry
+    end
+    return array
 end
 
 """
