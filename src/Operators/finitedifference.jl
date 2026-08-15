@@ -1,4 +1,10 @@
-import ..Utilities: PlusHalf, half, unionall_type
+import ..Utilities:
+    PlusHalf,
+    half,
+    unionall_type,
+    AutoBroadcaster,
+    nested_broadcast_result_type,
+    add_auto_broadcasters
 import ..DebugOnly: allow_mismatched_spaces_unsafe
 import UnrolledUtilities: unrolled_map
 
@@ -836,8 +842,42 @@ velocity used only to determine the upwind direction, as in
 contravariant data.
 """
 abstract type NonLinearAdvectionOperator <: AdvectionOperator end
-return_eltype(::NonLinearAdvectionOperator, V, args...) =
-    Geometry.Contravariant3Vector{eltype(eltype(V))}
+# The stencil returns Contravariant3Vector(op(...)), where op's result combines
+# the contravariant3 component of a velocity element with the advected field's
+# stencil values using ordinary arithmetic. For tuple-valued fields, both of
+# these are (nested) AutoBroadcasters of scalars, and the Contravariant3Vector
+# constructor broadcasts over the nesting, so that e.g. an NTuple-valued
+# advected field produces an NTuple of Contravariant3Vectors. The extra
+# parameters do not affect the result type.
+
+# Scalar structure of the contravariant3 component of a velocity element.
+velocity_component_type(::Type{X}) where {X <: AutoBroadcaster} =
+    nested_broadcast_result_type(velocity_component_type, X)
+velocity_component_type(::Type{T}) where {T} = eltype(T)
+
+# Scalar structure of an advected value in the stencil arithmetic. Operators
+# whose advected field holds tuples of center-valued quantities (e.g.
+# FCTZalesak) destructure each stencil value and combine the quantities
+# componentwise, so they define this as the tuple's component type instead.
+advected_component_type(op, ::Type{Tx}) where {Tx} = Tx
+
+nonlinear_advection_eltype(::Type{X}) where {X <: AutoBroadcaster} =
+    nested_broadcast_result_type(nonlinear_advection_eltype, X)
+nonlinear_advection_eltype(::Type{T}) where {T} =
+    Geometry.Contravariant3Vector{T}
+
+function return_eltype(op::NonLinearAdvectionOperator, V, arg, extra_params...)
+    # eltype may be the inference-failure sentinel Union{} when this is called
+    # while probing an expression with unsafe_eltype; propagate it instead of
+    # dispatching on it (Union{} is a subtype of everything).
+    (eltype(V) == Union{} || eltype(arg) == Union{}) && return Union{}
+    return nonlinear_advection_eltype(
+        Geometry.mul_return_type(
+            velocity_component_type(eltype(V)),
+            advected_component_type(op, add_auto_broadcasters(eltype(arg))),
+        ),
+    )
+end
 return_space(
     ::NonLinearAdvectionOperator,
     velocity_space::AllFaceFiniteDifferenceSpace,
@@ -1237,6 +1277,10 @@ end
 
 advection_velocity_width(::FCTZalesak) = Val(:neighboring)
 
+# each advected stencil value is a 2-tuple of (Φ, Φᵗᵈ), which the operator
+# destructures and combines componentwise
+advected_component_type(::FCTZalesak, ::Type{Tx}) where {Tx} = eltype(Tx)
+
 @inline function (op::FCTZalesak)(A₋₁, A, A₊₁, x₋₃₂, x₋₁₂, x₊₁₂, x₊₃₂)
     # each stencil value is a 2-tuple of (Φ, Φᵗᵈ)
     (ϕ₋₃₂, ϕ₋₃₂ᵗᵈ) = x₋₃₂
@@ -1423,8 +1467,12 @@ strip_space(op::TVDLimitedFluxC2F, parent_space) = TVDLimitedFluxC2F(
 ) = op(A, ϕ₋₃₂, ϕ₋₁₂, ϕ₊₁₂, ϕ₊₃₂, 𝓊.u³)
 @inline function (op::TVDLimitedFluxC2F)(A, ϕ₋₃₂, ϕ₋₁₂, ϕ₊₁₂, ϕ₊₃₂, 𝓊)
     Δϕ = ϕ₊₁₂ - ϕ₋₁₂ + eps(typeof(ϕ₋₁₂))
-    # Δϕ_clipped = sign(Δϕ) * max(abs(Δϕ), eps(typeof(Δϕ)))
-    r = ifelse(𝓊 >= 0, ϕ₋₁₂ - ϕ₋₃₂, ϕ₊₃₂ - ϕ₊₁₂) / Δϕ # Δϕ_clipped
+    Δϕ_upwind = ifelse(𝓊 >= 0, ϕ₋₁₂ - ϕ₋₃₂, ϕ₊₃₂ - ϕ₊₁₂)
+    # a zero upwind slope always gives r = 0, even when Δϕ is also zero (the
+    # added eps does not prevent that: ϕ₊₁₂ - ϕ₋₁₂ can be exactly -eps in
+    # regions where ϕ is flat up to roundoff, and 0 / 0 would produce NaN);
+    # ghost-cell padding makes the upwind slope exactly zero at boundary faces
+    r = ifelse(Δϕ_upwind == 0, zero(Δϕ_upwind), Δϕ_upwind / Δϕ)
     return limiter_coeff(r, op.method) * A
 end
 

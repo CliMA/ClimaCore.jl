@@ -133,6 +133,11 @@ v0.15.0
     limited fluxes to zero there; they now compute the ghost-cell-padded stencil
     instead.
 
+  `TVDLimitedFluxC2F`'s slope ratio `r` is now zero whenever the upwind slope is
+  zero, even if the denominator `ϕ₊₁₂ - ϕ₋₁₂ + eps` is also zero (which happens
+  when `ϕ₊₁₂ - ϕ₋₁₂` is exactly `-eps`, e.g. in regions where `ϕ` is flat up to
+  roundoff, and previously produced `NaN` limited fluxes from `0 / 0`).
+
   `MatrixFields.operator_matrix` now reports every `NonLinearAdvectionOperator`
   (including `TVDLimitedFluxC2F`, which previously threw a `MethodError`) as a
   nonlinear operator that cannot be represented by a matrix.
