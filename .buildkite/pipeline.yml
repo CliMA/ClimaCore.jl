@@ -791,7 +791,6 @@ steps:
           - "julia --color=yes --project=.buildkite examples/column/advect.jl"
         artifact_paths:
           - "examples/column/output/advect/*"
-          - "examples/column/output/advect_step_function/*"
 
       # The FCT / Boris & Book / Zalesak column-advection cases live in
       # test/Integration/smoke_column_advection.jl. The remaining limiter
