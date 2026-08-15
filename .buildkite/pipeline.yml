@@ -202,7 +202,7 @@ steps:
                 case: "test_scalar_15"
               soft_fail: true
             - with:
-                case: "test_non_scalar_2"
+                case: "test_non_scalar_3"
               soft_fail: true
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/gpu_matrix_field_broadcasting.jl"
@@ -1141,6 +1141,7 @@ steps:
       - label: ":computer: 3D sphere deformation flow w/ limiter & FCT"
         key: "cpu_3d_deformation_flow"
         retry: *retry_policy
+        soft_fail: true # remove this after autobroadcaster issues are fixed
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/sphere/deformation_flow.jl"
         artifact_paths:

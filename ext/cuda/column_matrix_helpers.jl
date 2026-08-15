@@ -2,6 +2,14 @@
 # stored in shared memory. These are specialized for columns with CUDA.blockDim().x face
 # levels, computed by threads `v = 1:CUDA.blockDim().x` (one column per `threadIdx().y`).
 #
+# `periodic` (a compile-time-constant `Bool` derived from the vertical topology) selects
+# how the ends of a column are handled. In a NON-periodic column an operand slot past the
+# top/bottom of the column contributes nothing, so it is zero-padded, and product-row
+# entries that fall outside the product matrix are truncated to zero. In a PERIODIC column
+# the neighbor wraps around to the opposite end, so the operand slot is wrapped with
+# `mod1(slot, CUDA.blockDim().x)`, always contributes, and no truncation is applied
+# (periodic columns span all `CUDA.blockDim().x` levels, so that is the wrap modulus).
+#
 
 # Number of valid slots in the column space of a matrix with the given shape.
 @inline n_column_slots(::Union{FaceToCenter, FaceToFace}) = CUDA.blockDim().x
@@ -36,22 +44,28 @@ Base.@propagate_inbounds function row_mul_mat!(
     matrix2,
     shape1::MatrixFields.AbstractMatrixShape,
     shape2::MatrixFields.AbstractMatrixShape,
+    periodic,
 ) where {P}
     v = threadIdx().x
     block_col_idx = threadIdx().y
+    n = CUDA.blockDim().x
     ld1, ud1 = MatrixFields.outer_diagonals(typeof(mat1_row))
     ld2, ud2 = MatrixFields.outer_diagonals(eltype(matrix2))
     pd1, pd2 = MatrixFields.outer_diagonals(P)
     prod_shape = product_shape(shape1, shape2)
-    mat2_offset = (block_col_idx - 1i32) * CUDA.blockDim().x
+    mat2_offset = (block_col_idx - 1i32) * n
     zero_entry = zero(eltype(P))
     prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
         prod_slot = band_matrix_d(v + pd, prod_shape)
-        if 0i32 < prod_slot <= n_column_slots(prod_shape)
+        if periodic || 0i32 < prod_slot <= n_column_slots(prod_shape)
             UnrolledUtilities.unrolled_mapreduce(+, (ld1:ud1...,)) do mat1_row_d
                 mat2_slot = band_matrix_d(v + mat1_row_d, shape1)
-                if ld2 <= pd - mat1_row_d <= ud2 &&
-                   0i32 < mat2_slot <= n_column_slots(shape1)
+                if !(ld2 <= pd - mat1_row_d <= ud2)
+                    zero_entry
+                elseif periodic
+                    @inbounds mat1_row[mat1_row_d] *
+                              matrix2[mod1(mat2_slot, n) + mat2_offset][pd - mat1_row_d]
+                elseif 0i32 < mat2_slot <= n_column_slots(shape1)
                     @inbounds mat1_row[mat1_row_d] *
                               matrix2[mat2_slot + mat2_offset][pd - mat1_row_d]
                 else
@@ -71,11 +85,13 @@ Base.@propagate_inbounds function row_mul_vec!(
     mat1_row,
     vector2,
     shape1::MatrixFields.AbstractMatrixShape,
+    periodic,
 ) where {P}
     v = threadIdx().x
     block_col_idx = threadIdx().y
+    n = CUDA.blockDim().x
     ld1, ud1 = MatrixFields.outer_diagonals(typeof(mat1_row))
-    vec2_offset = (block_col_idx - 1i32) * CUDA.blockDim().x
+    vec2_offset = (block_col_idx - 1i32) * n
     zero_entry = zero(P)
     return UnrolledUtilities.unrolled_mapreduce(
         +,
@@ -83,25 +99,13 @@ Base.@propagate_inbounds function row_mul_vec!(
         init = zero_entry,
     ) do mat1_row_d
         vec2_slot = band_matrix_d(v + mat1_row_d, shape1)
-        if 0i32 < vec2_slot <= n_column_slots(shape1)
-            @inbounds outer_or_mul(
-                mat1_row[mat1_row_d],
-                vector2[vec2_slot + vec2_offset],
-            )
+        if periodic
+            @inbounds mat1_row[mat1_row_d] *
+                      vector2[mod1(vec2_slot, n) + vec2_offset]
+        elseif 0i32 < vec2_slot <= n_column_slots(shape1)
+            @inbounds mat1_row[mat1_row_d] * vector2[vec2_slot + vec2_offset]
         else
             zero_entry
         end
     end
 end
-
-# Handles multiplication in row_mul_vec!.
-# Basically rmul, but some operators matrices require special handling
-# general case
-Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1, T2} = x * y
-# case for grad of a vec
-Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1 <: AbstractVector, T2} = x ⊗ y
-# case for divgrad of a vec
-Base.@propagate_inbounds outer_or_mul(
-    x::T1,
-    y::T2,
-) where {T1 <: Geometry.AbstractCovector, T2 <: Geometry.AbstractTensor{2}} = (x * y)'

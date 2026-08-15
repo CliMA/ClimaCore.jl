@@ -33,30 +33,68 @@ function Base.copyto!(
 
     fspace = Spaces.face_space(space)
     n_face_levels = Spaces.nlevels(fspace)
+    high_resolution = !(n_face_levels ≤ 256)
+    # https://github.com/JuliaGPU/CUDA.jl/issues/2672
+    max_shmem = CUDA.attribute(
+        device(),
+        CUDA.DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK,
+    )
 
     (_, Ni, Nj, Nh) = size(out_fv)
-    # This uses block and grid indices instead of computing cartesian indices from a
-    # linear index. The launch configuration is optimized for common use case of 64 face
-    # levels and Ni = Nj = 4. Periodic toppologies and masks are not currently supported
-    # `eager_copyto_stencil_kernel!` requires a  block size of (n_face_levels, Ni, 1)
-    # this block config is better for VIJFH. It is only used when the total number of
-    # threads in a block is between 32 and 256 to avoid underutilization of the GPU and
-    # errors due to too many registers used when the block size is too large.
-    if !Topologies.isperiodic(space) && mask isa NoMask &&
-       32 <= n_face_levels * Ni <= 256
-        op_matrix_bc = replace_fd_ops(bc)
+    # `eager_copyto_stencil_kernel!` requires one x-thread per face level, so a block
+    # is (n_face_levels, columns_per_block, 1) and the grid indexes the remaining
+    # columns. Each thread derives a linear column index from its y-thread and block
+    # index and decomposes it into `(i, j, h)`; this layout suits VIJFH, where the
+    # vertical axis is contiguous. Both periodic and non-periodic vertical topologies
+    # are supported (`has_padding_thread` accounts for the extra face level of
+    # non-periodic spaces), as are masked spaces. High-resolution columns (more face
+    # levels than fit in a block) fall through to `copyto_stencil_kernel!` below.
+    # TODO: auto reduce max reg usage when needed because of high res columns
+    # Size the dynamic shared memory to fit the largest single expression result in
+    # the broadcasted tree (see `max_eager_shmem_per_thread`). If even that does not
+    # fit in the device's per-block shared memory, there is no way to eagerly evaluate
+    # the expression, so error out instead of silently falling back.
+    eager_shmem_per_thread = max_eager_shmem_per_thread(bc)
+    if !high_resolution
+        # mask.N holds the active column count in a one-element device array;
+        # reading it on the host needs @allowscalar.
+        n_columns =
+            mask isa NoMask ? Ni * Nj * Nh :
+            CUDA.@allowscalar(mask.N[1])
+        # One column per block keeps register pressure low, which matters more than
+        # occupancy until there are enough columns to saturate the device; past that,
+        # pack as many columns into each block as 256 threads allow.
+        # 108 is the number of SMs in an A100. TODO: get this value from CUDA.jl to better optimize for different GPUs
+        threads_dim_y = n_columns > 256 * 108 ? div(256, n_face_levels) : 1
+        block_dim_x = div(n_columns, threads_dim_y, RoundUp)
+        eager_shmem = n_face_levels * threads_dim_y * eager_shmem_per_thread
+        eager_shmem ≤ max_shmem || error(
+            "The intermediate results of this broadcasted expression are too \
+             large to fit in GPU shared memory: evaluating it eagerly needs \
+             $(eager_shmem_per_thread) bytes per thread ($(eager_shmem) bytes \
+             per block of $(n_face_levels * threads_dim_y) threads), but the \
+             device only provides $(max_shmem) bytes of shared memory per block. \
+             Split the expression into smaller sub-expressions so that each \
+             intermediate matrix/vector result is smaller.",
+        )
+        # `axes(out)` is passed so the kernel can recover the output layout's
+        # horizontal extents from its type parameters (see `vijh_params`). The
+        # `CartesianIndices` the kernel builds from them therefore divides by
+        # compile-time constants, keeping the per-thread `divrem` cheap.
         args = (
             strip_space(out, space),
-            strip_space(op_matrix_bc, space),
+            strip_space(bc, space),
+            mask,
             axes(out),
         )
+
         auto_launch!(
             eager_copyto_stencil_kernel!,
             args;
-            threads_s = (n_face_levels, Ni, 1),
-            blocks_s = (1, Nj, Nh),
+            threads_s = (n_face_levels, threads_dim_y, 1),
+            blocks_s = (block_dim_x, 1, 1),
             always_inline = true,
-            shmem = n_face_levels * Ni * 9 * 4, # see `check_if_fits_in_shmem` for how this is calculated
+            shmem = eager_shmem,
         )
         return out
     end
