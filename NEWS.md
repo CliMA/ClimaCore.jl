@@ -90,9 +90,9 @@ v0.15.0
 
   Each of these can be written in terms of the remaining operators and boundary
   conditions; `test/Operators/finitedifference/unit_column.jl` contains a
-  testset ("Replacements for removed operators and boundary conditions") that
-  pins the replacements against the stencils they replace. For example, a
-  `SetValue(x₀)` boundary on `GradientC2F` is the same as
+  testset ("Boundary values and advection built from the primitive operators")
+  that pins each of these expressions against the stencil it reproduces. For
+  example, a `SetValue(x₀)` boundary on `GradientC2F` is the same as
   `SetGradient(Covariant3Vector(2 * (x[1] - x₀)))`, and `AdvectionC2C(v, θ)` is
   `InterpolateF2C()(dot(Contravariant3Vector(v), GradientC2F()(θ)))`.
   `MatrixFields.operator_matrix` now reports `LinVanLeerC2F` as a nonlinear

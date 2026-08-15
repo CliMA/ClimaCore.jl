@@ -815,6 +815,23 @@ x[3])`, where `x[1]` is the value at the center closest to the left boundary.
 The same logic applies to the right boundary. On periodic domains, indices
 wrap around instead.
 
+!!! note
+    The constant padding continues the field with a zero derivative along the
+    third coordinate line. On a terrain-following grid, the boundary is the
+    coordinate surface ``\\xi^3`` = const, and continuation with a zero
+    *wall-normal* derivative would instead require the ghost value
+    ``x[1] + (g^{31}/g^{33}) \\partial_1 x``, which a vertical stencil cannot
+    compute: it has no access to horizontal derivatives. The padding is
+    therefore a reconstruction closure in the coordinate-vertical direction,
+    not a physical boundary condition, and the difference only enters the
+    reconstruction at the faces nearest each boundary (measured for
+    `LinVanLeerC2F` on the Schar ridge of `examples/hybrid/plane/`, where
+    ``|g^{31}/g^{33}|`` reaches 0.059: up to 3% of the near-wall flux). The
+    flux *through* the boundary itself is not set by this padding: it is
+    imposed by the enclosing operator, as the tests and examples do with
+    `DivergenceF2C(; SetValue(Contravariant3Vector(0)))`, whose contravariant
+    component is the flow normal to the boundary surface.
+
 By default, it is assumed that the operator is only a function of the velocity at the current
 face. If the operator is a function of the velocity at neighboring faces, then the operator should define
 
@@ -944,7 +961,9 @@ end
 
 # we treat all faces like interior faces: out-of-range stencil indices are
 # clamped to the domain, which pads the ghost cells with the same value as the
-# closest interior point (indices wrap on periodic domains instead)
+# closest interior point (indices wrap on periodic domains instead). On
+# terrain-following grids, this padding is constant along the third coordinate
+# line, not along the wall normal; see the note on NonLinearAdvectionOperator.
 Base.@propagate_inbounds function stencil_interior(
     op::NonLinearAdvectionOperator,
     space,
@@ -1162,7 +1181,9 @@ Supported boundary conditions are:
     boundary faces, and so this operator should not be materialized directly: it
     needs to be composed with another operator that does not make use of this
     value, e.g. a [`DivergenceF2C`](@ref) operator, with a [`SetValue`]
-    (@ref) boundary.
+    (@ref) boundary. The one-sided reconstructions are taken along the third
+    coordinate line; on a terrain-following grid that is not the wall-normal
+    direction (see the note on [`NonLinearAdvectionOperator`](@ref)).
 """
 struct Upwind3rdOrderBiasedProductC2F{BCS} <: AdvectionOperator
     bcs::BCS
@@ -1221,7 +1242,7 @@ This operator does not accept boundary conditions: like all
 interior stencil, padding ghost cells with the value of the closest interior
 point. Since the padded values make both one-sided differences of `x` vanish
 there, the corrected antidiffusive flux is zero at the two faces nearest each
-boundary, matching the removed `FirstOrderOneSided` boundary condition.
+boundary.
 """
 struct FCTBorisBook{BCS <: @NamedTuple{}} <: NonLinearAdvectionOperator
     bcs::BCS
@@ -1263,9 +1284,8 @@ This stencil is based on [zalesak1979fully](@cite), as reported in [durran2010]
 This operator does not accept boundary conditions: like all
 [`NonLinearAdvectionOperator`](@ref)s, boundary faces are computed with the
 interior stencil, padding ghost cells with the value of the closest interior
-point. Previously, the `FirstOrderOneSided` boundary condition forced the
-corrected antidiffusive flux to zero at the two faces nearest each boundary;
-these faces now use the ghost-cell-padded stencil instead.
+point. The corrected antidiffusive flux at the two faces nearest each boundary
+is therefore whatever that padded stencil gives, not zero.
 """
 struct FCTZalesak{BCS <: @NamedTuple{}} <: NonLinearAdvectionOperator
     bcs::BCS
@@ -1439,9 +1459,8 @@ velocity field `u` in another basis).
 This operator does not accept boundary conditions: like all
 [`NonLinearAdvectionOperator`](@ref)s, boundary faces are computed with the
 interior stencil, padding ghost cells with the value of the closest interior
-point. Previously, the `FirstOrderOneSided` boundary condition forced the
-limited flux to zero at the two faces nearest each boundary; these faces now
-use the ghost-cell-padded stencil instead.
+point. The limited flux at the two faces nearest each boundary is therefore
+whatever that padded stencil gives, not zero.
 """
 struct TVDLimitedFluxC2F{BCS <: @NamedTuple{}, M} <: NonLinearAdvectionOperator
     bcs::BCS
@@ -1651,6 +1670,16 @@ The following boundary conditions are supported:
   ```math
   G(x)[\\tfrac{1}{2}] = v₀
   ```
+
+!!! note
+    `v₀` is projected onto the covariant 3 axis, so it prescribes
+    ``\\partial x / \\partial \\xi^3``, the derivative along the third
+    coordinate line. On a terrain-following grid the boundary is the coordinate
+    surface ``\\xi^3`` = const, whose normal derivative is the contravariant 3
+    component ``g^{31} \\partial_1 x + g^{33} \\partial_3 x``. The two differ
+    wherever ``g^{31}`` is nonzero, so `SetGradient(Covariant3Vector(0))` is a
+    zero normal derivative only where the boundary is flat; elsewhere the value
+    that gives one is ``-g^{31} \\partial_1 x / g^{33}``.
 """
 struct GradientC2F{BC} <: GradientOperator
     bcs::BC

@@ -135,7 +135,6 @@ function rhs_invariant!(dY, Y, _, t)
         top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
     )
-    vdivc2f = Operators.DivergenceC2F()
     # we want the total u³ at the boundary to be zero: we can either constrain
     # both to be zero, or allow one to be non-zero and set the other to be its
     # negation
@@ -204,12 +203,13 @@ function rhs_invariant!(dY, Y, _, t)
 
     lg_field_faces = Fields.local_geometry_field(axes(fw))
     lg_field_centers = Fields.local_geometry_field(axes(cρ))
-    # Only `J` on the boundary faces is needed below, and it has to end up on the same
-    # level space as the center quantities, so shift the face `J` (a scalar field) onto
-    # centers: `LeftBiasedF2C(x)[i] = x[i-half]`, so its first level is the bottom face,
-    # and `RightBiasedF2C(x)[i] = x[i+half]`, so its last level is the top face. Shifting
-    # the whole `LocalGeometry` field instead is not supported, because a finite
-    # difference operator multiplies its argument by an operator matrix row.
+    # Only `J` on the boundary faces is needed below, on the same level space
+    # as the center quantities, so the face `J` (a scalar field) is shifted
+    # onto centers: `LeftBiasedF2C(x)[i] = x[i-half]`, so its first level is
+    # the bottom face, and `RightBiasedF2C(x)[i] = x[i+half]`, so its last
+    # level is the top face. The whole `LocalGeometry` field cannot be shifted
+    # instead, because a finite difference operator multiplies its argument by
+    # an operator matrix row.
     J_bottom_face = Fields.level(Operators.LeftBiasedF2C().(lg_field_faces.J), 1)
     J_top_face = Fields.level(
         Operators.RightBiasedF2C().(lg_field_faces.J),
@@ -227,12 +227,12 @@ function rhs_invariant!(dY, Y, _, t)
         Geometry.Jcontravariant3(κ₂ * ᶜ∇ᵥw_top, lg_top_center) *
         (-2 * inv(J_top_face)),
     )
-    set_bcs = Operators.SetBoundaryOperator(
-        bottom = Operators.SetValue(bottom_divergence),
-        top = Operators.SetValue(top_divergence),
+    vdivc2f_bcs = Operators.DivergenceC2F(
+        bottom = Operators.SetDivergence(bottom_divergence),
+        top = Operators.SetDivergence(top_divergence),
     )
 
-    vκ₂∇²w = @. set_bcs(vdivc2f(κ₂ * ᶜ∇ᵥw))
+    vκ₂∇²w = @. vdivc2f_bcs(κ₂ * ᶜ∇ᵥw)
     hκ₂∇²h_tot = @. hwdiv(cρ * κ₂ * ᶜ∇ₕh_tot)
     vκ₂∇²h_tot = @. vdivf2c(fρ * κ₂ * ᶠ∇ᵥh_tot)
 
