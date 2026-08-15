@@ -841,7 +841,8 @@ return_eltype(::NonLinearAdvectionOperator, V, args...) =
 return_space(
     ::NonLinearAdvectionOperator,
     velocity_space::AllFaceFiniteDifferenceSpace,
-    args...,
+    arg_space::AllCenterFiniteDifferenceSpace,
+    extra_param_spaces...,
 ) = velocity_space
 advection_velocity_width(::NonLinearAdvectionOperator) = Val(:current)
 velocity_stencil_width(::Val{:current}) = (0, 0)
