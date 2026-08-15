@@ -69,11 +69,14 @@ InterpolateC2F
 InterpolateF2C
 WeightedInterpolateC2F
 WeightedInterpolateF2C
+AdvectionOperator
+NonLinearAdvectionOperator
 UpwindBiasedProductC2F
 Upwind3rdOrderBiasedProductC2F
 FCTBorisBook
 FCTZalesak
 LinVanLeerC2F
+TVDLimitedFluxC2F
 LeftBiasedC2F
 RightBiasedC2F
 LeftBiasedF2C

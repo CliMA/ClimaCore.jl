@@ -98,6 +98,45 @@ v0.15.0
   `MatrixFields.operator_matrix` now reports `LinVanLeerC2F` as a nonlinear
   operator instead of failing with a `MethodError`.
 
+- ![][badge-💥breaking] Added the `Operators.NonLinearAdvectionOperator` abstract
+  type for non-linear advection operators, and converted `LinVanLeerC2F`,
+  `FCTBorisBook`, `FCTZalesak`, and `TVDLimitedFluxC2F` into ones.
+  These operators do not take boundary conditions: every face is computed with the
+  interior stencil, with out-of-range stencil indices clamped to the domain, which
+  is equivalent to padding each input field with ghost cells that hold the value of
+  the closest interior point (on periodic domains, indices wrap as before).
+  Subtypes only define a pointwise function of the velocity and the advected-field
+  stencil values; `stencil_interior`, `return_eltype`, `return_space`, and the
+  stencil widths are provided by the abstract type. Consequently, these operators
+  are now constructed without `bottom`/`top` boundary conditions (e.g.
+  `LinVanLeerC2F(; constraint)`, `FCTZalesak()`) and error if any are passed.
+  Since each operator advects a single center-valued argument, `FCTZalesak` now
+  takes its two advected quantities as a single field with 2-tuple elements:
+  `FCTZalesak.(A, Φ, Φᵗᵈ)` becomes `FCTZalesak.(A, tuple.(Φ, Φᵗᵈ))` (or
+  `FCTZalesak(A, tuple(Φ, Φᵗᵈ))` inside `@.`).
+  Broadcast arguments beyond the velocity and advected field are evaluated at the
+  current face and passed through as is, so `TVDLimitedFluxC2F` now requires its
+  upwinding velocity `𝓊` to be supplied as contravariant data: either a
+  `Contravariant3Vector` field, or a scalar field holding the contravariant3
+  component, e.g.
+  `Geometry.contravariant3.(u, Fields.local_geometry_field(face_space))`.
+  All interior stencils are unchanged, and these operators can now be materialized
+  directly. On non-periodic domains, the two faces nearest each boundary now use
+  the ghost-cell-padded interior stencil instead of the removed
+  `FirstOrderOneSided`/`ThirdOrderOneSided` boundary reconstructions:
+  - `LinVanLeerC2F` previously used one-sided first-order upwind reconstructions
+    there; it now uses the ghost-cell-padded limited stencil.
+  - `FCTBorisBook` previously returned a zero antidiffusive flux there, and it
+    still does, since the padded ghost cells make the one-sided differences that
+    bound the corrected flux vanish; its results are unchanged everywhere.
+  - `FCTZalesak` and `TVDLimitedFluxC2F` previously forced their corrected or
+    limited fluxes to zero there; they now compute the ghost-cell-padded stencil
+    instead.
+
+  `MatrixFields.operator_matrix` now reports every `NonLinearAdvectionOperator`
+  (including `TVDLimitedFluxC2F`, which previously threw a `MethodError`) as a
+  nonlinear operator that cannot be represented by a matrix.
+
 - ![][badge-🔥behavioralΔ] Unified strong/weak spectral element operator variants
   via a `FormType` parameter. `Divergence`, `Gradient`, and `Curl` now carry a
   second type parameter (`StrongForm` or `WeakForm`), and `WeakDivergence`,

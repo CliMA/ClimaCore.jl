@@ -685,8 +685,6 @@ end
         c = sin.(centers)
 
         SLMethod = Operators.LinVanLeerC2F(
-            bottom = Operators.FirstOrderOneSided(),
-            top = Operators.FirstOrderOneSided(),
             constraint = Operators.MonotoneLocalExtrema(),
         )
 
@@ -743,8 +741,6 @@ end
         c = sin.(centers)
 
         SLMethod = Operators.LinVanLeerC2F(;
-            bottom = Operators.FirstOrderOneSided(),
-            top = Operators.FirstOrderOneSided(),
             constraint = Operators.MonotoneHarmonic(),
         )
 
@@ -801,8 +797,6 @@ end
         c = sin.(centers)
 
         SLMethod = Operators.LinVanLeerC2F(
-            bottom = Operators.FirstOrderOneSided(),
-            top = Operators.FirstOrderOneSided(),
             constraint = Operators.PositiveDefinite(),
         )
 

@@ -23,6 +23,7 @@ import ClimaCore.Operators:
     FCTBorisBook,
     FCTZalesak,
     LinVanLeerC2F,
+    TVDLimitedFluxC2F,
     SetBoundaryOperator,
     GradientC2F,
     GradientF2C,
@@ -165,9 +166,12 @@ end
     @test_throws "nonlinear" MatrixFields.operator_matrix(FCTZalesak())
     @test_throws "nonlinear" MatrixFields.operator_matrix(
         LinVanLeerC2F(;
-            bottom = FirstOrderOneSided(),
-            top = FirstOrderOneSided(),
             constraint = ClimaCore.Operators.AlgebraicMean(),
+        ),
+    )
+    @test_throws "nonlinear" MatrixFields.operator_matrix(
+        TVDLimitedFluxC2F(;
+            method = ClimaCore.Operators.MinModLimiter(),
         ),
     )
 end

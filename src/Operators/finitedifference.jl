@@ -391,7 +391,7 @@ abstract type InterpolationOperator <: FiniteDifferenceOperator end
 
 function assert_no_bcs(op, kwargs)
     length(kwargs) == 0 && return nothing
-    error("InterpolateF2C does not accept boundary conditions.")
+    error("$op does not accept boundary conditions.")
 end
 
 import UnrolledUtilities as UU
@@ -779,9 +779,168 @@ boundary_width(::WeightedInterpolateC2F, ::AbstractBoundaryCondition) = 1
 # or from a SetBoundaryOperator applied to the result (for SetValue); see
 # MatrixFields/operator_matrices.jl.
 
+"""
+    AdvectionOperator
+
+An abstract type for advection operators. Non linear operators should subtype
+[`NonLinearAdvectionOperator`](@ref).
+"""
 abstract type AdvectionOperator <: FiniteDifferenceOperator end
 return_eltype(::AdvectionOperator, velocity, arg) = eltype(arg)
 
+"""
+    NonLinearAdvectionOperator
+
+An abstract type for non-linear advection operators. Non linear operators should
+subtype this type. As of now, advection operators that do the following are supported:
+
+Given a face-valued velocity field `v` and a center-valued field `x`, for each
+face `i` the advection operator computes a function of the form
+`f(v[i-1], v[i], v[i+1], x[i-3/2], x[i-1/2], x[i+1/2], x[i+3/2])` or
+`f(v[i], x[i-3/2], x[i-1/2], x[i+1/2], x[i+3/2])`
+and returns a contravariant3 component. On non-periodic domains, all faces are
+treated like interior faces, with out-of-range stencil indices clamped to the
+domain; this is equivalent to padding each field with ghost cells that hold the
+value of the closest interior point. The velocity field is treated the same
+way. Concretely, at the left boundary face `i=1/2` the function is computed as
+`f(v[1/2], v[1/2], v[3/2], x[1], x[1], x[1], x[2])`, and at the first interior
+face `i=3/2` it is computed as `f(v[1/2], v[3/2], v[5/2], x[1], x[1], x[2],
+x[3])`, where `x[1]` is the value at the center closest to the left boundary.
+The same logic applies to the right boundary. On periodic domains, indices
+wrap around instead.
+
+By default, it is assumed that the operator is only a function of the velocity at the current
+face. If the operator is a function of the velocity at neighboring faces, then the operator should define
+
+`Operators.advection_velocity_width(::SomeNonLinearAdvectionOperator) = Val(:neighboring)`
+and the operator will be evaluated with the velocity at neighboring faces as well. The default is `Val(:current)`.
+
+The advected field is the broadcast argument following the velocity. An
+operator that is a function of the stencils of multiple center-valued
+quantities (e.g. [`FCTZalesak`](@ref)) should take a single center-valued field
+whose elements are tuples of those quantities (e.g. `op.(v, tuple.(x, y))`);
+each of the 4 stencil values passed to the operator is then such a tuple.
+
+Subtypes of this abstract type should be callable, with a method of the form:
+    `(::SomeNonLinearAdvectionOperator)(v, x⁻⁻, x⁻, x⁺, x⁺⁺, extra_params...)`
+or
+    `(::SomeNonLinearAdvectionOperator)(v⁻, v, v⁺, x⁻⁻, x⁻, x⁺, x⁺⁺, extra_params...)`
+if the operator is a function of the velocity at neighboring faces. All
+velocity arguments are supplied as the contravariant3 component of the
+face-valued velocity field, and `extra_params` are any broadcast arguments
+beyond the velocity and advected field (e.g. `dt`), evaluated at the current
+face and passed through as is. In particular, a vector-valued extra parameter
+is not converted: an operator that needs one in contravariant form (e.g. a
+velocity used only to determine the upwind direction, as in
+[`TVDLimitedFluxC2F`](@ref)) should require its callers to supply it as
+contravariant data.
+"""
+abstract type NonLinearAdvectionOperator <: AdvectionOperator end
+return_eltype(::NonLinearAdvectionOperator, V, args...) =
+    Geometry.Contravariant3Vector{eltype(eltype(V))}
+return_space(
+    ::NonLinearAdvectionOperator,
+    velocity_space::AllFaceFiniteDifferenceSpace,
+    args...,
+) = velocity_space
+advection_velocity_width(::NonLinearAdvectionOperator) = Val(:current)
+velocity_stencil_width(::Val{:current}) = (0, 0)
+velocity_stencil_width(::Val{:neighboring}) = (-1, 1)
+boundary_width(::NonLinearAdvectionOperator, ::AbstractBoundaryCondition) = 0
+stencil_interior_width(
+    op::NonLinearAdvectionOperator,
+    velocity,
+    arg,
+    extra_params...,
+) = (
+    velocity_stencil_width(advection_velocity_width(op)),
+    (-half - 1, half + 1),
+    map(Returns((0, 0)), extra_params)...,
+)
+
+Base.@propagate_inbounds function advection_velocities(
+    ::Val{:current},
+    space,
+    idx,
+    hidx,
+    velocity,
+)
+    v = Geometry.contravariant3(
+        getidx(space, velocity, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+    return (v,)
+end
+
+Base.@propagate_inbounds function advection_velocities(
+    ::Val{:neighboring},
+    space,
+    idx,
+    hidx,
+    velocity,
+)
+    idx⁻, idx⁺ = if Topologies.isperiodic(space)
+        (idx - 1, idx + 1) # getidx and LocalGeometry wrap periodic indices
+    else
+        lf = left_face_boundary_idx(space)
+        rf = right_face_boundary_idx(space)
+        (max(idx - 1, lf), min(idx + 1, rf))
+    end
+    v⁻ = Geometry.contravariant3(
+        getidx(space, velocity, idx⁻, hidx),
+        Geometry.LocalGeometry(space, idx⁻, hidx),
+    )
+    v = Geometry.contravariant3(
+        getidx(space, velocity, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+    v⁺ = Geometry.contravariant3(
+        getidx(space, velocity, idx⁺, hidx),
+        Geometry.LocalGeometry(space, idx⁺, hidx),
+    )
+    return (v⁻, v, v⁺)
+end
+
+# we treat all faces like interior faces: out-of-range stencil indices are
+# clamped to the domain, which pads the ghost cells with the same value as the
+# closest interior point (indices wrap on periodic domains instead)
+Base.@propagate_inbounds function stencil_interior(
+    op::NonLinearAdvectionOperator,
+    space,
+    idx,
+    hidx,
+    velocity,
+    arg,
+    extra_params...,
+)
+    i⁻⁻, i⁻, i⁺, i⁺⁺ = if Topologies.isperiodic(space)
+        (idx - half - 1, idx - half, idx + half, idx + half + 1)
+    else
+        lc = left_center_boundary_idx(space)
+        rc = right_center_boundary_idx(space)
+        (
+            clamp(idx - half - 1, lc, rc),
+            clamp(idx - half, lc, rc),
+            clamp(idx + half, lc, rc),
+            clamp(idx + half + 1, lc, rc),
+        )
+    end
+    a⁻⁻ = getidx(space, arg, i⁻⁻, hidx)
+    a⁻ = getidx(space, arg, i⁻, hidx)
+    a⁺ = getidx(space, arg, i⁺, hidx)
+    a⁺⁺ = getidx(space, arg, i⁺⁺, hidx)
+    vs = advection_velocities(
+        advection_velocity_width(op),
+        space,
+        idx,
+        hidx,
+        velocity,
+    )
+    params = map(param -> getidx(space, param, idx, hidx), extra_params)
+    return Geometry.Contravariant3Vector(
+        op(vs..., a⁻⁻, a⁻, a⁺, a⁺⁺, params...),
+    )
+end
 """
     U = UpwindBiasedProductC2F(;boundaries)
     U.(v, x)
@@ -836,10 +995,13 @@ stencil_interior_width(::UpwindBiasedProductC2F, velocity, arg) =
 boundary_width(::UpwindBiasedProductC2F, ::AbstractBoundaryCondition) = 1
 
 """
-    LinVanLeerC2F
+    LVL = LinVanLeerC2F(; constraint)
+    LVL.(v, x, dt)
 
-Following the van Leer class of limiters as noted in[Lin1994](@cite), four
-limiter constraint options are provided for use with advection operators:
+Compute the product of the face-valued vector field `v` and a center-valued
+field `x` at cell faces using a slope-limited reconstruction of `x`, following
+the van Leer class of limiters as noted in [Lin1994](@cite). Four limiter
+constraint options are provided:
 
 - `AlgebraicMean`: Algebraic mean, this guarantees neither positivity nor
   monotonicity (eq 2, `avg`)
@@ -856,27 +1018,22 @@ cases (discussed in Lin et al (1994)) include setting the 𝜙_min = 0 or 𝜙_m
 saturation mixing ratio for water vapor are not considered here in favour of
 the generalized local extrema in equation (5a, 5b).
 
-Supported boundary conditions include:
-
- - [`FirstOrderOneSided`](@ref)
- - [`ThirdOrderOneSided`](@ref)
+This operator does not accept boundary conditions: like all
+[`NonLinearAdvectionOperator`](@ref)s, boundary faces are computed with the
+interior stencil, padding ghost cells with the value of the closest interior
+point.
 """
-struct LinVanLeerC2F{BCS, C} <: AdvectionOperator
+struct LinVanLeerC2F{BCS <: @NamedTuple{}, C} <: NonLinearAdvectionOperator
     bcs::BCS
     constraint::C
-    function LinVanLeerC2F(; constraint, kwargs...)
-        assert_valid_bcs(
-            "LinVanLeerC2F",
-            kwargs,
-            (FirstOrderOneSided, ThirdOrderOneSided),
-        )
-        new{typeof(NamedTuple(kwargs)), typeof(constraint)}(
-            NamedTuple(kwargs),
-            constraint,
-        )
-    end
-    LinVanLeerC2F(bcs, constraint) = LinVanLeerC2F(; constraint, bcs...)
 end
+function LinVanLeerC2F(; constraint, kwargs...)
+    assert_no_bcs("LinVanLeerC2F", kwargs)
+    LinVanLeerC2F(NamedTuple(), constraint)
+end
+
+@inline (op::LinVanLeerC2F)(v, a⁻⁻, a⁻, a⁺, a⁺⁺, dt) =
+    slope_limited_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺, dt, op.constraint)
 
 abstract type LimiterConstraint end
 struct AlgebraicMean <: LimiterConstraint end
@@ -889,16 +1046,6 @@ strip_space(op::LinVanLeerC2F, parent_space) = LinVanLeerC2F(
     NamedTuple{keys(op.bcs)}(strip_space_args(values(op.bcs), parent_space)),
     op.constraint,
 )
-
-return_eltype(::LinVanLeerC2F, V, A, dt) =
-    Geometry.Contravariant3Vector{eltype(eltype(V))}
-
-return_space(
-    ::LinVanLeerC2F,
-    velocity_space::AllFaceFiniteDifferenceSpace,
-    arg_space::AllCenterFiniteDifferenceSpace,
-    dt,
-) = velocity_space
 
 function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::MonotoneLocalExtrema)
     Δ𝜙_avg = ((a⁰ - a⁻) + (a⁺ - a⁰)) / 2
@@ -945,148 +1092,6 @@ function slope_limited_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺, dt, constraint)
         Δ𝛼 = compute_Δ𝛼_linvanleer(a⁻, a⁺, a⁺⁺, v, dt, constraint)
         return v * (a⁺ - Δ𝛼 / 2)
     end
-end
-
-stencil_interior_width(::LinVanLeerC2F, velocity, arg, dt) =
-    ((0, 0), (-half - 1, half + 1), (0, 0))
-
-Base.@propagate_inbounds function stencil_interior(
-    op::LinVanLeerC2F,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-    dt,
-)
-    a⁻ = getidx(space, arg, idx - half, hidx)
-    a⁻⁻ = getidx(space, arg, idx - half - 1, hidx)
-    a⁺ = getidx(space, arg, idx + half, hidx)
-    a⁺⁺ = getidx(space, arg, idx + half + 1, hidx)
-    vᶠ = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    return Geometry.Contravariant3Vector(
-        slope_limited_product(vᶠ, a⁻, a⁻⁻, a⁺, a⁺⁺, dt, op.constraint),
-    )
-end
-
-boundary_width(::LinVanLeerC2F, ::AbstractBoundaryCondition) = 2
-
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::LinVanLeerC2F,
-    bc::FirstOrderOneSided,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-    dt,
-)
-    @assert idx <= left_face_boundary_idx(space) + 1
-    v = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    # `a⁻` is `LeftBiasedC2F`'s interior stencil, inlined here (the operator remains,
-    # but its `stencil_interior` method is now derived from its operator matrix).
-    a⁻ = getidx(space, arg, idx - half, hidx)
-    # `a⁺` is the removed `RightBiased3rdOrderC2F` operator's interior stencil, inlined
-    # here because this is now its only remaining use.
-    a⁺ =
-        (
-            4 * getidx(space, arg, idx - half, hidx) +
-            10 * getidx(space, arg, idx + half, hidx) -
-            2 * getidx(space, arg, idx + half + 1, hidx)
-        ) / 12
-    return Geometry.Contravariant3Vector(upwind_biased_product(v, a⁻, a⁺))
-end
-
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::LinVanLeerC2F,
-    bc::FirstOrderOneSided,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-    dt,
-)
-    @assert idx >= right_face_boundary_idx(space) - 1
-    v = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    # `a⁻` is the removed `LeftBiased3rdOrderC2F` operator's interior stencil, inlined
-    # here because this is now its only remaining use.
-    a⁻ =
-        (
-            -2 * getidx(space, arg, idx - 1 - half, hidx) +
-            10 * getidx(space, arg, idx - half, hidx) +
-            4 * getidx(space, arg, idx + half, hidx)
-        ) / 12
-    # `a⁺` is `RightBiasedC2F`'s interior stencil, inlined here (the operator remains,
-    # but its `stencil_interior` method is now derived from its operator matrix).
-    a⁺ = getidx(space, arg, idx + half, hidx)
-    return Geometry.Contravariant3Vector(upwind_biased_product(v, a⁻, a⁺))
-
-end
-
-Base.@propagate_inbounds function stencil_left_boundary(
-    op::LinVanLeerC2F,
-    bc::ThirdOrderOneSided,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-    dt,
-)
-    @assert idx <= left_face_boundary_idx(space) + 1
-
-    vᶠ = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    # `a` is the removed `RightBiased3rdOrderC2F` operator's interior stencil, inlined
-    # here because this is now its only remaining use.
-    a =
-        (
-            4 * getidx(space, arg, idx - half, hidx) +
-            10 * getidx(space, arg, idx + half, hidx) -
-            2 * getidx(space, arg, idx + half + 1, hidx)
-        ) / 12
-
-    return Geometry.Contravariant3Vector(vᶠ * a)
-end
-
-Base.@propagate_inbounds function stencil_right_boundary(
-    op::LinVanLeerC2F,
-    bc::ThirdOrderOneSided,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-    dt,
-)
-    @assert idx >= right_face_boundary_idx(space) - 1
-
-    vᶠ = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    # `a` is the removed `LeftBiased3rdOrderC2F` operator's interior stencil, inlined
-    # here because this is now its only remaining use.
-    a =
-        (
-            -2 * getidx(space, arg, idx - 1 - half, hidx) +
-            10 * getidx(space, arg, idx - half, hidx) +
-            4 * getidx(space, arg, idx + half, hidx)
-        ) / 12
-
-    return Geometry.Contravariant3Vector(vᶠ * a)
 end
 
 """
@@ -1150,7 +1155,7 @@ boundary_width(::Upwind3rdOrderBiasedProductC2F, ::AbstractBoundaryCondition) =
     2
 
 """
-    U = FCTBorisBook(;boundaries)
+    U = FCTBorisBook()
     U.(v, x)
 
 Correct the flux using the flux-corrected transport formulation by Boris and
@@ -1170,35 +1175,20 @@ where ``s[i] = +1`` if  `` v[i] \\geq 0`` and ``s[i] = -1`` if  `` v
 flux. This formulation is based on [BorisBook1973](@cite), as reported in
 [durran2010](@cite) section 5.4.1.
 
-Supported boundary conditions are:
-- [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind reconstruction
-  to compute `x` on the left boundary, and the first-order upwind
-  reconstruction to compute `x` on the right boundary.
-
-!!! note
-    Similar to the [`Upwind3rdOrderBiasedProductC2F`](@ref) operator, these
-    boundary conditions do not define the value at the actual boundary faces,
-    and so this operator cannot be materialized directly: it needs to be
-    composed with another operator that does not make use of this value, e.g. a
-    [`DivergenceF2C`](@ref) operator, with a [`SetValue`](@ref) boundary.
+This operator does not accept boundary conditions: like all
+[`NonLinearAdvectionOperator`](@ref)s, boundary faces are computed with the
+interior stencil, padding ghost cells with the value of the closest interior
+point. Since the padded values make both one-sided differences of `x` vanish
+there, the corrected antidiffusive flux is zero at the two faces nearest each
+boundary, matching the removed `FirstOrderOneSided` boundary condition.
 """
-struct FCTBorisBook{BCS} <: AdvectionOperator
+struct FCTBorisBook{BCS <: @NamedTuple{}} <: NonLinearAdvectionOperator
     bcs::BCS
-    function FCTBorisBook(; kwargs...)
-        assert_valid_bcs("FCTBorisBook", kwargs, (FirstOrderOneSided,))
-        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
-    end
-    FCTBorisBook(bcs) = FCTBorisBook(; bcs...)
 end
-
-return_eltype(::FCTBorisBook, V, A) =
-    Geometry.Contravariant3Vector{eltype(eltype(V))}
-
-return_space(
-    ::FCTBorisBook,
-    velocity_space::AllFaceFiniteDifferenceSpace,
-    arg_space::AllCenterFiniteDifferenceSpace,
-) = velocity_space
+function FCTBorisBook(; kwargs...)
+    assert_no_bcs("FCTBorisBook", kwargs)
+    FCTBorisBook(NamedTuple())
+end
 
 fct_boris_book(v, a⁻⁻, a⁻, a⁺, a⁺⁺) =
     ifelse(
@@ -1208,77 +1198,19 @@ fct_boris_book(v, a⁻⁻, a⁻, a⁺, a⁺⁺) =
         max(zero(v), min(abs(v), sign(v) * (a⁺⁺ - a⁺), sign(v) * (a⁻ - a⁻⁻))),
     )
 
-stencil_interior_width(::FCTBorisBook, velocity, arg) =
-    ((0, 0), (-half - 1, half + 1))
-
-Base.@propagate_inbounds function stencil_interior(
-    ::FCTBorisBook,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    a⁻⁻ = getidx(space, arg, idx - half - 1, hidx)
-    a⁻ = getidx(space, arg, idx - half, hidx)
-    a⁺ = getidx(space, arg, idx + half, hidx)
-    a⁺⁺ = getidx(space, arg, idx + half + 1, hidx)
-    vᶠ = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    return Geometry.Contravariant3Vector(fct_boris_book(vᶠ, a⁻⁻, a⁻, a⁺, a⁺⁺))
-end
-
-boundary_width(::FCTBorisBook, ::AbstractBoundaryCondition) = 2
-
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::FCTBorisBook,
-    bc::FirstOrderOneSided,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    @assert idx <= left_face_boundary_idx(space) + 1
-
-    vᶠ = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    return Geometry.Contravariant3Vector(zero(eltype(vᶠ)))
-end
-
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::FCTBorisBook,
-    bc::FirstOrderOneSided,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    @assert idx >= right_face_boundary_idx(space) - 1
-
-    vᶠ = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    return Geometry.Contravariant3Vector(zero(eltype(vᶠ)))
-end
+@inline (op::FCTBorisBook)(v, a⁻⁻, a⁻, a⁺, a⁺⁺) =
+    fct_boris_book(v, a⁻⁻, a⁻, a⁺, a⁺⁺)
 
 """
-    U = FCTZalesak(;boundaries)
-    U.(A, Φ, Φᵗᵈ)
+    U = FCTZalesak()
+    U.(A, tuple.(Φ, Φᵗᵈ))
 
 Correct the flux using the flux-corrected transport formulation by Zalesak
 [zalesak1979fully](@cite).
 
 Input arguments:
 - a face-valued vector field `A`
-- a center-valued field `Φ`
-- a center-valued field `Φᵗᵈ`
+- a center-valued field whose elements are 2-tuples of `Φ` and `Φᵗᵈ`
 
 ```math
 Φ_j^{n+1} = Φ_j^{td} - (C_{j+\\frac{1}{2}}A_{j+\\frac{1}{2}} - C_{j-\\frac{1}{2}}A_{j-\\frac{1}{2}})
@@ -1287,66 +1219,30 @@ Input arguments:
 This stencil is based on [zalesak1979fully](@cite), as reported in [durran2010]
 (@cite) section 5.4.2, where ``C`` denotes the corrected antidiffusive flux.
 
-Supported boundary conditions are:
-
-- [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind reconstruction
-  to compute `x` on the left boundary, and the first-order upwind
-  reconstruction to compute `x` on the right boundary.
-
-!!! note
-    Similar to the [`Upwind3rdOrderBiasedProductC2F`](@ref) operator, these
-    boundary conditions do not define the value at the actual boundary faces,
-    and so this operator cannot be materialized directly: it needs to be
-    composed with another operator that does not make use of this value, e.g.
-    a [`DivergenceF2C`](@ref) operator, with a [`SetValue`](@ref) boundary.
+This operator does not accept boundary conditions: like all
+[`NonLinearAdvectionOperator`](@ref)s, boundary faces are computed with the
+interior stencil, padding ghost cells with the value of the closest interior
+point. Previously, the `FirstOrderOneSided` boundary condition forced the
+corrected antidiffusive flux to zero at the two faces nearest each boundary;
+these faces now use the ghost-cell-padded stencil instead.
 """
-struct FCTZalesak{BCS} <: AdvectionOperator
+struct FCTZalesak{BCS <: @NamedTuple{}} <: NonLinearAdvectionOperator
     bcs::BCS
-    function FCTZalesak(; kwargs...)
-        assert_valid_bcs("FCTZalesak", kwargs, (FirstOrderOneSided,))
-        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
-    end
-    FCTZalesak(bcs) = FCTZalesak(; bcs...)
+end
+function FCTZalesak(; kwargs...)
+    assert_no_bcs("FCTZalesak", kwargs)
+    FCTZalesak(NamedTuple())
 end
 
-return_eltype(::FCTZalesak, A, Φ, Φᵗᵈ) =
-    Geometry.Contravariant3Vector{eltype(eltype(A))}
+advection_velocity_width(::FCTZalesak) = Val(:neighboring)
 
-return_space(
-    ::FCTZalesak,
-    A_space::AllFaceFiniteDifferenceSpace,
-    Φ_space::AllCenterFiniteDifferenceSpace,
-    Φᵗᵈ_space::AllCenterFiniteDifferenceSpace,
-) = A_space
-
-stencil_interior_width(::FCTZalesak, A_space, Φ_space, Φᵗᵈ_space) =
-    ((-1, 1), (-half - 1, half + 1), (-half - 1, half + 1))
-
-Base.@propagate_inbounds function stencil_interior(
-    ::FCTZalesak,
-    space,
-    idx,
-    hidx,
-    A_field,
-    Φ_field,
-    Φᵗᵈ_field,
-)
+@inline function (op::FCTZalesak)(A₋₁, A, A₊₁, x₋₃₂, x₋₁₂, x₊₁₂, x₊₃₂)
+    # each stencil value is a 2-tuple of (Φ, Φᵗᵈ)
+    (ϕ₋₃₂, ϕ₋₃₂ᵗᵈ) = x₋₃₂
+    (ϕ₋₁₂, ϕ₋₁₂ᵗᵈ) = x₋₁₂
+    (ϕ₊₁₂, ϕ₊₁₂ᵗᵈ) = x₊₁₂
+    (ϕ₊₃₂, ϕ₊₃₂ᵗᵈ) = x₊₃₂
     # 1/dt is in ϕ₋₃₂, ϕ₋₁₂, ϕ₊₁₂, ϕ₊₃₂, ϕ₋₃₂ᵗᵈ, ϕ₋₁₂ᵗᵈ, ϕ₊₁₂ᵗᵈ, ϕ₊₃₂ᵗᵈ
-    ϕ₋₃₂ = getidx(space, Φ_field, idx - half - 1, hidx)
-    ϕ₋₁₂ = getidx(space, Φ_field, idx - half, hidx)
-    ϕ₊₁₂ = getidx(space, Φ_field, idx + half, hidx)
-    ϕ₊₃₂ = getidx(space, Φ_field, idx + half + 1, hidx)
-    ϕ₋₃₂ᵗᵈ = getidx(space, Φᵗᵈ_field, idx - half - 1, hidx)
-    ϕ₋₁₂ᵗᵈ = getidx(space, Φᵗᵈ_field, idx - half, hidx)
-    ϕ₊₁₂ᵗᵈ = getidx(space, Φᵗᵈ_field, idx + half, hidx)
-    ϕ₊₃₂ᵗᵈ = getidx(space, Φᵗᵈ_field, idx + half + 1, hidx)
-
-    lg₋₁ = Geometry.LocalGeometry(space, idx - 1, hidx)
-    lg = Geometry.LocalGeometry(space, idx, hidx)
-    lg₊₁ = Geometry.LocalGeometry(space, idx + 1, hidx)
-    A₋₁ = Geometry.contravariant3(getidx(space, A_field, idx - 1, hidx), lg₋₁)
-    A = Geometry.contravariant3(getidx(space, A_field, idx, hidx), lg)
-    A₊₁ = Geometry.contravariant3(getidx(space, A_field, idx + 1, hidx), lg₊₁)
 
     # 𝒮5.4.2 (1)  Durran (5.32)  Zalesak's cosmetic correction
     # which is usually omitted but used in Durran's textbook
@@ -1381,39 +1277,7 @@ Base.@propagate_inbounds function stencil_interior(
     R₊₁₂⁺ = ifelse(P₊₁₂⁺ > 0, min(1, (ϕ₊₁₂ᵐᵃˣ - ϕ₊₁₂ᵗᵈ) / P₊₁₂⁺), zero(A))
 
     A_fct = ifelse(A >= 0, min(R₊₁₂⁺, R₋₁₂⁻), min(R₋₁₂⁺, R₊₁₂⁻)) * A
-    return Geometry.Contravariant3Vector(A_fct)
-end
-
-boundary_width(::FCTZalesak, ::AbstractBoundaryCondition) = 2
-
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::FCTZalesak,
-    bc::FirstOrderOneSided,
-    space,
-    idx,
-    hidx,
-    A_field,
-    Φ_field,
-    Φᵗᵈ_field,
-)
-    @assert idx <= left_face_boundary_idx(space) + 1
-
-    return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
-end
-
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::FCTZalesak,
-    bc::FirstOrderOneSided,
-    space,
-    idx,
-    hidx,
-    A_field,
-    Φ_field,
-    Φᵗᵈ_field,
-)
-    @assert idx >= right_face_boundary_idx(space) - 1
-
-    return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
+    return A_fct
 end
 
 """
@@ -1428,8 +1292,7 @@ abstract type AbstractTVDSlopeLimiter end
 
 
 """
-    U = RZeroLimiter(;boundaries)
-    U.(𝒜, Φ, 𝓊)
+    RZeroLimiter()
 
 A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
 `TVDLimitedFluxC2F` for the general formulation.
@@ -1438,8 +1301,7 @@ struct RZeroLimiter <: AbstractTVDSlopeLimiter end
 limiter_coeff(r, ::RZeroLimiter) = zero(r)
 
 """
-    U = RHalfLimiter(;boundaries)
-    U.(𝒜, Φ, 𝓊)
+    RHalfLimiter()
 
 A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
 `TVDLimitedFluxC2F` for the general formulation.
@@ -1448,8 +1310,7 @@ struct RHalfLimiter <: AbstractTVDSlopeLimiter end
 limiter_coeff(r, ::RHalfLimiter) = one(r) / 2
 
 """
-    U = RMaxLimiter(;boundaries)
-    U.(𝒜, Φ, 𝓊)
+    RMaxLimiter()
 
 A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
 `TVDLimitedFluxC2F` for the general formulation.
@@ -1458,8 +1319,7 @@ struct RMaxLimiter <: AbstractTVDSlopeLimiter end
 limiter_coeff(r, ::RMaxLimiter) = one(r)
 
 """
-    U = MinModLimiter(;boundaries)
-    U.(𝒜, Φ, 𝓊)
+    MinModLimiter()
 
 A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
 `TVDLimitedFluxC2F` for the general formulation.
@@ -1468,8 +1328,7 @@ struct MinModLimiter <: AbstractTVDSlopeLimiter end
 limiter_coeff(r, ::MinModLimiter) = max(0, min(1, r))
 
 """
-    U = KorenLimiter(;boundaries)
-    U.(𝒜, Φ, 𝓊)
+    KorenLimiter()
 
 A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
 `TVDLimitedFluxC2F` for the general formulation.
@@ -1478,8 +1337,7 @@ struct KorenLimiter <: AbstractTVDSlopeLimiter end
 limiter_coeff(r, ::KorenLimiter) = max(0, min(2r, (1 + 2r) / 3, 2))
 
 """
-    U = SuperbeeLimiter(;boundaries)
-    U.(𝒜, Φ, 𝓊)
+    SuperbeeLimiter()
 
 A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
 `TVDLimitedFluxC2F` for the general formulation.
@@ -1488,8 +1346,7 @@ struct SuperbeeLimiter <: AbstractTVDSlopeLimiter end
 limiter_coeff(r, ::SuperbeeLimiter) = max(0, min(1, r), min(2, r))
 
 """
-    U = MonotonizedCentralLimiter(;boundaries)
-    U.(𝒜, Φ, 𝓊)
+    MonotonizedCentralLimiter()
 
 A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
 `TVDLimitedFluxC2F` for the general formulation.
@@ -1498,9 +1355,9 @@ struct MonotonizedCentralLimiter <: AbstractTVDSlopeLimiter end
 limiter_coeff(r, ::MonotonizedCentralLimiter) = max(0, min(2r, (1 + r) / 2, 2))
 
 """
-    TVDLimitedFluxC2F{BCS, M} <: AdvectionOperator
+    TVDLimitedFluxC2F{BCS, M} <: NonLinearAdvectionOperator
 
-    U = TVDLimitedFluxC2F(;boundaries)
+    U = TVDLimitedFluxC2F(; method)
     U.(𝒜, Φ, 𝓊)
 
 `𝒜`, following the notation of Durran (Numerical Methods for Fluid Dynamics, 2ⁿᵈ
@@ -1528,91 +1385,46 @@ Supported limiter types are
 - SuperbeeLimiter
 - MonotonizedCentralLimiter
 
-Supported boundary conditions are:
+The face-valued velocity `𝓊` is only used to determine the upwind direction,
+and must be supplied as contravariant data: either a `Contravariant3Vector`
+field, or a scalar field holding the contravariant3 component (e.g.
+`Geometry.contravariant3.(u, Fields.local_geometry_field(face_space))` for a
+velocity field `u` in another basis).
 
- - [`FirstOrderOneSided`](@ref)
+This operator does not accept boundary conditions: like all
+[`NonLinearAdvectionOperator`](@ref)s, boundary faces are computed with the
+interior stencil, padding ghost cells with the value of the closest interior
+point. Previously, the `FirstOrderOneSided` boundary condition forced the
+limited flux to zero at the two faces nearest each boundary; these faces now
+use the ghost-cell-padded stencil instead.
 """
-struct TVDLimitedFluxC2F{BCS, M} <: AdvectionOperator
+struct TVDLimitedFluxC2F{BCS <: @NamedTuple{}, M} <: NonLinearAdvectionOperator
     bcs::BCS
     method::M
-    function TVDLimitedFluxC2F(; method, kwargs...)
-        assert_valid_bcs("TVDLimitedFluxC2F", kwargs, (FirstOrderOneSided,))
-        new{typeof(NamedTuple(kwargs)), typeof(method)}(
-            NamedTuple(kwargs),
-            method,
-        )
-    end
-    TVDLimitedFluxC2F(bcs, method) = TVDLimitedFluxC2F(; method, bcs...)
+end
+function TVDLimitedFluxC2F(; method, kwargs...)
+    assert_no_bcs("TVDLimitedFluxC2F", kwargs)
+    TVDLimitedFluxC2F(NamedTuple(), method)
 end
 
-return_eltype(::TVDLimitedFluxC2F, A, Φ, 𝓊) =
-    Geometry.Contravariant3Vector{eltype(eltype(A))}
-
-return_space(
-    ::TVDLimitedFluxC2F,
-    A_space::AllFaceFiniteDifferenceSpace,
-    Φ_space::AllCenterFiniteDifferenceSpace,
-    u_space::AllFaceFiniteDifferenceSpace,
-) = A_space
-
-stencil_interior_width(::TVDLimitedFluxC2F, A_space, Φ_space, u_space) =
-    ((-1, 1), (-half - 1, half + 1), (-1, +1))
-
-Base.@propagate_inbounds function stencil_interior(
-    op::TVDLimitedFluxC2F,
-    space,
-    idx,
-    hidx,
-    A_field,
-    Φ_field,
-    𝓊_field,
+strip_space(op::TVDLimitedFluxC2F, parent_space) = TVDLimitedFluxC2F(
+    NamedTuple{keys(op.bcs)}(strip_space_args(values(op.bcs), parent_space)),
+    op.method,
 )
-    ϕ₋₃₂ = getidx(space, Φ_field, idx - half - 1, hidx)
-    ϕ₋₁₂ = getidx(space, Φ_field, idx - half, hidx)
-    ϕ₊₁₂ = getidx(space, Φ_field, idx + half, hidx)
-    ϕ₊₃₂ = getidx(space, Φ_field, idx + half + 1, hidx)
 
-    lg = Geometry.LocalGeometry(space, idx, hidx)
-    𝓊 = Geometry.contravariant3(getidx(space, 𝓊_field, idx, hidx), lg)
-    A = Geometry.contravariant3(getidx(space, A_field, idx, hidx), lg)
-
+@inline (op::TVDLimitedFluxC2F)(
+    A,
+    ϕ₋₃₂,
+    ϕ₋₁₂,
+    ϕ₊₁₂,
+    ϕ₊₃₂,
+    𝓊::Geometry.Contravariant3Vector,
+) = op(A, ϕ₋₃₂, ϕ₋₁₂, ϕ₊₁₂, ϕ₊₃₂, 𝓊.u³)
+@inline function (op::TVDLimitedFluxC2F)(A, ϕ₋₃₂, ϕ₋₁₂, ϕ₊₁₂, ϕ₊₃₂, 𝓊)
     Δϕ = ϕ₊₁₂ - ϕ₋₁₂ + eps(typeof(ϕ₋₁₂))
     # Δϕ_clipped = sign(Δϕ) * max(abs(Δϕ), eps(typeof(Δϕ)))
     r = ifelse(𝓊 >= 0, ϕ₋₁₂ - ϕ₋₃₂, ϕ₊₃₂ - ϕ₊₁₂) / Δϕ # Δϕ_clipped
-
-    return Geometry.Contravariant3Vector(limiter_coeff(r, op.method) * A)
-end
-
-boundary_width(::TVDLimitedFluxC2F, ::AbstractBoundaryCondition) = 2
-
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::TVDLimitedFluxC2F,
-    bc::FirstOrderOneSided,
-    space,
-    idx,
-    hidx,
-    A_field,
-    Φ_field,
-    𝓊_field,
-)
-    @assert idx <= left_face_boundary_idx(space) + 1
-
-    return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
-end
-
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::TVDLimitedFluxC2F,
-    bc::FirstOrderOneSided,
-    space,
-    idx,
-    hidx,
-    A_field,
-    Φ_field,
-    𝓊_field,
-)
-    @assert idx >= right_face_boundary_idx(space) - 1
-
-    return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
+    return limiter_coeff(r, op.method) * A
 end
 
 abstract type BoundaryOperator <: FiniteDifferenceOperator end

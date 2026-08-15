@@ -95,10 +95,7 @@ function tendency!(yₜ, y, parameters, t)
         bottom = Operators.ThirdOrderOneSided(),
         top = Operators.ThirdOrderOneSided(),
     )
-    FCTZalesak = Operators.FCTZalesak(
-        bottom = Operators.FirstOrderOneSided(),
-        top = Operators.FirstOrderOneSided(),
-    )
+    FCTZalesak = Operators.FCTZalesak()
     hdiv = Operators.Divergence()
     hwdiv = Operators.WeakDivergence()
     hgrad = Operators.Gradient()
@@ -141,8 +138,7 @@ function tendency!(yₜ, y, parameters, t)
         Ic2f(ρ) * (
             upwind1(uᵥ, q1) + FCTZalesak(
                 upwind3(uᵥ, q1) - upwind1(uᵥ, q1),
-                q1 / dt,
-                q1 / dt - vdivf2c(Ic2f(ρ) * upwind1(uᵥ, q1)) / ρ,
+                tuple(q1 / dt, q1 / dt - vdivf2c(Ic2f(ρ) * upwind1(uᵥ, q1)) / ρ),
             )
         ),
     )

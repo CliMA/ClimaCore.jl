@@ -23,8 +23,7 @@ const TwoArgFDOperatorWithCenterInput = Union{
 const TwoArgFDOperatorWithFaceInput = Union{
     Operators.WeightedInterpolateF2C,
 }
-const NonlinearFDOperator =
-    Union{Operators.FCTBorisBook, Operators.FCTZalesak, Operators.LinVanLeerC2F}
+const NonlinearFDOperator = Operators.NonLinearAdvectionOperator
 
 const OneArgFDOperator =
     Union{OneArgFDOperatorWithCenterInput, OneArgFDOperatorWithFaceInput}
