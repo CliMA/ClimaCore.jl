@@ -39,6 +39,12 @@ max_eager_shmem_per_thread(
     bc::StencilBroadcasted{S, <:MultiplyColumnwiseBandMatrixField},
 ) where {S} =
     max(sizeof(cached_operand_type(bc)), _max_eager_shmem_over_args(bc.args))
+max_eager_shmem_per_thread(
+    bc::StencilBroadcasted{S, <:Operators.AdvectionOperator},
+) where {S} = max(
+    sizeof(advection_shmem_entry_type(bc)),
+    _max_eager_shmem_over_args(bc.args),
+)
 
 _max_eager_shmem_over_args(args::Tuple) = UnrolledUtilities.unrolled_mapreduce(
     max_eager_shmem_per_thread,
@@ -83,6 +89,24 @@ function cached_operand_type(bc)
     return projected_type
 end
 
+
+"""
+    advection_shmem_entry_type(bc)
+
+The type that the `AdvectionOperator` method of `calc_level_val` writes into
+shared memory for `bc`, per thread: the advected field's value at the thread's center
+level, prepended with the contravariant3 velocity component at the thread's face when
+the operator also needs the velocity at neighboring faces
+(`advection_velocity_width(op) == Val(:neighboring)`). The kernel allocates its shared
+memory buffer with this same function, so the launch-time sizing and the device-side
+element type cannot go out of sync.
+"""
+@inline function advection_shmem_entry_type(bc)
+    x_type = unsafe_eltype(bc.args[2i32])
+    v3_type = eltype(unsafe_eltype(bc.args[1i32]))
+    return Operators.advection_velocity_width(bc.op) isa Val{:neighboring} ?
+           Tuple{v3_type, x_type} : x_type
+end
 
 ClimaCore.Utilities.unsafe_eltype(::CUDA.CuRefType{T}) where {T} = T
 
@@ -341,6 +365,193 @@ Base.@propagate_inbounds function calc_level_val(
     end
 
     return val_no_bcs
+end
+
+"""
+    calc_level_val(bc::StencilBroadcasted{<:Any, <:AdvectionOperator}, hidx, space)
+
+Each thread computes the velocity (converted to its contravariant3 component) and the
+advected field at its own level, caches them in shared memory, and then gathers the
+4 neighboring center values (and, for operators with
+`advection_velocity_width(op) == Val(:neighboring)`, the 2 neighboring face velocities)
+that `stencil_interior` would have read, so each argument sub-expression is evaluated
+once per level instead of once per stencil offset. Extra parameters beyond the velocity
+and advected field are evaluated at the thread's face and passed through unmodified,
+matching `stencil_interior`.
+
+The operator's output space is a face space, so every x-thread maps to a valid face
+and computes a value; only the advected (center-valued) argument has a padding thread,
+whose garbage entry is cached but never read because the window indices are clamped to
+the center range (or wrapped, on periodic spaces) exactly like `stencil_interior`'s.
+"""
+Base.@propagate_inbounds function calc_level_val(
+    bc::BC,
+    hidx,
+    space,
+) where {
+    S,
+    Op <: Operators.AdvectionOperator,
+    BC <: StencilBroadcasted{S, Op},
+}
+    op = bc.op
+    v = threadIdx().x
+    block_col_idx = threadIdx().y
+    n_faces = CUDA.blockDim().x
+    periodic = Topologies.isperiodic(space)
+    width = Operators.advection_velocity_width(op)
+    velocity_space = reconstruct_placeholder_space(axes(bc.args[1i32]), space)
+    arg_space = reconstruct_placeholder_space(axes(bc.args[2i32]), space)
+    velocity_val =
+        @inbounds @inline calc_level_val(bc.args[1i32], hidx, velocity_space)
+    arg_val = @inbounds @inline calc_level_val(bc.args[2i32], hidx, arg_space)
+    params = @inbounds @inline UnrolledUtilities.unrolled_map(
+        Base.Fix2(reconstruct_space_and_call_calc_level_val, (hidx, space)),
+        Base.tail(Base.tail(bc.args)),
+    )
+    @inbounds lg = Geometry.LocalGeometry(velocity_space, v - half, hidx)
+    v³ = Geometry.contravariant3(velocity_val, lg)
+    # sync before writing so that no thread is still reading a previous user of the
+    # shared memory region (every handler allocates it at offset 0)
+    CUDA.sync_threads()
+    shmem = CUDA.CuDynamicSharedArray(
+        advection_shmem_entry_type(bc),
+        CUDA.blockDim().x * CUDA.blockDim().y,
+    )
+    col_offset = (block_col_idx - 1i32) * n_faces
+    @inbounds shmem[v + col_offset] = advection_shmem_entry(width, v³, arg_val)
+    CUDA.sync_threads()
+    stencil_vals = @inbounds advection_gather(
+        width,
+        op,
+        space,
+        shmem,
+        v³,
+        v,
+        n_faces,
+        periodic,
+        col_offset,
+    )
+    return Geometry.Contravariant3Vector(op(stencil_vals..., params...))
+end
+
+@inline advection_shmem_entry(::Val{:current}, v³, arg_val) = arg_val
+@inline advection_shmem_entry(::Val{:neighboring}, v³, arg_val) = (v³, arg_val)
+
+"""
+    advection_center_window(v, n_faces, periodic)
+
+Shared-memory indices of the 4 center-level stencil values around the face of x-thread
+`v` (the thread that holds center level `v`; the face index is `v - half`). Mirrors
+`stencil_interior(::AdvectionOperator, ...)`: out-of-range center indices are
+clamped to the domain on non-periodic spaces (padding the ghost cells with the closest
+interior value) and wrap around on periodic ones.
+"""
+@inline function advection_center_window(v, n_faces, periodic)
+    if periodic
+        (mod1(v - 2i32, n_faces), mod1(v - 1i32, n_faces), v, mod1(v + 1i32, n_faces))
+    else
+        # center levels span 1:n_faces - 1, and v - 2 and v - 1 are already below the
+        # upper limit (v ≤ n_faces), so they only need the lower clamp
+        n_centers = n_faces - 1i32
+        (
+            max(v - 2i32, 1i32),
+            max(v - 1i32, 1i32),
+            min(v, n_centers),
+            min(v + 1i32, n_centers),
+        )
+    end
+end
+
+"""
+    advection_ghost_values(op, space, v, n_faces, periodic, a⁻⁻, a⁻, a⁺, a⁺⁺)
+
+Returns `(a⁻⁻, a⁺⁺)` with the value of the single out-of-range center at the
+face one in from each boundary replaced by the reconstruction of `op`'s
+boundary condition for that boundary, mirroring
+`stencil_interior(::AdvectionOperator, ...)`. The boundary face
+itself (and every other face) is unaffected: its out-of-range centers keep
+the closest-value padding that `advection_center_window`'s clamping provides.
+"""
+@inline function advection_ghost_values(
+    op,
+    space,
+    v,
+    n_faces,
+    periodic,
+    a⁻⁻,
+    a⁻,
+    a⁺,
+    a⁺⁺,
+)
+    if !periodic
+        if v == 2i32
+            bc = Operators.get_boundary(
+                op,
+                Operators.left_boundary_window(space),
+            )
+            a⁻⁻ = bc(a⁻, a⁺)
+        elseif v == n_faces - 1i32
+            bc = Operators.get_boundary(
+                op,
+                Operators.right_boundary_window(space),
+            )
+            a⁺⁺ = bc(a⁺, a⁻)
+        end
+    end
+    return (a⁻⁻, a⁺⁺)
+end
+
+Base.@propagate_inbounds function advection_gather(
+    ::Val{:current},
+    op,
+    space,
+    shmem,
+    v³,
+    v,
+    n_faces,
+    periodic,
+    col_offset,
+)
+    (i⁻⁻, i⁻, i⁺, i⁺⁺) = advection_center_window(v, n_faces, periodic)
+    a⁻⁻ = @inbounds shmem[i⁻⁻ + col_offset]
+    a⁻ = @inbounds shmem[i⁻ + col_offset]
+    a⁺ = @inbounds shmem[i⁺ + col_offset]
+    a⁺⁺ = @inbounds shmem[i⁺⁺ + col_offset]
+    a⁻⁻, a⁺⁺ =
+        advection_ghost_values(op, space, v, n_faces, periodic, a⁻⁻, a⁻, a⁺, a⁺⁺)
+    return (v³, a⁻⁻, a⁻, a⁺, a⁺⁺)
+end
+
+Base.@propagate_inbounds function advection_gather(
+    ::Val{:neighboring},
+    op,
+    space,
+    shmem,
+    v³,
+    v,
+    n_faces,
+    periodic,
+    col_offset,
+)
+    (i⁻⁻, i⁻, i⁺, i⁺⁺) = advection_center_window(v, n_faces, periodic)
+    # neighboring face indices, clamped/wrapped like `advection_velocities`
+    iv⁻ = periodic ? mod1(v - 1i32, n_faces) : max(v - 1i32, 1i32)
+    iv⁺ = periodic ? mod1(v + 1i32, n_faces) : min(v + 1i32, n_faces)
+    a⁻⁻ = @inbounds shmem[i⁻⁻ + col_offset][2]
+    a⁻ = @inbounds shmem[i⁻ + col_offset][2]
+    a⁺ = @inbounds shmem[i⁺ + col_offset][2]
+    a⁺⁺ = @inbounds shmem[i⁺⁺ + col_offset][2]
+    a⁻⁻, a⁺⁺ =
+        advection_ghost_values(op, space, v, n_faces, periodic, a⁻⁻, a⁻, a⁺, a⁺⁺)
+    return @inbounds (
+        shmem[iv⁻ + col_offset][1],
+        v³,
+        shmem[iv⁺ + col_offset][1],
+        a⁻⁻,
+        a⁻,
+        a⁺,
+        a⁺⁺,
+    )
 end
 
 """

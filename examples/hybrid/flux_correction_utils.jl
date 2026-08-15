@@ -14,9 +14,10 @@ import ClimaCore:
 using ClimaCore.Geometry
 import ClimaCore.Geometry: ⊗
 
-# These reproduce the `FluxCorrectionC2C` and `FluxCorrectionF2F` operators
-# (with `Extrapolate` boundary conditions), which used to live in
-# `ClimaCore.Operators`, in terms of the gradient operators.
+# A diffusive flux correction for center- and face-valued quantities, written in
+# terms of the gradient operators. Its diffusivity is |velocity| Δz, which is
+# the form of numerical diffusion first-order upwinding introduces. The flux
+# through each boundary face is zero, so the correction adds nothing there.
 
 function add_flux_correction_c2c(d_, velocity, quantity)
     FT = Spaces.undertype(axes(quantity))

@@ -73,25 +73,16 @@ const vdiv = Operators.DivergenceF2C(
     bottom = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
 )
 const upwind1 = Operators.UpwindBiasedProductC2F(
-    bottom = Operators.Extrapolate(),
-    top = Operators.Extrapolate(),
+    bottom = Operators.FirstOrderOneSided(),
+    top = Operators.FirstOrderOneSided(),
 )
 const upwind3 = Operators.Upwind3rdOrderBiasedProductC2F(
     bottom = Operators.ThirdOrderOneSided(),
     top = Operators.ThirdOrderOneSided(),
 )
-const FCTZalesak = Operators.FCTZalesak(
-    bottom = Operators.FirstOrderOneSided(),
-    top = Operators.FirstOrderOneSided(),
-)
-const SlopeLimitedFlux = Operators.TVDLimitedFluxC2F(
-    bottom = Operators.FirstOrderOneSided(),
-    top = Operators.FirstOrderOneSided(),
-    method = Operators.MinModLimiter(),
-)
+const FCTZalesak = Operators.FCTZalesak()
+const SlopeLimitedFlux = Operators.TVDLimitedFluxC2F(method = Operators.MinModLimiter())
 const LinVanLeerFlux = Operators.LinVanLeerC2F(
-    bottom = Operators.FirstOrderOneSided(),
-    top = Operators.FirstOrderOneSided(),
     constraint = Operators.MonotoneLocalExtrema(),
 )
 
@@ -166,18 +157,18 @@ function vertical_tendency!(Yₜ, Y, cache, t)
                 face_ρ * upwind1(face_u, q) +
                 FCTZalesak(
                     face_ρ * (upwind3(face_u, q) - upwind1(face_u, q)),
-                    q / dt,
-                    q / dt - vdiv(face_ρ * upwind1(face_u, q)) / Y.c.ρ,
+                    tuple(q / dt, q / dt - vdiv(face_ρ * upwind1(face_u, q)) / Y.c.ρ),
                 ),
             )
     elseif fct_op == SlopeLimitedFlux
+        face_lg = Fields.local_geometry_field(face_u)
         @. Yₜ.c.ρq =
             -vdiv(
                 face_ρ * upwind1(face_u, q) +
                 SlopeLimitedFlux(
                     face_ρ * (upwind3(face_u, q) - upwind1(face_u, q)),
                     q / dt,
-                    face_u,
+                    Geometry.contravariant3(face_u, face_lg),
                 ),
             )
     elseif fct_op == LinVanLeerFlux

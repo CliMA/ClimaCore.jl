@@ -23,6 +23,7 @@ import ClimaCore.Operators:
     FCTBorisBook,
     FCTZalesak,
     LinVanLeerC2F,
+    TVDLimitedFluxC2F,
     SetBoundaryOperator,
     GradientC2F,
     GradientF2C,
@@ -132,19 +133,22 @@ end
     test_op_matrix(WeightedInterpolateC2F, SetValue, (ᶜscalar, ᶜnested))
     test_op_matrix(WeightedInterpolateC2F, Extrapolate, (ᶜscalar, ᶜnested))
     test_op_matrix(WeightedInterpolateF2C, Nothing, (ᶠscalar, ᶠnested))
-    test_op_matrix(UpwindBiasedProductC2F, Nothing, (ᶠuvw, ᶜscalar), true)
-    test_op_matrix(UpwindBiasedProductC2F, Extrapolate, (ᶠuvw, ᶜscalar))
+    # The advection operators' boundary faces are computed with the interior
+    # stencil, padding ghost points with one-sided reconstructions from the
+    # closest interior points (the value of the closest interior point when no
+    # boundary condition is given), so no SetBoundaryOperator is needed.
+    test_op_matrix(UpwindBiasedProductC2F, Nothing, (ᶠuvw, ᶜscalar))
+    test_op_matrix(UpwindBiasedProductC2F, FirstOrderOneSided, (ᶠuvw, ᶜscalar))
+    test_op_matrix(Upwind3rdOrderBiasedProductC2F, Nothing, (ᶠuvw, ᶜscalar))
     test_op_matrix(
         Upwind3rdOrderBiasedProductC2F,
         FirstOrderOneSided,
         (ᶠuvw, ᶜscalar),
-        true,
     )
     test_op_matrix(
         Upwind3rdOrderBiasedProductC2F,
         ThirdOrderOneSided,
         (ᶠuvw, ᶜscalar),
-        true,
     )
     test_op_matrix(SetBoundaryOperator, SetValue, (ᶠnested,))
     test_op_matrix(GradientC2F, Nothing, (ᶜscalar,), true)
@@ -165,9 +169,12 @@ end
     @test_throws "nonlinear" MatrixFields.operator_matrix(FCTZalesak())
     @test_throws "nonlinear" MatrixFields.operator_matrix(
         LinVanLeerC2F(;
-            bottom = FirstOrderOneSided(),
-            top = FirstOrderOneSided(),
             constraint = ClimaCore.Operators.AlgebraicMean(),
+        ),
+    )
+    @test_throws "nonlinear" MatrixFields.operator_matrix(
+        TVDLimitedFluxC2F(;
+            method = ClimaCore.Operators.MinModLimiter(),
         ),
     )
 end
@@ -191,7 +198,6 @@ end
     set_c3_gradients = (; bottom = SetGradient(c3_zero), top = SetGradient(c3_zero))
     ct12_zero = zero(Geometry.Contravariant12Vector{FT})
     set_ct12_curls = (; bottom = SetCurl(ct12_zero), top = SetCurl(ct12_zero))
-    extrapolate = (; bottom = Extrapolate(), top = Extrapolate())
 
     ᶠinterp = InterpolateC2F(; set_nested_values...)
     ᶜlbias = LeftBiasedF2C()
@@ -199,7 +205,7 @@ end
     ᶜwinterp = WeightedInterpolateF2C()
     ᶠwinterp = WeightedInterpolateC2F(; set_nested_values...)
     ᶜrbias = RightBiasedF2C(; set_nested_values.top)
-    ᶠupwind = UpwindBiasedProductC2F(; extrapolate...)
+    ᶠupwind = UpwindBiasedProductC2F()
     ᶠgrad = GradientC2F(; set_c3_gradients...)
     ᶜdiv = DivergenceF2C()
     ᶠcurl = CurlC2F(; set_ct12_curls...)

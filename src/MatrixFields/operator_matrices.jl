@@ -17,22 +17,26 @@ const OneArgFDOperatorWithFaceInput = Union{
 }
 const TwoArgFDOperatorWithCenterInput = Union{
     Operators.WeightedInterpolateC2F,
-    Operators.UpwindBiasedProductC2F,
-    Operators.Upwind3rdOrderBiasedProductC2F,
 }
 const TwoArgFDOperatorWithFaceInput = Union{
     Operators.WeightedInterpolateF2C,
 }
-const NonlinearFDOperator =
-    Union{Operators.FCTBorisBook, Operators.FCTZalesak, Operators.LinVanLeerC2F}
 
 const OneArgFDOperator =
     Union{OneArgFDOperatorWithCenterInput, OneArgFDOperatorWithFaceInput}
 const TwoArgFDOperator =
     Union{TwoArgFDOperatorWithCenterInput, TwoArgFDOperatorWithFaceInput}
 
-const FDOperatorWithCenterInput =
-    Union{OneArgFDOperatorWithCenterInput, TwoArgFDOperatorWithCenterInput}
+# The advection operators are two-argument operators over a center-valued
+# advected field, but unlike the operators above they are only rewritten as
+# operator-matrix multiplies when their interior stencil and boundary
+# reconstructions are all linear in the advected argument
+# (`Operators.has_linear_stencil`); the rest are evaluated pointwise.
+const FDOperatorWithCenterInput = Union{
+    OneArgFDOperatorWithCenterInput,
+    TwoArgFDOperatorWithCenterInput,
+    Operators.AdvectionOperator,
+}
 const FDOperatorWithFaceInput =
     Union{OneArgFDOperatorWithFaceInput, TwoArgFDOperatorWithFaceInput}
 
@@ -110,7 +114,9 @@ replace_lazy_operator(space, lazy_op::LazyOneArgFDOperatorMatrix) =
 # Since the operator matrix of a two-argument operator already has one argument,
 # we can modify Base.broadcasted to add a second argument.
 Base.Broadcast.broadcasted(
-    op_matrix::FDOperatorMatrix{<:TwoArgFDOperator},
+    op_matrix::FDOperatorMatrix{
+        <:Union{TwoArgFDOperator, Operators.AdvectionOperator},
+    },
     arg,
 ) = Base.Broadcast.broadcasted(
     op_matrix,
@@ -125,7 +131,7 @@ Base.Broadcast.broadcasted(
 # `modifies_input` decide where: `modifies_output` conditions are applied to the
 # result (after the multiply), while `modifies_input` conditions are applied to
 # the argument (before the multiply). A condition that is linear (e.g. Extrapolate)
-# is encoded directly in the matrix and is neither. (For advection and derivative
+# is encoded directly in the matrix and is neither. (For derivative
 # operators this widens every matrix row by one diagonal on each side -- see
 # `extrapolate_row_type` -- but reapplying the condition to the result with a
 # SetBoundaryOperator instead benchmarked slower on GPU, because the boundary
@@ -315,12 +321,37 @@ end
 # WeightedInterpolateC2F has such conditions (SetValue); every other two-argument
 # operator's conditions are linear, so `output_bcs` is empty for them and both
 # `op_with_matrix_bcs` and this function leave them untouched.
-function Operators.StencilBroadcasted{Style}(
+Operators.StencilBroadcasted{Style}(
     op::TwoArgFDOperator,
     args::Args,
     axes::Spaces.AbstractSpace,
     work::Work = nothing,
-) where {Style, Args, Work}
+) where {Style, Args, Work} =
+    two_arg_matrix_broadcasted(Style, op, args, axes, work)
+
+# An advection operator is only equivalent to a matrix multiply when its
+# interior stencil and its boundary reconstructions are all linear in the
+# advected argument; everything else (a flux-limited operator, or a
+# user-supplied ghost-point reconstruction) is left as an ordinary stencil and
+# evaluated pointwise. `has_linear_stencil` only depends on the types of the
+# operator and its boundary conditions, so this branch folds at compile time.
+Operators.StencilBroadcasted{Style}(
+    op::Operators.AdvectionOperator,
+    args::Args,
+    axes::Spaces.AbstractSpace,
+    work::Work = nothing,
+) where {Style, Args, Work} =
+    Operators.has_linear_stencil(op) ?
+    two_arg_matrix_broadcasted(Style, op, args, axes, work) :
+    unconverted_stencil_broadcasted(Style, op, args, axes, work)
+
+function two_arg_matrix_broadcasted(
+    ::Type{Style},
+    op,
+    args,
+    axes,
+    work,
+) where {Style}
     op_matrix =
         Base.Broadcast.broadcasted(FDOperatorMatrix(op_with_matrix_bcs(op)), args[1])
 
@@ -443,10 +474,13 @@ return ``\\textrm{op}'(\\textbf{0})``, where ``\\textbf{0} ={} ```zero.(arg)`.
 """
 operator_matrix(op::OneArgFDOperator) = LazyOneArgFDOperatorMatrix(op)
 operator_matrix(op::TwoArgFDOperator) = FDOperatorMatrix(op)
-operator_matrix(::O) where {O <: NonlinearFDOperator} = error(
-    "$(O.name.name) applies a nonlinear transformation to its argument, so it \
-     cannot be represented by a matrix",
-)
+operator_matrix(op::Operators.AdvectionOperator) =
+    Operators.has_linear_stencil(op) ? FDOperatorMatrix(op) :
+    error(
+        "$(typeof(op).name.name) applies a nonlinear transformation to its \
+         argument (in its interior stencil or through a boundary condition), \
+         so it cannot be represented by a matrix",
+    )
 operator_matrix(::O) where {O <: Operators.AbstractOperator} =
     error("operator_matrix has not been defined for $(O.name.name)")
 
@@ -701,7 +735,7 @@ Base.@propagate_inbounds ct3_data(velocity, space, idx, hidx) =
 #    boundary row is an identity entry pointing at that point. Such a row fits
 #    inside the interior row's band, so the operator's row type is unchanged.
 #
-#  - Replicate the nearest interior output (advection and derivative
+#  - Replicate the nearest interior output (derivative
 #    operators): the output at the boundary replicates the operator's output at
 #    the closest interior point, so the boundary row is the interior row
 #    evaluated at `idx ± 1`, with its band offsets shifted by `±1` to make them
@@ -713,7 +747,6 @@ Base.@propagate_inbounds ct3_data(velocity, space, idx, hidx) =
 const CopyInputExtrapolateOp =
     Union{Operators.InterpolateC2F, Operators.WeightedInterpolateC2F}
 const ReplicateOutputExtrapolateOp = Union{
-    Operators.UpwindBiasedProductC2F,
     Operators.GradientF2C,
     Operators.DivergenceF2C,
 }
@@ -799,10 +832,10 @@ Base.@propagate_inbounds function op_matrix_interior_row(
 end
 
 op_matrix_row_type(
-    op::Operators.UpwindBiasedProductC2F,
+    ::Operators.UpwindBiasedProductC2F,
     ::Type{FT},
     _,
-) where {FT} = extrapolate_row_type(op, BidiagonalMatrixRow{CT3{FT}})
+) where {FT} = BidiagonalMatrixRow{CT3{FT}}
 Base.@propagate_inbounds function op_matrix_interior_row(
     ::Operators.UpwindBiasedProductC2F,
     space,
@@ -832,8 +865,35 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     return QuaddiagonalMatrixRow(-v³ - av³, 7v³ + 3av³, 7v³ - 3av³, -v³ + av³) /
            12
 end
+
+# Boundary rows for the matrix-representable advection operators. Boundary
+# faces are computed with the interior stencil, padding the ghost points it
+# reaches with one-sided reconstructions from the closest interior points:
+#
+#  - FirstOrderOneSided (the default): every ghost point takes the value of
+#    the closest interior point, matching the index clamping that the
+#    pointwise-evaluated advection operators apply.
+#  - ThirdOrderOneSided (Upwind3rdOrderBiasedProductC2F only): at the face one
+#    in from the boundary, the single ghost point is linearly extrapolated
+#    from the two closest interior points (2 * closest - second-closest); at
+#    the boundary face itself, both ghost points take the value of the closest
+#    interior point.
+#
+# The matrix multiply clips out-of-range band entries instead of clamping
+# their indices, so each face whose interior row reaches a ghost point gets a
+# boundary row that folds the ghost coefficients into the closest interior
+# columns, leaving zeros in the out-of-range slots (which the multiply then
+# clips). The folded rows fit the interior row type, so no widening is needed.
+# The rows are reached through the generic FDOperatorMatrix
+# stencil_left_boundary / stencil_right_boundary methods; advection operators
+# never carry NullBoundaryCondition (FirstOrderOneSided is added by default),
+# so no zero-row fallback applies here.
+
+# At the boundary face, the padded upwind and downwind values coincide, so the
+# folded row is `v³` on the closest interior center regardless of upwind
+# direction: ((v³ + |v³|) + (v³ - |v³|)) / 2 = v³.
 Base.@propagate_inbounds function op_matrix_first_row(
-    ::Operators.Upwind3rdOrderBiasedProductC2F,
+    ::Operators.UpwindBiasedProductC2F,
     ::Operators.FirstOrderOneSided,
     space,
     idx,
@@ -841,11 +901,10 @@ Base.@propagate_inbounds function op_matrix_first_row(
     velocity,
 )
     v³ = CT3(ct3_data(velocity, space, idx, hidx))
-    av³ = CT3(abs(v³.u³))
-    return UpperTridiagonalMatrixRow(8v³ + 4av³, 5v³ - 5av³, -v³ + av³) / 12
+    return BidiagonalMatrixRow(zero(v³), v³)
 end
 Base.@propagate_inbounds function op_matrix_last_row(
-    ::Operators.Upwind3rdOrderBiasedProductC2F,
+    ::Operators.UpwindBiasedProductC2F,
     ::Operators.FirstOrderOneSided,
     space,
     idx,
@@ -853,34 +912,85 @@ Base.@propagate_inbounds function op_matrix_last_row(
     velocity,
 )
     v³ = CT3(ct3_data(velocity, space, idx, hidx))
-    av³ = CT3(abs(v³.u³))
-    return LowerTridiagonalMatrixRow(-v³ - av³, 5v³ + 5av³, 8v³ - 4av³) / 12
-end
-Base.@propagate_inbounds function op_matrix_first_row(
-    ::Operators.Upwind3rdOrderBiasedProductC2F,
-    ::Operators.ThirdOrderOneSided,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    v³ = CT3(ct3_data(velocity, space, idx, hidx))
-    return UpperTridiagonalMatrixRow(4v³, 10v³, -2v³) / 12
-end
-Base.@propagate_inbounds function op_matrix_last_row(
-    ::Operators.Upwind3rdOrderBiasedProductC2F,
-    ::Operators.ThirdOrderOneSided,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    v³ = CT3(ct3_data(velocity, space, idx, hidx))
-    return LowerTridiagonalMatrixRow(-2v³, 10v³, 4v³) / 12
+    return BidiagonalMatrixRow(v³, zero(v³))
 end
 
-op_matrix_row_type(::Operators.AdvectionOperator, ::Type{FT}, _) where {FT} =
-    TridiagonalMatrixRow{FT}
+# The interior stencil reaches one center beyond its face on each side, so two
+# faces on each side need folded rows. At the boundary face both lower (resp.
+# upper) ghost coefficients fold into the closest center; at the face one in
+# from the boundary only the outermost one does. With FirstOrderOneSided (or
+# no boundary condition), the ghost coefficient folds entirely into the
+# closest center: e.g. at the bottom, the interior row
+# (-v³ - |v³|, 7v³ + 3|v³|, 7v³ - 3|v³|, -v³ + |v³|) / 12 becomes
+# (0, 6v³ + 2|v³|, 7v³ - 3|v³|, -v³ + |v³|) / 12 at the face one in from the
+# boundary, and (0, 0, 13v³ - |v³|, -v³ + |v³|) / 12 at the boundary face.
+Base.@propagate_inbounds function op_matrix_first_row(
+    ::Operators.Upwind3rdOrderBiasedProductC2F,
+    ::Operators.FirstOrderOneSided,
+    space,
+    idx,
+    hidx,
+    velocity,
+)
+    v³ = CT3(ct3_data(velocity, space, idx, hidx))
+    av³ = CT3(abs(v³.u³))
+    z = zero(v³)
+    return idx == Operators.left_face_boundary_idx(space) ?
+           QuaddiagonalMatrixRow(z, z, 13v³ - av³, -v³ + av³) / 12 :
+           QuaddiagonalMatrixRow(z, 6v³ + 2av³, 7v³ - 3av³, -v³ + av³) / 12
+end
+Base.@propagate_inbounds function op_matrix_last_row(
+    ::Operators.Upwind3rdOrderBiasedProductC2F,
+    ::Operators.FirstOrderOneSided,
+    space,
+    idx,
+    hidx,
+    velocity,
+)
+    v³ = CT3(ct3_data(velocity, space, idx, hidx))
+    av³ = CT3(abs(v³.u³))
+    z = zero(v³)
+    return idx == Operators.right_face_boundary_idx(space) ?
+           QuaddiagonalMatrixRow(-v³ - av³, 13v³ + av³, z, z) / 12 :
+           QuaddiagonalMatrixRow(-v³ - av³, 7v³ + 3av³, 6v³ - 2av³, z) / 12
+end
+
+# With ThirdOrderOneSided, the boundary face is treated as with
+# FirstOrderOneSided, but at the face one in from the boundary the ghost point
+# is linearly extrapolated from the two closest interior points, so its
+# coefficient c folds as 2c into the closest column and -c into the
+# second-closest: e.g. at the bottom, the interior row becomes
+# (0, 5v³ + |v³|, 8v³ - 2|v³|, -v³ + |v³|) / 12.
+Base.@propagate_inbounds function op_matrix_first_row(
+    ::Operators.Upwind3rdOrderBiasedProductC2F,
+    ::Operators.ThirdOrderOneSided,
+    space,
+    idx,
+    hidx,
+    velocity,
+)
+    v³ = CT3(ct3_data(velocity, space, idx, hidx))
+    av³ = CT3(abs(v³.u³))
+    z = zero(v³)
+    return idx == Operators.left_face_boundary_idx(space) ?
+           QuaddiagonalMatrixRow(z, z, 13v³ - av³, -v³ + av³) / 12 :
+           QuaddiagonalMatrixRow(z, 5v³ + av³, 8v³ - 2av³, -v³ + av³) / 12
+end
+Base.@propagate_inbounds function op_matrix_last_row(
+    ::Operators.Upwind3rdOrderBiasedProductC2F,
+    ::Operators.ThirdOrderOneSided,
+    space,
+    idx,
+    hidx,
+    velocity,
+)
+    v³ = CT3(ct3_data(velocity, space, idx, hidx))
+    av³ = CT3(abs(v³.u³))
+    z = zero(v³)
+    return idx == Operators.right_face_boundary_idx(space) ?
+           QuaddiagonalMatrixRow(-v³ - av³, 13v³ + av³, z, z) / 12 :
+           QuaddiagonalMatrixRow(-v³ - av³, 8v³ + 2av³, 5v³ - av³, z) / 12
+end
 
 op_matrix_interior_row(::Operators.SetBoundaryOperator, ::Type{FT}) where {FT} =
     DiagonalMatrixRow(true)

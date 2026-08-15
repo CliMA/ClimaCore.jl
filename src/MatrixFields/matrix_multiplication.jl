@@ -317,6 +317,10 @@ function Operators.return_eltype(
 )
     et_mat1 = eltype(matrix1)
     et_arg = eltype(arg)
+    # eltype may be the inference-failure sentinel Union{} when this is called
+    # while probing an expression with unsafe_eltype; propagate it instead of
+    # treating it as a BandMatrixRow (Union{} is a subtype of everything).
+    (et_mat1 == Union{} || et_arg == Union{}) && return Union{}
     et_mat1 <: BandMatrixRow || error(
         "The first argument of MultiplyColumnwiseBandMatrixField must have
          elements of type BandMatrixRow, but the given argument has $et_mat1",

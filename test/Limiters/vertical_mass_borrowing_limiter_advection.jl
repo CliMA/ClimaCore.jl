@@ -60,8 +60,8 @@ function tendency!(yₜ, y, parameters, t)
         top = Operators.SetValue(Geometry.WVector(FT(0))),
     )
     upwind1 = Operators.UpwindBiasedProductC2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
+        bottom = Operators.FirstOrderOneSided(),
+        top = Operators.FirstOrderOneSided(),
     )
     upwind3 = Operators.Upwind3rdOrderBiasedProductC2F(
         bottom = Operators.ThirdOrderOneSided(),

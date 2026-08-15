@@ -323,8 +323,8 @@ end
     )
     @. divf2c(gradc2f_no_bc(ψ)) # runs
 
-    # A boundary condition whose value is a Field on the horizontal space (as
-    # opposed to a constant) used to fail here.
+    # A boundary condition whose value is a Field on the horizontal space,
+    # rather than a constant.
     gradc2f = Operators.GradientC2F(;
         top = Operators.SetGradient(Geometry.WVector.(value)),
         bottom = Operators.SetGradient(Geometry.WVector(FT(0.0))),
@@ -339,7 +339,7 @@ end
 # removed in #2521. These tests pin the recommended replacements against the
 # stencils that they replaced, on a stretched mesh (so that a dropped metric
 # term would show up).
-@testset "Replacements for removed operators and boundary conditions" begin
+@testset "Boundary values and advection built from the primitive operators" begin
     FT = Float64
     n = 8
     domain = Domains.IntervalDomain(
@@ -366,7 +366,7 @@ end
     # they are built from has to be moved to the CPU first
     cpu_parent(field) = Array(parent(field))
 
-    # the quantities that the removed stencils were written in terms of
+    # the quantities the reference stencils below are written in terms of
     tᶜ = cpu_parent(θᶜ)[:]
     tᶠ = cpu_parent(θᶠ)[:]
     w³ᶜ = cpu_parent(Geometry.contravariant3.(wᶜ, ᶜlg))[:]
@@ -379,7 +379,7 @@ end
     θ_bot = Fields.level(θᶜ, 1)
     θ_top = Fields.level(θᶜ, n)
 
-    @testset "GradientC2F, SetValue" begin
+    @testset "GradientC2F with a prescribed boundary value" begin
         # G(x)[1/2] = 2 (x[1] - x₀), G(x)[n+1/2] = 2 (x₀ - x[n])
         ref = [
             i == 1 ? 2 * (tᶜ[1] - θ₀) :
@@ -396,7 +396,7 @@ end
         @test cpu_parent(gradc2f.(θᶜ))[:] ≈ ref
     end
 
-    @testset "DivergenceC2F, SetValue(0)" begin
+    @testset "DivergenceC2F with a zero boundary value" begin
         # D(v)[1/2] = (Jv³[1] - 0) 2 / J[1/2]
         ref = [
             i == 1 ? (Jᶜ[1] * w³ᶜ[1]) * 2 / Jᶠ[1] :
@@ -427,7 +427,7 @@ end
         @test cpu_parent(@. set_bcs(divc2f(wᶜ)))[:] ≈ ref
     end
 
-    @testset "UpwindBiasedProductC2F, SetValue" begin
+    @testset "UpwindBiasedProductC2F with a prescribed boundary value" begin
         # U(v,x)[1/2] uses x₀ on the outside of the boundary
         ref = [
             i == 1 ?
@@ -455,7 +455,7 @@ end
         @test cpu_parent(@. set_bcs(upwind(wᶠ, θᶜ)))[:] ≈ ref
     end
 
-    @testset "AdvectionC2C, SetValue" begin
+    @testset "Centered advection of a center field" begin
         # A(v,θ)[i] = (v³[i+1/2] ∂θ⁺ + v³[i-1/2] ∂θ⁻) / 2, with the boundary
         # difference taken over half a cell
         ref = map(1:n) do i
@@ -477,7 +477,7 @@ end
         @test cpu_parent(new)[:] ≈ ref
     end
 
-    @testset "AdvectionF2F" begin
+    @testset "Centered advection of a face field" begin
         # A(v,θ)[i] = v³[i] (θ[i+1] - θ[i-1]) / 2, interior only
         ref = [w³ᶠ[i] * (tᶠ[i + 1] - tᶠ[i - 1]) / 2 for i in 2:n]
         gradf2c = Operators.GradientF2C()
@@ -489,7 +489,7 @@ end
         @test cpu_parent(new)[2:n] ≈ ref
     end
 
-    @testset "FluxCorrectionC2C, Extrapolate" begin
+    @testset "Diffusive flux correction of a center field" begin
         # A(v,θ)[i] = |v³[i+1/2]| ∂θ⁺ - |v³[i-1/2]| ∂θ⁻, where `Extrapolate`
         # drops the term outside of the boundary (zero flux through the face)
         ref = map(1:n) do i

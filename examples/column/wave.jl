@@ -23,6 +23,7 @@ import ClimaCore:
     Spaces
 
 import ClimaTimeSteppers as CTS
+import LazyBroadcast: lazy
 
 import Logging
 import TerminalLoggers
@@ -55,11 +56,20 @@ function tendency!(dY, Y, _, t)
 
     du = dY.u
     dp = dY.p
-    u_left = Fields.field_values(Fields.level(u, 1))[]
-    u_right = Fields.field_values(Fields.level(u, Fields.nlevels(u)))[]
+    # The homogeneous Dirichlet condition u = 0 at a boundary face is the
+    # covariant gradient 2 (u[1] - 0) there, and -2 (u[end] - 0) at the other
+    # end. The boundary values stay as fields on the boundary-face spaces
+    # rather than being read out as scalars, which needs scalar indexing on
+    # the GPU.
+    u_left = Fields.level(u, 1)
+    u_right = Fields.level(u, Fields.nlevels(u))
     ∂f = Operators.GradientC2F(
-        left = Operators.SetGradient(Geometry.Covariant3Vector(2 * u_left)),
-        right = Operators.SetGradient(Geometry.Covariant3Vector(-2 * u_right)),
+        left = Operators.SetGradient(
+            @. lazy(Geometry.Covariant3Vector(2 * u_left))
+        ),
+        right = Operators.SetGradient(
+            @. lazy(Geometry.Covariant3Vector(-2 * u_right))
+        ),
     )
     ∂c = Operators.DivergenceF2C()
 

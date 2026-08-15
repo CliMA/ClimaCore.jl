@@ -34,8 +34,8 @@ upwind!(dest, w, f, upwindc2f, divf2c) =
 
         w = Geometry.WVector.(ones(fspace))
         upwindc2f = Operators.UpwindBiasedProductC2F(
-            bottom = Operators.Extrapolate(),
-            top = Operators.Extrapolate(),
+            bottom = Operators.FirstOrderOneSided(),
+            top = Operators.FirstOrderOneSided(),
         )
         TU.@test_zero_allocations upwind!(dest, w, f, upwindc2f, divf2c)
     end

@@ -94,10 +94,10 @@ function opt_RightBiasedC2F(center_field)
     return RB.(identity.(center_field))
 end
 
-function opt_UpwindBiasedProductC2F_Extrapolate(face_vel, center_field)
+function opt_UpwindBiasedProductC2F_FirstOrderOneSided(face_vel, center_field)
     UB = Operators.UpwindBiasedProductC2F(
-        left = Operators.Extrapolate(),
-        right = Operators.Extrapolate(),
+        bottom = Operators.FirstOrderOneSided(),
+        top = Operators.FirstOrderOneSided(),
     )
     return UB.(face_vel, identity.(center_field))
 end
@@ -214,7 +214,7 @@ end
             @test_opt opt_LeftBiasedC2F(centers)
             @test_opt opt_RightBiasedC2F(centers)
 
-            @test_opt opt_UpwindBiasedProductC2F_Extrapolate(
+            @test_opt opt_UpwindBiasedProductC2F_FirstOrderOneSided(
                 face_velocities,
                 centers,
             )

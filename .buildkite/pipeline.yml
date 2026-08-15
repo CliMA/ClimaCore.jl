@@ -788,7 +788,6 @@ steps:
           - "julia --color=yes --project=.buildkite examples/column/advect.jl"
         artifact_paths:
           - "examples/column/output/advect/*"
-          - "examples/column/output/advect_step_function/*"
 
       # The FCT / Boris & Book / Zalesak column-advection cases live in
       # test/Integration/smoke_column_advection.jl. The remaining limiter
@@ -1138,7 +1137,6 @@ steps:
       - label: ":computer: 3D sphere deformation flow w/ limiter & FCT"
         key: "cpu_3d_deformation_flow"
         retry: *retry_policy
-        soft_fail: true # remove this after autobroadcaster issues are fixed
         command:
           - "julia --color=yes --project=.buildkite examples/hybrid/sphere/deformation_flow.jl"
         artifact_paths:
