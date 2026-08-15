@@ -192,7 +192,7 @@ steps:
               - "test_non_scalar_3"
               - "test_non_scalar_4"
               - "test_non_scalar_5"
-          # These three are known to fail on GPU; soft_fail keeps a known
+          # These two are known to fail on GPU; soft_fail keeps a known
           # failure from turning the whole matrix red.
           adjustments:
             - with:
@@ -200,9 +200,6 @@ steps:
               soft_fail: true
             - with:
                 case: "test_scalar_15"
-              soft_fail: true
-            - with:
-                case: "test_non_scalar_2"
               soft_fail: true
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/gpu_matrix_field_broadcasting.jl"
@@ -791,7 +788,6 @@ steps:
           - "julia --color=yes --project=.buildkite examples/column/advect.jl"
         artifact_paths:
           - "examples/column/output/advect/*"
-          - "examples/column/output/advect_step_function/*"
 
       # The FCT / Boris & Book / Zalesak column-advection cases live in
       # test/Integration/smoke_column_advection.jl. The remaining limiter

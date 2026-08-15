@@ -53,11 +53,8 @@ This is the only place that names a concrete upwind-biased operator. When those
 operators are consolidated behind a single type that dispatches on a constraint
 type parameter, this function is the one thing that needs to change.
 """
-limited_flux_operator(constraint) = Operators.LinVanLeerC2F(
-    bottom = Operators.FirstOrderOneSided(),
-    top = Operators.FirstOrderOneSided(),
-    constraint = constraint,
-)
+limited_flux_operator(constraint) =
+    Operators.LinVanLeerC2F(constraint = constraint)
 
 function tendency!(yₜ, y, parameters, t)
     (; w, Δt, constraint) = parameters

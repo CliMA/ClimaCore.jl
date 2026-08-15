@@ -73,15 +73,21 @@ InterpolateC2F
 InterpolateF2C
 WeightedInterpolateC2F
 WeightedInterpolateF2C
+AdvectionOperator
 UpwindBiasedProductC2F
 Upwind3rdOrderBiasedProductC2F
 FCTBorisBook
 FCTZalesak
 LinVanLeerC2F
+TVDLimitedFluxC2F
 LeftBiasedC2F
 RightBiasedC2F
 LeftBiasedF2C
 RightBiasedF2C
+BottomBiasedC2F
+TopBiasedC2F
+BottomBiasedF2C
+TopBiasedF2C
 AbstractTVDSlopeLimiter
 ```
 
@@ -99,8 +105,15 @@ CurlC2F
 
 ```@docs
 SetBoundaryOperator
-FirstOrderOneSided
-ThirdOrderOneSided
+```
+
+### Dirichlet (`SetValue`) replacement helpers
+
+```@docs
+gradient_c2f_dirichlet
+divergence_c2f_dirichlet
+curl_c2f_dirichlet
+upwind_biased_product_c2f_dirichlet
 ```
 
 ## Finite difference boundary conditions

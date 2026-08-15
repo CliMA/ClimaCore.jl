@@ -14,15 +14,18 @@ import ClimaCore:
 using ClimaCore.Geometry
 import ClimaCore.Geometry: ⊗
 
-# These reproduce the `FluxCorrectionC2C` and `FluxCorrectionF2F` operators
-# (with `Extrapolate` boundary conditions), which used to live in
-# `ClimaCore.Operators`, in terms of the gradient operators.
+# A diffusive flux correction for center- and face-valued quantities, written in
+# terms of the gradient operators. Its diffusivity is |velocity| Δz, which is
+# the form of numerical diffusion first-order upwinding introduces. Neither
+# version carries boundary values of its own: the center-valued one passes no
+# correction flux through the boundary faces, and the face-valued one takes its
+# outer gradient there to be the one-sided difference with the inner gradient
+# set to zero outside of the domain.
 
 function add_flux_correction_c2c(d_, velocity, quantity)
     FT = Spaces.undertype(axes(quantity))
-    # `Extrapolate` drops the term outside of the boundary, which for this
-    # center-valued operator means that the flux through the boundary face is
-    # zero, i.e. the inner gradient vanishes there.
+    # The zero gradient on each boundary face makes the inner gradient vanish
+    # there, so no correction flux passes through the face.
     zero_gradient = Operators.SetGradient(
         Geometry.outer(Geometry.Covariant3Vector(zero(FT)), zero(eltype(quantity))),
     )
@@ -50,9 +53,9 @@ function add_flux_correction_f2f(d_, velocity, quantity)
     n_levels = Fields.nlevels(inner_grad)
     top_level_space = axes(Fields.level(inner_grad, n_levels))
     bottom_level_space = axes(Fields.level(inner_grad, 1))
-    # `Extrapolate` drops the term outside of the boundary, which for this
-    # face-valued operator means that the value at the boundary face is
-    # ±`inner_grad` at the adjacent cell center.
+    # The gradient on each boundary face is ±`inner_grad` at the adjacent cell
+    # center, which is the one-sided difference with `inner_grad` taken as zero
+    # outside of the domain.
     top_gradient_extrapolate = Operators.SetGradient(
         Geometry.outer.(
             (Geometry.Covariant3Vector(-1),),

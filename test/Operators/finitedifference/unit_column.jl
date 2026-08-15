@@ -140,16 +140,27 @@ end
         ∂sin = Geometry.WVector.(∂.(w .* I.(θ)))
         @test ∂sin ≈ Geometry.WVector.(cos.(centers)) atol = 1e-2
 
-        # Can't define Neumann conditions on GradientF2C
-        ∂ = Operators.GradientF2C(
+        # Extrapolate is not accepted by GradientF2C
+        @test_throws AssertionError Operators.GradientF2C(
             left = Operators.Extrapolate(),
             right = Operators.Extrapolate(),
         )
 
-        @test_throws AssertionError Operators.GradientF2C(
-            left = Operators.SetGradient(1),
-            right = Operators.SetGradient(1),
+        # SetGradient prescribes the gradient at the boundary centers
+        ∂ = Operators.GradientF2C(
+            left = Operators.SetGradient(Geometry.Covariant3Vector(FT(0))),
+            right = Operators.SetGradient(Geometry.Covariant3Vector(FT(0))),
         )
+        ∂sin = Geometry.WVector.(∂.(w .* I.(θ)))
+        ∂sin_arr = vec(Array(parent(∂sin)))
+        @test ∂sin_arr[1] == 0
+        @test ∂sin_arr[end] == 0
+        @test maximum(
+            abs.(
+                ∂sin_arr[2:(end - 1)] .-
+                cos.(vec(Array(parent(centers))))[2:(end - 1)],
+            ),
+        ) ≤ 1e-2
 
         # 2) we set boundaries on the 1st operator
         I = Operators.InterpolateC2F(
@@ -163,8 +174,8 @@ end
 
         # 3) we set boundaries on both: 2nd should take precedence
         I = Operators.InterpolateC2F(
-            left = Operators.SetValue(FT(NaN)),
-            right = Operators.SetValue(FT(NaN)),
+            left = Operators.SetValue(FT(1)),
+            right = Operators.SetValue(FT(1)),
         )
         ∂ = Operators.GradientF2C(
             left = Operators.SetValue(FT(0)),
@@ -323,8 +334,8 @@ end
     )
     @. divf2c(gradc2f_no_bc(ψ)) # runs
 
-    # A boundary condition whose value is a Field on the horizontal space (as
-    # opposed to a constant) used to fail here.
+    # A boundary condition whose value is a Field on the horizontal space,
+    # rather than a constant.
     gradc2f = Operators.GradientC2F(;
         top = Operators.SetGradient(Geometry.WVector.(value)),
         bottom = Operators.SetGradient(Geometry.WVector(FT(0.0))),
@@ -333,13 +344,13 @@ end
     @test all(isfinite, parent(ClimaCore.to_cpu(∇ψ)))
 end
 
-# The `SetValue` boundary conditions of `GradientC2F`, `DivergenceC2F`,
-# `CurlC2F` and `UpwindBiasedProductC2F`, and the `AdvectionC2C`,
-# `AdvectionF2F` and `FluxCorrectionC2C`/`FluxCorrectionF2F` operators, were
-# removed in #2521. These tests pin the recommended replacements against the
-# stencils that they replaced, on a stretched mesh (so that a dropped metric
-# term would show up).
-@testset "Replacements for removed operators and boundary conditions" begin
+# `GradientC2F`, `DivergenceC2F`, `CurlC2F` and `UpwindBiasedProductC2F` take no
+# `SetValue` boundary condition, and there are no center-to-center or
+# face-to-face advection or flux-correction operators. These tests pin the
+# recommended way of writing each of those in terms of the operators that do
+# exist against the stencil it reproduces, on a stretched mesh (so that a
+# dropped metric term would show up).
+@testset "Boundary values and advection built from the primitive operators" begin
     FT = Float64
     n = 8
     domain = Domains.IntervalDomain(
@@ -366,7 +377,7 @@ end
     # they are built from has to be moved to the CPU first
     cpu_parent(field) = Array(parent(field))
 
-    # the quantities that the removed stencils were written in terms of
+    # the quantities the reference stencils below are written in terms of
     tᶜ = cpu_parent(θᶜ)[:]
     tᶠ = cpu_parent(θᶠ)[:]
     w³ᶜ = cpu_parent(Geometry.contravariant3.(wᶜ, ᶜlg))[:]
@@ -379,7 +390,7 @@ end
     θ_bot = Fields.level(θᶜ, 1)
     θ_top = Fields.level(θᶜ, n)
 
-    @testset "GradientC2F, SetValue" begin
+    @testset "GradientC2F with a prescribed boundary value" begin
         # G(x)[1/2] = 2 (x[1] - x₀), G(x)[n+1/2] = 2 (x₀ - x[n])
         ref = [
             i == 1 ? 2 * (tᶜ[1] - θ₀) :
@@ -394,9 +405,31 @@ end
             ),
         )
         @test cpu_parent(gradc2f.(θᶜ))[:] ≈ ref
+
+        # the helper that builds the same expression, with scalar and
+        # Field-valued boundary values
+        helped = Operators.gradient_c2f_dirichlet(θᶜ; bottom = θ₀, top = θ₀)
+        @test cpu_parent(helped)[:] ≈ ref
+        θ₀_bot = @. 0 * θ_bot + θ₀
+        helped = Operators.gradient_c2f_dirichlet(θᶜ; bottom = θ₀_bot, top = θ₀)
+        @test cpu_parent(helped)[:] ≈ ref
+        # an explicit boundary condition is passed through unchanged
+        helped = Operators.gradient_c2f_dirichlet(
+            θᶜ;
+            bottom = θ₀,
+            top = Operators.SetGradient(
+                Geometry.Covariant3Vector.(2 .* (θ₀ .- θ_top)),
+            ),
+        )
+        @test cpu_parent(helped)[:] ≈ ref
+        @test_throws ErrorException Operators.gradient_c2f_dirichlet(
+            θᶜ;
+            bottom = θ₀,
+            outer_space = θ₀,
+        )
     end
 
-    @testset "DivergenceC2F, SetValue(0)" begin
+    @testset "DivergenceC2F with a zero boundary value" begin
         # D(v)[1/2] = (Jv³[1] - 0) 2 / J[1/2]
         ref = [
             i == 1 ? (Jᶜ[1] * w³ᶜ[1]) * 2 / Jᶠ[1] :
@@ -425,9 +458,79 @@ end
         )
         divc2f = Operators.DivergenceC2F()
         @test cpu_parent(@. set_bcs(divc2f(wᶜ)))[:] ≈ ref
+
+        # the helper that builds the same expression
+        w₀ = Geometry.WVector(zero(FT))
+        helped = Operators.divergence_c2f_dirichlet(wᶜ; bottom = w₀, top = w₀)
+        @test cpu_parent(helped)[:] ≈ ref
     end
 
-    @testset "UpwindBiasedProductC2F, SetValue" begin
+    @testset "DivergenceC2F with a nonzero boundary value" begin
+        # D(v)[1/2] = (Jv³[1] - Jv³₀) 2 / J[1/2], with Jv³₀ computed from the
+        # prescribed boundary value and the boundary face's local geometry
+        w₀ = Geometry.WVector(FT(0.3))
+        w³₀ᶠ = cpu_parent(Geometry.contravariant3.(Ref(w₀), ᶠlg))[:]
+        ref = [
+            i == 1 ? (Jᶜ[1] * w³ᶜ[1] - Jᶠ[1] * w³₀ᶠ[1]) * 2 / Jᶠ[1] :
+            i == n + 1 ?
+            (Jᶠ[n + 1] * w³₀ᶠ[n + 1] - Jᶜ[n] * w³ᶜ[n]) * 2 / Jᶠ[n + 1] :
+            (Jᶜ[i] * w³ᶜ[i] - Jᶜ[i - 1] * w³ᶜ[i - 1]) / Jᶠ[i] for i in 1:(n + 1)
+        ]
+        helped = Operators.divergence_c2f_dirichlet(wᶜ; bottom = w₀, top = w₀)
+        @test cpu_parent(helped)[:] ≈ ref
+        # an explicit boundary condition is passed through unchanged, imposed
+        # on the wrapping SetBoundaryOperator
+        helped = Operators.divergence_c2f_dirichlet(
+            wᶜ;
+            bottom = w₀,
+            top = Operators.SetDivergence(zero(FT)),
+        )
+        @test cpu_parent(helped)[:] ≈ [ref[1:n]..., zero(FT)]
+        # Fields are tied to a single level's space, so they cannot be
+        # combined with the boundary face's local geometry
+        @test_throws ErrorException Operators.divergence_c2f_dirichlet(
+            wᶜ;
+            bottom = Fields.level(wᶜ, 1),
+        )
+    end
+
+    @testset "CurlC2F with a prescribed boundary value" begin
+        # C(u)[1/2]¹ = -(u₂[1] - u₂₀) 2 / J[1/2],
+        # C(u)[1/2]² = (u₁[1] - u₁₀) 2 / J[1/2]
+        zᶜ = Fields.coordinate_field(cs).z
+        uᶜ = @. Geometry.Covariant12Vector(sin(zᶜ), cos(zᶜ))
+        u₁₀, u₂₀ = FT(0.7), FT(-0.3)
+        u₀ = Geometry.Covariant12Vector(u₁₀, u₂₀)
+        u₁c = cpu_parent(uᶜ.components.data.:1)[:]
+        u₂c = cpu_parent(uᶜ.components.data.:2)[:]
+        ref₁ = [
+            i == 1 ? -(u₂c[1] - u₂₀) * 2 / Jᶠ[1] :
+            i == n + 1 ? -(u₂₀ - u₂c[n]) * 2 / Jᶠ[n + 1] :
+            -(u₂c[i] - u₂c[i - 1]) / Jᶠ[i] for i in 1:(n + 1)
+        ]
+        ref₂ = [
+            i == 1 ? (u₁c[1] - u₁₀) * 2 / Jᶠ[1] :
+            i == n + 1 ? (u₁₀ - u₁c[n]) * 2 / Jᶠ[n + 1] :
+            (u₁c[i] - u₁c[i - 1]) / Jᶠ[i] for i in 1:(n + 1)
+        ]
+        helped = Operators.curl_c2f_dirichlet(uᶜ; bottom = u₀, top = u₀)
+        @test cpu_parent(helped.components.data.:1)[:] ≈ ref₁
+        @test cpu_parent(helped.components.data.:2)[:] ≈ ref₂
+        # an explicit boundary condition is passed through unchanged
+        helped = Operators.curl_c2f_dirichlet(
+            uᶜ;
+            bottom = u₀,
+            top = Operators.SetCurl(
+                Geometry.Contravariant12Vector(zero(FT), zero(FT)),
+            ),
+        )
+        @test cpu_parent(helped.components.data.:1)[:] ≈
+              [ref₁[1:n]..., zero(FT)]
+        @test cpu_parent(helped.components.data.:2)[:] ≈
+              [ref₂[1:n]..., zero(FT)]
+    end
+
+    @testset "UpwindBiasedProductC2F with a prescribed boundary value" begin
         # U(v,x)[1/2] uses x₀ on the outside of the boundary
         ref = [
             i == 1 ?
@@ -453,9 +556,29 @@ end
         )
         upwind = Operators.UpwindBiasedProductC2F()
         @test cpu_parent(@. set_bcs(upwind(wᶠ, θᶜ)))[:] ≈ ref
+
+        # the helper that builds the same expression
+        helped = Operators.upwind_biased_product_c2f_dirichlet(
+            wᶠ,
+            θᶜ;
+            bottom = θ₀,
+            top = θ₀,
+        )
+        @test cpu_parent(helped)[:] ≈ ref
+        # an explicit boundary condition is passed through unchanged, imposed
+        # on the wrapping SetBoundaryOperator
+        helped = Operators.upwind_biased_product_c2f_dirichlet(
+            wᶠ,
+            θᶜ;
+            bottom = θ₀,
+            top = Operators.SetValue(
+                Geometry.Contravariant3Vector(zero(FT)),
+            ),
+        )
+        @test cpu_parent(helped)[:] ≈ [ref[1:n]..., zero(FT)]
     end
 
-    @testset "AdvectionC2C, SetValue" begin
+    @testset "Centered advection of a center field" begin
         # A(v,θ)[i] = (v³[i+1/2] ∂θ⁺ + v³[i-1/2] ∂θ⁻) / 2, with the boundary
         # difference taken over half a cell
         ref = map(1:n) do i
@@ -477,7 +600,7 @@ end
         @test cpu_parent(new)[:] ≈ ref
     end
 
-    @testset "AdvectionF2F" begin
+    @testset "Centered advection of a face field" begin
         # A(v,θ)[i] = v³[i] (θ[i+1] - θ[i-1]) / 2, interior only
         ref = [w³ᶠ[i] * (tᶠ[i + 1] - tᶠ[i - 1]) / 2 for i in 2:n]
         gradf2c = Operators.GradientF2C()
@@ -489,9 +612,10 @@ end
         @test cpu_parent(new)[2:n] ≈ ref
     end
 
-    @testset "FluxCorrectionC2C, Extrapolate" begin
-        # A(v,θ)[i] = |v³[i+1/2]| ∂θ⁺ - |v³[i-1/2]| ∂θ⁻, where `Extrapolate`
-        # drops the term outside of the boundary (zero flux through the face)
+    @testset "Diffusive flux correction of a center field" begin
+        # A(v,θ)[i] = |v³[i+1/2]| ∂θ⁺ - |v³[i-1/2]| ∂θ⁻, where the zero
+        # boundary gradient drops the term outside of the boundary (no flux
+        # through the boundary face)
         ref = map(1:n) do i
             fc⁺ = i == n ? zero(FT) : abs(w³ᶠ[i + 1]) * (tᶜ[i + 1] - tᶜ[i])
             fc⁻ = i == 1 ? zero(FT) : abs(w³ᶠ[i]) * (tᶜ[i] - tᶜ[i - 1])

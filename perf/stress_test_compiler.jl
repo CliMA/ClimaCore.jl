@@ -1999,8 +1999,8 @@ function upwinding_test(n::Int)
     using ClimaCore.Operators
 
     upwind = Operators.Upwind3rdOrderBiasedProductC2F(
-        bottom = Operators.ThirdOrderOneSided(),
-        top = Operators.ThirdOrderOneSided(),
+        bottom = Operators.Extrapolate(1),
+        top = Operators.Extrapolate(1),
     )
     ᶠv = Fields.Field(Geometry.WVector{FT}, face_space)
     ᶜf = Fields.Field(FT, center_space)
@@ -2040,8 +2040,8 @@ function climaatmos_column_test(repeats::Int)
         top = Operators.Extrapolate(),
     )
     upwind = Operators.Upwind3rdOrderBiasedProductC2F(
-        bottom = Operators.ThirdOrderOneSided(),
-        top = Operators.ThirdOrderOneSided(),
+        bottom = Operators.Extrapolate(1),
+        top = Operators.Extrapolate(1),
     )
 
     ᶜw = Fields.Field(FT, center_space)

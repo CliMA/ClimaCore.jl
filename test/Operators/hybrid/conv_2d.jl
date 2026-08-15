@@ -35,7 +35,7 @@ include("utils_2d.jl")
 
         err[k] = norm(adv .- cos.(Fields.coordinate_field(hv_center_space).z))
     end
-    # AdvectionC2C convergence rate
+    # Center-to-center advection convergence rate
     conv_adv_c2c = convergence_rate(err, Δh)
     @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
     @test conv_adv_c2c[1] ≈ 2 atol = 0.1
