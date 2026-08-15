@@ -204,11 +204,15 @@ function rhs_invariant!(dY, Y, _, t)
 
     lg_field_faces = Fields.local_geometry_field(axes(fw))
     lg_field_centers = Fields.local_geometry_field(axes(cρ))
-    # `LeftBiasedF2C(x)[i] = x[i-half]`, so its first level is the bottom face,
-    # and `RightBiasedF2C(x)[i] = x[i+half]`, so its last level is the top face.
-    lg_bottom_face = Fields.level(Operators.LeftBiasedF2C().(lg_field_faces), 1)
-    lg_top_face = Fields.level(
-        Operators.RightBiasedF2C().(lg_field_faces),
+    # Only `J` on the boundary faces is needed below, and it has to end up on the same
+    # level space as the center quantities, so shift the face `J` (a scalar field) onto
+    # centers: `LeftBiasedF2C(x)[i] = x[i-half]`, so its first level is the bottom face,
+    # and `RightBiasedF2C(x)[i] = x[i+half]`, so its last level is the top face. Shifting
+    # the whole `LocalGeometry` field instead is not supported, because a finite
+    # difference operator multiplies its argument by an operator matrix row.
+    J_bottom_face = Fields.level(Operators.LeftBiasedF2C().(lg_field_faces.J), 1)
+    J_top_face = Fields.level(
+        Operators.RightBiasedF2C().(lg_field_faces.J),
         Fields.nlevels(lg_field_centers),
     )
     lg_bottom_center = Fields.level(lg_field_centers, 1)
@@ -217,11 +221,11 @@ function rhs_invariant!(dY, Y, _, t)
     ᶜ∇ᵥw_top = Fields.level(ᶜ∇ᵥw, Fields.nlevels(ᶜ∇ᵥw))
     bottom_divergence = @. lazy(
         Geometry.Jcontravariant3(κ₂ * ᶜ∇ᵥw_bottom, lg_bottom_center) *
-        (2 * inv(lg_bottom_face.J)),
+        (2 * inv(J_bottom_face)),
     )
     top_divergence = @. lazy(
         Geometry.Jcontravariant3(κ₂ * ᶜ∇ᵥw_top, lg_top_center) *
-        (-2 * inv(lg_top_face.J)),
+        (-2 * inv(J_top_face)),
     )
     set_bcs = Operators.SetBoundaryOperator(
         bottom = Operators.SetValue(bottom_divergence),
