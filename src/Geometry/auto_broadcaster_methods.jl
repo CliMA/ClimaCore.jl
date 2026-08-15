@@ -15,7 +15,7 @@ Jcontravariant3(x::AutoBroadcaster, lg) =
 
 # An AutoBroadcaster entry pairs componentwise like its wrapped collection
 # (see `mul_with_projection` below and `_dual_axes_for_projection`).
-_dual_axes_for_projection(::Type{X}) where {X <: AutoBroadcaster} =
+@inline _dual_axes_for_projection(::Type{X}) where {X <: AutoBroadcaster} =
     _dual_axes_for_projection(unwrap(X))
 
 mul_with_projection(x::AutoBroadcaster, y::AutoBroadcaster, lg) =

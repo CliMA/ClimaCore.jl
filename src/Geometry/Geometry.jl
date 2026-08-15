@@ -36,18 +36,19 @@ result is a `Tuple` of axes that pairs componentwise with the entry, with
 The result must be a compile-time constant: the eager finite difference GPU
 kernel branches on `isnothing` of it (see `project_row2_for_mul` in
 `ext/cuda/operators_fd_eager.jl`), and a runtime branch there makes the whole
-projection dynamically dispatched, which fails to compile. Inference does not
-reliably fold `_dual_axes_for_projection` — it stops refining the `map` over
-`fieldtypes` after a few levels of nesting, so a deeply nested entry widens to a
-non-constant `Union` — hence the generator, which evaluates it during
-compilation by construction.
-
-This is defined here, rather than next to `_dual_axes_for_projection`, because a
-generator may only call methods that already exist when it is defined, and the
-last `_dual_axes_for_projection` method is added in `auto_broadcaster_methods.jl`.
+projection dynamically dispatched, which fails to compile. The result is a
+nested structure of singletons (axes and `nothing`s), so it is fully determined
+by its inferred type, and inference folds `_dual_axes_for_projection` to that
+constant (verified for the entry types of the `test_non_scalar_*` matrix-field
+broadcasts and for 5-level-deep `NamedTuple` nestings with mixed axes). If a new
+entry type ever defeats this — the symptom is an `InvalidIRError` from a dynamic
+`isnothing` in `project_row2_for_mul` — the fix is to make this a `@generated`
+function again (`QuoteNode(_dual_axes_for_projection(X))`), at the cost of
+freezing the method table: a generator cannot see `_dual_axes_for_projection`
+methods defined after it, including any added by downstream packages.
 """
-@generated recursively_find_dual_axes_for_projection(::Type{X}) where {X} =
-    QuoteNode(_dual_axes_for_projection(X))
+@inline recursively_find_dual_axes_for_projection(::Type{X}) where {X} =
+    _dual_axes_for_projection(X)
 
 include("deprecated.jl")
 
