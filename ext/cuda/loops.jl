@@ -126,33 +126,51 @@ end
 # Reduce a warp or sub-warp with warp shuffles, limited to active threads since
 # inactive threads have undefined results. For multi-warp scopes, first reduce
 # each warp, then reduce the results in the first warp.
+#
+# The two cases are separate methods, and the multi-warp one reaches the
+# warp-level reduction through `single_warp_reduce_points` rather than through
+# this generic method, so that neither calls itself. The split keeps each
+# method's job to one scope; it is not a fix for the `InvalidIRError` that
+# `sum` over a weighted level-field broadcast raises in ClimaAtmos, which the
+# split leaves unchanged. That error is a dynamic `shfl_recurse` in
+# `shuffle_reduce` below, so the value reaching the shuffles is abstractly
+# typed; it comes from `reduce_points(ThisThread(), ...)`, whose element type
+# is fixed by `return_type(op, NTuple{2, eltype(arg)})` at the launch site.
 DataLayouts.reduce_points(scope::ThisCooperativeGroup, op::O, arg; kwargs...) where {O} =
     if scope != ThisBlock() && DataLayouts.num_threads(scope) <= THREADS_PER_WARP
-        thread_result =
-            DataLayouts.reduce_points(DataLayouts.ThisThread(), op, arg; kwargs...)
-        shuffle_reduce(scope, op, thread_result, num_active_threads(scope))
+        single_warp_reduce_points(scope, op, arg; kwargs...)
     else
-        num_results = DataLayouts.num_subscopes(ThisWarp(), scope)
-        max_results = scope == ThisBlock() ? MAX_WARPS_PER_BLOCK : num_results
-        warp_index = DataLayouts.subscope_rank(ThisWarp(), scope)
-        warp_result = DataLayouts.reduce_points(ThisWarp(), op, arg; kwargs...)
-        results = DataLayouts.scoped_static_array(scope, typeof(warp_result), max_results)
-        if is_first_thread_in(ThisWarp())
-            @inbounds results[warp_index] = warp_result
+        multi_warp_reduce_points(scope, op, arg; kwargs...)
+    end
+
+@inline function single_warp_reduce_points(scope, op::O, arg; kwargs...) where {O}
+    thread_result =
+        DataLayouts.reduce_points(DataLayouts.ThisThread(), op, arg; kwargs...)
+    return shuffle_reduce(scope, op, thread_result, num_active_threads(scope))
+end
+
+@inline function multi_warp_reduce_points(scope, op::O, arg; kwargs...) where {O}
+    num_results = DataLayouts.num_subscopes(ThisWarp(), scope)
+    max_results = scope == ThisBlock() ? MAX_WARPS_PER_BLOCK : num_results
+    warp_index = DataLayouts.subscope_rank(ThisWarp(), scope)
+    warp_result = single_warp_reduce_points(ThisWarp(), op, arg; kwargs...)
+    results = DataLayouts.scoped_static_array(scope, typeof(warp_result), max_results)
+    if is_first_thread_in(ThisWarp())
+        @inbounds results[warp_index] = warp_result
+    end
+    DataLayouts.synchronize(scope)
+    if !isone(num_results)
+        if isone(warp_index)
+            @inbounds warp_result = results[DataLayouts.thread_rank(ThisWarp())]
+            final_result = shuffle_reduce(ThisWarp(), op, warp_result, num_results)
+            if is_first_thread_in(ThisWarp())
+                @inbounds results[1] = final_result
+            end
         end
         DataLayouts.synchronize(scope)
-        if !isone(num_results)
-            if isone(warp_index)
-                @inbounds warp_result = results[DataLayouts.thread_rank(ThisWarp())]
-                final_result = shuffle_reduce(ThisWarp(), op, warp_result, num_results)
-                if is_first_thread_in(ThisWarp())
-                    @inbounds results[1] = final_result
-                end
-            end
-            DataLayouts.synchronize(scope)
-        end
-        @inbounds results[1]
     end
+    return @inbounds results[1]
+end
 
 # Use the scope type to generate the number of pairwise reductions, log2(N), in
 # the compiler, without needing to rely on constant propagation in GPU kernels.
