@@ -17,8 +17,7 @@ each of the `N` locations represented by an element with one nodal point. Based
 on the [metric
 tensor](https://en.wikipedia.org/wiki/Metric_tensor#The_round_metric_on_a_sphere)
 of a sphere, the horizontal Jacobian `∂x∂ξ` is given by the diagonal matrix
-`diag(R·π/180, R·cosd(lat)·π/180)`, with the determinant `J =
-R²·cosd(lat)·(π/180)²`.
+`diag(R·π/180, R·cosd(lat)·π/180)`, with the determinant `J = R²·cosd(lat)·(π/180)²`.
 """
 struct PointCloudGrid{
     C <: ClimaComms.AbstractCommsContext,

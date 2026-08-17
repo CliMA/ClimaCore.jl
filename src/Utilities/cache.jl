@@ -6,11 +6,11 @@ that if the constructor with the same arguments is invoked again (e.g. by
 reading from a file), the cached object will be returned (also known as
 _memoization_). This has two main advantages:
 
-1. topology and metric information can be reused, reducing memory usage.
+ 1. topology and metric information can be reused, reducing memory usage.
 
-2. it is easy to check if two fields live on the same grid: we can just check if
-   the underlying grid objects are the same (`===`), rather than checking all
-   the fields are equal (via `==`).
+ 2. it is easy to check if two fields live on the same grid: we can just check if
+    the underlying grid objects are the same (`===`), rather than checking all
+    the fields are equal (via `==`).
 
 However this means that objects in the cache will not be removed from the
 garbage collector, so we provide an interface to remove these.

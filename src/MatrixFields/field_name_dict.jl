@@ -4,13 +4,14 @@
 
 An `AbstractDict` with keys of type `T` that are stored as a `FieldNameSet{T}`.
 There are two subtypes of `FieldNameDict`:
-- `FieldMatrix`, which maps a set of `FieldMatrixKeys` to either
-  `ColumnwiseBandMatrixField`s or multiples of `LinearAlgebra.I`; this is the
-  only user-facing subtype of `FieldNameDict`
-- `FieldVectorView`, which maps a set of `FieldVectorKeys` to `Field`s; this
-  subtype is automatically generated when a `FieldVector` is used in the same
-  operation as a `FieldMatrix` (e.g., when both appear in the same broadcast
-  expression, or when both are passed to a `FieldMatrixSolver`)
+
+  - `FieldMatrix`, which maps a set of `FieldMatrixKeys` to either
+    `ColumnwiseBandMatrixField`s or multiples of `LinearAlgebra.I`; this is the
+    only user-facing subtype of `FieldNameDict`
+  - `FieldVectorView`, which maps a set of `FieldVectorKeys` to `Field`s; this
+    subtype is automatically generated when a `FieldVector` is used in the same
+    operation as a `FieldMatrix` (e.g., when both appear in the same broadcast
+    expression, or when both are passed to a `FieldMatrixSolver`)
 
 A `FieldNameDict` can also be "lazy", which means that it can store
 `AbstractBroadcasted` objects that become `Field`s when they are materialized.
@@ -23,11 +24,12 @@ calling `dict[set]`. If `dict` is a `FieldMatrix`, the corresponding identity
 matrix can be computed by calling `one(dict)`.
 
 When broadcasting over `FieldNameDict`s, the following operations are supported:
-- Addition and subtraction
-- Multiplication, where the first argument must be a `FieldMatrix`
-- Inversion, where the argument must be a diagonal `FieldMatrix`, i.e., one in
-  which every entry is either a `ColumnwiseBandMatrixField` of
-  `DiagonalMatrixRow`s or a multiple of `LinearAlgebra.I`
+
+  - Addition and subtraction
+  - Multiplication, where the first argument must be a `FieldMatrix`
+  - Inversion, where the argument must be a diagonal `FieldMatrix`, i.e., one in
+    which every entry is either a `ColumnwiseBandMatrixField` of
+    `DiagonalMatrixRow`s or a multiple of `LinearAlgebra.I`
 """
 struct FieldNameDict{
     T <: Union{FieldName, FieldNamePair},
@@ -350,12 +352,13 @@ multiples of `sizeof(T)`, the type of the field with name `name_pair`, and a `Va
 what method can index a ClimaCore `Field` of `S` with `name_pair`.
 
 The third return value is one of the following:
-- `Val(:view)`: indexing with a view is possible
--  `Val(:view_of_blocks)`: indexing with a view of non-unfiform stride length is possible.\
- This is not implemented, and currently treated the same as `Val(:broadcasted_fallback)`
-- `Val(:broadcasted_fallback)`: indexing with a view is not possible
-- `Val(:broadcasted_zero)`: indexing with a view is not possible, and the `name_pair` indexes
-off diagonal with implicit tensor structure optimization (see MatrixFields docs)
+
+  - `Val(:view)`: indexing with a view is possible
+  - `Val(:view_of_blocks)`: indexing with a view of non-unfiform stride length is possible.\
+    This is not implemented, and currently treated the same as `Val(:broadcasted_fallback)`
+  - `Val(:broadcasted_fallback)`: indexing with a view is not possible
+  - `Val(:broadcasted_zero)`: indexing with a view is not possible, and the `name_pair` indexes
+    off diagonal with implicit tensor structure optimization (see MatrixFields docs)
 
 When `S` is a `Geometry.Tensor{2}`, and the name pair indexes to a slice of
 the tensor, an offset of `-1` is returned . In other words, the name pair cannot index into a slice.
@@ -553,6 +556,7 @@ of the entries of `field_matrix`, which corresponding to the
 `FT` typed components of entries of `field_matrix`.
 
 # Example usage
+
 ```julia
 e¹² = Geometry.Covariant12Vector(1.6, 0.7)
 e₃ = Geometry.Contravariant3Vector(1.0)
@@ -560,7 +564,7 @@ e³ = Geometry.Covariant3Vector(1)
 ᶜᶜmat3 = fill(TridiagonalMatrixRow(2.0, 3.2, 2.1), center_space)
 ᶜᶠmat2 = fill(BidiagonalMatrixRow(4.3, 1.7), center_space)
 ᶜᶜmat3_uₕ_scalar = ᶜᶜmat3 .* (e¹²,)
-ρχ_unit = (;ρq_liq = 1.0, ρq_ice = 1.0)
+ρχ_unit = (; ρq_liq = 1.0, ρq_ice = 1.0)
 ᶜᶠmat2_ρχ_u₃ = map(Base.Fix1(map, Base.Fix2(*, ρχ_unit * e₃')), ᶜᶠmat2)
 
 A = MatrixFields.FieldMatrix(

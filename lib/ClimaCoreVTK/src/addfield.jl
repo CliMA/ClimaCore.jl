@@ -6,9 +6,10 @@ Add a field or fields `f`, optionally prefixing the name with `prefix` to the
 VTK file `vtkfile`, interpolating to `dataspace`.
 
 `f` can be any of the following:
-- a scalar or vector field (if no `prefix` is provided, then the field will be named `"data"`)
-- a composite field, which will be named accordingly
-- a `NamedTuple` of fields
+
+  - a scalar or vector field (if no `prefix` is provided, then the field will be named `"data"`)
+  - a composite field, which will be named accordingly
+  - a `NamedTuple` of fields
 """
 function addfield!(vtkfile, prefix, fields::NamedTuple, dataspace)
     for (key, val) in pairs(fields)

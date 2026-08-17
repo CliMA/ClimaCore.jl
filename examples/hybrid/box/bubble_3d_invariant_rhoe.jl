@@ -44,22 +44,37 @@ CUDA.allowscalar(false)
 Parameters needed for the simulation.
 
 # Fields
+
 $(DocStringExtensions.FIELDS)
 """
 struct SimulationParameters{FT}
-    "Domain length in x and y directions. Here, lx = ly = lxy"
+    """
+    Domain length in x and y directions. Here, lx = ly = lxy
+    """
     lxy::FT
-    "Domain length in z direction"
+    """
+    Domain length in z direction
+    """
     lz::FT
-    "Number of elements in x and y directions"
+    """
+    Number of elements in x and y directions
+    """
     xyelem::Int
-    "Number of elements in z direction"
+    """
+    Number of elements in z direction
+    """
     zelem::Int
-    "Polynomial order"
+    """
+    Polynomial order
+    """
     npoly::Int
-    "time step"
+    """
+    time step
+    """
     Δt::FT
-    "Integration time (sec)"
+    """
+    Integration time (sec) # integration time
+    """
     t_int::FT # integration time
 end
 

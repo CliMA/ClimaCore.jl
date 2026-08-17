@@ -10,9 +10,10 @@ specialized linear solvers that fully utilize the sparsity pattern of `A`.
 
 Every subtype of `FieldMatrixSolverAlgorithm` must implement methods for the
 following functions:
-- [`field_matrix_solver_cache`](@ref)
-- [`check_field_matrix_solver`](@ref)
-- [`run_field_matrix_solver!`](@ref)
+
+  - [`field_matrix_solver_cache`](@ref)
+  - [`check_field_matrix_solver`](@ref)
+  - [`run_field_matrix_solver!`](@ref)
 """
 abstract type FieldMatrixSolverAlgorithm end
 
@@ -201,6 +202,7 @@ abstract type LazyFieldMatrixSolverAlgorithm <: FieldMatrixSolverAlgorithm end
     BlockDiagonalSolve()
 
 A `FieldMatrixSolverAlgorithm` for a block diagonal matrix:
+
 ```math
 A = \\begin{bmatrix}
      A_{11} & \\mathbf{0} & \\mathbf{0} & \\cdots & \\mathbf{0} \\\\
@@ -210,6 +212,7 @@ A = \\begin{bmatrix}
 \\mathbf{0} & \\mathbf{0} & \\mathbf{0} & \\cdots &      A_{NN}
 \\end{bmatrix}
 ```
+
 This algorithm solves the `N` block equations `Aₙₙ * xₙ = bₙ` in sequence (though
 we might want to parallelize it in the future).
 
@@ -312,15 +315,18 @@ end
     BlockLowerTriangularSolve(names₁...; [alg₁], [alg₂])
 
 A `FieldMatrixSolverAlgorithm` for a 2×2 block lower triangular matrix:
+
 ```math
 A = \\begin{bmatrix} A_{11} & \\mathbf{0} \\\\ A_{21} & A_{22} \\end{bmatrix}
 ```
+
 The `FieldName`s in `names₁` correspond to the subscript `₁`, while all other
 `FieldName`s correspond to the subscript `₂`. This algorithm has 2 steps:
-1. Solve `A₁₁ * x₁ = b₁` for `x₁` using the algorithm `alg₁`, which is set to a
-   [`BlockDiagonalSolve`](@ref) by default.
-2. Solve `A₂₂ * x₂ = b₂ - A₂₁ * x₁` for `x₂` using the algorithm `alg₂`, which
-   is also set to a `BlockDiagonalSolve` by default.
+
+ 1. Solve `A₁₁ * x₁ = b₁` for `x₁` using the algorithm `alg₁`, which is set to a
+    [`BlockDiagonalSolve`](@ref) by default.
+ 2. Solve `A₂₂ * x₂ = b₂ - A₂₁ * x₁` for `x₂` using the algorithm `alg₂`, which
+    is also set to a `BlockDiagonalSolve` by default.
 """
 struct BlockLowerTriangularSolve{
     N <: NTuple{<:Any, FieldName},
@@ -375,15 +381,18 @@ end
     BlockArrowheadSolve(names₁...; [alg₂])
 
 A `FieldMatrixSolverAlgorithm` for a 2×2 block arrowhead matrix:
+
 ```math
 A = \\begin{bmatrix} A_{11} & A_{12} \\\\ A_{21} & A_{22} \\end{bmatrix}, \\quad
 \\text{where } A_{11} \\text{ is a diagonal matrix}
 ```
+
 The `FieldName`s in `names₁` correspond to the subscript `₁`, while all other
 `FieldName`s correspond to the subscript `₂`. This algorithm has only 1 step:
-1. Solve `(A₂₂ - A₂₁ * inv(A₁₁) * A₁₂) * x₂ = b₂ - A₂₁ * inv(A₁₁) * b₁` for `x₂`
-   using the algorithm `alg₂`, which is set to a [`BlockDiagonalSolve`](@ref) by
-   default, and set `x₁` to `inv(A₁₁) * (b₁ - A₁₂ * x₂)`.
+
+ 1. Solve `(A₂₂ - A₂₁ * inv(A₁₁) * A₁₂) * x₂ = b₂ - A₂₁ * inv(A₁₁) * b₁` for `x₂`
+    using the algorithm `alg₂`, which is set to a [`BlockDiagonalSolve`](@ref) by
+    default, and set `x₁` to `inv(A₁₁) * (b₁ - A₁₂ * x₂)`.
 
 Since `A₁₁` is a diagonal matrix, `inv(A₁₁)` is easy to compute, which means
 that the Schur complement of `A₁₁` in `A`, `A₂₂ - A₂₁ * inv(A₁₁) * A₁₂`, as well
@@ -447,16 +456,19 @@ end
     SchurComplementReductionSolve(names₁...; [alg₁], alg₂)
 
 A `FieldMatrixSolverAlgorithm` for any 2×2 block matrix:
+
 ```math
 A = \\begin{bmatrix} A_{11} & A_{12} \\\\ A_{21} & A_{22} \\end{bmatrix}
 ```
+
 The `FieldName`s in `names₁` correspond to the subscript `₁`, while all other
 `FieldName`s correspond to the subscript `₂`. This algorithm has 3 steps:
-1. Solve `A₁₁ * x₁′ = b₁` for `x₁′` using the algorithm `alg₁`, which is set to
-   a [`BlockDiagonalSolve`](@ref) by default.
-2. Solve `(A₂₂ - A₂₁ * inv(A₁₁) * A₁₂) * x₂ = b₂ - A₂₁ * x₁′` for `x₂`
-   using the algorithm `alg₂`.
-3. Solve `A₁₁ * x₁ = b₁ - A₁₂ * x₂` for `x₁` using the algorithm `alg₁`.
+
+ 1. Solve `A₁₁ * x₁′ = b₁` for `x₁′` using the algorithm `alg₁`, which is set to
+    a [`BlockDiagonalSolve`](@ref) by default.
+ 2. Solve `(A₂₂ - A₂₁ * inv(A₁₁) * A₁₂) * x₂ = b₂ - A₂₁ * x₁′` for `x₂`
+    using the algorithm `alg₂`.
+ 3. Solve `A₁₁ * x₁ = b₁ - A₁₂ * x₂` for `x₁` using the algorithm `alg₁`.
 
 Since `A₁₁` is not necessarily a diagonal matrix, `inv(A₁₁)` will generally be a
 dense matrix, which means that the Schur complement of `A₁₁` in `A`,

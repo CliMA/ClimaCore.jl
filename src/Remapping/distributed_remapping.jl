@@ -216,10 +216,10 @@ struct Remapper{
 end
 
 """
-   Remapper(space, target_hcoords, target_zcoords, buffer_length = 1, horizontal_method = SpectralElementRemapping())
-   Remapper(space; target_hcoords, target_zcoords, buffer_length = 1, horizontal_method = SpectralElementRemapping())
-   Remapper(space, target_hcoords; buffer_length = 1, horizontal_method = SpectralElementRemapping())
-   Remapper(space, target_zcoords; buffer_length = 1)
+Remapper(space, target_hcoords, target_zcoords, buffer_length = 1, horizontal_method = SpectralElementRemapping())
+Remapper(space; target_hcoords, target_zcoords, buffer_length = 1, horizontal_method = SpectralElementRemapping())
+Remapper(space, target_hcoords; buffer_length = 1, horizontal_method = SpectralElementRemapping())
+Remapper(space, target_zcoords; buffer_length = 1)
 
 Return a `Remapper` responsible for interpolating any `Field` defined on the given `space`
 to the Cartesian product of `target_hcoords` with `target_zcoords`.
@@ -237,8 +237,7 @@ If you want to quickly remap something, you can call directly `interpolate`.
 By default, [`default_target_zcoords`](@ref) [`default_target_hcoords`](@ref) are used to
 determine the coordinates.
 
-Keyword arguments
-=================
+# Keyword arguments
 
 `buffer_length` is size of the internal buffer in the Remapper to store intermediate values
 for interpolation. Effectively, this controls how many fields can be remapped simultaneously
@@ -1046,8 +1045,8 @@ function _collect_interpolated_values!(
 end
 
 """
-   interpolate(remapper::Remapper, fields)
-   interpolate!(dest, remapper::Remapper, fields)
+interpolate(remapper::Remapper, fields)
+interpolate!(dest, remapper::Remapper, fields)
 
 Interpolate the given `field`(s) as prescribed by `remapper`.
 
@@ -1070,8 +1069,7 @@ Note: `interpolate` allocates new arrays and has some internal type-instability,
 When using `interpolate!`, the `dest`ination has to be the same array type as the
 device in use (e.g., `CuArray` for CUDA runs).
 
-Example
-========
+# Example
 
 Given `field1`,`field2`, two `Field` defined on a cubed sphere.
 
@@ -1196,56 +1194,71 @@ Interpolate `field` onto the Cartesian product of `target_hcoords` and `target_z
 `zresolution = nothing` disables vertical interpolation. `horizontal_method`: `SpectralElementRemapping()` or `BilinearRemapping()`.
 For performance, use a `Remapper` and `interpolate(remapper, fields)` instead.
 
-Example
-========
+# Example
 
 Given `field`, a `Field` defined on a cubed sphere.
 
 By default, a target uniform grid is chosen (with resolution `hresolution` and
 `zresolution`), so remapping is simply
+
 ```julia
 julia> interpolate(field)
+
 ```
+
 This will return an array of interpolated values.
 
 Resolution can be specified
+
 ```julia
 julia> interpolate(field; hresolution = 100, zresolution = 50)
-```
-Coordinates can be also specified directly:
-```julia
-julia> longpts = range(-180.0, 180.0, 21)
-julia> latpts = range(-80.0, 80.0, 21)
-julia> zpts = range(0.0, 1000.0, 21)
 
-julia> hcoords = [Geometry.LatLongPoint(lat, long) for long in longpts, lat in latpts]
+```
+
+Coordinates can be also specified directly:
+
+```julia
+julia> zpts = range(0.0, 1000.0, 21)
+longpts = range(-180.0, 180.0, 21)
+
 julia> zcoords = [Geometry.ZPoint(z) for z in zpts]
+latpts = range(-80.0, 80.0, 21)
 
 julia> interpolate(field, target_hcoords, target_zcoords)
+
 ```
 
 If you need the array of coordinates, you can call `default_target_hcoords` (or
 `default_target_zcoords`) passing `axes(field)`. This will return an array of
 `Geometry.Point`s. The functions `Geometry.components` and `Geometry.component`
 can be used to extract the components as numeric values. For example,
+
 ```julia
-julia> Geometry.components.(Geometry.components.([
-           Geometry.LatLongPoint(x, y) for x in range(-180.0, 180.0, length = 180),
-           y in range(-90.0, 90.0, length = 180)
-       ]))
+julia> Geometry.components.(
+           Geometry.components.([
+               Geometry.LatLongPoint(x, y) for x in range(-180.0, 180.0, length = 180),
+               y in range(-90.0, 90.0, length = 180)
+           ]),
+       )
 180×180 Matrix{StaticArraysCore.SVector{2, Float64}}:
  [-180.0, -90.0]    [-180.0, -88.9944]    …  [-180.0, 88.9944]    [-180.0, 90.0]
   ⋮                                        ⋱
  [180.0, -90.0]     [180.0, -88.9944]        [180.0, 88.9944]     [180.0, 90.0]
 ```
+
 To extract only long or lat, one can broadcast `getindex`
+
 ```julia
-julia> lats = getindex.(Geometry.components.([Geometry.LatLongPoint(x, y)
-                                              for x in range(-180.0, 180.0, length = 180),
-                                                  y in range(-90.0, 90.0, length = 180)
-                                             ]),
-                        1)
+julia> lats = getindex.(
+           Geometry.components.([
+               Geometry.LatLongPoint(x, y)
+               for x in range(-180.0, 180.0, length = 180),
+               y in range(-90.0, 90.0, length = 180)
+           ]),
+           1)
+
 ```
+
 This can be used directly for plotting.
 """
 function interpolate(

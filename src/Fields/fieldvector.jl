@@ -681,9 +681,8 @@ check that the types match. If `strict = false`, then
 `NamedTuple`s with the same properties but permuted order.
 For example:
 
- - `rcompare((;a=1,b=2), (;b=2,a=1); strict = true)` will return `false` and
- - `rcompare((;a=1,b=2), (;b=2,a=1); strict = false)` will return `true`
-
+  - `rcompare((;a=1,b=2), (;b=2,a=1); strict = true)` will return `false` and
+  - `rcompare((;a=1,b=2), (;b=2,a=1); strict = false)` will return `true`
 """
 rcompare(
     x::T,

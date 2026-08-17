@@ -11,8 +11,9 @@
 An extruded finite-difference space,
 where the extruded direction is _staggered_,
 containing grid information at either
- - cell centers (where `staggering` is [`Grids.CellCenter`](@ref)) or
- - cell faces (where `staggering` is [`Grids.CellFace`](@ref))
+
+  - cell centers (where `staggering` is [`Grids.CellCenter`](@ref)) or
+  - cell faces (where `staggering` is [`Grids.CellFace`](@ref))
 """
 struct ExtrudedFiniteDifferenceSpace{
     G <: Grids.AbstractExtrudedFiniteDifferenceGrid,

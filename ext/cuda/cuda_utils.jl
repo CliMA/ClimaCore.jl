@@ -221,15 +221,16 @@ multiprocessor, and which spreads small workloads across as many multiprocessors
 as possible. While `CUDA.launch_configuration` and its underlying C function
 `cudaOccMaxPotentialOccupancyBlockSize` only accept a single optional argument,
 `max_threads_per_block`, this function has three different variants:
- - When no positional arguments are specified, only the hardware constraints on
-   occupancy are considered (like CUDA's implementation without any arguments).
- - When `max_threads` is specified, the total number of threads is also limited.
-   If `strict` is `true`, this acts as a hard upper bound on the thread count.
-   Otherwise, an extra block of threads may be scheduled, allowing loops that
-   can handle surplus threads to assign every loop iteration to a unique thread.
- - When `max_threads_per_block` and `max_blocks` are both specified, the block
-   and grid dimensions of the launch configuration are individually limited
-   (similar to CUDA's implementation, but with the addition of `max_blocks`).
+
+  - When no positional arguments are specified, only the hardware constraints on
+    occupancy are considered (like CUDA's implementation without any arguments).
+  - When `max_threads` is specified, the total number of threads is also limited.
+    If `strict` is `true`, this acts as a hard upper bound on the thread count.
+    Otherwise, an extra block of threads may be scheduled, allowing loops that
+    can handle surplus threads to assign every loop iteration to a unique thread.
+  - When `max_threads_per_block` and `max_blocks` are both specified, the block
+    and grid dimensions of the launch configuration are individually limited
+    (similar to CUDA's implementation, but with the addition of `max_blocks`).
 
 In each case, `max_waves` can be specified to control how many waves of blocks
 are scheduled. Kernels with uneven load distributions (e.g., due to conditional
@@ -242,11 +243,12 @@ increased unless load redistribution is necessary. Setting `max_waves` to
 Like `CUDA.launch_configuration`, this returns a `NamedTuple` containing the
 optimal number of threads per block and the optimal number of blocks, and it
 also returns a symbol identifying the dominant factor that limits occupancy:
- - `:user` when limited by the user-specified constraints (e.g., `max_threads`)
- - `:num_blocks` when limited by the number of blocks per multiprocessor
- - `:num_threads` when limited by the number of threads per multiprocessor
- - `:registers` when limited by the register pressure of each thread
- - `:shared_memory` when limited by the shared memory requirements of each block
+
+  - `:user` when limited by the user-specified constraints (e.g., `max_threads`)
+  - `:num_blocks` when limited by the number of blocks per multiprocessor
+  - `:num_threads` when limited by the number of threads per multiprocessor
+  - `:registers` when limited by the register pressure of each thread
+  - `:shared_memory` when limited by the shared memory requirements of each block
 
 Computing a launch configuration requires querying the C driver for the kernel's
 register pressure and shared memory requirements, which adds measurable latency
@@ -511,6 +513,7 @@ end
     thread_index()
 
 Return the threadindex:
+
 ```
 (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x
 ```
@@ -520,6 +523,7 @@ Return the threadindex:
 
 """
     kernel_indexes(tidx, n)
+
 Return a tuple of indexes from the kernel,
 where `tidx` is the cuda thread index and
 `n` is a tuple of max lengths along each
@@ -536,6 +540,7 @@ Returns a `Bool` indicating if the thread index
 tuple of max lengths along each dimension of the
 
 accessed data.
+
 ```julia
 function kernel!(data, n)
     @inbounds begin

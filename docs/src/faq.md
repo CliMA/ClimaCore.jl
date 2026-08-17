@@ -16,12 +16,13 @@ cpu_space = ColumnSpace(;
     z_elem = 10,
     z_min = 0,
     z_max = 10,
-    staggering = CellCenter()
+    staggering = CellCenter(),
 )
 cuda_space = ClimaCore.to_device(ClimaComms.CUDADevice(), cpu_space)
 ```
 
 Similarly, we can convert back with `to_cpu`:
+
 ```julia
 new_cpu_space = ClimaCore.to_cpu(cuda_space)
 ```

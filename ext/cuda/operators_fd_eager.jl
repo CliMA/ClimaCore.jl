@@ -37,6 +37,7 @@ check_if_fits_in_shmem(val) = sizeof(typeof(val)) <= 36
 
 """
     has_type_arg(x)
+
 Check if `x` is a `Type`, or any of its arguments has a `Type` argument.
 This is needed because both the shmem matrix multiplication and the getidx fallback rely on
 `eltype`, and `eltype(::CudaRefType) = Any`

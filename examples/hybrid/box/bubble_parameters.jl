@@ -15,22 +15,37 @@ using DocStringExtensions
 Thermodynamic constants for the dry rising bubble.
 
 # Fields
+
 $(DocStringExtensions.FIELDS)
 """
 Base.@kwdef struct PhysicalParameters{FT}
-    "Mean sea level pressure"
+    """
+    Mean sea level pressure
+    """
     MSLP::FT = FT(1e5)
-    "Gravitational acceleration"
+    """
+    Gravitational acceleration
+    """
     grav::FT = FT(9.8)
-    "R dry (gas constant / mol mass dry air)"
+    """
+    R dry (gas constant / mol mass dry air)
+    """
     R_d::FT = FT(287.058)
-    "Heat capacity ratio"
+    """
+    Heat capacity ratio
+    """
     γ::FT = FT(1.4)
-    "Heat capacity at constant pressure"
+    """
+    Heat capacity at constant pressure
+    """
     C_p::FT = FT(R_d * γ / (γ - 1))
-    "Heat capacity at constant volume"
+    """
+    Heat capacity at constant volume
+    """
     C_v::FT = FT(R_d / (γ - 1))
-    "Triple point temperature"
+    """
+    Triple point temperature
+    """
     T_0::FT = FT(273.16)
 end
 Adapt.@adapt_structure PhysicalParameters

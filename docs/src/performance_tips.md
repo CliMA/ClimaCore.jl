@@ -19,20 +19,25 @@ Some Julia functions incur allocations. For example, `push!` dynamically allocat
 Julia's performance docs above recommends to pay close attention to allocations. Allocations can be coarsely reported with the `@time` macro and more finely reported by using `julia --track-allocation=all`. From [CodeCov.jl's docs](https://github.com/JuliaCI/Coverage.jl#memory-allocation):
 
 Start julia with
+
 ```sh
 julia --track-allocation=user
 ```
+
 Then:
-- Run whatever commands you wish to test. This first run is to ensure that everything is compiled (because compilation allocates memory).
-- Call `Profile.clear_malloc_data()`
-- Run your commands again
-- Quit julia
+
+  - Run whatever commands you wish to test. This first run is to ensure that everything is compiled (because compilation allocates memory).
+  - Call `Profile.clear_malloc_data()`
+  - Run your commands again
+  - Quit julia
 
 Finally, navigate to the directory holding your source code. Start julia (without command-line flags), and analyze the results using
+
 ```julia
 using Coverage
 analyze_malloc(dirnames)  # could be "." for the current directory, or "src", etc.
 ```
+
 This will return a vector of `MallocInfo` objects, specifying the number of bytes allocated, the file name, and the line number.
 These are sorted in increasing order of allocation size.
 
@@ -40,8 +45,8 @@ These are sorted in increasing order of allocation size.
 
 CliMA's [ReportMetrics.jl](https://github.com/CliMA/ReportMetrics.jl) applies the strategy in the above section and provides a re-useable interface for reporting the top-most important allocations. Here is an example of it in use:
 
- - rep_workload.jl
- - perf.jl
+  - rep_workload.jl
+  - perf.jl
 
 ```julia
 # File: rep_workload.jl
@@ -77,6 +82,7 @@ ReportMetrics.report_allocs(;
 ```
 
 This will print out something like the following:
+
 ```
 [ Info: RA_example: Number of unique allocating sites: 2
 ┌───────────────┬─────────────┬─────────────────────────────────────────┐
@@ -89,14 +95,16 @@ This will print out something like the following:
 ```
 
 From here, one can investigate where the most important allocations are coming from. Often, allocations arise from either:
- - Using functions that inherently allocate
-   - For example, `push!` inherently allocates
-   - Another example: defining a new variable `a = c .+ b`. Here, `a` is a newly allocated variable. It could be put into a cache and computed in-place via `a .= c .+ b`, which is non-allocating for Julia-native types (e.g., Arrays).
- - Type instabilities. Sometimes type-instabilities can trigger the compiler to perform runtime inference, which results in allocations. So, fixing type instabilities is one way to fix / remove allocations.
+
+  - Using functions that inherently allocate
+      + For example, `push!` inherently allocates
+      + Another example: defining a new variable `a = c .+ b`. Here, `a` is a newly allocated variable. It could be put into a cache and computed in-place via `a .= c .+ b`, which is non-allocating for Julia-native types (e.g., Arrays).
+  - Type instabilities. Sometimes type-instabilities can trigger the compiler to perform runtime inference, which results in allocations. So, fixing type instabilities is one way to fix / remove allocations.
 
 ## References
 
- - General julia-specific [performance tips](https://docs.julialang.org/en/v1/manual/performance-tips/)
- - [Code-coverage while tracking allocations](https://github.com/JuliaCI/Coverage.jl#code-coverage)
+  - General julia-specific [performance tips](https://docs.julialang.org/en/v1/manual/performance-tips/)
 
- - CliMA's [ReportMetrics.jl](https://github.com/CliMA/ReportMetrics.jl)
+  - [Code-coverage while tracking allocations](https://github.com/JuliaCI/Coverage.jl#code-coverage)
+
+  - CliMA's [ReportMetrics.jl](https://github.com/CliMA/ReportMetrics.jl)

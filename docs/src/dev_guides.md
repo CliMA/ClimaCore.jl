@@ -8,9 +8,9 @@ The guides are vendored as a Git subtree in this repository at `docs/dev-guides/
 
 ## What they cover
 
-- **Architecture** — repo structure conventions, ecosystem-wide design patterns, cross-repo contracts, dependency management
-- **Performance** — GPU kernel rules, broadcast patterns, allocation avoidance, type stability
-- **Workflow** — agent autonomy boundaries, code style, testing, and PR review guidelines
+  - **Architecture** — repo structure conventions, ecosystem-wide design patterns, cross-repo contracts, dependency management
+  - **Performance** — GPU kernel rules, broadcast patterns, allocation avoidance, type stability
+  - **Workflow** — agent autonomy boundaries, code style, testing, and PR review guidelines
 
 ## Repo-specific guide
 

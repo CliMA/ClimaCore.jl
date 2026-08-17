@@ -29,14 +29,15 @@ Transforms a variable expressed in spherical harmonics (var_spherical[num_fourie
 
     ! use all spherical harmonic modes
 
-
 # Arguments
-- mesh: struct with mesh information
-- snm: spherical variable
-- FT: FloatType
+
+  - mesh: struct with mesh information
+  - snm: spherical variable
+  - FT: FloatType
 
 # References
-- Ehrendorfer, M., Spectral Numerical Weather Prediction Models, Appendix B, Society for Industrial and Applied Mathematics, 2011
+
+  - Ehrendorfer, M., Spectral Numerical Weather Prediction Models, Appendix B, Society for Industrial and Applied Mathematics, 2011
 """
 function trans_spherical_to_grid!(mesh, snm, FT)
     num_fourier, num_spherical = mesh.num_fourier, mesh.num_spherical

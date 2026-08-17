@@ -19,7 +19,6 @@ remap!
 remap
 ```
 
-
 ## Mesh export
 
 ```@docs
@@ -76,7 +75,7 @@ NCDataset(datafile_cc, "c") do nc
     nc_w = defVar(nc, "w", Float64, fspace, ("time",))
 
     # write data to netcdf file
-    for i = 1:length(sol.u)
+    for i in 1:length(sol.u)
         nc_time[i] = sol.t[i]
 
         # extract fields and convert to orthogonal coordinates
@@ -85,11 +84,11 @@ NCDataset(datafile_cc, "c") do nc
         w = Geometry.WVector.(sol.u[i].w)
 
         # write fields to file
-        nc_rho[:,i] = Yc.ρ
-        nc_theta[:,i] = Yc.ρθ ./ Yc.ρ
-        nc_u[:,i] = map(u -> u.u, uₕ)
-        nc_v[:,i] = map(u -> u.v, uₕ)
-        nc_w[:,i] = map(u -> u.w, w)
+        nc_rho[:, i] = Yc.ρ
+        nc_theta[:, i] = Yc.ρθ ./ Yc.ρ
+        nc_u[:, i] = map(u -> u.u, uₕ)
+        nc_v[:, i] = map(u -> u.v, uₕ)
+        nc_w[:, i] = map(u -> u.w, w)
     end
 end
 

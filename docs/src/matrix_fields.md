@@ -107,11 +107,11 @@ scalar_field_matrix
 
 A FieldMatrix entry can be:
 
-- A `UniformScaling`, which contains a `Number`
-- A `DiagonalMatrixRow` containing a `Number` or a `Geometry.Tensor{2}`. The
-  tensor's basis is whatever the user supplies; there's no padding convention
-  imposed here.
-- A `ColumnwiseBandMatrixField`, where each value is a [`BandMatrixRow`](@ref) with entries of any type that can be represented using the field's base number type.
+  - A `UniformScaling`, which contains a `Number`
+  - A `DiagonalMatrixRow` containing a `Number` or a `Geometry.Tensor{2}`. The
+    tensor's basis is whatever the user supplies; there's no padding convention
+    imposed here.
+  - A `ColumnwiseBandMatrixField`, where each value is a [`BandMatrixRow`](@ref) with entries of any type that can be represented using the field's base number type.
 
 If an entry contains a composite type, the fields of that type can be extracted.
 This is also true for nested composite types.
@@ -123,21 +123,21 @@ using ClimaCore.CommonSpaces # hide
 import ClimaCore: MatrixFields, Quadratures # hide
 import ClimaCore.MatrixFields: @name # hide
 space = Box3DSpace(; # hide
-           z_elem = 3, # hide
-           x_min = 0, # hide
-           x_max = 1, # hide
-           y_min = 0, # hide
-           y_max = 1, # hide
-           z_min = 0, # hide
-           z_max = 10, # hide
-           periodic_x = false, # hide
-           periodic_y = false, # hide
-           n_quad_points = 1, # hide
-           quad = Quadratures.GL{1}(), # hide
-           x_elem = 1, # hide
-           y_elem = 2, # hide
-           staggering = CellCenter() # hide
-       ) # hide
+    z_elem = 3, # hide
+    x_min = 0, # hide
+    x_max = 1, # hide
+    y_min = 0, # hide
+    y_max = 1, # hide
+    z_min = 0, # hide
+    z_max = 10, # hide
+    periodic_x = false, # hide
+    periodic_y = false, # hide
+    n_quad_points = 1, # hide
+    quad = Quadratures.GL{1}(), # hide
+    x_elem = 1, # hide
+    y_elem = 2, # hide
+    staggering = CellCenter(), # hide
+) # hide
 nt_entry_field = fill(MatrixFields.DiagonalMatrixRow((; foo = 1.0, bar = 2.0)), space)
 nt_fieldmatrix = MatrixFields.FieldMatrix((@name(a), @name(b)) => nt_entry_field)
 nt_fieldmatrix[(@name(a), @name(b))]
@@ -161,7 +161,7 @@ Let key `(@name(name1), @name(name2))` correspond to entry `sample_entry` in `Fi
 An example of this is:
 
 ```julia
- A = MatrixFields.FieldMatrix((@name(name1), @name(name2)) => sample_entry)
+A = MatrixFields.FieldMatrix((@name(name1), @name(name2)) => sample_entry)
 ```
 
 Now consider what happens when indexing `A` with the key `(@name(name1.foo.bar.buz), @name(name2.biz.bop.fud))`.
@@ -174,18 +174,18 @@ by the internal key.
 The recursive indexing of an internal entry given some entry `entry` and internal key `internal_name_pair`
 works as follows:
 
-1. If the  `internal_name_pair` is blank, return `entry`
-2. If the element type of each band of `entry` is a `Geometry.Tensor{2}`, and `internal_name_pair` is of the form `(@name(components.data.1...), @name(components.data.2...))` (potentially with different numbers), then extract the specified component, and recurse on it with the remaining `internal_name_pair`.
-3. If the element type of each band of `entry` is an `Adjoint` of a `Geometry.AbstractTensor{1}` (an adjoint rank-1 tensor), then recurse on the parent of the adjoint.
-4. If `internal_name_pair[1]` is not empty, and the first name in it is a field of the element type of each band of `entry`, extract that field from `entry`, and recurse into it with the remaining names of `internal_name_pair[1]` and all of `internal_name_pair[2]`
-5. If `internal_name_pair[2]` is not empty, and the first name in it is a field of the element type of each band of `entry`, extract that field from `entry`, and recurse into it with all of `internal_name_pair[1]` and the remaining names of `internal_name_pair[2]`
-6. At this point, if none of the previous cases are true, both `internal_name_pair[1]` and `internal_name_pair[2]` should be non-empty, and it is assumed that `entry` is being used to implicitly represent some tensor structure. If the first name in `internal_name_pair[1]` is equivalent to `internal_name_pair[2]`, then both the first names are dropped, and entry is recursed onto. If the first names are different, both the first names are dropped, and the zero of entry is recursed onto.
+ 1. If the  `internal_name_pair` is blank, return `entry`
+ 2. If the element type of each band of `entry` is a `Geometry.Tensor{2}`, and `internal_name_pair` is of the form `(@name(components.data.1...), @name(components.data.2...))` (potentially with different numbers), then extract the specified component, and recurse on it with the remaining `internal_name_pair`.
+ 3. If the element type of each band of `entry` is an `Adjoint` of a `Geometry.AbstractTensor{1}` (an adjoint rank-1 tensor), then recurse on the parent of the adjoint.
+ 4. If `internal_name_pair[1]` is not empty, and the first name in it is a field of the element type of each band of `entry`, extract that field from `entry`, and recurse into it with the remaining names of `internal_name_pair[1]` and all of `internal_name_pair[2]`
+ 5. If `internal_name_pair[2]` is not empty, and the first name in it is a field of the element type of each band of `entry`, extract that field from `entry`, and recurse into it with all of `internal_name_pair[1]` and the remaining names of `internal_name_pair[2]`
+ 6. At this point, if none of the previous cases are true, both `internal_name_pair[1]` and `internal_name_pair[2]` should be non-empty, and it is assumed that `entry` is being used to implicitly represent some tensor structure. If the first name in `internal_name_pair[1]` is equivalent to `internal_name_pair[2]`, then both the first names are dropped, and entry is recursed onto. If the first names are different, both the first names are dropped, and the zero of entry is recursed onto.
 
 When the entry is a `ColumnWiseBandMatrixField`, indexing it will return a broadcasted object in
 the following situations:
 
-1. The internal key indexes to a type different than the basetype of the entry
-2. The internal key indexes to a zero-ed value
+ 1. The internal key indexes to a type different than the basetype of the entry
+ 2. The internal key indexes to a zero-ed value
 
 ```@setup 2
 using ClimaCore.CommonSpaces
@@ -256,8 +256,8 @@ The functions that index an entry with an internal key assume the implicit tenso
 when all of the following are true for `entry` where `T_k` is the element type of each band, and
 `(internal_key_1, internal_key_2)` is the internal key indexing `entry`.
 
-- the `internal_key_1` name chain is not empty and its first name is not a field of `T_k`
-- the `internal_key_2` name chain is not empty and its first name is not a field of `T_k`
+  - the `internal_key_1` name chain is not empty and its first name is not a field of `T_k`
+  - the `internal_key_2` name chain is not empty and its first name is not a field of `T_k`
 
 For most use cases, `T_k` is a scalar.
 
@@ -283,12 +283,18 @@ $b_1 = b_2 = 1$, and
 The non-zero values of each row of `M` are equivalent in this example, but they can also vary in value.
 
 ```julia
-∂f_∂g = fill(MatrixFields.TridiagonalMatrixRow(-0.5 * identity_axis2tensor, identity_axis2tensor, -0.5 * identity_axis2tensor), space)
-J = MatrixFields.FieldMatrix((@name(f), @name(g))=> ∂f_∂g)
+∂f_∂g = fill(
+    MatrixFields.TridiagonalMatrixRow(
+        -0.5 * identity_axis2tensor,
+        identity_axis2tensor,
+        -0.5 * identity_axis2tensor,
+    ),
+    space,
+)
+J = MatrixFields.FieldMatrix((@name(f), @name(g)) => ∂f_∂g)
 ```
 
 `∂f_∂g` can be indexed into to get the partial derrivatives of individual components.
-
 
 ```@example 2
 J[(@name(f.components.data.:(1)), @name(g.components.data.:(1)))]
@@ -307,7 +313,7 @@ J = MatrixFields.FieldMatrix((@name(f), @name(g))=> ∂f_∂g)
 
 ```julia
 ∂f_∂g = fill(MatrixFields.TridiagonalMatrixRow(-0.5, 1.0, -0.5), space)
-J = MatrixFields.FieldMatrix((@name(f), @name(g))=> ∂f_∂g)
+J = MatrixFields.FieldMatrix((@name(f), @name(g)) => ∂f_∂g)
 ```
 
 ```@example 2
@@ -315,7 +321,9 @@ J[(@name(f.components.data.:(1)), @name(g.components.data.:(1)))]
 ```
 
 ```@example 2
-Base.Broadcast.materialize(J[(@name(f.components.data.:(2)), @name(g.components.data.:(1)))])
+Base.Broadcast.materialize(
+    J[(@name(f.components.data.:(2)), @name(g.components.data.:(1)))],
+)
 ```
 
 If it is the case that
