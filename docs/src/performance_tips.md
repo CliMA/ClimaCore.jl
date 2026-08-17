@@ -100,4 +100,3 @@ From here, one can investigate where the most important allocations are coming f
  - [Code-coverage while tracking allocations](https://github.com/JuliaCI/Coverage.jl#code-coverage)
 
  - CliMA's [ReportMetrics.jl](https://github.com/CliMA/ReportMetrics.jl)
-

@@ -3996,7 +3996,7 @@ function fd_shmem_is_supported end
 """
     any_fd_shmem_supported(::Base.Broadcast.AbstractBroadcasted)
 
-Returns a Bool indicating if any operators in the broadcasted object support 
+Returns a Bool indicating if any operators in the broadcasted object support
 finite difference shared memory shmem.
 """
 function any_fd_shmem_supported end
@@ -4102,8 +4102,8 @@ end
 
 Allows users to, from global scope, enable finite
 difference shmem for operators that support it.
-TODO: ~30% slowdown was noticed with CC 0.14.31 
-in Aquaplanet benchmarks. This may need attention in 
+TODO: ~30% slowdown was noticed with CC 0.14.31
+in Aquaplanet benchmarks. This may need attention in
 future releases
 
 ## Usage

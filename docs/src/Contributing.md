@@ -140,6 +140,61 @@ We provide a brief [git tutorial](https://github.com/CliMA/ClimaWorkshops/blob/m
 
 Your development environment is now ready!
 
+### Pre-commit hooks
+
+`ClimaCore.jl` ships a [`.pre-commit-config.yaml`](https://github.com/CliMA/ClimaCore.jl/blob/main/.pre-commit-config.yaml)
+that runs the same checks CI runs, so formatting and whitespace problems are
+caught before you push. Installing it is optional but recommended:
+
+```bash
+uv tool install prek   # or: pipx install prek
+prek install           # installs the git hook in this clone
+```
+
+[`prek`](https://prek.j178.dev) is a fast, drop-in replacement for
+[`pre-commit`](https://pre-commit.com); either tool reads the same config, so
+`pip install pre-commit && pre-commit install` works too.
+
+Once installed, the hooks run automatically on `git commit` against your staged
+files. To sweep the whole repository, or to check a single hook, run:
+
+```bash
+prek run --all-files
+prek run julia-formatter --all-files
+```
+
+The hooks are:
+
+- The standard [`pre-commit-hooks`](https://github.com/pre-commit/pre-commit-hooks)
+  set: trailing whitespace, end-of-file newline, mixed line endings, TOML and
+  YAML syntax, merge-conflict markers, large files, case conflicts, and broken
+  symlinks.
+- `julia-formatter`, which runs `JuliaFormatter` from the version-pinned
+  [`.dev/format/`](https://github.com/CliMA/ClimaCore.jl/blob/main/.dev/format/Project.toml)
+  environment (currently `=2.10.1`) with the rules in the root
+  [`.JuliaFormatter.toml`](https://github.com/CliMA/ClimaCore.jl/blob/main/.JuliaFormatter.toml).
+  Using the pinned environment matters: `Pkg.add("JuliaFormatter")` in your base
+  environment may install a different version, which produces a different diff
+  from CI.
+- `markdown-link-ambiguity`, which flags a docs-build failure that is easy to
+  introduce and slow to diagnose. Documenter parses `[text](target)` as a link,
+  and its parser accepts any whitespace between the bracket and the parenthesis,
+  including a line break, so bracketed units followed by a parenthetical become
+  a link with an unresolvable target. Since `docs/make.jl` uses
+  `checkdocs = :exports`, such a link stays latent in an unrendered docstring
+  until someone adds that symbol to a page, and the build then fails in an
+  unrelated pull request. Separate the bracket and the parenthesis with
+  punctuation, or wrap the units in backticks.
+
+CI runs the same hooks on every pull request via
+[`.github/workflows/run-prek.yml`](https://github.com/CliMA/ClimaCore.jl/blob/main/.github/workflows/run-prek.yml),
+so a clean `prek run --all-files` locally means a green formatting check.
+
+Repository-wide formatting commits are listed in
+[`.git-blame-ignore-revs`](https://github.com/CliMA/ClimaCore.jl/blob/main/.git-blame-ignore-revs);
+run `git config blame.ignoreRevsFile .git-blame-ignore-revs` to keep them out of
+your `git blame` output.
+
 ## Pull Requests
 
 We follow the [ColPrac guide](https://github.com/SciML/ColPrac) for collaborative practices.
@@ -161,10 +216,13 @@ and [submit a pull request](https://github.com/CLiMA/ClimaAtmos.jl/compare/).
 
 Currently a number of checks are run per commit for a given PR.
 
-- `JuliaFormatter` checks if the PR is formatted according to our guidelines.
-  Before merging, the formatter should be run via the command `julia -e 'using
-  JuliaFormatter; format(".")'`. JuliaFormatter.jl should be installed in your
-  base Julia directory, and v2.10.1 must be used.
+- `Prek checks` runs the hooks in `.pre-commit-config.yaml`, including
+  `JuliaFormatter`, over the whole repository. Reproduce it locally with `prek
+  run --all-files` (see [Pre-commit hooks](#Pre-commit-hooks) above), or run the
+  formatter alone from the pinned environment:
+  `julia --startup-file=no --project=.dev/format -e 'using Pkg; Pkg.instantiate(); using JuliaFormatter; format(".")'`.
+  JuliaFormatter v2.10.1 must be used; a different version produces a different
+  diff.
 - `Documentation` rebuilds the documentation for the PR and checks if the docs
   are consistent and generate valid output.
 - `Unit Tests` run subsets of the unit tests defined in `tests/`, using `Pkg.test()`.

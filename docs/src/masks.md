@@ -166,12 +166,12 @@ operations of mask-aware and mask-unaware:
    - `min` (mask-unaware, warning is thrown)
    - `max` (mask-unaware, warning is thrown)
  - field constructors (`copy`, `Fields.Field`, `ones`, `zeros`) are mask-unaware.
-   This was a design implementation detail, users should not generally depend on the results where `mask == 0`, in case this is changed in the future. 
+   This was a design implementation detail, users should not generally depend on the results where `mask == 0`, in case this is changed in the future.
  - internal array operations (`fill!(parent(field), 0)`) mask-unaware.
 
 ## Developer docs
 
-In order to support masks, we define their types in `DataLayouts`, since 
+In order to support masks, we define their types in `DataLayouts`, since
 we need access to them from within kernels in `DataLayouts`. We could have made
 an API and kept them completely orthogonal, but that would have been a bit more
 complicated, also, it was convenient to make the masks themselves data layouts,
@@ -196,4 +196,3 @@ An important note is that when we set the mask maps for active columns, the
 order that they are assigned can be permuted without impacting correctness, but
 this could have a big impact on performance on the gpu. We should investigate
 this.
-

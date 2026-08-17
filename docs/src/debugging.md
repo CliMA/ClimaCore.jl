@@ -308,7 +308,7 @@ bc.axes.5.stop::Int64
 Sometimes, we want to start from a given simulation state and explore different
 ideas. For example, we want to run a simulation for 10 days, and then test how
 different approaches affect its stability. Sometimes, checkpoints offer a way to
-do this, but not everything can be checkpointed. 
+do this, but not everything can be checkpointed.
 
 A simple way to "checkpoint" a simulation is to `deepcopy` its state. This
 allows one to step the copy instead of the original one, which can be re-used to
@@ -329,7 +329,7 @@ other_space = deepcopy(space)
 one = ones(space)
 other_one = ones(other_space)
 
-one .+ other_one  # This throws an error 
+one .+ other_one  # This throws an error
 
 ClimaCore.DebugOnly.allow_mismatched_spaces_unsafe() = true
 one .+ other_one # Now it's fine!

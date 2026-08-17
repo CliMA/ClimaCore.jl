@@ -1,0 +1,67 @@
+# Canonical pre-commit configuration for ClimaCore.jl.
+#
+# Works with either `prek` (https://prek.j178.dev, recommended) or the original
+# `pre-commit`. Install the git hooks once with `prek install`, then the hooks
+# below run automatically on `git commit` against your staged files. For manual
+# runs, `prek run` uses normal hook file matching; use
+# `prek run --all-files` for a whole-repo sweep.
+#
+# Setup instructions live in docs/src/Contributing.md ("Pre-commit hooks").
+exclude: .*docs/dev-guides.*|\.github.*
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      # JuliaFormatter does not strip all trailing whitespace (e.g., in non-.jl
+      # files), so trim it here. This includes markdown: the pinned
+      # JuliaFormatter (=2.10.1) leaves no trailing whitespace of its own, so
+      # the two hooks agree. JuliaFormatter 1.x did not, and the two would undo
+      # each other on every run -- see the `julia-formatter` hook below.
+      - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      - id: markdown-link-ambiguity
+        name: Documenter link ambiguity ([units] followed by parentheses)
+        # Documenter parses `[text](target)` as a link, and its parser allows
+        # any whitespace -- including a newline -- between `]` and `(`. Units
+        # in brackets followed by a parenthetical therefore become links and
+        # break the docs build with a :cross_references error. Most docstrings
+        # are not rendered (checkdocs = :exports), so these stay latent until
+        # the symbol is added to a page; catch them at commit time instead.
+        entry: .dev/check_markdown_link_ambiguity.py
+        language: system
+        types_or: [julia, markdown]
+        pass_filenames: true
+        # Test files are never rendered by Documenter, and several of them
+        # embed expected `repr` output such as
+        # `IntervalDomain: x ∈ [-3.0,5.0] (periodic)`, which the check would
+        # (correctly, for prose) flag.
+        exclude: ^(test|lib/[^/]+/test)/
+
+      - id: julia-formatter
+        name: JuliaFormatter (matches CI)
+        # Uses the pinned .dev/format environment so the formatting matches the
+        # CI check regardless of the JuliaFormatter version in your base
+        # environment. Requires `julia` on your PATH.
+        # `Pkg.resolve()` runs first because .dev/format/Manifest.toml is
+        # gitignored: a manifest resolved before the compat bound in
+        # .dev/format/Project.toml was last bumped still pins the old version,
+        # and `Pkg.instantiate` honors it instead of re-resolving, silently
+        # formatting with the wrong major version. `resolve` errors rather than
+        # re-resolving in that case, so fall back to `Pkg.update()`, which
+        # re-resolves against the bound. Both are near no-ops once the
+        # environment matches.
+        entry: julia --startup-file=no --project=.dev/format -e 'using Pkg; try Pkg.resolve(; io = devnull) catch; Pkg.update(; io = devnull) end; Pkg.instantiate(; io = devnull); using JuliaFormatter; format(ARGS)'
+        language: system
+        types: [julia]
+        pass_filenames: true
+        require_serial: true

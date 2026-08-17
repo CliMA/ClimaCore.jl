@@ -269,7 +269,7 @@ end
     dss_local_ghost!(device, perimeter_data, perimeter, topology)
 
 Computes the "local" part of ghost vertex dss. (i.e. it computes the summation of all the shared local
-vertices of a unique ghost vertex and stores the value in each of the local vertex locations in 
+vertices of a unique ghost vertex and stores the value in each of the local vertex locations in
 `perimeter_data`)
 
 Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
@@ -299,7 +299,7 @@ dss_local_ghost!(
 """
     dss_ghost!(device, perimeter_data, perimeter, topology)
 
-Sets the value for all local vertices of each unique ghost vertex, in `perimeter_data`, to that of 
+Sets the value for all local vertices of each unique ghost vertex, in `perimeter_data`, to that of
 the representative ghost vertex.
 
 Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
@@ -347,7 +347,7 @@ end
     load_from_recv_buffer!(device, dss_buffer)
 
 Adds data from the recv buffer to the corresponding location in `perimeter_data`.
-For ghost vertices, this data is added only to the representative vertices. The values are 
+For ghost vertices, this data is added only to the representative vertices. The values are
 then scattered to other local vertices corresponding to each unique ghost vertex in `dss_local_ghost`.
 
 Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
