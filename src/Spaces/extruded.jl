@@ -179,10 +179,26 @@ issubspace(subspace::FiniteDifferenceSpace, space::ExtrudedFiniteDifferenceSpace
     grid(subspace) === grid(space).vertical_grid ||
     (grid(subspace) isa Grids.ColumnGrid && grid(subspace).full_grid === grid(space))
 
-Base.@propagate_inbounds level(space::ExtrudedFiniteDifferenceSpace2D, v) =
-    SpectralElementSpace1D(level(grid(space), staggered_level_index(space, v)))
-Base.@propagate_inbounds level(space::ExtrudedFiniteDifferenceSpace3D, v) =
-    SpectralElementSpace2D(level(grid(space), staggered_level_index(space, v)))
+# This must also cover device-side spaces, which appear in place of their host
+# counterparts inside GPU kernels (see reconstruct_placeholder_space). Without a
+# method that matches, `level` falls back to the generic identity method, which
+# silently returns the extruded space itself. Device-side grids do not store
+# their horizontal grid, so the aliases above cannot tell how many horizontal
+# dimensions such a space spans; the directions spanned by the coordinates of
+# its local geometry, which host and device spaces share, stand in for that.
+Base.@propagate_inbounds level(space::ExtrudedFiniteDifferenceSpace, v) =
+    _level_space(
+        eltype(local_geometry_data(space)),
+        level(grid(space), staggered_level_index(space, v)),
+    )
+_level_space(::Type{<:Geometry.LocalGeometry{(1, 2, 3)}}, level_grid) =
+    SpectralElementSpace2D(level_grid)
+_level_space(
+    ::Type{
+        <:Union{Geometry.LocalGeometry{(1, 3)}, Geometry.LocalGeometry{(2, 3)}},
+    },
+    level_grid,
+) = SpectralElementSpace1D(level_grid)
 
 Base.@propagate_inbounds slab(space::ExtrudedFiniteDifferenceSpace, v, h) =
     SpectralElementSpaceSlab(
