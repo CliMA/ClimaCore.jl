@@ -4,6 +4,21 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-🔥behavioralΔ] `Operators.PositiveDefinite`, the van Leer limiter
+  constraint of `LinVanLeerC2F`, now uses a physical global lower bound
+  \phi_min = 0, so reconstructed edge values — and the flux-form update under
+  the CFL condition — stay non-negative, while local extrema are no longer
+  clipped. This is intended for use with fields advected which are 
+  are assumed non-negative (e.g. specific humidities and other similar tracers); 
+  The constraint degenerates toward first-order upwinding wherever the 
+  field is negative.
+
+- ![][badge-🐛bugfix] Fix `Operators.SuperbeeLimiter`: the Sweby coefficient is
+  now `max(0, min(2r, 1), min(r, 2))`. The previous form used `min(1, r)`
+  instead of `min(2r, 1)`, so for `r ∈ (0, 1)` it matched MinMod rather than
+  Superbee.
+
+
 v0.15.3
 -------
 

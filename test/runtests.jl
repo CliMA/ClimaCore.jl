@@ -106,6 +106,7 @@ unit_tests = [
     UnitTest("FD ops - tensor"                          ,"Operators/finitedifference/unit_tensor.jl"; tier = :unit, subsystem = :operators),
     UnitTest("FD ops - boundary symmetry"               ,"Operators/finitedifference/unit_boundary_symmetry.jl"; tier = :unit, subsystem = :operators),
     UnitTest("FD ops - upwind schemes"                  ,"Operators/finitedifference/unit_upwind_schemes.jl"; tier = :unit, subsystem = :operators),
+    UnitTest("FD ops - TVD limiters"                    ,"Operators/finitedifference/unit_tvd_limiters.jl"; tier = :unit, subsystem = :operators),
     UnitTest("FD ops - inference"                       ,"Operators/finitedifference/inference_finitedifference.jl"; meta = :cpu_only, tier = :inference, subsystem = :operators),
     UnitTest("FD ops - inference examples"              ,"Operators/finitedifference/inference_examples.jl"; tier = :inference, subsystem = :operators),
     UnitTest("FD ops - column conv"                     ,"Operators/finitedifference/conv_column.jl"; tier = :conv, subsystem = :operators),

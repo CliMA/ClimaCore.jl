@@ -2,10 +2,12 @@
 # advected along a column by each of the available constraints in turn, and the
 # run asserts what each one promises: the two monotonicity-preserving
 # constraints may not step outside the initial bounds at all on a uniform mesh,
-# `PositiveDefinite` is allowed a small excursion, and `AlgebraicMean` — which
-# constrains nothing — is expected to overshoot. All of them must conserve mass
-# and land the pulse where the exact solution puts it. `limited_flux_operator`
-# isolates the choice of limiter, so a different constraint can be swapped in.
+# `PositiveDefinite` may never undershoot below zero (on any mesh) but is
+# allowed a bounded overshoot since it does not clip local maxima, and
+# `AlgebraicMean` — which constrains nothing — is expected to overshoot. All of
+# them must conserve mass and land the pulse where the exact solution puts it.
+# `limited_flux_operator` isolates the choice of limiter, so a different
+# constraint can be swapped in.
 using Test
 using LinearAlgebra
 import ClimaComms
@@ -102,8 +104,10 @@ constraints = (
     Operators.MonotoneLocalExtrema(),
 )
 # On a uniform mesh these two constraints are proven monotonicity-preserving,
-# so they may not leave the initial bounds at all; the others are allowed a
-# small excursion (`AlgebraicMean` imposes no constraint and is unbounded).
+# so they may not leave the initial bounds at all; on the stretched mesh they
+# are allowed a small excursion. `PositiveDefinite` guarantees non-negativity
+# per cell under the CFL bound on any mesh, but leaves the upper bound
+# unconstrained (`AlgebraicMean` imposes no constraint and is unbounded).
 monotonicity_preserving =
     (Operators.MonotoneHarmonic, Operators.MonotoneLocalExtrema)
 
@@ -153,6 +157,9 @@ for (stretch_fn, mesh_name) in zip(stretch_fns, mesh_names)
         if constraint isa Union{monotonicity_preserving...} &&
            stretch_fn == Meshes.Uniform()
             @test overshoot ≤ eps(FT)
+            @test undershoot ≤ eps(FT)
+        elseif constraint isa Operators.PositiveDefinite
+            @test overshoot ≤ FT(0.1)
             @test undershoot ≤ eps(FT)
         elseif !(constraint isa Operators.AlgebraicMean)
             @test overshoot ≤ FT(0.05)

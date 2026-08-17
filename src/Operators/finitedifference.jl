@@ -1397,18 +1397,24 @@ limiter constraint options are provided for use with advection operators:
 
 - `AlgebraicMean`: Algebraic mean, this guarantees neither positivity nor
   monotonicity (eq 2, `avg`)
-- `PositiveDefinite`: Positive-definite with implicit diffusion based on local
-  stencil extrema (eq 3b, 3c, 5a, 5b, `posd`)
+- `PositiveDefinite`: Positive-definite (semi-monotone) constraint using the
+  physical lower bound 𝜙_min = 0: the mismatch is limited by twice the upwind
+  cell value, so reconstructed edge values — and hence the flux-form update
+  under the CFL condition — remain non-negative. It does not clip local
+  extrema, so it is less diffusive than the monotone constraints. Intended for
+  positive-definite quantities such as specific humidities and other tracer
+  mass ratios (eq 3, `posd`)
 - `MonotoneHarmonic`: Monotonicity preserving harmonic mean, this implies a strong
   monotonicity constraint (eq 4, `mono4`)
 - `MonotoneLocalExtrema`: Monotonicity preserving, with extrema bounded by the
   edge cells in the stencil (eq 5, `mono5`)
 
 The diffusion implied by these methods is proportional to the local upwind CFL
-number. The `mismatch` Δ𝜙 = 0 returns the first-order upwind method. Special
-cases (discussed in Lin et al (1994)) include setting the 𝜙_min = 0 or 𝜙_max =
-saturation mixing ratio for water vapor are not considered here in favour of
-the generalized local extrema in equation (5a, 5b).
+number. The `mismatch` Δ𝜙 = 0 returns the first-order upwind method. Of the
+special cases discussed in Lin et al (1994), 𝜙_min = 0 is implemented as
+`PositiveDefinite`; a variable upper bound (e.g. 𝜙_max = saturation mixing
+ratio for water vapor) is not considered here in favour of the generalized
+local extrema in equation (5a, 5b).
 
 Supported boundary conditions include:
 
@@ -1475,11 +1481,13 @@ end
 posdiff(x, y) = ifelse(x - y ≥ 0, x - y, zero(x))
 
 function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::PositiveDefinite)
+    # Lin et al. (1994), eq 3, with the physical lower bound 𝜙_min = 0: the
+    # mismatch may not exceed twice the upwind cell value, which keeps both
+    # reconstructed edge values of the upwind cell non-negative (the upper
+    # bound is not constrained, so local extrema are not clipped).
     Δ𝜙_avg = ((a⁰ - a⁻) + (a⁺ - a⁰)) / 2
-    min𝜙 = min(a⁻, a⁰, a⁺)
-    max𝜙 = max(a⁻, a⁰, a⁺)
     return sign(Δ𝜙_avg) *
-           min(abs(Δ𝜙_avg), 2 * posdiff(a⁺, min𝜙), 2 * posdiff(max𝜙, a⁺)) *
+           min(abs(Δ𝜙_avg), 2 * posdiff(a⁰, zero(a⁰))) *
            (1 - sign(v) * v * dt)
 end
 
@@ -2111,7 +2119,7 @@ A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
 `TVDLimitedFluxC2F` for the general formulation.
 """
 struct SuperbeeLimiter <: AbstractTVDSlopeLimiter end
-limiter_coeff(r, ::SuperbeeLimiter) = max(0, min(1, r), min(2, r))
+limiter_coeff(r, ::SuperbeeLimiter) = max(0, min(2r, 1), min(r, 2))
 
 """
     U = MonotonizedCentralLimiter(;boundaries)

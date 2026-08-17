@@ -879,8 +879,10 @@ end
 
         # Unitary, constant advective velocity
         w = Geometry.WVector.(ones(fs))
-        # c = sin(z), scalar field defined at the centers
-        c = sin.(centers)
+        # c = 1 + sin(z) ≥ 0, a positive-definite field as assumed by the
+        # constraint (its 𝜙_min = 0 bound is meaningless for sign-indefinite
+        # fields); the analytic flux divergence is still cos(z)
+        c = 1 .+ sin.(centers)
 
         SLMethod = Operators.LinVanLeerC2F(
             bottom = Operators.FirstOrderOneSided(),
@@ -903,12 +905,14 @@ end
     # Check convergence rate
     conv_adv_wc = convergence_rate(err_adv_wc, Δh)
 
-    # LinVanLeer limited flux conv, with f(z) = sin(z)
-    @test conv_adv_wc[1] ≈ 1.0 atol = 0.01
-    @test conv_adv_wc[2] ≈ 1.0 atol = 0.01
-    @test conv_adv_wc[3] ≈ 1.0 atol = 0.01
-    @test conv_adv_wc[4] ≈ 1.0 atol = 0.01
-    @test conv_adv_wc[5] ≈ 1.0 atol = 0.01
+    # LinVanLeer limited flux conv, with f(z) = 1 + sin(z): away from the
+    # 𝜙 = 0 minimum the constraint rarely binds, matching the monotone
+    # constraints' 1.5 rate
+    @test conv_adv_wc[1] ≈ 1.5 atol = 0.01
+    @test conv_adv_wc[2] ≈ 1.5 atol = 0.01
+    @test conv_adv_wc[3] ≈ 1.5 atol = 0.01
+    @test conv_adv_wc[4] ≈ 1.5 atol = 0.01
+    @test conv_adv_wc[5] ≈ 1.5 atol = 0.01
 
 end
 

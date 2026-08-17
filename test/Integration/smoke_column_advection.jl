@@ -214,7 +214,10 @@ end
         boundary_names = (:bottom, :top),
     )
 
-    # (constraint, is it bounds-preserving?)
+    # (constraint, does it preserve both bounds?) `PositiveDefinite` enforces
+    # only the physical lower bound 𝜙_min = 0 (Lin et al. 1994, eq 3): no
+    # undershoot to roundoff, but a small overshoot is allowed since local
+    # maxima are not clipped.
     constraints = [
         (Operators.PositiveDefinite(), false),
         (Operators.MonotoneHarmonic(), true),
@@ -244,9 +247,10 @@ end
                 @test qmax ≤ z₁ + eps(FT)
                 @test qmin ≥ z₀ - eps(FT)
             else
-                # Positivity-preserving only: small overshoot allowed, no undershoot
+                # Positivity-preserving only: non-negativity holds to
+                # roundoff, small overshoot allowed
                 @test qmax ≤ z₁ + FT(0.05)
-                @test qmin ≥ z₀ - FT(0.05)
+                @test qmin ≥ z₀ - eps(FT)
             end
             @test abs(sum(q) - m₀) / abs(m₀) ≤ 10 * eps(FT)
         end
