@@ -92,6 +92,7 @@ helpers in `conversions.jl` (e.g. `project`, `transform`), which apply the
 appropriate metric from a `LocalGeometry`.
 
 # Examples
+
 ```julia
 julia> Covariant13Axis()
 Covariant13Components()
@@ -103,6 +104,7 @@ julia> dual(Covariant13Axis())
 Contravariant13Components()
 
 # reshape(tensor, (Components, ...)) reorders and zero-fills by `names`:
+
 julia> v = Covariant12Vector(1.0, 2.0);
 
 julia> reshape(v, (Covariant123Axis(),))         # zero-fill the missing u₃
@@ -237,11 +239,11 @@ colon-indexing yields a smaller `Tensor` over the remaining non-colon axes.
 
 # Shapes that `Tensor` takes in practice
 
-- `Tensor{1}` (a vector): `components::SVector`, `bases::Tuple{Components}`.
-- `Tensor{2}` covector (a row-vector): the first axis is [`ScalarComponents`](@ref)
-  and `components::Adjoint{T, SVector}`. This is what `v'` produces for a
-  `Tensor{1}` `v`.
-- `Tensor{2}` square tensor: `components::SMatrix`.
+  - `Tensor{1}` (a vector): `components::SVector`, `bases::Tuple{Components}`.
+  - `Tensor{2}` covector (a row-vector): the first axis is [`ScalarComponents`](@ref)
+    and `components::Adjoint{T, SVector}`. This is what `v'` produces for a
+    `Tensor{1}` `v`.
+  - `Tensor{2}` square tensor: `components::SMatrix`.
 
 The `UniformScaling` constructor is a convenience that converts
 `s = λ * I` (where `λ = s.λ` is the scalar stored in Julia's
@@ -264,6 +266,7 @@ To change basis types, use `project` / `transform` from `conversions.jl`,
 which apply the appropriate metric from a `LocalGeometry`.
 
 # Examples
+
 ```julia
 julia> v = Covariant12Vector(1.0, 2.0)
 Tensor([1.0, 2.0], (Covariant12Components(),))

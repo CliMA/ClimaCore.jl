@@ -16,10 +16,10 @@ regions to skip. This helps both with the ergonomics, as well as performance.
 
 There are two user-facing parts for ClimaCore masks:
 
- - set the `enable_mask = true` keyword in the space constructor (when available),
-   which is currently any constructor that returns/contains a `SpectralElementSpace2D`.
- - use `set_mask!` to set where the mask is `true` (where compute should occur)
-   and `false` (where compute should be skipped)
+  - set the `enable_mask = true` keyword in the space constructor (when available),
+    which is currently any constructor that returns/contains a `SpectralElementSpace2D`.
+  - use `set_mask!` to set where the mask is `true` (where compute should occur)
+    and `false` (where compute should be skipped)
 
 Here is an example
 
@@ -154,20 +154,20 @@ In addition, some operations with masked fields skip masked regions
 (i.e., mask-unaware), effectively ignoring the mask. Here is a list of
 operations of mask-aware and mask-unaware:
 
- - `DataLayout` operations (`Fields.field_values(f) = 1`) mask-unaware (will likely never be mask-aware).
- - `fill!` (`@. f = 1`) mask-aware
- - point-wise `copyto!` (`@. f = 1 + z`) mask-aware
- - stencil `copyto!` (`@. ᶜf = 1 + DivergenceF2C()(Geometry.WVector(ᶠf))`) mask-aware (vertical derivatives and interpolations interpolations)
- - spectral element operations `copyto!` (`@. f = 1 + Operators.Divergence()(f)`), where `Operators.Divergence` carries out a divergence operation in horizontal directions. mask-unaware
- - fieldvector operations `copyto!` (`@. Y += 1`) mask-unaware
- - reductions:
-   - `sum` (mask-unaware, warning is thrown)
-   - `extrema` (mask-unaware, warning is thrown)
-   - `min` (mask-unaware, warning is thrown)
-   - `max` (mask-unaware, warning is thrown)
- - field constructors (`copy`, `Fields.Field`, `ones`, `zeros`) are mask-unaware.
-   This was a design implementation detail, users should not generally depend on the results where `mask == 0`, in case this is changed in the future.
- - internal array operations (`fill!(parent(field), 0)`) mask-unaware.
+  - `DataLayout` operations (`Fields.field_values(f) = 1`) mask-unaware (will likely never be mask-aware).
+  - `fill!` (`@. f = 1`) mask-aware
+  - point-wise `copyto!` (`@. f = 1 + z`) mask-aware
+  - stencil `copyto!` (`@. ᶜf = 1 + DivergenceF2C()(Geometry.WVector(ᶠf))`) mask-aware (vertical derivatives and interpolations interpolations)
+  - spectral element operations `copyto!` (`@. f = 1 + Operators.Divergence()(f)`), where `Operators.Divergence` carries out a divergence operation in horizontal directions. mask-unaware
+  - fieldvector operations `copyto!` (`@. Y += 1`) mask-unaware
+  - reductions:
+      + `sum` (mask-unaware, warning is thrown)
+      + `extrema` (mask-unaware, warning is thrown)
+      + `min` (mask-unaware, warning is thrown)
+      + `max` (mask-unaware, warning is thrown)
+  - field constructors (`copy`, `Fields.Field`, `ones`, `zeros`) are mask-unaware.
+    This was a design implementation detail, users should not generally depend on the results where `mask == 0`, in case this is changed in the future.
+  - internal array operations (`fill!(parent(field), 0)`) mask-unaware.
 
 ## Developer docs
 
@@ -179,18 +179,18 @@ so it seemed most natural for them to live there.
 
 We have a couple types:
 
- - abstract `AbstractMask` for subtyping masks and use for generic interface
-   methods
- - `NoMask` (the default), which is a lazy object that should effectively result
-   in a no-op, without any loss of runtime performance
- - `IJHMask` currently the only supported horizontal mask, which contains
-   `is_active` (defined in `set_mask!`), `N` (the number of active columns),
-   and maps containing indices to the `i, j, h` locations where `is_active` is
-   true. The maps are defined in `set_mask_maps!`, allows us to launch cuda
-   kernels to only target the active columns, and threads are not wasted on
-   non-existent columns. The logic to handle this is relatively thin, and
-   extends our current `ext/cuda/datalayouts_threadblock.jl` api
-   (via `masked_partition` and `masked_universal_index`).
+  - abstract `AbstractMask` for subtyping masks and use for generic interface
+    methods
+  - `NoMask` (the default), which is a lazy object that should effectively result
+    in a no-op, without any loss of runtime performance
+  - `IJHMask` currently the only supported horizontal mask, which contains
+    `is_active` (defined in `set_mask!`), `N` (the number of active columns),
+    and maps containing indices to the `i, j, h` locations where `is_active` is
+    true. The maps are defined in `set_mask_maps!`, allows us to launch cuda
+    kernels to only target the active columns, and threads are not wasted on
+    non-existent columns. The logic to handle this is relatively thin, and
+    extends our current `ext/cuda/datalayouts_threadblock.jl` api
+    (via `masked_partition` and `masked_universal_index`).
 
 An important note is that when we set the mask maps for active columns, the
 order that they are assigned can be permuted without impacting correctness, but

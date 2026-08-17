@@ -271,12 +271,13 @@ elevation to the `HypsographyAdaption` type. A spectral second-order diffusion
 operator is applied with forward-Euler updates to generate
 profiles for each new iteration. Steps to generate smoothed terrain (
 represented as a ClimaCore Field) are as follows:
-- Compute discrete elevation profile f
-- Compute diffuse_surface_elevation!(f, κ, iter). f is mutated.
-- Define `Hypsography.LinearAdaption(f)`
-- Define `ExtrudedFiniteDifferenceSpace` with new surface elevation.
-Default diffusion parameters are appropriate for spherical arrangements.
-For `zmax-zsfc` == 𝒪(10^4), κ == 𝒪(10^8), dt == 𝒪(10⁻¹).
+
+  - Compute discrete elevation profile f
+  - Compute diffuse_surface_elevation!(f, κ, iter). f is mutated.
+  - Define `Hypsography.LinearAdaption(f)`
+  - Define `ExtrudedFiniteDifferenceSpace` with new surface elevation.
+    Default diffusion parameters are appropriate for spherical arrangements.
+    For `zmax-zsfc` == 𝒪(10^4), κ == 𝒪(10^8), dt == 𝒪(10⁻¹).
 """
 function diffuse_surface_elevation!(
     f::Fields.Field;

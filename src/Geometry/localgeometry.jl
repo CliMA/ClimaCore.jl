@@ -7,18 +7,28 @@ isapproxsymmetric(A::AbstractMatrix{T}; rtol = 10 * eps(T)) where {T <: Abstract
 The necessary local metric information defined at each node.
 """
 struct LocalGeometry{I, C <: AbstractPoint, FT, M, G}
-    "Coordinates of the current point"
+    """
+    Coordinates of the current point
+    """
     coordinates::C
-    "Jacobian determinant of the transformation `ξ` (reference space) to `x` (physical space)"
+    """
+    Jacobian determinant of the transformation `ξ` (reference space) to `x` (physical space)
+    """
     J::FT
-    "Metric terms: `J` multiplied by the quadrature weights"
+    """
+    Metric terms: `J` multiplied by the quadrature weights
+    """
     WJ::FT
-    "Canonical metric ∂x/∂ξ. Identity-padded to full
+    """
+    Canonical metric ∂x/∂ξ. Identity-padded to full
     (UVWAxis, Covariant123Axis) shape so a single matvec covers every
-    conversion regardless of `I`."
+    conversion regardless of `I`.
+    """
     ∂x∂ξ::M
-    "Contravariant metric tensor gⁱʲ. Identity-padded to full
-    (Contravariant123, Contravariant123) shape."
+    """
+    Contravariant metric tensor gⁱʲ. Identity-padded to full
+    (Contravariant123, Contravariant123) shape.
+    """
     gⁱʲ::G
 end
 
@@ -78,9 +88,13 @@ end
 The necessary local metric information defined at each node on each surface.
 """
 struct SurfaceGeometry{FT, N}
-    "surface Jacobian determinant, multiplied by the surface quadrature weight"
+    """
+    surface Jacobian determinant, multiplied by the surface quadrature weight
+    """
     sWJ::FT
-    "surface outward pointing normal vector"
+    """
+    surface outward pointing normal vector
+    """
     normal::N
 end
 
@@ -93,7 +107,9 @@ This is currently used for constructing spaces with pressure as the vertical
 coordinate.
 """
 struct CoordinateOnlyGeometry{C <: AbstractPoint}
-    "Coordinates of the current point"
+    """
+    Coordinates of the current point
+    """
     coordinates::C
 end
 

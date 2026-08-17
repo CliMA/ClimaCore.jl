@@ -6,12 +6,12 @@ analogue of [`PointSpace`](@ref), which is the single-column level space.
 
 Like [`SpectralElementSpace2D`](@ref), the wrapped `grid` is either:
 
-- a `Grids.PointCloudGrid` which is the level-agnostic horizontal space of a
-  [`MultiColumnFiniteDifferenceSpace`](@ref) (returned by
-  [`Spaces.horizontal_space`](@ref))
-- a `Grids.LevelGrid` of the extruded multi-column grid which is a single
-  vertical level (returned by [`Spaces.level`](@ref)), carrying full 3-D local
-  geometry.
+  - a `Grids.PointCloudGrid` which is the level-agnostic horizontal space of a
+    [`MultiColumnFiniteDifferenceSpace`](@ref) (returned by
+    [`Spaces.horizontal_space`](@ref))
+  - a `Grids.LevelGrid` of the extruded multi-column grid which is a single
+    vertical level (returned by [`Spaces.level`](@ref)), carrying full 3-D local
+    geometry.
 """
 struct PointCloudSpace{G <: Grids.AbstractGrid} <: AbstractSpace
     grid::G
@@ -43,13 +43,13 @@ A space of N independent vertical columns at arbitrary horizontal (lat, lon)
 locations on a sphere.  This is the N-column generalisation of
 [`Spaces.FiniteDifferenceSpace`](@ref) (the single-column space):
 
-- The data layout is `VIJFH{LG, Nv, 1, 1, N}` (same vertical structure for every
-  column; full 3-D local geometry including lat/lon/z coordinates).
-- [`Spaces.level`](@ref) returns a [`PointCloudSpace`](@ref) (N points at that
-  z-level) rather than a spectral-element horizontal space.
-- [`Spaces.column`](@ref) returns a single-column
-  [`Spaces.FiniteDifferenceSpace`](@ref).
-- [`Fields.bycolumn`](@ref) iterates over each column independently.
+  - The data layout is `VIJFH{LG, Nv, 1, 1, N}` (same vertical structure for every
+    column; full 3-D local geometry including lat/lon/z coordinates).
+  - [`Spaces.level`](@ref) returns a [`PointCloudSpace`](@ref) (N points at that
+    z-level) rather than a spectral-element horizontal space.
+  - [`Spaces.column`](@ref) returns a single-column
+    [`Spaces.FiniteDifferenceSpace`](@ref).
+  - [`Fields.bycolumn`](@ref) iterates over each column independently.
 
 There is no horizontal connectivity between columns; DSS and horizontal
 spectral-element operators are not supported.

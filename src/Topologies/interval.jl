@@ -10,7 +10,9 @@ struct IntervalTopology{
     M <: Meshes.IntervalMesh,
     B,
 } <: AbstractIntervalTopology
-    "the ClimaComms context on which the topology is defined"
+    """
+    the ClimaComms context on which the topology is defined
+    """
     context::C
     mesh::M
     boundaries::B

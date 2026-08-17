@@ -99,7 +99,6 @@ end
 """
     divergence_result_type(V)
 
-
 Return type when taking the divergence of a field of `V`.
 """
 @inline divergence_result_type(::Type{V}) where {V <: AbstractTensor{1}} = eltype(V)

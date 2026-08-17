@@ -30,7 +30,9 @@ struct BilinearRemapping{T12, T13, T14, T15} <: AbstractRemappingMethod
     local_bilinear_j::T15
 end
 
-"""`BilinearRemapping()` with no arguments: method tag; Remapper constructor fills in the arrays."""
+"""
+`BilinearRemapping()` with no arguments: method tag; Remapper constructor fills in the arrays.
+"""
 BilinearRemapping() = BilinearRemapping(nothing, nothing, nothing, nothing)
 
 """

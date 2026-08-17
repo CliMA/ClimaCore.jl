@@ -17,11 +17,12 @@ Base.broadcastable(name::FieldName) = tuple(name)
     @name(expr)
 
 Shorthand for constructing a `FieldName`. Some examples include
-- `name = @name()`, in which case `get_field(x, name)` returns `x`
-- `name = @name(a)`, in which case `get_field(x, name)` returns `x.a`
-- `name = @name(a.b.c)`, in which case `get_field(x, name)` returns `x.a.b.c`
-- `name = @name(a.b.c.:(1).d)`, in which case `get_field(x, name)` returns
-  `x.a.b.c.:(1).d`
+
+  - `name = @name()`, in which case `get_field(x, name)` returns `x`
+  - `name = @name(a)`, in which case `get_field(x, name)` returns `x.a`
+  - `name = @name(a.b.c)`, in which case `get_field(x, name)` returns `x.a.b.c`
+  - `name = @name(a.b.c.:(1).d)`, in which case `get_field(x, name)` returns
+    `x.a.b.c.:(1).d`
 
 This macro is preferred over the `FieldName` constructor because it checks
 whether `expr` is a syntactically valid chain of `getproperty` calls before

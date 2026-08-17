@@ -1,16 +1,16 @@
 """
     Meshes
 
-- domain
-- topology
-- coordinates
-- metric terms (inverse partial derivatives)
-- quadrature rules and weights
+  - domain
+  - topology
+  - coordinates
+  - metric terms (inverse partial derivatives)
+  - quadrature rules and weights
 
 ## References / notes
- - [ceed](https://ceed.exascaleproject.org/ceed-code/)
- - [QA](https://github.com/CliMA/ClimateMachine.jl/blob/ans/sphere/test/Numerics/DGMethods/compressible_navier_stokes_equations/sphere/sphere_helper_functions.jl)
 
+  - [ceed](https://ceed.exascaleproject.org/ceed-code/)
+  - [QA](https://github.com/CliMA/ClimateMachine.jl/blob/ans/sphere/test/Numerics/DGMethods/compressible_navier_stokes_equations/sphere/sphere_helper_functions.jl)
 """
 module Spaces
 
@@ -49,12 +49,12 @@ using StaticArrays, ForwardDiff, LinearAlgebra, Adapt
     AbstractSpace
 
 Should define
-- `grid`
-- `staggering`
 
+  - `grid`
 
-- `space` constructor
+  - `staggering`
 
+  - `space` constructor
 """
 abstract type AbstractSpace end
 
@@ -155,6 +155,7 @@ local_area(space::AbstractSpace) = Base.sum(weighted_jacobian(space))
 
 The length/area/volume of `space`. This is computed as the sum of the quadrature
 weights ``W_i`` multiplied by the Jacobian determinants ``J_i``:
+
 ```math
 \\sum_i W_i J_i \\approx \\int_\\Omega \\, d \\Omega
 ```

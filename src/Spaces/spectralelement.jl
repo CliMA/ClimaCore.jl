@@ -55,7 +55,6 @@ end
         quadrature_style::Quadratures.QuadratureStyle;
         kwargs...
     )
-
 """
 struct SpectralElementSpace1D{G} <: AbstractSpectralElementSpace
     grid::G

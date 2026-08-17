@@ -86,12 +86,13 @@ Create a file `weightfile` in SCRIP format containing the remapping weights from
 [`overlap_mesh`](@ref).
 
 Keyword arguments are passed as command-line options. These include:
-- `in_type` / `out_type`: the type of the input and output mesh:
-  - `"fv"` (default): finite volume (one value per element)
-  - `"cgll"`: continuous GLL finite element method (a single value for colocated nodes)
-  - `"dgll"`: discontinuous GLL finite element method (duplicate values for colocated nodes)
-- 'in_np'/'out_np': Order of input and output meshes
-- 'mono': Monotonicity of remapping
+
+  - `in_type` / `out_type`: the type of the input and output mesh:
+      + `"fv"` (default): finite volume (one value per element)
+      + `"cgll"`: continuous GLL finite element method (a single value for colocated nodes)
+      + `"dgll"`: discontinuous GLL finite element method (duplicate values for colocated nodes)
+  - 'in_np'/'out_np': Order of input and output meshes
+  - 'mono': Monotonicity of remapping
 
 Set `mono = true` for monotone remapping
 Set `verbose=true` to print information.

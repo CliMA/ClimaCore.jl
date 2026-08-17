@@ -4,8 +4,8 @@
 Transfrom `arg[I]` to a basis for direct stiffness summation (DSS).
 Transformations only apply to vector quantities.
 
-- `local_geometry[I]` is the relevant `LocalGeometry` object. If it is `nothing`, then no transformation is performed
-- `weight[I]` is the relevant DSS weights. If `weight` is `nothing`, then the result is simply summation.
+  - `local_geometry[I]` is the relevant `LocalGeometry` object. If it is `nothing`, then no transformation is performed
+  - `weight[I]` is the relevant DSS weights. If `weight` is `nothing`, then the result is simply summation.
 
 See [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """

@@ -4,22 +4,23 @@
 Represents a point in space.
 
 The following types are supported:
-- `XPoint(x)`
-- `YPoint(y)`
-- `ZPoint(z)`
-- `XYPoint(x, y)`
-- `XZPoint(x, z)`
-- `XYZPoint(x, y, z)`
-- `LatPoint(lat)`
-- `LongPoint(long)`
-- `LatLongPoint(lat, long)`
-- `LatLongZPoint(lat, long, z)`
-- `Cartesian1Point(x1)`
-- `Cartesian2Point(x2)`
-- `Cartesian3Point(x3)`
-- `Cartesian12Point(x1, x2)`
-- `Cartesian13Point(x1, x3)`
-- `Cartesian123Point(x1, x2, x3)`
+
+  - `XPoint(x)`
+  - `YPoint(y)`
+  - `ZPoint(z)`
+  - `XYPoint(x, y)`
+  - `XZPoint(x, z)`
+  - `XYZPoint(x, y, z)`
+  - `LatPoint(lat)`
+  - `LongPoint(long)`
+  - `LatLongPoint(lat, long)`
+  - `LatLongZPoint(lat, long, z)`
+  - `Cartesian1Point(x1)`
+  - `Cartesian2Point(x2)`
+  - `Cartesian3Point(x3)`
+  - `Cartesian12Point(x1, x2)`
+  - `Cartesian13Point(x1, x3)`
+  - `Cartesian123Point(x1, x2, x3)`
 """
 abstract type AbstractPoint{FT} end
 

@@ -62,6 +62,12 @@ repos:
         # environment matches.
         entry: julia --startup-file=no --project=.dev/format -e 'using Pkg; try Pkg.resolve(; io = devnull) catch; Pkg.update(; io = devnull) end; Pkg.instantiate(; io = devnull); using JuliaFormatter; format(ARGS)'
         language: system
-        types: [julia]
+        types_or: [julia, markdown]
         pass_filenames: true
         require_serial: true
+        # Mirrors the `ignore` list in .JuliaFormatter.toml, which JuliaFormatter
+        # applies only when it walks a directory itself -- files passed on the
+        # command line, as this hook passes them, are formatted regardless. These
+        # files use reference-style links and hand-aligned tables that
+        # `format_markdown` would inline and reflow.
+        exclude: (^|/)README\.md$|^NEWS\.md$|^AGENTS\.md$

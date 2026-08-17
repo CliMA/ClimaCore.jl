@@ -139,9 +139,10 @@ construct the nonuniform type `Tuple{Int32, Int32, Int128}` from three `Int64`s,
 spanning the eight padding bytes inserted between the `Int32`s and the `Int128`.
 
 For more information about `reinterpret` and padding, see the following:
-- https://discourse.julialang.org/t/reinterpret-returns-wrong-values
-- https://discourse.julialang.org/t/reinterpret-vector-into-single-struct
-- https://discourse.julialang.org/t/reinterpret-vector-of-mixed-type-tuples
+
+  - https://discourse.julialang.org/t/reinterpret-returns-wrong-values
+  - https://discourse.julialang.org/t/reinterpret-vector-into-single-struct
+  - https://discourse.julialang.org/t/reinterpret-vector-of-mixed-type-tuples
 """
 @generated bitcast_struct(::Type{T}, value::S) where {T, S} =
     Expr(:block, :@inline, bitcast_struct_expr(T, S, :value))

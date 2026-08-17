@@ -37,18 +37,19 @@ array, leading to a hybrid of the traditional "array-of-structs" (`F = 1`) and
 parallelized on CPUs and GPUs, and it dictates which array types are allocated.
 
 Several layouts are available, named after the order of their parent axes:
-- [`DataF`](@ref) is a 0-dimensional array that stores a single value, with an
-  `Nf`-element parent array (used in place of a `Ref`)
-- [`VIJFH`](@ref) is an `Nv × Ni × Nj × Nh` array that stores spatially
-  varying data, with each value spread along the fourth parent axis
-- [`VIJHF`](@ref) is like `VIJFH` with the `F` and `H` axes swapped, which permits
-  [linear indexing](https://docs.julialang.org/en/v1/devdocs/subarrays/#Linear-indexing)
-  and improves performance for operators that only access one field at a time
-- [`VIJHWithF`](@ref) generalizes `VIJFH` and `VIJHF` to any `F` axis
-  position, with `F = nothing` removing the axis altogether
-- [`VIH1`](@ref) and [`IH1JH2`](@ref) store vertical and horizontal planes of
-  interpolated data for plotting, whose `ih1` and `jh2` indices combine `i` and
-  `j` with `h1` and `h2` (orthogonal components of `h` in rectangular domains)
+
+  - [`DataF`](@ref) is a 0-dimensional array that stores a single value, with an
+    `Nf`-element parent array (used in place of a `Ref`)
+  - [`VIJFH`](@ref) is an `Nv × Ni × Nj × Nh` array that stores spatially
+    varying data, with each value spread along the fourth parent axis
+  - [`VIJHF`](@ref) is like `VIJFH` with the `F` and `H` axes swapped, which permits
+    [linear indexing](https://docs.julialang.org/en/v1/devdocs/subarrays/#Linear-indexing)
+    and improves performance for operators that only access one field at a time
+  - [`VIJHWithF`](@ref) generalizes `VIJFH` and `VIJHF` to any `F` axis
+    position, with `F = nothing` removing the axis altogether
+  - [`VIH1`](@ref) and [`IH1JH2`](@ref) store vertical and horizontal planes of
+    interpolated data for plotting, whose `ih1` and `jh2` indices combine `i` and
+    `j` with `h1` and `h2` (orthogonal components of `h` in rectangular domains)
 
 ```julia-repl
 julia> data = VIJFH{Tuple{Int64, Float64, Int128}, 10, 5, 5, nothing}(Array{Int64}, 20);
@@ -56,26 +57,28 @@ julia> data = VIJFH{Tuple{Int64, Float64, Int128}, 10, 5, 5, nothing}(Array{Int6
 julia> size(data), size(parent(data)) # Nh = 20 elements, Nf = 4 Int64 storage values
 ((10, 5, 5, 20), (10, 5, 5, 4, 20))
 
-julia> data[1, 2, 3, 4] = (0, 1.0, 2); data.:1[1, 2, 3, 4], data[1, 2, 3, 4].:2
+julia> data[1, 2, 3, 4] = (0, 1.0, 2);
+       data.:1[1, 2, 3, 4], data[1, 2, 3, 4].:2
 (0, 1.0)
 ```
 
 # Extended Help
 
 `DataLayout`s also provide the following functionality for ClimaCore:
-- Assigning a [`DataScope`](@ref) to every batch of data, and automatically
-  partitioning data across nestable multithreaded operations
-- Storing specific array dimensions as type parameters, and allocating static
-  arrays in place of regular arrays when every dimension can be inferred
-- Using linear indices in place of Cartesian indices where doing so may
-  improve performance, including in `getindex` and `view` operations
-- Automatic nested broadcasting over `Tuple` and `NamedTuple` values (or
-  other supported iterator types), along with broadcasting over array indices
-- Checking for type stability before evaluating operations like broadcasts
-  and reductions, avoiding inefficient CPU behavior and GPU compilation errors
-- Falling back to built-in `AbstractArray` methods when specialized ClimaCore
-  code is not available (this may be highly inefficient or fail to compile on
-  GPUs, but it should generally work on CPUs)
+
+  - Assigning a [`DataScope`](@ref) to every batch of data, and automatically
+    partitioning data across nestable multithreaded operations
+  - Storing specific array dimensions as type parameters, and allocating static
+    arrays in place of regular arrays when every dimension can be inferred
+  - Using linear indices in place of Cartesian indices where doing so may
+    improve performance, including in `getindex` and `view` operations
+  - Automatic nested broadcasting over `Tuple` and `NamedTuple` values (or
+    other supported iterator types), along with broadcasting over array indices
+  - Checking for type stability before evaluating operations like broadcasts
+    and reductions, avoiding inefficient CPU behavior and GPU compilation errors
+  - Falling back to built-in `AbstractArray` methods when specialized ClimaCore
+    code is not available (this may be highly inefficient or fail to compile on
+    GPUs, but it should generally work on CPUs)
 """
 abstract type DataLayout{T, N, F, S, A} <: AbstractArray{T, N} end
 

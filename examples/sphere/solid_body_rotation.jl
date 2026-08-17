@@ -37,7 +37,6 @@ Estimate convergence rate given vectors `err` and `Δh`
     log(err_k/err_m) ≈ log((Δh_k/Δh_m)^p)
     log(err_k/err_m) ≈ p*log(Δh_k/Δh_m)
     log(err_k/err_m)/log(Δh_k/Δh_m) ≈ p
-
 """
 convergence_rate(err, Δh) =
     [log(err[i] / err[i - 1]) / log(Δh[i] / Δh[i - 1]) for i in 2:length(Δh)]

@@ -133,8 +133,9 @@ Base.Broadcast.broadcasted(
 Constructs a new operator (or operator-like object) that generates the matrix
 applied by `op` to its final argument. If `op_matrix = operator_matrix(op)`,
 we can use the following identities:
-- When `op` takes one argument, `@. op(arg) == @. op_matrix() * arg`.
-- When `op` takes multiple arguments,
+
+  - When `op` takes one argument, `@. op(arg) == @. op_matrix() * arg`.
+  - When `op` takes multiple arguments,
     `@. op(args..., arg) == @. op_matrix(args...) * arg`.
 
 When `op` takes more than one argument, `operator_matrix(op)` constructs a
@@ -147,6 +148,7 @@ infer the space and element type of the operator matrix.
 
 As an example, the `InterpolateF2C()` operator on a space with ``n`` cell
 centers applies an ``n \\times (n + 1)`` bidiagonal matrix:
+
 ```math
 \\textrm{interp}(arg) = \\begin{bmatrix}
     0.5 &     0.5 &       0 & \\cdots &       0 &       0 &       0 \\\\
@@ -157,8 +159,10 @@ centers applies an ``n \\times (n + 1)`` bidiagonal matrix:
       0 &       0 &       0 & \\cdots &       0 &     0.5 &     0.5
 \\end{bmatrix} * arg
 ```
+
 The `GradientF2C()` operator applies a similar matrix, but with different
 entries:
+
 ```math
 \\textrm{grad}(arg) = \\begin{bmatrix}
 -\\textbf{e}^3 &  \\textbf{e}^3 &              0 & \\cdots &              0 &              0 &             0 \\\\
@@ -169,6 +173,7 @@ entries:
              0 &              0 &              0 & \\cdots &              0 & -\\textbf{e}^3 & \\textbf{e}^3
 \\end{bmatrix} * arg
 ```
+
 The unit vector ``\\textbf{e}^3``, which can also be thought of as the
 differential along the third coordinate axis (``\\textrm{d}\\xi^3``), is
 implemented as a `Geometry.Covariant3Vector(1)`.
@@ -176,6 +181,7 @@ implemented as a `Geometry.Covariant3Vector(1)`.
 Not all operators have well-defined operator matrices. For example, the operator
 `GradientC2F(; bottom = SetGradient(grad_b), top = SetGradient(grad_t))` applies
 an affine transformation:
+
 ```math
 \\textrm{grad}(arg) = \\begin{bmatrix}
 grad_b \\\\ 0 \\\\ 0 \\\\ \\vdots \\\\ 0 \\\\ 0 \\\\ grad_t
@@ -189,8 +195,10 @@ grad_b \\\\ 0 \\\\ 0 \\\\ \\vdots \\\\ 0 \\\\ 0 \\\\ grad_t
              0 &              0 &              0 & \\cdots &              0 &             0
 \\end{bmatrix} * arg
 ```
+
 However, this simplifies to a linear transformation when ``grad_b`` and
 ``grad_t`` are both 0:
+
 ```math
 \\textrm{grad}(arg) = \\begin{bmatrix}
              0 &              0 &              0 & \\cdots &              0 &             0 \\\\
@@ -202,6 +210,7 @@ However, this simplifies to a linear transformation when ``grad_b`` and
              0 &              0 &              0 & \\cdots &              0 &             0
 \\end{bmatrix} * arg
 ```
+
 In general, when `op` has nonzero boundary conditions that make it apply an
 affine transformation, `operator_matrix(op)` will print out a warning and zero
 out the boundary conditions before computing the operator matrix.
@@ -209,12 +218,14 @@ out the boundary conditions before computing the operator matrix.
 In addition to affine transformations, there are also some operators that apply
 nonlinear transformations to their arguments; that is, transformations which
 cannot be accurately approximated without using more terms of the form
+
 ```math
 \\textrm{op}(\\textbf{0}) +
 \\textrm{op}'(\\textbf{0}) * arg +
 \\textrm{op}''(\\textbf{0}) * arg * arg +
 \\ldots.
 ```
+
 When `op` is such an operator, `operator_matrix(op)` will throw an error. In the
 future, we may want to modify `operator_matrix(op)` so that it will instead
 return ``\\textrm{op}'(\\textbf{0})``, where ``\\textbf{0} ={} ```zero.(arg)`.

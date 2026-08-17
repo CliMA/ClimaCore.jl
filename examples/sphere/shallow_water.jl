@@ -42,16 +42,25 @@ include(joinpath(@__DIR__, "..", "example_utils.jl")) # linkfig
 Physical parameters needed for the simulation.
 
 # Fields
+
 $(DocStringExtensions.FIELDS)
 """
 Base.@kwdef struct PhysicalParameters{FT} # rename to PhysicalParameters
-    "Radius of earth"
+    """
+    Radius of earth
+    """
     R::FT = FT(6.37122e6)
-    "Rotation rate of earth"
+    """
+    Rotation rate of earth
+    """
     Ω::FT = FT(7.292e-5)
-    "Gravitational constant"
+    """
+    Gravitational constant
+    """
     g::FT = FT(9.80616)
-    "Hyperdiffusion coefficient"
+    """
+    Hyperdiffusion coefficient
+    """
     ν₄::FT = FT(0.25)
 end
 #This example solves the shallow-water equations on a cubed-sphere manifold.
@@ -71,16 +80,25 @@ pole and the center of the top cube panel.
 https://doi.org/10.1016/S0021-9991(05)80016-6
 
 # Fields
+
 $(DocStringExtensions.FIELDS)
 """
 Base.@kwdef struct SteadyStateTest{FT, P} <: AbstractTest
-    "Physical parameters"
+    """
+    Physical parameters
+    """
     params::P = PhysicalParameters{FT}()
-    "advection velocity"
+    """
+    advection velocity
+    """
     u0::FT = 2 * pi * params.R / (12 * 86400)
-    "peak of analytic height field"
+    """
+    peak of analytic height field
+    """
     h0::FT = 2.94e4 / params.g
-    "angle between the north pole and the center of the top cube panel"
+    """
+    angle between the north pole and the center of the top cube panel
+    """
     α::FT
 end
 SteadyStateTest(α::FT) where {FT} =
@@ -97,22 +115,37 @@ with compact support.
 https://doi.org/10.1016/S0021-9991(05)80016-6
 
 # Fields
+
 $(DocStringExtensions.FIELDS)
 """
 Base.@kwdef struct SteadyStateCompactTest{FT, P} <: AbstractTest
-    "Physical parameters"
+    """
+    Physical parameters
+    """
     params::P = PhysicalParameters{FT}()
-    "advection velocity"
+    """
+    advection velocity
+    """
     u0::FT = 2 * pi * params.R / (12 * 86400)
-    "peak of analytic height field"
+    """
+    peak of analytic height field
+    """
     h0::FT = 2.94e4 / params.g
-    "latitude lower bound for coordinate transformation parameter"
+    """
+    latitude lower bound for coordinate transformation parameter
+    """
     ϕᵦ::FT = -30.0
-    "latitude upper bound for coordinate transformation parameter"
+    """
+    latitude upper bound for coordinate transformation parameter
+    """
     ϕₑ::FT = 90.0
-    "velocity perturbation parameter"
+    """
+    velocity perturbation parameter
+    """
     xₑ::FT = 0.3
-    "angle between the north pole and the center of the top cube panel"
+    """
+    angle between the north pole and the center of the top cube panel
+    """
     α::FT
 end
 SteadyStateCompactTest(α::FT) where {FT} =
@@ -130,25 +163,42 @@ a non-uniform reference surface h_s.
 https://doi.org/10.1016/S0021-9991(05)80016-6
 
 # Fields
+
 $(DocStringExtensions.FIELDS)
 """
 Base.@kwdef struct MountainTest{FT, P} <: AbstractTest
-    "Physical parameters"
+    """
+    Physical parameters
+    """
     params::P = PhysicalParameters{FT}()
-    "advection velocity"
+    """
+    advection velocity
+    """
     u0::FT = 20.0
-    "peak of analytic height field"
+    """
+    peak of analytic height field
+    """
     h0::FT = 5960
-    "radius of conical mountain"
+    """
+    radius of conical mountain
+    """
     a::FT = 20.0
-    "center of mountain long coord, shifted by 180 compared to the paper,
-    because our λ ∈ [-180, 180] (in the paper it was 270, with λ ∈ [0, 360])"
+    """
+    center of mountain long coord, shifted by 180 compared to the paper,
+    because our λ ∈ `[-180, 180]` (in the paper it was 270, with λ ∈ `[0, 360]`)
+    """
     λc::FT = 90.0
-    "latitude coordinate for center of mountain"
+    """
+    latitude coordinate for center of mountain
+    """
     ϕc::FT = 30.0
-    "mountain peak height"
+    """
+    mountain peak height
+    """
     h_s0::FT = 2e3
-    "angle between the north pole and the center of the top cube panel"
+    """
+    angle between the north pole and the center of the top cube panel
+    """
     α::FT
 end
 MountainTest(α::FT) where {FT} =
@@ -164,20 +214,33 @@ vorticity equation on the sphere
 https://doi.org/10.1016/S0021-9991(05)80016-6
 
 # Fields
+
 $(DocStringExtensions.FIELDS)
 """
 Base.@kwdef struct RossbyHaurwitzTest{FT, P} <: AbstractTest
-    "Physical parameters"
+    """
+    Physical parameters
+    """
     params::P = PhysicalParameters{FT}()
-    "velocity amplitude parameter"
+    """
+    velocity amplitude parameter
+    """
     a::FT = 4.0
-    "peak of analytic height field"
+    """
+    peak of analytic height field
+    """
     h0::FT = 8.0e3
-    "vorticity amplitude parameter (1/sec)"
+    """
+    vorticity amplitude parameter (1/sec)
+    """
     ω::FT = 7.848e-6
-    "vorticity amplitude parameter (1/sec)"
+    """
+    vorticity amplitude parameter (1/sec)
+    """
     K::FT = 7.848e-6
-    "angle between the north pole and the center of the top cube panel"
+    """
+    angle between the north pole and the center of the top cube panel
+    """
     α::FT
 end
 RossbyHaurwitzTest(α::FT) where {FT} =
@@ -199,31 +262,54 @@ https://doi.org/10.3402/tellusa.v56i5.14436
 https://doi.org/10.1016/j.jcp.2010.04.044
 
 # Fields
+
 $(DocStringExtensions.FIELDS)
 """
 Base.@kwdef struct BarotropicInstabilityTest{FT, P} <: AbstractTest
-    "Physical parameters"
+    """
+    Physical parameters
+    """
     params::P = PhysicalParameters{FT}()
-    "maximum zonal velocity"
+    """
+    maximum zonal velocity
+    """
     u_max::FT = 80.0
-    "mountain shape parameters"
+    """
+    mountain shape parameters
+    """
     αₚ::FT = 19.09859
-    "mountain shape parameters"
+    """
+    mountain shape parameters
+    """
     βₚ::FT = 3.81971
-    "peak of balanced height field from Tempest
-    https://github.com/paullric/tempestmodel/blob/master/test/shallowwater_sphere/BarotropicInstabilityTest.cpp#L86"
+    """
+    peak of balanced height field from Tempest
+    https://github.com/paullric/tempestmodel/blob/master/test/shallowwater_sphere/BarotropicInstabilityTest.cpp#L86
+    """
     h0::FT = 10158.18617
-    "local perturbation peak height"
+    """
+    local perturbation peak height
+    """
     h_hat::FT = 120.0
-    "southern jet boundary"
+    """
+    southern jet boundary
+    """
     ϕ₀::FT = 25.71428
-    "northern jet boundary"
+    """
+    northern jet boundary
+    """
     ϕ₁::FT = 64.28571
-    "height perturbation peak location"
+    """
+    height perturbation peak location
+    """
     ϕ₂::FT = 45.0
-    "zonal velocity decay parameter"
+    """
+    zonal velocity decay parameter
+    """
     eₙ::FT = exp(-4.0 / (deg2rad(ϕ₁) - deg2rad(ϕ₀))^2)
-    "angle between the north pole and the center of the top cube panel"
+    """
+    angle between the north pole and the center of the top cube panel
+    """
     α::FT
 end
 BarotropicInstabilityTest(α::FT) where {FT} =
