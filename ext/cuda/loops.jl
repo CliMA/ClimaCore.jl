@@ -165,8 +165,11 @@ function shuffle_reduce(scope, op::O, value, num_values) where {O}
     num_offsets = num_reductions(scope)
     num_inactive = THREADS_PER_WARP - num_active_threads(ThisWarp())
     thread_index = DataLayouts.thread_rank(scope)
-    for offset in ntuple(Base.Fix1(>>, DataLayouts.num_threads(scope)), Val(num_offsets))
-        shuffled_value = CUDA.shfl_xor_sync(CUDA.FULL_MASK >> num_inactive, value, offset)
+    for offset in
+        ntuple(Base.Fix1(>>, DataLayouts.num_threads(scope)) ∘ Int32, Val(num_offsets))
+        # shfl_recurse fails if `offset` is not explicitly converted to an Int32
+        shuffled_value =
+            CUDA.shfl_xor_sync(CUDA.FULL_MASK >> num_inactive, value, offset)
         if thread_index <= num_values && xor(thread_index - 1, offset) + 1 <= num_values
             value = op(value, shuffled_value)
         end
@@ -174,7 +177,9 @@ function shuffle_reduce(scope, op::O, value, num_values) where {O}
     return value
 end
 
-# Extend CUDA's warp shuffle intrinsics to support AutoBroadcasters, recursively
+# Extend CUDA's warp shuffle intrinsics to support AutoBroadcasters and Tensors, recursively
 # shuffling each value that appears in a multi-component reduction.
-CUDA.shfl_recurse(op::O, x::Utilities.AutoBroadcaster) where {O} =
-    Utilities.AutoBroadcaster(UnrolledUtilities.unrolled_map(op, Utilities.unwrap(x)))
+CUDA.shfl_recurse(
+    op::O,
+    x::T,
+) where {O, T <: Union{ClimaCore.Geometry.Tensor, Utilities.AutoBroadcaster}} = map(op, x)
