@@ -40,11 +40,10 @@ multiples of `LinearAlgebra.I`. This comes with the following functionality:
 """
 module MatrixFields
 
-import LinearAlgebra: I, UniformScaling, Adjoint, AdjointAbsVec
+import LinearAlgebra: I, UniformScaling, Adjoint
 import LinearAlgebra: inv, norm, ldiv!, mul!
 import StaticArrays: SMatrix, SVector
 import BandedMatrices: BandedMatrix, band, _BandedMatrix
-import RecursiveArrayTools: recursive_bottom_eltype
 import KrylovKit
 import ClimaComms
 import NVTX
@@ -52,19 +51,19 @@ import Adapt
 using UnrolledUtilities
 
 import ..RecursiveApply: rzero
-import ..Utilities: PlusHalf, half, new
+import ..Utilities: PlusHalf, half, new, recursive_bottom_eltype
 import ..Utilities: AutoBroadcaster, is_auto_broadcastable, auto_broadcasted
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters
 import ..DataLayouts
-import ..DataLayouts: AbstractData
-import ..DataLayouts: vindex
+import ..DataLayouts: DataLayout
 import ..Geometry
 import ..Topologies
 import ..Spaces
 import ..Spaces: local_geometry_type
 import ..Fields
 import ..Operators
-using ..Geometry: mul_with_projection, mul_return_type, axis_tensor_type
+using ..Geometry:
+    mul_with_projection, mul_return_type, basis1, basis2, tensor_type
 
 export DiagonalMatrixRow,
     BidiagonalMatrixRow,
@@ -79,7 +78,7 @@ include("band_matrix_row.jl")
 const ColumnwiseBandMatrixField{V, S} = Fields.Field{
     V, S,
 } where {
-    V <: AbstractData{<:BandMatrixRow},
+    V <: DataLayout{<:BandMatrixRow},
     S <: Union{Spaces.AbstractSpace, Operators.PlaceholderSpace}, # so that this can exist inside cuda kernels
 }
 
@@ -126,11 +125,10 @@ function Base.show(io::IO, field::ColumnwiseBandMatrixField)
         end
     else
         # When a BandedMatrix with non-number entries is printed, it currently
-        # either prints in an illegible format (e.g., if it has AxisTensor or
-        # AdjointAxisTensor entries) or crashes during the evaluation of
-        # isassigned (e.g., if it has Tuple or NamedTuple entries). So, for
-        # matrix fields with non-number entries, we fall back to the default
-        # function for printing fields.
+        # either prints in an illegible format (e.g., if it has Tensor entries)
+        # or crashes during the evaluation of isassigned (e.g., if it has Tuple
+        # or NamedTuple entries). So, for matrix fields with non-number entries,
+        # we fall back to the default function for printing fields.
         print(io, ":")
         Fields._show_compact_field(io, field, "  ", true)
     end

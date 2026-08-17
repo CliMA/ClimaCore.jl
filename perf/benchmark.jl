@@ -17,8 +17,8 @@ catch err
     end
 end
 
-using SciMLBase: solve!, step!
-step!(integrator) # compile first
-trial = BenchmarkTools.@benchmark step!($integrator)
+import ClimaTimeSteppers as CTS
+CTS.step!(integrator) # compile first
+trial = BenchmarkTools.@benchmark CTS.step!($integrator)
 show(stdout, MIME("text/plain"), trial)
 println()

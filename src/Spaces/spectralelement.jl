@@ -69,6 +69,8 @@ grid(space::Spaces.SpectralElementSpace1D) = getfield(space, :grid)
 local_geometry_type(::Type{SpectralElementSpace1D{G}}) where {G} =
     local_geometry_type(G)
 
+Adapt.adapt_structure(to, space::SpectralElementSpace1D) =
+    SpectralElementSpace1D(Adapt.adapt(to, grid(space)))
 
 function SpectralElementSpace1D(
     topology::Topologies.IntervalTopology,
@@ -113,14 +115,6 @@ end
 Adapt.adapt_structure(to, space::SpectralElementSpace2D) =
     SpectralElementSpace2D(Adapt.adapt(to, grid(space)))
 
-
-function issubspace(
-    hspace::SpectralElementSpace2D{<:Grids.SpectralElementGrid2D},
-    level_space::SpectralElementSpace2D{<:Grids.LevelGrid},
-)
-    return grid(hspace) === grid(level_space).full_grid.horizontal_grid
-end
-
 """
     SpectralElementSpaceSlab <: AbstractSpace
 
@@ -133,15 +127,22 @@ end
 
 local_geometry_type(::Type{SpectralElementSpaceSlab{Q, G}}) where {Q, G} =
     eltype(G) # calls eltype from DataLayouts
-const SpectralElementSpaceSlab1D =
-    SpectralElementSpaceSlab{Q, DL} where {Q, DL <: DataLayouts.DataSlab1D}
 
-const SpectralElementSpaceSlab2D =
-    SpectralElementSpaceSlab{Q, DL} where {Q, DL <: DataLayouts.DataSlab2D}
+issubspace(space1::SpectralElementSpaceSlab, space2::SpectralElementSpaceSlab) =
+    space1 == space2
+issubspace(space1::AbstractSpectralElementSpace, space2::AbstractSpectralElementSpace) =
+    horizontal_grid(grid(space1)) === horizontal_grid(grid(space2))
 
-nlevels(space::SpectralElementSpaceSlab1D) = 1
-nlevels(space::SpectralElementSpaceSlab2D) = 1
+level(space::AbstractSpectralElementSpace, v) =
+    isone(v) ? space : throw(ArgumentError("Space only has one level"))
 
+Base.@propagate_inbounds slab(space::AbstractSpectralElementSpace, v, h) =
+    isone(v) ? slab(space, h) : throw(ArgumentError("Space has only one level"))
+Base.@propagate_inbounds slab(space::AbstractSpectralElementSpace, h) =
+    SpectralElementSpaceSlab(quadrature_style(space), slab(local_geometry_data(space), h))
+
+Base.@propagate_inbounds column(space::AbstractSpectralElementSpace, indices...) =
+    PointSpace(ClimaComms.context(space), column(local_geometry_data(space), indices...))
 
 """
     Spaces.node_horizontal_length_scale(space::AbstractSpectralElementSpace)
@@ -160,32 +161,6 @@ function node_horizontal_length_scale(space::AbstractSpectralElementSpace)
 end
 
 node_horizontal_length_scale(::Nothing) = 1
-
-
-Base.@propagate_inbounds function slab(
-    space::AbstractSpectralElementSpace,
-    v,
-    h,
-)
-    SpectralElementSpaceSlab(
-        quadrature_style(space),
-        slab(local_geometry_data(space), v, h),
-    )
-end
-Base.@propagate_inbounds slab(space::AbstractSpectralElementSpace, h) =
-    @inbounds slab(space, 1, h)
-
-Base.@propagate_inbounds function column(space::SpectralElementSpace1D, i, h)
-    local_geometry = column(local_geometry_data(space), i, h)
-    PointSpace(ClimaComms.context(space), local_geometry)
-end
-Base.@propagate_inbounds column(space::SpectralElementSpace1D, i, j, h) =
-    column(space, i, h)
-
-Base.@propagate_inbounds function column(space::SpectralElementSpace2D, i, j, h)
-    local_geometry = column(local_geometry_data(space), i, j, h)
-    PointSpace(ClimaComms.context(space), local_geometry)
-end
 
 function all_nodes(space::SpectralElementSpace2D)
     Nq = Quadratures.degrees_of_freedom(quadrature_style(space))

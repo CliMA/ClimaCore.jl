@@ -23,6 +23,7 @@ Call with `device_info(CUDA.name(CUDA.device()))`
 function device_info(device_name)
     device_specs = Dict(
         "NVIDIA A100-SXM4-80GB" => (; device_bandwidth_GBs = 2_039), # https://www.nvidia.com/en-us/data-center/a100/
+        "NVIDIA A100-SXM4-40GB" => (; device_bandwidth_GBs = 1_555), # https://www.nvidia.com/en-us/data-center/a100/
         "Tesla P100-PCIE-16GB" => (; device_bandwidth_GBs = 732), # https://images.nvidia.com/content/tesla/pdf/nvidia-tesla-p100-PCIe-datasheet.pdf
         "NVIDIA H100 80GB HBM3" => (; device_bandwidth_GBs = 3_350), # https://www.nvidia.com/en-us/data-center/h100/
         "NVIDIA GeForce GTX 1050" => (; device_bandwidth_GBs = 112.1), # https://www.techpowerup.com/gpu-specs/geforce-gtx-1050.c2875
@@ -128,7 +129,14 @@ function tabulate_benchmark(bm)
     title = strip(
         "$problem_size_str$n_reads_writes_str$nreps_str Float_type = $(bm.float_type), $device_bandwidth_GBs_str",
     )
-    PrettyTables.pretty_table(data; title, header, alignment = :l, crop = :none)
+    PrettyTables.pretty_table(
+        data;
+        title = String(title),
+        column_labels = header,
+        alignment = :l,
+        fit_table_in_display_horizontally = false,
+        fit_table_in_display_vertically = false,
+    )
 end
 
 push_info(

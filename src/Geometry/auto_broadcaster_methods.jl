@@ -4,7 +4,7 @@ import ..Utilities:
 # TODO: Avoid defining these methods by refactoring the Geometry module so that
 # all relevant functionality is expressed in terms of standard math operations
 
-(::Type{T})(x::AutoBroadcaster) where {T <: AxisTensor} = nested_broadcast(T, x)
+(::Type{T})(x::AutoBroadcaster) where {T <: AbstractTensor} = nested_broadcast(T, x)
 
 for f in (:covariant, :contravariant), n in (1, 2, 3)
     @eval $(Symbol(f, n))(x::AutoBroadcaster, lg) =
@@ -19,16 +19,6 @@ mul_with_projection(x::AutoBroadcaster, y, lg) =
     nested_broadcast(x -> mul_with_projection(x, y, lg), x)
 mul_with_projection(x, y::AutoBroadcaster, lg) =
     nested_broadcast(y -> mul_with_projection(x, y, lg), y)
-
-needs_projection(
-    ::Type{X},
-    ::Type{Y},
-) where {X <: AutoBroadcaster, Y <: AutoBroadcaster} =
-    needs_projection(eltype(X), eltype(Y))
-needs_projection(::Type{X}, ::Type{Y}) where {X <: AutoBroadcaster, Y} =
-    needs_projection(eltype(X), Y)
-needs_projection(::Type{X}, ::Type{Y}) where {X, Y <: AutoBroadcaster} =
-    needs_projection(X, eltype(Y))
 
 mul_return_type(
     ::Type{X},

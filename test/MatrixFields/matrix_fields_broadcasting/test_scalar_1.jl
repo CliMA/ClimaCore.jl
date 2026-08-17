@@ -1,13 +1,11 @@
-#=
-julia --project=.buildkite
-ENV["CLIMACOMMS_DEVICE"] = "CPU"
-using Revise; include(joinpath("test", "MatrixFields", "matrix_fields_broadcasting", "test_scalar_1.jl"))
-=#
 import ClimaCore
 #! format: off
 include(joinpath(pkgdir(ClimaCore),"test","MatrixFields","matrix_fields_broadcasting","test_scalar_utils.jl"))
 #! format: on
-test_opt = get(ENV, "BUILDKITE", "") == "true"
+# Opt checks (JET + allocation gates) run on CI; set CLIMACORE_TEST_OPT=true
+# to also run them locally.
+test_opt =
+    get(ENV, "CLIMACORE_TEST_OPT", get(ENV, "BUILDKITE", "false")) == "true"
 @testset "diagonal matrix times vector" begin
     bc = @lazy @. ᶜᶜmat * ᶜvec
     result = materialize(bc)
@@ -17,13 +15,13 @@ test_opt = get(ENV, "BUILDKITE", "") == "true"
         result,
         bc;
         input_fields,
-        using_cuda,
+        USING_CUDA,
     )
     test_opt && opt_test_field_broadcast_against_array_reference(
         result,
         bc;
         input_fields,
-        using_cuda,
+        USING_CUDA,
     )
-    test_opt && !using_cuda && perf_getidx(bc)
+    test_opt && !USING_CUDA && perf_getidx(bc)
 end

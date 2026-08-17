@@ -1,3 +1,6 @@
+# Mesh constructors shared by the examples: periodic lines and rectangles, and
+# the cubed sphere. They exist so the cases can state a resolution without
+# repeating the Domain -> Mesh construction each time.
 using ClimaComms
 using ClimaCore: Geometry, Domains, Meshes, Topologies, Spaces, Quadratures
 
@@ -35,7 +38,7 @@ function make_horizontal_space(
     mesh,
     npoly,
     context::ClimaComms.SingletonCommsContext,
-    horizontal_layout_type = DataLayouts.IJFH,
+    VIJH = DataLayouts.VIJFH,
 )
     quad = Quadratures.GLL{npoly + 1}()
     if mesh isa Meshes.AbstractMesh1D
@@ -46,7 +49,7 @@ function make_horizontal_space(
         space = Spaces.SpectralElementSpace2D(
             topology,
             quad;
-            horizontal_layout_type,
+            VIJH,
         )
     end
     return space
@@ -56,7 +59,7 @@ function make_horizontal_space(
     mesh,
     npoly,
     comms_ctx::ClimaComms.MPICommsContext,
-    horizontal_layout_type = DataLayouts.IJFH,
+    VIJH = DataLayouts.VIJFH,
 )
     quad = Quadratures.GLL{npoly + 1}()
     if mesh isa Meshes.AbstractMesh1D
@@ -66,7 +69,7 @@ function make_horizontal_space(
         space = Spaces.SpectralElementSpace2D(
             topology,
             quad;
-            horizontal_layout_type,
+            VIJH,
         )
     end
     return space

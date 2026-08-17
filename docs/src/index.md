@@ -9,3 +9,7 @@ and the definition of flexible discretizations. This, in turn, is coupled
 with low-level APIs that support different data layouts, specialized implementations,
 and flexible models for threading, to better face high-performance optimization,
 data storage, and scalability challenges on modern HPC architectures.
+
+## Developer Guides
+
+ClimaCore.jl follows the shared [CliMA Developer Guides](https://github.com/CliMA/DeveloperGuides) — engineering standards, architectural patterns, and development guidelines for the CliMA ecosystem. The guides are vendored locally at `docs/dev-guides/`.

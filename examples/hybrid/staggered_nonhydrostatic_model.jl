@@ -1,4 +1,10 @@
-using LinearAlgebra: ×, norm, norm_sqr, dot, Adjoint
+# The staggered nonhydrostatic model shared by the `hybrid/` cases: prognostic
+# density, total energy, horizontal momentum at cell centers, and vertical
+# velocity at cell faces. Defines the explicit tendency, the implicit tendency
+# for the vertical acoustic terms, and the Jacobian that the IMEX schemes solve
+# against. Including this file requires the constants listed below to already be
+# defined, which each case file does before the `include`.
+using LinearAlgebra: ×, norm, norm_sqr, dot
 using ClimaCore: Operators, Fields
 
 include("implicit_equation_jacobian.jl")
@@ -83,9 +89,7 @@ const ᶠno_flux_row3 = Operators.SetBoundaryOperator(
     bottom = Operators.SetValue(zero(QuaddiagonalMatrixRow{CT3{FT}})),
 )
 
-pressure_ρθ(ρθ) = p_0 * (ρθ * R_d / p_0)^γ
 pressure_ρe(ρe, K, Φ, ρ) = ρ * R_d * ((ρe / ρ - K - Φ) / cv_d + T_tri)
-pressure_ρe_int(ρe_int, ρ) = R_d * (ρe_int / cv_d + ρ * T_tri)
 
 get_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, dt, upwinding_mode) = merge(
     default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode),
@@ -120,7 +124,7 @@ function default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode)
         ᶜf,
         ∂ᶜK∂ᶠw = similar(
             ᶜlocal_geometry,
-            BidiagonalMatrixRow{Adjoint{FT, CT3{FT}}},
+            BidiagonalMatrixRow{typeof(CT3(FT(0))')},
         ),
         ᶠupwind_product,
         ᶠupwind_product_matrix,
@@ -147,43 +151,14 @@ function implicit_tendency!(Yₜ, Y, p, t)
 
     @. Yₜ.c.ρ = -(ᶜdivᵥ(ᶠinterp(ᶜρ) * ᶠw))
 
-    if :ρθ in propertynames(Y.c)
-        ᶜρθ = Y.c.ρθ
-        @. ᶜp = pressure_ρθ(ᶜρθ)
-        if isnothing(ᶠupwind_product)
-            @. Yₜ.c.ρθ = -(ᶜdivᵥ(ᶠinterp(ᶜρθ) * ᶠw))
-        else
-            @. Yₜ.c.ρθ =
-                -(ᶜdivᵥ(ᶠinterp(Y.c.ρ) * ᶠupwind_product(ᶠw, ᶜρθ / Y.c.ρ)))
-        end
-    elseif :ρe in propertynames(Y.c)
-        ᶜρe = Y.c.ρe
-        @. ᶜp = pressure_ρe(ᶜρe, ᶜK, ᶜΦ, ᶜρ)
-        if isnothing(ᶠupwind_product)
-            @. Yₜ.c.ρe = -(ᶜdivᵥ(ᶠinterp(ᶜρe + ᶜp) * ᶠw))
-        else
-            @. Yₜ.c.ρe = -(ᶜdivᵥ(
-                ᶠinterp(Y.c.ρ) * ᶠupwind_product(ᶠw, (ᶜρe + ᶜp) / Y.c.ρ),
-            ))
-        end
-    elseif :ρe_int in propertynames(Y.c)
-        ᶜρe_int = Y.c.ρe_int
-        @. ᶜp = pressure_ρe_int(ᶜρe_int, ᶜρ)
-        if isnothing(ᶠupwind_product)
-            @. Yₜ.c.ρe_int = -(
-                ᶜdivᵥ(ᶠinterp(ᶜρe_int + ᶜp) * ᶠw) -
-                ᶜinterp(dot(ᶠgradᵥ(ᶜp), CT3(ᶠw)))
-            )
-            # or, equivalently,
-            # Yₜ.c.ρe_int = -(ᶜdivᵥ(ᶠinterp(ᶜρe_int) * ᶠw) + ᶜp * ᶜdivᵥ(ᶠw))
-        else
-            @. Yₜ.c.ρe_int = -(
-                ᶜdivᵥ(
-                    ᶠinterp(Y.c.ρ) *
-                    ᶠupwind_product(ᶠw, (ᶜρe_int + ᶜp) / Y.c.ρ),
-                ) - ᶜinterp(dot(ᶠgradᵥ(ᶜp), CT3(ᶠw)))
-            )
-        end
+    ᶜρe = Y.c.ρe
+    @. ᶜp = pressure_ρe(ᶜρe, ᶜK, ᶜΦ, ᶜρ)
+    if isnothing(ᶠupwind_product)
+        @. Yₜ.c.ρe = -(ᶜdivᵥ(ᶠinterp(ᶜρe + ᶜp) * ᶠw))
+    else
+        @. Yₜ.c.ρe = -(ᶜdivᵥ(
+            ᶠinterp(Y.c.ρ) * ᶠupwind_product(ᶠw, (ᶜρe + ᶜp) / Y.c.ρ),
+        ))
     end
 
     Yₜ.c.uₕ .= (zero(eltype(Yₜ.c.uₕ)),)
@@ -192,13 +167,7 @@ function implicit_tendency!(Yₜ, Y, p, t)
 
     # TODO: Add flux correction to the Jacobian
     # @. Yₜ.c.ρ += ᶜFC(ᶠw, ᶜρ)
-    # if :ρθ in propertynames(Y.c)
-    #     @. Yₜ.c.ρθ += ᶜFC(ᶠw, ᶜρθ)
-    # elseif :ρe in propertynames(Y.c)
-    #     @. Yₜ.c.ρe += ᶜFC(ᶠw, ᶜρe)
-    # elseif :ρe_int in propertynames(Y.c)
-    #     @. Yₜ.c.ρe_int += ᶜFC(ᶠw, ᶜρe_int)
-    # end
+    # @. Yₜ.c.ρe += ᶜFC(ᶠw, ᶜρe)
 
     return Yₜ
 end
@@ -232,32 +201,10 @@ function default_remaining_tendency!(Yₜ, Y, p, t)
 
     # Energy conservation
 
-    if :ρθ in propertynames(Y.c)
-        ᶜρθ = Y.c.ρθ
-        @. ᶜp = pressure_ρθ(ᶜρθ)
-        @. Yₜ.c.ρθ -= split_divₕ(ᶜρ * ᶜuvw, ᶜρθ / ᶜρ)
-        @. Yₜ.c.ρθ -= ᶜdivᵥ(ᶠinterp(ᶜρθ * ᶜuₕ))
-    elseif :ρe in propertynames(Y.c)
-        ᶜρe = Y.c.ρe
-        @. ᶜp = pressure_ρe(ᶜρe, ᶜK, ᶜΦ, ᶜρ)
-        @. Yₜ.c.ρe -= split_divₕ(ᶜρ * ᶜuvw, (ᶜρe + ᶜp) / ᶜρ)
-        @. Yₜ.c.ρe -= ᶜdivᵥ(ᶠinterp((ᶜρe + ᶜp) * ᶜuₕ))
-    elseif :ρe_int in propertynames(Y.c)
-        ᶜρe_int = Y.c.ρe_int
-        @. ᶜp = pressure_ρe_int(ᶜρe_int, ᶜρ)
-        if point_type <: Geometry.Abstract3DPoint
-            @. Yₜ.c.ρe_int -=
-                split_divₕ(ᶜρ * ᶜuvw, (ᶜρe_int + ᶜp) / ᶜρ) - dot(gradₕ(ᶜp), CT12(ᶜuₕ))
-        else
-            @. Yₜ.c.ρe_int -=
-                split_divₕ(ᶜρ * ᶜuvw, (ᶜρe_int + ᶜp) / ᶜρ) - dot(gradₕ(ᶜp), CT1(ᶜuₕ))
-        end
-        @. Yₜ.c.ρe_int -= ᶜdivᵥ(ᶠinterp((ᶜρe_int + ᶜp) * ᶜuₕ))
-        # or, equivalently,
-        # @. Yₜ.c.ρe_int -= divₕ(ᶜρe_int * ᶜuvw) + ᶜp * divₕ(ᶜuvw)
-        # @. Yₜ.c.ρe_int -=
-        #     ᶜdivᵥ(ᶠinterp(ᶜρe_int * ᶜuₕ)) + ᶜp * ᶜdivᵥ(ᶠinterp(ᶜuₕ))
-    end
+    ᶜρe = Y.c.ρe
+    @. ᶜp = pressure_ρe(ᶜρe, ᶜK, ᶜΦ, ᶜρ)
+    @. Yₜ.c.ρe -= split_divₕ(ᶜρ * ᶜuvw, (ᶜρe + ᶜp) / ᶜρ)
+    @. Yₜ.c.ρe -= ᶜdivᵥ(ᶠinterp((ᶜρe + ᶜp) * ᶜuₕ))
 
     # Momentum conservation
 
@@ -287,7 +234,7 @@ end
 additional_tendency!(Yₜ, Y, p, t) = nothing
 
 function implicit_equation_jacobian!(j, Y, p, δtγ, t)
-    (; ∂Yₜ∂Y, ∂R∂Y, transform, flags) = j
+    (; ∂Yₜ∂Y, ∂R∂Y, flags) = j
     ᶜρ = Y.c.ρ
     ᶜuₕ = Y.c.uₕ
     ᶠw = Y.f.w
@@ -295,13 +242,7 @@ function implicit_equation_jacobian!(j, Y, p, δtγ, t)
     (; ᶠupwind_product, ᶠupwind_product_matrix, ᶠno_flux_row) = p
 
     ᶜρ_name = @name(c.ρ)
-    ᶜ𝔼_name = if :ρθ in propertynames(Y.c)
-        @name(c.ρθ)
-    elseif :ρe in propertynames(Y.c)
-        @name(c.ρe)
-    elseif :ρe_int in propertynames(Y.c)
-        @name(c.ρe_int)
-    end
+    ᶜ𝔼_name = @name(c.ρe)
     ᶠ𝕄_name = @name(f.w)
     ∂ᶜρₜ∂ᶠ𝕄 = ∂Yₜ∂Y[ᶜρ_name, ᶠ𝕄_name]
     ∂ᶜ𝔼ₜ∂ᶠ𝕄 = ∂Yₜ∂Y[ᶜ𝔼_name, ᶠ𝕄_name]
@@ -310,11 +251,11 @@ function implicit_equation_jacobian!(j, Y, p, δtγ, t)
     ∂ᶠ𝕄ₜ∂ᶠ𝕄 = ∂Yₜ∂Y[ᶠ𝕄_name, ᶠ𝕄_name]
 
     ᶠgⁱʲ = Fields.local_geometry_field(ᶠw).gⁱʲ
-    g³³(gⁱʲ) = Geometry.AxisTensor(
-        (Geometry.Contravariant3Axis(), Geometry.Contravariant3Axis()),
-        Geometry.components(gⁱʲ)[end],
+    g³³(gⁱʲ) = reshape(
+        gⁱʲ,
+        Geometry.Contravariant3Axis(),
+        Geometry.Contravariant3Axis(),
     )
-
     # If ∂(ᶜχ)/∂(ᶠw) = 0, then
     # ∂(ᶠupwind_product(ᶠw, ᶜχ))/∂(ᶠw) =
     #     ∂(ᶠupwind_product(ᶠw, ᶜχ))/∂(CT3(ᶠw)) * ∂(CT3(ᶠw))/∂(ᶠw) =
@@ -330,6 +271,9 @@ function implicit_equation_jacobian!(j, Y, p, δtγ, t)
     # ᶜK =
     #     norm_sqr(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))) / 2 =
     #     ACT12(ᶜuₕ) * ᶜuₕ / 2 + ACT3(ᶜinterp(ᶠw)) * ᶜinterp(ᶠw) / 2
+    # This discrete derivative maps to how the cell-centered kinetic energy
+    # changes with respect to the face-centered vertical velocity, which requires
+    # interpolating the velocity to the cell centers before taking the dot product.
     # ∂(ᶜK)/∂(ᶠw) = ACT3(ᶜinterp(ᶠw)) * ᶜinterp_matrix()
     @. ∂ᶜK∂ᶠw = DiagonalMatrixRow(adjoint(CT3(ᶜinterp(ᶠw)))) * ᶜinterp_matrix()
 
@@ -337,137 +281,73 @@ function implicit_equation_jacobian!(j, Y, p, δtγ, t)
     # ∂(ᶜρₜ)/∂(ᶠw) = -ᶜdivᵥ_matrix() * ᶠinterp(ᶜρ) * ᶠg³³
     @. ∂ᶜρₜ∂ᶠ𝕄 = -(ᶜdivᵥ_matrix()) * DiagonalMatrixRow(ᶠinterp(ᶜρ) * g³³(ᶠgⁱʲ))
 
-    if :ρθ in propertynames(Y.c)
-        ᶜρθ = Y.c.ρθ
-        @. ᶜp = pressure_ρθ(ᶜρθ)
+    ᶜρe = Y.c.ρe
+    @. ᶜK = norm_sqr(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))) / 2
+    @. ᶜp = pressure_ρe(ᶜρe, ᶜK, ᶜΦ, ᶜρ)
 
-        if flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode != :exact
-            error("∂ᶜ𝔼ₜ∂ᶠ𝕄_mode must be :exact when using ρθ")
-        end
-
+    if flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :exact
         if isnothing(ᶠupwind_product)
-            # ᶜρθₜ = -ᶜdivᵥ(ᶠinterp(ᶜρθ) * ᶠw)
-            # ∂(ᶜρθₜ)/∂(ᶠw) = -ᶜdivᵥ_matrix() * ᶠinterp(ᶜρθ) * ᶠg³³
+            # ᶜρeₜ = -ᶜdivᵥ(ᶠinterp(ᶜρe + ᶜp) * ᶠw)
+            # ∂(ᶜρeₜ)/∂(ᶠw) =
+            #     -ᶜdivᵥ_matrix() * (
+            #         ᶠinterp(ᶜρe + ᶜp) * ᶠg³³ +
+            #         CT3(ᶠw) * ∂(ᶠinterp(ᶜρe + ᶜp))/∂(ᶠw)
+            #     )
+            # ∂(ᶠinterp(ᶜρe + ᶜp))/∂(ᶠw) =
+            #     ∂(ᶠinterp(ᶜρe + ᶜp))/∂(ᶜp) * ∂(ᶜp)/∂(ᶠw)
+            # ∂(ᶠinterp(ᶜρe + ᶜp))/∂(ᶜp) = ᶠinterp_matrix()
+            # ∂(ᶜp)/∂(ᶠw) = ∂(ᶜp)/∂(ᶜK) * ∂(ᶜK)/∂(ᶠw)
+            # ∂(ᶜp)/∂(ᶜK) = -ᶜρ * R_d / cv_d
             @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
-                -(ᶜdivᵥ_matrix()) * DiagonalMatrixRow(ᶠinterp(ᶜρθ) * g³³(ᶠgⁱʲ))
-        else
-            # ᶜρθₜ = -ᶜdivᵥ(ᶠinterp(ᶜρ) * ᶠupwind_product(ᶠw, ᶜρθ / ᶜρ))
-            # ∂(ᶜρθₜ)/∂(ᶠw) =
-            #     -ᶜdivᵥ_matrix() * ᶠinterp(ᶜρ) *
-            #     ∂(ᶠupwind_product(ᶠw, ᶜρθ / ᶜρ))/∂(ᶠw)
-            @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
-                -(ᶜdivᵥ_matrix()) * DiagonalMatrixRow(
-                    ᶠinterp(ᶜρ) *
-                    vec_data(ᶠno_flux(ᶠupwind_product(ᶠw + εw, ᶜρθ / ᶜρ))) /
-                    vec_data(CT3(ᶠw + εw)) * g³³(ᶠgⁱʲ),
+                -(ᶜdivᵥ_matrix()) * (
+                    DiagonalMatrixRow(ᶠinterp(ᶜρe + ᶜp) * g³³(ᶠgⁱʲ)) +
+                    DiagonalMatrixRow(CT3(ᶠw)) *
+                    ᶠinterp_matrix() *
+                    DiagonalMatrixRow(-(ᶜρ * R_d / cv_d)) *
+                    ∂ᶜK∂ᶠw
                 )
-        end
-    elseif :ρe in propertynames(Y.c)
-        ᶜρe = Y.c.ρe
-        @. ᶜK = norm_sqr(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))) / 2
-        @. ᶜp = pressure_ρe(ᶜρe, ᶜK, ᶜΦ, ᶜρ)
-
-        if flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :exact
-            if isnothing(ᶠupwind_product)
-                # ᶜρeₜ = -ᶜdivᵥ(ᶠinterp(ᶜρe + ᶜp) * ᶠw)
-                # ∂(ᶜρeₜ)/∂(ᶠw) =
-                #     -ᶜdivᵥ_matrix() * (
-                #         ᶠinterp(ᶜρe + ᶜp) * ᶠg³³ +
-                #         CT3(ᶠw) * ∂(ᶠinterp(ᶜρe + ᶜp))/∂(ᶠw)
-                #     )
-                # ∂(ᶠinterp(ᶜρe + ᶜp))/∂(ᶠw) =
-                #     ∂(ᶠinterp(ᶜρe + ᶜp))/∂(ᶜp) * ∂(ᶜp)/∂(ᶠw)
-                # ∂(ᶠinterp(ᶜρe + ᶜp))/∂(ᶜp) = ᶠinterp_matrix()
-                # ∂(ᶜp)/∂(ᶠw) = ∂(ᶜp)/∂(ᶜK) * ∂(ᶜK)/∂(ᶠw)
-                # ∂(ᶜp)/∂(ᶜK) = -ᶜρ * R_d / cv_d
-                @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
-                    -(ᶜdivᵥ_matrix()) * (
-                        DiagonalMatrixRow(ᶠinterp(ᶜρe + ᶜp) * g³³(ᶠgⁱʲ)) +
-                        DiagonalMatrixRow(CT3(ᶠw)) *
-                        ᶠinterp_matrix() *
-                        DiagonalMatrixRow(-(ᶜρ * R_d / cv_d)) *
-                        ∂ᶜK∂ᶠw
-                    )
-            else
-                # ᶜρeₜ =
-                #     -ᶜdivᵥ(ᶠinterp(ᶜρ) * ᶠupwind_product(ᶠw, (ᶜρe + ᶜp) / ᶜρ))
-                # ∂(ᶜρeₜ)/∂(ᶠw) =
-                #     -ᶜdivᵥ_matrix() * ᶠinterp(ᶜρ) * (
-                #         ∂(ᶠupwind_product(ᶠw, (ᶜρe + ᶜp) / ᶜρ))/∂(ᶠw) +
-                #         ᶠupwind_product_matrix(ᶠw) * ∂((ᶜρe + ᶜp) / ᶜρ)/∂(ᶠw)
-                # ∂((ᶜρe + ᶜp) / ᶜρ)/∂(ᶠw) = 1 / ᶜρ * ∂(ᶜp)/∂(ᶠw)
-                # ∂(ᶜp)/∂(ᶠw) = ∂(ᶜp)/∂(ᶜK) * ∂(ᶜK)/∂(ᶠw)
-                # ∂(ᶜp)/∂(ᶜK) = -ᶜρ * R_d / cv_d
-                @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
-                    -(ᶜdivᵥ_matrix()) *
-                    DiagonalMatrixRow(ᶠinterp(ᶜρ)) *
-                    (
-                        DiagonalMatrixRow(
-                            vec_data(
-                                ᶠno_flux(
-                                    ᶠupwind_product(ᶠw + εw, (ᶜρe + ᶜp) / ᶜρ),
-                                ),
-                            ) / vec_data(CT3(ᶠw + εw)) * g³³(ᶠgⁱʲ),
-                        ) +
-                        ᶠno_flux_row(ᶠupwind_product_matrix(ᶠw)) *
-                        (-R_d / cv_d * ∂ᶜK∂ᶠw)
-                    )
-            end
-        elseif flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :no_∂ᶜp∂ᶜK
-            # same as above, but we approximate ∂(ᶜp)/∂(ᶜK) = 0, so that
-            # ∂ᶜ𝔼ₜ∂ᶠ𝕄 has 3 diagonals instead of 5
-            if isnothing(ᶠupwind_product)
-                @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
-                    -(ᶜdivᵥ_matrix()) *
-                    DiagonalMatrixRow(ᶠinterp(ᶜρe + ᶜp) * g³³(ᶠgⁱʲ))
-            else
-                @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
-                    -(ᶜdivᵥ_matrix()) * DiagonalMatrixRow(
-                        ᶠinterp(ᶜρ) * vec_data(
-                            ᶠno_flux(ᶠupwind_product(ᶠw + εw, (ᶜρe + ᶜp) / ᶜρ)),
-                        ) / vec_data(CT3(ᶠw + εw)) * g³³(ᶠgⁱʲ),
-                    )
-            end
         else
-            error("∂ᶜ𝔼ₜ∂ᶠ𝕄_mode must be :exact or :no_∂ᶜp∂ᶜK when using ρe")
-        end
-    elseif :ρe_int in propertynames(Y.c)
-        ᶜρe_int = Y.c.ρe_int
-        @. ᶜp = pressure_ρe_int(ᶜρe_int, ᶜρ)
-
-        if flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode != :exact
-            error("∂ᶜ𝔼ₜ∂ᶠ𝕄_mode must be :exact when using ρe_int")
-        end
-
-        if isnothing(ᶠupwind_product)
-            # ᶜρe_intₜ =
-            #     -ᶜdivᵥ(ᶠinterp(ᶜρe_int + ᶜp) * ᶠw) +
-            #     ᶜinterp(adjoint(ᶠgradᵥ(ᶜp)) * CT3(ᶠw))
-            # ∂(ᶜρe_intₜ)/∂(ᶠw) =
-            #     -ᶜdivᵥ_matrix() * ᶠinterp(ᶜρe_int + ᶜp) * ᶠg³³ +
-            #     ᶜinterp_matrix() * adjoint(ᶠgradᵥ(ᶜp)) * ᶠg³³
+            # ᶜρeₜ =
+            #     -ᶜdivᵥ(ᶠinterp(ᶜρ) * ᶠupwind_product(ᶠw, (ᶜρe + ᶜp) / ᶜρ))
+            # ∂(ᶜρeₜ)/∂(ᶠw) =
+            #     -ᶜdivᵥ_matrix() * ᶠinterp(ᶜρ) * (
+            #         ∂(ᶠupwind_product(ᶠw, (ᶜρe + ᶜp) / ᶜρ))/∂(ᶠw) +
+            #         ᶠupwind_product_matrix(ᶠw) * ∂((ᶜρe + ᶜp) / ᶜρ)/∂(ᶠw)
+            # ∂((ᶜρe + ᶜp) / ᶜρ)/∂(ᶠw) = 1 / ᶜρ * ∂(ᶜp)/∂(ᶠw)
+            # ∂(ᶜp)/∂(ᶠw) = ∂(ᶜp)/∂(ᶜK) * ∂(ᶜK)/∂(ᶠw)
+            # ∂(ᶜp)/∂(ᶜK) = -ᶜρ * R_d / cv_d
             @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
                 -(ᶜdivᵥ_matrix()) *
-                DiagonalMatrixRow(ᶠinterp(ᶜρe_int + ᶜp) * g³³(ᶠgⁱʲ)) +
-                ᶜinterp_matrix() *
-                DiagonalMatrixRow(adjoint(ᶠgradᵥ(ᶜp)) * g³³(ᶠgⁱʲ))
+                DiagonalMatrixRow(ᶠinterp(ᶜρ)) *
+                (
+                    DiagonalMatrixRow(
+                        vec_data(
+                            ᶠno_flux(
+                                ᶠupwind_product(ᶠw + εw, (ᶜρe + ᶜp) / ᶜρ),
+                            ),
+                        ) / vec_data(CT3(ᶠw + εw)) * g³³(ᶠgⁱʲ),
+                    ) +
+                    ᶠno_flux_row(ᶠupwind_product_matrix(ᶠw)) *
+                    (-R_d / cv_d * ∂ᶜK∂ᶠw)
+                )
+        end
+    elseif flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :no_∂ᶜp∂ᶜK
+        # same as above, but we approximate ∂(ᶜp)/∂(ᶜK) = 0, so that
+        # ∂ᶜ𝔼ₜ∂ᶠ𝕄 has 3 diagonals instead of 5
+        if isnothing(ᶠupwind_product)
+            @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
+                -(ᶜdivᵥ_matrix()) *
+                DiagonalMatrixRow(ᶠinterp(ᶜρe + ᶜp) * g³³(ᶠgⁱʲ))
         else
-            # ᶜρe_intₜ =
-            #     -ᶜdivᵥ(ᶠinterp(ᶜρ) * ᶠupwind_product(ᶠw, (ᶜρe_int + ᶜp) / ᶜρ)) +
-            #     ᶜinterp(adjoint(ᶠgradᵥ(ᶜp)) * CT3(ᶠw))
-            # ∂(ᶜρe_intₜ)/∂(ᶠw) =
-            #     -ᶜdivᵥ_matrix() * ᶠinterp(ᶜρ) *
-            #     ∂(ᶠupwind_product(ᶠw, (ᶜρe_int + ᶜp) / ᶜρ))/∂(ᶠw) +
-            #     ᶜinterp_matrix() * adjoint(ᶠgradᵥ(ᶜp)) * ᶠg³³
             @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
                 -(ᶜdivᵥ_matrix()) * DiagonalMatrixRow(
                     ᶠinterp(ᶜρ) * vec_data(
-                        ᶠno_flux(ᶠupwind_product(ᶠw + εw, (ᶜρe_int + ᶜp) / ᶜρ)),
+                        ᶠno_flux(ᶠupwind_product(ᶠw + εw, (ᶜρe + ᶜp) / ᶜρ)),
                     ) / vec_data(CT3(ᶠw + εw)) * g³³(ᶠgⁱʲ),
-                ) +
-                ᶜinterp_matrix() *
-                DiagonalMatrixRow(adjoint(ᶠgradᵥ(ᶜp)) * g³³(ᶠgⁱʲ))
+                )
         end
+    else
+        error("∂ᶜ𝔼ₜ∂ᶠ𝕄_mode must be :exact or :no_∂ᶜp∂ᶜK when using ρe")
     end
 
     # TODO: As an optimization, we can rewrite ∂ᶠ𝕄ₜ∂ᶜ𝔼 as 1 / ᶠinterp(ᶜρ) * M,
@@ -477,91 +357,36 @@ function implicit_equation_jacobian!(j, Y, p, δtγ, t)
        flags.∂ᶠ𝕄ₜ∂ᶜρ_mode != :hydrostatic_balance
         error("∂ᶠ𝕄ₜ∂ᶜρ_mode must be :exact or :hydrostatic_balance")
     end
-    if :ρθ in propertynames(Y.c)
+    # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥ(ᶜK + ᶜΦ)
+    # ∂(ᶠwₜ)/∂(ᶜρe) = ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) * ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρe)
+    # ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) = -1 / ᶠinterp(ᶜρ)
+    # ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρe) = ᶠgradᵥ_matrix() * R_d / cv_d
+    @. ∂ᶠ𝕄ₜ∂ᶜ𝔼 =
+        -DiagonalMatrixRow(1 / ᶠinterp(ᶜρ)) * (ᶠgradᵥ_matrix() * R_d / cv_d)
+
+    if flags.∂ᶠ𝕄ₜ∂ᶜρ_mode == :exact
         # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥ(ᶜK + ᶜΦ)
-        # ∂(ᶠwₜ)/∂(ᶜρθ) = ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) * ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρθ)
+        # ∂(ᶠwₜ)/∂(ᶜρ) =
+        #     ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) * ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρ) +
+        #     ∂(ᶠwₜ)/∂(ᶠinterp(ᶜρ)) * ∂(ᶠinterp(ᶜρ))/∂(ᶜρ)
         # ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) = -1 / ᶠinterp(ᶜρ)
-        # ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρθ) =
-        #     ᶠgradᵥ_matrix() * γ * R_d * (ᶜρθ * R_d / p_0)^(γ - 1)
-        @. ∂ᶠ𝕄ₜ∂ᶜ𝔼 =
+        # ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρ) =
+        #     ᶠgradᵥ_matrix() * R_d * (-(ᶜK + ᶜΦ) / cv_d + T_tri)
+        # ∂(ᶠwₜ)/∂(ᶠinterp(ᶜρ)) = ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ)^2
+        # ∂(ᶠinterp(ᶜρ))/∂(ᶜρ) = ᶠinterp_matrix()
+        @. ∂ᶠ𝕄ₜ∂ᶜρ =
             -DiagonalMatrixRow(1 / ᶠinterp(ᶜρ)) *
             ᶠgradᵥ_matrix() *
-            DiagonalMatrixRow(γ * R_d * (ᶜρθ * R_d / p_0)^(γ - 1))
-
-        if flags.∂ᶠ𝕄ₜ∂ᶜρ_mode == :exact
-            # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥ(ᶜK + ᶜΦ)
-            # ∂(ᶠwₜ)/∂(ᶜρ) = ∂(ᶠwₜ)/∂(ᶠinterp(ᶜρ)) * ∂(ᶠinterp(ᶜρ))/∂(ᶜρ)
-            # ∂(ᶠwₜ)/∂(ᶠinterp(ᶜρ)) = ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ)^2
-            # ∂(ᶠinterp(ᶜρ))/∂(ᶜρ) = ᶠinterp_matrix()
-            @. ∂ᶠ𝕄ₜ∂ᶜρ =
-                DiagonalMatrixRow(ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ)^2) * ᶠinterp_matrix()
-        elseif flags.∂ᶠ𝕄ₜ∂ᶜρ_mode == :hydrostatic_balance
-            # same as above, but we assume that ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) =
-            # -ᶠgradᵥ(ᶜΦ)
-            @. ∂ᶠ𝕄ₜ∂ᶜρ =
-                -DiagonalMatrixRow(ᶠgradᵥ(ᶜΦ) / ᶠinterp(ᶜρ)) * ᶠinterp_matrix()
-        end
-    elseif :ρe in propertynames(Y.c)
-        # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥ(ᶜK + ᶜΦ)
-        # ∂(ᶠwₜ)/∂(ᶜρe) = ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) * ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρe)
-        # ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) = -1 / ᶠinterp(ᶜρ)
-        # ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρe) = ᶠgradᵥ_matrix() * R_d / cv_d
-        @. ∂ᶠ𝕄ₜ∂ᶜ𝔼 =
-            -DiagonalMatrixRow(1 / ᶠinterp(ᶜρ)) * (ᶠgradᵥ_matrix() * R_d / cv_d)
-
-        if flags.∂ᶠ𝕄ₜ∂ᶜρ_mode == :exact
-            # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥ(ᶜK + ᶜΦ)
-            # ∂(ᶠwₜ)/∂(ᶜρ) =
-            #     ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) * ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρ) +
-            #     ∂(ᶠwₜ)/∂(ᶠinterp(ᶜρ)) * ∂(ᶠinterp(ᶜρ))/∂(ᶜρ)
-            # ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) = -1 / ᶠinterp(ᶜρ)
-            # ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρ) =
-            #     ᶠgradᵥ_matrix() * R_d * (-(ᶜK + ᶜΦ) / cv_d + T_tri)
-            # ∂(ᶠwₜ)/∂(ᶠinterp(ᶜρ)) = ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ)^2
-            # ∂(ᶠinterp(ᶜρ))/∂(ᶜρ) = ᶠinterp_matrix()
-            @. ∂ᶠ𝕄ₜ∂ᶜρ =
-                -DiagonalMatrixRow(1 / ᶠinterp(ᶜρ)) *
-                ᶠgradᵥ_matrix() *
-                DiagonalMatrixRow(R_d * (-(ᶜK + ᶜΦ) / cv_d + T_tri)) +
-                DiagonalMatrixRow(ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ)^2) * ᶠinterp_matrix()
-        elseif flags.∂ᶠ𝕄ₜ∂ᶜρ_mode == :hydrostatic_balance
-            # same as above, but we assume that ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) =
-            # -ᶠgradᵥ(ᶜΦ) and that ᶜK is negligible compared ot ᶜΦ
-            @. ∂ᶠ𝕄ₜ∂ᶜρ =
-                -DiagonalMatrixRow(1 / ᶠinterp(ᶜρ)) *
-                ᶠgradᵥ_matrix() *
-                DiagonalMatrixRow(R_d * (-(ᶜΦ) / cv_d + T_tri)) -
-                DiagonalMatrixRow(ᶠgradᵥ(ᶜΦ) / ᶠinterp(ᶜρ)) * ᶠinterp_matrix()
-        end
-    elseif :ρe_int in propertynames(Y.c)
-        # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥ(ᶜK + ᶜΦ)
-        # ∂(ᶠwₜ)/∂(ᶜρe_int) = ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) * ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρe_int)
-        # ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) = -1 / ᶠinterp(ᶜρ)
-        # ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρe_int) = ᶠgradᵥ_matrix() * R_d / cv_d
-        @. ∂ᶠ𝕄ₜ∂ᶜ𝔼 =
-            DiagonalMatrixRow(-1 / ᶠinterp(ᶜρ)) * (ᶠgradᵥ_matrix() * R_d / cv_d)
-
-        if flags.∂ᶠ𝕄ₜ∂ᶜρ_mode == :exact
-            # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥ(ᶜK + ᶜΦ)
-            # ∂(ᶠwₜ)/∂(ᶜρ) =
-            #     ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) * ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρ) +
-            #     ∂(ᶠwₜ)/∂(ᶠinterp(ᶜρ)) * ∂(ᶠinterp(ᶜρ))/∂(ᶜρ)
-            # ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) = -1 / ᶠinterp(ᶜρ)
-            # ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρ) = ᶠgradᵥ_matrix() * R_d * T_tri
-            # ∂(ᶠwₜ)/∂(ᶠinterp(ᶜρ)) = ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ)^2
-            # ∂(ᶠinterp(ᶜρ))/∂(ᶜρ) = ᶠinterp_matrix()
-            @. ∂ᶠ𝕄ₜ∂ᶜρ =
-                -DiagonalMatrixRow(1 / ᶠinterp(ᶜρ)) *
-                (ᶠgradᵥ_matrix() * R_d * T_tri) +
-                DiagonalMatrixRow(ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ)^2) * ᶠinterp_matrix()
-        elseif flags.∂ᶠ𝕄ₜ∂ᶜρ_mode == :hydrostatic_balance
-            # same as above, but we assume that ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) =
-            # -ᶠgradᵥ(ᶜΦ)
-            @. ∂ᶠ𝕄ₜ∂ᶜρ =
-                DiagonalMatrixRow(-1 / ᶠinterp(ᶜρ)) *
-                (ᶠgradᵥ_matrix() * R_d * T_tri) -
-                DiagonalMatrixRow(ᶠgradᵥ(ᶜΦ) / ᶠinterp(ᶜρ)) * ᶠinterp_matrix()
-        end
+            DiagonalMatrixRow(R_d * (-(ᶜK + ᶜΦ) / cv_d + T_tri)) +
+            DiagonalMatrixRow(ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ)^2) * ᶠinterp_matrix()
+    elseif flags.∂ᶠ𝕄ₜ∂ᶜρ_mode == :hydrostatic_balance
+        # same as above, but we assume that ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) =
+        # -ᶠgradᵥ(ᶜΦ) and that ᶜK is negligible compared ot ᶜΦ
+        @. ∂ᶠ𝕄ₜ∂ᶜρ =
+            -DiagonalMatrixRow(1 / ᶠinterp(ᶜρ)) *
+            ᶠgradᵥ_matrix() *
+            DiagonalMatrixRow(R_d * (-(ᶜΦ) / cv_d + T_tri)) -
+            DiagonalMatrixRow(ᶠgradᵥ(ᶜΦ) / ᶠinterp(ᶜρ)) * ᶠinterp_matrix()
     end
 
     # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥ(ᶜK + ᶜΦ)
@@ -577,21 +402,13 @@ function implicit_equation_jacobian!(j, Y, p, δtγ, t)
     #     ᶜ𝔼_name == :ρe ? ᶠgradᵥ_matrix() * (-ᶜρ * R_d / cv_d) : 0
     # ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜK + ᶜΦ)) = -1
     # ∂(ᶠgradᵥ(ᶜK + ᶜΦ))/∂(ᶜK) = ᶠgradᵥ_matrix()
-    if :ρθ in propertynames(Y.c) || :ρe_int in propertynames(Y.c)
-        @. ∂ᶠ𝕄ₜ∂ᶠ𝕄 = -(ᶠgradᵥ_matrix()) * ∂ᶜK∂ᶠw
-    elseif :ρe in propertynames(Y.c)
-        @. ∂ᶠ𝕄ₜ∂ᶠ𝕄 =
-            -(
-                DiagonalMatrixRow(1 / ᶠinterp(ᶜρ)) *
-                ᶠgradᵥ_matrix() *
-                DiagonalMatrixRow(-(ᶜρ * R_d / cv_d)) + ᶠgradᵥ_matrix()
-            ) * ∂ᶜK∂ᶠw
-    end
+    @. ∂ᶠ𝕄ₜ∂ᶠ𝕄 =
+        -(
+            DiagonalMatrixRow(1 / ᶠinterp(ᶜρ)) *
+            ᶠgradᵥ_matrix() *
+            DiagonalMatrixRow(-(ᶜρ * R_d / cv_d)) + ᶠgradᵥ_matrix()
+        ) * ∂ᶜK∂ᶠw
 
     I = one(∂R∂Y)
-    if transform
-        @. ∂R∂Y = I / FT(δtγ) - ∂Yₜ∂Y
-    else
-        @. ∂R∂Y = FT(δtγ) * ∂Yₜ∂Y - I
-    end
+    @. ∂R∂Y = FT(δtγ) * ∂Yₜ∂Y - I
 end

@@ -1,7 +1,3 @@
-#=
-julia --check-bounds=yes --project=.buildkite
-using Revise; include("test/Operators/finitedifference/unit_column.jl")
-=#
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 using ClimaCore
@@ -69,7 +65,7 @@ device = ClimaComms.device()
         ∂cos = Geometry.WVector.(∇ᶠ.(cos.(centers)))
         @test ∂cos ≈ Geometry.WVector.(.-sin.(faces)) atol = 1e-2
 
-        # test that broadcasting into incorrect field space throws an error
+        # Test that broadcasting into incorrect field space throws an error
         empty_centers = zeros(FT, center_space)
         @test_throws Exception empty_centers .= ∇ᶠ.(cos.(centers))
     end
@@ -121,7 +117,7 @@ end
         ∂cos = Geometry.WVector.(∇ᶠ.(cosz_c))
         @test ∂cos ≈ Geometry.WVector.(.-sinz_f) atol = 1e-2
 
-        # test that broadcasting into incorrect field space throws an error
+        # Test that broadcasting into incorrect field space throws an error
         empty_centers = zeros(FT, center_space)
         @test_throws Exception empty_centers .= ∇ᶠ.(cos.(centers))
     end
@@ -157,7 +153,7 @@ end
         ∂sin = Geometry.WVector.(∂.(w .* I.(θ)))
         @test ∂sin ≈ Geometry.WVector.(cos.(centers)) atol = 1e-2
 
-        # can't define Neumann conditions on GradientF2C
+        # Can't define Neumann conditions on GradientF2C
         ∂ = Operators.GradientF2C(
             left = Operators.Extrapolate(),
             right = Operators.Extrapolate(),
@@ -200,7 +196,7 @@ end
         ∂sin = Geometry.WVector.(∂.(w .* I.(θ)))
         @test ∂sin ≈ Geometry.WVector.(cos.(centers)) atol = 1e-2
 
-        # test that broadcasting into incorrect field space throws an error
+        # Test that broadcasting into incorrect field space throws an error
         empty_faces = zeros(FT, face_space)
         @test_throws Exception empty_faces .= ∂.(w .* I.(θ))
     end
@@ -235,8 +231,7 @@ end
     end
 end
 
-@testset "Biased interpolation" begin
-    FT = Float64
+@testset "Biased interpolation [$FT]" for FT in (Float32, Float64)
     n_elems = 10
     device = ClimaComms.device()
 
@@ -265,7 +260,7 @@ end
     fyp = parent(fy)
 
     # C2F biased operators
-    LBC2F = Operators.LeftBiasedC2F(; bottom = Operators.SetValue(10))
+    LBC2F = Operators.LeftBiasedC2F(; bottom = Operators.SetValue(FT(10)))
     @. cy = cos(zc)
     @. fy = LBC2F(cy)
     fy_ref = ClimaComms.allowscalar(device) do
@@ -273,7 +268,7 @@ end
     end
     @test all(fy_ref .== parent(ClimaCore.to_cpu(fy)))
 
-    RBC2F = Operators.RightBiasedC2F(; top = Operators.SetValue(10))
+    RBC2F = Operators.RightBiasedC2F(; top = Operators.SetValue(FT(10)))
     @. cy = cos(zc)
     @. fy = RBC2F(cy)
     fy_ref = ClimaComms.allowscalar(device) do
@@ -282,7 +277,7 @@ end
     @test all(fy_ref .== parent(ClimaCore.to_cpu(fy)))
 
     # F2C biased operators
-    LBF2C = Operators.LeftBiasedF2C(; bottom = Operators.SetValue(10))
+    LBF2C = Operators.LeftBiasedF2C(; bottom = Operators.SetValue(FT(10)))
     @. cy = cos(zc)
     @. cy = LBF2C(fy)
     cy_ref = ClimaComms.allowscalar(device) do
@@ -290,7 +285,7 @@ end
     end
     @test all(cy_ref .== parent(ClimaCore.to_cpu(cy)))
 
-    RBF2C = Operators.RightBiasedF2C(; top = Operators.SetValue(10))
+    RBF2C = Operators.RightBiasedF2C(; top = Operators.SetValue(FT(10)))
     @. cy = cos(zc)
     @. cy = RBF2C(fy)
     cy_ref = ClimaComms.allowscalar(device) do
@@ -301,8 +296,7 @@ end
 
 # https://github.com/CliMA/ClimaCore.jl/issues/994
 # TODO: make this test more low-level / granular (test `getidx`).
-@testset "Spatially varying BC with Grad" begin
-    FT = Float64
+@testset "Spatially varying BC with Grad [$FT]" for FT in (Float32, Float64)
     zmin = FT(1.0)
     zmax = FT(2.0)
     xlim = FT.((0.0, 10.0))
@@ -326,7 +320,6 @@ end
     grid_topology = Topologies.Topology2D(context, mesh)
     quad = Spaces.Quadratures.GLL{npolynomial + 1}()
     horzspace = Spaces.SpectralElementSpace2D(grid_topology, quad)
-
 
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint(zlim[1]),

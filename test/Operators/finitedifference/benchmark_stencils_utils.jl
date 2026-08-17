@@ -92,23 +92,6 @@ function set_value_divgrad_uₕ_maybe_field_bcs(c) # real-world example
     end
 end
 
-function set_vec_value_bcs(c)
-    FT = Spaces.undertype(axes(c))
-    wvec = Geometry.WVector
-    return (;bottom = Operators.SetValue(wvec(FT(0))),
-             top = Operators.SetValue(wvec(FT(0))))
-end
-
-function set_upwind_biased_bcs(c)
-    return (;bottom = Operators.FirstOrderOneSided(),
-             top = Operators.FirstOrderOneSided())
-end
-
-function set_upwind_biased_bcs(c)
-    return (;bottom = Operators.ThirdOrderOneSided(),
-             top = Operators.ThirdOrderOneSided())
-end
-
 function set_upwind_biased_3_bcs(c)
     return (;bottom = Operators.ThirdOrderOneSided(),
              top = Operators.ThirdOrderOneSided())
@@ -130,31 +113,11 @@ function set_divergence_bcs(c)
              top = Operators.SetDivergence(FT(0)))
 end
 
-function set_divergence_contra3_bcs(c)
-    FT = Spaces.undertype(axes(c))
-    contra3 = Geometry.Contravariant3Vector
-    return (;bottom = Operators.SetDivergence(contra3(FT(0))),
-             top = Operators.SetDivergence(contra3(FT(0))))
-end
-
 function set_gradient_value_bcs(c)
     FT = Spaces.undertype(axes(c))
     wvec = Geometry.WVector
     return (;bottom = Operators.SetGradient(wvec(FT(0))),
              top = Operators.SetGradient(wvec(FT(0))))
-end
-
-function set_gradient_bcs(c)
-    FT = Spaces.undertype(axes(c))
-    return (;bottom = Operators.SetGradient(FT(0)),
-             top = Operators.SetGradient(FT(0)))
-end
-
-function set_gradient_contra3_bcs(c)
-    FT = Spaces.undertype(axes(c))
-    contra3 = Geometry.Contravariant3Vector
-    return (;bottom = Operators.SetGradient(FT(0)),
-             top = Operators.SetGradient(FT(0)))
 end
 
 function set_curl_bcs(c)
@@ -363,14 +326,14 @@ function benchmark_operators_column(bm; z_elems, helem, Nq, compile::Bool = fals
     return (; bm, trials, t_min)
 end
 
-function benchmark_operators_sphere(bm; z_elems, helem, Nq, compile::Bool = false, horizontal_layout_type)
+function benchmark_operators_sphere(bm; z_elems, helem, Nq, compile::Bool = false, VIJH)
     FT = bm.float_type
     device = ClimaComms.device()
     @show device
     trials = DataStructures.OrderedDict()
     t_min = DataStructures.OrderedDict()
 
-    cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem=z_elems, helem, Nq, horizontal_layout_type)
+    cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem=z_elems, helem, Nq, VIJH)
     fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
     cfield = fill(field_vars(FT), cspace)
     ffield = fill(field_vars(FT), fspace)

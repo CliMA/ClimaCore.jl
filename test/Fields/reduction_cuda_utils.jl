@@ -1,5 +1,5 @@
 
-# set initial condition for steady-state test
+# Set initial condition for steady-state test
 function set_initial_condition(space)
     Y = map(Fields.local_geometry_field(space)) do local_geometry
         h = 1.0
@@ -8,7 +8,7 @@ function set_initial_condition(space)
     return Y
 end
 
-# set simple field
+# Set field
 function set_simple_field(space)
     α0 = 45.0
     h0 = 1.0

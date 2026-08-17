@@ -20,8 +20,8 @@ using Adapt
 import ..slab, ..column, ..level
 import ..Utilities: PlusHalf, half
 import ..DebugOnly: call_post_op_callback, post_op_callback
-import ..DataLayouts,
-    ..Geometry, ..Domains, ..Meshes, ..Topologies, ..Grids, ..Quadratures
+import ..DataLayouts, ..Geometry, ..Domains, ..Meshes, ..Topologies, ..Grids, ..Quadratures
+import ..DataLayouts: PointIndex
 
 import ..Domains: z_max, z_min
 import ..Meshes: n_elements_per_panel_direction
@@ -61,7 +61,6 @@ abstract type AbstractSpace end
 function grid end
 function staggering end
 
-
 ClimaComms.context(space::AbstractSpace) = ClimaComms.context(grid(space))
 ClimaComms.device(space::AbstractSpace) = ClimaComms.device(grid(space))
 
@@ -84,7 +83,7 @@ global_geometry(space::AbstractSpace) = global_geometry(grid(space))
 space(refspace::AbstractSpace, staggering::Staggering) =
     space(grid(refspace), staggering)
 
-issubspace(::AbstractSpace, ::AbstractSpace) = false
+issubspace(subspace::AbstractSpace, space::AbstractSpace) = subspace === space
 
 undertype(space::AbstractSpace) =
     Geometry.undertype(eltype(local_geometry_data(space)))
@@ -95,10 +94,40 @@ coordinates_data(grid::Grids.AbstractGrid) =
 coordinates_data(staggering, grid::Grids.AbstractGrid) =
     local_geometry_data(staggering, grid).coordinates
 
+horizontal_grid(grid::Grids.AbstractSpectralElementGrid) = grid
+horizontal_grid(grid::Grids.LevelGrid) = grid.full_grid.horizontal_grid
+
+vertical_grid(grid::Grids.AbstractFiniteDifferenceGrid) = grid
+vertical_grid(grid::Grids.ColumnGrid) = vertical_grid(grid.full_grid)
+vertical_grid(grid::Grids.AbstractExtrudedFiniteDifferenceGrid) = grid.vertical_grid
+
+# Device-side extruded grids do not store their vertical grids, so the vertical
+# topology, which Adapt preserves, stands in as the identity token compared by
+# issubspace: column slices share a vertical topology exactly when their host
+# grids share a vertical grid.
+vertical_grid(grid::Grids.DeviceExtrudedFiniteDifferenceGrid) =
+    Grids.vertical_topology(grid)
+
+half_level_error() = throw(ArgumentError("Cannot use PlusHalf as CellCenter space index"))
+
+staggered_level_index(space, v::Integer) = staggering(space) isa CellFace ? v - half : v
+staggered_level_index(space, v::PlusHalf) =
+    staggering(space) isa CellFace ? v : half_level_error()
+
+integer_level_index(_, v::Integer) = v
+integer_level_index(space, v::PlusHalf) =
+    staggering(space) isa CellFace ? v + half : half_level_error()
+
+Base.@propagate_inbounds Base.view(space::AbstractSpace, index::PointIndex) =
+    PointSpace(ClimaComms.context(space), view(local_geometry_data(space), index))
+Base.@propagate_inbounds Base.view(space::AbstractSpace, indices::PointIndex...) =
+    view(space, CartesianIndex(indices...))
+
 include("pointspace.jl")
 include("spectralelement.jl")
 include("finitedifference.jl")
 include("extruded.jl")
+include("multicolumn.jl")
 include("triangulation.jl")
 include("dss.jl")
 
@@ -193,7 +222,8 @@ Returns a bool indicating that the space has a vertical grid.
 function has_vertical end
 has_vertical(::AbstractSpace) = false
 has_vertical(::ExtrudedFiniteDifferenceSpace) = true
-has_vertical(::FiniteDifferenceSpace) = false
+has_vertical(::MultiColumnFiniteDifferenceSpace) = true
+has_vertical(::FiniteDifferenceSpace) = true
 
 """
     has_horizontal(::AbstractSpace)
@@ -209,21 +239,7 @@ has_horizontal(::SpectralElementSpace2D) = true
 set_mask!(fn, space::AbstractSpace) = set_mask!(fn, grid(space))
 set_mask!(fn, space::ExtrudedFiniteDifferenceSpace) =
     set_mask!(fn, grid(horizontal_space(space)))
-set_mask!(space::AbstractSpace, data::DataLayouts.AbstractData) =
+set_mask!(space::AbstractSpace, data::DataLayouts.DataLayout) =
     set_mask!(grid(space), data)
-
-"""
-    slab_type(space)
-
-Determines the appropriate slab data layout type for a given space.
-
-For spaces with 2 horizontal dimensions, returns IJF.
-For 1D spaces, returns IF.
-"""
-slab_type(space::SpectralElementSpace2D) = DataLayouts.IJF
-slab_type(space::SpectralElementSpace1D) = DataLayouts.IF
-slab_type(space::FiniteDifferenceSpace) = DataLayouts.IF
-slab_type(space::ExtrudedFiniteDifferenceSpace) =
-    slab_type(horizontal_space(space))
 
 end # module

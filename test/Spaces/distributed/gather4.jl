@@ -9,8 +9,7 @@ import ClimaCore:
     Operators,
     Spaces,
     Quadratures,
-    Topologies,
-    DataLayouts
+    Topologies
 
 using Logging
 
@@ -19,7 +18,7 @@ ClimaComms.@import_required_backends
 const comms_ctx = ClimaComms.MPICommsContext()
 const pid, nprocs = ClimaComms.init(comms_ctx)
 
-# log output only from root process
+# Log output only from root process
 logger_stream = ClimaComms.iamroot(comms_ctx) ? stderr : devnull
 
 prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
@@ -52,7 +51,7 @@ Nv = 1
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 global_space = Spaces.SpectralElementSpace2D(global_grid_topology, quad)
 
-gathered_coord = DataLayouts.gather(
+gathered_coord = ClimaComms.gather(
     comms_ctx,
     Fields.field_values(Fields.coordinate_field(space)),
 )

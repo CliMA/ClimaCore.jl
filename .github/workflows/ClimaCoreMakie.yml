@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
         with:
           version: '1.10'
@@ -25,7 +25,11 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y xorg-dev mesa-utils xvfb libgl1 freeglut3-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev
       - name: Install Julia dependencies
         run: >
-          julia --project=monorepo -e 'using Pkg; Pkg.develop(path="$(pwd())"); Pkg.develop(path="$(pwd())/lib/ClimaCoreMakie")'
+          julia --project=monorepo -e 'using Pkg;
+          Pkg.develop([
+            PackageSpec(path="$(pwd())"),
+            PackageSpec(path="$(pwd())/lib/ClimaCoreMakie"),
+          ])'
       - name: Run the tests
         continue-on-error: true
         env:

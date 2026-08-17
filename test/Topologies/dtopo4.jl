@@ -11,7 +11,7 @@ ClimaComms.@import_required_backends
 comms_ctx = ClimaComms.MPICommsContext()
 pid, nprocs = ClimaComms.init(comms_ctx)
 
-# log output only from root process
+# Log output only from root process
 logger_stream = ClimaComms.iamroot(comms_ctx) ? stderr : devnull
 prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
 atexit() do
@@ -47,18 +47,6 @@ function strip_extra_gface_info(gfacesin)
         push!(gfacesout, gfaces[1:5])
     end
     return gfacesout
-end
-
-function strip_extra_gvert_info(gvertsin)
-    gvertsout = Vector{Tuple{Int, Int}}[]
-    for verts in gvertsin
-        gvert_group = Tuple{Int, Int}[]
-        for (e, vertex_num, _, _) in verts
-            push!(gvert_group, (e, vertex_num))
-        end
-        push!(gvertsout, gvert_group)
-    end
-    return gvertsout
 end
 
 #=

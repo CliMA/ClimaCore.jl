@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
         with:
           version: '1.10'
@@ -26,8 +26,12 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get -y install paraview python3-paraview
       - name: Install Julia dependencies
-        run: |
-          julia --project=monorepo -e 'using Pkg; Pkg.develop(path="$(pwd())/lib/ClimaCoreVTK")'
+        run: >
+          julia --project=monorepo -e 'using Pkg;
+          Pkg.develop([
+            PackageSpec(path="lib/ClimaCoreVTK"),
+            PackageSpec(path="."),
+          ])'
       - name: Run the tests
         env:
           CI_OUTPUT_DIR: output

@@ -1,7 +1,6 @@
 using Test
 using ClimaComms
 using StaticArrays, IntervalSets
-import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
     Fields,
     Domains,
@@ -59,7 +58,7 @@ include("sphere_sphericalharmonics.jl")
     # Call the diffusion operator
     hyperdiff = ∇⁴(u)
 
-    # compute the exact solution
+    # Compute the exact solution
     exact_solution = @. l^2 * (l + 1)^2 / (radius)^4 * u
 
     @test hyperdiff ≈ exact_solution rtol = 2e-2

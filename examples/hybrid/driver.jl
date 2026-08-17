@@ -1,5 +1,11 @@
-# Test-specific definitions (may be overwritten in each test case file)
-# TODO: Allow some of these to be enironment variables or command line arguments
+# Driver for the `hybrid/` cases built on `staggered_nonhydrostatic_model.jl`.
+# Set `TEST_NAME` to a case file relative to this directory (for example
+# `sphere/baroclinic_wave_rhoe`); the driver includes it, builds the spaces and
+# initial state it declares, and runs it. See `sphere/README.md` for the other
+# environment variables it reads.
+#
+# The defaults below are overwritten by each case file.
+# TODO: Allow some of these to be environment variables or CLI arguments
 upwinding_mode = :none
 horizontal_mesh = nothing # must be object of type AbstractMesh
 npoly = 0
@@ -9,7 +15,7 @@ t_end = 0
 dt = 0
 dt_save_to_sol = 0 # 0 means don't save to sol
 dt_save_to_disk = 0 # 0 means don't save to disk
-ode_algorithm = nothing # must be object of type OrdinaryDiffEqAlgorithm
+ode_algorithm = nothing # must be a ClimaTimeSteppers algorithm name
 jacobian_flags = (;) # only required by implicit ODE algorithms
 max_newton_iters = 10 # only required by ODE algorithms that use Newton's method
 show_progress_bar = false
@@ -27,7 +33,6 @@ postprocessing(sol, output_dir) = nothing
 import ClimaTimeSteppers as CTS
 using ClimaComms
 ClimaComms.@import_required_backends
-import SciMLBase
 const comms_ctx = ClimaComms.context()
 is_distributed = comms_ctx isa ClimaComms.MPICommsContext
 using ClimaCore: DataLayouts
@@ -48,13 +53,10 @@ atexit() do
     global_logger(prev_logger)
 end
 
-using SciMLBase
-using DiffEqCallbacks
 using JLD2
 
 const FT = get(ENV, "FLOAT_TYPE", "Float32") == "Float32" ? Float32 : Float64
 
-include("../ordinary_diff_eq_bug_fixes.jl")
 include("../common_spaces.jl")
 
 if get(ENV, "Z_STRETCH", "false") == "true"
@@ -91,16 +93,16 @@ if haskey(ENV, "RESTART_FILE")
     ᶠlocal_geometry = Fields.local_geometry_field(Y.f)
 else
     t_start = FT(0)
-    horizontal_layout_types = Dict()
-    horizontal_layout_types["IJFH"] = DataLayouts.IJFH
-    horizontal_layout_types["IJHF"] = DataLayouts.IJHF
-    horizontal_layout_type =
-        horizontal_layout_types[get(ENV, "horizontal_layout_type", "IJFH")]
+    VIJHs = Dict()
+    VIJHs["VIJFH"] = DataLayouts.VIJFH
+    VIJHs["VIJHF"] = DataLayouts.VIJHF
+    VIJH =
+        VIJHs[get(ENV, "horizontal_layout_type", "VIJFH")]
     h_space = make_horizontal_space(
         horizontal_mesh,
         npoly,
         comms_ctx,
-        horizontal_layout_type,
+        VIJH,
     )
     center_space, face_space =
         make_hybrid_spaces(h_space, z_max, z_elem; z_stretch)
@@ -141,39 +143,38 @@ end
 save_to_disk_func =
     make_save_to_disk_func(output_dir, test_file_name, is_distributed)
 
-dss_callback = FunctionCallingCallback(func_start = true) do Y, t, integrator
-    p = integrator.p
+function dss!(Y, p, t)
     Spaces.weighted_dss!(Y.c, p.ghost_buffer.c)
     Spaces.weighted_dss!(Y.f, p.ghost_buffer.f)
 end
-if dt_save_to_disk == 0
-    save_to_disk_callback = nothing
-else
-    save_to_disk_callback = PeriodicCallback(
-        save_to_disk_func,
-        dt_save_to_disk;
-        initial_affect = true,
-    )
-end
-callback = SciMLBase.CallbackSet(
-    dss_callback,
-    save_to_disk_callback,
-    additional_callbacks...,
-)
 
-problem = SciMLBase.ODEProblem(
+# `EveryXSimulationTime` fires the affect at fixed intervals of simulated time,
+# which is what PeriodicCallback provided.
+save_to_disk_callback =
+    dt_save_to_disk == 0 ? () :
+    (
+        CTS.Callbacks.EveryXSimulationTime(
+            save_to_disk_func,
+            dt_save_to_disk;
+            atinit = true,
+        ),
+    )
+callback = CTS.CallbackSet(save_to_disk_callback..., additional_callbacks...)
+
+problem = CTS.ODEProblem(
     CTS.ClimaODEFunction(;
-        T_imp! = ODEFunction(
+        T_imp! = CTS.ODEFunction(
             implicit_tendency!;
             jac_kwargs(ode_algo, Y, jacobian_flags)...,
         ),
         T_exp! = remaining_tendency!,
+        dss!,
     ),
     Y,
     (t_start, t_end),
     p,
 )
-integrator = SciMLBase.init(
+integrator = CTS.init(
     problem,
     ode_algo;
     saveat = dt_save_to_sol == 0 ? [] : collect(t_start:dt_save_to_sol:t_end),
@@ -192,14 +193,14 @@ end
 @info "Running `$test_dir/$test_file_name` test case"
 @info "on a vertical $z_stretch_string grid"
 
-walltime = @elapsed sol = SciMLBase.solve!(integrator)
+walltime = @elapsed sol = CTS.solve!(integrator)
 any(isnan, sol.u[end]) && error("NaNs found in result.")
 
 if is_distributed # replace sol.u on the root processor with the global sol.u
     global_Y_c_1 =
-        DataLayouts.gather(comms_ctx, Fields.field_values(sol.u[1].c))
+        ClimaComms.gather(comms_ctx, Fields.field_values(sol.u[1].c))
     global_Y_f_1 =
-        DataLayouts.gather(comms_ctx, Fields.field_values(sol.u[1].f))
+        ClimaComms.gather(comms_ctx, Fields.field_values(sol.u[1].f))
     if ClimaComms.iamroot(comms_ctx)
         global_h_space = make_horizontal_space(
             horizontal_mesh,
@@ -220,9 +221,9 @@ if is_distributed # replace sol.u on the root processor with the global sol.u
     end
     for i in 1:length(sol.u)
         global_Y_c =
-            DataLayouts.gather(comms_ctx, Fields.field_values(sol.u[i].c))
+            ClimaComms.gather(comms_ctx, Fields.field_values(sol.u[i].c))
         global_Y_f =
-            DataLayouts.gather(comms_ctx, Fields.field_values(sol.u[i].f))
+            ClimaComms.gather(comms_ctx, Fields.field_values(sol.u[i].f))
         if ClimaComms.iamroot(comms_ctx)
             global_sol_u[i] = Fields.FieldVector(
                 c = Fields.Field(global_Y_c, global_center_space),
@@ -231,7 +232,7 @@ if is_distributed # replace sol.u on the root processor with the global sol.u
         end
     end
     if ClimaComms.iamroot(comms_ctx)
-        sol = SciMLBase.sensitivity_solution(sol, global_sol_u, sol.t)
+        sol = CTS.ODESolution(sol.t, global_sol_u, sol.prob, sol.alg)
         output_file =
             joinpath(output_dir, "scaling_data_$(nprocs)_processes.jld2")
         println("writing performance data to $output_file")
@@ -241,8 +242,25 @@ end
 if !is_distributed || ClimaComms.iamroot(comms_ctx)
     println("Walltime = $walltime seconds")
     ENV["GKSwstype"] = "nul" # avoid displaying plots
-    # https://github.com/CliMA/ClimaCore.jl/issues/2058
-    if !(Fields.field_values(sol.u[1].c) isa DataLayouts.VIJHF)
+    # TODO: split `postprocessing` into an assertion hook and a plotting hook,
+    # then delete this skip. Every `@test` a case declares lives inside
+    # `postprocessing` alongside its plots, so skipping the whole hook means
+    # the run asserts nothing at all — it only checks that no NaNs appeared.
+    # The skip exists for https://github.com/CliMA/ClimaCore.jl/issues/2058,
+    # which is about plotting VIJHF fields, not about the assertions.
+    #
+    # The skip is confined to VIJHF on GPU. `sphere/baroclinic_wave_rhoe` is
+    # verified end-to-end on VIJHF on CPU, in both Float32 and Float64,
+    # reductions and level plots alike, so the CPU half of that CI pair asserts
+    # what it is supposed to. #2058 is unverified on GPU, so VIJHF there
+    # skips — but it says so in the log rather than passing silently.
+    skip_postprocessing =
+        Fields.field_values(sol.u[1].c) isa DataLayouts.VIJHF &&
+        comms_ctx.device isa ClimaComms.CUDADevice
+    if skip_postprocessing
+        @warn "Skipping postprocessing on a VIJHF layout on GPU: this run \
+               asserts nothing. See ClimaCore.jl#2058."
+    else
         postprocessing(sol, output_dir)
     end
 end

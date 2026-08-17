@@ -1,30 +1,3 @@
-#=
-To run this script:
-julia --project=test
-
-To run all tests:
-```
-using Revise; using ClimaCore; include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "benchmark_ops.jl"))
-```
-
-For interactive experimentation:
-```
-using Revise; using ClimaCore
-include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "benchmark_utils.jl"))
-include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "benchmark_kernels.jl"))
-kernel_args = setup_kernel_args(["--float-type", "Float64"]);
-device = ClimaComms.device()
-trial = benchmark_kernel!(kernel_args, kernel_spectral_div_grad!, device; silent=true);
-trial = benchmark_kernel_array!(kernel_args.arr_args, kernel_spectral_wdiv_array!, device; silent=true);
-show(stdout, MIME("text/plain"), trial);
-```
-
-Notes:
-```
-using CUDA
-CUDA.@profile kernel_spectral_div_grad!(kernel_args)
-```
-=#
 import ClimaCore as CC
 import DataStructures
 include(
@@ -33,7 +6,7 @@ include(
         "test",
         "Operators",
         "spectralelement",
-        "benchmark_utils.jl",
+        "benchmark_ops_utils.jl",
     ),
 )
 include(

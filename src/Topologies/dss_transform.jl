@@ -1,6 +1,3 @@
-import ..Topologies: Topology2D
-import UnrolledUtilities: unrolled_map
-
 """
     dss_transform(arg, local_geometry, weight, I)
 
@@ -13,7 +10,12 @@ Transformations only apply to vector quantities.
 See [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
 Base.@propagate_inbounds dss_transform(arg, local_geometry, weight, I) =
-    dss_transform(arg[I], local_geometry[I], weight[I])
+    dss_transform(
+        arg[I],
+        local_geometry[I],
+        # DSS weights only vary in the horizontal, so their level index is 1.
+        weight[CartesianIndex(1, Base.tail(Tuple(I))...)],
+    )
 Base.@propagate_inbounds dss_transform(
     arg,
     local_geometry,
@@ -36,21 +38,24 @@ Base.@propagate_inbounds dss_transform(
     arg::AutoBroadcaster,
     local_geometry::Geometry.LocalGeometry,
     weight,
-) = nested_broadcast(arg -> dss_transform(arg, local_geometry, weight), arg)
-
-const NonTransformedAxis = Union{
-    Geometry.LocalAxis,
-    Geometry.CartesianAxis,
-    Geometry.Covariant3Axis,
-    Geometry.Contravariant3Axis,
-}
+) =
+    nested_broadcast(arg) do leaf
+        dss_transform(leaf, local_geometry, weight)
+    end
 @inline dss_transform(
-    arg::Geometry.AxisVector{<:Any, <:NonTransformedAxis},
+    arg::Geometry.OrthonormalTensor,
+    local_geometry::Geometry.LocalGeometry,
+    weight,
+) = arg * weight
+const NonTransformedAxis =
+    Union{Geometry.Covariant3Axis, Geometry.Contravariant3Axis}
+@inline dss_transform(
+    arg::Geometry.Tensor{1, <:Any, <:Tuple{<:NonTransformedAxis}},
     local_geometry::Geometry.LocalGeometry,
     weight,
 ) = arg * weight
 @inline function dss_transform(
-    arg::Geometry.AxisVector,
+    arg::Geometry.AbstractTensor{1},
     local_geometry::Geometry.LocalGeometry,
     weight,
 )
@@ -73,14 +78,13 @@ const NonTransformedAxis = Union{
     end
     # workaround for using a Covariant12Vector in a UW space
     if ax isa Geometry.UWAxis && axfrom isa Geometry.Covariant12Axis
-        # return Geometry.transform(Geometry.UVWAxis(), arg, local_geometry)
-        u₁, v = Geometry.components(arg)
+        u₁, v = parent(arg)
         uw_vector = Geometry.project(
             Geometry.UWAxis(),
             Geometry.Covariant13Vector(u₁, zero(u₁)),
             local_geometry,
         )
-        u, w = Geometry.components(uw_vector)
+        u, w = parent(uw_vector)
         return Geometry.UVWVector(u, v, w) * weight
     end
     Geometry.project(ax, arg, local_geometry) * weight
@@ -116,62 +120,34 @@ Base.@propagate_inbounds dss_untransform(
     ::Type{T},
     targ::T,
     local_geometry::Geometry.LocalGeometry,
-) where {T <: Geometry.AxisVector} = targ
+) where {T <: Geometry.AbstractTensor{1}} = targ
 @inline function dss_untransform(
-    ::Type{Geometry.AxisVector{T, A1, S}},
-    targ::Geometry.AxisVector,
+    ::Type{Geometry.Tensor{1, T, Tuple{B}, S}},
+    targ::Geometry.AbstractTensor{1},
     local_geometry::Geometry.LocalGeometry,
-) where {T, A1, S}
-    ax = A1()
+) where {T, B <: Geometry.Components, S}
+    # If `targ` already has the destination basis, dss_transform left it
+    # untouched and there is nothing to undo. (Required so the workaround
+    # below — which assumes dss_transform turned the input into a UVWVector —
+    # doesn't fire when no transform happened.)
+    targ isa Geometry.Tensor{1, T, Tuple{B}, S} && return targ
+    ax = B()
     # workaround for using a Covariant12Vector in a UW space
     if (
         axes(local_geometry.∂x∂ξ, 1) isa Geometry.UWAxis &&
         ax isa Geometry.Covariant12Axis
     )
-        u, u₂, w = Geometry.components(targ)
+        u, u₂, w = parent(targ)
         u₁_vector = Geometry.transform(
             Geometry.Covariant1Axis(),
             Geometry.UWVector(u, w),
             local_geometry,
         )
-        u₁, = Geometry.components(u₁_vector)
+        u₁, = parent(u₁_vector)
         return Geometry.Covariant12Vector(u₁, u₂)
     end
-    Geometry.transform(ax, targ, local_geometry)
+    Geometry.project(ax, targ, local_geometry)
 end
-
-# helper functions for DSS2
-
-function _representative_slab(
-    data::Union{DataLayouts.AbstractData, Nothing},
-    ::Type{DA},
-) where {DA}
-    rebuild_flag = DA isa Array ? false : true
-    if isnothing(data)
-        return nothing
-    elseif rebuild_flag
-        return DataLayouts.rebuild(
-            slab(data, CartesianIndex(1, 1, 1, 1, 1)),
-            Array,
-        )
-    else
-        return slab(data, CartesianIndex(1, 1, 1, 1, 1))
-    end
-end
-
-_transformed_type(
-    data::DataLayouts.AbstractData,
-    local_geometry::Union{DataLayouts.AbstractData, Nothing},
-    dss_weights::Union{DataLayouts.AbstractData, Nothing},
-    ::Type{DA},
-) where {DA} = typeof(
-    dss_transform(
-        _representative_slab(data, DA),
-        _representative_slab(local_geometry, DA),
-        _representative_slab(dss_weights, DA),
-        CartesianIndex(1, 1, 1, 1, 1),
-    ),
-)
 
 # currently only used in limiters (but not actually functional)
 # see https://github.com/CliMA/ClimaCore.jl/issues/1511
@@ -183,40 +159,20 @@ end
 
 recv_buffer(ghost::GhostBuffer) = ghost.recv_data
 
-create_ghost_buffer(data, topology::Topologies.AbstractTopology) = nothing
-
-create_ghost_buffer(
-    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, <:Any, Nij}},
-    topology::Topologies.Topology2D,
-) where {S, Nij} = create_ghost_buffer(
-    data,
-    topology,
-    Topologies.nsendelems(topology),
-    Topologies.nrecvelems(topology),
-)
-
+create_ghost_buffer(data, topology::AbstractTopology) = nothing
 
 function create_ghost_buffer(
-    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, <:Any, Nij}},
-    topology::Topologies.Topology2D,
-    Nhsend,
-    Nhrec,
-) where {S, Nij}
-    if data isa DataLayouts.IJFH
-        send_data = DataLayouts.IJFH{S, Nij}(typeof(parent(data)), Nhsend)
-        recv_data = DataLayouts.IJFH{S, Nij}(typeof(parent(data)), Nhrec)
-    else
-        Nv = DataLayouts.nlevels(data)
-        Nf = DataLayouts.ncomponents(data)
-        send_data = DataLayouts.VIJFH{S, Nv, Nij}(
-            similar(parent(data), (Nv, Nij, Nij, Nf, Nhsend)),
-        )
-        recv_data = DataLayouts.VIJFH{S, Nv, Nij}(
-            similar(parent(data), (Nv, Nij, Nij, Nf, Nhrec)),
-        )
-    end
-    k = stride(parent(send_data), DataLayouts.h_dim(data))
-
+    data::DataLayouts.VIJHWithF,
+    topology::Topology2D,
+    Nhsend = nsendelems(topology),
+    Nhrec = nrecvelems(topology),
+)
+    # Ghost exchange is only required for distributed topologies
+    ClimaComms.context(topology) isa ClimaComms.SingletonCommsContext &&
+        return nothing
+    send_data = similar(data, Base.setindex(size(data), Nhsend, 4))
+    recv_data = similar(data, Base.setindex(size(data), Nhrec, 4))
+    k = stride(parent(send_data), DataLayouts.f_dim(data) == 5 ? 4 : 5)
     graph_context = ClimaComms.graph_context(
         topology.context,
         parent(send_data),
@@ -227,4 +183,30 @@ function create_ghost_buffer(
         topology.neighbor_pids,
     )
     GhostBuffer(graph_context, send_data, recv_data)
+end
+
+"""
+    fill_send_buffer!(topology, data, ghost_buffer::GhostBuffer)
+
+Loads the send buffer of `ghost_buffer` with the data of the elements
+that neighboring processes need for their ghost elements.
+"""
+function fill_send_buffer!(
+    topology::Topology2D,
+    data::DataLayouts.DataLayout,
+    ghost_buffer::GhostBuffer,
+)
+    # NOTE: this copies one element per iteration, which is a separate kernel
+    # launch per send element when the arrays live on a GPU. That is
+    # inconsequential at the element counts this is currently used with (the
+    # limiter's ghost exchange), but a single gather over `send_elem_lidx`
+    # would be preferable if it is ever used with many send elements.
+    # The parent array stores H at dim 4 or 5, depending on where F is
+    h_dim = DataLayouts.f_dim(data) == 5 ? 4 : 5
+    send_array = parent(ghost_buffer.send_data)
+    data_array = parent(data)
+    for (sidx, lidx) in enumerate(topology.send_elem_lidx)
+        selectdim(send_array, h_dim, sidx) .= selectdim(data_array, h_dim, lidx)
+    end
+    return nothing
 end

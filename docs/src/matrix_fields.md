@@ -108,7 +108,9 @@ scalar_field_matrix
 A FieldMatrix entry can be:
 
 - A `UniformScaling`, which contains a `Number`
-- A `DiagonalMatrixRow`, which can contain either a `Number` or a tensor (represented as a `Geometry.Axis2Tensor`)
+- A `DiagonalMatrixRow` containing a `Number` or a `Geometry.Tensor{2}`. The
+  tensor's basis is whatever the user supplies; there's no padding convention
+  imposed here.
 - A `ColumnwiseBandMatrixField`, where each value is a [`BandMatrixRow`](@ref) with entries of any type that can be represented using the field's base number type.
 
 If an entry contains a composite type, the fields of that type can be extracted.
@@ -173,8 +175,8 @@ The recursive indexing of an internal entry given some entry `entry` and interna
 works as follows:
 
 1. If the  `internal_name_pair` is blank, return `entry`
-2. If the element type of each band of `entry` is an `Axis2Tensor`, and `internal_name_pair` is of the form `(@name(components.data.1...), @name(components.data.2...))` (potentially with different numbers), then extract the specified component, and recurse on it with the remaining `internal_name_pair`.
-3. If the element type of each band of `entry` is a `Geometry.AdjointAxisVector`, then recurse on the parent of the adjoint.
+2. If the element type of each band of `entry` is a `Geometry.Tensor{2}`, and `internal_name_pair` is of the form `(@name(components.data.1...), @name(components.data.2...))` (potentially with different numbers), then extract the specified component, and recurse on it with the remaining `internal_name_pair`.
+3. If the element type of each band of `entry` is an `Adjoint` of a `Geometry.AbstractTensor{1}` (an adjoint rank-1 tensor), then recurse on the parent of the adjoint.
 4. If `internal_name_pair[1]` is not empty, and the first name in it is a field of the element type of each band of `entry`, extract that field from `entry`, and recurse into it with the remaining names of `internal_name_pair[1]` and all of `internal_name_pair[2]`
 5. If `internal_name_pair[2]` is not empty, and the first name in it is a field of the element type of each band of `entry`, extract that field from `entry`, and recurse into it with all of `internal_name_pair[1]` and the remaining names of `internal_name_pair[2]`
 6. At this point, if none of the previous cases are true, both `internal_name_pair[1]` and `internal_name_pair[2]` should be non-empty, and it is assumed that `entry` is being used to implicitly represent some tensor structure. If the first name in `internal_name_pair[1]` is equivalent to `internal_name_pair[2]`, then both the first names are dropped, and entry is recursed onto. If the first names are different, both the first names are dropped, and the zero of entry is recursed onto.

@@ -3,12 +3,11 @@ module Topologies
 import ClimaComms, Adapt
 
 import ..ClimaCore
-import ..Utilities: Cache, cart_ind, linear_ind, AutoBroadcaster, nested_broadcast
+import ..Utilities: Cache, AutoBroadcaster, nested_broadcast, return_type
 import ..Geometry
 import ..Domains: Domains, coordinate_type
 import ..Meshes: Meshes, domain, coordinates
 import ..DataLayouts
-import ..DataLayouts: slab_index
 import ..slab, ..column, ..level
 
 import ..DeviceSideDevice, ..DeviceSideContext
@@ -46,6 +45,12 @@ mesh in the horizontal domain.
 
 """
 abstract type AbstractTopology end
+
+ClimaComms.context(topology::AbstractTopology) = topology.context
+ClimaComms.device(topology::AbstractTopology) =
+    ClimaComms.device(ClimaComms.context(topology))
+ClimaComms.array_type(topology::AbstractTopology) =
+    ClimaComms.array_type(ClimaComms.device(topology))
 
 function Base.summary(io::IO, topology::AbstractTopology)
     print(io, nameof(typeof(topology)))

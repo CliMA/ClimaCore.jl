@@ -3,6 +3,10 @@
 Thank you for considering contributing to `ClimaCore.jl`! We hope this guide
 helps you make a contribution.
 
+> [!IMPORTANT]
+> **Developer Guides**
+> ClimaCore.jl follows the shared [CliMA Developer Guides](https://github.com/CliMA/DeveloperGuides). Please review the local copy at `docs/dev-guides/` or the [Developer Guides documentation page](dev_guides.md) for ecosystem-wide architecture, performance, and workflow standards before contributing.
+
 ## What to contribute?
 
 - The easiest way to contribute is by running `ClimaCore.jl`, identifying
@@ -158,14 +162,15 @@ and [submit a pull request](https://github.com/CLiMA/ClimaAtmos.jl/compare/).
 Currently a number of checks are run per commit for a given PR.
 
 - `JuliaFormatter` checks if the PR is formatted according to our guidelines.
-  Before merging, the formatter should be run via the command `julia -e 'using JuliaFormatter; format(".")'`.
-  JuliaFormatter.jl should be installed in your base Julia directory, and v1.0.62 must be used.
+  Before merging, the formatter should be run via the command `julia -e 'using
+  JuliaFormatter; format(".")'`. JuliaFormatter.jl should be installed in your
+  base Julia directory, and v2.10.1 must be used.
 - `Documentation` rebuilds the documentation for the PR and checks if the docs
   are consistent and generate valid output.
 - `Unit Tests` run subsets of the unit tests defined in `tests/`, using `Pkg.test()`.
   The tests are run in parallel to ensure that they finish in a reasonable time.
   The tests only run the latest commit for a PR, branch and will kill any stale jobs on push.
-  These tests are only run on linux (Ubuntu LTS).
+  These tests are only run on Linux (Ubuntu LTS).
 
 Unit tests are run against every new commit for a given PR,
 the status of the unit-tests are not checked during the merge
@@ -176,13 +181,9 @@ do not require the unit tests to be run.
 
 ### Integration testing
 
-Currently a number of checks are run during integration testing before being
+Currently, a number of checks are run during integration testing before being
 merged into `main`.
 
-- `JuliaFormatter` checks if the PR is formatted according to our guidelines.
-  Before merging, the formatter should be run via the command `julia -e 'using JuliaFormatter; format(".")'`.
-  JuliaFormatter.jl should be installed in your base Julia directory, and v1.0.62 must be used.
-- `Documentation` checks that the documentation correctly builds for the merged PR.
 - `OS Unit Tests` checks that `ClimaCore.jl` package unit tests can pass
    on every OS supported with a pre-compiled system image (Linux, macOS, Windows).
 - `ClimaCore CI` computationally expensive integration testing on CPU and
@@ -195,6 +196,10 @@ exercise tests using accelerator hardware (GPUs).
 Currently HPC cluster integration tests are run using the [Buildkite CI service](https://buildkite.com/clima/climacore-ci).
 Tests are parallelized and run as individual [Slurm](https://slurm.schedmd.com/documentation.html)
 batch jobs on the HPC cluster and defined in `.buildkite/pipeline.yml`.
+
+### GPU Kernel Launch Latency
+
+When making changes to the CUDA extension (`ClimaCoreCUDAExt`), contributors should manually check for regressions or improvements in GPU kernel launch latency. We do not run automated CI tests for launch latency because absolute latency measurements tend to be flaky across different hardware nodes and transient loads. You can verify the performance impact of your changes using the benchmark scripts in the `benchmarks/` directory or by profiling the kernels locally.
 
 ## Contributing to Documentation
 

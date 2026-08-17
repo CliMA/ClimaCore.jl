@@ -1,415 +1,92 @@
-# row_mul_mat! handles banded matrix * banded matrix. There are 8 methods, but they all have the
-# same structure, so we they could be written as a single method.
-# The others can be obtained by copy-pasting and changing the indices appropriately.
-# Note that these are all specialized for CUDA.blockDim().x faces , so the indices are hardcoded.
+# Helpers for multiplying a single row of a banded matrix with a banded matrix or vector
+# stored in shared memory. These are specialized for columns with CUDA.blockDim().x face
+# levels, computed by threads `v = 1:CUDA.blockDim().x` (one column per `threadIdx().y`).
+#
+
+# Number of valid slots in the column space of a matrix with the given shape.
+@inline n_column_slots(::Union{FaceToCenter, FaceToFace}) = CUDA.blockDim().x
+@inline n_column_slots(::Union{CenterToFace, CenterToCenter}) =
+    CUDA.blockDim().x - 1i32
+
+# Shape of `matrix1 * matrix2`: its rows match `matrix1`'s rows and its columns match
+# `matrix2`'s columns.
+@inline product_shape(
+    ::Union{FaceToCenter, CenterToCenter},
+    ::Union{CenterToFace, CenterToCenter},
+) = CenterToCenter()
+@inline product_shape(
+    ::Union{FaceToCenter, CenterToCenter},
+    ::Union{FaceToCenter, FaceToFace},
+) = FaceToCenter()
+@inline product_shape(
+    ::Union{CenterToFace, FaceToFace},
+    ::Union{CenterToFace, CenterToCenter},
+) = CenterToFace()
+@inline product_shape(
+    ::Union{CenterToFace, FaceToFace},
+    ::Union{FaceToCenter, FaceToFace},
+) = FaceToFace()
+
+# row_mul_mat! handles banded matrix * banded matrix. Entries of the product row whose
+# column index lies outside the product matrix are set to zero, matching
+# `multiply_matrix_at_index` in `src/MatrixFields/matrix_multiplication.jl`.
 Base.@propagate_inbounds function row_mul_mat!(
     ::Type{P},
     mat1_row,
     matrix2,
-    ::FaceToCenter,
-    ::CenterToFace,
+    shape1::MatrixFields.AbstractMatrixShape,
+    shape2::MatrixFields.AbstractMatrixShape,
 ) where {P}
-    prod_eltype = P
     v = threadIdx().x
-    i = threadIdx().y
-    mat1_eltype = typeof(mat1_row)
-    mat2_eltype = eltype(matrix2)
-    ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
-    ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
-    pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
-    li = 1i32
-    ri = CUDA.blockDim().x - 1i32
-    zero_entry = zero(eltype(prod_eltype))
+    block_col_idx = threadIdx().y
+    ld1, ud1 = MatrixFields.outer_diagonals(typeof(mat1_row))
+    ld2, ud2 = MatrixFields.outer_diagonals(eltype(matrix2))
+    pd1, pd2 = MatrixFields.outer_diagonals(P)
+    prod_shape = product_shape(shape1, shape2)
+    mat2_offset = (block_col_idx - 1i32) * CUDA.blockDim().x
+    zero_entry = zero(eltype(P))
     prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
-        if v + pd < li || v + pd > ri
-            zero_entry
-        else
+        prod_slot = band_matrix_d(v + pd, prod_shape)
+        if 0i32 < prod_slot <= n_column_slots(prod_shape)
             UnrolledUtilities.unrolled_mapreduce(+, (ld1:ud1...,)) do mat1_row_d
+                mat2_slot = band_matrix_d(v + mat1_row_d, shape1)
                 if ld2 <= pd - mat1_row_d <= ud2 &&
-                   (0i32 < v + mat1_row_d + half <= CUDA.blockDim().x)
+                   0i32 < mat2_slot <= n_column_slots(shape1)
                     @inbounds mat1_row[mat1_row_d] *
-                              matrix2[v + mat1_row_d + half + (i - 1i32) * CUDA.blockDim().x][pd - mat1_row_d]
+                              matrix2[mat2_slot + mat2_offset][pd - mat1_row_d]
                 else
                     zero_entry
                 end
             end
-        end
-    end
-    return BandMatrixRow{pd1}(prod_entries...)
-end
-
-Base.@propagate_inbounds function row_mul_mat!(
-    ::Type{P},
-    mat1_row,
-    matrix2,
-    ::CenterToFace,
-    ::FaceToCenter,
-) where {P}
-    prod_eltype = P
-    v = threadIdx().x
-    i = threadIdx().y
-    mat1_eltype = typeof(mat1_row)
-    mat2_eltype = eltype(matrix2)
-    ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
-    ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
-    pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
-    li = 1i32
-    ri = CUDA.blockDim().x
-    zero_entry = zero(eltype(prod_eltype))
-    prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
-        if v + pd < li || v + pd > ri
-            zero_entry
         else
-            UnrolledUtilities.unrolled_mapreduce(+, (ld1:ud1...,)) do mat1_row_d
-                if ld2 <= pd - mat1_row_d <= ud2 &&
-                   (0i32 < v + mat1_row_d - half < CUDA.blockDim().x)
-                    @inbounds mat1_row[mat1_row_d] *
-                              matrix2[v + mat1_row_d - half + (i - 1i32) * CUDA.blockDim().x][pd - mat1_row_d]
-                else
-                    zero_entry
-                end
-            end
-        end
-    end
-    return BandMatrixRow{pd1}(prod_entries...)
-end
-
-Base.@propagate_inbounds function row_mul_mat!(
-    ::Type{P},
-    mat1_row,
-    matrix2,
-    ::CenterToCenter,
-    ::CenterToCenter,
-) where {P}
-    prod_eltype = P
-    v = threadIdx().x
-    i = threadIdx().y
-    mat1_eltype = typeof(mat1_row)
-    mat2_eltype = eltype(matrix2)
-    ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
-    ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
-    pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
-    li = 1i32
-    ri = CUDA.blockDim().x - 1i32
-    zero_entry = zero(eltype(prod_eltype))
-    prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
-        if v + pd < li || v + pd > ri
             zero_entry
-        else
-            UnrolledUtilities.unrolled_mapreduce(+, (ld1:ud1...,)) do mat1_row_d
-                if ld2 <= pd - mat1_row_d <= ud2 &&
-                   (0i32 < v + mat1_row_d <= CUDA.blockDim().x - 1i32)
-                    @inbounds mat1_row[mat1_row_d] *
-                              matrix2[v + mat1_row_d + (i - 1i32) * CUDA.blockDim().x][pd - mat1_row_d]
-                else
-                    zero_entry
-                end
-            end
         end
     end
     return BandMatrixRow{pd1}(prod_entries...)
 end
 
-Base.@propagate_inbounds function row_mul_mat!(
-    ::Type{P},
-    mat1_row,
-    matrix2,
-    ::FaceToFace,
-    ::FaceToFace,
-) where {P}
-    prod_eltype = P
-    v = threadIdx().x
-    i = threadIdx().y
-    mat1_eltype = typeof(mat1_row)
-    mat2_eltype = eltype(matrix2)
-    ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
-    ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
-    pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
-
-    li = 1i32
-    ri = CUDA.blockDim().x
-
-    zero_entry = zero(eltype(prod_eltype))
-    prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
-        if v + pd < li || v + pd > ri
-            zero_entry
-        else
-            UnrolledUtilities.unrolled_mapreduce(+, (ld1:ud1...,)) do mat1_row_d
-                if ld2 <= pd - mat1_row_d <= ud2 && (0i32 < v + mat1_row_d <= CUDA.blockDim().x)
-                    @inbounds mat1_row[mat1_row_d] *
-                              matrix2[v + mat1_row_d + (i - 1i32) * CUDA.blockDim().x][pd - mat1_row_d]
-                else
-                    zero_entry
-                end
-            end
-        end
-    end
-    return BandMatrixRow{pd1}(prod_entries...)
-end
-
-Base.@propagate_inbounds function row_mul_mat!(
-    ::Type{P},
-    mat1_row,
-    matrix2,
-    ::FaceToCenter,
-    ::FaceToFace,
-) where {P}
-    prod_eltype = P
-    v = threadIdx().x
-    i = threadIdx().y
-    mat1_eltype = typeof(mat1_row)
-    mat2_eltype = eltype(matrix2)
-    ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
-    ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
-    pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
-    li = 1i32
-    ri = CUDA.blockDim().x
-    zero_entry = zero(eltype(prod_eltype))
-    prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
-        if v + pd + half < li || v + pd + half > ri
-            zero_entry
-        else
-            UnrolledUtilities.unrolled_mapreduce(+, (ld1:ud1...,)) do mat1_row_d
-                if ld2 <= pd - mat1_row_d <= ud2 &&
-                   (0i32 < v + mat1_row_d + half <= CUDA.blockDim().x)
-                    @inbounds mat1_row[mat1_row_d] *
-                              matrix2[v + mat1_row_d + half + (i - 1i32) * CUDA.blockDim().x][pd - mat1_row_d]
-                else
-                    zero_entry
-                end
-            end
-        end
-    end
-    return BandMatrixRow{pd1}(prod_entries...)
-end
-
-Base.@propagate_inbounds function row_mul_mat!(
-    ::Type{P},
-    mat1_row,
-    matrix2,
-    ::CenterToFace,
-    ::CenterToCenter,
-) where {P}
-    prod_eltype = P
-    v = threadIdx().x
-    i = threadIdx().y
-    mat1_eltype = typeof(mat1_row)
-    mat2_eltype = eltype(matrix2)
-    ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
-    ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
-    pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
-    li = 1i32
-    ri = CUDA.blockDim().x
-    zero_entry = zero(eltype(prod_eltype))
-    prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
-        if v + pd + half < li || v + pd + half > ri
-            zero_entry
-        else
-            UnrolledUtilities.unrolled_mapreduce(+, (ld1:ud1...,)) do mat1_row_d
-                if ld2 <= pd - mat1_row_d <= ud2 &&
-                   (0i32 < v + mat1_row_d - half < CUDA.blockDim().x)
-                    @inbounds mat1_row[mat1_row_d] *
-                              matrix2[v + mat1_row_d - half + (i - 1i32) * CUDA.blockDim().x][pd - mat1_row_d]
-                else
-                    zero_entry
-                end
-            end
-        end
-    end
-    return BandMatrixRow{pd1}(prod_entries...)
-end
-
-Base.@propagate_inbounds function row_mul_mat!(
-    ::Type{P},
-    mat1_row,
-    matrix2,
-    ::FaceToFace,
-    ::CenterToFace,
-) where {P}
-    prod_eltype = P
-    v = threadIdx().x
-    i = threadIdx().y
-    mat1_eltype = typeof(mat1_row)
-    mat2_eltype = eltype(matrix2)
-    ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
-    ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
-    pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
-    li = 1i32
-    ri = CUDA.blockDim().x
-    zero_entry = zero(eltype(prod_eltype))
-    prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
-        if v + pd + half < li || v + pd + half > ri
-            zero_entry
-        else
-            UnrolledUtilities.unrolled_mapreduce(+, (ld1:ud1...,)) do mat1_row_d
-                if ld2 <= pd - mat1_row_d <= ud2 && (0i32 < v + mat1_row_d <= CUDA.blockDim().x)
-                    @inbounds mat1_row[mat1_row_d] *
-                              matrix2[v + mat1_row_d + (i - 1i32) * CUDA.blockDim().x][pd - mat1_row_d]
-                else
-                    zero_entry
-                end
-            end
-        end
-    end
-    return BandMatrixRow{pd1}(prod_entries...)
-end
-
-Base.@propagate_inbounds function row_mul_mat!(
-    ::Type{P},
-    mat1_row,
-    matrix2,
-    ::CenterToCenter,
-    ::FaceToCenter,
-) where {P}
-    prod_eltype = P
-    v = threadIdx().x
-    i = threadIdx().y
-    mat1_eltype = typeof(mat1_row)
-    mat2_eltype = eltype(matrix2)
-    ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
-    ld2, ud2 = MatrixFields.outer_diagonals(mat2_eltype)
-    pd1, pd2 = MatrixFields.outer_diagonals(prod_eltype)
-    li = 1i32
-    ri = CUDA.blockDim().x
-    zero_entry = zero(eltype(prod_eltype))
-    prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
-        if v + pd + half < li || v + pd + half > ri
-            zero_entry
-        else
-            UnrolledUtilities.unrolled_mapreduce(+, (ld1:ud1...,)) do mat1_row_d
-                if ld2 <= pd - mat1_row_d <= ud2 && (0i32 < v + mat1_row_d < CUDA.blockDim().x)
-                    @inbounds mat1_row[mat1_row_d] *
-                              matrix2[v + mat1_row_d + (i - 1i32) * CUDA.blockDim().x][pd - mat1_row_d]
-                else
-                    zero_entry
-                end
-            end
-        end
-    end
-    return BandMatrixRow{pd1}(prod_entries...)
-end
-
-# row_mul_vec! handles banded matrix * vector. There are four methods, but they all have the
-# same structure, so we they could be written as a single method.
-# The others can be obtained by copy-pasting and changing the indices appropriately.
-# Note that these are all specialized for CUDA.blockDim().x faces , so the indices are hardcoded.
+# row_mul_vec! handles banded matrix * vector.
 Base.@propagate_inbounds function row_mul_vec!(
     ::Type{P},
     mat1_row,
-    matrix2,
-    ::FaceToCenter,
+    vector2,
+    shape1::MatrixFields.AbstractMatrixShape,
 ) where {P}
-    prod_eltype = P
     v = threadIdx().x
-    i = threadIdx().y
-    mat1_eltype = typeof(mat1_row)
-    mat2_eltype = eltype(matrix2)
-    ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
-    li = 1i32
-    ri = CUDA.blockDim().x - 1i32
-    zero_entry = zero(prod_eltype)
+    block_col_idx = threadIdx().y
+    ld1, ud1 = MatrixFields.outer_diagonals(typeof(mat1_row))
+    vec2_offset = (block_col_idx - 1i32) * CUDA.blockDim().x
+    zero_entry = zero(P)
     return UnrolledUtilities.unrolled_mapreduce(
         +,
         ld1:ud1;
         init = zero_entry,
     ) do mat1_row_d
-        if (0i32 < v + mat1_row_d + half <= CUDA.blockDim().x)
+        vec2_slot = band_matrix_d(v + mat1_row_d, shape1)
+        if 0i32 < vec2_slot <= n_column_slots(shape1)
             @inbounds outer_or_mul(
                 mat1_row[mat1_row_d],
-                matrix2[v + mat1_row_d + half + (i - 1i32) * CUDA.blockDim().x],
-            )
-        else
-            zero_entry
-        end
-    end
-end
-
-Base.@propagate_inbounds function row_mul_vec!(
-    ::Type{P},
-    mat1_row,
-    matrix2,
-    ::CenterToFace,
-) where {P}
-    prod_eltype = P
-    v = threadIdx().x
-    i = threadIdx().y
-    mat1_eltype = typeof(mat1_row)
-    mat2_eltype = eltype(matrix2)
-    ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
-    li = 1i32
-    ri = CUDA.blockDim().x
-    zero_entry = zero(prod_eltype)
-    return UnrolledUtilities.unrolled_mapreduce(
-        +,
-        ld1:ud1;
-        init = zero_entry,
-    ) do mat1_row_d
-        if (0i32 < v + mat1_row_d - half < CUDA.blockDim().x)
-            @inbounds outer_or_mul(
-                mat1_row[mat1_row_d],
-                matrix2[v + mat1_row_d - half + (i - 1i32) * CUDA.blockDim().x],
-            )
-        else
-            zero_entry
-        end
-    end
-end
-
-Base.@propagate_inbounds function row_mul_vec!(
-    ::Type{P},
-    mat1_row,
-    matrix2,
-    ::CenterToCenter,
-) where {P}
-    prod_eltype = P
-    v = threadIdx().x
-    i = threadIdx().y
-    mat1_eltype = typeof(mat1_row)
-    mat2_eltype = eltype(matrix2)
-    ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
-    li = 1i32
-    ri = CUDA.blockDim().x - 1i32
-    zero_entry = zero(prod_eltype)
-    return UnrolledUtilities.unrolled_mapreduce(
-        +,
-        ld1:ud1;
-        init = zero_entry,
-    ) do mat1_row_d
-        if (0i32 < v + mat1_row_d <= CUDA.blockDim().x - 1i32)
-            @inbounds outer_or_mul(
-                mat1_row[mat1_row_d],
-                matrix2[v + mat1_row_d + (i - 1i32) * CUDA.blockDim().x],
-            )
-        else
-            zero_entry
-        end
-    end
-end
-
-Base.@propagate_inbounds function row_mul_vec!(
-    ::Type{P},
-    mat1_row,
-    matrix2,
-    ::FaceToFace,
-) where {P}
-    prod_eltype = P
-    v = threadIdx().x
-    i = threadIdx().y
-    mat1_eltype = typeof(mat1_row)
-    mat2_eltype = eltype(matrix2)
-    ld1, ud1 = MatrixFields.outer_diagonals(mat1_eltype)
-    li = 1i32
-    ri = CUDA.blockDim().x
-    zero_entry = zero(prod_eltype)
-    return UnrolledUtilities.unrolled_mapreduce(
-        +,
-        ld1:ud1;
-        init = zero_entry,
-    ) do mat1_row_d
-        if (0i32 < v + mat1_row_d <= CUDA.blockDim().x)
-            @inbounds outer_or_mul(
-                mat1_row[mat1_row_d],
-                matrix2[v + mat1_row_d + (i - 1i32) * CUDA.blockDim().x],
+                vector2[vec2_slot + vec2_offset],
             )
         else
             zero_entry
@@ -427,4 +104,4 @@ Base.@propagate_inbounds outer_or_mul(x::T1, y::T2) where {T1 <: AbstractVector,
 Base.@propagate_inbounds outer_or_mul(
     x::T1,
     y::T2,
-) where {T1 <: Geometry.AdjointAxisVector, T2 <: Geometry.Axis2Tensor} = (x * y)'
+) where {T1 <: Geometry.AbstractCovector, T2 <: Geometry.AbstractTensor{2}} = (x * y)'

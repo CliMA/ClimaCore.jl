@@ -28,9 +28,9 @@ function hvspace_3D(
     yelem = 4,
     zelem = 16,
     npoly = 7;
+    FT = Float64,
     device = ClimaComms.device(),
 )
-    FT = Float64
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);

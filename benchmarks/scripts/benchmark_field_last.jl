@@ -1,7 +1,4 @@
 #=
-julia --project=.buildkite
-using Revise; include(joinpath("benchmarks", "scripts", "benchmark_field_last.jl"))
-
 # Info
 
 # Benchmark results:

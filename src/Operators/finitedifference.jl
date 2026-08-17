@@ -2,15 +2,20 @@ import ..Utilities: PlusHalf, half, unionall_type
 import ..DebugOnly: allow_mismatched_spaces_unsafe
 import UnrolledUtilities: unrolled_map
 
-const AllFiniteDifferenceSpace =
-    Union{Spaces.FiniteDifferenceSpace, Spaces.ExtrudedFiniteDifferenceSpace}
+const AllFiniteDifferenceSpace = Union{
+    Spaces.FiniteDifferenceSpace,
+    Spaces.ExtrudedFiniteDifferenceSpace,
+    Spaces.MultiColumnFiniteDifferenceSpace,
+}
 const AllFaceFiniteDifferenceSpace = Union{
     Spaces.FaceFiniteDifferenceSpace,
     Spaces.FaceExtrudedFiniteDifferenceSpace,
+    Spaces.FaceMultiColumnFiniteDifferenceSpace,
 }
 const AllCenterFiniteDifferenceSpace = Union{
     Spaces.CenterFiniteDifferenceSpace,
     Spaces.CenterExtrudedFiniteDifferenceSpace,
+    Spaces.CenterMultiColumnFiniteDifferenceSpace,
 }
 
 Topologies.isperiodic(space::AllFiniteDifferenceSpace) =
@@ -27,13 +32,13 @@ right_idx(space::AllFaceFiniteDifferenceSpace) = right_face_boundary_idx(space)
 left_center_boundary_idx(space::AllFiniteDifferenceSpace) = 1
 right_center_boundary_idx(space::AllFiniteDifferenceSpace) = size(
     Spaces.local_geometry_data(Spaces.space(space, Spaces.CellCenter())),
-    4,
+    1,
 )
 left_face_boundary_idx(space::AllFiniteDifferenceSpace) = half
 right_face_boundary_idx(space::AllFiniteDifferenceSpace) =
     size(
         Spaces.local_geometry_data(Spaces.space(space, Spaces.CellFace())),
-        4,
+        1,
     ) - half
 
 
@@ -52,10 +57,10 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     if Topologies.isperiodic(space)
         v = mod1(v, Spaces.nlevels(space))
     end
-    i, j, h = hidx
+    i, j, h = hindices(space, hidx)
     local_geom =
         Grids.local_geometry_data(Spaces.grid(space), Grids.CellCenter())
-    return @inbounds local_geom[CartesianIndex(i, j, 1, v, h)]
+    return @inbounds local_geom[v, i, j, h]
 end
 Base.@propagate_inbounds function Geometry.LocalGeometry(
     space::AllFiniteDifferenceSpace,
@@ -66,9 +71,9 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     if Topologies.isperiodic(space)
         v = mod1(v, Spaces.nlevels(space))
     end
-    i, j, h = hidx
+    i, j, h = hindices(space, hidx)
     local_geom = Grids.local_geometry_data(Spaces.grid(space), Grids.CellFace())
-    return @inbounds local_geom[CartesianIndex(i, j, 1, v, h)]
+    return @inbounds local_geom[v, i, j, h]
 end
 
 
@@ -3395,17 +3400,13 @@ end
 return_space(::CurlC2F, space::AllCenterFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellFace())
 
-fd3_curl(u₊::Geometry.Covariant1Vector, u₋::Geometry.Covariant1Vector, invJ) =
-    Geometry.Contravariant2Vector((u₊.u₁ - u₋.u₁) * invJ)
-fd3_curl(u₊::Geometry.Covariant2Vector, u₋::Geometry.Covariant2Vector, invJ) =
-    Geometry.Contravariant1Vector(-(u₊.u₂ - u₋.u₂) * invJ)
-fd3_curl(::Geometry.Covariant3Vector, ::Geometry.Covariant3Vector, invJ) =
-    Geometry.Contravariant3Vector(zero(eltype(invJ)))
-fd3_curl(u₊::Geometry.Covariant12Vector, u₋::Geometry.Covariant12Vector, invJ) =
-    Geometry.Contravariant12Vector(
+function fd3_curl(u₊::CV, u₋::CV, invJ) where {CV <: Geometry.CovariantVector}
+    Geometry.Contravariant123Vector(
         -(u₊.u₂ - u₋.u₂) * invJ,
         (u₊.u₁ - u₋.u₁) * invJ,
+        zero(eltype(invJ)),
     )
+end
 
 stencil_interior_width(::CurlC2F, arg) = ((-half, half),)
 Base.@propagate_inbounds function stencil_interior(
@@ -3449,6 +3450,8 @@ Base.@propagate_inbounds function stencil_right_boundary(
     return fd3_curl(u, u₋, local_geometry.invJ * 2)
 end
 
+# Project the user-supplied curl value onto the full Contravariant123 axis so
+# the boundary output matches `return_eltype` (uniformly Contravariant123Vector).
 Base.@propagate_inbounds function stencil_left_boundary(
     ::CurlC2F,
     bc::SetCurl,
@@ -3457,7 +3460,10 @@ Base.@propagate_inbounds function stencil_left_boundary(
     hidx,
     arg,
 )
-    return getidx(space, bc.val, nothing, hidx)
+    return Geometry.project(
+        Geometry.Contravariant123Axis(),
+        getidx(space, bc.val, nothing, hidx),
+    )
 end
 Base.@propagate_inbounds function stencil_right_boundary(
     ::CurlC2F,
@@ -3467,7 +3473,10 @@ Base.@propagate_inbounds function stencil_right_boundary(
     hidx,
     arg,
 )
-    return getidx(space, bc.val, nothing, hidx)
+    return Geometry.project(
+        Geometry.Contravariant123Axis(),
+        getidx(space, bc.val, nothing, hidx),
+    )
 end
 
 
@@ -3633,9 +3642,21 @@ end
     )
 end
 
-Base.@propagate_inbounds function getidx(
+# When bounds checks are forced with check-bounds=yes, avoid inlining stencil
+# nodes of a broadcast expression through @propagate_inbounds. If each stencil
+# node inlines its interior and boundary subexpressions, the size of the
+# @propagate_inbounds expression grows exponentially with operator depth. With a
+# bounds check in every array access, LLVM can take tens of minutes to compile
+# flux-corrected transport examples. The check_bounds flag is constant and
+# precompilation caches are keyed on it, so each variant gets its own cache. If
+# bounds checks aren't forced, @propagate_inbounds improves runtime performance.
+macro maybe_propagate_inbounds(expr)
+    esc(isone(Base.JLOptions().check_bounds) ? expr : :(Base.@propagate_inbounds $expr))
+end
+
+@maybe_propagate_inbounds function getidx(
     parent_space,
-    bc::Union{StencilBroadcasted, Base.Broadcast.Broadcasted},
+    bc::Union{StencilBroadcasted, Base.Broadcast.Broadcasted{<:Fields.AbstractFieldStyle}},
     idx,
     hidx,
 )
@@ -3699,31 +3720,24 @@ Base.Broadcast.BroadcastStyle(
 
 Base.eltype(bc::StencilBroadcasted) = return_eltype(bc.op, bc.args...)
 
-function vidx(space::AllFaceFiniteDifferenceSpace, idx)
-    @assert idx isa PlusHalf
-    v = idx + half
-    if Topologies.isperiodic(space)
-        v = mod1(v, Spaces.nlevels(space))
-    end
-    return v
-end
-function vidx(space::AllCenterFiniteDifferenceSpace, idx)
-    @assert idx isa Integer
-    v = idx
-    if Topologies.isperiodic(space)
-        v = mod1(v, Spaces.nlevels(space))
-    end
-    return v
-end
-function vidx(space::AbstractSpace, idx)
-    return 1
-end
+vidx(space::AllFaceFiniteDifferenceSpace, idx::Union{Nothing, PlusHalf}) =
+    isnothing(idx) ? 1 :
+    Topologies.isperiodic(space) ? mod1(idx + half, Spaces.nlevels(space)) : idx + half
+vidx(space::AllCenterFiniteDifferenceSpace, idx::Union{Nothing, Integer}) =
+    isnothing(idx) ? 1 :
+    Topologies.isperiodic(space) ? mod1(idx, Spaces.nlevels(space)) : idx
+vidx(space::AbstractSpace, idx) = 1
+
+# Fields on a column space only have data at a single horizontal index, so the
+# horizontal indices from the broadcast expression do not apply to them.
+@inline hindices(::Spaces.FiniteDifferenceSpace, hidx) = (1, 1, 1)
+@inline hindices(space, hidx) = hidx
 
 Base.@propagate_inbounds function getidx(parent_space, bc::Fields.Field, idx)
     field_data = Fields.field_values(bc)
     space = reconstruct_placeholder_space(axes(bc), parent_space)
     v = vidx(space, idx)
-    return @inbounds field_data[vindex(v)]
+    return @inbounds field_data[v]
 end
 Base.@propagate_inbounds function getidx(
     parent_space,
@@ -3734,8 +3748,8 @@ Base.@propagate_inbounds function getidx(
     field_data = Fields.field_values(bc)
     space = reconstruct_placeholder_space(axes(bc), parent_space)
     v = vidx(space, idx)
-    i, j, h = hidx
-    return @inbounds field_data[CartesianIndex(i, j, 1, v, h)]
+    i, j, h = hindices(space, hidx)
+    return @inbounds field_data[v, i, j, h]
 end
 
 # unwap boxed scalars
@@ -3743,6 +3757,14 @@ end
 @inline getidx(parent_space, scalar::Ref, idx, hidx) = scalar[]
 @inline getidx(parent_space, field::Fields.PointField, idx, hidx) = field[]
 @inline getidx(parent_space, field::Fields.PointField, idx) = field[]
+@inline getidx(
+    parent_space,
+    bc::BC,
+    idx,
+    hidx,
+) where {
+    BC <: Base.Broadcast.Broadcasted,
+} = bc[]
 
 # enable automatic nested broadcasting over single-valued boundary conditions
 @inline getidx(parent_space, scalar, idx, hidx) = add_auto_broadcasters(scalar)
@@ -3782,7 +3804,7 @@ Base.@propagate_inbounds function setidx!(
     v = vidx(space, idx)
     field_data = Fields.field_values(field)
     i, j, h = hidx
-    @inbounds field_data[CartesianIndex(i, j, 1, v, h)] = val
+    @inbounds field_data[v, i, j, h] = val
     val
 end
 
@@ -3868,7 +3890,7 @@ function _serial_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
     bcs = bc # strip_space(bc, space)
     mask = Spaces.get_mask(axes(field_out))
     @inbounds for h in 1:Nh, j in 1:Nj, i in 1:Ni
-        DataLayouts.should_compute(mask, CartesianIndex(i, j, 1, 1, h)) ||
+        DataLayouts.should_compute(mask, CartesianIndex(1, i, j, h)) ||
             continue
         apply_stencil!(space, field_out, bcs, (i, j, h), bounds)
     end
@@ -3887,7 +3909,7 @@ function _threaded_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
             for j in 1:Nj, i in 1:Ni
                 DataLayouts.should_compute(
                     mask,
-                    CartesianIndex(i, j, 1, 1, h),
+                    CartesianIndex(1, i, j, h),
                 ) || continue
                 apply_stencil!(space, field_out, bcs, (i, j, h), bounds)
             end
@@ -3903,12 +3925,12 @@ function Base.copyto!(
     bc::Union{
         StencilBroadcasted{ColumnStencilStyle},
         Broadcasted{ColumnStencilStyle},
-    },
+    };
     mask = DataLayouts.NoMask(),
 )
     space = axes(bc)
     local_geometry = Spaces.local_geometry_data(space)
-    (Ni, Nj, _, _, Nh) = size(local_geometry)
+    (_, Ni, Nj, Nh) = size(local_geometry)
     context = ClimaComms.context(axes(field_out))
     device = ClimaComms.device(context)
     if (device isa ClimaComms.CPUMultiThreaded) && Nh > 1
@@ -4046,22 +4068,22 @@ promote_bc(bc::SetCurl{<:Integer}, ::Type{FT}) where {FT} = SetCurl(FT(bc.val))
 sconvert(::Type{T}, x::SArray{S}) where {T, S} = SArray{S, T}(x...)
 
 function promote_axis_tensor(
-    at::Geometry.AxisTensor{T, N, A, S},
+    at::Geometry.Tensor,
     ::Type{FT},
-) where {T, N, A, S, FT}
-    fc = sconvert(FT, Geometry.components(at))
-    return Geometry.AxisTensor{FT, N, A, typeof(fc)}(axes(at), fc)
+) where {FT}
+    fc = sconvert(FT, parent(at))
+    return Geometry.Tensor(fc, axes(at))
 end
 
-promote_axis_tensor(at::Geometry.AxisTensor{FT}, ::Type{FT}) where {FT} = at
+promote_axis_tensor(at::Geometry.Tensor{<:Any, FT}, ::Type{FT}) where {FT} = at
 
-promote_bc(bc::SetValue{<:Geometry.AxisTensor}, ::Type{FT}) where {FT} =
+promote_bc(bc::SetValue{<:Geometry.AbstractTensor}, ::Type{FT}) where {FT} =
     SetValue(promote_axis_tensor(bc.val, FT))
-promote_bc(bc::SetGradient{<:Geometry.AxisTensor}, ::Type{FT}) where {FT} =
+promote_bc(bc::SetGradient{<:Geometry.AbstractTensor}, ::Type{FT}) where {FT} =
     SetGradient(promote_axis_tensor(bc.val, FT))
-promote_bc(bc::SetDivergence{<:Geometry.AxisTensor}, ::Type{FT}) where {FT} =
+promote_bc(bc::SetDivergence{<:Geometry.AbstractTensor}, ::Type{FT}) where {FT} =
     SetDivergence(promote_axis_tensor(bc.val, FT))
-promote_bc(bc::SetCurl{<:Geometry.AxisTensor}, ::Type{FT}) where {FT} =
+promote_bc(bc::SetCurl{<:Geometry.AbstractTensor}, ::Type{FT}) where {FT} =
     SetCurl(promote_axis_tensor(bc.val, FT))
 
 

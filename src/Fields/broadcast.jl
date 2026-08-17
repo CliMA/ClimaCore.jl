@@ -18,15 +18,14 @@ struct FieldStyle{DS <: DataStyle} <: AbstractFieldStyle end
 FieldStyle(::DS) where {DS <: DataStyle} = FieldStyle{DS}()
 FieldStyle(x::Base.Broadcast.Unknown) = x
 
-FieldLevelStyle(::Type{S}) where {DS, S <: FieldStyle{DS}} =
-    FieldStyle{DataLayouts.DataLevelStyle(DS)}
-FieldColumnStyle(::Type{S}) where {DS, S <: FieldStyle{DS}} =
-    FieldStyle{DataLayouts.DataColumnStyle(DS)}
-FieldSlabStyle(::Type{S}) where {DS, S <: FieldStyle{DS}} =
-    FieldStyle{DataLayouts.DataSlabStyle(DS)}
+# Slicing a DataLayout preserves its layout_type and number of dimensions, so
+# slicing a broadcast expression does not change its style.
+FieldLevelStyle(::Type{S}) where {S <: FieldStyle} = S
+FieldColumnStyle(::Type{S}) where {S <: FieldStyle} = S
+FieldSlabStyle(::Type{S}) where {S <: FieldStyle} = S
 
 Base.Broadcast.BroadcastStyle(::Type{Field{V, S}}) where {V, S} =
-    FieldStyle(DataStyle(V))
+    FieldStyle(Base.Broadcast.BroadcastStyle(V))
 
 # Broadcasting over scalars (Ref or Tuple)
 Base.Broadcast.BroadcastStyle(
@@ -74,13 +73,18 @@ Base.Broadcast.combine_styles(
     (arg1, arg2, arg3, args...),
 )
 
-# Define broadcastable/broadcasted/eltype/similar/copy to match DataStyle
-# broadcasting, but with the application of a mask when copying
+# Define broadcastable/broadcasted/newindex/eltype/similar/copy to match
+# DataStyle broadcasting (see broadcast.jl in the DataLayouts module).
 Base.Broadcast.broadcastable(field::Field) =
     Field(Base.Broadcast.broadcastable(field_values(field)), axes(field))
 
 Base.Broadcast.broadcasted(style::AbstractFieldStyle, f::F, args...) where {F} =
     auto_broadcasted(style, f, args)
+
+Base.Broadcast.newindex(
+    bc::Union{Field, Base.Broadcast.Broadcasted{<:AbstractFieldStyle}},
+    index::Integer,
+) = iszero(ndims(bc)) ? CartesianIndex() : index
 
 Base.eltype(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     unsafe_eltype(bc)
@@ -89,7 +93,7 @@ Base.similar(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
 
 Base.copy(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
-    copyto!(similar(bc), bc, Spaces.get_mask(axes(bc)))
+    copyto!(similar(bc), bc; mask = Spaces.get_mask(axes(bc)))
 
 Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{Style},
@@ -99,16 +103,6 @@ Base.@propagate_inbounds function slab(
     _args = slab_args(bc.args, inds...)
     _axes = slab(axes(bc), inds...)
     Base.Broadcast.Broadcasted{_Style}(bc.f, _args, _axes)
-end
-
-Base.@propagate_inbounds function slab(
-    bc::DataLayouts.NonExtrudedBroadcasted{Style},
-    inds...,
-) where {Style <: AbstractFieldStyle}
-    _Style = FieldSlabStyle(Style)
-    _args = slab_args(bc.args, inds...)
-    _axes = slab(axes(bc), inds...)
-    DataLayouts.NonExtrudedBroadcasted{_Style}(bc.f, _args, _axes)
 end
 
 Base.@propagate_inbounds function level(
@@ -121,16 +115,6 @@ Base.@propagate_inbounds function level(
     Base.Broadcast.Broadcasted{_Style}(bc.f, _args, _axes)
 end
 
-Base.@propagate_inbounds function level(
-    bc::DataLayouts.NonExtrudedBroadcasted{Style},
-    inds...,
-) where {Style <: AbstractFieldStyle}
-    _Style = FieldLevelStyle(Style)
-    _args = level_args(bc.args, inds...)
-    _axes = level(axes(bc), inds...)
-    DataLayouts.NonExtrudedBroadcasted{_Style}(bc.f, _args, _axes)
-end
-
 Base.@propagate_inbounds function column(
     bc::Base.Broadcast.Broadcasted{Style},
     inds...,
@@ -139,16 +123,6 @@ Base.@propagate_inbounds function column(
     _args = column_args(bc.args, inds...)
     _axes = column(axes(bc), inds...)
     Base.Broadcast.Broadcasted{_Style}(bc.f, _args, _axes)
-end
-
-Base.@propagate_inbounds function column(
-    bc::DataLayouts.NonExtrudedBroadcasted{Style},
-    inds...,
-) where {Style <: AbstractFieldStyle}
-    _Style = FieldColumnStyle(Style)
-    _args = column_args(bc.args, inds...)
-    _axes = column(axes(bc), inds...)
-    DataLayouts.NonExtrudedBroadcasted{_Style}(bc.f, _args, _axes)
 end
 
 # Return underlying DataLayout object, DataStyle of broadcasted
@@ -169,18 +143,16 @@ function todata(bc::Base.Broadcast.Broadcasted{Style}) where {Style}
     _args = _todata_args(bc.args)
     Base.Broadcast.Broadcasted{Style}(bc.f, _args)
 end
-function todata(
-    bc::DataLayouts.NonExtrudedBroadcasted{FieldStyle{DS}},
-) where {DS}
-    _args = _todata_args(bc.args)
-    DataLayouts.NonExtrudedBroadcasted{DS}(bc.f, _args)
-end
-function todata(bc::DataLayouts.NonExtrudedBroadcasted{Style}) where {Style}
-    _args = _todata_args(bc.args)
-    DataLayouts.NonExtrudedBroadcasted{Style}(bc.f, _args)
-end
 
 field_values(bc::Base.AbstractBroadcasted) = todata(bc)
+
+# Extend the DataLayout methods of IndexStyle and eachindex to Field broadcasts.
+Base.IndexStyle(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
+    IndexStyle(todata(bc))
+Base.eachindex(
+    arg::Union{Field, Base.Broadcast.Broadcasted{<:AbstractFieldStyle}},
+    args::Union{Field, Base.Broadcast.Broadcasted{<:AbstractFieldStyle}}...,
+) = eachindex(todata(arg), unrolled_map(todata, args)...)
 
 # same logic as Base.Broadcast.Broadcasted (which only defines it for Tuples)
 Base.axes(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
@@ -200,16 +172,20 @@ Base.similar(
 
 @inline function Base.copyto!(
     dest::Field,
-    bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle},
+    bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle};
     mask = get_mask(axes(dest)),
 )
-    copyto!(field_values(dest), Base.Broadcast.instantiate(todata(bc)), mask)
+    copyto!(field_values(dest), Base.Broadcast.instantiate(todata(bc)); mask)
     return dest
 end
 
-# Fused multi-broadcast entry point for Fields
+# Fused multi-broadcast entry point for Fields. The mask argument must be
+# constrained to DataMask because an unconstrained second argument makes this
+# ambiguous with copyto! methods that only constrain their second arguments,
+# like the ones for Lmul and Rmul in ArrayLayouts.
 function Base.copyto!(
-    fmbc::FusedMultiBroadcast{T},
+    fmbc::FusedMultiBroadcast{T};
+    mask::DataLayouts.DataMask = get_mask(axes(first(fmbc.pairs).first)),
 ) where {N, T <: NTuple{N, Pair{<:Field, <:Any}}}
     fmb_data = FusedMultiBroadcast(
         map(fmbc.pairs) do pair
@@ -218,8 +194,7 @@ function Base.copyto!(
         end,
     )
     check_mismatched_spaces(fmbc)
-    check_fused_broadcast_axes(fmbc)
-    Base.copyto!(fmb_data) # forward to DataLayouts
+    Base.copyto!(fmb_data; mask)
 end
 
 @inline check_mismatched_spaces(fmbc::FusedMultiBroadcast) =
@@ -239,9 +214,7 @@ _check_mismatched_spaces(::T, ::T) where {T <: AbstractSpace} = nothing
 _check_mismatched_spaces(space1, space2) =
     error("FusedMultiBroadcast spaces are not the same.")
 
-@noinline function error_mismatched_spaces(space1::Type, space2::Type)
-    error("Broacasted spaces are not the same.")
-end
+error_mismatched_spaces() = error("Broacasted spaces are not the same.")
 
 @inline function Base.Broadcast.broadcast_shape(
     space1::AbstractSpace,
@@ -253,7 +226,7 @@ end
         elseif Spaces.issubspace(space1, space2)
             return space2
         else
-            error_mismatched_spaces(typeof(space1), typeof(space2))
+            error_mismatched_spaces()
         end
     end
     return space1
@@ -290,7 +263,7 @@ end
            Spaces.issubspace(space1, space2)
             nothing
         else
-            error_mismatched_spaces(typeof(space1), typeof(space2))
+            error_mismatched_spaces()
         end
     end
     return nothing
@@ -299,7 +272,7 @@ end
     space::AbstractSpace,
     ax2::Tuple,
 )
-    error_mismatched_spaces(typeof(space), typeof(ax2))
+    error_mismatched_spaces()
 end
 @inline function Base.Broadcast.check_broadcast_shape(
     ::AbstractSpace,
@@ -423,26 +396,10 @@ function Base.Broadcast.broadcasted(
     fs::AbstractFieldStyle,
     ::Type{V},
     arg,
-) where {V <: Geometry.AxisVector}
+) where {V <: Geometry.AbstractTensor{1}}
     space = Fields.axes(arg)
     # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
     Base.Broadcast.broadcasted(fs, V, arg, local_geometry_field(space))
-end
-
-function Base.Broadcast.broadcasted(
-    fs::AbstractFieldStyle,
-    ::Type{V},
-    arg,
-) where {V <: Geometry.CartesianVector}
-    space = Fields.axes(arg)
-    # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
-    Base.Broadcast.broadcasted(
-        fs,
-        V,
-        arg,
-        tuple(Spaces.global_geometry(space)),
-        local_geometry_field(space),
-    )
 end
 
 function Base.copyto!(
@@ -450,7 +407,7 @@ function Base.copyto!(
     bc::Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}},
 )
     mask = get_mask(axes(field))
-    copyto!(Fields.field_values(field), todata(bc), mask)
+    copyto!(Fields.field_values(field), todata(bc); mask)
     return field
 end
 function Base.copyto!(
@@ -458,19 +415,12 @@ function Base.copyto!(
     bc::Base.Broadcast.Broadcasted{Base.Broadcast.Style{Tuple}},
 )
     mask = get_mask(axes(field))
-    copyto!(Fields.field_values(field), todata(bc), mask)
+    copyto!(Fields.field_values(field), todata(bc); mask)
     return field
 end
 
 function Base.copyto!(field::Field, nt::NamedTuple)
     mask = get_mask(axes(field))
-    copyto!(
-        field,
-        Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}}(
-            identity,
-            (nt,),
-            axes(field),
-        ),
-        mask,
-    )
+    fill!(field_values(field), nt; mask)
+    return field
 end

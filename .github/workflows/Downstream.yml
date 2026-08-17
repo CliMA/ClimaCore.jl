@@ -22,8 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package:
-          - 'ClimaAtmos.jl'
+        package: # atmos is excluded here because buildkite is used to test it
           - 'ClimaCoupler.jl'
           - 'ClimaDiagnostics.jl'
           - 'ClimaLand.jl'
@@ -35,13 +34,13 @@ jobs:
           - '1.10'
           - '1.11'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
         with:
           version: ${{ matrix.version }}
       - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-buildpkg@v1
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           repository: 'CliMA/${{ matrix.package }}'
           path: ${{ matrix.package }}

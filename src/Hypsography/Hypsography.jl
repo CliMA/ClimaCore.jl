@@ -196,8 +196,8 @@ function _ExtrudedFiniteDifferenceGrid(
     vertical_grid::Grids.FiniteDifferenceGrid,
     adaption::HypsographyAdaption,
     global_geometry::Geometry.AbstractGlobalGeometry,
-    center_z::DataLayouts.AbstractData{Geometry.ZPoint{FT}},
-    face_z::DataLayouts.AbstractData{Geometry.ZPoint{FT}},
+    center_z::DataLayouts.DataLayout{Geometry.ZPoint{FT}},
+    face_z::DataLayouts.DataLayout{Geometry.ZPoint{FT}},
 ) where {FT}
     # construct the "flat" grid
     # avoid cached constructor so that it gets cleaned up automatically
@@ -230,11 +230,11 @@ function _ExtrudedFiniteDifferenceGrid(
             Fields.Field(
                 center_z_local_geometry,
                 center_flat_space,
-            ).coordinates.z
+            ).coordinates.z,
         )
     face_∇Z_field =
         grad.(
-            Fields.Field(face_z_local_geometry, face_flat_space).coordinates.z
+            Fields.Field(face_z_local_geometry, face_flat_space).coordinates.z,
         )
 
     # construct full local geometry

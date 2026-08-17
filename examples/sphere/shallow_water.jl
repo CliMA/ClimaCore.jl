@@ -1,6 +1,16 @@
+# Shallow-water equations on the cubed sphere, in vector-invariant form. The
+# test case is selected by command-line argument, each one a standard benchmark
+# from Williamson et al. (1992) or its successors: steady-state geostrophic
+# flow, a mountain in that flow, barotropic instability, and the
+# Rossby-Haurwitz wave. Each `AbstractTest` supplies its own topography,
+# Coriolis parameter, and initial condition.
+#
+# Runs on GPU as well as CPU: set `CLIMACOMMS_DEVICE=CUDA`. Plotting is skipped
+# on GPU, since the plotting backend cannot handle device-resident fields.
 using ClimaComms
 ClimaComms.@import_required_backends
 using LinearAlgebra
+using Test
 using Colors
 using DocStringExtensions
 
@@ -14,17 +24,17 @@ import ClimaCore:
     Operators,
     Spaces,
     Quadratures,
-    Topologies,
-    DataLayouts
+    Topologies
 
 import QuadGK
-using OrdinaryDiffEqSSPRK: ODEProblem, init, solve!, SSPRK33
+import ClimaTimeSteppers as CTS
 
 using Logging
 using ClimaComms
 import TerminalLoggers
 using ClimaCorePlots
 import Plots
+include(joinpath(@__DIR__, "..", "example_utils.jl")) # linkfig
 
 """
     PhysicalParameters{FT}
@@ -232,9 +242,9 @@ function set_coriolis_parameter(space, test::AbstractTest)
         ϕ = local_geometry.coordinates.lat
         λ = local_geometry.coordinates.long
         f = f_coriolis(Ω, ϕ, λ, α)
-        # Technically this should be a WVector, but since we are only in a 2D space,
-        # WVector, Contravariant3Vector, Covariant3Vector are all equivalent.
-        # This _won't_ be true in 3D however!
+        # Technically this should be a WVector, but since we are only in a 2D
+        # space, WVector, Contravariant3Vector, Covariant3Vector are all
+        # equivalent. This _won't_ be true in 3D however!
         Geometry.Contravariant3Vector(f)
     end
 end
@@ -402,9 +412,6 @@ function set_initial_condition(space, test::BarotropicInstabilityTest)
         if λ > 0.0
             λ -= 360.0
         end
-        if λ < -360.0 || λ > 0.0
-            @info "Invalid longitude value"
-        end
 
         # Add height perturbation
         h += h_hat * cosd(ϕ) * exp(-(λ^2 / αₚ^2) - ((ϕ₂ - ϕ)^2 / βₚ^2))
@@ -555,7 +562,6 @@ function shallow_water_driver(ARGS, ::Type{FT}) where {FT}
         global_space =
             space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     end
-    @show Spaces.node_horizontal_length_scale(space)^3
 
     coords = Fields.coordinate_field(space)
     f = set_coriolis_parameter(space, test)
@@ -564,7 +570,7 @@ function shallow_water_driver(ARGS, ::Type{FT}) where {FT}
     if !usempi
         Y0_global = deepcopy(Y)
     else
-        Y0_global_values = DataLayouts.gather(context, Fields.field_values(Y))
+        Y0_global_values = ClimaComms.gather(context, Fields.field_values(Y))
         if ClimaComms.iamroot(context)
             Y0_global = Fields.Field(Y0_global_values, global_space)
         end
@@ -580,10 +586,10 @@ function shallow_water_driver(ARGS, ::Type{FT}) where {FT}
     dt = 6 * 60
     T = 60 * 60 * 24 * 2
 
-    prob = ODEProblem(rhs!, Y, (0.0, T), parameters)
-    integrator = init(
+    prob = CTS.ODEProblem(CTS.ClimaODEFunction(; T_exp! = rhs!), Y, (0.0, T), parameters)
+    integrator = CTS.init(
         prob,
-        SSPRK33(),
+        CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
         dt = dt,
         saveat = collect(0.0:dt:T),
         progress = true,
@@ -592,17 +598,17 @@ function shallow_water_driver(ARGS, ::Type{FT}) where {FT}
     )
 
     if usempi
-        walltime = @elapsed sol = solve!(integrator)
+        walltime = @elapsed sol = CTS.solve!(integrator)
         ClimaComms.iamroot(context) && println("walltime = $walltime (sec)")
     else
-        sol = @timev solve!(integrator)
+        sol = @timev CTS.solve!(integrator)
     end
     sol_global = []
 
     if usempi
         for sol_step in sol.u
             sol_step_values_global =
-                DataLayouts.gather(context, Fields.field_values(sol_step))
+                ClimaComms.gather(context, Fields.field_values(sol_step))
             if ClimaComms.iamroot(context)
                 sol_step_global =
                     Fields.Field(sol_step_values_global, global_space)
@@ -632,20 +638,30 @@ function postprocessing(test, test_params, solution, Y0_global, T, dt)
     path = joinpath(@__DIR__, "output", dir)
     mkpath(path)
 
-    function linkfig(figpath, alt = "")
-        # Buildkite-agent upload figpath
-        # Link figure in logs if we are running on CI
-        if get(ENV, "BUILDKITE", "") == "true"
-            artifact_url = "artifact://$figpath"
-            print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-        end
-    end
     @info "Test case: $(test_name)"
     @info "  with α: $(α)⁰"
     @info "Solution L₂ norm at time t = 0: ", norm(Y0_global.h)
     @info "Solution L₂ norm at time t = $(T): ", norm(solution[end].h)
     @info "Fluid volume at time t = 0: ", sum(Y0_global.h)
     @info "Fluid volume at time t = $(T): ", sum(solution[end].h)
+
+    # Fluid volume must be conserved in every test case (measured drift at
+    # steady state: ~1e-14), and for the steady-state cases the exact solution
+    # is the initial condition, so the flow must stay close to it (measured
+    # relative L₂ error after 2 days: 0.024).
+    @test abs(sum(solution[end].h) - sum(Y0_global.h)) / abs(sum(Y0_global.h)) < 1e-10
+    if test isa SteadyStateTest || test isa SteadyStateCompactTest
+        rel_l2 = norm(solution[end].h .- Y0_global.h) / norm(Y0_global.h)
+        @test rel_l2 < 0.05
+    end
+
+    # The diagnostics above use device reductions and so run anywhere. The plots
+    # below move field data to the host, which is not supported for GPU fields,
+    # so they are skipped when the run is on a CUDA device.
+    if ClimaComms.device(solution[end].h) isa ClimaComms.CUDADevice
+        @info "Plotting skipped: not supported for fields on a CUDA device"
+        return nothing
+    end
 
     if test isa SteadyStateTest || test isa SteadyStateCompactTest
         # In these cases, we use the IC as the reference exact solution
@@ -666,14 +682,14 @@ function postprocessing(test, test_params, solution, Y0_global, T, dt)
             "Absolute error in height",
         )
         # Height errors over time
-        relL1err = Array{Float64}(undef, div(T, dt))
-        for t in 1:div(T, dt)
+        relL1err = Array{Float64}(undef, length(solution))
+        for t in 1:length(solution)
             relL1err[t] =
                 norm(solution[t].h .- Y0_global.h, 1) / norm(Y0_global.h, 1)
         end
         Plots.png(
             Plots.plot(
-                [1:dt:T],
+                0.0:dt:T,
                 relL1err,
                 xlabel = "time [s]",
                 ylabel = "Relative L₁ err",
