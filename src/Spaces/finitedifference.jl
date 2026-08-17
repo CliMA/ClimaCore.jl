@@ -135,11 +135,11 @@ function Δz_data(space::AbstractSpace)
 end
 
 function left_boundary_name(space::AbstractSpace)
-    boundaries = Topologies.boundaries(Spaces.vertical_topology(space))
+    boundaries = Topologies.boundaries(vertical_topology(space))
     propertynames(boundaries)[1]
 end
 
 function right_boundary_name(space::AbstractSpace)
-    boundaries = Topologies.boundaries(Spaces.vertical_topology(space))
+    boundaries = Topologies.boundaries(vertical_topology(space))
     propertynames(boundaries)[2]
 end

@@ -289,7 +289,7 @@ function interpolate_pressure(
 )
     (; pfull_field) = pfull_intp
     dest = fill(one(eltype(pfull_field)), pfull_intp.pressure_space)
-    Remapping.interpolate_pressure!(dest, field, pfull_intp)
+    interpolate_pressure!(dest, field, pfull_intp)
     return dest
 end
 

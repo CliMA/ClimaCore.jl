@@ -86,8 +86,8 @@ space(space::ExtrudedFiniteDifferenceSpace, staggering::Staggering) =
 
 FiniteDifferenceSpace(space::ExtrudedFiniteDifferenceSpace) =
     FiniteDifferenceSpace(
-        Spaces.grid(space).vertical_grid,
-        Spaces.staggering(space),
+        grid(space).vertical_grid,
+        staggering(space),
     )
 
 Adapt.adapt_structure(to, space::ExtrudedFiniteDifferenceSpace) =
@@ -135,9 +135,9 @@ function Base.show(io::IO, space::ExtrudedFiniteDifferenceSpace)
     print(iio, " "^(indent + 2), "context: ")
     Topologies.print_context(iio, ClimaComms.context(space))
     if has_horizontal(space)
-        hspace = Spaces.horizontal_space(space)
-        hmesh = Spaces.topology(hspace).mesh
-        Topologies.print_context(iio, Spaces.topology(hspace).context)
+        hspace = horizontal_space(space)
+        hmesh = topology(hspace).mesh
+        Topologies.print_context(iio, topology(hspace).context)
         println(iio)
         println(iio, " "^(indent + 2), "horizontal:")
         println(iio, " "^(indent + 4), "mesh: ", hmesh)
@@ -145,7 +145,7 @@ function Base.show(io::IO, space::ExtrudedFiniteDifferenceSpace)
             iio,
             " "^(indent + 4),
             "node_horizontal_length_scale: ",
-            Spaces.node_horizontal_length_scale(hspace),
+            node_horizontal_length_scale(hspace),
         )
         println(
             iio,
@@ -213,23 +213,23 @@ nlevels(space::ExtrudedFiniteDifferenceSpace) =
     size(local_geometry_data(space), 1)
 
 function left_boundary_name(space::ExtrudedFiniteDifferenceSpace)
-    boundaries = Topologies.boundaries(Spaces.vertical_topology(space))
+    boundaries = Topologies.boundaries(vertical_topology(space))
     propertynames(boundaries)[1]
 end
 function right_boundary_name(space::ExtrudedFiniteDifferenceSpace)
-    boundaries = Topologies.boundaries(Spaces.vertical_topology(space))
+    boundaries = Topologies.boundaries(vertical_topology(space))
     propertynames(boundaries)[2]
 end
 
 function eachslabindex(cspace::CenterExtrudedFiniteDifferenceSpace)
-    h_iter = eachslabindex(Spaces.horizontal_space(cspace))
+    h_iter = eachslabindex(horizontal_space(cspace))
     center_local_geometry =
         local_geometry_data(grid(cspace), Grids.CellCenter())
     Nv = size(center_local_geometry, 1)
     return Iterators.product(1:Nv, h_iter)
 end
 function eachslabindex(fspace::FaceExtrudedFiniteDifferenceSpace)
-    h_iter = eachslabindex(Spaces.horizontal_space(fspace))
+    h_iter = eachslabindex(horizontal_space(fspace))
     face_local_geometry = local_geometry_data(grid(fspace), Grids.CellFace())
     Nv = size(face_local_geometry, 1)
     return Iterators.product(1:Nv, h_iter)

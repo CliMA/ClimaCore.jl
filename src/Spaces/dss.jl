@@ -1,7 +1,5 @@
 import ..Topologies:
-    DSSBuffer,
     create_dss_buffer,
-    dss!,
     dss_1d!,
     dss_transform!,
     dss_untransform!,
@@ -18,7 +16,7 @@ perimeter(space::AbstractSpectralElementSpace) = Topologies.Perimeter2D(
 """
     create_dss_buffer(data, space)
 
-Creates a [`DSSBuffer`](@ref) for the field data corresponding to `data`
+Creates a [`Topologies.DSSBuffer`](@ref) for the field data corresponding to `data`
 """
 create_dss_buffer(data::DataLayouts.VIJHWithF, space) =
     isone(size(data, 3)) ? nothing :

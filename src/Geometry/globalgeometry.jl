@@ -222,12 +222,12 @@ function CartesianVector(
 end
 
 function product_geometry(
-    horizontal_local_geometry::Geometry.LocalGeometry,
-    vertical_local_geometry::Geometry.LocalGeometry,
+    horizontal_local_geometry::LocalGeometry,
+    vertical_local_geometry::LocalGeometry,
     global_geometry::AbstractGlobalGeometry,
     ∇z = nothing,
 )
-    coordinates = Geometry.product_coordinates(
+    coordinates = product_coordinates(
         horizontal_local_geometry.coordinates,
         vertical_local_geometry.coordinates,
     )
@@ -244,7 +244,7 @@ function product_geometry(
         vertical_local_geometry, vertical_local_geometry.∂x∂ξ,
     )
     ∂x∂ξ = isnothing(∇z) ? ∂x∂ξ_h + ∂x∂ξ_v : ∂x∂ξ_h + ∂x∂ξ_v + ∇z
-    return Geometry.LocalGeometry(coordinates, J, WJ, ∂x∂ξ)
+    return LocalGeometry(coordinates, J, WJ, ∂x∂ξ)
 end
 
 # Reshape an identity-padded 3×3 metric tensor back to its native I-sized
@@ -254,8 +254,8 @@ end
     reshape(∂x∂ξ, (Components{Orthonormal, I}(), Components{Covariant, I}()))
 
 function product_geometry(
-    horizontal_local_geometry::Geometry.LocalGeometry,
-    vertical_local_geometry::Geometry.LocalGeometry,
+    horizontal_local_geometry::LocalGeometry,
+    vertical_local_geometry::LocalGeometry,
     global_geometry::DeepSphericalGlobalGeometry,
     ∇z = nothing,
 )
@@ -263,7 +263,7 @@ function product_geometry(
     z = vertical_local_geometry.coordinates.z
     scale = ((r + z) / r)
 
-    coordinates = Geometry.product_coordinates(
+    coordinates = product_coordinates(
         horizontal_local_geometry.coordinates,
         vertical_local_geometry.coordinates,
     )
@@ -280,18 +280,18 @@ function product_geometry(
         vertical_local_geometry, vertical_local_geometry.∂x∂ξ,
     )
     ∂x∂ξ = isnothing(∇z) ? ∂x∂ξ_h + ∂x∂ξ_v : ∂x∂ξ_h + ∂x∂ξ_v + ∇z
-    return Geometry.LocalGeometry(coordinates, J, WJ, ∂x∂ξ)
+    return LocalGeometry(coordinates, J, WJ, ∂x∂ξ)
 end
 
 function product_geometry(
-    horizontal_local_geometry::Geometry.LocalGeometry,
-    vertical_local_geometry::Geometry.CoordinateOnlyGeometry,
+    horizontal_local_geometry::LocalGeometry,
+    vertical_local_geometry::CoordinateOnlyGeometry,
     global_geometry::AbstractGlobalGeometry,
     ∇z = nothing,
 )
-    coordinates = Geometry.product_coordinates(
+    coordinates = product_coordinates(
         horizontal_local_geometry.coordinates,
         vertical_local_geometry.coordinates,
     )
-    return Geometry.CoordinateOnlyGeometry(coordinates)
+    return CoordinateOnlyGeometry(coordinates)
 end

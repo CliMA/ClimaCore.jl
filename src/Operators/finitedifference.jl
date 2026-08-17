@@ -3623,10 +3623,10 @@ end
 @inline function should_call_left_boundary(idx, space, op, args...)
     Topologies.isperiodic(space) && return false
     loc = left_boundary_window(space)
-    return idx < Operators.left_interior_idx(
+    return idx < left_interior_idx(
         space,
         op,
-        Operators.get_boundary(op, loc),
+        get_boundary(op, loc),
         args...,
     )
 end
@@ -3634,10 +3634,10 @@ end
 @inline function should_call_right_boundary(idx, space, op, args...)
     Topologies.isperiodic(space) && return false
     loc = right_boundary_window(space)
-    return idx > Operators.right_interior_idx(
+    return idx > right_interior_idx(
         space,
         op,
-        Operators.get_boundary(op, loc),
+        get_boundary(op, loc),
         args...,
     )
 end
