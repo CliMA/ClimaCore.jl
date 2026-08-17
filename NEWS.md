@@ -4,6 +4,9 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.15.3
+-------
+
 - ![][badge-💥breaking] Removed the SciML compatibility layer
   (`src/Fields/compat_diffeq.jl`) and the `RecursiveArrayTools` dependency.
   Nothing in ClimaCore, ClimaAtmos, ClimaLand, or ClimaCoupler uses it: all of
@@ -19,6 +22,11 @@ main
   `muladd` over scalars, which does not exist, so it has thrown a
   `MethodError` on every call since it was added.
   [2576](https://github.com/CliMA/ClimaCore.jl/pull/2576)
+
+- Bugfix for indexing of reduced-dimension fields in GPU finite difference kernels
+  [2584](https://github.com/CliMA/ClimaCore.jl/pull/2584)
+
+- Bugfix for mapreduce with `Tensor` valued `Field`(s) on GPUs [2591](https://github.com/CliMA/ClimaCore.jl/pull/2591)
 
 
 v0.15.1
