@@ -111,7 +111,7 @@ function generate_smoothed_orography(
 )
     # Extrusion
     z_surface = Geometry.ZPoint.(warp_fn.(Fields.coordinate_field(hspace)))
-    # An Euler step defines the diffusion coefficient 
+    # An Euler step defines the diffusion coefficient
     # (See e.g. cfl condition for diffusive terms).
     # `parent` is a device array, so read the two nodes needed for the spacing
     # on the host rather than scalar-indexing it.
@@ -571,7 +571,7 @@ end
             ʷᶠcoords = Fields.coordinate_field(ʷhv_face_space)
             ᶜcoords = Fields.coordinate_field(hv_center_space)
             ᶠcoords = Fields.coordinate_field(hv_face_space)
-            # Check ηₛ = 0.75 is correctly applied. 
+            # Check ηₛ = 0.75 is correctly applied.
             # Expectation: ≈zero difference between unwarped and warped coordinates for η >= ηₕ, where η = z / zₜ
             r1 =
                 (

@@ -252,7 +252,7 @@ function Base.Broadcast.instantiate(sbc::SpectralBroadcasted)
             Base.Broadcast.check_broadcast_axes(axes, args...)
         end
     end
-    # For FiniteDifferenceSpace, return zeros 
+    # For FiniteDifferenceSpace, return zeros
     if axes isa Spaces.FiniteDifferenceSpace
         RT = operator_return_eltype(op, map(eltype, args)...)
         return Broadcast.broadcasted(Returns(zero(RT)), Fields.coordinate_field(axes))
@@ -779,10 +779,10 @@ end
 
 Computes the divergence of the product `ρu * ψ` using a **split-form (entropy-stable)** discretization.
 
-This operator is designed for the advection of scalar quantities in conservation laws (e.g., 
-thermodynamic variables or tracers). By evaluating the divergence using a specific averaging of the 
-conservative and advective forms, this formulation cancels aliasing errors that arise from the product 
-of two spectrally variable fields, thereby inhibiting the growth of quadratic instabilities (such as 
+This operator is designed for the advection of scalar quantities in conservation laws (e.g.,
+thermodynamic variables or tracers). By evaluating the divergence using a specific averaging of the
+conservative and advective forms, this formulation cancels aliasing errors that arise from the product
+of two spectrally variable fields, thereby inhibiting the growth of quadratic instabilities (such as
 cold temperature spikes) without requiring hyperviscosity.
 
 # Arguments

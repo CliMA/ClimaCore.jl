@@ -33,7 +33,7 @@ end
 """
     Utilities.Cache.clean_cache!(object)
 
-Remove `object` from the cache of created objects. 
+Remove `object` from the cache of created objects.
 
 In most cases, this function should not need to be called, unless you are
 constructing many grid objects, for example when doing a sweep over grid
@@ -49,7 +49,7 @@ end
 """
     Utilities.Cache.clean_cache!()
 
-Remove all objects from the cache of created objects. 
+Remove all objects from the cache of created objects.
 
 In most cases, this function should not need to be called, unless you are
 constructing many grid objects, for example when doing a sweep over grid

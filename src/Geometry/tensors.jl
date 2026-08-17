@@ -15,15 +15,15 @@ abstract type ComponentsType end
 
 # A tensor is named after the `ComponentsType` of its first axis:
 #  - A `CovariantTensor`'s first axis is covariant, and its components `vᵢ`
-#    multiply the dual basis; for a vector, `v = vᵢ eⁱ`, v ∈ V*. 
+#    multiply the dual basis; for a vector, `v = vᵢ eⁱ`, v ∈ V*.
 #  - A `ContravariantTensor`'s first axis is contravariant, and its components
 #    `vⁱ` multiply the tangent basis; for a vector, `v = vⁱ eᵢ`, v ∈ V.
 
 # Precisely (Stone & Goldbart): given two bases `eⱼ` and `e′ᵢ` over the same
 # space, expand one in the other - `eⱼ = aⁱⱼ e′ᵢ` (10.1), for some matrix `a`. A
 # vector `v` is invariant (only its components change with the basis), so the
-# new components `v′ⁱ` follow from the old `vʲ`: 
-#       `v = v′ⁱ e′ᵢ = vʲ eⱼ = vʲ aⁱⱼ e′ᵢ` 
+# new components `v′ⁱ` follow from the old `vʲ`:
+#       `v = v′ⁱ e′ᵢ = vʲ eⱼ = vʲ aⁱⱼ e′ᵢ`
 # and comparing coefficients of `e′ᵢ` gives `v′ⁱ = aⁱⱼ vʲ` (10.4). The same
 # matrix `a` appears in both laws but in opposite directions, since 10.1 writes
 # the old basis via the new, 10.4 writes the new components via the old. The
