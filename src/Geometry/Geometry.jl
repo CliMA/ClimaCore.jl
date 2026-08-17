@@ -1,7 +1,7 @@
 module Geometry
 
 using ..Utilities: AutoBroadcaster, nested_broadcast, nested_broadcast_result_type
-import LinearAlgebra: det, dot, norm, norm_sqr, cross, UniformScaling, Adjoint
+import LinearAlgebra: dot, norm, norm_sqr, cross, UniformScaling, Adjoint
 import Random
 using StaticArrays, UnrolledUtilities
 

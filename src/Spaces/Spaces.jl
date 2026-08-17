@@ -73,7 +73,7 @@ local_geometry_data(space::AbstractSpace) =
 dss_weights(space::AbstractSpace) = dss_weights(grid(space), staggering(space))
 
 function n_elements_per_panel_direction(space::AbstractSpace)
-    hspace = Spaces.horizontal_space(space)
+    hspace = horizontal_space(space)
     hmesh = topology(hspace).mesh
     return Meshes.n_elements_per_panel_direction(hmesh)
 end
@@ -140,7 +140,7 @@ function face_space(space::AbstractSpace)
     error("`center_space` can only be called with vertical/extruded spaces")
 end
 
-weighted_jacobian(space::Spaces.AbstractSpace) = local_geometry_data(space).WJ
+weighted_jacobian(space::AbstractSpace) = local_geometry_data(space).WJ
 
 """
     Spaces.local_area(space::Spaces.AbstractSpace)
@@ -148,7 +148,7 @@ weighted_jacobian(space::Spaces.AbstractSpace) = local_geometry_data(space).WJ
 The length/area/volume of `space` local to the current context. See
 [`Spaces.area`](@ref)
 """
-local_area(space::Spaces.AbstractSpace) = Base.sum(weighted_jacobian(space))
+local_area(space::AbstractSpace) = Base.sum(weighted_jacobian(space))
 
 """
     Spaces.area(space::Spaces.AbstractSpace)
@@ -161,7 +161,7 @@ weights ``W_i`` multiplied by the Jacobian determinants ``J_i``:
 
 If `space` is distributed, this uses a `ClimaComms.allreduce` operation.
 """
-area(space::Spaces.AbstractSpace) =
+area(space::AbstractSpace) =
     ClimaComms.allreduce(ClimaComms.context(space), local_area(space), +)
 
 ClimaComms.array_type(space::AbstractSpace) =

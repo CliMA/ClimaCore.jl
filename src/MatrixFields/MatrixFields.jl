@@ -41,7 +41,8 @@ multiples of `LinearAlgebra.I`. This comes with the following functionality:
 module MatrixFields
 
 import LinearAlgebra: I, UniformScaling, Adjoint
-import LinearAlgebra: inv, norm, ldiv!, mul!
+import Base: inv
+import LinearAlgebra: norm, ldiv!, mul!
 import StaticArrays: SMatrix, SVector
 import BandedMatrices: BandedMatrix, band, _BandedMatrix
 import KrylovKit
@@ -59,7 +60,6 @@ import ..DataLayouts: DataLayout
 import ..Geometry
 import ..Topologies
 import ..Spaces
-import ..Spaces: local_geometry_type
 import ..Fields
 import ..Operators
 using ..Geometry:

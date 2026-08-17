@@ -383,7 +383,7 @@ function read_topology_new(reader::HDF5Reader, name::AbstractString)
     elseif type == "Topology2D"
         mesh = read_mesh(reader, attrs(group)["mesh"])
         if haskey(group, "elemorder")
-            elemorder_matrix = HDF5.read(group, "elemorder")
+            elemorder_matrix = read(group, "elemorder")
             if reader.file_version < v"0.10.9"
                 elemorder = collect(
                     reinterpret(
@@ -435,7 +435,7 @@ This should cooperate with datasets written by `write!` for datalayouts.
 function read_data_layout(dataset, topology)
     ArrayType = ClimaComms.array_type(topology)
     data_layout = HDF5.read_attribute(dataset, "type")
-    array = HDF5.read(dataset)
+    array = read(dataset)
     if topology isa Topologies.Topology2D
         h_dim = _scan_h_dim(data_layout)
         nd = ndims(array)

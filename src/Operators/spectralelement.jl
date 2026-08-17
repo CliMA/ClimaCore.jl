@@ -1530,7 +1530,7 @@ function matrix_interpolate(
     interp_data =
         DataLayouts.IH1JH2{S, Nu, Nu, nothing}(Matrix{S}(undef, (Nu * n1, Nu * n2)))
     M = Quadratures.interpolation_matrix(Float64, Q_interp, quadrature_style)
-    Operators.tensor_product!(interp_data, Fields.field_values(field), M)
+    tensor_product!(interp_data, Fields.field_values(field), M)
     return parent(interp_data)
 end
 
@@ -1546,7 +1546,7 @@ function matrix_interpolate(
     interp_data =
         DataLayouts.VIH1{S, nl, Nu, nothing}(Matrix{S}(undef, (nl, Nu * n1)))
     M = Quadratures.interpolation_matrix(Float64, Q_interp, quadrature_style)
-    Operators.tensor_product!(interp_data, Fields.field_values(field), M)
+    tensor_product!(interp_data, Fields.field_values(field), M)
     return parent(interp_data)
 end
 

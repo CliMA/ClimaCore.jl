@@ -85,9 +85,9 @@ end
 
 const PointwiseOrColumnwiseBroadcasted = Union{
     Base.Broadcast.Broadcasted{
-        <:Union{Fields.FieldStyle, Operators.AbstractStencilStyle},
+        <:Union{Fields.FieldStyle, AbstractStencilStyle},
     },
-    Operators.StencilBroadcasted,
+    StencilBroadcasted,
 }
 
 # TODO: inline / delete this helper

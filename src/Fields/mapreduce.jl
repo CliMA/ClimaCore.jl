@@ -227,4 +227,4 @@ end
 
 Base.:(==)(field1::Field, field2::Field) =
     axes(field1) === axes(field2) &&
-    Fields.field_values(field1) == Fields.field_values(field2)
+    field_values(field1) == field_values(field2)

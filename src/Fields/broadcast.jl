@@ -134,7 +134,7 @@ _todata_args(args::Tuple) =
     end
 
 todata(obj) = obj
-todata(field::Field) = Fields.field_values(field)
+todata(field::Field) = field_values(field)
 function todata(bc::Base.Broadcast.Broadcasted{FieldStyle{DS}}) where {DS}
     _args = _todata_args(bc.args)
     Base.Broadcast.Broadcasted{DS}(bc.f, _args)
@@ -319,7 +319,7 @@ function Base.Broadcast.broadcasted(
     ::typeof(LinearAlgebra.norm),
     arg,
 )
-    space = Fields.axes(arg)
+    space = axes(arg)
     # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
     Base.Broadcast.broadcasted(
         fs,
@@ -333,7 +333,7 @@ function Base.Broadcast.broadcasted(
     ::typeof(LinearAlgebra.norm_sqr),
     arg,
 )
-    space = Fields.axes(arg)
+    space = axes(arg)
     # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
     Base.Broadcast.broadcasted(
         fs,
@@ -349,7 +349,7 @@ function Base.Broadcast.broadcasted(
     arg1,
     arg2,
 )
-    space = Fields.axes(arg1)
+    space = axes(arg1)
     # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
     Base.Broadcast.broadcasted(
         fs,
@@ -365,7 +365,7 @@ function Base.Broadcast.broadcasted(
     arg1,
     arg2,
 )
-    space = Fields.axes(arg2)
+    space = axes(arg2)
     # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
     Base.Broadcast.broadcasted(
         fs,
@@ -381,7 +381,7 @@ function Base.Broadcast.broadcasted(
     arg1,
     arg2,
 )
-    space = Fields.axes(arg2)
+    space = axes(arg2)
     # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
     Base.Broadcast.broadcasted(
         fs,
@@ -397,7 +397,7 @@ function Base.Broadcast.broadcasted(
     ::Type{V},
     arg,
 ) where {V <: Geometry.AbstractTensor{1}}
-    space = Fields.axes(arg)
+    space = axes(arg)
     # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
     Base.Broadcast.broadcasted(fs, V, arg, local_geometry_field(space))
 end
@@ -407,7 +407,7 @@ function Base.copyto!(
     bc::Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}},
 )
     mask = get_mask(axes(field))
-    copyto!(Fields.field_values(field), todata(bc); mask)
+    copyto!(field_values(field), todata(bc); mask)
     return field
 end
 function Base.copyto!(
@@ -415,7 +415,7 @@ function Base.copyto!(
     bc::Base.Broadcast.Broadcasted{Base.Broadcast.Style{Tuple}},
 )
     mask = get_mask(axes(field))
-    copyto!(Fields.field_values(field), todata(bc); mask)
+    copyto!(field_values(field), todata(bc); mask)
     return field
 end
 

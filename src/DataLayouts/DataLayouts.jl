@@ -1,7 +1,7 @@
 module DataLayouts
 
-import Base: @propagate_inbounds
-import LLVM: unsafe_load
+import Base: @propagate_inbounds, unsafe_load
+import LLVM # for the `unsafe_load` methods on `Core.LLVMPtr`
 import StaticArrays
 import BlockArrays
 import Adapt
