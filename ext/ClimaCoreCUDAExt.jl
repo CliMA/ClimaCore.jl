@@ -49,4 +49,20 @@ include(joinpath("cuda", "operators_dg.jl"))
     end
 end
 
+# Lift the recursion limit for the device reduce_points, whose recursion over warps
+# and sub-warps forwards kwargs and looks unbounded to the compiler, which would widen
+# and box the arguments (requiring dynamic dispatch). The limit must also be lifted on
+# the keyword-argument body functions, since that is where the recursion occurs.
+@static if hasfield(Method, :recursion_relation)
+    for method in methods(ClimaCore.DataLayouts.reduce_points)
+        method.module === (@__MODULE__) || continue
+        method.recursion_relation = Returns(true)
+        body_function = Base.bodyfunction(method)
+        isnothing(body_function) && continue
+        for body_method in methods(body_function)
+            body_method.recursion_relation = Returns(true)
+        end
+    end
+end
+
 end

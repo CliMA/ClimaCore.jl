@@ -60,7 +60,8 @@ the largest subset is used in order to minimize the number of points per thread.
 end
 
 """
-    foreach_slice([scope], op, f, args...; [mask])
+    foreach_slice(op, f, args...; [mask])
+    foreach_slice(scope, op, f, args...; mask)
 
 Generalization of `eachslice`/`mapslices` that applies `f` to slices of every
 [`DataLayout`](@ref) or similarly indexable argument, where the slice operator
@@ -71,11 +72,48 @@ Generalization of `eachslice`/`mapslices` that applies `f` to slices of every
 
 Each slice is assigned to a [`slice_subscope`](@ref) of `scope`, which by
 default is the largest available [`DataScope`](@ref) that can access every
-argument. A [`DataMask`](@ref), which by default is set to [`NoMask`](@ref), may
-also be used to skip over a particular subset of slices.
+argument. A [`DataMask`](@ref) may also be used to skip over a particular subset
+of slices.
+
+The `mask` is only given a default of [`NoMask`](@ref) when no `scope` is
+specified, since that is the only method a loop starts from. Every method that
+takes a `scope` requires a `mask`, so that a loop which passes its keyword
+arguments on cannot quietly drop a mask and compute over the points it excludes.
 """
 @inline foreach_slice(op::O, f::F, args...; mask = NoMask()) where {O, F} =
     foreach_slice(DataScope(args...), op, f, args...; mask)
+
+# A thread pool has to be resolved before looping over it, and given back afterward.
+@inline function foreach_slice(
+    pool::ThisThreadPool,
+    op::O,
+    f::F,
+    args...;
+    mask,
+) where {O, F}
+    pool_thread_info() == (0, 0) ||
+        return foreach_pool_slice(num_threads(pool), pool, op, f, args...; mask)
+    threads = resolve_pool_threads()
+    try
+        return foreach_pool_slice(threads, pool, op, f, args...; mask)
+    finally
+        release_pool_threads()
+    end
+end
+
+# Loop over the threads a pool loop resolved to. The count is passed as an integer rather
+# than as a resolved scope, because a scope whose type is only known at run time becomes a
+# union at every call below it, which uses up inference budget that the point loops need.
+@inline foreach_pool_slice(
+    threads::Int,
+    pool::ThisThreadPool,
+    op::O,
+    f::F,
+    args...;
+    mask,
+) where {O, F} =
+    isone(threads) ? foreach_slice(ThisThread(), op, f, args...; mask) :
+    parallelize_over(() -> slice_loop(pool, op, f, mask, args...), pool)
 
 # Change the scope to ThisThread when given only one thread, which compiles the
 # simplest possible loop.
@@ -132,20 +170,75 @@ for op in (:level, :slab, :column)
 end
 
 """
-    reduce_points([scope], op, arg; [mask], [init])
+    reduce_points(op, arg; [mask], [init])
+    reduce_points(scope, op, arg; mask, [init])
 
 Generalization of `reduce` that uses `op` to combine values stored in a
 [`DataLayout`](@ref) or similarly indexable argument.
 
 This combines all values in the given argument that are assigned to `scope`,
 which by default is the largest available [`DataScope`](@ref) that can access
-the argument. A [`DataMask`](@ref), which by default is set to [`NoMask`](@ref),
-may also be used to skip over a particular subset of points. If the `mask`
-disables every point, or if there are no points in `arg` to begin with, the
-`init` value must be specified.
+the argument. A [`DataMask`](@ref) may also be used to skip over a particular
+subset of points. If the `mask` disables every point, or if there are no points
+in `arg` to begin with, the `init` value must be specified.
+
+As in [`foreach_slice`](@ref), the `mask` is only given a default of
+[`NoMask`](@ref) when no `scope` is specified, so that a reduction which passes
+its keyword arguments on cannot quietly drop a mask.
 """
 @inline reduce_points(op::O, arg; mask = NoMask(), init...) where {O} =
     reduce_points(DataScope(arg), op, arg; mask, init...)
+
+@inline function reduce_points(
+    pool::ThisThreadPool,
+    op::O,
+    arg;
+    kwargs...,
+) where {O}
+    # Reduce on this thread when the pool has one thread, or when there are too few points
+    # to divide up, without resolving the pool or claiming any of its threads.
+    (isone(default_pool_size()) || length(arg) <= default_pool_size()) &&
+        return reduce_points(ThisThread(), op, reassign(arg, ThisThread()); kwargs...)
+    T = return_type(op, NTuple{2, eltype(arg)})
+    if pool_thread_info() != (0, 0)
+        # A reduction nested in another loop gets a fresh results array, since the task's
+        # reduction buffer may still be read by an outer reduction that is applying op.
+        return reduce_pool_points(
+            Array{T}(undef, num_threads(pool)),
+            pool,
+            op,
+            arg;
+            kwargs...,
+        )
+    end
+    threads = resolve_pool_threads()
+    try
+        isone(threads) &&
+            return reduce_points(ThisThread(), op, reassign(arg, ThisThread()); kwargs...)
+        results = scoped_array(pool, T, threads; buffer = true)
+        return reduce_pool_points(results, pool, op, arg; kwargs...)
+    finally
+        release_pool_threads()
+    end
+end
+
+# Reduce over the threads of the current pool loop, storing each thread's share of the
+# reduction in results. The results array is allocated by the caller, so that this method
+# stays concretely typed whether it is given a view of the task's reduction buffer or a
+# fresh array.
+@inline function reduce_pool_points(
+    results,
+    pool::ThisThreadPool,
+    op::O,
+    arg;
+    kwargs...,
+) where {O}
+    parallelize_over(pool) do
+        @inbounds results[thread_rank(pool)] =
+            reduce_points(ThisThread(), op, arg; kwargs...)
+    end
+    return reduce(op, results)
+end
 
 # Change the scope to ThisThread when given only one thread or a small argument.
 # Otherwise, reduce each thread's values, then reduce the results in one thread.

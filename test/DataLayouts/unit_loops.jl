@@ -175,3 +175,116 @@ end
     end
     @test data.unit != test_data(device, T, 1, 11).unit
 end
+
+# Nv is deliberately not a multiple of a GPU warp. A block whose thread count exceeded the
+# number of points in a column would leave its last threads with no points to reduce, and a
+# reduction without an init value has no placeholder to use in their place.
+@testset "reductions over slices whose length is not a multiple of a warp" begin
+    device = ClimaComms.device()
+    for Nv in (33, 63, 100)
+        arg = test_data(device, Float64, 1, Nv)
+        dest = test_data(device, Float64, 1, 1)
+        reference_array = Array(parent(arg))
+        # A column reduction assigns one column to each block, so the block's threads
+        # divide up the points of a column.
+        sum_of_columns!(dest, arg)
+        @test Array(parent(dest)) == sum(reference_array; dims = 1)
+        @test sum(identity, arg) == sum(reference_array)
+        # min has no init value, so every thread of the reduction must have a point.
+        @test DataLayouts.reduce_points(min, arg) == minimum(reference_array)
+    end
+end
+
+@testset "thread pool resolution and sharing" begin
+    device = ClimaComms.device()
+    if device isa ClimaComms.AbstractCPUDevice
+        data = test_data(device, Float64, 1, 64)
+        total = sum(Array(parent(data)))
+        pool_accounting_drained() =
+            DataLayouts.POOL_THREADS_IN_USE[] == 0 &&
+            DataLayouts.PENDING_POOL_LOOPS[] == 0
+
+        # Loops nested in an external threaded loop use one thread each, but they
+        # must still cover every point of their arguments.
+        external_loop_sums = zeros(Threads.nthreads())
+        Threads.@threads for i in eachindex(external_loop_sums)
+            external_loop_sums[i] = sum(identity, data)
+        end
+        @test all(==(total), external_loop_sums)
+        @test pool_accounting_drained()
+
+        # Concurrent loops that divide the pool between them must each compute a
+        # complete result, and small reductions must not disturb the division.
+        point = DataLayouts.DataF{Float64}(device_array(device, rand(1)))
+        concurrent_results = map(Base.OneTo(4)) do _
+            Threads.@spawn begin
+                is_correct = true
+                for _ in Base.OneTo(50)
+                    is_correct &= sum(identity, data) == total
+                    is_correct &= parent(data .+ data) == 2 .* Array(parent(data))
+                    is_correct &= sum(identity, point) == Array(parent(point))[]
+                end
+                is_correct
+            end
+        end
+        @test all(fetch, concurrent_results)
+        @test pool_accounting_drained()
+
+        # Loops launched from tasks outside the default pool must also be complete.
+        interactive_task = Threads.@spawn :interactive sum(identity, data)
+        @test fetch(interactive_task) == total
+        @test pool_accounting_drained()
+
+        # Explicit-scope loops must cover every point without scope resolution. Loops given
+        # a scope take a mask explicitly, since only the scope-free methods default it.
+        dest = test_data(device, Float64, 1, 64)
+        fill!(parent(dest), 0)
+        copy_point!(d, a) = (@inbounds d[] = a[])
+        DataLayouts.foreach_slice(
+            DataLayouts.ThisThreadPool(),
+            view,
+            copy_point!,
+            dest,
+            data;
+            mask = DataLayouts.NoMask(),
+        )
+        @test parent(dest) == parent(data)
+        @test DataLayouts.reduce_points(
+            DataLayouts.ThisThreadPool(),
+            +,
+            data;
+            mask = DataLayouts.NoMask(),
+        ) == total
+        @test pool_accounting_drained()
+
+        # An error thrown from inside a loop must not leak the loop's thread claim.
+        @test_throws Exception DataLayouts.foreach_point(_ -> error("!"), data)
+        @test pool_accounting_drained()
+
+        # A reduction nested in another reduction's op must not overwrite the outer
+        # reduction's results, which live in the task's reduction buffer. Over all-ones
+        # data, no worker's fold accumulator exceeds its chunk length, so a threshold
+        # just above the largest chunk only triggers in the launcher's final combine.
+        if Threads.threadpoolsize(:default) > 1
+            ones_data = DataLayouts.VIJFH{Float64, 64, 4, 4, nothing}(
+                device_array(device, ones(64, 4, 4, 1, 5)),
+            )
+            n_points = length(parent(ones_data))
+            threshold = cld(n_points, Threads.threadpoolsize(:default)) + 1
+            other = test_data(device, Float64, 1, 64)
+            nested_op(a, b) =
+                a + b + 0.0 * (a >= threshold ? sum(identity, other) : 0.0)
+            @test DataLayouts.reduce_points(nested_op, ones_data) == n_points
+            @test pool_accounting_drained()
+        end
+
+        # Loops over the pool cannot be nested inside its own worker threads.
+        if Threads.threadpoolsize(:default) > 1
+            @test_throws CompositeException DataLayouts.foreach_point(
+                _ -> sum(identity, data),
+                data,
+            )
+            @test pool_accounting_drained()
+        end
+    end
+end
