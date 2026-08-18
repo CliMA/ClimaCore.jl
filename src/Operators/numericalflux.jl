@@ -1379,8 +1379,14 @@ dissipation, with the two acoustic Roe waves additionally damped at
 ``|û_n ± ĉ|``:
 
     α± = ([[p′]] ± ρ̄ĉ[[u_n]])/(2ĉ²)
-    F*_ρ  −= (s₊α₊ + s₋α₋)/2
-    F*_ρe −= (s₊α₊(h̄ + ĉû_n) + s₋α₋(h̄ − ĉû_n))/2
+    F*_ρ  −= max(s₊α₊ + s₋α₋, 0)/2
+    F*_ρe −= max(s₊α₊(h̄ + ĉû_n) + s₋α₋(h̄ − ĉû_n), 0)/2
+
+The signed amplitudes make ``D_ρ = s₊α₊ + s₋α₋`` negative when the
+mean-flow term ``û_n ρ̄ Δu_n`` dominates ``Δp′`` (e.g., a decelerating
+jet with ``Δu_n`` opposed to ``û_n``).  Negative ``D_ρ`` adds to the mass
+flux instead of dissipating it. Both ``D_ρ`` and ``D_{ρe}`` are clipped to zero: 
+the acoustic channel only ever dissipates.
 
 The contact discontinuity (``α₀ = [[ρ]] − [[p]]/ĉ²``) stays exactly central — a
 density-jump penalty is sign-indefinite in face kinetic energy under the
@@ -1389,7 +1395,7 @@ vector-invariant pairing.
 The pressure jump is taken in the state field `p′ = p − p_ref` with `p_ref`
 a hydrostatically composed, single-valued-in-column reference: on
 terrain-following grids the raw ``[[p]]`` across a horizontal face contains
-an O(1) HYDROSTATIC jump (neighbors at different true altitude) that is not
+an O(1) hydrostatic jump (neighbors at different true altitude) that is not
 acoustic and must not be damped.
 
 State fields required: `ρ`, `e`, `p`, `p′`, `λ`, `uv`.
@@ -1416,8 +1422,8 @@ function (fn::VIES2InterfaceScalars)(normal, (y⁻,), (y⁺,))
     s₊ = abs(ûₙ + ĉ)
     s₋ = abs(ûₙ - ĉ)
     h̄ = (y⁻.e + y⁻.p / y⁻.ρ + y⁺.e + y⁺.p / y⁺.ρ) / 2
-    Dρ = s₊ * α₊ + s₋ * α₋
-    Dρe = s₊ * α₊ * (h̄ + ĉ * ûₙ) + s₋ * α₋ * (h̄ - ĉ * ûₙ)
+    Dρ = max(s₊ * α₊ + s₋ * α₋, zero(ĉ))
+    Dρe = max(s₊ * α₊ * (h̄ + ĉ * ûₙ) + s₋ * α₋ * (h̄ - ĉ * ûₙ), zero(ĉ))
     # Δv = v⁺ − v⁻ (v = −ρ/p), matching VIESInterfaceScalars' −(λ/2)w̄[[v]]
     return (ρ = F.ρ - Dρ / 2, ρe = F.ρe - λ / 2 * w̄ * Δv - Dρe / 2)
 end
