@@ -4,8 +4,8 @@
 Documenter parses ``[text](target)`` as a link. Its parser is more permissive
 than CommonMark: **any** run of whitespace between the closing bracket and the
 opening parenthesis still forms a link, including a line break. So all four of
-these become links whose destination is the parenthetical text, and the docs
-build fails with a ``:cross_references`` error:
+these become links whose destination is the parenthetical text, and Documenter
+reports a ``:cross_references`` error:
 
     Density [kg/m³](as measured at cloud base).
     Density [kg/m³] (as measured at cloud base).
@@ -20,10 +20,12 @@ safe:
     Density [kg/m³]. (As measured at cloud base.)
     Density `[kg/m³]` (as measured at cloud base).
 
-This matters even for docstrings that no page renders today: `docs/make.jl`
-uses ``checkdocs = :exports``, so an unrendered docstring's broken link stays
-latent until someone adds that symbol to a page, and the build then fails in a
-seemingly unrelated PR.
+Documenter only parses a docstring's markdown when the docstring is spliced
+onto a page, so an unrendered docstring's broken link stays latent until
+someone adds that symbol to a page. `docs/make.jl` currently sets
+``warnonly = [:cross_references]``, so today that surfaces as a warning rather
+than a build failure -- but it becomes an error, in a seemingly unrelated PR,
+if that setting is ever tightened.
 
 Usage:
     .dev/check_markdown_link_ambiguity.py [paths...]
