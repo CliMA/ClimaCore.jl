@@ -1,11 +1,13 @@
-#=
-julia --project
-using Revise; include(joinpath("test", "DataLayouts", "unit_loops.jl"))
-=#
 using Test
 import Random
 import ClimaComms
 import ClimaCore.DataLayouts
+
+import ClimaCore  # for `pkgdir` below
+@isdefined(TU) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+);
+import .TestUtilities as TU
 ClimaComms.@import_required_backends
 Random.seed!(1234)
 
@@ -13,9 +15,15 @@ device_array(device, array) = ClimaComms.array_type(device)(array)
 
 # Use integer values so that sums are exact regardless of iteration order,
 # which makes comparisons insensitive to how threads partition the data.
-function test_data(device, ::Type{T}, Nf, Nv) where {T}
+function test_data(
+    device,
+    ::Type{T},
+    Nf,
+    Nv,
+    ::Type{FT} = T isa Type{<:Number} ? T : Float64,
+) where {T, FT}
     (Ni, Nj, Nh) = (4, 4, 5)
-    array = device_array(device, Float64.(rand(1:(2^20), Nv, Ni, Nj, Nf, Nh)))
+    array = device_array(device, FT.(rand(1:1000, Nv, Ni, Nj, Nf, Nh)))
     return DataLayouts.VIJFH{T, Nv, Ni, Nj, nothing}(array)
 end
 
@@ -30,11 +38,11 @@ function manual_sum_of_columns!(dest, arg)
     return dest
 end
 
-@testset "nested loop functions" begin
+@testset "nested loop functions [$FT]" for FT in (Float32, Float64)
     device = ClimaComms.device()
-    arg = test_data(device, Float64, 1, 10)
-    dest = test_data(device, Float64, 1, 1)
-    reference_dest = test_data(device, Float64, 1, 1)
+    arg = test_data(device, FT, 1, 10)
+    dest = test_data(device, FT, 1, 1)
+    reference_dest = test_data(device, FT, 1, 1)
 
     # Nest fill!, sum, and mapreduce within the function passed to a slice
     # iterator, as in DataLayouts.column_reduce!.
@@ -51,7 +59,7 @@ end
         # end of the DataLayouts module; without them, the inner loops box
         # their arguments and allocate at every column.
         sum_allocs = @allocated sum_of_columns!(dest, arg)
-        @test sum_allocs == 0
+        TU.allocation_checks_meaningful() && @test sum_allocs == 0
     end
 end
 
@@ -102,10 +110,10 @@ end
     @test DataLayouts.reduce_points(+, data; mask, init = 0.0) == sum(Array(parent(data)))
 end
 
-@testset "0-dimensional data in broadcast expressions" begin
+@testset "0-dimensional data in broadcast expressions [$FT]" for FT in (Float32, Float64)
     device = ClimaComms.device()
-    data = test_data(device, Float64, 1, 10)
-    point = DataLayouts.DataF{Float64}(device_array(device, rand(1)))
+    data = test_data(device, FT, 1, 10)
+    point = DataLayouts.DataF{FT}(device_array(device, rand(FT, 1)))
 
     # Every linear or Cartesian index of a broadcast expression should access
     # the single point of any 0-dimensional data in that expression.
@@ -113,20 +121,52 @@ end
     @test parent(point .+ data) == parent(data) .+ Array(parent(point))[]
 end
 
+parent_broadcasted(data::DataLayouts.DataLayout) = parent(data)
+parent_broadcasted(bc::DataLayouts.LazyDataLayout) =
+    Base.broadcasted(bc.f, map(parent_broadcasted, bc.args)...)
+
+# Loops over mixed layouts require Cartesian indices, which are extruded by
+# Broadcast.newindex; loops over layouts with the same shape use linear indices.
+# Point layouts are ignored when deciding between linear and Cartesian indexing.
+@testset "broadcast expression indexing" begin
+    device = ClimaComms.device()
+    volume = test_data(device, Float64, 1, 10)
+    surface = test_data(device, Float64, 1, 1)
+    point = view(volume, 1)
+
+    for (bc, expected_style) in (
+        (Base.broadcasted(+, volume, volume, volume), IndexLinear()),
+        (Base.broadcasted(+, volume, volume, surface), IndexCartesian()),
+        (Base.broadcasted(+, volume, volume, point), IndexLinear()),
+        (Base.broadcasted(+, volume, surface, point), IndexCartesian()),
+        (Base.broadcasted(abs, Base.broadcasted(+, volume, volume)), IndexLinear()),
+        (Base.broadcasted(abs, Base.broadcasted(+, volume, surface)), IndexCartesian()),
+        (Base.broadcasted(abs, Base.broadcasted(+, volume, point)), IndexLinear()),
+    )
+        @test Base.IndexStyle(bc) == expected_style
+        @test parent(Base.materialize(bc)) == Base.materialize(parent_broadcasted(bc))
+        @test sum(bc) == sum(parent_broadcasted(bc))
+    end
+
+    # Genuinely mismatched extents throw before any kernel is launched.
+    mismatched_volume = test_data(device, Float64, 1, 7)
+    @test_throws DimensionMismatch volume .+ mismatched_volume
+end
+
 # Measure allocations from a top-level function, since the @allocated macro has
 # a small constant overhead when it is used in a local scope.
-assign_scalar!(data) = data .= 0.5
-assign_ref!(data) = data .= Ref(0.5)
-assign_tuple!(data) = data .= (0.5,)
+assign_scalar!(data) = data .= eltype(data)(0.5)
+assign_ref!(data) = data .= Ref(eltype(data)(0.5))
+assign_tuple!(data) = data .= (eltype(data)(0.5),)
 measured_allocations(f!::F, data) where {F} = @allocated f!(data)
 
-@testset "scalar broadcast allocations" begin
+@testset "scalar broadcast allocations [$FT]" for FT in (Float32, Float64)
     device = ClimaComms.device()
-    data = test_data(device, Float64, 1, 10)
+    data = test_data(device, FT, 1, 10)
     assign_scalar!(data)
     assign_ref!(data)
     assign_tuple!(data)
-    @test all(==(0.5), Array(parent(data)))
+    @test all(==(FT(0.5)), Array(parent(data)))
     if device isa ClimaComms.CPUSingleThreaded
         @test measured_allocations(assign_scalar!, data) == 0
         @test measured_allocations(assign_ref!, data) == 0
@@ -134,10 +174,10 @@ measured_allocations(f!::F, data) where {F} = @allocated f!(data)
     end
 end
 
-@testset "equality of layouts with different shapes" begin
+@testset "equality of layouts with different shapes [$FT]" for FT in (Float32, Float64)
     device = ClimaComms.device()
-    data_a = test_data(device, Float64, 1, 10)
-    data_b = test_data(device, Float64, 1, 11)
+    data_a = test_data(device, FT, 1, 10)
+    data_b = test_data(device, FT, 1, 11)
 
     # Comparing layouts with different sizes should return false instead of
     # throwing a DimensionMismatch from the elementwise fallback of ==.
@@ -145,16 +185,16 @@ end
     @test data_a == copy(data_a)
 
     # NaNs make layouts unequal, matching the behavior of == on Base arrays.
-    nan_data = test_data(device, Float64, 1, 10)
-    parent(nan_data) .= NaN
+    nan_data = test_data(device, FT, 1, 10)
+    parent(nan_data) .= FT(NaN)
     @test nan_data != nan_data
 end
 
-@testset "views and equality of properties without data" begin
+@testset "views and equality of properties without data [$FT]" for FT in (Float32, Float64)
     device = ClimaComms.device()
-    T = @NamedTuple{value::Float64, unit::Nothing}
-    data = test_data(device, T, 1, 10)
-    point = DataLayouts.DataF{T}(device_array(device, rand(1)))
+    T = @NamedTuple{value::FT, unit::Nothing}
+    data = test_data(device, T, 1, 10, FT)
+    point = DataLayouts.DataF{T}(device_array(device, rand(FT, 1)))
 
     # Zero-size fields are hidden from propertynames, but they are still
     # accessible through getproperty, which returns a view with Nf = 0.
@@ -167,23 +207,26 @@ end
         # Views with no data are equal whenever their sizes match, even when
         # the layouts they were created from are unequal.
         modified_arg = copy(arg)
-        parent(modified_arg) .+= 1
+        parent(modified_arg) .+= FT(1)
         @test arg != modified_arg
         @test arg.value != modified_arg.value
         @test arg.unit == arg.unit
         @test arg.unit == modified_arg.unit
     end
-    @test data.unit != test_data(device, T, 1, 11).unit
+    @test data.unit != test_data(device, T, 1, 11, FT).unit
 end
 
 # Nv is deliberately not a multiple of a GPU warp. A block whose thread count exceeded the
 # number of points in a column would leave its last threads with no points to reduce, and a
 # reduction without an init value has no placeholder to use in their place.
-@testset "reductions over slices whose length is not a multiple of a warp" begin
+@testset "reductions over slices whose length is not a multiple of a warp [$FT]" for FT in (
+    Float32,
+    Float64,
+)
     device = ClimaComms.device()
     for Nv in (33, 63, 100)
-        arg = test_data(device, Float64, 1, Nv)
-        dest = test_data(device, Float64, 1, 1)
+        arg = test_data(device, FT, 1, Nv)
+        dest = test_data(device, FT, 1, 1)
         reference_array = Array(parent(arg))
         # A column reduction assigns one column to each block, so the block's threads
         # divide up the points of a column.
@@ -194,6 +237,7 @@ end
         @test DataLayouts.reduce_points(min, arg) == minimum(reference_array)
     end
 end
+
 
 @testset "thread pool resolution and sharing" begin
     device = ClimaComms.device()
@@ -240,21 +284,9 @@ end
         dest = test_data(device, Float64, 1, 64)
         fill!(parent(dest), 0)
         copy_point!(d, a) = (@inbounds d[] = a[])
-        DataLayouts.foreach_slice(
-            DataLayouts.ThisThreadPool(),
-            view,
-            copy_point!,
-            dest,
-            data;
-            mask = DataLayouts.NoMask(),
-        )
+        DataLayouts.foreach_point(copy_point!, dest, data; mask = DataLayouts.NoMask())
         @test parent(dest) == parent(data)
-        @test DataLayouts.reduce_points(
-            DataLayouts.ThisThreadPool(),
-            +,
-            data;
-            mask = DataLayouts.NoMask(),
-        ) == total
+        @test DataLayouts.reduce_points(+, data; mask = DataLayouts.NoMask()) == total
         @test pool_accounting_drained()
 
         # An error thrown from inside a loop must not leak the loop's thread claim.

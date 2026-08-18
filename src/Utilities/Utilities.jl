@@ -5,6 +5,28 @@ using UnrolledUtilities
 import ForwardDiff
 import InteractiveUtils
 
+"""
+    ConvertTo{T}()
+
+A GPU-compatible callable that converts its argument to type `T`, equivalent to
+`Base.Fix1(convert, T)` but `isbitstype`. `Base.Fix1` stores a `Type{T}` field,
+which is not `isbits`, so it cannot be captured by GPU kernels. `ConvertTo{T}`
+is an empty struct and is always `isbits`, making it safe to use in broadcast
+expressions that run on the GPU.
+
+# Examples
+
+```julia
+julia> isbitstype(typeof(ConvertTo{Float32}()))
+true
+
+julia> isbitstype(typeof(Base.Fix1(convert, Float32))) # cannot enter a kernel
+false
+```
+"""
+struct ConvertTo{T} end
+@inline (::ConvertTo{T})(x) where {T} = convert(T, x)
+
 include("plushalf.jl")
 include("auto_broadcaster.jl")
 include("cache.jl")
@@ -92,7 +114,7 @@ julia> parent(stable_view(array, 4:6))
 ```
 """
 Base.@propagate_inbounds function stable_view(array::AbstractArray, indices...)
-    if indices isa Tuple{Union{Integer, AbstractRange{<:Integer}}} &&
+    if indices isa Tuple{Union{Integer, AbstractRange{<:Integer}, Colon}} &&
        ndims(array) != 1
         array isa Base.ReshapedArray &&
             return stable_view(parent(array), first(indices))
@@ -270,5 +292,20 @@ eltype_error(bc::Base.Broadcast.Broadcasted) =
     has_inferred_error(bc) ?
     bc.f(unrolled_map(new ∘ safe_eltype, bc.args)...) : # f throws runtime error
     throw(InferenceError(bc.f, Tuple{unrolled_map(safe_eltype, bc.args)...}))
+
+"""
+    recursive_bottom_eltype(x)
+
+The scalar type underlying `x`, found by following `eltype` until it stops
+changing. For a nested array of arrays this is the type of the numbers at the
+bottom, not the type of the outer element.
+
+```julia
+julia> recursive_bottom_eltype([[1.0, 2.0]])
+Float64
+```
+"""
+recursive_bottom_eltype(a) =
+    a == eltype(a) ? a : recursive_bottom_eltype(eltype(a))
 
 end # module

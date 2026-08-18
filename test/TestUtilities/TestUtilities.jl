@@ -11,6 +11,7 @@ module TestUtilities
 
 using IntervalSets
 using Test
+using LinearAlgebra
 import ClimaComms
 import ClimaCore.Fields
 import ClimaCore.DataLayouts
@@ -20,9 +21,107 @@ import ClimaCore.Quadratures
 import ClimaCore.Geometry
 import ClimaCore.Meshes
 import ClimaCore.Spaces
+import ClimaCore.CommonSpaces
 import ClimaCore.Topologies
 import ClimaCore.Domains
 import ClimaCore.Hypsography
+
+export convergence_rate,
+    PointSpace,
+    SpectralElementSpace1D,
+    SpectralElementSpace2D,
+    ColumnCenterFiniteDifferenceSpace,
+    ColumnFaceFiniteDifferenceSpace,
+    SphereSpectralElementSpace,
+    CenterExtrudedFiniteDifferenceSpace,
+    FaceExtrudedFiniteDifferenceSpace,
+    all_spaces,
+    bycolumnable,
+    levelable,
+    fc_index,
+    has_z_coordinates,
+    test_column_operators,
+    ssp33!,
+    @test_zero_allocations,
+    @test_precisions
+
+"""
+    @test_zero_allocations expr
+
+Evaluates `expr` in an isolated `@noinline` runner to prevent closure/box capture artifacts,
+warms up the evaluation, and asserts `@test allocs == 0`.
+"""
+macro test_zero_allocations(expr)
+    quote
+        let
+            @noinline function _run_zero_alloc_eval()
+                $(esc(expr))
+                return nothing
+            end
+            _run_zero_alloc_eval() # Warmup
+            $Test.@test ($Base.@allocated _run_zero_alloc_eval()) == 0
+        end
+    end
+end
+
+"""
+    @test_precisions [Float32, Float64] FT begin ... end
+    @test_precisions FT begin ... end  # Defaults to (Float32, Float64)
+
+Executes a test block iteratively across floating point precisions, binding `FT` to each type.
+"""
+macro test_precisions(args...)
+    if length(args) == 2
+        var = args[1]
+        block = args[2]
+        types = :((Float32, Float64))
+    elseif length(args) == 3
+        types = args[1]
+        var = args[2]
+        block = args[3]
+    else
+        error("Usage: @test_precisions [types] FT block")
+    end
+    quote
+        for $(esc(var)) in $(esc(types))
+            $(esc(block))
+        end
+    end
+end
+
+"""
+    ssp33!(rhs!, y, dy, y1, y2, params, dt, nsteps)
+
+Hand-rolled SSP RK33 (Shu-Osher three-stage, third-order strong stability
+preserving) time integrator, so that smoke tests need no external
+time-stepper dependency. `rhs!(dy, y, params, t)` writes the tendency in
+place; `y` may be a scalar `Field` or a `FieldVector`. The full step `dt` is
+implicit in `params` where a scheme needs it (e.g. FCT limiters read `Δt`
+from `params`, not a stage substep).
+"""
+function ssp33!(rhs!, y, dy, y1, y2, params, dt, nsteps)
+    for _ in 1:nsteps
+        rhs!(dy, y, params, zero(dt))
+        @. y1 = y + dt * dy
+        rhs!(dy, y1, params, zero(dt))
+        @. y2 = (3 * y + y1 + dt * dy) / 4
+        rhs!(dy, y2, params, zero(dt))
+        @. y = (y + 2 * y2 + 2 * dt * dy) / 3
+    end
+    return y
+end
+
+"""
+    convergence_rate(err, Δh)
+
+Estimate pairwise convergence rates given vectors or tuples `err` and `Δh`:
+    r[i] = log(err[i] / err[i - 1]) / log(Δh[i] / Δh[i - 1])
+"""
+convergence_rate(err::AbstractVector, Δh::AbstractVector) =
+    [log(err[i] / err[i - 1]) / log(Δh[i] / Δh[i - 1]) for i in 2:length(Δh)]
+
+convergence_rate(err::Tuple, Δh::Tuple) =
+    ntuple(i -> log(err[i + 1] / err[i]) / log(Δh[i + 1] / Δh[i]), length(Δh) - 1)
 
 function PointSpace(
     ::Type{FT};
@@ -142,7 +241,7 @@ function CenterExtrudedFiniteDifferenceSpace(
     )
 
     hypsography = if topography
-        # some non-trivial function of latitude and longitude
+        # A function of latitude and longitude
         H = (zlim[2] - zlim[1]) / zelem
         (; lat, long) = Fields.coordinate_field(hspace)
         surface_elevation =
@@ -164,6 +263,26 @@ function FaceExtrudedFiniteDifferenceSpace(::Type{FT}; kwargs...) where {FT}
     return Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
 end
 
+function PointColumnEnsembleSpace(::Type{FT}; context, zelem = 10, kwargs...) where {FT}
+    staggering = Spaces.CellCenter()
+    lats = FT.([0.0, 1.0, 2.0])
+    longs = FT.([3.0, 4.0, 5.0])
+    points = [Geometry.LatLongPoint(lat, long) for (lat, long) in zip(lats, longs)]
+    z_min = -10.0
+    z_max = 10.0
+    (; device) = context
+    return CommonSpaces.PointColumnEnsembleSpace(
+        FT;
+        z_elem = zelem,
+        staggering,
+        points,
+        z_min,
+        z_max,
+        device,
+        kwargs...,
+    )
+end
+
 function all_spaces(
     ::Type{FT};
     zelem = 10,
@@ -179,6 +298,7 @@ function all_spaces(
         # SpectralElementFiniteDifferenceRectilinearSpace2D(FT; context),
         ColumnCenterFiniteDifferenceSpace(FT; zelem, context),
         ColumnFaceFiniteDifferenceSpace(FT; zelem, context),
+        PointColumnEnsembleSpace(FT; zelem, context),
         SphereSpectralElementSpace(FT; context),
         CenterExtrudedFiniteDifferenceSpace(FT; zelem, context, helem),
         FaceExtrudedFiniteDifferenceSpace(FT; zelem, context, helem),
@@ -194,12 +314,14 @@ end
 bycolumnable(space) = (
     space isa Spaces.ExtrudedFiniteDifferenceSpace ||
     space isa Spaces.SpectralElementSpace1D ||
-    space isa Spaces.SpectralElementSpace2D
+    space isa Spaces.SpectralElementSpace2D ||
+    space isa Spaces.MultiColumnFiniteDifferenceSpace
 )
 
 levelable(space) = (
     space isa Spaces.ExtrudedFiniteDifferenceSpace ||
-    space isa Spaces.FiniteDifferenceSpace
+    space isa Spaces.FiniteDifferenceSpace ||
+    space isa Spaces.MultiColumnFiniteDifferenceSpace
 )
 
 fc_index(
@@ -207,6 +329,7 @@ fc_index(
     ::Union{
         Spaces.FaceExtrudedFiniteDifferenceSpace,
         Spaces.FaceFiniteDifferenceSpace,
+        Spaces.FaceMultiColumnFiniteDifferenceSpace,
     },
 ) = Utilities.PlusHalf(i)
 
@@ -215,6 +338,7 @@ fc_index(
     ::Union{
         Spaces.CenterExtrudedFiniteDifferenceSpace,
         Spaces.CenterFiniteDifferenceSpace,
+        Spaces.CenterMultiColumnFiniteDifferenceSpace,
     },
 ) = i
 
@@ -253,5 +377,19 @@ function test_column_operators(column_space, expect_zero_div = false)
     end
 end
 
+"""
+    allocation_checks_meaningful()
+
+Whether `@allocated` in this process reflects the allocations of optimized
+code.
+
+`--check-bounds=yes` inhibits the optimizations that make ClimaCore's in-place
+broadcasts allocation-free, so under it a zero-allocation sentinel measures the
+flag rather than the code (a spectral-element gradient goes from 0 to ~14 kB).
+The GitHub Actions job runs the suite through `Pkg.test`, which passes
+`--check-bounds=yes`; Buildkite's curated jobs do not, so the sentinels still
+gate there.
+"""
+allocation_checks_meaningful() = Base.JLOptions().check_bounds == 0
 
 end

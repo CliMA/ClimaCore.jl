@@ -84,34 +84,58 @@ end
 
 @testset "fill! and copyto!" begin
     device = ClimaComms.device()
-    A = ClimaComms.array_type(device){Float64}
-    @testset "Nf = 1 (uniform)" begin
-        for data in testable_layouts(A, Float64)
-            test_single_F!(data)
+    for FT in (Float32, Float64)
+        A = ClimaComms.array_type(device){FT}
+        @testset "Nf = 1 (uniform) [$FT]" begin
+            for data in testable_layouts(A, FT)
+                test_single_F!(data)
+            end
+        end
+        T_nonuniform_1 = FT === Float32 ? Tuple{Int16, UInt8} : Tuple{Int32, UInt8}
+        T_nonuniform_3 =
+            FT === Float32 ? Tuple{Tuple{Int16, UInt8}, UInt64} :
+            Tuple{Tuple{Int32, UInt8}, UInt128}
+        @testset "Nf = 1 (nonuniform) [$FT]" begin
+            for data in testable_layouts(A, T_nonuniform_1)
+                test_single_F!(data)
+            end
+        end
+        @testset "Nf = 3 (uniform) [$FT]" begin
+            for data in testable_layouts(A, Tuple{FT, NTuple{2, FT}})
+                test_multiple_F!(data)
+            end
+        end
+        @testset "Nf = 3 (nonuniform) [$FT]" begin
+            for data in testable_layouts(A, T_nonuniform_3)
+                test_multiple_F!(data)
+            end
+        end
+        @testset "scalar broadcasts of impure functions [$FT]" begin
+            # Functions like rand must be evaluated at every point, so only flat
+            # identity broadcasts can be replaced with a single call to fill!.
+            for data in testable_layouts(A, FT)
+                length(data) > 1 || continue
+                data .= rand.()
+                @test length(unique(Array(parent(data)))) > 1
+            end
         end
     end
-    @testset "Nf = 1 (nonuniform)" begin
-        for data in testable_layouts(A, Tuple{Int32, UInt8})
-            test_single_F!(data)
-        end
-    end
-    @testset "Nf = 3 (uniform)" begin
-        for data in testable_layouts(A, Tuple{Float64, NTuple{2, Float64}})
-            test_multiple_F!(data)
-        end
-    end
-    @testset "Nf = 3 (nonuniform)" begin
-        for data in testable_layouts(A, Tuple{Tuple{Int32, UInt8}, UInt128})
-            test_multiple_F!(data)
-        end
-    end
-    @testset "scalar broadcasts of impure functions" begin
-        # Functions like rand must be evaluated at every point, so only flat
-        # identity broadcasts can be replaced with a single call to fill!.
-        for data in testable_layouts(A, Float64)
+    @testset "component views across multiple elements" begin
+        # Float64 only: the stride arithmetic under test does not depend on the
+        # element type, and the layouts below are built from `Tuple{Float64,
+        # Float64}`.
+        A = ClimaComms.array_type(device){Float64}
+        # Component views read their parents with a constant stride, which must
+        # step over every component stored in the parent. A wrong step blends
+        # entries of different components, but only at points beyond the first
+        # stride block, so single-element layouts cannot detect it. The values
+        # are written through the multi-component layout, whose reads and
+        # writes do not use the constant-stride view accessors.
+        for data in testable_layouts(A, Tuple{Float64, Float64})
             length(data) > 1 || continue
-            data .= rand.()
-            @test length(unique(Array(parent(data)))) > 1
+            fill!(data, (1.0, 2.0))
+            @test reduce(+, data.:1) == length(data)
+            @test reduce(+, data.:2) == 2 * length(data)
         end
     end
 end

@@ -1,12 +1,11 @@
-#=
-julia --project
-using Revise; include(joinpath("test", "MatrixFields", "matrix_fields_broadcasting", "test_scalar_14.jl"))
-=#
 import ClimaCore
 #! format: off
 include(joinpath(pkgdir(ClimaCore),"test","MatrixFields","matrix_fields_broadcasting","test_scalar_utils.jl"))
 #! format: on
-test_opt = get(ENV, "BUILDKITE", "") == "true"
+# Opt checks (JET + allocation gates) run on CI; set CLIMACORE_TEST_OPT=true
+# to also run them locally.
+test_opt =
+    get(ENV, "CLIMACORE_TEST_OPT", get(ENV, "BUILDKITE", "false")) == "true"
 @testset "linear combination times another linear combination" begin
     bc = @lazy @. (2 * ᶠᶜmat * ᶜᶜmat * ᶜᶠmat + ᶠᶠmat * ᶠᶠmat / 3 - (4I,)) *
              (ᶠᶜmat * ᶜᶜmat * ᶜᶠmat * 2 - (ᶠᶠmat / 3) * ᶠᶠmat + (4I,))

@@ -41,10 +41,10 @@ multiples of `LinearAlgebra.I`. This comes with the following functionality:
 module MatrixFields
 
 import LinearAlgebra: I, UniformScaling, Adjoint
-import LinearAlgebra: inv, norm, ldiv!, mul!
+import Base: inv
+import LinearAlgebra: norm, ldiv!, mul!
 import StaticArrays: SMatrix, SVector
 import BandedMatrices: BandedMatrix, band, _BandedMatrix
-import RecursiveArrayTools: recursive_bottom_eltype
 import KrylovKit
 import ClimaComms
 import NVTX
@@ -52,7 +52,7 @@ import Adapt
 using UnrolledUtilities
 
 import ..RecursiveApply: rzero
-import ..Utilities: PlusHalf, half, new
+import ..Utilities: PlusHalf, half, new, recursive_bottom_eltype
 import ..Utilities: AutoBroadcaster, is_auto_broadcastable, auto_broadcasted
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters
 import ..DataLayouts
@@ -60,7 +60,6 @@ import ..DataLayouts: DataLayout
 import ..Geometry
 import ..Topologies
 import ..Spaces
-import ..Spaces: local_geometry_type
 import ..Fields
 import ..Operators
 using ..Geometry:

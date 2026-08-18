@@ -21,7 +21,7 @@ const comms_ctx = ClimaComms.context()
     InputOutput.HDF5Reader(filename, comms_ctx) do reader
         restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
         @test restart_Y == Y # test if restart is exact
-        # test if space is the same by comparing local geometry data
+        # Test if space is the same by comparing local geometry data
         # note that the read spaces are not "===" to the written spaces because there is no grid to cache
         lg_point = Spaces.local_geometry_data(axes(Y.p))[]
         lg_restart = Spaces.local_geometry_data(axes(restart_Y.p))[]

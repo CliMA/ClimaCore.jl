@@ -10,7 +10,6 @@ import ClimaCore.Operators: StencilBroadcasted
 import ClimaCore.Operators: LeftBoundaryWindow, RightBoundaryWindow, Interior
 
 struct CUDAColumnStencilStyle <: AbstractStencilStyle end
-struct CUDAWithShmemColumnStencilStyle <: AbstractStencilStyle end
 
 AbstractStencilStyle(bc, ::ClimaComms.CUDADevice) = CUDAColumnStencilStyle
 
@@ -18,20 +17,13 @@ Base.Broadcast.BroadcastStyle(
     x::Operators.ColumnStencilStyle,
     y::CUDAColumnStencilStyle,
 ) = y
-
-include("operators_fd_shmem_is_supported.jl")
 include("operators_fd_eager.jl")
-struct ShmemParams{Nv} end
-interior_size(::ShmemParams{Nv}) where {Nv} = (Nv,)
-boundary_size(::ShmemParams{Nv}) where {Nv} = (1,)
 
 function Base.copyto!(
     out::Field,
     bc::Union{
         StencilBroadcasted{CUDAColumnStencilStyle},
-        StencilBroadcasted{CUDAWithShmemColumnStencilStyle},
         Broadcasted{CUDAColumnStencilStyle},
-        Broadcasted{CUDAWithShmemColumnStencilStyle},
     };
     mask = Spaces.get_mask(axes(out)),
 )
@@ -41,97 +33,61 @@ function Base.copyto!(
 
     fspace = Spaces.face_space(space)
     n_face_levels = Spaces.nlevels(fspace)
-    high_resolution = !(n_face_levels ≤ 256)
-    # https://github.com/JuliaGPU/CUDA.jl/issues/2672
-    # max_shmem = 166912 # CUDA.limit(CUDA.LIMIT_SHMEM_SIZE) #
-    max_shmem = CUDA.attribute(
-        device(),
-        CUDA.DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK,
-    )
-    total_shmem = fd_shmem_needed_per_column(bc)
-    enough_shmem = total_shmem ≤ max_shmem
 
-    # TODO: Use CUDA.limit(CUDA.LIMIT_SHMEM_SIZE) to determine how much shmem should be used
-    # TODO: add shmem support for masked operations
-    if Operators.any_fd_shmem_supported(bc) &&
-       !high_resolution &&
-       mask isa NoMask &&
-       enough_shmem &&
-       Operators.use_fd_shmem()
-        shmem_params = ShmemParams{n_face_levels}()
-        p = fd_shmem_stencil_partition(out_fv, n_face_levels)
+    (_, Ni, Nj, Nh) = size(out_fv)
+    # This uses block and grid indices instead of computing cartesian indices from a
+    # linear index. The launch configuration is optimized for common use case of 64 face
+    # levels and Ni = Nj = 4. Periodic toppologies and masks are not currently supported
+    # `eager_copyto_stencil_kernel!` requires a  block size of (n_face_levels, Ni, 1)
+    # this block config is better for VIJFH. It is only used when the total number of
+    # threads in a block is between 32 and 256 to avoid underutilization of the GPU and
+    # errors due to too many registers used when the block size is too large.
+    if !Topologies.isperiodic(space) && mask isa NoMask &&
+       32 <= n_face_levels * Ni <= 256
+        op_matrix_bc = replace_fd_ops(bc)
         args = (
             strip_space(out, space),
-            strip_space(bc, space),
+            strip_space(op_matrix_bc, space),
             axes(out),
-            bounds,
-            mask,
-            shmem_params,
         )
         auto_launch!(
-            copyto_stencil_kernel_shmem!,
+            eager_copyto_stencil_kernel!,
             args;
-            threads_s = p.threads,
-            blocks_s = p.blocks,
+            threads_s = (n_face_levels, Ni, 1),
+            blocks_s = (1, Nj, Nh),
+            always_inline = true,
+            shmem = n_face_levels * Ni * 9 * 4, # see `check_if_fits_in_shmem` for how this is calculated
         )
-    else
-        bc′ = disable_shmem_style(bc)
-        (_, Ni, Nj, Nh) = size(out_fv)
-        # This uses block and grid indices instead of computing cartesian indices from a
-        # linear index. The launch configuration is optimized for common use case of 64 face
-        # levels and Ni = Nj = 4. Periodic toppologies and masks are not currently supported
-        # `eager_copyto_stencil_kernel!` requires a  block size of (n_face_levels, Ni, 1)
-        # this block config is better for VIJFH. It is only used when the total number of
-        # threads in a block is between 32 and 256 to avoid underutilization of the GPU and
-        # errors due to too many registers used when the block size is too large.
-        if !Topologies.isperiodic(space) && mask isa NoMask &&
-           32 <= n_face_levels * Ni <= 256
-            op_matrix_bc = replace_fd_ops(bc′)
-            args = (
-                strip_space(out, space),
-                strip_space(op_matrix_bc, space),
-                axes(out),
-            )
-            auto_launch!(
-                eager_copyto_stencil_kernel!,
-                args;
-                threads_s = (n_face_levels, Ni, 1),
-                blocks_s = (1, Nj, Nh),
-                always_inline = true,
-                shmem = n_face_levels * Ni * 9 * 4, # see `check_if_fits_in_shmem` for how this is calculated
-            )
-            return out
-        end
-        @assert !any_fd_shmem_style(bc′)
-        cart_inds = if mask isa NoMask
-            cartesian_indices(out_fv)
-        else
-            cartesian_indices_mask(out_fv, mask)
-        end
-
-        args = cudaconvert((
-            strip_space(out, space),
-            strip_space(bc′, space),
-            axes(out),
-            bounds,
-            mask,
-            cart_inds,
-        ))
-
-        threads = threads_via_occupancy(copyto_stencil_kernel!, args)
-        n_max_threads = min(threads, length(out_fv))
-        p = if mask isa NoMask
-            linear_partition(prod(size(out_fv)), n_max_threads)
-        else
-            masked_partition(mask, n_max_threads, out_fv)
-        end
-        auto_launch!(
-            copyto_stencil_kernel!,
-            args;
-            threads_s = p.threads,
-            blocks_s = p.blocks,
-        )
+        return out
     end
+    cart_inds = if mask isa NoMask
+        cartesian_indices(out_fv)
+    else
+        cartesian_indices_mask(out_fv, mask)
+    end
+
+    args = cudaconvert((
+        strip_space(out, space),
+        strip_space(bc, space),
+        axes(out),
+        bounds,
+        mask,
+        cart_inds,
+    ))
+
+    threads = threads_via_occupancy(copyto_stencil_kernel!, args)
+    n_max_threads = min(threads, length(out_fv))
+    p = if mask isa NoMask
+        linear_partition(prod(size(out_fv)), n_max_threads)
+    else
+        masked_partition(mask, n_max_threads, out_fv)
+    end
+    auto_launch!(
+        copyto_stencil_kernel!,
+        args;
+        threads_s = p.threads,
+        blocks_s = p.blocks,
+    )
     call_post_op_callback() && post_op_callback(out, out, bc)
     return out
 end
@@ -162,44 +118,6 @@ function copyto_stencil_kernel!(
             idx = v - 1 + li
             val = Operators.getidx(space, bc, idx, hidx)
             setidx!(space, out, idx, hidx, val)
-        end
-    end
-    return nothing
-end
-
-function copyto_stencil_kernel_shmem!(
-    out,
-    bc′::Union{StencilBroadcasted, Broadcasted},
-    space,
-    bds,
-    mask,
-    shmem_params::ShmemParams,
-)
-    @inbounds begin
-        out_fv = Fields.field_values(out)
-        I = fd_shmem_stencil_universal_index(space, out_fv)
-        if fd_shmem_stencil_is_valid_index(I, out_fv) # check that hidx is in bounds
-            (li, lw, rw, ri) = bds
-            (v, i, j, h) = I.I
-            hidx = (i, j, h)
-            idx = v - 1 + li
-            bc = Operators.reconstruct_placeholder_broadcasted(space, bc′)
-            bc_shmem = fd_allocate_shmem(shmem_params, bc) # allocates shmem
-
-            fd_resolve_shmem!(bc_shmem, idx, hidx, bds) # recursively fills shmem
-            CUDA.sync_threads()
-
-            nv = Spaces.nlevels(space)
-            isactive = if space isa Operators.AllFaceFiniteDifferenceSpace # check that idx is in bounds
-                idx + half <= nv
-            else
-                idx <= nv
-            end
-            if isactive
-                # Call getidx overloaded in operators_fd_shmem_common.jl
-                val = Operators.getidx(space, bc_shmem, idx, hidx)
-                setidx!(space, out, idx, hidx, val)
-            end
         end
     end
     return nothing

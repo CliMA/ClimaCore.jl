@@ -1,6 +1,3 @@
-#=
-using Revise; include(joinpath("test", "MatrixFields", "gpu_compat_bidiag_matrix_row.jl"))
-=#
 import ClimaCore
 import ClimaComms
 ClimaComms.@import_required_backends
@@ -10,6 +7,7 @@ ClimaComms.@import_required_backends
 import .TestUtilities as TU;
 
 import ClimaCore: Spaces, Geometry, Operators, Fields, MatrixFields
+import ClimaCore.Utilities: ConvertTo
 import StaticArrays: SArray, SMatrix
 import ClimaCore.Geometry: AbstractTensor, Tensor, Components, Covariant, Contravariant
 using ClimaCore.MatrixFields:
@@ -56,6 +54,15 @@ c = (;
     bdmr = Fields.Field(BidiagonalMatrixRow{GFT}, cspace),
 )
 
+# `Fields.Field(T, space)` leaves the data uninitialized, so fill it in: the
+# comparison below needs deterministic values, and `ᶜu₃ʲ` needs both signs in
+# order to exercise both branches of the upwinding `ifelse`.
+foreach(field -> fill!(parent(field), 0), values(f))
+foreach(field -> fill!(parent(field), 0), values(c))
+# (`lat` spans [-90, 90], so it already takes both signs.)
+ᶜlat = Fields.coordinate_field(cspace).lat
+@. c.ᶜu₃ʲ = C3(ᶜlat)
+
 const ᶜleft_bias = Operators.LeftBiasedF2C()
 const ᶜright_bias = Operators.RightBiasedF2C()
 const ᶜleft_bias_matrix = MatrixFields.operator_matrix(ᶜleft_bias)
@@ -66,12 +73,10 @@ get_I_u₃(::Type{_FT}) where {_FT} = DiagonalMatrixRow(one_C3xACT3(_FT))
 
 function foo(c, f)
     (; ᶠtridiagonal_matrix_c3, ᶠu₃, ∂ᶠu₃ʲ_err_∂ᶠu₃ʲ, adj_u₃) = f
-    (; ᶜu₃ʲ, bdmr_l, bdmr_r, bdmr) = c
     space = axes(ᶠtridiagonal_matrix_c3)
     FT = Spaces.undertype(space)
     I_u₃ = get_I_u₃(FT)
     dtγ = FT(1)
-    to_bidiagonal_row = Base.Fix1(convert, BidiagonalMatrixRow{FT})
 
     @. ∂ᶠu₃ʲ_err_∂ᶠu₃ʲ =
         dtγ * ᶠtridiagonal_matrix_c3 * DiagonalMatrixRow(adjoint(CT3(ᶠu₃))) -
@@ -79,22 +84,53 @@ function foo(c, f)
 
     @. ∂ᶠu₃ʲ_err_∂ᶠu₃ʲ = dtγ * ᶠtridiagonal_matrix_c3 * adj_u₃ - (I_u₃,)
 
-    # Fails on gpu
+    return nothing
+end
+
+# The upwinded stencil, written as a single fused broadcast expression. The
+# conversion goes through `ConvertTo{T}`, an empty struct, rather than
+# `Base.Fix1(convert, T)`: the latter stores a `Type` field and so is
+# not a bitstype, which a fused broadcast cannot compile for the GPU.
+function fused_stencil!(c, f)
+    (; ᶠtridiagonal_matrix_c3) = f
+    (; ᶜu₃ʲ) = c
+    FT = Spaces.undertype(axes(ᶠtridiagonal_matrix_c3))
+    to_bidiagonal_row = ConvertTo{BidiagonalMatrixRow{FT}}()
+
     @. ᶠtridiagonal_matrix_c3 =
         -(ᶠgradᵥ_matrix()) * ifelse(
             ᶜu₃ʲ.components.data.:1 > 0,
             to_bidiagonal_row(ᶜleft_bias_matrix()),
             to_bidiagonal_row(ᶜright_bias_matrix()),
         )
+    return nothing
+end
 
-    # However, this can be decomposed into simpler broadcast
-    # expressions that will run on gpus:
+# The same stencil, decomposed into simpler broadcast expressions, kept as
+# coverage of the same computation.
+function decomposed_stencil!(c, f)
+    (; ᶠtridiagonal_matrix_c3) = f
+    (; ᶜu₃ʲ, bdmr_l, bdmr_r, bdmr) = c
+    FT = Spaces.undertype(axes(ᶠtridiagonal_matrix_c3))
+    to_bidiagonal_row = ConvertTo{BidiagonalMatrixRow{FT}}()
+
     @. bdmr_l = to_bidiagonal_row(ᶜleft_bias_matrix())
     @. bdmr_r = to_bidiagonal_row(ᶜright_bias_matrix())
     @. bdmr = ifelse(ᶜu₃ʲ.components.data.:1 > 0, bdmr_l, bdmr_r)
     @. ᶠtridiagonal_matrix_c3 = -(ᶠgradᵥ_matrix()) * bdmr
-
     return nothing
 end
 
-foo(c, f)
+using Test
+@testset "gpu_compat_bidiag_matrix_row" begin
+    foo(c, f)
+    @test all(isfinite, parent(f.∂ᶠu₃ʲ_err_∂ᶠu₃ʲ))
+
+    decomposed_stencil!(c, f)
+    @test all(isfinite, parent(f.ᶠtridiagonal_matrix_c3))
+
+    # Both forms now compile on every device, so they must agree everywhere.
+    decomposed = Array(parent(f.ᶠtridiagonal_matrix_c3))
+    fused_stencil!(c, f)
+    @test Array(parent(f.ᶠtridiagonal_matrix_c3)) == decomposed
+end

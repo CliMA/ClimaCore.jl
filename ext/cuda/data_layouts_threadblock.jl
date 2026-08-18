@@ -1,9 +1,3 @@
-maximum_allowable_threads() = (
-    CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X),
-    CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Y),
-    CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Z),
-)
-
 # Wrappers for sizes and indices that are passed to kernels as type parameters.
 @inline unval(x) = x
 @inline unval(::Val{x}) where {x} = x
@@ -88,7 +82,7 @@ end
 ##### spectral kernel partition
 @inline function spectral_partition(data, n_max_threads::Integer = 256)
     (Nv, Ni, Nj, Nh) = size(data)
-    Nvthreads = min(fld(n_max_threads, Ni * Nj), maximum_allowable_threads()[3])
+    Nvthreads = min(fld(n_max_threads, Ni * Nj), device_attributes().max_block_dim_z)
     Nvblocks = cld(Nv, Nvthreads)
     @assert prod((Ni, Nj, Nvthreads)) ≤ n_max_threads "threads,n_max_threads=($(prod((Ni, Nj, Nvthreads))),$n_max_threads)"
     @assert Ni * Nj ≤ n_max_threads
@@ -122,7 +116,8 @@ end
 )
     (Nv, Ni, Nj, Nh) = size(data)
     Nvthreads = n_face_levels
-    @assert Nvthreads <= maximum_allowable_threads()[1] "Number of vertical face levels cannot exceed $(maximum_allowable_threads()[1])"
+    Nvlimit = device_attributes().max_block_dim_x
+    @assert Nvthreads <= Nvlimit "Number of vertical face levels cannot exceed $Nvlimit"
     Nvblocks = cld(Nv, Nvthreads) # +1 may be needed to guarantee that shared memory is populated at the last cell face
     return (;
         threads = (Nvthreads,),

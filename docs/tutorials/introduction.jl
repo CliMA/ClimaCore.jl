@@ -358,9 +358,9 @@ plot(∇∇sinz, ylim = (0, 10))
 
 # # 3. Solving PDEs
 #
-# ClimaCore can be used for spatial discretizations of PDEs. For temporal discretization, we can use the OrdinaryDiffEq package, which we aim to be compatibile with.
+# ClimaCore can be used for spatial discretizations of PDEs. For temporal discretization, we use ClimaTimeSteppers.
 
-import OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
 #----------------------------------------------------------------------------
 
 # ### 3.1 Heat equation using finite differences
@@ -392,9 +392,18 @@ function heat_fd_tendency!(dydt, y, α, t)
     @. dydt = α * divf2c(gradc2f(y))
 end
 
-heat_fd_prob = ODEProblem(heat_fd_tendency!, y0, (0.0, 5.0), 0.1)
-heat_fd_sol =
-    solve(heat_fd_prob, SSPRK33(), dt = 0.1, saveat = collect(0.0:0.25:5.0))
+heat_fd_prob = CTS.ODEProblem(
+    CTS.ClimaODEFunction(; T_exp! = heat_fd_tendency!),
+    y0,
+    (0.0, 5.0),
+    0.1,
+)
+heat_fd_sol = CTS.solve(
+    heat_fd_prob,
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
+    dt = 0.1,
+    saveat = collect(0.0:0.25:5.0),
+)
 #----------------------------------------------------------------------------
 
 anim = Plots.@animate for u in heat_fd_sol.u
@@ -420,9 +429,18 @@ end
 
 y0 = exp.(.-(coord.y .^ 2 .+ coord.x .^ 2) ./ 2)
 
-heat_cg_prob = ODEProblem(heat_cg_tendency!, y0, (0.0, 5.0), 0.1)
-heat_cg_sol =
-    solve(heat_cg_prob, SSPRK33(), dt = 0.1, saveat = collect(0.0:0.5:5.0))
+heat_cg_prob = CTS.ODEProblem(
+    CTS.ClimaODEFunction(; T_exp! = heat_cg_tendency!),
+    y0,
+    (0.0, 5.0),
+    0.1,
+)
+heat_cg_sol = CTS.solve(
+    heat_cg_prob,
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
+    dt = 0.1,
+    saveat = collect(0.0:0.5:5.0),
+)
 #----------------------------------------------------------------------------
 
 anim = Plots.@animate for u in heat_cg_sol.u
@@ -539,10 +557,15 @@ end
 
 #----------------------------------------------------------------------------
 
-shallow_water_prob = ODEProblem(shallow_water_tendency!, y0, (0.0, 20.0))
-@time shallow_water_sol = solve(
+shallow_water_prob = CTS.ODEProblem(
+    CTS.ClimaODEFunction(; T_exp! = shallow_water_tendency!),
+    y0,
+    (0.0, 20.0),
+    nothing,
+)
+@time shallow_water_sol = CTS.solve(
     shallow_water_prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = 0.05,
     saveat = collect(0.0:1.0:20.0),
 )

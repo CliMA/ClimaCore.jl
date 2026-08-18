@@ -110,6 +110,7 @@ function compute_neighbor_bounds_local_kernel!(
         q_max = slab_q_bounds[2]
         for lne in
             local_neighbor_elem_offset[h]:(local_neighbor_elem_offset[h + 1] - 1)
+
             h_nbr = local_neighbor_elem[lne]
             slab_q_bounds = slab(q_bounds, v, h_nbr)
             q_min = min(q_min, slab_q_bounds[1])

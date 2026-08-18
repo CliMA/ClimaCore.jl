@@ -35,25 +35,27 @@ import ClimaCore.Geometry: WVector
 import ClimaCore.Domains.Geometry: ⊗
 import ClimaCore.Utilities: half
 
-convergence_rate(err, Δh) =
-    [log(err[i] / err[i - 1]) / log(Δh[i] / Δh[i - 1]) for i in 2:length(Δh)]
+@isdefined(TU) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+);
+import .TestUtilities: convergence_rate
 
-function hvspace_2D(;
-    xlim = (-π, π),
-    zlim = (0, 4π),
+function hvspace_2D(
+    ::Type{FT} = Float64;
+    xlim = (-FT(π), FT(π)),
+    zlim = (FT(0), FT(4π)),
     helem = 10,
     velem = 64,
     npoly = 7,
     stretch = Meshes.Uniform(),
-)
-    FT = Float64
+    device = ClimaComms.device(),
+) where {FT}
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);
         boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, stretch, nelems = velem)
-    device = ClimaComms.device()
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(device, vertmesh)
 
     horzdomain = Domains.IntervalDomain(

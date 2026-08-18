@@ -53,7 +53,7 @@ ClimaCore.jl provides the spatial discretization building blocks for the [Climat
 - **`Field` abstraction**: scalar-, vector-, or struct-valued fields carrying values, geometry, and mesh information, with flexible memory layouts (AoS, SoA, AoSoA) and useful overloads (`sum`, `norm`, ...).
 - **Composable operators via broadcasting**: differential operators (`grad`, `div`, `interpolate`, ...) act like functions when broadcast over a `Field`, fusing operators and function calls into a single pass.
 - **GPU acceleration**: broadcast expressions compile to custom CUDA kernels, with specialization on polynomial degree for kernel performance.
-- **Time-stepper compatible**: works with [SciML](https://sciml.ai/)/OrdinaryDiffEq time steppers.
+- **Time-stepper compatible**: `Field`s and `FieldVector`s act as the state vector for [ClimaTimeSteppers](https://github.com/CliMA/ClimaTimeSteppers.jl), which the tests and examples here time-step with.
 
 ## Quick Example
 

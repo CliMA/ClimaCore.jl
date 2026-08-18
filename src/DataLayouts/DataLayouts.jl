@@ -1,7 +1,7 @@
 module DataLayouts
 
-import Base: @propagate_inbounds
-import LLVM: unsafe_load
+import Base: @propagate_inbounds, unsafe_load
+import LLVM # for the `unsafe_load` methods on `Core.LLVMPtr`
 import StaticArrays
 import BlockArrays
 import Adapt
@@ -242,7 +242,15 @@ Base.reinterpret(::Type{T}, data::DataLayout) where {T} = rebuild(data, parent(d
 
 ClimaComms.gather(::ClimaComms.SingletonCommsContext, data::DataLayout) = data
 ClimaComms.gather(ctx::ClimaComms.AbstractCommsContext, data::DataLayout) =
-    rebuild(data, ClimaComms.gather(ctx, parent(data)))
+    gather_data(ctx, data)
+# Disambiguate from ClimaCommsMPIExt's gather(::MPICommsContext, array)
+ClimaComms.gather(ctx::ClimaComms.MPICommsContext, data::DataLayout) =
+    gather_data(ctx, data)
+function gather_data(ctx, data)
+    gathered_array = ClimaComms.gather(ctx, parent(data))
+    # The array gather only returns data on the root process
+    return ClimaComms.iamroot(ctx) ? rebuild(data, gathered_array) : nothing
+end
 
 @inline add_f_dim(dims, dim, ::Val{F}) where {F} =
     isnothing(F) ? dims : unrolled_insert(dims, dim, Val(F))
@@ -322,8 +330,8 @@ end
 
 [`DataLayout`](@ref) representing a single value of type `T`, which can be
 stored across multiple array indices. This is used in place of a `Ref` to wrap
-data that is stored in any array. May be constructed either from the parent
-array type or the parent array itself.
+data that is stored in any one-dimensional array. May be constructed either from
+the parent array type or the parent array itself.
 """
 struct DataF{T, S, A} <: DataLayout{T, 0, 1, S, A}
     array::A
@@ -334,10 +342,8 @@ DataF{T, S}(::Type{A}) where {T, S, A} =
     DataF{T, S}(similar(A, num_basetypes(eltype(A), T)))
 function DataF{T, S}(array) where {T, S}
     check_basetype(eltype(array), T)
-    length(array) == num_basetypes(eltype(array), T) ||
-        throw(ArgumentError("Array length is not consistent with element type"))
-    linearly_indexable_array = IndexStyle(array) == IndexLinear() ? array : vec(array)
-    return DataF{T, S, typeof(linearly_indexable_array)}(linearly_indexable_array)
+    check_parent(array, num_basetypes(eltype(array), T))
+    return DataF{T, S, typeof(array)}(array)
 end
 
 @inline shape_params(::Type{<:DataF}) = (;)
@@ -411,17 +417,29 @@ end
     (Nv, Ni, Nj, isnothing(Nh) ? size(parent(data), isnothing(F) || F == 5 ? 4 : 5) : Nh)
 @inline nelems(data::VIJHWithF) = size(data, 4)
 
-@propagate_inbounds function level_view(data::VIJHWithF, v)
+@propagate_inbounds function level_view(
+    data::VIJHWithF{T, Nv, Ni, Nj, Nh, F, S},
+    v,
+) where {T, Nv, Ni, Nj, Nh, F, S}
     array = stable_view(parent(data), add_f_dim((v:v, :, :, :), :, Val(f_dim(data)))...)
-    return rebuild(data, array; Nv = 1)
+    return VIJHWithF{T, 1, Ni, Nj, Nh, F, S}(array)
 end
-@propagate_inbounds function slab_view(data::VIJHWithF, v, h)
+@propagate_inbounds function slab_view(
+    data::VIJHWithF{T, Nv, Ni, Nj, Nh, F, S},
+    v,
+    h,
+) where {T, Nv, Ni, Nj, Nh, F, S}
     array = stable_view(parent(data), add_f_dim((v:v, :, :, h:h), :, Val(f_dim(data)))...)
-    return rebuild(data, array; Nv = 1, Nh = 1)
+    return VIJHWithF{T, 1, Ni, Nj, 1, F, S}(array)
 end
-@propagate_inbounds function column_view(data::VIJHWithF, i, j, h)
+@propagate_inbounds function column_view(
+    data::VIJHWithF{T, Nv, Ni, Nj, Nh, F, S},
+    i,
+    j,
+    h,
+) where {T, Nv, Ni, Nj, Nh, F, S}
     array = stable_view(parent(data), add_f_dim((:, i:i, j:j, h:h), :, Val(f_dim(data)))...)
-    return rebuild(data, array; Ni = 1, Nj = 1, Nh = 1)
+    return VIJHWithF{T, Nv, 1, 1, 1, F, S}(array)
 end
 
 """
@@ -462,19 +480,29 @@ end
     (Nv, isnothing(Nh) ? size(parent(data), 2) : Ni)
 @inline nelems(data::VIH1) = size(data, 2) ÷ shape_params(data).Ni
 
-@propagate_inbounds function level_view(data::VIH1, v)
+@propagate_inbounds function level_view(
+    data::VIH1{T, Nv, Ni, Nh, S},
+    v,
+) where {T, Nv, Ni, Nh, S}
     array = stable_view(parent(data), v:v, :)
-    return rebuild(data, array; Nv = 1)
+    return VIH1{T, 1, Ni, Nh, S}(array)
 end
-@propagate_inbounds function slab_view(data::VIH1, v, h)
-    (; Ni) = shape_params(data)
+@propagate_inbounds function slab_view(
+    data::VIH1{T, Nv, Ni, Nh, S},
+    v,
+    h,
+) where {T, Nv, Ni, Nh, S}
     array = stable_view(parent(data), v:v, Ni * mod(h - 1, size(data, 2) ÷ Ni) .+ (1:Ni))
-    return rebuild(data, array; Nv = 1, Nh = 1)
+    return VIH1{T, 1, Ni, 1, S}(array)
 end
-@propagate_inbounds function column_view(data::VIH1, i, _, h)
-    (; Ni) = shape_params(data)
+@propagate_inbounds function column_view(
+    data::VIH1{T, Nv, Ni, Nh, S},
+    i,
+    _,
+    h,
+) where {T, Nv, Ni, Nh, S}
     array = stable_view(parent(data), :, Ni * mod(h - 1, size(data, 2) ÷ Ni) .+ (i:i))
-    return rebuild(data, array; Ni = 1, Nh = 1)
+    return VIH1{T, Nv, 1, 1, S}(array)
 end
 
 """
@@ -517,18 +545,53 @@ end
 @inline nelems(data::IH1JH2) =
     length(data) ÷ (shape_params(data).Ni * shape_params(data).Nj)
 
-@propagate_inbounds function slab_view(data::IH1JH2, _, h)
-    (; Ni, Nj) = shape_params(data)
+@propagate_inbounds function slab_view(
+    data::IH1JH2{T, Ni, Nj, Nh, S},
+    _,
+    h,
+) where {T, Ni, Nj, Nh, S}
     (h2, h1) = fldmod(h - 1, size(data, 1) ÷ Ni) .+ 1
     array = stable_view(parent(data), Ni * (h1 - 1) .+ (1:Ni), Nj * (h2 - 1) .+ (1:Nj))
-    return rebuild(data, array; Nh = 1)
+    return IH1JH2{T, Ni, Nj, 1, S}(array)
 end
-@propagate_inbounds function column_view(data::IH1JH2, i, j, h)
-    (; Ni, Nj) = shape_params(data)
+@propagate_inbounds function column_view(
+    data::IH1JH2{T, Ni, Nj, Nh, S},
+    i,
+    j,
+    h,
+) where {T, Ni, Nj, Nh, S}
     (h2, h1) = fldmod(h - 1, size(data, 1) ÷ Ni) .+ 1
     array = stable_view(parent(data), Ni * (h1 - 1) .+ (i:i), Nj * (h2 - 1) .+ (j:j))
-    return rebuild(data, array; Ni = 1, Nj = 1, Nh = 1)
+    return IH1JH2{T, 1, 1, 1, S}(array)
 end
+@inline nlevels(::DataF) = 1
+@inline nlevels(
+    ::VIJHWithF{T, Nv, Ni, Nj, Nh, F, S, A},
+) where {T, Nv, Ni, Nj, Nh, F, S, A} = Nv
+@inline nlevels(::VIH1{T, Nv, Ni, Nh, S, A}) where {T, Nv, Ni, Nh, S, A} = Nv
+@inline nlevels(::IH1JH2) = 1
+
+@inline nlevels(::Type{<:DataF}) = 1
+@inline nlevels(
+    ::Type{<:VIJHWithF{T, Nv, Ni, Nj, Nh, F, S, A}},
+) where {T, Nv, Ni, Nj, Nh, F, S, A} = Nv
+@inline nlevels(::Type{<:VIH1{T, Nv, Ni, Nh, S, A}}) where {T, Nv, Ni, Nh, S, A} = Nv
+@inline nlevels(::Type{<:IH1JH2}) = 1
+
+@inline nquadpoints(::DataF) = 1
+@inline nquadpoints(
+    ::VIJHWithF{T, Nv, Ni, Nj, Nh, F, S, A},
+) where {T, Nv, Ni, Nj, Nh, F, S, A} = Ni * Nj
+@inline nquadpoints(::VIH1{T, Nv, Ni, Nh, S, A}) where {T, Nv, Ni, Nh, S, A} = Ni
+@inline nquadpoints(::IH1JH2{T, Ni, Nj, Nh, S, A}) where {T, Ni, Nj, Nh, S, A} = Ni * Nj
+
+@inline nquadpoints(::Type{<:DataF}) = 1
+@inline nquadpoints(
+    ::Type{<:VIJHWithF{T, Nv, Ni, Nj, Nh, F, S, A}},
+) where {T, Nv, Ni, Nj, Nh, F, S, A} = Ni * Nj
+@inline nquadpoints(::Type{<:VIH1{T, Nv, Ni, Nh, S, A}}) where {T, Nv, Ni, Nh, S, A} = Ni
+@inline nquadpoints(::Type{<:IH1JH2{T, Ni, Nj, Nh, S, A}}) where {T, Ni, Nj, Nh, S, A} =
+    Ni * Nj
 
 include("broadcast.jl")
 include("indexing.jl")

@@ -1,14 +1,13 @@
-#=
-julia --project
-using Revise; include(joinpath("test", "MatrixFields", "matrix_fields_broadcasting", "test_non_scalar_1.jl"))
-=#
 import ClimaCore
 #! format: off
 if !(@isdefined(unit_test_field_broadcast))
     include(joinpath(pkgdir(ClimaCore),"test","MatrixFields","matrix_fields_broadcasting","test_non_scalar_utils.jl"))
 end
 #! format: on
-test_opt = get(ENV, "BUILDKITE", "") == "true"
+# Opt checks (JET + allocation gates) run on CI; set CLIMACORE_TEST_OPT=true
+# to also run them locally.
+test_opt =
+    get(ENV, "CLIMACORE_TEST_OPT", get(ENV, "BUILDKITE", "false")) == "true"
 @testset "matrix of covectors times matrix of vectors times matrix \
                  of numbers times matrix of covectors times matrix of \
                  vectors" begin

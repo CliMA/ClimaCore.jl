@@ -1,9 +1,3 @@
-#=
-julia --check-bounds=yes --project
-julia -g2 --check-bounds=yes --project
-julia --project
-using Revise; include(joinpath("test", "Fields", "unit_field_multi_broadcast_fusion.jl"))
-=#
 include("utils_field_multi_broadcast_fusion.jl")
 
 @testset "FusedMultiBroadcast - restrict to only similar fields" begin

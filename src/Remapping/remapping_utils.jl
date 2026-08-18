@@ -255,7 +255,7 @@ interpolation), otherwise return linearly spaced values.
 """
 function default_target_zcoords(space; zresolution = nothing)
     return Geometry.ZPoint.(
-        default_target_zcoords_as_vectors(space; zresolution)
+        default_target_zcoords_as_vectors(space; zresolution),
     )
 end
 

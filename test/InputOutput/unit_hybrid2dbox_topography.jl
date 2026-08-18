@@ -51,7 +51,7 @@ function hvspace_2D(
             sinpi.(
                 2 .* (Fields.coordinate_field(horzspace).x .- xlim[1]) ./
                 (xlim[2] - xlim[1]),
-            ) .+ 1
+            ) .+ 1,
         )
 
     hv_center_space = Spaces.ExtrudedFiniteDifferenceSpace(
@@ -79,7 +79,7 @@ function init_dry_rising_bubble_2d(x, z, params)
     p_0 = MSLP
     g = grav
 
-    # auxiliary quantities
+    # Auxiliary quantities
     r = sqrt((x - x_c)^2 + (z - z_c)^2)
     θ_p = r < r_c ? 0.5 * θ_c * (1.0 + cospi(r / r_c)) : 0.0 # potential temperature perturbation
 
@@ -103,12 +103,12 @@ end
         T_0 = 273.16, # triple point temperature
     )
 
-    # set up 2D domain - doubly periodic box
+    # Set up 2D domain - doubly periodic box
     hv_center_space, hv_face_space, context = hvspace_2D((-500, 500), (0, 1000))
 
     Φ(z) = grav * z
 
-    # initial conditions
+    # Initial conditions
     coords = Fields.coordinate_field(hv_center_space)
     face_coords = Fields.coordinate_field(hv_face_space)
 
@@ -120,7 +120,7 @@ end
     w = map(coord -> Geometry.Covariant3Vector(coord.z * 0.25), face_coords)
     Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 
-    # write field vector to hdf5 file
+    # Write field vector to hdf5 file
     filename = tempname()
     InputOutput.HDF5Writer(filename, context) do writer
         InputOutput.write!(writer, "Y" => Y) # write field vector from hdf5 file

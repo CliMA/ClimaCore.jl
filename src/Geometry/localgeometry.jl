@@ -1,5 +1,3 @@
-import LinearAlgebra: issymmetric
-
 isapproxsymmetric(A::AbstractMatrix{T}; rtol = 10 * eps(T)) where {T <: AbstractFloat} =
     Base.isapprox(A, A'; rtol)
 

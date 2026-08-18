@@ -1,3 +1,10 @@
+# Tracer advection on the cubed sphere, with the bounds-preserving quasimonotone
+# limiter. The wind is the standard deformational flow — a stretching cell
+# modulated by `cos(πt/T)`, superposed on a constant zonal drift — so it deforms
+# the tracers, then reverses and returns them to their initial state at `t = T`.
+# The run reports L₁, L₂, and L∞ errors over a sequence of resolutions. Choose
+# the initial condition with a command-line argument: `cosine_bells` (default),
+# `gaussian_bells`, or `cylinders`.
 using ClimaComms
 using LinearAlgebra
 
@@ -13,7 +20,7 @@ import ClimaCore:
     Quadratures
 
 using Test
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
 
 import Logging
 import TerminalLoggers
@@ -37,9 +44,6 @@ Estimate convergence rate given vectors `err` and `Δh`
 convergence_rate(err, Δh) =
     [log(err[i] / err[i - 1]) / log(Δh[i] / Δh[i - 1]) for i in 2:length(Δh)]
 
-# Advection problem on a sphere with bounds-preserving quasimonotone limiter.
-# The initial condition can be set via a command line argument.
-# Possible test cases are: cosine_bells (default), gaussian_bells, and cylinders
 
 const R = 6.37122e6  # sphere radius
 const r0 = R / 2     # bells radius
@@ -47,8 +51,7 @@ const ρ₀ = 1.0       # air density
 const D₄ = 6.6e14    # hyperdiffusion coefficient
 const u0 = 2 * pi * R / (86400 * 12)
 const T = 86400 * 12 # simulation period in seconds (12 days)
-const n_steps = 1200
-const dt = T / n_steps
+const base_n_steps = 1200
 const centers = [
     Geometry.LatLongPoint(0.0, rad2deg(5 * pi / 6) - 180.0),
     Geometry.LatLongPoint(0.0, rad2deg(7 * pi / 6) - 180.0),
@@ -75,14 +78,7 @@ end
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
-end
+include(joinpath(@__DIR__, "..", "example_utils.jl")) # linkfig
 
 function conservation_error(sol)
     initial_total_mass = sum(sol.u[1].ρ)
@@ -97,9 +93,7 @@ end
 
 # Set up spatial discretization
 FT = Float64
-@show FT
 ne_seq = (5, 10, 20)
-@show ne_seq
 Δh = zeros(FT, length(ne_seq))
 L1err, L2err, Linferr, relative_errors = zeros(FT, length(ne_seq)),
 zeros(FT, length(ne_seq)),
@@ -109,6 +103,12 @@ Nq = 4
 
 # h-refinement study
 for (k, ne) in enumerate(ne_seq)
+    # The explicit D₄∇⁴ hyperdiffusion bounds the stable timestep, and the
+    # bound tightens rapidly under refinement: at ne = 20 the 1200-step run is
+    # unstable (L₁ error 0.28, contained only by the limiter), while 4800 steps
+    # give the converged 0.005.
+    n_steps = base_n_steps * max(1, ne ÷ 10)^2
+    dt = T / n_steps
     # Set up space
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
@@ -119,8 +119,6 @@ for (k, ne) in enumerate(ne_seq)
 
     # Initialize variables needed for limiters
     n_elems = Topologies.nlocalelems(Spaces.topology(space))
-    min_q = zeros(n_elems)
-    max_q = zeros(n_elems)
 
     coords = Fields.coordinate_field(space)
     Δh[k] = 2 * R / ne
@@ -139,18 +137,18 @@ for (k, ne) in enumerate(ne_seq)
 
         # Initialize specific tracer concentration
         if test_name == cylinder_test_name
-            if rd[1] <= r0 && abs(λ - centers[1].long) * R >= rad2deg(r0 / 6)
+            if rd[1] <= r0 && deg2rad(abs(λ - centers[1].long)) * R >= r0 / 6
                 q = 1.0
             elseif rd[2] <= r0 &&
-                   abs(λ - centers[2].long) * R >= rad2deg(r0 / 6)
+                   deg2rad(abs(λ - centers[2].long)) * R >= r0 / 6
                 q = 1.0
             elseif rd[1] <= r0 &&
-                   abs(λ - centers[1].long) * R < rad2deg(r0 / 6) &&
-                   (ϕ - centers[1].lat) * R < rad2deg(-5 * r0 / 12)
+                   deg2rad(abs(λ - centers[1].long)) * R < r0 / 6 &&
+                   deg2rad(ϕ - centers[1].lat) * R < -5 * r0 / 12
                 q = 1.0
             elseif rd[2] <= r0 &&
-                   abs(λ - centers[2].long) * R < rad2deg(r0 / 6) &&
-                   (ϕ - centers[2].lat) * R > rad2deg(5 * r0 / 12)
+                   deg2rad(abs(λ - centers[2].long)) * R < r0 / 6 &&
+                   deg2rad(ϕ - centers[2].lat) * R > 5 * r0 / 12
                 q = 1.0
             else
                 q = 0.1
@@ -193,9 +191,8 @@ for (k, ne) in enumerate(ne_seq)
             Geometry.UVVector(uu, uv)
         end
 
-        Limiters.compute_bounds!(parameters.limiter, y.ρq, y.ρ)
-
-        # Compute hyperviscosity for the tracer equation by splitting it in two diffusion calls
+        # Compute hyperviscosity for the tracer equation by splitting it in two
+        # diffusion calls
         @. ystar.ρq = wdiv(grad(y.ρq / y.ρ))
         Spaces.weighted_dss!(ystar)
         @. ystar.ρq = -D₄ * wdiv(y.ρ * grad(ystar.ρq))
@@ -205,15 +202,15 @@ for (k, ne) in enumerate(ne_seq)
         @. ystar.ρq += -wdiv(y.ρq * u)      # adevtion of tracers equation
     end
 
-    function stage_callback!(ydoublestar, integrator, parameters, t)
+    function lim!(y, parameters, t, y_ref)
         if lim_flag
-            Limiters.apply_limiter!(
-                ydoublestar.ρq,
-                ydoublestar.ρ,
-                parameters.limiter,
-            )
+            Limiters.compute_bounds!(parameters.limiter, y_ref.ρq, y_ref.ρ)
+            Limiters.apply_limiter!(y.ρq, y.ρ, parameters.limiter)
         end
-        Spaces.weighted_dss!(ydoublestar)
+    end
+
+    function dss!(y, parameters, t)
+        Spaces.weighted_dss!(y)
     end
 
     # Set up RHS function
@@ -224,27 +221,29 @@ for (k, ne) in enumerate(ne_seq)
 
     # Solve the ODE
     end_time = T
-    prob = ODEProblem(f!, y0, (0.0, end_time), parameters)
-    sol = solve(
+    # Integrate a copy: `y0` is the reference for the error norms below, and
+    # ClimaTimeSteppers aliases the state it is given.
+    prob = CTS.ODEProblem(
+        CTS.ClimaODEFunction(; T_lim! = f!, lim!, dss!),
+        copy(y0),
+        (0.0, end_time),
+        parameters,
+    )
+    sol = CTS.solve(
         prob,
-        SSPRK33(stage_callback!),
+        CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
         dt = dt,
         saveat = [0.0:(10 * dt):end_time..., end_time],
-        progress = true,
-        adaptive = false,
-        progress_message = (dt, u, p, t) -> t,
     )
-    L1err[k] = norm(
-        (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
-        1,
-    )
-    L2err[k] = norm(
-        (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
-    )
-    Linferr[k] = norm(
-        (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
-        Inf,
-    )
+    # Error norms are normalized by the initial tracer's norm, not pointwise
+    # by the initial field: the Gaussian bells decay to ~0 away from the
+    # centers, and dividing by that produces unbounded "errors" where nothing
+    # is wrong.
+    q_final = sol.u[end].ρq ./ sol.u[end].ρ
+    q_init = y0.ρq ./ y0.ρ
+    L1err[k] = norm(q_final .- q_init, 1) / norm(q_init, 1)
+    L2err[k] = norm(q_final .- q_init) / norm(q_init)
+    Linferr[k] = norm(q_final .- q_init, Inf) / norm(q_init, Inf)
 
     @info "Test case: $(test_name)"
     @info "With limiter: $(lim_flag)"
@@ -254,13 +253,13 @@ for (k, ne) in enumerate(ne_seq)
     @info "Time step dt = $(dt) (s)"
     @info "Tracer concentration norm at t = 0 (s): ", norm(y0.ρq ./ y0.ρ)
     @info "Tracer concentration norm at $(n_steps) time steps, t = $(end_time) (s): ",
-    norm(sol.u[end].ρq ./ sol.u[end].ρ)
+    norm(q_final)
     @info "L₁ error at $(n_steps) time steps, t = $(end_time) (s): ", L1err[k]
     @info "L₂ error at $(n_steps) time steps, t = $(end_time) (s): ", L2err[k]
     @info "L∞ error at $(n_steps) time steps, t = $(end_time) (s): ", Linferr[k]
 
     Plots.png(
-        Plots.plot(sol.u[end].ρq ./ sol.u[end].ρ),
+        Plots.plot(q_final),
         joinpath(path, "final_q.png"),
     )
 
@@ -269,9 +268,20 @@ for (k, ne) in enumerate(ne_seq)
     relative_errors[k] = abs(lim_ρ_err - lim_ρq_err)
 end
 
-# Check conservation
-atols = [27.5eps(FT), 27.5eps(FT), 20eps(FT)] .* 200
+# Check conservation. Roundoff accumulates with the number of steps, and the
+# finest resolution takes 4x more of them, so its tolerance is scaled
+# accordingly (measured relative errors: 2.0e-13, 1.6e-15, 1.3e-12).
+atols = [27.5eps(FT) * 200, 27.5eps(FT) * 200, 20eps(FT) * 800]
 @info "relative_errors = $relative_errors"
+# The flow returns the tracer to its start, so the error must fall under
+# refinement. The bound is set by the initial condition: the cosine and
+# Gaussian bells are smooth (measured L₁ with resolution-scaled steps: 0.084,
+# 0.020, 0.008 and 0.041, 0.016, 0.004); the cylinders are discontinuous, so
+# the limited scheme converges slowly (0.27, 0.17, 0.14).
+final_L1_bound = test_name == cylinder_test_name ? 0.2 : 0.05
+@test all(diff(L1err) .< 0)
+@test L1err[end] < final_L1_bound
+
 @info "atols = $atols"
 for k in 1:length(ne_seq)
     @test relative_errors[k] ≈ FT(0) atol = atols[k]

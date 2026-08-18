@@ -25,7 +25,11 @@ jobs:
       - uses: julia-actions/cache@v3
       - name: Install Julia dependencies
         run: >
-          julia --project=monorepo -e 'using Pkg; Pkg.develop(path="$(pwd())"); Pkg.develop(path="$(pwd())/lib/ClimaCoreTempestRemap")'
+          julia --project=monorepo -e 'using Pkg;
+          Pkg.develop([
+            PackageSpec(path="$(pwd())"),
+            PackageSpec(path="$(pwd())/lib/ClimaCoreTempestRemap"),
+          ])'
       - name: Run the tests
         continue-on-error: true
         env:

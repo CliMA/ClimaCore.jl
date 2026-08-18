@@ -1,3 +1,7 @@
+# Ekman boundary layer: a rotating column driven by a geostrophic wind, with
+# constant eddy viscosity ν and a no-slip surface. Its steady state is the
+# analytic Ekman spiral, which the run plots alongside the computed profile and
+# asserts against over the whole column.
 import ClimaComms
 ClimaComms.@import_required_backends
 using LinearAlgebra
@@ -11,7 +15,7 @@ import ClimaCore:
     Geometry,
     Spaces
 
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
 
 import Logging
 import TerminalLoggers
@@ -19,29 +23,18 @@ Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 const FT = Float64
 
-# https://github.com/CliMA/CLIMAParameters.jl/blob/master/src/Planet/planet_parameters.jl#L5
-const MSLP = 1e5 # mean sea level pressure
-const grav = 9.8 # gravitational constant
-const R_d = 287.058 # R dry (gas constant / mol mass dry air)
-const γ = 1.4 # heat capacity ratio
-const C_p = R_d * γ / (γ - 1) # heat capacity at constant pressure
-const C_v = R_d / (γ - 1) # heat capacit at constant volume
-const R_m = R_d # moist R, assumed to be dry
-
-const f = 5e-5
-const ν = 0.01
-const L = 2e2
-const nelems = 30
-const Cd = ν / (L / nelems)
-const ug = 1.0
-const vg = 0.0
-const d = sqrt(2 * ν / f)
+const f = 5e-5              # Coriolis parameter (1/s)
+const ν = 0.01              # eddy viscosity (m²/s)
+const L = 2e2               # domain height (m), = 10 Ekman depths
+const nelems = 60
+const ug = 1.0              # geostrophic wind, u (m/s)
+const vg = 0.0              # geostrophic wind, v (m/s)
+const d = sqrt(2 * ν / f)   # Ekman depth (m)
 domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(0.0),
     Geometry.ZPoint{FT}(L);
     boundary_names = (:bottom, :top),
 )
-#mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
 mesh = Meshes.IntervalMesh(domain; nelems = nelems)
 device = ClimaComms.device()
 cspace = Spaces.CenterFiniteDifferenceSpace(device, mesh)
@@ -49,22 +42,14 @@ fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
 
 
 
-# https://github.com/CliMA/Thermodynamics.jl/blob/main/src/TemperatureProfiles.jl#L115-L155
-# https://clima.github.io/Thermodynamics.jl/dev/TemperatureProfiles/#DecayingTemperatureProfile
-function adiabatic_temperature_profile(z; T_surf = 300.0, T_min_ref = 230.0)
-    u = FT(ug)
-    v = FT(vg)
-    return (u = u, v = v)
-end
-
-
+# Start from the geostrophic wind everywhere; the spiral forms as the no-slip
+# surface decelerates the lowest levels.
+initial_wind(z) = (u = FT(ug), v = FT(vg))
 
 zc = Fields.coordinate_field(cspace)
-Yc = adiabatic_temperature_profile.(zc.z)
+Yc = initial_wind.(zc.z)
 w = Geometry.WVector.(zeros(Float64, fspace))
 
-Y_init = copy(Yc)
-w_init = copy(w)
 
 function tendency!(dY, Y, _, t)
     Yc = Y.Yc
@@ -79,30 +64,33 @@ function tendency!(dY, Y, _, t)
     du = dYc.u
     dv = dYc.v
 
-    # S 4.4.1: potential temperature density
-    # Mass conservation
+    # w is carried in the state but not evolved (no subsidence); its tendency
+    # must still be set, not left to whatever the tendency buffer contains.
+    @. dw = Geometry.WVector(zero(FT))
 
-    u_1 = parent(u)[1]
-    v_1 = parent(v)[1]
-    u_wind = sqrt(u_1^2 + v_1^2)
     A = Operators.AdvectionC2C(
         bottom = Operators.SetValue(0.0),
         top = Operators.SetValue(0.0),
     )
 
+    # No slip at the surface and the geostrophic wind at the top, so both
+    # boundary faces of ∂z(u, v) come from the gradient operator and the
+    # divergence needs no boundary condition of its own.
+    divf2c = Operators.DivergenceF2C()
+
     # u-momentum
-    bcs_bottom = Operators.SetValue(Geometry.WVector(Cd * u_wind * u_1))  # Eq. 4.16
-    bcs_top = Operators.SetValue(FT(ug))  # Eq. 4.18
-    gradc2f = Operators.GradientC2F(top = bcs_top)
-    divf2c = Operators.DivergenceF2C(bottom = bcs_bottom)
-    @. du = divf2c(ν * gradc2f(u)) + f * (v - vg) - A(w, u)   # Eq. 4.8
+    gradc2f = Operators.GradientC2F(
+        bottom = Operators.SetValue(FT(0)),
+        top = Operators.SetValue(FT(ug)),
+    )
+    @. du = divf2c(ν * gradc2f(u)) + f * (v - vg) - A(w, u)
 
     # v-momentum
-    bcs_bottom = Operators.SetValue(Geometry.WVector(Cd * u_wind * v_1))  # Eq. 4.17
-    bcs_top = Operators.SetValue(FT(vg))  # Eq. 4.19
-    gradc2f = Operators.GradientC2F(top = bcs_top)
-    divf2c = Operators.DivergenceF2C(bottom = bcs_bottom)
-    @. dv = divf2c(ν * gradc2f(v)) - f * (u - ug) - A(w, v)   # Eq. 4.9
+    gradc2f = Operators.GradientC2F(
+        bottom = Operators.SetValue(FT(0)),
+        top = Operators.SetValue(FT(vg)),
+    )
+    @. dv = divf2c(ν * gradc2f(v)) - f * (u - ug) - A(w, v)
     return dY
 end
 
@@ -110,18 +98,50 @@ end
 Y = Fields.FieldVector(Yc = Yc, w = w)
 dY = tendency!(similar(Y), Y, nothing, 0.0)
 
-Δt = 2.0
-ndays = 0
+Δt = 100.0 # the diffusive stability limit is Δz²/2ν ≈ 550 s
 # Solve the ODE operator
-prob = ODEProblem(tendency!, Y, (0.0, 60 * 60 * 50))
-sol = solve(
+prob = CTS.ODEProblem(
+    CTS.ClimaODEFunction(; T_exp! = tendency!),
+    Y,
+    (0.0, 1.5e6), # ≈ 12 inertial periods, enough to reach steady state
+    nothing,
+)
+sol = CTS.solve(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = Δt,
-    saveat = collect(0.0:600:(60 * 60 * 50)), # save 10 min
+    saveat = collect(0.0:1.5e4:1.5e6),
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
+
+# The analytic Ekman spiral (steady state of the system above).
+u_exact(z) = ug - exp(-z / d) * (ug * cos(z / d) + vg * sin(z / d))
+v_exact(z) = vg + exp(-z / d) * (ug * sin(z / d) - vg * cos(z / d))
+
+using Test
+@testset "steady state vs the analytic Ekman spiral" begin
+    z = vec(parent(Fields.coordinate_field(cspace).z))
+    u_end = vec(parent(sol.u[end].Yc.u))
+    v_end = vec(parent(sol.u[end].Yc.v))
+    u_ref = u_exact.(z)
+    v_ref = v_exact.(z)
+    # The state has stopped evolving over the last save interval, so what
+    # follows is a statement about the steady state and not about a transient.
+    u_prev = vec(parent(sol.u[end - 1].Yc.u))
+    v_prev = vec(parent(sol.u[end - 1].Yc.v))
+    @test maximum(abs, u_end .- u_prev) < 1e-3
+    @test maximum(abs, v_end .- v_prev) < 1e-3
+    # With no slip at the surface, that steady state is the analytic spiral
+    # over the whole column, down to the discretization error. Measured at
+    # this resolution: 0.0024 m/s in u and 0.0062 m/s in v, both attained in
+    # the first cell, and both falling by a factor of 4 per grid refinement.
+    @test maximum(abs, u_end .- u_ref) < 0.01
+    @test maximum(abs, v_end .- v_ref) < 0.01
+    # The signature of an Ekman layer: rotation turns the flow across the
+    # isobars, and in the limit z → 0 the veering angle is exactly 45°.
+    @test v_end[1] / u_end[1] ≈ 1 rtol = 0.05
+end
 
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
@@ -132,15 +152,10 @@ path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
 z_centers = vec(parent(Fields.coordinate_field(cspace)))
-z_faces = vec(parent(Fields.coordinate_field(fspace)))
 
 function ekman_plot(u; title = "", size = (1024, 600))
-    u_ref =
-        ug .-
-        exp.(-z_centers / d) .*
-        (ug * cos.(z_centers / d) + vg * sin.(z_centers / d))
     sub_plt1 = Plots.plot(
-        u_ref,
+        u_exact.(z_centers),
         z_centers,
         marker = :circle,
         xlabel = "u",
@@ -148,12 +163,8 @@ function ekman_plot(u; title = "", size = (1024, 600))
     )
     sub_plt1 = Plots.plot!(sub_plt1, vec(parent(u.Yc.u)), z_centers, label = "Comp")
 
-    v_ref =
-        vg .+
-        exp.(-z_centers / d) .*
-        (ug * sin.(z_centers / d) - vg * cos.(z_centers / d))
     sub_plt2 = Plots.plot(
-        v_ref,
+        v_exact.(z_centers),
         z_centers,
         marker = :circle,
         xlabel = "v",
@@ -170,21 +181,14 @@ function ekman_plot(u; title = "", size = (1024, 600))
     )
 end
 
-anim = Plots.@animate for (i, u) in enumerate(sol.u)
-    ekman_plot(u, title = "Hour $(i)")
+anim = Plots.@animate for (t, u) in zip(sol.t, sol.u)
+    ekman_plot(u, title = "t = $(round(t / 3600, digits = 1)) h")
 end
 Plots.mp4(anim, joinpath(path, "ekman.mp4"), fps = 10)
 
-Plots.png(ekman_plot(sol[end]), joinpath(path, "ekman_end.png"))
+Plots.png(ekman_plot(sol.u[end]), joinpath(path, "ekman_end.png"))
 
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
-end
+include(joinpath(@__DIR__, "..", "example_utils.jl")) # linkfig
 
 linkfig(
     relpath(joinpath(path, "ekman_end.png"), joinpath(@__DIR__, "../..")),

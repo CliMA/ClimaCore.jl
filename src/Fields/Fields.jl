@@ -4,8 +4,9 @@ import ClimaComms
 import MultiBroadcastFusion as MBF
 import ..slab, ..slab_args, ..column, ..column_args, ..level, ..level_args
 import ..DebugOnly: call_post_op_callback, post_op_callback
-import ..DataLayouts:
-    DataLayouts, DataLayout, DataStyle, FusedMultiBroadcast, @fused_direct
+import ..DataLayouts: DataLayouts, DataLayout, DataStyle, PointIndex
+# `@fused_direct` is unused here, but re-exposed as `Fields.@fused_direct` for users
+import ..DataLayouts: FusedMultiBroadcast, @fused_direct
 import ..Domains
 import ..Topologies
 import ..Quadratures
@@ -13,8 +14,9 @@ import ..Grids: ColumnIndex, local_geometry_type
 import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace, cuda_synchronize
 import ..Spaces: nlevels, ncolumns
 import ..Spaces: get_mask, set_mask!
-import ..Geometry: Geometry, Cartesian12Vector
+import ..Geometry: Geometry
 import ..Utilities: PlusHalf, half, safe_eltype, unsafe_eltype
+import ..Utilities: recursive_bottom_eltype
 import ..Utilities: drop_auto_broadcasters, auto_broadcasted
 
 using UnrolledUtilities
@@ -34,6 +36,11 @@ struct Field{V <: DataLayout, S <: AbstractSpace}
 end
 Field(::Type{T}, space::AbstractSpace) where {T} =
     Field(similar(Spaces.coordinates_data(space), T), space)
+
+# Ensure that every Field on a PointSpace has a zero-dimensional DataLayout.
+Field(values::DataLayout, space::AbstractPointSpace) = Field(view(values), space)
+Field(values::V, space::S) where {V <: DataLayout{<:Any, 0}, S <: AbstractPointSpace} =
+    Field{V, S}(values, space)
 
 local_geometry_type(::Field{V, S}) where {V, S} = local_geometry_type(S)
 
@@ -99,9 +106,22 @@ const CenterExtrudedFiniteDifferenceField{V, S} = Field{
     S,
 } where {V <: DataLayout, S <: Spaces.CenterExtrudedFiniteDifferenceSpace}
 
-#
-const SpectralElementField1D{V, S} =
-    Field{V, S} where {V <: DataLayout, S <: Spaces.SpectralElementSpace1D}
+const MultiColumnFiniteDifferenceField{V, S} = Field{
+    V,
+    S,
+} where {V <: DataLayout, S <: Spaces.MultiColumnFiniteDifferenceSpace}
+const FaceMultiColumnFiniteDifferenceField{V, S} = Field{
+    V,
+    S,
+} where {V <: DataLayout, S <: Spaces.FaceMultiColumnFiniteDifferenceSpace}
+const CenterMultiColumnFiniteDifferenceField{V, S} = Field{
+    V,
+    S,
+} where {
+    V <: DataLayout,
+    S <: Spaces.CenterMultiColumnFiniteDifferenceSpace,
+}
+
 const ExtrudedSpectralElementField2D{V, S} = Field{
     V,
     S,
@@ -153,26 +173,61 @@ ClimaComms.array_type(field::Field) =
     Field(getproperty(field_values(field), name), axes(field))
 
 Base.eltype(::Type{<:Field{V}}) where {V} = eltype(V)
-Base.parent(field::Field) = parent(field_values(field))
+Base.IndexStyle(::Type{<:Field{V}}) where {V} = IndexStyle(V)
 
-# to play nice with DifferentialEquations; may want to revisit this
-# https://github.com/SciML/SciMLBase.jl/blob/697bd0c0c7365e77fa311f2d32eade70f43a8d50/src/solutions/ode_solutions.jl#L31
-Base.size(field::Field) = ()
-Base.length(field::Field) = 1
+for f in (:parent, :size, :length, :ndims)
+    @eval Base.$f(field::Field) = $f(field_values(field))
+end
+
+# Scalar reductions and views on the values of a `Field`. Generic and
+# downstream code (NaN checks, plotting) relies on these. `any` reduces over
+# the backing array rather than the `DataLayout` so that predicates on numbers
+# (`isnan`, `isinf`) work on struct-valued fields, whose entries the predicate
+# could not accept; `vec` iterates the `DataLayout`, so its eltype is the
+# field's.
+Base.any(f, field::Field) = any(f, parent(field))
+Base.similar(field::F, ::Type{F}) where {F <: Field} = similar(field)
+Base.vec(field::Field) = vec(field_values(field))
+for f in (:DataScope, :shape_params, :inferred_size, :nelems)
+    @eval DataLayouts.$f(field::Field) = DataLayouts.$f(field_values(field))
+end
+
+DataLayouts.reassign(field::Field, scope) =
+    Field(DataLayouts.reassign(field_values(field), scope), axes(field))
 
 Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(axes(field))
 
-Base.@propagate_inbounds slab(field::Field, inds...) =
-    Field(slab(field_values(field), inds...), slab(axes(field), inds...))
+Base.@propagate_inbounds Base.setindex!(field::Field, val, indices::PointIndex...) =
+    setindex!(field, val, CartesianIndex(indices...))
+Base.@propagate_inbounds Base.getindex(field::Field, indices::PointIndex...) =
+    getindex(field, CartesianIndex(indices...))
+Base.@propagate_inbounds Base.view(field::Field, indices::PointIndex...) =
+    view(field, CartesianIndex(indices...))
 
-Base.@propagate_inbounds function column(field::Field, inds...)
-    column_space = column(axes(field), inds...)
-    column_data = column(field_values(field), inds...)
-    Field(level_data(column_space, column_data), column_space)
-end
-@inline column(field::FiniteDifferenceField, inds...) = field
+Base.@propagate_inbounds Base.setindex!(field::Field, val, index::PointIndex) =
+    setindex!(field_values(field), val, index)
+Base.@propagate_inbounds Base.getindex(field::Field, index::PointIndex) =
+    getindex(field_values(field), index)
+Base.@propagate_inbounds Base.view(field::Field, index::PointIndex) =
+    Field(view(field_values(field), index), view(axes(field), index))
 
+Base.getindex(field::Field, ::Colon) = field
+Base.view(field::Field, ::Colon) = field
 
+Base.@propagate_inbounds level(field::Field, v) = Field(
+    level(field_values(field), Spaces.integer_level_index(axes(field), v)),
+    level(axes(field), v),
+)
+
+Base.@propagate_inbounds slab(field::Field, h) =
+    Field(slab(field_values(field), h), slab(axes(field), h))
+Base.@propagate_inbounds slab(field::Field, v, h) = Field(
+    slab(field_values(field), Spaces.integer_level_index(axes(field), v), h),
+    slab(axes(field), v, h),
+)
+
+Base.@propagate_inbounds column(field::Field, indices...) =
+    Field(column(field_values(field), indices...), column(axes(field), indices...))
 
 # nice printing
 # follow x-array like printing?
@@ -307,8 +362,8 @@ local_geometry_field(space::AbstractSpace) =
     Field(Spaces.local_geometry_data(space), space)
 local_geometry_field(field::Field) = local_geometry_field(axes(field))
 
-Fields.local_geometry_field(bc::Base.Broadcast.Broadcasted) =
-    Fields.local_geometry_field(axes(bc))
+local_geometry_field(bc::Base.Broadcast.Broadcasted) =
+    local_geometry_field(axes(bc))
 
 """
     Δz_field(field::Field)
@@ -322,7 +377,6 @@ same space as the given field.
 
 include("broadcast.jl")
 include("mapreduce.jl")
-include("compat_diffeq.jl")
 include("fieldvector.jl")
 include("field_iterator.jl")
 include("indices.jl")
@@ -438,39 +492,6 @@ Create a buffer for communicating neighbour information of `field`.
 """
 Spaces.create_dss_buffer(field::Field) =
     Spaces.create_dss_buffer(field_values(field), axes(field))
-
-Base.@propagate_inbounds function level(
-    field::Union{
-        CenterFiniteDifferenceField,
-        CenterExtrudedFiniteDifferenceField,
-    },
-    v::Int,
-)
-    hspace = level(axes(field), v)
-    data = level(field_values(field), v)
-    Field(level_data(hspace, data), hspace)
-end
-Base.@propagate_inbounds function level(
-    field::Union{FaceFiniteDifferenceField, FaceExtrudedFiniteDifferenceField},
-    v::PlusHalf,
-)
-    hspace = level(axes(field), v)
-    data = level(field_values(field), v.i + 1)
-    Field(level_data(hspace, data), hspace)
-end
-
-# Levels of fields on column spaces are single points, so their data is
-# converted to a DataF to match the local geometry of a PointSpace.
-Base.@propagate_inbounds level_data(::Spaces.AbstractPointSpace, data) =
-    Spaces.point_data(data)
-@inline level_data(hspace, data) = data
-
-Base.getindex(field::Field, ::Colon) = field
-
-Base.@propagate_inbounds Base.getindex(field::PointField) =
-    getindex(field_values(field))
-Base.@propagate_inbounds Base.setindex!(field::PointField, val) =
-    setindex!(field_values(field), val)
 
 """
     set!(f::Function, field::Field, args = ())

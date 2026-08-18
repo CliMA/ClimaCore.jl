@@ -7,9 +7,8 @@ import BlockArrays
 A `FieldVector` is a wrapper around one or more `Field`s that acts like vector
 of the underlying arrays.
 
-It is similar in spirit to [`ArrayPartition` from
-RecursiveArrayTools.jl](https://github.com/SciML/RecursiveArrayTools.jl#arraypartition),
-but allows referring to fields by name.
+Unlike a plain concatenation of the underlying arrays, its fields can be
+referred to by name.
 
 # Constructors
 
@@ -43,6 +42,10 @@ Base.size(::ScalarWrapper) = ()
 Base.getindex(s::ScalarWrapper) = s.val
 Base.setindex!(s::ScalarWrapper, value) = s.val = value
 Base.similar(s::ScalarWrapper) = ScalarWrapper(s.val)
+# Without this method, zero(::ScalarWrapper) would return a 0-dimensional
+# Array, so zero(::FieldVector) would not preserve the component types of
+# FieldVectors with scalar components (breaking strict equality with them).
+Base.zero(s::ScalarWrapper) = ScalarWrapper(zero(s.val))
 
 """
     Fields.wrap(x)
@@ -62,12 +65,19 @@ This is called when calling `getproperty` on a `FieldVector` property of element
 type `T`.
 """
 unwrap(x) = x
+
+# The recursion goes through the backing array, not the `DataLayout`: `eltype`
+# of a heterogeneous-`Tuple`-valued layout reaches `Any` (via `eltype(Tuple{A,
+# B})`), which would type the `FieldVector` as `FieldVector{Any}`; the backing
+# array bottoms out at the scalar.
+recursive_bottom_eltype(field::Field) =
+    recursive_bottom_eltype(parent(field))
 unwrap(x::ScalarWrapper) = x[]
 
 function FieldVector(; kwargs...)
     values = map(wrap, NamedTuple(kwargs))
     T = promote_type(
-        map(RecursiveArrayTools.recursive_bottom_eltype, values)...,
+        map(recursive_bottom_eltype, values)...,
     )
     return FieldVector{T}(values)
 end
@@ -99,6 +109,16 @@ BlockArrays.blockaxes(fv::FieldVector) =
     (BlockArrays.BlockRange(1:length(_values(fv))),)
 Base.axes(fv::FieldVector) =
     (BlockArrays.blockedrange(map(length ∘ backing_array, Tuple(_values(fv)))),)
+
+# The AbstractArray fallback computes length from axes, whose blockedrange is
+# not inferrable for nested FieldVectors and allocates on every call; sum the
+# block lengths directly instead (length recurses into nested FieldVectors,
+# whose backing_array is the FieldVector itself).
+Base.length(fv::FieldVector) = unrolled_reduce(
+    (n, value) -> n + length(backing_array(value)),
+    Tuple(_values(fv)),
+    0,
+)
 
 Base.@propagate_inbounds Base.getindex(
     fv::FieldVector,
@@ -376,7 +396,7 @@ Base.mapreduce(f, op, fv::FieldVector) =
 Base.any(f, fv::FieldVector) = any(x -> any(f, backing_array(x)), _values(fv))
 Base.any(f::Function, fv::FieldVector) = # avoid ambiguities
     any(x -> any(f, backing_array(x)), _values(fv))
-Base.any(fv::FieldVector) = any(identity, A)
+Base.any(fv::FieldVector) = any(identity, fv)
 
 Base.all(f, fv::FieldVector) = all(x -> all(f, backing_array(x)), _values(fv))
 Base.all(f::Function, fv::FieldVector) =
@@ -409,10 +429,145 @@ function LinearAlgebra.norm(x::FieldVector)
     sqrt(LinearAlgebra.norm_sqr(x))
 end
 
+"""
+    fieldvector2array!(array, fv)
+
+Copy the entries of the `FieldVector` `fv` into the flat `AbstractVector`
+`array` of the same length, without allocating or scalar indexing: each
+component block is copied with a single array-level `copyto!`, so
+`FieldVector`s backed by GPU arrays are supported (including mixed cases,
+where `array` and some components live on different devices). Entries are
+ordered as in the `FieldVector`'s own linear indexing: component blocks in
+order, each in the linear order of its backing array.
+
+Scalar (`ScalarWrapper`) components are written to `array` with a `fill!` on a
+one-element view, which is GPU-safe.
+
+Intended for interfacing with libraries that operate on flat vectors, such as
+the Krylov.jl workspace vectors given by `Krylov.ktypeof(::FieldVector)` (see
+`KrylovExt`). See [`array2fieldvector!`](@ref) for the inverse copy and
+[`fieldvector2array`](@ref) for an allocating version.
+"""
+function fieldvector2array!(array::AbstractVector, fv::FieldVector)
+    length(array) == length(fv) || throw(
+        DimensionMismatch(
+            "cannot copy FieldVector of length $(length(fv)) to array of \
+             length $(length(array))",
+        ),
+    )
+    _blocks2array!(array, 0, Tuple(_values(fv)))
+    return array
+end
+
+"""
+    array2fieldvector!(fv, array)
+
+Copy the entries of the flat `AbstractVector` `array` into the `FieldVector`
+`fv` of the same length — the inverse of [`fieldvector2array!`](@ref), with
+the same entry ordering, allocation-free block-wise copies, and GPU support.
+
+Copying a scalar (`ScalarWrapper`) component out of `array` requires a scalar
+read, so scalar components are only supported when `array` is a CPU array (a
+GPU-backed `array` throws a scalar-indexing error rather than performing a
+hidden synchronizing transfer).
+
+See [`array2fieldvector`](@ref) for an allocating version.
+"""
+function array2fieldvector!(fv::FieldVector, array::AbstractVector)
+    length(array) == length(fv) || throw(
+        DimensionMismatch(
+            "cannot copy array of length $(length(array)) to FieldVector of \
+             length $(length(fv))",
+        ),
+    )
+    _array2blocks!(array, 0, Tuple(_values(fv)))
+    return fv
+end
+
+"""
+    fieldvector2array(fv)
+
+Allocating version of [`fieldvector2array!`](@ref): copy `fv` into a freshly
+allocated flat vector of `fv`'s device array type,
+`ClimaComms.array_type(fv){eltype(fv), 1}`.
+"""
+fieldvector2array(fv::FieldVector) = fieldvector2array!(
+    ClimaComms.array_type(fv){eltype(fv), 1}(undef, length(fv)),
+    fv,
+)
+
+"""
+    array2fieldvector(array, fv_prototype)
+
+Allocating version of [`array2fieldvector!`](@ref): copy `array` into a
+freshly allocated `FieldVector` with the same structure as `fv_prototype`
+(created with `similar`, which preserves component types).
+"""
+array2fieldvector(array::AbstractVector, fv_prototype::FieldVector) =
+    array2fieldvector!(similar(fv_prototype), array)
+
+# Both directions fold an entry offset over the component blocks with
+# unrolled_reduce; _block2array!/_array2block! copy one block and return the
+# offset advanced past it, recursing into nested FieldVectors.
+_blocks2array!(array, offset, vals::Tuple) = unrolled_reduce(
+    (off, value) -> _block2array!(array, off, backing_array(value)),
+    vals,
+    offset,
+)
+_block2array!(array, offset, block::FieldVector) =
+    _blocks2array!(array, offset, Tuple(_values(block)))
+function _block2array!(array, offset, block::AbstractArray)
+    n = length(block)
+    copyto!(array, offset + 1, block, 1, n)
+    return offset + n
+end
+# A 0-dimensional block (a ScalarWrapper) holds a CPU scalar; fill! on a
+# one-element view writes it to `array` without allocating or scalar indexing.
+function _block2array!(array, offset, block::AbstractArray{T, 0}) where {T}
+    fill!(view(array, (offset + 1):(offset + 1)), block[])
+    return offset + 1
+end
+
+_array2blocks!(array, offset, vals::Tuple) = unrolled_reduce(
+    (off, value) -> _array2block!(array, off, backing_array(value)),
+    vals,
+    offset,
+)
+_array2block!(array, offset, block::FieldVector) =
+    _array2blocks!(array, offset, Tuple(_values(block)))
+function _array2block!(array, offset, block::AbstractArray)
+    n = length(block)
+    copyto!(block, 1, array, offset + 1, n)
+    return offset + n
+end
+# Reading a scalar block back requires a scalar getindex on `array`; this is
+# allocation-free on CPU arrays and throws a scalar-indexing error for
+# GPU-backed arrays (see the docstring above).
+function _array2block!(array, offset, block::AbstractArray{T, 0}) where {T}
+    block[] = array[offset + 1]
+    return offset + 1
+end
+
 import ClimaComms
 
-ClimaComms.array_type(x::FieldVector) =
-    promote_type(unrolled_map(ClimaComms.array_type, _values(x))...)
+function ClimaComms.array_type(x::FieldVector)
+    T = _array_type(x)
+    # Union{} means x contains nothing but scalars, which live on the CPU.
+    return T === Union{} ? Array : T
+end
+# ScalarWrapper components hold CPU scalars regardless of where the other
+# components live, so they must not participate in the promotion, at any
+# nesting depth: their contribution is Union{}, the identity of promote_type
+# (which a nested FieldVector of nothing but scalars also promotes to).
+_array_type(x) = ClimaComms.array_type(x) # Fields
+# The splatted form is used instead of unrolled_mapreduce because the latter's
+# init keyword routes through Core.kwcall, which deepens the recursion cycle on
+# nested FieldVectors until inference gives up on optimizing it.
+_array_type(x::FieldVector) =
+    promote_type(unrolled_map(_array_type, Tuple(_values(x)))...)
+_array_type(::ScalarWrapper) = Union{}
+_array_type(x::A) where {A <: AbstractArray} =
+    parent(x) === x ? Base.typename(A).wrapper : _array_type(parent(x))
 
 ClimaComms.device(x::FieldVector) = ClimaComms.device(ClimaComms.context(x))
 function ClimaComms.context(x::FieldVector)

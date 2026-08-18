@@ -13,8 +13,8 @@ using Adapt
 using ClimaComms
 ClimaComms.@import_required_backends
 FloatType = eval(Meta.parse(get(ARGS, 1, "Float64")))
-using StaticArrays, IntervalSets, LinearAlgebra, SciMLBase
-using OrdinaryDiffEqSSPRK: SSPRK33
+using StaticArrays, IntervalSets, LinearAlgebra
+import ClimaTimeSteppers as CTS
 using DocStringExtensions
 
 import ClimaCore:
@@ -35,6 +35,7 @@ using ClimaCore.Spaces.Quadratures
 using Logging
 
 using CUDA
+include(joinpath(@__DIR__, "../..", "example_utils.jl")) # linkfig
 CUDA.allowscalar(false)
 
 """
@@ -45,7 +46,7 @@ Parameters needed for the simulation.
 # Fields
 $(DocStringExtensions.FIELDS)
 """
-struct SimulationParameters{FT} # rename to PhysicalParameters
+struct SimulationParameters{FT}
     "Domain length in x and y directions. Here, lx = ly = lxy"
     lxy::FT
     "Domain length in z direction"
@@ -65,6 +66,14 @@ end
 function SimulationParameters(::Type{FT}, resolution, args...) where {FT}
     @assert resolution ∈ ("low", "medium", "high", "custom")
     domain_extents = (FT(1000), FT(1000))
+    # The bubble accelerates at roughly g θ_c / θ_b until it nears the lid of
+    # the 1000 m box, and 250 s of that is the whole of the physics this case
+    # demonstrates: the updraft reaches 2.7 m/s with its top around 625 m.
+    # Integrating further reaches the collision with the lid, after which the
+    # thermal shears along the top faster than hyperdiffusion absorbs it and
+    # the peak velocity runs away (measured max|w|: 5.5 m/s at t = 400 s, 13 at
+    # t = 560 s, 38 at t = 700 s).
+    t_int_default = 250
     if resolution == "high"
         return SimulationParameters{FT}(
             domain_extents...,
@@ -72,7 +81,7 @@ function SimulationParameters(::Type{FT}, resolution, args...) where {FT}
             32,
             3,
             FT(0.01),
-            FT(700),
+            FT(t_int_default),
         )
     elseif resolution == "medium"
         return SimulationParameters{FT}(
@@ -81,7 +90,7 @@ function SimulationParameters(::Type{FT}, resolution, args...) where {FT}
             16,
             3,
             FT(0.025),
-            FT(700),
+            FT(t_int_default),
         )
     elseif resolution == "custom"
         @assert length(args) == 7 "provide lxy, lz, xyelem, zelem, npoly, Δt and t_int for the custom simulation"
@@ -93,36 +102,12 @@ function SimulationParameters(::Type{FT}, resolution, args...) where {FT}
             16,
             3,
             FT(0.05),
-            FT(700),
+            FT(t_int_default),
         )
     end
 end
 
-"""
-    PhysicalParameters{FT}
-
-Physical parameters needed for the simulation.
-
-# Fields
-$(DocStringExtensions.FIELDS)
-"""
-Base.@kwdef struct PhysicalParameters{FT} # rename to PhysicalParameters
-    "Mean sea level pressure"
-    MSLP::FT = FT(1e5)
-    "Gravitational constant"
-    grav::FT = FT(9.8)
-    "R dry (gas constant / mol mass dry air)"
-    R_d::FT = FT(287.058)
-    "Heat capacity ratio"
-    γ::FT = FT(1.4)
-    "Heat capacity at constant pressure"
-    C_p::FT = FT(R_d * γ / (γ - 1))
-    "Heat capacity at constant volume"
-    C_v::FT = FT(R_d / (γ - 1))
-    "Triple point temperature"
-    T_0::FT = FT(273.16)
-end
-Adapt.@adapt_structure PhysicalParameters
+include(joinpath(@__DIR__, "bubble_parameters.jl")) # PhysicalParameters, geopotential
 
 function hvspace_3D(
     sim_parameters::SimulationParameters{FT},
@@ -150,7 +135,6 @@ function hvspace_3D(
         x1periodic = true,
         x2periodic = true,
     )
-    Nv = Meshes.nelements(vertmesh)
     Nf_center, Nf_face = 2, 1 #1 + 3 + 1
     quad = Quadratures.GLL{npoly + 1}()
     horzmesh = Meshes.RectilinearMesh(horzdomain, xyelem, xyelem)
@@ -163,9 +147,9 @@ function hvspace_3D(
     return (hv_center_space, hv_face_space, horztopology)
 end
 
-@inline Φ(z, grav) = grav * z
-
-# Reference: https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml, Section 5a
+# Reference:
+# https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml,
+# Section 5a
 function init_dry_rising_bubble_3d(x, y, z, params)
     (; C_p, C_v, MSLP, grav, R_d, T_0) = params
     x_c = 0.0
@@ -237,13 +221,13 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
         Geometry.Covariant123Vector.(If2c.(fw))
 
     ce .= @. cρe / cρ
-    cI .= @. ce - Φ(z, grav) - (norm(cuvw)^2) / 2
+    cI .= @. ce - geopotential(z, grav) - (norm(cuvw)^2) / 2
     cT .= @. cI / C_v + T_0
     cp .= @. cρ * R_d * cT
 
     ### HYPERVISCOSITY
     # 1) compute hyperviscosity coefficients
-    ch_tot = @. ce + cp / cρ
+    ch_tot .= @. ce + cp / cρ
     χe = @. dρe = hwdiv(hgrad(ch_tot)) # we store χe in dρe
     χuₕ = @. duₕ =
         hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
@@ -269,7 +253,7 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
     dw .= fw .* 0
 
     # 1.a) horizontal divergence
-    dρ .-= hdiv.(cρ .* (cuvw))
+    dρ .-= hwdiv.(cρ .* (cuvw))
 
     # 1.b) vertical divergence
     vdivf2c = Operators.DivergenceF2C(
@@ -321,13 +305,13 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
     )
     @. dw -= vgradc2f(cp) / Ic2f(cρ)
 
-    cE .= @. (norm(cuvw)^2) / 2 + Φ(z, grav)
+    cE .= @. (norm(cuvw)^2) / 2 + geopotential(z, grav)
     @. duₕ -= hgrad(cE)
     @. dw -= vgradc2f(cE)
 
     # 3) potential temperature
 
-    @. dρe -= hdiv(cuvw * (cρe + cp))
+    @. dρe -= hwdiv(cuvw * (cρe + cp))
     @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
     @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 
@@ -368,14 +352,14 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
             parse(Int, get(ARGS, 6, "16")),
             parse(Int, get(ARGS, 7, "3")),
             parse(FT, get(ARGS, 8, "0.05")),
-            parse(FT, get(ARGS, 9, "700.0")),
+            parse(FT, get(ARGS, 9, "250.0")),
         )
     else
         args = ()
     end
 
     logger_stream = ClimaComms.iamroot(comms_ctx) ? stderr : devnull
-    prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
+    global_logger(ConsoleLogger(logger_stream, Logging.Info))
 
     @info "Context information" device = comms_ctx.device context = comms_ctx nprocs =
         ClimaComms.nprocs(comms_ctx) Float_type = FT resolution = resolution
@@ -412,9 +396,9 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
     cuvw =
         Geometry.Covariant123Vector.(Y.uₕ) .+
         Geometry.Covariant123Vector.(If2c.(Y.w))
-    cE = @. (norm(cuvw)^2) / 2 + Φ(coords.z, params.grav)
+    cE = @. (norm(cuvw)^2) / 2 + geopotential(coords.z, params.grav)
     ce = @. Y.Yc.ρe / Y.Yc.ρ
-    cI = @. ce - Φ(coords.z, params.grav) - (norm(cuvw)^2) / 2
+    cI = @. ce - geopotential(coords.z, params.grav) - (norm(cuvw)^2) / 2
     cT = @. cI / params.C_v + params.T_0
     cp = @. Y.Yc.ρ * params.R_d * cT
     ch_tot = @. ce + cp / Y.Yc.ρ
@@ -430,7 +414,7 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
         fω¹² = Operators.Curl().(Y.w),
         cω³ = Operators.Curl().(Y.uₕ),
         fu¹² = Geometry.Contravariant12Vector.(
-            Geometry.Covariant123Vector.(Ic2f.(Y.uₕ))
+            Geometry.Covariant123Vector.(Ic2f.(Y.uₕ)),
         ),
         fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant123Vector.(Y.w)),
         cuvw = cuvw,
@@ -446,10 +430,15 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
     rhs_invariant!(dYdt, Y, ghost_buffer, 0.0)
     # run!
     Δt = sim_params.Δt
-    prob = ODEProblem(rhs_invariant!, Y, (0.0, sim_params.t_int), ghost_buffer)
-    integrator = SciMLBase.init(
+    prob = CTS.ODEProblem(
+        CTS.ClimaODEFunction(; T_exp! = rhs_invariant!),
+        Y,
+        (0.0, sim_params.t_int),
+        ghost_buffer,
+    )
+    integrator = CTS.init(
         prob,
-        SSPRK33(),
+        CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
         dt = Δt,
         saveat = [0.0:10.0:(sim_params.t_int)..., sim_params.t_int],
         progress = true,
@@ -461,7 +450,7 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
         throw(:exit_profile)
     end
 
-    t_diff = @elapsed sol_invariant = SciMLBase.solve!(integrator)
+    t_diff = @elapsed sol_invariant = CTS.solve!(integrator)
 
     if ClimaComms.iamroot(comms_ctx)
         println("Walltime = $t_diff seconds")
@@ -478,7 +467,37 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
         end
     end
 
-    @info "summary" Es[end] Mass[end]
+    # `physical_w` reads this rank's subdomain, so the peak is reduced over the
+    # ranks. Every rank has to reach the reduction, which is why it sits outside
+    # the root-only block below.
+    physical_w(Y) = Geometry.WVector.(Y.w).components.data.:1
+    peak_w = map(sol_invariant.u) do Y
+        ClimaComms.allreduce(comms_ctx, maximum(physical_w(Y)), max)
+    end
+
+    # `Es` and `Mass` are only filled on the root rank.
+    if ClimaComms.iamroot(comms_ctx)
+        @info "summary" Es[end] Mass[end]
+
+        # The domain is closed: mass and total energy must be conserved
+        # (measured drift: ~1e-15 in mass, ~2e-13 in energy).
+        @test abs(Mass[end] - mass_0) / mass_0 < 1e-12
+        @test abs(Es[end] - energy_0) / energy_0 < 1e-10
+
+        # The background is neutrally stratified, so nothing arrests the bubble
+        # while it is clear of the lid: it accelerates steadily at a fixed
+        # fraction of g θ_c / θ_b = 0.016 m/s². Measured max w: 0.44 m/s at
+        # t = 40 s, 1.45 at t = 140 s, 2.53 at t = 240 s — a straight line
+        # through the origin at 0.0105 m/s², and never above the free-buoyancy
+        # bound.
+        @test 1 < peak_w[end] < 0.016 * sol_invariant.t[end]
+        @test issorted(peak_w)
+        acceleration = peak_w[end] / sol_invariant.t[end]
+        for (t, w) in zip(sol_invariant.t, peak_w)
+            t < 40 && continue # the first few seconds are the spin-up
+            @test w ≈ acceleration * t rtol = 0.1
+        end
+    end
     #-----------------------------------
 
     ENV["GKSwstype"] = "nul"
@@ -501,14 +520,6 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
             joinpath(path, "mass_" * resolution * "_res.png"),
         )
 
-        function linkfig(figpath, alt = "")
-            # buildkite-agent upload figpath
-            # link figure in logs if we are running on CI
-            if get(ENV, "BUILDKITE", "") == "true"
-                artifact_url = "artifact://$figpath"
-                print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-            end
-        end
 
         linkfig(
             relpath(
@@ -535,7 +546,9 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
 
             plotfield = ones(cpu_hv_center_space)
 
-            copyto!(parent(plotfield), parent(sol_invariant.u[30].Yc.ρe))
+            # Slice the final state; a fixed index here would depend on
+            # `t_int` and on the `saveat` spacing.
+            copyto!(parent(plotfield), parent(sol_invariant.u[end].Yc.ρe))
 
             png(
                 plot(plotfield, slice = (:, 0.0, :)),

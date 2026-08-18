@@ -16,7 +16,7 @@ import ..Utilities:
     unwrap
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..DataLayouts
-import ..Geometry: Geometry, Covariant12Vector, Contravariant12Vector, ⊗
+import ..Geometry: Geometry, ⊗
 import ..Spaces: Spaces, Quadratures, AbstractSpace
 import ..Topologies
 import ..Meshes
@@ -29,6 +29,6 @@ include("numericalflux.jl")
 include("finitedifference.jl")
 include("remapping.jl")
 include("integrals.jl")
-include("columnwise.jl")
+include("deprecated.jl")
 
 end # module

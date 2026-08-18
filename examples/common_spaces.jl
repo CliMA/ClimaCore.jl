@@ -1,3 +1,6 @@
+# Mesh constructors shared by the examples: periodic lines and rectangles, and
+# the cubed sphere. They exist so the cases can state a resolution without
+# repeating the Domain -> Mesh construction each time.
 using ClimaComms
 using ClimaCore: Geometry, Domains, Meshes, Topologies, Spaces, Quadratures
 

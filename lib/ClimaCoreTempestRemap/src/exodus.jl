@@ -65,7 +65,7 @@ function write_exodus(
                             Geometry.components(
                                 Meshes.coordinates(topology.mesh, elem, vert),
                             ),
-                        )
+                        ),
                     )
                 if normalize_coordinates
                     c = c ./ norm(c)
