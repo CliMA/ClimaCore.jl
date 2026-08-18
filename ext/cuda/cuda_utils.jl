@@ -261,7 +261,8 @@ function launch_configuration(
     strict = true,
     max_waves = nothing,
 ) where {F}
-    cu_func = (CUDA.@cuda always_inline = true launch = false f(args...)).fun
+    cu_func = (CUDA.@cuda always_inline = true launch = false maxregs =
+        max_registers_per_thread() f(args...)).fun
     cache_key = (cu_func, strict, max_waves, config_args...)
     lock(LAUNCH_CONFIGURATION_CACHE_LOCK)
     try
@@ -335,6 +336,44 @@ function register_pressure_limit()
     return parsed
 end
 
+# `CLIMA_MAX_REGISTERS_PER_THREAD` caps registers per thread at compile time
+# (ptxas `-maxrregcount`), deliberately trading spill for occupancy.
+#
+# Occupancy is a step function of this number, not a gradient. On an A100 the
+# 64K-register file per SM fits 65536/255 = 256 threads at the architectural
+# cap, i.e. one 256-thread block, i.e. 8 warps and 12.5% occupancy. Dropping to
+# 128 fits a second block and doubles resident warps; 254 buys exactly nothing.
+# Worth it only for a kernel that is issue-starved (few eligible warps) rather
+# than bandwidth-bound, since the spill it induces costs memory traffic to buy
+# latency hiding. That is a property of the kernel, not of ClimaCore, so it is
+# opt-in rather than a default.
+#
+# The cap binds only kernels that exceed it; anything already under it compiles
+# unchanged. It is read once and cached because it participates in the CUDA
+# compilation cache key -- changing it mid-process would silently mix kernels
+# compiled under different budgets.
+const MAX_REGISTERS_SETTING = Ref{Int}(-1)  # -1 = not yet read, 0 = no cap
+
+function _read_max_registers_per_thread()
+    raw = get(ENV, "CLIMA_MAX_REGISTERS_PER_THREAD", nothing)
+    raw === nothing && return 0
+    s = strip(raw)
+    (isempty(s) || lowercase(s) in ("off", "none", "0")) && return 0
+    parsed = tryparse(Int, s)
+    if parsed === nothing || parsed <= 0 || parsed > MAX_REGISTERS_PER_THREAD
+        @warn "Invalid CLIMA_MAX_REGISTERS_PER_THREAD=$(raw); ignoring" maxlog = 1
+        return 0
+    end
+    return parsed
+end
+
+function max_registers_per_thread()
+    MAX_REGISTERS_SETTING[] == -1 &&
+        (MAX_REGISTERS_SETTING[] = _read_max_registers_per_thread())
+    v = MAX_REGISTERS_SETTING[]
+    return v == 0 ? nothing : v
+end
+
 function register_pressure_ignored(name)
     raw = get(ENV, "CLIMA_IGNORE_REGISTER_PRESSURE", "")
     isempty(strip(raw)) && return false
@@ -374,7 +413,12 @@ function measure_spill(f!::F!, args) where {F!}
         cap = CUDA.capability(CUDA.device())
         arch = "sm_$(cap.major)$(cap.minor)"
         out, err = IOBuffer(), IOBuffer()
-        cmd = `$ptxas -arch=$arch -v -o $(tempname()).cubin $ptx_file`
+        maxregs = max_registers_per_thread()
+        cmd = if maxregs === nothing
+            `$ptxas -arch=$arch -v -o $(tempname()).cubin $ptx_file`
+        else
+            `$ptxas -arch=$arch -maxrregcount=$maxregs -v -o $(tempname()).cubin $ptx_file`
+        end
         proc = run(pipeline(ignorestatus(cmd); stdout = out, stderr = err))
         success(proc) || return nothing
         log = String(take!(err)) * String(take!(out))
@@ -639,8 +683,8 @@ function auto_launch!(
         @assert !isnothing(nitems)
         if nitems ≥ 0
             # Note: `name = nothing` here will revert to default behavior
-            kernel = CUDA.@cuda name = kernel_name always_inline = true launch =
-                false f!(args...)
+            kernel = CUDA.@cuda name = kernel_name always_inline = true maxregs =
+                max_registers_per_thread() launch = false f!(args...)
             config = launch_configuration(f!, args)
             threads = min(nitems, config.threads)
             blocks = cld(nitems, threads)
@@ -649,8 +693,9 @@ function auto_launch!(
         end
     else
         kernel =
-            CUDA.@cuda name = kernel_name always_inline = always_inline threads =
-                threads_s blocks = blocks_s shmem = shmem f!(args...)
+            CUDA.@cuda name = kernel_name always_inline = always_inline maxregs =
+                max_registers_per_thread() threads = threads_s blocks = blocks_s shmem =
+                shmem f!(args...)
         check_register_pressure(kernel, kernel_name, f!, args)
     end
 
