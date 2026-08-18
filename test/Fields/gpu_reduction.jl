@@ -186,6 +186,31 @@ end
     @test LinearAlgebra.norm(Yf, 2) ≈ LinearAlgebra.norm(Yf_cpu, 2)
     @test LinearAlgebra.norm(Yf, 3) ≈ LinearAlgebra.norm(Yf_cpu, 3)
     @test LinearAlgebra.norm(Yf, Inf) ≈ LinearAlgebra.norm(Yf_cpu, Inf)
+
+    # Tensor-valued fields are reduced one component at a time, which needs a
+    # shfl_recurse method for Tensors so that the warp shuffles in the reduction
+    # kernel can move them between lanes (see ext/cuda/loops.jl).
+    for (space, space_cpu) in (
+        (hv_center_space, hv_center_space_cpu),
+        (hv_face_space, hv_face_space_cpu),
+    )
+        coords = Fields.coordinate_field(space)
+        coords_cpu = Fields.coordinate_field(space_cpu)
+
+        # A zero-valued vector field, whose sum is exactly zero on both devices.
+        Yz = fill(zero(Geometry.WVector{FT}), space)
+        @test sum(Yz) == zero(Geometry.WVector{FT})
+
+        # One-component and three-component vector fields.
+        Yw = Geometry.WVector.(coords.z)
+        Yw_cpu = Geometry.WVector.(coords_cpu.z)
+        @test sum(Yw) ≈ sum(Yw_cpu)
+
+        Yuvw = Geometry.UVWVector.(coords.long, coords.lat, coords.z)
+        Yuvw_cpu =
+            Geometry.UVWVector.(coords_cpu.long, coords_cpu.lat, coords_cpu.z)
+        @test sum(Yuvw) ≈ sum(Yuvw_cpu)
+    end
 end
 
 @testset "test cuda reduction op for single column" begin

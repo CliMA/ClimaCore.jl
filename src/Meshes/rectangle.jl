@@ -25,7 +25,7 @@ Base.:(==)(mesh1::RectilinearMesh, mesh2::RectilinearMesh) =
     mesh1.intervalmesh1 == mesh2.intervalmesh1 &&
     mesh1.intervalmesh2 == mesh2.intervalmesh2
 function Base.hash(mesh::RectilinearMesh, h::UInt)
-    h = hash(Meshes.RectilinearMesh, h)
+    h = hash(RectilinearMesh, h)
     h = hash(mesh.intervalmesh1, h)
     h = hash(mesh.intervalmesh2, h)
     return h
