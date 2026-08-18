@@ -11,9 +11,6 @@ import ..Geometry,
     ..Spaces,
     ..Fields,
     ..Operators
-import ..Spaces: ExtrudedFiniteDifferenceSpace
-import ClimaCore.Utilities: half
-
 import ..Grids:
     _ExtrudedFiniteDifferenceGrid,
     ExtrudedFiniteDifferenceGrid,

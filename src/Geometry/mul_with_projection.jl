@@ -39,7 +39,7 @@ basis2(::Type{<:AbstractTensor{2, <:Any, <:Tuple{Any, B}}}) where {B} = B
 
 recursively_find_dual_axes_for_projection(
     ::Type{X},
-) where {X <: Tensor{2}} = dual(Geometry.tensor_axes(X)[2])
+) where {X <: Tensor{2}} = dual(tensor_axes(X)[2])
 @inline function recursively_find_dual_axes_for_projection(::Type{X}) where {X}
     Y = eltype(X)
     Y === X && return nothing

@@ -1,7 +1,6 @@
 using ..Meshes
 using ..Spaces:
     AbstractSpace, SpectralElementSpace1D, SpectralElementSpace2D, Quadratures
-using ..Topologies: Topology2D, IntervalTopology
 using ..Fields: Field
 using ..DataLayouts
 using SparseArrays, LinearAlgebra

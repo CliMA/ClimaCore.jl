@@ -12,7 +12,7 @@ import ..Utilities:
     new, is_auto_broadcastable, add_auto_broadcasters, drop_auto_broadcasters
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..DataLayouts
-import ..Geometry: Geometry, Covariant12Vector, Contravariant12Vector, ⊗
+import ..Geometry: Geometry, ⊗
 import ..Spaces: Spaces, Quadratures, AbstractSpace
 import ..Topologies
 import ..Meshes

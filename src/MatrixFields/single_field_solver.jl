@@ -41,7 +41,7 @@ end
 single_field_solve!(_, x, A::ScalingFieldMatrixEntry, b) =
     x .= (inv(scaling_value(A)),) .* b
 single_field_solve!(cache, x, A::ColumnwiseBandMatrixField, b) =
-    if eltype(A) <: MatrixFields.DiagonalMatrixRow
+    if eltype(A) <: DiagonalMatrixRow
         A₀ = A.entries.:1
         @. x = inv(A₀) * b
     else

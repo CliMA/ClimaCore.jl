@@ -34,7 +34,7 @@ end
 Base.:(==)(mesh1::IntervalMesh, mesh2::IntervalMesh) =
     mesh1.domain == mesh2.domain && mesh1.faces == mesh2.faces
 function Base.hash(mesh::IntervalMesh, h::UInt)
-    h = hash(Meshes.IntervalMesh, h)
+    h = hash(IntervalMesh, h)
     h = hash(mesh.domain, h)
     h = hash(mesh.faces, h)
     return h

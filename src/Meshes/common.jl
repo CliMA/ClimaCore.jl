@@ -119,7 +119,7 @@ function face_connectivity_matrix(
             if is_boundary_face(mesh, elem, face)
                 continue
             end
-            opelem, opface, reversed = Meshes.opposing_face(mesh, elem, face)
+            opelem, opface, reversed = opposing_face(mesh, elem, face)
             j = orderindex[opelem]
             push!(I, i)
             push!(J, j)

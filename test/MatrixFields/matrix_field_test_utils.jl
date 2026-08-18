@@ -564,9 +564,9 @@ function perf_getidx(bc; broken = false)
         time_and_units_str(BT.@belapsed call_getidx($space, $bc, $idx_i, $hidx))
     ber =
         time_and_units_str(BT.@belapsed call_getidx($space, $bc, $idx_r, $hidx))
-    JET.@test_opt call_getidx(space, bc, idx_l, hidx)
-    JET.@test_opt call_getidx(space, bc, idx_i, hidx)
-    JET.@test_opt call_getidx(space, bc, idx_r, hidx)
+    @test_opt call_getidx(space, bc, idx_l, hidx)
+    @test_opt call_getidx(space, bc, idx_i, hidx)
+    @test_opt call_getidx(space, bc, idx_r, hidx)
     @info "getidx times max(left,interior,right) = ($bel,$bei,$ber)"
     return nothing
 end

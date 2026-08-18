@@ -5,6 +5,7 @@ import MultiBroadcastFusion as MBF
 import ..slab, ..slab_args, ..column, ..column_args, ..level, ..level_args
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..DataLayouts: DataLayouts, DataLayout, DataStyle, PointIndex
+# `@fused_direct` is unused here, but re-exposed as `Fields.@fused_direct` for users
 import ..DataLayouts: FusedMultiBroadcast, @fused_direct
 import ..Domains
 import ..Topologies
@@ -13,7 +14,7 @@ import ..Grids: ColumnIndex, local_geometry_type
 import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace, cuda_synchronize
 import ..Spaces: nlevels, ncolumns
 import ..Spaces: get_mask, set_mask!
-import ..Geometry: Geometry, Cartesian12Vector
+import ..Geometry: Geometry
 import ..Utilities: PlusHalf, half, safe_eltype, unsafe_eltype
 import ..Utilities: recursive_bottom_eltype
 import ..Utilities: drop_auto_broadcasters, auto_broadcasted
@@ -361,8 +362,8 @@ local_geometry_field(space::AbstractSpace) =
     Field(Spaces.local_geometry_data(space), space)
 local_geometry_field(field::Field) = local_geometry_field(axes(field))
 
-Fields.local_geometry_field(bc::Base.Broadcast.Broadcasted) =
-    Fields.local_geometry_field(axes(bc))
+local_geometry_field(bc::Base.Broadcast.Broadcasted) =
+    local_geometry_field(axes(bc))
 
 """
     Δz_field(field::Field)
