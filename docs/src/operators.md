@@ -84,6 +84,10 @@ LeftBiasedC2F
 RightBiasedC2F
 LeftBiasedF2C
 RightBiasedF2C
+BottomBiasedC2F
+TopBiasedC2F
+BottomBiasedF2C
+TopBiasedF2C
 AbstractTVDSlopeLimiter
 ```
 

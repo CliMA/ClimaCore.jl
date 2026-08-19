@@ -544,8 +544,8 @@ end
         cfield,
         ffield,
         Operators.DivergenceF2C(;
-            bottom = Operators.Extrapolate(),
-            top = Operators.Extrapolate(),
+            bottom = Operators.SetDivergence(0),
+            top = Operators.SetDivergence(0),
         ),
         Operators.DivergenceC2F(;
             bottom = Operators.SetDivergence(0),

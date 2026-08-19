@@ -94,12 +94,14 @@ end
 
     function div!(F)
         vecdivf = zeros(eltype(F), hv_center_space)
-        Ic2f = Operators.InterpolateC2F()
+        Ic2f = Operators.InterpolateC2F(
+            bottom = Operators.Extrapolate(),
+            top = Operators.Extrapolate(),
+        )
         divf2c = Operators.DivergenceF2C(
             bottom = Operators.SetValue(
                 Geometry.WVector(1.0) ⊗ Geometry.UVector(0.0),
             ),
-            top = Operators.Extrapolate(),
         )
         # Only upward advection
         @. vecdivf = divf2c(vC ⊗ Ic2f(F))

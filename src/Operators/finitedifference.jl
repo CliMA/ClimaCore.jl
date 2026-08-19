@@ -735,6 +735,41 @@ right_interior_idx(
 right_interior_idx(space::AbstractSpace, ::RightBiasedF2C, ::SetValue, arg) =
     right_idx(space) - 1
 
+# In the vertical direction, the left boundary is the bottom and the right
+# boundary is the top, so each biased operator also has a vertically-named
+# alias.
+"""
+    BottomBiasedC2F
+
+Alias for [`LeftBiasedC2F`](@ref): in the vertical direction, the left
+boundary is the bottom.
+"""
+const BottomBiasedC2F = LeftBiasedC2F
+
+"""
+    BottomBiasedF2C
+
+Alias for [`LeftBiasedF2C`](@ref): in the vertical direction, the left
+boundary is the bottom.
+"""
+const BottomBiasedF2C = LeftBiasedF2C
+
+"""
+    TopBiasedC2F
+
+Alias for [`RightBiasedC2F`](@ref): in the vertical direction, the right
+boundary is the top.
+"""
+const TopBiasedC2F = RightBiasedC2F
+
+"""
+    TopBiasedF2C
+
+Alias for [`RightBiasedF2C`](@ref): in the vertical direction, the right
+boundary is the top.
+"""
+const TopBiasedF2C = RightBiasedF2C
+
 abstract type WeightedInterpolationOperator <: InterpolationOperator end
 # TODO: this is not in general correct and the return type
 # should be based on the component operator types (/, *) but we don't have a good way
@@ -1830,18 +1865,17 @@ The following boundary conditions are supported:
 ```math
 G(x)[1]³ = x[1+\\tfrac{1}{2}] - x₀
 ```
-
-  - [`Extrapolate()`](@ref): set the value at the center closest to the boundary
-    to be the same as the neighbouring interior value. For the left boundary, this becomes:
-
+- [`SetGradient(v₀)`](@ref): set the value of the gradient at the center
+  closest to the boundary to be `v₀`. For the left boundary, this becomes:
 ```math
-G(x)[1]³ = G(x)[2]³
+G(x)[1] = v₀
 ```
+  As with [`GradientC2F`](@ref), `v₀` is projected onto the covariant 3 axis.
 """
 struct GradientF2C{BCS} <: GradientOperator
     bcs::BCS
     function GradientF2C(; kwargs...)
-        assert_valid_bcs("GradientF2C", kwargs, (SetValue, Extrapolate))
+        assert_valid_bcs("GradientF2C", kwargs, (SetValue, SetGradient))
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     GradientF2C(bcs) = GradientF2C(; bcs...)
@@ -1855,7 +1889,7 @@ stencil_interior_width(::GradientF2C, arg) = ((-half, half),)
 boundary_width(::GradientF2C, ::AbstractBoundaryCondition) = 0
 
 boundary_width(::GradientF2C, ::SetValue) = 1
-boundary_width(::GradientF2C, ::Extrapolate) = 1
+boundary_width(::GradientF2C, ::SetGradient) = 1
 """
     G = GradientC2F(;boundaryname=boundarycondition...)
     G.(x)
@@ -1926,14 +1960,6 @@ The following boundary conditions are supported:
 ```math
 D(v)[1] = (Jv³[1+\\tfrac{1}{2}] - Jv³₀) / J[i]
 ```
-
-  - [`Extrapolate()`](@ref): set the value at the center closest to the boundary
-    to be the same as the neighbouring interior value. For the left boundary, this
-    becomes:
-
-```math
-D(v)[1]³ = D(v)[2]³
-
 - [`SetDivergence(v₀)`](@ref): set the divergence at the cell center  closest to
   the boundary
 ```
@@ -1941,11 +1967,7 @@ D(v)[1]³ = D(v)[2]³
 struct DivergenceF2C{BCS} <: DivergenceOperator
     bcs::BCS
     function DivergenceF2C(; kwargs...)
-        assert_valid_bcs(
-            "DivergenceF2C",
-            kwargs,
-            (SetValue, Extrapolate, SetDivergence),
-        )
+        assert_valid_bcs("DivergenceF2C", kwargs, (SetValue, SetDivergence))
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     DivergenceF2C(bcs) = DivergenceF2C(; bcs...)
@@ -1958,10 +1980,6 @@ stencil_interior_width(::DivergenceF2C, arg) = ((-half, half),)
 boundary_width(::DivergenceF2C, ::AbstractBoundaryCondition) = 0
 boundary_width(::DivergenceF2C, ::SetValue) = 1
 boundary_width(::DivergenceF2C, ::SetDivergence) = 1
-# Without this, `left_interior_idx`/`right_interior_idx` place the boundary
-# centers in the interior window, so `op_matrix_first_row`/`op_matrix_last_row`
-# for `Extrapolate` are never reached and the condition is silently ignored.
-boundary_width(::DivergenceF2C, ::Extrapolate) = 1
 
 # Extend `adapt_structure` for all boundary conditions containing a `val` field.
 function Adapt.adapt_structure(to, bc::AbstractBoundaryCondition)
@@ -2103,14 +2121,14 @@ left_idx(space) + boundary_width(op, bc)
 but can be overwritten for specific stencil types (e.g. if the stencil is
 assymetric).
 """
-# `bc` is left untyped because advection operators also accept user-supplied
-# callable ghost-point reconstructions, which are not AbstractBoundaryConditions.
 @inline function left_interior_idx(
     space::AbstractSpace,
     op::FiniteDifferenceOperator,
     bc,
     args...,
 )
+    # `bc` is left untyped because advection operators also accept user-supplied
+    # callable ghost-point reconstructions, which are not AbstractBoundaryConditions.
     left_idx(space) + boundary_width(op, bc)
 end
 

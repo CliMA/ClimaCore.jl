@@ -65,6 +65,20 @@ main
   operator that cannot be represented by a matrix.
   [2544](https://github.com/CliMA/ClimaCore.jl/pull/2544)
 
+- ![][badge-💥breaking] Removed the `Extrapolate` boundary condition from
+  `GradientF2C` and `DivergenceF2C`, where it replicated the operator's output
+  at the closest interior point (e.g. `G(x)[1] = G(x)[2]`); it remains
+  available on the interpolation operators `InterpolateC2F` and
+  `WeightedInterpolateC2F`, where it copies the closest interior input.
+  `GradientF2C` now accepts `SetGradient(v₀)`, which prescribes the gradient
+  at the center closest to the boundary (with `v₀` projected onto the
+  covariant 3 axis, as for `GradientC2F`). Also added `BottomBiasedC2F`,
+  `BottomBiasedF2C`, `TopBiasedC2F`, and `TopBiasedF2C` as aliases for
+  `LeftBiasedC2F`, `LeftBiasedF2C`, `RightBiasedC2F`, and `RightBiasedF2C`: in
+  the vertical direction, the left boundary is the bottom and the right
+  boundary is the top.
+  [2544](https://github.com/CliMA/ClimaCore.jl/pull/2544)
+
 - ![][badge-💥breaking] Removed unused finite difference operators and boundary
   conditions [2521](https://github.com/CliMA/ClimaCore.jl/pull/2521)
   - Removed `SetValue` from `GradientC2F`, `DivergenceC2F`, `CurlC2F` and

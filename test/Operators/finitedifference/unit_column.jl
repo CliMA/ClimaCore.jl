@@ -140,16 +140,27 @@ end
         ∂sin = Geometry.WVector.(∂.(w .* I.(θ)))
         @test ∂sin ≈ Geometry.WVector.(cos.(centers)) atol = 1e-2
 
-        # Can't define Neumann conditions on GradientF2C
-        ∂ = Operators.GradientF2C(
+        # Extrapolate is not accepted by GradientF2C
+        @test_throws AssertionError Operators.GradientF2C(
             left = Operators.Extrapolate(),
             right = Operators.Extrapolate(),
         )
 
-        @test_throws AssertionError Operators.GradientF2C(
-            left = Operators.SetGradient(1),
-            right = Operators.SetGradient(1),
+        # SetGradient prescribes the gradient at the boundary centers
+        ∂ = Operators.GradientF2C(
+            left = Operators.SetGradient(Geometry.Covariant3Vector(FT(0))),
+            right = Operators.SetGradient(Geometry.Covariant3Vector(FT(0))),
         )
+        ∂sin = Geometry.WVector.(∂.(w .* I.(θ)))
+        ∂sin_arr = vec(Array(parent(∂sin)))
+        @test ∂sin_arr[1] == 0
+        @test ∂sin_arr[end] == 0
+        @test maximum(
+            abs.(
+                ∂sin_arr[2:(end - 1)] .-
+                cos.(vec(Array(parent(centers))))[2:(end - 1)]
+            ),
+        ) ≤ 1e-2
 
         # 2) we set boundaries on the 1st operator
         I = Operators.InterpolateC2F(

@@ -62,16 +62,6 @@ function set_value_contra3_bcs(c)
              top = Operators.SetValue(contra3(FT(0.0))))
 end
 
-function set_value_divgrad_uₕ_bcs(c) # real-world example
-    FT = Spaces.undertype(axes(c))
-    top_val = Geometry.Contravariant3Vector(FT(0)) ⊗
-            Geometry.Covariant12Vector(FT(0), FT(0))
-    bottom_val = Geometry.Contravariant3Vector(FT(0)) ⊗
-            Geometry.Covariant12Vector(FT(0), FT(0))
-    return (;top = Operators.SetValue(top_val),
-             bottom = Operators.Extrapolate())
-end
-
 function set_value_divgrad_uₕ_maybe_field_bcs(c) # real-world example
     FT = Spaces.undertype(axes(c))
     top_val = Geometry.Contravariant3Vector(FT(0)) ⊗
@@ -152,7 +142,7 @@ bcs_tested(c, ::typeof(op_broadcast_example2!)) = ((;), )
 
 bcs_tested(c, ::typeof(op_GradientF2C!)) = ((;), set_value_bcs(c))
 bcs_tested(c, ::typeof(op_GradientC2F!)) = (set_gradient_value_bcs(c),)
-bcs_tested(c, ::typeof(op_DivergenceF2C!)) = ((;), extrapolate_bcs(c))
+bcs_tested(c, ::typeof(op_DivergenceF2C!)) = ((;), set_value_contra3_bcs(c))
 bcs_tested(c, ::typeof(op_DivergenceC2F!)) = (set_divergence_bcs(c), )
 bcs_tested(c, ::typeof(op_InterpolateF2C!)) = ((;), )
 bcs_tested(c, ::typeof(op_InterpolateC2F!)) = (set_value_bcs(c), extrapolate_bcs(c))
@@ -175,10 +165,7 @@ bcs_tested(c, ::typeof(op_div_interp_CC!)) =
 bcs_tested(c, ::typeof(op_div_interp_FF!)) =
     ((; inner = (;), outer = set_divergence_bcs(c)), )
 bcs_tested(c, ::typeof(op_divgrad_uₕ!)) =
-    (
-        (; inner = (;), outer = set_value_divgrad_uₕ_bcs(c)),
-        (; inner = (;), outer = set_value_divgrad_uₕ_maybe_field_bcs(c)),
-    )
+    ((; inner = (;), outer = set_value_divgrad_uₕ_maybe_field_bcs(c)),)
 
 function short_name(key)
     to_short = (
@@ -384,7 +371,7 @@ function test_results_column(t_min)
     [(op_GradientF2C!, :SetValue, :SetValue), 270.448*ns*buffer],
     [(op_GradientC2F!, :SetGradient, :SetGradient), 242.053*ns*buffer],
     [(op_DivergenceF2C!, :none), 1.005*μs*buffer],
-    [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), 1.076*μs*buffer],
+    [(op_DivergenceF2C!, :SetValue, :SetValue), 1.076*μs*buffer],
     [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), 878.028*ns*buffer],
     [(op_InterpolateF2C!, :none), 254.523*ns*buffer],
     [(op_InterpolateC2F!, :SetValue, :SetValue), 254.241*ns*buffer],
@@ -402,7 +389,6 @@ function test_results_column(t_min)
     [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 876.510*ns*buffer],
     [(op_div_interp_CC!, :SetValue, :SetValue, :none), 721.119*ns*buffer],
     [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), 686.581*ns*buffer],
-    [(op_divgrad_uₕ!, :none, :SetValue, :Extrapolate), 4.960*μs*buffer],
     [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), 5.047*μs*buffer],
     ]
     for (params, ref_time) in results
@@ -424,7 +410,7 @@ function test_results_sphere(t_min)
     [(op_GradientF2C!, :SetValue, :SetValue), 1.754*ms*buffer],
     [(op_GradientC2F!, :SetGradient, :SetGradient), 1.899*ms*buffer],
     [(op_DivergenceF2C!, :none), 6.792*ms*buffer],
-    [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), 6.776*ms*buffer],
+    [(op_DivergenceF2C!, :SetValue, :SetValue), 6.776*ms*buffer],
     [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), 6.720*ms*buffer],
     [(op_InterpolateF2C!, :none), 1.701*ms*buffer],
     [(op_InterpolateC2F!, :SetValue, :SetValue), 1.713*ms*buffer],
@@ -444,7 +430,6 @@ function test_results_sphere(t_min)
     [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 4.470*ms*buffer],
     [(op_div_interp_CC!, :SetValue, :SetValue, :none), 3.566*ms*buffer],
     [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), 3.663*ms*buffer],
-    [(op_divgrad_uₕ!, :none, :SetValue, :Extrapolate), 7.470*ms*buffer],
     [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), 7.251*ms*buffer],
     ]
     for (params, ref_time) in results
