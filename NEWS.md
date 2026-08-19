@@ -375,6 +375,11 @@ main
   `MultiColumnFiniteDifferenceSpace`
   [2596](https://github.com/CliMA/ClimaCore.jl/pull/2596)
 
+- ![][badge-✨feature/enhancement] Makie plotting has moved from the
+  `ClimaCoreMakie` companion package into the `ClimaCoreMakieExt` package
+  extension, which loads automatically when both `ClimaCore` and `Makie` (e.g.
+  via `CairoMakie` or `GLMakie`) are loaded.
+
 v0.15.3
 -------
 
