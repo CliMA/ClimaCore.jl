@@ -1849,6 +1849,54 @@ function kennedy_gruber_gravity_cartesian_flux(nvec_a, nvec_b, y_a, y_b)
 end
 
 """
+    wb_gravity_cartesian_increment_curvilinear(nvec_a, nvec_b, y_a, y_b)
+
+Curvilinear analogue of [`wb_gravity_cartesian_increment`](@ref): the same
+log-mean ρ̂ (Φ_b − Φ_a)/2 weight, but projected through the full UVW-frame
+unit-vector fields `Ec1`, `Ec2`, `Ec3` (UVWVectors) rather than the
+UV-plane `E1`, `E2`, `E3`. Required when `nvec` is a UVWVector (curvilinear
+metric normal, non-zero W component over terrain). Volume-only — the
+geopotential is single-valued at element faces so the interface Roe flux
+is unchanged.
+
+State fields required: `ρ`, `p`, `Φ`, `Ec1`, `Ec2`, `Ec3`.
+"""
+@inline function wb_gravity_cartesian_increment_curvilinear(nvec_a, nvec_b, y_a, y_b)
+    b_a = y_a.ρ / (2 * y_a.p)
+    b_b = y_b.ρ / (2 * y_b.p)
+    ρ̂ = (b_a + b_b) / 2 * logmean(y_a.ρ, y_b.ρ) / b_a
+    gΔΦ = ρ̂ * (y_b.Φ - y_a.Φ) / 2
+    Ē1n = (y_a.Ec1' * nvec_a + y_b.Ec1' * nvec_b) / 2
+    Ē2n = (y_a.Ec2' * nvec_a + y_b.Ec2' * nvec_b) / 2
+    Ē3n = (y_a.Ec3' * nvec_a + y_b.Ec3' * nvec_b) / 2
+    return (ρu1 = gΔΦ * Ē1n, ρu2 = gΔΦ * Ē2n, ρu3 = gΔΦ * Ē3n)
+end
+
+"""
+    kennedy_gruber_gravity_cartesian_flux_curvilinear(nvec_a, nvec_b, y_a, y_b)
+
+[`kennedy_gruber_cartesian_flux_curvilinear`](@ref) plus the curvilinear
+well-balanced geopotential fluctuation
+[`wb_gravity_cartesian_increment_curvilinear`](@ref). Use in place of
+[`kennedy_gruber_gravity_cartesian_flux`](@ref) whenever the metric normal
+is a UVWVector (terrain cross-terms present). Interface fluxes are
+unchanged — supply the Roe curvilinear interface as usual.
+"""
+function kennedy_gruber_gravity_cartesian_flux_curvilinear(nvec_a, nvec_b, y_a, y_b)
+    F = kennedy_gruber_cartesian_flux_curvilinear(nvec_a, nvec_b, y_a, y_b)
+    G = wb_gravity_cartesian_increment_curvilinear(nvec_a, nvec_b, y_a, y_b)
+    return (
+        ρ = F.ρ,
+        ρe = F.ρe,
+        ρu1 = F.ρu1 + G.ρu1,
+        ρu2 = F.ρu2 + G.ρu2,
+        ρu3 = F.ρu3 + G.ρu3,
+    )
+end
+@inline _fd_metric_style(::typeof(kennedy_gruber_gravity_cartesian_flux_curvilinear)) =
+    Val{:curvilinear}()
+
+"""
     kg_massflux_fluctuation(nvec_a, nvec_b, y_a, y_b)
 
 Non-symmetric two-point FLUCTUATION form for the advective operator
