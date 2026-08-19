@@ -1657,12 +1657,6 @@ end
 @inline _fd_metric_style(::typeof(kennedy_gruber_cartesian_flux_curvilinear)) =
     Val{:curvilinear}()
 
-# Interface flux: `add_numerical_flux_internal!` derives the normal style from
-# `fn`, so this override ensures the face normal is a `UVWVector` (matching
-# what `kennedy_gruber_roe_cartesian_curvilinear` expects).
-@inline _fd_metric_style(::typeof(kennedy_gruber_roe_cartesian_curvilinear)) =
-    Val{:curvilinear}()
-
 """
     kennedy_gruber_roe_cartesian_curvilinear(normal, argvals⁻, argvals⁺)
 
@@ -1745,6 +1739,11 @@ function kennedy_gruber_roe_cartesian_curvilinear(normal, (y⁻,), (y⁺,))
         ρu3 = F.ρu3 - Dρu3 / 2,
     )
 end
+# Interface flux: `add_numerical_flux_internal!` derives the face-normal style
+# from `fn`, so this ensures the normal is a `UVWVector`. Must appear AFTER
+# the function definition so `typeof(...)` resolves correctly.
+@inline _fd_metric_style(::typeof(kennedy_gruber_roe_cartesian_curvilinear)) =
+    Val{:curvilinear}()
 
 """
     logmean(a, b)
