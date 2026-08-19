@@ -16,6 +16,7 @@ import ClimaCore:
     Spaces
 
 import ClimaTimeSteppers as CTS
+import LazyBroadcast: lazy
 
 import Logging
 import TerminalLoggers
@@ -68,29 +69,63 @@ function tendency!(dY, Y, _, t)
     # must still be set, not left to whatever the tendency buffer contains.
     @. dw = Geometry.WVector(zero(FT))
 
-    A = Operators.AdvectionC2C(
-        bottom = Operators.SetValue(0.0),
-        top = Operators.SetValue(0.0),
-    )
+    u_bottom = Fields.level(u, 1)
+    u_top = Fields.level(u, Fields.nlevels(u))
+    v_bottom = Fields.level(v, 1)
+    v_top = Fields.level(v, Fields.nlevels(v))
 
-    # No slip at the surface and the geostrophic wind at the top, so both
-    # boundary faces of ∂z(u, v) come from the gradient operator and the
-    # divergence needs no boundary condition of its own.
+    # No slip at the surface and the geostrophic wind at the top. Setting the
+    # value x₀ at a boundary face is the same as setting the covariant gradient
+    # there to 2 (x[boundary center] - x₀), so both boundary faces of ∂z(u, v)
+    # come from the gradient operator and the divergence needs no boundary
+    # condition of its own. The advective form is an interpolated
+    # center-to-face gradient, with zero boundary values imposed the same way.
     divf2c = Operators.DivergenceF2C()
+    interpf2c = Operators.InterpolateF2C()
 
     # u-momentum
     gradc2f = Operators.GradientC2F(
-        bottom = Operators.SetValue(FT(0)),
-        top = Operators.SetValue(FT(ug)),
+        bottom = Operators.SetGradient(
+            @. lazy(Geometry.Covariant3Vector(2 * u_bottom))
+        ),
+        top = Operators.SetGradient(
+            @. lazy(Geometry.Covariant3Vector(2 * (FT(ug) - u_top)))
+        ),
     )
-    @. du = divf2c(ν * gradc2f(u)) + f * (v - vg) - A(w, u)
+    gradc2f_advect = Operators.GradientC2F(
+        bottom = Operators.SetGradient(
+            @. lazy(Geometry.Covariant3Vector(2 * u_bottom))
+        ),
+        top = Operators.SetGradient(
+            @. lazy(Geometry.Covariant3Vector(-2 * u_top))
+        ),
+    )
+    @. du =
+        divf2c(ν * gradc2f(u)) + f * (v - vg) - interpf2c(
+            Geometry.dot(Geometry.Contravariant3Vector(w), gradc2f_advect(u)),
+        )
 
     # v-momentum
     gradc2f = Operators.GradientC2F(
-        bottom = Operators.SetValue(FT(0)),
-        top = Operators.SetValue(FT(vg)),
+        bottom = Operators.SetGradient(
+            @. lazy(Geometry.Covariant3Vector(2 * v_bottom))
+        ),
+        top = Operators.SetGradient(
+            @. lazy(Geometry.Covariant3Vector(2 * (FT(vg) - v_top)))
+        ),
     )
-    @. dv = divf2c(ν * gradc2f(v)) - f * (u - ug) - A(w, v)
+    gradc2f_advect = Operators.GradientC2F(
+        bottom = Operators.SetGradient(
+            @. lazy(Geometry.Covariant3Vector(2 * v_bottom))
+        ),
+        top = Operators.SetGradient(
+            @. lazy(Geometry.Covariant3Vector(-2 * v_top))
+        ),
+    )
+    @. dv =
+        divf2c(ν * gradc2f(v)) - f * (u - ug) - interpf2c(
+            Geometry.dot(Geometry.Contravariant3Vector(w), gradc2f_advect(v)),
+        )
     return dY
 end
 

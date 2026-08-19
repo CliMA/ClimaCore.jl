@@ -427,11 +427,6 @@ Supported boundary conditions are:
 ```math
 I(x)[\\tfrac{1}{2}] = x₀
 ```
-- [`SetGradient(v)`](@ref): set the value at the boundary such that the gradient
-  is `v`. At the left boundary the stencil is
-```math
-I(x)[\\tfrac{1}{2}] = x[1] - \\frac{1}{2} v³
-```
 - [`Extrapolate`](@ref): use the closest interior point as the boundary value.
   At the left boundary the stencil is
 ```math
@@ -444,7 +439,7 @@ struct InterpolateC2F{BCS} <: InterpolationOperator
         assert_valid_bcs(
             "InterpolateC2F",
             kwargs,
-            (SetValue, SetGradient, Extrapolate),
+            (SetValue, Extrapolate),
         )
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
@@ -489,39 +484,6 @@ Base.@propagate_inbounds function stencil_right_boundary(
 )
     @assert idx == right_face_boundary_idx(space)
     getidx(space, bc.val, nothing, hidx)
-end
-
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::InterpolateC2F,
-    bc::SetGradient,
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    @assert idx == left_face_boundary_idx(space)
-    a⁺ = getidx(space, arg, idx + half, hidx)
-    v₃ = Geometry.covariant3(
-        getidx(space, bc.val, nothing, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    a⁺ - v₃ / 2
-end
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::InterpolateC2F,
-    bc::SetGradient,
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    @assert idx == right_face_boundary_idx(space)
-    a⁻ = getidx(space, arg, idx - half, hidx)
-    v₃ = Geometry.covariant3(
-        getidx(space, bc.val, nothing, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    a⁻ + v₃ / 2
 end
 
 Base.@propagate_inbounds function stencil_left_boundary(
@@ -1113,7 +1075,6 @@ WI(w, x)[i] = \\frac{
 Supported boundary conditions are:
 
 - [`SetValue(val)`](@ref): set the value at the boundary face to be `val`.
-- [`SetGradient`](@ref): set the value at the boundary such that the gradient is `val`.
 - [`Extrapolate`](@ref): use the closest interior point as the boundary value.
 
 These have the same stencil as in [`InterpolateC2F`](@ref).
@@ -1124,7 +1085,7 @@ struct WeightedInterpolateC2F{BCS} <: WeightedInterpolationOperator
         assert_valid_bcs(
             "WeightedInterpolateC2F",
             kwargs,
-            (SetValue, SetGradient, Extrapolate),
+            (SetValue, Extrapolate),
         )
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
@@ -1182,41 +1143,6 @@ end
 
 Base.@propagate_inbounds function stencil_left_boundary(
     ::WeightedInterpolateC2F,
-    bc::SetGradient,
-    space,
-    idx,
-    hidx,
-    weight,
-    arg,
-)
-    @assert idx == left_face_boundary_idx(space)
-    a⁺ = getidx(space, arg, idx + half, hidx)
-    v₃ = Geometry.covariant3(
-        getidx(space, bc.val, nothing, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    a⁺ - v₃ / 2
-end
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::WeightedInterpolateC2F,
-    bc::SetGradient,
-    space,
-    idx,
-    hidx,
-    weight,
-    arg,
-)
-    @assert idx == right_face_boundary_idx(space)
-    a⁻ = getidx(space, arg, idx - half, hidx)
-    v₃ = Geometry.covariant3(
-        getidx(space, bc.val, nothing, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    a⁻ + v₃ / 2
-end
-
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::WeightedInterpolateC2F,
     bc::Extrapolate,
     space,
     idx,
@@ -1264,15 +1190,6 @@ U(\\boldsymbol{v},x)[i] = \\begin{cases}
 where ``\\boldsymbol{e}_3`` is the 3rd covariant basis vector.
 
 Supported boundary conditions are:
-- [`SetValue(x₀)`](@ref): set the value of `x` to be `x₀` in a hypothetical
-  ghost cell on the other side of the boundary. On the left boundary the stencil
-  is
-  ```math
-  U(\\boldsymbol{v},x)[\\tfrac{1}{2}] = \\begin{cases}
-    v^3[\\tfrac{1}{2}] x_0  \\boldsymbol{e}_3 \\textrm{, if }  v^3[\\tfrac{1}{2}] > 0 \\\\
-    v^3[\\tfrac{1}{2}] x[1] \\boldsymbol{e}_3 \\textrm{, if }  v^3[\\tfrac{1}{2}] < 0
-    \\end{cases}
-  ```
 - [`Extrapolate()`](@ref): set the value of `x` to be the same as the closest
   interior point. On the left boundary, the stencil is
   ```math
@@ -1285,7 +1202,7 @@ struct UpwindBiasedProductC2F{BCS} <: AdvectionOperator
         assert_valid_bcs(
             "UpwindBiasedProductC2F",
             kwargs,
-            (SetValue, Extrapolate),
+            (Extrapolate,),
         )
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
@@ -1324,44 +1241,6 @@ Base.@propagate_inbounds function stencil_interior(
 end
 
 boundary_width(::UpwindBiasedProductC2F, ::AbstractBoundaryCondition) = 1
-
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::UpwindBiasedProductC2F,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    @assert idx == left_face_boundary_idx(space)
-    aᴸᴮ = getidx(space, bc.val, nothing, hidx)
-    a⁺ = stencil_interior(RightBiasedC2F(), space, idx, hidx, arg)
-    vᶠ = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    return Geometry.Contravariant3Vector(upwind_biased_product(vᶠ, aᴸᴮ, a⁺))
-end
-
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::UpwindBiasedProductC2F,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    @assert idx == right_face_boundary_idx(space)
-    a⁻ = stencil_interior(LeftBiasedC2F(), space, idx, hidx, arg)
-    aᴿᴮ = getidx(space, bc.val, nothing, hidx)
-    vᶠ = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    return Geometry.Contravariant3Vector(upwind_biased_product(vᶠ, a⁻, aᴿᴮ))
-end
 
 Base.@propagate_inbounds function stencil_left_boundary(
     op::UpwindBiasedProductC2F,
@@ -2241,409 +2120,6 @@ Base.@propagate_inbounds function stencil_right_boundary(
     return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
 end
 
-"""
-    A = AdvectionF2F(;boundaries)
-    A.(v, θ)
-
-Vertical advection operator at cell faces, for a face-valued velocity field `v` and face-valued
-variables `θ`, approximating ``v^3 \\partial_3 \\theta``.
-
-It uses the following stencil
-```math
-A(v,θ)[i] = \\frac{1}{2} (θ[i+1] - θ[i-1]) v³[i]
-```
-
-No boundary conditions are currently supported.
-"""
-struct AdvectionF2F{BCS <: @NamedTuple{}} <: AdvectionOperator
-    bcs::BCS
-end
-
-function AdvectionF2F(; kwargs...)
-    assert_no_bcs("AdvectionF2F", kwargs)
-    AdvectionF2F(NamedTuple(kwargs))
-end
-
-return_space(
-    ::AdvectionF2F,
-    velocity_space::AllFaceFiniteDifferenceSpace,
-    arg_space::AllFaceFiniteDifferenceSpace,
-) = arg_space
-
-stencil_interior_width(::AdvectionF2F, velocity, arg) = ((0, 0), (-1, 1))
-Base.@propagate_inbounds function stencil_interior(
-    ::AdvectionF2F,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    θ⁺ = getidx(space, arg, idx + 1, hidx)
-    θ⁻ = getidx(space, arg, idx - 1, hidx)
-    w³ = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    ∂θ₃ = (θ⁺ - θ⁻) / 2
-    return w³ * ∂θ₃
-end
-boundary_width(::AdvectionF2F, ::AbstractBoundaryCondition) = 1
-
-"""
-    A = AdvectionC2C(;boundaries)
-    A.(v, θ)
-
-Vertical advection operator at cell centers, for cell face velocity field `v`
-cell center variables `θ`, approximating ``v^3 \\partial_3 \\theta``.
-
-It uses the following stencil
-```math
-A(v,θ)[i] = \\frac{1}{2} \\{ (θ[i+1] - θ[i]) v³[i+\\tfrac{1}{2}] + (θ[i] - θ[i-1])v³[i-\\tfrac{1}{2}]\\}
-```
-
-Supported boundary conditions:
-
-- [`SetValue(θ₀)`](@ref): set the value of `θ` at the boundary face to be `θ₀`.
-  At the lower boundary, this is:
-```math
-A(v,θ)[1] = \\frac{1}{2} \\{ (θ[2] - θ[1]) v³[1 + \\tfrac{1}{2}] + (θ[1] - θ₀)v³[\\tfrac{1}{2}]\\}
-```
-- [`Extrapolate`](@ref): use the closest interior point as the boundary value.
-  At the lower boundary, this is:
-```math
-A(v,θ)[1] = (θ[2] - θ[1]) v³[1 + \\tfrac{1}{2}] \\}
-```
-"""
-struct AdvectionC2C{BCS} <: AdvectionOperator
-    bcs::BCS
-    function AdvectionC2C(; kwargs...)
-        assert_valid_bcs("AdvectionC2C", kwargs, (SetValue, Extrapolate))
-        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
-    end
-    AdvectionC2C(bcs) = AdvectionC2C(; bcs...)
-end
-
-return_space(
-    ::AdvectionC2C,
-    velocity_space::AllFaceFiniteDifferenceSpace,
-    arg_space::AllCenterFiniteDifferenceSpace,
-) = arg_space
-
-stencil_interior_width(::AdvectionC2C, velocity, arg) =
-    ((-half, +half), (-1, 1))
-Base.@propagate_inbounds function stencil_interior(
-    ::AdvectionC2C,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    θ⁺ = getidx(space, arg, idx + 1, hidx)
-    θ = getidx(space, arg, idx, hidx)
-    θ⁻ = getidx(space, arg, idx - 1, hidx)
-    w³⁺ = Geometry.contravariant3(
-        getidx(space, velocity, idx + half, hidx),
-        Geometry.LocalGeometry(space, idx + half, hidx),
-    )
-    w³⁻ = Geometry.contravariant3(
-        getidx(space, velocity, idx - half, hidx),
-        Geometry.LocalGeometry(space, idx - half, hidx),
-    )
-    ∂θ₃⁺ = θ⁺ - θ
-    ∂θ₃⁻ = θ - θ⁻
-    return (w³⁺ * ∂θ₃⁺ + w³⁻ * ∂θ₃⁻) / 2
-end
-
-boundary_width(::AdvectionC2C, ::AbstractBoundaryCondition) = 1
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::AdvectionC2C,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    @assert idx == left_center_boundary_idx(space)
-    θ⁺ = getidx(space, arg, idx + 1, hidx)
-    θ = getidx(space, arg, idx, hidx)
-    θ⁻ = getidx(space, bc.val, nothing, hidx) # defined at face, not the center
-    w³⁺ = Geometry.contravariant3(
-        getidx(space, velocity, idx + half, hidx),
-        Geometry.LocalGeometry(space, idx + half, hidx),
-    )
-    w³⁻ = Geometry.contravariant3(
-        getidx(space, velocity, idx - half, hidx),
-        Geometry.LocalGeometry(space, idx - half, hidx),
-    )
-    ∂θ₃⁺ = θ⁺ - θ
-    ∂θ₃⁻ = 2 * (θ - θ⁻)
-    return (w³⁺ * ∂θ₃⁺ + w³⁻ * ∂θ₃⁻) / 2
-end
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::AdvectionC2C,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    @assert idx == right_center_boundary_idx(space)
-    θ⁺ = getidx(space, bc.val, nothing, hidx) # value at the face
-    θ = getidx(space, arg, idx, hidx)
-    θ⁻ = getidx(space, arg, idx - 1, hidx)
-    w³⁺ = Geometry.contravariant3(
-        getidx(space, velocity, idx + half, hidx),
-        Geometry.LocalGeometry(space, idx + half, hidx),
-    )
-    w³⁻ = Geometry.contravariant3(
-        getidx(space, velocity, idx - half, hidx),
-        Geometry.LocalGeometry(space, idx - half, hidx),
-    )
-    ∂θ₃⁺ = 2 * (θ⁺ - θ)
-    ∂θ₃⁻ = θ - θ⁻
-    return (w³⁺ * ∂θ₃⁺ + w³⁻ * ∂θ₃⁻) / 2
-end
-
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::AdvectionC2C,
-    ::Extrapolate,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    @assert idx == left_center_boundary_idx(space)
-    θ⁺ = getidx(space, arg, idx + 1, hidx)
-    θ = getidx(space, arg, idx, hidx)
-    w³⁺ = Geometry.contravariant3(
-        getidx(space, velocity, idx + half, hidx),
-        Geometry.LocalGeometry(space, idx + half, hidx),
-    )
-    ∂θ₃⁺ = θ⁺ - θ
-    return (w³⁺ * ∂θ₃⁺)
-end
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::AdvectionC2C,
-    ::Extrapolate,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    @assert idx == right_center_boundary_idx(space)
-    θ = getidx(space, arg, idx, hidx)
-    θ⁻ = getidx(space, arg, idx - 1, hidx)
-    w³⁻ = Geometry.contravariant3(
-        getidx(space, velocity, idx - half, hidx),
-        Geometry.LocalGeometry(space, idx - half, hidx),
-    )
-    ∂θ₃⁻ = θ - θ⁻
-    return (w³⁻ * ∂θ₃⁻)
-end
-
-"""
-    A = FluxCorrectionC2C(;boundaries)
-    A.(v, θ)
-
-Vertical advection operator at cell centers, for cell center velocity field `v`
-cell center variables `θ`, approximating ``v^3 \\partial_3 \\theta``.
-
-It uses the following stencil (TODO)
-
-```math
-```
-
-Supported boundary conditions:
-
-- [`Extrapolate`](@ref): use the closest interior point as the boundary value.
-  At the lower boundary.
-"""
-struct FluxCorrectionC2C{BCS} <: AdvectionOperator
-    bcs::BCS
-    function FluxCorrectionC2C(; kwargs...)
-        assert_valid_bcs("FluxCorrectionC2C", kwargs, (Extrapolate,))
-        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
-    end
-    FluxCorrectionC2C(bcs) = FluxCorrectionC2C(; bcs...)
-end
-
-return_space(
-    ::FluxCorrectionC2C,
-    velocity_space::AllFaceFiniteDifferenceSpace,
-    arg_space::AllCenterFiniteDifferenceSpace,
-) = arg_space
-
-stencil_interior_width(::FluxCorrectionC2C, velocity, arg) =
-    ((-half, +half), (-1, 1))
-Base.@propagate_inbounds function stencil_interior(
-    ::FluxCorrectionC2C,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    θ⁺ = getidx(space, arg, idx + 1, hidx)
-    θ = getidx(space, arg, idx, hidx)
-    θ⁻ = getidx(space, arg, idx - 1, hidx)
-    w³⁺ = Geometry.contravariant3(
-        getidx(space, velocity, idx + half, hidx),
-        Geometry.LocalGeometry(space, idx + half, hidx),
-    )
-    w³⁻ = Geometry.contravariant3(
-        getidx(space, velocity, idx - half, hidx),
-        Geometry.LocalGeometry(space, idx - half, hidx),
-    )
-    ∂θ₃⁺ = θ⁺ - θ
-    ∂θ₃⁻ = θ - θ⁻
-    return abs(w³⁺) * ∂θ₃⁺ - abs(w³⁻) * ∂θ₃⁻
-end
-
-boundary_width(::FluxCorrectionC2C, ::AbstractBoundaryCondition) = 1
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::FluxCorrectionC2C,
-    ::Extrapolate,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    @assert idx == left_center_boundary_idx(space)
-    θ⁺ = getidx(space, arg, idx + 1, hidx)
-    θ = getidx(space, arg, idx, hidx)
-    w³⁺ = Geometry.contravariant3(
-        getidx(space, velocity, idx + half, hidx),
-        Geometry.LocalGeometry(space, idx + half, hidx),
-    )
-    ∂θ₃⁺ = θ⁺ - θ
-    return abs(w³⁺) * ∂θ₃⁺
-end
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::FluxCorrectionC2C,
-    ::Extrapolate,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    @assert idx == right_center_boundary_idx(space)
-    θ = getidx(space, arg, idx, hidx)
-    θ⁻ = getidx(space, arg, idx - 1, hidx)
-    w³⁻ = Geometry.contravariant3(
-        getidx(space, velocity, idx - half, hidx),
-        Geometry.LocalGeometry(space, idx - half, hidx),
-    )
-    ∂θ₃⁻ = θ - θ⁻
-    return -abs(w³⁻) * ∂θ₃⁻
-end
-
-"""
-    A = FluxCorrectionF2F(;boundaries)
-    A.(v, θ)
-
-Vertical advection operator at cell faces, for cell face velocity field `v`
-cell face variables `θ`, approximating ``v^3 \\partial_3 \\theta``.
-
-It uses the following stencil (TODO)
-
-```math
-```
-
-Supported boundary conditions:
-
-- [`Extrapolate`](@ref): use the closest interior point as the boundary value.
-  At the lower boundary.
-"""
-struct FluxCorrectionF2F{BCS} <: AdvectionOperator
-    bcs::BCS
-    function FluxCorrectionF2F(; kwargs...)
-        assert_valid_bcs("FluxCorrectionF2F", kwargs, (Extrapolate,))
-        new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
-    end
-    FluxCorrectionF2F(bcs) = FluxCorrectionF2F(; bcs...)
-end
-
-return_space(
-    ::FluxCorrectionF2F,
-    velocity_space::AllCenterFiniteDifferenceSpace,
-    arg_space::AllFaceFiniteDifferenceSpace,
-) = arg_space
-
-stencil_interior_width(::FluxCorrectionF2F, velocity, arg) =
-    ((-half, +half), (-1, 1))
-Base.@propagate_inbounds function stencil_interior(
-    ::FluxCorrectionF2F,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    θ⁺ = getidx(space, arg, idx + 1, hidx)
-    θ = getidx(space, arg, idx, hidx)
-    θ⁻ = getidx(space, arg, idx - 1, hidx)
-    w³⁺ = Geometry.contravariant3(
-        getidx(space, velocity, idx + half, hidx),
-        Geometry.LocalGeometry(space, idx + half, hidx),
-    )
-    w³⁻ = Geometry.contravariant3(
-        getidx(space, velocity, idx - half, hidx),
-        Geometry.LocalGeometry(space, idx - half, hidx),
-    )
-    ∂θ₃⁺ = θ⁺ - θ
-    ∂θ₃⁻ = θ - θ⁻
-    return abs(w³⁺) * ∂θ₃⁺ - abs(w³⁻) * ∂θ₃⁻
-end
-
-boundary_width(::FluxCorrectionF2F, ::AbstractBoundaryCondition) = 1
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::FluxCorrectionF2F,
-    ::Extrapolate,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    @assert idx == left_face_boundary_idx(space)
-    θ⁺ = getidx(space, arg, idx + 1, hidx)
-    θ = getidx(space, arg, idx, hidx)
-    w³⁺ = Geometry.contravariant3(
-        getidx(space, velocity, idx + half, hidx),
-        Geometry.LocalGeometry(space, idx + half, hidx),
-    )
-    ∂θ₃⁺ = θ⁺ - θ
-    return abs(w³⁺) * ∂θ₃⁺
-end
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::FluxCorrectionF2F,
-    ::Extrapolate,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    @assert idx == right_face_boundary_idx(space)
-    θ = getidx(space, arg, idx, hidx)
-    θ⁻ = getidx(space, arg, idx - 1, hidx)
-    w³⁻ = Geometry.contravariant3(
-        getidx(space, velocity, idx - half, hidx),
-        Geometry.LocalGeometry(space, idx - half, hidx),
-    )
-    ∂θ₃⁻ = θ - θ⁻
-    return -abs(w³⁻) * ∂θ₃⁻
-end
-
-
 abstract type BoundaryOperator <: FiniteDifferenceOperator end
 
 """
@@ -2834,11 +2310,6 @@ G(x)[i]^3 = x[i+\\tfrac{1}{2}] - x[i-\\tfrac{1}{2}]
 ```
 
 The following boundary conditions are supported:
-- [`SetValue(x₀)`](@ref): calculate the gradient assuming the value at the
-  boundary is `x₀`. For the left boundary, this becomes:
-  ```math
-  G(x)[\\tfrac{1}{2}]³ = 2 (x[1] - x₀)
-  ```
 - [`SetGradient(v₀)`](@ref): set the value of the gradient at the boundary to be
   `v₀`. For the left boundary, this becomes:
   ```math
@@ -2848,7 +2319,7 @@ The following boundary conditions are supported:
 struct GradientC2F{BC} <: GradientOperator
     bcs::BC
     function GradientC2F(; kwargs...)
-        assert_valid_bcs("GradientC2F", kwargs, (SetValue, SetGradient))
+        assert_valid_bcs("GradientC2F", kwargs, (SetGradient,))
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     GradientC2F(bcs) = GradientC2F(; bcs...)
@@ -2872,36 +2343,6 @@ Base.@propagate_inbounds function stencil_interior(
 end
 
 boundary_width(::GradientC2F, ::AbstractBoundaryCondition) = 1
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::GradientC2F,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    @assert idx == left_face_boundary_idx(space)
-    # ∂x[i] = 2(∂x[i + half] - val)
-    Geometry.Covariant3Vector(2) ⊗ (
-        getidx(space, arg, idx + half, hidx) -
-        getidx(space, bc.val, nothing, hidx)
-    )
-end
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::GradientC2F,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    @assert idx == right_face_boundary_idx(space)
-    Geometry.Covariant3Vector(2) ⊗ (
-        getidx(space, bc.val, nothing, hidx) -
-        getidx(space, arg, idx - half, hidx)
-    )
-end
-
 
 # left / right SetGradient boundary conditions
 Base.@propagate_inbounds function stencil_left_boundary(
@@ -2935,105 +2376,6 @@ Base.@propagate_inbounds function stencil_right_boundary(
         getidx(space, bc.val, nothing, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
-end
-
-"""
-    UG = UpwindBiasedGradient()
-    UG.(v, θ)
-
-Compute the gradient of a field `θ` by upwinding it according to the direction
-of a vector field `v` on the same space. The gradient stencil is determined by
-the sign of the 3rd contravariant component of `v`:
-```math
-UG(\\boldsymbol{v}, θ)[i] = \\begin{cases}
-    G(L(θ))[i] \\textrm{, if } v^3[i] > 0 \\\\
-    G(R(θ))[i] \\textrm{, if } v^3[i] < 0
-\\end{cases}
-```
-where `G` is a gradient operator and `L`/`R` are left/right-bias operators. When
-`θ` and `v` are located on centers, `G = GradientF2C()`, `L = LeftBiasedC2F()`,
-and `R = RightBiasedC2F()`. When they are located on faces, `G = GradientC2F()`,
-`L = LeftBiasedF2C()`, and `R = RightBiasedF2C()`.
-
-No boundary conditions are currently supported. The default behavior on the left
-boundary (with index `i_min`) is
-```math
-UG(\\boldsymbol{v}, θ)[i_min] = G(R(θ))[i_min]
-```
-and the default behavior on the right boundary (with index `i_max`) is
-```math
-UG(\\boldsymbol{v}, θ)[i_max] = G(L(θ))[i_max]
-```
-"""
-struct UpwindBiasedGradient{BCS} <: FiniteDifferenceOperator
-    bcs::BCS
-end
-function UpwindBiasedGradient(; kwargs...)
-    assert_no_bcs("UpwindBiasedGradient", kwargs)
-    return UpwindBiasedGradient(NamedTuple())
-end
-
-return_eltype(::UpwindBiasedGradient, velocity, arg) =
-    Geometry.gradient_result_type(Val((3,)), eltype(arg))
-
-return_space(
-    ::UpwindBiasedGradient,
-    velocity_space::AllCenterFiniteDifferenceSpace,
-    arg_space::AllCenterFiniteDifferenceSpace,
-) = arg_space
-return_space(
-    ::UpwindBiasedGradient,
-    velocity_space::AllFaceFiniteDifferenceSpace,
-    arg_space::AllFaceFiniteDifferenceSpace,
-) = arg_space
-
-stencil_interior_width(::UpwindBiasedGradient, velocity, arg) =
-    ((0, 0), (-1, 1))
-Base.@propagate_inbounds function stencil_interior(
-    ::UpwindBiasedGradient,
-    space,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    a⁺ = getidx(space, arg, idx + 1, hidx)
-    a = getidx(space, arg, idx, hidx)
-    a⁻ = getidx(space, arg, idx - 1, hidx)
-    v = Geometry.contravariant3(
-        getidx(space, velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    return Geometry.Covariant3Vector(1) ⊗
-           ((1 - sign(v)) / 2 * a⁺ + sign(v) * a - (1 + sign(v)) / 2 * a⁻)
-end
-
-boundary_width(::UpwindBiasedGradient, ::AbstractBoundaryCondition) = 1
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::UpwindBiasedGradient,
-    ::NullBoundaryCondition,
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    @assert idx == left_face_boundary_idx(space)
-    a⁺ = getidx(space, arg, idx + 1, hidx)
-    a = getidx(space, arg, idx, hidx)
-    return Geometry.Covariant3Vector(1) ⊗ (a⁺ - a)
-end
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::UpwindBiasedGradient,
-    ::NullBoundaryCondition,
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    @assert idx == right_face_boundary_idx(space)
-    a = getidx(space, arg, idx, hidx)
-    a⁻ = getidx(space, arg, idx - 1, hidx)
-    return Geometry.Covariant3Vector(1) ⊗ (a - a⁻)
 end
 
 abstract type DivergenceOperator <: FiniteDifferenceOperator end
@@ -3235,11 +2577,6 @@ where `Jv³` is the Jacobian multiplied by the third contravariant component of
 `v`.
 
 The following boundary conditions are supported:
-- [`SetValue(v₀)`](@ref): calculate the divergence assuming the value at the
-   boundary is `v₀`. For the left boundary, this becomes:
-  ```math
-  D(v)[\\tfrac{1}{2}] = \\frac{1}{2} (Jv³[1] - Jv³₀) / J[i]
-  ```
 - [`SetDivergence(x)`](@ref): set the value of the divergence at the boundary to be `x`.
   ```math
   D(v)[\\tfrac{1}{2}] = x
@@ -3248,7 +2585,7 @@ The following boundary conditions are supported:
 struct DivergenceC2F{BC} <: DivergenceOperator
     bcs::BC
     function DivergenceC2F(; kwargs...)
-        assert_valid_bcs("DivergenceC2F", kwargs, (SetValue, SetDivergence))
+        assert_valid_bcs("DivergenceC2F", kwargs, (SetDivergence,))
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     DivergenceC2F(bcs) = DivergenceC2F(; bcs...)
@@ -3278,48 +2615,6 @@ Base.@propagate_inbounds function stencil_interior(
 end
 
 boundary_width(::DivergenceC2F, ::AbstractBoundaryCondition) = 1
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::DivergenceC2F,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    @assert idx == left_face_boundary_idx(space)
-    # ∂x[i] = 2(∂x[i + half] - val)
-    local_geometry = Geometry.LocalGeometry(space, idx, hidx)
-    Ju³₊ = Geometry.Jcontravariant3(
-        getidx(space, arg, idx + half, hidx),
-        Geometry.LocalGeometry(space, idx + half, hidx),
-    )
-    Ju³ = Geometry.Jcontravariant3(
-        getidx(space, bc.val, nothing, hidx),
-        local_geometry,
-    )
-    (Ju³₊ - Ju³) * (2 * local_geometry.invJ)
-end
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::DivergenceC2F,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    @assert idx == right_face_boundary_idx(space)
-    local_geometry = Geometry.LocalGeometry(space, idx, hidx)
-    Ju³ = Geometry.Jcontravariant3(
-        getidx(space, bc.val, nothing, hidx),
-        local_geometry,
-    )
-    Ju³₋ = Geometry.Jcontravariant3(
-        getidx(space, arg, idx - half, hidx),
-        Geometry.LocalGeometry(space, idx - half, hidx),
-    )
-    (Ju³ - Ju³₋) * (2 * local_geometry.invJ)
-end
-
 # left / right SetDivergence boundary conditions
 Base.@propagate_inbounds function stencil_left_boundary(
     ::DivergenceC2F,
@@ -3379,19 +2674,13 @@ where ``v₁`` and ``v₂`` are the 1st and 2nd covariant components of ``v``, a
 
 The following boundary conditions are supported:
 
-- [`SetValue(v₀)`](@ref): calculate the curl assuming the value of ``v`` at the
-   boundary is `v₀`. For the left boundary, this becomes:
-  ```math
-  C(v)[\\tfrac{1}{2}]^1 = -\\frac{2}{J[i]} (v_2[1] - (v₀)_2)
-  C(v)[\\tfrac{1}{2}]^2 = \\frac{2}{J[i]} (v_1[1] - (v₀)_1)
-  ```
 - [`SetCurl(v⁰)`](@ref): enforce the curl operator output at the boundary to be
   the contravariant vector `v⁰`.
 """
 struct CurlC2F{BC} <: CurlFiniteDifferenceOperator
     bcs::BC
     function CurlC2F(; kwargs...)
-        assert_valid_bcs("CurlC2F", kwargs, (SetValue, SetCurl))
+        assert_valid_bcs("CurlC2F", kwargs, (SetCurl,))
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     CurlC2F(bcs) = CurlC2F(; bcs...)
@@ -3423,32 +2712,6 @@ Base.@propagate_inbounds function stencil_interior(
 end
 
 boundary_width(::CurlC2F, ::AbstractBoundaryCondition) = 1
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::CurlC2F,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    u₊ = getidx(space, arg, idx + half, hidx)
-    u = getidx(space, bc.val, nothing, hidx)
-    local_geometry = Geometry.LocalGeometry(space, idx, hidx)
-    return fd3_curl(u₊, u, local_geometry.invJ * 2)
-end
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::CurlC2F,
-    bc::SetValue,
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    u = getidx(space, bc.val, nothing, hidx)
-    u₋ = getidx(space, arg, idx - half, hidx)
-    local_geometry = Geometry.LocalGeometry(space, idx, hidx)
-    return fd3_curl(u, u₋, local_geometry.invJ * 2)
-end
 
 # Project the user-supplied curl value onto the full Contravariant123 axis so
 # the boundary output matches `return_eltype` (uniformly Contravariant123Vector).
@@ -3463,6 +2726,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
     return Geometry.project(
         Geometry.Contravariant123Axis(),
         getidx(space, bc.val, nothing, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
     )
 end
 Base.@propagate_inbounds function stencil_right_boundary(
@@ -3476,6 +2740,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
     return Geometry.project(
         Geometry.Contravariant123Axis(),
         getidx(space, bc.val, nothing, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
     )
 end
 

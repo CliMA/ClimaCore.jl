@@ -10,7 +10,8 @@ import ClimaCore:
     Spaces,
     Fields,
     Geometry,
-    Operators
+    Operators,
+    Utilities
 
 @testset "Finite Difference Upwind & Biased Schemes" begin
     for FT in (Float32, Float64)
@@ -55,13 +56,52 @@ import ClimaCore:
         w_pos = Geometry.WVector.(ones(face_space))
         w_neg = Geometry.WVector.(.-ones(face_space))
 
-        upwind_c2f = Operators.UpwindBiasedProductC2F(
-            bottom = Operators.SetValue(FT(1)),
-            top = Operators.SetValue(FT(0)),
-        )
+        # `UpwindBiasedProductC2F` no longer takes `SetValue` boundary
+        # conditions, so evaluate its stencil on the boundary faces here, using
+        # the values θ_bot and θ_top outside of the domain, and impose the
+        # result with a `SetBoundaryOperator`.
+        lg_face = Fields.local_geometry_field(face_space)
+        bottom_face = Utilities.PlusHalf(0)
+        top_face = Fields.nlevels(zf) - Utilities.PlusHalf(0)
+        n_center_levels = Fields.nlevels(step_c)
+        function upwind_c2f_with_boundaries(w, θ, θ_bot, θ_top)
+            v³ = Geometry.contravariant3.(w, lg_face)
+            v³_bot = Fields.level(v³, bottom_face)
+            v³_top = Fields.level(v³, top_face)
+            θ_first = Fields.Field(
+                Fields.field_values(Fields.level(θ, 1)),
+                axes(v³_bot),
+            )
+            θ_last = Fields.Field(
+                Fields.field_values(Fields.level(θ, n_center_levels)),
+                axes(v³_top),
+            )
+            set_bcs = Operators.SetBoundaryOperator(
+                bottom = Operators.SetValue(
+                    Geometry.Contravariant3Vector.(
+                        Operators.upwind_biased_product.(
+                            v³_bot,
+                            θ_bot,
+                            θ_first,
+                        ),
+                    ),
+                ),
+                top = Operators.SetValue(
+                    Geometry.Contravariant3Vector.(
+                        Operators.upwind_biased_product.(v³_top, θ_last, θ_top),
+                    ),
+                ),
+            )
+            upwind = Operators.UpwindBiasedProductC2F()
+            return @. set_bcs(upwind(w, θ))
+        end
 
-        flux_pos = Geometry.WVector.(upwind_c2f.(w_pos, step_c))
-        flux_neg = Geometry.WVector.(upwind_c2f.(w_neg, step_c))
+        flux_pos = Geometry.WVector.(
+            upwind_c2f_with_boundaries(w_pos, step_c, FT(1), FT(0)),
+        )
+        flux_neg = Geometry.WVector.(
+            upwind_c2f_with_boundaries(w_neg, step_c, FT(1), FT(0)),
+        )
 
         # For w > 0, flux = w * left_biased
         @test parent(flux_pos) ≈ parent(res_left_c2f)

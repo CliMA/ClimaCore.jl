@@ -26,8 +26,8 @@ upwind!(dest, w, f, upwindc2f, divf2c) =
         dest = zeros(cspace)
 
         gradc2f = Operators.GradientC2F(
-            bottom = Operators.SetValue(FT(0)),
-            top = Operators.SetValue(FT(0)),
+            bottom = Operators.SetGradient(Geometry.WVector(FT(0))),
+            top = Operators.SetGradient(Geometry.WVector(FT(0))),
         )
         divf2c = Operators.DivergenceF2C()
         TU.@test_zero_allocations laplacian!(dest, f, gradc2f, divf2c)

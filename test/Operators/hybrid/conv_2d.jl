@@ -4,11 +4,13 @@ include("utils_2d.jl")
 
     function advection(c, f, hv_center_space)
         adv = zeros(eltype(f), hv_center_space)
-        A = Operators.AdvectionC2C(
-            bottom = Operators.SetValue(0.0),
-            top = Operators.Extrapolate(),
+        gradc2f = Operators.GradientC2F(
+            bottom = Operators.SetGradient(Geometry.WVector(1.0)),
+            top = Operators.SetGradient(Geometry.WVector(1.0)),
         )
-        return @. adv = A(c, f)
+        interpf2c = Operators.InterpolateF2C()
+        return @. adv =
+            interpf2c(LinearAlgebra.dot(Geometry.Contravariant3Vector(c), gradc2f(f)))
     end
 
     n_elems_seq = 2 .^ (5, 6, 7, 8)
@@ -43,10 +45,6 @@ end
 
 @testset "1D SE, 1D FD Extruded Domain Discrete Product Rule Operations" begin
 
-    gradc2f = Operators.GradientC2F(
-        top = Operators.SetValue(0.0),
-        bottom = Operators.SetValue(0.0),
-    )
     gradf2c = Operators.GradientF2C()
 
     n_elems_seq = 2 .^ (5, 6, 7, 8)
@@ -80,10 +78,6 @@ end
 
 @testset "1D SE, 1D FD Extruded Domain Discrete Product Rule Operations: Stretched" begin
 
-    gradc2f = Operators.GradientC2F(
-        top = Operators.SetValue(0.0),
-        bottom = Operators.SetValue(0.0),
-    )
     gradf2c = Operators.GradientF2C()
 
     n_elems_seq = 2 .^ (5, 6, 7, 8)
