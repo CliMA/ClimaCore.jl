@@ -66,6 +66,7 @@ function compute_surface_geometry_extruded_2d(
     face,
     i,
     j,
+    mstyle = Val{:horizontal}(),
 )
     (; J, ∂ξ∂x) = local_geometry
     nvec = if face == 4
@@ -80,7 +81,7 @@ function compute_surface_geometry_extruded_2d(
         error("invalid face index $face")
     end
     sWJ = LinearAlgebra.norm(nvec)
-    n = Geometry.project(Geometry.UVAxis(), nvec / sWJ)
+    n = Geometry.project(_metric_axis(mstyle), nvec / sWJ)
     return Geometry.SurfaceGeometry(sWJ, n)
 end
 
@@ -240,6 +241,7 @@ function add_numerical_flux_internal_extruded_2d!(fn, dydt, args...)
     FT = Spaces.undertype(space)
     (_, quad_weights) = Quadratures.quadrature_points(FT, quadrature_style)
 
+    mstyle = _fd_metric_style(fn)
     dydt_data = Fields.field_values(dydt)
     args_data = map(
         arg -> arg isa Fields.Field ? Fields.field_values(arg) : arg,
@@ -264,6 +266,7 @@ function add_numerical_flux_internal_extruded_2d!(fn, dydt, args...)
                     face⁻,
                     i⁻,
                     j⁻,
+                    mstyle,
                 )
 
                 argvals⁻ = map(args_data) do arg
@@ -853,6 +856,7 @@ function add_lifting_flux_internal_extruded_2d!(fn, dydt, args...)
     FT = Spaces.undertype(space)
     (_, quad_weights) = Quadratures.quadrature_points(FT, quadrature_style)
 
+    mstyle = _fd_metric_style(fn)
     dydt_data = Fields.field_values(dydt)
     args_data = map(
         arg -> arg isa Fields.Field ? Fields.field_values(arg) : arg,
@@ -877,6 +881,7 @@ function add_lifting_flux_internal_extruded_2d!(fn, dydt, args...)
                     face⁻,
                     i⁻,
                     j⁻,
+                    mstyle,
                 )
 
                 argvals⁻ = map(args_data) do arg
@@ -917,11 +922,45 @@ end
 @inline _fd_scale(c, x::NamedTuple) = map(v -> _fd_scale(c, v), x)
 @inline _fd_scale(c, x) = c * x
 
-# Metric-scaled contravariant basis vector J ∂ξʳᵒʷ/∂x, projected onto the
-# local orthonormal horizontal frame (single-valued at shared nodes, including
-# across cubed-sphere panel edges).
-@inline _fd_metric_vector(local_geometry, row) = Geometry.project(
-    Geometry.UVAxis(),
+# ---------------------------------------------------------------------------
+# Metric-style trait: controls whether the flux-differencing divergence and
+# the interface surface-geometry use the projected horizontal (UV) metric
+# vector or the full curvilinear (UVW) metric vector.
+#
+# Flux functions signal their requirement by overloading `_fd_metric_style`.
+# The default is :horizontal (existing behaviour, no terrain cross-terms).
+# Curvilinear flux functions return Val{:curvilinear}() so that
+# `add_flux_differencing_divergence!` and `add_numerical_flux_internal!`
+# automatically pass UVW metric vectors without any caller-side changes.
+# ---------------------------------------------------------------------------
+
+"""
+    _fd_metric_style(fn) -> Val{:horizontal}() | Val{:curvilinear}()
+
+Trait controlling the metric projection used by
+[`add_flux_differencing_divergence!`](@ref) and
+[`add_numerical_flux_internal_extruded_2d!`](@ref).
+
+- `Val{:horizontal}()` (default): project `J ∂ξ/∂x` onto `UVAxis`, dropping
+  the radial (W) cross-term.  Correct for flat or gently terrain-following
+  grids where cross-terms are negligible.
+- `Val{:curvilinear}()`: retain the full `UVWAxis` vector.  Required for
+  terrain-following grids where the radial component `J ∂ξⁱ/∂z` is non-zero;
+  the DG–FD splitting is otherwise unchanged.
+
+Overload this for any two-point or interface flux function that needs the
+full curvilinear metric.
+"""
+@inline _fd_metric_style(::F) where {F} = Val{:horizontal}()
+
+# Axis selector derived from the metric style (avoids repeating if-else).
+@inline _metric_axis(::Val{:horizontal}) = Geometry.UVAxis()
+@inline _metric_axis(::Val{:curvilinear}) = Geometry.UVWAxis()
+
+# Metric-scaled contravariant basis vector J ∂ξʳᵒʷ/∂x.
+# Dispatches on the metric style so callers only pass `fn2pt` and `row`.
+@inline _fd_metric_vector(mstyle, local_geometry, row) = Geometry.project(
+    _metric_axis(mstyle),
     local_geometry.J * local_geometry.∂ξ∂x[row, :],
 )
 
@@ -1047,15 +1086,16 @@ end
     i,
     j,
 ) where {F, Y, L, Nq}
+    mstyle = _fd_metric_style(fn2pt)
     lg = lg_at(i, j)
-    Ja1 = _fd_metric_vector(lg, 1)
-    Ja2 = _fd_metric_vector(lg, 2)
+    Ja1 = _fd_metric_vector(mstyle, lg, 1)
+    Ja2 = _fd_metric_vector(mstyle, lg, 2)
     y_ij = y_at(i, j)
 
     c1 = -2 * w[i] * w[j] * D[i, 1]
     total = fn2pt(
         c1 * Ja1,
-        c1 * _fd_metric_vector(lg_at(1, j), 1),
+        c1 * _fd_metric_vector(mstyle, lg_at(1, j), 1),
         y_ij,
         y_at(1, j),
     )
@@ -1064,7 +1104,7 @@ end
         total,
         fn2pt(
             c2 * Ja2,
-            c2 * _fd_metric_vector(lg_at(i, 1), 2),
+            c2 * _fd_metric_vector(mstyle, lg_at(i, 1), 2),
             y_ij,
             y_at(i, 1),
         ),
@@ -1073,14 +1113,14 @@ end
         c1 = -2 * w[i] * w[j] * D[i, k]
         t1 = fn2pt(
             c1 * Ja1,
-            c1 * _fd_metric_vector(lg_at(k, j), 1),
+            c1 * _fd_metric_vector(mstyle, lg_at(k, j), 1),
             y_ij,
             y_at(k, j),
         )
         c2 = -2 * w[i] * w[j] * D[j, k]
         t2 = fn2pt(
             c2 * Ja2,
-            c2 * _fd_metric_vector(lg_at(i, k), 2),
+            c2 * _fd_metric_vector(mstyle, lg_at(i, k), 2),
             y_ij,
             y_at(i, k),
         )
@@ -1567,6 +1607,138 @@ function kennedy_gruber_roe_cartesian(normal, (y⁻,), (y⁺,))
 end
 # dry-air ratio of specific heats used by the Roe linearization
 const γ_dry = 7 / 5
+
+# ---------------------------------------------------------------------------
+# Curvilinear (full UVW metric) variants of the KG and Roe Cartesian fluxes.
+#
+# These extend the flat-sphere formulas to terrain-following grids by retaining
+# the W (radial) component of the face-normal metric vector `Ja^i`.  The
+# DG–FD split is unchanged; only the horizontal metric projection is widened.
+#
+# State fields required (in addition to `ρ`, `e`, `p`, `u1`, `u2`, `u3`, `λ`):
+#   uvw  :: UVWVector  — full velocity (uE, uN, w_c) in local orthonormal frame
+#   Ec1/Ec2/Ec3 :: UVWVector — full projections of ê₁/ê₂/ê₃ including eR_c
+#
+# `_fd_metric_style` is overloaded so that `add_flux_differencing_divergence!`
+# and `add_numerical_flux_internal_extruded_2d!` automatically pass UVW metric
+# vectors — no caller-side changes needed.
+# ---------------------------------------------------------------------------
+
+"""
+    kennedy_gruber_cartesian_flux_curvilinear(nvec_a, nvec_b, y_a, y_b)
+
+Curvilinear extension of [`kennedy_gruber_cartesian_flux`](@ref): the metric
+vectors `nvec_a`, `nvec_b` and the state velocity `uvw` / basis projections
+`Ec1/Ec2/Ec3` are `UVWVector`s, so the terrain metric cross-terms
+``Ja^i_W = J \\partial ξ^i / \\partial z`` are retained.
+
+On a flat grid ``Ja^i_W = 0`` and the formula reduces bitwise to
+[`kennedy_gruber_cartesian_flux`](@ref).
+"""
+function kennedy_gruber_cartesian_flux_curvilinear(nvec_a, nvec_b, y_a, y_b)
+    ρ̄ = (y_a.ρ + y_b.ρ) / 2
+    ē = (y_a.e + y_b.e) / 2
+    p̄ = (y_a.p + y_b.p) / 2
+    ūn = (y_a.uvw' * nvec_a + y_b.uvw' * nvec_b) / 2
+    ū1 = (y_a.u1 + y_b.u1) / 2
+    ū2 = (y_a.u2 + y_b.u2) / 2
+    ū3 = (y_a.u3 + y_b.u3) / 2
+    Ē1n = (y_a.Ec1' * nvec_a + y_b.Ec1' * nvec_b) / 2
+    Ē2n = (y_a.Ec2' * nvec_a + y_b.Ec2' * nvec_b) / 2
+    Ē3n = (y_a.Ec3' * nvec_a + y_b.Ec3' * nvec_b) / 2
+    return (
+        ρ = ρ̄ * ūn,
+        ρe = (ρ̄ * ē + p̄) * ūn,
+        ρu1 = ρ̄ * ū1 * ūn + p̄ * Ē1n,
+        ρu2 = ρ̄ * ū2 * ūn + p̄ * Ē2n,
+        ρu3 = ρ̄ * ū3 * ūn + p̄ * Ē3n,
+    )
+end
+@inline _fd_metric_style(::typeof(kennedy_gruber_cartesian_flux_curvilinear)) =
+    Val{:curvilinear}()
+
+"""
+    kennedy_gruber_roe_cartesian_curvilinear(normal, argvals⁻, argvals⁺)
+
+Curvilinear extension of [`kennedy_gruber_roe_cartesian`](@ref): the face
+`normal` is a `UVWVector` so the terrain metric cross-term is included in the
+normal-velocity computation and the Roe wave amplitudes.  The shear energy
+term is computed as ``\\hat{u}_{uvw} \\cdot \\Delta u_{\\perp}`` in the full
+UVW frame, capturing the radial-shear contribution through tilted faces.
+
+On a flat grid the W component of `normal` is zero and the Roe wave speeds
+and amplitudes reduce to those of [`kennedy_gruber_roe_cartesian`](@ref);
+the only flat-grid difference is the inclusion of the vertical-velocity shear
+``\\hat{w}_r \\, \\Delta w_r`` in the energy dissipation (a correction previously
+absent because ``w_r`` was not in the state).
+
+Additional state fields beyond [`kennedy_gruber_roe_cartesian`](@ref):
+`uvw` (`UVWVector`) and `Ec1/Ec2/Ec3` (`UVWVector`).
+"""
+function kennedy_gruber_roe_cartesian_curvilinear(normal, (y⁻,), (y⁺,))
+    F = kennedy_gruber_cartesian_flux_curvilinear(normal, normal, y⁻, y⁺)
+    γd = oftype(y⁻.ρ, γ_dry)
+    # face normal in Cartesian components (includes W terrain cross-term)
+    n1 = y⁻.Ec1' * normal
+    n2 = y⁻.Ec2' * normal
+    n3 = y⁻.Ec3' * normal
+    # Roe-averaged state
+    s⁻ = sqrt(y⁻.ρ)
+    s⁺ = sqrt(y⁺.ρ)
+    ρ̂ = s⁻ * s⁺
+    a⁻ = s⁻ / (s⁻ + s⁺)
+    a⁺ = 1 - a⁻
+    û1 = a⁻ * y⁻.u1 + a⁺ * y⁺.u1
+    û2 = a⁻ * y⁻.u2 + a⁺ * y⁺.u2
+    û3 = a⁻ * y⁻.u3 + a⁺ * y⁺.u3
+    ûuvw = a⁻ * y⁻.uvw + a⁺ * y⁺.uvw   # Roe-avg full velocity in UVW frame
+    Ĥ = a⁻ * (y⁻.e + y⁻.p / y⁻.ρ) + a⁺ * (y⁺.e + y⁺.p / y⁺.ρ)
+    ĉ = a⁻ * sqrt(γd * y⁻.p / y⁻.ρ) + a⁺ * sqrt(γd * y⁺.p / y⁺.ρ)
+    # full normal velocity: tangential Cartesian + radial through terrain normal
+    ûn = ûuvw' * normal
+    # jumps
+    Δρ = y⁺.ρ - y⁻.ρ
+    Δp = y⁺.p - y⁻.p
+    Δu1 = y⁺.u1 - y⁻.u1
+    Δu2 = y⁺.u2 - y⁻.u2
+    Δu3 = y⁺.u3 - y⁻.u3
+    Δuvw = y⁺.uvw - y⁻.uvw
+    Δun = Δuvw' * normal  # full normal-velocity jump (includes radial)
+    α₊ = (Δp + ρ̂ * ĉ * Δun) / (2 * ĉ^2)
+    α₋ = (Δp - ρ̂ * ĉ * Δun) / (2 * ĉ^2)
+    α₀ = Δρ - Δp / ĉ^2
+    s₊ = abs(ûn + ĉ)
+    s₋ = abs(ûn - ĉ)
+    s₀ = max(abs(ûn), ĉ / 20)
+    # transverse jumps of tangential Cartesian components
+    Δut1 = Δu1 - Δun * n1
+    Δut2 = Δu2 - Δun * n2
+    Δut3 = Δu3 - Δun * n3
+    B = Ĥ - ĉ^2 / (γd - 1)
+    # full shear energy in UVW frame: û_uvw · Δu_transverse
+    # = û_uvw · Δuvw − ûn · Δun  (Pythagoras on the decomposition)
+    shear_E = ûuvw' * Δuvw - ûn * Δun
+    Dρ = s₊ * α₊ + s₋ * α₋ + s₀ * α₀
+    Dρu1 =
+        s₊ * α₊ * (û1 + ĉ * n1) + s₋ * α₋ * (û1 - ĉ * n1) +
+        s₀ * (α₀ * û1 + ρ̂ * Δut1)
+    Dρu2 =
+        s₊ * α₊ * (û2 + ĉ * n2) + s₋ * α₋ * (û2 - ĉ * n2) +
+        s₀ * (α₀ * û2 + ρ̂ * Δut2)
+    Dρu3 =
+        s₊ * α₊ * (û3 + ĉ * n3) + s₋ * α₋ * (û3 - ĉ * n3) +
+        s₀ * (α₀ * û3 + ρ̂ * Δut3)
+    Dρe =
+        s₊ * α₊ * (Ĥ + ĉ * ûn) + s₋ * α₋ * (Ĥ - ĉ * ûn) +
+        s₀ * (α₀ * B + ρ̂ * shear_E)
+    return (
+        ρ = F.ρ - Dρ / 2,
+        ρe = F.ρe - Dρe / 2,
+        ρu1 = F.ρu1 - Dρu1 / 2,
+        ρu2 = F.ρu2 - Dρu2 / 2,
+        ρu3 = F.ρu3 - Dρu3 / 2,
+    )
+end
 
 """
     logmean(a, b)
