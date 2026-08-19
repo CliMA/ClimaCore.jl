@@ -1769,48 +1769,29 @@ end
 """
     wb_gravity_cartesian_increment(nvec_a, nvec_b, y_a, y_b)
 
-Non-symmetric two-point FLUCTUATION term for the geopotential (gravity)
-source ``ρ ∂Φ/∂x_c`` of the (ρ, ρe, ρu⃗-Cartesian) system, following
+Two-point FLUCTUATION term for the geopotential (gravity) source
+``ρ ∂Φ/∂x_c`` of the (ρ, ρe, ρu⃗-Cartesian) system, following
 Waruszewski et al. (2022, JCP 468:111507, Eqs. 73–76): each Cartesian
 momentum component ``c`` receives
 
     (1/2) ρ̂ (Φ_b − Φ_a) \\{ê_c ⋅ nvec\\},
-    ρ̂ = \\{b\\} \\, \\mathrm{logmean}(ρ_a, ρ_b) / b_a,
+    ρ̂ = \\mathrm{logmean}(ρ_a, ρ_b).
 
-with ``b = ρ/(2p)`` the inverse temperature and the OWN node first (the
-[`add_flux_differencing_divergence!`](@ref) row convention — the term is
-genuinely non-symmetric through ``1/b_a``). The geopotential is
-single-valued at element faces, so the fluctuation vanishes there: the term
-is VOLUME-ONLY and the interface fluxes need no change. It also vanishes
-for `y_a == y_b`, so the kernel's own-side boundary lifts contribute
-nothing (pure strong-form fluctuation, like
-[`kg_massflux_fluctuation`](@ref)).
+The geopotential is single-valued at element faces, so the fluctuation
+vanishes there: the term is VOLUME-ONLY and the interface fluxes need no
+change. It also vanishes for `y_a == y_b`, so the kernel's own-side
+boundary lifts contribute nothing.
 
 Well-balance: added to a volume flux whose momentum pressure term is the
 arithmetic ``\\{p\\}``, the combined PGF + gravity operator cancels
 PAIRWISE (any node pair) on isothermal hydrostatic states
 ``p ∝ \\exp(−Φ/(R_d T₀))``, for which
 ``\\mathrm{logmean}(ρ_a, ρ_b)(Φ_b − Φ_a) = −(p_b − p_a)`` is an identity.
-The pair sum then telescopes to ``p_n\\,D(ê_c ⋅ Ja)`` — so the rest state
-is an EXACT discrete steady state wherever the discrete metric identity
-closes for the directions this kernel spans: machine zero on affine 2D
-meshes; the free-stream-level GCL defect on smooth curved 2D meshes. On
-WARPED EXTRUDED grids the horizontal identity alone does not close
-(``Σ_{k=1,2} ∂_{ξ^k}(Ja^k) = −∂_{ξ^3}(Ja³) ≠ 0``, O(slope)): the
-fluctuation removes the pairwise thermodynamic imbalance but the geometric
-remainder requires the vertical (cross-term) direction — supply it in the
-staggered/HEVI vertical discretization to complete 3D well-balance
-(Waruszewski et al.'s scheme is exact because its flux differencing spans
-all three directions). General hydrostatic profiles reduce to the same
-accuracy via the ``p′ = p − p_{ref}`` splitting (isothermal reference in
-the flux, deviation elsewhere).
 
-State fields required: `ρ`, `p`, `Φ`, `E1`, `E2`, `E3`.
+State fields required: `ρ`, `Φ`, `E1`, `E2`, `E3`.
 """
 @inline function wb_gravity_cartesian_increment(nvec_a, nvec_b, y_a, y_b)
-    b_a = y_a.ρ / (2 * y_a.p)
-    b_b = y_b.ρ / (2 * y_b.p)
-    ρ̂ = (b_a + b_b) / 2 * logmean(y_a.ρ, y_b.ρ) / b_a
+    ρ̂ = logmean(y_a.ρ, y_b.ρ)
     gΔΦ = ρ̂ * (y_b.Φ - y_a.Φ) / 2
     Ē1n = (y_a.E1' * nvec_a + y_b.E1' * nvec_b) / 2
     Ē2n = (y_a.E2' * nvec_a + y_b.E2' * nvec_b) / 2
@@ -1852,19 +1833,17 @@ end
     wb_gravity_cartesian_increment_curvilinear(nvec_a, nvec_b, y_a, y_b)
 
 Curvilinear analogue of [`wb_gravity_cartesian_increment`](@ref): the same
-log-mean ρ̂ (Φ_b − Φ_a)/2 weight, but projected through the full UVW-frame
-unit-vector fields `Ec1`, `Ec2`, `Ec3` (UVWVectors) rather than the
-UV-plane `E1`, `E2`, `E3`. Required when `nvec` is a UVWVector (curvilinear
-metric normal, non-zero W component over terrain). Volume-only — the
-geopotential is single-valued at element faces so the interface Roe flux
-is unchanged.
+``ρ̂ = \\mathrm{logmean}(ρ_a, ρ_b)`` weight with ``(Φ_b − Φ_a)/2``, but
+projected through the full UVW-frame unit-vector fields `Ec1`, `Ec2`, `Ec3`
+(UVWVectors) rather than the UV-plane `E1`, `E2`, `E3`. Required when
+`nvec` is a UVWVector (curvilinear metric normal, non-zero W component over
+terrain). Volume-only — the geopotential is single-valued at element faces
+so the interface Roe flux is unchanged.
 
-State fields required: `ρ`, `p`, `Φ`, `Ec1`, `Ec2`, `Ec3`.
+State fields required: `ρ`, `Φ`, `Ec1`, `Ec2`, `Ec3`.
 """
 @inline function wb_gravity_cartesian_increment_curvilinear(nvec_a, nvec_b, y_a, y_b)
-    b_a = y_a.ρ / (2 * y_a.p)
-    b_b = y_b.ρ / (2 * y_b.p)
-    ρ̂ = (b_a + b_b) / 2 * logmean(y_a.ρ, y_b.ρ) / b_a
+    ρ̂ = logmean(y_a.ρ, y_b.ρ)
     gΔΦ = ρ̂ * (y_b.Φ - y_a.Φ) / 2
     Ē1n = (y_a.Ec1' * nvec_a + y_b.Ec1' * nvec_b) / 2
     Ē2n = (y_a.Ec2' * nvec_a + y_b.Ec2' * nvec_b) / 2
