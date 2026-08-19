@@ -28,7 +28,6 @@ jobs:
           Pkg.develop([
             PackageSpec(path="lib/ClimaCoreVTK"),
             PackageSpec(path="lib/ClimaCoreTempestRemap"),
-            PackageSpec(path="lib/ClimaCoreMakie"),
             PackageSpec(path="lib/ClimaCorePlots"),
             PackageSpec(path="lib/ClimaCoreSpectra"),
             PackageSpec(path="."),

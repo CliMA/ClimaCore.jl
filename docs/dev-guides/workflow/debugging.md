@@ -62,10 +62,11 @@ If `@which` points at a more abstract method than you expected, the argument's s
 
 ## 4. Plotting `ClimaCore.Field`s
 
-When numerical inspection isn't enough, a heatmap usually reveals the structure (a single column? a hemisphere? the poles?) of a bug. `ClimaCoreMakie` plots `Field`s directly:
+When numerical inspection isn't enough, a heatmap usually reveals the structure (a single column? a hemisphere? the poles?) of a bug. `ClimaCore.Visualize` plots `Field`s directly:
 
 ```julia
-using ClimaCoreMakie, CairoMakie, Makie
+using CairoMakie, Makie
+import ClimaCore.Visualize: fieldheatmap!
 
 field = ...                                  # a 2D Field
 fig = Figure()

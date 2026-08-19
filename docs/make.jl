@@ -1,11 +1,10 @@
 import Documenter, DocumenterCitations, Literate
 import ClimaCore,
     ClimaCoreVTK,
-    ClimaCoreMakie,
     ClimaCorePlots,
     ClimaCoreTempestRemap,
     ClimaCoreSpectra
-using Makie  # Required for Documenter to resolve @ref links to Makie types in ClimaCoreMakie docs
+using Makie  # Loads the ClimaCoreMakieExt extension
 
 if !@isdefined(TUTORIALS)
     TUTORIALS = ["introduction"]
@@ -70,7 +69,7 @@ withenv("GKSwstype" => "nul") do
             ClimaCoreVTK,
             ClimaCoreSpectra,
             ClimaCorePlots,
-            ClimaCoreMakie,
+            Base.get_extension(ClimaCore, :ClimaCoreMakieExt),
             ClimaCoreTempestRemap,
         ],
         pages = Any[
@@ -100,6 +99,7 @@ withenv("GKSwstype" => "nul") do
                 "Limiters" => "APIs/limiters_api.md",
                 "InputOutput" => "APIs/input_output_api.md",
                 "Remapping" => "APIs/remapping_api.md",
+                "Visualize" => "APIs/visualize_api.md",
                 "Devices" => "APIs/devices_api.md",
                 "DebugOnly" => "APIs/debug_only_api.md",
             ],
@@ -116,7 +116,6 @@ withenv("GKSwstype" => "nul") do
             "Debugging" => "debugging.md",
             "Libraries" => [
                 joinpath("lib", "ClimaCorePlots.md"),
-                joinpath("lib", "ClimaCoreMakie.md"),
                 joinpath("lib", "ClimaCoreVTK.md"),
                 joinpath("lib", "ClimaCoreTempestRemap.md"),
                 joinpath("lib", "ClimaCoreSpectra.md"),
