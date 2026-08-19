@@ -3,7 +3,7 @@ using ClimaComms
 ClimaComms.@import_required_backends
 using Statistics
 using LinearAlgebra
-
+import ClimaCore
 import ClimaCore:
     Domains,
     Fields,
@@ -13,7 +13,9 @@ import ClimaCore:
     Spaces,
     Quadratures,
     Topologies,
-    DataLayouts
+    DataLayouts,
+    CommonGrids,
+    CommonSpaces
 
 include("reduction_cuda_utils.jl")
 
@@ -315,4 +317,40 @@ end
     q_cpu = @. q₀(coords_cpu, 1.2, 1.5)
 
     @test [sum(q)...] ≈ [sum(q_cpu)...]
+end
+
+@testset "weighted reduction over a level of an extruded field" begin
+    # The reduction ClimaAtmos' `horizontal_integral_at_boundary` performs: a
+    # `sum` over a broadcast that divides a level of a face field by the
+    # level's Δz. This compares the GPU result vs the CPU value.
+    FT = Float32
+    make_face_space(dev) = CommonSpaces.ExtrudedCubedSphereSpace(
+        FT;
+        z_elem = 10,
+        z_min = 0,
+        z_max = 30000.0,
+        radius = 6.371f6,
+        h_elem = 4,
+        n_quad_points = 4,
+        staggering = CommonGrids.Grids.CellFace(),
+        device = dev,
+    )
+    horizontal_integral_at_boundary(f) =
+        sum(f ./ Fields.Δz_field(axes(f)) .* 2)
+    for const_value in (FT(1), Geometry.WVector(FT(1)), (a = FT(1), b = FT(1)))
+        results = map((
+            ClimaComms.CUDADevice(),
+            ClimaComms.CPUSingleThreaded(),
+        )) do dev
+            f = fill(const_value, make_face_space(dev))
+            flev = Fields.level(f, ClimaCore.Utilities.half)
+            horizontal_integral_at_boundary(flev)
+        end
+        if const_value isa NamedTuple
+            @test results[1].a ≈ results[2].a rtol = sqrt(eps(FT))
+            @test results[1].b ≈ results[2].b rtol = sqrt(eps(FT))
+        else
+            @test results[1] ≈ results[2] rtol = sqrt(eps(FT))
+        end
+    end
 end
