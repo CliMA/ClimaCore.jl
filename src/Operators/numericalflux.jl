@@ -1832,19 +1832,34 @@ end
 """
     wb_gravity_cartesian_increment_curvilinear(nvec_a, nvec_b, y_a, y_b)
 
-Curvilinear analogue of [`wb_gravity_cartesian_increment`](@ref): the same
-``ρ̂ = \\mathrm{logmean}(ρ_a, ρ_b)`` weight with ``(Φ_b − Φ_a)/2``, but
-projected through the full UVW-frame unit-vector fields `Ec1`, `Ec2`, `Ec3`
-(UVWVectors) rather than the UV-plane `E1`, `E2`, `E3`. Required when
-`nvec` is a UVWVector (curvilinear metric normal, non-zero W component over
-terrain). Volume-only — the geopotential is single-valued at element faces
-so the interface Roe flux is unchanged.
+Curvilinear analogue of [`wb_gravity_cartesian_increment`](@ref), projected
+through the full UVW-frame unit-vector fields `Ec1`, `Ec2`, `Ec3` (UVWVectors)
+rather than the UV-plane `E1`, `E2`, `E3`. Required when `nvec` is a UVWVector
+(curvilinear metric normal, non-zero W component over terrain). Volume-only —
+the geopotential is single-valued at element faces so the interface Roe flux is
+unchanged.
 
-State fields required: `ρ`, `Φ`, `Ec1`, `Ec2`, `Ec3`.
+**Non-isothermal-exact two-point gravity.** The fluctuation cancels the discrete
+hydrostatic pressure jump of a REFERENCE profile pairwise,
+
+    gΔΦ = −(p_ref_b − p_ref_a) / 2,
+
+so the combined `{p}` pressure flux plus this term telescopes to
+``p_{ref,a}\\,\\{ê_c · Ja\\}`` (the pure metric remainder) at ANY hydrostatic
+reference state ``p = p_{ref}`` — not just the isothermal one. This replaces the
+log-mean form ``ρ̂ = \\mathrm{logmean}(ρ_a,ρ_b)``, ``gΔΦ = ρ̂ (Φ_b−Φ_a)/2``, which
+is exact only where ``\\mathrm{logmean}(ρ_a,ρ_b)(Φ_b−Φ_a) = −(p_b−p_a)`` (i.e.
+isothermal). Since ``dp_{ref} = −ρ_{ref}\\,dΦ`` the reference pressure jump IS the
+discrete hydrostatic gravity term (Φ is encoded in `p_ref`), and deviations
+``p − p_{ref}`` drive the flow. Well-balance and jet-preservation depend on the
+reference: a horizontally-uniform `p_ref(z)` preserves the resting atmosphere over
+terrain for arbitrary `T(z)` while leaving real (e.g. meridional) pressure
+gradients intact.
+
+State fields required: `p_ref`, `Ec1`, `Ec2`, `Ec3`.
 """
 @inline function wb_gravity_cartesian_increment_curvilinear(nvec_a, nvec_b, y_a, y_b)
-    ρ̂ = logmean(y_a.ρ, y_b.ρ)
-    gΔΦ = ρ̂ * (y_b.Φ - y_a.Φ) / 2
+    gΔΦ = -(y_b.p_ref - y_a.p_ref) / 2
     Ē1n = (y_a.Ec1' * nvec_a + y_b.Ec1' * nvec_b) / 2
     Ē2n = (y_a.Ec2' * nvec_a + y_b.Ec2' * nvec_b) / 2
     Ē3n = (y_a.Ec3' * nvec_a + y_b.Ec3' * nvec_b) / 2
