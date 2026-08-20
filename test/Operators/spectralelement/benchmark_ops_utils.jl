@@ -127,38 +127,30 @@ end
 
 function setup_kernel_args(ARGS::Vector{String} = ARGS)
     s = ArgParseSettings(prog = "spectralelement operator benchmarks")
+    #! format: off
     @add_arg_table! s begin
-        """
-        --float-type
-        """
+        "--float-type"
         help = "Floating point type (Float32, Float64)"
         eval_arg = true
         default = Float64
-        """
-        --panel-size
-        """
+        "--panel-size"
         help = "Number of elements across each panel"
         arg_type = Int
         default = 8
-        """
-        --z_elem
-        """
+        "--z_elem"
         help = "Number of vertical elements (for extruded spaces)"
         arg_type = Int
         default = 10
-        """
-        --space-type
-        """
+        "--space-type"
         help = "Space type [`SpectralElementSpace2D` (default) `ExtrudedFiniteDifferenceSpace`]"
         arg_type = String
         default = "SpectralElementSpace2D"
-        """
-        --poly-nodes
-        """
+        "--poly-nodes"
         help = "Number of nodes in each dimension to use in the polynomial approximation. Polynomial degree = poly-nodes - 1."
         arg_type = Int
         default = 4
     end
+    #! format: on
     args = parse_args(ARGS, s)
 
     device = ClimaComms.device()
