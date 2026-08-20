@@ -124,18 +124,18 @@ import ClimaCore:
 end
 
 # The nonlinear advection operators compute every face with the interior
-# stencil. By default (and with FirstOrderOneSided), out-of-range center
-# indices are clamped to the domain (ghost points padded with the closest
-# interior value) and out-of-range face indices of the velocity slot are
-# clamped likewise; with another boundary condition, the value of the single
-# out-of-range center at the face one in from each boundary is reconstructed
-# by the condition's callable instead. The reference for every face, boundary
-# faces included, is therefore the operator's own pointwise function applied
-# to hand-clamped (or hand-reconstructed) stencil values.
+# stencil. By default (with Extrapolate{0}), out-of-range center indices are
+# clamped to the domain (ghost points padded with the closest interior value)
+# and out-of-range face indices of the velocity slot are clamped likewise;
+# with a higher-order Extrapolate{N}, the ghost points are instead padded with
+# the condition's extrapolation from the in-range interior points of the
+# stencil (the order is reduced at the boundary face itself, where only 2
+# interior points are in range). The reference for every face, boundary faces
+# included, is therefore the operator's own pointwise function applied to
+# hand-clamped (or hand-extrapolated) stencil values.
 
-# A user-supplied ghost-point reconstruction (see AdvectionOperator),
-# used to check that custom callables are applied at the face one in from each
-# boundary.
+# Ghost-point reconstructions are no longer user-supplied callables; this is
+# used to check that custom callables are rejected.
 struct CustomGhost end
 (::CustomGhost)(closest, second_closest) = 3 * closest - 2 * second_closest
 
@@ -184,9 +184,9 @@ struct CustomGhost end
                 @test flux ≈ ref
             end
 
-            # FCTBorisBook: the ghost padding makes the one-sided differences
-            # that bound the corrected flux vanish on the boundary faces, so
-            # the corrected flux there is zero.
+            # FCTBorisBook: the ghost padding makes the one-sided difference
+            # on the boundary side vanish at the boundary faces, and that
+            # difference bounds the corrected flux, so the flux there is zero.
             A = Geometry.Contravariant3Vector.(w_sign .* ones(FT, face_space))
             A³ = cpu(A)
             op_bb = Operators.FCTBorisBook()
@@ -232,8 +232,8 @@ struct CustomGhost end
         # A field that is flat up to roundoff: the upwind slope is exactly
         # zero at the face where the centered difference is exactly -eps, so
         # the added eps in the slope ratio's denominator cancels and the ratio
-        # is 0 / 0 unless the zero upwind slope short-circuits it (it used to
-        # produce NaN limited fluxes).
+        # is 0 / 0, and the limited flux NaN, unless the zero upwind slope
+        # short-circuits it.
         z_mid = FT(0.5)
         one_lo = FT(1) - eps(FT)
         zc = Fields.coordinate_field(center_space).z
@@ -252,48 +252,50 @@ struct CustomGhost end
         @test t_flat[drop_face - 2] == t_flat[drop_face - 1] # upwind slope 0
         @test flux_flat[drop_face] == 0
 
-        # Ghost-point reconstructions: with a boundary condition, the value of
-        # the single out-of-range center at the face one in from each boundary
-        # is reconstructed by the condition's callable instead of taking the
-        # closest interior value; the boundary face itself always keeps the
-        # closest-value padding, so only faces 2 and n differ from `stencil`.
-        ghost_stencil(i, g_bot, g_top) =
-            i == 2 ? (g_bot, t[1], t[2], t[3]) :
-            i == n ? (t[n - 2], t[n - 1], t[n], g_top) : stencil(i)
-        first_bcs = (;
-            bottom = Operators.FirstOrderOneSided(),
-            top = Operators.FirstOrderOneSided(),
-        )
-        third_bcs = (;
-            bottom = Operators.ThirdOrderOneSided(),
-            top = Operators.ThirdOrderOneSided(),
-        )
-        custom_bcs = (; bottom = CustomGhost(), top = CustomGhost())
+        # Ghost-point extrapolation: with Extrapolate{N}, every out-of-range
+        # center of a stencil is padded with the condition's extrapolation
+        # from the in-range interior points: at the boundary face both ghost
+        # points share the extrapolation from the 2 in-range points (so the
+        # order is reduced to at most 1 there), and at the face one in from
+        # the boundary the single ghost point is extrapolated from the 3
+        # in-range points; faces 1, 2, n and n + 1 therefore differ from the
+        # clamped `stencil`.
+        g2(N, x₁, x₂) = N == 0 ? x₁ : 2x₁ - x₂
+        g3(N, x₁, x₂, x₃) = N == 0 ? x₁ : N == 1 ? 2x₁ - x₂ : 3x₁ - 3x₂ + x₃
+        function ghost_stencil(i, N)
+            i == 1 &&
+                return (g2(N, t[1], t[2]), g2(N, t[1], t[2]), t[1], t[2])
+            i == 2 && return (g3(N, t[1], t[2], t[3]), t[1], t[2], t[3])
+            i == n &&
+                return (t[n - 2], t[n - 1], t[n], g3(N, t[n], t[n - 1], t[n - 2]))
+            i == n + 1 && return (
+                t[n - 1],
+                t[n],
+                g2(N, t[n], t[n - 1]),
+                g2(N, t[n], t[n - 1]),
+            )
+            return stencil(i)
+        end
+        extrapolate_bcs(N) =
+            (; bottom = Operators.Extrapolate(N), top = Operators.Extrapolate(N))
         for w_sign in (FT(1), FT(-1))
             w = Geometry.WVector.(w_sign .* ones(FT, face_space))
             v³ = cpu(Geometry.contravariant3.(w, lg_face))
             A = Geometry.Contravariant3Vector.(w_sign .* ones(FT, face_space))
             A³ = cpu(A)
 
-            # FirstOrderOneSided is the default
+            # Extrapolate{0} is the default, and matches the index clamping
             flux_default = cpu(Operators.FCTBorisBook().(A, θ))
-            @test cpu(Operators.FCTBorisBook(; first_bcs...).(A, θ)) ==
+            @test cpu(Operators.FCTBorisBook(; extrapolate_bcs(0)...).(A, θ)) ==
                   flux_default
 
-            # ThirdOrderOneSided reconstructs 2 * closest - second_closest,
-            # and custom callables apply their own formula
-            for (bcs, ghost) in (
-                (third_bcs, (x₁, x₂) -> 2 * x₁ - x₂),
-                (custom_bcs, (x₁, x₂) -> 3 * x₁ - 2 * x₂),
-            )
-                g_bot = ghost(t[1], t[2])
-                g_top = ghost(t[n], t[n - 1])
+            for N in (1, 2)
+                bcs = extrapolate_bcs(N)
 
                 op_bb = Operators.FCTBorisBook(; bcs...)
                 flux_bb = cpu(op_bb.(A, θ))
                 ref_bb = [
-                    op_bb(A³[i], ghost_stencil(i, g_bot, g_top)...) for
-                    i in 1:(n + 1)
+                    op_bb(A³[i], ghost_stencil(i, N)...) for i in 1:(n + 1)
                 ]
                 @test flux_bb ≈ ref_bb
 
@@ -303,7 +305,7 @@ struct CustomGhost end
                 )
                 flux_lvl = cpu(op_lvl.(w, θ, dt))
                 ref_lvl = [
-                    op_lvl(v³[i], ghost_stencil(i, g_bot, g_top)..., dt)
+                    op_lvl(v³[i], ghost_stencil(i, N)..., dt)
                     for i in 1:(n + 1)
                 ]
                 @test flux_lvl ≈ ref_lvl
@@ -317,23 +319,23 @@ struct CustomGhost end
                 )
                 flux_tvd = cpu(op_tvd.(A, θ, u³))
                 ref_tvd = [
-                    op_tvd(A³[i], ghost_stencil(i, g_bot, g_top)..., v³[i])
+                    op_tvd(A³[i], ghost_stencil(i, N)..., v³[i])
                     for i in 1:(n + 1)
                 ]
                 @test flux_tvd ≈ ref_tvd
             end
 
-            # FCTZalesak: the reconstruction applies componentwise to its
+            # FCTZalesak: the extrapolation applies componentwise to its
             # tuple-valued stencil entries
             θᵗᵈ = θ .- dt .* θ
             tᵗᵈ = cpu(θᵗᵈ)
             tup(j) = (t[clamp_c(j)] / dt, tᵗᵈ[clamp_c(j)] / dt)
-            g_bot_z = 2 .* tup(1) .- tup(2)
-            g_top_z = 2 .* tup(n) .- tup(n - 1)
+            g_bot2 = 2 .* tup(1) .- tup(2)
+            g_top2 = 2 .* tup(n) .- tup(n - 1)
             ghost_tup(j, i) =
-                (i == 2 && j == 0) ? g_bot_z :
-                (i == n && j == n + 1) ? g_top_z : tup(j)
-            op_z = Operators.FCTZalesak(; third_bcs...)
+                (i <= 2 && j <= 0) ? g_bot2 :
+                (i >= n && j >= n + 1) ? g_top2 : tup(j)
+            op_z = Operators.FCTZalesak(; extrapolate_bcs(1)...)
             flux_z = cpu(op_z.(A, tuple.(θ ./ dt, θᵗᵈ ./ dt)))
             ref_z = [
                 op_z(
@@ -349,61 +351,54 @@ struct CustomGhost end
             @test flux_z ≈ ref_z
         end
 
-        # The nonlinear advection operators only accept ghost-point
-        # reconstructions as boundary conditions: the one-sided conditions or
-        # a user-supplied callable. Everything else is an error.
+        # The advection operators only accept Extrapolate boundary
+        # conditions. Everything else is an error, including the custom
+        # callable ghost-point reconstructions they used to accept.
         @test_throws AssertionError Operators.LinVanLeerC2F(;
-            bottom = Operators.Extrapolate(),
+            bottom = Operators.SetValue(FT(0)),
             constraint = Operators.MonotoneHarmonic(),
         )
         @test_throws AssertionError Operators.FCTBorisBook(;
-            bottom = Operators.Extrapolate(),
+            bottom = CustomGhost(),
         )
         @test_throws AssertionError Operators.FCTZalesak(;
-            top = Operators.Extrapolate(),
+            top = CustomGhost(),
         )
         @test_throws AssertionError Operators.TVDLimitedFluxC2F(;
-            bottom = Operators.Extrapolate(),
+            bottom = CustomGhost(),
             method = Operators.MinModLimiter(),
         )
         @test_throws AssertionError Operators.FCTBorisBook(;
-            bottom = FT(1), # not callable, so not a reconstruction
+            bottom = FT(1),
         )
-        @test Operators.FCTBorisBook(;
-            bottom = Operators.FirstOrderOneSided(),
-            top = Operators.ThirdOrderOneSided(),
-        ).bcs.top isa Operators.ThirdOrderOneSided
-        @test Operators.FCTZalesak(;
-            bottom = CustomGhost(),
-            top = CustomGhost(),
-        ).bcs.bottom isa CustomGhost
-
-        # The linear advection operators only accept the one-sided boundary
-        # conditions.
         @test_throws AssertionError Operators.UpwindBiasedProductC2F(;
-            bottom = Operators.Extrapolate(),
-            top = Operators.Extrapolate(),
+            bottom = Operators.SetValue(FT(0)),
         )
         @test_throws AssertionError Operators.Upwind3rdOrderBiasedProductC2F(;
-            bottom = Operators.Extrapolate(),
+            bottom = CustomGhost(),
         )
-        @test_throws AssertionError Operators.UpwindBiasedProductC2F(;
-            bottom = Operators.ThirdOrderOneSided(),
-        )
+        @test Operators.FCTBorisBook(;
+            bottom = Operators.Extrapolate(0),
+            top = Operators.Extrapolate(1),
+        ).bcs.top === Operators.Extrapolate(1)
         @test Operators.UpwindBiasedProductC2F(;
-            bottom = Operators.FirstOrderOneSided(),
-            top = Operators.FirstOrderOneSided(),
-        ).bcs.bottom isa Operators.FirstOrderOneSided
+            bottom = Operators.Extrapolate(2),
+            top = Operators.Extrapolate(2),
+        ).bcs.bottom === Operators.Extrapolate(2)
         @test Operators.Upwind3rdOrderBiasedProductC2F(;
-            bottom = Operators.FirstOrderOneSided(),
-            top = Operators.ThirdOrderOneSided(),
-        ).bcs.top isa Operators.ThirdOrderOneSided
+            bottom = Operators.Extrapolate(0),
+            top = Operators.Extrapolate(2),
+        ).bcs.top === Operators.Extrapolate(2)
 
-        # FirstOrderOneSided is added to `bcs` by default when no boundary
+        # The deprecated one-sided conditions are aliases for Extrapolate
+        @test Operators.FirstOrderOneSided() === Operators.Extrapolate(0)
+        @test Operators.ThirdOrderOneSided() === Operators.Extrapolate(1)
+
+        # Extrapolate{0} is added to `bcs` by default when no boundary
         # conditions are given
         default_bcs = (;
-            bottom = Operators.FirstOrderOneSided(),
-            top = Operators.FirstOrderOneSided(),
+            bottom = Operators.Extrapolate(),
+            top = Operators.Extrapolate(),
         )
         @test Operators.UpwindBiasedProductC2F().bcs === default_bcs
         @test Operators.Upwind3rdOrderBiasedProductC2F().bcs === default_bcs
@@ -416,28 +411,22 @@ struct CustomGhost end
             constraint = Operators.AlgebraicMean(),
         ).bcs === default_bcs
 
-        # only advection operators whose interior stencil and boundary
-        # reconstructions are all linear are rewritten as operator-matrix
-        # multiplies
+        # only advection operators whose interior stencil is linear are
+        # rewritten as operator-matrix multiplies
         @test Operators.has_linear_stencil(Operators.UpwindBiasedProductC2F())
         @test Operators.has_linear_stencil(
             Operators.Upwind3rdOrderBiasedProductC2F(;
-                bottom = Operators.ThirdOrderOneSided(),
-                top = Operators.ThirdOrderOneSided(),
+                bottom = Operators.Extrapolate(2),
+                top = Operators.Extrapolate(2),
             ),
         )
         @test !Operators.has_linear_stencil(Operators.FCTBorisBook())
-        @test !Operators.has_linear_stencil(
-            Operators.FCTBorisBook(;
-                bottom = CustomGhost(),
-                top = CustomGhost(),
-            ),
-        )
 
-        # With FirstOrderOneSided (or no boundary condition), boundary faces
-        # are computed with the interior stencil, padding ghost points with
-        # the value of the closest interior point, so the flux at a boundary
-        # face is `v³ θ[closest center]` regardless of the upwind direction.
+        # UpwindBiasedProductC2F's stencil only reaches a ghost point at the
+        # boundary face itself, where a single interior point is in range, so
+        # every extrapolation order reduces to the value of the closest
+        # interior point, and the flux at a boundary face is
+        # `v³ θ[closest center]` regardless of the upwind direction.
         θ2 = sin.(3 .* Fields.coordinate_field(center_space).z)
         t2 = cpu(θ2)
         for w_sign in (FT(1), FT(-1))
@@ -446,8 +435,8 @@ struct CustomGhost end
             for upwind in (
                 Operators.UpwindBiasedProductC2F(),
                 Operators.UpwindBiasedProductC2F(;
-                    bottom = Operators.FirstOrderOneSided(),
-                    top = Operators.FirstOrderOneSided(),
+                    bottom = Operators.Extrapolate(2),
+                    top = Operators.Extrapolate(2),
                 ),
             )
                 flux = cpu(upwind.(w, θ2))
@@ -456,43 +445,34 @@ struct CustomGhost end
             end
         end
 
-        # The one-sided conditions on Upwind3rdOrderBiasedProductC2F evaluate
-        # the interior stencil with reconstructed ghost points: both pad the
-        # ghost points at the boundary face itself with the closest interior
-        # value, and at the face one in from the boundary FirstOrderOneSided
-        # pads with the closest interior value while ThirdOrderOneSided
-        # linearly extrapolates from the two closest interior points.
+        # Extrapolate on Upwind3rdOrderBiasedProductC2F evaluates the interior
+        # stencil with extrapolated ghost points: at the boundary face itself
+        # both ghost points share the extrapolation from the 2 in-range
+        # interior points (so the order is reduced to at most 1 there), and at
+        # the face one in from the boundary the single ghost point is
+        # extrapolated from the 3 in-range points.
         upwind3rd(v, a⁻⁻, a⁻, a⁺, a⁺⁺) =
             v ≥ 0 ? v * (-2a⁻⁻ + 10a⁻ + 4a⁺) / 12 :
             v * (4a⁻ + 10a⁺ - 2a⁺⁺) / 12
         for w_sign in (FT(1), FT(-1))
             w = Geometry.WVector.(w_sign .* ones(FT, face_space))
             v³ = cpu(Geometry.contravariant3.(w, lg_face))
-            for (ghost_bottom, ghost_top, bc) in (
-                (t2[1], t2[n], Operators.FirstOrderOneSided()),
-                (
-                    2 * t2[1] - t2[2],
-                    2 * t2[n] - t2[n - 1],
-                    Operators.ThirdOrderOneSided(),
-                ),
-            )
+            for N in 0:2
+                gb2 = g2(N, t2[1], t2[2])           # bottom face ghosts
+                gb3 = g3(N, t2[1], t2[2], t2[3])    # bottom one-in ghost
+                gt2 = g2(N, t2[n], t2[n - 1])       # top face ghosts
+                gt3 = g3(N, t2[n], t2[n - 1], t2[n - 2]) # top one-in ghost
                 upwind = Operators.Upwind3rdOrderBiasedProductC2F(;
-                    bottom = bc,
-                    top = bc,
+                    bottom = Operators.Extrapolate(N),
+                    top = Operators.Extrapolate(N),
                 )
                 flux = cpu(upwind.(w, θ2))
-                @test flux[1] ≈ upwind3rd(v³[1], t2[1], t2[1], t2[1], t2[2])
-                @test flux[2] ≈
-                      upwind3rd(v³[2], ghost_bottom, t2[1], t2[2], t2[3])
-                @test flux[n] ≈ upwind3rd(
-                    v³[n],
-                    t2[n - 2],
-                    t2[n - 1],
-                    t2[n],
-                    ghost_top,
-                )
+                @test flux[1] ≈ upwind3rd(v³[1], gb2, gb2, t2[1], t2[2])
+                @test flux[2] ≈ upwind3rd(v³[2], gb3, t2[1], t2[2], t2[3])
+                @test flux[n] ≈
+                      upwind3rd(v³[n], t2[n - 2], t2[n - 1], t2[n], gt3)
                 @test flux[n + 1] ≈
-                      upwind3rd(v³[n + 1], t2[n - 1], t2[n], t2[n], t2[n])
+                      upwind3rd(v³[n + 1], t2[n - 1], t2[n], gt2, gt2)
             end
         end
     end

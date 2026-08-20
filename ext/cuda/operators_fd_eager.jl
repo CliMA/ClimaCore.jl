@@ -25,12 +25,15 @@ include("column_matrix_helpers.jl")
 Return the maximum number of bytes that any single sub-expression of `bc` needs to
 cache its result in shared memory, per thread.
 
-Only `MultiplyColumnwiseBandMatrixField` stencil operations cache a result (the
-projected row of their second argument) in shared memory; every other node needs no
-shared memory of its own but is still traversed for nested multiplications. The launch
-configuration multiplies this value by the number of threads per block to size the
-dynamic shared memory, so that the result of any single multiplication is guaranteed to
-fit and can always be cached.
+Two kinds of node cache a result in shared memory: a
+`MultiplyColumnwiseBandMatrixField` stencil operation caches the projected row of its
+second argument (see `cached_operand_type`), and an `AdvectionOperator` caches its
+level's advected value, and velocity where it needs one (see
+`advection_shmem_entry_type`). Every other node needs no shared memory of its own but
+is still traversed for nested nodes that do. The launch configuration multiplies this
+value by the number of threads per block to size the dynamic shared memory, so that any
+single node's result is guaranteed to fit and can always be cached. Each node allocates
+that memory at offset 0, so nodes reuse it and must synchronize before writing.
 """
 max_eager_shmem_per_thread(x) = 0
 max_eager_shmem_per_thread(bc::Union{Broadcasted, StencilBroadcasted}) =
@@ -258,11 +261,12 @@ Base.@propagate_inbounds function calc_level_val(
     # project before placing in shared memory to avoid projecting multiple times
     mat2_row_converted =
         @inbounds @inline project_row2_for_mul(mat1_row, mat2_row, hidx, mat2_space)
-    # It should be possible to use static shared memory here, but it allocates new shared memory
-    # for each layer of recursion
+    # sync before writing so that no thread is still reading a previous user of
+    # the shared memory region (every handler allocates it at offset 0)
     CUDA.sync_threads()
-    # it should be possible to use a multi dim shared array here as well, but it seems to
-    # cause some weird issues with the indexing, so I'm just using a 1D array and indexing manually
+    # The region is dynamic because static shared memory would allocate a new
+    # one for each layer of recursion, and it is a 1D array indexed manually
+    # because a multi-dimensional shared array indexes incorrectly here.
     mat2 = CUDA.CuDynamicSharedArray(
         typeof(mat2_row_converted),
         CUDA.blockDim().x * CUDA.blockDim().y,
@@ -336,10 +340,10 @@ Base.@propagate_inbounds function calc_level_val(
     # this method is compiled for both staggerings: the automatic conversion puts one on a
     # face output (InterpolateC2F + SetValue), on a center output (DivergenceF2C +
     # SetDivergence), and on a face input (GradientF2C + SetValue). Deriving `idx` from
-    # the compile-time staggering type keeps the two apart, so the `PlusHalf` face index
-    # only reaches `should_call_*_boundary` when compiling for a face space and its
-    # `idx < left_interior_idx` comparison never mixes a `PlusHalf` with an integer center
-    # index -- which would pull in non-GPU-compatible error-formatting code.
+    # the compile-time staggering type keeps the two staggerings apart, so the `PlusHalf`
+    # face index only reaches `should_call_*_boundary` when compiling for a face space and
+    # its `idx < left_interior_idx` comparison never mixes a `PlusHalf` with an integer
+    # center index -- which would pull in non-GPU-compatible error-formatting code.
     idx = space.staggering isa Spaces.CellFace ? (v - half) : v
     if Operators.should_call_left_boundary(idx, space, op, bc.args...)
         lbw = Operators.left_boundary_window(space)
@@ -465,12 +469,15 @@ end
 """
     advection_ghost_values(op, space, v, n_faces, periodic, a⁻⁻, a⁻, a⁺, a⁺⁺)
 
-Returns `(a⁻⁻, a⁺⁺)` with the value of the single out-of-range center at the
-face one in from each boundary replaced by the reconstruction of `op`'s
-boundary condition for that boundary, mirroring
-`stencil_interior(::AdvectionOperator, ...)`. The boundary face
-itself (and every other face) is unaffected: its out-of-range centers keep
-the closest-value padding that `advection_center_window`'s clamping provides.
+Returns `(a⁻⁻, a⁻, a⁺, a⁺⁺)` with the values of the out-of-range centers
+replaced by the extrapolation of `op`'s boundary condition for that boundary
+from the in-range interior points of the stencil, mirroring
+`stencil_interior(::AdvectionOperator, ...)`: at the boundary face
+itself both out-of-range centers share the extrapolation from the 2 in-range
+points, and at the face one in from the boundary the single out-of-range
+center is extrapolated from the 3 in-range points. Every other face is
+unaffected, and keeps the closest-value padding that
+`advection_center_window`'s clamping provides.
 """
 @inline function advection_ghost_values(
     op,
@@ -484,21 +491,33 @@ the closest-value padding that `advection_center_window`'s clamping provides.
     a⁺⁺,
 )
     if !periodic
-        if v == 2i32
+        if v == 1i32
             bc = Operators.get_boundary(
                 op,
                 Operators.left_boundary_window(space),
             )
-            a⁻⁻ = bc(a⁻, a⁺)
+            a⁻⁻ = a⁻ = bc(a⁺, a⁺⁺)
+        elseif v == 2i32
+            bc = Operators.get_boundary(
+                op,
+                Operators.left_boundary_window(space),
+            )
+            a⁻⁻ = bc(a⁻, a⁺, a⁺⁺)
+        elseif v == n_faces
+            bc = Operators.get_boundary(
+                op,
+                Operators.right_boundary_window(space),
+            )
+            a⁺⁺ = a⁺ = bc(a⁻, a⁻⁻)
         elseif v == n_faces - 1i32
             bc = Operators.get_boundary(
                 op,
                 Operators.right_boundary_window(space),
             )
-            a⁺⁺ = bc(a⁺, a⁻)
+            a⁺⁺ = bc(a⁺, a⁻, a⁻⁻)
         end
     end
-    return (a⁻⁻, a⁺⁺)
+    return (a⁻⁻, a⁻, a⁺, a⁺⁺)
 end
 
 Base.@propagate_inbounds function advection_gather(
@@ -517,7 +536,7 @@ Base.@propagate_inbounds function advection_gather(
     a⁻ = @inbounds shmem[i⁻ + col_offset]
     a⁺ = @inbounds shmem[i⁺ + col_offset]
     a⁺⁺ = @inbounds shmem[i⁺⁺ + col_offset]
-    a⁻⁻, a⁺⁺ =
+    a⁻⁻, a⁻, a⁺, a⁺⁺ =
         advection_ghost_values(op, space, v, n_faces, periodic, a⁻⁻, a⁻, a⁺, a⁺⁺)
     return (v³, a⁻⁻, a⁻, a⁺, a⁺⁺)
 end
@@ -541,7 +560,7 @@ Base.@propagate_inbounds function advection_gather(
     a⁻ = @inbounds shmem[i⁻ + col_offset][2]
     a⁺ = @inbounds shmem[i⁺ + col_offset][2]
     a⁺⁺ = @inbounds shmem[i⁺⁺ + col_offset][2]
-    a⁻⁻, a⁺⁺ =
+    a⁻⁻, a⁻, a⁺, a⁺⁺ =
         advection_ghost_values(op, space, v, n_faces, periodic, a⁻⁻, a⁻, a⁺, a⁺⁺)
     return @inbounds (
         shmem[iv⁻ + col_offset][1],

@@ -368,7 +368,7 @@ import ClimaTimeSteppers as CTS
 # ```
 #
 # At the bottom we will use a Dirichlet condition ``y(0) = 1`` at the bottom: since we don't actually have a value located at the bottom, we will use a `SetGradient` boundary modifier on the inner gradient.
-# If ``y(0) = 1``, then the gradient at the first face is ``\frac{\partial y}{\partial z}[\tfrac{1}{2}] = 2(y[\tfrac{1}{2}] - 1)``.
+# If ``y(0) = 1``, then the covariant gradient at the first face is ``\frac{\partial y}{\partial \xi^3}[\tfrac{1}{2}] = 2(y[1] - 1)``, where ``y[1]`` is the value at the first cell center, half a cell above the boundary face.
 #
 # At the top we will use a Neumann condition ``\frac{\partial y}{\partial z}(10) = 0``. We can do this two equivalent ways:
 #  - a `SetGradient` on the gradient operator

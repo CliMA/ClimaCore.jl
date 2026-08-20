@@ -116,9 +116,9 @@ evaluated:
    [`stencil_right_boundary`](@ref), which produce `NaN`.
 
 The advection operators never use this condition: when they are given no
-boundary conditions, [`FirstOrderOneSided`](@ref) is added to their `bcs` by
-default, and a boundary whose name has no entry in `bcs` also falls back to
-`FirstOrderOneSided` (see [`AdvectionOperator`](@ref)).
+boundary conditions, [`Extrapolate{0}`](@ref Extrapolate) is added to their
+`bcs` by default, and a boundary whose name has no entry in `bcs` also falls
+back to `Extrapolate{0}` (see [`AdvectionOperator`](@ref)).
 
 Where `boundary_width` is zero the interior stencil applies instead and nothing special
 happens, so the same operator can give a placeholder at one boundary and an ordinary
@@ -167,54 +167,93 @@ struct SetCurl{S} <: AbstractBoundaryCondition
 end
 
 """
-    Extrapolate()
+    Extrapolate{N}()
+    Extrapolate(N = 0)
 
-Set the value at the boundary to be the same as the closest interior point.
+Evaluate the same stencil as the interior, but pad each ghost point the stencil
+reaches with a value extrapolated (with an order-`N` polynomial) from the
+`N + 1` closest interior points. Currently, only `0 <= N <= 2` is supported.
+
+If a stencil at a face `i` is a function of the values at
+`x[i-3/2], x[i-1/2], x[i+1/2], x[i+3/2]`, then at the face `i = 3/2` the single
+ghost point `x[0]` is padded with the weighted sum of the interior points
+`x[1], x[2], x[3]`, with the following weights:
+
+| N | x[1] | x[2] | x[3] |
+|---|------|------|------|
+| 0 | 1    | 0    | 0    |
+| 1 | 2    | -1   | 0    |
+| 2 | 3    | -3   | 1    |
+
+Only the interior points that the stencil can reach are available for the
+extrapolation, and if a ghost point requires more interior points than are
+available, `N` is reduced until the ghost point can be extrapolated with the
+available interior points. For example, if `N = 2` and the stencil above is
+evaluated at the boundary face `i = 1/2`, only the 2 interior points
+`x[1], x[2]` are available, so both ghost points are padded with the `N = 1`
+extrapolation:
+```
+x[-1] = x[0] = 2 * x[1] - x[2]
+```
+Note that every ghost point of a stencil is padded with the same extrapolated
+value: the extrapolation continues the field along the third coordinate line
+with a single boundary value, rather than evaluating the extrapolating
+polynomial at each ghost point's own position.
 """
-struct Extrapolate <: AbstractBoundaryCondition end
+struct Extrapolate{N} <: AbstractBoundaryCondition
+    function Extrapolate{N}() where {N}
+        N isa Integer && 0 <= N <= 2 ||
+            error("Extrapolate only supports orders 0 <= N <= 2; got N = $N")
+        return new{N}()
+    end
+end
+Extrapolate(N::Integer = 0) = Extrapolate{N}()
 
 """
-    FirstOrderOneSided()
+    extrapolate_weights(bc::Extrapolate{N}, navailable)
 
-Evaluate the boundary faces with the interior stencil, padding each ghost
-point it reaches with the value of the closest interior point (a zeroth-order
-one-sided reconstruction). This is the advection operators' default: when an
-[`AdvectionOperator`](@ref) is constructed with no boundary conditions, this
-condition is added to its `bcs`.
-
-Like every advection-operator boundary condition, this is a callable
-ghost-point reconstruction: `bc(closest, second_closest)` returns the value of
-the ghost point one step outside the domain, given the two interior values
-closest to the boundary (see [`AdvectionOperator`](@ref) for how the
-reconstruction is applied, and for how to supply a custom one).
+The weights of the `navailable` closest interior points in the ghost-point
+extrapolation of `bc`, as a tuple of 3 integers ordered from the closest
+interior point outwards (with trailing zeros when fewer than 3 points are
+used). The extrapolation order is reduced to `navailable - 1` when fewer than
+`N + 1` interior points are available.
 """
-struct FirstOrderOneSided <: AbstractBoundaryCondition end
-@inline (::FirstOrderOneSided)(closest, second_closest) = closest
+function extrapolate_weights(::Extrapolate{N}, navailable::Integer) where {N}
+    n = min(N, navailable - 1)
+    return n == 0 ? (1, 0, 0) : n == 1 ? (2, -1, 0) : (3, -3, 1)
+end
 
-"""
-    ThirdOrderOneSided()
-
-Evaluate the boundary faces with the interior stencil, padding the ghost
-points it reaches with one-sided reconstructions from the closest interior
-points:
-
- - at the face one in from each boundary, the single ghost point is linearly
-   extrapolated from the two closest interior points, e.g. at the bottom
-   `x[ghost] = 2 * x[closest] - x[second-closest]`;
- - at the boundary face itself, both ghost points take the value of the
-   closest interior point, as with [`FirstOrderOneSided`](@ref).
-
-As a callable ghost-point reconstruction (see
-[`AdvectionOperator`](@ref)), `bc(closest, second_closest)` returns
-the linear extrapolation `2 * closest - second_closest`, applied componentwise
-to tuple-valued fields.
-"""
-struct ThirdOrderOneSided <: AbstractBoundaryCondition end
-@inline (::ThirdOrderOneSided)(closest, second_closest) =
+# Callable ghost-point reconstruction interface (see AdvectionOperator): the
+# arguments are the interior points available to the extrapolation, ordered
+# from the one closest to the boundary outwards, and the result is the value
+# shared by every ghost point the stencil reaches. The extrapolation order is
+# reduced when fewer than N + 1 interior points are given; dispatching on the
+# reduced order keeps the zero-weight terms out of the computation (see
+# `extrapolate_weights` for the weights themselves). The reconstruction of a
+# tuple-valued field applies componentwise, through the AutoBroadcaster
+# arithmetic.
+@inline (::Extrapolate{N})(x₁, x₂) where {N} =
+    extrapolate_ghost_value(Val(min(N, 1)), x₁, x₂, x₂)
+@inline (::Extrapolate{N})(x₁, x₂, x₃) where {N} =
+    extrapolate_ghost_value(Val(min(N, 2)), x₁, x₂, x₃)
+@inline extrapolate_ghost_value(::Val{0}, x₁, x₂, x₃) = x₁
+@inline extrapolate_ghost_value(::Val{1}, x₁, x₂, x₃) =
     drop_auto_broadcasters(
-        2 * add_auto_broadcasters(closest) -
-        add_auto_broadcasters(second_closest),
+        2 * add_auto_broadcasters(x₁) - add_auto_broadcasters(x₂),
     )
+@inline extrapolate_ghost_value(::Val{2}, x₁, x₂, x₃) =
+    drop_auto_broadcasters(
+        3 * add_auto_broadcasters(x₁) - 3 * add_auto_broadcasters(x₂) +
+        add_auto_broadcasters(x₃),
+    )
+
+# Deprecated aliases for the one-sided reconstruction boundary conditions that
+# Extrapolate replaces. Note that ThirdOrderOneSided is not numerically
+# identical to its old definition: at the boundary face itself, the old
+# condition padded both ghost points with the closest interior value, while
+# Extrapolate{1} extrapolates them linearly.
+Base.@deprecate_binding FirstOrderOneSided Extrapolate{0} false
+Base.@deprecate_binding ThirdOrderOneSided Extrapolate{1} false
 
 abstract type Location end
 abstract type Boundary <: Location end
@@ -439,25 +478,6 @@ end
 
 import UnrolledUtilities as UU
 
-# An advection operator's boundary conditions are callable ghost-point
-# reconstructions: one of the one-sided boundary conditions, or any callable
-# `bc(closest, second_closest)` that returns the ghost value one step outside
-# the domain (see AdvectionOperator). Every other boundary condition
-# type is rejected, and so is any value with no methods (which cannot be a
-# reconstruction).
-function assert_valid_ghost_bcs(op, kwargs)
-    UU.unrolled_foreach(values(values(kwargs))) do bc
-        valid =
-            bc isa AbstractBoundaryCondition ?
-            bc isa Union{FirstOrderOneSided, ThirdOrderOneSided} :
-            !isempty(methods(bc))
-        @assert valid "$op only supports ghost-point-reconstruction boundary \
-                       conditions: FirstOrderOneSided, ThirdOrderOneSided, or \
-                       a callable of the form `bc(closest, second_closest)`. \
-                       BC given: $bc"
-    end
-    return nothing
-end
 function assert_valid_bcs(op, kwargs, valid_bcs)
     UU.unrolled_foreach(values(values(kwargs))) do bc
         @assert UU.unrolled_any(valid_bc -> bc isa valid_bc, valid_bcs) "$op only supports boundary conditions:\n\n\t $valid_bcs.\n\n BCs given:\n\n\t $(values(values(kwargs)))\n"
@@ -907,36 +927,21 @@ and returns a contravariant3 component. On non-periodic domains, all faces are
 treated like interior faces, padding out-of-range stencil points with ghost
 values (on periodic domains, indices wrap around instead):
 
- - At the boundary face itself, both out-of-range values of the advected field
-   take the value of the closest interior point, and the velocity field's
-   out-of-range face indices are clamped to the domain likewise. Concretely,
-   at the left boundary face `i=1/2` the function is computed as
-   `f(v[1/2], v[1/2], v[3/2], x[1], x[1], x[1], x[2])`, where `x[1]` is the
-   value at the center closest to the left boundary.
- - At the face one in from each boundary, the single out-of-range value of the
-   advected field is reconstructed by the operator's boundary condition for
-   that boundary: a callable of the form `bc(closest, second_closest)` that
-   returns the ghost value from the two interior values closest to the
-   boundary. The supported boundary conditions are
-   [`FirstOrderOneSided`](@ref) (equivalent to the closest-value padding
-   above), [`ThirdOrderOneSided`](@ref) (linear extrapolation), or any
-   user-supplied callable with that form (e.g.
-   `struct MyGhost end; (::MyGhost)(x₁, x₂) = ...` passed as
-   `SomeOperator(; bottom = MyGhost(), top = MyGhost())`). Concretely, with
-   `FirstOrderOneSided` at the first interior face `i=3/2` the function is
-   computed as `f(v[1/2], v[3/2], v[5/2], x[1], x[1], x[2], x[3])`, and with
-   `ThirdOrderOneSided` as
-   `f(v[1/2], v[3/2], v[5/2], 2x[1] - x[2], x[1], x[2], x[3])`.
+ - The out-of-range values of the advected field are padded with the
+   [`Extrapolate`](@ref) boundary condition for that boundary: every ghost
+   point the stencil reaches takes the value extrapolated from the in-range
+   interior points of the stencil (the extrapolation order is reduced at the
+   boundary face itself, where fewer interior points are in range). The only
+   supported boundary conditions are `Extrapolate{N}`; when an advection
+   operator is constructed with no boundary conditions, `Extrapolate{0}` is
+   added to its `bcs`, and a boundary whose name has no entry in `bcs` also
+   falls back to `Extrapolate{0}`.
+ - The velocity field's out-of-range face indices are clamped to the domain.
 
-The same logic applies to the right boundary. When an advection operator is
-constructed with no boundary conditions, `FirstOrderOneSided` is added to its
-`bcs` for the `bottom` and `top` boundaries by default (and a boundary whose
-name has no entry in `bcs` also falls back to `FirstOrderOneSided`).
-
-An advection operator whose interior stencil and boundary reconstructions are
-all linear in the advected argument (see `Operators.has_linear_stencil`) is
-rewritten as an operator-matrix multiply when it is broadcasted (see
-`MatrixFields.operator_matrix`), with the ghost-point reconstructions folded
+An advection operator whose interior stencil is linear in the advected
+argument (see `Operators.has_linear_stencil`) is rewritten as an
+operator-matrix multiply when it is broadcasted (see
+`MatrixFields.operator_matrix`), with the ghost-point extrapolations folded
 into its matrix's boundary rows; every other advection operator is evaluated
 pointwise, through the callable interface described below.
 
@@ -946,9 +951,8 @@ pointwise, through the callable interface described below.
     coordinate surface ``\\xi^3`` = const, and continuation along the wall
     would instead require horizontal derivatives, which a vertical stencil
     cannot compute (e.g. the closest-value padding continues the field with a
-    zero derivative along the third coordinate line).
-    `DivergenceF2C(; SetValue(Contravariant3Vector(0)))`, whose contravariant
-    component is the flow normal to the boundary surface.
+    zero derivative along the third coordinate line). The flux through the
+    boundary surface is imposed by the enclosing operator instead.
 
 By default, it is assumed that the operator is only a function of the velocity at the current
 face. If the operator is a function of the velocity at neighboring faces, then the operator should define
@@ -993,21 +997,18 @@ has_linear_stencil(op::AdvectionOperator) =
     has_linear_interior(op) &&
     UU.unrolled_all(is_linear_reconstruction, values(op.bcs))
 has_linear_interior(::AdvectionOperator) = false
-is_linear_reconstruction(::FirstOrderOneSided) = true
-is_linear_reconstruction(::ThirdOrderOneSided) = true
-is_linear_reconstruction(::Any) = false
+is_linear_reconstruction(::Extrapolate) = true
 
 # When no boundary conditions are supplied, advection operators default to
-# FirstOrderOneSided at both boundaries (`bottom` and `top` are the canonical
+# Extrapolate{0} at both boundaries (`bottom` and `top` are the canonical
 # vertical boundary names).
 advection_bcs(kwargs) =
-    isempty(kwargs) ?
-    (; bottom = FirstOrderOneSided(), top = FirstOrderOneSided()) :
+    isempty(kwargs) ? (; bottom = Extrapolate(), top = Extrapolate()) :
     NamedTuple(kwargs)
 
 # Advection operators never use NullBoundaryCondition: a boundary whose name
 # has no entry in `bcs` (e.g. when the vertical boundaries are not named
-# `bottom` and `top`) gets the default FirstOrderOneSided reconstruction.
+# `bottom` and `top`) gets the default Extrapolate{0} reconstruction.
 get_boundary(
     op::AdvectionOperator,
     ::LeftBoundaryWindow{name},
@@ -1017,7 +1018,7 @@ get_boundary(
     ::RightBoundaryWindow{name},
 ) where {name} = get_advection_boundary(op.bcs, name)
 get_advection_boundary(bcs::NamedTuple, name::Symbol) =
-    hasfield(typeof(bcs), name) ? getfield(bcs, name) : FirstOrderOneSided()
+    hasfield(typeof(bcs), name) ? getfield(bcs, name) : Extrapolate()
 # The stencil returns Contravariant3Vector(op(...)), where op's result combines
 # the contravariant3 component of a velocity element with the advected field's
 # stencil values using ordinary arithmetic. For tuple-valued fields, both of
@@ -1064,13 +1065,10 @@ advection_velocity_width(::AdvectionOperator) = Val(:current)
 velocity_stencil_width(::Val{:current}) = (0, 0)
 velocity_stencil_width(::Val{:neighboring}) = (-1, 1)
 # All faces are computed with the interior stencil (which applies the
-# ghost-point reconstructions itself), so no boundary window is needed. The
+# ghost-point extrapolations itself), so no boundary window is needed. The
 # operators that are rewritten as matrix multiplies override this: their
-# matrices need explicit boundary rows. The second method covers user-supplied
-# callable reconstructions, which are not AbstractBoundaryConditions (and
-# would otherwise hit the invalid-boundary-condition fallback).
+# matrices need explicit boundary rows.
 boundary_width(::AdvectionOperator, ::AbstractBoundaryCondition) = 0
-boundary_width(::AdvectionOperator, ::Any) = 0
 # Never reached at runtime for operators whose boundary_width is 0 (no face is
 # treated as a boundary window), but getidx's boundary branch still needs
 # statically resolvable methods when the operator carries boundary conditions;
@@ -1148,13 +1146,12 @@ Base.@propagate_inbounds function advection_velocities(
 end
 
 # we treat all faces like interior faces: out-of-range stencil indices are
-# clamped to the domain, which pads the ghost points with the same value as
-# the closest interior point (indices wrap on periodic domains instead), and
-# at the face one in from each boundary the padded value is then replaced by
-# the boundary condition's ghost-point reconstruction (a no-op with the
-# default FirstOrderOneSided). On terrain-following grids,
-# the reconstruction is along the third coordinate line, not along the wall
-# normal; see the note on AdvectionOperator.
+# clamped to the domain (indices wrap on periodic domains instead), and the
+# clamped values are then replaced by the boundary condition's ghost-point
+# extrapolation from the in-range interior points of the stencil (a no-op
+# with the default Extrapolate{0}, which matches the clamping). On
+# terrain-following grids, the extrapolation is along the third coordinate
+# line, not along the wall normal; see the note on AdvectionOperator.
 Base.@propagate_inbounds function stencil_interior(
     op::AdvectionOperator,
     space,
@@ -1178,17 +1175,24 @@ Base.@propagate_inbounds function stencil_interior(
         a⁻ = getidx(space, arg, clamp(idx - half, lc, rc), hidx)
         a⁺ = getidx(space, arg, clamp(idx + half, lc, rc), hidx)
         a⁺⁺ = getidx(space, arg, clamp(idx + half + 1, lc, rc), hidx)
-        # At the face one in from each boundary, the padded value of the
-        # single out-of-range center is replaced by the boundary condition's
-        # reconstruction. The boundary face itself keeps the closest-value
-        # padding for both of its out-of-range centers, for every boundary
-        # condition (see AdvectionOperator).
-        if idx == left_face_boundary_idx(space) + 1
+        # The padded values of the out-of-range centers are replaced by the
+        # boundary condition's extrapolation from the in-range interior points
+        # of the stencil: at the boundary face itself, both out-of-range
+        # centers share the extrapolation from the 2 in-range points, and at
+        # the face one in from the boundary the single out-of-range center is
+        # extrapolated from the 3 in-range points (see AdvectionOperator).
+        if idx == left_face_boundary_idx(space)
             bc = get_boundary(op, left_boundary_window(space))
-            a⁻⁻ = bc(a⁻, a⁺)
+            a⁻⁻ = a⁻ = bc(a⁺, a⁺⁺)
+        elseif idx == left_face_boundary_idx(space) + 1
+            bc = get_boundary(op, left_boundary_window(space))
+            a⁻⁻ = bc(a⁻, a⁺, a⁺⁺)
+        elseif idx == right_face_boundary_idx(space)
+            bc = get_boundary(op, right_boundary_window(space))
+            a⁺⁺ = a⁺ = bc(a⁻, a⁻⁻)
         elseif idx == right_face_boundary_idx(space) - 1
             bc = get_boundary(op, right_boundary_window(space))
-            a⁺⁺ = bc(a⁺, a⁻)
+            a⁺⁺ = bc(a⁺, a⁻, a⁻⁻)
         end
         (a⁻⁻, a⁻, a⁺, a⁺⁺)
     end
@@ -1223,18 +1227,20 @@ U(\\boldsymbol{v},x)[i] = \\begin{cases}
 
 where ``\\boldsymbol{e}_3`` is the 3rd covariant basis vector.
 
-The only supported boundary condition is [`FirstOrderOneSided()`](@ref), which
-is also added to `bcs` by default when no boundary conditions are given:
-boundary faces are computed with the interior stencil, padding the ghost point
-it reaches with the value of the closest interior point. Since the padded
-upwind and downwind values coincide there, the boundary faces reduce to
-``v^3[i] x_b \\boldsymbol{e}_3``, where ``x_b`` is the value at the center
-closest to the boundary.
+The only supported boundary condition is [`Extrapolate`](@ref), which is also
+added to `bcs` (as `Extrapolate{0}`) by default when no boundary conditions
+are given: boundary faces are computed with the interior stencil, padding the
+ghost point it reaches with the boundary condition's extrapolation. The
+stencil only reaches a ghost point at the boundary face itself, where a single
+interior point is in range, so every extrapolation order reduces to the value
+of the closest interior point: since the padded upwind and downwind values
+then coincide, the boundary faces reduce to ``v^3[i] x_b \\boldsymbol{e}_3``,
+where ``x_b`` is the value at the center closest to the boundary.
 """
 struct UpwindBiasedProductC2F{BCS} <: AdvectionOperator
     bcs::BCS
     function UpwindBiasedProductC2F(; kwargs...)
-        assert_valid_bcs("UpwindBiasedProductC2F", kwargs, (FirstOrderOneSided,))
+        assert_valid_bcs("UpwindBiasedProductC2F", kwargs, (Extrapolate,))
         bcs = advection_bcs(kwargs)
         new{typeof(bcs)}(bcs)
     end
@@ -1257,14 +1263,13 @@ stencil_interior_width(::UpwindBiasedProductC2F, velocity, arg) =
     ((0, 0), (-half, half))
 
 # Boundary faces are computed with the interior stencil, padding ghost points
-# with one-sided reconstructions from the closest interior points (with the
-# value of the closest interior point when no boundary condition is given; see
-# AdvectionOperator). Unlike a pointwise-evaluated AdvectionOperator, this
-# operator is evaluated through its operator matrix, whose multiply clips
-# out-of-range band entries instead of clamping their indices, so the faces
-# whose interior row reaches a ghost point need explicit boundary rows that
-# fold the ghost coefficients into the closest interior columns; see
-# MatrixFields/operator_matrices.jl.
+# with the Extrapolate boundary condition's extrapolation from the in-range
+# interior points (see AdvectionOperator). Unlike a pointwise-evaluated
+# AdvectionOperator, this operator is evaluated through its operator matrix,
+# whose multiply clips out-of-range band entries instead of extrapolating
+# their values, so the faces whose interior row reaches a ghost point need
+# explicit boundary rows that fold the ghost coefficients into the in-range
+# interior columns; see MatrixFields/operator_matrices.jl.
 boundary_width(::UpwindBiasedProductC2F, ::AbstractBoundaryCondition) = 1
 
 """
@@ -1291,19 +1296,17 @@ cases (discussed in Lin et al (1994)) include setting the 𝜙_min = 0 or 𝜙_m
 saturation mixing ratio for water vapor are not considered here in favour of
 the generalized local extrema in equation (5a, 5b).
 
-Like all [`AdvectionOperator`](@ref)s, boundary faces are computed
-with the interior stencil, padding ghost points with a boundary condition's
-reconstruction: [`FirstOrderOneSided`](@ref) (added to `bcs` by default when
-no boundary conditions are given), [`ThirdOrderOneSided`](@ref), or any
-callable of the form
-`bc(closest, second_closest)`.
+As for all [`AdvectionOperator`](@ref)s, boundary faces are computed with the
+interior stencil, padding ghost points with the [`Extrapolate`](@ref) boundary
+condition's extrapolation (`Extrapolate{0}` is added to `bcs` by default when
+no boundary conditions are given).
 """
 struct LinVanLeerC2F{BCS, C} <: AdvectionOperator
     bcs::BCS
     constraint::C
 end
 function LinVanLeerC2F(; constraint, kwargs...)
-    assert_valid_ghost_bcs("LinVanLeerC2F", kwargs)
+    assert_valid_bcs("LinVanLeerC2F", kwargs, (Extrapolate,))
     LinVanLeerC2F(advection_bcs(kwargs), constraint)
 end
 
@@ -1385,18 +1388,13 @@ U(v,x)[i] = \\begin{cases}
 
 This stencil is based on [WickerSkamarock2002](@cite), eq. 4(a).
 
-Supported boundary conditions are:
-- [`FirstOrderOneSided()`](@ref): boundary faces are computed with the
-  interior stencil, padding each ghost point it reaches with the value of the
-  closest interior point.
-- [`ThirdOrderOneSided()`](@ref): as above, except that at the face one in
-  from each boundary the single ghost point is linearly extrapolated from the
-  two closest interior points; at the boundary face itself both ghost points
-  still take the value of the closest interior point.
-
-When no boundary conditions are given, [`FirstOrderOneSided`](@ref) is added
-to `bcs` by default. The one-sided reconstructions are taken along
-the third coordinate line; on a terrain-following grid that is not the
+The only supported boundary condition is [`Extrapolate`](@ref): boundary
+faces are computed with the interior stencil, padding each ghost point it
+reaches with the condition's extrapolation from the in-range interior points
+(the extrapolation order is reduced at the boundary face itself, where only 2
+interior points are in range). When no boundary conditions are given,
+`Extrapolate{0}` is added to `bcs` by default. The extrapolations are taken
+along the third coordinate line; on a terrain-following grid that is not the
 wall-normal direction (see the note on [`AdvectionOperator`](@ref)).
 The flux through the boundary itself is not set by this padding: it is
 imposed by the enclosing operator, e.g. a [`DivergenceF2C`](@ref) operator
@@ -1408,7 +1406,7 @@ struct Upwind3rdOrderBiasedProductC2F{BCS} <: AdvectionOperator
         assert_valid_bcs(
             "Upwind3rdOrderBiasedProductC2F",
             kwargs,
-            (FirstOrderOneSided, ThirdOrderOneSided),
+            (Extrapolate,),
         )
         bcs = advection_bcs(kwargs)
         new{typeof(bcs)}(bcs)
@@ -1433,7 +1431,7 @@ stencil_interior_width(::Upwind3rdOrderBiasedProductC2F, velocity, arg) =
 
 
 # As for UpwindBiasedProductC2F, the boundary rows implement the interior
-# stencil with one-sided ghost-point reconstructions; see
+# stencil with extrapolated ghost points; see
 # MatrixFields/operator_matrices.jl. The interior stencil reaches one center
 # beyond its face on each side, so the two faces nearest each boundary need
 # boundary rows.
@@ -1461,21 +1459,19 @@ where ``s[i] = +1`` if  ``v[i] \\geq 0`` and ``s[i] = -1`` if  ``v [i] \\leq 0``
 flux. This formulation is based on [BorisBook1973](@cite), as reported in
 [durran2010](@cite) section 5.4.1.
 
-Like all [`AdvectionOperator`](@ref)s, boundary faces are computed
-with the interior stencil, padding ghost points with a boundary condition's
-reconstruction: [`FirstOrderOneSided`](@ref) (added to `bcs` by default when
-no boundary conditions are given), [`ThirdOrderOneSided`](@ref), or any
-callable of the form
-`bc(closest, second_closest)`. With the default, the padded values make both
-one-sided differences of `x` vanish at the two faces nearest each boundary,
-so the corrected antidiffusive flux is zero there; at the boundary face
-itself this holds for every boundary condition.
+As for all [`AdvectionOperator`](@ref)s, boundary faces are computed with the
+interior stencil, padding ghost points with the [`Extrapolate`](@ref) boundary
+condition's extrapolation (`Extrapolate{0}` is added to `bcs` by default when
+no boundary conditions are given). With the default, the padded values make
+the one-sided difference of `x` on the boundary side vanish at the two faces
+nearest each boundary, and that difference bounds the corrected antidiffusive
+flux, so the flux is zero there.
 """
 struct FCTBorisBook{BCS} <: AdvectionOperator
     bcs::BCS
 end
 function FCTBorisBook(; kwargs...)
-    assert_valid_ghost_bcs("FCTBorisBook", kwargs)
+    assert_valid_bcs("FCTBorisBook", kwargs, (Extrapolate,))
     FCTBorisBook(advection_bcs(kwargs))
 end
 
@@ -1508,20 +1504,19 @@ Input arguments:
 This stencil is based on [zalesak1979fully](@cite), as reported in [durran2010]
 (@cite) section 5.4.2, where ``C`` denotes the corrected antidiffusive flux.
 
-Like all [`AdvectionOperator`](@ref)s, boundary faces are computed
-with the interior stencil, padding ghost points with a boundary condition's
-reconstruction: [`FirstOrderOneSided`](@ref) (added to `bcs` by default when
-no boundary conditions are given), [`ThirdOrderOneSided`](@ref), or any
-callable of the form
-`bc(closest, second_closest)`; a reconstruction of a tuple-valued field
-applies to each of `Φ` and `Φᵗᵈ`. The corrected antidiffusive flux at the two
-faces nearest each boundary is whatever the padded stencil gives, not zero.
+As for all [`AdvectionOperator`](@ref)s, boundary faces are computed with the
+interior stencil, padding ghost points with the [`Extrapolate`](@ref) boundary
+condition's extrapolation (`Extrapolate{0}` is added to `bcs` by default when
+no boundary conditions are given); the extrapolation of a tuple-valued field
+applies to each of `Φ` and `Φᵗᵈ`. No value is imposed at the faces nearest
+each boundary: the corrected antidiffusive flux there is whatever the padded
+stencil gives.
 """
 struct FCTZalesak{BCS} <: AdvectionOperator
     bcs::BCS
 end
 function FCTZalesak(; kwargs...)
-    assert_valid_ghost_bcs("FCTZalesak", kwargs)
+    assert_valid_bcs("FCTZalesak", kwargs, (Extrapolate,))
     FCTZalesak(advection_bcs(kwargs))
 end
 
@@ -1686,20 +1681,18 @@ field, or a scalar field holding the contravariant3 component (e.g.
 `Geometry.contravariant3.(u, Fields.local_geometry_field(face_space))` for a
 velocity field `u` in another basis).
 
-Like all [`AdvectionOperator`](@ref)s, boundary faces are computed
-with the interior stencil, padding ghost points with a boundary condition's
-reconstruction: [`FirstOrderOneSided`](@ref) (added to `bcs` by default when
-no boundary conditions are given), [`ThirdOrderOneSided`](@ref), or any
-callable of the form
-`bc(closest, second_closest)`. The limited flux at the two faces nearest each
-boundary is whatever the padded stencil gives, not zero.
+As for all [`AdvectionOperator`](@ref)s, boundary faces are computed with the
+interior stencil, padding ghost points with the [`Extrapolate`](@ref) boundary
+condition's extrapolation (`Extrapolate{0}` is added to `bcs` by default when
+no boundary conditions are given). No value is imposed at the faces nearest
+each boundary: the limited flux there is whatever the padded stencil gives.
 """
 struct TVDLimitedFluxC2F{BCS, M} <: AdvectionOperator
     bcs::BCS
     method::M
 end
 function TVDLimitedFluxC2F(; method, kwargs...)
-    assert_valid_ghost_bcs("TVDLimitedFluxC2F", kwargs)
+    assert_valid_bcs("TVDLimitedFluxC2F", kwargs, (Extrapolate,))
     TVDLimitedFluxC2F(advection_bcs(kwargs), method)
 end
 
@@ -1722,7 +1715,8 @@ strip_space(op::TVDLimitedFluxC2F, parent_space) = TVDLimitedFluxC2F(
     # a zero upwind slope always gives r = 0, even when Δϕ is also zero (the
     # added eps does not prevent that: ϕ₊₁₂ - ϕ₋₁₂ can be exactly -eps in
     # regions where ϕ is flat up to roundoff, and 0 / 0 would produce NaN);
-    # ghost-cell padding makes the upwind slope exactly zero at boundary faces
+    # ghost-cell padding also makes the upwind slope exactly zero at a boundary
+    # face whose velocity points into the domain
     r = ifelse(Δϕ_upwind == 0, zero(Δϕ_upwind), Δϕ_upwind / Δϕ)
     return limiter_coeff(r, op.method) * A
 end
@@ -2124,11 +2118,9 @@ assymetric).
 @inline function left_interior_idx(
     space::AbstractSpace,
     op::FiniteDifferenceOperator,
-    bc,
+    bc::AbstractBoundaryCondition,
     args...,
 )
-    # `bc` is left untyped because advection operators also accept user-supplied
-    # callable ghost-point reconstructions, which are not AbstractBoundaryConditions.
     left_idx(space) + boundary_width(op, bc)
 end
 
@@ -2148,7 +2140,7 @@ assymetric).
 @inline function right_interior_idx(
     space::AbstractSpace,
     op::FiniteDifferenceOperator,
-    bc,
+    bc::AbstractBoundaryCondition,
     args...,
 )
     right_idx(space) - boundary_width(op, bc)
@@ -2685,9 +2677,6 @@ promote_bc(bc::SetGradient, FT) = bc
 promote_bc(bc::SetDivergence, FT) = bc
 promote_bc(bc::SetCurl, FT) = bc
 promote_bc(bc::AbstractBoundaryCondition, FT) = bc
-# user-supplied callable ghost-point reconstructions (see
-# AdvectionOperator) hold no boundary values to promote
-promote_bc(bc, FT) = bc
 
 promote_bc(bc::SetValue{<:Integer}, ::Type{FT}) where {FT} =
     SetValue(FT(bc.val))

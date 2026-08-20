@@ -73,12 +73,12 @@ const vdiv = Operators.DivergenceF2C(
     bottom = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
 )
 const upwind1 = Operators.UpwindBiasedProductC2F(
-    bottom = Operators.FirstOrderOneSided(),
-    top = Operators.FirstOrderOneSided(),
+    bottom = Operators.Extrapolate(0),
+    top = Operators.Extrapolate(0),
 )
 const upwind3 = Operators.Upwind3rdOrderBiasedProductC2F(
-    bottom = Operators.ThirdOrderOneSided(),
-    top = Operators.ThirdOrderOneSided(),
+    bottom = Operators.Extrapolate(1),
+    top = Operators.Extrapolate(1),
 )
 const FCTZalesak = Operators.FCTZalesak()
 const SlopeLimitedFlux = Operators.TVDLimitedFluxC2F(method = Operators.MinModLimiter())

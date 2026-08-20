@@ -116,8 +116,6 @@ SetValue
 SetGradient
 SetDivergence
 Extrapolate
-FirstOrderOneSided
-ThirdOrderOneSided
 ```
 
 ## Integrals

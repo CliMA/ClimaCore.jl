@@ -158,7 +158,7 @@ end
         @test maximum(
             abs.(
                 ∂sin_arr[2:(end - 1)] .-
-                cos.(vec(Array(parent(centers))))[2:(end - 1)]
+                cos.(vec(Array(parent(centers))))[2:(end - 1)],
             ),
         ) ≤ 1e-2
 
@@ -344,12 +344,12 @@ end
     @test all(isfinite, parent(ClimaCore.to_cpu(∇ψ)))
 end
 
-# The `SetValue` boundary conditions of `GradientC2F`, `DivergenceC2F`,
-# `CurlC2F` and `UpwindBiasedProductC2F`, and the `AdvectionC2C`,
-# `AdvectionF2F` and `FluxCorrectionC2C`/`FluxCorrectionF2F` operators, were
-# removed in #2521. These tests pin the recommended replacements against the
-# stencils that they replaced, on a stretched mesh (so that a dropped metric
-# term would show up).
+# `GradientC2F`, `DivergenceC2F`, `CurlC2F` and `UpwindBiasedProductC2F` take no
+# `SetValue` boundary condition, and there are no center-to-center or
+# face-to-face advection or flux-correction operators. These tests pin the
+# recommended way of writing each of those in terms of the operators that do
+# exist against the stencil it reproduces, on a stretched mesh (so that a
+# dropped metric term would show up).
 @testset "Boundary values and advection built from the primitive operators" begin
     FT = Float64
     n = 8
@@ -501,8 +501,9 @@ end
     end
 
     @testset "Diffusive flux correction of a center field" begin
-        # A(v,θ)[i] = |v³[i+1/2]| ∂θ⁺ - |v³[i-1/2]| ∂θ⁻, where `Extrapolate`
-        # drops the term outside of the boundary (zero flux through the face)
+        # A(v,θ)[i] = |v³[i+1/2]| ∂θ⁺ - |v³[i-1/2]| ∂θ⁻, where the zero
+        # boundary gradient drops the term outside of the boundary (no flux
+        # through the boundary face)
         ref = map(1:n) do i
             fc⁺ = i == n ? zero(FT) : abs(w³ᶠ[i + 1]) * (tᶜ[i + 1] - tᶜ[i])
             fc⁻ = i == 1 ? zero(FT) : abs(w³ᶠ[i]) * (tᶜ[i] - tᶜ[i - 1])

@@ -33,12 +33,12 @@ function fct_blend_tendency!(dq, q, p, t)
     (; w, C) = p
     FT = Spaces.undertype(axes(q))
     upwind1 = Operators.UpwindBiasedProductC2F(
-        bottom = Operators.FirstOrderOneSided(),
-        top = Operators.FirstOrderOneSided(),
+        bottom = Operators.Extrapolate(0),
+        top = Operators.Extrapolate(0),
     )
     upwind3 = Operators.Upwind3rdOrderBiasedProductC2F(
-        bottom = Operators.ThirdOrderOneSided(),
-        top = Operators.ThirdOrderOneSided(),
+        bottom = Operators.Extrapolate(1),
+        top = Operators.Extrapolate(1),
     )
     divf2c = Operators.DivergenceF2C(
         bottom = Operators.SetValue(Geometry.WVector(FT(0))),
@@ -54,12 +54,12 @@ function boris_book_tendency!(dq, q, p, t)
     (; w, Δt) = p
     FT = Spaces.undertype(axes(q))
     upwind1 = Operators.UpwindBiasedProductC2F(
-        bottom = Operators.FirstOrderOneSided(),
-        top = Operators.FirstOrderOneSided(),
+        bottom = Operators.Extrapolate(0),
+        top = Operators.Extrapolate(0),
     )
     upwind3 = Operators.Upwind3rdOrderBiasedProductC2F(
-        bottom = Operators.ThirdOrderOneSided(),
-        top = Operators.ThirdOrderOneSided(),
+        bottom = Operators.Extrapolate(1),
+        top = Operators.Extrapolate(1),
     )
     fct = Operators.FCTBorisBook()
     divf2c = Operators.DivergenceF2C(
@@ -80,12 +80,12 @@ function zalesak_tendency!(dq, q, p, t)
     (; w, Δt) = p
     FT = Spaces.undertype(axes(q))
     upwind1 = Operators.UpwindBiasedProductC2F(
-        bottom = Operators.FirstOrderOneSided(),
-        top = Operators.FirstOrderOneSided(),
+        bottom = Operators.Extrapolate(0),
+        top = Operators.Extrapolate(0),
     )
     upwind3 = Operators.Upwind3rdOrderBiasedProductC2F(
-        bottom = Operators.ThirdOrderOneSided(),
-        top = Operators.ThirdOrderOneSided(),
+        bottom = Operators.Extrapolate(1),
+        top = Operators.Extrapolate(1),
     )
     fct = Operators.FCTZalesak()
     divf2c = Operators.DivergenceF2C(

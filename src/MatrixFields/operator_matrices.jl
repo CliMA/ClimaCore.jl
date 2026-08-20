@@ -326,10 +326,10 @@ Operators.StencilBroadcasted{Style}(
 
 # An advection operator is only equivalent to a matrix multiply when its
 # interior stencil and its boundary reconstructions are all linear in the
-# advected argument; everything else (a flux-limited operator, or a
-# user-supplied ghost-point reconstruction) is left as an ordinary stencil and
-# evaluated pointwise. `has_linear_stencil` only depends on the types of the
-# operator and its boundary conditions, so this branch folds at compile time.
+# advected argument; everything else (i.e. a flux-limited operator) is left as
+# an ordinary stencil and evaluated pointwise. `has_linear_stencil` only
+# depends on the types of the operator and its boundary conditions, so this
+# branch folds at compile time.
 Operators.StencilBroadcasted{Style}(
     op::Operators.AdvectionOperator,
     args::Args,
@@ -576,7 +576,7 @@ op_matrix_last_row(op, bc, space, idx, hidx, args...) =
 # `boundary_width(op, ::NullBoundaryCondition) == 0`, so no boundary row is requested
 # for it -- and a center-input operator's interior row at the boundary face reaches a
 # center outside the domain. The multiply clips those band entries, so the result is
-# unaffected, but merely building the row can read out of range:
+# unaffected, but building the row can read out of range:
 # `DivergenceOperator`'s row evaluates `LocalGeometry(space, idx - half, hidx)`, which
 # is center 0 at the bottom face, and that is a `BoundsError` under
 # `--check-bounds=yes`.
@@ -722,11 +722,14 @@ Base.@propagate_inbounds ct3_data(velocity, space, idx, hidx) =
 
 ################################################################################
 
-# Boundary rows for the Extrapolate boundary condition, which is only accepted
-# by the interpolation operators: the output at the boundary face is the
-# input's value at the closest interior point, so the boundary row is an
-# identity entry pointing at that point. Such a row fits inside the interior
-# row's band, so the operator's row type is unchanged.
+# Boundary rows for the Extrapolate boundary condition on the interpolation
+# operators. Their stencil only reaches a ghost point at the boundary face
+# itself, where a single interior point is in range, so every extrapolation
+# order reduces to the value of the closest interior point, and the
+# interpolation of that value with itself is again that value: the boundary
+# row is an identity entry pointing at the closest interior point. Such a row
+# fits inside the interior row's band, so the operator's row type is
+# unchanged.
 const CopyInputExtrapolateOp =
     Union{Operators.InterpolateC2F, Operators.WeightedInterpolateC2F}
 
@@ -811,130 +814,108 @@ Base.@propagate_inbounds function op_matrix_interior_row(
            12
 end
 
-# Boundary rows for the matrix-representable advection operators. Boundary
-# faces are computed with the interior stencil, padding the ghost points it
-# reaches with one-sided reconstructions from the closest interior points:
+# Boundary rows for the matrix-representable advection operators (with the
+# Extrapolate boundary condition, the only one they accept). Boundary faces
+# are computed with the interior stencil, padding the ghost points it reaches
+# with the condition's extrapolation from the in-range interior points (see
+# `Operators.Extrapolate`; the extrapolation order is reduced where fewer
+# interior points are in range).
 #
-#  - FirstOrderOneSided (the default): every ghost point takes the value of
-#    the closest interior point, matching the index clamping that the
-#    pointwise-evaluated advection operators apply.
-#  - ThirdOrderOneSided (Upwind3rdOrderBiasedProductC2F only): at the face one
-#    in from the boundary, the single ghost point is linearly extrapolated
-#    from the two closest interior points (2 * closest - second-closest); at
-#    the boundary face itself, both ghost points take the value of the closest
-#    interior point.
-#
-# The matrix multiply clips out-of-range band entries instead of clamping
-# their indices, so each face whose interior row reaches a ghost point gets a
-# boundary row that folds the ghost coefficients into the closest interior
+# The matrix multiply clips out-of-range band entries instead of extrapolating
+# their values, so each face whose interior row reaches a ghost point gets a
+# boundary row that folds the ghost coefficients into the in-range interior
 # columns, leaving zeros in the out-of-range slots (which the multiply then
-# clips). The folded rows fit the interior row type, so no widening is needed.
+# clips): the boundary row is the interior row multiplied (on the right) by
+# the square matrix `E` that expresses each stencil point in terms of the
+# in-range interior points -- the identity for the in-range points, and the
+# extrapolation weights for the ghost points. Since every ghost point of a
+# stencil shares the same extrapolated value, all ghost rows of `E` are equal,
+# and the product reduces to adding `sum(ghost coefficients) * weight[k]` to
+# the k-th in-range column. The folded rows fit the interior row type, so no
+# widening is needed. For example, at the bottom, the interior row of
+# Upwind3rdOrderBiasedProductC2F, (-v³ - |v³|, 7v³ + 3|v³|, 7v³ - 3|v³|,
+# -v³ + |v³|) / 12, becomes (0, 6v³ + 2|v³|, 7v³ - 3|v³|, -v³ + |v³|) / 12 at
+# the face one in from the boundary with Extrapolate{0}, and
+# (0, 5v³ + |v³|, 8v³ - 2|v³|, -v³ + |v³|) / 12 with Extrapolate{1}.
+#
 # The rows are reached through the generic FDOperatorMatrix
 # stencil_left_boundary / stencil_right_boundary methods; advection operators
-# never carry NullBoundaryCondition (FirstOrderOneSided is added by default),
-# so no zero-row fallback applies here.
+# never carry NullBoundaryCondition (Extrapolate{0} is added by default), so
+# no zero-row fallback applies here. The interior row of these operators only
+# reads the velocity and local geometry at the row's own face, so it is safe
+# to evaluate at boundary faces.
+const ExtrapolateAdvectionOp = Union{
+    Operators.UpwindBiasedProductC2F,
+    Operators.Upwind3rdOrderBiasedProductC2F,
+}
 
-# At the boundary face, the padded upwind and downwind values coincide, so the
-# folded row is `v³` on the closest interior center regardless of upwind
-# direction: ((v³ + |v³|) + (v³ - |v³|)) / 2 = v³.
 Base.@propagate_inbounds function op_matrix_first_row(
-    ::Operators.UpwindBiasedProductC2F,
-    ::Operators.FirstOrderOneSided,
+    op::ExtrapolateAdvectionOp,
+    bc::Operators.Extrapolate,
     space,
     idx,
     hidx,
     velocity,
 )
-    v³ = CT3(ct3_data(velocity, space, idx, hidx))
-    return BidiagonalMatrixRow(zero(v³), v³)
+    row = op_matrix_interior_row(op, space, idx, hidx, velocity)
+    nghost =
+        Operators.boundary_width(op, bc) -
+        (idx - Operators.left_face_boundary_idx(space))
+    return fold_extrapolate_row_left(row, bc, nghost)
 end
 Base.@propagate_inbounds function op_matrix_last_row(
-    ::Operators.UpwindBiasedProductC2F,
-    ::Operators.FirstOrderOneSided,
+    op::ExtrapolateAdvectionOp,
+    bc::Operators.Extrapolate,
     space,
     idx,
     hidx,
     velocity,
 )
-    v³ = CT3(ct3_data(velocity, space, idx, hidx))
-    return BidiagonalMatrixRow(v³, zero(v³))
+    row = op_matrix_interior_row(op, space, idx, hidx, velocity)
+    nghost =
+        Operators.boundary_width(op, bc) -
+        (Operators.right_face_boundary_idx(space) - idx)
+    return fold_extrapolate_row_right(row, bc, nghost)
 end
 
-# The interior stencil reaches one center beyond its face on each side, so two
-# faces on each side need folded rows. At the boundary face both lower (resp.
-# upper) ghost coefficients fold into the closest center; at the face one in
-# from the boundary only the outermost one does. With FirstOrderOneSided (or
-# no boundary condition), the ghost coefficient folds entirely into the
-# closest center: e.g. at the bottom, the interior row
-# (-v³ - |v³|, 7v³ + 3|v³|, 7v³ - 3|v³|, -v³ + |v³|) / 12 becomes
-# (0, 6v³ + 2|v³|, 7v³ - 3|v³|, -v³ + |v³|) / 12 at the face one in from the
-# boundary, and (0, 0, 13v³ - |v³|, -v³ + |v³|) / 12 at the boundary face.
-Base.@propagate_inbounds function op_matrix_first_row(
-    ::Operators.Upwind3rdOrderBiasedProductC2F,
-    ::Operators.FirstOrderOneSided,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    v³ = CT3(ct3_data(velocity, space, idx, hidx))
-    av³ = CT3(abs(v³.u³))
-    z = zero(v³)
-    return idx == Operators.left_face_boundary_idx(space) ?
-           QuaddiagonalMatrixRow(z, z, 13v³ - av³, -v³ + av³) / 12 :
-           QuaddiagonalMatrixRow(z, 6v³ + 2av³, 7v³ - 3av³, -v³ + av³) / 12
+# `interior row * E` written out: the `nghost` out-of-range entries on the
+# boundary side are zeroed, and their sum, weighted by the extrapolation
+# weights of the in-range points ordered from the boundary outwards, is added
+# to the in-range entries. `extrapolate_weights` returns 3 weights, which is
+# enough for any row with up to 4 entries (a row with at least 1 ghost entry
+# has at most 3 in-range ones).
+@inline function fold_extrapolate_row_left(
+    row::BandMatrixRow{ld, bw},
+    bc::Operators.Extrapolate,
+    nghost,
+) where {ld, bw}
+    entries = row.entries
+    z = zero(first(entries))
+    w = Operators.extrapolate_weights(bc, bw - nghost)
+    ghost_sum = reduce(+, ntuple(k -> k <= nghost ? entries[k] : z, Val(bw)))
+    return BandMatrixRow{ld}(
+        ntuple(
+            j -> j <= nghost ? z : entries[j] + ghost_sum * w[j - nghost],
+            Val(bw),
+        )...,
+    )
 end
-Base.@propagate_inbounds function op_matrix_last_row(
-    ::Operators.Upwind3rdOrderBiasedProductC2F,
-    ::Operators.FirstOrderOneSided,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    v³ = CT3(ct3_data(velocity, space, idx, hidx))
-    av³ = CT3(abs(v³.u³))
-    z = zero(v³)
-    return idx == Operators.right_face_boundary_idx(space) ?
-           QuaddiagonalMatrixRow(-v³ - av³, 13v³ + av³, z, z) / 12 :
-           QuaddiagonalMatrixRow(-v³ - av³, 7v³ + 3av³, 6v³ - 2av³, z) / 12
-end
-
-# With ThirdOrderOneSided, the boundary face is treated as with
-# FirstOrderOneSided, but at the face one in from the boundary the ghost point
-# is linearly extrapolated from the two closest interior points, so its
-# coefficient c folds as 2c into the closest column and -c into the
-# second-closest: e.g. at the bottom, the interior row becomes
-# (0, 5v³ + |v³|, 8v³ - 2|v³|, -v³ + |v³|) / 12.
-Base.@propagate_inbounds function op_matrix_first_row(
-    ::Operators.Upwind3rdOrderBiasedProductC2F,
-    ::Operators.ThirdOrderOneSided,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    v³ = CT3(ct3_data(velocity, space, idx, hidx))
-    av³ = CT3(abs(v³.u³))
-    z = zero(v³)
-    return idx == Operators.left_face_boundary_idx(space) ?
-           QuaddiagonalMatrixRow(z, z, 13v³ - av³, -v³ + av³) / 12 :
-           QuaddiagonalMatrixRow(z, 5v³ + av³, 8v³ - 2av³, -v³ + av³) / 12
-end
-Base.@propagate_inbounds function op_matrix_last_row(
-    ::Operators.Upwind3rdOrderBiasedProductC2F,
-    ::Operators.ThirdOrderOneSided,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    v³ = CT3(ct3_data(velocity, space, idx, hidx))
-    av³ = CT3(abs(v³.u³))
-    z = zero(v³)
-    return idx == Operators.right_face_boundary_idx(space) ?
-           QuaddiagonalMatrixRow(-v³ - av³, 13v³ + av³, z, z) / 12 :
-           QuaddiagonalMatrixRow(-v³ - av³, 8v³ + 2av³, 5v³ - av³, z) / 12
+@inline function fold_extrapolate_row_right(
+    row::BandMatrixRow{ld, bw},
+    bc::Operators.Extrapolate,
+    nghost,
+) where {ld, bw}
+    entries = row.entries
+    z = zero(first(entries))
+    navail = bw - nghost
+    w = Operators.extrapolate_weights(bc, navail)
+    ghost_sum = reduce(+, ntuple(k -> k > navail ? entries[k] : z, Val(bw)))
+    return BandMatrixRow{ld}(
+        ntuple(
+            j -> j > navail ? z : entries[j] + ghost_sum * w[navail + 1 - j],
+            Val(bw),
+        )...,
+    )
 end
 
 op_matrix_interior_row(::Operators.SetBoundaryOperator, ::Type{FT}) where {FT} =

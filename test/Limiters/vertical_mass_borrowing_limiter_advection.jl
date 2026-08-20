@@ -60,12 +60,12 @@ function tendency!(yₜ, y, parameters, t)
         top = Operators.SetValue(Geometry.WVector(FT(0))),
     )
     upwind1 = Operators.UpwindBiasedProductC2F(
-        bottom = Operators.FirstOrderOneSided(),
-        top = Operators.FirstOrderOneSided(),
+        bottom = Operators.Extrapolate(0),
+        top = Operators.Extrapolate(0),
     )
     upwind3 = Operators.Upwind3rdOrderBiasedProductC2F(
-        bottom = Operators.ThirdOrderOneSided(),
-        top = Operators.ThirdOrderOneSided(),
+        bottom = Operators.Extrapolate(1),
+        top = Operators.Extrapolate(1),
     )
     If = Operators.InterpolateC2F()
     @. yₜ.q = -divf2c(upwind1(w, y.q) * If(y.q))

@@ -62,16 +62,20 @@ function Base.copyto!(
         # One column per block keeps register pressure low, which matters more than
         # occupancy until there are enough columns to saturate the device; past that,
         # pack as many columns into each block as 256 threads allow.
-        # 108 is the number of SMs in an A100. TODO: get this value from CUDA.jl to better optimize for different GPUs
+        # 108 is the number of SMs in an A100.
+        # TODO: get this value from CUDA.jl to better optimize for different GPUs
         threads_dim_y = n_columns > 256 * 108 ? div(256, n_face_levels) : 1
         block_dim_x = div(n_columns, threads_dim_y, RoundUp)
         eager_shmem = n_face_levels * threads_dim_y * eager_shmem_per_thread
-        # use fallback lazy evaluation if the eager kernel would exceed the device's per-block shared memory
+        # use fallback lazy evaluation if the eager kernel would exceed the
+        # device's per-block shared memory
         if eager_shmem ≤ max_shmem
-            # `axes(out)` is passed so the kernel can recover the output layout's
-            # horizontal extents from its type parameters (see `vijh_params`). The
-            # `CartesianIndices` the kernel builds from them therefore divides by
-            # compile-time constants, keeping the per-thread `divrem` cheap.
+            # `axes(out)` is passed as the space the kernel evaluates `bc` on, since
+            # `out` and `bc` are space-stripped. The kernel recovers the output
+            # layout's horizontal extents from the type parameters of
+            # `field_values(out)` (see `vijh_params`), so the `CartesianIndices` it
+            # builds from them divides by compile-time constants, keeping the
+            # per-thread `divrem` cheap.
             args = (
                 strip_space(out, space),
                 strip_space(bc, space),

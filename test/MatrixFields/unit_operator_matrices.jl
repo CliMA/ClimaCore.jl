@@ -8,8 +8,6 @@ import ClimaCore.Operators:
     SetDivergence,
     SetCurl,
     Extrapolate,
-    FirstOrderOneSided,
-    ThirdOrderOneSided,
     InterpolateC2F,
     InterpolateF2C,
     LeftBiasedC2F,
@@ -134,20 +132,27 @@ end
     test_op_matrix(WeightedInterpolateC2F, Extrapolate, (ᶜscalar, ᶜnested))
     test_op_matrix(WeightedInterpolateF2C, Nothing, (ᶠscalar, ᶠnested))
     # The advection operators' boundary faces are computed with the interior
-    # stencil, padding ghost points with one-sided reconstructions from the
-    # closest interior points (the value of the closest interior point when no
-    # boundary condition is given), so no SetBoundaryOperator is needed.
+    # stencil, padding ghost points with the Extrapolate boundary condition's
+    # extrapolation from the in-range interior points (Extrapolate{0}, the
+    # value of the closest interior point, when no boundary condition is
+    # given), so no SetBoundaryOperator is needed.
     test_op_matrix(UpwindBiasedProductC2F, Nothing, (ᶠuvw, ᶜscalar))
-    test_op_matrix(UpwindBiasedProductC2F, FirstOrderOneSided, (ᶠuvw, ᶜscalar))
+    test_op_matrix(UpwindBiasedProductC2F, Extrapolate{0}, (ᶠuvw, ᶜscalar))
+    test_op_matrix(UpwindBiasedProductC2F, Extrapolate{2}, (ᶠuvw, ᶜscalar))
     test_op_matrix(Upwind3rdOrderBiasedProductC2F, Nothing, (ᶠuvw, ᶜscalar))
     test_op_matrix(
         Upwind3rdOrderBiasedProductC2F,
-        FirstOrderOneSided,
+        Extrapolate{0},
         (ᶠuvw, ᶜscalar),
     )
     test_op_matrix(
         Upwind3rdOrderBiasedProductC2F,
-        ThirdOrderOneSided,
+        Extrapolate{1},
+        (ᶠuvw, ᶜscalar),
+    )
+    test_op_matrix(
+        Upwind3rdOrderBiasedProductC2F,
+        Extrapolate{2},
         (ᶠuvw, ᶜscalar),
     )
     test_op_matrix(SetBoundaryOperator, SetValue, (ᶠnested,))
@@ -325,9 +330,6 @@ end
         test_broken_with_cuda = true, # TODO: Fix this.
     )
 
-    # The AdvectionC2C operator has been removed, so the center-to-center
-    # advection matrix in the tests below is replaced by the matrix of an
-    # upwinded flux divergence, ᶜdiv_matrix() * ᶠupwind_matrix(ᶠuvw).
 
     # TODO: For some reason, we need to compile and run @test_opt on several
     # simpler broadcast expressions before we can run the remaining two test

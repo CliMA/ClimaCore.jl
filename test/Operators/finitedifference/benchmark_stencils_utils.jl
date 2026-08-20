@@ -151,7 +151,8 @@ bcs_tested(c, ::typeof(op_LeftBiasedF2C!)) = ((;), set_bot_value_bc(c))
 bcs_tested(c, ::typeof(op_RightBiasedC2F!)) = (set_top_value_bc(c),)
 bcs_tested(c, ::typeof(op_RightBiasedF2C!)) = ((;), set_top_value_bc(c))
 bcs_tested(c, ::typeof(op_CurlC2F!)) = (set_curl_bcs(c),)
-# The advection operators accept no boundary conditions.
+# The advection operators are benchmarked with no boundary conditions, i.e. with
+# their default `Extrapolate{0}` ghost-point extrapolation.
 bcs_tested(c, ::typeof(op_UpwindBiasedProductC2F!)) = ((;),)
 bcs_tested(c, ::typeof(op_Upwind3rdOrderBiasedProductC2F!)) = ((;),)
 

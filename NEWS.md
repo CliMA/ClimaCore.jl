@@ -5,41 +5,47 @@ main
 -------
 
 - ![][badge-💥breaking] The advection operators' boundary treatment has been
-  reworked around redefined one-sided boundary conditions that select how the
-  ghost points reached by the interior stencil are reconstructed:
-  `FirstOrderOneSided` pads every ghost point with the value of the closest
-  interior point (the default when no boundary condition is given), while
-  `ThirdOrderOneSided` linearly extrapolates the ghost point at the face one
-  in from each boundary from the two closest interior points, and pads both
-  ghost points at the boundary face itself with the value of the closest
-  interior point. `UpwindBiasedProductC2F` accepts `FirstOrderOneSided`
-  (replacing `Extrapolate`, which used to copy the nearest interior face's
-  output and is no longer accepted), and `Upwind3rdOrderBiasedProductC2F`
-  accepts both (replacing their previous one-sided up/downwind boundary
-  reconstructions). The flux-limited advection operators (`LinVanLeerC2F`,
-  `FCTBorisBook`, `FCTZalesak`, and `TVDLimitedFluxC2F`) also accept both,
-  applied at the face one in from each boundary (the boundary face itself
-  always keeps the closest-value padding), as well as any user-supplied
-  callable of the form `bc(closest, second_closest)` that returns the ghost
-  value from the two interior values closest to the boundary; every other
-  boundary condition type is rejected. When an advection operator is
-  constructed with no boundary conditions, `FirstOrderOneSided` is added to
-  its `bcs` by default. An advection operator is rewritten as an
-  operator-matrix multiply exactly when its interior stencil and boundary
-  reconstructions are all linear in the advected argument
-  (`Operators.has_linear_stencil`), with the ghost-point reconstructions
-  folded into its matrix's boundary rows; all others are evaluated pointwise.
-  As before, the flux through the boundary itself should be imposed by the
-  enclosing operator, e.g. `DivergenceF2C` with a `SetValue` boundary.
+  reworked around a generalized `Extrapolate{N}` boundary condition (also
+  written `Extrapolate(N)`, with `Extrapolate() == Extrapolate{0}()`), which
+  selects how the ghost points reached by the interior stencil are padded:
+  every ghost point of a stencil takes the value extrapolated (with an
+  order-`N` polynomial, `0 <= N <= 2`) from the `N + 1` interior points
+  closest to the boundary, and the order is reduced where the stencil has
+  fewer interior points in range (at a boundary face itself only 2 are in
+  range, so the order there is at most 1; `UpwindBiasedProductC2F`'s 2-point
+  stencil only ever has 1 in range, so every order reduces to closest-value
+  padding for it). `Extrapolate` is now the only boundary condition the
+  advection operators (`UpwindBiasedProductC2F`,
+  `Upwind3rdOrderBiasedProductC2F`, `LinVanLeerC2F`, `FCTBorisBook`,
+  `FCTZalesak`, and `TVDLimitedFluxC2F`) accept, and `Extrapolate{0}` is added
+  to an operator's `bcs` when it is constructed with no boundary conditions.
+  It replaces the one-sided conditions, which remain as deprecated aliases:
+  `FirstOrderOneSided == Extrapolate{0}` (identical behavior) and
+  `ThirdOrderOneSided == Extrapolate{1}` (identical at the face one in from
+  each boundary; at the boundary face itself the old condition padded both
+  ghost points with the closest interior value, while `Extrapolate{1}`
+  extrapolates them linearly). User-supplied callable ghost-point
+  reconstructions are no longer accepted. An advection operator is rewritten
+  as an operator-matrix multiply exactly when its interior stencil is linear
+  in the advected argument (`Operators.has_linear_stencil`), with the
+  ghost-point extrapolations folded into its matrix's boundary rows by
+  multiplying the interior row with the matrix of extrapolation weights; all
+  others are evaluated pointwise. Note that `Extrapolate` on
+  `UpwindBiasedProductC2F` also changes meaning: it used to replicate the
+  operator's *output* at the closest interior face (`U(v, x)[1/2] =
+  U(v, x)[3/2]`), while it now pads the ghost *input*, so the boundary face
+  evaluates to `v³[1/2] x[1]`. As before, the flux through the boundary
+  itself should be imposed by the enclosing operator, e.g. `DivergenceF2C`
+  with a `SetValue` boundary.
 
   On non-periodic domains, this changes results at the two faces nearest each
-  boundary (with the default `FirstOrderOneSided` reconstruction):
+  boundary (with the default `Extrapolate{0}` padding):
   - `LinVanLeerC2F` previously used one-sided first-order upwind
     reconstructions there; it now uses the ghost-point-padded limited stencil.
   - `FCTBorisBook` previously returned a zero antidiffusive flux there, and it
-    still does, since the padded ghost points make the one-sided differences
-    that bound the corrected flux vanish; its results are unchanged
-    everywhere.
+    still does, since the padded ghost points make the one-sided difference on
+    the boundary side vanish, and that difference bounds the corrected flux;
+    its results are unchanged everywhere.
   - `FCTZalesak` and `TVDLimitedFluxC2F` previously forced their corrected or
     limited fluxes to zero there; they now compute the ghost-point-padded
     stencil instead.
