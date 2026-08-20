@@ -111,12 +111,23 @@ struct SetValue{S} <: AbstractBoundaryCondition
 end
 
 """
-    SetRobin(val)
+    SetRobin(g, a, b)
 
-Set a Robin BC.
+Set a Robin boundary condition
+```math
+a \\, \\partial_z u + b \\, u = g
+```
+at the boundary of a [`GradientC2F`](@ref) operator, where ``\\partial_z u`` is
+the physical (+3 / ``W``) derivative and ``u`` is the boundary face value.
+
+The Dirichlet condition [`SetValue`](@ref)`(g)` is recovered with
+``(a, b) = (0, 1)``, and the Neumann condition
+[`SetGradient`](@ref)`(WVector(g))` with ``(a, b) = (1, 0)``.
 """
-struct SetRobin{S} <: AbstractBoundaryCondition
-    val::S
+struct SetRobin{G, A, B} <: AbstractBoundaryCondition
+    g::G
+    a::A
+    b::B
 end
 
 """
@@ -2853,6 +2864,11 @@ The following boundary conditions are supported:
   ```math
   G(x)[\\tfrac{1}{2}] = v₀
   ```
+- [`SetRobin(g, a, b)`](@ref): calculate the gradient assuming the Robin
+  condition ``a \\partial_z u + b u = g`` at the boundary face, where
+  ``\\partial_z u`` is the physical (+3 / ``W``) derivative. This recovers
+  [`SetValue`](@ref)`(g)` when ``(a,b)=(0,1)`` and
+  [`SetGradient`](@ref)`(WVector(g))` when ``(a,b)=(1,0)``.
 """
 struct GradientC2F{BC} <: GradientOperator
     bcs::BC
@@ -2922,14 +2938,19 @@ Base.@propagate_inbounds function stencil_left_boundary(
 )
     @assert idx == left_face_boundary_idx(space)
     u_center = getidx(space, arg, idx + half, hidx)
-    g, a, b = bc.val
-    u_face = (g - a*u_center) / (b-a)
-    robin_value = Geometry.WVector(u_center - u_face)
-    Geometry.project(
-        Geometry.Covariant3Axis(),
-        getidx(space, robin_value, nothing, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
+    g = getidx(space, bc.g, nothing, hidx)
+    a = getidx(space, bc.a, nothing, hidx)
+    b = getidx(space, bc.b, nothing, hidx)
+    lg = Geometry.LocalGeometry(space, idx, hidx)
+    # W-component per unit covariant-3 gradient at this face
+    s = Geometry.project(
+        Geometry.WAxis(),
+        Geometry.Covariant3Vector(one(u_center)),
+        lg,
+    )[1]
+    # a * 2s (u_center - u_face) + b * u_face = g
+    u_face = (g - (2 * a * s) * u_center) / (b - 2 * a * s)
+    Geometry.Covariant3Vector(2) ⊗ (u_center - u_face)
 end
 Base.@propagate_inbounds function stencil_right_boundary(
     ::GradientC2F,
@@ -2941,14 +2962,18 @@ Base.@propagate_inbounds function stencil_right_boundary(
 )
     @assert idx == right_face_boundary_idx(space)
     u_center = getidx(space, arg, idx - half, hidx)
-    g, a, b = bc.val
-    u_face = (g + a*u_center) / (b+a)
-    robin_value = Geometry.WVector(u_face - u_center)
-    Geometry.project(
-        Geometry.Covariant3Axis(),
-        getidx(space, robin_value, nothing, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
+    g = getidx(space, bc.g, nothing, hidx)
+    a = getidx(space, bc.a, nothing, hidx)
+    b = getidx(space, bc.b, nothing, hidx)
+    lg = Geometry.LocalGeometry(space, idx, hidx)
+    s = Geometry.project(
+        Geometry.WAxis(),
+        Geometry.Covariant3Vector(one(u_center)),
+        lg,
+    )[1]
+    # a * 2s (u_face - u_center) + b * u_face = g
+    u_face = (g + (2 * a * s) * u_center) / (b + 2 * a * s)
+    Geometry.Covariant3Vector(2) ⊗ (u_face - u_center)
 end
 
 
@@ -4102,6 +4127,7 @@ This is an internal method.
 """
 promote_bc(bc::SetValue, FT) = bc
 promote_bc(bc::SetGradient, FT) = bc
+promote_bc(bc::SetRobin, FT) = bc
 promote_bc(bc::SetDivergence, FT) = bc
 promote_bc(bc::SetCurl, FT) = bc
 promote_bc(bc::AbstractBoundaryCondition, FT) = bc
@@ -4110,6 +4136,8 @@ promote_bc(bc::SetValue{<:Integer}, ::Type{FT}) where {FT} =
     SetValue(FT(bc.val))
 promote_bc(bc::SetGradient{<:Integer}, ::Type{FT}) where {FT} =
     SetGradient(FT(bc.val))
+promote_bc(bc::SetRobin{<:Integer, <:Integer, <:Integer}, ::Type{FT}) where {FT} =
+    SetRobin(FT(bc.g), FT(bc.a), FT(bc.b))
 promote_bc(bc::SetDivergence{<:Integer}, ::Type{FT}) where {FT} =
     SetDivergence(FT(bc.val))
 promote_bc(bc::SetCurl{<:Integer}, ::Type{FT}) where {FT} = SetCurl(FT(bc.val))

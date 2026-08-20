@@ -15,8 +15,8 @@ function compare_dirichlet(value, data)
         label="Dirichlet",
     )
 
-    bottom_bc = CC.Operators.SetRobin([value, 0.0, 1.0])
-    top_bc = CC.Operators.SetRobin([value, 0.0, 1.0])
+    bottom_bc = CC.Operators.SetRobin(value, 0.0, 1.0)
+    top_bc = CC.Operators.SetRobin(value, 0.0, 1.0)
     gradc2f = CC.Operators.GradientC2F(bottom=bottom_bc, top=top_bc)
     ∇data = gradc2f.(data)
     plot!(
@@ -45,8 +45,8 @@ function compare_neumann(value, data)
         label="Neumann",
     )
 
-    bottom_bc = CC.Operators.SetRobin([value, 1.0, 0.0])
-    top_bc = CC.Operators.SetRobin([value, 1.0, 0.0])
+    bottom_bc = CC.Operators.SetRobin(value, 1.0, 0.0)
+    top_bc = CC.Operators.SetRobin(value, 1.0, 0.0)
     gradc2f = CC.Operators.GradientC2F(bottom=bottom_bc, top=top_bc)
     ∇data = gradc2f.(data)
     plot!(
