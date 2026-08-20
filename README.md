@@ -43,60 +43,287 @@ The dynamical core (_dycore_) of the CliMA Earth System Model: composable, GPU-c
 [zenodo-img]: https://zenodo.org/badge/356355994.svg
 [zenodo-url]: https://zenodo.org/badge/latestdoi/356355994
 
-ClimaCore.jl provides the spatial discretization building blocks for the [Climate Modeling Alliance (CliMA)](https://clima.caltech.edu/) Earth System Model, which is written entirely in [Julia](https://julialang.org/). It pairs a high-level API for composing differential operators and defining flexible discretizations with low-level APIs for data layouts, specialized implementations, and threading — targeting both CPU and GPU architectures from a single codebase.
+ClimaCore.jl is a library for **building PDE solvers** — on the sphere, in boxes
+and vertical slices, and in single columns. It gives you the discretization,
+continuous or discontinuous spectral elements in the horizontal and staggered
+finite differences in the vertical, as composable operators that you broadcast
+over fields. The code you write looks like the equations you are solving, and
+the same source runs on a laptop, on an NVIDIA GPU, and across MPI ranks.
+
+It is the dynamical core underneath [ClimaAtmos.jl](https://github.com/CliMA/ClimaAtmos.jl)
+and [ClimaLand.jl](https://github.com/CliMA/ClimaLand.jl), and it is a
+standalone package: nothing in it assumes you are building a climate model.
+
+## Who this is for
+
+  - **You are writing a model, not running one.** ClimaCore gives you spaces,
+    fields, and operators, and stays out of the physics. If you want a
+    configured atmosphere — radiation, microphysics, turbulence and convection,
+    surface fluxes — that is [ClimaAtmos.jl](https://github.com/CliMA/ClimaAtmos.jl),
+    which is built on this package.
+  - **Geophysical fluid dynamics without the whole Earth system model.**
+    Shallow water on the sphere, barotropic instability, mountain waves,
+    gravity waves, density currents, rising thermals, tracer transport under
+    prescribed winds: each is a complete, tested program in [`examples/`](examples/),
+    a few hundred lines end to end.
+  - **Dynamical-core development.** Change the prognostic variables, the flux
+    form, the limiter, the implicit/explicit split, or the vertical staggering
+    without forking a model whose discretization and equations are the same
+    code.
+  - **People who need a GPU but do not want to write kernels.** A broadcast
+    expression over fields compiles to one fused kernel, specialized on the
+    polynomial degree; switching devices is an environment variable.
+
+The horizontal discretization is the one used by the spectral-element
+atmospheric dynamical cores — a cubed sphere of Gauss–Legendre–Lobatto
+elements with direct stiffness summation, the family that CAM-SE/HOMME, NUMA,
+and their performance-portable rewrites belong to. The difference is that here
+it is a library, and the equations stay yours.
 
 ## Features
 
-- **Spectral-element horizontal discretizations**: continuous (CG) and discontinuous (DG) Galerkin spectral elements.
-- **Flexible vertical discretization**: staggered finite differences on center/face grids.
-- **Multiple geometries**: Cartesian and spherical domains, with governing equations expressed in covariant vectors for curvilinear systems and Cartesian vectors for Euclidean spaces.
-- **`Field` abstraction**: scalar-, vector-, or struct-valued fields carrying values, geometry, and mesh information, with flexible memory layouts (AoS, SoA, AoSoA) and useful overloads (`sum`, `norm`, ...).
-- **Composable operators via broadcasting**: differential operators (`grad`, `div`, `interpolate`, ...) act like functions when broadcast over a `Field`, fusing operators and function calls into a single pass.
-- **GPU acceleration**: broadcast expressions compile to custom CUDA kernels, with specialization on polynomial degree for kernel performance.
-- **Time-stepper compatible**: `Field`s and `FieldVector`s act as the state vector for [ClimaTimeSteppers](https://github.com/CliMA/ClimaTimeSteppers.jl), which the tests and examples here time-step with.
+  - **Spectral-element horizontal discretizations**: continuous (CG) and discontinuous (DG) Galerkin spectral elements, on the cubed sphere and on Cartesian planes.
+  - **Flexible vertical discretization**: staggered finite differences on center/face grids, with stretching and terrain-following (hypsography) coordinates.
+  - **Multiple geometries**: Cartesian and spherical domains, with governing equations expressed in covariant vectors for curvilinear systems and Cartesian vectors for Euclidean spaces — the metric terms are handled for you.
+  - **`Field` abstraction**: scalar-, vector-, or struct-valued fields carrying values, geometry, and mesh information, with flexible memory layouts (AoS, SoA, AoSoA) and useful overloads (`sum`, `norm`, ...).
+  - **Composable operators via broadcasting**: differential operators (`grad`, `div`, `curl`, `interpolate`, ...) act like functions when broadcast over a `Field`, fusing operators and function calls into a single pass.
+  - **Implicit solvers for the vertical**: `MatrixFields` builds banded Jacobians column by column and solves them, which is what IMEX time stepping of the vertical acoustic and diffusive terms needs.
+  - **GPU acceleration**: broadcast expressions compile to custom CUDA kernels, with specialization on polynomial degree for kernel performance.
+  - **Distributed by construction**: element topologies carry their halo exchange, so the same tendency function runs on one rank or hundreds.
+  - **Time-stepper compatible**: `Field`s and `FieldVector`s act as the state vector for [ClimaTimeSteppers.jl](https://github.com/CliMA/ClimaTimeSteppers.jl), which the tests and examples here time-step with.
 
-## Quick Example
+## Installation
+
+ClimaCore.jl is a registered Julia package (Julia v1.10 or later):
 
 ```julia
-import ClimaComms
-ClimaComms.@import_required_backends
-import ClimaCore: Domains, Meshes, Spaces, Fields, Geometry, Operators
-
-FT = Float64
-
-# Build a 1D column: interval domain -> mesh -> finite-difference space
-domain = Domains.IntervalDomain(
-    Geometry.ZPoint{FT}(0),
-    Geometry.ZPoint{FT}(2π),
-    boundary_names = (:bottom, :top),
-)
-mesh = Meshes.IntervalMesh(domain; nelems = 128)
-space = Spaces.CenterFiniteDifferenceSpace(ClimaComms.device(), mesh)
-
-# Define a field over the space and differentiate it with a composed operator
-z = Fields.coordinate_field(space).z
-θ = sin.(z)
-grad = Operators.GradientC2F(
-    bottom = Operators.SetValue(FT(0)),
-    top = Operators.SetValue(FT(0)),
-)
-∂θ = @. Geometry.WVector(grad(θ))   # face-valued vertical gradient (≈ cos(z))
+using Pkg
+Pkg.add(["ClimaCore", "ClimaComms", "ClimaTimeSteppers"])
 ```
 
-More runnable examples (column, plane, and sphere configurations) are in the [`examples/`](examples/) directory.
+## Quick start
+
+Advect a tracer once around the sphere. The whole program is a space, two
+fields, a tendency, and a time stepper:
+
+```julia
+using ClimaComms
+ClimaComms.@import_required_backends
+using ClimaCore.CommonSpaces
+import ClimaCore: Fields, Geometry, Operators, Spaces
+import ClimaTimeSteppers as CTS
+
+const R = 6.37122e6                # planet radius (m)
+const u₀ = 2π * R / (12 * 86400)   # once around in 12 days
+
+# 6 × 16² spectral elements on the cubed sphere, 4 × 4 GLL nodes in each
+space = CubedSphereSpace(; radius = R, h_elem = 16, n_quad_points = 4)
+coords = Fields.coordinate_field(space)
+
+u = @. Geometry.UVVector(u₀ * cosd(coords.lat), 0.0)      # solid-body rotation
+q = @. exp(-(coords.lat^2 + (coords.long + 90)^2) / 800)  # a blob to carry around
+
+function transport!(dq, q, u, t)
+    wdiv = Operators.WeakDivergence()
+    @. dq = -wdiv(q * u)         # ∂q/∂t = -∇·(u q)
+    Spaces.weighted_dss!(dq)     # the spectral-element gather across elements
+end
+
+prob = CTS.ODEProblem(
+    CTS.ClimaODEFunction(; T_exp! = transport!),
+    copy(q),
+    (0.0, 12 * 86400.0),
+    u,
+)
+sol = CTS.solve(prob, CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()); dt = 20 * 60.0)
+
+# The blob returns to where it started (measured relative L₂ error after a full
+# circuit: 2.7e-4), and the weak form conserves its mass to roundoff: the
+# measured drift is 1e-13, against 3e-4 for the strong-form `Divergence()`.
+sum(sol.u[end]) ≈ sum(q)
+```
+
+No stencil loops, no halo bookkeeping, no metric terms written out by hand: the
+divergence operator knows it is on a sphere because the space does.
+
+## Examples
+
+### The equations you write are the equations you solve
+
+The shallow-water system in vector-invariant form, the standard testbed for a
+horizontal dynamical core, is two broadcast expressions:
+
+```julia
+using LinearAlgebra: norm, ×
+
+# ∂h/∂t = -∇·(h u)
+# ∂u/∂t = -∇(g(h + hₛ) + |u|²/2) + u × (f + ∇×u)
+function shallow_water!(dY, Y, (; f, h_s, g), t)
+    wdiv = Operators.WeakDivergence()
+    grad = Operators.Gradient()
+    curl = Operators.Curl()
+    @. dY.h = -wdiv(Y.h * Y.u)
+    @. dY.u = -grad(g * (Y.h + h_s) + norm(Y.u)^2 / 2) + Y.u × (f + curl(Y.u))
+    Spaces.weighted_dss!(dY)
+end
+```
+
+`Y.u` is a covariant vector field, `f` a contravariant one; the cross product,
+the curl, and the gradient apply the cubed-sphere metric terms themselves.
+Hyperviscosity is two more lines of the same kind
+(`wdiv(grad(·))` applied twice).
+
+[`examples/sphere/shallow_water.jl`](examples/sphere/shallow_water.jl) runs this
+over the standard test suite of Williamson et al. (1992) — steady-state
+geostrophic flow, flow over a mountain, barotropic instability, and the
+Rossby–Haurwitz wave — with the hyperviscosity and the error norms included.
+
+### Columns, and boundary conditions that are part of the operator
+
+Vertical operators carry their boundary conditions, so a Dirichlet bottom and a
+prescribed-flux top are arguments rather than special-cased index arithmetic:
+
+```julia
+using ClimaCore.CommonSpaces
+import ClimaCore: Fields, Geometry, Operators
+
+space = ColumnSpace(; z_min = 0.0, z_max = 1.0, z_elem = 10, staggering = CellCenter())
+T = Fields.zeros(Float64, space)
+
+function heat!(dT, T, α, t)
+    gradc2f = Operators.GradientC2F(
+        bottom = Operators.SetValue(0.0),                    # T = 0 at the surface
+        top = Operators.SetGradient(Geometry.WVector(1.0)),  # ∂T/∂z = 1 at the top
+    )
+    divf2c = Operators.DivergenceF2C()
+    @. dT = α * divf2c(gradc2f(T))   # ∂T/∂t = α ∇²T, centers → faces → centers
+end
+```
+
+`GradientC2F` maps cell centers to faces and `DivergenceF2C` maps back, which is
+the staggering that keeps a diffusion operator compact. The same pattern carries
+the vertical transport, diffusion, and surface fluxes in every CliMA component
+model. See [`examples/column/`](examples/column/) for this case with its exact
+solution, an Ekman spiral, hydrostatic balance, and advection with limiters.
+
+### Standard test cases, already written
+
+Each of these is a runnable program that also asserts what the case is supposed
+to show, so they double as a starting point and as a regression test of your
+changes:
+
+| Case | What it exercises | File |
+|:--|:--|:--|
+| Solid-body tracer transport | horizontal transport, cubed-sphere panel edges | [`sphere/solid_body_rotation.jl`](examples/sphere/solid_body_rotation.jl) |
+| Shallow-water suite, Williamson et al. (1992) | vector-invariant form, hyperviscosity, conservation | [`sphere/shallow_water.jl`](examples/sphere/shallow_water.jl) |
+| Bickley jet, CG and DG | barotropic instability, energy conservation, over-integration | [`plane/bickleyjet_cg.jl`](examples/plane/bickleyjet_cg.jl) |
+| Deformational flow and Hadley circulation (DCMIP 2012) | filamentation, limiters, vertical–horizontal coupling | [`hybrid/sphere/deformation_flow.jl`](examples/hybrid/sphere/deformation_flow.jl), [`hadley_circulation.jl`](examples/hybrid/sphere/hadley_circulation.jl) |
+| Rising thermal bubble, 2D and 3D | nonhydrostatic compressible flow in a box | [`hybrid/box/bubble_3d_invariant_rhoe.jl`](examples/hybrid/box/bubble_3d_invariant_rhoe.jl) |
+| Density current | advection at a rolling-up front (Kelvin–Helmholtz billows) | [`hybrid/plane/density_current_2d_invariant_rhoe.jl`](examples/hybrid/plane/density_current_2d_invariant_rhoe.jl) |
+| Mountain waves, Schär et al. (2002) and witch-of-Agnesi | terrain-following metric terms, sponge layers | [`hybrid/plane/schar_mountain.jl`](examples/hybrid/plane/schar_mountain.jl) |
+| Inertial and nonhydrostatic gravity waves | IMEX splitting against linear analytic solutions | [`hybrid/plane/inertial_gravity_wave.jl`](examples/hybrid/plane/inertial_gravity_wave.jl) |
+| Baroclinic wave, Ullrich et al. (2014) | the standard dry dynamical-core benchmark | [`hybrid/sphere/baroclinic_wave_rhoe.jl`](examples/hybrid/sphere/baroclinic_wave_rhoe.jl) |
+
+### One source, three machines
+
+The device and the communication context come from the environment through
+[ClimaComms.jl](https://github.com/CliMA/ClimaComms.jl), so a script does not
+change when the hardware does:
+
+```bash
+julia --project my_solver.jl                                     # CPU
+CLIMACOMMS_DEVICE=CUDA julia --project my_solver.jl              # one GPU
+CLIMACOMMS_CONTEXT=MPI CLIMACOMMS_DEVICE=CUDA \
+    srun --ntasks=4 julia --project my_solver.jl                 # four GPUs
+```
+
+Element topologies carry their own halo exchange, and `weighted_dss!` performs
+it, so a tendency written for one rank is already the distributed one.
+
+### Output and analysis
+
+  - `Remapping.interpolate(field)` returns a plain (or `CuArray`) array on a
+    uniform lat–long–z grid — one call, suitable for plotting and diagnostics;
+    `Remapping.Remapper` is the reusable, allocation-free version.
+  - `InputOutput.HDF5Writer` / `HDF5Reader` checkpoint and restore fields and
+    the spaces they live on, in serial or in parallel.
+  - [`lib/`](lib/) holds the visualization and analysis companions:
+    `ClimaCorePlots` and `ClimaCoreMakie` recipes, `ClimaCoreVTK` output,
+    `ClimaCoreSpectra` for spherical-harmonic energy spectra, and
+    `ClimaCoreTempestRemap` for conservative remapping.
+  - Spaces support masks (`enable_mask = true` plus `set_mask!`), so nodes over
+    the ocean — or wherever data is missing — can be skipped entirely.
+
+## Scope: what is in the box, and what is not
+
+**In:** spectral elements (CG/DG) on cubed spheres and rectangles; staggered
+finite differences in the vertical, with stretching, terrain-following
+coordinates, upwind and limited transport operators; covariant/contravariant
+geometry; distributed topologies and CUDA; banded matrix fields with direct
+solvers for column-coupled implicit systems; HDF5 I/O and remapping.
+
+**Out:**
+
+  - **Physics.** No radiation, microphysics, turbulence, or surface
+    parameterizations. Those live in
+    [ClimaAtmos.jl](https://github.com/CliMA/ClimaAtmos.jl) and
+    [ClimaLand.jl](https://github.com/CliMA/ClimaLand.jl).
+  - **Time stepping.** `Field`s and `FieldVector`s are state vectors;
+    [ClimaTimeSteppers.jl](https://github.com/CliMA/ClimaTimeSteppers.jl)
+    integrates them.
+  - **Global elliptic solves.** The direct solvers in `MatrixFields` are banded
+    within a column, which is what vertically-implicit IMEX schemes need. There
+    is no built-in pressure Poisson solver; `FieldVector`s do work with
+    [Krylov.jl](https://github.com/JuliaSmoothOptimizers/Krylov.jl), so a
+    matrix-free iterative solve is possible, but you would be writing it.
+  - **Adaptive meshes.** No AMR; the horizontal mesh is an equiangular cubed
+    sphere or a rectilinear box, refined by changing the element count or the
+    polynomial degree.
+
+### Can I do DNS or LES in a small box?
+
+LES, yes. `Box3DSpace(; periodic_x = true, periodic_y = true, ...)` builds a
+doubly periodic box with spectral elements in the horizontal and stretched
+finite differences in the vertical, which is the standard layout for
+atmospheric boundary-layer LES; the compressible equations
+to time-step in it are the ones the [`examples/hybrid/box/`](examples/hybrid/box/)
+cases already solve, and ClimaAtmos runs box LES on top of them with a
+Smagorinsky–Lilly closure.
+
+Canonical DNS is a different matter. The vertical is second-order finite
+differences rather than spectral, so vertical resolution has to be bought with
+points rather than with polynomial order, and the fully incompressible route
+needs the global pressure solve noted above. For high-Reynolds-number DNS
+benchmarks in a periodic box, purpose-built spectral solvers such as
+[Nek5000/nekRS](https://github.com/Nek5000/nekRS) or
+[Dedalus](https://dedalus-project.org/) remain the better fit. ClimaCore is
+built for stratified, rotating, thin-shell flows where the horizontal and
+vertical scales differ by orders of magnitude — which is exactly why the
+horizontal and the vertical are discretized differently.
 
 ## Documentation
 
-- **[Stable docs](https://CliMA.github.io/ClimaCore.jl/stable/)** — installation, introduction, mathematical framework, and API reference
-- **[Dev docs](https://CliMA.github.io/ClimaCore.jl/dev/)** — latest development version
-- **[`examples/`](examples/)** — runnable examples across geometries
+  - **[Stable docs](https://CliMA.github.io/ClimaCore.jl/stable/)** — installation, introduction, mathematical framework, and API reference
+  - **[Dev docs](https://CliMA.github.io/ClimaCore.jl/dev/)** — latest development version
+  - **[`examples/`](examples/)** — runnable examples across geometries
+  - **[Operators](https://CliMA.github.io/ClimaCore.jl/dev/operators/)**, **[Matrix fields](https://CliMA.github.io/ClimaCore.jl/dev/matrix_fields/)**, and **[Remapping](https://CliMA.github.io/ClimaCore.jl/dev/remapping/)** — the pages most solvers need next
 
-## Integration with CliMA models
+## Where to go next
 
-ClimaCore.jl is the dynamical core used throughout the [CliMA](https://github.com/CliMA) ecosystem, including:
+Within the CliMA ecosystem:
 
-- [ClimaAtmos.jl](https://github.com/CliMA/ClimaAtmos.jl) — atmosphere model
-- [ClimaLand.jl](https://github.com/CliMA/ClimaLand.jl) — land model
+  - [ClimaAtmos.jl](https://github.com/CliMA/ClimaAtmos.jl) — atmosphere model: physics, diagnostics, and calibration on top of these operators
+  - [ClimaLand.jl](https://github.com/CliMA/ClimaLand.jl) — land model
+  - [ClimaCoupler.jl](https://github.com/CliMA/ClimaCoupler.jl) — coupled atmosphere/land/ocean/sea-ice simulations
+  - [ClimaTimeSteppers.jl](https://github.com/CliMA/ClimaTimeSteppers.jl) — explicit, implicit, and IMEX time steppers that take `FieldVector`s
+  - [ClimaComms.jl](https://github.com/CliMA/ClimaComms.jl) — the device and MPI abstraction the examples above switch with
+
+Related packages worth knowing, in and out of Julia:
+
+  - [Oceananigans.jl](https://github.com/CliMA/Oceananigans.jl) — finite-volume ocean and non-hydrostatic fluid simulations on GPUs
+  - [SpeedyWeather.jl](https://github.com/SpeedyWeather/SpeedyWeather.jl) — spherical-harmonic atmospheric general circulation model
+  - [Trixi.jl](https://github.com/trixi-framework/Trixi.jl) — adaptive high-order discontinuous Galerkin for hyperbolic conservation laws
+  - [Dedalus](https://dedalus-project.org/) — Python framework for global spectral methods, equations entered as text
 
 ## Contributing
 
