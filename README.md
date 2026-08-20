@@ -40,8 +40,8 @@ The dynamical core (_dycore_) of the CliMA Earth System Model: composable, GPU-c
 [dlt-img]: https://img.shields.io/badge/dynamic/json?url=http%3A%2F%2Fjuliapkgstats.com%2Fapi%2Fv1%2Ftotal_downloads%2FClimaCore&query=total_requests&label=Downloads
 [dlt-url]: https://juliapkgstats.com/pkg/ClimaCore
 
-[zenodo-img]: https://zenodo.org/badge/356355994.svg
-[zenodo-url]: https://zenodo.org/badge/latestdoi/356355994
+[zenodo-img]: https://zenodo.org/badge/DOI/10.5281/zenodo.21987213.svg
+[zenodo-url]: https://doi.org/10.5281/zenodo.21987213
 
 ClimaCore.jl provides the spatial discretization building blocks for the [Climate Modeling Alliance (CliMA)](https://clima.caltech.edu/) Earth System Model, which is written entirely in [Julia](https://julialang.org/). It pairs a high-level API for composing differential operators and defining flexible discretizations with low-level APIs for data layouts, specialized implementations, and threading — targeting both CPU and GPU architectures from a single codebase.
 
