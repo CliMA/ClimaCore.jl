@@ -4,6 +4,158 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-💥breaking] The advection operators' boundary treatment has been
+  reworked around a generalized `Extrapolate{N}` boundary condition (also
+  written `Extrapolate(N)`, with `Extrapolate() == Extrapolate{0}()`), which
+  selects how the ghost points reached by the interior stencil are padded:
+  every ghost point of a stencil takes the value extrapolated (with an
+  order-`N` polynomial, `0 <= N <= 2`) from the `N + 1` interior points
+  closest to the boundary, and the order is reduced where the stencil has
+  fewer interior points in range (at a boundary face itself only 2 are in
+  range, so the order there is at most 1; `UpwindBiasedProductC2F`'s 2-point
+  stencil only ever has 1 in range, so every order reduces to closest-value
+  padding for it). `Extrapolate` is now the only boundary condition the
+  advection operators (`UpwindBiasedProductC2F`,
+  `Upwind3rdOrderBiasedProductC2F`, `LinVanLeerC2F`, `FCTBorisBook`,
+  `FCTZalesak`, and `TVDLimitedFluxC2F`) accept, and `Extrapolate{0}` is added
+  to an operator's `bcs` when it is constructed with no boundary conditions.
+  It replaces the one-sided conditions, which remain as deprecated aliases
+  (`FirstOrderOneSided == Extrapolate{0}` and
+  `ThirdOrderOneSided == Extrapolate{1}`). The aliases are **not**
+  numerically identical to the old conditions: the old conditions replaced
+  the whole stencil with fixed one-sided reconstructions at the two faces
+  nearest each boundary, while `Extrapolate` keeps the interior stencil's
+  upwinding and only pads its ghost points. At the face one in from a
+  boundary, the results coincide exactly when the velocity at that face
+  points toward the boundary (the old downwind-biased reconstruction is then
+  also the upwind choice), and differ when it points into the domain: with
+  inflow `v³` at the second-lowest face and centers `x₁, x₂, x₃` counted up
+  from the boundary, `Upwind3rdOrderBiasedProductC2F` with
+  `ThirdOrderOneSided` gave `v³ (4x₁ + 10x₂ - 2x₃) / 12` and now gives
+  `v³ (x₁ + x₂) / 2` with `Extrapolate{1}`, while with `FirstOrderOneSided`
+  it gave the first-order `v³ x₁` and now gives `v³ (2x₁ + x₂) / 3` with
+  `Extrapolate{0}`. At the boundary face itself the old reconstructions
+  reached one center beyond the boundary, so they were only meaningful under
+  an enclosing operator that overrides the boundary face (e.g.
+  `DivergenceF2C` with `SetValue`); `Extrapolate`'s ghost-point padding is
+  well-defined there. User-supplied callable ghost-point reconstructions are
+  no longer accepted. A boundary condition whose keyword name matches neither
+  of the space's vertical boundary names is now an error at broadcast time
+  (previously it was silently ignored), except for the default
+  `(bottom, top)` pair of `Extrapolate{0}`s, which applies at any boundary
+  names. An advection operator is rewritten
+  as an operator-matrix multiply exactly when its interior stencil is linear
+  in the advected argument (`Operators.has_linear_stencil`), with the
+  ghost-point extrapolations folded into its matrix's boundary rows by
+  multiplying the interior row with the matrix of extrapolation weights; all
+  others are evaluated pointwise. Note that `Extrapolate` on
+  `UpwindBiasedProductC2F` also changes meaning: it used to replicate the
+  operator's *output* at the closest interior face (`U(v, x)[1/2] =
+  U(v, x)[3/2]`), while it now pads the ghost *input*, so the boundary face
+  evaluates to `v³[1/2] x[1]`. As before, the flux through the boundary
+  itself should be imposed by the enclosing operator, e.g. `DivergenceF2C`
+  with a `SetValue` boundary.
+
+  On non-periodic domains, this changes results at the two faces nearest each
+  boundary (with the default `Extrapolate{0}` padding):
+  - `LinVanLeerC2F` previously used one-sided first-order upwind
+    reconstructions there; it now uses the ghost-point-padded limited stencil.
+  - `FCTBorisBook` previously returned a zero antidiffusive flux there, and it
+    still does, since the padded ghost points make the one-sided difference on
+    the boundary side vanish, and that difference bounds the corrected flux;
+    its results are unchanged everywhere.
+  - `FCTZalesak` and `TVDLimitedFluxC2F` previously forced their corrected or
+    limited fluxes to zero there; they now compute the ghost-point-padded
+    stencil instead.
+
+  Two operators also change their calling convention. Since an advection
+  operator advects a single center-valued argument, `FCTZalesak` now takes its
+  two advected quantities as a single field with 2-tuple elements:
+  `FCTZalesak.(A, Φ, Φᵗᵈ)` becomes `FCTZalesak.(A, tuple.(Φ, Φᵗᵈ))` (or
+  `FCTZalesak(A, tuple(Φ, Φᵗᵈ))` inside `@.`). Broadcast arguments beyond the
+  velocity and advected field are evaluated at the current face and passed
+  through as is, so `TVDLimitedFluxC2F` now requires its upwinding velocity
+  `𝓊` to be supplied as contravariant data: either a `Contravariant3Vector`
+  field, or a scalar field holding the contravariant3 component, e.g.
+  `Geometry.contravariant3.(u, Fields.local_geometry_field(face_space))`.
+
+  `TVDLimitedFluxC2F`'s slope ratio `r` is now zero whenever the upwind slope
+  is zero, even if the denominator `ϕ₊₁₂ - ϕ₋₁₂ + eps` is also zero (which
+  happens when `ϕ₊₁₂ - ϕ₋₁₂` is exactly `-eps`, e.g. in regions where `ϕ` is
+  flat up to roundoff, and previously produced `NaN` limited fluxes from
+  `0 / 0`). `MatrixFields.operator_matrix` now reports every advection
+  operator with a nonlinear stencil or boundary reconstruction (including
+  `TVDLimitedFluxC2F`, which previously threw a `MethodError`) as a nonlinear
+  operator that cannot be represented by a matrix.
+  [2544](https://github.com/CliMA/ClimaCore.jl/pull/2544)
+
+- ![][badge-🔥behavioralΔ] Broadcasts over the linear one-argument finite
+  difference operators are now evaluated as operator-matrix multiplies:
+  `@. op(arg)` is rewritten to multiply `arg` by `op`'s operator matrix
+  (`MatrixFields.operator_matrix`), with value-fixing boundary conditions
+  reapplied around the multiply by a `SetBoundaryOperator`. Two user-visible
+  consequences:
+  - A center-input operator (`InterpolateC2F`, `GradientC2F`, `DivergenceC2F`,
+    `CurlC2F`, ...) constructed without a boundary condition now produces a
+    **zero** matrix row at each boundary face, so the result there is a finite
+    zero instead of the `NaN` that previously flagged a forgotten boundary
+    condition. Supply boundary conditions wherever the boundary values matter;
+    a missing one is no longer diagnosed at run time.
+  - `CurlC2F` results are now `Contravariant12Vector`s rather than
+    `Contravariant123Vector`s with a structurally zero third component, since
+    its operator matrix's rows produce the two nonzero components of the
+    vertical curl contribution; `SetCurl` boundary values are projected onto
+    the `Contravariant12` axis accordingly. Code that read the `u³` component
+    of a `CurlC2F` result must drop it (it was always zero).
+
+  Columns too short for a stencil's interior (e.g. a center-to-face operator
+  on a single-level column, or a 4-point advection stencil on a 2-level
+  column) are now supported: `Operators.window_bounds` clamps the overlapping
+  boundary windows instead of rejecting them with an `AssertionError`, and
+  every face is computed with the appropriate boundary row (the ghost-point
+  extrapolations reduce their order to the interior points actually in
+  range). On GPUs, finite difference broadcasts over
+  `MultiColumnFiniteDifferenceSpace` now use the eager
+  one-thread-per-level kernel like the extruded and single-column families,
+  instead of falling back to the one-thread-per-value kernel.
+  [2544](https://github.com/CliMA/ClimaCore.jl/pull/2544)
+
+- ![][badge-💥breaking] Removed the `Extrapolate` boundary condition from
+  `GradientF2C` and `DivergenceF2C`, where it replicated the operator's output
+  at the closest interior point (e.g. `G(x)[1] = G(x)[2]`); it remains
+  available on the interpolation operators `InterpolateC2F` and
+  `WeightedInterpolateC2F`, where it copies the closest interior input.
+  `GradientF2C` now accepts `SetGradient(v₀)`, which prescribes the gradient
+  at the center closest to the boundary (with `v₀` projected onto the
+  covariant 3 axis, as for `GradientC2F`). Also added `BottomBiasedC2F`,
+  `BottomBiasedF2C`, `TopBiasedC2F`, and `TopBiasedF2C` as aliases for
+  `LeftBiasedC2F`, `LeftBiasedF2C`, `RightBiasedC2F`, and `RightBiasedF2C`: in
+  the vertical direction, the left boundary is the bottom and the right
+  boundary is the top.
+  [2544](https://github.com/CliMA/ClimaCore.jl/pull/2544)
+
+- ![][badge-💥breaking] Removed unused finite difference operators and boundary
+  conditions [2521](https://github.com/CliMA/ClimaCore.jl/pull/2521)
+  - Removed `SetValue` from `GradientC2F`, `DivergenceC2F`, `CurlC2F` and
+    `UpwindBiasedProductC2F`
+  - Removed `SetGradient` from `InterpolateC2F` and `WeightedInterpolateC2F`
+  - Removed the `AdvectionC2C`, `AdvectionF2F`, `FluxCorrectionC2C` and
+    `FluxCorrectionF2F` operators
+  - Removed the `UpwindBiasedGradient` operator, which had no downstream users
+
+  Each of these can be written in terms of the remaining operators and boundary
+  conditions; `test/Operators/finitedifference/unit_column.jl` contains a
+  testset ("Boundary values and advection built from the primitive operators")
+  that pins the replacement expressions for `SetValue` on `GradientC2F`,
+  `DivergenceC2F` and `UpwindBiasedProductC2F`, and for the `AdvectionC2C`,
+  `AdvectionF2F` and `FluxCorrectionC2C` stencils, against the stencil each
+  reproduces (the remaining removals follow the same patterns). For
+  example, a `SetValue(x₀)` boundary on `GradientC2F` is the same as
+  `SetGradient(Covariant3Vector(2 * (x[1] - x₀)))`, and `AdvectionC2C(v, θ)` is
+  `InterpolateF2C()(dot(Contravariant3Vector(v), GradientC2F()(θ)))`.
+  `MatrixFields.operator_matrix` now reports `LinVanLeerC2F` as a nonlinear
+  operator instead of failing with a `MethodError`.
+
 v0.15.3
 -------
 
@@ -87,6 +239,7 @@ v0.15.0
   (`Operators.use_fd_shmem()` returns `false`), so default behavior and performance are unchanged.
   Downstream code that opted in by defining `Operators.use_fd_shmem() = true` will no longer
   see any effect from doing so. [2526](https://github.com/CliMA/ClimaCore.jl/pull/2526)
+
 - ![][badge-🔥behavioralΔ] Unified strong/weak spectral element operator variants
   via a `FormType` parameter. `Divergence`, `Gradient`, and `Curl` now carry a
   second type parameter (`StrongForm` or `WeakForm`), and `WeakDivergence`,

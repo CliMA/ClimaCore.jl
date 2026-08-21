@@ -25,6 +25,7 @@ import ClimaCore:
     Hypsography
 using ClimaCore.Geometry
 using ClimaCore.Utilities: half
+import LazyBroadcast: lazy
 
 
 using Logging: global_logger
@@ -226,10 +227,6 @@ function rhs_invariant!(dY, Y, _, t)
         top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
     )
-    vdivc2f = Operators.DivergenceC2F(
-        top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-        bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-    )
     # we want the total u³ at the boundary to be zero: we can either constrain
     # both to be zero, or allow one to be non-zero and set the other to be its
     # negation
@@ -305,13 +302,49 @@ function rhs_invariant!(dY, Y, _, t)
     ᶠ∇ₕw = @. hgrad(fw.components.data.:1)
     ᶜ∇ₕh_tot = @. hgrad(h_tot)
 
+    # The divergence at each boundary face is the interior stencil with the
+    # argument set to zero outside the domain. That reduces to the one-sided
+    # difference below, whose factor of 2 comes from the boundary face lying
+    # half a cell from the closest center.
+    lg_field_faces = Fields.local_geometry_field(axes(fw))
+    lg_field_centers = Fields.local_geometry_field(axes(cρ))
+    # Only `J` on the boundary faces is needed below, on the same level space
+    # as the center quantities, so the face `J` (a scalar field) is shifted
+    # onto centers: `LeftBiasedF2C(x)[i] = x[i-half]`, so its first level is
+    # the bottom face, and `RightBiasedF2C(x)[i] = x[i+half]`, so its last
+    # level is the top face. The whole `LocalGeometry` field cannot be shifted
+    # instead, because a finite difference operator multiplies its argument by
+    # an operator matrix row.
+    J_bottom_face = Fields.level(Operators.LeftBiasedF2C().(lg_field_faces.J), 1)
+    J_top_face = Fields.level(
+        Operators.RightBiasedF2C().(lg_field_faces.J),
+        Fields.nlevels(lg_field_centers),
+    )
+    lg_bottom_center = Fields.level(lg_field_centers, 1)
+    lg_top_center =
+        Fields.level(lg_field_centers, Fields.nlevels(lg_field_centers))
+    ᶜ∇ᵥw_bottom = Fields.level(ᶜ∇ᵥw, 1)
+    ᶜ∇ᵥw_top = Fields.level(ᶜ∇ᵥw, Fields.nlevels(ᶜ∇ᵥw))
+    bottom_divergence = @. lazy(
+        Geometry.Jcontravariant3(κ₂ * ᶜ∇ᵥw_bottom, lg_bottom_center) *
+        (2 * inv(J_bottom_face)),
+    )
+    top_divergence = @. lazy(
+        Geometry.Jcontravariant3(κ₂ * ᶜ∇ᵥw_top, lg_top_center) *
+        (-2 * inv(J_top_face)),
+    )
+    vdivc2f_bcs = Operators.DivergenceC2F(
+        bottom = Operators.SetDivergence(bottom_divergence),
+        top = Operators.SetDivergence(top_divergence),
+    )
+
     dfw = dY.w.components.data.:1
     dcu = dY.uₕ.components.data.:1
 
     @. dcu += hwdiv(κ₂ * ᶜ∇ₕuₕ)
     @. dcu += vdivf2c(κ₂ * ᶠ∇ᵥuₕ)
     @. dfw += hwdiv(κ₂ * ᶠ∇ₕw)
-    @. dfw += vdivc2f(κ₂ * ᶜ∇ᵥw)
+    @. dfw += vdivc2f_bcs(κ₂ * ᶜ∇ᵥw)
     @. dρe += hwdiv(cρ * κ₂ * ᶜ∇ₕh_tot)
     @. dρe += vdivf2c(fρ * κ₂ * ᶠ∇ᵥh_tot)
 
@@ -416,6 +449,28 @@ sol = @timev CTS.solve!(integrator)
     w = maximum(abs, parent(Geometry.WVector.(sol.u[end].w)))
     @info "Peak |w| at the end of the run: $w m/s"
     @test 1 < w < 3
+end
+
+@testset "no flow through the terrain" begin
+    # The lower boundary is the coordinate surface ξ³ = 0, so the flow normal
+    # to it is the contravariant-3 component of the velocity, not `w`. Over a
+    # ridge this steep, the two differ: g¹³/g³³ reaches 0.059 at the steepest
+    # point, so a boundary condition written on `w` alone would leave a normal
+    # velocity of that order. `project_surface_w!` sets u₃ = -g³¹u₁/g³³, which
+    # is what makes the contravariant-3 component vanish.
+    Y = sol.u[end]
+    Ic2f = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    fuₕ = Ic2f.(Y.uₕ)
+    total = @. Geometry.Covariant13Vector(fuₕ) + Geometry.Covariant13Vector(Y.w)
+    u³ = Geometry.contravariant3.(total, Fields.local_geometry_field(hv_face_space))
+    surface_u³ = maximum(abs, parent(Fields.level(u³, half)))
+    # For scale, the contravariant-3 velocity reached in the interior.
+    interior_u³ = maximum(abs, parent(u³))
+    @info "Surface normal velocity: $surface_u³ (interior scale $interior_u³)"
+    @test surface_u³ < 1e-12 * max(interior_u³, eps())
 end
 
 ENV["GKSwstype"] = "nul"

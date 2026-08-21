@@ -315,19 +315,12 @@ function Operators.return_eltype(
     matrix1,
     arg,
 )
-    # this is needed to support the divergence operator matrix applied to a Tensor field
-    if (
-        matrix1 isa Operators.StencilBroadcasted && matrix1.op isa FDOperatorMatrix &&
-        !(eltype(arg) <: BandMatrixRow)
-    )
-        if matrix1.op.op isa OneArgFDOperator
-            return Operators.return_eltype(matrix1.op.op, arg)
-        else
-            return Operators.return_eltype(matrix1.op.op, matrix1.args[1], arg)
-        end
-    end
     et_mat1 = eltype(matrix1)
     et_arg = eltype(arg)
+    # eltype may be the inference-failure sentinel Union{} when this is called
+    # while probing an expression with unsafe_eltype; propagate it instead of
+    # treating it as a BandMatrixRow (Union{} is a subtype of everything).
+    (et_mat1 == Union{} || et_arg == Union{}) && return Union{}
     et_mat1 <: BandMatrixRow || error(
         "The first argument of MultiplyColumnwiseBandMatrixField must have
          elements of type BandMatrixRow, but the given argument has $et_mat1",

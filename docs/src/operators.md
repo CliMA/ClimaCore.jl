@@ -73,15 +73,21 @@ InterpolateC2F
 InterpolateF2C
 WeightedInterpolateC2F
 WeightedInterpolateF2C
+AdvectionOperator
 UpwindBiasedProductC2F
 Upwind3rdOrderBiasedProductC2F
 FCTBorisBook
 FCTZalesak
 LinVanLeerC2F
+TVDLimitedFluxC2F
 LeftBiasedC2F
 RightBiasedC2F
 LeftBiasedF2C
 RightBiasedF2C
+BottomBiasedC2F
+TopBiasedC2F
+BottomBiasedF2C
+TopBiasedF2C
 AbstractTVDSlopeLimiter
 ```
 
@@ -90,8 +96,6 @@ AbstractTVDSlopeLimiter
 ```@docs
 GradientF2C
 GradientC2F
-AdvectionF2F
-AdvectionC2C
 DivergenceF2C
 DivergenceC2F
 CurlC2F
@@ -101,8 +105,6 @@ CurlC2F
 
 ```@docs
 SetBoundaryOperator
-FirstOrderOneSided
-ThirdOrderOneSided
 ```
 
 ## Finite difference boundary conditions

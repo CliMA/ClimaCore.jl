@@ -1,11 +1,11 @@
 # 1D vertical advection of a sine wave, solved four ways: the first-order upwind
-# flux form (`UpwindBiasedProductC2F`), the centered advective form
-# (`AdvectionC2C`), and each of those with `FluxCorrectionC2C` — an upwind-style
-# diffusive stabilizer — added. The exact solution is sin(z - t), which supplies
-# the boundary values, so the errors measure what each formulation does to the
-# wave: the centered form is nearly exact but relies on the problem's
-# smoothness, the upwind form damps, and the flux correction adds upwind damping
-# to whatever it is applied to.
+# flux form (`UpwindBiasedProductC2F`), the centered advective form (an
+# interpolated center-to-face gradient), and each of those with a diffusive flux
+# correction added. The exact solution is sin(z - t), which supplies the
+# boundary values, so the errors measure what each formulation does to the wave:
+# the centered form is nearly exact but relies on the problem's smoothness, the
+# upwind form damps, and the flux correction adds numerical diffusion to
+# whatever it is applied to.
 import ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore:
@@ -16,9 +16,11 @@ import ClimaCore:
     DataLayouts,
     Operators,
     Geometry,
-    Spaces
+    Spaces,
+    Utilities
 
 import ClimaTimeSteppers as CTS
+import LazyBroadcast: lazy
 
 import Logging
 import TerminalLoggers
@@ -46,46 +48,133 @@ w = Geometry.WVector.(ones(FT, fspace))
 exact_θ(z, t) = sin(z - t)
 θ_init = exact_θ.(Fields.coordinate_field(cspace).z, 0)
 
-# `FluxCorrectionC2C` adds an upwind-style diffusive flux to whichever
-# formulation it is applied to; it carries no boundary values of its own.
-flux_correction() = Operators.FluxCorrectionC2C(
-    left = Operators.Extrapolate(),
-    right = Operators.Extrapolate(),
-)
+# A diffusive flux with diffusivity |w| Δz, added to whichever formulation it is
+# applied to. Diffusion is symmetric rather than upwind-biased; what makes it a
+# correction is that first-order upwinding introduces numerical diffusion of
+# this form, of half this size (the difference between the upwind and centered
+# fluxes is exactly half of this term). It carries no boundary values of its
+# own: the zero gradient on each boundary face sets its flux through that face
+# to zero.
+function flux_correction(θ)
+    zero_gradient =
+        Operators.SetGradient(Geometry.Covariant3Vector(zero(FT)))
+    gradc2f =
+        Operators.GradientC2F(left = zero_gradient, right = zero_gradient)
+    gradf2c = Operators.GradientF2C()
+    lg_field = Fields.local_geometry_field(fspace)
+    return @. lazy(
+        adjoint(
+            gradf2c(
+                adjoint(gradc2f(θ)) * Geometry.Contravariant3Vector(
+                    abs(Geometry.contravariant3(w, lg_field)),
+                ),
+            ),
+        ) * Geometry.Contravariant3Vector(1),
+    )
+end
 
-# Flux form: the face flux is reconstructed by first-order upwinding, and the
-# inflow face takes the exact value.
-upwind_flux(t) = Operators.UpwindBiasedProductC2F(
-    left = Operators.SetValue(exact_θ(z_left, t)),
-    right = Operators.SetValue(exact_θ(z_right, t)),
-)
+# Flux form: the face flux is reconstructed by first-order upwinding.
+# `UpwindBiasedProductC2F` takes no boundary condition that sets the boundary
+# faces, so its stencil is evaluated there here, with the exact value of θ
+# standing in for the point outside the domain, and imposed with a
+# `SetBoundaryOperator`.
+function upwind_boundary_operator(θ, t)
+    lg_field = Fields.local_geometry_field(fspace)
+    face_bottom = Utilities.PlusHalf(0)
+    face_top = Fields.nlevels(w) - Utilities.PlusHalf(0)
+    v_left = Geometry.contravariant3.(
+        Fields.level(w, face_bottom),
+        Fields.level(lg_field, face_bottom),
+    )
+    v_right = Geometry.contravariant3.(
+        Fields.level(w, face_top),
+        Fields.level(lg_field, face_top),
+    )
+    # The boundary values stay as fields on the boundary-face spaces rather
+    # than being read out as scalars, which would require scalar indexing on
+    # the GPU. The first and last center values are rewrapped onto those
+    # spaces, since a center level and a face level are different spaces.
+    θ_left =
+        Fields.Field(Fields.field_values(Fields.level(θ, 1)), axes(v_left))
+    θ_right = Fields.Field(
+        Fields.field_values(Fields.level(θ, Fields.nlevels(θ))),
+        axes(v_right),
+    )
+    θ_inflow = exact_θ(z_left, t)
+    θ_outflow = exact_θ(z_right, t)
+    return Operators.SetBoundaryOperator(;
+        left = Operators.SetValue(
+            @. lazy(
+                Geometry.Contravariant3Vector(
+                    Operators.upwind_biased_product(
+                        v_left,
+                        θ_inflow,
+                        θ_left,
+                    ),
+                ),
+            )
+        ),
+        right = Operators.SetValue(
+            @. lazy(
+                Geometry.Contravariant3Vector(
+                    Operators.upwind_biased_product(
+                        v_right,
+                        θ_right,
+                        θ_outflow,
+                    ),
+                ),
+            )
+        ),
+    )
+end
 
 # Advective form: centered differences, with the exact value at the inflow
-# boundary and extrapolation at the outflow one.
-centered_advection(t) = Operators.AdvectionC2C(
-    left = Operators.SetValue(exact_θ(z_left, t)),
-    right = Operators.Extrapolate(),
-)
+# boundary and extrapolation at the outflow one. The gradient on the left
+# boundary face is the one implied by θ = exact_θ(z_left, t) outside of the
+# domain; on the right boundary face it is the gradient at the closest interior
+# face, built from the last two center values.
+function centered_advection_gradient(θ, t)
+    θ_1 = Fields.level(θ, 1)
+    θ_n = Fields.level(θ, Fields.nlevels(θ))
+    θ_nm1 = Fields.level(θ, Fields.nlevels(θ) - 1)
+    return Operators.GradientC2F(
+        left = Operators.SetGradient(
+            @. lazy(Geometry.Covariant3Vector(2 * (θ_1 - exact_θ(z_left, t))))
+        ),
+        right = Operators.SetGradient(
+            @. lazy(Geometry.Covariant3Vector(θ_n - θ_nm1))
+        ),
+    )
+end
 
 function tendency_upwind!(dθ, θ, _, t)
-    upwind = upwind_flux(t)
+    set_bcs = upwind_boundary_operator(θ, t)
+    upwind = Operators.UpwindBiasedProductC2F()
     divf2c = Operators.DivergenceF2C()
-    return @. dθ = -divf2c(upwind(w, θ))
+    return @. dθ = -divf2c(set_bcs(upwind(w, θ)))
 end
 function tendency_upwind_corrected!(dθ, θ, _, t)
-    upwind = upwind_flux(t)
+    set_bcs = upwind_boundary_operator(θ, t)
+    upwind = Operators.UpwindBiasedProductC2F()
     divf2c = Operators.DivergenceF2C()
-    correction = flux_correction()
-    return @. dθ = -divf2c(upwind(w, θ)) + correction(w, θ)
+    correction = flux_correction(θ)
+    return @. dθ = -divf2c(set_bcs(upwind(w, θ))) + correction
 end
 function tendency_centered!(dθ, θ, _, t)
-    advect = centered_advection(t)
-    return @. dθ = -advect(w, θ)
+    gradc2f = centered_advection_gradient(θ, t)
+    interpf2c = Operators.InterpolateF2C()
+    return @. dθ = -interpf2c(
+        Geometry.dot(Geometry.Contravariant3Vector(w), gradc2f(θ)),
+    )
 end
 function tendency_centered_corrected!(dθ, θ, _, t)
-    advect = centered_advection(t)
-    correction = flux_correction()
-    return @. dθ = -advect(w, θ) + correction(w, θ)
+    gradc2f = centered_advection_gradient(θ, t)
+    interpf2c = Operators.InterpolateF2C()
+    correction = flux_correction(θ)
+    return @. dθ =
+        -interpf2c(
+            Geometry.dot(Geometry.Contravariant3Vector(w), gradc2f(θ)),
+        ) + correction
 end
 
 tendency_upwind!(similar(θ_init), θ_init, nothing, 0.0)

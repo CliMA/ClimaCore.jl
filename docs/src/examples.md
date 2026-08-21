@@ -81,28 +81,28 @@ The example code solves the equation for 4 different tendencies with the followi
 
   - Tendency 2:
 
-    $$D = \partial(UB) + \textrm{fcc}(v, \theta),$$
+    $$D = \partial(UB) - \textrm{fcc}(v, \theta),$$
 
-    where $\textrm{fcc}(v, \theta)$ is the [`center-to-center flux correction`](https://github.com/CliMA/ClimaCore.jl/blob/main/src/Operators/finitedifference.jl#L2617) operator.
+    where $\textrm{fcc}(v, \theta) = \bar{\partial}(|v| G(\theta))$ is a flux correction term, built from the [face-to-center gradient](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.GradientF2C) $\bar{\partial}$ and the [center-to-face gradient](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.GradientC2F) $G$. The gradient of $\theta$ is set to zero on both boundary faces, so that no correction flux passes through them.
 
   - Tendency 3:
 
-    $$D = A,$$
+    $$D = \bar{I}(v \cdot G(\theta))$$
 
-    where $A$ is the [`center-to-center vertical advection`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.AdvectionC2C) operator.
+    where ``G`` is the [center-to-face gradient](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.GradientC2F) operator (called `gradc2f` in the example code) and $\bar{I}$ is the [face-to-center interpolation](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.InterpolateF2C) operator.
 
   - Tendency 4:
 
-    $$D = A + \textrm{fcc}(v, \theta),$$
+    $$D = \bar{I}(v \cdot G(\theta)) - \textrm{fcc}(v, \theta),$$
 
-    where $\textrm{fcc}(v, \theta)$ is the [`center-to-center flux correction`](https://github.com/CliMA/ClimaCore.jl/blob/main/src/Operators/finitedifference.jl#L2617) operator.
+    combining the discretizations of tendencies 3 and 2.
 
 #### Set Up
 
-This test case is set up in a 1D column domain ``z \in [0, 4\pi]``, discretized into a mesh of 128 elements. The velocity field is defined as a sinusoidal wave. The boundary conditions are operator dependent, so they depend on the tendency.
+This test case is set up in a 1D column domain ``z \in [0, 4\pi]``, discretized into a mesh of 128 elements, with the initial condition ``\theta(z, 0) = sin(z)``. The velocity field is constant and upward, so the exact solution is the initial sine wave translated at unit speed; it also supplies the boundary values. The boundary conditions are operator dependent, so they depend on the tendency.
 
-  - For tendencies 1 and 2 where the upwind biased operator ``UB`` is used, the left boundary is defined as ``sin(a - t)``. The right boundary is ``sin(b - t)``. Here ``a`` and ``b`` are the left and right bounds of the domain.
-  - For tendencies 3 and 4, where the advection operator ``A`` is used, the left boundary is defined as ``sin(-t)``.  The right boundary is extrapolated, meaning its value is set to the closest interior point.
+  - For tendencies 1 and 2, where the upwind biased operator ``UB`` is used, the value of ``\theta`` outside of the left boundary is ``sin(a - t)`` and outside of the right boundary is ``sin(b - t)``. Here ``a`` and ``b`` are the left and right bounds of the domain. Since `UpwindBiasedProductC2F` takes no boundary condition that sets the boundary faces, the example evaluates the upwind stencil at the boundary faces itself and imposes the result with a [`SetBoundaryOperator`](https://clima.github.io/ClimaCore.jl/dev/operators/#ClimaCore.Operators.SetBoundaryOperator).
+  - For tendencies 3 and 4, the gradient ``G(\theta)`` on the left boundary face is set to ``2 (\theta[1] - sin(a - t))``, which is the value it takes when ``\theta = sin(a - t)`` outside of the boundary. On the right boundary face it is set to the gradient of the closest interior faces, an extrapolation.
 
 ## 2D Cartesian examples
 

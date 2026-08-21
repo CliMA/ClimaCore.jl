@@ -8,8 +8,6 @@ import ClimaCore.Operators:
     SetDivergence,
     SetCurl,
     Extrapolate,
-    FirstOrderOneSided,
-    ThirdOrderOneSided,
     InterpolateC2F,
     InterpolateF2C,
     LeftBiasedC2F,
@@ -22,10 +20,8 @@ import ClimaCore.Operators:
     Upwind3rdOrderBiasedProductC2F,
     FCTBorisBook,
     FCTZalesak,
-    AdvectionC2C,
-    AdvectionF2F,
-    FluxCorrectionC2C,
-    FluxCorrectionF2F,
+    LinVanLeerC2F,
+    TVDLimitedFluxC2F,
     SetBoundaryOperator,
     GradientC2F,
     GradientF2C,
@@ -121,7 +117,6 @@ end
     # Note: The Curl operator currently only works with C12, C1, or C2 inputs.
     test_op_matrix(InterpolateC2F, Nothing, (ᶜnested,), true)
     test_op_matrix(InterpolateC2F, SetValue, (ᶜnested,))
-    test_op_matrix(InterpolateC2F, SetGradient, (ᶜnested,))
     test_op_matrix(InterpolateC2F, Extrapolate, (ᶜnested,))
     test_op_matrix(InterpolateF2C, Nothing, (ᶠnested,))
     test_op_matrix(LeftBiasedC2F, Nothing, (ᶜnested,), true)
@@ -134,49 +129,58 @@ end
     test_op_matrix(RightBiasedF2C, SetValue, (ᶠnested,))
     test_op_matrix(WeightedInterpolateC2F, Nothing, (ᶜscalar, ᶜnested), true)
     test_op_matrix(WeightedInterpolateC2F, SetValue, (ᶜscalar, ᶜnested))
-    test_op_matrix(WeightedInterpolateC2F, SetGradient, (ᶜscalar, ᶜnested))
     test_op_matrix(WeightedInterpolateC2F, Extrapolate, (ᶜscalar, ᶜnested))
     test_op_matrix(WeightedInterpolateF2C, Nothing, (ᶠscalar, ᶠnested))
-    test_op_matrix(UpwindBiasedProductC2F, Nothing, (ᶠuvw, ᶜscalar), true)
-    test_op_matrix(UpwindBiasedProductC2F, SetValue, (ᶠuvw, ᶜscalar))
-    test_op_matrix(UpwindBiasedProductC2F, Extrapolate, (ᶠuvw, ᶜscalar))
+    # The advection operators' boundary faces are computed with the interior
+    # stencil, padding ghost points with the Extrapolate boundary condition's
+    # extrapolation from the in-range interior points (Extrapolate{0}, the
+    # value of the closest interior point, when no boundary condition is
+    # given), so no SetBoundaryOperator is needed.
+    test_op_matrix(UpwindBiasedProductC2F, Nothing, (ᶠuvw, ᶜscalar))
+    test_op_matrix(UpwindBiasedProductC2F, Extrapolate{0}, (ᶠuvw, ᶜscalar))
+    test_op_matrix(UpwindBiasedProductC2F, Extrapolate{2}, (ᶠuvw, ᶜscalar))
+    test_op_matrix(Upwind3rdOrderBiasedProductC2F, Nothing, (ᶠuvw, ᶜscalar))
     test_op_matrix(
         Upwind3rdOrderBiasedProductC2F,
-        FirstOrderOneSided,
+        Extrapolate{0},
         (ᶠuvw, ᶜscalar),
-        true,
     )
     test_op_matrix(
         Upwind3rdOrderBiasedProductC2F,
-        ThirdOrderOneSided,
+        Extrapolate{1},
         (ᶠuvw, ᶜscalar),
-        true,
     )
-    test_op_matrix(AdvectionC2C, SetValue, (ᶠuvw, ᶜnested))
-    test_op_matrix(AdvectionC2C, Extrapolate, (ᶠuvw, ᶜnested))
-    test_op_matrix(AdvectionF2F, Nothing, (ᶠuvw, ᶠnested), true)
-    test_op_matrix(FluxCorrectionC2C, Extrapolate, (ᶠuvw, ᶜnested))
-    test_op_matrix(FluxCorrectionF2F, Extrapolate, (ᶜuvw, ᶠnested))
+    test_op_matrix(
+        Upwind3rdOrderBiasedProductC2F,
+        Extrapolate{2},
+        (ᶠuvw, ᶜscalar),
+    )
     test_op_matrix(SetBoundaryOperator, SetValue, (ᶠnested,))
     test_op_matrix(GradientC2F, Nothing, (ᶜscalar,), true)
-    test_op_matrix(GradientC2F, SetValue, (ᶜscalar,))
     test_op_matrix(GradientC2F, SetGradient, (ᶜscalar,))
     test_op_matrix(GradientF2C, Nothing, (ᶠscalar,))
     test_op_matrix(GradientF2C, SetValue, (ᶠscalar,))
-    test_op_matrix(GradientF2C, Extrapolate, (ᶠscalar,))
+    test_op_matrix(GradientF2C, SetGradient, (ᶠscalar,))
     test_op_matrix(DivergenceC2F, Nothing, (ᶜuvw,), true)
-    test_op_matrix(DivergenceC2F, SetValue, (ᶜuvw,))
     test_op_matrix(DivergenceC2F, SetDivergence, (ᶜuvw,))
     test_op_matrix(DivergenceF2C, Nothing, (ᶠuvw,))
     test_op_matrix(DivergenceF2C, SetValue, (ᶠuvw,))
     test_op_matrix(DivergenceF2C, SetDivergence, (ᶠuvw,))
-    test_op_matrix(DivergenceF2C, Extrapolate, (ᶠuvw,))
     test_op_matrix(CurlC2F, Nothing, (ᶜc12,), true)
-    test_op_matrix(CurlC2F, SetValue, (ᶜc12,))
     test_op_matrix(CurlC2F, SetCurl, (ᶜc12,))
 
     @test_throws "nonlinear" MatrixFields.operator_matrix(FCTBorisBook())
     @test_throws "nonlinear" MatrixFields.operator_matrix(FCTZalesak())
+    @test_throws "nonlinear" MatrixFields.operator_matrix(
+        LinVanLeerC2F(;
+            constraint = ClimaCore.Operators.AlgebraicMean(),
+        ),
+    )
+    @test_throws "nonlinear" MatrixFields.operator_matrix(
+        TVDLimitedFluxC2F(;
+            method = ClimaCore.Operators.MinModLimiter(),
+        ),
+    )
 end
 
 @testset "Operator Matrix Broadcasting" begin
@@ -191,32 +195,31 @@ end
     c12_a = rand(Geometry.Covariant12Vector{FT})
     c12_b = rand(Geometry.Covariant12Vector{FT})
 
-    set_scalar_values =
-        (; bottom = SetValue(zero(FT)), top = SetValue(zero(FT)))
     nested_zero = rzero(NestedType{FT})
     set_nested_values =
         (; bottom = SetValue(nested_zero), top = SetValue(nested_zero))
-    c12_zero = zero(Geometry.Covariant12Vector{FT})
-    set_c12_values = (; bottom = SetValue(c12_zero), top = SetValue(c12_zero))
-    extrapolate = (; bottom = Extrapolate(), top = Extrapolate())
+    c3_zero = zero(Geometry.Covariant3Vector{FT})
+    set_c3_gradients = (; bottom = SetGradient(c3_zero), top = SetGradient(c3_zero))
+    ct12_zero = zero(Geometry.Contravariant12Vector{FT})
+    set_ct12_curls = (; bottom = SetCurl(ct12_zero), top = SetCurl(ct12_zero))
 
     ᶠinterp = InterpolateC2F(; set_nested_values...)
     ᶜlbias = LeftBiasedF2C()
     ᶠrbias = RightBiasedC2F(; set_nested_values.top)
     ᶜwinterp = WeightedInterpolateF2C()
-    ᶠupwind = UpwindBiasedProductC2F(; set_scalar_values...)
-    ᶜadvect = AdvectionC2C(; extrapolate...)
-    ᶜflux_correct = FluxCorrectionC2C(; extrapolate...)
-    ᶠgrad = GradientC2F(; set_scalar_values...)
+    ᶠwinterp = WeightedInterpolateC2F(; set_nested_values...)
+    ᶜrbias = RightBiasedF2C(; set_nested_values.top)
+    ᶠupwind = UpwindBiasedProductC2F()
+    ᶠgrad = GradientC2F(; set_c3_gradients...)
     ᶜdiv = DivergenceF2C()
-    ᶠcurl = CurlC2F(; set_c12_values...)
+    ᶠcurl = CurlC2F(; set_ct12_curls...)
     ᶠinterp_matrix = MatrixFields.operator_matrix(ᶠinterp)
     ᶜlbias_matrix = MatrixFields.operator_matrix(ᶜlbias)
     ᶠrbias_matrix = MatrixFields.operator_matrix(ᶠrbias)
     ᶜwinterp_matrix = MatrixFields.operator_matrix(ᶜwinterp)
+    ᶠwinterp_matrix = MatrixFields.operator_matrix(ᶠwinterp)
+    ᶜrbias_matrix = MatrixFields.operator_matrix(ᶜrbias)
     ᶠupwind_matrix = MatrixFields.operator_matrix(ᶠupwind)
-    ᶜadvect_matrix = MatrixFields.operator_matrix(ᶜadvect)
-    ᶜflux_correct_matrix = MatrixFields.operator_matrix(ᶜflux_correct)
     ᶠgrad_matrix = MatrixFields.operator_matrix(ᶠgrad)
     ᶜdiv_matrix = MatrixFields.operator_matrix(ᶜdiv)
     ᶠcurl_matrix = MatrixFields.operator_matrix(ᶠcurl)
@@ -244,16 +247,16 @@ end
     test_field_broadcast(;
         test_name = "product of six operator matrices",
         get_result = @lazy(
-            @. ᶜflux_correct_matrix(ᶠuvw) *
-               ᶜadvect_matrix(ᶠuvw) *
+            @. ᶜrbias_matrix() *
+               ᶠwinterp_matrix(ᶜscalar) *
                ᶜwinterp_matrix(ᶠscalar) *
                ᶠrbias_matrix() *
                ᶜlbias_matrix() *
                ᶠinterp_matrix()
         ),
         set_result = @lazy(
-            @. ᶜflux_correct_matrix(ᶠuvw) *
-               ᶜadvect_matrix(ᶠuvw) *
+            @. ᶜrbias_matrix() *
+               ᶠwinterp_matrix(ᶜscalar) *
                ᶜwinterp_matrix(ᶠscalar) *
                ᶠrbias_matrix() *
                ᶜlbias_matrix() *
@@ -265,8 +268,8 @@ end
         test_name = "applying six operators to a nested field using operator \
                      matrices",
         get_result = @lazy(
-            @. ᶜflux_correct_matrix(ᶠuvw) *
-               ᶜadvect_matrix(ᶠuvw) *
+            @. ᶜrbias_matrix() *
+               ᶠwinterp_matrix(ᶜscalar) *
                ᶜwinterp_matrix(ᶠscalar) *
                ᶠrbias_matrix() *
                ᶜlbias_matrix() *
@@ -274,8 +277,8 @@ end
                ᶜnested
         ),
         set_result = @lazy(
-            @. ᶜflux_correct_matrix(ᶠuvw) *
-               ᶜadvect_matrix(ᶠuvw) *
+            @. ᶜrbias_matrix() *
+               ᶠwinterp_matrix(ᶜscalar) *
                ᶜwinterp_matrix(ᶠscalar) *
                ᶠrbias_matrix() *
                ᶜlbias_matrix() *
@@ -283,22 +286,21 @@ end
                ᶜnested
         ),
         ref_set_result = @lazy(
-            @. ᶜflux_correct(
-                ᶠuvw,
-                ᶜadvect(
-                    ᶠuvw,
+            @. ᶜrbias(
+                ᶠwinterp(
+                    ᶜscalar,
                     ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested)))),
                 ),
             )
         ),
     )
-    # This test is will fail because of incorrect results, not InvalidIRError
+    # This test will fail because of incorrect results, not InvalidIRError
     USING_CUDA || test_field_broadcast(;
         test_name = "applying six operators to a nested field using operator \
                      matrices, but with forced right associativity",
         get_result = @lazy(
-            @. ᶜflux_correct_matrix(ᶠuvw) * (
-                ᶜadvect_matrix(ᶠuvw) * (
+            @. ᶜrbias_matrix() * (
+                ᶠwinterp_matrix(ᶜscalar) * (
                     ᶜwinterp_matrix(ᶠscalar) * (
                         ᶠrbias_matrix() *
                         (ᶜlbias_matrix() * (ᶠinterp_matrix() * ᶜnested))
@@ -307,8 +309,8 @@ end
             )
         ),
         set_result = @lazy(
-            @. ᶜflux_correct_matrix(ᶠuvw) * (
-                ᶜadvect_matrix(ᶠuvw) * (
+            @. ᶜrbias_matrix() * (
+                ᶠwinterp_matrix(ᶜscalar) * (
                     ᶜwinterp_matrix(ᶠscalar) * (
                         ᶠrbias_matrix() *
                         (ᶜlbias_matrix() * (ᶠinterp_matrix() * ᶜnested))
@@ -317,10 +319,9 @@ end
             )
         ),
         ref_set_result = @lazy(
-            @. ᶜflux_correct(
-                ᶠuvw,
-                ᶜadvect(
-                    ᶠuvw,
+            @. ᶜrbias(
+                ᶠwinterp(
+                    ᶜscalar,
                     ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested)))),
                 ),
             )
@@ -328,6 +329,7 @@ end
         time_ratio_limit = 30, # This case's ref function is fast on Buildkite.
         test_broken_with_cuda = true, # TODO: Fix this.
     )
+
 
     # TODO: For some reason, we need to compile and run @test_opt on several
     # simpler broadcast expressions before we can run the remaining two test
@@ -339,7 +341,10 @@ end
                ᶜwinterp_matrix(ᶠscalar) *
                ᶠcurl_matrix() *
                (c12_a,) +
-               (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
+               (
+                DiagonalMatrixRow(ᶜdiv(ᶠuvw)) -
+                ᶜdiv_matrix() * ᶠupwind_matrix(ᶠuvw)
+            ) / 5
         ),
         @lazy(
             @. ᶜdiv_matrix() *
@@ -350,7 +355,10 @@ end
                    ᶜwinterp_matrix(ᶠscalar) *
                    ᶠcurl_matrix() *
                    (c12_a,) +
-                   (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
+                   (
+                       DiagonalMatrixRow(ᶜdiv(ᶠuvw)) -
+                       ᶜdiv_matrix() * ᶠupwind_matrix(ᶠuvw)
+                   ) / 5
                )
         ),
     )
@@ -371,7 +379,10 @@ end
                     ᶜwinterp_matrix(ᶠscalar) *
                     ᶠcurl_matrix() *
                     (c12_a,) +
-                    (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
+                    (
+                        DiagonalMatrixRow(ᶜdiv(ᶠuvw)) -
+                        ᶜdiv_matrix() * ᶠupwind_matrix(ᶠuvw)
+                    ) / 5
                 ) - (2I,)
             )
         ),
@@ -385,7 +396,10 @@ end
                     ᶜwinterp_matrix(ᶠscalar) *
                     ᶠcurl_matrix() *
                     (c12_a,) +
-                    (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
+                    (
+                        DiagonalMatrixRow(ᶜdiv(ᶠuvw)) -
+                        ᶜdiv_matrix() * ᶠupwind_matrix(ᶠuvw)
+                    ) / 5
                 ) - (2I,)
             )
         ),
@@ -410,8 +424,10 @@ end
                        ᶜwinterp_matrix(ᶠscalar) *
                        ᶠcurl_matrix() *
                        (c12_a,) +
-                       (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) /
-                       5
+                       (
+                           DiagonalMatrixRow(ᶜdiv(ᶠuvw)) -
+                           ᶜdiv_matrix() * ᶠupwind_matrix(ᶠuvw)
+                       ) / 5
                    ) - (2I,)
                ) *
                ᶜscalar
@@ -427,8 +443,10 @@ end
                        ᶜwinterp_matrix(ᶠscalar) *
                        ᶠcurl_matrix() *
                        (c12_a,) +
-                       (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) /
-                       5
+                       (
+                           DiagonalMatrixRow(ᶜdiv(ᶠuvw)) -
+                           ᶜdiv_matrix() * ᶠupwind_matrix(ᶠuvw)
+                       ) / 5
                    ) - (2I,)
                ) *
                ᶜscalar
@@ -438,7 +456,7 @@ end
         #     ᶜdiv(
         #         ᶠscalar * ᶠgrad(
         #             (c12_b',) * ᶜwinterp(ᶠscalar, ᶠcurl((c12_a,) * ᶜscalar)) +
-        #             (ᶜdiv(ᶠuvw) * ᶜscalar - ᶜadvect(ᶠuvw, ᶜscalar)) / 5,
+        #             (ᶜdiv(ᶠuvw) * ᶜscalar - ᶜdiv(ᶠupwind(ᶠuvw, ᶜscalar))) / 5,
         #         ),
         #     ) - 2 * ᶜscalar,
         # )),
