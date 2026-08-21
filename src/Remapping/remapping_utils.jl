@@ -66,7 +66,8 @@ function vertical_reference_coordinates(space, zcoords)
 
     is_cell_center =
         space isa Spaces.CenterExtrudedFiniteDifferenceSpace ||
-        space isa Spaces.CenterFiniteDifferenceSpace
+        space isa Spaces.CenterFiniteDifferenceSpace ||
+        space isa Spaces.CenterMultiColumnFiniteDifferenceSpace
 
     ξ3s = map(zcoords) do zcoord
         velem = Meshes.containing_element(vert_mesh, zcoord)
@@ -96,6 +97,7 @@ function vertical_bounding_indices(
     space::Union{
         Spaces.FaceExtrudedFiniteDifferenceSpace,
         Spaces.FaceFiniteDifferenceSpace,
+        Spaces.FaceMultiColumnFiniteDifferenceSpace,
     },
     zcoords,
 )
@@ -109,6 +111,7 @@ function vertical_bounding_indices(
     space::Union{
         Spaces.CenterExtrudedFiniteDifferenceSpace,
         Spaces.CenterFiniteDifferenceSpace,
+        Spaces.CenterMultiColumnFiniteDifferenceSpace,
     },
     zcoords,
 )
@@ -154,6 +157,14 @@ end
 function default_target_hcoords(
     space::Spaces.FiniteDifferenceSpace;
     hresolution,
+)
+    return nothing
+end
+
+# Point-cloud columns have no horizontal interpolation
+function default_target_hcoords(
+    space::Spaces.MultiColumnFiniteDifferenceSpace;
+    hresolution = nothing,
 )
     return nothing
 end

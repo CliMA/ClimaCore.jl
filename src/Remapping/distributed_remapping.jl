@@ -137,6 +137,7 @@ struct Remapper{
     T9, # <: AbstractArray,
     T10 <: AbstractArray,
     T11 <: Union{Tuple{Colon}, Tuple{Colon, Colon}, Tuple{Colon, Colon, Colon}},
+    HM <: Union{Nothing, AbstractRemappingMethod},
 }
     # The ClimaComms context
     comms_ctx::CC
@@ -212,7 +213,8 @@ struct Remapper{
     colons::T11
 
     # Horizontal remapping method. BilinearRemapping holds precomputed (s, t) and (i, j).
-    horiz_method::AbstractRemappingMethod
+    # This is `nothing` when there is no horizontal interpolation for the space.
+    horiz_method::HM
 end
 
 """
@@ -285,6 +287,22 @@ Remapper(
 # Purely vertical, positional
 Remapper(
     space::Spaces.FiniteDifferenceSpace,
+    target_zcoords::AbstractArray;
+    buffer_length::Int = 1,
+    horizontal_method::AbstractRemappingMethod = SpectralElementRemapping(),
+) = _Remapper(space; target_zcoords, target_hcoords = nothing, buffer_length)
+
+# Multiple independent columns: vertical-only interpolation
+Remapper(
+    space::Spaces.MultiColumnFiniteDifferenceSpace;
+    target_zcoords::AbstractArray = default_target_zcoords(space),
+    buffer_length::Int = 1,
+    horizontal_method::AbstractRemappingMethod = SpectralElementRemapping(),
+) = _Remapper(space; target_zcoords, target_hcoords = nothing, buffer_length)
+
+# Multiple independent columns, positional
+Remapper(
+    space::Spaces.MultiColumnFiniteDifferenceSpace,
     target_zcoords::AbstractArray;
     buffer_length::Int = 1,
     horizontal_method::AbstractRemappingMethod = SpectralElementRemapping(),
@@ -569,7 +587,64 @@ function _Remapper(
         interpolated_values,
         buffer_length,
         colons,
-        SpectralElementRemapping(), # no horizontal interpolation
+        nothing, # horiz_method: no horizontal interpolation
+    )
+end
+
+# Constructor for the case with multiple column space (horizontal_method
+# accepted, ignored)
+function _Remapper(
+    space::Spaces.MultiColumnFiniteDifferenceSpace;
+    target_zcoords::AbstractArray,
+    target_hcoords::Nothing,
+    buffer_length::Int = 1,
+    horizontal_method::AbstractRemappingMethod = SpectralElementRemapping(),
+)
+    comms_ctx = ClimaComms.context(space)
+    FT = Spaces.undertype(space)
+    ArrayType = ClimaComms.array_type(space)
+
+    # Columns share the vertical mesh only when there is no terrain adaption
+    Spaces.grid(space).hypsography isa Grids.Flat ||
+        error("Remapping does not support non-Flat hypsography for multi-column spaces")
+
+    num_columns = Spaces.ncolumns(space)
+
+    vert_interpolation_weights =
+        ArrayType(vertical_interpolation_weights(space, target_zcoords))
+    vert_bounding_indices =
+        ArrayType(vertical_bounding_indices(space, target_zcoords))
+
+    # Use all columns
+    local_target_hcoords_bitmask = trues(num_columns)
+    local_horiz_indices = ArrayType(collect(1:num_columns))
+    local_horiz_interpolation_weights = (ArrayType(ones(FT, num_columns, 1)),)
+    field_values = ArrayType(zeros(FT, 1))
+
+    local_interpolated_values = ArrayType(
+        zeros(FT, (num_columns, length(target_zcoords), buffer_length)),
+    )
+    interpolated_values = ArrayType(
+        zeros(FT, (num_columns, length(target_zcoords), buffer_length)),
+    )
+    colons = (:, :)
+
+    return Remapper(
+        comms_ctx,
+        space,
+        nothing, # local_target_hcoords,
+        target_zcoords,
+        local_target_hcoords_bitmask,
+        local_horiz_interpolation_weights,
+        local_horiz_indices,
+        vert_interpolation_weights,
+        vert_bounding_indices,
+        local_interpolated_values,
+        field_values,
+        interpolated_values,
+        buffer_length,
+        colons,
+        nothing,
     )
 end
 
@@ -601,7 +676,11 @@ function _set_interpolated_values!(
     )
 end
 
-function _set_interpolated_values!(::SpectralElementRemapping, remapper::Remapper, fields)
+function _set_interpolated_values!(
+    ::Union{Nothing, SpectralElementRemapping},
+    remapper::Remapper,
+    fields,
+)
     _set_interpolated_values!(
         remapper._local_interpolated_values,
         fields,
@@ -837,8 +916,6 @@ function set_interpolated_values_cpu_kernel!(
 )
     space = axes(first(fields))
     FT = Spaces.undertype(space)
-    quad = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(quad)
     for (field_index, field) in enumerate(fields)
         field_values = Fields.field_values(field)
 
@@ -851,7 +928,9 @@ function set_interpolated_values_cpu_kernel!(
             for (out_index, h) in enumerate(local_horiz_indices)
                 # If we are no longer in the same element, read the field values again
                 if prev_lidx != h || prev_vindex != vindex
-                    for i in 1:Nq
+                    # The nodes per element are the columns of the
+                    # interpolation matrix
+                    for i in axes(I, 2)
                         scratch_field_values[i] =
                             A * field_values[v_lo, i, 1, h] +
                             B * field_values[v_hi, i, 1, h]
@@ -861,7 +940,7 @@ function set_interpolated_values_cpu_kernel!(
 
                 tmp = zero(FT)
 
-                for i in 1:Nq
+                for i in axes(I, 2)
                     tmp += I[out_index, i] * scratch_field_values[i]
                 end
                 out[out_index, vindex, field_index] = tmp
@@ -1311,6 +1390,17 @@ function interpolate(
     target_zcoords,
     target_hcoords,
     kwargs...,  # e.g. horizontal_method; accepted for uniform API, ignored for vertical-only
+)
+    remapper = Remapper(space; target_zcoords)
+    return interpolate(remapper, field)
+end
+
+function interpolate(
+    field::Fields.Field,
+    space::Spaces.MultiColumnFiniteDifferenceSpace;
+    target_zcoords,
+    target_hcoords,
+    kwargs...,
 )
     remapper = Remapper(space; target_zcoords)
     return interpolate(remapper, field)

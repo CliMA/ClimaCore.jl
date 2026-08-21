@@ -953,6 +953,114 @@ if !with_mpi
             @test size(Remapping.interpolate(ccoords.z)) == (30,)
         end
     end
+
+    @testset "Multiple independent columns" begin
+        lats = [0.0, 10.0, -5.0]
+        longs = [0.0, 20.0, 90.0]
+        points = [Geometry.LatLongPoint(lat, long) for (lat, long) in zip(lats, longs)]
+        num_cols = length(points)
+
+        cspace = CommonSpaces.PointColumnEnsembleSpace(;
+            points = points,
+            z_elem = 30,
+            z_min = 0.0,
+            z_max = 1000.0,
+            staggering = Spaces.CellCenter(),
+        )
+        fspace = Spaces.FaceMultiColumnFiniteDifferenceSpace(cspace)
+
+        zpts = range(0.0, 1000.0, 21)
+        zcoords = [Geometry.ZPoint(z) for z in zpts]
+
+        # Center space
+        cremapper = Remapping.Remapper(
+            cspace;
+            target_zcoords = zcoords,
+            buffer_length = 2,
+        )
+        ccoords = Fields.coordinate_field(cspace)
+        cinterp_z = Remapping.interpolate(cremapper, ccoords.z)
+        # Interpolation is 0th order in the half-cells next to the boundaries
+        cexpected_col = collect(zpts)
+        cexpected_col[1] = 1000.0 * (0 / 30 + 1 / 30) / 2
+        cexpected_col[end] = 1000.0 * (29 / 30 + 30 / 30) / 2
+        cexpected_z = ArrayType([z for _ in 1:num_cols, z in cexpected_col])
+        @test cinterp_z ≈ cexpected_z
+
+        # A field that varies across columns
+        cinterp_latz = Remapping.interpolate(cremapper, sind.(ccoords.lat) .* ccoords.z)
+        cexpected_latz =
+            ArrayType([sind(lat) * z for lat in lats, z in cexpected_col])
+        @test cinterp_latz ≈ cexpected_latz
+
+        # Face space
+        fremapper = Remapping.Remapper(fspace, zcoords; buffer_length = 2)
+        fcoords = Fields.coordinate_field(fspace)
+        finterp_z = Remapping.interpolate(fremapper, fcoords.z)
+        fexpected_z = ArrayType([z for _ in 1:num_cols, z in zpts])
+        @test finterp_z ≈ fexpected_z
+
+        # Remapping three fields (more than the buffer length)
+        cinterp = Remapping.interpolate(
+            cremapper,
+            [ccoords.z, sind.(ccoords.lat) .* ccoords.z, ccoords.z],
+        )
+        @test cexpected_z ≈ cinterp[:, :, 1]
+        @test cexpected_latz ≈ cinterp[:, :, 2]
+        @test cexpected_z ≈ cinterp[:, :, 3]
+
+        # Remapping two fields (same as buffer length)
+        cinterp2 = Remapping.interpolate(
+            cremapper,
+            [ccoords.z, sind.(ccoords.lat) .* ccoords.z],
+        )
+        @test cexpected_z ≈ cinterp2[:, :, 1]
+        @test cexpected_latz ≈ cinterp2[:, :, 2]
+
+        # Remapping in-place
+        dest = ArrayType(zeros(num_cols, 21))
+        Remapping.interpolate!(dest, cremapper, ccoords.z)
+        @test cexpected_z ≈ dest
+
+        Remapping.interpolate!(dest, fremapper, fcoords.z)
+        @test fexpected_z ≈ dest
+
+        dest = ArrayType(zeros(num_cols, 21, 3))
+        Remapping.interpolate!(
+            dest,
+            fremapper,
+            [fcoords.z, fcoords.z, fcoords.z],
+        )
+        @test fexpected_z ≈ dest[:, :, 1]
+        @test fexpected_z ≈ dest[:, :, 2]
+        @test fexpected_z ≈ dest[:, :, 3]
+
+        # Consistency with a single-column remapper
+        vertdomain = Domains.IntervalDomain(
+            Geometry.ZPoint(0.0),
+            Geometry.ZPoint(1000.0);
+            boundary_names = (:bottom, :top),
+        )
+        vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 30)
+        verttopo = Topologies.IntervalTopology(
+            ClimaComms.SingletonCommsContext(ClimaComms.device()),
+            vertmesh,
+        )
+        col_cspace = Spaces.CenterFiniteDifferenceSpace(verttopo)
+        col_remapper =
+            Remapping.Remapper(col_cspace; target_zcoords = zcoords)
+        col_interp_z = Remapping.interpolate(
+            col_remapper,
+            Fields.coordinate_field(col_cspace).z,
+        )
+        for col in 1:num_cols
+            @test cinterp_z[col, :] ≈ col_interp_z
+        end
+
+        # Convenience interpolate (only checking the shape)
+        @test size(Remapping.interpolate(ccoords.z)) == (num_cols, 30)
+        @test size(Remapping.interpolate(fcoords.z)) == (num_cols, 30)
+    end
 end
 
 @testset "Default coordinates" begin
