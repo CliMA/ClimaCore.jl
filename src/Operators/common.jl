@@ -156,31 +156,24 @@ placeholder_space(
     parent_space::Spaces.CenterMultiColumnFiniteDifferenceSpace,
 ) = parent_space
 
-strip_space(obj, parent_space) = obj
-
+strip_space(arg, parent_space) = arg
 function strip_space(field::Field, parent_space)
-    current_space = axes(field)
-    new_space = placeholder_space(current_space, parent_space)
-    return Field(Fields.field_values(field), new_space)
+    space = placeholder_space(axes(field), parent_space)
+    return Field(Fields.field_values(field), space)
+end
+function strip_space(bc::Broadcast.Broadcasted, parent_space)
+    args = unrolled_map(Base.Fix2(strip_space, axes(bc)), bc.args)
+    space = placeholder_space(axes(bc), parent_space)
+    return Broadcast.Broadcasted(bc.style, bc.f, args, space)
 end
 
-function strip_space(
-    bc::Base.Broadcast.Broadcasted{Style},
-    parent_space,
-) where {Style}
-    current_space = axes(bc)
-    new_space = placeholder_space(current_space, parent_space)
-    return Base.Broadcast.Broadcasted{Style}(
-        bc.f,
-        strip_space_args(bc.args, current_space),
-        new_space,
-    )
-end
-
-strip_space_args(args::Tuple, space) =
-    unrolled_map(arg -> strip_space(arg, space), args)
-
+unstrip_space(arg, parent_space) = arg
 function unstrip_space(field::Field, parent_space)
-    new_space = reconstruct_placeholder_space(axes(field), parent_space)
-    return Field(Fields.field_values(field), new_space)
+    space = reconstruct_placeholder_space(axes(field), parent_space)
+    return Field(Fields.field_values(field), space)
+end
+function unstrip_space(bc::Broadcast.Broadcasted, parent_space)
+    args = unrolled_map(Base.Fix2(unstrip_space, axes(bc)), bc.args)
+    space = reconstruct_placeholder_space(axes(bc), parent_space)
+    return Broadcast.Broadcasted(bc.style, bc.f, args, space)
 end

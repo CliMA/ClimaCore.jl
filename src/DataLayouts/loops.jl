@@ -78,7 +78,7 @@ the largest subset is used in order to minimize the number of points per thread.
 end
 
 """
-    foreach_slice(op, f, args...; [mask])
+    foreach_slice(op, f, args...; [mask], [no_init])
 
 Generalization of `eachslice`/`mapslices` that applies `f` to slices of every
 [`DataLayout`](@ref) or similarly indexable argument, where the slice operator
@@ -92,25 +92,28 @@ Each slice is assigned to a [`slice_subscope`](@ref) of `scope`, which by
 default is the largest available [`DataScope`](@ref) that can access every
 argument. A [`DataMask`](@ref) may also be used to skip over a particular subset
 of slices.
+
+By default, `f` is called as `f(slices...)`. Setting `no_index` to `false` turns
+this into `f(index, slices...)`, like in a loop over the output of `enumerate`.
 """
-@inline foreach_slice(op::O, f::F, args...; mask = NoMask()) where {O, F} =
+@inline foreach_slice(op::O, f::F, args...; mask = NoMask(), no_index = true) where {O, F} =
     unrolled_allequal(Base.Fix1(each_slice_index, op), args) ?
-    foreach_slice(DataScope(args...), op, f, mask, args...) :
+    foreach_slice(DataScope(args...), op, f, args...; mask, no_index) :
     throw(DimensionMismatch("Inputs to foreach_slice must have compatible dimensions"))
 
 # A thread pool has to be resolved before looping over it, and given back afterward.
 @inline function foreach_slice(
-    pool::ThisThreadPool,
+    scope::ThisThreadPool,
     op::O,
     f::F,
-    mask,
-    args...,
+    args...;
+    kwargs...,
 ) where {O, F}
     pool_thread_info() == (0, 0) ||
-        return foreach_pool_slice(num_threads(pool), pool, op, f, mask, args...)
+        return foreach_pool_slice(num_threads(scope), scope, op, f, args...; kwargs...)
     threads = resolve_pool_threads()
     try
-        return foreach_pool_slice(threads, pool, op, f, mask, args...)
+        return foreach_pool_slice(threads, scope, op, f, args...; kwargs...)
     finally
         release_pool_threads()
     end
@@ -121,17 +124,17 @@ end
 # union at every call below it, which uses up inference budget that the point loops need.
 @inline foreach_pool_slice(
     threads::Int,
-    pool::ThisThreadPool,
+    scope::ThisThreadPool,
     op::O,
     f::F,
-    mask,
-    args...,
+    args...;
+    kwargs...,
 ) where {O, F} =
-    isone(threads) ? foreach_slice(ThisThread(), op, f, mask, args...) :
-    parallelize_over(() -> slice_loop(pool, op, f, mask, args...), pool)
+    isone(threads) ? foreach_slice(ThisThread(), op, f, args...; kwargs...) :
+    parallelize_over(() -> slice_loop(scope, op, f, args...; kwargs...), scope)
 
-@inline foreach_slice(scope::DataScope, op::O, f::F, mask, args...) where {O, F} =
-    slice_loop(scope, op, f, mask, args...)
+@inline foreach_slice(scope::DataScope, op::O, f::F, args...; kwargs...) where {O, F} =
+    slice_loop(scope, op, f, args...; kwargs...)
 
 # The loop body lives behind a function barrier because the generic
 # slice_subscope method branches on a slice size that is only known at run time
@@ -140,8 +143,8 @@ end
 # the correlated unions of the argument slices must all be split at the call to
 # f, which exceeds inference's union-splitting limit for three or more
 # arguments and makes every slice operation dynamic.
-@inline slice_loop(scope, op::O, f::F, mask, args...) where {O, F} =
-    scoped_slice_loop(slice_subscope(scope, op, args...), scope, op, f, mask, args...)
+@inline slice_loop(scope, op::O, f::F, args...; kwargs...) where {O, F} =
+    scoped_slice_loop(slice_subscope(scope, op, args...), scope, op, f, args...; kwargs...)
 
 # Point loops need @simd and an inlined call to f for vectorization, since LLVM
 # cannot vectorize across a flattened CartesianIndices iterator unless @simd
@@ -152,20 +155,27 @@ end
 # broadcasts. Lazy iterators such as Iterators.filter or Iterators.map do not
 # support @simd, and operations on non-point slices typically do too much work
 # per slice for vectorization to be worthwhile.
-@inline function scoped_slice_loop(subscope, scope, op::O, f::F, mask, args...) where {O, F}
+@inline function scoped_slice_loop(
+    subscope,
+    scope,
+    op::O,
+    f::F,
+    args...;
+    mask,
+    no_index,
+) where {O, F}
     indices = subscope_slice_indices(subscope, scope, mask, op, args...)
-    N_indices = length(indices)
-    @simd_if (op == view && simd_over_indices(indices)) for i in 1:N_indices
+    @simd_if (op == view && simd_over_indices(indices)) for i in 1:length(indices)
         index = @inbounds indices[i]
         slices = unrolled_map(args) do arg
             @inbounds reassign(op(arg, Tuple(index)...), subscope)
         end
-        @inline f(slices...)
+        @inline no_index ? f(slices...) : f(index, slices...)
     end
 end
 
 """
-    foreach_point(f, args...; [mask])
+    foreach_point(f, args...; [mask], [no_index])
 
 Run [`foreach_slice`](@ref) with `view` as the slice operator.
 """
@@ -175,7 +185,7 @@ Run [`foreach_slice`](@ref) with `view` as the slice operator.
 for op in (:level, :slab, :column)
     @eval begin
         """
-            foreach_$($op)(f, args...; [mask])
+            foreach_$($op)(f, args...; [mask], [no_index])
 
         Run [`foreach_slice`](@ref) with [`$($op)`](@ref) as the slice operator.
         """
@@ -199,12 +209,7 @@ in `arg` to begin with, the `init` value must be specified.
 @inline reduce_points(op::O, arg; mask = NoMask(), init...) where {O} =
     reduce_points(DataScope(arg), op, arg; mask, init...)
 
-@inline function reduce_points(
-    pool::ThisThreadPool,
-    op::O,
-    arg;
-    kwargs...,
-) where {O}
+@inline function reduce_points(scope::ThisThreadPool, op::O, arg; kwargs...) where {O}
     # Reduce on this thread when the pool has one thread, or when there are too few points
     # to divide up, without resolving the pool or claiming any of its threads.
     (isone(default_pool_size()) || length(arg) <= default_pool_size()) &&
@@ -213,20 +218,15 @@ in `arg` to begin with, the `init` value must be specified.
     if pool_thread_info() != (0, 0)
         # A reduction nested in another loop gets a fresh results array, since the task's
         # reduction buffer may still be read by an outer reduction that is applying op.
-        return reduce_pool_points(
-            Array{T}(undef, num_threads(pool)),
-            pool,
-            op,
-            arg;
-            kwargs...,
-        )
+        results = Array{T}(undef, num_threads(scope))
+        return reduce_pool_points(results, scope, op, arg; kwargs...)
     end
     threads = resolve_pool_threads()
     try
         isone(threads) &&
             return reduce_points(ThisThread(), op, reassign(arg, ThisThread()); kwargs...)
-        results = scoped_array(pool, T, threads; buffer = true)
-        return reduce_pool_points(results, pool, op, arg; kwargs...)
+        results = scoped_array(scope, T, threads; buffer = true)
+        return reduce_pool_points(results, scope, op, arg; kwargs...)
     finally
         release_pool_threads()
     end
@@ -238,13 +238,13 @@ end
 # fresh array.
 @inline function reduce_pool_points(
     results,
-    pool::ThisThreadPool,
+    scope::ThisThreadPool,
     op::O,
     arg;
     kwargs...,
 ) where {O}
-    parallelize_over(pool) do
-        @inbounds results[thread_rank(pool)] =
+    parallelize_over(scope) do
+        @inbounds results[thread_rank(scope)] =
             reduce_points(ThisThread(), op, arg; kwargs...)
     end
     return reduce(op, results)
@@ -273,19 +273,17 @@ end
 # require an init: unmasked launchers assign every thread at least one point,
 # and masked reductions (whose active points may not cover every thread) are
 # documented to require an init value. Masked indices are equivalent to what
-# the slice index machinery uses for single-point views.
-# The two branches are not equivalent: eachindex gives unmasked reductions
-# linear indices whenever the argument supports them, which CPU reductions
-# vectorize an order of magnitude better than the Cartesian indices that the
-# slice index machinery produces on host scopes.
-@inline reduce_points(::ThisThread, op::O, arg; mask, init...) where {O} =
-    if mask == NoMask()
-        indices = @inbounds subscope_indices(ThisThread(), DataScope(arg), eachindex(arg))
-        safe_mapreduce(index -> (@inbounds arg[index]), op, indices; init...)
-    else
-        indices = subscope_slice_indices(ThisThread(), DataScope(arg), mask, view, arg)
-        safe_mapreduce(index -> (@inbounds arg[index]), op, indices; init...)
-    end
+# the slice index machinery uses for single-point views. Unmasked reductions use
+# eachindex, which returns linear indices whenever the argument supports them.
+# CPU reductions over linear indices vectorize an order of magnitude better than
+# reductions over the Cartesian indices generated by subscope_slice_indices.
+@inline function reduce_points(::ThisThread, op::O, arg; mask, init...) where {O}
+    indices =
+        mask == NoMask() ?
+        (@inbounds subscope_indices(ThisThread(), DataScope(arg), eachindex(arg))) :
+        subscope_slice_indices(ThisThread(), DataScope(arg), mask, view, arg)
+    return safe_mapreduce(index -> (@inbounds arg[index]), op, indices; init...)
+end
 
 """
     column_reduce!(op, dest, arg; [mask], [flip], [init])
@@ -313,7 +311,7 @@ right-associative, and `init` seeds the fold when it is given.
         fill!(dest_column, reduce(op, maybe_reverse(arg_column); init...))
     end
 end
-# TODO: Extend this to column_accumulate!, column_stencil!, and slab_convolve!
+# TODO: Extend this to column_accumulate!
 
 # Convert the value before the fill! loop. Even though setindex! converts at
 # every point, the compiler does not hoist the conversion, and filling a Float64

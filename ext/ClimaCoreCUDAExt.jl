@@ -24,10 +24,8 @@ include(joinpath("cuda", "remapping_distributed.jl"))
 include(joinpath("cuda", "operators_integral.jl"))
 include(joinpath("cuda", "remapping_interpolate_array.jl"))
 include(joinpath("cuda", "limiters.jl"))
-include(joinpath("cuda", "operators_sem_shmem.jl"))
 include(joinpath("cuda", "matrix_fields_single_field_solve.jl"))
 include(joinpath("cuda", "matrix_fields_multiple_field_solve.jl"))
-include(joinpath("cuda", "operators_spectral_element.jl"))
 
 # Lift the recursion limit for the device reduce_points, whose recursion over warps
 # and sub-warps forwards kwargs and looks unbounded to the compiler, which would widen

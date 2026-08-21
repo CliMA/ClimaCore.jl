@@ -143,3 +143,114 @@ which, by using the anti-symmetry of the Levi-Civita symbol, reduces to
 """
 const WeakCurl{I} = Curl{I, WeakForm}
 WeakCurl() = WeakCurl{()}()
+
+"""
+    SlabData{T}
+
+A [`DataLayouts.DataLayout`](@ref) that stores a single slab of values of type
+`T` (a `VIJHWithF` layout with `Nv = Nh = 1`).
+"""
+const SlabData{T} = DataLayouts.VIJHWithF{T, 1, <:Any, <:Any, 1}
+
+# Index for one node in a slab of data, with v = h = 1.
+@inline slab_node_index(ij::CartesianIndex{1}) = CartesianIndex(1, ij[1], 1, 1)
+@inline slab_node_index(ij::CartesianIndex{2}) =
+    CartesianIndex(1, ij[1], ij[2], 1)
+
+Base.@propagate_inbounds function get_node(space, scalar, ij, slabidx)
+    scalar[]
+end
+Base.@propagate_inbounds function get_node(
+    space,
+    scalar::Tuple{<:Any},
+    ij,
+    slabidx,
+)
+    scalar[1]
+end
+Base.@propagate_inbounds function get_node(
+    parent_space,
+    field::Fields.Field,
+    ij::CartesianIndex{1},
+    slabidx,
+)
+    space = reconstruct_placeholder_space(axes(field), parent_space)
+    i, = Tuple(ij)
+    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace ||
+       space isa Spaces.FaceFiniteDifferenceSpace
+        _v = slabidx.v + half
+    elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace ||
+           space isa Spaces.AbstractSpectralElementSpace ||
+           space isa Spaces.CenterFiniteDifferenceSpace
+        _v = slabidx.v
+    else
+        error("invalid space")
+    end
+    h = slabidx.h
+    fv = Fields.field_values(field)
+    v = isnothing(_v) ? 1 : _v
+    return fv[v, i, 1, h]
+end
+Base.@propagate_inbounds function get_node(
+    parent_space,
+    field::Fields.Field,
+    ij::CartesianIndex{2},
+    slabidx,
+)
+    space = reconstruct_placeholder_space(axes(field), parent_space)
+    i, j = Tuple(ij)
+    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
+        _v = slabidx.v + half
+    elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace ||
+           space isa Spaces.AbstractSpectralElementSpace
+        _v = slabidx.v
+    else
+        error("invalid space")
+    end
+    h = slabidx.h
+    fv = Fields.field_values(field)
+    v = isnothing(_v) ? 1 : _v
+    return fv[v, i, j, h]
+end
+Base.@propagate_inbounds function get_node(
+    parent_space,
+    bc::Base.Broadcast.Broadcasted,
+    ij,
+    slabidx,
+)
+    space = reconstruct_placeholder_space(axes(bc), parent_space)
+    args = _get_node(space, ij, slabidx, bc.args)
+    bc.f(args...)
+end
+Base.@propagate_inbounds function get_node(space, data::SlabData, ij, slabidx)
+    data[slab_node_index(ij)]
+end
+Base.@propagate_inbounds function get_node(
+    space,
+    field::Fields.Field{<:SlabData},
+    ij::CartesianIndex{1},
+    slabidx,
+)
+    Fields.field_values(field)[slab_node_index(ij)]
+end
+Base.@propagate_inbounds function get_node(
+    space,
+    field::Fields.Field{<:SlabData},
+    ij::CartesianIndex{2},
+    slabidx,
+)
+    Fields.field_values(field)[slab_node_index(ij)]
+end
+Base.@propagate_inbounds function get_node(
+    space,
+    data::StaticArrays.SArray,
+    ij,
+    slabidx,
+)
+    data[ij]
+end
+
+dont_limit = (args...) -> true
+for m in methods(get_node)
+    m.recursion_relation = dont_limit
+end

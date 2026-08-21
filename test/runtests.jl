@@ -64,11 +64,9 @@ unit_tests = [
     UnitTest("Fields - convergence integrals"           ,"Fields/conv_field_integrals.jl"; tier = :conv, subsystem = :fields),
     UnitTest("Fields - multi broadcast fusion"          ,"Fields/unit_field_multi_broadcast_fusion.jl"; tier = :unit, subsystem = :fields),
     UnitTest("Fields - inference"                       ,"Fields/inference_fields.jl"; meta = :cpu_only, tier = :inference, subsystem = :fields),
-    UnitTest("Reinstantiate broadcasted"                ,"Operators/unit_reinstantiate_bc.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Placeholder Fields"                       ,"Operators/unit_common.jl"; tier = :unit, subsystem = :operators),
 
     # Spectral Element Operators
-    UnitTest("Spectral elem - form types"               ,"Operators/spectralelement/unit_form_types.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - vector identities"        ,"Operators/spectralelement/unit_vector_identities.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - rectilinear"              ,"Operators/spectralelement/unit_rectilinear.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - plane"                    ,"Operators/spectralelement/unit_plane.jl"; tier = :unit, subsystem = :operators),
