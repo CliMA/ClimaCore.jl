@@ -13,8 +13,11 @@ projecting its tendency against r̂ (the discarded radial component is the
 u²/r curvature term shallow-atmosphere momentum also neglects); ρw (faces)
 carries the radial momentum exactly as in the plane flux-form drivers.
 
-Time integration: explicit SSPRK33 (DT default 4 s). No HEVI yet — the
-point is to test the KEP property before re-deriving the implicit Jacobian.
+Pressure gradient: Exner-perturbation form (Yatunin et al. 2026) — advective
+KG momentum flux + −ρ cp_d(θ ∇Π' + θ' ∇Π_ref), well-balanced over topography.
+Time integration: explicit SSPRK33 (DT default 4 s) or IMEX-HEVI (ARS343 +
+Newton; implicit vertical acoustics with the Exner Jacobian in
+fddg_fluxform_jacobian.jl; DT default 60 s at helem=4).
 
 Env: HELEM, NPOLY, ZELEM, ZMAX, DT, T_END, KAPPA4, FILTER, PERTURB, NDIAG,
      HELD_SUAREZ, HS_SPINUP

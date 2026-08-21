@@ -6,20 +6,29 @@ the ρ/ρe field-name constants used below are defined here, built on the FD
 operators (If, vdivf2c, ᶠgradᵥ) and thermodynamic constants (R_d, cv_d,
 T_tri) from the model file.
 
-Implicit tendency (vertical acoustic subsystem; everything else explicit):
+Implicit tendency (vertical acoustic subsystem; everything else explicit).
+The ρw pressure-gradient + gravity is in Exner-perturbation form (Yatunin et
+al. 2026): with Π = (p/p₀)^κ, θ = T/Π, Π' = Π − Π_ref, θ' = θ − θ_ref,
     ᶜρₜ  = −ᶜdivᵥ(ᶠρw)                       [linear in ρw]
     ᶜρeₜ = −ᶜdivᵥ(ᶠρw · ᶠinterp(ᶜh_tot))     [central; VanLeer corr. explicit]
-    ᶠρwₜ = −ᶠgradᵥ(ᶜp) − ᶠinterp(ᶜρ)·ᶠgradᵥ(ᶜΦ)
+    ᶠρwₜ = −ᶠinterp(ᶜρ)·cp_d·(ᶠinterp(ᶜθ)·ᶠgradᵥ(Π') + ᶠinterp(ᶜθ')·ᶠgradᵥ(Π_ref))
     ρu_c: no implicit tendency.
 
-Nonzero Jacobian blocks (h_tot and K frozen, the analog of the validated
-:no_∂ᶜp∂ᶜK default; ∂ᶠρwₜ/∂ᶠρw ≡ 0 under frozen K since the ρw equation is
-otherwise independent of ρw):
+Nonzero Jacobian blocks (h_tot, K, and the interpolated coefficients ᶠinterp(ρ),
+ᶠinterp(θ) frozen — the analog of the validated :no_∂ᶜp∂ᶜK default; ∂ᶠρwₜ/∂ᶠρw ≡
+0 under frozen K). With K frozen, ∂p/∂ρe = R_d/cv_d, ∂p/∂ρ = R_d(−(K+Φ)/cv_d +
+T_tri), and ∂Π/∂p = κ Π/p; Π_ref is a fixed reference field. Define
+C = ᶠinterp(ρ)·cp_d·ᶠinterp(θ) and A = cp_d(ᶠinterp(θ)ᶠgradᵥ(Π') +
+ᶠinterp(θ')ᶠgradᵥ(Π_ref)) (a Covariant3 face field), so ᶠρwₜ = −ᶠinterp(ρ)·A:
     ∂ᶜρₜ/∂ᶠρw  = −ᶜdivᵥ_matrix ⋅ Diag(g³³)
     ∂ᶜρeₜ/∂ᶠρw = −ᶜdivᵥ_matrix ⋅ Diag(ᶠinterp(ᶜh_tot)·g³³)
-    ∂ᶠρwₜ/∂ᶜρe = −ᶠgradᵥ_matrix ⋅ (R_d/cv_d)
-    ∂ᶠρwₜ/∂ᶜρ  = −ᶠgradᵥ_matrix ⋅ Diag(R_d(−(K+Φ)/cv_d + T_tri))
-                 − Diag(ᶠgradᵥ(ᶜΦ)) ⋅ ᶠinterp_matrix
+    ∂ᶠρwₜ/∂ᶜρe = −Diag(C) ⋅ ᶠgradᵥ_matrix ⋅ Diag((κΠ/p)(R_d/cv_d))
+    ∂ᶠρwₜ/∂ᶜρ  = −Diag(C) ⋅ ᶠgradᵥ_matrix ⋅ Diag((κΠ/p)R_d(−(K+Φ)/cv_d + T_tri))
+                 − Diag(A) ⋅ ᶠinterp_matrix
+The last term (∂/∂ρ through the ᶠinterp(ρ) prefactor) is the Exner analog of the
+old −Diag(ᶠgradᵥ(Φ))·ᶠinterp gravity term; A ≈ 0 at hydrostatic balance. The
+leading ∂/∂ρe block reduces to the old −ᶠgradᵥ(R_d/cv_d) since
+C·κΠ/p ≈ ρ R_d T/p = 1 — a consistent refinement of the full-p Jacobian.
 =#
 
 import LinearAlgebra: ldiv!
@@ -96,6 +105,17 @@ function fddg_implicit_equation_jacobian!(
     p_thermo = @. pressure_ρe(ρe, K, ᶜΦ, ρ)
     h_tot = @. (ρe + p_thermo) / ρ
 
+    # Exner-perturbation thermodynamics (see the header). K frozen ⇒
+    # ∂p/∂ρe = R_d/cv_d, ∂p/∂ρ = R_d(−(K+Φ)/cv_d + T_tri); ∂Π/∂p = κ Π/p.
+    Π = @. (p_thermo / p_0)^κ_gas
+    θ = @. p_thermo / (ρ * R_d) / Π
+    Πp = @. Π - ᶜΠ_ref
+    θp = @. θ - ᶜθ_ref
+    dΠ_dρe = @. κ_gas * Π / p_thermo * (R_d / cv_d)
+    dΠ_dρ = @. κ_gas * Π / p_thermo * R_d * (-(K + ᶜΦ) / cv_d + T_tri)
+    Cpg = @. If(ρ) * cp_d * If(θ)                       # frozen prefactor
+    Apg = @. cp_d * (If(θ) * ᶠgradᵥ(Πp) + If(θp) * ᶠgradᵥ(ᶜΠ_ref))  # C3 face
+
     ᶠgⁱʲ = Fields.local_geometry_field(Y.ρw).gⁱʲ
     g³³(gⁱʲ) = reshape(
         gⁱʲ,
@@ -110,12 +130,15 @@ function fddg_implicit_equation_jacobian!(
     @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
         -(ᶜdivᵥ_matrix()) * DiagonalMatrixRow(If(h_tot) * g³³(ᶠgⁱʲ))
 
-    # ᶠρwₜ = −ᶠgradᵥ(ᶜp) − ᶠinterp(ᶜρ)·ᶠgradᵥ(ᶜΦ)
-    @. ∂ᶠ𝕄ₜ∂ᶜ𝔼 = -(ᶠgradᵥ_matrix() * R_d / cv_d)
+    # ᶠρwₜ = −ᶠinterp(ρ) cp_d (ᶠinterp(θ) ᶠgradᵥ(Π') + ᶠinterp(θ') ᶠgradᵥ(Π_ref))
+    @. ∂ᶠ𝕄ₜ∂ᶜ𝔼 =
+        -DiagonalMatrixRow(Cpg) *
+        ᶠgradᵥ_matrix() *
+        DiagonalMatrixRow(dΠ_dρe)
     @. ∂ᶠ𝕄ₜ∂ᶜρ =
-        -(ᶠgradᵥ_matrix()) *
-        DiagonalMatrixRow(R_d * (-(K + ᶜΦ) / cv_d + T_tri)) -
-        DiagonalMatrixRow(ᶠgradᵥ(ᶜΦ)) * ᶠinterp_matrix()
+        -DiagonalMatrixRow(Cpg) *
+        ᶠgradᵥ_matrix() *
+        DiagonalMatrixRow(dΠ_dρ) - DiagonalMatrixRow(Apg) * ᶠinterp_matrix()
 
     I = one(∂R∂Y)
     @. ∂R∂Y = FT(δtγ) * ∂Yₜ∂Y - I
