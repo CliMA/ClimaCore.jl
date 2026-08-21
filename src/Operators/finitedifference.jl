@@ -307,7 +307,7 @@ get_boundary(
 strip_space(op::FiniteDifferenceOperator, parent_space) =
     unionall_type(typeof(op))(
         NamedTuple{keys(op.bcs)}(
-            strip_space_args(values(op.bcs), parent_space),
+            unrolled_map(Base.Fix2(strip_space, parent_space), values(op.bcs)),
         ),
     )
 
@@ -383,18 +383,10 @@ function strip_space(sbc::StencilBroadcasted{Style}, parent_space) where {Style}
     new_space = placeholder_space(current_space, parent_space)
     return StencilBroadcasted{Style}(
         strip_space(sbc.op, current_space),
-        strip_space_args(sbc.args, current_space),
+        unrolled_map(Base.Fix2(strip_space, parent_space), sbc.args),
         new_space,
     )
 end
-
-"""
-    return_eltype(::Op, fields...)
-
-Defines the element type of the result of operator `Op`
-"""
-function return_eltype end
-
 
 """
     stencil_interior_width(::Op, args...)
@@ -1390,7 +1382,9 @@ struct MonotoneLocalExtrema <: LimiterConstraint end
 
 
 strip_space(op::LinVanLeerC2F, parent_space) = LinVanLeerC2F(
-    NamedTuple{keys(op.bcs)}(strip_space_args(values(op.bcs), parent_space)),
+    NamedTuple{keys(op.bcs)}(
+        unrolled_map(Base.Fix2(strip_space, parent_space), values(op.bcs)),
+    ),
     op.constraint,
 )
 
@@ -3148,11 +3142,11 @@ function Base.Broadcast.materialize!(
 end
 
 Base.@propagate_inbounds column(op::FiniteDifferenceOperator, inds...) =
-    unionall_type(typeof(op))(column_args(op.bcs, inds...))
+    unionall_type(typeof(op))(column(op.bcs, inds...))
 Base.@propagate_inbounds column(sbc::StencilBroadcasted{S}, inds...) where {S} =
     StencilBroadcasted{S}(
         column(sbc.op, inds...),
-        column_args(sbc.args, inds...),
+        column(sbc.args, inds...),
         column(sbc.axes, inds...),
     )
 
@@ -3160,9 +3154,6 @@ Base.@propagate_inbounds column(sbc::StencilBroadcasted{S}, inds...) where {S} =
 if hasfield(Method, :recursion_relation)
     dont_limit = (args...) -> true
     for m in methods(column)
-        m.recursion_relation = dont_limit
-    end
-    for m in methods(column_args)
         m.recursion_relation = dont_limit
     end
 end
@@ -3221,16 +3212,6 @@ function Base.copyto!(
     end
     return _serial_copyto!(field_out, bc, Ni, Nj, Nh)
 end
-
-@inline function reconstruct_placeholder_broadcasted(
-    parent_space::Spaces.AbstractSpace,
-    sbc::StencilBroadcasted{Style},
-) where {Style}
-    space = reconstruct_placeholder_space(axes(sbc), parent_space)
-    args = _reconstruct_placeholder_broadcasted(space, sbc.args)
-    return StencilBroadcasted{Style}(sbc.op, args, space, sbc.work)
-end
-
 
 function window_bounds(space, bc)
     if Topologies.isperiodic(space)
@@ -3377,17 +3358,6 @@ promote_bc(bc::SetDivergence{<:Geometry.AbstractTensor}, ::Type{FT}) where {FT} 
     SetDivergence(promote_axis_tensor(bc.val, FT))
 promote_bc(bc::SetCurl{<:Geometry.AbstractTensor}, ::Type{FT}) where {FT} =
     SetCurl(promote_axis_tensor(bc.val, FT))
-
-
-if hasfield(Method, :recursion_relation)
-    dont_limit = (args...) -> true
-    for m in methods(reconstruct_placeholder_broadcasted)
-        m.recursion_relation = dont_limit
-    end
-    for m in methods(_reconstruct_placeholder_broadcasted)
-        m.recursion_relation = dont_limit
-    end
-end
 
 """
     use_fd_shmem()

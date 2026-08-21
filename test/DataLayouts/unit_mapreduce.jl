@@ -14,8 +14,8 @@ function test_mapreduce_1!(data)
     parent(data) .= rand.(eltype(parent(data)))
     @test minimum(data) == minimum(parent(data))
     @test maximum(sqrt, data) == maximum(sqrt, parent(data))
-    @test maximum(Base.broadcasted(*, data, DataLayouts.level(data))) ==
-          maximum(Base.broadcasted(*, parent(data), parent(DataLayouts.level(data))))
+    @test maximum(Base.broadcasted(*, data, DataLayouts.level(data, 1))) ==
+          maximum(Base.broadcasted(*, parent(data), parent(DataLayouts.level(data, 1))))
 end
 
 function test_mapreduce_2!(data)
@@ -23,9 +23,13 @@ function test_mapreduce_2!(data)
     @test minimum(data) == (minimum(parent(data.:1)), minimum(parent(data.:2)))
     @test maximum(sqrt, data) ==
           (maximum(sqrt, parent(data.:1)), maximum(sqrt, parent(data.:2)))
-    @test maximum(Base.broadcasted(*, data, DataLayouts.level(data))) == (
-        maximum(Base.broadcasted(*, parent(data.:1), parent(DataLayouts.level(data.:1)))),
-        maximum(Base.broadcasted(*, parent(data.:2), parent(DataLayouts.level(data.:2)))),
+    @test maximum(Base.broadcasted(*, data, DataLayouts.level(data, 1))) == (
+        maximum(
+            Base.broadcasted(*, parent(data.:1), parent(DataLayouts.level(data.:1, 1))),
+        ),
+        maximum(
+            Base.broadcasted(*, parent(data.:2), parent(DataLayouts.level(data.:2, 1))),
+        ),
     )
 end
 

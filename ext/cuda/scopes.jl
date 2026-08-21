@@ -1,4 +1,4 @@
-import UnrolledUtilities: unrolled_all, unrolled_allequal, unrolled_flatmap
+import UnrolledUtilities: unrolled_map, unrolled_all, unrolled_allequal, unrolled_flatmap
 
 const THREADS_PER_WARP = 32
 const MAX_WARPS_PER_BLOCK = 32
@@ -224,3 +224,10 @@ end
     ::typeof(view),
     args...,
 ) = eachindex(args...)
+
+# Keep each operator in its own device function to reduce shared memory usage.
+@noinline ClimaCore.Operators.scoped_apply_operator(scope::ThisCooperativeGroup, bc) =
+    ClimaCore.Operators.apply_operator(
+        bc.f,
+        unrolled_map(ClimaCore.Operators.apply_operators, bc.args)...,
+    )

@@ -153,7 +153,7 @@ end
 
 function lazy_data_broadcast(adaption::T) where {T}
     n_args = Val(fieldcount(T))
-    data_args = ntuple(i -> Fields.todata(getfield(adaption, i)), n_args)
+    data_args = ntuple(i -> Fields.field_values(getfield(adaption, i)), n_args)
     return Base.Broadcast.broadcasted(Operators.unionall_type(T), data_args...)
 end # Should this be defined in Fields? It can also be extended to nested structs.
 

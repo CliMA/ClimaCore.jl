@@ -38,20 +38,24 @@ A [`DataStyle`](@ref) broadcast expression whose [`layout_type`](@ref) is `D`.
 """
 const LazyDataLayout{D} = Broadcast.Broadcasted{<:DataStyle{<:Any, D}}
 
-# Optimize axes(::LazyDataLayout) with statically inferrable axes when possible.
-@inline Broadcast._axes(bc::LazyDataLayout, ::Nothing) =
-    has_inferred_size(bc) ? unrolled_map(Base.OneTo, inferred_size(bc)) :
-    unrolled_reduce(stable_combine_axes, unrolled_map(axes, bc.args))
+# Avoid Base's Broadcast.combine_axes, whose DimensionMismatch error cannot be
+# compiled in GPU kernels because it generates a string during runtime.
+@inline Broadcast._axes(bc::LazyDataLayout, ::Nothing) = unrolled_map(Base.OneTo, size(bc))
 
-# Instead of Base's combine_axes, whose DimensionMismatch error cannot compile
-# on GPUs, use a version that always selects the first non-singleton dimension.
-@inline stable_combine_axes(axes1::Tuple, axes2::Tuple) =
-    isempty(axes2) ? axes1 :
-    isempty(axes1) ? axes2 :
+@inline combine_sizes(size1, size2) =
+    isempty(size2) ? size1 :
+    isempty(size1) ? size2 :
     (
-        isone(length(first(axes2))) ? first(axes1) : first(axes2),
-        stable_combine_axes(Base.tail(axes1), Base.tail(axes2))...,
+        isone(first(size2)) ? first(size1) : first(size2),
+        combine_sizes(Base.tail(size1), Base.tail(size2))...,
     )
+
+# Ensure that size(::LazyDataLayout) is statically inferrable when possible.
+@inline Base.size(bc::LazyDataLayout) =
+    has_inferred_size(bc) ? inferred_size(bc) :
+    unrolled_mapreduce(combine_sizes, bc.args) do arg
+        arg isa Tuple ? (length(arg),) : size(arg) # size(::Tuple) is undefined
+    end
 
 # Make ndims support nested broadcasts whose axes have not been instantiated.
 @inline Base.ndims(::LazyDataLayout{D}) where {D} = ndims(D)

@@ -6,15 +6,10 @@ using StaticArrays
 
 import Base.Broadcast: Broadcasted
 
-import ..slab, ..slab_args, ..column, ..column_args
+import ..level, ..slab, ..column
 import ClimaComms
-import ..Utilities:
-    Cache,
-    new,
-    unwrap,
-    is_auto_broadcastable,
-    add_auto_broadcasters,
-    drop_auto_broadcasters
+import ..Utilities: Utilities, Cache, new, unwrap, is_auto_broadcastable
+import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..DataLayouts
 import ..Geometry: Geometry, ⊗
