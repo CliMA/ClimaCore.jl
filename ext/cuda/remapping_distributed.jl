@@ -2,6 +2,7 @@ import ClimaCore: Topologies, Spaces, Fields, Quadratures
 import ClimaComms
 import CUDA
 using CUDA: @cuda
+import UnrolledUtilities
 import ClimaCore.Remapping: _set_interpolated_values_device!, bilinear, linear
 
 function ClimaCore.Remapping._set_interpolated_values_bilinear!(
@@ -393,15 +394,16 @@ function set_interpolated_values_kernel!(
         v_lo, v_hi = vert_bounding_indices[j]
         A, B = vert_interpolation_weights[j]
 
-        val = zero(eltype(out))
-        for t in 1:Nq
-            val +=
-                I[i, t] * (
-                    A * field_values[k][v_lo, t, 1, h] +
-                    B * field_values[k][v_hi, t, 1, h]
-                )
-        end
-        out[i, j, k] = val
+        out[i, j, k] =
+            UnrolledUtilities.unrolled_applyat(k, field_values) do fvals
+                val = zero(eltype(out))
+                for t in 1:Nq
+                    val +=
+                        I[i, t] *
+                        (A * fvals[v_lo, t, 1, h] + B * fvals[v_hi, t, 1, h])
+                end
+                val
+            end
     end
     return nothing
 end
