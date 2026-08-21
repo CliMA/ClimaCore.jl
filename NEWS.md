@@ -19,13 +19,31 @@ main
   `Upwind3rdOrderBiasedProductC2F`, `LinVanLeerC2F`, `FCTBorisBook`,
   `FCTZalesak`, and `TVDLimitedFluxC2F`) accept, and `Extrapolate{0}` is added
   to an operator's `bcs` when it is constructed with no boundary conditions.
-  It replaces the one-sided conditions, which remain as deprecated aliases:
-  `FirstOrderOneSided == Extrapolate{0}` (identical behavior) and
-  `ThirdOrderOneSided == Extrapolate{1}` (identical at the face one in from
-  each boundary; at the boundary face itself the old condition padded both
-  ghost points with the closest interior value, while `Extrapolate{1}`
-  extrapolates them linearly). User-supplied callable ghost-point
-  reconstructions are no longer accepted. An advection operator is rewritten
+  It replaces the one-sided conditions, which remain as deprecated aliases
+  (`FirstOrderOneSided == Extrapolate{0}` and
+  `ThirdOrderOneSided == Extrapolate{1}`). The aliases are **not**
+  numerically identical to the old conditions: the old conditions replaced
+  the whole stencil with fixed one-sided reconstructions at the two faces
+  nearest each boundary, while `Extrapolate` keeps the interior stencil's
+  upwinding and only pads its ghost points. At the face one in from a
+  boundary, the results coincide exactly when the velocity at that face
+  points toward the boundary (the old downwind-biased reconstruction is then
+  also the upwind choice), and differ when it points into the domain: with
+  inflow `v³` at the second-lowest face and centers `x₁, x₂, x₃` counted up
+  from the boundary, `Upwind3rdOrderBiasedProductC2F` with
+  `ThirdOrderOneSided` gave `v³ (4x₁ + 10x₂ - 2x₃) / 12` and now gives
+  `v³ (x₁ + x₂) / 2` with `Extrapolate{1}`, while with `FirstOrderOneSided`
+  it gave the first-order `v³ x₁` and now gives `v³ (2x₁ + x₂) / 3` with
+  `Extrapolate{0}`. At the boundary face itself the old reconstructions
+  reached one center beyond the boundary, so they were only meaningful under
+  an enclosing operator that overrides the boundary face (e.g.
+  `DivergenceF2C` with `SetValue`); `Extrapolate`'s ghost-point padding is
+  well-defined there. User-supplied callable ghost-point reconstructions are
+  no longer accepted. A boundary condition whose keyword name matches neither
+  of the space's vertical boundary names is now an error at broadcast time
+  (previously it was silently ignored), except for the default
+  `(bottom, top)` pair of `Extrapolate{0}`s, which applies at any boundary
+  names. An advection operator is rewritten
   as an operator-matrix multiply exactly when its interior stencil is linear
   in the advected argument (`Operators.has_linear_stencil`), with the
   ghost-point extrapolations folded into its matrix's boundary rows by
@@ -71,6 +89,26 @@ main
   operator that cannot be represented by a matrix.
   [2544](https://github.com/CliMA/ClimaCore.jl/pull/2544)
 
+- ![][badge-🔥behavioralΔ] Broadcasts over the linear one-argument finite
+  difference operators are now evaluated as operator-matrix multiplies:
+  `@. op(arg)` is rewritten to multiply `arg` by `op`'s operator matrix
+  (`MatrixFields.operator_matrix`), with value-fixing boundary conditions
+  reapplied around the multiply by a `SetBoundaryOperator`. Two user-visible
+  consequences:
+  - A center-input operator (`InterpolateC2F`, `GradientC2F`, `DivergenceC2F`,
+    `CurlC2F`, ...) constructed without a boundary condition now produces a
+    **zero** matrix row at each boundary face, so the result there is a finite
+    zero instead of the `NaN` that previously flagged a forgotten boundary
+    condition. Supply boundary conditions wherever the boundary values matter;
+    a missing one is no longer diagnosed at run time.
+  - `CurlC2F` results are now `Contravariant12Vector`s rather than
+    `Contravariant123Vector`s with a structurally zero third component, since
+    its operator matrix's rows produce the two nonzero components of the
+    vertical curl contribution; `SetCurl` boundary values are projected onto
+    the `Contravariant12` axis accordingly. Code that read the `u³` component
+    of a `CurlC2F` result must drop it (it was always zero).
+  [2544](https://github.com/CliMA/ClimaCore.jl/pull/2544)
+
 - ![][badge-💥breaking] Removed the `Extrapolate` boundary condition from
   `GradientF2C` and `DivergenceF2C`, where it replicated the operator's output
   at the closest interior point (e.g. `G(x)[1] = G(x)[2]`); it remains
@@ -97,7 +135,10 @@ main
   Each of these can be written in terms of the remaining operators and boundary
   conditions; `test/Operators/finitedifference/unit_column.jl` contains a
   testset ("Boundary values and advection built from the primitive operators")
-  that pins each of these expressions against the stencil it reproduces. For
+  that pins the replacement expressions for `SetValue` on `GradientC2F`,
+  `DivergenceC2F` and `UpwindBiasedProductC2F`, and for the `AdvectionC2C`,
+  `AdvectionF2F` and `FluxCorrectionC2C` stencils, against the stencil each
+  reproduces (the remaining removals follow the same patterns). For
   example, a `SetValue(x₀)` boundary on `GradientC2F` is the same as
   `SetGradient(Covariant3Vector(2 * (x[1] - x₀)))`, and `AdvectionC2C(v, θ)` is
   `InterpolateF2C()(dot(Contravariant3Vector(v), GradientC2F()(θ)))`.

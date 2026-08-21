@@ -477,3 +477,152 @@ struct CustomGhost end
         end
     end
 end
+
+@testset "Ghost-point extrapolation on a 2-center column" begin
+    # On a column with only 2 centers, the middle face is one in from both
+    # boundaries: each of its two out-of-range centers is padded with the
+    # extrapolation of its own boundary's condition, from the only 2 in-range
+    # points (so the order is reduced to at most 1, as at a boundary face).
+    for FT in (Float32, Float64)
+        context = ClimaComms.SingletonCommsContext()
+        domain = Domains.IntervalDomain(
+            Geometry.ZPoint(FT(0)),
+            Geometry.ZPoint(FT(1));
+            boundary_names = (:bottom, :top),
+        )
+        mesh = Meshes.IntervalMesh(domain; nelems = 2)
+        topology = Topologies.IntervalTopology(context, mesh)
+        center_space = Spaces.CenterFiniteDifferenceSpace(topology)
+        face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
+        lg_face = Fields.local_geometry_field(face_space)
+
+        cpu(x) = Array(parent(x))[:]
+        θ = sin.(3 .* Fields.coordinate_field(center_space).z)
+        t = cpu(θ)
+        dt = FT(0.1)
+        g2(N, x₁, x₂) = N == 0 ? x₁ : 2x₁ - x₂
+        upwind3rd(v, a⁻⁻, a⁻, a⁺, a⁺⁺) =
+            v ≥ 0 ? v * (-2a⁻⁻ + 10a⁻ + 4a⁺) / 12 :
+            v * (4a⁻ + 10a⁺ - 2a⁺⁺) / 12
+
+        for w_sign in (FT(1), FT(-1)), N in 0:2
+            w = Geometry.WVector.(w_sign .* ones(FT, face_space))
+            v³ = cpu(Geometry.contravariant3.(w, lg_face))
+            A = Geometry.Contravariant3Vector.(w_sign .* ones(FT, face_space))
+            A³ = cpu(A)
+            bcs =
+                (; bottom = Operators.Extrapolate(N), top = Operators.Extrapolate(N))
+
+            g_bot = g2(N, t[1], t[2]) # every bottom ghost
+            g_top = g2(N, t[2], t[1]) # every top ghost
+            stencils = (
+                (g_bot, g_bot, t[1], t[2]), # bottom face
+                (g_bot, t[1], t[2], g_top), # middle face: ghosts on both sides
+                (t[1], t[2], g_top, g_top), # top face
+            )
+
+            op_lvl = Operators.LinVanLeerC2F(;
+                constraint = Operators.AlgebraicMean(),
+                bcs...,
+            )
+            flux_lvl = cpu(op_lvl.(w, θ, dt))
+            @test flux_lvl ≈ [op_lvl(v³[i], stencils[i]..., dt) for i in 1:3]
+
+            op_bb = Operators.FCTBorisBook(; bcs...)
+            flux_bb = cpu(op_bb.(A, θ))
+            @test flux_bb ≈ [op_bb(A³[i], stencils[i]...) for i in 1:3]
+
+            # Upwind3rdOrderBiasedProductC2F is rewritten as an operator-matrix
+            # multiply; at the middle face its boundary row must fold the ghost
+            # extrapolations of both boundaries
+            op_u3 = Operators.Upwind3rdOrderBiasedProductC2F(; bcs...)
+            flux_u3 = cpu(op_u3.(w, θ))
+            @test flux_u3 ≈ [upwind3rd(v³[i], stencils[i]...) for i in 1:3]
+        end
+
+        # On a 1-center column, every stencil point collapses to the single
+        # interior value, so the flux is v³ θ[1] at both faces for any order.
+        mesh1 = Meshes.IntervalMesh(domain; nelems = 1)
+        topology1 = Topologies.IntervalTopology(context, mesh1)
+        center_space1 = Spaces.CenterFiniteDifferenceSpace(topology1)
+        face_space1 = Spaces.FaceFiniteDifferenceSpace(center_space1)
+        lg_face1 = Fields.local_geometry_field(face_space1)
+        θ1 = FT(0.3) .* ones(center_space1)
+        for w_sign in (FT(1), FT(-1)), N in 0:2
+            w1 = Geometry.WVector.(w_sign .* ones(FT, face_space1))
+            v³1 = cpu(Geometry.contravariant3.(w1, lg_face1))
+            bcs =
+                (; bottom = Operators.Extrapolate(N), top = Operators.Extrapolate(N))
+            for flux in (
+                cpu(Operators.UpwindBiasedProductC2F(; bcs...).(w1, θ1)),
+                cpu(Operators.Upwind3rdOrderBiasedProductC2F(; bcs...).(w1, θ1)),
+                cpu(
+                    Operators.LinVanLeerC2F(;
+                        constraint = Operators.AlgebraicMean(),
+                        bcs...,
+                    ).(w1, θ1, dt),
+                ),
+            )
+                @test flux ≈ FT(0.3) .* v³1
+            end
+        end
+    end
+end
+
+@testset "Advection boundary condition names must match the space's" begin
+    for FT in (Float32, Float64)
+        context = ClimaComms.SingletonCommsContext()
+        make_column(boundary_names) = begin
+            domain = Domains.IntervalDomain(
+                Geometry.ZPoint(FT(0)),
+                Geometry.ZPoint(FT(1));
+                boundary_names,
+            )
+            mesh = Meshes.IntervalMesh(domain; nelems = 8)
+            topology = Topologies.IntervalTopology(context, mesh)
+            center_space = Spaces.CenterFiniteDifferenceSpace(topology)
+            (center_space, Spaces.FaceFiniteDifferenceSpace(center_space))
+        end
+        (center_space, face_space) = make_column((:bottom, :top))
+        θ = ones(center_space)
+        w = Geometry.WVector.(ones(FT, face_space))
+        A = Geometry.Contravariant3Vector.(ones(FT, face_space))
+
+        # A boundary condition whose keyword name matches neither of the
+        # space's boundary names is an error at broadcast time, instead of
+        # being silently ignored in favor of the default reconstruction.
+        op_wrong_names = Operators.FCTBorisBook(;
+            left = Operators.Extrapolate(1),
+            right = Operators.Extrapolate(1),
+        )
+        @test_throws "must be named after a boundary" op_wrong_names.(A, θ)
+        op_typo = Operators.Upwind3rdOrderBiasedProductC2F(;
+            botom = Operators.Extrapolate(1), # sic
+            top = Operators.Extrapolate(1),
+        )
+        @test_throws "must be named after a boundary" op_typo.(w, θ)
+
+        # The default (bottom, top) pair of Extrapolate{0}s applies at any
+        # boundary names: constructing the operator with no boundary
+        # conditions works on a space whose boundaries are named differently,
+        # and matches the explicitly-named equivalent.
+        (center_lr, face_lr) = make_column((:left, :right))
+        θ_lr = sin.(3 .* Fields.coordinate_field(center_lr).z)
+        w_lr = Geometry.WVector.(ones(FT, face_lr))
+        default_flux = parent(Operators.Upwind3rdOrderBiasedProductC2F().(w_lr, θ_lr))
+        named_flux = parent(
+            Operators.Upwind3rdOrderBiasedProductC2F(;
+                left = Operators.Extrapolate(0),
+                right = Operators.Extrapolate(0),
+            ).(w_lr, θ_lr),
+        )
+        @test default_flux == named_flux
+        # ... while non-default conditions under mismatched names still error
+        op_bt_on_lr = Operators.FCTBorisBook(;
+            bottom = Operators.Extrapolate(1),
+            top = Operators.Extrapolate(1),
+        )
+        A_lr = Geometry.Contravariant3Vector.(ones(FT, face_lr))
+        @test_throws "must be named after a boundary" op_bt_on_lr.(A_lr, θ_lr)
+    end
+end

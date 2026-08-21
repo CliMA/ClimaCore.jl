@@ -34,6 +34,10 @@ is still traversed for nested nodes that do. The launch configuration multiplies
 value by the number of threads per block to size the dynamic shared memory, so that any
 single node's result is guaranteed to fit and can always be cached. Each node allocates
 that memory at offset 0, so nodes reuse it and must synchronize before writing.
+
+Returns `nothing` when any cached entry type cannot be sized (its inference gave a
+non-concrete type; see `cached_operand_type`), in which case the caller must fall back
+to the lazy `copyto_stencil_kernel!` instead of launching the eager kernel.
 """
 max_eager_shmem_per_thread(x) = 0
 max_eager_shmem_per_thread(bc::Union{Broadcasted, StencilBroadcasted}) =
@@ -41,20 +45,27 @@ max_eager_shmem_per_thread(bc::Union{Broadcasted, StencilBroadcasted}) =
 max_eager_shmem_per_thread(
     bc::StencilBroadcasted{S, <:MultiplyColumnwiseBandMatrixField},
 ) where {S} =
-    max(sizeof(cached_operand_type(bc)), _max_eager_shmem_over_args(bc.args))
+    _shmem_max(_sizeof_or_nothing(cached_operand_type(bc)), _max_eager_shmem_over_args(bc.args))
 max_eager_shmem_per_thread(
     bc::StencilBroadcasted{S, <:Operators.AdvectionOperator},
-) where {S} = max(
-    sizeof(advection_shmem_entry_type(bc)),
+) where {S} = _shmem_max(
+    _sizeof_or_nothing(advection_shmem_entry_type(bc)),
     _max_eager_shmem_over_args(bc.args),
 )
 
 _max_eager_shmem_over_args(args::Tuple) = UnrolledUtilities.unrolled_mapreduce(
     max_eager_shmem_per_thread,
-    max,
+    _shmem_max,
     args;
     init = 0,
 )
+
+# `max` over byte counts, with `nothing` (unsizeable) as an absorbing element.
+_shmem_max(bytes1, bytes2) =
+    isnothing(bytes1) || isnothing(bytes2) ? nothing : max(bytes1, bytes2)
+
+_sizeof_or_nothing(::Nothing) = nothing
+_sizeof_or_nothing(::Type{T}) where {T} = isconcretetype(T) ? sizeof(T) : nothing
 
 """
     cached_operand_type(bc)
@@ -71,24 +82,37 @@ nested inside a `BandMatrixRow`, so no property of the operand's outermost type
 bounds the projected size. Mirror `project_row2_for_mul`'s type-level logic instead
 and infer the projected type, so the buffer is always big enough for what the kernel
 writes into it.
+
+The kernel's multiply handler allocates its shared memory buffer with this same
+function, so the launch-time sizing and the device-side element type cannot go out
+of sync (see `advection_shmem_entry_type` for the same pattern).
+
+Returns `nothing` when the type cannot be determined (an operand's eltype is the
+inference-failure sentinel `Union{}`, or inference of the projection gave a
+non-concrete type); the launch then falls back to the lazy `copyto_stencil_kernel!`,
+which needs no shared memory, instead of erroring.
 """
-function cached_operand_type(bc)
+# The single-argument form is used by the launch-side sizing, where `bc` is not yet
+# space-stripped; the kernel passes the reconstructed operand space explicitly, since
+# a stripped argument's `axes` is a placeholder space with no local geometry type.
+@inline cached_operand_type(bc) = cached_operand_type(bc, axes(bc.args[2i32]))
+@inline function cached_operand_type(bc, mat2_space)
     mat1_type = unsafe_eltype(bc.args[1i32])
     mat2_type = unsafe_eltype(bc.args[2i32])
+    (isconcretetype(mat1_type) && isconcretetype(mat2_type)) || return nothing
     mat1_et = mat1_type <: BandMatrixRow ? eltype(mat1_type) : mat1_type
     project_onto =
         ClimaCore.Geometry.recursively_find_dual_axes_for_projection(mat1_et)
     isnothing(project_onto) && return mat2_type
-    lg_type = Spaces.local_geometry_type(typeof(axes(bc.args[2i32])))
-    projected_type = ClimaCore.Utilities.return_type(
+    lg_type = Spaces.local_geometry_type(typeof(mat2_space))
+    # Core.Compiler.return_type rather than Utilities.return_type: the latter
+    # throws an InferenceError on a non-concrete result, and the caller falls
+    # back to the lazy kernel instead.
+    projected_type = Core.Compiler.return_type(
         recursively_project,
         Tuple{Tuple{typeof(project_onto), lg_type}, mat2_type},
     )
-    isconcretetype(projected_type) || error(
-        "Unable to size the eager finite difference kernel's shared memory: \
-         inference gave the non-concrete type $projected_type for the \
-         projection of a $mat2_type operand onto $project_onto",
-    )
+    isconcretetype(projected_type) || return nothing
     return projected_type
 end
 
@@ -267,8 +291,13 @@ Base.@propagate_inbounds function calc_level_val(
     # The region is dynamic because static shared memory would allocate a new
     # one for each layer of recursion, and it is a 1D array indexed manually
     # because a multi-dimensional shared array indexes incorrectly here.
+    # Allocate with the same `cached_operand_type` the launch-side sizing used, so
+    # the buffer's element size cannot go out of sync with the sizing; writing
+    # `mat2_row_converted` into it converts (a no-op when inference matched the
+    # runtime type, and a loud conversion error -- rather than silent shared-memory
+    # corruption -- if the two ever diverge).
     mat2 = CUDA.CuDynamicSharedArray(
-        typeof(mat2_row_converted),
+        cached_operand_type(bc, mat2_space),
         CUDA.blockDim().x * CUDA.blockDim().y,
     )
     @inbounds mat2[v + (block_col_idx - 1) * CUDA.blockDim().x] = mat2_row_converted
@@ -475,9 +504,12 @@ from the in-range interior points of the stencil, mirroring
 `stencil_interior(::AdvectionOperator, ...)`: at the boundary face
 itself both out-of-range centers share the extrapolation from the 2 in-range
 points, and at the face one in from the boundary the single out-of-range
-center is extrapolated from the 3 in-range points. Every other face is
-unaffected, and keeps the closest-value padding that
-`advection_center_window`'s clamping provides.
+center is extrapolated from the 3 in-range points. The two boundaries are
+handled with independent branches, exactly like `stencil_interior`'s: on a
+2-center column, the middle face is one in from both boundaries, so both of
+its out-of-range centers need their ghost-point extrapolations, each from the
+only 2 in-range points. Every other face is unaffected, and keeps the
+closest-value padding that `advection_center_window`'s clamping provides.
 """
 @inline function advection_ghost_values(
     op,
@@ -502,8 +534,9 @@ unaffected, and keeps the closest-value padding that
                 op,
                 Operators.left_boundary_window(space),
             )
-            a⁻⁻ = bc(a⁻, a⁺, a⁺⁺)
-        elseif v == n_faces
+            a⁻⁻ = v == n_faces - 1i32 ? bc(a⁻, a⁺) : bc(a⁻, a⁺, a⁺⁺)
+        end
+        if v == n_faces
             bc = Operators.get_boundary(
                 op,
                 Operators.right_boundary_window(space),
@@ -514,7 +547,7 @@ unaffected, and keeps the closest-value padding that
                 op,
                 Operators.right_boundary_window(space),
             )
-            a⁺⁺ = bc(a⁺, a⁻, a⁻⁻)
+            a⁺⁺ = v == 2i32 ? bc(a⁺, a⁻) : bc(a⁺, a⁻, a⁻⁻)
         end
     end
     return (a⁻⁻, a⁻, a⁺, a⁺⁺)
@@ -604,6 +637,13 @@ single value along the missing dimensions, and are broadcast across them: a
 level field has no vertical dimension, and a column field has no horizontal
 dimensions. Those dimensions are read at index 1, matching `Operators.vidx` and
 `Operators.hindices`.
+
+The space gate below decides which case a field is by its space type, so any
+space family with a vertical dimension that is not an
+`ExtrudedFiniteDifferenceSpace` or `FiniteDifferenceSpace` (e.g.
+`MultiColumnFiniteDifferenceSpace`) would be misread as a level field and read
+entirely at level 1; such families must not reach the eager kernel (see the
+`eager_supported` launch gate in `operators_finite_difference.jl`).
 """
 Base.@propagate_inbounds function calc_level_val(
     arg::F,
@@ -639,19 +679,31 @@ Base.@propagate_inbounds function calc_level_val(
     BC <:
     StencilBroadcasted{S, <:FDOperatorMatrix},
 }
-    op = bc.op.op
+    op_matrix = bc.op
     args = bc.args
-    val = @inbounds @inline get_op_row(op, args, hidx, space)
+    val = @inbounds @inline get_op_row(op_matrix, args, hidx, space)
     return val
 end
 
 """
-    get_op_row(op, args, hidx, space)
+    get_op_row(op_matrix, args, hidx, space)
 
 Get the correct row of the operator matrix for the current thread, taking into account boundary conditions.
+
+Takes the broadcasted `FDOperatorMatrix` itself rather than rebuilding one from its
+wrapped operator: the `FDOperatorMatrix` constructor carries a value-dependent
+`has_affine_bc` check with an `@warn`, which cannot be compiled into device code when
+the operator still holds a value-fixing boundary condition (as it does through the
+public `MatrixFields.operator_matrix` API, which does not strip boundary conditions).
 """
 
-Base.@propagate_inbounds function get_op_row(op, args, hidx, space)
+Base.@propagate_inbounds function get_op_row(
+    op_matrix::FDOperatorMatrix,
+    args,
+    hidx,
+    space,
+)
+    op = op_matrix.op
     FT = Spaces.undertype(space)
     v = threadIdx().x
 
@@ -664,7 +716,6 @@ Base.@propagate_inbounds function get_op_row(op, args, hidx, space)
     in_left_bnd = Operators.should_call_left_boundary(v_half, space, op, nothing)
     in_right_bnd =
         Operators.should_call_right_boundary(v_half, space, op, nothing)
-    op_matrix = FDOperatorMatrix(op)
     if in_left_bnd
         lloc = Operators.left_boundary_window(space)
         left_bndry = Operators.get_boundary(op, lloc)

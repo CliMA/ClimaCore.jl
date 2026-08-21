@@ -50,10 +50,22 @@ function Base.copyto!(
     # non-periodic spaces), as are masked spaces. High-resolution columns (more face
     # levels than fit in a block) fall through to `copyto_stencil_kernel!` below.
     # TODO: auto reduce max reg usage when needed because of high res columns
-    # Size the dynamic shared memory to fit the largest single expression result in
-    # the broadcasted tree (see `max_eager_shmem_per_thread`)
-    eager_shmem_per_thread = max_eager_shmem_per_thread(bc)
-    if !high_resolution
+    # The eager kernel's per-level indexing (`calc_level_val` for `Field`s, and
+    # `has_padding_thread`) is written for the extruded and single-column space
+    # families; any other family (e.g. `MultiColumnFiniteDifferenceSpace`, which
+    # `calc_level_val`'s space gate would misread as a level field and evaluate
+    # entirely at level 1) must take the lazy kernel below.
+    eager_supported =
+        space isa Union{
+            Spaces.ExtrudedFiniteDifferenceSpace,
+            Spaces.FiniteDifferenceSpace,
+        }
+    if !high_resolution && eager_supported
+        # Size the dynamic shared memory to fit the largest single expression result
+        # in the broadcasted tree; `nothing` means an expression's cached entry type
+        # could not be sized (non-concrete inference), so the eager kernel cannot be
+        # launched and the lazy kernel below (which needs no shared memory) is used.
+        eager_shmem_per_thread = max_eager_shmem_per_thread(bc)
         # mask.N holds the active column count in a one-element device array;
         # reading it on the host needs @allowscalar.
         n_columns =
@@ -66,10 +78,12 @@ function Base.copyto!(
         # TODO: get this value from CUDA.jl to better optimize for different GPUs
         threads_dim_y = n_columns > 256 * 108 ? div(256, n_face_levels) : 1
         block_dim_x = div(n_columns, threads_dim_y, RoundUp)
-        eager_shmem = n_face_levels * threads_dim_y * eager_shmem_per_thread
+        eager_shmem =
+            isnothing(eager_shmem_per_thread) ? nothing :
+            n_face_levels * threads_dim_y * eager_shmem_per_thread
         # use fallback lazy evaluation if the eager kernel would exceed the
         # device's per-block shared memory
-        if eager_shmem ≤ max_shmem
+        if !isnothing(eager_shmem) && eager_shmem ≤ max_shmem
             # `axes(out)` is passed as the space the kernel evaluates `bc` on, since
             # `out` and `bc` are space-stripped. The kernel recovers the output
             # layout's horizontal extents from the type parameters of

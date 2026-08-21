@@ -861,7 +861,22 @@ Base.@propagate_inbounds function op_matrix_first_row(
     nghost =
         Operators.boundary_width(op, bc) -
         (idx - Operators.left_face_boundary_idx(space))
-    return fold_extrapolate_row_left(row, bc, nghost)
+    # On a short column the row can also reach ghost points beyond the right
+    # boundary (the middle face of a 2-center column is one in from both
+    # boundaries, and both faces of a 1-center column reach ghosts on both
+    # sides). `should_call_left_boundary` takes precedence, so this row must
+    # fold the right boundary's ghosts as well, with the order of both
+    # extrapolations reduced to the number of in-range points.
+    bc_right =
+        Operators.get_boundary(op, Operators.right_boundary_window(space))
+    nghost_right = max(
+        Operators.boundary_width(op, bc_right) -
+        (Operators.right_face_boundary_idx(space) - idx),
+        0,
+    )
+    row = fold_extrapolate_row_left(row, bc, nghost, nghost_right)
+    nghost_right == 0 && return row
+    return fold_extrapolate_row_right(row, bc_right, nghost_right, nghost)
 end
 Base.@propagate_inbounds function op_matrix_last_row(
     op::ExtrapolateAdvectionOp,
@@ -875,23 +890,42 @@ Base.@propagate_inbounds function op_matrix_last_row(
     nghost =
         Operators.boundary_width(op, bc) -
         (Operators.right_face_boundary_idx(space) - idx)
-    return fold_extrapolate_row_right(row, bc, nghost)
+    # This row cannot also reach the left boundary's ghost points in practice
+    # (`should_call_left_boundary` takes precedence, so overlapping faces are
+    # routed to `op_matrix_first_row`), but fold them like `op_matrix_first_row`
+    # does for symmetry and robustness.
+    bc_left =
+        Operators.get_boundary(op, Operators.left_boundary_window(space))
+    nghost_left = max(
+        Operators.boundary_width(op, bc_left) -
+        (idx - Operators.left_face_boundary_idx(space)),
+        0,
+    )
+    row = fold_extrapolate_row_right(row, bc, nghost, nghost_left)
+    nghost_left == 0 && return row
+    return fold_extrapolate_row_left(row, bc_left, nghost_left, nghost)
 end
 
 # `interior row * E` written out: the `nghost` out-of-range entries on the
 # boundary side are zeroed, and their sum, weighted by the extrapolation
 # weights of the in-range points ordered from the boundary outwards, is added
-# to the in-range entries. `extrapolate_weights` returns 3 weights, which is
-# enough for any row with up to 4 entries (a row with at least 1 ghost entry
-# has at most 3 in-range ones).
+# to the in-range entries. `nother` is the number of out-of-range entries on
+# the opposite side of the row (nonzero only on 1- and 2-center columns);
+# they reduce the extrapolation order like the in-range count does, and the
+# trailing zeros of `extrapolate_weights`'s 3-tuple keep them untouched here,
+# so that the opposite boundary's fold (applied before or after this one) can
+# zero them and fold their coefficients itself. `extrapolate_weights` returns
+# 3 weights, which is enough for any row with up to 4 entries (a row with at
+# least 1 ghost entry has at most 3 others).
 @inline function fold_extrapolate_row_left(
     row::BandMatrixRow{ld, bw},
     bc::Operators.Extrapolate,
     nghost,
+    nother = 0,
 ) where {ld, bw}
     entries = row.entries
     z = zero(first(entries))
-    w = Operators.extrapolate_weights(bc, bw - nghost)
+    w = Operators.extrapolate_weights(bc, bw - nghost - nother)
     ghost_sum = reduce(+, ntuple(k -> k <= nghost ? entries[k] : z, Val(bw)))
     return BandMatrixRow{ld}(
         ntuple(
@@ -904,15 +938,19 @@ end
     row::BandMatrixRow{ld, bw},
     bc::Operators.Extrapolate,
     nghost,
+    nother = 0,
 ) where {ld, bw}
     entries = row.entries
     z = zero(first(entries))
-    navail = bw - nghost
-    w = Operators.extrapolate_weights(bc, navail)
-    ghost_sum = reduce(+, ntuple(k -> k > navail ? entries[k] : z, Val(bw)))
+    w = Operators.extrapolate_weights(bc, bw - nghost - nother)
+    last_in_range = bw - nghost
+    ghost_sum =
+        reduce(+, ntuple(k -> k > last_in_range ? entries[k] : z, Val(bw)))
     return BandMatrixRow{ld}(
         ntuple(
-            j -> j > navail ? z : entries[j] + ghost_sum * w[navail + 1 - j],
+            j ->
+                j > last_in_range ? z :
+                entries[j] + ghost_sum * w[last_in_range + 1 - j],
             Val(bw),
         )...,
     )

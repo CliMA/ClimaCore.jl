@@ -248,10 +248,18 @@ end
     )
 
 # Deprecated aliases for the one-sided reconstruction boundary conditions that
-# Extrapolate replaces. Note that ThirdOrderOneSided is not numerically
-# identical to its old definition: at the boundary face itself, the old
-# condition padded both ghost points with the closest interior value, while
-# Extrapolate{1} extrapolates them linearly.
+# Extrapolate replaces. Note that the aliases are NOT numerically identical to
+# the old conditions: the old conditions replaced the whole stencil with fixed
+# one-sided reconstructions at the two faces nearest each boundary, while
+# Extrapolate keeps the interior stencil's upwinding and only pads its ghost
+# points. At the face one in from a boundary the two coincide exactly when the
+# velocity at that face points toward the boundary (the old downwind-biased
+# reconstruction is then also the upwind choice) and differ when it points
+# into the domain (see NEWS.md for the stencils). At the boundary face itself
+# the old reconstructions reached one center beyond the boundary, so they were
+# only usable under an enclosing operator that overrides that face (e.g.
+# DivergenceF2C with SetValue); Extrapolate's ghost-point padding is
+# well-defined there.
 Base.@deprecate_binding FirstOrderOneSided Extrapolate{0} false
 Base.@deprecate_binding ThirdOrderOneSided Extrapolate{1} false
 
@@ -1002,9 +1010,9 @@ is_linear_reconstruction(::Extrapolate) = true
 # When no boundary conditions are supplied, advection operators default to
 # Extrapolate{0} at both boundaries (`bottom` and `top` are the canonical
 # vertical boundary names).
+const default_advection_bcs = (; bottom = Extrapolate(), top = Extrapolate())
 advection_bcs(kwargs) =
-    isempty(kwargs) ? (; bottom = Extrapolate(), top = Extrapolate()) :
-    NamedTuple(kwargs)
+    isempty(kwargs) ? default_advection_bcs : NamedTuple(kwargs)
 
 # Advection operators never use NullBoundaryCondition: a boundary whose name
 # has no entry in `bcs` (e.g. when the vertical boundaries are not named
@@ -1019,6 +1027,30 @@ get_boundary(
 ) where {name} = get_advection_boundary(op.bcs, name)
 get_advection_boundary(bcs::NamedTuple, name::Symbol) =
     hasfield(typeof(bcs), name) ? getfield(bcs, name) : Extrapolate()
+
+# A `bcs` entry whose name matches neither of the space's boundary names would
+# silently be ignored in favor of the Extrapolate{0} fallback above, so catch
+# mismatched names when the space is known (at broadcast instantiation, via
+# `return_space`). Names that miss are only tolerated when `bcs` is exactly
+# the default inserted by `advection_bcs`, whose reconstruction the fallback
+# reproduces at any boundary name; on periodic spaces there are no boundaries
+# and `bcs` is ignored altogether. Everything here is in the type domain, so
+# the check folds away for valid broadcasts.
+@inline function assert_valid_advection_bc_names(op::AdvectionOperator, space)
+    op.bcs === default_advection_bcs && return nothing
+    Topologies.isperiodic(space) && return nothing
+    names =
+        (Spaces.left_boundary_name(space), Spaces.right_boundary_name(space))
+    UU.unrolled_all(name -> name in names, keys(op.bcs)) ||
+        invalid_advection_bc_names_error(typeof(op), keys(op.bcs), names)
+    return nothing
+end
+@noinline invalid_advection_bc_names_error(op_type, bc_names, space_names) =
+    error(
+        "Every boundary condition of $(op_type.name.name) must be named \
+         after a boundary of the space ($(join(space_names, ", "))); \
+         got ($(join(bc_names, ", ")))",
+    )
 # The stencil returns Contravariant3Vector(op(...)), where op's result combines
 # the contravariant3 component of a velocity element with the advected field's
 # stencil values using ordinary arithmetic. For tuple-valued fields, both of
@@ -1055,12 +1087,15 @@ function return_eltype(op::AdvectionOperator, V, arg, extra_params...)
         ),
     )
 end
-return_space(
-    ::AdvectionOperator,
+function return_space(
+    op::AdvectionOperator,
     velocity_space::AllFaceFiniteDifferenceSpace,
     arg_space::AllCenterFiniteDifferenceSpace,
     extra_param_spaces...,
-) = velocity_space
+)
+    assert_valid_advection_bc_names(op, velocity_space)
+    return velocity_space
+end
 advection_velocity_width(::AdvectionOperator) = Val(:current)
 velocity_stencil_width(::Val{:current}) = (0, 0)
 velocity_stencil_width(::Val{:neighboring}) = (-1, 1)
@@ -1180,19 +1215,26 @@ Base.@propagate_inbounds function stencil_interior(
         # of the stencil: at the boundary face itself, both out-of-range
         # centers share the extrapolation from the 2 in-range points, and at
         # the face one in from the boundary the single out-of-range center is
-        # extrapolated from the 3 in-range points (see AdvectionOperator).
-        if idx == left_face_boundary_idx(space)
+        # extrapolated from the 3 in-range points (see AdvectionOperator). The
+        # two boundaries are handled with independent branches: on a 2-center
+        # column, the middle face is one in from both boundaries, so both of
+        # its out-of-range centers need their ghost-point extrapolations, each
+        # from the only 2 in-range points.
+        lf = left_face_boundary_idx(space)
+        rf = right_face_boundary_idx(space)
+        if idx == lf
             bc = get_boundary(op, left_boundary_window(space))
             a⁻⁻ = a⁻ = bc(a⁺, a⁺⁺)
-        elseif idx == left_face_boundary_idx(space) + 1
+        elseif idx == lf + 1
             bc = get_boundary(op, left_boundary_window(space))
-            a⁻⁻ = bc(a⁻, a⁺, a⁺⁺)
-        elseif idx == right_face_boundary_idx(space)
+            a⁻⁻ = idx == rf - 1 ? bc(a⁻, a⁺) : bc(a⁻, a⁺, a⁺⁺)
+        end
+        if idx == rf
             bc = get_boundary(op, right_boundary_window(space))
             a⁺⁺ = a⁺ = bc(a⁻, a⁻⁻)
-        elseif idx == right_face_boundary_idx(space) - 1
+        elseif idx == rf - 1
             bc = get_boundary(op, right_boundary_window(space))
-            a⁺⁺ = bc(a⁺, a⁻, a⁻⁻)
+            a⁺⁺ = idx == lf + 1 ? bc(a⁺, a⁻) : bc(a⁺, a⁻, a⁻⁻)
         end
         (a⁻⁻, a⁻, a⁺, a⁺⁺)
     end
@@ -1250,12 +1292,6 @@ has_linear_interior(::UpwindBiasedProductC2F) = true
 
 return_eltype(::UpwindBiasedProductC2F, V, A) =
     Geometry.Contravariant3Vector{eltype(eltype(V))}
-
-return_space(
-    ::UpwindBiasedProductC2F,
-    velocity_space::AllFaceFiniteDifferenceSpace,
-    arg_space::AllCenterFiniteDifferenceSpace,
-) = velocity_space
 
 upwind_biased_product(v, a⁻, a⁺) = ((v + abs(v)) * a⁻ + (v - abs(v)) * a⁺) / 2
 
@@ -1418,13 +1454,6 @@ has_linear_interior(::Upwind3rdOrderBiasedProductC2F) = true
 
 return_eltype(::Upwind3rdOrderBiasedProductC2F, V, A) =
     Geometry.Contravariant3Vector{eltype(eltype(V))}
-
-return_space(
-    ::Upwind3rdOrderBiasedProductC2F,
-    velocity_space::AllFaceFiniteDifferenceSpace,
-    arg_space::AllCenterFiniteDifferenceSpace,
-) = velocity_space
-
 
 stencil_interior_width(::Upwind3rdOrderBiasedProductC2F, velocity, arg) =
     ((0, 0), (-half - 1, half + 1))
@@ -1737,7 +1766,7 @@ The following boundary conditions are supported:
  - [`SetGradient(val)`](@ref): set the value to be `val` on the boundary, projected onto
    the `Covariant3` axis.
  - [`SetCurl(val)`](@ref): set the value to be `val` on the boundary, projected onto the
-   `Contravariant123` axis.
+   `Contravariant12` axis (the axis of [`CurlC2F`](@ref)'s output).
  - [`SetDivergence(val)`](@ref): set the value to be `val` on the boundary.
 
 The projecting conditions exist so that this operator can reapply the boundary conditions
@@ -1797,9 +1826,13 @@ Base.@propagate_inbounds imposed_boundary_value(
     getidx(space, bc.val, nothing, hidx),
     Geometry.LocalGeometry(space, idx, hidx),
 )
+# Project onto Contravariant12, not Contravariant123: CurlC2F's operator
+# matrix produces Contravariant12Vector entries (see `op_matrix_row_type` for
+# CurlFiniteDifferenceOperator), so a wider boundary value would make getidx
+# return a Union of the two vector types across the column.
 Base.@propagate_inbounds imposed_boundary_value(bc::SetCurl, space, idx, hidx) =
     Geometry.project(
-        Geometry.Contravariant123Axis(),
+        Geometry.Contravariant12Axis(),
         getidx(space, bc.val, nothing, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
@@ -2581,8 +2614,17 @@ function window_bounds(space, bc)
         lw = left_interior_window_idx(bc, space, lbw)::typeof(li)
         ri = right_idx(space)
         rw = right_interior_window_idx(bc, space, rbw)::typeof(ri)
+        # On a short column the two boundary windows can overlap (e.g. a
+        # 4-wide advection stencil on a 2-center column, whose middle face is
+        # within a stencil width of both boundaries), crossing `lw` past `rw`.
+        # Boundary handling is dispatched per index (`should_call_left_boundary`
+        # takes precedence over the right), so the window split only needs to
+        # cover each index exactly once: clamp the crossed bounds into an
+        # empty interior window, with the overlap assigned to the left window.
+        lw = min(lw, ri + 1)
+        rw = max(rw, lw - 1)
     end
-    @assert li <= lw <= rw <= ri
+    @assert li <= lw <= rw + 1 && rw <= ri
     return (li, lw, rw, ri)
 end
 
