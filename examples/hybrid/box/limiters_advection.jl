@@ -1,14 +1,14 @@
-#=
-julia --project=.buildkite
-ARGS = ["cosine_bells"];
-# ARGS = ["gaussian_bells"];
-# ARGS = ["slotted_spheres"];
-using Revise; include(joinpath("examples", "hybrid", "box", "limiters_advection.jl"))
-=#
+# Solid-body advection of tracers on a 3D Cartesian box, with the
+# bounds-preserving quasimonotone horizontal limiter. The flow returns the
+# tracers to their starting point, so the final field should match the initial
+# one; the run reports the L₁, L₂, and L∞ errors against the initial field.
+# Choose the initial condition with a command-line argument: `cosine_bells`
+# (default), `gaussian_bells`, or `slotted_spheres`.
 using ClimaComms
+using Test
 ClimaComms.@import_required_backends
 using LinearAlgebra
-using SciMLBase
+import ClimaTimeSteppers as CTS
 
 import ClimaCore:
     Domains,
@@ -22,7 +22,6 @@ import ClimaCore:
     Limiters,
     slab
 import ClimaCore.Geometry: ⊗
-import ClimaTimeSteppers as CTS
 
 import Logging
 import TerminalLoggers
@@ -39,7 +38,6 @@ Estimate convergence rate given vectors `err` and `Δh`
     log(err_k/err_m) ≈ log((Δh_k/Δh_m)^p)
     log(err_k/err_m) ≈ p*log(Δh_k/Δh_m)
     log(err_k/err_m)/log(Δh_k/Δh_m) ≈ p
-
 """
 convergence_rate(err, Δh) =
     [log(err[i] / err[i - 1]) / log(Δh[i] / Δh[i - 1]) for i in 2:length(Δh)]
@@ -89,9 +87,10 @@ function hvspace_3D(
     return (cspace, fspace)
 end
 
-# Advection problem on a 3D Cartesian domain with bounds-preserving quasimonotone horizontal limiter.
-# The initial condition can be set via a command line argument.
-# Possible test cases are: cosine_bells (default), gaussian_bells, and slotted_spheres
+# Advection problem on a 3D Cartesian domain with bounds-preserving
+# quasimonotone horizontal limiter. The initial condition can be set via a
+# command line argument. Possible test cases are: cosine_bells (default),
+# gaussian_bells, and slotted_spheres
 
 # Set up physical parameters
 Base.@kwdef struct LimAdvectionParams{FT}
@@ -209,15 +208,7 @@ end
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
-function linkfig(figpath, alt = "")
-    rpath = relpath(figpath, joinpath(@__DIR__, "../../.."))
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$rpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
-end
+include(joinpath(@__DIR__, "../..", "example_utils.jl")) # linkfig
 
 function local_velocity(params, coord, t)
     (; u0, flow_center, end_time, zmax) = params
@@ -305,7 +296,7 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
         limiter = Limiters.QuasiMonotoneLimiter(q_init),
         params,
     )
-    prob = SciMLBase.ODEProblem(
+    prob = CTS.ODEProblem(
         CTS.ClimaODEFunction(;
             T_lim! = horizontal_tendency!,
             T_exp! = vertical_tendency!,
@@ -316,7 +307,7 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
         (0.0, end_time),
         parameters,
     )
-    sol = SciMLBase.solve(
+    sol = CTS.solve(
         prob,
         CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
         dt = dt,
@@ -325,9 +316,21 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
 
     q_final = sol.u[end].ρq ./ sol.u[end].ρ
     Δh[k] = (xmax - xmin) / horz_ne
-    L1err[k] = norm((q_final .- q_init) ./ q_init, 1)
-    L2err[k] = norm((q_final .- q_init) ./ q_init)
-    Linferr[k] = norm((q_final .- q_init) ./ q_init, Inf)
+    # Error norms are normalized by the initial tracer's norm, not pointwise
+    # by `q_init`: the Gaussian bells decay to ~0 away from the centers, and
+    # dividing by that produces unbounded "errors" where nothing is wrong.
+    L1err[k] = norm(q_final .- q_init, 1) / norm(q_init, 1)
+    L2err[k] = norm(q_final .- q_init) / norm(q_init)
+    Linferr[k] = norm(q_final .- q_init, Inf) / norm(q_init, Inf)
+
+    # Only the horizontal transport passes through the limiter (`T_lim!`); the
+    # vertical transport does not, so it can overshoot. Bound the excursion at
+    # 10% of the tracer range (measured: up to 5.6% across the resolutions),
+    # and require exact tracer mass conservation from the weak-form divergence.
+    q_range = maximum(q_init) - minimum(q_init)
+    @test minimum(q_final) ≥ minimum(q_init) - 0.1 * q_range
+    @test maximum(q_final) ≤ maximum(q_init) + 0.1 * q_range
+    @test abs(sum(sol.u[end].ρq) - sum(sol.u[1].ρq)) / abs(sum(sol.u[1].ρq)) < 1e-10
 
     @info "Test case: $(name(test_case))"
     @info "With limiter: $(lim_flag)"
@@ -342,6 +345,19 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
     @info "L₂ error at $(n_steps) time steps, t = $(end_time) (s): ", L2err[k]
     @info "L∞ error at $(n_steps) time steps, t = $(end_time) (s): ", Linferr[k]
 end
+
+# The error is not strictly monotone under refinement at these coarse
+# resolutions (the limiter clips differently on each mesh), but the finest run
+# must beat the coarsest. The final bound is set by the initial condition at
+# these bilinear (Nij = 2) elements: the cosine bells are resolved (measured
+# L₁: 0.057, 0.077, 0.052, 0.048), the slotted spheres are discontinuous
+# (0.28, 0.31, 0.22, 0.21), and the narrow Gaussian bells are underresolved
+# even on the finest mesh (1.51, 1.08, 0.76, 0.72).
+final_L1_bound =
+    test_case isa GaussianBells ? 0.8 :
+    (test_case isa SlottedSpheres ? 0.3 : 0.1)
+@test L1err[end] < L1err[1]
+@test L1err[end] < final_L1_bound
 
 # Print convergence rate info
 conv = convergence_rate(L2err, Δh)
@@ -360,7 +376,10 @@ Plots.png(
     ),
     joinpath(path, "L1error.png"),
 )
-linkfig(joinpath(path, "L1error.png"), "L₁ error Vs Nₑ")
+linkfig(
+    relpath(joinpath(path, "L1error.png"), joinpath(@__DIR__, "../../..")),
+    "L₁ error Vs Nₑ",
+)
 
 
 # L₂ error Vs number of elements
@@ -375,7 +394,10 @@ Plots.png(
     ),
     joinpath(path, "L2error.png"),
 )
-linkfig(joinpath(path, "L2error.png"), "L₂ error Vs Nₑ")
+linkfig(
+    relpath(joinpath(path, "L2error.png"), joinpath(@__DIR__, "../../..")),
+    "L₂ error Vs Nₑ",
+)
 
 # L∞ error Vs number of elements
 Plots.png(
@@ -389,4 +411,7 @@ Plots.png(
     ),
     joinpath(path, "Linferror.png"),
 )
-linkfig(joinpath(path, "Linferror.png"), "L∞ error Vs Nₑ")
+linkfig(
+    relpath(joinpath(path, "Linferror.png"), joinpath(@__DIR__, "../../..")),
+    "L∞ error Vs Nₑ",
+)

@@ -1,10 +1,3 @@
-#=
-julia --project=.buildkite
-ENV["CLIMACOMMS_DEVICE"]="CUDA";
-using Revise; include("test/MatrixFields/multiple_field_solve_reproducer_1.jl")
-
-# TODO: simplify this reproducer
-=#
 using Test
 using StaticArrays
 import LinearAlgebra: I
@@ -91,7 +84,16 @@ get_jac_type(
     space::Union{Spaces.PointSpace, Spaces.SpectralElementSpace2D},
     FT,
 ) = MatrixFields.DiagonalMatrixRow{FT};
-get_j_field(space, FT) = zeros(get_jac_type(space, FT), space)
+# Identity Jacobian blocks (rather than zeros): the kernel this file
+# reproduces is compiled from the block *types*, not their values, and an
+# invertible matrix lets the result be asserted below instead of only
+# checking that the solve does not crash.
+function get_j_field(space, FT)
+    j_field = zeros(get_jac_type(space, FT), space)
+    identity_row = one(eltype(j_field))
+    fill!(j_field, identity_row)
+    return j_field
+end
 
 implicit_blocks = MatrixFields.unrolled_map(
     var ->
@@ -108,4 +110,17 @@ A = MatrixFields.replace_name_tree(A_mf, keys(b).name_tree);
 alg = MatrixFields.BlockDiagonalSolve();
 solver = MatrixFields.FieldMatrixSolver(alg, A_mf, vector);
 (; cache) = solver;
+
+# With A = I on the implicit blocks and A = -I on the explicit blocks,
+# solving A * x = b for b ≡ 1 must give x ≡ 1 and x ≡ -1 respectively.
+b_vec .= FT(1);
 MatrixFields.run_field_matrix_solver!(alg, cache, x, A, b)
+
+@testset "multiple field solve reproducer 1" begin
+    for var in implicit_vars
+        @test all(==(FT(1)), parent(MatrixFields.get_field(vector, var)))
+    end
+    for var in explicit_vars
+        @test all(==(FT(-1)), parent(MatrixFields.get_field(vector, var)))
+    end
+end

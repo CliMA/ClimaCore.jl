@@ -1,7 +1,7 @@
 abstract type AbstractSpectralElementSpace <: AbstractSpace end
 
 Topologies.nlocalelems(space::AbstractSpectralElementSpace) =
-    Topologies.nlocalelems(Spaces.topology(space))
+    Topologies.nlocalelems(topology(space))
 
 
 
@@ -12,7 +12,7 @@ horizontal_space(space::AbstractSpectralElementSpace) = space
 nlevels(space::AbstractSpectralElementSpace) = 1
 
 eachslabindex(space::AbstractSpectralElementSpace) =
-    1:Topologies.nlocalelems(Spaces.topology(space))
+    1:Topologies.nlocalelems(topology(space))
 
 staggering(space::AbstractSpectralElementSpace) = nothing
 
@@ -28,20 +28,20 @@ function Base.show(io::IO, space::AbstractSpectralElementSpace)
     if hasfield(typeof(grid(space)), :topology)
         # some reduced spaces (like slab space) do not have topology
         print(iio, " "^(indent + 2), "context: ")
-        Topologies.print_context(iio, Spaces.topology(grid(space)).context)
+        Topologies.print_context(iio, topology(grid(space)).context)
         println(iio)
         println(
             iio,
             " "^(indent + 2),
             "mesh: ",
-            Spaces.topology(grid(space)).mesh,
+            topology(grid(space)).mesh,
         )
     end
     print(
         iio,
         " "^(indent + 2),
         "quadrature: ",
-        Spaces.quadrature_style(grid(space)),
+        quadrature_style(grid(space)),
     )
 end
 
@@ -55,7 +55,6 @@ end
         quadrature_style::Quadratures.QuadratureStyle;
         kwargs...
     )
-
 """
 struct SpectralElementSpace1D{G} <: AbstractSpectralElementSpace
     grid::G
@@ -64,11 +63,13 @@ space(grid::Grids.SpectralElementGrid1D, ::Nothing) =
     SpectralElementSpace1D(grid)
 space(grid::Grids.LevelGrid{<:Grids.ExtrudedSpectralElementGrid2D}, ::Nothing) =
     SpectralElementSpace1D(grid)
-grid(space::Spaces.SpectralElementSpace1D) = getfield(space, :grid)
+grid(space::SpectralElementSpace1D) = getfield(space, :grid)
 
 local_geometry_type(::Type{SpectralElementSpace1D{G}}) where {G} =
     local_geometry_type(G)
 
+Adapt.adapt_structure(to, space::SpectralElementSpace1D) =
+    SpectralElementSpace1D(Adapt.adapt(to, grid(space)))
 
 function SpectralElementSpace1D(
     topology::Topologies.IntervalTopology,
@@ -99,7 +100,7 @@ space(grid::Grids.LevelGrid{<:Grids.ExtrudedSpectralElementGrid3D}, ::Nothing) =
 local_geometry_type(::Type{SpectralElementSpace2D{G}}) where {G} =
     local_geometry_type(G)
 
-grid(space::Spaces.SpectralElementSpace2D) = getfield(space, :grid)
+grid(space::SpectralElementSpace2D) = getfield(space, :grid)
 
 function SpectralElementSpace2D(
     topology::Topologies.Topology2D,
@@ -112,14 +113,6 @@ end
 
 Adapt.adapt_structure(to, space::SpectralElementSpace2D) =
     SpectralElementSpace2D(Adapt.adapt(to, grid(space)))
-
-
-function issubspace(
-    hspace::SpectralElementSpace2D{<:Grids.SpectralElementGrid2D},
-    level_space::SpectralElementSpace2D{<:Grids.LevelGrid},
-)
-    return grid(hspace) === grid(level_space).full_grid.horizontal_grid
-end
 
 """
     SpectralElementSpaceSlab <: AbstractSpace
@@ -134,6 +127,22 @@ end
 local_geometry_type(::Type{SpectralElementSpaceSlab{Q, G}}) where {Q, G} =
     eltype(G) # calls eltype from DataLayouts
 
+issubspace(space1::SpectralElementSpaceSlab, space2::SpectralElementSpaceSlab) =
+    space1 == space2
+issubspace(space1::AbstractSpectralElementSpace, space2::AbstractSpectralElementSpace) =
+    horizontal_grid(grid(space1)) === horizontal_grid(grid(space2))
+
+level(space::AbstractSpectralElementSpace, v) =
+    isone(v) ? space : throw(ArgumentError("Space only has one level"))
+
+Base.@propagate_inbounds slab(space::AbstractSpectralElementSpace, v, h) =
+    isone(v) ? slab(space, h) : throw(ArgumentError("Space has only one level"))
+Base.@propagate_inbounds slab(space::AbstractSpectralElementSpace, h) =
+    SpectralElementSpaceSlab(quadrature_style(space), slab(local_geometry_data(space), h))
+
+Base.@propagate_inbounds column(space::AbstractSpectralElementSpace, indices...) =
+    PointSpace(ClimaComms.context(space), column(local_geometry_data(space), indices...))
+
 """
     Spaces.node_horizontal_length_scale(space::AbstractSpectralElementSpace)
 
@@ -146,37 +155,11 @@ Returns a default length scale of 1 when no space is provided.
 function node_horizontal_length_scale(space::AbstractSpectralElementSpace)
     quad = quadrature_style(space)
     Nu = Quadratures.unique_degrees_of_freedom(quad)
-    return Meshes.element_horizontal_length_scale(Spaces.topology(space).mesh) /
+    return Meshes.element_horizontal_length_scale(topology(space).mesh) /
            Nu
 end
 
 node_horizontal_length_scale(::Nothing) = 1
-
-
-Base.@propagate_inbounds function slab(
-    space::AbstractSpectralElementSpace,
-    v,
-    h,
-)
-    SpectralElementSpaceSlab(
-        quadrature_style(space),
-        slab(local_geometry_data(space), v, h),
-    )
-end
-Base.@propagate_inbounds slab(space::AbstractSpectralElementSpace, h) =
-    @inbounds slab(space, 1, h)
-
-Base.@propagate_inbounds function column(space::SpectralElementSpace1D, i, h)
-    local_geometry = column(local_geometry_data(space), i, 1, h)
-    PointSpace(ClimaComms.context(space), local_geometry)
-end
-Base.@propagate_inbounds column(space::SpectralElementSpace1D, i, j, h) =
-    column(space, i, h)
-
-Base.@propagate_inbounds function column(space::SpectralElementSpace2D, i, j, h)
-    local_geometry = column(local_geometry_data(space), i, j, h)
-    PointSpace(ClimaComms.context(space), local_geometry)
-end
 
 function all_nodes(space::SpectralElementSpace2D)
     Nq = Quadratures.degrees_of_freedom(quadrature_style(space))
@@ -208,17 +191,17 @@ Base.eltype(iter::UniqueNodeIterator{<:SpectralElementSpace2D}) =
 
 function Base.length(iter::UniqueNodeIterator{<:SpectralElementSpace2D})
     space = iter.space
-    topology = Spaces.topology(space)
+    space_topology = topology(space)
     Nq = Quadratures.degrees_of_freedom(quadrature_style(space))
 
-    nelem = Topologies.nlocalelems(topology)
-    nvert = length(Topologies.local_vertices(topology))
-    nface_interior = length(Topologies.interior_faces(topology))
-    if isempty(Topologies.boundary_tags(topology))
+    nelem = Topologies.nlocalelems(space_topology)
+    nvert = length(Topologies.local_vertices(space_topology))
+    nface_interior = length(Topologies.interior_faces(space_topology))
+    if isempty(Topologies.boundary_tags(space_topology))
         nface_boundary = 0
     else
-        nface_boundary = sum(Topologies.boundary_tags(topology)) do tag
-            length(Topologies.boundary_faces(topology, tag))
+        nface_boundary = sum(Topologies.boundary_tags(space_topology)) do tag
+            length(Topologies.boundary_faces(space_topology, tag))
         end
     end
     return nelem * (Nq - 2)^2 +
@@ -258,28 +241,28 @@ function Base.iterate(
         # this also doesn't deal with the case where eo == e
         if j == 1
             # face 1
-            eo, _, _ = Topologies.opposing_face(Spaces.topology(space), e, 1)
+            eo, _, _ = Topologies.opposing_face(topology(space), e, 1)
             if 0 < eo < e
                 continue
             end
         end
         if i == Nq
             # face 2
-            eo, _, _ = Topologies.opposing_face(Spaces.topology(space), e, 2)
+            eo, _, _ = Topologies.opposing_face(topology(space), e, 2)
             if 0 < eo < e
                 continue
             end
         end
         if j == Nq
             # face 3
-            eo, _, _ = Topologies.opposing_face(Spaces.topology(space), e, 3)
+            eo, _, _ = Topologies.opposing_face(topology(space), e, 3)
             if 0 < eo < e
                 continue
             end
         end
         if i == 1
             # face 4
-            eo, _, _ = Topologies.opposing_face(Spaces.topology(space), e, 4)
+            eo, _, _ = Topologies.opposing_face(topology(space), e, 4)
             if 0 < eo < e
                 continue
             end

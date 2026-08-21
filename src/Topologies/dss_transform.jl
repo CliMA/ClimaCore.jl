@@ -4,8 +4,8 @@
 Transfrom `arg[I]` to a basis for direct stiffness summation (DSS).
 Transformations only apply to vector quantities.
 
-- `local_geometry[I]` is the relevant `LocalGeometry` object. If it is `nothing`, then no transformation is performed
-- `weight[I]` is the relevant DSS weights. If `weight` is `nothing`, then the result is simply summation.
+  - `local_geometry[I]` is the relevant `LocalGeometry` object. If it is `nothing`, then no transformation is performed
+  - `weight[I]` is the relevant DSS weights. If `weight` is `nothing`, then the result is simply summation.
 
 See [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
@@ -183,4 +183,30 @@ function create_ghost_buffer(
         topology.neighbor_pids,
     )
     GhostBuffer(graph_context, send_data, recv_data)
+end
+
+"""
+    fill_send_buffer!(topology, data, ghost_buffer::GhostBuffer)
+
+Loads the send buffer of `ghost_buffer` with the data of the elements
+that neighboring processes need for their ghost elements.
+"""
+function fill_send_buffer!(
+    topology::Topology2D,
+    data::DataLayouts.DataLayout,
+    ghost_buffer::GhostBuffer,
+)
+    # NOTE: this copies one element per iteration, which is a separate kernel
+    # launch per send element when the arrays live on a GPU. That is
+    # inconsequential at the element counts this is currently used with (the
+    # limiter's ghost exchange), but a single gather over `send_elem_lidx`
+    # would be preferable if it is ever used with many send elements.
+    # The parent array stores H at dim 4 or 5, depending on where F is
+    h_dim = DataLayouts.f_dim(data) == 5 ? 4 : 5
+    send_array = parent(ghost_buffer.send_data)
+    data_array = parent(data)
+    for (sidx, lidx) in enumerate(topology.send_elem_lidx)
+        selectdim(send_array, h_dim, sidx) .= selectdim(data_array, h_dim, lidx)
+    end
+    return nothing
 end

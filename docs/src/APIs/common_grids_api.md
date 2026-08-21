@@ -12,4 +12,5 @@ CommonGrids.ColumnGrid
 CommonGrids.Box3DGrid
 CommonGrids.SliceXZGrid
 CommonGrids.RectangleXYGrid
+CommonGrids.PointColumnEnsembleGrid
 ```

@@ -10,7 +10,9 @@ struct IntervalTopology{
     M <: Meshes.IntervalMesh,
     B,
 } <: AbstractIntervalTopology
-    "the ClimaComms context on which the topology is defined"
+    """
+    the ClimaComms context on which the topology is defined
+    """
     context::C
     mesh::M
     boundaries::B
@@ -73,23 +75,22 @@ function boundaries(topology::AbstractIntervalTopology)
 end
 
 function domain(topology::AbstractIntervalTopology)
-    mesh = Topologies.mesh(topology)
-    Meshes.domain(mesh)
+    Meshes.domain(mesh(topology))
 end
 
 function nlocalelems(topology::AbstractIntervalTopology)
-    mesh = Topologies.mesh(topology)
-    length(mesh.faces) - 1
+    topology_mesh = mesh(topology)
+    length(topology_mesh.faces) - 1
 end
 
 function vertex_coordinates(topology::AbstractIntervalTopology, elem)
-    mesh = Topologies.mesh(topology)
-    (mesh.faces[elem], mesh.faces[elem + 1])
+    topology_mesh = mesh(topology)
+    (topology_mesh.faces[elem], topology_mesh.faces[elem + 1])
 end
 
 function opposing_face(topology::AbstractIntervalTopology, elem, face)
-    mesh = Topologies.mesh(topology)
-    n = length(mesh.faces) - 1
+    topology_mesh = mesh(topology)
+    n = length(topology_mesh.faces) - 1
     if face == 1
         if elem == 1
             if isperiodic(topology)
@@ -116,12 +117,12 @@ end
 
 function Base.length(fiter::InteriorFaceIterator{<:AbstractIntervalTopology})
     topology = fiter.topology
-    mesh = Topologies.mesh(topology)
+    topology_mesh = mesh(topology)
     periodic = isempty(topology.boundaries)
     if periodic
-        length(mesh.faces) - 1
+        length(topology_mesh.faces) - 1
     else
-        length(mesh.faces) - 2
+        length(topology_mesh.faces) - 2
     end
 end
 
@@ -130,9 +131,9 @@ function Base.iterate(
     i = 1,
 )
     topology = fiter.topology
-    mesh = Topologies.mesh(topology)
-    periodic = isempty(Topologies.boundaries(topology))
-    n = length(mesh.faces) - 1
+    topology_mesh = mesh(topology)
+    periodic = isempty(boundaries(topology))
+    n = length(topology_mesh.faces) - 1
     if i < n
         return (i + 1, 1, i, 2, false), i + 1
     elseif i == n && periodic

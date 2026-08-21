@@ -84,8 +84,8 @@ color_range_per_field = Dict(
                             ClimaCore.level.(
                                 (getproperty(slice, name),),
                                 1:nlevels,
-                            )
-                        )
+                            ),
+                        ),
                     )...,
                 ),
             ) for slice in time_series

@@ -343,11 +343,9 @@ end
 defaultname(::DataLayouts.IJHMask) = "IJHMask"
 defaultname(::Grids.SpectralElementGrid1D) = "horizontal_grid"
 defaultname(::Grids.SpectralElementGrid2D) = "horizontal_grid"
-defaultname(::Grids.ExtrudedFiniteDifferenceGrid) =
-    "extruded_finite_difference_grid"
+defaultname(::Grids.ExtrudedFiniteDifferenceGrid) = "extruded_finite_difference_grid"
 defaultname(grid::Grids.FiniteDifferenceGrid) = defaultname(grid.topology)
-defaultname(grid::Grids.LevelGrid) =
-    "$(defaultname(grid.full_grid)): level $(grid.level)"
+defaultname(grid::Grids.LevelGrid) = "$(defaultname(grid.full_grid)): level $(grid.level)"
 
 """
     write_new!(writer, space, name)
@@ -580,12 +578,13 @@ function write!(
 end
 
 function write_plain_array!(group, array::AbstractArray, name::AbstractString)
-    nd = ndims(array)
-    dims = size(array)
+    array_cpu = array isa Array ? array : Array(array)
+    nd = ndims(array_cpu)
+    dims = size(array_cpu)
     localidx = ntuple(d -> (:), nd)
     dataset =
-        create_dataset(group, name, datatype(eltype(array)), dataspace(dims))
-    dataset[localidx...] = array
+        create_dataset(group, name, datatype(eltype(array_cpu)), dataspace(dims))
+    dataset[localidx...] = array_cpu
     return dataset
 end
 

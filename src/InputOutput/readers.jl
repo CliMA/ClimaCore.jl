@@ -91,11 +91,12 @@ distributed using this context. As with [`HDF5Writer`](@ref), this requires a
 HDF5 library with MPI support.
 
 # Interface
-- [`read_domain`](@ref)
-- [`read_mesh`](@ref)
-- [`read_topology`](@ref)
-- [`read_space`](@ref)
-- [`read_field`](@ref)
+
+  - [`read_domain`](@ref)
+  - [`read_mesh`](@ref)
+  - [`read_topology`](@ref)
+  - [`read_space`](@ref)
+  - [`read_field`](@ref)
 
 # Usage
 
@@ -110,10 +111,14 @@ end
 ```
 
 To explore the contents of the `reader`, use either
+
 ```julia
 julia> reader |> propertynames
+
 ```
+
 e.g, to explore the components of the `space`,
+
 ```julia
 julia> reader.space_cache
 Dict{Any, Any} with 3 entries:
@@ -124,7 +129,6 @@ Dict{Any, Any} with 3 entries:
 
 Once "unpacked" as shown above, `ClimaCorePlots` or `ClimaCoreMakie` can be used to visualise
 fields. `ClimaCoreTempestRemap` supports interpolation onto user-specified grids if necessary.
-
 """
 struct HDF5Reader{C <: ClimaComms.AbstractCommsContext}
     file::HDF5.File
@@ -383,7 +387,7 @@ function read_topology_new(reader::HDF5Reader, name::AbstractString)
     elseif type == "Topology2D"
         mesh = read_mesh(reader, attrs(group)["mesh"])
         if haskey(group, "elemorder")
-            elemorder_matrix = HDF5.read(group, "elemorder")
+            elemorder_matrix = read(group, "elemorder")
             if reader.file_version < v"0.10.9"
                 elemorder = collect(
                     reinterpret(
@@ -435,7 +439,7 @@ This should cooperate with datasets written by `write!` for datalayouts.
 function read_data_layout(dataset, topology)
     ArrayType = ClimaComms.array_type(topology)
     data_layout = HDF5.read_attribute(dataset, "type")
-    array = HDF5.read(dataset)
+    array = read(dataset)
     if topology isa Topologies.Topology2D
         h_dim = _scan_h_dim(data_layout)
         nd = ndims(array)

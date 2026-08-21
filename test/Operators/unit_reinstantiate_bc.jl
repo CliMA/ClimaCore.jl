@@ -1,8 +1,3 @@
-#=
-julia --project=.buildkite
-using Revise; include("test/Operators/unit_reinstantiate_bc.jl")
-=#
-
 # TODO: make this unit test more low-level
 using ClimaComms
 ClimaComms.@import_required_backends

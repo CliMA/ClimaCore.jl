@@ -30,7 +30,9 @@ struct BilinearRemapping{T12, T13, T14, T15} <: AbstractRemappingMethod
     local_bilinear_j::T15
 end
 
-"""`BilinearRemapping()` with no arguments: method tag; Remapper constructor fills in the arrays."""
+"""
+`BilinearRemapping()` with no arguments: method tag; Remapper constructor fills in the arrays.
+"""
 BilinearRemapping() = BilinearRemapping(nothing, nothing, nothing, nothing)
 
 """
@@ -255,7 +257,7 @@ interpolation), otherwise return linearly spaced values.
 """
 function default_target_zcoords(space; zresolution = nothing)
     return Geometry.ZPoint.(
-        default_target_zcoords_as_vectors(space; zresolution)
+        default_target_zcoords_as_vectors(space; zresolution),
     )
 end
 

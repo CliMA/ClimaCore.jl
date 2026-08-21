@@ -45,3 +45,7 @@ docs/src/tutorials/
 *.gz
 *.mp4
 *.png
+
+# Python bytecode from the .dev/ helper scripts
+__pycache__/
+*.pyc

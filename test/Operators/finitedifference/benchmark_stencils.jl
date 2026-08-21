@@ -1,7 +1,3 @@
-#=
-julia --project
-using Revise; include(joinpath("test", "Operators", "finitedifference", "benchmark_stencils.jl"))
-=#
 include("benchmark_stencils_utils.jl")
 
 #! format: off

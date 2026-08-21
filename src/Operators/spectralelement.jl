@@ -29,9 +29,10 @@ AbstractSpectralStyle(::ClimaComms.AbstractCPUDevice) = SlabBlockSpectralStyle
 Represents an operation that is applied to each element, where `I` is the tuple of axis indices.
 
 Subtypes `Op` of this should define the following:
-- [`operator_return_eltype(::Op, ElTypes...)`](@ref)
-- [`allocate_work(::Op, args...)`](@ref)
-- [`apply_operator(::Op, work, args...)`](@ref)
+
+  - [`operator_return_eltype(::Op, ElTypes...)`](@ref)
+  - [`allocate_work(::Op, args...)`](@ref)
+  - [`apply_operator(::Op, work, args...)`](@ref)
 
 Additionally, the result type `OpResult <: OperatorSlabResult` of `apply_operator` should define `get_node(::OpResult, ij, slabidx)`.
 """
@@ -107,13 +108,14 @@ which distinguish the variational form of a spectral element operator.
 
 The strong and weak variants of an operator share the same interior
 computation; they differ only in three form-dependent factors:
- - whether the derivative matrix is applied directly or transposed with a sign
-   flip (from integration by parts); see `form_deriv_entry`,
- - whether the argument is weighted by the quadrature weights `W` or by the
-   Jacobian factor; see `form_weighted_arg` and `form_jacobian`,
- - whether the result is rescaled by `J` or by `WJ`; see
-   `form_jacobian_rescale`, and by `W` or not at all; see
-   `form_weight_rescale`.
+
+  - whether the derivative matrix is applied directly or transposed with a sign
+    flip (from integration by parts); see `form_deriv_entry`,
+  - whether the argument is weighted by the quadrature weights `W` or by the
+    Jacobian factor; see `form_weighted_arg` and `form_jacobian`,
+  - whether the result is rescaled by `J` or by `WJ`; see
+    `form_jacobian_rescale`, and by `W` or not at all; see
+    `form_weight_rescale`.
 
 Operators with strong/weak variants carry a `FormType` as their second type
 parameter, e.g. `Divergence{I, StrongForm}`, with the weak variant available
@@ -252,7 +254,7 @@ function Base.Broadcast.instantiate(sbc::SpectralBroadcasted)
             Base.Broadcast.check_broadcast_axes(axes, args...)
         end
     end
-    # For FiniteDifferenceSpace, return zeros 
+    # For FiniteDifferenceSpace, return zeros
     if axes isa Spaces.FiniteDifferenceSpace
         RT = operator_return_eltype(op, map(eltype, args)...)
         return Broadcast.broadcasted(Returns(zero(RT)), Fields.coordinate_field(axes))
@@ -331,12 +333,12 @@ end
 Recursively evaluate any operators in `bc` at `slabidx`, replacing any
 `SpectralBroadcasted` objects.
 
-- if `bc` is a regular `Broadcasted` object, return a new `Broadcasted` with `resolve_operator` called on each `arg`
-- if `bc` is a regular `SpectralBroadcasted` object:
- - call `resolve_operator` called on each `arg`
- - call `apply_operator`, returning the resulting "pseudo Field":  a `Field` with a
- [`SlabData`](@ref) data object.
-- if `bc` is a `Field`, return that
+  - if `bc` is a regular `Broadcasted` object, return a new `Broadcasted` with `resolve_operator` called on each `arg`
+  - if `bc` is a regular `SpectralBroadcasted` object:
+  - call `resolve_operator` called on each `arg`
+  - call `apply_operator`, returning the resulting "pseudo Field":  a `Field` with a
+    [`SlabData`](@ref) data object.
+  - if `bc` is a `Field`, return that
 """
 Base.@propagate_inbounds function resolve_operator(
     bc::SpectralBroadcasted{SlabBlockSpectralStyle},
@@ -670,26 +672,33 @@ Base.Broadcast.BroadcastStyle(
 Computes the per-element spectral (strong) divergence of a vector field ``u``.
 
 The divergence of a vector field ``u`` is defined as
+
 ```math
 \\nabla \\cdot u = \\sum_i \\frac{1}{J} \\frac{\\partial (J u^i)}{\\partial \\xi^i}
 ```
+
 where ``J`` is the Jacobian determinant, ``u^i`` is the ``i``th contravariant
 component of ``u``.
 
 This is discretized by
+
 ```math
 \\sum_i I \\left\\{\\frac{1}{J} \\frac{\\partial (I\\{J u^i\\})}{\\partial \\xi^i} \\right\\}
 ```
+
 where ``I\\{x\\}`` is the interpolation operator that projects to the
 unique polynomial interpolating ``x`` at the quadrature points. In matrix
 form, this can be written as
+
 ```math
 J^{-1} \\sum_i D_i J u^i
 ```
+
 where ``D_i`` is the derivative matrix along the ``i``th dimension
 
 ## References
-- [Taylor2010](@cite), equation 15
+
+  - [Taylor2010](@cite), equation 15
 """
 struct Divergence{I, F <: FormType} <: SpectralElementOperator{I} end
 Divergence() = Divergence{(), StrongForm}()
@@ -779,21 +788,24 @@ end
 
 Computes the divergence of the product `ρu * ψ` using a **split-form (entropy-stable)** discretization.
 
-This operator is designed for the advection of scalar quantities in conservation laws (e.g., 
-thermodynamic variables or tracers). By evaluating the divergence using a specific averaging of the 
-conservative and advective forms, this formulation cancels aliasing errors that arise from the product 
-of two spectrally variable fields, thereby inhibiting the growth of quadratic instabilities (such as 
+This operator is designed for the advection of scalar quantities in conservation laws (e.g.,
+thermodynamic variables or tracers). By evaluating the divergence using a specific averaging of the
+conservative and advective forms, this formulation cancels aliasing errors that arise from the product
+of two spectrally variable fields, thereby inhibiting the growth of quadratic instabilities (such as
 cold temperature spikes) without requiring hyperviscosity.
 
 # Arguments
-- `ρu`: The transport vector field, typically the **mass flux**. It must be a vector quantity (e.g., `Geometry.Contravariant12Vector`).
-- `ψ`: The **specific** scalar quantity to be advected (e.g., specific total energy ``e_{tot}`` or specific humidity ``q_{tot}``).
+
+  - `ρu`: The transport vector field, typically the **mass flux**. It must be a vector quantity (e.g., `Geometry.Contravariant12Vector`).
+  - `ψ`: The **specific** scalar quantity to be advected (e.g., specific total energy ``e_{tot}`` or specific humidity ``q_{tot}``).
 
 # Mathematical Formulation
 
 ## Continuous
+
 The split form of the divergence operator is defined as the arithmetic mean of
 the conservative and advective forms:
+
 ```math
 \\nabla \\cdot (\\rho \\mathbf{u} \\psi)|_\\textrm{split} =
     \\frac{1}{2} \\nabla \\cdot (\\rho \\mathbf{u} \\psi) +
@@ -804,8 +816,10 @@ the conservative and advective forms:
 ```
 
 ## Discrete
+
 The discretized split operator is equivalent to using the strong formulation of
 the gradient operator and the weak formulation of the divergence operator:
+
 ```math
 \\textrm{split_div}(\\rho \\mathbf{u}, \\psi) =
     \\frac{1}{2} \\textrm{wdiv}(\\rho \\mathbf{u} \\psi) +
@@ -814,48 +828,60 @@ the gradient operator and the weak formulation of the divergence operator:
         \\rho \\mathbf{u} \\cdot \\textrm{grad}(\\psi)
     \\right)
 ```
+
 Swapping the weak and strong formulations in the last two terms also results in
 the same operator. The discrete form of the divergence theorem, which stems from
 the generalized summation-by-parts (SBP) property, guarantees that the integral
 of the first term vanishes,
+
 ```math
 \\int_\\Omega \\textrm{wdiv}(\\rho \\mathbf{u} \\psi) dV = 0
 ```
+
 while the integrals of the other two terms cancel out,
+
 ```math
 \\int_\\Omega \\psi \\textrm{wdiv}(\\rho \\mathbf{u}) dV =
     -\\int_\\Omega \\rho \\mathbf{u} \\cdot \\textrm{grad}(\\psi) dV
 ```
+
 So, this discretization ensures that the split operator conserves the integral
 of ``\\rho \\mathbf{u} \\psi``.
 
 ## Two-Point
+
 A more compact representation of the discretized operator can be obtained with
 the symmetric two-point flux, whose values in one dimension are
+
 ```math
 (F^1)_{ij} =
     \\frac{1}{2} (\\rho_i J_i (u^1)_i + \\rho_j J_j (u^1)_j) (\\psi_i + \\psi_j)
 ```
+
 With ``D`` denoting the spectral derivative matrix, the split operator in one
 dimension can be expressed as
+
 ```math
 \\textrm{split_div}(\\rho \\mathbf{u}, \\psi)_i =
     \\frac{1}{J_i} \\sum_{j \\neq i} D_{ij} (F^1)_{ij}
 ```
+
 In two dimensions, ``F^1`` and the analogous quantity ``F^2`` provide a similar
 expression for the split divergence, with the one-dimensional operator applied
 sequentially along each dimension.
 
 # Properties
-1.  **Conservation:** The split operator conserves ``\\rho \\mathbf{u} \\psi``
-2.  **Consistency:** If ``\\psi = 1``, the split operator degenerates to the
+
+ 1. **Conservation:** The split operator conserves ``\\rho \\mathbf{u} \\psi``
+ 2. **Consistency:** If ``\\psi = 1``, the split operator degenerates to the
     weak formulation of ``\\nabla \\cdot \\rho \\mathbf{u}`` (mass continuity)
-3.  **Complexity:** The split operator has the same ``O(N^2)`` complexity per
+ 3. **Complexity:** The split operator has the same ``O(N^2)`` complexity per
     element as the strong and weak operators, but needs twice as many operations
 
 # References
-- Fisher, T. C., & Carpenter, M. H. (2013). High-order entropy stable finite difference schemes for nonlinear conservation laws: Finite domains. Journal of Computational Physics, 252, 518-557. [https://doi.org/10.1016/j.jcp.2013.06.014](https://doi.org/10.1016/j.jcp.2013.06.014)
-- Gassner, G. J. (2013). A skew-symmetric discontinuous Galerkin spectral element discretization and its relation to SBP-SAT finite difference methods. SIAM Journal on Scientific Computing, 35, A1233-A1253. [https://doi.org/10.1137/120890144](https://doi.org/10.1137/120890144)
+
+  - Fisher, T. C., & Carpenter, M. H. (2013). High-order entropy stable finite difference schemes for nonlinear conservation laws: Finite domains. Journal of Computational Physics, 252, 518-557. [https://doi.org/10.1016/j.jcp.2013.06.014](https://doi.org/10.1016/j.jcp.2013.06.014)
+  - Gassner, G. J. (2013). A skew-symmetric discontinuous Galerkin spectral element discretization and its relation to SBP-SAT finite difference methods. SIAM Journal on Scientific Computing, 35, A1233-A1253. [https://doi.org/10.1137/120890144](https://doi.org/10.1137/120890144)
 """
 struct SplitDivergence{I} <: SpectralElementOperator{I} end
 SplitDivergence() = SplitDivergence{()}()
@@ -967,18 +993,22 @@ Compute the (strong) gradient of `f` on each element, returning a
 
 The ``i``th covariant component of the gradient is the partial derivative with
 respect to the reference element:
+
 ```math
 (\\nabla f)_i = \\frac{\\partial f}{\\partial \\xi^i}
 ```
 
 Discretely, this can be written in matrix form as
+
 ```math
 D_i f
 ```
+
 where ``D_i`` is the derivative matrix along the ``i``th dimension.
 
 ## References
-- [Taylor2010](@cite), equation 16
+
+  - [Taylor2010](@cite), equation 16
 """
 struct Gradient{I, F <: FormType} <: SpectralElementOperator{I} end
 Gradient() = Gradient{(), StrongForm}()
@@ -1085,13 +1115,16 @@ Note: The vector field ``u`` needs to be excliclty converted to a `CovaraintVect
 as then the `Curl` is independent of the local metric tensor.
 
 The curl of a vector field ``u`` is a vector field with contravariant components
+
 ```math
 (\\nabla \\times u)^i = \\frac{1}{J} \\sum_{jk} \\epsilon^{ijk} \\frac{\\partial u_k}{\\partial \\xi^j}
 ```
+
 where ``J`` is the Jacobian determinant, ``u_k`` is the ``k``th covariant
 component of ``u``, and ``\\epsilon^{ijk}`` are the [Levi-Civita
 symbols](https://en.wikipedia.org/wiki/Levi-Civita_symbol#Three_dimensions_2).
 In other words
+
 ```math
 \\begin{bmatrix}
   (\\nabla \\times u)^1 \\\\
@@ -1107,14 +1140,17 @@ In other words
 ```
 
 In matrix form, this becomes
+
 ```math
 \\epsilon^{ijk} J^{-1} D_j u_k
 ```
+
 Note that unused dimensions will be dropped: e.g. the 2D curl of a
 `Covariant12Vector`-field will return a `Contravariant3Vector`.
 
 ## References
-- [Taylor2010](@cite), equation 17
+
+  - [Taylor2010](@cite), equation 17
 """
 struct Curl{I, F <: FormType} <: CurlSpectralElementOperator{I} end
 Curl() = Curl{(), StrongForm}()
@@ -1232,9 +1268,11 @@ Interpolates `f` to the `space`. If `space` has equal or higher polynomial
 degree as the space of `f`, this is exact, otherwise it will be lossy.
 
 In matrix form, it is the linear operator
+
 ```math
 I = \\bigotimes_i I_i
 ```
+
 where ``I_i`` is the barycentric interpolation matrix in the ``i``th dimension.
 
 See also [`Restrict`](@ref).
@@ -1315,16 +1353,21 @@ polynomial space `space` (``\\mathcal{V}_0^*``). `space` must be on the same
 topology as the space of `f`, but have a lower polynomial degree.
 
 It is defined as the field ``\\theta \\in \\mathcal{V}_0^*`` such that for all ``\\phi \\in \\mathcal{V}_0^*``
+
 ```math
 \\int_\\Omega \\phi \\theta \\,d\\Omega = \\int_\\Omega \\phi f \\,d\\Omega
 ```
+
 In matrix form, this is
+
 ```math
 \\phi^\\top W^* J^* \\theta = (I \\phi)^\\top WJ f
 ```
+
 where ``W^*`` and ``J^*`` are the quadrature weights and Jacobian determinant of
 ``\\mathcal{V}_0^*``, and ``I`` is the interpolation operator (see [`Interpolate`](@ref))
 from ``\\mathcal{V}_0^*`` to ``\\mathcal{V}_0``. This reduces to
+
 ```math
 \\theta = (W^* J^*)^{-1} I^\\top WJ f
 ```
@@ -1530,7 +1573,7 @@ function matrix_interpolate(
     interp_data =
         DataLayouts.IH1JH2{S, Nu, Nu, nothing}(Matrix{S}(undef, (Nu * n1, Nu * n2)))
     M = Quadratures.interpolation_matrix(Float64, Q_interp, quadrature_style)
-    Operators.tensor_product!(interp_data, Fields.field_values(field), M)
+    tensor_product!(interp_data, Fields.field_values(field), M)
     return parent(interp_data)
 end
 
@@ -1546,7 +1589,7 @@ function matrix_interpolate(
     interp_data =
         DataLayouts.VIH1{S, nl, Nu, nothing}(Matrix{S}(undef, (nl, Nu * n1)))
     M = Quadratures.interpolation_matrix(Float64, Q_interp, quadrature_style)
-    Operators.tensor_product!(interp_data, Fields.field_values(field), M)
+    tensor_product!(interp_data, Fields.field_values(field), M)
     return parent(interp_data)
 end
 
@@ -1565,7 +1608,6 @@ matrix_interpolate(field::Field, Nu::Integer) =
 Recursive matrix product along the 1st dimension of `S`. Equivalent to:
 
     mapreduce(*, +, W[i,:], S[:,j])
-
 """
 function rmatmul1(W, S, i, j)
     Nq = size(W, 2)

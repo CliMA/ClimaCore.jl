@@ -8,13 +8,13 @@ using ClimaComms
 stores information on the TempestRemap map and the source and target data:
 
 where:
- - `source_space` and `target_space` are ClimaCore's 2D spaces.
- - `weights` is a vector of remapping weights. (length = number of overlap-mesh nodes).
- - `source_local_idxs` a 3-element Tuple with 3 index vectors, representing local (i,j,elem) indices on the source mesh. (length of each index vector = number of overlap-mesh nodes)
- - `target_local_idxs` is the same as `source_local_idxs` but for the target mesh.
- - `row_indices` are the target row indices from TempestRemap. (length = number of overlap-mesh nodes)
- - `out_type` string that defines the output type.
 
+  - `source_space` and `target_space` are ClimaCore's 2D spaces.
+  - `weights` is a vector of remapping weights. (length = number of overlap-mesh nodes).
+  - `source_local_idxs` a 3-element Tuple with 3 index vectors, representing local (i,j,elem) indices on the source mesh. (length of each index vector = number of overlap-mesh nodes)
+  - `target_local_idxs` is the same as `source_local_idxs` but for the target mesh.
+  - `row_indices` are the target row indices from TempestRemap. (length = number of overlap-mesh nodes)
+  - `out_type` string that defines the output type.
 """
 struct LinearMap{S, T, W, I, V} # make consistent with / move to regridding.jl
     source_space::S

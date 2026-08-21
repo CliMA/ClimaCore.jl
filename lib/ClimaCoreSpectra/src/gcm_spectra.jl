@@ -102,17 +102,20 @@ end
 Normalized associated Legendre polynomials, P_{m,l} = qnm.
 
 # Arguments:
-- FT: FloatType
-- num_fourier: Int, number of truncated zonal wavenumbers (m)
-- num_spherical: Int, number of total wavenumbers (n)
-- sinθ: Array{FT} with sin(latitude)
-- nθ: Int, number of Gaussian latitudes
+
+  - FT: FloatType
+  - num_fourier: Int, number of truncated zonal wavenumbers (m)
+  - num_spherical: Int, number of total wavenumbers (n)
+  - sinθ: Array{FT} with sin(latitude)
+  - nθ: Int, number of Gaussian latitudes
 
 # References:
-- Ehrendorfer, M. (2011) Spectral Numerical Weather Prediction Models, Appendix B, Society for Industrial and Applied Mathematics
-- Winch, D. (2007) Spherical harmonics, in Encyclopedia of Geomagnetism and Paleomagnetism, Eds Gubbins D. and Herrero-Bervera, E., Springer
+
+  - Ehrendorfer, M. (2011) Spectral Numerical Weather Prediction Models, Appendix B, Society for Industrial and Applied Mathematics
+  - Winch, D. (2007) Spherical harmonics, in Encyclopedia of Geomagnetism and Paleomagnetism, Eds Gubbins D. and Herrero-Bervera, E., Springer
 
 # Details (using notation and Eq. references from Ehrendorfer, 2011):
+
     l=0,1...∞    and m = -l, -l+1, ... l-1, l
     P_{0,0} = 1, such that 1/4π ∫∫YYdS = δ (where Y = spherical harmonics, S = domain surface area)
     P_{m,m} = sqrt((2m+1)/2m) cosθ P_{m-1,m-1}
@@ -157,12 +160,16 @@ end
 Compute sin(latitude) and the weight factors for Gaussian integration.
 
 # Arguments
-- FT: FloatType
-- n: Int, number of Gaussian latitudes
+
+  - FT: FloatType
+  - n: Int, number of Gaussian latitudes
 
 # References
-- Ehrendorfer, M., Spectral Numerical Weather Prediction Models, Appendix B, Society for Industrial and Applied Mathematics, 2011
+
+  - Ehrendorfer, M., Spectral Numerical Weather Prediction Models, Appendix B, Society for Industrial and Applied Mathematics, 2011
+
 # Details (following notation from Ehrendorfer, 2011):
+
     Pn(x) is an odd function
     solve half of the n roots and weightes of Pn(x) # n = 2n_half
     P_{-1}(x) = 0
@@ -220,6 +227,7 @@ end
 Transforms a variable on a Gaussian grid (pfield[nλ, nθ]) into the spherical harmonics domain (var_spherical2d[num_fourier+1, num_spherical+1]).
 
 # Details:
+
     Here λ = longitude, θ = latitude, η = sinθ, m = zonal wavenumber, n = total wavenumber:
     var_spherical2d = F_{m,n}    # Output variable in spectral space (Complex{FT}[num_fourier+1, num_spherical+1])
     qwg = P_{m,n}(η)w(η)         # Weighted Legendre polynomials (FT[num_fourier+1, num_spherical+1, nθ])
@@ -227,12 +235,14 @@ Transforms a variable on a Gaussian grid (pfield[nλ, nθ]) into the spherical h
     pfield = F(λ, η)             # Input variable on Gaussian grid FT[nλ, nθ]
 
 # Arguments
-- mesh: struct with mesh information
-- pfield: variable on Gaussian grid to be transformed
+
+  - mesh: struct with mesh information
+  - pfield: variable on Gaussian grid to be transformed
 
 # References
-- Ehrendorfer, M., Spectral Numerical Weather Prediction Models, Appendix B, Society for Industrial and Applied Mathematics, 2011
-- [Wiin1967](@cite)
+
+  - Ehrendorfer, M., Spectral Numerical Weather Prediction Models, Appendix B, Society for Industrial and Applied Mathematics, 2011
+  - [Wiin1967](@cite)
 """
 function trans_grid_to_spherical!(
     mesh::SpectralSphericalMesh{FT},
@@ -283,9 +293,10 @@ end
 Store the total wave number `n` for this basis in a matrix `wave_numbers` of shape [m,n].
 
 # Arguments:
-- wave_numbers: Matrix of [Int, Int] to store the wave wave_numbers
-- num_fourier: Int, number of truncated zonal wavenumbers (m)
-- num_spherical: Int, number of total wavenumbers (n)
+
+  - wave_numbers: Matrix of [Int, Int] to store the wave wave_numbers
+  - num_fourier: Int, number of truncated zonal wavenumbers (m)
+  - num_spherical: Int, number of total wavenumbers (n)
 """
 function compute_wave_numbers!(
     wave_numbers,
@@ -312,12 +323,13 @@ transform at each Gaussian latitude. The input field must be first
 intepolated to a Gaussian grid.
 
 # Arguments
-- FT: FloatType
-- var_grid: variable on a Gaussian (lon, lat, z) grid to be transformed
-- z: Array with uniform z levels
-- lat: Array with uniform lats
-- lon: Array with uniform longs
-- weight: Array with weights for mass-weighted calculations
+
+  - FT: FloatType
+  - var_grid: variable on a Gaussian (lon, lat, z) grid to be transformed
+  - z: Array with uniform z levels
+  - lat: Array with uniform lats
+  - lon: Array with uniform longs
+  - weight: Array with weights for mass-weighted calculations
 """
 function power_spectrum_1d(FT, var_grid, z, lat, lon, weight)
     num_lev = length(z)
@@ -372,12 +384,14 @@ Transform a variable defined on a regular lat long grid to the 2d spectral space
 (as for the 1D spectrum) and Legendre polynomials for meridians, and calculate spectra.
 
 # Arguments
-- FT: FloatType
-- var_grid: variable on a Gaussian (lon, lat, z) grid to be transformed
-- mass_weight: Array with weights for mass-weighted calculations.
+
+  - FT: FloatType
+  - var_grid: variable on a Gaussian (lon, lat, z) grid to be transformed
+  - mass_weight: Array with weights for mass-weighted calculations.
 
 # References
-- [Baer1972](@cite)
+
+  - [Baer1972](@cite)
 """
 function power_spectrum_2d(FT, var_grid, mass_weight)
 

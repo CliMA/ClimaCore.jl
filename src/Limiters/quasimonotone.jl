@@ -66,9 +66,9 @@ introduce some change in the tracer mass, which we then redistribute so that the
 l2 error is smallest. This redistribution might violate constraints; thus, we do
 a few iterations (until `abs(Δtracer_mass) <= rtol * tracer_mass`).
 
-- `ρq`: tracer density Field, where `q` denotes tracer concentration per unit
-  mass. This can be a scalar field, or a struct-valued field.
-- `ρ`: fluid density Field (scalar).
+  - `ρq`: tracer density Field, where `q` denotes tracer concentration per unit
+    mass. This can be a scalar field, or a struct-valued field.
+  - `ρ`: fluid density Field (scalar).
 
 # Constructor
 
@@ -96,15 +96,25 @@ Then call [`apply_limiter!`](@ref) on the output fields:
     apply_limiter!(ρq, ρ, limiter)
 """
 struct QuasiMonotoneLimiter{D, G, FT, CS}
-    "contains the min and max of each element"
+    """
+    contains the min and max of each element
+    """
     q_bounds::D
-    "contains the min and max of each element and its neighbors"
+    """
+    contains the min and max of each element and its neighbors
+    """
     q_bounds_nbr::D
-    "communication buffer"
+    """
+    communication buffer
+    """
     ghost_buffer::G
-    "relative tolerance for tracer mass change"
+    """
+    relative tolerance for tracer mass change
+    """
     rtol::FT
-    "Convergence statistics"
+    """
+    Convergence statistics
+    """
     convergence_stats::CS
 end
 
@@ -238,6 +248,14 @@ end
 Update the field `limiter.q_bounds_nbr` based on `limiter.q_bounds` in the ghost
 neighbors. This should be called after the ghost exchange has completed.
 
+!!! note
+
+    This loop indexes slabs of the receive buffer from the host, so the
+    distributed limiter is only supported on CPUs. Running it with a
+    `CUDADevice` and an `MPICommsContext` would trigger scalar indexing of a
+    `CuArray`. Making distributed limiters work on GPUs requires replacing
+    this loop (and the `q_bounds_nbr` update below) with a kernel.
+
 Part of [`compute_bounds!`](@ref).
 """
 function compute_neighbor_bounds_ghost!(
@@ -276,6 +294,7 @@ Compute the desired bounds for the tracer concentration per unit mass `q`, based
 on the tracer density, `ρq`, and density, `ρ`, fields.
 
 This is computed by
+
  1. [`compute_element_bounds!`](@ref)
  2. starts the ghost exchange (if distributed)
  3. [`compute_neighbor_bounds_local!`](@ref)

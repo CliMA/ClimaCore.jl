@@ -1,8 +1,3 @@
-#=
-julia --project
-ENV["CLIMACOMMS_DEVICE"] = "CPU"; using Revise; include(joinpath("test", "Fields", "benchmark_fieldvectors.jl"))
-ENV["CLIMACOMMS_DEVICE"] = "CUDA"; using Revise; include(joinpath("test", "Fields", "benchmark_fieldvectors.jl"))
-=#
 using Test
 using ClimaCore.DataLayouts
 using ClimaCore: Spaces, Fields, Geometry

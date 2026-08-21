@@ -1,7 +1,3 @@
-#=
-julia --project=.buildkite
-using Revise; include("test/InputOutput/unit_spectralelement2d.jl")
-=#
 using Test
 using ClimaComms
 ClimaComms.@import_required_backends
@@ -23,10 +19,10 @@ import ClimaCore:
 function init_state(local_geometry, p)
     coord = local_geometry.coordinates
     x, y = coord.x, coord.y
-    # set initial state
+    # Set initial state
     ρ = p.ρ₀
 
-    # set initial velocity
+    # Set initial velocity
     U₁ = cosh(y)^(-2)
 
     # Ψ′ = exp(-(x2 + p.l / 10)^2 / 2p.l^2) * cos(p.k * x) * cos(p.k * y)
@@ -41,7 +37,7 @@ function init_state(local_geometry, p)
         local_geometry,
     )
 
-    # set initial tracer
+    # Set initial tracer
     θ = sin(p.k * y)
     return (ρ = ρ, u = u, ρθ = ρ * θ)
 end
@@ -73,7 +69,7 @@ function init_space(context; enable_bubble, enable_mask)
     )
 end
 
-# function mktempfile(f)
+# Function mktempfile(f)
 #     mktempdir() do dir
 #         cd(dir) do
 #             f(tempname(dir))
@@ -105,7 +101,7 @@ end
     y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
     Y = Fields.FieldVector(y0 = y0)
 
-    # write field vector to hdf5 file
+    # Write field vector to hdf5 file
     mktempfile(context) do filename
         InputOutput.HDF5Writer(filename, context) do writer
             InputOutput.write!(writer, "Y" => Y) # write field vector from hdf5 file
@@ -127,7 +123,7 @@ end
         sin(coords.x) > 0.5
     end
 
-    # write field vector to hdf5 file
+    # Write field vector to hdf5 file
     mktempfile(context) do filename
         InputOutput.HDF5Writer(filename, context) do writer
             InputOutput.write!(writer, "Y" => Y) # write field vector from hdf5 file

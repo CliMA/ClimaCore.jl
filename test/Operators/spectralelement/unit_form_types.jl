@@ -1,7 +1,3 @@
-#=
-julia --project
-using Revise; include(joinpath("test", "Operators", "spectralelement", "unit_form_types.jl"))
-=#
 using Test
 using ClimaComms
 import ClimaCore:

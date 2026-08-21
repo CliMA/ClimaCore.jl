@@ -1,3 +1,9 @@
+# Solid-body rotation on the 3D sphere: an isothermal, hydrostatically balanced
+# atmosphere in rigid rotation with the planet. The exact solution is the
+# initial state, so the run asserts that density and total energy are unchanged
+# at the end. `discrete_hydrostatic_balance!` replaces the analytic profile with
+# one balanced against the *discrete* vertical operators, which is what keeps
+# the state at rest.
 using ClimaComms
 using Test
 using LinearAlgebra
@@ -15,7 +21,7 @@ import ClimaCore:
     Operators
 import ClimaCore.Utilities: half
 
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
+import ClimaTimeSteppers as CTS
 
 import Logging
 import TerminalLoggers
@@ -237,14 +243,16 @@ function discrete_hydrostatic_balance!(ρ, p, dz, grav)
 end
 
 discrete_hydrostatic_balance!(ρ, p, z_top / n_vert, grav)
-# now ρ (after correction) and p (computed from analytical relation) are in discrete hydrostatic balance
-# only need to correct ρe without changing ρ and p, i.e., keep ρT unchanged before vs after the correction on ρ
+# now ρ (after correction) and p (computed from analytical relation) are in
+# discrete hydrostatic balance only need to correct ρe without changing ρ and p,
+# i.e., keep ρT unchanged before vs after the correction on ρ
 ρe = @. ρe + (ρ - ρ_ana) * Φ(zc_vec) - (ρ - ρ_ana) * cv_d * T_tri
 
 # Note: In princile, ρe = @. cv_d * p /R_d - ρ * cv_d * T_tri + ρ * Φ(zc_vec) should work,
 #       however, it is not as accurate as the above correction
 
-# set up initial condition: not discretely balanced; only create a Field as a place holder
+# set up initial condition: not discretely balanced; only create a Field as a
+# place holder
 Yc = map(coord -> init_sbr_thermo(coord.z), c_coords)
 # put the dicretely balanced ρ and ρe into Yc
 parent(Yc.ρ) .= ρ  # Yc.ρ is a VIJFH layout
@@ -279,17 +287,18 @@ dYdt = similar(Y)
 rhs!(dYdt, Y, parameters, 0.0)
 
 # run!
-using OrdinaryDiffEqSSPRK: ODEProblem, init, solve!, SSPRK33
+import ClimaTimeSteppers as CTS
 # Solve the ODE
-T = 3600
+t_end = 3600
 dt = 5
-prob = ODEProblem(rhs!, Y, (0.0, T), parameters)
+prob =
+    CTS.ODEProblem(CTS.ClimaODEFunction(; T_exp! = rhs!), Y, (0.0, t_end), parameters)
 
-integrator = init(
+integrator = CTS.init(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = dt,
-    saveat = collect(0.0:dt:T),
+    saveat = collect(0.0:dt:t_end),
     progress = true,
     adaptive = false,
     progress_message = (dt, u, p, t) -> t,
@@ -300,13 +309,30 @@ if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
 end
 
 # solve ode
-sol = @timev solve!(integrator)
+sol = @timev CTS.solve!(integrator)
 
 uₕ_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
 w_phy = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)
 
-@test maximum(abs.(uₕ_phy.components.data.:1)) ≤ 1e-11
-@test maximum(abs.(uₕ_phy.components.data.:2)) ≤ 1e-11
-@test maximum(abs.(w_phy |> parent)) ≤ 1e-11
-@test norm(sol.u[end].Yc.ρ) ≈ norm(sol.u[1].Yc.ρ) rtol = 1e-2
-@test norm(sol.u[end].Yc.ρe) ≈ norm(sol.u[1].Yc.ρe) rtol = 1e-2
+# The state is written in the rotating frame, where the atmosphere is at rest,
+# and `discrete_hydrostatic_balance!` holds it there: nothing moves at any
+# point of the run (measured max|u|, max|v|, max|w|: 5e-12, 4e-12, 1e-12 m/s).
+@test maximum(abs, uₕ_phy.components.data.:1) ≤ 1e-11
+@test maximum(abs, uₕ_phy.components.data.:2) ≤ 1e-11
+@test maximum(abs, parent(w_phy)) ≤ 1e-11
+@test maximum(
+    maximum(abs, Geometry.WVector.(Y.w).components.data.:1) for Y in sol.u
+) ≤ 1e-11
+
+# Nothing moving means ρ and ρe are unchanged pointwise, not merely equal in
+# norm, and the closed domain conserves both (measured relative L₂ drift:
+# 1.4e-15 and 3.1e-15; measured conservation drift: 1e-15 and 2e-15).
+@testset "conservation and steadiness" begin
+    Y_start = sol.u[1]
+    Y_end = sol.u[end]
+    @test norm(Y_end.Yc.ρ .- Y_start.Yc.ρ) / norm(Y_start.Yc.ρ) < 1e-12
+    @test norm(Y_end.Yc.ρe .- Y_start.Yc.ρe) / norm(Y_start.Yc.ρe) < 1e-12
+    @test abs(sum(Y_end.Yc.ρ) - sum(Y_start.Yc.ρ)) / sum(Y_start.Yc.ρ) < 1e-12
+    @test abs(sum(Y_end.Yc.ρe) - sum(Y_start.Yc.ρe)) /
+          abs(sum(Y_start.Yc.ρe)) < 1e-12
+end

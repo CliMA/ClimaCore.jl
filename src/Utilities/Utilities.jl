@@ -5,6 +5,28 @@ using UnrolledUtilities
 import ForwardDiff
 import InteractiveUtils
 
+"""
+    ConvertTo{T}()
+
+A GPU-compatible callable that converts its argument to type `T`, equivalent to
+`Base.Fix1(convert, T)` but `isbitstype`. `Base.Fix1` stores a `Type{T}` field,
+which is not `isbits`, so it cannot be captured by GPU kernels. `ConvertTo{T}`
+is an empty struct and is always `isbits`, making it safe to use in broadcast
+expressions that run on the GPU.
+
+# Examples
+
+```julia
+julia> isbitstype(typeof(ConvertTo{Float32}()))
+true
+
+julia> isbitstype(typeof(Base.Fix1(convert, Float32))) # cannot enter a kernel
+false
+```
+"""
+struct ConvertTo{T} end
+@inline (::ConvertTo{T})(x) where {T} = convert(T, x)
+
 include("plushalf.jl")
 include("auto_broadcaster.jl")
 include("cache.jl")
@@ -68,18 +90,19 @@ Base.@propagate_inbounds linear_ind(n::NTuple, loc::NTuple) =
     stable_view(array, indices...)
 
 Like `view`, but with two modifications that avoid expensive operations:
-- Every view is a `SubArray`, even when `array` is a GPU array. GPUArrays
-  replaces each contiguous view of a `CuArray` with a new `CuArray` derived
-  from the same memory buffer, and the derived array's type is not inferrable,
-  which makes all host code that builds slice or property views type-unstable.
-  The `SubArray`s constructed here have fully inferred types, and they are
-  converted to `SubArray`s of `CuDeviceArray`s when passed to kernels.
-- A view along the linear indices of a multidimensional `array` (a single
-  `Integer` or range of `Integer`s) wraps the `array` in a 1-dimensional
-  `ReshapedArray`, instead of using `reshape` like Base's `view` does, which
-  allocates a new object whenever it is applied to an `Array`. If the `array`
-  is already a `ReshapedArray`, its parent gets wrapped instead, since a
-  reshape stores the same values in the same linear order as its parent.
+
+  - Every view is a `SubArray`, even when `array` is a GPU array. GPUArrays
+    replaces each contiguous view of a `CuArray` with a new `CuArray` derived
+    from the same memory buffer, and the derived array's type is not inferrable,
+    which makes all host code that builds slice or property views type-unstable.
+    The `SubArray`s constructed here have fully inferred types, and they are
+    converted to `SubArray`s of `CuDeviceArray`s when passed to kernels.
+  - A view along the linear indices of a multidimensional `array` (a single
+    `Integer` or range of `Integer`s) wraps the `array` in a 1-dimensional
+    `ReshapedArray`, instead of using `reshape` like Base's `view` does, which
+    allocates a new object whenever it is applied to an `Array`. If the `array`
+    is already a `ReshapedArray`, its parent gets wrapped instead, since a
+    reshape stores the same values in the same linear order as its parent.
 
 ```julia-repl
 julia> array = rand(3, 1, 4);
@@ -92,7 +115,7 @@ julia> parent(stable_view(array, 4:6))
 ```
 """
 Base.@propagate_inbounds function stable_view(array::AbstractArray, indices...)
-    if indices isa Tuple{Union{Integer, AbstractRange{<:Integer}}} &&
+    if indices isa Tuple{Union{Integer, AbstractRange{<:Integer}, Colon}} &&
        ndims(array) != 1
         array isa Base.ReshapedArray &&
             return stable_view(parent(array), first(indices))
@@ -112,6 +135,7 @@ Drops all parameters from the type `T`. If the input argument is not a `Type`,
 its type is used instead.
 
 # Examples
+
 ```julia
 julia> unionall_type(typeof([1, 2, 3]))
 Array
@@ -179,6 +203,7 @@ If provided, the second argument is used to initialize fields of the new value
 with special handling of `DataType` fields to avoid errors during compilation.
 
 # Examples
+
 ```jldoctest; setup = :(import ClimaCore.Utilities: new), filter = r"\\d+"
 julia> new(Int)
 4889520192
@@ -270,5 +295,20 @@ eltype_error(bc::Base.Broadcast.Broadcasted) =
     has_inferred_error(bc) ?
     bc.f(unrolled_map(new ∘ safe_eltype, bc.args)...) : # f throws runtime error
     throw(InferenceError(bc.f, Tuple{unrolled_map(safe_eltype, bc.args)...}))
+
+"""
+    recursive_bottom_eltype(x)
+
+The scalar type underlying `x`, found by following `eltype` until it stops
+changing. For a nested array of arrays this is the type of the numbers at the
+bottom, not the type of the outer element.
+
+```julia
+julia> recursive_bottom_eltype([[1.0, 2.0]])
+Float64
+```
+"""
+recursive_bottom_eltype(a) =
+    a == eltype(a) ? a : recursive_bottom_eltype(eltype(a))
 
 end # module

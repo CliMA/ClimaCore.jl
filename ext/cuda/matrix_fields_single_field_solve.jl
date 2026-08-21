@@ -56,17 +56,6 @@ function single_field_solve_kernel!(device, cache, x, A, b, mask, cart_inds)
     return nothing
 end
 
-@inline unrolled_unzip_tuple_field_values(data) =
-    unrolled_unzip_tuple_field_values(data, propertynames(data))
-@inline unrolled_unzip_tuple_field_values(data, pn::Tuple) = (
-    getproperty(data, first(pn)),
-    unrolled_unzip_tuple_field_values(data, Base.tail(pn))...,
-)
-@inline unrolled_unzip_tuple_field_values(data, pn::Tuple{Any}) =
-    (getproperty(data, first(pn)),)
-@inline unrolled_unzip_tuple_field_values(data, pn::Tuple{}) = ()
-
-# TODO: get this working, it doesn't work yet due to InvalidIR
 function _single_field_solve_diag_matrix_row!(
     device::ClimaComms.CUDADevice,
     cache,
@@ -74,7 +63,7 @@ function _single_field_solve_diag_matrix_row!(
     A,
     b,
 )
-    Aⱼs = unrolled_unzip_tuple_field_values(Fields.field_values(A.entries))
+    Aⱼs = unzip_tuple_field_values(Fields.field_values(A.entries))
     (A₀,) = Aⱼs
     x_data = Fields.field_values(x)
     b_data = Fields.field_values(b)

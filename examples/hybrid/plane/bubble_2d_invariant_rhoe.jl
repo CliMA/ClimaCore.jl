@@ -1,10 +1,15 @@
+# Dry rising thermal bubble in 2D: a warm perturbation in a neutrally stratified
+# atmosphere becomes buoyant and rolls up into a mushroom cloud. A standard
+# check that the nonhydrostatic solver handles strong local buoyancy while
+# conserving mass and energy. Written in vector-invariant form with total energy
+# as the prognostic thermodynamic variable.
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
-using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaComms
 ClimaComms.@import_required_backends
+include("plane_utils.jl")
 
 import ClimaCore:
     ClimaCore,
@@ -24,56 +29,17 @@ using Logging: global_logger
 using TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
 
-function hvspace_2D(
-    xlim = (-π, π),
-    zlim = (0, 4π),
-    xelem = 10,
-    zelem = 40,
-    npoly = 4,
-)
-    FT = Float64
-    vertdomain = Domains.IntervalDomain(
-        Geometry.ZPoint{FT}(zlim[1]),
-        Geometry.ZPoint{FT}(zlim[2]);
-        boundary_names = (:bottom, :top),
-    )
-    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    context = ClimaComms.context()
-    device = ClimaComms.device(context)
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(device, vertmesh)
-
-    horzdomain = Domains.IntervalDomain(
-        Geometry.XPoint{FT}(xlim[1]),
-        Geometry.XPoint{FT}(xlim[2]);
-        periodic = true,
-    )
-    horzmesh = Meshes.IntervalMesh(horzdomain, nelems = xelem)
-    horztopology = Topologies.IntervalTopology(device, horzmesh)
-
-    quad = Quadratures.GLL{npoly + 1}()
-    horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
-
-    hv_center_space =
-        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
-    hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
-    return (hv_center_space, hv_face_space)
-end
 
 # set up 2D domain - doubly periodic box
-hv_center_space, hv_face_space = hvspace_2D((-500, 500), (0, 1000))
+hv_center_space, hv_face_space =
+    hvspace_2D((-500, 500), (0, 1000); xelem = 10, zelem = 40)
 
-const MSLP = 1e5 # mean sea level pressure
-const grav = 9.8 # gravitational constant
-const R_d = 287.058 # R dry (gas constant / mol mass dry air)
-const γ = 1.4 # heat capacity ratio
-const C_p = R_d * γ / (γ - 1) # heat capacity at constant pressure
-const C_v = R_d / (γ - 1) # heat capacity at constant volume
-const T_0 = 273.16 # triple point temperature
 
-Φ(z) = grav * z
+geopotential(z) = grav * z
 
-# Reference: https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml, Section 5a
-# Prognostic thermodynamic variable: Total Energy
+# Reference:
+# https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml,
+# Section 5a Prognostic thermodynamic variable: Total Energy
 function init_dry_rising_bubble_2d(x, z)
     x_c = 0.0
     z_c = 350.0
@@ -146,7 +112,7 @@ function rhs_invariant!(dY, Y, _, t)
     cuw = Geometry.Covariant13Vector.(cuₕ) .+ Geometry.Covariant13Vector.(cw)
 
     ce = @. cρe / cρ
-    cI = @. ce - Φ(z) - (norm(cuw)^2) / 2
+    cI = @. ce - geopotential(z) - (norm(cuw)^2) / 2
     cT = @. cI / C_v + T_0
     cp = @. cρ * R_d * cT
 
@@ -168,7 +134,7 @@ function rhs_invariant!(dY, Y, _, t)
     dw .= fw .* 0
 
     # 1.a) horizontal divergence
-    dρ .-= hdiv.(cρ .* (cuw))
+    dρ .-= hwdiv.(cρ .* (cuw))
 
     # 1.b) vertical divergence
     vdivf2c = Operators.DivergenceF2C(
@@ -206,7 +172,7 @@ function rhs_invariant!(dY, Y, _, t)
     # convert to contravariant
     # these will need to be modified with topography
     fu¹² =
-        Geometry.Contravariant1Vector.(Geometry.Covariant13Vector.(Ic2f.(cuₕ)),)
+        Geometry.Contravariant1Vector.(Geometry.Covariant13Vector.(Ic2f.(cuₕ)))
     fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant13Vector.(fw))
     @. dw -= fω¹² × fu¹² # Covariant3Vector on faces
     @. duₕ -= If2c(fω¹² × fu³)
@@ -218,13 +184,13 @@ function rhs_invariant!(dY, Y, _, t)
     )
     @. dw -= vgradc2f(cp) / Ic2f(cρ)
 
-    cE = @. (norm(cuw)^2) / 2 + Φ(z)
+    cE = @. (norm(cuw)^2) / 2 + geopotential(z)
     @. duₕ -= hgrad(cE)
     @. dw -= vgradc2f(cE)
 
     # 3) total energy
 
-    @. dρe -= hdiv(cuw * (cρe + cp))
+    @. dρe -= hwdiv(cuw * (cρe + cp))
     @. dρe -= vdivf2c((Ic2f(cρ) * third_order_upwind_c2f(fw, (cρe + cp) / cρ)))
     @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 
@@ -252,12 +218,17 @@ dYdt = similar(Y);
 rhs_invariant!(dYdt, Y, nothing, 0.0);
 
 # run!
-using OrdinaryDiffEqSSPRK: init, ODEProblem, solve!, SSPRK33
+import ClimaTimeSteppers as CTS
 Δt = 0.04
-prob = ODEProblem(rhs_invariant!, Y, (0.0, 1200.0))
-integrator = init(
+prob = CTS.ODEProblem(
+    CTS.ClimaODEFunction(; T_exp! = rhs_invariant!),
+    Y,
+    (0.0, 1200.0),
+    nothing,
+)
+integrator = CTS.init(
     prob,
-    SSPRK33(),
+    CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
     dt = Δt,
     saveat = collect(0.0:10.0:1200.0),
     progress = true,
@@ -268,7 +239,18 @@ if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
     throw(:exit_profile)
 end
 
-sol = @timev solve!(integrator)
+sol = @timev CTS.solve!(integrator)
+
+using Test
+# The domain is closed, so mass and total energy must be conserved (measured
+# drift: 1e-15 and 4e-13), and the warm bubble must rise at a few m/s
+# (measured max|w| = 3.4) — neither stay still nor blow up.
+@test abs(sum(sol.u[end].Yc.ρ) - sum(sol.u[1].Yc.ρ)) / sum(sol.u[1].Yc.ρ) < 1e-12
+@test abs(sum(sol.u[end].Yc.ρe) - sum(sol.u[1].Yc.ρe)) / sum(sol.u[1].Yc.ρe) < 1e-10
+@testset "bubble rise speed" begin
+    w = maximum(abs, parent(Geometry.WVector.(sol.u[end].w)))
+    @test 1 < w < 10
+end
 
 ENV["GKSwstype"] = "nul"
 import Plots, ClimaCorePlots
@@ -307,20 +289,13 @@ Plots.png(
     joinpath(path, "mass_cons.png"),
 )
 
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
-end
+include(joinpath(@__DIR__, "../..", "example_utils.jl")) # linkfig
 
 linkfig(
-    relpath(joinpath(path, "energy_cons.png"), joinpath(@__DIR__, "../..")),
+    relpath(joinpath(path, "energy_cons.png"), joinpath(@__DIR__, "../../..")),
     "Total Energy",
 )
 linkfig(
-    relpath(joinpath(path, "mass_cons.png"), joinpath(@__DIR__, "../..")),
+    relpath(joinpath(path, "mass_cons.png"), joinpath(@__DIR__, "../../..")),
     "Mass",
 )

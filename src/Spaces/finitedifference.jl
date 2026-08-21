@@ -9,8 +9,8 @@ abstract type AbstractFiniteDifferenceSpace <: AbstractSpace end
 A 1D finite-difference space, that lives on
 either:
 
- - cell centers (where `staggering` is [`Grids.CellCenter`](@ref)) or
- - cell faces (where `staggering` is [`Grids.CellFace`](@ref))
+  - cell centers (where `staggering` is [`Grids.CellCenter`](@ref)) or
+  - cell faces (where `staggering` is [`Grids.CellFace`](@ref))
 """
 struct FiniteDifferenceSpace{
     G <: Grids.AbstractFiniteDifferenceGrid,
@@ -83,6 +83,20 @@ CenterFiniteDifferenceSpace(
 Adapt.adapt_structure(to, space::FiniteDifferenceSpace) =
     FiniteDifferenceSpace(Adapt.adapt(to, grid(space)), staggering(space))
 
+issubspace(space1::FiniteDifferenceSpace, space2::FiniteDifferenceSpace) =
+    vertical_grid(grid(space1)) === vertical_grid(grid(space2))
+
+Base.@propagate_inbounds level(space::FiniteDifferenceSpace, v) = PointSpace(
+    ClimaComms.context(space),
+    level(local_geometry_data(space), integer_level_index(space, v)),
+)
+
+Base.@propagate_inbounds slab(space::FiniteDifferenceSpace, v, h) =
+    isone(h) ? level(space, v) : throw(ArgumentError("Space has only one column"))
+
+column(space::FiniteDifferenceSpace, indices...) =
+    all(isone, indices) ? space : throw(ArgumentError("Space has only one column"))
+
 """
     face_space(space::FiniteDifferenceSpace)
 
@@ -121,26 +135,11 @@ function Δz_data(space::AbstractSpace)
 end
 
 function left_boundary_name(space::AbstractSpace)
-    boundaries = Topologies.boundaries(Spaces.vertical_topology(space))
+    boundaries = Topologies.boundaries(vertical_topology(space))
     propertynames(boundaries)[1]
 end
 
 function right_boundary_name(space::AbstractSpace)
-    boundaries = Topologies.boundaries(Spaces.vertical_topology(space))
+    boundaries = Topologies.boundaries(vertical_topology(space))
     propertynames(boundaries)[2]
-end
-
-Base.@propagate_inbounds function level(
-    space::FaceFiniteDifferenceSpace,
-    v::PlusHalf,
-)
-    @inbounds local_geometry = level(local_geometry_data(space), v.i + 1)
-    PointSpace(ClimaComms.context(space), local_geometry)
-end
-Base.@propagate_inbounds function level(
-    space::CenterFiniteDifferenceSpace,
-    v::Int,
-)
-    local_geometry = level(local_geometry_data(space), v)
-    PointSpace(ClimaComms.context(space), local_geometry)
 end

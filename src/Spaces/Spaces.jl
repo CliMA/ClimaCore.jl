@@ -1,16 +1,16 @@
 """
     Meshes
 
-- domain
-- topology
-- coordinates
-- metric terms (inverse partial derivatives)
-- quadrature rules and weights
+  - domain
+  - topology
+  - coordinates
+  - metric terms (inverse partial derivatives)
+  - quadrature rules and weights
 
 ## References / notes
- - [ceed](https://ceed.exascaleproject.org/ceed-code/)
- - [QA](https://github.com/CliMA/ClimateMachine.jl/blob/ans/sphere/test/Numerics/DGMethods/compressible_navier_stokes_equations/sphere/sphere_helper_functions.jl)
 
+  - [ceed](https://ceed.exascaleproject.org/ceed-code/)
+  - [QA](https://github.com/CliMA/ClimateMachine.jl/blob/ans/sphere/test/Numerics/DGMethods/compressible_navier_stokes_equations/sphere/sphere_helper_functions.jl)
 """
 module Spaces
 
@@ -20,8 +20,8 @@ using Adapt
 import ..slab, ..column, ..level
 import ..Utilities: PlusHalf, half
 import ..DebugOnly: call_post_op_callback, post_op_callback
-import ..DataLayouts,
-    ..Geometry, ..Domains, ..Meshes, ..Topologies, ..Grids, ..Quadratures
+import ..DataLayouts, ..Geometry, ..Domains, ..Meshes, ..Topologies, ..Grids, ..Quadratures
+import ..DataLayouts: PointIndex
 
 import ..Domains: z_max, z_min
 import ..Meshes: n_elements_per_panel_direction
@@ -49,18 +49,17 @@ using StaticArrays, ForwardDiff, LinearAlgebra, Adapt
     AbstractSpace
 
 Should define
-- `grid`
-- `staggering`
 
+  - `grid`
 
-- `space` constructor
+  - `staggering`
 
+  - `space` constructor
 """
 abstract type AbstractSpace end
 
 function grid end
 function staggering end
-
 
 ClimaComms.context(space::AbstractSpace) = ClimaComms.context(grid(space))
 ClimaComms.device(space::AbstractSpace) = ClimaComms.device(grid(space))
@@ -74,7 +73,7 @@ local_geometry_data(space::AbstractSpace) =
 dss_weights(space::AbstractSpace) = dss_weights(grid(space), staggering(space))
 
 function n_elements_per_panel_direction(space::AbstractSpace)
-    hspace = Spaces.horizontal_space(space)
+    hspace = horizontal_space(space)
     hmesh = topology(hspace).mesh
     return Meshes.n_elements_per_panel_direction(hmesh)
 end
@@ -84,7 +83,7 @@ global_geometry(space::AbstractSpace) = global_geometry(grid(space))
 space(refspace::AbstractSpace, staggering::Staggering) =
     space(grid(refspace), staggering)
 
-issubspace(::AbstractSpace, ::AbstractSpace) = false
+issubspace(subspace::AbstractSpace, space::AbstractSpace) = subspace === space
 
 undertype(space::AbstractSpace) =
     Geometry.undertype(eltype(local_geometry_data(space)))
@@ -95,10 +94,40 @@ coordinates_data(grid::Grids.AbstractGrid) =
 coordinates_data(staggering, grid::Grids.AbstractGrid) =
     local_geometry_data(staggering, grid).coordinates
 
+horizontal_grid(grid::Grids.AbstractSpectralElementGrid) = grid
+horizontal_grid(grid::Grids.LevelGrid) = grid.full_grid.horizontal_grid
+
+vertical_grid(grid::Grids.AbstractFiniteDifferenceGrid) = grid
+vertical_grid(grid::Grids.ColumnGrid) = vertical_grid(grid.full_grid)
+vertical_grid(grid::Grids.AbstractExtrudedFiniteDifferenceGrid) = grid.vertical_grid
+
+# Device-side extruded grids do not store their vertical grids, so the vertical
+# topology, which Adapt preserves, stands in as the identity token compared by
+# issubspace: column slices share a vertical topology exactly when their host
+# grids share a vertical grid.
+vertical_grid(grid::Grids.DeviceExtrudedFiniteDifferenceGrid) =
+    Grids.vertical_topology(grid)
+
+half_level_error() = throw(ArgumentError("Cannot use PlusHalf as CellCenter space index"))
+
+staggered_level_index(space, v::Integer) = staggering(space) isa CellFace ? v - half : v
+staggered_level_index(space, v::PlusHalf) =
+    staggering(space) isa CellFace ? v : half_level_error()
+
+integer_level_index(_, v::Integer) = v
+integer_level_index(space, v::PlusHalf) =
+    staggering(space) isa CellFace ? v + half : half_level_error()
+
+Base.@propagate_inbounds Base.view(space::AbstractSpace, index::PointIndex) =
+    PointSpace(ClimaComms.context(space), view(local_geometry_data(space), index))
+Base.@propagate_inbounds Base.view(space::AbstractSpace, indices::PointIndex...) =
+    view(space, CartesianIndex(indices...))
+
 include("pointspace.jl")
 include("spectralelement.jl")
 include("finitedifference.jl")
 include("extruded.jl")
+include("multicolumn.jl")
 include("triangulation.jl")
 include("dss.jl")
 
@@ -111,7 +140,7 @@ function face_space(space::AbstractSpace)
     error("`center_space` can only be called with vertical/extruded spaces")
 end
 
-weighted_jacobian(space::Spaces.AbstractSpace) = local_geometry_data(space).WJ
+weighted_jacobian(space::AbstractSpace) = local_geometry_data(space).WJ
 
 """
     Spaces.local_area(space::Spaces.AbstractSpace)
@@ -119,20 +148,21 @@ weighted_jacobian(space::Spaces.AbstractSpace) = local_geometry_data(space).WJ
 The length/area/volume of `space` local to the current context. See
 [`Spaces.area`](@ref)
 """
-local_area(space::Spaces.AbstractSpace) = Base.sum(weighted_jacobian(space))
+local_area(space::AbstractSpace) = Base.sum(weighted_jacobian(space))
 
 """
     Spaces.area(space::Spaces.AbstractSpace)
 
 The length/area/volume of `space`. This is computed as the sum of the quadrature
 weights ``W_i`` multiplied by the Jacobian determinants ``J_i``:
+
 ```math
 \\sum_i W_i J_i \\approx \\int_\\Omega \\, d \\Omega
 ```
 
 If `space` is distributed, this uses a `ClimaComms.allreduce` operation.
 """
-area(space::Spaces.AbstractSpace) =
+area(space::AbstractSpace) =
     ClimaComms.allreduce(ClimaComms.context(space), local_area(space), +)
 
 ClimaComms.array_type(space::AbstractSpace) =
@@ -193,6 +223,7 @@ Returns a bool indicating that the space has a vertical grid.
 function has_vertical end
 has_vertical(::AbstractSpace) = false
 has_vertical(::ExtrudedFiniteDifferenceSpace) = true
+has_vertical(::MultiColumnFiniteDifferenceSpace) = true
 has_vertical(::FiniteDifferenceSpace) = true
 
 """

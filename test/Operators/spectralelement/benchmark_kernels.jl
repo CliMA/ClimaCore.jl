@@ -117,35 +117,30 @@ function kernel_vector_dss!(args)
 end
 
 ##### field dss!
-kernel_field_dss_array!(args) = kernel_copyto!(args)
 function kernel_field_dss!(args)
     Spaces.weighted_dss!(args.ϕψ, args.buffers.ϕψ_buffer)
     return nothing
 end
 
 ##### ntuple_field dss!
-kernel_ntuple_field_dss_array!(args) = kernel_copyto!(args)
 function kernel_ntuple_field_dss!(args)
     Spaces.weighted_dss!(args.nt_ϕψ, args.buffers.nt_ϕψ_buffer)
     return nothing
 end
 
 ##### ntuple_floats dss!
-kernel_ntuple_floats_dss_array!(args) = kernel_copyto!(args)
 function kernel_ntuple_floats_dss!(args)
     Spaces.weighted_dss!(args.nt_ϕψ_ft, args.buffers.nt_ϕψ_ft_buffer)
     return nothing
 end
 
 ##### complicated_field dss!
-kernel_complicated_field_dss_array!(args) = kernel_copyto!(args)
 function kernel_complicated_field_dss!(args)
     Spaces.weighted_dss!(args.f_comp, args.buffers.f_comp_buffer)
     return nothing
 end
 
 ##### complicated_field2 dss!
-kernel_complicated_field2_dss_array!(args) = kernel_copyto!(args)
 function kernel_complicated_field2_dss!(args)
     Spaces.weighted_dss!(args.f_comp2, args.buffers.f_comp2_buffer)
     return nothing

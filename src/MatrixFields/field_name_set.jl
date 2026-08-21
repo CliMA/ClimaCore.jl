@@ -5,9 +5,10 @@ const FieldNamePair = Tuple{FieldName, FieldName}
 
 An `AbstractSet` that contains values of type `T`, which serves as an analogue
 of a `KeySet` for a `FieldNameDict`. There are two subtypes of `FieldNameSet`:
-- `FieldVectorKeys`, for which `T` is set to `FieldName`
-- `FieldMatrixKeys`, for which `T` is set to `Tuple{FieldName, FieldName}`; each
-  tuple of type `T` represents a pair of row-column indices
+
+  - `FieldVectorKeys`, for which `T` is set to `FieldName`
+  - `FieldMatrixKeys`, for which `T` is set to `Tuple{FieldName, FieldName}`; each
+    tuple of type `T` represents a pair of row-column indices
 
 Since `FieldName`s are singleton types, the result of almost any `FieldNameSet`
 operation can be inferred during compilation. So, with the exception of `map`,

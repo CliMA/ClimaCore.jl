@@ -10,7 +10,7 @@ import ClimaCore.Operators:
 import ClimaCore.MatrixFields: FaceToCenter, CenterToFace, Square, CenterToCenter,
     FaceToFace, TwoArgFDOperator, OneArgFDOperator, has_affine_bc, FDOperatorMatrix,
     MultiplyColumnwiseBandMatrixField, operator_input_space, op_matrix_row_type,
-    BandMatrixRow
+    BandMatrixRow, band_matrix_d
 using ClimaCore.MatrixFields
 import ClimaCore.Utilities
 import ClimaCore
@@ -37,6 +37,7 @@ check_if_fits_in_shmem(val) = sizeof(typeof(val)) <= 36
 
 """
     has_type_arg(x)
+
 Check if `x` is a `Type`, or any of its arguments has a `Type` argument.
 This is needed because both the shmem matrix multiplication and the getidx fallback rely on
 `eltype`, and `eltype(::CudaRefType) = Any`
@@ -366,21 +367,30 @@ end
 
 Returns the value of the field `f` at the thread's index.
 When the staggering of `space` is `CellCenter`, the thread with `v == CUDA.blockDim().x` returns `new(eltype(f))`
+
+Fields whose space is missing one of the extruded space's dimensions hold a
+single value along the missing dimensions, and are broadcast across them: a
+level field has no vertical dimension, and a column field has no horizontal
+dimensions. Those dimensions are read at index 1, matching `Operators.vidx` and
+`Operators.hindices`.
 """
 Base.@propagate_inbounds function calc_level_val(
     arg::F,
     space,
 ) where {F <: Field}
     data = field_values(arg)
-    i = threadIdx().y
-    j = blockIdx().y
-    v = threadIdx().x
-    h = blockIdx().z
     if space isa
-       Union{Spaces.ExtrudedFiniteDifferenceSpace, Spaces.FiniteDifferenceSpace} &&
-       space.staggering isa Spaces.CellCenter
-        v == CUDA.blockDim().x && return @inline @inbounds new(eltype(data))
+       Union{Spaces.ExtrudedFiniteDifferenceSpace, Spaces.FiniteDifferenceSpace}
+        space.staggering isa Spaces.CellCenter &&
+            threadIdx().x == CUDA.blockDim().x &&
+            return @inline @inbounds new(eltype(data))
+        v = threadIdx().x
+    else
+        v = 1i32
     end
+    (i, j, h) =
+        space isa Spaces.FiniteDifferenceSpace ? (1i32, 1i32, 1i32) :
+        (threadIdx().y, blockIdx().y, blockIdx().z)
     return @inline @inbounds data[v, i, j, h]
 end
 

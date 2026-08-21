@@ -7,11 +7,12 @@ on the diagonal with index `d` by calling `row[d]`, taking linear combinations
 with other band matrix rows (and with `LinearAlgebra.I`), and checking for
 equality with other band matrix rows (and with `LinearAlgebra.I`). There are
 several aliases for commonly used subtypes of `BandMatrixRow`:
-- `DiagonalMatrixRow(entry_1)`
-- `BidiagonalMatrixRow(entry_1, entry_2)`
-- `TridiagonalMatrixRow(entry_1, entry_2, entry_3)`
-- `QuaddiagonalMatrixRow(entry_1, entry_2, entry_3, entry_4)`
-- `PentadiagonalMatrixRow(entry_1, entry_2, entry_3, entry_4, entry_5)`
+
+  - `DiagonalMatrixRow(entry_1)`
+  - `BidiagonalMatrixRow(entry_1, entry_2)`
+  - `TridiagonalMatrixRow(entry_1, entry_2, entry_3)`
+  - `QuaddiagonalMatrixRow(entry_1, entry_2, entry_3, entry_4)`
+  - `PentadiagonalMatrixRow(entry_1, entry_2, entry_3, entry_4, entry_5)`
 """
 struct BandMatrixRow{ld, bw, T} # bw is the bandwidth (the number of diagonals)
     entries::NTuple{bw, T}

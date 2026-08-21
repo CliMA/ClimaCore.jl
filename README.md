@@ -40,7 +40,7 @@ The dynamical core (_dycore_) of the CliMA Earth System Model: composable, GPU-c
 [dlt-img]: https://img.shields.io/badge/dynamic/json?url=http%3A%2F%2Fjuliapkgstats.com%2Fapi%2Fv1%2Ftotal_downloads%2FClimaCore&query=total_requests&label=Downloads
 [dlt-url]: https://juliapkgstats.com/pkg/ClimaCore
 
-[zenodo-img]: https://zenodo.org/badge/356355994.svg
+[zenodo-img]: https://img.shields.io/badge/DOI-10.5281%2Fzenodo.5554759-blue.svg
 [zenodo-url]: https://zenodo.org/badge/latestdoi/356355994
 
 ClimaCore.jl provides the spatial discretization building blocks for the [Climate Modeling Alliance (CliMA)](https://clima.caltech.edu/) Earth System Model, which is written entirely in [Julia](https://julialang.org/). It pairs a high-level API for composing differential operators and defining flexible discretizations with low-level APIs for data layouts, specialized implementations, and threading — targeting both CPU and GPU architectures from a single codebase.
@@ -53,7 +53,7 @@ ClimaCore.jl provides the spatial discretization building blocks for the [Climat
 - **`Field` abstraction**: scalar-, vector-, or struct-valued fields carrying values, geometry, and mesh information, with flexible memory layouts (AoS, SoA, AoSoA) and useful overloads (`sum`, `norm`, ...).
 - **Composable operators via broadcasting**: differential operators (`grad`, `div`, `interpolate`, ...) act like functions when broadcast over a `Field`, fusing operators and function calls into a single pass.
 - **GPU acceleration**: broadcast expressions compile to custom CUDA kernels, with specialization on polynomial degree for kernel performance.
-- **Time-stepper compatible**: works with [SciML](https://sciml.ai/)/OrdinaryDiffEq time steppers.
+- **Time-stepper compatible**: `Field`s and `FieldVector`s act as the state vector for [ClimaTimeSteppers](https://github.com/CliMA/ClimaTimeSteppers.jl), which the tests and examples here time-step with.
 
 ## Quick Example
 

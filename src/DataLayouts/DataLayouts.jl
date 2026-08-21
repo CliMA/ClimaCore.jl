@@ -1,7 +1,7 @@
 module DataLayouts
 
-import Base: @propagate_inbounds
-import LLVM: unsafe_load
+import Base: @propagate_inbounds, unsafe_load
+import LLVM # for the `unsafe_load` methods on `Core.LLVMPtr`
 import StaticArrays
 import BlockArrays
 import Adapt
@@ -37,18 +37,19 @@ array, leading to a hybrid of the traditional "array-of-structs" (`F = 1`) and
 parallelized on CPUs and GPUs, and it dictates which array types are allocated.
 
 Several layouts are available, named after the order of their parent axes:
-- [`DataF`](@ref) is a 0-dimensional array that stores a single value, with an
-  `Nf`-element parent array (used in place of a `Ref`)
-- [`VIJFH`](@ref) is an `Nv × Ni × Nj × Nh` array that stores spatially
-  varying data, with each value spread along the fourth parent axis
-- [`VIJHF`](@ref) is like `VIJFH` with the `F` and `H` axes swapped, which permits
-  [linear indexing](https://docs.julialang.org/en/v1/devdocs/subarrays/#Linear-indexing)
-  and improves performance for operators that only access one field at a time
-- [`VIJHWithF`](@ref) generalizes `VIJFH` and `VIJHF` to any `F` axis
-  position, with `F = nothing` removing the axis altogether
-- [`VIH1`](@ref) and [`IH1JH2`](@ref) store vertical and horizontal planes of
-  interpolated data for plotting, whose `ih1` and `jh2` indices combine `i` and
-  `j` with `h1` and `h2` (orthogonal components of `h` in rectangular domains)
+
+  - [`DataF`](@ref) is a 0-dimensional array that stores a single value, with an
+    `Nf`-element parent array (used in place of a `Ref`)
+  - [`VIJFH`](@ref) is an `Nv × Ni × Nj × Nh` array that stores spatially
+    varying data, with each value spread along the fourth parent axis
+  - [`VIJHF`](@ref) is like `VIJFH` with the `F` and `H` axes swapped, which permits
+    [linear indexing](https://docs.julialang.org/en/v1/devdocs/subarrays/#Linear-indexing)
+    and improves performance for operators that only access one field at a time
+  - [`VIJHWithF`](@ref) generalizes `VIJFH` and `VIJHF` to any `F` axis
+    position, with `F = nothing` removing the axis altogether
+  - [`VIH1`](@ref) and [`IH1JH2`](@ref) store vertical and horizontal planes of
+    interpolated data for plotting, whose `ih1` and `jh2` indices combine `i` and
+    `j` with `h1` and `h2` (orthogonal components of `h` in rectangular domains)
 
 ```julia-repl
 julia> data = VIJFH{Tuple{Int64, Float64, Int128}, 10, 5, 5, nothing}(Array{Int64}, 20);
@@ -56,26 +57,28 @@ julia> data = VIJFH{Tuple{Int64, Float64, Int128}, 10, 5, 5, nothing}(Array{Int6
 julia> size(data), size(parent(data)) # Nh = 20 elements, Nf = 4 Int64 storage values
 ((10, 5, 5, 20), (10, 5, 5, 4, 20))
 
-julia> data[1, 2, 3, 4] = (0, 1.0, 2); data.:1[1, 2, 3, 4], data[1, 2, 3, 4].:2
+julia> data[1, 2, 3, 4] = (0, 1.0, 2);
+       data.:1[1, 2, 3, 4], data[1, 2, 3, 4].:2
 (0, 1.0)
 ```
 
 # Extended Help
 
 `DataLayout`s also provide the following functionality for ClimaCore:
-- Assigning a [`DataScope`](@ref) to every batch of data, and automatically
-  partitioning data across nestable multithreaded operations
-- Storing specific array dimensions as type parameters, and allocating static
-  arrays in place of regular arrays when every dimension can be inferred
-- Using linear indices in place of Cartesian indices where doing so may
-  improve performance, including in `getindex` and `view` operations
-- Automatic nested broadcasting over `Tuple` and `NamedTuple` values (or
-  other supported iterator types), along with broadcasting over array indices
-- Checking for type stability before evaluating operations like broadcasts
-  and reductions, avoiding inefficient CPU behavior and GPU compilation errors
-- Falling back to built-in `AbstractArray` methods when specialized ClimaCore
-  code is not available (this may be highly inefficient or fail to compile on
-  GPUs, but it should generally work on CPUs)
+
+  - Assigning a [`DataScope`](@ref) to every batch of data, and automatically
+    partitioning data across nestable multithreaded operations
+  - Storing specific array dimensions as type parameters, and allocating static
+    arrays in place of regular arrays when every dimension can be inferred
+  - Using linear indices in place of Cartesian indices where doing so may
+    improve performance, including in `getindex` and `view` operations
+  - Automatic nested broadcasting over `Tuple` and `NamedTuple` values (or
+    other supported iterator types), along with broadcasting over array indices
+  - Checking for type stability before evaluating operations like broadcasts
+    and reductions, avoiding inefficient CPU behavior and GPU compilation errors
+  - Falling back to built-in `AbstractArray` methods when specialized ClimaCore
+    code is not available (this may be highly inefficient or fail to compile on
+    GPUs, but it should generally work on CPUs)
 """
 abstract type DataLayout{T, N, F, S, A} <: AbstractArray{T, N} end
 
@@ -242,7 +245,15 @@ Base.reinterpret(::Type{T}, data::DataLayout) where {T} = rebuild(data, parent(d
 
 ClimaComms.gather(::ClimaComms.SingletonCommsContext, data::DataLayout) = data
 ClimaComms.gather(ctx::ClimaComms.AbstractCommsContext, data::DataLayout) =
-    rebuild(data, ClimaComms.gather(ctx, parent(data)))
+    gather_data(ctx, data)
+# Disambiguate from ClimaCommsMPIExt's gather(::MPICommsContext, array)
+ClimaComms.gather(ctx::ClimaComms.MPICommsContext, data::DataLayout) =
+    gather_data(ctx, data)
+function gather_data(ctx, data)
+    gathered_array = ClimaComms.gather(ctx, parent(data))
+    # The array gather only returns data on the root process
+    return ClimaComms.iamroot(ctx) ? rebuild(data, gathered_array) : nothing
+end
 
 @inline add_f_dim(dims, dim, ::Val{F}) where {F} =
     isnothing(F) ? dims : unrolled_insert(dims, dim, Val(F))
@@ -322,8 +333,8 @@ end
 
 [`DataLayout`](@ref) representing a single value of type `T`, which can be
 stored across multiple array indices. This is used in place of a `Ref` to wrap
-data that is stored in any array. May be constructed either from the parent
-array type or the parent array itself.
+data that is stored in any one-dimensional array. May be constructed either from
+the parent array type or the parent array itself.
 """
 struct DataF{T, S, A} <: DataLayout{T, 0, 1, S, A}
     array::A
@@ -334,10 +345,8 @@ DataF{T, S}(::Type{A}) where {T, S, A} =
     DataF{T, S}(similar(A, num_basetypes(eltype(A), T)))
 function DataF{T, S}(array) where {T, S}
     check_basetype(eltype(array), T)
-    length(array) == num_basetypes(eltype(array), T) ||
-        throw(ArgumentError("Array length is not consistent with element type"))
-    linearly_indexable_array = IndexStyle(array) == IndexLinear() ? array : vec(array)
-    return DataF{T, S, typeof(linearly_indexable_array)}(linearly_indexable_array)
+    check_parent(array, num_basetypes(eltype(array), T))
+    return DataF{T, S, typeof(array)}(array)
 end
 
 @inline shape_params(::Type{<:DataF}) = (;)
@@ -411,17 +420,29 @@ end
     (Nv, Ni, Nj, isnothing(Nh) ? size(parent(data), isnothing(F) || F == 5 ? 4 : 5) : Nh)
 @inline nelems(data::VIJHWithF) = size(data, 4)
 
-@propagate_inbounds function level_view(data::VIJHWithF, v)
+@propagate_inbounds function level_view(
+    data::VIJHWithF{T, Nv, Ni, Nj, Nh, F, S},
+    v,
+) where {T, Nv, Ni, Nj, Nh, F, S}
     array = stable_view(parent(data), add_f_dim((v:v, :, :, :), :, Val(f_dim(data)))...)
-    return rebuild(data, array; Nv = 1)
+    return VIJHWithF{T, 1, Ni, Nj, Nh, F, S}(array)
 end
-@propagate_inbounds function slab_view(data::VIJHWithF, v, h)
+@propagate_inbounds function slab_view(
+    data::VIJHWithF{T, Nv, Ni, Nj, Nh, F, S},
+    v,
+    h,
+) where {T, Nv, Ni, Nj, Nh, F, S}
     array = stable_view(parent(data), add_f_dim((v:v, :, :, h:h), :, Val(f_dim(data)))...)
-    return rebuild(data, array; Nv = 1, Nh = 1)
+    return VIJHWithF{T, 1, Ni, Nj, 1, F, S}(array)
 end
-@propagate_inbounds function column_view(data::VIJHWithF, i, j, h)
+@propagate_inbounds function column_view(
+    data::VIJHWithF{T, Nv, Ni, Nj, Nh, F, S},
+    i,
+    j,
+    h,
+) where {T, Nv, Ni, Nj, Nh, F, S}
     array = stable_view(parent(data), add_f_dim((:, i:i, j:j, h:h), :, Val(f_dim(data)))...)
-    return rebuild(data, array; Ni = 1, Nj = 1, Nh = 1)
+    return VIJHWithF{T, Nv, 1, 1, 1, F, S}(array)
 end
 
 """
@@ -462,19 +483,29 @@ end
     (Nv, isnothing(Nh) ? size(parent(data), 2) : Ni)
 @inline nelems(data::VIH1) = size(data, 2) ÷ shape_params(data).Ni
 
-@propagate_inbounds function level_view(data::VIH1, v)
+@propagate_inbounds function level_view(
+    data::VIH1{T, Nv, Ni, Nh, S},
+    v,
+) where {T, Nv, Ni, Nh, S}
     array = stable_view(parent(data), v:v, :)
-    return rebuild(data, array; Nv = 1)
+    return VIH1{T, 1, Ni, Nh, S}(array)
 end
-@propagate_inbounds function slab_view(data::VIH1, v, h)
-    (; Ni) = shape_params(data)
+@propagate_inbounds function slab_view(
+    data::VIH1{T, Nv, Ni, Nh, S},
+    v,
+    h,
+) where {T, Nv, Ni, Nh, S}
     array = stable_view(parent(data), v:v, Ni * mod(h - 1, size(data, 2) ÷ Ni) .+ (1:Ni))
-    return rebuild(data, array; Nv = 1, Nh = 1)
+    return VIH1{T, 1, Ni, 1, S}(array)
 end
-@propagate_inbounds function column_view(data::VIH1, i, _, h)
-    (; Ni) = shape_params(data)
+@propagate_inbounds function column_view(
+    data::VIH1{T, Nv, Ni, Nh, S},
+    i,
+    _,
+    h,
+) where {T, Nv, Ni, Nh, S}
     array = stable_view(parent(data), :, Ni * mod(h - 1, size(data, 2) ÷ Ni) .+ (i:i))
-    return rebuild(data, array; Ni = 1, Nh = 1)
+    return VIH1{T, Nv, 1, 1, S}(array)
 end
 
 """
@@ -517,18 +548,53 @@ end
 @inline nelems(data::IH1JH2) =
     length(data) ÷ (shape_params(data).Ni * shape_params(data).Nj)
 
-@propagate_inbounds function slab_view(data::IH1JH2, _, h)
-    (; Ni, Nj) = shape_params(data)
+@propagate_inbounds function slab_view(
+    data::IH1JH2{T, Ni, Nj, Nh, S},
+    _,
+    h,
+) where {T, Ni, Nj, Nh, S}
     (h2, h1) = fldmod(h - 1, size(data, 1) ÷ Ni) .+ 1
     array = stable_view(parent(data), Ni * (h1 - 1) .+ (1:Ni), Nj * (h2 - 1) .+ (1:Nj))
-    return rebuild(data, array; Nh = 1)
+    return IH1JH2{T, Ni, Nj, 1, S}(array)
 end
-@propagate_inbounds function column_view(data::IH1JH2, i, j, h)
-    (; Ni, Nj) = shape_params(data)
+@propagate_inbounds function column_view(
+    data::IH1JH2{T, Ni, Nj, Nh, S},
+    i,
+    j,
+    h,
+) where {T, Ni, Nj, Nh, S}
     (h2, h1) = fldmod(h - 1, size(data, 1) ÷ Ni) .+ 1
     array = stable_view(parent(data), Ni * (h1 - 1) .+ (i:i), Nj * (h2 - 1) .+ (j:j))
-    return rebuild(data, array; Ni = 1, Nj = 1, Nh = 1)
+    return IH1JH2{T, 1, 1, 1, S}(array)
 end
+@inline nlevels(::DataF) = 1
+@inline nlevels(
+    ::VIJHWithF{T, Nv, Ni, Nj, Nh, F, S, A},
+) where {T, Nv, Ni, Nj, Nh, F, S, A} = Nv
+@inline nlevels(::VIH1{T, Nv, Ni, Nh, S, A}) where {T, Nv, Ni, Nh, S, A} = Nv
+@inline nlevels(::IH1JH2) = 1
+
+@inline nlevels(::Type{<:DataF}) = 1
+@inline nlevels(
+    ::Type{<:VIJHWithF{T, Nv, Ni, Nj, Nh, F, S, A}},
+) where {T, Nv, Ni, Nj, Nh, F, S, A} = Nv
+@inline nlevels(::Type{<:VIH1{T, Nv, Ni, Nh, S, A}}) where {T, Nv, Ni, Nh, S, A} = Nv
+@inline nlevels(::Type{<:IH1JH2}) = 1
+
+@inline nquadpoints(::DataF) = 1
+@inline nquadpoints(
+    ::VIJHWithF{T, Nv, Ni, Nj, Nh, F, S, A},
+) where {T, Nv, Ni, Nj, Nh, F, S, A} = Ni * Nj
+@inline nquadpoints(::VIH1{T, Nv, Ni, Nh, S, A}) where {T, Nv, Ni, Nh, S, A} = Ni
+@inline nquadpoints(::IH1JH2{T, Ni, Nj, Nh, S, A}) where {T, Ni, Nj, Nh, S, A} = Ni * Nj
+
+@inline nquadpoints(::Type{<:DataF}) = 1
+@inline nquadpoints(
+    ::Type{<:VIJHWithF{T, Nv, Ni, Nj, Nh, F, S, A}},
+) where {T, Nv, Ni, Nj, Nh, F, S, A} = Ni * Nj
+@inline nquadpoints(::Type{<:VIH1{T, Nv, Ni, Nh, S, A}}) where {T, Nv, Ni, Nh, S, A} = Ni
+@inline nquadpoints(::Type{<:IH1JH2{T, Ni, Nj, Nh, S, A}}) where {T, Ni, Nj, Nh, S, A} =
+    Ni * Nj
 
 include("broadcast.jl")
 include("indexing.jl")

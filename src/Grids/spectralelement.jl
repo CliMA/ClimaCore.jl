@@ -140,12 +140,13 @@ The flag `autodiff_metric` enables the use of automatic differentiation instead 
 SEM for computing metric terms.
 
 # Input arguments:
-- topology: Topology2D
-- quadrature_style: QuadratureStyle
-- enable_bubble: Bool
-- autodiff_metric: Bool
-- VIJH: subtype of DataLayouts.VIJHWithF with a specific F axis
-- enable_mask: Boolean used to skip operations where the space's mask is 0
+
+  - topology: Topology2D
+  - quadrature_style: QuadratureStyle
+  - enable_bubble: Bool
+  - autodiff_metric: Bool
+  - VIJH: subtype of DataLayouts.VIJHWithF with a specific F axis
+  - enable_mask: Boolean used to skip operations where the space's mask is 0
 
 The idea behind the so-called `bubble_correction` is that the numerical area
 of the domain (e.g., the sphere) is given by the sum of nodal integration weights
@@ -156,13 +157,17 @@ geometric and numerical areas of each element match.
 
 Let ``\\Delta A^e := A^e_{exact} - A^e_{approx}``, then, in
 the case of linear elements, we correct ``W_{i,j} J^e_{i,j}`` by:
+
 ```math
 \\widehat{W_{i,j} J^e}_{i,j} = W_{i,j} J^e_{i,j} + \\Delta A^e * W_{i,j} / Nq^2 .
 ```
+
 and the case of non linear elements, by
+
 ```math
 \\widehat{W_{i,j} J^e}_{i,j} = W_{i,j} J^e_{i,j} \\left( 1 + \\tilde{A}^e \\right) ,
 ```
+
 where ``\\tilde{A}^e`` is the approximated area given by the sum of the interior nodal integration weights.
 
 Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSphere`](@ref) and
@@ -572,12 +577,20 @@ quadrature_style(grid::AbstractSpectralElementGrid) = grid.quadrature_style
 dss_weights(grid::AbstractSpectralElementGrid, ::Nothing) = grid.dss_weights
 
 ## GPU compatibility
+struct DeviceSpectralElementGrid1D{Q, GG, LG} <: AbstractSpectralElementGrid
+    quadrature_style::Q
+    global_geometry::GG
+    local_geometry::LG
+end
 struct DeviceSpectralElementGrid2D{Q, GG, LG, M} <: AbstractSpectralElementGrid
     quadrature_style::Q
     global_geometry::GG
     local_geometry::LG
     mask::M
 end
+
+ClimaComms.context(grid::DeviceSpectralElementGrid1D) = DeviceSideContext()
+ClimaComms.device(grid::DeviceSpectralElementGrid1D) = DeviceSideDevice()
 
 ClimaComms.context(grid::DeviceSpectralElementGrid2D) = DeviceSideContext()
 ClimaComms.device(grid::DeviceSpectralElementGrid2D) = DeviceSideDevice()

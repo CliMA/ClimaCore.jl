@@ -84,6 +84,11 @@ Adapt.adapt_structure(to, fmb::FusedMultiBroadcast) = FusedMultiBroadcast(
 const MaybeLazyDataLayout = Union{DataLayout, LazyDataLayout}
 const MaybeFusedDataLayoutBroadcast = Union{LazyDataLayout, FusedMultiBroadcast}
 
+@inline is_layout_arg(::MaybeLazyDataLayout) = true
+@inline is_layout_arg(::Any) = false
+
+@inline get_layout_arg_tuple(arg) = is_layout_arg(arg) ? (arg,) : ()
+
 """
     layout_args(bc)
 
@@ -91,23 +96,29 @@ Extracts every [`DataLayout`](@ref) and [`LazyDataLayout`](@ref) from the
 arguments of a broadcast expression.
 """
 @inline layout_args(bc::LazyDataLayout) =
-    unrolled_filter(Base.Fix2(isa, MaybeLazyDataLayout), bc.args)
+    unrolled_flatmap(get_layout_arg_tuple, bc.args)
 @inline layout_args(bc::FusedMultiBroadcast) =
-    unrolled_filter(Base.Fix2(isa, MaybeLazyDataLayout), unrolled_flatten(bc.pairs))
+    unrolled_flatmap(get_layout_arg_tuple, unrolled_flatten(bc.pairs))
 
 @inline DataScope(bc::MaybeFusedDataLayoutBroadcast) = DataScope(layout_args(bc)...)
 
 @inline layout_type(::LazyDataLayout{D}) where {D} = D
 
 # Only specify the parent array element type, instead of a concrete array type.
+@inline parent_eltype(arg) = eltype(parent_type(arg))
 @inline parent_type(bc::LazyDataLayout) =
-    AbstractArray{promote_type(unrolled_map(eltype ∘ parent_type, layout_args(bc))...)}
+    AbstractArray{promote_type(unrolled_map(parent_eltype, layout_args(bc))...)}
 
 # Allow any combination of f_dim values, taking a maximum to resolve conflicts.
-@inline function f_dim(bc::LazyDataLayout)
-    f_dims = unrolled_filter(!isnothing, unrolled_map(f_dim, layout_args(bc)))
-    return isempty(f_dims) ? nothing : max(f_dims...)
-end
+# Reduce with a nothing-or-integer accumulator instead of collecting the
+# non-nothing values into a tuple, so that no intermediate tuples appear in
+# GPU-compiled code. The init value is passed positionally instead of as a
+# keyword argument because kwcalls of unrolled_reduce do not always specialize
+# during GPU compilation of wide broadcast expressions.
+@inline f_dim(bc::LazyDataLayout) =
+    unrolled_reduce(unrolled_map(f_dim, layout_args(bc)), nothing) do dim1, dim2
+        isnothing(dim1) ? dim2 : isnothing(dim2) ? dim1 : max(dim1, dim2)
+    end
 
 # Extrude singleton axes like Broadcast.combine_axes when combining vijh_params.
 @inline vijh_params(bc::LazyDataLayout) =
@@ -142,7 +153,7 @@ const DATA_LAYOUT_PRIMITIVES =
 for f in (:ndims, :length, :size, :axes, DATA_LAYOUT_PRIMITIVES...)
     f_with_module_prefix = f in DATA_LAYOUT_PRIMITIVES ? f : :(Base.$f)
     @eval @inline $f_with_module_prefix(bc::FusedMultiBroadcast) =
-        unrolled_allequal($f, layout_args(bc)) ? $f(first(layout_args(bc))) :
+        unrolled_allequal($f, unrolled_map(first, bc.pairs)) ? $f(first(first(bc.pairs))) :
         throw(DimensionMismatch($("$f is inconsistent among fused broadcasts")))
 end
 
@@ -157,7 +168,7 @@ Replaces each of the [`layout_args`](@ref) in a broadcast expression with
         Base.@_propagate_inbounds_meta
         arg isa MaybeLazyDataLayout ? f(arg, f_args...) : arg
     end
-    return Broadcast.Broadcasted(bc.style, bc.f, modified_args, bc.axes)
+    return Broadcast.Broadcasted(bc.style, bc.f, modified_args)
 end
 @propagate_inbounds function modify_args(f::F, bc::FusedMultiBroadcast, f_args...) where {F}
     modified_pairs = unrolled_map_with_inbounds(bc.pairs) do (dest, bc)

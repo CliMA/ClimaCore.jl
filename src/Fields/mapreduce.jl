@@ -49,6 +49,7 @@ and quadrature weights:
 \\approx
 \\int_\\Omega f(v) \\, d \\Omega
 ```
+
 where ``v_i`` is the value at each node, and ``f`` is the identity function if not specified.
 
 If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
@@ -115,6 +116,7 @@ summation of the field values multiplied by the Jacobian determinants and quadra
 \\approx
 \\frac{\\int_\\Omega f(v) \\, d \\Omega}{\\int_\\Omega \\, d \\Omega}
 ```
+
 where ``v_i`` is the Field value at each node, and ``f`` is the identity function if not specified.
 
 If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
@@ -145,21 +147,26 @@ Statistics.mean(fn, field::Field) =
 
 The approximate ``L^p`` norm of `v`, where ``L^p`` represents the space of measurable
 functions for which the p-th power of the absolute value is Lebesgue integrable, that is:
+
 ```math
 \\| v \\|_p = \\left( \\int_\\Omega |v|^p d \\Omega \\right)^{1/p}
 ```
+
 where ``|v|`` is defined to be the absolute value if ``v`` is a scalar-valued Field, or the 2-norm
 if it is a vector-valued Field or composite Field (see [LinearAlgebra.norm](https://docs.julialang.org/en/v1/stdlib/LinearAlgebra/#LinearAlgebra.norm)).
 Similar to `sum` and `mean`, in an `AbstractSpectralElementSpace`, this is computed by
 summation of the field values multiplied by the Jacobian determinants and quadrature weights.
 If `normalize=true` (the default), then internally the discrete norm is divided
 by the sum of the Jacobian determinants and quadrature weights:
+
 ```math
 \\left(\\frac{\\sum_i |v_i|^p W_i J_i}{\\sum_i W_i J_i}\\right)^{1/p}
 \\approx
 \\left(\\frac{\\int_\\Omega |v|^p \\, d \\Omega}{\\int_\\Omega \\, d \\Omega}\\right)^{1/p}
 ```
+
 If `p=Inf`, then the norm is the maximum of the absolute values
+
 ```math
 \\max_i |v_i| \\approx \\sup_{\\Omega} |v|
 ```
@@ -226,4 +233,5 @@ function Base.isapprox(
 end
 
 Base.:(==)(field1::Field, field2::Field) =
-    axes(field1) === axes(field2) && parent(field1) == parent(field2)
+    axes(field1) === axes(field2) &&
+    field_values(field1) == field_values(field2)

@@ -11,9 +11,6 @@ import ..Geometry,
     ..Spaces,
     ..Fields,
     ..Operators
-import ..Spaces: ExtrudedFiniteDifferenceSpace
-import ClimaCore.Utilities: half
-
 import ..Grids:
     _ExtrudedFiniteDifferenceGrid,
     ExtrudedFiniteDifferenceGrid,
@@ -230,11 +227,11 @@ function _ExtrudedFiniteDifferenceGrid(
             Fields.Field(
                 center_z_local_geometry,
                 center_flat_space,
-            ).coordinates.z
+            ).coordinates.z,
         )
     face_∇Z_field =
         grad.(
-            Fields.Field(face_z_local_geometry, face_flat_space).coordinates.z
+            Fields.Field(face_z_local_geometry, face_flat_space).coordinates.z,
         )
 
     # construct full local geometry
@@ -274,12 +271,13 @@ elevation to the `HypsographyAdaption` type. A spectral second-order diffusion
 operator is applied with forward-Euler updates to generate
 profiles for each new iteration. Steps to generate smoothed terrain (
 represented as a ClimaCore Field) are as follows:
-- Compute discrete elevation profile f
-- Compute diffuse_surface_elevation!(f, κ, iter). f is mutated.
-- Define `Hypsography.LinearAdaption(f)`
-- Define `ExtrudedFiniteDifferenceSpace` with new surface elevation.
-Default diffusion parameters are appropriate for spherical arrangements.
-For `zmax-zsfc` == 𝒪(10^4), κ == 𝒪(10^8), dt == 𝒪(10⁻¹).
+
+  - Compute discrete elevation profile f
+  - Compute diffuse_surface_elevation!(f, κ, iter). f is mutated.
+  - Define `Hypsography.LinearAdaption(f)`
+  - Define `ExtrudedFiniteDifferenceSpace` with new surface elevation.
+    Default diffusion parameters are appropriate for spherical arrangements.
+    For `zmax-zsfc` == 𝒪(10^4), κ == 𝒪(10^8), dt == 𝒪(10⁻¹).
 """
 function diffuse_surface_elevation!(
     f::Fields.Field;

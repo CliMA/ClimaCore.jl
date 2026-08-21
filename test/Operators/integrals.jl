@@ -1,7 +1,6 @@
 using Test
 using JET
 import Random
-import CUDA # explicitly required due to JET
 import ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore
@@ -17,12 +16,18 @@ import ClimaCore.Operators:
 );
 import .TestUtilities as TU;
 
+# CUDA is only needed to prune JET reports raised from CUDA frames, and it is
+# absent from the CPU-only test environment that `Pkg.test` builds. Reach it
+# through the ClimaComms extension (which `@import_required_backends` loads
+# only on a CUDA device) rather than importing it outright, and prune nothing
+# when there is no GPU. This mirrors MatrixFields/matrix_field_test_utils.jl.
+const USING_CUDA = ClimaComms.device() isa ClimaComms.CUDADevice
+cuda_module(ext) = USING_CUDA ? ext.CUDA : ext
+const CUDA_MOD = cuda_module(Base.get_extension(ClimaComms, :ClimaCommsCUDAExt))
 const CLIMACORE_CUDA_MOD = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
 const CUDA_FRAMES =
-    (
-        AnyFrameModule(CUDA),
-        AnyFrameModule(CLIMACORE_CUDA_MOD),
-    )
+    USING_CUDA ?
+    (AnyFrameModule(CUDA_MOD), AnyFrameModule(CLIMACORE_CUDA_MOD)) : ()
 
 are_boundschecks_forced = Base.JLOptions().check_bounds == 1
 center_to_face_space(center_space::Spaces.CenterFiniteDifferenceSpace) =
