@@ -13,10 +13,10 @@ Construct a 1D mesh with face locations at `faces`.
 
 Constuct a 1D mesh on `domain` with `nelems` elements, using `stretching`. Possible values of `stretching` are:
 
-- [`Uniform()`](@ref)
-- [`ExponentialStretching(H)`](@ref)
-- [`GeneralizedExponentialStretching(dz_bottom, dz_top)`](@ref)
-- [`HyperbolicTangentStretching(dz_bottom)`](@ref)
+  - [`Uniform()`](@ref)
+  - [`ExponentialStretching(H)`](@ref)
+  - [`GeneralizedExponentialStretching(dz_bottom, dz_top)`](@ref)
+  - [`HyperbolicTangentStretching(dz_bottom)`](@ref)
 
 If `reverse_mode` is `true`, the smallest element is at the top, and the largest at the bottom
 (this is typical for land model configurations).
@@ -180,9 +180,11 @@ the scale height (a typical atmospheric scale height `H ≈ 7.5`km).
 
 For an interval ``[z_0,z_1]``, this makes the elements uniformally spaced in
 ``\\zeta``, where
+
 ```math
 \\zeta = \\frac{1 - e^{-\\eta/h}}{1-e^{-1/h}},
 ```
+
 where ``\\eta = \\frac{z - z_0}{z_1-z_0}``, and ``h = \\frac{H}{z_1-z_0}`` is
 the non-dimensional scale height. If `reverse_mode` is `true`, the smallest
 element is at the top, and the largest at the bottom (this is typical for land
@@ -359,9 +361,11 @@ it is the grid spacing at the top of the vertical column domain.
 
 For an interval ``[z_0,z_1]``, this makes the elements uniformally spaced in
 ``\\zeta``, where
+
 ```math
 \\eta = 1 - \\frac{tanh[\\gamma(1-\\zeta)]}{tanh(\\gamma)},
 ```
+
 where ``\\eta = \\frac{z - z_0}{z_1-z_0}``. The stretching parameter ``\\gamma``
 is chosen to achieve a given resolution `dz_surface` at the surface.
 
@@ -448,6 +452,7 @@ end
         parent_mesh::AbstractMesh,
         trunc_domain::IntervalDomain{CT},
     )
+
 Constructs an `IntervalMesh`, truncating the given `parent_mesh` defined on a
 truncated `trunc_domain`. The truncation preserves the number of
 degrees of freedom covering the space from the `trunc_domain`'s `z_bottom` to `z_top`,

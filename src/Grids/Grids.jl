@@ -14,15 +14,17 @@ using StaticArrays
 
 Grids should define the following
 
+  - [`topology`](@ref): the topology of the grid
 
-- [`topology`](@ref): the topology of the grid
-- [`mesh`](@ref): the mesh of the grid
-- [`domain`](@ref): the domain of the grid
-- `ClimaComms.context`
-- `ClimaComms.device`
+  - [`mesh`](@ref): the mesh of the grid
 
-- [`local_geometry_data`](@ref): the `DataLayout` object containing the local geometry data information
+  - [`domain`](@ref): the domain of the grid
 
+  - `ClimaComms.context`
+
+  - `ClimaComms.device`
+
+  - [`local_geometry_data`](@ref): the `DataLayout` object containing the local geometry data information
 """
 abstract type AbstractGrid end
 

@@ -6,7 +6,6 @@ Interpolate horizontal field on the given `slab_indices` using the given interpo
 
 `interpolate_slab!` interpolates several values at a fixed `z` coordinate. For this reason,
 it requires several slab indices and weights.
-
 """
 interpolate_slab!(output_array, field::Fields.Field, slab_indices, weights) =
     interpolate_slab!(
@@ -144,7 +143,6 @@ returned. Effectively, this means that the interpolation is first-order accurate
 column, but zeroth-order accurate close to the boundaries.
 
 Return `fill_value` when the vertical coordinate is negative.
-
 """
 function interpolate_slab_level!(
     output_array,
@@ -254,6 +252,7 @@ interpolate_array(field, longpts, latpts, zpts)
 ```
 
 !!! note
+
     Hypsography is not currently handled correctly.
 """
 function interpolate_array end
@@ -385,8 +384,9 @@ end
     interpolation_weights(horz_mesh, hcoord, quad_points, method::AbstractRemappingMethod)
 
 Return weights (tuple of arrays) to interpolate onto `hcoord`.
-- `SpectralElementRemapping()`: uses spectral element quadrature weights.
-- `BilinearRemapping()`: Bilinear on the 2-point cell containing (ξ1, ξ2).
+
+  - `SpectralElementRemapping()`: uses spectral element quadrature weights.
+  - `BilinearRemapping()`: Bilinear on the 2-point cell containing (ξ1, ξ2).
 """
 function interpolation_weights end
 

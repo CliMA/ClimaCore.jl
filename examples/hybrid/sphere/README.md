@@ -45,6 +45,6 @@ JLD2 output.
 ## Remapping output to a lat/lon grid
 
 To remap CG nodal output onto a regular lat/lon grid, use
-[`ClimaCoreTempestRemap`](../../../lib/ClimaCoreTempestRemap) directly; see its
+[`ClimaCoreTempestRemap`](../../../lib/ClimaCoreTempestRemap/) directly; see its
 test suite for worked examples of `overlap_mesh`, `remap_weights`, and
 `apply_remap`.

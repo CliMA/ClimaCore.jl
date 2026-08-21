@@ -83,9 +83,10 @@ end
 Generalization of `eachslice`/`mapslices` that applies `f` to slices of every
 [`DataLayout`](@ref) or similarly indexable argument, where the slice operator
 `op` can be any of the following:
- - [`level`](@ref), but only when [`nelems`](@ref) is statically inferrable
- - [`slab`](@ref) or [`column`](@ref)
- - `view` (for single-point slices)
+
+  - [`level`](@ref), but only when [`nelems`](@ref) is statically inferrable
+  - [`slab`](@ref) or [`column`](@ref)
+  - `view` (for single-point slices)
 
 Each slice is assigned to a [`slice_subscope`](@ref) of `scope`, which by
 default is the largest available [`DataScope`](@ref) that can access every

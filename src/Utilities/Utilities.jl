@@ -90,18 +90,19 @@ Base.@propagate_inbounds linear_ind(n::NTuple, loc::NTuple) =
     stable_view(array, indices...)
 
 Like `view`, but with two modifications that avoid expensive operations:
-- Every view is a `SubArray`, even when `array` is a GPU array. GPUArrays
-  replaces each contiguous view of a `CuArray` with a new `CuArray` derived
-  from the same memory buffer, and the derived array's type is not inferrable,
-  which makes all host code that builds slice or property views type-unstable.
-  The `SubArray`s constructed here have fully inferred types, and they are
-  converted to `SubArray`s of `CuDeviceArray`s when passed to kernels.
-- A view along the linear indices of a multidimensional `array` (a single
-  `Integer` or range of `Integer`s) wraps the `array` in a 1-dimensional
-  `ReshapedArray`, instead of using `reshape` like Base's `view` does, which
-  allocates a new object whenever it is applied to an `Array`. If the `array`
-  is already a `ReshapedArray`, its parent gets wrapped instead, since a
-  reshape stores the same values in the same linear order as its parent.
+
+  - Every view is a `SubArray`, even when `array` is a GPU array. GPUArrays
+    replaces each contiguous view of a `CuArray` with a new `CuArray` derived
+    from the same memory buffer, and the derived array's type is not inferrable,
+    which makes all host code that builds slice or property views type-unstable.
+    The `SubArray`s constructed here have fully inferred types, and they are
+    converted to `SubArray`s of `CuDeviceArray`s when passed to kernels.
+  - A view along the linear indices of a multidimensional `array` (a single
+    `Integer` or range of `Integer`s) wraps the `array` in a 1-dimensional
+    `ReshapedArray`, instead of using `reshape` like Base's `view` does, which
+    allocates a new object whenever it is applied to an `Array`. If the `array`
+    is already a `ReshapedArray`, its parent gets wrapped instead, since a
+    reshape stores the same values in the same linear order as its parent.
 
 ```julia-repl
 julia> array = rand(3, 1, 4);
@@ -134,6 +135,7 @@ Drops all parameters from the type `T`. If the input argument is not a `Type`,
 its type is used instead.
 
 # Examples
+
 ```julia
 julia> unionall_type(typeof([1, 2, 3]))
 Array
@@ -201,6 +203,7 @@ If provided, the second argument is used to initialize fields of the new value
 with special handling of `DataType` fields to avoid errors during compilation.
 
 # Examples
+
 ```jldoctest; setup = :(import ClimaCore.Utilities: new), filter = r"\\d+"
 julia> new(Int)
 4889520192

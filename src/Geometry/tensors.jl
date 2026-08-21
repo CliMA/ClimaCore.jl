@@ -15,15 +15,15 @@ abstract type ComponentsType end
 
 # A tensor is named after the `ComponentsType` of its first axis:
 #  - A `CovariantTensor`'s first axis is covariant, and its components `vᵢ`
-#    multiply the dual basis; for a vector, `v = vᵢ eⁱ`, v ∈ V*. 
+#    multiply the dual basis; for a vector, `v = vᵢ eⁱ`, v ∈ V*.
 #  - A `ContravariantTensor`'s first axis is contravariant, and its components
 #    `vⁱ` multiply the tangent basis; for a vector, `v = vⁱ eᵢ`, v ∈ V.
 
 # Precisely (Stone & Goldbart): given two bases `eⱼ` and `e′ᵢ` over the same
 # space, expand one in the other - `eⱼ = aⁱⱼ e′ᵢ` (10.1), for some matrix `a`. A
 # vector `v` is invariant (only its components change with the basis), so the
-# new components `v′ⁱ` follow from the old `vʲ`: 
-#       `v = v′ⁱ e′ᵢ = vʲ eⱼ = vʲ aⁱⱼ e′ᵢ` 
+# new components `v′ⁱ` follow from the old `vʲ`:
+#       `v = v′ⁱ e′ᵢ = vʲ eⱼ = vʲ aⁱⱼ e′ᵢ`
 # and comparing coefficients of `e′ᵢ` gives `v′ⁱ = aⁱⱼ vʲ` (10.4). The same
 # matrix `a` appears in both laws but in opposite directions, since 10.1 writes
 # the old basis via the new, 10.4 writes the new components via the old. The
@@ -92,6 +92,7 @@ helpers in `conversions.jl` (e.g. `project`, `transform`), which apply the
 appropriate metric from a `LocalGeometry`.
 
 # Examples
+
 ```julia
 julia> Covariant13Axis()
 Covariant13Components()
@@ -103,6 +104,7 @@ julia> dual(Covariant13Axis())
 Contravariant13Components()
 
 # reshape(tensor, (Components, ...)) reorders and zero-fills by `names`:
+
 julia> v = Covariant12Vector(1.0, 2.0);
 
 julia> reshape(v, (Covariant123Axis(),))         # zero-fill the missing u₃
@@ -237,11 +239,11 @@ colon-indexing yields a smaller `Tensor` over the remaining non-colon axes.
 
 # Shapes that `Tensor` takes in practice
 
-- `Tensor{1}` (a vector): `components::SVector`, `bases::Tuple{Components}`.
-- `Tensor{2}` covector (a row-vector): the first axis is [`ScalarComponents`](@ref)
-  and `components::Adjoint{T, SVector}`. This is what `v'` produces for a
-  `Tensor{1}` `v`.
-- `Tensor{2}` square tensor: `components::SMatrix`.
+  - `Tensor{1}` (a vector): `components::SVector`, `bases::Tuple{Components}`.
+  - `Tensor{2}` covector (a row-vector): the first axis is [`ScalarComponents`](@ref)
+    and `components::Adjoint{T, SVector}`. This is what `v'` produces for a
+    `Tensor{1}` `v`.
+  - `Tensor{2}` square tensor: `components::SMatrix`.
 
 The `UniformScaling` constructor is a convenience that converts
 `s = λ * I` (where `λ = s.λ` is the scalar stored in Julia's
@@ -264,6 +266,7 @@ To change basis types, use `project` / `transform` from `conversions.jl`,
 which apply the appropriate metric from a `LocalGeometry`.
 
 # Examples
+
 ```julia
 julia> v = Covariant12Vector(1.0, 2.0)
 Tensor([1.0, 2.0], (Covariant12Components(),))

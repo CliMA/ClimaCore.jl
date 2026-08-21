@@ -17,11 +17,12 @@ struct NoMask <: DataMask end
 
 A [`DataMask`](@ref) that marks the columns of a [`VIJFH`](@ref) or
 [`VIJHF`](@ref) layout as active or inactive, using the following cached values:
- - `is_active`, a layout similar to `level(data, 1)` representing a boolean mask
- - `N`, an array that contains the total number of active columns
- - `i_map`, an array that contains the `i`-index of each active column
- - `j_map`, an array that contains the `j`-index of each active column
- - `h_map`, an array that contains the `h`-index of each active column
+
+  - `is_active`, a layout similar to `level(data, 1)` representing a boolean mask
+  - `N`, an array that contains the total number of active columns
+  - `i_map`, an array that contains the `i`-index of each active column
+  - `j_map`, an array that contains the `j`-index of each active column
+  - `h_map`, an array that contains the `h`-index of each active column
 """
 struct IJHMask{D, A} <: DataMask
     is_active::D

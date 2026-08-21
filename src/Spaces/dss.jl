@@ -30,7 +30,7 @@ create_dss_buffer(data::DataLayouts.VIJHWithF, space) =
 """
     function weighted_dss!(data, space, dss_buffer)
 
-Computes weighted dss of `data`. 
+Computes weighted dss of `data`.
 
 It comprises of the following steps:
 
@@ -77,14 +77,14 @@ cuda_synchronize(device::ClimaComms.AbstractDevice; kwargs...) = nothing
 
 It comprises of the following steps:
 
-1). Apply [`Spaces.dss_transform!`](@ref) on perimeter elements. This weights and tranforms vector 
-fields to physical basis if needed. Scalar fields are weighted. The transformed and/or weighted 
+1). Apply [`Spaces.dss_transform!`](@ref) on perimeter elements. This weights and tranforms vector
+fields to physical basis if needed. Scalar fields are weighted. The transformed and/or weighted
 perimeter `data` is stored in `perimeter_data`.
 
 2). Apply [`Spaces.dss_local_ghost!`](@ref)
 This computes partial weighted DSS on ghost vertices, using only the information from `local` vertices.
 
-3). [`Spaces.fill_send_buffer!`](@ref) 
+3). [`Spaces.fill_send_buffer!`](@ref)
 Loads the send buffer from `perimeter_data`. For unique ghost vertices, only data from the
 representative ghost vertices which store result of "ghost local" DSS are loaded.
 
@@ -104,7 +104,7 @@ end
 """
     weighted_dss_internal!(data, space, dss_buffer)
 
-1). Apply [`Spaces.dss_transform!`](@ref) on interior elements. Local elements are split into interior 
+1). Apply [`Spaces.dss_transform!`](@ref) on interior elements. Local elements are split into interior
 and perimeter elements to facilitate overlapping of communication with computation.
 
 2). Probe communication
@@ -158,8 +158,8 @@ end
 1). Finish communications.
 
 2). Call [`Spaces.load_from_recv_buffer!`](@ref)
-After the communication is complete, this adds data from the recv buffer to the corresponding location in 
-`perimeter_data`. For ghost vertices, this data is added only to the representative vertices. The values are 
+After the communication is complete, this adds data from the recv buffer to the corresponding location in
+`perimeter_data`. For ghost vertices, this data is added only to the representative vertices. The values are
 then scattered to other local vertices corresponding to each unique ghost vertex in `dss_local_ghost`.
 
 3). Call [`Spaces.dss_untransform!`](@ref) on all local elements.

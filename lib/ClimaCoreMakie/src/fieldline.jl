@@ -7,11 +7,11 @@ Plots a line plot of a 1D field.
 
 Inherited from [`Makie.lines`](https://docs.makie.org/stable/examples/plotting_functions/lines/index.html#lines).
 
-- `color` sets the color of the line.
+  - `color` sets the color of the line.
 
-- `linewidth` sets the width of the line.
+  - `linewidth` sets the width of the line.
 
-- `linestyle` sets the style of the line (e.g., `:solid`, `:dash`, `:dot`).
+  - `linestyle` sets the style of the line (e.g., `:solid`, `:dash`, `:dot`).
 
 See the [Makie.lines documentation](https://docs.makie.org/stable/examples/plotting_functions/lines/index.html#lines) for a complete list of attributes.
 """

@@ -14,7 +14,7 @@ Supertype for all limiters.
 
 # Interfaces
 
-- [`apply_limiter!`](@ref)
+  - [`apply_limiter!`](@ref)
 """
 abstract type AbstractLimiter end
 

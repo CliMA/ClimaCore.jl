@@ -13,36 +13,45 @@ In this derivation, we will use ``M_1`` and ``M_2`` to denote two
 (vector-like) `Field`. For both ``M_1`` and ``M_2``, we will use the array-like
 index notation ``M[row, col]`` to denote ``M[row][col-row]``, i.e., the entry in
 the `BandMatrixRow` ``M[row]`` located on the diagonal with index ``col - row``.
-We will also use `outer_indices```(```space```)`` to denote the tuple
-``(```left_idx```(```space```), ```right_idx```(```space```))``.
+We will also use `outer_indices`(`````space```)`` to denote the tuple ``(```left_idx`````(`space`), `right_idx`(`space```))``.
 
 # 1. Matrix-Vector Multiplication
 
 From the definition of matrix-vector multiplication,
+
 ```math
 (M_1 * V)[i] = \\sum_k M_1[i, k] * V[k].
 ```
+
 To establish bounds on the values of ``k``, let us define the following values:
-- ``li_1, ri_1 ={}```outer_indices```(```column_axes```(M_1))``
-- ``ld_1, ud_1 ={}```outer_diagonals```(```eltype```(M_1))``
+
+  - ``li_1, ri_1 ={}```outer_indices```(```column_axes```(M_1))``
+  - ``ld_1, ud_1 ={}```outer_diagonals```(```eltype```(M_1))``
 
 Since ``M_1[i, k]`` is only well-defined if ``k`` is a valid column index and
 ``k - i`` is a valid diagonal index, we know that
+
 ```math
 li_1 \\leq k \\leq ri_1 \\quad \\text{and} \\quad ld_1 \\leq k - i \\leq ud_1.
 ```
+
 Combining these into a single inequality gives us
+
 ```math
 \\text{max}(li_1, i + ld_1) \\leq k \\leq \\text{min}(ri_1, i + ud_1).
 ```
+
 So, we can rewrite the expression for ``(M_1 * V)[i]`` as
+
 ```math
 (M_1 * V)[i] =
     \\sum_{k\\ =\\ \\text{max}(li_1, i + ld_1)}^{\\text{min}(ri_1, i + ud_1)}
     M_1[i, k] * V[k].
 ```
+
 If we replace the variable ``k`` with ``d = k - i`` and switch from array-like
 indexing to `Field` indexing, we find that
+
 ```math
 (M_1 * V)[i] =
     \\sum_{d\\ =\\ \\text{max}(li_1 - i, ld_1)}^{\\text{min}(ri_1 - i, ud_1)}
@@ -52,18 +61,24 @@ indexing to `Field` indexing, we find that
 ## 1.1 Interior vs. Boundary Indices
 
 Now, suppose that the row index ``i`` is such that
+
 ```math
 li_1 - ld_1 \\leq i \\leq ri_1 - ud_1.
 ```
+
 If this is the case, then the bounds on ``d`` can be simplified to
+
 ```math
 \\text{max}(li_1 - i, ld_1) = ld_1 \\quad \\text{and} \\quad
 \\text{min}(ri_1 - i, ud_1) = ud_1.
 ```
+
 The expression for ``(M_1 * V)[i]`` then becomes
+
 ```math
 (M_1 * V)[i] = \\sum_{d = ld_1}^{ud_1} M_1[i][d] * V[i + d].
 ```
+
 The values of ``i`` in this range are considered to be in the "interior" of the
 operator, while those not in this range (for which we cannot make the above
 simplification) are considered to be on the "boundary".
@@ -71,15 +86,18 @@ simplification) are considered to be on the "boundary".
 # 2. Matrix-Matrix Multiplication
 
 From the definition of matrix-matrix multiplication,
+
 ```math
 (M_1 * M_2)[i, j] = \\sum_k M_1[i, k] * M_2[k, j].
 ```
+
 To establish bounds on the values of ``j`` and ``k``, let us define the
 following values:
-- ``li_1, ri_1 ={}```outer_indices```(```column_axes```(M_1))``
-- ``ld_1, ud_1 ={}```outer_diagonals```(```eltype```(M_1))``
-- ``li_2, ri_2 ={}```outer_indices```(```column_axes```(M_2))``
-- ``ld_2, ud_2 ={}```outer_diagonals```(```eltype```(M_2))``
+
+  - ``li_1, ri_1 ={}```outer_indices```(```column_axes```(M_1))``
+  - ``ld_1, ud_1 ={}```outer_diagonals```(```eltype```(M_1))``
+  - ``li_2, ri_2 ={}```outer_indices```(```column_axes```(M_2))``
+  - ``ld_2, ud_2 ={}```outer_diagonals```(```eltype```(M_2))``
 
 In addition, let ``ld_{prod}`` and ``ud_{prod}`` denote the outer diagonal
 indices of the product matrix ``M_1 * M_2``. We will derive the values of
@@ -87,20 +105,27 @@ indices of the product matrix ``M_1 * M_2``. We will derive the values of
 
 Since ``M_1[i, k]`` is only well-defined if ``k`` is a valid column index and
 ``k - i`` is a valid diagonal index, we know that
+
 ```math
 li_1 \\leq k \\leq ri_1 \\quad \\text{and} \\quad ld_1 \\leq k - i \\leq ud_1.
 ```
+
 Since ``M_2[k, j]`` is only well-defined if ``j`` is a valid column index and
 ``j - k`` is a valid diagonal index, we also know that
+
 ```math
 li_2 \\leq j \\leq ri_2 \\quad \\text{and} \\quad ld_2 \\leq j - k \\leq ud_2.
 ```
+
 Finally, ``(M_1 * M_2)[i, j]`` is only well-defined if ``j - i`` is a valid
 diagonal index, so
+
 ```math
 ld_{prod} \\leq j - i \\leq ud_{prod}.
 ```
+
 These inequalities can be combined to obtain
+
 ```math
 \\begin{gather*}
 \\text{max}(li_2, i + ld_{prod}) \\leq j \\leq
@@ -110,7 +135,9 @@ These inequalities can be combined to obtain
 \\text{min}(ri_1, i + ud_1, j - ld_2).
 \\end{gather*}
 ```
+
 So, we can rewrite the expression for ``(M_1 * M_2)[i, j]`` as
+
 ```math
 \\begin{gather*}
 (M_1 * M_2)[i, j] =
@@ -121,9 +148,11 @@ So, we can rewrite the expression for ``(M_1 * M_2)[i, j]`` as
 \\text{max}(li_2, i + ld_{prod}) \\leq j \\leq \\text{min}(ri_2, i + ud_{prod}).
 \\end{gather*}
 ```
+
 If we replace the variable ``k`` with ``d = k - i``, replace the variable ``j``
 with ``d_{prod} = j - i``, and switch from array-like indexing to `Field`
 indexing, we find that
+
 ```math
 \\begin{gather*}
 (M_1 * M_2)[i][d_{prod}] =
@@ -139,21 +168,28 @@ indexing, we find that
 ## 2.1 Interior vs. Boundary Indices
 
 Now, suppose that the row index ``i`` is such that
+
 ```math
 \\text{max}(li_1 - ld_1, li_2 - ld_{prod}) \\leq i \\leq
     \\text{min}(ri_1 - ud_1, ri_2 - ud_{prod}).
 ```
+
 If this is the case, then the bounds on ``d_{prod}`` can be simplified to
+
 ```math
 \\text{max}(li_2 - i, ld_{prod}) = ld_{prod} \\quad \\text{and} \\quad
 \\text{min}(ri_2 - i, ud_{prod}) = ud_{prod}.
 ```
+
 Similarly, the bounds on ``d`` can be simplified using the fact that
+
 ```math
 \\text{max}(li_1 - i, ld_1) = ld_1 \\quad \\text{and} \\quad
 \\text{min}(ri_1 - i, ud_1) = ud_1.
 ```
+
 The expression for ``(M_1 * M_2)[i][d_{prod}]`` then becomes
+
 ```math
 \\begin{gather*}
 (M_1 * M_2)[i][d_{prod}] =
@@ -163,7 +199,8 @@ The expression for ``(M_1 * M_2)[i][d_{prod}]`` then becomes
     M_1[i][d] * M_2[i + d][d_{prod} - d], \\text{ where} \\\\[0.5em]
 ld_{prod} \\leq d_{prod} \\leq ud_{prod}.
 \\end{gather*}
-```
+```# TODO: Remove this in the next major release of ClimaCore.
+
 The values of ``i`` in this range are considered to be in the "interior" of the
 operator, while those not in this range (for which we cannot make these
 simplifications) are considered to be on the "boundary".
@@ -172,27 +209,36 @@ simplifications) are considered to be on the "boundary".
 
 We only need to compute ``(M_1 * M_2)[i][d_{prod}]`` for values of ``d_{prod}``
 that correspond to a nonempty sum in the interior, i.e, those for which
+
 ```math
 \\text{max}(ld_1, d_{prod} - ud_2) \\leq \\text{min}(ud_1, d_{prod} - ld_2).
 ```
+
 This can be broken down into the four inequalities
+
 ```math
 ld_1 \\leq ud_1, \\qquad ld_1 \\leq d_{prod} - ld_2, \\qquad
 d_{prod} - ud_2 \\leq ud_1, \\quad \\text{and} \\quad
 d_{prod} - ud_2 \\leq d_{prod} - ld_2.
 ```
+
 By definition, ``ld_1 \\leq ud_1`` and ``ld_2 \\leq ud_2``, so the first and
 last inequality are always true. Rearranging the remaining two inequalities
 tells us that
+
 ```math
 ld_1 + ld_2 \\leq d_{prod} \\leq ud_1 + ud_2.
 ```
+
 In other words, the outer diagonal indices of ``M_1 * M_2`` are
-```math
+
+```math # matrix-matrix multiplication
 ld_{prod} = ld_1 + ld_2 \\quad \\text{and} \\quad ud_{prod} = ud_1 + ud_2.
 ```
+
 This means that we can express the bounds on the interior values of ``i`` as
-```math
+
+```math # matrix-vector multiplication
 \\text{max}(li_1, li_2 - ld_2) - ld_1 \\leq i \\leq
     \\text{min}(ri_1, ri_2 - ud_2) - ud_1.
 ```

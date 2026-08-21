@@ -99,9 +99,9 @@ init_state_vector(local_geometry, p, ::Type{FT}) where {FT} =
     dss_buffer = Spaces.create_dss_buffer(y0)
     Spaces.weighted_dss!(y0, dss_buffer) # DSS2
 #! format: off
-    expected_vals = FT[18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 9.5, 
-                       14.0, 18.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5, 18.5, 
-                       23.0, 27.5, 18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 27.5, 
+    expected_vals = FT[18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 9.5,
+                       14.0, 18.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5, 18.5,
+                       23.0, 27.5, 18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 27.5,
                        32.0, 18.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5]
     @test Array(yarr[:]) == expected_vals
 #! format: on

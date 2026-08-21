@@ -2,10 +2,11 @@
     TestUtilities
 
 TestUtilities is designed to:
- - Reduce the test boilerplate
- - Provide testers with iterators over
-   instances of types to ease testing
-   a diverse set of inputs to functions
+
+  - Reduce the test boilerplate
+  - Provide testers with iterators over
+    instances of types to ease testing
+    a diverse set of inputs to functions
 """
 module TestUtilities
 
@@ -115,7 +116,7 @@ end
     convergence_rate(err, Δh)
 
 Estimate pairwise convergence rates given vectors or tuples `err` and `Δh`:
-    r[i] = log(err[i] / err[i - 1]) / log(Δh[i] / Δh[i - 1])
+r[i] = log(err[i] / err[i - 1]) / log(Δh[i] / Δh[i - 1])
 """
 convergence_rate(err::AbstractVector, Δh::AbstractVector) =
     [log(err[i] / err[i - 1]) / log(Δh[i] / Δh[i - 1]) for i in 2:length(Δh)]

@@ -35,7 +35,7 @@ const u₀ = 10.0 # initial horizontal wind (m/s)
 
 function warp_surface(coord)
     # Parameters from GMD-9-2007-2016
-    # Specification for Agnesi Mountain following 
+    # Specification for Agnesi Mountain following
     # Ulrich and Guerra [2016 GMD]
     x = Geometry.component(coord, 1)
     FT = eltype(x)
@@ -59,7 +59,7 @@ hv_center_space, hv_face_space =
 
 geopotential(z) = grav * z
 
-# Prognostic thermodynamic variable: Total Energy 
+# Prognostic thermodynamic variable: Total Energy
 function init_advection_over_mountain(x, z)
     θ₀ = 280.0
     cp_d = C_p

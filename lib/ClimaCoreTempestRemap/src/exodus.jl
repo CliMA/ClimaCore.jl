@@ -13,12 +13,14 @@ When using this function with a distributed topology input for MPI, it should
 only be called on a single process.
 
 Options:
-- `normalize_coordinates`: if true, the coordinates are normalized to be on the
-  unit sphere (this is required for use with TempestRemap)
+
+  - `normalize_coordinates`: if true, the coordinates are normalized to be on the
+    unit sphere (this is required for use with TempestRemap)
 
 # References
-- EXODUS II: A finite element data model:
-  https://www.osti.gov/biblio/10102115-exodus-ii-finite-element-data-model
+
+  - EXODUS II: A finite element data model:
+    https://www.osti.gov/biblio/10102115-exodus-ii-finite-element-data-model
 """
 function write_exodus(
     filename,

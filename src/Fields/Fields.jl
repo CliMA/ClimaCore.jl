@@ -402,9 +402,9 @@ Apply weighted direct stiffness summation (DSS) to `f`. This operates in-place
 for communication in a distributed setting, see [`Spaces.create_dss_buffer`](@ref).
 
 This is a projection operation from the piecewise polynomial space
-``\\mathcal{V}_0`` to the continuous space ``\\mathcal{V}_1 = \\mathcal{V}_0
-\\cap \\mathcal{C}_0``, defined as the field ``\\theta \\in \\mathcal{V}_1``
+``\\mathcal{V}_0`` to the continuous space ``\\mathcal{V}_1 = \\mathcal{V}_0 \\cap \\mathcal{C}_0``, defined as the field ``\\theta \\in \\mathcal{V}_1``
 such that for all ``\\phi \\in \\mathcal{V}_1``
+
 ```math
 \\int_\\Omega \\phi \\theta \\,d\\Omega = \\int_\\Omega \\phi f \\,d\\Omega
 ```
@@ -412,14 +412,19 @@ such that for all ``\\phi \\in \\mathcal{V}_1``
 In matrix form, we define ``\\bar \\theta`` to be the unique global node
 representation, and ``Q`` to be the "scatter" operator which maps to the
 redundant node representation ``\\theta``
+
 ```math
 \\theta = Q \\bar \\theta
 ```
+
 Then the problem can be written as
+
 ```math
 (Q \\bar\\phi)^\\top W J Q \\bar\\theta = (Q \\bar\\phi)^\\top W J f
 ```
+
 which reduces to
+
 ```math
 \\theta = Q \\bar\\theta = Q (Q^\\top W J Q)^{-1} Q^\\top W J f
 ```
@@ -615,13 +620,13 @@ end
 
 Extracts a view of a `ClimaCore` `Field`'s underlying array. Can be used to
 simplify the process of getting and setting values in an `RRTMGPModel`; e.g.
+
 ```
     center_temperature .= field2array(center_temperature_field)
     field2array(face_flux_field) .= face_flux
 ```
 
-The dimensions of the resulting array are `([number of vertical nodes], number
-of horizontal nodes)`, with the first dimension dropped for fields defined over
+The dimensions of the resulting array are `([number of vertical nodes], number of horizontal nodes)`, with the first dimension dropped for fields defined over
 horizontal spaces. Only fields of scalars are supported; i.e., the element type
 of the array must be the same as the struct type of `field`.
 """

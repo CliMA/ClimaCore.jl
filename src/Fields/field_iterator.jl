@@ -107,8 +107,9 @@ end
 Returns an iterable field, that recursively calls
 `getproperty` for all of the `propertynames`, and
 returns a `Tuple` of
- - the individual scalar field and
- - the tuple chain used to reach the scalar field
+
+  - the individual scalar field and
+  - the tuple chain used to reach the scalar field
 """
 function field_iterator(f::Union{Field, FieldVector})
     prop_chains = property_chains(f)
