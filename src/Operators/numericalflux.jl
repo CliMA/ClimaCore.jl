@@ -1435,6 +1435,74 @@ end
 const γ_dry = 7 / 5
 
 """
+    kennedy_gruber_cartesian_advective_flux(nvec_a, nvec_b, y_a, y_b)
+
+Advection-only variant of [`kennedy_gruber_cartesian_flux`](@ref): the momentum
+flux omits the pressure term ``p̄ \\{ê_c ⋅ n\\}``, leaving the pure kinetic
+Kennedy-Gruber flux ``ρ̄ ū_c ūn``. Used when the pressure-gradient force is
+supplied separately in non-conservative (Exner-perturbation) form (Yatunin et
+al. 2026): momentum conservation is traded for a well-balanced pressure
+gradient, while the KEP property of the advective flux — and the mass and
+energy (enthalpy) fluxes — are unchanged.
+"""
+function kennedy_gruber_cartesian_advective_flux(nvec_a, nvec_b, y_a, y_b)
+    ρ̄ = (y_a.ρ + y_b.ρ) / 2
+    ē = (y_a.e + y_b.e) / 2
+    p̄ = (y_a.p + y_b.p) / 2
+    ūn = (y_a.uv' * nvec_a + y_b.uv' * nvec_b) / 2
+    ū1 = (y_a.u1 + y_b.u1) / 2
+    ū2 = (y_a.u2 + y_b.u2) / 2
+    ū3 = (y_a.u3 + y_b.u3) / 2
+    return (
+        ρ = ρ̄ * ūn,
+        ρe = (ρ̄ * ē + p̄) * ūn,
+        ρu1 = ρ̄ * ū1 * ūn,
+        ρu2 = ρ̄ * ū2 * ūn,
+        ρu3 = ρ̄ * ū3 * ūn,
+    )
+end
+
+"""
+    kennedy_gruber_rusanov_cartesian_advective(normal, argvals⁻, argvals⁺)
+
+Advection-only counterpart of [`kennedy_gruber_rusanov_cartesian`](@ref): the
+central part omits the momentum pressure flux (see
+[`kennedy_gruber_cartesian_advective_flux`](@ref)); the Rusanov dissipation is
+unchanged.
+"""
+function kennedy_gruber_rusanov_cartesian_advective(normal, (y⁻,), (y⁺,))
+    λ = max(y⁻.λ, y⁺.λ)
+    F = kennedy_gruber_cartesian_advective_flux(normal, normal, y⁻, y⁺)
+    return (
+        ρ = F.ρ - λ / 2 * (y⁺.ρ - y⁻.ρ),
+        ρe = F.ρe - λ / 2 * (y⁺.ρe - y⁻.ρe),
+        ρu1 = F.ρu1 - λ / 2 * (y⁺.ρ * y⁺.u1 - y⁻.ρ * y⁻.u1),
+        ρu2 = F.ρu2 - λ / 2 * (y⁺.ρ * y⁺.u2 - y⁻.ρ * y⁻.u2),
+        ρu3 = F.ρu3 - λ / 2 * (y⁺.ρ * y⁺.u3 - y⁻.ρ * y⁻.u3),
+    )
+end
+
+"""
+    kennedy_gruber_roe_cartesian_advective(normal, argvals⁻, argvals⁺)
+
+Advection-only counterpart of [`kennedy_gruber_roe_cartesian`](@ref): the full
+Roe flux minus its central momentum pressure term ``p̄ \\{ê_c ⋅ n\\}`` (mass,
+energy and all wave-selective dissipation unchanged). `ê_c` is single-valued at
+the shared node, so ``\\{ê_c ⋅ n\\} = ((E_c⁻ + E_c⁺)/2) ⋅ n``.
+"""
+function kennedy_gruber_roe_cartesian_advective(normal, (y⁻,), (y⁺,))
+    F = kennedy_gruber_roe_cartesian(normal, (y⁻,), (y⁺,))
+    p̄ = (y⁻.p + y⁺.p) / 2
+    return (
+        ρ = F.ρ,
+        ρe = F.ρe,
+        ρu1 = F.ρu1 - p̄ * (((y⁻.E1 + y⁺.E1) / 2)' * normal),
+        ρu2 = F.ρu2 - p̄ * (((y⁻.E2 + y⁺.E2) / 2)' * normal),
+        ρu3 = F.ρu3 - p̄ * (((y⁻.E3 + y⁺.E3) / 2)' * normal),
+    )
+end
+
+"""
     kg_massflux_fluctuation(nvec_a, nvec_b, y_a, y_b)
 
 Non-symmetric two-point FLUCTUATION form for the advective operator

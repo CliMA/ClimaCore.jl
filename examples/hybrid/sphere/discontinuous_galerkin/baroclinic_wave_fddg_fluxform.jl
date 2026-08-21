@@ -1,13 +1,12 @@
 #=
-Baroclinic wave / balanced flow on the cubed sphere with the FULL system in
-flux form: (ρ, ρe, ρu⃗) with momentum in GLOBAL CARTESIAN components, all
+Baroclinic wave / balanced flow on the cubed sphere with the full system in
+flux form: (ρ, ρe, ρu⃗) with momentum in global Cartesian components, all
 horizontal terms discretized with Kennedy-Gruber flux-differencing volume
 fluxes + KG-Rusanov interfaces (Souza et al. 2023, JAMES,
 doi:10.1029/2022MS003527). The constant Cartesian basis makes component-wise
 flux differencing kinetic-energy-preserving with no curvature source terms —
-the volume terms cannot spuriously produce kinetic energy, which is the
-structural property the vector-invariant driver lacks (its noise-fed jet
-runaway precedes every crash there).
+the volume terms cannot spuriously produce kinetic energy (TODO: explore 
+whether vector-invariant form can retain this structural property)
 
 Shallow-atmosphere: the Cartesian center momentum is kept tangential by
 projecting its tendency against r̂ (the discarded radial component is the
@@ -68,9 +67,13 @@ filter_Nc > 0 && @warn(
 # rather than |u| + c.
 const interface_flux =
     Symbol(lowercase(get(ENV, "INTERFACE_FLUX", "rusanov")))
+# Advection-only interface fluxes: the pressure gradient is supplied separately
+# in Exner-perturbation form (below), so the central momentum pressure flux is
+# stripped from the interface flux (dissipation unchanged).
 const cartesian_interface_fn =
-    interface_flux == :roe ? Operators.kennedy_gruber_roe_cartesian :
-    Operators.kennedy_gruber_rusanov_cartesian
+    interface_flux == :roe ?
+    Operators.kennedy_gruber_roe_cartesian_advective :
+    Operators.kennedy_gruber_rusanov_cartesian_advective
 
 # ---------------------------------------------------------------------------
 # Cartesian basis fields come from sphere_dg_fd_model.jl (eE*, eN*, eR*).
@@ -79,6 +82,18 @@ const cartesian_interface_fn =
 const E1 = @. Geometry.UVVector(eE1, eN1)
 const E2 = @. Geometry.UVVector(eE2, eN2)
 const E3 = @. Geometry.UVVector(eE3, eN3)
+
+# Geographic horizontal gradient of the reference Exner Π_ref (time-invariant;
+# nonzero only over topography, where terrain-following levels tilt). Completed
+# DG gradient = strong hgrad + central lifting, in the local orthonormal frame.
+const ᶜgΠ_ref = let
+    lift = Operators.lifting_correction(
+        Operators.central_gradient_lift,
+        Geometry.UVVector{FT},
+        ᶜΠ_ref,
+    )
+    @. Geometry.UVVector(hgrad(ᶜΠ_ref)) + lift
+end
 
 # ---------------------------------------------------------------------------
 # Initial state: convert the (discretely balanced) vector-invariant IC
@@ -169,6 +184,13 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
     e = @. ρe / ρ
     h_tot = @. (ρe + p) / ρ
     λ = @. sqrt(uE^2 + uN^2) + sqrt(γ * p / ρ)
+    # Exner function and potential temperature (dry θv = θ), and their
+    # deviations from the hydrostatic reference (for the Exner-perturbation
+    # pressure-gradient force, Yatunin et al. 2026).
+    Π = @. (p / p_0)^κ_gas
+    θ = @. p / (ρ * R_d) / Π
+    Πp = @. Π - ᶜΠ_ref
+    θp = @. θ - ᶜθ_ref
 
     # --- Horizontal: FDDG volume + KG-Rusanov interfaces, full system ---
     y = map(
@@ -184,7 +206,7 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
         ρ,
     )
     Operators.add_flux_differencing_divergence!(
-        Operators.kennedy_gruber_cartesian_flux,
+        Operators.kennedy_gruber_cartesian_advective_flux,
         dy_mw,
         y,
     )
@@ -194,6 +216,29 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
     @. dYc.ρu1 = dy_mw.ρu1 / lgeom_c.WJ
     @. dYc.ρu2 = dy_mw.ρu2 / lgeom_c.WJ
     @. dYc.ρu3 = dy_mw.ρu3 / lgeom_c.WJ
+
+    # --- Horizontal Exner-perturbation pressure-gradient force (Yatunin et al.
+    #     2026), Cartesian components: −ρ c_pd (θ ∇ₕΠ' + θ' ∇ₕΠ_ref). The DG
+    #     gradient is strong hgrad + central lifting (no DSS), taken in the
+    #     geographic frame then rotated to Cartesian. ∇ₕ of a z-only field
+    #     vanishes on level surfaces, so at rest (θ'=Π'=0) this is exactly zero
+    #     — well-balanced over topography, unlike the metric-defective
+    #     conservative pressure flux. ---
+    liftΠp = Operators.lifting_correction(
+        Operators.central_gradient_lift,
+        Geometry.UVVector{FT},
+        Πp,
+    )
+    gΠp = @. Geometry.UVVector(hgrad(Πp)) + liftΠp
+    pgfE =
+        @. -cp_d *
+           (θ * gΠp.components.data.:1 + θp * ᶜgΠ_ref.components.data.:1)
+    pgfN =
+        @. -cp_d *
+           (θ * gΠp.components.data.:2 + θp * ᶜgΠ_ref.components.data.:2)
+    @. dYc.ρu1 += ρ * (pgfE * eE1 + pgfN * eN1)
+    @. dYc.ρu2 += ρ * (pgfE * eE2 + pgfN * eN2)
+    @. dYc.ρu3 += ρ * (pgfE * eE3 + pgfN * eN3)
 
     # --- Vertical FD (plane flux-form pattern; implicit under HEVI) ---
     if vertical_transport
@@ -269,8 +314,14 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
     #     advection, sponge ---
     w = @. ρw_w / If(ρ)
     if vertical_transport
+        # Exner-perturbation pressure-gradient + gravity (Yatunin et al. 2026):
+        # −ρ c_pd (θ ∂_ξ³ Π' + θ' ∂_ξ³ Π_ref).  Gravity is absorbed into the
+        # reference term, so at rest (Π'=θ'=0) the tendency is exactly zero —
+        # no discrete-balance requirement, no column rebalancing.
         @. dρw = Bw(
-            -(ᶠgradᵥ(p) + If(ρ) * ᶠgradᵥ(ᶜΦ)) -
+            -If(ρ) *
+            cp_d *
+            (If(θ) * ᶠgradᵥ(Πp) + If(θp) * ᶠgradᵥ(ᶜΠ_ref)) -
             C3(vvdivc2f(Ic(ρw_w ⊗ w)), lgeom_f),
         )
     else
@@ -328,13 +379,18 @@ function implicit_tendency_fddg!(dY, Y, p, t)
     K = @. (uE^2 + uN^2 + w_c^2) / 2
     p_thermo = @. pressure_ρe(ρe, K, ᶜΦ, ρ)
     h_tot = @. (ρe + p_thermo) / ρ
+    Π = @. (p_thermo / p_0)^κ_gas
+    θ = @. p_thermo / (ρ * R_d) / Π
+    Πp = @. Π - ᶜΠ_ref
+    θp = @. θ - ᶜθ_ref
 
     @. dY.Yc.ρ = -vdivf2c(ρw_w)
     @. dY.Yc.ρe = -vdivf2c(ρw_w * If(h_tot))
     dY.Yc.ρu1 .= FT(0)
     dY.Yc.ρu2 .= FT(0)
     dY.Yc.ρu3 .= FT(0)
-    @. dY.ρw = Bw(-(ᶠgradᵥ(p_thermo) + If(ρ) * ᶠgradᵥ(ᶜΦ)))
+    @. dY.ρw =
+        Bw(-If(ρ) * cp_d * (If(θ) * ᶠgradᵥ(Πp) + If(θp) * ᶠgradᵥ(ᶜΠ_ref)))
     return dY
 end
 
@@ -375,6 +431,15 @@ end
 saveat_grid =
     collect(FT(0):min(t_end, parse(FT, get(ENV, "DT_SAVE", "21600"))):t_end)
 
+# Diagnostic monitor at a fixed simulated-time interval (CTS-native callback;
+# CTS 0.10 does not accept SciMLBase's DiscreteCallback).
+monitor = CTS.Callbacks.EveryXSimulationTime(
+    integrator -> println(diag_str(integrator.u, integrator.t)),
+    max(Δt, ndiag * Δt);
+    atinit = true,
+)
+callback = CTS.CallbackSet(monitor)
+
 if stepper == "hevi"
     # Split-consistency check: rhs == implicit + remaining (exact when the
     # tendency filter is off; with the filter on, the implicit part is
@@ -392,52 +457,31 @@ if stepper == "hevi"
             r(:Yc) split_ρw = r(:ρw)
     end
     jacobian = FDDGImplicitEquationJacobian(Y)
-    mon_dt = ndiag * Δt
-    monitor = SciMLBase.DiscreteCallback(
-        (u, t, integrator) -> mod(t, mon_dt) == 0,
-        integrator -> println(diag_str(integrator.u, integrator.t));
-        save_positions = (false, false),
-    )
-    prob = SciMLBase.ODEProblem(
-        CTS.ClimaODEFunction(;
-            T_imp! = SciMLBase.ODEFunction(
-                implicit_tendency_fddg!;
-                jac_prototype = jacobian,
-                Wfact = fddg_implicit_equation_jacobian!,
-            ),
-            T_exp! = remaining_tendency_fddg!,
+    ode_function = CTS.ClimaODEFunction(;
+        T_imp! = CTS.ODEFunction(
+            implicit_tendency_fddg!;
+            jac_prototype = jacobian,
+            Wfact = fddg_implicit_equation_jacobian!,
         ),
-        Y,
-        (FT(0), t_end),
-        nothing,
+        T_exp! = remaining_tendency_fddg!,
     )
     ode_algo =
         CTS.IMEXAlgorithm(CTS.ARS343(), CTS.NewtonsMethod(; max_iters = 2))
-    sol = SciMLBase.solve(
-        prob,
-        ode_algo;
-        dt = Δt,
-        saveat = saveat_grid,
-        callback = monitor,
-    )
 else
-    prob = ODEProblem(rhs_fddg!, Y, (FT(0), t_end))
-    nsteps_between = max(1, ndiag)
-    monitor = SciMLBase.DiscreteCallback(
-        (u, t, integrator) ->
-            (integrator.iter % nsteps_between == 0) || t >= t_end,
-        integrator -> println(diag_str(integrator.u, integrator.t));
-        save_positions = (false, false),
-    )
-    sol = solve(
-        prob,
-        SSPRK33(),
-        dt = Δt,
-        saveat = saveat_grid,
-        internalnorm = fieldvector_norm,
-        callback = monitor,
-    )
+    ode_function = CTS.ClimaODEFunction(; T_exp! = rhs_fddg!)
+    ode_algo = CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher())
 end
+
+prob = CTS.ODEProblem(ode_function, Y, (FT(0), t_end), nothing)
+integrator = CTS.init(
+    prob,
+    ode_algo;
+    dt = Δt,
+    saveat = saveat_grid,
+    callback = callback,
+    adaptive = false,
+)
+sol = CTS.solve!(integrator)
 
 @info (
     apply_held_suarez ?
@@ -457,8 +501,8 @@ end
 # ---------------------------------------------------------------------------
 # Plots (v/u at level 3, p/T at level 1; PLOTS=0 disables)
 # ---------------------------------------------------------------------------
-import CairoMakie, ClimaCoreMakie
 if get(ENV, "PLOTS", "1") != "0"
+import CairoMakie, ClimaCoreMakie
 output_dir = joinpath(
     @__DIR__,
     "output",

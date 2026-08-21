@@ -52,8 +52,6 @@ import ClimaCore:
     Spaces,
     Topologies
 
-using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
-import SciMLBase
 import ClimaTimeSteppers as CTS
 import StaticArrays: SVector
 import Printf
@@ -173,6 +171,24 @@ end
 const ᶜΦ = @. grav * ccoords.z
 const ᶜf_cor = @. CT3(Geometry.WVector(2 * Ω * sind(ccoords.lat)))
 
+# ---------------------------------------------------------------------------
+# Hydrostatic reference state for the Exner-perturbation pressure-gradient
+# force (Yatunin et al. 2026). An isothermal reference T_ref is analytic and
+# satisfies dp_ref/dz = −ρ_ref g in the continuum:
+#     Π_ref(z) = (p_ref/p_0)^κ = exp(−κ g z / (R_d T_ref)),
+#     θ_ref(z) = T_ref / Π_ref(z),   ρ_ref = p_ref / (R_d T_ref).
+# The momentum pressure-gradient + gravity is written as the deviation
+#     −ρ c_pd (θ ∇Π' + θ' ∇Π_ref),   Π' = Π − Π_ref,  θ' = θ − θ_ref,
+# which is the identically-zero field at rest (θ'=Π'=0).
+const T_ref = parse(FT, get(ENV, "REF_TEMP", "250"))
+const ᶜΠ_ref = @. exp(-κ_gas * grav * ccoords.z / (R_d * T_ref))
+const ᶜθ_ref = @. T_ref / ᶜΠ_ref
+# IC = baroclinic (default, Ullrich et al. jet) | resting (quiescent
+# isothermal = the reference; the sphere C-property / well-balancedness witness)
+const ic_mode = lowercase(get(ENV, "IC", "baroclinic"))
+ic_mode in ("baroclinic", "resting") ||
+    error("IC must be baroclinic or resting")
+
 # Cartesian basis fields (centers): ê_E, ê_N, r̂ from lat/long (degrees).
 # Used by the flux-form FDDG driver — velocity components advected as scalars
 # must live in a globally constant frame.
@@ -271,6 +287,20 @@ cond(λ, ϕ) = (0 < r_gc(λ, ϕ) < d_0) * (r_gc(λ, ϕ) != R * pi)
 
 function initial_state(ᶜlocal_geometry, ᶠlocal_geometry)
     (; lat, long, z) = ᶜlocal_geometry.coordinates
+
+    # Quiescent isothermal atmosphere = the Exner reference,
+    # so Π'≡0, θ'≡0 and the Exner-perturbation PGF is exactly zero.
+    # Well-balanced rest-state on the sphere
+    if ic_mode == "resting"
+        ᶜp = @. p_0 * exp(-grav * z / (R_d * T_ref))
+        ᶜρr = @. ᶜp / (R_d * T_ref)
+        ᶜρer = @. cv_d * ᶜp / R_d + ᶜρr * (grav * z - cv_d * T_tri)
+        ᶜuₕr = @. C12(Geometry.UVVector(FT(0), FT(0)), ᶜlocal_geometry)
+        ᶠwr = map(_ -> C3(FT(0)), ᶠlocal_geometry)
+        Ycr = map((ρi, ρei) -> (; ρ = ρi, ρe = ρei), ᶜρr, ᶜρer)
+        return Fields.FieldVector(Yc = Ycr, uₕ = ᶜuₕr, w = ᶠwr)
+    end
+
     ᶜρ = @. pres(lat, z) / R_d / temp(lat, z)
     u₀ = @. u_base(lat, z)
     v₀ = @. 0 * z
