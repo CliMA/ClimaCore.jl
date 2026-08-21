@@ -112,6 +112,15 @@ struct SetValue{S} <: AbstractBoundaryCondition
 end
 
 """
+    SetRobin(val)
+
+Set a Robin BC.
+"""
+struct SetRobin{S} <: AbstractBoundaryCondition
+    val::S
+end
+
+"""
     SetGradient(val)
 
 Set the gradient at the boundary to be `val`. In the case of gradient operators
@@ -2907,7 +2916,7 @@ The following boundary conditions are supported:
 struct GradientC2F{BC} <: GradientOperator
     bcs::BC
     function GradientC2F(; kwargs...)
-        assert_valid_bcs("GradientC2F", kwargs, (SetValue, SetGradient))
+        assert_valid_bcs("GradientC2F", kwargs, (SetValue, SetGradient, SetRobin))
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     GradientC2F(bcs) = GradientC2F(; bcs...)
@@ -2958,6 +2967,46 @@ Base.@propagate_inbounds function stencil_right_boundary(
     Geometry.Covariant3Vector(2) ⊗ (
         getidx(space, bc.val, nothing, hidx) -
         getidx(space, arg, idx - half, hidx)
+    )
+end
+
+# left/right SetRobin BC
+Base.@propagate_inbounds function stencil_left_boundary(
+    ::GradientC2F,
+    bc::SetRobin,
+    space,
+    idx,
+    hidx,
+    arg,
+)
+    @assert idx == left_face_boundary_idx(space)
+    u_center = getidx(space, arg, idx + half, hidx)
+    g, a, b = bc.val
+    u_face = (g - a*u_center) / (b-a)
+    robin_value = Geometry.WVector(u_center - u_face)
+    Geometry.project(
+        Geometry.Covariant3Axis(),
+        getidx(space, robin_value, nothing, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+end
+Base.@propagate_inbounds function stencil_right_boundary(
+    ::GradientC2F,
+    bc::SetRobin,
+    space,
+    idx,
+    hidx,
+    arg,
+)
+    @assert idx == right_face_boundary_idx(space)
+    u_center = getidx(space, arg, idx - half, hidx)
+    g, a, b = bc.val
+    u_face = (g + a*u_center) / (b+a)
+    robin_value = Geometry.WVector(u_face - u_center)
+    Geometry.project(
+        Geometry.Covariant3Axis(),
+        getidx(space, robin_value, nothing, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
     )
 end
 
