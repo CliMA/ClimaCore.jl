@@ -505,6 +505,34 @@ zero_wall_faces = Operators.SetBoundaryOperator(
     top = Operators.SetValue(Geometry.WVector(0.0)),
 )
 
+"""
+    op_plot_string(op)
+
+A filename-friendly description of an advection operator, appended to every
+plot name so that each plot records the operator and boundary conditions that
+produced it: the operator's type name, its limiter constraint (for
+`LinVanLeerC2F`), and each of its boundary conditions, e.g.
+`Upwind3rdOrderBiasedProductC2F_bottom_Extrapolate1_top_Extrapolate1`. On
+periodic meshes the boundary conditions in the name are the operator's
+(unused) defaults.
+"""
+op_plot_string(op) = join(
+    (
+        string(nameof(typeof(op))),
+        (
+            op isa Operators.LinVanLeerC2F ?
+            (string(nameof(typeof(op.constraint))),) : ()
+        )...,
+        (
+            "$(name)_$(bc_plot_string(getproperty(op.bcs, name)))" for
+            name in propertynames(op.bcs)
+        )...,
+    ),
+    "_",
+)
+bc_plot_string(::Operators.Extrapolate{N}) where {N} = "Extrapolate$N"
+bc_plot_string(bc) = string(nameof(typeof(bc)))
+
 function test_advection_convergence(case)
     FT = Float64
     (; n_elems_seq, op, op_args, w_fn, c_fn, exact_fn, divf2c) = case
@@ -555,7 +583,10 @@ function test_advection_convergence(case)
         end
 
         suffix = isempty(stretch_name) ? "" : "_$(stretch_name)"
-        plot_flux_and_adv(case.plot_name * suffix, results)
+        plot_flux_and_adv(
+            "$(case.plot_name)_$(op_plot_string(op))$suffix",
+            results,
+        )
 
         if case.err_bound !== nothing
             @test err_adv_wc[3] ≤ err_adv_wc[2] ≤ err_adv_wc[1] ≤ case.err_bound
@@ -630,7 +661,7 @@ advection_convergence_cases = [
     (;
         name = "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on (uniform) \
                 periodic mesh, constant w",
-        plot_name = "upwind3/periodic_constant_w",
+        plot_name = "periodic/constant_w",
         periodic = true,
         n_elems_seq = 2 .^ (5, 6, 7, 8),
         op = Operators.Upwind3rdOrderBiasedProductC2F(),
@@ -646,7 +677,7 @@ advection_convergence_cases = [
     (;
         name = "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on (uniform) \
                 periodic mesh, varying sign w",
-        plot_name = "upwind3/periodic_varying_w",
+        plot_name = "periodic/varying_w",
         periodic = true,
         n_elems_seq = 2 .^ (5, 6, 7, 8),
         op = Operators.Upwind3rdOrderBiasedProductC2F(),
@@ -663,7 +694,7 @@ advection_convergence_cases = [
         name = "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on (uniform \
                 and stretched) non-periodic mesh, with Extrapolate{0} + \
                 DivergenceF2C SetValue BCs, constant w",
-        plot_name = "upwind3/nonperiodic_constant_w",
+        plot_name = "nonperiodic/constant_w",
         periodic = false,
         n_elems_seq = 2 .^ (4, 6, 8, 10),
         op = Operators.Upwind3rdOrderBiasedProductC2F(
@@ -700,7 +731,7 @@ advection_convergence_cases = [
         name = "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on uniform \
                 non-periodic mesh, with Extrapolate{1} + DivergenceF2C \
                 SetValue BCs, varying sign w",
-        plot_name = "upwind3/nonperiodic_varying_w",
+        plot_name = "nonperiodic/varying_w",
         periodic = false,
         n_elems_seq = 2 .^ (4, 6, 8, 10),
         op = Operators.Upwind3rdOrderBiasedProductC2F(
@@ -728,7 +759,7 @@ advection_convergence_cases = [
     # reconstruction.
     (;
         name = "Lin et al. (1994) van Leer class limiter (Mono5)",
-        plot_name = "linvanleer/mono5",
+        plot_name = "periodic/constant_w",
         periodic = true,
         n_elems_seq = 2 .^ (5, 6, 7, 8, 9, 10),
         op = Operators.LinVanLeerC2F(
@@ -744,7 +775,7 @@ advection_convergence_cases = [
     ),
     (;
         name = "Lin et al. (1994) van Leer class limiter (Mono4)",
-        plot_name = "linvanleer/mono4",
+        plot_name = "periodic/constant_w",
         periodic = true,
         n_elems_seq = 2 .^ (5, 6, 7, 8, 9, 10),
         op = Operators.LinVanLeerC2F(constraint = Operators.MonotoneHarmonic()),
@@ -758,7 +789,7 @@ advection_convergence_cases = [
     ),
     (;
         name = "Lin et al. (1994) van Leer class limiter (PosDef)",
-        plot_name = "linvanleer/posdef",
+        plot_name = "periodic/constant_w",
         periodic = true,
         n_elems_seq = 2 .^ (5, 6, 7, 8, 9, 10),
         op = Operators.LinVanLeerC2F(constraint = Operators.PositiveDefinite()),
@@ -783,7 +814,7 @@ advection_convergence_cases = [
         name = "UpwindBiasedProductC2F + DivergenceF2C conservation on \
                 uniform non-periodic mesh, c -> 0 and w extremal at the \
                 boundaries",
-        plot_name = "conservation/upwind1",
+        plot_name = "conservation/outflow",
         periodic = false,
         n_elems_seq = 2 .^ (4, 6, 8, 10),
         op = Operators.UpwindBiasedProductC2F(),
@@ -809,7 +840,7 @@ advection_convergence_cases = [
         name = "Upwind3rdOrderBiasedProductC2F + DivergenceF2C conservation \
                 on uniform non-periodic mesh, with Extrapolate{1}, c -> 0 \
                 and w extremal at the boundaries",
-        plot_name = "conservation/upwind3",
+        plot_name = "conservation/outflow",
         periodic = false,
         n_elems_seq = 2 .^ (4, 6, 8, 10),
         op = Operators.Upwind3rdOrderBiasedProductC2F(
@@ -841,7 +872,7 @@ advection_convergence_cases = [
         name = "Lin et al. (1994) van Leer class limiter (Mono5) + \
                 DivergenceF2C conservation on uniform non-periodic mesh, \
                 c -> 0 and w extremal at the boundaries",
-        plot_name = "conservation/linvanleer_mono5",
+        plot_name = "conservation/outflow",
         periodic = false,
         n_elems_seq = 2 .^ (4, 6, 8, 10),
         op = Operators.LinVanLeerC2F(
@@ -873,7 +904,7 @@ advection_convergence_cases = [
         name = "Upwind3rdOrderBiasedProductC2F + DivergenceF2C conservation \
                 on uniform non-periodic mesh, with Extrapolate{1}, c -> 0 \
                 and w inflow at the boundaries",
-        plot_name = "conservation/upwind3_inflow",
+        plot_name = "conservation/inflow",
         periodic = false,
         n_elems_seq = 2 .^ (4, 6, 8, 10),
         op = Operators.Upwind3rdOrderBiasedProductC2F(
@@ -914,7 +945,7 @@ advection_convergence_cases = [
         name = "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on uniform \
                 non-periodic mesh, with Extrapolate{0}, c with a simple zero \
                 and w inflow at the boundaries",
-        plot_name = "conservation/upwind3_inflow_simple_zero_e0",
+        plot_name = "conservation/inflow_simple_zero",
         periodic = false,
         n_elems_seq = 2 .^ (4, 6, 8, 10),
         op = Operators.Upwind3rdOrderBiasedProductC2F(
@@ -943,7 +974,7 @@ advection_convergence_cases = [
         name = "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on uniform \
                 non-periodic mesh, with Extrapolate{1}, c with a simple zero \
                 and w inflow at the boundaries",
-        plot_name = "conservation/upwind3_inflow_simple_zero_e1",
+        plot_name = "conservation/inflow_simple_zero",
         periodic = false,
         n_elems_seq = 2 .^ (4, 6, 8, 10),
         op = Operators.Upwind3rdOrderBiasedProductC2F(
@@ -986,6 +1017,12 @@ end
     device = ClimaComms.device()
     results = []
 
+    # UpwindBiasedProductC2F & Upwind3rdOrderBiasedProductC2F Center -> Face
+    # operators (resolution-independent, so they can also name the plot)
+    first_order_fluxᶠ = Operators.UpwindBiasedProductC2F()
+    third_order_fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F()
+    divf2c = Operators.DivergenceF2C()
+
     for (k, n) in enumerate(n_elems_seq)
         domain = Domains.IntervalDomain(
             Geometry.ZPoint{FT}(-pi),
@@ -1000,18 +1037,13 @@ end
         centers = Fields.coordinate_field(cs).z
         C = FT(1.0) # flux-correction coefficient (falling back to third-order upwinding)
 
-        # UpwindBiasedProductC2F & Upwind3rdOrderBiasedProductC2F Center -> Face operator
         # Unitary, constant advective velocity
         w = Geometry.WVector.(ones(fs))
         # c = sin(z), scalar field defined at the centers
         c = sin.(centers)
 
-        first_order_fluxᶠ = Operators.UpwindBiasedProductC2F()
-        third_order_fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F()
         first_order_fluxsinᶠ = first_order_fluxᶠ.(w, c)
         third_order_fluxsinᶠ = third_order_fluxᶠ.(w, c)
-
-        divf2c = Operators.DivergenceF2C()
         corrected_antidiff_flux =
             @. divf2c(C * (third_order_fluxsinᶠ - first_order_fluxsinᶠ))
         adv_wc = @. divf2c(first_order_fluxsinᶠ) + corrected_antidiff_flux
@@ -1028,7 +1060,8 @@ end
         push!(results, (n, w, c, flux, adv_wc, cos.(centers)))
     end
 
-    plot_flux_and_adv("fct/periodic", results)
+    fct_ops = "$(op_plot_string(first_order_fluxᶠ))_plus_$(op_plot_string(third_order_fluxᶠ))"
+    plot_flux_and_adv("fct/periodic_$fct_ops", results)
 
     # Check convergence rate
     conv_adv_wc = convergence_rate(err_adv_wc, Δh)
@@ -1046,6 +1079,22 @@ end
     n_elems_seq = 2 .^ (4, 6, 8, 10)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(1.0))
     device = ClimaComms.device()
+
+    # UpwindBiasedProductC2F & Upwind3rdOrderBiasedProductC2F Center -> Face
+    # operators (resolution-independent, so they can also name the plot)
+    first_order_fluxᶠ = Operators.UpwindBiasedProductC2F(
+        bottom = Operators.Extrapolate(0),
+        top = Operators.Extrapolate(0),
+    )
+    third_order_fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F(
+        bottom = Operators.Extrapolate(0),
+        top = Operators.Extrapolate(0),
+    )
+    divf2c = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(Geometry.Contravariant3Vector(FT(0.0))),
+        top = Operators.SetValue(Geometry.Contravariant3Vector(FT(0.0))),
+    )
+    fct_ops = "$(op_plot_string(first_order_fluxᶠ))_plus_$(op_plot_string(third_order_fluxᶠ))"
 
     for (i, stretch_fn) in enumerate(stretch_fns)
         err_adv_wc = zeros(FT, length(n_elems_seq))
@@ -1065,30 +1114,11 @@ end
             centers = Fields.coordinate_field(cs).z
             C = FT(1.0) # flux-correction coefficient (falling back to third-order upwinding)
 
-            # UpwindBiasedProductC2F & Upwind3rdOrderBiasedProductC2F Center -> Face operator
             # Unitary, constant advective velocity
             w = Geometry.WVector.(ones(fs))
             # c = sin(z), scalar field defined at the centers
             Δz = FT(2pi / n)
             c = (cos.(centers .- Δz / 2) .- cos.(centers .+ Δz / 2)) ./ Δz
-
-            first_order_fluxᶠ = Operators.UpwindBiasedProductC2F(
-                bottom = Operators.Extrapolate(0),
-                top = Operators.Extrapolate(0),
-            )
-            third_order_fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F(
-                bottom = Operators.Extrapolate(0),
-                top = Operators.Extrapolate(0),
-            )
-
-            divf2c = Operators.DivergenceF2C(
-                bottom = Operators.SetValue(
-                    Geometry.Contravariant3Vector(FT(0.0)),
-                ),
-                top = Operators.SetValue(
-                    Geometry.Contravariant3Vector(FT(0.0)),
-                ),
-            )
 
             first_order_flux = first_order_fluxᶠ.(w, c)
             third_order_flux = third_order_fluxᶠ.(w, c)
@@ -1108,7 +1138,10 @@ end
             push!(results, (n, w, c, flux, adv_wc, cos.(centers)))
         end
 
-        plot_flux_and_adv("fct/nonperiodic_fv_ic_$(stretch_names[i])", results)
+        plot_flux_and_adv(
+            "fct/nonperiodic_fv_ic_$(fct_ops)_$(stretch_names[i])",
+            results,
+        )
 
         # Check convergence rate
         conv_adv_wc = convergence_rate(err_adv_wc, Δh)
@@ -1137,6 +1170,22 @@ end
     err_adv_wc = zeros(FT, length(n_elems_seq))
     Δh = zeros(FT, length(n_elems_seq))
     results = []
+
+    # UpwindBiasedProductC2F & Upwind3rdOrderBiasedProductC2F Center -> Face
+    # operators (resolution-independent, so they can also name the plot)
+    first_order_fluxᶠ = Operators.UpwindBiasedProductC2F(
+        bottom = Operators.Extrapolate(0),
+        top = Operators.Extrapolate(0),
+    )
+    third_order_fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F(
+        bottom = Operators.Extrapolate(1),
+        top = Operators.Extrapolate(1),
+    )
+    divf2c = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(Geometry.WVector(FT(0.0))),
+        top = Operators.SetValue(Geometry.WVector(FT(0.0))),
+    )
+
     for (k, n) in enumerate(n_elems_seq)
         domain = Domains.IntervalDomain(
             Geometry.ZPoint{FT}(-pi),
@@ -1151,25 +1200,11 @@ end
         centers = Fields.coordinate_field(cs).z
         C = FT(1.0) # flux-correction coefficient (falling back to third-order upwinding)
 
-        # UpwindBiasedProductC2F & Upwind3rdOrderBiasedProductC2F Center -> Face operator
         # Unitary, constant advective velocity
         w = Geometry.WVector.(ones(fs))
         # c = sin(z), scalar field defined at the centers
         c = sin.(centers)
 
-        first_order_fluxᶠ = Operators.UpwindBiasedProductC2F(
-            bottom = Operators.Extrapolate(0),
-            top = Operators.Extrapolate(0),
-        )
-        third_order_fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F(
-            bottom = Operators.Extrapolate(1),
-            top = Operators.Extrapolate(1),
-        )
-
-        divf2c = Operators.DivergenceF2C(
-            bottom = Operators.SetValue(Geometry.WVector(FT(0.0))),
-            top = Operators.SetValue(Geometry.WVector(FT(0.0))),
-        )
         first_order_flux = first_order_fluxᶠ.(w, c)
         third_order_flux = third_order_fluxᶠ.(w, c)
         corrected_antidiff_flux =
@@ -1186,7 +1221,8 @@ end
         push!(results, (n, w, c, flux, adv_wc, cos.(centers)))
     end
 
-    plot_flux_and_adv("fct/nonperiodic_pointwise_ic", results)
+    fct_ops = "$(op_plot_string(first_order_fluxᶠ))_plus_$(op_plot_string(third_order_fluxᶠ))"
+    plot_flux_and_adv("fct/nonperiodic_pointwise_ic_$fct_ops", results)
 
     # Check convergence rate
     conv_adv_wc = convergence_rate(err_adv_wc, Δh)
