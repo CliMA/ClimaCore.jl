@@ -499,7 +499,11 @@ if is_balanced_flow && !apply_held_suarez
 end
 
 # ---------------------------------------------------------------------------
-# Plots (v/u at level 3, p/T at level 1; PLOTS=0 disables)
+# Plots (v/u at level 3, p/T at level 1; PLOTS=0 disables). Uses CairoMakie +
+# the ClimaCoreMakie extension; both must be in the active environment (see the
+# note in the header — add them to .buildkite or run from an env that has
+# them). Import is inside the guard so PLOTS=0 runs need neither. GPU-safe:
+# each plotted field is moved to the CPU with `ClimaCore.to_cpu`.
 # ---------------------------------------------------------------------------
 if get(ENV, "PLOTS", "1") != "0"
 import CairoMakie, ClimaCoreMakie
