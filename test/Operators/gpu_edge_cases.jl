@@ -19,6 +19,7 @@ import ClimaCore:
     Geometry,
     Operators,
     Quadratures
+import ClimaCore.CommonSpaces: PointColumnEnsembleSpace, CellCenter
 
 const test_device = ClimaComms.device()
 const cpu_device = ClimaComms.CPUSingleThreaded()
@@ -140,13 +141,16 @@ end
         @test all(isfinite, Array(parent(field)))
     end
 
-    # Center-to-face stencils do not support a column whose interior window
-    # is empty: `Operators.window_bounds` rejects it on every device. This
-    # test pins that limitation; if empty interior windows are ever
-    # supported, replace it with a device-vs-CPU comparison like the one
-    # above.
-    @test_throws AssertionError fd_c2f_results(spaces...)
-    @test_throws AssertionError fd_c2f_results(spaces_cpu...)
+    # Center-to-face stencils on a column whose interior window is empty:
+    # `Operators.window_bounds` used to reject these, but it now clamps the
+    # overlapping boundary windows (boundary handling is dispatched per index,
+    # with the left window taking precedence), so both faces are computed with
+    # their boundary rows.
+    for (field, field_cpu) in
+        zip(fd_c2f_results(spaces...), fd_c2f_results(spaces_cpu...))
+        @test device_matches_cpu(field, field_cpu; rtol = 10 * eps(FT))
+        @test all(isfinite, Array(parent(field)))
+    end
 end
 
 @testset "smallest column with an interior, Nv = 2 (device vs CPU) [$FT]" for FT in (
@@ -170,6 +174,78 @@ end
     results = (fd_f2c_results(spaces...)..., fd_c2f_results(spaces...)...)
     results_cpu =
         (fd_f2c_results(spaces_cpu...)..., fd_c2f_results(spaces_cpu...)...)
+    for (field, field_cpu) in zip(results, results_cpu)
+        @test device_matches_cpu(field, field_cpu; rtol = 10 * eps(FT))
+        @test all(isfinite, Array(parent(field)))
+    end
+end
+
+# Advection and nested-multiply stencils, covering the eager GPU kernel's
+# advection (pointwise and operator-matrix) and matrix-multiply handlers.
+function fd_advection_results(center_space, face_space)
+    FT = Spaces.undertype(center_space)
+    zc = Fields.coordinate_field(center_space).z
+    x = @. sin(3 * zc / 1000)
+    w = Geometry.WVector.(ones(FT, face_space))
+    up3 = Operators.Upwind3rdOrderBiasedProductC2F(
+        bottom = Operators.Extrapolate(1),
+        top = Operators.Extrapolate(1),
+    )
+    lvl = Operators.LinVanLeerC2F(
+        constraint = Operators.MonotoneLocalExtrema(),
+    )
+    div_sv = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
+        top = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
+    )
+    gradc2f = Operators.GradientC2F(
+        bottom = Operators.SetGradient(Geometry.WVector(FT(1))),
+        top = Operators.SetGradient(Geometry.WVector(FT(0))),
+    )
+    divf2c = Operators.DivergenceF2C()
+    return (
+        (@. div_sv(up3(w, x))),
+        lvl.(w, x, FT(0.1)),
+        (@. divf2c(gradc2f(x))),
+    )
+end
+
+@testset "multi-column FD space (device vs CPU) [$FT]" for FT in (
+    Float32,
+    Float64,
+)
+    # MultiColumnFiniteDifferenceSpace is in the eager GPU kernel's supported
+    # space families (`Operators.AllFiniteDifferenceSpace`); its `Field`
+    # handler must read each leaf field at the thread's level, not misread the
+    # space as a level field and read everything at level 1 -- the CPU
+    # references vary with z, so that failure mode cannot match them.
+    mc_spaces(device) = begin
+        points = [
+            Geometry.LatLongPoint(FT(10i - 40), FT(20i - 80)) for i in 1:7
+        ]
+        center_space = PointColumnEnsembleSpace(
+            FT;
+            points,
+            z_elem = 8,
+            z_min = FT(0),
+            z_max = FT(1000),
+            device,
+            staggering = CellCenter(),
+        )
+        (center_space, Spaces.face_space(center_space))
+    end
+    spaces = mc_spaces(test_device)
+    spaces_cpu = mc_spaces(cpu_device)
+    results = (
+        fd_f2c_results(spaces...)...,
+        fd_c2f_results(spaces...)...,
+        fd_advection_results(spaces...)...,
+    )
+    results_cpu = (
+        fd_f2c_results(spaces_cpu...)...,
+        fd_c2f_results(spaces_cpu...)...,
+        fd_advection_results(spaces_cpu...)...,
+    )
     for (field, field_cpu) in zip(results, results_cpu)
         @test device_matches_cpu(field, field_cpu; rtol = 10 * eps(FT))
         @test all(isfinite, Array(parent(field)))

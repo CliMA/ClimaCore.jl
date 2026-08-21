@@ -107,6 +107,17 @@ main
     vertical curl contribution; `SetCurl` boundary values are projected onto
     the `Contravariant12` axis accordingly. Code that read the `u³` component
     of a `CurlC2F` result must drop it (it was always zero).
+
+  Columns too short for a stencil's interior (e.g. a center-to-face operator
+  on a single-level column, or a 4-point advection stencil on a 2-level
+  column) are now supported: `Operators.window_bounds` clamps the overlapping
+  boundary windows instead of rejecting them with an `AssertionError`, and
+  every face is computed with the appropriate boundary row (the ghost-point
+  extrapolations reduce their order to the interior points actually in
+  range). On GPUs, finite difference broadcasts over
+  `MultiColumnFiniteDifferenceSpace` now use the eager
+  one-thread-per-level kernel like the extruded and single-column families,
+  instead of falling back to the one-thread-per-value kernel.
   [2544](https://github.com/CliMA/ClimaCore.jl/pull/2544)
 
 - ![][badge-💥breaking] Removed the `Extrapolate` boundary condition from

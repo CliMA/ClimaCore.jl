@@ -638,12 +638,14 @@ level field has no vertical dimension, and a column field has no horizontal
 dimensions. Those dimensions are read at index 1, matching `Operators.vidx` and
 `Operators.hindices`.
 
-The space gate below decides which case a field is by its space type, so any
-space family with a vertical dimension that is not an
-`ExtrudedFiniteDifferenceSpace` or `FiniteDifferenceSpace` (e.g.
-`MultiColumnFiniteDifferenceSpace`) would be misread as a level field and read
-entirely at level 1; such families must not reach the eager kernel (see the
-`eager_supported` launch gate in `operators_finite_difference.jl`).
+The space gate below decides which case a field is by its space type: the
+finite difference families in `Operators.AllFiniteDifferenceSpace` (extruded,
+single-column, and multi-column) are read at the thread's level, and anything
+else is treated as a field without a vertical dimension and read at level 1.
+A new space family with a vertical dimension must be added to that union (and
+audited here) before the `eager_supported` launch gate in
+`operators_finite_difference.jl` lets it reach the eager kernel; otherwise it
+would be misread as a level field.
 """
 Base.@propagate_inbounds function calc_level_val(
     arg::F,
@@ -651,8 +653,7 @@ Base.@propagate_inbounds function calc_level_val(
     space,
 ) where {F <: Field}
     data = field_values(arg)
-    if space isa
-       Union{Spaces.ExtrudedFiniteDifferenceSpace, Spaces.FiniteDifferenceSpace}
+    if space isa Operators.AllFiniteDifferenceSpace
         has_padding_thread(space) &&
             threadIdx().x == CUDA.blockDim().x &&
             return @inline @inbounds new(eltype(data))
@@ -660,6 +661,8 @@ Base.@propagate_inbounds function calc_level_val(
     else
         v = 1i32
     end
+    # mirrors `Operators.hindices`: a single-column space holds one column at
+    # (1, 1, 1); extruded and multi-column layouts are indexed by `hidx`
     (i, j, h) =
         space isa Spaces.FiniteDifferenceSpace ? (1i32, 1i32, 1i32) : hidx
     return @inline @inbounds data[v, i, j, h]

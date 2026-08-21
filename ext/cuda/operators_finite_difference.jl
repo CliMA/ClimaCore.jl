@@ -51,15 +51,13 @@ function Base.copyto!(
     # levels than fit in a block) fall through to `copyto_stencil_kernel!` below.
     # TODO: auto reduce max reg usage when needed because of high res columns
     # The eager kernel's per-level indexing (`calc_level_val` for `Field`s, and
-    # `has_padding_thread`) is written for the extruded and single-column space
-    # families; any other family (e.g. `MultiColumnFiniteDifferenceSpace`, which
-    # `calc_level_val`'s space gate would misread as a level field and evaluate
-    # entirely at level 1) must take the lazy kernel below.
-    eager_supported =
-        space isa Union{
-            Spaces.ExtrudedFiniteDifferenceSpace,
-            Spaces.FiniteDifferenceSpace,
-        }
+    # `has_padding_thread`) is written for the finite difference space families
+    # in `Operators.AllFiniteDifferenceSpace` (extruded, single-column, and
+    # multi-column); any other family with a vertical dimension must take the
+    # lazy kernel below, since `calc_level_val`'s space gate would misread its
+    # fields as level fields and evaluate them entirely at level 1. Keep this
+    # gate and that space gate in sync.
+    eager_supported = space isa Operators.AllFiniteDifferenceSpace
     if !high_resolution && eager_supported
         # Size the dynamic shared memory to fit the largest single expression result
         # in the broadcasted tree; `nothing` means an expression's cached entry type
