@@ -333,6 +333,8 @@ main
     `CommonSpaces.MultiColumnSpace`.
   - The old names are available, but deprecated.
     [2611](https://github.com/CliMA/ClimaCore.jl/pull/2611)
+  - Support remapping for `MultiColumnFiniteDifferenceSpace`
+  [2596](https://github.com/CliMA/ClimaCore.jl/pull/2596)
 
 v0.15.3
 -------
