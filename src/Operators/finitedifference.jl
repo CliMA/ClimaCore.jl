@@ -4020,16 +4020,6 @@ function Base.copyto!(
     return _serial_copyto!(field_out, bc, Ni, Nj, Nh)
 end
 
-@inline function reconstruct_placeholder_broadcasted(
-    parent_space::Spaces.AbstractSpace,
-    sbc::StencilBroadcasted{Style},
-) where {Style}
-    space = reconstruct_placeholder_space(axes(sbc), parent_space)
-    args = _reconstruct_placeholder_broadcasted(space, sbc.args)
-    return StencilBroadcasted{Style}(sbc.op, args, space, sbc.work)
-end
-
-
 function window_bounds(space, bc)
     if Topologies.isperiodic(space)
         li = lw = left_idx(space)
@@ -4166,17 +4156,6 @@ promote_bc(bc::SetDivergence{<:Geometry.AbstractTensor}, ::Type{FT}) where {FT} 
     SetDivergence(promote_axis_tensor(bc.val, FT))
 promote_bc(bc::SetCurl{<:Geometry.AbstractTensor}, ::Type{FT}) where {FT} =
     SetCurl(promote_axis_tensor(bc.val, FT))
-
-
-if hasfield(Method, :recursion_relation)
-    dont_limit = (args...) -> true
-    for m in methods(reconstruct_placeholder_broadcasted)
-        m.recursion_relation = dont_limit
-    end
-    for m in methods(_reconstruct_placeholder_broadcasted)
-        m.recursion_relation = dont_limit
-    end
-end
 
 """
     use_fd_shmem()

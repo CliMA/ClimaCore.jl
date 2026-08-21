@@ -243,17 +243,13 @@ Adapt.adapt_structure(to, data::DataLayout) = rebuild(data, Adapt.adapt(to, pare
 Base.copy(data::DataLayout) = rebuild(data, copy(parent(data)))
 Base.reinterpret(::Type{T}, data::DataLayout) where {T} = rebuild(data, parent(data), T)
 
-ClimaComms.gather(::ClimaComms.SingletonCommsContext, data::DataLayout) = data
-ClimaComms.gather(ctx::ClimaComms.AbstractCommsContext, data::DataLayout) =
-    gather_data(ctx, data)
-# Disambiguate from ClimaCommsMPIExt's gather(::MPICommsContext, array)
-ClimaComms.gather(ctx::ClimaComms.MPICommsContext, data::DataLayout) =
-    gather_data(ctx, data)
-function gather_data(ctx, data)
-    gathered_array = ClimaComms.gather(ctx, parent(data))
-    # The array gather only returns data on the root process
-    return ClimaComms.iamroot(ctx) ? rebuild(data, gathered_array) : nothing
+# Add MPICommsContext method to disambiguate from gather(::MPICommsContext, array).
+for T in (:(ClimaComms.AbstractCommsContext), :(ClimaComms.MPICommsContext))
+    ClimaComms.gather(ctx::$T, data::DataLayout) =
+        ClimaComms.iamroot(ctx) ? # Only return data on the root process.
+        rebuild(data, ClimaComms.gather(ctx, parent(data))) : nothing
 end
+ClimaComms.gather(::ClimaComms.SingletonCommsContext, data::DataLayout) = data
 
 @inline add_f_dim(dims, dim, ::Val{F}) where {F} =
     isnothing(F) ? dims : unrolled_insert(dims, dim, Val(F))
@@ -420,29 +416,17 @@ end
     (Nv, Ni, Nj, isnothing(Nh) ? size(parent(data), isnothing(F) || F == 5 ? 4 : 5) : Nh)
 @inline nelems(data::VIJHWithF) = size(data, 4)
 
-@propagate_inbounds function level_view(
-    data::VIJHWithF{T, Nv, Ni, Nj, Nh, F, S},
-    v,
-) where {T, Nv, Ni, Nj, Nh, F, S}
+@propagate_inbounds function level_view(data::VIJHWithF, v)
     array = stable_view(parent(data), add_f_dim((v:v, :, :, :), :, Val(f_dim(data)))...)
-    return VIJHWithF{T, 1, Ni, Nj, Nh, F, S}(array)
+    return rebuild(data, array; Nv = 1)
 end
-@propagate_inbounds function slab_view(
-    data::VIJHWithF{T, Nv, Ni, Nj, Nh, F, S},
-    v,
-    h,
-) where {T, Nv, Ni, Nj, Nh, F, S}
+@propagate_inbounds function slab_view(data::VIJHWithF, v, h)
     array = stable_view(parent(data), add_f_dim((v:v, :, :, h:h), :, Val(f_dim(data)))...)
-    return VIJHWithF{T, 1, Ni, Nj, 1, F, S}(array)
+    return rebuild(data, array; Nv = 1, Nh = 1)
 end
-@propagate_inbounds function column_view(
-    data::VIJHWithF{T, Nv, Ni, Nj, Nh, F, S},
-    i,
-    j,
-    h,
-) where {T, Nv, Ni, Nj, Nh, F, S}
+@propagate_inbounds function column_view(data::VIJHWithF, i, j, h)
     array = stable_view(parent(data), add_f_dim((:, i:i, j:j, h:h), :, Val(f_dim(data)))...)
-    return VIJHWithF{T, Nv, 1, 1, 1, F, S}(array)
+    return rebuild(data, array; Ni = 1, Nj = 1, Nh = 1)
 end
 
 """
@@ -481,31 +465,19 @@ end
     (Nv, isnothing(Nh) ? nothing : Ni)
 @inline Base.size(data::VIH1{<:Any, Nv, Ni, Nh}) where {Nv, Ni, Nh} =
     (Nv, isnothing(Nh) ? size(parent(data), 2) : Ni)
-@inline nelems(data::VIH1) = size(data, 2) ÷ shape_params(data).Ni
+@inline nelems(data::VIH1{<:Any, <:Any, Ni}) where {Ni} = size(data, 2) ÷ Ni
 
-@propagate_inbounds function level_view(
-    data::VIH1{T, Nv, Ni, Nh, S},
-    v,
-) where {T, Nv, Ni, Nh, S}
+@propagate_inbounds function level_view(data::VIH1, v)
     array = stable_view(parent(data), v:v, :)
-    return VIH1{T, 1, Ni, Nh, S}(array)
+    return rebuild(data, array; Nv = 1)
 end
-@propagate_inbounds function slab_view(
-    data::VIH1{T, Nv, Ni, Nh, S},
-    v,
-    h,
-) where {T, Nv, Ni, Nh, S}
+@propagate_inbounds function slab_view(data::VIH1{<:Any, <:Any, Ni}, v, h) where {Ni}
     array = stable_view(parent(data), v:v, Ni * mod(h - 1, size(data, 2) ÷ Ni) .+ (1:Ni))
-    return VIH1{T, 1, Ni, 1, S}(array)
+    return rebuild(data, array; Nv = 1, Nh = 1)
 end
-@propagate_inbounds function column_view(
-    data::VIH1{T, Nv, Ni, Nh, S},
-    i,
-    _,
-    h,
-) where {T, Nv, Ni, Nh, S}
+@propagate_inbounds function column_view(data::VIH1{<:Any, <:Any, Ni}, i, _, h) where {Ni}
     array = stable_view(parent(data), :, Ni * mod(h - 1, size(data, 2) ÷ Ni) .+ (i:i))
-    return VIH1{T, Nv, 1, 1, S}(array)
+    return rebuild(data, array; Ni = 1, Nh = 1)
 end
 
 """
@@ -545,56 +517,23 @@ end
     isnothing(Nh) ? (nothing, nothing) : (Ni, Nj)
 @inline Base.size(data::IH1JH2{<:Any, Ni, Nj, Nh}) where {Ni, Nj, Nh} =
     isnothing(Nh) ? size(parent(data)) : (Ni, Nj)
-@inline nelems(data::IH1JH2) =
-    length(data) ÷ (shape_params(data).Ni * shape_params(data).Nj)
+@inline nelems(data::IH1JH2{<:Any, Ni, Nj}) where {Ni, Nj} = length(data) ÷ (Ni * Nj)
 
-@propagate_inbounds function slab_view(
-    data::IH1JH2{T, Ni, Nj, Nh, S},
-    _,
-    h,
-) where {T, Ni, Nj, Nh, S}
+@propagate_inbounds function slab_view(data::IH1JH2{<:Any, Ni, Nj}, _, h) where {Ni, Nj}
     (h2, h1) = fldmod(h - 1, size(data, 1) ÷ Ni) .+ 1
     array = stable_view(parent(data), Ni * (h1 - 1) .+ (1:Ni), Nj * (h2 - 1) .+ (1:Nj))
-    return IH1JH2{T, Ni, Nj, 1, S}(array)
+    return rebuild(data, array; Nh = 1)
 end
 @propagate_inbounds function column_view(
-    data::IH1JH2{T, Ni, Nj, Nh, S},
+    data::IH1JH2{<:Any, Ni, Nj},
     i,
     j,
     h,
-) where {T, Ni, Nj, Nh, S}
+) where {Ni, Nj}
     (h2, h1) = fldmod(h - 1, size(data, 1) ÷ Ni) .+ 1
     array = stable_view(parent(data), Ni * (h1 - 1) .+ (i:i), Nj * (h2 - 1) .+ (j:j))
-    return IH1JH2{T, 1, 1, 1, S}(array)
+    return rebuild(data, array; Ni = 1, Nj = 1, Nh = 1)
 end
-@inline nlevels(::DataF) = 1
-@inline nlevels(
-    ::VIJHWithF{T, Nv, Ni, Nj, Nh, F, S, A},
-) where {T, Nv, Ni, Nj, Nh, F, S, A} = Nv
-@inline nlevels(::VIH1{T, Nv, Ni, Nh, S, A}) where {T, Nv, Ni, Nh, S, A} = Nv
-@inline nlevels(::IH1JH2) = 1
-
-@inline nlevels(::Type{<:DataF}) = 1
-@inline nlevels(
-    ::Type{<:VIJHWithF{T, Nv, Ni, Nj, Nh, F, S, A}},
-) where {T, Nv, Ni, Nj, Nh, F, S, A} = Nv
-@inline nlevels(::Type{<:VIH1{T, Nv, Ni, Nh, S, A}}) where {T, Nv, Ni, Nh, S, A} = Nv
-@inline nlevels(::Type{<:IH1JH2}) = 1
-
-@inline nquadpoints(::DataF) = 1
-@inline nquadpoints(
-    ::VIJHWithF{T, Nv, Ni, Nj, Nh, F, S, A},
-) where {T, Nv, Ni, Nj, Nh, F, S, A} = Ni * Nj
-@inline nquadpoints(::VIH1{T, Nv, Ni, Nh, S, A}) where {T, Nv, Ni, Nh, S, A} = Ni
-@inline nquadpoints(::IH1JH2{T, Ni, Nj, Nh, S, A}) where {T, Ni, Nj, Nh, S, A} = Ni * Nj
-
-@inline nquadpoints(::Type{<:DataF}) = 1
-@inline nquadpoints(
-    ::Type{<:VIJHWithF{T, Nv, Ni, Nj, Nh, F, S, A}},
-) where {T, Nv, Ni, Nj, Nh, F, S, A} = Ni * Nj
-@inline nquadpoints(::Type{<:VIH1{T, Nv, Ni, Nh, S, A}}) where {T, Nv, Ni, Nh, S, A} = Ni
-@inline nquadpoints(::Type{<:IH1JH2{T, Ni, Nj, Nh, S, A}}) where {T, Ni, Nj, Nh, S, A} =
-    Ni * Nj
 
 include("broadcast.jl")
 include("indexing.jl")

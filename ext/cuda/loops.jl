@@ -5,28 +5,39 @@ has_inferred_slice_size(op::O, arg) where {O} =
         Val(DataLayouts.has_inferred_size(slice))
     end
 
-DataLayouts.foreach_slice(scope::ThisHost, op::O, f::F, mask, args...) where {O, F} =
+function DataLayouts.foreach_slice(
+    scope::ThisHost,
+    op::O,
+    f::F,
+    args...;
+    mask,
+    kwargs...,
+) where {O, F}
     if !all(Base.Fix1(has_inferred_slice_size, op), args)
         for index in DataLayouts.subscope_slice_indices(scope, scope, mask, op, args...)
             f(map(arg -> (@inbounds op(arg, Tuple(index)...)), args)...)
         end
-    else
-        check_device_assumptions()
-        kernel_function(args...) =
-            DataLayouts.foreach_slice(ThisKernel(), op, f, mask, args...)
-        if DataLayouts.slice_subscope(ThisKernel(), op, args...) == ThisBlock()
-            max_slice_points = maximum(Base.Fix1(DataLayouts.num_slice_points, op), args)
-            max_slices = length(DataLayouts.each_slice_index(op, first(args)))
-            (; threads, blocks) =
-                launch_configuration(kernel_function, args, max_slice_points, max_slices)
-        else
-            # Extra threads run empty loops, so max_points isn't a strict limit.
-            max_points = maximum(length, args)
-            (; threads, blocks) =
-                launch_configuration(kernel_function, args, max_points; strict = false)
-        end
-        auto_launch!(kernel_function, args; threads_s = threads, blocks_s = blocks)
     end
+
+    kernel_kwargs = values(kwargs) # capture kwargs as a NamedTuple (Pairs isn't isbitstype)
+    kernel_function(args...) =
+        DataLayouts.foreach_slice(ThisKernel(), op, f, args...; mask, kernel_kwargs...)
+
+    if DataLayouts.slice_subscope(ThisKernel(), op, args...) == ThisBlock()
+        max_slice_points = maximum(Base.Fix1(DataLayouts.num_slice_points, op), args)
+        max_slices = length(DataLayouts.each_slice_index(op, first(args)))
+        (; threads, blocks) =
+            launch_configuration(kernel_function, args, max_slice_points, max_slices)
+    else
+        # Extra threads run empty loops, so max_points isn't a strict limit.
+        max_points = maximum(length, args)
+        (; threads, blocks) =
+            launch_configuration(kernel_function, args, max_points; strict = false)
+    end
+
+    check_device_assumptions()
+    auto_launch!(kernel_function, args; threads_s = threads, blocks_s = blocks)
+end
 
 # Only save a reduction result to an array from one thread per reduction scope.
 is_first_thread_in(scope) = isone(DataLayouts.thread_rank(scope))
@@ -55,12 +66,7 @@ end
 # combines them with warp shuffles, which needs no shared memory and therefore
 # supports arbitrarily wide element types.
 function DataLayouts.reduce_points(scope::ThisHost, op::O, arg; kwargs...) where {O}
-    check_device_assumptions()
-
-    # Capture the kwargs as a NamedTuple, whose names are type parameters. The
-    # Pairs structure of kwargs stores its names in a Tuple of Symbols, which
-    # cannot be passed to a kernel because Symbols are not bitstypes.
-    kernel_kwargs = values(kwargs)
+    kernel_kwargs = values(kwargs) # capture kwargs as a NamedTuple (Pairs isn't isbitstype)
     function kernel_function(results, finished_blocks, arg, num_blocks)
         result = DataLayouts.reduce_points(ThisBlock(), op, arg; kernel_kwargs...)
         block_idx = DataLayouts.partition_rank(ThisKernel())
@@ -113,7 +119,9 @@ function DataLayouts.reduce_points(scope::ThisHost, op::O, arg; kwargs...) where
         length(arg),
     )
     results = DataLayouts.scoped_array(scope, T, blocks; buffer = true)
-    CUDA.fill!(finished_blocks, Int32(0))
+
+    check_device_assumptions()
+    fill!(finished_blocks, Int32(0))
     auto_launch!(
         kernel_function,
         (results, finished_blocks, arg, Int32(blocks));
