@@ -45,7 +45,10 @@ max_eager_shmem_per_thread(bc::Union{Broadcasted, StencilBroadcasted}) =
 max_eager_shmem_per_thread(
     bc::StencilBroadcasted{S, <:MultiplyColumnwiseBandMatrixField},
 ) where {S} =
-    _shmem_max(_sizeof_or_nothing(cached_operand_type(bc)), _max_eager_shmem_over_args(bc.args))
+    _shmem_max(
+        _sizeof_or_nothing(cached_operand_type(bc)),
+        _max_eager_shmem_over_args(bc.args),
+    )
 max_eager_shmem_per_thread(
     bc::StencilBroadcasted{S, <:Operators.AdvectionOperator},
 ) where {S} = _shmem_max(

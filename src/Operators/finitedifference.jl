@@ -110,10 +110,10 @@ Wherever an operator needs a boundary row for this condition (that is, wherever
 rather than a meaningful result, and which placeholder depends on how the operator is
 evaluated:
 
- - an operator that is rewritten into an operator matrix multiply gets a zero boundary
-   row, so its boundary output is zero;
- - any other operator goes through [`stencil_left_boundary`](@ref) /
-   [`stencil_right_boundary`](@ref), which produce `NaN`.
+  - an operator that is rewritten into an operator matrix multiply gets a zero boundary
+    row, so its boundary output is zero;
+  - any other operator goes through [`stencil_left_boundary`](@ref) /
+    [`stencil_right_boundary`](@ref), which produce `NaN`.
 
 The advection operators never use this condition: when they are given no
 boundary conditions, [`Extrapolate{0}`](@ref Extrapolate) is added to their
@@ -180,7 +180,7 @@ ghost point `x[0]` is padded with the weighted sum of the interior points
 `x[1], x[2], x[3]`, with the following weights:
 
 | N | x[1] | x[2] | x[3] |
-|---|------|------|------|
+|:- |:---- |:---- |:---- |
 | 0 | 1    | 0    | 0    |
 | 1 | 2    | -1   | 0    |
 | 2 | 3    | -3   | 1    |
@@ -192,9 +192,11 @@ available interior points. For example, if `N = 2` and the stencil above is
 evaluated at the boundary face `i = 1/2`, only the 2 interior points
 `x[1], x[2]` are available, so both ghost points are padded with the `N = 1`
 extrapolation:
+
 ```
 x[-1] = x[0] = 2 * x[1] - x[2]
 ```
+
 Note that every ghost point of a stencil is padded with the same extrapolated
 value: the extrapolation continues the field along the third coordinate line
 with a single boundary value, rather than evaluating the extrapolating
@@ -533,8 +535,10 @@ Supported boundary conditions are:
 ```math
 I(x)[\\tfrac{1}{2}] = x₀
 ```
-- [`Extrapolate`](@ref): use the closest interior point as the boundary value.
-  At the left boundary the stencil is
+
+  - [`Extrapolate`](@ref): use the closest interior point as the boundary value.
+    At the left boundary the stencil is
+
 ```math
 I(x)[\\tfrac{1}{2}] = x[1]
 ```
@@ -873,8 +877,8 @@ WI(w, x)[i] = \\frac{
 
 Supported boundary conditions are:
 
-- [`SetValue(val)`](@ref): set the value at the boundary face to be `val`.
-- [`Extrapolate`](@ref): use the closest interior point as the boundary value.
+  - [`SetValue(val)`](@ref): set the value at the boundary face to be `val`.
+  - [`Extrapolate`](@ref): use the closest interior point as the boundary value.
 
 These have the same stencil as in [`InterpolateC2F`](@ref).
 """
@@ -935,16 +939,16 @@ and returns a contravariant3 component. On non-periodic domains, all faces are
 treated like interior faces, padding out-of-range stencil points with ghost
 values (on periodic domains, indices wrap around instead):
 
- - The out-of-range values of the advected field are padded with the
-   [`Extrapolate`](@ref) boundary condition for that boundary: every ghost
-   point the stencil reaches takes the value extrapolated from the in-range
-   interior points of the stencil (the extrapolation order is reduced at the
-   boundary face itself, where fewer interior points are in range). The only
-   supported boundary conditions are `Extrapolate{N}`; when an advection
-   operator is constructed with no boundary conditions, `Extrapolate{0}` is
-   added to its `bcs`, and a boundary whose name has no entry in `bcs` also
-   falls back to `Extrapolate{0}`.
- - The velocity field's out-of-range face indices are clamped to the domain.
+  - The out-of-range values of the advected field are padded with the
+    [`Extrapolate`](@ref) boundary condition for that boundary: every ghost
+    point the stencil reaches takes the value extrapolated from the in-range
+    interior points of the stencil (the extrapolation order is reduced at the
+    boundary face itself, where fewer interior points are in range). The only
+    supported boundary conditions are `Extrapolate{N}`; when an advection
+    operator is constructed with no boundary conditions, `Extrapolate{0}` is
+    added to its `bcs`, and a boundary whose name has no entry in `bcs` also
+    falls back to `Extrapolate{0}`.
+  - The velocity field's out-of-range face indices are clamped to the domain.
 
 An advection operator whose interior stencil is linear in the advected
 argument (see `Operators.has_linear_stencil`) is rewritten as an
@@ -954,6 +958,7 @@ into its matrix's boundary rows; every other advection operator is evaluated
 pointwise, through the callable interface described below.
 
 !!! note
+
     The ghost-point reconstruction continues the field along the third
     coordinate line. On a terrain-following grid, the boundary is the
     coordinate surface ``\\xi^3`` = const, and continuation along the wall
@@ -976,9 +981,9 @@ each of the 4 stencil values passed to the operator is then such a tuple.
 
 Subtypes of this abstract type that are evaluated pointwise should be
 callable, with a method of the form:
-    `(::SomeAdvectionOperator)(v, x⁻⁻, x⁻, x⁺, x⁺⁺, extra_params...)`
+`(::SomeAdvectionOperator)(v, x⁻⁻, x⁻, x⁺, x⁺⁺, extra_params...)`
 or
-    `(::SomeAdvectionOperator)(v⁻, v, v⁺, x⁻⁻, x⁻, x⁺, x⁺⁺, extra_params...)`
+`(::SomeAdvectionOperator)(v⁻, v, v⁺, x⁻⁻, x⁻, x⁺, x⁺⁺, extra_params...)`
 if the operator is a function of the velocity at neighboring faces. All
 velocity arguments are supplied as the contravariant3 component of the
 face-valued velocity field, and `extra_params` are any broadcast arguments
@@ -1548,8 +1553,9 @@ Correct the flux using the flux-corrected transport formulation by Zalesak
 [zalesak1979fully](@cite).
 
 Input arguments:
-- a face-valued vector field `A`
-- a center-valued field whose elements are 2-tuples of `Φ` and `Φᵗᵈ`
+
+  - a face-valued vector field `A`
+  - a center-valued field whose elements are 2-tuples of `Φ` and `Φᵗᵈ`
 
 ```math
 Φ_j^{n+1} = Φ_j^{td} - (C_{j+\\frac{1}{2}}A_{j+\\frac{1}{2}} - C_{j-\\frac{1}{2}}A_{j-\\frac{1}{2}})
@@ -1740,6 +1746,7 @@ interior stencil, padding ghost points with the [`Extrapolate`](@ref) boundary
 condition's extrapolation (`Extrapolate{0}` is added to `bcs` by default when
 no boundary conditions are given). No value is imposed at the faces nearest
 each boundary: the limited flux there is whatever the padded stencil gives.
+```
 """
 struct TVDLimitedFluxC2F{BCS, M} <: AdvectionOperator
     bcs::BCS
@@ -1787,12 +1794,12 @@ with no condition is left untouched.
 
 The following boundary conditions are supported:
 
- - [`SetValue(val)`](@ref): set the value to be `val` on the boundary.
- - [`SetGradient(val)`](@ref): set the value to be `val` on the boundary, projected onto
-   the `Covariant3` axis.
- - [`SetCurl(val)`](@ref): set the value to be `val` on the boundary, projected onto the
-   `Contravariant12` axis (the axis of [`CurlC2F`](@ref)'s output).
- - [`SetDivergence(val)`](@ref): set the value to be `val` on the boundary.
+  - [`SetValue(val)`](@ref): set the value to be `val` on the boundary.
+  - [`SetGradient(val)`](@ref): set the value to be `val` on the boundary, projected onto
+    the `Covariant3` axis.
+  - [`SetCurl(val)`](@ref): set the value to be `val` on the boundary, projected onto the
+    `Contravariant12` axis (the axis of [`CurlC2F`](@ref)'s output).
+  - [`SetDivergence(val)`](@ref): set the value to be `val` on the boundary.
 
 The projecting conditions exist so that this operator can reapply the boundary conditions
 of the operator it was derived from when a broadcast is rewritten as an operator matrix
@@ -1917,12 +1924,15 @@ The following boundary conditions are supported:
 ```math
 G(x)[1]³ = x[1+\\tfrac{1}{2}] - x₀
 ```
-- [`SetGradient(v₀)`](@ref): set the value of the gradient at the center
-  closest to the boundary to be `v₀`. For the left boundary, this becomes:
+
+  - [`SetGradient(v₀)`](@ref): set the value of the gradient at the center
+    closest to the boundary to be `v₀`. For the left boundary, this becomes:
+
 ```math
 G(x)[1] = v₀
 ```
-  As with [`GradientC2F`](@ref), `v₀` is projected onto the covariant 3 axis.
+
+As with [`GradientC2F`](@ref), `v₀` is projected onto the covariant 3 axis.
 """
 struct GradientF2C{BCS} <: GradientOperator
     bcs::BCS
@@ -1954,13 +1964,15 @@ G(x)[i]^3 = x[i+\\tfrac{1}{2}] - x[i-\\tfrac{1}{2}]
 ```
 
 The following boundary conditions are supported:
-- [`SetGradient(v₀)`](@ref): set the value of the gradient at the boundary to be
-  `v₀`. For the left boundary, this becomes:
-  ```math
-  G(x)[\\tfrac{1}{2}] = v₀
-  ```
+
+  - [`SetGradient(v₀)`](@ref): set the value of the gradient at the boundary to be
+    `v₀`. For the left boundary, this becomes:
+    ```math
+    G(x)[\\tfrac{1}{2}] = v₀
+    ```
 
 !!! note
+
     `v₀` is projected onto the covariant 3 axis, so it prescribes
     ``\\partial x / \\partial \\xi^3``, the derivative along the third
     coordinate line. On a terrain-following grid the boundary is the coordinate
@@ -2012,8 +2024,11 @@ The following boundary conditions are supported:
 ```math
 D(v)[1] = (Jv³[1+\\tfrac{1}{2}] - Jv³₀) / J[i]
 ```
-- [`SetDivergence(v₀)`](@ref): set the divergence at the cell center  closest to
-  the boundary
+
+  - [`SetDivergence(v₀)`](@ref): set the divergence at the cell center  closest to
+    the boundary
+
+```
 ```
 """
 struct DivergenceF2C{BCS} <: DivergenceOperator
@@ -2074,10 +2089,11 @@ where `Jv³` is the Jacobian multiplied by the third contravariant component of
 `v`.
 
 The following boundary conditions are supported:
-- [`SetDivergence(x)`](@ref): set the value of the divergence at the boundary to be `x`.
-  ```math
-  D(v)[\\tfrac{1}{2}] = x
-  ```
+
+  - [`SetDivergence(x)`](@ref): set the value of the divergence at the boundary to be `x`.
+    ```math
+    D(v)[\\tfrac{1}{2}] = x
+    ```
 """
 struct DivergenceC2F{BC} <: DivergenceOperator
     bcs::BC
@@ -2132,8 +2148,8 @@ where ``v₁`` and ``v₂`` are the 1st and 2nd covariant components of ``v``, a
 
 The following boundary conditions are supported:
 
-- [`SetCurl(v⁰)`](@ref): enforce the curl operator output at the boundary to be
-  the contravariant vector `v⁰`.
+  - [`SetCurl(v⁰)`](@ref): enforce the curl operator output at the boundary to be
+    the contravariant vector `v⁰`.
 """
 struct CurlC2F{BC} <: CurlFiniteDifferenceOperator
     bcs::BC

@@ -560,7 +560,11 @@ end
                     Operators.LinVanLeerC2F(;
                         constraint = Operators.AlgebraicMean(),
                         bcs...,
-                    ).(w1, θ1, dt),
+                    ).(
+                        w1,
+                        θ1,
+                        dt,
+                    ),
                 ),
             )
                 @test flux ≈ FT(0.3) .* v³1
@@ -614,7 +618,10 @@ end
             Operators.Upwind3rdOrderBiasedProductC2F(;
                 left = Operators.Extrapolate(0),
                 right = Operators.Extrapolate(0),
-            ).(w_lr, θ_lr),
+            ).(
+                w_lr,
+                θ_lr,
+            ),
         )
         @test default_flux == named_flux
         # ... while non-default conditions under mismatched names still error

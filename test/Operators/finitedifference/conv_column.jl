@@ -89,7 +89,12 @@ function plot_flux_and_adv(name, results)
         xguide = "flux (WVector)",
         yguide = "z faces",
     )
-    Plots.plot!(adv_plt; title = "flux_divergence", xguide = "flux_divergence", yguide = "z centers")
+    Plots.plot!(
+        adv_plt;
+        title = "flux_divergence",
+        xguide = "flux_divergence",
+        yguide = "z centers",
+    )
     plts = (w_plt, c_plt, flux_plt, adv_plt)
     Plots.plot!.(plts, legend = :outerbottom, legendcolumns = 2)
     plt = Plots.plot(
@@ -549,8 +554,10 @@ function test_advection_convergence(case)
             domain = Domains.IntervalDomain(
                 Geometry.ZPoint{FT}(-pi),
                 Geometry.ZPoint{FT}(pi);
-                (case.periodic ? (; periodic = true) :
-                 (; boundary_names = (:bottom, :top)))...,
+                (
+                    case.periodic ? (; periodic = true) :
+                    (; boundary_names = (:bottom, :top))
+                )...,
             )
             mesh = Meshes.IntervalMesh(domain, stretch; nelems = n)
 
