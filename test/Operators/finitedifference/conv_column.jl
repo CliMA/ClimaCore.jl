@@ -89,7 +89,7 @@ function plot_flux_and_adv(name, results)
         xguide = "flux (WVector)",
         yguide = "z faces",
     )
-    Plots.plot!(adv_plt; title = "adv_wc", xguide = "adv_wc", yguide = "z centers")
+    Plots.plot!(adv_plt; title = "flux_divergence", xguide = "flux_divergence", yguide = "z centers")
     plts = (w_plt, c_plt, flux_plt, adv_plt)
     Plots.plot!.(plts, legend = :outerbottom, legendcolumns = 2)
     plt = Plots.plot(

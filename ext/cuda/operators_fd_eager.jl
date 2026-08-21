@@ -167,7 +167,14 @@ Base.@propagate_inbounds function eager_copyto_stencil_kernel!(
 ) where {BC}
     v = threadIdx().x
     col_idx = threadIdx().y + (blockIdx().x - 1) * blockDim().y
-    (i, j, h) = if mask isa NoMask
+    # Out-of-range columns must not exit early: the shmem handlers in `calc_level_val`
+    # contain `sync_threads()` barriers, and a barrier that only part of a block reaches
+    # is undefined behavior before sm_70 (exited threads only implicitly satisfy
+    # `bar.sync` on Volta and later). Instead, out-of-range threads compute a valid
+    # dummy column -- all x-threads of a y-row share `col_idx`, so a dummy column's
+    # shared-memory slice is written and read only by its own threads -- and the result
+    # is discarded at the store below.
+    (in_range, (i, j, h)) = if mask isa NoMask
         # `Ni` and `Nj` are read off the output layout's type parameters (see
         # `vijh_params`), so they are compile-time constants and the `CartesianIndices`
         # decomposition below is a fixed-divisor `divrem`. Only `Nh` is a runtime value,
@@ -177,26 +184,34 @@ Base.@propagate_inbounds function eager_copyto_stencil_kernel!(
         Ni = size_params.Ni
         Nh = ClimaCore.DataLayouts.nelems(ClimaCore.Fields.field_values(out))
         cart_inds = CartesianIndices((Ni, Nj, Nh))
-        col_idx > length(cart_inds) && return nothing
-        @inbounds cart_inds[col_idx].I
+        in_range = col_idx <= length(cart_inds)
+        (in_range, @inbounds(cart_inds[in_range ? col_idx : one(col_idx)].I))
     else
         (; N, i_map, j_map, h_map) = mask
         # Bound by the active-column count `N`, not `length(i_map)`: the maps
         # are allocated with one entry per column of the layout, but
         # `set_mask_maps!` only writes the first `N` entries, and the launch
         # rounds the grid up to a multiple of `blockDim().y` columns.
-        @inbounds col_idx > N[1] && return nothing
-        @inbounds i = i_map[col_idx]
-        @inbounds j = j_map[col_idx]
-        @inbounds h = h_map[col_idx]
-        (i, j, h)
+        in_range = @inbounds col_idx <= N[1]
+        ijh = if in_range
+            @inbounds (i_map[col_idx], j_map[col_idx], h_map[col_idx])
+        else
+            # Column (1, 1, 1) always exists in the allocated layout (even when
+            # masked out, its memory is allocated); deriving the dummy from
+            # constants avoids reading map entries beyond `N` that
+            # `set_mask_maps!` never wrote.
+            (one(eltype(i_map)), one(eltype(j_map)), one(eltype(h_map)))
+        end
+        (in_range, ijh)
     end
     hidx = (i, j, h)
     val = @inbounds @inline calc_level_val(bc, hidx, space)
-    if space.staggering isa ClimaCore.Grids.CellFace
-        @inbounds @inline setidx!(space, out, v - half, hidx, val)
-    elseif !(has_padding_thread(space) && v == CUDA.blockDim().x)
-        @inbounds @inline setidx!(space, out, v, hidx, val)
+    if in_range
+        if space.staggering isa ClimaCore.Grids.CellFace
+            @inbounds @inline setidx!(space, out, v - half, hidx, val)
+        elseif !(has_padding_thread(space) && v == CUDA.blockDim().x)
+            @inbounds @inline setidx!(space, out, v, hidx, val)
+        end
     end
     return nothing
 end
@@ -495,63 +510,23 @@ interior value) and wrap around on periodic ones.
     end
 end
 
-"""
-    advection_ghost_values(op, space, v, n_faces, periodic, a⁻⁻, a⁻, a⁺, a⁺⁺)
-
-Returns `(a⁻⁻, a⁻, a⁺, a⁺⁺)` with the values of the out-of-range centers
-replaced by the extrapolation of `op`'s boundary condition for that boundary
-from the in-range interior points of the stencil, mirroring
-`stencil_interior(::AdvectionOperator, ...)`: at the boundary face
-itself both out-of-range centers share the extrapolation from the 2 in-range
-points, and at the face one in from the boundary the single out-of-range
-center is extrapolated from the 3 in-range points. The two boundaries are
-handled with independent branches, exactly like `stencil_interior`'s: on a
-2-center column, the middle face is one in from both boundaries, so both of
-its out-of-range centers need their ghost-point extrapolations, each from the
-only 2 in-range points. Every other face is unaffected, and keeps the
-closest-value padding that `advection_center_window`'s clamping provides.
-"""
-@inline function advection_ghost_values(
-    op,
-    space,
-    v,
-    n_faces,
-    periodic,
-    a⁻⁻,
-    a⁻,
-    a⁺,
-    a⁺⁺,
-)
-    if !periodic
-        if v == 1i32
-            bc = Operators.get_boundary(
-                op,
-                Operators.left_boundary_window(space),
-            )
-            a⁻⁻ = a⁻ = bc(a⁺, a⁺⁺)
-        elseif v == 2i32
-            bc = Operators.get_boundary(
-                op,
-                Operators.left_boundary_window(space),
-            )
-            a⁻⁻ = v == n_faces - 1i32 ? bc(a⁻, a⁺) : bc(a⁻, a⁺, a⁺⁺)
-        end
-        if v == n_faces
-            bc = Operators.get_boundary(
-                op,
-                Operators.right_boundary_window(space),
-            )
-            a⁺⁺ = a⁺ = bc(a⁻, a⁻⁻)
-        elseif v == n_faces - 1i32
-            bc = Operators.get_boundary(
-                op,
-                Operators.right_boundary_window(space),
-            )
-            a⁺⁺ = v == 2i32 ? bc(a⁺, a⁻) : bc(a⁺, a⁻, a⁻⁻)
-        end
-    end
-    return (a⁻⁻, a⁻, a⁺, a⁺⁺)
-end
+# Ghost-point extrapolation of the out-of-range stencil values, shared with
+# the pointwise `stencil_interior(::AdvectionOperator, ...)`; the x-thread `v`
+# holds the face `v - 1` faces in from the left boundary and `n_faces - v`
+# faces in from the right one. A no-op on periodic spaces, whose indices wrap
+# instead (`periodic` is a compile-time constant, so the branch folds).
+@inline advection_ghost_values(op, space, v, n_faces, periodic, a⁻⁻, a⁻, a⁺, a⁺⁺) =
+    periodic ? (a⁻⁻, a⁻, a⁺, a⁺⁺) :
+    Operators.advection_ghost_values(
+        op,
+        space,
+        v - 1i32,
+        n_faces - v,
+        a⁻⁻,
+        a⁻,
+        a⁺,
+        a⁺⁺,
+    )
 
 Base.@propagate_inbounds function advection_gather(
     ::Val{:current},

@@ -1180,6 +1180,55 @@ Base.@propagate_inbounds function advection_velocities(
     return (v⁻, v, v⁺)
 end
 
+"""
+    advection_ghost_values(op, space, dist_left, dist_right, a⁻⁻, a⁻, a⁺, a⁺⁺)
+
+Replace the values of the out-of-range centers of an [`AdvectionOperator`](@ref)
+stencil at the face `dist_left` faces in from the left boundary and
+`dist_right` faces in from the right one with the extrapolation of `op`'s
+boundary condition for that boundary from the in-range interior points of the
+stencil: at the boundary face itself, both out-of-range centers share the
+extrapolation from the 2 in-range points, and at the face one in from the
+boundary the single out-of-range center is extrapolated from the 3 in-range
+points (see [`AdvectionOperator`](@ref)). The two boundaries are handled with
+independent branches: on a 2-center column, the middle face is one in from
+both boundaries, so both of its out-of-range centers need their ghost-point
+extrapolations, each from the only 2 in-range points. Every other face is
+unaffected, and keeps the closest-value padding of the caller's index
+clamping.
+
+The stencil values are passed in already clamped, so this is shared by the
+pointwise `stencil_interior` method below (the CPU and lazy-GPU path) and the
+eager GPU kernel's `advection_gather`, keeping the boundary semantics of the
+two paths identical by construction.
+"""
+@inline function advection_ghost_values(
+    op::AdvectionOperator,
+    space,
+    dist_left,
+    dist_right,
+    a⁻⁻,
+    a⁻,
+    a⁺,
+    a⁺⁺,
+)
+    if dist_left == 0
+        bc = get_boundary(op, left_boundary_window(space))
+        a⁻⁻ = a⁻ = bc(a⁺, a⁺⁺)
+    elseif dist_left == 1
+        bc = get_boundary(op, left_boundary_window(space))
+        a⁻⁻ = dist_right == 1 ? bc(a⁻, a⁺) : bc(a⁻, a⁺, a⁺⁺)
+    end
+    if dist_right == 0
+        bc = get_boundary(op, right_boundary_window(space))
+        a⁺⁺ = a⁺ = bc(a⁻, a⁻⁻)
+    elseif dist_right == 1
+        bc = get_boundary(op, right_boundary_window(space))
+        a⁺⁺ = dist_left == 1 ? bc(a⁺, a⁻) : bc(a⁺, a⁻, a⁻⁻)
+    end
+    return (a⁻⁻, a⁻, a⁺, a⁺⁺)
+end
+
 # we treat all faces like interior faces: out-of-range stencil indices are
 # clamped to the domain (indices wrap on periodic domains instead), and the
 # clamped values are then replaced by the boundary condition's ghost-point
@@ -1210,33 +1259,9 @@ Base.@propagate_inbounds function stencil_interior(
         a⁻ = getidx(space, arg, clamp(idx - half, lc, rc), hidx)
         a⁺ = getidx(space, arg, clamp(idx + half, lc, rc), hidx)
         a⁺⁺ = getidx(space, arg, clamp(idx + half + 1, lc, rc), hidx)
-        # The padded values of the out-of-range centers are replaced by the
-        # boundary condition's extrapolation from the in-range interior points
-        # of the stencil: at the boundary face itself, both out-of-range
-        # centers share the extrapolation from the 2 in-range points, and at
-        # the face one in from the boundary the single out-of-range center is
-        # extrapolated from the 3 in-range points (see AdvectionOperator). The
-        # two boundaries are handled with independent branches: on a 2-center
-        # column, the middle face is one in from both boundaries, so both of
-        # its out-of-range centers need their ghost-point extrapolations, each
-        # from the only 2 in-range points.
         lf = left_face_boundary_idx(space)
         rf = right_face_boundary_idx(space)
-        if idx == lf
-            bc = get_boundary(op, left_boundary_window(space))
-            a⁻⁻ = a⁻ = bc(a⁺, a⁺⁺)
-        elseif idx == lf + 1
-            bc = get_boundary(op, left_boundary_window(space))
-            a⁻⁻ = idx == rf - 1 ? bc(a⁻, a⁺) : bc(a⁻, a⁺, a⁺⁺)
-        end
-        if idx == rf
-            bc = get_boundary(op, right_boundary_window(space))
-            a⁺⁺ = a⁺ = bc(a⁻, a⁻⁻)
-        elseif idx == rf - 1
-            bc = get_boundary(op, right_boundary_window(space))
-            a⁺⁺ = idx == lf + 1 ? bc(a⁺, a⁻) : bc(a⁺, a⁻, a⁻⁻)
-        end
-        (a⁻⁻, a⁻, a⁺, a⁺⁺)
+        advection_ghost_values(op, space, idx - lf, rf - idx, a⁻⁻, a⁻, a⁺, a⁺⁺)
     end
     vs = advection_velocities(
         advection_velocity_width(op),
