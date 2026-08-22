@@ -65,20 +65,19 @@ itself for the strong form, and `W * arg` (with the quadrature weights
 """
 @inline materialize_quadrature_weighted(::StrongForm, arg) = Base.materialize(arg)
 @inline function materialize_quadrature_weighted(::WeakForm, arg)
-    (; WJ, invJ) = Fields.local_geometry_field(arg)
-    return Base.broadcasted(*, arg, Base.broadcasted(*, WJ, invJ))
+    (; WJ, J) = Fields.local_geometry_field(arg)
+    return Base.broadcasted(*, arg, Base.broadcasted(/, WJ, J))
 end
 
 """
     lazy_jacobian_unweighted(form, dest)
 
 The result value `dest`, divided by the `materialize_jacobian_weighted` of the given
-[`FormType`](@ref): `dest * J⁻¹` for the strong form (using the precomputed
-inverse), and `dest / WJ` for the weak form. Used by [`Divergence`](@ref) and
-[`Curl`](@ref).
+[`FormType`](@ref): `dest / J` for the strong form, and `dest / WJ` for the
+weak form. Used by [`Divergence`](@ref) and [`Curl`](@ref).
 """
 @inline lazy_jacobian_unweighted(::StrongForm, dest) =
-    Base.broadcasted(*, dest, Fields.local_geometry_field(dest).invJ)
+    Base.broadcasted(/, dest, Fields.local_geometry_field(dest).J)
 @inline lazy_jacobian_unweighted(::WeakForm, dest) =
     Base.broadcasted(/, dest, Fields.local_geometry_field(dest).WJ)
 
@@ -89,25 +88,19 @@ The result value `dest`, divided by the quadrature weights `W = WJ * J⁻¹` if 
 given [`FormType`](@ref) requires it: `dest` itself for the strong form, and
 `dest / W` for the weak form. Used by [`Gradient`](@ref), whose weak variant
 weights its argument by `W` without a Jacobian factor to divide out.
-
-The CPU `apply_operator` methods for [`Gradient`](@ref) inline this rescale
-behind an `F === WeakForm` branch instead of calling it, so that the strong form
-skips the loop over quadrature points entirely; on GPUs each thread rescales
-only its own point, so there is no loop to skip.
 """
 @inline lazy_quadrature_unweighted(::StrongForm, dest) = dest
 @inline function lazy_quadrature_unweighted(::WeakForm, dest)
-    (; WJ, invJ) = Fields.local_geometry_field(dest)
-    return Base.broadcasted(/, dest, Base.broadcasted(*, WJ, invJ))
+    (; WJ, J) = Fields.local_geometry_field(dest)
+    return Base.broadcasted(/, dest, Base.broadcasted(/, WJ, J))
 end
 
 """
     deriv_matrix(form, dest)
 
-Entry of the derivative matrix `D` applied by an operator of the given
-[`FormType`](@ref) when accumulating the contribution of quadrature point `i`
-to quadrature point `ii`: `D[ii, i]` for the strong form, and `-D[i, ii]` (the
-transpose, with the sign flip from integration by parts) for the weak form.
+The derivative matrix applied by an operator of the given [`FormType`](@ref):
+`D` for the strong form, and `-Dᵀ` (the transpose, with the sign flip from
+integration by parts) for the weak form.
 """
 @inline deriv_matrix(::StrongForm, dest) = Quadratures.differentiation_matrix(
     Spaces.undertype(axes(dest)),
@@ -129,11 +122,15 @@ Interpolation matrix.
 """
     horizontal_dims(arg)
 
-Tuple of the horizontal dimensions covered by a `Field` (either 0, 1, or 2).
+Tuple of the horizontal dimensions covered by a `Field` or lazy field broadcast
+(either 0, 1, or 2 of them), determined by comparing its `I` and `J` axis
+lengths against the quadrature points per dimension of its space. A slice from
+`foreach_slice` covers only the dimensions it spans, e.g. `(2,)` for a slice
+along `J` of a 2D space.
 """
 function horizontal_dims(arg)
     (; Ni, Nj) = DataLayouts.vijh_params(arg)
-    Nq = DataLayouts.ncomponents(arg)
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(axes(arg)))
     return Ni == Nj == Nq ? (1, 2) : Ni == Nq ? (1,) : Nj == Nq ? (2,) : ()
 end
 
@@ -146,6 +143,12 @@ struct SpectralStyle <: Fields.AbstractFieldStyle end
 
 Broadcast.BroadcastStyle(::SpectralStyle, ::Fields.FieldStyle) = SpectralStyle()
 
+# Slicing a spectral broadcast preserves its style, so that slabs and levels of
+# spectral operations are recognized by materialize_spectral_operations.
+Fields.FieldLevelStyle(::Type{SpectralStyle}) = SpectralStyle
+Fields.FieldColumnStyle(::Type{SpectralStyle}) = SpectralStyle
+Fields.FieldSlabStyle(::Type{SpectralStyle}) = SpectralStyle
+
 """
     SpectralElementOperator
 
@@ -156,9 +159,12 @@ abstract type SpectralElementOperator <: AbstractOperator end
 
 const SpectralBroadcasted = Broadcast.Broadcasted{SpectralStyle}
 const LazySpectralOperation =
-    Broadcast.Broadcasted{SpectralStyle, <:SpectralElementOperator}
+    Broadcast.Broadcasted{SpectralStyle, <:Any, <:SpectralElementOperator}
 
-Base.eltype(bc::LazySpectralOperation) = return_eltype(bc.f, bc.args...)
+# Operators are not callable, so their return type cannot be obtained through
+# inference like that of an ordinary broadcasted function; get it from
+# return_eltype instead.
+Utilities.unsafe_eltype(bc::LazySpectralOperation) = return_eltype(bc.f, bc.args...)
 
 function Broadcast.broadcasted(op::SpectralElementOperator, args...)
     args′ = unrolled_map(Broadcast.broadcastable, args)
@@ -184,15 +190,22 @@ end
 @noinline materialize_spectral_operations(bc::LazySpectralOperation) =
     apply_operator(bc.f, unrolled_map(materialize_spectral_operations, bc.args)...)
 
-# Set dest_slice .+= matrix * arg_slice for each 1D i or j slice of the inputs.
+# Set dest_slice .+= matrix * arg_slice for each 1D i or j slice of the inputs,
+# looping over the underlying DataLayouts so that no column spaces are built.
+# The output point (i, j) is skipped when its index along the non-sliced
+# dimension exceeds the extent of arg, which can be smaller than that of dest
+# (e.g. in Interpolate); along the sliced dimension, the extents of dest and
+# arg match the row and column counts of matrix.
 # Threads using the same argument must be synchronized before this is called.
-@inline muladd_slab!(dest, matrix, arg, slice_val::Union{Val{:i}, Val{:j}}) =
-    DataLayouts.foreach_column(dest; no_index = false) do dest_index, dest_point
+@inline function muladd_slab!(dest, matrix, arg, slice_val::Union{Val{:i}, Val{:j}})
+    dest_data = Fields.field_values(dest)
+    arg_data = Fields.field_values(arg)
+    DataLayouts.foreach_column(dest_data; no_index = false) do dest_index, dest_point
         (i, j, _) = Tuple(dest_index)
-        (; Ni, Nj) = vijh_params(arg)
-        if i <= Ni && j <= Nj
+        (; Ni, Nj) = DataLayouts.vijh_params(arg_data)
+        if slice_val isa Val{:i} ? j <= Nj : i <= Ni
             axis2 = axes(matrix, 2)
-            arg_point(i, j) = @inbounds column(arg, i, j, 1)
+            arg_point(i, j) = @inbounds column(arg_data, i, j, 1)
             @inbounds dest_point[] +=
                 slice_val isa Val{:i} ?
                 unrolled_sum(i′ -> (@inbounds matrix[i, i′] * arg_point(i′, j)[]), axis2) :
@@ -200,14 +213,18 @@ end
         end
         nothing
     end
+end
 
 # Set dest .= arg' when Ni == Nj, or set dest .= arg[1] if either Ni or Nj is 1.
-@inline transpose_slab!(dest, arg) =
-    DataLayouts.foreach_column(dest; no_index = false) do dest_index, dest_point
+@inline function transpose_slab!(dest, arg)
+    dest_data = Fields.field_values(dest)
+    arg_data = Fields.field_values(arg)
+    DataLayouts.foreach_column(dest_data; no_index = false) do dest_index, dest_point
         (i, j, _) = Tuple(dest_index)
-        (; Ni, Nj) = vijh_params(arg)
-        @inbounds dest_point[] = column(arg, min(j, Ni), min(i, Nj), 1)[]
+        (; Ni, Nj) = DataLayouts.vijh_params(arg_data)
+        @inbounds dest_point[] = column(arg_data, min(j, Ni), min(i, Nj), 1)[]
     end
+end
 
 """
     div = Divergence()
@@ -259,7 +276,7 @@ return_eltype(::Divergence, arg) = Geometry.divergence_result_type(eltype(arg))
     arg′² = 2 in dims ? Geometry.contravariant2.(arg′, lg) : nothing
     DataLayouts.synchronize(DataLayouts.DataScope(arg′))
     dest = similar(arg′, return_eltype(op, arg))
-    dest .= zero(eltype(dest))
+    dest .= (zero(eltype(dest)),)
     matrix = deriv_matrix(F(), dest)
     1 in dims && muladd_slab!(dest, matrix, arg′¹, Val(:i))
     2 in dims && muladd_slab!(dest, matrix, arg′², Val(:j))
@@ -389,7 +406,7 @@ return_eltype(::SplitDivergence, arg1, arg2) =
     arg′² = 2 in dims ? Geometry.contravariant2.(arg′, lg) : nothing
     DataLayouts.synchronize(DataLayouts.DataScope(arg′))
     dest = similar(arg′, return_eltype(op, arg1, arg2))
-    dest .= zero(eltype(dest))
+    dest .= (zero(eltype(dest)),)
     matrix = deriv_matrix(StrongForm(), dest)
     matrix -= LinearAlgebra.Diagonal(matrix)
     1 in dims && muladd_slab!(dest, matrix, arg′¹, Val(:i))
@@ -438,7 +455,7 @@ return_eltype(::Gradient, arg) =
     e²_arg′ = 2 in dims ? (Geometry.Covariant2Vector(true),) .⊗ arg′ : nothing
     DataLayouts.synchronize(DataLayouts.DataScope(arg′))
     dest = similar(arg′, return_eltype(op, arg))
-    dest .= zero(eltype(dest))
+    dest .= (zero(eltype(dest)),)
     matrix = deriv_matrix(F(), dest)
     1 in dims && muladd_slab!(dest, matrix, e¹_arg′, Val(:i))
     2 in dims && muladd_slab!(dest, matrix, e²_arg′, Val(:j))
@@ -514,7 +531,7 @@ return_eltype(::Curl, arg) =
         Geometry.Contravariant3Vector.(Geometry.covariant1.(arg′, lg)) : nothing
     DataLayouts.synchronize(DataLayouts.DataScope(arg′))
     dest = similar(arg′, return_eltype(op, arg))
-    dest .= zero(eltype(dest))
+    dest .= (zero(eltype(dest)),)
     matrix = deriv_matrix(F(), dest)
     1 in dims && muladd_slab!(dest, matrix, ε¹ⁿᵐ_arg′ₙ_eₘ, Val(:i))
     2 in dims && muladd_slab!(dest, matrix, ε²ⁿᵐ_arg′ₙ_eₘ, Val(:j))
@@ -549,7 +566,7 @@ return_eltype(::Interpolate, arg) = eltype(arg)
     arg′ = Base.materialize(arg)
     DataLayouts.synchronize(DataLayouts.DataScope(arg′))
     dest = Fields.Field(eltype(arg), slab(op.space, 1, 1))
-    dest .= zero(eltype(dest))
+    dest .= (zero(eltype(dest)),)
     matrix = interp_matrix(dest, arg)
     if horizontal_dims(arg) == (1,)
         muladd_slab!(dest, matrix, arg′, Val(:i))
@@ -605,7 +622,7 @@ return_eltype(::Restrict, arg) = eltype(arg)
     arg′ = materialize_jacobian_weighted(WeakForm(), arg)
     DataLayouts.synchronize(DataLayouts.DataScope(arg′))
     dest = Fields.Field(eltype(arg), slab(op.space, 1, 1))
-    dest .= zero(eltype(dest))
+    dest .= (zero(eltype(dest)),)
     matrix = interp_matrix(arg, dest)'
     if horizontal_dims(arg) == (1,)
         muladd_slab!(dest, matrix, arg′, Val(:i))

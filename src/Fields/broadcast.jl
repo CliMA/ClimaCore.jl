@@ -146,6 +146,35 @@ end
 
 field_values(bc::Base.AbstractBroadcasted) = todata(bc)
 
+# Forward the DataLayout size, scope, and reassignment queries used by the
+# generic loop machinery (foreach_slab and friends) to the Fields in a
+# broadcast expression, like the LazyDataLayout methods in DataLayouts.
+const LazyFieldBroadcast = Base.Broadcast.Broadcasted{<:AbstractFieldStyle}
+const MaybeLazyField = Union{Field, LazyFieldBroadcast}
+
+@inline field_data_args(bc::LazyFieldBroadcast) =
+    unrolled_flatmap(field_data_arg_tuple, bc.args)
+@inline field_data_arg_tuple(arg::Field) = (field_values(arg),)
+@inline field_data_arg_tuple(arg::LazyFieldBroadcast) = field_data_args(arg)
+@inline field_data_arg_tuple(arg) = ()
+
+for f in (:shape_params, :inferred_size, :nelems)
+    @eval @inline DataLayouts.$f(bc::LazyFieldBroadcast) =
+        DataLayouts.$f(first(field_data_args(bc)))
+end
+@inline DataLayouts.DataScope(bc::LazyFieldBroadcast) =
+    DataLayouts.DataScope(field_data_args(bc)...)
+@inline DataLayouts.reassign(bc::LazyFieldBroadcast, scope) =
+    Base.Broadcast.Broadcasted(
+        bc.style,
+        bc.f,
+        unrolled_map(
+            arg -> arg isa MaybeLazyField ? DataLayouts.reassign(arg, scope) : arg,
+            bc.args,
+        ),
+        bc.axes,
+    )
+
 # Extend the DataLayout methods of IndexStyle and eachindex to Field broadcasts.
 Base.IndexStyle(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     IndexStyle(todata(bc))

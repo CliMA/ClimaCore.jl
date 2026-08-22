@@ -173,7 +173,7 @@ function unstrip_space(field::Field, parent_space)
     return Field(Fields.field_values(field), space)
 end
 function unstrip_space(bc::Broadcast.Broadcasted, parent_space)
-    args = unrolled_map(Base.Fix2(unstrip_space, axes(bc)), bc.args)
     space = reconstruct_placeholder_space(axes(bc), parent_space)
+    args = unrolled_map(Base.Fix2(unstrip_space, space), bc.args)
     return Broadcast.Broadcasted(bc.style, bc.f, args, space)
 end
