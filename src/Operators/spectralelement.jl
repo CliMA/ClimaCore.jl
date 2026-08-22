@@ -166,6 +166,25 @@ const LazySpectralOperation =
 # return_eltype instead.
 Utilities.unsafe_eltype(bc::LazySpectralOperation) = return_eltype(bc.f, bc.args...)
 
+# The space of an operator's output can differ from the space of its arguments
+# (e.g. for Interpolate and Restrict); get it from return_space instead of
+# combining the argument spaces, and skip the axes check in instantiate, which
+# would compare the argument spaces against the output space.
+@inline Fields._axes(bc::LazySpectralOperation, ::Nothing) =
+    return_space(bc.f, unrolled_map(axes, bc.args)...)
+@inline Broadcast.instantiate(bc::LazySpectralOperation) =
+    Broadcast.Broadcasted{SpectralStyle}(bc.f, instantiate_args(bc.args), axes(bc))
+
+# Slicing a spectral broadcast also slices the space stored in its operator (if
+# any), so that apply_operator sees the output space of the current slice.
+Base.@propagate_inbounds function slab(bc::SpectralBroadcasted, inds...)
+    return Broadcast.Broadcasted{SpectralStyle}(
+        slab(bc.f, inds...),
+        slab_args(bc.args, inds...),
+        slab(axes(bc), inds...),
+    )
+end
+
 function Broadcast.broadcasted(op::SpectralElementOperator, args...)
     args′ = unrolled_map(Broadcast.broadcastable, args)
     style = Broadcast.result_style(SpectralStyle(), Broadcast.combine_styles(args′...))
@@ -193,9 +212,10 @@ end
 # Set dest_slice .+= matrix * arg_slice for each 1D i or j slice of the inputs,
 # looping over the underlying DataLayouts so that no column spaces are built.
 # The output point (i, j) is skipped when its index along the non-sliced
-# dimension exceeds the extent of arg, which can be smaller than that of dest
-# (e.g. in Interpolate); along the sliced dimension, the extents of dest and
-# arg match the row and column counts of matrix.
+# dimension exceeds the extent of arg, or when its index along the sliced
+# dimension exceeds the row count of matrix; either can happen when dest and
+# arg have different sizes (e.g. in Interpolate and Restrict, whose 2D methods
+# use an intermediate buffer sized like the larger of the two).
 # Threads using the same argument must be synchronized before this is called.
 @inline function muladd_slab!(dest, matrix, arg, slice_val::Union{Val{:i}, Val{:j}})
     dest_data = Fields.field_values(dest)
@@ -203,7 +223,8 @@ end
     DataLayouts.foreach_column(dest_data; no_index = false) do dest_index, dest_point
         (i, j, _) = Tuple(dest_index)
         (; Ni, Nj) = DataLayouts.vijh_params(arg_data)
-        if slice_val isa Val{:i} ? j <= Nj : i <= Ni
+        n_rows = size(matrix, 1)
+        if slice_val isa Val{:i} ? (i <= n_rows && j <= Nj) : (j <= n_rows && i <= Ni)
             axis2 = axes(matrix, 2)
             arg_point(i, j) = @inbounds column(arg_data, i, j, 1)
             @inbounds dest_point[] +=
@@ -224,6 +245,30 @@ end
         (; Ni, Nj) = DataLayouts.vijh_params(arg_data)
         @inbounds dest_point[] = column(arg_data, min(j, Ni), min(i, Nj), 1)[]
     end
+end
+
+# Set dest .+= (matrix ⊗ matrix) * arg along the dimensions in dims, where dest
+# and arg may have different quadrature sizes (as in Interpolate and Restrict).
+# The 2D case sweeps one dimension at a time through an intermediate buffer
+# sized like the larger of dest and arg; the guards in muladd_slab! skip the
+# entries of the buffer outside the (n_rows, Nj_arg) region written by the
+# first sweep and read by the second. Threads using arg must be synchronized
+# before this is called, and dest must be zero-filled.
+@inline function apply_tensor_product!(dest, matrix, arg, dims)
+    if dims == (1,)
+        muladd_slab!(dest, matrix, arg, Val(:i))
+    elseif dims == (2,)
+        muladd_slab!(dest, matrix, arg, Val(:j))
+    elseif dims == (1, 2)
+        partial_result =
+            DataLayouts.nquadpoints(dest) > DataLayouts.nquadpoints(arg) ?
+            similar(dest) : similar(arg)
+        partial_result .= (zero(eltype(partial_result)),)
+        muladd_slab!(partial_result, matrix, arg, Val(:i))
+        DataLayouts.synchronize(DataLayouts.DataScope(partial_result))
+        muladd_slab!(dest, matrix, partial_result, Val(:j))
+    end
+    return nothing
 end
 
 """
@@ -562,24 +607,16 @@ end
 return_space(op::Interpolate, _) = op.space
 return_eltype(::Interpolate, arg) = eltype(arg)
 
+Base.@propagate_inbounds slab(op::Interpolate, inds...) =
+    Interpolate(slab(op.space, inds...))
+
 @inline function apply_operator(op::Interpolate, arg)
     arg′ = Base.materialize(arg)
     DataLayouts.synchronize(DataLayouts.DataScope(arg′))
-    dest = Fields.Field(eltype(arg), slab(op.space, 1, 1))
+    dest = Fields.Field(eltype(arg′), op.space)
     dest .= (zero(eltype(dest)),)
-    matrix = interp_matrix(dest, arg)
-    if horizontal_dims(arg) == (1,)
-        muladd_slab!(dest, matrix, arg′, Val(:i))
-    elseif horizontal_dims(arg) == (2,)
-        muladd_slab!(dest, matrix, arg′, Val(:j))
-    elseif horizontal_dims(arg) == (1, 2)
-        partial_result =
-            DataLayouts.nquadpoints(dest) > DataLayouts.nquadpoints(arg) ?
-            similar(dest) : similar(arg)
-        muladd_slab!(partial_result, matrix, arg′, Val(:i))
-        DataLayouts.synchronize(DataLayouts.DataScope(partial_result))
-        muladd_slab!(dest, matrix, partial_result, Val(:j))
-    end
+    matrix = interp_matrix(dest, arg′)
+    apply_tensor_product!(dest, matrix, arg′, horizontal_dims(arg′))
     return dest
 end
 
@@ -618,24 +655,16 @@ end
 return_space(op::Restrict, _) = op.space
 return_eltype(::Restrict, arg) = eltype(arg)
 
+Base.@propagate_inbounds slab(op::Restrict, inds...) =
+    Restrict(slab(op.space, inds...))
+
 @inline function apply_operator(op::Restrict, arg)
     arg′ = materialize_jacobian_weighted(WeakForm(), arg)
     DataLayouts.synchronize(DataLayouts.DataScope(arg′))
-    dest = Fields.Field(eltype(arg), slab(op.space, 1, 1))
+    dest = Fields.Field(eltype(arg′), op.space)
     dest .= (zero(eltype(dest)),)
-    matrix = interp_matrix(arg, dest)'
-    if horizontal_dims(arg) == (1,)
-        muladd_slab!(dest, matrix, arg′, Val(:i))
-    elseif horizontal_dims(arg) == (2,)
-        muladd_slab!(dest, matrix, arg′, Val(:j))
-    elseif horizontal_dims(arg) == (1, 2)
-        partial_result =
-            DataLayouts.nquadpoints(dest) > DataLayouts.nquadpoints(arg) ?
-            similar(dest) : similar(arg)
-        muladd_slab!(partial_result, matrix, arg′, Val(:i))
-        DataLayouts.synchronize(DataLayouts.DataScope(partial_result))
-        muladd_slab!(dest, matrix, partial_result, Val(:j))
-    end
+    matrix = interp_matrix(arg′, dest)'
+    apply_tensor_product!(dest, matrix, arg′, horizontal_dims(arg′))
     return lazy_jacobian_unweighted(WeakForm(), dest)
 end
 
