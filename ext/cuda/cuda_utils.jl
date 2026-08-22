@@ -564,12 +564,18 @@ end
 # pure loss: the hot microphysics kernel spends a third of its memory traffic on
 # spill at a 69% L1 hit rate while its shared memory sits unused.
 #
-# Unlike a register cap this does not trade anything away -- there is no shared
-# memory to give up -- so it is on by default and can be switched off if a
-# kernel that does use shared memory turns out to regress.
+# MEASURED AND REJECTED, off by default. On a full AMIP run this cost 47.6% more
+# GPU time end to end (-25.5% SYPD), and it did not even do what it was meant to:
+# the target kernel's L1 hit rate moved 69.08% -> 69.24% and its duration was
+# unchanged. The loss was spread across every kernel rather than concentrated --
+# copyto_foreach alone went 72 -> 216 ms over 2090 launches -- which is the
+# signature of the SM reconfiguring its cache split whenever consecutive kernels
+# request different carveouts. With thousands of launches per step that
+# reconfiguration costs far more than any hit-rate gain, so setting this per
+# kernel is the wrong granularity. Kept, off, so the result is not rediscovered.
 function prefer_l1_cache()
-    raw = lowercase(strip(get(ENV, "CLIMA_PREFER_L1_CACHE", "true")))
-    return !(raw in ("0", "false", "no", "off"))
+    raw = lowercase(strip(get(ENV, "CLIMA_PREFER_L1_CACHE", "false")))
+    return raw in ("1", "true", "yes", "on")
 end
 
 """
