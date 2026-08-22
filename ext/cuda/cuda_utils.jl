@@ -554,6 +554,49 @@ function resolved_register_cap(f!::F!, args, kernel) where {F!}
     end
 end
 
+# `CLIMA_PREFER_L1_CACHE` gives the SM's unified cache entirely to L1 for
+# kernels that use no shared memory.
+#
+# On an A100 the 192 KB per SM is split between shared memory and L1, and the
+# default split reserves shared memory whether or not a kernel uses any.
+# ClimaCore's broadcast kernels use none. Spilled registers live in local
+# memory, which is cached in L1, so for a kernel that spills this reservation is
+# pure loss: the hot microphysics kernel spends a third of its memory traffic on
+# spill at a 69% L1 hit rate while its shared memory sits unused.
+#
+# Unlike a register cap this does not trade anything away -- there is no shared
+# memory to give up -- so it is on by default and can be switched off if a
+# kernel that does use shared memory turns out to regress.
+function prefer_l1_cache()
+    raw = lowercase(strip(get(ENV, "CLIMA_PREFER_L1_CACHE", "true")))
+    return !(raw in ("0", "false", "no", "off"))
+end
+
+"""
+    maximize_l1_cache!(kernel)
+
+Give this kernel's SM cache entirely to L1, when it uses no shared memory.
+
+A no-op for kernels that do use shared memory: taking it away would spill them
+into a slower path or fail the launch outright.
+"""
+function maximize_l1_cache!(kernel)
+    prefer_l1_cache() || return nothing
+    try
+        f = kernel.fun
+        attrs = CUDA.attributes(f)
+        # Static shared memory is fixed at compile time; a kernel asking for any
+        # must keep its carveout.
+        attrs[CUDA.FUNC_ATTRIBUTE_SHARED_SIZE_BYTES] == 0 || return nothing
+        # 0 == CU_SHAREDMEM_CARVEOUT_MAX_L1.
+        attrs[CUDA.FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT] = 0
+    catch err
+        # Not supported on every architecture; never fail a launch over a hint.
+        @debug "could not set L1 carveout" err
+    end
+    return nothing
+end
+
 """
     compile_with_cap(f, args; name, always_inline)
 
@@ -567,9 +610,13 @@ is paid once per kernel, not per launch.
 function compile_with_cap(f::F, args; name = nothing, always_inline = true) where {F}
     probe = CUDA.@cuda name = name always_inline = always_inline launch = false f(args...)
     cap = resolved_register_cap(f, args, probe)
-    cap === nothing && return (probe, nothing)
+    if cap === nothing
+        maximize_l1_cache!(probe)
+        return (probe, nothing)
+    end
     kernel = CUDA.@cuda name = name always_inline = always_inline maxregs = cap launch =
         false f(args...)
+    maximize_l1_cache!(kernel)
     return (kernel, cap)
 end
 
