@@ -19,6 +19,7 @@ mutable struct SpectralElementGrid1D{
     global_geometry::GG
     local_geometry::LG
     dss_weights::D
+    discontinuous::Bool
 end
 
 Adapt.@adapt_structure SpectralElementGrid1D
@@ -33,16 +34,22 @@ function SpectralElementGrid1D(
     topology::Topologies.IntervalTopology,
     quadrature_style::Quadratures.QuadratureStyle;
     VIJH::Type{<:DataLayouts.VIJHWithF} = DataLayouts.VIJFH,
+    discontinuous::Bool = false,
 )
     get!(
         Cache.OBJECT_CACHE,
-        (SpectralElementGrid1D, topology, quadrature_style),
+        (SpectralElementGrid1D, topology, quadrature_style, discontinuous),
     ) do
-        _SpectralElementGrid1D(topology, quadrature_style, VIJH)
+        _SpectralElementGrid1D(topology, quadrature_style, VIJH; discontinuous)
     end
 end
 
-function _SpectralElementGrid1D(topology, quadrature_style, ::Type{VIJH}) where {VIJH}
+function _SpectralElementGrid1D(
+    topology,
+    quadrature_style,
+    ::Type{VIJH};
+    discontinuous,
+) where {VIJH}
     DA = ClimaComms.array_type(topology)
     global_geometry = Geometry.CartesianGlobalGeometry()
     CoordType = Topologies.coordinate_type(topology)
@@ -85,7 +92,13 @@ function _SpectralElementGrid1D(topology, quadrature_style, ::Type{VIJH}) where 
         quadrature_style,
         global_geometry,
         device_local_geometry,
-        compute_dss_weights(device_local_geometry, topology, quadrature_style),
+        compute_dss_weights(
+            device_local_geometry,
+            topology,
+            quadrature_style,
+            discontinuous,
+        ),
+        discontinuous,
     )
 end
 
@@ -116,6 +129,7 @@ mutable struct SpectralElementGrid2D{
     mask::M
     enable_bubble::Bool
     autodiff_metric::Bool
+    discontinuous::Bool
 end
 
 Adapt.@adapt_structure SpectralElementGrid2D
@@ -132,6 +146,7 @@ local_geometry_type(
         autodiff_metric,
         VIJH,
         enable_mask::Bool,
+        discontinuous::Bool,
     )
 
 Construct a `SpectralElementGrid2D` instance given a `topology` and `quadrature`. The
@@ -147,6 +162,13 @@ SEM for computing metric terms.
   - autodiff_metric: Bool
   - VIJH: subtype of DataLayouts.VIJHWithF with a specific F axis
   - enable_mask: Boolean used to skip operations where the space's mask is 0
+  - discontinuous: Boolean marking the grid's function space as discontinuous
+    Galerkin (DG): no continuity is maintained across element boundaries, so
+    [`Spaces.weighted_dss!`](@ref) is a no-op on fields over this grid and
+    inter-element coupling is instead supplied by DG numerical fluxes (see
+    `Operators.add_numerical_flux_internal!`). No DSS weights are computed.
+    The flag is not serialized by `InputOutput`; grids read from HDF5 are
+    continuous.
 
 The idea behind the so-called `bubble_correction` is that the numerical area
 of the domain (e.g., the sphere) is given by the sum of nodal integration weights
@@ -180,6 +202,7 @@ function SpectralElementGrid2D(
     enable_bubble::Bool = false,
     autodiff_metric::Bool = true,
     enable_mask::Bool = false,
+    discontinuous::Bool = false,
 )
     get!(
         Cache.OBJECT_CACHE,
@@ -191,6 +214,7 @@ function SpectralElementGrid2D(
             autodiff_metric,
             VIJH,
             enable_mask,
+            discontinuous,
         ),
     ) do
         _SpectralElementGrid2D(
@@ -200,6 +224,7 @@ function SpectralElementGrid2D(
             enable_bubble,
             autodiff_metric,
             enable_mask,
+            discontinuous,
         )
     end
 end
@@ -221,6 +246,7 @@ function _SpectralElementGrid2D(
     enable_bubble,
     autodiff_metric,
     enable_mask,
+    discontinuous,
 ) where {VIJH}
     # 1. compute localgeom for local elememts
     # 2. ghost exchange of localgeom
@@ -438,12 +464,18 @@ function _SpectralElementGrid2D(
         quadrature_style,
         global_geometry,
         device_local_geometry,
-        compute_dss_weights(device_local_geometry, topology, quadrature_style),
+        compute_dss_weights(
+            device_local_geometry,
+            topology,
+            quadrature_style,
+            discontinuous,
+        ),
         internal_surface_geometry,
         boundary_surface_geometries,
         mask,
         enable_bubble,
         autodiff_metric,
+        discontinuous,
     )
 end
 
@@ -554,8 +586,9 @@ end
 @inline _orth_axis(::Geometry.LocalGeometry{I}) where {I} =
     Geometry.Components{Geometry.Orthonormal, I}()
 
-function compute_dss_weights(local_geometry, topology, quadrature_style)
-    Quadratures.requires_dss(quadrature_style) || return nothing
+function compute_dss_weights(local_geometry, topology, quadrature_style, discontinuous)
+    !discontinuous && Quadratures.requires_dss(quadrature_style) ||
+        return nothing
 
     # Although the weights are defined as WJ / Σ collocated WJ, we can use J
     # instead of WJ if the weights are symmetric across element boundaries.
@@ -566,6 +599,22 @@ function compute_dss_weights(local_geometry, topology, quadrature_style)
 end
 
 # accessors
+
+"""
+    Grids.is_continuous(grid)
+
+Whether fields on `grid` are members of the continuous (CG) function space:
+shared element-boundary nodes exist (`Quadratures.requires_dss`) and the grid
+is not marked `discontinuous`. Discontinuous (DG) grids skip
+[`Spaces.weighted_dss!`](@ref) and couple elements through numerical fluxes
+instead. Grids with no horizontal spectral elements (e.g. column grids) are
+continuous.
+"""
+is_continuous(grid::AbstractGrid) = true
+is_continuous(grid::SpectralElementGrid1D) =
+    !grid.discontinuous && Quadratures.requires_dss(grid.quadrature_style)
+is_continuous(grid::SpectralElementGrid2D) =
+    !grid.discontinuous && Quadratures.requires_dss(grid.quadrature_style)
 
 topology(grid::AbstractSpectralElementGrid) = grid.topology
 
