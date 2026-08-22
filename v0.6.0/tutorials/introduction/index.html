@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Introduction to ClimaCore.jl · ClimaCore.jl</title><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.039/juliamono-regular.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.11/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">ClimaCore.jl</a></span></div><form class="docs-search" action="../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../api/">API</a></li><li><a class="tocitem" href="../../operators/">Operators</a></li><li><input class="collapse-toggle" id="menuitem-4" type="checkbox" checked/><label class="tocitem" for="menuitem-4"><span class="docs-label">Tutorials</span><i class="docs-chevron"></i></label><ul class="collapsed"><li class="is-active"><a class="tocitem" href>Introduction to ClimaCore.jl</a><ul class="internal"><li><a class="tocitem" href="#.-Constructing-a-discretization"><span>1. Constructing a discretization</span></a></li><li><a class="tocitem" href="#.-Operators"><span>2. Operators</span></a></li><li class="toplevel"><a class="tocitem" href="#.-Solving-PDEs"><span>3. Solving PDEs</span></a></li></ul></li></ul></li><li><a class="tocitem" href="../../references/">References</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>Introduction to ClimaCore.jl</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Introduction to ClimaCore.jl</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/CliMA/ClimaCore.jl/blob/master/docs/tutorials/introduction.jl" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Introduction-to-ClimaCore.jl"><a class="docs-heading-anchor" href="#Introduction-to-ClimaCore.jl">Introduction to ClimaCore.jl</a><a id="Introduction-to-ClimaCore.jl-1"></a><a class="docs-heading-anchor-permalink" href="#Introduction-to-ClimaCore.jl" title="Permalink"></a></h1><p><em>This tutorial is available as a <a href="../introduction.ipynb">Jupyter notebook</a>.</em></p><h3 id="What-is-ClimaCore?"><a class="docs-heading-anchor" href="#What-is-ClimaCore?">What is ClimaCore?</a><a id="What-is-ClimaCore?-1"></a><a class="docs-heading-anchor-permalink" href="#What-is-ClimaCore?" title="Permalink"></a></h3><p>A suite of tools for constructing spatial discretizations</p><ul><li>primarily aimed at climate and weather models</li><li>initial aim:<ul><li>spectral element discretization in the horizontal</li><li>staggered finite difference in the vertical</li></ul></li><li>currently under development</li></ul><pre><code class="language-julia hljs">using ClimaCore, LinearAlgebra, IntervalSets, UnPack, Plots, OrdinaryDiffEq</code></pre><h2 id=".-Constructing-a-discretization"><a class="docs-heading-anchor" href="#.-Constructing-a-discretization">1. Constructing a discretization</a><a id=".-Constructing-a-discretization-1"></a><a class="docs-heading-anchor-permalink" href="#.-Constructing-a-discretization" title="Permalink"></a></h2><h3 id=".1-Domains"><a class="docs-heading-anchor" href="#.1-Domains">1.1 Domains</a><a id=".1-Domains-1"></a><a class="docs-heading-anchor-permalink" href="#.1-Domains" title="Permalink"></a></h3><p>A <em>domain</em> a region of space (think of a mathematical domain).</p><pre><code class="language-julia hljs">column_domain = ClimaCore.Domains.IntervalDomain(
+    ClimaCore.Geometry.ZPoint(0.0) .. ClimaCore.Geometry.ZPoint(10.0),
+    boundary_tags = (:bottom, :top),
+)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">IntervalDomain(ZPoint(0.0), ZPoint(10.0); boundary_names = (:bottom, :top))</code></pre><pre><code class="language-julia hljs">rectangle_domain = ClimaCore.Domains.RectangleDomain(
+    ClimaCore.Geometry.XPoint(-2π) .. ClimaCore.Geometry.XPoint(2π),
+    ClimaCore.Geometry.YPoint(-2π) .. ClimaCore.Geometry.YPoint(2π),
+    x1periodic = true,
+    x2periodic = true,
+)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">RectangleDomain(
+  IntervalDomain(XPoint(-6.283185307179586), XPoint(6.283185307179586); periodic=true)
+  IntervalDomain(YPoint(-6.283185307179586), YPoint(6.283185307179586); periodic=true)
+)</code></pre><h3 id=".2-Meshes"><a class="docs-heading-anchor" href="#.2-Meshes">1.2 Meshes</a><a id=".2-Meshes-1"></a><a class="docs-heading-anchor-permalink" href="#.2-Meshes" title="Permalink"></a></h3><p>A <em>mesh</em> is a division of a domain into elements</p><pre><code class="language-julia hljs">column_mesh = ClimaCore.Meshes.IntervalMesh(column_domain, nelems = 32)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">32-element IntervalMesh of IntervalDomain(ZPoint(0.0), ZPoint(10.0); boundary_names = (:bottom, :top))</code></pre><pre><code class="language-julia hljs">rectangle_mesh = ClimaCore.Meshes.RectilinearMesh(rectangle_domain, 16, 16)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">16×16-element RectilinearMesh of RectangleDomain(
+  IntervalDomain(XPoint(-6.283185307179586), XPoint(6.283185307179586); periodic=true)
+  IntervalDomain(YPoint(-6.283185307179586), YPoint(6.283185307179586); periodic=true)
+)</code></pre><h3 id=".3-Topologies"><a class="docs-heading-anchor" href="#.3-Topologies">1.3 Topologies</a><a id=".3-Topologies-1"></a><a class="docs-heading-anchor-permalink" href="#.3-Topologies" title="Permalink"></a></h3><p>A <em>topology</em> determines the ordering and connections between elements of a mesh</p><ul><li>At the moment, this is only required for 2D meshes</li></ul><pre><code class="language-julia hljs">rectangle_topology = ClimaCore.Topologies.Topology2D(rectangle_mesh)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Topology2D on 16×16-element RectilinearMesh of RectangleDomain(
+  IntervalDomain(XPoint(-6.283185307179586), XPoint(6.283185307179586); periodic=true)
+  IntervalDomain(YPoint(-6.283185307179586), YPoint(6.283185307179586); periodic=true)
+)</code></pre><h3 id=".4-Spaces"><a class="docs-heading-anchor" href="#.4-Spaces">1.4 Spaces</a><a id=".4-Spaces-1"></a><a class="docs-heading-anchor-permalink" href="#.4-Spaces" title="Permalink"></a></h3><p>A <em>space</em> represents a discretized function space over some domain. Currently two discretizations are supported.</p><h4 id=".4.1-Staggered-finite-difference-discretization"><a class="docs-heading-anchor" href="#.4.1-Staggered-finite-difference-discretization">1.4.1 Staggered finite difference discretization</a><a id=".4.1-Staggered-finite-difference-discretization-1"></a><a class="docs-heading-anchor-permalink" href="#.4.1-Staggered-finite-difference-discretization" title="Permalink"></a></h4><p>This discretizes an interval domain by approximating the function by a value at either the center of each element (<code>CenterFiniteDifferenceSpace</code>), or the faces between elements (<code>FaceFiniteDifferenceSpace</code>).</p><p>You can construct either the center or face space from the mesh, then construct the opposite space from the original one (this is to avoid allocating additional memory).</p><pre><code class="language-julia hljs">column_center_space = ClimaCore.Spaces.CenterFiniteDifferenceSpace(column_mesh)
+# construct the face space from the center one
+column_face_space =
+    ClimaCore.Spaces.FaceFiniteDifferenceSpace(column_center_space)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">FaceFiniteDifferenceSpace:
+  IntervalTopology on 32-element IntervalMesh of IntervalDomain(ZPoint(0.0), ZPoint(10.0); boundary_names = (:bottom, :top))</code></pre><h4 id=".4.2-Spectral-element-discretization"><a class="docs-heading-anchor" href="#.4.2-Spectral-element-discretization">1.4.2 Spectral element discretization</a><a id=".4.2-Spectral-element-discretization-1"></a><a class="docs-heading-anchor-permalink" href="#.4.2-Spectral-element-discretization" title="Permalink"></a></h4><p>A spectral element space approximates the function with polynomials in each element. The polynomials are represented using a <em>nodal discretization</em>, which stores the values of the polynomials at particular points in each element (termed <em>nodes</em> or <em>degrees of freedom</em>).</p><p>These nodes are chosen by a particular <em>quadrature rule</em>, which allows us to integrate functions over the domain. The only supported choice for now is a Gauss-Legendre-Lobatto rule.</p><pre><code class="language-julia hljs"># Gauss-Legendre-Lobatto quadrature with 4 nodes in each direction, so 16 in each element
+quad = ClimaCore.Spaces.Quadratures.GLL{4}()
+rectangle_space =
+    ClimaCore.Spaces.SpectralElementSpace2D(rectangle_topology, quad)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">SpectralElementSpace2D:
+  Topology2D on 16×16-element RectilinearMesh of RectangleDomain(
+    IntervalDomain(XPoint(-6.283185307179586), XPoint(6.283185307179586); periodic=true)
+    IntervalDomain(YPoint(-6.283185307179586), YPoint(6.283185307179586); periodic=true)
+  )
+  ClimaCore.Spaces.Quadratures.GLL{4}()</code></pre><h3 id=".5-Fields"><a class="docs-heading-anchor" href="#.5-Fields">1.5 Fields</a><a id=".5-Fields-1"></a><a class="docs-heading-anchor-permalink" href="#.5-Fields" title="Permalink"></a></h3><p>Finally, we can construct a <em>field</em>: a function in a space. A field is simply a space and the values at each node in the space.</p><p>The easiest field to construct is the <em>coordinate field</em></p><pre><code class="language-julia hljs">coord = ClimaCore.Fields.coordinate_field(rectangle_space)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ClimaCore.Geometry.XYPoint{Float64}-valued Field:
+  x: [-6.28319, -6.06611, -5.71487, -5.49779, -6.28319, -6.06611, -5.71487, -5.49779, -6.28319, -6.06611  …  6.06611, 6.28319, 5.49779, 5.71487, 6.06611, 6.28319, 5.49779, 5.71487, 6.06611, 6.28319]
+  y: [-6.28319, -6.28319, -6.28319, -6.28319, -6.06611, -6.06611, -6.06611, -6.06611, -5.71487, -5.71487  …  5.71487, 5.71487, 6.06611, 6.06611, 6.06611, 6.06611, 6.28319, 6.28319, 6.28319, 6.28319]</code></pre><p>This is a <em>struct-value field</em>: it contains coordinates in a struct at each point. We can extract just the <code>x</code> coordinate, to get a <em>scalar field</em>:</p><pre><code class="language-julia hljs">x = coord.x</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Float64-valued Field:
+  [-6.28319, -6.06611, -5.71487, -5.49779, -6.28319, -6.06611, -5.71487, -5.49779, -6.28319, -6.06611  …  6.06611, 6.28319, 5.49779, 5.71487, 6.06611, 6.28319, 5.49779, 5.71487, 6.06611, 6.28319]</code></pre><p>Although you can&#39;t index directly into a field, it can be used in some other ways similar to a Julia <code>Array</code>. For example, broadcasting can be used to define new fields in terms of other ones:</p><pre><code class="language-julia hljs">sinx = sin.(x)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Float64-valued Field:
+  [2.44929e-16, 0.215378, 0.538216, 0.707107, 2.44929e-16, 0.215378, 0.538216, 0.707107, 2.44929e-16, 0.215378  …  -0.215378, -2.44929e-16, -0.707107, -0.538216, -0.215378, -2.44929e-16, -0.707107, -0.538216, -0.215378, -2.44929e-16]</code></pre><p>Fields can be easily vizualized with Plots.jl:</p><pre><code class="language- hljs">import Plots
+Plots.plot(sinx)</code></pre><p>If you&#39;re using the terminal, <code>UnicodePlots</code> is also supported.</p><p>This works similarly for finite difference discretizations</p><pre><code class="language-julia hljs">column_center_coords = ClimaCore.Fields.coordinate_field(column_center_space)
+column_face_coords = ClimaCore.Fields.coordinate_field(column_face_space)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ClimaCore.Geometry.ZPoint{Float64}-valued Field:
+  z: [0.0, 0.3125, 0.625, 0.9375, 1.25, 1.5625, 1.875, 2.1875, 2.5, 2.8125  …  7.1875, 7.5, 7.8125, 8.125, 8.4375, 8.75, 9.0625, 9.375, 9.6875, 10.0]</code></pre><pre><code class="language- hljs">plot(sin.(column_center_coords.z), ylim = (0.0, 10.0))
+plot!(cos.(column_face_coords.z), ylim = (0.0, 10.0))</code></pre><p>Reduction operations are defined anologously:</p><ul><li><code>sum</code> will give the integral of the function</li></ul><p class="math-container">\[\int_D f(x) dx\]</p><ul><li><code>norm</code> will give the L² function norm</li></ul><p class="math-container">\[\sqrt{\int_D |f(x)|^2 dx}\]</p><pre><code class="language-julia hljs">sum(sinx) ## integral</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">-6.661338147750939e-16</code></pre><pre><code class="language-julia hljs">norm(sinx) ## L² norm</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">8.885765876316748</code></pre><h3 id=".6-Vectors-and-vector-fields"><a class="docs-heading-anchor" href="#.6-Vectors-and-vector-fields">1.6 Vectors and vector fields</a><a id=".6-Vectors-and-vector-fields-1"></a><a class="docs-heading-anchor-permalink" href="#.6-Vectors-and-vector-fields" title="Permalink"></a></h3><p>A <em>vector field</em> is a field with vector-valued quantity, i.e. at every point in space, you have a vector.</p><p>However one of the key requirements of ClimaCore is to support vectors specified in curvilinear or non-Cartesian coordinates. We will discuss this in a bit further, but for now, you can define a 2-dimensional vector field using <code>Geometry.Cartesian12Vector</code>:</p><pre><code class="language-julia hljs">v = ClimaCore.Geometry.Cartesian12Vector.(coord.y, .-coord.x)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ClimaCore.Geometry.AxisTensor{Float64, 1, Tuple{ClimaCore.Geometry.CartesianAxis{(1, 2)}}, StaticArrays.SVector{2, Float64}}-valued Field:
+  components: 
+    data: 
+      1: [-6.28319, -6.28319, -6.28319, -6.28319, -6.06611, -6.06611, -6.06611, -6.06611, -5.71487, -5.71487  …  5.71487, 5.71487, 6.06611, 6.06611, 6.06611, 6.06611, 6.28319, 6.28319, 6.28319, 6.28319]
+      2: [6.28319, 6.06611, 5.71487, 5.49779, 6.28319, 6.06611, 5.71487, 5.49779, 6.28319, 6.06611  …  -6.06611, -6.28319, -5.49779, -5.71487, -6.06611, -6.28319, -5.49779, -5.71487, -6.06611, -6.28319]</code></pre><h2 id=".-Operators"><a class="docs-heading-anchor" href="#.-Operators">2. Operators</a><a id=".-Operators-1"></a><a class="docs-heading-anchor-permalink" href="#.-Operators" title="Permalink"></a></h2><p><em>Operators</em> can compute spatial derivative operations.</p><ul><li>for performance reasons, we need to be able to &quot;fuse&quot; multiple operators and function applications</li><li>Julia provides a tool for this: <strong>broadcasting</strong>, with a very flexible API</li></ul><p>Can think of operators are &quot;pseudo-functions&quot;: can&#39;t be called directly, but act similar to functions in the context of broadcasting.</p><h3 id=".1-Spectral-element-operators"><a class="docs-heading-anchor" href="#.1-Spectral-element-operators">2.1 Spectral element operators</a><a id=".1-Spectral-element-operators-1"></a><a class="docs-heading-anchor-permalink" href="#.1-Spectral-element-operators" title="Permalink"></a></h3><p>The <code>Gradient</code> operator takes the gradient of a scalar field, and returns a vector field.</p><pre><code class="language-julia hljs">grad = ClimaCore.Operators.Gradient()
+∇sinx = grad.(sinx)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ClimaCore.Geometry.AxisTensor{Float64, 1, Tuple{ClimaCore.Geometry.CovariantAxis{(1, 2)}}, StaticArrays.SVector{2, Float64}}-valued Field:
+  components: 
+    data: 
+      1: [0.393185, 0.383236, 0.331262, 0.276966, 0.393185, 0.383236, 0.331262, 0.276966, 0.393185, 0.383236  …  0.383236, 0.393185, 0.276966, 0.331262, 0.383236, 0.393185, 0.276966, 0.331262, 0.383236, 0.393185]
+      2: [1.72563e-31, 2.2482e-15, 3.33067e-16, 0.0, 0.0, 9.4369e-16, 5.55112e-17, 0.0, 0.0, -9.4369e-16  …  -9.4369e-16, 0.0, 0.0, 5.55112e-17, 9.4369e-16, 0.0, 0.0, 4.44089e-16, 2.22045e-15, 1.97215e-31]</code></pre><pre><code class="language- hljs">plot(∇sinx.components.data.:1, clim = (-1, 1))</code></pre><p>This returns the gradient in <a href="https://en.wikipedia.org/wiki/Covariance_and_contravariance_of_vectors"><em>covariant</em></a> coordinates</p><p class="math-container">\[(\nabla f)_i = \frac{\partial f}{\partial \xi^i}\]</p><p>where <span>$(\xi^1,\xi^2)$</span> are the coordinates in the <em>reference element</em>: a square <span>$[-1,1]^2$</span>.</p><p>This can be converted to a Cartesian basis by multiplying by the partial derivative matrix</p><p class="math-container">\[\frac{\partial \xi}{\partial x}\]</p><p>This can be done calling `ClimaCore.Geometry.CartesianVector:</p><pre><code class="language-julia hljs">∇sinx_cart = ClimaCore.Geometry.CartesianVector.(∇sinx)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ClimaCore.Geometry.AxisTensor{Float64, 1, Tuple{ClimaCore.Geometry.CartesianAxis{(1, 2)}}, StaticArrays.SVector{2, Float64}}-valued Field:
+  components: 
+    data: 
+      1: [1.00124, 0.975903, 0.843551, 0.705289, 1.00124, 0.975903, 0.843551, 0.705289, 1.00124, 0.975903  …  0.975903, 1.00124, 0.705289, 0.843551, 0.975903, 1.00124, 0.705289, 0.843551, 0.975903, 1.00124]
+      2: [4.39429e-31, 5.725e-15, 6.09663e-16, 0.0, 0.0, 2.40309e-15, -9.71273e-17, 0.0, 0.0, -2.40309e-15  …  -2.12718e-15, 0.0, 0.0, 6.18329e-16, 2.67899e-15, 0.0, 0.0, 1.60783e-15, 5.93022e-15, 5.02204e-31]</code></pre><pre><code class="language- hljs">plot(∇sinx_cart.components.data.:1, clim = (-1, 1))</code></pre><pre><code class="language- hljs">plot(∇sinx_cart.components.data.:2, clim = (-1, 1))</code></pre><pre><code class="language-julia hljs">∇sinx_ref = ClimaCore.Geometry.Cartesian12Vector.(cos.(x), 0.0)
+norm(∇sinx_cart .- ∇sinx_ref)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">0.020559221354630154</code></pre><p>Similarly, the <code>Divergence</code> operator takes the divergence of vector field, and returns a scalar field.</p><p>If we take the divergence of a gradient, we can get a Laplacian:</p><pre><code class="language- hljs">div = ClimaCore.Operators.Divergence()
+∇²sinx = div.(grad.(sinx))
+plot(∇²sinx)</code></pre><p><em>Note</em>: In curvilinear coordinates, the divergence is defined in terms of the <em>contravariant</em> components <span>$u^i$</span>:</p><p class="math-container">\[\nabla \cdot u = \frac{1}{J} \sum_i \frac{\partial}{\partial \xi^i} (J u^i)\]</p><p>The <code>Divergence</code> operator handles this conversion internally.</p><h4 id=".1.1-Direct-stiffness-summation"><a class="docs-heading-anchor" href="#.1.1-Direct-stiffness-summation">2.1.1 Direct stiffness summation</a><a id=".1.1-Direct-stiffness-summation-1"></a><a class="docs-heading-anchor-permalink" href="#.1.1-Direct-stiffness-summation" title="Permalink"></a></h4><p>Spectral element operators only operate <em>within</em> a single element, and so the result may be discontinuous. To address this, the usual fix is <em>direct stiffness summation</em> (DSS), which averages the values at the element boundaries.</p><p>This corresponds to the <span>$L^2$</span> projection onto the subset of continuous functions in our function space.</p><pre><code class="language- hljs">∇²sinx_dss = ClimaCore.Spaces.weighted_dss!(copy(∇²sinx))
+plot(∇²sinx_dss)</code></pre><pre><code class="language- hljs">plot(∇²sinx_dss .- ∇²sinx)</code></pre><h3 id=".2-Finite-difference-operators"><a class="docs-heading-anchor" href="#.2-Finite-difference-operators">2.2 Finite difference operators</a><a id=".2-Finite-difference-operators-1"></a><a class="docs-heading-anchor-permalink" href="#.2-Finite-difference-operators" title="Permalink"></a></h3><p>Finite difference operators are similar with some subtle differences:</p><ul><li>they can change staggering (center to face, or vice versa)</li><li>they can span multiple elements<ul><li>no DSS is required</li><li>boundary handling may be required</li></ul></li></ul><p>We use the following convention:</p><ul><li>centers are indexed by integers <code>1, 2, ..., n</code></li><li>faces are indexed by half integers <code>½, 1+½, ..., n+½</code></li></ul><p><strong>Face to center gradient</strong></p><p>An finite-difference operator defines a <em>stencil</em>. For example, the gradient operator</p><p class="math-container">\[\nabla\theta[i] = \frac{\theta [i+\tfrac{1}{2}] - \theta[i-\tfrac{1}{2}]}{\Delta z}\]</p><p>(actually, a little more complicated as it gives a vector in a covariant basis)</p><pre><code class="nohighlight hljs">        ...
+      /
+θ[2+½]
+      \
+        ∇θ[2]
+      /
+θ[1+½]
+      \
+        ∇θ[1]
+      /
+θ[½]</code></pre><p>Every center value is well-defined, so boundary handling is optional.</p><pre><code class="language-julia hljs">cosz = cos.(column_face_coords.z)
+gradf2c = ClimaCore.Operators.GradientF2C()
+∇cosz = gradf2c.(cosz)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ClimaCore.Geometry.AxisTensor{Float64, 1, Tuple{ClimaCore.Geometry.CovariantAxis{(3,)}}, StaticArrays.SVector{1, Float64}}-valued Field:
+  components: 
+    data: 
+      1: [-0.0484321, -0.140605, -0.219158, -0.276483, -0.307026, -0.30783, -0.278816, -0.222794, -0.145192, -0.0535264  …  -0.211705, -0.271589, -0.305166, -0.309183, -0.283251, -0.229882, -0.154246, -0.0636694, 0.0330747, 0.126615]</code></pre><pre><code class="language- hljs">plot(
+    ClimaCore.Geometry.CartesianVector.(∇cosz).components.data.:1,
+    ylim = (0, 10),
+)</code></pre><p><strong>Center to face gradient</strong></p><p>Uses the same stencil, but doesn&#39;t work directly:</p><pre><code class="language-julia hljs">sinz = sin.(column_center_coords.z)
+gradc2f = ClimaCore.Operators.GradientC2F()
+# ∇sinz = gradc2f.(sinz) ## this would throw an error</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ClimaCore.Operators.GradientC2F{NamedTuple{(), Tuple{}}}(NamedTuple())</code></pre><p>This throws an error because face values at the boundary are <em>not</em> well-defined:</p><pre><code class="nohighlight hljs">...
+      \
+        ∇θ[2+½]
+      /
+θ[2]
+      \
+        ∇θ[1+½]
+      /
+θ[1]
+      \
+        ????</code></pre><p>To handle boundaries we need to <em>modify the stencil</em>. Two options:</p><ul><li>provide the <em>value</em> <span>$\theta^*$</span> of <span>$\theta$</span> at the boundary:</li></ul><p class="math-container">\[\nabla\theta[\tfrac{1}{2}] = \frac{\theta[1] - \theta^*}{\Delta z /2}\]</p><ul><li>provide the <em>gradient</em> <span>$\nabla\theta^*$</span> of <span>$\theta$</span> at the boundary:</li></ul><p class="math-container">\[\nabla\theta[\tfrac{1}{2}] = \nabla\theta^*\]</p><p>These modified stencils are provided as keyword arguments to the operator (based on the boundary label names):</p><pre><code class="language- hljs">sinz = sin.(column_center_coords.z)
+gradc2f = ClimaCore.Operators.GradientC2F(
+    bottom = ClimaCore.Operators.SetValue(sin(0.0)),
+    top = ClimaCore.Operators.SetGradient(
+        ClimaCore.Geometry.Cartesian3Vector(cos(10.0)),
+    ),
+)
+∇sinz = gradc2f.(sinz)</code></pre><pre><code class="language- hljs">plot(
+    ClimaCore.Geometry.CartesianVector.(∇sinz).components.data.:1,
+    ylim = (0, 10),
+)</code></pre><p>As before, multiple operators (or functions) can be fused together with broadcasting.</p><p>One extra advantage of this is that boundaries of the inner operators only need to be specified if they would affect the final result.</p><p>Consider the center-to-center Laplacian:</p><pre><code class="nohighlight hljs">...
+      \       /
+        ∇θ[2+½]
+      /       \
+θ[2]            ∇⋅∇θ[2]
+      \       /
+        ∇θ[1+½]
+      /       \
+θ[1]            ∇⋅∇θ[1]
+              /
+         ∇θ*</code></pre><pre><code class="language- hljs">sinz = sin.(column_center_coords.z)
+# we don&#39;t need to specify boundaries, as the stencil won&#39;t reach that far
+gradc2f = ClimaCore.Operators.GradientC2F()
+divf2c = ClimaCore.Operators.DivergenceF2C(
+    bottom = ClimaCore.Operators.SetValue(
+        ClimaCore.Geometry.Cartesian3Vector(cos(0.0)),
+    ),
+    top = ClimaCore.Operators.SetValue(
+        ClimaCore.Geometry.Cartesian3Vector(cos(10.0)),
+    ),
+)
+∇∇sinz = divf2c.(gradc2f.(sinz))</code></pre><pre><code class="language- hljs">plot(∇∇sinz, ylim = (0, 10))</code></pre><h1 id=".-Solving-PDEs"><a class="docs-heading-anchor" href="#.-Solving-PDEs">3. Solving PDEs</a><a id=".-Solving-PDEs-1"></a><a class="docs-heading-anchor-permalink" href="#.-Solving-PDEs" title="Permalink"></a></h1><p>ClimaCore can be used for spatial discretizations of PDEs. For temporal discretization, we can use the OrdinaryDiffEq package, which we aim to be compatibile with.</p><pre><code class="language-julia hljs">using OrdinaryDiffEq</code></pre><h3 id=".1-Heat-equation-using-finite-differences"><a class="docs-heading-anchor" href="#.1-Heat-equation-using-finite-differences">3.1 Heat equation using finite differences</a><a id=".1-Heat-equation-using-finite-differences-1"></a><a class="docs-heading-anchor-permalink" href="#.1-Heat-equation-using-finite-differences" title="Permalink"></a></h3><p>We will use a cell-center discretization of the heat equation:</p><p class="math-container">\[\frac{\partial y}{\partial t} = \alpha \nabla \cdot \nabla y\]</p><p>At the bottom we will use a Dirichlet condition <span>$y(0) = 1$</span><code>at the bottom: since we don&#39;t actually have a value located at the bottom, we will use a</code>SetValue` boundary modifier on the inner gradient.</p><p>At the top we will use a Neumann condition <span>$\frac{\partial y}{\partial z}(10) = 0$</span>. We can do this two equivalent ways:</p><ul><li>a <code>SetGradient</code> on the gradient operator</li><li>a <code>SetValue</code> on the divergence operator</li></ul><p>either will work.</p><pre><code class="language- hljs">y0 = zeros(column_center_space)
+
+# define the tendency function
+function heat_fd_tendency!(dydt, y, α, t)
+    gradc2f = ClimaCore.Operators.GradientC2F(
+        bottom = ClimaCore.Operators.SetValue(1.0),
+        top = ClimaCore.Operators.SetGradient(
+            ClimaCore.Geometry.Cartesian3Vector(0.0),
+        ),
+    )
+    divf2c = ClimaCore.Operators.DivergenceF2C()
+    # the @. macro &quot;dots&quot; the whole expression
+    # i.e.  dydt .= α .* divf2c.(gradc2f.(y))
+    @. dydt = α * divf2c(gradc2f(y))
+end
+
+heat_fd_prob = ODEProblem(heat_fd_tendency!, y0, (0.0, 5.0), 0.1)
+heat_fd_sol = solve(heat_fd_prob, SSPRK33(), dt = 0.1, saveat = 0.25)</code></pre><pre><code class="language- hljs">anim = Plots.@animate for u in heat_fd_sol.u
+    plot(u, xlim = (0, 1), ylim = (0, 10))
+end
+mp4(anim)</code></pre><h3 id=".2-Heat-equation-using-continuous-Galerkin-(CG)-spectral-element"><a class="docs-heading-anchor" href="#.2-Heat-equation-using-continuous-Galerkin-(CG)-spectral-element">3.2 Heat equation using continuous Galerkin (CG) spectral element</a><a id=".2-Heat-equation-using-continuous-Galerkin-(CG)-spectral-element-1"></a><a class="docs-heading-anchor-permalink" href="#.2-Heat-equation-using-continuous-Galerkin-(CG)-spectral-element" title="Permalink"></a></h3><pre><code class="language-julia hljs">function heat_cg_tendency!(dydt, y, α, t)
+    grad = ClimaCore.Operators.Gradient()
+    wdiv = ClimaCore.Operators.WeakDivergence()
+    # apply element operators
+    @. dydt = α * wdiv(grad(y))
+
+    # direct stiffness summation (DSS): project to continuous function space
+    ClimaCore.Spaces.weighted_dss!(dydt)
+    return dydt
+end
+
+y0 = exp.(.-(coord.y .^ 2 .+ coord.x .^ 2) ./ 2)
+
+heat_cg_prob = ODEProblem(heat_cg_tendency!, y0, (0.0, 5.0), 0.1)
+heat_cg_sol = solve(heat_cg_prob, SSPRK33(), dt = 0.1, saveat = 0.5)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">retcode: Success
+Interpolation: 1st order linear
+t: 11-element Vector{Float64}:
+ 0.0
+ 0.5
+ 1.0
+ 1.5
+ 2.0
+ 2.5
+ 3.0
+ 3.5
+ 4.0
+ 4.5
+ 5.0
+u: 11-element Vector{ClimaCore.Fields.Field{ClimaCore.DataLayouts.IJFH{Float64, 4, Array{Float64, 4}}, ClimaCore.Spaces.SpectralElementSpace2D{ClimaCore.Topologies.Topology2D{ClimaCore.Meshes.RectilinearMesh{ClimaCore.Meshes.IntervalMesh{ClimaCore.Domains.IntervalDomain{ClimaCore.Geometry.XPoint{Float64}, Nothing}, LinRange{ClimaCore.Geometry.XPoint{Float64}, Int64}}, ClimaCore.Meshes.IntervalMesh{ClimaCore.Domains.IntervalDomain{ClimaCore.Geometry.YPoint{Float64}, Nothing}, LinRange{ClimaCore.Geometry.YPoint{Float64}, Int64}}}, CartesianIndices{2, Tuple{Base.OneTo{Int64}, Base.OneTo{Int64}}}, LinearIndices{2, Tuple{Base.OneTo{Int64}, Base.OneTo{Int64}}}, NamedTuple{(), Tuple{}}}, ClimaCore.Spaces.Quadratures.GLL{4}, ClimaCore.Geometry.CartesianGlobalGeometry, ClimaCore.DataLayouts.IJFH{ClimaCore.Geometry.LocalGeometry{(1, 2), ClimaCore.Geometry.XYPoint{Float64}, Float64, StaticArrays.SMatrix{2, 2, Float64, 4}}, 4, Array{Float64, 4}}, ClimaCore.DataLayouts.IJFH{Float64, 4, Array{Float64, 4}}, ClimaCore.DataLayouts.IFH{ClimaCore.Geometry.SurfaceGeometry{Float64, ClimaCore.Geometry.AxisTensor{Float64, 1, Tuple{ClimaCore.Geometry.LocalAxis{(1, 2)}}, StaticArrays.SVector{2, Float64}}}, 4, Array{Float64, 3}}, NamedTuple{(), Tuple{}}}}}:
+ Float64-valued Field:
+  [7.15717e-18, 2.7344e-17, 2.16475e-16, 7.31057e-16, 2.7344e-17, 1.04468e-16, 8.27047e-16, 2.79301e-15, 2.16475e-16, 8.27047e-16  …  8.27047e-16, 2.16475e-16, 2.79301e-15, 8.27047e-16, 1.04468e-16, 2.7344e-17, 7.31057e-16, 2.16475e-16, 2.7344e-17, 7.15717e-18]
+ Float64-valued Field:
+  [9.43714e-16, 1.65105e-15, 1.07955e-14, 3.19401e-14, 1.65105e-15, 2.88557e-15, 1.8897e-14, 5.57259e-14, 1.07955e-14, 1.8897e-14  …  1.8897e-14, 1.07955e-14, 5.57259e-14, 1.8897e-14, 2.88557e-15, 1.65105e-15, 3.19401e-14, 1.07955e-14, 1.65105e-15, 9.43714e-16]
+ Float64-valued Field:
+  [1.76354e-14, 2.8768e-14, 1.52544e-13, 4.13456e-13, 2.8768e-14, 4.6842e-14, 2.48378e-13, 6.73229e-13, 1.52544e-13, 2.48378e-13  …  2.48378e-13, 1.52544e-13, 6.73229e-13, 2.48378e-13, 4.6842e-14, 2.8768e-14, 4.13456e-13, 1.52544e-13, 2.8768e-14, 1.76354e-14]
+ Float64-valued Field:
+  [2.02605e-13, 3.12665e-13, 1.40719e-12, 3.53943e-12, 3.12665e-13, 4.82027e-13, 2.16942e-12, 5.45561e-12, 1.40719e-12, 2.16942e-12  …  2.16942e-12, 1.40719e-12, 5.45561e-12, 2.16942e-12, 4.82027e-13, 3.12665e-13, 3.53943e-12, 1.40719e-12, 3.12665e-13, 2.02605e-13]
+ Float64-valued Field:
+  [1.63452e-12, 2.40218e-12, 9.42221e-12, 2.21977e-11, 2.40218e-12, 3.53011e-12, 1.38442e-11, 3.26129e-11, 9.42221e-12, 1.38442e-11  …  1.38442e-11, 9.42221e-12, 3.26129e-11, 1.38442e-11, 3.53011e-12, 2.40218e-12, 2.21977e-11, 9.42221e-12, 2.40218e-12, 1.63452e-12]
+ Float64-valued Field:
+  [9.95014e-12, 1.40226e-11, 4.8862e-11, 1.08654e-10, 1.40226e-11, 1.97611e-11, 6.88498e-11, 1.53092e-10, 4.8862e-11, 6.88498e-11  …  6.88498e-11, 4.8862e-11, 1.53092e-10, 6.88498e-11, 1.97611e-11, 1.40226e-11, 1.08654e-10, 4.8862e-11, 1.40226e-11, 9.95014e-12]
+ Float64-valued Field:
+  [4.82014e-11, 6.55051e-11, 2.05863e-10, 4.34805e-10, 6.55051e-11, 8.90181e-11, 2.79733e-10, 5.90808e-10, 2.05863e-10, 2.79733e-10  …  2.79733e-10, 2.05863e-10, 5.90808e-10, 2.79733e-10, 8.90181e-11, 6.55051e-11, 4.34805e-10, 2.05863e-10, 6.55051e-11, 4.82014e-11]
+ Float64-valued Field:
+  [1.93409e-10, 2.54705e-10, 7.3086e-10, 1.47394e-9, 2.54705e-10, 3.35418e-10, 9.62408e-10, 1.94085e-9, 7.3086e-10, 9.62408e-10  …  9.62408e-10, 7.3086e-10, 1.94085e-9, 9.62408e-10, 3.35418e-10, 2.54705e-10, 1.47394e-9, 7.3086e-10, 2.54705e-10, 1.93409e-10]
+ Float64-valued Field:
+  [6.63222e-10, 8.4994e-10, 2.24969e-9, 4.3513e-9, 8.4994e-10, 1.08921e-9, 2.88289e-9, 5.57591e-9, 2.24969e-9, 2.88289e-9  …  2.88289e-9, 2.24969e-9, 5.57591e-9, 2.88289e-9, 1.08921e-9, 8.4994e-10, 4.3513e-9, 2.24969e-9, 8.4994e-10, 6.63222e-10]
+ Float64-valued Field:
+  [1.99234e-9, 2.49355e-9, 6.14103e-9, 1.1435e-8, 2.49355e-9, 3.12082e-9, 7.68562e-9, 1.4311e-8, 6.14103e-9, 7.68562e-9  …  7.68562e-9, 6.14103e-9, 1.4311e-8, 7.68562e-9, 3.12082e-9, 2.49355e-9, 1.1435e-8, 6.14103e-9, 2.49355e-9, 1.99234e-9]
+ Float64-valued Field:
+  [5.3484e-9, 6.55726e-9, 1.51373e-8, 2.72246e-8, 6.55726e-9, 8.03929e-9, 1.85581e-8, 3.33767e-8, 1.51373e-8, 1.85581e-8  …  1.85581e-8, 1.51373e-8, 3.33767e-8, 1.85581e-8, 8.03929e-9, 6.55726e-9, 2.72246e-8, 1.51373e-8, 6.55726e-9, 5.3484e-9]</code></pre><pre><code class="language- hljs">anim = Plots.@animate for u in heat_cg_sol.u
+    Plots.plot(u, c = :thermal)
+end
+mp4(anim)</code></pre><h3 id=".3-Shallow-water-equations"><a class="docs-heading-anchor" href="#.3-Shallow-water-equations">3.3 Shallow water equations</a><a id=".3-Shallow-water-equations-1"></a><a class="docs-heading-anchor-permalink" href="#.3-Shallow-water-equations" title="Permalink"></a></h3><p>The shallow water equations in vector invariant form can be written as</p><p class="math-container">\[\begin{align*}
+    \frac{\partial \rho}{\partial t} + \nabla \cdot (\rho u) &amp;= 0\\
+    \frac{\partial u_i}{\partial t} + \nabla (\Phi + \tfrac{1}{2}\|u\|^2)_i  &amp;= J (u \times (\nabla \times u))_i
+\end{align*}\]</p><p>where <span>$J$</span> is the Jacobian determinant, and <span>$\Phi = g \rho$</span>.</p><p>Note that the velocity <span>$u$</span> is specified in <em>covariant</em> coordinates <span>$u_i$</span>.</p><p>For vizualization purposes, we can model a passive tracer <span>$\theta$</span> as</p><p class="math-container">\[\frac{\partial \rho \theta}{\partial t} + \nabla \cdot (\rho \theta u) = 0\]</p><pre><code class="language- hljs">using ClimaCore.Geometry
+
+parameters = (
+    ϵ = 0.1,  ## perturbation size for initial condition
+    l = 0.5, ## Gaussian width
+    k = 0.5, ## Sinusoidal wavenumber
+    ρ₀ = 1.0, ## reference density
+    c = 2,
+    g = 10,
+    D₄ = 1e-4, ## hyperdiffusion coefficient
+)
+
+function init_state(local_geometry, p)
+    coord = local_geometry.coordinates
+    @unpack x, y = coord
+    # set initial state
+    ρ = p.ρ₀
+
+    # set initial velocity
+    U₁ = cosh(y)^(-2)
+
+    # Ψ′ = exp(-(x2 + p.l / 10)^2 / 2p.l^2) * cos(p.k * x) * cos(p.k * y)
+    # Vortical velocity fields (u₁′, u₂′) = (-∂²Ψ′, ∂¹Ψ′)
+    ϕ = exp(-(y + p.l / 10)^2 / 2p.l^2)
+    u₁′ = ϕ * (y + p.l / 10) / p.l^2 * cos(p.k * x) * cos(p.k * y)
+    u₁′ += p.k * ϕ * cos(p.k * x) * sin(p.k * y)
+    u₂′ = -p.k * ϕ * sin(p.k * x) * cos(p.k * y)
+
+    u = Geometry.Covariant12Vector(
+        Geometry.Cartesian12Vector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′),
+        local_geometry,
+    )
+
+    # set initial tracer
+    θ = sin(p.k * y)
+    return (ρ = ρ, u = u, ρθ = ρ * θ)
+end
+
+
+y0 =
+    init_state.(
+        ClimaCore.Fields.local_geometry_field(rectangle_space),
+        Ref(parameters),
+    )
+
+# plot initial tracer
+Plots.plot(y0.ρθ)</code></pre><pre><code class="language-julia hljs">function shallow_water_tendency!(dydt, y, _, t)
+
+    @unpack D₄, g = parameters
+
+    sdiv = ClimaCore.Operators.Divergence()
+    wdiv = ClimaCore.Operators.WeakDivergence()
+    grad = ClimaCore.Operators.Gradient()
+    wgrad = ClimaCore.Operators.WeakGradient()
+    curl = ClimaCore.Operators.Curl()
+    wcurl = ClimaCore.Operators.WeakCurl()
+
+
+    # compute hyperviscosity first
+    @. dydt.u =
+        wgrad(sdiv(y.u)) -
+        Geometry.Covariant12Vector(wcurl(Geometry.Covariant3Vector(curl(y.u))))
+    @. dydt.ρθ = wdiv(grad(y.ρθ))
+
+    ClimaCore.Spaces.weighted_dss!(dydt)
+
+    @. dydt.u =
+        -D₄ *
+        (wgrad(sdiv(dydt.u)) - Geometry.Covariant12Vector(wcurl(curl(dydt.u))))
+    @. dydt.ρθ = -D₄ * wdiv(grad(dydt.ρθ))
+
+    # comute rest of tendency
+    @. begin
+        dydt.ρ = -wdiv(y.ρ * y.u)
+        dydt.u += -grad(g * y.ρ + norm(y.u)^2 / 2) + y.u × curl(y.u)
+        dydt.ρθ += -wdiv(y.ρθ * y.u)
+    end
+    ClimaCore.Spaces.weighted_dss!(dydt)
+    return dydt
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">shallow_water_tendency! (generic function with 1 method)</code></pre><pre><code class="language- hljs">shallow_water_prob = ODEProblem(shallow_water_tendency!, y0, (0.0, 20.0))
+@time shallow_water_sol =
+    solve(shallow_water_prob, SSPRK33(), dt = 0.05, saveat = 1.0)
+anim = Plots.@animate for u in shallow_water_sol.u
+    Plots.plot(u.ρθ, clim = (-1, 1))
+end
+mp4(anim)</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../operators/">« Operators</a><a class="docs-footer-nextpage" href="../../references/">References »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.10 on <span class="colophon-date" title="Wednesday 5 January 2022 02:51">Wednesday 5 January 2022</span>. Using Julia version 1.7.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
