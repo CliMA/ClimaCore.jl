@@ -628,10 +628,24 @@ return_eltype(::Interpolate, arg) = eltype(arg)
 Base.@propagate_inbounds slab(op::Interpolate, inds...) =
     Interpolate(slab(op.space, inds...))
 
+# The stored space is read on devices (unlike the spaces of broadcast
+# arguments, it is not replaced with a placeholder), so it must be adapted.
+Adapt.adapt_structure(to, op::Interpolate) = Interpolate(Adapt.adapt(to, op.space))
+
+# Allocate a Field of type T on a slab of the operator's space, with the same
+# DataScope as the slab argument. The operator's space is a kernel argument on
+# GPUs, so its geometry data has kernel scope rather than the block scope
+# required for allocations inside apply_operator.
+@inline function slab_field(::Type{T}, space, scope_source) where {T}
+    scope = DataLayouts.DataScope(scope_source)
+    coords_data = DataLayouts.reassign(Spaces.coordinates_data(space), scope)
+    return Fields.Field(similar(coords_data, T), space)
+end
+
 @inline function apply_operator(op::Interpolate, arg)
     arg′ = Base.materialize(arg)
     DataLayouts.synchronize(DataLayouts.DataScope(arg′))
-    dest = Fields.Field(eltype(arg′), op.space)
+    dest = slab_field(eltype(arg′), op.space, arg′)
     dest .= (zero(eltype(dest)),)
     matrix = interp_matrix(dest, arg′)
     apply_tensor_product!(dest, matrix, arg′, horizontal_dims(arg′))
@@ -676,10 +690,12 @@ return_eltype(::Restrict, arg) = eltype(arg)
 Base.@propagate_inbounds slab(op::Restrict, inds...) =
     Restrict(slab(op.space, inds...))
 
+Adapt.adapt_structure(to, op::Restrict) = Restrict(Adapt.adapt(to, op.space))
+
 @inline function apply_operator(op::Restrict, arg)
     arg′ = materialize_jacobian_weighted(WeakForm(), arg)
     DataLayouts.synchronize(DataLayouts.DataScope(arg′))
-    dest = Fields.Field(eltype(arg′), op.space)
+    dest = slab_field(eltype(arg′), op.space, arg′)
     dest .= (zero(eltype(dest)),)
     matrix = interp_matrix(arg′, dest)'
     apply_tensor_product!(dest, matrix, arg′, horizontal_dims(arg′))

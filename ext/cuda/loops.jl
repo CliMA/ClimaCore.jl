@@ -11,17 +11,20 @@ function DataLayouts.foreach_slice(
     f::F,
     args...;
     mask,
+    no_index = true,
     kwargs...,
 ) where {O, F}
     if !all(Base.Fix1(has_inferred_slice_size, op), args)
         for index in DataLayouts.subscope_slice_indices(scope, scope, mask, op, args...)
-            f(map(arg -> (@inbounds op(arg, Tuple(index)...)), args)...)
+            slices = map(arg -> (@inbounds op(arg, Tuple(index)...)), args)
+            no_index ? f(slices...) : f(index, slices...)
         end
+        return nothing
     end
 
     kernel_kwargs = values(kwargs) # capture kwargs as a NamedTuple (Pairs isn't isbitstype)
     kernel_function(args...) =
-        DataLayouts.foreach_slice(ThisKernel(), op, f, args...; mask, kernel_kwargs...)
+        DataLayouts.foreach_slice(ThisKernel(), op, f, args...; mask, no_index, kernel_kwargs...)
 
     if DataLayouts.slice_subscope(ThisKernel(), op, args...) == ThisBlock()
         max_slice_points = maximum(Base.Fix1(DataLayouts.num_slice_points, op), args)
