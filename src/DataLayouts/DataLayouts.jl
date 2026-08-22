@@ -245,7 +245,7 @@ Base.reinterpret(::Type{T}, data::DataLayout) where {T} = rebuild(data, parent(d
 
 # Add MPICommsContext method to disambiguate from gather(::MPICommsContext, array).
 for T in (:(ClimaComms.AbstractCommsContext), :(ClimaComms.MPICommsContext))
-    ClimaComms.gather(ctx::$T, data::DataLayout) =
+    @eval ClimaComms.gather(ctx::$T, data::DataLayout) =
         ClimaComms.iamroot(ctx) ? # Only return data on the root process.
         rebuild(data, ClimaComms.gather(ctx, parent(data))) : nothing
 end

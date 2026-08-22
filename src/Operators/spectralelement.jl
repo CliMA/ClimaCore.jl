@@ -1,4 +1,4 @@
-import UnrolledUtilities: unrolled_map
+import UnrolledUtilities: unrolled_map, unrolled_sum
 import ..Utilities.Unrolled: unrolled_map_with_inbounds
 
 """
@@ -17,9 +17,9 @@ computation; they differ only in three form-dependent factors:
    `lazy_jacobian_unweighted`, and by `W` or not at all; see
    `lazy_quadrature_unweighted`.
 
-Operators with strong/weak variants carry a `FormType` as their second type
-parameter, e.g. `Divergence{I, StrongForm}`, with the weak variant available
-under an alias, e.g. `WeakDivergence{I} = Divergence{I, WeakForm}`.
+Operators with strong/weak variants carry a `FormType` as their type parameter,
+e.g. `Divergence{StrongForm}`, with the weak variant available under an alias,
+e.g. `WeakDivergence = Divergence{WeakForm}`.
 """
 abstract type FormType end
 
@@ -158,7 +158,7 @@ const SpectralBroadcasted = Broadcast.Broadcasted{SpectralStyle}
 const LazySpectralOperation =
     Broadcast.Broadcasted{SpectralStyle, <:SpectralElementOperator}
 
-Base.eltype(bc::SpectralBroadcasted) = return_eltype(bc.op, bc.args...)
+Base.eltype(bc::LazySpectralOperation) = return_eltype(bc.f, bc.args...)
 
 function Broadcast.broadcasted(op::SpectralElementOperator, args...)
     args′ = unrolled_map(Broadcast.broadcastable, args)

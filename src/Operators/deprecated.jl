@@ -1,6 +1,6 @@
 # Backwards-compatibility aliases for the pre-FormType spectral element
 # operators. The weak-form operators are now the WeakForm variants of their
-# strong-form counterparts (e.g., Divergence{I, WeakForm} instead of a separate
+# strong-form counterparts (e.g., Divergence{WeakForm} instead of a separate
 # WeakDivergence type); the aliases below keep the old names working. As with
 # src/DataLayouts/deprecated.jl, these are plain aliases without deprecation
 # warnings. Remove this file when all downstream consumers have migrated to the
@@ -52,8 +52,7 @@ where
   - ``W`` is the diagonal matrix of quadrature weights
   - ``D_i`` is the derivative matrix along the ``i``th dimension
 """
-const WeakDivergence{I} = Divergence{I, WeakForm}
-WeakDivergence() = WeakDivergence{()}()
+const WeakDivergence = Divergence{WeakForm}
 
 """
     wgrad = WeakGradient()
@@ -96,8 +95,7 @@ which reduces to
 
 where ``D_i`` is the derivative matrix along the ``i``th dimension.
 """
-const WeakGradient{I} = Gradient{I, WeakForm}
-WeakGradient() = WeakGradient{()}()
+const WeakGradient = Gradient{WeakForm}
 
 """
     wcurl = WeakCurl()
@@ -141,8 +139,7 @@ which, by using the anti-symmetry of the Levi-Civita symbol, reduces to
 \\theta^i = - \\epsilon^{ijk} (WJ)^{-1} D_j^\\top W u_k
 ```
 """
-const WeakCurl{I} = Curl{I, WeakForm}
-WeakCurl() = WeakCurl{()}()
+const WeakCurl = Curl{WeakForm}
 
 """
     SlabData{T}
