@@ -75,8 +75,8 @@ const interface_flux =
 # stripped from the interface flux (dissipation unchanged).
 const cartesian_interface_fn =
     interface_flux == :roe ?
-    Operators.kennedy_gruber_roe_cartesian_advective :
-    Operators.kennedy_gruber_rusanov_cartesian_advective
+    kennedy_gruber_roe_cartesian_advective :
+    kennedy_gruber_rusanov_cartesian_advective
 
 # ---------------------------------------------------------------------------
 # Cartesian basis fields come from sphere_dg_fd_model.jl (eE*, eN*, eR*).
@@ -209,7 +209,7 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
         ρ,
     )
     Operators.add_flux_differencing_divergence!(
-        Operators.kennedy_gruber_cartesian_advective_flux,
+        kennedy_gruber_cartesian_advective_flux,
         dy_mw,
         y,
     )
@@ -509,177 +509,177 @@ end
 # each plotted field is moved to the CPU with `ClimaCore.to_cpu`.
 # ---------------------------------------------------------------------------
 if get(ENV, "PLOTS", "1") != "0"
-import CairoMakie, ClimaCoreMakie
-output_dir = joinpath(
-    @__DIR__,
-    "output",
-    apply_held_suarez ? "held_suarez_fddg_fluxform" :
-    "baroclinic_wave_fddg_fluxform",
-)
-mkpath(output_dir)
-
-# Form the diagnostics on the device (all fields share spaces there), then
-# move each scalar result to the CPU for the plot recipes.
-function plot_fields_cpu(Yi)
-    Yc = Yi.Yc
-    ρ = Yc.ρ
-    uE = @. (Yc.ρu1 * eE1 + Yc.ρu2 * eE2 + Yc.ρu3 * eE3) / ρ
-    uN = @. (Yc.ρu1 * eN1 + Yc.ρu2 * eN2 + Yc.ρu3 * eN3) / ρ
-    w_c = @. Ic(Geometry.WVector(Yi.ρw)).components.data.:1 / ρ
-    K = @. (uE^2 + uN^2 + w_c^2) / 2
-    p = @. pressure_ρe(Yc.ρe, K, ᶜΦ, ρ)
-    T = @. p / (R_d * ρ)
-    return (;
-        u = ClimaCore.to_cpu(uE),
-        v = ClimaCore.to_cpu(uN),
-        p = ClimaCore.to_cpu(p),
-        T = ClimaCore.to_cpu(T),
+    import CairoMakie, ClimaCoreMakie
+    output_dir = joinpath(
+        @__DIR__,
+        "output",
+        apply_held_suarez ? "held_suarez_fddg_fluxform" :
+        "baroclinic_wave_fddg_fluxform",
     )
-end
+    mkpath(output_dir)
 
-# ClimaCoreMakie.fieldheatmap plots a 2D field, so slice the requested
-# horizontal level out of the extruded field first. On the cubed sphere the
-# level's coordinates are LatLongPoints, so this renders a long–lat map.
-function save_level_heatmap(path, field, lev; colorrange = nothing)
-    fig = CairoMakie.Figure()
-    ax = CairoMakie.Axis(fig[1, 1]; xlabel = "long [deg]", ylabel = "lat [deg]")
-    kw = isnothing(colorrange) ? (;) : (; colorrange)
-    plt = ClimaCoreMakie.fieldheatmap!(ax, Fields.level(field, lev); kw...)
-    CairoMakie.Colorbar(fig[1, 2], plt)
-    CairoMakie.save(path, fig)
-    return nothing
-end
-
-function save_level_animation(
-    path,
-    states,
-    to_field,
-    lev;
-    colorrange = nothing,
-    framerate = 5,
-)
-    fig = CairoMakie.Figure()
-    ax = CairoMakie.Axis(fig[1, 1]; xlabel = "long [deg]", ylabel = "lat [deg]")
-    frame = CairoMakie.Observable(Fields.level(to_field(first(states)), lev))
-    kw = isnothing(colorrange) ? (;) : (; colorrange)
-    plt = ClimaCoreMakie.fieldheatmap!(ax, frame; kw...)
-    CairoMakie.Colorbar(fig[1, 2], plt)
-    CairoMakie.record(fig, path, states; framerate) do Yi
-        frame[] = Fields.level(to_field(Yi), lev)
-    end
-    return nothing
-end
-
-let f_end = plot_fields_cpu(sol.u[end])
-    save_level_heatmap(
-        joinpath(output_dir, "v_end.png"),
-        f_end.v,
-        3;
-        colorrange = (-6, 6),
-    )
-    save_level_heatmap(joinpath(output_dir, "p_sfc_end.png"), f_end.p, 1)
-end
-if length(sol.u) > 2
-    for (name, getfield_fn, lev, colorrange) in (
-        ("v", f -> f.v, 3, (-6, 6)),
-        ("u", f -> f.u, 3, nothing),
-        ("p_sfc", f -> f.p, 1, nothing),
-        ("T_sfc", f -> f.T, 1, nothing),
-    )
-        save_level_animation(
-            joinpath(output_dir, "$name.mp4"),
-            sol.u,
-            Yi -> getfield_fn(plot_fields_cpu(Yi)),
-            lev;
-            colorrange,
+    # Form the diagnostics on the device (all fields share spaces there), then
+    # move each scalar result to the CPU for the plot recipes.
+    function plot_fields_cpu(Yi)
+        Yc = Yi.Yc
+        ρ = Yc.ρ
+        uE = @. (Yc.ρu1 * eE1 + Yc.ρu2 * eE2 + Yc.ρu3 * eE3) / ρ
+        uN = @. (Yc.ρu1 * eN1 + Yc.ρu2 * eN2 + Yc.ρu3 * eN3) / ρ
+        w_c = @. Ic(Geometry.WVector(Yi.ρw)).components.data.:1 / ρ
+        K = @. (uE^2 + uN^2 + w_c^2) / 2
+        p = @. pressure_ρe(Yc.ρe, K, ᶜΦ, ρ)
+        T = @. p / (R_d * ρ)
+        return (;
+            u = ClimaCore.to_cpu(uE),
+            v = ClimaCore.to_cpu(uN),
+            p = ClimaCore.to_cpu(p),
+            T = ClimaCore.to_cpu(T),
         )
     end
-end
 
-# --- Canonical Held–Suarez diagnostics: time & zonal mean u(φ, z) and
-#     T(φ, z), quadrature-weighted (WJ) latitude binning of the saved
-#     snapshots past the spinup time. HS_SPINUP [s] defaults to t_end/2;
-#     Held & Suarez (1994) use a 200-day spinup and a long-time mean, so
-#     treat short-run output as qualitative. ---
-if apply_held_suarez && length(sol.u) > 1
-    hs_spinup = parse(FT, get(ENV, "HS_SPINUP", string(t_end / 2)))
-    avg_idx = [i for (i, ti) in enumerate(sol.t) if ti >= hs_spinup]
-    isempty(avg_idx) && (avg_idx = [length(sol.u)])
-    nbins = 45
-    edges = range(FT(-90), FT(90); length = nbins + 1)
-    lat_centers = collect((edges[1:(end - 1)] .+ edges[2:end]) ./ 2)
-    lat_p = parent(ClimaCore.to_cpu(ccoords.lat))
-    wj_p = parent(
-        ClimaCore.to_cpu(Fields.local_geometry_field(hv_center_space).WJ),
+    # ClimaCoreMakie.fieldheatmap plots a 2D field, so slice the requested
+    # horizontal level out of the extruded field first. On the cubed sphere the
+    # level's coordinates are LatLongPoints, so this renders a long–lat map.
+    function save_level_heatmap(path, field, lev; colorrange = nothing)
+        fig = CairoMakie.Figure()
+        ax = CairoMakie.Axis(fig[1, 1]; xlabel = "long [deg]", ylabel = "lat [deg]")
+        kw = isnothing(colorrange) ? (;) : (; colorrange)
+        plt = ClimaCoreMakie.fieldheatmap!(ax, Fields.level(field, lev); kw...)
+        CairoMakie.Colorbar(fig[1, 2], plt)
+        CairoMakie.save(path, fig)
+        return nothing
+    end
+
+    function save_level_animation(
+        path,
+        states,
+        to_field,
+        lev;
+        colorrange = nothing,
+        framerate = 5,
     )
-    z_p = parent(ClimaCore.to_cpu(ccoords.z))
-    Nv = size(lat_p, 1)
-    z_km = [
-        sum(view(z_p, v, :, :, :, :)) / length(view(z_p, v, :, :, :, :)) /
-        1e3 for v in 1:Nv
-    ]
-    usum = zeros(Nv, nbins)
-    Tsum = zeros(Nv, nbins)
-    wsum = zeros(Nv, nbins)
-    for i in avg_idx
-        # `local`: this runs at top level, where loop-body assignments that
-        # shadow globals (T_p, b, ...) are ambiguous soft scope
-        local fi = plot_fields_cpu(sol.u[i])
-        local u_p = parent(fi.u)
-        local T_p = parent(fi.T)
-        for I in CartesianIndices(lat_p)
-            local b = clamp(searchsortedlast(edges, lat_p[I]), 1, nbins)
-            local w = wj_p[I]
-            usum[I[1], b] += w * u_p[I]
-            Tsum[I[1], b] += w * T_p[I]
-            wsum[I[1], b] += w
+        fig = CairoMakie.Figure()
+        ax = CairoMakie.Axis(fig[1, 1]; xlabel = "long [deg]", ylabel = "lat [deg]")
+        frame = CairoMakie.Observable(Fields.level(to_field(first(states)), lev))
+        kw = isnothing(colorrange) ? (;) : (; colorrange)
+        plt = ClimaCoreMakie.fieldheatmap!(ax, frame; kw...)
+        CairoMakie.Colorbar(fig[1, 2], plt)
+        CairoMakie.record(fig, path, states; framerate) do Yi
+            frame[] = Fields.level(to_field(Yi), lev)
+        end
+        return nothing
+    end
+
+    let f_end = plot_fields_cpu(sol.u[end])
+        save_level_heatmap(
+            joinpath(output_dir, "v_end.png"),
+            f_end.v,
+            3;
+            colorrange = (-6, 6),
+        )
+        save_level_heatmap(joinpath(output_dir, "p_sfc_end.png"), f_end.p, 1)
+    end
+    if length(sol.u) > 2
+        for (name, getfield_fn, lev, colorrange) in (
+            ("v", f -> f.v, 3, (-6, 6)),
+            ("u", f -> f.u, 3, nothing),
+            ("p_sfc", f -> f.p, 1, nothing),
+            ("T_sfc", f -> f.T, 1, nothing),
+        )
+            save_level_animation(
+                joinpath(output_dir, "$name.mp4"),
+                sol.u,
+                Yi -> getfield_fn(plot_fields_cpu(Yi)),
+                lev;
+                colorrange,
+            )
         end
     end
-    ubar = usum ./ wsum   # empty bins → NaN → contour gaps
-    Tbar = Tsum ./ wsum
-    day_str(i) = string(round(sol.t[i] / 86400; digits = 1))
-    span = "days $(day_str(avg_idx[1]))–$(day_str(avg_idx[end]))"
-    # These are plain (lat × z) matrices, not ClimaCore fields, so use
-    # CairoMakie's contourf directly. Makie expects z of size
-    # (length(x), length(y)) = (nbins, Nv), hence the permutedims.
-    let fig = CairoMakie.Figure()
-        ax = CairoMakie.Axis(
-            fig[1, 1];
-            xlabel = "latitude [deg]",
-            ylabel = "z [km]",
-            title = "zonal-mean u [m/s], $span",
+
+    # --- Canonical Held–Suarez diagnostics: time & zonal mean u(φ, z) and
+    #     T(φ, z), quadrature-weighted (WJ) latitude binning of the saved
+    #     snapshots past the spinup time. HS_SPINUP [s] defaults to t_end/2;
+    #     Held & Suarez (1994) use a 200-day spinup and a long-time mean, so
+    #     treat short-run output as qualitative. ---
+    if apply_held_suarez && length(sol.u) > 1
+        hs_spinup = parse(FT, get(ENV, "HS_SPINUP", string(t_end / 2)))
+        avg_idx = [i for (i, ti) in enumerate(sol.t) if ti >= hs_spinup]
+        isempty(avg_idx) && (avg_idx = [length(sol.u)])
+        nbins = 45
+        edges = range(FT(-90), FT(90); length = nbins + 1)
+        lat_centers = collect((edges[1:(end - 1)] .+ edges[2:end]) ./ 2)
+        lat_p = parent(ClimaCore.to_cpu(ccoords.lat))
+        wj_p = parent(
+            ClimaCore.to_cpu(Fields.local_geometry_field(hv_center_space).WJ),
         )
-        cf = CairoMakie.contourf!(
-            ax,
-            lat_centers,
-            z_km,
-            permutedims(ubar);
-            colormap = :balance,
-        )
-        CairoMakie.Colorbar(fig[1, 2], cf)
-        CairoMakie.save(joinpath(output_dir, "u_zonal_mean.png"), fig)
+        z_p = parent(ClimaCore.to_cpu(ccoords.z))
+        Nv = size(lat_p, 1)
+        z_km = [
+            sum(view(z_p,v,:,:,:,:)) / length(view(z_p,v,:,:,:,:)) /
+            1e3 for v in 1:Nv
+        ]
+        usum = zeros(Nv, nbins)
+        Tsum = zeros(Nv, nbins)
+        wsum = zeros(Nv, nbins)
+        for i in avg_idx
+            # `local`: this runs at top level, where loop-body assignments that
+            # shadow globals (T_p, b, ...) are ambiguous soft scope
+            local fi = plot_fields_cpu(sol.u[i])
+            local u_p = parent(fi.u)
+            local T_p = parent(fi.T)
+            for I in CartesianIndices(lat_p)
+                local b = clamp(searchsortedlast(edges, lat_p[I]), 1, nbins)
+                local w = wj_p[I]
+                usum[I[1], b] += w * u_p[I]
+                Tsum[I[1], b] += w * T_p[I]
+                wsum[I[1], b] += w
+            end
+        end
+        ubar = usum ./ wsum   # empty bins → NaN → contour gaps
+        Tbar = Tsum ./ wsum
+        day_str(i) = string(round(sol.t[i] / 86400; digits = 1))
+        span = "days $(day_str(avg_idx[1]))–$(day_str(avg_idx[end]))"
+        # These are plain (lat × z) matrices, not ClimaCore fields, so use
+        # CairoMakie's contourf directly. Makie expects z of size
+        # (length(x), length(y)) = (nbins, Nv), hence the permutedims.
+        let fig = CairoMakie.Figure()
+            ax = CairoMakie.Axis(
+                fig[1, 1];
+                xlabel = "latitude [deg]",
+                ylabel = "z [km]",
+                title = "zonal-mean u [m/s], $span",
+            )
+            cf = CairoMakie.contourf!(
+                ax,
+                lat_centers,
+                z_km,
+                permutedims(ubar);
+                colormap = :balance,
+            )
+            CairoMakie.Colorbar(fig[1, 2], cf)
+            CairoMakie.save(joinpath(output_dir, "u_zonal_mean.png"), fig)
+        end
+        let fig = CairoMakie.Figure()
+            ax = CairoMakie.Axis(
+                fig[1, 1];
+                xlabel = "latitude [deg]",
+                ylabel = "z [km]",
+                title = "zonal-mean T [K], $span",
+            )
+            cf = CairoMakie.contourf!(
+                ax,
+                lat_centers,
+                z_km,
+                permutedims(Tbar);
+                colormap = :thermal,
+            )
+            CairoMakie.Colorbar(fig[1, 2], cf)
+            CairoMakie.save(joinpath(output_dir, "T_zonal_mean.png"), fig)
+        end
+        @info "Held–Suarez zonal-mean diagnostics" averaged_snapshots =
+            length(avg_idx) window = span
     end
-    let fig = CairoMakie.Figure()
-        ax = CairoMakie.Axis(
-            fig[1, 1];
-            xlabel = "latitude [deg]",
-            ylabel = "z [km]",
-            title = "zonal-mean T [K], $span",
-        )
-        cf = CairoMakie.contourf!(
-            ax,
-            lat_centers,
-            z_km,
-            permutedims(Tbar);
-            colormap = :thermal,
-        )
-        CairoMakie.Colorbar(fig[1, 2], cf)
-        CairoMakie.save(joinpath(output_dir, "T_zonal_mean.png"), fig)
-    end
-    @info "Held–Suarez zonal-mean diagnostics" averaged_snapshots =
-        length(avg_idx) window = span
-end
-@info "Output written to $output_dir"
+    @info "Output written to $output_dir"
 end # PLOTS
 
 # script value: keep REPL `include(...)` from displaying the (enormous)

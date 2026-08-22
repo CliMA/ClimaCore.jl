@@ -14,6 +14,22 @@ main
   models can gate DSS on the space itself rather than on the quadrature type.
   The flag is part of the grid cache key.
 
+- Added horizontal discontinuous-Galerkin (DG) operator support. The
+  discretization-generic machinery lives in `src/Operators/numericalflux.jl`:
+  interior- and boundary-face numerical fluxes and symmetric face liftings on
+  pure-2D and extruded (1D and 2D horizontal) spectral-element spaces, the
+  flux-differencing (split-form / FDDG) volume divergence of Souza et al.
+  (2023, JAMES), and the device-resident `DGConnectivity` face buffer (with
+  CUDA implementations in the `ClimaCoreCUDAExt` extension). A generic flux
+  library lives in `src/Operators/dg_fluxes.jl`: `CentralNumericalFlux`,
+  `RusanovNumericalFlux`, the Kennedy-Gruber advected-scalar two-point flux
+  pair, central-lifting and jump-penalty face functions, and an LDG/SIPG
+  Laplacian for optional scale-selective dissipation. Equation-set-specific
+  fluxes (compressible Euler with Cartesian momentum components) are example
+  code, not part of the `Operators` API; see
+  `examples/hybrid/sphere/discontinuous_galerkin/euler_dg_fluxes.jl` and the
+  FDDG baroclinic-wave / Held-Suarez drivers in the same directory.
+
 v0.15.3
 -------
 

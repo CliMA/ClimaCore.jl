@@ -158,12 +158,12 @@ const Δt = if haskey(ENV, "DT")
     parse(FT, ENV["DT"])
 elseif stepper == "hevi"
     FT(max(
-        1,
-        floor(
-            Spaces.node_horizontal_length_scale(horzspace) /
-            (350 * (2 * npoly + 1)),
-        ),
-    ))
+            1,
+            floor(
+                Spaces.node_horizontal_length_scale(horzspace) /
+                (350 * (2 * npoly + 1)),
+            ),
+        ))
 else
     FT(4.0)
 end
@@ -351,10 +351,12 @@ const T_equator = FT(315)
 const T_min = FT(200)
 const σ_b = FT(7 / 10)
 
-# All DG building blocks — the Kennedy-Gruber two-point/interface fluxes,
-# the central lifting / jump-penalty face functions, `lifting_correction`,
-# and `ldg_laplacian_tendency` — come from ClimaCore's Operators module;
-# no operators are defined in this driver.
+# DG machinery (face loops, flux differencing, `lifting_correction`) and the
+# generic flux library (central lifting / jump-penalty face functions,
+# `ldg_laplacian_tendency`) come from ClimaCore's Operators module. The
+# Euler-specific Kennedy-Gruber Cartesian fluxes are equation-set code and
+# live with the examples:
+include("euler_dg_fluxes.jl")
 
 # Explicit SIPG biharmonic stability cap (validated on the plane DG-FD
 # cases): the CG value 2e17 is only stable there because DSS makes the
@@ -370,7 +372,7 @@ const κ₄_cfl_cap = FT(
 # v-oscillation per hour at the cap at the default resolution); cap/10 keeps
 # that near the truncation floor while still damping grid modes.
 const κ₄ = haskey(ENV, "KAPPA4") ? parse(FT, ENV["KAPPA4"]) :
-    min(FT(2e17), κ₄_cfl_cap / 10)
+           min(FT(2e17), κ₄_cfl_cap / 10)
 κ₄ > κ₄_cfl_cap &&
     @warn "κ₄ exceeds the explicit SIPG stability cap" κ₄ κ₄_cfl_cap
 const filter_Nc = parse(Int, get(ENV, "FILTER", string(npoly)))
@@ -388,14 +390,16 @@ const state_filter_kc = parse(Int, get(ENV, "STATE_FILTER_KC", "2"))
 const state_filter_s = parse(Int, get(ENV, "STATE_FILTER_S", "2"))
 const state_filter_M = let
     Nq = npoly + 1
-    Σ = SVector{Nq, FT}(ntuple(Nq) do i
-        m = i - 1
-        m <= state_filter_kc ? FT(1) :
-        exp(
-            -state_filter_α *
-            ((m - state_filter_kc) / (npoly - state_filter_kc))^(2 * state_filter_s),
-        )
-    end)
+    Σ = SVector{Nq, FT}(
+        ntuple(Nq) do i
+            m = i - 1
+            m <= state_filter_kc ? FT(1) :
+            exp(
+                -state_filter_α *
+                ((m - state_filter_kc) / (npoly - state_filter_kc))^(2 * state_filter_s),
+            )
+        end,
+    )
     Quadratures.spectral_filter_matrix(
         Spaces.quadrature_style(hv_center_space),
         Σ,

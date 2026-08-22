@@ -9,6 +9,7 @@ import Base.Broadcast: Broadcasted
 import ..slab, ..slab_args, ..column, ..column_args
 import ClimaComms
 import ..Utilities:
+    Cache,
     new,
     unwrap,
     is_auto_broadcastable,
@@ -26,6 +27,7 @@ import ..Fields: Fields, Field
 include("common.jl")
 include("spectralelement.jl")
 include("numericalflux.jl")
+include("dg_fluxes.jl")
 include("finitedifference.jl")
 include("remapping.jl")
 include("integrals.jl")
