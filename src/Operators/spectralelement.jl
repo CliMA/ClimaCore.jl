@@ -236,16 +236,37 @@ end
     end
 end
 
-# Set dest .= arg' when Ni == Nj, or set dest .= arg[1] if either Ni or Nj is 1.
-@inline function transpose_slab!(dest, arg)
+# Set dest_slice .+= matrix * F for each 1D i or j slice of the inputs, where
+# F[k, k′] = (arg1[k] + arg1[k′]) * (arg2[k] + arg2[k′]) / 2 is the symmetric
+# two-point flux between points k and k′ of the slice. Unlike in muladd_slab!,
+# the summand depends on the destination point as well as the summation point,
+# so F cannot be precomputed as a pointwise field. The diagonal of matrix must
+# be zero, since flux differencing excludes the self-pairing F[k, k].
+# Threads using the same arguments must be synchronized before this is called.
+@inline function split_muladd_slab!(dest, matrix, arg1, arg2, slice_val::Union{Val{:i}, Val{:j}})
     dest_data = Fields.field_values(dest)
-    arg_data = Fields.field_values(arg)
+    arg1_data = slab_point_data(arg1)
+    arg2_data = slab_point_data(arg2)
     DataLayouts.foreach_column(dest_data; no_index = false) do dest_index, dest_point
         (i, j, _) = Tuple(dest_index)
-        (; Ni, Nj) = DataLayouts.vijh_params(arg_data)
-        @inbounds dest_point[] = column(arg_data, min(j, Ni), min(i, Nj), 1)[]
+        axis2 = axes(matrix, 2)
+        flux(i′, j′) =
+            (point_value(arg1_data, i, j) + point_value(arg1_data, i′, j′)) *
+            (point_value(arg2_data, i, j) + point_value(arg2_data, i′, j′)) / 2
+        @inbounds dest_point[] +=
+            slice_val isa Val{:i} ?
+            unrolled_sum(i′ -> (@inbounds matrix[i, i′] * flux(i′, j)), axis2) :
+            unrolled_sum(j′ -> (@inbounds matrix[j, j′] * flux(i, j′)), axis2)
+        nothing
     end
 end
+
+# Allow scalar broadcast arguments (e.g. split_div.(u, 1)) alongside Fields.
+@inline slab_point_data(x) = x
+@inline slab_point_data(field::Fields.Field) = Fields.field_values(field)
+@inline point_value(x, i, j) = x[]
+Base.@propagate_inbounds point_value(data::DataLayouts.DataLayout, i, j) =
+    column(data, i, j, 1)[]
 
 # Set dest .+= (matrix ⊗ matrix) * arg along the dimensions in dims, where dest
 # and arg may have different quadrature sizes (as in Interpolate and Restrict).
@@ -435,27 +456,24 @@ return_space(::SplitDivergence, space, _) = space
 return_eltype(::SplitDivergence, arg1, arg2) =
     Geometry.mul_return_type(Geometry.divergence_result_type(eltype(arg1)), eltype(arg2))
 
-# Split form is J⁻¹ ∑ₕ Dₕ Fʰ, where F is @. (arg1 + arg1') * (arg2 + arg2') / 2.
+# Split form is J⁻¹ ∑ₕ ∑_{k′≠k} Dₕ[k, k′] Fʰ[k, k′] along each dimension h,
+# with the symmetric two-point flux Fʰ[k, k′] = (Juʰₖ + Juʰₖ′)(ψₖ + ψₖ′) / 2
+# between points k and k′ of a slice. The contravariant components Juʰ are
+# evaluated pointwise, with each point's own metric, before they are averaged.
 @noinline function apply_operator(op::SplitDivergence, arg1, arg2)
-    dims = horizontal_dims(arg1)
     Ju = materialize_jacobian_weighted(StrongForm(), arg1)
     ψ = Base.materialize(arg2)
-    DataLayouts.synchronize(DataLayouts.DataScope(Ju, ψ))
-    transposed_Ju = similar(Ju)
-    transposed_ψ = similar(ψ)
-    transpose_slab!(transposed_Ju, Ju)
-    transpose_slab!(transposed_ψ, ψ)
-    arg′ = (Ju .+ transposed_Ju) .* (ψ .+ transposed_ψ) ./ 2
-    lg = Fields.local_geometry_field(arg′)
-    arg′¹ = 1 in dims ? Geometry.contravariant1.(arg′, lg) : nothing
-    arg′² = 2 in dims ? Geometry.contravariant2.(arg′, lg) : nothing
-    DataLayouts.synchronize(DataLayouts.DataScope(arg′))
-    dest = similar(arg′, return_eltype(op, arg1, arg2))
+    lg = Fields.local_geometry_field(Ju)
+    dims = horizontal_dims(Ju)
+    Ju¹ = 1 in dims ? Geometry.contravariant1.(Ju, lg) : nothing
+    Ju² = 2 in dims ? Geometry.contravariant2.(Ju, lg) : nothing
+    DataLayouts.synchronize(DataLayouts.DataScope(Ju))
+    dest = similar(Ju, return_eltype(op, arg1, arg2))
     dest .= (zero(eltype(dest)),)
     matrix = deriv_matrix(StrongForm(), dest)
     matrix -= LinearAlgebra.Diagonal(matrix)
-    1 in dims && muladd_slab!(dest, matrix, arg′¹, Val(:i))
-    2 in dims && muladd_slab!(dest, matrix, arg′², Val(:j))
+    1 in dims && split_muladd_slab!(dest, matrix, Ju¹, ψ, Val(:i))
+    2 in dims && split_muladd_slab!(dest, matrix, Ju², ψ, Val(:j))
     return lazy_jacobian_unweighted(StrongForm(), dest)
 end
 
