@@ -62,10 +62,13 @@ const LazyDataLayout{D} = Broadcast.Broadcasted{<:DataStyle{<:Any, D}}
 # Remove all AutoBroadcaster wrappers when allocating a new DataLayout.
 @inline Base.similar(bc::LazyDataLayout) =
     similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
-@inline Base.similar(bc::LazyDataLayout, ::Type{T}) where {T} = similar(
-    layout_type(bc){T, shape_params(bc)..., typeof(DataScope(bc)), parent_type(bc)},
-    size(bc),
-)
+@inline function Base.similar(bc::LazyDataLayout, ::Type{T}) where {T}
+    D = layout_type(bc){T, shape_params(bc)..., typeof(DataScope(bc)), parent_type(bc)}
+    # Skip the runtime size when the type's size is statically inferred, so
+    # that a non-escaping temporary with a statically-sized parent array can
+    # stay on the stack.
+    return has_inferred_size(D) ? similar(D) : similar(D, size(bc))
+end
 
 # Define a MultiBroadcastFusion type, FusedMultiBroadcast, and a corresponding
 # @fused macro, as outlined in https://github.com/CliMA/MultiBroadcastFusion.jl.

@@ -875,7 +875,7 @@ end
         @test op_on_level_of_field ==
               (Spaces.level(gradh.(field.x), TU.fc_index(1, space)))
 
-        @test_broken op_on_level_of_field == Base.materialize((Spaces.level(
+        @test op_on_level_of_field == Base.materialize((Spaces.level(
             lazy.(gradh.(field.x)),
             TU.fc_index(1, space),
         )),)

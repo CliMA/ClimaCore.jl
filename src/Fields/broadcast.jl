@@ -89,10 +89,12 @@ Base.Broadcast.newindex(
 Base.eltype(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     unsafe_eltype(bc)
 
-Base.similar(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
+# @inline keeps a non-escaping slab or column temporary allocated by
+# materialize on the stack (see similar_layout in DataLayouts).
+@inline Base.similar(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
 
-Base.copy(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
+@inline Base.copy(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     copyto!(similar(bc), bc; mask = Spaces.get_mask(axes(bc)))
 
 Base.@propagate_inbounds function slab(
@@ -189,12 +191,12 @@ Base.axes(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
 _axes(bc, ::Nothing) = Base.Broadcast.combine_axes(bc.args...)
 _axes(bc, axes) = axes
 
-Base.similar(
+@inline Base.similar(
     bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle},
     ::Type{Eltype},
 ) where {Eltype} = Field(Eltype, axes(bc))
 
-Base.similar(
+@inline Base.similar(
     bc::Base.Broadcast.Broadcasted{<:FieldStyle},
     ::Type{Eltype},
 ) where {Eltype} = Field(similar(todata(bc), Eltype), axes(bc))

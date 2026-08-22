@@ -254,11 +254,15 @@ ClimaComms.gather(::ClimaComms.SingletonCommsContext, data::DataLayout) = data
 @inline add_f_dim(dims, dim, ::Val{F}) where {F} =
     isnothing(F) ? dims : unrolled_insert(dims, dim, Val(F))
 
-function similar_layout(data, ::Type{T}, maybe_dims...) where {T}
+# @inline lets a temporary layout with statically-inferred size stay on the
+# stack when it does not escape its allocating function: the MArray type from
+# scoped_static_array constant-folds, and the allocation is visible to the
+# caller's escape analysis.
+@inline function similar_layout(data, ::Type{T}, maybe_dims...) where {T}
     B = checked_valid_basetype(eltype(parent_type(data)), T)
     return similar_layout(data, T, B, maybe_dims...)
 end
-function similar_layout(data, ::Type{T}, ::Type{B}, maybe_dims...) where {T, B}
+@inline function similar_layout(data, ::Type{T}, ::Type{B}, maybe_dims...) where {T, B}
     Nf = num_basetypes(B, T)
     dims_or_data_size =
         isone(length(maybe_dims)) ? first(maybe_dims) :
@@ -269,11 +273,11 @@ function similar_layout(data, ::Type{T}, ::Type{B}, maybe_dims...) where {T, B}
     return rebuild(data, array, T)
 end
 
-Base.similar(::Type{D}, maybe_dims::Dims...) where {D <: DataLayout} =
+@inline Base.similar(::Type{D}, maybe_dims::Dims...) where {D <: DataLayout} =
     similar_layout(D, eltype(D), maybe_dims...)
-Base.similar(data::DataLayout, maybe_dims::Dims...) =
+@inline Base.similar(data::DataLayout, maybe_dims::Dims...) =
     similar_layout(data, eltype(data), maybe_dims...)
-Base.similar(data::DataLayout, ::Type{T}, maybe_dims::Dims...) where {T} =
+@inline Base.similar(data::DataLayout, ::Type{T}, maybe_dims::Dims...) where {T} =
     similar_layout(data, T, maybe_dims...)
 
 function replace_basetype(data::DataLayout, ::Type{B}) where {B}

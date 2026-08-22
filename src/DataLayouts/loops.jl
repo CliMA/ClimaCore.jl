@@ -372,7 +372,9 @@ end
     return copyto!(dest, convert(Broadcast.Broadcasted{style_type}, bc); kwargs...)
 end
 
-function Base.copyto!(dest::DataLayout, arg::MaybeLazyDataLayout; kwargs...)
+# @inline keeps a non-escaping temporary dest with statically-inferred size on
+# the stack (see similar_layout in DataLayouts.jl).
+@inline function Base.copyto!(dest::DataLayout, arg::MaybeLazyDataLayout; kwargs...)
     foreach_point(dest, arg; kwargs...) do dest_point, arg_point
         @inbounds dest_point[] = arg_point[]
     end

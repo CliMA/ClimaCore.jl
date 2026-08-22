@@ -223,7 +223,7 @@ num_threads(::ThisThread) = 1
 thread_rank(::ThisThread) = 1
 scoped_array(::ThisThread, ::Type{T}, dims; buffer = false) where {T} =
     buffer ? task_reduction_buffer(Array{T, 1}, dims) : Array{T}(undef, dims)
-scoped_static_array(::ThisThread, ::Type{T}, dims) where {T} =
+@inline scoped_static_array(::ThisThread, ::Type{T}, dims) where {T} =
     StaticArrays.MArray{Tuple{dims...}, T}(undef)
 
 """

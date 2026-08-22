@@ -34,7 +34,7 @@ struct Field{V <: DataLayout, S <: AbstractSpace}
     values::V
     space::S
 end
-Field(::Type{T}, space::AbstractSpace) where {T} =
+@inline Field(::Type{T}, space::AbstractSpace) where {T} =
     Field(similar(Spaces.coordinates_data(space), T), space)
 
 # Ensure that every Field on a PointSpace has a zero-dimensional DataLayout.
