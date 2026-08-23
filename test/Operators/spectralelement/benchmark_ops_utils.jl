@@ -127,6 +127,7 @@ end
 
 function setup_kernel_args(ARGS::Vector{String} = ARGS)
     s = ArgParseSettings(prog = "spectralelement operator benchmarks")
+    #! format: off
     @add_arg_table! s begin
         "--float-type"
         help = "Floating point type (Float32, Float64)"
@@ -149,6 +150,7 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
         arg_type = Int
         default = 4
     end
+    #! format: on
     args = parse_args(ARGS, s)
 
     device = ClimaComms.device()

@@ -77,7 +77,7 @@ function vtk_connectivity_map_lagrange(Nq1, Nq2 = 1, Nq3 = 1)
 end
 
 """
-  vtk_cells_lagrange(space)
+vtk_cells_lagrange(space)
 
 Construct a vector of `MeshCell` objects representing the elements of `space` as
 an unstuctured mesh of Lagrange polynomial cells, suitable for passing to
@@ -97,7 +97,7 @@ function vtk_cells_lagrange(gspace::Spaces.SpectralElementSpace2D)
 end
 
 """
-  vtk_cells_linear(space)
+vtk_cells_linear(space)
 
 Construct a vector of `MeshCell` objects representing the elements of `space` as
 an unstuctured mesh of linear cells, suitable for passing to
@@ -170,11 +170,12 @@ end
 The space for the grid used by VTK, for any field on `space`.
 
 This generally does two things:
- - Modifies the horizontal space to use a `ClosedUniform` quadrature rule, which
-   will use equispaced nodal points in the reference element. This is required
-   for using [VTK Lagrange elements](https://blog.kitware.com/modeling-arbitrary-order-lagrange-finite-elements-in-the-visualization-toolkit/)
-   (see [1](https://discourse.paraview.org/t/node-positions-of-high-order-lagrange-quadrilateral-cells/7012/3)).
- - Modifies the vertical space to be on the faces.
+
+  - Modifies the horizontal space to use a `ClosedUniform` quadrature rule, which
+    will use equispaced nodal points in the reference element. This is required
+    for using [VTK Lagrange elements](https://blog.kitware.com/modeling-arbitrary-order-lagrange-finite-elements-in-the-visualization-toolkit/)
+    (see [1](https://discourse.paraview.org/t/node-positions-of-high-order-lagrange-quadrilateral-cells/7012/3)).
+  - Modifies the vertical space to be on the faces.
 """
 function vtk_grid_space(space::Spaces.SpectralElementSpace1D)
     if Spaces.quadrature_style(space) isa Quadratures.ClosedUniform
@@ -219,9 +220,10 @@ Construct a space for outputting cell data, when using outputting a grid `gridsp
 be stored.
 
 This generally does two things:
- - Modifies the horizontal space to use a `Uniform` quadrature rule, which
-   will use equispaced nodal points in the reference element (excluding the boundary).
- - Modifies the vertical space to be on the centers.
+
+  - Modifies the horizontal space to use a `Uniform` quadrature rule, which
+    will use equispaced nodal points in the reference element (excluding the boundary).
+  - Modifies the vertical space to be on the centers.
 """
 function vtk_cell_space(gridspace::Spaces.SpectralElementSpace1D)
     @assert Spaces.quadrature_style(gridspace) isa Quadratures.ClosedUniform

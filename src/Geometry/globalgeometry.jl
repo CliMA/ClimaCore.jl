@@ -43,12 +43,13 @@ The local vector basis has `u` in the zonal direction (with east being
 positive), `v` in the meridonal (north positive), and `w` in the radial
 direction (outward positive). For a point located at the pole, we take the limit
 along the zero longitude line:
-- at the north pole, this corresponds to `u` being aligned with the `x2`
-  direction, `v` being aligned with the negative `x1` direction, and `w` being
-  aligned with the `x3` direction.
-- at the south pole, this corresponds to `u` being aligned with the `x2`
-  direction, `v` being aligned with the `x1` direction, and `w` being aligned
-  with the negative `x3` direction.
+
+  - at the north pole, this corresponds to `u` being aligned with the `x2`
+    direction, `v` being aligned with the negative `x1` direction, and `w` being
+    aligned with the `x3` direction.
+  - at the south pole, this corresponds to `u` being aligned with the `x2`
+    direction, `v` being aligned with the `x1` direction, and `w` being aligned
+    with the negative `x3` direction.
 """
 struct SphericalGlobalGeometry{FT} <: AbstractSphericalGlobalGeometry
     radius::FT

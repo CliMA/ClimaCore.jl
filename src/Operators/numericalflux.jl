@@ -8,19 +8,20 @@ The numerical flux is determined by evaluating
     fn(normal, argvals⁻, argvals⁺)
 
 where:
- - `normal` is the unit normal vector, pointing from the "minus" side to the "plus" side
- - `argvals⁻` is the tuple of values of `args` on the "minus" side of the face
- - `argvals⁺` is the tuple of values of `args` on the "plus" side of the face
-and should return the net flux from the "minus" side to the "plus" side.
+
+  - `normal` is the unit normal vector, pointing from the "minus" side to the "plus" side
+  - `argvals⁻` is the tuple of values of `args` on the "minus" side of the face
+  - `argvals⁺` is the tuple of values of `args` on the "plus" side of the face
+    and should return the net flux from the "minus" side to the "plus" side.
 
 For consistency, it should satisfy the property that
 
     fn(normal, argvals⁻, argvals⁺) == -fn(-normal, argvals⁺, argvals⁻)
 
-
 See also:
-- [`CentralNumericalFlux`](@ref)
-- [`RusanovNumericalFlux`](@ref)
+
+  - [`CentralNumericalFlux`](@ref)
+  - [`RusanovNumericalFlux`](@ref)
 """
 function add_numerical_flux_internal!(fn, dydt, args...)
     space = axes(dydt)

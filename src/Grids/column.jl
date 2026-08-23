@@ -5,8 +5,9 @@ An index into a column of a field. This can be used as an argument to `getindex`
 of a `Field`, to return a field on that column.
 
 # Example
+
 ```julia
-colidx = ColumnIndex((1,1),1)
+colidx = ColumnIndex((1, 1), 1)
 field[colidx]
 ```
 """

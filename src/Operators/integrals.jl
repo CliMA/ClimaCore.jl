@@ -6,8 +6,7 @@ broadcast_zero(field) = zero(eltype(Base.broadcastable(field)))
 """
     column_integral_definite!(ϕ_top, ᶜ∂ϕ∂z, [ϕ_bot])
 
-Sets `ϕ_top```{}= \\frac{1}{ΔA(z_{bot})}\\int_{z_{bot}}^{z_{top}}\\,
-```ᶜ∂ϕ∂z```(z)\\,ΔA(z)\\,dz +{}```ϕ_bot`, where ``z_{bot}`` and ``z_{top}`` are
+Sets `````ϕ_top```{}= \\frac{1}{ΔA(z_{bot})}\\int_{z_{bot}}^{z_{top}}\\, ```ᶜ∂ϕ∂z```(z)\\,ΔA(z)\\,dz +{}```ϕ_bot`````, where ``z_{bot}`` and ``z_{top}`` are
 the values of `z` at the bottom and top of the domain, and where `ΔA` is the
 area differential `J/Δz`, with `J` denoting the metric Jacobian. The input
 `ᶜ∂ϕ∂z` should be a cell-center `Field` or `AbstractBroadcasted`, and the output
@@ -26,8 +25,7 @@ end
 """
     column_integral_indefinite!(ᶠϕ, ᶜ∂ϕ∂z, [ϕ_bot])
 
-Sets `ᶠϕ```(z) = \\frac{1}{ΔA(z_{bot})}\\int_{z_{bot}}^z\\,```ᶜ∂ϕ∂z```(z')\\,
-ΔA(z')\\,dz' +{}```ϕ_bot`, where ``z_{bot}`` is the value of `z` at the bottom
+Sets `````ᶠϕ```(z) = \\frac{1}{ΔA(z_{bot})}\\int_{z_{bot}}^z\\,```ᶜ∂ϕ∂z```(z')\\, ΔA(z')\\,dz' +{}```ϕ_bot`````, where ``z_{bot}`` is the value of `z` at the bottom
 of the domain, and where `ΔA` is the area differential `J/Δz`, with `J` denoting
 the metric Jacobian. The input `ᶜ∂ϕ∂z` should be a cell-center `Field` or
 `AbstractBroadcasted`, and the output `ᶠϕ` should be a cell-face `Field`. The
@@ -35,8 +33,7 @@ default value of `ϕ_bot` is 0.
 
     column_integral_indefinite!(∂ϕ∂z, ᶠϕ, [ϕ_bot], [rtol])
 
-Sets `ᶠϕ```(z) = \\frac{1}{ΔA(z_{bot})}\\int_{z_{bot}}^z\\,
-```∂ϕ∂z```(```ᶠϕ```(z'), z')\\,ΔA(z')\\,dz' +{}```ϕ_bot`, where `∂ϕ∂z` can be
+Sets `````ᶠϕ```(z) = \\frac{1}{ΔA(z_{bot})}\\int_{z_{bot}}^z\\, ```∂ϕ∂z```(```ᶠϕ```(z'), z')\\,ΔA(z')\\,dz' +{}```ϕ_bot`````, where `∂ϕ∂z` can be
 any scalar-valued two-argument function. When a shallow atmosphere approximation
 is used, `ΔA = ΔA_{bot}` at all values of `z`, and the output `ᶠϕ` satisfies
 `ᶜgradᵥ.(ᶠϕ) ≈ ∂ϕ∂z.(ᶜint.(ᶠϕ), ᶜz)` with a relative tolerance of `rtol`, where
@@ -122,6 +119,7 @@ When `reverse = true`, it starts at the top boundary and proceeds downward.
 
 With `first_level` and `last_level` denoting the indices of the boundary levels
 of `input`, the default reduction in each column can be summarized as follows:
+
   - If `init` is unspecified,
     ```
     reduced_value = input[first_level]
@@ -231,6 +229,7 @@ downward, with the corresponding staggered boundary offsets reversed.
 
 With `first_level` and `last_level` denoting the indices of the boundary levels
 of `input`, the default accumulation in each column can be summarized as follows:
+
   - For center-to-center and face-to-face accumulation with `init` unspecified,
     ```
     accumulated_value = input[first_level]

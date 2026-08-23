@@ -6,17 +6,18 @@ using PrettyTables
     UnitTest(name, filename; meta, tier, subsystem, slow)
 
 A unit test, given:
- - `name::String` the name of the unit test
- - `filename::String` the filename of the unit test
- - `meta::Any` meta information for the test
- - `tier::Symbol` test tier (:unit, :inference, :allocs, :conv, :smoke, :gpu, :misc)
- - `subsystem::Symbol` domain subsystem (:datalayouts, :geometry, :domains, :meshes, :topologies, :quadratures, :spaces, :fields, :operators, :matrixfields, :hypsography, :limiters, :io, :remapping, :integration, :gpu, :quality, :utilities, :other)
- - `slow::Bool` the test costs minutes rather than seconds, from compiling many
-   layout/space specializations or from building large spaces. `tier` says what
-   a test checks; `slow` says what it costs. Buildkite runs these, splitting
-   the suite across parallel agents; the GitHub Actions job is one two-core
-   runner per Julia version under a wall-clock limit, and excludes them with
-   `TEST_EXCLUDE_SLOW`. Mark a test slow only with a measurement to back it up.
+
+  - `name::String` the name of the unit test
+  - `filename::String` the filename of the unit test
+  - `meta::Any` meta information for the test
+  - `tier::Symbol` test tier (:unit, :inference, :allocs, :conv, :smoke, :gpu, :misc)
+  - `subsystem::Symbol` domain subsystem (:datalayouts, :geometry, :domains, :meshes, :topologies, :quadratures, :spaces, :fields, :operators, :matrixfields, :hypsography, :limiters, :io, :remapping, :integration, :gpu, :quality, :utilities, :other)
+  - `slow::Bool` the test costs minutes rather than seconds, from compiling many
+    layout/space specializations or from building large spaces. `tier` says what
+    a test checks; `slow` says what it costs. Buildkite runs these, splitting
+    the suite across parallel agents; the GitHub Actions job is one two-core
+    runner per Julia version under a wall-clock limit, and excludes them with
+    `TEST_EXCLUDE_SLOW`. Mark a test slow only with a measurement to back it up.
 """
 mutable struct UnitTest
     name::String
@@ -89,15 +90,16 @@ end
     validate_tests(unit_tests::Vector{UnitTest}; test_path)
 
 Given:
- - `unit_tests` a vector of `UnitTest`s
- - `test_path` the path to the test directory (for checking that files exist).
-               Typically this should be `test_path = @__DIR__`.
+
+  - `unit_tests` a vector of `UnitTest`s
+  - `test_path` the path to the test directory (for checking that files exist).
+    Typically this should be `test_path = @__DIR__`.
 
 Returns `err::Symbol` indicating the validation results:
 
- - `:duplicate_file` duplicate files found (and info statements are printed)
- - `:non_existent_file` found non-existent files (and info statements are printed)
- - `:pass` passes
+  - `:duplicate_file` duplicate files found (and info statements are printed)
+  - `:non_existent_file` found non-existent files (and info statements are printed)
+  - `:pass` passes
 
 Checking for non-existent files can help
 prevent situations where a user adds a new
@@ -143,9 +145,9 @@ end
         time_format::Symbol = :second, # one of (:second, :compoundperiod)
     )
 
- - `include_timings::Bool` indicates whether or not to include the timings/percent columns
- - `time_format::Symbol` specify the time format. Valid values include [:second (default), :compoundperiod].
-                         If we do not match either of these, then we warn & default to `:second`.
+  - `include_timings::Bool` indicates whether or not to include the timings/percent columns
+  - `time_format::Symbol` specify the time format. Valid values include [:second (default), :compoundperiod].
+    If we do not match either of these, then we warn & default to `:second`.
 
 Tabulate the given unit tests. The `include_timings` kwarg
 extends the table to include timings of the tests.
@@ -259,8 +261,8 @@ end
 Run a single unit test and update its timing fields (`elapsed`,
 `compile_time`, `recompile_time`) and `test_id`.
 
- - `prevent_leaky_tests::Bool` wraps the test in a module so variables and
-   imports do not leak between test files.
+  - `prevent_leaky_tests::Bool` wraps the test in a module so variables and
+    imports do not leak between test files.
 """
 function run_unit_test!(
     test::UnitTest,
@@ -297,8 +299,8 @@ end
 Run all given unit tests, and updates each of the `UnitTest`'s elapsed time.
 
 Note:
-    for `fail_fast = false`, the tests are all wrapped in `@testset "Unit tests"`
-    so output is suppressed until all tests are complete.
+for `fail_fast = false`, the tests are all wrapped in `@testset "Unit tests"`
+so output is suppressed until all tests are complete.
 """
 function run_unit_tests!(
     unit_tests::Vector{UnitTest};

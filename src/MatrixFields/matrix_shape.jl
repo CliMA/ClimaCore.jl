@@ -16,7 +16,7 @@ Returns the matrix shape for a matrix field defined on the `matrix_space`. By de
 When the matrix_space is a finite difference space (extruded or otherwise): the shape is
 either `Square()`, `FaceToCenter()`, or `CenterToFace()`, depending on
 whether the diagonal indices of `matrix_field` are `Int`s or `PlusHalf`s and
-whether `matrix_space` is on cell centers or cell faces. 
+whether `matrix_space` is on cell centers or cell faces.
 
 When the matrix_space is a spectral element or point space: only a Square() shape is supported.
 """

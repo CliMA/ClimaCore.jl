@@ -21,6 +21,7 @@ iterating over all arguments for which `is_auto_broadcastable` is true
 passed to the function directly. This behavior is triggered by using
 `AutoBroadcaster`s, optionally in conjunction with compatible iterators that are
 not wrapped in `AutoBroadcaster`s, in the following ways:
+
   - passing them to standard math functions or constructors
   - passing them to `ifelse` (for iterating over conditional values)
   - applying them as function calls (for iterating over functions)
@@ -34,6 +35,7 @@ identical to their underlying iterators, with support for common operations like
 `iterate`, `propertynames`, `getindex`, and `reduce`.
 
 # Examples
+
 ```jldoctest; setup = :(import ClimaCore.Utilities, ClimaCore.Geometry.StaticArrays)
 julia> x = Utilities.AutoBroadcaster((1, 2.0, StaticArrays.SVector(3, 4)))
 (1, 2.0, [3, 4])
@@ -124,6 +126,7 @@ returned instead of the original wrapper. Otherwise, the default result of
 `Broadcasted(style, f, args, axes)` is returned without modifications.
 
 # Examples
+
 ```jldoctest; setup = :(import ClimaCore.Utilities), filter = r"\\{.+\\}"
 julia> x = (im, (1, 2.0), [3, 4])
 (im, (1, 2.0), [3, 4])
@@ -168,6 +171,7 @@ passed to any standard math function or constructor, but for generic operations
 it must be called explicitly.
 
 # Examples
+
 ```jldoctest; setup = :(import ClimaCore.Utilities)
 julia> x = Utilities.add_auto_broadcasters(((:a, :b, :c), (:d, :e, :f), :g))
 ((:a, :b, :c), (:d, :e, :f), :g)

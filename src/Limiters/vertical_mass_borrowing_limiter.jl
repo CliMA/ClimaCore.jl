@@ -33,7 +33,8 @@ Limiters.apply_limiter!(q, ρ, limiter)
 This code was adapted from [E3SM](https://github.com/E3SM-Project/E3SM/blob/2c377c5ec9a5585170524b366ad85074ab1b1a5c/components/eam/src/physics/cam/massborrow.F90)
 
 References:
- - [zhang2018impact](@cite)
+
+  - [zhang2018impact](@cite)
 """
 struct VerticalMassBorrowingLimiter{T <: Tuple}
     q_min::T

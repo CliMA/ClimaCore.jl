@@ -9,12 +9,13 @@ export QuadratureStyle,
     GLL, GL, polynomial_degree, degrees_of_freedom, quadrature_points
 
 """
-   QuadratureStyle{Nq}
+QuadratureStyle{Nq}
 
 Quadrature style supertype. See sub-types:
- - [`GLL`](@ref)
- - [`GL`](@ref)
- - [`Uniform`](@ref)
+
+  - [`GLL`](@ref)
+  - [`GL`](@ref)
+  - [`Uniform`](@ref)
 """
 abstract type QuadratureStyle{Nq} end
 
@@ -152,6 +153,7 @@ end
 The matrix which interpolates the Lagrange polynomial of degree `Nq-1` through
 the points `r`, to points `x`. The matrix coefficients are computed using the
 Barycentric formula of [Berrut2004](@cite), section 4:
+
 ```math
 I_{ij} = \\begin{cases}
 1 & \\text{if } x_i = r_j, \\\\
@@ -159,6 +161,7 @@ I_{ij} = \\begin{cases}
 \\frac{\\displaystyle \\frac{w_j}{x_i - r_j}}{\\displaystyle \\sum_k \\frac{w_k}{x_i - r_k}} & \\text{otherwise,}
 \\end{cases}
 ```
+
 where ``w_j`` are the barycentric weights, see [`barycentric_weights`](@ref).
 """
 function interpolation_matrix(
@@ -264,6 +267,7 @@ The spectral differentiation matrix for the Lagrange polynomial of degree `Nq-1`
 interpolating at points `r`.
 
 The matrix coefficients are computed using the [Berrut2004](@cite), section 9.3:
+
 ```math
 D_{ij} = \\begin{cases}
     \\displaystyle
@@ -271,6 +275,7 @@ D_{ij} = \\begin{cases}
     -\\sum_{k \\ne j} D_{kj} &\\text{ if } i = j
 \\end{cases}
 ```
+
 where ``w_j`` are the barycentric weights, see [`barycentric_weights`](@ref).
 """
 function differentiation_matrix(r::SVector{Nq, T}) where {Nq, T}

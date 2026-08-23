@@ -25,6 +25,7 @@ instance when they are detected in a `ClimaCore` operation.
 To do this, we need two ingredients:
 
 First, we need to enable the callback system:
+
 ```@example clima_debug
 import ClimaCore
 ClimaCore.DebugOnly.call_post_op_callback() = true
@@ -34,6 +35,7 @@ The line `ClimaCore.DebugOnly.call_post_op_callback() = true` means that at the
 end of every `ClimaCore` operation, the function
 `ClimaCore.DebugOnly.post_op_callback` is called. By default, this function does
 nothing. So, the second ingredient is to define a method:
+
 ```@example clima_debug
 function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
     has_nans = result isa Number ? isnan(result) : any(isnan, parent(result))
@@ -73,6 +75,7 @@ data = ClimaCore.DataLayouts.VIJFH{FT, 5, 2, 2, 2}(Array{FT})
 @. data = NaN
 ClimaCore.DebugOnly.call_post_op_callback() = false # hide
 ```
+
 This example should print `NaN` on your standard output.
 
 As you see, this only tells us that a `NaN` was found, but not which function
@@ -96,6 +99,7 @@ other packages.
 
 Let us simulate this case (note this is a toy example optimized for clarity and
 not for performance: the functions below have unnecessary allocations)
+
 ```julia
 import ClimaCore
 using ClimaCore.CommonSpaces
@@ -123,6 +127,7 @@ any(isnan, renormalized_energy(myrho, myP, myu)) # true
 
 To debug this, we first need to identify where the first `NaN` is produced. We
 use `DebugOnly.call_post_op_callback` and infiltrate.
+
 ```julia
 import Infiltrator # must be in your default environment
 ClimaCore.DebugOnly.call_post_op_callback() = true
@@ -138,14 +143,17 @@ end
 only when the `condition` is true (in this case `has_nans || has_inf`).
 
 Now, when we run our example, we will see
-```julia
+
+```julia-repl
 julia> renormalized_energy(myrho, myP, myu)
 Infiltrating post_op_callback(::ClimaCore.DataLayouts.VIJFH{...}, ::ClimaCore.DataLayouts.VIJFH{...}, ::Vararg{Any}; kwargs::@Kwargs{})
   at REPL[40]:4
 infil>
 ```
+
 Here, we are dropped into a new REPL with full access to the variables in the scope where the `NaN` occurred. However, because of how `post_op_callback`, this is at a low level within `ClimaCore`, which is typically not useful. Hence, the next step is to type `@trace`, which prints out
-```julia
+
+```text
 [1] post_op_callback(::ClimaCore.DataLayouts.VIJFH{…}, ::ClimaCore.DataLayouts.VIJFH{…}, ::Vararg{…}; kwargs::@Kwargs{})
     at REPL[40]:4
 [2] post_op_callback
@@ -170,6 +178,7 @@ see our functions. In this case, we see that the first `NaN` is in
 `specific_energy`, so we will investigate that function. We leave the
 Infiltrator REPL with `@exit`, disable the `call_post_op_callback`, and move our
 `infiltrate` call within the target function:
+
 ```julia
 ClimaCore.DebugOnly.call_post_op_callback() = false
 function specific_energy(rho, P, u)
@@ -178,6 +187,7 @@ function specific_energy(rho, P, u)
     return (kinetic_energy(u) .+ other_energy(P)) ./ density_without_restmass
 end
 ```
+
 Now, when we evaluate our problematic expression (the one at the top level, in this case `renormalized_energy(myrho, myP, myu)`), we will be dropped in a REPL inside `specific_energy`. Here, we have access to `density_without_restmass`, and we notice that it can be zero, leading to the `NaN`.
 
 !!! tip
@@ -198,6 +208,7 @@ things go wrong.
 Let's now see a different way to use Infiltrator, where we move the variables in specific scope to the Main scope in the REPL and do some analysis on it.
 
 ```julia
+julia> args[2]
 import ClimaCore
 import Infiltrator # must be in your default environment
 ClimaCore.DebugOnly.call_post_op_callback() = true
@@ -236,11 +247,6 @@ ClimaCore.DebugOnly.print_depth_limited_stack_trace(st; maxtypedepth=1)
 # Once there, you can see that the call lead you to `copyto!`,
 # Inspecting `args` shows that the `Broadcasted` object used to populate the
 # result was:
-julia> args[2]
-Base.Broadcast.Broadcasted{ClimaCore.DataLayouts.VIJFHStyle{5, 2, Array{Float64}}}(+, (ClimaCore.DataLayouts.VIJFH{Float64, 5, 2, Array{Float64, 5}}
-  [NaN, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  …  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1))
-
-# And there's your problem, NaNs is on the right-hand-side of that assignment.
 ```
 
 If your broadcasted object is very long, it can be a bit overwhelming to figure
@@ -258,9 +264,10 @@ bc = Infiltrator.safehouse.args[2]; # we know that argument 2 is the broadcasted
 (; result) = Infiltrator.safehouse; # get the result
 @structured_print bc Options(; highlight = x->highlight_nans(x))
 ```
+
 This last line results in:
 
-```julia
+```julia-repl
 julia> @structured_print bc Options(; highlight = x->highlight_nans(x))
 bc
 bc.style::ClimaCore.DataLayouts.VIJFHStyle{5, 2, Array{Float64}}
@@ -286,8 +293,7 @@ bc.axes.5.stop::Int64
 !!! warn
 
     While `post_op_callback` may be helpful, it's not bullet proof. NaNs can
-    infiltrate user data any time internals are used. For example `parent
-    (data) .= NaN` will not be caught by ClimaCore.DebugOnly, and errors can be
+    infiltrate user data any time internals are used. For example `parent (data) .= NaN` will not be caught by ClimaCore.DebugOnly, and errors can be
     observed later than expected.
 
 !!! note
@@ -308,7 +314,7 @@ bc.axes.5.stop::Int64
 Sometimes, we want to start from a given simulation state and explore different
 ideas. For example, we want to run a simulation for 10 days, and then test how
 different approaches affect its stability. Sometimes, checkpoints offer a way to
-do this, but not everything can be checkpointed. 
+do this, but not everything can be checkpointed.
 
 A simple way to "checkpoint" a simulation is to `deepcopy` its state. This
 allows one to step the copy instead of the original one, which can be re-used to
@@ -321,6 +327,7 @@ pointers to perform certain safety checks, and deepcopies return new pointers
 defined on space that are not identically the same.
 
 Let us look at an example of this.
+
 ```julia
 import ClimaCore
 using ClimaCore.CommonSpaces
@@ -329,7 +336,7 @@ other_space = deepcopy(space)
 one = ones(space)
 other_one = ones(other_space)
 
-one .+ other_one  # This throws an error 
+one .+ other_one  # This throws an error
 
 ClimaCore.DebugOnly.allow_mismatched_spaces_unsafe() = true
 one .+ other_one # Now it's fine!

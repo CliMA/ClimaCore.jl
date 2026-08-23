@@ -9,8 +9,8 @@ abstract type AbstractFiniteDifferenceSpace <: AbstractSpace end
 A 1D finite-difference space, that lives on
 either:
 
- - cell centers (where `staggering` is [`Grids.CellCenter`](@ref)) or
- - cell faces (where `staggering` is [`Grids.CellFace`](@ref))
+  - cell centers (where `staggering` is [`Grids.CellCenter`](@ref)) or
+  - cell faces (where `staggering` is [`Grids.CellFace`](@ref))
 """
 struct FiniteDifferenceSpace{
     G <: Grids.AbstractFiniteDifferenceGrid,

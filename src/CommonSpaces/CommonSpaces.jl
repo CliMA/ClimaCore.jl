@@ -36,7 +36,7 @@ import ..Spaces: face_space, center_space
 
 
 """
-	ExtrudedCubedSphereSpace(
+    ExtrudedCubedSphereSpace(
         ::Type{<:AbstractFloat}; # defaults to Float64
         z_elem::Integer,
         z_min::Real,
@@ -61,25 +61,25 @@ import ..Spaces: face_space, center_space
 Construct an [`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) for a
 cubed sphere configuration, given:
 
- - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
- - `z_elem` the number of z-points
- - `z_min` the domain minimum along the z-direction.
- - `z_max` the domain maximum along the z-direction.
- - `radius` the radius of the cubed sphere
- - `h_elem` the number of horizontal elements per side of every panel (6 panels in total)
- - `n_quad_points` the number of quadrature points per horizontal element
- - `device` the `ClimaComms.device`
- - `context` the `ClimaComms.context`
- - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
- - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
- - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
- - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
- - `h_mesh` the horizontal mesh (defaults to `Meshes.EquiangularCubedSphere`)
- - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
- - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
- - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
- - `enable_bubble` enables the "bubble correction" for more accurate element areas when computing the spectral element space. See [`Grids.SpectralElementGrid2D`](@ref) for more information.
- - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
+  - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
+  - `z_elem` the number of z-points
+  - `z_min` the domain minimum along the z-direction.
+  - `z_max` the domain maximum along the z-direction.
+  - `radius` the radius of the cubed sphere
+  - `h_elem` the number of horizontal elements per side of every panel (6 panels in total)
+  - `n_quad_points` the number of quadrature points per horizontal element
+  - `device` the `ClimaComms.device`
+  - `context` the `ClimaComms.context`
+  - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
+  - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
+  - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
+  - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
+  - `h_mesh` the horizontal mesh (defaults to `Meshes.EquiangularCubedSphere`)
+  - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
+  - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
+  - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
+  - `enable_bubble` enables the "bubble correction" for more accurate element areas when computing the spectral element space. See [`Grids.SpectralElementGrid2D`](@ref) for more information.
+  - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
 
 Note that these arguments are all the same as
 [`CommonGrids.ExtrudedCubedSphereGrid`](@ref), except for `staggering`.
@@ -95,10 +95,12 @@ space = ExtrudedCubedSphereSpace(;
     radius = 10,
     h_elem = 10,
     n_quad_points = 4,
-    staggering = CellCenter()
+    staggering = CellCenter(),
 )
 ```
+
 This will construct a cell-center space. If you wish to create a face centered space:
+
 ```julia
 using ClimaCore.CommonSpaces
 space = ExtrudedCubedSphereSpace(;
@@ -108,9 +110,10 @@ space = ExtrudedCubedSphereSpace(;
     radius = 10,
     h_elem = 10,
     n_quad_points = 4,
-    staggering = CellFace()
+    staggering = CellFace(),
 )
 ```
+
 alternatively, you can use the `Spaces.face_space` function.
 """
 function ExtrudedCubedSphereSpace end
@@ -127,7 +130,7 @@ ExtrudedCubedSphereSpace(
 )
 
 """
-	CubedSphereSpace(
+    CubedSphereSpace(
         ::Type{<:AbstractFloat}; # defaults to Float64
         radius::Real,
         h_elem::Integer,
@@ -143,16 +146,16 @@ ExtrudedCubedSphereSpace(
 Construct a [`Spaces.SpectralElementSpace2D`](@ref) for a
 cubed sphere configuration, given:
 
- - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
- - `radius` the radius of the cubed sphere
- - `h_elem` the number of horizontal elements per side of every panel (6 panels in total)
- - `n_quad_points` the number of quadrature points per horizontal element
- - `device` the `ClimaComms.device`
- - `context` the `ClimaComms.context`
- - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
- - `h_mesh` the horizontal mesh (defaults to `Meshes.EquiangularCubedSphere`)
- - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
- - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
+  - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
+  - `radius` the radius of the cubed sphere
+  - `h_elem` the number of horizontal elements per side of every panel (6 panels in total)
+  - `n_quad_points` the number of quadrature points per horizontal element
+  - `device` the `ClimaComms.device`
+  - `context` the `ClimaComms.context`
+  - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
+  - `h_mesh` the horizontal mesh (defaults to `Meshes.EquiangularCubedSphere`)
+  - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
+  - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
 
 Note that these arguments are all the same as [`CommonGrids.CubedSphereGrid`](@ref).
 
@@ -173,7 +176,7 @@ CubedSphereSpace(::Type{FT}; kwargs...) where {FT} =
     Spaces.SpectralElementSpace2D(CubedSphereGrid(FT; kwargs...))
 
 """
-	ColumnSpace(
+    ColumnSpace(
         ::Type{<:AbstractFloat}; # defaults to Float64
         z_elem::Integer,
         z_min::Real,
@@ -187,15 +190,15 @@ CubedSphereSpace(::Type{FT}; kwargs...) where {FT} =
 Construct a 1D [`Spaces.FiniteDifferenceSpace`](@ref) for a
 column configuration, given:
 
- - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
- - `z_elem` the number of z-points
- - `z_min` the domain minimum along the z-direction.
- - `z_max` the domain maximum along the z-direction.
- - `device` the `ClimaComms.device`
- - `context` the `ClimaComms.context`
- - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
- - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
- - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
+  - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
+  - `z_elem` the number of z-points
+  - `z_min` the domain minimum along the z-direction.
+  - `z_max` the domain maximum along the z-direction.
+  - `device` the `ClimaComms.device`
+  - `context` the `ClimaComms.context`
+  - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
+  - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
+  - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
 
 Note that these arguments are all the  same as [`CommonGrids.ColumnGrid`]
 (@ref), except for `staggering`.
@@ -208,7 +211,7 @@ space = ColumnSpace(;
     z_elem = 10,
     z_min = 0,
     z_max = 10,
-    staggering = CellCenter()
+    staggering = CellCenter(),
 )
 ```
 """
@@ -218,7 +221,7 @@ ColumnSpace(::Type{FT}; staggering::Staggering, kwargs...) where {FT} =
     Spaces.FiniteDifferenceSpace(ColumnGrid(FT; kwargs...), staggering)
 
 """
-	Box3DSpace(
+    Box3DSpace(
         ::Type{<:AbstractFloat}; # defaults to Float64
         z_elem::Integer,
         x_min::Real,
@@ -248,29 +251,29 @@ ColumnSpace(::Type{FT}; staggering::Staggering, kwargs...) where {FT} =
 Construct a [`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) for a 3D box
 configuration, given:
 
- - `z_elem` the number of z-points
- - `x_min` the domain minimum along the x-direction.
- - `x_max` the domain maximum along the x-direction.
- - `y_min` the domain minimum along the y-direction.
- - `y_max` the domain maximum along the y-direction.
- - `z_min` the domain minimum along the z-direction.
- - `z_max` the domain maximum along the z-direction.
- - `periodic_x` Bool indicating to use periodic domain along x-direction
- - `periodic_y` Bool indicating to use periodic domain along y-direction
- - `n_quad_points` the number of quadrature points per horizontal element
- - `x_elem` the number of x-points
- - `y_elem` the number of y-points
- - `device` the `ClimaComms.device`
- - `context` the `ClimaComms.context`
- - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
- - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
- - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
- - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
- - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
- - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
- - `enable_bubble` enables the "bubble correction" for more accurate element areas when computing the spectral element space. See [`Grids.SpectralElementGrid2D`](@ref) for more information.
- - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
- - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
+  - `z_elem` the number of z-points
+  - `x_min` the domain minimum along the x-direction.
+  - `x_max` the domain maximum along the x-direction.
+  - `y_min` the domain minimum along the y-direction.
+  - `y_max` the domain maximum along the y-direction.
+  - `z_min` the domain minimum along the z-direction.
+  - `z_max` the domain maximum along the z-direction.
+  - `periodic_x` Bool indicating to use periodic domain along x-direction
+  - `periodic_y` Bool indicating to use periodic domain along y-direction
+  - `n_quad_points` the number of quadrature points per horizontal element
+  - `x_elem` the number of x-points
+  - `y_elem` the number of y-points
+  - `device` the `ClimaComms.device`
+  - `context` the `ClimaComms.context`
+  - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
+  - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
+  - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
+  - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
+  - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
+  - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
+  - `enable_bubble` enables the "bubble correction" for more accurate element areas when computing the spectral element space. See [`Grids.SpectralElementGrid2D`](@ref) for more information.
+  - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
+  - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
 
 Note that these arguments are all  the same as [`CommonGrids.Box3DGrid`]
 (@ref), except for `staggering`.
@@ -292,7 +295,7 @@ space = Box3DSpace(;
     n_quad_points = 4,
     x_elem = 3,
     y_elem = 4,
-    staggering = CellCenter()
+    staggering = CellCenter(),
 )
 ```
 """
@@ -302,7 +305,7 @@ Box3DSpace(::Type{FT}; staggering::Staggering, kwargs...) where {FT} =
     Spaces.ExtrudedFiniteDifferenceSpace(Box3DGrid(FT; kwargs...), staggering)
 
 """
-	SliceXZSpace(
+    SliceXZSpace(
         ::Type{<:AbstractFloat}; # defaults to Float64
         z_elem::Integer,
         x_min::Real,
@@ -324,22 +327,22 @@ Box3DSpace(::Type{FT}; staggering::Staggering, kwargs...) where {FT} =
 Construct a [`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) for a 2D slice
 configuration, given:
 
- - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
- - `z_elem` the number of z-points
- - `x_min` the domain minimum along the x-direction.
- - `x_max` the domain maximum along the x-direction.
- - `z_min` the domain minimum along the z-direction.
- - `z_max` the domain maximum along the z-direction.
- - `periodic_x` Bool indicating to use periodic domain along x-direction
- - `n_quad_points` the number of quadrature points per horizontal element
- - `x_elem` the number of x-points
- - `device` the `ClimaComms.device`
- - `context` the `ClimaComms.context`
- - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
- - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
- - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
- - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
- - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
+  - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
+  - `z_elem` the number of z-points
+  - `x_min` the domain minimum along the x-direction.
+  - `x_max` the domain maximum along the x-direction.
+  - `z_min` the domain minimum along the z-direction.
+  - `z_max` the domain maximum along the z-direction.
+  - `periodic_x` Bool indicating to use periodic domain along x-direction
+  - `n_quad_points` the number of quadrature points per horizontal element
+  - `x_elem` the number of x-points
+  - `device` the `ClimaComms.device`
+  - `context` the `ClimaComms.context`
+  - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
+  - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
+  - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
+  - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
+  - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
 
 Note that these arguments are all the same as [`CommonGrids.SliceXZGrid`](@ref),
 except for `staggering`.
@@ -357,7 +360,7 @@ space = SliceXZSpace(;
     periodic_x = false,
     n_quad_points = 4,
     x_elem = 4,
-    staggering = CellCenter()
+    staggering = CellCenter(),
 )
 ```
 """
@@ -367,7 +370,7 @@ SliceXZSpace(::Type{FT}; staggering::Staggering, kwargs...) where {FT} =
     Spaces.ExtrudedFiniteDifferenceSpace(SliceXZGrid(FT; kwargs...), staggering)
 
 """
-	RectangleXYSpace(
+    RectangleXYSpace(
         ::Type{<:AbstractFloat}; # defaults to Float64
         x_min::Real,
         x_max::Real,
@@ -388,20 +391,20 @@ SliceXZSpace(::Type{FT}; staggering::Staggering, kwargs...) where {FT} =
 Construct a [`Spaces.SpectralElementSpace2D`](@ref) space for a 2D rectangular
 configuration, given:
 
- - `x_min` the domain minimum along the x-direction.
- - `x_max` the domain maximum along the x-direction.
- - `y_min` the domain minimum along the y-direction.
- - `y_max` the domain maximum along the y-direction.
- - `periodic_x` Bool indicating to use periodic domain along x-direction
- - `periodic_y` Bool indicating to use periodic domain along y-direction
- - `n_quad_points` the number of quadrature points per horizontal element
- - `x_elem` the number of x-points
- - `y_elem` the number of y-points
- - `device` the `ClimaComms.device`
- - `context` the `ClimaComms.context`
- - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
- - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
- - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
+  - `x_min` the domain minimum along the x-direction.
+  - `x_max` the domain maximum along the x-direction.
+  - `y_min` the domain minimum along the y-direction.
+  - `y_max` the domain maximum along the y-direction.
+  - `periodic_x` Bool indicating to use periodic domain along x-direction
+  - `periodic_y` Bool indicating to use periodic domain along y-direction
+  - `n_quad_points` the number of quadrature points per horizontal element
+  - `x_elem` the number of x-points
+  - `y_elem` the number of y-points
+  - `device` the `ClimaComms.device`
+  - `context` the `ClimaComms.context`
+  - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
+  - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
+  - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
 
 # Example usage
 
@@ -426,7 +429,7 @@ RectangleXYSpace(::Type{FT}; kwargs...) where {FT} =
     Spaces.SpectralElementSpace2D(RectangleXYGrid(FT; kwargs...))
 
 """
-	PointColumnEnsembleSpace(
+    PointColumnEnsembleSpace(
         ::Type{<:AbstractFloat}; # defaults to Float64
         points::AbstractVector{Geometry.LatLongPoint{FT}},
         z_elem::Integer,
@@ -442,15 +445,15 @@ Construct a [`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) (aliased as
 `Spaces.MultiColumnFiniteDifferenceSpace`) for N independent columns at arbitrary (lat, lon)
 locations on a sphere, given:
 
- - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
- - `points` a vector of `Geometry.LatLongPoint` specifying each column location
- - `z_elem` the number of z-points
- - `z_min` the domain minimum along the z-direction
- - `z_max` the domain maximum along the z-direction
- - `device` the `ClimaComms.device`
- - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
- - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
- - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
+  - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
+  - `points` a vector of `Geometry.LatLongPoint` specifying each column location
+  - `z_elem` the number of z-points
+  - `z_min` the domain minimum along the z-direction
+  - `z_max` the domain maximum along the z-direction
+  - `device` the `ClimaComms.device`
+  - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
+  - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
+  - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
 
 Note that these arguments are all the same as [`CommonGrids.PointColumnEnsembleGrid`](@ref),
 except for `staggering`.
@@ -461,11 +464,11 @@ except for `staggering`.
 using ClimaCore.CommonSpaces, ClimaCore.Geometry
 points = [LatLongPoint(0.0, 0.0), LatLongPoint(10.0, 20.0), LatLongPoint(-5.0, 90.0)]
 space = PointColumnEnsembleSpace(;
-    points  = points,
-    z_elem  = 10,
-    z_min   = 0,
-    z_max   = 10_000,
-    staggering = CellCenter()
+    points = points,
+    z_elem = 10,
+    z_min = 0,
+    z_max = 10_000,
+    staggering = CellCenter(),
 )
 ```
 """

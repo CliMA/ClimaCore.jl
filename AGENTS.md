@@ -15,6 +15,11 @@ The shared engineering guidelines are vendored as a Git subtree at `docs/dev-gui
 
 Edits to shared guidelines belong in [CliMA/DeveloperGuides](https://github.com/CliMA/DeveloperGuides), not in the vendored copy here. A scheduled workflow (`.github/workflows/update_dev_guides.yml`) syncs the subtree monthly.
 
+## Formatting and pre-commit hooks
+
+- Format code before committing. CI checks formatting via the `prek` hook in [.github/workflows/run-prek.yml](.github/workflows/run-prek.yml), which runs JuliaFormatter from the version-pinned [.dev/format/Project.toml](.dev/format/Project.toml) environment (currently `=2.10.1`). Match CI with either `prek run julia-formatter --all-files` or the pinned env directly: `julia --startup-file=no --project=.dev/format -e 'using Pkg; Pkg.instantiate(io=devnull); using JuliaFormatter; format(ARGS)' .`. Avoid `julia -e 'using JuliaFormatter; format(".")'` from your global environment — a mismatched version produces a different diff.
+- Optional but recommended: install the pre-commit hooks in [.pre-commit-config.yaml](.pre-commit-config.yaml) (`uv tool install prek && prek install`) to auto-format and trim trailing whitespace on commit. See [docs/src/Contributing.md](docs/src/Contributing.md) ("Pre-commit hooks").
+
 ## Repo-specific guide
 
 - [docs/clima_core_specific.md](docs/clima_core_specific.md) — directory layout, key abstractions, test groups, and conventions specific to this package.

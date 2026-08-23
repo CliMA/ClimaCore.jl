@@ -21,9 +21,9 @@ pid, nprocs = ClimaComms.init(context)
 #=
  _ _
 |3|4|
- - - 
+ - -
 |1|2|
- - -  
+ - -
 =#
 @testset "2x2 element mesh with periodic boundaries on 4 processes" begin
     n1, n2 = 2, 2

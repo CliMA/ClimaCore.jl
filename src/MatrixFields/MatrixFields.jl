@@ -10,32 +10,34 @@ an `ExtrudedFiniteDifferenceSpace` can be interpreted as a collection of band
 matrices, one for each column of the `Field`. Such `Field`s are called
 `ColumnwiseBandMatrixField`s, and this module adds the following functionality
 for them:
-- Constructors, e.g., `matrix_field = @. BidiagonalMatrixRow(field1, field2)`
-- Linear combinations, e.g., `@. 3 * matrix_field1 + matrix_field2 / 3`
-- Matrix-vector multiplication, e.g., `@. matrix_field * field`
-- Matrix-matrix multiplication, e.g., `@. matrix_field1 * matrix_field2`
-- Compatibility with `LinearAlgebra.I`, e.g., `@. matrix_field = (4I,)` or
+
+  - Constructors, e.g., `matrix_field = @. BidiagonalMatrixRow(field1, field2)`
+  - Linear combinations, e.g., `@. 3 * matrix_field1 + matrix_field2 / 3`
+  - Matrix-vector multiplication, e.g., `@. matrix_field * field`
+  - Matrix-matrix multiplication, e.g., `@. matrix_field1 * matrix_field2`
+  - Compatibility with `LinearAlgebra.I`, e.g., `@. matrix_field = (4I,)` or
     `@. matrix_field - (4I,)`
-- Compatibility with generic data types, e.g., the entries of `matrix_field` can
+  - Compatibility with generic data types, e.g., the entries of `matrix_field` can
     be iterators instead of single values, which allows `matrix_field` to
     represent multiple band matrices at the same time
-- Integration with `Operators`, e.g., the `matrix_field` that gets applied to
+  - Integration with `Operators`, e.g., the `matrix_field` that gets applied to
     the argument of any `FiniteDifferenceOperator` `op` can be obtained using
     the `FiniteDifferenceOperator` `operator_matrix(op)`
-- Conversions to native array types, e.g., `field2arrays(matrix_field)` can
+  - Conversions to native array types, e.g., `field2arrays(matrix_field)` can
     convert each column of `matrix_field` into a `BandedMatrix` from
     `BandedMatrices.jl`
-- Custom printing, e.g., `matrix_field` gets displayed as a `BandedMatrix`,
+  - Custom printing, e.g., `matrix_field` gets displayed as a `BandedMatrix`,
     specifically, as the `BandedMatrix` that corresponds to its first column
 
 This module also adds support for defining and manipulating sparse block
 matrices of `Field`s. Specifically, it adds the `FieldMatrix` type, which is a
 dictionary that maps pairs of `FieldName`s to `ColumnwiseBandMatrixField`s or
 multiples of `LinearAlgebra.I`. This comes with the following functionality:
-- Addition and subtraction, e.g., `@. field_matrix1 + field_matrix2`
-- Matrix-vector multiplication, e.g., `@. field_matrix * field_vector`
-- Matrix-matrix multiplication, e.g., `@. field_matrix1 * field_matrix2`
-- The ability to solve linear equations using `FieldMatrixSolver`, which is a
+
+  - Addition and subtraction, e.g., `@. field_matrix1 + field_matrix2`
+  - Matrix-vector multiplication, e.g., `@. field_matrix * field_vector`
+  - Matrix-matrix multiplication, e.g., `@. field_matrix1 * field_matrix2`
+  - The ability to solve linear equations using `FieldMatrixSolver`, which is a
     generalization of `ldiv!` that is designed to optimize solver performance
 """
 module MatrixFields

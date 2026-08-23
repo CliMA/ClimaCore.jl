@@ -8,16 +8,15 @@ Plots a heatmap of a field.
 
 Inherited from [`Makie.mesh`](https://docs.makie.org/stable/examples/plotting_functions/mesh/index.html#mesh).
 
-- `colormap::Union{Symbol, Vector{<:Colorant}} = :viridis`` sets the colormap that is sampled for numeric colors.
+  - `colormap::Union{Symbol, Vector{<:Colorant}} = :viridis`` sets the colormap that is sampled for numeric colors.
 
-- `colorrange::Tuple{<:Real, <:Real}` sets the values representing the start and end points of colormap.
+  - `colorrange::Tuple{<:Real, <:Real}` sets the values representing the start and end points of colormap.
 
-- `nan_color::Union{Symbol, <:Colorant} = RGBAf(0,0,0,0)` sets a replacement color for `color = NaN`.
+  - `nan_color::Union{Symbol, <:Colorant} = RGBAf(0,0,0,0)` sets a replacement color for `color = NaN`.
 
-- `lowclip::Union{Automatic, Symbol, <:Colorant} = automatic` sets a color for any value below the colorrange.
+  - `lowclip::Union{Automatic, Symbol, <:Colorant} = automatic` sets a color for any value below the colorrange.
 
-- `highclip::Union{Automatic, Symbol, <:Colorant} = automatic` sets a color for any value above the colorrange.
-
+  - `highclip::Union{Automatic, Symbol, <:Colorant} = automatic` sets a color for any value above the colorrange.
 """
 @recipe FieldHeatmap (field,) begin
     coords = nothing

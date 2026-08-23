@@ -91,11 +91,12 @@ distributed using this context. As with [`HDF5Writer`](@ref), this requires a
 HDF5 library with MPI support.
 
 # Interface
-- [`read_domain`](@ref)
-- [`read_mesh`](@ref)
-- [`read_topology`](@ref)
-- [`read_space`](@ref)
-- [`read_field`](@ref)
+
+  - [`read_domain`](@ref)
+  - [`read_mesh`](@ref)
+  - [`read_topology`](@ref)
+  - [`read_space`](@ref)
+  - [`read_field`](@ref)
 
 # Usage
 
@@ -110,10 +111,14 @@ end
 ```
 
 To explore the contents of the `reader`, use either
+
 ```julia
 julia> reader |> propertynames
+
 ```
+
 e.g, to explore the components of the `space`,
+
 ```julia
 julia> reader.space_cache
 Dict{Any, Any} with 3 entries:
@@ -124,7 +129,6 @@ Dict{Any, Any} with 3 entries:
 
 Once "unpacked" as shown above, `ClimaCorePlots` or `ClimaCoreMakie` can be used to visualise
 fields. `ClimaCoreTempestRemap` supports interpolation onto user-specified grids if necessary.
-
 """
 struct HDF5Reader{C <: ClimaComms.AbstractCommsContext}
     file::HDF5.File

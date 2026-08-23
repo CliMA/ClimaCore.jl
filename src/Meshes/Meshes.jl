@@ -34,6 +34,7 @@ In 1D, faces and vertices are the same, and both are numbered `[1,2]`.
 
 In 2D, a face is a line segment between to vertices, and both are numbered `[1,2,3,4]`,
 in a counter-clockwise direction.
+
 ```
  v4        f3        v3
    o-----------------o
@@ -50,18 +51,20 @@ f4 |                 | f2     f2 =>  v2 v3
 # Interface
 
 A subtype of `AbstractMesh` should define the following methods:
-- [`domain(mesh)`](@ref)
-- [`elements(mesh)`](@ref)
-- [`is_boundary_face(mesh, elem, face)`](@ref)
-- [`boundary_face_name(mesh, elem, face)`](@ref)
-- [`opposing_face(mesh, elem, face)`](@ref)
-- [`coordinates(mesh, elem, vert)`](@ref)
-- [`containing_element`](@ref) (optional)
+
+  - [`domain(mesh)`](@ref)
+  - [`elements(mesh)`](@ref)
+  - [`is_boundary_face(mesh, elem, face)`](@ref)
+  - [`boundary_face_name(mesh, elem, face)`](@ref)
+  - [`opposing_face(mesh, elem, face)`](@ref)
+  - [`coordinates(mesh, elem, vert)`](@ref)
+  - [`containing_element`](@ref) (optional)
 
 The following types/methods are provided by `AbstractMesh`:
-- [`SharedVertices(mesh, elem, vert)`](@ref)
-- [`face_connectivity_matrix(mesh[,elemorder])`](@ref face_connectivity_matrix)
-- [`vertex_connectivity_matrix(mesh[,elemorder])`](@ref vertex_connectivity_matrix)
+
+  - [`SharedVertices(mesh, elem, vert)`](@ref)
+  - [`face_connectivity_matrix(mesh[,elemorder])`](@ref face_connectivity_matrix)
+  - [`vertex_connectivity_matrix(mesh[,elemorder])`](@ref vertex_connectivity_matrix)
 """
 abstract type AbstractMesh{dim} end
 

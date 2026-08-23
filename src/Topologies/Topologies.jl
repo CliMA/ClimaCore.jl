@@ -13,36 +13,35 @@ import ..slab, ..column, ..level
 import ..DeviceSideDevice, ..DeviceSideContext
 
 """
-   AbstractTopology
+AbstractTopology
 
 Subtypes of `AbstractHorizontalTopology` define connectiveness of a
 mesh in the horizontal domain.
 
 # Interfaces
 
-- [`nelems`](@ref)
-- [`domain(topology::AbstractTopology)`](@ref)
-- [`mesh`](@ref)
-- [`nlocalelems`](@ref)
-- [`nneighbors`](@ref)
-- [`nsendelems`](@ref)
-- [`nghostelems`](@ref)
-- [`localelemindex`](@ref)
-- [`vertex_coordinates`](@ref)
-- [`opposing_face`](@ref)
-- [`face_node_index`](@ref)
-- [`interior_faces`](@ref)
-- [`ghost_faces`](@ref)
-- [`vertex_node_index`](@ref)
-- [`local_neighboring_elements`](@ref)
-- [`ghost_neighboring_elements`](@ref)
-- [`local_vertices`](@ref)
-- [`ghost_vertices`](@ref)
-- [`neighbors`](@ref)
-- [`boundary_tags`](@ref)
-- [`boundary_tag`](@ref)
-- [`boundary_faces`](@ref)
-
+  - [`nelems`](@ref)
+  - [`domain(topology::AbstractTopology)`](@ref)
+  - [`mesh`](@ref)
+  - [`nlocalelems`](@ref)
+  - [`nneighbors`](@ref)
+  - [`nsendelems`](@ref)
+  - [`nghostelems`](@ref)
+  - [`localelemindex`](@ref)
+  - [`vertex_coordinates`](@ref)
+  - [`opposing_face`](@ref)
+  - [`face_node_index`](@ref)
+  - [`interior_faces`](@ref)
+  - [`ghost_faces`](@ref)
+  - [`vertex_node_index`](@ref)
+  - [`local_neighboring_elements`](@ref)
+  - [`ghost_neighboring_elements`](@ref)
+  - [`local_vertices`](@ref)
+  - [`ghost_vertices`](@ref)
+  - [`neighbors`](@ref)
+  - [`boundary_tags`](@ref)
+  - [`boundary_tag`](@ref)
+  - [`boundary_faces`](@ref)
 """
 abstract type AbstractTopology end
 
@@ -144,9 +143,9 @@ function vertex_coordinates end
 
 The opposing face of face number `face` of element `elem` in `topology`.
 
-- `opelem` is the opposing element number, 0 for a boundary, negative for a ghost element
-- `opface` is the opposite face number, or boundary face number if a boundary
-- `reversed` indicates whether the opposing face has the opposite orientation.
+  - `opelem` is the opposing element number, 0 for a boundary, negative for a ghost element
+  - `opface` is the opposite face number, or boundary face number if a boundary
+  - `reversed` indicates whether the opposing face has the opposite orientation.
 """
 function opposing_face end
 

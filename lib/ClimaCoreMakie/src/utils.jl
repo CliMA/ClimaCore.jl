@@ -7,7 +7,7 @@ or `Point3f`.
 `coords` can be one of the following:
 - `field` containing the coordinates of the vertices (default is to use `Fields.coordinate_field(space)`)
 - a tuple of scalar fields, one for each coordinate
-- a type which 
+- a type which
 """
 
 function plot_vertices(space::ClimaCore.Spaces.AbstractSpace, ::Nothing)
