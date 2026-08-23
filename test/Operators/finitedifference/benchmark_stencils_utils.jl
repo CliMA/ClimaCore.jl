@@ -159,6 +159,11 @@ bcs_tested(c, ::typeof(op_Upwind3rdOrderBiasedProductC2F!)) = ((;),)
 # Composed operators (bcs handled case-by-case)
 bcs_tested(c, ::typeof(op_divUpwind3rdOrderBiasedProductC2F!)) =
     ((; inner = (;), outer = set_value_contra3_bcs(c)), )
+# The Laplacian of a center field (the most common composed vertical operator
+# downstream); the inner gradient carries the SetGradient boundary conditions,
+# since GradientC2F no longer accepts SetValue.
+bcs_tested(c, ::typeof(op_divgrad_CC!)) =
+    ((; inner = set_gradient_value_bcs(c), outer = (;)), )
 bcs_tested(c, ::typeof(op_divgrad_FF!)) =
     ((; inner = (;), outer = set_divergence_bcs(c)), )
 bcs_tested(c, ::typeof(op_div_interp_CC!)) =
@@ -343,6 +348,7 @@ function benchmark_operators_base(bm, trials, t_min, cfield, ffield, name; compi
         # op_Upwind3rdOrderBiasedProductC2F!, # TODO: do we need to test this for different w values?
         #### Composed
         op_divUpwind3rdOrderBiasedProductC2F!,
+        op_divgrad_CC!,
         op_divgrad_FF!,
         op_div_interp_CC!,
         op_div_interp_FF!,
@@ -387,6 +393,12 @@ function test_results_column(t_min)
     [(op_CurlC2F!, :SetCurl, :SetCurl), 1.692*μs*buffer],
     [(op_UpwindBiasedProductC2F!, :none), 765.401*ns*buffer],
     [(op_divUpwind3rdOrderBiasedProductC2F!, :none, :SetValue, :SetValue), 2.540*μs*buffer],
+    # The reference times of entries whose boundary conditions changed in the
+    # operator refactor (op_DivergenceF2C! above, op_divgrad_CC!,
+    # op_div_interp_FF!) were carried over from the closest pre-refactor
+    # entries rather than re-measured; they are within-buffer tripwires, not
+    # measurements.
+    [(op_divgrad_CC!, :SetGradient, :SetGradient, :none), 924.147*ns*buffer],
     [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 876.510*ns*buffer],
     [(op_div_interp_CC!, :SetValue, :SetValue, :none), 721.119*ns*buffer],
     [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), 686.581*ns*buffer],
@@ -428,6 +440,9 @@ function test_results_sphere(t_min)
     [(op_CurlC2F!, :SetCurl, :SetCurl), 4.669*ms*buffer],
     [(op_UpwindBiasedProductC2F!, :none), 3.432*ms*buffer],
     [(op_divUpwind3rdOrderBiasedProductC2F!, :none, :SetValue, :SetValue), 5.650*ms*buffer],
+    # See the note in test_results_column: the changed-BC entries' reference
+    # times were carried over, not re-measured.
+    [(op_divgrad_CC!, :SetGradient, :SetGradient, :none), 4.474*ms*buffer],
     [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 4.470*ms*buffer],
     [(op_div_interp_CC!, :SetValue, :SetValue, :none), 3.566*ms*buffer],
     [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), 3.663*ms*buffer],

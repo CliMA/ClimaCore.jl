@@ -149,14 +149,26 @@ struct CustomGhost end
             boundary_names = (:bottom, :top),
         )
         n = 8
-        mesh = Meshes.IntervalMesh(domain; nelems = n)
+        # Stretched mesh, so that the references would catch a wrong level in
+        # a local geometry lookup (every J factor is different).
+        mesh = Meshes.IntervalMesh(
+            domain,
+            Meshes.ExponentialStretching(FT(1) / 2);
+            nelems = n,
+        )
         topology = Topologies.IntervalTopology(context, mesh)
         center_space = Spaces.CenterFiniteDifferenceSpace(topology)
         face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
         lg_face = Fields.local_geometry_field(face_space)
+        zface = Fields.coordinate_field(face_space).z
 
         θ = sin.(3 .* Fields.coordinate_field(center_space).z)
         dt = FT(0.1)
+
+        # Velocity profiles: uniformly positive, uniformly negative, and
+        # sign-alternating within the column, all varying from face to face so
+        # that a wrong face index in a velocity lookup changes the result.
+        w_profiles = (z -> 1 + z / 2, z -> -1 - z / 2, z -> cospi(5 * z))
 
         # host copies for the pointwise references
         cpu(x) = Array(parent(x))[:]
@@ -167,8 +179,8 @@ struct CustomGhost end
         stencil(i) =
             (t[clamp_c(i - 2)], t[clamp_c(i - 1)], t[clamp_c(i)], t[clamp_c(i + 1)])
 
-        for w_sign in (FT(1), FT(-1))
-            w = Geometry.WVector.(w_sign .* ones(FT, face_space))
+        for w_fn in w_profiles
+            w = @. Geometry.WVector(FT(w_fn(zface)))
             v³ = cpu(Geometry.contravariant3.(w, lg_face))
 
             # LinVanLeerC2F: materialized directly, no enclosing operator
@@ -187,7 +199,7 @@ struct CustomGhost end
             # FCTBorisBook: the ghost padding makes the one-sided difference
             # on the boundary side vanish at the boundary faces, and that
             # difference bounds the corrected flux, so the flux there is zero.
-            A = Geometry.Contravariant3Vector.(w_sign .* ones(FT, face_space))
+            A = @. Geometry.Contravariant3Vector(FT(w_fn(zface)))
             A³ = cpu(A)
             op_bb = Operators.FCTBorisBook()
             flux_bb = cpu(op_bb.(A, θ))
@@ -278,18 +290,16 @@ struct CustomGhost end
         end
         extrapolate_bcs(N) =
             (; bottom = Operators.Extrapolate(N), top = Operators.Extrapolate(N))
-        for w_sign in (FT(1), FT(-1))
-            w = Geometry.WVector.(w_sign .* ones(FT, face_space))
+        for w_fn in w_profiles
+            w = @. Geometry.WVector(FT(w_fn(zface)))
             v³ = cpu(Geometry.contravariant3.(w, lg_face))
-            A = Geometry.Contravariant3Vector.(w_sign .* ones(FT, face_space))
+            A = @. Geometry.Contravariant3Vector(FT(w_fn(zface)))
             A³ = cpu(A)
 
-            # Extrapolate{0} is the default, and matches the index clamping
-            flux_default = cpu(Operators.FCTBorisBook().(A, θ))
-            @test cpu(Operators.FCTBorisBook(; extrapolate_bcs(0)...).(A, θ)) ==
-                  flux_default
-
-            for N in (1, 2)
+            # N = 0 also checks that the default Extrapolate{0} matches the
+            # hand-written index clamping (`ghost_stencil(i, 0)` reduces to
+            # `stencil(i)`).
+            for N in 0:2
                 bcs = extrapolate_bcs(N)
 
                 op_bb = Operators.FCTBorisBook(; bcs...)
@@ -326,29 +336,40 @@ struct CustomGhost end
             end
 
             # FCTZalesak: the extrapolation applies componentwise to its
-            # tuple-valued stencil entries
+            # tuple-valued stencil entries. As for the scalar-valued operators
+            # above, the boundary face's ghost tuples share the 2-point
+            # extrapolation (order at most 1), while the one-in face's single
+            # ghost tuple uses the full order over the 3 in-range entries.
             θᵗᵈ = θ .- dt .* θ
             tᵗᵈ = cpu(θᵗᵈ)
             tup(j) = (t[clamp_c(j)] / dt, tᵗᵈ[clamp_c(j)] / dt)
-            g_bot2 = 2 .* tup(1) .- tup(2)
-            g_top2 = 2 .* tup(n) .- tup(n - 1)
-            ghost_tup(j, i) =
-                (i <= 2 && j <= 0) ? g_bot2 :
-                (i >= n && j >= n + 1) ? g_top2 : tup(j)
-            op_z = Operators.FCTZalesak(; extrapolate_bcs(1)...)
-            flux_z = cpu(op_z.(A, tuple.(θ ./ dt, θᵗᵈ ./ dt)))
-            ref_z = [
-                op_z(
-                    A³[max(i - 1, 1)],
-                    A³[i],
-                    A³[min(i + 1, n + 1)],
-                    ghost_tup(i - 2, i),
-                    ghost_tup(i - 1, i),
-                    ghost_tup(i, i),
-                    ghost_tup(i + 1, i),
-                ) for i in 1:(n + 1)
-            ]
-            @test flux_z ≈ ref_z
+            gtup2(N, j₁, j₂) = N == 0 ? tup(j₁) : 2 .* tup(j₁) .- tup(j₂)
+            gtup3(N, j₁, j₂, j₃) =
+                N == 0 ? tup(j₁) :
+                N == 1 ? 2 .* tup(j₁) .- tup(j₂) :
+                3 .* tup(j₁) .- 3 .* tup(j₂) .+ tup(j₃)
+            for N in 0:2
+                ghost_tup(j, i) =
+                    (i == 1 && j <= 0) ? gtup2(N, 1, 2) :
+                    (i == 2 && j == 0) ? gtup3(N, 1, 2, 3) :
+                    (i == n + 1 && j >= n + 1) ? gtup2(N, n, n - 1) :
+                    (i == n && j == n + 1) ? gtup3(N, n, n - 1, n - 2) :
+                    tup(j)
+                op_z = Operators.FCTZalesak(; extrapolate_bcs(N)...)
+                flux_z = cpu(op_z.(A, tuple.(θ ./ dt, θᵗᵈ ./ dt)))
+                ref_z = [
+                    op_z(
+                        A³[max(i - 1, 1)],
+                        A³[i],
+                        A³[min(i + 1, n + 1)],
+                        ghost_tup(i - 2, i),
+                        ghost_tup(i - 1, i),
+                        ghost_tup(i, i),
+                        ghost_tup(i + 1, i),
+                    ) for i in 1:(n + 1)
+                ]
+                @test flux_z ≈ ref_z
+            end
         end
 
         # The advection operators only accept Extrapolate boundary
@@ -505,10 +526,13 @@ end
             v ≥ 0 ? v * (-2a⁻⁻ + 10a⁻ + 4a⁺) / 12 :
             v * (4a⁻ + 10a⁺ - 2a⁺⁺) / 12
 
+        # Face-varying velocity, so that a wrong face index in a velocity
+        # lookup changes the result even on this short column.
+        zface = Fields.coordinate_field(face_space).z
         for w_sign in (FT(1), FT(-1)), N in 0:2
-            w = Geometry.WVector.(w_sign .* ones(FT, face_space))
+            w = @. Geometry.WVector(w_sign * (1 + zface))
             v³ = cpu(Geometry.contravariant3.(w, lg_face))
-            A = Geometry.Contravariant3Vector.(w_sign .* ones(FT, face_space))
+            A = @. Geometry.Contravariant3Vector(w_sign * (1 + zface))
             A³ = cpu(A)
             bcs =
                 (; bottom = Operators.Extrapolate(N), top = Operators.Extrapolate(N))
@@ -532,12 +556,54 @@ end
             flux_bb = cpu(op_bb.(A, θ))
             @test flux_bb ≈ [op_bb(A³[i], stencils[i]...) for i in 1:3]
 
+            # FCTZalesak: neighboring velocities clamp to the column's 3 faces
+            θᵗᵈ = θ .- dt .* θ
+            tᵗᵈ = cpu(θᵗᵈ)
+            tup2c(j) = (t[j] / dt, tᵗᵈ[j] / dt)
+            gtup_bot = N == 0 ? tup2c(1) : 2 .* tup2c(1) .- tup2c(2)
+            gtup_top = N == 0 ? tup2c(2) : 2 .* tup2c(2) .- tup2c(1)
+            tup_stencils = (
+                (gtup_bot, gtup_bot, tup2c(1), tup2c(2)),
+                (gtup_bot, tup2c(1), tup2c(2), gtup_top),
+                (tup2c(1), tup2c(2), gtup_top, gtup_top),
+            )
+            op_z = Operators.FCTZalesak(; bcs...)
+            flux_z = cpu(op_z.(A, tuple.(θ ./ dt, θᵗᵈ ./ dt)))
+            @test flux_z ≈ [
+                op_z(
+                    A³[max(i - 1, 1)],
+                    A³[i],
+                    A³[min(i + 1, 3)],
+                    tup_stencils[i]...,
+                ) for i in 1:3
+            ]
+
+            # TVDLimitedFluxC2F, with the velocity supplied as contravariant
+            # data
+            u³ = Geometry.Contravariant3Vector.(
+                Geometry.contravariant3.(w, lg_face),
+            )
+            op_tvd = Operators.TVDLimitedFluxC2F(;
+                method = Operators.MinModLimiter(),
+                bcs...,
+            )
+            flux_tvd = cpu(op_tvd.(A, θ, u³))
+            @test flux_tvd ≈ [op_tvd(A³[i], stencils[i]..., v³[i]) for i in 1:3]
+
             # Upwind3rdOrderBiasedProductC2F is rewritten as an operator-matrix
             # multiply; at the middle face its boundary row must fold the ghost
             # extrapolations of both boundaries
             op_u3 = Operators.Upwind3rdOrderBiasedProductC2F(; bcs...)
             flux_u3 = cpu(op_u3.(w, θ))
             @test flux_u3 ≈ [upwind3rd(v³[i], stencils[i]...) for i in 1:3]
+
+            # UpwindBiasedProductC2F's boundary faces reduce to v³ times the
+            # closest center for every extrapolation order
+            upwind1(v, a⁻, a⁺) = ((v + abs(v)) * a⁻ + (v - abs(v)) * a⁺) / 2
+            op_u1 = Operators.UpwindBiasedProductC2F(; bcs...)
+            flux_u1 = cpu(op_u1.(w, θ))
+            @test flux_u1 ≈
+                  [v³[1] * t[1], upwind1(v³[2], t[1], t[2]), v³[3] * t[2]]
         end
 
         # On a 1-center column, every stencil point collapses to the single
@@ -548,9 +614,15 @@ end
         face_space1 = Spaces.FaceFiniteDifferenceSpace(center_space1)
         lg_face1 = Fields.local_geometry_field(face_space1)
         θ1 = FT(0.3) .* ones(center_space1)
+        zface1 = Fields.coordinate_field(face_space1).z
         for w_sign in (FT(1), FT(-1)), N in 0:2
-            w1 = Geometry.WVector.(w_sign .* ones(FT, face_space1))
+            # Face-varying velocity, so the two faces cannot be confused
+            w1 = @. Geometry.WVector(w_sign * (1 + zface1))
             v³1 = cpu(Geometry.contravariant3.(w1, lg_face1))
+            A1 = @. Geometry.Contravariant3Vector(w_sign * (1 + zface1))
+            u³1 = Geometry.Contravariant3Vector.(
+                Geometry.contravariant3.(w1, lg_face1),
+            )
             bcs =
                 (; bottom = Operators.Extrapolate(N), top = Operators.Extrapolate(N))
             for flux in (
@@ -569,7 +641,99 @@ end
             )
                 @test flux ≈ FT(0.3) .* v³1
             end
+            # Every stencil difference vanishes on a 1-center column, so the
+            # corrected/limited fluxes are exactly zero
+            @test cpu(Operators.FCTBorisBook(; bcs...).(A1, θ1)) == [0, 0]
+            @test cpu(
+                Operators.FCTZalesak(; bcs...).(
+                    A1,
+                    tuple.(θ1 ./ dt, θ1 ./ dt),
+                ),
+            ) == [0, 0]
+            @test cpu(
+                Operators.TVDLimitedFluxC2F(;
+                    method = Operators.MinModLimiter(),
+                    bcs...,
+                ).(
+                    A1,
+                    θ1,
+                    u³1,
+                ),
+            ) == [0, 0]
         end
+    end
+end
+
+@testset "Nonlinear advection operators on a periodic column" begin
+    # On a periodic column there are no boundaries: stencil indices of the
+    # advected field and the neighboring-face velocity indices wrap around
+    # instead of clamping, and boundary conditions are ignored.
+    for FT in (Float32, Float64)
+        context = ClimaComms.SingletonCommsContext()
+        domain = Domains.IntervalDomain(
+            Geometry.ZPoint(FT(0)),
+            Geometry.ZPoint(FT(1));
+            periodic = true,
+        )
+        n = 8
+        mesh = Meshes.IntervalMesh(domain; nelems = n)
+        topology = Topologies.IntervalTopology(context, mesh)
+        center_space = Spaces.CenterFiniteDifferenceSpace(topology)
+        face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
+        lg_face = Fields.local_geometry_field(face_space)
+        zface = Fields.coordinate_field(face_space).z
+
+        cpu(x) = Array(parent(x))[:]
+        θ = sin.(3 .* Fields.coordinate_field(center_space).z)
+        t = cpu(θ)
+        dt = FT(0.1)
+
+        # face i sits between centers i - 1 and i, all indices modulo n
+        wrap(j) = mod1(j, n)
+        stencil(i) = (t[wrap(i - 2)], t[wrap(i - 1)], t[wrap(i)], t[wrap(i + 1)])
+
+        # sign-alternating, face-varying velocity
+        w = @. Geometry.WVector(FT(cospi(5 * zface)))
+        v³ = cpu(Geometry.contravariant3.(w, lg_face))
+        A = @. Geometry.Contravariant3Vector(FT(cospi(5 * zface)))
+        A³ = cpu(A)
+        @test length(v³) == n # periodic columns store n faces
+
+        op_lvl = Operators.LinVanLeerC2F(;
+            constraint = Operators.MonotoneLocalExtrema(),
+        )
+        flux_lvl = cpu(op_lvl.(w, θ, dt))
+        @test flux_lvl ≈ [op_lvl(v³[i], stencil(i)..., dt) for i in 1:n]
+
+        op_bb = Operators.FCTBorisBook()
+        flux_bb = cpu(op_bb.(A, θ))
+        @test flux_bb ≈ [op_bb(A³[i], stencil(i)...) for i in 1:n]
+
+        θᵗᵈ = θ .- dt .* θ
+        tᵗᵈ = cpu(θᵗᵈ)
+        tup(j) = (t[wrap(j)] / dt, tᵗᵈ[wrap(j)] / dt)
+        op_z = Operators.FCTZalesak()
+        flux_z = cpu(op_z.(A, tuple.(θ ./ dt, θᵗᵈ ./ dt)))
+        @test flux_z ≈ [
+            op_z(
+                A³[wrap(i - 1)],
+                A³[i],
+                A³[wrap(i + 1)],
+                tup(i - 2),
+                tup(i - 1),
+                tup(i),
+                tup(i + 1),
+            ) for i in 1:n
+        ]
+
+        u³ = Geometry.Contravariant3Vector.(
+            Geometry.contravariant3.(w, lg_face),
+        )
+        op_tvd = Operators.TVDLimitedFluxC2F(;
+            method = Operators.MinModLimiter(),
+        )
+        flux_tvd = cpu(op_tvd.(A, θ, u³))
+        @test flux_tvd ≈ [op_tvd(A³[i], stencil(i)..., v³[i]) for i in 1:n]
     end
 end
 
