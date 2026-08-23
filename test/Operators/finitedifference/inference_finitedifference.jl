@@ -93,12 +93,58 @@ function opt_RightBiasedC2F(center_field)
     return RB.(identity.(center_field))
 end
 
+# The boundary conditions here must be named after the space's boundaries
+# (left/right below), so that the named-boundary-condition path is what gets
+# analyzed; a (bottom, top) pair of Extrapolate{0}s is the default, which
+# short-circuits the name lookup.
 function opt_UpwindBiasedProductC2F_Extrapolate(face_vel, center_field)
     UB = Operators.UpwindBiasedProductC2F(
-        bottom = Operators.Extrapolate(0),
-        top = Operators.Extrapolate(0),
+        left = Operators.Extrapolate(0),
+        right = Operators.Extrapolate(0),
     )
     return UB.(face_vel, identity.(center_field))
+end
+
+function opt_Upwind3rdOrderBiasedProductC2F_mixed(face_vel, center_field)
+    UB = Operators.Upwind3rdOrderBiasedProductC2F(
+        left = Operators.Extrapolate(0),
+        right = Operators.Extrapolate(2),
+    )
+    return UB.(face_vel, identity.(center_field))
+end
+
+function opt_FCTBorisBook(face_flux, center_field)
+    op = Operators.FCTBorisBook(
+        left = Operators.Extrapolate(1),
+        right = Operators.Extrapolate(1),
+    )
+    return op.(face_flux, identity.(center_field))
+end
+
+function opt_FCTZalesak(face_flux, center_field, center_field_td)
+    op = Operators.FCTZalesak(
+        left = Operators.Extrapolate(1),
+        right = Operators.Extrapolate(1),
+    )
+    return op.(face_flux, tuple.(center_field, center_field_td))
+end
+
+function opt_TVDLimitedFluxC2F(face_flux, center_field, face_ct3)
+    op = Operators.TVDLimitedFluxC2F(
+        left = Operators.Extrapolate(1),
+        right = Operators.Extrapolate(1),
+        method = Operators.MinModLimiter(),
+    )
+    return op.(face_flux, identity.(center_field), face_ct3)
+end
+
+function opt_LinVanLeerC2F(face_vel, center_field, dt)
+    op = Operators.LinVanLeerC2F(
+        left = Operators.Extrapolate(1),
+        right = Operators.Extrapolate(1),
+        constraint = Operators.MonotoneLocalExtrema(),
+    )
+    return op.(face_vel, identity.(center_field), dt)
 end
 
 
@@ -187,6 +233,20 @@ end
                 face_velocities,
                 centers,
             )
+
+            # The reworked advection operators: matrix-rewritten (upwind) and
+            # pointwise (FCT/TVD/van Leer), including the ghost-point
+            # extrapolations and, for FCTZalesak, the tuple-valued advected
+            # field and the neighboring-face velocities
+            face_ct3 = Geometry.Contravariant3Vector.(face_values)
+            @test_opt opt_Upwind3rdOrderBiasedProductC2F_mixed(
+                face_velocities,
+                centers,
+            )
+            @test_opt opt_FCTBorisBook(face_ct3, centers)
+            @test_opt opt_FCTZalesak(face_ct3, centers, centers)
+            @test_opt opt_TVDLimitedFluxC2F(face_ct3, centers, face_ct3)
+            @test_opt opt_LinVanLeerC2F(face_velocities, centers, FT(0.1))
 
             @test_opt opt_GradientC2F_SetGradient(centers)
 
