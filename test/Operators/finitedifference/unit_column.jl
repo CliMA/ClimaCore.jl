@@ -52,6 +52,16 @@ device = ClimaComms.device()
         ∂cos = Geometry.WVector.(∇ᶠ.(cos.(centers)))
         @test ∂cos ≈ Geometry.WVector.(.-sin.(faces)) atol = 1e-2
 
+        # The gradient of the coordinate field is exactly 1 at the interior
+        # faces, and SetGradient prescribes it exactly at the boundary faces,
+        # so the whole result is exact (up to roundoff).
+        ∇ᶠ_exact = Operators.GradientC2F(
+            left = Operators.SetGradient(Geometry.WVector(FT(1))),
+            right = Operators.SetGradient(Geometry.WVector(FT(1))),
+        )
+        ∂z = Geometry.WVector.(∇ᶠ_exact.(centers))
+        @test ∂z ≈ Geometry.WVector.(ones(FT, face_space)) rtol = 10 * eps(FT)
+
         # Test that broadcasting into incorrect field space throws an error
         empty_centers = zeros(FT, center_space)
         @test_throws Exception empty_centers .= ∇ᶠ.(cos.(centers))
@@ -172,10 +182,13 @@ end
         ∂sin = Geometry.WVector.(∂.(w .* I.(θ)))
         @test ∂sin ≈ Geometry.WVector.(cos.(centers)) atol = 1e-2
 
-        # 3) we set boundaries on both: 2nd should take precedence
+        # 3) we set boundaries on both: 2nd should take precedence. The NaN
+        # boundary values prove that the inner boundary values do not enter
+        # the result at all (any leak, even through a zero coefficient, would
+        # poison it).
         I = Operators.InterpolateC2F(
-            left = Operators.SetValue(FT(1)),
-            right = Operators.SetValue(FT(1)),
+            left = Operators.SetValue(FT(NaN)),
+            right = Operators.SetValue(FT(NaN)),
         )
         ∂ = Operators.GradientF2C(
             left = Operators.SetValue(FT(0)),
@@ -638,4 +651,173 @@ end
         # difference of the fluxes across the cell
         @test cpu_parent(gradf2c.(flux))[:] ≈ ref
     end
+end
+
+@testset "Linear operators on 1- and 2-center columns" begin
+    # Columns too short for a stencil's interior are supported: the two
+    # boundary windows overlap, and every level is computed with the
+    # appropriate boundary row. These are the linear-operator counterparts of
+    # the short-column advection tests in unit_upwind_schemes.jl.
+    for FT in (Float32, Float64)
+        context = ClimaComms.SingletonCommsContext()
+        domain = Domains.IntervalDomain(
+            Geometry.ZPoint{FT}(0),
+            Geometry.ZPoint{FT}(1);
+            boundary_names = (:bottom, :top),
+        )
+        make_spaces(n) = begin
+            mesh = Meshes.IntervalMesh(domain; nelems = n)
+            topology = Topologies.IntervalTopology(context, mesh)
+            center_space = Spaces.CenterFiniteDifferenceSpace(topology)
+            (center_space, Spaces.FaceFiniteDifferenceSpace(center_space))
+        end
+        cpu(x) = Array(parent(x))[:]
+
+        # --- 2-center column (Δz = 1/2) -----------------------------------
+        (center_space, face_space) = make_spaces(2)
+        θ = sin.(3 .* Fields.coordinate_field(center_space).z)
+        t = cpu(θ)
+        dz = FT(1) / 2
+
+        interp_set = Operators.InterpolateC2F(;
+            bottom = Operators.SetValue(FT(7)),
+            top = Operators.SetValue(FT(-3)),
+        )
+        @test cpu(interp_set.(θ)) ≈ [7, (t[1] + t[2]) / 2, -3]
+
+        interp_extrap = Operators.InterpolateC2F(;
+            bottom = Operators.Extrapolate(),
+            top = Operators.Extrapolate(),
+        )
+        @test cpu(interp_extrap.(θ)) ≈ [t[1], (t[1] + t[2]) / 2, t[2]]
+
+        # a missing boundary condition gives a zero boundary row
+        @test cpu(Operators.InterpolateC2F().(θ)) ≈
+              [0, (t[1] + t[2]) / 2, 0]
+
+        grad_c2f = Operators.GradientC2F(;
+            bottom = Operators.SetGradient(Geometry.WVector(FT(2))),
+            top = Operators.SetGradient(Geometry.WVector(FT(-5))),
+        )
+        @test cpu(Geometry.WVector.(grad_c2f.(θ))) ≈
+              [2, (t[2] - t[1]) / dz, -5]
+
+        # face-valued input field, for the F2C operators
+        ψ = cos.(2 .* Fields.coordinate_field(face_space).z)
+        p = cpu(ψ)
+        @test cpu(Geometry.WVector.(Operators.GradientF2C().(ψ))) ≈
+              [(p[2] - p[1]) / dz, (p[3] - p[2]) / dz]
+        grad_f2c_set = Operators.GradientF2C(;
+            bottom = Operators.SetValue(FT(1)),
+            top = Operators.SetValue(FT(-1)),
+        )
+        @test cpu(Geometry.WVector.(grad_f2c_set.(ψ))) ≈
+              [(p[2] - 1) / dz, (-1 - p[2]) / dz]
+
+        # DivergenceF2C with SetValue replaces the boundary-face input values
+        w = Geometry.WVector.(ψ)
+        div_set = Operators.DivergenceF2C(;
+            bottom = Operators.SetValue(Geometry.WVector(FT(1))),
+            top = Operators.SetValue(Geometry.WVector(FT(-1))),
+        )
+        @test cpu(div_set.(w)) ≈ [(p[2] - 1) / dz, (-1 - p[2]) / dz]
+
+        # CurlC2F: C(v)¹ = -∂v₂/J, C(v)² = ∂v₁/J at the interior face, and
+        # the prescribed curl at the boundary faces
+        v12 = @. Geometry.Covariant12Vector(θ, 2 * θ)
+        curl = Operators.CurlC2F(;
+            bottom = Operators.SetCurl(Geometry.Contravariant12Vector(FT(0), FT(0))),
+            top = Operators.SetCurl(Geometry.Contravariant12Vector(FT(0), FT(0))),
+        )
+        curl_vals = cpu(curl.(v12)) # layout: (face, component)
+        Δv₁ = t[2] - t[1]
+        Δv₂ = 2 * (t[2] - t[1])
+        @test curl_vals ≈ [0, -Δv₂ / dz, 0, 0, Δv₁ / dz, 0]
+
+        # WeightedInterpolateC2F
+        zc2 = Fields.coordinate_field(center_space).z
+        ω = @. 1 + zc2
+        ω_vals = cpu(ω)
+        winterp = Operators.WeightedInterpolateC2F(;
+            bottom = Operators.SetValue(FT(4)),
+            top = Operators.SetValue(FT(-6)),
+        )
+        @test cpu(winterp.(ω, θ)) ≈ [
+            4,
+            (ω_vals[1] * t[1] + ω_vals[2] * t[2]) / (ω_vals[1] + ω_vals[2]),
+            -6,
+        ]
+
+        # --- 1-center column (Δz = 1) --------------------------------------
+        (center_space1, face_space1) = make_spaces(1)
+        θ1 = FT(0.3) .* ones(center_space1)
+        @test cpu(
+            Operators.InterpolateC2F(;
+                bottom = Operators.Extrapolate(),
+                top = Operators.Extrapolate(),
+            ).(
+                θ1,
+            ),
+        ) ≈ [0.3, 0.3]
+        @test cpu(
+            Operators.InterpolateC2F(;
+                bottom = Operators.SetValue(FT(1)),
+                top = Operators.SetValue(FT(2)),
+            ).(
+                θ1,
+            ),
+        ) ≈ [1, 2]
+        @test cpu(
+            Geometry.WVector.(
+                Operators.GradientC2F(;
+                    bottom = Operators.SetGradient(Geometry.WVector(FT(2))),
+                    top = Operators.SetGradient(Geometry.WVector(FT(-5))),
+                ).(
+                    θ1,
+                ),
+            ),
+        ) ≈ [2, -5]
+
+        # both boundary-face input values are replaced, and the single center
+        # differences them
+        ψ1 = cos.(2 .* Fields.coordinate_field(face_space1).z)
+        w1 = Geometry.WVector.(ψ1)
+        div_set1 = Operators.DivergenceF2C(;
+            bottom = Operators.SetValue(Geometry.WVector(FT(1))),
+            top = Operators.SetValue(Geometry.WVector(FT(-1))),
+        )
+        @test cpu(div_set1.(w1)) ≈ [-2]
+        p1 = cpu(ψ1)
+        @test cpu(Geometry.WVector.(Operators.GradientF2C().(ψ1))) ≈
+              [p1[2] - p1[1]]
+    end
+end
+
+@testset "Removed boundary conditions are rejected" begin
+    # These operator/boundary-condition combinations were removed; each can be
+    # written in terms of the remaining operators and boundary conditions (see
+    # the testset above and NEWS.md). Pin the removals, so that they cannot
+    # silently come back without boundary rows to support them.
+    FT = Float64
+    @test_throws AssertionError Operators.GradientC2F(;
+        bottom = Operators.SetValue(FT(0)),
+    )
+    @test_throws AssertionError Operators.DivergenceC2F(;
+        bottom = Operators.SetValue(Geometry.WVector(FT(0))),
+    )
+    @test_throws AssertionError Operators.CurlC2F(;
+        bottom = Operators.SetValue(Geometry.Covariant12Vector(FT(0), FT(0))),
+    )
+    @test_throws AssertionError Operators.InterpolateC2F(;
+        bottom = Operators.SetGradient(Geometry.WVector(FT(0))),
+    )
+    @test_throws AssertionError Operators.WeightedInterpolateC2F(;
+        bottom = Operators.SetGradient(Geometry.WVector(FT(0))),
+    )
+    @test_throws AssertionError Operators.DivergenceF2C(;
+        bottom = Operators.Extrapolate(),
+    )
+    @test_throws AssertionError Operators.GradientF2C(;
+        bottom = Operators.Extrapolate(),
+    )
 end

@@ -183,6 +183,170 @@ end
     )
 end
 
+# Test the operator matrices' interior and boundary rows against hand-written
+# stencils. The order is reduced to the number of in-range interior points.
+@testset "Operator matrix rows against hand-written stencils" begin
+    FT = Float64
+    n = 5 # enough for 2 interior faces between the two boundary windows
+    comms_ctx = ClimaComms.SingletonCommsContext(comms_device)
+    domain = Domains.IntervalDomain(
+        Geometry.ZPoint(FT(0)),
+        Geometry.ZPoint(FT(10));
+        boundary_names = (:bottom, :top),
+    )
+    # Stretched mesh, so that the expected metric (J) factors are nontrivial.
+    mesh = Meshes.IntervalMesh(
+        domain,
+        Meshes.ExponentialStretching(FT(5));
+        nelems = n,
+    )
+    topology = Topologies.IntervalTopology(comms_ctx, mesh)
+    center_space = Spaces.CenterFiniteDifferenceSpace(topology)
+    face_space = Spaces.FaceFiniteDifferenceSpace(topology)
+
+    # Sign-changing velocity, to exercise both upwind branches at interior and
+    # boundary faces.
+    ᶠz = Fields.coordinate_field(face_space).z
+    ᶠw = @. Geometry.WVector(2 * cos(3 * ᶠz) + FT(1) / 10)
+    ᶠv³ = vec(
+        Array(
+            parent(
+                Geometry.contravariant3.(
+                    ᶠw,
+                    Fields.local_geometry_field(face_space),
+                ),
+            ),
+        ),
+    )
+    ᶜJ = vec(Array(parent(Fields.local_geometry_field(center_space).J)))
+    ᶠJ = vec(Array(parent(Fields.local_geometry_field(face_space).J)))
+
+    # The single-column parent array has singleton horizontal dimensions;
+    # flatten it to (level, band entry).
+    level_by_entry(field) =
+        reshape(Array(parent(field)), size(parent(field), 1), :)
+
+    # Materializes the matrix of a one-argument operator as a field of rows by
+    # multiplying it with the identity matrix on its input space.
+    function matrix_rows(op, input_space)
+        op_matrix = MatrixFields.operator_matrix(op)
+        input_ones = ones(input_space)
+        return level_by_entry(
+            materialize(@lazy @. op_matrix() * DiagonalMatrixRow(input_ones)),
+        )
+    end
+
+    # InterpolateC2F: interior faces average the two adjacent centers. With
+    # Extrapolate, the boundary face copies the closest center; with SetValue
+    # (or no boundary condition), the matrix's boundary rows are zero (the
+    # value is imposed outside the matrix, by a SetBoundaryOperator).
+    interp_interior = [f in (1, n + 1) ? [0, 0] : [0.5, 0.5] for f in 1:(n + 1)]
+    @test matrix_rows(InterpolateC2F(), center_space) ≈
+          stack(interp_interior; dims = 1)
+    @test matrix_rows(
+        InterpolateC2F(; bottom = SetValue(FT(0)), top = SetValue(FT(0))),
+        center_space,
+    ) ≈ stack(interp_interior; dims = 1)
+    @test matrix_rows(
+        InterpolateC2F(; bottom = Extrapolate(), top = Extrapolate()),
+        center_space,
+    ) ≈ stack(
+        [f == 1 ? [0, 1] : f == n + 1 ? [1, 0] : [0.5, 0.5] for f in 1:(n + 1)];
+        dims = 1,
+    )
+
+    # GradientF2C: G(x)[i] = (x[i+1/2] - x[i-1/2]) e³. Without boundary
+    # conditions the boundary-face values of the input are used; SetValue
+    # zeroes the fixed input's coefficient (the prescribed value's contribution
+    # is affine, not linear).
+    @test matrix_rows(GradientF2C(), face_space) ≈
+          stack([[-1, 1] for i in 1:n]; dims = 1)
+    @test matrix_rows(
+        GradientF2C(; bottom = SetValue(FT(0)), top = SetValue(FT(0))),
+        face_space,
+    ) ≈ stack(
+        [i == 1 ? [0, 1] : i == n ? [-1, 0] : [-1, 1] for i in 1:n];
+        dims = 1,
+    )
+
+    # DivergenceF2C: D(v)[i] = (J v³[i+1/2] - J v³[i-1/2]) / J[i], with the
+    # fixed input's coefficient zeroed under SetValue.
+    div_bcs = (;
+        bottom = SetValue(zero(Geometry.Contravariant3Vector{FT})),
+        top = SetValue(zero(Geometry.Contravariant3Vector{FT})),
+    )
+    @test matrix_rows(DivergenceF2C(; div_bcs...), face_space) ≈ stack(
+        [
+            [
+                i == 1 ? zero(FT) : -(ᶠJ[i] / ᶜJ[i]),
+                i == n ? zero(FT) : ᶠJ[i + 1] / ᶜJ[i],
+            ] for i in 1:n
+        ];
+        dims = 1,
+    )
+
+    # UpwindBiasedProductC2F: interior row ((v³ + |v³|) / 2, (v³ - |v³|) / 2).
+    # Its stencil only reaches one ghost point, at each boundary face itself,
+    # where a single interior point is in range, so every extrapolation order
+    # gives the same boundary row: v³ times the closest center.
+    for N in (0, 2)
+        upwind1_op_matrix = MatrixFields.operator_matrix(
+            UpwindBiasedProductC2F(;
+                bottom = Extrapolate(N),
+                top = Extrapolate(N),
+            ),
+        )
+        upwind1_matrix = materialize(@lazy @. upwind1_op_matrix(ᶠw))
+        @test level_by_entry(upwind1_matrix) ≈ stack(
+            [
+                let v = ᶠv³[f]
+                    f == 1 ? [0, v] :
+                    f == n + 1 ? [v, 0] :
+                    [(v + abs(v)) / 2, (v - abs(v)) / 2]
+                end for f in 1:(n + 1)
+            ];
+            dims = 1,
+        )
+    end
+
+    # Upwind3rdOrderBiasedProductC2F: interior row
+    # (-v - |v|, 7v + 3|v|, 7v - 3|v|, -v + |v|) / 12 over the 4 centers around
+    # the face. The boundary rows below were derived by hand: substitute the
+    # shared ghost value g = Σ wₖ xₖ (with the Extrapolate weights over the
+    # in-range centers, ordered from the boundary outwards, and the order
+    # reduced to the in-range count) into the interior stencil and collect the
+    # coefficients of the in-range centers.
+    function upwind3_expected_row(v, N, f)
+        a = abs(v)
+        if f == 1               # boundary face: 2 ghosts, 2 in range, order ≤ 1
+            N == 0 ? [0, 0, 13v - a, -v + a] : [0, 0, 19v + a, -7v - a]
+        elseif f == 2           # one-in face: 1 ghost, 3 in range
+            N == 0 ? [0, 6v + 2a, 7v - 3a, -v + a] :
+            N == 1 ? [0, 5v + a, 8v - 2a, -v + a] : [0, 4v, 10v, -2v]
+        elseif f == n           # one-in face, top
+            N == 0 ? [-v - a, 7v + 3a, 6v - 2a, 0] :
+            N == 1 ? [-v - a, 8v + 2a, 5v - a, 0] : [-2v, 10v, 4v, 0]
+        elseif f == n + 1       # boundary face, top
+            N == 0 ? [-v - a, 13v + a, 0, 0] : [-7v + a, 19v - a, 0, 0]
+        else                    # interior
+            [-v - a, 7v + 3a, 7v - 3a, -v + a]
+        end ./ 12
+    end
+    for N in 0:2
+        upwind3_op_matrix = MatrixFields.operator_matrix(
+            Upwind3rdOrderBiasedProductC2F(;
+                bottom = Extrapolate(N),
+                top = Extrapolate(N),
+            ),
+        )
+        upwind3_matrix = materialize(@lazy @. upwind3_op_matrix(ᶠw))
+        @test level_by_entry(upwind3_matrix) ≈ stack(
+            [upwind3_expected_row(ᶠv³[f], N, f) for f in 1:(n + 1)];
+            dims = 1,
+        )
+    end
+end
+
 @testset "Operator Matrix Broadcasting" begin
     FT = Float64
     center_space, face_space = test_spaces(FT)

@@ -64,8 +64,17 @@ import .TestUtilities: convergence_rate
         V = Geometry.WVector.(ones(FT, fs))
 
         function ∑tendencies!(dT, T, z, t)
+            # Dirichlet condition at the bottom. Unlike a prescribed analytic 
+            # gradient, this uses the evolving solution's own half-cell difference,
+            # so the scheme's bottom-boundary treatment is part of what the 
+            # convergence rate measures.
             bc_gb = Operators.SetGradient(
-                Geometry.WVector(FT(∇gaussian(z₀, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ))),
+                Geometry.Covariant3Vector.(
+                    2 .* (
+                        Fields.level(T, 1) .-
+                        FT(gaussian(z₀, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ))
+                    ),
+                ),
             )
             bc_gt = Operators.SetGradient(
                 Geometry.WVector(FT(∇gaussian(z₁, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ))),
@@ -107,13 +116,16 @@ import .TestUtilities: convergence_rate
         computed_result = sol.u[end]
         analytical_result = gaussian.(zp, t₁; μ = μ, δ = δ, ν = ν, 𝓌 = 𝓌)
         Δh[k] = (z₁ - z₀) / n
+        # Root-mean-square error. (Dividing the Euclidean norm by N instead of
+        # √N would scale the error by an extra √Δh and inflate the measured
+        # rate by 1/2.)
         err[k] =
             norm(parent(computed_result) .- analytical_result) /
-            length(analytical_result)
+            sqrt(length(analytical_result))
     end
     conv = convergence_rate(err, Δh)
     # conv should be approximately 2 for second order-accurate stencil.
-    @test 1.4 ≤ conv[1] ≤ 2.6
-    @test 1.4 ≤ conv[2] ≤ 2.6
+    @test conv[1] ≈ 2 atol = 0.3
+    @test conv[2] ≈ 2 atol = 0.3
     @test err[3] ≤ err[2] ≤ err[1] ≤ 1e-2
 end
