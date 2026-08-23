@@ -467,7 +467,7 @@ function multiply_matrix_at_index(
     # boundary's window can also have matrix row entries that reach past the
     # other end of the column
     if !isnothing(bc)
-        space2 = axes(arg)
+        space2 = Operators.reconstruct_placeholder_space(axes(arg), space)
         boundary_modified_ld1 =
             max(Operators.left_idx(space2) - idx, boundary_modified_ld1)
         boundary_modified_ud1 =

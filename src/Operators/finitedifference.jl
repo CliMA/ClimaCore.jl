@@ -233,21 +233,23 @@ end
 # reduced order keeps the zero-weight terms out of the computation (see
 # `extrapolate_weights` for the weights themselves). The reconstruction of a
 # tuple-valued field applies componentwise, through the AutoBroadcaster
-# arithmetic.
+# arithmetic. The result must have the same type as the inputs (which are
+# already AutoBroadcasters for tuple-valued fields, wrapped by `getidx`), so
+# the wrappers are not dropped here: `advection_ghost_values` substitutes the
+# result for a subset of the clamped stencil values, and a type mismatch
+# between the two makes the stencil evaluation dynamically dispatched.
 @inline (::Extrapolate{N})(x₁, x₂) where {N} =
     extrapolate_ghost_value(Val(min(N, 1)), x₁, x₂, x₂)
 @inline (::Extrapolate{N})(x₁, x₂, x₃) where {N} =
     extrapolate_ghost_value(Val(min(N, 2)), x₁, x₂, x₃)
 @inline extrapolate_ghost_value(::Val{0}, x₁, x₂, x₃) = x₁
 @inline extrapolate_ghost_value(::Val{1}, x₁, x₂, x₃) =
-    drop_auto_broadcasters(
-        2 * add_auto_broadcasters(x₁) - add_auto_broadcasters(x₂),
-    )
+    2 * add_auto_broadcasters(x₁) - add_auto_broadcasters(x₂)
+# Grouped as 3(x₁ - x₂) + x₃ rather than 3x₁ - 3x₂ + x₃ so that constant data
+# is reconstructed exactly
 @inline extrapolate_ghost_value(::Val{2}, x₁, x₂, x₃) =
-    drop_auto_broadcasters(
-        3 * add_auto_broadcasters(x₁) - 3 * add_auto_broadcasters(x₂) +
-        add_auto_broadcasters(x₃),
-    )
+    3 * (add_auto_broadcasters(x₁) - add_auto_broadcasters(x₂)) +
+    add_auto_broadcasters(x₃)
 
 # Deprecated aliases for the one-sided reconstruction boundary conditions that
 # Extrapolate replaces. Note that the aliases are NOT numerically identical to
@@ -1994,8 +1996,10 @@ The following boundary conditions are supported:
     zero normal derivative only where the boundary is flat; elsewhere the value
     that gives one is ``-g^{31} \\partial_1 x / g^{33}``.
 
-To prescribe the boundary *value* of `x` instead (the removed `SetValue`
-boundary condition), see [`gradient_c2f_dirichlet`](@ref).
+To prescribe the boundary value of `x` instead (the removed `SetValue`
+boundary condition), see [`gradient_c2f_dirichlet`](@ref); for a Robin
+condition combining the value and the vertical derivative, see
+[`gradient_c2f_robin`](@ref).
 """
 struct GradientC2F{BC} <: GradientOperator
     bcs::BC
@@ -2118,7 +2122,7 @@ The following boundary conditions are supported:
     D(v)[\\tfrac{1}{2}] = x
     ```
 
-To prescribe the boundary *value* of `v` instead (the removed `SetValue`
+To prescribe the boundary value of `v` instead (the removed `SetValue`
 boundary condition), see [`divergence_c2f_dirichlet`](@ref).
 """
 struct DivergenceC2F{BC} <: DivergenceOperator
@@ -2185,7 +2189,7 @@ The following boundary conditions are supported:
   - [`SetCurl(v⁰)`](@ref): enforce the curl operator output at the boundary to be
     the contravariant vector `v⁰`.
 
-To prescribe the boundary *value* of `v` instead (the removed `SetValue`
+To prescribe the boundary value of `v` instead (the removed `SetValue`
 boundary condition), see [`curl_c2f_dirichlet`](@ref).
 """
 struct CurlC2F{BC} <: CurlFiniteDifferenceOperator
@@ -2260,7 +2264,7 @@ end
     gradient_c2f_dirichlet(x; <boundary_name> = x₀...)
 
 The vertical gradient of the center-valued field `x` interpolated to faces,
-with the *value* of `x` prescribed to be `x₀` at each named boundary face: the
+with the value of `x` prescribed to be `x₀` at each named boundary face: the
 exact replacement for the removed `GradientC2F(<boundary_name> = SetValue(x₀)).(x)`, built (for `bottom` and `top` boundaries) as
 
 ```julia
@@ -2314,7 +2318,7 @@ end
     divergence_c2f_dirichlet(v; <boundary_name> = v₀...)
 
 The vertical contribution to the divergence of the center-valued vector field
-`v` interpolated to faces, with the *value* of `v` prescribed to be `v₀` at
+`v` interpolated to faces, with the value of `v` prescribed to be `v₀` at
 each named boundary face: the exact replacement for the removed
 `DivergenceC2F(<boundary_name> = SetValue(v₀)).(v)`, built by wrapping a plain
 `DivergenceC2F` in a [`SetBoundaryOperator`](@ref) that overrides each
@@ -2390,7 +2394,7 @@ end
     curl_c2f_dirichlet(u; <boundary_name> = u₀...)
 
 The vertical-derivative contribution to the curl of the center-valued
-covariant vector field `u` interpolated to faces, with the *value* of `u`
+covariant vector field `u` interpolated to faces, with the value of `u`
 prescribed to be `u₀` at each named boundary face: the exact replacement for
 the removed `CurlC2F(<boundary_name> = SetValue(u₀)).(u)`, built by supplying
 the removed stencil's boundary rows,
