@@ -122,7 +122,7 @@ const center = Geometry.LatLongPoint(0.0, 270.0)
 # 6 × 16² spectral elements on the cubed sphere, 4 × 4 GLL nodes in each
 space = CubedSphereSpace(; radius = R, h_elem = 16, n_quad_points = 4)
 coords = Fields.coordinate_field(space)
-global_geom = Spaces.global_geometry(space)
+const global_geom = Spaces.global_geometry(space)
 
 u = @. Geometry.UVVector(u₀ * cosd(coords.lat), 0.0)       # solid-body rotation
 h = map(coords) do c
@@ -148,7 +148,7 @@ sol = CTS.solve(prob, CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()); dt = 20 * 60.0
 # over a closed surface, so mass is conserved to roundoff (measured drift:
 # 4e-15), and the L₁ error decreases by roughly a factor of 3 per halving of
 # the element size.
-sum(sol.u[end]) ≈ sum(h)
+@assert sum(sol.u[end]) ≈ sum(h)
 ```
 
 Operators are matrix-free: they define the action of the operator directly on a
