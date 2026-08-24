@@ -264,7 +264,7 @@ it, so a tendency written for one rank is already the distributed one.
   - Spaces support masks (`enable_mask = true` plus `set_mask!`), so nodes over
     the ocean (or wherever data is missing) can be skipped entirely.
 
-## Scope: what is in the box, and what is not
+## Scope
 
 **In:** spectral elements (CG/DG) on cubed spheres and rectangles; staggered
 finite differences in the vertical, with stretching, terrain-following
