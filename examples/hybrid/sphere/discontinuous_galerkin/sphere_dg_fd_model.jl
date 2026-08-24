@@ -501,7 +501,9 @@ let
     zf = vec(Array(parent(fcoords.z))[:, 1, 1, 1, 1])
     Δz_min = minimum(diff(zf))
     c_max = sqrt(γ * R_d * T_e)
-    @info "DG-FD sphere setup" stepper helem npoly zelem Δt t_end κ₄ κ₄_cfl_cap filter_Nc h_node Δz_min
+    # Peak surface elevation (bottom face physical z): 0 for flat, ≈h₀ for hj.
+    max_mtn = maximum(parent(Fields.level(fcoords.z, ClimaCore.Utilities.half)))
+    @info "DG-FD sphere setup" stepper topo max_mtn helem npoly zelem Δt t_end κ₄ κ₄_cfl_cap filter_Nc h_node Δz_min
     @info "Acoustic CFL estimates" vertical = c_max * Δt / Δz_min horizontal =
         c_max * Δt / h_node
 end
