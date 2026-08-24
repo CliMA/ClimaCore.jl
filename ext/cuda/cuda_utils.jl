@@ -132,6 +132,25 @@ function max_active_blocks(threads_per_block, regs_per_thread, shmem_per_block)
     return (max_blocks_per_sm * attrs.sm_count, limit)
 end
 
+# The number of warps per multiprocessor that a given register count allows,
+# which is the quantity `__launch_bounds__` lets us ask ptxas to target. Register
+# pressure maps onto a handful of discrete occupancy steps rather than a
+# continuum -- on sm_80, 255 registers allow 8 warps per multiprocessor, 168
+# allow 12, and 128 allow 16 -- so the only register request worth making is the
+# one that reaches the next step up.
+function max_warps_per_sm_by_registers(regs_per_thread)
+    attrs = device_attributes()
+    max_warps_per_sm = fld(attrs.max_threads_per_sm, attrs.threads_per_warp)
+    iszero(regs_per_thread) && return max_warps_per_sm
+    regs_per_thread > attrs.max_regs_per_thread && return 0
+    regs_per_warp = regs_per_thread * attrs.threads_per_warp
+    allocated_regs_per_warp =
+        cld(regs_per_warp, attrs.regs_per_allocation) * attrs.regs_per_allocation
+    max_regs_per_scheduler = fld(attrs.max_regs_per_sm, attrs.schedulers_per_sm)
+    warps_per_scheduler = fld(max_regs_per_scheduler, allocated_regs_per_warp)
+    return min(warps_per_scheduler * attrs.schedulers_per_sm, max_warps_per_sm)
+end
+
 # cudaOccMaxPotentialOccupancyBlockSize times the maximum number of waves,
 # optimized for single-stream execution of both small and large workloads
 # https://gitlab.com/nvidia/headers/cuda-individual/cudart/-/blob/main/cuda_occupancy.h#L1865-1965
@@ -263,7 +282,7 @@ function launch_configuration(
     strict = true,
     max_waves = nothing,
 ) where {F}
-    cu_func = (CUDA.@cuda always_inline = true launch = false f(args...)).fun
+    cu_func = compile_kernel(f, args, launch_bounds(f, args)).fun
     cache_key = (cu_func, strict, max_waves, config_args...)
     lock(LAUNCH_CONFIGURATION_CACHE_LOCK)
     try
@@ -280,6 +299,196 @@ function config_via_occupancy(f::F, nitems, args) where {F}
     threads_per_block = launch_configuration(f, args, nitems; strict = false).threads
     return (; threads = threads_per_block, blocks = cld(nitems, threads_per_block))
 end
+
+# `@cuda` requires literal keyword names, so the annotated and unannotated
+# compilations have to be separate call sites rather than one splatted keyword
+# tuple. Keeping the unannotated site free of `maxthreads`/`blocks_per_sm`
+# entirely, rather than passing `nothing` for them, also keeps its compiler
+# configuration identical to the one built when launch bounds are switched off,
+# so no kernel is recompiled merely because the mechanism exists.
+compile_kernel(f::F, args, ::Nothing, name = nothing) where {F} =
+    CUDA.@cuda launch = false name = name always_inline = true f(args...)
+compile_kernel(f::F, args, bounds::NamedTuple, name = nothing) where {F} =
+    CUDA.@cuda launch = false name = name always_inline = true maxthreads =
+        bounds.maxthreads blocks_per_sm = bounds.blocks_per_sm f(args...)
+
+launch_kernel!(
+    f!::F!,
+    args,
+    ::Nothing;
+    name,
+    always_inline,
+    threads,
+    blocks,
+    shmem,
+) where {F!} =
+    CUDA.@cuda name = name always_inline = always_inline threads = threads blocks =
+        blocks shmem = shmem f!(args...)
+launch_kernel!(
+    f!::F!,
+    args,
+    bounds::NamedTuple;
+    name,
+    always_inline,
+    threads,
+    blocks,
+    shmem,
+) where {F!} =
+    CUDA.@cuda name = name always_inline = always_inline threads = threads blocks =
+        blocks shmem = shmem maxthreads = bounds.maxthreads blocks_per_sm =
+        bounds.blocks_per_sm f!(args...)
+
+# Target occupancy for `__launch_bounds__`, in warps per multiprocessor, and the
+# per-thread growth in local memory tolerated to reach it. The target defaults to
+# the occupancy step above the 8 warps that an sm_80 kernel at the 255-register
+# ceiling is held to; reaching it needs registers down to 168, rather than the
+# 128 that a 16-warp target would demand. Setting the target to zero disables the
+# mechanism, restoring unannotated launches.
+const LAUNCH_BOUNDS_TARGET_WARPS_PER_SM = Ref{Int}(12)
+const LAUNCH_BOUNDS_SPILL_BUDGET = Ref{Int}(256)
+
+const LaunchBounds = @NamedTuple{maxthreads::Int, blocks_per_sm::Int}
+const LaunchBoundsDecision = @NamedTuple{
+    kernel::Symbol,
+    bounds::Union{Nothing, LaunchBounds},
+    target_warps::Int,
+    unbounded_regs::Int,
+    bounded_regs::Int,
+    unbounded_warps::Int,
+    bounded_warps::Int,
+    spill_growth::Int,
+}
+const LAUNCH_BOUNDS_CACHE = IdDict{Any, LaunchBoundsDecision}()
+const LAUNCH_BOUNDS_CACHE_LOCK = ReentrantLock()
+
+"""
+    launch_bounds(f, args)
+
+Resolve the `__launch_bounds__` annotation to compile `f(args...)` with, or
+`nothing` to compile it unannotated.
+
+A kernel whose register pressure holds it below
+`LAUNCH_BOUNDS_TARGET_WARPS_PER_SM[]` warps per multiprocessor is recompiled with
+`.maxntid` and `.minnctapersm` set to that target, which asks ptxas to fit the
+kernel into the corresponding register budget. This is deliberately not the same
+as capping registers with `maxregs` (`.maxnreg`): a hard cap makes ptxas spill
+whatever does not fit, whereas launch bounds give its allocator an occupancy goal
+that it can also reach by rematerializing values and rescheduling, which usually
+costs far less memory traffic for the same occupancy.
+
+The annotated kernel is kept only if ptxas actually reached the requested
+occupancy, and did not pay for it with more than `LAUNCH_BOUNDS_SPILL_BUDGET[]`
+extra bytes of local memory per thread. A kernel that cannot be squeezed is
+therefore left alone rather than made slower, and one that is already at or above
+the target is never recompiled at all.
+
+Both settings are read from the environment at load time
+(`CLIMA_LAUNCH_BOUNDS_TARGET_WARPS_PER_SM` and `CLIMA_LAUNCH_BOUNDS_SPILL_BUDGET`)
+and can be changed during a session with [`set_launch_bounds_target!`](@ref).
+[`launch_bounds_report`](@ref) shows what was decided for each kernel.
+"""
+function launch_bounds(f::F, args) where {F}
+    iszero(LAUNCH_BOUNDS_TARGET_WARPS_PER_SM[]) && return nothing
+    return launch_bounds_decision(f, args).bounds
+end
+
+function launch_bounds_decision(f::F, args) where {F}
+    target_warps = LAUNCH_BOUNDS_TARGET_WARPS_PER_SM[]
+    unbounded = compile_kernel(f, args, nothing)
+    lock(LAUNCH_BOUNDS_CACHE_LOCK)
+    try
+        return get!(LAUNCH_BOUNDS_CACHE, unbounded.fun) do
+            uncached_launch_bounds(f, args, unbounded, target_warps)
+        end
+    finally
+        unlock(LAUNCH_BOUNDS_CACHE_LOCK)
+    end
+end
+
+function uncached_launch_bounds(f::F, args, unbounded, target_warps) where {F}
+    attrs = device_attributes()
+    kernel = Base.typename(F).name
+    unbounded_regs = Int(CUDA.registers(unbounded))
+    unbounded_warps = max_warps_per_sm_by_registers(unbounded_regs)
+    unbounded_local = _memory_bytes(CUDA.memory(unbounded), :local)
+    decision(bounds, regs, growth) = (;
+        kernel,
+        bounds,
+        target_warps,
+        unbounded_regs,
+        bounded_regs = regs,
+        unbounded_warps,
+        bounded_warps = max_warps_per_sm_by_registers(regs),
+        spill_growth = growth,
+    )
+    unannotated() = decision(nothing, unbounded_regs, 0)
+
+    # Nothing worth asking for: the kernel already reaches the target, or the
+    # target would need a block wider than the device supports.
+    unbounded_warps >= target_warps && return unannotated()
+    maxthreads = target_warps * attrs.threads_per_warp
+    maxthreads > attrs.max_threads_per_block && return unannotated()
+
+    bounds = (; maxthreads, blocks_per_sm = 1)
+    bounded = compile_kernel(f, args, bounds)
+    bounded_regs = Int(CUDA.registers(bounded))
+    spill_growth = _memory_bytes(CUDA.memory(bounded), :local) - unbounded_local
+
+    # Keep the annotated kernel only if it bought the occupancy it asked for
+    # without spilling more than the budget allows.
+    if max_warps_per_sm_by_registers(bounded_regs) < target_warps ||
+       spill_growth > LAUNCH_BOUNDS_SPILL_BUDGET[]
+        return decision(nothing, bounded_regs, spill_growth)
+    end
+    return decision(bounds, bounded_regs, spill_growth)
+end
+
+# `.maxntid` is emitted as a three-tuple padded with ones, so an annotation only
+# describes one-dimensional blocks, and only ones that fit within the bound the
+# kernel was compiled for. Launching a bounded kernel with a wider block is an
+# error, so anything else falls back to the unannotated kernel. `always_inline`
+# has to match the value `compile_kernel` used, since the decision was made about
+# the register pressure of a kernel compiled that way.
+function applicable_launch_bounds(f::F, args, threads, always_inline) where {F}
+    (threads isa Integer && always_inline === true) || return nothing
+    bounds = launch_bounds(f, args)
+    isnothing(bounds) && return nothing
+    return threads <= bounds.maxthreads ? bounds : nothing
+end
+
+"""
+    set_launch_bounds_target!(target_warps; spill_budget)
+
+Set the launch-bounds target occupancy, in warps per multiprocessor, and discard
+the decisions and launch configurations cached under the previous target so that
+the new one takes effect for kernels that have already been launched.
+
+Intended for comparing targets within a single session; a target of zero disables
+launch bounds. See [`launch_bounds`](@ref).
+"""
+function set_launch_bounds_target!(
+    target_warps;
+    spill_budget = LAUNCH_BOUNDS_SPILL_BUDGET[],
+)
+    LAUNCH_BOUNDS_TARGET_WARPS_PER_SM[] = target_warps
+    LAUNCH_BOUNDS_SPILL_BUDGET[] = spill_budget
+    lock(() -> empty!(LAUNCH_BOUNDS_CACHE), LAUNCH_BOUNDS_CACHE_LOCK)
+    lock(() -> empty!(LAUNCH_CONFIGURATION_CACHE), LAUNCH_CONFIGURATION_CACHE_LOCK)
+    return target_warps
+end
+
+"""
+    launch_bounds_report()
+
+Return one entry per kernel considered for launch bounds, recording the registers
+and occupancy it compiles to with and without them, and how much extra local
+memory the annotated version spills. An entry whose `bounds` are `nothing` was
+left unannotated, either because it already met the target or because it failed
+one of the checks in [`launch_bounds`](@ref).
+"""
+launch_bounds_report() =
+    lock(() -> sort!(collect(values(LAUNCH_BOUNDS_CACHE)); by = d -> -d.unbounded_regs),
+        LAUNCH_BOUNDS_CACHE_LOCK)
 
 const reported_stats = Dict()
 const kernel_names = IdDict()
@@ -317,6 +526,20 @@ function _getenv_bool(var::AbstractString; default::Bool = false)
     end
 end
 
+# Parse an integer environment variable, falling back to the default if unset or
+# unparseable
+function _getenv_int(var::AbstractString, default::Int)
+    raw = get(ENV, var, nothing)
+    raw === nothing && return default
+    parsed = tryparse(Int, strip(String(raw)))
+    if isnothing(parsed)
+        @warn "Unrecognized integer env var value; using default" var = var val = raw default =
+            default
+        return default
+    end
+    return parsed
+end
+
 # Create a ref to hold the setting determining whether to name kernels from
 # stack trace
 const NAME_KERNELS_FROM_STACK_TRACE = Ref{Bool}(false)
@@ -326,6 +549,11 @@ function __init__()
     NAME_KERNELS_FROM_STACK_TRACE[] = _getenv_bool(
         "CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE"; default = false,
     )
+    LAUNCH_BOUNDS_TARGET_WARPS_PER_SM[] = _getenv_int(
+        "CLIMA_LAUNCH_BOUNDS_TARGET_WARPS_PER_SM", LAUNCH_BOUNDS_TARGET_WARPS_PER_SM[],
+    )
+    LAUNCH_BOUNDS_SPILL_BUDGET[] =
+        _getenv_int("CLIMA_LAUNCH_BOUNDS_SPILL_BUDGET", LAUNCH_BOUNDS_SPILL_BUDGET[])
 end
 
 name_kernels_from_stack_trace() = NAME_KERNELS_FROM_STACK_TRACE[]
@@ -448,18 +676,26 @@ function auto_launch!(
     if auto
         @assert !isnothing(nitems)
         if nitems ≥ 0
-            # Note: `name = nothing` here will revert to default behavior
-            kernel = CUDA.@cuda name = kernel_name always_inline = true launch =
-                false f!(args...)
             config = launch_configuration(f!, args)
             threads = min(nitems, config.threads)
             blocks = cld(nitems, threads)
+            bounds = applicable_launch_bounds(f!, args, threads, true)
+            # Note: `name = nothing` here will revert to default behavior
+            kernel = compile_kernel(f!, args, bounds, kernel_name)
             kernel(args...; threads, blocks) # This knows to use always_inline from above.
         end
     else
-        kernel =
-            CUDA.@cuda name = kernel_name always_inline = always_inline threads =
-                threads_s blocks = blocks_s shmem = shmem f!(args...)
+        bounds = applicable_launch_bounds(f!, args, threads_s, always_inline)
+        kernel = launch_kernel!(
+            f!,
+            args,
+            bounds;
+            name = kernel_name,
+            always_inline,
+            threads = threads_s,
+            blocks = blocks_s,
+            shmem,
+        )
     end
 
     if collect_kernel_stats() # only for development use
