@@ -167,23 +167,10 @@ CLIMACOMMS_CONTEXT=MPI CLIMACOMMS_DEVICE=CUDA \
 
 ## Examples
 
-Each of these is a runnable program in [`examples/`](examples/) that asserts
-what the case is supposed to show, so they double as a starting point and as a
-regression test. The [documentation](https://CliMA.github.io/ClimaCore.jl/dev/examples/)
-describes the equations and discretizations they use.
-
-| Case | What it exercises | File |
-|:--|:--|:--|
-| Heat equation, Ekman spiral, hydrostatic balance, limited advection | staggered vertical operators with boundary conditions | [`column/`](examples/column/) |
-| Solid-body tracer transport | horizontal transport, cubed-sphere panel edges | [`sphere/solid_body_rotation.jl`](examples/sphere/solid_body_rotation.jl) |
-| Shallow-water suite, Williamson et al. (1992) | vector-invariant form, hyperviscosity, conservation | [`sphere/shallow_water.jl`](examples/sphere/shallow_water.jl) |
-| Bickley jet, CG and DG | barotropic instability, energy conservation, over-integration | [`plane/bickleyjet_cg.jl`](examples/plane/bickleyjet_cg.jl), [`plane/bickleyjet_dg.jl`](examples/plane/bickleyjet_dg.jl) |
-| Deformational flow and Hadley circulation (DCMIP 2012) | filamentation, limiters, vertical–horizontal coupling | [`hybrid/sphere/deformation_flow.jl`](examples/hybrid/sphere/deformation_flow.jl), [`hadley_circulation.jl`](examples/hybrid/sphere/hadley_circulation.jl) |
-| Rising thermal bubble, 2D and 3D | nonhydrostatic compressible flow in a box | [`hybrid/box/bubble_3d_invariant_rhoe.jl`](examples/hybrid/box/bubble_3d_invariant_rhoe.jl) |
-| Density current | advection at a rolling-up front (Kelvin–Helmholtz billows) | [`hybrid/plane/density_current_2d_invariant_rhoe.jl`](examples/hybrid/plane/density_current_2d_invariant_rhoe.jl) |
-| Mountain waves, Schär et al. (2002) and witch-of-Agnesi | terrain-following metric terms, sponge layers | [`hybrid/plane/schar_mountain.jl`](examples/hybrid/plane/schar_mountain.jl) |
-| Inertial and nonhydrostatic gravity waves | IMEX splitting against linear analytic solutions | [`hybrid/plane/inertial_gravity_wave.jl`](examples/hybrid/plane/inertial_gravity_wave.jl) |
-| Baroclinic wave, Ullrich et al. (2014) | the standard dry dynamical-core benchmark | [`hybrid/sphere/baroclinic_wave_rhoe.jl`](examples/hybrid/sphere/baroclinic_wave_rhoe.jl) |
+[`examples/`](examples/) contains example cases and explains how to run them.
+The [examples documentation](https://CliMA.github.io/ClimaCore.jl/dev/examples/)
+derives the
+equations and discretizations for several of them.
 
 ## Documentation
 
