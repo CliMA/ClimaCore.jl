@@ -60,8 +60,8 @@ which takes ClimaCore fields as its state vector.
 ## Who this is for
 
   - **Writing a model.** ClimaCore provides spaces, fields, and operators for
-    spatial PDE discretization. Complex models can be built on it, for
-    example the atmosphere model
+    spatial PDE discretization. Complex models can be built on it, e.g.,
+    CliMA's atmosphere model
     [ClimaAtmos.jl](https://github.com/CliMA/ClimaAtmos.jl), which adds
     physics, diagnostics, and calibration on top.
   - **Geophysical fluid dynamics.** Shallow water on the sphere, barotropic
