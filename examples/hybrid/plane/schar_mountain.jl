@@ -25,7 +25,6 @@ import ClimaCore:
     Hypsography
 using ClimaCore.Geometry
 using ClimaCore.Utilities: half
-import LazyBroadcast: lazy
 
 
 using Logging: global_logger
@@ -302,40 +301,16 @@ function rhs_invariant!(dY, Y, _, t)
     ᶠ∇ₕw = @. hgrad(fw.components.data.:1)
     ᶜ∇ₕh_tot = @. hgrad(h_tot)
 
-    # The divergence at each boundary face is the interior stencil with the
-    # argument set to zero outside the domain. That reduces to the one-sided
-    # difference below, whose factor of 2 comes from the boundary face lying
-    # half a cell from the closest center.
-    lg_field_faces = Fields.local_geometry_field(axes(fw))
-    lg_field_centers = Fields.local_geometry_field(axes(cρ))
-    # Only `J` on the boundary faces is needed below, on the same level space
-    # as the center quantities, so the face `J` (a scalar field) is shifted
-    # onto centers: `LeftBiasedF2C(x)[i] = x[i-half]`, so its first level is
-    # the bottom face, and `RightBiasedF2C(x)[i] = x[i+half]`, so its last
-    # level is the top face. The whole `LocalGeometry` field cannot be shifted
-    # instead, because a finite difference operator multiplies its argument by
-    # an operator matrix row.
-    J_bottom_face = Fields.level(Operators.LeftBiasedF2C().(lg_field_faces.J), 1)
-    J_top_face = Fields.level(
-        Operators.RightBiasedF2C().(lg_field_faces.J),
-        Fields.nlevels(lg_field_centers),
-    )
-    lg_bottom_center = Fields.level(lg_field_centers, 1)
-    lg_top_center =
-        Fields.level(lg_field_centers, Fields.nlevels(lg_field_centers))
-    ᶜ∇ᵥw_bottom = Fields.level(ᶜ∇ᵥw, 1)
-    ᶜ∇ᵥw_top = Fields.level(ᶜ∇ᵥw, Fields.nlevels(ᶜ∇ᵥw))
-    bottom_divergence = @. lazy(
-        Geometry.Jcontravariant3(κ₂ * ᶜ∇ᵥw_bottom, lg_bottom_center) *
-        (2 * inv(J_bottom_face)),
-    )
-    top_divergence = @. lazy(
-        Geometry.Jcontravariant3(κ₂ * ᶜ∇ᵥw_top, lg_top_center) *
-        (-2 * inv(J_top_face)),
-    )
-    vdivc2f_bcs = Operators.DivergenceC2F(
-        bottom = Operators.SetDivergence(bottom_divergence),
-        top = Operators.SetDivergence(top_divergence),
+    # The diffusive flux κ₂ ∇ᵥw is zero at each boundary face; that Dirichlet
+    # value on the divergence's argument is imposed by
+    # `divergence_c2f_dirichlet`, which reproduces the one-sided difference
+    # whose factor of 2 comes from the boundary face lying half a cell from
+    # the closest center.
+    κ₂∇ᵥw = @. κ₂ * ᶜ∇ᵥw
+    vκ₂∇²w = Operators.divergence_c2f_dirichlet(
+        κ₂∇ᵥw;
+        bottom = Geometry.WVector(0.0),
+        top = Geometry.WVector(0.0),
     )
 
     dfw = dY.w.components.data.:1
@@ -344,7 +319,7 @@ function rhs_invariant!(dY, Y, _, t)
     @. dcu += hwdiv(κ₂ * ᶜ∇ₕuₕ)
     @. dcu += vdivf2c(κ₂ * ᶠ∇ᵥuₕ)
     @. dfw += hwdiv(κ₂ * ᶠ∇ₕw)
-    @. dfw += vdivc2f_bcs(κ₂ * ᶜ∇ᵥw)
+    @. dfw += vκ₂∇²w
     @. dρe += hwdiv(cρ * κ₂ * ᶜ∇ₕh_tot)
     @. dρe += vdivf2c(fρ * κ₂ * ᶠ∇ᵥh_tot)
 

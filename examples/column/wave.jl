@@ -23,7 +23,6 @@ import ClimaCore:
     Spaces
 
 import ClimaTimeSteppers as CTS
-import LazyBroadcast: lazy
 
 import Logging
 import TerminalLoggers
@@ -56,24 +55,12 @@ function tendency!(dY, Y, _, t)
 
     du = dY.u
     dp = dY.p
-    # The homogeneous Dirichlet condition u = 0 at a boundary face is the
-    # covariant gradient 2 (u[1] - 0) there, and -2 (u[end] - 0) at the other
-    # end. The boundary values stay as fields on the boundary-face spaces
-    # rather than being read out as scalars, which needs scalar indexing on
-    # the GPU.
-    u_left = Fields.level(u, 1)
-    u_right = Fields.level(u, Fields.nlevels(u))
-    ∂f = Operators.GradientC2F(
-        left = Operators.SetGradient(
-            @. lazy(Geometry.Covariant3Vector(2 * u_left))
-        ),
-        right = Operators.SetGradient(
-            @. lazy(Geometry.Covariant3Vector(-2 * u_right))
-        ),
-    )
+    # The homogeneous Dirichlet condition u = 0 on both boundary faces is
+    # imposed through the gradient operator by `gradient_c2f_dirichlet`.
+    ∂u = Operators.gradient_c2f_dirichlet(u; left = 0.0, right = 0.0)
     ∂c = Operators.DivergenceF2C()
 
-    @. dp = -Geometry.WVector(∂f(u))
+    @. dp = -Geometry.WVector(∂u)
     @. du = -∂c(p)
 
     return dY
@@ -104,8 +91,9 @@ exact_p(z, t) = -cos(z) * sin(t)
 
 # The scheme conserves the discrete energy (Δz/2) (Σ u² + Σ w p²) exactly, with
 # the boundary faces carrying half weight — that weighting is what makes the
-# boundary terms in `GradientC2F` (with the Dirichlet condition on `u` imposed
-# through `SetGradient`) and `DivergenceF2C` cancel.
+# boundary terms in `gradient_c2f_dirichlet` (which imposes the Dirichlet
+# condition on `u` through `GradientC2F`'s `SetGradient`) and `DivergenceF2C`
+# cancel.
 face_weights = [j == 1 || j == nelems + 1 ? 0.5 : 1.0 for j in 1:(nelems + 1)]
 Δz = z_length / nelems
 energy(Y) =
