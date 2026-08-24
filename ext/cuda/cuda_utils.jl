@@ -399,7 +399,15 @@ const LaunchBoundsDecision = @NamedTuple{
     bounded_warps::Int,
     spill_growth::Int,
 }
-const LAUNCH_BOUNDS_CACHE = IdDict{Any, LaunchBoundsDecision}()
+# Keyed on the kernel and argument TYPES, not on the compiled function. Keying
+# it on the compiled kernel would mean calling `cufunction` on every launch
+# merely to obtain the key, and an AMIP step spends most of its host time
+# issuing many small kernels: two extra lookups per launch measurably slowed
+# the launch-bound parts of a real run (copyto_foreach! +116% per call) and cost
+# far more than the occupancy this mechanism wins back on the GPU. Must be a
+# hash-based `Dict` rather than an `IdDict`, since the key tuple is rebuilt on
+# every call and would never be identical.
+const LAUNCH_BOUNDS_CACHE = Dict{Any, LaunchBoundsDecision}()
 const LAUNCH_BOUNDS_CACHE_LOCK = ReentrantLock()
 
 """
@@ -434,21 +442,26 @@ function launch_bounds(f::F, args) where {F}
 end
 
 function launch_bounds_decision(f::F, args) where {F}
-    target_warps = LAUNCH_BOUNDS_TARGET_WARPS_PER_SM[]
-    unbounded = compile_kernel(f, args, nothing)
+    key = (F, typeof(args))
     lock(LAUNCH_BOUNDS_CACHE_LOCK)
     try
-        return get!(LAUNCH_BOUNDS_CACHE, unbounded.fun) do
-            uncached_launch_bounds(f, args, unbounded, target_warps)
-        end
+        cached = get(LAUNCH_BOUNDS_CACHE, key, nothing)
+        isnothing(cached) || return cached
+        decision =
+            uncached_launch_bounds(f, args, LAUNCH_BOUNDS_TARGET_WARPS_PER_SM[])
+        LAUNCH_BOUNDS_CACHE[key] = decision
+        return decision
     finally
         unlock(LAUNCH_BOUNDS_CACHE_LOCK)
     end
 end
 
-function uncached_launch_bounds(f::F, args, unbounded, target_warps) where {F}
+function uncached_launch_bounds(f::F, args, target_warps) where {F}
     attrs = device_attributes()
     kernel = Base.typename(F).name
+    # Compiled here rather than by the caller, so that the cache-hit path never
+    # touches the compiler.
+    unbounded = compile_kernel(f, args, nothing)
     unbounded_regs = Int(CUDA.registers(unbounded))
     unbounded_warps = max_warps_per_sm_by_registers(unbounded_regs)
     unbounded_local = _memory_bytes(CUDA.memory(unbounded), :local)
