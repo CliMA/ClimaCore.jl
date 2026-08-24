@@ -319,16 +319,23 @@ function initial_state(ᶜlocal_geometry, ᶠlocal_geometry)
     # (p[v+1] − p[v])/Δz = −g (ρ[v] + ρ[v+1])/2 holds exactly, then set ρe
     # such that the diagnosed pressure is exactly the analytic p.
     ᶜp_ana = @. pres(lat, z)
-    ρ_par = parent(ᶜρ)
-    p_par = parent(ᶜp_ana)
-    # per-interface Δz from the actual center heights (supports ZSTRETCH;
-    # a uniform zmax/zelem here silently corrupts ρ on stretched grids)
-    z_par = parent(z)
-    for v in 1:(size(ρ_par, 1) - 1)
-        @views @. ρ_par[v + 1, :, :, :, :] =
-            -ρ_par[v, :, :, :, :] -
-            2 * (p_par[v + 1, :, :, :, :] - p_par[v, :, :, :, :]) /
-            (z_par[v + 1, :, :, :, :] - z_par[v, :, :, :, :]) / grav
+    # REBALANCE=1 (default) applies the full-p column rebalance below; it is a
+    # smooth-analytic-IC device (and inconsistent with the Exner PGF — see the
+    # discussion). REBALANCE=0 uses the raw analytic state; with the Exner
+    # reference-subtracted PGF the residual is truncation-level, which is the
+    # setting that generalizes to data-derived (ERA5/sounding) ICs.
+    if get(ENV, "REBALANCE", "1") == "1"
+        ρ_par = parent(ᶜρ)
+        p_par = parent(ᶜp_ana)
+        # per-interface Δz from the actual center heights (supports ZSTRETCH;
+        # a uniform zmax/zelem here silently corrupts ρ on stretched grids)
+        z_par = parent(z)
+        for v in 1:(size(ρ_par, 1) - 1)
+            @views @. ρ_par[v + 1, :, :, :, :] =
+                -ρ_par[v, :, :, :, :] -
+                2 * (p_par[v + 1, :, :, :, :] - p_par[v, :, :, :, :]) /
+                (z_par[v + 1, :, :, :, :] - z_par[v, :, :, :, :]) / grav
+        end
     end
     ᶜK = @. norm_sqr(ᶜuₕ_local) / 2
     ᶜρe = @. cv_d * ᶜp_ana / R_d + ᶜρ * (ᶜK + grav * z - cv_d * T_tri)
