@@ -86,6 +86,8 @@ CenterMultiColumnFiniteDifferenceSpace(space::MultiColumnFiniteDifferenceSpace) 
 # so that we return MultiColumnFiniteDifferenceSpace rather than ExtrudedFiniteDifferenceSpace.
 space(refspace::MultiColumnFiniteDifferenceSpace, s::Staggering) =
     MultiColumnFiniteDifferenceSpace(grid(refspace), s)
+space(grid::Grids.ExtrudedMultiPointGrid, s::Staggering) =
+    MultiColumnFiniteDifferenceSpace(grid, s)
 
 function face_space(space::MultiColumnFiniteDifferenceSpace)
     MultiColumnFiniteDifferenceSpace(grid(space), CellFace())
@@ -142,6 +144,7 @@ nlevels(space::MultiColumnFiniteDifferenceSpace) =
 
 horizontal_space(space::MultiColumnFiniteDifferenceSpace) =
     MultiPointSpace(grid(space).horizontal_grid)
+horizontal_space(space::MultiPointSpace) = space
 
 # No DSS / mask machinery needed.
 get_mask(space::MultiPointSpace) = DataLayouts.NoMask()
