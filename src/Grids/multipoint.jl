@@ -122,6 +122,8 @@ function _MultiPointGrid(
     )
 end
 
+Meshes.domain(grid::MultiPointGrid) = Domains.SphereDomain(grid.global_geometry.radius)
+
 function print_multipoint_horizontal(io::IO, grid::MultiPointGrid, indent)
     println(io, " "^(indent + 2), "horizontal:")
     print(io, " "^(indent + 4), "context: ")
