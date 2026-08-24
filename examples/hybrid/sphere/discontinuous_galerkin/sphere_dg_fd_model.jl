@@ -46,6 +46,7 @@ import ClimaCore:
     Domains,
     Fields,
     Geometry,
+    Hypsography,
     Meshes,
     Operators,
     Quadratures,
@@ -107,6 +108,30 @@ const t_end = parse(FT, get(ENV, "T_END", string(t_end_default)))
 const stepper = lowercase(get(ENV, "STEPPER", "explicit"))
 stepper in ("explicit", "hevi") || error("STEPPER must be explicit or hevi")
 
+# ---------------------------------------------------------------------------
+# Topography (TOPO = flat | hj). Hughes & Jablonowski (2023, GMD 16, 6805)
+# double-mountain: two ridges, super-Gaussian (exponent 6) in latitude ×
+# Gaussian in longitude, centred at (72°E, 45°N) and (140°E, 45°N), peak
+# h₀ = 2000 m. Warp applied via Gal–Chen `Hypsography.LinearAdaption`.
+# ---------------------------------------------------------------------------
+const topo = lowercase(get(ENV, "TOPO", "flat"))
+topo in ("flat", "hj") || error("TOPO must be flat or hj")
+const hj_h0 = parse(FT, get(ENV, "MTN_HEIGHT", "2000"))  # peak elevation [m]
+const hj_dφ = FT(16)   # meridional width [deg] (super-Gaussian, exponent 6)
+const hj_dλ = FT(7)    # zonal width [deg] (Gaussian, exponent 2)
+
+# shortest signed longitude difference [deg] (periodic wrap to [−180, 180])
+_dlon(λ, λc) = mod(λ - λc + FT(180), FT(360)) - FT(180)
+_hj_ridge(λ, φ, λc, φc) =
+    exp(-((φ - φc) / hj_dφ)^6 - (_dlon(λ, λc) / hj_dλ)^2)
+# z_s(λ, φ): analytic, continuous (single-valued at shared nodes) — GPU-safe.
+function warp_hj(coord)
+    λ = coord.long
+    φ = coord.lat
+    return hj_h0 *
+           (_hj_ridge(λ, φ, FT(72), FT(45)) + _hj_ridge(λ, φ, FT(140), FT(45)))
+end
+
 function sphere_hv_spaces()
     context = ClimaComms.context()
     device = ClimaComms.device(context)
@@ -131,17 +156,32 @@ function sphere_hv_spaces()
     else
         Meshes.IntervalMesh(vertdomain, nelems = zelem)
     end
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(device, vertmesh)
-
     horzdomain = Domains.SphereDomain(R)
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)
     horztopology = Topologies.Topology2D(context, horzmesh)
     quad = Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
-    hv_center_space =
-        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
-    hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
+    if topo == "flat"
+        vert_center_space =
+            Spaces.CenterFiniteDifferenceSpace(device, vertmesh)
+        hv_center_space =
+            Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
+        hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
+    else
+        # Terrain-following: build from faces so the surface coincides with the
+        # lowest face, then warp with the Gal–Chen LinearAdaption of z_s(λ,φ).
+        vert_face_space = Spaces.FaceFiniteDifferenceSpace(device, vertmesh)
+        z_surface =
+            Geometry.ZPoint.(warp_hj.(Fields.coordinate_field(horzspace)))
+        hv_face_space = Spaces.ExtrudedFiniteDifferenceSpace(
+            horzspace,
+            vert_face_space,
+            Hypsography.LinearAdaption(z_surface),
+        )
+        hv_center_space =
+            Spaces.CenterExtrudedFiniteDifferenceSpace(hv_face_space)
+    end
     return (horzspace, hv_center_space, hv_face_space)
 end
 
@@ -380,7 +420,10 @@ const κ₄ = haskey(ENV, "KAPPA4") ? parse(FT, ENV["KAPPA4"]) :
     min(FT(2e17), κ₄_cfl_cap / 10)
 κ₄ > κ₄_cfl_cap &&
     @warn "κ₄ exceeds the explicit SIPG stability cap" κ₄ κ₄_cfl_cap
-const filter_Nc = parse(Int, get(ENV, "FILTER", string(npoly)))
+# Default OFF: the cutoff filter voids the KEP property of the flux-differencing
+# scheme (the driver @warns on FILTER>0), and its tensor_product! has no GPU
+# dispatch for the extruded layout (scalar-indexing error on CUDA). Prefer κ₄.
+const filter_Nc = parse(Int, get(ENV, "FILTER", "0"))
 
 # Optional per-step exponential filter on the VELOCITY state (uₕ, w).
 # The tendency cutoff above starves the top modes of forcing, but the HEVI
