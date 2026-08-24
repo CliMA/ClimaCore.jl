@@ -2,15 +2,20 @@ import ..Utilities: PlusHalf, half, unionall_type
 import ..DebugOnly: allow_mismatched_spaces_unsafe
 import UnrolledUtilities: unrolled_map
 
-const AllFiniteDifferenceSpace =
-    Union{Spaces.FiniteDifferenceSpace, Spaces.ExtrudedFiniteDifferenceSpace}
+const AllFiniteDifferenceSpace = Union{
+    Spaces.FiniteDifferenceSpace,
+    Spaces.ExtrudedFiniteDifferenceSpace,
+    Spaces.MultiColumnFiniteDifferenceSpace,
+}
 const AllFaceFiniteDifferenceSpace = Union{
     Spaces.FaceFiniteDifferenceSpace,
     Spaces.FaceExtrudedFiniteDifferenceSpace,
+    Spaces.FaceMultiColumnFiniteDifferenceSpace,
 }
 const AllCenterFiniteDifferenceSpace = Union{
     Spaces.CenterFiniteDifferenceSpace,
     Spaces.CenterExtrudedFiniteDifferenceSpace,
+    Spaces.CenterMultiColumnFiniteDifferenceSpace,
 }
 
 Topologies.isperiodic(space::AllFiniteDifferenceSpace) =
@@ -27,13 +32,13 @@ right_idx(space::AllFaceFiniteDifferenceSpace) = right_face_boundary_idx(space)
 left_center_boundary_idx(space::AllFiniteDifferenceSpace) = 1
 right_center_boundary_idx(space::AllFiniteDifferenceSpace) = size(
     Spaces.local_geometry_data(Spaces.space(space, Spaces.CellCenter())),
-    4,
+    1,
 )
 left_face_boundary_idx(space::AllFiniteDifferenceSpace) = half
 right_face_boundary_idx(space::AllFiniteDifferenceSpace) =
     size(
         Spaces.local_geometry_data(Spaces.space(space, Spaces.CellFace())),
-        4,
+        1,
     ) - half
 
 
@@ -52,10 +57,10 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     if Topologies.isperiodic(space)
         v = mod1(v, Spaces.nlevels(space))
     end
-    i, j, h = hidx
+    i, j, h = hindices(space, hidx)
     local_geom =
         Grids.local_geometry_data(Spaces.grid(space), Grids.CellCenter())
-    return @inbounds local_geom[CartesianIndex(i, j, 1, v, h)]
+    return @inbounds local_geom[v, i, j, h]
 end
 Base.@propagate_inbounds function Geometry.LocalGeometry(
     space::AllFiniteDifferenceSpace,
@@ -66,9 +71,9 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     if Topologies.isperiodic(space)
         v = mod1(v, Spaces.nlevels(space))
     end
-    i, j, h = hidx
+    i, j, h = hindices(space, hidx)
     local_geom = Grids.local_geometry_data(Spaces.grid(space), Grids.CellFace())
-    return @inbounds local_geom[CartesianIndex(i, j, 1, v, h)]
+    return @inbounds local_geom[v, i, j, h]
 end
 
 
@@ -78,9 +83,10 @@ end
 An abstract type for boundary conditions for [`FiniteDifferenceOperator`](@ref)s.
 
 Subtypes should define:
-- [`boundary_width`](@ref)
-- [`stencil_left_boundary`](@ref)
-- [`stencil_right_boundary`](@ref)
+
+  - [`boundary_width`](@ref)
+  - [`stencil_left_boundary`](@ref)
+  - [`stencil_right_boundary`](@ref)
 """
 abstract type AbstractBoundaryCondition end
 
@@ -167,10 +173,10 @@ struct RightBoundaryWindow{name} <: BoundaryWindow end
 
 An abstract type for finite difference operators. Instances of this should define:
 
-- [`return_eltype`](@ref)
-- [`return_space`](@ref)
-- [`stencil_interior_width`](@ref)
-- [`stencil_interior`](@ref)
+  - [`return_eltype`](@ref)
+  - [`return_space`](@ref)
+  - [`stencil_interior_width`](@ref)
+  - [`stencil_interior`](@ref)
 
 See also [`AbstractBoundaryCondition`](@ref) for how to define the boundaries.
 """
@@ -310,9 +316,11 @@ upper bounds of the index offsets of the stencil for each argument in the
 stencil.
 
 ## Example
+
 ```
 stencil(::Op, arg1, arg2) = ((-half, 1+half), (0,0))
 ```
+
 implies that at index `i`, the stencil accesses `arg1` at `i-half`, `i+half` and
 `i+1+half`, and `arg2` at index `i`.
 """
@@ -411,24 +419,30 @@ boundary_width(::InterpolateF2C, ::AbstractBoundaryCondition) = 0
     I.(x)
 
 Interpolate a center-valued field `x` to faces, using the stencil
+
 ```math
 I(x)[i] = \\frac{1}{2} (x[i+\\tfrac{1}{2}] + x[i-\\tfrac{1}{2}])
 ```
 
 Supported boundary conditions are:
 
-- [`SetValue(x₀)`](@ref): set the value at the boundary face to be `x₀`. On the
-  left boundary the stencil is
+  - [`SetValue(x₀)`](@ref): set the value at the boundary face to be `x₀`. On the
+    left boundary the stencil is
+
 ```math
 I(x)[\\tfrac{1}{2}] = x₀
 ```
-- [`SetGradient(v)`](@ref): set the value at the boundary such that the gradient
-  is `v`. At the left boundary the stencil is
+
+  - [`SetGradient(v)`](@ref): set the value at the boundary such that the gradient
+    is `v`. At the left boundary the stencil is
+
 ```math
 I(x)[\\tfrac{1}{2}] = x[1] - \\frac{1}{2} v³
 ```
-- [`Extrapolate`](@ref): use the closest interior point as the boundary value.
-  At the left boundary the stencil is
+
+  - [`Extrapolate`](@ref): use the closest interior point as the boundary value.
+    At the left boundary the stencil is
+
 ```math
 I(x)[\\tfrac{1}{2}] = x[1]
 ```
@@ -549,12 +563,15 @@ end
     L.(x)
 
 Interpolate a center-value field to a face-valued field from the left.
+
 ```math
 L(x)[i] = x[i-\\tfrac{1}{2}]
 ```
 
 Only the left boundary condition should be set. Currently supported is:
-- [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+
+  - [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+
 ```math
 L(x)[\\tfrac{1}{2}] = x_0
 ```
@@ -610,12 +627,15 @@ end
     L.(x)
 
 Interpolate a face-value field to a center-valued field from the left.
+
 ```math
 L(x)[i+\\tfrac{1}{2}] = x[i]
 ```
 
 Only the left boundary condition should be set. Currently supported is:
-- [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+
+  - [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+
 ```math
 L(x)[1] = x_0
 ```
@@ -672,12 +692,15 @@ end
     L.(x)
 
 Interpolate a center-value field to a face-valued field from the left, using a 3rd-order reconstruction.
+
 ```math
 L(x)[i] =  \\left(-2 x[i-\\tfrac{3}{2}] + 10 x[i-\\tfrac{1}{2}] + 4 x[i+\\tfrac{1}{2}] \\right) / 12
 ```
 
 Only the left boundary condition should be set. Currently supported is:
-- [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+
+  - [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+
 ```math
 L(x)[\\tfrac{1}{2}] = x_0
 ```
@@ -738,12 +761,15 @@ end
     L.(x)
 
 Interpolate a face-value field to a center-valued field from the left, using a 3rd-order reconstruction.
+
 ```math
 L(x)[i+\\tfrac{1}{2}] =  \\left(-2 x[i-1] + 10 x[i] + 4 x[i+1] \\right) / 12
 ```
 
 Only the left boundary condition should be set. Currently supported is:
-- [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+
+  - [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+
 ```math
 L(x)[1] = x_0
 ```
@@ -805,12 +831,15 @@ end
     R.(x)
 
 Interpolate a center-valued field to a face-valued field from the right.
+
 ```math
 R(x)[i] = x[i+\\tfrac{1}{2}]
 ```
 
 Only the right boundary condition should be set. Currently supported is:
-- [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+
+  - [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+
 ```math
 R(x)[n+\\tfrac{1}{2}] = x_0
 ```
@@ -866,12 +895,15 @@ end
     R.(x)
 
 Interpolate a face-valued field to a center-valued field from the right.
+
 ```math
 R(x)[i] = x[i+\\tfrac{1}{2}]
 ```
 
 Only the right boundary condition should be set. Currently supported is:
-- [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+
+  - [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+
 ```math
 R(x)[n+\\tfrac{1}{2}] = x_0
 ```
@@ -930,12 +962,15 @@ end
     R.(x)
 
 Interpolate a center-valued field to a face-valued field from the right, using a 3rd-order reconstruction.
+
 ```math
 R(x)[i] = \\left(4 x[i-\\tfrac{1}{2}] + 10 x[i+\\tfrac{1}{2}] -2 x[i+\\tfrac{3}{2}]  \\right) / 12
 ```
 
 Only the right boundary condition should be set. Currently supported is:
-- [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+
+  - [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+
 ```math
 R(x)[n+\\tfrac{1}{2}] = x_0
 ```
@@ -984,12 +1019,15 @@ end
     R.(x)
 
 Interpolate a face-valued field to a center-valued field from the right, using a 3rd-order reconstruction.
+
 ```math
 R(x)[i] = \\left(4 x[i] + 10 x[i+1] -2 x[i+2]  \\right) / 12
 ```
 
 Only the right boundary condition should be set. Currently supported is:
-- [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+
+  - [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+
 ```math
 R(x)[n+\\tfrac{1}{2}] = x_0
 ```
@@ -1046,6 +1084,7 @@ return_eltype(::WeightedInterpolationOperator, weights, arg) = eltype(arg)
 
 Interpolate a face-valued field `x` to centers, weighted by a face-valued field
 `w`, using the stencil
+
 ```math
 WI(w, x)[i] = \\frac{
         w[i+\\tfrac{1}{2}] x[i+\\tfrac{1}{2}] +  w[i-\\tfrac{1}{2}] x[i-\\tfrac{1}{2}])
@@ -1097,6 +1136,7 @@ boundary_width(::WeightedInterpolateF2C, ::AbstractBoundaryCondition) = 0
 
 Interpolate a center-valued field `x` to faces, weighted by a center-valued field
 `w`, using the stencil
+
 ```math
 WI(w, x)[i] = \\frac{
     w[i+\\tfrac{1}{2}] x[i+\\tfrac{1}{2}] +  w[i-\\tfrac{1}{2}] x[i-\\tfrac{1}{2}])
@@ -1107,9 +1147,9 @@ WI(w, x)[i] = \\frac{
 
 Supported boundary conditions are:
 
-- [`SetValue(val)`](@ref): set the value at the boundary face to be `val`.
-- [`SetGradient`](@ref): set the value at the boundary such that the gradient is `val`.
-- [`Extrapolate`](@ref): use the closest interior point as the boundary value.
+  - [`SetValue(val)`](@ref): set the value at the boundary face to be `val`.
+  - [`SetGradient`](@ref): set the value at the boundary such that the gradient is `val`.
+  - [`Extrapolate`](@ref): use the closest interior point as the boundary value.
 
 These have the same stencil as in [`InterpolateC2F`](@ref).
 """
@@ -1250,29 +1290,32 @@ field `x` at cell faces by upwinding `x` according to the direction of `v`.
 
 More precisely, it is computed based on the sign of the 3rd contravariant
 component, and it returns a `Contravariant3Vector`:
+
 ```math
 U(\\boldsymbol{v},x)[i] = \\begin{cases}
   v^3[i] x[i-\\tfrac{1}{2}]\\boldsymbol{e}_3 \\textrm{, if } v^3[i] > 0 \\\\
   v^3[i] x[i+\\tfrac{1}{2}]\\boldsymbol{e}_3 \\textrm{, if } v^3[i] < 0
   \\end{cases}
 ```
+
 where ``\\boldsymbol{e}_3`` is the 3rd covariant basis vector.
 
 Supported boundary conditions are:
-- [`SetValue(x₀)`](@ref): set the value of `x` to be `x₀` in a hypothetical
-  ghost cell on the other side of the boundary. On the left boundary the stencil
-  is
-  ```math
-  U(\\boldsymbol{v},x)[\\tfrac{1}{2}] = \\begin{cases}
-    v^3[\\tfrac{1}{2}] x_0  \\boldsymbol{e}_3 \\textrm{, if }  v^3[\\tfrac{1}{2}] > 0 \\\\
-    v^3[\\tfrac{1}{2}] x[1] \\boldsymbol{e}_3 \\textrm{, if }  v^3[\\tfrac{1}{2}] < 0
-    \\end{cases}
-  ```
-- [`Extrapolate()`](@ref): set the value of `x` to be the same as the closest
-  interior point. On the left boundary, the stencil is
-  ```math
-  U(\\boldsymbol{v},x)[\\tfrac{1}{2}] = U(\\boldsymbol{v},x)[1 + \\tfrac{1}{2}]
-  ```
+
+  - [`SetValue(x₀)`](@ref): set the value of `x` to be `x₀` in a hypothetical
+    ghost cell on the other side of the boundary. On the left boundary the stencil
+    is
+    ```math
+    U(\\boldsymbol{v},x)[\\tfrac{1}{2}] = \\begin{cases}
+      v^3[\\tfrac{1}{2}] x_0  \\boldsymbol{e}_3 \\textrm{, if }  v^3[\\tfrac{1}{2}] > 0 \\\\
+      v^3[\\tfrac{1}{2}] x[1] \\boldsymbol{e}_3 \\textrm{, if }  v^3[\\tfrac{1}{2}] < 0
+      \\end{cases}
+    ```
+  - [`Extrapolate()`](@ref): set the value of `x` to be the same as the closest
+    interior point. On the left boundary, the stencil is
+    ```math
+    U(\\boldsymbol{v},x)[\\tfrac{1}{2}] = U(\\boldsymbol{v},x)[1 + \\tfrac{1}{2}]
+    ```
 """
 struct UpwindBiasedProductC2F{BCS} <: AdvectionOperator
     bcs::BCS
@@ -1390,14 +1433,14 @@ end
 Following the van Leer class of limiters as noted in[Lin1994](@cite), four
 limiter constraint options are provided for use with advection operators:
 
-- `AlgebraicMean`: Algebraic mean, this guarantees neither positivity nor
-  monotonicity (eq 2, `avg`)
-- `PositiveDefinite`: Positive-definite with implicit diffusion based on local
-  stencil extrema (eq 3b, 3c, 5a, 5b, `posd`)
-- `MonotoneHarmonic`: Monotonicity preserving harmonic mean, this implies a strong
-  monotonicity constraint (eq 4, `mono4`)
-- `MonotoneLocalExtrema`: Monotonicity preserving, with extrema bounded by the
-  edge cells in the stencil (eq 5, `mono5`)
+  - `AlgebraicMean`: Algebraic mean, this guarantees neither positivity nor
+    monotonicity (eq 2, `avg`)
+  - `PositiveDefinite`: Positive-definite with implicit diffusion based on local
+    stencil extrema (eq 3b, 3c, 5a, 5b, `posd`)
+  - `MonotoneHarmonic`: Monotonicity preserving harmonic mean, this implies a strong
+    monotonicity constraint (eq 4, `mono4`)
+  - `MonotoneLocalExtrema`: Monotonicity preserving, with extrema bounded by the
+    edge cells in the stencil (eq 5, `mono5`)
 
 The diffusion implied by these methods is proportional to the local upwind CFL
 number. The `mismatch` Δ𝜙 = 0 returns the first-order upwind method. Special
@@ -1407,8 +1450,8 @@ the generalized local extrema in equation (5a, 5b).
 
 Supported boundary conditions include:
 
- - [`FirstOrderOneSided`](@ref)
- - [`ThirdOrderOneSided`](@ref)
+  - [`FirstOrderOneSided`](@ref)
+  - [`ThirdOrderOneSided`](@ref)
 """
 struct LinVanLeerC2F{BCS, C} <: AdvectionOperator
     bcs::BCS
@@ -1612,23 +1655,27 @@ end
 
 Compute the product of a face-valued vector field `v` and a center-valued field
 `x` at cell faces by upwinding `x`, to third-order of accuracy, according to `v`
+
 ```math
 U(v,x)[i] = \\begin{cases}
   v[i] \\left(-2 x[i-\\tfrac{3}{2}] + 10 x[i-\\tfrac{1}{2}] + 4 x[i+\\tfrac{1}{2}] \\right) / 12  \\textrm{, if } v[i] > 0 \\\\
   v[i] \\left(4 x[i-\\tfrac{1}{2}] + 10 x[i+\\tfrac{1}{2}] -2 x[i+\\tfrac{3}{2}]  \\right) / 12  \\textrm{, if } v[i] < 0
   \\end{cases}
 ```
+
 This stencil is based on [WickerSkamarock2002](@cite), eq. 4(a).
 
 Supported boundary conditions are:
-- [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind scheme to
-  compute `x` on the left boundary, and the first-order upwind scheme to
-  compute `x` on the right boundary.
-- [`ThirdOrderOneSided(x₀)`](@ref): uses the third-order downwind reconstruction
-  to compute `x` on the left boundary, and the third-order upwind
-  reconstruction to compute `x` on the right boundary.
+
+  - [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind scheme to
+    compute `x` on the left boundary, and the first-order upwind scheme to
+    compute `x` on the right boundary.
+  - [`ThirdOrderOneSided(x₀)`](@ref): uses the third-order downwind reconstruction
+    to compute `x` on the left boundary, and the third-order upwind
+    reconstruction to compute `x` on the right boundary.
 
 !!! note
+
     These boundary conditions do not define the value at the actual
     boundary faces, and so this operator should not be materialized directly: it
     needs to be composed with another operator that does not make use of this
@@ -1778,25 +1825,27 @@ Correct the flux using the flux-corrected transport formulation by Boris and
 Book [BorisBook1973](@cite).
 
 Input arguments:
-- a face-valued vector field `v`
-- a center-valued field `x`
+
+  - a face-valued vector field `v`
+  - a center-valued field `x`
 
 ```math
 Ac(v,x)[i] =
   s[i] \\max \\left\\{0, \\min \\left[ |v[i] |, s[i] \\left( x[i+\\tfrac{3}{2}] - x[i+\\tfrac{1}{2}]  \\right) ,  s[i] \\left( x[i-\\tfrac{1}{2}] - x[i-\\tfrac{3}{2}]  \\right) \\right] \\right\\},
 ```
 
-where ``s[i] = +1`` if  `` v[i] \\geq 0`` and ``s[i] = -1`` if  `` v
-[i] \\leq 0``, and ``Ac`` represents the resulting corrected antidiffusive
+where ``s[i] = +1`` if  ``v[i] \\geq 0`` and ``s[i] = -1`` if  ``v [i] \\leq 0``, and ``Ac`` represents the resulting corrected antidiffusive
 flux. This formulation is based on [BorisBook1973](@cite), as reported in
 [durran2010](@cite) section 5.4.1.
 
 Supported boundary conditions are:
-- [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind reconstruction
-  to compute `x` on the left boundary, and the first-order upwind
-  reconstruction to compute `x` on the right boundary.
+
+  - [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind reconstruction
+    to compute `x` on the left boundary, and the first-order upwind
+    reconstruction to compute `x` on the right boundary.
 
 !!! note
+
     Similar to the [`Upwind3rdOrderBiasedProductC2F`](@ref) operator, these
     boundary conditions do not define the value at the actual boundary faces,
     and so this operator cannot be materialized directly: it needs to be
@@ -1897,9 +1946,10 @@ Correct the flux using the flux-corrected transport formulation by Zalesak
 [zalesak1979fully](@cite).
 
 Input arguments:
-- a face-valued vector field `A`
-- a center-valued field `Φ`
-- a center-valued field `Φᵗᵈ`
+
+  - a face-valued vector field `A`
+  - a center-valued field `Φ`
+  - a center-valued field `Φᵗᵈ`
 
 ```math
 Φ_j^{n+1} = Φ_j^{td} - (C_{j+\\frac{1}{2}}A_{j+\\frac{1}{2}} - C_{j-\\frac{1}{2}}A_{j-\\frac{1}{2}})
@@ -1910,11 +1960,12 @@ This stencil is based on [zalesak1979fully](@cite), as reported in [durran2010]
 
 Supported boundary conditions are:
 
-- [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind reconstruction
-  to compute `x` on the left boundary, and the first-order upwind
-  reconstruction to compute `x` on the right boundary.
+  - [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind reconstruction
+    to compute `x` on the left boundary, and the first-order upwind
+    reconstruction to compute `x` on the right boundary.
 
 !!! note
+
     Similar to the [`Upwind3rdOrderBiasedProductC2F`](@ref) operator, these
     boundary conditions do not define the value at the actual boundary faces,
     and so this operator cannot be materialized directly: it needs to be
@@ -2127,11 +2178,11 @@ limiter_coeff(r, ::MonotonizedCentralLimiter) = max(0, min(2r, (1 + r) / 2, 2))
 `𝒜`, following the notation of Durran (Numerical Methods for Fluid Dynamics, 2ⁿᵈ
 ed.) is the antidiffusive flux given by
 
-``` 𝒜 = ℱʰ - ℱˡ ``` where h and l superscripts represent the high and lower
+`𝒜 = ℱʰ - ℱˡ` where h and l superscripts represent the high and lower
 order (monotone) fluxes respectively. The effect of the TVD limiters is then to
 adjust the flux
 
-``` F_{j+1/2} = F^{l}_{j+1/2} + C_{j+1/2}(F^{h}_{j+1/2} - F^{l}_{j+1/2}) where
+```F_{j+1/2} = F^{l}_{j+1/2} + C_{j+1/2}(F^{h}_{j+1/2} - F^{l}_{j+1/2}) where
 C_{j+1/2} is the multiplicative limiter which is a function of ```
 
 the ratio of the slope of the solution across a cell interface.
@@ -2152,6 +2203,7 @@ Supported limiter types are
 Supported boundary conditions are:
 
  - [`FirstOrderOneSided`](@ref)
+```
 """
 struct TVDLimitedFluxC2F{BCS, M} <: AdvectionOperator
     bcs::BCS
@@ -2244,6 +2296,7 @@ Vertical advection operator at cell faces, for a face-valued velocity field `v` 
 variables `θ`, approximating ``v^3 \\partial_3 \\theta``.
 
 It uses the following stencil
+
 ```math
 A(v,θ)[i] = \\frac{1}{2} (θ[i+1] - θ[i-1]) v³[i]
 ```
@@ -2293,19 +2346,23 @@ Vertical advection operator at cell centers, for cell face velocity field `v`
 cell center variables `θ`, approximating ``v^3 \\partial_3 \\theta``.
 
 It uses the following stencil
+
 ```math
 A(v,θ)[i] = \\frac{1}{2} \\{ (θ[i+1] - θ[i]) v³[i+\\tfrac{1}{2}] + (θ[i] - θ[i-1])v³[i-\\tfrac{1}{2}]\\}
 ```
 
 Supported boundary conditions:
 
-- [`SetValue(θ₀)`](@ref): set the value of `θ` at the boundary face to be `θ₀`.
-  At the lower boundary, this is:
+  - [`SetValue(θ₀)`](@ref): set the value of `θ` at the boundary face to be `θ₀`.
+    At the lower boundary, this is:
+
 ```math
 A(v,θ)[1] = \\frac{1}{2} \\{ (θ[2] - θ[1]) v³[1 + \\tfrac{1}{2}] + (θ[1] - θ₀)v³[\\tfrac{1}{2}]\\}
 ```
-- [`Extrapolate`](@ref): use the closest interior point as the boundary value.
-  At the lower boundary, this is:
+
+  - [`Extrapolate`](@ref): use the closest interior point as the boundary value.
+    At the lower boundary, this is:
+
 ```math
 A(v,θ)[1] = (θ[2] - θ[1]) v³[1 + \\tfrac{1}{2}] \\}
 ```
@@ -2456,8 +2513,8 @@ It uses the following stencil (TODO)
 
 Supported boundary conditions:
 
-- [`Extrapolate`](@ref): use the closest interior point as the boundary value.
-  At the lower boundary.
+  - [`Extrapolate`](@ref): use the closest interior point as the boundary value.
+    At the lower boundary.
 """
 struct FluxCorrectionC2C{BCS} <: AdvectionOperator
     bcs::BCS
@@ -2554,8 +2611,8 @@ It uses the following stencil (TODO)
 
 Supported boundary conditions:
 
-- [`Extrapolate`](@ref): use the closest interior point as the boundary value.
-  At the lower boundary.
+  - [`Extrapolate`](@ref): use the closest interior point as the boundary value.
+    At the lower boundary.
 """
 struct FluxCorrectionF2F{BCS} <: AdvectionOperator
     bcs::BCS
@@ -2646,7 +2703,7 @@ abstract type BoundaryOperator <: FiniteDifferenceOperator end
 
 This operator only modifies the values at the boundary:
 
- - [`SetValue(val)`](@ref): set the value to be `val` on the boundary.
+  - [`SetValue(val)`](@ref): set the value to be `val` on the boundary.
 """
 struct SetBoundaryOperator{BCS} <: BoundaryOperator
     bcs::BCS
@@ -2706,6 +2763,7 @@ return_eltype(::GradientOperator, arg) =
 
 Compute the gradient of a face-valued field `x`, returning a center-valued
 `Covariant3` vector field, using the stencil:
+
 ```math
 G(x)[i]^3 = x[i+\\tfrac{1}{2}] - x[i-\\tfrac{1}{2}]
 ```
@@ -2716,14 +2774,18 @@ need to cast the output of the `GradientF2C` to a `UVector`, `VVector` or `WVect
 according to the type of domain on which the operator is defined.
 
 The following boundary conditions are supported:
- - by default, the value of `x` at the boundary face will be used.
- - [`SetValue(x₀)`](@ref): calculate the gradient assuming the value at the
-   boundary is `x₀`. For the left boundary, this becomes:
+
+  - by default, the value of `x` at the boundary face will be used.
+  - [`SetValue(x₀)`](@ref): calculate the gradient assuming the value at the
+    boundary is `x₀`. For the left boundary, this becomes:
+
 ```math
 G(x)[1]³ = x[1+\\tfrac{1}{2}] - x₀
 ```
-- [`Extrapolate()`](@ref): set the value at the center closest to the boundary
-to be the same as the neighbouring interior value. For the left boundary, this becomes:
+
+  - [`Extrapolate()`](@ref): set the value at the center closest to the boundary
+    to be the same as the neighbouring interior value. For the left boundary, this becomes:
+
 ```math
 G(x)[1]³ = G(x)[2]³
 ```
@@ -2824,21 +2886,23 @@ end
 
 Compute the gradient of a center-valued field `x`, returning a face-valued
 `Covariant3` vector field, using the stencil:
+
 ```math
 G(x)[i]^3 = x[i+\\tfrac{1}{2}] - x[i-\\tfrac{1}{2}]
 ```
 
 The following boundary conditions are supported:
-- [`SetValue(x₀)`](@ref): calculate the gradient assuming the value at the
-  boundary is `x₀`. For the left boundary, this becomes:
-  ```math
-  G(x)[\\tfrac{1}{2}]³ = 2 (x[1] - x₀)
-  ```
-- [`SetGradient(v₀)`](@ref): set the value of the gradient at the boundary to be
-  `v₀`. For the left boundary, this becomes:
-  ```math
-  G(x)[\\tfrac{1}{2}] = v₀
-  ```
+
+  - [`SetValue(x₀)`](@ref): calculate the gradient assuming the value at the
+    boundary is `x₀`. For the left boundary, this becomes:
+    ```math
+    G(x)[\\tfrac{1}{2}]³ = 2 (x[1] - x₀)
+    ```
+  - [`SetGradient(v₀)`](@ref): set the value of the gradient at the boundary to be
+    `v₀`. For the left boundary, this becomes:
+    ```math
+    G(x)[\\tfrac{1}{2}] = v₀
+    ```
 """
 struct GradientC2F{BC} <: GradientOperator
     bcs::BC
@@ -2939,12 +3003,14 @@ end
 Compute the gradient of a field `θ` by upwinding it according to the direction
 of a vector field `v` on the same space. The gradient stencil is determined by
 the sign of the 3rd contravariant component of `v`:
+
 ```math
 UG(\\boldsymbol{v}, θ)[i] = \\begin{cases}
     G(L(θ))[i] \\textrm{, if } v^3[i] > 0 \\\\
     G(R(θ))[i] \\textrm{, if } v^3[i] < 0
 \\end{cases}
 ```
+
 where `G` is a gradient operator and `L`/`R` are left/right-bias operators. When
 `θ` and `v` are located on centers, `G = GradientF2C()`, `L = LeftBiasedC2F()`,
 and `R = RightBiasedC2F()`. When they are located on faces, `G = GradientC2F()`,
@@ -2952,10 +3018,13 @@ and `R = RightBiasedC2F()`. When they are located on faces, `G = GradientC2F()`,
 
 No boundary conditions are currently supported. The default behavior on the left
 boundary (with index `i_min`) is
+
 ```math
 UG(\\boldsymbol{v}, θ)[i_min] = G(R(θ))[i_min]
 ```
+
 and the default behavior on the right boundary (with index `i_max`) is
+
 ```math
 UG(\\boldsymbol{v}, θ)[i_max] = G(L(θ))[i_max]
 ```
@@ -3041,28 +3110,34 @@ return_eltype(::DivergenceOperator, arg) =
 
 Compute the vertical contribution to the divergence of a face-valued field
 vector `v`, returning a center-valued scalar field, using the stencil
+
 ```math
 D(v)[i] = (Jv³[i+\\tfrac{1}{2}] - Jv³[i-\\tfrac{1}{2}]) / J[i]
 ```
+
 where `Jv³` is the Jacobian multiplied by the third contravariant component of
 `v`.
 
 The following boundary conditions are supported:
- - by default, the value of `v` at the boundary face will be used.
- - [`SetValue(v₀)`](@ref): calculate the divergence assuming the value at the
-   boundary is `v₀`. For the left boundary, this becomes:
+
+  - by default, the value of `v` at the boundary face will be used.
+  - [`SetValue(v₀)`](@ref): calculate the divergence assuming the value at the
+    boundary is `v₀`. For the left boundary, this becomes:
+
 ```math
 D(v)[1] = (Jv³[1+\\tfrac{1}{2}] - Jv³₀) / J[i]
 ```
-- [`Extrapolate()`](@ref): set the value at the center closest to the boundary
-  to be the same as the neighbouring interior value. For the left boundary, this
-  becomes:
+
+  - [`Extrapolate()`](@ref): set the value at the center closest to the boundary
+    to be the same as the neighbouring interior value. For the left boundary, this
+    becomes:
+
 ```math
 D(v)[1]³ = D(v)[2]³
 
 - [`SetDivergence(v₀)`](@ref): set the divergence at the cell center  closest to
   the boundary
-
+```
 """
 struct DivergenceF2C{BCS} <: DivergenceOperator
     bcs::BCS
@@ -3223,22 +3298,25 @@ Adapt.adapt_structure(to, op::FiniteDifferenceOperator) =
 
 Compute the vertical contribution to the divergence of a center-valued field
 vector `v`, returning a face-valued scalar field, using the stencil
+
 ```math
 D(v)[i] = (Jv³[i+\\tfrac{1}{2}] - Jv³[i-\\tfrac{1}{2}]) / J[i]
 ```
+
 where `Jv³` is the Jacobian multiplied by the third contravariant component of
 `v`.
 
 The following boundary conditions are supported:
-- [`SetValue(v₀)`](@ref): calculate the divergence assuming the value at the
-   boundary is `v₀`. For the left boundary, this becomes:
-  ```math
-  D(v)[\\tfrac{1}{2}] = \\frac{1}{2} (Jv³[1] - Jv³₀) / J[i]
-  ```
-- [`SetDivergence(x)`](@ref): set the value of the divergence at the boundary to be `x`.
-  ```math
-  D(v)[\\tfrac{1}{2}] = x
-  ```
+
+  - [`SetValue(v₀)`](@ref): calculate the divergence assuming the value at the
+    boundary is `v₀`. For the left boundary, this becomes:
+    ```math
+    D(v)[\\tfrac{1}{2}] = \\frac{1}{2} (Jv³[1] - Jv³₀) / J[i]
+    ```
+  - [`SetDivergence(x)`](@ref): set the value of the divergence at the boundary to be `x`.
+    ```math
+    D(v)[\\tfrac{1}{2}] = x
+    ```
 """
 struct DivergenceC2F{BC} <: DivergenceOperator
     bcs::BC
@@ -3356,32 +3434,36 @@ covariant vector field `v`. It acts on the horizontal covariant components of
 contravariant vector field (that is ``C(v)³ = 0``).
 
 Specifically it approximates:
+
 ```math
 \\begin{align*}
 C(v)^1 &= -\\frac{1}{J} \\frac{\\partial v_2}{\\partial \\xi^3}  \\\\
 C(v)^2 &= \\frac{1}{J} \\frac{\\partial v_1}{\\partial \\xi^3} \\\\
 \\end{align*}
 ```
+
 using the stencils
+
 ```math
 \\begin{align*}
 C(v)[i]^1 &= - \\frac{1}{J[i]} (v₂[i+\\tfrac{1}{2}] - v₂[i-\\tfrac{1}{2}]) \\\\
 C(v)[i]^2 &= \\frac{1}{J[i]}  (v₁[i+\\tfrac{1}{2}] - v₁[i-\\tfrac{1}{2}])
 \\end{align*}
 ```
+
 where ``v₁`` and ``v₂`` are the 1st and 2nd covariant components of ``v``, and
 ``J`` is the Jacobian determinant.
 
 The following boundary conditions are supported:
 
-- [`SetValue(v₀)`](@ref): calculate the curl assuming the value of ``v`` at the
-   boundary is `v₀`. For the left boundary, this becomes:
-  ```math
-  C(v)[\\tfrac{1}{2}]^1 = -\\frac{2}{J[i]} (v_2[1] - (v₀)_2)
-  C(v)[\\tfrac{1}{2}]^2 = \\frac{2}{J[i]} (v_1[1] - (v₀)_1)
-  ```
-- [`SetCurl(v⁰)`](@ref): enforce the curl operator output at the boundary to be
-  the contravariant vector `v⁰`.
+  - [`SetValue(v₀)`](@ref): calculate the curl assuming the value of ``v`` at the
+    boundary is `v₀`. For the left boundary, this becomes:
+    ```math
+    C(v)[\\tfrac{1}{2}]^1 = -\\frac{2}{J[i]} (v_2[1] - (v₀)_2)
+    C(v)[\\tfrac{1}{2}]^2 = \\frac{2}{J[i]} (v_1[1] - (v₀)_1)
+    ```
+  - [`SetCurl(v⁰)`](@ref): enforce the curl operator output at the boundary to be
+    the contravariant vector `v⁰`.
 """
 struct CurlC2F{BC} <: CurlFiniteDifferenceOperator
     bcs::BC
@@ -3486,9 +3568,11 @@ _stencil_interior_width(bc::StencilBroadcasted) =
 
 The index of the left-most interior point of the operator `op` with boundary
 `bc` when used with arguments `args...`. By default, this is
+
 ```julia
 left_idx(space) + boundary_width(op, bc)
 ```
+
 but can be overwritten for specific stencil types (e.g. if the stencil is
 assymetric).
 """
@@ -3506,9 +3590,11 @@ end
 
 The index of the right-most interior point of the operator `op` with boundary
 `bc` when used with arguments `args...`. By default, this is
+
 ```julia
 right_idx(space) + boundary_width(op, bc)
 ```
+
 but can be overwritten for specific stencil types (e.g. if the stencil is
 assymetric).
 """
@@ -3618,10 +3704,10 @@ end
 @inline function should_call_left_boundary(idx, space, op, args...)
     Topologies.isperiodic(space) && return false
     loc = left_boundary_window(space)
-    return idx < Operators.left_interior_idx(
+    return idx < left_interior_idx(
         space,
         op,
-        Operators.get_boundary(op, loc),
+        get_boundary(op, loc),
         args...,
     )
 end
@@ -3629,15 +3715,27 @@ end
 @inline function should_call_right_boundary(idx, space, op, args...)
     Topologies.isperiodic(space) && return false
     loc = right_boundary_window(space)
-    return idx > Operators.right_interior_idx(
+    return idx > right_interior_idx(
         space,
         op,
-        Operators.get_boundary(op, loc),
+        get_boundary(op, loc),
         args...,
     )
 end
 
-Base.@propagate_inbounds function getidx(
+# When bounds checks are forced with check-bounds=yes, avoid inlining stencil
+# nodes of a broadcast expression through @propagate_inbounds. If each stencil
+# node inlines its interior and boundary subexpressions, the size of the
+# @propagate_inbounds expression grows exponentially with operator depth. With a
+# bounds check in every array access, LLVM can take tens of minutes to compile
+# flux-corrected transport examples. The check_bounds flag is constant and
+# precompilation caches are keyed on it, so each variant gets its own cache. If
+# bounds checks aren't forced, @propagate_inbounds improves runtime performance.
+macro maybe_propagate_inbounds(expr)
+    esc(isone(Base.JLOptions().check_bounds) ? expr : :(Base.@propagate_inbounds $expr))
+end
+
+@maybe_propagate_inbounds function getidx(
     parent_space,
     bc::Union{StencilBroadcasted, Base.Broadcast.Broadcasted{<:Fields.AbstractFieldStyle}},
     idx,
@@ -3703,31 +3801,24 @@ Base.Broadcast.BroadcastStyle(
 
 Base.eltype(bc::StencilBroadcasted) = return_eltype(bc.op, bc.args...)
 
-function vidx(space::AllFaceFiniteDifferenceSpace, idx)
-    @assert idx isa PlusHalf
-    v = idx + half
-    if Topologies.isperiodic(space)
-        v = mod1(v, Spaces.nlevels(space))
-    end
-    return v
-end
-function vidx(space::AllCenterFiniteDifferenceSpace, idx)
-    @assert idx isa Integer
-    v = idx
-    if Topologies.isperiodic(space)
-        v = mod1(v, Spaces.nlevels(space))
-    end
-    return v
-end
-function vidx(space::AbstractSpace, idx)
-    return 1
-end
+vidx(space::AllFaceFiniteDifferenceSpace, idx::Union{Nothing, PlusHalf}) =
+    isnothing(idx) ? 1 :
+    Topologies.isperiodic(space) ? mod1(idx + half, Spaces.nlevels(space)) : idx + half
+vidx(space::AllCenterFiniteDifferenceSpace, idx::Union{Nothing, Integer}) =
+    isnothing(idx) ? 1 :
+    Topologies.isperiodic(space) ? mod1(idx, Spaces.nlevels(space)) : idx
+vidx(space::AbstractSpace, idx) = 1
+
+# Fields on a column space only have data at a single horizontal index, so the
+# horizontal indices from the broadcast expression do not apply to them.
+@inline hindices(::Spaces.FiniteDifferenceSpace, hidx) = (1, 1, 1)
+@inline hindices(space, hidx) = hidx
 
 Base.@propagate_inbounds function getidx(parent_space, bc::Fields.Field, idx)
     field_data = Fields.field_values(bc)
     space = reconstruct_placeholder_space(axes(bc), parent_space)
     v = vidx(space, idx)
-    return @inbounds field_data[vindex(v)]
+    return @inbounds field_data[v]
 end
 Base.@propagate_inbounds function getidx(
     parent_space,
@@ -3738,8 +3829,8 @@ Base.@propagate_inbounds function getidx(
     field_data = Fields.field_values(bc)
     space = reconstruct_placeholder_space(axes(bc), parent_space)
     v = vidx(space, idx)
-    i, j, h = hidx
-    return @inbounds field_data[CartesianIndex(i, j, 1, v, h)]
+    i, j, h = hindices(space, hidx)
+    return @inbounds field_data[v, i, j, h]
 end
 
 # unwap boxed scalars
@@ -3794,7 +3885,7 @@ Base.@propagate_inbounds function setidx!(
     v = vidx(space, idx)
     field_data = Fields.field_values(field)
     i, j, h = hidx
-    @inbounds field_data[CartesianIndex(i, j, 1, v, h)] = val
+    @inbounds field_data[v, i, j, h] = val
     val
 end
 
@@ -3880,7 +3971,7 @@ function _serial_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
     bcs = bc # strip_space(bc, space)
     mask = Spaces.get_mask(axes(field_out))
     @inbounds for h in 1:Nh, j in 1:Nj, i in 1:Ni
-        DataLayouts.should_compute(mask, CartesianIndex(i, j, 1, 1, h)) ||
+        DataLayouts.should_compute(mask, CartesianIndex(1, i, j, h)) ||
             continue
         apply_stencil!(space, field_out, bcs, (i, j, h), bounds)
     end
@@ -3899,7 +3990,7 @@ function _threaded_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
             for j in 1:Nj, i in 1:Ni
                 DataLayouts.should_compute(
                     mask,
-                    CartesianIndex(i, j, 1, 1, h),
+                    CartesianIndex(1, i, j, h),
                 ) || continue
                 apply_stencil!(space, field_out, bcs, (i, j, h), bounds)
             end
@@ -3915,12 +4006,12 @@ function Base.copyto!(
     bc::Union{
         StencilBroadcasted{ColumnStencilStyle},
         Broadcasted{ColumnStencilStyle},
-    },
+    };
     mask = DataLayouts.NoMask(),
 )
     space = axes(bc)
     local_geometry = Spaces.local_geometry_data(space)
-    (Ni, Nj, _, _, Nh) = size(local_geometry)
+    (_, Ni, Nj, Nh) = size(local_geometry)
     context = ClimaComms.context(axes(field_out))
     device = ClimaComms.device(context)
     if (device isa ClimaComms.CPUMultiThreaded) && Nh > 1
@@ -3986,7 +4077,7 @@ function fd_shmem_is_supported end
 """
     any_fd_shmem_supported(::Base.Broadcast.AbstractBroadcasted)
 
-Returns a Bool indicating if any operators in the broadcasted object support 
+Returns a Bool indicating if any operators in the broadcasted object support
 finite difference shared memory shmem.
 """
 function any_fd_shmem_supported end
@@ -4092,11 +4183,12 @@ end
 
 Allows users to, from global scope, enable finite
 difference shmem for operators that support it.
-TODO: ~30% slowdown was noticed with CC 0.14.31 
-in Aquaplanet benchmarks. This may need attention in 
+TODO: ~30% slowdown was noticed with CC 0.14.31
+in Aquaplanet benchmarks. This may need attention in
 future releases
 
 ## Usage
+
 ```julia
 Operators.use_fd_shmem() = false
 ```

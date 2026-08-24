@@ -23,7 +23,7 @@ compare_read_type(x) = InputOutput.read_type(string(eltype(x))) == eltype(x)
     space = TU.ColumnCenterFiniteDifferenceSpace(FT; context)
     @test compare_read_type(fill((1.0, 2.0, (3.0, 4.0, (5.0,))), space))
     @test compare_read_type(fill((; a = FT(0), b = (; c = FT(1))), space))
-    # test that attempting to read a type from a string with an expression that executes code throws an error
+    # Test that attempting to read a type from a string with an expression that executes code throws an error
     @test_throws ErrorException InputOutput.read_type("1+2")
     @test_throws ErrorException InputOutput.read_type("Base.rm(\"foo.jl\")")
 end

@@ -4,18 +4,9 @@ import ClimaComms
 import MultiBroadcastFusion as MBF
 import ..slab, ..slab_args, ..column, ..column_args, ..level, ..level_args
 import ..DebugOnly: call_post_op_callback, post_op_callback
-import ..DataLayouts:
-    DataLayouts,
-    AbstractData,
-    DataStyle,
-    FusedMultiBroadcast,
-    @fused_direct,
-    isascalar,
-    check_fused_broadcast_axes,
-    ToCPU,
-    ToCUDA,
-    copyto_per_field!,
-    copyto_per_field_scalar!
+import ..DataLayouts: DataLayouts, DataLayout, DataStyle, PointIndex
+# `@fused_direct` is unused here, but re-exposed as `Fields.@fused_direct` for users
+import ..DataLayouts: FusedMultiBroadcast, @fused_direct
 import ..Domains
 import ..Topologies
 import ..Quadratures
@@ -23,9 +14,9 @@ import ..Grids: ColumnIndex, local_geometry_type
 import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace, cuda_synchronize
 import ..Spaces: nlevels, ncolumns
 import ..Spaces: get_mask, set_mask!
-import ..DataLayouts: AbstractMask
-import ..Geometry: Geometry, Cartesian12Vector
+import ..Geometry: Geometry
 import ..Utilities: PlusHalf, half, safe_eltype, unsafe_eltype
+import ..Utilities: recursive_bottom_eltype
 import ..Utilities: drop_auto_broadcasters, auto_broadcasted
 
 using UnrolledUtilities
@@ -39,28 +30,21 @@ import StaticArrays, LinearAlgebra, Statistics
 
 A set of `values` defined at each point of a `space`.
 """
-struct Field{V <: AbstractData, S <: AbstractSpace}
+struct Field{V <: DataLayout, S <: AbstractSpace}
     values::V
     space::S
-    # add metadata/attributes?
-    function Field{V, S}(values::V, space::S) where {V, S}
-        #TODOneed to enforce that the data size matches the space
-        return new{V, S}(values, space)
-    end
 end
-Field(values::V, space::S) where {V <: AbstractData, S <: AbstractSpace} =
-    Field{V, S}(values, space)
-
-Field(::Type{T}, space::S) where {T, S <: AbstractSpace} =
+Field(::Type{T}, space::AbstractSpace) where {T} =
     Field(similar(Spaces.coordinates_data(space), T), space)
+
+# Ensure that every Field on a PointSpace has a zero-dimensional DataLayout.
+Field(values::DataLayout, space::AbstractPointSpace) = Field(view(values), space)
+Field(values::V, space::S) where {V <: DataLayout{<:Any, 0}, S <: AbstractPointSpace} =
+    Field{V, S}(values, space)
 
 local_geometry_type(::Field{V, S}) where {V, S} = local_geometry_type(S)
 
 ClimaComms.context(field::Field) = ClimaComms.context(axes(field))
-
-ClimaComms.context(topology::Topologies.Topology2D) = topology.context
-ClimaComms.context(topology::T) where {T <: Topologies.AbstractTopology} =
-    topology.context
 
 Adapt.adapt_structure(to, field::Field) =
     Field(Adapt.adapt(to, field_values(field)), Adapt.adapt(to, axes(field)))
@@ -68,71 +52,90 @@ Adapt.adapt_structure(to, field::Field) =
 ## aliases
 # Point Field
 const PointField{V, S} =
-    Field{V, S} where {V <: AbstractData, S <: Spaces.PointSpace}
+    Field{V, S} where {V <: DataLayout, S <: Spaces.PointSpace}
 
 # TODO: do we need to make this distinction? what about inside cuda kernels
 #       when we replace with a PlaceHolerSpace?
 const PointDataField{V, S} =
-    Field{V, S} where {V <: DataLayouts.DataF, S <: Spaces.AbstractSpace}
+    Field{V, S} where {V <: DataLayout{<:Any, 0}, S <: Spaces.AbstractSpace}
 
 # Spectral Element Field
 const SpectralElementField{V, S} = Field{
     V,
     S,
-} where {V <: AbstractData, S <: Spaces.AbstractSpectralElementSpace}
+} where {V <: DataLayout, S <: Spaces.AbstractSpectralElementSpace}
 const SpectralElementField1D{V, S} =
-    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace1D}
+    Field{V, S} where {V <: DataLayout, S <: Spaces.SpectralElementSpace1D}
 const SpectralElementField2D{V, S} =
-    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace2D}
+    Field{V, S} where {V <: DataLayout, S <: Spaces.SpectralElementSpace2D}
 
 const FiniteDifferenceField{V, S} =
-    Field{V, S} where {V <: AbstractData, S <: Spaces.FiniteDifferenceSpace}
+    Field{V, S} where {V <: DataLayout, S <: Spaces.FiniteDifferenceSpace}
+# Backwards-compatibility alias for the pre-rewrite ColumnField, which was a
+# Field with DataLayouts.DataColumn values. Single-column fields are now
+# identified by their space (a FiniteDifferenceSpace, which may wrap a
+# ColumnGrid returned by `column(::ExtrudedFiniteDifferenceSpace, ...)`), so
+# the old ColumnField is the same set of fields as FiniteDifferenceField.
+const ColumnField = FiniteDifferenceField
 const FaceFiniteDifferenceField{V, S} =
-    Field{V, S} where {V <: AbstractData, S <: Spaces.FaceFiniteDifferenceSpace}
+    Field{V, S} where {V <: DataLayout, S <: Spaces.FaceFiniteDifferenceSpace}
 const CenterFiniteDifferenceField{V, S} = Field{
     V,
     S,
-} where {V <: AbstractData, S <: Spaces.CenterFiniteDifferenceSpace}
+} where {V <: DataLayout, S <: Spaces.CenterFiniteDifferenceSpace}
 
 # Extruded Fields
 const ExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
-} where {V <: AbstractData, S <: Spaces.ExtrudedFiniteDifferenceSpace}
+} where {V <: DataLayout, S <: Spaces.ExtrudedFiniteDifferenceSpace}
 const ExtrudedFiniteDifferenceField2D{V, S} = Field{
     V,
     S,
-} where {V <: AbstractData, S <: Spaces.ExtrudedFiniteDifferenceSpace2D}
+} where {V <: DataLayout, S <: Spaces.ExtrudedFiniteDifferenceSpace2D}
 const ExtrudedFiniteDifferenceField3D{V, S} = Field{
     V,
     S,
-} where {V <: AbstractData, S <: Spaces.ExtrudedFiniteDifferenceSpace3D}
+} where {V <: DataLayout, S <: Spaces.ExtrudedFiniteDifferenceSpace3D}
 const FaceExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
-} where {V <: AbstractData, S <: Spaces.FaceExtrudedFiniteDifferenceSpace}
+} where {V <: DataLayout, S <: Spaces.FaceExtrudedFiniteDifferenceSpace}
 const CenterExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
-} where {V <: AbstractData, S <: Spaces.CenterExtrudedFiniteDifferenceSpace}
+} where {V <: DataLayout, S <: Spaces.CenterExtrudedFiniteDifferenceSpace}
 
-#
-const SpectralElementField1D{V, S} =
-    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace1D}
+const MultiColumnFiniteDifferenceField{V, S} = Field{
+    V,
+    S,
+} where {V <: DataLayout, S <: Spaces.MultiColumnFiniteDifferenceSpace}
+const FaceMultiColumnFiniteDifferenceField{V, S} = Field{
+    V,
+    S,
+} where {V <: DataLayout, S <: Spaces.FaceMultiColumnFiniteDifferenceSpace}
+const CenterMultiColumnFiniteDifferenceField{V, S} = Field{
+    V,
+    S,
+} where {
+    V <: DataLayout,
+    S <: Spaces.CenterMultiColumnFiniteDifferenceSpace,
+}
+
 const ExtrudedSpectralElementField2D{V, S} = Field{
     V,
     S,
-} where {V <: AbstractData, S <: Spaces.ExtrudedSpectralElementSpace2D}
+} where {V <: DataLayout, S <: Spaces.ExtrudedSpectralElementSpace2D}
 
 const RectilinearSpectralElementField2D{V, S} = Field{
     V,
     S,
-} where {V <: AbstractData, S <: Spaces.RectilinearSpectralElementSpace2D}
+} where {V <: DataLayout, S <: Spaces.RectilinearSpectralElementSpace2D}
 const ExtrudedRectilinearSpectralElementField3D{V, S} = Field{
     V,
     S,
 } where {
-    V <: AbstractData,
+    V <: DataLayout,
     S <: Spaces.ExtrudedRectilinearSpectralElementSpace3D,
 }
 
@@ -142,12 +145,12 @@ const ExtrudedRectilinearSpectralElementField3D{V, S} = Field{
 const CubedSphereSpectralElementField2D{V, S} = Field{
     V,
     S,
-} where {V <: AbstractData, S <: Spaces.CubedSphereSpectralElementSpace2D}
+} where {V <: DataLayout, S <: Spaces.CubedSphereSpectralElementSpace2D}
 const ExtrudedCubedSphereSpectralElementField3D{V, S} = Field{
     V,
     S,
 } where {
-    V <: AbstractData,
+    V <: DataLayout,
     S <: Spaces.ExtrudedCubedSphereSpectralElementSpace3D,
 }
 
@@ -164,57 +167,67 @@ ClimaComms.array_type(field::Field) =
     ClimaComms.array_type(ClimaComms.device(field))
 
 @inline Base.dotgetproperty(field::Field, prop) = Base.getproperty(field, prop)
-@inline Base.getproperty(field::Field, i::Integer) = Field(
-    DataLayouts.field_index_view(field_values(field), Val(i)),
-    axes(field),
-)
-@inline Base.getproperty(field::Field, name::Symbol) = Field(
-    DataLayouts.field_name_view(field_values(field), Val(name)),
-    axes(field),
-)
+@inline Base.getproperty(field::Field, i::Integer) =
+    Field(getproperty(field_values(field), i), axes(field))
+@inline Base.getproperty(field::Field, name::Symbol) =
+    Field(getproperty(field_values(field), name), axes(field))
 
 Base.eltype(::Type{<:Field{V}}) where {V} = eltype(V)
-Base.parent(field::Field) = parent(field_values(field))
+Base.IndexStyle(::Type{<:Field{V}}) where {V} = IndexStyle(V)
 
-# to play nice with DifferentialEquations; may want to revisit this
-# https://github.com/SciML/SciMLBase.jl/blob/697bd0c0c7365e77fa311f2d32eade70f43a8d50/src/solutions/ode_solutions.jl#L31
-Base.size(field::Field) = ()
-Base.length(field::Field) = 1
+for f in (:parent, :size, :length, :ndims)
+    @eval Base.$f(field::Field) = $f(field_values(field))
+end
+
+# Scalar reductions and views on the values of a `Field`. Generic and
+# downstream code (NaN checks, plotting) relies on these. `any` reduces over
+# the backing array rather than the `DataLayout` so that predicates on numbers
+# (`isnan`, `isinf`) work on struct-valued fields, whose entries the predicate
+# could not accept; `vec` iterates the `DataLayout`, so its eltype is the
+# field's.
+Base.any(f, field::Field) = any(f, parent(field))
+Base.similar(field::F, ::Type{F}) where {F <: Field} = similar(field)
+Base.vec(field::Field) = vec(field_values(field))
+for f in (:DataScope, :shape_params, :inferred_size, :nelems)
+    @eval DataLayouts.$f(field::Field) = DataLayouts.$f(field_values(field))
+end
+
+DataLayouts.reassign(field::Field, scope) =
+    Field(DataLayouts.reassign(field_values(field), scope), axes(field))
 
 Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(axes(field))
 
-# Methods for Slab and Column fields
-const SlabField{V, S} =
-    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab}
+Base.@propagate_inbounds Base.setindex!(field::Field, val, indices::PointIndex...) =
+    setindex!(field, val, CartesianIndex(indices...))
+Base.@propagate_inbounds Base.getindex(field::Field, indices::PointIndex...) =
+    getindex(field, CartesianIndex(indices...))
+Base.@propagate_inbounds Base.view(field::Field, indices::PointIndex...) =
+    view(field, CartesianIndex(indices...))
 
-const SlabField1D{V, S} = Field{
-    V,
-    S,
-} where {
-    V <: DataLayouts.DataSlab1D,
-    S <: Spaces.SpectralElementSpaceSlab1D,
-}
+Base.@propagate_inbounds Base.setindex!(field::Field, val, index::PointIndex) =
+    setindex!(field_values(field), val, index)
+Base.@propagate_inbounds Base.getindex(field::Field, index::PointIndex) =
+    getindex(field_values(field), index)
+Base.@propagate_inbounds Base.view(field::Field, index::PointIndex) =
+    Field(view(field_values(field), index), view(axes(field), index))
 
-const SlabField2D{V, S} = Field{
-    V,
-    S,
-} where {
-    V <: DataLayouts.DataSlab2D,
-    S <: Spaces.SpectralElementSpaceSlab2D,
-}
+Base.getindex(field::Field, ::Colon) = field
+Base.view(field::Field, ::Colon) = field
 
-const ColumnField{V, S} =
-    Field{V, S} where {V <: DataLayouts.DataColumn, S <: Spaces.AbstractSpace}
+Base.@propagate_inbounds level(field::Field, v) = Field(
+    level(field_values(field), Spaces.integer_level_index(axes(field), v)),
+    level(axes(field), v),
+)
 
-Base.@propagate_inbounds slab(field::Field, inds...) =
-    Field(slab(field_values(field), inds...), slab(axes(field), inds...))
+Base.@propagate_inbounds slab(field::Field, h) =
+    Field(slab(field_values(field), h), slab(axes(field), h))
+Base.@propagate_inbounds slab(field::Field, v, h) = Field(
+    slab(field_values(field), Spaces.integer_level_index(axes(field), v), h),
+    slab(axes(field), v, h),
+)
 
-Base.@propagate_inbounds function column(field::Field, inds...)
-    Field(column(field_values(field), inds...), column(axes(field), inds...))
-end
-@inline column(field::FiniteDifferenceField, inds...) = field
-
-
+Base.@propagate_inbounds column(field::Field, indices...) =
+    Field(column(field_values(field), indices...), column(axes(field), indices...))
 
 # nice printing
 # follow x-array like printing?
@@ -275,28 +288,20 @@ Base.copy(field::Field) = Field(copy(field_values(field)), axes(field))
 Base.deepcopy_internal(field::Field, stackdict::IdDict) =
     Field(Base.deepcopy_internal(field_values(field), stackdict), axes(field))
 
-function Base.copyto!(
-    dest::Field{V, M},
-    src::Field{V, M},
-    mask = DataLayouts.NoMask(),
-) where {V, M}
+function Base.copyto!(dest::Field, src::Field; mask = get_mask(axes(dest)))
     @assert axes(dest) == axes(src)
-    copyto!(field_values(dest), field_values(src), mask)
+    copyto!(field_values(dest), field_values(src); mask)
     return dest
 end
 
 """
-    fill!(field::Field, value, mask = get_mask(axes(field)))
+    fill!(field::Field, value; mask = get_mask(axes(field)))
 
 Fill `field` with `value`. The mask is extracted from the field's space,
 and `fill!` is only applied where the `mask` is true.
 """
-function Base.fill!(
-    field::Field,
-    value,
-    mask::AbstractMask = get_mask(axes(field)),
-)
-    fill!(field_values(field), value, mask)
+function Base.fill!(field::Field, value; mask = get_mask(axes(field)))
+    fill!(field_values(field), value; mask)
     return field
 end
 """
@@ -304,20 +309,18 @@ end
 
 Create a new `Field` on `space` and fill it with `value`.
 """
-function Base.fill(value::FT, space::AbstractSpace) where {FT}
-    field = Field(FT, space)
-    return fill!(field, value)
-end
+Base.fill(value::FT, space::AbstractSpace) where {FT} = fill!(Field(FT, space), value)
 
 """
     zeros(space::AbstractSpace)
 
-Create a new field on `space` that is zero everywhere.
+Create a new field on `space` that is zero everywhere. Unlike `fill`, this also
+zeroes out data at points that are masked out, so that the field does not
+contain any uninitialized values.
 """
 function Base.zeros(::Type{FT}, space::AbstractSpace) where {FT}
     field = Field(FT, space)
-    data = parent(field)
-    fill!(data, zero(eltype(data)))
+    fill!(parent(field), zero(eltype(parent(field))))
     return field
 end
 Base.zeros(space::AbstractSpace) = zeros(Spaces.undertype(space), space)
@@ -329,16 +332,14 @@ Create a new field on `space` that is one everywhere.
 """
 function Base.ones(::Type{FT}, space::AbstractSpace) where {FT}
     field = Field(FT, space)
-    data = parent(field)
-    fill!(data, one(eltype(data)))
+    fill!(parent(field), one(eltype(parent(field))))
     return field
 end
 Base.ones(space::AbstractSpace) = ones(Spaces.undertype(space), space)
 
 function Base.zero(field::Field)
     zfield = similar(field)
-    zarray = parent(zfield)
-    fill!(zarray, zero(eltype(zarray)))
+    fill!(parent(zfield), zero(eltype(parent(zfield))))
     return zfield
 end
 
@@ -361,8 +362,8 @@ local_geometry_field(space::AbstractSpace) =
     Field(Spaces.local_geometry_data(space), space)
 local_geometry_field(field::Field) = local_geometry_field(axes(field))
 
-Fields.local_geometry_field(bc::Base.Broadcast.Broadcasted) =
-    Fields.local_geometry_field(axes(bc))
+local_geometry_field(bc::Base.Broadcast.Broadcasted) =
+    local_geometry_field(axes(bc))
 
 """
     Δz_field(field::Field)
@@ -376,7 +377,6 @@ same space as the given field.
 
 include("broadcast.jl")
 include("mapreduce.jl")
-include("compat_diffeq.jl")
 include("fieldvector.jl")
 include("field_iterator.jl")
 include("indices.jl")
@@ -402,9 +402,9 @@ Apply weighted direct stiffness summation (DSS) to `f`. This operates in-place
 for communication in a distributed setting, see [`Spaces.create_dss_buffer`](@ref).
 
 This is a projection operation from the piecewise polynomial space
-``\\mathcal{V}_0`` to the continuous space ``\\mathcal{V}_1 = \\mathcal{V}_0
-\\cap \\mathcal{C}_0``, defined as the field ``\\theta \\in \\mathcal{V}_1``
+``\\mathcal{V}_0`` to the continuous space ``\\mathcal{V}_1 = \\mathcal{V}_0 \\cap \\mathcal{C}_0``, defined as the field ``\\theta \\in \\mathcal{V}_1``
 such that for all ``\\phi \\in \\mathcal{V}_1``
+
 ```math
 \\int_\\Omega \\phi \\theta \\,d\\Omega = \\int_\\Omega \\phi f \\,d\\Omega
 ```
@@ -412,14 +412,19 @@ such that for all ``\\phi \\in \\mathcal{V}_1``
 In matrix form, we define ``\\bar \\theta`` to be the unique global node
 representation, and ``Q`` to be the "scatter" operator which maps to the
 redundant node representation ``\\theta``
+
 ```math
 \\theta = Q \\bar \\theta
 ```
+
 Then the problem can be written as
+
 ```math
 (Q \\bar\\phi)^\\top W J Q \\bar\\theta = (Q \\bar\\phi)^\\top W J f
 ```
+
 which reduces to
+
 ```math
 \\theta = Q \\bar\\theta = Q (Q^\\top W J Q)^{-1} Q^\\top W J f
 ```
@@ -492,33 +497,6 @@ Create a buffer for communicating neighbour information of `field`.
 """
 Spaces.create_dss_buffer(field::Field) =
     Spaces.create_dss_buffer(field_values(field), axes(field))
-
-Base.@propagate_inbounds function level(
-    field::Union{
-        CenterFiniteDifferenceField,
-        CenterExtrudedFiniteDifferenceField,
-    },
-    v::Int,
-)
-    hspace = level(axes(field), v)
-    data = level(field_values(field), v)
-    Field(data, hspace)
-end
-Base.@propagate_inbounds function level(
-    field::Union{FaceFiniteDifferenceField, FaceExtrudedFiniteDifferenceField},
-    v::PlusHalf,
-)
-    hspace = level(axes(field), v)
-    data = level(field_values(field), v.i + 1)
-    Field(data, hspace)
-end
-
-Base.getindex(field::Field, ::Colon) = field
-
-Base.@propagate_inbounds Base.getindex(field::PointField) =
-    getindex(field_values(field))
-Base.@propagate_inbounds Base.setindex!(field::PointField, val) =
-    setindex!(field_values(field), val)
 
 """
     set!(f::Function, field::Field, args = ())
@@ -628,31 +606,29 @@ to simplify the process of getting and setting values in an `RRTMGPModel`; e.g.
     face_flux_field .= array2field(model.face_flux, face_space)
 ```
 
-The dimensions of `array` are assumed to be `([number of vertical nodes], number
-of horizontal nodes)`. Also, `array` must represent a `Field` of scalars, so
-that the struct type of the resulting `Field` is the same as the element type of
-`array`. If this restriction were removed, one would also need to pass the
-desired `Field` struct type as an argument to `array2field`, which would then
-need to permute the dimensions of `array` to match the target `DataLayout`.
+The struct type of the resulting `Field` is set to the array's element type.
 """
-array2field(array, space) = Field(
-    DataLayouts.array2data(array, Spaces.local_geometry_data(space)),
-    space,
-)
+function array2field(array, space)
+    data = Spaces.local_geometry_data(space)
+    array_size = DataLayouts.add_f_dim(size(data), 1, Val(DataLayouts.f_dim(data)))
+    parent_array = reshape(array, array_size)
+    return Field(DataLayouts.rebuild(data, parent_array, eltype(array)), space)
+end
 
 """
     field2array(field)
 
 Extracts a view of a `ClimaCore` `Field`'s underlying array. Can be used to
 simplify the process of getting and setting values in an `RRTMGPModel`; e.g.
+
 ```
     center_temperature .= field2array(center_temperature_field)
     field2array(face_flux_field) .= face_flux
 ```
 
-The dimensions of the resulting array are `([number of vertical nodes], number
-of horizontal nodes)`. Also, `field` must be a `Field` of scalars, so that the
-element type of the array is the same as the struct type of `field`.
+The dimensions of the resulting array are `([number of vertical nodes], number of horizontal nodes)`, with the first dimension dropped for fields defined over
+horizontal spaces. Only fields of scalars are supported; i.e., the element type
+of the array must be the same as the struct type of `field`.
 """
 function field2array(field::Field)
     if sizeof(eltype(field)) != sizeof(eltype(parent(field)))
@@ -660,7 +636,8 @@ function field2array(field::Field)
         error("unable to use field2array because each Field element is \
                represented by $f_axis_size array elements (must be 1)")
     end
-    return DataLayouts.data2array(field_values(field))
+    Spaces.has_vertical(axes(field)) || return vec(parent(field))
+    return reshape(parent(field), nlevels(axes(field)), :)
 end
 
 set_mask!(space::Spaces.AbstractSpace, field::Field) =

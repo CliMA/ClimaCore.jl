@@ -7,7 +7,7 @@ Adapt.adapt_structure(
     grid::Grids.ExtrudedFiniteDifferenceGrid,
 ) = Grids.DeviceExtrudedFiniteDifferenceGrid(
     Adapt.adapt(to, Grids.vertical_topology(grid)),
-    Adapt.adapt(to, grid.horizontal_grid.quadrature_style),
+    Adapt.adapt(to, Grids.quadrature_style(grid)),
     Adapt.adapt(to, grid.global_geometry),
     Adapt.adapt(to, grid.center_local_geometry),
     Adapt.adapt(to, grid.face_local_geometry),
@@ -21,6 +21,15 @@ Adapt.adapt_structure(
     Adapt.adapt(to, grid.global_geometry),
     Adapt.adapt(to, grid.center_local_geometry),
     Adapt.adapt(to, grid.face_local_geometry),
+)
+
+Adapt.adapt_structure(
+    to::CUDA.KernelAdaptor,
+    grid::Grids.SpectralElementGrid1D,
+) = Grids.DeviceSpectralElementGrid1D(
+    Adapt.adapt(to, grid.quadrature_style),
+    Adapt.adapt(to, grid.global_geometry),
+    Adapt.adapt(to, grid.local_geometry),
 )
 
 Adapt.adapt_structure(
@@ -54,12 +63,3 @@ Adapt.adapt_structure(
     lim.rtol,
     Limiters.NoConvergenceStats(),
 )
-
-Adapt.adapt_structure(to::CUDA.KernelAdaptor, mask::DataLayouts.IJHMask) =
-    DataLayouts.IJHMask(
-        Adapt.adapt(to, mask.is_active),
-        nothing,
-        Adapt.adapt(to, mask.i_map),
-        Adapt.adapt(to, mask.j_map),
-        Adapt.adapt(to, mask.h_map),
-    )

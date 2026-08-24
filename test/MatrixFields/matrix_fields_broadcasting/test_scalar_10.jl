@@ -1,21 +1,15 @@
-#=
-julia --project
-using Revise; include(joinpath("test", "MatrixFields", "matrix_fields_broadcasting", "test_scalar_10.jl"))
-=#
 import ClimaCore
 #! format: off
 include(joinpath(pkgdir(ClimaCore),"test","MatrixFields","matrix_fields_broadcasting","test_scalar_utils.jl"))
 #! format: on
-test_opt = get(ENV, "BUILDKITE", "") == "true"
+# Opt checks (JET + allocation gates) run on CI; set CLIMACORE_TEST_OPT=true
+# to also run them locally.
+test_opt =
+    get(ENV, "CLIMACORE_TEST_OPT", get(ENV, "BUILDKITE", "false")) == "true"
 @testset "diagonal matrix times bi-diagonal matrix times \
                  tri-diagonal matrix times quad-diagonal matrix times \
                  vector, but with forced right-associativity" begin
     bc = @lazy @. ᶜᶜmat * (ᶜᶠmat * (ᶠᶠmat * (ᶠᶜmat * ᶜvec)))
-    if USING_CUDA
-        @test_throws invalid_ir_error materialize(bc)
-        @warn "cuda is broken for this test, exiting."
-        exit(0)
-    end
     result = materialize(bc)
 
     input_fields = (ᶜᶜmat, ᶜᶠmat, ᶠᶠmat, ᶠᶜmat, ᶜvec)
@@ -60,4 +54,5 @@ test_opt = get(ENV, "BUILDKITE", "") == "true"
         USING_CUDA,
     )
     test_opt && !USING_CUDA && perf_getidx(bc)
+
 end

@@ -1,7 +1,3 @@
-#=
-julia --project
-using Revise; include(joinpath("test", "Spaces", "extruded_cuda.jl"))
-=#
 using LinearAlgebra, IntervalSets
 using ClimaComms
 ClimaComms.@import_required_backends
@@ -25,7 +21,7 @@ compare(cpu, gpu, f) = all(parent(f(cpu)) .≈ Array(parent(f(gpu))))
     context = SingletonCommsContext(device)
     collect(TU.all_spaces(Float64; zelem = 10, context)) # make sure we can construct spaces
     as = collect(TU.all_spaces(Float64; zelem = 10, context))
-    @test length(as) == 8
+    @test length(as) == 9
 end
 
 @testset "copyto! with CuArray-backed extruded spaces" begin

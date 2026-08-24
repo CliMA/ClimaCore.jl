@@ -1,7 +1,4 @@
 #=
-julia --project=.buildkite
-using Revise; include(joinpath("benchmarks", "scripts", "benchmark_offset.jl"))
-
 # Info
 
  - This benchmark demos the performance for different offset styles:

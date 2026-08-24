@@ -17,7 +17,7 @@ Additional attributes can be added as keyword arguments.
 # Example
 
 ```julia
-timevar = add_time_coord!(nc; units = "seconds since 2020-01-01 00:00:00",)
+timevar = add_time_coord!(nc; units = "seconds since 2020-01-01 00:00:00")
 timevar[:] = collect(0.0:0.5:60)
 ```
 """
@@ -98,7 +98,7 @@ function def_space_coord(
     coords = Spaces.coordinates_data(space)
 
     for (col, ((i, j), e)) in enumerate(nodes)
-        coord = slab(coords, e)[slab_index(i, j)]
+        coord = slab(coords, e)[1, i, j, 1]
         X[col] = coord.x
         Y[col] = coord.y
     end
@@ -150,7 +150,7 @@ function def_space_coord(
     coords = Spaces.coordinates_data(space)
 
     for (col, ((i, j), e)) in enumerate(nodes)
-        coord = slab(coords, e)[slab_index(i, j)]
+        coord = slab(coords, e)[1, i, j, 1]
         lon[col] = coord.long
         lat[col] = coord.lat
     end
@@ -277,6 +277,7 @@ along with any further dimensions specified in `extradims`. The new variable is
 returned.
 
 !!! note
+
     This does not write any data to the variable.
 """
 function NCDatasets.defVar(
@@ -300,9 +301,9 @@ Appropriate spatial dimensions should already be defined by [`defVar`](@ref).
 def_space_coord(nc, space)
 nc_time = def_time_coord(nc)
 nc_u = defVar(nc, "u", Float64, space, ("time",))
-for (i,t) in enumerate(times)
+for (i, t) in enumerate(times)
     nc_time[i] = t
-    nc_u[:,i] = U[i]
+    nc_u[:, i] = U[i]
 end
 ```
 """
@@ -329,7 +330,7 @@ function Base.setindex!(
     end
     data = Fields.field_values(field)
     for (col, ((i, j), e)) in enumerate(nodes)
-        var[col, extraidx...] = slab(data, e)[slab_index(i, j)]
+        var[col, extraidx...] = slab(data, e)[1, i, j, 1]
     end
     return var
 end

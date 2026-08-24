@@ -1,13 +1,289 @@
 import CUDA
 import ClimaCore.Fields
 import ClimaCore.DataLayouts
-import ClimaCore.DataLayouts: empty_kernel_stats
+import ClimaCore.Utilities
+
+function uncached_device_attributes()
+    device = CUDA.device()
+    get_attr(code) = Int(CUDA.attribute(device, code))
+    sm_version = (
+        get_attr(CUDA.DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR),
+        get_attr(CUDA.DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR),
+    )
+    sm_version[1] > 12 && throw(ArgumentError("Missing device attributes for \
+                                               Compute Capability $(sm_version[1])"))
+    return (;
+        threads_per_warp = get_attr(CUDA.DEVICE_ATTRIBUTE_WARP_SIZE),
+
+        # kernel launch configuration limits
+        max_block_dim_x = get_attr(CUDA.DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X),
+        max_block_dim_y = get_attr(CUDA.DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Y),
+        max_block_dim_z = get_attr(CUDA.DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Z),
+        max_grid_dim_x = get_attr(CUDA.DEVICE_ATTRIBUTE_MAX_GRID_DIM_X),
+        max_grid_dim_y = get_attr(CUDA.DEVICE_ATTRIBUTE_MAX_GRID_DIM_Y),
+        max_grid_dim_z = get_attr(CUDA.DEVICE_ATTRIBUTE_MAX_GRID_DIM_Z),
+
+        # occupancy limits exposed by the CUDA API
+        sm_count = get_attr(CUDA.DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT),
+        max_threads_per_block = get_attr(CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK),
+        max_threads_per_sm = get_attr(CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_MULTIPROCESSOR),
+        max_regs_per_block = get_attr(CUDA.DEVICE_ATTRIBUTE_MAX_REGISTERS_PER_BLOCK),
+        max_regs_per_sm = get_attr(CUDA.DEVICE_ATTRIBUTE_MAX_REGISTERS_PER_MULTIPROCESSOR),
+        max_shmem_per_block = get_attr(CUDA.DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK),
+        max_shmem_per_sm =
+        get_attr(CUDA.DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_MULTIPROCESSOR),
+        reserved_shmem_per_block =
+        get_attr(CUDA.DEVICE_ATTRIBUTE_RESERVED_SHARED_MEMORY_PER_BLOCK),
+
+        # more hardware properties from version 12.9 of the CUDA Runtime Headers
+        # https://gitlab.com/nvidia/headers/cuda-individual/cudart/-/blob/main/cuda_occupancy.h#L606-779
+        regs_per_allocation = 256,
+        shmem_per_allocation = sm_version[1] < 8 ? 256 : 128,
+        max_regs_per_thread = sm_version[1] < 7 ? 255 : 256,
+        schedulers_per_sm = sm_version == (6, 0) ? 2 : 4,
+        max_blocks_per_sm =
+        sm_version[1] < 5 || sm_version in ((7, 5), (8, 6), (8, 7)) ? 16 :
+        sm_version in ((8, 9), (10, 1)) || sm_version[1] == 12 ? 24 : 32,
+
+        # custom property to represent how the 2 schedulers/SM of CC 6.0 are
+        # bumped to 4 schedulers/SM for compatibility with other CC 6.x versions
+        # https://gitlab.com/nvidia/headers/cuda-individual/cudart/-/blob/main/cuda_occupancy.h#L1669-1692
+        max_schedulers_per_sm = 4,
+    )
+end
+
+const DEVICE_ATTRIBUTE_CACHE =
+    Ref{Utilities.return_type(uncached_device_attributes, Tuple{})}()
+const DEVICE_ATTRIBUTE_CACHE_INITIALIZED = Threads.Atomic{Bool}(false)
+
+"""
+    device_attributes()
+
+Collection of hardware properties from the CUDA API and CUDA Runtime Headers,
+obtained through calls to `CUDA.attribute`.
+
+Attributes are obtained by querying the C driver, which adds measurable latency
+if done more than once, so all attributes are cached after the first call. An
+`Atomic` initialization flag is used to ensure that every thread either sees a
+fully written cache or sets the cache itself. Any thread can set the cache, as
+ClimaComms only targets one device from threads launched by the same process.
+"""
+function device_attributes()
+    DEVICE_ATTRIBUTE_CACHE_INITIALIZED[] && return DEVICE_ATTRIBUTE_CACHE[]
+    DEVICE_ATTRIBUTE_CACHE[] = uncached_device_attributes()
+    DEVICE_ATTRIBUTE_CACHE_INITIALIZED[] = true
+    return DEVICE_ATTRIBUTE_CACHE[]
+end
+
+# cudaOccMaxActiveBlocksPerMultiprocessor times the number of multiprocessors,
+# and its limiting factor (num_blocks/num_threads/registers/shared_memory); the
+# block-barrier limit is intentionally ignored. CUDA's occupancy calculator
+# counts the named-barrier slots used by PTX `bar.sync N` (N > 0), `mbarrier`,
+# and similar instructions. ClimaCore uses only `sync_threads()` (PTX
+# `bar.sync 0`, the implicit CTA barrier, which does not consume a named-barrier
+# slot), `sync_warp()` (a warp convergence instruction), and `threadfence()` (a
+# memory fence, not a barrier). None of these affects the named-barrier count,
+# so the limit is irrelevant here.
+# https://gitlab.com/nvidia/headers/cuda-individual/cudart/-/blob/main/cuda_occupancy.h#L1282-1777
+function max_active_blocks(threads_per_block, regs_per_thread, shmem_per_block)
+    attrs = device_attributes()
+    round_up(n, divisor) = cld(n, divisor) * divisor # round n up to next multiple of divisor
+
+    (max_blocks_per_sm, limit) = (attrs.max_blocks_per_sm, :num_blocks)
+
+    if !iszero(threads_per_block)
+        threads_per_block > attrs.max_threads_per_block && return (0, :num_threads)
+        warps_per_block = cld(threads_per_block, attrs.threads_per_warp)
+        (max_warps_per_sm, warp_limit) =
+            (fld(attrs.max_threads_per_sm, attrs.threads_per_warp), :num_threads)
+        if !iszero(regs_per_thread)
+            regs_per_thread > attrs.max_regs_per_thread && return (0, :registers)
+            min_regs_per_warp = regs_per_thread * attrs.threads_per_warp
+            allocated_warps_per_block =
+                round_up(warps_per_block, attrs.max_schedulers_per_sm)
+            allocated_regs_per_warp = round_up(min_regs_per_warp, attrs.regs_per_allocation)
+            allocated_regs_per_block = allocated_warps_per_block * allocated_regs_per_warp
+            allocated_regs_per_block > attrs.max_regs_per_block && return (0, :registers)
+            max_regs_per_scheduler = fld(attrs.max_regs_per_sm, attrs.schedulers_per_sm)
+            max_warps_per_scheduler = fld(max_regs_per_scheduler, allocated_regs_per_warp)
+            max_warps_per_sm_by_regs = max_warps_per_scheduler * attrs.schedulers_per_sm
+            if max_warps_per_sm_by_regs < max_warps_per_sm
+                (max_warps_per_sm, warp_limit) = (max_warps_per_sm_by_regs, :registers)
+            end
+        end
+        max_blocks_per_sm_by_warps = fld(max_warps_per_sm, warps_per_block)
+        if max_blocks_per_sm_by_warps < max_blocks_per_sm
+            (max_blocks_per_sm, limit) = (max_blocks_per_sm_by_warps, warp_limit)
+        end
+    end
+
+    if !iszero(shmem_per_block)
+        min_shmem_per_block = shmem_per_block + attrs.reserved_shmem_per_block
+        max_shmem_per_block = attrs.max_shmem_per_block + attrs.reserved_shmem_per_block
+        allocated_shmem_per_block =
+            round_up(min_shmem_per_block, attrs.shmem_per_allocation)
+        allocated_shmem_per_block > max_shmem_per_block && return (0, :shared_memory)
+        max_blocks_per_sm_by_shmem = fld(attrs.max_shmem_per_sm, allocated_shmem_per_block)
+        if max_blocks_per_sm_by_shmem < max_blocks_per_sm
+            (max_blocks_per_sm, limit) = (max_blocks_per_sm_by_shmem, :shared_memory)
+        end
+    end
+
+    return (max_blocks_per_sm * attrs.sm_count, limit)
+end
+
+# cudaOccMaxPotentialOccupancyBlockSize times the maximum number of waves,
+# optimized for single-stream execution of both small and large workloads
+# https://gitlab.com/nvidia/headers/cuda-individual/cudart/-/blob/main/cuda_occupancy.h#L1865-1965
+function uncached_launch_configuration(cu_func, strict, default_max_waves, config_args...)
+    attrs = device_attributes()
+    cu_func_attrs = CUDA.attributes(cu_func)
+    regs_per_thread = Int(cu_func_attrs[CUDA.FUNC_ATTRIBUTE_NUM_REGS])
+    shmem_per_block = Int(cu_func_attrs[CUDA.FUNC_ATTRIBUTE_SHARED_SIZE_BYTES])
+    default_max_threads_per_block = min(
+        Int(cu_func_attrs[CUDA.FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK]),
+        attrs.max_threads_per_block,
+    )
+
+    get_user_max_threads_per_block() = attrs.max_block_dim_x
+    get_user_max_threads_per_block(user_max_threads) = user_max_threads
+    get_user_max_threads_per_block(user_max_threads_per_block, _) =
+        user_max_threads_per_block
+
+    get_user_max_blocks(_) = attrs.max_grid_dim_x
+    get_user_max_blocks(threads_per_block, user_max_threads) =
+        (strict ? fld : cld)(user_max_threads, threads_per_block) # round down when strict
+    get_user_max_blocks(_, _, user_max_blocks) = user_max_blocks
+
+    user_max_threads_per_block = get_user_max_threads_per_block(config_args...)
+    user_constraints_ignorable = user_max_threads_per_block >= default_max_threads_per_block
+    max_threads_per_block = min(user_max_threads_per_block, default_max_threads_per_block)
+
+    # Launch a single wave of blocks unless a caller asks for more. This
+    # replaces a heuristic that launched fld(regs_per_thread, 48) + 1 waves, on
+    # the assumption that higher register pressure leads to uneven load
+    # distributions. An A100 sweep over max_waves in (1, 2, 4) found one wave to
+    # be at least as fast throughout and clearly fastest for reductions, where
+    # the equal-shape lazy reduction went from 145 to 129 us, so that assumption
+    # was costing more in block-scheduling than it recovered.
+    max_waves = something(default_max_waves, 1)
+
+    # Iterating from small to large block sizes, prefer configurations with more
+    # total threads; on ties, prefer larger blocks (fewer blocks means less
+    # block-scheduling latency), but never accept a new configuration with fewer
+    # blocks unless it still has at least one block per multiprocessor. This
+    # spreads small workloads across as many multiprocessors as possible, while
+    # also confining large workloads to as few blocks as possible.
+    (best_threads_per_block, best_num_blocks, best_limit) = (0, 0, :user)
+    for warps_per_block in 1:cld(max_threads_per_block, attrs.threads_per_warp)
+        threads_per_block =
+            min(warps_per_block * attrs.threads_per_warp, max_threads_per_block)
+        (max_blocks_per_wave, active_blocks_limit) =
+            max_active_blocks(threads_per_block, regs_per_thread, shmem_per_block)
+        user_max_blocks = get_user_max_blocks(threads_per_block, config_args...)
+        user_constraints_ignorable &= user_max_blocks >= max_blocks_per_wave * max_waves
+        (num_blocks, limit) =
+            user_max_blocks <= max_blocks_per_wave * max_waves ? (user_max_blocks, :user) :
+            (max_blocks_per_wave * max_waves, active_blocks_limit)
+        if threads_per_block * num_blocks >= best_threads_per_block * best_num_blocks &&
+           (num_blocks >= attrs.sm_count || num_blocks >= best_num_blocks)
+            (best_threads_per_block, best_num_blocks, best_limit) =
+                (threads_per_block, num_blocks, limit)
+        end
+    end
+
+    # Compare searches unaffected by config_args against CUDA's implementation.
+    if DataLayouts.VALIDATE_LAUNCH_CONFIGURATIONS[] && user_constraints_ignorable
+        min_blocks_per_wave = cld(best_num_blocks, max_waves)
+        cuda_config = (; blocks = min_blocks_per_wave, threads = best_threads_per_block)
+        @assert CUDA.launch_configuration(cu_func) == cuda_config
+    end
+
+    return (;
+        threads = best_threads_per_block,
+        blocks = best_num_blocks,
+        limit = best_limit,
+    )
+end
+
+const LAUNCH_CONFIGURATION_CACHE =
+    IdDict{Any, @NamedTuple{threads::Int, blocks::Int, limit::Symbol}}()
+const LAUNCH_CONFIGURATION_CACHE_LOCK = ReentrantLock()
+
+"""
+    launch_configuration(f, args; max_waves = nothing)
+    launch_configuration(f, args, max_threads; strict = true, max_waves = nothing)
+    launch_configuration(f, args, max_threads_per_block, max_blocks; max_waves = nothing)
+
+Analogue of `CUDA.launch_configuration` optimized for single-stream execution,
+which maximizes occupancy across the entire device instead of just one
+multiprocessor, and which spreads small workloads across as many multiprocessors
+as possible. While `CUDA.launch_configuration` and its underlying C function
+`cudaOccMaxPotentialOccupancyBlockSize` only accept a single optional argument,
+`max_threads_per_block`, this function has three different variants:
+
+  - When no positional arguments are specified, only the hardware constraints on
+    occupancy are considered (like CUDA's implementation without any arguments).
+  - When `max_threads` is specified, the total number of threads is also limited.
+    If `strict` is `true`, this acts as a hard upper bound on the thread count.
+    Otherwise, an extra block of threads may be scheduled, allowing loops that
+    can handle surplus threads to assign every loop iteration to a unique thread.
+  - When `max_threads_per_block` and `max_blocks` are both specified, the block
+    and grid dimensions of the launch configuration are individually limited
+    (similar to CUDA's implementation, but with the addition of `max_blocks`).
+
+In each case, `max_waves` can be specified to control how many waves of blocks
+are scheduled. Kernels with uneven load distributions (e.g., due to conditional
+branches or nonuniform memory accesses) may require multiple waves to prevent
+some multiprocessors from idling while others are still active. However, block
+scheduling also adds measurable latency, so the number of waves should not be
+increased unless load redistribution is necessary. Setting `max_waves` to
+`nothing` gives it a dynamic value based on the kernel's register pressure.
+
+Like `CUDA.launch_configuration`, this returns a `NamedTuple` containing the
+optimal number of threads per block and the optimal number of blocks, and it
+also returns a symbol identifying the dominant factor that limits occupancy:
+
+  - `:user` when limited by the user-specified constraints (e.g., `max_threads`)
+  - `:num_blocks` when limited by the number of blocks per multiprocessor
+  - `:num_threads` when limited by the number of threads per multiprocessor
+  - `:registers` when limited by the register pressure of each thread
+  - `:shared_memory` when limited by the shared memory requirements of each block
+
+Computing a launch configuration requires querying the C driver for the kernel's
+register pressure and shared memory requirements, which adds measurable latency
+if done more than once per kernel, so the result is cached in an `IdDict`. A
+lock is used to prevent multiple threads from updating the cache simultaneously,
+since an `IdDict` should never be read as it is being rehashed.
+"""
+function launch_configuration(
+    f::F,
+    args,
+    config_args...;
+    strict = true,
+    max_waves = nothing,
+) where {F}
+    cu_func = (CUDA.@cuda always_inline = true launch = false f(args...)).fun
+    cache_key = (cu_func, strict, max_waves, config_args...)
+    lock(LAUNCH_CONFIGURATION_CACHE_LOCK)
+    try
+        return get!(LAUNCH_CONFIGURATION_CACHE, cache_key) do
+            uncached_launch_configuration(cache_key...)
+        end
+    finally
+        unlock(LAUNCH_CONFIGURATION_CACHE_LOCK)
+    end
+end
+
+threads_via_occupancy(f::F, args) where {F} = launch_configuration(f, args).threads
+function config_via_occupancy(f::F, nitems, args) where {F}
+    threads_per_block = launch_configuration(f, args, nitems; strict = false).threads
+    return (; threads = threads_per_block, blocks = cld(nitems, threads_per_block))
+end
 
 const reported_stats = Dict()
 const kernel_names = IdDict()
 
-# Call via ClimaCore.DataLayouts.empty_kernel_stats()
-empty_kernel_stats(::ClimaComms.CUDADevice) = empty!(reported_stats)
 collect_kernel_stats() = false
 
 function _memory_bytes(memory, key::Symbol)
@@ -72,6 +348,7 @@ const CLIMACORE_IGNORE_FUNCS =
     frame_method = frame.linfo isa Core.CodeInstance ? frame.linfo.def : frame.linfo
     frame_method isa Core.MethodInstance || return false
     mod = frame_method.def.module::Module
+    mod === DataLayouts && return false # loop machinery below user-facing calls
     mod_name = fullname(mod)[1]
     mod_name == :ClimaCore && frame.func::Symbol ∈ CLIMACORE_IGNORE_FUNCS && return false
     return mod_name ∉ IGNORE_MODULES
@@ -88,7 +365,7 @@ end
             Int,
             NTuple{N, <:Int},
             AbstractArray,
-            AbstractData,
+            DataLayout,
             Field,
         };
         auto = false,
@@ -174,7 +451,7 @@ function auto_launch!(
             # Note: `name = nothing` here will revert to default behavior
             kernel = CUDA.@cuda name = kernel_name always_inline = true launch =
                 false f!(args...)
-            config = CUDA.launch_configuration(kernel.fun)
+            config = launch_configuration(f!, args)
             threads = min(nitems, config.threads)
             blocks = cld(nitems, threads)
             kernel(args...; threads, blocks) # This knows to use always_inline from above.
@@ -191,7 +468,7 @@ function auto_launch!(
         # occursin("single_field_solve_kernel", string(nameof(F!))) || return nothing
         if !haskey(reported_stats, key)
             kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
-            config = CUDA.launch_configuration(kernel.fun)
+            config = launch_configuration(f!, args)
             threads = isnothing(nitems) ? nothing : min(nitems, config.threads)
             blocks = isnothing(nitems) ? nothing : cld(nitems, threads)
             # For now, let's just collect info, later we can benchmark
@@ -232,50 +509,11 @@ function auto_launch!(
     return nothing
 end
 
-function threads_via_occupancy(f!::F!, args) where {F!}
-    kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
-    config = CUDA.launch_configuration(kernel.fun)
-    return config.threads
-end
-
-"""
-    config_via_occupancy(f!::F!, nitems, args) where {F!}
-
-Returns a named tuple of `(:threads, :blocks)` that contains an approximate
-optimal launch configuration for the kernel `f!` with arguments `args`, given
-`nitems` total items to process.
-
-If the number of items is greater than the minimal number of threads required for the config
-suggested by `CUDA.launch_configuration` to be valid, that config is returned. Otherwise,
-the threads are spread out across more SMs to improve occupancy.
-"""
-function config_via_occupancy(f!::F!, nitems, args) where {F!}
-    kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
-    config = CUDA.launch_configuration(kernel.fun)
-    SM_count = CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT)
-    max_block_size = CUDA.attribute(CUDA.device(), CUDA.DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X)
-    if cld(nitems, config.threads) < config.blocks
-        # gpu will not saturate, so spread out threads across more SMs
-        even_distribution_threads = cld(nitems, SM_count)
-        # Ensure we don't exceed max block size (usually limited by register pressure)
-        # If so, attempt to halve the number of threads
-        even_distribution_threads =
-            even_distribution_threads > max_block_size ? div(even_distribution_threads, 2) :
-            even_distribution_threads
-        # it should be safe to assume even_distribution_threads < config.threads here
-        threads = min(even_distribution_threads, config.threads)
-        blocks = cld(nitems, threads)
-    else
-        threads = min(nitems, config.threads)
-        blocks = cld(nitems, threads)
-    end
-    return (; threads, blocks)
-end
-
 """
     thread_index()
 
 Return the threadindex:
+
 ```
 (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x
 ```
@@ -285,6 +523,7 @@ Return the threadindex:
 
 """
     kernel_indexes(tidx, n)
+
 Return a tuple of indexes from the kernel,
 where `tidx` is the cuda thread index and
 `n` is a tuple of max lengths along each
@@ -301,6 +540,7 @@ Returns a `Bool` indicating if the thread index
 tuple of max lengths along each dimension of the
 
 accessed data.
+
 ```julia
 function kernel!(data, n)
     @inbounds begin

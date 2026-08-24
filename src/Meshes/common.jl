@@ -11,9 +11,7 @@ nelements(mesh::AbstractMesh) = length(elements(mesh))
 """
     i = refindex(ϕ, n)
 
-Given a reference coordinate `ϕ` in the interval `[-1, 1]``, divide the interval
-into `n` evenly spaced subintervals, and return the index of the subinterval
-(`i`), and the position in the subinterval (`ϕs`), normalized to normalized `[-1, 1]`.
+Given a reference coordinate `ϕ` in the interval ```[-1, 1]``, divide the interval into ```n` evenly spaced subintervals, and return the index of the subinterval (`i`), and the position in the subinterval (`ϕs`), normalized to normalized `[-1, 1]`.
 """
 function refindex(ϕ, n)
     ϕn = ϕ * n
@@ -119,7 +117,7 @@ function face_connectivity_matrix(
             if is_boundary_face(mesh, elem, face)
                 continue
             end
-            opelem, opface, reversed = Meshes.opposing_face(mesh, elem, face)
+            opelem, opface, reversed = opposing_face(mesh, elem, face)
             j = orderindex[opelem]
             push!(I, i)
             push!(J, j)

@@ -1,7 +1,15 @@
 import ClimaCore.Remapping: interpolate_slab!
 import ClimaCore: Topologies, Spaces, Fields, Operators, Quadratures
+import ClimaComms
 import CUDA
 using CUDA: @cuda
+
+function _configure_threadblock(max_threads, nitems)
+    nthreads = min(max_threads, nitems)
+    nblocks = cld(nitems, nthreads)
+    return (nthreads, nblocks)
+end
+
 function interpolate_slab!(
     output_array,
     field::Fields.Field,
@@ -17,7 +25,7 @@ function interpolate_slab!(
     cuslab_indices = CuArray(slab_indices)
 
     nitems = length(output_array)
-    nthreads, nblocks = _configure_threadblock(nitems)
+    nthreads, nblocks = _configure_threadblock(_max_threads_cuda(), nitems)
 
     args = (output_cuarray, field, cuslab_indices, cuweights)
     auto_launch!(
@@ -54,15 +62,16 @@ function interpolate_slab_kernel!(
         I1, I2 = weights[index]
         Nq1, Nq2 = length(I1), length(I2)
 
-        output_array[index] = zero(FT)
+        val = zero(FT)
 
         for j in 1:Nq2, i in 1:Nq1
             ij = CartesianIndex((i, j))
-            output_array[index] +=
+            val +=
                 I1[i] *
                 I2[j] *
                 Operators.get_node(space, field, ij, slab_indices[index])
         end
+        output_array[index] = val
     end
     return nothing
 end
@@ -83,14 +92,15 @@ function interpolate_slab_kernel!(
         I1, = weights[index]
         Nq = length(I1)
 
-        output_array[index] = zero(FT)
+        val = zero(FT)
 
         for i in 1:Nq
             ij = CartesianIndex((i))
-            output_array[index] +=
+            val +=
                 I1[i] *
                 Operators.get_node(space, field, ij, slab_indices[index])
         end
+        output_array[index] = val
     end
     return nothing
 end
@@ -112,7 +122,7 @@ function interpolate_slab_level!(
     )
 
     nitems = length(vidx_ref_coordinates)
-    nthreads, nblocks = _configure_threadblock(nitems)
+    nthreads, nblocks = _configure_threadblock(_max_threads_cuda(), nitems)
     args = (output_cuarray, field, cuvidx_ref_coordinates, h, Is)
     auto_launch!(
         interpolate_slab_level_kernel!,

@@ -56,7 +56,7 @@ Exception:
 
 ## 2. Avoid `using` / `import` between submodules of the same package
 
-Inside `src/`, do not introduce new `using` or `import` statements that pull names from a *sibling* or *parent* submodule of the same package. This rule does not restrict `using`/`import` of external packages — those are normal Julia idioms.
+Inside `src/`, do not introduce new `using` or `import` statements that pull names from a *sibling* or *parent* submodule of the same package. This rule does not restrict `using`/`import` of external packages; those are normal Julia idioms.
 
 Bad:
 
@@ -125,7 +125,7 @@ In the wrapping case, also define `Adapt.adapt_structure` so the post-adapt obje
 
 ## 8. Prefer immutable structs
 
-Prefer immutable structs for types that are passed into GPU kernels or broadcast expressions. `mutable struct` is acceptable for infrastructure types that are never passed into kernels — for example, grid objects (`ClimaCore.Grids`), topologies, and time-stepping integrators (`ClimaTimeSteppers.TimeStepperIntegrator`).
+Prefer immutable structs for types that are passed into GPU kernels or broadcast expressions. `mutable struct` is acceptable for infrastructure types that are never passed into kernels, for example grid objects (`ClimaCore.Grids`), topologies, and time-stepping integrators (`ClimaTimeSteppers.TimeStepperIntegrator`).
 
 ## 9. Prefer `SVector` or `Tuple` over `Vector` / `Array`
 
@@ -138,7 +138,7 @@ For fixed-size data, use stack-friendly/static representations.
 
 ## 11. Do not use `@assert` within kernels
 
-Use `error("static message")` instead. Do not capture runtime variables in the error string within a kernel — string interpolation allocates and, on GPU, typically fails to compile because the device runtime lacks the full `print_to_string` machinery.
+Use `error("static message")` instead. Do not capture runtime variables in the error string within a kernel: string interpolation allocates and, on GPU, typically fails to compile because the device runtime lacks the full `print_to_string` machinery.
 
 Bad:
 
@@ -181,7 +181,7 @@ end
 Preferred:
 
 ```julia
-# AD-compatible — types inferred from inputs
+# AD-compatible: types inferred from inputs
 @inline function compute(x, y)
     return x^2 + y
 end
@@ -230,7 +230,7 @@ acc = zero(x)
 
 A data-dependent `if/else` in a GPU kernel causes warp divergence; `ifelse(cond, a, b)` computes branchlessly. Both arguments are always evaluated, so guard mathematically invalid operations (`log`, `sqrt`, division) *before* the `ifelse`, not inside a `begin...end` block inside it.
 
-For the full explanation — SIMT semantics, why `ifelse` does not skip work, and the worked `log(x)` example — see [GPU Performance Guide §1](../performance/gpu_performance.md). For choosing the right floor in the pre-guard, see [Numerical Robustness §1–2](../performance/numerical_robustness.md).
+For the full explanation (SIMT semantics, why `ifelse` does not skip work, and the worked `log(x)` example), see [GPU Performance Guide §1](../performance/gpu_performance.md). For the broader branch-avoidance discipline (including evaluating both arms of a physical case split and combining pointwise conditions with `&`/`|` rather than `&&`/`||`), see the [Branchless Code Guide](../performance/branchless_code.md). For choosing the right floor in the pre-guard, see [Numerical Robustness §1–2](../performance/numerical_robustness.md).
 
 ## 18. Prefer functors over closures in broadcast or high-loop contexts
 
@@ -259,9 +259,9 @@ Validation: `@allocated integrate(PhysicsEval(params, state), data)` should be 0
 
 ## 19. Prefer fixed iteration counts in iterative solvers inside GPU kernels
 
-Convergence-based loops (`while err > tol`) cause thread divergence when different threads converge at different rates. Where the physics allows it, prefer a fixed number of iterations so all threads in a warp follow the same execution path.
+Convergence-based loops (`while err > tol`, or `for ...; converged && break; end`) cause thread divergence when different threads converge at different rates: the warp runs until the slowest point finishes, and the early-exit `break` is itself a data-dependent branch. Where the physics allows it, prefer a fixed number of iterations so all threads in a warp follow the same execution path.
 
-This is a performance guideline, not a strict rule. Use judgement: fixed iterations are appropriate when a small count (for example, 2–5 Newton steps) is known to be sufficient for the physical accuracy required.
+Fix the count by *physical adequacy* (e.g. temperature to ~0.1 K, not to `eps(FT)`), and determine it with an offline test that sweeps the full range of conditions a climate run can produce. The canonical example is `Thermodynamics.saturation_adjustment` (a fixed `maxiter = 2` Newton solve, no convergence flag). For the methodology, the offline-test checklist, and the worked example, see the [Branchless Code Guide §4–5](../performance/branchless_code.md).
 
 ## 20. Extract parameters and non-field scalars before `@.` blocks
 
@@ -327,7 +327,7 @@ x = map(f, SVector(a, b, c))
 
 ## 24. Limit use of @generated functions
 
-Generated functions are extremely versatile and helpful for debugging, but they have significantly higher compilation latencies than non-generated functions.
+Generated functions are versatile and helpful for debugging, but they have significantly higher compilation latencies than non-generated functions.
 
 To minimize compilation time, only use generated functions when absolutely necessary. This includes the following situations:
 

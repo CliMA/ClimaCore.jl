@@ -3,6 +3,14 @@ Base.map(fn, field::Field, fields::Field...) =
 Base.map!(fn, dest::Field, fields::Field...) =
     Base.broadcast!(fn, dest, fields...)
 
+# Wrap a value in a DataF so that its parent array can be used with ClimaComms
+# reduction operations.
+function scalar_data(value::T) where {T}
+    data = DataLayouts.DataF{T}(Array{DataLayouts.default_basetype(T)})
+    data[] = value
+    return data
+end
+
 """
     Fields.local_sum(v::Field)
 
@@ -13,7 +21,7 @@ See [`sum`](@ref) for the integral over the full domain.
 """
 function local_sum(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
-    dev::ClimaComms.AbstractCPUDevice,
+    dev::ClimaComms.AbstractDevice,
 )
     result = Base.sum(
         Base.Broadcast.broadcasted(
@@ -41,6 +49,7 @@ and quadrature weights:
 \\approx
 \\int_\\Omega f(v) \\, d \\Omega
 ```
+
 where ``v_i`` is the value at each node, and ``f`` is the identity function if not specified.
 
 If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
@@ -48,14 +57,14 @@ If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
 Base.sum(field::Field) = Base.sum(identity, field)
 function Base.sum(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
-    ::ClimaComms.AbstractCPUDevice,
+    ::ClimaComms.AbstractDevice,
 )
     context = ClimaComms.context(axes(field))
-    data_sum = DataLayouts.DataF(local_sum(field))
+    data_sum = scalar_data(local_sum(field))
     ClimaComms.allreduce!(context, parent(data_sum), +)
     return data_sum[]
 end
-Base.sum(fn, field::Field, ::ClimaComms.AbstractCPUDevice) =
+Base.sum(fn, field::Field, ::ClimaComms.AbstractDevice) =
     Base.sum(Base.Broadcast.broadcasted(fn, field))
 Base.sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}}) =
     Base.sum(field, ClimaComms.device(axes(field)))
@@ -68,25 +77,25 @@ Approximate maximum of `v` or `f.(v)` over the domain.
 
 If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
 """
-function Base.maximum(fn, field::Field, ::ClimaComms.AbstractCPUDevice)
+function Base.maximum(fn, field::Field, ::ClimaComms.AbstractDevice)
     context = ClimaComms.context(axes(field))
-    data_max = DataLayouts.DataF(mapreduce(fn, max, todata(field)))
+    data_max = scalar_data(mapreduce(fn, max, todata(field)))
     ClimaComms.allreduce!(context, parent(data_max), max)
     return data_max[]
 end
-Base.maximum(field::Field, device::ClimaComms.AbstractCPUDevice) =
+Base.maximum(field::Field, device::ClimaComms.AbstractDevice) =
     maximum(identity, field, device)
 Base.maximum(fn, field::Field) =
     Base.maximum(fn, field, ClimaComms.device(field))
 Base.maximum(field::Field) = Base.maximum(field, ClimaComms.device(field))
 
-function Base.minimum(fn, field::Field, ::ClimaComms.AbstractCPUDevice)
+function Base.minimum(fn, field::Field, ::ClimaComms.AbstractDevice)
     context = ClimaComms.context(axes(field))
-    data_min = DataLayouts.DataF(mapreduce(fn, min, todata(field)))
+    data_min = scalar_data(mapreduce(fn, min, todata(field)))
     ClimaComms.allreduce!(context, parent(data_min), min)
     return data_min[]
 end
-Base.minimum(field::Field, device::ClimaComms.AbstractCPUDevice) =
+Base.minimum(field::Field, device::ClimaComms.AbstractDevice) =
     minimum(identity, field, device)
 Base.minimum(fn, field::Field) =
     Base.minimum(fn, field, ClimaComms.device(field))
@@ -107,6 +116,7 @@ summation of the field values multiplied by the Jacobian determinants and quadra
 \\approx
 \\frac{\\int_\\Omega f(v) \\, d \\Omega}{\\int_\\Omega \\, d \\Omega}
 ```
+
 where ``v_i`` is the Field value at each node, and ``f`` is the identity function if not specified.
 
 If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
@@ -114,17 +124,17 @@ If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
 Statistics.mean(field::Field) = Statistics.mean(identity, field)
 function Statistics.mean(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
-    ::ClimaComms.AbstractCPUDevice,
+    ::ClimaComms.AbstractDevice,
 )
     space = axes(field)
     context = ClimaComms.context(space)
     data_combined =
-        DataLayouts.DataF((local_sum(field), Spaces.local_area(space)))
+        scalar_data((local_sum(field), Spaces.local_area(space)))
     ClimaComms.allreduce!(context, parent(data_combined), +)
     sum_v, area_v = data_combined[]
     return sum_v ./ area_v
 end
-Statistics.mean(fn, field::Field, ::ClimaComms.AbstractCPUDevice) =
+Statistics.mean(fn, field::Field, ::ClimaComms.AbstractDevice) =
     Statistics.mean(Base.Broadcast.broadcasted(fn, field))
 
 Statistics.mean(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}}) =
@@ -137,21 +147,26 @@ Statistics.mean(fn, field::Field) =
 
 The approximate ``L^p`` norm of `v`, where ``L^p`` represents the space of measurable
 functions for which the p-th power of the absolute value is Lebesgue integrable, that is:
+
 ```math
 \\| v \\|_p = \\left( \\int_\\Omega |v|^p d \\Omega \\right)^{1/p}
 ```
+
 where ``|v|`` is defined to be the absolute value if ``v`` is a scalar-valued Field, or the 2-norm
 if it is a vector-valued Field or composite Field (see [LinearAlgebra.norm](https://docs.julialang.org/en/v1/stdlib/LinearAlgebra/#LinearAlgebra.norm)).
 Similar to `sum` and `mean`, in an `AbstractSpectralElementSpace`, this is computed by
 summation of the field values multiplied by the Jacobian determinants and quadrature weights.
 If `normalize=true` (the default), then internally the discrete norm is divided
 by the sum of the Jacobian determinants and quadrature weights:
+
 ```math
 \\left(\\frac{\\sum_i |v_i|^p W_i J_i}{\\sum_i W_i J_i}\\right)^{1/p}
 \\approx
 \\left(\\frac{\\int_\\Omega |v|^p \\, d \\Omega}{\\int_\\Omega \\, d \\Omega}\\right)^{1/p}
 ```
+
 If `p=Inf`, then the norm is the maximum of the absolute values
+
 ```math
 \\max_i |v_i| \\approx \\sup_{\\Omega} |v|
 ```
@@ -173,7 +188,7 @@ LinearAlgebra.norm(field::Field, p::Real = 2; normalize = true) =
 
 function LinearAlgebra.norm(
     field::Field,
-    ::ClimaComms.AbstractCPUDevice,
+    ::ClimaComms.AbstractDevice,
     p::Real = 2;
     normalize = true,
 )
@@ -218,4 +233,5 @@ function Base.isapprox(
 end
 
 Base.:(==)(field1::Field, field2::Field) =
-    axes(field1) === axes(field2) && parent(field1) == parent(field2)
+    axes(field1) === axes(field2) &&
+    field_values(field1) == field_values(field2)

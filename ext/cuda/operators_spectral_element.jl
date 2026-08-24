@@ -5,8 +5,9 @@ using CUDA
 import ClimaCore.Operators: AbstractSpectralStyle, strip_space
 import ClimaCore.Operators: SpectralBroadcasted, set_node!, get_node
 import ClimaCore.Operators: get_local_geometry
+import ClimaCore.Operators: Divergence, SplitDivergence, Gradient, Curl
 import ClimaCore.Operators:
-    Divergence, WeakDivergence, SplitDivergence, Gradient, WeakGradient, Curl, WeakCurl
+    form_deriv_entry, form_jacobian_rescale, form_weight_rescale
 import Base.Broadcast: Broadcasted
 
 """
@@ -33,13 +34,13 @@ function Base.copyto!(
     sbc::Union{
         SpectralBroadcasted{CUDASpectralStyle},
         Broadcasted{CUDASpectralStyle},
-    },
+    };
     mask = DataLayouts.NoMask(),
 )
     space = axes(out)
-    us = UniversalSize(Fields.field_values(out))
+    out_fv = Fields.field_values(out)
     # executed
-    p = spectral_partition(us)
+    p = spectral_partition(out_fv)
     args = (
         strip_space(out, space),
         strip_space(sbc, space),
@@ -74,7 +75,7 @@ function copyto_spectral_kernel!(
         # v in `slabidx` may potentially be out-of-range: any time memory is
         # accessed, it should be checked by a call to is_valid_index(space, ij, slabidx)
 
-        # resolve_shmem! needs to be called even when out of range, so that 
+        # resolve_shmem! needs to be called even when out of range, so that
         # sync_threads() is invoked collectively
         resolve_shmem!(sbc_shmem, ij, slabidx)
 
@@ -181,13 +182,19 @@ Base.@propagate_inbounds function resolve_shmem!(obj, ij, slabidx)
     nothing
 end
 
+# The methods below serve both forms of each operator: form_deriv_entry supplies the
+# derivative matrix entries (transposed and sign-flipped for the weak form), and
+# form_jacobian_rescale or form_weight_rescale divides the form's Jacobian or
+# quadrature-weight factor back out of the result. Every operator keeps one accumulator
+# per dimension and combines them once at the end, which keeps the accumulation loops as
+# independent dependency chains.
 Base.@propagate_inbounds function operator_evaluate(
-    op::Divergence{(1,)},
+    op::Divergence{(1,), F},
     (Jv¹,),
     space,
     ij,
     slabidx,
-)
+) where {F}
     vt = threadIdx().z
     i, _ = ij.I
 
@@ -198,19 +205,19 @@ Base.@propagate_inbounds function operator_evaluate(
 
     local_geometry = get_local_geometry(space, ij, slabidx)
 
-    DJv = D[i, 1] * Jv¹[1, vt]
+    D₁Jv¹ = form_deriv_entry(F(), D, i, 1) * Jv¹[1, vt]
     for k in 2:Nq
-        DJv += D[i, k] * Jv¹[k, vt]
+        D₁Jv¹ += form_deriv_entry(F(), D, i, k) * Jv¹[k, vt]
     end
-    return DJv * local_geometry.invJ
+    return form_jacobian_rescale(F(), local_geometry, D₁Jv¹)
 end
 Base.@propagate_inbounds function operator_evaluate(
-    op::Divergence{(1, 2)},
+    op::Divergence{(1, 2), F},
     (Jv¹, Jv²),
     space,
     ij,
     slabidx,
-)
+) where {F}
     vt = threadIdx().z
     i, j = ij.I
 
@@ -221,63 +228,13 @@ Base.@propagate_inbounds function operator_evaluate(
 
     local_geometry = get_local_geometry(space, ij, slabidx)
 
-    DJv = D[i, 1] * Jv¹[1, j, vt]
+    D₁Jv¹ = form_deriv_entry(F(), D, i, 1) * Jv¹[1, j, vt]
+    D₂Jv² = form_deriv_entry(F(), D, j, 1) * Jv²[i, 1, vt]
     for k in 2:Nq
-        DJv += D[i, k] * Jv¹[k, j, vt]
+        D₁Jv¹ += form_deriv_entry(F(), D, i, k) * Jv¹[k, j, vt]
+        D₂Jv² += form_deriv_entry(F(), D, j, k) * Jv²[i, k, vt]
     end
-    for k in 1:Nq
-        DJv += D[j, k] * Jv²[i, k, vt]
-    end
-    return DJv * local_geometry.invJ
-end
-
-Base.@propagate_inbounds function operator_evaluate(
-    op::WeakDivergence{(1,)},
-    (WJv¹,),
-    space,
-    ij,
-    slabidx,
-)
-    vt = CUDA.threadIdx().z
-    i, _ = ij.I
-
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-
-    local_geometry = get_local_geometry(space, ij, slabidx)
-
-    Dᵀ₁WJv¹ = D[1, i] * WJv¹[1, vt]
-    for k in 2:Nq
-        Dᵀ₁WJv¹ += D[k, i] * WJv¹[k, vt]
-    end
-    return -Dᵀ₁WJv¹ / local_geometry.WJ
-end
-Base.@propagate_inbounds function operator_evaluate(
-    op::WeakDivergence{(1, 2)},
-    (WJv¹, WJv²),
-    space,
-    ij,
-    slabidx,
-)
-    vt = threadIdx().z
-    i, j = ij.I
-
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-
-    local_geometry = get_local_geometry(space, ij, slabidx)
-
-    Dᵀ₁WJv¹ = D[1, i] * WJv¹[1, j, vt]
-    Dᵀ₂WJv² = D[1, j] * WJv²[i, 1, vt]
-    for k in 2:Nq
-        Dᵀ₁WJv¹ += D[k, i] * WJv¹[k, j, vt]
-        Dᵀ₂WJv² += D[k, j] * WJv²[i, k, vt]
-    end
-    return -(Dᵀ₁WJv¹ + Dᵀ₂WJv²) / local_geometry.WJ
+    return form_jacobian_rescale(F(), local_geometry, D₁Jv¹ + D₂Jv²)
 end
 
 Base.@propagate_inbounds function operator_evaluate(
@@ -341,12 +298,12 @@ Base.@propagate_inbounds function operator_evaluate(
 end
 
 Base.@propagate_inbounds function operator_evaluate(
-    op::Gradient{(1,)},
-    input,
+    op::Gradient{(1,), F},
+    (input,),
     space,
     ij,
     slabidx,
-)
+) where {F}
     vt = threadIdx().z
     i, _ = ij.I
 
@@ -355,29 +312,32 @@ Base.@propagate_inbounds function operator_evaluate(
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
 
+    local_geometry = get_local_geometry(space, ij, slabidx)
+
     @inbounds begin
-        ∂f∂ξ₁ = D[i, 1] * input[1, vt]
+        ∂f∂ξ₁ = form_deriv_entry(F(), D, i, 1) * input[1, vt]
         for k in 2:Nq
-            ∂f∂ξ₁ += D[i, k] * input[k, vt]
+            ∂f∂ξ₁ += form_deriv_entry(F(), D, i, k) * input[k, vt]
         end
     end
-    if eltype(input) <: Number
-        return Geometry.Covariant1Vector(∂f∂ξ₁)
+    result = if eltype(input) <: Number
+        Geometry.Covariant1Vector(∂f∂ξ₁)
     elseif eltype(input) <: Geometry.AbstractTensor{1}
         tensor_axes = (Geometry.Covariant1Axis(), Geometry.tensor_axes(eltype(input))[1])
         tensor_components = hcat(parent(∂f∂ξ₁))'
-        return Geometry.Tensor(tensor_components, tensor_axes)
+        Geometry.Tensor(tensor_components, tensor_axes)
     else
         error("Unsupported input type for gradient operator: $(eltype(input))")
     end
+    return form_weight_rescale(F(), local_geometry, result)
 end
 Base.@propagate_inbounds function operator_evaluate(
-    op::Gradient{(1, 2)},
-    input,
+    op::Gradient{(1, 2), F},
+    (input,),
     space,
     ij,
     slabidx,
-)
+) where {F}
     vt = threadIdx().z
     i, j = ij.I
 
@@ -386,84 +346,36 @@ Base.@propagate_inbounds function operator_evaluate(
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
 
+    local_geometry = get_local_geometry(space, ij, slabidx)
+
     @inbounds begin
-        ∂f∂ξ₁ = D[i, 1] * input[1, j, vt]
-        ∂f∂ξ₂ = D[j, 1] * input[i, 1, vt]
+        ∂f∂ξ₁ = form_deriv_entry(F(), D, i, 1) * input[1, j, vt]
+        ∂f∂ξ₂ = form_deriv_entry(F(), D, j, 1) * input[i, 1, vt]
         for k in 2:Nq
-            ∂f∂ξ₁ += D[i, k] * input[k, j, vt]
-            ∂f∂ξ₂ += D[j, k] * input[i, k, vt]
+            ∂f∂ξ₁ += form_deriv_entry(F(), D, i, k) * input[k, j, vt]
+            ∂f∂ξ₂ += form_deriv_entry(F(), D, j, k) * input[i, k, vt]
         end
     end
-    if eltype(input) <: Number
-        return Geometry.Covariant12Vector(∂f∂ξ₁, ∂f∂ξ₂)
+    result = if eltype(input) <: Number
+        Geometry.Covariant12Vector(∂f∂ξ₁, ∂f∂ξ₂)
     elseif eltype(input) <: Geometry.AbstractTensor{1}
         tensor_axes = (Geometry.Covariant12Axis(), Geometry.tensor_axes(eltype(input))[1])
         tensor_components =
             hcat(parent(∂f∂ξ₁), parent(∂f∂ξ₂))'
-        return Geometry.Tensor(tensor_components, tensor_axes)
+        Geometry.Tensor(tensor_components, tensor_axes)
     else
         error("Unsupported input type for gradient operator: $(eltype(input))")
     end
+    return form_weight_rescale(F(), local_geometry, result)
 end
 
 Base.@propagate_inbounds function operator_evaluate(
-    op::WeakGradient{(1,)},
-    (Wf,),
-    space,
-    ij,
-    slabidx,
-)
-    vt = threadIdx().z
-    i, _ = ij.I
-
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    W = local_geometry.WJ * local_geometry.invJ
-
-    Dᵀ₁Wf = D[1, i] * Wf[1, vt]
-    for k in 2:Nq
-        Dᵀ₁Wf += D[k, i] * Wf[k, vt]
-    end
-    return Geometry.Covariant1Vector(-Dᵀ₁Wf) / W
-end
-Base.@propagate_inbounds function operator_evaluate(
-    op::WeakGradient{(1, 2)},
-    (Wf,),
-    space,
-    ij,
-    slabidx,
-)
-    vt = threadIdx().z
-    i, j = ij.I
-
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    W = local_geometry.WJ * local_geometry.invJ
-
-    Dᵀ₁Wf = D[1, i] * Wf[1, j, vt]
-    Dᵀ₂Wf = D[1, j] * Wf[i, 1, vt]
-    for k in 2:Nq
-        Dᵀ₁Wf += D[k, i] * Wf[k, j, vt]
-        Dᵀ₂Wf += D[k, j] * Wf[i, k, vt]
-    end
-    return Geometry.Covariant12Vector(-Dᵀ₁Wf, -Dᵀ₂Wf) / W
-end
-
-Base.@propagate_inbounds function operator_evaluate(
-    op::Curl{(1,)},
+    op::Curl{(1,), F},
     work,
     space,
     ij,
     slabidx,
-)
+) where {F}
     vt = threadIdx().z
     i, _ = ij.I
 
@@ -474,22 +386,22 @@ Base.@propagate_inbounds function operator_evaluate(
     local_geometry = get_local_geometry(space, ij, slabidx)
 
     _, v₂, v₃ = work
-    D₁v₂ = D[i, 1] * v₂[1, vt]
-    D₁v₃ = D[i, 1] * v₃[1, vt]
+    D₁v₂ = form_deriv_entry(F(), D, i, 1) * v₂[1, vt]
+    D₁v₃ = form_deriv_entry(F(), D, i, 1) * v₃[1, vt]
     @simd for k in 2:Nq
-        D₁v₂ += D[i, k] * v₂[k, vt]
-        D₁v₃ += D[i, k] * v₃[k, vt]
+        D₁v₂ += form_deriv_entry(F(), D, i, k) * v₂[k, vt]
+        D₁v₃ += form_deriv_entry(F(), D, i, k) * v₃[k, vt]
     end
     result = Geometry.Contravariant123Vector(zero(FT), -D₁v₃, D₁v₂)
-    return result * local_geometry.invJ
+    return form_jacobian_rescale(F(), local_geometry, result)
 end
 Base.@propagate_inbounds function operator_evaluate(
-    op::Curl{(1, 2)},
+    op::Curl{(1, 2), F},
     work,
     space,
     ij,
     slabidx,
-)
+) where {F}
     vt = threadIdx().z
     i, j = ij.I
 
@@ -500,73 +412,16 @@ Base.@propagate_inbounds function operator_evaluate(
     local_geometry = get_local_geometry(space, ij, slabidx)
 
     v₁, v₂, v₃ = work
-    D₁v₂ = D[i, 1] * v₂[1, j, vt]
-    D₂v₁ = D[j, 1] * v₁[i, 1, vt]
-    D₁v₃ = D[i, 1] * v₃[1, j, vt]
-    D₂v₃ = D[j, 1] * v₃[i, 1, vt]
+    D₁v₂ = form_deriv_entry(F(), D, i, 1) * v₂[1, j, vt]
+    D₂v₁ = form_deriv_entry(F(), D, j, 1) * v₁[i, 1, vt]
+    D₁v₃ = form_deriv_entry(F(), D, i, 1) * v₃[1, j, vt]
+    D₂v₃ = form_deriv_entry(F(), D, j, 1) * v₃[i, 1, vt]
     @simd for k in 2:Nq
-        D₁v₂ += D[i, k] * v₂[k, j, vt]
-        D₂v₁ += D[j, k] * v₁[i, k, vt]
-        D₁v₃ += D[i, k] * v₃[k, j, vt]
-        D₂v₃ += D[j, k] * v₃[i, k, vt]
+        D₁v₂ += form_deriv_entry(F(), D, i, k) * v₂[k, j, vt]
+        D₂v₁ += form_deriv_entry(F(), D, j, k) * v₁[i, k, vt]
+        D₁v₃ += form_deriv_entry(F(), D, i, k) * v₃[k, j, vt]
+        D₂v₃ += form_deriv_entry(F(), D, j, k) * v₃[i, k, vt]
     end
     result = Geometry.Contravariant123Vector(D₂v₃, -D₁v₃, D₁v₂ - D₂v₁)
-    return result * local_geometry.invJ
-end
-
-Base.@propagate_inbounds function operator_evaluate(
-    op::WeakCurl{(1,)},
-    work,
-    space,
-    ij,
-    slabidx,
-)
-    vt = threadIdx().z
-    i, _ = ij.I
-
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    local_geometry = get_local_geometry(space, ij, slabidx)
-
-    _, Wv₂, Wv₃ = work
-    Dᵀ₁Wv₂ = D[1, i] * Wv₂[1, vt]
-    Dᵀ₁Wv₃ = D[1, i] * Wv₃[1, vt]
-    @simd for k in 2:Nq
-        Dᵀ₁Wv₂ += D[k, i] * Wv₂[k, vt]
-        Dᵀ₁Wv₃ += D[k, i] * Wv₃[k, vt]
-    end
-    result = Geometry.Contravariant123Vector(zero(FT), Dᵀ₁Wv₃, -Dᵀ₁Wv₂)
-    return result / local_geometry.WJ
-end
-Base.@propagate_inbounds function operator_evaluate(
-    op::WeakCurl{(1, 2)},
-    work,
-    space,
-    ij,
-    slabidx,
-)
-    vt = threadIdx().z
-    i, j = ij.I
-
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    local_geometry = get_local_geometry(space, ij, slabidx)
-
-    Wv₁, Wv₂, Wv₃ = work
-    Dᵀ₁Wv₂ = D[1, i] * Wv₂[1, j, vt]
-    Dᵀ₂Wv₁ = D[1, j] * Wv₁[i, 1, vt]
-    Dᵀ₁Wv₃ = D[1, i] * Wv₃[1, j, vt]
-    Dᵀ₂Wv₃ = D[1, j] * Wv₃[i, 1, vt]
-    @simd for k in 2:Nq
-        Dᵀ₁Wv₂ += D[k, i] * Wv₂[k, j, vt]
-        Dᵀ₂Wv₁ += D[k, j] * Wv₁[i, k, vt]
-        Dᵀ₁Wv₃ += D[k, i] * Wv₃[k, j, vt]
-        Dᵀ₂Wv₃ += D[k, j] * Wv₃[i, k, vt]
-    end
-    result = Geometry.Contravariant123Vector(-Dᵀ₂Wv₃, Dᵀ₁Wv₃, Dᵀ₂Wv₁ - Dᵀ₁Wv₂)
-    return result / local_geometry.WJ
+    return form_jacobian_rescale(F(), local_geometry, result)
 end

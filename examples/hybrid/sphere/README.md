@@ -1,56 +1,50 @@
-# A pipeline to run the sphere simulations on Caltech's central cluster
+# Running the 3D sphere examples on Caltech's central cluster
 
-## Running the simulation
+The examples in this directory are driven by `examples/hybrid/driver.jl`, which
+selects a case through the `TEST_NAME` environment variable. They exist to
+exercise ClimaCore's dycore — the hybrid spectral-element/finite-difference
+sphere discretization, its implicit/explicit split, and hyperdiffusion — not to
+run climate simulations. For forced-dissipative climate configurations
+(Held-Suarez, aquaplanet, AMIP, ...), use
+[ClimaAtmos.jl](https://github.com/CliMA/ClimaAtmos.jl), which owns the physics
+and its parameterizations.
 
-Here is a sbatch script template for setting up simulations on caltech central hpc.
-```
+## Running a case
+
+```bash
 #!/bin/bash
-
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=8
-#SBATCH --job-name=$YOUR_JOB_NAME
 #SBATCH --time=15:00:00
-#SBATCH --output=$YOUR_SIMULATION_LOG_DIR/simulation.log
 
 module purge
-module load julia/1.10.0
+module load climacommon
 
-export JULIA_MPI_BINARY=system
-export JULIA_CUDA_USE_BINARYBUILDER=false
 export JULIA_NUM_THREADS=${SLURM_CPUS_PER_TASK:=1}
-
-export TEST_NAME=sphere/held_suarez_rhoe
+export TEST_NAME=sphere/baroclinic_wave_rhoe
 export OUTPUT_DIR=$YOUR_SIMULATION_OUTPUT_DIR
 #export RESTART_FILE=$YOUR_JLD2_RESTART_FILE
 
-CC_EXAMPLE=$HOME'/ClimaCore.jl/examples/'
-TESTCASE=$CC_EXAMPLE'hybrid/driver.jl'
-
-julia --project=$CC_EXAMPLE -e 'using Pkg; Pkg.instantiate()'
-julia --project=$CC_EXAMPLE -e 'using Pkg; Pkg.API.precompile()'
-
-julia --project=$CC_EXAMPLE --threads=8 $TESTCASE
-
+CC=$HOME/ClimaCore.jl
+julia --project=$CC/.buildkite -e 'using Pkg; Pkg.instantiate()'
+julia --project=$CC/.buildkite --threads=8 $CC/examples/hybrid/driver.jl
 ```
-In the runscript, one needs to specify the following environmant variable:
-* `TEST_NAME`: the experiment to run;
-* `OUTPUT_DIR`: the directory for jld2 data being saved at;
-* `RESTART_FILE`: if run from a pre-existing jld2 data saved from a previous simulation.
 
-Meanwhile, to enable multithreads, one needs to launch with the desired number of threads (e.g., `julia --threads=8`).
+Environment variables read by the driver:
 
-To use `sphere/held_suarez_rhoe` as an example, one needs to modify [these lines](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/hybrid/sphere/held_suarez_rhoe.jl#L6-L16) into the specific setup. In particular, `dt_save_to_disk=FT(0)` means no jld2 outputs. A non-zero value specifies the frequency in seconds to save the data into jld2 files.
+* `TEST_NAME` (required): the case to run, e.g. `sphere/baroclinic_wave_rhoe`,
+  `sphere/balanced_flow_rhoe`, or `plane/inertial_gravity_wave`.
+* `OUTPUT_DIR`: where JLD2 output is written.
+* `RESTART_FILE`: a JLD2 file from a previous run to restart from.
+* `FLOAT_TYPE`: `Float32` (default) or `Float64`.
 
+Resolution, timestep, and output frequency are set in the case file itself
+(e.g. `sphere/baroclinic_wave_rhoe.jl`); `dt_save_to_disk = FT(0)` disables
+JLD2 output.
 
-## Remapping the CG nodal outputs in `jld2` onto the regular lat/lon grids and save into `nc` files
+## Remapping output to a lat/lon grid
 
-`remap_pipeline.jl` remaps CG output onto lat/lon using the `TempestRemapping` subpackage. One needs to specify the following environment variables:
-* `JLD2_DIR`: the directory of saved `jld2` files from the simulation;
-* `THERMO_VAR`: either `e_tot` or `theta` based on the thermodynamic variable of the simulation;
-* `NC_DIR`: the directory where remapped `nc` files will be saved in; if not specified, a subdirectory named `nc` will be created under `JLD2_DIR`;
-* `NLAT` and `NLON`: the number of evenly distributed grids in latitudes and longitudes; if not specified, they are default to `90` and `180` respectively.
-
-### Note: A computing node is needed to run the remapping on caltech central hpc. It gives the following warning messages without interrupting the process.
-```
-/home/****/.julia/artifacts/db8bb055d059e1c04bade7bd86a3010466d5ad4a/bin/ApplyOfflineMap: /resnick/software/julia/1.7.0/bin/../lib/julia/libcurl.so.4: no version information available (required by /home/jiahe/.julia/artifacts/a990d3d23ca4ca4c1fcd1e42fc198f1272f7c49b/lib/libnetcdf.so.18)
-```
+To remap CG nodal output onto a regular lat/lon grid, use
+[`ClimaCoreTempestRemap`](../../../lib/ClimaCoreTempestRemap/) directly; see its
+test suite for worked examples of `overlap_mesh`, `remap_weights`, and
+`apply_remap`.

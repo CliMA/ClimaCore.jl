@@ -1,8 +1,4 @@
 #=
-julia --project=.buildkite
-julia -g2 --check-bounds=yes --project=.buildkite
-using Revise; include(joinpath("benchmarks", "scripts", "index_swapping.jl"))
-
 # Info:
 This script compares the performance
 of our universal index support (for
@@ -106,7 +102,7 @@ function custom_kernel_knl_bc_1swap!(y1, bc, us)
         if tidx ≤ get_N(us)
             n = (get_Nij(us), get_Nij(us), 1, get_Nv(us), get_Nh(us))
             GCI = CartesianIndices(map(x -> Base.OneTo(x), n))[tidx]
-            # Perform index swap (as in `getindex(::AbstractData, ::CartesianIndex)`)
+            # Perform index swap (as in `getindex(::DataLayout, ::CartesianIndex)`)
             i, j, _, v, h = GCI.I
             CI = CartesianIndex(v, i, j, 1, h)
             y1[CI] = bc[CI]
@@ -140,7 +136,7 @@ function custom_kernel_knl_bc_2swap!(y1, bc, us)
             (v, i, j, _, h) = CIK.I
             GCI = CartesianIndex(i, j, 1, v, h)
 
-            # Swap again (in `getindex(::AbstractData, ::CartesianIndex)`)
+            # Swap again (in `getindex(::DataLayout, ::CartesianIndex)`)
             (i, j, _, v, h) = GCI.I
             CI = CartesianIndex(v, i, j, 1, h)
             y1[CI] = bc[CI]

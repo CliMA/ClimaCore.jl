@@ -33,9 +33,10 @@ boundary elements where it is 0th order.
 
 Assuming you have a `ClimaCore` `Field` with name `field`, the simplest way to
 interpolate onto a uniform grid is with
+
 ```julia
-julia> import ClimaCore.Remapping
 julia> Remapping.interpolate(field)
+import ClimaCore.Remapping
 ```
 
 This will return an `Array` (or a `CuArray`) with the `field` interpolated on
@@ -49,16 +50,14 @@ By default, vertical interpolation is off (field evaluated on levels). Horizonta
 interpolation: `SpectralElementRemapping()` (default; uses spectral element quadrature weights) or `BilinearRemapping()`:
 
 ```julia
-interpolated_array = Remapping.interpolate(field; horizontal_method = Remapping.BilinearRemapping())
+interpolated_array =
+    Remapping.interpolate(field; horizontal_method = Remapping.BilinearRemapping())
 ```
 
 `ClimaCore.Remapping.interpolate` allocates new output arrays. As such, it is
 not suitable for performance-critical applications.
 `ClimaCore.Remapping.interpolate!` performs interpolation in-place. When using
-the in-place version`, the `dest`ination has to have the same array type as the
-device in use (e.g., `CuArray` for CUDA runs) and has to be `nothing` for
-non-root processes. For performance-critical applications, it is preferable to a
-`ClimaCore.Remapping.Remapper` and use it directly (see next Section).
+the in-place version`, the `dest`ination has to have the same array type as the device in use (e.g., `CuArray`for CUDA runs) and has to be`nothing`for non-root processes. For performance-critical applications, it is preferable to a`ClimaCore.Remapping.Remapper` and use it directly (see next Section).
 
 #### Example
 
@@ -66,9 +65,11 @@ Given `field`, a `Field` defined on a cubed sphere.
 
 By default, a target uniform grid is chosen (with resolution `hresolution` and
 `vresolution`), so remapping is
+
 ```julia
 interpolated_array = interpolate(field, hcoords, zcoords)
 ```
+
 Coordinates can be specified:
 
 ```julia
@@ -83,6 +84,7 @@ interpolated_array = interpolate(field, hcoords, zcoords)
 # Or, to use bilinear remapping without spectral element weighting:
 # interpolate(field, hcoords, zcoords; horizontal_method = Remapping.BilinearRemapping())
 ```
+
 The output is defined on the Cartesian product of `hcoords` with `zcoords`.
 
 If the default target coordinates are being used, it is possible to broadcast
@@ -90,6 +92,7 @@ If the default target coordinates are being used, it is possible to broadcast
 broadcast `getindex` to extract the respective coordinates as vectors).
 
 This also provides the simplest way to plot a `Field`. Suppose `field` is a 2D `Field`:
+
 ```julia
 using CairoMakie
 heatmap(ClimaCore.Remapping.interpolate(field))
@@ -99,8 +102,8 @@ heatmap(ClimaCore.Remapping.interpolate(field))
 
 Two horizontal remapping methods are available:
 
-- **`SpectralElementRemapping()`** (default): Uses spectral element quadrature weights for high-order polynomial interpolation. More accurate for smooth fields but can produce overshoots/undershoots near discontinuities.
-- **`BilinearRemapping()`**: Uses bilinear interpolation on the 2×2 GLL cell containing each target point. More conservative (bounds-preserving) but lower-order accuracy.
+  - **`SpectralElementRemapping()`** (default): Uses spectral element quadrature weights for high-order polynomial interpolation. More accurate for smooth fields but can produce overshoots/undershoots near discontinuities.
+  - **`BilinearRemapping()`**: Uses bilinear interpolation on the 2×2 GLL cell containing each target point. More conservative (bounds-preserving) but lower-order accuracy.
 
 Both methods can be used with `interpolate_array` or `Remapper`:
 
@@ -112,7 +115,7 @@ interpolated = Remapping.interpolate_array(field, xpts, ypts)
 
 # Use bilinear remapping
 interpolated = Remapping.interpolate_array(
-    field, xpts, ypts; horizontal_method = BilinearRemapping()
+    field, xpts, ypts; horizontal_method = BilinearRemapping(),
 )
 
 # With Remapper
@@ -177,9 +180,10 @@ x_se = Float64[]
 y_se = Float64[]
 vals_se = Float64[]
 Fields.byslab(space) do slabidx
-    x_data = parent(Fields.slab(coords.x, slabidx))
-    y_data = parent(Fields.slab(coords.y, slabidx))
-    f_data = parent(Fields.slab(field, slabidx))
+    # The parents of these scalar slabs have size (1, Nq, Nq, 1, 1).
+    x_data = reshape(parent(Fields.slab(coords.x, slabidx)), Nq, Nq)
+    y_data = reshape(parent(Fields.slab(coords.y, slabidx)), Nq, Nq)
+    f_data = reshape(parent(Fields.slab(field, slabidx)), Nq, Nq)
     for j in 1:Nq, i in 1:Nq
         push!(x_se, x_data[i, j])
         push!(y_se, y_data[i, j])
@@ -241,7 +245,7 @@ Colorbar(fig[2, 2], sc_se; label = "value")
 fig
 ```
 
-Row 1: heatmaps use **orange** for undershoots (&lt; 0) and **red** for overshoots (&gt; 1). The spectral method produces overshoots/undershoots near the discontinuity; bilinear stays in [0, 1]. The error panel (bilinear − spectral) shows where the two methods differ. Row 2: raw field values at the GLL nodes (the source data); pink lines show element boundaries.
+Row 1: heatmaps use **orange** for undershoots (< 0) and **red** for overshoots (> 1). The spectral method produces overshoots/undershoots near the discontinuity; bilinear stays in [0, 1]. The error panel (bilinear − spectral) shows where the two methods differ. Row 2: raw field values at the GLL nodes (the source data); pink lines show element boundaries.
 
 ### The `Remapper` object
 
@@ -253,15 +257,18 @@ horizontal point, there is a fixed column of vertical coordinates).
 
 Let us create our first remapper, assuming we have `space` defined on the
 surface of the sphere
+
 ```julia
 import ClimaCore.Geometry: LatLongPoint, ZPoint
 import ClimaCore.Remapping: Remapper
 
-hcoords = [Geometry.LatLongPoint(lat, long) for long in -180.:180., lat in -90.:90.]
+hcoords = [Geometry.LatLongPoint(lat, long) for long in -180.0:180.0, lat in -90.0:90.0]
 remapper = Remapper(space, target_hcoords)
 ```
+
 This `remapper` object knows can interpolate `Field`s defined on `space` with
 the same `interpolate` and `interpolate!` functions.
+
 ```julia
 import ClimaCore.Fields: coordinate_field
 import ClimaCore.Remapping: interpolate, interpolate!
@@ -274,6 +281,7 @@ interpolate!(interpolated_array, remapper, example_field)
 ```
 
 Multiple fields defined on the same space can be interpolate at the same time
+
 ```julia
 example_field2 = cosd.(example_field)
 interpolated_arrays = interpolate(remapper, [example_field, example_field2])
@@ -365,18 +373,20 @@ vertical coordinate is pressure rather than height.
 
 The `PressureInterpolator` performs the following steps:
 
-1. **Ensure monotonicity**: Applies a cumulative minimum along each column to
-   ensure pressure decreases monotonically with height.
-2. **Vertical interpolation**: Interpolates field values to the specified
-   pressure coordinates using linear interpolation with constant boundary
-   conditions.
+ 1. **Ensure monotonicity**: Applies a cumulative minimum along each column to
+    ensure pressure decreases monotonically with height.
+ 2. **Vertical interpolation**: Interpolates field values to the specified
+    pressure coordinates using linear interpolation with constant boundary
+    conditions.
 
 !!! warning "Pressure-height relationship"
+
     The implementation assumes pressure decreases monotonically with height. If
     the interpolated field appears unrealistic, check for instabilities or
     inversions in your pressure field.
 
 !!! note "Boundary conditions"
+
     By default, vertical interpolation uses constant boundary conditions at the
     top and bottom of the atmosphere. Interpolated values at pressure levels
     outside the model's vertical range may be inaccurate.
@@ -384,14 +394,16 @@ The `PressureInterpolator` performs the following steps:
 ## Space and staggering requirements
 
 !!! note "Space compatibility"
+
     The pressure field and the field being interpolated must be defined on the
     same space with the same vertical staggering (`CellCenter` or `CellFace`).
     The pressure field must use `CellCenter` staggering.
 
 The `PressureInterpolator` works with:
-- `ExtrudedFiniteDifferenceSpace` - 3D spaces (e.g., cubed sphere with vertical
-  levels)
-- `FiniteDifferenceSpace` - 1D column spaces
+
+  - `ExtrudedFiniteDifferenceSpace` - 3D spaces (e.g., cubed sphere with vertical
+    levels)
+  - `FiniteDifferenceSpace` - 1D column spaces
 
 Interpolating fields on center and face spaces are supported, but the pressure
 field itself must always be on a center space.

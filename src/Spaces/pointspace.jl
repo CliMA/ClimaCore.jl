@@ -9,7 +9,7 @@ A zero-dimensional space.
 """
 struct PointSpace{
     C <: ClimaComms.AbstractCommsContext,
-    LG <: DataLayouts.Data0D,
+    LG <: DataLayouts.DataLayout{<:Any, 0},
 } <: AbstractPointSpace
     context::C
     local_geometry::LG
@@ -26,6 +26,9 @@ function PointSpace(device::ClimaComms.AbstractDevice, x)
     context = ClimaComms.SingletonCommsContext(device)
     return PointSpace(context, x)
 end
+
+PointSpace(context::ClimaComms.AbstractCommsContext, data::DataLayouts.DataLayout) =
+    PointSpace(context, view(data)) # view of a DataLayout is always a DataF
 
 function PointSpace(
     context::ClimaComms.AbstractCommsContext,
@@ -62,3 +65,8 @@ end
 all_nodes(::PointSpace) = (1,)
 
 node_horizontal_length_scale(space::PointSpace) = 1
+
+for f in (:level, :slab, :column)
+    @eval $f(space::PointSpace, indices...) =
+        all(isone, indices) ? space : throw(ArgumentError("Space has only one point"))
+end

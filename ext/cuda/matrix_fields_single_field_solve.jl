@@ -7,14 +7,13 @@ import ClimaCore.Fields
 import ClimaCore.Spaces
 import ClimaCore.Topologies
 import ClimaCore.MatrixFields
-import ClimaCore.DataLayouts: vindex, universal_size
 import ClimaCore.MatrixFields: single_field_solve!
 import ClimaCore.MatrixFields: _single_field_solve!
 import ClimaCore.MatrixFields: band_matrix_solve!, unzip_tuple_field_values
 
 function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
 
-    Ni, Nj, _, Nv, Nh = size(Fields.field_values(A))
+    Nv, Ni, Nj, Nh = size(Fields.field_values(A))
 
     # Tridiagonal solvers are handled by special implementation
     # The special solver is limited in Nv by the number of threads per block
@@ -25,10 +24,9 @@ function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
         return
     end
 
-    us = UniversalSize(Fields.field_values(A))
     mask = Spaces.get_mask(axes(x))
-    cart_inds = cartesian_indices_columnwise(us)
-    args = (device, cache, x, A, b, us, mask, cart_inds)
+    cart_inds = cartesian_indices_columnwise(Fields.field_values(A))
+    args = (device, cache, x, A, b, mask, cart_inds)
     nitems = Ni * Nj * Nh
     (; threads, blocks) = config_via_occupancy(single_field_solve_kernel!, nitems, args)
     auto_launch!(
@@ -40,12 +38,12 @@ function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
     call_post_op_callback() && post_op_callback(x, device, cache, x, A, b)
 end
 
-function single_field_solve_kernel!(device, cache, x, A, b, us, mask, cart_inds)
+function single_field_solve_kernel!(device, cache, x, A, b, mask, cart_inds)
     tidx = linear_thread_idx()
-    if linear_is_valid_index(tidx, us) && tidx ≤ length(unval(cart_inds))
+    if linear_is_valid_index(tidx, unval(cart_inds))
         I = unval(cart_inds)[tidx]
         (i, j, h) = I.I
-        ui = CartesianIndex((i, j, 1, 1, h))
+        ui = CartesianIndex((1, i, j, h))
         DataLayouts.should_compute(mask, ui) || return nothing
         _single_field_solve!(
             device,
@@ -58,17 +56,6 @@ function single_field_solve_kernel!(device, cache, x, A, b, us, mask, cart_inds)
     return nothing
 end
 
-@inline unrolled_unzip_tuple_field_values(data) =
-    unrolled_unzip_tuple_field_values(data, propertynames(data))
-@inline unrolled_unzip_tuple_field_values(data, pn::Tuple) = (
-    getproperty(data, Val(first(pn))),
-    unrolled_unzip_tuple_field_values(data, Base.tail(pn))...,
-)
-@inline unrolled_unzip_tuple_field_values(data, pn::Tuple{Any}) =
-    (getproperty(data, Val(first(pn))),)
-@inline unrolled_unzip_tuple_field_values(data, pn::Tuple{}) = ()
-
-# TODO: get this working, it doesn't work yet due to InvalidIR
 function _single_field_solve_diag_matrix_row!(
     device::ClimaComms.CUDADevice,
     cache,
@@ -76,14 +63,13 @@ function _single_field_solve_diag_matrix_row!(
     A,
     b,
 )
-    Aⱼs = unrolled_unzip_tuple_field_values(Fields.field_values(A.entries))
+    Aⱼs = unzip_tuple_field_values(Fields.field_values(A.entries))
     (A₀,) = Aⱼs
-    vi = vindex
     x_data = Fields.field_values(x)
     b_data = Fields.field_values(b)
     Nv = DataLayouts.nlevels(x_data)
     @inbounds for v in 1:Nv
-        x_data[vi(v)] = inv(A₀[vi(v)]) * b_data[vi(v)]
+        x_data[v] = inv(A₀[v]) * b_data[v]
     end
 end
 
@@ -109,16 +95,16 @@ end
 
 function _single_field_solve!(
     ::ClimaComms.CUDADevice,
-    cache::Fields.ColumnField,
-    x::Fields.ColumnField,
+    cache::Fields.FiniteDifferenceField,
+    x::Fields.FiniteDifferenceField,
     A::UniformScaling,
-    b::Fields.ColumnField,
+    b::Fields.FiniteDifferenceField,
 )
     x_data = Fields.field_values(x)
     b_data = Fields.field_values(b)
     Nv = DataLayouts.nlevels(x_data)
     @inbounds for v in 1:Nv
-        x_data[vindex(v)] = inv(A.λ) * b_data[vindex(v)]
+        x_data[v] = inv(A.λ) * b_data[v]
     end
 end
 
@@ -145,7 +131,6 @@ function band_matrix_solve_local_mem!(
     Nv = DataLayouts.nlevels(x)
     Ux, U₊₁ = cache
     A₋₁, A₀, A₊₁ = Aⱼs
-    vi = vindex
 
     Ux_local = MArray{Tuple{Nv}, eltype(Ux)}(undef)
     U₊₁_local = MArray{Tuple{Nv}, eltype(U₊₁)}(undef)
@@ -155,16 +140,16 @@ function band_matrix_solve_local_mem!(
     A₊₁_local = MArray{Tuple{Nv}, eltype(A₊₁)}(undef)
     b_local = MArray{Tuple{Nv}, eltype(b)}(undef)
     @inbounds for v in 1:Nv
-        A₋₁_local[v] = A₋₁[vi(v)]
-        A₀_local[v] = A₀[vi(v)]
-        A₊₁_local[v] = A₊₁[vi(v)]
-        b_local[v] = b[vi(v)]
+        A₋₁_local[v] = A₋₁[v]
+        A₀_local[v] = A₀[v]
+        A₊₁_local[v] = A₊₁[v]
+        b_local[v] = b[v]
     end
     cache_local = (Ux_local, U₊₁_local)
     Aⱼs_local = (A₋₁_local, A₀_local, A₊₁_local)
-    band_matrix_solve!(t, cache_local, x_local, Aⱼs_local, b_local, identity)
+    band_matrix_solve!(t, cache_local, x_local, Aⱼs_local, b_local)
     @inbounds for v in 1:Nv
-        x[vi(v)] = x_local[v]
+        x[v] = x_local[v]
     end
     return nothing
 end
@@ -176,7 +161,6 @@ function band_matrix_solve_local_mem!(
     Aⱼs,
     b,
 )
-    vi = vindex
     Nv = DataLayouts.nlevels(x)
     Ux, U₊₁, U₊₂ = cache
     A₋₂, A₋₁, A₀, A₊₁, A₊₂ = Aⱼs
@@ -191,18 +175,18 @@ function band_matrix_solve_local_mem!(
     A₊₂_local = MArray{Tuple{Nv}, eltype(A₊₂)}(undef)
     b_local = MArray{Tuple{Nv}, eltype(b)}(undef)
     @inbounds for v in 1:Nv
-        A₋₂_local[v] = A₋₂[vi(v)]
-        A₋₁_local[v] = A₋₁[vi(v)]
-        A₀_local[v] = A₀[vi(v)]
-        A₊₁_local[v] = A₊₁[vi(v)]
-        A₊₂_local[v] = A₊₂[vi(v)]
-        b_local[v] = b[vi(v)]
+        A₋₂_local[v] = A₋₂[v]
+        A₋₁_local[v] = A₋₁[v]
+        A₀_local[v] = A₀[v]
+        A₊₁_local[v] = A₊₁[v]
+        A₊₂_local[v] = A₊₂[v]
+        b_local[v] = b[v]
     end
     cache_local = (Ux_local, U₊₁_local, U₊₂_local)
     Aⱼs_local = (A₋₂_local, A₋₁_local, A₀_local, A₊₁_local, A₊₂_local)
-    band_matrix_solve!(t, cache_local, x_local, Aⱼs_local, b_local, identity)
+    band_matrix_solve!(t, cache_local, x_local, Aⱼs_local, b_local)
     @inbounds for v in 1:Nv
-        x[vi(v)] = x_local[v]
+        x[v] = x_local[v]
     end
     return nothing
 end
@@ -217,7 +201,7 @@ function band_matrix_solve_local_mem!(
     Nv = DataLayouts.nlevels(x)
     (A₀,) = Aⱼs
     @inbounds for v in 1:Nv
-        x[vindex(v)] = inv(A₀[vindex(v)]) * b[vindex(v)]
+        x[v] = inv(A₀[v]) * b[v]
     end
     return nothing
 end
@@ -237,8 +221,8 @@ function tridiag_pcr_kernel!(
     s_c = CUDA.CuStaticSharedArray(eltype(c), Nv)
     s_d = CUDA.CuStaticSharedArray(eltype(d), Nv)
 
-    idx = CartesianIndex(idx_i, idx_j, 1, i, idx_h)
-    ui = CartesianIndex(idx_i, idx_j, 1, 1, idx_h)
+    idx = CartesianIndex(i, idx_i, idx_j, idx_h)
+    ui = CartesianIndex(1, idx_i, idx_j, idx_h)
     DataLayouts.should_compute(mask, ui) || return nothing
 
     # Load into shared memory
@@ -313,7 +297,7 @@ function single_field_solve_tridiagonal!(cache, x, A, b)
     )
 
     # Get field dimensions
-    Ni, Nj, _, Nv, Nh = universal_size(Fields.field_values(A))
+    Nv, Ni, Nj, Nh = size(Fields.field_values(A))
 
     # Prepare data
     Aⱼs = unzip_tuple_field_values(Fields.field_values(A.entries))

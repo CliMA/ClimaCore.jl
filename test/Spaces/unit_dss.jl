@@ -1,8 +1,3 @@
-#=
-julia --project
-ENV["CLIMACOMMS_DEVICE"] = "CPU";
-using Revise; include(joinpath("test", "Spaces", "unit_dss.jl"))
-=#
 using Test
 using ClimaComms
 using Random
@@ -17,22 +12,12 @@ import ClimaCore:
     Operators,
     Spaces,
     Quadratures,
-    Topologies,
-    DataLayouts
+    Topologies
 
 @isdefined(TU) || include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
 );
 import .TestUtilities as TU;
-
-function get_space_cs(::Type{FT}; context, R = 300.0) where {FT}
-    domain = Domains.SphereDomain{FT}(300.0)
-    mesh = Meshes.EquiangularCubedSphere(domain, 3)
-    topology = Topologies.Topology2D(context, mesh)
-    quad = Quadratures.GLL{4}()
-    space = Spaces.SpectralElementSpace2D(topology, quad)
-    return space
-end
 
 function one_to_n_dss(a::AbstractArray)
     _a = Array(a)
@@ -45,7 +30,7 @@ end
 
 function test_dss_count(f::Fields.Field, buff::Topologies.DSSBuffer, nc)
     parent(f) .= one_to_n_dss(parent(f))
-    @test allunique(parent(f))
+    @test allunique(Array(parent(f)))
     cf = copy(f)
     Spaces.weighted_dss!(f => buff)
     n_dss_unaffected = count(parent(f) .== parent(cf))
@@ -67,7 +52,7 @@ function get_space_and_buffers3(::Type{FT}; context) where {FT}
     h_elem = 2
     device = ClimaComms.device(context)
     @info "running dss-Covariant123Vector test on $(device)" h_elem z_elem npoly R z_max FT
-    # horizontal space
+    # Horizontal space
     domain = Domains.SphereDomain{FT}(R)
     horizontal_mesh = Meshes.EquiangularCubedSphere(domain, h_elem)
     horizontal_topology = Topologies.Topology2D(
@@ -77,7 +62,7 @@ function get_space_and_buffers3(::Type{FT}; context) where {FT}
     )
     quad = Quadratures.GLL{npoly + 1}()
     h_space = Spaces.SpectralElementSpace2D(horizontal_topology, quad)
-    # vertical space
+    # Vertical space
     z_domain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zero(z_max)),
         Geometry.ZPoint{FT}(z_max);
@@ -99,12 +84,30 @@ function get_space_and_buffers3(::Type{FT}; context) where {FT}
     return (; space, y12, y123, y3, dss_buffer)
 end
 
+@testset "DSS of a constant field on the cubed sphere" begin
+    # DSS of a continuous (here, constant) field must leave it unchanged.
+    # Both even and odd element counts are exercised: odd ne produces
+    # different panel-edge node pairings on the cubed sphere.
+    FT = Float64
+    device = ClimaComms.device()
+    context = ClimaComms.SingletonCommsContext(device)
+    for ne in (3, 4)
+        domain = Domains.SphereDomain{FT}(300.0)
+        mesh = Meshes.EquiangularCubedSphere(domain, ne)
+        topology = Topologies.Topology2D(context, mesh)
+        space = Spaces.SpectralElementSpace2D(topology, Quadratures.GLL{4}())
+        x = ones(space)
+        Spaces.weighted_dss!(x)
+        @test Array(parent(x)) ≈ ones(size(parent(x)))
+    end
+end
+
 @testset "DSS of Tensors on Cubed Sphere" begin
     FT = Float64
     device = ClimaComms.device()
     nt = get_space_and_buffers3(FT; context = ClimaComms.context(device))
 
-    # test DSS for a Covariant12Vector
+    # Test DSS for a Covariant12Vector
     # ensure physical velocity is continuous across SE boundary for initial state
     n_dss_affected_y12 =
         test_dss_count(nt.y12, nt.dss_buffer.y12, 2).n_dss_affected
@@ -116,6 +119,52 @@ end
     @test n_dss_affected_y12 * 3 / 2 ==
           n_dss_affected_y123 ==
           n_dss_affected_y3 * 3
+end
+
+@testset "DSS idempotence on the extruded cubed sphere" begin
+    # A field that has already been DSSed is continuous, so a second DSS is a
+    # no-op: weighted_dss! is idempotent.
+    FT = Float64
+    device = ClimaComms.device()
+    nt = get_space_and_buffers3(FT; context = ClimaComms.context(device))
+
+    Spaces.weighted_dss!(nt.y12 => nt.dss_buffer.y12)
+    init = copy(nt.y12)
+    Spaces.weighted_dss!(nt.y12, nt.dss_buffer.y12)
+    @test init ≈ nt.y12
+
+    Spaces.weighted_dss!(nt.y123, nt.dss_buffer.y123)
+    init = copy(nt.y123)
+    Spaces.weighted_dss!(nt.y123, nt.dss_buffer.y123)
+    @test init ≈ nt.y123
+end
+
+if ClimaComms.device() isa ClimaComms.CUDADevice
+    @testset "GPU-vs-CPU DSS on the extruded cubed sphere" begin
+        FT = Float64
+        cpu_device = ClimaComms.CPUSingleThreaded()
+        gpu_device = ClimaComms.CUDADevice()
+        gpu = get_space_and_buffers3(FT; context = ClimaComms.context(gpu_device))
+        cpu = get_space_and_buffers3(FT; context = ClimaComms.context(cpu_device))
+
+        Spaces.weighted_dss!(cpu.y12 => cpu.dss_buffer.y12)
+        Spaces.weighted_dss!(gpu.y12 => gpu.dss_buffer.y12)
+        inity12 = (; cpu = copy(cpu.y12), gpu = copy(gpu.y12))
+        Spaces.weighted_dss!(cpu.y12, cpu.dss_buffer.y12)
+        Spaces.weighted_dss!(gpu.y12, gpu.dss_buffer.y12)
+        @test inity12.cpu ≈ cpu.y12
+        @test inity12.gpu ≈ gpu.y12
+        @test parent(cpu.y12) ≈ Array(parent(gpu.y12))
+
+        Spaces.weighted_dss!(cpu.y123, cpu.dss_buffer.y123)
+        Spaces.weighted_dss!(gpu.y123, gpu.dss_buffer.y123)
+        inity123 = (; cpu = copy(cpu.y123), gpu = copy(gpu.y123))
+        Spaces.weighted_dss!(cpu.y123, cpu.dss_buffer.y123)
+        Spaces.weighted_dss!(gpu.y123, gpu.dss_buffer.y123)
+        @test inity123.cpu ≈ cpu.y123
+        @test inity123.gpu ≈ gpu.y123
+        @test parent(cpu.y123) ≈ Array(parent(gpu.y123))
+    end
 end
 
 function test_dss_conservation(space)

@@ -7,6 +7,13 @@ on:
       - main
     tags: '*'
 
+# Documenter deploys with `git push --force-with-lease`, which fails when another run has
+# moved `gh-pages` since this one cloned it. Superseding an in-progress run keeps two
+# deployments of the same ref from racing each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   docbuild:
     runs-on: ubuntu-24.04
@@ -17,8 +24,15 @@ jobs:
           version: '1.10'
       - name: Install dependencies
         run: >
-          julia --project=docs -e 'using Pkg; Pkg.develop(path=".");
-          Pkg.develop(path="lib/ClimaCoreVTK"); 
+          julia --project=docs -e 'using Pkg;
+          Pkg.develop([
+            PackageSpec(path="lib/ClimaCoreVTK"),
+            PackageSpec(path="lib/ClimaCoreTempestRemap"),
+            PackageSpec(path="lib/ClimaCoreMakie"),
+            PackageSpec(path="lib/ClimaCorePlots"),
+            PackageSpec(path="lib/ClimaCoreSpectra"),
+            PackageSpec(path="."),
+          ]);
           Pkg.instantiate(;verbose=true)'
       - name: Build and deploy
         env:

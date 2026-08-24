@@ -103,6 +103,28 @@ bycolumn(
     device::ClimaComms.AbstractCPUDevice,
 ) = bycolumn(fn, Spaces.horizontal_space(space), device)
 
+function bycolumn(
+    fn,
+    space::Spaces.MultiColumnFiniteDifferenceSpace,
+    ::ClimaComms.CPUSingleThreaded,
+)
+    N = Spaces.ncolumns(space)
+    @inbounds for h in 1:N
+        fn(ColumnIndex((1,), h))
+    end
+    return nothing
+end
+function bycolumn(
+    fn,
+    space::Spaces.MultiColumnFiniteDifferenceSpace,
+    ::ClimaComms.CPUMultiThreaded,
+)
+    N = Spaces.ncolumns(space)
+    @inbounds Threads.@threads for h in 1:N
+        fn(ColumnIndex((1,), h))
+    end
+    return nothing
+end
 
 
 """
@@ -271,8 +293,8 @@ function byslab(
     end
 end
 
-universal_index(colidx::Fields.ColumnIndex{2}) =
-    CartesianIndex(colidx.ij[1], colidx.ij[2], 1, 1, colidx.h)
+universal_index(colidx::ColumnIndex{2}) =
+    CartesianIndex(1, colidx.ij[1], colidx.ij[2], colidx.h)
 
-universal_index(colidx::Fields.ColumnIndex{1}) =
-    CartesianIndex(colidx.ij[1], 1, 1, 1, colidx.h)
+universal_index(colidx::ColumnIndex{1}) =
+    CartesianIndex(1, colidx.ij[1], 1, colidx.h)

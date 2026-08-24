@@ -90,17 +90,19 @@ end
 Write `fields` to as an unstructured mesh VTK file named `$(basename).vtu`.
 
 `fields` can be either:
-- a ClimaCore `Field` object,
-- a `FieldVector` object,
-- a `NamedTuple` of `Field`s.
+
+  - a ClimaCore `Field` object,
+  - a `FieldVector` object,
+  - a `NamedTuple` of `Field`s.
 
 The `basis` keyword option determines the type of cells used to write.:
-- `:cell` (default): output values at cell centers (interpolating where
-  necessary).
-- `:point`: output values at cell vertices.
-- `:lagrange`: output values at Lagrange nodes (valid only for spectral element
-  spaces), using Use VTK Lagrange cells to accurately represent high-order
-  elements.
+
+  - `:cell` (default): output values at cell centers (interpolating where
+    necessary).
+  - `:point`: output values at cell vertices.
+  - `:lagrange`: output values at Lagrange nodes (valid only for spectral element
+    spaces), using Use VTK Lagrange cells to accurately represent high-order
+    elements.
 
 The `latlong=true` keyword option will output a spherical or spherical shell
 domain using the Mercator projection, with longitude along the x-axis, latitude

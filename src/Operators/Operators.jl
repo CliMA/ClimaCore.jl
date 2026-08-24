@@ -11,9 +11,8 @@ import ClimaComms
 import ..Utilities:
     new, is_auto_broadcastable, add_auto_broadcasters, drop_auto_broadcasters
 import ..DebugOnly: call_post_op_callback, post_op_callback
-import ..DataLayouts: DataLayouts, Data2D, DataSlab2D
-import ..DataLayouts: vindex
-import ..Geometry: Geometry, Covariant12Vector, Contravariant12Vector, ⊗
+import ..DataLayouts
+import ..Geometry: Geometry, ⊗
 import ..Spaces: Spaces, Quadratures, AbstractSpace
 import ..Topologies
 import ..Meshes
@@ -26,6 +25,6 @@ include("numericalflux.jl")
 include("finitedifference.jl")
 include("remapping.jl")
 include("integrals.jl")
-include("columnwise.jl")
+include("deprecated.jl")
 
 end # module

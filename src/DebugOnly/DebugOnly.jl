@@ -10,8 +10,7 @@ module DebugOnly
 """
     post_op_callback(result, args...; kwargs...)
 
-A callback that is called, if `ClimaCore.DataLayouts.call_post_op_callback() =
-true`, on the result of every data operation.
+A callback that is called, if `ClimaCore.DataLayouts.call_post_op_callback() = true`, on the result of every data operation.
 
 There is purposely no implementation-- this is a debugging tool, and users may
 want to check different things.
@@ -34,7 +33,7 @@ call_post_op_callback() = false
 # TODO: define a convenience macro to inject `post_op_hook`
 
 """
-	example_debug_post_op_callback(result, args...; kwargs...)
+    example_debug_post_op_callback(result, args...; kwargs...)
 
 An example `post_op_callback` method, that checks for `NaN`s and `Inf`s.
 """
@@ -125,8 +124,7 @@ To allow combining mismatched spaces, override this function so that it returns
     results. If you disable this check, you are responsible to ensure that the
     results make sense.
 
-Example
-=======
+# Example
 
 ```julia
 julia> import ClimaCore;
@@ -140,7 +138,7 @@ julia> space = ExtrudedCubedSphereSpace(;
            radius = 10,
            h_elem = 10,
            n_quad_points = 4,
-           staggering = CellCenter()
+           staggering = CellCenter(),
        );
 
 julia> other_space = deepcopy(space);
@@ -161,11 +159,13 @@ Stacktrace:
    @ ClimaCore.Fields ~/repos/ClimaCore.jl/src/Fields/broadcast.jl:227
 
 # Turning `allow_mismatched_spaces_unsafe` on
+
 julia> ClimaCore.DebugOnly.allow_mismatched_spaces_unsafe() = true;
 
 julia> one .+ other_one
 Float64-valued Field:
   [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0  …  2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
+```
 """
 function allow_mismatched_spaces_unsafe()
     return false

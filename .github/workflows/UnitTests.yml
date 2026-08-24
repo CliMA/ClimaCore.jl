@@ -1,10 +1,13 @@
 name: Unit Tests
 
 on:
-  pull_request:
+  push:
     branches:
       - main
     tags: '*'
+  pull_request:
+    branches:
+      - main
 
 # Needed to allow julia-actions/cache to delete old caches that it has created
 permissions:
@@ -28,7 +31,6 @@ jobs:
           - '1.11'
         os:
           - ubuntu-latest
-          - windows-latest
           # There is a concurrency limit for MacOS runners across the
           # entire organization.
           # (see https://docs.github.com/en/actions/reference/limits#job-concurrency-limits-for-github-hosted-runners)
@@ -47,9 +49,23 @@ jobs:
       - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest
+        with:
+          # Only this job's coverage is uploaded. Instrumenting bypasses the
+          # precompiled pkgimages, so an instrumented run takes ~2.5x as long.
+          coverage: ${{ matrix.version == '1.10' && matrix.os == 'ubuntu-latest' }}
+        env:
+          # Portability check across Julia versions and operating systems, on one
+          # two-core runner each. Buildkite splits the same suite and runs the
+          # tiers excluded here, which repeat their cases or run end-to-end.
+          TEST_EXCLUDE_TIER: "conv,inference,allocs,smoke"
+          # `slow` marks the multi-minute tests (see test/tabulated_tests.jl).
+          TEST_EXCLUDE_SLOW: "true"
       - uses: julia-actions/julia-processcoverage@latest
+        if: matrix.version == '1.10' && matrix.os == 'ubuntu-latest'
       - uses: codecov/codecov-action@v7
-        if: ${{ matrix.version == '1.10' }} && ${{ matrix.os == 'ubuntu-latest' }}
+        # One expression: `${{ a }} && ${{ b }}` interpolates each half separately
+        # and leaves the string "true && false", which is truthy either way.
+        if: matrix.version == '1.10' && matrix.os == 'ubuntu-latest'
         with:
           files: lcov.info
         env:

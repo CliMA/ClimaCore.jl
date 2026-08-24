@@ -1,19 +1,21 @@
-import ..Topologies: Topology2D
-import UnrolledUtilities: unrolled_map
-
 """
     dss_transform(arg, local_geometry, weight, I)
 
 Transfrom `arg[I]` to a basis for direct stiffness summation (DSS).
 Transformations only apply to vector quantities.
 
-- `local_geometry[I]` is the relevant `LocalGeometry` object. If it is `nothing`, then no transformation is performed
-- `weight[I]` is the relevant DSS weights. If `weight` is `nothing`, then the result is simply summation.
+  - `local_geometry[I]` is the relevant `LocalGeometry` object. If it is `nothing`, then no transformation is performed
+  - `weight[I]` is the relevant DSS weights. If `weight` is `nothing`, then the result is simply summation.
 
 See [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
 Base.@propagate_inbounds dss_transform(arg, local_geometry, weight, I) =
-    dss_transform(arg[I], local_geometry[I], weight[I])
+    dss_transform(
+        arg[I],
+        local_geometry[I],
+        # DSS weights only vary in the horizontal, so their level index is 1.
+        weight[CartesianIndex(1, Base.tail(Tuple(I))...)],
+    )
 Base.@propagate_inbounds dss_transform(
     arg,
     local_geometry,
@@ -147,39 +149,6 @@ Base.@propagate_inbounds dss_untransform(
     Geometry.project(ax, targ, local_geometry)
 end
 
-# helper functions for DSS2
-
-function _representative_slab(
-    data::Union{DataLayouts.AbstractData, Nothing},
-    ::Type{DA},
-) where {DA}
-    rebuild_flag = DA isa Array ? false : true
-    if isnothing(data)
-        return nothing
-    elseif rebuild_flag
-        return DataLayouts.rebuild(
-            slab(data, CartesianIndex(1, 1, 1, 1, 1)),
-            Array,
-        )
-    else
-        return slab(data, CartesianIndex(1, 1, 1, 1, 1))
-    end
-end
-
-_transformed_type(
-    data::DataLayouts.AbstractData,
-    local_geometry::Union{DataLayouts.AbstractData, Nothing},
-    dss_weights::Union{DataLayouts.AbstractData, Nothing},
-    ::Type{DA},
-) where {DA} = typeof(
-    dss_transform(
-        _representative_slab(data, DA),
-        _representative_slab(local_geometry, DA),
-        _representative_slab(dss_weights, DA),
-        CartesianIndex(1, 1, 1, 1, 1),
-    ),
-)
-
 # currently only used in limiters (but not actually functional)
 # see https://github.com/CliMA/ClimaCore.jl/issues/1511
 struct GhostBuffer{G, D}
@@ -190,40 +159,20 @@ end
 
 recv_buffer(ghost::GhostBuffer) = ghost.recv_data
 
-create_ghost_buffer(data, topology::Topologies.AbstractTopology) = nothing
-
-create_ghost_buffer(
-    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, <:Any, Nij}},
-    topology::Topologies.Topology2D,
-) where {S, Nij} = create_ghost_buffer(
-    data,
-    topology,
-    Topologies.nsendelems(topology),
-    Topologies.nrecvelems(topology),
-)
-
+create_ghost_buffer(data, topology::AbstractTopology) = nothing
 
 function create_ghost_buffer(
-    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, <:Any, Nij}},
-    topology::Topologies.Topology2D,
-    Nhsend,
-    Nhrec,
-) where {S, Nij}
-    if data isa DataLayouts.IJFH
-        send_data = DataLayouts.IJFH{S, Nij}(typeof(parent(data)), Nhsend)
-        recv_data = DataLayouts.IJFH{S, Nij}(typeof(parent(data)), Nhrec)
-    else
-        Nv = DataLayouts.nlevels(data)
-        Nf = DataLayouts.ncomponents(data)
-        send_data = DataLayouts.VIJFH{S, Nv, Nij}(
-            similar(parent(data), (Nv, Nij, Nij, Nf, Nhsend)),
-        )
-        recv_data = DataLayouts.VIJFH{S, Nv, Nij}(
-            similar(parent(data), (Nv, Nij, Nij, Nf, Nhrec)),
-        )
-    end
-    k = stride(parent(send_data), DataLayouts.h_dim(data))
-
+    data::DataLayouts.VIJHWithF,
+    topology::Topology2D,
+    Nhsend = nsendelems(topology),
+    Nhrec = nrecvelems(topology),
+)
+    # Ghost exchange is only required for distributed topologies
+    ClimaComms.context(topology) isa ClimaComms.SingletonCommsContext &&
+        return nothing
+    send_data = similar(data, Base.setindex(size(data), Nhsend, 4))
+    recv_data = similar(data, Base.setindex(size(data), Nhrec, 4))
+    k = stride(parent(send_data), DataLayouts.f_dim(data) == 5 ? 4 : 5)
     graph_context = ClimaComms.graph_context(
         topology.context,
         parent(send_data),
@@ -234,4 +183,30 @@ function create_ghost_buffer(
         topology.neighbor_pids,
     )
     GhostBuffer(graph_context, send_data, recv_data)
+end
+
+"""
+    fill_send_buffer!(topology, data, ghost_buffer::GhostBuffer)
+
+Loads the send buffer of `ghost_buffer` with the data of the elements
+that neighboring processes need for their ghost elements.
+"""
+function fill_send_buffer!(
+    topology::Topology2D,
+    data::DataLayouts.DataLayout,
+    ghost_buffer::GhostBuffer,
+)
+    # NOTE: this copies one element per iteration, which is a separate kernel
+    # launch per send element when the arrays live on a GPU. That is
+    # inconsequential at the element counts this is currently used with (the
+    # limiter's ghost exchange), but a single gather over `send_elem_lidx`
+    # would be preferable if it is ever used with many send elements.
+    # The parent array stores H at dim 4 or 5, depending on where F is
+    h_dim = DataLayouts.f_dim(data) == 5 ? 4 : 5
+    send_array = parent(ghost_buffer.send_data)
+    data_array = parent(data)
+    for (sidx, lidx) in enumerate(topology.send_elem_lidx)
+        selectdim(send_array, h_dim, sidx) .= selectdim(data_array, h_dim, lidx)
+    end
+    return nothing
 end

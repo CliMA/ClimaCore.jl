@@ -29,9 +29,10 @@ AbstractSpectralStyle(::ClimaComms.AbstractCPUDevice) = SlabBlockSpectralStyle
 Represents an operation that is applied to each element, where `I` is the tuple of axis indices.
 
 Subtypes `Op` of this should define the following:
-- [`operator_return_eltype(::Op, ElTypes...)`](@ref)
-- [`allocate_work(::Op, args...)`](@ref)
-- [`apply_operator(::Op, work, args...)`](@ref)
+
+  - [`operator_return_eltype(::Op, ElTypes...)`](@ref)
+  - [`allocate_work(::Op, args...)`](@ref)
+  - [`apply_operator(::Op, work, args...)`](@ref)
 
 Additionally, the result type `OpResult <: OperatorSlabResult` of `apply_operator` should define `get_node(::OpResult, ij, slabidx)`.
 """
@@ -47,8 +48,6 @@ function operator_axes end
 operator_axes(space::Spaces.AbstractSpace) = ()
 operator_axes(space::Spaces.SpectralElementSpace1D) = (1,)
 operator_axes(space::Spaces.SpectralElementSpace2D) = (1, 2)
-operator_axes(space::Spaces.SpectralElementSpaceSlab1D) = (1,)
-operator_axes(space::Spaces.SpectralElementSpaceSlab2D) = (1, 2)
 operator_axes(space::Spaces.ExtrudedFiniteDifferenceSpace) =
     operator_axes(Spaces.horizontal_space(space))
 
@@ -101,6 +100,121 @@ Adapt.adapt_structure(to, sbc::SpectralBroadcasted{Style}) where {Style} =
 
 return_space(::SpectralElementOperator, space, args...) = space
 
+"""
+    FormType
+
+Supertype of the singleton types [`StrongForm`](@ref) and [`WeakForm`](@ref),
+which distinguish the variational form of a spectral element operator.
+
+The strong and weak variants of an operator share the same interior
+computation; they differ only in three form-dependent factors:
+
+  - whether the derivative matrix is applied directly or transposed with a sign
+    flip (from integration by parts); see `form_deriv_entry`,
+  - whether the argument is weighted by the quadrature weights `W` or by the
+    Jacobian factor; see `form_weighted_arg` and `form_jacobian`,
+  - whether the result is rescaled by `J` or by `WJ`; see
+    `form_jacobian_rescale`, and by `W` or not at all; see
+    `form_weight_rescale`.
+
+Operators with strong/weak variants carry a `FormType` as their second type
+parameter, e.g. `Divergence{I, StrongForm}`, with the weak variant available
+under an alias, e.g. `WeakDivergence{I} = Divergence{I, WeakForm}`.
+"""
+abstract type FormType end
+
+"""
+    StrongForm()
+
+The [`FormType`](@ref) of an operator that discretizes a derivative directly at
+the quadrature points (e.g. [`Divergence`](@ref), [`Gradient`](@ref),
+[`Curl`](@ref)).
+"""
+struct StrongForm <: FormType end
+
+"""
+    WeakForm()
+
+The [`FormType`](@ref) of an operator that discretizes the volume-integral
+contribution of the corresponding weak-form expression, obtained after
+integration by parts (e.g. [`WeakDivergence`](@ref), [`WeakGradient`](@ref),
+[`WeakCurl`](@ref)).
+"""
+struct WeakForm <: FormType end
+
+"""
+    form_deriv_entry(form, D, ii, i)
+
+Entry of the derivative matrix `D` applied by an operator of the given
+[`FormType`](@ref) when accumulating the contribution of quadrature point `i`
+to quadrature point `ii`: `D[ii, i]` for the strong form, and `-D[i, ii]` (the
+transpose, with the sign flip from integration by parts) for the weak form.
+"""
+@inline form_deriv_entry(::StrongForm, D, ii, i) = D[ii, i]
+@inline form_deriv_entry(::WeakForm, D, ii, i) = -D[i, ii]
+
+"""
+    form_weighted_arg(form, local_geometry, x)
+
+The argument value `x`, weighted as required by an operator of the given
+[`FormType`](@ref) whose weak variant integrates against test functions: `x`
+itself for the strong form, and `W * x` (with the quadrature weights
+`W = WJ * J⁻¹`) for the weak form. Used by [`Gradient`](@ref) and
+[`Curl`](@ref).
+"""
+@inline form_weighted_arg(::StrongForm, local_geometry, x) = x
+@inline form_weighted_arg(::WeakForm, local_geometry, x) =
+    (local_geometry.WJ * local_geometry.invJ) * x
+
+"""
+    form_jacobian(form, local_geometry)
+
+The Jacobian factor that scales the contravariant components summed by an
+operator of the given [`FormType`](@ref): `J` for the strong form, and `WJ`
+for the weak form. Used by [`Divergence`](@ref).
+"""
+@inline form_jacobian(::StrongForm, local_geometry) = local_geometry.J
+@inline form_jacobian(::WeakForm, local_geometry) = local_geometry.WJ
+
+"""
+    form_jacobian_rescale(form, local_geometry, x)
+
+The result value `x`, divided by the `form_jacobian` of the given
+[`FormType`](@ref): `x * J⁻¹` for the strong form (using the precomputed
+inverse), and `x / WJ` for the weak form. Used by [`Divergence`](@ref) and
+[`Curl`](@ref).
+"""
+@inline form_jacobian_rescale(::StrongForm, local_geometry, x) =
+    x * local_geometry.invJ
+@inline form_jacobian_rescale(::WeakForm, local_geometry, x) =
+    x / local_geometry.WJ
+
+"""
+    form_weight_rescale(form, local_geometry, x)
+
+The result value `x`, divided by the quadrature weights `W = WJ * J⁻¹` if the
+given [`FormType`](@ref) requires it: `x` itself for the strong form, and
+`x / W` for the weak form. Used by [`Gradient`](@ref), whose weak variant
+weights its argument by `W` without a Jacobian factor to divide out.
+
+The CPU `apply_operator` methods for [`Gradient`](@ref) inline this rescale
+behind an `F === WeakForm` branch instead of calling it, so that the strong form
+skips the loop over quadrature points entirely; on GPUs each thread rescales
+only its own point, so there is no loop to skip.
+"""
+@inline form_weight_rescale(::StrongForm, local_geometry, x) = x
+@inline form_weight_rescale(::WeakForm, local_geometry, x) =
+    x / (local_geometry.WJ * local_geometry.invJ)
+
+"""
+    rebuild_operator(op, space)
+
+Reconstruct a `SpectralElementOperator` with its `operator_axes` reset to those
+of `space`, preserving all other type parameters (in particular the
+[`FormType`](@ref) of operators with strong/weak variants).
+"""
+rebuild_operator(op::SpectralElementOperator, space) =
+    unionall_type(typeof(op)){()}(space)
 
 function Base.Broadcast.broadcasted(op::SpectralElementOperator, args...)
     args′ = map(Base.Broadcast.broadcastable, args)
@@ -140,14 +254,13 @@ function Base.Broadcast.instantiate(sbc::SpectralBroadcasted)
             Base.Broadcast.check_broadcast_axes(axes, args...)
         end
     end
-    # For FiniteDifferenceSpace, return zeros 
+    # For FiniteDifferenceSpace, return zeros
     if axes isa Spaces.FiniteDifferenceSpace
         RT = operator_return_eltype(op, map(eltype, args)...)
         return Broadcast.broadcasted(Returns(zero(RT)), Fields.coordinate_field(axes))
     end
-    # If we've already instantiated, then we need to strip the type parameters,
-    # for example, `Divergence{()}(axes)`.
-    op = unionall_type(typeof(op)){()}(axes)
+    # If we've already instantiated, then we need to reset the operator axes.
+    op = rebuild_operator(op, axes)
     Style = AbstractSpectralStyle(ClimaComms.device(axes))
     return SpectralBroadcasted{Style}(op, args, axes)
 end
@@ -166,13 +279,13 @@ function Base.Broadcast.instantiate(
     end
     # For FiniteDifferenceSpace with operators, return zeros for horizontal operators
     if axes isa Spaces.FiniteDifferenceSpace && bc.f isa SpectralElementOperator
-        op = unionall_type(typeof(bc.f)){()}(axes)
+        op = rebuild_operator(bc.f, axes)
         RT = operator_return_eltype(op, map(eltype, args)...)
         return Broadcast.broadcasted(Returns(zero(RT)), Fields.coordinate_field(axes))
     end
 
     if bc.f isa SpectralElementOperator
-        op = unionall_type(typeof(bc.f)){()}(axes)
+        op = rebuild_operator(bc.f, axes)
         Style = AbstractSpectralStyle(ClimaComms.device(axes))
         return Base.Broadcast.Broadcasted{Style}(op, args, axes)
     else
@@ -188,7 +301,7 @@ function Base.copyto!(
     sbc::Union{
         SpectralBroadcasted{SlabBlockSpectralStyle},
         Broadcasted{SlabBlockSpectralStyle},
-    },
+    };
     mask = DataLayouts.NoMask(),
 )
     Fields.byslab(axes(out)) do slabidx
@@ -220,12 +333,12 @@ end
 Recursively evaluate any operators in `bc` at `slabidx`, replacing any
 `SpectralBroadcasted` objects.
 
-- if `bc` is a regular `Broadcasted` object, return a new `Broadcasted` with `resolve_operator` called on each `arg`
-- if `bc` is a regular `SpectralBroadcasted` object:
- - call `resolve_operator` called on each `arg`
- - call `apply_operator`, returning the resulting "pseudo Field":  a `Field` with an
- `IF`/`IJF` data object.
-- if `bc` is a `Field`, return that
+  - if `bc` is a regular `Broadcasted` object, return a new `Broadcasted` with `resolve_operator` called on each `arg`
+  - if `bc` is a regular `SpectralBroadcasted` object:
+  - call `resolve_operator` called on each `arg`
+  - call `apply_operator`, returning the resulting "pseudo Field":  a `Field` with a
+    [`SlabData`](@ref) data object.
+  - if `bc` is a `Field`, return that
 """
 Base.@propagate_inbounds function resolve_operator(
     bc::SpectralBroadcasted{SlabBlockSpectralStyle},
@@ -363,7 +476,7 @@ Base.@propagate_inbounds function get_node(
     h = slabidx.h
     fv = Fields.field_values(field)
     v = isnothing(_v) ? 1 : _v
-    return fv[CartesianIndex(i, 1, 1, v, h)]
+    return fv[v, i, 1, h]
 end
 Base.@propagate_inbounds function get_node(
     parent_space,
@@ -384,7 +497,7 @@ Base.@propagate_inbounds function get_node(
     h = slabidx.h
     fv = Fields.field_values(field)
     v = isnothing(_v) ? 1 : _v
-    return fv[CartesianIndex(i, j, 1, v, h)]
+    return fv[v, i, j, h]
 end
 
 
@@ -399,13 +512,53 @@ Base.@propagate_inbounds function get_node(
     args = _get_node(space, ij, slabidx, bc.args)
     bc.f(args...)
 end
+"""
+    SlabData{T}
+
+A [`DataLayouts.DataLayout`](@ref) that stores a single slab of values of type
+`T` (a `VIJHWithF` layout with `Nv = Nh = 1`).
+"""
+const SlabData{T} = DataLayouts.VIJHWithF{T, 1, <:Any, <:Any, 1}
+
+"""
+    slab_data(T, FT, Ni, [Nj])
+
+Mutable temporary storage for one slab of values of type `T`, backed by an
+`MArray` with eltype `FT` (a `VIJFH` layout with `Nv = Nh = 1`).
+"""
+@inline function slab_data(::Type{T}, ::Type{FT}, Ni, Nj = 1) where {T, FT}
+    Nf = DataLayouts.num_basetypes(FT, T)
+    array = MArray{Tuple{1, Ni, Nj, Nf, 1}, FT, 5, Ni * Nj * Nf}(undef)
+    return DataLayouts.VIJFH{T, 1, Ni, Nj, 1}(array)
+end
+
+# Immutable copy of a slab temporary, used to construct pseudo-Fields.
+@inline immutable_slab_data(data::SlabData) =
+    DataLayouts.rebuild(data, SArray(parent(data)))
+
+# Index for one node in a slab of data, with v = h = 1.
+@inline slab_node_index(ij::CartesianIndex{1}) = CartesianIndex(1, ij[1], 1, 1)
+@inline slab_node_index(ij::CartesianIndex{2}) =
+    CartesianIndex(1, ij[1], ij[2], 1)
+
+Base.@propagate_inbounds function get_node(space, data::SlabData, ij, slabidx)
+    data[slab_node_index(ij)]
+end
 Base.@propagate_inbounds function get_node(
     space,
-    data::Union{DataLayouts.IJF, DataLayouts.IF},
-    ij,
+    field::Fields.Field{<:SlabData},
+    ij::CartesianIndex{1},
     slabidx,
 )
-    data[ij]
+    Fields.field_values(field)[slab_node_index(ij)]
+end
+Base.@propagate_inbounds function get_node(
+    space,
+    field::Fields.Field{<:SlabData},
+    ij::CartesianIndex{2},
+    slabidx,
+)
+    Fields.field_values(field)[slab_node_index(ij)]
 end
 Base.@propagate_inbounds function get_node(
     space,
@@ -438,7 +591,7 @@ Base.@propagate_inbounds function get_local_geometry(
     end
     lgd = Spaces.local_geometry_data(space)
     v = isnothing(_v) ? 1 : _v
-    return lgd[CartesianIndex(i, 1, 1, v, h)]
+    return lgd[v, i, 1, h]
 end
 Base.@propagate_inbounds function get_local_geometry(
     space::Union{
@@ -457,7 +610,7 @@ Base.@propagate_inbounds function get_local_geometry(
     end
     v = isnothing(_v) ? 1 : _v
     lgd = Spaces.local_geometry_data(space)
-    return lgd[CartesianIndex(i, j, 1, v, h)]
+    return lgd[v, i, j, h]
 end
 
 Base.@propagate_inbounds function set_node!(
@@ -477,7 +630,7 @@ Base.@propagate_inbounds function set_node!(
     h = slabidx.h
     fv = Fields.field_values(field)
     v = isnothing(_v) ? 1 : _v
-    fv[CartesianIndex(i, 1, 1, v, h)] = val
+    fv[v, i, 1, h] = val
 end
 Base.@propagate_inbounds function set_node!(
     space,
@@ -495,7 +648,7 @@ Base.@propagate_inbounds function set_node!(
     h = slabidx.h
     fv = Fields.field_values(field)
     v = isnothing(_v) ? 1 : _v
-    fv[CartesianIndex(i, j, 1, v, h)] = val
+    fv[v, i, j, h] = val
 end
 
 Base.Broadcast.BroadcastStyle(
@@ -519,93 +672,114 @@ Base.Broadcast.BroadcastStyle(
 Computes the per-element spectral (strong) divergence of a vector field ``u``.
 
 The divergence of a vector field ``u`` is defined as
+
 ```math
 \\nabla \\cdot u = \\sum_i \\frac{1}{J} \\frac{\\partial (J u^i)}{\\partial \\xi^i}
 ```
+
 where ``J`` is the Jacobian determinant, ``u^i`` is the ``i``th contravariant
 component of ``u``.
 
 This is discretized by
+
 ```math
 \\sum_i I \\left\\{\\frac{1}{J} \\frac{\\partial (I\\{J u^i\\})}{\\partial \\xi^i} \\right\\}
 ```
+
 where ``I\\{x\\}`` is the interpolation operator that projects to the
 unique polynomial interpolating ``x`` at the quadrature points. In matrix
 form, this can be written as
+
 ```math
 J^{-1} \\sum_i D_i J u^i
 ```
+
 where ``D_i`` is the derivative matrix along the ``i``th dimension
 
 ## References
-- [Taylor2010](@cite), equation 15
+
+  - [Taylor2010](@cite), equation 15
 """
-struct Divergence{I} <: SpectralElementOperator{I} end
-Divergence() = Divergence{()}()
-Divergence{()}(space) = Divergence{operator_axes(space)}()
+struct Divergence{I, F <: FormType} <: SpectralElementOperator{I} end
+Divergence() = Divergence{(), StrongForm}()
+Divergence{I}() where {I} = Divergence{I, StrongForm}()
+rebuild_operator(::Divergence{I, F}, space) where {I, F} =
+    Divergence{operator_axes(space), F}()
 
 operator_return_eltype(op::Divergence{I}, ::Type{S}) where {I, S} =
     Geometry.divergence_result_type(S)
 
-function apply_operator(op::Divergence{(1,)}, space, slabidx, arg)
+# The strong divergence is J⁻¹ ∑ᵢ Dᵢ (J uⁱ), while the weak divergence is
+# -(WJ)⁻¹ ∑ᵢ Dᵢᵀ (WJ uⁱ); see form_deriv_entry, form_jacobian, and
+# form_jacobian_rescale for the form-dependent factors.
+
+function apply_operator(op::Divergence{(1,), F}, space, slabidx, arg) where {F}
+    form = F()
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = IF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq)
     fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
-        Jv¹ = local_geometry.J * Geometry.contravariant1(v, local_geometry)
+        Jv¹ =
+            form_jacobian(form, local_geometry) *
+            Geometry.contravariant1(v, local_geometry)
         for ii in 1:Nq
-            out[slab_index(ii)] += D[ii, i] * Jv¹
+            out[ii] += form_deriv_entry(form, D, ii, i) * Jv¹
         end
     end
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i)] *= local_geometry.invJ
+        out[i] = form_jacobian_rescale(form, local_geometry, out[i])
     end
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 Base.@propagate_inbounds function apply_operator(
-    op::Divergence{(1, 2)},
+    op::Divergence{(1, 2), F},
     space,
     slabidx,
     arg,
-)
+) where {F}
+    form = F()
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq, Nq)
     fill!(parent(out), zero(FT))
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
-        Jv¹ = local_geometry.J * Geometry.contravariant1(v, local_geometry)
+        Jv¹ =
+            form_jacobian(form, local_geometry) *
+            Geometry.contravariant1(v, local_geometry)
         for ii in 1:Nq
-            out[slab_index(ii, j)] += D[ii, i] * Jv¹
+            out[1, ii, j, 1] += form_deriv_entry(form, D, ii, i) * Jv¹
         end
-        Jv² = local_geometry.J * Geometry.contravariant2(v, local_geometry)
+        Jv² =
+            form_jacobian(form, local_geometry) *
+            Geometry.contravariant2(v, local_geometry)
         for jj in 1:Nq
-            out[slab_index(i, jj)] += D[jj, j] * Jv²
+            out[1, i, jj, 1] += form_deriv_entry(form, D, jj, j) * Jv²
         end
     end
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i, j)] *= local_geometry.invJ
+        out[1, i, j, 1] = form_jacobian_rescale(form, local_geometry, out[1, i, j, 1])
     end
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 """
@@ -614,21 +788,24 @@ end
 
 Computes the divergence of the product `ρu * ψ` using a **split-form (entropy-stable)** discretization.
 
-This operator is designed for the advection of scalar quantities in conservation laws (e.g., 
-thermodynamic variables or tracers). By evaluating the divergence using a specific averaging of the 
-conservative and advective forms, this formulation cancels aliasing errors that arise from the product 
-of two spectrally variable fields, thereby inhibiting the growth of quadratic instabilities (such as 
+This operator is designed for the advection of scalar quantities in conservation laws (e.g.,
+thermodynamic variables or tracers). By evaluating the divergence using a specific averaging of the
+conservative and advective forms, this formulation cancels aliasing errors that arise from the product
+of two spectrally variable fields, thereby inhibiting the growth of quadratic instabilities (such as
 cold temperature spikes) without requiring hyperviscosity.
 
 # Arguments
-- `ρu`: The transport vector field, typically the **mass flux**. It must be a vector quantity (e.g., `Geometry.Contravariant12Vector`).
-- `ψ`: The **specific** scalar quantity to be advected (e.g., specific total energy ``e_{tot}`` or specific humidity ``q_{tot}``).
+
+  - `ρu`: The transport vector field, typically the **mass flux**. It must be a vector quantity (e.g., `Geometry.Contravariant12Vector`).
+  - `ψ`: The **specific** scalar quantity to be advected (e.g., specific total energy ``e_{tot}`` or specific humidity ``q_{tot}``).
 
 # Mathematical Formulation
 
 ## Continuous
+
 The split form of the divergence operator is defined as the arithmetic mean of
 the conservative and advective forms:
+
 ```math
 \\nabla \\cdot (\\rho \\mathbf{u} \\psi)|_\\textrm{split} =
     \\frac{1}{2} \\nabla \\cdot (\\rho \\mathbf{u} \\psi) +
@@ -639,8 +816,10 @@ the conservative and advective forms:
 ```
 
 ## Discrete
+
 The discretized split operator is equivalent to using the strong formulation of
 the gradient operator and the weak formulation of the divergence operator:
+
 ```math
 \\textrm{split_div}(\\rho \\mathbf{u}, \\psi) =
     \\frac{1}{2} \\textrm{wdiv}(\\rho \\mathbf{u} \\psi) +
@@ -649,48 +828,60 @@ the gradient operator and the weak formulation of the divergence operator:
         \\rho \\mathbf{u} \\cdot \\textrm{grad}(\\psi)
     \\right)
 ```
+
 Swapping the weak and strong formulations in the last two terms also results in
 the same operator. The discrete form of the divergence theorem, which stems from
 the generalized summation-by-parts (SBP) property, guarantees that the integral
 of the first term vanishes,
+
 ```math
 \\int_\\Omega \\textrm{wdiv}(\\rho \\mathbf{u} \\psi) dV = 0
 ```
+
 while the integrals of the other two terms cancel out,
+
 ```math
 \\int_\\Omega \\psi \\textrm{wdiv}(\\rho \\mathbf{u}) dV =
     -\\int_\\Omega \\rho \\mathbf{u} \\cdot \\textrm{grad}(\\psi) dV
 ```
+
 So, this discretization ensures that the split operator conserves the integral
 of ``\\rho \\mathbf{u} \\psi``.
 
 ## Two-Point
+
 A more compact representation of the discretized operator can be obtained with
 the symmetric two-point flux, whose values in one dimension are
+
 ```math
 (F^1)_{ij} =
     \\frac{1}{2} (\\rho_i J_i (u^1)_i + \\rho_j J_j (u^1)_j) (\\psi_i + \\psi_j)
 ```
+
 With ``D`` denoting the spectral derivative matrix, the split operator in one
 dimension can be expressed as
+
 ```math
 \\textrm{split_div}(\\rho \\mathbf{u}, \\psi)_i =
     \\frac{1}{J_i} \\sum_{j \\neq i} D_{ij} (F^1)_{ij}
 ```
+
 In two dimensions, ``F^1`` and the analogous quantity ``F^2`` provide a similar
 expression for the split divergence, with the one-dimensional operator applied
 sequentially along each dimension.
 
 # Properties
-1.  **Conservation:** The split operator conserves ``\\rho \\mathbf{u} \\psi``
-2.  **Consistency:** If ``\\psi = 1``, the split operator degenerates to the
+
+ 1. **Conservation:** The split operator conserves ``\\rho \\mathbf{u} \\psi``
+ 2. **Consistency:** If ``\\psi = 1``, the split operator degenerates to the
     weak formulation of ``\\nabla \\cdot \\rho \\mathbf{u}`` (mass continuity)
-3.  **Complexity:** The split operator has the same ``O(N^2)`` complexity per
+ 3. **Complexity:** The split operator has the same ``O(N^2)`` complexity per
     element as the strong and weak operators, but needs twice as many operations
 
 # References
-- Fisher, T. C., & Carpenter, M. H. (2013). High-order entropy stable finite difference schemes for nonlinear conservation laws: Finite domains. Journal of Computational Physics, 252, 518-557. [https://doi.org/10.1016/j.jcp.2013.06.014](https://doi.org/10.1016/j.jcp.2013.06.014)
-- Gassner, G. J. (2013). A skew-symmetric discontinuous Galerkin spectral element discretization and its relation to SBP-SAT finite difference methods. SIAM Journal on Scientific Computing, 35, A1233-A1253. [https://doi.org/10.1137/120890144](https://doi.org/10.1137/120890144)
+
+  - Fisher, T. C., & Carpenter, M. H. (2013). High-order entropy stable finite difference schemes for nonlinear conservation laws: Finite domains. Journal of Computational Physics, 252, 518-557. [https://doi.org/10.1016/j.jcp.2013.06.014](https://doi.org/10.1016/j.jcp.2013.06.014)
+  - Gassner, G. J. (2013). A skew-symmetric discontinuous Galerkin spectral element discretization and its relation to SBP-SAT finite difference methods. SIAM Journal on Scientific Computing, 35, A1233-A1253. [https://doi.org/10.1137/120890144](https://doi.org/10.1137/120890144)
 """
 struct SplitDivergence{I} <: SpectralElementOperator{I} end
 SplitDivergence() = SplitDivergence{()}()
@@ -711,37 +902,33 @@ function apply_operator(op::SplitDivergence{(1,)}, space, slabidx, arg1, arg2)
     JT = operator_return_eltype(op, eltype(arg1), FT)
     RT = operator_return_eltype(op, eltype(arg1), eltype(arg2))
 
-    Ju1 = IF{JT, Nq}(MArray, FT)
-    psi = IF{eltype(arg2), Nq}(MArray, eltype(arg2))
+    Ju1 = slab_data(JT, FT, Nq)
+    psi = slab_data(eltype(arg2), eltype(arg2), Nq)
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
         u = get_node(space, arg1, ij, slabidx)
-        Ju1[slab_index(i)] =
+        Ju1[i] =
             local_geometry.J * Geometry.contravariant1(u, local_geometry)
-        psi[slab_index(i)] = get_node(space, arg2, ij, slabidx)
+        psi[i] = get_node(space, arg2, ij, slabidx)
     end
 
-    out = IF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq)
     fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
         for j in 1:(i - 1) # loop over half the indices, since F1[i,j] = F1[j,i]
-            F1 =
-                (
-                    (Ju1[slab_index(i)] + Ju1[slab_index(j)]) *
-                    (psi[slab_index(i)] + psi[slab_index(j)])
-                ) / 2
-            out[slab_index(i)] += D[i, j] * F1
-            out[slab_index(j)] += D[j, i] * F1
+            F1 = (Ju1[i] + Ju1[j]) * (psi[i] + psi[j]) / 2
+            out[i] += D[i, j] * F1
+            out[j] += D[j, i] * F1
         end
     end
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i)] *= local_geometry.invJ
+        out[i] *= local_geometry.invJ
     end
 
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 function apply_operator(op::SplitDivergence{(1, 2)}, space, slabidx, arg1, arg2)
@@ -752,149 +939,49 @@ function apply_operator(op::SplitDivergence{(1, 2)}, space, slabidx, arg1, arg2)
     JT = operator_return_eltype(op, eltype(arg1), FT)
     RT = operator_return_eltype(op, eltype(arg1), eltype(arg2))
 
-    Ju1 = DataLayouts.IJF{JT, Nq}(MArray, FT)
-    Ju2 = DataLayouts.IJF{JT, Nq}(MArray, FT)
-    psi = DataLayouts.IJF{eltype(arg2), Nq}(MArray, eltype(arg2))
+    Ju1 = slab_data(JT, FT, Nq, Nq)
+    Ju2 = slab_data(JT, FT, Nq, Nq)
+    psi = slab_data(eltype(arg2), eltype(arg2), Nq, Nq)
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
         u = get_node(space, arg1, ij, slabidx)
-        Ju1[slab_index(i, j)] =
+        Ju1[1, i, j, 1] =
             local_geometry.J * Geometry.contravariant1(u, local_geometry)
-        Ju2[slab_index(i, j)] =
+        Ju2[1, i, j, 1] =
             local_geometry.J * Geometry.contravariant2(u, local_geometry)
-        psi[slab_index(i, j)] = get_node(space, arg2, ij, slabidx)
+        psi[1, i, j, 1] = get_node(space, arg2, ij, slabidx)
     end
 
-    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq, Nq)
     fill!(parent(out), zero(FT))
     @inbounds for j in 1:Nq, i in 1:Nq
         for k in 1:(i - 1) # loop over half the indices, since F1[i,k] = F1[k,i]
             F1 =
                 (
-                    (Ju1[slab_index(i, j)] + Ju1[slab_index(k, j)]) *
-                    (psi[slab_index(i, j)] + psi[slab_index(k, j)])
+                    (Ju1[1, i, j, 1] + Ju1[1, k, j, 1]) *
+                    (psi[1, i, j, 1] + psi[1, k, j, 1])
                 ) / 2
-            out[slab_index(i, j)] += D[i, k] * F1
-            out[slab_index(k, j)] += D[k, i] * F1
+            out[1, i, j, 1] += D[i, k] * F1
+            out[1, k, j, 1] += D[k, i] * F1
         end
         for k in 1:(j - 1) # loop over half the indices, since F2[j,k] = F2[k,j]
             F2 =
                 (
-                    (Ju2[slab_index(i, j)] + Ju2[slab_index(i, k)]) *
-                    (psi[slab_index(i, j)] + psi[slab_index(i, k)])
+                    (Ju2[1, i, j, 1] + Ju2[1, i, k, 1]) *
+                    (psi[1, i, j, 1] + psi[1, i, k, 1])
                 ) / 2
-            out[slab_index(i, j)] += D[j, k] * F2
-            out[slab_index(i, k)] += D[k, j] * F2
+            out[1, i, j, 1] += D[j, k] * F2
+            out[1, i, k, 1] += D[k, j] * F2
         end
     end
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i, j)] *= local_geometry.invJ
+        out[1, i, j, 1] *= local_geometry.invJ
     end
 
-    return Field(SArray(out), space)
-end
-
-"""
-    wdiv = WeakDivergence()
-    wdiv.(u)
-
-Computes the "weak divergence" of a vector field `u`.
-
-This is defined as the scalar field ``\\theta \\in \\mathcal{V}_0`` such that
-for all ``\\phi\\in \\mathcal{V}_0``
-```math
-\\int_\\Omega \\phi \\theta \\, d \\Omega
-=
-- \\int_\\Omega (\\nabla \\phi) \\cdot u \\,d \\Omega
-```
-where ``\\mathcal{V}_0`` is the space of ``u``.
-
-This arises as the contribution of the volume integral after applying
-integration by parts to the weak form expression of the divergence
-```math
-\\int_\\Omega \\phi (\\nabla \\cdot u) \\, d \\Omega
-=
-- \\int_\\Omega (\\nabla \\phi) \\cdot u \\,d \\Omega
-+ \\oint_{\\partial \\Omega} \\phi (u \\cdot n) \\,d \\sigma
-```
-
-It can be written in matrix form as
-```math
-ϕ^\\top WJ θ = - \\sum_i (D_i ϕ)^\\top WJ u^i
-```
-which reduces to
-```math
-θ = -(WJ)^{-1} \\sum_i D_i^\\top WJ u^i
-```
-where
- - ``J`` is the diagonal Jacobian matrix
- - ``W`` is the diagonal matrix of quadrature weights
- - ``D_i`` is the derivative matrix along the ``i``th dimension
-"""
-struct WeakDivergence{I} <: SpectralElementOperator{I} end
-WeakDivergence() = WeakDivergence{()}()
-WeakDivergence{()}(space) = WeakDivergence{operator_axes(space)}()
-
-operator_return_eltype(::WeakDivergence{I}, ::Type{S}) where {I, S} =
-    Geometry.divergence_result_type(S)
-
-function apply_operator(op::WeakDivergence{(1,)}, space, slabidx, arg)
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IF{RT, Nq}(MArray, FT)
-    fill!(parent(out), zero(FT))
-    @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        v = get_node(space, arg, ij, slabidx)
-        WJv¹ = local_geometry.WJ * Geometry.contravariant1(v, local_geometry)
-        for ii in 1:Nq
-            out[slab_index(ii)] += D[i, ii] * WJv¹
-        end
-    end
-    @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i)] /= -local_geometry.WJ
-    end
-    return Field(SArray(out), space)
-end
-
-function apply_operator(op::WeakDivergence{(1, 2)}, space, slabidx, arg)
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
-    fill!(parent(out), zero(FT))
-
-    @inbounds for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        v = get_node(space, arg, ij, slabidx)
-        WJv¹ = local_geometry.WJ * Geometry.contravariant1(v, local_geometry)
-        for ii in 1:Nq
-            out[slab_index(ii, j)] += D[i, ii] * WJv¹
-        end
-        WJv² = local_geometry.WJ * Geometry.contravariant2(v, local_geometry)
-        for jj in 1:Nq
-            out[slab_index(i, jj)] += D[j, jj] * WJv²
-        end
-    end
-    @inbounds for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i, j)] /= -local_geometry.WJ
-    end
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 """
@@ -906,176 +993,114 @@ Compute the (strong) gradient of `f` on each element, returning a
 
 The ``i``th covariant component of the gradient is the partial derivative with
 respect to the reference element:
+
 ```math
 (\\nabla f)_i = \\frac{\\partial f}{\\partial \\xi^i}
 ```
 
 Discretely, this can be written in matrix form as
+
 ```math
 D_i f
 ```
+
 where ``D_i`` is the derivative matrix along the ``i``th dimension.
 
 ## References
-- [Taylor2010](@cite), equation 16
+
+  - [Taylor2010](@cite), equation 16
 """
-struct Gradient{I} <: SpectralElementOperator{I} end
-Gradient() = Gradient{()}()
-Gradient{()}(space) = Gradient{operator_axes(space)}()
+struct Gradient{I, F <: FormType} <: SpectralElementOperator{I} end
+Gradient() = Gradient{(), StrongForm}()
+Gradient{I}() where {I} = Gradient{I, StrongForm}()
+rebuild_operator(::Gradient{I, F}, space) where {I, F} =
+    Gradient{operator_axes(space), F}()
 
 operator_return_eltype(::Gradient{I}, ::Type{S}) where {I, S} =
     Geometry.gradient_result_type(Val(I), S)
 
-function apply_operator(op::Gradient{(1,)}, space, slabidx, arg)
+# The strong gradient is Dᵢ f, while the weak gradient is -W⁻¹ Dᵢᵀ (W f); see
+# form_deriv_entry and form_weighted_arg for the form-dependent factors. Only
+# the weak form needs the final W⁻¹ rescale, which stays inlined in each
+# apply_operator so that the strong form can skip that loop entirely.
+
+function apply_operator(op::Gradient{(1,), F}, space, slabidx, arg) where {F}
+    form = F()
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq)
     fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
-        x = get_node(space, arg, ij, slabidx)
+        local_geometry = get_local_geometry(space, ij, slabidx)
+        x = form_weighted_arg(form, local_geometry, get_node(space, arg, ij, slabidx))
         for ii in 1:Nq
-            ∂f∂ξ = Geometry.Covariant1Vector(D[ii, i]) ⊗ x
-            out[slab_index(ii)] += ∂f∂ξ
+            ∂f∂ξ =
+                Geometry.Covariant1Vector(form_deriv_entry(form, D, ii, i)) ⊗ x
+            out[ii] += ∂f∂ξ
         end
     end
-    return Field(SArray(out), space)
+    if F === WeakForm
+        @inbounds for i in 1:Nq
+            ij = CartesianIndex((i,))
+            local_geometry = get_local_geometry(space, ij, slabidx)
+            W = local_geometry.WJ * local_geometry.invJ
+            out[i] /= W
+        end
+    end
+    return Field(immutable_slab_data(out), space)
 end
 
 Base.@propagate_inbounds function apply_operator(
-    op::Gradient{(1, 2)},
+    op::Gradient{(1, 2), F},
     space,
     slabidx,
     arg,
-)
+) where {F}
+    form = F()
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq, Nq)
     fill!(parent(out), zero(FT))
 
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
-        x = get_node(space, arg, ij, slabidx)
+        local_geometry = get_local_geometry(space, ij, slabidx)
+        x = form_weighted_arg(form, local_geometry, get_node(space, arg, ij, slabidx))
         for ii in 1:Nq
-            ∂f∂ξ₁ = Geometry.Covariant12Vector(D[ii, i], zero(eltype(D))) ⊗ x
-            out[slab_index(ii, j)] += ∂f∂ξ₁
+            ∂f∂ξ₁ =
+                Geometry.Covariant12Vector(
+                    form_deriv_entry(form, D, ii, i),
+                    zero(eltype(D)),
+                ) ⊗ x
+            out[1, ii, j, 1] += ∂f∂ξ₁
         end
         for jj in 1:Nq
-            ∂f∂ξ₂ = Geometry.Covariant12Vector(zero(eltype(D)), D[jj, j]) ⊗ x
-            out[slab_index(i, jj)] += ∂f∂ξ₂
+            ∂f∂ξ₂ =
+                Geometry.Covariant12Vector(
+                    zero(eltype(D)),
+                    form_deriv_entry(form, D, jj, j),
+                ) ⊗ x
+            out[1, i, jj, 1] += ∂f∂ξ₂
         end
     end
-    return Field(SArray(out), space)
-end
-
-"""
-    wgrad = WeakGradient()
-    wgrad.(f)
-
-Compute the "weak gradient" of `f` on each element.
-
-This is defined as the the vector field ``\\theta \\in \\mathcal{V}_0`` such
-that for all ``\\phi \\in \\mathcal{V}_0``
-```math
-\\int_\\Omega \\phi \\cdot \\theta \\, d \\Omega
-=
-- \\int_\\Omega (\\nabla \\cdot \\phi) f \\, d\\Omega
-```
-where ``\\mathcal{V}_0`` is the space of ``f``.
-
-This arises from the contribution of the volume integral after by applying
-integration by parts to the weak form expression of the gradient
-```math
-\\int_\\Omega \\phi \\cdot (\\nabla f) \\, d \\Omega
-=
-- \\int_\\Omega f (\\nabla \\cdot \\phi) \\, d\\Omega
-+ \\oint_{\\partial \\Omega} f (\\phi \\cdot n) \\, d \\sigma
-```
-
-In matrix form, this becomes
-```math
-{\\phi^i}^\\top W J \\theta_i = - ( J^{-1} D_i J \\phi^i )^\\top W J f
-```
-which reduces to
-```math
-\\theta_i = -W^{-1} D_i^\\top W f
-```
-where ``D_i`` is the derivative matrix along the ``i``th dimension.
-"""
-struct WeakGradient{I} <: SpectralElementOperator{I} end
-WeakGradient() = WeakGradient{()}()
-WeakGradient{()}(space) = WeakGradient{operator_axes(space)}()
-
-operator_return_eltype(::WeakGradient{I}, ::Type{S}) where {I, S} =
-    Geometry.gradient_result_type(Val(I), S)
-
-function apply_operator(op::WeakGradient{(1,)}, space, slabidx, arg)
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IF{RT, Nq}(MArray, FT)
-    fill!(parent(out), zero(FT))
-    @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        W = local_geometry.WJ * local_geometry.invJ
-        Wx = W * get_node(space, arg, ij, slabidx)
-        for ii in 1:Nq
-            Dᵀ₁Wf = Geometry.Covariant1Vector(D[i, ii]) ⊗ Wx
-            out[slab_index(ii)] -= Dᵀ₁Wf
+    if F === WeakForm
+        @inbounds for j in 1:Nq, i in 1:Nq
+            ij = CartesianIndex((i, j))
+            local_geometry = get_local_geometry(space, ij, slabidx)
+            W = local_geometry.WJ * local_geometry.invJ
+            out[1, i, j, 1] /= W
         end
     end
-    @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        W = local_geometry.WJ * local_geometry.invJ
-        out[slab_index(i)] /= W
-    end
-    return Field(SArray(out), space)
-end
-
-function apply_operator(op::WeakGradient{(1, 2)}, space, slabidx, arg)
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
-    fill!(parent(out), zero(FT))
-
-    @inbounds for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        W = local_geometry.WJ * local_geometry.invJ
-        Wx = W * get_node(space, arg, ij, slabidx)
-        for ii in 1:Nq
-            Dᵀ₁Wf = Geometry.Covariant12Vector(D[i, ii], zero(eltype(D))) ⊗ Wx
-            out[slab_index(ii, j)] -= Dᵀ₁Wf
-        end
-        for jj in 1:Nq
-            Dᵀ₂Wf = Geometry.Covariant12Vector(zero(eltype(D)), D[j, jj]) ⊗ Wx
-            out[slab_index(i, jj)] -= Dᵀ₂Wf
-        end
-    end
-    @inbounds for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        W = local_geometry.WJ * local_geometry.invJ
-        out[slab_index(i, j)] /= W
-    end
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 abstract type CurlSpectralElementOperator{I} <: SpectralElementOperator{I} end
@@ -1090,13 +1115,16 @@ Note: The vector field ``u`` needs to be excliclty converted to a `CovaraintVect
 as then the `Curl` is independent of the local metric tensor.
 
 The curl of a vector field ``u`` is a vector field with contravariant components
+
 ```math
 (\\nabla \\times u)^i = \\frac{1}{J} \\sum_{jk} \\epsilon^{ijk} \\frac{\\partial u_k}{\\partial \\xi^j}
 ```
+
 where ``J`` is the Jacobian determinant, ``u_k`` is the ``k``th covariant
 component of ``u``, and ``\\epsilon^{ijk}`` are the [Levi-Civita
 symbols](https://en.wikipedia.org/wiki/Levi-Civita_symbol#Three_dimensions_2).
 In other words
+
 ```math
 \\begin{bmatrix}
   (\\nabla \\times u)^1 \\\\
@@ -1112,199 +1140,118 @@ In other words
 ```
 
 In matrix form, this becomes
+
 ```math
 \\epsilon^{ijk} J^{-1} D_j u_k
 ```
+
 Note that unused dimensions will be dropped: e.g. the 2D curl of a
 `Covariant12Vector`-field will return a `Contravariant3Vector`.
 
 ## References
-- [Taylor2010](@cite), equation 17
+
+  - [Taylor2010](@cite), equation 17
 """
-struct Curl{I} <: CurlSpectralElementOperator{I} end
-Curl() = Curl{()}()
-Curl{()}(space) = Curl{operator_axes(space)}()
+struct Curl{I, F <: FormType} <: CurlSpectralElementOperator{I} end
+Curl() = Curl{(), StrongForm}()
+Curl{I}() where {I} = Curl{I, StrongForm}()
+rebuild_operator(::Curl{I, F}, space) where {I, F} =
+    Curl{operator_axes(space), F}()
 
 operator_return_eltype(::Curl{I}, ::Type{S}) where {I, S} =
     Geometry.curl_result_type(Val(I), S)
 
-function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
+# The strong curl is εⁱʲᵏ J⁻¹ Dⱼ uₖ, while the weak curl is
+# -εⁱʲᵏ (WJ)⁻¹ Dⱼᵀ (W uₖ); see form_deriv_entry, form_weighted_arg, and
+# form_jacobian_rescale for the form-dependent factors.
+
+function apply_operator(op::Curl{(1,), F}, space, slabidx, arg) where {F}
+    form = F()
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq)
     fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
-        v₂ = Geometry.covariant2(v, local_geometry)
-        v₃ = Geometry.covariant3(v, local_geometry)
+        v₂ = form_weighted_arg(
+            form,
+            local_geometry,
+            Geometry.covariant2(v, local_geometry),
+        )
+        v₃ = form_weighted_arg(
+            form,
+            local_geometry,
+            Geometry.covariant3(v, local_geometry),
+        )
         for ii in 1:Nq
-            D₁v₂ = D[ii, i] * v₂
-            D₁v₃ = D[ii, i] * v₃
-            out[slab_index(ii)] +=
+            D₁v₂ = form_deriv_entry(form, D, ii, i) * v₂
+            D₁v₃ = form_deriv_entry(form, D, ii, i) * v₃
+            out[ii] +=
                 Geometry.Contravariant123Vector(zero(FT), -D₁v₃, D₁v₂)
         end
     end
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i)] *= local_geometry.invJ
+        out[i] = form_jacobian_rescale(form, local_geometry, out[i])
     end
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
-function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
+function apply_operator(op::Curl{(1, 2), F}, space, slabidx, arg) where {F}
+    form = F()
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    out = slab_data(RT, FT, Nq, Nq)
     fill!(parent(out), zero(FT))
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
         v = get_node(space, arg, ij, slabidx)
-        v₁ = Geometry.covariant1(v, local_geometry)
-        v₂ = Geometry.covariant2(v, local_geometry)
-        v₃ = Geometry.covariant3(v, local_geometry)
+        v₁ = form_weighted_arg(
+            form,
+            local_geometry,
+            Geometry.covariant1(v, local_geometry),
+        )
+        v₂ = form_weighted_arg(
+            form,
+            local_geometry,
+            Geometry.covariant2(v, local_geometry),
+        )
+        v₃ = form_weighted_arg(
+            form,
+            local_geometry,
+            Geometry.covariant3(v, local_geometry),
+        )
         for ii in 1:Nq
-            D₁v₃ = D[ii, i] * v₃
-            D₁v₂ = D[ii, i] * v₂
-            out[slab_index(ii, j)] +=
+            D₁v₃ = form_deriv_entry(form, D, ii, i) * v₃
+            D₁v₂ = form_deriv_entry(form, D, ii, i) * v₂
+            out[1, ii, j, 1] +=
                 Geometry.Contravariant123Vector(zero(FT), -D₁v₃, D₁v₂)
         end
         for jj in 1:Nq
-            D₂v₃ = D[jj, j] * v₃
-            D₂v₁ = D[jj, j] * v₁
-            out[slab_index(i, jj)] +=
+            D₂v₃ = form_deriv_entry(form, D, jj, j) * v₃
+            D₂v₁ = form_deriv_entry(form, D, jj, j) * v₁
+            out[1, i, jj, 1] +=
                 Geometry.Contravariant123Vector(D₂v₃, zero(FT), -D₂v₁)
         end
     end
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i, j)] *= local_geometry.invJ
+        out[1, i, j, 1] = form_jacobian_rescale(form, local_geometry, out[1, i, j, 1])
     end
-    return Field(SArray(out), space)
-end
-
-"""
-    wcurl = WeakCurl()
-    wcurl.(u)
-
-Computes the "weak curl" on each element of a covariant vector field `u`.
-
-Note: The vector field ``u`` needs to be excliclty converted to a `CovaraintVector`,
-as then the `WeakCurl` is independent of the local metric tensor.
-
-This is defined as the vector field ``\\theta \\in \\mathcal{V}_0`` such that
-for all ``\\phi \\in \\mathcal{V}_0``
-```math
-\\int_\\Omega \\phi \\cdot \\theta \\, d \\Omega
-=
-\\int_\\Omega (\\nabla \\times \\phi) \\cdot u \\,d \\Omega
-```
-where ``\\mathcal{V}_0`` is the space of ``f``.
-
-This arises from the contribution of the volume integral after by applying
-integration by parts to the weak form expression of the curl
-```math
-\\int_\\Omega \\phi \\cdot (\\nabla \\times u) \\,d\\Omega
-=
-\\int_\\Omega (\\nabla \\times \\phi) \\cdot u \\,d \\Omega
-- \\oint_{\\partial \\Omega} (\\phi \\times u) \\cdot n \\,d\\sigma
-```
-
-In matrix form, this becomes
-```math
-{\\phi_i}^\\top W J \\theta^i = (J^{-1} \\epsilon^{kji} D_j \\phi_i)^\\top W J u_k
-```
-which, by using the anti-symmetry of the Levi-Civita symbol, reduces to
-```math
-\\theta^i = - \\epsilon^{ijk} (WJ)^{-1} D_j^\\top W u_k
-```
-"""
-struct WeakCurl{I} <: CurlSpectralElementOperator{I} end
-WeakCurl() = WeakCurl{()}()
-WeakCurl{()}(space) = WeakCurl{operator_axes(space)}()
-
-operator_return_eltype(::WeakCurl{I}, ::Type{S}) where {I, S} =
-    Geometry.curl_result_type(Val(I), S)
-
-function apply_operator(op::WeakCurl{(1,)}, space, slabidx, arg)
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IF{RT, Nq}(MArray, FT)
-    fill!(parent(out), zero(FT))
-    @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        v = get_node(space, arg, ij, slabidx)
-        W = local_geometry.WJ * local_geometry.invJ
-        Wv₂ = W * Geometry.covariant2(v, local_geometry)
-        Wv₃ = W * Geometry.covariant3(v, local_geometry)
-        for ii in 1:Nq
-            Dᵀ₁Wv₂ = D[i, ii] * Wv₂
-            Dᵀ₁Wv₃ = D[i, ii] * Wv₃
-            out[slab_index(ii)] +=
-                Geometry.Contravariant123Vector(zero(FT), Dᵀ₁Wv₃, -Dᵀ₁Wv₂)
-        end
-    end
-    @inbounds for i in 1:Nq
-        ij = CartesianIndex((i,))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i)] /= local_geometry.WJ
-    end
-    return Field(SArray(out), space)
-end
-
-function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(arg))
-    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
-    fill!(parent(out), zero(FT))
-    @inbounds for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        v = get_node(space, arg, ij, slabidx)
-        W = local_geometry.WJ * local_geometry.invJ
-        Wv₁ = W * Geometry.covariant1(v, local_geometry)
-        Wv₂ = W * Geometry.covariant2(v, local_geometry)
-        Wv₃ = W * Geometry.covariant3(v, local_geometry)
-        for ii in 1:Nq
-            Dᵀ₁Wv₃ = D[i, ii] * Wv₃
-            Dᵀ₁Wv₂ = D[i, ii] * Wv₂
-            out[slab_index(ii, j)] +=
-                Geometry.Contravariant123Vector(zero(FT), Dᵀ₁Wv₃, -Dᵀ₁Wv₂)
-        end
-        for jj in 1:Nq
-            Dᵀ₂Wv₃ = D[j, jj] * Wv₃
-            Dᵀ₂Wv₁ = D[j, jj] * Wv₁
-            out[slab_index(i, jj)] +=
-                Geometry.Contravariant123Vector(-Dᵀ₂Wv₃, zero(FT), Dᵀ₂Wv₁)
-        end
-    end
-    @inbounds for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
-        local_geometry = get_local_geometry(space, ij, slabidx)
-        out[slab_index(i, j)] /= local_geometry.WJ
-    end
-    return Field(SArray(out), space)
+    return Field(immutable_slab_data(out), space)
 end
 
 # interplation / restriction
@@ -1321,9 +1268,11 @@ Interpolates `f` to the `space`. If `space` has equal or higher polynomial
 degree as the space of `f`, this is exact, otherwise it will be lossy.
 
 In matrix form, it is the linear operator
+
 ```math
 I = \\bigotimes_i I_i
 ```
+
 where ``I_i`` is the barycentric interpolation matrix in the ``i``th dimension.
 
 See also [`Restrict`](@ref).
@@ -1343,7 +1292,7 @@ function apply_operator(op::Interpolate{(1,)}, space_out, slabidx, arg)
     Nq_out = Quadratures.degrees_of_freedom(QS_out)
     Imat = Quadratures.interpolation_matrix(FT, QS_out, QS_in)
     RT = eltype(arg)
-    out = DataLayouts.IF{RT, Nq_out}(MArray, FT)
+    out = slab_data(RT, FT, Nq_out)
     @inbounds for i in 1:Nq_out
         # manually inlined rmatmul with slab_getnode
         ij = CartesianIndex((1,))
@@ -1356,9 +1305,9 @@ function apply_operator(op::Interpolate{(1,)}, space_out, slabidx, arg)
                 r,
             )
         end
-        out[slab_index(i)] = r
+        out[i] = r
     end
-    return Field(SArray(out), space_out)
+    return Field(immutable_slab_data(out), space_out)
 end
 
 function apply_operator(op::Interpolate{(1, 2)}, space_out, slabidx, arg)
@@ -1371,8 +1320,8 @@ function apply_operator(op::Interpolate{(1, 2)}, space_out, slabidx, arg)
     Imat = Quadratures.interpolation_matrix(FT, QS_out, QS_in)
     RT = eltype(arg)
     # temporary storage
-    temp = DataLayouts.IJF{RT, max(Nq_in, Nq_out)}(MArray, FT)
-    out = DataLayouts.IJF{RT, Nq_out}(MArray, FT)
+    temp = slab_data(RT, FT, max(Nq_in, Nq_out), max(Nq_in, Nq_out))
+    out = slab_data(RT, FT, Nq_out, Nq_out)
     @inbounds for j in 1:Nq_in, i in 1:Nq_out
         # manually inlined rmatmul1 with slab get_node
         # we do this to remove one allocated intermediate array
@@ -1386,12 +1335,12 @@ function apply_operator(op::Interpolate{(1, 2)}, space_out, slabidx, arg)
                 r,
             )
         end
-        temp[slab_index(i, j)] = r
+        temp[1, i, j, 1] = r
     end
     @inbounds for j in 1:Nq_out, i in 1:Nq_out
-        out[slab_index(i, j)] = rmatmul2(Imat, temp, i, j)
+        out[1, i, j, 1] = rmatmul2(Imat, temp, i, j)
     end
-    return Field(SArray(out), space_out)
+    return Field(immutable_slab_data(out), space_out)
 end
 
 
@@ -1404,16 +1353,21 @@ polynomial space `space` (``\\mathcal{V}_0^*``). `space` must be on the same
 topology as the space of `f`, but have a lower polynomial degree.
 
 It is defined as the field ``\\theta \\in \\mathcal{V}_0^*`` such that for all ``\\phi \\in \\mathcal{V}_0^*``
+
 ```math
 \\int_\\Omega \\phi \\theta \\,d\\Omega = \\int_\\Omega \\phi f \\,d\\Omega
 ```
+
 In matrix form, this is
+
 ```math
 \\phi^\\top W^* J^* \\theta = (I \\phi)^\\top WJ f
 ```
+
 where ``W^*`` and ``J^*`` are the quadrature weights and Jacobian determinant of
 ``\\mathcal{V}_0^*``, and ``I`` is the interpolation operator (see [`Interpolate`](@ref))
 from ``\\mathcal{V}_0^*`` to ``\\mathcal{V}_0``. This reduces to
+
 ```math
 \\theta = (W^* J^*)^{-1} I^\\top WJ f
 ```
@@ -1433,7 +1387,7 @@ function apply_operator(op::Restrict{(1,)}, space_out, slabidx, arg)
     Nq_out = Quadratures.degrees_of_freedom(QS_out)
     ImatT = Quadratures.interpolation_matrix(FT, QS_in, QS_out)' # transpose
     RT = eltype(arg)
-    out = IF{RT, Nq_out}(MArray, FT)
+    out = slab_data(RT, FT, Nq_out)
     @inbounds for i in 1:Nq_out
         # manually inlined rmatmul with slab get_node
         ij = CartesianIndex((1,))
@@ -1450,9 +1404,9 @@ function apply_operator(op::Restrict{(1,)}, space_out, slabidx, arg)
         end
         ij_out = CartesianIndex((i,))
         WJ_out = get_local_geometry(space_out, ij_out, slabidx).WJ
-        out[slab_index(i)] = r / WJ_out
+        out[i] = r / WJ_out
     end
-    return Field(SArray(out), space_out)
+    return Field(immutable_slab_data(out), space_out)
 end
 
 function apply_operator(op::Restrict{(1, 2)}, space_out, slabidx, arg)
@@ -1465,8 +1419,8 @@ function apply_operator(op::Restrict{(1, 2)}, space_out, slabidx, arg)
     ImatT = Quadratures.interpolation_matrix(FT, QS_in, QS_out)' # transpose
     RT = eltype(arg)
     # temporary storage
-    temp = DataLayouts.IJF{RT, max(Nq_in, Nq_out)}(MArray, FT)
-    out = DataLayouts.IJF{RT, Nq_out}(MArray, FT)
+    temp = slab_data(RT, FT, max(Nq_in, Nq_out), max(Nq_in, Nq_out))
+    out = slab_data(RT, FT, Nq_out, Nq_out)
     @inbounds for j in 1:Nq_in, i in 1:Nq_out
         # manually inlined rmatmul1 with slab get_node
         ij = CartesianIndex((1, j))
@@ -1481,14 +1435,14 @@ function apply_operator(op::Restrict{(1, 2)}, space_out, slabidx, arg)
                 r,
             )
         end
-        temp[slab_index(i, j)] = r
+        temp[1, i, j, 1] = r
     end
     @inbounds for j in 1:Nq_out, i in 1:Nq_out
         ij_out = CartesianIndex((i, j))
         WJ_out = get_local_geometry(space_out, ij_out, slabidx).WJ
-        out[slab_index(i, j)] = rmatmul2(ImatT, temp, i, j) / WJ_out
+        out[1, i, j, 1] = rmatmul2(ImatT, temp, i, j) / WJ_out
     end
-    return Field(SArray(out), space_out)
+    return Field(immutable_slab_data(out), space_out)
 end
 
 
@@ -1501,71 +1455,97 @@ Computes the tensor product `out = (M ⊗ M) * in` on each element.
 function tensor_product! end
 
 function tensor_product!(
-    out::DataLayouts.Data1DX{S, Nv, Ni_out},
-    indata::DataLayouts.Data1DX{S, Nv, Ni_in},
+    out::Union{
+        DataLayouts.VIJHWithF{S, Nv, Ni_out, 1},
+        DataLayouts.VIH1{S, Nv, Ni_out},
+    },
+    indata::DataLayouts.VIJHWithF{S, Nv, Ni_in, 1},
     M::SMatrix{Ni_out, Ni_in},
 ) where {S, Nv, Ni_out, Ni_in}
-    (_, _, _, _, Nh_in) = size(indata)
-    (_, _, _, _, Nh_out) = size(out)
+    Nh_in = DataLayouts.nelems(indata)
+    Nh_out = DataLayouts.nelems(out)
     # TODO: assumes the same number of levels (horizontal only)
     @assert Nh_in == Nh_out
     @inbounds for h in 1:Nh_out, v in 1:Nv
         in_slab = slab(indata, v, h)
         out_slab = slab(out, v, h)
         for i in 1:Ni_out
-            r = M[i, 1] * in_slab[slab_index(1)]
+            r = M[i, 1] * in_slab[1]
             for ii in 2:Ni_in
-                r = muladd(M[i, ii], in_slab[slab_index(ii)], r)
+                r = muladd(M[i, ii], in_slab[ii], r)
             end
-            out_slab[slab_index(i)] = r
+            out_slab[i] = r
         end
     end
     return out
 end
 
 function tensor_product!(
-    out::DataLayouts.Data2D{S, Nij_out},
-    indata::DataLayouts.Data2D{S, Nij_in},
+    out::DataLayouts.VIJHWithF{S, 1, Nij_out, Nij_out},
+    indata::DataLayouts.VIJHWithF{S, 1, Nij_in, Nij_in},
     M::SMatrix{Nij_out, Nij_in},
 ) where {S, Nij_out, Nij_in}
-
-    Nh = length(indata)
-    @assert Nh == length(out)
+    Nh = size(indata, 4)
+    @assert Nh == size(out, 4)
 
     # temporary storage
-    temp = MArray{Tuple{Nij_out, Nij_in}, S, 2, Nij_out * Nij_in}(undef)
+    temp = MArray{Tuple{1, Nij_out, Nij_in, 1}, S, 4, Nij_out * Nij_in}(undef)
 
     @inbounds for h in 1:Nh
-        in_slab = slab(indata, h)
-        out_slab = slab(out, h)
+        in_slab = slab(indata, 1, h)
+        out_slab = slab(out, 1, h)
         for j in 1:Nij_in, i in 1:Nij_out
-            temp[slab_index(i, j)] = rmatmul1(M, in_slab, i, j)
+            temp[1, i, j, 1] = rmatmul1(M, in_slab, i, j)
         end
         for j in 1:Nij_out, i in 1:Nij_out
-            out_slab[slab_index(i, j)] = rmatmul2(M, temp, i, j)
+            out_slab[1, i, j, 1] = rmatmul2(M, temp, i, j)
         end
     end
     return out
 end
 
 function tensor_product!(
-    out_slab::DataLayouts.DataSlab2D{S, Nij_out},
-    in_slab::DataLayouts.DataSlab2D{S, Nij_in},
+    out::DataLayouts.IH1JH2{S, Nij_out, Nij_out},
+    indata::DataLayouts.VIJHWithF{S, 1, Nij_in, Nij_in},
+    M::SMatrix{Nij_out, Nij_in},
+) where {S, Nij_out, Nij_in}
+    Nh = DataLayouts.nelems(indata)
+    @assert Nh == DataLayouts.nelems(out)
+
+    # temporary storage
+    temp = MArray{Tuple{1, Nij_out, Nij_in, 1}, S, 4, Nij_out * Nij_in}(undef)
+
+    @inbounds for h in 1:Nh
+        in_slab = slab(indata, 1, h)
+        out_slab = slab(out, 1, h)
+        for j in 1:Nij_in, i in 1:Nij_out
+            temp[1, i, j, 1] = rmatmul1(M, in_slab, i, j)
+        end
+        for j in 1:Nij_out, i in 1:Nij_out
+            out_slab[i, j] = rmatmul2(M, temp, i, j)
+        end
+    end
+    return out
+end
+
+function tensor_product!(
+    out_slab::DataLayouts.VIJHWithF{S, 1, Nij_out, Nij_out, 1},
+    in_slab::DataLayouts.VIJHWithF{S, 1, Nij_in, Nij_in, 1},
     M::SMatrix{Nij_out, Nij_in},
 ) where {S, Nij_out, Nij_in}
     # temporary storage
-    temp = MArray{Tuple{Nij_out, Nij_in}, S, 2, Nij_out * Nij_in}(undef)
+    temp = MArray{Tuple{1, Nij_out, Nij_in, 1}, S, 4, Nij_out * Nij_in}(undef)
     @inbounds for j in 1:Nij_in, i in 1:Nij_out
-        temp[slab_index(i, j)] = rmatmul1(M, in_slab, i, j)
+        temp[1, i, j, 1] = rmatmul1(M, in_slab, i, j)
     end
     @inbounds for j in 1:Nij_out, i in 1:Nij_out
-        out_slab[slab_index(i, j)] = rmatmul2(M, temp, i, j)
+        out_slab[1, i, j, 1] = rmatmul2(M, temp, i, j)
     end
     return out_slab
 end
 
 function tensor_product!(
-    inout::Data2D{S, Nij},
+    inout::DataLayouts.VIJHWithF{S, 1, Nij, Nij},
     M::SMatrix{Nij, Nij},
 ) where {S, Nij}
     inout_bc = Base.broadcastable(inout)
@@ -1591,9 +1571,9 @@ function matrix_interpolate(
     mesh = topology.mesh
     n1, n2 = size(Meshes.elements(mesh))
     interp_data =
-        DataLayouts.IH1JH2{S, Nu}(Matrix{S}(undef, (Nu * n1, Nu * n2)))
+        DataLayouts.IH1JH2{S, Nu, Nu, nothing}(Matrix{S}(undef, (Nu * n1, Nu * n2)))
     M = Quadratures.interpolation_matrix(Float64, Q_interp, quadrature_style)
-    Operators.tensor_product!(interp_data, Fields.field_values(field), M)
+    tensor_product!(interp_data, Fields.field_values(field), M)
     return parent(interp_data)
 end
 
@@ -1606,9 +1586,10 @@ function matrix_interpolate(
     quadrature_style = Spaces.quadrature_style(space)
     nl = Spaces.nlevels(space)
     n1 = Topologies.nlocalelems(Spaces.topology(space))
-    interp_data = DataLayouts.IV1JH2{S, nl, Nu}(Matrix{S}(undef, (nl, Nu * n1)))
+    interp_data =
+        DataLayouts.VIH1{S, nl, Nu, nothing}(Matrix{S}(undef, (nl, Nu * n1)))
     M = Quadratures.interpolation_matrix(Float64, Q_interp, quadrature_style)
-    Operators.tensor_product!(interp_data, Fields.field_values(field), M)
+    tensor_product!(interp_data, Fields.field_values(field), M)
     return parent(interp_data)
 end
 
@@ -1621,22 +1602,18 @@ Returns a 2D Matrix for plotting / visualizing 2D Fields.
 matrix_interpolate(field::Field, Nu::Integer) =
     matrix_interpolate(field, Quadratures.Uniform{Nu}())
 
-import .DataLayouts: slab_index
-import .Spaces: slab_type
-
 """
     rmatmul1(W, S, i, j)
 
 Recursive matrix product along the 1st dimension of `S`. Equivalent to:
 
     mapreduce(*, +, W[i,:], S[:,j])
-
 """
 function rmatmul1(W, S, i, j)
     Nq = size(W, 2)
-    @inbounds r = W[i, 1] * S[slab_index(1, j)]
+    @inbounds r = W[i, 1] * S[1, 1, j, 1]
     @inbounds for ii in 2:Nq
-        r = muladd(W[i, ii], S[slab_index(ii, j)], r)
+        r = muladd(W[i, ii], S[1, ii, j, 1], r)
     end
     return r
 end
@@ -1650,9 +1627,9 @@ Recursive matrix product along the 2nd dimension `S`. Equivalent to:
 """
 function rmatmul2(W, S, i, j)
     Nq = size(W, 2)
-    @inbounds r = W[j, 1] * S[slab_index(i, 1)]
+    @inbounds r = W[j, 1] * S[1, i, 1, 1]
     @inbounds for jj in 2:Nq
-        r = muladd(W[j, jj], S[slab_index(i, jj)], r)
+        r = muladd(W[j, jj], S[1, i, jj, 1], r)
     end
     return r
 end

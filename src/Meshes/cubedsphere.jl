@@ -3,6 +3,7 @@
 
 This is an abstract type of cubed-sphere meshes on `SphereDomain`s. A
 cubed-sphere mesh has 6 panels, laid out as follows:
+
 ```
                                           :   Panel 1   :
                             +-------------+-------------+
@@ -37,17 +38,20 @@ This is the same panel ordering used by the S2 Geometry library (though we use 1
 instead of 0-based numering).
 
 Elements are indexed by a `CartesianIndex{3}` object, where the components are:
-- horizontal element index (left to right) within each panel.
-- vertical element index (bottom to top) within each panel.
-- panel number
+
+  - horizontal element index (left to right) within each panel.
+  - vertical element index (bottom to top) within each panel.
+  - panel number
 
 Subtypes should have the following fields:
-- `domain`: a `SphereDomain`
-- `ne`: number of elements across each panel
+
+  - `domain`: a `SphereDomain`
+  - `ne`: number of elements across each panel
 
 # External links
-- [S2Geometry library](https://s2geometry.io/devguide/s2cell_hierarchy)
-- [MIT GCM exch2](https://mitgcm.readthedocs.io/en/latest/phys_pkgs/exch2.html?highlight=cube%20sphere#fig-48tile)
+
+  - [S2Geometry library](https://s2geometry.io/devguide/s2cell_hierarchy)
+  - [MIT GCM exch2](https://mitgcm.readthedocs.io/en/latest/phys_pkgs/exch2.html?highlight=cube%20sphere#fig-48tile)
 """
 abstract type AbstractCubedSphere <: AbstractMesh2D end
 

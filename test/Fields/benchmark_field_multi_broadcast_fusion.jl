@@ -1,9 +1,3 @@
-#=
-julia --check-bounds=yes --project
-julia -g2 --check-bounds=yes --project
-julia --project
-using Revise; include(joinpath("test", "Fields", "benchmark_field_multi_broadcast_fusion.jl"))
-=#
 include("utils_field_multi_broadcast_fusion.jl")
 
 @testset "FusedMultiBroadcast VIJFH and VF" begin
@@ -42,7 +36,7 @@ end
         zelem = 63,
         helem = 30,
         Nq = 4,
-        horizontal_layout_type = DataLayouts.IJHF,
+        VIJH = DataLayouts.VIJHF,
         context = ClimaComms.context(device),
     )
     X = Fields.FieldVector(

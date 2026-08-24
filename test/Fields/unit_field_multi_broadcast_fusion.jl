@@ -1,9 +1,3 @@
-#=
-julia --check-bounds=yes --project
-julia -g2 --check-bounds=yes --project
-julia --project
-using Revise; include(joinpath("test", "Fields", "unit_field_multi_broadcast_fusion.jl"))
-=#
 include("utils_field_multi_broadcast_fusion.jl")
 
 @testset "FusedMultiBroadcast - restrict to only similar fields" begin
@@ -104,7 +98,7 @@ end
         zelem = 3,
         helem = 4,
         context = ClimaComms.context(device),
-        horizontal_layout_type = DataLayouts.IJHF,
+        VIJH = DataLayouts.VIJHF,
     )
     X = Fields.FieldVector(
         x1 = rand_field(FT, space),
@@ -143,15 +137,6 @@ end
             y3 = rand_field(FT, space),
         )
         test_kernel!(; fused!, unfused!, X, Y)
-        # Does not seem to be ready to work with NonExtrudedBroadcasted:
-        # test_kernel!(;
-        #     fused! = fused_bycolumn!,
-        #     unfused! = unfused_bycolumn!,
-        #     X,
-        #     Y,
-        # )
-
-        nothing
     end
 end
 

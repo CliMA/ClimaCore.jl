@@ -29,7 +29,7 @@ end
     z_elem = 10
     h_elem = 4
     device = ClimaComms.device(comms_ctx)
-    # horizontal space
+    # Horizontal space
     domain = Domains.SphereDomain(R)
     horizontal_mesh = Meshes.EquiangularCubedSphere(domain, h_elem)
     topology = Topologies.Topology2D(
@@ -39,7 +39,7 @@ end
     )
     quad = Quadratures.GLL{npoly + 1}()
     h_space = Spaces.SpectralElementSpace2D(topology, quad)
-    # vertical space
+    # Vertical space
     z_domain = Domains.IntervalDomain(
         Geometry.ZPoint(zero(z_max)),
         Geometry.ZPoint(z_max);
@@ -57,7 +57,7 @@ end
 
     Y = Fields.FieldVector(; c = ᶜlocal_geometry, f = ᶠlocal_geometry)
 
-    # write field vector to hdf5 file
+    # Write field vector to hdf5 file
     InputOutput.HDF5Writer(filename, comms_ctx) do writer
         InputOutput.write!(writer, Y, "Y")
     end

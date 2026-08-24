@@ -65,4 +65,4 @@ level_field = Fields.level(Fields.Field(Float64, face_space), Utilities.half)
 using Test
 @testset "Example broadcast expression on GPUs" begin
     @test !isnothing(@. ᶜgradᵥ(level_field + ᶠscalar_field))
-end # Formerly broken; fixed in CliMA/ClimaCore.jl#2172
+end

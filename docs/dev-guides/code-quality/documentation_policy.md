@@ -4,19 +4,19 @@ Standards for repository-level documentation and docstrings across CliMA reposit
 
 ## 1. Goal
 
-CliMA is committed to producing high-quality, well-documented software so that knowledge is shared and not siloed. Documentation should explain the **design, purpose, and behavior** of code — not its mechanical implementation. Aim for "minimally viable documentation": enough for a technically capable reader who is not a subject-matter expert to understand and use the code.
+CliMA is committed to producing high-quality, well-documented software so that knowledge is shared and not siloed. Documentation should explain the **design, purpose, and behavior** of code rather than its mechanical implementation. Aim for "minimally viable documentation": enough for a technically capable reader who is not a subject-matter expert to understand and use the code.
 
 - **Do** document interfaces, expected behavior, and short examples.
-- **Do not** narrate what the code does line by line — the code itself should be self-explanatory.
+- **Do not** narrate what the code does line by line; the code itself should be self-explanatory.
 
 ## 2. Repository documentation
 
 Every repository must include the following pages (typically under `docs/src/` or in `README.md`):
 
-1. **Home** — a brief description with links to important subcomponents.
-2. **Examples** — simple runnable examples covering the main uses.
-3. **API reference** — interface concepts, purpose, and function signatures.
-4. **Contribution guidelines** — how to contribute (PRs, style, CI).
+1. **Home**: a brief description with links to important subcomponents.
+2. **Examples**: simple runnable examples covering the main uses.
+3. **API reference**: interface concepts, purpose, and function signatures.
+4. **Contribution guidelines**: how to contribute (PRs, style, CI).
 
 All repositories must also include a `LICENSE` file (Apache 2.0) and a `NOTICE` file in the repository root.
 
@@ -24,10 +24,10 @@ All repositories must also include a `LICENSE` file (Apache 2.0) and a `NOTICE` 
 
 The [Diátaxis](https://diataxis.fr/) framework distinguishes four documentation modes; each page should have a clear primary mode:
 
-- **Tutorials** — learning-oriented walkthroughs. State the goal up front, deliver visible results at every step, and minimize digressions. Test tutorials in CI (e.g. via Literate.jl) so they cannot silently break.
-- **How-to guides** — task-oriented directions for someone who already knows what they want. Title as verb phrases ("How to add a parameterization"), not nouns ("Parameterizations").
-- **Reference** — API docs, configuration options, data formats. Documenter's [`@autodocs`](https://documenter.juliadocs.org/stable/man/syntax/#@autodocs-block) blocks are convenient for fast-moving internal modules; prefer **manual `@docs` curation** for the public API so you control symbol ordering, separation of public from internal, and stable URL anchors.
-- **Explanation** — derivations, design rationale, trade-offs. This is the right place for mathematical formulations and theory.
+- **Tutorials**: learning-oriented walkthroughs. State the goal up front, deliver visible results at every step, and minimize digressions. Test tutorials in CI (e.g. via Literate.jl) so they cannot silently break.
+- **How-to guides**: task-oriented directions for someone who already knows what they want. Title as verb phrases ("How to add a parameterization"), not nouns ("Parameterizations").
+- **Reference**: API docs, configuration options, data formats. Documenter's [`@autodocs`](https://documenter.juliadocs.org/stable/man/syntax/#@autodocs-block) blocks are convenient for fast-moving internal modules; prefer **manual `@docs` curation** for the public API so you control symbol ordering, separation of public from internal, and stable URL anchors.
+- **Explanation**: derivations, design rationale, trade-offs. This is the right place for mathematical formulations and theory.
 
 These modes are guides, not strict partitions: CliMA repos commonly interleave theory and worked examples (e.g. Thermodynamics.jl pairs a *Mathematical Formulation* page with a *How-To Guide*). What matters is that each page has one primary purpose and the reader can find what they need.
 
@@ -36,7 +36,7 @@ These modes are guides, not strict partitions: CliMA repos commonly interleave t
 - [Documenter.jl](https://juliadocs.github.io/Documenter.jl/stable/) renders docstrings into documentation pages.
 - [Literate.jl](https://fredrikekre.github.io/Literate.jl/stable/) generates markdown and notebook-style examples from Julia scripts and runs them in CI.
 - Sources live in `docs/src/`; tutorials in `tutorials/` if present.
-- For local iteration, use `LiveServer.servedocs()` — see [onboarding.md §6](../workflow/onboarding.md).
+- For local iteration, use `LiveServer.servedocs()` (see [onboarding.md §9](../workflow/onboarding.md)).
 
 ## 3. Docstrings
 
@@ -78,7 +78,7 @@ Universal rules:
 - **One-line summary** follows after a blank line, in imperative mood ("Compute…", not "Computes…").
 - **Backtick `code`** for variable names, type names, and option strings.
 - **Sentences end with periods**, including in bullet items.
-- **Be concise.** Names and formulas do the work — a docstring is not a tutorial.
+- **Be concise.** Names and formulas do the work; a docstring is not a tutorial.
 
 ### 3.3 Section headings
 
@@ -89,13 +89,13 @@ Use these headings, in this order, with a single `#`. Include only what you need
 | `# Arguments`          | Positional arguments. Skip if the signature is self-explanatory and there are ≤ 2 args.                       |
 | `# Keyword Arguments`  | Keyword arguments. Document defaults in the bullet, not just in the signature.                                |
 | `# Returns`            | When the return value is non-obvious or has structure (`NamedTuple`, multiple values, a `Field` with non-obvious units). |
-| `# Fields`             | For struct types — see §3.5.                                                                                  |
+| `# Fields`             | For struct types (see §3.5).                                                                                  |
 | `# Constructor`        | When an abstract or parametric type has a meaningful outer constructor.                                       |
 | `# Examples`           | At least one short example for any user-facing function, type, or setup.                                      |
 | `# Notes`              | Caveats, performance notes.                                                                                   |
-| `# Extended help`      | Optional appendix shown only via `??function_name` — see §3.7.                                                |
+| `# Extended help`      | Optional appendix shown only via `??function_name` (see §3.7).                                                |
 
-Use the plural form (`# Arguments`, `# Examples`) — Julia's official convention. Fix variants (`## Example`, `Arguments:`) when you encounter them.
+Use the plural form (`# Arguments`, `# Examples`), Julia's official convention. Fix variants (`## Example`, `Arguments:`) when you encounter them.
 
 **Argument and field bullet format:**
 
@@ -108,12 +108,12 @@ Each bullet starts with the backticked identifier. For complex options, list val
 
 ### 3.4 Units, math, references
 
-**Units.** Atmospheric and physics code is dimensional; units carry meaning. Use SI unless the underlying library exposes another unit (then match it and say so). Put units in square brackets at the end of the description: `[K]`, `[kg/m³]`, `[m/s²]`, `[W/m²]`, `[kg/kg]` for specific humidities. Dimensionless quantities: `[-]`. Be consistent within a docstring. Do **not** put `(...)` immediately after `[...]` — Documenter parses `[text](text)` as a markdown link and will error (see §4).
+**Units.** Atmospheric and physics code is dimensional; units carry meaning. Use SI unless the underlying library exposes another unit (then match it and say so). Put units in square brackets at the end of the description: `[K]`, `[kg/m³]`, `[m/s²]`, `[W/m²]`, `[kg/kg]` for specific humidities. Dimensionless quantities: `[-]`. Be consistent within a docstring. Do **not** put `(...)` immediately after `[...]`; Documenter parses `[text](text)` as a markdown link and will error (see §4).
 
 **Math.** Documenter renders math with [KaTeX](https://katex.org/).
 
-- **Prefer Unicode for simple expressions** — α, β, ρ, ∂, ∇, ≤, ∈ all render inline and read more naturally than `\alpha`, `\beta`, etc., matching the variable names in the code.
-- **Use LaTeX for complex layout** — fractions, integrals with bounds, multi-line alignment.
+- **Prefer Unicode for simple expressions**: α, β, ρ, ∂, ∇, ≤, ∈ all render inline and read more naturally than `\alpha`, `\beta`, etc., matching the variable names in the code.
+- **Use LaTeX for complex layout**: fractions, integrals with bounds, multi-line alignment.
 - **Inline:** double backticks, ``` ``α · β`` ```. **Display:** fenced ` ```math ` block.
 
 ~~~markdown
@@ -130,7 +130,7 @@ If a docstring has many backslashes, use `raw"""..."""` so Julia does not interp
 Described in [Smith2020](@cite). The scheme of [Stevens2005](@cite) is extended by [Ackerman2009](@cite).
 ~~~
 
-Add the BibTeX entry before citing — the docs build fails otherwise.
+Add the BibTeX entry before citing; the docs build fails otherwise.
 
 **Cross-references.** Every function, type, or method name you mention should be linked, not just backticked. The `@ref` form costs one extra `(@ref)` and gives the reader a click-through:
 
@@ -144,7 +144,7 @@ The target must be documented and registered on a docs page (or exported). For c
 Wraps [`Thermodynamics.air_temperature`](@extref).
 ~~~
 
-Without DocumenterInterLinks configured, fall back to fully qualified names in backticks so the reader at least sees the package qualifier — but prefer to set up DocumenterInterLinks.
+Without DocumenterInterLinks configured, fall back to fully qualified names in backticks so the reader at least sees the package qualifier, but prefer to set up DocumenterInterLinks.
 
 ### 3.5 Structs
 
@@ -179,10 +179,10 @@ If a struct is parameterized, explain the type parameters in prose or a nested l
 Smagorinsky-Lilly eddy viscosity model.
 
 `AXES` is a symbol indicating the axes the model is applied along:
-- `:UVW` — all axes,
-- `:UV`  — horizontal axes only,
-- `:W`   — vertical axis only,
-- `:UV_W` — horizontal and vertical treated separately.
+- `:UVW`: all axes,
+- `:UV`: horizontal axes only,
+- `:W`: vertical axis only,
+- `:UV_W`: horizontal and vertical treated separately.
 """
 struct SmagorinskyLilly{AXES} <: EddyViscosityModel end
 ~~~
@@ -224,9 +224,9 @@ See the cheat sheet (§3.10) for the full skeleton.
 
 ### 3.8 Examples and admonitions
 
-**Examples** — at least one for any user-facing API; optional for internal helpers. Use a plain fenced ` ```julia ` block; examples should be runnable in a fresh REPL after `using YourPackage` (spell out non-trivial setup). One short example is better than three sprawling ones.
+**Examples**: at least one for any user-facing API; optional for internal helpers. Use a plain fenced ` ```julia ` block; examples should be runnable in a fresh REPL after `using YourPackage` (spell out non-trivial setup). One short example is better than three sprawling ones.
 
-**Admonitions** ([Documenter syntax](https://documenter.juliadocs.org/stable/showcase/#Admonitions)) — use sparingly for genuinely important caveats. Kinds: `note`, `warning`, `tip`, `info`, `compat`, `danger`.
+**Admonitions** ([Documenter syntax](https://documenter.juliadocs.org/stable/showcase/#Admonitions)): use sparingly for genuinely important caveats. Kinds: `note`, `warning`, `tip`, `info`, `compat`, `danger`.
 
 ~~~markdown
 !!! warning
@@ -234,7 +234,7 @@ See the cheat sheet (§3.10) for the full skeleton.
     values. Run after `set_implicit_precomputed_quantities_part1!`.
 ~~~
 
-Keep to 1–3 sentences. If you find yourself writing more than two admonitions in one docstring, the docstring is doing too much — split it or move content into `docs/src/`.
+Keep to 1–3 sentences. If you find yourself writing more than two admonitions in one docstring, the docstring is doing too much: split it or move content into `docs/src/`.
 
 ### 3.9 `# Extended help`
 
@@ -316,22 +316,22 @@ abstract type Foo end
 
 ### 3.11 What we don't use, and other anti-patterns
 
-- **`DocStringExtensions`** (`$(TYPEDEF)`, `$(FIELDS)`, `$(SIGNATURES)`, …). Spell out signatures, field lists, and types by hand. Readability in source matters more than DRY.
+- **`DocStringExtensions`** (`$(TYPEDEF)`, `$(FIELDS)`, `$(SIGNATURES)`, …). Spell out signatures, field lists, and types by hand. Readability in source matters more than DRY. Some existing repos (e.g. CloudMicrophysics.jl's parameter structs) use `$(FIELDS)` from before this guidance; don't introduce new uses, but migrating old ones is not required on its own.
 - **`jldoctest`** blocks. Most CliMA repos don't run doctests in CI, so jldoctests silently rot. Use plain ` ```julia ` blocks.
 - **Long mathematical derivations inline.** The docstring should give the reader enough to use the function; derivations belong on an *Explanation* page or in the source paper. Link to it.
-- **Generated docstrings via metaprogramming** (macros that splice docstrings into `@eval`'d definitions) unless unavoidable — hard to grep, hard to read, easy to break.
-- **Missing signature line** (`"""Compute X..."""` with no indented signature) — breaks REPL help and Documenter rendering.
-- **Restating the obvious** (`"""Return the input."""` for `identity`) — noise.
-- **Documenting *how* instead of *why*** — the implementation is right below; callers want what to pass in, what they get back, what assumptions apply.
+- **Generated docstrings via metaprogramming** (macros that splice docstrings into `@eval`'d definitions) unless unavoidable: hard to grep, hard to read, easy to break.
+- **Missing signature line** (`"""Compute X..."""` with no indented signature): breaks REPL help and Documenter rendering.
+- **Restating the obvious** (`"""Return the input."""` for `identity`): noise.
+- **Documenting *how* instead of *why***: the implementation is right below; callers want what to pass in, what they get back, what assumptions apply.
 - **Out-of-date signatures.** When renaming an argument, update both the signature line and the `# Arguments` bullets. CI does not catch divergence.
-- **Inconsistent units** within one docstring — worse than no docstring.
-- **`Arguments:`, `Inputs:`, `Returns:` as plain prose lines** — these are invisible structure; Documenter renders only the `# Heading` form.
-- **Mixing imperative and third person** within one docstring — pick one.
+- **Inconsistent units** within one docstring: worse than no docstring.
+- **`Arguments:`, `Inputs:`, `Returns:` as plain prose lines**: these are invisible structure; Documenter renders only the `# Heading` form.
+- **Mixing imperative and third person** within one docstring: pick one.
 - **Multi-paragraph docstrings on internal helpers.** If you are writing more than ~15 lines for a helper called from one place, the prose belongs in a block comment near the call site or on a docs page.
 
 ## 4. Documenter.jl pitfalls
 
-**Markdown link ambiguity.** `[kg/m^3](description)` is parsed as a markdown link and produces `:cross_references` errors if the parenthetical text is not a URL. Fix: use parentheses for units (`(kg/m^3)`), or separate brackets and parentheses with punctuation. Do not attempt to escape brackets with backslashes in Julia string literals — that causes invalid-escape-sequence errors during precompilation.
+**Markdown link ambiguity.** `[kg/m^3](description)` is parsed as a markdown link and produces `:cross_references` errors if the parenthetical text is not a URL. Fix: use parentheses for units (`(kg/m^3)`), or separate brackets and parentheses with punctuation. Do not attempt to escape brackets with backslashes in Julia string literals; that causes invalid-escape-sequence errors during precompilation.
 
 **Missing docstrings.** If `makedocs` fails with "Missing docstrings", ensure every exported symbol with a docstring is included on a documentation page via `@docs` or `@autodocs`.
 
