@@ -167,10 +167,9 @@ CLIMACOMMS_CONTEXT=MPI CLIMACOMMS_DEVICE=CUDA \
 
 ## Examples
 
-[`examples/`](examples/) contains example cases and explains how to run them.
-The [examples documentation](https://CliMA.github.io/ClimaCore.jl/dev/examples/)
-derives the
-equations and discretizations for several of them.
+See [`examples/`](examples/) for example cases and how to run them.
+The [documentation](https://CliMA.github.io/ClimaCore.jl/dev/examples/)
+derives the equations and discretizations for several of them.
 
 ## Documentation
 
