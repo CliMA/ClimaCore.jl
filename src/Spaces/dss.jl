@@ -19,7 +19,7 @@ perimeter(space::AbstractSpectralElementSpace) = Topologies.Perimeter2D(
 Creates a [`Topologies.DSSBuffer`](@ref) for the field data corresponding to `data`
 """
 create_dss_buffer(data::DataLayouts.VIJHWithF, space) =
-    isone(size(data, 3)) ? nothing :
+    (!is_continuous(space) || isone(size(data, 3))) ? nothing :
     create_dss_buffer(
         data,
         topology(space),
@@ -49,6 +49,7 @@ end
 
 function weighted_dss_prepare!(data, space, dss_buffer)
     isnothing(dss_buffer) && return nothing
+    is_continuous(space) || return nothing
     device = ClimaComms.device(topology(space))
     hspace = horizontal_space(space)
     dss_transform!(
@@ -92,7 +93,7 @@ representative ghost vertices which store result of "ghost local" DSS are loaded
 """
 function weighted_dss_start!(data, space, dss_buffer)
     isnothing(dss_buffer) && return nothing
-    Quadratures.requires_dss(quadrature_style(space)) || return nothing
+    is_continuous(space) || return nothing
     sizeof(eltype(data)) > 0 || return nothing
     device = ClimaComms.device(topology(space))
     weighted_dss_prepare!(data, space, dss_buffer)
@@ -112,7 +113,7 @@ and perimeter elements to facilitate overlapping of communication with computati
 3). [`Spaces.dss_local!`](@ref) computes the weighted DSS on local vertices and faces.
 """
 function weighted_dss_internal!(data, space, dss_buffer)
-    Quadratures.requires_dss(quadrature_style(space)) || return nothing
+    is_continuous(space) || return nothing
     sizeof(eltype(data)) > 0 || return nothing
     hspace = horizontal_space(space)
     device = ClimaComms.device(topology(hspace))
@@ -168,7 +169,7 @@ This transforms the DSS'd local vectors back to Covariant12 vectors, and copies 
 """
 function weighted_dss_ghost!(data, space, dss_buffer)
     isnothing(dss_buffer) && return data
-    Quadratures.requires_dss(quadrature_style(space)) || return data
+    is_continuous(space) || return data
     sizeof(eltype(data)) > 0 || return data
     ClimaComms.finish(dss_buffer.graph_context)
     hspace = horizontal_space(space)
