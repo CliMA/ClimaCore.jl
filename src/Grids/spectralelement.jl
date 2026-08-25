@@ -3,9 +3,16 @@
 abstract type AbstractSpectralElementGrid <: AbstractGrid end
 
 """
-    SpectralElementGrid1D(mesh::Meshes.IntervalMesh, quadrature_style::Quadratures.QuadratureStyle)
+    SpectralElementGrid1D(
+        topology::Topologies.IntervalTopology,
+        quadrature_style::Quadratures.QuadratureStyle;
+        VIJH,
+        discontinuous::Bool = false,
+    )
 
-A one-dimensional space: within each element the space is represented as a polynomial.
+A one-dimensional grid: within each element the space is represented as a
+polynomial. `discontinuous` marks the grid's function space as discontinuous
+Galerkin (DG); see [`SpectralElementGrid2D`](@ref).
 """
 mutable struct SpectralElementGrid1D{
     T,
@@ -167,8 +174,8 @@ SEM for computing metric terms.
     [`Spaces.weighted_dss!`](@ref) is a no-op on fields over this grid and
     inter-element coupling is instead supplied by DG numerical fluxes (see
     `Operators.add_numerical_flux_internal!`). No DSS weights are computed.
-    The flag is not serialized by `InputOutput`; grids read from HDF5 are
-    continuous.
+    `InputOutput` serializes the flag; grids in files written before it
+    existed read back as continuous.
 
 The idea behind the so-called `bubble_correction` is that the numerical area
 of the domain (e.g., the sphere) is given by the sum of nodal integration weights

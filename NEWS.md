@@ -12,7 +12,9 @@ main
   computed. The new queries `Grids.is_continuous(grid)` /
   `Spaces.is_continuous(space)` report the discretization, so downstream
   models can gate DSS on the space itself rather than on the quadrature type.
-  The flag is part of the grid cache key.
+  The flag is part of the grid cache key and is serialized by `InputOutput`
+  (grids in files written before it existed read back as continuous).
+  [2599](https://github.com/CliMA/ClimaCore.jl/pull/2599)
 
 v0.15.3
 -------

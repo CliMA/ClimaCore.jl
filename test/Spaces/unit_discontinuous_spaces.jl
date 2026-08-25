@@ -14,7 +14,9 @@ import ClimaCore:
     Meshes,
     Quadratures,
     Spaces,
-    Topologies
+    Topologies,
+    InputOutput
+import ClimaCore.Utilities.Cache
 
 FT = Float64
 
@@ -111,4 +113,71 @@ end
     @test parent(f_dg2) == f_before
     Spaces.weighted_dss!(f_dg2 => buffer)
     @test parent(f_dg2) == f_before
+end
+
+# Round-trip a field through HDF5 and report the restart space's continuity.
+# The grids under test are evicted from the object cache first, so the reader
+# reconstructs them from the file attributes rather than returning the cached
+# objects.
+function roundtrip_is_continuous(space)
+    context = ClimaComms.context(space)
+    filename = tempname(; cleanup = true)
+    f = Fields.local_geometry_field(space).J
+    InputOutput.HDF5Writer(filename, context) do writer
+        InputOutput.write!(writer, "f" => f)
+    end
+    grid = Spaces.grid(space)
+    Cache.clean_cache!(grid)
+    grid isa Grids.ExtrudedFiniteDifferenceGrid &&
+        Cache.clean_cache!(grid.horizontal_grid)
+    InputOutput.HDF5Reader(filename, context) do reader
+        Spaces.is_continuous(axes(InputOutput.read_field(reader, "f")))
+    end
+end
+
+function plane_hspace(FT; discontinuous)
+    context = ClimaComms.context()
+    hdomain = Domains.IntervalDomain(
+        Geometry.XPoint(zero(FT)),
+        Geometry.XPoint(FT(1));
+        periodic = true,
+    )
+    hmesh = Meshes.IntervalMesh(hdomain, nelems = 4)
+    htopology = Topologies.IntervalTopology(ClimaComms.device(context), hmesh)
+    return Spaces.SpectralElementSpace1D(
+        htopology,
+        Quadratures.GLL{4}();
+        discontinuous,
+    )
+end
+
+@testset "discontinuous flag survives an InputOutput round-trip" begin
+    @test !roundtrip_is_continuous(dg_space)
+    @test roundtrip_is_continuous(cg_space)
+    # extruded plane spaces cover the SpectralElementGrid1D writer/reader
+    dg_plane, _ = extruded_spaces(plane_hspace(FT; discontinuous = true))
+    cg_plane, _ = extruded_spaces(plane_hspace(FT; discontinuous = false))
+    @test !roundtrip_is_continuous(dg_plane)
+    @test roundtrip_is_continuous(cg_plane)
+end
+
+@testset "CG and DG grids round-trip through a single file" begin
+    # Both grids request the group name "horizontal_grid"; the writer must
+    # give the second one a distinct group instead of aliasing it to the
+    # first, or one field restarts with the wrong discretization.
+    context = ClimaComms.context()
+    filename = tempname(; cleanup = true)
+    f_dg = Fields.local_geometry_field(dg_space).J
+    f_cg = Fields.local_geometry_field(cg_space).J
+    InputOutput.HDF5Writer(filename, context) do writer
+        InputOutput.write!(writer, "f_dg" => f_dg, "f_cg" => f_cg)
+    end
+    Cache.clean_cache!(Spaces.grid(dg_space))
+    Cache.clean_cache!(Spaces.grid(cg_space))
+    InputOutput.HDF5Reader(filename, context) do reader
+        restart_dg = InputOutput.read_field(reader, "f_dg")
+        restart_cg = InputOutput.read_field(reader, "f_cg")
+        @test !Spaces.is_continuous(axes(restart_dg))
+        @test Spaces.is_continuous(axes(restart_cg))
+    end
 end
