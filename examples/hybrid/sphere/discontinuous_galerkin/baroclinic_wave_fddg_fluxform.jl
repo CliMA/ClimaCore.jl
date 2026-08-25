@@ -210,15 +210,22 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
     e = @. ρe / ρ
     h_tot = @. (ρe + p) / ρ
     λ = @. sqrt(uE^2 + uN^2) + sqrt(γ * p / ρ)
-    # Floored sound speed for the LMARS reference impedance (robust vs p<0).
-    c = @. sqrt(γ * max(p, FT(100)) / ρ)
-    # Exner function and potential temperature (dry θv = θ), and their
-    # deviations from the hydrostatic reference (for the Exner-perturbation
-    # pressure-gradient force, Yatunin et al. 2026; used only when PGF=exner).
-    Π = @. (p / p_0)^κ_gas
-    θ = @. p / (ρ * R_d) / Π
-    Πp = @. Π - ᶜΠ_ref
-    θp = @. θ - ᶜθ_ref
+    # LMARS reference impedance uses a REFERENCE sound speed c_ref = √(γ R_d
+    # T_ref) (consistent with the isothermal reference state), not the local
+    # √(γp/ρ). This is LMARS's low-Mach design — a fixed reference impedance,
+    # independent of the local p — so it is robust by construction WITHOUT any
+    # unphysical clamp on pressure (a genuinely negative p still surfaces via λ
+    # above, as it should, rather than being silently floored).
+    c = @. sqrt(γ * R_d * T_ref) + zero(p)
+    # Exner function / potential-temperature deviations — only needed (and only
+    # well-defined: (p/p₀)^κ requires p>0) for PGF=exner. Computing them for the
+    # conservative path would gratuitously DomainError on a transient p<0.
+    if pgf == :exner
+        Π = @. (p / p_0)^κ_gas
+        θ = @. p / (ρ * R_d) / Π
+        Πp = @. Π - ᶜΠ_ref
+        θp = @. θ - ᶜθ_ref
+    end
 
     # --- Horizontal: FDDG volume + interface (flux gated by PGF/INTERFACE_FLUX) ---
     y = map(
@@ -412,10 +419,12 @@ function implicit_tendency_fddg!(dY, Y, p, t)
     K = @. (uE^2 + uN^2 + w_c^2) / 2
     p_thermo = @. pressure_ρe(ρe, K, ᶜΦ, ρ)
     h_tot = @. (ρe + p_thermo) / ρ
-    Π = @. (p_thermo / p_0)^κ_gas
-    θ = @. p_thermo / (ρ * R_d) / Π
-    Πp = @. Π - ᶜΠ_ref
-    θp = @. θ - ᶜθ_ref
+    if pgf == :exner
+        Π = @. (p_thermo / p_0)^κ_gas
+        θ = @. p_thermo / (ρ * R_d) / Π
+        Πp = @. Π - ᶜΠ_ref
+        θp = @. θ - ᶜθ_ref
+    end
 
     @. dY.Yc.ρ = -vdivf2c(ρw_w)
     @. dY.Yc.ρe = -vdivf2c(ρw_w * If(h_tot))

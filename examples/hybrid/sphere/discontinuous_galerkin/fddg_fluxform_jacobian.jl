@@ -105,16 +105,18 @@ function fddg_implicit_equation_jacobian!(
     p_thermo = @. pressure_ρe(ρe, K, ᶜΦ, ρ)
     h_tot = @. (ρe + p_thermo) / ρ
 
-    # Exner-perturbation thermodynamics (see the header). K frozen ⇒
-    # ∂p/∂ρe = R_d/cv_d, ∂p/∂ρ = R_d(−(K+Φ)/cv_d + T_tri); ∂Π/∂p = κ Π/p.
-    Π = @. (p_thermo / p_0)^κ_gas
-    θ = @. p_thermo / (ρ * R_d) / Π
-    Πp = @. Π - ᶜΠ_ref
-    θp = @. θ - ᶜθ_ref
-    dΠ_dρe = @. κ_gas * Π / p_thermo * (R_d / cv_d)
-    dΠ_dρ = @. κ_gas * Π / p_thermo * R_d * (-(K + ᶜΦ) / cv_d + T_tri)
-    Cpg = @. If(ρ) * cp_d * If(θ)                       # frozen prefactor
-    Apg = @. cp_d * (If(θ) * ᶠgradᵥ(Πp) + If(θp) * ᶠgradᵥ(ᶜΠ_ref))  # C3 face
+    # Exner-perturbation thermodynamics (PGF=exner only; (p/p₀)^κ requires p>0).
+    # K frozen ⇒ ∂p/∂ρe = R_d/cv_d, ∂p/∂ρ = R_d(−(K+Φ)/cv_d + T_tri); ∂Π/∂p = κΠ/p.
+    if pgf == :exner
+        Π = @. (p_thermo / p_0)^κ_gas
+        θ = @. p_thermo / (ρ * R_d) / Π
+        Πp = @. Π - ᶜΠ_ref
+        θp = @. θ - ᶜθ_ref
+        dΠ_dρe = @. κ_gas * Π / p_thermo * (R_d / cv_d)
+        dΠ_dρ = @. κ_gas * Π / p_thermo * R_d * (-(K + ᶜΦ) / cv_d + T_tri)
+        Cpg = @. If(ρ) * cp_d * If(θ)                       # frozen prefactor
+        Apg = @. cp_d * (If(θ) * ᶠgradᵥ(Πp) + If(θp) * ᶠgradᵥ(ᶜΠ_ref))  # C3 face
+    end
 
     ᶠgⁱʲ = Fields.local_geometry_field(Y.ρw).gⁱʲ
     g³³(gⁱʲ) = reshape(
