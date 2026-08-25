@@ -1492,6 +1492,43 @@ function lmars_cartesian(normal, (y⁻,), (y⁺,))
 end
 
 """
+    lmars_cartesian_advective(normal, argvals⁻, argvals⁺)
+
+Advection-only counterpart of [`lmars_cartesian`](@ref): keeps LMARS's low-Mach
+contact velocity `u* = ½(uₙ⁻+uₙ⁺) − (pm⁺−pm⁻)/(2C)` and upwinds the advected
+quantities (`ρ`, `ρe`, `ρu_c`) at `u*`, but OMITS the conservative pressure flux
+`p* n`. Used with a non-conservative (Exner-perturbation) pressure-gradient force
+(`kennedy_gruber_cartesian_advective_flux` volume flux): the interface supplies
+LMARS's wave-selective, `sqrt(γp/ρ)`-free advective dissipation (impedance
+`C = ρ̄ĉ`, `ĉ = √(γR_d T_ref)`) while the PGF is handled separately, exactly as
+the Roe/Rusanov advective counterparts. Well-balanced: at a shared node `pm⁻=pm⁺`
+at rest ⇒ `u*=0` ⇒ zero interface flux.
+"""
+function lmars_cartesian_advective(normal, (y⁻,), (y⁺,))
+    n1 = y⁻.E1' * normal
+    n2 = y⁻.E2' * normal
+    n3 = y⁻.E3' * normal
+    unL = y⁻.u1 * n1 + y⁻.u2 * n2 + y⁻.u3 * n3
+    unR = y⁺.u1 * n1 + y⁺.u2 * n2 + y⁺.u3 * n3
+    C = (y⁻.ρ + y⁺.ρ) / 2 * (y⁻.c + y⁺.c) / 2      # reference impedance ρ̄ĉ
+    ustar = (unL + unR) / 2 - (y⁺.pm - y⁻.pm) / (2 * C)
+    pos = ustar >= 0
+    ρup = ifelse(pos, y⁻.ρ, y⁺.ρ)
+    ρeup = ifelse(pos, y⁻.ρe, y⁺.ρe)
+    pup = ifelse(pos, y⁻.p, y⁺.p)
+    u1up = ifelse(pos, y⁻.u1, y⁺.u1)
+    u2up = ifelse(pos, y⁻.u2, y⁺.u2)
+    u3up = ifelse(pos, y⁻.u3, y⁺.u3)
+    return (
+        ρ = ustar * ρup,
+        ρe = ustar * (ρeup + pup),                 # enthalpy flux (full p)
+        ρu1 = ustar * (ρup * u1up),                # NO pressure flux (Exner PGF)
+        ρu2 = ustar * (ρup * u2up),
+        ρu3 = ustar * (ρup * u3up),
+    )
+end
+
+"""
     kennedy_gruber_cartesian_advective_flux(nvec_a, nvec_b, y_a, y_b)
 
 Advection-only variant of [`kennedy_gruber_cartesian_flux`](@ref): the momentum

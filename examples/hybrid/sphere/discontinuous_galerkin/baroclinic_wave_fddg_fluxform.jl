@@ -82,15 +82,14 @@ const is_conservative = pgf in (:conservative, :conservative_pert)
 
 # INTERFACE_FLUX = rusanov (default) | roe | lmars. Rusanov damps every wave
 # family at λ=|u|+c (over-dissipates stationary jumps); Roe damps entropy/shear
-# at |û_n| (Souza et al. 2023); LMARS (conservative only) is a low-Mach two-wave
-# Riemann solver (acoustic ∝ρc, advective ∝|u*|) — wave-selective like Roe but
-# cheaper and with no sqrt(γp/ρ).
+# at |û_n| (Souza et al. 2023); LMARS is a low-Mach two-wave Riemann solver
+# (acoustic ∝ρc, advective ∝|u*|) — wave-selective like Roe but cheaper and with
+# no sqrt(γp/ρ). With a conservative PGF LMARS carries p* in the momentum flux;
+# with the Exner PGF it uses the advective variant (contact u* upwinding, no p*).
 const interface_flux =
     Symbol(lowercase(get(ENV, "INTERFACE_FLUX", "rusanov")))
 interface_flux in (:rusanov, :roe, :lmars) ||
     error("INTERFACE_FLUX must be rusanov, roe, or lmars")
-(interface_flux == :lmars && !is_conservative) &&
-    error("INTERFACE_FLUX=lmars requires PGF=conservative or conservative_pert")
 
 # Volume + interface fluxes for the (ρ,ρe,ρu⃗) system. Both conservative
 # formulations share the same flux family; they differ only in the momentum
@@ -106,6 +105,7 @@ const cartesian_interface_fn =
         Operators.kennedy_gruber_rusanov_cartesian
     ) :
     (
+        interface_flux == :lmars ? Operators.lmars_cartesian_advective :
         interface_flux == :roe ?
         Operators.kennedy_gruber_roe_cartesian_advective :
         Operators.kennedy_gruber_rusanov_cartesian_advective
