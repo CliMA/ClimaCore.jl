@@ -1314,6 +1314,10 @@ function kennedy_gruber_cartesian_flux(nvec_a, nvec_b, y_a, y_b)
     ρ̄ = (y_a.ρ + y_b.ρ) / 2
     ē = (y_a.e + y_b.e) / 2
     p̄ = (y_a.p + y_b.p) / 2
+    # Momentum pressure: `pm` = p (full conservative) or p' = p − p_ref
+    # (stratified conservative, well-balanced over topography). Energy keeps
+    # the full thermodynamic p in the enthalpy flux.
+    p̄m = (y_a.pm + y_b.pm) / 2
     ūn = (y_a.uv' * nvec_a + y_b.uv' * nvec_b) / 2
     ū1 = (y_a.u1 + y_b.u1) / 2
     ū2 = (y_a.u2 + y_b.u2) / 2
@@ -1324,9 +1328,9 @@ function kennedy_gruber_cartesian_flux(nvec_a, nvec_b, y_a, y_b)
     return (
         ρ = ρ̄ * ūn,
         ρe = (ρ̄ * ē + p̄) * ūn,
-        ρu1 = ρ̄ * ū1 * ūn + p̄ * Ē1n,
-        ρu2 = ρ̄ * ū2 * ūn + p̄ * Ē2n,
-        ρu3 = ρ̄ * ū3 * ūn + p̄ * Ē3n,
+        ρu1 = ρ̄ * ū1 * ūn + p̄m * Ē1n,
+        ρu2 = ρ̄ * ū2 * ūn + p̄m * Ē2n,
+        ρu3 = ρ̄ * ū3 * ūn + p̄m * Ē3n,
     )
 end
 
@@ -1386,9 +1390,13 @@ function kennedy_gruber_roe_cartesian(normal, (y⁻,), (y⁺,))
     Ĥ = a⁻ * (y⁻.e + y⁻.p / y⁻.ρ) + a⁺ * (y⁺.e + y⁺.p / y⁺.ρ)
     ĉ = a⁻ * sqrt(γd * y⁻.p / y⁻.ρ) + a⁺ * sqrt(γd * y⁺.p / y⁺.ρ)
     ûn = û1 * n1 + û2 * n2 + û3 * n3
-    # jumps and wave amplitudes
+    # jumps and wave amplitudes. The pressure jump uses the momentum pressure
+    # `pm` (= p for full conservative, = p' for stratified) so the acoustic
+    # amplitudes vanish at rest even over topography. (The entropy amplitude α₀
+    # still uses the full Δρ, so stratified Roe leaves an O(Δρ_ref) contact-wave
+    # residual over terrain — stable, not machine-precision; LMARS avoids it.)
     Δρ = y⁺.ρ - y⁻.ρ
-    Δp = y⁺.p - y⁻.p
+    Δp = y⁺.pm - y⁻.pm
     Δu1 = y⁺.u1 - y⁻.u1
     Δu2 = y⁺.u2 - y⁻.u2
     Δu3 = y⁺.u3 - y⁻.u3
@@ -1462,8 +1470,10 @@ function lmars_cartesian(normal, (y⁻,), (y⁺,))
     unL = y⁻.u1 * n1 + y⁻.u2 * n2 + y⁻.u3 * n3
     unR = y⁺.u1 * n1 + y⁺.u2 * n2 + y⁺.u3 * n3
     C = (y⁻.ρ + y⁺.ρ) / 2 * (y⁻.c + y⁺.c) / 2      # reference impedance ρ̄ĉ
-    ustar = (unL + unR) / 2 - (y⁺.p - y⁻.p) / (2 * C)
-    pstar = (y⁻.p + y⁺.p) / 2 - C * (unR - unL) / 2
+    # Acoustic solve on the momentum pressure `pm` (= p full / p' stratified) so
+    # u*, p* vanish at rest even over topography; enthalpy below keeps full p.
+    ustar = (unL + unR) / 2 - (y⁺.pm - y⁻.pm) / (2 * C)
+    pstar = (y⁻.pm + y⁺.pm) / 2 - C * (unR - unL) / 2
     # upwind (branchless) the advected quantities at u*
     pos = ustar >= 0
     ρup = ifelse(pos, y⁻.ρ, y⁺.ρ)

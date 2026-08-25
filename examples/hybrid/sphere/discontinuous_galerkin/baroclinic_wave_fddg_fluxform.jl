@@ -61,16 +61,24 @@ filter_Nc > 0 && @warn(
     "use FILTER=0 (κ₄ for dissipation) with this driver.",
 )
 
-# PGF = exner (default) | conservative — the momentum pressure-gradient
-# formulation, gated for the A/B/B' comparison (see the LMARS discussion):
-#   exner        : non-conservative Exner-perturbation PGF (Yatunin et al. 2026)
-#                  with advective (pressure-stripped) KG volume + interface.
-#                  Well-balanced by construction; momentum NOT conserved.
-#   conservative : pressure carried IN the flux (KG two-point volume + a
-#                  conservative interface Riemann flux); momentum conserved.
-# Cells:  B = exner+roe,  B' = conservative+roe,  A = conservative+lmars.
+# PGF = exner (default) | conservative | conservative_pert — the momentum
+# pressure-gradient formulation, gated for the A/B comparison:
+#   exner            : non-conservative Exner-perturbation PGF (Yatunin et al.
+#                      2026) with advective (pressure-stripped) KG volume +
+#                      interface. Well-balanced; momentum NOT conserved.
+#   conservative     : full p carried in the flux (KG volume + conservative
+#                      interface). Momentum conserved; NOT well-balanced over
+#                      terrain (full-p PGF cancellation error).
+#   conservative_pert: stratified conservative — perturbation pressure p' = p −
+#                      p_ref in the momentum flux (full p in energy), buoyancy
+#                      −(ρ−ρ_ref)g in ρw. Momentum conserved AND well-balanced
+#                      over terrain (differences the small p').
+# Cells: B=exner+roe, B'=conservative+roe, B''=conservative_pert+roe,
+#        A=conservative+lmars, A'=conservative_pert+lmars.
 const pgf = Symbol(lowercase(get(ENV, "PGF", "exner")))
-pgf in (:exner, :conservative) || error("PGF must be exner or conservative")
+pgf in (:exner, :conservative, :conservative_pert) ||
+    error("PGF must be exner, conservative, or conservative_pert")
+const is_conservative = pgf in (:conservative, :conservative_pert)
 
 # INTERFACE_FLUX = rusanov (default) | roe | lmars. Rusanov damps every wave
 # family at λ=|u|+c (over-dissipates stationary jumps); Roe damps entropy/shear
@@ -81,15 +89,17 @@ const interface_flux =
     Symbol(lowercase(get(ENV, "INTERFACE_FLUX", "rusanov")))
 interface_flux in (:rusanov, :roe, :lmars) ||
     error("INTERFACE_FLUX must be rusanov, roe, or lmars")
-(interface_flux == :lmars && pgf != :conservative) &&
-    error("INTERFACE_FLUX=lmars requires PGF=conservative")
+(interface_flux == :lmars && !is_conservative) &&
+    error("INTERFACE_FLUX=lmars requires PGF=conservative or conservative_pert")
 
-# Volume + interface fluxes for the (ρ,ρe,ρu⃗) system, gated by PGF.
+# Volume + interface fluxes for the (ρ,ρe,ρu⃗) system. Both conservative
+# formulations share the same flux family; they differ only in the momentum
+# pressure `pm` (= p or p') set in the tendency.
 const cartesian_volume_fn =
-    pgf == :conservative ? Operators.kennedy_gruber_cartesian_flux :
+    is_conservative ? Operators.kennedy_gruber_cartesian_flux :
     Operators.kennedy_gruber_cartesian_advective_flux
 const cartesian_interface_fn =
-    pgf == :conservative ?
+    is_conservative ?
     (
         interface_flux == :lmars ? Operators.lmars_cartesian :
         interface_flux == :roe ? Operators.kennedy_gruber_roe_cartesian :
@@ -217,6 +227,10 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
     # unphysical clamp on pressure (a genuinely negative p still surfaces via λ
     # above, as it should, rather than being silently floored).
     c = @. sqrt(γ * R_d * T_ref) + zero(p)
+    # Momentum pressure carried in the conservative flux: full p (conservative)
+    # or perturbation p' = p − p_ref (conservative_pert, well-balanced over
+    # terrain). Unused by the advective flux (PGF=exner).
+    pm = pgf == :conservative_pert ? (@. p - ᶜp_ref) : p
     # Exner function / potential-temperature deviations — only needed (and only
     # well-defined: (p/p₀)^κ requires p>0) for PGF=exner. Computing them for the
     # conservative path would gratuitously DomainError on a transient p<0.
@@ -229,12 +243,12 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
 
     # --- Horizontal: FDDG volume + interface (flux gated by PGF/INTERFACE_FLUX) ---
     y = map(
-        (ρi, ρei, ei, pi, uvi, u1i, u2i, u3i, E1i, E2i, E3i, λi, ci) -> (;
-            ρ = ρi, ρe = ρei, e = ei, p = pi, uv = uvi,
+        (ρi, ρei, ei, pi, pmi, uvi, u1i, u2i, u3i, E1i, E2i, E3i, λi, ci) -> (;
+            ρ = ρi, ρe = ρei, e = ei, p = pi, pm = pmi, uv = uvi,
             u1 = u1i, u2 = u2i, u3 = u3i,
             E1 = E1i, E2 = E2i, E3 = E3i, λ = λi, c = ci,
         ),
-        ρ, ρe, e, p, uv, u1, u2, u3, E1, E2, E3, λ, c,
+        ρ, ρe, e, p, pm, uv, u1, u2, u3, E1, E2, E3, λ, c,
     )
     dy_mw = map(
         _ -> (ρ = FT(0), ρe = FT(0), ρu1 = FT(0), ρu2 = FT(0), ρu3 = FT(0)),
@@ -356,11 +370,18 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
                 (If(θ) * ᶠgradᵥ(Πp) + If(θp) * ᶠgradᵥ(ᶜΠ_ref)) -
                 C3(vvdivc2f(Ic(ρw_w ⊗ w)), lgeom_f),
             )
-        else
+        elseif pgf == :conservative
             # Conservative full-p pressure gradient + gravity (balanced pair;
             # relies on the discrete-hydrostatic IC, i.e. REBALANCE=1).
             @. dρw = Bw(
                 -(ᶠgradᵥ(p) + If(ρ) * ᶠgradᵥ(ᶜΦ)) -
+                C3(vvdivc2f(Ic(ρw_w ⊗ w)), lgeom_f),
+            )
+        else
+            # Stratified conservative: −∂_ξ³ p' − (ρ−ρ_ref) g (buoyancy pair),
+            # pm = p'. Differences the small p' ⇒ well-balanced over terrain.
+            @. dρw = Bw(
+                -(ᶠgradᵥ(pm) + If(ρ - ᶜρ_ref) * ᶠgradᵥ(ᶜΦ)) -
                 C3(vvdivc2f(Ic(ρw_w ⊗ w)), lgeom_f),
             )
         end
@@ -419,6 +440,7 @@ function implicit_tendency_fddg!(dY, Y, p, t)
     K = @. (uE^2 + uN^2 + w_c^2) / 2
     p_thermo = @. pressure_ρe(ρe, K, ᶜΦ, ρ)
     h_tot = @. (ρe + p_thermo) / ρ
+    pm = pgf == :conservative_pert ? (@. p_thermo - ᶜp_ref) : p_thermo
     if pgf == :exner
         Π = @. (p_thermo / p_0)^κ_gas
         θ = @. p_thermo / (ρ * R_d) / Π
@@ -434,8 +456,10 @@ function implicit_tendency_fddg!(dY, Y, p, t)
     if pgf == :exner
         @. dY.ρw =
             Bw(-If(ρ) * cp_d * (If(θ) * ᶠgradᵥ(Πp) + If(θp) * ᶠgradᵥ(ᶜΠ_ref)))
-    else
+    elseif pgf == :conservative
         @. dY.ρw = Bw(-(ᶠgradᵥ(p_thermo) + If(ρ) * ᶠgradᵥ(ᶜΦ)))
+    else
+        @. dY.ρw = Bw(-(ᶠgradᵥ(pm) + If(ρ - ᶜρ_ref) * ᶠgradᵥ(ᶜΦ)))
     end
     return dY
 end
