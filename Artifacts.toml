@@ -1,0 +1,11 @@
+# Lazily-downloaded CliMA artifacts used by examples (resolved via
+# ClimaUtilities.ClimaArtifacts.@clima_artifact). Entry copied from ClimaAtmos.
+# earth_orography_60arcseconds: ETOPO2022 surface elevation, 60 arc-second,
+# used by examples/hybrid/sphere/discontinuous_galerkin (TOPO=earth).
+[earth_orography_60arcseconds]
+git-tree-sha1 = "fe19d8dbe7a18ff39588e1f718014b0479d9c0f7"
+lazy = true
+
+    [[earth_orography_60arcseconds.download]]
+    sha256 = "eca66c0701d1c2b9e271742314915ffbf4a0fae92709df611c323f38e019966e"
+    url = "https://caltech.box.com/shared/static/4asrxcgl6xsgenfcug9p0wkkyhtqilgk.gz"
