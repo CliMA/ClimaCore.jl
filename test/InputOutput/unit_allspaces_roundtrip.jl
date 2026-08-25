@@ -19,14 +19,6 @@ import Random: seed!
     context = ClimaComms.context()
     seed!(1)
     for space in TU.all_spaces(FT; context)
-        # TODO: InputOutput cannot serialize a MultiColumnFiniteDifferenceSpace
-        # yet: its MultiPointGrid horizontal grid has no topology, which
-        # `write!` requires (`Spaces.topology` errors). Remove this skip once
-        # HDF5 support for multi-point grids lands.
-        if space isa Spaces.MultiColumnFiniteDifferenceSpace
-            @test_skip "HDF5 round-trip on MultiColumnFiniteDifferenceSpace"
-            continue
-        end
         field = Fields.Field(FT, space)
         parent(field) .= rand.(FT)
         Y = Fields.FieldVector(; f = field)

@@ -165,6 +165,7 @@ unit_tests = [
     UnitTest("InputOutput - hybrid3dcubedsphere"        ,"InputOutput/unit_hybrid3dcubedsphere.jl"; tier = :unit, subsystem = :io),
     UnitTest("InputOutput - hybrid3dcubedsphere_topo"   ,"InputOutput/unit_hybrid3dcubedsphere_topography.jl"; tier = :unit, subsystem = :io),
     UnitTest("InputOutput - finitedifferences"          ,"InputOutput/unit_finitedifference.jl"; tier = :unit, subsystem = :io),
+    UnitTest("InputOutput - multicolumn"                ,"InputOutput/unit_multicolumn.jl"; tier = :unit, subsystem = :io),
     UnitTest("InputOutput - pointspaces"                ,"InputOutput/unit_point.jl"; meta = :cpu_only, tier = :unit, subsystem = :io),
     UnitTest("Array interpolation"                      ,"Remapping/unit_interpolate_array.jl"; tier = :unit, subsystem = :remapping),
     UnitTest("Distributed remapping"                    ,"Remapping/unit_distributed_remapping.jl"; tier = :unit, subsystem = :remapping),
