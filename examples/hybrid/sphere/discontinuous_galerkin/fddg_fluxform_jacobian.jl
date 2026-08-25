@@ -130,15 +130,27 @@ function fddg_implicit_equation_jacobian!(
     @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
         -(ᶜdivᵥ_matrix()) * DiagonalMatrixRow(If(h_tot) * g³³(ᶠgⁱʲ))
 
-    # ᶠρwₜ = −ᶠinterp(ρ) cp_d (ᶠinterp(θ) ᶠgradᵥ(Π') + ᶠinterp(θ') ᶠgradᵥ(Π_ref))
-    @. ∂ᶠ𝕄ₜ∂ᶜ𝔼 =
-        -DiagonalMatrixRow(Cpg) *
-        ᶠgradᵥ_matrix() *
-        DiagonalMatrixRow(dΠ_dρe)
-    @. ∂ᶠ𝕄ₜ∂ᶜρ =
-        -DiagonalMatrixRow(Cpg) *
-        ᶠgradᵥ_matrix() *
-        DiagonalMatrixRow(dΠ_dρ) - DiagonalMatrixRow(Apg) * ᶠinterp_matrix()
+    if pgf == :exner
+        # Exner-perturbation ρw (see header):
+        # ᶠρwₜ = −ᶠinterp(ρ)cp_d(ᶠinterp(θ)ᶠgradᵥ(Π') + ᶠinterp(θ')ᶠgradᵥ(Π_ref))
+        @. ∂ᶠ𝕄ₜ∂ᶜ𝔼 =
+            -DiagonalMatrixRow(Cpg) *
+            ᶠgradᵥ_matrix() *
+            DiagonalMatrixRow(dΠ_dρe)
+        @. ∂ᶠ𝕄ₜ∂ᶜρ =
+            -DiagonalMatrixRow(Cpg) *
+            ᶠgradᵥ_matrix() *
+            DiagonalMatrixRow(dΠ_dρ) -
+            DiagonalMatrixRow(Apg) * ᶠinterp_matrix()
+    else
+        # Conservative full-p ρw: ᶠρwₜ = −ᶠgradᵥ(p) − ᶠinterp(ρ)·ᶠgradᵥ(Φ),
+        # ∂p/∂ρe = R_d/cv_d, ∂p/∂ρ = R_d(−(K+Φ)/cv_d + T_tri).
+        @. ∂ᶠ𝕄ₜ∂ᶜ𝔼 = -(ᶠgradᵥ_matrix() * R_d / cv_d)
+        @. ∂ᶠ𝕄ₜ∂ᶜρ =
+            -(ᶠgradᵥ_matrix()) *
+            DiagonalMatrixRow(R_d * (-(K + ᶜΦ) / cv_d + T_tri)) -
+            DiagonalMatrixRow(ᶠgradᵥ(ᶜΦ)) * ᶠinterp_matrix()
+    end
 
     I = one(∂R∂Y)
     @. ∂R∂Y = FT(δtγ) * ∂Yₜ∂Y - I

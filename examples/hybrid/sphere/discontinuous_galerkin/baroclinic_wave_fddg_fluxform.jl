@@ -61,22 +61,45 @@ filter_Nc > 0 && @warn(
     "use FILTER=0 (κ₄ for dissipation) with this driver.",
 )
 
-# INTERFACE_FLUX = rusanov (default) | roe. Rusanov damps every wave family
-# at λ = |u| + c, hitting the balanced jet's element-edge shear/contact
-# jumps (which propagate at u_n ≈ 0) with acoustic-speed dissipation — a
-# deterministic, hemisphere-symmetric forcing. The Roe flux damps entropy
-# and shear jumps at |û_n| instead (Souza et al. 2023 interface choice); in
-# roe mode the ρw advective interface likewise uses the advective bound |u|
-# rather than |u| + c.
+# PGF = exner (default) | conservative — the momentum pressure-gradient
+# formulation, gated for the A/B/B' comparison (see the LMARS discussion):
+#   exner        : non-conservative Exner-perturbation PGF (Yatunin et al. 2026)
+#                  with advective (pressure-stripped) KG volume + interface.
+#                  Well-balanced by construction; momentum NOT conserved.
+#   conservative : pressure carried IN the flux (KG two-point volume + a
+#                  conservative interface Riemann flux); momentum conserved.
+# Cells:  B = exner+roe,  B' = conservative+roe,  A = conservative+lmars.
+const pgf = Symbol(lowercase(get(ENV, "PGF", "exner")))
+pgf in (:exner, :conservative) || error("PGF must be exner or conservative")
+
+# INTERFACE_FLUX = rusanov (default) | roe | lmars. Rusanov damps every wave
+# family at λ=|u|+c (over-dissipates stationary jumps); Roe damps entropy/shear
+# at |û_n| (Souza et al. 2023); LMARS (conservative only) is a low-Mach two-wave
+# Riemann solver (acoustic ∝ρc, advective ∝|u*|) — wave-selective like Roe but
+# cheaper and with no sqrt(γp/ρ).
 const interface_flux =
     Symbol(lowercase(get(ENV, "INTERFACE_FLUX", "rusanov")))
-# Advection-only interface fluxes: the pressure gradient is supplied separately
-# in Exner-perturbation form (below), so the central momentum pressure flux is
-# stripped from the interface flux (dissipation unchanged).
+interface_flux in (:rusanov, :roe, :lmars) ||
+    error("INTERFACE_FLUX must be rusanov, roe, or lmars")
+(interface_flux == :lmars && pgf != :conservative) &&
+    error("INTERFACE_FLUX=lmars requires PGF=conservative")
+
+# Volume + interface fluxes for the (ρ,ρe,ρu⃗) system, gated by PGF.
+const cartesian_volume_fn =
+    pgf == :conservative ? Operators.kennedy_gruber_cartesian_flux :
+    Operators.kennedy_gruber_cartesian_advective_flux
 const cartesian_interface_fn =
-    interface_flux == :roe ?
-    Operators.kennedy_gruber_roe_cartesian_advective :
-    Operators.kennedy_gruber_rusanov_cartesian_advective
+    pgf == :conservative ?
+    (
+        interface_flux == :lmars ? Operators.lmars_cartesian :
+        interface_flux == :roe ? Operators.kennedy_gruber_roe_cartesian :
+        Operators.kennedy_gruber_rusanov_cartesian
+    ) :
+    (
+        interface_flux == :roe ?
+        Operators.kennedy_gruber_roe_cartesian_advective :
+        Operators.kennedy_gruber_rusanov_cartesian_advective
+    )
 
 # ---------------------------------------------------------------------------
 # Cartesian basis fields come from sphere_dg_fd_model.jl (eE*, eN*, eR*).
@@ -187,32 +210,30 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
     e = @. ρe / ρ
     h_tot = @. (ρe + p) / ρ
     λ = @. sqrt(uE^2 + uN^2) + sqrt(γ * p / ρ)
+    # Floored sound speed for the LMARS reference impedance (robust vs p<0).
+    c = @. sqrt(γ * max(p, FT(100)) / ρ)
     # Exner function and potential temperature (dry θv = θ), and their
     # deviations from the hydrostatic reference (for the Exner-perturbation
-    # pressure-gradient force, Yatunin et al. 2026).
+    # pressure-gradient force, Yatunin et al. 2026; used only when PGF=exner).
     Π = @. (p / p_0)^κ_gas
     θ = @. p / (ρ * R_d) / Π
     Πp = @. Π - ᶜΠ_ref
     θp = @. θ - ᶜθ_ref
 
-    # --- Horizontal: FDDG volume + KG-Rusanov interfaces, full system ---
+    # --- Horizontal: FDDG volume + interface (flux gated by PGF/INTERFACE_FLUX) ---
     y = map(
-        (ρi, ρei, ei, pi, uvi, u1i, u2i, u3i, E1i, E2i, E3i, λi) -> (;
+        (ρi, ρei, ei, pi, uvi, u1i, u2i, u3i, E1i, E2i, E3i, λi, ci) -> (;
             ρ = ρi, ρe = ρei, e = ei, p = pi, uv = uvi,
             u1 = u1i, u2 = u2i, u3 = u3i,
-            E1 = E1i, E2 = E2i, E3 = E3i, λ = λi,
+            E1 = E1i, E2 = E2i, E3 = E3i, λ = λi, c = ci,
         ),
-        ρ, ρe, e, p, uv, u1, u2, u3, E1, E2, E3, λ,
+        ρ, ρe, e, p, uv, u1, u2, u3, E1, E2, E3, λ, c,
     )
     dy_mw = map(
         _ -> (ρ = FT(0), ρe = FT(0), ρu1 = FT(0), ρu2 = FT(0), ρu3 = FT(0)),
         ρ,
     )
-    Operators.add_flux_differencing_divergence!(
-        Operators.kennedy_gruber_cartesian_advective_flux,
-        dy_mw,
-        y,
-    )
+    Operators.add_flux_differencing_divergence!(cartesian_volume_fn, dy_mw, y)
     Operators.add_numerical_flux_internal!(cartesian_interface_fn, dy_mw, y)
     @. dYc.ρ = dy_mw.ρ / lgeom_c.WJ
     @. dYc.ρe = dy_mw.ρe / lgeom_c.WJ
@@ -220,28 +241,30 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
     @. dYc.ρu2 = dy_mw.ρu2 / lgeom_c.WJ
     @. dYc.ρu3 = dy_mw.ρu3 / lgeom_c.WJ
 
-    # --- Horizontal Exner-perturbation pressure-gradient force (Yatunin et al.
-    #     2026), Cartesian components: −ρ c_pd (θ ∇ₕΠ' + θ' ∇ₕΠ_ref). The DG
-    #     gradient is strong hgrad + central lifting (no DSS), taken in the
-    #     geographic frame then rotated to Cartesian. ∇ₕ of a z-only field
-    #     vanishes on level surfaces, so at rest (θ'=Π'=0) this is exactly zero
-    #     — well-balanced over topography, unlike the metric-defective
-    #     conservative pressure flux. ---
-    liftΠp = Operators.lifting_correction(
-        Operators.central_gradient_lift,
-        Geometry.UVVector{FT},
-        Πp,
-    )
-    gΠp = @. Geometry.UVVector(hgrad(Πp)) + liftΠp
-    pgfE =
-        @. -cp_d *
-           (θ * gΠp.components.data.:1 + θp * ᶜgΠ_ref.components.data.:1)
-    pgfN =
-        @. -cp_d *
-           (θ * gΠp.components.data.:2 + θp * ᶜgΠ_ref.components.data.:2)
-    @. dYc.ρu1 += ρ * (pgfE * eE1 + pgfN * eN1)
-    @. dYc.ρu2 += ρ * (pgfE * eE2 + pgfN * eN2)
-    @. dYc.ρu3 += ρ * (pgfE * eE3 + pgfN * eN3)
+    # --- Horizontal Exner-perturbation pressure-gradient force (PGF=exner only;
+    #     Yatunin et al. 2026), Cartesian components: −ρ c_pd (θ ∇ₕΠ' + θ' ∇ₕΠ_ref).
+    #     DG gradient = strong hgrad + central lifting (no DSS), geographic →
+    #     Cartesian. ∇ₕ of a z-only field vanishes on level surfaces, so at rest
+    #     (θ'=Π'=0) this is exactly zero — well-balanced over topography, unlike
+    #     the metric-defective conservative pressure flux. Under PGF=conservative
+    #     the pressure is carried in cartesian_volume_fn/cartesian_interface_fn. ---
+    if pgf == :exner
+        liftΠp = Operators.lifting_correction(
+            Operators.central_gradient_lift,
+            Geometry.UVVector{FT},
+            Πp,
+        )
+        gΠp = @. Geometry.UVVector(hgrad(Πp)) + liftΠp
+        pgfE =
+            @. -cp_d *
+               (θ * gΠp.components.data.:1 + θp * ᶜgΠ_ref.components.data.:1)
+        pgfN =
+            @. -cp_d *
+               (θ * gΠp.components.data.:2 + θp * ᶜgΠ_ref.components.data.:2)
+        @. dYc.ρu1 += ρ * (pgfE * eE1 + pgfN * eN1)
+        @. dYc.ρu2 += ρ * (pgfE * eE2 + pgfN * eN2)
+        @. dYc.ρu3 += ρ * (pgfE * eE3 + pgfN * eN3)
+    end
 
     # --- Vertical FD (plane flux-form pattern; implicit under HEVI) ---
     if vertical_transport
@@ -317,16 +340,23 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
     #     advection, sponge ---
     w = @. ρw_w / If(ρ)
     if vertical_transport
-        # Exner-perturbation pressure-gradient + gravity (Yatunin et al. 2026):
-        # −ρ c_pd (θ ∂_ξ³ Π' + θ' ∂_ξ³ Π_ref).  Gravity is absorbed into the
-        # reference term, so at rest (Π'=θ'=0) the tendency is exactly zero —
-        # no discrete-balance requirement, no column rebalancing.
-        @. dρw = Bw(
-            -If(ρ) *
-            cp_d *
-            (If(θ) * ᶠgradᵥ(Πp) + If(θp) * ᶠgradᵥ(ᶜΠ_ref)) -
-            C3(vvdivc2f(Ic(ρw_w ⊗ w)), lgeom_f),
-        )
+        if pgf == :exner
+            # Exner-perturbation PGF + gravity (Yatunin et al. 2026): gravity
+            # absorbed into the reference term, so at rest (Π'=θ'=0) exactly 0.
+            @. dρw = Bw(
+                -If(ρ) *
+                cp_d *
+                (If(θ) * ᶠgradᵥ(Πp) + If(θp) * ᶠgradᵥ(ᶜΠ_ref)) -
+                C3(vvdivc2f(Ic(ρw_w ⊗ w)), lgeom_f),
+            )
+        else
+            # Conservative full-p pressure gradient + gravity (balanced pair;
+            # relies on the discrete-hydrostatic IC, i.e. REBALANCE=1).
+            @. dρw = Bw(
+                -(ᶠgradᵥ(p) + If(ρ) * ᶠgradᵥ(ᶜΦ)) -
+                C3(vvdivc2f(Ic(ρw_w ⊗ w)), lgeom_f),
+            )
+        end
     else
         @. dρw = Bw(-C3(vvdivc2f(Ic(ρw_w ⊗ w)), lgeom_f))
     end
@@ -392,8 +422,12 @@ function implicit_tendency_fddg!(dY, Y, p, t)
     dY.Yc.ρu1 .= FT(0)
     dY.Yc.ρu2 .= FT(0)
     dY.Yc.ρu3 .= FT(0)
-    @. dY.ρw =
-        Bw(-If(ρ) * cp_d * (If(θ) * ᶠgradᵥ(Πp) + If(θp) * ᶠgradᵥ(ᶜΠ_ref)))
+    if pgf == :exner
+        @. dY.ρw =
+            Bw(-If(ρ) * cp_d * (If(θ) * ᶠgradᵥ(Πp) + If(θp) * ᶠgradᵥ(ᶜΠ_ref)))
+    else
+        @. dY.ρw = Bw(-(ᶠgradᵥ(p_thermo) + If(ρ) * ᶠgradᵥ(ᶜΦ)))
+    end
     return dY
 end
 
@@ -402,6 +436,7 @@ include("fddg_fluxform_jacobian.jl")
 # ---------------------------------------------------------------------------
 # Time integration (explicit SSPRK33) with a step monitor
 # ---------------------------------------------------------------------------
+@info "Momentum scheme" pgf interface_flux stepper
 dY = similar(Y)
 rhs_fddg!(dY, Y, nothing, FT(0))
 @info "Initial RHS" max_dρ = maximum(abs, parent(dY.Yc.ρ)) max_dρe =

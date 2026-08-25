@@ -1435,6 +1435,53 @@ end
 const γ_dry = 7 / 5
 
 """
+    lmars_cartesian(normal, argvals⁻, argvals⁺)
+
+Low-Mach Approximate Riemann Solver (LMARS; Chen et al. 2013, the FV3 flux) for
+the conservative (ρ, ρe, ρu⃗-Cartesian) system. A two-wave acoustic Riemann
+solve gives an interface normal velocity and pressure from the reference
+impedance ``C = ρ̄ ĉ`` (ĉ = mean of a state-provided, floorable sound speed
+`c`):
+
+    u* = ½(uₙ⁻+uₙ⁺) − (p⁺−p⁻)/(2C),   p* = ½(p⁻+p⁺) − ½C(uₙ⁺−uₙ⁻),
+
+then every advected quantity is upwinded at `u*` (flow speed, NOT `|u|+c`), so
+acoustic dissipation scales with the impedance `C` while advective dissipation
+scales with `|u*|` — wave-selective like Roe, but with no eigen-decomposition
+and no `sqrt(γp/ρ)` (robust where `p` dips negative). State fields: `ρ`, `ρe`,
+`p`, `u1`,`u2`,`u3` (Cartesian velocity), `E1`,`E2`,`E3` (Cartesian projections
+of the face normal, single-valued at the node), and `c` (sound speed). It is a
+complete numerical flux (no separate central+penalty), consistent with the
+Kennedy-Gruber volume flux `kennedy_gruber_cartesian_flux`.
+"""
+function lmars_cartesian(normal, (y⁻,), (y⁺,))
+    # face normal in Cartesian components (ê_c single-valued at the node)
+    n1 = y⁻.E1' * normal
+    n2 = y⁻.E2' * normal
+    n3 = y⁻.E3' * normal
+    unL = y⁻.u1 * n1 + y⁻.u2 * n2 + y⁻.u3 * n3
+    unR = y⁺.u1 * n1 + y⁺.u2 * n2 + y⁺.u3 * n3
+    C = (y⁻.ρ + y⁺.ρ) / 2 * (y⁻.c + y⁺.c) / 2      # reference impedance ρ̄ĉ
+    ustar = (unL + unR) / 2 - (y⁺.p - y⁻.p) / (2 * C)
+    pstar = (y⁻.p + y⁺.p) / 2 - C * (unR - unL) / 2
+    # upwind (branchless) the advected quantities at u*
+    pos = ustar >= 0
+    ρup = ifelse(pos, y⁻.ρ, y⁺.ρ)
+    ρeup = ifelse(pos, y⁻.ρe, y⁺.ρe)
+    pup = ifelse(pos, y⁻.p, y⁺.p)
+    u1up = ifelse(pos, y⁻.u1, y⁺.u1)
+    u2up = ifelse(pos, y⁻.u2, y⁺.u2)
+    u3up = ifelse(pos, y⁻.u3, y⁺.u3)
+    return (
+        ρ = ustar * ρup,
+        ρe = ustar * (ρeup + pup),                 # enthalpy flux (full p)
+        ρu1 = ustar * (ρup * u1up) + pstar * n1,
+        ρu2 = ustar * (ρup * u2up) + pstar * n2,
+        ρu3 = ustar * (ρup * u3up) + pstar * n3,
+    )
+end
+
+"""
     kennedy_gruber_cartesian_advective_flux(nvec_a, nvec_b, y_a, y_b)
 
 Advection-only variant of [`kennedy_gruber_cartesian_flux`](@ref): the momentum
