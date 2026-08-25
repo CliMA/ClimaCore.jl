@@ -115,7 +115,11 @@ stepper in ("explicit", "hevi") || error("STEPPER must be explicit or hevi")
 # h₀ = 2000 m. Warp applied via Gal–Chen `Hypsography.LinearAdaption`.
 # ---------------------------------------------------------------------------
 const topo = lowercase(get(ENV, "TOPO", "flat"))
-topo in ("flat", "hj") || error("TOPO must be flat or hj")
+topo in ("flat", "hj", "earth") || error("TOPO must be flat, hj, or earth")
+# TOPO=earth pulls in ClimaUtilities/Interpolations/NCDatasets + the ETOPO2022
+# artifact; isolated in earth_topography.jl and loaded only when requested so
+# flat/hj (and GPU production) runs stay lean.
+topo == "earth" && include(joinpath(@__DIR__, "earth_topography.jl"))
 const hj_h0 = parse(FT, get(ENV, "MTN_HEIGHT", "2000"))  # peak elevation [m]
 const hj_dφ = FT(16)   # meridional width [deg] (super-Gaussian, exponent 6)
 const hj_dλ = FT(7)    # zonal width [deg] (Gaussian, exponent 2)
@@ -169,10 +173,14 @@ function sphere_hv_spaces()
             Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
         hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
     else
-        # Terrain-following: build from faces so the surface coincides with the
-        # lowest face, then warp with the Gal–Chen LinearAdaption of z_s(λ,φ).
+        # Terrain-following (hj = analytic Hughes–Jablonowski ridges; earth =
+        # ETOPO2022 via earth_z_surface). Build from faces so the surface
+        # coincides with the lowest face, then warp with the Gal–Chen
+        # LinearAdaption of z_s(λ,φ).
         vert_face_space = Spaces.FaceFiniteDifferenceSpace(device, vertmesh)
         z_surface =
+            topo == "earth" ?
+            Geometry.ZPoint.(earth_z_surface(horzspace)) :
             Geometry.ZPoint.(warp_hj.(Fields.coordinate_field(horzspace)))
         hv_face_space = Spaces.ExtrudedFiniteDifferenceSpace(
             horzspace,
@@ -498,8 +506,11 @@ const Bw = Operators.SetBoundaryOperator(
 let
     h_node = Spaces.node_horizontal_length_scale(horzspace)
     # true minimum level spacing (≠ zmax/zelem on ZSTRETCH grids)
-    zf = vec(Array(parent(fcoords.z))[:, 1, 1, 1, 1])
-    Δz_min = minimum(diff(zf))
+    # True global minimum cell spacing over ALL columns (an earlier version
+    # read one hard-coded column, so it reported the unwarped Δz even with
+    # topography — misleading). Over terrain the near-surface cells under the
+    # ridges are compressed, so this is < zmax/zelem there.
+    Δz_min = minimum(parent(Fields.Δz_field(hv_center_space)))
     c_max = sqrt(γ * R_d * T_e)
     # Peak surface elevation (bottom face physical z): 0 for flat, ≈h₀ for hj.
     max_mtn = maximum(parent(Fields.level(fcoords.z, ClimaCore.Utilities.half)))

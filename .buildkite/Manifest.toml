@@ -2,7 +2,7 @@
 
 julia_version = "1.11.9"
 manifest_format = "2.0"
-project_hash = "f21175c6815f6b1629aa42762b94ae2f0f1a137f"
+project_hash = "25d3bb62caff636cbf1c9dd9b3682e836f4afcab"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -472,6 +472,20 @@ weakdeps = ["BenchmarkTools", "CUDA", "OrderedCollections", "PrettyTables"]
 
     [deps.ClimaTimeSteppers.extensions]
     ClimaTimeSteppersBenchmarkToolsExt = ["CUDA", "BenchmarkTools", "OrderedCollections", "PrettyTables"]
+
+[[deps.ClimaUtilities]]
+deps = ["Artifacts", "ClimaComms", "Dates"]
+git-tree-sha1 = "0b3bee4ed33c36adea64ed47fa4ef5bb60926006"
+uuid = "b3f4f4ca-9299-4f7f-bd9b-81e1242a7513"
+version = "0.1.31"
+weakdeps = ["Adapt", "CUDA", "ClimaCore", "ClimaCoreTempestRemap", "Interpolations", "NCDatasets"]
+
+    [deps.ClimaUtilities.extensions]
+    ClimaUtilitiesClimaCoreExt = "ClimaCore"
+    ClimaUtilitiesClimaCoreInterpolationsExt = ["ClimaCore", "Interpolations"]
+    ClimaUtilitiesClimaCoreNCDatasetsExt = ["ClimaCore", "NCDatasets"]
+    ClimaUtilitiesClimaCoreTempestRemapExt = "ClimaCoreTempestRemap"
+    ClimaUtilitiesNCDatasetsExt = "NCDatasets"
 
 [[deps.CloseOpenIntervals]]
 deps = ["Static", "StaticArrayInterface"]
