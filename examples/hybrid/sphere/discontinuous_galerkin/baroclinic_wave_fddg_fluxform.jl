@@ -91,24 +91,42 @@ const interface_flux =
 interface_flux in (:rusanov, :roe, :lmars) ||
     error("INTERFACE_FLUX must be rusanov, roe, or lmars")
 
-# Volume + interface fluxes for the (ρ,ρe,ρu⃗) system. Both conservative
-# formulations share the same flux family; they differ only in the momentum
-# pressure `pm` (= p or p') set in the tendency.
+# VOLUME_FLUX = kg (default) | ranocha. Kennedy-Gruber is KEP + pressure-
+# equilibrium-preserving; Ranocha is additionally entropy-conservative (Tadmor),
+# so with a dissipative interface it yields a discrete entropy inequality. Only
+# for the conservative PGF (the advective/Exner volume flux carries no pressure).
+const volume_flux = Symbol(lowercase(get(ENV, "VOLUME_FLUX", "kg")))
+volume_flux in (:kg, :ranocha) || error("VOLUME_FLUX must be kg or ranocha")
+(volume_flux == :ranocha && !is_conservative) &&
+    error("VOLUME_FLUX=ranocha requires PGF=conservative or conservative_pert")
+(volume_flux == :ranocha && interface_flux == :lmars) &&
+    error("VOLUME_FLUX=ranocha requires INTERFACE_FLUX=rusanov or roe")
+
+# Volume + interface fluxes for the (ρ,ρe,ρu⃗) system. The conservative
+# formulations share a flux family; they differ only in the momentum pressure
+# `pm` (= p or p') set in the tendency. Ranocha swaps in the entropy-conservative
+# central pair (volume + interface central both use the log-mean flux).
 const cartesian_volume_fn =
-    is_conservative ? Operators.kennedy_gruber_cartesian_flux :
-    Operators.kennedy_gruber_cartesian_advective_flux
+    !is_conservative ? Operators.kennedy_gruber_cartesian_advective_flux :
+    volume_flux == :ranocha ? Operators.ranocha_cartesian_flux :
+    Operators.kennedy_gruber_cartesian_flux
 const cartesian_interface_fn =
-    is_conservative ?
-    (
-        interface_flux == :lmars ? Operators.lmars_cartesian :
-        interface_flux == :roe ? Operators.kennedy_gruber_roe_cartesian :
-        Operators.kennedy_gruber_rusanov_cartesian
-    ) :
+    !is_conservative ?
     (
         interface_flux == :lmars ? Operators.lmars_cartesian_advective :
         interface_flux == :roe ?
         Operators.kennedy_gruber_roe_cartesian_advective :
         Operators.kennedy_gruber_rusanov_cartesian_advective
+    ) :
+    volume_flux == :ranocha ?
+    (
+        interface_flux == :roe ? Operators.ranocha_roe_cartesian :
+        Operators.ranocha_rusanov_cartesian
+    ) :
+    (
+        interface_flux == :lmars ? Operators.lmars_cartesian :
+        interface_flux == :roe ? Operators.kennedy_gruber_roe_cartesian :
+        Operators.kennedy_gruber_rusanov_cartesian
     )
 
 # ---------------------------------------------------------------------------
@@ -469,7 +487,7 @@ include("fddg_fluxform_jacobian.jl")
 # ---------------------------------------------------------------------------
 # Time integration (explicit SSPRK33) with a step monitor
 # ---------------------------------------------------------------------------
-@info "Momentum scheme" pgf interface_flux stepper
+@info "Momentum scheme" pgf volume_flux interface_flux stepper
 dY = similar(Y)
 rhs_fddg!(dY, Y, nothing, FT(0))
 @info "Initial RHS" max_dρ = maximum(abs, parent(dY.Yc.ρ)) max_dρe =

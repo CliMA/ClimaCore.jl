@@ -1335,6 +1335,78 @@ function kennedy_gruber_cartesian_flux(nvec_a, nvec_b, y_a, y_b)
 end
 
 """
+    ln_mean(x, y)
+
+Numerically-stable logarithmic mean ``(x-y)/(\\log x - \\log y)`` (Ismail & Roe
+2009): switches to the convergent Taylor series in ``f^2=((x-y)/(x+y))^2`` when
+``x≈y`` to avoid the ``0/0`` cancellation. The log mean is the building block of
+entropy-conservative fluxes (it is what makes ``⟦w⟧·F^\\# = ⟦ψ⟧`` hold exactly).
+"""
+@inline function ln_mean(x, y)
+    ε = oftype(x, 1e-4)
+    f² = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y)  # ((x−y)/(x+y))²
+    return f² < ε ?
+           (x + y) / (2 + f² * (2 / 3 + f² * (2 / 5 + f² * 2 / 7))) :
+           (y - x) / log(y / x)
+end
+
+"""
+    ranocha_cartesian_flux(nvec_a, nvec_b, y_a, y_b)
+
+Ranocha (2018, 2020) two-point flux for the (ρ, ρe, ρu⃗) system in GLOBAL
+CARTESIAN momentum components — the *entropy-conservative* counterpart of
+[`kennedy_gruber_cartesian_flux`](@ref). Unlike Kennedy-Gruber (which is only
+kinetic-energy- and pressure-equilibrium-preserving), the Ranocha flux is
+SIMULTANEOUSLY entropy-conservative (Tadmor `⟦w⟧·F# = ⟦ψ⟧`), kinetic-energy-
+preserving, and pressure-equilibrium-preserving, so — paired with an
+entropy-dissipative interface — it yields a discrete entropy inequality that
+Kennedy-Gruber cannot.
+
+It differs from KG in three places: the mass flux uses the logarithmic mean
+``ρ^{ln}`` instead of ``ρ̄``; the internal energy uses ``1/((γ-1)(ρ/p)^{ln})``;
+and the pressure-work uses the cross term ``½(p_a u_{n,b}+p_b u_{n,a})`` rather
+than ``p̄ ū_n``. The kinetic part is the KEP cross term ``½\\,u_a·u_b``. The
+geopotential (``Φ = e - e_{int} - K``, single-valued at a shared node, varying
+horizontally only over terrain) is advected as a passive potential ``ρ^{ln}
+ū_n\\,\\{Φ\\}``. Momentum pressure uses `pm` (= p, or p' for the stratified /
+well-balanced split) exactly as KG, so it drops into the same volume-flux slot
+and inherits the same reference-deviation well-balancedness. Consistency check:
+for `y_a == y_b` it collapses to the physical fluxes ``ρu_n``,
+``(ρe+p)u_n``, ``ρu_c u_n + pm\\,ê_c·n``. Same state fields as
+[`kennedy_gruber_cartesian_flux`](@ref).
+"""
+function ranocha_cartesian_flux(nvec_a, nvec_b, y_a, y_b)
+    γd = oftype(y_a.ρ, γ_dry)
+    ρln = ln_mean(y_a.ρ, y_b.ρ)
+    ūn = (y_a.uv' * nvec_a + y_b.uv' * nvec_b) / 2
+    mn = ρln * ūn                                   # entropy-consistent mass flux
+    ū1 = (y_a.u1 + y_b.u1) / 2
+    ū2 = (y_a.u2 + y_b.u2) / 2
+    ū3 = (y_a.u3 + y_b.u3) / 2
+    p̄m = (y_a.pm + y_b.pm) / 2
+    Ē1n = (y_a.E1' * nvec_a + y_b.E1' * nvec_b) / 2
+    Ē2n = (y_a.E2' * nvec_a + y_b.E2' * nvec_b) / 2
+    Ē3n = (y_a.E3' * nvec_a + y_b.E3' * nvec_b) / 2
+    # internal energy: 1/((γ−1)(ρ/p)^ln); KEP kinetic cross term; pressure work
+    e_int = 1 / (ln_mean(y_a.ρ / y_a.p, y_b.ρ / y_b.p) * (γd - 1))
+    K̃ = (y_a.u1 * y_b.u1 + y_a.u2 * y_b.u2 + y_a.u3 * y_b.u3) / 2
+    una = y_a.uv' * nvec_a
+    unb = y_b.uv' * nvec_b
+    pv = (y_a.p * unb + y_b.p * una) / 2            # ½(p_a u_{n,b}+p_b u_{n,a})
+    # geopotential per node (Φ = e − e_int − K), advected as a passive potential
+    Φa = y_a.e - y_a.p / ((γd - 1) * y_a.ρ) - (y_a.u1^2 + y_a.u2^2 + y_a.u3^2) / 2
+    Φb = y_b.e - y_b.p / ((γd - 1) * y_b.ρ) - (y_b.u1^2 + y_b.u2^2 + y_b.u3^2) / 2
+    Φ̄ = (Φa + Φb) / 2
+    return (
+        ρ = mn,
+        ρe = mn * (K̃ + e_int + Φ̄) + pv,
+        ρu1 = mn * ū1 + p̄m * Ē1n,
+        ρu2 = mn * ū2 + p̄m * Ē2n,
+        ρu3 = mn * ū3 + p̄m * Ē3n,
+    )
+end
+
+"""
     kennedy_gruber_rusanov_cartesian(normal, argvals⁻, argvals⁺)
 
 Interface flux for the (ρ, ρe, ρu⃗-Cartesian) system:
@@ -1437,6 +1509,48 @@ function kennedy_gruber_roe_cartesian(normal, (y⁻,), (y⁺,))
         ρu1 = F.ρu1 - Dρu1 / 2,
         ρu2 = F.ρu2 - Dρu2 / 2,
         ρu3 = F.ρu3 - Dρu3 / 2,
+    )
+end
+
+"""
+    ranocha_rusanov_cartesian(normal, argvals⁻, argvals⁺)
+    ranocha_roe_cartesian(normal, argvals⁻, argvals⁺)
+
+Entropy-stable interface fluxes: the entropy-conservative
+[`ranocha_cartesian_flux`](@ref) central part plus the same Rusanov / Roe
+dissipation used by the Kennedy-Gruber interfaces. The dissipation is recovered
+as ``(F_{diss} - F_{KG,central})`` (a cheap extra KG eval) and added to the
+Ranocha central flux, so the tested wave-selective penalties are reused verbatim
+while the volume/interface central pair is now entropy-conservative. Paired with
+[`ranocha_cartesian_flux`](@ref) as the volume flux this gives an EC-volume +
+dissipative-interface scheme — the ingredient Kennedy-Gruber lacks for a discrete
+entropy inequality. (The dissipation is in conserved, not entropy, variables, so
+this is entropy-stable in the sense of an EC volume flux + a positive dissipation,
+not a certified entropy-variable dissipation matrix.)
+"""
+function ranocha_rusanov_cartesian(normal, (y⁻,), (y⁺,))
+    Fr = ranocha_cartesian_flux(normal, normal, y⁻, y⁺)
+    Fkg = kennedy_gruber_cartesian_flux(normal, normal, y⁻, y⁺)
+    Fd = kennedy_gruber_rusanov_cartesian(normal, (y⁻,), (y⁺,))
+    return (
+        ρ = Fr.ρ + (Fd.ρ - Fkg.ρ),
+        ρe = Fr.ρe + (Fd.ρe - Fkg.ρe),
+        ρu1 = Fr.ρu1 + (Fd.ρu1 - Fkg.ρu1),
+        ρu2 = Fr.ρu2 + (Fd.ρu2 - Fkg.ρu2),
+        ρu3 = Fr.ρu3 + (Fd.ρu3 - Fkg.ρu3),
+    )
+end
+
+function ranocha_roe_cartesian(normal, (y⁻,), (y⁺,))
+    Fr = ranocha_cartesian_flux(normal, normal, y⁻, y⁺)
+    Fkg = kennedy_gruber_cartesian_flux(normal, normal, y⁻, y⁺)
+    Fd = kennedy_gruber_roe_cartesian(normal, (y⁻,), (y⁺,))
+    return (
+        ρ = Fr.ρ + (Fd.ρ - Fkg.ρ),
+        ρe = Fr.ρe + (Fd.ρe - Fkg.ρe),
+        ρu1 = Fr.ρu1 + (Fd.ρu1 - Fkg.ρu1),
+        ρu2 = Fr.ρu2 + (Fd.ρu2 - Fkg.ρu2),
+        ρu3 = Fr.ρu3 + (Fd.ρu3 - Fkg.ρu3),
     )
 end
 # dry-air ratio of specific heats used by the Roe linearization
