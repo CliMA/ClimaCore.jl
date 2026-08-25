@@ -52,6 +52,7 @@ unit_tests = [
     UnitTest("Spaces - exact 2x2 DSS"                   ,"Spaces/unit_dss_exact.jl"; tier = :unit, subsystem = :spaces),
     UnitTest("Spaces - DSS vs grouped reference"        ,"Spaces/unit_dss_reference.jl"; tier = :unit, subsystem = :spaces),
     UnitTest("Spaces - serial CPU DSS"                  ,"Spaces/unit_serial_cpu_dss.jl"; tier = :unit, subsystem = :spaces),
+    UnitTest("Spaces - discontinuous (DG) spaces"       ,"Spaces/unit_discontinuous_spaces.jl"; tier = :unit, subsystem = :spaces),
     UnitTest("Sphere spaces"                            ,"Spaces/unit_sphere_spaces.jl"; tier = :unit, subsystem = :spaces),
     UnitTest("Spaces - high resolution"                 ,"Spaces/unit_high_resolution_space.jl"; tier = :unit, subsystem = :spaces),
     UnitTest("Terrain warp"                             ,"Spaces/unit_terrain_warp.jl"; tier = :unit, subsystem = :spaces, slow = true), # 5.9 min: sweeps npoly/helem up to 10 in 3D

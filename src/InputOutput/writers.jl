@@ -62,7 +62,12 @@ end
 struct HDF5Writer{C <: ClimaComms.AbstractCommsContext} <: AbstractWriter
     file::HDF5.File
     context::C
-    cache::Dict{String, String}
+    # written object => its group name; identity-keyed so that two distinct
+    # objects sharing a default name (e.g. a CG and a DG grid, both
+    # "horizontal_grid") get distinct groups instead of silently aliasing
+    cache::IdDict{Any, String}
+    # requested name => times requested, for uniquifying repeated names
+    namecounts::Dict{String, Int}
 end
 
 function HDF5Writer(
@@ -102,12 +107,12 @@ function HDF5Writer(
     else
         write_attribute(file, "ClimaCore version", string(VERSION))
     end
-    cache = Dict{String, String}()
-    return HDF5Writer(file, context, cache)
+    return HDF5Writer(file, context, IdDict{Any, String}(), Dict{String, Int}())
 end
 
 function Base.close(hdfwriter::HDF5Writer)
     empty!(hdfwriter.cache)
+    empty!(hdfwriter.namecounts)
     close(hdfwriter.file)
     return nothing
 end
@@ -138,16 +143,27 @@ Write the object `obj` using `writer`. An optional `preferredname` can be
 provided, otherwise [`defaultname`](@ref) will be used to generate a name. The
 name of the object will be returned.
 
-A cache of domains, meshes, topologies and spaces is kept: if one of these
-objects has already been written, then the file will not be modified: instead
-the name under which the object was first written will be returned. Note that
-`Field`s and `FieldVector`s are _not_ cached, and so can be written multiple
-times.
+A cache of domains, meshes, topologies and grids is kept: if the same object
+has already been written, the file is not modified and the name under which
+the object was first written is returned. Distinct objects that request the
+same name (e.g. two spectral-element grids differing only in a constructor
+flag, both named "horizontal_grid") are written to distinct groups, with a
+`_2`, `_3`, ... suffix appended to later names; references always use the
+returned name. `Field`s and `FieldVector`s are _not_ cached, and so can be
+written multiple times.
 """
 function write!(writer::HDF5Writer, obj, name = defaultname(obj))
-    get!(writer.cache, name) do
-        write_new!(writer, obj, name)
+    get!(writer.cache, obj) do
+        write_new!(writer, obj, unique_name!(writer, name))
     end
+end
+
+# First request for a name keeps it; later requests (necessarily for distinct
+# objects, since identical objects hit the cache) get a numbered suffix.
+function unique_name!(writer::HDF5Writer, name::AbstractString)
+    n = get(writer.namecounts, name, 0) + 1
+    writer.namecounts[name] = n
+    return n == 1 ? String(name) : string(name, "_", n)
 end
 
 # Domains
@@ -369,6 +385,7 @@ function write_new!(
         "quadrature_num_points",
         Quadratures.degrees_of_freedom(Spaces.quadrature_style(grid)),
     )
+    write_attribute(group, "discontinuous", grid.discontinuous ? "true" : "false")
     write_attribute(group, "topology", write!(writer, Spaces.topology(grid)))
     return name
 end
@@ -391,6 +408,7 @@ function write_new!(
         Quadratures.degrees_of_freedom(Spaces.quadrature_style(grid)),
     )
     write_attribute(group, "bubble", grid.enable_bubble ? "true" : "false")
+    write_attribute(group, "discontinuous", grid.discontinuous ? "true" : "false")
     write_attribute(group, "topology", write!(writer, Spaces.topology(grid)))
     if !(grid.mask isa DataLayouts.NoMask)
         write_attribute(
@@ -481,9 +499,12 @@ function write!(
     topology::Topologies.AbstractTopology,
     name::AbstractString = defaultname(mask),
 )
-    group = create_group(writer.file, "grid_mask/$name")
-    write!(writer, group, mask.is_active, "is_active", topology)
-    return name
+    get!(writer.cache, mask) do
+        uname = unique_name!(writer, name)
+        group = create_group(writer.file, "grid_mask/$uname")
+        write!(writer, group, mask.is_active, "is_active", topology)
+        uname
+    end
 end
 
 # write fields

@@ -138,6 +138,7 @@ struct HDF5Reader{C <: ClimaComms.AbstractCommsContext}
     mesh_cache::Dict{Any, Any}
     topology_cache::Dict{Any, Any}
     grid_cache::Dict{Any, Any}
+    space_cache::Dict{Any, Any}
 end
 
 function HDF5Reader(
@@ -178,6 +179,7 @@ function HDF5Reader(
         Dict(),
         Dict(),
         Dict(),
+        Dict(),
     )
 end
 
@@ -190,6 +192,7 @@ function Base.close(hdfreader::HDF5Reader)
     empty!(hdfreader.mesh_cache)
     empty!(hdfreader.topology_cache)
     empty!(hdfreader.grid_cache)
+    empty!(hdfreader.space_cache)
     close(hdfreader.file)
     return nothing
 end
@@ -461,8 +464,13 @@ function read_grid_new(reader, name)
             _scan_quadrature_style(attrs(group)["quadrature_type"], npts)
         topology = read_topology(reader, attrs(group)["topology"])
         enable_bubble = get(attrs(group), "bubble", "false") == "true"
+        discontinuous = get(attrs(group), "discontinuous", "false") == "true"
         if type == "SpectralElementGrid1D"
-            return Grids.SpectralElementGrid1D(topology, quadrature_style)
+            return Grids.SpectralElementGrid1D(
+                topology,
+                quadrature_style;
+                discontinuous,
+            )
         else
             enable_mask = haskey(attrs(group), "grid_mask")
             grid = Grids.SpectralElementGrid2D(
@@ -470,11 +478,14 @@ function read_grid_new(reader, name)
                 quadrature_style;
                 enable_bubble,
                 enable_mask,
+                discontinuous,
             )
             if enable_mask
-                mask_type = keys(reader.file["grid_mask"])[1]
-                @assert mask_type == "IJHMask"
-                ds_is_active = reader.file["grid_mask"]["IJHMask"]["is_active"]
+                # the attribute stores the mask's group name ("IJHMask", with
+                # a numbered suffix when a file holds several masks)
+                mask_name = attrs(group)["grid_mask"]
+                @assert startswith(mask_name, "IJHMask")
+                ds_is_active = reader.file["grid_mask"][mask_name]["is_active"]
                 is_active = read_data_layout(ds_is_active, topology)
                 Grids.set_mask!(grid, is_active)
             end
