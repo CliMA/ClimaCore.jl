@@ -341,14 +341,26 @@ end
 Operators.return_space(::MultiplyColumnwiseBandMatrixField, space1, space2) =
     space1
 
-# Compute max(li - i, ld).
+# Compute max(li - i, ld) and min(ri - i, ud). Both corners clamp both ends of
+# the band: on columns too short for the interior stencil, the boundary windows
+# are clamped (`Operators.window_bounds`) and can overlap, so a point in one
+# boundary's window can also have band entries that reach past the other end of
+# the column.
 boundary_modified_ld(_, ld, column_space, i) = ld
-boundary_modified_ld(::TopLeftMatrixCorner, ld, column_space, i) =
+boundary_modified_ld(
+    ::Union{TopLeftMatrixCorner, BottomRightMatrixCorner},
+    ld,
+    column_space,
+    i,
+) =
     max(Operators.left_idx(column_space) - i, ld)
-
-# Compute min(ri - i, ud).
 boundary_modified_ud(_, ud, column_space, i) = ud
-boundary_modified_ud(::BottomRightMatrixCorner, ud, column_space, i) =
+boundary_modified_ud(
+    ::Union{TopLeftMatrixCorner, BottomRightMatrixCorner},
+    ud,
+    column_space,
+    i,
+) =
     min(Operators.right_idx(column_space) - i, ud)
 
 # TODO: Use @propagate_inbounds here, and remove @inbounds from this function.
@@ -462,17 +474,6 @@ function multiply_matrix_at_index(
     ld1, ud1 = outer_diagonals(eltype(matrix1))
     boundary_modified_ld1 = boundary_modified_ld(bc, ld1, column_space1, idx)
     boundary_modified_ud1 = boundary_modified_ud(bc, ud1, column_space1, idx)
-    # On columns too short for the interior stencil, the boundary windows are
-    # clamped (`Operators.window_bounds`) and can overlap, so a point in one
-    # boundary's window can also have matrix row entries that reach past the
-    # other end of the column
-    if !isnothing(bc)
-        space2 = Operators.reconstruct_placeholder_space(axes(arg), space)
-        boundary_modified_ld1 =
-            max(Operators.left_idx(space2) - idx, boundary_modified_ld1)
-        boundary_modified_ud1 =
-            min(Operators.right_idx(space2) - idx, boundary_modified_ud1)
-    end
 
     # Precompute the row that is needed from matrix1 so that it does not get
     # recomputed multiple times.

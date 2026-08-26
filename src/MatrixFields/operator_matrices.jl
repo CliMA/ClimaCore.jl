@@ -66,6 +66,21 @@ operator_input_space(
     space::Spaces.MultiColumnFiniteDifferenceSpace,
 ) = Spaces.FaceMultiColumnFiniteDifferenceSpace(space)
 
+# A SetBoundaryOperator is space-preserving (`return_space(op, space) = space`), so its
+# operator matrix must be built on the argument's own space, whether center or face;
+operator_input_space(
+    ::Operators.SetBoundaryOperator,
+    space::Spaces.FiniteDifferenceSpace,
+) = space
+operator_input_space(
+    ::Operators.SetBoundaryOperator,
+    space::Spaces.ExtrudedFiniteDifferenceSpace,
+) = space
+operator_input_space(
+    ::Operators.SetBoundaryOperator,
+    space::Spaces.MultiColumnFiniteDifferenceSpace,
+) = space
+
 has_affine_bc(op) = unrolled_any(
     bc ->
         bc isa Union{
@@ -374,6 +389,19 @@ we can use the following identities:
   - When `op` takes one argument, `@. op(arg) == @. op_matrix() * arg`.
   - When `op` takes multiple arguments,
     `@. op(args..., arg) == @. op_matrix(args...) * arg`.
+
+These identities do not hold as stated for gradient and divergence operators.
+A gradient operator matrix has vector-valued entries and a divergence operator
+matrix has covector-valued entries, so when ClimaCore itself rewrites a
+gradient or divergence broadcast into a matrix multiply, it compensates with
+an `adjoint`: on the argument for gradients and on the result for divergences.
+The explicit `@. op_matrix() * arg` form applies no such compensation, so for
+a divergence operator it evaluates to `adjoint.(@. op(arg))` rather than
+`@. op(arg)`. When the divergence's result is a scalar (e.g. the divergence of
+a vector field), the adjoint is a no-op and the identity holds exactly; when
+the argument is a higher-rank tensor field, the result holds the same
+components in transposed (row) form, and materializing it into a destination
+field with the operator's own element type throws a `DimensionMismatch`.
 
 When `op` takes more than one argument, `operator_matrix(op)` constructs a
 `FiniteDifferenceOperator` that generates the operator matrix. When `op` only

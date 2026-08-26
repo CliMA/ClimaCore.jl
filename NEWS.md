@@ -114,7 +114,11 @@ main
   boundary windows instead of rejecting them with an `AssertionError`, and
   every face is computed with the appropriate boundary row (the ghost-point
   extrapolations reduce their order to the interior points actually in
-  range). On GPUs, finite difference broadcasts over
+  range). When the two boundary windows overlap on such a column, the bottom
+  (left) boundary condition always takes precedence: e.g. a two-sided
+  `SetDivergence` on a single-level column, which prescribes two values for
+  the one output point, applies the bottom value there. On GPUs, finite
+  difference broadcasts over
   `MultiColumnFiniteDifferenceSpace` now use the eager
   one-thread-per-level kernel like the extruded and single-column families,
   instead of falling back to the one-thread-per-value kernel.
@@ -142,6 +146,11 @@ main
   - Removed the `AdvectionC2C`, `AdvectionF2F`, `FluxCorrectionC2C` and
     `FluxCorrectionF2F` operators
   - Removed the `UpwindBiasedGradient` operator, which had no downstream users
+  - Removed the `LeftBiased3rdOrderC2F`, `LeftBiased3rdOrderF2C`,
+    `RightBiased3rdOrderC2F` and `RightBiased3rdOrderF2C` operators, which had
+    no downstream users (the C2F reconstructions survive as the interior
+    stencil of `Upwind3rdOrderBiasedProductC2F`, which applies the left- or
+    right-biased variant according to the sign of its velocity argument)
 
   Each of these can be written in terms of the remaining operators and boundary
   conditions; `test/Operators/finitedifference/unit_column.jl` contains a
