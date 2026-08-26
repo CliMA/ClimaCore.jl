@@ -1295,6 +1295,36 @@ function kennedy_gruber_rusanov_scalars(normal, (y⁻,), (y⁺,))
 end
 
 """
+    kennedy_gruber_tracer_flux(nvec_a, nvec_b, y_a, y_b)
+
+Two-point flux for a passive tracer ``ρq`` advected by the SAME Kennedy-Gruber
+mass flux as continuity: ``F_{ρq} = \\{ρ\\}\\{ũ\\}\\{q\\}`` (the mass flux
+``\\{ρ\\}\\{ũ\\}`` times the arithmetic-mean specific tracer ``\\{q\\}``). This
+is free-stream-preserving for the tracer — with ``q`` uniform, ``F_{ρq} = q F_ρ``
+so the tracer equation reduces to ``q``×continuity and a constant ``q`` stays
+constant. State fields required: `ρ`, `uv`, `q` (specific tracer, e.g. total
+specific humidity `q_tot`).
+"""
+function kennedy_gruber_tracer_flux(nvec_a, nvec_b, y_a, y_b)
+    Fρ = ((y_a.ρ + y_b.ρ) / 2) * ((y_a.uv' * nvec_a + y_b.uv' * nvec_b) / 2)
+    q̄ = (y_a.q + y_b.q) / 2
+    return (ρq = Fρ * q̄,)
+end
+
+"""
+    kennedy_gruber_rusanov_tracer(normal, argvals⁻, argvals⁺)
+
+Interface flux for a passive tracer: [`kennedy_gruber_tracer_flux`](@ref) central
+part plus a Rusanov penalty on the conserved tracer jump ``⟦ρq⟧`` scaled by the
+state field `λ`. State fields: `ρ`, `uv`, `q`, `λ` (and `ρq = ρ·q`).
+"""
+function kennedy_gruber_rusanov_tracer(normal, (y⁻,), (y⁺,))
+    λ = max(y⁻.λ, y⁺.λ)
+    F = kennedy_gruber_tracer_flux(normal, normal, y⁻, y⁺)
+    return (ρq = F.ρq - λ / 2 * (y⁺.ρ * y⁺.q - y⁻.ρ * y⁻.q),)
+end
+
+"""
     kennedy_gruber_cartesian_flux(nvec_a, nvec_b, y_a, y_b)
 
 Kennedy-Gruber two-point flux for the full (ρ, ρe, ρu⃗) system with momentum
