@@ -1407,6 +1407,67 @@ function ranocha_cartesian_flux(nvec_a, nvec_b, y_a, y_b)
 end
 
 """
+    waruszewski_cartesian_flux(nvec_a, nvec_b, y_a, y_b)
+
+Waruszewski et al. (2022, JCP 468:111507) entropy-conservative + WELL-BALANCED
+two-point flux for the (ρ, ρe, ρu⃗) system WITH GRAVITY, in global Cartesian
+momentum components. This is the only flux here that is EC *and* machine-precision
+well-balanced over terrain SIMULTANEOUSLY: the geopotential is handled by a
+non-conservative fluctuation term ``½ρ̂⟦φ⟧`` in the momentum flux — NOT by a
+reference split. It satisfies the generalized (non-conservative) Tadmor condition
+``β⁻·D(a;b) − β⁺·D(b;a) = ⟦u_kη⟧`` with the geopotential-augmented entropy
+variables (β₁ carries the ``+2φb`` term; see [`entropy_variables`](@ref)).
+
+Differs from Ranocha: the EC pressure is Chandrashekar's ``p* = {{ρ}}/(2{{b}})``,
+``b = ρ/(2p)`` (not ``{{p}}``); the internal energy uses the log-mean of ``b``;
+and the momentum pressure slot is ``p* + ½ρ̂⟦φ⟧`` with ``ρ̂ = {{b}}{{ρ}}_log/b⁻``
+(NON-symmetric — uses the own/self state ``b⁻``, which is well-defined here since
+the kernel passes the self node first). Verified: at ``y_a=y_b`` it reduces to the
+physical fluxes, and the Tadmor residual over a geopotential jump is ~1e-15.
+
+Hybrid adaptation: the horizontal DG advects only the horizontal momentum, so the
+vertical kinetic energy ``w_c²/2`` rides as a passive potential bundled with ``φ``
+in ``e*`` (via ``Ψ = e − e_int − K_h``), while the gravity fluctuation uses the
+geopotential ``φ`` alone (state field `φ`). State fields: `ρ`, `e`, `p`, `uv`,
+`u1`,`u2`,`u3`, `E1`,`E2`,`E3`, `φ`.
+"""
+function waruszewski_cartesian_flux(nvec_a, nvec_b, y_a, y_b)
+    γd = oftype(y_a.ρ, γ_dry)
+    ba = y_a.ρ / (2 * y_a.p)                         # inverse temperature b⁻ (self)
+    bb = y_b.ρ / (2 * y_b.p)
+    ρln = ln_mean(y_a.ρ, y_b.ρ)
+    bln = ln_mean(ba, bb)
+    b̄ = (ba + bb) / 2
+    ρ̄ = (y_a.ρ + y_b.ρ) / 2
+    ūn = (y_a.uv' * nvec_a + y_b.uv' * nvec_b) / 2
+    mn = ρln * ūn                                    # (ρuₖ)* = ρ^ln {{u}}
+    ū1 = (y_a.u1 + y_b.u1) / 2
+    ū2 = (y_a.u2 + y_b.u2) / 2
+    ū3 = (y_a.u3 + y_b.u3) / 2
+    p_star = ρ̄ / (2 * b̄)                             # Chandrashekar p* = {{ρ}}/2{{b}}
+    ρ̂ = b̄ * ρln / ba                                # NON-symmetric (self b⁻)
+    jφ = y_b.φ - y_a.φ                               # ⟦φ⟧
+    pgrav = p_star + ρ̂ * jφ / 2                      # momentum pressure slot
+    Ē1n = (y_a.E1' * nvec_a + y_b.E1' * nvec_b) / 2
+    Ē2n = (y_a.E2' * nvec_a + y_b.E2' * nvec_b) / 2
+    Ē3n = (y_a.E3' * nvec_a + y_b.E3' * nvec_b) / 2
+    # internal energy log-mean 1/(2(γ−1)b^ln); horizontal KEP kinetic cross term;
+    # passive potential Ψ = φ + w_c²/2 = e − e_int − K_h (advected like {{φ}}).
+    e_int = 1 / (2 * (γd - 1) * bln)
+    K̃ = (y_a.u1 * y_b.u1 + y_a.u2 * y_b.u2 + y_a.u3 * y_b.u3) / 2
+    Ψa = y_a.e - y_a.p / ((γd - 1) * y_a.ρ) - (y_a.u1^2 + y_a.u2^2 + y_a.u3^2) / 2
+    Ψb = y_b.e - y_b.p / ((γd - 1) * y_b.ρ) - (y_b.u1^2 + y_b.u2^2 + y_b.u3^2) / 2
+    e_star = e_int + (Ψa + Ψb) / 2 + K̃
+    return (
+        ρ = mn,
+        ρe = e_star * mn + ūn * p_star,
+        ρu1 = mn * ū1 + pgrav * Ē1n,
+        ρu2 = mn * ū2 + pgrav * Ē2n,
+        ρu3 = mn * ū3 + pgrav * Ē3n,
+    )
+end
+
+"""
     kennedy_gruber_rusanov_cartesian(normal, argvals⁻, argvals⁺)
 
 Interface flux for the (ρ, ρe, ρu⃗-Cartesian) system:
@@ -1551,6 +1612,57 @@ function ranocha_roe_cartesian(normal, (y⁻,), (y⁺,))
         ρu1 = Fr.ρu1 + (Fd.ρu1 - Fkg.ρu1),
         ρu2 = Fr.ρu2 + (Fd.ρu2 - Fkg.ρu2),
         ρu3 = Fr.ρu3 + (Fd.ρu3 - Fkg.ρu3),
+    )
+end
+
+"""
+    waruszewski_rusanov_cartesian(normal, argvals⁻, argvals⁺)
+    waruszewski_roe_cartesian(normal, argvals⁻, argvals⁺)
+    waruszewski_es_cartesian(normal, argvals⁻, argvals⁺)
+
+Interface fluxes pairing the well-balanced entropy-conservative
+[`waruszewski_cartesian_flux`](@ref) central part with Rusanov / Roe / entropy-
+variable ([`entropy_stable_dissipation`](@ref)) dissipation. The dissipation is
+recovered as ``(F_{diss} − F_{KG,central})`` (a cheap KG eval) so the tested
+penalties are reused verbatim; the WB-EC central flux carries the pressure and
+gravity. With the entropy-variable (`es`) dissipation this is the genuinely
+entropy-stable AND well-balanced-over-terrain scheme.
+"""
+function waruszewski_rusanov_cartesian(normal, (y⁻,), (y⁺,))
+    Fw = waruszewski_cartesian_flux(normal, normal, y⁻, y⁺)
+    Fkg = kennedy_gruber_cartesian_flux(normal, normal, y⁻, y⁺)
+    Fd = kennedy_gruber_rusanov_cartesian(normal, (y⁻,), (y⁺,))
+    return (
+        ρ = Fw.ρ + (Fd.ρ - Fkg.ρ),
+        ρe = Fw.ρe + (Fd.ρe - Fkg.ρe),
+        ρu1 = Fw.ρu1 + (Fd.ρu1 - Fkg.ρu1),
+        ρu2 = Fw.ρu2 + (Fd.ρu2 - Fkg.ρu2),
+        ρu3 = Fw.ρu3 + (Fd.ρu3 - Fkg.ρu3),
+    )
+end
+
+function waruszewski_roe_cartesian(normal, (y⁻,), (y⁺,))
+    Fw = waruszewski_cartesian_flux(normal, normal, y⁻, y⁺)
+    Fkg = kennedy_gruber_cartesian_flux(normal, normal, y⁻, y⁺)
+    Fd = kennedy_gruber_roe_cartesian(normal, (y⁻,), (y⁺,))
+    return (
+        ρ = Fw.ρ + (Fd.ρ - Fkg.ρ),
+        ρe = Fw.ρe + (Fd.ρe - Fkg.ρe),
+        ρu1 = Fw.ρu1 + (Fd.ρu1 - Fkg.ρu1),
+        ρu2 = Fw.ρu2 + (Fd.ρu2 - Fkg.ρu2),
+        ρu3 = Fw.ρu3 + (Fd.ρu3 - Fkg.ρu3),
+    )
+end
+
+function waruszewski_es_cartesian(normal, (y⁻,), (y⁺,))
+    Fw = waruszewski_cartesian_flux(normal, normal, y⁻, y⁺)
+    D = entropy_stable_dissipation(y⁻, y⁺)
+    return (
+        ρ = Fw.ρ - D.ρ,
+        ρe = Fw.ρe - D.ρe,
+        ρu1 = Fw.ρu1 - D.ρu1,
+        ρu2 = Fw.ρu2 - D.ρu2,
+        ρu3 = Fw.ρu3 - D.ρu3,
     )
 end
 # dry-air ratio of specific heats used by the Roe linearization

@@ -101,11 +101,17 @@ interface_flux in (:rusanov, :roe, :lmars, :es) ||
 # so with a dissipative interface it yields a discrete entropy inequality. Only
 # for the conservative PGF (the advective/Exner volume flux carries no pressure).
 const volume_flux = Symbol(lowercase(get(ENV, "VOLUME_FLUX", "kg")))
-volume_flux in (:kg, :ranocha) || error("VOLUME_FLUX must be kg or ranocha")
-(volume_flux == :ranocha && !is_conservative) &&
-    error("VOLUME_FLUX=ranocha requires PGF=conservative or conservative_pert")
-(volume_flux == :ranocha && interface_flux == :lmars) &&
-    error("VOLUME_FLUX=ranocha requires INTERFACE_FLUX=rusanov or roe")
+volume_flux in (:kg, :ranocha, :waruszewski) ||
+    error("VOLUME_FLUX must be kg, ranocha, or waruszewski")
+(volume_flux in (:ranocha, :waruszewski) && !is_conservative) && error(
+    "VOLUME_FLUX=$volume_flux requires PGF=conservative or conservative_pert",
+)
+(volume_flux in (:ranocha, :waruszewski) && interface_flux == :lmars) &&
+    error("VOLUME_FLUX=$volume_flux requires INTERFACE_FLUX=rusanov, roe, or es")
+# Waruszewski (2022) is the well-balanced ENTROPY-CONSERVATIVE flux: it handles
+# the geopotential as a non-conservative fluctuation term ½ρ̂⟦φ⟧ (no reference
+# split), so it is EC AND machine-precision well-balanced over terrain at once.
+# Pair with PGF=conservative_pert for the vertical ρw perturbation (vertical WB).
 
 # Volume + interface fluxes for the (ρ,ρe,ρu⃗) system. The conservative
 # formulations share a flux family; they differ only in the momentum pressure
@@ -113,6 +119,7 @@ volume_flux in (:kg, :ranocha) || error("VOLUME_FLUX must be kg or ranocha")
 # central pair (volume + interface central both use the log-mean flux).
 const cartesian_volume_fn =
     !is_conservative ? Operators.kennedy_gruber_cartesian_advective_flux :
+    volume_flux == :waruszewski ? Operators.waruszewski_cartesian_flux :
     volume_flux == :ranocha ? Operators.ranocha_cartesian_flux :
     Operators.kennedy_gruber_cartesian_flux
 const cartesian_interface_fn =
@@ -122,6 +129,12 @@ const cartesian_interface_fn =
         interface_flux == :roe ?
         Operators.kennedy_gruber_roe_cartesian_advective :
         Operators.kennedy_gruber_rusanov_cartesian_advective
+    ) :
+    volume_flux == :waruszewski ?
+    (
+        interface_flux == :es ? Operators.waruszewski_es_cartesian :
+        interface_flux == :roe ? Operators.waruszewski_roe_cartesian :
+        Operators.waruszewski_rusanov_cartesian
     ) :
     volume_flux == :ranocha ?
     (
@@ -268,12 +281,13 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
 
     # --- Horizontal: FDDG volume + interface (flux gated by PGF/INTERFACE_FLUX) ---
     y = map(
-        (ρi, ρei, ei, pi, pmi, uvi, u1i, u2i, u3i, E1i, E2i, E3i, λi, ci) -> (;
-            ρ = ρi, ρe = ρei, e = ei, p = pi, pm = pmi, uv = uvi,
-            u1 = u1i, u2 = u2i, u3 = u3i,
-            E1 = E1i, E2 = E2i, E3 = E3i, λ = λi, c = ci,
-        ),
-        ρ, ρe, e, p, pm, uv, u1, u2, u3, E1, E2, E3, λ, c,
+        (ρi, ρei, ei, pi, pmi, uvi, u1i, u2i, u3i, E1i, E2i, E3i, λi, ci, φi) ->
+            (;
+                ρ = ρi, ρe = ρei, e = ei, p = pi, pm = pmi, uv = uvi,
+                u1 = u1i, u2 = u2i, u3 = u3i,
+                E1 = E1i, E2 = E2i, E3 = E3i, λ = λi, c = ci, φ = φi,
+            ),
+        ρ, ρe, e, p, pm, uv, u1, u2, u3, E1, E2, E3, λ, c, ᶜΦ,
     )
     dy_mw = map(
         _ -> (ρ = FT(0), ρe = FT(0), ρu1 = FT(0), ρu2 = FT(0), ρu3 = FT(0)),
