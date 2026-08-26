@@ -490,9 +490,15 @@ end
 
 import UnrolledUtilities as UU
 
-function assert_valid_bcs(op, kwargs, valid_bcs, removed_setvalue_hint = "")
+
+function assert_valid_bcs(
+    op,
+    kwargs,
+    ::Type{ValidBCs},
+    removed_setvalue_hint = "",
+) where {ValidBCs}
     UU.unrolled_foreach(values(values(kwargs))) do bc
-        @assert UU.unrolled_any(valid_bc -> bc isa valid_bc, valid_bcs) "$op only supports boundary conditions:\n\n\t $valid_bcs.\n\n BCs given:\n\n\t $(values(values(kwargs)))\n$(bc isa SetValue ? removed_setvalue_hint : "")"
+        @assert bc isa ValidBCs "$op only supports boundary conditions:\n\n\t $ValidBCs.\n\n BCs given:\n\n\t $(values(values(kwargs)))\n$(bc isa SetValue ? removed_setvalue_hint : "")"
     end
     return nothing
 end
@@ -551,7 +557,7 @@ struct InterpolateC2F{BCS} <: InterpolationOperator
         assert_valid_bcs(
             "InterpolateC2F",
             kwargs,
-            (SetValue, Extrapolate),
+            Union{SetValue, Extrapolate},
         )
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
@@ -587,7 +593,7 @@ L(x)[\\tfrac{1}{2}] = x_0
 struct LeftBiasedC2F{BCS} <: InterpolationOperator
     bcs::BCS
     function LeftBiasedC2F(; kwargs...)
-        assert_valid_bcs("LeftBiasedC2F", kwargs, (SetValue,))
+        assert_valid_bcs("LeftBiasedC2F", kwargs, SetValue)
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     LeftBiasedC2F(bcs) = LeftBiasedC2F(; bcs...)
@@ -632,7 +638,7 @@ L(x)[1] = x_0
 struct LeftBiasedF2C{BCS} <: InterpolationOperator
     bcs::BCS
     function LeftBiasedF2C(; kwargs...)
-        assert_valid_bcs("LeftBiasedF2C", kwargs, (SetValue,))
+        assert_valid_bcs("LeftBiasedF2C", kwargs, SetValue)
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     LeftBiasedF2C(bcs) = LeftBiasedF2C(; bcs...)
@@ -697,7 +703,7 @@ R(x)[n+\\tfrac{1}{2}] = x_0
 struct RightBiasedC2F{BCS} <: InterpolationOperator
     bcs::BCS
     function RightBiasedC2F(; kwargs...)
-        assert_valid_bcs("RightBiasedC2F", kwargs, (SetValue,))
+        assert_valid_bcs("RightBiasedC2F", kwargs, SetValue)
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     RightBiasedC2F(bcs) = RightBiasedC2F(; bcs...)
@@ -742,7 +748,7 @@ R(x)[n+\\tfrac{1}{2}] = x_0
 struct RightBiasedF2C{BCS} <: InterpolationOperator
     bcs::BCS
     function RightBiasedF2C(; kwargs...)
-        assert_valid_bcs("RightBiasedF2C", kwargs, (SetValue,))
+        assert_valid_bcs("RightBiasedF2C", kwargs, SetValue)
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     RightBiasedF2C(bcs) = RightBiasedF2C(; bcs...)
@@ -890,7 +896,7 @@ struct WeightedInterpolateC2F{BCS} <: WeightedInterpolationOperator
         assert_valid_bcs(
             "WeightedInterpolateC2F",
             kwargs,
-            (SetValue, Extrapolate),
+            Union{SetValue, Extrapolate},
         )
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
@@ -1321,7 +1327,7 @@ struct UpwindBiasedProductC2F{BCS} <: AdvectionOperator
         assert_valid_bcs(
             "UpwindBiasedProductC2F",
             kwargs,
-            (Extrapolate,),
+            Extrapolate,
             "\n`SetValue` was removed from UpwindBiasedProductC2F; to \
              prescribe the advected value used at a boundary face, use \
              `Operators.upwind_biased_product_c2f_dirichlet`, which builds \
@@ -1386,7 +1392,7 @@ struct LinVanLeerC2F{BCS, C} <: AdvectionOperator
     constraint::C
 end
 function LinVanLeerC2F(; constraint, kwargs...)
-    assert_valid_bcs("LinVanLeerC2F", kwargs, (Extrapolate,))
+    assert_valid_bcs("LinVanLeerC2F", kwargs, Extrapolate)
     LinVanLeerC2F(advection_bcs(kwargs), constraint)
 end
 
@@ -1486,7 +1492,7 @@ struct Upwind3rdOrderBiasedProductC2F{BCS} <: AdvectionOperator
         assert_valid_bcs(
             "Upwind3rdOrderBiasedProductC2F",
             kwargs,
-            (Extrapolate,),
+            Extrapolate,
         )
         bcs = advection_bcs(kwargs)
         new{typeof(bcs)}(bcs)
@@ -1544,7 +1550,7 @@ struct FCTBorisBook{BCS} <: AdvectionOperator
     bcs::BCS
 end
 function FCTBorisBook(; kwargs...)
-    assert_valid_bcs("FCTBorisBook", kwargs, (Extrapolate,))
+    assert_valid_bcs("FCTBorisBook", kwargs, Extrapolate)
     FCTBorisBook(advection_bcs(kwargs))
 end
 
@@ -1590,7 +1596,7 @@ struct FCTZalesak{BCS} <: AdvectionOperator
     bcs::BCS
 end
 function FCTZalesak(; kwargs...)
-    assert_valid_bcs("FCTZalesak", kwargs, (Extrapolate,))
+    assert_valid_bcs("FCTZalesak", kwargs, Extrapolate)
     FCTZalesak(advection_bcs(kwargs))
 end
 
@@ -1767,7 +1773,7 @@ struct TVDLimitedFluxC2F{BCS, M} <: AdvectionOperator
     method::M
 end
 function TVDLimitedFluxC2F(; method, kwargs...)
-    assert_valid_bcs("TVDLimitedFluxC2F", kwargs, (Extrapolate,))
+    assert_valid_bcs("TVDLimitedFluxC2F", kwargs, Extrapolate)
     TVDLimitedFluxC2F(advection_bcs(kwargs), method)
 end
 
@@ -1825,7 +1831,7 @@ struct SetBoundaryOperator{BCS} <: BoundaryOperator
         assert_valid_bcs(
             "SetBoundaryOperator",
             kwargs,
-            (SetValue, SetGradient, SetCurl, SetDivergence),
+            Union{SetValue, SetGradient, SetCurl, SetDivergence},
         )
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
@@ -1951,7 +1957,7 @@ As with [`GradientC2F`](@ref), `v₀` is projected onto the covariant 3 axis.
 struct GradientF2C{BCS} <: GradientOperator
     bcs::BCS
     function GradientF2C(; kwargs...)
-        assert_valid_bcs("GradientF2C", kwargs, (SetValue, SetGradient))
+        assert_valid_bcs("GradientF2C", kwargs, Union{SetValue, SetGradient})
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     GradientF2C(bcs) = GradientF2C(; bcs...)
@@ -2007,7 +2013,7 @@ struct GradientC2F{BC} <: GradientOperator
         assert_valid_bcs(
             "GradientC2F",
             kwargs,
-            (SetGradient,),
+            SetGradient,
             "\n`SetValue` was removed from GradientC2F; to prescribe the \
              boundary value of the differentiated field, use \
              `Operators.gradient_c2f_dirichlet`, which builds the exact \
@@ -2061,7 +2067,7 @@ D(v)[1] = (Jv³[1+\\tfrac{1}{2}] - Jv³₀) / J[i]
 struct DivergenceF2C{BCS} <: DivergenceOperator
     bcs::BCS
     function DivergenceF2C(; kwargs...)
-        assert_valid_bcs("DivergenceF2C", kwargs, (SetValue, SetDivergence))
+        assert_valid_bcs("DivergenceF2C", kwargs, Union{SetValue, SetDivergence})
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     DivergenceF2C(bcs) = DivergenceF2C(; bcs...)
@@ -2131,7 +2137,7 @@ struct DivergenceC2F{BC} <: DivergenceOperator
         assert_valid_bcs(
             "DivergenceC2F",
             kwargs,
-            (SetDivergence,),
+            SetDivergence,
             "\n`SetValue` was removed from DivergenceC2F; to prescribe the \
              boundary value of the diverged field, use \
              `Operators.divergence_c2f_dirichlet`, which builds the exact \
@@ -2198,7 +2204,7 @@ struct CurlC2F{BC} <: CurlFiniteDifferenceOperator
         assert_valid_bcs(
             "CurlC2F",
             kwargs,
-            (SetCurl,),
+            SetCurl,
             "\n`SetValue` was removed from CurlC2F; to prescribe the \
              boundary value of the curled field, use \
              `Operators.curl_c2f_dirichlet`, which builds the exact \
