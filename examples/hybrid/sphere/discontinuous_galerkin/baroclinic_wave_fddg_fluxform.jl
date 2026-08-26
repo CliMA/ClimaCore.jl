@@ -88,8 +88,13 @@ const is_conservative = pgf in (:conservative, :conservative_pert)
 # with the Exner PGF it uses the advective variant (contact u* upwinding, no p*).
 const interface_flux =
     Symbol(lowercase(get(ENV, "INTERFACE_FLUX", "rusanov")))
-interface_flux in (:rusanov, :roe, :lmars) ||
-    error("INTERFACE_FLUX must be rusanov, roe, or lmars")
+interface_flux in (:rusanov, :roe, :lmars, :es) ||
+    error("INTERFACE_FLUX must be rusanov, roe, lmars, or es")
+# es = Lax-Friedrichs dissipation in ENTROPY variables (½λĤ⟦w⟧, Ĥ=∂U/∂w SPD):
+# paired with the Ranocha EC volume flux it gives a provable discrete entropy
+# inequality. Requires the conservative PGF (full Euler dissipation).
+(interface_flux == :es && !is_conservative) &&
+    error("INTERFACE_FLUX=es requires PGF=conservative or conservative_pert")
 
 # VOLUME_FLUX = kg (default) | ranocha. Kennedy-Gruber is KEP + pressure-
 # equilibrium-preserving; Ranocha is additionally entropy-conservative (Tadmor),
@@ -120,10 +125,12 @@ const cartesian_interface_fn =
     ) :
     volume_flux == :ranocha ?
     (
+        interface_flux == :es ? Operators.ranocha_es_cartesian :
         interface_flux == :roe ? Operators.ranocha_roe_cartesian :
         Operators.ranocha_rusanov_cartesian
     ) :
     (
+        interface_flux == :es ? Operators.kennedy_gruber_es_cartesian :
         interface_flux == :lmars ? Operators.lmars_cartesian :
         interface_flux == :roe ? Operators.kennedy_gruber_roe_cartesian :
         Operators.kennedy_gruber_rusanov_cartesian
@@ -507,13 +514,19 @@ function diag_str(Y, t)
     w_c = @. Ic(ρw_w).components.data.:1 / ρ
     K = @. (uE^2 + uN^2 + w_c^2) / 2
     p = @. pressure_ρe(Y.Yc.ρe, K, ᶜΦ, ρ)
+    # Total physical entropy ∫ρs dV, s = cv_d log(p/ρ^γ). The mathematical entropy
+    # S = −ρs/(γ−1) is what the ES flux dissipates, so an entropy-stable scheme
+    # has S non-increasing ⇔ ∫ρs NON-DECREASING (net of the O(⟦p_ref⟧) reference
+    # residual — a rising ∫ρs confirms the ES dissipation dominates the residual).
+    S_phys = Fields.sum(@. ρ * cv_d * (log(p) - γ * log(ρ)))
     @sprintf(
-        "t=%8.0f  max|w|=%.4e  max|v|=%.4e  min p=%.4e  min ρ=%.4e",
+        "t=%8.0f  max|w|=%.4e  max|v|=%.4e  min p=%.4e  min ρ=%.4e  ∫ρs=%.10e",
         t,
         maximum(abs, parent(ρw_w)) / maximum(parent(ρ)),
         maximum(abs, parent(uN)),
         minimum(parent(p)),
         minimum(parent(ρ)),
+        S_phys,
     )
 end
 

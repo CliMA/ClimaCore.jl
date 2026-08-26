@@ -1557,6 +1557,126 @@ end
 const γ_dry = 7 / 5
 
 """
+    entropy_variables(ρ, u1, u2, u3, p)
+
+Entropy variables ``w = ∂S/∂U`` for the ideal-gas Euler system with the
+mathematical (convex) entropy ``S = -ρs/(γ-1)``, ``s = \\log p - γ\\log ρ``
+(thermal frame). With ``β = ρ/(2p)``,
+
+    w = ((γ-s)/(γ-1) - β|u|²,  2βu1,  2βu2,  2βu3,  -2β).
+
+Additive constants in `s` drop under the jump `⟦w⟧`, so they are irrelevant to
+the dissipation built from these.
+"""
+@inline function entropy_variables(ρ, u1, u2, u3, p)
+    γd = oftype(ρ, γ_dry)
+    β = ρ / (2 * p)
+    s = log(p) - γd * log(ρ)
+    wρ = (γd - s) / (γd - 1) - β * (u1^2 + u2^2 + u3^2)
+    return (wρ, 2 * β * u1, 2 * β * u2, 2 * β * u3, -2 * β)
+end
+
+"""
+    entropy_stable_dissipation(y⁻, y⁺)
+
+Lax-Friedrichs dissipation in ENTROPY variables, ``½ λ Ĥ ⟦w⟧``, where
+``Ĥ = ∂U/∂w`` is the (symmetric positive-definite) entropy Jacobian at the
+arithmetic-mean state and ``λ = \\max(|u|+c)``. Because `Ĥ` is SPD,
+``⟦w⟧·(Ĥ⟦w⟧) ≥ 0``, so subtracting this from ANY entropy-conservative
+([`ranocha_cartesian_flux`](@ref)) or kinetic-energy-preserving
+([`kennedy_gruber_cartesian_flux`](@ref)) central flux gives a discrete entropy
+inequality (entropy stability) — the guarantee that conserved-variable
+Rusanov/Roe penalties do not provide. To leading order `Ĥ⟦w⟧ = ⟦U⟧`, so this is
+an entropy-consistent Rusanov. The geopotential (single-valued at the shared
+node, `⟦Φ⟧ = 0`) is handled by forming `Ĥ⟦w⟧` in the thermal frame and shifting
+the energy component by `Φ·(mass dissipation)` — an identity-preserving change of
+variables. Returns the conserved-variable dissipation `(ρ, ρe, ρu1, ρu2, ρu3)`.
+The `Ĥ = ∂U/∂w` form is verified numerically (symmetry, SPD, `Ĥ·(∂w/∂U)=I`).
+"""
+@inline function entropy_stable_dissipation(y⁻, y⁺)
+    γd = oftype(y⁻.ρ, γ_dry)
+    w⁻ = entropy_variables(y⁻.ρ, y⁻.u1, y⁻.u2, y⁻.u3, y⁻.p)
+    w⁺ = entropy_variables(y⁺.ρ, y⁺.u1, y⁺.u2, y⁺.u3, y⁺.p)
+    v1 = w⁺[1] - w⁻[1]
+    v2 = w⁺[2] - w⁻[2]
+    v3 = w⁺[3] - w⁻[3]
+    v4 = w⁺[4] - w⁻[4]
+    v5 = w⁺[5] - w⁻[5]
+    # arithmetic-mean state for Ĥ = ∂U/∂w
+    ρ = (y⁻.ρ + y⁺.ρ) / 2
+    u1 = (y⁻.u1 + y⁺.u1) / 2
+    u2 = (y⁻.u2 + y⁺.u2) / 2
+    u3 = (y⁻.u3 + y⁺.u3) / 2
+    p = (y⁻.p + y⁺.p) / 2
+    k = (u1^2 + u2^2 + u3^2) / 2
+    E = p / ((γd - 1) * ρ) + k            # thermal total energy per mass
+    H = E + p / ρ                         # thermal enthalpy per mass
+    c2 = γd * p / ρ
+    # Ĥ v (thermal frame), Ĥ = ∂U/∂w SPD
+    HvR = ρ * v1 + ρ * u1 * v2 + ρ * u2 * v3 + ρ * u3 * v4 + ρ * E * v5
+    Hv1 =
+        ρ * u1 * v1 + (ρ * u1^2 + p) * v2 + ρ * u1 * u2 * v3 +
+        ρ * u1 * u3 * v4 + ρ * u1 * H * v5
+    Hv2 =
+        ρ * u2 * v1 + ρ * u1 * u2 * v2 + (ρ * u2^2 + p) * v3 +
+        ρ * u2 * u3 * v4 + ρ * u2 * H * v5
+    Hv3 =
+        ρ * u3 * v1 + ρ * u1 * u3 * v2 + ρ * u2 * u3 * v3 +
+        (ρ * u3^2 + p) * v4 + ρ * u3 * H * v5
+    HvE =
+        ρ * E * v1 + ρ * u1 * H * v2 + ρ * u2 * H * v3 + ρ * u3 * H * v4 +
+        (ρ * H^2 - c2 * p / (γd - 1)) * v5
+    λ = max(y⁻.λ, y⁺.λ)
+    # geopotential (single-valued at the node ⇒ Φ⁻ = Φ⁺); shift thermal→total
+    Φ = y⁻.e - y⁻.p / ((γd - 1) * y⁻.ρ) - (y⁻.u1^2 + y⁻.u2^2 + y⁻.u3^2) / 2
+    half = λ / 2
+    Dρ = half * HvR
+    return (
+        ρ = Dρ,
+        ρe = half * HvE + Φ * Dρ,
+        ρu1 = half * Hv1,
+        ρu2 = half * Hv2,
+        ρu3 = half * Hv3,
+    )
+end
+
+"""
+    kennedy_gruber_es_cartesian(normal, argvals⁻, argvals⁺)
+    ranocha_es_cartesian(normal, argvals⁻, argvals⁺)
+
+Entropy-stable interface fluxes: a central two-point flux (Kennedy-Gruber or
+Ranocha) minus [`entropy_stable_dissipation`](@ref) (dissipation in the entropy
+variables). With the Ranocha EC central flux this is a genuinely entropy-stable
+scheme (discrete `dS/dt ≤` boundary); with the KG (KEP, not EC) central flux the
+dissipation is still entropy-decreasing but the KG volume error remains. Both
+share the identical dissipation, so the penalty is decoupled from the choice of
+central flux.
+"""
+function kennedy_gruber_es_cartesian(normal, (y⁻,), (y⁺,))
+    F = kennedy_gruber_cartesian_flux(normal, normal, y⁻, y⁺)
+    D = entropy_stable_dissipation(y⁻, y⁺)
+    return (
+        ρ = F.ρ - D.ρ,
+        ρe = F.ρe - D.ρe,
+        ρu1 = F.ρu1 - D.ρu1,
+        ρu2 = F.ρu2 - D.ρu2,
+        ρu3 = F.ρu3 - D.ρu3,
+    )
+end
+
+function ranocha_es_cartesian(normal, (y⁻,), (y⁺,))
+    F = ranocha_cartesian_flux(normal, normal, y⁻, y⁺)
+    D = entropy_stable_dissipation(y⁻, y⁺)
+    return (
+        ρ = F.ρ - D.ρ,
+        ρe = F.ρe - D.ρe,
+        ρu1 = F.ρu1 - D.ρu1,
+        ρu2 = F.ρu2 - D.ρu2,
+        ρu3 = F.ρu3 - D.ρu3,
+    )
+end
+
+"""
     lmars_cartesian(normal, argvals⁻, argvals⁺)
 
 Low-Mach Approximate Riemann Solver (LMARS; Chen et al. 2013, the FV3 flux) for
