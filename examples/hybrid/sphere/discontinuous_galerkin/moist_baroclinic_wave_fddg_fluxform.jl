@@ -19,7 +19,7 @@ Time integration: explicit SSPRK33 (DT default 4 s) or IMEX-HEVI (ARS343 +
 Newton; implicit vertical acoustics with the Exner Jacobian in
 fddg_fluxform_jacobian.jl; DT default 60 s at helem=4).
 
-Env: HELEM, NPOLY, ZELEM, ZMAX, DT, T_END, KAPPA4, FILTER, PERTURB, NDIAG,
+Env: HELEM, NPOLY, ZELEM, ZMAX, DT, T_END, FILTER, PERTURB, NDIAG,
      HELD_SUAREZ, HS_SPINUP
 Run: PERTURB=0 DT=4 T_END=3600 julia --project=.buildkite \
          examples/hybrid/sphere/baroclinic_wave_fddg_fluxform.jl
@@ -42,7 +42,7 @@ const t_end_default = 86400.0
 # advective range — pass DT explicitly for HEVI runs.
 
 # Shared grid, constants, ICs, operators (If, Ic, vdivf2c, VanLeer, ᶠgradᵥ,
-# filter, sponge, κ₄). The vector-invariant rhs!/run_simulation defined there
+# filter, sponge). The vector-invariant rhs!/run_simulation defined there
 # are simply not used.
 include("sphere_dg_fd_moist_model.jl")
 
@@ -60,12 +60,12 @@ using Printf
 # the kinetic-energy pairing is bilinear with the state outside the
 # projection, so filtering voids the KEP telescoping (and the exact
 # conservation) this scheme's stability rests on. Measured: helem=16,
-# zelem=30, dt=90, κ₄=cap/10 crashes at day 2.5 with FILTER=4 and runs on
-# healthy with FILTER=0. Prefer κ₄ for scale-selective dissipation here.
+# zelem=30, dt=90 crashes at day 2.5 with FILTER=4 and runs on healthy with
+# FILTER=0. Rely on the interface (Roe/Rusanov) dissipation instead.
 filter_Nc > 0 && @warn(
     "FILTER=$filter_Nc voids the KEP property of the flux-differencing " *
     "scheme and has been measured to DESTABILIZE stressed runs; " *
-    "use FILTER=0 (κ₄ for dissipation) with this driver.",
+    "use FILTER=0 (rely on the interface dissipation) with this driver.",
 )
 
 # PGF = exner (default) | conservative | conservative_pert — the momentum
@@ -426,27 +426,6 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
         @. dYc.ρu2 -= (k_f * height_factor) * ρ * u2
         @. dYc.ρu3 -= (k_f * height_factor) * ρ * u3
         @. dYc.ρe -= ΔρT * cv_d
-    end
-
-    # --- κ₄ hyperdiffusion (h_tot + Cartesian velocity components) ---
-    if κ₄ != 0
-        τ_κ₄ = Operators.ldg_penalty_parameter(κ₄, hv_center_space)
-        χe = similar(h_tot)
-        @. χe = hwdiv(hgrad(h_tot))
-        χ1 = similar(u1)
-        @. χ1 = hwdiv(hgrad(u1))
-        χ2 = similar(u2)
-        @. χ2 = hwdiv(hgrad(u2))
-        χ3 = similar(u3)
-        @. χ3 = hwdiv(hgrad(u3))
-        de4 = Operators.ldg_laplacian_tendency(χe, ρ, κ₄, τ_κ₄)
-        du1 = Operators.ldg_laplacian_tendency(χ1, ρ, κ₄, τ_κ₄)
-        du2 = Operators.ldg_laplacian_tendency(χ2, ρ, κ₄, τ_κ₄)
-        du3 = Operators.ldg_laplacian_tendency(χ3, ρ, κ₄, τ_κ₄)
-        @. dYc.ρe -= de4
-        @. dYc.ρu1 -= du1
-        @. dYc.ρu2 -= du2
-        @. dYc.ρu3 -= du3
     end
 
     # --- Tangential projection of the momentum tendency (shallow atm.) ---

@@ -7,8 +7,8 @@ cases:
 This file provides only the SHARED scaffolding consumed by the flux-form FDDG
 driver (`baroclinic_wave_fddg_fluxform.jl`): the cubed-sphere shell spaces,
 physical constants, the balanced/perturbed initial state, the vertical FD
-operators, and the cutoff-filter / Rayleigh-sponge / κ₄-hyperdiffusion
-parameters. The prognostic tendency, time stepping and HEVI Jacobian live in
+operators, and the cutoff-filter / Rayleigh-sponge parameters (κ₄
+hyperdiffusion has been removed). The prognostic tendency, time stepping and HEVI Jacobian live in
 the including driver. (The earlier vector-invariant tendency/driver and its
 `sphere_dg_fd_jacobian.jl` have been removed; only the flux-form FDDG pathway
 remains.)
@@ -22,9 +22,9 @@ panel edges, where covariant components are not.
 
 Vertical FD: mass via face mass flux; energy via Lin–van Leer upwind;
 w = 0 and ∂z(·) = 0 at top/bottom (CG-model boundary conditions).
-Stabilization: κ₄ biharmonic hyperdiffusion ONLY (no κ₂), two-pass:
-element-local first Laplacian, then SIPG (LDG penalty) second pass for
-inter-element damping. Optional element-local cutoff filter on the state.
+Stabilization: interface (Roe/Rusanov) numerical-flux dissipation, plus an
+optional element-local cutoff filter and velocity-state spectral filter. (κ₄
+biharmonic hyperdiffusion has been removed from this setup.)
 
 The including driver must define (before `include`):
   const FT                  # floating-point type
@@ -32,7 +32,7 @@ The including driver must define (before `include`):
   const is_balanced_flow    # Bool: disable the baroclinic-wave perturbation
   const t_end_default       # default simulation length [s]
 
-Environment overrides: HELEM, NPOLY, ZELEM, ZMAX, DT, T_END, KAPPA4, FILTER,
+Environment overrides: HELEM, NPOLY, ZELEM, ZMAX, DT, T_END, FILTER,
 STEPPER
 =#
 
@@ -547,31 +547,19 @@ const T_equator = FT(315)
 const T_min = FT(200)
 const σ_b = FT(7 / 10)
 
-# All DG building blocks — the Kennedy-Gruber two-point/interface fluxes,
-# the central lifting / jump-penalty face functions, `lifting_correction`,
-# and `ldg_laplacian_tendency` — come from ClimaCore's Operators module;
-# no operators are defined in this driver.
+# All DG building blocks — the Kennedy-Gruber two-point/interface fluxes and
+# the central lifting / jump-penalty face functions (`lifting_correction`) —
+# come from ClimaCore's Operators module; no operators are defined here.
 
-# Explicit SIPG biharmonic stability cap (validated on the plane DG-FD
-# cases): the CG value 2e17 is only stable there because DSS makes the
-# first-pass Laplacian continuous; the DG penalty at 2e17 exceeds this cap
-# ~400× at the default resolution and blows up within a few steps.
-const κ₄_cfl_cap = FT(
-    Spaces.node_horizontal_length_scale(horzspace)^3 /
-    ((2 * npoly + 1)^2 * Δt),
-)
-# Default κ₄ = cap/10: the SIPG penalty acts on the O(truncation) face jumps
-# of the element-local first-pass Laplacian, so cap-level κ₄ produces a
-# measurable spurious forcing of smooth balanced states (~4 m/s of inertial
-# v-oscillation per hour at the cap at the default resolution); cap/10 keeps
-# that near the truncation floor while still damping grid modes.
-const κ₄ = haskey(ENV, "KAPPA4") ? parse(FT, ENV["KAPPA4"]) :
-    min(FT(2e17), κ₄_cfl_cap / 10)
-κ₄ > κ₄_cfl_cap &&
-    @warn "κ₄ exceeds the explicit SIPG stability cap" κ₄ κ₄_cfl_cap
+# κ₄ biharmonic (SIPG) hyperdiffusion has been REMOVED from this setup: there is
+# no KAPPA4 knob and no `ldg_laplacian_tendency` call. Grid-scale dissipation, if
+# needed, comes from the interface (Roe/Rusanov) numerical flux and the optional
+# velocity-state spectral filter below.
+
 # Default OFF: the cutoff filter voids the KEP property of the flux-differencing
 # scheme (the driver @warns on FILTER>0), and its tensor_product! has no GPU
-# dispatch for the extruded layout (scalar-indexing error on CUDA). Prefer κ₄.
+# dispatch for the extruded layout (scalar-indexing error on CUDA). Prefer the
+# interface dissipation / velocity-state filter.
 const filter_Nc = parse(Int, get(ENV, "FILTER", "0"))
 
 # Optional per-step exponential filter on the VELOCITY state (uₕ, w).
@@ -579,7 +567,7 @@ const filter_Nc = parse(Int, get(ENV, "FILTER", "0"))
 # implicit update bypasses it and nonlinear products regenerate top-mode
 # content in the state, so noise still accumulates (helem=4 FILTER=3 GPU run
 # crashed at t = 560,400 s). Filtering the state is the classical SEM cure:
-# a modal projection, unconditionally stable (not Δt-limited like κ₄/SIPG),
+# a modal projection, unconditionally stable (not Δt-limited like an explicit SIPG hyperdiffusion),
 # and conservation-neutral since ρ and ρe are untouched. Mode multipliers
 # σ(m) = 1 for m ≤ kc, exp(−α((m−kc)/(npoly−kc))^(2s)) above; off when α = 0.
 const state_filter_α = parse(FT, get(ENV, "STATE_FILTER_ALPHA", "0"))
@@ -655,7 +643,7 @@ let
     c_max = sqrt(γ * R_d * T_e)
     # Peak surface elevation (bottom face physical z): 0 for flat, ≈h₀ for hj.
     max_mtn = maximum(parent(Fields.level(fcoords.z, ClimaCore.Utilities.half)))
-    @info "DG-FD sphere setup" stepper topo max_mtn helem npoly zelem Δt t_end κ₄ κ₄_cfl_cap filter_Nc h_node Δz_min
+    @info "DG-FD sphere setup" stepper topo max_mtn helem npoly zelem Δt t_end filter_Nc h_node Δz_min
     @info "Acoustic CFL estimates" vertical = c_max * Δt / Δz_min horizontal =
         c_max * Δt / h_node
 end
