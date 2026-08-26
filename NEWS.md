@@ -16,6 +16,20 @@ main
   (grids in files written before it existed read back as continuous).
   [2599](https://github.com/CliMA/ClimaCore.jl/pull/2599)
 
+- Introduces horizontal discontinuous-Galerkin (DG) operator support. The
+  discretization-generic machinery lives in `src/Operators/numericalflux.jl`:
+  interior- and boundary-face numerical fluxes and symmetric face liftings on
+  pure-2D and extruded (1D and 2D horizontal) spectral-element spaces, the
+  flux-differencing (split-form / FDDG) volume divergence of Souza et al.
+  (2023), and the device-resident `DGConnectivity` face buffer (with
+  CUDA implementations in the `ClimaCoreCUDAExt` extension). A generic flux
+  library lives in `src/Operators/dg_fluxes.jl`: `CentralNumericalFlux`,
+  `RusanovNumericalFlux`, central-lifting and jump-penalty face functions, and
+  an LDG/SIPG Laplacian for optional scale-selective dissipation.
+  Equation-set-specific fluxes (compressible Euler with Cartesian momentum
+  components) are example code. Operator tests are included as part of
+  `test/runtests.jl`.
+
 v0.15.3
 -------
 
