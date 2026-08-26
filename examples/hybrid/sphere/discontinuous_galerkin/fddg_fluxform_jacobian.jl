@@ -144,6 +144,19 @@ function fddg_implicit_equation_jacobian!(
             ᶠgradᵥ_matrix() *
             DiagonalMatrixRow(dΠ_dρ) -
             DiagonalMatrixRow(Apg) * ᶠinterp_matrix()
+    elseif is_moist
+        #   ∂p/∂ρe = R_m/cv_m = κ_m,
+        #   ∂p/∂ρ  = R_m T − κ_m (ρe/ρ)   [since ∂(ρe/ρ)/∂ρ = −(ρe/ρ)/ρ].
+        q_tot = @. Y.Yc.ρq_tot / ρ
+        R_m = @. R_d * (1 - q_tot) + R_v * q_tot
+        cv_m = @. cv_d * (1 - q_tot) + cv_v * q_tot
+        κ_m = @. R_m / cv_m
+        Tair = (@. moist_p_dyn(ρ, ρe / ρ - K - ᶜΦ, q_tot)).T
+        dp_dρ = @. R_m * Tair - κ_m * (ρe / ρ)
+        @. ∂ᶠ𝕄ₜ∂ᶜ𝔼 = -(ᶠgradᵥ_matrix()) * DiagonalMatrixRow(κ_m)
+        @. ∂ᶠ𝕄ₜ∂ᶜρ =
+            -(ᶠgradᵥ_matrix()) * DiagonalMatrixRow(dp_dρ) -
+            DiagonalMatrixRow(ᶠgradᵥ(ᶜΦ)) * ᶠinterp_matrix()
     else
         # Conservative full-p ρw: ᶠρwₜ = −ᶠgradᵥ(p) − ᶠinterp(ρ)·ᶠgradᵥ(Φ),
         # ∂p/∂ρe = R_d/cv_d, ∂p/∂ρ = R_d(−(K+Φ)/cv_d + T_tri).

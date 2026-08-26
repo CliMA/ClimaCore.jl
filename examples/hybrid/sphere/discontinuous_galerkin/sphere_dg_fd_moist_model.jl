@@ -97,6 +97,7 @@ const Ω = FT(7.29212e-5)
 const cp_d = R_d / κ_gas
 const cv_d = cp_d - R_d
 const γ = cp_d / cv_d
+const is_moist = true    # moist core (q_tot + 0-moment microphysics)
 
 pressure_ρe(ρe, K, Φ, ρ) = ρ * R_d * ((ρe / ρ - K - Φ) / cv_d + T_tri)
 
@@ -116,6 +117,11 @@ const cv_l = TP.cv_l(thermo_params)
 const cv_i = TP.cv_i(thermo_params)
 const e_int_i0 = TP.e_int_i0(thermo_params)
 const T_0_td = TP.T_0(thermo_params)
+# Vapor gas constant / heat capacity / reference internal energy — for the moist
+# HEVI Jacobian ∂p derivatives (κ_m-based; see fddg_fluxform_jacobian.jl).
+const R_v = TP.R_v(thermo_params)
+const cv_v = TP.cv_v(thermo_params)
+const e_int_v0 = TP.e_int_v0(thermo_params)
 
 """
     moist_state(ρ, e_int, q_tot) -> (; T, p, q_liq, q_ice)
@@ -161,6 +167,15 @@ saturation-adjusted pressure and condensate are still used by the microphysics /
 diagnostics via `moist_state`).
 """
 @inline function moist_p_dyn(ρ, e_int, q_tot)
+    # T from TD's CLOSED-FORM internal-energy inverse (air_temperature; the ρe
+    # IndepVars branch, air_temperatures.jl:18) — non-iterating and non-throwing,
+    # and the exact inverse of the TD.internal_energy used to build ρe (so it is
+    # convention-consistent, unlike a hand-rolled cv_d(T−T_tri) form). Condensate
+    # treated as vapor for the dynamics pressure (retains the vapor virtual effect;
+    # the accurate saturated p / condensate come from moist_state for microphysics).
+    # T floored to T_min_rob (ClimaAtmos T_min_sgs mechanism) ONLY to keep the
+    # downstream √(γp/ρ) safe on the implicit solver's transient iterates — this
+    # guards a diagnostic on solver iterates, it does not clamp the prognostic state.
     z = zero(q_tot)
     T = max(T_min_rob, TD.air_temperature(thermo_params, e_int, q_tot, z, z))
     p = TD.air_pressure(thermo_params, T, ρ, q_tot, z, z)

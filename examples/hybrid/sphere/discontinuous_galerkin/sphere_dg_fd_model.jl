@@ -90,6 +90,7 @@ const Ω = FT(7.29212e-5)
 const cp_d = R_d / κ_gas
 const cv_d = cp_d - R_d
 const γ = cp_d / cv_d
+const is_moist = false   # dry core; the moist model sets this true
 
 pressure_ρe(ρe, K, Φ, ρ) = ρ * R_d * ((ρe / ρ - K - Φ) / cv_d + T_tri)
 
