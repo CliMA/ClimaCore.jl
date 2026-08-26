@@ -64,9 +64,9 @@ import .TestUtilities: convergence_rate
         V = Geometry.WVector.(ones(FT, fs))
 
         function ∑tendencies!(dT, T, z, t)
-            # Dirichlet condition at the bottom. Unlike a prescribed analytic 
+            # Dirichlet condition at the bottom. Unlike a prescribed analytic
             # gradient, this uses the evolving solution's own half-cell difference,
-            # so the scheme's bottom-boundary treatment is part of what the 
+            # so the scheme's bottom-boundary treatment is part of what the
             # convergence rate measures.
             bc_gb = Operators.SetGradient(
                 Geometry.Covariant3Vector.(

@@ -127,13 +127,23 @@ The type that the `AdvectionOperator` method of `calc_level_val` writes into
 shared memory for `bc`, per thread: the advected field's value at the thread's center
 level, prepended with the contravariant3 velocity component at the thread's face when
 the operator also needs the velocity at neighboring faces
-(`advection_velocity_width(op) == Val(:neighboring)`). The kernel allocates its shared
+(`advection_velocity_width(op) == Val(:neighboring)`). The velocity slot holds
+`Geometry.contravariant3(velocity_val, lg)`, whose type is
+`Operators.velocity_component_type` of the velocity's element type — for a tuple-valued
+velocity that is an `AutoBroadcaster` of the components' scalars, not the tuple's single
+component type (which is all `Base.eltype` would give). The kernel allocates its shared
 memory buffer with this same function, so the launch-time sizing and the device-side
 element type cannot go out of sync.
 """
 @inline function advection_shmem_entry_type(bc)
     x_type = unsafe_eltype(bc.args[2i32])
-    v3_type = eltype(unsafe_eltype(bc.args[1i32]))
+    v_type = unsafe_eltype(bc.args[1i32])
+    # unsafe_eltype may return the inference-failure sentinel Union{}, which would
+    # dispatch into the AutoBroadcaster method of velocity_component_type (Union{} is
+    # a subtype of everything); propagate it so the launch falls back to the lazy
+    # kernel (`_sizeof_or_nothing` treats any non-concrete type as unsizeable).
+    v_type == Union{} && return Union{}
+    v3_type = Operators.velocity_component_type(v_type)
     return Operators.advection_velocity_width(bc.op) isa Val{:neighboring} ?
            Tuple{v3_type, x_type} : x_type
 end
