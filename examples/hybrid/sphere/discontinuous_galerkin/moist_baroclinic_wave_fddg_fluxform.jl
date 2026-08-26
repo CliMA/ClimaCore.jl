@@ -596,9 +596,15 @@ function diag_str(Y, t)
     K = @. (uE^2 + uN^2 + w_c^2) / 2
     q_tot = @. Y.Yc.ρq_tot / ρ
     e_int = @. Y.Yc.ρe / ρ - K - ᶜΦ
-    sat = @. moist_state(ρ, e_int, q_tot)
-    p = sat.p
-    q_c = @. sat.q_liq + sat.q_ice
+    # Use the non-throwing dynamics thermo (moist_p_dyn / condensate_partition_tuple)
+    # for the monitor too: saturation_adjustment has exp/log/^ that throw a
+    # DomainError on an extreme transient column and can kill an otherwise-healthy
+    # run *from the diagnostic*. moist_p_dyn floors T > 0, so condensate_partition
+    # is safe.
+    dyn = @. moist_p_dyn(ρ, e_int, q_tot)
+    p = dyn.p
+    cond = @. condensate_partition_tuple(dyn.T, ρ, q_tot)
+    q_c = @. cond.q_liq + cond.q_ice
     total_water = Fields.sum(Y.Yc.ρq_tot)
     @sprintf(
         "t=%8.0f  max|w|=%.3e  max|v|=%.3e  min p=%.3e  min ρ=%.3e  max q_tot=%.4e  max q_cond=%.3e  ∫ρq=%.6e",
@@ -713,9 +719,11 @@ function plot_fields_cpu(Yi)
     K = @. (uE^2 + uN^2 + w_c^2) / 2
     q_tot = @. Yc.ρq_tot / ρ
     e_int = @. Yc.ρe / ρ - K - ᶜΦ
-    sat = @. moist_state(ρ, e_int, q_tot)
-    p = sat.p
-    T = sat.T
+    # Non-throwing thermo for plotting (see diag_str): saturation_adjustment can
+    # DomainError on an extreme column at output time.
+    dyn = @. moist_p_dyn(ρ, e_int, q_tot)
+    p = dyn.p
+    T = dyn.T
     return (;
         u = ClimaCore.to_cpu(uE),
         v = ClimaCore.to_cpu(uN),
