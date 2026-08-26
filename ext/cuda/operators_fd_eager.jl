@@ -30,10 +30,17 @@ Two kinds of node cache a result in shared memory: a
 second argument (see `cached_operand_type`), and an `AdvectionOperator` caches its
 level's advected value, and velocity where it needs one (see
 `advection_shmem_entry_type`). Every other node needs no shared memory of its own but
-is still traversed for nested nodes that do. The launch configuration multiplies this
-value by the number of threads per block to size the dynamic shared memory, so that any
-single node's result is guaranteed to fit and can always be cached. Each node allocates
-that memory at offset 0, so nodes reuse it and must synchronize before writing.
+is still traversed for nested nodes that do. Each caching node requests a static
+shared-memory buffer with one slot per face level, and the compiler merges those
+requests into a single shared region sized to the LARGEST one (verified in the PTX:
+one `shmem[...]` global per kernel, sized `max(entry sizes) * n_face_levels`), so
+nodes reuse the region and must synchronize before writing -- the same semantics the
+previous dynamic offset-0 allocation had. The launch configuration multiplies this
+value by the number of face levels (one column per block, so threads per block) and
+falls back to the lazy `copyto_stencil_kernel!` when it exceeds the device's per-block
+shared memory. If the merge behavior ever changed, a kernel could exceed this
+prediction, which fails loudly at load time (ptxas "too much shared data"), not
+silently.
 
 Returns `nothing` when any cached entry type cannot be sized (its inference gave a
 non-concrete type; see `cached_operand_type`), in which case the caller must fall back
@@ -169,15 +176,13 @@ Base.@propagate_inbounds function eager_copyto_stencil_kernel!(
     space,
 ) where {BC}
     v = threadIdx().x
-    col_idx = threadIdx().y + (blockIdx().x - 1) * blockDim().y
-    # Out-of-range columns must not exit early: the shmem handlers in `calc_level_val`
-    # contain `sync_threads()` barriers, and a barrier that only part of a block reaches
-    # is undefined behavior before sm_70 (exited threads only implicitly satisfy
-    # `bar.sync` on Volta and later). Instead, out-of-range threads compute a valid
-    # dummy column -- all x-threads of a y-row share `col_idx`, so a dummy column's
-    # shared-memory slice is written and read only by its own threads -- and the result
-    # is discarded at the store below.
-    (in_range, (i, j, h)) = if mask isa NoMask
+    # Each block computes exactly one column (`blockDim().y == 1`, which lets the shmem
+    # handlers in `calc_level_val` size their static shared-memory buffers with the
+    # compile-time face-level count alone), and the launch sizes the grid to the active
+    # column count, so every block maps to a valid column and every thread reaches the
+    # handlers' `sync_threads()` barriers.
+    col_idx = blockIdx().x
+    (i, j, h) = if mask isa NoMask
         # `Ni` and `Nj` are read off the output layout's type parameters (see
         # `vijh_params`), so they are compile-time constants and the `CartesianIndices`
         # decomposition below is a fixed-divisor `divrem`. Only `Nh` is a runtime value,
@@ -187,34 +192,19 @@ Base.@propagate_inbounds function eager_copyto_stencil_kernel!(
         Ni = size_params.Ni
         Nh = ClimaCore.DataLayouts.nelems(ClimaCore.Fields.field_values(out))
         cart_inds = CartesianIndices((Ni, Nj, Nh))
-        in_range = col_idx <= length(cart_inds)
-        (in_range, @inbounds(cart_inds[in_range ? col_idx : one(col_idx)].I))
+        @inbounds cart_inds[col_idx].I
     else
-        (; N, i_map, j_map, h_map) = mask
-        # Bound by the active-column count `N`, not `length(i_map)`: the maps
-        # are allocated with one entry per column of the layout, but
-        # `set_mask_maps!` only writes the first `N` entries, and the launch
-        # rounds the grid up to a multiple of `blockDim().y` columns.
-        in_range = @inbounds col_idx <= N[1]
-        ijh = if in_range
-            @inbounds (i_map[col_idx], j_map[col_idx], h_map[col_idx])
-        else
-            # Column (1, 1, 1) always exists in the allocated layout (even when
-            # masked out, its memory is allocated); deriving the dummy from
-            # constants avoids reading map entries beyond `N` that
-            # `set_mask_maps!` never wrote.
-            (one(eltype(i_map)), one(eltype(j_map)), one(eltype(h_map)))
-        end
-        (in_range, ijh)
+        (; i_map, j_map, h_map) = mask
+        # In bounds because the launch sizes the grid to the active-column count
+        # `mask.N[1]`, and `set_mask_maps!` writes exactly that many map entries.
+        @inbounds (i_map[col_idx], j_map[col_idx], h_map[col_idx])
     end
     hidx = (i, j, h)
     val = @inbounds @inline calc_level_val(bc, hidx, space)
-    if in_range
-        if space.staggering isa ClimaCore.Grids.CellFace
-            @inbounds @inline setidx!(space, out, v - half, hidx, val)
-        elseif !(has_padding_thread(space) && v == CUDA.blockDim().x)
-            @inbounds @inline setidx!(space, out, v, hidx, val)
-        end
+    if space.staggering isa ClimaCore.Grids.CellFace
+        @inbounds @inline setidx!(space, out, v - half, hidx, val)
+    elseif !(has_padding_thread(space) && v == CUDA.blockDim().x)
+        @inbounds @inline setidx!(space, out, v, hidx, val)
     end
     return nothing
 end
@@ -287,11 +277,6 @@ Base.@propagate_inbounds function calc_level_val(
     Op <: MultiplyColumnwiseBandMatrixField,
     BC <: StencilBroadcasted{S, Op},
 }
-    # The launch configuration sizes the dynamic shared memory to fit the largest single
-    # expression result in the broadcasted tree (see `max_eager_shmem_per_thread`), so the
-    # result of every multiplication is guaranteed to fit and can always be cached.
-    v = threadIdx().x
-    block_col_idx = threadIdx().y
     # Whether the vertical topology is periodic. `row_mul_*!` uses this (a compile-time
     # constant) to wrap operand reads at the column ends instead of zero-padding them.
     periodic = Topologies.isperiodic(space)
@@ -303,22 +288,47 @@ Base.@propagate_inbounds function calc_level_val(
     # project before placing in shared memory to avoid projecting multiple times
     mat2_row_converted =
         @inbounds @inline project_row2_for_mul(mat1_row, mat2_row, hidx, mat2_space)
-    # sync before writing so that no thread is still reading a previous user of
-    # the shared memory region (every handler allocates it at offset 0)
+    return shmem_mul(bc, mat1_row, mat2_row_converted, mat1_space, mat2_space, periodic)
+end
+
+
+"""
+    shmem_mul(bc, mat1_row, mat2_row_converted, mat1_space, mat2_space, periodic)
+
+Cache `mat2_row_converted` in a static shared-memory buffer (one slot per face level,
+one column per block) and multiply `mat1_row` with the cached column via `row_mul_*!`.
+
+The compiler merges the static allocations of a kernel's caching nodes into a single
+shared region sized to the largest request (see `max_eager_shmem_per_thread`), so the
+buffer is shared with other nodes and each node must `sync_threads()` before writing.
+`@noinline` gives each instantiation of this function a single `CuStaticSharedArray`
+call site; inlining it would duplicate the allocation per multiply node, and duplicated
+call sites have been observed to NOT always merge, which would grow the footprint past
+the launch-side prediction. The buffer's element type is the same
+`cached_operand_type` the launch-side sizing used, so the two cannot go out of sync;
+writing `mat2_row_converted` into it converts (a no-op when inference matched the
+runtime type, and a loud conversion error -- rather than silent shared-memory
+corruption -- if the two ever diverge). Its length must be a compile-time constant for
+the static allocation, so it is read off the space type (`nlevels` folds from the data
+layout's type parameters) rather than `blockDim().x`.
+"""
+@noinline function shmem_mul(
+    bc,
+    mat1_row,
+    mat2_row_converted,
+    mat1_space,
+    mat2_space,
+    periodic,
+)
+    # sync before writing so that no thread is still reading a previous user of the
+    # shared region (the caching nodes' allocations are merged into one region)
     CUDA.sync_threads()
-    # The region is dynamic because static shared memory would allocate a new
-    # one for each layer of recursion, and it is a 1D array indexed manually
-    # because a multi-dimensional shared array indexes incorrectly here.
-    # Allocate with the same `cached_operand_type` the launch-side sizing used, so
-    # the buffer's element size cannot go out of sync with the sizing; writing
-    # `mat2_row_converted` into it converts (a no-op when inference matched the
-    # runtime type, and a loud conversion error -- rather than silent shared-memory
-    # corruption -- if the two ever diverge).
-    mat2 = CUDA.CuDynamicSharedArray(
+    mat2 = CUDA.CuStaticSharedArray(
         cached_operand_type(bc, mat2_space),
-        CUDA.blockDim().x * CUDA.blockDim().y,
+        Spaces.nlevels(Spaces.face_space(mat2_space)),
     )
-    @inbounds mat2[v + (block_col_idx - 1) * CUDA.blockDim().x] = mat2_row_converted
+    v = threadIdx().x
+    @inbounds mat2[v] = mat2_row_converted
     CUDA.sync_threads()
     # if the output is on centers, the padding CUDA.blockDim().xth thread can just return 0
     has_padding_thread(mat1_space) && v == CUDA.blockDim().x &&
@@ -334,15 +344,23 @@ Base.@propagate_inbounds function calc_level_val(
     end
 
     if mat2_row_converted isa ClimaCore.MatrixFields.BandMatrixRow
-        # mat * mat case
+        # the projection only transforms the row's entries, so the converted row has
+        # the same outer diagonals as the original operand row
         if mat2_space.staggering isa Spaces.CellCenter
             mat2_shape =
-                eltype(ClimaCore.MatrixFields.outer_diagonals(typeof(mat2_row))) <:
-                ClimaCore.Utilities.PlusHalf ? FaceToCenter() : CenterToCenter()
+                eltype(
+                    ClimaCore.MatrixFields.outer_diagonals(
+                        typeof(mat2_row_converted),
+                    ),
+                ) <: ClimaCore.Utilities.PlusHalf ? FaceToCenter() :
+                CenterToCenter()
         else
             mat2_shape =
-                eltype(ClimaCore.MatrixFields.outer_diagonals(typeof(mat2_row))) <:
-                ClimaCore.Utilities.PlusHalf ? CenterToFace() : FaceToFace()
+                eltype(
+                    ClimaCore.MatrixFields.outer_diagonals(
+                        typeof(mat2_row_converted),
+                    ),
+                ) <: ClimaCore.Utilities.PlusHalf ? CenterToFace() : FaceToFace()
         end
         out = @inbounds @inline row_mul_mat!(
             eltype(bc),
@@ -355,7 +373,6 @@ Base.@propagate_inbounds function calc_level_val(
         out isa eltype(bc) || return convert(eltype(bc), out)
         return out
     else
-        # mat * vec case
         out =
             @inbounds @inline row_mul_vec!(eltype(bc), mat1_row, mat2, mat1_shape, periodic)
         out isa eltype(bc) || return convert(eltype(bc), out)
@@ -446,7 +463,6 @@ Base.@propagate_inbounds function calc_level_val(
 }
     op = bc.op
     v = threadIdx().x
-    block_col_idx = threadIdx().y
     n_faces = CUDA.blockDim().x
     periodic = Topologies.isperiodic(space)
     width = Operators.advection_velocity_width(op)
@@ -462,14 +478,18 @@ Base.@propagate_inbounds function calc_level_val(
     @inbounds lg = Geometry.LocalGeometry(velocity_space, v - half, hidx)
     v³ = Geometry.contravariant3(velocity_val, lg)
     # sync before writing so that no thread is still reading a previous user of the
-    # shared memory region (every handler allocates it at offset 0)
+    # shared region: the caching nodes' static allocations are merged into a single
+    # region sized to the largest request (see `max_eager_shmem_per_thread`), so this
+    # buffer is shared with other multiply/advection nodes. It holds one slot per face
+    # level (one column per block); its length must be a compile-time constant for the
+    # static allocation, so it is read off the space type (`nlevels` folds from the
+    # data layout's type parameters) rather than `blockDim().x`.
     CUDA.sync_threads()
-    shmem = CUDA.CuDynamicSharedArray(
+    shmem = CUDA.CuStaticSharedArray(
         advection_shmem_entry_type(bc),
-        CUDA.blockDim().x * CUDA.blockDim().y,
+        Spaces.nlevels(Spaces.face_space(space)),
     )
-    col_offset = (block_col_idx - 1i32) * n_faces
-    @inbounds shmem[v + col_offset] = advection_shmem_entry(width, v³, arg_val)
+    @inbounds shmem[v] = advection_shmem_entry(width, v³, arg_val)
     CUDA.sync_threads()
     stencil_vals = @inbounds advection_gather(
         width,
@@ -480,7 +500,6 @@ Base.@propagate_inbounds function calc_level_val(
         v,
         n_faces,
         periodic,
-        col_offset,
     )
     return Geometry.Contravariant3Vector(op(stencil_vals..., params...))
 end
@@ -540,13 +559,12 @@ Base.@propagate_inbounds function advection_gather(
     v,
     n_faces,
     periodic,
-    col_offset,
 )
     (i⁻⁻, i⁻, i⁺, i⁺⁺) = advection_center_window(v, n_faces, periodic)
-    a⁻⁻ = @inbounds shmem[i⁻⁻ + col_offset]
-    a⁻ = @inbounds shmem[i⁻ + col_offset]
-    a⁺ = @inbounds shmem[i⁺ + col_offset]
-    a⁺⁺ = @inbounds shmem[i⁺⁺ + col_offset]
+    a⁻⁻ = @inbounds shmem[i⁻⁻]
+    a⁻ = @inbounds shmem[i⁻]
+    a⁺ = @inbounds shmem[i⁺]
+    a⁺⁺ = @inbounds shmem[i⁺⁺]
     a⁻⁻, a⁻, a⁺, a⁺⁺ =
         advection_ghost_values(op, space, v, n_faces, periodic, a⁻⁻, a⁻, a⁺, a⁺⁺)
     return (v³, a⁻⁻, a⁻, a⁺, a⁺⁺)
@@ -561,22 +579,21 @@ Base.@propagate_inbounds function advection_gather(
     v,
     n_faces,
     periodic,
-    col_offset,
 )
     (i⁻⁻, i⁻, i⁺, i⁺⁺) = advection_center_window(v, n_faces, periodic)
     # neighboring face indices, clamped/wrapped like `advection_velocities`
     iv⁻ = periodic ? mod1(v - 1i32, n_faces) : max(v - 1i32, 1i32)
     iv⁺ = periodic ? mod1(v + 1i32, n_faces) : min(v + 1i32, n_faces)
-    a⁻⁻ = @inbounds shmem[i⁻⁻ + col_offset][2]
-    a⁻ = @inbounds shmem[i⁻ + col_offset][2]
-    a⁺ = @inbounds shmem[i⁺ + col_offset][2]
-    a⁺⁺ = @inbounds shmem[i⁺⁺ + col_offset][2]
+    a⁻⁻ = @inbounds shmem[i⁻⁻][2]
+    a⁻ = @inbounds shmem[i⁻][2]
+    a⁺ = @inbounds shmem[i⁺][2]
+    a⁺⁺ = @inbounds shmem[i⁺⁺][2]
     a⁻⁻, a⁻, a⁺, a⁺⁺ =
         advection_ghost_values(op, space, v, n_faces, periodic, a⁻⁻, a⁻, a⁺, a⁺⁺)
     return @inbounds (
-        shmem[iv⁻ + col_offset][1],
+        shmem[iv⁻][1],
         v³,
-        shmem[iv⁺ + col_offset][1],
+        shmem[iv⁺][1],
         a⁻⁻,
         a⁻,
         a⁺,

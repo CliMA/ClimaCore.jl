@@ -41,10 +41,11 @@ function Base.copyto!(
     )
 
     (_, Ni, Nj, Nh) = size(out_fv)
-    # `eager_copyto_stencil_kernel!` requires one x-thread per face level, so a block
-    # is (n_face_levels, columns_per_block, 1) and the grid indexes the remaining
-    # columns. Each thread derives a linear column index from its y-thread and block
-    # index and decomposes it into `(i, j, h)`; this layout suits VIJFH, where the
+    # `eager_copyto_stencil_kernel!` requires one x-thread per face level and computes
+    # one column per block (its shared-memory buffers are static, so their size -- one
+    # slot per face level -- must be known at compile time), so a block is
+    # (n_face_levels, 1, 1) and the grid indexes the columns. Each block decomposes its
+    # block index into the column's `(i, j, h)`; this layout suits VIJFH, where the
     # vertical axis is contiguous. Both periodic and non-periodic vertical topologies
     # are supported (`has_padding_thread` accounts for the extra face level of
     # non-periodic spaces), as are masked spaces. High-resolution columns (more face
@@ -59,28 +60,23 @@ function Base.copyto!(
     # gate and that space gate in sync.
     eager_supported = space isa Operators.AllFiniteDifferenceSpace
     if !high_resolution && eager_supported
-        # Size the dynamic shared memory to fit the largest single expression result
-        # in the broadcasted tree; `nothing` means an expression's cached entry type
-        # could not be sized (non-concrete inference), so the eager kernel cannot be
-        # launched and the lazy kernel below (which needs no shared memory) is used.
+        # Predict the kernel's static shared memory: the caching nodes' allocations
+        # are merged into one region sized to the largest single entry (see
+        # `max_eager_shmem_per_thread`). `nothing` means an expression's cached entry
+        # type could not be sized (non-concrete inference), so the eager kernel cannot
+        # be compiled and the lazy kernel below (which needs no shared memory) is used.
         eager_shmem_per_thread = max_eager_shmem_per_thread(bc)
         # mask.N holds the active column count in a one-element device array;
         # reading it on the host needs @allowscalar.
         n_columns =
             mask isa NoMask ? Ni * Nj * Nh :
             CUDA.@allowscalar(mask.N[1])
-        # One column per block keeps register pressure low, which matters more than
-        # occupancy until there are enough columns to saturate the device; past that,
-        # pack as many columns into each block as 256 threads allow.
-        # 108 is the number of SMs in an A100.
-        # TODO: get this value from CUDA.jl to better optimize for different GPUs
-        threads_dim_y = n_columns > 256 * 108 ? div(256, n_face_levels) : 1
-        block_dim_x = div(n_columns, threads_dim_y, RoundUp)
+        block_dim_x = n_columns
         eager_shmem =
             isnothing(eager_shmem_per_thread) ? nothing :
-            n_face_levels * threads_dim_y * eager_shmem_per_thread
-        # use fallback lazy evaluation if the eager kernel would exceed the
-        # device's per-block shared memory
+            n_face_levels * eager_shmem_per_thread
+        # use fallback lazy evaluation if the eager kernel's static shared memory
+        # could exceed the device's per-block limit
         if !isnothing(eager_shmem) && eager_shmem ≤ max_shmem
             # `axes(out)` is passed as the space the kernel evaluates `bc` on, since
             # `out` and `bc` are space-stripped. The kernel recovers the output
@@ -98,10 +94,9 @@ function Base.copyto!(
             auto_launch!(
                 eager_copyto_stencil_kernel!,
                 args;
-                threads_s = (n_face_levels, threads_dim_y, 1),
+                threads_s = (n_face_levels, 1, 1),
                 blocks_s = (block_dim_x, 1, 1),
                 always_inline = true,
-                shmem = eager_shmem,
             )
             return out
         end

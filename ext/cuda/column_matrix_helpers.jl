@@ -1,6 +1,6 @@
 # Helpers for multiplying a single row of a banded matrix with a banded matrix or vector
 # stored in shared memory. These are specialized for columns with CUDA.blockDim().x face
-# levels, computed by threads `v = 1:CUDA.blockDim().x` (one column per `threadIdx().y`).
+# levels, computed by threads `v = 1:CUDA.blockDim().x` (one column per block).
 #
 # `periodic` (a compile-time-constant `Bool` derived from the vertical topology) selects
 # how the ends of a column are handled. In a NON-periodic column an operand slot past the
@@ -47,13 +47,11 @@ Base.@propagate_inbounds function row_mul_mat!(
     periodic,
 ) where {P}
     v = threadIdx().x
-    block_col_idx = threadIdx().y
     n = CUDA.blockDim().x
     ld1, ud1 = MatrixFields.outer_diagonals(typeof(mat1_row))
     ld2, ud2 = MatrixFields.outer_diagonals(eltype(matrix2))
     pd1, pd2 = MatrixFields.outer_diagonals(P)
     prod_shape = product_shape(shape1, shape2)
-    mat2_offset = (block_col_idx - 1i32) * n
     zero_entry = zero(eltype(P))
     prod_entries = UnrolledUtilities.unrolled_map((pd1:pd2...,)) do pd
         prod_slot = band_matrix_d(v + pd, prod_shape)
@@ -64,10 +62,10 @@ Base.@propagate_inbounds function row_mul_mat!(
                     zero_entry
                 elseif periodic
                     @inbounds mat1_row[mat1_row_d] *
-                              matrix2[mod1(mat2_slot, n) + mat2_offset][pd - mat1_row_d]
+                              matrix2[mod1(mat2_slot, n)][pd - mat1_row_d]
                 elseif 0i32 < mat2_slot <= n_column_slots(shape1)
                     @inbounds mat1_row[mat1_row_d] *
-                              matrix2[mat2_slot + mat2_offset][pd - mat1_row_d]
+                              matrix2[mat2_slot][pd - mat1_row_d]
                 else
                     zero_entry
                 end
@@ -88,10 +86,8 @@ Base.@propagate_inbounds function row_mul_vec!(
     periodic,
 ) where {P}
     v = threadIdx().x
-    block_col_idx = threadIdx().y
     n = CUDA.blockDim().x
     ld1, ud1 = MatrixFields.outer_diagonals(typeof(mat1_row))
-    vec2_offset = (block_col_idx - 1i32) * n
     zero_entry = zero(P)
     return UnrolledUtilities.unrolled_mapreduce(
         +,
@@ -101,9 +97,9 @@ Base.@propagate_inbounds function row_mul_vec!(
         vec2_slot = band_matrix_d(v + mat1_row_d, shape1)
         if periodic
             @inbounds mat1_row[mat1_row_d] *
-                      vector2[mod1(vec2_slot, n) + vec2_offset]
+                      vector2[mod1(vec2_slot, n)]
         elseif 0i32 < vec2_slot <= n_column_slots(shape1)
-            @inbounds mat1_row[mat1_row_d] * vector2[vec2_slot + vec2_offset]
+            @inbounds mat1_row[mat1_row_d] * vector2[vec2_slot]
         else
             zero_entry
         end
