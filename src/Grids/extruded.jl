@@ -126,6 +126,9 @@ end
 
 topology(grid::ExtrudedFiniteDifferenceGrid) = topology(grid.horizontal_grid)
 
+is_continuous(grid::ExtrudedFiniteDifferenceGrid) =
+    is_continuous(grid.horizontal_grid)
+
 ClimaComms.context(grid::ExtrudedFiniteDifferenceGrid) =
     ClimaComms.context(grid.horizontal_grid)
 ClimaComms.device(grid::ExtrudedFiniteDifferenceGrid) =
