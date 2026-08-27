@@ -27,7 +27,6 @@ jobs:
           - 'ClimaDiagnostics.jl'
           - 'ClimaLand.jl'
           - 'ClimaTimesteppers.jl'
-          - 'KinematicDriver.jl'
           - 'ClimaDiagnostics.jl'
           - 'ClimaUtilities.jl'
         version:
