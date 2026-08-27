@@ -46,6 +46,11 @@ const t_end_default = 86400.0
 # are simply not used.
 include("sphere_dg_fd_moist_model.jl")
 
+# Active timestep, mutable so a DT_RAMP (see below) can raise it mid-run. Read by
+# the vertical VanLeer Courant limiter in the tendency so its slope limiting stays
+# consistent with the step the integrator is actually taking. Initialised to Δt.
+const Δt_ref = Ref(Δt)
+
 import ClimaCore.Geometry: ⊗
 import ClimaCore.Limiters
 
@@ -405,18 +410,18 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
     # --- Vertical FD (plane flux-form pattern; implicit under HEVI) ---
     if vertical_transport
         @. dYc.ρ -= vdivf2c(ρw_w)
-        @. dYc.ρe -= vdivf2c(VanLeer(ρw_w, h_tot, Δt))
+        @. dYc.ρe -= vdivf2c(VanLeer(ρw_w, h_tot, Δt_ref[]))
     else
         # mass flux is fully implicit (linear); energy gets the explicit
         # (VanLeer − central) correction so the HEVI total is Lin-VanLeer
         @. dYc.ρe -=
-            vdivf2c(VanLeer(ρw_w, h_tot, Δt)) - vdivf2c(ρw_w * If(h_tot))
+            vdivf2c(VanLeer(ρw_w, h_tot, Δt_ref[])) - vdivf2c(ρw_w * If(h_tot))
     end
-    @. dYc.ρu1 -= vdivf2c(VanLeer(ρw_w, u1, Δt))
-    @. dYc.ρu2 -= vdivf2c(VanLeer(ρw_w, u2, Δt))
-    @. dYc.ρu3 -= vdivf2c(VanLeer(ρw_w, u3, Δt))
+    @. dYc.ρu1 -= vdivf2c(VanLeer(ρw_w, u1, Δt_ref[]))
+    @. dYc.ρu2 -= vdivf2c(VanLeer(ρw_w, u2, Δt_ref[]))
+    @. dYc.ρu3 -= vdivf2c(VanLeer(ρw_w, u3, Δt_ref[]))
     # Vertical moisture transport: monotone Lin-VanLeer of q_tot on the mass flux.
-    @. dYc.ρq_tot -= vdivf2c(VanLeer(ρw_w, q_tot, Δt))
+    @. dYc.ρq_tot -= vdivf2c(VanLeer(ρw_w, q_tot, Δt_ref[]))
 
     # --- 0-moment microphysics (CloudMicrophysics.jl): instantaneous removal of
     #     condensate above the threshold as precipitation. S ≤ 0 [1/s] is the
@@ -641,7 +646,39 @@ monitor = CTS.Callbacks.EveryXSimulationTime(
     max(Δt, ndiag * Δt);
     atinit = true,
 )
-callback = CTS.CallbackSet(monitor)
+# --- Optional timestep ramp (DT_RAMP="t1:dt1,t2:dt2,…", simulated seconds) ---
+# Run at the base DT through the initial spin-up transient (where a rough-terrain /
+# high-moisture start is most CFL-fragile), then step up to a larger dt once the
+# flow settles. Mechanism: the switch times are added as `tstops` so the integrator
+# lands exactly on them, and a per-step callback calls CTS `set_dt!` (which sets the
+# `_dt` every step reads) + updates Δt_ref[] (the VanLeer Courant limiter). Empty ⇒
+# constant DT. Example: DT=60 DT_RAMP="604800:120" ⇒ 60 s for week 1, then 120 s.
+const dt_ramp = let s = strip(get(ENV, "DT_RAMP", ""))
+    isempty(s) ? Tuple{FT, FT}[] :
+    sort!(
+        map(split(s, ",")) do p
+            (ts, dts) = split(strip(p), ":")
+            (parse(FT, ts), parse(FT, dts))
+        end;
+        by = first,
+    )
+end
+const dt_ramp_times = FT[t for (t, _) in dt_ramp]
+const dt_ramp_i = Ref(0)
+function dt_ramp_cb!(integrator)
+    i = dt_ramp_i[]
+    while i < length(dt_ramp) && integrator.t + eps(integrator.t) >= dt_ramp[i + 1][1]
+        i += 1
+        newdt = dt_ramp[i][2]
+        CTS.set_dt!(integrator, newdt)
+        Δt_ref[] = newdt
+        @info "DT ramp" t = integrator.t dt = newdt
+    end
+    dt_ramp_i[] = i
+    return nothing
+end
+callback = isempty(dt_ramp) ? CTS.CallbackSet(monitor) :
+    CTS.CallbackSet(monitor, CTS.Callbacks.EveryXSimulationSteps(dt_ramp_cb!, 1))
 
 # --- Bound-preserving moisture limiter (Guba et al. 2014, QuasiMonotone "OP1") ---
 # The horizontal DG ρq_tot transport (KG/LMARS two-point + interface flux) is not
@@ -758,6 +795,7 @@ integrator = CTS.init(
     ode_algo;
     dt = Δt,
     saveat = saveat_grid,
+    tstops = dt_ramp_times,   # land exactly on each DT_RAMP switch time
     callback = callback,
     adaptive = false,
 )
