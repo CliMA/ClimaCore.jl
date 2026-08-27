@@ -204,15 +204,15 @@ with special handling of `DataType` fields to avoid errors during compilation.
 
 # Examples
 
-```jldoctest; setup = :(import ClimaCore.Utilities: new), filter = r"\\d+"
-julia> new(Int)
-4889520192
+```jldoctest; setup = :(import ClimaCore.Utilities: new)
+julia> new(Int) isa Int
+true
 
 julia> new(Complex{Int}, (1, 2))
 1 + 2im
 
-julia> new(@NamedTuple{a::Type{Int}, b::Int, c::Complex{Int}})
-(a = Int64, b = 4889520192, c = 6162822528 + 8036417625im)
+julia> new(@NamedTuple{a::Type{Int}, b::Int, c::Complex{Int}}).a
+Int64
 
 julia> new(@NamedTuple{a::DataType, b::Int, c::Complex{Int}}, (Int, 1, 1 + 2im))
 (a = Int64, b = 1, c = 1 + 2im)

@@ -4,33 +4,19 @@ ClimaCore.jl Release Notes
 main
 -------
 
-- The discontinuous-Galerkin (DG) face operators
-  (`Operators.add_numerical_flux_internal!` and
-  `Operators.add_lifting_flux_internal!`) now run correctly on distributed
-  (MPI) `Topology2D` spaces. Faces that straddle a rank boundary
-  (`Topologies.ghost_faces`) were previously skipped, so partition-boundary
-  elements got no interface flux; each rank now completes its own side after a
-  face-strip halo exchange (`Topologies.GhostFaceExchange`), which ships only
-  the `Nq` face-node values of each rank-boundary face — `~Nq×` less data
-  than a whole-element halo — between face-sharing neighbours only.
-  Validated by 2- and 3-rank CPU equivalence tests (each rank's result matches
-  the element-local strong-divergence reference at partition-boundary nodes).
-  On the GPU, the ghost faces go through the same exchange, started before the
-  interior-face kernels (overlapping communication with compute) and completed
-  by a ghost staging + gather kernel pair over
-  `Operators.dg_ghost_connectivity`; the 2- and 3-rank tests also run on CUDA
-  in Buildkite. One halo exchange can be shared by several face-operator
-  calls in the same tendency evaluation: start it with
-  `Operators.start_dg_ghost_exchange(args...)` and pass the returned handle
-  to each operator via the `ghost_exchange` keyword — the first consumer
-  completes the exchange and the others read the same recv strips, so each
-  halo message is sent once instead of once per operator.
+- The DG face operators (`Operators.add_numerical_flux_internal!` and
+  `Operators.add_lifting_flux_internal!`) now run on distributed (MPI)
+  `Topology2D` spaces: each rank completes its rank-boundary
+  (`Topologies.ghost_faces`) side through a face-strip halo exchange
+  (`Topologies.GhostFaceExchange`) that ships only the `Nq` face-node values
+  per face, on both CPU and CUDA. Several operators in one tendency evaluation
+  can share a single exchange via `Operators.start_dg_ghost_exchange(args...)`
+  and the `ghost_exchange` keyword. Covered by 2- and 3-rank CPU and CUDA
+  tests.
 
-- `Operators.add_numerical_flux_boundary!` now has CUDA kernels (one-sided
-  staging + gather over `Operators.dg_boundary_connectivity`); it previously
-  fell back to the CPU slab loop, which requires scalar indexing on device
-  arrays. Nodes at domain corners accumulate the contributions of both their
-  boundary faces deterministically through the gather map.
+- `Operators.add_numerical_flux_boundary!` now has CUDA kernels (staging +
+  gather over `Operators.dg_boundary_connectivity`), so it no longer needs
+  scalar indexing on device arrays.
 
 - Spectral-element grids can be marked as discontinuous-Galerkin function
   spaces: `SpectralElementGrid1D`/`SpectralElementGrid2D` (and the
