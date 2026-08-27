@@ -47,6 +47,7 @@ const t_end_default = 86400.0
 include("sphere_dg_fd_moist_model.jl")
 
 import ClimaCore.Geometry: ⊗
+import ClimaCore.Limiters
 
 # Moist HEVI: the implicit vertical acoustics (ρ, ρe, ρw) use the moist
 # saturation-adjusted pressure in the residual; the analytic dry ∂p Jacobian
@@ -156,6 +157,14 @@ const cartesian_interface_fn =
         Operators.kennedy_gruber_rusanov_cartesian
     )
 
+# Horizontal moisture-tracer INTERFACE flux (the KG two-point volume term is kept
+# either way, as for momentum). With INTERFACE_FLUX=lmars the tracer is upwinded at
+# the SAME contact velocity as the LMARS mass flux (constancy-preserving); es/roe
+# have no dedicated tracer variant here, so they fall back to KG-central + Rusanov.
+const tracer_interface_fn =
+    interface_flux == :lmars ? Operators.lmars_tracer :
+    Operators.kennedy_gruber_rusanov_tracer
+
 # ---------------------------------------------------------------------------
 # Cartesian basis fields come from sphere_dg_fd_model.jl (eE*, eN*, eR*).
 # Tangential projections of the Cartesian unit vectors (state-independent):
@@ -240,7 +249,31 @@ const vvdivc2f = Operators.DivergenceC2F(
 # which live in implicit_tendency_fddg!). The (VanLeer − central) energy
 # correction and the full momentum-component vertical transport stay
 # explicit, so the HEVI total equals the fully explicit path.
+# --- Report-only diagnostic scan (DEBUG_SCAN=1) -----------------------------
+# Prints the min/max of the prognostics ENTERING the tendency, plus a finiteness
+# flag, so the first field + time to go bad is visible immediately before a device
+# DomainError (ρ≤0 ⇒ dynamics / waruszewski ln_mean poison; ρq_tot<0 ⇒ moisture).
+# Because CUDA kernel exceptions are async, the LAST printed scan is the culprit
+# state and the crash surfaces at the next scan's reduction. GPU-safe (whole-array
+# reductions, no scalar indexing) and STRICTLY read-only — no clamping of the state.
+const debug_scan = get(ENV, "DEBUG_SCAN", "0") == "1"
+@inline _dmin(f) = minimum(parent(f))
+@inline _dmax(f) = maximum(parent(f))
+@inline _dbad(f) = any(x -> !isfinite(x), parent(f))
+function debug_scan_fddg!(Y, t, tag)
+    debug_scan || return nothing
+    Yc = Y.Yc
+    finite = !(
+        _dbad(Yc.ρ) || _dbad(Yc.ρe) || _dbad(Yc.ρq_tot) ||
+        _dbad(Yc.ρu1) || _dbad(Yc.ρu2) || _dbad(Yc.ρu3) || _dbad(Y.ρw)
+    )
+    @info "scan[$tag]" t minρ = _dmin(Yc.ρ) minρe = _dmin(Yc.ρe) minρq =
+        _dmin(Yc.ρq_tot) maxρq = _dmax(Yc.ρq_tot) finite
+    return nothing
+end
+
 function compute_tendency_fddg!(dY, Y, t, vertical_transport)
+    debug_scan_fddg!(Y, t, vertical_transport ? :rhs : :remaining)
     Yc = Y.Yc
     ρw = Y.ρw
     dYc = dY.Yc
@@ -338,7 +371,7 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
         y,
     )
     Operators.add_numerical_flux_internal!(
-        Operators.kennedy_gruber_rusanov_tracer,
+        tracer_interface_fn,
         dy_q,
         y,
     )
@@ -610,6 +643,40 @@ monitor = CTS.Callbacks.EveryXSimulationTime(
 )
 callback = CTS.CallbackSet(monitor)
 
+# --- Bound-preserving moisture limiter (Guba et al. 2014, QuasiMonotone "OP1") ---
+# The horizontal DG ρq_tot transport (KG/LMARS two-point + interface flux) is not
+# sign-preserving at GLL nodes: over steep terrain it Gibbs-undershoots q_tot < 0,
+# which then poisons the moist saturation/condensate thermodynamics (the source of
+# the transient sqrt/log/^ DomainErrors). QuasiMonotoneLimiter redistributes tracer
+# mass *within each element* (conservatively) to keep nodal q_tot inside its
+# element+neighbor [min,max] — a monotone projection, NOT an unphysical clamp of the
+# prognostic. It is applied once per RK stage through ClimaTimeSteppers' `lim!` hook
+# (imex_ark.jl calls `f.lim!(U, p, t, u_ref)` each stage i≠1), so every stage's
+# tendency sees an in-bounds q_tot before the thermo runs. Bounds are taken from the
+# stage reference state `u_ref`; the projection is applied to the incremented `U`.
+const use_tracer_limiter = get(ENV, "TRACER_LIMITER", "1") == "1"
+const tracer_limiter = Limiters.QuasiMonotoneLimiter(Y.Yc.ρq_tot)
+function lim_fddg!(U, p, t, u_ref)
+    use_tracer_limiter || return nothing
+    Limiters.compute_bounds!(tracer_limiter, u_ref.Yc.ρq_tot, u_ref.Yc.ρ)
+    # POSITIVITY: QuasiMonotone by itself only enforces the element+neighbor
+    # [min,max]; once a whole region undershoots, its lower bound is itself < 0 and
+    # q_tot stays negative → R_m = R_d+(R_v−R_d)q_tot flips sign → p = ρR_mT < 0 →
+    # sqrt(γp/ρ) / ln_mean(ρ/2p) DomainError (diagnosed on CPU). Floor the lower
+    # bound at 0 so the limiter is bound-preserving WITH a physical q_tot ≥ 0 floor
+    # (standard positivity limiter, mass-conserving when the element mean ≥ 0 — not a
+    # pointwise clamp of the prognostic). q_bounds_nbr stores [min,max] on axis 2;
+    # index 1 = min. selectdim keeps this rank/device-agnostic (GPU broadcast-safe).
+    q_min = selectdim(parent(tracer_limiter.q_bounds_nbr), 2, 1)
+    before = debug_scan ? minimum(parent(U.Yc.ρq_tot)) : 0.0
+    boundmin_pre = debug_scan ? minimum(q_min) : 0.0
+    @. q_min = max(q_min, 0)
+    Limiters.apply_limiter!(U.Yc.ρq_tot, U.Yc.ρ, tracer_limiter)
+    debug_scan && @info "lim!" t minρq_before = before minρq_after =
+        minimum(parent(U.Yc.ρq_tot)) boundmin_pre boundmin_post = minimum(q_min)
+    return nothing
+end
+
 if stepper == "hevi"
     # Split-consistency check: rhs == implicit + remaining (exact when the
     # tendency filter is off; with the filter on, the implicit part is
@@ -633,12 +700,18 @@ if stepper == "hevi"
             jac_prototype = jacobian,
             Wfact = fddg_implicit_equation_jacobian!,
         ),
-        T_exp! = remaining_tendency_fddg!,
+        # NB: the explicit tendency is passed as T_lim! (NOT T_exp!): ClimaTimeSteppers
+        # only calls the `lim!` hook when a T_lim! is present (has_T_lim ⇔ _has_lim,
+        # set iff T_lim! is given; imex_ark.jl gates `f.lim!` on has_T_lim). Numerically
+        # identical to T_exp! (same explicit tableau coeffs) but activates the per-stage
+        # QuasiMonotone positivity limiter on ρq_tot.
+        T_lim! = remaining_tendency_fddg!,
+        lim! = lim_fddg!,
     )
     ode_algo =
         CTS.IMEXAlgorithm(CTS.ARS343(), CTS.NewtonsMethod(; max_iters = 2))
 else
-    ode_function = CTS.ClimaODEFunction(; T_exp! = rhs_fddg!)
+    ode_function = CTS.ClimaODEFunction(; T_lim! = rhs_fddg!, lim! = lim_fddg!)
     ode_algo = CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher())
 end
 

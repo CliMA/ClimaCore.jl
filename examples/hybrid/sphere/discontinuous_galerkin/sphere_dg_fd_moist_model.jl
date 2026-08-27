@@ -491,30 +491,34 @@ function initial_state(ᶜlocal_geometry, ᶠlocal_geometry)
     ᶜuₕ_local = @. Geometry.UVVector(u₀, v₀)
     ᶜuₕ = @. C12(ᶜuₕ_local, ᶜlocal_geometry)
 
-    # Discrete hydrostatic balance (column-wise, cf. solid_body_rotation_3d):
-    # the analytic state satisfies ∂z p = −ρg only in the continuum; on the
-    # staggered FD grid the residual of ᶠgradᵥ(p)/ᶠinterp(ρ) + g projects
-    # onto gravity modes and drives O(10 m/s) spurious w. Keep the analytic
-    # p at cell centers and correct ρ so the centered face balance
-    # (p[v+1] − p[v])/Δz = −g (ρ[v] + ρ[v+1])/2 holds exactly, then set ρe
-    # such that the diagnosed pressure is exactly the analytic p.
-    ᶜp_ana = @. pres(lat, z)
-    # REBALANCE=1 (default) applies the full-p column rebalance below; it is a
-    # smooth-analytic-IC device (and inconsistent with the Exner PGF — see the
-    # discussion). REBALANCE=0 uses the raw analytic state; with the Exner
-    # reference-subtracted PGF the residual is truncation-level, which is the
-    # setting that generalizes to data-derived (ERA5/sounding) ICs.
+    # Discrete hydrostatic balance (column-wise), MOISTURE-CONSISTENT: enforce the
+    # centered face balance on the pressure the DYNAMICS actually diagnose,
+    # p = ρ·R_m·T (moist_p_dyn), NOT the dry analytic p. The analytic state satisfies
+    # ∂z p = −ρg only in the continuum; on the staggered FD grid the residual projects
+    # onto gravity modes and drives spurious w. Holding T, q_tot, R_m at their analytic
+    # values and writing aₖ ≡ R_m[k]·T[k] (so p = ρ a), the centered balance
+    #   (ρa)[v+1] − (ρa)[v] = −gΔz (ρ[v]+ρ[v+1])/2
+    # solves column-upward (bottom ρ = analytic ⇒ surface p = analytic p) to
+    #   ρ[v+1] = ρ[v]·(2 a[v] − gΔz)/(2 a[v+1] + gΔz).
+    # Using the moist RT (a = R_m·T) removes the O(q_tot) virtual-temperature
+    # imbalance the earlier dry-p rebalance left in the moist column — the seed of
+    # the fast initial adjustment. REBALANCE=0 uses the raw analytic state (residual
+    # truncation-level under the Exner reference-subtracted PGF; generalizes to
+    # data-derived ERA5/sounding ICs).
     if get(ENV, "REBALANCE", "1") == "1"
+        ᶜa = @. ᶜR_m * ᶜT
         ρ_par = parent(ᶜρ)
-        p_par = parent(ᶜp_ana)
+        a_par = parent(ᶜa)
         # per-interface Δz from the actual center heights (supports ZSTRETCH;
         # a uniform zmax/zelem here silently corrupts ρ on stretched grids)
         z_par = parent(z)
         for v in 1:(size(ρ_par, 1) - 1)
             @views @. ρ_par[v + 1, :, :, :, :] =
-                -ρ_par[v, :, :, :, :] -
-                2 * (p_par[v + 1, :, :, :, :] - p_par[v, :, :, :, :]) /
-                (z_par[v + 1, :, :, :, :] - z_par[v, :, :, :, :]) / grav
+                ρ_par[v, :, :, :, :] *
+                (2 * a_par[v, :, :, :, :] -
+                 grav * (z_par[v + 1, :, :, :, :] - z_par[v, :, :, :, :])) /
+                (2 * a_par[v + 1, :, :, :, :] +
+                 grav * (z_par[v + 1, :, :, :, :] - z_par[v, :, :, :, :]))
         end
     end
     ᶜK = @. norm_sqr(ᶜuₕ_local) / 2

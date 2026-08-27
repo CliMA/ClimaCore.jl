@@ -1868,6 +1868,31 @@ function lmars_cartesian(normal, (y⁻,), (y⁺,))
 end
 
 """
+    lmars_tracer(normal, argvals⁻, argvals⁺)
+
+Interface flux for a passive tracer `ρq` that is **consistent with the LMARS mass
+flux**: the tracer is upwinded at the SAME low-Mach contact velocity `u*` that
+[`lmars_cartesian`](@ref) uses for continuity/momentum, so a uniform `q` reproduces
+`q·(u*·ρ_up)` = `q` × the LMARS continuity flux (free-stream / constancy
+preserving). Use this for `ρq_tot` whenever the dynamics use `INTERFACE_FLUX=lmars`,
+so mass and tracer share one interface velocity (a `kennedy_gruber_rusanov_tracer`
+here would advect moisture with a *different* mass flux and inject spurious tracer).
+`u*` is `√(γp/ρ)`-free and vanishes at rest over terrain. State fields required:
+`ρ`, `c`, `pm`, `u1/u2/u3`, `E1/E2/E3`, `q`.
+"""
+function lmars_tracer(normal, (y⁻,), (y⁺,))
+    n1 = y⁻.E1' * normal
+    n2 = y⁻.E2' * normal
+    n3 = y⁻.E3' * normal
+    unL = y⁻.u1 * n1 + y⁻.u2 * n2 + y⁻.u3 * n3
+    unR = y⁺.u1 * n1 + y⁺.u2 * n2 + y⁺.u3 * n3
+    C = (y⁻.ρ + y⁺.ρ) / 2 * (y⁻.c + y⁺.c) / 2      # reference impedance ρ̄ĉ
+    ustar = (unL + unR) / 2 - (y⁺.pm - y⁻.pm) / (2 * C)
+    ρqup = ifelse(ustar >= 0, y⁻.ρ * y⁻.q, y⁺.ρ * y⁺.q)
+    return (ρq = ustar * ρqup,)
+end
+
+"""
     lmars_cartesian_advective(normal, argvals⁻, argvals⁺)
 
 Advection-only counterpart of [`lmars_cartesian`](@ref): keeps LMARS's low-Mach
