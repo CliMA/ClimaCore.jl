@@ -110,6 +110,7 @@ SetBoundaryOperator
 ### Dirichlet (`SetValue`) replacement helpers
 
 ```@docs
+DirichletOperator
 gradient_c2f_dirichlet
 divergence_c2f_dirichlet
 curl_c2f_dirichlet

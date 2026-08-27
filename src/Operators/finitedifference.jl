@@ -487,17 +487,21 @@ end
 import UnrolledUtilities as UU
 
 
-function assert_valid_bcs(
-    op,
-    kwargs,
-    ::Type{ValidBCs},
-    removed_setvalue_hint = "",
-) where {ValidBCs}
+function assert_valid_bcs(op, kwargs, ::Type{ValidBCs}) where {ValidBCs}
     UU.unrolled_foreach(values(values(kwargs))) do bc
-        @assert bc isa ValidBCs "$op only supports boundary conditions:\n\n\t $ValidBCs.\n\n BCs given:\n\n\t $(values(values(kwargs)))\n$(bc isa SetValue ? removed_setvalue_hint : "")"
+        @assert bc isa ValidBCs "$op only supports boundary conditions:\n\n\t $ValidBCs.\n\n BCs given:\n\n\t $(values(values(kwargs)))"
     end
     return nothing
 end
+
+# `SetValue` was removed from `GradientC2F`, `DivergenceC2F`, `CurlC2F` and
+# `UpwindBiasedProductC2F`, but each removed boundary stencil is exactly
+# expressible with the remaining operators and boundary conditions. When a
+# `SetValue` is requested, those constructors return a [`DirichletOperator`](@ref)
+# (defined with the `*_c2f_dirichlet` helpers below) instead of an operator of
+# their own type.
+has_setvalue_bc(kwargs) =
+    UU.unrolled_any(bc -> bc isa SetValue, values(values(kwargs)))
 
 """
     InterpolateF2C()
@@ -1313,22 +1317,19 @@ of the closest interior point: since the padded upwind and downwind values
 then coincide, the boundary faces reduce to ``v^3[i] x_b \\boldsymbol{e}_3``,
 where ``x_b`` is the value at the center closest to the boundary.
 
-To prescribe the value of `x` used on the outside of a boundary (the removed
-`SetValue` boundary condition), see
-[`upwind_biased_product_c2f_dirichlet`](@ref).
+To prescribe the value of `x` used on the outside of a boundary instead, pass
+a [`SetValue`](@ref): the constructor then returns a
+[`DirichletOperator`](@ref) that applies
+[`upwind_biased_product_c2f_dirichlet`](@ref), the exact replacement for the
+removed `SetValue` stencil (fused into an enclosing broadcast, though lazy
+arguments and the boundary rows are materialized on each application).
 """
 struct UpwindBiasedProductC2F{BCS} <: AdvectionOperator
     bcs::BCS
     function UpwindBiasedProductC2F(; kwargs...)
-        assert_valid_bcs(
-            "UpwindBiasedProductC2F",
-            kwargs,
-            Extrapolate,
-            "\n`SetValue` was removed from UpwindBiasedProductC2F; to \
-             prescribe the advected value used at a boundary face, use \
-             `Operators.upwind_biased_product_c2f_dirichlet`, which builds \
-             the exact replacement from the remaining operators.\n",
-        )
+        has_setvalue_bc(kwargs) &&
+            return DirichletOperator{UpwindBiasedProductC2F}(kwargs)
+        assert_valid_bcs("UpwindBiasedProductC2F", kwargs, Extrapolate)
         bcs = advection_bcs(kwargs)
         new{typeof(bcs)}(bcs)
     end
@@ -1998,21 +1999,18 @@ The following boundary conditions are supported:
     zero normal derivative only where the boundary is flat; elsewhere the value
     that gives one is ``-g^{31} \\partial_1 x / g^{33}``.
 
-To prescribe the boundary value of `x` instead (the removed `SetValue`
-boundary condition), see [`gradient_c2f_dirichlet`](@ref).
+To prescribe the boundary value of `x` instead, pass a [`SetValue`](@ref):
+the constructor then returns a [`DirichletOperator`](@ref) that applies
+[`gradient_c2f_dirichlet`](@ref), the exact replacement for the removed
+`SetValue` stencil (fused into an enclosing broadcast, though lazy
+arguments and the boundary rows are materialized on each application).
 """
 struct GradientC2F{BC} <: GradientOperator
     bcs::BC
     function GradientC2F(; kwargs...)
-        assert_valid_bcs(
-            "GradientC2F",
-            kwargs,
-            SetGradient,
-            "\n`SetValue` was removed from GradientC2F; to prescribe the \
-             boundary value of the differentiated field, use \
-             `Operators.gradient_c2f_dirichlet`, which builds the exact \
-             replacement from the remaining operators.\n",
-        )
+        has_setvalue_bc(kwargs) &&
+            return DirichletOperator{GradientC2F}(kwargs)
+        assert_valid_bcs("GradientC2F", kwargs, SetGradient)
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     GradientC2F(bcs) = GradientC2F(; bcs...)
@@ -2138,21 +2136,18 @@ The following boundary conditions are supported:
     D(v)[\\tfrac{1}{2}] = x
     ```
 
-To prescribe the boundary value of `v` instead (the removed `SetValue`
-boundary condition), see [`divergence_c2f_dirichlet`](@ref).
+To prescribe the boundary value of `v` instead, pass a [`SetValue`](@ref):
+the constructor then returns a [`DirichletOperator`](@ref) that applies
+[`divergence_c2f_dirichlet`](@ref), the exact replacement for the removed
+`SetValue` stencil (fused into an enclosing broadcast, though lazy
+arguments and the boundary rows are materialized on each application).
 """
 struct DivergenceC2F{BC} <: DivergenceOperator
     bcs::BC
     function DivergenceC2F(; kwargs...)
-        assert_valid_bcs(
-            "DivergenceC2F",
-            kwargs,
-            SetDivergence,
-            "\n`SetValue` was removed from DivergenceC2F; to prescribe the \
-             boundary value of the diverged field, use \
-             `Operators.divergence_c2f_dirichlet`, which builds the exact \
-             replacement from the remaining operators.\n",
-        )
+        has_setvalue_bc(kwargs) &&
+            return DirichletOperator{DivergenceC2F}(kwargs)
+        assert_valid_bcs("DivergenceC2F", kwargs, SetDivergence)
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     DivergenceC2F(bcs) = DivergenceC2F(; bcs...)
@@ -2205,21 +2200,17 @@ The following boundary conditions are supported:
   - [`SetCurl(v⁰)`](@ref): enforce the curl operator output at the boundary to be
     the contravariant vector `v⁰`.
 
-To prescribe the boundary value of `v` instead (the removed `SetValue`
-boundary condition), see [`curl_c2f_dirichlet`](@ref).
+To prescribe the boundary value of `v` instead, pass a [`SetValue`](@ref):
+the constructor then returns a [`DirichletOperator`](@ref) that applies
+[`curl_c2f_dirichlet`](@ref), the exact replacement for the removed
+`SetValue` stencil (fused into an enclosing broadcast, though lazy
+arguments and the boundary rows are materialized on each application).
 """
 struct CurlC2F{BC} <: CurlFiniteDifferenceOperator
     bcs::BC
     function CurlC2F(; kwargs...)
-        assert_valid_bcs(
-            "CurlC2F",
-            kwargs,
-            SetCurl,
-            "\n`SetValue` was removed from CurlC2F; to prescribe the \
-             boundary value of the curled field, use \
-             `Operators.curl_c2f_dirichlet`, which builds the exact \
-             replacement from the remaining operators.\n",
-        )
+        has_setvalue_bc(kwargs) && return DirichletOperator{CurlC2F}(kwargs)
+        assert_valid_bcs("CurlC2F", kwargs, SetCurl)
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     CurlC2F(bcs) = CurlC2F(; bcs...)
@@ -2242,10 +2233,62 @@ boundary_width(::CurlC2F, ::AbstractBoundaryCondition) = 1
 # "Boundary values and advection built from the primitive operators" testset
 # in `test/Operators/finitedifference/unit_column.jl` pins the replacement
 # expressions against the stencils they reproduce). The helpers below build
-# those replacements. They are migration aids rather than building blocks for
-# performance-sensitive code: every call materializes its result, along with
-# small level fields holding the boundary rows' values; inline the expression
-# each helper builds (see the docstrings) to fuse it into a larger broadcast.
+# those replacements, and requesting a `SetValue` from one of those operators'
+# constructors returns a `DirichletOperator` that applies the matching helper.
+# Each helper has a lazy `*_broadcasted` form, which returns the replacement
+# as an unmaterialized stencil broadcast that fuses into an enclosing
+# broadcast like any other operator application; the public helpers
+# materialize that broadcast. Laziness stops at the boundary rows: their
+# values depend on the boundary levels of the actual argument fields, so every
+# application materializes small level fields holding them (and any lazy
+# argument must be materialized before the boundary levels can be taken).
+
+"""
+    DirichletOperator{Op}(bcs)
+
+The operator returned by the constructor of `Op` (one of [`GradientC2F`](@ref),
+[`DivergenceC2F`](@ref), [`CurlC2F`](@ref) or [`UpwindBiasedProductC2F`](@ref))
+when one of the requested boundary conditions is a [`SetValue`](@ref), which
+those operators no longer support directly. Applying it with `.` calls the
+corresponding Dirichlet replacement helper ([`gradient_c2f_dirichlet`](@ref),
+[`divergence_c2f_dirichlet`](@ref), [`curl_c2f_dirichlet`](@ref) or
+[`upwind_biased_product_c2f_dirichlet`](@ref)) with each `SetValue(x₀)`
+unwrapped to its  `x₀value` and every other boundary condition passed through
+as given. The replacement is built as a lazy stencil broadcast, so it fuses
+into an enclosing broadcast like a true operator application; but the
+boundary rows' values depend on the boundary levels of the actual arguments,
+so each application first materializes any lazy argument, along with small
+level fields holding the boundary rows' values.
+"""
+struct DirichletOperator{Op, BCS}
+    bcs::BCS
+    DirichletOperator{Op}(kwargs) where {Op} = (
+        bcs = map(dirichlet_bc_value, NamedTuple(kwargs));
+        new{Op, typeof(bcs)}(bcs)
+    )
+end
+
+dirichlet_bc_value(bc::SetValue) = bc.val
+dirichlet_bc_value(bc) = bc
+
+dirichlet_helper_broadcasted(::DirichletOperator{GradientC2F}) =
+    gradient_c2f_dirichlet_broadcasted
+dirichlet_helper_broadcasted(::DirichletOperator{DivergenceC2F}) =
+    divergence_c2f_dirichlet_broadcasted
+dirichlet_helper_broadcasted(::DirichletOperator{CurlC2F}) =
+    curl_c2f_dirichlet_broadcasted
+dirichlet_helper_broadcasted(::DirichletOperator{UpwindBiasedProductC2F}) =
+    upwind_biased_product_c2f_dirichlet_broadcasted
+
+# Applying a DirichletOperator returns the helper's lazy stencil broadcast,
+# which fuses into any enclosing broadcast. The helpers need the boundary
+# levels of the actual argument fields to build the boundary rows, so lazy
+# arguments are materialized first.
+Base.Broadcast.broadcasted(op::DirichletOperator, args...) =
+    dirichlet_helper_broadcasted(op)(
+        unrolled_map(Base.Broadcast.materialize, args)...;
+        op.bcs...,
+    )
 
 # Wrap a boundary value for broadcasting against level fields: numbers and
 # axis tensors broadcast as scalars, and fields broadcast as themselves.
@@ -2300,7 +2343,14 @@ combined with an explicit condition on the other; and a boundary without a
 prescribed value is computed as by `GradientC2F` without a boundary condition
 there. The result is materialized on the face space.
 """
-function gradient_c2f_dirichlet(x; boundary_values...)
+gradient_c2f_dirichlet(x; boundary_values...) = Base.Broadcast.materialize(
+    gradient_c2f_dirichlet_broadcasted(x; boundary_values...),
+)
+
+# The lazy form of `gradient_c2f_dirichlet`: the same replacement, returned as
+# an unmaterialized stencil broadcast (the boundary rows' level fields are
+# still materialized).
+function gradient_c2f_dirichlet_broadcasted(x; boundary_values...)
     space = axes(x)
     fname = "gradient_c2f_dirichlet"
     (lname, rname, x_bot, x_top) =
@@ -2327,7 +2377,7 @@ function gradient_c2f_dirichlet(x; boundary_values...)
         end
         bcs = merge(bcs, NamedTuple{(rname,)}((bc,)))
     end
-    return GradientC2F(; bcs...).(x)
+    return Base.Broadcast.broadcasted(GradientC2F(; bcs...), x)
 end
 
 """
@@ -2356,7 +2406,13 @@ a boundary without a prescribed value is computed as by `DivergenceC2F`
 without a boundary condition there. The result is materialized on the face
 space.
 """
-function divergence_c2f_dirichlet(v; boundary_values...)
+divergence_c2f_dirichlet(v; boundary_values...) = Base.Broadcast.materialize(
+    divergence_c2f_dirichlet_broadcasted(v; boundary_values...),
+)
+
+# The lazy form of `divergence_c2f_dirichlet` (see
+# `gradient_c2f_dirichlet_broadcasted`).
+function divergence_c2f_dirichlet_broadcasted(v; boundary_values...)
     space = axes(v)
     fname = "divergence_c2f_dirichlet"
     (lname, rname, v_bot, v_top) =
@@ -2401,9 +2457,10 @@ function divergence_c2f_dirichlet(v; boundary_values...)
         end
         bcs = merge(bcs, NamedTuple{(rname,)}((bc,)))
     end
-    set_boundary = SetBoundaryOperator(; bcs...)
-    divergence = DivergenceC2F()
-    return @. set_boundary(divergence(v))
+    return Base.Broadcast.broadcasted(
+        SetBoundaryOperator(; bcs...),
+        Base.Broadcast.broadcasted(DivergenceC2F(), v),
+    )
 end
 
 """
@@ -2430,7 +2487,13 @@ value that is already an [`AbstractBoundaryCondition`](@ref) (e.g. a
 value is computed as by `CurlC2F` without a boundary condition there. The
 result is materialized on the face space.
 """
-function curl_c2f_dirichlet(u; boundary_values...)
+curl_c2f_dirichlet(u; boundary_values...) = Base.Broadcast.materialize(
+    curl_c2f_dirichlet_broadcasted(u; boundary_values...),
+)
+
+# The lazy form of `curl_c2f_dirichlet` (see
+# `gradient_c2f_dirichlet_broadcasted`).
+function curl_c2f_dirichlet_broadcasted(u; boundary_values...)
     space = axes(u)
     fname = "curl_c2f_dirichlet"
     (lname, rname, u_bot, u_top) =
@@ -2464,7 +2527,7 @@ function curl_c2f_dirichlet(u; boundary_values...)
         end
         bcs = merge(bcs, NamedTuple{(rname,)}((bc,)))
     end
-    return CurlC2F(; bcs...).(u)
+    return Base.Broadcast.broadcasted(CurlC2F(; bcs...), u)
 end
 
 """
@@ -2487,7 +2550,22 @@ e.g. a `SetValue` of the flux) is instead imposed as given on the wrapping
 as by `UpwindBiasedProductC2F` without a boundary condition there. The result
 is materialized on the face space.
 """
-function upwind_biased_product_c2f_dirichlet(v, x; boundary_values...)
+upwind_biased_product_c2f_dirichlet(v, x; boundary_values...) =
+    Base.Broadcast.materialize(
+        upwind_biased_product_c2f_dirichlet_broadcasted(
+            v,
+            x;
+            boundary_values...,
+        ),
+    )
+
+# The lazy form of `upwind_biased_product_c2f_dirichlet` (see
+# `gradient_c2f_dirichlet_broadcasted`).
+function upwind_biased_product_c2f_dirichlet_broadcasted(
+    v,
+    x;
+    boundary_values...,
+)
     center_space = axes(x)
     fname = "upwind_biased_product_c2f_dirichlet"
     (lname, rname, x_bot, x_top) = dirichlet_boundary_values(
@@ -2529,9 +2607,10 @@ function upwind_biased_product_c2f_dirichlet(v, x; boundary_values...)
         end
         bcs = merge(bcs, NamedTuple{(rname,)}((bc,)))
     end
-    set_boundary = SetBoundaryOperator(; bcs...)
-    product = UpwindBiasedProductC2F()
-    return @. set_boundary(product(v, x))
+    return Base.Broadcast.broadcasted(
+        SetBoundaryOperator(; bcs...),
+        Base.Broadcast.broadcasted(UpwindBiasedProductC2F(), v, x),
+    )
 end
 
 
