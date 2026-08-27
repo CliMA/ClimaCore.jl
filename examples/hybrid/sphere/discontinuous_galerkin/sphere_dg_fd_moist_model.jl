@@ -472,16 +472,21 @@ function initial_state(ᶜlocal_geometry, ᶠlocal_geometry)
         return Fields.FieldVector(Yc = Ycr, uₕ = ᶜuₕr, w = ᶠwr)
     end
 
-    ᶜT = @. temp(lat, z)
-    # Subsaturated moisture: q_tot = RH0 · q_vap_sat(T, ρ), capped at z_t. Moist
-    # density from the analytic pressure and moist gas constant R_m so the
-    # diagnosed moist pressure ρ R_m T matches the analytic p (hydrostatically
-    # consistent up to the discrete rebalance below — keeps the initial spurious
-    # w small despite the added moisture).
-    ᶜρ_dry = @. pres(lat, z) / (R_d * ᶜT)
-    ᶜq_tot = @. q_rh0 * TD.q_vap_saturation(thermo_params, ᶜT, ᶜρ_dry) * (z ≤ z_t)
+    # MOIST baroclinic wave in GEOSTROPHIC + hydrostatic balance (DCMIP2016-style
+    # virtual-temperature construction): the Ullrich analytic temperature is taken
+    # as the VIRTUAL temperature T_v, so density ρ = p/(R_d T_v), pressure p, and the
+    # wind u_base remain EXACTLY the balanced dry fields — adding moisture does not
+    # perturb the momentum balance (this removes the geostrophic IC imbalance that
+    # otherwise spins up spurious O(50–100 m/s) meridional wind). The actual
+    # temperature follows from p = ρ R_m T = ρ R_d T_v ⇒ T = T_v · R_d/R_m, and the
+    # diagnosed moist pressure ρ R_m T = ρ R_d T_v ≡ p is the analytic (balanced) p.
+    # RH0=0 recovers R_m=R_d, T=T_v, ρ=ρ_dry — i.e. exactly the dry balanced state.
+    ᶜTv = @. temp(lat, z)                                   # analytic T ≡ virtual temp
+    ᶜρ = @. pres(lat, z) / (R_d * ᶜTv)                      # = dry-balanced density
+    ᶜq_tot =
+        @. q_rh0 * TD.q_vap_saturation(thermo_params, ᶜTv, ᶜρ) * (z ≤ z_t)
     ᶜR_m = @. TD.gas_constant_air(thermo_params, ᶜq_tot, FT(0), FT(0))
-    ᶜρ = @. pres(lat, z) / (ᶜR_m * ᶜT)
+    ᶜT = @. ᶜTv * R_d / ᶜR_m                                # actual temperature
     u₀ = @. u_base(lat, z)
     v₀ = @. 0 * z
     if !is_balanced_flow
