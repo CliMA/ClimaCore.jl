@@ -436,6 +436,14 @@ end
         # Field-valued boundary values
         helped = Operators.gradient_c2f_dirichlet(θᶜ; bottom = θ₀, top = θ₀)
         @test cpu_parent(helped)[:] ≈ ref
+        # requesting the removed SetValue from the constructor applies the
+        # same helper
+        routed = Operators.GradientC2F(
+            bottom = Operators.SetValue(θ₀),
+            top = Operators.SetValue(θ₀),
+        )
+        @test routed isa Operators.DirichletOperator{Operators.GradientC2F}
+        @test cpu_parent(routed.(θᶜ))[:] ≈ ref
         θ₀_bot = @. 0 * θ_bot + θ₀
         helped = Operators.gradient_c2f_dirichlet(θᶜ; bottom = θ₀_bot, top = θ₀)
         @test cpu_parent(helped)[:] ≈ ref
@@ -504,6 +512,13 @@ end
         ]
         helped = Operators.divergence_c2f_dirichlet(wᶜ; bottom = w₀, top = w₀)
         @test cpu_parent(helped)[:] ≈ ref
+        # requesting the removed SetValue from the constructor applies the
+        # same helper
+        routed = Operators.DivergenceC2F(
+            bottom = Operators.SetValue(w₀),
+            top = Operators.SetValue(w₀),
+        )
+        @test cpu_parent(routed.(wᶜ))[:] ≈ ref
         # an explicit boundary condition is passed through unchanged, imposed
         # on the wrapping SetBoundaryOperator
         helped = Operators.divergence_c2f_dirichlet(
@@ -542,6 +557,16 @@ end
         helped = Operators.curl_c2f_dirichlet(uᶜ; bottom = u₀, top = u₀)
         @test cpu_parent(helped.components.data.:1)[:] ≈ ref₁
         @test cpu_parent(helped.components.data.:2)[:] ≈ ref₂
+        # requesting the removed SetValue from the constructor applies the
+        # same helper
+        routed = Operators.CurlC2F(
+            bottom = Operators.SetValue(u₀),
+            top = Operators.SetValue(u₀),
+        ).(
+            uᶜ,
+        )
+        @test cpu_parent(routed.components.data.:1)[:] ≈ ref₁
+        @test cpu_parent(routed.components.data.:2)[:] ≈ ref₂
         # an explicit boundary condition is passed through unchanged
         helped = Operators.curl_c2f_dirichlet(
             uᶜ;
@@ -591,6 +616,13 @@ end
             top = θ₀,
         )
         @test cpu_parent(helped)[:] ≈ ref
+        # requesting the removed SetValue from the constructor applies the
+        # same helper
+        routed = Operators.UpwindBiasedProductC2F(
+            bottom = Operators.SetValue(θ₀),
+            top = Operators.SetValue(θ₀),
+        )
+        @test cpu_parent(routed.(wᶠ, θᶜ))[:] ≈ ref
         # an explicit boundary condition is passed through unchanged, imposed
         # on the wrapping SetBoundaryOperator
         helped = Operators.upwind_biased_product_c2f_dirichlet(
@@ -811,17 +843,22 @@ end
     # These operator/boundary-condition combinations were removed; each can be
     # written in terms of the remaining operators and boundary conditions (see
     # the testset above and NEWS.md). Pin the removals, so that they cannot
-    # silently come back without boundary rows to support them.
+    # silently come back without boundary rows to support them: requesting a
+    # `SetValue` from a C2F operator constructor returns a `DirichletOperator`
+    # wrapping the replacement expression instead of an operator of that type.
     FT = Float64
-    @test_throws AssertionError Operators.GradientC2F(;
+    @test Operators.GradientC2F(;
         bottom = Operators.SetValue(FT(0)),
-    )
-    @test_throws AssertionError Operators.DivergenceC2F(;
+    ) isa Operators.DirichletOperator{Operators.GradientC2F}
+    @test Operators.DivergenceC2F(;
         bottom = Operators.SetValue(Geometry.WVector(FT(0))),
-    )
-    @test_throws AssertionError Operators.CurlC2F(;
+    ) isa Operators.DirichletOperator{Operators.DivergenceC2F}
+    @test Operators.CurlC2F(;
         bottom = Operators.SetValue(Geometry.Covariant12Vector(FT(0), FT(0))),
-    )
+    ) isa Operators.DirichletOperator{Operators.CurlC2F}
+    @test Operators.UpwindBiasedProductC2F(;
+        bottom = Operators.SetValue(FT(0)),
+    ) isa Operators.DirichletOperator{Operators.UpwindBiasedProductC2F}
     @test_throws AssertionError Operators.InterpolateC2F(;
         bottom = Operators.SetGradient(Geometry.WVector(FT(0))),
     )

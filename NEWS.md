@@ -171,8 +171,15 @@ main
   migration aids rather than performance-sensitive building blocks), pass
   boundary values that are already boundary conditions through unchanged (so a
   Dirichlet value on one boundary can be combined with an explicit condition
-  on the other), and the four operators' error messages for a `SetValue`
-  boundary condition now point to them. `MatrixFields.operator_matrix` now reports `LinVanLeerC2F` as a
+  on the other), and requesting a `SetValue` from one of the four operators'
+  constructors automatically returns an `Operators.DirichletOperator` that
+  applies the matching helper when broadcast, so existing
+  `GradientC2F(bottom = SetValue(x₀)).(x)`-style code keeps working. The
+  replacement stencil is built lazily, so it fuses into an enclosing broadcast
+  like a true operator application, but each application still materializes
+  any lazy argument (the boundary rows need the argument's boundary levels)
+  along with small level fields holding the boundary rows' values.
+  `MatrixFields.operator_matrix` now reports `LinVanLeerC2F` as a
   nonlinear operator instead of failing with a `MethodError`.
 
 - Spectral-element grids can be marked as discontinuous-Galerkin function
