@@ -5,7 +5,8 @@ using UnrolledUtilities
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ClimaCore: slab
 
-export AbstractLimiter, QuasiMonotoneLimiter, VerticalMassBorrowingLimiter
+export AbstractLimiter,
+    QuasiMonotoneLimiter, VerticalMassBorrowingLimiter, PositivityLimiter
 
 """
     AbstractLimiter
@@ -20,6 +21,7 @@ abstract type AbstractLimiter end
 
 # implementations
 include("quasimonotone.jl")
+include("positivity.jl")
 include("vertical_mass_borrowing_limiter.jl")
 
 end # end module

@@ -654,26 +654,63 @@ callback = CTS.CallbackSet(monitor)
 # (imex_ark.jl calls `f.lim!(U, p, t, u_ref)` each stage i≠1), so every stage's
 # tendency sees an in-bounds q_tot before the thermo runs. Bounds are taken from the
 # stage reference state `u_ref`; the projection is applied to the incremented `U`.
-const use_tracer_limiter = get(ENV, "TRACER_LIMITER", "1") == "1"
+# Zhang–Shu (2010) positivity limiter (default). Scales the whole conserved vector
+# (ρ, ρe, ρu1, ρu2, ρu3, ρq_tot) at each node toward the WJ-weighted element mean by
+# ONE θ ∈ [0,1] — a convex combination, so every element mean (mass/energy/water) is
+# preserved exactly — chosen as the smallest θ enforcing ρ ≥ ρ_min, ρq_tot ≥ 0, AND
+# p ≥ p_min simultaneously (p via zs_pressure + per-node bisection). This unifies the
+# density/pressure positivity that keeps the entropy-conservative waruszewski flux's
+# ln_mean(ρ)/√(γp/ρ) arguments positive with the moisture positivity, with NO
+# limiter-ordering hazard (one common θ) and NO grid-scale hyperdiffusion. It is a
+# mean-preserving redistribution (the Zhang–Shu ε admissible-set boundary), NOT a
+# pointwise clamp. Applied per RK stage via ClimaTimeSteppers' `lim!` hook.
+#
+# QuasiMonotone is available (TRACER_LIMITER=1) for its two-sided shape preservation
+# (overshoot control), but is OFF by default: Zhang–Shu already covers q_tot ≥ 0, and
+# running both risks them fighting (QML redistributes ρq_tot using ρ, ZS then rescales ρ).
+const use_tracer_limiter = get(ENV, "TRACER_LIMITER", "0") == "1"
+const use_positivity_limiter = get(ENV, "POSITIVITY_LIMITER", "1") == "1"
+const zs_rho_min = parse(FT, get(ENV, "ZS_RHO_MIN", "1e-6"))
+const zs_p_min = parse(FT, get(ENV, "ZS_P_MIN", "1e-2"))
 const tracer_limiter = Limiters.QuasiMonotoneLimiter(Y.Yc.ρq_tot)
+const positivity_limiter =
+    Limiters.PositivityLimiter(FT; ρ_min = zs_rho_min, p_min = zs_p_min, maxiter = 10)
+
+# Pressure of a scaled conserved node, matching the tendency's EOS exactly: the
+# horizontal kinetic energy from the (scaled) Cartesian momenta, the vertical KE +
+# geopotential carried unscaled in `off = w_c²/2 + Φ`, and the non-throwing moist
+# `moist_p_dyn`. GPU-safe (moist_p_dyn is used in the device tendency broadcast).
+@inline function zs_pressure(ρ, ρe, ρu1, ρu2, ρu3, ρq, off)
+    K_h = (ρu1^2 + ρu2^2 + ρu3^2) / (2 * ρ^2)
+    e_int = ρe / ρ - K_h - off
+    return moist_p_dyn(ρ, e_int, ρq / ρ).p
+end
+
 function lim_fddg!(U, p, t, u_ref)
-    use_tracer_limiter || return nothing
-    Limiters.compute_bounds!(tracer_limiter, u_ref.Yc.ρq_tot, u_ref.Yc.ρ)
-    # POSITIVITY: QuasiMonotone by itself only enforces the element+neighbor
-    # [min,max]; once a whole region undershoots, its lower bound is itself < 0 and
-    # q_tot stays negative → R_m = R_d+(R_v−R_d)q_tot flips sign → p = ρR_mT < 0 →
-    # sqrt(γp/ρ) / ln_mean(ρ/2p) DomainError (diagnosed on CPU). Floor the lower
-    # bound at 0 so the limiter is bound-preserving WITH a physical q_tot ≥ 0 floor
-    # (standard positivity limiter, mass-conserving when the element mean ≥ 0 — not a
-    # pointwise clamp of the prognostic). q_bounds_nbr stores [min,max] on axis 2;
-    # index 1 = min. selectdim keeps this rank/device-agnostic (GPU broadcast-safe).
-    q_min = selectdim(parent(tracer_limiter.q_bounds_nbr), 2, 1)
-    before = debug_scan ? minimum(parent(U.Yc.ρq_tot)) : 0.0
-    boundmin_pre = debug_scan ? minimum(q_min) : 0.0
-    @. q_min = max(q_min, 0)
-    Limiters.apply_limiter!(U.Yc.ρq_tot, U.Yc.ρ, tracer_limiter)
-    debug_scan && @info "lim!" t minρq_before = before minρq_after =
-        minimum(parent(U.Yc.ρq_tot)) boundmin_pre boundmin_post = minimum(q_min)
+    Yc = U.Yc
+    if use_tracer_limiter
+        # QuasiMonotone (optional): two-sided element+neighbor [min,max] shape
+        # preservation, lower bound floored at 0 for positivity. q_bounds_nbr stores
+        # [min,max] on axis 2; index 1 = min. selectdim is rank/device-agnostic.
+        Limiters.compute_bounds!(tracer_limiter, u_ref.Yc.ρq_tot, u_ref.Yc.ρ)
+        q_min = selectdim(parent(tracer_limiter.q_bounds_nbr), 2, 1)
+        @. q_min = max(q_min, 0)
+        Limiters.apply_limiter!(U.Yc.ρq_tot, U.Yc.ρ, tracer_limiter)
+    end
+    if use_positivity_limiter
+        # off = w_c²/2 + Φ (w_c = ρw interpolated to centers / ρ), matching the
+        # tendency's e_int = ρe/ρ − K − Φ. Recomputed each stage from U.
+        w_c = @. Ic(Geometry.WVector(U.ρw)).components.data.:1 / Yc.ρ
+        off = @. w_c^2 / 2 + ᶜΦ
+        Limiters.apply_positivity_limiter!(
+            positivity_limiter,
+            zs_pressure,
+            (Yc.ρ, Yc.ρe, Yc.ρu1, Yc.ρu2, Yc.ρu3, Yc.ρq_tot),
+            off,
+        )
+    end
+    debug_scan && @info "lim!" t minρ = minimum(parent(Yc.ρ)) minρq =
+        minimum(parent(Yc.ρq_tot))
     return nothing
 end
 
