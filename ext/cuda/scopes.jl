@@ -215,6 +215,61 @@ end
     return @inbounds indices[view_range]
 end
 
+# A strided subset of linear indices, built without StepRange's checked
+# steprange_last (sign/overflow branches and a runtime srem) and with a stored
+# length, so per-thread point loops don't pay for checked range construction.
+struct StridedLinearIndices
+    first::Int
+    step::Int
+    length::Int
+end
+Base.length(indices::StridedLinearIndices) = indices.length
+Base.firstindex(::StridedLinearIndices) = 1
+Base.lastindex(indices::StridedLinearIndices) = indices.length
+Base.eachindex(indices::StridedLinearIndices) = Base.OneTo(indices.length)
+Base.size(indices::StridedLinearIndices) = (indices.length,)
+Base.@propagate_inbounds Base.getindex(indices::StridedLinearIndices, n::Int) =
+    indices.first + (n - 1) * indices.step
+DataLayouts.simd_over_indices(::StridedLinearIndices) = false
+
+# Unmasked point loops assign each thread the linear indices rank:n:N. Building
+# that as a StepRange constructs two checked ranges per kernel (the colon and
+# Base.OneTo(N)[view_range]), whose steprange_last and length require an srem,
+# an sdiv, and several overflow branches; with rank, n, and N all positive, a
+# single division gives the same subset for a fraction of the register cost.
+Base.@propagate_inbounds function DataLayouts.subscope_indices(
+    ::DataLayouts.ThisThread,
+    scope::ThisKernel,
+    indices::AbstractUnitRange,
+)
+    rank = Int(DataLayouts.thread_rank(scope))
+    n = Int(DataLayouts.num_threads(scope))
+    num_indices = length(indices)
+    count = rank > num_indices ? 0 : (num_indices - rank) ÷ n + 1
+    return StridedLinearIndices(Int(first(indices)) + rank - 1, n, count)
+end
+
+# Masked point loops store their active positions as a Base.OneTo inside
+# ActivePointIndices and ActiveColumnIndices, so the same unchecked strided
+# subset applies to them; only the position range is divided among threads,
+# while the mask lookup in getindex is untouched.
+Base.@propagate_inbounds DataLayouts.subscope_indices(
+    subscope::DataLayouts.ThisThread,
+    scope::ThisKernel,
+    indices::DataLayouts.ActivePointIndices{Nv},
+) where {Nv} = DataLayouts.ActivePointIndices{Nv}(
+    indices.mask,
+    DataLayouts.subscope_indices(subscope, scope, indices.indices),
+)
+Base.@propagate_inbounds DataLayouts.subscope_indices(
+    subscope::DataLayouts.ThisThread,
+    scope::ThisKernel,
+    indices::DataLayouts.ActiveColumnIndices,
+) = DataLayouts.ActiveColumnIndices(
+    indices.mask,
+    DataLayouts.subscope_indices(subscope, scope, indices.indices),
+)
+
 # Unmasked point loops on device scopes iterate over eachindex instead of the
 # Cartesian each_slice_index. When every argument supports linear indexing, this
 # avoids the integer divisions required for linear-to-Cartesian conversion.
