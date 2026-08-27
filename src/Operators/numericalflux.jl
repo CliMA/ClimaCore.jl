@@ -177,18 +177,21 @@ function _add_interior_face_flux_2d!(mode::Val, fn::F, dydt, args...) where {F}
     internal_surface_geometry = grid.internal_surface_geometry
     dydt_bc = Base.broadcastable(dydt)
     args_bc =
-        map(arg -> arg isa Fields.Field ? Base.broadcastable(arg) : arg, args)
+        unrolled_map(arg -> arg isa Fields.Field ? Base.broadcastable(arg) : arg, args)
 
     for (iface, (elem⁻, face⁻, elem⁺, face⁺, reversed)) in
         enumerate(Topologies.interior_faces(topology))
 
-        internal_surface_geometry_slab = slab(internal_surface_geometry, iface)
+        internal_surface_geometry_slab =
+            slab(internal_surface_geometry, 1, iface)
 
-        arg_slabs⁻ = map(arg -> slab(Fields.todata(arg), elem⁻), args_bc)
-        arg_slabs⁺ = map(arg -> slab(Fields.todata(arg), elem⁺), args_bc)
+        arg_slabs⁻ =
+            unrolled_map(arg -> slab(Fields.todata(arg), 1, elem⁻), args_bc)
+        arg_slabs⁺ =
+            unrolled_map(arg -> slab(Fields.todata(arg), 1, elem⁺), args_bc)
 
-        dydt_slab⁻ = slab(Fields.field_values(dydt_bc), elem⁻)
-        dydt_slab⁺ = slab(Fields.field_values(dydt_bc), elem⁺)
+        dydt_slab⁻ = slab(Fields.field_values(dydt_bc), 1, elem⁻)
+        dydt_slab⁺ = slab(Fields.field_values(dydt_bc), 1, elem⁺)
 
         for q in 1:Nq
             sgeom⁻ = internal_surface_geometry_slab[q]
@@ -196,13 +199,13 @@ function _add_interior_face_flux_2d!(mode::Val, fn::F, dydt, args...) where {F}
             i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
             i⁺, j⁺ = Topologies.face_node_index(face⁺, Nq, q, reversed)
 
-            argvals⁻ = map(
+            argvals⁻ = unrolled_map(
                 slab_ ->
                     slab_ isa DataLayouts.DataLayout ? slab_[1, i⁻, j⁻, 1] :
                     slab_,
                 arg_slabs⁻,
             )
-            argvals⁺ = map(
+            argvals⁺ = unrolled_map(
                 slab_ ->
                     slab_ isa DataLayouts.DataLayout ? slab_[1, i⁺, j⁺, 1] :
                     slab_,
@@ -239,7 +242,7 @@ function _add_interior_face_flux_extruded_1d!(
     local_geometry = Spaces.local_geometry_data(space)
 
     dydt_data = Fields.field_values(dydt)
-    args_data = map(
+    args_data = unrolled_map(
         arg -> arg isa Fields.Field ? Fields.field_values(arg) : arg,
         args,
     )
@@ -254,17 +257,13 @@ function _add_interior_face_flux_extruded_1d!(
             lg⁻ = slab(local_geometry, v, elem⁻)[i⁻]
             sgeom⁻ = compute_surface_geometry_1d(lg⁻, face⁻)
 
-            argvals⁻ = map(args_data) do arg
-                val =
-                    arg isa DataLayouts.AbstractData ?
-                    slab(arg, v, elem⁻)[i⁻] : arg
-                add_auto_broadcasters(val)
+            argvals⁻ = unrolled_map(args_data) do arg
+                arg isa DataLayouts.AbstractData ?
+                slab(arg, v, elem⁻)[i⁻] : arg
             end
-            argvals⁺ = map(args_data) do arg
-                val =
-                    arg isa DataLayouts.AbstractData ?
-                    slab(arg, v, elem⁺)[i⁺] : arg
-                add_auto_broadcasters(val)
+            argvals⁺ = unrolled_map(args_data) do arg
+                arg isa DataLayouts.AbstractData ?
+                slab(arg, v, elem⁺)[i⁺] : arg
             end
 
             δ⁻, δ⁺ = _face_side_increments(
@@ -302,7 +301,7 @@ function _add_interior_face_flux_extruded_2d!(
     (_, quad_weights) = Quadratures.quadrature_points(FT, quadrature_style)
 
     dydt_data = Fields.field_values(dydt)
-    args_data = map(
+    args_data = unrolled_map(
         arg -> arg isa Fields.Field ? Fields.field_values(arg) : arg,
         args,
     )
@@ -313,12 +312,25 @@ function _add_interior_face_flux_extruded_2d!(
 
             dydt_slab⁻ = slab(dydt_data, v, elem⁻)
             dydt_slab⁺ = slab(dydt_data, v, elem⁺)
+            lg_slab⁻ = slab(local_geometry, v, elem⁻)
+            arg_slabs⁻ = unrolled_map(
+                arg ->
+                    arg isa DataLayouts.AbstractData ?
+                    slab(arg, v, elem⁻) : arg,
+                args_data,
+            )
+            arg_slabs⁺ = unrolled_map(
+                arg ->
+                    arg isa DataLayouts.AbstractData ?
+                    slab(arg, v, elem⁺) : arg,
+                args_data,
+            )
 
             for q in 1:Nq
                 i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
                 i⁺, j⁺ = Topologies.face_node_index(face⁺, Nq, q, reversed)
 
-                lg⁻ = slab(local_geometry, v, elem⁻)[1, i⁻, j⁻, 1]
+                lg⁻ = lg_slab⁻[1, i⁻, j⁻, 1]
                 sgeom⁻ = compute_surface_geometry_extruded_2d(
                     lg⁻,
                     quad_weights,
@@ -327,18 +339,18 @@ function _add_interior_face_flux_extruded_2d!(
                     j⁻,
                 )
 
-                argvals⁻ = map(args_data) do arg
-                    val =
-                        arg isa DataLayouts.AbstractData ?
-                        slab(arg, v, elem⁻)[1, i⁻, j⁻, 1] : arg
-                    add_auto_broadcasters(val)
-                end
-                argvals⁺ = map(args_data) do arg
-                    val =
-                        arg isa DataLayouts.AbstractData ?
-                        slab(arg, v, elem⁺)[1, i⁺, j⁺, 1] : arg
-                    add_auto_broadcasters(val)
-                end
+                argvals⁻ = unrolled_map(
+                    slab_ ->
+                        slab_ isa DataLayouts.AbstractData ?
+                        slab_[1, i⁻, j⁻, 1] : slab_,
+                    arg_slabs⁻,
+                )
+                argvals⁺ = unrolled_map(
+                    slab_ ->
+                        slab_ isa DataLayouts.AbstractData ?
+                        slab_[1, i⁺, j⁺, 1] : slab_,
+                    arg_slabs⁺,
+                )
 
                 δ⁻, δ⁺ = _face_side_increments(
                     mode,
@@ -359,37 +371,22 @@ end
 # Distributed (MPI) ghost faces
 # ---------------------------------------------------------------------------
 
-# Add the face contributions on ghost faces — faces whose "plus" element is
-# owned by another rank. `Topologies.interior_faces` covers only local-local
-# faces, so the loops above skip these; here each rank completes its own
-# ("minus") side.
+# Ghost faces — those whose "plus" element is owned by another rank — are
+# skipped by `Topologies.interior_faces`, so the interior loops above miss
+# them. Here each rank completes its own ("minus") side, reading the neighbour
+# values from the `Topologies.GhostFaceExchange` recv strips (see there for the
+# slot pairing and node order).
 #
-# The neighbour ("plus") face values are exchanged as `Nq`-node face strips
-# through `Topologies.GhostFaceExchange` (see there for the slot pairing and
-# node-order conventions): the strip for the ghost face at position `f` of
-# `Topologies.ghost_faces` sits at slot `face_slot[f]` of `recv_data`, and the
-# plus-side value at loop node `q` is strip node `q′ = reversed ? Nq - q + 1 :
-# q` (strips are packed in the sender's natural face order).
+# Writing only the minus side is exact: the mirror ghost face on the
+# neighbouring rank writes its own minus side, and the two match the
+# single-rank result because the normal is single-valued up to sign
+# (`n̂⁺ = -n̂⁻`), `sWJ` is single-valued on a conforming face, and the flux is
+# antisymmetric (`fn(n̂, a, b) == -fn(-n̂, b, a)`). So the minus-side increment
+# of `_face_side_increments` (numflux or lifting, as in the interior loops) is
+# applied and its plus side is dropped.
 #
-# Only the minus side is written. The mirror ghost face on the neighbouring
-# rank writes its own minus side, and the two agree with the single-rank
-# result because the outward normal is single-valued up to sign in the local
-# orthonormal frame (`n̂⁺ = -n̂⁻`), `sWJ` is single-valued on a conforming
-# face, and the flux is antisymmetric (`fn(n̂, a, b) == -fn(-n̂, b, a)`) — the
-# operator contract. The minus-side increment of `_face_side_increments` is
-# applied (`mode` is `Val(:numflux)` or `Val(:lifting)`, as in the interior
-# loops); the plus-side increment belongs to the mirror face on the
-# neighbouring rank. No-op on single-process contexts and on ranks with no
-# ghost faces:
-# the strip exchange involves only face-sharing neighbour pairs (both sides of
-# each pair have mirrored ghost faces), so a rank with none shares no exchange
-# with any peer and can skip it safely.
-#
-# Handles pure 2D spectral-element spaces (`Nv == 1`) and extruded spaces with
-# 2D horizontal spectral elements; the geometry is built the same way as the
-# interior extruded-2D loop, which matches the grid's precomputed
-# `internal_surface_geometry` for the pure-2D case. Ghost exchange is started
-# before the interior-face loops to overlap communication with compute.
+# Handles pure 2D (`Nv == 1`) and extruded 2D-horizontal spaces, with the
+# geometry built as in the interior extruded-2D loop.
 
 """
     DGGhostExchange
@@ -475,12 +472,23 @@ function _finish_dg_ghost_faces!(
     for v in 1:Nv
         for (f, (elem⁻, face⁻, _ridx⁺, _face⁺, reversed)) in enumerate(gfaces)
             dydt_slab⁻ = slab(dydt_data, v, elem⁻)
+            lg_slab⁻ = slab(local_geometry, v, elem⁻)
             slot = isnothing(face_slot) ? 0 : Int(face_slot[f])
+            arg_slabs⁻ = unrolled_map(
+                a ->
+                    a isa DataLayouts.DataLayout ?
+                    slab(a, v, elem⁻) : a,
+                args_local,
+            )
+            recv_slabs⁺ = unrolled_map(
+                r -> isnothing(r) ? nothing : slab(r, v, slot),
+                recv,
+            )
             for q in 1:Nq
                 i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
                 q′ = reversed ? Nq - q + 1 : q
 
-                lg⁻ = slab(local_geometry, v, elem⁻)[1, i⁻, j⁻, 1]
+                lg⁻ = lg_slab⁻[1, i⁻, j⁻, 1]
                 sgeom⁻ = compute_surface_geometry_extruded_2d(
                     lg⁻,
                     quad_weights,
@@ -490,16 +498,16 @@ function _finish_dg_ghost_faces!(
                 )
 
                 argvals⁻ = unrolled_map(
-                    a ->
-                        a isa DataLayouts.DataLayout ?
-                        slab(a, v, elem⁻)[1, i⁻, j⁻, 1] : a,
-                    args_local,
+                    slab_ ->
+                        slab_ isa DataLayouts.DataLayout ?
+                        slab_[1, i⁻, j⁻, 1] : slab_,
+                    arg_slabs⁻,
                 )
                 argvals⁺ = unrolled_map(
-                    (a, r) ->
-                        isnothing(r) ? a : slab(r, v, slot)[1, q′, 1, 1],
+                    (a, r_slab) ->
+                        isnothing(r_slab) ? a : r_slab[1, q′, 1, 1],
                     args_local,
-                    recv,
+                    recv_slabs⁺,
                 )
 
                 # Only δ⁻ is used; the plus side lives on the neighbour rank.
@@ -736,19 +744,23 @@ function _add_numerical_flux_boundary!(
         for (iface, (elem⁻, face⁻)) in
             enumerate(Topologies.boundary_faces(topology, boundarytag))
             boundary_surface_geometry_slab =
-                surface_geometry_slab =
-                    slab(boundary_surface_geometries[iboundary], 1, iface)
+                slab(boundary_surface_geometries[iboundary], 1, iface)
 
-            arg_slabs⁻ = unrolled_map(arg -> slab(Fields.todata(arg), 1, elem⁻), args_bc)
+            arg_slabs⁻ =
+                unrolled_map(arg -> slab(Fields.todata(arg), 1, elem⁻), args_bc)
             dydt_slab⁻ = slab(Fields.field_values(dydt_bc), 1, elem⁻)
             for q in 1:Nq
                 sgeom⁻ = boundary_surface_geometry_slab[q]
                 i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
                 argvals⁻ = unrolled_map(
                     slab ->
-                        slab isa DataLayouts.DataLayout ? slab[1, i⁻, j⁻, 1] : slab,
+                        slab isa DataLayouts.DataLayout ?
+                        slab[1, i⁻, j⁻, 1] : slab,
                     arg_slabs⁻,
                 )
+                # Wrap so a multi-field (NamedTuple/vector) flux value scales
+                # and subtracts elementwise, matching the interior loops and
+                # the GPU boundary kernel's `_fd_scale`.
                 numflux⁻ = add_auto_broadcasters(fn(sgeom⁻.normal, argvals⁻))
                 dydt_slab⁻[1, i⁻, j⁻, 1] =
                     dydt_slab⁻[1, i⁻, j⁻, 1] - (sgeom⁻.sWJ * numflux⁻)

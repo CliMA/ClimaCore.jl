@@ -122,6 +122,28 @@ end
             @test sum(parent(rb)) ≈ -c * (2 * Lx + 2 * Ly) rtol = sqrt(eps(FT))
         end
 
+        @testset "Multi-field (NamedTuple) boundary flux [$FT]" begin
+            # A flux returning a NamedTuple must scale and subtract per field,
+            # like the interior loops and the GPU boundary kernel: its `a`
+            # component must match the scalar-flux path, and the zero-flux `b`
+            # component must stay zero.
+            box = channel_space(FT; Lx, Ly, x1periodic = false)
+            coords = Fields.coordinate_field(box)
+            a = @. sin(coords.x) + cos(coords.y)
+            b = ones(box)
+            y = map((ai, bi) -> (; a = ai, b = bi), a, b)
+            r = similar(y)
+            fill!(parent(r), 0)
+            nt_flux(normal, (y⁻,)) = (; a = y⁻.a, b = zero(y⁻.b))
+            Operators.add_numerical_flux_boundary!(nt_flux, r, y)
+
+            r_a = zeros(box)
+            scalar_flux(normal, (q⁻,)) = q⁻
+            Operators.add_numerical_flux_boundary!(scalar_flux, r_a, a)
+            @test parent(r.a) ≈ parent(r_a) rtol = sqrt(eps(FT))
+            @test all(iszero, parent(r.b))
+        end
+
         @testset "boundary connectivity gather matches CPU path [$FT]" begin
             # Host emulation of the GPU boundary algorithm (stage
             # sWJ·fn(n̂, ·⁻) per boundary face node, gather with the
