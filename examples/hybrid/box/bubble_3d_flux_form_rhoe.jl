@@ -274,10 +274,12 @@ function rhs!(dY, Y, _, t)
     @. dρw -= hwdiv(uₕf ⊗ ρw)
 
     # Upwind flux correction
-    add_flux_correction_c2c(dρ, w, ρ)
-    add_flux_correction_c2c(dρe, w, ρe)
-    add_flux_correction_c2c(dρuₕ, w, ρuₕ)
-    add_flux_correction_f2f(dρw, wc, ρw)
+    # Main.@exfiltrate
+    # error("balls")
+    add_flux_correction_c2c!(dρ, w, ρ)
+    add_flux_correction_c2c!(dρe, w, ρe)
+    add_flux_correction_c2c!(dρuₕ, w, ρuₕ)
+    add_flux_correction_f2f!(dρw, wc, ρw)
 
     Spaces.weighted_dss!(dYc)
     Spaces.weighted_dss!(dρw)

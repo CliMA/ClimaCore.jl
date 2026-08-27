@@ -679,7 +679,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
     arg,
 )
     @assert idx == left_center_boundary_idx(space)
-    getidx(space, bc.val, nothing, hidx)
+    getidx(space, bc.val, idx, hidx)
 end
 
 """
@@ -1321,8 +1321,8 @@ To prescribe the value of `x` used on the outside of a boundary instead, pass
 a [`SetValue`](@ref): the constructor then returns a
 [`DirichletOperator`](@ref) that applies
 [`upwind_biased_product_c2f_dirichlet`](@ref), the exact replacement for the
-removed `SetValue` stencil (fused into an enclosing broadcast, though lazy
-arguments and the boundary rows are materialized on each application).
+removed `SetValue` stencil, fused into an enclosing broadcast with lazy
+boundary rows.
 """
 struct UpwindBiasedProductC2F{BCS} <: AdvectionOperator
     bcs::BCS
@@ -1859,12 +1859,22 @@ boundary_width(
 # The value a `SetBoundaryOperator` imposes at a boundary. `SetGradient` and `SetCurl`
 # hold values in the axis the operator they were taken from writes its output in, so they
 # are projected onto that axis; `SetValue` and `SetDivergence` are imposed as given.
+# The value is read at the boundary index, so it may be a constant, a field on
+# the boundary level, or a field or lazy broadcast over the whole space. A
+# full-space value on the space's own staggering is read at the boundary index
+# itself; one on the opposite staggering must be wrapped in
+# `BoundaryAdjacentCenter` (as the Dirichlet helpers' boundary rows do), which
+# reads it at the center level adjacent to the boundary face.
+# A lazy value must be pointwise (fields combined with pointwise functions): a
+# stencil operator inside it would be evaluated at the boundary index of the
+# wrong staggering, so its boundary handling breaks down (an operator without
+# boundary conditions yields its `NullBoundaryCondition` `NaN`s there).
 Base.@propagate_inbounds imposed_boundary_value(
     bc::Union{SetValue, SetDivergence},
     space,
     idx,
     hidx,
-) = getidx(space, bc.val, nothing, hidx)
+) = getidx(space, bc.val, idx, hidx)
 Base.@propagate_inbounds imposed_boundary_value(
     bc::SetGradient,
     space,
@@ -1872,7 +1882,7 @@ Base.@propagate_inbounds imposed_boundary_value(
     hidx,
 ) = Geometry.project(
     Geometry.Covariant3Axis(),
-    getidx(space, bc.val, nothing, hidx),
+    getidx(space, bc.val, idx, hidx),
     Geometry.LocalGeometry(space, idx, hidx),
 )
 # Project onto Contravariant12, not Contravariant123: CurlC2F's operator
@@ -1882,7 +1892,7 @@ Base.@propagate_inbounds imposed_boundary_value(
 Base.@propagate_inbounds imposed_boundary_value(bc::SetCurl, space, idx, hidx) =
     Geometry.project(
         Geometry.Contravariant12Axis(),
-        getidx(space, bc.val, nothing, hidx),
+        getidx(space, bc.val, idx, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
 
@@ -2002,8 +2012,8 @@ The following boundary conditions are supported:
 To prescribe the boundary value of `x` instead, pass a [`SetValue`](@ref):
 the constructor then returns a [`DirichletOperator`](@ref) that applies
 [`gradient_c2f_dirichlet`](@ref), the exact replacement for the removed
-`SetValue` stencil (fused into an enclosing broadcast, though lazy
-arguments and the boundary rows are materialized on each application).
+`SetValue` stencil, fused into an enclosing broadcast with lazy
+boundary rows.
 """
 struct GradientC2F{BC} <: GradientOperator
     bcs::BC
@@ -2139,8 +2149,8 @@ The following boundary conditions are supported:
 To prescribe the boundary value of `v` instead, pass a [`SetValue`](@ref):
 the constructor then returns a [`DirichletOperator`](@ref) that applies
 [`divergence_c2f_dirichlet`](@ref), the exact replacement for the removed
-`SetValue` stencil (fused into an enclosing broadcast, though lazy
-arguments and the boundary rows are materialized on each application).
+`SetValue` stencil, fused into an enclosing broadcast with lazy
+boundary rows.
 """
 struct DivergenceC2F{BC} <: DivergenceOperator
     bcs::BC
@@ -2203,8 +2213,8 @@ The following boundary conditions are supported:
 To prescribe the boundary value of `v` instead, pass a [`SetValue`](@ref):
 the constructor then returns a [`DirichletOperator`](@ref) that applies
 [`curl_c2f_dirichlet`](@ref), the exact replacement for the removed
-`SetValue` stencil (fused into an enclosing broadcast, though lazy
-arguments and the boundary rows are materialized on each application).
+`SetValue` stencil, fused into an enclosing broadcast with lazy
+boundary rows.
 """
 struct CurlC2F{BC} <: CurlFiniteDifferenceOperator
     bcs::BC
@@ -2238,10 +2248,11 @@ boundary_width(::CurlC2F, ::AbstractBoundaryCondition) = 1
 # Each helper has a lazy `*_broadcasted` form, which returns the replacement
 # as an unmaterialized stencil broadcast that fuses into an enclosing
 # broadcast like any other operator application; the public helpers
-# materialize that broadcast. Laziness stops at the boundary rows: their
-# values depend on the boundary levels of the actual argument fields, so every
-# application materializes small level fields holding them (and any lazy
-# argument must be materialized before the boundary levels can be taken).
+# materialize that broadcast. The boundary rows are lazy as well: each row is a
+# pointwise function of the values adjacent to the boundary face, stored as an
+# unmaterialized broadcast over the full argument fields that is only read at
+# the boundary index (see `imposed_boundary_value` and
+# `BoundaryAdjacentCenter`), so applying a helper allocates nothing.
 
 """
     DirichletOperator{Op}(bcs)
@@ -2254,11 +2265,9 @@ corresponding Dirichlet replacement helper ([`gradient_c2f_dirichlet`](@ref),
 [`divergence_c2f_dirichlet`](@ref), [`curl_c2f_dirichlet`](@ref) or
 [`upwind_biased_product_c2f_dirichlet`](@ref)) with each `SetValue(x₀)`
 unwrapped to its  `x₀value` and every other boundary condition passed through
-as given. The replacement is built as a lazy stencil broadcast, so it fuses
-into an enclosing broadcast like a true operator application; but the
-boundary rows' values depend on the boundary levels of the actual arguments,
-so each application first materializes any lazy argument, along with small
-level fields holding the boundary rows' values.
+as given. The replacement is built as a lazy stencil broadcast with lazy
+boundary rows, so it fuses into an enclosing broadcast like a true operator
+application and allocates nothing.
 """
 struct DirichletOperator{Op, BCS}
     bcs::BCS
@@ -2281,28 +2290,126 @@ dirichlet_helper_broadcasted(::DirichletOperator{UpwindBiasedProductC2F}) =
     upwind_biased_product_c2f_dirichlet_broadcasted
 
 # Applying a DirichletOperator returns the helper's lazy stencil broadcast,
-# which fuses into any enclosing broadcast. The helpers need the boundary
-# levels of the actual argument fields to build the boundary rows, so lazy
-# arguments are materialized first.
+# which fuses into any enclosing broadcast; lazy arguments are passed through
+# unmaterialized.
 Base.Broadcast.broadcasted(op::DirichletOperator, args...) =
-    dirichlet_helper_broadcasted(op)(
-        unrolled_map(Base.Broadcast.materialize, args)...;
-        op.bcs...,
+    dirichlet_helper_broadcasted(op)(args...; op.bcs...)
+
+# Wrap a boundary value for use in a lazy boundary row: numbers and axis
+# tensors broadcast as scalars (as 1-tuples rather than `Ref`s, which would
+# heap-allocate on every application), while fields and lazy broadcasts (over
+# the boundary level or over the whole space) broadcast as themselves.
+dirichlet_value(val) = (val,)
+dirichlet_value(val::Union{Fields.Field, Base.AbstractBroadcasted}) = val
+
+# Wraps a center-staggered argument of a lazy Dirichlet boundary row (`S` is
+# the name of the boundary the row belongs to, as validated by
+# `dirichlet_boundary_values`). The row is read at a boundary face index, but
+# its center-staggered arguments are only meaningful at the center level
+# adjacent to that face, so `getidx` on the wrapper translates the face index
+# (bottom face 1/2 -> center 1, top face n+1/2 -> center n) before recursing
+# into the wrapped argument.
+struct BoundaryAdjacentCenter{S, A}
+    arg::A
+end
+BoundaryAdjacentCenter{S}(arg::A) where {S, A} =
+    BoundaryAdjacentCenter{S, A}(arg)
+
+Adapt.adapt_structure(to, w::BoundaryAdjacentCenter{S}) where {S} =
+    BoundaryAdjacentCenter{S}(Adapt.adapt(to, w.arg))
+
+strip_space(w::BoundaryAdjacentCenter{S}, parent_space) where {S} =
+    BoundaryAdjacentCenter{S}(strip_space(w.arg, parent_space))
+
+# The wrapper broadcasts like its wrapped argument, so `combine_styles` over a
+# boundary row's arguments still resolves to a field style.
+Base.Broadcast.BroadcastStyle(
+    ::Type{BoundaryAdjacentCenter{S, A}},
+) where {S, A} = Base.Broadcast.BroadcastStyle(A)
+
+Base.@propagate_inbounds function getidx(
+    parent_space,
+    w::BoundaryAdjacentCenter{S},
+    idx::PlusHalf,
+    hidx,
+) where {S}
+    # At the left (bottom) boundary the adjacent center level is above the
+    # face, and at the right (top) boundary it is below. The boundary names
+    # are part of the vertical topology's type, so the comparison
+    # constant-folds.
+    shift = S === Spaces.left_boundary_name(parent_space) ? half : -half
+    return getidx(parent_space, w.arg, idx + shift, hidx)
+end
+# Keep a stray wrapper read at a non-face index from reaching the generic
+# scalar `getidx` fallback, which would silently return the wrapper itself.
+@inline getidx(parent_space, w::BoundaryAdjacentCenter, idx, hidx) =
+    error("a BoundaryAdjacentCenter can only be read at a boundary face index")
+
+# Wrap the center-staggered arguments of a boundary row (the boundary the row
+# belongs to is known when the row is built); everything else -- face-staggered
+# fields, boundary-level fields, and scalars -- is read at the boundary face
+# index as given.
+boundary_adjacent_arg(::Val, arg) = arg
+boundary_adjacent_arg(
+    bname::Val,
+    arg::Union{Fields.Field, Base.AbstractBroadcasted},
+) = _boundary_adjacent_arg(bname, axes(arg), arg)
+_boundary_adjacent_arg(
+    ::Val{S},
+    ::AllCenterFiniteDifferenceSpace,
+    arg,
+) where {S} = BoundaryAdjacentCenter{S}(arg)
+_boundary_adjacent_arg(::Val, space, arg) = arg
+
+# The lazy broadcast holding a Dirichlet boundary row, anchored to the face
+# space whose boundary it is read at. The arguments may mix center- and
+# face-staggered fields (center-staggered ones are wrapped in
+# `BoundaryAdjacentCenter`, which reads them at the level adjacent to the
+# boundary face), so their axes cannot be combined by `instantiate`; the
+# `Broadcasted` is constructed with the face space as its axes instead.
+function dirichlet_row_broadcasted(
+    f::F,
+    bname::Val,
+    face_space,
+    args...,
+) where {F}
+    row_args = map(arg -> boundary_adjacent_arg(bname, arg), args)
+    return Base.Broadcast.Broadcasted{
+        typeof(Base.Broadcast.combine_styles(row_args...)),
+    }(
+        f,
+        row_args,
+        face_space,
     )
+end
 
-# Wrap a boundary value for broadcasting against level fields: numbers and
-# axis tensors broadcast as scalars, and fields broadcast as themselves.
-dirichlet_value(fname, val) = Ref(val)
-dirichlet_value(fname, val::Fields.Field) = val
-
-# The boundary values that must be combined with the local geometry on the
-# whole face space (rather than with fields on a boundary level) cannot be
-# fields, which are tied to a single level's space.
-constant_dirichlet_value(fname, val) = Ref(val)
-constant_dirichlet_value(fname, val::Fields.Field) = error(
-    "$fname only supports boundary values that are constant per column \
-     (numbers or axis tensors), not Fields",
-)
+# The Dirichlet boundary rows as pointwise functions of the values adjacent to
+# the boundary face. `_upper`/`_lower` follow the vertical direction: at the
+# bottom boundary the prescribed value is the lower argument and the first
+# center level is the upper one, and at the top boundary the roles are
+# reversed, so each helper builds both of its boundary rows from one function.
+dirichlet_gradient_row(x_upper, x_lower) =
+    Geometry.Covariant3Vector(2 * (x_upper - x_lower))
+dirichlet_divergence_row(v_upper, lg_upper, v_lower, lg_lower, face_lg) =
+    (
+        Geometry.Jcontravariant3(v_upper, lg_upper) -
+        Geometry.Jcontravariant3(v_lower, lg_lower)
+    ) * 2 / face_lg.J
+function dirichlet_curl_row(u_upper, u_lower, face_lg)
+    Δu = u_upper - u_lower
+    return Geometry.Contravariant12Vector(
+        -2 * Δu.components.data.:2 / face_lg.J,
+        2 * Δu.components.data.:1 / face_lg.J,
+    )
+end
+dirichlet_upwind_row(v, x_lower, x_upper, face_lg) =
+    Geometry.Contravariant3Vector(
+        upwind_biased_product(
+            Geometry.contravariant3(v, face_lg),
+            x_lower,
+            x_upper,
+        ),
+    )
 
 # Split the user-provided boundary values into the values at the space's left
 # (bottom) and right (top) boundaries, validating the boundary names.
@@ -2335,23 +2442,25 @@ GradientC2F(
 )
 ```
 
-`x` must have a scalar eltype. Each boundary value may be a number or a
-`Field` on the corresponding boundary level of `x`'s space; a boundary value
-that is already an [`AbstractBoundaryCondition`](@ref) (e.g. a `SetGradient`)
-is instead applied as given, so a Dirichlet value on one boundary can be
-combined with an explicit condition on the other; and a boundary without a
-prescribed value is computed as by `GradientC2F` without a boundary condition
-there. The result is materialized on the face space.
+`x` must have a scalar eltype. Each boundary value may be a number, a `Field`
+(on the corresponding boundary level of `x`'s space, or on a whole space, of
+which only the level adjacent to the boundary is read), or an unmaterialized
+lazy broadcast of such fields; a boundary value that is already an
+[`AbstractBoundaryCondition`](@ref) (e.g. a `SetGradient`) is instead applied
+as given, so a Dirichlet value on one boundary can be combined with an
+explicit condition on the other; and a boundary without a prescribed value is
+computed as by `GradientC2F` without a boundary condition there. The result is
+materialized on the face space.
 """
 gradient_c2f_dirichlet(x; boundary_values...) = Base.Broadcast.materialize(
     gradient_c2f_dirichlet_broadcasted(x; boundary_values...),
 )
 
 # The lazy form of `gradient_c2f_dirichlet`: the same replacement, returned as
-# an unmaterialized stencil broadcast (the boundary rows' level fields are
-# still materialized).
+# an unmaterialized stencil broadcast with lazy boundary rows.
 function gradient_c2f_dirichlet_broadcasted(x; boundary_values...)
     space = axes(x)
+    face_space = Spaces.face_space(space)
     fname = "gradient_c2f_dirichlet"
     (lname, rname, x_bot, x_top) =
         dirichlet_boundary_values(fname, space, NamedTuple(boundary_values))
@@ -2360,9 +2469,15 @@ function gradient_c2f_dirichlet_broadcasted(x; boundary_values...)
         bc = if x_bot isa AbstractBoundaryCondition
             x_bot
         else
-            x₀ = dirichlet_value(fname, x_bot)
+            # G(x)[1/2] = 2 (x[1] - x₀)
             SetGradient(
-                Geometry.Covariant3Vector.(2 .* (Fields.level(x, 1) .- x₀)),
+                dirichlet_row_broadcasted(
+                    dirichlet_gradient_row,
+                    Val(lname),
+                    face_space,
+                    x,
+                    dirichlet_value(x_bot),
+                ),
             )
         end
         bcs = merge(bcs, NamedTuple{(lname,)}((bc,)))
@@ -2371,9 +2486,16 @@ function gradient_c2f_dirichlet_broadcasted(x; boundary_values...)
         bc = if x_top isa AbstractBoundaryCondition
             x_top
         else
-            x₀ = dirichlet_value(fname, x_top)
-            xₙ = Fields.level(x, Spaces.nlevels(space))
-            SetGradient(Geometry.Covariant3Vector.(2 .* (x₀ .- xₙ)))
+            # G(x)[n+1/2] = 2 (x₀ - x[n])
+            SetGradient(
+                dirichlet_row_broadcasted(
+                    dirichlet_gradient_row,
+                    Val(rname),
+                    face_space,
+                    dirichlet_value(x_top),
+                    x,
+                ),
+            )
         end
         bcs = merge(bcs, NamedTuple{(rname,)}((bc,)))
     end
@@ -2397,14 +2519,16 @@ D(v)[\\tfrac{1}{2}] = (Jv³[1] - Jv³₀) \\frac{2}{J[\\tfrac{1}{2}]}
 (and its mirror image at the top), where `Jv³₀` is computed from `v₀` and the
 boundary face's local geometry.
 
-Each boundary value must be constant per column (a number is not meaningful
-here; use an axis tensor such as `Geometry.WVector(0.0)`). A boundary value
-that is already an [`AbstractBoundaryCondition`](@ref) (one accepted by
-`SetBoundaryOperator`, e.g. a `SetValue` or `SetDivergence` of the operator's
-output) is instead imposed as given on the wrapping `SetBoundaryOperator`, and
-a boundary without a prescribed value is computed as by `DivergenceC2F`
-without a boundary condition there. The result is materialized on the face
-space.
+Each boundary value may be an axis tensor such as `Geometry.WVector(0.0)` (a
+number is not meaningful here), a `Field` of such values (on the corresponding
+boundary level, or on a whole space, of which only the level adjacent to the
+boundary is read), or an unmaterialized lazy broadcast of such fields. A
+boundary value that is already an [`AbstractBoundaryCondition`](@ref) (one
+accepted by `SetBoundaryOperator`, e.g. a `SetValue` or `SetDivergence` of the
+operator's output) is instead imposed as given on the wrapping
+`SetBoundaryOperator`, and a boundary without a prescribed value is computed
+as by `DivergenceC2F` without a boundary condition there. The result is
+materialized on the face space.
 """
 divergence_c2f_dirichlet(v; boundary_values...) = Base.Broadcast.materialize(
     divergence_c2f_dirichlet_broadcasted(v; boundary_values...),
@@ -2414,27 +2538,31 @@ divergence_c2f_dirichlet(v; boundary_values...) = Base.Broadcast.materialize(
 # `gradient_c2f_dirichlet_broadcasted`).
 function divergence_c2f_dirichlet_broadcasted(v; boundary_values...)
     space = axes(v)
+    face_space = Spaces.face_space(space)
     fname = "divergence_c2f_dirichlet"
     (lname, rname, v_bot, v_top) =
         dirichlet_boundary_values(fname, space, NamedTuple(boundary_values))
-    face_lg = Fields.local_geometry_field(Spaces.face_space(space))
+    face_lg = Fields.local_geometry_field(face_space)
     center_lg = Fields.local_geometry_field(space)
     bcs = (;)
     if v_bot !== nothing
         bc = if v_bot isa AbstractBoundaryCondition
             v_bot
         else
-            v₀ = constant_dirichlet_value(fname, v_bot)
-            # bottom-face values of face-valued fields, as fields on the first
-            # center level (`LeftBiasedF2C(x)[1] = x[1/2]`)
-            at_bottom_face(f) = Fields.level(LeftBiasedF2C().(f), 1)
-            J_face = at_bottom_face(face_lg.J)
-            Jv³₀ = at_bottom_face(Geometry.Jcontravariant3.(v₀, face_lg))
-            Jv³₁ = Geometry.Jcontravariant3.(
-                Fields.level(v, 1),
-                Fields.level(center_lg, 1),
+            # D(v)[1/2] = (Jv³[1] - Jv³₀) 2 / J[1/2], with Jv³₀ computed from
+            # the prescribed value and the boundary face's local geometry
+            SetValue(
+                dirichlet_row_broadcasted(
+                    dirichlet_divergence_row,
+                    Val(lname),
+                    face_space,
+                    v,
+                    center_lg,
+                    dirichlet_value(v_bot),
+                    face_lg,
+                    face_lg,
+                ),
             )
-            SetValue(@. (Jv³₁ - Jv³₀) * 2 / J_face)
         end
         bcs = merge(bcs, NamedTuple{(lname,)}((bc,)))
     end
@@ -2442,18 +2570,19 @@ function divergence_c2f_dirichlet_broadcasted(v; boundary_values...)
         bc = if v_top isa AbstractBoundaryCondition
             v_top
         else
-            v₀ = constant_dirichlet_value(fname, v_top)
-            n = Spaces.nlevels(space)
-            # top-face values of face-valued fields, as fields on the last
-            # center level (`RightBiasedF2C(x)[n] = x[n+1/2]`)
-            at_top_face(f) = Fields.level(RightBiasedF2C().(f), n)
-            J_face = at_top_face(face_lg.J)
-            Jv³₀ = at_top_face(Geometry.Jcontravariant3.(v₀, face_lg))
-            Jv³ₙ = Geometry.Jcontravariant3.(
-                Fields.level(v, n),
-                Fields.level(center_lg, n),
+            # D(v)[n+1/2] = (Jv³₀ - Jv³[n]) 2 / J[n+1/2]
+            SetValue(
+                dirichlet_row_broadcasted(
+                    dirichlet_divergence_row,
+                    Val(rname),
+                    face_space,
+                    dirichlet_value(v_top),
+                    face_lg,
+                    v,
+                    center_lg,
+                    face_lg,
+                ),
             )
-            SetValue(@. (Jv³₀ - Jv³ₙ) * 2 / J_face)
         end
         bcs = merge(bcs, NamedTuple{(rname,)}((bc,)))
     end
@@ -2480,12 +2609,15 @@ C(u)[\\tfrac{1}{2}]^2 = (u_1[1] - u_{1,0}) \\frac{2}{J[\\tfrac{1}{2}]}
 (and their mirror images at the top), as [`SetCurl`](@ref) boundary
 conditions.
 
-Each boundary value must be constant per column, with the covariant 1 and 2
-components of `eltype(u)` (e.g. a `Geometry.Covariant12Vector`). A boundary
-value that is already an [`AbstractBoundaryCondition`](@ref) (e.g. a
-`SetCurl`) is instead applied as given, and a boundary without a prescribed
-value is computed as by `CurlC2F` without a boundary condition there. The
-result is materialized on the face space.
+Each boundary value must have the covariant 1 and 2 components of `eltype(u)`
+(e.g. a `Geometry.Covariant12Vector`), and may be an axis tensor, a `Field` of
+such values (on the corresponding boundary level, or on a whole space, of
+which only the level adjacent to the boundary is read), or an unmaterialized
+lazy broadcast of such fields. A boundary value that is already an
+[`AbstractBoundaryCondition`](@ref) (e.g. a `SetCurl`) is instead applied as
+given, and a boundary without a prescribed value is computed as by `CurlC2F`
+without a boundary condition there. The result is materialized on the face
+space.
 """
 curl_c2f_dirichlet(u; boundary_values...) = Base.Broadcast.materialize(
     curl_c2f_dirichlet_broadcasted(u; boundary_values...),
@@ -2495,23 +2627,27 @@ curl_c2f_dirichlet(u; boundary_values...) = Base.Broadcast.materialize(
 # `gradient_c2f_dirichlet_broadcasted`).
 function curl_c2f_dirichlet_broadcasted(u; boundary_values...)
     space = axes(u)
+    face_space = Spaces.face_space(space)
     fname = "curl_c2f_dirichlet"
     (lname, rname, u_bot, u_top) =
         dirichlet_boundary_values(fname, space, NamedTuple(boundary_values))
-    face_lg = Fields.local_geometry_field(Spaces.face_space(space))
-    curl_row(Δu, J_face) = Geometry.Contravariant12Vector.(
-        -2 .* Δu.components.data.:2 ./ J_face,
-        2 .* Δu.components.data.:1 ./ J_face,
-    )
+    face_lg = Fields.local_geometry_field(face_space)
     bcs = (;)
     if u_bot !== nothing
         bc = if u_bot isa AbstractBoundaryCondition
             u_bot
         else
-            u₀ = constant_dirichlet_value(fname, u_bot)
-            J_face = Fields.level(LeftBiasedF2C().(face_lg.J), 1)
-            Δu = Fields.level(u, 1) .- u₀
-            SetCurl(curl_row(Δu, J_face))
+            # C(u)[1/2] from Δu = u[1] - u₀
+            SetCurl(
+                dirichlet_row_broadcasted(
+                    dirichlet_curl_row,
+                    Val(lname),
+                    face_space,
+                    u,
+                    dirichlet_value(u_bot),
+                    face_lg,
+                ),
+            )
         end
         bcs = merge(bcs, NamedTuple{(lname,)}((bc,)))
     end
@@ -2519,11 +2655,17 @@ function curl_c2f_dirichlet_broadcasted(u; boundary_values...)
         bc = if u_top isa AbstractBoundaryCondition
             u_top
         else
-            u₀ = constant_dirichlet_value(fname, u_top)
-            n = Spaces.nlevels(space)
-            J_face = Fields.level(RightBiasedF2C().(face_lg.J), n)
-            Δu = u₀ .- Fields.level(u, n)
-            SetCurl(curl_row(Δu, J_face))
+            # C(u)[n+1/2] from Δu = u₀ - u[n]
+            SetCurl(
+                dirichlet_row_broadcasted(
+                    dirichlet_curl_row,
+                    Val(rname),
+                    face_space,
+                    dirichlet_value(u_top),
+                    u,
+                    face_lg,
+                ),
+            )
         end
         bcs = merge(bcs, NamedTuple{(rname,)}((bc,)))
     end
@@ -2542,13 +2684,14 @@ wrapping a plain [`UpwindBiasedProductC2F`](@ref) in a
 with the removed stencil's value, the upwind product of `v³` there with `x₀`
 on the boundary side and the closest center value of `x` on the interior side.
 
-Each boundary value may be a number or a `Field` on the corresponding boundary
-level of `x`'s space; a boundary value that is already an
-[`AbstractBoundaryCondition`](@ref) (one accepted by `SetBoundaryOperator`,
-e.g. a `SetValue` of the flux) is instead imposed as given on the wrapping
-`SetBoundaryOperator`; and a boundary without a prescribed value is computed
-as by `UpwindBiasedProductC2F` without a boundary condition there. The result
-is materialized on the face space.
+Each boundary value may be a number, a `Field` (on the corresponding boundary
+level of `x`'s space, or on a whole space, of which only the level adjacent to
+the boundary is read), or an unmaterialized lazy broadcast of such fields; a
+boundary value that is already an [`AbstractBoundaryCondition`](@ref) (one
+accepted by `SetBoundaryOperator`, e.g. a `SetValue` of the flux) is instead
+imposed as given on the wrapping `SetBoundaryOperator`; and a boundary without
+a prescribed value is computed as by `UpwindBiasedProductC2F` without a
+boundary condition there. The result is materialized on the face space.
 """
 upwind_biased_product_c2f_dirichlet(v, x; boundary_values...) =
     Base.Broadcast.materialize(
@@ -2567,25 +2710,30 @@ function upwind_biased_product_c2f_dirichlet_broadcasted(
     boundary_values...,
 )
     center_space = axes(x)
+    face_space = Spaces.face_space(center_space)
     fname = "upwind_biased_product_c2f_dirichlet"
     (lname, rname, x_bot, x_top) = dirichlet_boundary_values(
         fname,
         center_space,
         NamedTuple(boundary_values),
     )
-    face_lg = Fields.local_geometry_field(axes(v))
-    v³ = Geometry.contravariant3.(v, face_lg)
+    face_lg = Fields.local_geometry_field(face_space)
     bcs = (;)
     if x_bot !== nothing
         bc = if x_bot isa AbstractBoundaryCondition
             x_bot
         else
-            x₀ = dirichlet_value(fname, x_bot)
-            v³_face = Fields.level(LeftBiasedF2C().(v³), 1)
-            x₁ = Fields.level(x, 1)
+            # U(v, x)[1/2] = upwind product of v³[1/2] with x₀ below and x[1]
+            # above
             SetValue(
-                Geometry.Contravariant3Vector.(
-                    upwind_biased_product.(v³_face, x₀, x₁),
+                dirichlet_row_broadcasted(
+                    dirichlet_upwind_row,
+                    Val(lname),
+                    face_space,
+                    v,
+                    dirichlet_value(x_bot),
+                    x,
+                    face_lg,
                 ),
             )
         end
@@ -2595,13 +2743,17 @@ function upwind_biased_product_c2f_dirichlet_broadcasted(
         bc = if x_top isa AbstractBoundaryCondition
             x_top
         else
-            x₀ = dirichlet_value(fname, x_top)
-            n = Spaces.nlevels(center_space)
-            v³_face = Fields.level(RightBiasedF2C().(v³), n)
-            xₙ = Fields.level(x, n)
+            # U(v, x)[n+1/2] = upwind product of v³[n+1/2] with x[n] below and
+            # x₀ above
             SetValue(
-                Geometry.Contravariant3Vector.(
-                    upwind_biased_product.(v³_face, xₙ, x₀),
+                dirichlet_row_broadcasted(
+                    dirichlet_upwind_row,
+                    Val(rname),
+                    face_space,
+                    v,
+                    x,
+                    dirichlet_value(x_top),
+                    face_lg,
                 ),
             )
         end

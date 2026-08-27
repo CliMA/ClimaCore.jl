@@ -84,7 +84,7 @@ Base.promote_rule(
     promote_rule(BMR, DiagonalMatrixRow{eltype(US)})
 
 Base.convert(::Type{BMR}, row::BMR) where {BMR <: BandMatrixRow} = row
-function Base.convert(
+@inline function Base.convert(
     ::Type{BMR},
     row::BandMatrixRow,
 ) where {BMR <: BandMatrixRow}

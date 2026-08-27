@@ -105,7 +105,7 @@ which needs no shared memory, instead of erroring.
     (isconcretetype(mat1_type) && isconcretetype(mat2_type)) || return nothing
     mat1_et = mat1_type <: BandMatrixRow ? eltype(mat1_type) : mat1_type
     project_onto =
-        ClimaCore.Geometry.recursively_find_dual_axes_for_projection(mat1_et)
+        ClimaCore.Geometry._dual_axes_for_projection(mat1_et)
     isnothing(project_onto) && return mat2_type
     lg_type = Spaces.local_geometry_type(typeof(mat2_space))
     # Core.Compiler.return_type rather than Utilities.return_type: the latter
@@ -751,7 +751,7 @@ Projects `mat2_row` onto the correct axis for multiplication with `mat1_row` if 
 Base.@propagate_inbounds function project_row2_for_mul(mat1_row, mat2_row, hidx, space)
     mat1_et = mat1_row isa BandMatrixRow ? eltype(mat1_row) : typeof(mat1_row)
     project_onto =
-        ClimaCore.Geometry.recursively_find_dual_axes_for_projection(mat1_et)
+        ClimaCore.Geometry._dual_axes_for_projection(mat1_et)
     isnothing(project_onto) && return mat2_row
     v = threadIdx().x
     if has_padding_thread(space) && v == CUDA.blockDim().x
@@ -775,7 +775,7 @@ Recursively project `y` onto the axes in `projection_tuple[1]` using the local g
 in `projection_tuple[2]`. The axes are either a single axis, which projects every tensor
 leaf of `y`, or (for multi-component entries like Tuples and AutoBroadcasters) a Tuple
 that pairs componentwise with `y`, with `nothing` marking components that need no
-projection (see `Geometry.recursively_find_dual_axes_for_projection`).
+projection (see `Geometry._dual_axes_for_projection`).
 """
 Base.@propagate_inbounds recursively_project(projection_tuple::T, y::Y) where {T, Y} =
     project_or_map(projection_tuple[1], projection_tuple[2], y)
@@ -806,8 +806,7 @@ Base.@propagate_inbounds project_or_map(
 Base.@propagate_inbounds project_or_map(axis, lg, y) =
     map(Base.Fix1(recursively_project, (axis, lg)), y)
 @inline project_or_map(axis, lg, y::Number) = y
-Base.@propagate_inbounds project_or_map(axis, lg, y::AbstractTensor) =
-    @inbounds @inline project(axis, y, lg)
+@inline project_or_map(axis, lg, y::AbstractTensor) = project(axis, y, lg)
 
 # Zip each component's axis with its component so the componentwise map can reuse
 # `Base.Fix2` instead of a closure over `lg`. This must use `unrolled_map_into_tuple`

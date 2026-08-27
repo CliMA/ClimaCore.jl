@@ -447,6 +447,16 @@ end
         θ₀_bot = @. 0 * θ_bot + θ₀
         helped = Operators.gradient_c2f_dirichlet(θᶜ; bottom = θ₀_bot, top = θ₀)
         @test cpu_parent(helped)[:] ≈ ref
+        # a lazy boundary value or a full-field boundary value is read at the
+        # level adjacent to the boundary
+        helped = Operators.gradient_c2f_dirichlet(
+            θᶜ;
+            bottom = Base.Broadcast.broadcasted(θ -> 0 * θ + θ₀, θᶜ),
+            top = 0 .* θᶠ .+ θ₀,
+        )
+        @test cpu_parent(helped)[:] ≈ ref
+        # lazy operator arguments are passed through unmaterialized
+        @test cpu_parent(@. routed(θᶜ + 0))[:] ≈ ref
         # an explicit boundary condition is passed through unchanged
         helped = Operators.gradient_c2f_dirichlet(
             θᶜ;
@@ -527,12 +537,19 @@ end
             top = Operators.SetDivergence(zero(FT)),
         )
         @test cpu_parent(helped)[:] ≈ [ref[1:n]..., zero(FT)]
-        # Fields are tied to a single level's space, so they cannot be
-        # combined with the boundary face's local geometry
-        @test_throws ErrorException Operators.divergence_c2f_dirichlet(
+        # boundary values may also be Fields or lazy broadcasts over a whole
+        # space; only the level adjacent to the boundary is read
+        w₀ᶠ = map(_ -> w₀, ᶠlg)
+        helped =
+            Operators.divergence_c2f_dirichlet(wᶜ; bottom = w₀ᶠ, top = w₀ᶠ)
+        @test cpu_parent(helped)[:] ≈ ref
+        w₀lazy = Base.Broadcast.broadcasted(w -> 0 * w + w₀, wᶜ)
+        helped = Operators.divergence_c2f_dirichlet(
             wᶜ;
-            bottom = Fields.level(wᶜ, 1),
+            bottom = w₀lazy,
+            top = w₀lazy,
         )
+        @test cpu_parent(helped)[:] ≈ ref
     end
 
     @testset "CurlC2F with a prescribed boundary value" begin

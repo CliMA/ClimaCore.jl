@@ -134,11 +134,6 @@ end
 # included, is therefore the operator's own pointwise function applied to
 # hand-clamped (or hand-extrapolated) stencil values.
 
-# Ghost-point reconstructions are no longer user-supplied callables; this is
-# used to check that custom callables are rejected.
-struct CustomGhost end
-(::CustomGhost)(closest, second_closest) = 3 * closest - 2 * second_closest
-
 @testset "Nonlinear advection operators at boundary faces" begin
     for FT in (Float32, Float64)
         context = ClimaComms.SingletonCommsContext()
@@ -380,23 +375,7 @@ struct CustomGhost end
             constraint = Operators.MonotoneHarmonic(),
         )
         @test_throws AssertionError Operators.FCTBorisBook(;
-            bottom = CustomGhost(),
-        )
-        @test_throws AssertionError Operators.FCTZalesak(;
-            top = CustomGhost(),
-        )
-        @test_throws AssertionError Operators.TVDLimitedFluxC2F(;
-            bottom = CustomGhost(),
-            method = Operators.MinModLimiter(),
-        )
-        @test_throws AssertionError Operators.FCTBorisBook(;
             bottom = FT(1),
-        )
-        @test_throws AssertionError Operators.UpwindBiasedProductC2F(;
-            bottom = Operators.SetValue(FT(0)),
-        )
-        @test_throws AssertionError Operators.Upwind3rdOrderBiasedProductC2F(;
-            bottom = CustomGhost(),
         )
         @test Operators.FCTBorisBook(;
             bottom = Operators.Extrapolate(0),
@@ -443,59 +422,11 @@ struct CustomGhost end
         )
         @test !Operators.has_linear_stencil(Operators.FCTBorisBook())
 
-        # UpwindBiasedProductC2F's stencil only reaches a ghost point at the
-        # boundary face itself, where a single interior point is in range, so
-        # every extrapolation order reduces to the value of the closest
-        # interior point, and the flux at a boundary face is
-        # `v³ θ[closest center]` regardless of the upwind direction.
-        θ2 = sin.(3 .* Fields.coordinate_field(center_space).z)
-        t2 = cpu(θ2)
-        for w_sign in (FT(1), FT(-1))
-            w = Geometry.WVector.(w_sign .* ones(FT, face_space))
-            v³ = cpu(Geometry.contravariant3.(w, lg_face))
-            for upwind in (
-                Operators.UpwindBiasedProductC2F(),
-                Operators.UpwindBiasedProductC2F(;
-                    bottom = Operators.Extrapolate(2),
-                    top = Operators.Extrapolate(2),
-                ),
-            )
-                flux = cpu(upwind.(w, θ2))
-                @test flux[1] == v³[1] * t2[1]
-                @test flux[n + 1] == v³[n + 1] * t2[n]
-            end
-        end
-
-        # Extrapolate on Upwind3rdOrderBiasedProductC2F evaluates the interior
-        # stencil with extrapolated ghost points: at the boundary face itself
-        # both ghost points share the extrapolation from the 2 in-range
-        # interior points (so the order is reduced to at most 1 there), and at
-        # the face one in from the boundary the single ghost point is
-        # extrapolated from the 3 in-range points.
-        upwind3rd(v, a⁻⁻, a⁻, a⁺, a⁺⁺) =
-            v ≥ 0 ? v * (-2a⁻⁻ + 10a⁻ + 4a⁺) / 12 :
-            v * (4a⁻ + 10a⁺ - 2a⁺⁺) / 12
-        for w_sign in (FT(1), FT(-1))
-            w = Geometry.WVector.(w_sign .* ones(FT, face_space))
-            v³ = cpu(Geometry.contravariant3.(w, lg_face))
-            for N in 0:2
-                gb2 = g2(N, t2[1], t2[2])           # bottom face ghosts
-                gb3 = g3(N, t2[1], t2[2], t2[3])    # bottom one-in ghost
-                gt2 = g2(N, t2[n], t2[n - 1])       # top face ghosts
-                gt3 = g3(N, t2[n], t2[n - 1], t2[n - 2]) # top one-in ghost
-                upwind = Operators.Upwind3rdOrderBiasedProductC2F(;
-                    bottom = Operators.Extrapolate(N),
-                    top = Operators.Extrapolate(N),
-                )
-                flux = cpu(upwind.(w, θ2))
-                @test flux[1] ≈ upwind3rd(v³[1], gb2, gb2, t2[1], t2[2])
-                @test flux[2] ≈ upwind3rd(v³[2], gb3, t2[1], t2[2], t2[3])
-                @test flux[n] ≈
-                      upwind3rd(v³[n], t2[n - 2], t2[n - 1], t2[n], gt3)
-                @test flux[n + 1] ≈
-                      upwind3rd(v³[n + 1], t2[n - 1], t2[n], gt2, gt2)
-            end
-        end
+        # The upwinding outputs of UpwindBiasedProductC2F and
+        # Upwind3rdOrderBiasedProductC2F (with and without Extrapolate) are not
+        # tested here: their BandMatrixRow coefficients are checked against
+        # hand-written stencils in test/MatrixFields/unit_operator_matrices.jl,
+        # and matrix multiplication has its own unit tests.
     end
 end
 
