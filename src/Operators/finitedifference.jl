@@ -2057,11 +2057,23 @@ D(v)[1] = (Jv³[1+\\tfrac{1}{2}] - Jv³₀) / J[i]
 
 ```
 ```
+
+  - [`Extrapolate()`](@ref Extrapolate): set the value at the center closest to
+    the boundary to be the same as the neighbouring interior value. For the left
+    boundary, this becomes:
+
+```math
+D(v)[1] = D(v)[2]
+```
 """
 struct DivergenceF2C{BCS} <: DivergenceOperator
     bcs::BCS
     function DivergenceF2C(; kwargs...)
-        assert_valid_bcs("DivergenceF2C", kwargs, Union{SetValue, SetDivergence})
+        assert_valid_bcs(
+            "DivergenceF2C",
+            kwargs,
+            Union{SetValue, SetDivergence, Extrapolate},
+        )
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     DivergenceF2C(bcs) = DivergenceF2C(; bcs...)
@@ -2074,6 +2086,10 @@ stencil_interior_width(::DivergenceF2C, arg) = ((-half, half),)
 boundary_width(::DivergenceF2C, ::AbstractBoundaryCondition) = 0
 boundary_width(::DivergenceF2C, ::SetValue) = 1
 boundary_width(::DivergenceF2C, ::SetDivergence) = 1
+# Without this, `left_interior_idx`/`right_interior_idx` place the boundary
+# centers in the interior window, so `op_matrix_first_row`/`op_matrix_last_row`
+# for `Extrapolate` are never reached and the condition is silently ignored.
+boundary_width(::DivergenceF2C, ::Extrapolate) = 1
 
 # Extend `adapt_structure` for all boundary conditions containing a `val` field.
 function Adapt.adapt_structure(to, bc::AbstractBoundaryCondition)

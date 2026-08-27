@@ -166,6 +166,7 @@ end
     test_op_matrix(DivergenceF2C, Nothing, (ᶠuvw,))
     test_op_matrix(DivergenceF2C, SetValue, (ᶠuvw,))
     test_op_matrix(DivergenceF2C, SetDivergence, (ᶠuvw,))
+    test_op_matrix(DivergenceF2C, Extrapolate, (ᶠuvw,))
     test_op_matrix(CurlC2F, Nothing, (ᶜc12,), true)
     test_op_matrix(CurlC2F, SetCurl, (ᶜc12,))
 
@@ -291,6 +292,23 @@ end
                 i == 1 ? zero(FT) : -(ᶠJ[i] / ᶜJ[i]),
                 i == n ? zero(FT) : ᶠJ[i + 1] / ᶜJ[i],
             ] for i in 1:n
+        ];
+        dims = 1,
+    )
+
+    # DivergenceF2C with Extrapolate replicates the interior output at the
+    # boundary centers (D(v)[1] = D(v)[2]): the boundary row is the adjacent
+    # interior row with its band offsets shifted by one, which widens the
+    # matrix's rows to a quaddiagonal band (the extra entries are zero away
+    # from the boundaries).
+    @test matrix_rows(
+        DivergenceF2C(; bottom = Extrapolate(), top = Extrapolate()),
+        face_space,
+    ) ≈ stack(
+        [
+            i == 1 ? [0, 0, -(ᶠJ[2] / ᶜJ[2]), ᶠJ[3] / ᶜJ[2]] :
+            i == n ? [-(ᶠJ[n - 1] / ᶜJ[n - 1]), ᶠJ[n] / ᶜJ[n - 1], 0, 0] :
+            [0, -(ᶠJ[i] / ᶜJ[i]), ᶠJ[i + 1] / ᶜJ[i], 0] for i in 1:n
         ];
         dims = 1,
     )

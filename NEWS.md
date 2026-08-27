@@ -126,10 +126,11 @@ main
   [2544](https://github.com/CliMA/ClimaCore.jl/pull/2544)
 
 - ![][badge-💥breaking] Removed the `Extrapolate` boundary condition from
-  `GradientF2C` and `DivergenceF2C`, where it replicated the operator's output
-  at the closest interior point (e.g. `G(x)[1] = G(x)[2]`); it remains
-  available on the interpolation operators `InterpolateC2F` and
-  `WeightedInterpolateC2F`, where it copies the closest interior input.
+  `GradientF2C`, where it replicated the operator's output at the closest
+  interior point (`G(x)[1] = G(x)[2]`); it remains available on
+  `DivergenceF2C`, where it keeps that replicate-output meaning
+  (`D(v)[1] = D(v)[2]`), and on the interpolation operators `InterpolateC2F`
+  and `WeightedInterpolateC2F`, where it copies the closest interior input.
   `GradientF2C` now accepts `SetGradient(v₀)`, which prescribes the gradient
   at the center closest to the boundary (with `v₀` projected onto the
   covariant 3 axis, as for `GradientC2F`). Also added `BottomBiasedC2F`,
