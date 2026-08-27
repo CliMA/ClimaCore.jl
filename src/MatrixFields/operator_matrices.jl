@@ -92,6 +92,9 @@ has_affine_bc(op) = unrolled_any(
     op.bcs,
 )
 
+uses_extrapolate(op) =
+    unrolled_any(Base.Fix2(isa, Operators.Extrapolate), op.bcs)
+
 ################################################################################
 
 struct FDOperatorMatrix{O <: Operators.FiniteDifferenceOperator} <:
@@ -144,8 +147,12 @@ Base.Broadcast.broadcasted(
 # that term is reinjected with a SetBoundaryOperator, and `modifies_output` /
 # `modifies_input` decide where: `modifies_output` conditions are applied to the
 # result (after the multiply), while `modifies_input` conditions are applied to
-# the argument (before the multiply). A condition that is linear (e.g. Extrapolate
-# on the interpolation operators) is encoded directly in the matrix and is neither.
+# the argument (before the multiply). A condition that is linear (e.g. Extrapolate)
+# is encoded directly in the matrix and is neither. (For DivergenceF2C this widens
+# every matrix row by one diagonal on each side -- see `extrapolate_row_type` -- but
+# reapplying the condition to the result with a SetBoundaryOperator instead
+# benchmarked slower on GPU, because the boundary levels then recompute the multiply
+# through the lazy `getidx` path.)
 #
 # For nearly every operator such a boundary condition prescribes the operator's
 # output at the boundary, so it modifies the output. Examples:
@@ -774,14 +781,29 @@ Base.@propagate_inbounds ct3_data(velocity, space, idx, hidx) =
 
 ################################################################################
 
-# Boundary rows for the Extrapolate boundary condition on the interpolation
-# operators. Their stencil only reaches a ghost point at the boundary face
-# itself, where a single interior point is in range, so every extrapolation
-# order reduces to the value of the closest interior point, and the
-# interpolation of that value with itself is again that value: the boundary
-# row is an identity entry pointing at the closest interior point. Such a row
-# fits inside the interior row's band, so the operator's row type is
-# unchanged.
+# Boundary rows for the Extrapolate boundary condition. Extrapolate has two
+# distinct meanings, depending on the operator:
+#
+#  - Copy the nearest input (interpolation operators): their stencil only
+#    reaches a ghost point at the boundary face itself, where a single
+#    interior point is in range, so every extrapolation order reduces to the
+#    value of the closest interior point, and the interpolation of that value
+#    with itself is again that value: the boundary row is an identity entry
+#    pointing at the closest interior point. Such a row fits inside the
+#    interior row's band, so the operator's row type is unchanged.
+#
+#  - Replicate the nearest interior output (DivergenceF2C): the output at the
+#    boundary center replicates the operator's output at the closest interior
+#    center, so the boundary row is the interior row evaluated at `idx ± 1`,
+#    with its band offsets shifted by `±1` to make them relative to `idx`. The
+#    `convert` in `stencil_left_boundary` / `stencil_right_boundary` zero-pads
+#    the shifted row to the operator's full row type, which must be one
+#    diagonal wider on each side than the interior row (see
+#    `extrapolate_row_type`); the multiply clips band entries that lie outside
+#    the column. (Keeping the row Bidiagonal by reapplying the condition to
+#    the result with a SetBoundaryOperator instead benchmarked slower on GPU,
+#    because the boundary levels then recompute the multiply through the lazy
+#    `getidx` path.)
 const CopyInputExtrapolateOp =
     Union{Operators.InterpolateC2F, Operators.WeightedInterpolateC2F}
 
@@ -795,6 +817,40 @@ op_matrix_last_row(
     ::Operators.Extrapolate,
     ::Type{FT},
 ) where {FT} = LowerDiagonalMatrixRow(true)
+
+# Reinterprets a row computed at `idx - shift` as a row at `idx` by shifting
+# its band offsets. The offsets are type-level constants, so the shift happens
+# at compile time.
+shift_row_band(row::BandMatrixRow{ld}, ::Val{shift}) where {ld, shift} =
+    BandMatrixRow{ld + shift}(row.entries...)
+
+Base.@propagate_inbounds op_matrix_first_row(
+    op::Operators.DivergenceF2C,
+    ::Operators.Extrapolate,
+    space,
+    idx,
+    hidx,
+    args...,
+) = shift_row_band(
+    op_matrix_interior_row(op, space, idx + 1, hidx, args...),
+    Val(1),
+)
+Base.@propagate_inbounds op_matrix_last_row(
+    op::Operators.DivergenceF2C,
+    ::Operators.Extrapolate,
+    space,
+    idx,
+    hidx,
+    args...,
+) = shift_row_band(
+    op_matrix_interior_row(op, space, idx - 1, hidx, args...),
+    Val(-1),
+)
+
+widen_row_type(::Type{BandMatrixRow{ld, bw, T}}) where {ld, bw, T} =
+    BandMatrixRow{ld - 1, bw + 2, T}
+extrapolate_row_type(op, ::Type{Row}) where {Row <: BandMatrixRow} =
+    uses_extrapolate(op) ? widen_row_type(Row) : Row
 
 ################################################################################
 
@@ -1026,8 +1082,8 @@ op_matrix_last_row(
     ::Type{FT},
 ) where {FT} = BidiagonalMatrixRow(-C3(FT(1)), C3(FT(0)))
 
-op_matrix_row_type(::Operators.DivergenceOperator, ::Type{FT}) where {FT} =
-    BidiagonalMatrixRow{C3Cov{FT}}
+op_matrix_row_type(op::Operators.DivergenceOperator, ::Type{FT}) where {FT} =
+    extrapolate_row_type(op, BidiagonalMatrixRow{C3Cov{FT}})
 Base.@propagate_inbounds function op_matrix_interior_row(
     ::Operators.DivergenceOperator,
     space,

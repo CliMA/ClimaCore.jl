@@ -142,7 +142,8 @@ bcs_tested(c, ::typeof(op_broadcast_example2!)) = ((;), )
 
 bcs_tested(c, ::typeof(op_GradientF2C!)) = ((;), set_value_bcs(c))
 bcs_tested(c, ::typeof(op_GradientC2F!)) = (set_gradient_value_bcs(c),)
-bcs_tested(c, ::typeof(op_DivergenceF2C!)) = ((;), set_value_contra3_bcs(c))
+bcs_tested(c, ::typeof(op_DivergenceF2C!)) =
+    ((;), set_value_contra3_bcs(c), extrapolate_bcs(c))
 bcs_tested(c, ::typeof(op_DivergenceC2F!)) = (set_divergence_bcs(c), )
 bcs_tested(c, ::typeof(op_InterpolateF2C!)) = ((;), )
 bcs_tested(c, ::typeof(op_InterpolateC2F!)) = (set_value_bcs(c), extrapolate_bcs(c))
@@ -379,6 +380,7 @@ function test_results_column(t_min)
     [(op_GradientC2F!, :SetGradient, :SetGradient), 242.053*ns*buffer],
     [(op_DivergenceF2C!, :none), 1.005*μs*buffer],
     [(op_DivergenceF2C!, :SetValue, :SetValue), 1.076*μs*buffer],
+    [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), 1.076*μs*buffer],
     [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), 878.028*ns*buffer],
     [(op_InterpolateF2C!, :none), 254.523*ns*buffer],
     [(op_InterpolateC2F!, :SetValue, :SetValue), 254.241*ns*buffer],
@@ -424,6 +426,7 @@ function test_results_sphere(t_min)
     [(op_GradientC2F!, :SetGradient, :SetGradient), 1.899*ms*buffer],
     [(op_DivergenceF2C!, :none), 6.792*ms*buffer],
     [(op_DivergenceF2C!, :SetValue, :SetValue), 6.776*ms*buffer],
+    [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), 6.776*ms*buffer],
     [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), 6.720*ms*buffer],
     [(op_InterpolateF2C!, :none), 1.701*ms*buffer],
     [(op_InterpolateC2F!, :SetValue, :SetValue), 1.713*ms*buffer],

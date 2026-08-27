@@ -42,6 +42,19 @@ device = ClimaComms.device()
         ∂sin = divᶜ.(Geometry.WVector.(sin.(faces)))
         @test ∂sin ≈ cos.(centers) atol = 1e-2
 
+        # Extrapolate replicates the divergence at the closest interior
+        # center: D(v)[1] = D(v)[2] and D(v)[n] = D(v)[n-1].
+        divᶜ_extrap = Operators.DivergenceF2C(
+            left = Operators.Extrapolate(),
+            right = Operators.Extrapolate(),
+        )
+        ∂sin_extrap = divᶜ_extrap.(Geometry.WVector.(sin.(faces)))
+        ∂sin_arr = vec(Array(parent(∂sin)))
+        ∂sin_extrap_arr = vec(Array(parent(∂sin_extrap)))
+        @test ∂sin_extrap_arr[1] == ∂sin_arr[2]
+        @test ∂sin_extrap_arr[end] == ∂sin_arr[end - 1]
+        @test ∂sin_extrap_arr[2:(end - 1)] == ∂sin_arr[2:(end - 1)]
+
         # Center -> Face operator
         # first order convergence at boundaries
 
@@ -814,9 +827,6 @@ end
     )
     @test_throws AssertionError Operators.WeightedInterpolateC2F(;
         bottom = Operators.SetGradient(Geometry.WVector(FT(0))),
-    )
-    @test_throws AssertionError Operators.DivergenceF2C(;
-        bottom = Operators.Extrapolate(),
     )
     @test_throws AssertionError Operators.GradientF2C(;
         bottom = Operators.Extrapolate(),
