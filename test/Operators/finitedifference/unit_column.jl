@@ -691,9 +691,10 @@ end
         )
         @test cpu(interp_extrap.(θ)) ≈ [t[1], (t[1] + t[2]) / 2, t[2]]
 
-        # a missing boundary condition gives a zero boundary row
-        @test cpu(Operators.InterpolateC2F().(θ)) ≈
-              [0, (t[1] + t[2]) / 2, 0]
+        # a missing boundary condition gives a NaN boundary row
+        interp_no_bc = cpu(Operators.InterpolateC2F().(θ))
+        @test isnan(interp_no_bc[1]) && isnan(interp_no_bc[3])
+        @test interp_no_bc[2] ≈ (t[1] + t[2]) / 2
 
         grad_c2f = Operators.GradientC2F(;
             bottom = Operators.SetGradient(Geometry.WVector(FT(2))),

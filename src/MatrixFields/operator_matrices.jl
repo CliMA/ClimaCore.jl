@@ -596,18 +596,36 @@ op_matrix_first_row(op, bc, space, idx, hidx, args...) =
 op_matrix_last_row(op, bc, space, idx, hidx, args...) =
     op_matrix_last_row(op, bc, Spaces.undertype(space))
 
-# Fallback methods for unspecified boundary conditions (need to use zero here
-# instead of NaN to avoid polluting nearby interior rows with NaNs).
+# Fallback methods for unspecified boundary conditions: a missing boundary
+# condition leaves the operator's boundary rows undefined, so they are filled
+# with `NaN`s, matching the `NaN` that the pointwise stencil path produces
+# (see `Operators.stencil_left_boundary(op, ::NullBoundaryCondition, ...)`).
+# A multiply against a `NaN` row makes only that row's output `NaN`; interior
+# rows are unaffected.
 #
 # The row must not be the interior row. Only operators whose input is centers reach
 # these methods -- every face-input operator has
 # `boundary_width(op, ::NullBoundaryCondition) == 0`, so no boundary row is requested
 # for it -- and a center-input operator's interior row at the boundary face reaches a
-# center outside the domain. The multiply clips those band entries, so the result is
-# unaffected, but building the row can read out of range:
-# `DivergenceOperator`'s row evaluates `LocalGeometry(space, idx - half, hidx)`, which
-# is center 0 at the bottom face, and that is a `BoundsError` under
-# `--check-bounds=yes`.
+# center outside the domain. The multiply clips those band entries, so only the `NaN`
+# entries in range contribute, but building the interior row can also read out of
+# range: `DivergenceOperator`'s row evaluates `LocalGeometry(space, idx - half, hidx)`,
+# which is center 0 at the bottom face, and that is a `BoundsError` under
+# `--check-bounds=yes`. The `NaN` row is built from the row type alone, so it reads
+# nothing.
+#
+# The row must constant-fold during inference: these stencil branches are compiled
+# into every broadcast over the operator matrix (including the matrix-multiply
+# kernels, whose inference budget is already tight), and any runtime NaN-row
+# construction there -- even a fully type-stable one -- makes the surrounding kernels
+# type-unstable. `@assume_effects :foldable` licenses concrete evaluation of this
+# call during inference, so it reduces to a constant just like `rzero`; the function
+# only turns type arguments into an isbits value, so the asserted effects hold (do
+# not add reads of runtime state here).
+Base.@assume_effects :foldable @inline nan_boundary_row(
+    ::Type{BMR},
+    ::Type{FT},
+) where {BMR <: BandMatrixRow, FT} = convert(BMR, rzero(BMR) * FT(NaN))
 Operators.stencil_left_boundary(
     op_matrix::FDOperatorMatrix,
     ::Operators.NullBoundaryCondition,
@@ -615,7 +633,10 @@ Operators.stencil_left_boundary(
     idx,
     hidx,
     args...,
-) = rzero(Operators.return_eltype(op_matrix, args...))
+) = nan_boundary_row(
+    Operators.return_eltype(op_matrix, args...),
+    Spaces.undertype(space),
+)
 Operators.stencil_right_boundary(
     op_matrix::FDOperatorMatrix,
     ::Operators.NullBoundaryCondition,
@@ -623,7 +644,10 @@ Operators.stencil_right_boundary(
     idx,
     hidx,
     args...,
-) = rzero(Operators.return_eltype(op_matrix, args...))
+) = nan_boundary_row(
+    Operators.return_eltype(op_matrix, args...),
+    Spaces.undertype(space),
+)
 
 # Boundary rows for value-fixing boundary conditions that are still attached to
 # the operator matrix. This only happens through the explicit `operator_matrix(op)`

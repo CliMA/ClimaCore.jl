@@ -237,12 +237,22 @@ end
     end
 
     # InterpolateC2F: interior faces average the two adjacent centers. With
-    # Extrapolate, the boundary face copies the closest center; with SetValue
-    # (or no boundary condition), the matrix's boundary rows are zero (the
-    # value is imposed outside the matrix, by a SetBoundaryOperator).
+    # Extrapolate, the boundary face copies the closest center; with SetValue,
+    # the matrix's boundary rows are zero (the value is imposed outside the
+    # matrix, by a SetBoundaryOperator); with no boundary condition, they are
+    # NaN in the in-range entries (the out-of-range entries are clipped by the
+    # multiply), flagging the missing boundary condition.
     interp_interior = [f in (1, n + 1) ? [0, 0] : [0.5, 0.5] for f in 1:(n + 1)]
-    @test matrix_rows(InterpolateC2F(), center_space) ≈
-          stack(interp_interior; dims = 1)
+    @test isequal(
+        matrix_rows(InterpolateC2F(), center_space),
+        stack(
+            [
+                f == 1 ? [0, NaN] :
+                f == n + 1 ? [NaN, 0] : [0.5, 0.5] for f in 1:(n + 1)
+            ];
+            dims = 1,
+        ),
+    )
     @test matrix_rows(
         InterpolateC2F(; bottom = SetValue(FT(0)), top = SetValue(FT(0))),
         center_space,

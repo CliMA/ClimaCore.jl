@@ -106,14 +106,11 @@ strip_space(bc::AbstractBoundaryCondition, parent_space) =
 This is used as a placeholder when no other boundary condition can be applied.
 
 Wherever an operator needs a boundary row for this condition (that is, wherever
-[`boundary_width`](@ref) is nonzero for it), the value produced there is a placeholder
-rather than a meaningful result, and which placeholder depends on how the operator is
-evaluated:
-
-  - an operator that is rewritten into an operator matrix multiply gets a zero boundary
-    row, so its boundary output is zero;
-  - any other operator goes through [`stencil_left_boundary`](@ref) /
-    [`stencil_right_boundary`](@ref), which produce `NaN`.
+[`boundary_width`](@ref) is nonzero for it), the result produced there is `NaN`, which
+flags the missing boundary condition. This holds on every evaluation path: an operator
+that is rewritten into an operator matrix multiply gets a `NaN` boundary row (see
+`MatrixFields`), and any other operator goes through [`stencil_left_boundary`](@ref) /
+[`stencil_right_boundary`](@ref), which produce `NaN` directly.
 
 The advection operators never use this condition: when they are given no
 boundary conditions, [`Extrapolate{0}`](@ref Extrapolate) is added to their
@@ -121,10 +118,9 @@ boundary conditions, [`Extrapolate{0}`](@ref Extrapolate) is added to their
 back to `Extrapolate{0}` (see [`AdvectionOperator`](@ref)).
 
 Where `boundary_width` is zero the interior stencil applies instead and nothing special
-happens, so the same operator can give a placeholder at one boundary and an ordinary
-value at the other. Rather than relying on either placeholder, give the operator a
-boundary condition, or overwrite the boundary afterwards with a
-[`SetBoundaryOperator`](@ref).
+happens, so the same operator can give `NaN` at one boundary and an ordinary value at
+the other. To obtain a meaningful boundary value, give the operator a boundary
+condition, or overwrite the boundary afterwards with a [`SetBoundaryOperator`](@ref).
 """
 struct NullBoundaryCondition <: AbstractBoundaryCondition end
 
@@ -460,8 +456,8 @@ that cannot be evaluated without a boundary condition, a `NullBoundaryCondition`
 generates `NaN` values here.
 
 Operators that are rewritten into an operator matrix multiply do not reach this method:
-their boundary rows come from `MatrixFields` instead, where a `NullBoundaryCondition` row
-is zero rather than `NaN`.
+their boundary rows come from `MatrixFields` instead, where a `NullBoundaryCondition`
+row is filled with `NaN`s, so the boundary output is `NaN` there as well.
 """
 stencil_left_boundary(op, ::NullBoundaryCondition, space, _, _, args...) =
     new(return_eltype(op, args...)) * Spaces.undertype(space)(NaN)
@@ -475,8 +471,8 @@ that cannot be evaluated without a boundary condition, a `NullBoundaryCondition`
 generates `NaN` values here.
 
 Operators that are rewritten into an operator matrix multiply do not reach this method:
-their boundary rows come from `MatrixFields` instead, where a `NullBoundaryCondition` row
-is zero rather than `NaN`.
+their boundary rows come from `MatrixFields` instead, where a `NullBoundaryCondition`
+row is filled with `NaN`s, so the boundary output is `NaN` there as well.
 """
 stencil_right_boundary(op, ::NullBoundaryCondition, space, _, _, args...) =
     new(return_eltype(op, args...)) * Spaces.undertype(space)(NaN)

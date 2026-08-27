@@ -96,11 +96,12 @@ main
   reapplied around the multiply by a `SetBoundaryOperator`. Two user-visible
   consequences:
   - A center-input operator (`InterpolateC2F`, `GradientC2F`, `DivergenceC2F`,
-    `CurlC2F`, ...) constructed without a boundary condition now produces a
-    **zero** matrix row at each boundary face, so the result there is a finite
-    zero instead of the `NaN` that previously flagged a forgotten boundary
-    condition. Supply boundary conditions wherever the boundary values matter;
-    a missing one is no longer diagnosed at run time.
+    `CurlC2F`, ...) constructed without a boundary condition produces a `NaN`
+    matrix row at each boundary face, so the result there is `NaN`, just as it
+    was on the pointwise stencil path; a forgotten boundary condition is still
+    flagged at run time. This also applies to the explicit
+    `MatrixFields.operator_matrix` API, whose boundary rows for a missing
+    boundary condition were previously **zero**: they are now `NaN` rows.
   - `CurlC2F` results are now `Contravariant12Vector`s rather than
     `Contravariant123Vector`s with a structurally zero third component, since
     its operator matrix's rows produce the two nonzero components of the
