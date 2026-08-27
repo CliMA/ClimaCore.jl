@@ -776,12 +776,17 @@ function plot_fields_cpu(Yi)
     dyn = @. moist_p_dyn(ρ, e_int, q_tot)
     p = dyn.p
     T = dyn.T
+    # Diagnostic condensate split at the (non-throwing) plotting T — 0-moment
+    # microphysics carries no prognostic q_liq/q_ice, so partition from q_tot.
+    cond = @. condensate_partition_tuple(T, ρ, q_tot)
     return (;
         u = ClimaCore.to_cpu(uE),
         v = ClimaCore.to_cpu(uN),
         p = ClimaCore.to_cpu(p),
         T = ClimaCore.to_cpu(T),
         q_tot = ClimaCore.to_cpu(q_tot),
+        q_liq = ClimaCore.to_cpu(cond.q_liq),
+        q_ice = ClimaCore.to_cpu(cond.q_ice),
     )
 end
 
@@ -818,6 +823,23 @@ function save_level_animation(
     return nothing
 end
 
+# Model level whose column-mean center altitude is nearest a target [m]. Over
+# terrain a level index is not a constant altitude, so pick by mean z.
+function level_nearest_z(z_target)
+    zc = Fields.coordinate_field(hv_center_space).z
+    best_k, best_d = 1, FT(Inf)
+    for k in 1:Spaces.nlevels(hv_center_space)
+        zk = sum(parent(Fields.level(zc, k))) / length(parent(Fields.level(zc, k)))
+        d = abs(zk - z_target)
+        d < best_d && ((best_k, best_d) = (k, d))
+    end
+    return best_k
+end
+const lev_1km = level_nearest_z(FT(1000))
+# Only emit moisture plots when the run actually carries moisture (RH0 > 0);
+# a dry run would otherwise write all-zero q fields.
+const plot_moist = q_rh0 > 0
+
 let f_end = plot_fields_cpu(sol.u[end])
     save_level_heatmap(
         joinpath(output_dir, "v_end.png"),
@@ -826,6 +848,12 @@ let f_end = plot_fields_cpu(sol.u[end])
         colorrange = (-6, 6),
     )
     save_level_heatmap(joinpath(output_dir, "p_sfc_end.png"), f_end.p, 1)
+    if plot_moist
+        # q_tot at the first (surface) level; q_liq/q_ice at ~1 km.
+        save_level_heatmap(joinpath(output_dir, "q_tot_end.png"), f_end.q_tot, 1)
+        save_level_heatmap(joinpath(output_dir, "q_liq_end.png"), f_end.q_liq, lev_1km)
+        save_level_heatmap(joinpath(output_dir, "q_ice_end.png"), f_end.q_ice, lev_1km)
+    end
 end
 if length(sol.u) > 2
     for (name, getfield_fn, lev, colorrange) in (
@@ -833,6 +861,21 @@ if length(sol.u) > 2
         ("u", f -> f.u, 3, nothing),
         ("p_sfc", f -> f.p, 1, nothing),
         ("T_sfc", f -> f.T, 1, nothing),
+    )
+        save_level_animation(
+            joinpath(output_dir, "$name.mp4"),
+            sol.u,
+            Yi -> getfield_fn(plot_fields_cpu(Yi)),
+            lev;
+            colorrange,
+        )
+    end
+end
+if length(sol.u) > 2 && plot_moist
+    for (name, getfield_fn, lev, colorrange) in (
+        ("q_tot", f -> f.q_tot, 1, nothing),
+        ("q_liq", f -> f.q_liq, lev_1km, nothing),
+        ("q_ice", f -> f.q_ice, lev_1km, nothing),
     )
         save_level_animation(
             joinpath(output_dir, "$name.mp4"),
