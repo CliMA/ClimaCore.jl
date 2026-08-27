@@ -98,6 +98,7 @@ unit_tests = [
     UnitTest("Spectral elem - DG sphere fluxes"         ,"Operators/spectralelement/unit_sphere_dg_fluxes.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG stability properties"  ,"Operators/spectralelement/unit_dg_stability.jl"; meta = :cpu_only, tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG boundary fluxes"       ,"Operators/spectralelement/unit_dg_boundary_fluxes.jl"; meta = :cpu_only, tier = :unit, subsystem = :operators),
+    UnitTest("Spectral elem - DG extruded sphere"       ,"Operators/spectralelement/unit_extruded_sphere_dg.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG divergence conv"       ,"Operators/spectralelement/conv_dg_divergence.jl"; meta = :cpu_only, tier = :conv, subsystem = :operators),
     UnitTest("Operators - broadcast inference"          ,"Operators/inference_operators.jl"; tier = :inference, subsystem = :operators),
     UnitTest("FD ops - zero-allocation stencils"        ,"Operators/finitedifference/allocs_fd_ops.jl"; meta = :cpu_only, tier = :allocs, subsystem = :operators),

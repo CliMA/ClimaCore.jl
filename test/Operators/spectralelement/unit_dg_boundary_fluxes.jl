@@ -44,7 +44,11 @@ function channel_space(::Type{FT}; Lx = FT(2π), Ly = FT(2), nelem = 4, Nq = 4) 
     )
     mesh = Meshes.RectilinearMesh(domain, nelem, nelem)
     topology = Topologies.Topology2D(context, mesh)
-    return Spaces.SpectralElementSpace2D(topology, Quadratures.GLL{Nq}())
+    return Spaces.SpectralElementSpace2D(
+        topology,
+        Quadratures.GLL{Nq}();
+        discontinuous = true,
+    )
 end
 
 @testset "DG boundary numerical fluxes" begin
@@ -52,6 +56,7 @@ end
         Lx = FT(2π)
         Ly = FT(2)
         space = channel_space(FT; Lx, Ly)
+        @test !Spaces.is_continuous(space)
         coords = Fields.coordinate_field(space)
         q = ones(space)
 
