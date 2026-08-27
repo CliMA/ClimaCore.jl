@@ -156,36 +156,30 @@ end
         end
 
         @testset "Discontinuous Galerkin (DG) Integration [$FT]" begin
-            # `add_numerical_flux_internal!` iterates interior faces with host
-            # scalar indexing, so the DG interface-flux path is CPU-only.
-            if ClimaComms.device() isa ClimaComms.CUDADevice
-                @test_skip "DG interface flux (add_numerical_flux_internal!) is CPU-only"
-            else
-                y = copy(y0)
-                dydt = similar(y)
-                y_stage = similar(y)
-                numflux = Operators.RusanovNumericalFlux(sw_flux, sw_wavespeed)
+            y = copy(y0)
+            dydt = similar(y)
+            y_stage = similar(y)
+            numflux = Operators.RusanovNumericalFlux(sw_flux, sw_wavespeed)
 
-                # Warmup step
-                shallow_water_rhs_dg!(dydt, y, (space, params, numflux), FT(0))
+            # Warmup step
+            shallow_water_rhs_dg!(dydt, y, (space, params, numflux), FT(0))
 
-                # Run SSPRK steps
-                for step in 1:nsteps
-                    rk_step!(
-                        shallow_water_rhs_dg!,
-                        y,
-                        dydt,
-                        y_stage,
-                        (space, params, numflux),
-                        dt,
-                    )
-                end
-
-                # Verify mass conservation
-                mass_final = sum(y.ρ)
-                tol = FT == Float32 ? 1e-4 : 1e-10
-                @test isapprox(mass_final, mass0, rtol = tol)
+            # Run SSPRK steps
+            for step in 1:nsteps
+                rk_step!(
+                    shallow_water_rhs_dg!,
+                    y,
+                    dydt,
+                    y_stage,
+                    (space, params, numflux),
+                    dt,
+                )
             end
+
+            # Verify mass conservation
+            mass_final = sum(y.ρ)
+            tol = FT == Float32 ? 1e-4 : 1e-10
+            @test isapprox(mass_final, mass0, rtol = tol)
         end
     end
 end
