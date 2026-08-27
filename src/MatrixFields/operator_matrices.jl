@@ -88,7 +88,12 @@ has_affine_bc(op) = unrolled_any(
             Operators.SetGradient,
             Operators.SetDivergence,
             Operators.SetCurl,
-        } && ((typeof(bc.val) <: Fields.Field) || bc.val != rzero(typeof(bc.val))),
+        } && (
+            (
+                typeof(bc.val) <:
+                Union{Fields.Field, Base.AbstractBroadcasted}
+            ) || bc.val != rzero(typeof(bc.val))
+        ),
     op.bcs,
 )
 
@@ -620,16 +625,8 @@ op_matrix_last_row(op, bc, space, idx, hidx, args...) =
 # which is center 0 at the bottom face, and that is a `BoundsError` under
 # `--check-bounds=yes`. The `NaN` row is built from the row type alone, so it reads
 # nothing.
-#
-# The row must constant-fold during inference: these stencil branches are compiled
-# into every broadcast over the operator matrix (including the matrix-multiply
-# kernels, whose inference budget is already tight), and any runtime NaN-row
-# construction there -- even a fully type-stable one -- makes the surrounding kernels
-# type-unstable. `@assume_effects :foldable` licenses concrete evaluation of this
-# call during inference, so it reduces to a constant just like `rzero`; the function
-# only turns type arguments into an isbits value, so the asserted effects hold (do
-# not add reads of runtime state here).
-Base.@assume_effects :foldable @inline nan_boundary_row(
+
+@inline nan_boundary_row(
     ::Type{BMR},
     ::Type{FT},
 ) where {BMR <: BandMatrixRow, FT} = convert(BMR, rzero(BMR) * FT(NaN))
@@ -1025,12 +1022,28 @@ end
 # zero them and fold their coefficients itself. `extrapolate_weights` returns
 # 3 weights, which is enough for any row with up to 4 entries (a row with at
 # least 1 ghost entry has at most 3 others).
+# `nghost` is a function of the runtime row index, so it cannot be constant-
+# propagated into the folds below; these ladders make it a compile-time
+# constant instead, which folds the `ntuple` branches and turns the
+# `w[j - nghost]` weight lookups into constant tuple indices (~40% faster per
+# fold than a runtime `nghost`). The callers guarantee `nghost >= 1`, and a
+# foldable row keeps at least one in-range entry, so `nghost <= 3`. `nother`
+# stays a runtime value: it only selects the extrapolation order inside
+# `extrapolate_weights`, which is a branch-free select either way.
+@inline fold_extrapolate_row_left(row, bc, nghost, nother = 0) =
+    nghost == 1 ? fold_extrapolate_row_left(row, bc, Val(1), nother) :
+    nghost == 2 ? fold_extrapolate_row_left(row, bc, Val(2), nother) :
+    fold_extrapolate_row_left(row, bc, Val(3), nother)
+@inline fold_extrapolate_row_right(row, bc, nghost, nother = 0) =
+    nghost == 1 ? fold_extrapolate_row_right(row, bc, Val(1), nother) :
+    nghost == 2 ? fold_extrapolate_row_right(row, bc, Val(2), nother) :
+    fold_extrapolate_row_right(row, bc, Val(3), nother)
 @inline function fold_extrapolate_row_left(
     row::BandMatrixRow{ld, bw},
     bc::Operators.Extrapolate,
-    nghost,
-    nother = 0,
-) where {ld, bw}
+    ::Val{nghost},
+    nother,
+) where {ld, bw, nghost}
     entries = row.entries
     z = zero(first(entries))
     w = Operators.extrapolate_weights(bc, bw - nghost - nother)
@@ -1045,9 +1058,9 @@ end
 @inline function fold_extrapolate_row_right(
     row::BandMatrixRow{ld, bw},
     bc::Operators.Extrapolate,
-    nghost,
-    nother = 0,
-) where {ld, bw}
+    ::Val{nghost},
+    nother,
+) where {ld, bw, nghost}
     entries = row.entries
     z = zero(first(entries))
     w = Operators.extrapolate_weights(bc, bw - nghost - nother)

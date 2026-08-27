@@ -20,8 +20,7 @@ import ClimaCore:
     Spaces,
     Quadratures,
     Fields,
-    Operators,
-    Utilities
+    Operators
 using ClimaCore.Geometry
 
 using Logging: global_logger

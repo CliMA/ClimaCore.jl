@@ -34,11 +34,7 @@ function Base.copyto!(
     fspace = Spaces.face_space(space)
     n_face_levels = Spaces.nlevels(fspace)
     high_resolution = !(n_face_levels ≤ 256)
-    # https://github.com/JuliaGPU/CUDA.jl/issues/2672
-    max_shmem = CUDA.attribute(
-        device(),
-        CUDA.DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK,
-    )
+    max_shmem = device_attributes().max_shmem_per_block
 
     (_, Ni, Nj, Nh) = size(out_fv)
     # `eager_copyto_stencil_kernel!` requires one x-thread per face level, so a block
