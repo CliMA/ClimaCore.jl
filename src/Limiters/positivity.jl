@@ -7,7 +7,7 @@ A Zhang–Shu (2010) positivity-preserving limiter for a coupled
 conservation-law system on spectral elements.
 
 Unlike [`QuasiMonotoneLimiter`](@ref) (two-sided, neighbor-based shape
-preservation for a *tracer*), this limiter enforces a one-sided physical floor
+preservation for a tracer), this limiter enforces a one-sided physical floor
 on the dynamics: it scales the whole conserved vector at each node toward the
 `WJ`-weighted element mean by a single factor `θ ∈ [0, 1]`,
 

@@ -436,11 +436,26 @@ cond(λ, ϕ) = (0 < r_gc(λ, ϕ) < d_0) * (r_gc(λ, ϕ) != R * pi)
     cosd(ϕ_c) *
     sind(λ - λ_c) / sin(r_gc(λ, ϕ) / R) * cond(λ, ϕ)
 
-# Initial total specific humidity: a fixed relative-humidity fraction RH0 of the
-# saturation specific humidity (subsaturated ⇒ physical, no immediate massive
-# condensation — unlike a fixed q profile, which supersaturates this model's cold
-# columns), capped at the tropopause z_t. RH0 overridable via RH0.
+# Initial total specific humidity. Two modes (MOISTURE_IC):
+#   "rh"    (default): q_tot = RH0 · q_sat(T_v, ρ). Subsaturated everywhere, so no
+#           immediate condensation, but the absolute moisture inherits the cool
+#           base-state temperature (⇒ low surface q_tot, e.g. ~3 g/kg at RH0=0.1).
+#   "dcmip": the DCMIP-2016 (Ullrich et al. 2016, test 4) explicit specific-humidity
+#           profile q_0·exp[−(z/z_q1)²]·exp[−(z/z_q2)⁴], which targets ~q_0 (18 g/kg)
+#           at the surface, but CAPPED at RH_MAX·q_sat so it stays subsaturated: a
+#           bare fixed profile is uniform in latitude and would supersaturate the cold
+#           polar columns (q_sat there ~1 g/kg ⇒ ~18× supersaturation ⇒ latent-heat
+#           shock at t=0). The cap gives ~q_0 where it is warm enough to hold it and
+#           RH_MAX·q_sat where it is not.
+# All capped at the tropopause z_t.
 const q_rh0 = parse(FT, get(ENV, "RH0", "0.8"))
+const moisture_ic = get(ENV, "MOISTURE_IC", "rh")
+const q_sfc0 = parse(FT, get(ENV, "QT0", "0.018"))   # DCMIP q_0 [kg/kg]
+const z_q1 = parse(FT, get(ENV, "ZQ1", "3000"))      # DCMIP vertical scale 1 [m]
+const z_q2 = parse(FT, get(ENV, "ZQ2", "8000"))      # DCMIP vertical scale 2 [m]
+const rh_max = parse(FT, get(ENV, "RH_MAX", "1.0"))  # saturation cap for "dcmip"
+moisture_ic in ("rh", "dcmip") ||
+    error("MOISTURE_IC must be \"rh\" or \"dcmip\"")
 
 # Internal energy per mass for the moist IC at (ρ, T, q_tot): equilibrium
 # condensate partition then the moisture-weighted internal energy (referenced to
@@ -483,8 +498,14 @@ function initial_state(ᶜlocal_geometry, ᶠlocal_geometry)
     # RH0=0 recovers R_m=R_d, T=T_v, ρ=ρ_dry — i.e. exactly the dry balanced state.
     ᶜTv = @. temp(lat, z)                                   # analytic T ≡ virtual temp
     ᶜρ = @. pres(lat, z) / (R_d * ᶜTv)                      # = dry-balanced density
+    ᶜq_sat = @. TD.q_vap_saturation(thermo_params, ᶜTv, ᶜρ)
     ᶜq_tot =
-        @. q_rh0 * TD.q_vap_saturation(thermo_params, ᶜTv, ᶜρ) * (z ≤ z_t)
+        moisture_ic == "dcmip" ?
+        (@. min(
+            q_sfc0 * exp(-(z / z_q1)^2) * exp(-(z / z_q2)^4),
+            rh_max * ᶜq_sat,
+        ) * (z ≤ z_t)) :
+        (@. q_rh0 * ᶜq_sat * (z ≤ z_t))
     ᶜR_m = @. TD.gas_constant_air(thermo_params, ᶜq_tot, FT(0), FT(0))
     ᶜT = @. ᶜTv * R_d / ᶜR_m                                # actual temperature
     u₀ = @. u_base(lat, z)
