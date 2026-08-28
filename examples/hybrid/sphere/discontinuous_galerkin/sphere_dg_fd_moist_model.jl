@@ -327,13 +327,15 @@ const ᶜf_cor = @. CT3(Geometry.WVector(2 * Ω * sind(ccoords.lat)))
 #     −ρ c_pd (θ ∇Π' + θ' ∇Π_ref),   Π' = Π − Π_ref,  θ' = θ − θ_ref,
 # which is the identically-zero field at rest (θ'=Π'=0).
 const T_ref = parse(FT, get(ENV, "REF_TEMP", "250"))
-const ᶜΠ_ref = @. exp(-κ_gas * grav * ccoords.z / (R_d * T_ref))
-const ᶜθ_ref = @. T_ref / ᶜΠ_ref
-# Pressure/density of the isothermal reference (for the stratified conservative
-# PGF, PGF=conservative_pert: p' = p − p_ref carried in the momentum flux,
-# buoyancy −(ρ−ρ_ref)g in ρw). Same reference as the Exner form.
-const ᶜp_ref = @. p_0 * exp(-grav * ccoords.z / (R_d * T_ref))
-const ᶜρ_ref = @. ᶜp_ref / (R_d * T_ref)
+const ref_qt = parse(FT, get(ENV, "REF_QT", "0"))
+const T_v_ref = T_ref * (1 + (R_v / R_d - 1) * ref_qt)
+const ᶜΠ_ref = @. exp(-κ_gas * grav * ccoords.z / (R_d * T_v_ref))
+const ᶜθ_ref = @. T_v_ref / ᶜΠ_ref
+# Pressure/density of the reference (for the stratified conservative PGF,
+# PGF=conservative_pert: p' = p − p_ref carried in the momentum flux, buoyancy
+# −(ρ−ρ_ref)g in ρw). Same reference as the Exner form.
+const ᶜp_ref = @. p_0 * exp(-grav * ccoords.z / (R_d * T_v_ref))
+const ᶜρ_ref = @. ᶜp_ref / (R_d * T_v_ref)
 # IC = baroclinic (default, Ullrich et al. jet) | resting (quiescent
 # isothermal = the reference; the sphere C-property / well-balancedness witness)
 const ic_mode = lowercase(get(ENV, "IC", "baroclinic"))
