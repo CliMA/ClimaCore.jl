@@ -144,15 +144,23 @@ end
 
 Add consistent LDG/SIPG face coupling
 ``−\\{\\!\\{κ G\\}\\!\\}·n̂ + τ[[q]]`` to a WJ-weighted Laplacian residual.
-Accepts a shared [`start_dg_ghost_exchange`](@ref) handle started on
-`(q, G, κ)`.
+The method with a leading `ghost_exchange` consumes a shared
+[`start_dg_ghost_exchange`](@ref) handle started on `(q, G, κ)`.
 """
-add_ldg_laplacian_flux_internal!(dydt, q, G, κ, τ; ghost_exchange = nothing) =
-    add_numerical_flux_internal!(
-        LDGLaplacianFlux(τ),
-        dydt,
-        q,
-        G,
-        κ;
-        ghost_exchange,
-    )
+add_ldg_laplacian_flux_internal!(dydt, q, G, κ, τ) =
+    add_numerical_flux_internal!(LDGLaplacianFlux(τ), dydt, q, G, κ)
+add_ldg_laplacian_flux_internal!(
+    ghost_exchange::DGGhostExchange,
+    dydt,
+    q,
+    G,
+    κ,
+    τ,
+) = add_numerical_flux_internal!(
+    ghost_exchange,
+    LDGLaplacianFlux(τ),
+    dydt,
+    q,
+    G,
+    κ,
+)

@@ -188,9 +188,9 @@ main
   (`Topologies.ghost_faces`) side through a face-strip halo exchange
   (`Topologies.GhostFaceExchange`) that ships only the `Nq` face-node values
   per face, on both CPU and CUDA. Several operators in one tendency evaluation
-  can share a single exchange via `Operators.start_dg_ghost_exchange(args...)`
-  and the `ghost_exchange` keyword. Covered by 2- and 3-rank CPU and CUDA
-  tests.
+  can share a single exchange by passing the handle returned by
+  `Operators.start_dg_ghost_exchange(args...)` as a leading argument. Covered
+  by 2- and 3-rank CPU and CUDA tests.
 
 - `Operators.add_numerical_flux_boundary!` now has CUDA kernels (staging +
   gather over `Operators.dg_boundary_connectivity`), so it no longer needs

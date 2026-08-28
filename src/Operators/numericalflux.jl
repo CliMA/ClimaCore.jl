@@ -52,11 +52,27 @@ function compute_surface_geometry_extruded_2d(
     return Geometry.SurfaceGeometry(sWJ, n)
 end
 
+"""
+    DGGhostExchange
+
+Handle for one round of the DG ghost-face halo exchange, shared across face
+operators — see [`start_dg_ghost_exchange`](@ref). The first operator that
+consumes the handle completes the exchange (`ClimaComms.finish`); later
+consumers read the same recv strips.
+"""
+struct DGGhostExchange{B}
+    bufs::B
+    finished::Base.RefValue{Bool}
+end
+DGGhostExchange(bufs) = DGGhostExchange(bufs, Ref(false))
+const NO_DG_GHOST_EXCHANGE = DGGhostExchange(nothing, Ref(true))
+
 # Device-dispatch seam (DSS-style): CPU methods live here; the
 # `ClimaComms.CUDADevice` methods are provided by the ClimaCoreCUDAExt
 # extension (ext/cuda/operators_dg.jl).
 """
     add_numerical_flux_internal!(fn, dydt, args...)
+    add_numerical_flux_internal!(ghost_exchange, fn, dydt, args...)
 
 Add the numerical flux at the internal faces of the spectral space mesh.
 
@@ -75,28 +91,63 @@ For consistency, it should satisfy the property that
 
     fn(normal, argvals⁻, argvals⁺) == -fn(-normal, argvals⁺, argvals⁻)
 
+The method with a leading `ghost_exchange` consumes a shared halo exchange
+from [`start_dg_ghost_exchange`](@ref) on distributed spaces.
+
 See also:
 
   - [`CentralNumericalFlux`](@ref)
   - [`RusanovNumericalFlux`](@ref)
 """
+add_numerical_flux_internal!(fn::F, dydt, args...) where {F} =
+    _add_numerical_flux_internal!(
+        ClimaComms.device(axes(dydt)),
+        nothing,
+        fn,
+        dydt,
+        args...,
+    )
 add_numerical_flux_internal!(
+    ghost_exchange::DGGhostExchange,
     fn::F,
     dydt,
-    args...;
-    ghost_exchange = nothing,
+    args...,
 ) where {F} = _add_numerical_flux_internal!(
     ClimaComms.device(axes(dydt)),
+    ghost_exchange,
     fn,
     dydt,
-    args...;
-    ghost_exchange,
+    args...,
 )
 
-_add_numerical_flux_internal!(device, fn::F, dydt, args...; kwargs...) where {F} =
-    error(
-        "add_numerical_flux_internal! is not implemented for $device; load CUDA.jl for CUDADevice support",
-    )
+_add_numerical_flux_internal!(
+    device,
+    ghost_exchange,
+    fn::F,
+    dydt,
+    args...,
+) where {F} = error(
+    "add_numerical_flux_internal! is not implemented for $device; load CUDA.jl for CUDADevice support",
+)
+
+# One-step argument access for the CPU face loops: `Field` and data-layout
+# arguments are read at node `(i, j)` of level `v` in element `h` (`(i,)` for
+# 1D horizontal elements); other arguments (e.g. equation parameters) pass
+# through. Each face node then needs a single `unrolled_map` from `args` to
+# values — a chain of Field→data→slab→value maps compiles one generated-map
+# instantiation per stage, with the latency that entails. The indices are
+# structurally in bounds: they come from `face_node_index` over `1:Nq` and
+# the topology's face lists.
+@inline _face_node_value(arg::Fields.Field, v, i, j, h) =
+    _face_node_value(Fields.field_values(arg), v, i, j, h)
+@inline _face_node_value(arg::DataLayouts.DataLayout, v, i, j, h) =
+    @inbounds slab(arg, v, h)[1, i, j, 1]
+@inline _face_node_value(arg, v, i, j, h) = arg
+@inline _face_node_value_1d(arg::Fields.Field, v, i, h) =
+    _face_node_value_1d(Fields.field_values(arg), v, i, h)
+@inline _face_node_value_1d(arg::DataLayouts.DataLayout, v, i, h) =
+    @inbounds slab(arg, v, h)[i]
+@inline _face_node_value_1d(arg, v, i, h) = arg
 
 # Face residual increments for one interior face node. Shared by numerical
 # flux (antisymmetric) and symmetric lifting; geometry loops pass `mode`.
@@ -127,24 +178,25 @@ end
 end
 function _add_numerical_flux_internal!(
     ::ClimaComms.AbstractCPUDevice,
+    ghost_exchange,
     fn::F,
     dydt,
-    args...;
-    ghost_exchange = nothing,
+    args...,
 ) where {F}
-    _add_interior_face_flux!(Val(:numflux), fn, dydt, args...; ghost_exchange)
+    _add_interior_face_flux!(Val(:numflux), ghost_exchange, fn, dydt, args...)
 end
 
 # Topology dispatch for CPU interior-face updates (numflux or lifting). The
-# ghost-face halo exchange is started (or a shared handle checked) before the
-# interior loops so communication overlaps the local face work, and finished
-# afterwards by the ghost-face loop in `_finish_dg_ghost_faces!`.
+# ghost-face halo exchange is started (or the shared `ghost_exchange` handle
+# checked) before the interior loops so communication overlaps the local face
+# work, and finished afterwards by the ghost-face loop in
+# `_finish_dg_ghost_faces!`.
 function _add_interior_face_flux!(
     mode::Val,
+    ghost_exchange,
     fn::F,
     dydt,
-    args...;
-    ghost_exchange = nothing,
+    args...,
 ) where {F}
     space = axes(dydt)
     grid = Spaces.grid(space)
@@ -175,9 +227,7 @@ function _add_interior_face_flux_2d!(mode::Val, fn::F, dydt, args...) where {F}
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     topology = Spaces.topology(space)
     internal_surface_geometry = grid.internal_surface_geometry
-    dydt_bc = Base.broadcastable(dydt)
-    args_bc =
-        unrolled_map(arg -> arg isa Fields.Field ? Base.broadcastable(arg) : arg, args)
+    dydt_data = Fields.field_values(dydt)
 
     for (iface, (elem⁻, face⁻, elem⁺, face⁺, reversed)) in
         enumerate(Topologies.interior_faces(topology))
@@ -185,13 +235,8 @@ function _add_interior_face_flux_2d!(mode::Val, fn::F, dydt, args...) where {F}
         internal_surface_geometry_slab =
             slab(internal_surface_geometry, 1, iface)
 
-        arg_slabs⁻ =
-            unrolled_map(arg -> slab(Fields.todata(arg), 1, elem⁻), args_bc)
-        arg_slabs⁺ =
-            unrolled_map(arg -> slab(Fields.todata(arg), 1, elem⁺), args_bc)
-
-        dydt_slab⁻ = slab(Fields.field_values(dydt_bc), 1, elem⁻)
-        dydt_slab⁺ = slab(Fields.field_values(dydt_bc), 1, elem⁺)
+        dydt_slab⁻ = slab(dydt_data, 1, elem⁻)
+        dydt_slab⁺ = slab(dydt_data, 1, elem⁺)
 
         for q in 1:Nq
             sgeom⁻ = internal_surface_geometry_slab[q]
@@ -200,16 +245,12 @@ function _add_interior_face_flux_2d!(mode::Val, fn::F, dydt, args...) where {F}
             i⁺, j⁺ = Topologies.face_node_index(face⁺, Nq, q, reversed)
 
             argvals⁻ = unrolled_map(
-                slab_ ->
-                    slab_ isa DataLayouts.DataLayout ? slab_[1, i⁻, j⁻, 1] :
-                    slab_,
-                arg_slabs⁻,
+                arg -> _face_node_value(arg, 1, i⁻, j⁻, elem⁻),
+                args,
             )
             argvals⁺ = unrolled_map(
-                slab_ ->
-                    slab_ isa DataLayouts.DataLayout ? slab_[1, i⁺, j⁺, 1] :
-                    slab_,
-                arg_slabs⁺,
+                arg -> _face_node_value(arg, 1, i⁺, j⁺, elem⁺),
+                args,
             )
 
             δ⁻, δ⁺ = _face_side_increments(
@@ -242,10 +283,6 @@ function _add_interior_face_flux_extruded_1d!(
     local_geometry = Spaces.local_geometry_data(space)
 
     dydt_data = Fields.field_values(dydt)
-    args_data = unrolled_map(
-        arg -> arg isa Fields.Field ? Fields.field_values(arg) : arg,
-        args,
-    )
 
     for v in 1:Nv
         for (elem⁻, face⁻, elem⁺, face⁺, _reversed) in
@@ -257,14 +294,14 @@ function _add_interior_face_flux_extruded_1d!(
             lg⁻ = slab(local_geometry, v, elem⁻)[i⁻]
             sgeom⁻ = compute_surface_geometry_1d(lg⁻, face⁻)
 
-            argvals⁻ = unrolled_map(args_data) do arg
-                arg isa DataLayouts.AbstractData ?
-                slab(arg, v, elem⁻)[i⁻] : arg
-            end
-            argvals⁺ = unrolled_map(args_data) do arg
-                arg isa DataLayouts.AbstractData ?
-                slab(arg, v, elem⁺)[i⁺] : arg
-            end
+            argvals⁻ = unrolled_map(
+                arg -> _face_node_value_1d(arg, v, i⁻, elem⁻),
+                args,
+            )
+            argvals⁺ = unrolled_map(
+                arg -> _face_node_value_1d(arg, v, i⁺, elem⁺),
+                args,
+            )
 
             δ⁻, δ⁺ = _face_side_increments(
                 mode,
@@ -301,10 +338,6 @@ function _add_interior_face_flux_extruded_2d!(
     (_, quad_weights) = Quadratures.quadrature_points(FT, quadrature_style)
 
     dydt_data = Fields.field_values(dydt)
-    args_data = unrolled_map(
-        arg -> arg isa Fields.Field ? Fields.field_values(arg) : arg,
-        args,
-    )
 
     for v in 1:Nv
         for (elem⁻, face⁻, elem⁺, face⁺, reversed) in
@@ -313,18 +346,6 @@ function _add_interior_face_flux_extruded_2d!(
             dydt_slab⁻ = slab(dydt_data, v, elem⁻)
             dydt_slab⁺ = slab(dydt_data, v, elem⁺)
             lg_slab⁻ = slab(local_geometry, v, elem⁻)
-            arg_slabs⁻ = unrolled_map(
-                arg ->
-                    arg isa DataLayouts.AbstractData ?
-                    slab(arg, v, elem⁻) : arg,
-                args_data,
-            )
-            arg_slabs⁺ = unrolled_map(
-                arg ->
-                    arg isa DataLayouts.AbstractData ?
-                    slab(arg, v, elem⁺) : arg,
-                args_data,
-            )
 
             for q in 1:Nq
                 i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
@@ -340,16 +361,12 @@ function _add_interior_face_flux_extruded_2d!(
                 )
 
                 argvals⁻ = unrolled_map(
-                    slab_ ->
-                        slab_ isa DataLayouts.AbstractData ?
-                        slab_[1, i⁻, j⁻, 1] : slab_,
-                    arg_slabs⁻,
+                    arg -> _face_node_value(arg, v, i⁻, j⁻, elem⁻),
+                    args,
                 )
                 argvals⁺ = unrolled_map(
-                    slab_ ->
-                        slab_ isa DataLayouts.AbstractData ?
-                        slab_[1, i⁺, j⁺, 1] : slab_,
-                    arg_slabs⁺,
+                    arg -> _face_node_value(arg, v, i⁺, j⁺, elem⁺),
+                    args,
                 )
 
                 δ⁻, δ⁺ = _face_side_increments(
@@ -388,20 +405,6 @@ end
 # Handles pure 2D (`Nv == 1`) and extruded 2D-horizontal spaces, with the
 # geometry built as in the interior extruded-2D loop.
 
-"""
-    DGGhostExchange
-
-Handle for one round of the DG ghost-face halo exchange, shared across face
-operators — see [`start_dg_ghost_exchange`](@ref). The first operator that
-consumes the handle completes the exchange (`ClimaComms.finish`); later
-consumers read the same recv strips.
-"""
-struct DGGhostExchange{B}
-    bufs::B
-    finished::Base.RefValue{Bool}
-end
-DGGhostExchange(bufs) = DGGhostExchange(bufs, Ref(false))
-const NO_DG_GHOST_EXCHANGE = DGGhostExchange(nothing, Base.RefValue{Bool}(true))
 
 function _start_dg_ghost_exchange(space, args)
     topology = Spaces.topology(space)
@@ -458,16 +461,9 @@ function _finish_dg_ghost_faces!(
     (_, quad_weights) = Quadratures.quadrature_points(FT, quadrature_style)
     local_geometry = Spaces.local_geometry_data(space)
     dydt_data = Fields.field_values(dydt)
-    args_local = unrolled_map(
-        arg -> arg isa Fields.Field ? Fields.field_values(arg) : arg,
-        args,
-    )
-    recv = unrolled_map(
-        ex -> isnothing(ex) ? nothing : ex.recv_data,
-        ghost_bufs,
-    )
     # The slot schedule is identical across the exchanged arguments; with no
-    # exchanged argument (all `recv` entries `nothing`), slots are never read.
+    # exchanged argument (an argument's `ghost_bufs` entry is `nothing`),
+    # slots are never read.
     exs = unrolled_filter(!isnothing, ghost_bufs)
     face_slot = isempty(exs) ? nothing : first(exs).face_slot
 
@@ -479,16 +475,6 @@ function _finish_dg_ghost_faces!(
             dydt_slab⁻ = @inbounds slab(dydt_data, v, elem⁻)
             lg_slab⁻ = @inbounds slab(local_geometry, v, elem⁻)
             slot = isnothing(face_slot) ? 0 : Int(face_slot[f])
-            arg_slabs⁻ = unrolled_map(
-                a ->
-                    a isa DataLayouts.DataLayout ?
-                    (@inbounds slab(a, v, elem⁻)) : a,
-                args_local,
-            )
-            recv_slabs⁺ = unrolled_map(
-                r -> isnothing(r) ? nothing : (@inbounds slab(r, v, slot)),
-                recv,
-            )
             for q in 1:Nq
                 i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
                 q′ = reversed ? Nq - q + 1 : q
@@ -503,17 +489,17 @@ function _finish_dg_ghost_faces!(
                 )
 
                 argvals⁻ = unrolled_map(
-                    slab_ ->
-                        slab_ isa DataLayouts.DataLayout ?
-                        (@inbounds slab_[1, i⁻, j⁻, 1]) : slab_,
-                    arg_slabs⁻,
+                    arg -> _face_node_value(arg, v, i⁻, j⁻, elem⁻),
+                    args,
                 )
+                # A non-exchanged argument (no strip buffer) is identical on
+                # both sides.
                 argvals⁺ = unrolled_map(
-                    (a, r_slab) ->
-                        isnothing(r_slab) ? a :
-                        (@inbounds r_slab[1, q′, 1, 1]),
-                    args_local,
-                    recv_slabs⁺,
+                    (arg, ex) ->
+                        isnothing(ex) ? arg :
+                        (@inbounds slab(ex.recv_data, v, slot)[1, q′, 1, 1]),
+                    args,
+                    ghost_bufs,
                 )
 
                 # Only δ⁻ is used; the plus side lives on the neighbour rank.
@@ -556,10 +542,10 @@ shared by several operator calls in the same tendency evaluation:
 
     ex = Operators.start_dg_ghost_exchange(y)
     # ... element-local volume terms (the exchange overlaps them) ...
-    Operators.add_numerical_flux_internal!(numflux, dydt, y; ghost_exchange = ex)
-    Operators.add_lifting_flux_internal!(lift, dydt2, y; ghost_exchange = ex)
+    Operators.add_numerical_flux_internal!(ex, numflux, dydt, y)
+    Operators.add_lifting_flux_internal!(ex, lift, dydt2, y)
 
-Without the keyword each operator performs its own exchange, so an RHS that
+Without the leading handle each operator performs its own exchange, so an RHS that
 applies several face operators to the same state sends every halo message
 once per operator; a shared exchange sends each once. The space is taken from
 the first `Field` in `args`, or passed as a leading argument.
@@ -792,21 +778,12 @@ function _add_numerical_flux_boundary!(
     # `boundary_surface_geometries`.
     local_geometry = Spaces.local_geometry_data(space)
     dydt_data = Fields.field_values(dydt)
-    args_data = unrolled_map(
-        arg -> arg isa Fields.Field ? Fields.field_values(arg) : arg,
-        args,
-    )
 
     for boundarytag in Topologies.boundary_tags(topology)
         for (elem⁻, face⁻) in Topologies.boundary_faces(topology, boundarytag)
             for v in 1:Nv
                 dydt_slab⁻ = slab(dydt_data, v, elem⁻)
                 lg_slab⁻ = slab(local_geometry, v, elem⁻)
-                arg_slabs⁻ = unrolled_map(
-                    a ->
-                        a isa DataLayouts.DataLayout ? slab(a, v, elem⁻) : a,
-                    args_data,
-                )
                 for q in 1:Nq
                     i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
                     sgeom⁻ = compute_surface_geometry_extruded_2d(
@@ -817,10 +794,8 @@ function _add_numerical_flux_boundary!(
                         j⁻,
                     )
                     argvals⁻ = unrolled_map(
-                        slab_ ->
-                            slab_ isa DataLayouts.DataLayout ?
-                            slab_[1, i⁻, j⁻, 1] : slab_,
-                        arg_slabs⁻,
+                        arg -> _face_node_value(arg, v, i⁻, j⁻, elem⁻),
+                        args,
                     )
                     # Wrap so a multi-field (NamedTuple/vector) flux value
                     # scales and subtracts elementwise, matching the interior
@@ -858,6 +833,7 @@ end
 
 """
     add_lifting_flux_internal!(fn, dydt, args...)
+    add_lifting_flux_internal!(ghost_exchange, fn, dydt, args...)
 
 Add *symmetric* face lifting terms at internal faces — the DG correction for
 non-conservative (gradient / curl) terms, where both sides of a face receive
@@ -873,34 +849,49 @@ gradient of a scalar `q` is completed by `fn(n̂, (q⁻,), (q⁺,)) = ((q⁺ −
 `dydt` must be in mass-weighted residual form (`WJ * ∂Y/∂t`), matching
 [`add_numerical_flux_internal!`](@ref). Implemented for pure 2D spectral
 element spaces and for extruded spaces with 1D (plane) or 2D (e.g.
-cubed-sphere) horizontal spectral elements.
+cubed-sphere) horizontal spectral elements. The method with a leading
+`ghost_exchange` consumes a shared halo exchange from
+[`start_dg_ghost_exchange`](@ref) on distributed spaces.
 """
+add_lifting_flux_internal!(fn::F, dydt, args...) where {F} =
+    _add_lifting_flux_internal!(
+        ClimaComms.device(axes(dydt)),
+        nothing,
+        fn,
+        dydt,
+        args...,
+    )
 add_lifting_flux_internal!(
+    ghost_exchange::DGGhostExchange,
     fn::F,
     dydt,
-    args...;
-    ghost_exchange = nothing,
+    args...,
 ) where {F} = _add_lifting_flux_internal!(
     ClimaComms.device(axes(dydt)),
+    ghost_exchange,
     fn,
     dydt,
-    args...;
-    ghost_exchange,
+    args...,
 )
 
-_add_lifting_flux_internal!(device, fn::F, dydt, args...; kwargs...) where {F} =
-    error(
-        "add_lifting_flux_internal! is not implemented for $device; load CUDA.jl for CUDADevice support",
-    )
+_add_lifting_flux_internal!(
+    device,
+    ghost_exchange,
+    fn::F,
+    dydt,
+    args...,
+) where {F} = error(
+    "add_lifting_flux_internal! is not implemented for $device; load CUDA.jl for CUDADevice support",
+)
 
 function _add_lifting_flux_internal!(
     ::ClimaComms.AbstractCPUDevice,
+    ghost_exchange,
     fn::F,
     dydt,
-    args...;
-    ghost_exchange = nothing,
+    args...,
 ) where {F}
-    _add_interior_face_flux!(Val(:lifting), fn, dydt, args...; ghost_exchange)
+    _add_interior_face_flux!(Val(:lifting), ghost_exchange, fn, dydt, args...)
 end
 
 """

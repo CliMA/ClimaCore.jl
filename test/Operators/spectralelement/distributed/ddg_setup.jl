@@ -133,20 +133,10 @@ function run_ddg_tests(::Type{FT}) where {FT}
         ex = Operators.start_dg_ghost_exchange(y)
         r = similar(q)
         r .= 0
-        Operators.add_numerical_flux_internal!(
-            dg_central_flux,
-            r,
-            y;
-            ghost_exchange = ex,
-        )
+        Operators.add_numerical_flux_internal!(ex, dg_central_flux, r, y)
         l = similar(q, Geometry.UVVector{FT})
         fill!(parent(l), 0)
-        Operators.add_lifting_flux_internal!(
-            lift_q,
-            l,
-            y;
-            ghost_exchange = ex,
-        )
+        Operators.add_lifting_flux_internal!(ex, lift_q, l, y)
         @test parent(r) == parent(r_ref)
         @test parent(l) == parent(l_ref)
 
@@ -158,18 +148,18 @@ function run_ddg_tests(::Type{FT}) where {FT}
             r2 = similar(q)
             r2 .= 0
             @test_throws ErrorException Operators.add_numerical_flux_internal!(
+                ex2,
                 dg_jump_penalty,
                 r2,
-                q;
-                ghost_exchange = ex2,
+                q,
             )
             # Consume the started exchange so the next round on `y` finds
             # its buffers idle.
             Operators.add_numerical_flux_internal!(
+                ex2,
                 dg_central_flux,
                 r2,
-                y;
-                ghost_exchange = ex2,
+                y,
             )
 
             # Distinct fields of the same type share exchange buffers, so
@@ -181,19 +171,9 @@ function run_ddg_tests(::Type{FT}) where {FT}
             @test_throws ErrorException Operators.start_dg_ghost_exchange(q2)
             r3 = similar(q)
             r3 .= 0
-            Operators.add_numerical_flux_internal!(
-                dg_jump_penalty,
-                r3,
-                q;
-                ghost_exchange = ex3,
-            )
+            Operators.add_numerical_flux_internal!(ex3, dg_jump_penalty, r3, q)
             ex4 = Operators.start_dg_ghost_exchange(q2)
-            Operators.add_numerical_flux_internal!(
-                dg_jump_penalty,
-                r3,
-                q2;
-                ghost_exchange = ex4,
-            )
+            Operators.add_numerical_flux_internal!(ex4, dg_jump_penalty, r3, q2)
         end
     end
 

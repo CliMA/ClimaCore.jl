@@ -101,19 +101,19 @@ end
 
 Operators._add_numerical_flux_internal!(
     ::ClimaComms.CUDADevice,
+    ghost_exchange,
     fn::F,
     dydt,
-    args...;
-    ghost_exchange = nothing,
-) where {F} = _dg_face_apply!(fn, dydt, args, Val(:numflux); ghost_exchange)
+    args...,
+) where {F} = _dg_face_apply!(ghost_exchange, fn, dydt, args, Val(:numflux))
 
 Operators._add_lifting_flux_internal!(
     ::ClimaComms.CUDADevice,
+    ghost_exchange,
     fn::F,
     dydt,
-    args...;
-    ghost_exchange = nothing,
-) where {F} = _dg_face_apply!(fn, dydt, args, Val(:lifting); ghost_exchange)
+    args...,
+) where {F} = _dg_face_apply!(ghost_exchange, fn, dydt, args, Val(:lifting))
 
 # The face-strip halo exchange starts before the interior-face kernels, so the
 # communication overlaps with the interior compute; each argument is packed by
@@ -171,13 +171,7 @@ Operators._dg_shared_or_start(
     ::Nothing,
 ) = Operators._start_dg_ghost_exchange_handle(device, space, args)
 
-function _dg_face_apply!(
-    fn::F,
-    dydt,
-    args,
-    mode::Val;
-    ghost_exchange = nothing,
-) where {F}
+function _dg_face_apply!(ghost_exchange, fn::F, dydt, args, mode::Val) where {F}
     space = axes(dydt)
     topology = Spaces.topology(space)
     grid = Spaces.grid(space)
