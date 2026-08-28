@@ -1268,38 +1268,3 @@ function kennedy_gruber_rusanov_height(normal, (y⁻,), (y⁺,))
            λ / 2 * (y⁺.h - y⁻.h)
 end
 
-# ---------------------------------------------------------------------------
-# DG face-function library for non-conservative (vector-invariant) terms
-# ---------------------------------------------------------------------------
-
-"""
-    central_gradient_lift(normal, (q⁻,), (q⁺,))
-
-Symmetric central lifting completing the strong-form DG gradient of a scalar:
-each side adds ``(q^* - q_{side}) n̂_{side}`` with central ``q^*``, i.e.
-``((q⁺ - q⁻)/2)\\,n̂`` on the minus side. Use with
-[`add_lifting_flux_internal!`](@ref) / [`lifting_correction`](@ref).
-"""
-central_gradient_lift(normal, (q⁻,), (q⁺,)) = ((q⁺ - q⁻) / 2) * normal
-
-"""
-    central_curl3_lift(normal, (u⁻, v⁻), (u⁺, v⁺))
-
-Central lifting for the radial component of the horizontal curl:
-``r̂ ⋅ (n̂ × (u^* - u_{side}))`` from the tangential jumps of the orthonormal
-velocity components `(u, v)`.
-"""
-central_curl3_lift(normal, (u⁻, v⁻), (u⁺, v⁺)) =
-    (
-        normal.components.data.:1 * (v⁺ - v⁻) -
-        normal.components.data.:2 * (u⁺ - u⁻)
-    ) / 2
-
-"""
-    jump_penalty_lift(normal, (q⁻, λ⁻), (q⁺, λ⁺))
-
-λ-scaled interface penalty: each side relaxes toward its neighbor at rate
-``\\max(λ⁻, λ⁺)/2``.
-"""
-jump_penalty_lift(normal, (q⁻, λ⁻), (q⁺, λ⁺)) = max(λ⁻, λ⁺) / 2 * (q⁺ - q⁻)
-
