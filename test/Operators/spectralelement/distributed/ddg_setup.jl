@@ -171,6 +171,29 @@ function run_ddg_tests(::Type{FT}) where {FT}
                 y;
                 ghost_exchange = ex2,
             )
+
+            # Distinct fields of the same type share exchange buffers, so
+            # starting a second round while one is in flight throws instead
+            # of overwriting the in-flight send strips; after the first
+            # round is consumed, a round on the other field works.
+            q2 = @. cosd(coords.long) * cosd(coords.lat)
+            ex3 = Operators.start_dg_ghost_exchange(q)
+            @test_throws ErrorException Operators.start_dg_ghost_exchange(q2)
+            r3 = similar(q)
+            r3 .= 0
+            Operators.add_numerical_flux_internal!(
+                dg_jump_penalty,
+                r3,
+                q;
+                ghost_exchange = ex3,
+            )
+            ex4 = Operators.start_dg_ghost_exchange(q2)
+            Operators.add_numerical_flux_internal!(
+                dg_jump_penalty,
+                r3,
+                q2;
+                ghost_exchange = ex4,
+            )
         end
     end
 

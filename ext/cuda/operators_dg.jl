@@ -35,11 +35,10 @@ function Operators._add_flux_differencing_divergence!(
     grid = Spaces.grid(space)
     if grid isa Grids.ExtrudedFiniteDifferenceGrid
         @assert grid.horizontal_grid isa Grids.SpectralElementGrid2D
-        Nv = Spaces.nlevels(space)
     else
         @assert grid isa Grids.SpectralElementGrid2D
-        Nv = 1
     end
+    Nv = Spaces.nlevels(space)
     quadrature_style = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
     FT = Spaces.undertype(space)
@@ -128,27 +127,35 @@ function Operators._start_dg_ghost_exchange_handle(
     topology = Spaces.topology(space)
     ClimaComms.context(topology) isa ClimaComms.SingletonCommsContext &&
         return Operators.NO_DG_GHOST_EXCHANGE
-    grid = Spaces.grid(space)
-    Nv =
-        grid isa Grids.ExtrudedFiniteDifferenceGrid ? Spaces.nlevels(space) :
-        1
+    Nv = Spaces.nlevels(space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     args_data =
         unrolled_map(a -> a isa Fields.Field ? Fields.field_values(a) : a, args)
     bufs = ntuple(Val(length(args_data))) do i
         a = args_data[i]
         a isa DataLayouts.DataLayout || return nothing
-        ex = Operators._dg_face_exchange(space, a, i)
-        isnothing(ex) && return nothing
+        Operators._dg_face_exchange(space, a, i)
+    end
+    Operators._claim_dg_face_exchanges!(bufs)
+    foreach(ntuple(identity, Val(length(args_data)))) do i
+        ex = bufs[i]
+        isnothing(ex) && return
         nstrips = length(ex.slot_lidx)
         p = linear_partition(Nq * Nv * nstrips, _max_threads_cuda())
         auto_launch!(
             dg_face_pack_kernel!,
-            (ex.send_data, a, ex.slot_lidx, ex.slot_face, Val(Nq), Nv, nstrips);
+            (
+                ex.send_data,
+                args_data[i],
+                ex.slot_lidx,
+                ex.slot_face,
+                Val(Nq),
+                Nv,
+                nstrips,
+            );
             threads_s = p.threads,
             blocks_s = p.blocks,
         )
-        ex
     end
     # MPI reads the device-side send buffers on the host timeline, so the
     # pack kernels must have completed (the DSS-start pattern).
@@ -176,11 +183,10 @@ function _dg_face_apply!(
     grid = Spaces.grid(space)
     if grid isa Grids.ExtrudedFiniteDifferenceGrid
         @assert grid.horizontal_grid isa Grids.SpectralElementGrid2D
-        Nv = Spaces.nlevels(space)
     else
         @assert grid isa Grids.SpectralElementGrid2D
-        Nv = 1
     end
+    Nv = Spaces.nlevels(space)
     quadrature_style = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
     conn = Operators.dg_connectivity(space)
@@ -493,11 +499,10 @@ function _dg_boundary_apply!(fn::F, dydt, args) where {F}
     grid = Spaces.grid(space)
     if grid isa Grids.ExtrudedFiniteDifferenceGrid
         @assert grid.horizontal_grid isa Grids.SpectralElementGrid2D
-        Nv = Spaces.nlevels(space)
     else
         @assert grid isa Grids.SpectralElementGrid2D
-        Nv = 1
     end
+    Nv = Spaces.nlevels(space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
 
     dydt_data = Fields.field_values(dydt)

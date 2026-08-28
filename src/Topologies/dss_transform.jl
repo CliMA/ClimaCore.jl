@@ -251,6 +251,12 @@ struct GhostFaceExchange{G, D, IV}
     slot_lidx::IV
     slot_face::IV
     face_slot::Vector{Int32}
+    # Exchanges are memoized per (space, data type, argument position), so
+    # distinct fields of the same type share this object; the latch is set at
+    # fill and cleared at finish, turning an overlapping second start — which
+    # would overwrite the in-flight send strips and double-start the graph
+    # context — into an error.
+    in_flight::Base.RefValue{Bool}
 end
 
 # Strip schedule shared by every `GhostFaceExchange` on a topology: for each
@@ -340,6 +346,7 @@ function create_ghost_face_exchange(
         DA(slot_lidx),
         DA(slot_face),
         face_slot,
+        Ref(false),
     )
 end
 
