@@ -833,9 +833,11 @@ end
 # ---------------------------------------------------------------------------
 if get(ENV, "PLOTS", "1") != "0"
 import CairoMakie, ClimaCoreMakie
+# Output location. Defaults to <driver dir>/output; override the base with
+# OUTPUT_DIR (e.g. a scratch folder) — the case subfolder is kept so runs of
+# different cases don't collide. mkpath creates the full nested path.
 output_dir = joinpath(
-    @__DIR__,
-    "output",
+    get(ENV, "OUTPUT_DIR", joinpath(@__DIR__, "output")),
     apply_held_suarez ? "held_suarez_fddg_fluxform" :
     "moist_baroclinic_wave_fddg_fluxform",
 )
