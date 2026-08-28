@@ -40,6 +40,8 @@ using LinearAlgebra: ×, norm, norm_sqr, dot
 
 import ClimaComms
 ClimaComms.@import_required_backends
+const comms_ctx = ClimaComms.context()
+const pid, nprocs = ClimaComms.init(comms_ctx)
 
 import ClimaCore
 import ClimaCore:
@@ -77,7 +79,12 @@ fieldvector_norm(u, t) = abs(u)
 
 import Logging
 import TerminalLoggers
-Logging.global_logger(TerminalLoggers.TerminalLogger())
+if comms_ctx isa ClimaComms.MPICommsContext
+    logger_stream = ClimaComms.iamroot(comms_ctx) ? stderr : devnull
+    Logging.global_logger(Logging.ConsoleLogger(logger_stream, Logging.Info))
+else
+    Logging.global_logger(TerminalLoggers.TerminalLogger())
+end
 
 const C3 = Geometry.Covariant3Vector
 const C12 = Geometry.Covariant12Vector
