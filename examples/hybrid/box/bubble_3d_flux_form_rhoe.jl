@@ -274,8 +274,6 @@ function rhs!(dY, Y, _, t)
     @. dρw -= hwdiv(uₕf ⊗ ρw)
 
     # Upwind flux correction
-    # Main.@exfiltrate
-    # error("balls")
     add_flux_correction_c2c!(dρ, w, ρ)
     add_flux_correction_c2c!(dρe, w, ρe)
     add_flux_correction_c2c!(dρuₕ, w, ρuₕ)
