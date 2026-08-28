@@ -4,6 +4,20 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- The DG face operators (`Operators.add_numerical_flux_internal!` and
+  `Operators.add_lifting_flux_internal!`) now run on distributed (MPI)
+  `Topology2D` spaces: each rank completes its rank-boundary
+  (`Topologies.ghost_faces`) side through a face-strip halo exchange
+  (`Topologies.GhostFaceExchange`) that ships only the `Nq` face-node values
+  per face, on both CPU and CUDA. Several operators in one tendency evaluation
+  can share a single exchange via `Operators.start_dg_ghost_exchange(args...)`
+  and the `ghost_exchange` keyword. Covered by 2- and 3-rank CPU and CUDA
+  tests.
+
+- `Operators.add_numerical_flux_boundary!` now has CUDA kernels (staging +
+  gather over `Operators.dg_boundary_connectivity`), so it no longer needs
+  scalar indexing on device arrays.
+
 - Spectral-element grids can be marked as discontinuous-Galerkin function
   spaces: `SpectralElementGrid1D`/`SpectralElementGrid2D` (and the
   corresponding `Spaces` constructors) accept `discontinuous = true`. On such
@@ -15,6 +29,20 @@ main
   The flag is part of the grid cache key and is serialized by `InputOutput`
   (grids in files written before it existed read back as continuous).
   [2599](https://github.com/CliMA/ClimaCore.jl/pull/2599)
+
+- Introduces horizontal discontinuous-Galerkin (DG) operator support. The
+  discretization-generic machinery lives in `src/Operators/numericalflux.jl`:
+  interior- and boundary-face numerical fluxes and symmetric face liftings on
+  pure-2D and extruded (1D and 2D horizontal) spectral-element spaces, the
+  flux-differencing (split-form / FDDG) volume divergence of Souza et al.
+  (2023), and the device-resident `DGConnectivity` face buffer (with
+  CUDA implementations in the `ClimaCoreCUDAExt` extension). A generic flux
+  library lives in `src/Operators/dg_fluxes.jl`: `CentralNumericalFlux`,
+  `RusanovNumericalFlux`, central-lifting and jump-penalty face functions, and
+  an LDG/SIPG Laplacian for optional scale-selective dissipation.
+  Equation-set-specific fluxes (compressible Euler with Cartesian momentum
+  components) are example code. Operator tests are included as part of
+  `test/runtests.jl`.
 
 v0.15.3
 -------

@@ -98,6 +98,8 @@ unit_tests = [
     UnitTest("Spectral elem - DG sphere fluxes"         ,"Operators/spectralelement/unit_sphere_dg_fluxes.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG stability properties"  ,"Operators/spectralelement/unit_dg_stability.jl"; meta = :cpu_only, tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG boundary fluxes"       ,"Operators/spectralelement/unit_dg_boundary_fluxes.jl"; meta = :cpu_only, tier = :unit, subsystem = :operators),
+    UnitTest("Spectral elem - DG extruded sphere"       ,"Operators/spectralelement/unit_extruded_sphere_dg.jl"; tier = :unit, subsystem = :operators),
+    UnitTest("Spectral elem - DG extruded plane"        ,"Operators/spectralelement/unit_extruded_plane_dg.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG divergence conv"       ,"Operators/spectralelement/conv_dg_divergence.jl"; meta = :cpu_only, tier = :conv, subsystem = :operators),
     UnitTest("Operators - broadcast inference"          ,"Operators/inference_operators.jl"; tier = :inference, subsystem = :operators),
     UnitTest("FD ops - zero-allocation stencils"        ,"Operators/finitedifference/allocs_fd_ops.jl"; meta = :cpu_only, tier = :allocs, subsystem = :operators),
@@ -202,6 +204,8 @@ unit_tests = [
     # (see .buildkite/pipeline.yml).
     UnitTest("Distributed - topology (4 ranks)"         ,"Topologies/dtopo4.jl"; meta = :distributed, tier = :unit, subsystem = :topologies),
     UnitTest("Distributed - DSS (2 ranks)"              ,"Spaces/distributed/ddss2.jl"; meta = :distributed, tier = :unit, subsystem = :spaces),
+    UnitTest("Distributed - DG operators (2 ranks)"     ,"Operators/spectralelement/distributed/ddg2.jl"; meta = :distributed, tier = :unit, subsystem = :operators),
+    UnitTest("Distributed - DG operators (3 ranks)"     ,"Operators/spectralelement/distributed/ddg3.jl"; meta = :distributed, tier = :unit, subsystem = :operators),
     UnitTest("Distributed - DSS (3 ranks)"              ,"Spaces/distributed/ddss3.jl"; meta = :distributed, tier = :unit, subsystem = :spaces),
     UnitTest("Distributed - DSS (4 ranks)"              ,"Spaces/distributed/ddss4.jl"; meta = :distributed, tier = :unit, subsystem = :spaces),
     UnitTest("Distributed - gather (4 ranks)"           ,"Spaces/distributed/gather4.jl"; meta = :distributed, tier = :unit, subsystem = :spaces),

@@ -1545,9 +1545,9 @@ function tensor_product!(
 end
 
 function tensor_product!(
-    inout::DataLayouts.VIJHWithF{S, 1, Nij, Nij},
+    inout::DataLayouts.VIJHWithF{S, Nv, Nij, Nij},
     M::SMatrix{Nij, Nij},
-) where {S, Nij}
+) where {S, Nv, Nij}
     inout_bc = Base.broadcastable(inout)
     tensor_product!(inout_bc, inout_bc, M)
 end
