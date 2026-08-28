@@ -32,7 +32,6 @@ ClimaCore.jl provides the dynamical core infrastructure for [CliMA](https://clim
 | Krylov ext        | `ext/KrylovExt.jl`                       | Krylov.jl integration for iterative solvers                                    |
 | Makie ext         | `ext/ClimaCoreMakieExt.jl`, `ext/makie/` | Makie.jl recipes for ClimaCore fields                                          |
 | Lib: Plots        | `lib/ClimaCorePlots/`                    | Plots.jl recipes for ClimaCore fields                                          |
-| Lib: VTK          | `lib/ClimaCoreVTK/`                      | VTK output for visualization                                                   |
 | Lib: TempestRemap | `lib/ClimaCoreTempestRemap/`             | TempestRemap bindings for conservative remapping                               |
 | Lib: Spectra      | `lib/ClimaCoreSpectra/`                  | Spectral analysis of fields on the sphere                                      |
 
@@ -53,7 +52,7 @@ Tests are defined in `test/runtests.jl` using the `UnitTest` / `tabulated_tests`
 | CPU unit tests          | 104 tests covering DataLayouts, Geometry, Meshes, Topologies, Quadratures, Spaces, Fields, Operators (spectral element + finite-difference), MatrixFields, Hypsography, Limiters, Remapping, InputOutput, Aqua, deprecations |
 | GPU tests (`:gpu_only`) | 9 tests: CUDA kernels, compiler stress regression, DataLayout GPU ops, spectral element CUDA, finite-difference CUDA, extruded sphere/3dbox CUDA, field map-reduce CUDA                                                      |
 | Buildkite CI            | Runs the unit tests on an HPC cluster with CUDA, defined in `.buildkite/pipeline.yml`                                                                                                                                        |
-| Lib CI workflows        | Separate GitHub Actions per companion package: ClimaCorePlots, ClimaCoreSpectra, ClimaCoreTempestRemap, ClimaCoreVTK                                                                                                         |
+| Lib CI workflows        | Separate GitHub Actions per companion package: ClimaCorePlots, ClimaCoreSpectra, ClimaCoreTempestRemap                                                                                                         |
 
 ## Repo-specific conventions
 

@@ -1,9 +1,5 @@
 import Documenter, DocumenterCitations, Literate
-import ClimaCore,
-    ClimaCoreVTK,
-    ClimaCorePlots,
-    ClimaCoreTempestRemap,
-    ClimaCoreSpectra
+import ClimaCore, ClimaCorePlots, ClimaCoreTempestRemap, ClimaCoreSpectra
 using Makie  # Loads the ClimaCoreMakieExt extension
 
 if !@isdefined(TUTORIALS)
@@ -66,7 +62,6 @@ withenv("GKSwstype" => "nul") do
         modules = [
             ClimaCore,
             ClimaCore.Remapping,
-            ClimaCoreVTK,
             ClimaCoreSpectra,
             Base.get_extension(ClimaCore, :ClimaCoreMakieExt),
             ClimaCoreTempestRemap,
@@ -115,7 +110,6 @@ withenv("GKSwstype" => "nul") do
             "Debugging" => "debugging.md",
             "Libraries" => [
                 joinpath("lib", "ClimaCorePlots.md"),
-                joinpath("lib", "ClimaCoreVTK.md"),
                 joinpath("lib", "ClimaCoreTempestRemap.md"),
                 joinpath("lib", "ClimaCoreSpectra.md"),
             ],
