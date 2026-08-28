@@ -96,8 +96,8 @@ unit_tests = [
     # scoped `allowscalar` (the two below) or are :cpu_only (the three after).
     UnitTest("Spectral elem - DG two-point fluxes"      ,"Operators/spectralelement/unit_two_point_fluxes.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG sphere fluxes"         ,"Operators/spectralelement/unit_sphere_dg_fluxes.jl"; tier = :unit, subsystem = :operators),
-    UnitTest("Spectral elem - DG stability properties"  ,"Operators/spectralelement/unit_dg_stability.jl"; meta = :cpu_only, tier = :unit, subsystem = :operators),
-    UnitTest("Spectral elem - DG boundary fluxes"       ,"Operators/spectralelement/unit_dg_boundary_fluxes.jl"; meta = :cpu_only, tier = :unit, subsystem = :operators),
+    UnitTest("Spectral elem - DG stability properties"  ,"Operators/spectralelement/unit_dg_stability.jl"; tier = :unit, subsystem = :operators),
+    UnitTest("Spectral elem - DG boundary fluxes"       ,"Operators/spectralelement/unit_dg_boundary_fluxes.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG extruded sphere"       ,"Operators/spectralelement/unit_extruded_sphere_dg.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG extruded plane"        ,"Operators/spectralelement/unit_extruded_plane_dg.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG divergence conv"       ,"Operators/spectralelement/conv_dg_divergence.jl"; meta = :cpu_only, tier = :conv, subsystem = :operators),
