@@ -1185,6 +1185,111 @@ function kennedy_gruber_roe_cartesian_advective(normal, (y⁻,), (y⁺,))
     )
 end
 
+# Harten–Lax–van Leer (HLL, 1983) two-wave approximate Riemann solver.
+# Davis (1988) signal-speed estimates S_L = min(uₙ⁻−c⁻, uₙ⁺−c⁺),
+# S_R = max(uₙ⁻+c⁻, uₙ⁺+c⁺) (c = √(γp/ρ)). Well-posed here: S_R − S_L ≥
+# 2·min(c⁻,c⁺) > 0 whenever p > 0 (the Zhang–Shu limiter guarantees it), so the
+# middle-state division never blows up and the 3-way select can be a branchless
+# `ifelse` (GPU-safe — both arms always evaluate).
+@inline function _hll_signal_speeds(normal, y⁻, y⁺)
+    γd = oftype(y⁻.ρ, γ_dry)
+    n1 = y⁻.E1' * normal
+    n2 = y⁻.E2' * normal
+    n3 = y⁻.E3' * normal
+    un⁻ = y⁻.u1 * n1 + y⁻.u2 * n2 + y⁻.u3 * n3
+    un⁺ = y⁺.u1 * n1 + y⁺.u2 * n2 + y⁺.u3 * n3
+    c⁻ = sqrt(γd * y⁻.p / y⁻.ρ)
+    c⁺ = sqrt(γd * y⁺.p / y⁺.ρ)
+    S_L = min(un⁻ - c⁻, un⁺ - c⁺)
+    S_R = max(un⁻ + c⁻, un⁺ + c⁺)
+    return S_L, S_R
+end
+
+# One HLL flux component from the left/right physical fluxes (FL, FR) and
+# conserved states (UL, UR): F⁻ if S_L≥0, F⁺ if S_R≤0, else the HLL average.
+@inline _hll(FL, FR, UL, UR, S_L, S_R, invΔS) = ifelse(
+    S_L >= 0,
+    FL,
+    ifelse(S_R <= 0, FR, (S_R * FL - S_L * FR + S_L * S_R * (UR - UL)) * invΔS),
+)
+
+"""
+    kennedy_gruber_hll_cartesian(normal, argvals⁻, argvals⁺)
+
+HLL interface flux for the (ρ, ρe, ρu⃗-Cartesian) conservative system. Unlike the
+Roe/Rusanov fluxes (central two-point flux + a dissipation penalty), HLL is a
+genuine two-wave Riemann solver built directly from the LEFT and RIGHT *physical*
+fluxes `F(y⁻)`, `F(y⁺)` — here `kennedy_gruber_cartesian_flux(y, y)`, which equals
+the consistent physical flux and carries the momentum pressure `pm` (= p, or p′
+for the stratified/well-balanced split). Signal speeds from
+[`_hll_signal_speeds`](@ref) (Davis). The conserved momentum jump uses `ρ u_c`.
+
+More dissipative than Roe on contact/shear waves (a single [S_L, S_R] star region,
+no wave-by-wave selection), but robust and positivity-friendly, and — with the
+Zhang–Shu limiter — a strong, simple baseline. Volume-scheme-independent (uses the
+physical flux, not the two-point volume flux), so it pairs with any VOLUME_FLUX.
+Same state fields as [`kennedy_gruber_roe_cartesian`](@ref).
+"""
+function kennedy_gruber_hll_cartesian(normal, (y⁻,), (y⁺,))
+    S_L, S_R = _hll_signal_speeds(normal, y⁻, y⁺)
+    invΔS = 1 / (S_R - S_L)
+    F⁻ = kennedy_gruber_cartesian_flux(normal, normal, y⁻, y⁻)
+    F⁺ = kennedy_gruber_cartesian_flux(normal, normal, y⁺, y⁺)
+    return (
+        ρ = _hll(F⁻.ρ, F⁺.ρ, y⁻.ρ, y⁺.ρ, S_L, S_R, invΔS),
+        ρe = _hll(F⁻.ρe, F⁺.ρe, y⁻.ρe, y⁺.ρe, S_L, S_R, invΔS),
+        ρu1 = _hll(F⁻.ρu1, F⁺.ρu1, y⁻.ρ * y⁻.u1, y⁺.ρ * y⁺.u1, S_L, S_R, invΔS),
+        ρu2 = _hll(F⁻.ρu2, F⁺.ρu2, y⁻.ρ * y⁻.u2, y⁺.ρ * y⁺.u2, S_L, S_R, invΔS),
+        ρu3 = _hll(F⁻.ρu3, F⁺.ρu3, y⁻.ρ * y⁻.u3, y⁺.ρ * y⁺.u3, S_L, S_R, invΔS),
+    )
+end
+
+"""
+    kennedy_gruber_hll_cartesian_advective(normal, argvals⁻, argvals⁺)
+
+Advection-only counterpart of [`kennedy_gruber_hll_cartesian`](@ref) for the
+non-conservative (Exner-perturbation) path: the left/right physical fluxes come
+from [`kennedy_gruber_cartesian_advective_flux`](@ref) (momentum flux omits the
+pressure term), so HLL supplies wave-selective advective dissipation while the
+pressure-gradient force is handled separately by the Exner PGF — exactly as the
+Roe/Rusanov/LMARS advective counterparts. Same signal speeds and conserved-state
+jumps as the conservative HLL.
+"""
+function kennedy_gruber_hll_cartesian_advective(normal, (y⁻,), (y⁺,))
+    S_L, S_R = _hll_signal_speeds(normal, y⁻, y⁺)
+    invΔS = 1 / (S_R - S_L)
+    F⁻ = kennedy_gruber_cartesian_advective_flux(normal, normal, y⁻, y⁻)
+    F⁺ = kennedy_gruber_cartesian_advective_flux(normal, normal, y⁺, y⁺)
+    return (
+        ρ = _hll(F⁻.ρ, F⁺.ρ, y⁻.ρ, y⁺.ρ, S_L, S_R, invΔS),
+        ρe = _hll(F⁻.ρe, F⁺.ρe, y⁻.ρe, y⁺.ρe, S_L, S_R, invΔS),
+        ρu1 = _hll(F⁻.ρu1, F⁺.ρu1, y⁻.ρ * y⁻.u1, y⁺.ρ * y⁺.u1, S_L, S_R, invΔS),
+        ρu2 = _hll(F⁻.ρu2, F⁺.ρu2, y⁻.ρ * y⁻.u2, y⁺.ρ * y⁺.u2, S_L, S_R, invΔS),
+        ρu3 = _hll(F⁻.ρu3, F⁺.ρu3, y⁻.ρ * y⁻.u3, y⁺.ρ * y⁺.u3, S_L, S_R, invΔS),
+    )
+end
+
+"""
+    hll_tracer(normal, argvals⁻, argvals⁺)
+
+HLL interface flux for a passive tracer `ρq`, consistent with the HLL mass flux:
+the tracer physical fluxes are `ρq·uₙ` on each side and the same Davis signal
+speeds are used, so `q ≡ const` reproduces the HLL continuity flux (free-stream
+preserving). State fields required: `ρ`, `p`, `u1/u2/u3`, `E1/E2/E3`, `q`.
+"""
+function hll_tracer(normal, (y⁻,), (y⁺,))
+    S_L, S_R = _hll_signal_speeds(normal, y⁻, y⁺)
+    invΔS = 1 / (S_R - S_L)
+    n1 = y⁻.E1' * normal
+    n2 = y⁻.E2' * normal
+    n3 = y⁻.E3' * normal
+    un⁻ = y⁻.u1 * n1 + y⁻.u2 * n2 + y⁻.u3 * n3
+    un⁺ = y⁺.u1 * n1 + y⁺.u2 * n2 + y⁺.u3 * n3
+    ρq⁻ = y⁻.ρ * y⁻.q
+    ρq⁺ = y⁺.ρ * y⁺.q
+    return (ρq = _hll(ρq⁻ * un⁻, ρq⁺ * un⁺, ρq⁻, ρq⁺, S_L, S_R, invΔS),)
+end
+
 """
     kg_massflux_fluctuation(nvec_a, nvec_b, y_a, y_b)
 

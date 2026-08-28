@@ -101,8 +101,8 @@ const is_conservative = pgf in (:conservative, :conservative_pert)
 # with the Exner PGF it uses the advective variant (contact u* upwinding, no p*).
 const interface_flux =
     Symbol(lowercase(get(ENV, "INTERFACE_FLUX", "rusanov")))
-interface_flux in (:rusanov, :roe, :lmars, :es) ||
-    error("INTERFACE_FLUX must be rusanov, roe, lmars, or es")
+interface_flux in (:rusanov, :roe, :lmars, :es, :hll) ||
+    error("INTERFACE_FLUX must be rusanov, roe, lmars, es, or hll")
 # es = Lax-Friedrichs dissipation in ENTROPY variables (½λĤ⟦w⟧, Ĥ=∂U/∂w SPD):
 # paired with the Ranocha EC volume flux it gives a provable discrete entropy
 # inequality. Requires the conservative PGF (full Euler dissipation).
@@ -139,6 +139,8 @@ const cartesian_interface_fn =
     !is_conservative ?
     (
         interface_flux == :lmars ? Operators.lmars_cartesian_advective :
+        interface_flux == :hll ?
+        Operators.kennedy_gruber_hll_cartesian_advective :
         interface_flux == :roe ?
         Operators.kennedy_gruber_roe_cartesian_advective :
         Operators.kennedy_gruber_rusanov_cartesian_advective
@@ -146,18 +148,21 @@ const cartesian_interface_fn =
     volume_flux == :waruszewski ?
     (
         interface_flux == :es ? Operators.waruszewski_es_cartesian :
+        interface_flux == :hll ? Operators.kennedy_gruber_hll_cartesian :
         interface_flux == :roe ? Operators.waruszewski_roe_cartesian :
         Operators.waruszewski_rusanov_cartesian
     ) :
     volume_flux == :ranocha ?
     (
         interface_flux == :es ? Operators.ranocha_es_cartesian :
+        interface_flux == :hll ? Operators.kennedy_gruber_hll_cartesian :
         interface_flux == :roe ? Operators.ranocha_roe_cartesian :
         Operators.ranocha_rusanov_cartesian
     ) :
     (
         interface_flux == :es ? Operators.kennedy_gruber_es_cartesian :
         interface_flux == :lmars ? Operators.lmars_cartesian :
+        interface_flux == :hll ? Operators.kennedy_gruber_hll_cartesian :
         interface_flux == :roe ? Operators.kennedy_gruber_roe_cartesian :
         Operators.kennedy_gruber_rusanov_cartesian
     )
@@ -168,6 +173,7 @@ const cartesian_interface_fn =
 # have no dedicated tracer variant here, so they fall back to KG-central + Rusanov.
 const tracer_interface_fn =
     interface_flux == :lmars ? Operators.lmars_tracer :
+    interface_flux == :hll ? Operators.hll_tracer :
     Operators.kennedy_gruber_rusanov_tracer
 
 # ---------------------------------------------------------------------------
