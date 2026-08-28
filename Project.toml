@@ -36,10 +36,12 @@ CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 GPUCompiler = "61eb1bfa-7361-4325-ad38-22787b887f55"
 Krylov = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
 
 [extensions]
 ClimaCoreCUDAExt = "CUDA"
 ClimaCoreMakieExt = "Makie"
+ClimaCoreRecipesBaseExt = "RecipesBase"
 KrylovExt = "Krylov"
 
 [compat]
@@ -78,8 +80,10 @@ Makie = "0.24"
 MultiBroadcastFusion = "0.3.1, 0.4"
 NVTX = "0.3, 1"
 PkgVersion = "0.1, 0.2, 0.3"
+Plots = "1"
 PrettyTables = "3"
 Random = "1"
+RecipesBase = "1"
 RootSolvers = "0.3.4, 0.4, 1.0"
 SafeTestsets = "0.1"
 SparseArrays = "1"
@@ -105,6 +109,7 @@ JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 Krylov = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
 LazyBroadcast = "9dccce8e-a116-406d-9fcc-a88ed4f510c8"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SafeTestsets = "1bc83da4-3b8d-516f-aca4-4fe02f6d838f"
@@ -113,4 +118,4 @@ TerminalLoggers = "5d786b92-1e48-4d6f-9151-6b4477ca9bed"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Aqua", "ArgParse", "AssociatedLegendrePolynomials", "BenchmarkTools", "CairoMakie", "ClimaTimeSteppers", "CountFlops", "Dates", "FastBroadcast", "Krylov", "JET", "LazyBroadcast", "Logging", "PrettyTables", "Random", "SafeTestsets", "StatsBase", "TerminalLoggers", "Test"]
+test = ["Aqua", "ArgParse", "AssociatedLegendrePolynomials", "BenchmarkTools", "CairoMakie", "ClimaTimeSteppers", "CountFlops", "Dates", "FastBroadcast", "Krylov", "JET", "LazyBroadcast", "Logging", "Plots", "PrettyTables", "Random", "SafeTestsets", "StatsBase", "TerminalLoggers", "Test"]

@@ -291,7 +291,7 @@ sol = @timev CTS.solve!(integrator)
 @test maximum(abs, parent(Geometry.WVector.(sol.u[end].w))) < 0.5
 
 ENV["GKSwstype"] = "nul"
-import Plots, ClimaCorePlots
+import Plots
 Plots.GRBackend()
 
 dir = "iso_channel_2d"

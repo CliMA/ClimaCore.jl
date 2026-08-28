@@ -6,9 +6,9 @@ using IntervalSets
 import Plots
 
 import ClimaCore
-import ClimaCorePlots
 
 OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
+@show OUTPUT_DIR
 
 @testset "spectral element 1D" begin
     domain = ClimaCore.Domains.IntervalDomain(

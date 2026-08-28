@@ -27,7 +27,6 @@ import ClimaCore:
 
 # Visualization artifacts
 ENV["GKSwstype"] = "nul"
-import ClimaCorePlots
 import Plots
 Plots.GRBackend()
 device_name = ClimaComms.device() isa ClimaComms.CUDADevice ? "GPU" : "CPU"

@@ -27,7 +27,6 @@ jobs:
           julia --project=docs -e 'using Pkg;
           Pkg.develop([
             PackageSpec(path="lib/ClimaCoreTempestRemap"),
-            PackageSpec(path="lib/ClimaCorePlots"),
             PackageSpec(path="lib/ClimaCoreSpectra"),
             PackageSpec(path="."),
           ]);

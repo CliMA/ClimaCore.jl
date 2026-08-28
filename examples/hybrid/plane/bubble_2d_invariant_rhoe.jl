@@ -241,7 +241,7 @@ using Test
 end
 
 ENV["GKSwstype"] = "nul"
-import Plots, ClimaCorePlots
+import Plots
 Plots.GRBackend()
 
 dir = "bubble_2d_invariant_rhoe"

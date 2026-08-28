@@ -9,13 +9,9 @@ using Test
 using Random
 
 
-# Plots and ClimaCorePlots are in the .buildkite environment but not in the one
-# `Pkg.test` builds, and here they only write a diagnostic PNG — no assertion
-# depends on them. Make them optional, as test/tabulated_tests.jl does for
-# PrettyTables, so the test still runs in a plotting-free environment.
+# We might not have Plots, depending on the environment
 const HAVE_PLOTS = try
     import Plots
-    import ClimaCorePlots
     true
 catch
     false

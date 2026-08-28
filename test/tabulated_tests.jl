@@ -11,7 +11,7 @@ A unit test, given:
   - `filename::String` the filename of the unit test
   - `meta::Any` meta information for the test
   - `tier::Symbol` test tier (:unit, :inference, :allocs, :conv, :smoke, :gpu, :misc)
-  - `subsystem::Symbol` domain subsystem (:datalayouts, :geometry, :domains, :meshes, :topologies, :quadratures, :spaces, :fields, :operators, :matrixfields, :hypsography, :limiters, :io, :remapping, :integration, :gpu, :quality, :utilities, :other)
+  - `subsystem::Symbol` domain subsystem (:datalayouts, :geometry, :domains, :meshes, :topologies, :quadratures, :spaces, :fields, :operators, :matrixfields, :hypsography, :limiters, :io, :remapping, :integration, :gpu, :quality, :utilities, :viz, :other)
   - `slow::Bool` the test costs minutes rather than seconds, from compiling many
     layout/space specializations or from building large spaces. `tier` says what
     a test checks; `slow` says what it costs. Buildkite runs these, splitting

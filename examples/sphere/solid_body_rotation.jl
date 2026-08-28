@@ -62,7 +62,7 @@ end
 
 # Plot variables and auxiliary function
 ENV["GKSwstype"] = "nul"
-import ClimaCorePlots, Plots
+import Plots
 Plots.GRBackend()
 dir = "cg_sphere_solid_body_$(test_name)"
 dir = "$(dir)_$(test_angle_name)"

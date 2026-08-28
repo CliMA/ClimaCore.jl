@@ -336,7 +336,7 @@ sol = @timev CTS.solve!(integrator)
 end
 
 ENV["GKSwstype"] = "nul"
-import Plots, ClimaCorePlots
+import Plots
 Plots.GRBackend()
 
 dir = "agnesi_etot_nh"

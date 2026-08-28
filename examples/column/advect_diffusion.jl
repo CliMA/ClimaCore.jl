@@ -146,7 +146,7 @@ z_centers = vec(parent(Fields.coordinate_field(cspace).z))
 end
 
 ENV["GKSwstype"] = "nul"
-using ClimaCorePlots, Plots
+using Plots
 Plots.GRBackend()
 
 dir = "advect_diffusion"

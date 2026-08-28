@@ -321,7 +321,7 @@ sol = CTS.solve(
 )
 
 ENV["GKSwstype"] = "nul"
-using ClimaCorePlots, Plots
+using Plots
 Plots.GRBackend()
 
 dir = discretization isa Grids.CG ? "cg" : "dg_$(numflux_name)"

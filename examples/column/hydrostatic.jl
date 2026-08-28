@@ -163,7 +163,7 @@ using Test
 @test abs(sum(sol.u[end].Yc.ρθ) - sum(sol.u[1].Yc.ρθ)) / sum(sol.u[1].Yc.ρθ) < 1e-10
 
 ENV["GKSwstype"] = "nul"
-using ClimaCorePlots, Plots
+using Plots
 Plots.GRBackend()
 
 dir = "hydrostatic"

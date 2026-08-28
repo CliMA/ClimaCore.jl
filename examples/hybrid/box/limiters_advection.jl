@@ -189,7 +189,7 @@ end
 
 # Plot variables and auxiliary function
 ENV["GKSwstype"] = "nul"
-using ClimaCorePlots, Plots
+using Plots
 Plots.GRBackend()
 device = ClimaComms.device()
 dev_suffix = device isa ClimaComms.CUDADevice ? "_gpu" : ""

@@ -6,7 +6,7 @@ include(joinpath("examples", "hybrid", "driver.jl"))
 using Printf
 using Test
 using ProgressLogging
-using ClimaCorePlots, Plots
+using Plots
 import ClimaComms
 ClimaComms.@import_required_backends
 
