@@ -1146,6 +1146,38 @@ function kennedy_gruber_cartesian_advective_flux(nvec_a, nvec_b, y_a, y_b)
 end
 
 """
+    waruszewski_cartesian_advective_flux(nvec_a, nvec_b, y_a, y_b)
+
+Advection-only variant of [`waruszewski_cartesian_flux`](@ref): the momentum flux
+drops the entire pressure slot ``pgrav = p* + ½ρ̂⟦φ⟧`` (Chandrashekar pressure AND
+the geopotential fluctuation), leaving the pure kinetic momentum ``ρ^{ln} ūₙ ū_c``.
+Used with a non-conservative (Exner-perturbation) pressure-gradient force, which
+supplies BOTH the pressure gradient and gravity separately (Yatunin et al. 2026),
+so the flux must carry neither. The log-mean mass flux ``ρ^{ln} ūₙ`` and the
+entropy-consistent energy flux (internal-energy log-mean + potential ``Ψ`` +
+kinetic cross term ``+ ūₙ p*``) are unchanged from the full flux.
+
+NOTE: stripping the pressure slot breaks the discrete entropy-conservation
+identity (which needs ``p*`` in the momentum flux to telescope) — this variant is
+NOT entropy-conservative in momentum. What survives vs. the arithmetic-mean
+`kennedy_gruber_cartesian_advective_flux` is the log-mean mass/energy pair.
+"""
+function waruszewski_cartesian_advective_flux(nvec_a, nvec_b, y_a, y_b)
+    F = waruszewski_cartesian_flux(nvec_a, nvec_b, y_a, y_b)
+    # F.ρ = mn = ρ^ln ūₙ, so the pure kinetic momentum is mn ū_c = F.ρ ū_c.
+    ū1 = (y_a.u1 + y_b.u1) / 2
+    ū2 = (y_a.u2 + y_b.u2) / 2
+    ū3 = (y_a.u3 + y_b.u3) / 2
+    return (
+        ρ = F.ρ,
+        ρe = F.ρe,
+        ρu1 = F.ρ * ū1,                            # NO pressure/gravity (Exner PGF)
+        ρu2 = F.ρ * ū2,
+        ρu3 = F.ρ * ū3,
+    )
+end
+
+"""
     kennedy_gruber_rusanov_cartesian_advective(normal, argvals⁻, argvals⁺)
 
 Advection-only counterpart of [`kennedy_gruber_rusanov_cartesian`](@ref): the
@@ -1182,6 +1214,31 @@ function kennedy_gruber_roe_cartesian_advective(normal, (y⁻,), (y⁺,))
         ρu1 = F.ρu1 - p̄ * (((y⁻.E1 + y⁺.E1) / 2)' * normal),
         ρu2 = F.ρu2 - p̄ * (((y⁻.E2 + y⁺.E2) / 2)' * normal),
         ρu3 = F.ρu3 - p̄ * (((y⁻.E3 + y⁺.E3) / 2)' * normal),
+    )
+end
+
+"""
+    waruszewski_roe_cartesian_advective(normal, argvals⁻, argvals⁺)
+
+Advection-only counterpart of [`waruszewski_roe_cartesian`](@ref): the
+log-mean/entropy-consistent Waruszewski central mass and energy fluxes with the
+momentum pressure slot stripped (pure kinetic ``ρ^{ln} ūₙ ū_c``, see
+[`waruszewski_cartesian_advective_flux`](@ref)) plus the wave-selective Roe
+dissipation, for use with a non-conservative (Exner-perturbation) PGF. Built by
+the same ``Fw + (F_{diss} − F_{KG,central})`` decomposition as the conservative
+wrapper but in the advective flux family, so the Roe dissipation is byte-identical
+to [`kennedy_gruber_roe_cartesian_advective`](@ref) already used on the Exner path.
+"""
+function waruszewski_roe_cartesian_advective(normal, (y⁻,), (y⁺,))
+    Fw = waruszewski_cartesian_advective_flux(normal, normal, y⁻, y⁺)
+    Fkg = kennedy_gruber_cartesian_advective_flux(normal, normal, y⁻, y⁺)
+    Fd = kennedy_gruber_roe_cartesian_advective(normal, (y⁻,), (y⁺,))
+    return (
+        ρ = Fw.ρ + (Fd.ρ - Fkg.ρ),
+        ρe = Fw.ρe + (Fd.ρe - Fkg.ρe),
+        ρu1 = Fw.ρu1 + (Fd.ρu1 - Fkg.ρu1),
+        ρu2 = Fw.ρu2 + (Fd.ρu2 - Fkg.ρu2),
+        ρu3 = Fw.ρu3 + (Fd.ρu3 - Fkg.ρu3),
     )
 end
 

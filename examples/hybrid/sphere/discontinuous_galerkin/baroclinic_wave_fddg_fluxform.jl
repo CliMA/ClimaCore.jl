@@ -103,9 +103,15 @@ interface_flux in (:rusanov, :roe, :lmars, :es) ||
 const volume_flux = Symbol(lowercase(get(ENV, "VOLUME_FLUX", "kg")))
 volume_flux in (:kg, :ranocha, :waruszewski) ||
     error("VOLUME_FLUX must be kg, ranocha, or waruszewski")
-(volume_flux in (:ranocha, :waruszewski) && !is_conservative) && error(
-    "VOLUME_FLUX=$volume_flux requires PGF=conservative or conservative_pert",
+(volume_flux == :ranocha && !is_conservative) && error(
+    "VOLUME_FLUX=ranocha requires PGF=conservative or conservative_pert",
 )
+# On the Exner path Waruszewski is available only through its advective variant
+# (waruszewski_{cartesian,roe_cartesian}_advective): the pressure slot is stripped
+# and the PGF is supplied non-conservatively, so it is Roe-only and NOT EC/WB in
+# momentum — it retains only the log-mean mass/energy central fluxes.
+(volume_flux == :waruszewski && !is_conservative && interface_flux != :roe) &&
+    error("VOLUME_FLUX=waruszewski with PGF=exner requires INTERFACE_FLUX=roe")
 (volume_flux in (:ranocha, :waruszewski) && interface_flux == :lmars) &&
     error("VOLUME_FLUX=$volume_flux requires INTERFACE_FLUX=rusanov, roe, or es")
 # Waruszewski (2022) is the well-balanced ENTROPY-CONSERVATIVE flux: it handles
@@ -118,7 +124,12 @@ volume_flux in (:kg, :ranocha, :waruszewski) ||
 # `pm` (= p or p') set in the tendency. Ranocha swaps in the entropy-conservative
 # central pair (volume + interface central both use the log-mean flux).
 const cartesian_volume_fn =
-    !is_conservative ? Operators.kennedy_gruber_cartesian_advective_flux :
+    !is_conservative ?
+    (
+        volume_flux == :waruszewski ?
+        Operators.waruszewski_cartesian_advective_flux :
+        Operators.kennedy_gruber_cartesian_advective_flux
+    ) :
     volume_flux == :waruszewski ? Operators.waruszewski_cartesian_flux :
     volume_flux == :ranocha ? Operators.ranocha_cartesian_flux :
     Operators.kennedy_gruber_cartesian_flux
@@ -127,7 +138,11 @@ const cartesian_interface_fn =
     (
         interface_flux == :lmars ? Operators.lmars_cartesian_advective :
         interface_flux == :roe ?
-        Operators.kennedy_gruber_roe_cartesian_advective :
+        (
+            volume_flux == :waruszewski ?
+            Operators.waruszewski_roe_cartesian_advective :
+            Operators.kennedy_gruber_roe_cartesian_advective
+        ) :
         Operators.kennedy_gruber_rusanov_cartesian_advective
     ) :
     volume_flux == :waruszewski ?
