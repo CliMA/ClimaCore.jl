@@ -344,6 +344,47 @@ end
     parent(getfield(_values(fv), symb))
 @inline transform_broadcasted(x, symb_val, axes) = x
 
+# FieldVector entries are N-dimensional arrays, and broadcasting over them on
+# GPU pays for an N-dimensional Cartesian index computation (one integer
+# division and modulo per dimension) in every thread. When every array in a
+# broadcast has the same contiguous layout as the destination, the expression
+# can instead be evaluated over `vec`s of the arrays, with plain linear
+# indexing. The GPU extension marks its array types via is_gpu_array_type;
+# everything else keeps the standard path.
+is_gpu_array_type(::Type) = false
+is_gpu_array_type(::Type{<:SubArray{<:Any, <:Any, P}}) where {P} =
+    is_gpu_array_type(P)
+
+@inline is_contiguous_gpu_array(a::DenseArray) =
+    is_gpu_array_type(typeof(a)) && ndims(a) > 0
+@inline is_contiguous_gpu_array(a::SubArray) =
+    is_gpu_array_type(typeof(a)) && ndims(a) > 0 && Base.iscontiguous(a)
+@inline is_contiguous_gpu_array(a::AbstractArray) = false
+
+# is_flat_compatible gates flatten_bc_arg: the argument types the gate accepts
+# must be exactly those the transform below has methods for, so that any type
+# added to one without the other fails with a MethodError instead of flattening
+# incorrectly. Arrays must match the destination's size exactly (broadcasts
+# that expand a smaller argument keep Cartesian indexing).
+@inline is_flat_compatible(dest::AbstractArray, arg::AbstractArray) =
+    is_contiguous_gpu_array(dest) &&
+    is_contiguous_gpu_array(arg) &&
+    size(dest) == size(arg)
+@inline is_flat_compatible(dest::AbstractArray, arg::Number) = true
+@inline is_flat_compatible(dest::AbstractArray, arg) = false
+@inline is_flat_compatible(dest::AbstractArray, bc::Base.Broadcast.Broadcasted) =
+    is_contiguous_gpu_array(dest) &&
+    unrolled_all(Base.Fix1(is_flat_compatible, dest), bc.args)
+
+@inline flatten_bc_arg(dest::AbstractArray, arg::AbstractArray) = vec(arg)
+@inline flatten_bc_arg(dest::AbstractArray, arg::Number) = arg
+@inline flatten_bc_arg(dest::AbstractArray, bc::Base.Broadcast.Broadcasted) =
+    Base.Broadcast.Broadcasted(
+        bc.f,
+        unrolled_map(Base.Fix1(flatten_bc_arg, dest), bc.args),
+        (Base.OneTo(length(dest)),),
+    )
+
 @inline function Base.copyto!(
     dest::FieldVector,
     bc::Union{FieldVector, Base.Broadcast.Broadcasted{FieldVectorStyle}},
@@ -351,8 +392,13 @@ end
     unrolled_foreach(property_name_vals(dest)) do symb_val
         array = parent(getfield(_values(dest), unval(symb_val)))
         bct = transform_broadcasted(bc, symb_val, axes(array))
-        array isa FieldVector ? copyto!(array, bct) :
-        copyto!(array, Base.Broadcast.instantiate(bct))
+        if array isa FieldVector
+            copyto!(array, bct)
+        elseif is_flat_compatible(array, bct)
+            copyto!(vec(array), Base.Broadcast.instantiate(flatten_bc_arg(array, bct)))
+        else
+            copyto!(array, Base.Broadcast.instantiate(bct))
+        end
     end
     call_post_op_callback() && post_op_callback(dest, dest, bc)
     return dest
