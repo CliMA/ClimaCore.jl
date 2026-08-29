@@ -263,7 +263,7 @@ function launch_configuration(
     strict = true,
     max_waves = nothing,
 ) where {F}
-    cu_func = (CUDA.@cuda always_inline = true launch = false f(args...)).fun
+    cu_func = first(compile_with_cap(f, args)).fun
     cache_key = (cu_func, strict, max_waves, config_args...)
     lock(LAUNCH_CONFIGURATION_CACHE_LOCK)
     try
@@ -285,6 +285,565 @@ const reported_stats = Dict()
 const kernel_names = IdDict()
 
 collect_kernel_stats() = false
+
+# --- Register pressure diagnostics -------------------------------------------
+#
+# A kernel that reaches the architectural register cap has zero headroom: every
+# additional live value must spill to local (off-chip) memory. That cliff is
+# invisible today -- the model runs, just slowly -- and it is reached by the
+# COMBINATION of what several packages contribute to one fused broadcast, so no
+# single package sees it coming. Making it observable is cheap, because
+# `launch_configuration` already queries register pressure per kernel.
+#
+# Controlled by `CLIMA_CHECK_REGISTER_PRESSURE`:
+#   off   (default) no cost beyond an env lookup
+#   warn            log once per kernel
+#   error           raise, so CI cannot ignore it
+#
+# `CLIMA_REGISTER_PRESSURE_CHECK_LIMIT` sets the register threshold (default 255,
+# the sm_20+ architectural maximum). Lower it to catch kernels approaching the
+# cap rather than sitting on it.
+#
+# `CLIMA_IGNORE_REGISTER_PRESSURE` is a comma-separated list of substrings;
+# a kernel whose name matches any of them is skipped. Without an escape hatch a
+# hard error gets switched off wholesale the first time it fires on a kernel
+# somebody already knows about.
+
+const REGISTER_PRESSURE_REPORTED = Set{Any}()
+const REGISTER_PRESSURE_LOCK = ReentrantLock()
+
+# The architectural cap on registers per thread for sm_20 and later. Above this
+# ptxas has no choice but to spill.
+const MAX_REGISTERS_PER_THREAD = 255
+
+function register_pressure_action()
+    raw = lowercase(strip(get(ENV, "CLIMA_CHECK_REGISTER_PRESSURE", "off")))
+    (isempty(raw) || raw in ("off", "false", "0", "no")) && return :off
+    raw in ("warn", "warning", "true", "1", "yes") && return :warn
+    raw in ("error", "strict") && return :error
+    @warn "Unrecognized CLIMA_CHECK_REGISTER_PRESSURE=$(raw); treating as off" maxlog = 1
+    return :off
+end
+
+function register_pressure_limit()
+    raw = get(ENV, "CLIMA_REGISTER_PRESSURE_CHECK_LIMIT", nothing)
+    raw === nothing && return MAX_REGISTERS_PER_THREAD
+    parsed = tryparse(Int, strip(raw))
+    if parsed === nothing || parsed <= 0
+        @warn "Invalid CLIMA_REGISTER_PRESSURE_CHECK_LIMIT=$(raw); using $(MAX_REGISTERS_PER_THREAD)" maxlog =
+            1
+        return MAX_REGISTERS_PER_THREAD
+    end
+    return parsed
+end
+
+# `CLIMA_MAX_REGISTERS_PER_THREAD` caps registers per thread at compile time
+# (ptxas `-maxrregcount`), deliberately trading spill for occupancy.
+#
+# Occupancy is a step function of this number, not a gradient. On an A100 the
+# 64K-register file per SM fits 65536/255 = 256 threads at the architectural
+# cap, i.e. one 256-thread block, i.e. 8 warps and 12.5% occupancy. Dropping to
+# 128 fits a second block and doubles resident warps; 254 buys exactly nothing.
+# Worth it only for a kernel that is issue-starved (few eligible warps) rather
+# than bandwidth-bound, since the spill it induces costs memory traffic to buy
+# latency hiding. That is a property of the kernel, not of ClimaCore, so it is
+# opt-in rather than a default.
+#
+# The cap binds only kernels that exceed it; anything already under it compiles
+# unchanged. It is read once and cached because it participates in the CUDA
+# compilation cache key -- changing it mid-process would silently mix kernels
+# compiled under different budgets.
+const MAX_REGISTERS_SETTING = Ref{Any}(:unread)
+
+function _read_max_registers_per_thread()
+    raw = get(ENV, "CLIMA_MAX_REGISTERS_PER_THREAD", nothing)
+    raw === nothing && return nothing
+    s = lowercase(strip(raw))
+    (isempty(s) || s in ("off", "none", "0")) && return nothing
+    # `auto` picks a cap per kernel from its own occupancy and spill; a number
+    # forces the same cap on every kernel that exceeds it.
+    s == "auto" && return :auto
+    parsed = tryparse(Int, s)
+    if parsed === nothing || parsed <= 0 || parsed > MAX_REGISTERS_PER_THREAD
+        @warn "Invalid CLIMA_MAX_REGISTERS_PER_THREAD=$(raw); ignoring" maxlog = 1
+        return nothing
+    end
+    return parsed
+end
+
+function max_registers_per_thread()
+    MAX_REGISTERS_SETTING[] === :unread &&
+        (MAX_REGISTERS_SETTING[] = _read_max_registers_per_thread())
+    return MAX_REGISTERS_SETTING[]
+end
+
+"""
+    warps_per_sm_by_registers(regs_per_thread)
+
+Resident warps per SM permitted by register pressure alone, ignoring block
+shape. This is the quantity a register cap actually moves.
+
+It is a step function, which is the whole reason capping is worth doing: on an
+A100 a kernel needs to cross from 255 to 128 registers before a single extra
+warp becomes resident, and every budget in between is indistinguishable from
+255. Reporting registers without this conversion invites the reasonable but
+wrong inference that shaving a few registers helps.
+"""
+function warps_per_sm_by_registers(regs_per_thread)
+    attrs = device_attributes()
+    regs_per_thread <= 0 && return fld(attrs.max_threads_per_sm, attrs.threads_per_warp)
+    regs_per_thread > attrs.max_regs_per_thread && return 0
+    round_up(n, d) = cld(n, d) * d
+    allocated_regs_per_warp =
+        round_up(regs_per_thread * attrs.threads_per_warp, attrs.regs_per_allocation)
+    max_regs_per_scheduler = fld(attrs.max_regs_per_sm, attrs.schedulers_per_sm)
+    by_regs =
+        fld(max_regs_per_scheduler, allocated_regs_per_warp) * attrs.schedulers_per_sm
+    return min(by_regs, fld(attrs.max_threads_per_sm, attrs.threads_per_warp))
+end
+
+"""
+    register_cap_candidates(regs_now)
+
+Register budgets worth probing, cheapest first.
+
+For each reachable occupancy tier above the current one this returns the
+*largest* budget that reaches it, which is the budget that reaches that tier
+with the least spill. Anything lower in the same tier spills more for no
+additional residency.
+"""
+function register_cap_candidates(regs_now)
+    candidates = Int[]
+    best = warps_per_sm_by_registers(regs_now)
+    for r in (regs_now - 1):-1:MIN_REGISTER_CAP
+        w = warps_per_sm_by_registers(r)
+        if w > best
+            push!(candidates, r)
+            best = w
+        end
+    end
+    return candidates
+end
+
+function register_pressure_ignored(name)
+    raw = get(ENV, "CLIMA_IGNORE_REGISTER_PRESSURE", "")
+    isempty(strip(raw)) && return false
+    s = string(name)
+    return any(p -> !isempty(p) && occursin(p, s), strip.(split(raw, ",")))
+end
+
+# Floor for the automatic search. Below this the spill required is large enough
+# that no plausible occupancy gain pays for it, and probing costs a ptxas run
+# each.
+const MIN_REGISTER_CAP = 32
+
+# Spill a capped kernel may take on, in bytes stored per thread, before the cap
+# is judged not worth it. Empirical, from AMIP kernel timings on an A100: the
+# hot microphysics kernel doubles occupancy for 184 bytes and gets 36% faster,
+# while ClimaCore's weighted_dss_internal takes on 324 bytes for the same
+# occupancy step and gets 34% slower. Anything between those is a guess, so this
+# sits just above the win and below the loss.
+#
+# Spill is a proxy, not the mechanism. ptxas can also pay for a tighter budget by
+# rematerializing values rather than spilling them, which costs instructions and
+# is invisible here -- a ClimaLand turbulent_fluxes kernel regressed 21% while
+# spilling only 44 bytes. So this heuristic is not sound in general, and
+# CLIMA_IGNORE_REGISTER_PRESSURE exempts kernels it gets wrong.
+const DEFAULT_SPILL_BUDGET = 256
+
+# Only kernels at or below this many warps per SM are candidates. Occupancy has
+# sharply diminishing returns, and the evidence here covers exactly one step:
+# the hot microphysics kernel going from 8 to 16 warps. A kernel already at 20+
+# warps is not starved for residency in the way that one was, so capping it
+# spends spill on latency hiding it does not need. Against a 64-warp ceiling an
+# unfiltered search treats almost everything as register-limited and drives it
+# to the floor.
+const REGISTER_CAP_SEARCH_MAX_WARPS = 16
+
+# Stop once residency is merely adequate rather than maximal. Without this the
+# search keeps buying tiers while spill happens to stay under budget, which for
+# small kernels means running to the bottom of the ladder -- 14 of 14 decisions
+# in an AMIP run landed on the floor, none on an intermediate tier.
+const REGISTER_CAP_TARGET_WARPS = 32
+
+function register_cap_spill_budget()
+    raw = get(ENV, "CLIMA_REGISTER_CAP_SPILL_BUDGET", nothing)
+    raw === nothing && return DEFAULT_SPILL_BUDGET
+    parsed = tryparse(Int, strip(raw))
+    if parsed === nothing || parsed < 0
+        @warn "Invalid CLIMA_REGISTER_CAP_SPILL_BUDGET=$(raw); using $(DEFAULT_SPILL_BUDGET)" maxlog =
+            1
+        return DEFAULT_SPILL_BUDGET
+    end
+    return parsed
+end
+
+# Decisions are cached per (function, argument types): the search costs a ptxas
+# run per candidate, and the answer cannot change within a process.
+const REGISTER_CAP_CACHE = IdDict{Any, Union{Nothing, Int}}()
+const REGISTER_CAP_LOCK = ReentrantLock()
+
+"""
+    auto_register_cap(f!, args, regs_now)
+
+Best register cap for this kernel, or `nothing` to leave it uncapped.
+
+Walks the occupancy tiers above the current one, cheapest first, pricing each
+with ptxas, and keeps the deepest tier whose spill stays within
+[`register_cap_spill_budget`](@ref). Stops at the first tier that exceeds the
+budget: spill is not strictly monotonic in the budget, but it trends, and each
+extra probe costs a recompile.
+"""
+function auto_register_cap(f!::F!, args, regs_now) where {F!}
+    candidates = register_cap_candidates(regs_now)
+    isempty(candidates) && return nothing
+    budget = register_cap_spill_budget()
+    chosen = nothing
+    for cap in candidates
+        spill = measure_spill(f!, args, cap)
+        # Unmeasurable spill is not evidence of no spill; refuse to cap blind.
+        spill === nothing && break
+        spill.stores > budget && break
+        chosen = cap
+        # Adequate residency reached; further tiers cost spill for latency
+        # hiding that is already covered.
+        warps_per_sm_by_registers(cap) >= REGISTER_CAP_TARGET_WARPS && break
+    end
+    return chosen
+end
+
+"""
+    resolved_register_cap(f!, args, kernel)
+
+The register cap to compile this kernel with: `nothing`, a fixed budget, or the
+result of the automatic per-kernel search.
+
+Both the launch and `launch_configuration` must agree on this. If they
+disagreed, the grid would be sized for one register count and the kernel
+compiled with another, which silently wastes exactly the capacity the cap was
+meant to unlock.
+"""
+function resolved_register_cap(f!::F!, args, kernel) where {F!}
+    setting = max_registers_per_thread()
+    setting === :auto || return setting
+    key = (F!, typeof(args))
+    lock(REGISTER_CAP_LOCK)
+    try
+        return get!(REGISTER_CAP_CACHE, key) do
+            regs_now = CUDA.registers(kernel)
+            # Cheap rejections first. Naming a kernel takes a stacktrace and
+            # each probe is a full recompile, so neither may run for the many
+            # kernels that are nowhere near register-bound. Against a 64-warp
+            # ceiling every kernel above 32 registers is nominally
+            # register-limited, which is useless as a filter; what matters is
+            # being badly enough limited that a tier is worth buying.
+            attrs = device_attributes()
+            max_warps = fld(attrs.max_threads_per_sm, attrs.threads_per_warp)
+            warps_per_sm_by_registers(regs_now) >
+            min(REGISTER_CAP_SEARCH_MAX_WARPS, fld(max_warps, 2)) && return nothing
+            name = something(compute_kernel_name(f!, args), nameof(F!))
+            register_pressure_ignored(name) && return nothing
+            cap = auto_register_cap(f!, args, regs_now)
+            if cap !== nothing
+                @info "Capping `$(name)` at $(cap) registers (was $(regs_now)): " *
+                      "$(warps_per_sm_by_registers(regs_now)) -> " *
+                      "$(warps_per_sm_by_registers(cap)) warps/SM"
+            end
+            return cap
+        end
+    finally
+        unlock(REGISTER_CAP_LOCK)
+    end
+end
+
+# `CLIMA_PREFER_L1_CACHE` gives the SM's unified cache entirely to L1 for
+# kernels that use no shared memory.
+#
+# On an A100 the 192 KB per SM is split between shared memory and L1, and the
+# default split reserves shared memory whether or not a kernel uses any.
+# ClimaCore's broadcast kernels use none. Spilled registers live in local
+# memory, which is cached in L1, so for a kernel that spills this reservation is
+# pure loss: the hot microphysics kernel spends a third of its memory traffic on
+# spill at a 69% L1 hit rate while its shared memory sits unused.
+#
+# MEASURED AND REJECTED, off by default. On a full AMIP run this cost 47.6% more
+# GPU time end to end (-25.5% SYPD), and it did not even do what it was meant to:
+# the target kernel's L1 hit rate moved 69.08% -> 69.24% and its duration was
+# unchanged. The loss was spread across every kernel rather than concentrated --
+# copyto_foreach alone went 72 -> 216 ms over 2090 launches -- which is the
+# signature of the SM reconfiguring its cache split whenever consecutive kernels
+# request different carveouts. With thousands of launches per step that
+# reconfiguration costs far more than any hit-rate gain, so setting this per
+# kernel is the wrong granularity. Kept, off, so the result is not rediscovered.
+function prefer_l1_cache()
+    raw = lowercase(strip(get(ENV, "CLIMA_PREFER_L1_CACHE", "false")))
+    return raw in ("1", "true", "yes", "on")
+end
+
+"""
+    maximize_l1_cache!(kernel)
+
+Give this kernel's SM cache entirely to L1, when it uses no shared memory.
+
+A no-op for kernels that do use shared memory: taking it away would spill them
+into a slower path or fail the launch outright.
+"""
+function maximize_l1_cache!(kernel)
+    prefer_l1_cache() || return nothing
+    try
+        f = kernel.fun
+        attrs = CUDA.attributes(f)
+        # Static shared memory is fixed at compile time; a kernel asking for any
+        # must keep its carveout.
+        attrs[CUDA.FUNC_ATTRIBUTE_SHARED_SIZE_BYTES] == 0 || return nothing
+        # 0 == CU_SHAREDMEM_CARVEOUT_MAX_L1.
+        attrs[CUDA.FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT] = 0
+    catch err
+        # Not supported on every architecture; never fail a launch over a hint.
+        @debug "could not set L1 carveout" err
+    end
+    return nothing
+end
+
+"""
+    compile_with_cap(f, args; name, always_inline)
+
+Compile `f` under its resolved register cap, returning `(kernel, cap)`.
+
+The uncapped compile happens first regardless, because the automatic search
+needs the natural register count to know which occupancy tiers are even
+reachable. CUDA.jl caches compilations per configuration, so the second compile
+is paid once per kernel, not per launch.
+"""
+function compile_with_cap(f::F, args; name = nothing, always_inline = true) where {F}
+    probe = CUDA.@cuda name = name always_inline = always_inline launch = false f(args...)
+    cap = resolved_register_cap(f, args, probe)
+    if cap === nothing
+        maximize_l1_cache!(probe)
+        return (probe, nothing)
+    end
+    kernel = CUDA.@cuda name = name always_inline = always_inline maxregs = cap launch =
+        false f(args...)
+    maximize_l1_cache!(kernel)
+    return (kernel, cap)
+end
+
+"""
+    find_ptxas()
+
+Path to a usable `ptxas`, or `nothing`.
+
+`CUDA.ptxas` exists only when CUDA.jl resolves a toolkit that provides it, and
+on this cluster that resolution rides on `JULIA_LOAD_PATH`: the environment
+module puts the local-toolkit preference on the load path, so any caller that
+overwrites `JULIA_LOAD_PATH` (profiling wrappers do, to pin the project) loses
+the binding entirely. Falling back to `PATH` and the usual install roots keeps
+spill measurable there instead of silently reporting "unmeasured", which reads
+as "no spill" to anything that does not check.
+"""
+function find_ptxas()
+    try
+        p = only(CUDA.ptxas().exec)
+        p !== nothing && isfile(p) && return p
+    catch
+        # CUDA.ptxas undefined or unresolvable; fall through to the search.
+    end
+    p = Sys.which("ptxas")
+    p === nothing || return p
+    for root in (get(ENV, "CUDA_HOME", nothing), get(ENV, "CUDA_PATH", nothing),
+        "/usr/local/cuda")
+        root === nothing && continue
+        candidate = joinpath(root, "bin", "ptxas")
+        isfile(candidate) && return candidate
+    end
+    return nothing
+end
+
+"""
+    measure_spill(f!, args)
+
+Exact per-thread spill (stores, loads) in bytes for this kernel, or `nothing`.
+
+`CUDA.memory(k).local` cannot answer this: it is the stack frame INCLUDING spill
+slots, so a kernel with a large returned value looks identical to one that
+spills. Only `ptxas -v` separates them. That costs a recompile, so it runs only
+for kernels that already tripped the register threshold -- a handful per run --
+and the result is cached with the warning.
+
+`dump_module = true` is required: without it only the entry function is emitted,
+ptxas cannot resolve the called device functions, and the register/spill numbers
+that come back are wrong rather than absent.
+"""
+# PTX ISA versions to try, newest first. CUDA.jl emits PTX for the toolkit it
+# resolved, which need not be the ptxas we found: when a caller overwrites
+# JULIA_LOAD_PATH the local-toolkit preference is lost, CUDA.jl falls back to
+# artifact defaults, and the emitted `.version` can outrun the installed
+# assembler ("Unsupported .version 9.2; current version is 9.0"). Stepping down
+# until one assembles keeps spill measurable rather than silently unreported.
+# `nothing` means "whatever CUDA.jl picks", which is right when they do agree.
+const PTX_ISA_FALLBACKS =
+    [nothing, v"9.0", v"8.7", v"8.5", v"8.3", v"8.0", v"7.8", v"7.5"]
+const WORKING_PTX_ISA = Ref{Any}(:unset)
+
+function _assemble_for_spill(ptxas, f!, tt, maxregs, isa_ver)
+    io = IOBuffer()
+    if isa_ver === nothing
+        CUDA.code_ptx(io, f!, tt; kernel = true, always_inline = true, dump_module = true)
+    else
+        CUDA.code_ptx(
+            io, f!, tt;
+            kernel = true, always_inline = true, dump_module = true, ptx = isa_ver,
+        )
+    end
+    ptx_file = tempname() * ".ptx"
+    write(ptx_file, String(take!(io)))
+    cap = CUDA.capability(CUDA.device())
+    arch = "sm_$(cap.major)$(cap.minor)"
+    out, err = IOBuffer(), IOBuffer()
+    cmd = if maxregs === nothing
+        `$ptxas -arch=$arch -v -o $(tempname()).cubin $ptx_file`
+    else
+        `$ptxas -arch=$arch -maxrregcount=$maxregs -v -o $(tempname()).cubin $ptx_file`
+    end
+    proc = run(pipeline(ignorestatus(cmd); stdout = out, stderr = err))
+    return (success(proc), String(take!(err)) * String(take!(out)))
+end
+
+function measure_spill(f!::F!, args, maxregs = max_registers_per_thread()) where {F!}
+    ptxas = find_ptxas()
+    ptxas === nothing && return nothing
+    # `max_registers_per_thread()` may return the mode `:auto` rather than a
+    # budget. Only an integer is a budget; anything else means "no cap".
+    maxregs isa Integer || (maxregs = nothing)
+    try
+        gargs = map(CUDA.cudaconvert, args)
+        tt = Tuple{map(Core.Typeof, gargs)...}
+        # Once one ISA assembles, every later kernel uses it directly; the
+        # search is per process, not per kernel.
+        candidates =
+            WORKING_PTX_ISA[] === :unset ? PTX_ISA_FALLBACKS : [WORKING_PTX_ISA[]]
+        for isa_ver in candidates
+            ok, log = try
+                _assemble_for_spill(ptxas, f!, tt, maxregs, isa_ver)
+            catch
+                # LLVM rejects ISA versions it does not know; try an older one.
+                (false, "Unsupported .version")
+            end
+            if ok
+                WORKING_PTX_ISA[] = isa_ver
+                grab(re) = (m = match(re, log); m === nothing ? 0 : parse(Int, m[1]))
+                return (
+                    stores = grab(r"(\d+) bytes spill stores"),
+                    loads = grab(r"(\d+) bytes spill loads"),
+                )
+            end
+            # A version mismatch is worth retrying; anything else is a real
+            # failure and retrying only burns compiles.
+            occursin("Unsupported .version", log) || return nothing
+        end
+        return nothing
+    catch err
+        @debug "spill measurement failed" err
+        return nothing
+    end
+end
+
+"""
+    check_register_pressure(kernel, kernel_name, f!, args)
+
+Report kernels at or above the register limit, once each.
+
+Reports registers and local memory. NOTE that local memory is the stack frame
+INCLUDING any spill slots, not spill alone -- CUDA.jl exposes no way to separate
+them, and a kernel can carry a large stack frame while spilling nothing (the
+returned value of a microphysics tendency function does exactly that). So this
+flags "no headroom left", which is exact, rather than "is spilling", which is
+not measurable here. Confirm actual spilling with `ptxas -v` or Nsight Compute.
+"""
+function check_register_pressure(kernel, kernel_name, f!::F!, args) where {F!}
+    action = register_pressure_action()
+    action === :off && return nothing
+    # Name it even when global naming is off: without a name the report cannot
+    # say WHICH broadcast is at the cap, and paying for names on every kernel is
+    # exactly why global naming is opt-in. Only flagged kernels pay here.
+    # NB: computed inside the branch rather than via `something(...)`, which
+    # evaluates every argument and would take a `stacktrace()` we already have.
+    name = kernel_name
+    if name === nothing
+        name = something(compute_kernel_name(f!, args), nameof(F!))
+    end
+    register_pressure_ignored(name) && return nothing
+
+    registers = CUDA.registers(kernel)
+    registers >= register_pressure_limit() || return nothing
+
+    # Deduplicate warnings only. An error must always raise: otherwise a kernel
+    # that was warned about earlier in the process could never fail the build,
+    # which silently defeats CLIMA_CHECK_REGISTER_PRESSURE=error.
+    if action === :warn
+        key = (objectid(f!), name, registers)
+        lock(REGISTER_PRESSURE_LOCK)
+        try
+            key in REGISTER_PRESSURE_REPORTED && return nothing
+            push!(REGISTER_PRESSURE_REPORTED, key)
+        finally
+            unlock(REGISTER_PRESSURE_LOCK)
+        end
+    end
+
+    local_bytes = _memory_bytes(CUDA.memory(kernel), :local)
+    limit = register_pressure_limit()
+    spill = measure_spill(f!, args, registers)
+    spill_str = if spill === nothing
+        "spill: UNMEASURED (no ptxas, or ptxas rejected the generated PTX); " *
+        "$(local_bytes) bytes local memory, " *
+        "which is stack frame INCLUDING spill slots and so cannot prove spilling"
+    elseif spill.stores > 0
+        "SPILLING $(spill.stores) bytes stored / $(spill.loads) loaded per thread"
+    else
+        "not spilling (0 bytes), but with no headroom left"
+    end
+    # Registers matter because of the warps they cost, so report that directly.
+    # A kernel can sit at the cap without spilling a byte and still be the
+    # slowest thing in the run purely for lack of resident warps, which is
+    # invisible if the report stops at "is it spilling".
+    attrs = device_attributes()
+    max_warps = fld(attrs.max_threads_per_sm, attrs.threads_per_warp)
+    warps = warps_per_sm_by_registers(registers)
+    occupancy = round(100 * warps / max_warps; digits = 1)
+    advice = if max_registers_per_thread() !== nothing
+        "A register cap is already in effect for this run."
+    else
+        cap = auto_register_cap(f!, args, registers)
+        if cap === nothing
+            "No lower register budget was found whose spill stays within " *
+            "$(register_cap_spill_budget()) bytes, so more occupancy would have to " *
+            "be bought with more spill than it is likely to be worth."
+        else
+            "Capping at $(cap) registers would raise this to " *
+            "$(warps_per_sm_by_registers(cap)) warps/SM; set " *
+            "CLIMA_MAX_REGISTERS_PER_THREAD=auto to apply it."
+        end
+    end
+    msg = join(
+        [
+            "Kernel `$(name)`: $(registers) registers per thread " *
+            "(limit $(limit), architectural max $(MAX_REGISTERS_PER_THREAD)) -- " *
+            "$(spill_str).",
+            "This allows $(warps) of $(max_warps) warps per SM ($(occupancy)% " *
+            "occupancy). Any further register pressure, from this package or any " *
+            "other package contributing to this broadcast, must spill to off-chip " *
+            "memory.",
+            advice,
+            "Set CLIMA_CHECK_REGISTER_PRESSURE=off to disable, or add a substring of " *
+            "the kernel name to CLIMA_IGNORE_REGISTER_PRESSURE.",
+        ],
+        "\n",
+    )
+    action === :error ? error(msg) : @warn msg
+    return nothing
+end
+
 
 function _memory_bytes(memory, key::Symbol)
     if hasproperty(memory, key)
@@ -360,6 +919,70 @@ end
 end
 
 """
+    compute_kernel_name(f!, args)
+
+Kernel name derived from the stack trace, cached per method instance.
+
+Costs a `stacktrace()` on first sight of each kernel, which is why naming is
+opt-in globally via `CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE`. The register
+pressure check calls this on demand for the handful of kernels that trip its
+threshold, so that check reports a usable name without making every kernel pay.
+
+Safe to call from deeper in this file: `ClimaCoreCUDAExt` is in `IGNORE_MODULES`,
+so the frame selected is the same either way.
+"""
+function compute_kernel_name(f!::F!, args) where {F!}
+    kernel_name = nothing
+    # Create a key from the method instance and types of the args
+    key = objectid(CUDA.methodinstance(typeof(f!), typeof(args)))
+    kernel_name_exists = key in keys(kernel_names)
+    if !kernel_name_exists
+        # Construct the kernel name, ignoring modules we don't care about
+        stack = stacktrace()
+        first_relevant_index = findfirst(is_relevant_frame, stack)
+        if !isnothing(first_relevant_index)
+            # Don't include file if this is inside an NVTX annotation
+            frame = stack[first_relevant_index]::Base.StackTraces.StackFrame
+            func_name = string(frame.func)
+            if contains(func_name, "#")
+                func_name = split(func_name, "#")[1]
+            end
+            frame_method =
+                frame.linfo isa Core.CodeInstance ? frame.linfo.def : frame.linfo
+            fp_split =
+                splitpath(fpath_from_method_instance(frame_method::Core.MethodInstance))
+            if "NVTX" in fp_split
+                fp_string = "_NVTX"
+                line_string = ""
+            else
+                # Trim base directory off of file path to shorten
+                package_index = findfirst(fp_split) do part
+                    startswith(part, "Clima")
+                end
+                if isnothing(package_index)
+                    package_index = findfirst(p -> p == ".julia", fp_split)
+                end
+                if isnothing(package_index)
+                    package_index = findfirst(p -> p == "src", fp_split)
+                end
+                if isnothing(package_index)
+                    package_index = 1
+                end
+                fp_string =
+                    "_FILE_" *
+                    string(joinpath(fp_split[package_index:end]...))
+                line_string = "_L" * string(frame.line)
+            end
+            name_str = string(func_name) * fp_string * line_string
+            kernel_name = replace(name_str, r"[^A-Za-z0-9]" => "_")
+        end
+        @debug "Using kernel name: $kernel_name"
+        kernel_names[key] = kernel_name
+    end
+    return kernel_names[key]
+end
+
+"""
     auto_launch!(f!::F!, args,
         ::Union{
             Int,
@@ -392,74 +1015,27 @@ function auto_launch!(
     caller = :unknown,
     shmem = 0,
 ) where {F!}
-    # If desired, compute a kernel name from the stack trace and store in
-    # a global Dict, which serves as an in memory cache
-    kernel_name = nothing
-    if name_kernels_from_stack_trace()
-        # Create a key from the method instance and types of the args
-        key = objectid(CUDA.methodinstance(typeof(f!), typeof(args)))
-        kernel_name_exists = key in keys(kernel_names)
-        if !kernel_name_exists
-            # Construct the kernel name, ignoring modules we don't care about
-            stack = stacktrace()
-            first_relevant_index = findfirst(is_relevant_frame, stack)
-            if !isnothing(first_relevant_index)
-                # Don't include file if this is inside an NVTX annotation
-                frame = stack[first_relevant_index]::Base.StackTraces.StackFrame
-                func_name = string(frame.func)
-                if contains(func_name, "#")
-                    func_name = split(func_name, "#")[1]
-                end
-                frame_method =
-                    frame.linfo isa Core.CodeInstance ? frame.linfo.def : frame.linfo
-                fp_split =
-                    splitpath(fpath_from_method_instance(frame_method::Core.MethodInstance))
-                if "NVTX" in fp_split
-                    fp_string = "_NVTX"
-                    line_string = ""
-                else
-                    # Trim base directory off of file path to shorten
-                    package_index = findfirst(fp_split) do part
-                        startswith(part, "Clima")
-                    end
-                    if isnothing(package_index)
-                        package_index = findfirst(p -> p == ".julia", fp_split)
-                    end
-                    if isnothing(package_index)
-                        package_index = findfirst(p -> p == "src", fp_split)
-                    end
-                    if isnothing(package_index)
-                        package_index = 1
-                    end
-                    fp_string =
-                        "_FILE_" *
-                        string(joinpath(fp_split[package_index:end]...))
-                    line_string = "_L" * string(frame.line)
-                end
-                name_str = string(func_name) * fp_string * line_string
-                kernel_name = replace(name_str, r"[^A-Za-z0-9]" => "_")
-            end
-            @debug "Using kernel name: $kernel_name"
-            kernel_names[key] = kernel_name
-        end
-        kernel_name = kernel_names[key]
-    end
+    # If desired, compute a kernel name from the stack trace (cached).
+    kernel_name =
+        name_kernels_from_stack_trace() ? compute_kernel_name(f!, args) : nothing
 
     if auto
         @assert !isnothing(nitems)
         if nitems ≥ 0
             # Note: `name = nothing` here will revert to default behavior
-            kernel = CUDA.@cuda name = kernel_name always_inline = true launch =
-                false f!(args...)
+            kernel = first(compile_with_cap(f!, args; name = kernel_name))
             config = launch_configuration(f!, args)
             threads = min(nitems, config.threads)
             blocks = cld(nitems, threads)
             kernel(args...; threads, blocks) # This knows to use always_inline from above.
+            check_register_pressure(kernel, kernel_name, f!, args)
         end
     else
-        kernel =
-            CUDA.@cuda name = kernel_name always_inline = always_inline threads =
-                threads_s blocks = blocks_s shmem = shmem f!(args...)
+        kernel = first(
+            compile_with_cap(f!, args; name = kernel_name, always_inline),
+        )
+        kernel(args...; threads = threads_s, blocks = blocks_s, shmem)
+        check_register_pressure(kernel, kernel_name, f!, args)
     end
 
     if collect_kernel_stats() # only for development use
