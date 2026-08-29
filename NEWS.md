@@ -4,6 +4,29 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] Added the horizontal Laplacian atoms
+  `Operators.scalar_laplacian` and `Operators.vector_laplacian`, the building
+  blocks of ∇⁴ hyperdiffusion. On continuous (CG) spaces they return lazy,
+  element-local operator expressions that fuse into consuming broadcasts;
+  materialized intermediates must be made continuous with
+  `Spaces.weighted_dss!` between passes (batch several intermediates into one
+  call to share the ghost exchange). On discontinuous (DG) spaces
+  `scalar_laplacian` includes the interior-penalty face corrections itself and
+  `weighted_dss!` is a no-op, so one calling sequence serves both
+  discretizations (`vector_laplacian` is not yet implemented for DG). The
+  hybrid example's hyperdiffusion is rewritten on top of these atoms.
+  PR [2606](https://github.com/CliMA/ClimaCore.jl/pull/2606)
+- ![][badge-🚀performance] FieldVector broadcasts on GPU flatten to linear
+  indexing when every array in the broadcast has the same contiguous layout as
+  the destination, bypassing CUDA.jl's N-dimensional Cartesian index
+  computation (measured 3× faster vector updates in a baroclinic-wave
+  benchmark). Spectral-element slab loops reserve half the shared memory per
+  block (`MAX_SUBBLOCK_LAUNCH_THREADS` 256 → 128), and the eager
+  finite-difference kernel packs 128 threads per block and queries the SM
+  count from the device. The environment variables `CLIMA_CUDA_MAX_WAVES`,
+  `CLIMA_FD_MAX_THREADS`, and `CLIMA_COLLECT_KERNEL_STATS` (read once at
+  module load) override launch-tuning defaults for experiments.
+  PR [2606](https://github.com/CliMA/ClimaCore.jl/pull/2606)
 - ![][badge-✨feature/enhancement] Spectral element operators are now evaluated
   through the slice-loop primitives (`foreach_slab` and the other
   `DataLayouts.foreach_*` loops), so they can appear inside fused loop bodies
