@@ -1,19 +1,28 @@
-import UnrolledUtilities: unrolled_all, unrolled_allequal, unrolled_flatmap
+import UnrolledUtilities: unrolled_map, unrolled_all, unrolled_allequal, unrolled_flatmap
 import CUDA: LLVM # Used by shmem_pointer to emit a shared-memory global.
 
 const THREADS_PER_WARP = 32
 const MAX_WARPS_PER_BLOCK = 32
 
-# Smallest sub-block that a slice loop can assign a slice to: the last stop
-# before ThisThread in slice_subscope's descent (see partition below).
+# Smallest sub-block that a slice loop can assign a slice to, and therefore the
+# last stop before ThisThread in the chain of scopes that slice_subscope
+# descends through; see partition(::ThisSubBlock) below.
 const MIN_THREADS_PER_SUBBLOCK = 2
 
 # Cap on the number of threads in a block that assigns one slice to each of its
-# sub-blocks. Shared memory is sized for the largest possible sub-block count
-# before the launch configuration is known; without a cap that is a full
-# 1024-thread block, reserving 4x the shared memory a slab loop can use, and
-# shared memory limits the occupancy of spectral element kernels.
-const MAX_SUBBLOCK_LAUNCH_THREADS = 256
+# sub-blocks. A sub-block's shared memory is allocated for the largest number of
+# sub-blocks a block can hold (see scoped_static_array below), and that
+# allocation is compiled into the kernel before its launch configuration is
+# known, so the two have to agree on a bound. Without a cap the bound is a full
+# 1024-thread block, which makes every slab loop reserve four times the shared
+# memory it can use -- and shared memory is what limits the occupancy of spectral
+# element kernels. The kernels that slice loops replaced used 256; halving the
+# cap to 128 halves the shared memory reserved per block, which raised occupancy
+# and measured faster on an A100 baroclinic wave (h_elem = 30, z_elem = 63).
+# Slabs with more points than the cap fall back to multiple points per thread
+# (see DataLayouts.slice_subscope).
+const MAX_SUBBLOCK_LAUNCH_THREADS = 128
+
 # To reduce latency, only check device attributes before the first launch.
 const DEVICE_ASSUMPTIONS_CHECKED = Ref(false)
 function check_device_assumptions()
@@ -36,10 +45,10 @@ DataLayouts.DataScope(::Type{<:CUDA.CuDeviceArray{<:Any, <:Any, A}}) where {A} =
 """
     ThisHost()
 
-[`DataScope`](@ref) that represents the host device for a GPU: assigned to any
-[`DataLayout`](@ref) backed by a `CuArray`, and replaced with its device-side
-analogue [`ThisKernel`](@ref) through `Adapt.jl`. Only array allocations are
-supported.
+[`DataScope`](@ref) that represents the host device for a GPU. This scope is
+assigned to any [`DataLayout`](@ref) backed by a `CuArray`, and it is replaced
+with its device-side analogue [`ThisKernel`](@ref) through `Adapt.jl`. Aside
+from array allocations, other standard `DataScope` operations are not supported.
 """
 struct ThisHost <: DataLayouts.DataScope end
 
@@ -60,11 +69,15 @@ Support for multidimensional grids may be added in a future release.
 """
 struct ThisKernel <: DataLayouts.DataScope end
 
-# A kernel is partitioned into fixed-size sub-blocks rather than
-# dynamically-sized blocks, so that every scope in slice_subscope's descent
-# chain has a compile-time thread count (needed by DataLayouts.register_similar).
-# ThisBlock stays a subscope of ThisKernel even though it left the partition
-# chain, since it is the scope of every shared-memory allocation.
+# A kernel is partitioned into sub-blocks of MAX_SUBBLOCK_LAUNCH_THREADS threads
+# rather than into blocks, so that every scope in the chain that slice_subscope
+# descends through has a compile-time thread count (see static_num_threads
+# below): DataLayouts.register_similar needs that count to be constant to size a
+# thread's register storage, and a dynamically-sized ThisBlock at the top of the
+# chain would make it a run-time value for every slice with more than
+# THREADS_PER_WARP points. ThisBlock stays a subscope of ThisKernel even though
+# it left the partition chain, since it is the scope of every shared-memory
+# allocation (see DataScope(::Type{<:CUDA.CuDeviceArray}) above).
 @inline DataLayouts.num_threads(::ThisKernel) = CUDA.gridDim().x * CUDA.blockDim().x
 @inline DataLayouts.thread_rank(::ThisKernel) =
     (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
@@ -92,11 +105,21 @@ Support for multidimensional blocks may be added in a future release.
 """
 struct ThisBlock <: ThisCooperativeGroup end
 
-# A block is partitioned into warps rather than individual threads, so that
-# slice_subscope can descend past ThisBlock: partitioning straight into threads
-# would stop the descent there, so a 4x4 GLL slab would occupy a whole
-# 16-thread block, capping occupancy at 32 blocks per multiprocessor (512 of
-# 2048 threads) instead of packing 16 slabs into one 256-thread block.
+# A block is partitioned into warps rather than into individual threads, so that
+# slice_subscope can descend past ThisBlock and give a slice with no more points
+# than a warp has lanes a group of exactly that many threads. Partitioning
+# straight into threads makes num_threads(partition(ThisBlock())) equal to 1,
+# which stops the descent at ThisBlock for every slice with more than one point:
+# a 4x4 GLL slab then occupies a whole 16-thread block, wasting half of the
+# block's only warp and capping occupancy at the hardware limit of 32 blocks per
+# multiprocessor (512 of 2048 threads), instead of packing 16 slabs into one
+# 256-thread block. Beyond a warp there is nothing to gain.
+#
+# The chain is only this long because every num_slice_points method is a function
+# of an argument's type. When a slice's point count was a run-time value, every
+# scope the descent could stop at ended up in the Union that slice_subscope
+# returned, and inference widened a Union of more than three scopes to Any, which
+# made every slice loop dispatch dynamically and allocate inside GPU kernels.
 @inline DataLayouts.partition(::ThisBlock) = ThisWarp()
 @inline DataLayouts.num_threads(::ThisBlock) = CUDA.blockDim().x
 @inline DataLayouts.thread_rank(::ThisBlock) = CUDA.threadIdx().x
@@ -149,9 +172,9 @@ Operations that require dynamically-sized array allocations are not supported.
 """
 const ThisWarp = ThisSubBlock{THREADS_PER_WARP}
 
-# Sub-blocks are halved down to MIN_THREADS_PER_SUBBLOCK threads, then split
-# into single threads; halving keeps every sub-block aligned with the lanes of
-# a warp, which thread_rank and synchronize below rely on.
+# Sub-blocks are halved until they hold MIN_THREADS_PER_SUBBLOCK threads, which
+# are partitioned into single threads. Halving keeps every sub-block aligned
+# with the lanes of a warp, which thread_rank and synchronize below rely on.
 @inline DataLayouts.partition(::ThisSubBlock{N}) where {N} =
     N <= MIN_THREADS_PER_SUBBLOCK ? DataLayouts.ThisThread() : ThisSubBlock{N ÷ 2}()
 @inline DataLayouts.num_threads(::ThisSubBlock{N}) where {N} = N
@@ -175,19 +198,33 @@ const ThisWarp = ThisSubBlock{THREADS_PER_WARP}
     cld(CUDA.threadIdx().x, N)
 
 # Largest block that a slice loop assigning every slice to this subscope may be
-# launched with (subscope_launch_threads rounds it to whole sub-blocks).
+# launched with, before DataLayouts.subscope_launch_threads rounds it down to a
+# whole number of sub-blocks.
 #
-# ONE WIDE SUB-BLOCK PER BLOCK. A sub-block wider than a warp has no barrier of
-# its own and is synchronized with the block-wide sync_threads, so a block must
-# hold exactly one of them: two sub-blocks' strided slice subsets can differ in
-# length by one, and the one with the extra slice would reach sync_threads
-# after its neighbour already returned, which is undefined behavior.
+# ONE WIDE SUB-BLOCK PER BLOCK. A sub-block of at most a warp has a barrier of
+# its own (sync_warp), independent of every other warp in the block, so a block
+# may hold as many such sub-blocks as MAX_SUBBLOCK_LAUNCH_THREADS allows. A wider
+# sub-block has no barrier of its own and is synchronized with the block-wide
+# sync_threads instead (see synchronize(::ThisSubBlock) above), so a block must
+# hold exactly one of them: two sub-blocks in one block are given consecutive
+# ranks by subscope_indices, which hands rank r the strided subset r:n:num_slices
+# of the loop's slices, and those subsets differ in length by one whenever
+# num_slices is not a multiple of n. The sub-block with the extra slice then
+# reaches that round's barriers after its neighbours have already returned from
+# the kernel, and sync_threads reached by only part of a block is undefined
+# behavior. Giving each wide sub-block a block of its own makes the block-wide
+# barrier exactly the sub-block's barrier, and makes subscope_rank(scope,
+# ThisBlock()) always one, so the shared memory below holds a single sub-block's
+# worth of values instead of MAX_SUBBLOCK_LAUNCH_THREADS ÷ N of them.
 @inline max_subblock_launch_threads(::ThisSubBlock{N}) where {N} =
     N > THREADS_PER_WARP ? N : MAX_SUBBLOCK_LAUNCH_THREADS
 
-# Assign threads in a sub-block one slice of a block-shared array. The
-# sub-block count comes from max_subblock_launch_threads, since
-# num_subscopes(scope, ThisWarp()) throws for sub-blocks wider than a warp.
+# Assign threads in a sub-block one slice of an array shared across their block.
+# The sub-block count comes from max_subblock_launch_threads, the cap on a
+# sub-block slice loop's block size, rather than from num_subscopes(scope,
+# ThisWarp()): a warp is a subscope of a ThisSubBlock{N} with N > THREADS_PER_WARP
+# and not the other way around, so that call throws an InvalidSubscopeError for
+# wide sub-blocks.
 @inline function DataLayouts.scoped_static_array(
     scope::ThisSubBlock{N}, ::Type{T}, dims,
 ) where {N, T}

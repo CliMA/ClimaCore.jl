@@ -67,10 +67,14 @@ function Base.copyto!(
             CUDA.@allowscalar(mask.N[1])
         # One column per block keeps register pressure low, which matters more than
         # occupancy until there are enough columns to saturate the device; past that,
-        # pack as many columns into each block as 256 threads allow.
-        # 108 is the number of SMs in an A100.
-        # TODO: get this value from CUDA.jl to better optimize for different GPUs
-        threads_dim_y = n_columns > 256 * 108 ? div(256, n_face_levels) : 1
+        # pack as many columns into each block as FD_MAX_THREADS allow. The cap
+        # defaults to 128 threads (2 columns at 64 levels), which measured faster
+        # than 256 on an A100 baroclinic wave (h_elem = 30, z_elem = 63) by
+        # reducing register pressure; CLIMA_FD_MAX_THREADS overrides it.
+        fd_max_threads = FD_MAX_THREADS[]
+        threads_dim_y =
+            n_columns > fd_max_threads * device_attributes().sm_count ?
+            max(1, div(fd_max_threads, n_face_levels)) : 1
         block_dim_x = div(n_columns, threads_dim_y, RoundUp)
         eager_shmem =
             isnothing(eager_shmem_per_thread) ? nothing :

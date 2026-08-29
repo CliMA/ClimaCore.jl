@@ -77,7 +77,8 @@ end
 
         # One wide sub-block per block, so a block-wide barrier is exactly that
         # sub-block's barrier. Narrower sub-blocks keep sharing a block.
-        @test cld(block_threads, N) == (N > ext.THREADS_PER_WARP ? 1 : cld(256, N))
+        @test cld(block_threads, N) ==
+              (N > ext.THREADS_PER_WARP ? 1 : cld(ext.MAX_SUBBLOCK_LAUNCH_THREADS, N))
 
         # The trailing dimension of a sub-block's shared memory has one entry per
         # sub-block a block can hold, so the largest index a launched block can

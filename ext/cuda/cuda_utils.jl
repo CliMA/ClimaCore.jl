@@ -168,11 +168,14 @@ function uncached_launch_configuration(
     # Launch a single wave of blocks unless a caller asks for more. This
     # replaces a heuristic that launched fld(regs_per_thread, 48) + 1 waves, on
     # the assumption that higher register pressure leads to uneven load
-    # distributions. An A100 sweep over max_waves in (1, 2, 4) found one wave to
-    # be at least as fast throughout and clearly fastest for reductions, where
-    # the equal-shape lazy reduction went from 145 to 129 us, so that assumption
-    # was costing more in block-scheduling than it recovered.
-    max_waves = something(default_max_waves, 1)
+    # distributions. An A100 sweep over max_waves in (1, 2, 4) on small unit
+    # benchmarks found one wave at least as fast throughout and clearly fastest
+    # for reductions (the equal-shape lazy reduction went from 145 to 129 us).
+    # A re-sweep on a realistic problem (baroclinic wave, h_elem = 30,
+    # z_elem = 63, A100) found more waves at most marginally faster, so the
+    # single-wave default stands; CLIMA_CUDA_MAX_WAVES overrides it for tuning
+    # experiments.
+    max_waves = something(default_max_waves, MAX_WAVES[])
 
     # Block sizes are searched in whole multiples of this unit, one warp unless
     # a caller needs a coarser one: a partially populated sub-block skips the
@@ -316,7 +319,8 @@ end
 const reported_stats = Dict()
 const kernel_names = IdDict()
 
-collect_kernel_stats() = false
+# Read from a Ref rather than ENV: this runs on every auto_launch! call.
+collect_kernel_stats() = COLLECT_KERNEL_STATS[]
 
 function _memory_bytes(memory, key::Symbol)
     if hasproperty(memory, key)
@@ -349,15 +353,37 @@ function _getenv_bool(var::AbstractString; default::Bool = false)
     end
 end
 
-# Create a ref to hold the setting determining whether to name kernels from
-# stack trace
+# Parse integer-valued environment variables, warning on unparsable values.
+# Only called from __init__: kernel-launch paths must read the Refs below, not
+# ENV.
+function _getenv_int(var::AbstractString, default::Int)
+    raw = get(ENV, var, nothing)
+    raw === nothing && return default
+    value = tryparse(Int, strip(String(raw)))
+    isnothing(value) &&
+        @warn "Unrecognized integer env var value; using default" var = var val =
+            raw default = default
+    return something(value, default)
+end
+
+# Refs to hold settings read from environment variables in __init__: kernel
+# naming from stack traces, per-launch kernel statistics, the wave count used
+# by the launch-configuration search, and the block-size cap of the eager FD
+# kernel.
 const NAME_KERNELS_FROM_STACK_TRACE = Ref{Bool}(false)
+const COLLECT_KERNEL_STATS = Ref{Bool}(false)
+const MAX_WAVES = Ref{Int}(1)
+const FD_MAX_THREADS = Ref{Int}(128)
 
 # Always reload when module is imported so precompilation doesn't make it "stick"
 function __init__()
     NAME_KERNELS_FROM_STACK_TRACE[] = _getenv_bool(
         "CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE"; default = false,
     )
+    COLLECT_KERNEL_STATS[] =
+        _getenv_bool("CLIMA_COLLECT_KERNEL_STATS"; default = false)
+    MAX_WAVES[] = max(1, _getenv_int("CLIMA_CUDA_MAX_WAVES", 1))
+    FD_MAX_THREADS[] = max(1, _getenv_int("CLIMA_FD_MAX_THREADS", 128))
 end
 
 name_kernels_from_stack_trace() = NAME_KERNELS_FROM_STACK_TRACE[]
