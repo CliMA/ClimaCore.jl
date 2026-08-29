@@ -82,20 +82,6 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     return @inbounds local_geom[v, i, j, h]
 end
 
-
-"""
-    AbstractBoundaryCondition
-
-An abstract type for boundary conditions for [`FiniteDifferenceOperator`](@ref)s.
-
-Subtypes should define:
-
-  - [`boundary_width`](@ref)
-  - [`stencil_left_boundary`](@ref)
-  - [`stencil_right_boundary`](@ref)
-"""
-abstract type AbstractBoundaryCondition end
-
 strip_space(bc::AbstractBoundaryCondition, parent_space) =
     hasproperty(bc, :val) ?
     unionall_type(typeof(bc))(strip_space(bc.val, parent_space)) : bc

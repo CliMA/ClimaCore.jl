@@ -15,14 +15,15 @@ import ClimaCore.Geometry: ⊗
 
 # The standard cubed-sphere spectral-element space used by the DG tests.
 # `discontinuous = true` marks the grid as DG (skips DSS; see
-# `test/Spaces/unit_discontinuous_spaces.jl`).
+# `test/Spaces/unit_discontinuous_spaces.jl`). The distributed tests pass an
+# MPI `context` to partition the sphere across ranks.
 function dg_sphere_space(
     ::Type{FT};
     radius = FT(6.371e6),
     helem = 4,
     Nq = 4,
+    context = ClimaComms.SingletonCommsContext(),
 ) where {FT}
-    context = ClimaComms.SingletonCommsContext()
     hdomain = Domains.SphereDomain(radius)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
     htopology = Topologies.Topology2D(context, hmesh)

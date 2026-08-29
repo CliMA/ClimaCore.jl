@@ -23,6 +23,7 @@ import ..Topologies
 import ..Meshes
 import ..Grids
 import ..Fields: Fields, Field
+import UnrolledUtilities: unrolled_map, unrolled_filter
 
 include("common.jl")
 include("spectralelement.jl")
