@@ -246,6 +246,236 @@ function get_CoordType2D(topology)
     end
 end
 
+# The "epsilon bubble" correction: the numerical area of the domain (the sum
+# of nodal integration weights times their Jacobians) is not exactly equal to
+# the geometric area (e.g. 4π radius² for the sphere), but the two are
+# required to match. The correction modifies the interior weights of each
+# element so that its numerical area equals the geometric area, approximated
+# by `high_order_elem_area` from a quadrature of twice the order. Linear
+# elements (Nq == 2) have no interior nodes, so the deficit is spread
+# uniformly over all nodes; higher-order elements use the HOMME bubble
+# correction, scaling J at interior nodes only. `@noinline` keeps this branchy
+# block a separately inferred and cached unit of the grid constructor.
+@noinline function apply_bubble_correction!(
+    local_geometry,
+    topology,
+    quadrature_style,
+    global_geometry,
+    autodiff_metric,
+    lidx,
+    elem,
+    elem_area::FT,
+    high_order_elem_area::FT,
+    quad_weights,
+) where {FT}
+    Nq = Quadratures.degrees_of_freedom(quadrature_style)
+    lg_args =
+        (global_geometry, topology, quadrature_style, autodiff_metric, elem)
+    if abs(elem_area - high_order_elem_area) ≤ eps(FT)
+        for i in 1:Nq, j in 1:Nq
+            u, ∂u∂ξ = local_geometry_at_nodal_point(lg_args..., i, j)
+            J = det(parent(∂u∂ξ))
+            WJ = J * quad_weights[i] * quad_weights[j]
+            local_geometry[1, i, j, lidx] = Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
+        end
+    else
+        Δarea = high_order_elem_area - elem_area
+        if Nq == 2
+            for i in 1:Nq, j in 1:Nq
+                u, ∂u∂ξ = local_geometry_at_nodal_point(lg_args..., i, j)
+                J = det(parent(∂u∂ξ)) + Δarea / Nq^2
+                WJ = J * quad_weights[i] * quad_weights[j]
+                local_geometry[1, i, j, lidx] =
+                    Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
+            end
+        else
+            interior_elem_area = zero(FT)
+            for i in 2:(Nq - 1), j in 2:(Nq - 1)
+                u, ∂u∂ξ = local_geometry_at_nodal_point(lg_args..., i, j)
+                J = det(parent(∂u∂ξ))
+                WJ = J * quad_weights[i] * quad_weights[j]
+                interior_elem_area += WJ
+            end
+            if abs(interior_elem_area) ≤ sqrt(eps(FT))
+                error(
+                    "Bubble correction cannot be performed; sum of inner weights is too small.",
+                )
+            end
+            rel_interior_elem_area_Δ = Δarea / interior_elem_area
+
+            for i in 1:Nq, j in 1:Nq
+                u, ∂u∂ξ = local_geometry_at_nodal_point(lg_args..., i, j)
+                J = det(parent(∂u∂ξ))
+                # Modify J only for interior nodes
+                if i != 1 && j != 1 && i != Nq && j != Nq
+                    J *= (1 + rel_interior_elem_area_Δ)
+                end
+                WJ = J * quad_weights[i] * quad_weights[j]
+                local_geometry[1, i, j, lidx] =
+                    Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
+            end
+        end
+    end
+end
+
+@noinline function compute_nodal_local_geometries!(
+    local_geometry,
+    topology,
+    quadrature_style,
+    global_geometry,
+    autodiff_metric,
+    enable_bubble,
+)
+    domain = Topologies.domain(topology)
+    FT = Domains.float_type(domain)
+    Nq = Quadratures.degrees_of_freedom(quadrature_style)
+    _, quad_weights = Quadratures.quadrature_points(FT, quadrature_style)
+
+    if enable_bubble
+        high_order_quadrature_style = Quadratures.GLL{Nq * 2}()
+        high_order_Nq =
+            Quadratures.degrees_of_freedom(high_order_quadrature_style)
+        _, high_order_quad_weights =
+            Quadratures.quadrature_points(FT, high_order_quadrature_style)
+        for (lidx, elem) in enumerate(Topologies.localelems(topology))
+            elem_area = zero(FT)
+            high_order_elem_area = zero(FT)
+            lg_args = (
+                global_geometry,
+                topology,
+                quadrature_style,
+                autodiff_metric,
+                elem,
+            )
+            high_order_lg_args = (
+                global_geometry,
+                topology,
+                high_order_quadrature_style,
+                autodiff_metric,
+                elem,
+            )
+            # high-order quadrature loop for computing the geometric element
+            # face area
+            for i in 1:high_order_Nq, j in 1:high_order_Nq
+                u, ∂u∂ξ =
+                    local_geometry_at_nodal_point(high_order_lg_args..., i, j)
+                J_high_order = det(parent(∂u∂ξ))
+                WJ_high_order =
+                    J_high_order *
+                    high_order_quad_weights[i] *
+                    high_order_quad_weights[j]
+                high_order_elem_area += WJ_high_order
+            end
+            # low-order quadrature loop for computing the numerical element
+            # face area
+            for i in 1:Nq, j in 1:Nq
+                u, ∂u∂ξ = local_geometry_at_nodal_point(lg_args..., i, j)
+                J = det(parent(∂u∂ξ))
+                WJ = J * quad_weights[i] * quad_weights[j]
+                elem_area += WJ
+            end
+            apply_bubble_correction!(
+                local_geometry,
+                topology,
+                quadrature_style,
+                global_geometry,
+                autodiff_metric,
+                lidx,
+                elem,
+                elem_area,
+                high_order_elem_area,
+                quad_weights,
+            )
+        end
+    else
+        for (lidx, elem) in enumerate(Topologies.localelems(topology))
+            lg_args = (
+                global_geometry,
+                topology,
+                quadrature_style,
+                autodiff_metric,
+                elem,
+            )
+            for i in 1:Nq, j in 1:Nq
+                u, ∂u∂ξ = local_geometry_at_nodal_point(lg_args..., i, j)
+                J = det(parent(∂u∂ξ))
+                WJ = J * quad_weights[i] * quad_weights[j]
+                local_geometry[1, i, j, lidx] =
+                    Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
+            end
+        end
+    end
+end
+
+@noinline function compute_surface_geometries(
+    ::Type{VIJH},
+    ::Type{SG},
+    ::Type{FT},
+    DA,
+    local_geometry,
+    topology,
+    quad_weights,
+    Nq,
+) where {VIJH, SG, FT}
+    interior_faces = Array(Topologies.interior_faces(topology))
+    internal_surface_geometry =
+        VIJH{SG, 1, Nq, 1, nothing}(Array{FT}, length(interior_faces))
+    for (iface, (lidx⁻, face⁻, lidx⁺, face⁺, reversed)) in
+        enumerate(interior_faces)
+        local_geometry_slab⁻ = slab(local_geometry, 1, lidx⁻)
+        local_geometry_slab⁺ = slab(local_geometry, 1, lidx⁺)
+
+        for q in 1:Nq
+            sgeom⁻ = compute_surface_geometry(
+                local_geometry_slab⁻,
+                quad_weights,
+                face⁻,
+                q,
+                false,
+            )
+            sgeom⁺ = compute_surface_geometry(
+                local_geometry_slab⁺,
+                quad_weights,
+                face⁺,
+                q,
+                reversed,
+            )
+
+            @assert sgeom⁻.sWJ ≈ sgeom⁺.sWJ
+            @assert sgeom⁻.normal ≈ -sgeom⁺.normal
+
+            internal_surface_geometry[1, q, 1, iface] = sgeom⁻
+        end
+    end
+    internal_surface_geometry =
+        DataLayouts.rebuild(internal_surface_geometry, DA)
+
+    boundary_surface_geometries =
+        map(Topologies.boundary_tags(topology)) do boundarytag
+            boundary_faces =
+                Topologies.boundary_faces(topology, boundarytag)
+            boundary_surface_geometry = VIJH{SG, 1, Nq, 1, nothing}(
+                Array{FT},
+                length(boundary_faces),
+            )
+            for (iface, (elem, face)) in enumerate(boundary_faces)
+                local_geometry_slab = slab(local_geometry, 1, elem)
+                for q in 1:Nq
+                    boundary_surface_geometry[1, q, 1, iface] =
+                        compute_surface_geometry(
+                            local_geometry_slab,
+                            quad_weights,
+                            face,
+                            q,
+                            false,
+                        )
+                end
+            end
+            DataLayouts.rebuild(boundary_surface_geometry, DA)
+        end
+    return (internal_surface_geometry, boundary_surface_geometries)
+end
+
 function _SpectralElementGrid2D(
     topology,
     quadrature_style,
@@ -255,21 +485,6 @@ function _SpectralElementGrid2D(
     enable_mask,
     discontinuous,
 ) where {VIJH}
-    # 1. compute localgeom for local elememts
-    # 2. ghost exchange of localgeom
-    # 3. do a round of dss on WJs
-    # 4. compute dss weights (WJ ./ dss(WJ)) (local and ghost)
-
-    # DSS on a field would consist of
-    # 1. copy to send buffers
-    # 2. start exchange
-    # 3. dss of internal connections
-    #  - option for weighting and transformation
-    # 4. finish exchange
-    # 5. dss of ghost connections
-
-    ### How to DSS multiple fields?
-    # 1. allocate buffers externally
     DA = ClimaComms.array_type(topology)
     domain = Topologies.domain(topology)
     FT = Domains.float_type(domain)
@@ -282,179 +497,35 @@ function _SpectralElementGrid2D(
     AIdx = Geometry.coordinate_axis(CoordType2D)
     Nh = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
-    high_order_quadrature_style = Quadratures.GLL{Nq * 2}()
-    high_order_Nq = Quadratures.degrees_of_freedom(high_order_quadrature_style)
     LG = Geometry.LocalGeometryType(CoordType2D, FT, AIdx)
 
     local_geometry = VIJH{LG, 1, Nq, Nq, nothing}(Array{FT}, Nh)
-
-    _, quad_weights = Quadratures.quadrature_points(FT, quadrature_style)
-    _, high_order_quad_weights =
-        Quadratures.quadrature_points(FT, high_order_quadrature_style)
-    for (lidx, elem) in enumerate(Topologies.localelems(topology))
-        elem_area = zero(FT)
-        high_order_elem_area = zero(FT)
-        Δarea = zero(FT)
-        interior_elem_area = zero(FT)
-        rel_interior_elem_area_Δ = zero(FT)
-        lg_args =
-            (global_geometry, topology, quadrature_style, autodiff_metric, elem)
-        high_order_lg_args = (
-            global_geometry,
-            topology,
-            high_order_quadrature_style,
-            autodiff_metric,
-            elem,
-        )
-        # high-order quadrature loop for computing geometric element face area.
-        for i in 1:high_order_Nq, j in 1:high_order_Nq
-            u, ∂u∂ξ = local_geometry_at_nodal_point(high_order_lg_args..., i, j)
-            J_high_order = det(parent(∂u∂ξ))
-            WJ_high_order =
-                J_high_order *
-                high_order_quad_weights[i] *
-                high_order_quad_weights[j]
-            high_order_elem_area += WJ_high_order
-        end
-        # low-order quadrature loop for computing numerical element face area
-        for i in 1:Nq, j in 1:Nq
-            u, ∂u∂ξ = local_geometry_at_nodal_point(lg_args..., i, j)
-            J = det(parent(∂u∂ξ))
-            WJ = J * quad_weights[i] * quad_weights[j]
-            elem_area += WJ
-            if !enable_bubble
-                local_geometry[1, i, j, lidx] = Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
-            end
-        end
-
-        # If enabled, apply bubble correction
-        if enable_bubble
-            if abs(elem_area - high_order_elem_area) ≤ eps(FT)
-                for i in 1:Nq, j in 1:Nq
-                    u, ∂u∂ξ = local_geometry_at_nodal_point(lg_args..., i, j)
-                    J = det(parent(∂u∂ξ))
-                    WJ = J * quad_weights[i] * quad_weights[j]
-                    local_geometry[1, i, j, lidx] = Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
-                end
-            else
-                # The idea behind the so-called `bubble_correction` is that
-                # the numerical area of the domain (e.g., the sphere) is given by the sum
-                # of nodal integration weights times their corresponding Jacobians. However,
-                # this discrete sum is not exactly equal to the exact geometric area
-                # (4pi*radius^2 for the sphere). It is required that numerical area = geometric area.
-                # The "epsilon bubble" approach modifies the inner weights in each
-                # element so that geometric and numerical areas of each element match.
-
-                # Compute difference between geometric area of an element and its approximate numerical area
-                Δarea = high_order_elem_area - elem_area
-
-                # Linear elements: Nq == 2 (SpectralElementSpace2D cannot have Nq < 2)
-                # Use uniform bubble correction
-                if Nq == 2
-                    for i in 1:Nq, j in 1:Nq
-                        u, ∂u∂ξ =
-                            local_geometry_at_nodal_point(lg_args..., i, j)
-                        J = det(parent(∂u∂ξ))
-                        J += Δarea / Nq^2
-                        WJ = J * quad_weights[i] * quad_weights[j]
-                        local_geometry[1, i, j, lidx] =
-                            Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
-                    end
-                else # Higher-order elements: Use HOMME bubble correction for the interior nodes
-                    for i in 2:(Nq - 1), j in 2:(Nq - 1)
-                        u, ∂u∂ξ =
-                            local_geometry_at_nodal_point(lg_args..., i, j)
-                        J = det(parent(∂u∂ξ))
-                        WJ = J * quad_weights[i] * quad_weights[j]
-                        interior_elem_area += WJ
-                    end
-                    # Check that interior_elem_area is not too small
-                    if abs(interior_elem_area) ≤ sqrt(eps(FT))
-                        error(
-                            "Bubble correction cannot be performed; sum of inner weights is too small.",
-                        )
-                    end
-                    rel_interior_elem_area_Δ = Δarea / interior_elem_area
-
-                    for i in 1:Nq, j in 1:Nq
-                        u, ∂u∂ξ =
-                            local_geometry_at_nodal_point(lg_args..., i, j)
-                        J = det(parent(∂u∂ξ))
-                        # Modify J only for interior nodes
-                        if i != 1 && j != 1 && i != Nq && j != Nq
-                            J *= (1 + rel_interior_elem_area_Δ)
-                        end
-                        WJ = J * quad_weights[i] * quad_weights[j]
-                        # Finally allocate local geometry
-                        local_geometry[1, i, j, lidx] =
-                            Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
-                    end
-                end
-            end
-        end
-    end
+    compute_nodal_local_geometries!(
+        local_geometry,
+        topology,
+        quadrature_style,
+        global_geometry,
+        autodiff_metric,
+        enable_bubble,
+    )
 
     SG = Geometry.SurfaceGeometry{
         FT,
         Geometry.LocalVector{FT, AIdx, SVector{2, FT}},
     }
-    interior_faces = Array(Topologies.interior_faces(topology))
-
+    _, quad_weights = Quadratures.quadrature_points(FT, quadrature_style)
     if quadrature_style isa Quadratures.GLL
-        internal_surface_geometry =
-            VIJH{SG, 1, Nq, 1, nothing}(Array{FT}, length(interior_faces))
-        for (iface, (lidx⁻, face⁻, lidx⁺, face⁺, reversed)) in enumerate(interior_faces)
-            local_geometry_slab⁻ = slab(local_geometry, 1, lidx⁻)
-            local_geometry_slab⁺ = slab(local_geometry, 1, lidx⁺)
-
-            for q in 1:Nq
-                sgeom⁻ = compute_surface_geometry(
-                    local_geometry_slab⁻,
-                    quad_weights,
-                    face⁻,
-                    q,
-                    false,
-                )
-                sgeom⁺ = compute_surface_geometry(
-                    local_geometry_slab⁺,
-                    quad_weights,
-                    face⁺,
-                    q,
-                    reversed,
-                )
-
-                @assert sgeom⁻.sWJ ≈ sgeom⁺.sWJ
-                @assert sgeom⁻.normal ≈ -sgeom⁺.normal
-
-                internal_surface_geometry[1, q, 1, iface] = sgeom⁻
-            end
-        end
-        internal_surface_geometry =
-            DataLayouts.rebuild(internal_surface_geometry, DA)
-
-        boundary_surface_geometries =
-            map(Topologies.boundary_tags(topology)) do boundarytag
-                boundary_faces =
-                    Topologies.boundary_faces(topology, boundarytag)
-                boundary_surface_geometry = VIJH{SG, 1, Nq, 1, nothing}(
-                    Array{FT},
-                    length(boundary_faces),
-                )
-                for (iface, (elem, face)) in enumerate(boundary_faces)
-                    local_geometry_slab = slab(local_geometry, 1, elem)
-                    for q in 1:Nq
-                        boundary_surface_geometry[1, q, 1, iface] =
-                            compute_surface_geometry(
-                                local_geometry_slab,
-                                quad_weights,
-                                face,
-                                q,
-                                false,
-                            )
-                    end
-                end
-                DataLayouts.rebuild(boundary_surface_geometry, DA)
-            end
+        (internal_surface_geometry, boundary_surface_geometries) =
+            compute_surface_geometries(
+                VIJH,
+                SG,
+                FT,
+                DA,
+                local_geometry,
+                topology,
+                quad_weights,
+                Nq,
+            )
     else
         internal_surface_geometry = nothing
         boundary_surface_geometries = nothing
