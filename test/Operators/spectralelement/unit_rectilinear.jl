@@ -129,7 +129,7 @@ end
     for (topology, space, coords) in (grid_test_setup,)
         f = sin.(coords.x .+ 2 .* coords.y)
 
-        wgrad = Operators.WeakGradient()
+        wgrad = Operators.Gradient{Operators.WeakForm}()
         gradf = wgrad.(f)
         Spaces.weighted_dss!(gradf)
 
@@ -217,7 +217,7 @@ end
             2 .* sin.(coords.x .+ 2 .* coords.y)
 
         curl = Operators.Curl()
-        wcurl = Operators.WeakCurl()
+        wcurl = Operators.Curl{Operators.WeakForm}()
         curlcurlv =
             Geometry.UVVector.(
                 wcurl.(
@@ -241,7 +241,7 @@ end
                 cos.(3 .* coords.x .+ 4 .* coords.y),
             )
 
-        wcurl = Operators.WeakCurl()
+        wcurl = Operators.Curl{Operators.WeakForm}()
         curlv = wcurl.(Geometry.Covariant12Vector.(v))
         Spaces.weighted_dss!(curlv)
         curlv_ref =
@@ -287,7 +287,7 @@ end
                 cos.(3 .* coords.x .+ 2 .* coords.y),
             )
 
-        wdiv = Operators.WeakDivergence()
+        wdiv = Operators.Divergence{Operators.WeakForm}()
         divv = wdiv.(v)
         Spaces.weighted_dss!(divv)
         divv_ref =
@@ -337,7 +337,7 @@ end
         y = @. sin(k * coords.x + l * coords.y)
         ∇⁴y_ref = @. (k^2 + l^2)^2 * sin(k * coords.x + l * coords.y)
 
-        wdiv = Operators.WeakDivergence()
+        wdiv = Operators.Divergence{Operators.WeakForm}()
         grad = Operators.Gradient()
         χ = Spaces.weighted_dss!(@. wdiv(grad(y)))
         ∇⁴y = Spaces.weighted_dss!(@. wdiv(grad(χ)))
@@ -356,10 +356,10 @@ end
             0.0,
         )
         curl = Operators.Curl()
-        wcurl = Operators.WeakCurl()
+        wcurl = Operators.Curl{Operators.WeakForm}()
 
         sdiv = Operators.Divergence()
-        wgrad = Operators.WeakGradient()
+        wgrad = Operators.Gradient{Operators.WeakForm}()
 
         χ = Spaces.weighted_dss!(
             @. Geometry.UVVector(wgrad(sdiv(y))) - Geometry.UVVector(
@@ -398,7 +398,7 @@ end
         )
 
         curl = Operators.Curl()
-        wcurl = Operators.WeakCurl()
+        wcurl = Operators.Curl{Operators.WeakForm}()
 
         @test Geometry.Contravariant123Vector.(curl.(yₕ)) .+
               Geometry.Contravariant123Vector.(curl.(yᵥ)) ≈
@@ -426,7 +426,7 @@ end
     masked_coords = Fields.coordinate_field(masked_space)
 
     grad = Operators.Gradient()
-    wdiv = Operators.WeakDivergence()
+    wdiv = Operators.Divergence{Operators.WeakForm}()
     f = sin.(grid_coords.x .+ 2 .* grid_coords.y)
     masked_f = zeros(masked_space)
     parent(masked_f) .= parent(f)

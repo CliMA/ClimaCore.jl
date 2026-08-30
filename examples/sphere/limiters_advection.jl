@@ -175,7 +175,7 @@ for (k, ne) in enumerate(ne_seq)
     function f!(ystar, y, parameters, t)
 
         grad = Operators.Gradient()
-        wdiv = Operators.WeakDivergence()
+        wdiv = Operators.Divergence{Operators.WeakForm}()
         T = parameters.T
 
         coords = Fields.coordinate_field(axes(y.ρq))

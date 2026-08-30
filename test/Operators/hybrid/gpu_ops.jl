@@ -19,11 +19,11 @@ include("utils_cuda.jl")
 
 
     hdiv = Operators.Divergence()
-    hwdiv = Operators.WeakDivergence()
+    hwdiv = Operators.Divergence{Operators.WeakForm}()
     hgrad = Operators.Gradient()
-    hwgrad = Operators.WeakGradient()
+    hwgrad = Operators.Gradient{Operators.WeakForm}()
     hcurl = Operators.Curl()
-    hwcurl = Operators.WeakCurl()
+    hwcurl = Operators.Curl{Operators.WeakForm}()
 
 
     ccoords = Fields.coordinate_field(hv_center_space_gpu)

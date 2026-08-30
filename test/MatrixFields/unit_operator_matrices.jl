@@ -10,10 +10,10 @@ import ClimaCore.Operators:
     Extrapolate,
     InterpolateC2F,
     InterpolateF2C,
-    LeftBiasedC2F,
-    LeftBiasedF2C,
-    RightBiasedC2F,
-    RightBiasedF2C,
+    BottomBiasedC2F,
+    BottomBiasedF2C,
+    TopBiasedC2F,
+    TopBiasedF2C,
     WeightedInterpolateC2F,
     WeightedInterpolateF2C,
     UpwindBiasedProductC2F,
@@ -65,9 +65,9 @@ function test_op_matrix(
 
     op = if BC <: Nothing
         Op()
-    elseif Op <: Union{LeftBiasedC2F, LeftBiasedF2C}
+    elseif Op <: Union{BottomBiasedC2F, BottomBiasedF2C}
         Op(; bottom = op_bc)
-    elseif Op <: Union{RightBiasedC2F, RightBiasedF2C}
+    elseif Op <: Union{TopBiasedC2F, TopBiasedF2C}
         Op(; top = op_bc)
     else
         Op(; bottom = op_bc, top = op_bc)
@@ -119,14 +119,14 @@ end
     test_op_matrix(InterpolateC2F, SetValue, (ᶜnested,))
     test_op_matrix(InterpolateC2F, Extrapolate, (ᶜnested,))
     test_op_matrix(InterpolateF2C, Nothing, (ᶠnested,))
-    test_op_matrix(LeftBiasedC2F, Nothing, (ᶜnested,), true)
-    test_op_matrix(LeftBiasedC2F, SetValue, (ᶜnested,))
-    test_op_matrix(LeftBiasedF2C, Nothing, (ᶠnested,))
-    test_op_matrix(LeftBiasedF2C, SetValue, (ᶠnested,))
-    test_op_matrix(RightBiasedC2F, Nothing, (ᶜnested,), true)
-    test_op_matrix(RightBiasedC2F, SetValue, (ᶜnested,))
-    test_op_matrix(RightBiasedF2C, Nothing, (ᶠnested,))
-    test_op_matrix(RightBiasedF2C, SetValue, (ᶠnested,))
+    test_op_matrix(BottomBiasedC2F, Nothing, (ᶜnested,), true)
+    test_op_matrix(BottomBiasedC2F, SetValue, (ᶜnested,))
+    test_op_matrix(BottomBiasedF2C, Nothing, (ᶠnested,))
+    test_op_matrix(BottomBiasedF2C, SetValue, (ᶠnested,))
+    test_op_matrix(TopBiasedC2F, Nothing, (ᶜnested,), true)
+    test_op_matrix(TopBiasedC2F, SetValue, (ᶜnested,))
+    test_op_matrix(TopBiasedF2C, Nothing, (ᶠnested,))
+    test_op_matrix(TopBiasedF2C, SetValue, (ᶠnested,))
     test_op_matrix(WeightedInterpolateC2F, Nothing, (ᶜscalar, ᶜnested), true)
     test_op_matrix(WeightedInterpolateC2F, SetValue, (ᶜscalar, ᶜnested))
     test_op_matrix(WeightedInterpolateC2F, Extrapolate, (ᶜscalar, ᶜnested))
@@ -396,11 +396,11 @@ end
     set_ct12_curls = (; bottom = SetCurl(ct12_zero), top = SetCurl(ct12_zero))
 
     ᶠinterp = InterpolateC2F(; set_nested_values...)
-    ᶜlbias = LeftBiasedF2C()
-    ᶠrbias = RightBiasedC2F(; set_nested_values.top)
+    ᶜlbias = BottomBiasedF2C()
+    ᶠrbias = TopBiasedC2F(; set_nested_values.top)
     ᶜwinterp = WeightedInterpolateF2C()
     ᶠwinterp = WeightedInterpolateC2F(; set_nested_values...)
-    ᶜrbias = RightBiasedF2C(; set_nested_values.top)
+    ᶜrbias = TopBiasedF2C(; set_nested_values.top)
     ᶠupwind = UpwindBiasedProductC2F()
     ᶠgrad = GradientC2F(; set_c3_gradients...)
     ᶜdiv = DivergenceF2C()

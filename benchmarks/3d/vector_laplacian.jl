@@ -48,11 +48,11 @@ const CT3 = Geometry.Contravariant3Vector
 const CT123 = Geometry.Contravariant123Vector
 
 const divₕ = Operators.Divergence()
-const wdivₕ = Operators.WeakDivergence()
+const wdivₕ = Operators.Divergence{Operators.WeakForm}()
 const gradₕ = Operators.Gradient()
-const wgradₕ = Operators.WeakGradient()
+const wgradₕ = Operators.Gradient{Operators.WeakForm}()
 const curlₕ = Operators.Curl()
-const wcurlₕ = Operators.WeakCurl()
+const wcurlₕ = Operators.Curl{Operators.WeakForm}()
 
 
 function vector_laplacian!(ᶜ∇²u, u, temp_C123)

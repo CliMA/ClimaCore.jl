@@ -19,7 +19,7 @@ radius = FT(1)
 domain = Domains.SphereDomain(radius)
 
 grad = Operators.Gradient()
-wgrad = Operators.WeakGradient()
+wgrad = Operators.Gradient{Operators.WeakForm}()
 
 @testset "gradient" begin
     Ne = 5

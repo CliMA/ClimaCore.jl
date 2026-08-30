@@ -55,8 +55,8 @@ end
 # temp1's slab.
 function test_fused_slab_loop(space, subspace)
     FT = Spaces.undertype(space)
-    (div, wdiv) = (Operators.Divergence(), Operators.WeakDivergence())
-    (grad, wgrad) = (Operators.Gradient(), Operators.WeakGradient())
+    (div, wdiv) = (Operators.Divergence(), Operators.Divergence{Operators.WeakForm}())
+    (grad, wgrad) = (Operators.Gradient(), Operators.Gradient{Operators.WeakForm}())
     curl = Operators.Curl()
     dest = Fields.Field(FT, space)
     src1 = Fields.Field(Tuple{FT, FT}, space)

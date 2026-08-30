@@ -50,8 +50,8 @@ end
 for FT in (Float32, Float64)
     @testset "split divergence (FT = $FT)" begin
         split_div = Operators.SplitDivergence()
-        wdiv = Operators.WeakDivergence()
-        wgrad = Operators.WeakGradient()
+        wdiv = Operators.Divergence{Operators.WeakForm}()
+        wgrad = Operators.Gradient{Operators.WeakForm}()
         div = Operators.Divergence()
         grad = Operators.Gradient()
 

@@ -2,11 +2,22 @@
     FormType
 
 Supertype of the singleton types [`StrongForm`](@ref) and [`WeakForm`](@ref),
-which distinguish the variational form of a spectral element operator. The two
-variants share the same interior computation; they differ only in the applied
-derivative matrix (`D` vs. its integration-by-parts counterpart `-Dᵀ`) and in
-the weights that multiply the argument and divide the result. Weak variants are
-defined as aliases; e.g., `WeakDivergence()` is a `Divergence{WeakForm}`.
+which distinguish the variational form of a spectral element operator.
+
+The strong and weak variants of an operator share the same interior
+computation; they differ only in three form-dependent factors:
+
+  - whether the derivative matrix is applied directly or transposed with a sign
+    flip (from integration by parts); see `deriv_matrix`,
+  - whether the argument is multiplied by the quadrature weights `W` or by
+    one of the Jacobian factors `J` or `WJ`; see
+    `materialize_quadrature_weighted` and `materialize_jacobian_weighted`,
+  - whether the result is divided by the quadrature weights or by one of the
+    Jacobian factors; see `quadrature_unweighted` and `jacobian_unweighted`.
+
+Operators that have strong/weak variants use a `FormType` parameter; e.g.,
+`Divergence()` is a `Divergence{StrongForm}`, and the weak divergence is
+`Divergence{WeakForm}()`.
 """
 abstract type FormType end
 
@@ -24,8 +35,8 @@ struct StrongForm <: FormType end
 
 The [`FormType`](@ref) of an operator that discretizes the volume-integral
 contribution of the corresponding weak-form expression, obtained after
-integration by parts (e.g. [`WeakDivergence`](@ref), [`WeakGradient`](@ref), and
-[`WeakCurl`](@ref)).
+integration by parts (e.g. [`Divergence{WeakForm}`](@ref Divergence),
+[`Gradient{WeakForm}`](@ref Gradient), and [`Curl{WeakForm}`](@ref Curl)).
 """
 struct WeakForm <: FormType end
 
@@ -515,10 +526,16 @@ end
 end
 
 """
-    div = Divergence()
+    div = Divergence()              # strong form, == Divergence{StrongForm}()
+    wdiv = Divergence{WeakForm}()   # weak form
     div.(u)
 
-Computes the per-element spectral (strong) divergence of a vector field ``u``.
+Computes the per-element spectral divergence of a vector field ``u``.
+`Divergence()` computes the strong form; `Divergence{WeakForm}()` computes the
+weak form (the volume-integral contribution obtained after integration by
+parts), distinguished by the [`FormType`](@ref) parameter.
+
+## Strong form
 
 The divergence of a vector field ``u`` is defined as
 
@@ -544,6 +561,42 @@ J^{-1} \\sum_i D_i J u^i
 ```
 
 where ``D_i`` is the derivative matrix along the ``i``th dimension
+
+## Weak form
+
+The weak divergence is the scalar field ``\\theta \\in \\mathcal{V}_0`` such
+that for all ``\\phi\\in \\mathcal{V}_0``
+
+```math
+\\int_\\Omega \\phi \\theta \\, d \\Omega
+=
+- \\int_\\Omega (\\nabla \\phi) \\cdot u \\,d \\Omega
+```
+
+where ``\\mathcal{V}_0`` is the space of ``u``. It arises as the contribution
+of the volume integral after applying integration by parts to the weak form
+expression of the divergence
+
+```math
+\\int_\\Omega \\phi (\\nabla \\cdot u) \\, d \\Omega
+=
+- \\int_\\Omega (\\nabla \\phi) \\cdot u \\,d \\Omega
++ \\oint_{\\partial \\Omega} \\phi (u \\cdot n) \\,d \\sigma
+```
+
+It can be written in matrix form as
+
+```math
+ϕ^\\top WJ θ = - \\sum_i (D_i ϕ)^\\top WJ u^i
+```
+
+which reduces to
+
+```math
+θ = -(WJ)^{-1} \\sum_i D_i^\\top WJ u^i
+```
+
+where ``W`` is the diagonal matrix of quadrature weights.
 
 ## References
 
@@ -699,11 +752,17 @@ function apply_operator(op::SplitDivergence, arg1, arg2)
 end
 
 """
-    grad = Gradient()
+    grad = Gradient()              # strong form, == Gradient{StrongForm}()
+    wgrad = Gradient{WeakForm}()   # weak form
     grad.(f)
 
-Compute the (strong) gradient of `f` on each element, returning a
-`CovariantVector`-field.
+Compute the gradient of `f` on each element, returning a
+`CovariantVector`-field. `Gradient()` computes the strong form;
+`Gradient{WeakForm}()` computes the weak form (the volume-integral
+contribution obtained after integration by parts), distinguished by the
+[`FormType`](@ref) parameter.
+
+## Strong form
 
 The ``i``th covariant component of the gradient is the partial derivative with
 respect to the reference element:
@@ -719,6 +778,40 @@ D_i f
 ```
 
 where ``D_i`` is the derivative matrix along the ``i``th dimension.
+
+## Weak form
+
+The weak gradient is the vector field ``\\theta \\in \\mathcal{V}_0`` such that
+for all ``\\phi \\in \\mathcal{V}_0``
+
+```math
+\\int_\\Omega \\phi \\cdot \\theta \\, d \\Omega
+=
+- \\int_\\Omega (\\nabla \\cdot \\phi) f \\, d\\Omega
+```
+
+where ``\\mathcal{V}_0`` is the space of ``f``. It arises from the contribution
+of the volume integral after applying integration by parts to the weak form
+expression of the gradient
+
+```math
+\\int_\\Omega \\phi \\cdot (\\nabla f) \\, d \\Omega
+=
+- \\int_\\Omega f (\\nabla \\cdot \\phi) \\, d\\Omega
++ \\oint_{\\partial \\Omega} f (\\phi \\cdot n) \\, d \\sigma
+```
+
+In matrix form, this becomes
+
+```math
+{\\phi^i}^\\top W J \\theta_i = - ( J^{-1} D_i J \\phi^i )^\\top W J f
+```
+
+which reduces to
+
+```math
+\\theta_i = -W^{-1} D_i^\\top W f
+```
 
 ## References
 
@@ -746,13 +839,19 @@ function apply_operator(op::Gradient{F}, arg) where {F}
 end
 
 """
-    curl = Curl()
+    curl = Curl()              # strong form, == Curl{StrongForm}()
+    wcurl = Curl{WeakForm}()   # weak form
     curl.(u)
 
-Computes the per-element spectral (strong) curl of a covariant vector field ``u``.
+Computes the per-element spectral curl of a covariant vector field ``u``.
+`Curl()` computes the strong form; `Curl{WeakForm}()` computes the weak form
+(the volume-integral contribution obtained after integration by parts),
+distinguished by the [`FormType`](@ref) parameter.
 
-Note: The vector field ``u`` needs to be excliclty converted to a `CovaraintVector`,
-as then the `Curl` is independent of the local metric tensor.
+Note: The vector field ``u`` needs to be explicitly converted to a
+`CovariantVector`, as then the curl is independent of the local metric tensor.
+
+## Strong form
 
 The curl of a vector field ``u`` is a vector field with contravariant components
 
@@ -787,6 +886,40 @@ In matrix form, this becomes
 
 Note that unused dimensions will be dropped: e.g. the 2D curl of a
 `Covariant12Vector`-field will return a `Contravariant3Vector`.
+
+## Weak form
+
+The weak curl is the vector field ``\\theta \\in \\mathcal{V}_0`` such that for
+all ``\\phi \\in \\mathcal{V}_0``
+
+```math
+\\int_\\Omega \\phi \\cdot \\theta \\, d \\Omega
+=
+\\int_\\Omega (\\nabla \\times \\phi) \\cdot u \\,d \\Omega
+```
+
+where ``\\mathcal{V}_0`` is the space of ``u``. It arises from the contribution
+of the volume integral after applying integration by parts to the weak form
+expression of the curl
+
+```math
+\\int_\\Omega \\phi \\cdot (\\nabla \\times u) \\,d\\Omega
+=
+\\int_\\Omega (\\nabla \\times \\phi) \\cdot u \\,d \\Omega
+- \\oint_{\\partial \\Omega} (\\phi \\times u) \\cdot n \\,d\\sigma
+```
+
+In matrix form, this becomes
+
+```math
+{\\phi_i}^\\top W J \\theta^i = (J^{-1} \\epsilon^{kji} D_j \\phi_i)^\\top W J u_k
+```
+
+which, by using the anti-symmetry of the Levi-Civita symbol, reduces to
+
+```math
+\\theta^i = - \\epsilon^{ijk} (WJ)^{-1} D_j^\\top W u_k
+```
 
 ## References
 

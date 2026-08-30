@@ -147,10 +147,10 @@ bcs_tested(c, ::typeof(op_DivergenceF2C!)) =
 bcs_tested(c, ::typeof(op_DivergenceC2F!)) = (set_divergence_bcs(c), )
 bcs_tested(c, ::typeof(op_InterpolateF2C!)) = ((;), )
 bcs_tested(c, ::typeof(op_InterpolateC2F!)) = (set_value_bcs(c), extrapolate_bcs(c))
-bcs_tested(c, ::typeof(op_LeftBiasedC2F!)) = (set_bot_value_bc(c),)
-bcs_tested(c, ::typeof(op_LeftBiasedF2C!)) = ((;), set_bot_value_bc(c))
-bcs_tested(c, ::typeof(op_RightBiasedC2F!)) = (set_top_value_bc(c),)
-bcs_tested(c, ::typeof(op_RightBiasedF2C!)) = ((;), set_top_value_bc(c))
+bcs_tested(c, ::typeof(op_BottomBiasedC2F!)) = (set_bot_value_bc(c),)
+bcs_tested(c, ::typeof(op_BottomBiasedF2C!)) = ((;), set_bot_value_bc(c))
+bcs_tested(c, ::typeof(op_TopBiasedC2F!)) = (set_top_value_bc(c),)
+bcs_tested(c, ::typeof(op_TopBiasedF2C!)) = ((;), set_top_value_bc(c))
 bcs_tested(c, ::typeof(op_CurlC2F!)) = (set_curl_bcs(c),)
 # The advection operators are benchmarked with no boundary conditions, i.e. with
 # their default `Extrapolate{0}` ghost-point extrapolation.
@@ -337,10 +337,10 @@ function benchmark_operators_base(bm, trials, t_min, cfield, ffield, name; compi
         op_broadcast_example0!,
         op_broadcast_example1!,
         op_broadcast_example2!,
-        op_LeftBiasedC2F!,
-        op_LeftBiasedF2C!,
-        op_RightBiasedC2F!,
-        op_RightBiasedF2C!,
+        op_BottomBiasedC2F!,
+        op_BottomBiasedF2C!,
+        op_TopBiasedC2F!,
+        op_TopBiasedF2C!,
         op_CurlC2F!,
         #### Mixed / adaptive
         op_UpwindBiasedProductC2F!, # TODO: do we need to test this for different w values?
@@ -386,12 +386,12 @@ function test_results_column(t_min)
     [(op_InterpolateC2F!, :SetValue, :SetValue), 254.241*ns*buffer],
     [(op_InterpolateC2F!, :Extrapolate, :Extrapolate), 241.308*ns*buffer],
     [(op_broadcast_example2!, :none), 555.039*ns*buffer],
-    [(op_LeftBiasedC2F!, :SetValue), 207.264*ns*buffer],
-    [(op_LeftBiasedF2C!, :none), 137.031*ns*buffer],
-    [(op_LeftBiasedF2C!, :SetValue), 185.135*ns*buffer],
-    [(op_RightBiasedC2F!, :SetValue), 129.971*ns*buffer],
-    [(op_RightBiasedF2C!, :none), 142.120*ns*buffer],
-    [(op_RightBiasedF2C!, :SetValue), 141.446*ns*buffer],
+    [(op_BottomBiasedC2F!, :SetValue), 207.264*ns*buffer],
+    [(op_BottomBiasedF2C!, :none), 137.031*ns*buffer],
+    [(op_BottomBiasedF2C!, :SetValue), 185.135*ns*buffer],
+    [(op_TopBiasedC2F!, :SetValue), 129.971*ns*buffer],
+    [(op_TopBiasedF2C!, :none), 142.120*ns*buffer],
+    [(op_TopBiasedF2C!, :SetValue), 141.446*ns*buffer],
     [(op_CurlC2F!, :SetCurl, :SetCurl), 1.692*μs*buffer],
     [(op_UpwindBiasedProductC2F!, :none), 765.401*ns*buffer],
     [(op_divUpwind3rdOrderBiasedProductC2F!, :none, :SetValue, :SetValue), 2.540*μs*buffer],
@@ -434,12 +434,12 @@ function test_results_sphere(t_min)
     [(op_broadcast_example0!, :none), 1.059*ms*buffer],
     [(op_broadcast_example1!, :none), 154.330*ms*buffer],
     [(op_broadcast_example2!, :none), 152.689*ms*buffer],
-    [(op_LeftBiasedC2F!, :SetValue), 1.758*ms*buffer],
-    [(op_LeftBiasedF2C!, :none), 1.711*ms*buffer],
-    [(op_LeftBiasedF2C!, :SetValue), 1.754*ms*buffer],
-    [(op_RightBiasedC2F!, :SetValue), 1.847*ms*buffer],
-    [(op_RightBiasedF2C!, :none), 1.582*ms*buffer],
-    [(op_RightBiasedF2C!, :SetValue), 1.551*ms*buffer],
+    [(op_BottomBiasedC2F!, :SetValue), 1.758*ms*buffer],
+    [(op_BottomBiasedF2C!, :none), 1.711*ms*buffer],
+    [(op_BottomBiasedF2C!, :SetValue), 1.754*ms*buffer],
+    [(op_TopBiasedC2F!, :SetValue), 1.847*ms*buffer],
+    [(op_TopBiasedF2C!, :none), 1.582*ms*buffer],
+    [(op_TopBiasedF2C!, :SetValue), 1.551*ms*buffer],
     [(op_CurlC2F!, :SetCurl, :SetCurl), 4.669*ms*buffer],
     [(op_UpwindBiasedProductC2F!, :none), 3.432*ms*buffer],
     [(op_divUpwind3rdOrderBiasedProductC2F!, :none, :SetValue, :SetValue), 5.650*ms*buffer],

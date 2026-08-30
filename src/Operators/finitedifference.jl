@@ -108,7 +108,7 @@ happens, so the same operator can give `NaN` at one boundary and an ordinary val
 the other. To obtain a meaningful boundary value, give the operator a boundary
 condition, or overwrite the boundary afterwards with a [`SetBoundaryOperator`](@ref).
 """
-struct NullBoundaryCondition <: AbstractBoundaryCondition end
+struct NullBoundaryCondition <: VerticalBoundaryCondition end
 
 """
     SetValue(val)
@@ -116,7 +116,7 @@ struct NullBoundaryCondition <: AbstractBoundaryCondition end
 Set the value at the boundary to be `val`. In the case of gradient operators,
 this will set the input value from which the gradient is computed.
 """
-struct SetValue{S} <: AbstractBoundaryCondition
+struct SetValue{S} <: VerticalBoundaryCondition
     val::S
 end
 
@@ -126,7 +126,7 @@ end
 Set the gradient at the boundary to be `val`. In the case of gradient operators
 this will set the output value of the gradient.
 """
-struct SetGradient{S} <: AbstractBoundaryCondition
+struct SetGradient{S} <: VerticalBoundaryCondition
     val::S
 end
 
@@ -135,7 +135,7 @@ end
 
 Set the divergence at the boundary to be `val`.
 """
-struct SetDivergence{S} <: AbstractBoundaryCondition
+struct SetDivergence{S} <: VerticalBoundaryCondition
     val::S
 end
 
@@ -144,7 +144,7 @@ end
 
 Set the curl at the boundary to be `val`.
 """
-struct SetCurl{S} <: AbstractBoundaryCondition
+struct SetCurl{S} <: VerticalBoundaryCondition
     val::S
 end
 
@@ -184,7 +184,7 @@ value: the extrapolation continues the field along the third coordinate line
 with a single boundary value, rather than evaluating the extrapolating
 polynomial at each ghost point's own position.
 """
-struct Extrapolate{N} <: AbstractBoundaryCondition
+struct Extrapolate{N} <: VerticalBoundaryCondition
     function Extrapolate{N}() where {N}
         N isa Integer && 0 <= N <= 2 ||
             error("Extrapolate only supports orders 0 <= N <= 2; got N = $N")
@@ -192,6 +192,19 @@ struct Extrapolate{N} <: AbstractBoundaryCondition
     end
 end
 Extrapolate(N::Integer = 0) = Extrapolate{N}()
+
+"""
+    Outflow(; order = 0)
+
+Physically named outflow (zero-normal-gradient family) boundary condition:
+returns [`Extrapolate{order}()`](@ref Extrapolate), so it is accepted wherever
+`Extrapolate` is. On the finite-difference advection operators it pads the
+ghost points the interior stencil reaches with an order-`order` extrapolation
+from the interior; near a boundary the order is reduced when fewer than
+`order + 1` interior points are in range, as documented for
+[`Extrapolate`](@ref). `Outflow()` is the zero-order (constant-value) closure.
+"""
+Outflow(; order = 0) = Extrapolate{order}()
 
 """
     extrapolate_weights(bc::Extrapolate{N}, navailable)
@@ -500,7 +513,7 @@ return_space(::InterpolateF2C, space::AllFaceFiniteDifferenceSpace) =
 
 stencil_interior_width(::InterpolateF2C, arg) = ((-half, half),)
 
-boundary_width(::InterpolateF2C, ::AbstractBoundaryCondition) = 0
+boundary_width(::InterpolateF2C, ::VerticalBoundaryCondition) = 0
 
 
 """
@@ -547,87 +560,87 @@ return_space(::InterpolateC2F, space::AllCenterFiniteDifferenceSpace) =
 
 stencil_interior_width(::InterpolateC2F, arg) = ((-half, half),)
 
-boundary_width(::InterpolateC2F, ::AbstractBoundaryCondition) = 1
+boundary_width(::InterpolateC2F, ::VerticalBoundaryCondition) = 1
 
 
 """
-    L = LeftBiasedC2F(;boundaries)
-    L.(x)
+    B = BottomBiasedC2F(;boundaries)
+    B.(x)
 
-Interpolate a center-value field to a face-valued field from the left.
+Interpolate a center-valued field to a face-valued field from below.
 
 ```math
-L(x)[i] = x[i-\\tfrac{1}{2}]
+B(x)[i] = x[i-\\tfrac{1}{2}]
 ```
 
-Only the left boundary condition should be set. Currently supported is:
+Only the bottom boundary condition should be set. Currently supported is:
 
   - [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
 
 ```math
-L(x)[\\tfrac{1}{2}] = x_0
+B(x)[\\tfrac{1}{2}] = x_0
 ```
 """
-struct LeftBiasedC2F{BCS} <: InterpolationOperator
+struct BottomBiasedC2F{BCS} <: InterpolationOperator
     bcs::BCS
-    function LeftBiasedC2F(; kwargs...)
-        assert_valid_bcs("LeftBiasedC2F", kwargs, SetValue)
+    function BottomBiasedC2F(; kwargs...)
+        assert_valid_bcs("BottomBiasedC2F", kwargs, SetValue)
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
-    LeftBiasedC2F(bcs) = LeftBiasedC2F(; bcs...)
+    BottomBiasedC2F(bcs) = BottomBiasedC2F(; bcs...)
 end
 
-return_space(::LeftBiasedC2F, space::AllCenterFiniteDifferenceSpace) =
+return_space(::BottomBiasedC2F, space::AllCenterFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellFace())
 
-stencil_interior_width(::LeftBiasedC2F, arg) = ((-half, -half),)
+stencil_interior_width(::BottomBiasedC2F, arg) = ((-half, -half),)
 
 left_interior_idx(
     space::AbstractSpace,
-    ::LeftBiasedC2F,
-    ::AbstractBoundaryCondition,
+    ::BottomBiasedC2F,
+    ::VerticalBoundaryCondition,
     arg,
 ) = left_idx(space) + 1
 right_interior_idx(
     space::AbstractSpace,
-    ::LeftBiasedC2F,
-    ::AbstractBoundaryCondition,
+    ::BottomBiasedC2F,
+    ::VerticalBoundaryCondition,
     arg,
 ) = right_idx(space)
 
 """
-    L = LeftBiasedF2C(;boundaries)
-    L.(x)
+    B = BottomBiasedF2C(;boundaries)
+    B.(x)
 
-Interpolate a face-value field to a center-valued field from the left.
+Interpolate a face-valued field to a center-valued field from below.
 
 ```math
-L(x)[i+\\tfrac{1}{2}] = x[i]
+B(x)[i+\\tfrac{1}{2}] = x[i]
 ```
 
-Only the left boundary condition should be set. Currently supported is:
+Only the bottom boundary condition should be set. Currently supported is:
 
   - [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
 
 ```math
-L(x)[1] = x_0
+B(x)[1] = x_0
 ```
 """
-struct LeftBiasedF2C{BCS} <: InterpolationOperator
+struct BottomBiasedF2C{BCS} <: InterpolationOperator
     bcs::BCS
-    function LeftBiasedF2C(; kwargs...)
-        assert_valid_bcs("LeftBiasedF2C", kwargs, SetValue)
+    function BottomBiasedF2C(; kwargs...)
+        assert_valid_bcs("BottomBiasedF2C", kwargs, SetValue)
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
-    LeftBiasedF2C(bcs) = LeftBiasedF2C(; bcs...)
+    BottomBiasedF2C(bcs) = BottomBiasedF2C(; bcs...)
 end
 
-return_space(::LeftBiasedF2C, space::AllFaceFiniteDifferenceSpace) =
+return_space(::BottomBiasedF2C, space::AllFaceFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellCenter())
 
-stencil_interior_width(::LeftBiasedF2C, arg) = ((-half, -half),)
+stencil_interior_width(::BottomBiasedF2C, arg) = ((-half, -half),)
 Base.@propagate_inbounds stencil_interior(
-    ::LeftBiasedF2C,
+    ::BottomBiasedF2C,
     space,
     idx,
     hidx,
@@ -635,21 +648,21 @@ Base.@propagate_inbounds stencil_interior(
 ) = getidx(space, arg, idx - half, hidx)
 left_interior_idx(
     space::AbstractSpace,
-    ::LeftBiasedF2C,
-    ::AbstractBoundaryCondition,
+    ::BottomBiasedF2C,
+    ::VerticalBoundaryCondition,
     arg,
 ) = left_idx(space)
 right_interior_idx(
     space::AbstractSpace,
-    ::LeftBiasedF2C,
-    ::AbstractBoundaryCondition,
+    ::BottomBiasedF2C,
+    ::VerticalBoundaryCondition,
     arg,
 ) = right_idx(space)
 
-left_interior_idx(space::AbstractSpace, ::LeftBiasedF2C, ::SetValue, arg) =
+left_interior_idx(space::AbstractSpace, ::BottomBiasedF2C, ::SetValue, arg) =
     left_idx(space) + 1
 Base.@propagate_inbounds function stencil_left_boundary(
-    ::LeftBiasedF2C,
+    ::BottomBiasedF2C,
     bc::SetValue,
     space,
     idx,
@@ -661,132 +674,97 @@ Base.@propagate_inbounds function stencil_left_boundary(
 end
 
 """
-    R = RightBiasedC2F(;boundaries)
-    R.(x)
+    T = TopBiasedC2F(;boundaries)
+    T.(x)
 
-Interpolate a center-valued field to a face-valued field from the right.
+Interpolate a center-valued field to a face-valued field from above.
 
 ```math
-R(x)[i] = x[i+\\tfrac{1}{2}]
+T(x)[i] = x[i+\\tfrac{1}{2}]
 ```
 
-Only the right boundary condition should be set. Currently supported is:
+Only the top boundary condition should be set. Currently supported is:
 
   - [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
 
 ```math
-R(x)[n+\\tfrac{1}{2}] = x_0
+T(x)[n+\\tfrac{1}{2}] = x_0
 ```
 """
-struct RightBiasedC2F{BCS} <: InterpolationOperator
+struct TopBiasedC2F{BCS} <: InterpolationOperator
     bcs::BCS
-    function RightBiasedC2F(; kwargs...)
-        assert_valid_bcs("RightBiasedC2F", kwargs, SetValue)
+    function TopBiasedC2F(; kwargs...)
+        assert_valid_bcs("TopBiasedC2F", kwargs, SetValue)
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
-    RightBiasedC2F(bcs) = RightBiasedC2F(; bcs...)
+    TopBiasedC2F(bcs) = TopBiasedC2F(; bcs...)
 end
 
-return_space(::RightBiasedC2F, space::AllCenterFiniteDifferenceSpace) =
+return_space(::TopBiasedC2F, space::AllCenterFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellFace())
 
-stencil_interior_width(::RightBiasedC2F, arg) = ((half, half),)
+stencil_interior_width(::TopBiasedC2F, arg) = ((half, half),)
 
 left_interior_idx(
     space::AbstractSpace,
-    ::RightBiasedC2F,
-    ::AbstractBoundaryCondition,
+    ::TopBiasedC2F,
+    ::VerticalBoundaryCondition,
     arg,
 ) = left_idx(space)
 right_interior_idx(
     space::AbstractSpace,
-    ::RightBiasedC2F,
-    ::AbstractBoundaryCondition,
+    ::TopBiasedC2F,
+    ::VerticalBoundaryCondition,
     arg,
 ) = right_idx(space) - 1
 
 """
-    R = RightBiasedF2C(;boundaries)
-    R.(x)
+    T = TopBiasedF2C(;boundaries)
+    T.(x)
 
-Interpolate a face-valued field to a center-valued field from the right.
+Interpolate a face-valued field to a center-valued field from above.
 
 ```math
-R(x)[i] = x[i+\\tfrac{1}{2}]
+T(x)[i] = x[i+\\tfrac{1}{2}]
 ```
 
-Only the right boundary condition should be set. Currently supported is:
+Only the top boundary condition should be set. Currently supported is:
 
   - [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
 
 ```math
-R(x)[n+\\tfrac{1}{2}] = x_0
+T(x)[n+\\tfrac{1}{2}] = x_0
 ```
 """
-struct RightBiasedF2C{BCS} <: InterpolationOperator
+struct TopBiasedF2C{BCS} <: InterpolationOperator
     bcs::BCS
-    function RightBiasedF2C(; kwargs...)
-        assert_valid_bcs("RightBiasedF2C", kwargs, SetValue)
+    function TopBiasedF2C(; kwargs...)
+        assert_valid_bcs("TopBiasedF2C", kwargs, SetValue)
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
-    RightBiasedF2C(bcs) = RightBiasedF2C(; bcs...)
+    TopBiasedF2C(bcs) = TopBiasedF2C(; bcs...)
 end
 
-return_space(::RightBiasedF2C, space::AllFaceFiniteDifferenceSpace) =
+return_space(::TopBiasedF2C, space::AllFaceFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellCenter())
 
-stencil_interior_width(::RightBiasedF2C, arg) = ((half, half),)
+stencil_interior_width(::TopBiasedF2C, arg) = ((half, half),)
 
 left_interior_idx(
     space::AbstractSpace,
-    ::RightBiasedF2C,
-    ::AbstractBoundaryCondition,
+    ::TopBiasedF2C,
+    ::VerticalBoundaryCondition,
     arg,
 ) = left_idx(space)
 right_interior_idx(
     space::AbstractSpace,
-    ::RightBiasedF2C,
-    ::AbstractBoundaryCondition,
+    ::TopBiasedF2C,
+    ::VerticalBoundaryCondition,
     arg,
 ) = right_idx(space)
 
-right_interior_idx(space::AbstractSpace, ::RightBiasedF2C, ::SetValue, arg) =
+right_interior_idx(space::AbstractSpace, ::TopBiasedF2C, ::SetValue, arg) =
     right_idx(space) - 1
-
-# In the vertical direction, the left boundary is the bottom and the right
-# boundary is the top, so each biased operator also has a vertically-named
-# alias.
-"""
-    BottomBiasedC2F
-
-Alias for [`LeftBiasedC2F`](@ref): in the vertical direction, the left
-boundary is the bottom.
-"""
-const BottomBiasedC2F = LeftBiasedC2F
-
-"""
-    BottomBiasedF2C
-
-Alias for [`LeftBiasedF2C`](@ref): in the vertical direction, the left
-boundary is the bottom.
-"""
-const BottomBiasedF2C = LeftBiasedF2C
-
-"""
-    TopBiasedC2F
-
-Alias for [`RightBiasedC2F`](@ref): in the vertical direction, the right
-boundary is the top.
-"""
-const TopBiasedC2F = RightBiasedC2F
-
-"""
-    TopBiasedF2C
-
-Alias for [`RightBiasedF2C`](@ref): in the vertical direction, the right
-boundary is the top.
-"""
-const TopBiasedF2C = RightBiasedF2C
 
 abstract type WeightedInterpolationOperator <: InterpolationOperator end
 # TODO: this is not in general correct and the return type
@@ -844,7 +822,7 @@ Base.@propagate_inbounds function stencil_interior(
     (w⁺ * a⁺ + w⁻ * a⁻) / (w⁺ + w⁻)
 end
 
-boundary_width(::WeightedInterpolateF2C, ::AbstractBoundaryCondition) = 0
+boundary_width(::WeightedInterpolateF2C, ::VerticalBoundaryCondition) = 0
 
 """
     WI = WeightedInterpolateC2F(; boundaries)
@@ -904,7 +882,8 @@ Base.@propagate_inbounds function stencil_interior(
     (w⁺ * a⁺ + w⁻ * a⁻) / (w⁺ + w⁻)
 end
 
-boundary_width(::WeightedInterpolateC2F, ::AbstractBoundaryCondition) = 1
+boundary_width(::WeightedInterpolateC2F, ::VerticalBoundaryCondition) = 1
+
 # WeightedInterpolateC2F has no stencil_left_boundary/stencil_right_boundary methods:
 # every broadcast over it is rewritten as an operator matrix multiply when it is
 # instantiated, so its boundary values come from the operator matrix (for Extrapolate)
@@ -930,10 +909,11 @@ values (on periodic domains, indices wrap around instead):
     point the stencil reaches takes the value extrapolated from the in-range
     interior points of the stencil (the extrapolation order is reduced at the
     boundary face itself, where fewer interior points are in range). The only
-    supported boundary conditions are `Extrapolate{N}`; when an advection
-    operator is constructed with no boundary conditions, `Extrapolate{0}` is
-    added to its `bcs`, and a boundary whose name has no entry in `bcs` also
-    falls back to `Extrapolate{0}`.
+    supported boundary conditions are `Extrapolate{N}`
+    ([`Outflow(; order = N)`](@ref Outflow) is the physically named
+    constructor); when an advection operator is constructed with no boundary
+    conditions, `Extrapolate{0}` is added to its `bcs`, and a boundary whose
+    name has no entry in `bcs` also falls back to `Extrapolate{0}`.
   - The velocity field's out-of-range face indices are clamped to the domain.
 
 An advection operator whose interior stencil is linear in the advected
@@ -1094,7 +1074,8 @@ velocity_stencil_width(::Val{:neighboring}) = (-1, 1)
 # ghost-point extrapolations itself), so no boundary window is needed. The
 # operators that are rewritten as matrix multiplies override this: their
 # matrices need explicit boundary rows.
-boundary_width(::AdvectionOperator, ::AbstractBoundaryCondition) = 0
+boundary_width(::AdvectionOperator, ::VerticalBoundaryCondition) = 0
+
 # Never reached at runtime for operators whose boundary_width is 0 (no face is
 # treated as a boundary window), but getidx's boundary branch still needs
 # statically resolvable methods when the operator carries boundary conditions;
@@ -1285,8 +1266,9 @@ U(\\boldsymbol{v},x)[i] = \\begin{cases}
 
 where ``\\boldsymbol{e}_3`` is the 3rd covariant basis vector.
 
-The only supported boundary condition is [`Extrapolate`](@ref), which is also
-added to `bcs` (as `Extrapolate{0}`) by default when no boundary conditions
+The only supported boundary condition is [`Extrapolate`](@ref)
+([`Outflow`](@ref)), which is also added to `bcs` (as `Extrapolate{0}`) by
+default when no boundary conditions
 are given: boundary faces are computed with the interior stencil, padding the
 ghost point it reaches with the boundary condition's extrapolation. The
 stencil only reaches a ghost point at the boundary face itself, where a single
@@ -1331,7 +1313,7 @@ stencil_interior_width(::UpwindBiasedProductC2F, velocity, arg) =
 # their values, so the faces whose interior row reaches a ghost point need
 # explicit boundary rows that fold the ghost coefficients into the in-range
 # interior columns; see MatrixFields/operator_matrices.jl.
-boundary_width(::UpwindBiasedProductC2F, ::AbstractBoundaryCondition) = 1
+boundary_width(::UpwindBiasedProductC2F, ::VerticalBoundaryCondition) = 1
 
 """
     LVL = LinVanLeerC2F(; constraint)
@@ -1358,8 +1340,9 @@ saturation mixing ratio for water vapor are not considered here in favour of
 the generalized local extrema in equation (5a, 5b).
 
 As for all [`AdvectionOperator`](@ref)s, boundary faces are computed with the
-interior stencil, padding ghost points with the [`Extrapolate`](@ref) boundary
-condition's extrapolation (`Extrapolate{0}` is added to `bcs` by default when
+interior stencil, padding ghost points with the [`Extrapolate`](@ref)
+([`Outflow`](@ref)) boundary condition's extrapolation (`Extrapolate{0}` is
+added to `bcs` by default when
 no boundary conditions are given).
 """
 struct LinVanLeerC2F{BCS, C} <: AdvectionOperator
@@ -1451,8 +1434,9 @@ U(v,x)[i] = \\begin{cases}
 
 This stencil is based on [WickerSkamarock2002](@cite), eq. 4(a).
 
-The only supported boundary condition is [`Extrapolate`](@ref): boundary
-faces are computed with the interior stencil, padding each ghost point it
+The only supported boundary condition is [`Extrapolate`](@ref)
+([`Outflow`](@ref)): boundary faces are computed with the interior stencil,
+padding each ghost point it
 reaches with the condition's extrapolation from the in-range interior points
 (the extrapolation order is reduced at the boundary face itself, where only 2
 interior points are in range). When no boundary conditions are given,
@@ -1491,7 +1475,7 @@ stencil_interior_width(::Upwind3rdOrderBiasedProductC2F, velocity, arg) =
 # MatrixFields/operator_matrices.jl. The interior stencil reaches one center
 # beyond its face on each side, so the two faces nearest each boundary need
 # boundary rows.
-boundary_width(::Upwind3rdOrderBiasedProductC2F, ::AbstractBoundaryCondition) =
+boundary_width(::Upwind3rdOrderBiasedProductC2F, ::VerticalBoundaryCondition) =
     2
 
 """
@@ -1516,8 +1500,9 @@ flux. This formulation is based on [BorisBook1973](@cite), as reported in
 [durran2010](@cite) section 5.4.1.
 
 As for all [`AdvectionOperator`](@ref)s, boundary faces are computed with the
-interior stencil, padding ghost points with the [`Extrapolate`](@ref) boundary
-condition's extrapolation (`Extrapolate{0}` is added to `bcs` by default when
+interior stencil, padding ghost points with the [`Extrapolate`](@ref)
+([`Outflow`](@ref)) boundary condition's extrapolation (`Extrapolate{0}` is
+added to `bcs` by default when
 no boundary conditions are given). With the default, the padded values make
 the one-sided difference of `x` on the boundary side vanish at the two faces
 nearest each boundary, and that difference bounds the corrected antidiffusive
@@ -1562,8 +1547,9 @@ This stencil is based on [zalesak1979fully](@cite), as reported in [durran2010]
 (@cite) section 5.4.2, where ``C`` denotes the corrected antidiffusive flux.
 
 As for all [`AdvectionOperator`](@ref)s, boundary faces are computed with the
-interior stencil, padding ghost points with the [`Extrapolate`](@ref) boundary
-condition's extrapolation (`Extrapolate{0}` is added to `bcs` by default when
+interior stencil, padding ghost points with the [`Extrapolate`](@ref)
+([`Outflow`](@ref)) boundary condition's extrapolation (`Extrapolate{0}` is
+added to `bcs` by default when
 no boundary conditions are given); the extrapolation of a tuple-valued field
 applies to each of `Φ` and `Φᵗᵈ`. No value is imposed at the faces nearest
 each boundary: the corrected antidiffusive flux there is whatever the padded
@@ -1739,8 +1725,9 @@ field, or a scalar field holding the contravariant3 component (e.g.
 velocity field `u` in another basis).
 
 As for all [`AdvectionOperator`](@ref)s, boundary faces are computed with the
-interior stencil, padding ghost points with the [`Extrapolate`](@ref) boundary
-condition's extrapolation (`Extrapolate{0}` is added to `bcs` by default when
+interior stencil, padding ghost points with the [`Extrapolate`](@ref)
+([`Outflow`](@ref)) boundary condition's extrapolation (`Extrapolate{0}` is
+added to `bcs` by default when
 no boundary conditions are given). No value is imposed at the faces nearest
 each boundary: the limited flux there is whatever the padded stencil gives.
 ```
@@ -1833,7 +1820,7 @@ Base.@propagate_inbounds stencil_interior(
 # generic windowing code) keeps one-sided SetBoundaryOperators out of the boundary
 # window entirely, so they never reach the NaN-producing NullBoundaryCondition
 # stencil methods.
-boundary_width(::SetBoundaryOperator, ::AbstractBoundaryCondition) = 0
+boundary_width(::SetBoundaryOperator, ::VerticalBoundaryCondition) = 0
 boundary_width(
     ::SetBoundaryOperator,
     ::Union{SetValue, SetGradient, SetCurl, SetDivergence},
@@ -1957,7 +1944,7 @@ return_space(::GradientF2C, space::AllFaceFiniteDifferenceSpace) =
 
 stencil_interior_width(::GradientF2C, arg) = ((-half, half),)
 
-boundary_width(::GradientF2C, ::AbstractBoundaryCondition) = 0
+boundary_width(::GradientF2C, ::VerticalBoundaryCondition) = 0
 
 boundary_width(::GradientF2C, ::SetValue) = 1
 boundary_width(::GradientF2C, ::SetGradient) = 1
@@ -2012,7 +1999,7 @@ return_space(::GradientC2F, space::AllCenterFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellFace())
 
 stencil_interior_width(::GradientC2F, arg) = ((-half, half),)
-boundary_width(::GradientC2F, ::AbstractBoundaryCondition) = 1
+boundary_width(::GradientC2F, ::VerticalBoundaryCondition) = 1
 
 abstract type DivergenceOperator <: FiniteDifferenceOperator end
 return_eltype(::DivergenceOperator, arg) =
@@ -2048,9 +2035,9 @@ D(v)[1] = (Jv³[1+\\tfrac{1}{2}] - Jv³₀) / J[i]
 ```
 ```
 
-  - [`Extrapolate()`](@ref Extrapolate): set the value at the center closest to
-    the boundary to be the same as the neighbouring interior value. For the left
-    boundary, this becomes:
+  - [`Extrapolate()`](@ref Extrapolate), equivalently [`Outflow()`](@ref):
+    set the value at the center closest to the boundary to be the same as the
+    neighbouring interior value. For the left boundary, this becomes:
 
 ```math
 D(v)[1] = D(v)[2]
@@ -2073,7 +2060,7 @@ return_space(::DivergenceF2C, space::AllFaceFiniteDifferenceSpace) =
     Spaces.space(space, Spaces.CellCenter())
 
 stencil_interior_width(::DivergenceF2C, arg) = ((-half, half),)
-boundary_width(::DivergenceF2C, ::AbstractBoundaryCondition) = 0
+boundary_width(::DivergenceF2C, ::VerticalBoundaryCondition) = 0
 boundary_width(::DivergenceF2C, ::SetValue) = 1
 boundary_width(::DivergenceF2C, ::SetDivergence) = 1
 # Without this, `left_interior_idx`/`right_interior_idx` place the boundary
@@ -2150,7 +2137,7 @@ return_space(::DivergenceC2F, space::AllCenterFiniteDifferenceSpace) =
 
 stencil_interior_width(::DivergenceC2F, arg) = ((-half, half),)
 
-boundary_width(::DivergenceC2F, ::AbstractBoundaryCondition) = 1
+boundary_width(::DivergenceC2F, ::VerticalBoundaryCondition) = 1
 
 
 abstract type CurlFiniteDifferenceOperator <: FiniteDifferenceOperator end
@@ -2214,7 +2201,7 @@ return_space(::CurlC2F, space::AllCenterFiniteDifferenceSpace) =
 
 stencil_interior_width(::CurlC2F, arg) = ((-half, half),)
 
-boundary_width(::CurlC2F, ::AbstractBoundaryCondition) = 1
+boundary_width(::CurlC2F, ::VerticalBoundaryCondition) = 1
 
 
 # Dirichlet (`SetValue`) replacements for the center-to-face operators.
@@ -2755,7 +2742,7 @@ _stencil_interior_width(bc::StencilBroadcasted) =
     stencil_interior_width(bc.op, bc.args...)
 
 """
-    left_interior_idx(space::AbstractSpace, op::FiniteDifferenceOperator, bc::AbstractBoundaryCondition, args..)
+    left_interior_idx(space::AbstractSpace, op::FiniteDifferenceOperator, bc::VerticalBoundaryCondition, args..)
 
 The index of the left-most interior point of the operator `op` with boundary
 `bc` when used with arguments `args...`. By default, this is
@@ -2770,14 +2757,14 @@ assymetric).
 @inline function left_interior_idx(
     space::AbstractSpace,
     op::FiniteDifferenceOperator,
-    bc::AbstractBoundaryCondition,
+    bc::VerticalBoundaryCondition,
     args...,
 )
     left_idx(space) + boundary_width(op, bc)
 end
 
 """
-    right_interior_idx(space::AbstractSpace, op::FiniteDifferenceOperator, bc::AbstractBoundaryCondition, args..)
+    right_interior_idx(space::AbstractSpace, op::FiniteDifferenceOperator, bc::VerticalBoundaryCondition, args..)
 
 The index of the right-most interior point of the operator `op` with boundary
 `bc` when used with arguments `args...`. By default, this is
@@ -2792,7 +2779,7 @@ assymetric).
 @inline function right_interior_idx(
     space::AbstractSpace,
     op::FiniteDifferenceOperator,
-    bc::AbstractBoundaryCondition,
+    bc::VerticalBoundaryCondition,
     args...,
 )
     right_idx(space) - boundary_width(op, bc)

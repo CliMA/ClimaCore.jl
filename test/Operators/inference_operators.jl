@@ -34,7 +34,7 @@ apply2(op_outer, op_inner, f) = op_outer.(op_inner.(f))
         coords = Fields.coordinate_field(sspace)
         g = @. sind(coords.long) * cosd(coords.lat)
         grad = Operators.Gradient()
-        wdiv = Operators.WeakDivergence()
+        wdiv = Operators.Divergence{Operators.WeakForm}()
         @test (@inferred apply1(grad, g)) isa Fields.Field
         @test (@inferred apply2(wdiv, grad, g)) isa Fields.Field
     end

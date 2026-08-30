@@ -19,7 +19,7 @@ radius = FT(1)
 domain = Domains.SphereDomain(radius)
 
 sdiv = Operators.Divergence()
-wdiv = Operators.WeakDivergence()
+wdiv = Operators.Divergence{Operators.WeakForm}()
 
 @testset "divergence" begin
     Ne = 7

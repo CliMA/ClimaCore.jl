@@ -131,7 +131,7 @@ mutable struct SpectralElementGrid2D{
     global_geometry::GG
     local_geometry::LG
     dss_weights::D
-    internal_surface_geometry::IS
+    interior_surface_geometry::IS
     boundary_surface_geometries::BS
     mask::M
     enable_bubble::Bool
@@ -173,7 +173,7 @@ SEM for computing metric terms.
     Galerkin (DG): no continuity is maintained across element boundaries, so
     [`Spaces.weighted_dss!`](@ref) is a no-op on fields over this grid and
     inter-element coupling is instead supplied by DG numerical fluxes (see
-    `Operators.add_numerical_flux_internal!`). No DSS weights are computed.
+    `Operators.add_numerical_flux_interior!`). No DSS weights are computed.
     `InputOutput` serializes the flag; grids in files written before it
     existed read back as continuous.
 
@@ -418,7 +418,7 @@ end
     Nq,
 ) where {VIJH, SG, FT}
     interior_faces = Array(Topologies.interior_faces(topology))
-    internal_surface_geometry =
+    interior_surface_geometry =
         VIJH{SG, 1, Nq, 1, nothing}(Array{FT}, length(interior_faces))
     for (iface, (lidx⁻, face⁻, lidx⁺, face⁺, reversed)) in
         enumerate(interior_faces)
@@ -444,11 +444,11 @@ end
             @assert sgeom⁻.sWJ ≈ sgeom⁺.sWJ
             @assert sgeom⁻.normal ≈ -sgeom⁺.normal
 
-            internal_surface_geometry[1, q, 1, iface] = sgeom⁻
+            interior_surface_geometry[1, q, 1, iface] = sgeom⁻
         end
     end
-    internal_surface_geometry =
-        DataLayouts.rebuild(internal_surface_geometry, DA)
+    interior_surface_geometry =
+        DataLayouts.rebuild(interior_surface_geometry, DA)
 
     boundary_surface_geometries =
         map(Topologies.boundary_tags(topology)) do boundarytag
@@ -473,7 +473,7 @@ end
             end
             DataLayouts.rebuild(boundary_surface_geometry, DA)
         end
-    return (internal_surface_geometry, boundary_surface_geometries)
+    return (interior_surface_geometry, boundary_surface_geometries)
 end
 
 function _SpectralElementGrid2D(
@@ -515,7 +515,7 @@ function _SpectralElementGrid2D(
     }
     _, quad_weights = Quadratures.quadrature_points(FT, quadrature_style)
     if quadrature_style isa Quadratures.GLL
-        (internal_surface_geometry, boundary_surface_geometries) =
+        (interior_surface_geometry, boundary_surface_geometries) =
             compute_surface_geometries(
                 VIJH,
                 SG,
@@ -527,7 +527,7 @@ function _SpectralElementGrid2D(
                 Nq,
             )
     else
-        internal_surface_geometry = nothing
+        interior_surface_geometry = nothing
         boundary_surface_geometries = nothing
     end
 
@@ -548,7 +548,7 @@ function _SpectralElementGrid2D(
             quadrature_style,
             discontinuous,
         ),
-        internal_surface_geometry,
+        interior_surface_geometry,
         boundary_surface_geometries,
         mask,
         enable_bubble,

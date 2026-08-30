@@ -36,11 +36,11 @@ const CT12 = Geometry.Contravariant12Vector
 
 const divₕ = Operators.Divergence()
 const split_divₕ = Operators.SplitDivergence()
-const wdivₕ = Operators.WeakDivergence()
+const wdivₕ = Operators.Divergence{Operators.WeakForm}()
 const gradₕ = Operators.Gradient()
-const wgradₕ = Operators.WeakGradient()
+const wgradₕ = Operators.Gradient{Operators.WeakForm}()
 const curlₕ = Operators.Curl()
-const wcurlₕ = Operators.WeakCurl()
+const wcurlₕ = Operators.Curl{Operators.WeakForm}()
 
 const ᶜinterp = Operators.InterpolateF2C()
 const ᶠinterp = Operators.InterpolateC2F(

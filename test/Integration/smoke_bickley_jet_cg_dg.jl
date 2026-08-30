@@ -63,7 +63,7 @@ end
 sw_wavespeed(state, p) = sqrt(p.g * state.ρ) + norm(state.ρu / state.ρ)
 
 function shallow_water_rhs_cg!(dydt, y, (space, params), t)
-    wdiv = Operators.WeakDivergence()
+    wdiv = Operators.Divergence{Operators.WeakForm}()
     rparams = Ref(params)
     @. dydt = -wdiv(sw_flux(y, rparams))
     Spaces.weighted_dss!(dydt)
@@ -71,7 +71,7 @@ function shallow_water_rhs_cg!(dydt, y, (space, params), t)
 end
 
 function shallow_water_rhs_dg!(dydt, y, (space, params, numflux), t)
-    wdiv = Operators.WeakDivergence()
+    wdiv = Operators.Divergence{Operators.WeakForm}()
     lgeom = Fields.local_geometry_field(space)
 
     # Volume weak divergence, weighted by WJ so the interface flux
@@ -80,7 +80,7 @@ function shallow_water_rhs_dg!(dydt, y, (space, params, numflux), t)
     @. dydt = wdiv(sw_flux(y, rparams)) * (-lgeom.WJ)
 
     # Surface numerical flux across element boundaries
-    Operators.add_numerical_flux_internal!(numflux, dydt, y, params)
+    Operators.add_numerical_flux_interior!(numflux, dydt, y, params)
 
     # Un-weight by dividing by the metric determinant WJ
     @. dydt = dydt / lgeom.WJ

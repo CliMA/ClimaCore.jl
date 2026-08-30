@@ -46,9 +46,9 @@ import .TestUtilities as TU
         grad_op = Operators.Gradient()
         div_op = Operators.Divergence()
         curl_op = Operators.Curl()
-        wdiv_op = Operators.WeakDivergence()
-        wgrad_op = Operators.WeakGradient()
-        wcurl_op = Operators.WeakCurl()
+        wdiv_op = Operators.Divergence{Operators.WeakForm}()
+        wgrad_op = Operators.Gradient{Operators.WeakForm}()
+        wcurl_op = Operators.Curl{Operators.WeakForm}()
 
         # 1. curl(grad(f)) == 0
         grad_f = grad_op.(f)

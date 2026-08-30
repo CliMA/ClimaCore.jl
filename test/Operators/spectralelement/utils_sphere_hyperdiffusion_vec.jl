@@ -17,8 +17,8 @@ include("sphere_sphericalharmonics.jl")
 function ∇⁴(u)
     scurl = Operators.Curl()
     sdiv = Operators.Divergence()
-    wcurl = Operators.WeakCurl()
-    wgrad = Operators.WeakGradient()
+    wcurl = Operators.Curl{Operators.WeakForm}()
+    wgrad = Operators.Gradient{Operators.WeakForm}()
 
     χ = Spaces.weighted_dss!(
         @. wgrad(sdiv(u)) - Geometry.Covariant12Vector(

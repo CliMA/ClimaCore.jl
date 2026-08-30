@@ -419,7 +419,7 @@ mp4(anim)
 
 function heat_cg_tendency!(dydt, y, α, t)
     grad = ClimaCore.Operators.Gradient()
-    wdiv = ClimaCore.Operators.WeakDivergence()
+    wdiv = ClimaCore.Operators.Divergence{ClimaCore.Operators.WeakForm}()
     ## apply element operators
     @. dydt = α * wdiv(grad(y))
 
@@ -523,11 +523,11 @@ function shallow_water_tendency!(dydt, y, _, t)
     (; D₄, g) = parameters
 
     sdiv = ClimaCore.Operators.Divergence()
-    wdiv = ClimaCore.Operators.WeakDivergence()
+    wdiv = ClimaCore.Operators.Divergence{ClimaCore.Operators.WeakForm}()
     grad = ClimaCore.Operators.Gradient()
-    wgrad = ClimaCore.Operators.WeakGradient()
+    wgrad = ClimaCore.Operators.Gradient{ClimaCore.Operators.WeakForm}()
     curl = ClimaCore.Operators.Curl()
-    wcurl = ClimaCore.Operators.WeakCurl()
+    wcurl = ClimaCore.Operators.Curl{ClimaCore.Operators.WeakForm}()
 
 
     ## compute hyperviscosity first

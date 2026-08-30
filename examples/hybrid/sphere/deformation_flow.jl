@@ -58,7 +58,7 @@ ode_algorithm = CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher())
 
 # Operators used in increment!
 const hdiv = Operators.Divergence()
-const hwdiv = Operators.WeakDivergence()
+const hwdiv = Operators.Divergence{Operators.WeakForm}()
 const hgrad = Operators.Gradient()
 const interp = Operators.InterpolateC2F(
     bottom = Operators.Extrapolate(),

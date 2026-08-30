@@ -407,7 +407,7 @@ end
     y = @. sin(k * coords.x)
     ∇⁴y_ref = @. k^4 * sin(k * coords.x)
 
-    wdiv = Operators.WeakDivergence()
+    wdiv = Operators.Divergence{Operators.WeakForm}()
     grad = Operators.Gradient()
     χ = Spaces.weighted_dss!(@. wdiv(grad(y)))
     ∇⁴y = Spaces.weighted_dss!(@. wdiv(grad(χ)))

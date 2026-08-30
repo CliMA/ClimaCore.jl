@@ -275,7 +275,7 @@ end
     fyp = parent(fy)
 
     # C2F biased operators
-    LBC2F = Operators.LeftBiasedC2F(; bottom = Operators.SetValue(FT(10)))
+    LBC2F = Operators.BottomBiasedC2F(; bottom = Operators.SetValue(FT(10)))
     @. cy = cos(zc)
     @. fy = LBC2F(cy)
     fy_ref = ClimaComms.allowscalar(device) do
@@ -283,7 +283,7 @@ end
     end
     @test all(fy_ref .== parent(ClimaCore.to_cpu(fy)))
 
-    RBC2F = Operators.RightBiasedC2F(; top = Operators.SetValue(FT(10)))
+    RBC2F = Operators.TopBiasedC2F(; top = Operators.SetValue(FT(10)))
     @. cy = cos(zc)
     @. fy = RBC2F(cy)
     fy_ref = ClimaComms.allowscalar(device) do
@@ -292,7 +292,7 @@ end
     @test all(fy_ref .== parent(ClimaCore.to_cpu(fy)))
 
     # F2C biased operators
-    LBF2C = Operators.LeftBiasedF2C(; bottom = Operators.SetValue(FT(10)))
+    LBF2C = Operators.BottomBiasedF2C(; bottom = Operators.SetValue(FT(10)))
     @. cy = cos(zc)
     @. cy = LBF2C(fy)
     cy_ref = ClimaComms.allowscalar(device) do
@@ -300,7 +300,7 @@ end
     end
     @test all(cy_ref .== parent(ClimaCore.to_cpu(cy)))
 
-    RBF2C = Operators.RightBiasedF2C(; top = Operators.SetValue(FT(10)))
+    RBF2C = Operators.TopBiasedF2C(; top = Operators.SetValue(FT(10)))
     @. cy = cos(zc)
     @. cy = RBF2C(fy)
     cy_ref = ClimaComms.allowscalar(device) do
@@ -480,12 +480,12 @@ end
             i == n + 1 ? -(Jᶜ[n] * w³ᶜ[n]) * 2 / Jᶠ[n + 1] :
             (Jᶜ[i] * w³ᶜ[i] - Jᶜ[i - 1] * w³ᶜ[i - 1]) / Jᶠ[i] for i in 1:(n + 1)
         ]
-        # `LeftBiasedF2C(x)[i] = x[i-half]`, so its first level is the bottom
-        # face; `RightBiasedF2C(x)[i] = x[i+half]`, so its last level is the top.
+        # `BottomBiasedF2C(x)[i] = x[i-half]`, so its first level is the bottom
+        # face; `TopBiasedF2C(x)[i] = x[i+half]`, so its last level is the top.
         # These are applied to `J` rather than to the local geometry itself, so
         # that the stencil only ever operates on scalars.
-        J_bot_face = Fields.level(Operators.LeftBiasedF2C().(ᶠlg.J), 1)
-        J_top_face = Fields.level(Operators.RightBiasedF2C().(ᶠlg.J), n)
+        J_bot_face = Fields.level(Operators.BottomBiasedF2C().(ᶠlg.J), 1)
+        J_top_face = Fields.level(Operators.TopBiasedF2C().(ᶠlg.J), n)
         set_bcs = Operators.SetBoundaryOperator(
             bottom = Operators.SetValue(
                 Geometry.Jcontravariant3.(

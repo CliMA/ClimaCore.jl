@@ -1,12 +1,12 @@
 #=
-CUDA implementations of the DG internal-face and flux-differencing volume
+CUDA implementations of the DG interior-face and flux-differencing volume
 operators (see src/Operators/numericalflux.jl for the CPU methods and the
 operator contracts).
 
 Kernel design:
 - Flux-differencing volume (`_add_flux_differencing_divergence!`), element-local.
-- Internal-face fluxes (`_add_numerical_flux_internal!`,
-  `_add_lifting_flux_internal!`): two-pass staging + gather, follows `DSS` GPU kernels.
+- Interior-face fluxes (`_add_numerical_flux_interior!`,
+  `_add_lifting_flux_interior!`): two-pass staging + gather, follows `DSS` GPU kernels.
 - Ghost (inter-rank) faces: face-strip halo exchange
   (`Topologies.GhostFaceExchange`, one pack kernel per argument) started
   before the interior kernels (overlapping communication with compute), then
@@ -102,10 +102,10 @@ function dg_fddg_volume_kernel!(
 end
 
 # ---------------------------------------------------------------------------
-# Internal-face numerical flux and symmetric lifting (staging + gather)
+# Interior-face numerical flux and symmetric lifting (staging + gather)
 # ---------------------------------------------------------------------------
 
-Operators._add_numerical_flux_internal!(
+Operators._add_numerical_flux_interior!(
     ::ClimaComms.CUDADevice,
     ghost_exchange,
     fn::F,
@@ -113,7 +113,7 @@ Operators._add_numerical_flux_internal!(
     args...,
 ) where {F} = _dg_face_apply!(ghost_exchange, fn, dydt, args, Val(:numflux))
 
-Operators._add_lifting_flux_internal!(
+Operators._add_lifting_flux_interior!(
     ::ClimaComms.CUDADevice,
     ghost_exchange,
     fn::F,

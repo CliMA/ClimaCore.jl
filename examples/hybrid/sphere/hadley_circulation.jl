@@ -97,7 +97,7 @@ function tendency!(yₜ, y, parameters, t)
     )
     FCTZalesak = Operators.FCTZalesak()
     hdiv = Operators.Divergence()
-    hwdiv = Operators.WeakDivergence()
+    hwdiv = Operators.Divergence{Operators.WeakForm}()
     hgrad = Operators.Gradient()
 
     function local_velocity(coord)

@@ -11,19 +11,35 @@ abstract type AbstractOperator end
 """
     AbstractBoundaryCondition
 
-Supertype for boundary conditions of both the finite-difference and the
-discontinuous-Galerkin operators.
+Supertype for the boundary conditions of both the finite-difference and the
+discontinuous-Galerkin operators. The two families act on different mesh
+directions, so every boundary condition is either a
+[`VerticalBoundaryCondition`](@ref) or a
+[`HorizontalBoundaryCondition`](@ref), never both.
+"""
+abstract type AbstractBoundaryCondition end
 
-Boundary conditions for [`FiniteDifferenceOperator`](@ref)s should define:
+"""
+    VerticalBoundaryCondition <: AbstractBoundaryCondition
+
+Supertype for the boundary conditions of the vertical (column)
+[`FiniteDifferenceOperator`](@ref)s, e.g. [`SetValue`](@ref) and
+[`Extrapolate`](@ref). Subtypes should define:
 
   - [`boundary_width`](@ref)
   - [`stencil_left_boundary`](@ref)
   - [`stencil_right_boundary`](@ref)
-
-Boundary conditions for the DG numerical-flux operators (see
-[`add_numerical_flux_boundary!`](@ref)) should define [`ghost_state`](@ref).
 """
-abstract type AbstractBoundaryCondition end
+abstract type VerticalBoundaryCondition <: AbstractBoundaryCondition end
+
+"""
+    HorizontalBoundaryCondition <: AbstractBoundaryCondition
+
+Supertype for the boundary conditions of the horizontal DG numerical-flux
+operators (see [`add_numerical_flux_boundary!`](@ref)), e.g.
+[`ReflectingWallBC`](@ref). Subtypes should define [`ghost_state`](@ref).
+"""
+abstract type HorizontalBoundaryCondition <: AbstractBoundaryCondition end
 
 """
     return_eltype(::Op, fields...)

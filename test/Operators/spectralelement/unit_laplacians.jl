@@ -30,7 +30,7 @@ materialize = Base.Broadcast.materialize
     coord = Fields.coordinate_field(space)
     f = @. sind(coord.long) * cosd(coord.lat)
     ρ = @. 2 + sind(coord.lat)
-    wdiv = Operators.WeakDivergence()
+    wdiv = Operators.Divergence{Operators.WeakForm}()
     grad = Operators.Gradient()
 
     expected = @. wdiv(grad(f))
@@ -54,9 +54,9 @@ end
         Geometry.UVVector(cosd(coord.lat), sind(coord.long) * cosd(coord.lat)),
     )
     div = Operators.Divergence()
-    wgrad = Operators.WeakGradient()
+    wgrad = Operators.Gradient{Operators.WeakForm}()
     curl = Operators.Curl()
-    wcurl = Operators.WeakCurl()
+    wcurl = Operators.Curl{Operators.WeakForm}()
     C12 = Geometry.Covariant12Vector
     C3 = Geometry.Covariant3Vector
 
@@ -75,7 +75,7 @@ end
     space = TU.SpectralElementSpace1D(FT; context)
     coord = Fields.coordinate_field(space)
     div = Operators.Divergence()
-    wgrad = Operators.WeakGradient()
+    wgrad = Operators.Gradient{Operators.WeakForm}()
     C12 = Geometry.Covariant12Vector
     u = @. C12(wgrad(sin(coord.x)))
 
@@ -102,12 +102,12 @@ end
     ρe = @. sind(coord.long) * cosd(coord.lat) * (1 + coord.z)
     p = @. cosd(coord.long) + coord.z
     ρ = @. 2 + sind(coord.lat)
-    wdiv = Operators.WeakDivergence()
+    wdiv = Operators.Divergence{Operators.WeakForm}()
     grad = Operators.Gradient()
     div = Operators.Divergence()
-    wgrad = Operators.WeakGradient()
+    wgrad = Operators.Gradient{Operators.WeakForm}()
     curl = Operators.Curl()
-    wcurl = Operators.WeakCurl()
+    wcurl = Operators.Curl{Operators.WeakForm}()
     C12 = Geometry.Covariant12Vector
     C3 = Geometry.Covariant3Vector
     κ₄ = FT(1e-3)
