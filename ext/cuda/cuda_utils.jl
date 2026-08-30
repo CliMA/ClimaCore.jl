@@ -171,10 +171,12 @@ function uncached_launch_configuration(
     # distributions. An A100 sweep over max_waves in (1, 2, 4) on small unit
     # benchmarks found one wave at least as fast throughout and clearly fastest
     # for reductions (the equal-shape lazy reduction went from 145 to 129 us).
-    # A re-sweep on a realistic problem (baroclinic wave, h_elem = 30,
-    # z_elem = 63, A100) found more waves at most marginally faster, so the
-    # single-wave default stands; CLIMA_CUDA_MAX_WAVES overrides it for tuning
-    # experiments.
+    # After the FieldVector aliasing fix removed the per-step device
+    # allocations, a realistic-problem sweep (baroclinic wave, h_elem = 30,
+    # z_elem = 63, A100; see perf/sweep_kernel_configs.jl) found 4-8 waves ~6%
+    # faster per step (215 vs 228 ms). The default stays at one wave until the
+    # reduction slowdown seen at higher wave counts is revisited;
+    # CLIMA_CUDA_MAX_WAVES overrides it for tuning experiments.
     max_waves = something(default_max_waves, MAX_WAVES[])
 
     # Block sizes are searched in whole multiples of this unit, one warp unless
@@ -374,6 +376,7 @@ const NAME_KERNELS_FROM_STACK_TRACE = Ref{Bool}(false)
 const COLLECT_KERNEL_STATS = Ref{Bool}(false)
 const MAX_WAVES = Ref{Int}(1)
 const FD_MAX_THREADS = Ref{Int}(128)
+const DSS_MAX_THREADS = Ref{Int}(256)
 
 # Always reload when module is imported so precompilation doesn't make it "stick"
 function __init__()
@@ -384,6 +387,7 @@ function __init__()
         _getenv_bool("CLIMA_COLLECT_KERNEL_STATS"; default = false)
     MAX_WAVES[] = max(1, _getenv_int("CLIMA_CUDA_MAX_WAVES", 1))
     FD_MAX_THREADS[] = max(1, _getenv_int("CLIMA_FD_MAX_THREADS", 128))
+    DSS_MAX_THREADS[] = max(1, _getenv_int("CLIMA_DSS_MAX_THREADS", 256))
 end
 
 name_kernels_from_stack_trace() = NAME_KERNELS_FROM_STACK_TRACE[]

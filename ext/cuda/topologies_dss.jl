@@ -1,9 +1,12 @@
 import ClimaCore: DataLayouts, Topologies
 
+# Generic block-size cap, also used by the DG volume and remapping kernels.
 _max_threads_cuda() = 256
 
+# The DSS perimeter kernels have their own cap (CLIMA_DSS_MAX_THREADS
+# overrides it), so tuning DSS does not reconfigure the other kernels.
 function dss_config(nitems)
-    config = linear_partition(nitems, _max_threads_cuda())
+    config = linear_partition(nitems, DSS_MAX_THREADS[])
     return (; threads_s = config.threads, blocks_s = config.blocks)
 end
 

@@ -376,14 +376,32 @@ is_gpu_array_type(::Type{<:SubArray{<:Any, <:Any, P}}) where {P} =
     is_contiguous_gpu_array(dest) &&
     unrolled_all(Base.Fix1(is_flat_compatible, dest), bc.args)
 
-@inline flatten_bc_arg(dest::AbstractArray, arg::AbstractArray) = vec(arg)
-@inline flatten_bc_arg(dest::AbstractArray, arg::Number) = arg
-@inline flatten_bc_arg(dest::AbstractArray, bc::Base.Broadcast.Broadcasted) =
-    Base.Broadcast.Broadcasted(
-        bc.f,
-        unrolled_map(Base.Fix1(flatten_bc_arg, dest), bc.args),
-        (Base.OneTo(length(dest)),),
-    )
+# flatten_bc_arg replaces every array in the broadcast with its `vec`, except
+# the destination itself, which must map to the same `flat_dest` object that
+# is passed to `copyto!`: `Broadcast.broadcast_unalias` only skips its
+# defensive copy when destination and argument are identical (`===`), and two
+# separate `vec` wrappers around the same memory alias without being
+# identical, so every in-place update like `x .-= dx` would allocate a device
+# copy of `x`.
+@inline flatten_bc_arg(
+    dest::AbstractArray,
+    flat_dest::AbstractArray,
+    arg::AbstractArray,
+) = dest === arg ? flat_dest : vec(arg)
+@inline flatten_bc_arg(
+    dest::AbstractArray,
+    flat_dest::AbstractArray,
+    arg::Number,
+) = arg
+@inline flatten_bc_arg(
+    dest::AbstractArray,
+    flat_dest::AbstractArray,
+    bc::Base.Broadcast.Broadcasted,
+) = Base.Broadcast.Broadcasted(
+    bc.f,
+    unrolled_map(arg -> flatten_bc_arg(dest, flat_dest, arg), bc.args),
+    (Base.OneTo(length(dest)),),
+)
 
 @inline function Base.copyto!(
     dest::FieldVector,
@@ -395,7 +413,11 @@ is_gpu_array_type(::Type{<:SubArray{<:Any, <:Any, P}}) where {P} =
         if array isa FieldVector
             copyto!(array, bct)
         elseif is_flat_compatible(array, bct)
-            copyto!(vec(array), Base.Broadcast.instantiate(flatten_bc_arg(array, bct)))
+            flat_dest = vec(array)
+            copyto!(
+                flat_dest,
+                Base.Broadcast.instantiate(flatten_bc_arg(array, flat_dest, bct)),
+            )
         else
             copyto!(array, Base.Broadcast.instantiate(bct))
         end

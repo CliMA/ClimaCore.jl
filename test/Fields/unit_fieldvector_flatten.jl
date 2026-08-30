@@ -55,7 +55,7 @@ Fields.is_gpu_array_type(::Type{<:FlatTestArray}) = true
     # The gate and the transform must accept exactly the same argument types:
     # anything the gate rejects has no flatten_bc_arg method, so a divergence
     # fails loudly instead of flattening incorrectly.
-    @test !hasmethod(flatten_bc_arg, Tuple{Array{FT, 3}, String})
+    @test !hasmethod(flatten_bc_arg, Tuple{Array{FT, 3}, Vector{FT}, String})
 end
 
 @testset "FieldVector flattening transform equivalence" begin
@@ -68,8 +68,20 @@ end
         Base.Broadcast.broadcasted(*, a, FT(2)),
         b,
     )
-    copyto!(vec(dest), Base.Broadcast.instantiate(flatten_bc_arg(dest, bc)))
+    flat_dest = vec(dest)
+    copyto!(
+        flat_dest,
+        Base.Broadcast.instantiate(flatten_bc_arg(dest, flat_dest, bc)),
+    )
     @test dest.data ≈ @. 2 * a.data + b.data
+
+    # The destination's own appearance in the broadcast must flatten to the
+    # same object handed to copyto!, or Broadcast's aliasing check makes a
+    # defensive copy of the destination on every in-place update.
+    bc_aliased = Base.Broadcast.broadcasted(+, dest, b)
+    fbc = flatten_bc_arg(dest, flat_dest, bc_aliased)
+    @test fbc.args[1] === flat_dest
+    @test fbc.args[2] !== flat_dest
 end
 
 # On GPU runs this exercises the flattened path end-to-end; on CPU runs it
@@ -102,5 +114,18 @@ end
     for name in (:x1, :x2)
         @test Array(parent(getproperty(W, name))) ==
               Array(parent(getproperty(X, name)))
+    end
+
+    # In-place update where the destination appears in its own broadcast: on
+    # GPU this exercises the identity-preserving flatten path, which must not
+    # fall back to a defensive aliasing copy or change results.
+    z_old = Dict(
+        name => Array(parent(getproperty(Z, name))) for name in (:x1, :x2)
+    )
+    @. Z = 2 * Z + Y - 1
+    for name in (:x1, :x2)
+        y = Array(parent(getproperty(Y, name)))
+        expected = @. 2 * z_old[name] + y - 1
+        @test Array(parent(getproperty(Z, name))) ≈ expected
     end
 end
