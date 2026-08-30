@@ -116,6 +116,46 @@ SetDivergence
 Extrapolate
 ```
 
+## Discontinuous Galerkin operators
+
+Face and volume operators for discontinuous-Galerkin (DG) discretizations on
+spectral-element spaces marked with `discontinuous = true`. The face operators
+act on a mass-weighted residual (`WJ * ∂Y/∂t`) and complete the weak-form (or
+flux-differencing) volume terms at element interfaces.
+
+```@docs
+add_numerical_flux_internal!
+add_numerical_flux_boundary!
+add_lifting_flux_internal!
+lifting_correction
+add_flux_differencing_divergence!
+add_ldg_laplacian_flux_internal!
+ldg_laplacian_tendency
+ldg_penalty_parameter
+start_dg_ghost_exchange
+DGGhostExchange
+```
+
+### Numerical fluxes and face lifts
+
+```@docs
+AbstractNumericalFlux
+CentralNumericalFlux
+RusanovNumericalFlux
+LDGLaplacianFlux
+central_gradient_lift
+central_curl3_lift
+jump_penalty_lift
+```
+
+### DG boundary conditions
+
+```@docs
+ghost_state
+PeriodicBC
+ReflectingWallBC
+```
+
 ## Integrals
 
 ```@docs

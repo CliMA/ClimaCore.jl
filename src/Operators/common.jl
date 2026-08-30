@@ -8,6 +8,22 @@ called directly, but can be broadcasted over `Field`s.
 """
 abstract type AbstractOperator end
 
+"""
+    AbstractBoundaryCondition
+
+Supertype for boundary conditions of both the finite-difference and the
+discontinuous-Galerkin operators.
+
+Boundary conditions for [`FiniteDifferenceOperator`](@ref)s should define:
+
+  - [`boundary_width`](@ref)
+  - [`stencil_left_boundary`](@ref)
+  - [`stencil_right_boundary`](@ref)
+
+Boundary conditions for the DG numerical-flux operators (see
+[`add_numerical_flux_boundary!`](@ref)) should define [`ghost_state`](@ref).
+"""
+abstract type AbstractBoundaryCondition end
 
 """
     return_space(::Op, spaces...)

@@ -38,7 +38,11 @@ function periodic_plane(::Type{FT}, nelem; L = FT(2π), Nq = 4) where {FT}
     )
     mesh = Meshes.RectilinearMesh(domain, nelem, nelem)
     topology = Topologies.Topology2D(context, mesh)
-    return Spaces.SpectralElementSpace2D(topology, Quadratures.GLL{Nq}())
+    return Spaces.SpectralElementSpace2D(
+        topology,
+        Quadratures.GLL{Nq}();
+        discontinuous = true,
+    )
 end
 
 include("utils_dg.jl") # dg_divergence
@@ -49,6 +53,7 @@ include("utils_dg.jl") # dg_divergence
     errs = zeros(FT, length(nelems))
     for (i, nelem) in enumerate(nelems)
         space = periodic_plane(FT, nelem)
+        @test !Spaces.is_continuous(space)
         coords = Fields.coordinate_field(space)
         uv = @. Geometry.UVVector(sin(coords.x), sin(coords.y))
         div_exact = @. cos(coords.x) + cos(coords.y)

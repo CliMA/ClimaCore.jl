@@ -362,6 +362,52 @@ steps:
           slurm_ntasks: 2
           modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
+      - label: "Unit: distributed DG operators (2 ranks)"
+        key: unit_distributed_dg2
+        retry: *retry_policy
+        command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/distributed/ddg2.jl"
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+        agents:
+          slurm_ntasks: 2
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+
+      - label: "Unit: distributed DG operators (3 ranks)"
+        key: unit_distributed_dg3
+        retry: *retry_policy
+        command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/distributed/ddg3.jl"
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+        agents:
+          slurm_ntasks: 3
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+
+      - label: "Unit: cuda distributed DG operators (2 ranks)"
+        key: gpu_distributed_dg2
+        retry: *retry_policy
+        command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/distributed/ddg2.jl"
+        timeout_in_minutes: 15
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_ntasks: 2
+          slurm_gpus: 2
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+
+      - label: "Unit: cuda distributed DG operators (3 ranks)"
+        key: gpu_distributed_dg3
+        retry: *retry_policy
+        command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/distributed/ddg3.jl"
+        timeout_in_minutes: 15
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_ntasks: 3
+          slurm_gpus: 3
+          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+
       - label: "Unit: distributed dss3"
         key: unit_distributed_dss3
         retry: *retry_policy

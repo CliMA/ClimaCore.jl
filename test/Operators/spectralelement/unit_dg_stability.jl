@@ -43,7 +43,11 @@ function dg_plane_space(::Type{FT}; L = FT(2π), xelem = 4, yelem = 4, Nq = 4) w
     )
     mesh = Meshes.RectilinearMesh(domain, xelem, yelem)
     topology = Topologies.Topology2D(context, mesh)
-    return Spaces.SpectralElementSpace2D(topology, Quadratures.GLL{Nq}())
+    return Spaces.SpectralElementSpace2D(
+        topology,
+        Quadratures.GLL{Nq}();
+        discontinuous = true,
+    )
 end
 
 # A smooth, single-valued scalar and velocity for a given space. The `+ 2`
@@ -68,6 +72,7 @@ end
     TU.@test_precisions FT begin
         for (name, space) in
             (("sphere", dg_sphere_space(FT)), ("plane", dg_plane_space(FT)))
+            @test !Spaces.is_continuous(space)
             lgeom = Fields.local_geometry_field(space)
             q, uv = smooth_state(space)
 
@@ -105,7 +110,9 @@ end
 
                 qd = copy(q)
                 Random.seed!(1234)
-                parent(qd) .+= FT(0.1) .* (rand(FT, size(parent(qd))) .- FT(0.5))
+                qd_cpu = Array(parent(qd))
+                qd_cpu .+= FT(0.1) .* (rand(FT, size(qd_cpu)) .- FT(0.5))
+                copyto!(parent(qd), qd_cpu)
                 rd = similar(qd)
                 fill!(parent(rd), 0)
                 Operators.add_numerical_flux_internal!(dg_jump_penalty, rd, qd)
@@ -120,7 +127,9 @@ end
                 # even across a discontinuity.
                 qd = copy(q)
                 Random.seed!(2024)
-                parent(qd) .+= FT(0.1) .* (rand(FT, size(parent(qd))) .- FT(0.5))
+                qd_cpu = Array(parent(qd))
+                qd_cpu .+= FT(0.1) .* (rand(FT, size(qd_cpu)) .- FT(0.5))
+                copyto!(parent(qd), qd_cpu)
                 uvd = copy(uv)
                 y = map((qi, uvi) -> (; q = qi, uv = uvi), qd, uvd)
                 r = similar(qd)
