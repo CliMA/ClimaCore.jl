@@ -199,7 +199,7 @@ end
                     elem⁻ = Int(bconn.faces[1, f])
                     face⁻ = Int(bconn.faces[2, f])
                     i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, qq, false)
-                    sg = bconn.sgeom[qq, 1, f]
+                    sg = bconn.sgeom[1, qq, f]
                     q⁻ = q_data[CartesianIndex(1, i⁻, j⁻, elem⁻)]
                     staging[qq, f] = sg.sWJ * flux(sg.normal, (q⁻,))
                 end
