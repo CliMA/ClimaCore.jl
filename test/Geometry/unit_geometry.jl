@@ -113,6 +113,78 @@ end
     end
 end
 
+@testset "Composable Points" begin
+
+    for FT in (Float32, Float64, BigFloat)
+        x, y, z, p = FT(1), FT(2), FT(3), FT(4)
+        lat, long = FT(30), FT(-45)
+
+        @test Geometry.XYPoint(Geometry.XPoint(x), Geometry.YPoint(y)) ===
+              Geometry.XYPoint(x, y)
+        @test Geometry.XZPoint(Geometry.XPoint(x), Geometry.ZPoint(z)) ===
+              Geometry.XZPoint(x, z)
+        @test Geometry.YZPoint(Geometry.YPoint(y), Geometry.ZPoint(z)) ===
+              Geometry.YZPoint(y, z)
+
+        @test Geometry.XYZPoint(Geometry.XYPoint(x, y), Geometry.ZPoint(z)) ===
+              Geometry.XYZPoint(x, y, z)
+        @test Geometry.XYZPoint(
+            Geometry.XPoint(x),
+            Geometry.YPoint(y),
+            Geometry.ZPoint(z),
+        ) === Geometry.XYZPoint(x, y, z)
+
+        # `LatLongPoint` accepts its two parts in either order
+        @test Geometry.LatLongPoint(
+            Geometry.LatPoint(lat),
+            Geometry.LongPoint(long),
+        ) === Geometry.LatLongPoint(lat, long)
+        @test Geometry.LatLongPoint(
+            Geometry.LongPoint(long),
+            Geometry.LatPoint(lat),
+        ) === Geometry.LatLongPoint(lat, long)
+
+        @test Geometry.LatLongZPoint(
+            Geometry.LatLongPoint(lat, long),
+            Geometry.ZPoint(z),
+        ) === Geometry.LatLongZPoint(lat, long, z)
+        @test Geometry.LatLongZPoint(
+            Geometry.LatPoint(lat),
+            Geometry.LongPoint(long),
+            Geometry.ZPoint(z),
+        ) === Geometry.LatLongZPoint(lat, long, z)
+
+        @test Geometry.LatLongPPoint(
+            Geometry.LatLongPoint(lat, long),
+            Geometry.PPoint(p),
+        ) === Geometry.LatLongPPoint(lat, long, p)
+        @test Geometry.LatLongPPoint(
+            Geometry.LatPoint(lat),
+            Geometry.LongPoint(long),
+            Geometry.PPoint(p),
+        ) === Geometry.LatLongPPoint(lat, long, p)
+    end
+
+    # components of mixed float type are promoted, as in `product_coordinates`
+    @test Geometry.XYPoint(Geometry.XPoint(1.0f0), Geometry.YPoint(2.0)) ===
+          Geometry.XYPoint(1.0, 2.0)
+    @test Geometry.XYZPoint(
+        Geometry.XPoint(1.0f0),
+        Geometry.YPoint(2.0),
+        Geometry.ZPoint(3.0f0),
+    ) === Geometry.XYZPoint(1.0, 2.0, 3.0)
+
+    # composing mismatched axes is still an error
+    @test_throws MethodError Geometry.XYPoint(
+        Geometry.YPoint(1.0),
+        Geometry.XPoint(2.0),
+    )
+    @test_throws MethodError Geometry.XZPoint(
+        Geometry.XPoint(1.0),
+        Geometry.YPoint(2.0),
+    )
+end
+
 @testset "Vectors" begin
     wᵢ = Geometry.Covariant12Vector(1.0, 2.0)
     vʲ = Geometry.Contravariant12Vector(3.0, 4.0)
