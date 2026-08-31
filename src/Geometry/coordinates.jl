@@ -161,7 +161,7 @@ _coordinate(p::XZPoint, ::Val{2}) = ZPoint(p.z)
 
 _coordinate_type(::Type{YZPoint{FT}}, ::Val{1}) where {FT} = YPoint{FT}
 _coordinate_type(::Type{YZPoint{FT}}, ::Val{2}) where {FT} = ZPoint{FT}
-_coordinate(p::YZPoint, ::Val{1}) = YPoint(p.x)
+_coordinate(p::YZPoint, ::Val{1}) = YPoint(p.y)
 _coordinate(p::YZPoint, ::Val{2}) = ZPoint(p.z)
 
 _coordinate_type(::Type{XYZPoint{FT}}, ::Val{1}) where {FT} = XPoint{FT}
