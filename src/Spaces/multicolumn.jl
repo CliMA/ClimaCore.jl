@@ -30,6 +30,8 @@ ClimaComms.device(space::MultiPointSpace) = ClimaComms.device(grid(space))
 
 local_geometry_data(space::MultiPointSpace) =
     local_geometry_data(grid(space), nothing)
+Base.ndims(::Type{MultiPointSpace{G}}) where {G} = ndims(G)
+
 local_geometry_type(::Type{MultiPointSpace{G}}) where {G} =
     local_geometry_type(G)
 
@@ -64,6 +66,9 @@ struct MultiColumnFiniteDifferenceSpace{
     grid::G
     staggering::S
 end
+
+Base.ndims(::Type{MultiColumnFiniteDifferenceSpace{G, S}}) where {G, S} =
+    ndims(G)
 
 local_geometry_type(::Type{MultiColumnFiniteDifferenceSpace{G, S}}) where {G, S} =
     local_geometry_type(G)

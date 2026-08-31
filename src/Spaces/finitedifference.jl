@@ -24,6 +24,8 @@ FiniteDifferenceSpace(
     staggering::Staggering,
 ) = FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(topology), staggering)
 
+Base.ndims(::Type{FiniteDifferenceSpace{G, S}}) where {G, S} = ndims(G)
+
 local_geometry_type(::Type{FiniteDifferenceSpace{G, S}}) where {G, S} =
     local_geometry_type(G)
 

@@ -4,11 +4,13 @@ using StaticArrays, IntervalSets, LinearAlgebra
 import Adapt
 ClimaComms.@import_required_backends
 
+import ClimaCore
 import ClimaCore:
     slab,
     Domains,
     Meshes,
     Topologies,
+    Grids,
     Spaces,
     Quadratures,
     Fields,
@@ -20,6 +22,11 @@ import ClimaCore:
 
 using ClimaCore.CommonSpaces
 using ClimaCore.Utilities.Cache
+
+@isdefined(TU) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+);
+import .TestUtilities as TU;
 
 on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
 
@@ -649,5 +656,82 @@ end
         @test data_dss[1, 1, 1, :, 4] ==
               data[1, Nij, Nij, :, 1] .+ data[1, 1, Nij, :, 2] .+
               data[1, Nij, 1, :, 3] .+ data[1, 1, 1, :, 4]
+    end
+end
+
+@testset "ndims" begin
+    FT = Float64
+    context = ClimaComms.context()
+
+    # 1D
+    zgrid = Grids.FiniteDifferenceGrid(
+        Topologies.IntervalTopology(
+            context,
+            Meshes.IntervalMesh(
+                Domains.IntervalDomain(
+                    Geometry.ZPoint(FT(0)),
+                    Geometry.ZPoint(FT(1000));
+                    boundary_names = (:bottom, :top),
+                );
+                nelems = 10,
+            ),
+        ),
+    )
+    center_space = Spaces.CenterFiniteDifferenceSpace(zgrid)
+    face_space = Spaces.FaceFiniteDifferenceSpace(zgrid)
+    @test ndims(center_space) == 1
+    @test ndims(face_space) == 1
+
+    # 1D horizontal, and the 2D extrusion of it
+    xtopology = Topologies.IntervalTopology(
+        context,
+        Meshes.IntervalMesh(
+            Domains.IntervalDomain(
+                Geometry.XPoint(FT(0)),
+                Geometry.XPoint(FT(1));
+                periodic = true,
+            );
+            nelems = 4,
+        ),
+    )
+    space_1d = Spaces.SpectralElementSpace1D(xtopology, Quadratures.GLL{4}())
+    @test ndims(space_1d) == 1
+    @test ndims(Spaces.ExtrudedFiniteDifferenceSpace(space_1d, center_space)) ==
+          2
+
+    # 2D horizontal, and the 3D extrusion of it
+    sphere_topology = Topologies.Topology2D(
+        context,
+        Meshes.EquiangularCubedSphere(Domains.SphereDomain(FT(6.371e6)), 4),
+    )
+    space_2d =
+        Spaces.SpectralElementSpace2D(sphere_topology, Quadratures.GLL{4}())
+    space_3d = Spaces.ExtrudedFiniteDifferenceSpace(space_2d, center_space)
+    @test ndims(space_2d) == 2
+    @test ndims(space_3d) == 3
+
+    # a column is 1D and a level drops the vertical dimension, even though
+    # both keep the ambient coordinate type of the space they slice
+    @test ndims(Spaces.column(space_3d, 1, 1, 1)) == 1
+    @test ndims(Spaces.level(space_3d, 1)) == 2
+
+    # `ndims` is fixed by the type, so it is a compile-time constant
+    for space in (center_space, space_1d, space_2d, space_3d)
+        @test ndims(typeof(space)) == ndims(space)
+        @test @inferred(ndims(space)) == ndims(space)
+        @test (@allocated ndims(space)) == 0
+    end
+
+    # every space TestUtilities knows about answers, and agrees with the
+    # number of components of its coordinates
+    for space in TU.all_spaces(FT; context)
+        @test ndims(space) isa Int
+        is_slice =
+            !(space isa Spaces.PointSpace) &&
+            Spaces.grid(space) isa Union{Grids.ColumnGrid, Grids.LevelGrid}
+        if !is_slice
+            @test ndims(space) ==
+                  Geometry.ncomponents(eltype(Spaces.coordinates_data(space)))
+        end
     end
 end

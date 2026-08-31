@@ -31,6 +31,8 @@ dss_weights(levelgrid::LevelGrid, _) = dss_weights(levelgrid.full_grid, nothing)
 local_geometry_type(::Type{LevelGrid{G, L}}) where {G, L} =
     local_geometry_type(G)
 
+Base.ndims(::Type{LevelGrid{G, L}}) where {G, L} = ndims(G) - 1
+
 local_geometry_data(levelgrid::LevelGrid{<:Any, Int}, ::Nothing) = level(
     local_geometry_data(levelgrid.full_grid, CellCenter()),
     levelgrid.level,
