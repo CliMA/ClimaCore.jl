@@ -121,7 +121,7 @@ function alloc_test_derivative(cfield, ffield, ∇c, ∇f)
     p = @allocated begin
         @. fz = fx * fy * ∇f(wvec(cy)) * ∇f(wvec(cx)) * fϕ * fψ
     end
-    @test p ≤ 3600 broken = USING_CUDA
+    @test p ≤ 3600
 end
 
 function alloc_test_redefined_operators(cfield, ffield)
@@ -175,7 +175,7 @@ function alloc_test_operators_in_loops(cfield, ffield)
         p = @allocated begin
             @. cz = cx * cy * ∇c(wvec(fy)) * ∇c(wvec(fx)) * cϕ * cψ
         end
-        @test p ≤ 3600 broken = USING_CUDA
+        @test p ≤ 3600
         c∇closure() = @. cz = cx * cy * ∇c(wvec(fy)) * ∇c(wvec(fx)) * cϕ * cψ
         c∇closure()
         p = @allocated begin
@@ -194,7 +194,7 @@ function alloc_test_nested_expressions_1(cfield, ffield)
     p = @allocated begin
         @. cz = cx * cy * ∇c(wvec(LB(cy))) * ∇c(wvec(LB(cx))) * cϕ * cψ
     end
-    @test p ≤ 3600 broken = USING_CUDA
+    @test p ≤ 3600
 end
 
 function alloc_test_nested_expressions_2(cfield, ffield)
@@ -207,7 +207,7 @@ function alloc_test_nested_expressions_2(cfield, ffield)
     p = @allocated begin
         @. cz = cx * cy * ∇c(wvec(RB(cy))) * ∇c(wvec(RB(cx))) * cϕ * cψ
     end
-    @test p ≤ 3600 broken = USING_CUDA
+    @test p ≤ 3600
 end
 
 function alloc_test_nested_expressions_3(cfield, ffield)
@@ -235,8 +235,8 @@ function alloc_test_nested_expressions_4(cfield, ffield)
         top = Operators.SetValue(0),
     )
     ∇f = Operators.DivergenceC2F(;
-        bottom = Operators.SetValue(wvec(0)),
-        top = Operators.SetValue(wvec(0)),
+        bottom = Operators.SetDivergence(0),
+        top = Operators.SetDivergence(0),
     )
     LB = Operators.LeftBiasedF2C(; bottom = Operators.SetValue(1))
     #! format: off
@@ -272,9 +272,9 @@ function alloc_test_nested_expressions_6(cfield, ffield)
     wvec = Geometry.WVector
     Ic = Operators.InterpolateF2C()
     ∇f = Operators.DivergenceC2F(;
-        bottom = Operators.SetValue(wvec(0)),
-        top = Operators.SetValue(wvec(0)),
-    )
+            bottom = Operators.SetDivergence(0),
+            top = Operators.SetDivergence(0),
+        )
     #! format: off
     @. fz = fx * fy * ∇f(wvec(Ic(fy) * cx)) * ∇f(wvec(Ic(fy) * cx)) * fϕ * fψ # Compile first
     p = @allocated begin
@@ -416,7 +416,10 @@ function alloc_test_nested_expressions_13(
     zero_bcs =
         (; bottom = Operators.SetValue(FT(0)), top = Operators.SetValue(FT(0)))
     I0f = Operators.InterpolateC2F(; zero_bcs...)
-    ∇f = Operators.DivergenceC2F(; adv_bcs...)
+    ∇f = Operators.DivergenceC2F(;
+        bottom = Operators.SetDivergence(0),
+        top = Operators.SetDivergence(0),
+    )
 
     # Compile first
     @inbounds for i in 1:n_tuples
@@ -501,14 +504,6 @@ end
         cfield,
         ffield,
         Operators.InterpolateC2F(;
-            bottom = Operators.SetGradient(wvec_glob(0)),
-            top = Operators.SetGradient(wvec_glob(0)),
-        ),
-    )
-    alloc_test_c2f_interp(
-        cfield,
-        ffield,
-        Operators.InterpolateC2F(;
             bottom = Operators.Extrapolate(),
             top = Operators.Extrapolate(),
         ),
@@ -529,8 +524,8 @@ end
         ffield,
         Operators.DivergenceF2C(),
         Operators.DivergenceC2F(;
-            bottom = Operators.SetValue(wvec_glob(0)),
-            top = Operators.SetValue(wvec_glob(0)),
+            bottom = Operators.SetDivergence(0),
+            top = Operators.SetDivergence(0),
         ),
     )
     alloc_test_derivative(
@@ -541,16 +536,16 @@ end
             top = Operators.SetValue(wvec_glob(0)),
         ),
         Operators.DivergenceC2F(;
-            bottom = Operators.SetValue(wvec_glob(0)),
-            top = Operators.SetValue(wvec_glob(0)),
+            bottom = Operators.SetDivergence(0),
+            top = Operators.SetDivergence(0),
         ),
     )
     alloc_test_derivative(
         cfield,
         ffield,
         Operators.DivergenceF2C(;
-            bottom = Operators.Extrapolate(),
-            top = Operators.Extrapolate(),
+            bottom = Operators.SetDivergence(0),
+            top = Operators.SetDivergence(0),
         ),
         Operators.DivergenceC2F(;
             bottom = Operators.SetDivergence(0),

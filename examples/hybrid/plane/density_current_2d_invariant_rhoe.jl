@@ -133,10 +133,6 @@ function rhs_invariant!(dY, Y, _, t)
         top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
     )
-    vdivc2f = Operators.DivergenceC2F(
-        top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-        bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-    )
     # we want the total u³ at the boundary to be zero: we can either constrain
     # both to be zero, or allow one to be non-zero and set the other to be its
     # negation
@@ -202,7 +198,16 @@ function rhs_invariant!(dY, Y, _, t)
     hκ₂∇²uₕ = @. hwdiv(κ₂ * ᶜ∇ₕuₕ)
     vκ₂∇²uₕ = @. vdivf2c(κ₂ * ᶠ∇ᵥuₕ)
     hκ₂∇²w = @. hwdiv(κ₂ * ᶠ∇ₕw)
-    vκ₂∇²w = @. vdivc2f(κ₂ * ᶜ∇ᵥw)
+
+    # The diffusive flux κ₂ ∇ᵥw is zero at each boundary face; that Dirichlet
+    # value on the divergence's argument is imposed by
+    # `divergence_c2f_dirichlet`.
+    κ₂∇ᵥw = @. κ₂ * ᶜ∇ᵥw
+    vκ₂∇²w = Operators.divergence_c2f_dirichlet(
+        κ₂∇ᵥw;
+        bottom = Geometry.WVector(0.0),
+        top = Geometry.WVector(0.0),
+    )
     hκ₂∇²h_tot = @. hwdiv(cρ * κ₂ * ᶜ∇ₕh_tot)
     vκ₂∇²h_tot = @. vdivf2c(fρ * κ₂ * ᶠ∇ᵥh_tot)
 

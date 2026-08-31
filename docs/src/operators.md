@@ -73,15 +73,21 @@ InterpolateC2F
 InterpolateF2C
 WeightedInterpolateC2F
 WeightedInterpolateF2C
+AdvectionOperator
 UpwindBiasedProductC2F
 Upwind3rdOrderBiasedProductC2F
 FCTBorisBook
 FCTZalesak
 LinVanLeerC2F
+TVDLimitedFluxC2F
 LeftBiasedC2F
 RightBiasedC2F
 LeftBiasedF2C
 RightBiasedF2C
+BottomBiasedC2F
+TopBiasedC2F
+BottomBiasedF2C
+TopBiasedF2C
 AbstractTVDSlopeLimiter
 ```
 
@@ -90,8 +96,6 @@ AbstractTVDSlopeLimiter
 ```@docs
 GradientF2C
 GradientC2F
-AdvectionF2F
-AdvectionC2C
 DivergenceF2C
 DivergenceC2F
 CurlC2F
@@ -101,8 +105,16 @@ CurlC2F
 
 ```@docs
 SetBoundaryOperator
-FirstOrderOneSided
-ThirdOrderOneSided
+```
+
+### Dirichlet (`SetValue`) replacement helpers
+
+```@docs
+DirichletOperator
+gradient_c2f_dirichlet
+divergence_c2f_dirichlet
+curl_c2f_dirichlet
+upwind_biased_product_c2f_dirichlet
 ```
 
 ## Finite difference boundary conditions
@@ -114,6 +126,46 @@ SetValue
 SetGradient
 SetDivergence
 Extrapolate
+```
+
+## Discontinuous Galerkin operators
+
+Face and volume operators for discontinuous-Galerkin (DG) discretizations on
+spectral-element spaces marked with `discontinuous = true`. The face operators
+act on a mass-weighted residual (`WJ * ∂Y/∂t`) and complete the weak-form (or
+flux-differencing) volume terms at element interfaces.
+
+```@docs
+add_numerical_flux_internal!
+add_numerical_flux_boundary!
+add_lifting_flux_internal!
+lifting_correction
+add_flux_differencing_divergence!
+add_ldg_laplacian_flux_internal!
+ldg_laplacian_tendency
+ldg_penalty_parameter
+start_dg_ghost_exchange
+DGGhostExchange
+```
+
+### Numerical fluxes and face lifts
+
+```@docs
+AbstractNumericalFlux
+CentralNumericalFlux
+RusanovNumericalFlux
+LDGLaplacianFlux
+central_gradient_lift
+central_curl3_lift
+jump_penalty_lift
+```
+
+### DG boundary conditions
+
+```@docs
+ghost_state
+PeriodicBC
+ReflectingWallBC
 ```
 
 ## Integrals

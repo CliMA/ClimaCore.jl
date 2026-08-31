@@ -33,19 +33,6 @@ function opt_RightBiasedF2C(face_field)
     return RB.(identity.(face_field))
 end
 
-function opt_AdvectionF2F(face_vel, face_field)
-    A = Operators.AdvectionF2F()
-    return A.(face_vel, identity.(face_field))
-end
-
-function opt_FluxCorrectionF2F_Extrapolate(face_vel, face_field)
-    FC = Operators.FluxCorrectionF2F(
-        left = Operators.Extrapolate(),
-        right = Operators.Extrapolate(),
-    )
-    return FC.(face_vel, identity.(face_field))
-end
-
 function opt_GradientF2C(face_field)
     ∇ᶜ = Operators.GradientF2C()
     return Geometry.WVector.(∇ᶜ.(sin.(face_field)))
@@ -72,14 +59,6 @@ function opt_InterpolateC2F_SetValue(center_field)
     return I.(identity.(center_field))
 end
 
-function opt_InterpolateC2F_SetGradient(center_field)
-    I = Operators.InterpolateC2F(
-        left = Operators.SetGradient(Geometry.WVector(0.0)),
-        right = Operators.SetGradient(Geometry.WVector(0.0)),
-    )
-    return I.(identity.(center_field))
-end
-
 function opt_InterpolateC2F_Extrapolate(center_field)
     I = Operators.InterpolateC2F(
         left = Operators.Extrapolate(),
@@ -92,14 +71,6 @@ function opt_WeightedInterpolateC2F_SetValue(weights, center_field)
     WI = Operators.WeightedInterpolateC2F(
         left = Operators.SetValue(0.0),
         right = Operators.SetValue(0.0),
-    )
-    return identity.(WI.(weights, center_field))
-end
-
-function opt_WeightedInterpolateC2F_SetGradient(weights, center_field)
-    WI = Operators.WeightedInterpolateC2F(
-        left = Operators.SetGradient(Geometry.WVector(0.0)),
-        right = Operators.SetGradient(Geometry.WVector(0.0)),
     )
     return identity.(WI.(weights, center_field))
 end
@@ -122,53 +93,60 @@ function opt_RightBiasedC2F(center_field)
     return RB.(identity.(center_field))
 end
 
-function opt_UpwindBiasedProductC2F_SetValue(face_vel, center_field)
-    UB = Operators.UpwindBiasedProductC2F(
-        left = Operators.SetValue(0.0),
-        right = Operators.SetValue(0.0),
-    )
-    return UB.(face_vel, identity.(center_field))
-end
-
+# The boundary conditions here must be named after the space's boundaries
+# (left/right below), so that the named-boundary-condition path is what gets
+# analyzed; a (bottom, top) pair of Extrapolate{0}s is the default, which
+# short-circuits the name lookup.
 function opt_UpwindBiasedProductC2F_Extrapolate(face_vel, center_field)
     UB = Operators.UpwindBiasedProductC2F(
-        left = Operators.Extrapolate(),
-        right = Operators.Extrapolate(),
+        left = Operators.Extrapolate(0),
+        right = Operators.Extrapolate(0),
     )
     return UB.(face_vel, identity.(center_field))
 end
 
-function opt_AdvectionC2C_SetValue(face_vel, center_field)
-    A = Operators.AdvectionC2C(
-        left = Operators.SetValue(0.0),
-        right = Operators.SetValue(0.0),
+function opt_Upwind3rdOrderBiasedProductC2F_mixed(face_vel, center_field)
+    UB = Operators.Upwind3rdOrderBiasedProductC2F(
+        left = Operators.Extrapolate(0),
+        right = Operators.Extrapolate(2),
     )
-    return A.(face_vel, identity.(center_field))
+    return UB.(face_vel, identity.(center_field))
 end
 
-function opt_AdvectionC2C_Extrapolate(face_vel, center_field)
-    A = Operators.AdvectionC2C(
-        left = Operators.Extrapolate(),
-        right = Operators.Extrapolate(),
+function opt_FCTBorisBook(face_flux, center_field)
+    op = Operators.FCTBorisBook(
+        left = Operators.Extrapolate(1),
+        right = Operators.Extrapolate(1),
     )
-    return A.(face_vel, identity.(center_field))
+    return op.(face_flux, identity.(center_field))
 end
 
-function opt_FluxCorrectionC2C_Extrapolate(face_vel, center_field)
-    FC = Operators.FluxCorrectionC2C(
-        left = Operators.Extrapolate(),
-        right = Operators.Extrapolate(),
+function opt_FCTZalesak(face_flux, center_field, center_field_td)
+    op = Operators.FCTZalesak(
+        left = Operators.Extrapolate(1),
+        right = Operators.Extrapolate(1),
     )
-    return FC.(face_vel, identity.(center_field))
+    return op.(face_flux, tuple.(center_field, center_field_td))
 end
 
-function opt_GradientC2F_SetValue(center_field)
-    ∇ᶠ = Operators.GradientC2F(
-        left = Operators.SetValue(1.0),
-        right = Operators.SetValue(-1.0),
+function opt_TVDLimitedFluxC2F(face_flux, center_field, face_ct3)
+    op = Operators.TVDLimitedFluxC2F(
+        left = Operators.Extrapolate(1),
+        right = Operators.Extrapolate(1),
+        method = Operators.MinModLimiter(),
     )
-    return Geometry.WVector.(∇ᶠ.(cos.(center_field)))
+    return op.(face_flux, identity.(center_field), face_ct3)
 end
+
+function opt_LinVanLeerC2F(face_vel, center_field, dt)
+    op = Operators.LinVanLeerC2F(
+        left = Operators.Extrapolate(1),
+        right = Operators.Extrapolate(1),
+        constraint = Operators.MonotoneLocalExtrema(),
+    )
+    return op.(face_vel, identity.(center_field), dt)
+end
+
 
 function opt_GradientC2F_SetGradient(center_field)
     ∇ᶠ = Operators.GradientC2F(
@@ -176,14 +154,6 @@ function opt_GradientC2F_SetGradient(center_field)
         right = Operators.SetGradient(Geometry.WVector(0.0)),
     )
     return Geometry.WVector.(∇ᶠ.(cos.(center_field)))
-end
-
-function opt_DivergenceC2F_SetValue(center_field)
-    divᶠ = Operators.DivergenceC2F(
-        left = Operators.SetValue(Geometry.WVector(0.0)),
-        right = Operators.SetValue(Geometry.WVector(0.0)),
-    )
-    return divᶠ.(Geometry.WVector.(sin.(center_field)))
 end
 
 function opt_DivergenceC2F_SetDivergence(center_field)
@@ -195,15 +165,6 @@ function opt_DivergenceC2F_SetDivergence(center_field)
     return divᶠ.(Geometry.WVector.(cos.(center_field)))
 end
 
-
-function opt_CurlC2F_SetValue(center_field)
-    # DivergenceC2F, SetDivergence
-    curlᶠ = Operators.CurlC2F(
-        left = Operators.SetValue(Geometry.Covariant1Vector(0.0)),
-        right = Operators.SetValue(Geometry.Covariant1Vector(0.0)),
-    )
-    return curlᶠ.(Geometry.Covariant1Vector.(cos.(center_field)))
-end
 
 # Test that Julia ia able to optimize Stencil operations v1.7+
 @static if @isdefined(var"@test_opt")
@@ -244,13 +205,6 @@ end
             @test_opt opt_LeftBiasedF2C(faces)
             @test_opt opt_RightBiasedF2C(faces)
 
-            # @test_opt opt_AdvectionF2F(face_velocities, faces)
-
-            @test_opt opt_FluxCorrectionF2F_Extrapolate(
-                center_velocities,
-                faces,
-            )
-
             @test_opt opt_GradientF2C(faces)
             @test_opt opt_DivergenceF2C(faces)
 
@@ -261,14 +215,9 @@ end
             @test_opt function_filter = filter sum(sin.(centers))
 
             @test_opt opt_InterpolateC2F_SetValue(centers)
-            @test_opt opt_InterpolateC2F_SetGradient(centers)
             @test_opt opt_InterpolateC2F_Extrapolate(centers)
 
             @test_opt opt_WeightedInterpolateC2F_SetValue(
-                center_values,
-                centers,
-            )
-            @test_opt opt_WeightedInterpolateC2F_SetGradient(
                 center_values,
                 centers,
             )
@@ -280,29 +229,28 @@ end
             @test_opt opt_LeftBiasedC2F(centers)
             @test_opt opt_RightBiasedC2F(centers)
 
-            @test_opt opt_UpwindBiasedProductC2F_SetValue(
-                face_velocities,
-                centers,
-            )
             @test_opt opt_UpwindBiasedProductC2F_Extrapolate(
                 face_velocities,
                 centers,
             )
 
-            @test_opt opt_AdvectionC2C_SetValue(face_velocities, centers)
-            @test_opt opt_AdvectionC2C_Extrapolate(face_velocities, centers)
-
-            @test_opt opt_FluxCorrectionC2C_Extrapolate(
+            # The reworked advection operators: matrix-rewritten (upwind) and
+            # pointwise (FCT/TVD/van Leer), including the ghost-point
+            # extrapolations and, for FCTZalesak, the tuple-valued advected
+            # field and the neighboring-face velocities
+            face_ct3 = Geometry.Contravariant3Vector.(face_values)
+            @test_opt opt_Upwind3rdOrderBiasedProductC2F_mixed(
                 face_velocities,
                 centers,
             )
+            @test_opt opt_FCTBorisBook(face_ct3, centers)
+            @test_opt opt_FCTZalesak(face_ct3, centers, centers)
+            @test_opt opt_TVDLimitedFluxC2F(face_ct3, centers, face_ct3)
+            @test_opt opt_LinVanLeerC2F(face_velocities, centers, FT(0.1))
 
-            @test_opt opt_GradientC2F_SetValue(centers)
             @test_opt opt_GradientC2F_SetGradient(centers)
 
-            @test_opt opt_DivergenceC2F_SetValue(centers)
             @test_opt opt_DivergenceC2F_SetDivergence(centers)
-            @test_opt opt_CurlC2F_SetValue(centers)
         end
     end
 end

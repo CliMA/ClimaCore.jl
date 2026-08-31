@@ -188,15 +188,5 @@ RightBiasedF2C
 UpwindBiasedProductC2F
 Upwind3rdOrderBiasedProductC2F
 CurlC2F
-
-# Unused (at the moment) operators
-LeftBiased3rdOrderC2F  # unused
-LeftBiased3rdOrderF2C  # unused
-RightBiased3rdOrderC2F # unused
-RightBiased3rdOrderF2C # unused
-AdvectionF2F           # only used in ClimaAtmos src/
-AdvectionC2C           # only used in ClimaAtmos src/
-FluxCorrectionC2C      # unused at the moment
-FluxCorrectionF2F      # only used in ClimaAtmos src/
 ```
 =#

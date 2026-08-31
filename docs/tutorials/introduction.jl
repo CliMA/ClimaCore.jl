@@ -11,7 +11,6 @@
 # - currently under development
 
 using ClimaComms, ClimaCore, ClimaCorePlots, LinearAlgebra, IntervalSets, Plots
-
 #----------------------------------------------------------------------------
 
 # ## 1. Constructing a discretization
@@ -297,13 +296,8 @@ gradc2f = ClimaCore.Operators.GradientC2F()
 #         ????
 # ```
 #
-# To handle boundaries we need to *modify the stencil*. Two options:
-# - provide the _value_ $\theta^*$ of $\theta$ at the boundary:
-# ```math
-# \nabla\theta[\tfrac{1}{2}] = \frac{\theta[1] - \theta^*}{\Delta z /2}
-# ```
+# To handle boundaries we need to *modify the stencil*. This is done by providing the *gradient* $\nabla\theta^*$ of $\theta$ at the boundary:
 #
-# - provide the *gradient* $\nabla\theta^*$ of $\theta$ at the boundary:
 # ```math
 # \nabla\theta[\tfrac{1}{2}] = \nabla\theta^*
 # ```
@@ -312,7 +306,9 @@ gradc2f = ClimaCore.Operators.GradientC2F()
 
 sinz = sin.(column_center_coords.z)
 gradc2f = ClimaCore.Operators.GradientC2F(
-    bottom = ClimaCore.Operators.SetValue(sin(0.0)),
+    bottom = ClimaCore.Operators.SetGradient(
+        ClimaCore.Geometry.WVector(cos(0.0)),
+    ),
     top = ClimaCore.Operators.SetGradient(
         ClimaCore.Geometry.WVector(cos(10.0)),
     ),
@@ -370,10 +366,12 @@ import ClimaTimeSteppers as CTS
 # \frac{\partial y}{\partial t} = \alpha \nabla \cdot \nabla y
 # ```
 #
-# At the bottom we will use a Dirichlet condition ``y(0) = 1`` at the bottom: since we don't actually have a value located at the bottom, we will use a `SetValue` boundary modifier on the inner gradient.
+# At the bottom we will use a Dirichlet condition ``y(0) = 1`` at the bottom: since we don't actually have a value located at the bottom, the condition is imposed through a `SetGradient` boundary modifier on the inner gradient.
+# If ``y(0) = 1``, then the covariant gradient at the first face is ``\frac{\partial y}{\partial \xi^3}[\tfrac{1}{2}] = 2(y[1] - 1)``, where ``y[1]`` is the value at the first cell center, half a cell above the boundary face.
+# The helper function `Operators.gradient_c2f_dirichlet` builds exactly this `SetGradient` from the prescribed boundary value.
 #
 # At the top we will use a Neumann condition ``\frac{\partial y}{\partial z}(10) = 0``. We can do this two equivalent ways:
-#  - a `SetGradient` on the gradient operator
+#  - a `SetGradient` on the gradient operator (passed through `gradient_c2f_dirichlet` as an explicit boundary condition)
 #  - a `SetValue` on the divergence operator
 #
 # either will work.
@@ -382,14 +380,17 @@ y0 = zeros(column_center_space)
 
 ## define the tendency function
 function heat_fd_tendency!(dydt, y, α, t)
-    gradc2f = ClimaCore.Operators.GradientC2F(
-        bottom = ClimaCore.Operators.SetValue(1.0),
-        top = ClimaCore.Operators.SetGradient(ClimaCore.Geometry.WVector(0.0)),
+    ∇y = ClimaCore.Operators.gradient_c2f_dirichlet(
+        y;
+        bottom = 1.0,
+        top = ClimaCore.Operators.SetGradient(
+            ClimaCore.Geometry.Covariant3Vector(0.0),
+        ),
     )
     divf2c = ClimaCore.Operators.DivergenceF2C()
     ## the @. macro "dots" the whole expression
-    ## i.e.  dydt .= α .* divf2c.(gradc2f.(y))
-    @. dydt = α * divf2c(gradc2f(y))
+    ## i.e.  dydt .= α .* divf2c.(∇y)
+    @. dydt = α * divf2c(∇y)
 end
 
 heat_fd_prob = CTS.ODEProblem(

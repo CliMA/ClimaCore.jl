@@ -41,6 +41,7 @@ const context = ClimaComms.SingletonCommsContext()
 
 include(joinpath(@__DIR__, "../..", "example_utils.jl")) # linkfig
 include(joinpath(@__DIR__, "bubble_parameters.jl")) # PhysicalParameters, geopotential
+include(joinpath(@__DIR__, "..", "flux_correction_utils.jl")) # add_flux_correction_{c2c,f2f}
 
 # The invariant counterpart threads these through a `PhysicalParameters` value
 # because it also runs on the GPU; this case is CPU-only, so it reads the same
@@ -226,14 +227,6 @@ function rhs!(dY, Y, _, t)
         bottom = Operators.SetValue(Geometry.WVector(0.0)),
         top = Operators.SetValue(Geometry.WVector(0.0)),
     )
-    fcc = Operators.FluxCorrectionC2C(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-    fcf = Operators.FluxCorrectionF2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
 
     z = coords.z
     uₕ = @. ρuₕ / ρ
@@ -281,10 +274,10 @@ function rhs!(dY, Y, _, t)
     @. dρw -= hwdiv(uₕf ⊗ ρw)
 
     # Upwind flux correction
-    @. dρ += fcc(w, ρ)
-    @. dρe += fcc(w, ρe)
-    @. dρuₕ += fcc(w, ρuₕ)
-    @. dρw += fcf(wc, ρw)
+    add_flux_correction_c2c!(dρ, w, ρ)
+    add_flux_correction_c2c!(dρe, w, ρe)
+    add_flux_correction_c2c!(dρuₕ, w, ρuₕ)
+    add_flux_correction_f2f!(dρw, wc, ρw)
 
     Spaces.weighted_dss!(dYc)
     Spaces.weighted_dss!(dρw)

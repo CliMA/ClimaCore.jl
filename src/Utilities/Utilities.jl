@@ -204,7 +204,7 @@ with special handling of `DataType` fields to avoid errors during compilation.
 
 # Examples
 
-```jldoctest; setup = :(import ClimaCore.Utilities: new), filter = r"\\d+"
+```jldoctest; setup = :(import ClimaCore.Utilities: new), filter = r"-?\\d+"
 julia> new(Int)
 4889520192
 
