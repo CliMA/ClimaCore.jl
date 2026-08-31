@@ -139,6 +139,29 @@ product_coordinates(latlongp::LatLongPoint, zp::ZPoint) =
 product_coordinates(latlongp::LatLongPoint, pressure_p::PPoint) =
     LatLongPPoint(promote(latlongp.lat, latlongp.long, pressure_p.p)...)
 
+XYPoint(xp::XPoint, yp::YPoint) = product_coordinates(xp, yp)
+XZPoint(xp::XPoint, zp::ZPoint) = product_coordinates(xp, zp)
+YZPoint(yp::YPoint, zp::ZPoint) = product_coordinates(yp, zp)
+
+XYZPoint(xyp::XYPoint, zp::ZPoint) = product_coordinates(xyp, zp)
+XYZPoint(xp::XPoint, yp::YPoint, zp::ZPoint) =
+    product_coordinates(product_coordinates(xp, yp), zp)
+
+LatLongPoint(latp::LatPoint, longp::LongPoint) =
+    product_coordinates(latp, longp)
+LatLongPoint(longp::LongPoint, latp::LatPoint) =
+    product_coordinates(longp, latp)
+
+LatLongZPoint(latlongp::LatLongPoint, zp::ZPoint) =
+    product_coordinates(latlongp, zp)
+LatLongZPoint(latp::LatPoint, longp::LongPoint, zp::ZPoint) =
+    product_coordinates(product_coordinates(latp, longp), zp)
+
+LatLongPPoint(latlongp::LatLongPoint, pp::PPoint) =
+    product_coordinates(latlongp, pp)
+LatLongPPoint(latp::LatPoint, longp::LongPoint, pp::PPoint) =
+    product_coordinates(product_coordinates(latp, longp), pp)
+
 component(p::AbstractPoint{FT}, i::Symbol) where {FT} = getfield(p, i)::FT
 component(p::AbstractPoint{FT}, i::Integer) where {FT} = getfield(p, i)::FT
 
