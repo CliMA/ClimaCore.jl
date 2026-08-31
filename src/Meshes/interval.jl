@@ -158,6 +158,14 @@ Use uniformly-sized elements.
 """
 struct Uniform <: StretchingRule end
 
+"""
+    Meshes._convert_stretch(FT, stretch)
+
+Convert the parameters of the stretching rule `stretch` to the floating point type `FT`
+"""
+function _convert_stretch end
+_convert_stretch(::Type{FT}, stretch::Uniform) where {FT} = stretch
+
 function IntervalMesh(
     domain::IntervalDomain{CT},
     stretch::Uniform = Uniform();
@@ -202,15 +210,19 @@ struct ExponentialStretching{FT} <: StretchingRule
     H::FT
 end
 
+_convert_stretch(::Type{FT}, stretch::ExponentialStretching) where {FT} =
+    ExponentialStretching{FT}(stretch.H)
+
 function IntervalMesh(
     domain::IntervalDomain{CT},
-    stretch::ExponentialStretching{FT};
+    stretch::ExponentialStretching;
     nelems::Int,
     reverse_mode::Bool = false,
 ) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
     if nelems < 1
         throw(ArgumentError("`nelems` must be ≥ 1"))
     end
+    stretch = _convert_stretch(FT, stretch)
     cmin = Geometry.component(domain.coord_min, 1)
     cmax = Geometry.component(domain.coord_max, 1)
     R = cmax - cmin
@@ -253,9 +265,25 @@ struct GeneralizedExponentialStretching{FT} <: StretchingRule
     dz_top::FT
 end
 
+# More specific than the generated `(::FT, ::FT) where {FT}`, so every `Real`
+# pair lands here: call the parametric constructor rather than recursing.
+function GeneralizedExponentialStretching(dz_bottom::Real, dz_top::Real)
+    dz_bottom, dz_top = promote(dz_bottom, dz_top)
+    return GeneralizedExponentialStretching{typeof(dz_bottom)}(
+        dz_bottom,
+        dz_top,
+    )
+end
+
+_convert_stretch(
+    ::Type{FT},
+    stretch::GeneralizedExponentialStretching,
+) where {FT} =
+    GeneralizedExponentialStretching{FT}(stretch.dz_bottom, stretch.dz_top)
+
 function IntervalMesh(
     domain::IntervalDomain{CT},
-    stretch::GeneralizedExponentialStretching{FT};
+    stretch::GeneralizedExponentialStretching;
     nelems::Int,
     FT_solve = Float64,
     tol = 1e-3,
@@ -264,6 +292,7 @@ function IntervalMesh(
     if nelems ≤ 1
         throw(ArgumentError("`nelems` must be ≥ 2"))
     end
+    stretch = _convert_stretch(FT, stretch)
 
     dz_bottom = FT_solve(stretch.dz_bottom)
     dz_top = FT_solve(stretch.dz_top)
@@ -384,9 +413,14 @@ struct HyperbolicTangentStretching{FT} <: StretchingRule
     dz_surface::FT
 end
 
+_convert_stretch(
+    ::Type{FT},
+    stretch::HyperbolicTangentStretching,
+) where {FT} = HyperbolicTangentStretching{FT}(stretch.dz_surface)
+
 function IntervalMesh(
     domain::IntervalDomain{CT},
-    stretch::HyperbolicTangentStretching{FT};
+    stretch::HyperbolicTangentStretching;
     nelems::Int,
     FT_solve = Float64,
     tol::Union{FT, Nothing} = nothing,
@@ -395,6 +429,7 @@ function IntervalMesh(
     if nelems ≤ 1
         throw(ArgumentError("`nelems` must be ≥ 2"))
     end
+    stretch = _convert_stretch(FT, stretch)
 
     dz_surface = FT_solve(stretch.dz_surface)
     tol === nothing && (tol = dz_surface * FT_solve(1e-6))
