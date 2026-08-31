@@ -111,6 +111,7 @@ end
 
 
 function coordinates(mesh::RectilinearMesh, elem::CartesianIndex{2}, vert::Int)
+    check_vertex_index(vert, 4)
     x1, x2 = elem.I
     coord1 = coordinates(mesh.intervalmesh1, x1, vert == 1 || vert == 4 ? 1 : 2)
     coord2 = coordinates(mesh.intervalmesh2, x2, vert == 1 || vert == 2 ? 1 : 2)
