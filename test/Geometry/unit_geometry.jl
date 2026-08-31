@@ -39,12 +39,13 @@ using LinearAlgebra, StaticArrays
     @test Geometry.LongPoint(1.0) <= Geometry.LongPoint(1.0f0)
 end
 
-@testset "2D XY,XZ Points" begin
+@testset "2D XY,XZ,YZ Points" begin
 
     for FT in (Float32, Float64, BigFloat)
         for pt in (
             Geometry.XYPoint(one(FT), zero(FT)),
             Geometry.XZPoint(one(FT), zero(FT)),
+            Geometry.YZPoint(one(FT), zero(FT)),
         )
             @test Geometry.ncomponents(pt) == 2
             @test Geometry.components(pt) isa SVector{2, FT}
@@ -53,10 +54,14 @@ end
             @test Geometry.component(pt, 1) == one(FT)
             @test Geometry.component(pt, 2) == zero(FT)
             @test_throws Exception Geometry.component(pt, 3)
-            @test Geometry.coordinate(pt, 1) == Geometry.XPoint(one(FT))
             if pt isa Geometry.XYPoint
+                @test Geometry.coordinate(pt, 1) == Geometry.XPoint(one(FT))
                 @test Geometry.coordinate(pt, 2) == Geometry.YPoint(zero(FT))
             elseif pt isa Geometry.XZPoint
+                @test Geometry.coordinate(pt, 1) == Geometry.XPoint(one(FT))
+                @test Geometry.coordinate(pt, 2) == Geometry.ZPoint(zero(FT))
+            elseif pt isa Geometry.YZPoint
+                @test Geometry.coordinate(pt, 1) == Geometry.YPoint(one(FT))
                 @test Geometry.coordinate(pt, 2) == Geometry.ZPoint(zero(FT))
             end
             @test_throws Exception Geometry.coordinate(pt, 3)
