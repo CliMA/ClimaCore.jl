@@ -64,8 +64,13 @@ end
     @test_throws BoundsError Meshes.coordinates(mesh, 0, 1)
     @test Meshes.coordinates(mesh, 1, 1) == Geometry.ZPoint(0.0)
     @test Meshes.coordinates(mesh, 2, 2) == Geometry.ZPoint(1.0)
-    @test_throws BoundsError Meshes.coordinates(mesh, 2, 3)
-    @test_throws BoundsError Meshes.coordinates(mesh, 3, 3)
+    # an element of a 1D mesh has 2 vertices; `vert = 3` used to index past
+    # them into the next element's faces, which returned a plausible-looking
+    # coordinate rather than erroring (#1026)
+    @test_throws ArgumentError Meshes.coordinates(mesh, 1, 3)
+    @test_throws ArgumentError Meshes.coordinates(mesh, 2, 3)
+    @test_throws ArgumentError Meshes.coordinates(mesh, 3, 3)
+    @test_throws ArgumentError Meshes.coordinates(mesh, 1, 0)
 end
 
 
@@ -96,8 +101,13 @@ end
     @test_throws BoundsError Meshes.coordinates(mesh, 0, 1)
     @test Meshes.coordinates(mesh, 1, 1) == Geometry.ZPoint(0.0)
     @test Meshes.coordinates(mesh, 2, 2) == Geometry.ZPoint(1.0)
-    @test_throws BoundsError Meshes.coordinates(mesh, 2, 3)
-    @test_throws BoundsError Meshes.coordinates(mesh, 3, 3)
+    # an element of a 1D mesh has 2 vertices; `vert = 3` used to index past
+    # them into the next element's faces, which returned a plausible-looking
+    # coordinate rather than erroring (#1026)
+    @test_throws ArgumentError Meshes.coordinates(mesh, 1, 3)
+    @test_throws ArgumentError Meshes.coordinates(mesh, 2, 3)
+    @test_throws ArgumentError Meshes.coordinates(mesh, 3, 3)
+    @test_throws ArgumentError Meshes.coordinates(mesh, 1, 0)
 end
 
 @testset "IntervalMesh ExponentialStretching" begin
@@ -285,7 +295,7 @@ end
     @test Meshes.coordinates(mesh, 1, 1) == Geometry.ZPoint(-1.0)
     # Test the face element distance at the top of the domain is dz_top
     @test isapprox(
-        Meshes.coordinates(mesh, 1, nelems),
+        Meshes.coordinates(mesh, nelems, 1),
         Geometry.ZPoint(-Geometry.ZPoint(0.02 / 45.0).z),
         rtol = 1e-3,
     )
@@ -313,7 +323,7 @@ end
     )
     # Test the bottom and top of the mesh coordinates are correct
     @test Meshes.coordinates(mesh, 1, 1) == Geometry.ZPoint(0.0)
-    @test Meshes.coordinates(mesh, 1, nelems + 1) ≈ Geometry.ZPoint(1.0)
+    @test Meshes.coordinates(mesh, nelems, 2) ≈ Geometry.ZPoint(1.0)
     # Test the interval of the mesh coordinates at the surface is the same as dz_surface
     @test isapprox(
         Meshes.coordinates(mesh, 1, 2),
@@ -343,10 +353,10 @@ end
     )
     # Test the bottom and top of the mesh coordinates are correct
     @test Meshes.coordinates(mesh, 1, 1) == Geometry.ZPoint(-1.0)
-    @test Meshes.coordinates(mesh, 1, nelems + 1) ≈ Geometry.ZPoint(0.0)
+    @test Meshes.coordinates(mesh, nelems, 2) ≈ Geometry.ZPoint(0.0)
     # Test the interval of the mesh coordinates at the surface is the same as dz_surface
     @test isapprox(
-        Meshes.coordinates(mesh, 1, nelems),
+        Meshes.coordinates(mesh, nelems, 1),
         Geometry.ZPoint(-0.03 / 75.0),
         rtol = 1e-3,
     )
@@ -375,7 +385,7 @@ end
     trunc_mesh = Meshes.truncate_mesh(parent_mesh, trunc_domain)
 
     @test Meshes.coordinates(trunc_mesh, 1, 1) == Geometry.ZPoint(z_bottom)
-    @test Meshes.coordinates(trunc_mesh, 1, length(trunc_mesh.faces)) ==
+    @test Meshes.coordinates(trunc_mesh, Meshes.nelements(trunc_mesh), 2) ==
           Geometry.ZPoint(z_top)
 end
 

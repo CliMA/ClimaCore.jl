@@ -160,14 +160,39 @@ function vertex_connectivity_matrix(
 end
 
 """
+    Meshes.check_vertex_index(vert, nverts)
+
+Throw an `ArgumentError` unless `1 ≤ vert ≤ nverts`.
+
+The `coordinates(mesh, elem, vert)` methods pick a vertex with a chain of
+`vert == ...` comparisons, so without this check an out-of-range `vert` falls
+through to the last branch and silently returns another vertex's coordinates
+rather than erroring.
+"""
+@inline function check_vertex_index(vert::Integer, nverts::Integer)
+    if !(1 <= vert <= nverts)
+        throw(
+            ArgumentError(
+                "vertex index must be in 1:$nverts, got vert = $vert",
+            ),
+        )
+    end
+    return nothing
+end
+
+"""
     Meshes.coordinates(mesh, elem, vert::Int)
     Meshes.coordinates(mesh, elem, ξ::SVector)
 
 Return the physical coordinates of a point in an element `elem` of `mesh`. The
 position of the point can either be a vertex number `vert` or the coordinates
 `ξ` in the reference element.
+
+Elements of a 2D mesh are quadrilaterals, so `vert` must be in `1:4`; elements
+of a 1D mesh have two vertices, so `vert` must be in `1:2`.
 """
 function coordinates(mesh::AbstractMesh2D, elem, vert::Integer)
+    check_vertex_index(vert, 4)
     FT = Domains.float_type(domain(mesh))
     ξ1 = (vert == 1 || vert == 4) ? FT(-1) : FT(1)
     ξ2 = (vert == 1 || vert == 2) ? FT(-1) : FT(1)

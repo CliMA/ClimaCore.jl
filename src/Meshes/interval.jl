@@ -57,8 +57,10 @@ function element_horizontal_length_scale(mesh::IntervalMesh)
     return (cmax - cmin) / nelements(mesh)
 end
 
-coordinates(mesh::IntervalMesh, elem::Integer, vert::Integer) =
-    mesh.faces[elem + vert - 1]
+function coordinates(mesh::IntervalMesh, elem::Integer, vert::Integer)
+    check_vertex_index(vert, 2)
+    return mesh.faces[elem + vert - 1]
+end
 
 function coordinates(
     mesh::IntervalMesh,
