@@ -12,5 +12,5 @@ CommonSpaces.ColumnSpace
 CommonSpaces.Box3DSpace
 CommonSpaces.SliceXZSpace
 CommonSpaces.RectangleXYSpace
-CommonSpaces.PointColumnEnsembleSpace
+CommonSpaces.MultiColumnSpace
 ```

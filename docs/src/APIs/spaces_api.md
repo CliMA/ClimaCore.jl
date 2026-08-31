@@ -52,6 +52,19 @@ Spaces.node_horizontal_length_scale
 Spaces.ExtrudedFiniteDifferenceSpace
 ```
 
+## Point Spaces
+
+```@docs
+Spaces.PointSpace
+```
+
+## Multi-column Spaces
+
+```@docs
+Spaces.MultiPointSpace
+Spaces.MultiColumnFiniteDifferenceSpace
+```
+
 ## Utilities
 
 ```@docs

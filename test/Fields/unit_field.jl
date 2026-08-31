@@ -1501,7 +1501,7 @@ end
     FT = Float64
     context = ClimaComms.context(ClimaComms.device())
     for space in (
-        TU.PointColumnEnsembleSpace(FT; context),
+        TU.MultiColumnSpace(FT; context),
         TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
     )
         for subspace in (Spaces.level(space, 1), Spaces.column(space, 1, 1, 1))

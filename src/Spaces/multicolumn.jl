@@ -1,40 +1,43 @@
 """
-    PointCloudSpace
+    MultiPointSpace
 
 A horizontal space of N independent (lat, lon) points.  This is the N-column
 analogue of [`PointSpace`](@ref), which is the single-column level space.
 
 Like [`SpectralElementSpace2D`](@ref), the wrapped `grid` is either:
 
-  - a `Grids.PointCloudGrid` which is the level-agnostic horizontal space of a
+  - a `Grids.MultiPointGrid` which is the level-agnostic horizontal space of a
     [`MultiColumnFiniteDifferenceSpace`](@ref) (returned by
-    [`Spaces.horizontal_space`](@ref))
+    `Spaces.horizontal_space`)
   - a `Grids.LevelGrid` of the extruded multi-column grid which is a single
-    vertical level (returned by [`Spaces.level`](@ref)), carrying full 3-D local
+    vertical level (returned by `Spaces.level`), carrying full 3-D local
     geometry.
 """
-struct PointCloudSpace{G <: Grids.AbstractGrid} <: AbstractSpace
+struct MultiPointSpace{G <: Grids.AbstractGrid} <: AbstractSpace
     grid::G
 end
 
-grid(space::PointCloudSpace) = getfield(space, :grid)
-staggering(space::PointCloudSpace) = nothing
+grid(space::MultiPointSpace) = getfield(space, :grid)
+staggering(space::MultiPointSpace) = nothing
 
-space(grid::Grids.PointCloudGrid, ::Nothing) = PointCloudSpace(grid)
-space(grid::Grids.LevelGrid{<:Grids.ExtrudedPointCloudGrid}, ::Nothing) =
-    PointCloudSpace(grid)
+space(grid::Grids.MultiPointGrid, ::Nothing) = MultiPointSpace(grid)
+space(grid::Grids.LevelGrid{<:Grids.ExtrudedMultiPointGrid}, ::Nothing) =
+    MultiPointSpace(grid)
 
-ClimaComms.context(space::PointCloudSpace) =
+ClimaComms.context(space::MultiPointSpace) =
     ClimaComms.context(grid(space))
-ClimaComms.device(space::PointCloudSpace) = ClimaComms.device(grid(space))
+ClimaComms.device(space::MultiPointSpace) = ClimaComms.device(grid(space))
 
-local_geometry_data(space::PointCloudSpace) =
+local_geometry_data(space::MultiPointSpace) =
     local_geometry_data(grid(space), nothing)
-local_geometry_type(::Type{PointCloudSpace{G}}) where {G} =
+local_geometry_type(::Type{MultiPointSpace{G}}) where {G} =
     local_geometry_type(G)
 
-Adapt.adapt_structure(to, space::PointCloudSpace) =
-    PointCloudSpace(Adapt.adapt(to, grid(space)))
+Adapt.adapt_structure(to, space::MultiPointSpace) =
+    MultiPointSpace(Adapt.adapt(to, grid(space)))
+
+# Backwards-compatibility alias for the old name.
+Base.@deprecate_binding PointCloudSpace MultiPointSpace false
 
 """
     MultiColumnFiniteDifferenceSpace
@@ -45,9 +48,9 @@ locations on a sphere.  This is the N-column generalisation of
 
   - The data layout is `VIJFH{LG, Nv, 1, 1, N}` (same vertical structure for every
     column; full 3-D local geometry including lat/lon/z coordinates).
-  - [`Spaces.level`](@ref) returns a [`PointCloudSpace`](@ref) (N points at that
+  - `Spaces.level` returns a [`MultiPointSpace`](@ref) (N points at that
     z-level) rather than a spectral-element horizontal space.
-  - [`Spaces.column`](@ref) returns a single-column
+  - `Spaces.column` returns a single-column
     [`Spaces.FiniteDifferenceSpace`](@ref).
   - [`Fields.bycolumn`](@ref) iterates over each column independently.
 
@@ -97,23 +100,23 @@ Adapt.adapt_structure(to, space::MultiColumnFiniteDifferenceSpace) =
         staggering(space),
     )
 
-issubspace(space1::PointCloudSpace, space2::PointCloudSpace) =
+issubspace(space1::MultiPointSpace, space2::MultiPointSpace) =
     horizontal_grid(grid(space1)) === horizontal_grid(grid(space2))
-issubspace(subspace::PointCloudSpace, space::MultiColumnFiniteDifferenceSpace) =
+issubspace(subspace::MultiPointSpace, space::MultiColumnFiniteDifferenceSpace) =
     grid(subspace) === grid(space).horizontal_grid ||
     (grid(subspace) isa Grids.LevelGrid && grid(subspace).full_grid === grid(space))
 issubspace(subspace::FiniteDifferenceSpace, space::MultiColumnFiniteDifferenceSpace) =
     grid(subspace) === grid(space).vertical_grid ||
     (grid(subspace) isa Grids.ColumnGrid && grid(subspace).full_grid === grid(space))
 
-level(space::PointCloudSpace, v) =
+level(space::MultiPointSpace, v) =
     isone(v) ? space : throw(ArgumentError("Space only has one level"))
 Base.@propagate_inbounds level(space::MultiColumnFiniteDifferenceSpace, v) =
-    PointCloudSpace(level(grid(space), staggered_level_index(space, v)))
+    MultiPointSpace(level(grid(space), staggered_level_index(space, v)))
 
-Base.@propagate_inbounds slab(space::PointCloudSpace, v, h) =
+Base.@propagate_inbounds slab(space::MultiPointSpace, v, h) =
     isone(v) ? slab(space, h) : throw(ArgumentError("Space only has one level"))
-Base.@propagate_inbounds slab(space::PointCloudSpace, h) =
+Base.@propagate_inbounds slab(space::MultiPointSpace, h) =
     PointSpace(ClimaComms.context(space), slab(local_geometry_data(space), h))
 Base.@propagate_inbounds slab(space::MultiColumnFiniteDifferenceSpace, v, h) =
     PointSpace(
@@ -121,12 +124,12 @@ Base.@propagate_inbounds slab(space::MultiColumnFiniteDifferenceSpace, v, h) =
         slab(local_geometry_data(space), integer_level_index(space, v), h),
     )
 
-Base.@propagate_inbounds column(space::PointCloudSpace, indices...) =
+Base.@propagate_inbounds column(space::MultiPointSpace, indices...) =
     PointSpace(ClimaComms.context(space), column(local_geometry_data(space), indices...))
 Base.@propagate_inbounds column(space::MultiColumnFiniteDifferenceSpace, indices...) =
     FiniteDifferenceSpace(column(grid(space), indices...), space.staggering)
 
-ncolumns(space::PointCloudSpace) =
+ncolumns(space::MultiPointSpace) =
     DataLayouts.nelems(local_geometry_data(space))
 
 ncolumns(space::MultiColumnFiniteDifferenceSpace) =
@@ -138,26 +141,26 @@ nlevels(space::MultiColumnFiniteDifferenceSpace) =
     DataLayouts.nlevels(local_geometry_data(space))
 
 horizontal_space(space::MultiColumnFiniteDifferenceSpace) =
-    PointCloudSpace(grid(space).horizontal_grid)
+    MultiPointSpace(grid(space).horizontal_grid)
 
 # No DSS / mask machinery needed.
-get_mask(space::PointCloudSpace) = DataLayouts.NoMask()
+get_mask(space::MultiPointSpace) = DataLayouts.NoMask()
 get_mask(space::MultiColumnFiniteDifferenceSpace) = DataLayouts.NoMask()
 set_mask!(::Any, ::MultiColumnFiniteDifferenceSpace) = nothing
 
 """
     obtain_surface_space(cs::CenterMultiColumnFiniteDifferenceSpace)
 
-Return the [`PointCloudSpace`](@ref) corresponding to the top face (surface) of
+Return the [`MultiPointSpace`](@ref) corresponding to the top face (surface) of
 `cs`.
 """
 obtain_surface_space(cs::CenterMultiColumnFiniteDifferenceSpace) =
     horizontal_space(cs)
 
-function Base.show(io::IO, space::PointCloudSpace)
+function Base.show(io::IO, space::MultiPointSpace)
     indent = get(io, :indent, 0)
     iio = IOContext(io, :indent => indent + 2)
-    println(io, "PointCloudSpace:")
+    println(io, "MultiPointSpace:")
     print(iio, " "^(indent + 2), "context: ")
     Topologies.print_context(iio, ClimaComms.context(space))
     println(iio)

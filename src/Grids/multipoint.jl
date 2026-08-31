@@ -1,6 +1,6 @@
 
 """
-    PointCloudGrid(
+    MultiPointGrid(
         context :: ClimaComms.AbstractCommsContext,
         points  :: AbstractVector{Geometry.LatLongPoint{FT}},
     )
@@ -9,7 +9,7 @@ A horizontal grid consisting of N arbitrary, disconnected (lat, long) locations
 on a sphere. There is no connectivity between columns; no spectral element
 basis, DSS, or horizontal operators are supported on this grid.
 
-This is the horizontal component used by a "point cloud" extruded space (N
+This is the horizontal component used by a multi-column extruded space (N
 independent columns at user-chosen sphere locations).
 
 The `local_geometry` is stored as a `VIJFH{LG, 1, 1, 1, N}` data layout, with
@@ -19,7 +19,7 @@ tensor](https://en.wikipedia.org/wiki/Metric_tensor#The_round_metric_on_a_sphere
 of a sphere, the horizontal Jacobian `∂x∂ξ` is given by the diagonal matrix
 `diag(R·π/180, R·cosd(lat)·π/180)`, with the determinant `J = R²·cosd(lat)·(π/180)²`.
 """
-struct PointCloudGrid{
+struct MultiPointGrid{
     C <: ClimaComms.AbstractCommsContext,
     GG <: Geometry.AbstractGlobalGeometry,
     LG,
@@ -29,53 +29,53 @@ struct PointCloudGrid{
     local_geometry::LG  # VIJFH{LocalGeometry{(1,2), LatLongPoint{FT}, ...}, 1, 1, 1, N}
 end
 
-Adapt.@adapt_structure PointCloudGrid
+Adapt.@adapt_structure MultiPointGrid
 
-local_geometry_type(::Type{PointCloudGrid{C, GG, LG}}) where {C, GG, LG} =
+local_geometry_type(::Type{MultiPointGrid{C, GG, LG}}) where {C, GG, LG} =
     eltype(LG)
 
-ClimaComms.context(grid::PointCloudGrid) = grid.context
-ClimaComms.device(grid::PointCloudGrid) = ClimaComms.device(grid.context)
+ClimaComms.context(grid::MultiPointGrid) = grid.context
+ClimaComms.device(grid::MultiPointGrid) = ClimaComms.device(grid.context)
 
-topology(::PointCloudGrid) = error(
-    "PointCloudGrid has no topology",
+topology(::MultiPointGrid) = error(
+    "MultiPointGrid has no topology",
 )
 
-local_geometry_data(grid::PointCloudGrid, ::Nothing) = grid.local_geometry
-global_geometry(grid::PointCloudGrid) = grid.global_geometry
+local_geometry_data(grid::MultiPointGrid, ::Nothing) = grid.local_geometry
+global_geometry(grid::MultiPointGrid) = grid.global_geometry
 
-quadrature_style(::PointCloudGrid) = nothing
+quadrature_style(::MultiPointGrid) = nothing
 
 """
-    PointCloudGrid(
+    MultiPointGrid(
         points  :: AbstractVector{Geometry.LatLongPoint{FT}};
         radius  :: Real,
         device  :: ClimaComms.AbstractDevice = ClimaComms.device(),
     )
 
-Convenience constructor: build a `PointCloudGrid` from a vector of
+Convenience constructor: build a `MultiPointGrid` from a vector of
 `LatLongPoint`s and a sphere `radius`. The horizontal metric terms in
 `local_geometry` are set from the sphere geometry at each point:
 `∂x∂ξ = diag(R·π/180, R·cosd(lat)·π/180)`, `J = R²·cosd(lat)·(π/180)²`.
 """
-function PointCloudGrid(
+function MultiPointGrid(
     points::AbstractVector{Geometry.LatLongPoint{FT}};
     radius::Real,
     device::ClimaComms.AbstractDevice = ClimaComms.device(),
 ) where {FT}
-    get!(Cache.OBJECT_CACHE, (PointCloudGrid, copy(points), radius, device)) do
-        _PointCloudGrid(points; radius, device)
+    get!(Cache.OBJECT_CACHE, (MultiPointGrid, copy(points), radius, device)) do
+        _MultiPointGrid(points; radius, device)
     end
 end
 
-function _PointCloudGrid(
+function _MultiPointGrid(
     points::AbstractVector{Geometry.LatLongPoint{FT}};
     radius::Real,
     device::ClimaComms.AbstractDevice = ClimaComms.device(),
 ) where {FT}
     radius > 0 || error("Radius ($radius) must be positive")
 
-    # PointCloudGrid is single-process only; the context is always a
+    # MultiPointGrid is single-process only; the context is always a
     # SingletonCommsContext built from the given device.
     context = ClimaComms.SingletonCommsContext(device)
 
@@ -115,14 +115,14 @@ function _PointCloudGrid(
     end
 
     DA = ClimaComms.array_type(device)
-    return PointCloudGrid(
+    return MultiPointGrid(
         context,
         global_geometry,
         DataLayouts.rebuild(local_geometry, DA),
     )
 end
 
-function print_pointcloud_horizontal(io::IO, grid::PointCloudGrid, indent)
+function print_multipoint_horizontal(io::IO, grid::MultiPointGrid, indent)
     println(io, " "^(indent + 2), "horizontal:")
     print(io, " "^(indent + 4), "context: ")
     Topologies.print_context(io, grid.context)
@@ -136,9 +136,13 @@ function print_pointcloud_horizontal(io::IO, grid::PointCloudGrid, indent)
     print(io, " "^(indent + 4), "radius: ", grid.global_geometry.radius)
 end
 
-function Base.show(io::IO, grid::PointCloudGrid)
+function Base.show(io::IO, grid::MultiPointGrid)
     indent = get(io, :indent, 0)
     iio = IOContext(io, :indent => indent + 2)
     println(io, nameof(typeof(grid)), ":")
-    print_pointcloud_horizontal(iio, grid, indent)
+    print_multipoint_horizontal(iio, grid, indent)
 end
+
+# Backwards-compatibility alias for the old name; deprecated, but old code
+# keeps working. Remove once downstream consumers have migrated.
+Base.@deprecate_binding PointCloudGrid MultiPointGrid false

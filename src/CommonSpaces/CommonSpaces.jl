@@ -13,6 +13,7 @@ export ExtrudedCubedSphereSpace,
     Box3DSpace,
     SliceXZSpace,
     RectangleXYSpace,
+    MultiColumnSpace,
     PointColumnEnsembleSpace,
     CellCenter,
     CellFace,
@@ -31,7 +32,7 @@ import ..CommonGrids:
     Box3DGrid,
     SliceXZGrid,
     RectangleXYGrid,
-    PointColumnEnsembleGrid
+    MultiColumnGrid
 import ..Spaces: face_space, center_space
 
 
@@ -429,7 +430,7 @@ RectangleXYSpace(::Type{FT}; kwargs...) where {FT} =
     Spaces.SpectralElementSpace2D(RectangleXYGrid(FT; kwargs...))
 
 """
-    PointColumnEnsembleSpace(
+    MultiColumnSpace(
         ::Type{<:AbstractFloat}; # defaults to Float64
         points::AbstractVector{Geometry.LatLongPoint{FT}},
         z_elem::Integer,
@@ -441,9 +442,8 @@ RectangleXYSpace(::Type{FT}; kwargs...) where {FT} =
         staggering::Staggering,
     )
 
-Construct a [`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) (aliased as
-`Spaces.MultiColumnFiniteDifferenceSpace`) for N independent columns at arbitrary (lat, lon)
-locations on a sphere, given:
+Construct a [`Spaces.MultiColumnFiniteDifferenceSpace`](@ref) for N
+independent columns at arbitrary (lat, lon) locations on a sphere, given:
 
   - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
   - `points` a vector of `Geometry.LatLongPoint` specifying each column location
@@ -455,7 +455,7 @@ locations on a sphere, given:
   - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
   - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
 
-Note that these arguments are all the same as [`CommonGrids.PointColumnEnsembleGrid`](@ref),
+Note that these arguments are all the same as [`CommonGrids.MultiColumnGrid`](@ref),
 except for `staggering`.
 
 # Example usage
@@ -463,7 +463,7 @@ except for `staggering`.
 ```julia
 using ClimaCore.CommonSpaces, ClimaCore.Geometry
 points = [LatLongPoint(0.0, 0.0), LatLongPoint(10.0, 20.0), LatLongPoint(-5.0, 90.0)]
-space = PointColumnEnsembleSpace(;
+space = MultiColumnSpace(;
     points = points,
     z_elem = 10,
     z_min = 0,
@@ -472,12 +472,15 @@ space = PointColumnEnsembleSpace(;
 )
 ```
 """
-function PointColumnEnsembleSpace end
-PointColumnEnsembleSpace(; kwargs...) = PointColumnEnsembleSpace(Float64; kwargs...)
-PointColumnEnsembleSpace(::Type{FT}; staggering::Staggering, kwargs...) where {FT} =
+function MultiColumnSpace end
+MultiColumnSpace(; kwargs...) = MultiColumnSpace(Float64; kwargs...)
+MultiColumnSpace(::Type{FT}; staggering::Staggering, kwargs...) where {FT} =
     Spaces.MultiColumnFiniteDifferenceSpace(
-        PointColumnEnsembleGrid(FT; kwargs...),
+        MultiColumnGrid(FT; kwargs...),
         staggering,
     )
+
+# Backwards-compatibility alias for the old name.
+Base.@deprecate_binding PointColumnEnsembleSpace MultiColumnSpace false
 
 end # module

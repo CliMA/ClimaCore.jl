@@ -20,9 +20,9 @@ import Random: seed!
     seed!(1)
     for space in TU.all_spaces(FT; context)
         # TODO: InputOutput cannot serialize a MultiColumnFiniteDifferenceSpace
-        # yet: its PointCloudGrid horizontal grid has no topology, which
+        # yet: its MultiPointGrid horizontal grid has no topology, which
         # `write!` requires (`Spaces.topology` errors). Remove this skip once
-        # HDF5 support for point-cloud grids lands.
+        # HDF5 support for multi-point grids lands.
         if space isa Spaces.MultiColumnFiniteDifferenceSpace
             @test_skip "HDF5 round-trip on MultiColumnFiniteDifferenceSpace"
             continue

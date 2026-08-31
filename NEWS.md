@@ -299,6 +299,15 @@ main
   Equation-set-specific fluxes (compressible Euler with Cartesian momentum
   components) are example code. Operator tests are included as part of
   `test/runtests.jl`.
+- The "point cloud" types have been renamed to use the `Multi` prefix:
+  - `Grids.PointCloudGrid` is now `Grids.MultiPointGrid`,
+  - `Grids.ExtrudedPointCloudGrid` is `Grids.ExtrudedMultiPointGrid`,
+  - `Spaces.PointCloudSpace` is now `Spaces.MultiPointSpace`,
+  - `CommonGrids.PointColumnEnsembleGrid` is now `CommonGrids.MultiColumnGrid`,
+  - `CommonSpaces.PointColumnEnsembleSpace` is now
+    `CommonSpaces.MultiColumnSpace`.
+  - The old names are available, but deprecated.
+    [2611](https://github.com/CliMA/ClimaCore.jl/pull/2611)
 
 v0.15.3
 -------
