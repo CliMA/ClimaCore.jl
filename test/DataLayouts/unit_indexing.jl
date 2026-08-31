@@ -29,11 +29,12 @@ import ClimaCore.DataLayouts: VIJFH, slab, column, level
     col[1, 1, 1, 1] = FT(7)
     @test data[1, 1, 1, 1] == FT(7)
 
-    # A layout with a single slab and column still checks its indices.
+    # A layout with a single slab and column still checks its indices. Slices
+    # that contain exactly one point are zero-dimensional views.
     single = VIJFH{FT, 1, 1, 1, nothing}(Array{FT}, 1)
     parent(single) .= FT(0)
-    @test size(slab(single, 1, 1)) == (1, 1, 1, 1)
-    @test size(column(single, 1, 1, 1)) == (1, 1, 1, 1)
+    @test size(slab(single, 1, 1)) == ()
+    @test size(column(single, 1, 1, 1)) == ()
     @test_throws BoundsError slab(single, 2, 1)
     @test_throws BoundsError column(single, 2, 1, 1)
 end

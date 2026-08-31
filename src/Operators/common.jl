@@ -44,12 +44,12 @@ function return_space end
 const NonPointwiseBroadcasted =
     Broadcast.Broadcasted{<:Fields.AbstractFieldStyle, <:Any, <:AbstractOperator}
 
-@inline Utilities.unsafe_eltype((; f, args)::NonPointwiseBroadcasted) =
+Utilities.unsafe_eltype((; f, args)::NonPointwiseBroadcasted) =
     return_eltype(f, args...)
-@inline Broadcast._axes((; f, args)::NonPointwiseBroadcasted, ::Nothing) =
-    return_space(f, unrolled_map(axes, args)...)
-@inline Broadcast.instantiate((; style, f, args, axes)::NonPointwiseBroadcasted) =
-    Broadcast.Broadcasted(style, f, unrolled_map(Broadcast.instantiate, args), axes)
+Broadcast._axes((; f, args)::NonPointwiseBroadcasted, ::Nothing) =
+    return_space(f, unrolled_tuple_map(axes, args)...)
+Broadcast.instantiate((; style, f, args, axes)::NonPointwiseBroadcasted) =
+    Broadcast.Broadcasted(style, f, unrolled_tuple_map(Broadcast.instantiate, args), axes)
 
 # TODO: Remove this after refactoring the StencilBroadcasted API.
 abstract type OperatorBroadcasted{Style} <: Base.AbstractBroadcasted end
@@ -59,10 +59,10 @@ Base.Broadcast.BroadcastStyle(
 ) where {Style} = Style()
 
 # recursively unwrap axes broadcast arguments in a way that is statically reducible by the optimizer
-@inline axes_args(args::Tuple) = unrolled_map(axes, args)
+axes_args(args::Tuple) = unrolled_tuple_map(axes, args)
 
 @inline instantiate_args(args::Tuple) =
-    unrolled_map(Base.Broadcast.instantiate, args)
+    unrolled_tuple_map(Base.Broadcast.instantiate, args)
 
 function Base.axes(opbc::OperatorBroadcasted)
     if isnothing(opbc.axes)
@@ -106,6 +106,12 @@ for op in (:level, :slab, :column)
     @eval $op(space::CenterPlaceholderSpace, indices...) = space
     @eval $op(space::FacePlaceholderSpace, indices...) = space
 end
+
+# A LevelPlaceholderSpace stands to PlaceholderSpace as a horizontal space
+# stands to its extruded space; a sliced pointwise node mixing level fields
+# with fields on the enclosing space reaches broadcast_shape with both, and
+# without this relation it throws (in a GPU kernel, with no stacktrace).
+Spaces.issubspace(::LevelPlaceholderSpace, ::PlaceholderSpace) = true
 
 placeholder_space(current_space, parent_space) = current_space
 placeholder_space(current_space::T, parent_space::T) where {T} =
@@ -203,8 +209,13 @@ function strip_space(field::Field, parent_space)
     return Field(Fields.field_values(field), space)
 end
 function strip_space(bc::Broadcast.Broadcasted, parent_space)
-    args = unrolled_map(Base.Fix2(strip_space, parent_space), bc.args)
-    space = placeholder_space(axes(bc), parent_space)
+    # Strip each node's args relative to the node's own space, not the space
+    # passed in from above: device-side reconstruction resolves each stripped
+    # space against the directly enclosing node's space, so stripping against a
+    # farther ancestor would reconstruct to the wrong space.
+    current_space = axes(bc)
+    args = unrolled_tuple_map(Base.Fix2(strip_space, current_space), bc.args)
+    space = placeholder_space(current_space, parent_space)
     return Broadcast.Broadcasted(bc.style, bc.f, args, space)
 end
 
@@ -214,7 +225,9 @@ function unstrip_space(field::Field, parent_space)
     return Field(Fields.field_values(field), space)
 end
 function unstrip_space(bc::Broadcast.Broadcasted, parent_space)
-    args = unrolled_map(Base.Fix2(unstrip_space, parent_space), bc.args)
+    # Invert strip_space: reconstruct this node's space against the enclosing
+    # node's space, and then reconstruct the args against this node's space.
     space = reconstruct_placeholder_space(axes(bc), parent_space)
+    args = unrolled_tuple_map(Base.Fix2(unstrip_space, space), bc.args)
     return Broadcast.Broadcasted(bc.style, bc.f, args, space)
 end

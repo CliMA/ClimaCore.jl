@@ -1,25 +1,39 @@
 ## Components-type conversion helpers (private)
+#
+# Every conversion reads at most one metric out of `lg`, fixed at compile time
+# by the requested `ComponentsType` and the type of `v`; the table below defines
+# both halves at once: `metric_for_components_type` extracts just that metric
+# (`nothing` when none is needed) and `_to_components_type` consumes it. The
+# metric is always one of `lg`'s *stored* fields, never a derived property, so
+# it can be a `Field` view of a `LocalGeometry` field's backing array.
+for (basis, V, metric, converted) in (
+    (:Contravariant, :ContravariantTensor, :nothing, :v),
+    (:Covariant, :CovariantTensor, :nothing, :v),
+    (:Orthonormal, :OrthonormalTensor, :nothing, :v),
+    (:Contravariant, :CovariantTensor, :(lg.gⁱʲ), :(metric * v)),
+    (:Covariant, :ContravariantTensor, :(lg.gⁱʲ), :(inv(metric) * v)),
+    (:Contravariant, :OrthonormalTensor, :(lg.∂x∂ξ), :(inv(metric) * v)),
+    (:Covariant, :OrthonormalTensor, :(lg.∂x∂ξ), :(metric' * v)),
+    (:Orthonormal, :ContravariantTensor, :(lg.∂x∂ξ), :(metric * v)),
+    (:Orthonormal, :CovariantTensor, :(lg.∂x∂ξ), :(inv(metric)' * v)),
+)
+    M = metric == :nothing ? :Nothing : :(AbstractTensor{2})
+    @eval @inline metric_for_components_type(::$basis, ::Type{<:$V}, lg) = $metric
+    @eval @inline _to_components_type(::$basis, v::$V, metric::$M) = $converted
+end
 
-# Metrics are identity-padded to full (1,2,3) shape on `LocalGeometry`, so
-# every conversion is a single matvec — names outside `lg`'s geometry `I`
-# ride the identity block of the padded matrix automatically. Same-type
-# pairs are explicit no-ops; cross-type pairs pick the appropriate cached
-# matrix.
-@inline _to_components_type(::Contravariant, v::ContravariantTensor, ::LocalGeometry) = v
-@inline _to_components_type(::Covariant, v::CovariantTensor, ::LocalGeometry) = v
-@inline _to_components_type(::Orthonormal, v::OrthonormalTensor, ::LocalGeometry) = v
-@inline _to_components_type(::Contravariant, v::CovariantTensor, lg::LocalGeometry) =
-    lg.gⁱʲ * v
-@inline _to_components_type(::Covariant, v::ContravariantTensor, lg::LocalGeometry) =
-    lg.gᵢⱼ * v
-@inline _to_components_type(::Contravariant, v::OrthonormalTensor, lg::LocalGeometry) =
-    lg.∂ξ∂x * v
-@inline _to_components_type(::Covariant, v::OrthonormalTensor, lg::LocalGeometry) =
-    lg.∂x∂ξ' * v
-@inline _to_components_type(::Orthonormal, v::ContravariantTensor, lg::LocalGeometry) =
-    lg.∂x∂ξ * v
-@inline _to_components_type(::Orthonormal, v::CovariantTensor, lg::LocalGeometry) =
-    lg.∂ξ∂x' * v
+# Element types that no conversion handles keep the unnarrowed `lg` and have no
+# `_to_components_type` method for it, so they still raise the same `MethodError`.
+@inline metric_for_components_type(::ComponentsType, ::Type, lg) = lg
+@inline _to_components_type(
+    basis::ComponentsType,
+    v::Union{ContravariantTensor, CovariantTensor, OrthonormalTensor},
+    lg::LocalGeometry,
+) = _to_components_type(basis, v, metric_for_components_type(basis, typeof(v), lg))
+
+# A `LocalGeometry`, or the narrowed metric extracted from one. Conversions that
+# only need the metric accept either.
+const LocalGeometryMetric = Union{LocalGeometry, AbstractTensor{2}, Nothing}
 
 ## project(basis, v, local_geometry)  — 3-argument form using metric
 
@@ -35,7 +49,7 @@ geometry (e.g. dim 3 in a horizontal `(1,2)` `LocalGeometry`) is handled by
 final `reshape` then zero-fills any remaining destination names that aren't
 in the source.
 """
-@inline project(b::Components{BT}, v::AbstractTensor, lg::LocalGeometry) where {BT} =
+@inline project(b::Components{BT}, v::AbstractTensor, lg::LocalGeometryMetric) where {BT} =
     reshape(_to_components_type(BT(), v, lg), (b, Base.tail(axes(v))...))
 
 """
@@ -83,12 +97,14 @@ end
 ## Scalar component extractors
 
 for n in 1:3
-    @eval @inline $(Symbol(:covariant, n))(u::AbstractTensor{1}, lg::LocalGeometry) =
+    @eval @inline $(Symbol(:covariant, n))(u::AbstractTensor{1}, lg::LocalGeometryMetric) =
         project($(Symbol(:Covariant, n, :Axis))(), u, lg)[1]
-    @eval @inline $(Symbol(:contravariant, n))(u::AbstractTensor{1}, lg::LocalGeometry) =
-        project($(Symbol(:Contravariant, n, :Axis))(), u, lg)[1]
-    @eval @inline $(Symbol(:contravariant, n))(u::AbstractTensor{2}, lg::LocalGeometry) =
-        project($(Symbol(:Contravariant, n, :Axis))(), u, lg)[1, :]
+    @eval @inline $(Symbol(:contravariant, n))(
+        u::AbstractTensor{1}, lg::LocalGeometryMetric,
+    ) = project($(Symbol(:Contravariant, n, :Axis))(), u, lg)[1]
+    @eval @inline $(Symbol(:contravariant, n))(
+        u::AbstractTensor{2}, lg::LocalGeometryMetric,
+    ) = project($(Symbol(:Contravariant, n, :Axis))(), u, lg)[1, :]
 end
 
 @inline Jcontravariant3(u::AbstractTensor, lg::LocalGeometry) =

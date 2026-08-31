@@ -1,5 +1,5 @@
 import ..DebugOnly: allow_mismatched_spaces_unsafe
-import UnrolledUtilities: unrolled_map
+import ..Utilities.Unrolled: unrolled_tuple_map
 
 """
     AbstractFieldStyle
@@ -88,14 +88,18 @@ Base.eltype(bc::LazyField) = unsafe_eltype(bc)
 
 Base.similar(bc::LazyField) = similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
 
-@inline Base.copy(bc::LazyField) =
+Base.copy(bc::LazyField) =
     copyto!(similar(bc), bc; mask = Spaces.get_mask(axes(bc)))
 
-@inline field_values(bc::Broadcast.Broadcasted) = bc
-@inline function field_values(bc::LazyField{FieldStyle{DS}}) where {DS}
-    args′ = unrolled_map(arg -> arg isa MaybeLazyField ? field_values(arg) : arg, bc.args)
-    return Broadcast.Broadcasted{DS}(bc.f, args′)
-end
+field_values(bc::Broadcast.Broadcasted) = bc
+@inline field_values(bc::LazyField{FieldStyle{DS}}) where {DS} =
+    Broadcast.Broadcasted{DS}(
+        bc.f,
+        unrolled_tuple_map(
+            arg -> arg isa MaybeLazyField ? field_values(arg) : arg,
+            bc.args,
+        ),
+    )
 
 # Forward size/scope primitives from Base and DataLayouts to the field_values.
 for f in (:size, :length, :ndims)
@@ -105,34 +109,55 @@ for f in (:DataScope, :shape_params, :inferred_size, :nelems)
     @eval DataLayouts.$f(arg::MaybeLazyField) = DataLayouts.$f(field_values(arg))
 end
 
-@inline function DataLayouts.reassign(bc::LazyField, scope)
-    args′ = unrolled_map(bc.args) do arg
-        arg isa MaybeLazyField ? DataLayouts.reassign(arg, scope) : arg
-    end
-    return Broadcast.Broadcasted(bc.style, bc.f, args′, bc.axes)
+@inline DataLayouts.reassign(bc::LazyField, scope) = Broadcast.Broadcasted(
+    bc.style,
+    bc.f,
+    unrolled_tuple_map(
+        arg -> arg isa MaybeLazyField ? DataLayouts.reassign(arg, scope) : arg,
+        bc.args,
+    ),
+    bc.axes,
+)
+
+# Analogue of Broadcast.broadcasted for rebuilding the nodes of an existing
+# broadcast expression from slices of their arguments, skipping the
+# Utilities.auto_broadcasted analysis the expression already went through.
+# Re-running it is not just redundant: starting with Julia 1.11, GPU kernel
+# inference stops constant-folding unsafe_eltype partway down deeply nested
+# operator expressions, turning the slice operators and return_eltype into
+# dynamic calls with runtime allocations in GPU kernels.
+@inline sliced_broadcasted(f::F, args, axes) where {F} =
+    Broadcast.Broadcasted(Broadcast.combine_styles(args...), f, args, axes)
+
+# Body of a slice operator applied to one node of a broadcast expression; a
+# generated function makes slicing a node one method instance rather than three
+# per node per distinct expression type (as in DataLayouts/indexing.jl).
+sliced_broadcast_body(op::Symbol, bc_type) = quote
+    Base.@_propagate_inbounds_meta
+    f = getfield(bc, :f)
+    f′ = f isa Union{Function, Type} ? f : $op(f, inds...)
+    args = getfield(bc, :args)
+    return sliced_broadcasted(
+        f′,
+        Base.Cartesian.@ntuple(
+            $(length(bc_type.parameters[4].parameters)),
+            n -> let arg = getfield(args, n)
+                arg isa MaybeLazyField ? $op(arg, inds...) : arg
+            end,
+        ),
+        $op(bc.axes, inds...),
+    )
 end
 
 for op in (:level, :slab, :column)
-    @eval Base.@propagate_inbounds function $op(bc::LazyField, inds...)
-        f′ = bc.f isa Union{Function, Type} ? bc.f : $op(bc.f, inds...)
-        args′ = unrolled_map_with_inbounds(bc.args) do arg
-            Base.@_propagate_inbounds_meta
-            arg isa MaybeLazyField ? $op(arg, inds...) : arg
-        end
-        return Broadcast.broadcasted(f′, args′...)
-    end
-end
-
-@static if hasfield(Method, :recursion_relation)
-    for f in (level, slab, column), method in methods(f)
-        method.recursion_relation = Returns(true)
-    end
+    @eval @generated $op(bc::LazyField, inds...) =
+        sliced_broadcast_body($(QuoteNode(op)), bc)
 end
 
 # Extend the DataLayout methods of IndexStyle and eachindex to Field broadcasts.
 Base.IndexStyle(bc::LazyField) = IndexStyle(field_values(bc))
 Base.eachindex(arg::MaybeLazyField, args::MaybeLazyField...) =
-    eachindex(field_values(arg), unrolled_map(field_values, args)...)
+    eachindex(field_values(arg), unrolled_tuple_map(field_values, args)...)
 
 Base.similar(bc::LazyField, ::Type{T}) where {T} = Field(T, axes(bc))
 
@@ -162,7 +187,7 @@ function Base.copyto!(
         end,
     )
     check_mismatched_spaces(fmbc)
-    Base.copyto!(fmb_data; mask)
+    copyto!(fmb_data; mask)
 end
 
 @inline check_mismatched_spaces(fmbc::FusedMultiBroadcast) =

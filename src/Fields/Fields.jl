@@ -19,8 +19,6 @@ import ..Utilities: PlusHalf, half, safe_eltype, unsafe_eltype
 import ..Utilities: recursive_bottom_eltype
 import ..Utilities: drop_auto_broadcasters, auto_broadcasted
 import ..Utilities: add_auto_broadcasters, is_auto_broadcastable
-import ..Utilities.Unrolled: unrolled_map_with_inbounds
-
 using UnrolledUtilities
 using ClimaComms
 import Adapt
@@ -158,15 +156,14 @@ const ExtrudedCubedSphereSpectralElementField3D{V, S} = Field{
 
 Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 Base.ndims(::Type{Field{V, S}}) where {V, S} = Base.ndims(V)
-
 @inline field_values(field::Field) = getfield(field, :values)
 
-@inline field_values(x::Number) = x
-@inline field_values(t::Tuple) = map(field_values, t)
-@inline field_values(nt::NamedTuple) = NamedTuple{keys(nt)}(field_values(values(nt)))
+field_values(x::Number) = x
+field_values(t::Tuple) = map(field_values, t)
+field_values(nt::NamedTuple) = NamedTuple{keys(nt)}(field_values(values(nt)))
 
 @inline Base.axes(field::Field) = getfield(field, :space)
-@inline Base.parent(field::Field) = parent(field_values(field))
+Base.parent(field::Field) = parent(field_values(field))
 
 # Define device and device array type
 ClimaComms.device(field::Field) = ClimaComms.device(axes(field))
@@ -218,6 +215,11 @@ Base.@propagate_inbounds level(field::Field, v) = Field(
     level(field_values(field), Spaces.integer_level_index(axes(field), v)),
     level(axes(field), v),
 )
+
+# DEPRECATED: use level(field, v) instead; a caller that reaches this method
+# with a multi-level field has a bug that it silently hides. No warning, as in
+# src/DataLayouts/deprecated.jl. Remove once ClimaAtmos has migrated.
+level(field::Field) = field
 
 Base.@propagate_inbounds slab(field::Field, h) =
     Field(slab(field_values(field), h), slab(axes(field), h))

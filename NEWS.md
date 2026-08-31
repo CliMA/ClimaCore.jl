@@ -4,6 +4,20 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] Spectral element operators are now evaluated
+  through the slice-loop primitives (`foreach_slab` and the other
+  `DataLayouts.foreach_*` loops), so they can appear inside fused loop bodies
+  alongside pointwise broadcasts: one loop on CPUs and one kernel launch on
+  GPUs per fused body, replacing the hand-written CUDA spectral kernels.
+  Statements in a fused body may read the results of the statements before
+  them, both pointwise and through operators, and temporaries materialized
+  inside a body are stored in per-thread registers. `Restrict` cannot read a
+  register-resident argument on GPUs and now throws an error asking for the
+  argument to be materialized outside the fused loop.
+- ![][badge-🚀performance] Fused spectral element broadcasts compile with
+  lower memory and run faster than the replaced implementation on CPUs, and
+  slightly faster on GPUs.
+
 - ![][badge-💥breaking] The advection operators' boundary treatment has been
   reworked around a generalized `Extrapolate{N}` boundary condition (also
   written `Extrapolate(N)`, with `Extrapolate() == Extrapolate{0}()`), which

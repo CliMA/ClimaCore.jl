@@ -55,6 +55,7 @@ using UnrolledUtilities
 
 import ..RecursiveApply: rzero
 import ..Utilities: PlusHalf, half, new, recursive_bottom_eltype
+import ..Utilities: @drop_recursion_limits
 import ..Utilities: AutoBroadcaster, is_auto_broadcastable, auto_broadcasted
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters
 import ..DataLayouts

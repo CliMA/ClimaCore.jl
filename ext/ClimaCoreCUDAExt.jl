@@ -13,6 +13,7 @@ import ClimaCore.DebugOnly: call_post_op_callback, post_op_callback
 import ClimaCore.DataLayouts: NoMask, IJHMask
 import ClimaCore.DataLayouts: slab, column
 import ClimaCore.Utilities: half, new, return_type
+import ClimaCore.Utilities: @drop_recursion_limits
 
 include(joinpath("cuda", "adapt.jl"))
 include(joinpath("cuda", "cuda_utils.jl"))
@@ -28,22 +29,9 @@ include(joinpath("cuda", "matrix_fields_single_field_solve.jl"))
 include(joinpath("cuda", "matrix_fields_multiple_field_solve.jl"))
 include(joinpath("cuda", "operators_dg.jl"))
 
-# Lift the recursion limit for the device-side reduce_points, whose recursion
-# over sub-blocks forwards kwargs and looks unbounded to the compiler (causing
-# it to widen the argument types and use dynamic dispatch), and for the
-# host-side foreach_slice, which is re-entered when the function passed to an
-# unfused slice loop launches its own kernels. The limit must also be lifted on
-# the keyword-argument body functions, since that is where the recursion occurs.
-@static if hasfield(Method, :recursion_relation)
-    for f in (DataLayouts.reduce_points, DataLayouts.foreach_slice), method in methods(f)
-        method.module === (@__MODULE__) || continue
-        method.recursion_relation = Returns(true)
-        body_function = Base.bodyfunction(method)
-        isnothing(body_function) && continue
-        for body_method in methods(body_function)
-            body_method.recursion_relation = Returns(true)
-        end
-    end
-end
+# reduce_points recurses over sub-blocks and foreach_slice is re-entered when
+# an unfused slice loop's function launches its own kernels; the DataLayouts
+# exemption does not cover the kwcall methods that belong to this module.
+@drop_recursion_limits Core.kwcall
 
 end

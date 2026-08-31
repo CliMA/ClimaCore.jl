@@ -1516,63 +1516,6 @@ end
     end
 end
 
-function test_fused_loop(foreach_slice, space, subspace)
-    FT = Spaces.undertype(space)
-    dest = Fields.Field(FT, space)
-    src1 = Fields.Field(Tuple{FT, FT}, space)
-    src2 = Fields.Field(Tuple{FT, FT}, subspace)
-    parent(src1) .= rand.(FT)
-    parent(src2) .= rand.(FT)
-
-    function fused_loop!(dest, src1, src2)
-        @. dest = 0
-        temp1 = @. sin(src1.:1) + cos(src2.:1)
-        @. dest += temp1 * temp1
-        temp2 = @. sin(src1.:2) + cos(src2.:2)
-        @. dest += temp2 * temp2
-        @. dest /= 2
-    end
-
-    foreach_slice(fused_loop!, dest, src1, src2)
-    @test dest ≈ @. sum((sin(src1) + cos(src2))^2) / 2
-
-    CUDA_FRAMES = @isdefined(CUDA) ? (AnyFrameModule(CUDA),) : ()
-    @test_opt ignored_modules = CUDA_FRAMES foreach_slice(fused_loop!, dest, src1, src2)
-end
-
-@testset "foreach_slice pointwise broadcast fusion" begin
-    context = ClimaComms.context(ClimaComms.device())
-
-    for space1 in TU.all_spaces(Float64; context)
-        test_fused_loop(foreach_point, space1, space1)
-        test_fused_loop(foreach_level, space1, space1)
-        test_fused_loop(foreach_slab, space1, space1)
-        test_fused_loop(foreach_column, space1, space1)
-
-        space2 = Spaces.level(space1, 1)
-        if space1 !== space2
-            @test_throws DimensionMismatch test_fused_loop(foreach_point, space1, space2)
-            @test_throws DimensionMismatch test_fused_loop(foreach_level, space1, space2)
-            @test_throws DimensionMismatch test_fused_loop(foreach_slab, space1, space2)
-
-            test_fused_loop(foreach_column, space1, space2)
-        end
-
-        space3 = Spaces.column(space1, 1, 1, 1)
-        if space1 !== space3
-            @test_throws DimensionMismatch test_fused_loop(foreach_point, space1, space3)
-            @test_throws DimensionMismatch test_fused_loop(foreach_column, space1, space3)
-
-            test_fused_loop(foreach_level, space1, space3)
-            if DataLayouts.nelems(Spaces.local_geometry_data(space1)) == 1
-                test_fused_loop(foreach_slab, space1, space3)
-            else
-                @test_throws DimensionMismatch test_fused_loop(foreach_slab, space1, space3)
-            end
-        end
-    end
-end
-
 include("unit_field_multi_broadcast_fusion.jl")
 
 nothing

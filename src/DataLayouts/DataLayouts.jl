@@ -10,7 +10,9 @@ import ClimaComms
 import MultiBroadcastFusion: @make_type, @make_fused, fused_direct
 using UnrolledUtilities
 
+import ..Utilities: @drop_recursion_limits, @drop_constprop
 import ..Utilities.Unrolled: unrolled_setindex, unrolled_insert, unrolled_map_with_inbounds
+import ..Utilities.Unrolled: unrolled_tuple_map
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters, auto_broadcasted
 import ..Utilities: stable_view, unionall_type, replace_type_parameter, safe_mapreduce
 import ..Utilities: fieldtype_vals, return_type, safe_eltype, unsafe_eltype
@@ -245,37 +247,40 @@ Base.reinterpret(::Type{T}, data::DataLayout) where {T} = rebuild(data, parent(d
 
 # Add MPICommsContext method to disambiguate from gather(::MPICommsContext, array).
 for T in (:(ClimaComms.AbstractCommsContext), :(ClimaComms.MPICommsContext))
-    @eval ClimaComms.gather(ctx::$T, data::DataLayout) =
-        ClimaComms.iamroot(ctx) ? # Only return data on the root process.
-        rebuild(data, ClimaComms.gather(ctx, parent(data))) : nothing
+    @eval function ClimaComms.gather(ctx::$T, data::DataLayout)
+        # The array gather is a collective, so every process must call it, even
+        # though it only returns an array on the root process.
+        gathered_array = ClimaComms.gather(ctx, parent(data))
+        return ClimaComms.iamroot(ctx) ? rebuild(data, gathered_array) : nothing
+    end
 end
 ClimaComms.gather(::ClimaComms.SingletonCommsContext, data::DataLayout) = data
 
 @inline add_f_dim(dims, dim, ::Val{F}) where {F} =
     isnothing(F) ? dims : unrolled_insert(dims, dim, Val(F))
 
-# Use @inline so layouts with statically inferrable sizes can be stored on the
-# stack if they do not escape their calling functions, rather than on the heap.
-@inline function similar_layout(data, ::Type{T}, maybe_dims...) where {T}
+function similar_layout(data, ::Type{T}, maybe_dims...) where {T}
     B = checked_valid_basetype(eltype(parent_type(data)), T)
     return similar_layout(data, T, B, maybe_dims...)
 end
-@inline function similar_layout(data, ::Type{T}, ::Type{B}, maybe_dims...) where {T, B}
+function similar_layout(data, ::Type{T}, ::Type{B}, maybe_dims...) where {T, B}
     Nf = num_basetypes(B, T)
     dims_or_data_size =
         isone(length(maybe_dims)) ? first(maybe_dims) :
         has_inferred_size(data) ? inferred_size(data) : size(data)
     array_size = add_f_dim(dims_or_data_size, Nf, Val(f_dim(data)))
-    new_scoped_array = has_inferred_size(data) ? scoped_static_array : scoped_array
-    array = new_scoped_array(DataScope(data), B, array_size)
+    array =
+        has_inferred_size(data) ?
+        scoped_static_array(DataScope(data), B, array_size) :
+        scoped_array(DataScope(data), B, array_size)
     return rebuild(data, array, T)
 end
 
-@inline Base.similar(::Type{D}, maybe_dims::Dims...) where {D <: DataLayout} =
+Base.similar(::Type{D}, maybe_dims::Dims...) where {D <: DataLayout} =
     similar_layout(D, eltype(D), maybe_dims...)
-@inline Base.similar(data::DataLayout, maybe_dims::Dims...) =
+Base.similar(data::DataLayout, maybe_dims::Dims...) =
     similar_layout(data, eltype(data), maybe_dims...)
-@inline Base.similar(data::DataLayout, ::Type{T}, maybe_dims::Dims...) where {T} =
+Base.similar(data::DataLayout, ::Type{T}, maybe_dims::Dims...) where {T} =
     similar_layout(data, T, maybe_dims...)
 
 function replace_basetype(data::DataLayout, ::Type{B}) where {B}
@@ -467,7 +472,7 @@ end
     (Nv, isnothing(Nh) ? nothing : Ni)
 @inline Base.size(data::VIH1{<:Any, Nv, Ni, Nh}) where {Nv, Ni, Nh} =
     (Nv, isnothing(Nh) ? size(parent(data), 2) : Ni)
-@inline nelems(data::VIH1{<:Any, <:Any, Ni}) where {Ni} = size(data, 2) ÷ Ni
+nelems(data::VIH1{<:Any, <:Any, Ni}) where {Ni} = size(data, 2) ÷ Ni
 
 @propagate_inbounds function level_view(data::VIH1, v)
     array = stable_view(parent(data), v:v, :)
@@ -519,7 +524,7 @@ end
     isnothing(Nh) ? (nothing, nothing) : (Ni, Nj)
 @inline Base.size(data::IH1JH2{<:Any, Ni, Nj, Nh}) where {Ni, Nj, Nh} =
     isnothing(Nh) ? size(parent(data)) : (Ni, Nj)
-@inline nelems(data::IH1JH2{<:Any, Ni, Nj}) where {Ni, Nj} = length(data) ÷ (Ni * Nj)
+nelems(data::IH1JH2{<:Any, Ni, Nj}) where {Ni, Nj} = length(data) ÷ (Ni * Nj)
 
 @propagate_inbounds function slab_view(data::IH1JH2{<:Any, Ni, Nj}, _, h) where {Ni, Nj}
     (h2, h1) = fldmod(h - 1, size(data, 1) ÷ Ni) .+ 1
@@ -541,28 +546,21 @@ include("broadcast.jl")
 include("indexing.jl")
 include("masks.jl")
 include("loops.jl")
+include("registers.jl")
 include("deprecated.jl")
 
-# Drop the recursion limits of this module's Core.kwcall methods and recursive
-# DataScope functions, so that kwarg functions like fill! and column_reduce! can
-# be composed, multiple scopes can be combined, and is_subscope/slice_subscope
-# can repeatedly partition a scope. The default limit makes the compiler widen
-# argument types, leading to dynamic dispatch and runtime allocations. The limit
-# must also be lifted on the keyword-argument body functions, since that is
-# where the widening occurs: each Core.kwcall method sorts the kwargs into Pairs
-# for its hidden body method, which can widen the Pairs type when a slice loop
-# or reduction calls another slice loop or reduction on every iteration.
-@static if hasfield(Method, :recursion_relation)
-    for f in (Core.kwcall, DataScope, is_subscope, slice_subscope), method in methods(f)
-        method.module === (@__MODULE__) || continue
-        method.recursion_relation = Returns(true)
-        f === Core.kwcall || continue
-        body_function = Base.bodyfunction(method)
-        isnothing(body_function) && continue
-        for body_method in methods(body_function)
-            body_method.recursion_relation = Returns(true)
-        end
-    end
-end
+# Drop the default recursion limit from every function defined in this module
+# (including hidden kwcall body functions): slice loops and reductions are
+# mutually recursive, and the default limit widens their argument types into
+# dynamic dispatch and runtime allocations. Every function is exempted, since a
+# missing exemption only shows up several call layers away.
+@drop_recursion_limits @__MODULE__
+
+# The loop entry points only: the loop bodies and operator internals keep
+# constant propagation, since turning it off there shifts kernel codegen
+# enough to flip cases near the sm_60 register brink.
+@drop_constprop foreach_pool_slice, unfused_slice_loop,
+foreach_point, foreach_level, foreach_slab, foreach_column, column_reduce!,
+Base.fill!, Base.copyto!
 
 end # module

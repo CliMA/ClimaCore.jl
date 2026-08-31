@@ -1,5 +1,5 @@
 import ClimaCore
-import ClimaCore: Spaces, Operators
+import ClimaCore: Fields, Spaces, Operators, column
 using ClimaComms
 ClimaComms.@import_required_backends
 @isdefined(TU) || include(
@@ -33,6 +33,31 @@ using Test
           Operators.FacePlaceholderSpace()
     @test Operators.placeholder_space(extruded_face_space, extruded_center_space) ===
           Operators.FacePlaceholderSpace()
+end
+
+@testset "slices of stripped broadcasts over level fields" begin
+    FT = Float64
+    # This runs a column kernel's body on the host, so its space has to be a CPU
+    # one even when the tests are run on a GPU.
+    space = TU.CenterExtrudedFiniteDifferenceSpace(
+        FT;
+        context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()),
+    )
+    ᶜa = ones(space)
+    level_field = similar(Fields.level(ᶜa, 1))  # one value per column
+    fill!(parent(level_field), FT(3))
+
+    # As in the GPU column operators: strip the spaces, then slice inside the
+    # kernel, mixing LevelPlaceholderSpace and PlaceholderSpace arguments.
+    bc = Base.Broadcast.broadcasted(tuple, ᶜa, ᶜa, level_field)
+    stripped = Operators.strip_space(bc, space)
+    @test map(arg -> axes(arg), stripped.args) === (
+        Operators.PlaceholderSpace(),
+        Operators.PlaceholderSpace(),
+        Operators.LevelPlaceholderSpace(),
+    )
+    sliced = @inbounds column(stripped, 1, 1, 1)
+    @test axes(sliced) === Operators.PlaceholderSpace()
 end
 
 @testset "reconstruct_placeholder_space" begin

@@ -175,15 +175,44 @@ end
 end
 
 # Use Broadcast.newindex to match the behavior of getindex for LazyDataLayouts.
-@propagate_inbounds Base.view(bc::MaybeFusedDataLayoutBroadcast, index::PointIndex) =
-    modify_args(bc) do arg
-        Base.@_propagate_inbounds_meta
-        view(arg, Broadcast.newindex(arg, index))
-    end
+#
+# The argument loop is expanded by a generated function rather than routed
+# through modify_args, whose two extra closure layers cost 10% more compilation
+# memory on the vector hyperdiffusion benchmark (point views are taken once per
+# node of a broadcast expression per slice loop over it).
+@generated Base.view(bc::LazyDataLayout, index::PointIndex) = quote
+    Base.@_propagate_inbounds_meta
+    args = getfield(bc, :args)
+    return Broadcast.Broadcasted(
+        getfield(bc, :style),
+        getfield(bc, :f),
+        Base.Cartesian.@ntuple(
+            $(length(bc.parameters[4].parameters)),
+            n -> let arg = getfield(args, n)
+                arg isa MaybeLazyDataLayout ?
+                view(arg, Broadcast.newindex(arg, index)) : arg
+            end,
+        ),
+    )
+end
+@propagate_inbounds Base.view(bc::FusedMultiBroadcast, index::PointIndex) =
+    FusedMultiBroadcast(
+        unrolled_map_with_inbounds(bc.pairs) do (dest, arg)
+            Base.@_propagate_inbounds_meta
+            Pair(
+                view(dest, Broadcast.newindex(dest, index)),
+                arg isa MaybeLazyDataLayout ?
+                view(arg, Broadcast.newindex(arg, index)) : arg,
+            )
+        end,
+    )
 
 # A single-point slice of multidimensional data keeps its number of dimensions,
 # so single-point broadcasts are identified by their length instead of ndims.
-@inline Base.view(bc::MaybeFusedDataLayoutBroadcast, ::CartesianIndex{0}) =
+# One method per broadcast type, avoiding ambiguity with the PointIndex methods.
+@inline Base.view(bc::LazyDataLayout, ::CartesianIndex{0}) =
+    isone(length(bc)) ? bc : Base.throw_boundserror(bc, (CartesianIndex(),))
+@inline Base.view(bc::FusedMultiBroadcast, ::CartesianIndex{0}) =
     isone(length(bc)) ? bc : Base.throw_boundserror(bc, (CartesianIndex(),))
 
 @propagate_inbounds Base.setindex!(data::DataLayout, value, indices::PointIndex...) =
@@ -193,21 +222,29 @@ end
 @propagate_inbounds Base.view(arg::IndexableData, indices::PointIndex...) =
     view(arg, CartesianIndex(indices...))
 
-# Reduce latency by only constructing slice views when necessary.
+# Reduce latency by only constructing slice views when necessary. A slice with
+# exactly one point is returned as a zero-dimensional view, so that every way
+# of slicing down to one point produces the same representation (see the note
+# on single-point views above); a single-point broadcast slice would otherwise
+# keep multidimensional style and axes, incompatible with zero-dimensional
+# slices of materialized data.
 @propagate_inbounds function level(arg::IndexableData, v)
-    (; Nv) = vijh_params(arg)
+    (; Nv, Ni, Nj, Nh) = vijh_params(arg)
+    Ni == Nj == Nh == 1 && return view(arg, CartesianIndex(v, 1, 1, 1))
     Nv == 1 || return level_view(arg, v)
     @boundscheck v == 1 || throw(ArgumentError("DataLayout has only one level"))
     return arg
 end
 @propagate_inbounds function slab(arg::IndexableData, v, h)
-    (; Nv, Nh) = vijh_params(arg)
+    (; Nv, Ni, Nj, Nh) = vijh_params(arg)
+    Ni == Nj == 1 && return view(arg, CartesianIndex(v, 1, 1, h))
     Nv == Nh == 1 || return slab_view(arg, v, h)
     @boundscheck v == h == 1 || throw(ArgumentError("DataLayout has only one slab"))
     return arg
 end
 @propagate_inbounds function column(arg::IndexableData, i, j, h)
-    (; Ni, Nj, Nh) = vijh_params(arg)
+    (; Nv, Ni, Nj, Nh) = vijh_params(arg)
+    Nv == 1 && return view(arg, CartesianIndex(1, i, j, h))
     Ni == Nj == Nh == 1 || return column_view(arg, i, j, h)
     @boundscheck i == j == h == 1 || throw(ArgumentError("DataLayout has only one column"))
     return arg

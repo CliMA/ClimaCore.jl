@@ -79,35 +79,6 @@ end
     return CartesianIndices(map(Base.OneTo, (Ni, Nj, Nh, Nnames)))
 end
 
-##### spectral kernel partition
-@inline function spectral_partition(data, n_max_threads::Integer = 256)
-    (Nv, Ni, Nj, Nh) = size(data)
-    Nvthreads = min(fld(n_max_threads, Ni * Nj), device_attributes().max_block_dim_z)
-    Nvblocks = cld(Nv, Nvthreads)
-    @assert prod((Ni, Nj, Nvthreads)) ≤ n_max_threads "threads,n_max_threads=($(prod((Ni, Nj, Nvthreads))),$n_max_threads)"
-    @assert Ni * Nj ≤ n_max_threads
-    return (; threads = (Ni, Nj, Nvthreads), blocks = (Nh, Nvblocks), Nvthreads)
-end
-@inline function spectral_universal_index(space::Spaces.AbstractSpace)
-    i = threadIdx().x
-    j = threadIdx().y
-    k = threadIdx().z
-    h = blockIdx().x
-    vid = k + (blockIdx().y - 1) * blockDim().z
-    if space isa Spaces.AbstractSpectralElementSpace
-        v = nothing
-    elseif space isa Spaces.FaceExtrudedFiniteDifferenceSpace
-        v = vid - half
-    elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace
-        v = vid
-    else
-        error("Invalid space")
-    end
-    ij = CartesianIndex((i, j))
-    slabidx = Fields.SlabIndex(v, h)
-    return (ij, slabidx)
-end
-
 ##### shmem fd kernel partition
 @inline function fd_shmem_stencil_partition(
     data,

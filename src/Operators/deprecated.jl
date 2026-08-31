@@ -1,11 +1,9 @@
 # Backwards-compatibility aliases for the pre-FormType spectral element
-# operators. The weak-form operators are now the WeakForm variants of their
-# strong-form counterparts (e.g., Divergence{WeakForm} instead of a separate
-# WeakDivergence type); the aliases below keep the old names working. As with
-# src/DataLayouts/deprecated.jl, these are plain aliases without deprecation
-# warnings. Remove this file when all downstream consumers have migrated to the
-# parameterized names (type-alias cleanup, Phase 4 of
-# https://github.com/CliMA/ClimaCore.jl/issues/2554).
+# operators (e.g., WeakDivergence for Divergence{WeakForm}), without deprecation
+# warnings, as in src/DataLayouts/deprecated.jl. Remove the aliases below when
+# all downstream consumers have migrated to the parameterized names (type-alias
+# cleanup, Phase 4 of https://github.com/CliMA/ClimaCore.jl/issues/2554);
+# get_node at the end of this file is live API used by the Remapping module.
 
 """
     wdiv = WeakDivergence()
@@ -141,48 +139,23 @@ which, by using the anti-symmetry of the Levi-Civita symbol, reduces to
 """
 const WeakCurl = Curl{WeakForm}
 
-# Nodal getters for Fields, used by the Remapping module and its CUDA extension.
+# Nodal getter for Fields, used by the Remapping module and its CUDA extension.
+# A 1-dimensional index is a column of a 1D space, so its second index is 1.
 Base.@propagate_inbounds function get_node(
-    parent_space,
-    field::Fields.Field,
-    ij::CartesianIndex{1},
-    slabidx,
-)
+    parent_space, field::Fields.Field, ij::CartesianIndex{N}, slabidx,
+) where {N}
     space = reconstruct_placeholder_space(axes(field), parent_space)
-    i, = Tuple(ij)
-    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace ||
-       space isa Spaces.FaceFiniteDifferenceSpace
-        _v = slabidx.v + half
-    elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace ||
-           space isa Spaces.AbstractSpectralElementSpace ||
-           space isa Spaces.CenterFiniteDifferenceSpace
-        _v = slabidx.v
-    else
-        error("invalid space")
-    end
-    h = slabidx.h
-    fv = Fields.field_values(field)
-    v = isnothing(_v) ? 1 : _v
-    return fv[v, i, 1, h]
-end
-Base.@propagate_inbounds function get_node(
-    parent_space,
-    field::Fields.Field,
-    ij::CartesianIndex{2},
-    slabidx,
-)
-    space = reconstruct_placeholder_space(axes(field), parent_space)
-    i, j = Tuple(ij)
-    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
-        _v = slabidx.v + half
-    elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace ||
-           space isa Spaces.AbstractSpectralElementSpace
-        _v = slabidx.v
-    else
-        error("invalid space")
-    end
-    h = slabidx.h
-    fv = Fields.field_values(field)
-    v = isnothing(_v) ? 1 : _v
-    return fv[v, i, j, h]
+    _v =
+        if space isa Spaces.FaceExtrudedFiniteDifferenceSpace ||
+           space isa Spaces.FaceFiniteDifferenceSpace
+            slabidx.v + half
+        elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace ||
+               space isa Spaces.AbstractSpectralElementSpace ||
+               space isa Spaces.CenterFiniteDifferenceSpace
+            slabidx.v
+        else
+            error("invalid space")
+        end
+    (i, j) = N == 1 ? (ij[1], 1) : Tuple(ij)
+    return Fields.field_values(field)[isnothing(_v) ? 1 : _v, i, j, slabidx.h]
 end

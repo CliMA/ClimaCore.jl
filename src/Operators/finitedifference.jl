@@ -307,7 +307,7 @@ get_boundary(
 strip_space(op::FiniteDifferenceOperator, parent_space) =
     unionall_type(typeof(op))(
         NamedTuple{keys(op.bcs)}(
-            unrolled_map(Base.Fix2(strip_space, parent_space), values(op.bcs)),
+            unrolled_tuple_map(Base.Fix2(strip_space, parent_space), values(op.bcs)),
         ),
     )
 
@@ -383,7 +383,7 @@ function strip_space(sbc::StencilBroadcasted{Style}, parent_space) where {Style}
     new_space = placeholder_space(current_space, parent_space)
     return StencilBroadcasted{Style}(
         strip_space(sbc.op, current_space),
-        unrolled_map(Base.Fix2(strip_space, parent_space), sbc.args),
+        unrolled_tuple_map(Base.Fix2(strip_space, current_space), sbc.args),
         new_space,
     )
 end
@@ -1383,7 +1383,7 @@ struct MonotoneLocalExtrema <: LimiterConstraint end
 
 strip_space(op::LinVanLeerC2F, parent_space) = LinVanLeerC2F(
     NamedTuple{keys(op.bcs)}(
-        unrolled_map(Base.Fix2(strip_space, parent_space), values(op.bcs)),
+        unrolled_tuple_map(Base.Fix2(strip_space, parent_space), values(op.bcs)),
     ),
     op.constraint,
 )
@@ -1755,7 +1755,9 @@ function TVDLimitedFluxC2F(; method, kwargs...)
 end
 
 strip_space(op::TVDLimitedFluxC2F, parent_space) = TVDLimitedFluxC2F(
-    NamedTuple{keys(op.bcs)}(strip_space_args(values(op.bcs), parent_space)),
+    NamedTuple{keys(op.bcs)}(
+        unrolled_tuple_map(Base.Fix2(strip_space, parent_space), values(op.bcs)),
+    ),
     op.method,
 )
 
@@ -2102,7 +2104,7 @@ Adapt.adapt_structure(to, op::FiniteDifferenceOperator) =
     unionall_type(typeof(op))(; adapt_bcs(to, bcs)...)
 
 @inline adapt_bcs(to, bcs) = NamedTuple{keys(bcs)}(
-    unrolled_map(bc -> Adapt.adapt_structure(to, bc), values(bcs)),
+    unrolled_tuple_map(bc -> Adapt.adapt_structure(to, bc), values(bcs)),
 )
 
 """
@@ -2798,7 +2800,7 @@ end
 
 
 @inline _left_interior_window_idx_args(args::Tuple, space, loc) =
-    unrolled_map(args) do arg
+    unrolled_tuple_map(args) do arg
         left_interior_window_idx(arg, space, loc)
     end
 
@@ -2846,7 +2848,7 @@ end
 end
 
 @inline _right_interior_window_idx_args(args::Tuple, space, loc) =
-    unrolled_map(args) do arg
+    unrolled_tuple_map(args) do arg
         right_interior_window_idx(arg, space, loc)
     end
 
@@ -3059,15 +3061,7 @@ end
     end
 end
 
-if hasfield(Method, :recursion_relation)
-    dont_limit = (args...) -> true
-    for m in methods(call_bc_f)
-        m.recursion_relation = dont_limit
-    end
-    for m in methods(getidx)
-        m.recursion_relation = dont_limit
-    end
-end
+@drop_recursion_limits call_bc_f, getidx
 
 # setidx! methods for copyto!
 Base.@propagate_inbounds function setidx!(
@@ -3106,7 +3100,7 @@ function Base.Broadcast.broadcasted(
     # may help with latency.
     FT = Spaces.undertype(axes(StencilBroadcasted{Style}(op, args)))
     args′ =
-        unrolled_map(args) do arg
+        unrolled_tuple_map(args) do arg
             is_auto_broadcastable(eltype(arg)) ?
             Base.Broadcast.broadcasted(add_auto_broadcasters, arg) : arg
         end
@@ -3141,6 +3135,13 @@ function Base.Broadcast.materialize!(
     )
 end
 
+# A boundary condition holds values for one boundary point per column, so it
+# passes through slicing unchanged; stated explicitly because level/slab/column
+# deliberately have no generic identity fallback (see src/interface.jl).
+for slice_op in (:level, :slab, :column)
+    @eval $slice_op(bc::AbstractBoundaryCondition, inds...) = bc
+end
+
 Base.@propagate_inbounds column(op::FiniteDifferenceOperator, inds...) =
     unionall_type(typeof(op))(column(op.bcs, inds...))
 Base.@propagate_inbounds column(sbc::StencilBroadcasted{S}, inds...) where {S} =
@@ -3151,12 +3152,7 @@ Base.@propagate_inbounds column(sbc::StencilBroadcasted{S}, inds...) where {S} =
     )
 
 #TODO: the optimizer dies with column broadcast expressions over a certain complexity
-if hasfield(Method, :recursion_relation)
-    dont_limit = (args...) -> true
-    for m in methods(column)
-        m.recursion_relation = dont_limit
-    end
-end
+@drop_recursion_limits column
 
 function _serial_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
     space = axes(field_out)

@@ -60,6 +60,7 @@ unit_tests = [
 
     # Fields
     UnitTest("Fields"                                   ,"Fields/unit_field.jl"; tier = :unit, subsystem = :fields),
+    UnitTest("Fields - fused slice loops"              ,"Fields/unit_fusion.jl"; tier = :unit, subsystem = :fields, slow = true), # compiles the spectral stack for every space; excluded from the one-process GHA jobs
     UnitTest("Fields - inference regression"            ,"Fields/inference_repro.jl"; tier = :inference, subsystem = :fields),
     UnitTest("Fields - zero-allocation broadcasts"      ,"Fields/allocs_field.jl"; meta = :cpu_only, tier = :allocs, subsystem = :fields),
     UnitTest("Fields - convergence integrals"           ,"Fields/conv_field_integrals.jl"; tier = :conv, subsystem = :fields),
@@ -69,7 +70,7 @@ unit_tests = [
 
     # Spectral Element Operators
     UnitTest("Spectral elem - vector identities"        ,"Operators/spectralelement/unit_vector_identities.jl"; tier = :unit, subsystem = :operators),
-    UnitTest("Spectral elem - rectilinear"              ,"Operators/spectralelement/unit_rectilinear.jl"; tier = :unit, subsystem = :operators),
+    UnitTest("Spectral elem - rectilinear"              ,"Operators/spectralelement/unit_rectilinear.jl"; tier = :unit, subsystem = :operators, slow = true), # 28 min under the GHA coverage job; Buildkite runs it uninstrumented
     UnitTest("Spectral elem - plane"                    ,"Operators/spectralelement/unit_plane.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - inference"                ,"Operators/spectralelement/inference_spectralelement.jl"; tier = :inference, subsystem = :operators),
     UnitTest("Spectral elem - gradient tensor"          ,"Operators/spectralelement/unit_covar_deriv_ops.jl"; tier = :unit, subsystem = :operators),
@@ -101,10 +102,11 @@ unit_tests = [
     UnitTest("Spectral elem - DG divergence conv"       ,"Operators/spectralelement/conv_dg_divergence.jl"; meta = :cpu_only, tier = :conv, subsystem = :operators),
     UnitTest("Operators - broadcast inference"          ,"Operators/inference_operators.jl"; tier = :inference, subsystem = :operators),
     UnitTest("FD ops - zero-allocation stencils"        ,"Operators/finitedifference/allocs_fd_ops.jl"; meta = :cpu_only, tier = :allocs, subsystem = :operators),
+    UnitTest("SEM ops - zero-allocation broadcasts"     ,"Operators/spectralelement/allocs_spectral_ops.jl"; meta = :cpu_only, tier = :allocs, subsystem = :operators),
 
     # Finite Difference & Hybrid Operators
     UnitTest("FD ops - column"                          ,"Operators/finitedifference/unit_column.jl"; tier = :unit, subsystem = :operators),
-    UnitTest("FD ops - tensor"                          ,"Operators/finitedifference/unit_tensor.jl"; tier = :unit, subsystem = :operators),
+    UnitTest("FD ops - tensor"                          ,"Operators/finitedifference/unit_tensor.jl"; tier = :unit, subsystem = :operators, slow = true), # largest instrumented compile peak; the coverage job cannot afford it
     UnitTest("FD ops - boundary symmetry"               ,"Operators/finitedifference/unit_boundary_symmetry.jl"; tier = :unit, subsystem = :operators),
     UnitTest("FD ops - upwind schemes"                  ,"Operators/finitedifference/unit_upwind_schemes.jl"; tier = :unit, subsystem = :operators),
     UnitTest("FD ops - inference"                       ,"Operators/finitedifference/inference_finitedifference.jl"; meta = :cpu_only, tier = :inference, subsystem = :operators),
@@ -137,13 +139,13 @@ unit_tests = [
     UnitTest("MatrixFields - broadcasting"              ,"MatrixFields/unit_matrix_field_broadcasting.jl"; meta = :cpu_only, tier = :unit, subsystem = :matrixfields, slow = true), # 3.1 min for all 22 cases
     UnitTest("MatrixFields - multiple field solve"      ,"MatrixFields/multiple_field_solve_reproducer_1.jl"; tier = :unit, subsystem = :matrixfields),
     UnitTest("MatrixFields - flat spaces"               ,"MatrixFields/unit_flat_spaces.jl"; tier = :unit, subsystem = :matrixfields),
-    UnitTest("MatrixFields - indexing"                  ,"MatrixFields/unit_field_matrix_indexing.jl"; tier = :unit, subsystem = :matrixfields),
+    UnitTest("MatrixFields - indexing"                  ,"MatrixFields/unit_field_matrix_indexing.jl"; tier = :unit, subsystem = :matrixfields, slow = true), # +1.5 GiB instrumented peak on the coverage job
     UnitTest("MatrixFields - operator matrices"         ,"MatrixFields/unit_operator_matrices.jl"; tier = :unit, subsystem = :matrixfields, slow = true), # 4.3 min
     UnitTest("MatrixFields - mat mul recursion"         ,"MatrixFields/unit_matrix_multiplication_recursion.jl"; tier = :unit, subsystem = :matrixfields),
 
     # Hypsography
     UnitTest("Hypsography - 2d"                         ,"Hypsography/unit_hypsography_2d.jl"; tier = :unit, subsystem = :hypsography),
-    UnitTest("Hypsography - 3d sphere"                  ,"Hypsography/unit_hypsography_3dsphere.jl"; tier = :unit, subsystem = :hypsography),
+    UnitTest("Hypsography - 3d sphere"                  ,"Hypsography/unit_hypsography_3dsphere.jl"; tier = :unit, subsystem = :hypsography, slow = true), # +3 GiB instrumented peak; the coverage job's repeated OOM site
 
     # Limiters, IO, Remapping
     UnitTest("Limiter"                                  ,"Limiters/unit_limiter.jl"; tier = :unit, subsystem = :limiters),

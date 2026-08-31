@@ -115,6 +115,33 @@ Number of threads that are part of a [`DataScope`](@ref).
 @inline num_threads(scope) = num_partitions(scope) * num_threads(partition(scope))
 
 """
+    static_num_threads(scope)
+
+[`num_threads`](@ref) of a [`DataScope`](@ref) when it is a compile-time
+constant, and `nothing` when it is only known at run time. Used by
+[`register_similar`](@ref) to determine how many points of a slice each thread
+can be assigned.
+"""
+static_num_threads(scope) = nothing
+
+# Number of threads that a device launch must give each of its launch units (a
+# thread block on a GPU) when a loop assigns every slice to a subscope of the
+# launch's scope: max_threads rounded down to a whole multiple of
+# num_threads(subscope), and never fewer than one whole subscope.
+#
+# WHOLE SUBSCOPES INVARIANT: a slice loop gives the thread of rank r the
+# strided subset r:num_threads(subscope):Np of a slice's points, with the
+# stride read from the subscope's *type*: in a partial subscope, points
+# assigned to a missing rank are silently skipped, and the point-to-register
+# correspondence of a register_similar destination breaks. Every launch unit
+# must therefore hold a whole number of subscopes, and max_threads must be at
+# least num_threads(subscope), which holds on supported devices.
+@inline function subscope_launch_threads(subscope, max_threads)
+    subscope_threads = Int(num_threads(subscope))
+    return max(fld(Int(max_threads), subscope_threads), 1) * subscope_threads
+end
+
+"""
     num_partitions(scope)
 
 Number of partitions (results of [`partition`](@ref)) in a [`DataScope`](@ref).
@@ -200,6 +227,11 @@ scoped_array(scope, ::Type{T}, dims; buffer = false) where {T} =
 Statically-sized array with the specified element type and size, whose values
 can be modified by every thread in a [`DataScope`](@ref). If a `DataScope` does
 not provide its own method, this falls back to calling [`scoped_array`](@ref).
+
+Two allocations with equal element types and sizes may be assigned to the same
+memory (this is what happens for block-level allocations on GPUs, which are
+stored in shared memory), so their lifetimes must not overlap unless they are
+guaranteed to hold identical values.
 """
 scoped_static_array(scope, ::Type{T}, dims) where {T} = scoped_array(scope, T, dims)
 
@@ -220,6 +252,7 @@ strided_access(scope) = true
 struct ThisThread <: DataScope end
 
 num_threads(::ThisThread) = 1
+static_num_threads(::ThisThread) = 1
 thread_rank(::ThisThread) = 1
 scoped_array(::ThisThread, ::Type{T}, dims; buffer = false) where {T} =
     buffer ? task_reduction_buffer(Array{T, 1}, dims) : Array{T}(undef, dims)
@@ -408,25 +441,67 @@ Base.@propagate_inbounds function subscope_indices(subscope, scope, indices)
         subscope == partition(scope) ? num_partitions(scope) :
         num_subscopes(subscope, scope)
     view_range =
-        strided_access(scope) ? (rank:n:length(indices)) :
+        strided_access(scope) ? strided_range(rank, n, length(indices)) :
         (length(indices) * (rank - 1) ÷ n + 1):(length(indices) * rank ÷ n)
     return subscope_index_view(scope, indices, view_range)
 end
 
+# AbstractRange of len Ints beginning at start and increasing by step, with its
+# length stored rather than derived from its endpoints. Base's StepRange
+# divides its endpoints by its step every time its length is read, which a
+# slice loop does several times per nested loop, and only the outermost loop's
+# step is not a compile-time constant -- the loop every other one runs inside.
+# GPUs have no integer division unit, so each such division expands into a long
+# emulation sequence; hosts divide out of order and once per slice rather than
+# per point, which is why the divisions are invisible in CPU timings.
+struct StridedRange <: AbstractRange{Int}
+    start::Int
+    step::Int
+    len::Int
+end
+@inline Base.first(range::StridedRange) = range.start
+@inline Base.step(range::StridedRange) = range.step
+@inline Base.length(range::StridedRange) = range.len
+@inline Base.size(range::StridedRange) = (range.len,)
+@inline Base.last(range::StridedRange) = range.start + (range.len - 1) * range.step
+Base.@propagate_inbounds function Base.getindex(range::StridedRange, i::Int)
+    @boundscheck checkbounds(range, i)
+    return range.start + (i - 1) * range.step
+end
+
+# Range subsets of strided ranges, taken by nested slice loops and views of
+# views. Every range subindex must be covered by one of these methods: a missed
+# pair falls back to the generic AbstractArray getindex, which allocates a
+# Vector and interpolates an error string, neither of which is GPU-compilable.
+Base.@propagate_inbounds function Base.getindex(
+    range::StridedRange, sub::AbstractRange{<:Integer},
+)
+    @boundscheck checkbounds(range, sub)
+    start = range.start + (first(sub) - 1) * range.step
+    return StridedRange(start, range.step * step(sub), length(sub))
+end
+Base.@propagate_inbounds function Base.getindex(
+    range::AbstractUnitRange{<:Integer}, sub::StridedRange,
+)
+    @boundscheck checkbounds(range, sub)
+    return StridedRange(first(range) + sub.start - 1, sub.step, sub.len)
+end
+
+# The strided subset rank:n:n_indices, whose length is computed once here.
+@inline strided_range(rank, n, n_indices) =
+    StridedRange(rank, n, rank > n_indices ? 0 : (n_indices - rank) ÷ n + 1)
 # Return a view by default, so iterating over it is as efficient as iterating
 # over the original indices. GPU scopes must override this, since a strided view
 # of CartesianIndices is a ReshapedArray with GPU-incompatible bounds checks.
 Base.@propagate_inbounds subscope_index_view(scope, indices, view_range) =
     view(indices, view_range)
 
-struct StridedCartesianIndices{I, V}
+struct StridedCartesianIndices{N, I, V} <: AbstractVector{CartesianIndex{N}}
     indices::I
     view_range::V
 end
-Base.length(strided::StridedCartesianIndices) = length(strided.view_range)
-Base.firstindex(strided::StridedCartesianIndices) = 1
-Base.lastindex(strided::StridedCartesianIndices) = length(strided.view_range)
-Base.eachindex(strided::StridedCartesianIndices) = Base.OneTo(length(strided))
+StridedCartesianIndices(indices::CartesianIndices{N}, view_range) where {N} =
+    StridedCartesianIndices{N, typeof(indices), typeof(view_range)}(indices, view_range)
 Base.size(strided::StridedCartesianIndices) = (length(strided.view_range),)
 Base.@propagate_inbounds Base.getindex(strided::StridedCartesianIndices, n::Int) =
     strided.indices[strided.view_range[n]]

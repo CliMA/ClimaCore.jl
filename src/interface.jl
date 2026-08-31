@@ -1,3 +1,4 @@
+# Toplevel interface functions for recurisve broadcast expressions
 import ..Utilities.Unrolled: unrolled_map_with_inbounds
 
 """
@@ -27,6 +28,7 @@ function column end
 
 for op in (:level, :slab, :column)
     @eval $op(n::Number, inds...) = n
+    @eval $op(::Nothing, inds...) = nothing
     @eval Base.@propagate_inbounds $op(t::Tuple, inds...) =
         unrolled_map_with_inbounds(t) do x
             Base.@_propagate_inbounds_meta
