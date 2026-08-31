@@ -71,6 +71,7 @@ export ExtrudedCubedSphereGrid,
     Box3DGrid,
     SliceXZGrid,
     RectangleXYGrid,
+    MultiColumnGrid,
     PointColumnEnsembleGrid
 
 import ClimaComms
@@ -705,7 +706,7 @@ function RectangleXYGrid(
 end
 
 """
-    PointColumnEnsembleGrid(
+    MultiColumnGrid(
         ::Type{<:AbstractFloat}; # defaults to Float64
         points::AbstractVector{Geometry.LatLongPoint{FT}},
         z_elem::Integer,
@@ -742,7 +743,7 @@ not supported. Use [`ClimaCore.Fields.bycolumn`](@ref) to iterate over columns.
 ```julia
 using ClimaCore.CommonGrids, ClimaCore.Geometry
 points = [LatLongPoint(0.0, 0.0), LatLongPoint(10.0, 20.0), LatLongPoint(-5.0, 90.0)]
-grid = PointColumnEnsembleGrid(;
+grid = MultiColumnGrid(;
     points = points,
     z_elem = 10,
     z_min = 0,
@@ -751,8 +752,8 @@ grid = PointColumnEnsembleGrid(;
 )
 ```
 """
-PointColumnEnsembleGrid(; kwargs...) = PointColumnEnsembleGrid(Float64; kwargs...)
-function PointColumnEnsembleGrid(
+MultiColumnGrid(; kwargs...) = MultiColumnGrid(Float64; kwargs...)
+function MultiColumnGrid(
     ::Type{FT};
     points::AbstractVector{Geometry.LatLongPoint{FT}},
     z_elem::Integer,
@@ -763,7 +764,7 @@ function PointColumnEnsembleGrid(
     stretch::Meshes.StretchingRule = Meshes.Uniform(),
     z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
 ) where {FT}
-    h_grid = Grids.PointCloudGrid(points; radius, device)
+    h_grid = Grids.MultiPointGrid(points; radius, device)
     z_topology = Topologies.IntervalTopology(
         ClimaComms.SingletonCommsContext(device),
         z_mesh,
@@ -771,5 +772,8 @@ function PointColumnEnsembleGrid(
     z_grid = Grids.FiniteDifferenceGrid(z_topology)
     return Grids.ExtrudedFiniteDifferenceGrid(h_grid, z_grid)
 end
+
+# Backwards-compatibility alias for the old name.
+Base.@deprecate_binding PointColumnEnsembleGrid MultiColumnGrid false
 
 end # module

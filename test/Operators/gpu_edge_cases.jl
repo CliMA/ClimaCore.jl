@@ -19,7 +19,7 @@ import ClimaCore:
     Geometry,
     Operators,
     Quadratures
-import ClimaCore.CommonSpaces: PointColumnEnsembleSpace, CellCenter
+import ClimaCore.CommonSpaces: MultiColumnSpace, CellCenter
 
 const test_device = ClimaComms.device()
 const cpu_device = ClimaComms.CPUSingleThreaded()
@@ -312,7 +312,7 @@ end
         points = [
             Geometry.LatLongPoint(FT(10i - 40), FT(20i - 80)) for i in 1:7
         ]
-        center_space = PointColumnEnsembleSpace(
+        center_space = MultiColumnSpace(
             FT;
             points,
             z_elem = 8,

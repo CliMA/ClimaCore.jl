@@ -264,7 +264,7 @@ function FaceExtrudedFiniteDifferenceSpace(::Type{FT}; kwargs...) where {FT}
     return Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
 end
 
-function PointColumnEnsembleSpace(::Type{FT}; context, zelem = 10, kwargs...) where {FT}
+function MultiColumnSpace(::Type{FT}; context, zelem = 10, kwargs...) where {FT}
     staggering = Spaces.CellCenter()
     lats = FT.([0.0, 1.0, 2.0])
     longs = FT.([3.0, 4.0, 5.0])
@@ -272,7 +272,7 @@ function PointColumnEnsembleSpace(::Type{FT}; context, zelem = 10, kwargs...) wh
     z_min = -10.0
     z_max = 10.0
     (; device) = context
-    return CommonSpaces.PointColumnEnsembleSpace(
+    return CommonSpaces.MultiColumnSpace(
         FT;
         z_elem = zelem,
         staggering,
@@ -299,7 +299,7 @@ function all_spaces(
         # SpectralElementFiniteDifferenceRectilinearSpace2D(FT; context),
         ColumnCenterFiniteDifferenceSpace(FT; zelem, context),
         ColumnFaceFiniteDifferenceSpace(FT; zelem, context),
-        PointColumnEnsembleSpace(FT; zelem, context),
+        MultiColumnSpace(FT; zelem, context),
         SphereSpectralElementSpace(FT; context),
         CenterExtrudedFiniteDifferenceSpace(FT; zelem, context, helem),
         FaceExtrudedFiniteDifferenceSpace(FT; zelem, context, helem),
