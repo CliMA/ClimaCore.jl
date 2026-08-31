@@ -32,6 +32,9 @@ import ..Grids:
     Staggering,
     CellFace,
     CellCenter,
+    Discretization,
+    CG,
+    DG,
     topology,
     vertical_topology,
     local_geometry_type,
@@ -68,13 +71,24 @@ topology(space::AbstractSpace) = topology(grid(space))
 vertical_topology(space::AbstractSpace) = vertical_topology(grid(space))
 
 """
+    Spaces.discretization(space)
+
+The Galerkin discretization of `space`: `Grids.CG()` or `Grids.DG()`, as
+selected by the `discretization` keyword at grid construction (for extruded
+spaces, that of the horizontal grid). Dispatch on it to write code that
+differs by discretization; see also [`Spaces.is_continuous`](@ref).
+"""
+discretization(space::AbstractSpace) = Grids.discretization(grid(space))
+
+"""
     Spaces.is_continuous(space)
 
 Whether fields on `space` are members of the continuous (CG) function space,
-maintained via [`Spaces.weighted_dss!`](@ref). `false` for discontinuous (DG)
-spaces: spectral-element grids constructed with `discontinuous = true` or
-with a quadrature whose nodes are not shared across element boundaries (e.g.
-`Quadratures.GL`). In those cases, `weighted_dss!` is a no-op, and
+maintained via [`Spaces.weighted_dss!`](@ref)
+(`Spaces.discretization(space) isa Grids.CG`). `false` for discontinuous (DG)
+spaces: spectral-element grids constructed with `discretization = Grids.DG()`
+or with a quadrature whose nodes are not shared across element boundaries
+(e.g. `Quadratures.GL`). In those cases, `weighted_dss!` is a no-op, and
 inter-element coupling is supplied by DG numerical fluxes. Downstream models
 can use this to decide whether a stage state needs DSS.
 """

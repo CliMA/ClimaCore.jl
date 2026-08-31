@@ -21,23 +21,21 @@ corrections (see [`ldg_laplacian_tendency`](@ref)), and `weighted_dss!` is a
 no-op — so the same prep → `weighted_dss!` → apply sequence is correct for
 both discretizations.
 """
-function scalar_laplacian(χ; weight = nothing)
+scalar_laplacian(χ; weight = nothing) =
+    scalar_laplacian(Spaces.discretization(axes(χ)), χ, weight)
+
+function scalar_laplacian(::Grids.CG, χ, weight)
+    wdiv = Divergence{WeakForm}()
+    grad = Gradient()
+    return isnothing(weight) ? lazy.(wdiv.(grad.(χ))) :
+           lazy.(wdiv.(weight .* grad.(χ)))
+end
+
+function scalar_laplacian(::Grids.DG, χ, weight)
     space = axes(χ)
-    if Spaces.is_continuous(space)
-        wdiv = Divergence{WeakForm}()
-        grad = Gradient()
-        return isnothing(weight) ? lazy.(wdiv.(grad.(χ))) :
-               lazy.(wdiv.(weight .* grad.(χ)))
-    else
-        q = Base.Broadcast.materialize(χ)
-        κ = one(Spaces.undertype(space))
-        return ldg_laplacian_tendency(
-            q,
-            weight,
-            κ,
-            ldg_penalty_parameter(κ, space),
-        )
-    end
+    q = Base.Broadcast.materialize(χ)
+    κ = one(Spaces.undertype(space))
+    return ldg_laplacian_tendency(q, weight, κ, ldg_penalty_parameter(κ, space))
 end
 
 """
@@ -57,12 +55,16 @@ element-local and must be made continuous with
 implemented for discontinuous (DG) spaces, which need grad-div/curl-curl
 face lifting.
 """
-function vector_laplacian(u; divergence_factor = 1)
+vector_laplacian(u; divergence_factor = 1) =
+    vector_laplacian(Spaces.discretization(axes(u)), u, divergence_factor)
+
+vector_laplacian(::Grids.DG, u, divergence_factor) = error(
+    "vector_laplacian is not implemented for DG spaces, which need \
+     grad-div/curl-curl face lifting",
+)
+
+function vector_laplacian(::Grids.CG, u, divergence_factor)
     space = axes(u)
-    Spaces.is_continuous(space) || error(
-        "vector_laplacian is not implemented for DG spaces, which need \
-         grad-div/curl-curl face lifting",
-    )
     div = Divergence()
     wgrad = Gradient{WeakForm}()
     graddiv = lazy.(wgrad.(div.(u)))

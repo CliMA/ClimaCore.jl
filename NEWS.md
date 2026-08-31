@@ -4,6 +4,24 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-💥breaking] The Galerkin discretization of a spectral-element grid
+  is represented by the singleton types `Grids.CG()` (the default) and
+  `Grids.DG()`: construct with `discretization = Grids.DG()` and read it back
+  with `Grids.discretization(grid)` / `Spaces.discretization(space)`, which
+  discretization-dependent code can dispatch on. This replaces the Boolean
+  `discontinuous = true` grid keyword; `is_continuous` is unchanged.
+  `InputOutput` serializes the discretization; grids in files without the
+  attribute read back as continuous.
+
+- ![][badge-✨feature/enhancement] Added the model-level CG↔DG switch
+  `Operators.tendency_completion` / `Operators.complete_tendency!`: a tendency
+  written as an element-local weak form plus one completion call runs on both
+  discretizations, with the completion object built once from the space —
+  `Spaces.weighted_dss!` on continuous spaces, the mass-weighted DG interface
+  (and optional boundary) numerical fluxes on `Grids.DG()` spaces.
+  The CG↔DG Bickley-jet integration test now runs one shallow-water tendency
+  on both discretizations through this switch.
+
 - ![][badge-💥breaking] Renamed the DG interior-face assembly operators from
   `internal` to `interior` for consistency with `add_numerical_flux_boundary!`:
   `Operators.add_numerical_flux_internal!` →
@@ -276,14 +294,15 @@ main
 
 - Spectral-element grids can be marked as discontinuous-Galerkin function
   spaces: `SpectralElementGrid1D`/`SpectralElementGrid2D` (and the
-  corresponding `Spaces` constructors) accept `discontinuous = true`. On such
-  grids, `Spaces.weighted_dss!` (and its `start!`/`internal!`/`ghost!` split)
-  is a no-op, `create_dss_buffer` returns `nothing`, and no DSS weights are
-  computed. The new queries `Grids.is_continuous(grid)` /
-  `Spaces.is_continuous(space)` report the discretization, so downstream
-  models can gate DSS on the space itself rather than on the quadrature type.
-  The flag is part of the grid cache key and is serialized by `InputOutput`
-  (grids in files written before it existed read back as continuous).
+  corresponding `Spaces` constructors) accept `discretization = Grids.DG()`.
+  On such grids, `Spaces.weighted_dss!` (and its
+  `start!`/`internal!`/`ghost!` split) is a no-op, `create_dss_buffer` returns
+  `nothing`, and no DSS weights are computed. The new queries
+  `Grids.is_continuous(grid)` / `Spaces.is_continuous(space)` report the
+  discretization, so downstream models can gate DSS on the space itself rather
+  than on the quadrature type. The discretization is part of the grid cache
+  key and is serialized by `InputOutput` (grids in files without the
+  attribute read back as continuous).
   [2599](https://github.com/CliMA/ClimaCore.jl/pull/2599)
 
 - Introduces horizontal discontinuous-Galerkin (DG) operator support. The

@@ -46,7 +46,7 @@ function dg_plane_space(::Type{FT}; L = FT(2π), xelem = 4, yelem = 4, Nq = 4) w
     return Spaces.SpectralElementSpace2D(
         topology,
         Quadratures.GLL{Nq}();
-        discontinuous = true,
+        discretization = Spaces.DG(),
     )
 end
 

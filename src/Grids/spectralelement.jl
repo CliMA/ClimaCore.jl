@@ -3,16 +3,50 @@
 abstract type AbstractSpectralElementGrid <: AbstractGrid end
 
 """
+    Discretization
+
+Supertype of the singleton types [`CG`](@ref) and [`DG`](@ref), which
+distinguish the Galerkin discretization of a spectral-element grid. Select it
+with the `discretization` keyword of [`SpectralElementGrid1D`](@ref) /
+[`SpectralElementGrid2D`](@ref) (and the corresponding `Spaces` constructors);
+read it back with [`discretization`](@ref). The stored value is normalized at
+grid construction: a quadrature whose nodes are not shared across element
+boundaries (`Quadratures.requires_dss` is `false`, e.g. `Quadratures.GL`)
+cannot represent a continuous space, so such grids store `DG()` regardless of
+the keyword.
+"""
+abstract type Discretization end
+
+"""
+    CG()
+
+The continuous-Galerkin [`Discretization`](@ref) (the default): functions are
+single-valued at element boundaries, and element-local weak operators are
+completed by [`Spaces.weighted_dss!`](@ref).
+"""
+struct CG <: Discretization end
+
+"""
+    DG()
+
+The discontinuous-Galerkin [`Discretization`](@ref): functions are
+element-local (multi-valued at element boundaries), `Spaces.weighted_dss!` is
+a no-op, and element coupling enters through interface numerical fluxes (see
+`Operators.add_numerical_flux_interior!`).
+"""
+struct DG <: Discretization end
+
+"""
     SpectralElementGrid1D(
         topology::Topologies.IntervalTopology,
         quadrature_style::Quadratures.QuadratureStyle;
         VIJH,
-        discontinuous::Bool = false,
+        discretization::Discretization = CG(),
     )
 
 A one-dimensional grid: within each element the space is represented as a
-polynomial. `discontinuous` marks the grid's function space as discontinuous
-Galerkin (DG); see [`SpectralElementGrid2D`](@ref).
+polynomial. `discretization` selects continuous ([`CG`](@ref), the default) or
+discontinuous ([`DG`](@ref)) Galerkin; see [`SpectralElementGrid2D`](@ref).
 """
 mutable struct SpectralElementGrid1D{
     T,
@@ -20,13 +54,17 @@ mutable struct SpectralElementGrid1D{
     GG <: Geometry.AbstractGlobalGeometry,
     LG,
     D,
+    Disc,
 } <: AbstractSpectralElementGrid
     topology::T
     quadrature_style::Q
     global_geometry::GG
     local_geometry::LG
     dss_weights::D
-    discontinuous::Bool
+    # A type parameter rather than a `Union{CG, DG}` field, so that
+    # `discretization` is inferrable and the methods dispatching on it
+    # (`scalar_laplacian`, `tendency_completion`) resolve statically.
+    discretization::Disc
 end
 
 Adapt.@adapt_structure SpectralElementGrid1D
@@ -41,21 +79,33 @@ function SpectralElementGrid1D(
     topology::Topologies.IntervalTopology,
     quadrature_style::Quadratures.QuadratureStyle;
     VIJH::Type{<:DataLayouts.VIJHWithF} = DataLayouts.VIJFH,
-    discontinuous::Bool = false,
+    discretization::Discretization = CG(),
 )
+    discretization = normalize_discretization(discretization, quadrature_style)
     get!(
         Cache.OBJECT_CACHE,
-        (SpectralElementGrid1D, topology, quadrature_style, discontinuous),
+        (SpectralElementGrid1D, topology, quadrature_style, discretization),
     ) do
-        _SpectralElementGrid1D(topology, quadrature_style, VIJH; discontinuous)
+        _SpectralElementGrid1D(
+            topology,
+            quadrature_style,
+            VIJH;
+            discretization,
+        )
     end
 end
+
+# The stored discretization is normalized against the quadrature: nodes shared
+# between elements exist only for `requires_dss` quadratures (e.g. GLL), so
+# any other quadrature yields a DG grid regardless of the keyword.
+normalize_discretization(discretization::Discretization, quadrature_style) =
+    Quadratures.requires_dss(quadrature_style) ? discretization : DG()
 
 function _SpectralElementGrid1D(
     topology,
     quadrature_style,
     ::Type{VIJH};
-    discontinuous,
+    discretization,
 ) where {VIJH}
     DA = ClimaComms.array_type(topology)
     global_geometry = Geometry.CartesianGlobalGeometry()
@@ -103,9 +153,9 @@ function _SpectralElementGrid1D(
             device_local_geometry,
             topology,
             quadrature_style,
-            discontinuous,
+            discretization,
         ),
-        discontinuous,
+        discretization,
     )
 end
 
@@ -125,6 +175,7 @@ mutable struct SpectralElementGrid2D{
     IS,
     BS,
     M,
+    Disc,
 } <: AbstractSpectralElementGrid
     topology::T
     quadrature_style::Q
@@ -136,14 +187,17 @@ mutable struct SpectralElementGrid2D{
     mask::M
     enable_bubble::Bool
     autodiff_metric::Bool
-    discontinuous::Bool
+    # A type parameter rather than a `Union{CG, DG}` field, so that
+    # `discretization` is inferrable and the methods dispatching on it
+    # (`scalar_laplacian`, `tendency_completion`) resolve statically.
+    discretization::Disc
 end
 
 Adapt.@adapt_structure SpectralElementGrid2D
 
 local_geometry_type(
-    ::Type{SpectralElementGrid2D{T, Q, GG, LG, D, IS, BS, M}},
-) where {T, Q, GG, LG, D, IS, BS, M} = eltype(LG) # calls eltype from DataLayouts
+    ::Type{SpectralElementGrid2D{T, Q, GG, LG, D, IS, BS, M, Disc}},
+) where {T, Q, GG, LG, D, IS, BS, M, Disc} = eltype(LG) # calls eltype from DataLayouts
 
 """
     SpectralElementGrid2D(
@@ -153,7 +207,7 @@ local_geometry_type(
         autodiff_metric,
         VIJH,
         enable_mask::Bool,
-        discontinuous::Bool,
+        discretization::Discretization = CG(),
     )
 
 Construct a `SpectralElementGrid2D` instance given a `topology` and `quadrature`. The
@@ -169,13 +223,13 @@ SEM for computing metric terms.
   - autodiff_metric: Bool
   - VIJH: subtype of DataLayouts.VIJHWithF with a specific F axis
   - enable_mask: Boolean used to skip operations where the space's mask is 0
-  - discontinuous: Boolean marking the grid's function space as discontinuous
-    Galerkin (DG): no continuity is maintained across element boundaries, so
-    [`Spaces.weighted_dss!`](@ref) is a no-op on fields over this grid and
-    inter-element coupling is instead supplied by DG numerical fluxes (see
-    `Operators.add_numerical_flux_interior!`). No DSS weights are computed.
-    `InputOutput` serializes the flag; grids in files written before it
-    existed read back as continuous.
+  - discretization: continuous ([`CG`](@ref), the default) or discontinuous
+    ([`DG`](@ref)) Galerkin. On a `DG()` grid no continuity is maintained
+    across element boundaries, so [`Spaces.weighted_dss!`](@ref) is a no-op on
+    fields over this grid and inter-element coupling is instead supplied by DG
+    numerical fluxes (see `Operators.add_numerical_flux_interior!`). No DSS
+    weights are computed. `InputOutput` serializes the discretization; grids in
+    files written before it existed read back as continuous.
 
 The idea behind the so-called `bubble_correction` is that the numerical area
 of the domain (e.g., the sphere) is given by the sum of nodal integration weights
@@ -209,8 +263,9 @@ function SpectralElementGrid2D(
     enable_bubble::Bool = false,
     autodiff_metric::Bool = true,
     enable_mask::Bool = false,
-    discontinuous::Bool = false,
+    discretization::Discretization = CG(),
 )
+    discretization = normalize_discretization(discretization, quadrature_style)
     get!(
         Cache.OBJECT_CACHE,
         (
@@ -221,7 +276,7 @@ function SpectralElementGrid2D(
             autodiff_metric,
             VIJH,
             enable_mask,
-            discontinuous,
+            discretization,
         ),
     ) do
         _SpectralElementGrid2D(
@@ -231,7 +286,7 @@ function SpectralElementGrid2D(
             enable_bubble,
             autodiff_metric,
             enable_mask,
-            discontinuous,
+            discretization,
         )
     end
 end
@@ -483,7 +538,7 @@ function _SpectralElementGrid2D(
     enable_bubble,
     autodiff_metric,
     enable_mask,
-    discontinuous,
+    discretization,
 ) where {VIJH}
     DA = ClimaComms.array_type(topology)
     domain = Topologies.domain(topology)
@@ -546,14 +601,14 @@ function _SpectralElementGrid2D(
             device_local_geometry,
             topology,
             quadrature_style,
-            discontinuous,
+            discretization,
         ),
         interior_surface_geometry,
         boundary_surface_geometries,
         mask,
         enable_bubble,
         autodiff_metric,
-        discontinuous,
+        discretization,
     )
 end
 
@@ -664,10 +719,9 @@ end
 @inline _orth_axis(::Geometry.LocalGeometry{I}) where {I} =
     Geometry.Components{Geometry.Orthonormal, I}()
 
-function compute_dss_weights(local_geometry, topology, quadrature_style, discontinuous)
-    !discontinuous && Quadratures.requires_dss(quadrature_style) ||
-        return nothing
-
+compute_dss_weights(local_geometry, topology, quadrature_style, ::DG) =
+    nothing
+function compute_dss_weights(local_geometry, topology, quadrature_style, ::CG)
     # Although the weights are defined as WJ / Σ collocated WJ, we can use J
     # instead of WJ if the weights are symmetric across element boundaries.
     dss_weights = copy(local_geometry.J)
@@ -679,20 +733,27 @@ end
 # accessors
 
 """
+    Grids.discretization(grid)
+
+The [`Discretization`](@ref) of `grid`: [`CG`](@ref)`()` or [`DG`](@ref)`()`,
+as stored at grid construction (normalized against the quadrature; see
+[`Discretization`](@ref)). Grids with no horizontal spectral elements (e.g.
+column grids) are `CG()`.
+"""
+discretization(grid::AbstractGrid) = CG()
+discretization(grid::SpectralElementGrid1D) = grid.discretization
+discretization(grid::SpectralElementGrid2D) = grid.discretization
+
+"""
     Grids.is_continuous(grid)
 
 Whether fields on `grid` are members of the continuous (CG) function space:
-shared element-boundary nodes exist (`Quadratures.requires_dss`) and the grid
-is not marked `discontinuous`. Discontinuous (DG) grids skip
+`Grids.discretization(grid) isa CG`. Discontinuous (DG) grids skip
 [`Spaces.weighted_dss!`](@ref) and couple elements through numerical fluxes
 instead. Grids with no horizontal spectral elements (e.g. column grids) are
 continuous.
 """
-is_continuous(grid::AbstractGrid) = true
-is_continuous(grid::SpectralElementGrid1D) =
-    !grid.discontinuous && Quadratures.requires_dss(grid.quadrature_style)
-is_continuous(grid::SpectralElementGrid2D) =
-    !grid.discontinuous && Quadratures.requires_dss(grid.quadrature_style)
+is_continuous(grid::AbstractGrid) = discretization(grid) isa CG
 
 topology(grid::AbstractSpectralElementGrid) = grid.topology
 

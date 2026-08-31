@@ -144,7 +144,11 @@ end
     topology = Topologies.Topology2D(context, mesh)
     quad = Quadratures.GLL{4}()
     dg_space =
-        Spaces.SpectralElementSpace2D(topology, quad; discontinuous = true)
+        Spaces.SpectralElementSpace2D(
+            topology,
+            quad;
+            discretization = Spaces.DG(),
+        )
     coord = Fields.coordinate_field(dg_space)
     f = @. sind(coord.long) * cosd(coord.lat)
     ρ = @. 2 + sind(coord.lat)

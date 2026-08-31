@@ -15,6 +15,11 @@ level(
 
 topology(levelgrid::LevelGrid) = topology(levelgrid.full_grid)
 
+# A level of a discontinuous grid is discontinuous: without this the fallback
+# reports `CG()`, and `Spaces.weighted_dss!` on a level field then builds a
+# buffer and passes the grid's `nothing` DSS weights to `dss_transform!`.
+discretization(levelgrid::LevelGrid) = discretization(levelgrid.full_grid)
+
 ClimaComms.context(levelgrid::LevelGrid) = ClimaComms.context(levelgrid.full_grid)
 ClimaComms.device(levelgrid::LevelGrid) = ClimaComms.device(levelgrid.full_grid)
 

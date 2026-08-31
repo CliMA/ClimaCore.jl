@@ -50,7 +50,7 @@ function extruded_sphere_spaces(
     hspace = Spaces.SpectralElementSpace2D(
         htopology,
         Quadratures.GLL{Nq}();
-        discontinuous = true,
+        discretization = Spaces.DG(),
     )
 
     center_space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
@@ -182,7 +182,7 @@ end
             hspace = Spaces.SpectralElementSpace2D(
                 htopology,
                 Quadratures.GLL{4}();
-                discontinuous = true,
+                discretization = Spaces.DG(),
             )
             @test !Spaces.is_continuous(hspace)
             hcoords = Fields.coordinate_field(hspace)
@@ -235,7 +235,7 @@ end
             rspace = Spaces.SpectralElementSpace2D(
                 rtopology,
                 Quadratures.GLL{4}();
-                discontinuous = true,
+                discretization = Spaces.DG(),
             )
             @test !Spaces.is_continuous(rspace)
             rcoords = Fields.coordinate_field(rspace)

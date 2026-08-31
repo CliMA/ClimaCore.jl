@@ -132,9 +132,9 @@ zero-normal-gradient closure), accepted wherever `Extrapolate` is.
 ## Discontinuous Galerkin operators
 
 Face and volume operators for discontinuous-Galerkin (DG) discretizations on
-spectral-element spaces marked with `discontinuous = true`. The face operators
-act on a mass-weighted residual (`WJ * ∂Y/∂t`) and complete the weak-form (or
-flux-differencing) volume terms at element interfaces.
+spectral-element spaces constructed with `discretization = Grids.DG()`. The
+face operators act on a mass-weighted residual (`WJ * ∂Y/∂t`) and complete
+the weak-form (or flux-differencing) volume terms at element interfaces.
 
 ```@docs
 add_numerical_flux_interior!
@@ -147,6 +147,21 @@ ldg_laplacian_tendency
 ldg_penalty_parameter
 start_dg_ghost_exchange
 DGGhostExchange
+```
+
+### Model-level CG↔DG switching
+
+A model's tendency assembly can be written once for both discretizations: the
+element-local weak-form tendency is completed across element interfaces by a
+completion object built from the space — DSS on continuous spaces, interface
+numerical fluxes on discontinuous ones.
+
+```@docs
+tendency_completion
+complete_tendency!
+AbstractTendencyCompletion
+DSSCompletion
+NumericalFluxCompletion
 ```
 
 ### Numerical fluxes and face lifts
