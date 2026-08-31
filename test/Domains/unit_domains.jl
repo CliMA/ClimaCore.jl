@@ -64,6 +64,19 @@ import .TestUtilities as TU
         end
     end
 
+    @testset "SphereDomain radius promotion" begin
+        # An integer radius used to give a `SphereDomain{Int}`, which failed
+        # much later in the quadrature rule (#1468).
+        domain = Domains.SphereDomain(1000)
+        @test domain isa Domains.SphereDomain{Float64}
+        @test domain.radius === 1000.0
+        @test Domains.SphereDomain(1 // 2) isa Domains.SphereDomain{Float64}
+        @test Domains.SphereDomain(1.0f3) isa Domains.SphereDomain{Float32}
+        @test Domains.coordinate_type(Domains.SphereDomain(1000)) ==
+              Geometry.Cartesian123Point{Float64}
+        @test_throws Exception Domains.SphereDomain("1000")
+    end
+
     @testset "IntervalDomain coordinate promotion" begin
         # Mixed-precision endpoints promote to a common coordinate type.
         domain = Domains.IntervalDomain(
