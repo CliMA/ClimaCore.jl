@@ -224,6 +224,28 @@ get_mask(space::ExtrudedFiniteDifferenceSpace) =
     get_mask(horizontal_space(space))
 
 """
+    ndims(space::AbstractSpace)
+
+The number of spatial dimensions of `space`.
+
+This is fixed by the type, so it is available at compile time: a
+`CenterFiniteDifferenceSpace` is always 1, a `SpectralElementSpace2D` always 2,
+and an `ExtrudedFiniteDifferenceSpace` is 2 or 3 depending on its horizontal
+space.
+
+```julia
+julia> ndims(Spaces.CenterFiniteDifferenceSpace(grid))
+1
+```
+
+Spaces that are built on a `Grids.AbstractGrid` forward to `ndims` of that
+grid; the rest read the number of components off their coordinate type.
+"""
+Base.ndims(space::AbstractSpace) = ndims(typeof(space))
+Base.ndims(::Type{S}) where {S <: AbstractSpace} =
+    Geometry.ncomponents(Geometry.coordinate_type(local_geometry_type(S)))
+
+"""
     has_vertical(::AbstractSpace)
 
 Returns a bool indicating that the space has a vertical grid.

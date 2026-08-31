@@ -116,3 +116,14 @@ end
 undertype(::Type{<:LocalGeometry{I, C, FT}}) where {I, C, FT} = FT
 undertype(::Type{SurfaceGeometry{FT, N}}) where {FT, N} = FT
 undertype(::Type{<:CoordinateOnlyGeometry{C}}) where {C} = eltype(C)
+
+"""
+    coordinate_type(geom)
+
+The `AbstractPoint` type of the coordinates of the geometry `geom`, which can
+be either an object or a type.
+"""
+coordinate_type(::Type{<:LocalGeometry{I, C}}) where {I, C} = C
+coordinate_type(::Type{<:CoordinateOnlyGeometry{C}}) where {C} = C
+coordinate_type(geom::Union{LocalGeometry, CoordinateOnlyGeometry}) =
+    coordinate_type(typeof(geom))

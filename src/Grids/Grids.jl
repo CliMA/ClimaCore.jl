@@ -58,6 +58,25 @@ function local_geometry_type end
 # Fallback, but this requires user error-handling
 local_geometry_type(::Type{T}) where {T} = Union{}
 
+"""
+    ndims(grid::AbstractGrid)
+
+The number of spatial dimensions of `grid`.
+
+This is fixed by the type, so it is available at compile time: a
+`FiniteDifferenceGrid` is always 1, a `SpectralElementGrid2D` always 2, an
+`ExtrudedFiniteDifferenceGrid` 2 or 3 depending on its horizontal grid, and so
+on. `Spaces.AbstractSpace` forwards to its grid.
+
+The generic method reads the number of components off the grid's coordinate
+type; grids that are a lower-dimensional view of another grid (`ColumnGrid`,
+`LevelGrid`) override it, since their coordinates keep the full ambient
+dimension of the grid they slice.
+"""
+Base.ndims(grid::AbstractGrid) = ndims(typeof(grid))
+Base.ndims(::Type{G}) where {G <: AbstractGrid} =
+    Geometry.ncomponents(Geometry.coordinate_type(local_geometry_type(G)))
+
 function dss_weights end
 function quadrature_style end
 function vertical_topology end

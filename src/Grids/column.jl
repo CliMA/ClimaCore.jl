@@ -34,6 +34,8 @@ Adapt.@adapt_structure ColumnGrid
 
 local_geometry_type(::Type{<:ColumnGrid{G}}) where {G} = local_geometry_type(G)
 
+Base.ndims(::Type{<:ColumnGrid}) = 1
+
 column(grid::AbstractExtrudedFiniteDifferenceGrid, indices...) = ColumnGrid(grid, indices)
 
 topology(colgrid::ColumnGrid) = vertical_topology(colgrid.full_grid)
