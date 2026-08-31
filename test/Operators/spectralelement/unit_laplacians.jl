@@ -1,7 +1,7 @@
-# Tests the horizontal Laplacian atoms against the hand-written operator
-# compositions they replace, on CG spaces with two and one horizontal
-# dimensions and on a DG sphere (where the scalar atom must match the
-# interior-penalty Laplacian and the vector atom must fail loudly).
+# Tests the horizontal Laplacian atoms against the equivalent hand-written
+# operator compositions, on CG spaces with two and one horizontal dimensions
+# and on a DG sphere (where the scalar atom must match the interior-penalty
+# Laplacian and the vector atom must fail loudly).
 using Test
 using ClimaComms
 ClimaComms.@import_required_backends

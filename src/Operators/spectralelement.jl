@@ -318,10 +318,12 @@ inlined_buffer_bytes(bc::SpectralBroadcasted{<:SpectralElementOperator}) =
     +(0, unrolled_tuple_map(inlined_buffer_bytes, bc.args)...)
 
 # Inline each operator unless its expression asks a block for more than CUDA's
-# 48 KB of static shared memory (a compilation error): 48 * 1024 bytes over
-# MAX_SUBBLOCK_LAUNCH_THREADS = 256 threads. The bound's ~2x slack fits two
-# at-budget expressions per kernel; RESIDUAL RISK: three or more still overflow,
-# signaled only by the ptxas error.
+# 48 KB of static shared memory (a compilation error). The budget is 192 bytes
+# per thread of a 256-thread block; launched blocks hold at most 128 threads
+# (MAX_SUBBLOCK_LAUNCH_THREADS in ext/cuda/scopes.jl), so an at-budget
+# expression reserves at most half of the 48 KB and two fit per kernel;
+# RESIDUAL RISK: three or more still overflow, signaled only by the ptxas
+# error.
 const MAX_INLINED_BUFFER_BYTES = 48 * 1024 ÷ 256
 @inline scoped_apply_operator(scope, ::Val{true}, bc) =
     apply_operator(bc.f, unrolled_tuple_map(apply_operators, bc.args)...)

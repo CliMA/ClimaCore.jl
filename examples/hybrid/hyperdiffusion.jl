@@ -3,6 +3,8 @@
 # with a DSS in between. It is a numerical closure, present to remove grid-scale
 # noise that the spectral element discretization does not damp on its own, not a
 # physical mixing parameterization.
+import LazyBroadcast: lazy
+
 hyperdiffusion_cache(
     ᶜlocal_geometry;
     κ₄ = FT(0),
@@ -25,11 +27,10 @@ function hyperdiffusion_tendency!(Yₜ, Y, p, t)
     # computed before a single weighted_dss! call, which batches the scalar
     # and vector exchanges into one communication phase. The Laplacian atoms
     # handle the horizontal-dimension distinction (no curl-curl term with one
-    # horizontal dimension), and on DG spaces they include the face
-    # corrections themselves (where weighted_dss! is a no-op), so this
-    # sequence is discretization-agnostic.
-    ᶜh_tot =
-        Base.Broadcast.broadcasted((ρe, p′, ρ) -> (ρe + p′) / ρ, Y.c.ρe, ᶜp, ᶜρ)
+    # horizontal dimension). On DG spaces weighted_dss! is a no-op and
+    # scalar_laplacian includes the face corrections itself; vector_laplacian
+    # does not support DG yet, so this tendency is CG-only until it does.
+    ᶜh_tot = lazy.((Y.c.ρe .+ ᶜp) ./ ᶜρ)
     ᶜχ .= Operators.scalar_laplacian(ᶜh_tot)
     ᶜχuₕ .= Operators.vector_laplacian(ᶜuₕ)
     Spaces.weighted_dss!(ᶜχ => ghost_buffer.χ, ᶜχuₕ => ghost_buffer.χuₕ)

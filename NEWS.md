@@ -17,20 +17,24 @@ main
   hybrid example's hyperdiffusion is rewritten on top of these atoms.
   PR [2606](https://github.com/CliMA/ClimaCore.jl/pull/2606)
 - ![][badge-🚀performance] FieldVector broadcasts on GPU flatten to linear
-  indexing when every array in the broadcast has the same contiguous layout as
-  the destination, bypassing CUDA.jl's N-dimensional Cartesian index
-  computation (measured 3× faster vector updates in a baroclinic-wave
-  benchmark); in-place updates like `x .-= dx` preserve destination identity
-  through the flattening, so they no longer allocate a defensive aliasing copy
-  (previously 7.85 GB of device allocations per step on a 63-level sphere, now
-  zero). Spectral-element slab loops reserve half the shared memory per
+  indexing when the destination and every array in the broadcast have the
+  same shape and are `IndexLinear` (dense arrays and contiguous views),
+  bypassing CUDA.jl's N-dimensional Cartesian index computation (measured 3×
+  faster vector updates in a baroclinic-wave benchmark); in-place updates
+  like `x .-= dx` preserve destination identity through the flattening, so
+  they no longer allocate a defensive aliasing copy (previously 7.85 GB of
+  device allocations per step on a 63-level sphere, now zero). CPU broadcasts
+  keep the standard path, which guarantees zero allocations.
+  Spectral-element slab loops reserve half the shared memory per
   block (`MAX_SUBBLOCK_LAUNCH_THREADS` 256 → 128), and the eager
   finite-difference kernel packs 128 threads per block and queries the SM
   count from the device. The environment variables `CLIMA_CUDA_MAX_WAVES`,
-  `CLIMA_FD_MAX_THREADS`, `CLIMA_DSS_MAX_THREADS`, and
-  `CLIMA_COLLECT_KERNEL_STATS` (read once at module load) override
-  launch-tuning defaults for experiments (see
-  `perf/sweep_kernel_configs.jl`).
+  `CLIMA_FD_MAX_THREADS`, and `CLIMA_DSS_MAX_THREADS` (read once at module
+  load) override launch-tuning defaults for experiments (see
+  `perf/sweep_kernel_configs.jl`). `CLIMA_COLLECT_KERNEL_STATS` toggles the
+  development-only per-launch statistics; it is a compile-time constant (read
+  when the CUDA extension precompiles) so that the statistics block folds away
+  and does not enter the kernel-launch type-stability contract.
   PR [2606](https://github.com/CliMA/ClimaCore.jl/pull/2606)
 - ![][badge-✨feature/enhancement] Spectral element operators are now evaluated
   through the slice-loop primitives (`foreach_slab` and the other

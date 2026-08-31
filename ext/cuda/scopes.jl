@@ -9,18 +9,18 @@ const MAX_WARPS_PER_BLOCK = 32
 # descends through; see partition(::ThisSubBlock) below.
 const MIN_THREADS_PER_SUBBLOCK = 2
 
-# Cap on the number of threads in a block that assigns one slice to each of its
-# sub-blocks. A sub-block's shared memory is allocated for the largest number of
-# sub-blocks a block can hold (see scoped_static_array below), and that
-# allocation is compiled into the kernel before its launch configuration is
-# known, so the two have to agree on a bound. Without a cap the bound is a full
-# 1024-thread block, which makes every slab loop reserve four times the shared
-# memory it can use -- and shared memory is what limits the occupancy of spectral
-# element kernels. The kernels that slice loops replaced used 256; halving the
-# cap to 128 halves the shared memory reserved per block, which raised occupancy
-# and measured faster on an A100 baroclinic wave (h_elem = 30, z_elem = 63).
-# Slabs with more points than the cap fall back to multiple points per thread
-# (see DataLayouts.slice_subscope).
+# Cap on the number of threads in a block that assigns one slice to each of
+# its sub-blocks. A sub-block's shared memory is allocated for the largest
+# number of sub-blocks a block can hold (see scoped_static_array below), and
+# that allocation is compiled into the kernel before its launch configuration
+# is known, so the two have to agree on a bound. Without a cap the bound is a
+# full 1024-thread block, which makes every slab loop reserve eight times the
+# shared memory it can use -- and shared memory is what limits the occupancy
+# of spectral element kernels. A cap of 128 reserves half the shared memory
+# per block of a 256-thread bound, which raised occupancy and measured faster
+# on an A100 baroclinic wave (h_elem = 30, z_elem = 63). Slabs with more
+# points than the cap fall back to multiple points per thread (see
+# DataLayouts.slice_subscope).
 const MAX_SUBBLOCK_LAUNCH_THREADS = 128
 
 # To reduce latency, only check device attributes before the first launch.
@@ -76,8 +76,8 @@ struct ThisKernel <: DataLayouts.DataScope end
 # thread's register storage, and a dynamically-sized ThisBlock at the top of the
 # chain would make it a run-time value for every slice with more than
 # THREADS_PER_WARP points. ThisBlock stays a subscope of ThisKernel even though
-# it left the partition chain, since it is the scope of every shared-memory
-# allocation (see DataScope(::Type{<:CUDA.CuDeviceArray}) above).
+# it is not part of the static partitioning chain; it is the scope of every
+# shared-memory allocation (see DataScope(::Type{<:CUDA.CuDeviceArray}) above).
 @inline DataLayouts.num_threads(::ThisKernel) = CUDA.gridDim().x * CUDA.blockDim().x
 @inline DataLayouts.thread_rank(::ThisKernel) =
     (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
@@ -114,12 +114,6 @@ struct ThisBlock <: ThisCooperativeGroup end
 # block's only warp and capping occupancy at the hardware limit of 32 blocks per
 # multiprocessor (512 of 2048 threads), instead of packing 16 slabs into one
 # 256-thread block. Beyond a warp there is nothing to gain.
-#
-# The chain is only this long because every num_slice_points method is a function
-# of an argument's type. When a slice's point count was a run-time value, every
-# scope the descent could stop at ended up in the Union that slice_subscope
-# returned, and inference widened a Union of more than three scopes to Any, which
-# made every slice loop dispatch dynamically and allocate inside GPU kernels.
 @inline DataLayouts.partition(::ThisBlock) = ThisWarp()
 @inline DataLayouts.num_threads(::ThisBlock) = CUDA.blockDim().x
 @inline DataLayouts.thread_rank(::ThisBlock) = CUDA.threadIdx().x
@@ -202,14 +196,15 @@ const ThisWarp = ThisSubBlock{THREADS_PER_WARP}
 # whole number of sub-blocks.
 #
 # ONE WIDE SUB-BLOCK PER BLOCK. A sub-block of at most a warp has a barrier of
-# its own (sync_warp), independent of every other warp in the block, so a block
-# may hold as many such sub-blocks as MAX_SUBBLOCK_LAUNCH_THREADS allows. A wider
-# sub-block has no barrier of its own and is synchronized with the block-wide
-# sync_threads instead (see synchronize(::ThisSubBlock) above), so a block must
-# hold exactly one of them: two sub-blocks in one block are given consecutive
-# ranks by subscope_indices, which hands rank r the strided subset r:n:num_slices
-# of the loop's slices, and those subsets differ in length by one whenever
-# num_slices is not a multiple of n. The sub-block with the extra slice then
+# its own (sync_warp), independent of every other warp in the block, so a
+# block may hold as many such sub-blocks as MAX_SUBBLOCK_LAUNCH_THREADS
+# allows. A wider sub-block has no barrier of its own and is synchronized with
+# the block-wide sync_threads instead (see synchronize(::ThisSubBlock) above),
+# so a block must hold exactly one of them: two sub-blocks in one block are
+# given consecutive ranks by subscope_indices, which hands rank r the strided
+# subset r:n:num_slices of the loop's slices, and those subsets differ in
+# length by one whenever num_slices is not a multiple of n. The sub-block with
+# the extra slice then
 # reaches that round's barriers after its neighbours have already returned from
 # the kernel, and sync_threads reached by only part of a block is undefined
 # behavior. Giving each wide sub-block a block of its own makes the block-wide
@@ -219,12 +214,12 @@ const ThisWarp = ThisSubBlock{THREADS_PER_WARP}
 @inline max_subblock_launch_threads(::ThisSubBlock{N}) where {N} =
     N > THREADS_PER_WARP ? N : MAX_SUBBLOCK_LAUNCH_THREADS
 
-# Assign threads in a sub-block one slice of an array shared across their block.
-# The sub-block count comes from max_subblock_launch_threads, the cap on a
-# sub-block slice loop's block size, rather than from num_subscopes(scope,
-# ThisWarp()): a warp is a subscope of a ThisSubBlock{N} with N > THREADS_PER_WARP
-# and not the other way around, so that call throws an InvalidSubscopeError for
-# wide sub-blocks.
+# Assign threads in a sub-block one slice of an array shared across their
+# block. The sub-block count comes from max_subblock_launch_threads, the cap
+# on a sub-block slice loop's block size, rather than from
+# num_subscopes(scope, ThisWarp()): a warp is a subscope of a ThisSubBlock{N}
+# with N > THREADS_PER_WARP and not the other way around, so that call throws
+# an InvalidSubscopeError for wide sub-blocks.
 @inline function DataLayouts.scoped_static_array(
     scope::ThisSubBlock{N}, ::Type{T}, dims,
 ) where {N, T}

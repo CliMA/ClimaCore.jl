@@ -165,18 +165,15 @@ function uncached_launch_configuration(
     user_constraints_ignorable = user_max_threads_per_block >= default_max_threads_per_block
     max_threads_per_block = min(user_max_threads_per_block, default_max_threads_per_block)
 
-    # Launch a single wave of blocks unless a caller asks for more. This
-    # replaces a heuristic that launched fld(regs_per_thread, 48) + 1 waves, on
-    # the assumption that higher register pressure leads to uneven load
-    # distributions. An A100 sweep over max_waves in (1, 2, 4) on small unit
-    # benchmarks found one wave at least as fast throughout and clearly fastest
-    # for reductions (the equal-shape lazy reduction went from 145 to 129 us).
-    # After the FieldVector aliasing fix removed the per-step device
-    # allocations, a realistic-problem sweep (baroclinic wave, h_elem = 30,
-    # z_elem = 63, A100; see perf/sweep_kernel_configs.jl) found 4-8 waves ~6%
-    # faster per step (215 vs 228 ms). The default stays at one wave until the
-    # reduction slowdown seen at higher wave counts is revisited;
-    # CLIMA_CUDA_MAX_WAVES overrides it for tuning experiments.
+    # Launch a single wave of blocks unless a caller asks for more. An A100
+    # sweep over max_waves in (1, 2, 4) on small unit benchmarks found one
+    # wave at least as fast throughout and fastest for reductions (the
+    # equal-shape lazy reduction: 129 us at one wave, 145 us at more). On a
+    # realistic problem with zero per-step device allocations (baroclinic
+    # wave, h_elem = 30, z_elem = 63, A100; see perf/sweep_kernel_configs.jl),
+    # 4-8 waves measured ~6% faster per step (215 vs 228 ms). The default
+    # stays at one wave until the reduction slowdown at higher wave counts is
+    # revisited; CLIMA_CUDA_MAX_WAVES overrides it for tuning experiments.
     max_waves = something(default_max_waves, MAX_WAVES[])
 
     # Block sizes are searched in whole multiples of this unit, one warp unless
@@ -274,7 +271,8 @@ branches or nonuniform memory accesses) may require multiple waves to prevent
 some multiprocessors from idling while others are still active. However, block
 scheduling also adds measurable latency, so the number of waves should not be
 increased unless load redistribution is necessary. Setting `max_waves` to
-`nothing` gives it a dynamic value based on the kernel's register pressure.
+`nothing` gives it the default of one wave, which the `CLIMA_CUDA_MAX_WAVES`
+environment variable overrides.
 
 Like `CUDA.launch_configuration`, this returns a `NamedTuple` containing the
 optimal number of threads per block and the optimal number of blocks, and it
@@ -301,6 +299,10 @@ function launch_configuration(
     granularity = nothing,
 ) where {F}
     cu_func = (CUDA.@cuda always_inline = true launch = false f(args...)).fun
+    # The default is resolved before the cache key is built, so that changing
+    # MAX_WAVES[] at runtime (as perf/sweep_kernel_configs.jl does) misses the
+    # cache instead of returning configurations computed for the old value.
+    max_waves = something(max_waves, MAX_WAVES[])
     cache_key = (cu_func, strict, max_waves, granularity, config_args...)
     lock(LAUNCH_CONFIGURATION_CACHE_LOCK)
     try
@@ -321,8 +323,12 @@ end
 const reported_stats = Dict()
 const kernel_names = IdDict()
 
-# Read from a Ref rather than ENV: this runs on every auto_launch! call.
-collect_kernel_stats() = COLLECT_KERNEL_STATS[]
+# A compile-time constant, not a `Ref`, so that inference folds away the
+# development-only statistics block in `auto_launch!` (which is otherwise
+# type-unstable and fails the fused-broadcast `@test_opt`). Set
+# `CLIMA_COLLECT_KERNEL_STATS` before the extension precompiles to enable it,
+# or redefine this method (as perf/stress_test_compiler.jl does).
+collect_kernel_stats() = COLLECT_KERNEL_STATS
 
 function _memory_bytes(memory, key::Symbol)
     if hasproperty(memory, key)
@@ -355,17 +361,28 @@ function _getenv_bool(var::AbstractString; default::Bool = false)
     end
 end
 
-# Parse integer-valued environment variables, warning on unparsable values.
-# Only called from __init__: kernel-launch paths must read the Refs below, not
-# ENV.
-function _getenv_int(var::AbstractString, default::Int)
+# Parse integer-valued environment variables. Warns and falls back to the
+# default on unparsable input, and errors on a value outside `min:max` so a
+# misconfigured cap fails loudly at load instead of being silently clipped or
+# failing at the first kernel launch. Only called from __init__: kernel-launch
+# paths must read the Refs below, not ENV.
+function _getenv_int(
+    var::AbstractString,
+    default::Int;
+    min::Int = 1,
+    max::Int = typemax(Int),
+)
     raw = get(ENV, var, nothing)
     raw === nothing && return default
     value = tryparse(Int, strip(String(raw)))
-    isnothing(value) &&
+    if isnothing(value)
         @warn "Unrecognized integer env var value; using default" var = var val =
             raw default = default
-    return something(value, default)
+        return default
+    end
+    value < min && error("$var must be ≥ $min, got $value")
+    value > max && error("$var must be ≤ $max, got $value")
+    return value
 end
 
 # Refs to hold settings read from environment variables in __init__: kernel
@@ -373,7 +390,8 @@ end
 # by the launch-configuration search, and the block-size cap of the eager FD
 # kernel.
 const NAME_KERNELS_FROM_STACK_TRACE = Ref{Bool}(false)
-const COLLECT_KERNEL_STATS = Ref{Bool}(false)
+const COLLECT_KERNEL_STATS =
+    _getenv_bool("CLIMA_COLLECT_KERNEL_STATS"; default = false)
 const MAX_WAVES = Ref{Int}(1)
 const FD_MAX_THREADS = Ref{Int}(128)
 const DSS_MAX_THREADS = Ref{Int}(256)
@@ -383,11 +401,11 @@ function __init__()
     NAME_KERNELS_FROM_STACK_TRACE[] = _getenv_bool(
         "CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE"; default = false,
     )
-    COLLECT_KERNEL_STATS[] =
-        _getenv_bool("CLIMA_COLLECT_KERNEL_STATS"; default = false)
-    MAX_WAVES[] = max(1, _getenv_int("CLIMA_CUDA_MAX_WAVES", 1))
-    FD_MAX_THREADS[] = max(1, _getenv_int("CLIMA_FD_MAX_THREADS", 128))
-    DSS_MAX_THREADS[] = max(1, _getenv_int("CLIMA_DSS_MAX_THREADS", 256))
+    MAX_WAVES[] = _getenv_int("CLIMA_CUDA_MAX_WAVES", 1)
+    # 1024 is CUDA's threads-per-block limit; these caps feed block sizes
+    # directly, so a larger value would fail at the first kernel launch.
+    FD_MAX_THREADS[] = _getenv_int("CLIMA_FD_MAX_THREADS", 128; max = 1024)
+    DSS_MAX_THREADS[] = _getenv_int("CLIMA_DSS_MAX_THREADS", 256; max = 1024)
 end
 
 name_kernels_from_stack_trace() = NAME_KERNELS_FROM_STACK_TRACE[]

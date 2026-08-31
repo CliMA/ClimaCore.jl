@@ -12,7 +12,8 @@ import .TestUtilities as TU;
 
 # Stand-in for a GPU array: a DenseArray wrapper that the FieldVector
 # flattening gate treats as a GPU type, so the gate and the transform can be
-# unit-tested without a GPU.
+# unit-tested without a GPU. The other half of the gate is Base.IndexStyle,
+# which the IndexLinear method below supplies.
 struct FlatTestArray{T, N} <: DenseArray{T, N}
     data::Array{T, N}
 end
@@ -20,7 +21,6 @@ Base.size(a::FlatTestArray) = size(a.data)
 Base.getindex(a::FlatTestArray, i::Int) = a.data[i]
 Base.setindex!(a::FlatTestArray, v, i::Int) = (a.data[i] = v)
 Base.IndexStyle(::Type{<:FlatTestArray}) = IndexLinear()
-Base.strides(a::FlatTestArray) = strides(a.data)
 Fields.is_gpu_array_type(::Type{<:FlatTestArray}) = true
 
 @testset "FieldVector flattening gate" begin
@@ -34,10 +34,14 @@ Fields.is_gpu_array_type(::Type{<:FlatTestArray}) = true
     @test is_flat_compatible(dest, FT(2))
     # Broadcasts that expand a smaller argument keep Cartesian indexing.
     @test !is_flat_compatible(dest, smaller)
-    # Non-GPU arrays and destinations keep the standard path.
+    # CPU arrays and destinations keep the standard path, which guarantees
+    # zero allocations (the flat path's `vec` wrappers allocate host headers).
     @test !is_flat_compatible(dest, cpu)
     @test !is_flat_compatible(cpu, same)
 
+    # The layout half of the gate is Base.IndexStyle: contiguous views are
+    # IndexLinear and flatten; non-contiguous views are IndexCartesian and
+    # keep the standard path.
     whole = FlatTestArray(rand(FT, 3, 4, 10))
     @test is_flat_compatible(dest, view(whole, :, :, 1:5))
     wide = FlatTestArray(rand(FT, 3, 8, 5))

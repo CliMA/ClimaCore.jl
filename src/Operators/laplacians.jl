@@ -26,9 +26,8 @@ function scalar_laplacian(χ; weight = nothing)
     if Spaces.is_continuous(space)
         wdiv = WeakDivergence()
         grad = Gradient()
-        G = Base.Broadcast.broadcasted(grad, χ)
-        isnothing(weight) || (G = Base.Broadcast.broadcasted(*, weight, G))
-        return Base.Broadcast.broadcasted(wdiv, G)
+        return isnothing(weight) ? lazy.(wdiv.(grad.(χ))) :
+               lazy.(wdiv.(weight .* grad.(χ)))
     else
         q = Base.Broadcast.materialize(χ)
         κ = one(Spaces.undertype(space))
@@ -66,39 +65,21 @@ function vector_laplacian(u; divergence_factor = 1)
     )
     div = Divergence()
     wgrad = WeakGradient()
-    graddiv =
-        Base.Broadcast.broadcasted(wgrad, Base.Broadcast.broadcasted(div, u))
+    graddiv = lazy.(wgrad.(div.(u)))
+    isone(divergence_factor) ||
+        (graddiv = lazy.(divergence_factor .* graddiv))
     # The curl-curl part exists whenever the horizontal manifold has two
     # dimensions (a plane or the sphere, extruded or not); with one horizontal
     # dimension it vanishes identically.
-    hspace =
-        space isa Spaces.ExtrudedFiniteDifferenceSpace ?
-        Spaces.horizontal_space(space) : space
-    if hspace isa Spaces.SpectralElementSpace1D
-        graddiv =
-            Base.Broadcast.broadcasted(Geometry.Covariant12Vector, graddiv)
-        divergence_factor === 1 || (
-            graddiv =
-                Base.Broadcast.broadcasted(*, divergence_factor, graddiv)
-        )
-        return graddiv
-    else
-        divergence_factor === 1 || (
-            graddiv =
-                Base.Broadcast.broadcasted(*, divergence_factor, graddiv)
-        )
-        curl = Curl()
-        wcurl = WeakCurl()
-        curlcurl = Base.Broadcast.broadcasted(
-            Geometry.Covariant12Vector,
-            Base.Broadcast.broadcasted(
-                wcurl,
-                Base.Broadcast.broadcasted(
-                    Geometry.Covariant3Vector,
-                    Base.Broadcast.broadcasted(curl, u),
-                ),
-            ),
-        )
-        return Base.Broadcast.broadcasted(-, graddiv, curlcurl)
+    if Spaces.horizontal_space(space) isa Spaces.SpectralElementSpace1D
+        return lazy.(Geometry.Covariant12Vector.(graddiv))
     end
+    curl = Curl()
+    wcurl = WeakCurl()
+    curlcurl = lazy.(
+        Geometry.Covariant12Vector.(
+            wcurl.(Geometry.Covariant3Vector.(curl.(u))),
+        ),
+    )
+    return lazy.(graddiv .- curlcurl)
 end

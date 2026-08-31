@@ -346,20 +346,24 @@ end
 
 # FieldVector entries are N-dimensional arrays, and broadcasting over them on
 # GPU pays for an N-dimensional Cartesian index computation (one integer
-# division and modulo per dimension) in every thread. When every array in a
-# broadcast has the same contiguous layout as the destination, the expression
-# can instead be evaluated over `vec`s of the arrays, with plain linear
-# indexing. The GPU extension marks its array types via is_gpu_array_type;
-# everything else keeps the standard path.
+# division and modulo per dimension) in every thread. When the destination and
+# every array in the broadcast have the same shape and support fast linear
+# indexing (`Base.IndexStyle` is `IndexLinear`: dense arrays and contiguous
+# views), the expression can instead be evaluated over `vec`s of the arrays,
+# with plain linear indexing. `vec` enumerates elements in the same
+# column-major order as the Cartesian traversal, so the rewrite is exact on
+# any device; the path is nevertheless gated to GPU arrays (marked by the GPU
+# extension via is_gpu_array_type) because the `vec` wrapper headers allocate
+# host memory, and CPU FieldVector broadcasts guarantee zero allocations
+# (see the sentinel for issue 1465 in test/Fields/unit_field.jl).
 is_gpu_array_type(::Type) = false
 is_gpu_array_type(::Type{<:SubArray{<:Any, <:Any, P}}) where {P} =
     is_gpu_array_type(P)
 
-@inline is_contiguous_gpu_array(a::DenseArray) =
-    is_gpu_array_type(typeof(a)) && ndims(a) > 0
-@inline is_contiguous_gpu_array(a::SubArray) =
-    is_gpu_array_type(typeof(a)) && ndims(a) > 0 && Base.iscontiguous(a)
-@inline is_contiguous_gpu_array(a::AbstractArray) = false
+@inline supports_flat_indexing(a::AbstractArray) =
+    is_gpu_array_type(typeof(a)) &&
+    IndexStyle(typeof(a)) === IndexLinear() &&
+    ndims(a) > 0
 
 # is_flat_compatible gates flatten_bc_arg: the argument types the gate accepts
 # must be exactly those the transform below has methods for, so that any type
@@ -367,13 +371,13 @@ is_gpu_array_type(::Type{<:SubArray{<:Any, <:Any, P}}) where {P} =
 # incorrectly. Arrays must match the destination's size exactly (broadcasts
 # that expand a smaller argument keep Cartesian indexing).
 @inline is_flat_compatible(dest::AbstractArray, arg::AbstractArray) =
-    is_contiguous_gpu_array(dest) &&
-    is_contiguous_gpu_array(arg) &&
+    supports_flat_indexing(dest) &&
+    supports_flat_indexing(arg) &&
     size(dest) == size(arg)
 @inline is_flat_compatible(dest::AbstractArray, arg::Number) = true
 @inline is_flat_compatible(dest::AbstractArray, arg) = false
 @inline is_flat_compatible(dest::AbstractArray, bc::Base.Broadcast.Broadcasted) =
-    is_contiguous_gpu_array(dest) &&
+    supports_flat_indexing(dest) &&
     unrolled_all(Base.Fix1(is_flat_compatible, dest), bc.args)
 
 # flatten_bc_arg replaces every array in the broadcast with its `vec`, except

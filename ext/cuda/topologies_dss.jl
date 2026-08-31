@@ -1,6 +1,6 @@
 import ClimaCore: DataLayouts, Topologies
 
-# Generic block-size cap, also used by the DG volume and remapping kernels.
+# Generic block-size cap; its callers are the DG volume and remapping kernels.
 _max_threads_cuda() = 256
 
 # The DSS perimeter kernels have their own cap (CLIMA_DSS_MAX_THREADS
