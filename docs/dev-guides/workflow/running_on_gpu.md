@@ -1,6 +1,6 @@
 # Running a CliMA Model on GPU
 
-This guide takes you from a fresh machine to a CliMA model that executes its kernels on an NVIDIA GPU. 
+This guide takes you from a fresh machine to a CliMA model that executes its kernels on an NVIDIA GPU.
 
 This is a *run-the-model* guide. For writing GPU-compatible code (kernels, broadcasts, `isbits`), see [gpu_performance.md](../performance/gpu_performance.md); for the device-agnostic and MPI patterns used inside library code, see [clima_comms.md](../infrastructure/clima_comms.md).
 
@@ -57,7 +57,7 @@ Place this near the top of your entry point or test file, before calling `ClimaC
 export CLIMACOMMS_DEVICE="CUDA"   # in the shell, no spaces around =
 ```
 
-or, equivalently, at the very top of your Julia script before any CliMA package loads:
+or, equivalently, at the top of your Julia script before any CliMA package loads:
 
 ```julia
 ENV["CLIMACOMMS_DEVICE"] = "CUDA"
@@ -73,7 +73,7 @@ export CLIMACOMMS_CONTEXT="SINGLETON"
 
 ## 6. Verify the device
 
-Confirm the model is actually on the GPU rather than silently on CPU:
+Confirm the model is on the GPU rather than silently on CPU:
 
 ```julia
 using ClimaComms
