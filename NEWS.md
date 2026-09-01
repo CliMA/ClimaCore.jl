@@ -22,6 +22,15 @@ main
   The CG↔DG Bickley-jet integration test now runs one shallow-water tendency
   on both discretizations through this switch.
 
+- ![][badge-🔥behavioralΔ] The two Bickley-jet examples `examples/plane/
+  bickleyjet_cg.jl` and `examples/plane/bickleyjet_dg.jl` are replaced by the
+  single driver `examples/plane/bickleyjet.jl`, which takes the
+  discretization as its first argument (`cg` or `dg`, then the numerical-flux
+  name and an optional `noslip`). The prognostic equations, physical flux,
+  initial condition and diagnostics are shared; the only structural difference
+  is the space's `discretization` and the `Operators.tendency_completion` built
+  from it, so the tendency function is written once.
+
 - ![][badge-🚀performance] `Operators.scalar_laplacian` no longer allocates on
   DG spaces (each call built ~5 device fields): the gradient and a
   materialized lazy argument now live in scratch fields keyed on the space's
