@@ -1,3 +1,11 @@
+# The 1.10 coverage run is split into two subsystem shards (see
+# .github/workflows/UnitTests.yml), each uploading its own report. Wait for
+# both before computing the coverage status, so one shard's partial upload does
+# not briefly report as a coverage drop.
+codecov:
+  notify:
+    after_n_builds: 2
+
 comment: false
 coverage:
   status:
