@@ -4,6 +4,44 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-🔥behavioralΔ] The DG scalar Laplacian
+  (`Operators.scalar_laplacian` on `Grids.DG()` spaces, and
+  `Operators.ldg_laplacian_tendency`) is now the 
+  symmetric interior-penalty (SIPG) discretization. It previously omitted the
+  adjoint-consistency term `−∫_f {{κ∇v}}·n̂[[q]]`, which made it the incomplete
+  (IIPG) form.
+
+- ![][badge-💥breaking] `Operators.ldg_penalty_parameter(κ, space)` returns a
+  `Field` rather than a scalar, takes a `weight` keyword argument, and is
+  joined by the in-place `Operators.ldg_penalty_parameter!(τ, κ; weight)`.
+  Interior-penalty coercivity is a per-face condition `τ_f ≥ C κ_f p²/h_f`, and
+  the previous scalar violated it two ways:
+  * `h` came from `Spaces.node_horizontal_length_scale`, a single mesh-wide
+    average. The nodal length scale now comes from the local metric (columns 1
+    and 2 of `∂x∂ξ`, so terrain-following vertical shear does not inflate it).
+    On an equiangular cubed sphere the nodal `τ` spans a factor of 1.4; on a
+    uniform mesh it reproduces the old scalar exactly, so uniform-mesh results
+    are unchanged.
+  * the penalty ignored the `weight` the consistency term carries, so a density
+    weight spanning decades was simultaneously under- and over-penalized at
+    different heights. `weight` now enters `τ`, and the interface flux takes
+    `max(τ⁻, τ⁺)` so a weight that jumps across a face is penalized by its
+    larger side.
+
+  Correspondingly `Operators.LDGLaplacianFlux` is a singleton — it takes `τ` as
+  a fourth per-side argument `(q, G, κ, τ)` instead of storing it — and
+  `Operators.ldg_laplacian_tendency!` takes a second vector scratch field for
+  the lifted jump. `add_ldg_laplacian_flux_interior!` keeps its signature and
+  accepts a scalar or a `Field` `τ`.
+
+- ![][badge-✨feature/enhancement] New unit tests assemble the DG scalar
+  Laplacian as a matrix and pin its symmetry (≤1e-13) and negative
+  semidefiniteness, unweighted and with smooth and three-decade weights, plus a
+  τ-below-threshold control that must *lose* semidefiniteness — without it a
+  coercivity test cannot distinguish a sound penalty from an arbitrarily large
+  one. Coercivity is measured to hold to τ ≈ 0.1 τ_default and fail by
+  0.05 τ_default.
+
 - ![][badge-💥breaking] The Galerkin discretization of a spectral-element grid
   is represented by the singleton types `Grids.CG()` (the default) and
   `Grids.DG()`: construct with `discretization = Grids.DG()` and read it back
