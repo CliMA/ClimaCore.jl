@@ -4,6 +4,38 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] Added the horizontal Laplacian atoms
+  `Operators.scalar_laplacian` and `Operators.vector_laplacian`, the building
+  blocks of ∇⁴ hyperdiffusion. On continuous (CG) spaces they return lazy,
+  element-local operator expressions that fuse into consuming broadcasts;
+  materialized intermediates must be made continuous with
+  `Spaces.weighted_dss!` between passes (batch several intermediates into one
+  call to share the ghost exchange). On discontinuous (DG) spaces
+  `scalar_laplacian` includes the interior-penalty face corrections itself and
+  `weighted_dss!` is a no-op, so one calling sequence serves both
+  discretizations (`vector_laplacian` is not yet implemented for DG). The
+  hybrid example's hyperdiffusion is rewritten on top of these atoms.
+  PR [2606](https://github.com/CliMA/ClimaCore.jl/pull/2606)
+- ![][badge-🚀performance] FieldVector broadcasts on GPU flatten to linear
+  indexing when the destination and every array in the broadcast have the
+  same shape and are `IndexLinear` (dense arrays and contiguous views),
+  bypassing CUDA.jl's N-dimensional Cartesian index computation (measured 3×
+  faster vector updates in a baroclinic-wave benchmark); in-place updates
+  like `x .-= dx` preserve destination identity through the flattening, so
+  they no longer allocate a defensive aliasing copy (previously 7.85 GB of
+  device allocations per step on a 63-level sphere, now zero). CPU broadcasts
+  keep the standard path, which guarantees zero allocations.
+  Spectral-element slab loops reserve half the shared memory per
+  block (`MAX_SUBBLOCK_LAUNCH_THREADS` 256 → 128), and the eager
+  finite-difference kernel packs 128 threads per block and queries the SM
+  count from the device. The environment variables `CLIMA_CUDA_MAX_WAVES`,
+  `CLIMA_FD_MAX_THREADS`, and `CLIMA_DSS_MAX_THREADS` (read once at module
+  load) override launch-tuning defaults for experiments (see
+  `perf/sweep_kernel_configs.jl`). `CLIMA_COLLECT_KERNEL_STATS` toggles the
+  development-only per-launch statistics; it is a compile-time constant (read
+  when the CUDA extension precompiles) so that the statistics block folds away
+  and does not enter the kernel-launch type-stability contract.
+  PR [2606](https://github.com/CliMA/ClimaCore.jl/pull/2606)
 - ![][badge-✨feature/enhancement] Spectral element operators are now evaluated
   through the slice-loop primitives (`foreach_slab` and the other
   `DataLayouts.foreach_*` loops), so they can appear inside fused loop bodies

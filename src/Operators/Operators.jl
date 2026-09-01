@@ -27,12 +27,14 @@ import ..Grids
 import ..Fields: Fields, Field
 import UnrolledUtilities: unrolled_map, unrolled_filter
 import UnrolledUtilities: unrolled_all, unrolled_in, unrolled_sum
+import LazyBroadcast: lazy
 import ..Utilities.Unrolled: unrolled_tuple_map
 
 include("common.jl")
 include("spectralelement.jl")
 include("numericalflux.jl")
 include("dg_fluxes.jl")
+include("laplacians.jl")
 include("finitedifference.jl")
 include("remapping.jl")
 include("integrals.jl")

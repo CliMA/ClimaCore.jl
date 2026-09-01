@@ -1126,7 +1126,7 @@ internal-face operators (the DSS-buffer analog for DG):
   - `faces`: `5 × nfaces` `Int32` matrix of interior faces
     `(elem⁻, face⁻, elem⁺, face⁺, reversed)`;
   - `sgeom`: precomputed [`Geometry.SurfaceGeometry`](@ref) per
-    `(q, level, face)` (level = 1 for pure 2D spaces), evaluated from the
+    `(level, q, face)` (level = 1 for pure 2D spaces), evaluated from the
     minus side exactly as the CPU loops do;
   - a deterministic gather map from element boundary nodes to their face
     contributions, in ragged-array form (`node_*`, `node_offset`,
@@ -1167,7 +1167,7 @@ function dg_connectivity(space)
     return get!(() -> build_dg_connectivity(space), Cache.OBJECT_CACHE, key)
 end
 
-# Memoized device staging array of shape `(Nq, Nv, nsides, nfaces)` for the GPU
+# Memoized device staging array of shape `(Nv, Nq, nsides, nfaces)` for the GPU
 # face kernels, keyed (and released by `clean_cache!`) alongside the space's
 # connectivity. `tag` separates the interior (`nsides` 1 or 2) and ghost
 # (`nsides == 1`) buffers, which the same operator call uses in turn.
@@ -1184,7 +1184,7 @@ function _dg_staging_buffer(
         Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
         Nv = Spaces.nlevels(space)
         DA = ClimaComms.array_type(Spaces.topology(space))
-        buf = DA{T}(undef, Nq, Nv, nsides, nfaces)
+        buf = DA{T}(undef, Nv, Nq, nsides, nfaces)
         Cache.OBJECT_CACHE[key] = buf
     end
     return buf
@@ -1211,7 +1211,7 @@ function build_dg_connectivity(space)
 
     lg_host = Adapt.adapt(Array, Spaces.local_geometry_data(space))
     SG = Geometry.SurfaceGeometry{FT, Geometry.UVVector{FT}}
-    sgeom = Array{SG}(undef, Nq, Nv, nfaces)
+    sgeom = Array{SG}(undef, Nv, Nq, nfaces)
 
     # (elem, i, j) → list of (face, side, q); side 1 = minus, 2 = plus
     contrib = Dict{NTuple{3, Int}, Vector{NTuple{3, Int32}}}()
@@ -1231,7 +1231,7 @@ function build_dg_connectivity(space)
             )
             for v in 1:Nv
                 lg = slab(lg_host, v, elem⁻)[1, i⁻, j⁻, 1]
-                sgeom[q, v, f] = compute_surface_geometry_extruded_2d(
+                sgeom[v, q, f] = compute_surface_geometry_extruded_2d(
                     lg,
                     w,
                     face⁻,
@@ -1327,7 +1327,7 @@ function build_dg_ghost_connectivity(space)
     faces = Matrix{Int32}(undef, 5, nfaces)
     lg_host = Adapt.adapt(Array, Spaces.local_geometry_data(space))
     SG = Geometry.SurfaceGeometry{FT, Geometry.UVVector{FT}}
-    sgeom = Array{SG}(undef, Nq, Nv, nfaces)
+    sgeom = Array{SG}(undef, Nv, Nq, nfaces)
 
     (; face_slot) = Topologies.ghost_face_schedule(topology)
     contrib = Dict{NTuple{3, Int}, Vector{NTuple{3, Int32}}}()
@@ -1342,7 +1342,7 @@ function build_dg_ghost_connectivity(space)
             )
             for v in 1:Nv
                 lg = slab(lg_host, v, elem⁻)[1, i⁻, j⁻, 1]
-                sgeom[q, v, f] = compute_surface_geometry_extruded_2d(
+                sgeom[v, q, f] = compute_surface_geometry_extruded_2d(
                     lg,
                     w,
                     face⁻,
@@ -1394,7 +1394,7 @@ function build_dg_boundary_connectivity(space)
     faces = Matrix{Int32}(undef, 2, nfaces)
     lg_host = Adapt.adapt(Array, Spaces.local_geometry_data(space))
     SG = Geometry.SurfaceGeometry{FT, Geometry.UVVector{FT}}
-    sgeom = Array{SG}(undef, Nq, Nv, nfaces)
+    sgeom = Array{SG}(undef, Nv, Nq, nfaces)
 
     contrib = Dict{NTuple{3, Int}, Vector{NTuple{3, Int32}}}()
     for (f, (elem⁻, face⁻)) in enumerate(bfaces)
@@ -1407,7 +1407,7 @@ function build_dg_boundary_connectivity(space)
             )
             for v in 1:Nv
                 lg = slab(lg_host, v, elem⁻)[1, i⁻, j⁻, 1]
-                sgeom[q, v, f] = compute_surface_geometry_extruded_2d(
+                sgeom[v, q, f] = compute_surface_geometry_extruded_2d(
                     lg,
                     w,
                     face⁻,

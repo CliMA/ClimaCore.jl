@@ -219,7 +219,7 @@ function run_ddg_tests(::Type{FT}) where {FT}
                 reversed = gconn.faces[5, f] == 1
                 i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, qq, false)
                 q′ = reversed ? Nq - qq + 1 : qq
-                sg = gconn.sgeom[qq, 1, f]
+                sg = gconn.sgeom[1, qq, f]
                 y⁻ = y_data[CartesianIndex(1, i⁻, j⁻, elem⁻)]
                 y⁺ = ex.recv_data[CartesianIndex(1, q′, 1, slot)]
                 staging[qq, f] =

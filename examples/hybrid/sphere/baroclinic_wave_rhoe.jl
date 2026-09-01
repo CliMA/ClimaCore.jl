@@ -13,10 +13,11 @@ include("baroclinic_wave_utils.jl")
 const sponge = false
 
 # Variables required for driver.jl (modify as needed)
-horizontal_mesh = cubed_sphere_mesh(; radius = R, h_elem = 4)
+h_elem = parse(Int, get(ENV, "H_ELEM", "4"))
+horizontal_mesh = cubed_sphere_mesh(; radius = R, h_elem = h_elem)
 npoly = 4
 z_max = FT(30e3)
-z_elem = 10
+z_elem = parse(Int, get(ENV, "Z_ELEM", "10"))
 t_end = FT(60 * 60 * 24 * 10)
 dt = FT(400)
 dt_save_to_sol = FT(60 * 60 * 24)
