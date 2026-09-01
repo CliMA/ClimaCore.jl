@@ -245,22 +245,25 @@ end
 
 # Optional CLI / Environment-based test filtering:
 # e.g. TEST_TIER=unit, TEST_EXCLUDE_TIER=conv,inference, TEST_SUBSYSTEM=operators,
-# TEST_TAG=dg, TEST_FAST=true, TEST_EXCLUDE_SLOW=true
+# TEST_EXCLUDE_SUBSYSTEM=operators, TEST_TAG=dg, TEST_FAST=true,
+# TEST_EXCLUDE_SLOW=true
 let
     tier_filter = get(ENV, "TEST_TIER", nothing)
     exclude_tier_filter = get(ENV, "TEST_EXCLUDE_TIER", nothing)
     subsystem_filter = get(ENV, "TEST_SUBSYSTEM", nothing)
+    exclude_subsystem_filter = get(ENV, "TEST_EXCLUDE_SUBSYSTEM", nothing)
     tag_filter = get(ENV, "TEST_TAG", nothing)
     fast_filter = get(ENV, "TEST_FAST", "false") == "true"
     exclude_slow_filter = get(ENV, "TEST_EXCLUDE_SLOW", "false") == "true"
     if !isnothing(tier_filter) || !isnothing(exclude_tier_filter) ||
-       !isnothing(subsystem_filter) || !isnothing(tag_filter) ||
-       fast_filter || exclude_slow_filter
+       !isnothing(subsystem_filter) || !isnothing(exclude_subsystem_filter) ||
+       !isnothing(tag_filter) || fast_filter || exclude_slow_filter
         filtered = filter_tests(
             unit_tests;
             tier = tier_filter,
             exclude_tier = exclude_tier_filter,
             subsystem = subsystem_filter,
+            exclude_subsystem = exclude_subsystem_filter,
             tag = tag_filter,
             fast = fast_filter,
             exclude_slow = exclude_slow_filter,
@@ -289,6 +292,7 @@ if isempty(unit_tests)
                 "TEST_TIER",
                 "TEST_EXCLUDE_TIER",
                 "TEST_SUBSYSTEM",
+                "TEST_EXCLUDE_SUBSYSTEM",
                 "TEST_TAG",
                 "TEST_FAST",
                 "TEST_EXCLUDE_SLOW",

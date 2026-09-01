@@ -41,16 +41,20 @@ UnitTest(
 ) = UnitTest(name, filename, 0.0, 0.0, 0.0, 0, meta, tier, subsystem, slow)
 
 """
-    filter_tests(unit_tests::Vector{UnitTest}; tier = nothing, exclude_tier = nothing, subsystem = nothing, tag = nothing, fast::Bool = false, exclude_slow::Bool = false)
+    filter_tests(unit_tests::Vector{UnitTest}; tier = nothing, exclude_tier = nothing, subsystem = nothing, exclude_subsystem = nothing, tag = nothing, fast::Bool = false, exclude_slow::Bool = false)
 
 Filters unit tests based on tier, excluded tier(s) (comma-separated, e.g.
-`"conv,inference"`), subsystem, case-insensitive substring match, or `slow`.
+`"conv,inference"`), subsystem, excluded subsystem(s) (comma-separated),
+case-insensitive substring match, or `slow`. Selecting a subsystem and
+excluding its complement partitions the suite into shards that together cover
+every test (see the sharded coverage job in `.github/workflows/UnitTests.yml`).
 """
 function filter_tests(
     unit_tests::Vector{UnitTest};
     tier = nothing,
     exclude_tier = nothing,
     subsystem = nothing,
+    exclude_subsystem = nothing,
     tag = nothing,
     fast::Bool = false,
     exclude_slow::Bool = false,
@@ -59,6 +63,14 @@ function filter_tests(
         Symbol[]
     else
         [Symbol(strip(s)) for s in split(String(exclude_tier), ","; keepempty = false)]
+    end
+    excluded_subsystems = if isnothing(exclude_subsystem)
+        Symbol[]
+    else
+        [
+            Symbol(strip(s)) for
+            s in split(String(exclude_subsystem), ","; keepempty = false)
+        ]
     end
     return filter(unit_tests) do t
         if fast && t.tier != :unit
@@ -74,6 +86,9 @@ function filter_tests(
             return false
         end
         if !isnothing(subsystem) && t.subsystem != Symbol(subsystem)
+            return false
+        end
+        if t.subsystem in excluded_subsystems
             return false
         end
         if !isnothing(tag)
