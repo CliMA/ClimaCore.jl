@@ -19,13 +19,18 @@
 #
 # Usage:
 #
-#     julia --project=.buildkite examples/plane/bickleyjet.jl [cg|dg] [numflux] [boundary]
+#     julia --project=.buildkite examples/plane/bickleyjet.jl [cg|dg] [numflux] [boundary] [hyperdiffusion]
 #
 # `numflux` is `central`, `rusanov` (default) or `roe`, and is used only by the
 # DG completion — CG passes it and ignores it. 
 # `boundary` is empty (doubly periodic, the default) or `noslip`, which
 # closes the y-direction with walls; walls are DG-only here, since CG imposes
 # boundary conditions through the operators rather than through a flux.
+# `hyperdiffusion` is empty (off, the default) or `hyperdiffusion`, which adds
+# a ∇⁴ closure on the velocity and the tracer. Like the rest of the tendency it
+# is written once for both discretizations: the Laplacian atoms carry the DG
+# face terms themselves, and the `Spaces.weighted_dss!` between the two passes
+# — which makes the intermediates continuous on CG — is a no-op on DG.
 #
 # `central` adds no interface dissipation, so it does not survive the roll-up:
 # the filaments the instability produces feed grid-scale energy that nothing
@@ -69,6 +74,7 @@ const parameters = (
 discretization_name = get(ARGS, 1, "cg")
 numflux_name = get(ARGS, 2, "rusanov")
 boundary_name = get(ARGS, 3, "")
+hyperdiffusion_name = get(ARGS, 4, "")
 
 discretization = if discretization_name == "cg"
     Spaces.CG()
@@ -95,6 +101,13 @@ config = if discretization isa Spaces.CG
     (; Nqh = 7, filter_order = 0, tspan = 80.0, rollup_factor = 10)
 else
     (; Nqh = 0, filter_order = 3, tspan = 200.0, rollup_factor = 5)
+end
+
+const use_hyperdiffusion = if hyperdiffusion_name in ("", "hyperdiffusion")
+    hyperdiffusion_name == "hyperdiffusion"
+else
+    error("Unknown hyperdiffusion option $(repr(hyperdiffusion_name)): pass \
+           \"hyperdiffusion\" or nothing at all.")
 end
 
 const is_periodic = boundary_name == ""
@@ -271,6 +284,60 @@ boundary_numflux =
 
 dydt = similar(y0)
 
+# ∇⁴ hyperdiffusion, when active: high-order numerical diffusion 
+# applied to the velocity and to the tracer. `κ₄ ~ c h³` is the 
+# hyperdiffusion coefficient.
+hyperdiffusion = if !use_hyperdiffusion
+    nothing
+else
+    c = sqrt(parameters.g * parameters.ρ₀)
+    κ₄ = 0.0015 * c * Spaces.node_horizontal_length_scale(space)^3
+    # The DG Laplacian's interface penalty, τ ~ (2Nq − 1)²/h, dominates its
+    # spectrum, so its ∇⁴ is ~(2Nq − 1)⁴ stiffer than the CG one at the same
+    # resolution (measured spectral radius here: 1.3e8 against 5.8e4, a factor
+    # of 2160 against the 2401 that scaling predicts). Dividing κ₄ by it keeps
+    # the explicit time-step limit the same as CG's while still damping the
+    # grid-scale jumps hard — those are exactly the modes the penalty makes
+    # stiff, so they keep a damping rate of order 1/time.
+    if discretization isa Spaces.DG
+        κ₄ /= (2 * Nq - 1)^4
+    end
+    χu = similar(y0.ρu, Geometry.Covariant12Vector{Float64})
+    χθ = similar(y0.ρθ)
+    (;
+        κ₄,
+        u = similar(χu),
+        χu,
+        χθ,
+        ∇⁴u = similar(χu),
+        ∇⁴θ = similar(χθ),
+        buffer_χu = Spaces.create_dss_buffer(χu),
+        buffer_χθ = Spaces.create_dss_buffer(χθ),
+    )
+end
+
+# Adds `-κ₄ ∇⁴` on the velocity and the tracer to the element-local tendency,
+# before it is completed: on CG the completion's DSS then covers this term too,
+# and on DG the atoms have already added their own face terms.
+function hyperdiffusion_tendency!(dydt, y, hyperdiffusion)
+    isnothing(hyperdiffusion) && return dydt
+    (; κ₄, u, χu, χθ, ∇⁴u, ∇⁴θ, buffer_χu, buffer_χθ) = hyperdiffusion
+    lgeom = Fields.local_geometry_field(axes(y.ρ))
+    @. u = Geometry.Covariant12Vector(y.ρu / y.ρ, lgeom)
+    Operators.vector_laplacian!(χu, u)
+    Operators.scalar_laplacian!(χθ, Base.broadcasted(/, y.ρθ, y.ρ))
+    # Continuity of the intermediates between the passes: a DSS on CG, a no-op
+    # on DG, where the first pass already coupled the elements.
+    Spaces.weighted_dss!(χu => buffer_χu, χθ => buffer_χθ)
+    Operators.vector_laplacian!(∇⁴u, χu)
+    Operators.scalar_laplacian!(∇⁴θ, χθ; weight = y.ρ)
+    # `ρu` is the prognostic, so the velocity tendency is weighted by ρ; the
+    # tracer's weight is already inside its second pass.
+    @. dydt.ρu -= κ₄ * y.ρ * Geometry.UVVector(∇⁴u, lgeom)
+    @. dydt.ρθ -= κ₄ * ∇⁴θ
+    return dydt
+end
+
 # The discretization switch: on CG this is a DSS (with its exchange buffer),
 # on DG the interface- and boundary-flux completion. `numflux` is passed
 # unconditionally; CG ignores it.
@@ -290,7 +357,7 @@ filter_matrix =
 # One tendency for both discretizations: an element-local weak-form divergence
 # of the physical flux, completed across element interfaces by `completion`.
 function rhs!(dydt, y, p, t)
-    (; parameters, completion, Ispace, filter_matrix) = p
+    (; parameters, completion, Ispace, filter_matrix, hyperdiffusion) = p
     wdiv = Operators.Divergence{Operators.WeakForm}()
     rparameters = Ref(parameters)
 
@@ -304,6 +371,7 @@ function rhs!(dydt, y, p, t)
         @. dydt = -Rop(wdiv(flux(Iop(y), rparameters)))
     end
 
+    hyperdiffusion_tendency!(dydt, y, hyperdiffusion)
     Operators.complete_tendency!(completion, dydt, y, parameters)
 
     isnothing(filter_matrix) ||
@@ -311,7 +379,7 @@ function rhs!(dydt, y, p, t)
     return dydt
 end
 
-p = (; parameters, completion, Ispace, filter_matrix)
+p = (; parameters, completion, Ispace, filter_matrix, hyperdiffusion)
 rhs!(dydt, y0, p, 0.0);
 
 # Solve the ODE operator
@@ -338,6 +406,9 @@ dir = discretization isa Spaces.CG ? "cg" : "dg_$(numflux_name)"
 if boundary_name != ""
     dir = "$(dir)_$(boundary_name)"
 end
+if use_hyperdiffusion
+    dir = "$(dir)_hyperdiffusion"
+end
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
@@ -362,7 +433,9 @@ using Test
         @test Es[end] ≤ Es[1] * (1 + sqrt(eps()))
     end
     # CG conserves total energy up to time-integration error (measured drift
-    # over t = 80: +5e-5). Either way the drift must stay small.
+    # over t = 80: +5e-5). Either way the drift must stay small — including
+    # with `hyperdiffusion`, which is dissipative by construction and takes the
+    # drift to -3.5e-4 (CG) and -3.0e-4 (DG `rusanov`).
     @test abs(Es[end] - Es[1]) / Es[1] < 1e-3
 end
 
@@ -405,8 +478,10 @@ end
     # Rolling the jet up draws the tracer into filaments the mesh cannot
     # resolve, and there is no limiter, so θ overshoots its initial [-1, 1]
     # range (measured: [-3.1, 2.7] for CG; ±3.7 for `rusanov`, ±2.6 for `roe`,
-    # ±2.0 with walls). See `limiters_advection.jl` for the limited transport
-    # that does hold the bounds.
+    # ±2.0 with walls). `hyperdiffusion` removes most of that overshoot —
+    # [-1.2, 1.2] for CG, [-1.1, 1.9] for DG `rusanov` — which is what it is
+    # there for, though it bounds nothing: see `limiters_advection.jl` for the
+    # limited transport that does hold the bounds.
     θ_end = sol.u[end].ρθ ./ sol.u[end].ρ
     @test maximum(abs, θ_end) < 5
 end

@@ -136,12 +136,15 @@ spectral-element spaces constructed with `discretization = Grids.DG()`. The
 face operators act on a mass-weighted residual (`WJ * ∂Y/∂t`) and complete
 the weak-form (or flux-differencing) volume terms at element interfaces.
 
-The Laplacian below couples elements two ways: [`LDGLaplacianFlux`](@ref) at
-the faces, and a jump correction folded into the volume divergence. Both are
-needed — with only the first, the operator is not symmetric and loses an order
-of accuracy. The strength of the coupling is
-[`ldg_penalty_parameter`](@ref), a `Field` rather than one number because it
-has to track element size and the diffusivity weight across the mesh.
+The Laplacians below couple elements two ways: a face flux
+([`LDGLaplacianFlux`](@ref) for a scalar, [`VectorLaplacianFlux`](@ref) for a
+vector), and a jump correction folded into the volume term. Both are needed —
+with only the first, the operator is not symmetric and loses an order of
+accuracy. The strength of the coupling is [`ldg_penalty_parameter`](@ref), a
+`Field` rather than one number because it has to track element size and the
+diffusivity weight across the mesh. The vector Laplacian is the grad-div minus
+curl-curl split into the divergence and the vertical vorticity, one such
+operator per part, so that it damps what its continuous counterpart does.
 
 ```@docs
 add_numerical_flux_interior!
@@ -152,6 +155,8 @@ add_flux_differencing_divergence!
 add_ldg_laplacian_flux_interior!
 ldg_laplacian_tendency
 ldg_laplacian_tendency!
+ldg_vector_laplacian_tendency
+ldg_vector_laplacian_tendency!
 ldg_penalty_parameter
 ldg_penalty_parameter!
 start_dg_ghost_exchange
@@ -180,8 +185,10 @@ AbstractNumericalFlux
 CentralNumericalFlux
 RusanovNumericalFlux
 LDGLaplacianFlux
+VectorLaplacianFlux
 central_gradient_lift
 central_curl3_lift
+central_divergence_lift
 jump_penalty_lift
 ```
 

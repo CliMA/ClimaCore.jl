@@ -67,6 +67,35 @@ central_curl3_lift(normal, (u⁻, v⁻), (u⁺, v⁺)) =
     ) / 2
 
 """
+    central_curl3_lift(normal, (u⁻,), (u⁺,))
+
+Vector-argument form of the above: the horizontal vector `u` in the same
+orthonormal basis as the normal (usually [`Geometry.UVVector`](@ref)), rather
+than its two components as separate fields. One field to index and to stage in
+the halo exchange instead of two.
+"""
+function central_curl3_lift(
+    normal,
+    argvals⁻::Tuple{Any},
+    argvals⁺::Tuple{Any},
+)
+    Δu = (argvals⁺[1] - argvals⁻[1]) / 2
+    return normal.components.data.:1 * Δu.components.data.:2 -
+           normal.components.data.:2 * Δu.components.data.:1
+end
+
+"""
+    central_divergence_lift(normal, (u⁻,), (u⁺,))
+
+Symmetric central lifting completing the strong-form DG divergence of a
+horizontal vector: each side adds ``(u^* - u_{side}) ⋅ n̂_{side}`` with central
+``u^*``, i.e. ``((u⁺ - u⁻)/2) ⋅ n̂`` on the minus side. `u` must be in the same
+basis as the face normal (usually [`Geometry.UVVector`](@ref)). Use with
+[`add_lifting_flux_interior!`](@ref) / [`lifting_correction`](@ref).
+"""
+central_divergence_lift(normal, (u⁻,), (u⁺,)) = ((u⁺ - u⁻) / 2)' * normal
+
+"""
     jump_penalty_lift(normal, (q⁻, λ⁻), (q⁺, λ⁺))
 
 λ-scaled interface penalty: each side relaxes toward its neighbor at rate
@@ -290,3 +319,216 @@ add_ldg_laplacian_flux_interior!(
     κ,
     τ,
 )
+
+# ---------------------------------------------------------------------------
+# The DG vector Laplacian
+#
+# ∇²u = ∇(∇⋅u) − ∇×(∇×u) splits the smoothing into the divergence ∇⋅u and the
+# vertical component of the curl, ẑ⋅(∇×u).
+# For a test function `v`:
+#     Σ_K ∫_K [α (∇⋅u)(∇⋅v) + (ẑ⋅(∇×u))(ẑ⋅(∇×v))]  inside each element
+#   − Σ_f ∫_f [α {{∇⋅u}} [[v]]⋅n̂ + {{ẑ⋅(∇×u)}} ẑ⋅(n̂ × [[v]])]
+#   − Σ_f ∫_f [the same with u and v swapped]
+#   + Σ_f ∫_f τ [[u]]⋅[[v]]                       a penalty term
+# ---------------------------------------------------------------------------
+
+"""
+    VectorLaplacianFlux(divergence_factor)
+
+Interface flux for the DG vector Laplacian, used with
+[`add_numerical_flux_interior!`](@ref). Each side supplies
+`(u, ∇⋅u, ẑ⋅(∇×u), τ)`: the vector in the face normal's basis (usually
+[`Geometry.UVVector`](@ref)), the divergence and the vertical component of the
+curl as that side's element computed them, and the penalty, a scalar or a
+`Field`. With one horizontal dimension there is no curl term, and each side
+supplies `(u, ∇⋅u, τ)`. Returns
+
+    -α {{∇⋅u}} n̂ - {{ẑ⋅(∇×u)}} (ẑ × n̂) + max(τ⁻, τ⁺) * (α [[u]]⋅n̂ n̂ + [[u]]ₜ)
+
+where `α = divergence_factor` and `[[u]]ₜ` is the tangential part of the jump.
+`α` multiplies the grad-div part and the normal-jump penalty that holds it
+together.
+"""
+struct VectorLaplacianFlux{FT} <: AbstractNumericalFlux
+    divergence_factor::FT
+end
+
+function (fn::VectorLaplacianFlux)(
+    normal,
+    argvals⁻::NTuple{4, Any},
+    argvals⁺::NTuple{4, Any},
+)
+    u⁻, divu⁻, curlu⁻, τ⁻ = argvals⁻[1], argvals⁻[2], argvals⁻[3], argvals⁻[4]
+    u⁺, divu⁺, curlu⁺, τ⁺ = argvals⁺[1], argvals⁺[2], argvals⁺[3], argvals⁺[4]
+    α = fn.divergence_factor
+    αdiv = α * (divu⁻ + divu⁺) / 2
+    curlavg = (curlu⁻ + curlu⁺) / 2
+    n₁ = normal.components.data.:1
+    n₂ = normal.components.data.:2
+    # -α {{∇⋅u}} n̂ - {{ẑ⋅(∇×u)}} (ẑ × n̂), with ẑ × n̂ = (-n₂, n₁) in the
+    # (U, V) frame.
+    Favg =
+        Geometry.UVVector(curlavg * n₂ - αdiv * n₁, -curlavg * n₁ - αdiv * n₂)
+    # The normal part of the jump goes with the divergence and carries its
+    # factor; what is left is tangential and goes with the curl.
+    Δ = u⁻ - u⁺
+    pen = Δ + (α - 1) * (Δ' * normal) * normal
+    return Favg + max(τ⁻, τ⁺) * pen
+end
+
+function (fn::VectorLaplacianFlux)(
+    normal,
+    argvals⁻::NTuple{3, Any},
+    argvals⁺::NTuple{3, Any},
+)
+    u⁻, divu⁻, τ⁻ = argvals⁻[1], argvals⁻[2], argvals⁻[3]
+    u⁺, divu⁺, τ⁺ = argvals⁺[1], argvals⁺[2], argvals⁺[3]
+    α = fn.divergence_factor
+    αdiv = α * (divu⁻ + divu⁺) / 2
+    # With one horizontal dimension every jump is normal to the face, so all of
+    # it goes with the divergence.
+    return -αdiv * normal + α * max(τ⁻, τ⁺) * (u⁻ - u⁺)
+end
+
+"""
+    ldg_vector_laplacian_tendency(u, divergence_factor, τ)
+
+Horizontal vector Laplacian of `u` on a DG space,
+`divergence_factor * ∇(∇⋅u) − ∇×(∇×u)`, in the basis of `u`. Neighbouring
+elements are coupled by [`VectorLaplacianFlux`](@ref), with `τ` from
+[`ldg_penalty_parameter`](@ref) at unit diffusivity; the flux applies
+`divergence_factor` to the part of the penalty that carries it.
+
+Allocates the result and the scratch fields;
+[`ldg_vector_laplacian_tendency!`](@ref) takes all of them as arguments.
+"""
+function ldg_vector_laplacian_tendency(u, divergence_factor, τ)
+    space = axes(u)
+    FT = Spaces.undertype(space)
+    if Spaces.horizontal_space(space) isa Spaces.SpectralElementSpace1D
+        V = Geometry.UVector{FT}
+        curlu = nothing
+        R_curlu = nothing
+    else
+        V = Geometry.UVVector{FT}
+        curlu = Fields.Field(FT, space)
+        R_curlu = Fields.Field(FT, space)
+    end
+    return ldg_vector_laplacian_tendency!(
+        similar(u),
+        Fields.Field(V, space),
+        Fields.Field(V, space),
+        Fields.Field(FT, space),
+        Fields.Field(FT, space),
+        curlu,
+        R_curlu,
+        u,
+        divergence_factor,
+        τ,
+    )
+end
+
+"""
+    ldg_vector_laplacian_tendency!(out, r, u_loc, divu, R_divu, curlu, R_curlu, u, divergence_factor, τ)
+
+In-place [`ldg_vector_laplacian_tendency`](@ref): writes into `out`, using as
+scratch the mass-weighted residual `r` and the vector `u_loc` (both in the face
+normals' basis), the divergence `divu` and the lifting `R_divu` of the face
+jumps in `u`, and the vertical curl `curlu` and its `R_curlu`. Pass
+`curlu = R_curlu = nothing` with one horizontal dimension, where there is no
+curl-curl part. No scratch field may alias `u`; `out` may. Returns `out`.
+"""
+function ldg_vector_laplacian_tendency!(
+    out,
+    r,
+    u_loc,
+    divu,
+    R_divu,
+    curlu,
+    R_curlu,
+    u,
+    divergence_factor,
+    τ,
+)
+    space = axes(u)
+    FT = Spaces.undertype(space)
+    α = FT(divergence_factor)
+    lgeom = Fields.local_geometry_field(space)
+    div = Divergence()
+    curl = Curl()
+    wgrad = Gradient{WeakForm}()
+    wcurl = Curl{WeakForm}()
+    # `u` in the frame the face terms work in, which the two sides of a face
+    # node share. The volume operators read the same field: converting to it is
+    # exact, so it costs only roundoff.
+    _project_into!(u_loc, u, lgeom)
+    # Both liftings read `u_loc` alone, so one halo exchange serves both.
+    ghost = start_dg_ghost_exchange(space, u_loc)
+    # The divergence each element sees on its own, and the same with the face
+    # jumps spread back over it. The face flux averages the first; the volume
+    # term differentiates the second, which is what keeps the operator
+    # symmetric.
+    @. divu = div(u_loc)
+    fill!(parent(R_divu), zero(FT))
+    add_lifting_flux_interior!(ghost, central_divergence_lift, R_divu, u_loc)
+    @. R_divu = divu + R_divu / lgeom.WJ
+    if curlu === nothing
+        @. r = lgeom.WJ * Geometry.UVector(α * wgrad(R_divu), lgeom)
+        add_numerical_flux_interior!(VectorLaplacianFlux(α), r, u_loc, divu, τ)
+    else
+        # ẑ⋅(∇×u), the same way: covariant components in, since a curl is free
+        # of the metric in those, and the physical component out, since that is
+        # what the face terms measure.
+        @. curlu = _vertical_curl(
+            curl(Geometry.Covariant12Vector(u_loc, lgeom)),
+            lgeom,
+        )
+        fill!(parent(R_curlu), zero(FT))
+        add_lifting_flux_interior!(ghost, central_curl3_lift, R_curlu, u_loc)
+        @. R_curlu = curlu + R_curlu / lgeom.WJ
+        @. r =
+            lgeom.WJ * Geometry.UVVector(
+                α * wgrad(R_divu) - Geometry.Covariant12Vector(
+                    wcurl(
+                        Geometry.Covariant3Vector(
+                            Geometry.WVector(R_curlu),
+                            lgeom,
+                        ),
+                    ),
+                ),
+                lgeom,
+            )
+        add_numerical_flux_interior!(
+            VectorLaplacianFlux(α),
+            r,
+            u_loc,
+            divu,
+            curlu,
+            τ,
+        )
+    end
+    return _unweight_into!(out, r, lgeom)
+end
+
+# The vertical component of a curl, as a scalar rate. Orthonormal rather than
+# contravariant, so that the volume and face terms measure the same thing where
+# the two differ: a grid whose third coordinate is not a length, such as an
+# extruded one.
+@inline _vertical_curl(curl_u, lg) = Geometry.WVector(curl_u, lg).w
+
+# Write `v` into `dest`, converting to the basis `dest`'s element type asks
+# for: the caller chooses the basis of its own field, and the operators here
+# work in the face normals'.
+_project_into!(dest, v, lgeom) =
+    _project_into!(eltype(dest), dest, v, lgeom)
+function _project_into!(::Type{T}, dest, v, lgeom) where {T}
+    @. dest = T(v, lgeom)
+    return dest
+end
+
+# The same, for a mass-weighted residual: unweight, then convert.
+_unweight_into!(dest, r, lgeom) = _unweight_into!(eltype(dest), dest, r, lgeom)
+function _unweight_into!(::Type{T}, dest, r, lgeom) where {T}
+    @. dest = T(r / lgeom.WJ, lgeom)
+    return dest
+end

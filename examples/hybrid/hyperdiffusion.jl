@@ -27,15 +27,15 @@ function hyperdiffusion_tendency!(Yₜ, Y, p, t)
     # computed before a single weighted_dss! call, which batches the scalar
     # and vector exchanges into one communication phase. The Laplacian atoms
     # handle the horizontal-dimension distinction (no curl-curl term with one
-    # horizontal dimension). On DG spaces weighted_dss! is a no-op and
-    # scalar_laplacian includes the face corrections itself; vector_laplacian
-    # does not support DG yet, so this tendency is CG-only until it does.
-    # The first pass writes through `scalar_laplacian!`, allocation-free on
-    # both discretizations; the second stays in the returning form, which on
-    # CG is lazy and fuses into the tendency broadcast.
+    # horizontal dimension). On DG spaces weighted_dss! is a no-op and both
+    # atoms include the face corrections themselves, so this tendency runs
+    # unchanged on either discretization. The first pass writes through the
+    # in-place forms, allocation-free on both; the second stays in the
+    # returning form, which on CG is lazy and fuses into the tendency
+    # broadcast (on DG it is a materialized field).
     ᶜh_tot = lazy.((Y.c.ρe .+ ᶜp) ./ ᶜρ)
     Operators.scalar_laplacian!(ᶜχ, ᶜh_tot)
-    ᶜχuₕ .= Operators.vector_laplacian(ᶜuₕ)
+    Operators.vector_laplacian!(ᶜχuₕ, ᶜuₕ)
     Spaces.weighted_dss!(ᶜχ => ghost_buffer.χ, ᶜχuₕ => ghost_buffer.χuₕ)
 
     Yₜ.c.ρe .-= κ₄ .* Operators.scalar_laplacian(ᶜχ; weight = ᶜρ)

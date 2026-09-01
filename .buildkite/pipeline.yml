@@ -928,6 +928,19 @@ steps:
         artifact_paths:
           - "examples/plane/output/dg_*/*"
 
+      - label: ":computer: Bickley jet {{matrix.case}} hyperdiffusion"
+        key: "cpu_bickleyjet_hyperdiffusion"
+        retry: *retry_policy
+        matrix:
+          setup:
+            case:
+              - "cg"
+              - "dg"
+        command:
+          - "julia --color=yes --project=.buildkite examples/plane/bickleyjet.jl {{matrix.case}} rusanov '' hyperdiffusion"
+        artifact_paths:
+          - "examples/plane/output/*_hyperdiffusion/*"
+
       - label: ":computer: Plane limiters advection {{matrix.case}}"
         key: "cpu_plane_limiters_advection"
         retry: *retry_policy

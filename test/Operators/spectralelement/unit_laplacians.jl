@@ -1,9 +1,9 @@
 # Tests the horizontal Laplacian atoms against the equivalent hand-written
 # operator compositions, on CG spaces with two and one horizontal dimensions
-# and on a DG sphere (where the scalar atom must match the interior-penalty
-# Laplacian and the vector atom must fail loudly), and then assembles the DG
-# operator as a matrix to pin the two properties it has to have: it must be
-# symmetric, and it must only ever damp — plus their dependence on the penalty.
+# and on a DG sphere (where both atoms must match the interior-penalty
+# operators), and then assembles the DG operators as matrices to pin the two
+# properties they have to have: they must be symmetric, and they must only
+# ever damp — plus their dependence on the penalty.
 using Test
 using LinearAlgebra
 using ClimaComms
@@ -72,6 +72,16 @@ end
     got_damped =
         materialize(Operators.vector_laplacian(u; divergence_factor = factor))
     @test parent(got_damped) ≈ parent(expected_damped)
+
+    # The in-place form writes into a caller-owned field, including when the
+    # destination aliases the argument.
+    out = similar(u)
+    @test Operators.vector_laplacian!(out, u) === out
+    @test parent(out) ≈ parent(expected)
+
+    aliased = copy(u)
+    Operators.vector_laplacian!(aliased, aliased; divergence_factor = factor)
+    @test parent(aliased) ≈ parent(expected_damped)
 end
 
 @testset "vector_laplacian with one horizontal dimension" begin
@@ -204,7 +214,29 @@ end
     u = @. Geometry.Covariant12Vector(
         Geometry.UVVector(cosd(coord.lat), sind(coord.long) * cosd(coord.lat)),
     )
-    @test_throws ErrorException Operators.vector_laplacian(u)
+    expected_u = Operators.ldg_vector_laplacian_tendency(u, one(FT), τ)
+    got_u = Operators.vector_laplacian(u)
+    @test parent(got_u) ≈ parent(expected_u)
+
+    factor = FT(1 / 2)
+    @test parent(Operators.vector_laplacian(u; divergence_factor = factor)) ≈
+          parent(Operators.ldg_vector_laplacian_tendency(u, factor, τ))
+
+    out_u = similar(u)
+    @test Operators.vector_laplacian!(out_u, u) === out_u
+    @test parent(out_u) ≈ parent(expected_u)
+
+    aliased_u = copy(u)
+    Operators.vector_laplacian!(aliased_u, aliased_u)
+    @test parent(aliased_u) ≈ parent(expected_u)
+
+    # The result is in the basis of the destination, so a caller that holds
+    # its velocity in the local orthonormal frame gets it back in that frame.
+    lgeom = Fields.local_geometry_field(dg_space)
+    u_uv = @. Geometry.UVVector(u, lgeom)
+    got_uv = Operators.vector_laplacian(u_uv)
+    @test eltype(got_uv) <: Geometry.UVVector
+    @test parent(got_uv) ≈ parent(@. Geometry.UVVector(expected_u, lgeom))
 end
 
 # Unit square periodic DG plane
@@ -241,6 +273,24 @@ function assemble_weighted_laplacian(space, op)
     end
     WJ = Diagonal(vec(parent(Fields.local_geometry_field(space).WJ)))
     return WJ * A
+end
+
+# The same for an operator on horizontal vectors, whose two components share
+# the node's `WJ`.
+function assemble_weighted_vector_laplacian(space, op)
+    FT = Spaces.undertype(space)
+    u = Fields.Field(Geometry.UVVector{FT}, space)
+    n = length(parent(u))
+    A = zeros(FT, n, n)
+    for j in 1:n
+        fill!(parent(u), FT(0))
+        parent(u)[j] = FT(1)
+        A[:, j] .= vec(parent(op(u)))
+    end
+    lgeom = Fields.local_geometry_field(space)
+    WJ = Fields.Field(Geometry.UVVector{FT}, space)
+    @. WJ = Geometry.UVVector(lgeom.WJ, lgeom.WJ)
+    return Diagonal(vec(parent(WJ))) * A
 end
 
 # Eigenvalues of the symmetric half of `B`
@@ -287,6 +337,162 @@ end
     # Too small a penalty and the operator amplifies the very modes it is
     # meant to damp (measured max eigenvalue 1.9 against |min| 9.1).
     @test maximum(ev_under) > FT(0.01) * abs(minimum(ev_under))
+end
+
+@testset "hyperdiffusion example usage on a DG extruded sphere" begin
+    # The continuous calling sequence, unchanged, on a discontinuous space:
+    # both atoms carry their own face terms and `weighted_dss!` is a no-op, so
+    # the same tendency code runs on either discretization.
+    hspace = Spaces.SpectralElementSpace2D(
+        Topologies.Topology2D(
+            context,
+            Meshes.EquiangularCubedSphere(Domains.SphereDomain(FT(6.371e6)), 2),
+        ),
+        Quadratures.GLL{3}();
+        discretization = Spaces.DG(),
+    )
+    vspace = Spaces.CenterFiniteDifferenceSpace(
+        Meshes.IntervalMesh(
+            Domains.IntervalDomain(
+                Geometry.ZPoint(FT(0)),
+                Geometry.ZPoint(FT(30e3));
+                boundary_names = (:bottom, :top),
+            );
+            nelems = 4,
+        ),
+    )
+    space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
+    coord = Fields.coordinate_field(space)
+    lgeom = Fields.local_geometry_field(space)
+    ᶜρ = @. 2 + sind(coord.lat)
+    ᶜρe = @. sind(coord.long) * cosd(coord.lat) * (1 + coord.z / FT(30e3))
+    ᶜp = @. cosd(coord.long) + coord.z / FT(30e3)
+    ᶜuₕ = @. Geometry.Covariant12Vector(
+        Geometry.UVVector(cosd(coord.lat), sind(coord.long) * cosd(coord.lat)),
+        lgeom,
+    )
+    κ₄ = FT(1e-3)
+    factor = FT(1 / 2)
+
+    ᶜχ = similar(ᶜρe)
+    ᶜχuₕ = similar(ᶜuₕ)
+    buffer_χ = Spaces.create_dss_buffer(ᶜχ)
+    buffer_χuₕ = Spaces.create_dss_buffer(ᶜχuₕ)
+    Yₜρe = zeros(space)
+    Yₜuₕ = similar(ᶜuₕ)
+    fill!(parent(Yₜuₕ), FT(0))
+
+    ᶜh_tot = Base.Broadcast.broadcasted((e, p, ρ) -> (e + p) / ρ, ᶜρe, ᶜp, ᶜρ)
+    Operators.scalar_laplacian!(ᶜχ, ᶜh_tot)
+    ᶜχuₕ .= Operators.vector_laplacian(ᶜuₕ)
+    Spaces.weighted_dss!(ᶜχ => buffer_χ, ᶜχuₕ => buffer_χuₕ)
+    Yₜρe .-= κ₄ .* Operators.scalar_laplacian(ᶜχ; weight = ᶜρ)
+    Yₜuₕ .-=
+        κ₄ .* Operators.vector_laplacian(ᶜχuₕ; divergence_factor = factor)
+
+    # A no-op DSS leaves the intermediates as the atoms wrote them, and each
+    # pass is the interior-penalty operator.
+    τ = Operators.ldg_penalty_parameter(one(FT), space)
+    @test parent(ᶜχuₕ) ≈
+          parent(Operators.ldg_vector_laplacian_tendency(ᶜuₕ, one(FT), τ))
+    @test parent(Yₜuₕ) ≈
+          -κ₄ .* parent(
+        Operators.ldg_vector_laplacian_tendency(ᶜχuₕ, factor, τ),
+    )
+    @test all(isfinite, parent(Yₜρe))
+end
+
+@testset "DG vector Laplacian is symmetric" begin
+    space = dg_periodic_plane(FT, 2, 2, 3; context)
+    for factor in (FT(1), FT(5), FT(1 / 2))
+        B = assemble_weighted_vector_laplacian(
+            space,
+            u -> Operators.vector_laplacian(u; divergence_factor = factor),
+        )
+        @testset "divergence_factor = $factor" begin
+            @test norm(B - B') / norm(B) < 1e-13
+            ev = symmetric_spectrum(B)
+            # Every mode damped, apart from the two constant vector fields,
+            # which a periodic domain leaves untouched.
+            @test maximum(ev) < 1e-10 * abs(minimum(ev))
+            @test minimum(ev) < 0
+            @test count(<(1e-10 * abs(minimum(ev))), abs.(ev)) == 2
+        end
+    end
+end
+
+@testset "divergence_factor scales exactly the grad-div part" begin
+    space = dg_periodic_plane(FT, 2, 2, 3; context)
+    assemble(factor) = assemble_weighted_vector_laplacian(
+        space,
+        u -> Operators.vector_laplacian(u; divergence_factor = factor),
+    )
+    A1, A2, A3 = assemble(FT(1)), assemble(FT(2)), assemble(FT(3))
+    # Affine in the factor: the grad-div part carries it, and so does the
+    # penalty on the normal jump that holds that part together — nothing else
+    # does, so second differences in the factor vanish.
+    @test norm(A3 - 2 * A2 + A1) < 1e-12 * norm(A1)
+    # ... and it is not a no-op.
+    @test norm(A2 - A1) > FT(0.1) * norm(A1)
+end
+
+@testset "DG vector Laplacian only damps if the penalty is large enough" begin
+    space = dg_periodic_plane(FT, 2, 2, 3; context)
+    τ = Operators.ldg_penalty_parameter(one(FT), space)
+    laplacian(τ) =
+        u -> Operators.ldg_vector_laplacian_tendency(u, one(FT), τ)
+
+    B = assemble_weighted_vector_laplacian(space, laplacian(τ))
+    ev = symmetric_spectrum(B)
+    @test maximum(ev) < 1e-10 * abs(minimum(ev))
+
+    B_under = assemble_weighted_vector_laplacian(space, laplacian(FT(0.02) .* τ))
+    ev_under = symmetric_spectrum(B_under)
+    @test maximum(ev_under) > FT(0.01) * abs(minimum(ev_under))
+end
+
+@testset "DG vector Laplacian converges to ∇²" begin
+    # The truncation error of a second derivative taken from degree-`p`
+    # polynomials, so one order less than the scalar atom's — the same rate
+    # the CG atom has for the same identity.
+    k = 2 * FT(π)
+    errors = map((4, 8)) do nx
+        space = dg_periodic_plane(FT, nx, nx, 4; context)
+        coord = Fields.coordinate_field(space)
+        u = @. Geometry.UVVector(
+            sin(k * coord.x) * cos(k * coord.y),
+            cos(k * coord.x) * sin(k * coord.y),
+        )
+        got = Operators.vector_laplacian(u)
+        exact = @. (-2 * k^2) * u
+        return sqrt(
+            sum(@. norm(got - exact)^2) / sum(@. norm(exact)^2),
+        )
+    end
+    @test errors[2] < errors[1] / 3
+    @test errors[2] < FT(0.06)
+end
+
+@testset "vector_laplacian! does not allocate on DG" begin
+    space = dg_periodic_plane(FT, 2, 2, 3; context)
+    coord = Fields.coordinate_field(space)
+    u = @. Geometry.UVVector(
+        sin(2 * FT(π) * coord.x) * cos(2 * FT(π) * coord.y),
+        cos(2 * FT(π) * coord.x) * sin(2 * FT(π) * coord.y),
+    )
+    out = similar(u)
+    # Compile first, then measure with @allocated
+    Operators.vector_laplacian!(out, u)
+    Operators.vector_laplacian!(out, u; divergence_factor = FT(2))
+    if !(ClimaComms.device() isa ClimaComms.CUDADevice) &&
+       TU.allocation_checks_meaningful()
+        @test (@allocated Operators.vector_laplacian!(out, u)) < 256
+        @test (@allocated Operators.vector_laplacian!(
+            out,
+            u;
+            divergence_factor = FT(2),
+        )) < 256
+    end
 end
 
 @testset "ldg_penalty_parameter varies over the mesh and carries the weight" begin

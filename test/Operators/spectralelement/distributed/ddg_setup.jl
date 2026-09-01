@@ -273,4 +273,40 @@ function run_ddg_tests(::Type{FT}) where {FT}
         qmax = ClimaComms.allreduce(context, maximum(abs, parent(q)), max)
         @test err_global < tol * qmax
     end
+
+    @testset "vector-Laplacian face terms vanish for continuous fields [$FT, $nprocs ranks]" begin
+        # The face terms of the vector Laplacian — the divergence and vorticity
+        # liftings and the penalty — are all jumps in `u`, so they vanish on a
+        # single-valued field only if the partition-boundary jump uses the
+        # received ghost value. `vector_laplacian` shares one exchange between
+        # the two liftings, so a mismatch there shows up here too.
+        uvmax = ClimaComms.allreduce(context, maximum(abs, parent(uv)), max)
+        for lift in
+            (Operators.central_divergence_lift, Operators.central_curl3_lift)
+            r = similar(uv, FT)
+            fill!(parent(r), 0)
+            Operators.add_lifting_flux_interior!(lift, r, uv)
+            rn = @. r / lgeom.WJ
+            err = ClimaComms.allreduce(context, maximum(abs, parent(rn)), max)
+            @test err < tol * uvmax
+        end
+
+        # Isolate the penalty: with zero divergence and vorticity the flux is
+        # τ[[u]] alone.
+        zero_scalar = zeros(space)
+        one_scalar = ones(space)
+        r = similar(uv)
+        fill!(parent(r), 0)
+        Operators.add_numerical_flux_interior!(
+            Operators.VectorLaplacianFlux(one(FT)),
+            r,
+            uv,
+            zero_scalar,
+            zero_scalar,
+            one_scalar,
+        )
+        rn = @. r / lgeom.WJ
+        err = ClimaComms.allreduce(context, maximum(abs, parent(rn)), max)
+        @test err < tol * uvmax
+    end
 end

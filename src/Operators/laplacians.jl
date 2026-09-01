@@ -54,7 +54,8 @@ scalar_laplacian!(out, χ; weight = nothing) =
     scalar_laplacian!(Spaces.discretization(axes(χ)), out, χ, weight)
 
 function scalar_laplacian!(::Grids.CG, out, χ, weight)
-    out === χ && (χ = _aliased_argument_copy(out))
+    out === χ &&
+        (χ = _aliased_argument_copy(out, :scalar_laplacian_aliased_argument))
     out .= scalar_laplacian(Grids.CG(), χ, weight)
     return out
 end
@@ -62,7 +63,8 @@ end
 function scalar_laplacian!(::Grids.DG, out, χ, weight)
     space = axes(χ)
     q = _dg_scalar_argument(space, χ)
-    q === out && (q = _aliased_argument_copy(out))
+    q === out &&
+        (q = _aliased_argument_copy(out, :scalar_laplacian_aliased_argument))
     T = eltype(q)
     FT = Spaces.undertype(space)
     κ = one(FT)
@@ -86,13 +88,9 @@ end
 # An argument that aliases the destination, copied into scratch so the
 # operators can read it while writing `out`. Scratch rather than `copy`, so
 # that the in-place forms stay allocation-free even when aliased.
-function _aliased_argument_copy(out)
+function _aliased_argument_copy(out, tag::Symbol)
     space = axes(out)
-    q = _laplacian_scratch_field(
-        space,
-        eltype(out),
-        :scalar_laplacian_aliased_argument,
-    )
+    q = _laplacian_scratch_field(space, eltype(out), tag)
     q .= out
     return q
 end
@@ -134,27 +132,109 @@ end
 """
     vector_laplacian(u; divergence_factor = 1)
 
-Weak horizontal vector Laplacian of a horizontal covariant vector, as the
-grad-div minus curl-curl identity
+Weak horizontal vector Laplacian of a horizontal vector, as the grad-div minus
+curl-curl identity
 `divergence_factor * wgradₕ(divₕ(u)) − C12(wcurlₕ(C3(curlₕ(u))))`, with the
-grad-div part scaled by `divergence_factor` (used for divergence damping in
-the second pass of ∇⁴ hyperdiffusion). On spaces with one horizontal
-dimension the curl-curl part vanishes identically and only the grad-div part
-is built.
+grad-div part scaled by `divergence_factor` (used for divergence damping in the
+second pass of ∇⁴ hyperdiffusion). On spaces with one horizontal dimension the
+curl-curl part vanishes identically and only the grad-div part is built.
 
 Returns a lazy operator expression on continuous (CG) spaces; the result is
-element-local and must be made continuous with
-[`Spaces.weighted_dss!`](@ref) before it is differentiated again. Not yet
-implemented for discontinuous (DG) spaces, which need grad-div/curl-curl
-face lifting.
+element-local and must be made continuous with [`Spaces.weighted_dss!`](@ref)
+before it is differentiated again. On discontinuous (DG) spaces it returns a
+materialized `Field`, in the basis of `u`, that already includes the face terms
+coupling neighbouring elements (see
+[`ldg_vector_laplacian_tendency!`](@ref)), and `weighted_dss!` is a no-op — so
+the same prep → `weighted_dss!` → apply sequence is correct for both
+discretizations.
+
+Each call owns its result on both discretizations, so any number of results may
+be live at once. The DG result is a fresh `Field`; in a tendency, where that
+allocation is not wanted, use [`vector_laplacian!`](@ref) to write into a
+caller-owned field instead.
 """
 vector_laplacian(u; divergence_factor = 1) =
     vector_laplacian(Spaces.discretization(axes(u)), u, divergence_factor)
 
-vector_laplacian(::Grids.DG, u, divergence_factor) = error(
-    "vector_laplacian is not implemented for DG spaces, which need \
-     grad-div/curl-curl face lifting",
-)
+function vector_laplacian(::Grids.DG, u, divergence_factor)
+    v = _dg_vector_argument(u)
+    return vector_laplacian!(Grids.DG(), similar(v), v, divergence_factor)
+end
+
+"""
+    vector_laplacian!(out, u; divergence_factor = 1)
+
+Write [`vector_laplacian`](@ref)`(u; divergence_factor)` into the caller-owned
+field `out` and return `out`. Allocation-free on both discretizations, so this
+is the form to use in a tendency. `out` may alias `u`, and is written in the
+basis of its own element type, which need not be the basis of `u`.
+"""
+vector_laplacian!(out, u; divergence_factor = 1) =
+    vector_laplacian!(
+        Spaces.discretization(axes(u)),
+        out,
+        u,
+        divergence_factor,
+    )
+
+function vector_laplacian!(::Grids.CG, out, u, divergence_factor)
+    out === u &&
+        (u = _aliased_argument_copy(out, :vector_laplacian_aliased_argument))
+    out .= vector_laplacian(Grids.CG(), u, divergence_factor)
+    return out
+end
+
+function vector_laplacian!(::Grids.DG, out, u, divergence_factor)
+    v = _dg_vector_argument(u)
+    space = axes(v)
+    FT = Spaces.undertype(space)
+    α = FT(divergence_factor)
+    # `out` needs no aliasing copy: nothing writes to it until the argument
+    # has been read into scratch. One penalty field serves both parts of the
+    # operator — the flux applies `divergence_factor` to the part of it that
+    # carries it (see `VectorLaplacianFlux`).
+    τ = _laplacian_scratch_field(space, FT, :vector_laplacian_penalty)
+    ldg_penalty_parameter!(τ, one(FT))
+    divu = _laplacian_scratch_field(space, FT, :vector_laplacian_divergence)
+    R_divu =
+        _laplacian_scratch_field(space, FT, :vector_laplacian_divergence_lift)
+    # The basis of the face normals: with one horizontal dimension there is no
+    # second component to carry, and no curl-curl part. Both branches are
+    # decided by the type of the space, so the element type stays a
+    # compile-time constant.
+    if Spaces.horizontal_space(space) isa Spaces.SpectralElementSpace1D
+        V = Geometry.UVector{FT}
+        curlu = nothing
+        R_curlu = nothing
+    else
+        V = Geometry.UVVector{FT}
+        curlu = _laplacian_scratch_field(space, FT, :vector_laplacian_curl)
+        R_curlu =
+            _laplacian_scratch_field(space, FT, :vector_laplacian_curl_lift)
+    end
+    u_loc = _laplacian_scratch_field(space, V, :vector_laplacian_argument)
+    r = _laplacian_scratch_field(space, V, :vector_laplacian_residual)
+    return ldg_vector_laplacian_tendency!(
+        out,
+        r,
+        u_loc,
+        divu,
+        R_divu,
+        curlu,
+        R_curlu,
+        v,
+        α,
+        τ,
+    )
+end
+
+# Fields pass through; a lazy argument is materialized, since the face kernels
+# index their arguments at element-boundary nodes and so need stored values.
+# Unlike the scalar atom this allocates: the element type of a lazy vector
+# expression is not known here, so there is no scratch field to reuse. One more
+# reason for a tendency to pass a `Field`.
+_dg_vector_argument(u::Fields.Field) = u
+_dg_vector_argument(u) = Base.Broadcast.materialize(u)
 
 function vector_laplacian(::Grids.CG, u, divergence_factor)
     space = axes(u)

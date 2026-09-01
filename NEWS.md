@@ -4,6 +4,19 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] `Operators.vector_laplacian` enabled on
+  discontinuous (DG) spaces. It uses the
+  CG atom's `∇²u = ∇(∇⋅u) − ∇×(∇×u)` split into the divergence and the vertical
+  vorticity, with each part discretized like the DG scalar Laplacian and
+  `Operators.VectorLaplacianFlux` at the faces. The assembled operator is
+  symmetric to roundoff and negative semidefinite, with the same penalty margin
+  as the scalar one, and `divergence_factor` scales the grad-div part and its
+  normal-jump penalty alone, so the operator is affine in it.
+  `examples/plane/bickleyjet.jl` gained a `hyperdiffusion` option that runs the
+  ∇⁴ closure on the velocity and the tracer from one tendency on either
+  discretization; on DG it scales `κ₄` by `(2Nq − 1)⁴`, the factor by which the
+  interface penalty stiffens ∇⁴ relative to CG at the same resolution.
+
 - ![][badge-🔥behavioralΔ] The DG scalar Laplacian
   (`Operators.scalar_laplacian` on `Grids.DG()` spaces, and
   `Operators.ldg_laplacian_tendency`) is now the 
@@ -147,8 +160,8 @@ main
   call to share the ghost exchange). On discontinuous (DG) spaces
   `scalar_laplacian` includes the interior-penalty face corrections itself and
   `weighted_dss!` is a no-op, so one calling sequence serves both
-  discretizations (`vector_laplacian` is not yet implemented for DG). The
-  hybrid example's hyperdiffusion is rewritten on top of these atoms.
+  discretizations (`vector_laplacian` followed, see above). The hybrid
+  example's hyperdiffusion is rewritten on top of these atoms.
   PR [2606](https://github.com/CliMA/ClimaCore.jl/pull/2606)
 - ![][badge-🚀performance] FieldVector broadcasts on GPU flatten to linear
   indexing when the destination and every array in the broadcast have the
