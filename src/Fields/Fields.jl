@@ -2,7 +2,7 @@ module Fields
 
 import ClimaComms
 import MultiBroadcastFusion as MBF
-import ..slab, ..slab_args, ..column, ..column_args, ..level, ..level_args
+import ..slab, ..column, ..level
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..DataLayouts: DataLayouts, DataLayout, DataStyle, PointIndex
 # `@fused_direct` is unused here, but re-exposed as `Fields.@fused_direct` for users
@@ -18,7 +18,7 @@ import ..Geometry: Geometry
 import ..Utilities: PlusHalf, half, safe_eltype, unsafe_eltype
 import ..Utilities: recursive_bottom_eltype
 import ..Utilities: drop_auto_broadcasters, auto_broadcasted
-
+import ..Utilities: add_auto_broadcasters, is_auto_broadcastable
 using UnrolledUtilities
 using ClimaComms
 import Adapt
@@ -158,8 +158,12 @@ Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 Base.ndims(::Type{Field{V, S}}) where {V, S} = Base.ndims(V)
 @inline field_values(field::Field) = getfield(field, :values)
 
-# Define the axes field to be the todata(bc) of the return field
+field_values(x::Number) = x
+field_values(t::Tuple) = map(field_values, t)
+field_values(nt::NamedTuple) = NamedTuple{keys(nt)}(field_values(values(nt)))
+
 @inline Base.axes(field::Field) = getfield(field, :space)
+Base.parent(field::Field) = parent(field_values(field))
 
 # Define device and device array type
 ClimaComms.device(field::Field) = ClimaComms.device(axes(field))
@@ -175,10 +179,6 @@ ClimaComms.array_type(field::Field) =
 Base.eltype(::Type{<:Field{V}}) where {V} = eltype(V)
 Base.IndexStyle(::Type{<:Field{V}}) where {V} = IndexStyle(V)
 
-for f in (:parent, :size, :length, :ndims)
-    @eval Base.$f(field::Field) = $f(field_values(field))
-end
-
 # Scalar reductions and views on the values of a `Field`. Generic and
 # downstream code (NaN checks, plotting) relies on these. `any` reduces over
 # the backing array rather than the `DataLayout` so that predicates on numbers
@@ -188,9 +188,6 @@ end
 Base.any(f, field::Field) = any(f, parent(field))
 Base.similar(field::F, ::Type{F}) where {F <: Field} = similar(field)
 Base.vec(field::Field) = vec(field_values(field))
-for f in (:DataScope, :shape_params, :inferred_size, :nelems)
-    @eval DataLayouts.$f(field::Field) = DataLayouts.$f(field_values(field))
-end
 
 DataLayouts.reassign(field::Field, scope) =
     Field(DataLayouts.reassign(field_values(field), scope), axes(field))
@@ -218,6 +215,11 @@ Base.@propagate_inbounds level(field::Field, v) = Field(
     level(field_values(field), Spaces.integer_level_index(axes(field), v)),
     level(axes(field), v),
 )
+
+# DEPRECATED: use level(field, v) instead; a caller that reaches this method
+# with a multi-level field has a bug that it silently hides. No warning, as in
+# src/DataLayouts/deprecated.jl. Remove once ClimaAtmos has migrated.
+level(field::Field) = field
 
 Base.@propagate_inbounds slab(field::Field, h) =
     Field(slab(field_values(field), h), slab(axes(field), h))
@@ -300,7 +302,7 @@ end
 Fill `field` with `value`. The mask is extracted from the field's space,
 and `fill!` is only applied where the `mask` is true.
 """
-function Base.fill!(field::Field, value; mask = get_mask(axes(field)))
+@inline function Base.fill!(field::Field, value; mask = get_mask(axes(field)))
     fill!(field_values(field), value; mask)
     return field
 end

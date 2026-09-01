@@ -1,5 +1,5 @@
 import ..DebugOnly: allow_mismatched_spaces_unsafe
-import UnrolledUtilities: unrolled_map
+import ..Utilities.Unrolled: unrolled_tuple_map
 
 """
     AbstractFieldStyle
@@ -7,6 +7,9 @@ import UnrolledUtilities: unrolled_map
 The supertype of all broadcasting-like operations on Fields.
 """
 abstract type AbstractFieldStyle <: Base.BroadcastStyle end
+
+const LazyField{S <: AbstractFieldStyle} = Base.Broadcast.Broadcasted{S}
+const MaybeLazyField = Union{Field, LazyField}
 
 """
     FieldStyle{DS <: DataStyle}
@@ -17,12 +20,6 @@ struct FieldStyle{DS <: DataStyle} <: AbstractFieldStyle end
 
 FieldStyle(::DS) where {DS <: DataStyle} = FieldStyle{DS}()
 FieldStyle(x::Base.Broadcast.Unknown) = x
-
-# Slicing a DataLayout preserves its layout_type and number of dimensions, so
-# slicing a broadcast expression does not change its style.
-FieldLevelStyle(::Type{S}) where {S <: FieldStyle} = S
-FieldColumnStyle(::Type{S}) where {S <: FieldStyle} = S
-FieldSlabStyle(::Type{S}) where {S <: FieldStyle} = S
 
 Base.Broadcast.BroadcastStyle(::Type{Field{V, S}}) where {V, S} =
     FieldStyle(Base.Broadcast.BroadcastStyle(V))
@@ -62,120 +59,116 @@ Base.Broadcast.result_join(
 # Override the recursive unrolling used in combine_styles (which can lead to
 # inference failures in broadcast expressions with more than 10 arguments) with
 # manual unrolling (which can have higher latency but is always inferrable).
-Base.Broadcast.combine_styles(
-    arg1::Union{Field, Base.Broadcast.Broadcasted{<:AbstractFieldStyle}},
-    arg2,
-    arg3,
-    args...,
-) = unrolled_mapreduce(
-    Base.Broadcast.combine_styles,
-    Base.Broadcast.result_style,
-    (arg1, arg2, arg3, args...),
-)
+Base.Broadcast.combine_styles(arg1::MaybeLazyField, arg2, arg3, args...) =
+    unrolled_mapreduce(
+        Base.Broadcast.combine_styles,
+        Base.Broadcast.result_style,
+        (arg1, arg2, arg3, args...),
+    )
+
+# Base's _axes only supports Tuple values of bc.axes, so broadcasts whose axes
+# are spaces need this additional method.
+Base.Broadcast._axes(::Base.Broadcast.Broadcasted, space::AbstractSpace) = space
 
 # Define broadcastable/broadcasted/newindex/eltype/similar/copy to match
 # DataStyle broadcasting (see broadcast.jl in the DataLayouts module).
 Base.Broadcast.broadcastable(field::Field) =
     Field(Base.Broadcast.broadcastable(field_values(field)), axes(field))
+Base.Broadcast.broadcastable(bc::LazyField) =
+    is_auto_broadcastable(eltype(bc)) ?
+    Base.Broadcast.Broadcasted(bc.style, add_auto_broadcasters, (bc,)) : bc
 
 Base.Broadcast.broadcasted(style::AbstractFieldStyle, f::F, args...) where {F} =
     auto_broadcasted(style, f, args)
 
-Base.Broadcast.newindex(
-    bc::Union{Field, Base.Broadcast.Broadcasted{<:AbstractFieldStyle}},
-    index::Integer,
-) = iszero(ndims(bc)) ? CartesianIndex() : index
+Base.Broadcast.newindex(arg::MaybeLazyField, index::Integer) =
+    iszero(ndims(arg)) ? CartesianIndex() : index
 
-Base.eltype(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
-    unsafe_eltype(bc)
+Base.eltype(bc::LazyField) = unsafe_eltype(bc)
 
-Base.similar(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
-    similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
+Base.similar(bc::LazyField) = similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
 
-Base.copy(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
+Base.copy(bc::LazyField) =
     copyto!(similar(bc), bc; mask = Spaces.get_mask(axes(bc)))
 
-Base.@propagate_inbounds function slab(
-    bc::Base.Broadcast.Broadcasted{Style},
-    inds...,
-) where {Style <: AbstractFieldStyle}
-    _Style = FieldSlabStyle(Style)
-    _args = slab_args(bc.args, inds...)
-    _axes = slab(axes(bc), inds...)
-    Base.Broadcast.Broadcasted{_Style}(bc.f, _args, _axes)
+field_values(bc::Broadcast.Broadcasted) = bc
+@inline field_values(bc::LazyField{FieldStyle{DS}}) where {DS} =
+    Broadcast.Broadcasted{DS}(
+        bc.f,
+        unrolled_tuple_map(
+            arg -> arg isa MaybeLazyField ? field_values(arg) : arg,
+            bc.args,
+        ),
+    )
+
+# Forward size/scope primitives from Base and DataLayouts to the field_values.
+for f in (:size, :length, :ndims)
+    @eval Base.$f(arg::MaybeLazyField) = $f(field_values(arg))
+end
+for f in (:DataScope, :shape_params, :inferred_size, :nelems)
+    @eval DataLayouts.$f(arg::MaybeLazyField) = DataLayouts.$f(field_values(arg))
 end
 
-Base.@propagate_inbounds function level(
-    bc::Base.Broadcast.Broadcasted{Style},
-    inds...,
-) where {Style <: AbstractFieldStyle}
-    _Style = FieldLevelStyle(Style)
-    _args = level_args(bc.args, inds...)
-    _axes = level(axes(bc), inds...)
-    Base.Broadcast.Broadcasted{_Style}(bc.f, _args, _axes)
+@inline DataLayouts.reassign(bc::LazyField, scope) = Broadcast.Broadcasted(
+    bc.style,
+    bc.f,
+    unrolled_tuple_map(
+        arg -> arg isa MaybeLazyField ? DataLayouts.reassign(arg, scope) : arg,
+        bc.args,
+    ),
+    bc.axes,
+)
+
+# Analogue of Broadcast.broadcasted for rebuilding the nodes of an existing
+# broadcast expression from slices of their arguments, skipping the
+# Utilities.auto_broadcasted analysis the expression already went through.
+# Re-running it is not just redundant: starting with Julia 1.11, GPU kernel
+# inference stops constant-folding unsafe_eltype partway down deeply nested
+# operator expressions, turning the slice operators and return_eltype into
+# dynamic calls with runtime allocations in GPU kernels.
+@inline sliced_broadcasted(f::F, args, axes) where {F} =
+    Broadcast.Broadcasted(Broadcast.combine_styles(args...), f, args, axes)
+
+# Body of a slice operator applied to one node of a broadcast expression; a
+# generated function makes slicing a node one method instance rather than three
+# per node per distinct expression type (as in DataLayouts/indexing.jl).
+sliced_broadcast_body(op::Symbol, bc_type) = quote
+    Base.@_propagate_inbounds_meta
+    f = getfield(bc, :f)
+    f′ = f isa Union{Function, Type} ? f : $op(f, inds...)
+    args = getfield(bc, :args)
+    return sliced_broadcasted(
+        f′,
+        Base.Cartesian.@ntuple(
+            $(length(bc_type.parameters[4].parameters)),
+            n -> let arg = getfield(args, n)
+                arg isa MaybeLazyField ? $op(arg, inds...) : arg
+            end,
+        ),
+        $op(bc.axes, inds...),
+    )
 end
 
-Base.@propagate_inbounds function column(
-    bc::Base.Broadcast.Broadcasted{Style},
-    inds...,
-) where {Style <: AbstractFieldStyle}
-    _Style = FieldColumnStyle(Style)
-    _args = column_args(bc.args, inds...)
-    _axes = column(axes(bc), inds...)
-    Base.Broadcast.Broadcasted{_Style}(bc.f, _args, _axes)
+for op in (:level, :slab, :column)
+    @eval @generated $op(bc::LazyField, inds...) =
+        sliced_broadcast_body($(QuoteNode(op)), bc)
 end
-
-# Return underlying DataLayout object, DataStyle of broadcasted
-# for `Base.similar` of a Field
-# _todata_args(args::Tuple) = (todata(args[1]), _todata_args(Base.tail(args))...)
-_todata_args(args::Tuple) =
-    unrolled_map(args) do arg
-        todata(arg)
-    end
-
-todata(obj) = obj
-todata(field::Field) = field_values(field)
-function todata(bc::Base.Broadcast.Broadcasted{FieldStyle{DS}}) where {DS}
-    _args = _todata_args(bc.args)
-    Base.Broadcast.Broadcasted{DS}(bc.f, _args)
-end
-function todata(bc::Base.Broadcast.Broadcasted{Style}) where {Style}
-    _args = _todata_args(bc.args)
-    Base.Broadcast.Broadcasted{Style}(bc.f, _args)
-end
-
-field_values(bc::Base.AbstractBroadcasted) = todata(bc)
 
 # Extend the DataLayout methods of IndexStyle and eachindex to Field broadcasts.
-Base.IndexStyle(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
-    IndexStyle(todata(bc))
-Base.eachindex(
-    arg::Union{Field, Base.Broadcast.Broadcasted{<:AbstractFieldStyle}},
-    args::Union{Field, Base.Broadcast.Broadcasted{<:AbstractFieldStyle}}...,
-) = eachindex(todata(arg), unrolled_map(todata, args)...)
+Base.IndexStyle(bc::LazyField) = IndexStyle(field_values(bc))
+Base.eachindex(arg::MaybeLazyField, args::MaybeLazyField...) =
+    eachindex(field_values(arg), unrolled_tuple_map(field_values, args)...)
 
-# same logic as Base.Broadcast.Broadcasted (which only defines it for Tuples)
-Base.axes(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
-    _axes(bc, bc.axes)
-_axes(bc, ::Nothing) = Base.Broadcast.combine_axes(bc.args...)
-_axes(bc, axes) = axes
+Base.similar(bc::LazyField, ::Type{T}) where {T} = Field(T, axes(bc))
 
-Base.similar(
-    bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle},
-    ::Type{Eltype},
-) where {Eltype} = Field(Eltype, axes(bc))
+# Allocate pointwise broadcast results from the broadcast's own data instead of
+# going through the space, whose coordinate data can be a dynamically-sized view
+# even when the broadcast's layout shape is static.
+Base.similar(bc::LazyField{FieldStyle{DS}}, ::Type{T}) where {DS, T} =
+    Field(similar(field_values(bc), T), axes(bc))
 
-Base.similar(
-    bc::Base.Broadcast.Broadcasted{<:FieldStyle},
-    ::Type{Eltype},
-) where {Eltype} = Field(similar(todata(bc), Eltype), axes(bc))
-
-@inline function Base.copyto!(
-    dest::Field,
-    bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle};
-    mask = get_mask(axes(dest)),
-)
-    copyto!(field_values(dest), Base.Broadcast.instantiate(todata(bc)); mask)
+@inline function Base.copyto!(dest::Field, bc::LazyField; mask = get_mask(axes(dest)))
+    copyto!(field_values(dest), Base.Broadcast.instantiate(field_values(bc)); mask)
     return dest
 end
 
@@ -189,12 +182,12 @@ function Base.copyto!(
 ) where {N, T <: NTuple{N, Pair{<:Field, <:Any}}}
     fmb_data = FusedMultiBroadcast(
         map(fmbc.pairs) do pair
-            bc = Base.Broadcast.instantiate(todata(pair.second))
+            bc = Base.Broadcast.instantiate(field_values(pair.second))
             Pair(field_values(pair.first), bc)
         end,
     )
     check_mismatched_spaces(fmbc)
-    Base.copyto!(fmb_data; mask)
+    copyto!(fmb_data; mask)
 end
 
 @inline check_mismatched_spaces(fmbc::FusedMultiBroadcast) =
@@ -309,7 +302,7 @@ end
 Base.Broadcast.broadcasted(
     ::typeof(Base.literal_pow),
     ::typeof(^),
-    f::Union{Field, Base.Broadcast.Broadcasted{<:AbstractFieldStyle}},
+    f::MaybeLazyField,
     ::Val{n},
 ) where {n} = Base.Broadcast.broadcasted(x -> Base.literal_pow(^, x, Val(n)), f)
 
@@ -407,7 +400,7 @@ function Base.copyto!(
     bc::Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}},
 )
     mask = get_mask(axes(field))
-    copyto!(field_values(field), todata(bc); mask)
+    copyto!(field_values(field), bc; mask)
     return field
 end
 function Base.copyto!(
@@ -415,7 +408,7 @@ function Base.copyto!(
     bc::Base.Broadcast.Broadcasted{Base.Broadcast.Style{Tuple}},
 )
     mask = get_mask(axes(field))
-    copyto!(field_values(field), todata(bc); mask)
+    copyto!(field_values(field), bc; mask)
     return field
 end
 

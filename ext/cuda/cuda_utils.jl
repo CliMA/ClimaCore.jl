@@ -135,7 +135,13 @@ end
 # cudaOccMaxPotentialOccupancyBlockSize times the maximum number of waves,
 # optimized for single-stream execution of both small and large workloads
 # https://gitlab.com/nvidia/headers/cuda-individual/cudart/-/blob/main/cuda_occupancy.h#L1865-1965
-function uncached_launch_configuration(cu_func, strict, default_max_waves, config_args...)
+function uncached_launch_configuration(
+    cu_func,
+    strict,
+    default_max_waves,
+    default_granularity,
+    config_args...,
+)
     attrs = device_attributes()
     cu_func_attrs = CUDA.attributes(cu_func)
     regs_per_thread = Int(cu_func_attrs[CUDA.FUNC_ATTRIBUTE_NUM_REGS])
@@ -168,6 +174,24 @@ function uncached_launch_configuration(cu_func, strict, default_max_waves, confi
     # was costing more in block-scheduling than it recovered.
     max_waves = something(default_max_waves, 1)
 
+    # Block sizes are searched in whole multiples of this unit, one warp unless
+    # a caller needs a coarser one: a partially populated sub-block skips the
+    # points of the threads it is missing (see subscope_launch_threads). The
+    # unit is clamped to the largest launchable block, so the search always has
+    # a candidate.
+    granularity = max(something(default_granularity, 0), attrs.threads_per_warp)
+    unit = min(granularity, max_threads_per_block)
+
+    # A warp-unit caller also gets the largest launchable block even when it is
+    # not a whole number of warps (matching CUDA's own search); only a caller
+    # that asked for a coarser unit needs the clamped candidate dropped, since
+    # a non-whole block is not merely suboptimal for it but incorrect.
+    block_sizes =
+        isnothing(default_granularity) ?
+        (
+            min(units * unit, max_threads_per_block) for
+            units in 1:cld(max_threads_per_block, unit)
+        ) : (units * unit for units in 1:fld(max_threads_per_block, unit))
     # Iterating from small to large block sizes, prefer configurations with more
     # total threads; on ties, prefer larger blocks (fewer blocks means less
     # block-scheduling latency), but never accept a new configuration with fewer
@@ -175,9 +199,7 @@ function uncached_launch_configuration(cu_func, strict, default_max_waves, confi
     # spreads small workloads across as many multiprocessors as possible, while
     # also confining large workloads to as few blocks as possible.
     (best_threads_per_block, best_num_blocks, best_limit) = (0, 0, :user)
-    for warps_per_block in 1:cld(max_threads_per_block, attrs.threads_per_warp)
-        threads_per_block =
-            min(warps_per_block * attrs.threads_per_warp, max_threads_per_block)
+    for threads_per_block in block_sizes
         (max_blocks_per_wave, active_blocks_limit) =
             max_active_blocks(threads_per_block, regs_per_thread, shmem_per_block)
         user_max_blocks = get_user_max_blocks(threads_per_block, config_args...)
@@ -192,8 +214,11 @@ function uncached_launch_configuration(cu_func, strict, default_max_waves, confi
         end
     end
 
-    # Compare searches unaffected by config_args against CUDA's implementation.
-    if DataLayouts.VALIDATE_LAUNCH_CONFIGURATIONS[] && user_constraints_ignorable
+    # Compare searches unaffected by config_args against CUDA's implementation,
+    # which only ever considers whole warps.
+    if DataLayouts.VALIDATE_LAUNCH_CONFIGURATIONS[] &&
+       user_constraints_ignorable &&
+       isnothing(default_granularity)
         min_blocks_per_wave = cld(best_num_blocks, max_waves)
         cuda_config = (; blocks = min_blocks_per_wave, threads = best_threads_per_block)
         @assert CUDA.launch_configuration(cu_func) == cuda_config
@@ -232,6 +257,12 @@ as possible. While `CUDA.launch_configuration` and its underlying C function
     and grid dimensions of the launch configuration are individually limited
     (similar to CUDA's implementation, but with the addition of `max_blocks`).
 
+A `granularity` may also be specified, in which case only block sizes that are
+whole multiples of it are considered. This defaults to the warp size, which is
+the smallest unit a block can usefully be made of; a loop that hands each slice
+to a sub-block needs the coarser unit of one sub-block (see
+`DataLayouts.subscope_launch_threads`).
+
 In each case, `max_waves` can be specified to control how many waves of blocks
 are scheduled. Kernels with uneven load distributions (e.g., due to conditional
 branches or nonuniform memory accesses) may require multiple waves to prevent
@@ -262,9 +293,10 @@ function launch_configuration(
     config_args...;
     strict = true,
     max_waves = nothing,
+    granularity = nothing,
 ) where {F}
     cu_func = (CUDA.@cuda always_inline = true launch = false f(args...)).fun
-    cache_key = (cu_func, strict, max_waves, config_args...)
+    cache_key = (cu_func, strict, max_waves, granularity, config_args...)
     lock(LAUNCH_CONFIGURATION_CACHE_LOCK)
     try
         return get!(LAUNCH_CONFIGURATION_CACHE, cache_key) do

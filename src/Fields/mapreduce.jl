@@ -27,7 +27,7 @@ function local_sum(
         Base.Broadcast.broadcasted(
             *,
             Spaces.weighted_jacobian(axes(field)),
-            todata(field),
+            field_values(field),
         ),
     )
     call_post_op_callback() && post_op_callback(result, field, dev)
@@ -79,7 +79,7 @@ If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
 """
 function Base.maximum(fn, field::Field, ::ClimaComms.AbstractDevice)
     context = ClimaComms.context(axes(field))
-    data_max = scalar_data(mapreduce(fn, max, todata(field)))
+    data_max = scalar_data(mapreduce(fn, max, field_values(field)))
     ClimaComms.allreduce!(context, parent(data_max), max)
     return data_max[]
 end
@@ -91,7 +91,7 @@ Base.maximum(field::Field) = Base.maximum(field, ClimaComms.device(field))
 
 function Base.minimum(fn, field::Field, ::ClimaComms.AbstractDevice)
     context = ClimaComms.context(axes(field))
-    data_min = scalar_data(mapreduce(fn, min, todata(field)))
+    data_min = scalar_data(mapreduce(fn, min, field_values(field)))
     ClimaComms.allreduce!(context, parent(data_min), min)
     return data_min[]
 end

@@ -4,6 +4,7 @@ using ..Utilities: AutoBroadcaster, nested_broadcast, nested_broadcast_result_ty
 import LinearAlgebra: dot, norm, norm_sqr, cross, UniformScaling, Adjoint
 import Random
 using StaticArrays, UnrolledUtilities
+import ..Utilities.Unrolled: unrolled_tuple_map
 
 export ⊗
 export UVector, VVector, WVector, UVVector, UWVector, VWVector, UVWVector

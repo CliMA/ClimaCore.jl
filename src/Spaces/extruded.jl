@@ -203,6 +203,7 @@ _level_space(
 
 Base.@propagate_inbounds slab(space::ExtrudedFiniteDifferenceSpace, v, h) =
     SpectralElementSpaceSlab(
+        ClimaComms.context(space),
         quadrature_style(space),
         slab(local_geometry_data(space), integer_level_index(space, v), h),
     )

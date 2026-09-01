@@ -119,13 +119,20 @@ Adapt.adapt_structure(to, space::SpectralElementSpace2D) =
 
 A view into a `SpectralElementSpace2D` for a single slab.
 """
-struct SpectralElementSpaceSlab{Q, G} <: AbstractSpectralElementSpace
+struct SpectralElementSpaceSlab{C, Q, G} <: AbstractSpectralElementSpace
+    context::C
     quadrature_style::Q
     local_geometry::G
 end
 
-local_geometry_type(::Type{SpectralElementSpaceSlab{Q, G}}) where {Q, G} =
+local_geometry_type(::Type{SpectralElementSpaceSlab{<:Any, <:Any, G}}) where {G} =
     eltype(G) # calls eltype from DataLayouts
+
+ClimaComms.device(space::SpectralElementSpaceSlab) = ClimaComms.device(space.context)
+ClimaComms.context(space::SpectralElementSpaceSlab) = space.context
+
+quadrature_style(space::SpectralElementSpaceSlab) = space.quadrature_style
+local_geometry_data(space::SpectralElementSpaceSlab) = space.local_geometry
 
 issubspace(space1::SpectralElementSpaceSlab, space2::SpectralElementSpaceSlab) =
     space1 == space2
@@ -138,7 +145,11 @@ level(space::AbstractSpectralElementSpace, v) =
 Base.@propagate_inbounds slab(space::AbstractSpectralElementSpace, v, h) =
     isone(v) ? slab(space, h) : throw(ArgumentError("Space has only one level"))
 Base.@propagate_inbounds slab(space::AbstractSpectralElementSpace, h) =
-    SpectralElementSpaceSlab(quadrature_style(space), slab(local_geometry_data(space), h))
+    SpectralElementSpaceSlab(
+        ClimaComms.context(space),
+        quadrature_style(space),
+        slab(local_geometry_data(space), h),
+    )
 
 Base.@propagate_inbounds column(space::AbstractSpectralElementSpace, indices...) =
     PointSpace(ClimaComms.context(space), column(local_geometry_data(space), indices...))

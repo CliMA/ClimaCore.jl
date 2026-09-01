@@ -23,10 +23,15 @@ end
 
 @testset "Highly nested AutoBroadcasters" begin
     FT = Float64
+    # Coverage instrumentation is superlinear in the compiled function sizes
+    # these depths produce (511 s at 20/10/5 vs 60 s at 16/8/4 on Julia 1.10),
+    # so the instrumented job runs the same testset at reduced depths, still
+    # well above the nesting that trips an unlifted recursion limit.
+    (d1, d2, d3) = Base.JLOptions().code_coverage == 0 ? (20, 10, 5) : (16, 8, 4)
     for T in (
-        typeof(∘(ntuple(Returns(tup -> (tup,)), 20)...)(zero(FT))),
-        typeof(∘(ntuple(Returns(tup -> (tup, tup)), 10)...)(zero(FT))),
-        typeof(∘(ntuple(Returns(tup -> (tup, tup, tup)), 5)...)(zero(FT))),
+        typeof(∘(ntuple(Returns(tup -> (tup,)), d1)...)(zero(FT))),
+        typeof(∘(ntuple(Returns(tup -> (tup, tup)), d2)...)(zero(FT))),
+        typeof(∘(ntuple(Returns(tup -> (tup, tup, tup)), d3)...)(zero(FT))),
         NamedTuple{
             (:ρ, :uₕ, :ρe_tot, :ρq_tot, :sgs⁰, :sgsʲs),
             Tuple{

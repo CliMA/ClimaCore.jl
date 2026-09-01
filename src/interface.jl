@@ -2,53 +2,38 @@
 import ..Utilities.Unrolled: unrolled_map_with_inbounds
 
 """
+    level(data, v)
+
+Horizontal view of `data` at level `v`, spanning all elements in that level.
+"""
+function level end
+
+"""
     slab(data, v, h)
     slab(data, h)
 
-A "pancake" view into an underlying data layout `data` at level `v` and
-horizontal element `h`. If `v` is omitted, it is assumed to be 1.
+Horizontal view of `data` at level `v` and horizontal element `h`. If `v` is
+omitted, it is assumed to be 1.
 """
 function slab end
-
-# generic fallback
-Base.@propagate_inbounds slab(x, inds...) = x
-Base.@propagate_inbounds slab(tup::Tuple, inds...) = slab_args(tup, inds...)
-
-Base.@propagate_inbounds slab_args(args::Tuple, inds...) =
-    unrolled_map_with_inbounds(args) do arg
-        Base.@_propagate_inbounds_meta
-        slab(arg, inds...)
-    end
-Base.@propagate_inbounds slab_args(args::NamedTuple, inds...) =
-    NamedTuple{keys(args)}(slab_args(values(args), inds...))
 
 """
     column(data, i, j, h)
     column(data, i, h)
 
-A contiguous "column" view into an underlying data layout `data` at nodal point
-index `(i, j)` of horizontal element `h`. If `j` is omitted, it is assumed to
-be 1.
+Vertical view of `data` at nodal point index `(i, j)` of horizontal element `h`.
+If `j` is omitted, it is assumed to be 1.
 """
 function column end
 
-# generic fallback
-Base.@propagate_inbounds column(x, inds...) = x
-Base.@propagate_inbounds column(tup::Tuple, inds...) = column_args(tup, inds...)
-
-Base.@propagate_inbounds column_args(args::Tuple, inds...) =
-    unrolled_map_with_inbounds(args) do arg
-        Base.@_propagate_inbounds_meta
-        column(arg, inds...)
-    end
-Base.@propagate_inbounds column_args(args::NamedTuple, inds...) =
-    NamedTuple{keys(args)}(column_args(values(args), inds...))
-
-function level end
-
-Base.@propagate_inbounds level(x, inds...) = x
-Base.@propagate_inbounds level_args(args::Tuple, inds...) =
-    unrolled_map_with_inbounds(args) do arg
-        Base.@_propagate_inbounds_meta
-        level(arg, inds...)
-    end
+for op in (:level, :slab, :column)
+    @eval $op(n::Number, inds...) = n
+    @eval $op(::Nothing, inds...) = nothing
+    @eval Base.@propagate_inbounds $op(t::Tuple, inds...) =
+        unrolled_map_with_inbounds(t) do x
+            Base.@_propagate_inbounds_meta
+            $op(x, inds...)
+        end
+    @eval Base.@propagate_inbounds $op(nt::NamedTuple, inds...) =
+        NamedTuple{keys(nt)}($op(values(nt), inds...))
+end
