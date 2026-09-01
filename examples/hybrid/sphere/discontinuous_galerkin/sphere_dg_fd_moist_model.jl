@@ -219,6 +219,15 @@ topo in ("flat", "hj", "earth") || error("TOPO must be flat, hj, or earth")
 # flat/hj (and GPU production) runs stay lean.
 topo == "earth" && include(joinpath(@__DIR__, "earth_topography.jl"))
 const hj_h0 = parse(FT, get(ENV, "MTN_HEIGHT", "2000"))  # peak elevation [m]
+# WARP = linear (Gal–Chen, default) | sleve (Schär 2002 exponential decay).
+# SLEVE decays the warp below η = SLEVE_ETAH with decay scale SLEVE_S (must
+# satisfy s·z_top > max z_surface, enforced by Hypsography). NOTE: SLEVE
+# concentrates ∂η(slope) in thinner near-surface cells — check the printed
+# min Δz against the vertical acoustic CFL before keeping DT.
+const warp_type = lowercase(get(ENV, "WARP", "linear"))
+warp_type in ("linear", "sleve") || error("WARP must be linear or sleve")
+const sleve_ηₕ = parse(FT, get(ENV, "SLEVE_ETAH", "0.7"))
+const sleve_s = parse(FT, get(ENV, "SLEVE_S", "0.8"))
 const hj_dφ = FT(16)   # meridional width [deg] (super-Gaussian, exponent 6)
 const hj_dλ = FT(7)    # zonal width [deg] (Gaussian, exponent 2)
 
@@ -280,13 +289,24 @@ function sphere_hv_spaces()
             topo == "earth" ?
             Geometry.ZPoint.(earth_z_surface(horzspace)) :
             Geometry.ZPoint.(warp_hj.(Fields.coordinate_field(horzspace)))
+        adaption =
+            warp_type == "sleve" ?
+            Hypsography.SLEVEAdaption(z_surface, sleve_ηₕ, sleve_s) :
+            Hypsography.LinearAdaption(z_surface)
         hv_face_space = Spaces.ExtrudedFiniteDifferenceSpace(
             horzspace,
             vert_face_space,
-            Hypsography.LinearAdaption(z_surface),
+            adaption,
         )
         hv_center_space =
             Spaces.CenterExtrudedFiniteDifferenceSpace(hv_face_space)
+        # Grid health over terrain: the warp thins the near-surface cells
+        # (SLEVE especially), and min Δz sets the explicit vertical acoustic
+        # CFL — surface Δz below the flat-grid value means DT must shrink
+        # proportionally, independent of any discretization property.
+        Δz_f = Fields.Δz_field(hv_center_space)
+        @info "warped grid health" warp_type min_Δz = minimum(Δz_f) max_Δz =
+            maximum(Δz_f)
     end
     return (horzspace, hv_center_space, hv_face_space)
 end

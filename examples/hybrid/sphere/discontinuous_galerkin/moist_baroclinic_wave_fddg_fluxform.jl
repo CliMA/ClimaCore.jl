@@ -407,21 +407,38 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
         @. dYc.ρu3 += ρ * (pgfE * eE3 + pgfN * eN3)
     end
 
-    # --- Vertical FD (plane flux-form pattern; implicit under HEVI) ---
+    # --- Vertical FD (plane flux-form pattern; implicit under HEVI).
+    #     The face flux is the TOTAL momentum so its Contravariant3 projection
+    #     (taken inside vdivf2c/VanLeer with the face local geometry) carries
+    #     the terrain cross-term ρuₕ·∇ₓξ³: the horizontal FDDG rows (Ja¹, Ja²)
+    #     act along tilted coordinate surfaces and the discrete GCL pairing
+    #     Σᵢ Dᵢ(Jaⁱ) = 0 closes only with the full CT3 flux in the vertical
+    #     family. A w-only vertical flux leaves the spurious source
+    #     −(1/J)∂_η(J ∂ξ³∂x·ρuₕ) — small for gentle Gal–Chen warps, fatal
+    #     under SLEVE (∂_η of the slope is ~4× larger and concentrated in the
+    #     thinned near-surface cells). Over flat topography ∂ξ³/∂x ≡ 0, so the
+    #     cross entries multiply exact zeros and nothing changes. ---
+    ᶠρuE = @. If(ρ * uE)
+    ᶠρuN = @. If(ρ * uN)
+    ᶠM = @. Geometry.UVWVector(ᶠρuE, ᶠρuN, ρw_w.components.data.:1)
     if vertical_transport
-        @. dYc.ρ -= vdivf2c(ρw_w)
-        @. dYc.ρe -= vdivf2c(VanLeer(ρw_w, h_tot, Δt_ref[]))
+        @. dYc.ρ -= vdivf2c(ᶠM)
+        @. dYc.ρe -= vdivf2c(VanLeer(ᶠM, h_tot, Δt_ref[]))
     else
-        # mass flux is fully implicit (linear); energy gets the explicit
-        # (VanLeer − central) correction so the HEVI total is Lin-VanLeer
+        # the ρw (acoustic) part of the mass flux is fully implicit (linear);
+        # the advective uₕ cross-term rides explicit. Energy gets the explicit
+        # (VanLeer(total) − central(ρw)) correction so the HEVI total is
+        # Lin-VanLeer on the total flux.
+        ᶠMcross = @. Geometry.UVWVector(ᶠρuE, ᶠρuN, zero(ᶠρuE))
+        @. dYc.ρ -= vdivf2c(ᶠMcross)
         @. dYc.ρe -=
-            vdivf2c(VanLeer(ρw_w, h_tot, Δt_ref[])) - vdivf2c(ρw_w * If(h_tot))
+            vdivf2c(VanLeer(ᶠM, h_tot, Δt_ref[])) - vdivf2c(ρw_w * If(h_tot))
     end
-    @. dYc.ρu1 -= vdivf2c(VanLeer(ρw_w, u1, Δt_ref[]))
-    @. dYc.ρu2 -= vdivf2c(VanLeer(ρw_w, u2, Δt_ref[]))
-    @. dYc.ρu3 -= vdivf2c(VanLeer(ρw_w, u3, Δt_ref[]))
+    @. dYc.ρu1 -= vdivf2c(VanLeer(ᶠM, u1, Δt_ref[]))
+    @. dYc.ρu2 -= vdivf2c(VanLeer(ᶠM, u2, Δt_ref[]))
+    @. dYc.ρu3 -= vdivf2c(VanLeer(ᶠM, u3, Δt_ref[]))
     # Vertical moisture transport: monotone Lin-VanLeer of q_tot on the mass flux.
-    @. dYc.ρq_tot -= vdivf2c(VanLeer(ρw_w, q_tot, Δt_ref[]))
+    @. dYc.ρq_tot -= vdivf2c(VanLeer(ᶠM, q_tot, Δt_ref[]))
 
     # --- 0-moment microphysics (CloudMicrophysics.jl): instantaneous removal of
     #     condensate above the threshold as precipitation. S ≤ 0 [1/s] is the
@@ -474,7 +491,8 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
 
     # --- ρw: pressure gradient + buoyancy (discretely balanced pair,
     #     implicit under HEVI), vertical advection, horizontal DG
-    #     advection, sponge ---
+    #     advection, sponge. Vertical self-advection uses the same TOTAL
+    #     mass flux ᶠM (terrain cross-term) as the center transports. ---
     w = @. ρw_w / If(ρ)
     if vertical_transport
         if pgf == :exner
@@ -484,25 +502,25 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
                 -If(ρ) *
                 cp_d *
                 (If(θ) * ᶠgradᵥ(Πp) + If(θp) * ᶠgradᵥ(ᶜΠ_ref)) -
-                C3(vvdivc2f(Ic(ρw_w ⊗ w)), lgeom_f),
+                C3(vvdivc2f(Ic(ᶠM ⊗ w)), lgeom_f),
             )
         elseif pgf == :conservative
             # Conservative full-p pressure gradient + gravity (balanced pair;
             # relies on the discrete-hydrostatic IC, i.e. REBALANCE=1).
             @. dρw = Bw(
                 -(ᶠgradᵥ(p) + If(ρ) * ᶠgradᵥ(ᶜΦ)) -
-                C3(vvdivc2f(Ic(ρw_w ⊗ w)), lgeom_f),
+                C3(vvdivc2f(Ic(ᶠM ⊗ w)), lgeom_f),
             )
         else
             # Stratified conservative: −∂_ξ³ p' − (ρ−ρ_ref) g (buoyancy pair),
             # pm = p'. Differences the small p' ⇒ well-balanced over terrain.
             @. dρw = Bw(
                 -(ᶠgradᵥ(pm) + If(ρ - ᶜρ_ref) * ᶠgradᵥ(ᶜΦ)) -
-                C3(vvdivc2f(Ic(ρw_w ⊗ w)), lgeom_f),
+                C3(vvdivc2f(Ic(ᶠM ⊗ w)), lgeom_f),
             )
         end
     else
-        @. dρw = Bw(-C3(vvdivc2f(Ic(ρw_w ⊗ w)), lgeom_f))
+        @. dρw = Bw(-C3(vvdivc2f(Ic(ᶠM ⊗ w)), lgeom_f))
     end
     ρw_sc = @. ρw_w.components.data.:1
     uvf = @. If(uv)
@@ -601,6 +619,16 @@ rhs_fddg!(dY, Y, nothing, FT(0))
     maximum(abs, parent(dY.Yc.ρu2)),
     maximum(abs, parent(dY.Yc.ρu3)),
 ) max_dρw = maximum(abs, parent(dY.ρw))
+# DIAG_LEVELS=1: per-level max|dρ| of the initial RHS. Separates the interior
+# metric/truncation residual from the bottom-cell impermeability transient
+# (balanced flow has u·∇h ≠ 0 at the surface — a REAL divergence confined to
+# the lowest cell by the SetValue(0) boundary flux stencil).
+if get(ENV, "DIAG_LEVELS", "0") == "1"
+    let A = parent(Fields.field_values(dY.Yc.ρ))
+        lvl = vec(maximum(abs, A; dims = (2, 3, 4, 5)))
+        println("per-level max|dρ| (bottom → top): ", join(lvl, ", "))
+    end
+end
 
 const ndiag = parse(Int, get(ENV, "NDIAG", "150"))
 
