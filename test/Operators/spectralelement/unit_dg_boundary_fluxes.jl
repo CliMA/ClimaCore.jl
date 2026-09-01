@@ -21,7 +21,7 @@ import ClimaCore:
 import .TestUtilities as TU
 
 # `add_numerical_flux_boundary!`, the boundary-face counterpart of
-# `add_numerical_flux_internal!`, on a channel domain (periodic in x, walls at
+# `add_numerical_flux_interior!`, on a channel domain (periodic in x, walls at
 # y = ±Ly/2). The interior-face path is covered elsewhere, on boundary-free
 # domains:
 #

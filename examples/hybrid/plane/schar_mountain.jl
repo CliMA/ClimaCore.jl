@@ -163,9 +163,9 @@ function rhs_invariant!(dY, Y, _, t)
     # 0) update w at the bottom
 
     hdiv = Operators.Divergence()
-    hwdiv = Operators.WeakDivergence()
+    hwdiv = Operators.Divergence{Operators.WeakForm}()
     hgrad = Operators.Gradient()
-    hwgrad = Operators.WeakGradient()
+    hwgrad = Operators.Gradient{Operators.WeakForm}()
     hcurl = Operators.Curl()
 
     # get u_cov at first interior cell center

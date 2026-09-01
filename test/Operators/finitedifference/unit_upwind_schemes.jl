@@ -36,10 +36,10 @@ import ClimaCore:
         step_f = @. ifelse(zf < 0, FT(1), FT(0))
 
         # Operators: 1st order biased C2F and F2C
-        left_c2f = Operators.LeftBiasedC2F(bottom = Operators.SetValue(FT(1)))
-        right_c2f = Operators.RightBiasedC2F(top = Operators.SetValue(FT(0)))
-        left_f2c = Operators.LeftBiasedF2C(bottom = Operators.SetValue(FT(1)))
-        right_f2c = Operators.RightBiasedF2C(top = Operators.SetValue(FT(0)))
+        left_c2f = Operators.BottomBiasedC2F(bottom = Operators.SetValue(FT(1)))
+        right_c2f = Operators.TopBiasedC2F(top = Operators.SetValue(FT(0)))
+        left_f2c = Operators.BottomBiasedF2C(bottom = Operators.SetValue(FT(1)))
+        right_f2c = Operators.TopBiasedF2C(top = Operators.SetValue(FT(0)))
 
         # A. Monotonicity / Boundedness on step function: 0 <= result <= 1
         res_left_c2f = left_c2f.(step_c)
@@ -109,10 +109,10 @@ import ClimaCore:
         @test parent(flux_neg) ≈ -parent(res_right_c2f)
 
         # C. Constant preservation: biased interpolation of 1 is 1
-        left_c2f_const = Operators.LeftBiasedC2F(bottom = Operators.SetValue(FT(1)))
-        right_c2f_const = Operators.RightBiasedC2F(top = Operators.SetValue(FT(1)))
-        left_f2c_const = Operators.LeftBiasedF2C(bottom = Operators.SetValue(FT(1)))
-        right_f2c_const = Operators.RightBiasedF2C(top = Operators.SetValue(FT(1)))
+        left_c2f_const = Operators.BottomBiasedC2F(bottom = Operators.SetValue(FT(1)))
+        right_c2f_const = Operators.TopBiasedC2F(top = Operators.SetValue(FT(1)))
+        left_f2c_const = Operators.BottomBiasedF2C(bottom = Operators.SetValue(FT(1)))
+        right_f2c_const = Operators.TopBiasedF2C(top = Operators.SetValue(FT(1)))
 
         ones_c = ones(center_space)
         ones_f = ones(face_space)
@@ -393,6 +393,22 @@ end
         # The deprecated one-sided conditions are aliases for Extrapolate
         @test Operators.FirstOrderOneSided() === Operators.Extrapolate(0)
         @test Operators.ThirdOrderOneSided() === Operators.Extrapolate(1)
+
+        # Outflow is a physically named convenience constructor for Extrapolate
+        @test Operators.Outflow() === Operators.Extrapolate{0}()
+        @test Operators.Outflow(; order = 2) === Operators.Extrapolate{2}()
+        # applying an operator built with Outflow reproduces Extrapolate exactly
+        w_outflow = @. Geometry.WVector(FT(1) + zface / 2)
+        op_outflow = Operators.UpwindBiasedProductC2F(;
+            bottom = Operators.Outflow(),
+            top = Operators.Outflow(),
+        )
+        op_extrapolate = Operators.UpwindBiasedProductC2F(;
+            bottom = Operators.Extrapolate(),
+            top = Operators.Extrapolate(),
+        )
+        @test parent(op_outflow.(w_outflow, θ)) ==
+              parent(op_extrapolate.(w_outflow, θ))
 
         # Extrapolate{0} is added to `bcs` by default when no boundary
         # conditions are given

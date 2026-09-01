@@ -53,10 +53,10 @@ dg_central_flux_uv(normal, (uv⁻,), (uv⁺,)) = ((uv⁻ + uv⁺) / 2)' * normal
 function dg_divergence(uv)
     space = axes(uv)
     lgeom = Fields.local_geometry_field(space)
-    hwdiv = Operators.WeakDivergence()
+    hwdiv = Operators.Divergence{Operators.WeakForm}()
     F = Geometry.transform.(Ref(Geometry.Contravariant12Axis()), uv)
     r = @. hwdiv(F) * (-(lgeom.WJ))
-    Operators.add_numerical_flux_internal!(dg_central_flux_uv, r, uv)
+    Operators.add_numerical_flux_interior!(dg_central_flux_uv, r, uv)
     return @. -r / lgeom.WJ
 end
 

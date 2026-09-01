@@ -25,7 +25,7 @@ include("utils_dg.jl")  # dg_sphere_space, sw_flux, sw_wavespeed, sw_roeflux
 #   1. Consistency: dissipation vanishes on single-valued (continuous) fields
 #   2. Conservation: single-valued interface fluxes sum globally to zero for conserved scalars (ρ, ρθ)
 #   3. Dual precision: Float32 and Float64
-# (The zero-allocation sentinel for `add_numerical_flux_internal!` lives in
+# (The zero-allocation sentinel for `add_numerical_flux_interior!` lives in
 # unit_sphere_dg_fluxes.jl.)
 
 @testset "Two-Point DG Numerical Fluxes on the Sphere" begin
@@ -58,13 +58,13 @@ include("utils_dg.jl")  # dg_sphere_space, sw_flux, sw_wavespeed, sw_roeflux
                 y = base_test_state()
                 rc = similar(y)
                 fill!(parent(rc), 0)
-                Operators.add_numerical_flux_internal!(central, rc, y, params)
+                Operators.add_numerical_flux_interior!(central, rc, y, params)
                 scale = maximum(abs, parent(rc))
 
                 for numflux in (rusanov, roe)
                     r = similar(y)
                     fill!(parent(r), 0)
-                    Operators.add_numerical_flux_internal!(numflux, r, y, params)
+                    Operators.add_numerical_flux_interior!(numflux, r, y, params)
                     tol = 100 * eps(FT)
                     @test maximum(abs, parent(r) .- parent(rc)) < tol * scale
                 end
@@ -80,7 +80,7 @@ include("utils_dg.jl")  # dg_sphere_space, sw_flux, sw_wavespeed, sw_roeflux
                 for numflux in (central, rusanov, roe)
                     r = similar(y)
                     fill!(parent(r), 0)
-                    Operators.add_numerical_flux_internal!(numflux, r, y, params)
+                    Operators.add_numerical_flux_interior!(numflux, r, y, params)
                     tol = 100 * eps(FT)
                     for comp in (r.ρ, r.ρθ)
                         scale = sum(abs, parent(comp))

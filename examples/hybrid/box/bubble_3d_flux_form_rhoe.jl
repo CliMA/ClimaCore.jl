@@ -196,7 +196,7 @@ function rhs!(dY, Y, _, t)
     # Spectral horizontal operators. The weak divergence is the adjoint of the
     # gradient, so flux divergences built from it conserve the transported
     # quantity to roundoff on this periodic domain.
-    hwdiv = Operators.WeakDivergence()
+    hwdiv = Operators.Divergence{Operators.WeakForm}()
     hgrad = Operators.Gradient()
 
     # Vertical finite difference operators, with no flux through the

@@ -24,7 +24,7 @@ both discretizations.
 function scalar_laplacian(χ; weight = nothing)
     space = axes(χ)
     if Spaces.is_continuous(space)
-        wdiv = WeakDivergence()
+        wdiv = Divergence{WeakForm}()
         grad = Gradient()
         return isnothing(weight) ? lazy.(wdiv.(grad.(χ))) :
                lazy.(wdiv.(weight .* grad.(χ)))
@@ -64,7 +64,7 @@ function vector_laplacian(u; divergence_factor = 1)
          grad-div/curl-curl face lifting",
     )
     div = Divergence()
-    wgrad = WeakGradient()
+    wgrad = Gradient{WeakForm}()
     graddiv = lazy.(wgrad.(div.(u)))
     isone(divergence_factor) ||
         (graddiv = lazy.(divergence_factor .* graddiv))
@@ -75,7 +75,7 @@ function vector_laplacian(u; divergence_factor = 1)
         return lazy.(Geometry.Covariant12Vector.(graddiv))
     end
     curl = Curl()
-    wcurl = WeakCurl()
+    wcurl = Curl{WeakForm}()
     curlcurl = lazy.(
         Geometry.Covariant12Vector.(
             wcurl.(Geometry.Covariant3Vector.(curl.(u))),

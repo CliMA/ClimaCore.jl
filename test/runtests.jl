@@ -91,7 +91,7 @@ unit_tests = [
     UnitTest("Spectral elem - sphere hyperdiff vec"     ,"Operators/spectralelement/unit_sphere_hyperdiffusion_vec.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - sphere hyperdiff vec conv" ,"Operators/spectralelement/conv_sphere_hyperdiffusion_vec.jl"; tier = :conv, subsystem = :operators),
     UnitTest("Spectral elem - over-integration"         ,"Operators/spectralelement/unit_overintegration.jl"; meta = :cpu_only, tier = :unit, subsystem = :operators),
-    # `add_numerical_flux_internal!`/`_boundary!` walk faces in a host loop and
+    # `add_numerical_flux_interior!`/`_boundary!` walk faces in a host loop and
     # scalar-index the data, so tests built on them either wrap the calls in a
     # scoped `allowscalar` (the two below) or are :cpu_only (the three after).
     UnitTest("Spectral elem - DG two-point fluxes"      ,"Operators/spectralelement/unit_two_point_fluxes.jl"; tier = :unit, subsystem = :operators),

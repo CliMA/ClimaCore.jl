@@ -24,13 +24,13 @@ function opt_WeightedInterpolateF2C(weights, face_field)
     return identity.(WI.(weights, face_field))
 end
 
-function opt_LeftBiasedF2C(face_field)
-    LB = Operators.LeftBiasedF2C(left = Operators.SetValue(0.0))
+function opt_BottomBiasedF2C(face_field)
+    LB = Operators.BottomBiasedF2C(left = Operators.SetValue(0.0))
     return LB.(identity.(face_field))
 end
 
-function opt_RightBiasedF2C(face_field)
-    RB = Operators.RightBiasedF2C(right = Operators.SetValue(0.0))
+function opt_TopBiasedF2C(face_field)
+    RB = Operators.TopBiasedF2C(right = Operators.SetValue(0.0))
     return RB.(identity.(face_field))
 end
 
@@ -84,13 +84,13 @@ function opt_WeightedInterpolateC2F_Extrapolate(weights, center_field)
     return identity.(WI.(weights, center_field))
 end
 
-function opt_LeftBiasedC2F(center_field)
-    LB = Operators.LeftBiasedC2F(left = Operators.SetValue(0.0))
+function opt_BottomBiasedC2F(center_field)
+    LB = Operators.BottomBiasedC2F(left = Operators.SetValue(0.0))
     return LB.(identity.(center_field))
 end
 
-function opt_RightBiasedC2F(center_field)
-    RB = Operators.RightBiasedC2F(right = Operators.SetValue(0.0))
+function opt_TopBiasedC2F(center_field)
+    RB = Operators.TopBiasedC2F(right = Operators.SetValue(0.0))
     return RB.(identity.(center_field))
 end
 
@@ -186,8 +186,8 @@ end
             @test_opt opt_InterpolateF2C(faces)
             @test_opt opt_WeightedInterpolateF2C(face_values, faces)
 
-            @test_opt opt_LeftBiasedF2C(faces)
-            @test_opt opt_RightBiasedF2C(faces)
+            @test_opt opt_BottomBiasedF2C(faces)
+            @test_opt opt_TopBiasedF2C(faces)
 
             @test_opt opt_GradientF2C(faces)
             @test_opt opt_GradientF2C(faces)
@@ -211,8 +211,8 @@ end
                 centers,
             )
 
-            @test_opt opt_LeftBiasedC2F(centers)
-            @test_opt opt_RightBiasedC2F(centers)
+            @test_opt opt_BottomBiasedC2F(centers)
+            @test_opt opt_TopBiasedC2F(centers)
 
             @test_opt opt_UpwindBiasedProductC2F_Extrapolate(
                 face_velocities,

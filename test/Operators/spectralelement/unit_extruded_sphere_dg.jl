@@ -20,7 +20,7 @@ import ClimaCore:
 );
 import .TestUtilities as TU
 
-# DG internal-face flux loops on an extruded cubed-sphere shell
+# DG interior-face flux loops on an extruded cubed-sphere shell
 # (SpectralElementSpace2D horizontal × finite-difference vertical):
 # conservation, consistency at continuous fields, and equivalence of
 # weak divergence + central numerical flux with the strong divergence
@@ -93,7 +93,7 @@ end
                 lgeom = Fields.local_geometry_field(space)
                 r = similar(q)
                 r .= 0
-                Operators.add_numerical_flux_internal!(jump_penalty, r, q)
+                Operators.add_numerical_flux_interior!(jump_penalty, r, q)
                 rn = @. r / lgeom.WJ
                 @test maximum(abs, parent(rn)) < tol * maximum(abs, parent(q))
             end
@@ -108,7 +108,7 @@ end
             G0 = @. Geometry.UVVector(zero(grad(q)))
             r = similar(q)
             r .= 0
-            Operators.add_ldg_laplacian_flux_internal!(r, q, G0, FT(1), FT(1))
+            Operators.add_ldg_laplacian_flux_interior!(r, q, G0, FT(1), FT(1))
             rn = @. r / lgeom.WJ
             @test maximum(abs, parent(rn)) < tol * maximum(abs, parent(q))
         end
@@ -118,7 +118,7 @@ end
             lgeom = Fields.local_geometry_field(center_space)
             r = similar(q, Geometry.UVVector{FT})
             fill!(parent(r), 0)
-            Operators.add_lifting_flux_internal!(grad_lift, r, q)
+            Operators.add_lifting_flux_interior!(grad_lift, r, q)
             rn = @. r / lgeom.WJ
             @test maximum(abs, parent(rn)) < tol * maximum(abs, parent(q))
         end
@@ -131,7 +131,7 @@ end
             lgeom = Fields.local_geometry_field(center_space)
             r = similar(u)
             fill!(parent(r), 0)
-            Operators.add_lifting_flux_internal!(curl3_lift, r, u, v)
+            Operators.add_lifting_flux_interior!(curl3_lift, r, u, v)
             rn = @. r / lgeom.WJ
             scale = max(maximum(abs, parent(u)), maximum(abs, parent(v)))
             @test maximum(abs, parent(rn)) < tol * scale
@@ -145,7 +145,7 @@ end
             lgeom = Fields.local_geometry_field(center_space)
             rc = similar(q)
             fill!(parent(rc), 0)
-            Operators.add_lifting_flux_internal!(jump_lift, rc, q, λ)
+            Operators.add_lifting_flux_interior!(jump_lift, rc, q, λ)
             rn = @. rc / lgeom.WJ
             @test maximum(abs, parent(rn)) < tol * maximum(abs, parent(q))
 
@@ -156,7 +156,7 @@ end
             copyto!(parent(qd), qd_cpu)
             rd = similar(qd)
             fill!(parent(rd), 0)
-            Operators.add_lifting_flux_internal!(jump_lift, rd, qd, λ)
+            Operators.add_lifting_flux_interior!(jump_lift, rd, qd, λ)
             @test sum(parent(qd) .* parent(rd)) < 0
         end
 
@@ -169,7 +169,7 @@ end
             y = map((qi, uvi) -> (; q = qi, uv = uvi), q, uv)
             r = similar(q)
             r .= 0
-            Operators.add_numerical_flux_internal!(central_flux, r, y)
+            Operators.add_numerical_flux_interior!(central_flux, r, y)
             scale = sum(abs, parent(r))
             @test abs(sum(parent(r))) < tol_sum * scale
         end
@@ -192,13 +192,13 @@ end
 
             r = similar(q)
             r .= 0
-            Operators.add_numerical_flux_internal!(jump_penalty, r, q)
+            Operators.add_numerical_flux_interior!(jump_penalty, r, q)
             rn = @. r / lgeom.WJ
             @test maximum(abs, parent(rn)) < tol * maximum(abs, parent(q))
 
             rl = similar(q, Geometry.UVVector{FT})
             fill!(parent(rl), 0)
-            Operators.add_lifting_flux_internal!(grad_lift, rl, q)
+            Operators.add_lifting_flux_interior!(grad_lift, rl, q)
             rln = @. rl / lgeom.WJ
             @test maximum(abs, parent(rln)) < tol * maximum(abs, parent(q))
 
@@ -206,7 +206,7 @@ end
             v = @. -sind(hcoords.long) * sind(hcoords.lat)
             rcurl = similar(q)
             fill!(parent(rcurl), 0)
-            Operators.add_lifting_flux_internal!(curl3_lift, rcurl, u, v)
+            Operators.add_lifting_flux_interior!(curl3_lift, rcurl, u, v)
             rcurln = @. rcurl / lgeom.WJ
             scale = max(maximum(abs, parent(u)), maximum(abs, parent(v)))
             @test maximum(abs, parent(rcurln)) < tol * scale
@@ -214,7 +214,7 @@ end
             λ = ones(hspace)
             rj = similar(q)
             fill!(parent(rj), 0)
-            Operators.add_lifting_flux_internal!(jump_lift, rj, q, λ)
+            Operators.add_lifting_flux_interior!(jump_lift, rj, q, λ)
             rjn = @. rj / lgeom.WJ
             @test maximum(abs, parent(rjn)) < tol * maximum(abs, parent(q))
         end
@@ -257,7 +257,7 @@ end
             r_fd .= 0
             Operators.add_flux_differencing_divergence!(central_2pt, r_fd, y)
 
-            hwdiv = Operators.WeakDivergence()
+            hwdiv = Operators.Divergence{Operators.WeakForm}()
             F = @. q * uv
             r_weak = @. hwdiv(F) * (-(rlgeom.WJ))
 
@@ -282,7 +282,7 @@ end
             G_c12 =
                 Geometry.transform.(Ref(Geometry.Contravariant12Axis()), G_uv)
             r_ldg = @. (-(rlgeom.WJ)) * κ * (-hwdiv(G_c12))
-            Operators.add_ldg_laplacian_flux_internal!(r_ldg, q, G_uv, κ, τ)
+            Operators.add_ldg_laplacian_flux_interior!(r_ldg, q, G_uv, κ, τ)
             r_lap_strong = @. rlgeom.WJ * κ * hdiv(G_c12)
             scale_lap = maximum(abs, parent(r_lap_strong))
             @test maximum(abs, parent(r_ldg .- r_lap_strong)) < tol * scale_lap
@@ -323,7 +323,7 @@ end
         end
 
         @testset "weak divergence + central flux equals strong divergence [$FT]" begin
-            hwdiv = Operators.WeakDivergence()
+            hwdiv = Operators.Divergence{Operators.WeakForm}()
             hdiv = Operators.Divergence()
             lgeom = Fields.local_geometry_field(center_space)
 
@@ -336,7 +336,7 @@ end
             y = map((qi, uvi) -> (; q = qi, uv = uvi), q, uv)
 
             dy_mw = @. hwdiv(F) * (-(lgeom.WJ))
-            Operators.add_numerical_flux_internal!(central_flux, dy_mw, y)
+            Operators.add_numerical_flux_interior!(central_flux, dy_mw, y)
             dy = @. dy_mw / lgeom.WJ
 
             dy_strong = @. -hdiv(F)

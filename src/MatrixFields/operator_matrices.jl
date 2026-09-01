@@ -1,16 +1,16 @@
 # Note: This list must be kept up-to-date with finitedifference.jl.
 const OneArgFDOperatorWithCenterInput = Union{
     Operators.InterpolateC2F,
-    Operators.LeftBiasedC2F,
-    Operators.RightBiasedC2F,
+    Operators.BottomBiasedC2F,
+    Operators.TopBiasedC2F,
     Operators.GradientC2F,
     Operators.DivergenceC2F,
     Operators.CurlC2F,
 }
 const OneArgFDOperatorWithFaceInput = Union{
     Operators.InterpolateF2C,
-    Operators.LeftBiasedF2C,
-    Operators.RightBiasedF2C,
+    Operators.BottomBiasedF2C,
+    Operators.TopBiasedF2C,
     Operators.SetBoundaryOperator,
     Operators.GradientF2C,
     Operators.DivergenceF2C,
@@ -162,7 +162,7 @@ Base.Broadcast.broadcasted(
 # For nearly every operator such a boundary condition prescribes the operator's
 # output at the boundary, so it modifies the output. Examples:
 #  - InterpolateC2F  with SetValue(x₀):    I(x)[½] = x₀
-#  - LeftBiasedF2C   with SetValue(x₀):    L(x)[1] = x₀
+#  - BottomBiasedF2C with SetValue(x₀):    B(x)[1] = x₀
 #  - GradientC2F     with SetGradient(v₀): G(x)[½] = v₀
 #
 # GradientF2C and DivergenceF2C are the exception, and the only operators for
@@ -536,14 +536,14 @@ Operators.stencil_interior_width(op_matrix::FDOperatorMatrix, args...) =
 Operators.left_interior_idx(
     space::Spaces.AbstractSpace,
     op_matrix::FDOperatorMatrix,
-    bc::Operators.AbstractBoundaryCondition,
+    bc::Operators.VerticalBoundaryCondition,
     args...,
 ) = Operators.left_interior_idx(space, op_matrix.op, bc, args...)
 
 Operators.right_interior_idx(
     space::Spaces.AbstractSpace,
     op_matrix::FDOperatorMatrix,
-    bc::Operators.AbstractBoundaryCondition,
+    bc::Operators.VerticalBoundaryCondition,
     args...,
 ) = Operators.right_interior_idx(space, op_matrix.op, bc, args...)
 
@@ -857,12 +857,12 @@ op_matrix_interior_row(
 ) where {FT} = BidiagonalMatrixRow(FT(1), FT(1)) / 2
 
 op_matrix_interior_row(
-    ::Union{Operators.LeftBiasedC2F, Operators.LeftBiasedF2C},
+    ::Union{Operators.BottomBiasedC2F, Operators.BottomBiasedF2C},
     ::Type{FT},
 ) where {FT} = LowerDiagonalMatrixRow(true)
 
 op_matrix_interior_row(
-    ::Union{Operators.RightBiasedC2F, Operators.RightBiasedF2C},
+    ::Union{Operators.TopBiasedC2F, Operators.TopBiasedF2C},
     ::Type{FT},
 ) where {FT} = UpperDiagonalMatrixRow(true)
 

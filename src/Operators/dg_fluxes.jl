@@ -49,7 +49,7 @@ end
 Symmetric central lifting completing the strong-form DG gradient of a scalar:
 each side adds ``(q^* - q_{side}) n̂_{side}`` with central ``q^*``, i.e.
 ``((q⁺ - q⁻)/2)\\,n̂`` on the minus side. Use with
-[`add_lifting_flux_internal!`](@ref) / [`lifting_correction`](@ref).
+[`add_lifting_flux_interior!`](@ref) / [`lifting_correction`](@ref).
 """
 central_gradient_lift(normal, (q⁻,), (q⁺,)) = ((q⁺ - q⁻) / 2) * normal
 
@@ -91,7 +91,7 @@ volume term plus the consistent numerical flux
 [`ldg_penalty_parameter`](@ref).
 """
 function ldg_laplacian_tendency(q, ρ_weight, κ, τ)
-    wdiv = WeakDivergence()
+    wdiv = Divergence{WeakForm}()
     grad = Gradient()
     lgeom = Fields.local_geometry_field(axes(q))
     residual = similar(q)
@@ -99,7 +99,7 @@ function ldg_laplacian_tendency(q, ρ_weight, κ, τ)
     @. residual = (-lgeom.WJ) * κ * (-wdiv(G))
     # Face normals are UVVector; raise G to the same basis for G·n̂.
     G_uv = @. Geometry.UVVector(G)
-    add_ldg_laplacian_flux_internal!(residual, q, G_uv, κ, τ)
+    add_ldg_laplacian_flux_interior!(residual, q, G_uv, κ, τ)
     return residual ./ lgeom.WJ
 end
 
@@ -122,7 +122,7 @@ end
     LDGLaplacianFlux(τ)
 
 Consistent interior-penalty flux for the LDG/SIPG Laplacian. Called through
-[`add_numerical_flux_internal!`](@ref) on a WJ-weighted residual of
+[`add_numerical_flux_interior!`](@ref) on a WJ-weighted residual of
 ``−∇·F`` with ``F = −κ G`` and ``G = ∇q`` (or ``ρ_{weight} ∇q``). Arguments
 are `(q, G, κ)` on each side, where `G` must share the face-normal
 basis (typically [`Geometry.UVVector`](@ref)); returns
@@ -140,23 +140,23 @@ function (fn::LDGLaplacianFlux)(normal, argvals⁻, argvals⁺)
 end
 
 """
-    add_ldg_laplacian_flux_internal!(dydt, q, G, κ, τ)
+    add_ldg_laplacian_flux_interior!(dydt, q, G, κ, τ)
 
 Add consistent LDG/SIPG face coupling
 ``−\\{\\!\\{κ G\\}\\!\\}·n̂ + τ[[q]]`` to a WJ-weighted Laplacian residual.
 The method with a leading `ghost_exchange` consumes a shared
 [`start_dg_ghost_exchange`](@ref) handle started on `(q, G, κ)`.
 """
-add_ldg_laplacian_flux_internal!(dydt, q, G, κ, τ) =
-    add_numerical_flux_internal!(LDGLaplacianFlux(τ), dydt, q, G, κ)
-add_ldg_laplacian_flux_internal!(
+add_ldg_laplacian_flux_interior!(dydt, q, G, κ, τ) =
+    add_numerical_flux_interior!(LDGLaplacianFlux(τ), dydt, q, G, κ)
+add_ldg_laplacian_flux_interior!(
     ghost_exchange::DGGhostExchange,
     dydt,
     q,
     G,
     κ,
     τ,
-) = add_numerical_flux_internal!(
+) = add_numerical_flux_interior!(
     ghost_exchange,
     LDGLaplacianFlux(τ),
     dydt,

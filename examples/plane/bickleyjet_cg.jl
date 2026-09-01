@@ -112,7 +112,7 @@ end
 function rhs!(dydt, y, _, t)
 
     I = Operators.Interpolate(Ispace)
-    div = Operators.WeakDivergence()
+    div = Operators.Divergence{Operators.WeakForm}()
     R = Operators.Restrict(space)
 
     rparameters = Ref(parameters)

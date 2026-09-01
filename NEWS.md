@@ -4,6 +4,36 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-💥breaking] Renamed the DG interior-face assembly operators from
+  `internal` to `interior` for consistency with `add_numerical_flux_boundary!`:
+  `Operators.add_numerical_flux_internal!` →
+  `Operators.add_numerical_flux_interior!`, `add_lifting_flux_internal!` →
+  `add_lifting_flux_interior!`, and `add_ldg_laplacian_flux_internal!` →
+  `add_ldg_laplacian_flux_interior!` (with the corresponding private device
+  seams). These names are unexported and have no known downstream users; there
+  are no deprecation shims. `add_numerical_flux_boundary!`,
+  `start_dg_ghost_exchange`, `lifting_correction`,
+  `add_flux_differencing_divergence!`, and the flux structs are unchanged.
+
+- ![][badge-✨feature/enhancement] Added `Operators.Outflow(; order = 0)`, a
+  physically named convenience constructor for advection-operator outflow
+  boundary conditions: it returns `Operators.Extrapolate{order}()`, an
+  order-`order` extrapolation from the interior whose order-0 case is the
+  zero-normal-gradient closure, so `Outflow() === Extrapolate{0}()` and
+  `Outflow(; order = 2) === Extrapolate{2}()`. Additive only; `Extrapolate`
+  remains the numerical primitive and nothing changes for existing code.
+
+- ![][badge-✨feature/enhancement] `Operators.AbstractBoundaryCondition` is
+  specialized into `Operators.VerticalBoundaryCondition` (the boundary
+  conditions of the vertical finite-difference operators, e.g. `SetValue`,
+  `Extrapolate`) and `Operators.HorizontalBoundaryCondition` (those of the
+  horizontal DG numerical-flux operators, e.g. `ReflectingWallBC`), so the two
+  families are distinct at the type level. Passing a boundary condition to an
+  operator of the other family now fails at dispatch with an error naming the
+  mismatch. Custom boundary conditions should subtype the family they
+  implement; direct subtypes of `AbstractBoundaryCondition` are only caught by
+  the generic invalid-boundary-condition error.
+
 - ![][badge-✨feature/enhancement] Added the horizontal Laplacian atoms
   `Operators.scalar_laplacian` and `Operators.vector_laplacian`, the building
   blocks of ∇⁴ hyperdiffusion. On continuous (CG) spaces they return lazy,
@@ -179,12 +209,14 @@ main
   and `WeightedInterpolateC2F`, where it copies the closest interior input.
   `GradientF2C` now accepts `SetGradient(v₀)`, which prescribes the gradient
   at the center closest to the boundary (with `v₀` projected onto the
-  covariant 3 axis, as for `GradientC2F`). Also added `BottomBiasedC2F`,
-  `BottomBiasedF2C`, `TopBiasedC2F`, and `TopBiasedF2C` as aliases for
-  `LeftBiasedC2F`, `LeftBiasedF2C`, `RightBiasedC2F`, and `RightBiasedF2C`: in
-  the vertical direction, the left boundary is the bottom and the right
-  boundary is the top.
-  [2544](https://github.com/CliMA/ClimaCore.jl/pull/2544)
+  covariant 3 axis, as for `GradientC2F`). The finite-difference biased
+  interpolation operators are named for the vertical direction they lean
+  toward: `BottomBiasedC2F` and `BottomBiasedF2C` take the value below a node,
+  `TopBiasedC2F` and `TopBiasedF2C` the value above. `LeftBiasedC2F`,
+  `LeftBiasedF2C`, `RightBiasedC2F`, and `RightBiasedF2C` remain available as
+  compatibility aliases.
+  [2544](https://github.com/CliMA/ClimaCore.jl/pull/2544),
+  [2608](https://github.com/CliMA/ClimaCore.jl/pull/2608)
 
 - ![][badge-💥breaking] Removed unused finite difference operators and boundary
   conditions [2521](https://github.com/CliMA/ClimaCore.jl/pull/2521)
@@ -228,8 +260,8 @@ main
   `MatrixFields.operator_matrix` now reports `LinVanLeerC2F` as a
   nonlinear operator instead of failing with a `MethodError`.
 
-- The DG face operators (`Operators.add_numerical_flux_internal!` and
-  `Operators.add_lifting_flux_internal!`) now run on distributed (MPI)
+- The DG face operators (`Operators.add_numerical_flux_interior!` and
+  `Operators.add_lifting_flux_interior!`) now run on distributed (MPI)
   `Topology2D` spaces: each rank completes its rank-boundary
   (`Topologies.ghost_faces`) side through a face-strip halo exchange
   (`Topologies.GhostFaceExchange`) that ships only the `Nq` face-node values

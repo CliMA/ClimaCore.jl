@@ -116,11 +116,11 @@ function rhs!(dydt, y, _, t)
     g = parameters.g
 
     sdiv = Operators.Divergence()
-    wdiv = Operators.WeakDivergence()
+    wdiv = Operators.Divergence{Operators.WeakForm}()
     grad = Operators.Gradient()
-    wgrad = Operators.WeakGradient()
+    wgrad = Operators.Gradient{Operators.WeakForm}()
     curl = Operators.Curl()
-    wcurl = Operators.WeakCurl()
+    wcurl = Operators.Curl{Operators.WeakForm}()
 
     # compute hyperviscosity first
     @. dydt.u =

@@ -46,7 +46,7 @@ include("sphere_sphericalharmonics.jl")
 
     function ∇⁴(u)
         grad = Operators.Gradient()
-        wdiv = Operators.WeakDivergence()
+        wdiv = Operators.Divergence{Operators.WeakForm}()
         diff = @. wdiv(grad(u))
         Spaces.weighted_dss!(diff)
 

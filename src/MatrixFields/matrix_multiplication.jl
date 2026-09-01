@@ -250,8 +250,13 @@ const ⋅ = MultiplyColumnwiseBandMatrixField()
 
 Operators.strip_space(op::MultiplyColumnwiseBandMatrixField, _) = op
 
-struct TopLeftMatrixCorner <: Operators.AbstractBoundaryCondition end
-struct BottomRightMatrixCorner <: Operators.AbstractBoundaryCondition end
+# These name the two corners of the band matrix, not the ends of the column.
+# The vertical index runs from the domain bottom (the `LeftBoundaryWindow`) to
+# the domain top (the `RightBoundaryWindow`), so the matrix's top-left corner
+# (its first rows and columns) sits at the domain bottom and its bottom-right
+# corner at the domain top.
+struct TopLeftMatrixCorner <: Operators.VerticalBoundaryCondition end
+struct BottomRightMatrixCorner <: Operators.VerticalBoundaryCondition end
 
 Operators.get_boundary(
     ::MultiplyColumnwiseBandMatrixField,

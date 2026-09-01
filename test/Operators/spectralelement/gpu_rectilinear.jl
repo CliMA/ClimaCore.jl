@@ -52,20 +52,20 @@ f = sin.(coords.x .+ 2 .* coords.y)
 g = Geometry.UVVector.(sin.(coords.x), 2 .* cos.(coords.y .+ coords.x))
 
 grad = Operators.Gradient()
-wgrad = Operators.WeakGradient()
+wgrad = Operators.Gradient{Operators.WeakForm}()
 
 @test Array(parent(grad.(f))) ≈ parent(grad.(f_cpu))
 @test Array(parent(wgrad.(f))) ≈ parent(wgrad.(f_cpu))
 
 div = Operators.Divergence()
-wdiv = Operators.WeakDivergence()
+wdiv = Operators.Divergence{Operators.WeakForm}()
 
 @test Array(parent(div.(g))) ≈ parent(div.(g_cpu))
 @test Array(parent(wdiv.(g))) ≈ parent(wdiv.(g_cpu))
 @test Array(parent(div.(grad.(f)))) ≈ parent(div.(grad.(f_cpu))) # composite
 
 curl = Operators.Curl()
-wcurl = Operators.WeakCurl()
+wcurl = Operators.Curl{Operators.WeakForm}()
 
 @test Array(parent(curl.(Geometry.Covariant12Vector.(g)))) ≈
       parent(curl.(Geometry.Covariant12Vector.(g_cpu)))
@@ -173,7 +173,8 @@ end
 # contribution and end up weighted by W², so it is only buffered when the buffer
 # is private to one thread; see Operators.materialize_quadrature_weighted.
 @testset "weak-form operators applied to a fused scalar argument" begin
-    # The hyperdiffusion shapes: WeakGradient of a Divergence, WeakCurl of a Curl.
+    # The hyperdiffusion shapes: Gradient{WeakForm} of a Divergence,
+    # Curl{WeakForm} of a Curl.
     @test Array(parent(@. wgrad(div(g)))) ≈ parent(@. wgrad(div(g_cpu)))
     @test Array(
         parent(

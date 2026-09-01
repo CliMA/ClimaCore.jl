@@ -116,13 +116,13 @@ function roeflux(n, (y⁻, parameters⁻), (y⁺, parameters⁺))
 end
 
 function volume!(dydt, y, (parameters,), t)
-    div = Operators.WeakDivergence()
+    div = Operators.Divergence{Operators.WeakForm}()
     rparameters = Ref(parameters)
     @. dydt = -(div(flux(y, rparameters)))
     return dydt
 end
 
 function add_face!(dydt, y, (parameters,), t)
-    Operators.add_numerical_flux_internal!(roeflux, dydt, y, parameters)
+    Operators.add_numerical_flux_interior!(roeflux, dydt, y, parameters)
     return dydt
 end

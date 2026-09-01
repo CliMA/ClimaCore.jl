@@ -71,10 +71,10 @@ const NO_DG_GHOST_EXCHANGE = DGGhostExchange(nothing, Ref(true))
 # `ClimaComms.CUDADevice` methods are provided by the ClimaCoreCUDAExt
 # extension (ext/cuda/operators_dg.jl).
 """
-    add_numerical_flux_internal!(fn, dydt, args...)
-    add_numerical_flux_internal!(ghost_exchange, fn, dydt, args...)
+    add_numerical_flux_interior!(fn, dydt, args...)
+    add_numerical_flux_interior!(ghost_exchange, fn, dydt, args...)
 
-Add the numerical flux at the internal faces of the spectral space mesh.
+Add the numerical flux at the interior faces of the spectral space mesh.
 
 The numerical flux is determined by evaluating
 
@@ -99,20 +99,20 @@ See also:
   - [`CentralNumericalFlux`](@ref)
   - [`RusanovNumericalFlux`](@ref)
 """
-add_numerical_flux_internal!(fn::F, dydt, args...) where {F} =
-    _add_numerical_flux_internal!(
+add_numerical_flux_interior!(fn::F, dydt, args...) where {F} =
+    _add_numerical_flux_interior!(
         ClimaComms.device(axes(dydt)),
         nothing,
         fn,
         dydt,
         args...,
     )
-add_numerical_flux_internal!(
+add_numerical_flux_interior!(
     ghost_exchange::DGGhostExchange,
     fn::F,
     dydt,
     args...,
-) where {F} = _add_numerical_flux_internal!(
+) where {F} = _add_numerical_flux_interior!(
     ClimaComms.device(axes(dydt)),
     ghost_exchange,
     fn,
@@ -120,14 +120,14 @@ add_numerical_flux_internal!(
     args...,
 )
 
-_add_numerical_flux_internal!(
+_add_numerical_flux_interior!(
     device,
     ghost_exchange,
     fn::F,
     dydt,
     args...,
 ) where {F} = error(
-    "add_numerical_flux_internal! is not implemented for $device; load CUDA.jl for CUDADevice support",
+    "add_numerical_flux_interior! is not implemented for $device; load CUDA.jl for CUDADevice support",
 )
 
 # One-step argument access for the CPU face loops: `Field` and data-layout
@@ -176,7 +176,7 @@ end
     lift⁺ = add_auto_broadcasters(fn(-normal, argvals⁺, argvals⁻))
     return (sWJ * lift⁻, sWJ * lift⁺)
 end
-function _add_numerical_flux_internal!(
+function _add_numerical_flux_interior!(
     ::ClimaComms.AbstractCPUDevice,
     ghost_exchange,
     fn::F,
@@ -220,26 +220,26 @@ function _add_interior_face_flux!(
     return _finish_dg_ghost_faces!(mode, fn, dydt, args, ghost)
 end
 
-# Pure 2D spectral element space (precomputed internal surface geometry).
+# Pure 2D spectral element space (precomputed interior surface geometry).
 function _add_interior_face_flux_2d!(mode::Val, fn::F, dydt, args...) where {F}
     space = axes(dydt)
     grid = Spaces.grid(space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     topology = Spaces.topology(space)
-    internal_surface_geometry = grid.internal_surface_geometry
+    interior_surface_geometry = grid.interior_surface_geometry
     dydt_data = Fields.field_values(dydt)
 
     for (iface, (elem⁻, face⁻, elem⁺, face⁺, reversed)) in
         enumerate(Topologies.interior_faces(topology))
 
-        internal_surface_geometry_slab =
-            slab(internal_surface_geometry, 1, iface)
+        interior_surface_geometry_slab =
+            slab(interior_surface_geometry, 1, iface)
 
         dydt_slab⁻ = slab(dydt_data, 1, elem⁻)
         dydt_slab⁺ = slab(dydt_data, 1, elem⁺)
 
         for q in 1:Nq
-            sgeom⁻ = internal_surface_geometry_slab[q]
+            sgeom⁻ = interior_surface_geometry_slab[q]
 
             i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
             i⁺, j⁺ = Topologies.face_node_index(face⁺, Nq, q, reversed)
@@ -542,8 +542,8 @@ shared by several operator calls in the same tendency evaluation:
 
     ex = Operators.start_dg_ghost_exchange(y)
     # ... element-local volume terms (the exchange overlaps them) ...
-    Operators.add_numerical_flux_internal!(ex, numflux, dydt, y)
-    Operators.add_lifting_flux_internal!(ex, lift, dydt2, y)
+    Operators.add_numerical_flux_interior!(ex, numflux, dydt, y)
+    Operators.add_lifting_flux_interior!(ex, lift, dydt2, y)
 
 Without the leading handle each operator performs its own exchange, so an RHS that
 applies several face operators to the same state sends every halo message
@@ -687,22 +687,24 @@ function _claim_dg_face_exchanges!(ghost_bufs)
     return nothing
 end
 """
-    PeriodicBC <: AbstractBoundaryCondition
+    PeriodicBC <: HorizontalBoundaryCondition
 
-Periodic boundary condition (handled by topology, no ghost state needed).
+Periodic boundary condition for the horizontal DG numerical-flux operators,
+handled by the topology (no ghost state needed).
 """
-struct PeriodicBC <: AbstractBoundaryCondition end
-
-"""
-    ReflectingWallBC <: AbstractBoundaryCondition
-
-Reflecting wall boundary condition (no-normal-flow).
-Reflects normal momentum component; preserves density and potential temperature.
-"""
-struct ReflectingWallBC <: AbstractBoundaryCondition end
+struct PeriodicBC <: HorizontalBoundaryCondition end
 
 """
-    ghost_state(bc::AbstractBoundaryCondition, normal, argvals⁻)
+    ReflectingWallBC <: HorizontalBoundaryCondition
+
+Reflecting-wall (no-normal-flow) boundary condition for the horizontal DG
+numerical-flux operators: its [`ghost_state`](@ref) reflects the normal
+momentum component and preserves the other prognostic fields.
+"""
+struct ReflectingWallBC <: HorizontalBoundaryCondition end
+
+"""
+    ghost_state(bc::HorizontalBoundaryCondition, normal, argvals⁻)
 
 Construct the exterior-side argument tuple for the given BC.
 
@@ -710,7 +712,7 @@ Returns a tuple with the same length as `argvals⁻`, replacing only the
 prognostic state `argvals⁻[1]` with the ghost state; remaining arguments
 (e.g. equation parameters, coordinates) are forwarded unchanged.
 """
-function ghost_state(::AbstractBoundaryCondition, normal, argvals⁻)
+function ghost_state(::HorizontalBoundaryCondition, normal, argvals⁻)
     error("ghost_state not implemented for this boundary condition")
 end
 
@@ -734,7 +736,7 @@ mesh:
 per boundary face node, where `normal` is the outward unit normal and
 `argvals⁻` is the tuple of values of `args` at that node. `dydt` must be in
 mass-weighted residual form (`WJ * ∂Y/∂t`), matching
-[`add_numerical_flux_internal!`](@ref). Implemented for pure 2D spectral
+[`add_numerical_flux_interior!`](@ref). Implemented for pure 2D spectral
 element spaces and extruded spaces with 2D horizontal spectral elements
 (``sWJ`` then carries the vertical measure). No-op on domains without boundary
 faces (e.g. the sphere).
@@ -811,14 +813,14 @@ function _add_numerical_flux_boundary!(
 end
 
 """
-    add_numerical_flux_boundary!(numflux::AbstractNumericalFlux, bc::AbstractBoundaryCondition, dydt, args...)
+    add_numerical_flux_boundary!(numflux::AbstractNumericalFlux, bc::HorizontalBoundaryCondition, dydt, args...)
 
 Add numerical flux at boundaries using a typed boundary condition.
 Constructs the ghost state via `ghost_state(bc, normal, argvals⁻)` and applies the numerical flux.
 """
 function add_numerical_flux_boundary!(
     numflux::AbstractNumericalFlux,
-    bc::AbstractBoundaryCondition,
+    bc::HorizontalBoundaryCondition,
     dydt,
     args...,
 )
@@ -827,15 +829,27 @@ function add_numerical_flux_boundary!(
         numflux(normal, argvals⁻, argvals⁺)
     end
 end
+
+# A boundary condition of the wrong family (a vertical finite-difference BC, or
+# a direct `AbstractBoundaryCondition` subtype) would otherwise bind to the
+# `fn`-taking method above as `dydt` and fail later with an unrelated message,
+# so it goes through the same rejection the finite-difference operators use and
+# both families report an out-of-family boundary condition the same way.
+add_numerical_flux_boundary!(
+    numflux::AbstractNumericalFlux,
+    bc::AbstractBoundaryCondition,
+    dydt,
+    args...,
+) = invalid_boundary_condition_error(typeof(numflux), typeof(bc))
 # ---------------------------------------------------------------------------
 # Symmetric face lifting for non-conservative (gradient / curl) terms
 # ---------------------------------------------------------------------------
 
 """
-    add_lifting_flux_internal!(fn, dydt, args...)
-    add_lifting_flux_internal!(ghost_exchange, fn, dydt, args...)
+    add_lifting_flux_interior!(fn, dydt, args...)
+    add_lifting_flux_interior!(ghost_exchange, fn, dydt, args...)
 
-Add *symmetric* face lifting terms at internal faces — the DG correction for
+Add *symmetric* face lifting terms at interior faces — the DG correction for
 non-conservative (gradient / curl) terms, where both sides of a face receive
 their own correction rather than equal-and-opposite fluxes:
 
@@ -847,26 +861,26 @@ gradient of a scalar `q` is completed by `fn(n̂, (q⁻,), (q⁺,)) = ((q⁺ −
 (the lifting of `(q* − q⁻) n̂` with a central interface value `q*`).
 
 `dydt` must be in mass-weighted residual form (`WJ * ∂Y/∂t`), matching
-[`add_numerical_flux_internal!`](@ref). Implemented for pure 2D spectral
+[`add_numerical_flux_interior!`](@ref). Implemented for pure 2D spectral
 element spaces and for extruded spaces with 1D (plane) or 2D (e.g.
 cubed-sphere) horizontal spectral elements. The method with a leading
 `ghost_exchange` consumes a shared halo exchange from
 [`start_dg_ghost_exchange`](@ref) on distributed spaces.
 """
-add_lifting_flux_internal!(fn::F, dydt, args...) where {F} =
-    _add_lifting_flux_internal!(
+add_lifting_flux_interior!(fn::F, dydt, args...) where {F} =
+    _add_lifting_flux_interior!(
         ClimaComms.device(axes(dydt)),
         nothing,
         fn,
         dydt,
         args...,
     )
-add_lifting_flux_internal!(
+add_lifting_flux_interior!(
     ghost_exchange::DGGhostExchange,
     fn::F,
     dydt,
     args...,
-) where {F} = _add_lifting_flux_internal!(
+) where {F} = _add_lifting_flux_interior!(
     ClimaComms.device(axes(dydt)),
     ghost_exchange,
     fn,
@@ -874,17 +888,17 @@ add_lifting_flux_internal!(
     args...,
 )
 
-_add_lifting_flux_internal!(
+_add_lifting_flux_interior!(
     device,
     ghost_exchange,
     fn::F,
     dydt,
     args...,
 ) where {F} = error(
-    "add_lifting_flux_internal! is not implemented for $device; load CUDA.jl for CUDADevice support",
+    "add_lifting_flux_interior! is not implemented for $device; load CUDA.jl for CUDADevice support",
 )
 
-function _add_lifting_flux_internal!(
+function _add_lifting_flux_interior!(
     ::ClimaComms.AbstractCPUDevice,
     ghost_exchange,
     fn::F,
@@ -898,7 +912,7 @@ end
     lifting_correction(fn, ::Type{T}, args...)
 
 WJ-normalized DG face-lifting correction field of element type `T`: applies
-[`add_lifting_flux_internal!`](@ref) with face function `fn` to a zero
+[`add_lifting_flux_interior!`](@ref) with face function `fn` to a zero
 residual on the space of `args[1]` and divides by `WJ`. The result is the
 correction to the corresponding element-local strong-form operator.
 """
@@ -907,7 +921,7 @@ function lifting_correction(fn::F, ::Type{T}, args...) where {F, T}
     lgeom = Fields.local_geometry_field(space)
     r = similar(args[1], T)
     fill!(parent(r), 0)
-    add_lifting_flux_internal!(fn, r, args...)
+    add_lifting_flux_interior!(fn, r, args...)
     return r ./ lgeom.WJ
 end
 # ---------------------------------------------------------------------------
@@ -945,7 +959,7 @@ fixed by this choice (e.g. Kennedy–Gruber → KEP).
 
 Stored in weak-equivalent form (strong flux-differencing plus one-sided
 boundary lifts), so it replaces `dydt = hwdiv(F) * (-WJ)` and composes with
-[`add_numerical_flux_internal!`](@ref) to give the FDDG SAT
+[`add_numerical_flux_interior!`](@ref) to give the FDDG SAT
 ``F^* - F(y^-)⋅n̂``. SBP telescoping gives local conservation; global
 conservation follows from antisymmetric interface fluxes.
 
@@ -1121,7 +1135,7 @@ end
     DGConnectivity
 
 Cached, device-resident connectivity and face geometry for the DG
-internal-face operators (the DSS-buffer analog for DG):
+interior-face operators (the DSS-buffer analog for DG):
 
   - `faces`: `5 × nfaces` `Int32` matrix of interior faces
     `(elem⁻, face⁻, elem⁺, face⁺, reversed)`;

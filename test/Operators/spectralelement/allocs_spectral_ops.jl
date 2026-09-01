@@ -41,11 +41,11 @@ u_cross_curl_u!(dest, u, f, curl) = (
         f = Geometry.Contravariant3Vector.(Geometry.WVector.(ϕ))
 
         grad = Operators.Gradient()
-        wgrad = Operators.WeakGradient()
+        wgrad = Operators.Gradient{Operators.WeakForm}()
         div = Operators.Divergence()
-        wdiv = Operators.WeakDivergence()
+        wdiv = Operators.Divergence{Operators.WeakForm}()
         curl = Operators.Curl()
-        wcurl = Operators.WeakCurl()
+        wcurl = Operators.Curl{Operators.WeakForm}()
 
         TU.@test_zero_allocations div_grad!(ϕ, ψ, grad, wdiv)
         TU.@test_zero_allocations grad_only!(du, ϕ, grad)

@@ -156,15 +156,15 @@ end
         )
 
     # Test weak grad operator
-    wgrad = Operators.WeakGradient()
+    wgrad = Operators.Gradient{Operators.WeakForm}()
     @test parent(wgrad.(f_cpu)) ≈ Array(parent(wgrad.(f_gpu)))
 
     # Test weak div operator
-    wdiv = Operators.WeakDivergence()
+    wdiv = Operators.Divergence{Operators.WeakForm}()
     @test parent(wdiv.(x_cpu)) ≈ Array(parent(wdiv.(x_gpu)))
 
     # Test weak curl operator
-    wcurl = Operators.WeakCurl()
+    wcurl = Operators.Curl{Operators.WeakForm}()
     @test parent(wcurl.(Geometry.Covariant12Vector.(g_cpu))) ≈
           Array(parent(wcurl.(Geometry.Covariant12Vector.(g_gpu))))
     @test parent(wcurl.(Geometry.Covariant3Vector.(f_cpu))) ≈

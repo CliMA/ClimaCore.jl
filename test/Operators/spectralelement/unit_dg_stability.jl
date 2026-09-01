@@ -77,17 +77,17 @@ end
             q, uv = smooth_state(space)
 
             @testset "SBP identity, non-constant flux [$name, $FT]" begin
-                # WeakDivergence(F)*(-WJ) + central surface flux == -Divergence(F),
-                # node-wise, for the *non-constant* flux F = q*u. This is the
-                # discrete summation-by-parts identity relating the weak and
-                # strong divergence operators.
-                hwdiv = Operators.WeakDivergence()
+                # Divergence{WeakForm}(F)*(-WJ) + central surface flux ==
+                # -Divergence(F), node-wise, for the *non-constant* flux
+                # F = q*u. This is the discrete summation-by-parts identity
+                # relating the weak and strong divergence operators.
+                hwdiv = Operators.Divergence{Operators.WeakForm}()
                 hdiv = Operators.Divergence()
                 F = Geometry.transform.(Ref(Geometry.Contravariant12Axis()), q .* uv)
                 y = map((qi, uvi) -> (; q = qi, uv = uvi), q, uv)
 
                 dy_mw = @. hwdiv(F) * (-(lgeom.WJ))
-                Operators.add_numerical_flux_internal!(dg_central_flux, dy_mw, y)
+                Operators.add_numerical_flux_interior!(dg_central_flux, dy_mw, y)
                 dy = @. dy_mw / lgeom.WJ
 
                 dy_strong = @. -hdiv(F)
@@ -102,7 +102,7 @@ end
                 # negative across a discontinuity.
                 rc = similar(q)
                 fill!(parent(rc), 0)
-                Operators.add_numerical_flux_internal!(dg_jump_penalty, rc, q)
+                Operators.add_numerical_flux_interior!(dg_jump_penalty, rc, q)
                 energy_continuous = sum(parent(q) .* parent(rc))
                 q_scale = sum(abs2, parent(q))
                 tol = FT == Float32 ? 1e-4 : 1e-10
@@ -115,7 +115,7 @@ end
                 copyto!(parent(qd), qd_cpu)
                 rd = similar(qd)
                 fill!(parent(rd), 0)
-                Operators.add_numerical_flux_internal!(dg_jump_penalty, rd, qd)
+                Operators.add_numerical_flux_interior!(dg_jump_penalty, rd, qd)
                 energy_discontinuous = sum(parent(qd) .* parent(rd))
                 @test energy_discontinuous < 0
             end
@@ -134,7 +134,7 @@ end
                 y = map((qi, uvi) -> (; q = qi, uv = uvi), qd, uvd)
                 r = similar(qd)
                 fill!(parent(r), 0)
-                Operators.add_numerical_flux_internal!(dg_central_flux, r, y)
+                Operators.add_numerical_flux_interior!(dg_central_flux, r, y)
                 scale = sum(abs, parent(r))
                 tol = FT == Float32 ? 1e-5 : 1e-11
                 @test abs(sum(parent(r))) < tol * scale
