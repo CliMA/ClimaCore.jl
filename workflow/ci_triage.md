@@ -57,7 +57,7 @@ Allocation tests typically use the warm-up + `@allocated == 0` pattern (see [all
 The `Documentation` workflow runs `docs/make.jl`. Two recurring failures:
 
 - **Missing docstrings**: an exported symbol with no docstring (or with one not referenced from a docs page) triggers `Documenter`'s "missing docstring" error. Add an `@docs` block or use `@autodocs` over the module.
-- **Cross-reference errors**: `[text](text)` in a docstring is parsed as a link. Use parentheses for units (`(kg/m^3)`), not brackets. See [documentation_policy.md](../code-quality/documentation_policy.md).
+- **Cross-reference errors**: `[text](text)` in a docstring is parsed as a link, and Documenter allows whitespace — even a line break — between `]` and `(`. Keep bracketed units (§3.4) but never let a parenthetical follow them directly: write `[kg/m^3], at cloud base` or `` `[kg/m^3]` (at cloud base) ``. See [documentation_policy.md](../code-quality/documentation_policy.md).
 
 ## 10. Formatter
 
@@ -76,6 +76,19 @@ Buildkite jobs on shared CliMA clusters use a per-pipeline Julia [depot](https:/
 - `ERROR: \`Pkg=...\` depends on \`OtherPkg=...\`, but no such entry exists in the manifest`
 
 (Exact wording varies by Julia version; the consistent signal is a precompile/manifest failure during pipeline initialization, not in the test step itself.) When you see these on a fresh PR with no manifest changes, the depot is the suspect. Clearing it is a one-line maintainer action; the next pipeline run rebuilds the cache. The procedure is documented in the [CliMA slurm-buildkite wiki](https://github.com/CliMA/slurm-buildkite/wiki/Clearing-Shared-Depots).
+
+## 13. A README badge that disagrees with CI
+
+Not every red badge is a broken build. Before chasing a failure, confirm the badge is reporting what you think it is. The badge conventions themselves are in [documentation_policy.md §2.3](../code-quality/documentation_policy.md).
+
+- **GitHub Actions badge reads `failing` while `main` is green.** The badge has no `?branch=main` filter, so it shows the workflow's most recent run on *any* branch — typically a failing PR. Pin the badge, and check that the workflow has a `push: branches: [main]` trigger; without one there is no `main` run to report.
+- **GitHub Actions badge reads `no status`.** The badge is pinned to `main` but the workflow only triggers on `pull_request`. Add the push trigger; the first merge after that populates it.
+- **The last `main` run was `cancelled`.** GitHub renders a cancelled conclusion as `failing`. Repos set `concurrency: cancel-in-progress: true` keyed on the ref, so two pushes to `main` in quick succession cancel the first run — expected behavior, not a failure. Re-run it or wait for the next push.
+- **Buildkite badge reads `unknown`.** The `?branch=main` filter found no builds because that pipeline only builds PR branches. Either enable `main` builds in the Buildkite pipeline settings or drop the badge; do not leave a permanent `unknown`.
+- **Codecov badge reads `unknown` right after a merge.** Coverage is uploaded per matrix job *after* tests finish, so the tip commit has no report until the run completes. It resolves on its own.
+- **A Zenodo DOI badge renders broken intermittently.** GitHub's camo proxy does not cache Zenodo badges (`cache-control: no-cache`), so every page load refetches from Zenodo and a slow response shows as a broken image. Verify with `curl -I` before concluding the markdown is wrong.
+
+When a badge is genuinely reporting a real failure, say so rather than papering over it: relaxing a flaky threshold or dropping a badge to get green is a maintainer decision, not a cleanup.
 
 ## Self-correction
 
