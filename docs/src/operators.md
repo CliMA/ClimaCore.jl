@@ -144,6 +144,7 @@ lifting_correction
 add_flux_differencing_divergence!
 add_ldg_laplacian_flux_interior!
 ldg_laplacian_tendency
+ldg_laplacian_tendency!
 ldg_penalty_parameter
 start_dg_ghost_exchange
 DGGhostExchange

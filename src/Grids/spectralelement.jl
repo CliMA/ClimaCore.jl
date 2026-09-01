@@ -70,8 +70,8 @@ end
 Adapt.@adapt_structure SpectralElementGrid1D
 
 local_geometry_type(
-    ::Type{SpectralElementGrid1D{T, Q, GG, LG}},
-) where {T, Q, GG, LG} = eltype(LG) # calls eltype from DataLayouts
+    ::Type{SpectralElementGrid1D{T, Q, GG, LG, D, Disc}},
+) where {T, Q, GG, LG, D, Disc} = eltype(LG) # calls eltype from DataLayouts
 
 # non-view grids are cached based on their input arguments
 # this means that if data is saved in two different files, reloading will give fields which live on the same grid

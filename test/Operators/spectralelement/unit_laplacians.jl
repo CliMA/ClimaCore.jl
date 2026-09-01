@@ -163,6 +163,40 @@ end
     got_weighted = Operators.scalar_laplacian(f; weight = ρ)
     @test parent(got_weighted) ≈ parent(expected_weighted)
 
+    # Each call owns its result, so two results may be live at once. A shared
+    # output buffer would make the second call overwrite the first, and
+    # `∇²f_live + ∇²g_live` would silently evaluate to `2∇²g`.
+    g = @. cosd(coord.long) * sind(coord.lat)
+    ∇²f_live = Operators.scalar_laplacian(f)
+    ∇²g_live = Operators.scalar_laplacian(g)
+    @test ∇²f_live !== ∇²g_live
+    @test parent(∇²f_live) ≈ parent(expected)
+    @test parent(∇²g_live) ≈
+          parent(Operators.ldg_laplacian_tendency(g, nothing, κ, τ))
+
+    # The in-place form writes into a caller-owned field, including when the
+    # destination aliases the argument.
+    out = similar(f)
+    @test Operators.scalar_laplacian!(out, f) === out
+    @test parent(out) ≈ parent(expected)
+
+    aliased = copy(f)
+    Operators.scalar_laplacian!(aliased, aliased)
+    @test parent(aliased) ≈ parent(expected)
+
+    # A lazy argument is materialized into a scratch field; the operator is
+    # linear, so the result of doubling the input is exactly double.
+    got_lazy =
+        Operators.scalar_laplacian(Base.Broadcast.broadcasted(x -> 2 * x, f))
+    @test parent(got_lazy) ≈ 2 .* parent(expected)
+
+    # Feeding a result straight back in (a DG ∇⁴ needs no DSS between the
+    # passes) is well defined, since each call owns its result.
+    ∇²f = Operators.scalar_laplacian(f)
+    expected_∇⁴ = Operators.ldg_laplacian_tendency(∇²f, nothing, κ, τ)
+    got_∇⁴ = Operators.scalar_laplacian(Operators.scalar_laplacian(f))
+    @test parent(got_∇⁴) ≈ parent(expected_∇⁴)
+
     u = @. Geometry.Covariant12Vector(
         Geometry.UVVector(cosd(coord.lat), sind(coord.long) * cosd(coord.lat)),
     )

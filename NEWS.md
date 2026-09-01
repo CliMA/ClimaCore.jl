@@ -22,6 +22,42 @@ main
   The CG↔DG Bickley-jet integration test now runs one shallow-water tendency
   on both discretizations through this switch.
 
+- ![][badge-🚀performance] `Operators.scalar_laplacian` no longer allocates on
+  DG spaces (each call built ~5 device fields): the gradient and a
+  materialized lazy argument now live in scratch fields keyed on the space's
+  grid (released by the zero-argument `Utilities.Cache.clean_cache!()`), and
+  the new in-place `Operators.ldg_laplacian_tendency!` writes the tendency
+  into a caller-owned field.
+
+- ![][badge-✨feature/enhancement] Added `Operators.scalar_laplacian!(out, χ;
+  weight)`, which writes the Laplacian into a caller-owned field and is
+  allocation-free on both discretizations; `out` may alias `χ`. This is the
+  form to use in a tendency. Correspondingly, `Operators.scalar_laplacian` on
+  a DG space now returns a freshly allocated `Field` rather than a scratch
+  field shared by every call on that space: two results could previously be
+  live at once while aliasing, so `∇²a + ∇²b` silently evaluated to `2∇²b` on
+  DG while being correct on CG.
+
+- ![][badge-✨feature/enhancement] `Operators.tendency_completion` accepts a
+  `FieldVector` tendency on continuous spaces, where the completion is a
+  single batched `Spaces.weighted_dss!` over all components; the components
+  must agree on their discretization. On discontinuous spaces a `FieldVector`
+  is rejected with an explanatory error instead of a `MethodError`: the
+  interface numerical flux is evaluated on the whole state at a face node, so
+  the tendency must be one `Field` with a composite (e.g. `NamedTuple`)
+  eltype.
+
+- ![][badge-💥breaking] The Galerkin discretization is a type parameter of
+  `Grids.SpectralElementGrid1D` / `SpectralElementGrid2D` rather than a
+  `Union{CG, DG}` field, so `Grids.discretization` is inferrable and the
+  methods dispatching on it (`Operators.scalar_laplacian`,
+  `Operators.tendency_completion`) resolve statically instead of through a
+  runtime union split. Code that spells out these grids' type parameters
+  positionally needs one more parameter; `Grids.discretization(grid)` is
+  unchanged. It now also forwards through `Grids.LevelGrid` to the underlying
+  grid, instead of falling back to `CG()` and reporting a level of a DG grid
+  as continuous.
+
 - ![][badge-💥breaking] Renamed the DG interior-face assembly operators from
   `internal` to `interior` for consistency with `add_numerical_flux_boundary!`:
   `Operators.add_numerical_flux_internal!` →
@@ -41,16 +77,19 @@ main
   `Outflow(; order = 2) === Extrapolate{2}()`. Additive only; `Extrapolate`
   remains the numerical primitive and nothing changes for existing code.
 
-- ![][badge-✨feature/enhancement] `Operators.AbstractBoundaryCondition` is
+- ![][badge-💥breaking] `Operators.AbstractBoundaryCondition` is
   specialized into `Operators.VerticalBoundaryCondition` (the boundary
   conditions of the vertical finite-difference operators, e.g. `SetValue`,
   `Extrapolate`) and `Operators.HorizontalBoundaryCondition` (those of the
   horizontal DG numerical-flux operators, e.g. `ReflectingWallBC`), so the two
   families are distinct at the type level. Passing a boundary condition to an
   operator of the other family now fails at dispatch with an error naming the
-  mismatch. Custom boundary conditions should subtype the family they
-  implement; direct subtypes of `AbstractBoundaryCondition` are only caught by
-  the generic invalid-boundary-condition error.
+  mismatch. Custom boundary conditions must subtype the family they implement:
+  the finite-difference stencil defaults now dispatch on
+  `VerticalBoundaryCondition`, so a pre-existing direct subtype of
+  `AbstractBoundaryCondition` fails with a `MethodError` (in
+  `left_interior_idx`/`right_interior_idx`) or, when `boundary_width` is
+  undefined, the generic invalid-boundary-condition error.
 
 - ![][badge-✨feature/enhancement] Added the horizontal Laplacian atoms
   `Operators.scalar_laplacian` and `Operators.vector_laplacian`, the building

@@ -175,6 +175,30 @@ end
     @test roundtrip_is_continuous(cg_plane)
 end
 
+@testset "legacy \"discontinuous\" attribute reads back as DG" begin
+    # Files written before "discretization" replaced the "discontinuous"
+    # attribute must still restore their DG grids.
+    context = ClimaComms.context()
+    filename = tempname(; cleanup = true)
+    f = Fields.local_geometry_field(dg_space).J
+    InputOutput.HDF5Writer(filename, context) do writer
+        InputOutput.write!(writer, "f" => f)
+    end
+    InputOutput.HDF5.h5open(filename, "r+") do file
+        for name in keys(file["grids"])
+            group = file["grids"][name]
+            grid_attrs = InputOutput.HDF5.attrs(group)
+            haskey(grid_attrs, "discretization") || continue
+            InputOutput.HDF5.delete_attribute(group, "discretization")
+            grid_attrs["discontinuous"] = "true"
+        end
+    end
+    Cache.clean_cache!(Spaces.grid(dg_space))
+    InputOutput.HDF5Reader(filename, context) do reader
+        @test !Spaces.is_continuous(axes(InputOutput.read_field(reader, "f")))
+    end
+end
+
 @testset "CG and DG grids round-trip through a single file" begin
     # Both grids request the group name "horizontal_grid"; the writer must
     # give the second one a distinct group instead of aliasing it to the

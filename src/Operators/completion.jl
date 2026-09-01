@@ -74,11 +74,10 @@ supported on a discontinuous space: the interface flux is evaluated on the
 whole state at a face node, which requires the state to be one `Field` with a
 composite (e.g. `NamedTuple`) eltype rather than a collection of `Field`s.
 """
-tendency_completion(dydt::Fields.Field; kwargs...) =
-    tendency_completion(completion_discretization(dydt), dydt; kwargs...)
-
-tendency_completion(dydt::Fields.FieldVector; kwargs...) =
-    tendency_completion(completion_discretization(dydt), dydt; kwargs...)
+tendency_completion(
+    dydt::Union{Fields.Field, Fields.FieldVector};
+    kwargs...,
+) = tendency_completion(completion_discretization(dydt), dydt; kwargs...)
 
 tendency_completion(
     ::Grids.CG,
@@ -167,7 +166,14 @@ function complete_tendency!(completion::DSSCompletion, dydt, args...)
     return dydt
 end
 
-function complete_tendency!(completion::NumericalFluxCompletion, dydt, args...)
+# `args::Vararg{Any, N}` for the same reason as in the face-operator chain it
+# calls into (see add_numerical_flux_interior!): merely forwarded varargs
+# would otherwise compile unspecialized.
+function complete_tendency!(
+    completion::NumericalFluxCompletion,
+    dydt,
+    args::Vararg{Any, N},
+) where {N}
     lgeom = Fields.local_geometry_field(axes(dydt))
     @. dydt = dydt * lgeom.WJ
     add_numerical_flux_interior!(completion.numflux, dydt, args...)
