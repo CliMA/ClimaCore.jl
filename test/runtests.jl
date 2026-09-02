@@ -152,6 +152,7 @@ unit_tests = [
 
     # Limiters, IO, Remapping
     UnitTest("Limiter"                                  ,"Limiters/unit_limiter.jl"; tier = :unit, subsystem = :limiters),
+    UnitTest("Limiters - Zhang-Shu positivity"          ,"Limiters/positivity_limiter.jl"; tier = :unit, subsystem = :limiters),
     UnitTest("Limiters - vertical mass borrowing"       ,"Limiters/vertical_mass_borrowing_limiter.jl"; tier = :unit, subsystem = :limiters),
     UnitTest("Limiters - vertical mass borrowing adv"   ,"Limiters/vertical_mass_borrowing_limiter_advection.jl"; tier = :unit, subsystem = :limiters, slow = true), # 2.3 min
     UnitTest("InputOutput - hdf5"                       ,"InputOutput/unit_hdf5.jl"; tier = :unit, subsystem = :io),

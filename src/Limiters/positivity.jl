@@ -30,6 +30,7 @@ condition.
 
     lim = PositivityLimiter(FT; ρ_min, p_min, maxiter)
     apply_positivity_limiter!(lim, pressure_fn, (ρ, ρe, ρu1, ρu2, ρu3, ρq), off)
+    apply_positivity_limiter!(lim, pressure_fn, (ρ, ρe, ρu1, ρu2, ρu3), off)
 
 where `(ρ, ρe, ρu1, ρu2, ρu3, ρq)` are the conserved scalar `Field`s to scale
 (the first is the density used for the `ρ_min` constraint; the last is the tracer
@@ -40,6 +41,10 @@ used for the `≥ 0` constraint), `off` is an auxiliary scalar `Field` (e.g.
 
 returns the pressure the `p_min` floor is applied to. `pressure_fn` must be
 GPU-compatible (it is called inside the device kernel).
+
+The 5-field form is the dry case: there is no tracer constraint, and the
+pressure functor receives `ρq = nothing`, so a dry `pressure_fn` should accept
+(and ignore) that argument.
 """
 struct PositivityLimiter{FT} <: AbstractLimiter
     ρ_min::FT
@@ -54,6 +59,11 @@ PositivityLimiter(
     maxiter::Int = 10,
 ) where {FT} = PositivityLimiter{FT}(FT(ρ_min), FT(p_min), maxiter)
 
+# Convex combination toward the element mean; `nothing` (the dry case's
+# absent tracer) passes through, so one `_p_scaled` serves both state shapes.
+@inline _θmix(θ, x, m) = m + θ * (x - m)
+@inline _θmix(θ, ::Nothing, ::Nothing) = nothing
+
 @inline function _p_scaled(
     pfn,
     θ,
@@ -61,20 +71,23 @@ PositivityLimiter(
     mρ, mρe, mu1, mu2, mu3, mρq,
     off,
 )
-    ρθ = mρ + θ * (ρ0 - mρ)
-    ρeθ = mρe + θ * (ρe0 - mρe)
-    u1θ = mu1 + θ * (u10 - mu1)
-    u2θ = mu2 + θ * (u20 - mu2)
-    u3θ = mu3 + θ * (u30 - mu3)
-    ρqθ = mρq + θ * (ρq0 - mρq)
-    return pfn(ρθ, ρeθ, u1θ, u2θ, u3θ, ρqθ, off)
+    return pfn(
+        _θmix(θ, ρ0, mρ),
+        _θmix(θ, ρe0, mρe),
+        _θmix(θ, u10, mu1),
+        _θmix(θ, u20, mu2),
+        _θmix(θ, u30, mu3),
+        _θmix(θ, ρq0, mρq),
+        off,
+    )
 end
 
 """
     apply_positivity_slab!(lim, pfn, sρ, sρe, su1, su2, su3, sρq, soff, sWJ)
 
 Apply the [`PositivityLimiter`](@ref) to one element slab (fixed `(v, h)`),
-in place. Shared by the CPU and CUDA paths.
+in place. Shared by the CPU and CUDA paths. `sρq === nothing` is the dry
+(tracer-less) case.
 """
 function apply_positivity_slab!(
     lim::PositivityLimiter,
@@ -87,10 +100,12 @@ function apply_positivity_slab!(
     p_min = lim.p_min
 
     # 1) WJ-weighted element means (the conserved quantities to preserve).
+    #    `sρq === nothing` is the dry case: every tracer branch below compiles
+    #    away and `mρq = nothing` flows through `_θmix` into the pressure call.
     Wtot = zero(FT)
     mρ = zero(FT); mρe = zero(FT)
     mu1 = zero(FT); mu2 = zero(FT); mu3 = zero(FT)
-    mρq = zero(FT)
+    mρq = sρq === nothing ? nothing : zero(FT)
     for j in 1:Nj, i in 1:Ni
         w = sWJ[1, i, j, 1]
         Wtot += w
@@ -99,29 +114,37 @@ function apply_positivity_slab!(
         mu1 += su1[1, i, j, 1] * w
         mu2 += su2[1, i, j, 1] * w
         mu3 += su3[1, i, j, 1] * w
-        mρq += sρq[1, i, j, 1] * w
+        if sρq !== nothing
+            mρq += sρq[1, i, j, 1] * w
+        end
     end
     mρ /= Wtot; mρe /= Wtot
     mu1 /= Wtot; mu2 /= Wtot; mu3 /= Wtot
-    mρq /= Wtot
+    if mρq !== nothing
+        mρq /= Wtot
+    end
 
     # 2) θ from the two linear floors (density, tracer). (num)/(num − min):
     #    the largest θ keeping the scaled min at the floor. If the mean itself
     #    is inadmissible the ratio is ≤ 0 ⇒ θ collapses to the mean (θ = 0).
     θ = one(FT)
     ρmin_node = FT(Inf)
-    ρqmin_node = FT(Inf)
     for j in 1:Nj, i in 1:Ni
         ρmin_node = min(ρmin_node, sρ[1, i, j, 1])
-        ρqmin_node = min(ρqmin_node, sρq[1, i, j, 1])
     end
     if ρmin_node < ρ_min
         d = mρ - ρmin_node
         θ = min(θ, d > 0 ? (mρ - ρ_min) / d : zero(FT))
     end
-    if ρqmin_node < 0
-        d = mρq - ρqmin_node
-        θ = min(θ, d > 0 ? mρq / d : zero(FT))
+    if sρq !== nothing
+        ρqmin_node = FT(Inf)
+        for j in 1:Nj, i in 1:Ni
+            ρqmin_node = min(ρqmin_node, sρq[1, i, j, 1])
+        end
+        if ρqmin_node < 0
+            d = mρq - ρqmin_node
+            θ = min(θ, d > 0 ? mρq / d : zero(FT))
+        end
     end
     θ = max(θ, zero(FT))
     θ_a = θ
@@ -133,7 +156,8 @@ function apply_positivity_slab!(
     for j in 1:Nj, i in 1:Ni
         ρ0 = sρ[1, i, j, 1]; ρe0 = sρe[1, i, j, 1]
         u10 = su1[1, i, j, 1]; u20 = su2[1, i, j, 1]; u30 = su3[1, i, j, 1]
-        ρq0 = sρq[1, i, j, 1]; off = soff[1, i, j, 1]
+        ρq0 = sρq === nothing ? nothing : sρq[1, i, j, 1]
+        off = soff[1, i, j, 1]
         p_hi = _p_scaled(pfn, θ_a, ρ0, ρe0, u10, u20, u30, ρq0, mρ, mρe, mu1, mu2, mu3, mρq, off)
         if p_hi < p_min
             p0 = pfn(mρ, mρe, mu1, mu2, mu3, mρq, off)
@@ -159,12 +183,14 @@ function apply_positivity_slab!(
     # 4) apply the common θ to every conserved component (mean-preserving).
     if θ < one(FT)
         for j in 1:Nj, i in 1:Ni
-            sρ[1, i, j, 1] = mρ + θ * (sρ[1, i, j, 1] - mρ)
-            sρe[1, i, j, 1] = mρe + θ * (sρe[1, i, j, 1] - mρe)
-            su1[1, i, j, 1] = mu1 + θ * (su1[1, i, j, 1] - mu1)
-            su2[1, i, j, 1] = mu2 + θ * (su2[1, i, j, 1] - mu2)
-            su3[1, i, j, 1] = mu3 + θ * (su3[1, i, j, 1] - mu3)
-            sρq[1, i, j, 1] = mρq + θ * (sρq[1, i, j, 1] - mρq)
+            sρ[1, i, j, 1] = _θmix(θ, sρ[1, i, j, 1], mρ)
+            sρe[1, i, j, 1] = _θmix(θ, sρe[1, i, j, 1], mρe)
+            su1[1, i, j, 1] = _θmix(θ, su1[1, i, j, 1], mu1)
+            su2[1, i, j, 1] = _θmix(θ, su2[1, i, j, 1], mu2)
+            su3[1, i, j, 1] = _θmix(θ, su3[1, i, j, 1], mu3)
+            if sρq !== nothing
+                sρq[1, i, j, 1] = _θmix(θ, sρq[1, i, j, 1], mρq)
+            end
         end
     end
     return nothing
@@ -174,11 +200,21 @@ end
     apply_positivity_limiter!(lim, pressure_fn, states, off)
 
 Apply the [`PositivityLimiter`](@ref). `states` is the 6-tuple of conserved
-scalar `Field`s `(ρ, ρe, ρu1, ρu2, ρu3, ρq)`; `off` is the auxiliary scalar
-`Field`; `pressure_fn` is the pressure functor (see [`PositivityLimiter`](@ref)).
+scalar `Field`s `(ρ, ρe, ρu1, ρu2, ρu3, ρq)`, or the 5-tuple without the
+tracer for a dry state; `off` is the auxiliary scalar `Field`; `pressure_fn`
+is the pressure functor (see [`PositivityLimiter`](@ref)).
 """
 apply_positivity_limiter!(lim::PositivityLimiter, pfn, states, off) =
     apply_positivity_limiter!(lim, pfn, states, off, ClimaComms.device(off))
+
+# The tracer slot of a dry (5-field) state; the `nothing` disables every
+# tracer branch in the slab kernel at compile time.
+@inline _positivity_tracer(states::Tuple{Any, Any, Any, Any, Any}) = nothing
+@inline _positivity_tracer(states::Tuple{Any, Any, Any, Any, Any, Any}) =
+    Fields.field_values(states[6])
+
+@inline _positivity_slab(x, v, h) = slab(x, v, h)
+@inline _positivity_slab(::Nothing, v, h) = nothing
 
 function apply_positivity_limiter!(
     lim::PositivityLimiter,
@@ -187,13 +223,13 @@ function apply_positivity_limiter!(
     off,
     ::ClimaComms.AbstractCPUDevice,
 ) where {F}
-    (ρ, ρe, u1, u2, u3, ρq) = states
+    (ρ, ρe, u1, u2, u3) = states
     dρ = Fields.field_values(ρ)
     dρe = Fields.field_values(ρe)
     du1 = Fields.field_values(u1)
     du2 = Fields.field_values(u2)
     du3 = Fields.field_values(u3)
-    dρq = Fields.field_values(ρq)
+    dρq = _positivity_tracer(states)
     doff = Fields.field_values(off)
     dWJ = Spaces.local_geometry_data(axes(ρ)).WJ
     (Nv, _, _, Nh) = size(dρ)
@@ -202,7 +238,7 @@ function apply_positivity_limiter!(
             lim, pfn,
             slab(dρ, v, h), slab(dρe, v, h),
             slab(du1, v, h), slab(du2, v, h), slab(du3, v, h),
-            slab(dρq, v, h), slab(doff, v, h), slab(dWJ, v, h),
+            _positivity_slab(dρq, v, h), slab(doff, v, h), slab(dWJ, v, h),
         )
     end
     return nothing

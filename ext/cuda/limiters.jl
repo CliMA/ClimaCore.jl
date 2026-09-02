@@ -7,6 +7,8 @@ import ClimaCore.Limiters:
     PositivityLimiter,
     apply_positivity_limiter!,
     apply_positivity_slab!,
+    _positivity_tracer,
+    _positivity_slab,
     VerticalMassBorrowingLimiter,
     column_massborrow!
 import ClimaCore: DataLayouts, Spaces, Topologies, Fields
@@ -174,7 +176,7 @@ function apply_positivity_limiter!(
     off,
     ::ClimaComms.CUDADevice,
 ) where {F}
-    (ρ, ρe, u1, u2, u3, ρq) = states
+    (ρ, ρe, u1, u2, u3) = states
     dρ = Fields.field_values(ρ)
     (Nv, _, _, Nh) = size(dρ)
     nthreads, nblocks = config_threadblock(Nv, Nh)
@@ -186,7 +188,7 @@ function apply_positivity_limiter!(
         Fields.field_values(u1),
         Fields.field_values(u2),
         Fields.field_values(u3),
-        Fields.field_values(ρq),
+        _positivity_tracer(states),
         Fields.field_values(off),
         Spaces.local_geometry_data(axes(ρ)).WJ,
     )
@@ -213,7 +215,7 @@ function apply_positivity_limiter_kernel!(
             lim, pfn,
             slab(dρ, v, h), slab(dρe, v, h),
             slab(du1, v, h), slab(du2, v, h), slab(du3, v, h),
-            slab(dρq, v, h), slab(doff, v, h), slab(dWJ, v, h),
+            _positivity_slab(dρq, v, h), slab(doff, v, h), slab(dWJ, v, h),
         )
     end
     return nothing

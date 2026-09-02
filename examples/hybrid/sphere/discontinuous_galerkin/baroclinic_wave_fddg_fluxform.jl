@@ -20,7 +20,7 @@ Newton; implicit vertical acoustics with the Exner Jacobian in
 fddg_fluxform_jacobian.jl; DT default 60 s at helem=4).
 
 Env: HELEM, NPOLY, ZELEM, ZMAX, DT, T_END, KAPPA4, FILTER, PERTURB, NDIAG,
-     HELD_SUAREZ, HS_SPINUP
+     HELD_SUAREZ, HS_SPINUP, POSITIVITY_LIMITER, ZS_RHO_MIN, ZS_P_MIN
 Run: PERTURB=0 DT=4 T_END=3600 julia --project=.buildkite \
          examples/hybrid/sphere/baroclinic_wave_fddg_fluxform.jl
 =#
@@ -556,6 +556,49 @@ monitor = CTS.Callbacks.EveryXSimulationTime(
 )
 callback = CTS.CallbackSet(monitor)
 
+# --- Zhang–Shu (2010) positivity limiter (default on) ---
+# Scales the conserved vector (ρ, ρe, ρu1, ρu2, ρu3) at each node toward the
+# WJ-weighted element mean by one θ ∈ [0,1] — a convex combination, so every
+# element mean (mass, energy, momentum) is preserved exactly — chosen as the
+# smallest θ enforcing ρ ≥ ρ_min and p ≥ p_min (p via zs_pressure + per-node
+# bisection). A mean-preserving redistribution, NOT a pointwise clamp: it keeps
+# the Rusanov wave speed √(γp/ρ) and the EOS arguments physical through the
+# Gibbs under/overshoots of steep-terrain or stressed (large-dt) runs, and is a
+# no-op (θ = 1) whenever all nodes are already admissible. Applied once per RK
+# stage through ClimaTimeSteppers' `lim!` hook.
+import ClimaCore.Limiters
+const use_positivity_limiter = get(ENV, "POSITIVITY_LIMITER", "1") == "1"
+const zs_rho_min = parse(FT, get(ENV, "ZS_RHO_MIN", "1e-6"))
+const zs_p_min = parse(FT, get(ENV, "ZS_P_MIN", "1e-2"))
+const positivity_limiter =
+    Limiters.PositivityLimiter(FT; ρ_min = zs_rho_min, p_min = zs_p_min, maxiter = 10)
+
+# Pressure of a scaled conserved node, matching the tendency's EOS exactly:
+# horizontal kinetic energy from the (scaled) Cartesian momenta, the vertical
+# KE + geopotential carried unscaled in `off = w_c²/2 + Φ`, so
+# e_int = ρe/ρ − K_h − off as in pressure_ρe. The dry state has no tracer, so
+# the limiter passes ρq = nothing.
+@inline function zs_pressure(ρ, ρe, ρu1, ρu2, ρu3, ::Nothing, off)
+    K_h = (ρu1^2 + ρu2^2 + ρu3^2) / (2 * ρ^2)
+    return ρ * R_d * ((ρe / ρ - K_h - off) / cv_d + T_tri)
+end
+
+function lim_fddg!(U, p, t, u_ref)
+    use_positivity_limiter || return nothing
+    Yc = U.Yc
+    # off = w_c²/2 + Φ (w_c = ρw interpolated to centers / ρ), recomputed each
+    # stage from U.
+    w_c = @. Ic(Geometry.WVector(U.ρw)).components.data.:1 / Yc.ρ
+    off = @. w_c^2 / 2 + ᶜΦ
+    Limiters.apply_positivity_limiter!(
+        positivity_limiter,
+        zs_pressure,
+        (Yc.ρ, Yc.ρe, Yc.ρu1, Yc.ρu2, Yc.ρu3),
+        off,
+    )
+    return nothing
+end
+
 if stepper == "hevi"
     # Split-consistency check: rhs == implicit + remaining (exact when the
     # tendency filter is off; with the filter on, the implicit part is
@@ -579,12 +622,17 @@ if stepper == "hevi"
             jac_prototype = jacobian,
             Wfact = fddg_implicit_equation_jacobian!,
         ),
-        T_exp! = remaining_tendency_fddg!,
+        # NB: the explicit tendency is passed as T_lim! (NOT T_exp!):
+        # ClimaTimeSteppers only calls the `lim!` hook when a T_lim! is
+        # present. Numerically identical to T_exp! (same explicit tableau
+        # coefficients), but activates the per-stage positivity limiter.
+        T_lim! = remaining_tendency_fddg!,
+        lim! = lim_fddg!,
     )
     ode_algo =
         CTS.IMEXAlgorithm(CTS.ARS343(), CTS.NewtonsMethod(; max_iters = 2))
 else
-    ode_function = CTS.ClimaODEFunction(; T_exp! = rhs_fddg!)
+    ode_function = CTS.ClimaODEFunction(; T_lim! = rhs_fddg!, lim! = lim_fddg!)
     ode_algo = CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher())
 end
 
