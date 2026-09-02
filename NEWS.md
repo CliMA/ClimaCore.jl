@@ -4,6 +4,19 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] The `CommonGrids` and `CommonSpaces`
+  constructors that build a horizontal spectral-element grid
+  (`ExtrudedCubedSphereGrid`, `CubedSphereGrid`, `Box3DGrid`, `SliceXZGrid`,
+  `RectangleXYGrid` and the matching `*Space` constructors) accept a
+  `discretization` keyword and forward it to the grid, so a discontinuous
+  space is built with `discretization = Grids.DG()`; when omitted, the
+  discretization follows the quadrature as for the grid constructors. The
+  `Spaces.SpectralElementSpace1D` / `SpectralElementSpace2D` docstrings name
+  the keywords they forward, and `examples/plane/bickleyjet.jl` builds both of
+  its spaces with `CommonSpaces.RectangleXYSpace` instead of assembling the
+  domain, mesh and topology by hand.
+  PR [2621](https://github.com/CliMA/ClimaCore.jl/pull/2621)
+
 - ![][badge-🔥behavioralΔ] The two Bickley-jet examples `examples/plane/
   bickleyjet_cg.jl` and `examples/plane/bickleyjet_dg.jl` are replaced by the
   single driver `examples/plane/bickleyjet.jl`, which takes the

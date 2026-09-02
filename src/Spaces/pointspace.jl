@@ -5,7 +5,10 @@ local_geometry_data(space::AbstractPointSpace) = space.local_geometry
 """
     PointSpace <: AbstractSpace
 
-A zero-dimensional space.
+A zero-dimensional space: a single point, the horizontal space of one column
+(`Spaces.level` of a [`FiniteDifferenceSpace`](@ref)). For `N` disconnected
+horizontal points see [`MultiPointSpace`](@ref), and for `N` independent
+columns see [`MultiColumnFiniteDifferenceSpace`](@ref).
 """
 struct PointSpace{
     C <: ClimaComms.AbstractCommsContext,

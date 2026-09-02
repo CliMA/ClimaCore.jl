@@ -143,6 +143,82 @@ warp_surface_elev(coord, hc::FT) where {FT} =
     @test grid isa Grids.SpectralElementGrid2D
     @test Grids.topology(grid).mesh isa Meshes.RectilinearMesh
 
+    # `discretization` reaches the horizontal spectral-element grid through
+    # every constructor that builds one; omitted, it follows the quadrature,
+    # so GLL nodes give CG.
+    @test Spaces.discretization(space) === Grids.CG()
+    dg_space = RectangleXYSpace(
+        FT;
+        x_min = FT(0),
+        x_max = FT(1),
+        y_min = FT(0),
+        y_max = FT(1),
+        periodic_x = true,
+        periodic_y = true,
+        n_quad_points = 4,
+        x_elem = 3,
+        y_elem = 4,
+        discretization = Grids.DG(),
+    )
+    @test Spaces.discretization(dg_space) === Grids.DG()
+    @test !Spaces.is_continuous(dg_space)
+    dg_space = ExtrudedCubedSphereSpace(
+        FT;
+        z_elem = 10,
+        z_min = FT(0),
+        z_max = FT(1),
+        radius = FT(10),
+        h_elem = 10,
+        n_quad_points = 4,
+        staggering = CellCenter(),
+        discretization = Grids.DG(),
+    )
+    @test Spaces.discretization(dg_space) === Grids.DG()
+    @test Spaces.discretization(Spaces.horizontal_space(dg_space)) ===
+          Grids.DG()
+    dg_space = CubedSphereSpace(
+        FT;
+        radius = FT(10),
+        n_quad_points = 4,
+        h_elem = 10,
+        discretization = Grids.DG(),
+    )
+    @test Spaces.discretization(dg_space) === Grids.DG()
+    dg_space = Box3DSpace(
+        FT;
+        z_elem = 10,
+        x_min = FT(0),
+        x_max = FT(1),
+        y_min = FT(0),
+        y_max = FT(1),
+        z_min = FT(0),
+        z_max = FT(10),
+        periodic_x = true,
+        periodic_y = true,
+        n_quad_points = 4,
+        x_elem = 3,
+        y_elem = 4,
+        staggering = CellCenter(),
+        discretization = Grids.DG(),
+    )
+    @test Spaces.discretization(dg_space) === Grids.DG()
+    if !(ClimaComms.device() isa ClimaComms.CUDADevice)
+        dg_space = SliceXZSpace(
+            FT;
+            z_elem = 10,
+            x_min = FT(0),
+            x_max = FT(1),
+            z_min = FT(0),
+            z_max = FT(1),
+            periodic_x = true,
+            n_quad_points = 4,
+            x_elem = 4,
+            staggering = CellCenter(),
+            discretization = Grids.DG(),
+        )
+        @test Spaces.discretization(dg_space) === Grids.DG()
+    end
+
     lats = [0.0, 3.0, 5.0]
     longs = [0.0, 4.0, 7.0]
     points = [

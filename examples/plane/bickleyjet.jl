@@ -40,16 +40,8 @@
 using ClimaComms
 using LinearAlgebra
 
-import ClimaCore:
-    Domains,
-    Fields,
-    Geometry,
-    Grids,
-    Meshes,
-    Operators,
-    Spaces,
-    Quadratures,
-    Topologies
+import ClimaCore: Fields, Geometry, Grids, Operators, Spaces, Quadratures
+import ClimaCore.CommonSpaces: RectangleXYSpace
 import ClimaCore.Geometry: ⊗
 
 import ClimaTimeSteppers as CTS
@@ -105,35 +97,32 @@ if !is_periodic && discretization isa Grids.CG
            impose it through the operators.")
 end
 
-domain = Domains.RectangleDomain(
-    Domains.IntervalDomain(
-        Geometry.XPoint(-2π),
-        Geometry.XPoint(2π),
-        periodic = true,
-    ),
-    Domains.IntervalDomain(
-        Geometry.YPoint(-2π),
-        Geometry.YPoint(2π),
-        periodic = is_periodic,
-        boundary_names = is_periodic ? nothing : (:south, :north),
-    ),
-)
-
 n1, n2 = 16, 16
 Nq = 4
-mesh = Meshes.RectilinearMesh(domain, n1, n2)
-grid_topology = Topologies.Topology2D(context, mesh)
-quad = Quadratures.GLL{Nq}()
-space = Spaces.SpectralElementSpace2D(grid_topology, quad; discretization)
 
-# Over-integration space, on the same discretization as the model space.
+# `CommonSpaces.RectangleXYSpace` builds the domain, mesh, topology and grid
+# from the geometry in one call, and takes `discretization` alongside it. A
+# non-periodic direction gets its boundary names (`:south`, `:north`) from the
+# constructor.
+geometry = (;
+    x_min = -2π,
+    x_max = 2π,
+    y_min = -2π,
+    y_max = 2π,
+    x_elem = n1,
+    y_elem = n2,
+    periodic_x = true,
+    periodic_y = is_periodic,
+    context,
+)
+space = RectangleXYSpace(; geometry..., n_quad_points = Nq, discretization)
+
+# Over-integration space, on the same discretization as the model space. Only
+# the quadrature differs, and topologies are cached on their mesh, so this
+# shares the topology of `space` and `Interpolate`/`Restrict` accept the pair.
 Ispace =
     iszero(config.Nqh) ? nothing :
-    Spaces.SpectralElementSpace2D(
-        grid_topology,
-        Quadratures.GLL{config.Nqh}();
-        discretization,
-    )
+    RectangleXYSpace(; geometry..., n_quad_points = config.Nqh, discretization)
 
 function init_state(coord, p)
     x, y = coord.x, coord.y

@@ -118,7 +118,7 @@ same.
 To allow combining mismatched spaces, override this function so that it returns
 `true`.
 
-!!! warn
+!!! warning
 
     `ClimaCore` checks for consistency of spaces to protect you from non-sense
     results. If you disable this check, you are responsible to ensure that the
