@@ -14,7 +14,7 @@ import ClimaCore:
 import ClimaCore.Geometry: ⊗
 
 # The standard cubed-sphere spectral-element space used by the DG tests.
-# `discontinuous = true` marks the grid as DG (skips DSS; see
+# `discretization = Spaces.DG()` marks the grid as DG (skips DSS; see
 # `test/Spaces/unit_discontinuous_spaces.jl`). The distributed tests pass an
 # MPI `context` to partition the sphere across ranks.
 function dg_sphere_space(
@@ -30,7 +30,7 @@ function dg_sphere_space(
     return Spaces.SpectralElementSpace2D(
         htopology,
         Quadratures.GLL{Nq}();
-        discontinuous = true,
+        discretization = Spaces.DG(),
     )
 end
 

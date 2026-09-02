@@ -21,7 +21,10 @@ Spaces.weighted_dss_start!
 Spaces.weighted_dss_internal!
 Spaces.weighted_dss_ghost!
 Spaces.weighted_dss!
-Spaces.is_continuous
 Grids.is_continuous
+Grids.discretization
+Grids.Discretization
+Grids.CG
+Grids.DG
 Spaces.unique_nodes
 ```

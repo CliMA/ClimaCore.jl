@@ -1,7 +1,7 @@
-# Asserts the discontinuous-grid (DG) contract: `discontinuous = true` marks a
-# spectral-element grid as DG, `is_continuous` reports it (also through
-# extruded spaces), and `weighted_dss!` is the identity there while remaining
-# a genuine projection on the continuous twin of the same topology.
+# Asserts the discontinuous-grid (DG) contract: `discretization = Grids.DG()`
+# marks a spectral-element grid as DG, `discretization`/`is_continuous` report
+# it (also through extruded spaces), and `weighted_dss!` is the identity there
+# while changing perimeter values on the continuous twin of the same topology.
 using Test
 using Random
 import ClimaComms
@@ -44,21 +44,38 @@ end
 topology = sphere_topology(FT)
 quad = Quadratures.GLL{4}()
 cg_space = Spaces.SpectralElementSpace2D(topology, quad)
-dg_space = Spaces.SpectralElementSpace2D(topology, quad; discontinuous = true)
+dg_space = Spaces.SpectralElementSpace2D(
+    topology,
+    quad;
+    discretization = Grids.DG(),
+)
 
-@testset "is_continuous and grid caching" begin
+@testset "discretization, is_continuous, and grid caching" begin
+    @test Spaces.discretization(cg_space) === Grids.CG()
+    @test Spaces.discretization(dg_space) === Grids.DG()
     @test Spaces.is_continuous(cg_space)
     @test !Spaces.is_continuous(dg_space)
-    # the flag is part of the grid cache key
+    # the discretization is part of the grid cache key
     @test Spaces.grid(cg_space) !== Spaces.grid(dg_space)
     @test Spaces.grid(dg_space).dss_weights === nothing
 
-    # GL quadrature has no shared boundary nodes, so it is DG without the flag
+    # GL quadrature has no shared boundary nodes, so it cannot represent a
+    # continuous space: an omitted discretization follows the quadrature to DG,
+    # and an explicit CG is rejected rather than silently downgraded.
     gl_space = Spaces.SpectralElementSpace2D(topology, Quadratures.GL{4}())
+    @test Spaces.discretization(gl_space) === Grids.DG()
     @test !Spaces.is_continuous(gl_space)
+    @test_throws ArgumentError Spaces.SpectralElementSpace2D(
+        topology,
+        Quadratures.GL{4}();
+        discretization = Grids.CG(),
+    )
 
     cg_center, cg_face = extruded_spaces(cg_space)
     dg_center, dg_face = extruded_spaces(dg_space)
+    # extruded spaces forward to the horizontal grid
+    @test Spaces.discretization(cg_center) === Grids.CG()
+    @test Spaces.discretization(dg_center) === Grids.DG()
     @test Spaces.is_continuous(cg_center) && Spaces.is_continuous(cg_face)
     @test !Spaces.is_continuous(dg_center) && !Spaces.is_continuous(dg_face)
 
@@ -73,6 +90,7 @@ dg_space = Spaces.SpectralElementSpace2D(topology, quad; discontinuous = true)
         device,
         Meshes.IntervalMesh(vdomain, nelems = 4),
     )
+    @test Spaces.discretization(vspace) === Grids.CG()
     @test Spaces.is_continuous(vspace)
 end
 
@@ -135,7 +153,7 @@ function roundtrip_is_continuous(space)
     end
 end
 
-function plane_hspace(FT; discontinuous)
+function plane_hspace(FT; discretization)
     context = ClimaComms.context()
     hdomain = Domains.IntervalDomain(
         Geometry.XPoint(zero(FT)),
@@ -147,18 +165,44 @@ function plane_hspace(FT; discontinuous)
     return Spaces.SpectralElementSpace1D(
         htopology,
         Quadratures.GLL{4}();
-        discontinuous,
+        discretization,
     )
 end
 
-@testset "discontinuous flag survives an InputOutput round-trip" begin
+@testset "discretization survives an InputOutput round-trip" begin
     @test !roundtrip_is_continuous(dg_space)
     @test roundtrip_is_continuous(cg_space)
     # extruded plane spaces cover the SpectralElementGrid1D writer/reader
-    dg_plane, _ = extruded_spaces(plane_hspace(FT; discontinuous = true))
-    cg_plane, _ = extruded_spaces(plane_hspace(FT; discontinuous = false))
+    dg_plane, _ =
+        extruded_spaces(plane_hspace(FT; discretization = Grids.DG()))
+    cg_plane, _ =
+        extruded_spaces(plane_hspace(FT; discretization = Grids.CG()))
     @test !roundtrip_is_continuous(dg_plane)
     @test roundtrip_is_continuous(cg_plane)
+end
+
+@testset "legacy \"discontinuous\" attribute reads back as DG" begin
+    # Files written before "discretization" replaced the "discontinuous"
+    # attribute must still restore their DG grids.
+    context = ClimaComms.context()
+    filename = tempname(; cleanup = true)
+    f = Fields.local_geometry_field(dg_space).J
+    InputOutput.HDF5Writer(filename, context) do writer
+        InputOutput.write!(writer, "f" => f)
+    end
+    InputOutput.HDF5.h5open(filename, "r+") do file
+        for name in keys(file["grids"])
+            group = file["grids"][name]
+            grid_attrs = InputOutput.HDF5.attrs(group)
+            haskey(grid_attrs, "discretization") || continue
+            InputOutput.HDF5.delete_attribute(group, "discretization")
+            grid_attrs["discontinuous"] = "true"
+        end
+    end
+    Cache.clean_cache!(Spaces.grid(dg_space))
+    InputOutput.HDF5Reader(filename, context) do reader
+        @test !Spaces.is_continuous(axes(InputOutput.read_field(reader, "f")))
+    end
 end
 
 @testset "CG and DG grids round-trip through a single file" begin

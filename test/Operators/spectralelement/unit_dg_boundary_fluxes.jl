@@ -59,7 +59,7 @@ function channel_space(
     return Spaces.SpectralElementSpace2D(
         topology,
         Quadratures.GLL{Nq}();
-        discontinuous = true,
+        discretization = Spaces.DG(),
     )
 end
 

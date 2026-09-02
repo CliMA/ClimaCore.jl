@@ -144,7 +144,11 @@ end
     topology = Topologies.Topology2D(context, mesh)
     quad = Quadratures.GLL{4}()
     dg_space =
-        Spaces.SpectralElementSpace2D(topology, quad; discontinuous = true)
+        Spaces.SpectralElementSpace2D(
+            topology,
+            quad;
+            discretization = Spaces.DG(),
+        )
     coord = Fields.coordinate_field(dg_space)
     f = @. sind(coord.long) * cosd(coord.lat)
     ρ = @. 2 + sind(coord.lat)
@@ -158,6 +162,28 @@ end
     expected_weighted = Operators.ldg_laplacian_tendency(f, ρ, κ, τ)
     got_weighted = Operators.scalar_laplacian(f; weight = ρ)
     @test parent(got_weighted) ≈ parent(expected_weighted)
+
+    # The in-place form writes into a caller-owned field, including when the
+    # destination aliases the argument.
+    out = similar(f)
+    @test Operators.scalar_laplacian!(out, f) === out
+    @test parent(out) ≈ parent(expected)
+
+    aliased = copy(f)
+    Operators.scalar_laplacian!(aliased, aliased)
+    @test parent(aliased) ≈ parent(expected)
+
+    # A lazy argument is materialized into a scratch field; the operator is
+    # linear, so the result of doubling the input is exactly double.
+    got_lazy =
+        Operators.scalar_laplacian(Base.Broadcast.broadcasted(*, 2, f))
+    @test parent(got_lazy) ≈ 2 .* parent(expected)
+
+    # A DG ∇⁴ is two passes with no DSS between them.
+    ∇²f = Operators.scalar_laplacian(f)
+    expected_∇⁴ = Operators.ldg_laplacian_tendency(∇²f, nothing, κ, τ)
+    got_∇⁴ = Operators.scalar_laplacian(Operators.scalar_laplacian(f))
+    @test parent(got_∇⁴) ≈ parent(expected_∇⁴)
 
     u = @. Geometry.Covariant12Vector(
         Geometry.UVVector(cosd(coord.lat), sind(coord.long) * cosd(coord.lat)),

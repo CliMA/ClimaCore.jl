@@ -94,10 +94,11 @@ Returns `nothing` when the type cannot be determined (an operand's eltype is the
 inference-failure sentinel `Union{}`, or inference of the projection gave a
 non-concrete type); the launch then falls back to the lazy `copyto_stencil_kernel!`,
 which needs no shared memory, instead of erroring.
+
+The single-argument form is used by the launch-side sizing, where `bc` is not yet
+space-stripped; the kernel passes the reconstructed operand space explicitly, since
+a stripped argument's `axes` is a placeholder space with no local geometry type.
 """
-# The single-argument form is used by the launch-side sizing, where `bc` is not yet
-# space-stripped; the kernel passes the reconstructed operand space explicitly, since
-# a stripped argument's `axes` is a placeholder space with no local geometry type.
 @inline cached_operand_type(bc) = cached_operand_type(bc, axes(bc.args[2i32]))
 @inline function cached_operand_type(bc, mat2_space)
     mat1_type = unsafe_eltype(bc.args[1i32])
