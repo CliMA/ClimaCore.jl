@@ -1,409 +1,193 @@
-# Remapping to regular grids
+# Remap and interpolate
 
-`ClimaCore` horizontal domains are spectral elements. Points are not distributed
-uniformly within an element, and elements are also not necessarily organized in
-a simple way. For these reasons, remapping to regular grids becomes a
-fundamental operations when inspecting the simulation output. In this section,
-we describe the remappers currently available in `ClimaCore`.
+Spectral-element nodes are not uniformly spaced within an element, and the
+elements of a cubed sphere are not aligned with latitude and longitude, so
+output is interpolated to a regular grid before it is plotted or written.
+ClimaCore provides a fast, element-local interpolation for diagnostics and
+plots; conservative remapping, which preserves areas and integrals and is
+needed for exchanges between coupled component models, goes through
+TempestRemap. This page covers the interpolation, with pointers to the rest.
 
-Broadly speaking, we can classify remappers in two categories: conservative, and
-non-conservative. Conservative remappers preserve areas (and masses) when
-interpolating from the spectral grid to Cartesian ones. Conservative remappers
-are non-local operations (meaning that they require communication between
-different elements) and are more expensive, so they are typically reserved to
-operations where physical conservation is important (e.g., exchange between
-component models in a coupled simulation). On the other hand, non-conservative
-remappers are local to an element and faster to evaluate, which makes them
-suitable to operations like diagnostics and plotting, where having perfect
-physical conservation is not as important.
+## How the interpolation works
 
-## Non-conservative remapping
+Within the element that contains a target point, the field is evaluated by
+Lagrange interpolation through the element's nodes, in the barycentric form of
+[Berrut2004](@cite), equation (3.2), with the same polynomial degree as the
+field (`Remapping.SpectralElementRemapping`, the default). This is exact for
+the polynomial the field represents, so a smooth field is interpolated to
+spectral accuracy, and it overshoots near a discontinuity like any high-order
+interpolant. `Remapping.BilinearRemapping` interpolates bilinearly within the
+2 × 2 block of nodes around the target point instead: second-order accurate,
+but bounded by the surrounding nodal values, so no new extrema appear. In the
+vertical, values are interpolated linearly between the two nearest levels;
+below the lowest level and above the highest, the nearest level's value is
+used.
 
-Non-conservative remappers are fast and do not require communication, but they
-are not as accurate as conservative remappers, especially with large elements
-with sharp gradients. These remappers are better suited for diagnostics and
-plots.
+## Prerequisites
 
-The main non-conservative remapper currently implemented utilizes a Lagrange
-interpolation with the barycentric formula in [Berrut2004], equation (3.2), for
-the horizontal interpolation. Vertical interpolation is linear except in the
-boundary elements where it is 0th order.
+`import ClimaCore: Remapping, Geometry`. Target points are arrays of
+`Geometry.Point`s: `LatLongPoint` on the sphere, `XYPoint` (or `XPoint`) on a
+plane, `ZPoint` for heights.
 
-### Quick start
+## Steps
 
-Assuming you have a `ClimaCore` `Field` with name `field`, the simplest way to
-interpolate onto a uniform grid is with
+ 1. For a one-off interpolation, call `Remapping.interpolate` on the field. With
+    no coordinates given, a uniform target grid is chosen from the field's space
+    (latitude–longitude on the sphere, `x`–`y` on a plane, with `zresolution`
+    levels in the vertical) and the interpolated values are returned as an
+    `Array` (or a `CuArray` on a GPU):
 
-```julia
-julia> Remapping.interpolate(field)
-import ClimaCore.Remapping
-```
+    ```julia
+    interpolated = Remapping.interpolate(field)
+    interpolated = Remapping.interpolate(field; hresolution = 100, zresolution = 50)
+    ```
 
-This will return an `Array` (or a `CuArray`) with the `field` interpolated on
-some uniform grid that is automatically determined based on the `Space` of the
-given `field`. To obtain such coordinates, you can call the
-`Remapping.default_target_hcoords` and `Remapping.default_target_zcoords`
-functions. These functions return an `Array` with the coordinates over which
-interpolation will occur. These arrays are of type `Geometry.Point`s.
+    `Remapping.default_target_hcoords(space)` and
+    `Remapping.default_target_zcoords(space)` return the target points of that
+    default grid, for axis labels.
 
-By default, vertical interpolation is off (field evaluated on levels). Horizontal
-interpolation: `SpectralElementRemapping()` (default; uses spectral element quadrature weights) or `BilinearRemapping()`:
+ 2. To choose the target points, pass them as arrays. The output is defined on
+    the Cartesian product of the horizontal and vertical targets:
 
-```julia
-interpolated_array =
-    Remapping.interpolate(field; horizontal_method = Remapping.BilinearRemapping())
-```
+    ```julia
+    longs = range(-180.0, 180.0, 21)
+    lats = range(-80.0, 80.0, 21)
+    zs = range(0.0, 1000.0, 21)
+    hcoords = [Geometry.LatLongPoint(lat, long) for long in longs, lat in lats]
+    zcoords = [Geometry.ZPoint(z) for z in zs]
+    interpolated = Remapping.interpolate(field, hcoords, zcoords)   # size 21 × 21 × 21
+    ```
 
-`ClimaCore.Remapping.interpolate` allocates new output arrays. As such, it is
-not suitable for performance-critical applications.
-`ClimaCore.Remapping.interpolate!` performs interpolation in-place. When using
-the in-place version`, the `dest`ination has to have the same array type as the device in use (e.g., `CuArray`for CUDA runs) and has to be`nothing`for non-root processes. For performance-critical applications, it is preferable to a`ClimaCore.Remapping.Remapper` and use it directly (see next Section).
+    The horizontal-only and vertical-only forms omit the coordinates the space
+    does not have. On a Cartesian plane, `Remapping.interpolate_array(field, xpts, ypts)`
+    accepts ranges of `XPoint`s and `YPoint`s directly.
 
-#### Example
+ 3. For repeated interpolation onto the same targets, in a diagnostics loop or
+    for several fields, build a `Remapping.Remapper` once. It stores the
+    target points, the interpolation weights, and scratch space, and serves
+    every field on its space:
 
-Given `field`, a `Field` defined on a cubed sphere.
+    ```julia
+    remapper = Remapping.Remapper(space, hcoords, zcoords)
+    interpolated = Remapping.interpolate(remapper, field)
+    Remapping.interpolate!(interpolated, remapper, field)      # in place
+    ```
 
-By default, a target uniform grid is chosen (with resolution `hresolution` and
-`vresolution`), so remapping is
+    Several fields on the same space are interpolated in one call,
+    `interpolate(remapper, [field1, field2])`, which returns an array with a
+    leading field dimension. The `buffer_length` keyword of the constructor sets
+    how many fields one call processes at once; more fields than that are
+    handled in batches.
 
-```julia
-interpolated_array = interpolate(field, hcoords, zcoords)
-```
+ 4. Choose the horizontal method where it matters. Both `interpolate` and
+    `Remapper` take `horizontal_method = Remapping.BilinearRemapping()` for a
+    bounded interpolation of fields with sharp gradients, as the comparison
+    below shows on a slotted cylinder.
 
-Coordinates can be specified:
+## Distributed runs
 
-```julia
-longpts = range(-180.0, 180.0, 21)
-latpts = range(-80.0, 80.0, 21)
-zpts = range(0.0, 1000.0, 21)
+Each MPI process builds its own `Remapper` for the target points that fall in
+its elements. `interpolate` gathers the result on the root process and returns
+it there; on the other processes, it returns `nothing`. `interpolate!` follows
+the same rule: its destination must be an array of the device's array type on
+the root process and `nothing` elsewhere.
 
-hcoords = [Geometry.LatLongPoint(lat, long) for long in longpts, lat in latpts]
-zcoords = [Geometry.ZPoint(z) for z in zpts]
+## Spectral versus bilinear interpolation
 
-interpolated_array = interpolate(field, hcoords, zcoords)
-# Or, to use bilinear remapping without spectral element weighting:
-# interpolate(field, hcoords, zcoords; horizontal_method = Remapping.BilinearRemapping())
-```
-
-The output is defined on the Cartesian product of `hcoords` with `zcoords`.
-
-If the default target coordinates are being used, it is possible to broadcast
-`ClimaCore.Geometry.components` to extract them as a vector of tuples (and then
-broadcast `getindex` to extract the respective coordinates as vectors).
-
-This also provides the simplest way to plot a `Field`. Suppose `field` is a 2D `Field`:
-
-```julia
-using CairoMakie
-heatmap(ClimaCore.Remapping.interpolate(field))
-```
-
-### Remapping methods: Bilinear vs SpectralElementRemapping
-
-Two horizontal remapping methods are available:
-
-  - **`SpectralElementRemapping()`** (default): Uses spectral element quadrature weights for high-order polynomial interpolation. More accurate for smooth fields but can produce overshoots/undershoots near discontinuities.
-  - **`BilinearRemapping()`**: Uses bilinear interpolation on the 2×2 GLL cell containing each target point. More conservative (bounds-preserving) but lower-order accuracy.
-
-Both methods can be used with `interpolate_array` or `Remapper`:
-
-```julia
-using ClimaCore.Remapping: SpectralElementRemapping, BilinearRemapping
-
-# Use spectral remapping (default)
-interpolated = Remapping.interpolate_array(field, xpts, ypts)
-
-# Use bilinear remapping
-interpolated = Remapping.interpolate_array(
-    field, xpts, ypts; horizontal_method = BilinearRemapping(),
-)
-
-# With Remapper
-remapper = Remapper(space; target_hcoords, horizontal_method = BilinearRemapping())
-```
-
-#### Slotted-cylinder example (demo of horizontal remapping types)
+A slotted cylinder on a plane of 6 × 6 elements with `Nq = 4`, interpolated to
+a 24 × 24 grid by both methods. The spectral interpolant overshoots and
+undershoots at the discontinuity (marked red and orange); the bilinear
+interpolant stays within `[0, 1]`.
 
 ```@example remap_visualization
 using ClimaComms
+ClimaComms.@import_required_backends
 using ClimaCore:
     Geometry, Domains, Meshes, Topologies, Spaces, Fields, Remapping, Quadratures
 using CairoMakie
+CairoMakie.activate!(type = "png")
 
-device = ClimaComms.CPUSingleThreaded()
-nelements_horz = 6
-Nq = 4
-n_interp = 24
-
-# Simple test field: disk with slot (discontinuous)
-slot_radius = 0.15
-slot_cx, slot_cy = 0.5, 0.5
-slot_half_width = 0.025
-slot_y_hi = slot_cy + slot_radius
-
-horzdomain = Domains.RectangleDomain(
+nelems, Nq, n_interp = 6, 4, 24
+domain = Domains.RectangleDomain(
     Geometry.XPoint(0.0) .. Geometry.XPoint(1.0),
     Geometry.YPoint(0.0) .. Geometry.YPoint(1.0),
     x1periodic = true, x2periodic = true,
 )
+mesh = Meshes.RectilinearMesh(domain, nelems, nelems)
+topology = Topologies.Topology2D(ClimaComms.context(), mesh)
+space = Spaces.SpectralElementSpace2D(topology, Quadratures.GLL{Nq}())
 
-quad = Quadratures.GLL{Nq}()
-horzmesh = Meshes.RectilinearMesh(horzdomain, nelements_horz, nelements_horz)
-horztopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(device), horzmesh)
-space = Spaces.SpectralElementSpace2D(horztopology, quad)
-
-coords = Fields.coordinate_field(space)
+# A disk of radius 0.15 about (0.5, 0.5) with a slot cut upward from its center.
 function slotted_cylinder(x, y)
-    in_disk = (x - slot_cx)^2 + (y - slot_cy)^2 <= slot_radius^2
-    in_slot = (abs(x - slot_cx) <= slot_half_width) && (y >= slot_cy) && (y <= slot_y_hi)
+    in_disk = (x - 0.5)^2 + (y - 0.5)^2 <= 0.15^2
+    in_slot = abs(x - 0.5) <= 0.025 && 0.5 <= y <= 0.65
     return (in_disk && !in_slot) ? 1.0 : 0.0
 end
+coords = Fields.coordinate_field(space)
 field = @. slotted_cylinder(coords.x, coords.y)
 Spaces.weighted_dss!(field)
 
 xpts = range(Geometry.XPoint(0.0), Geometry.XPoint(1.0), length = n_interp)
 ypts = range(Geometry.YPoint(0.0), Geometry.YPoint(1.0), length = n_interp)
-
-# Compare both methods
-interp_bilinear = Remapping.interpolate_array(
-    field, xpts, ypts; horizontal_method = Remapping.BilinearRemapping(),
+bilinear = Remapping.interpolate_array(
+    field,
+    xpts,
+    ypts;
+    horizontal_method = Remapping.BilinearRemapping(),
 )
-interp_spectral = Remapping.interpolate_array(
-    field, xpts, ypts; horizontal_method = Remapping.SpectralElementRemapping(),
+spectral = Remapping.interpolate_array(
+    field,
+    xpts,
+    ypts;
+    horizontal_method = Remapping.SpectralElementRemapping(),
 )
 
-# Error (bilinear − spectral): highlights where the methods differ
-err_bilinear_spectral = interp_bilinear .- interp_spectral
-
-# Raw data at GLL nodes (source field before interpolation)
-x_se = Float64[]
-y_se = Float64[]
-vals_se = Float64[]
-Fields.byslab(space) do slabidx
-    # The parents of these scalar slabs have size (1, Nq, Nq, 1, 1).
-    x_data = reshape(parent(Fields.slab(coords.x, slabidx)), Nq, Nq)
-    y_data = reshape(parent(Fields.slab(coords.y, slabidx)), Nq, Nq)
-    f_data = reshape(parent(Fields.slab(field, slabidx)), Nq, Nq)
-    for j in 1:Nq, i in 1:Nq
-        push!(x_se, x_data[i, j])
-        push!(y_se, y_data[i, j])
-        push!(vals_se, f_data[i, j])
-    end
+x = [p.x for p in xpts]
+y = [p.y for p in ypts]
+fig = Figure(size = (1000, 330))
+for (i, (title, data)) in enumerate((("Bilinear", bilinear), ("Spectral", spectral)))
+    ax = Axis(fig[1, 2i - 1], title = title, xlabel = "x", ylabel = "y", aspect = 1)
+    hm = heatmap!(ax, x, y, data'; colorrange = (0, 1), lowclip = :orange, highclip = :red)
+    Colorbar(fig[1, 2i], hm)
 end
-
-x_plot = [p.x for p in xpts]
-y_plot = [p.y for p in ypts]
-
-fig = Figure(size = (1200, 700))
-ax1 = Axis(fig[1, 1], title = "Bilinear", xlabel = "x", ylabel = "y")
-hm1 = heatmap!(
-    ax1, x_plot, y_plot, interp_bilinear';
-    colorrange = (0, 1), colormap = :viridis,
-    lowclip = :orange, highclip = :red,
-)
-Colorbar(fig[1, 2], hm1; label = "value")
-
-ax2 = Axis(fig[1, 3], title = "Spectral", xlabel = "x", ylabel = "y")
-hm2 = heatmap!(
-    ax2, x_plot, y_plot, interp_spectral';
-    colorrange = (0, 1), colormap = :viridis,
-    lowclip = :orange, highclip = :red,
-)
-Colorbar(fig[1, 4], hm2; label = "value")
-
-ax3 = Axis(fig[1, 5], title = "Error (bilinear − spectral)", xlabel = "x", ylabel = "y")
-erange = extrema(err_bilinear_spectral)
-hm3 = heatmap!(
-    ax3, x_plot, y_plot, err_bilinear_spectral';
-    colorrange = erange, colormap = :RdBu,
-)
-Colorbar(fig[1, 6], hm3; label = "error")
-
-# Row 2: raw spectral element grid (exact values at GLL nodes)
-# Swap (y_se, x_se) so orientation matches heatmaps (slab i,j vs display x,y convention)
-ax_se = Axis(
-    fig[2, 1],
-    title = "Raw spectral element grid (GLL nodes)",
-    xlabel = "x",
-    ylabel = "y",
-)
-sc_se = scatter!(
-    ax_se, y_se, x_se;
-    color = vals_se,
-    colorrange = (0, 1),
-    colormap = :viridis,
-    lowclip = :orange,
-    highclip = :red,
-    markersize = 8,
-)
-boundary_pos = (0:nelements_horz) ./ nelements_horz
-vlines!(ax_se, boundary_pos; color = :pink, linewidth = 2)
-hlines!(ax_se, boundary_pos; color = :pink, linewidth = 2)
-limits!(ax_se, 0, 1, 0, 1)
-Colorbar(fig[2, 2], sc_se; label = "value")
-
+ax = Axis(fig[1, 5], title = "Bilinear − spectral", xlabel = "x", ylabel = "y", aspect = 1)
+hm = heatmap!(ax, x, y, (bilinear .- spectral)'; colormap = :RdBu, colorrange = (-0.5, 0.5))
+Colorbar(fig[1, 6], hm)
 fig
 ```
 
-Row 1: heatmaps use **orange** for undershoots (< 0) and **red** for overshoots (> 1). The spectral method produces overshoots/undershoots near the discontinuity; bilinear stays in [0, 1]. The error panel (bilinear − spectral) shows where the two methods differ. Row 2: raw field values at the GLL nodes (the source data); pink lines show element boundaries.
+## Conservative remapping with TempestRemap
 
-### The `Remapper` object
+Conservative regridding between a cubed-sphere space and a latitude–longitude
+grid, which preserves the integral of the field and is what exchanges between
+coupled component models need, is a nonlocal operation that
+[TempestRemap](https://github.com/ClimateGlobalChange/tempestremap) performs
+from mesh files and weight files. The companion package
+[ClimaCoreTempestRemap](../lib/ClimaCoreTempestRemap.md) writes the meshes and
+fields in the format it reads and applies the resulting weights.
 
-A `Remapping.Remapper` is an object that is tied to a specified `Space` and can
-interpolate scalar `Field`s defined on that space onto a predefined target grid.
-The grid does not have to be regular, but it has to be defined as a Cartesian
-product between some horizontal and vertical coordinates (meaning, for each
-horizontal point, there is a fixed column of vertical coordinates).
+## Interpolating to pressure levels
 
-Let us create our first remapper, assuming we have `space` defined on the
-surface of the sphere
-
-```julia
-import ClimaCore.Geometry: LatLongPoint, ZPoint
-import ClimaCore.Remapping: Remapper
-
-hcoords = [Geometry.LatLongPoint(lat, long) for long in -180.0:180.0, lat in -90.0:90.0]
-remapper = Remapper(space, target_hcoords)
-```
-
-This `remapper` object knows can interpolate `Field`s defined on `space` with
-the same `interpolate` and `interpolate!` functions.
+`Remapping.PressureInterpolator` interpolates a field from the model's height
+levels to prescribed pressure levels, column by column, using a pressure field
+on the same space. The pressure field must live on cell centers; the field
+being interpolated may live on centers or faces of the same space.
 
 ```julia
-import ClimaCore.Fields: coordinate_field
-import ClimaCore.Remapping: interpolate, interpolate!
-
-example_field = coordinate_field(space)
-interpolated_array = interpolate(remapper, example_field)
-
-# Interpolate in place
-interpolate!(interpolated_array, remapper, example_field)
-```
-
-Multiple fields defined on the same space can be interpolate at the same time
-
-```julia
-example_field2 = cosd.(example_field)
-interpolated_arrays = interpolate(remapper, [example_field, example_field2])
-```
-
-When interpolating multiple fields, greater performance can be achieved by
-creating the `Remapper` with a larger internal buffer to store intermediate
-values for interpolation. Effectively, this controls how many fields can be
-remapped simultaneously in `interpolate`. When more fields than `buffer_length`
-are passed, the remapper will batch the work in sizes of `buffer_length`. The
-optimal number of fields passed is the `buffer_length` of the `remapper`. If
-more fields are passed, the `remapper` will batch work with size up to its
-`buffer_length`.
-
-#### Example
-
-Given `field1`,`field2`, two `Field` defined on a cubed sphere.
-
-```julia
-longpts = range(-180.0, 180.0, 21)
-latpts = range(-80.0, 80.0, 21)
-zpts = range(0.0, 1000.0, 21)
-
-hcoords = [Geometry.LatLongPoint(lat, long) for long in longpts, lat in latpts]
-zcoords = [Geometry.ZPoint(z) for z in zpts]
-
-space = axes(field1)
-
-remapper = Remapper(space, hcoords, zcoords)
-
-int1 = interpolate(remapper, field1)
-int2 = interpolate(remapper, field2)
-
-# Or
-int12 = interpolate(remapper, [field1, field2])
-# With int1 = int12[1, :, :, :]
-```
-
-## Conservative remapping with `TempestRemap`
-
-This section hasn't been written yet. You can help by writing it.
-
-TODO: finish writing this section.
-
-# Interpolating to pressure coordinates
-
-In addition to the `Remapper`, you can also interpolate to pressure coordinates.
-This can be used with the `Remapper` to remap a `ClimaCore` `Field` to a regular
-grid, where the vertical is pressure.
-
-`ClimaCore` provides the `PressureInterpolator` for efficient vertical
-interpolation from height to pressure coordinates.
-
-## Quick start
-
-The simplest way to interpolate a field to pressure coordinates:
-
-```julia
-import ClimaCore: Remapping, Fields
-using ClimaInterpolations
-
-# Define target pressure levels (in ascending order)
-pressure_levels = 100.0 .* [100.0, 250.0, 500.0, 850.0, 1000.0]
-
-# Create the interpolator
-# pressure_field is a pressure field on center space
+pressure_levels = 100.0 .* [100.0, 250.0, 500.0, 850.0, 1000.0]   # Pa, ascending
 pressure_intp = Remapping.PressureInterpolator(pressure_field, pressure_levels)
 
-# Interpolate the field to pressure coordinates
-field_on_pressure_space = Remapping.interpolate_pressure(field, pressure_intp)
+field_on_p = Remapping.interpolate_pressure(field, pressure_intp)
+Remapping.interpolate_pressure!(field_on_p, field, pressure_intp)   # in place
 
-# Get the pressure field and space with pressure as the vertical
-p_field = Remapping.pfull_field(pressure_intp)
-p_space = Remapping.pressure_space(pressure_intp)
-
-# If the pressure field changes, then you need to call update!
-Remapping.update!(pressure_intp)
-
-# This mutates both field_on_pressure_space and the interpolation done
-# in-place
-field_on_pressure_space =
-    Remapping.interpolate_pressure!(field_on_pressure_space, field, pressure_intp)
+Remapping.update!(pressure_intp)          # after the pressure field has changed
+Remapping.pressure_space(pressure_intp)   # the space whose vertical coordinate is pressure
 ```
 
-The result `field_on_pressure_space` is defined on a new space where the
-vertical coordinate is pressure rather than height.
-
-## How it works
-
-The `PressureInterpolator` performs the following steps:
-
- 1. **Ensure monotonicity**: Applies a cumulative minimum along each column to
-    ensure pressure decreases monotonically with height.
- 2. **Vertical interpolation**: Interpolates field values to the specified
-    pressure coordinates using linear interpolation with constant boundary
-    conditions.
-
-!!! warning "Pressure-height relationship"
-
-    The implementation assumes pressure decreases monotonically with height. If
-    the interpolated field appears unrealistic, check for instabilities or
-    inversions in your pressure field.
-
-!!! note "Boundary conditions"
-
-    By default, vertical interpolation uses constant boundary conditions at the
-    top and bottom of the atmosphere. Interpolated values at pressure levels
-    outside the model's vertical range may be inaccurate.
-
-## Space and staggering requirements
-
-!!! note "Space compatibility"
-
-    The pressure field and the field being interpolated must be defined on the
-    same space with the same vertical staggering (`CellCenter` or `CellFace`).
-    The pressure field must use `CellCenter` staggering.
-
-The `PressureInterpolator` works with:
-
-  - `ExtrudedFiniteDifferenceSpace` - 3D spaces (e.g., cubed sphere with vertical
-    levels)
-  - `FiniteDifferenceSpace` - 1D column spaces
-
-Interpolating fields on center and face spaces are supported, but the pressure
-field itself must always be on a center space.
+The interpolator first enforces that pressure decreases monotonically with
+height in every column (by a cumulative minimum), then interpolates linearly
+in pressure, holding the boundary value constant beyond the model's top and
+bottom. Pressure levels outside the model's range therefore receive the
+boundary value, not an extrapolation. The result lives on a new space whose
+vertical coordinate is pressure, so the `Remapper` above can then remap it to
+a latitude–longitude grid.

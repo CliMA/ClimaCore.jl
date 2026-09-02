@@ -1,8 +1,8 @@
-# Debugging
+# Debug NaNs and broadcasts
 
-`ClimaCore` comes with a set of debugging tools for a variety of situations.
-These tools are collected in the [`ClimaCore.DebugOnly`](@ref) modules and are
-presented in this page.
+`ClimaCore.DebugOnly` holds hooks for locating where a simulation produces
+`NaN`s or `Inf`s and for inspecting the broadcast expressions that produced
+them. This page shows how to use them, with and without Infiltrator.jl.
 
 ## Finding where `NaN` arise
 
@@ -197,9 +197,8 @@ Now, when we evaluate our problematic expression (the one at the top level, in t
     prepending their name with `Main`. Similarly, if you want to infiltrate inside a
     module, prepend `@infiltrate` with `Main` (`Main.@infiltrate`).
 
-Looking at this code, we could have probably guess that the `NaN` comes from a
-division from 0, and the real question is how do we get that?. In more complex
-cases, the functions are spread across different packages and involve several
+In this small example, the `NaN` comes from a division by zero, and the
+question is how the zero got there. In larger models, the functions are spread across different packages and involve several
 different variables. This approach allows one to systematically identify where
 things go wrong.
 
@@ -208,7 +207,6 @@ things go wrong.
 Let's now see a different way to use Infiltrator, where we move the variables in specific scope to the Main scope in the REPL and do some analysis on it.
 
 ```julia
-julia> args[2]
 import ClimaCore
 import Infiltrator # must be in your default environment
 ClimaCore.DebugOnly.call_post_op_callback() = true
@@ -225,8 +223,7 @@ function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
         # Now, `Infiltrator.safehouse` will be a NamedTuple
         # containing `result`, `args`, `kwargs` and `st`.
         Infiltrator.@exfiltrate
-        # sometimes code execution doesn't stop, I'm not sure why. Let's
-        # make sure we exfiltrate immediately with the data we want.
+        # Stop here so that the exfiltrated data is the first occurrence.
         error("Exfiltrating.")
     end
 end
@@ -244,15 +241,13 @@ parent(x)[1] = NaN # emulate incorrect initialization
 # You can print the stack trace, to see where the NaNs were found:
 ClimaCore.DebugOnly.print_depth_limited_stack_trace(st; maxtypedepth=1)
 
-# Once there, you can see that the call lead you to `copyto!`,
-# Inspecting `args` shows that the `Broadcasted` object used to populate the
-# result was:
+# The trace leads to `copyto!`; `args[2]` is the `Broadcasted` object that
+# populated the result, inspected in the next section.
 ```
 
 If your broadcasted object is very long, it can be a bit overwhelming to figure
 out which part of the expression contains NaNs (if any). To make this process
-more manageable, we can use [`StructuredPrinting.jl`]
-(https://github.com/charleskawczynski/StructuredPrinting.jl) to highlight which
+more manageable, [StructuredPrinting.jl](https://github.com/CliMA/StructuredPrinting.jl) highlights which
 parts of the broadcasted object contains NaNs:
 
 ```julia

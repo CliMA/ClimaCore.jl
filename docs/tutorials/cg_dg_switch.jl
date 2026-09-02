@@ -2,8 +2,8 @@
 #
 # ClimaCore's spectral-element grids come in two variants, continuous Galerkin
 # (CG) and discontinuous Galerkin (DG). They share the element-local operators
-# and differ in how neighboring elements are coupled: DG replaces the direct
-# stiffness summation (DSS) of CG by interface numerical fluxes
+# and differ in how neighboring elements are coupled: CG by direct stiffness
+# summation (DSS), DG by interface numerical fluxes
 # ([Yatunin2026](@cite), [Souza2023](@cite)). This tutorial writes one
 # shallow-water tendency and evaluates it on both.
 #
@@ -126,6 +126,6 @@ sum(cg_dydt.ρ), sum(dg_dydt.ρ)
 maximum(abs, parent(cg_dydt.ρθ) .- parent(dg_dydt.ρθ)) /
 maximum(abs, parent(cg_dydt.ρθ))
 
-# From here a model advances `y` with ClimaTimeSteppers; the example
-# `examples/plane/bickleyjet_dg.jl` and the integration test
-# `test/Integration/smoke_bickley_jet_cg_dg.jl` do so on both spaces.
+# From here, a model advances `y` with ClimaTimeSteppers; the example
+# [`examples/plane/bickleyjet.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/plane/bickleyjet.jl) and the integration test
+# [`test/Integration/smoke_bickley_jet_cg_dg.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/test/Integration/smoke_bickley_jet_cg_dg.jl) do so on both spaces.

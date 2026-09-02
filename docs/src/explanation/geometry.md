@@ -19,8 +19,8 @@ equiangular gnomonic projection of a cube face for the sphere
 stretching function with a terrain-following transformation. Two bases are
 attached to every point of the physical domain:
 
-- the **covariant basis** `e_i = ∂r/∂ξⁱ`, tangent to the coordinate lines;
-- the **contravariant basis** `eⁱ = ∇ξⁱ`, normal to the coordinate surfaces.
+  - the **covariant basis** `e_i = ∂r/∂ξⁱ`, tangent to the coordinate lines;
+  - the **contravariant basis** `eⁱ = ∇ξⁱ`, normal to the coordinate surfaces.
 
 They are dual, `e_i ⋅ eʲ = δᵢʲ`, and coincide only where the map is
 orthogonal and unit-scaled. A vector `u` has covariant components
@@ -43,20 +43,20 @@ Because the bases vary from node to node, a vector component has meaning
 only together with its basis. ClimaCore therefore represents vectors by typed
 components:
 
-- `Geometry.Covariant12Vector`, `Covariant3Vector`, `Covariant123Vector`
-  (`C12`, `C3`, `C123`): covariant components. The prognostic velocity of the
-  atmosphere is stored this way: `u₁, u₂` on centers, `u₃` on faces.
-- `Geometry.Contravariant12Vector`, `Contravariant3Vector`, `Contravariant123Vector`
-  (`CT12`, `CT3`, `CT123`): contravariant components, the natural form for
-  a flux through a coordinate surface. Their units are reference coordinate
-  per second, not meters per second.
-- `Geometry.UVVector`, `WVector`, `UVWVector`: components in the local
-  orthonormal frame, zonal, meridional, and radial on the sphere, `x`, `y`,
-  `z` in a box. This is the frame in which physical quantities are set and
-  read, and in which DSS averages vectors across element boundaries, where
-  the covariant bases of neighboring elements differ.
-- `Geometry.Cartesian123Vector` and related types: a single global Cartesian
-  frame, used for output and visualization.
+  - `Geometry.Covariant12Vector`, `Covariant3Vector`, `Covariant123Vector`
+    (`C12`, `C3`, `C123`): covariant components. The prognostic velocity of the
+    atmosphere is stored this way: `u₁, u₂` on centers, `u₃` on faces.
+  - `Geometry.Contravariant12Vector`, `Contravariant3Vector`, `Contravariant123Vector`
+    (`CT12`, `CT3`, `CT123`): contravariant components, the natural form for
+    a flux through a coordinate surface. Their units are reference coordinate
+    per second, not meters per second.
+  - `Geometry.UVVector`, `WVector`, `UVWVector`: components in the local
+    orthonormal frame, zonal, meridional, and radial on the sphere, `x`, `y`,
+    `z` in a box. This is the frame in which physical quantities are set and
+    read, and in which DSS averages vectors across element boundaries, where
+    the covariant bases of neighboring elements differ.
+  - `Geometry.Cartesian123Vector` and related types: a single global Cartesian
+    frame, used for output and visualization.
 
 Conversions between these types are constructors that take the local
 geometry, `Geometry.Contravariant3Vector(u, local_geometry)`, and the
@@ -64,7 +64,7 @@ operators perform them internally: a `Divergence` accepts a vector in any
 basis and converts it to contravariant components before differencing; a
 `Gradient` returns covariant components. Writing a model consists largely of
 choosing which components each term needs; the
-[introduction tutorial](../tutorials/introduction.md) shows the conversions in
+[introduction tutorial](../tutorials/fields_and_operators.md) shows the conversions in
 use.
 
 ## Differential operators in generalized coordinates
@@ -81,11 +81,17 @@ discrete operators implement,
 The gradient of a scalar is covariant, the divergence needs contravariant
 components, and the curl maps covariant components to contravariant ones,
 which fixes the input and output types of `Gradient`, `Divergence`, and
-`Curl`. The divergence of a tensor (the momentum flux) would need Christoffel
-symbols in this form; ClimaCore avoids them by converting the tensor to a
-Cartesian frame, differencing, and converting back [Vinokur74a](@cite), or,
-in the atmosphere, by writing momentum advection in vector-invariant form so
-that only scalar gradients and curls of vectors appear.
+`Curl`. The divergence of a second-rank tensor (a momentum flux `ρ u ⊗ u`) is
+more delicate: in general coordinates the derivative of the second index's
+basis vectors contributes Christoffel-symbol terms [Vinokur74a](@cite).
+ClimaCore's `Divergence` of a tensor converts the first index to
+contravariant components and differences each row as a scalar, leaving the
+second index in the basis it was given; this is exact when that basis is
+constant across the element, as for `UVVector ⊗ UVVector` on a plane, and
+omits the Christoffel terms otherwise. The atmosphere sidesteps the issue by
+writing momentum advection in vector-invariant form, so that only scalar
+gradients and curls of vectors appear, and the flux-form examples on the
+sphere are limited to shallow-water depth and tracers.
 
 The metric terms `∂x/∂ξ` are computed at grid construction. For the cubed
 sphere, they are obtained by forward-mode automatic differentiation of the
@@ -139,12 +145,14 @@ terrain-following adaption. Levels are uniform in `ξ³`; the vertical grid
 constructor places the `Nv + 1` faces at `z_ref` and the adaption warps them.
 
 **Stretching** (`Meshes.StretchingRule`) concentrates levels near the
-surface. With `η = z_ref / z_top` the implemented rules are
+surface. With `η = z_ref / z_top`, the implemented rules are
 
 ```math
-\text{Uniform:}\quad \eta = \xi^3, \qquad
-\text{Exponential:}\quad \xi^3 = \frac{1 - e^{-\eta/\hat h}}{1 - e^{-1/\hat h}},\ \hat h = \frac{H}{z_\mathrm{top}}, \qquad
-\text{Hyperbolic tangent:}\quad \eta = 1 - \frac{\tanh\bigl(\gamma (1 - \xi^3)\bigr)}{\tanh \gamma},
+\begin{aligned}
+\text{Uniform:}\quad & \eta = \xi^3, \\
+\text{Exponential:}\quad & \xi^3 = \frac{1 - e^{-\eta/\widehat{h}}}{1 - e^{-1/\widehat{h}}},\quad \widehat{h} = \frac{H}{z_\mathrm{top}}, \\
+\text{Hyperbolic tangent:}\quad & \eta = 1 - \frac{\tanh\bigl(\gamma (1 - \xi^3)\bigr)}{\tanh \gamma}.
+\end{aligned}
 ```
 
 with `H` a scale height (`Meshes.ExponentialStretching(H)`) and `γ` solved so
@@ -194,9 +202,8 @@ e^3 = \frac{1}{\partial_3 z}\left(\widehat{k} - \frac{\partial_1 z}{\partial_1 x
 
 so the metric components `g^{31} = e^3 ⋅ e^1` and `g^{32} = e^3 ⋅ e^2` are
 proportional to the slopes `∂_1 z`, `∂_2 z` of the level surfaces and vanish
-where the levels are flat. For the Gal-Chen map `∂_3 z = (dz_ref/dξ³)(1 −
-h/z_top)` and `∂_1 z = (1 − z_ref/z_top)\, ∂_1 h`, so the tilt persists to the
-top; for SLEVE it is zero above `ηₕ z_top`. `Fields.local_geometry_field`
+where the levels are flat. For the Gal-Chen map, `∂_3 z = (dz_ref/dξ³)(1 − h/z_top)` and `∂_1 z = (1 − z_ref/z_top)\, ∂_1 h`, so the tilt persists to the
+top; for SLEVE, it is zero above `ηₕ z_top`. `Fields.local_geometry_field`
 stores `∂x/∂ξ`, its inverse, `J`, and `gⁱʲ` at every node, evaluated by
 forward-mode differentiation of the map.
 

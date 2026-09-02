@@ -1,29 +1,24 @@
-# Masks
+# Mask horizontal points
 
-## Motivation
+A horizontal mask marks nodal columns of a `SpectralElementSpace2D` (or of a
+space extruded from one) where operations are skipped. The land model uses it
+for degrees of freedom over the ocean, where there is no data to evaluate
+expressions on; skipping them keeps the code free of per-point conditionals
+and saves the work.
 
-ClimaCore spaces, `SpectralElementSpace2D`s in particular, support masks, where
-users can set horizontal nodal locations where operations are skipped.
+## Prerequisites
 
-This is especially helpful for the land model, where they may have degrees of
-freedom over the ocean, but do not want to evaluate expressions in regions where
-data is missing.
+A space constructed with `enable_mask = true`, which every constructor that
+builds a `SpectralElementSpace2D` accepts.
 
-Masks in ClimaCore offer a solution to this by, ahead of time prescribing
-regions to skip. This helps both with the ergonomics, as well as performance.
+## Steps
 
-## User interface
+1. Construct the space with the mask enabled.
+2. Set the mask with `Spaces.set_mask!`, either from a function of the
+   coordinates that returns `true` where computation should occur, or from a
+   field that is `1` there and `0` elsewhere.
 
-There are two user-facing parts for ClimaCore masks:
-
-  - set the `enable_mask = true` keyword in the space constructor (when available),
-    which is currently any constructor that returns/contains a `SpectralElementSpace2D`.
-  - use `set_mask!` to set where the mask is `true` (where compute should occur)
-    and `false` (where compute should be skipped)
-
-Here is an example
-
-```julia
+```@example masks
 using ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore: Spaces, Fields
@@ -46,24 +41,30 @@ FT = Float64
 Spaces.set_mask!(ᶜspace) do coords
     coords.lat > 0.5
 end
-# Or
-mask = Fields.Field(FT, ᶜspace)
-mask .= map(cf -> cf.lat > 0.5 ? 0.0 : 1.0, Fields.coordinate_field(mask))
+# Or, from a field on the horizontal space that is 1 where computation should
+# occur and 0 elsewhere. `zeros` initializes every column (constructors are
+# mask-unaware); the broadcast that follows writes the active columns.
+hspace = Spaces.horizontal_space(ᶜspace)
+lat = Fields.coordinate_field(hspace).lat
+mask = zeros(hspace)
+@. mask = lat > 0.5
 Spaces.set_mask!(ᶜspace, mask)
 ```
 
-Finally, operations over fields will be skipped where `mask == 0`, and applied
-where `mask == 1`:
+3. Operate on fields as usual. Mask-aware operations are skipped where the
+   mask is `0` and applied where it is `1`:
 
-```
+```julia
 @. f = 1 # only applied where the mask is equal to 1
 ```
 
-## Example script
+## A worked example
 
-Here is a more complex script where the mask is used:
+Vertical operators respect the mask, so a `NaN` in a masked column does not
+propagate into the result. The counts below are for this grid (6 × 10 × 10
+elements of 4 × 4 nodes, 10 levels) and are checked when the docs are built.
 
-```julia
+```@example masks
 using ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore: Spaces, Fields, DataLayouts, Geometry, Operators
@@ -117,7 +118,7 @@ mask = Spaces.get_mask(ᶜspace)
 ᶠf = zeros(ᶠspace)
 c = Fields.Field(FT, ᶜspace)
 div = Operators.DivergenceF2C()
-foo(f, cf) = cf.lat > 0.5 ? zero(f) : sqrt(-1) # results in NaN in masked out regions
+foo(f, cf) = cf.lat > 0.5 ? zero(f) : oftype(f, NaN) # NaN in the masked-out region
 @. c = div(Geometry.WVector(foo(ᶠf, ᶠcoords)))
 
 # Check that this field should never yield NaNs
@@ -143,11 +144,9 @@ c_no_mask = Fields.Field(FT, ᶜspace_no_mask)
 
 ## Supported operations and caveats
 
-Currently, masked _operations_ are only supported for `Fields` (and not
-`DataLayouts`) with `SpectralElementSpace2D`s. We do not yet have support for
-masked `SpectralElement1DSpace`s, and we will likely never offer masked
-operation support for `DataLayouts`, as they do not have the space, and can
-therefore not use the mask.
+Masked _operations_ are supported only for `Fields` (and not
+`DataLayouts`) with `SpectralElementSpace2D`s. Masks on `SpectralElementSpace1D`s are future work; `DataLayouts` stay
+mask-unaware by design, since a data layout carries no space and hence no mask.
 
 In addition, some operations with masked fields skip masked regions
 (i.e., mask-aware), and other operations execute everywhere
@@ -169,15 +168,10 @@ operations of mask-aware and mask-unaware:
     This was a design implementation detail, users should not generally depend on the results where `mask == 0`, in case this is changed in the future.
   - internal array operations (`fill!(parent(field), 0)`) mask-unaware.
 
-## Developer docs
+## Implementation notes
 
-In order to support masks, we define their types in `DataLayouts`, since
-we need access to them from within kernels in `DataLayouts`. We could have made
-an API and kept them completely orthogonal, but that would have been a bit more
-complicated, also, it was convenient to make the masks themselves data layouts,
-so it seemed most natural for them to live there.
-
-We have a couple types:
+Mask types live in `DataLayouts`, because the kernels there need them; the
+masks are themselves data layouts. The types:
 
   - abstract `AbstractMask` for subtyping masks and use for generic interface
     methods
@@ -192,7 +186,5 @@ We have a couple types:
     extends our current `ext/cuda/datalayouts_threadblock.jl` api
     (via `masked_partition` and `masked_universal_index`).
 
-An important note is that when we set the mask maps for active columns, the
-order that they are assigned can be permuted without impacting correctness, but
-this could have a big impact on performance on the gpu. We should investigate
-this.
+The order in which active columns are assigned in the mask maps does not
+affect correctness; its effect on GPU performance has not been measured.
