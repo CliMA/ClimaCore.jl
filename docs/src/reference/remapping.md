@@ -6,6 +6,7 @@ CurrentModule = ClimaCore
 
 ```@docs
 Remapping.interpolate_array
+Remapping.Remapper
 Remapping.interpolate
 Remapping.PressureInterpolator
 Remapping.PressureInterpolator(pfull_field::Fields.Field, pfull_levels)
@@ -17,4 +18,9 @@ Remapping.interpolate_pressure!
 Remapping.AbstractRemappingMethod
 Remapping.SpectralElementRemapping
 Remapping.BilinearRemapping
+```
+
+```@docs
+Remapping.default_target_hcoords
+Remapping.default_target_zcoords
 ```

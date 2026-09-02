@@ -52,7 +52,7 @@ locations on a sphere.  This is the N-column generalisation of
     z-level) rather than a spectral-element horizontal space.
   - `Spaces.column` returns a single-column
     [`Spaces.FiniteDifferenceSpace`](@ref).
-  - [`Fields.bycolumn`](@ref) iterates over each column independently.
+  - `Fields.bycolumn` iterates over each column independently.
 
 There is no horizontal connectivity between columns; DSS and horizontal
 spectral-element operators are not supported.

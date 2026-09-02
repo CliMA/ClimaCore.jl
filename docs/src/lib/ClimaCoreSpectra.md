@@ -20,7 +20,7 @@ ClimaCoreSpectra.compute_wave_numbers!
 
 ## Examples
 
-`lib/ClimaCoreSpectra/test/gcm_visual_test.jl` computes the one- and
+[`lib/ClimaCoreSpectra/test/gcm_visual_test.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/lib/ClimaCoreSpectra/test/gcm_visual_test.jl) computes the one- and
 two-dimensional spectra of test fields on a latitude–longitude grid, transforms
 them back, and plots the input, the spectra, and the reconstruction error. Run
 it from the repository root with `BUILD_DOCS=true` set to write the figures:

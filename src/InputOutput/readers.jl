@@ -78,17 +78,17 @@ end
 is_type_expr(t) = isbits(t)
 
 """
-    HDF5Reader(filename::AbstractString[, context::ClimaComms.AbstractCommsContext])
-    HDF5Reader(::Function, filename::AbstractString[, context::ClimaComms.AbstractCommsContext])
+    HDF5Reader(filename::AbstractString, context::ClimaComms.AbstractCommsContext)
+    HDF5Reader(::Function, filename::AbstractString, context::ClimaComms.AbstractCommsContext)
 
 An `AbstractReader` for reading from HDF5 files created by [`HDF5Writer`](@ref).
 The reader object contains an internal cache of domains, meshes, topologies and
 spaces that are read so that duplicate objects are not created.
 
-The optional `context` can be used for reading distributed fields: in this case,
-the `MPICommsContext` used passed as an argument: resulting `Field`s will be
-distributed using this context. As with [`HDF5Writer`](@ref), this requires a
-HDF5 library with MPI support.
+`context` is the `ClimaComms` context of the run (`ClimaComms.context()`); with
+an `MPICommsContext` the resulting `Field`s are distributed over its ranks,
+which requires an HDF5 library with MPI support, as for [`HDF5Writer`](@ref).
+The `do`-block form closes the file when the block returns.
 
 # Interface
 
@@ -101,14 +101,18 @@ HDF5 library with MPI support.
 # Usage
 
 ```julia
-InputOutput.HDF5Reader(filename) do reader
-    Y = read_field(reader, "Y")
+InputOutput.HDF5Reader(filename, ClimaComms.context()) do reader
+    Y = read_field(reader, "Y")          # the whole FieldVector
     Y.c |> propertynames
     Y.f |> propertynames
-    ρ_field = read_field(reader, "Y.c.ρ")
-    w_field = read_field(reader, "Y.f.w")
+    c = read_field(reader, "Y/c")        # one component, by its slash path
+    ρ_field = c.ρ
 end
 ```
+
+A `FieldVector` named `"Y"` with components `c` and `f` is stored as the fields
+`"Y/c"` and `"Y/f"`; the members of a `NamedTuple`-valued field (`Y.c.ρ`) are
+not addressable separately.
 
 To explore the contents of the `reader`, use either
 

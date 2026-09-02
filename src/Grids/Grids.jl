@@ -16,9 +16,9 @@ Grids should define the following
 
   - [`topology`](@ref): the topology of the grid
 
-  - [`mesh`](@ref): the mesh of the grid
+  - `mesh`: the mesh of the grid
 
-  - [`domain`](@ref): the domain of the grid
+  - `domain`: the domain of the grid
 
   - `ClimaComms.context`
 

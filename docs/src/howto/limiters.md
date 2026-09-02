@@ -14,26 +14,26 @@ least-squares problem of finding the field closest to the transported one that
 lies within bounds set by the neighboring elements' values, keeping the
 element's tracer mass.
 
-1. Create the limiter once for a tracer density field (a scalar or a
-   `NamedTuple` of tracers), and keep it in the model's cache:
+ 1. Create the limiter once for a tracer density field (a scalar or a
+    `NamedTuple` of tracers), and keep it in the model's cache:
 
-   ```julia
-   limiter = Limiters.QuasiMonotoneLimiter(ρq)
-   ```
+    ```julia
+    limiter = Limiters.QuasiMonotoneLimiter(ρq)
+    ```
 
-2. Before the transport step, compute the bounds from the state the step
-   starts from. In a multi-stage scheme, this is the stage's starting state:
+ 2. Before the transport step, compute the bounds from the state the step
+    starts from. In a multi-stage scheme, this is the stage's starting state:
 
-   ```julia
-   Limiters.compute_bounds!(limiter, y.ρq, y.ρ)
-   ```
+    ```julia
+    Limiters.compute_bounds!(limiter, y.ρq, y.ρ)
+    ```
 
-3. After the step (or stage), apply the limiter to the transported tracer
-   density, with the transported density as the weight:
+ 3. After the step (or stage), apply the limiter to the transported tracer
+    density, with the transported density as the weight:
 
-   ```julia
-   Limiters.apply_limiter!(y_new.ρq, y_new.ρ, limiter)
-   ```
+    ```julia
+    Limiters.apply_limiter!(y_new.ρq, y_new.ρ, limiter)
+    ```
 
 On a distributed topology, `compute_bounds!` exchanges neighbor bounds
 across process boundaries. [`examples/plane/limiters_advection.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/plane/limiters_advection.jl),
@@ -63,5 +63,5 @@ with a slope limiter (`RZeroLimiter`, `MinModLimiter`, `KorenLimiter`,
 `SuperbeeLimiter`, …), and the flux-corrected transport operators
 `FCTBorisBook` and `FCTZalesak` [BorisBook1973, zalesak1979fully](@cite) return
 limited face fluxes given the face velocity and the center field. Their
-docstrings on the [Operators](../reference/operators.md) reference page give
+docstrings on the [finite-difference operators](../reference/operators_fd.md) reference page give
 the stencils.

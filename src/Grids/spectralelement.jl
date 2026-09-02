@@ -22,7 +22,7 @@ abstract type Discretization end
 
 The continuous-Galerkin [`Discretization`](@ref): functions are
 single-valued at element boundaries, and element-local weak operators are
-completed by [`Spaces.weighted_dss!`](@ref).
+completed by `Spaces.weighted_dss!`.
 """
 struct CG <: Discretization end
 
@@ -229,7 +229,7 @@ SEM for computing metric terms.
   - enable_mask: Boolean used to skip operations where the space's mask is 0
   - discretization: continuous ([`CG`](@ref)) or discontinuous
     ([`DG`](@ref)) Galerkin, following the quadrature when omitted. On a `DG()` grid no continuity is maintained
-    across element boundaries, so [`Spaces.weighted_dss!`](@ref) is a no-op on
+    across element boundaries, so `Spaces.weighted_dss!` is a no-op on
     fields over this grid and inter-element coupling is instead supplied by DG
     numerical fluxes (see `Operators.add_numerical_flux_interior!`). No DSS
     weights are computed. `InputOutput` serializes the discretization; grids in
@@ -750,7 +750,7 @@ discretization(grid::SpectralElementGrid2D) = grid.discretization
 
 Whether fields on `grid` (or on `space`'s grid) are members of the continuous
 (CG) function space: `Grids.discretization(grid) isa CG`. Discontinuous (DG)
-grids skip [`Spaces.weighted_dss!`](@ref) and couple elements through
+grids skip `Spaces.weighted_dss!` and couple elements through
 numerical fluxes instead.
 """
 is_continuous(grid::AbstractGrid) = discretization(grid) isa CG

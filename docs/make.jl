@@ -82,11 +82,16 @@ withenv("GKSwstype" => "nul") do
         collapselevel = 1,
         size_threshold = 300_000, # default is 200_000
         size_threshold_warn = 200_000, # default is 100_000
+        assets = ["assets/custom.css"],
     )
 
     # External links are checked on every build but only fail it when
     # LINKCHECK_STRICT is set: external sites are transiently unreachable, and
     # that should not block unrelated pull requests.
+    # The Makie recipe docstrings (FieldHeatmap, FieldContourf, FieldLine) inherit
+    # attribute lists that @ref Makie types such as `Makie.Linestyle`, which no
+    # ClimaCore page renders; :cross_references is warn-only for those. The custom
+    # `check_docstring_refs` above keeps ClimaCore's own docstring @refs strict.
     warnonly = Symbol[:cross_references]
     isempty(get(ENV, "LINKCHECK_STRICT", "")) && push!(warnonly, :linkcheck)
 
@@ -159,7 +164,9 @@ withenv("GKSwstype" => "nul") do
                 "CommonSpaces" => "reference/common_spaces.md",
                 "Fields" => "reference/fields.md",
                 "DataLayouts" => "reference/datalayouts.md",
-                "Operators" => "reference/operators.md",
+                "Operators: spectral element" => "reference/operators_se.md",
+                "Operators: finite difference" => "reference/operators_fd.md",
+                "Operators: discontinuous Galerkin" => "reference/operators_dg.md",
                 "DSS" => "reference/dss.md",
                 "Limiters" => "reference/limiters.md",
                 "Hypsography" => "reference/hypsography.md",
@@ -170,10 +177,14 @@ withenv("GKSwstype" => "nul") do
                 "Devices" => "reference/devices.md",
                 "Utilities" => "reference/utilities.md",
                 "DebugOnly" => "reference/debug_only.md",
+                "Environment variables" => "reference/environment.md",
                 "Companion packages" => [
+                    "Overview" => "lib/companions.md",
                     "ClimaCoreTempestRemap" => "lib/ClimaCoreTempestRemap.md",
                     "ClimaCoreSpectra" => "lib/ClimaCoreSpectra.md",
                 ],
+                "Internal APIs" => "reference/internals.md",
+                "Glossary" => "reference/glossary.md",
             ],
             "Developer" => [
                 "Contributing" => "Contributing.md",

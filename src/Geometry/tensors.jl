@@ -71,11 +71,11 @@ abstract type AbstractComponents end
     Components(components_type::ComponentsType, names::Tuple)
 
 Type-level description of a single tensor axis. The parameter `T` selects the
-component convention ([`Covariant`](@ref), [`Contravariant`](@ref),
-[`Orthonormal`](@ref), or [`OneScalar`](@ref)), and `names` is a tuple of
+component convention (`Covariant`, `Contravariant`,
+`Orthonormal`, or `OneScalar`), and `names` is a tuple of
 identifiers for the components along the axis (typically dimension indices
 like `(1, 3)` for the ξ¹/ξ³ directions, or `(nothing,)` for the scalar row
-of a covector; see [`ScalarComponents`](@ref)).
+of a covector; see `ScalarComponents`).
 
 A `Components` is a singleton: all information lives in the type parameters, so
 instances are free at runtime and available for multiple dispatch. Named aliases
@@ -240,7 +240,7 @@ colon-indexing yields a smaller `Tensor` over the remaining non-colon axes.
 # Shapes that `Tensor` takes in practice
 
   - `Tensor{1}` (a vector): `components::SVector`, `bases::Tuple{Components}`.
-  - `Tensor{2}` covector (a row-vector): the first axis is [`ScalarComponents`](@ref)
+  - `Tensor{2}` covector (a row-vector): the first axis is `ScalarComponents`
     and `components::Adjoint{T, SVector}`. This is what `v'` produces for a
     `Tensor{1}` `v`.
   - `Tensor{2}` square tensor: `components::SMatrix`.

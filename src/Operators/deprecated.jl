@@ -3,19 +3,36 @@
 # counterparts (e.g., Divergence{WeakForm}); the aliases below keep the
 # WeakDivergence/WeakGradient/WeakCurl names working. Nothing in this repo uses
 # them — src, ext, tests, examples, tutorials, and benchmarks all call the
-# parameterized names, and the docs page (docs/src/operators.md) documents
-# those — so they are kept only for downstream packages. As with
+# parameterized names — so they are kept only for downstream packages, and
+# their docstrings point at the parameterized operators. As with
 # src/DataLayouts/deprecated.jl, these are plain aliases without deprecation
 # warnings. Remove them once downstream consumers have migrated to the
 # parameterized names (type-alias cleanup, Phase 4 of
 # https://github.com/CliMA/ClimaCore.jl/issues/2554).
 # get_node at the end of this file is live API used by the Remapping module.
 
-# Weak-form documentation lives on the parameterized operators
-# (`Divergence`/`Gradient`/`Curl`, under their "Weak form" headings); these
-# aliases are undocumented backward-compatibility bindings.
+"""
+    WeakDivergence
+
+Alias for [`Divergence{WeakForm}`](@ref Divergence), kept for downstream
+packages; new code spells out the parameterized name.
+"""
 const WeakDivergence = Divergence{WeakForm}
+
+"""
+    WeakGradient
+
+Alias for [`Gradient{WeakForm}`](@ref Gradient), kept for downstream packages;
+new code spells out the parameterized name.
+"""
 const WeakGradient = Gradient{WeakForm}
+
+"""
+    WeakCurl
+
+Alias for [`Curl{WeakForm}`](@ref Curl), kept for downstream packages; new
+code spells out the parameterized name.
+"""
 const WeakCurl = Curl{WeakForm}
 
 # The finite-difference biased interpolation operators are named for the

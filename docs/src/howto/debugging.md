@@ -1,344 +1,148 @@
 # Debug NaNs and broadcasts
 
-`ClimaCore.DebugOnly` holds hooks for locating where a simulation produces
-`NaN`s or `Inf`s and for inspecting the broadcast expressions that produced
-them. This page shows how to use them, with and without Infiltrator.jl.
+`ClimaCore.DebugOnly` holds hooks for locating where a simulation first
+produces a `NaN` or `Inf` and for inspecting the broadcast expression that
+produced it. A large model evaluates hundreds of broadcasts per step, most of
+them inside other packages, so the hooks are placed at the one point they all
+pass through: the end of every `ClimaCore` operation.
 
-## Finding where `NaN` arise
+## Prerequisites
 
-One of the most challenging tasks that users have is: debug a large simulation
-that is breaking, e.g., yielding `NaN`s somewhere. This is especially complex
-for large models with many terms and implicit time-stepping with all the bells
-and whistles that the CliMA ecosystem offers.
+Optional: [Infiltrator.jl](https://github.com/JuliaDebug/Infiltrator.jl) in
+the default environment for the interactive steps, and
+[StructuredPrinting.jl](https://github.com/CliMA/StructuredPrinting.jl) for
+inspecting broadcast objects.
 
-Because so much data (for example, the solution state, and many cached fields)
-is typically contained in `ClimaCore` data structures, we offer a hook to
-inspect this data after any operation that `ClimaCore` performs.
+## Steps
 
-### Example
+ 1. Switch the hook on and give it a method. When
+    `DebugOnly.call_post_op_callback()` returns `true`, every `ClimaCore`
+    operation ends by calling `DebugOnly.post_op_callback(result, args...; kwargs...)`
+    with its result and arguments. The function has no methods by default;
+    define one with a general signature, since it is called from many places
+    with many argument types:
 
-#### Print `NaNs` when they are found
-
-In this example, we add a callback that simply prints `NaNs found` every
-instance when they are detected in a `ClimaCore` operation.
-
-To do this, we need two ingredients:
-
-First, we need to enable the callback system:
-
-```@example clima_debug
-import ClimaCore
-ClimaCore.DebugOnly.call_post_op_callback() = true
-```
-
-The line `ClimaCore.DebugOnly.call_post_op_callback() = true` means that at the
-end of every `ClimaCore` operation, the function
-`ClimaCore.DebugOnly.post_op_callback` is called. By default, this function does
-nothing. So, the second ingredient is to define a method:
-
-```@example clima_debug
-function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
-    has_nans = result isa Number ? isnan(result) : any(isnan, parent(result))
-    has_inf = result isa Number ? isinf(result) : any(isinf, parent(result))
-    if has_nans || has_inf
-        has_nans && println("NaNs found!")
-        has_inf && println("Infs found!")
+    ```@example clima_debug
+    import ClimaCore
+    ClimaCore.DebugOnly.call_post_op_callback() = true
+    function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
+        has_nan = result isa Number ? isnan(result) : any(isnan, parent(result))
+        has_inf = result isa Number ? isinf(result) : any(isinf, parent(result))
+        has_nan && println("NaN found")
+        has_inf && println("Inf found")
     end
-end
-```
+    data = ClimaCore.DataLayouts.VIJFH{Float64, 5, 2, 2, 2}(Array{Float64})
+    @. data = NaN
+    ```
 
-If needed, multiple methods of `post_op_callback` can be defined, but here, we
-define a general method that checks if `NaN`s are in the given object.
+    The hook applies to every `ClimaCore` operation in the session, including
+    code unrelated to the problem, so switch it off once the `NaN` is located:
 
-Note that we need `post_op_callback` to be called for a wide variety of inputs
-because it is called by many different functions with many different objects.
-Therefore, we recommend that you define `post_op_callback` with a very general
-method signature, like the one above and perhaps use `Infiltrator` to inspect
-the arguments.
+    ```@example clima_debug
+    ClimaCore.DebugOnly.call_post_op_callback() = false
+    nothing # hide
+    ```
 
-Now, let us put everything together and demonstrate a complete example:
+ 2. Find the operation that produced it. The message above says that a `NaN`
+    appeared, not where. With Infiltrator, drop into a REPL at the first
+    occurrence instead of printing:
 
-```@example clima_debug
-import ClimaCore
-ClimaCore.DebugOnly.call_post_op_callback() = true
-function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
-    has_nans = result isa Number ? isnan(result) : any(isnan, parent(result))
-    has_inf = result isa Number ? isinf(result) : any(isinf, parent(result))
-    if has_nans || has_inf
-        has_nans && println("NaNs found!")
-        has_inf && println("Infs found!")
+    ```julia
+    import Infiltrator
+    ClimaCore.DebugOnly.call_post_op_callback() = true
+    function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
+        has_nan = result isa Number ? isnan(result) : any(isnan, parent(result))
+        has_inf = result isa Number ? isinf(result) : any(isinf, parent(result))
+        @infiltrate has_nan || has_inf
     end
-end
+    ```
 
-FT = Float64
-data = ClimaCore.DataLayouts.VIJFH{FT, 5, 2, 2, 2}(Array{FT})
-@. data = NaN
-ClimaCore.DebugOnly.call_post_op_callback() = false # hide
-```
+    `@infiltrate condition` opens the `infil>` REPL in the scope of the macro
+    when the condition holds. That scope is inside `ClimaCore`'s `copyto!`,
+    which is rarely informative by itself; type `@trace` for a stack trace with
+    type-limited signatures and read it upward until your own functions appear:
 
-This example should print `NaN` on your standard output.
+    ```text
+    [3] copyto!         at ClimaCore.jl/src/DataLayouts/copyto.jl:18
+    [4] copyto!         at ClimaCore.jl/src/Fields/broadcast.jl:190
+    [5] copy            at ClimaCore.jl/src/Fields/broadcast.jl:97
+    [6] materialize     at base/broadcast.jl:872
+    [7] specific_energy(rho::Field, P::Field, u::Field)   at REPL[31]:2
+    [8] renormalized_energy(rho::Field, P::Field, u::Field)   at REPL[36]:2
+    ```
 
-As you see, this only tells us that a `NaN` was found, but not which function
-triggered the `NaN`. A simple way to find that is to extend this example with
-`Infiltrator`.
+    Here the first `NaN` appears in `specific_energy`. Leave the REPL with
+    `@exit`, switch the hook off, and place `@infiltrate` inside that function
+    to inspect its local variables before the offending expression runs. In
+    the `infil>` REPL, `?` lists the commands; objects from the main session
+    are reached by prefixing `Main`, and `Main.@infiltrate` is the form to use
+    inside a module.
 
-#### Infiltrating and Exfiltrating
+ 3. Alternatively, exfiltrate the arguments to the main session and inspect
+    them there. `Infiltrator.@exfiltrate` copies the local variables into
+    `Infiltrator.safehouse`; raising an error afterwards stops at the first
+    occurrence:
 
-[Infiltrator.jl](https://github.com/JuliaDebug/Infiltrator.jl) is a simple
-debugging tool for Julia packages.
-
-Here is an example, where we can use Infiltrator.jl to find where `NaN`s is coming
-from interactively.
-
-##### Infiltrating
-
-Suppose you have a `NaN` in your simulation and what to look at the variables
-right before the expression caused the `NaN`. One of the challenges in this is
-that you probably have a tower of function being called, many of which belong to
-other packages.
-
-Let us simulate this case (note this is a toy example optimized for clarity and
-not for performance: the functions below have unnecessary allocations)
-
-```julia
-import ClimaCore
-using ClimaCore.CommonSpaces
-space = CubedSphereSpace(; radius = 10, n_quad_points = 4, h_elem = 10)
-myrho = ones(space)
-myP = ones(space)
-myu = ones(space)
-
-kinetic_energy(field) = field .* field ./ 2
-other_energy(field) = field ./ sum(field)
-offset_by_one(field) = field .- 1
-
-function specific_energy(rho, P, u)
-    density_without_restmass = offset_by_one(rho)
-    return (kinetic_energy(u) .+ other_energy(P)) ./ density_without_restmass
-end
-
-function renormalized_energy(rho, P, u)
-    energy = specific_energy(rho, P, u)
-    return energy ./ sum(energy)
-end
-
-any(isnan, renormalized_energy(myrho, myP, myu)) # true
-```
-
-To debug this, we first need to identify where the first `NaN` is produced. We
-use `DebugOnly.call_post_op_callback` and infiltrate.
-
-```julia
-import Infiltrator # must be in your default environment
-ClimaCore.DebugOnly.call_post_op_callback() = true
-function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
-    has_nans = result isa Number ? isnan(result) : any(isnan, parent(result))
-    has_inf = result isa Number ? isinf(result) : any(isinf, parent(result))
-    @infiltrate has_nans || has_inf
-end
-```
-
-"Infiltrating" means being dropped into a new REPL where in the scope of the
-`@infiltrate` macro. `@infiltrate condition` means that we want to infiltrate
-only when the `condition` is true (in this case `has_nans || has_inf`).
-
-Now, when we run our example, we will see
-
-```julia-repl
-julia> renormalized_energy(myrho, myP, myu)
-Infiltrating post_op_callback(::ClimaCore.DataLayouts.VIJFH{...}, ::ClimaCore.DataLayouts.VIJFH{...}, ::Vararg{Any}; kwargs::@Kwargs{})
-  at REPL[40]:4
-infil>
-```
-
-Here, we are dropped into a new REPL with full access to the variables in the scope where the `NaN` occurred. However, because of how `post_op_callback`, this is at a low level within `ClimaCore`, which is typically not useful. Hence, the next step is to type `@trace`, which prints out
-
-```text
-[1] post_op_callback(::ClimaCore.DataLayouts.VIJFH{…}, ::ClimaCore.DataLayouts.VIJFH{…}, ::Vararg{…}; kwargs::@Kwargs{})
-    at REPL[40]:4
-[2] post_op_callback
-    at REPL[40]:1
-[3] copyto!
-    at ClimaCore.jl/src/DataLayouts/copyto.jl:18
-[4] copyto!
-    at ClimaCore.jl/src/Fields/broadcast.jl:190
-[5] copy
-    at ClimaCore.jl/src/Fields/broadcast.jl:97
-[6] materialize
-    at .julia/juliaup/julia-1.11.4+0.x64.linux.gnu/share/julia/base/broadcast.jl:872
-[7] specific_energy(rho::ClimaCore.Fields.Field{…}, P::ClimaCore.Fields.Field{…}, u::ClimaCore.Fields.Field{…})
-    at REPL[31]:2
-[8] renormalized_energy(rho::ClimaCore.Fields.Field{…}, P::ClimaCore.Fields.Field{…}, u::ClimaCore.Fields.Field{…})
-    at REPL[36]:2
-[9] top-level scope
-```
-
-`@trace` returns a type-limited stacktrace that we can read backwards until we
-see our functions. In this case, we see that the first `NaN` is in
-`specific_energy`, so we will investigate that function. We leave the
-Infiltrator REPL with `@exit`, disable the `call_post_op_callback`, and move our
-`infiltrate` call within the target function:
-
-```julia
-ClimaCore.DebugOnly.call_post_op_callback() = false
-function specific_energy(rho, P, u)
-    @infiltrate
-    density_without_restmass = offset_by_one(rho)
-    return (kinetic_energy(u) .+ other_energy(P)) ./ density_without_restmass
-end
-```
-
-Now, when we evaluate our problematic expression (the one at the top level, in this case `renormalized_energy(myrho, myP, myu)`), we will be dropped in a REPL inside `specific_energy`. Here, we have access to `density_without_restmass`, and we notice that it can be zero, leading to the `NaN`.
-
-!!! tip
-
-    The infiltrator REPL is different from the normal Julia repl. Type `?` for
-    some useful commands. You can fetch objects defined in the main REPL by
-    prepending their name with `Main`. Similarly, if you want to infiltrate inside a
-    module, prepend `@infiltrate` with `Main` (`Main.@infiltrate`).
-
-In this small example, the `NaN` comes from a division by zero, and the
-question is how the zero got there. In larger models, the functions are spread across different packages and involve several
-different variables. This approach allows one to systematically identify where
-things go wrong.
-
-##### Exfiltrating and StructuredPrinting
-
-Let's now see a different way to use Infiltrator, where we move the variables in specific scope to the Main scope in the REPL and do some analysis on it.
-
-```julia
-import ClimaCore
-import Infiltrator # must be in your default environment
-ClimaCore.DebugOnly.call_post_op_callback() = true
-function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
-    has_nans = result isa Number ? isnan(result) : any(isnan, parent(result))
-    has_inf = result isa Number ? isinf(result) : any(isinf, parent(result))
-    if has_nans || has_inf
-        has_nans && println("NaNs found!")
-        has_inf && println("Infs found!")
-        # Let's define the stack trace so that we know where this came from
-        st = stacktrace()
-
-        # Let's use Infiltrator.jl to exfiltrate to drop into the REPL.
-        # Now, `Infiltrator.safehouse` will be a NamedTuple
-        # containing `result`, `args`, `kwargs` and `st`.
-        Infiltrator.@exfiltrate
-        # Stop here so that the exfiltrated data is the first occurrence.
-        error("Exfiltrating.")
+    ```julia
+    import Infiltrator
+    ClimaCore.DebugOnly.call_post_op_callback() = true
+    function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
+        has_nan = result isa Number ? isnan(result) : any(isnan, parent(result))
+        if has_nan
+            st = stacktrace()
+            Infiltrator.@exfiltrate   # result, args, kwargs, and st
+            error("exfiltrated at the first NaN")
+        end
     end
-end
+    ```
 
-FT = Float64
-data = ClimaCore.DataLayouts.VIJFH{FT, 5, 2, 2, 2}(Array{FT})
-x = ClimaCore.DataLayouts.VIJFH{FT, 5, 2, 2, 2}(Array{FT})
-fill!(parent(data), 0)
-fill!(parent(x), 0)
-parent(x)[1] = NaN # emulate incorrect initialization
-@. data = x + 1
-# Let's see what happened
-(;result, args, kwargs, st) = Infiltrator.safehouse;
+    After the error, `(; result, args, st) = Infiltrator.safehouse` holds the
+    data. `ClimaCore.DebugOnly.print_depth_limited_stack_trace(st; maxtypedepth = 1)`
+    prints the trace with the field and space types abbreviated. When the
+    trace leads to `copyto!`, `args[2]` is the `Broadcasted` object whose
+    evaluation produced the result, and StructuredPrinting highlights the parts
+    of it that contain `NaN`s:
 
-# You can print the stack trace, to see where the NaNs were found:
-ClimaCore.DebugOnly.print_depth_limited_stack_trace(st; maxtypedepth=1)
+    ```julia
+    using StructuredPrinting
+    import ClimaCore: DataLayouts
+    has_nan(x::DataLayouts.DataLayout) = any(isnan, parent(x))
+    has_nan(_) = false
+    bc = Infiltrator.safehouse.args[2]
+    @structured_print bc Options(; highlight = has_nan)
+    ```
 
-# The trace leads to `copyto!`; `args[2]` is the `Broadcasted` object that
-# populated the result, inspected in the next section.
-```
+    The output lists the fields of `bc` (`f`, `args`, `axes`, …) with their
+    types, and the argument that carries the `NaN` is printed in red.
 
-If your broadcasted object is very long, it can be a bit overwhelming to figure
-out which part of the expression contains NaNs (if any). To make this process
-more manageable, [StructuredPrinting.jl](https://github.com/CliMA/StructuredPrinting.jl) highlights which
-parts of the broadcasted object contains NaNs:
+## Caveats
 
-```julia
-using StructuredPrinting
-import ClimaCore: DataLayouts
-highlight_nans(x::DataLayouts.DataLayout) = any(y->isnan(y), parent(x));
-highlight_nans(_) = false;
-bc = Infiltrator.safehouse.args[2]; # we know that argument 2 is the broadcasted object
-(; result) = Infiltrator.safehouse; # get the result
-@structured_print bc Options(; highlight = x->highlight_nans(x))
-```
+  - The hook sees `ClimaCore` operations only. A `NaN` written through
+    internals, such as `parent(data) .= NaN`, is not caught until a later
+    `ClimaCore` operation reads it.
+  - `post_op_callback` runs after every operation, so an expensive callback
+    slows the run in proportion.
+  - Do not combine the hook with `@testset`: Test.jl keeps running after an
+    error until the set completes, so the state you inspect is the last
+    occurrence, not the first.
 
-This last line results in:
+## Reuse a state after `deepcopy`
 
-```julia-repl
-julia> @structured_print bc Options(; highlight = x->highlight_nans(x))
-bc
-bc.style::ClimaCore.DataLayouts.VIJFHStyle{5, 2, Array{Float64}}
-bc.f::typeof(+)
-bc.args::Tuple{ClimaCore.DataLayouts.VIJFH{Float64, 5, 2, Array{…}}, Int64}
-bc.args.1::ClimaCore.DataLayouts.VIJFH{Float64, 5, 2, Array{Float64, 5}}       # highlighted in RED
-bc.args.2::Int64
-bc.axes::NTuple{5, Base.OneTo{Int64}}
-bc.axes.1::Base.OneTo{Int64}
-bc.axes.1.stop::Int64
-bc.axes.2::Base.OneTo{Int64}
-bc.axes.2.stop::Int64
-bc.axes.3::Base.OneTo{Int64}
-bc.axes.3.stop::Int64
-bc.axes.4::Base.OneTo{Int64}
-bc.axes.4.stop::Int64
-bc.axes.5::Base.OneTo{Int64}
-bc.axes.5.stop::Int64
-```
-
-#### Caveats
-
-!!! warning
-
-    While `post_op_callback` may be helpful, it's not bullet proof. NaNs can
-    infiltrate user data any time internals are used. For example `parent (data) .= NaN` will not be caught by ClimaCore.DebugOnly, and errors can be
-    observed later than expected.
-
-!!! note
-
-    `post_op_callback` is called in many places, so this is a
-    performance-critical code path and expensive operations performed in
-    `post_op_callback` may significantly slow down your code.
-
-!!! warning
-
-    It is _highly_ recommended to use `post_op_callback` _without_ `@testset`,
-    as Test.jl may continue running through code execution, until all of the
-    tests in a given `@testset` are complete, and the result will be that you
-    will get the _last_ observed instance of `NaN` or `Inf`.
-
-#### Faster explorations when the initialization is expensive
-
-Sometimes, we want to start from a given simulation state and explore different
-ideas. For example, we want to run a simulation for 10 days, and then test how
-different approaches affect its stability. Sometimes, checkpoints offer a way to
-do this, but not everything can be checkpointed.
-
-A simple way to "checkpoint" a simulation is to `deepcopy` its state. This
-allows one to step the copy instead of the original one, which can be re-used to
-make new copies, allowing for various explorations. `ClimaCore` does not support
-this workflow out-of-the-box. The reason for this is that `ClimaCore` uses
-pointers to perform certain safety checks, and deepcopies return new pointers
-(by definition). To enable this, override the
-`DebugOnly.allow_mismatched_spaces_unsafe` function so that it returns true. When
-`DebugOnly.allow_mismatched_spaces_unsafe` returns true, `ClimaCore` can mix fields
-defined on space that are not identically the same.
-
-Let us look at an example of this.
+Exploring alternatives from a spun-up state is easiest by advancing a
+`deepcopy` of it, so that the original is kept for the next copy. `ClimaCore`
+checks that fields in one broadcast live on the same space by object identity,
+and a `deepcopy` creates a new space object, so a broadcast that mixes the copy
+with fields on the original space raises a mismatched-spaces error.
+`DebugOnly.allow_mismatched_spaces_unsafe` turns that check off:
 
 ```julia
 import ClimaCore
-using ClimaCore.CommonSpaces
 other_space = deepcopy(space)
-
-one = ones(space)
-other_one = ones(other_space)
-
-one .+ other_one  # This throws an error
-
+ones(space) .+ ones(other_space)                          # error: mismatched spaces
 ClimaCore.DebugOnly.allow_mismatched_spaces_unsafe() = true
-one .+ other_one # Now it's fine!
+ones(space) .+ ones(other_space)                          # allowed
 ```
 
-!!! warning
-
-    `ClimaCore` checks for consistency of spaces to protect you from non-sense
-    results. If you disable this check, you are responsible to ensure that the
-    results make sense.
+The check exists to prevent meaningless results from fields on different
+grids; with it off, you are responsible for making sure the spaces are in fact
+equivalent.

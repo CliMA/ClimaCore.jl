@@ -14,13 +14,14 @@ whose large-eddy simulations ran on GPUs and CPUs from one Julia source
 
 **One kernel language.** Model code is written as broadcast expressions over
 fields ([Operators and broadcasting](operators.md)). On a CPU, a fused
-expression compiles to a loop; when the fields live on a `ClimaComms.CUDADevice`
+expression compiles to a loop; when the fields live on a `ClimaComms.CUDADevice`,
 the same expression compiles to a CUDA kernel through the `ClimaCoreCUDAExt`
-package extension, which loads when CUDA.jl is present. Pointwise and
-finite-difference kernels assign one thread per nodal point; spectral-element
-kernels assign one thread per horizontal slice of an element and hold the
-element's nodes in shared memory. Kernels are specialized on the polynomial
-degree, so the loops over quadrature nodes unroll.
+package extension, which loads when CUDA.jl is present. Every kernel assigns one thread per
+nodal point. Finite-difference kernels give a column to a group of threads
+along its levels; spectral-element kernels give each element slab a group of
+threads, one per node, pack several slabs into a thread block, and stage the
+slab in shared memory for the differentiation matrix. Kernels are specialized
+on the polynomial degree, so the loops over quadrature nodes unroll.
 
 **Device-agnostic data.** A field's storage is an array whose type follows the
 device (`Array` or `CuArray`), and every grid, space, and operator is
@@ -49,15 +50,15 @@ Hardware in the measurements: NCAR's Derecho (four NVIDIA A100 GPUs per
 node), Google Cloud Platform NVIDIA H100 instances, and Caltech's Resnick
 cluster (two 32-core Intel Icelake CPUs per node, 16 MPI ranks per node).
 
-| Quantity                                                   | Result                                                                                  |
-|:-----------------------------------------------------------|:----------------------------------------------------------------------------------------|
-| Weak scaling, 103 km → 6 km, 1 → 256 GPUs                  | Efficiency above 92% on GPUs; time per step stays near the 1-GPU value of 223 ms        |
-| Weak scaling on CPUs, 16 → 512 ranks                       | Efficiency above 98%                                                                    |
-| Strong scaling on GPUs                                     | Efficiency above 95% while each GPU holds at least about 5400 spectral elements         |
-| Strong scaling on CPUs                                     | About 80% at the highest resolution, up to 16 nodes                                     |
-| Throughput at 25–50 km                                     | More than 1 simulated year per day on a dozen to a few dozen GPUs                       |
-| Throughput at 6 km, 256 H100 GPUs                          | 0.20 simulated years per day, with one-moment microphysics                              |
-| Time per step at 51 km on 4 A100 GPUs                      | About 0.22 s                                                                            |
+| Quantity                                  | Result                                                                           |
+|:----------------------------------------- |:-------------------------------------------------------------------------------- |
+| Weak scaling, 103 km → 6 km, 1 → 256 GPUs | Efficiency above 92% on GPUs; time per step stays near the 1-GPU value of 223 ms |
+| Weak scaling on CPUs, 16 → 512 ranks      | Efficiency above 98%                                                             |
+| Strong scaling on GPUs                    | Efficiency above 95% while each GPU holds at least about 5400 spectral elements  |
+| Strong scaling on CPUs                    | About 80% at the highest resolution, up to 16 nodes                              |
+| Throughput at 25–50 km                    | More than 1 simulated year per day on a dozen to a few dozen GPUs                |
+| Throughput at 6 km, 256 H100 GPUs         | 0.20 simulated years per day, with one-moment microphysics                       |
+| Time per step at 51 km on 4 A100 GPUs     | About 0.22 s                                                                     |
 
 ![Weak scaling on GPUs and CPUs](../assets/weak_scaling.png)
 
@@ -109,8 +110,8 @@ Over-aggressive fusion of a long tendency into one kernel spills registers or
 exhausts shared memory and slows the kernel; the split points are chosen by
 measurement.
 
-Four environment variables tune the GPU kernel launches (`CLIMA_CUDA_MAX_WAVES`,
-`CLIMA_FD_MAX_THREADS`, `CLIMA_DSS_MAX_THREADS`, `CLIMA_COLLECT_KERNEL_STATS`);
+Four environment variables tune the GPU kernel launches; the
+[Environment variables](../reference/environment.md) page lists them, and
 [`perf/sweep_kernel_configs.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/perf/sweep_kernel_configs.jl) sweeps them.
 For writing new code that keeps these properties (no allocation in kernels,
 type stability, `ifelse` over branches), see the shared developer guides under

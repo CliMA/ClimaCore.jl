@@ -6,7 +6,7 @@ only storing the entries that belong to the thread reading it, in a
 `StaticArrays.MArray` or `SArray` that a compiler can promote to registers. `F`
 is the position of the field dimension (see [`f_dim`](@ref)), `Stride` is the
 number of threads in the scope it was allocated for (also the stride between
-consecutive points of the reading thread), and [`register_array_params`](@ref)
+consecutive points of the reading thread), and `register_array_params`
 derives the remaining size parameters from `Sz` and `F`.
 
 Every thread is assigned the strided subset `rank:Stride:Np` of the scope's

@@ -19,3 +19,20 @@ Fields.ColumnIndex
 Fields.bycolumn
 Fields.Δz_field
 ```
+
+## Slicing
+
+```@docs
+ClimaCore.level
+ClimaCore.column
+ClimaCore.slab
+```
+
+## Conversion to arrays
+
+```@docs
+Fields.fieldvector2array
+Fields.fieldvector2array!
+Fields.array2fieldvector
+Fields.array2fieldvector!
+```

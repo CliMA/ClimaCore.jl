@@ -19,12 +19,12 @@ parent_h_dim(values::DataLayouts.VIJHWithF) =
     something(DataLayouts.f_dim(values), 5) == 5 ? 4 : 5
 
 """
-    HDF5Writer(filename::AbstractString[,
-               context::ClimaComms.AbstractCommsContext];
+    HDF5Writer(filename::AbstractString,
+               context::ClimaComms.AbstractCommsContext;
                overwrite::Bool = true)
     HDF5Writer(::Function,
-               filename::AbstractString[,
-               context::ClimaComms.AbstractCommsContext];
+               filename::AbstractString,
+               context::ClimaComms.AbstractCommsContext;
                overwrite::Bool = true)
 
 An `AbstractWriter` for writing to HDF5-formatted files using the ClimaCore
@@ -32,9 +32,9 @@ storage conventions. An internal cache is used to avoid writing duplicate
 domains, meshes, topologies and spaces to the file. Use [`HDF5Reader`](@ref) to
 load the data from the file.
 
-The optional `context` can be used for writing distributed fields: in this case,
-the `MPICommsContext` used passed as an argument: this must match the context
-used for distributing the `Field`.
+`context` is the `ClimaComms` context of the run (`ClimaComms.context()`); for
+distributed fields it is the `MPICommsContext` the fields were distributed
+with. The `do`-block form closes the file when the block returns.
 
 The writer overwrites or appends to existing files depending on the value of the
 `overwrite` keyword argument. When `overwrite` is `false`, the writer appends to
@@ -54,7 +54,7 @@ The writer overwrites or appends to existing files depending on the value of the
 # Usage
 
 ```julia
-InputOutput.HDF5Writer(filename) do writer
+InputOutput.HDF5Writer(filename, ClimaComms.context()) do writer
     InputOutput.write!(writer, Y, "Y")
 end
 ```

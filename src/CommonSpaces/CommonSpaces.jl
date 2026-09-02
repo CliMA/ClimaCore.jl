@@ -72,17 +72,17 @@ cubed sphere configuration, given:
   - `n_quad_points` the number of quadrature points per horizontal element
   - `device` the `ClimaComms.device`
   - `context` the `ClimaComms.context`
-  - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
+  - `stretch` the mesh `Meshes.StretchingRule` (defaults to `Meshes.Uniform`)
   - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
-  - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
+  - `global_geometry` the global geometry (defaults to `Geometry.CartesianGlobalGeometry`)
   - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
   - `discretization` the Galerkin discretization of the horizontal spectral-element grid: `Grids.CG()`, continuous across element boundaries with DSS, or `Grids.DG()`, discontinuous with interface numerical fluxes. When omitted (`nothing`) it follows the quadrature: `CG()` for GLL nodes, `DG()` for quadratures whose nodes are not shared between elements. See [`Grids.SpectralElementGrid2D`](@ref).
   - `h_mesh` the horizontal mesh (defaults to `Meshes.EquiangularCubedSphere`)
   - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
-  - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
+  - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See `Grids.SpectralElementGrid2D` for its use.
   - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
-  - `enable_bubble` enables the "bubble correction" for more accurate element areas when computing the spectral element space. See [`Grids.SpectralElementGrid2D`](@ref) for more information.
-  - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
+  - `enable_bubble` enables the "bubble correction" for more accurate element areas when computing the spectral element space. See `Grids.SpectralElementGrid2D` for more information.
+  - `staggering` vertical staggering, can be one of [[`CellFace`](@ref), [`CellCenter`](@ref)]
 
 Note that these arguments are all the same as
 [`CommonGrids.ExtrudedCubedSphereGrid`](@ref), except for `staggering`.
@@ -160,7 +160,7 @@ cubed sphere configuration, given:
   - `discretization` the Galerkin discretization of the horizontal spectral-element grid: `Grids.CG()`, continuous across element boundaries with DSS, or `Grids.DG()`, discontinuous with interface numerical fluxes. When omitted (`nothing`) it follows the quadrature: `CG()` for GLL nodes, `DG()` for quadratures whose nodes are not shared between elements. See [`Grids.SpectralElementGrid2D`](@ref).
   - `h_mesh` the horizontal mesh (defaults to `Meshes.EquiangularCubedSphere`)
   - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
-  - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
+  - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See `Grids.SpectralElementGrid2D` for its use.
 
 Note that these arguments are all the same as [`CommonGrids.CubedSphereGrid`](@ref).
 
@@ -201,9 +201,9 @@ column configuration, given:
   - `z_max` the domain maximum along the z-direction.
   - `device` the `ClimaComms.device`
   - `context` the `ClimaComms.context`
-  - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
+  - `stretch` the mesh `Meshes.StretchingRule` (defaults to `Meshes.Uniform`)
   - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
-  - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
+  - `staggering` vertical staggering, can be one of [[`CellFace`](@ref), [`CellCenter`](@ref)]
 
 Note that these arguments are all the  same as [`CommonGrids.ColumnGrid`]
 (@ref), except for `staggering`.
@@ -271,16 +271,16 @@ configuration, given:
   - `y_elem` the number of y-points
   - `device` the `ClimaComms.device`
   - `context` the `ClimaComms.context`
-  - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
+  - `stretch` the mesh `Meshes.StretchingRule` (defaults to `Meshes.Uniform`)
   - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
-  - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
+  - `global_geometry` the global geometry (defaults to `Geometry.CartesianGlobalGeometry`)
   - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
   - `discretization` the Galerkin discretization of the horizontal spectral-element grid: `Grids.CG()`, continuous across element boundaries with DSS, or `Grids.DG()`, discontinuous with interface numerical fluxes. When omitted (`nothing`) it follows the quadrature: `CG()` for GLL nodes, `DG()` for quadratures whose nodes are not shared between elements. See [`Grids.SpectralElementGrid2D`](@ref).
   - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
   - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
-  - `enable_bubble` enables the "bubble correction" for more accurate element areas when computing the spectral element space. See [`Grids.SpectralElementGrid2D`](@ref) for more information.
-  - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
-  - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
+  - `enable_bubble` enables the "bubble correction" for more accurate element areas when computing the spectral element space. See `Grids.SpectralElementGrid2D` for more information.
+  - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See `Grids.SpectralElementGrid2D` for its use.
+  - `staggering` vertical staggering, can be one of [[`CellFace`](@ref), [`CellCenter`](@ref)]
 
 Note that these arguments are all  the same as [`CommonGrids.Box3DGrid`]
 (@ref), except for `staggering`.
@@ -346,12 +346,12 @@ configuration, given:
   - `x_elem` the number of x-points
   - `device` the `ClimaComms.device`
   - `context` the `ClimaComms.context`
-  - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
+  - `stretch` the mesh `Meshes.StretchingRule` (defaults to `Meshes.Uniform`)
   - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
-  - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
+  - `global_geometry` the global geometry (defaults to `Geometry.CartesianGlobalGeometry`)
   - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
   - `discretization` the Galerkin discretization of the horizontal spectral-element grid: `Grids.CG()`, continuous across element boundaries with DSS, or `Grids.DG()`, discontinuous with interface numerical fluxes. When omitted (`nothing`) it follows the quadrature: `CG()` for GLL nodes, `DG()` for quadratures whose nodes are not shared between elements. See [`Grids.SpectralElementGrid2D`](@ref).
-  - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
+  - `staggering` vertical staggering, can be one of [[`CellFace`](@ref), [`CellCenter`](@ref)]
 
 Note that these arguments are all the same as [`CommonGrids.SliceXZGrid`](@ref),
 except for `staggering`.
@@ -413,7 +413,7 @@ configuration, given:
   - `device` the `ClimaComms.device`
   - `context` the `ClimaComms.context`
   - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
-  - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
+  - `global_geometry` the global geometry (defaults to `Geometry.CartesianGlobalGeometry`)
   - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
   - `discretization` the Galerkin discretization of the horizontal spectral-element grid: `Grids.CG()`, continuous across element boundaries with DSS, or `Grids.DG()`, discontinuous with interface numerical fluxes. When omitted (`nothing`) it follows the quadrature: `CG()` for GLL nodes, `DG()` for quadratures whose nodes are not shared between elements. See [`Grids.SpectralElementGrid2D`](@ref).
 
@@ -461,9 +461,9 @@ independent columns at arbitrary (lat, lon) locations on a sphere, given:
   - `z_min` the domain minimum along the z-direction
   - `z_max` the domain maximum along the z-direction
   - `device` the `ClimaComms.device`
-  - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
+  - `stretch` the mesh `Meshes.StretchingRule` (defaults to `Meshes.Uniform`)
   - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
-  - `staggering` vertical staggering, can be one of [[`Grids.CellFace`](@ref), [`Grids.CellCenter`](@ref)]
+  - `staggering` vertical staggering, can be one of [[`CellFace`](@ref), [`CellCenter`](@ref)]
 
 Note that these arguments are all the same as [`CommonGrids.MultiColumnGrid`](@ref),
 except for `staggering`.

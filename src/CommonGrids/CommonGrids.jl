@@ -755,7 +755,7 @@ arbitrary (lat, lon) locations on a sphere, given:
     with given `stretch`.
 
 There is no horizontal connectivity between columns. Horizontal operators are
-not supported. Use [`ClimaCore.Fields.bycolumn`](@ref) to iterate over columns.
+not supported. Use `Fields.bycolumn` to iterate over columns.
 
 # Example usage
 

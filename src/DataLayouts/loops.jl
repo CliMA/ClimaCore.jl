@@ -79,7 +79,7 @@ such scope is available, the largest subset is used in order to minimize the
 number of points per thread.
 
 `scope` itself is only used when its thread count is a compile-time constant
-(see [`static_num_threads`](@ref)), since [`scoped_slice_loop`](@ref) gives every
+(see [`static_num_threads`](@ref)), since `scoped_slice_loop` gives every
 slice a scope with a statically known number of threads.
 """
 @inline function slice_subscope(scope, op::O, args...) where {O}
