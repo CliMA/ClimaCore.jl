@@ -46,11 +46,11 @@ end
 """
     tendency_completion(dydt; numflux, boundary_numflux = nothing)
 
-Interface-coupling configuration for the tendency field `dydt` (or any field
-with the tendency's space and value type), selected by dispatch on
+Build the interface-coupling configuration for the tendency field `dydt` (or any
+field with the tendency's space and value type), selected by dispatch on
 [`Grids.discretization`](@ref): a [`DSSCompletion`](@ref) on `Grids.CG()`
-spaces, a [`NumericalFluxCompletion`](@ref) on `Grids.DG()` ones. Built once
-at model setup; the discretization choice then lives in the space, and the
+spaces, a [`NumericalFluxCompletion`](@ref) on `Grids.DG()` ones. Call once at
+model setup; the discretization choice then lives in the space, and the
 tendency code is shared:
 
     completion = Operators.tendency_completion(dydt; numflux)
@@ -115,10 +115,10 @@ tendency_completion(
 """
     completion_discretization(dydt)
 
-The discretization that [`tendency_completion`](@ref) dispatches on. One
+Return the discretization that [`tendency_completion`](@ref) dispatches on. One
 completion applies a single interface treatment, so every component of a
 `FieldVector` must agree, even though components may live on different spaces
-(centers and faces).
+(centers and faces); an error is thrown otherwise.
 """
 completion_discretization(dydt::Fields.Field) =
     Spaces.discretization(axes(dydt))
@@ -159,7 +159,7 @@ mass-weighted DG surface term:
     add_numerical_flux_boundary!(boundary_numflux, dydt, args...)  # if given
     dydt /= WJ
 
-Returns `dydt`.
+Mutates `dydt` in place and returns it.
 """
 function complete_tendency!(completion::DSSCompletion, dydt, args...)
     Spaces.weighted_dss!(dydt, completion.buffer)

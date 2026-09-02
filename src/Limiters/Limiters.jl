@@ -12,9 +12,14 @@ export AbstractLimiter, QuasiMonotoneLimiter, VerticalMassBorrowingLimiter
 
 Supertype for all limiters.
 
-# Interfaces
+Subtypes:
 
-  - [`apply_limiter!`](@ref)
+  - [`QuasiMonotoneLimiter`](@ref): horizontal quasi-monotone flux limiter for spectral
+    element advection.
+  - [`VerticalMassBorrowingLimiter`](@ref): vertical mass-borrowing limiter that removes
+    negative tracer mass.
+
+Subtypes implement [`apply_limiter!`](@ref).
 """
 abstract type AbstractLimiter end
 

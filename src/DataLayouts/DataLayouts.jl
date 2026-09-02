@@ -41,17 +41,17 @@ parallelized on CPUs and GPUs, and it dictates which array types are allocated.
 Several layouts are available, named after the order of their parent axes:
 
   - [`DataF`](@ref) is a 0-dimensional array that stores a single value, with an
-    `Nf`-element parent array (used in place of a `Ref`)
+    `Nf`-element parent array (used in place of a `Ref`).
   - [`VIJFH`](@ref) is an `Nv × Ni × Nj × Nh` array that stores spatially
-    varying data, with each value spread along the fourth parent axis
+    varying data, with each value spread along the fourth parent axis.
   - [`VIJHF`](@ref) is like `VIJFH` with the `F` and `H` axes swapped, which permits
     [linear indexing](https://docs.julialang.org/en/v1/devdocs/subarrays/#Linear-indexing)
-    and improves performance for operators that only access one field at a time
+    and improves performance for operators that only access one field at a time.
   - [`VIJHWithF`](@ref) generalizes `VIJFH` and `VIJHF` to any `F` axis
-    position, with `F = nothing` removing the axis altogether
+    position, with `F = nothing` removing the axis altogether.
   - [`VIH1`](@ref) and [`IH1JH2`](@ref) store vertical and horizontal planes of
     interpolated data for plotting, whose `ih1` and `jh2` indices combine `i` and
-    `j` with `h1` and `h2` (orthogonal components of `h` in rectangular domains)
+    `j` with `h1` and `h2` (orthogonal components of `h` in rectangular domains).
 
 ```julia-repl
 julia> data = VIJFH{Tuple{Int64, Float64, Int128}, 10, 5, 5, nothing}(Array{Int64}, 20);
@@ -64,23 +64,23 @@ julia> data[1, 2, 3, 4] = (0, 1.0, 2);
 (0, 1.0)
 ```
 
-# Extended Help
+# Extended help
 
 `DataLayout`s also provide the following functionality for ClimaCore:
 
   - Assigning a [`DataScope`](@ref) to every batch of data, and automatically
-    partitioning data across nestable multithreaded operations
+    partitioning data across nestable multithreaded operations.
   - Storing specific array dimensions as type parameters, and allocating static
-    arrays in place of regular arrays when every dimension can be inferred
+    arrays in place of regular arrays when every dimension can be inferred.
   - Using linear indices in place of Cartesian indices where doing so may
-    improve performance, including in `getindex` and `view` operations
+    improve performance, including in `getindex` and `view` operations.
   - Automatic nested broadcasting over `Tuple` and `NamedTuple` values (or
-    other supported iterator types), along with broadcasting over array indices
+    other supported iterator types), along with broadcasting over array indices.
   - Checking for type stability before evaluating operations like broadcasts
-    and reductions, avoiding inefficient CPU behavior and GPU compilation errors
+    and reductions, avoiding inefficient CPU behavior and GPU compilation errors.
   - Falling back to built-in `AbstractArray` methods when specialized ClimaCore
-    code is not available (this may be highly inefficient or fail to compile on
-    GPUs, but it should generally work on CPUs)
+    code is not available (this may be inefficient or fail to compile on GPUs,
+    but it works on CPUs).
 """
 abstract type DataLayout{T, N, F, S, A} <: AbstractArray{T, N} end
 
@@ -93,7 +93,7 @@ DataScope(::Type{<:DataLayout{<:Any, <:Any, <:Any, S}}) where {S <: DataScope} =
     layout_type(D)
     layout_type(data)
 
-Type of a [`DataLayout`](@ref), but stripped of all its type parameters.
+Return the type of a [`DataLayout`](@ref), stripped of all its type parameters.
 """
 @inline layout_type(::D) where {D <: DataLayout} = layout_type(D)
 @inline layout_type(::Type{D}) where {D <: DataLayout} = unionall_type(D)
@@ -102,8 +102,8 @@ Type of a [`DataLayout`](@ref), but stripped of all its type parameters.
     parent_type(D)
     parent_type(data)
 
-Type of parent array used by a [`DataLayout`](@ref), or a similar abstract type
-if the concrete type is unavailable.
+Return the type of the parent array used by a [`DataLayout`](@ref), or a similar
+abstract type if the concrete type is unavailable.
 """
 @inline parent_type(::D) where {D <: DataLayout} = parent_type(D)
 @inline parent_type(::Type{<:DataLayout{<:Any, <:Any, <:Any, <:Any, A}}) where {A} = A
@@ -112,10 +112,10 @@ if the concrete type is unavailable.
     f_dim(D)
     f_dim(data)
 
-Index of the `F` axis in a parent array for a [`DataLayout`](@ref), or `nothing`
-if there is no separate `F` axis. The value of `nothing` is chosen instead of
-`missing` because GPUCompiler.jl compares type parameters with `==`, which
-returns the non-boolean `missing` whenever one of its arguments is `missing`.
+Return the index of the `F` axis in the parent array of a [`DataLayout`](@ref), or
+`nothing` if there is no separate `F` axis. The value `nothing` is used instead of
+`missing` because GPUCompiler.jl compares type parameters with `==`, which returns
+the non-boolean `missing` whenever one of its arguments is `missing`.
 """
 @inline f_dim(::D) where {D <: DataLayout} = f_dim(D)
 @inline f_dim(::Type{<:DataLayout{<:Any, <:Any, F}}) where {F} = F
@@ -124,8 +124,8 @@ returns the non-boolean `missing` whenever one of its arguments is `missing`.
     shape_params(D)
     shape_params(data)
 
-A `NamedTuple` with all shape-related parameters of a [`DataLayout`](@ref). This
-excludes its element type, its parent array type, and its [`DataScope`](@ref).
+Return a `NamedTuple` with all shape-related parameters of a [`DataLayout`](@ref).
+This excludes its element type, its parent array type, and its [`DataScope`](@ref).
 """
 @inline shape_params(::D) where {D <: DataLayout} = shape_params(D)
 
@@ -133,8 +133,8 @@ excludes its element type, its parent array type, and its [`DataScope`](@ref).
     inferred_size(D)
     inferred_size(data)
 
-Size of a [`DataLayout`](@ref), with dimensions that cannot be inferred from its
-type set to `nothing`.
+Return the size of a [`DataLayout`](@ref), with dimensions that cannot be inferred
+from its type set to `nothing`.
 """
 @inline inferred_size(::D) where {D <: DataLayout} = inferred_size(D)
 
@@ -142,7 +142,8 @@ type set to `nothing`.
     has_inferred_size(D)
     has_inferred_size(data)
 
-Whether every dimension of a [`DataLayout`](@ref) can be inferred from its type.
+Return whether every dimension of a [`DataLayout`](@ref) can be inferred from its
+type.
 """
 @inline has_inferred_size(data) = inferred_size(data) isa Tuple{Vararg{Integer}}
 
@@ -150,9 +151,10 @@ Whether every dimension of a [`DataLayout`](@ref) can be inferred from its type.
     vijh_params(D)
     vijh_params(data)
 
-A `NamedTuple` with `Nv`, `Ni`, `Nj`, and `Nh`, representing lengths of the `V`,
-`I`, `J`, and `H` axes in a [`DataLayout`](@ref). Like [`inferred_size`](@ref),
-this returns `nothing` for dimensions that cannot be inferred from the type.
+Return a `NamedTuple` with `Nv`, `Ni`, `Nj`, and `Nh`, the lengths of the `V`, `I`,
+`J`, and `H` axes in a [`DataLayout`](@ref). Axes that the layout does not have are
+reported with length 1. Like [`inferred_size`](@ref), this returns `nothing` for
+dimensions that cannot be inferred from the type.
 """
 @inline vijh_params(data) = (;
     Nv = get(shape_params(data), :Nv, 1),
@@ -165,7 +167,7 @@ this returns `nothing` for dimensions that cannot be inferred from the type.
     nlevels(D)
     nlevels(data)
 
-Length of the `V` axis in a [`DataLayout`](@ref).
+Return the length of the `V` axis in a [`DataLayout`](@ref).
 """
 @inline nlevels(data) = vijh_params(data).Nv
 
@@ -173,7 +175,7 @@ Length of the `V` axis in a [`DataLayout`](@ref).
     nquadpoints(D)
     nquadpoints(data)
 
-Product of the lengths of the `I` and `J` axes in a [`DataLayout`](@ref).
+Return the product of the lengths of the `I` and `J` axes in a [`DataLayout`](@ref).
 """
 @inline nquadpoints(data) = vijh_params(data).Ni * vijh_params(data).Nj
 
@@ -181,8 +183,9 @@ Product of the lengths of the `I` and `J` axes in a [`DataLayout`](@ref).
     nelems(D)
     nelems(data)
 
-Length of the `H` axis in a [`DataLayout`](@ref). When the length cannot be
-inferred from its type, a concrete instance of it must be provided instead.
+Return the length of the `H` axis in a [`DataLayout`](@ref). When the length cannot
+be inferred from the type, a concrete instance must be provided instead; passing a
+type throws an `ArgumentError`.
 """
 @inline nelems(data) =
     isnothing(vijh_params(data).Nh) ?
@@ -193,8 +196,8 @@ inferred from its type, a concrete instance of it must be provided instead.
     ncomponents(D)
     ncomponents(data)
 
-Length of the hidden `F` axis in a [`DataLayout`](@ref), or 1 if there is no
-separate `F` axis.
+Return the length of the hidden `F` axis in a [`DataLayout`](@ref), or 1 if there is
+no separate `F` axis.
 """
 @inline ncomponents(data) = num_basetypes(eltype(parent_type(data)), eltype(data))
 
@@ -213,7 +216,7 @@ result type of performing such an assignment for a layout of type `D`.
     layout_constructor(D, [T]; [params...])
     layout_constructor(data, [T]; [params...])
 
-Constructor for a similar [`DataLayout`](@ref) that can be applied as
+Return a constructor for a similar [`DataLayout`](@ref) that can be applied as
 `constructor(array)`, with the element type optionally replaced with `T`, and
 with any subset of the [`shape_params`](@ref) optionally replaced with `params`.
 """
@@ -336,8 +339,8 @@ end
 
 [`DataLayout`](@ref) representing a single value of type `T`, which can be
 stored across multiple array indices. This is used in place of a `Ref` to wrap
-data that is stored in any one-dimensional array. May be constructed either from
-the parent array type or the parent array itself.
+data that is stored in any one-dimensional array. It can be constructed either
+from the parent array type or from the parent array itself.
 """
 struct DataF{T, S, A} <: DataLayout{T, 0, 1, S, A}
     array::A
@@ -375,9 +378,9 @@ end
 levels, `Nh` horizontal elements, and `Ni × Nj` quadrature points per element.
 The parameters `Nv`, `Ni`, and `Nj` must be integers, but `Nh` may be set to
 `nothing` and obtained at runtime from the array size. Each value of type `T`
-can be stored across multiple indices along the fourth array axis. May be
-constructed either from the parent array type or the parent array itself, though
-using a type requires passing an additional integer if `Nh` is set to `nothing`.
+can be stored across multiple indices along the fourth array axis. It can be
+constructed either from the parent array type or from the parent array itself,
+though using a type requires passing `Nh_dynamic` if `Nh` is set to `nothing`.
 """
 const VIJFH{T, Nv, Ni, Nj, Nh, S, A} = VIJHWithF{T, Nv, Ni, Nj, Nh, 4, S, A}
 
@@ -445,9 +448,9 @@ levels and `Ni × Nh1` horizontal quadrature points. This ignores the second
 horizontal direction, which spans `Nj × Nh2` quadrature points (`Nh` is given by
 `Nh1 × Nh2`). The parameters `Nv` and `Ni` must be integers, but `Nh` may be
 set to `nothing` and obtained at runtime from the array size; when it is not
-`nothing`, `Nh` can only be set to 1. May be constructed either from the parent
-array type or the parent array itself, though using a type requires passing an
-additional integer if `Nh` is set to `nothing`.
+`nothing`, `Nh` can only be set to 1. It can be constructed either from the parent
+array type or from the parent array itself, though using a type requires passing
+`Nh_dynamic` if `Nh` is set to `nothing`.
 """
 struct VIH1{T, Nv, Ni, Nh, S, A} <: DataLayout{T, 2, nothing, S, A}
     array::A
@@ -496,9 +499,9 @@ quadrature points along one horizontal direction and `Nj × Nh2` quadrature
 points along the other horizontal direction (`Nh` is given by `Nh1 × Nh2`). This
 ignores the vertical direction, which spans `Nv` levels. The parameters `Ni` and
 `Nj` must be integers, but `Nh` may be set to `nothing` and obtained at runtime
-from the array size; when it is not `nothing`, `Nh` can only be set to 1. May be
-constructed either from the parent array type or the parent array itself, though
-using a type requires passing an additional integer if `Nh` is set to `nothing`.
+from the array size; when it is not `nothing`, `Nh` can only be set to 1. It can
+be constructed either from the parent array type or from the parent array itself,
+though using a type requires passing `Nh_dynamic` if `Nh` is set to `nothing`.
 """
 struct IH1JH2{T, Ni, Nj, Nh, S, A} <: DataLayout{T, 2, nothing, S, A}
     array::A

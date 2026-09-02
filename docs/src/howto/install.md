@@ -28,7 +28,7 @@ using Pkg
 Pkg.test("ClimaCore")
 ```
 
-The suite runs for a long time on a laptop; see `test/runtests.jl` for how to
+The suite runs for a long time on a laptop; see [`test/runtests.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/test/runtests.jl) for how to
 select a subset.
 
 ## Enable GPU or MPI backends

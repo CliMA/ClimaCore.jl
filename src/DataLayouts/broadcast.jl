@@ -78,7 +78,7 @@ Base.size(bc::LazyDataLayout) =
     buffer_similar(data, T)
     buffer_similar(bc, T)
 
-Allocates a new [`DataLayout`](@ref) through its [`DataScope`](@ref)'s memory
+Allocate a new [`DataLayout`](@ref) through its [`DataScope`](@ref)'s memory
 (see [`scoped_array`](@ref) and [`scoped_static_array`](@ref)), so that every
 thread in the scope can read the result. `Base.similar` on a
 [`LazyDataLayout`](@ref) instead routes through [`register_similar`](@ref),
@@ -120,8 +120,8 @@ const MaybeFusedDataLayoutBroadcast = Union{LazyDataLayout, FusedMultiBroadcast}
 """
     layout_args(bc)
 
-Extracts every [`DataLayout`](@ref) and [`LazyDataLayout`](@ref) from the
-arguments of a broadcast expression.
+Return a tuple of every [`DataLayout`](@ref) and [`LazyDataLayout`](@ref) among
+the arguments of a broadcast expression.
 """
 @inline layout_args(bc::LazyDataLayout) =
     unrolled_flatmap(get_layout_arg_tuple, bc.args)
@@ -189,8 +189,8 @@ end
 """
     modify_args(f, bc, f_args...)
 
-Replaces each of the [`layout_args`](@ref) in a broadcast expression with
-`f(layout_arg, f_args...)`.
+Return a copy of a broadcast expression in which each of the [`layout_args`](@ref)
+is replaced with `f(layout_arg, f_args...)`.
 """
 @propagate_inbounds function modify_args(f::F, bc::LazyDataLayout, f_args...) where {F}
     modified_args = unrolled_map_with_inbounds(bc.args) do arg

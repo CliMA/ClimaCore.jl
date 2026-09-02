@@ -6,7 +6,7 @@ only storing the entries that belong to the thread reading it, in a
 `StaticArrays.MArray` or `SArray` that a compiler can promote to registers. `F`
 is the position of the field dimension (see [`f_dim`](@ref)), `Stride` is the
 number of threads in the scope it was allocated for (also the stride between
-consecutive points of the reading thread), and [`register_array_params`](@ref)
+consecutive points of the reading thread), and `register_array_params`
 derives the remaining size parameters from `Sz` and `F`.
 
 Every thread is assigned the strided subset `rank:Stride:Np` of the scope's
@@ -91,13 +91,15 @@ end
 
 """
     register_similar(data, T)
+    register_similar(bc, T)
 
-Like `Base.similar(data, T)`, but backed by a [`RegisterArray`](@ref) that only
-stores each thread's own points; the result must not be read by any other
-thread (see [`RegisterArray`](@ref)). Falls back to [`buffer_similar`](@ref)
-when registers cannot be used (a non-inferrable size, a non-constant thread
-count, or a single-thread scope, already an `MArray`); lazy layouts are first
-converted into the layout type that [`buffer_similar`](@ref) would allocate.
+Allocate a [`DataLayout`](@ref) like `Base.similar(data, T)`, but backed by a
+[`RegisterArray`](@ref) that only stores each thread's own points; the result must
+not be read by any other thread (see [`RegisterArray`](@ref)). This falls back to
+[`buffer_similar`](@ref) when registers cannot be used (a non-inferrable size, a
+non-constant thread count, or a single-thread scope, which is already an `MArray`);
+lazy layouts are first converted into the layout type that [`buffer_similar`](@ref)
+would allocate.
 """
 @inline register_similar(bc::LazyDataLayout, ::Type{T}) where {T} =
     has_inferred_size(bc) ?

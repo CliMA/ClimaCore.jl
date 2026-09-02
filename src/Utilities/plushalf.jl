@@ -1,11 +1,11 @@
 """
     PlusHalf(i)
 
-Represents `i + 1/2`, but stored as internally as an integer value. Used for
-indexing into staggered finite difference meshes: the convention "half" values
-are indexed at cell faces, whereas centers are indexed at cell centers.
+Number representing `i + 1/2`, stored internally as the integer `i`. Used for
+indexing into staggered finite difference meshes: by convention, half-integer
+indices refer to cell faces and integer indices refer to cell centers.
 
-Supports `+`, `-` and inequalities.
+Supports `+`, `-`, `min`, `max`, and inequalities.
 
 See also [`half`](@ref).
 """
@@ -15,7 +15,10 @@ end
 PlusHalf{I}(h::PlusHalf{I}) where {I <: Integer} = h
 
 """
-    const half = PlusHalf(0)
+    half
+
+The constant `PlusHalf(0)`, representing the index `1/2`; `i + half` is the
+[`PlusHalf`](@ref) index `i + 1/2`.
 """
 const half = PlusHalf(0)
 

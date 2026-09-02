@@ -59,7 +59,7 @@ Tests are defined in `test/runtests.jl` using the `UnitTest` / `tabulated_tests`
   - **Module-per-directory**: each `src/` subdirectory is its own Julia sub-module, re-exported from `ClimaCore.jl`.
   - **`lib/` companion packages**: visualization and remapping packages live as independent Julia packages under `lib/`, each with its own `Project.toml`. They have separate CI workflows.
   - **`ext/` CUDA pattern**: GPU support uses Julia's package extension mechanism (`ext/ClimaCoreCUDAExt.jl`). CPU fallbacks are always provided.
-  - **Coding style**: `TitleCase` for types, `snake_case` for objects/functions, spaces after commas. Formatting follows [YASGuide](https://github.com/jrevels/YASGuide) loosely, enforced via `JuliaFormatter` (v1.0.62) in CI.
+  - **Coding style**: `TitleCase` for types, `snake_case` for objects/functions, spaces after commas. Formatting is enforced by `JuliaFormatter`, pinned in `.dev/format/Project.toml` and run by the pre-commit hooks and CI (`.github/workflows/format.yml`), with the rules in `.JuliaFormatter.toml`.
   - **ColPrac**: the project follows the [ColPrac guide](https://github.com/SciML/ColPrac) for collaborative practices.
   - **Tabulated test runner**: tests use the custom `UnitTest` struct and `run_unit_tests!` / `tabulate_tests` helpers from `test/tabulated_tests.jl`, with leak detection enabled.
 

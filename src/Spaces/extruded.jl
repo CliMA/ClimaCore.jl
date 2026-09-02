@@ -8,12 +8,14 @@
         deep::Bool = false,
     )
 
-An extruded finite-difference space,
-where the extruded direction is _staggered_,
-containing grid information at either
+Extruded finite-difference space: a horizontal space extruded along a staggered
+vertical direction, with grid information at either
 
-  - cell centers (where `staggering` is [`Grids.CellCenter`](@ref)) or
-  - cell faces (where `staggering` is [`Grids.CellFace`](@ref))
+  - cell centers, where `staggering` is [`Grids.CellCenter`](@ref), or
+  - cell faces, where `staggering` is [`Grids.CellFace`](@ref).
+
+The second constructor takes the `staggering` from `vertical_space`; `deep = true`
+selects deep-atmosphere spherical geometry.
 """
 struct ExtrudedFiniteDifferenceSpace{
     G <: Grids.AbstractExtrudedFiniteDifferenceGrid,
@@ -37,9 +39,8 @@ const CenterExtrudedFiniteDifferenceSpace{G} =
 """
     face_space(space::ExtrudedFiniteDifferenceSpace)
 
-Return face-centered space corresponding to `space`.
-
-If `space` is already face-centered, return itself.
+Return the face-centered space corresponding to `space`. If `space` is already
+face-centered, return an equal space.
 """
 function face_space(space::ExtrudedFiniteDifferenceSpace)
     return ExtrudedFiniteDifferenceSpace(grid(space), CellFace())
@@ -48,9 +49,8 @@ end
 """
     center_space(space::ExtrudedFiniteDifferenceSpace)
 
-Return center-centered space corresponding to `space`.
-
-If `space` is already center-centered, return itself.
+Return the cell-centered space corresponding to `space`. If `space` is already
+cell-centered, return an equal space.
 """
 function center_space(space::ExtrudedFiniteDifferenceSpace)
     return ExtrudedFiniteDifferenceSpace(grid(space), CellCenter())

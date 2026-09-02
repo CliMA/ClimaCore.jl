@@ -63,36 +63,6 @@ WeightedPreconditioner
 CustomPreconditioner
 ```
 
-## Internals
-
-```@docs
-outer_diagonals
-band_matrix_row_type
-matrix_shape
-column_axes
-AbstractLazyOperator
-replace_lazy_operator
-FieldName
-@name
-FieldNameTree
-FieldNameSet
-is_lazy
-lazy_main_diagonal
-lazy_mul
-LazySchurComplement
-field_matrix_solver_cache
-check_field_matrix_solver
-run_field_matrix_solver!
-solver_algorithm
-lazy_preconditioner
-preconditioner_cache
-check_preconditioner
-lazy_or_concrete_preconditioner
-apply_preconditioner
-get_scalar_keys
-field_offset_and_type
-```
-
 ## Utilities
 
 ```@docs
@@ -105,18 +75,17 @@ scalar_field_matrix
 
 ## Indexing a FieldMatrix
 
-A FieldMatrix entry can be:
+An entry of a `FieldMatrix` is one of
 
-  - A `UniformScaling`, which contains a `Number`
-  - A `DiagonalMatrixRow` containing a `Number` or a `Geometry.Tensor{2}`. The
-    tensor's basis is whatever the user supplies; there's no padding convention
-    imposed here.
-  - A `ColumnwiseBandMatrixField`, where each value is a [`BandMatrixRow`](@ref) with entries of any type that can be represented using the field's base number type.
+  - a `UniformScaling`, holding a `Number`;
+  - a `DiagonalMatrixRow`, holding a `Number` or a `Geometry.Tensor{2}` in
+    whatever basis the user supplies;
+  - a `ColumnwiseBandMatrixField`: a `Field` whose values are
+    [`BandMatrixRow`](@ref)s, one banded matrix per column, with entries of any
+    type built from the field's base number type.
 
-If an entry contains a composite type, the fields of that type can be extracted.
-This is also true for nested composite types.
-
-For example:
+The keys are pairs of `@name`s. When an entry's element type is a composite
+type, indexing with a longer name reaches into it, recursively:
 
 ```@example 1
 using ClimaCore.CommonSpaces # hide
@@ -143,49 +112,42 @@ nt_fieldmatrix = MatrixFields.FieldMatrix((@name(a), @name(b)) => nt_entry_field
 nt_fieldmatrix[(@name(a), @name(b))]
 ```
 
-The internal values of the named tuples can be extracted with
-
 ```@example 1
 nt_fieldmatrix[(@name(a.foo), @name(b))]
 ```
-
-and
 
 ```@example 1
 nt_fieldmatrix[(@name(a.bar), @name(b))]
 ```
 
-### Further Indexing Details
+### Indexing rules
 
-Let key `(@name(name1), @name(name2))` correspond to entry `sample_entry` in `FieldMatrix` `A`.
-An example of this is:
+Let `(@name(name1), @name(name2))` be a key of `A` paired with `entry`, and
+consider `A[(@name(name1.foo.bar), @name(name2.biz.bop))]`. `getindex` first
+finds the key of `A` that contains the requested key; here
+`(@name(name1), @name(name2))` is the *parent key* and
+`(@name(foo.bar), @name(biz.bop))` the *internal key*. The entry is then
+indexed by the internal key, which for a name pair `(n₁, n₂)` and an entry
+whose bands have element type `T` proceeds as follows:
 
-```julia
-A = MatrixFields.FieldMatrix((@name(name1), @name(name2)) => sample_entry)
-```
+ 1. If both names are empty, return the entry.
+ 2. If `T` is a `Geometry.Tensor{2}` and the pair has the form
+    `(@name(components.data.i…), @name(components.data.j…))`, extract component
+    `(i, j)` and recurse with the remaining names.
+ 3. If `T` is the `Adjoint` of a rank-1 tensor, recurse on its parent.
+ 4. If the first name of `n₁` is a field of `T`, extract it and recurse with
+    the rest of `n₁` and all of `n₂`.
+ 5. Likewise for the first name of `n₂`.
+ 6. Otherwise both names are nonempty and neither is a field of `T`, and the
+    entry is taken to represent a tensor implicitly, as a scaling of the
+    identity (see below): if the first names of `n₁` and `n₂` agree, drop them
+    and recurse on the entry; if they differ, drop them and recurse on its
+    zero.
 
-Now consider what happens when indexing `A` with the key `(@name(name1.foo.bar.buz), @name(name2.biz.bop.fud))`.
-
-First, `getindex` finds a key in `A` that contains the key being indexed. In this example, `(@name(name1.foo.bar.buz), @name(name2.biz.bop.fud))` is contained within `(@name(name1), @name(name2))`, so `(@name(name1), @name(name2))` is called the "parent key" and `(@name(foo.bar.buz), @name(biz.bop.fud))` is referred to as the "internal key".
-
-Next, the entry that `(@name(name1), @name(name2))` is paired with is recursively indexed
-by the internal key.
-
-The recursive indexing of an internal entry given some entry `entry` and internal key `internal_name_pair`
-works as follows:
-
- 1. If the  `internal_name_pair` is blank, return `entry`
- 2. If the element type of each band of `entry` is a `Geometry.Tensor{2}`, and `internal_name_pair` is of the form `(@name(components.data.1...), @name(components.data.2...))` (potentially with different numbers), then extract the specified component, and recurse on it with the remaining `internal_name_pair`.
- 3. If the element type of each band of `entry` is an `Adjoint` of a `Geometry.AbstractTensor{1}` (an adjoint rank-1 tensor), then recurse on the parent of the adjoint.
- 4. If `internal_name_pair[1]` is not empty, and the first name in it is a field of the element type of each band of `entry`, extract that field from `entry`, and recurse into it with the remaining names of `internal_name_pair[1]` and all of `internal_name_pair[2]`
- 5. If `internal_name_pair[2]` is not empty, and the first name in it is a field of the element type of each band of `entry`, extract that field from `entry`, and recurse into it with all of `internal_name_pair[1]` and the remaining names of `internal_name_pair[2]`
- 6. At this point, if none of the previous cases are true, both `internal_name_pair[1]` and `internal_name_pair[2]` should be non-empty, and it is assumed that `entry` is being used to implicitly represent some tensor structure. If the first name in `internal_name_pair[1]` is equivalent to `internal_name_pair[2]`, then both the first names are dropped, and entry is recursed onto. If the first names are different, both the first names are dropped, and the zero of entry is recursed onto.
-
-When the entry is a `ColumnWiseBandMatrixField`, indexing it will return a broadcasted object in
-the following situations:
-
- 1. The internal key indexes to a type different than the basetype of the entry
- 2. The internal key indexes to a zero-ed value
+Indexing a `ColumnwiseBandMatrixField` returns a `Broadcasted` object rather
+than a `Field` when the internal key reaches a type other than the entry's
+base type or a zero created in rule 6; `Base.Broadcast.materialize` turns it
+into a field.
 
 ```@setup 2
 using ClimaCore.CommonSpaces
@@ -210,67 +172,30 @@ identity_axis2tensor = Geometry.Covariant12Vector(FT(1), FT(0)) *
 J = MatrixFields.FieldMatrix((@name(f), @name(g))=> ∂f_∂g)
 ```
 
-## Optimizations
+## Storage optimizations
 
-Each entry of a `FieldMatrix` can be a `ColumnwiseBandMatrixField`, a `DiagonalMatrixRow`, or a
-`UniformScaling`. A `ColumnwiseBandMatrixField` is a `Field` with a `BandMatrixRow` at each point.
-It represents a collection of banded matrices, with each column of the `Field` corresponding to a
-specific matrix. If all columns correspond a constant multiple of the identity matrix, the `Field`
-may be replaced with a `ScalingFieldMatrixEntry` (i.e., a `DiagonalMatrixRow` or `UniformScaling`).
+A `FieldMatrix` entry may be stored more compactly than as a field of band
+rows when its structure allows it. Let `f` and `g` be fields on a column space
+with `Nv` levels and element types `T_f`, `T_g`, and let `M` with `M_ij = ∂f_i/∂g_j`
+be the `Nv × Nv` banded matrix of an entry.
 
-For the following sections, `space` is a column space with $N_v$ levels. A column space is
-used for simplicity in this example, but the optimizations work with any space with columns.
+### Scaling entries
 
-Let $f$ and $g$ be `Fields` on `space` with elements of type with elements of type
-`T_f` and `T_g`. $f_i$ and $g_i$ refers to the values of $f$ and $g$ at the $ 0 < i \leq N_v$ level.
-
-Let $M$ be a $N_v \times N_v$ banded matrix with lower and upper bandwidth of $b_1$ and $b_2$.
-$M$ represents $\frac{\partial f}{\partial g}$, so $M_{i,j} = \frac{\partial f_i}{\partial g_j}$
-
-### `ScalingFieldMatrixEntry` Optimization
-
-Consider the case where $b_1 = 0$ and $b_2 = 0$, i.e $M$ is a diagonal matrix, and
-where $M = k * I$, and $k$ is of type `T_k`. This would happen if
-$\frac{\partial f_i}{\partial g_j} = \delta_{ij} * k$. Instead of storing
-each element on the diagonal, the `FieldMatrix` can store a single value that represents a scaling of the identity matrix, reducing memory usage by a factor of $N_v$:
+When `M = k I` for a value `k` of type `T_k`, the entry
 
 ```julia
 entry = fill(DiagonalMatrixRow(k), space)
 ```
 
-can also be represented by
+is replaced by a single value, `entry = DiagonalMatrixRow(k)`, or, for a
+scalar `k`, `entry = k * LinearAlgebra.I`. Both are `ScalingFieldMatrixEntry`s
+and cut the memory by a factor of `Nv`.
 
-```julia
-entry = DiagonalMatrixRow(k)
-```
+### Implicit tensor structure
 
-or, if `T_k` is a scalar, then
-
-```julia
-entry = I * k
-```
-
-### Implicit Tensor Structure Optimization
-
-The functions that index an entry with an internal key assume the implicit tensor structure optimization is being used
-when all of the following are true for `entry` where `T_k` is the element type of each band, and
-`(internal_key_1, internal_key_2)` is the internal key indexing `entry`.
-
-  - the `internal_key_1` name chain is not empty and its first name is not a field of `T_k`
-  - the `internal_key_2` name chain is not empty and its first name is not a field of `T_k`
-
-For most use cases, `T_k` is a scalar.
-
-If the above conditions are met, the optimization assumes that the user intends the
-entry to have an implicit tensor structure, with the values of type `T_k` representing a scaling of the
-identity tensor. If both the first and second names in the name pair are equivalent, then they index onto the diagonal,
-and the scalar value of `k` is returned. Otherwise, they index off the diagonal, and a zero value
-is returned.
-
-This optimization is intended to be used when `T_f = T_g`.
-The notation $f_{n}[i]$ where $0 < n \leq N_v$  refers to the $i$-th component of the element
-at the $n$-th vertical level of $f$. In the following example, `T_f` and `T_g` are both `Covariant12Vector`s, and
-$b_1 = b_2 = 1$, and
+When `T_f = T_g` is a vector type and `∂f/∂g` is a multiple of the identity
+tensor at every band, the tensor need not be stored. Writing `f_n[i]` for the
+`i`th component at level `n`, take the tridiagonal example
 
 ```math
 \frac{\partial f_n[i]}{\partial g_m[j]} = \begin{cases}
@@ -280,7 +205,8 @@ $b_1 = b_2 = 1$, and
 \end{cases}
 ```
 
-The non-zero values of each row of `M` are equivalent in this example, but they can also vary in value.
+for `Covariant12Vector`s. Stored explicitly, each band holds the identity
+tensor times a scalar:
 
 ```julia
 ∂f_∂g = fill(
@@ -294,7 +220,7 @@ The non-zero values of each row of `M` are equivalent in this example, but they 
 J = MatrixFields.FieldMatrix((@name(f), @name(g)) => ∂f_∂g)
 ```
 
-`∂f_∂g` can be indexed into to get the partial derrivatives of individual components.
+and indexing by component extracts the diagonal and off-diagonal blocks:
 
 ```@example 2
 J[(@name(f.components.data.:(1)), @name(g.components.data.:(1)))]
@@ -304,7 +230,8 @@ J[(@name(f.components.data.:(1)), @name(g.components.data.:(1)))]
 J[(@name(f.components.data.:(2)), @name(g.components.data.:(1)))]
 ```
 
-This can be more optimally stored with the implicit tensor structure optimization:
+The same entry stored with scalar bands, by rule 6 of the indexing rules, is
+read as the scalar times the identity tensor:
 
 ```@setup 2
 ∂f_∂g = fill(MatrixFields.TridiagonalMatrixRow(-0.5, 1.0, -0.5), space)
@@ -326,14 +253,6 @@ Base.Broadcast.materialize(
 )
 ```
 
-If it is the case that
-
-```math
-\frac{\partial f_n[i]}{\partial g_m[j]} = \begin{cases}
-  k, & \text{if } i = j \text{ and } m = n \\
-  0, & \text{if } i \neq j \text{ or } m \neq n
-\end{cases}
-```
-
-where $k$ is a constant scalar, the implicit tensor structure optimization and
-`ScalingFieldMatrixEntry` optimization can both be applied.
+When in addition the scalar is the same at every level and only on the
+diagonal, `∂f_n[i]/∂g_m[j] = k δ_ij δ_nm`, both optimizations apply and the
+entry is `k * LinearAlgebra.I`.

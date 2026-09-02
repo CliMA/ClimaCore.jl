@@ -15,10 +15,8 @@ function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
 
     Nv, Ni, Nj, Nh = size(Fields.field_values(A))
 
-    # Tridiagonal solvers are handled by special implementation
-    # The special solver is limited in Nv by the number of threads per block
-    # hence it cannot be used for very large matrices.
-    # 512 should run on most GPUs
+    # Tridiagonal systems have a dedicated solver, whose Nv is limited by the number
+    # of threads per block; 512 runs on most GPUs.
     if eltype(A) <: MatrixFields.TridiagonalMatrixRow && Nv <= 512
         single_field_solve_tridiagonal!(cache, x, A, b)
         return
@@ -281,11 +279,13 @@ end
 """
     single_field_solve_tridiagonal!(cache, x, A, b)
 
-Specialized solver for the tridiagonal MatrixField. Solves each column in
-parallel launching Nv threads per block where Nv is the number of vertical levels.
-Works best if Nv is multiple of 32. There is an upper limit on the size of Nv
-due to resource limits of the GPU (register and shared memory usage). For
-A100 it is 1024, but may differ depending on the hardware.
+Solve `A * x = b` in place for `x` on a CUDA device, where `A` is a tridiagonal
+`MatrixField`, using parallel cyclic reduction. Returns `nothing`.
+
+Each column is solved by one thread block of `Nv` threads, where `Nv` is the number of
+vertical levels. This works best when `Nv` is a multiple of 32. The GPU's register and
+shared-memory limits cap `Nv`; on an A100 the cap is 1024, and it differs on other
+hardware. `cache` is unused apart from the post-op callback.
 """
 function single_field_solve_tridiagonal!(cache, x, A, b)
 

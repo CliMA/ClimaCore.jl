@@ -1,14 +1,14 @@
 """
-    FieldMatrixWithSolver(A, b, [alg])
+    FieldMatrixWithSolver(A, b, alg = BlockDiagonalSolve())
 
-A wrapper that combines a `FieldMatrix` `A` with a `FieldMatrixSolver` that can
-be used to solve the equation `A * x = b` for `x`, where `x` and `b` are both
-`FieldVector`s. Similar to a `LinearAlgebra.Factorization`, this wrapper can be
-passed to `ldiv!`, whereas a regular `FieldMatrix` cannot be passed to `ldiv!`.
+Wrapper that combines a `FieldMatrix` `A` with a [`FieldMatrixSolver`](@ref) that
+can be used to solve the equation `A * x = b` for `x`, where `x` and `b` are both
+`FieldVector`s. Like a `LinearAlgebra.Factorization`, this wrapper can be passed to
+`ldiv!`, whereas a regular `FieldMatrix` cannot.
 
-By default, the `FieldMatrixSolverAlgorithm` `alg` is set to a
-[`BlockDiagonalSolve`](@ref), so a custom `alg` must be specified when `A` is
-not a block diagonal matrix.
+By default, the [`FieldMatrixSolverAlgorithm`](@ref) `alg` is a
+[`BlockDiagonalSolve`](@ref), so a custom `alg` must be specified when `A` is not
+a block diagonal matrix.
 """
 struct FieldMatrixWithSolver{M, S} <: AbstractDict{FieldNamePair, Any}
     matrix::M
@@ -45,7 +45,7 @@ Base.zero(A::FieldMatrixWithSolver) =
 
 # Since one(::FieldMatrix) is an identity matrix, it does not require a linear
 # solver. The equation I * x == b can be solved directly, without calling ldiv.
-# TODO: Find a simple way to construct a linear solver for the identity matrix.
+# TODO: Construct a linear solver for the identity matrix.
 Base.one(A::FieldMatrixWithSolver) =
     FieldMatrixWithSolver(one(A.matrix), nothing)
 

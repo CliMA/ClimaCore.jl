@@ -74,8 +74,8 @@ end
 """
     central_gradient_lift(normal, (q⁻,), (q⁺,))
 
-Symmetric central lifting completing the strong-form DG gradient of a scalar:
-each side adds ``(q^* - q_{side}) n̂_{side}`` with central ``q^*``, i.e.
+Return the symmetric central lifting that completes the strong-form DG gradient
+of a scalar: each side adds ``(q^* - q_{side}) n̂_{side}`` with central ``q^*``, i.e.
 ``((q⁺ - q⁻)/2)\\,n̂`` on the minus side. Use with
 [`add_lifting_flux_interior!`](@ref) / [`lifting_correction`](@ref).
 """
@@ -84,7 +84,7 @@ central_gradient_lift(normal, (q⁻,), (q⁺,)) = ((q⁺ - q⁻) / 2) * normal
 """
     central_curl3_lift(normal, (u⁻, v⁻), (u⁺, v⁺))
 
-Central lifting for the radial component of the horizontal curl:
+Return the central lifting for the radial component of the horizontal curl:
 ``r̂ ⋅ (n̂ × (u^* - u_{side}))`` from the tangential jumps of the orthonormal
 velocity components `(u, v)`.
 """
@@ -97,8 +97,8 @@ central_curl3_lift(normal, (u⁻, v⁻), (u⁺, v⁺)) =
 """
     jump_penalty_lift(normal, (q⁻, λ⁻), (q⁺, λ⁺))
 
-λ-scaled interface penalty: each side relaxes toward its neighbor at rate
-``\\max(λ⁻, λ⁺)/2``.
+Return the λ-scaled interface penalty `max(λ⁻, λ⁺) / 2 * (q⁺ - q⁻)`: each side
+relaxes toward its neighbor at rate ``\\max(λ⁻, λ⁺)/2``.
 """
 jump_penalty_lift(normal, (q⁻, λ⁻), (q⁺, λ⁺)) = max(λ⁻, λ⁺) / 2 * (q⁺ - q⁻)
 
@@ -261,7 +261,7 @@ end
 Interface flux for the DG Laplacian, used with
 [`add_numerical_flux_interior!`](@ref). Each side supplies `(q, G, κ, τ)`,
 where `G` is the gradient in the same basis as the face normal (usually
-[`Geometry.UVVector`](@ref)) and `τ` is a scalar or a `Field`. Returns the
+`Geometry.UVVector`) and `τ` is a scalar or a `Field`. Returns the
 gradient averaged across the face plus a penalty on the jump in `q`:
 `-{{κG}}·n̂ + max(τ⁻, τ⁺) * (q⁻ - q⁺)`.
 

@@ -4,7 +4,8 @@ import ..Utilities.Unrolled: unrolled_tuple_map
 """
     AbstractFieldStyle
 
-The supertype of all broadcasting-like operations on Fields.
+Abstract supertype of the broadcast styles of `Field`s. Subtypes: `FieldStyle` and
+`FieldConflict`.
 """
 abstract type AbstractFieldStyle <: Base.BroadcastStyle end
 
@@ -14,7 +15,8 @@ const MaybeLazyField = Union{Field, LazyField}
 """
     FieldStyle{DS <: DataStyle}
 
-Standard broadcasting on Fields. Delegates the actual work to `DS`.
+Broadcast style of `Field`s whose values have the `DataStyle` `DS`, to which the
+work is delegated.
 """
 struct FieldStyle{DS <: DataStyle} <: AbstractFieldStyle end
 
@@ -42,10 +44,10 @@ Base.Broadcast.BroadcastStyle(
 """
     FieldConflict
 
-Analogue of the built-in `Broadcast.ArrayConflict` for Fields. Used in place of
+Analog of the built-in `Broadcast.ArrayConflict` for `Field`s. Used in place of
 `Broadcast.Unknown` to call `Broadcast.broadcasted(::AbstractFieldStyle, ...)`.
-Without this broadcast style, such `broadcasted` methods would need more complex
-definitions that specialize on argument types, rather than just the style type.
+Without this broadcast style, such `broadcasted` methods would need definitions
+that specialize on argument types rather than on the style type alone.
 """
 struct FieldConflict <: AbstractFieldStyle end
 
@@ -122,7 +124,7 @@ end
 # Analogue of Broadcast.broadcasted for rebuilding the nodes of an existing
 # broadcast expression from slices of their arguments, skipping the
 # Utilities.auto_broadcasted analysis the expression already went through.
-# Re-running it is not just redundant: starting with Julia 1.11, GPU kernel
+# Re-running it is redundant and, starting with Julia 1.11, harmful: GPU kernel
 # inference stops constant-folding unsafe_eltype partway down deeply nested
 # operator expressions, turning the slice operators and return_eltype into
 # dynamic calls with runtime allocations in GPU kernels.
@@ -247,10 +249,10 @@ end
     space1::AbstractSpace,
     space2::AbstractSpace,
 )
-    # When DebugOnly.allow_mismatched_spaces_unsafe() returns true, we ignore the check
-    # and blindly return `space1`. Responsibility is left up to the user to
-    # handle this correctly. This is useful to work with spaces that are == but
-    # not ===, e.g., deepcopied spaces.
+    # When DebugOnly.allow_mismatched_spaces_unsafe() returns true, the check is skipped
+    # and `space1` is returned. The caller is responsible for the spaces being
+    # compatible. This allows working with spaces that are == but not ===, e.g.,
+    # deepcopied spaces.
     if space1 !== space2 && !allow_mismatched_spaces_unsafe()
         if Spaces.issubspace(space2, space1) ||
            Spaces.issubspace(space1, space2)
@@ -306,14 +308,15 @@ Base.Broadcast.broadcasted(
     ::Val{n},
 ) where {n} = Base.Broadcast.broadcasted(x -> Base.literal_pow(^, x, Val(n)), f)
 
-# Specialize handling of vector-based functions to automatically add LocalGeometry information
+# Specialize vector-based functions to add LocalGeometry information.
 function Base.Broadcast.broadcasted(
     fs::AbstractFieldStyle,
     ::typeof(LinearAlgebra.norm),
     arg,
 )
     space = axes(arg)
-    # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
+    # Wrap in a Field so that the axes line up (the Field is unwrapped again, so this is
+    # a no-op).
     Base.Broadcast.broadcasted(
         fs,
         Geometry._norm,
@@ -327,7 +330,8 @@ function Base.Broadcast.broadcasted(
     arg,
 )
     space = axes(arg)
-    # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
+    # Wrap in a Field so that the axes line up (the Field is unwrapped again, so this is
+    # a no-op).
     Base.Broadcast.broadcasted(
         fs,
         Geometry._norm_sqr,
@@ -343,7 +347,8 @@ function Base.Broadcast.broadcasted(
     arg2,
 )
     space = axes(arg1)
-    # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
+    # Wrap in a Field so that the axes line up (the Field is unwrapped again, so this is
+    # a no-op).
     Base.Broadcast.broadcasted(
         fs,
         Geometry._cross,
@@ -359,7 +364,8 @@ function Base.Broadcast.broadcasted(
     arg2,
 )
     space = axes(arg2)
-    # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
+    # Wrap in a Field so that the axes line up (the Field is unwrapped again, so this is
+    # a no-op).
     Base.Broadcast.broadcasted(
         fs,
         Geometry.transform,
@@ -375,7 +381,8 @@ function Base.Broadcast.broadcasted(
     arg2,
 )
     space = axes(arg2)
-    # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
+    # Wrap in a Field so that the axes line up (the Field is unwrapped again, so this is
+    # a no-op).
     Base.Broadcast.broadcasted(
         fs,
         Geometry.project,
@@ -391,7 +398,8 @@ function Base.Broadcast.broadcasted(
     arg,
 ) where {V <: Geometry.AbstractTensor{1}}
     space = axes(arg)
-    # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
+    # Wrap in a Field so that the axes line up (the Field is unwrapped again, so this is
+    # a no-op).
     Base.Broadcast.broadcasted(fs, V, arg, local_geometry_field(space))
 end
 

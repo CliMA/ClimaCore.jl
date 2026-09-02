@@ -5,7 +5,7 @@
 """
     linear_thread_idx()
 
-Returns the linear index of the current thread across all blocks, computed from
+Return the linear index of the current thread across all blocks, computed from
 CUDA's `threadIdx`, `blockIdx` and `blockDim`.
 """
 @inline linear_thread_idx() =

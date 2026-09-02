@@ -4,13 +4,13 @@
 CurrentModule = ClimaCoreTempestRemap
 ```
 
-ClimaCoreTempestRemap.jl provides an interfaces for using ClimaCore data with
+ClimaCoreTempestRemap.jl provides an interface for using ClimaCore data with
 the [TempestRemap](https://github.com/ClimateGlobalChange/tempestremap/)
 remapping package, by Paul Ullrich.
 
-# Interface
+## Interface
 
-## Online remap
+### Online remap
 
 ```@docs
 LinearMap
@@ -19,13 +19,13 @@ remap!
 remap
 ```
 
-## Mesh export
+### Mesh export
 
 ```@docs
 write_exodus
 ```
 
-## NetCDF data export
+### NetCDF data export
 
 ```@docs
 def_time_coord
@@ -34,7 +34,7 @@ NCDatasets.defVar(::NCDatasets.NCDataset, ::NCDatasets.SymbolOrString, field::Fi
 Base.setindex!(::NCDatasets.CFVariable, ::Fields.Field, ::Colon)
 ```
 
-## Wrapper functions
+### Wrapper functions
 
 ```@docs
 rll_mesh
@@ -43,21 +43,20 @@ remap_weights
 apply_remap
 ```
 
-# Example
+## Example
 
-The following example converts a time-stepper solution object `sol` to a netcdf file, and remaps it to a regular latitude-longitude (RLL) grid.
+The following example writes a time-stepper solution `sol` on an extruded
+cubed-sphere space to a NetCDF file and remaps it to a regular
+latitude–longitude (RLL) grid. It is not run by the documentation build: it
+needs the TempestRemap binary, which the `TempestRemap_jll` dependency of the
+package provides, and a solution object.
 
 ```julia
 using ClimaCore: Geometry, Meshes, Domains, Topologies, Spaces, Quadratures
 using NCDatasets, ClimaCoreTempestRemap
 
-# sol is the integrator solution
-# cspace is the center extrduded space
-# fspace is the face extruded space
-
-# the issue is that the Space types changed since this changed
-# we can reconstruct it by digging around a bit
-Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(cspace))
+# sol is the integrator solution; cspace and fspace are the center and face
+# extruded spaces its fields live on.
 
 datafile_cc = "test.nc"
 NCDataset(datafile_cc, "c") do nc

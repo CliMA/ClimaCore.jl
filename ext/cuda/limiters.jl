@@ -173,7 +173,9 @@ end
         dev::ClimaComms.CUDADevice,
     )
 
-Apply the VerticalMassBorrowingLimiter to the field `q` with density field `ρ`.
+Apply the `VerticalMassBorrowingLimiter` in place to the field `q` with density field `ρ`
+on a CUDA device, launching one thread per column, tracer component, and node. Returns
+`nothing`.
 """
 function apply_limiter!(
     q::Fields.Field,
@@ -197,7 +199,8 @@ function apply_limiter!(
     nthread_z = cld(64, nthread_x * nthread_y) # ensure block is at least 64 threads
     # threads x dim represents nodes within an element
     # threads y represents different tracers
-    # threads z may represent different horizontal elements if needed to reach 64 threads per block
+    # Threads along z may represent different horizontal elements when needed to reach
+    # 64 threads per block.
     # blocks x dim represents different horizontal elements
     nthreads = (nthread_x, nthread_y, nthread_z)
     nblocks = cld(ncols * Nf, prod(nthreads))

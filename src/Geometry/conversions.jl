@@ -38,25 +38,27 @@ const LocalGeometryMetric = Union{LocalGeometry, AbstractTensor{2}, Nothing}
 ## project(basis, v, local_geometry)  — 3-argument form using metric
 
 """
-    project(basis, V, local_geometry)
+    project(basis, v, local_geometry)
 
-Project the first axis of vector or tensor `V` onto `basis`, performing a
-change of basis type via the metric if necessary.  Missing components are
-zero-filled; extra components are dropped (no error even if they are nonzero).
-Identity-metric passthrough on dimensions orthogonal to `local_geometry`'s
-geometry (e.g. dim 3 in a horizontal `(1,2)` `LocalGeometry`) is handled by
-`_to_components_type`, which preserves every source name in the converted result; the
-final `reshape` then zero-fills any remaining destination names that aren't
-in the source.
+Project the first axis of the vector or tensor `v` onto `basis`, changing the basis type
+via the metric of `local_geometry` if necessary. Missing components are zero-filled;
+extra components are dropped without error even when they are nonzero.
+
+`local_geometry` is a `LocalGeometry`, or the single metric tensor extracted from one, or
+`nothing` when the conversion needs no metric. Dimensions orthogonal to the geometry
+(e.g. dimension 3 in a horizontal `(1, 2)` `LocalGeometry`) pass through the
+identity-padded metric in `_to_components_type`, which preserves every source component
+name; the final `reshape` then zero-fills the destination names that are not in the
+source.
 """
 @inline project(b::Components{BT}, v::AbstractTensor, lg::LocalGeometryMetric) where {BT} =
     reshape(_to_components_type(BT(), v, lg), (b, Base.tail(axes(v))...))
 
 """
-    transform(basis, V, local_geometry)
+    transform(basis, v, local_geometry)
 
-Like `project(basis, V, local_geometry)`, but throws an `InexactError` if any
-dropped component is nonzero.
+Like `project(basis, v, local_geometry)`, but throw an `InexactError` if any dropped
+component is nonzero.
 """
 @inline transform(b::Components{BT}, v::AbstractTensor, lg::LocalGeometry) where {BT} =
     transform(b, _to_components_type(BT(), v, lg))
@@ -115,7 +117,7 @@ end
 """
     divergence_result_type(V)
 
-Return type when taking the divergence of a field of `V`.
+Return the element type of the divergence of a field with element type `V`.
 """
 @inline divergence_result_type(::Type{V}) where {V <: AbstractTensor{1}} = eltype(V)
 @inline divergence_result_type(
@@ -126,7 +128,8 @@ Return type when taking the divergence of a field of `V`.
 """
     gradient_result_type(Val(I), V)
 
-Return type when taking the gradient along dimension `I` of a field of type `V`.
+Return the element type of the gradient along the dimensions `I` of a field with element
+type `V`.
 """
 @inline function gradient_result_type(::Val{I}, ::Type{V}) where {I, V <: Number}
     N = length(I)
@@ -143,10 +146,10 @@ end
 """
     curl_result_type(Val(I), V)
 
-Return type when taking the curl along dimensions `I` of a field of type `V`.
-Always returns the full `Contravariant123Vector`; dimensions outside the
-actual curl range carry zeros, consistent with the identity-padded metric
-convention used throughout `LocalGeometry`.
+Return the element type of the curl along the dimensions `I` of a field with element type
+`V`. The result is always the full `Contravariant123Vector`; dimensions outside the curl
+range carry zeros, consistent with the identity-padded metric convention of
+`LocalGeometry`.
 """
 @inline curl_result_type(_, ::Type{<:CovariantVector{FT}}) where {FT} =
     Contravariant123Vector{FT}

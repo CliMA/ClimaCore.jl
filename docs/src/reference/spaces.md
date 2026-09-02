@@ -4,15 +4,16 @@
 CurrentModule = ClimaCore
 ```
 
-A `Space` represents a discretized function space over some domain.
-Currently two main discretizations are supported: Spectral Element Discretization
-(both Continuous Galerkin and Discontinuous Galerkin types) and a staggered
-Finite Difference Discretization. Combination of these two in the horizontal/vertical
-directions, respectively, is what we call a _hybrid_ space.
-
-Sketch of a 2DX hybrid discretization:
+A space is a grid together with the information a field needs to live on it:
+for a vertical grid, the staggering (cell centers or cell faces). Two
+discretizations are provided, spectral elements (continuous or discontinuous
+Galerkin) in the horizontal and staggered finite differences in the vertical,
+and their product is an *extruded* (hybrid) space.
 
 ![3D hybrid discretization in a Cartesian domain](../assets/DiscretizationSketch.png)
+
+*An extruded space on a box: spectral elements with their quadrature nodes in
+the horizontal, stacked over the cells of a staggered vertical grid.*
 
 ```@docs
 Spaces
@@ -21,18 +22,16 @@ Spaces.Δz_data
 
 ## Finite Difference Spaces
 
-ClimaCore.jl supports staggered Finite Difference discretizations. Finite Differences
-discretize an interval domain by approximating the function by a value at either
-the center of each element (also referred to as _cell_) (`CenterFiniteDifferenceSpace`),
-or the interfaces (faces in 3D, edges in 2D or points in 1D) between elements
-(`FaceFiniteDifferenceSpace`).
+A finite-difference space holds one value per cell of an interval mesh,
+either at the cell centers (`CenterFiniteDifferenceSpace`) or at the faces
+between cells (`FaceFiniteDifferenceSpace`). Construct one of the two from the
+mesh and derive the other from it with `Spaces.face_space` or
+`Spaces.center_space`; the two share one grid and no geometry is allocated
+twice.
 
 ```@docs
 Spaces.FiniteDifferenceSpace
 ```
-
-Users should construct either the center or face space from the mesh, then construct
-the other space from the original one: this internally reuses the same data structures, and avoids allocating additional memory.
 
 ## Spectral Element Spaces
 
@@ -41,6 +40,18 @@ Spaces.SpectralElementSpace1D
 Spaces.SpectralElementSpace2D
 Spaces.SpectralElementSpaceSlab
 ```
+
+### Discretization: CG or DG
+
+The Galerkin discretization of a spectral-element grid is a type parameter of
+the grid, set with the `discretization` keyword of the grid and space
+constructors and read back from the space
+([Choose CG or DG](../howto/choose_cg_dg.md)).
+
+The types and accessors are documented on the [Grids](grids.md) page:
+`Grids.Discretization`, `Grids.CG`, `Grids.DG`, `Grids.discretization`,
+`Grids.is_continuous`. `Spaces.discretization` and `Spaces.is_continuous` are
+the same functions applied to a space.
 
 ```@docs
 Spaces.node_horizontal_length_scale
