@@ -2,8 +2,8 @@
 # the building blocks of ∇⁴ hyperdiffusion: two Laplacian passes with a
 # `Spaces.weighted_dss!` of the intermediate fields between them. Owning the
 # atoms here lets the continuity mechanics differ by discretization — DSS of
-# the intermediate on CG, interior-penalty face fluxes inside each pass on DG —
-# while callers use one calling sequence for both.
+# the intermediate on CG, face terms coupling neighbouring elements inside each
+# pass on DG — while callers use one calling sequence for both.
 
 """
     scalar_laplacian(χ; weight = nothing)
@@ -16,8 +16,8 @@ into consuming broadcasts; the result is element-local, and materialized
 intermediates must be made continuous with [`Spaces.weighted_dss!`](@ref)
 before they are differentiated again (batch several intermediates into one
 call to share the ghost exchange). On discontinuous (DG) spaces, this returns a
-materialized `Field` that already includes the interior-penalty face
-corrections (see [`ldg_laplacian_tendency!`](@ref)), and `weighted_dss!` is a
+materialized `Field` that already includes the face terms coupling neighbouring
+elements (see [`sipg_laplacian_tendency!`](@ref)), and `weighted_dss!` is a
 no-op — so the same prep → `weighted_dss!` → apply sequence is correct for
 both discretizations.
 
@@ -64,14 +64,23 @@ function scalar_laplacian!(::Grids.DG, out, χ, weight)
     q = _dg_scalar_argument(space, χ)
     q === out && (q = _aliased_argument_copy(out))
     T = eltype(q)
-    κ = one(Spaces.undertype(space))
+    FT = Spaces.undertype(space)
+    κ = one(FT)
     G_uv = _laplacian_scratch_field(
         space,
         Geometry.UVVector{T},
         :scalar_laplacian_gradient,
     )
-    τ = ldg_penalty_parameter(κ, space)
-    return ldg_laplacian_tendency!(out, G_uv, q, weight, κ, τ)
+    R_uv = _laplacian_scratch_field(
+        space,
+        Geometry.UVVector{T},
+        :scalar_laplacian_lifting,
+    )
+    # τ carries the same `weight` as the flux it balances, so the two scale
+    # together (see `sipg_penalty_parameter`).
+    τ = _laplacian_scratch_field(space, FT, :scalar_laplacian_penalty)
+    sipg_penalty_parameter!(τ, κ; weight)
+    return sipg_laplacian_tendency!(out, G_uv, R_uv, q, weight, κ, τ)
 end
 
 # An argument that aliases the destination, copied into scratch so the
