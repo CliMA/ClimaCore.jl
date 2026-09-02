@@ -4,6 +4,25 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-🔥behavioralΔ] The two Bickley-jet examples `examples/plane/
+  bickleyjet_cg.jl` and `examples/plane/bickleyjet_dg.jl` are replaced by the
+  single driver `examples/plane/bickleyjet.jl`, which takes the
+  discretization as its first argument (`cg` or `dg`, then the numerical-flux
+  name and an optional `noslip`). The prognostic equations, physical flux,
+  initial condition and diagnostics are shared; the only structural difference
+  is the space's `discretization` and the `Operators.tendency_completion` built
+  from it, so the tendency function is written once.
+
+- ![][badge-🔥behavioralΔ] The DG scalar Laplacian
+  (`Operators.scalar_laplacian` on `Grids.DG()` spaces, and
+  `Operators.ldg_laplacian_tendency`) is now the symmetric interior-penalty
+  (SIPG) discretization. It previously omitted the adjoint-consistency term
+  `−∫_f {{κ∇v}}·n̂[[q]]`, which made it the incomplete (IIPG) form.
+
+- ![][badge-💥breaking] `Operators.ldg_penalty_parameter(κ, space)` returns a
+  `Field` rather than a scalar, takes a `weight` keyword argument, and is
+  joined by the in-place `Operators.ldg_penalty_parameter!(τ, κ; weight)`.
+
 - ![][badge-💥breaking] The Galerkin discretization of a spectral-element grid
   is represented by the singleton types `Grids.CG()` (the default) and
   `Grids.DG()`: construct `SpectralElementGrid1D`/`SpectralElementGrid2D` (and
