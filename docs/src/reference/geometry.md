@@ -50,3 +50,10 @@ elevation above the surface of the sphere with radius R (implicitly accounted fo
 useful for converting everything to a full Cartesian domain (e.g. for visualization
 purposes). These are distinct from `XYZPoint` as `ZPoint` can mean different
 things in different domains.
+
+## Internal helpers
+
+```@docs
+Geometry.mul_with_projection
+Geometry.mul_return_type
+```

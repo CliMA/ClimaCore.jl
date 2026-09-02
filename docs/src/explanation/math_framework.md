@@ -59,7 +59,7 @@ then may want to consider different bases, as not all operators accept all bases
 
 ### Covariant and Contravariant bases
 
-![Different bases supported in ClimaCore.jl](Bases.png)
+![Different bases supported in ClimaCore.jl](../assets/Bases.png)
 
 _Covariance_ and _contravariance_ describe how the quantitative description of
 certain geometric or physical entities changes with a change of basis.

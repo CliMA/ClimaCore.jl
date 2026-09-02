@@ -1,9 +1,10 @@
-import Documenter, DocumenterCitations, Literate
+import Documenter, DocumenterCitations, DocumenterInterLinks, Literate
+import DocInventories
 import ClimaCore, ClimaCoreTempestRemap, ClimaCoreSpectra
-using Makie  # Loads the ClimaCoreMakieExt extension
+using CairoMakie  # loads ClimaCoreMakieExt so Visualize is documented
 
 if !@isdefined(TUTORIALS)
-    TUTORIALS = ["introduction"]
+    TUTORIALS = ["introduction", "cg_dg_switch"]
 end
 
 rm(joinpath(@__DIR__, "src", "tutorials"), force = true, recursive = true)
@@ -29,6 +30,32 @@ for tutorial in TUTORIALS
     )
 end
 
+# Every docstring `@ref` should point at a symbol some page renders; otherwise
+# the broken link stays latent until that docstring is added to a page and
+# fails an unrelated pull request. The existing backlog (several hundred
+# references, mostly to internals) is reported, not fatal, until the reference
+# pages cover it; STRICT_DOCSTRING_REFS=1 lists the offenders and fails. See
+# check_docstring_refs.jl.
+include(joinpath(@__DIR__, "check_docstring_refs.jl"))
+check_docstring_refs(
+    ClimaCore,
+    joinpath(@__DIR__, "src");
+    strict = !isempty(get(ENV, "STRICT_DOCSTRING_REFS", "")),
+)
+
+# The default inventory-download timeout (1 s) fails on slow networks.
+inventory(url) = DocInventories.Inventory(url; timeout = 30.0, retries = 5)
+links = DocumenterInterLinks.InterLinks(
+    "Julia" => inventory("https://docs.julialang.org/en/v1/objects.inv"),
+    "ClimaComms" =>
+        inventory("https://clima.github.io/ClimaComms.jl/stable/objects.inv"),
+    "ClimaTimeSteppers" => inventory(
+        "https://clima.github.io/ClimaTimeSteppers.jl/stable/objects.inv",
+    ),
+    "ClimaAtmos" =>
+        inventory("https://clima.github.io/ClimaAtmos.jl/stable/objects.inv"),
+)
+
 withenv("GKSwstype" => "nul") do
 
     bib =
@@ -51,12 +78,19 @@ withenv("GKSwstype" => "nul") do
         size_threshold_warn = 200_000, # default is 100_000
     )
 
+    # External links are checked on every build but only fail it when
+    # LINKCHECK_STRICT is set: external sites are transiently unreachable, and
+    # that should not block unrelated pull requests.
+    warnonly = Symbol[:cross_references]
+    isempty(get(ENV, "LINKCHECK_STRICT", "")) && push!(warnonly, :linkcheck)
+
     Documenter.makedocs(;
-        plugins = [bib],
+        plugins = [bib, links],
         sitename = "ClimaCore.jl",
         format = format,
         checkdocs = :exports,
-        warnonly = [:cross_references],  # Warn instead of error on unresolved @ref links (e.g., Makie.Linestyle)
+        linkcheck = true,
+        warnonly = warnonly,
         clean = true,
         doctest = true,
         modules = [
@@ -68,54 +102,58 @@ withenv("GKSwstype" => "nul") do
         ],
         pages = Any[
             "Home" => "index.md",
-            "Introduction" => "intro.md",
-            "Mathematical Framework" => "math_framework.md",
-            "Installation and How-to Guides" => "installation_instructions.md",
-            "Geometry" => "geometry.md",
-            "Operators" => "operators.md",
-            "Remapping" => "remapping.md",
-            "MatrixFields" => "matrix_fields.md",
-            "API" => [
-                "Utilities" => "APIs/utilities_api.md",
-                "DataLayouts" => "APIs/datalayouts_api.md",
-                "Geometry" => "APIs/geometry_api.md",
-                "Domains" => "APIs/domains_api.md",
-                "Meshes" => "APIs/meshes_api.md",
-                "Topologies" => "APIs/topologies_api.md",
-                "Grids" => "APIs/grids_api.md",
-                "Hypsography" => "APIs/hypso_api.md",
-                "DSS" => "APIs/dss_api.md",
-                "CommonGrids" => "APIs/common_grids_api.md",
-                "Spaces" => "APIs/spaces_api.md",
-                "CommonSpaces" => "APIs/common_spaces_api.md",
-                "Quadratures" => "APIs/quadratures_api.md",
-                "Fields" => "APIs/fields_api.md",
-                "Limiters" => "APIs/limiters_api.md",
-                "InputOutput" => "APIs/input_output_api.md",
-                "Remapping" => "APIs/remapping_api.md",
-                "Visualize" => "APIs/visualize_api.md",
-                "Devices" => "APIs/devices_api.md",
-                "DebugOnly" => "APIs/debug_only_api.md",
+            "Getting started" => [
+                "Install ClimaCore" => "howto/install.md",
+                "Concepts and design" => "getting_started/concepts.md",
+                "Tutorial: Introduction" => "tutorials/introduction.md",
+                "Tutorial: CG and DG with one tendency" => "tutorials/cg_dg_switch.md",
             ],
-            "Developer docs" => [
-                "Developer Guides" => "dev_guides.md",
-                "Performance tips" => "performance_tips.md",
+            "How-to guides" => [
+                "Run the examples" => "howto/run_examples.md",
+                "Remap and interpolate" => "howto/remapping.md",
+                "Mask horizontal points" => "howto/masks.md",
+                "Debug NaNs and broadcasts" => "howto/debugging.md",
+                "Move data between CPU and GPU" => "howto/to_device.md",
             ],
-            "Tutorials" => [
-                joinpath("tutorials", tutorial * ".md") for
-                tutorial in TUTORIALS
+            "Explanation" => [
+                "Mathematical framework" => "explanation/math_framework.md",
+                "Spectral elements: CG and DG" => "explanation/discretizations.md",
+                "Example gallery" => "explanation/examples.md",
             ],
-            "Examples" => "examples.md",
-            "Masks" => "masks.md",
-            "Debugging" => "debugging.md",
-            "Libraries" => [
-                joinpath("lib", "ClimaCoreTempestRemap.md"),
-                joinpath("lib", "ClimaCoreSpectra.md"),
+            "Reference" => [
+                "API overview" => "reference/index.md",
+                "Domains" => "reference/domains.md",
+                "Meshes" => "reference/meshes.md",
+                "Topologies" => "reference/topologies.md",
+                "Geometry" => "reference/geometry.md",
+                "Quadratures" => "reference/quadratures.md",
+                "Grids" => "reference/grids.md",
+                "CommonGrids" => "reference/common_grids.md",
+                "Spaces" => "reference/spaces.md",
+                "CommonSpaces" => "reference/common_spaces.md",
+                "Fields" => "reference/fields.md",
+                "DataLayouts" => "reference/datalayouts.md",
+                "Operators" => "reference/operators.md",
+                "DSS" => "reference/dss.md",
+                "Limiters" => "reference/limiters.md",
+                "Hypsography" => "reference/hypsography.md",
+                "MatrixFields" => "reference/matrix_fields.md",
+                "Remapping" => "reference/remapping.md",
+                "Visualize" => "reference/visualize.md",
+                "Input/Output" => "reference/input_output.md",
+                "Devices" => "reference/devices.md",
+                "Utilities" => "reference/utilities.md",
+                "DebugOnly" => "reference/debug_only.md",
+                "Companion packages" => [
+                    "ClimaCoreTempestRemap" => "lib/ClimaCoreTempestRemap.md",
+                    "ClimaCoreSpectra" => "lib/ClimaCoreSpectra.md",
+                ],
             ],
-            "Contributing guide" => "Contributing.md",
-            "Code of Conduct" => "code_of_conduct.md",
-            "Frequently asked questions" => "faq.md",
-            "references.md",
+            "Developer" => [
+                "Contributing" => "Contributing.md",
+                "Code of conduct" => "code_of_conduct.md",
+            ],
+            "References" => "references.md",
         ],
     )
 end

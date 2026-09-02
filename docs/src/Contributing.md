@@ -5,7 +5,7 @@ helps you make a contribution.
 
 > [!IMPORTANT]
 > **Developer Guides**
-> ClimaCore.jl follows the shared [CliMA Developer Guides](https://github.com/CliMA/DeveloperGuides). Please review the local copy at `docs/dev-guides/` or the [Developer Guides documentation page](dev_guides.md) for ecosystem-wide architecture, performance, and workflow standards before contributing.
+> ClimaCore.jl follows the shared [CliMA Developer Guides](https://github.com/CliMA/DeveloperGuides), vendored at [`docs/dev-guides/`](https://github.com/CliMA/ClimaCore.jl/tree/main/docs/dev-guides) and synced monthly. Read them, and the repo-specific guide [`docs/clima_core_specific.md`](https://github.com/CliMA/ClimaCore.jl/blob/main/docs/clima_core_specific.md), before contributing. Edits to the shared guides belong upstream, not in the vendored copy.
 
 ## What to contribute?
 

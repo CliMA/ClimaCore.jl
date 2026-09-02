@@ -290,7 +290,7 @@ bc.axes.5.stop::Int64
 
 #### Caveats
 
-!!! warn
+!!! warning
 
     While `post_op_callback` may be helpful, it's not bullet proof. NaNs can
     infiltrate user data any time internals are used. For example `parent (data) .= NaN` will not be caught by ClimaCore.DebugOnly, and errors can be
@@ -302,7 +302,7 @@ bc.axes.5.stop::Int64
     performance-critical code path and expensive operations performed in
     `post_op_callback` may significantly slow down your code.
 
-!!! warn
+!!! warning
 
     It is _highly_ recommended to use `post_op_callback` _without_ `@testset`,
     as Test.jl may continue running through code execution, until all of the
@@ -342,7 +342,7 @@ ClimaCore.DebugOnly.allow_mismatched_spaces_unsafe() = true
 one .+ other_one # Now it's fine!
 ```
 
-!!! warn
+!!! warning
 
     `ClimaCore` checks for consistency of spaces to protect you from non-sense
     results. If you disable this check, you are responsible to ensure that the

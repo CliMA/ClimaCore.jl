@@ -4,7 +4,7 @@
 CurrentModule = ClimaCore
 ```
 
-A `Mesh` is a division of a domain into elements.
+A mesh is a division of a domain into elements.
 
 ## Mesh types
 

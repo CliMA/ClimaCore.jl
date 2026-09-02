@@ -4,8 +4,8 @@
 CurrentModule = ClimaCore
 ```
 
-A `Topology` determines the ordering and connections between elements of a mesh.
-![Space-filling curve element ordering for a cubed sphere mesh](../cubedsphere_spacefillingcurve.png)
+A topology determines the ordering and connections between elements of a mesh.
+![Space-filling curve element ordering for a cubed sphere mesh](../assets/cubedsphere_spacefillingcurve.png)
 
 ## Types
 
