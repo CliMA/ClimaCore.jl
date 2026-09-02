@@ -118,6 +118,12 @@ withenv("GKSwstype" => "nul") do
             "Explanation" => [
                 "Mathematical framework" => "explanation/math_framework.md",
                 "Spectral elements: CG and DG" => "explanation/discretizations.md",
+                "Staggered vertical discretization" => "explanation/vertical.md",
+                "Hybrid grids and generalized coordinates" => "explanation/geometry.md",
+                "Operators and broadcasting" => "explanation/operators.md",
+                "DSS and numerical fluxes" => "explanation/interelement.md",
+                "Performance and portability" => "explanation/performance.md",
+                "Differentiability" => "explanation/differentiability.md",
                 "Example gallery" => "explanation/examples.md",
             ],
             "Reference" => [
