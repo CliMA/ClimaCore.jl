@@ -10,7 +10,9 @@ The limiters supertype is
 Limiters.AbstractLimiter
 ```
 
-This class of flux-limiters is applied only in the horizontal direction (on spectral advection operators).
+`QuasiMonotoneLimiter` acts on the horizontal spectral-element structure of a
+field; `VerticalMassBorrowingLimiter` acts along each column. Both are applied
+to the state after a step or stage ([Limit tracers](../howto/limiters.md)).
 
 ## Interfaces
 

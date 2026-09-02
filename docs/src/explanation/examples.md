@@ -108,7 +108,7 @@ This test case is set up in a 1D column domain ``z \in [0, 4\pi]``, discretized 
 
 ### Flux Limiters advection
 
-The 2D Cartesian advection/transport example in [`examples/plane/limiters_advection.jl`](https://github.com/CliMA/ClimaCore.jl/tree/main/examples/plane/limiters_advection.jl) demonstrates the application of flux limiters in the horizontal direction, namely [`QuasiMonotoneLimiter`](@ref ClimaCore.Limiters.QuasiMonotoneLimiter), in a 2D Cartesian domain.
+The 2D Cartesian advection/transport example in [`examples/plane/limiters_advection.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/plane/limiters_advection.jl) demonstrates the application of flux limiters in the horizontal direction, namely [`QuasiMonotoneLimiter`](@ref ClimaCore.Limiters.QuasiMonotoneLimiter), in a 2D Cartesian domain.
 
 #### Equations and discretizations
 
@@ -210,7 +210,7 @@ Because this is a fully 2D problem, the application of limiters does not affect 
 
 ### Flux Limiters advection
 
-The 3D Cartesian advection/transport example in [`examples/hybrid/box/limiters_advection.jl`](https://github.com/CliMA/ClimaCore.jl/tree/main/examples/hybrid/box/limiters_advection.jl) demonstrates the application of flux limiters in the horizontal direction, namely [`QuasiMonotoneLimiter`](@ref ClimaCore.Limiters.QuasiMonotoneLimiter), in a hybrid Cartesian domain. It also demonstrates the usage of the high-order upwinding scheme in the vertical direction, called [`Upwind3rdOrderBiasedProductC2F`](@ref ClimaCore.Operators.Upwind3rdOrderBiasedProductC2F).
+The 3D Cartesian advection/transport example in [`examples/hybrid/box/limiters_advection.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/hybrid/box/limiters_advection.jl) demonstrates the application of flux limiters in the horizontal direction, namely [`QuasiMonotoneLimiter`](@ref ClimaCore.Limiters.QuasiMonotoneLimiter), in a hybrid Cartesian domain. It also demonstrates the usage of the high-order upwinding scheme in the vertical direction, called [`Upwind3rdOrderBiasedProductC2F`](@ref ClimaCore.Operators.Upwind3rdOrderBiasedProductC2F).
 
 #### Equations and discretizations
 
@@ -345,7 +345,7 @@ Because this is a Cartesian 3D problem, the application of limiters does not aff
 
 ### Flux Limiters advection
 
-The 2D sphere advection/transport example in [`examples/sphere/limiters_advection.jl`](https://github.com/CliMA/ClimaCore.jl/tree/main/examples/sphere/limiters_advection.jl) demonstrates the application of flux limiters in the horizontal direction, namely [`QuasiMonotoneLimiter`](@ref ClimaCore.Limiters.QuasiMonotoneLimiter), in a 2D spherical domain.
+The 2D sphere advection/transport example in [`examples/sphere/limiters_advection.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/sphere/limiters_advection.jl) demonstrates the application of flux limiters in the horizontal direction, namely [`QuasiMonotoneLimiter`](@ref ClimaCore.Limiters.QuasiMonotoneLimiter), in a 2D spherical domain.
 
 #### Equations and discretizations
 
@@ -550,7 +550,7 @@ This suite of examples contains five different test cases:
 
 ### Deformation Flow with Flux Limiters
 
-The 3D sphere advection/transport example in [`examples/hybrid/sphere/deformation_flow.jl`](https://github.com/CliMA/ClimaCore.jl/tree/main/examples/hybrid/sphere/deformation_flow.jl) demonstrates the application of flux limiters in the horizontal direction, namely [`QuasiMonotoneLimiter`](@ref ClimaCore.Limiters.QuasiMonotoneLimiter), in a hybrid 3D spherical domain. It also demonstrates the usage of the flux-corrected transport in the vertical direction; by default, it uses `FCTZalesak`.
+The 3D sphere advection/transport example in [`examples/hybrid/sphere/deformation_flow.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/hybrid/sphere/deformation_flow.jl) demonstrates the application of flux limiters in the horizontal direction, namely [`QuasiMonotoneLimiter`](@ref ClimaCore.Limiters.QuasiMonotoneLimiter), in a hybrid 3D spherical domain. It also demonstrates the usage of the flux-corrected transport in the vertical direction; by default, it uses `FCTZalesak`.
 
 #### Equations and discretizations
 

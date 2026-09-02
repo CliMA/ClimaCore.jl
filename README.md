@@ -55,6 +55,15 @@ ClimaCore.jl provides the spatial discretization building blocks for the [Climat
 - **GPU acceleration**: broadcast expressions compile to custom CUDA kernels, with specialization on polynomial degree for kernel performance.
 - **Time-stepper compatible**: `Field`s and `FieldVector`s act as the state vector for [ClimaTimeSteppers](https://github.com/CliMA/ClimaTimeSteppers.jl), which the tests and examples here time-step with.
 
+## Installation
+
+ClimaCore.jl is a registered Julia package (Julia 1.10 or later):
+
+```julia
+using Pkg
+Pkg.add("ClimaCore")
+```
+
 ## Quick Example
 
 ```julia
@@ -87,7 +96,7 @@ More runnable examples (column, plane, and sphere configurations) are in the [`e
 
 ## Documentation
 
-- **[Stable docs](https://CliMA.github.io/ClimaCore.jl/stable/)** — installation, introduction, mathematical framework, and API reference
+- **[Stable docs](https://CliMA.github.io/ClimaCore.jl/stable/)** — tutorials, how-to guides, explanation of the numerics, and API reference
 - **[Dev docs](https://CliMA.github.io/ClimaCore.jl/dev/)** — latest development version
 - **[`examples/`](examples/)** — runnable examples across geometries
 

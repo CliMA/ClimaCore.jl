@@ -12,7 +12,7 @@ directions, respectively, is what we call a _hybrid_ space.
 
 Sketch of a 2DX hybrid discretization:
 
-![3D hybrid discretization in a Cartesian domain](../DiscretizationSketch.png)
+![3D hybrid discretization in a Cartesian domain](../assets/DiscretizationSketch.png)
 
 ```@docs
 Spaces

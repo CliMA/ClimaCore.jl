@@ -4,6 +4,12 @@
 CurrentModule = ClimaCore
 ```
 
+Direct stiffness summation makes a field on a continuous spectral-element
+space single-valued at element boundaries ([DSS and numerical
+fluxes](../explanation/interelement.md)). `Spaces.weighted_dss!` is the
+user-level entry point; the `Topologies` functions are the phases it is built
+from.
+
 ```@docs
 Topologies.dss_transform
 Topologies.dss_transform!
@@ -21,10 +27,5 @@ Spaces.weighted_dss_start!
 Spaces.weighted_dss_internal!
 Spaces.weighted_dss_ghost!
 Spaces.weighted_dss!
-Grids.is_continuous
-Grids.discretization
-Grids.Discretization
-Grids.CG
-Grids.DG
 Spaces.unique_nodes
 ```
