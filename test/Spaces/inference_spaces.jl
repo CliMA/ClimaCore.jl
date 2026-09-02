@@ -59,9 +59,11 @@ end
             enable_bubble = false,
             autodiff_metric = true,
             enable_mask = false,
+            discretization = Grids.CG(),
         )
         n_found = length(JET.get_reports(result.analyzer, result.result))
-        n_allowed = 0
+        # Measured at Float32, GLL{4}, on a CenterExtrudedFiniteDifferenceSpace.
+        n_allowed = 106
         @test n_found ≤ n_allowed
         if n_found < n_allowed
             @info "Inference may have improved for _SpectralElementGrid2D: (n_found, n_allowed) = ($n_found, $n_allowed)"

@@ -87,20 +87,43 @@ WJ-normalized interior-penalty Laplacian tendency approximating
 ``κ ∇⋅(ρ_{weight} ∇q)`` (or ``κ ∇²q`` when `ρ_weight === nothing`): weak-form
 volume term plus the consistent numerical flux
 ``−\\{\\!\\{κ G\\}\\!\\}·n̂ + τ [\\![q]\\!]`` with ``G = ρ_{weight} ∇q``
-(or ``G = ∇q``). See [`LDGLaplacianFlux`](@ref) and
-[`ldg_penalty_parameter`](@ref).
+(or ``G = ∇q``). Allocates the result and its gradient scratch; the in-place
+[`ldg_laplacian_tendency!`](@ref) takes both as arguments. See
+[`LDGLaplacianFlux`](@ref) and [`ldg_penalty_parameter`](@ref).
 """
-function ldg_laplacian_tendency(q, ρ_weight, κ, τ)
+ldg_laplacian_tendency(q, ρ_weight, κ, τ) = ldg_laplacian_tendency!(
+    similar(q),
+    Fields.Field(Geometry.UVVector{eltype(q)}, axes(q)),
+    q,
+    ρ_weight,
+    κ,
+    τ,
+)
+
+"""
+    ldg_laplacian_tendency!(out, G_uv, q, ρ_weight, κ, τ)
+
+In-place form of [`ldg_laplacian_tendency`](@ref): writes the tendency into
+`out`, using `G_uv` as scratch for the gradient. Neither `out` nor `G_uv` may
+alias `q` or `ρ_weight`. Returns `out`.
+"""
+function ldg_laplacian_tendency!(out, G_uv, q, ρ_weight, κ, τ)
     wdiv = Divergence{WeakForm}()
     grad = Gradient()
     lgeom = Fields.local_geometry_field(axes(q))
-    residual = similar(q)
-    G = ρ_weight === nothing ? (@. grad(q)) : (@. ρ_weight * grad(q))
-    @. residual = (-lgeom.WJ) * κ * (-wdiv(G))
-    # Face normals are UVVector; raise G to the same basis for G·n̂.
-    G_uv = @. Geometry.UVVector(G)
-    add_ldg_laplacian_flux_interior!(residual, q, G_uv, κ, τ)
-    return residual ./ lgeom.WJ
+    # Face normals are UVVector; G is built in that basis for G·n̂, and the
+    # volume term takes the divergence of the same field (the covariant-to-UV
+    # conversion is exact, so the result differs only by roundoff from a
+    # divergence of the covariant gradient).
+    if ρ_weight === nothing
+        @. G_uv = Geometry.UVVector(grad(q))
+    else
+        @. G_uv = Geometry.UVVector(ρ_weight * grad(q))
+    end
+    @. out = (-lgeom.WJ) * κ * (-wdiv(G_uv))
+    add_ldg_laplacian_flux_interior!(out, q, G_uv, κ, τ)
+    @. out = out / lgeom.WJ
+    return out
 end
 
 """
@@ -110,9 +133,7 @@ Interior-penalty scaling ``τ = κ (2N_q − 1)^2 / h`` using the horizontal
 spectral-element length scale (works for extruded hybrid spaces).
 """
 function ldg_penalty_parameter(κ, space)
-    hspace =
-        space isa Spaces.ExtrudedFiniteDifferenceSpace ?
-        Spaces.horizontal_space(space) : space
+    hspace = Spaces.horizontal_space(space)
     h = Spaces.node_horizontal_length_scale(hspace)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(hspace))
     return κ * (2 * Nq - 1)^2 / h

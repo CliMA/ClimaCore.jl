@@ -70,6 +70,12 @@ const NO_DG_GHOST_EXCHANGE = DGGhostExchange(nothing, Ref(true))
 # Device-dispatch seam (DSS-style): CPU methods live here; the
 # `ClimaComms.CUDADevice` methods are provided by the ClimaCoreCUDAExt
 # extension (ext/cuda/operators_dg.jl).
+#
+# Throughout the CPU face-operator call chain, `args` is declared as
+# `Vararg{Any, N}` with `N` a type parameter: the arguments are mostly
+# forwarded unchanged, so Julia's Vararg heuristic would otherwise compile the
+# chain unspecialized on them, heap-allocating the argument tuple at every call
+# boundary and the index closures at every face node.
 """
     add_numerical_flux_interior!(fn, dydt, args...)
     add_numerical_flux_interior!(ghost_exchange, fn, dydt, args...)
@@ -99,7 +105,7 @@ See also:
   - [`CentralNumericalFlux`](@ref)
   - [`RusanovNumericalFlux`](@ref)
 """
-add_numerical_flux_interior!(fn::F, dydt, args...) where {F} =
+add_numerical_flux_interior!(fn::F, dydt, args::Vararg{Any, N}) where {F, N} =
     _add_numerical_flux_interior!(
         ClimaComms.device(axes(dydt)),
         nothing,
@@ -111,8 +117,8 @@ add_numerical_flux_interior!(
     ghost_exchange::DGGhostExchange,
     fn::F,
     dydt,
-    args...,
-) where {F} = _add_numerical_flux_interior!(
+    args::Vararg{Any, N},
+) where {F, N} = _add_numerical_flux_interior!(
     ClimaComms.device(axes(dydt)),
     ghost_exchange,
     fn,
@@ -135,18 +141,20 @@ _add_numerical_flux_interior!(
 # 1D horizontal elements); other arguments (e.g. equation parameters) pass
 # through. Each face node then needs a single `unrolled_map` from `args` to
 # values — a chain of Field→data→slab→value maps compiles one generated-map
-# instantiation per stage, with the latency that entails. The indices are
+# instantiation per stage, with the latency that entails. Data layouts are
+# indexed directly (like the GPU face kernels) rather than through per-node
+# slab views, which the compiler does not reliably elide. The indices are
 # structurally in bounds: they come from `face_node_index` over `1:Nq` and
 # the topology's face lists.
 @inline _face_node_value(arg::Fields.Field, v, i, j, h) =
     _face_node_value(Fields.field_values(arg), v, i, j, h)
 @inline _face_node_value(arg::DataLayouts.DataLayout, v, i, j, h) =
-    @inbounds slab(arg, v, h)[1, i, j, 1]
+    @inbounds arg[CartesianIndex(v, i, j, h)]
 @inline _face_node_value(arg, v, i, j, h) = arg
 @inline _face_node_value_1d(arg::Fields.Field, v, i, h) =
     _face_node_value_1d(Fields.field_values(arg), v, i, h)
 @inline _face_node_value_1d(arg::DataLayouts.DataLayout, v, i, h) =
-    @inbounds slab(arg, v, h)[i]
+    @inbounds arg[CartesianIndex(v, i, 1, h)]
 @inline _face_node_value_1d(arg, v, i, h) = arg
 
 # Face residual increments for one interior face node. Shared by numerical
@@ -181,8 +189,8 @@ function _add_numerical_flux_interior!(
     ghost_exchange,
     fn::F,
     dydt,
-    args...,
-) where {F}
+    args::Vararg{Any, N},
+) where {F, N}
     _add_interior_face_flux!(Val(:numflux), ghost_exchange, fn, dydt, args...)
 end
 
@@ -196,8 +204,8 @@ function _add_interior_face_flux!(
     ghost_exchange,
     fn::F,
     dydt,
-    args...,
-) where {F}
+    args::Vararg{Any, N},
+) where {F, N}
     space = axes(dydt)
     grid = Spaces.grid(space)
     if grid isa Grids.ExtrudedFiniteDifferenceGrid &&
@@ -221,7 +229,12 @@ function _add_interior_face_flux!(
 end
 
 # Pure 2D spectral element space (precomputed interior surface geometry).
-function _add_interior_face_flux_2d!(mode::Val, fn::F, dydt, args...) where {F}
+function _add_interior_face_flux_2d!(
+    mode::Val,
+    fn::F,
+    dydt,
+    args::Vararg{Any, N},
+) where {F, N}
     space = axes(dydt)
     grid = Spaces.grid(space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
@@ -231,15 +244,14 @@ function _add_interior_face_flux_2d!(mode::Val, fn::F, dydt, args...) where {F}
 
     for (iface, (elem⁻, face⁻, elem⁺, face⁺, reversed)) in
         enumerate(Topologies.interior_faces(topology))
-
-        interior_surface_geometry_slab =
-            slab(interior_surface_geometry, 1, iface)
-
-        dydt_slab⁻ = slab(dydt_data, 1, elem⁻)
-        dydt_slab⁺ = slab(dydt_data, 1, elem⁺)
-
         for q in 1:Nq
-            sgeom⁻ = interior_surface_geometry_slab[q]
+            sgeom⁻ =
+                @inbounds interior_surface_geometry[CartesianIndex(
+                    1,
+                    q,
+                    1,
+                    iface,
+                )]
 
             i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
             i⁺, j⁺ = Topologies.face_node_index(face⁺, Nq, q, reversed)
@@ -261,8 +273,10 @@ function _add_interior_face_flux_2d!(mode::Val, fn::F, dydt, args...) where {F}
                 argvals⁻,
                 argvals⁺,
             )
-            dydt_slab⁻[1, i⁻, j⁻, 1] = dydt_slab⁻[1, i⁻, j⁻, 1] + δ⁻
-            dydt_slab⁺[1, i⁺, j⁺, 1] = dydt_slab⁺[1, i⁺, j⁺, 1] + δ⁺
+            I⁻ = CartesianIndex(1, i⁻, j⁻, elem⁻)
+            I⁺ = CartesianIndex(1, i⁺, j⁺, elem⁺)
+            @inbounds dydt_data[I⁻] = dydt_data[I⁻] + δ⁻
+            @inbounds dydt_data[I⁺] = dydt_data[I⁺] + δ⁺
         end
     end
     return dydt
@@ -274,8 +288,8 @@ function _add_interior_face_flux_extruded_1d!(
     mode::Val,
     fn::F,
     dydt,
-    args...,
-) where {F}
+    args::Vararg{Any, N},
+) where {F, N}
     space = axes(dydt)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     Nv = Spaces.nlevels(space)
@@ -291,7 +305,7 @@ function _add_interior_face_flux_extruded_1d!(
             i⁻ = face_node_index_1d(face⁻, Nq)
             i⁺ = face_node_index_1d(face⁺, Nq)
 
-            lg⁻ = slab(local_geometry, v, elem⁻)[i⁻]
+            lg⁻ = @inbounds local_geometry[CartesianIndex(v, i⁻, 1, elem⁻)]
             sgeom⁻ = compute_surface_geometry_1d(lg⁻, face⁻)
 
             argvals⁻ = unrolled_map(
@@ -311,10 +325,10 @@ function _add_interior_face_flux_extruded_1d!(
                 argvals⁻,
                 argvals⁺,
             )
-            dydt_slab⁻ = slab(dydt_data, v, elem⁻)
-            dydt_slab⁺ = slab(dydt_data, v, elem⁺)
-            dydt_slab⁻[i⁻] = dydt_slab⁻[i⁻] + δ⁻
-            dydt_slab⁺[i⁺] = dydt_slab⁺[i⁺] + δ⁺
+            I⁻ = CartesianIndex(v, i⁻, 1, elem⁻)
+            I⁺ = CartesianIndex(v, i⁺, 1, elem⁺)
+            @inbounds dydt_data[I⁻] = dydt_data[I⁻] + δ⁻
+            @inbounds dydt_data[I⁺] = dydt_data[I⁺] + δ⁺
         end
     end
     return dydt
@@ -326,8 +340,8 @@ function _add_interior_face_flux_extruded_2d!(
     mode::Val,
     fn::F,
     dydt,
-    args...,
-) where {F}
+    args::Vararg{Any, N},
+) where {F, N}
     space = axes(dydt)
     quadrature_style = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
@@ -342,16 +356,12 @@ function _add_interior_face_flux_extruded_2d!(
     for v in 1:Nv
         for (elem⁻, face⁻, elem⁺, face⁺, reversed) in
             Topologies.interior_faces(topology)
-
-            dydt_slab⁻ = slab(dydt_data, v, elem⁻)
-            dydt_slab⁺ = slab(dydt_data, v, elem⁺)
-            lg_slab⁻ = slab(local_geometry, v, elem⁻)
-
             for q in 1:Nq
                 i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
                 i⁺, j⁺ = Topologies.face_node_index(face⁺, Nq, q, reversed)
 
-                lg⁻ = lg_slab⁻[1, i⁻, j⁻, 1]
+                lg⁻ =
+                    @inbounds local_geometry[CartesianIndex(v, i⁻, j⁻, elem⁻)]
                 sgeom⁻ = compute_surface_geometry_extruded_2d(
                     lg⁻,
                     quad_weights,
@@ -377,8 +387,10 @@ function _add_interior_face_flux_extruded_2d!(
                     argvals⁻,
                     argvals⁺,
                 )
-                dydt_slab⁻[1, i⁻, j⁻, 1] = dydt_slab⁻[1, i⁻, j⁻, 1] + δ⁻
-                dydt_slab⁺[1, i⁺, j⁺, 1] = dydt_slab⁺[1, i⁺, j⁺, 1] + δ⁺
+                I⁻ = CartesianIndex(v, i⁻, j⁻, elem⁻)
+                I⁺ = CartesianIndex(v, i⁺, j⁺, elem⁺)
+                @inbounds dydt_data[I⁻] = dydt_data[I⁻] + δ⁻
+                @inbounds dydt_data[I⁺] = dydt_data[I⁺] + δ⁺
             end
         end
     end
@@ -472,14 +484,13 @@ function _finish_dg_ghost_faces!(
     # from the topology's ghost-face list and schedule.
     for v in 1:Nv
         for (f, (elem⁻, face⁻, _ridx⁺, _face⁺, reversed)) in enumerate(gfaces)
-            dydt_slab⁻ = @inbounds slab(dydt_data, v, elem⁻)
-            lg_slab⁻ = @inbounds slab(local_geometry, v, elem⁻)
             slot = isnothing(face_slot) ? 0 : Int(face_slot[f])
             for q in 1:Nq
                 i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
                 q′ = reversed ? Nq - q + 1 : q
 
-                lg⁻ = @inbounds lg_slab⁻[1, i⁻, j⁻, 1]
+                lg⁻ =
+                    @inbounds local_geometry[CartesianIndex(v, i⁻, j⁻, elem⁻)]
                 sgeom⁻ = compute_surface_geometry_extruded_2d(
                     lg⁻,
                     quad_weights,
@@ -497,7 +508,12 @@ function _finish_dg_ghost_faces!(
                 argvals⁺ = unrolled_map(
                     (arg, ex) ->
                         isnothing(ex) ? arg :
-                        (@inbounds slab(ex.recv_data, v, slot)[1, q′, 1, 1]),
+                        (@inbounds ex.recv_data[CartesianIndex(
+                            v,
+                            q′,
+                            1,
+                            slot,
+                        )]),
                     args,
                     ghost_bufs,
                 )
@@ -511,8 +527,8 @@ function _finish_dg_ghost_faces!(
                     argvals⁻,
                     argvals⁺,
                 )
-                @inbounds dydt_slab⁻[1, i⁻, j⁻, 1] =
-                    dydt_slab⁻[1, i⁻, j⁻, 1] + δ⁻
+                I⁻ = CartesianIndex(v, i⁻, j⁻, elem⁻)
+                @inbounds dydt_data[I⁻] = dydt_data[I⁻] + δ⁻
             end
         end
     end
@@ -741,13 +757,16 @@ element spaces and extruded spaces with 2D horizontal spectral elements
 (``sWJ`` then carries the vertical measure). No-op on domains without boundary
 faces (e.g. the sphere).
 """
-@inline add_numerical_flux_boundary!(fn::F, dydt, args...) where {F} =
-    _add_numerical_flux_boundary!(
-        ClimaComms.device(axes(dydt)),
-        fn,
-        dydt,
-        args...,
-    )
+@inline add_numerical_flux_boundary!(
+    fn::F,
+    dydt,
+    args::Vararg{Any, N},
+) where {F, N} = _add_numerical_flux_boundary!(
+    ClimaComms.device(axes(dydt)),
+    fn,
+    dydt,
+    args...,
+)
 
 _add_numerical_flux_boundary!(device, fn::F, dydt, args...) where {F} = error(
     "add_numerical_flux_boundary! is not implemented for $device; load CUDA.jl for CUDADevice support",
@@ -757,8 +776,8 @@ function _add_numerical_flux_boundary!(
     ::ClimaComms.AbstractCPUDevice,
     fn::F,
     dydt,
-    args...,
-) where {F}
+    args::Vararg{Any, N},
+) where {F, N}
     space = axes(dydt)
     grid = Spaces.grid(space)
     if grid isa Grids.ExtrudedFiniteDifferenceGrid &&
@@ -784,12 +803,16 @@ function _add_numerical_flux_boundary!(
     for boundarytag in Topologies.boundary_tags(topology)
         for (elem⁻, face⁻) in Topologies.boundary_faces(topology, boundarytag)
             for v in 1:Nv
-                dydt_slab⁻ = slab(dydt_data, v, elem⁻)
-                lg_slab⁻ = slab(local_geometry, v, elem⁻)
                 for q in 1:Nq
                     i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
+                    lg⁻ = @inbounds local_geometry[CartesianIndex(
+                        v,
+                        i⁻,
+                        j⁻,
+                        elem⁻,
+                    )]
                     sgeom⁻ = compute_surface_geometry_extruded_2d(
-                        lg_slab⁻[1, i⁻, j⁻, 1],
+                        lg⁻,
                         quad_weights,
                         face⁻,
                         i⁻,
@@ -803,8 +826,9 @@ function _add_numerical_flux_boundary!(
                     # scales and subtracts elementwise, matching the interior
                     # loops and the GPU boundary kernel's `_fd_scale`.
                     numflux⁻ = add_auto_broadcasters(fn(sgeom⁻.normal, argvals⁻))
-                    dydt_slab⁻[1, i⁻, j⁻, 1] =
-                        dydt_slab⁻[1, i⁻, j⁻, 1] - (sgeom⁻.sWJ * numflux⁻)
+                    I⁻ = CartesianIndex(v, i⁻, j⁻, elem⁻)
+                    @inbounds dydt_data[I⁻] =
+                        dydt_data[I⁻] - (sgeom⁻.sWJ * numflux⁻)
                 end
             end
         end
@@ -822,8 +846,8 @@ function add_numerical_flux_boundary!(
     numflux::AbstractNumericalFlux,
     bc::HorizontalBoundaryCondition,
     dydt,
-    args...,
-)
+    args::Vararg{Any, N},
+) where {N}
     add_numerical_flux_boundary!(dydt, args...) do normal, argvals⁻
         argvals⁺ = ghost_state(bc, normal, argvals⁻)
         numflux(normal, argvals⁻, argvals⁺)
@@ -867,7 +891,7 @@ cubed-sphere) horizontal spectral elements. The method with a leading
 `ghost_exchange` consumes a shared halo exchange from
 [`start_dg_ghost_exchange`](@ref) on distributed spaces.
 """
-add_lifting_flux_interior!(fn::F, dydt, args...) where {F} =
+add_lifting_flux_interior!(fn::F, dydt, args::Vararg{Any, N}) where {F, N} =
     _add_lifting_flux_interior!(
         ClimaComms.device(axes(dydt)),
         nothing,
@@ -879,8 +903,8 @@ add_lifting_flux_interior!(
     ghost_exchange::DGGhostExchange,
     fn::F,
     dydt,
-    args...,
-) where {F} = _add_lifting_flux_interior!(
+    args::Vararg{Any, N},
+) where {F, N} = _add_lifting_flux_interior!(
     ClimaComms.device(axes(dydt)),
     ghost_exchange,
     fn,
@@ -903,8 +927,8 @@ function _add_lifting_flux_interior!(
     ghost_exchange,
     fn::F,
     dydt,
-    args...,
-) where {F}
+    args::Vararg{Any, N},
+) where {F, N}
     _add_interior_face_flux!(Val(:lifting), ghost_exchange, fn, dydt, args...)
 end
 

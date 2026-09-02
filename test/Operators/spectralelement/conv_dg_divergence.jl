@@ -41,7 +41,7 @@ function periodic_plane(::Type{FT}, nelem; L = FT(2π), Nq = 4) where {FT}
     return Spaces.SpectralElementSpace2D(
         topology,
         Quadratures.GLL{Nq}();
-        discontinuous = true,
+        discretization = Spaces.DG(),
     )
 end
 

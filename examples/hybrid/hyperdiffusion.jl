@@ -30,8 +30,11 @@ function hyperdiffusion_tendency!(Yₜ, Y, p, t)
     # horizontal dimension). On DG spaces weighted_dss! is a no-op and
     # scalar_laplacian includes the face corrections itself; vector_laplacian
     # does not support DG yet, so this tendency is CG-only until it does.
+    # The first pass writes through `scalar_laplacian!`, allocation-free on
+    # both discretizations; the second stays in the returning form, which on
+    # CG is lazy and fuses into the tendency broadcast.
     ᶜh_tot = lazy.((Y.c.ρe .+ ᶜp) ./ ᶜρ)
-    ᶜχ .= Operators.scalar_laplacian(ᶜh_tot)
+    Operators.scalar_laplacian!(ᶜχ, ᶜh_tot)
     ᶜχuₕ .= Operators.vector_laplacian(ᶜuₕ)
     Spaces.weighted_dss!(ᶜχ => ghost_buffer.χ, ᶜχuₕ => ghost_buffer.χuₕ)
 

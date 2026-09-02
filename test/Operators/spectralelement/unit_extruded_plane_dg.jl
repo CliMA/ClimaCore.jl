@@ -40,7 +40,7 @@ function extruded_plane_spaces(
     hspace = Spaces.SpectralElementSpace1D(
         htopology,
         Quadratures.GLL{Nq}();
-        discontinuous = true,
+        discretization = Spaces.DG(),
     )
 
     zdomain = Domains.IntervalDomain(

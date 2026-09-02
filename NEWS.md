@@ -4,16 +4,68 @@ ClimaCore.jl Release Notes
 main
 -------
 
-- ![][badge-💥breaking] Renamed the DG interior-face assembly operators from
-  `internal` to `interior` for consistency with `add_numerical_flux_boundary!`:
-  `Operators.add_numerical_flux_internal!` →
-  `Operators.add_numerical_flux_interior!`, `add_lifting_flux_internal!` →
-  `add_lifting_flux_interior!`, and `add_ldg_laplacian_flux_internal!` →
-  `add_ldg_laplacian_flux_interior!` (with the corresponding private device
-  seams). These names are unexported and have no known downstream users; there
-  are no deprecation shims. `add_numerical_flux_boundary!`,
-  `start_dg_ghost_exchange`, `lifting_correction`,
-  `add_flux_differencing_divergence!`, and the flux structs are unchanged.
+- ![][badge-💥breaking] The Galerkin discretization of a spectral-element grid
+  is represented by the singleton types `Grids.CG()` (the default) and
+  `Grids.DG()`: construct `SpectralElementGrid1D`/`SpectralElementGrid2D` (and
+  the corresponding `Spaces` constructors) with `discretization = Grids.DG()`,
+  and read it back with `Grids.discretization(grid)` /
+  `Spaces.discretization(space)`, which discretization-dependent code can
+  dispatch on. This replaces the Boolean `discontinuous = true` grid keyword.
+  The discretization is a type parameter of these grids rather than a field, so
+  it is inferrable and the methods dispatching on it resolve statically; code
+  that spells out their type parameters positionally needs one more parameter.
+  Omitting the keyword follows the quadrature: `CG()` when its nodes are shared
+  across element boundaries (`Quadratures.requires_dss`, e.g. GLL) and `DG()`
+  otherwise, so a single-node horizontal space stays discontinuous. Passing
+  `CG()` explicitly with a quadrature that cannot represent a continuous space
+  raises an `ArgumentError` rather than being silently downgraded. On a `DG()` grid
+  `Spaces.weighted_dss!` (and its `start!`/`internal!`/`ghost!` split) is a
+  no-op, `Spaces.create_dss_buffer` returns `nothing`, and no DSS weights are
+  computed; `Grids.is_continuous` / `Spaces.is_continuous` report the
+  discretization, so models can gate DSS on the space itself rather than on the
+  quadrature type. The discretization is part of the grid cache key, forwards
+  through `Grids.LevelGrid`, and is serialized by `InputOutput` (grids in files
+  without the attribute read back as continuous).
+  PR [2599](https://github.com/CliMA/ClimaCore.jl/pull/2599)
+
+- ![][badge-✨feature/enhancement] Added horizontal discontinuous-Galerkin (DG)
+  operator support. The discretization-generic machinery lives in
+  `src/Operators/numericalflux.jl`: interior- and boundary-face numerical
+  fluxes (`Operators.add_numerical_flux_interior!` and
+  `add_numerical_flux_boundary!`) and symmetric face liftings
+  (`add_lifting_flux_interior!`) on pure-2D and extruded (1D and 2D
+  horizontal) spectral-element spaces, the flux-differencing (split-form /
+  FDDG) volume divergence of Souza et al. (2023), and the device-resident
+  `DGConnectivity` face buffer. A generic flux library lives in
+  `src/Operators/dg_fluxes.jl`: `CentralNumericalFlux`,
+  `RusanovNumericalFlux`, central-lifting and jump-penalty face functions, and
+  an LDG/SIPG Laplacian for optional scale-selective dissipation.
+  Equation-set-specific fluxes (compressible Euler with Cartesian momentum
+  components) are example code. The face operators run on CPU and CUDA (with
+  kernels in the `ClimaCoreCUDAExt` extension) and on distributed (MPI)
+  `Topology2D` spaces, where each rank completes its rank-boundary
+  (`Topologies.ghost_faces`) side through a face-strip halo exchange
+  (`Topologies.GhostFaceExchange`) that ships only the `Nq` face-node values
+  per face. Several operators in one tendency evaluation can share a single
+  exchange by passing the handle returned by
+  `Operators.start_dg_ghost_exchange(args...)` as a leading argument. Covered
+  by 2- and 3-rank CPU and CUDA tests.
+  PRs [2602](https://github.com/CliMA/ClimaCore.jl/pull/2602),
+  [2603](https://github.com/CliMA/ClimaCore.jl/pull/2603)
+
+- ![][badge-✨feature/enhancement] Added the model-level CG↔DG switch
+  `Operators.tendency_completion` / `Operators.complete_tendency!`: a tendency
+  written as an element-local weak form plus one completion call runs on both
+  discretizations, with the completion object built once from the space —
+  `Spaces.weighted_dss!` on continuous spaces, the mass-weighted DG interface
+  (and optional boundary) numerical fluxes on `Grids.DG()` spaces. The tendency
+  may be a `Field` on either discretization, or a `FieldVector` on a continuous
+  one, where the completion is a single batched `Spaces.weighted_dss!` over all
+  components (which must agree on their discretization). On a discontinuous
+  space it must be one `Field` with a composite (e.g. `NamedTuple`) eltype,
+  since the interface numerical flux is evaluated on the whole state at a face
+  node. The CG↔DG Bickley-jet integration test runs one shallow-water tendency
+  on both discretizations through this switch.
 
 - ![][badge-✨feature/enhancement] Added `Operators.Outflow(; order = 0)`, a
   physically named convenience constructor for advection-operator outflow
@@ -23,28 +75,40 @@ main
   `Outflow(; order = 2) === Extrapolate{2}()`. Additive only; `Extrapolate`
   remains the numerical primitive and nothing changes for existing code.
 
-- ![][badge-✨feature/enhancement] `Operators.AbstractBoundaryCondition` is
+- ![][badge-💥breaking] `Operators.AbstractBoundaryCondition` is
   specialized into `Operators.VerticalBoundaryCondition` (the boundary
   conditions of the vertical finite-difference operators, e.g. `SetValue`,
   `Extrapolate`) and `Operators.HorizontalBoundaryCondition` (those of the
   horizontal DG numerical-flux operators, e.g. `ReflectingWallBC`), so the two
   families are distinct at the type level. Passing a boundary condition to an
   operator of the other family now fails at dispatch with an error naming the
-  mismatch. Custom boundary conditions should subtype the family they
-  implement; direct subtypes of `AbstractBoundaryCondition` are only caught by
-  the generic invalid-boundary-condition error.
+  mismatch. Custom boundary conditions must subtype the family they implement:
+  the finite-difference stencil defaults now dispatch on
+  `VerticalBoundaryCondition`, so a pre-existing direct subtype of
+  `AbstractBoundaryCondition` fails with a `MethodError` (in
+  `left_interior_idx`/`right_interior_idx`) or, when `boundary_width` is
+  undefined, the generic invalid-boundary-condition error.
 
 - ![][badge-✨feature/enhancement] Added the horizontal Laplacian atoms
-  `Operators.scalar_laplacian` and `Operators.vector_laplacian`, the building
-  blocks of ∇⁴ hyperdiffusion. On continuous (CG) spaces they return lazy,
-  element-local operator expressions that fuse into consuming broadcasts;
-  materialized intermediates must be made continuous with
-  `Spaces.weighted_dss!` between passes (batch several intermediates into one
-  call to share the ghost exchange). On discontinuous (DG) spaces
-  `scalar_laplacian` includes the interior-penalty face corrections itself and
-  `weighted_dss!` is a no-op, so one calling sequence serves both
-  discretizations (`vector_laplacian` is not yet implemented for DG). The
-  hybrid example's hyperdiffusion is rewritten on top of these atoms.
+  `Operators.scalar_laplacian`, `Operators.scalar_laplacian!` and
+  `Operators.vector_laplacian`, the building blocks of ∇⁴ hyperdiffusion. On
+  continuous (CG) spaces the returning forms give lazy, element-local operator
+  expressions that fuse into consuming broadcasts; materialized intermediates
+  must be made continuous with `Spaces.weighted_dss!` between passes (batch
+  several intermediates into one call to share the ghost exchange). On
+  discontinuous (DG) spaces `scalar_laplacian` includes the interior-penalty
+  face corrections itself and `weighted_dss!` is a no-op, so one calling
+  sequence serves both discretizations (`vector_laplacian` is not yet
+  implemented for DG). `Operators.scalar_laplacian!(out, χ; weight)` writes the
+  result into a caller-owned field and is allocation-free on both
+  discretizations, so it is the form to use in a tendency; `out` may alias `χ`.
+  Each call to the returning `scalar_laplacian` owns its result — freshly
+  allocated on DG — so any number of results may be live at once. On DG the
+  gradient and a materialized lazy argument live in scratch fields keyed on the
+  space's grid (released by the zero-argument `Utilities.Cache.clean_cache!()`),
+  and the in-place `Operators.ldg_laplacian_tendency!` writes the tendency into
+  a caller-owned field. The hybrid example's hyperdiffusion is rewritten on top
+  of these atoms.
   PR [2606](https://github.com/CliMA/ClimaCore.jl/pull/2606)
 - ![][badge-🚀performance] FieldVector broadcasts on GPU flatten to linear
   indexing when the destination and every array in the broadcast have the
@@ -260,45 +324,6 @@ main
   `MatrixFields.operator_matrix` now reports `LinVanLeerC2F` as a
   nonlinear operator instead of failing with a `MethodError`.
 
-- The DG face operators (`Operators.add_numerical_flux_interior!` and
-  `Operators.add_lifting_flux_interior!`) now run on distributed (MPI)
-  `Topology2D` spaces: each rank completes its rank-boundary
-  (`Topologies.ghost_faces`) side through a face-strip halo exchange
-  (`Topologies.GhostFaceExchange`) that ships only the `Nq` face-node values
-  per face, on both CPU and CUDA. Several operators in one tendency evaluation
-  can share a single exchange by passing the handle returned by
-  `Operators.start_dg_ghost_exchange(args...)` as a leading argument. Covered
-  by 2- and 3-rank CPU and CUDA tests.
-
-- `Operators.add_numerical_flux_boundary!` now has CUDA kernels (staging +
-  gather over `Operators.dg_boundary_connectivity`), so it no longer needs
-  scalar indexing on device arrays.
-
-- Spectral-element grids can be marked as discontinuous-Galerkin function
-  spaces: `SpectralElementGrid1D`/`SpectralElementGrid2D` (and the
-  corresponding `Spaces` constructors) accept `discontinuous = true`. On such
-  grids, `Spaces.weighted_dss!` (and its `start!`/`internal!`/`ghost!` split)
-  is a no-op, `create_dss_buffer` returns `nothing`, and no DSS weights are
-  computed. The new queries `Grids.is_continuous(grid)` /
-  `Spaces.is_continuous(space)` report the discretization, so downstream
-  models can gate DSS on the space itself rather than on the quadrature type.
-  The flag is part of the grid cache key and is serialized by `InputOutput`
-  (grids in files written before it existed read back as continuous).
-  [2599](https://github.com/CliMA/ClimaCore.jl/pull/2599)
-
-- Introduces horizontal discontinuous-Galerkin (DG) operator support. The
-  discretization-generic machinery lives in `src/Operators/numericalflux.jl`:
-  interior- and boundary-face numerical fluxes and symmetric face liftings on
-  pure-2D and extruded (1D and 2D horizontal) spectral-element spaces, the
-  flux-differencing (split-form / FDDG) volume divergence of Souza et al.
-  (2023), and the device-resident `DGConnectivity` face buffer (with
-  CUDA implementations in the `ClimaCoreCUDAExt` extension). A generic flux
-  library lives in `src/Operators/dg_fluxes.jl`: `CentralNumericalFlux`,
-  `RusanovNumericalFlux`, central-lifting and jump-penalty face functions, and
-  an LDG/SIPG Laplacian for optional scale-selective dissipation.
-  Equation-set-specific fluxes (compressible Euler with Cartesian momentum
-  components) are example code. Operator tests are included as part of
-  `test/runtests.jl`.
 - The "point cloud" types have been renamed to use the `Multi` prefix:
   - `Grids.PointCloudGrid` is now `Grids.MultiPointGrid`,
   - `Grids.ExtrudedPointCloudGrid` is `Grids.ExtrudedMultiPointGrid`,

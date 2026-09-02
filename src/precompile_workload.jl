@@ -19,7 +19,14 @@ if ccall(:jl_generating_output, Cint, ()) == 1 &&
         # Centers carry Nv = 63 and faces Nv = 64, an AMIP resolution.
         nelems = 63
         for FT in (Float64, Float32)
-            context = ClimaComms.SingletonCommsContext()
+            # The device is pinned rather than taken from `ClimaComms.device()`,
+            # which reads `CLIMACOMMS_DEVICE` and throws on `CUDA` unless the
+            # CUDA extension is loaded. This workload runs inside ClimaCore's
+            # own precompilation, where CUDA.jl is a weak dependency and so is
+            # never loaded, so a run script exporting `CLIMACOMMS_DEVICE=CUDA`
+            # before `using ClimaCore` would otherwise fail to precompile.
+            context =
+                ClimaComms.SingletonCommsContext(ClimaComms.CPUMultiThreaded())
             vdomain = Domains.IntervalDomain(
                 Geometry.ZPoint(FT(0)),
                 Geometry.ZPoint(FT(1));

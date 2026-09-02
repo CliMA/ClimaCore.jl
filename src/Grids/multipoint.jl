@@ -146,3 +146,8 @@ end
 # Backwards-compatibility alias for the old name; deprecated, but old code
 # keeps working. Remove once downstream consumers have migrated.
 Base.@deprecate_binding PointCloudGrid MultiPointGrid false
+
+# Grids with no horizontal spectral elements are continuous: every node
+# belongs to exactly one element, so there is nothing for DSS to reconcile.
+discretization(grid::AbstractFiniteDifferenceGrid) = CG()
+discretization(grid::MultiPointGrid) = CG()

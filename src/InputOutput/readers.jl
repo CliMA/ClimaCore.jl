@@ -464,12 +464,19 @@ function read_grid_new(reader, name)
             _scan_quadrature_style(attrs(group)["quadrature_type"], npts)
         topology = read_topology(reader, attrs(group)["topology"])
         enable_bubble = get(attrs(group), "bubble", "false") == "true"
-        discontinuous = get(attrs(group), "discontinuous", "false") == "true"
+        # A grid group without a "discretization" attribute reads back as CG,
+        # unless it has the legacy "discontinuous" attribute (files written
+        # before "discretization" replaced it).
+        legacy_default =
+            get(attrs(group), "discontinuous", "false") == "true" ? "DG" : "CG"
+        discretization =
+            get(attrs(group), "discretization", legacy_default) == "DG" ?
+            Grids.DG() : Grids.CG()
         if type == "SpectralElementGrid1D"
             return Grids.SpectralElementGrid1D(
                 topology,
                 quadrature_style;
-                discontinuous,
+                discretization,
             )
         else
             enable_mask = haskey(attrs(group), "grid_mask")
@@ -478,7 +485,7 @@ function read_grid_new(reader, name)
                 quadrature_style;
                 enable_bubble,
                 enable_mask,
-                discontinuous,
+                discretization,
             )
             if enable_mask
                 # the attribute stores the mask's group name ("IJHMask", with
