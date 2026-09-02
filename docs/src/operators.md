@@ -136,16 +136,21 @@ spectral-element spaces constructed with `discretization = Grids.DG()`. The
 face operators act on a mass-weighted residual (`WJ * ∂Y/∂t`) and complete
 the weak-form (or flux-differencing) volume terms at element interfaces.
 
+The Laplacian below couples elements two ways: [`SIPGLaplacianFlux`](@ref) at
+the faces, and a jump correction folded into the volume divergence. Including
+both ensures order of accuracy is maintained with a symmetric operator.
+
 ```@docs
 add_numerical_flux_interior!
 add_numerical_flux_boundary!
 add_lifting_flux_interior!
 lifting_correction
 add_flux_differencing_divergence!
-add_ldg_laplacian_flux_interior!
-ldg_laplacian_tendency
-ldg_laplacian_tendency!
-ldg_penalty_parameter
+add_sipg_laplacian_flux_interior!
+sipg_laplacian_tendency
+sipg_laplacian_tendency!
+sipg_penalty_parameter
+sipg_penalty_parameter!
 start_dg_ghost_exchange
 DGGhostExchange
 ```
@@ -171,7 +176,7 @@ NumericalFluxCompletion
 AbstractNumericalFlux
 CentralNumericalFlux
 RusanovNumericalFlux
-LDGLaplacianFlux
+SIPGLaplacianFlux
 central_gradient_lift
 central_curl3_lift
 jump_penalty_lift

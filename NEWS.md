@@ -4,6 +4,26 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-🔥behavioralΔ] The two Bickley-jet examples `examples/plane/
+  bickleyjet_cg.jl` and `examples/plane/bickleyjet_dg.jl` are replaced by the
+  single driver `examples/plane/bickleyjet.jl`, which takes the
+  discretization as its first argument (`cg` or `dg`, then the numerical-flux
+  name and an optional `noslip`). The prognostic equations, physical flux,
+  initial condition and diagnostics are shared; the only structural difference
+  is the space's `discretization` and the `Operators.tendency_completion` built
+  from it, so the tendency function is written once.
+
+- ![][badge-🔥behavioralΔ] The DG scalar Laplacian
+  (`Operators.scalar_laplacian` on `Grids.DG()` spaces, and
+  `Operators.sipg_laplacian_tendency`) is now the symmetric interior-penalty
+  (SIPG) discretization. It previously omitted the adjoint-consistency term
+  `−∫_f {{κ∇v}}·n̂[[q]]`, which made it the incomplete (IIPG) form - with 
+  symmetry enforced, the methods are now labelled SIPG.
+
+- ![][badge-💥breaking] `Operators.sipg_penalty_parameter(κ, space)` returns a
+  `Field` rather than a scalar, takes a `weight` keyword argument, and is
+  joined by the in-place `Operators.sipg_penalty_parameter!(τ, κ; weight)`.
+
 - ![][badge-💥breaking] The Galerkin discretization of a spectral-element grid
   is represented by the singleton types `Grids.CG()` (the default) and
   `Grids.DG()`: construct `SpectralElementGrid1D`/`SpectralElementGrid2D` (and
@@ -39,7 +59,7 @@ main
   `DGConnectivity` face buffer. A generic flux library lives in
   `src/Operators/dg_fluxes.jl`: `CentralNumericalFlux`,
   `RusanovNumericalFlux`, central-lifting and jump-penalty face functions, and
-  an LDG/SIPG Laplacian for optional scale-selective dissipation.
+  an SIPG Laplacian for optional scale-selective dissipation.
   Equation-set-specific fluxes (compressible Euler with Cartesian momentum
   components) are example code. The face operators run on CPU and CUDA (with
   kernels in the `ClimaCoreCUDAExt` extension) and on distributed (MPI)
@@ -106,7 +126,7 @@ main
   allocated on DG — so any number of results may be live at once. On DG the
   gradient and a materialized lazy argument live in scratch fields keyed on the
   space's grid (released by the zero-argument `Utilities.Cache.clean_cache!()`),
-  and the in-place `Operators.ldg_laplacian_tendency!` writes the tendency into
+  and the in-place `Operators.sipg_laplacian_tendency!` writes the tendency into
   a caller-owned field. The hybrid example's hyperdiffusion is rewritten on top
   of these atoms.
   PR [2606](https://github.com/CliMA/ClimaCore.jl/pull/2606)
