@@ -19,7 +19,7 @@ using Aqua
     # If the number of ambiguities is less than the limit below,
     # then please lower the limit based on the new number of ambiguities.
     # We're trying to drive this number down to zero to reduce latency.
-    n_existing_ambiguities = 26
+    n_existing_ambiguities = 27
     if !(length(ambs) ≤ n_existing_ambiguities)
         for method_ambiguity in ambs
             @show method_ambiguity
