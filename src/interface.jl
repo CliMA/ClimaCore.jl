@@ -4,7 +4,7 @@ import ..Utilities.Unrolled: unrolled_map_with_inbounds
 """
     level(data, v)
 
-Horizontal view of `data` at level `v`, spanning all elements in that level.
+Return a horizontal view of `data` at level `v`, spanning all elements in that level.
 """
 function level end
 
@@ -12,7 +12,7 @@ function level end
     slab(data, v, h)
     slab(data, h)
 
-Horizontal view of `data` at level `v` and horizontal element `h`. If `v` is
+Return a horizontal view of `data` at level `v` and horizontal element `h`. If `v` is
 omitted, it is assumed to be 1.
 """
 function slab end
@@ -21,8 +21,8 @@ function slab end
     column(data, i, j, h)
     column(data, i, h)
 
-Vertical view of `data` at nodal point index `(i, j)` of horizontal element `h`.
-If `j` is omitted, it is assumed to be 1.
+Return a vertical view of `data` at nodal point index `(i, j)` of horizontal element
+`h`. If `j` is omitted, it is assumed to be 1.
 """
 function column end
 

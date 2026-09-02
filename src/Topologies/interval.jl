@@ -1,18 +1,25 @@
 abstract type AbstractIntervalTopology <: AbstractTopology end
 
 """
-    IntervalTopology([context::SingletonCommsContext,] mesh::IntervalMesh)
+    IntervalTopology(context::ClimaComms.SingletonCommsContext, mesh::Meshes.IntervalMesh)
+    IntervalTopology(device::ClimaComms.AbstractDevice, mesh::Meshes.IntervalMesh)
 
-A sequential topology on an [`Meshes.IntervalMesh`](@ref).
+Sequential topology on a [`Meshes.IntervalMesh`](@ref). Only a
+`SingletonCommsContext` is supported. Construction is memoized in
+`Cache.OBJECT_CACHE`.
+
+# Fields
+
+  - `context`: The `ClimaComms` context on which the topology is defined.
+  - `mesh`: The `IntervalMesh`.
+  - `boundaries`: `NamedTuple` mapping boundary names to boundary tags; empty for a
+    periodic domain.
 """
 struct IntervalTopology{
     C <: ClimaComms.AbstractCommsContext,
     M <: Meshes.IntervalMesh,
     B,
 } <: AbstractIntervalTopology
-    """
-    the ClimaComms context on which the topology is defined
-    """
     context::C
     mesh::M
     boundaries::B

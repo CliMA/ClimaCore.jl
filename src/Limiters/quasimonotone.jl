@@ -51,70 +51,59 @@ end
 """
     QuasiMonotoneLimiter
 
-This limiter is inspired by the one presented in Guba et al
-[GubaOpt2014](@cite). In the reference paper, it is denoted by OP1, and is
-outlined in eqs. (37)-(40). Quasimonotone here is meant to be monotone with
-respect to the spectral element nodal values. This limiter involves solving a
-constrained optimization problem (a weighted least square problem up to a fixed
-tolerance) that is completely local to each element.
+Quasi-monotone limiter for tracer densities on spectral element spaces, after the OP1
+limiter of [GubaOpt2014](@cite), eqs. (37)-(40). Quasi-monotone means monotone with
+respect to the spectral element nodal values.
 
-As in HOMME, the implementation idea here is the following: we need to find a
-grid field which is closest to the initial field (in terms of weighted sum), but
-satisfies the min/max constraints. So, first we find values that do not satisfy
-constraints and bring these values to a closest constraint. This way we
-introduce some change in the tracer mass, which we then redistribute so that the
-l2 error is smallest. This redistribution might violate constraints; thus, we do
-a few iterations (until `abs(Δtracer_mass) <= rtol * tracer_mass`).
+For each element, the limiter finds the nodal field closest, in the mass-weighted `l2`
+norm, to the input field that satisfies min/max bounds on the concentration `q = ρq / ρ`.
+As in HOMME, it clips the nodal values that violate the bounds to the nearest bound, which
+changes the tracer mass of the element, and then redistributes the mass change over the
+nodes that are not at a bound so that the `l2` error is smallest. Redistribution can
+violate the bounds again, so the two steps are iterated until
+`abs(Δtracer_mass) <= rtol * tracer_mass` or `Nq^2` iterations have been done. The
+optimization is local to each element; the neighbors enter only through the bounds.
 
-  - `ρq`: tracer density Field, where `q` denotes tracer concentration per unit
-    mass. This can be a scalar field, or a struct-valued field.
-  - `ρ`: fluid density Field (scalar).
+# Fields
+
+  - `q_bounds`: min and max of `q` in each element.
+  - `q_bounds_nbr`: min and max of `q` over each element and its neighbors.
+  - `ghost_buffer`: buffer for exchanging `q_bounds` with neighboring processes.
+  - `rtol`: relative tolerance for the tracer mass change per element [-].
+  - `convergence_stats`: `LimiterConvergenceStats` (or `NoConvergenceStats`) accumulated by
+    `apply_limiter!`.
 
 # Constructor
 
-    limiter = QuasiMonotoneLimiter(
+    QuasiMonotoneLimiter(
         ρq::Field;
         rtol = eps(eltype(parent(ρq))),
-        convergence_stats = LimiterConvergenceStats()
+        convergence_stats = LimiterConvergenceStats{eltype(parent(ρq))}(),
     )
 
-Creates a limiter instance for the field `ρq` with relative tolerance `rtol`,
-and `convergence_stats`, which collects statistics in `apply_limiter!`
-(e.g., number of times that convergence is met or not). Users can call
+Create a limiter for the tracer density field `ρq`, where `q` is the tracer concentration
+per unit mass; `ρq` can be a scalar-valued or a struct-valued `Field`. `convergence_stats`
+records the number of `apply_limiter!` calls in which some element failed to converge,
+the largest relative mass error, and the smallest tracer mass;
+`print_convergence_stats(limiter)` prints them.
 
-`Limiters.print_convergence_stats(::QuasiMonotoneLimiter)` to print the
-convergence stats.
+# Examples
 
-# Usage
+Call [`compute_bounds!`](@ref) on the fields at the start of the step, then
+[`apply_limiter!`](@ref) on the updated fields:
 
-Call [`compute_bounds!`](@ref) on the input fields:
-
-    compute_bounds!(limiter, ρq, ρ)
-
-Then call [`apply_limiter!`](@ref) on the output fields:
-
-    apply_limiter!(ρq, ρ, limiter)
+```julia
+limiter = QuasiMonotoneLimiter(ρq)
+compute_bounds!(limiter, ρq, ρ)
+# ... advance ρq and ρ ...
+apply_limiter!(ρq, ρ, limiter)
+```
 """
 struct QuasiMonotoneLimiter{D, G, FT, CS}
-    """
-    contains the min and max of each element
-    """
     q_bounds::D
-    """
-    contains the min and max of each element and its neighbors
-    """
     q_bounds_nbr::D
-    """
-    communication buffer
-    """
     ghost_buffer::G
-    """
-    relative tolerance for tracer mass change
-    """
     rtol::FT
-    """
-    Convergence statistics
-    """
     convergence_stats::CS
 end
 
@@ -156,8 +145,8 @@ end
 """
     compute_element_bounds!(limiter::QuasiMonotoneLimiter, ρq, ρ)
 
-Given two fields `ρq` and `ρ`, computes the min and max of `q` in each element,
-storing it in `limiter.q_bounds`.
+Compute the min and max of `q = ρq / ρ` over the nodes of each element and store them in
+`limiter.q_bounds`.
 
 Part of [`compute_bounds!`](@ref).
 """
@@ -203,10 +192,10 @@ function compute_element_bounds!(
 end
 
 """
-    compute_neighbor_bounds_local!(limiter::QuasiMonotoneLimiter, topology)
+    compute_neighbor_bounds_local!(limiter::QuasiMonotoneLimiter, ρ)
 
-Update the field `limiter.q_bounds_nbr` based on `limiter.q_bounds` in the local
-neighbors.
+Set `limiter.q_bounds_nbr` in each element to the min and max of `limiter.q_bounds` over
+the element and its process-local neighbors in the topology of `axes(ρ)`.
 
 Part of [`compute_bounds!`](@ref).
 """
@@ -245,16 +234,16 @@ end
 """
     compute_neighbor_bounds_ghost!(limiter::QuasiMonotoneLimiter, topology)
 
-Update the field `limiter.q_bounds_nbr` based on `limiter.q_bounds` in the ghost
-neighbors. This should be called after the ghost exchange has completed.
+Widen `limiter.q_bounds_nbr` in each element with the min and max of `limiter.q_bounds` in
+its ghost neighbors, read from `limiter.ghost_buffer.recv_data`. Call it after the ghost
+exchange has completed; it does nothing when `limiter.ghost_buffer` is not a
+`GhostBuffer`.
 
 !!! note
 
-    This loop indexes slabs of the receive buffer from the host, so the
-    distributed limiter is only supported on CPUs. Running it with a
-    `CUDADevice` and an `MPICommsContext` would trigger scalar indexing of a
-    `CuArray`. Making distributed limiters work on GPUs requires replacing
-    this loop (and the `q_bounds_nbr` update below) with a kernel.
+    This function indexes slabs of the receive buffer from the host, so the distributed
+    limiter runs on CPUs only. With a `CUDADevice` and an `MPICommsContext`, it triggers
+    scalar indexing of a `CuArray`.
 
 Part of [`compute_bounds!`](@ref).
 """
@@ -290,16 +279,17 @@ end
 """
     compute_bounds!(limiter::QuasiMonotoneLimiter, ρq::Field, ρ::Field)
 
-Compute the desired bounds for the tracer concentration per unit mass `q`, based
-on the tracer density, `ρq`, and density, `ρ`, fields.
+Compute the bounds on the tracer concentration `q = ρq / ρ` that [`apply_limiter!`](@ref)
+enforces, from the tracer density `ρq` and the density `ρ`, and store them in
+`limiter.q_bounds_nbr`.
 
-This is computed by
+The steps are:
 
- 1. [`compute_element_bounds!`](@ref)
- 2. starts the ghost exchange (if distributed)
- 3. [`compute_neighbor_bounds_local!`](@ref)
- 4. completes the ghost exchange (if distributed)
- 5. [`compute_neighbor_bounds_ghost!`](@ref) (if distributed)
+ 1. [`compute_element_bounds!`](@ref) computes the min and max of `q` in each element.
+ 2. If distributed, start the ghost exchange of the element bounds.
+ 3. [`compute_neighbor_bounds_local!`](@ref) widens the bounds with the local neighbors.
+ 4. If distributed, complete the ghost exchange and widen the bounds with the ghost
+    neighbors in [`compute_neighbor_bounds_ghost!`](@ref).
 """
 function compute_bounds!(
     limiter::QuasiMonotoneLimiter,
@@ -328,12 +318,19 @@ end
 
 
 """
-    apply_limiter!(ρq, ρ, limiter::QuasiMonotoneLimiter)
+    apply_limiter!(ρq, ρ, limiter::QuasiMonotoneLimiter; warn = true)
 
-Apply the limiter on the tracer density  `ρq`, using the computed desired bounds
-on the concentration `q` and density `ρ` as an optimal weight. This iterates
-over each element, calling [`apply_limit_slab!`](@ref). If the limiter fails to
-converge for any element, a warning is issued.
+Limit the tracer density `ρq` in place so that the concentration `q = ρq / ρ` at each
+node lies within the bounds computed by [`compute_bounds!`](@ref), while preserving the
+tracer mass of each element up to the relative tolerance `limiter.rtol`.
+
+Each element is processed by [`apply_limit_slab!`](@ref), with the density `ρ` times the
+quadrature weights as the weights of the least-squares redistribution. When some element
+fails to converge, `limiter.convergence_stats` is updated. On CPU devices with
+`warn = true`, the accumulated convergence statistics are printed with `@warn` after each
+call.
+
+Return `ρq` on CPU devices and `nothing` on CUDA devices.
 """
 apply_limiter!(
     ρq::Fields.Field,
@@ -412,10 +409,22 @@ end
 """
     apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
 
-Apply the computed bounds of the tracer concentration (`slab_q_bounds`) in the
-limiter to `slab_ρq`, given the total mass `slab_ρ`, metric terms `slab_WJ`,
-and relative tolerance `rtol`. Return whether the tolerance condition could be
-satisfied.
+Limit the nodal values of one element's tracer density `slab_ρq` in place so that
+`q = ρq / ρ` lies within `slab_q_bounds`, the min and max for the element, given the
+density `slab_ρ` and the quadrature weights times Jacobians `slab_WJ`.
+
+The bounds are first widened to include the element mean of `q`, so that a solution exists.
+Values outside the bounds are clipped, and the resulting tracer mass change is
+redistributed over the nodes not at a bound, in proportion to `slab_ρ * slab_WJ`, until the
+relative mass change is at most `rtol` or `Nq^2` iterations have been done. Each component
+of a struct-valued `slab_ρq` is limited independently against the matching component of
+`slab_q_bounds`.
+
+# Returns
+
+A tuple `(converged, max_rel_err, min_tracer_mass)`: whether all components met the
+tolerance, the largest relative mass error, and the smallest absolute tracer mass over the
+components.
 """
 function apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
     (_, Ni, Nj, _) = size(slab_ρq)

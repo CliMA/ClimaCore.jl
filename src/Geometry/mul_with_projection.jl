@@ -7,11 +7,11 @@ const SingleValue = Union{Number, AbstractTensor}
 """
     mul_with_projection(x, y, lg)
 
-Similar to `x * y`, except that this version automatically projects `y` to avoid
-`DimensionMismatch` errors for `Tensor`s. For example, if `x` is a covector
-along the `Covariant3Axis` (e.g., `Covariant3Vector(1)'`), then `y` will be
-projected onto the `Contravariant3Axis`. In general, the first axis of `y` will
-be projected onto the dual of the last axis of `x`.
+Compute `x * y`, projecting `y` first so that `Tensor` operands do not raise
+`DimensionMismatch` errors. For example, if `x` is a covector along the `Covariant3Axis`
+(e.g., `Covariant3Vector(1)'`), then `y` is projected onto the `Contravariant3Axis`. In
+general, the first axis of `y` is projected onto the dual of the last axis of `x`, using
+the local geometry `lg`. When `x` is not a `Tensor{2}`, this is `x * y`.
 """
 mul_with_projection(x, y, _) = x * y
 mul_with_projection(x::Tensor{2}, y::AbstractTensor, lg) =
@@ -42,7 +42,7 @@ basis2(::Type{<:AbstractTensor{2, <:Any, <:Tuple{Any, B}}}) where {B} = B
 """
     _dual_axes_for_projection(X)
 
-The axes that the second operand of a multiplication must be projected onto for
+Return the axes that the second operand of a multiplication must be projected onto for
 entries of type `X` in the first operand, or `nothing` if no projection is
 needed. For entries with multiple components that do not all share one axis, the
 result is a `Tuple` of axes that pairs componentwise with the entry, with
@@ -90,15 +90,15 @@ end
 """
     mul_return_type(X, Y)
 
-Return type of `mul_with_projection(x, y, lg)`. Equivalent to
-`Base._return_type(mul_with_projection, Tuple{X, Y, LG})` but explicit so
-that MatrixFields' eltype inference always sees a concrete type — internal
-`_return_type` can widen to `Union`/`Any` and is unstable across Julia versions.
+Return the type of `mul_with_projection(x, y, lg)` for `x::X` and `y::Y`. Equivalent to
+`Base._return_type(mul_with_projection, Tuple{X, Y, LG})`, but explicit so that the
+`eltype` inference in `MatrixFields` always sees a concrete type; the internal
+`_return_type` can widen to `Union` or `Any` and is unstable across Julia versions.
 
-The methods cover six distinct result shapes (scalar×scalar, scalar×tensor,
-covector×vector, vector×covector, 2-tensor×vector, 2-tensor×2-tensor) where
-the output `ndims` goes up, down, or stays the same — no single formula
-fits all of them.
+The methods cover six result shapes (scalar×scalar, scalar×tensor, covector×vector,
+vector×covector, 2-tensor×vector, 2-tensor×2-tensor) in which the output `ndims` goes
+up, down, or stays the same; no single formula fits all of them. The fallback method
+throws an error for unsupported type pairs.
 
 Future cleanup: try replacing with `Base._return_type` and keep only methods
 that fail; collapse the two `Tensor{2}*Tensor{N}` cases via

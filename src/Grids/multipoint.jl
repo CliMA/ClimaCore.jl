@@ -1,23 +1,27 @@
 
 """
-    MultiPointGrid(
-        context :: ClimaComms.AbstractCommsContext,
-        points  :: AbstractVector{Geometry.LatLongPoint{FT}},
-    )
+    MultiPointGrid{C, GG, LG} <: AbstractSpectralElementGrid
 
-A horizontal grid consisting of N arbitrary, disconnected (lat, long) locations
-on a sphere. There is no connectivity between columns; no spectral element
-basis, DSS, or horizontal operators are supported on this grid.
+Horizontal grid of `N` arbitrary, disconnected (lat, long) locations on a sphere.
+There is no connectivity between columns; no spectral element basis, DSS, or
+horizontal operators are supported on this grid.
 
-This is the horizontal component used by a multi-column extruded space (N
-independent columns at user-chosen sphere locations).
+This is the horizontal component of a multi-column extruded space (`N` independent
+columns at user-chosen sphere locations). Construct it with
+`MultiPointGrid(points; radius, device)`.
 
-The `local_geometry` is stored as a `VIJFH{LG, 1, 1, 1, N}` data layout, with
-each of the `N` locations represented by an element with one nodal point. Based
-on the [metric
+# Fields
+
+  - `context`: The `ClimaComms.SingletonCommsContext` of the grid.
+  - `global_geometry`: The `Geometry.SphericalGlobalGeometry` of the sphere.
+  - `local_geometry`: A `VIJFH{LG, 1, 1, 1, N}` data layout, with each of the `N`
+    locations represented by an element with one nodal point.
+
+Based on the [metric
 tensor](https://en.wikipedia.org/wiki/Metric_tensor#The_round_metric_on_a_sphere)
-of a sphere, the horizontal Jacobian `∂x∂ξ` is given by the diagonal matrix
-`diag(R·π/180, R·cosd(lat)·π/180)`, with the determinant `J = R²·cosd(lat)·(π/180)²`.
+of a sphere, the horizontal Jacobian `∂x∂ξ` is the diagonal matrix
+`diag(R·cosd(lat)·π/180, R·π/180)` (long, lat), with determinant
+`J = R²·cosd(lat)·(π/180)²`.
 """
 struct MultiPointGrid{
     C <: ClimaComms.AbstractCommsContext,
@@ -53,10 +57,18 @@ quadrature_style(::MultiPointGrid) = nothing
         device  :: ClimaComms.AbstractDevice = ClimaComms.device(),
     )
 
-Convenience constructor: build a `MultiPointGrid` from a vector of
-`LatLongPoint`s and a sphere `radius`. The horizontal metric terms in
-`local_geometry` are set from the sphere geometry at each point:
-`∂x∂ξ = diag(R·π/180, R·cosd(lat)·π/180)`, `J = R²·cosd(lat)·(π/180)²`.
+Build a `MultiPointGrid` from a vector of `LatLongPoint`s and a sphere `radius`.
+The horizontal metric terms in `local_geometry` are set from the sphere geometry
+at each point: `∂x∂ξ = diag(R·cosd(lat)·π/180, R·π/180)`,
+`J = R²·cosd(lat)·(π/180)²`. Construction is memoized in `Cache.OBJECT_CACHE`.
+
+# Keyword Arguments
+
+  - `radius`: Sphere radius [m]; must be positive.
+  - `device`: `ClimaComms.AbstractDevice` on which the geometry is stored; defaults to
+    `ClimaComms.device()`.
+
+Every point must satisfy `|lat| < 90`, since the metric degenerates at the poles.
 """
 function MultiPointGrid(
     points::AbstractVector{Geometry.LatLongPoint{FT}};
@@ -145,8 +157,7 @@ function Base.show(io::IO, grid::MultiPointGrid)
     print_multipoint_horizontal(iio, grid, indent)
 end
 
-# Backwards-compatibility alias for the old name; deprecated, but old code
-# keeps working. Remove once downstream consumers have migrated.
+# Deprecated alias of `MultiPointGrid`.
 Base.@deprecate_binding PointCloudGrid MultiPointGrid false
 
 # Grids with no horizontal spectral elements are continuous: every node

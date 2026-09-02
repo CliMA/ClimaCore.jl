@@ -12,26 +12,20 @@ using StaticArrays
 """
     Grids.AbstractGrid
 
-Grids should define the following
+Abstract supertype of grids. Subtypes define the following methods:
 
-  - [`topology`](@ref): the topology of the grid
-
-  - [`mesh`](@ref): the mesh of the grid
-
-  - [`domain`](@ref): the domain of the grid
-
-  - `ClimaComms.context`
-
-  - `ClimaComms.device`
-
-  - [`local_geometry_data`](@ref): the `DataLayout` object containing the local geometry data information
+  - [`topology`](@ref): the topology of the grid.
+  - `ClimaComms.context` and `ClimaComms.device` (default to those of the topology).
+  - `Meshes.domain` (defaults to that of the topology).
+  - [`local_geometry_data`](@ref): the `DataLayout` object containing the local
+    geometry of the grid.
 """
 abstract type AbstractGrid end
 
 """
     Grids.topology(grid::AbstractGrid)
 
-Get the topology of a grid.
+Return the topology of `grid`.
 """
 function topology end
 
@@ -41,17 +35,18 @@ function topology end
         staggering :: Union{Staggering, Nothing},
     )
 
-Get the `DataLayout` object containing the local geometry data information of
-the `grid` with staggering `staggering`.
+Return the `DataLayout` object containing the local geometry of `grid` at the
+given `staggering`.
 
-If the grid is not staggered, `staggering` should be `nothing`.
+If the grid is not staggered, `staggering` is `nothing`.
 """
 function local_geometry_data end
 
 """
-    Grids.local_geometry_type(::Type)
+    Grids.local_geometry_type(::Type{<:AbstractGrid})
 
-Get the `LocalGeometry` type.
+Return the `LocalGeometry` element type of a grid type. The fallback for
+unrecognized types is `Union{}`.
 """
 function local_geometry_type end
 
@@ -99,7 +94,7 @@ end
 """
     has_horizontal(::AbstractGrid)
 
-Returns a bool indicating that the grid has a horizontal part.
+Return `true` if the grid has a horizontal part.
 """
 function has_horizontal end
 has_horizontal(::AbstractGrid) = false
@@ -112,7 +107,7 @@ has_horizontal(::MultiPointGrid) = true
 """
     has_vertical(::AbstractGrid)
 
-Returns a bool indicating that the grid has a vertical part.
+Return `true` if the grid has a vertical part.
 """
 function has_vertical end
 has_vertical(::AbstractGrid) = false
@@ -122,18 +117,20 @@ has_vertical(::ExtrudedFiniteDifferenceGrid) = true
 """
     get_mask(grid::AbstractGrid)
 
-Retrieve the mask for the grid (defaults to DataLayouts.NoMask).
+Return the mask of `grid`; `DataLayouts.NoMask()` for grids without a mask.
 """
 get_mask(::AbstractGrid) = DataLayouts.NoMask()
 get_mask(grid::ExtrudedFiniteDifferenceGrid) = grid.horizontal_grid.mask
 get_mask(::ExtrudedFiniteDifferenceGrid{<:MultiPointGrid}) = DataLayouts.NoMask()
 
 """
-    set_mask!(fn::Function, grid)
-    set_mask!(grid, ::DataLayouts.DataLayout)
+    set_mask!(fn, grid)
+    set_mask!(grid, data::DataLayouts.DataLayout)
 
-Set the mask using the function `fn`, which is called for all coordinates on the
-given grid.
+Set the active-node mask of `grid`. With `fn`, the mask is `fn(coord)` evaluated at
+every coordinate of the horizontal grid; with `data`, the mask is copied from
+`data`. The mask maps are then rebuilt with `DataLayouts.set_mask_maps!`. Does
+nothing if the grid mask is a `DataLayouts.NoMask`. Returns `nothing`.
 """
 function set_mask! end
 

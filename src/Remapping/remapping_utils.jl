@@ -1,27 +1,49 @@
 """
     AbstractRemappingMethod
 
-Abstract type for horizontal remapping methods. Dispatch on concrete subtypes to avoid
-branching in interpolation and Remapper logic.
+Supertype for horizontal remapping methods.
+
+Subtypes:
+
+  - [`SpectralElementRemapping`](@ref): Lagrange interpolation on all quadrature nodes of
+    the containing element.
+  - [`BilinearRemapping`](@ref): linear (1D) or bilinear (2D) interpolation between the two
+    quadrature nodes that bracket the target point in each direction.
+
+[`Remapper`](@ref), [`interpolate`](@ref), and [`interpolate_array`](@ref) dispatch on the concrete
+subtype passed as `horizontal_method`.
 """
 abstract type AbstractRemappingMethod end
 
 """
     SpectralElementRemapping <: AbstractRemappingMethod
 
-Use spectral element quadrature weights (e.g. Lagrange at GLL points) for horizontal
-interpolation.
+Interpolate horizontally with the Lagrange polynomial through all quadrature nodes of the
+containing element (the barycentric formula of [Berrut2004](@cite)).
 """
 struct SpectralElementRemapping <: AbstractRemappingMethod end
 
 """
     BilinearRemapping{T12, T13, T14, T15} <: AbstractRemappingMethod
+    BilinearRemapping()
 
-Use bilinear interpolation on the 2-point cell containing the target point (1D: linear on
-2-point cell; 2D: bilinear on 2×2 cell). Holds precomputed local coordinates (s, t) and
-node indices (i, j). For 1D horizontal, `local_bilinear_t` and `local_bilinear_j` are
-`nothing`. Call `BilinearRemapping()` with no arguments to use as a method tag; the
-Remapper constructor fills in the arrays.
+Interpolate horizontally between the two quadrature nodes that bracket the target point in
+each direction: linear in 1D, bilinear on a 2×2 node cell in 2D.
+
+The no-argument constructor returns a method tag with all fields `nothing`; pass it as
+`horizontal_method` to [`Remapper`](@ref), [`interpolate`](@ref), or [`interpolate_array`](@ref).
+The `Remapper` constructor fills in the fields for its process-local target points.
+
+# Fields
+
+  - `local_bilinear_s`: local coordinate in the first direction, in `[0, 1]`, per target
+    point.
+  - `local_bilinear_t`: local coordinate in the second direction, in `[0, 1]`, per target
+    point; `nothing` in 1D.
+  - `local_bilinear_i`: index of the lower bracketing node in the first direction, per
+    target point.
+  - `local_bilinear_j`: index of the lower bracketing node in the second direction, per
+    target point; `nothing` in 1D.
 """
 struct BilinearRemapping{T12, T13, T14, T15} <: AbstractRemappingMethod
     local_bilinear_s::T12
@@ -30,17 +52,15 @@ struct BilinearRemapping{T12, T13, T14, T15} <: AbstractRemappingMethod
     local_bilinear_j::T15
 end
 
-"""
-`BilinearRemapping()` with no arguments: method tag; Remapper constructor fills in the arrays.
-"""
 BilinearRemapping() = BilinearRemapping(nothing, nothing, nothing, nothing)
 
 """
     vertical_indices(space, zcoords)
 
-Return the vertical index of the element that contains `zcoords`.
+Return the index of the vertical element of `space` that contains each of `zcoords`.
 
-`zcoords` is interpreted as "reference z coordinates".
+`zcoords` are interpreted as reference `z` coordinates, i.e., coordinates of the vertical
+mesh before any terrain adaption.
 """
 function vertical_indices(space, zcoords)
     vert_topology = Spaces.vertical_topology(space)
@@ -51,14 +71,16 @@ end
 """
     vertical_reference_coordinates(space, zcoords)
 
-Return the reference coordinates of the element that contains `zcoords`.
+Return the reference coordinate ξ of each of `zcoords` within its containing vertical
+element.
 
-Reference coordinates (ξ) typically go from -1 to 1, but for center spaces this function
-remaps in such a way that they can directly be used for linear interpolation (so, if ξ is
-negative, it is remapped to (0,1), if positive to (-1, 0)). This is best used alongside with
-`vertical_bounding_indices`.
+On face spaces, ξ ∈ [-1, 1] within the element. On center spaces, ξ is shifted by ±1 so
+that it is the reference coordinate between the two neighboring cell centers: a point in
+the lower half of the cell (ξ < 0) maps to (0, 1), a point in the upper half maps to
+(-1, 0). The shifted value pairs with the level indices from `vertical_bounding_indices`
+for linear interpolation.
 
-`zcoords` is interpreted as "reference z coordinates".
+`zcoords` are interpreted as reference `z` coordinates.
 """
 function vertical_reference_coordinates(space, zcoords)
     vert_topology = Spaces.vertical_topology(space)
@@ -84,12 +106,14 @@ end
 """
     vertical_bounding_indices(space, zcoords)
 
-Return the vertical element indices needed to perform linear interpolation of `zcoords`.
+Return, for each of `zcoords`, the pair `(v_lo, v_hi)` of vertical level indices between
+which the field is interpolated linearly.
 
-For centered-valued fields, if `zcoord` is in the top (bottom) half of a top (bottom)
-element in a column, no interpolation is performed and the value at the cell center is
-returned. Effectively, this means that the interpolation is first-order accurate across the
-column, but zeroth-order accurate close to the boundaries.
+On face spaces, these are the two faces of the containing element. On center spaces, they
+are the two cell centers nearest to the point. In a non-periodic column, a point in the
+upper (lower) half of the top (bottom) cell gets `v_lo == v_hi`, so the interpolation
+returns the cell-center value: the interpolation is first-order accurate in the interior of
+the column and zeroth-order accurate in the outer half of the boundary cells.
 """
 function vertical_bounding_indices end
 
@@ -141,13 +165,9 @@ end
 """
     vertical_interpolation_weights(space, zcoords)
 
-Compute the interpolation weights to vertically interpolate the `zcoords` in the given `space`.
-
-This assumes a linear interpolation, where the first weight is to be multiplied with the "lower"
-element, and the second weight with the "higher" element in a stack.
-
-That is, this function returns `A`, `B` such that `f(zcoord) = A f_lo + B f_hi`, where `f_lo` and
-`f_hi` are the values on the neighboring elements of `zcoord`.
+Return, for each of `zcoords`, the pair of weights `(A, B)` for linear vertical
+interpolation in `space`, `f(zcoord) = A * f_lo + B * f_hi`, where `f_lo` and `f_hi` are
+the values at the levels returned by `vertical_bounding_indices`.
 """
 function vertical_interpolation_weights(space, zcoords)
     ξs = vertical_reference_coordinates(space, zcoords)
@@ -188,20 +208,29 @@ function default_target_zcoords(
 end
 
 """
-    default_target_hcoords(space::Spaces.AbstractSpace; hresolution)
+    default_target_hcoords(space::Spaces.AbstractSpace; hresolution = 180)
 
-Return an Array with the Geometry.Points to interpolate uniformly the horizontal
-component of the given `space`.
+Return an array of `Geometry.Point`s that cover the horizontal domain of `space` uniformly
+with `hresolution` points per direction.
+
+On the sphere, the result is a `hresolution × hresolution` array of `LatLongPoint`s, with
+latitudes from -90 to 90 along the first dimension and longitudes from -180 to 180 along
+the second (in degrees). On a plane, the points have the coordinate type of the horizontal
+domain and span its extent. Return `nothing` for spaces without a horizontal direction to
+interpolate over (`FiniteDifferenceSpace`, `MultiColumnFiniteDifferenceSpace`,
+`MultiPointSpace`).
 """
 function default_target_hcoords(space::Spaces.AbstractSpace; hresolution = 180)
     return default_target_hcoords(Spaces.horizontal_space(space); hresolution)
 end
 
 """
-    default_target_hcoords_as_vectors(space::Spaces.AbstractSpace; hresolution)
+    default_target_hcoords_as_vectors(space::Spaces.AbstractSpace; hresolution = 180)
 
-Return an Vectors with the coordinate to interpolate uniformly the horizontal
-component of the given `space`.
+Return the coordinate vectors underlying [`default_target_hcoords`](@ref): a tuple of two
+vectors for 2D horizontal spaces (latitudes and longitudes, in degrees, on the sphere) or
+a single vector for 1D horizontal spaces, each with `hresolution` uniformly spaced values of
+the space's float type.
 """
 function default_target_hcoords_as_vectors(
     space::Spaces.AbstractSpace;
@@ -269,13 +298,15 @@ end
 
 
 """
-    default_target_zcoords(space::Spaces.AbstractSpace; zresolution)
+    default_target_zcoords(space::Spaces.AbstractSpace; zresolution = nothing)
 
-Return an `Array` with the `Geometry.Points` to interpolate the vertical component of the
-given `space`.
+Return a vector of `Geometry.ZPoint`s covering the vertical extent of `space`.
 
-When `zresolution` is `nothing`, return the levels (which essentially disables vertical
-interpolation), otherwise return linearly spaced values.
+When `zresolution` is `nothing`, return the cell-center heights of the model levels, so
+that vertical interpolation of a center field reproduces its values. Otherwise, return
+`zresolution` uniformly spaced heights between `Domains.z_min(space)` and
+`Domains.z_max(space)`. Return `nothing` for spaces without a vertical direction
+(`AbstractSpectralElementSpace`, `MultiPointSpace`).
 """
 function default_target_zcoords(space; zresolution = nothing)
     return Geometry.ZPoint.(
@@ -301,8 +332,9 @@ end
 """
     bilinear(c11, c21, c22, c12, s, t)
 
-Bilinear interpolation in (s,t) ∈ [0,1]² (local to 2-point cell; reference element is [-1,1]²):
-(1-s)(1-t)*c11 + s*(1-t)*c21 + (1-s)*t*c12 + s*t*c22
+Return the bilinear interpolant at local coordinates `(s, t) ∈ [0, 1]²` of the corner
+values `c11 = f(0, 0)`, `c21 = f(1, 0)`, `c22 = f(1, 1)`, and `c12 = f(0, 1)`:
+`(1 - s) * (1 - t) * c11 + s * (1 - t) * c21 + (1 - s) * t * c12 + s * t * c22`.
 """
 @inline bilinear(c11, c21, c22, c12, s, t) =
     (1 - s) * (1 - t) * c11 + s * (1 - t) * c21 + (1 - s) * t * c12 + s * t * c22
@@ -310,6 +342,7 @@ Bilinear interpolation in (s,t) ∈ [0,1]² (local to 2-point cell; reference el
 """
     linear(c1, c2, s)
 
-Linear interpolation in s ∈ [0,1] on 2-point cell (1D analogue of bilinear).
+Return the linear interpolant at local coordinate `s ∈ [0, 1]` between `c1 = f(0)` and
+`c2 = f(1)`: `(1 - s) * c1 + s * c2`.
 """
 @inline linear(c1, c2, s) = (1 - s) * c1 + s * c2
