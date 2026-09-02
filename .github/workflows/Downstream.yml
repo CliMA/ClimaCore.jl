@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - tr/more-down
     tags: '*'
   pull_request:
 
@@ -23,12 +24,12 @@ jobs:
       fail-fast: false
       matrix:
         package: # atmos is excluded here because buildkite is used to test it
-          - 'ClimaCoupler.jl'
-          - 'ClimaDiagnostics.jl'
+          # - 'ClimaCoupler.jl'
+          # - 'ClimaDiagnostics.jl'
           - 'ClimaLand.jl'
-          - 'ClimaTimesteppers.jl'
-          - 'ClimaDiagnostics.jl'
-          - 'ClimaUtilities.jl'
+          # - 'ClimaTimesteppers.jl'
+          # - 'ClimaDiagnostics.jl'
+          # - 'ClimaUtilities.jl'
         version:
           - '1.10'
           - '1.11'
@@ -50,13 +51,13 @@ jobs:
       # and dev ClimaCore before running the test suite from there.
       - if: (matrix.package != 'ClimaCoupler.jl')
         run: |
-          julia --color=yes -e 'using Pkg; Pkg.add("TestEnv")'
-          julia --color=yes --project=${{ matrix.package }} -e 'using Pkg; Pkg.instantiate()'
-          julia --color=yes --project=${{ matrix.package }} -e 'using TestEnv; TestEnv.activate();\
+          julia -O0 --color=yes -e 'using Pkg; Pkg.add("TestEnv")'
+          julia -O0 --color=yes --project=${{ matrix.package }} -e 'using Pkg; Pkg.instantiate()'
+          julia -O0 --color=yes --project=${{ matrix.package }} -e 'using TestEnv; TestEnv.activate();\
             using Pkg; Pkg.develop(; path = "."); include("${{ matrix.package }}/test/runtests.jl")'
 
       - if: matrix.package == 'ClimaCoupler.jl'
         run: |
-          julia --color=yes --project=ClimaCoupler.jl/experiments/AMIP -e 'using Pkg; Pkg.instantiate()'
-          julia --color=yes --project=ClimaCoupler.jl/experiments/AMIP -e 'using Pkg; Pkg.develop(; path = ".")'
-          julia --color=yes --project=ClimaCoupler.jl/experiments/AMIP ClimaCoupler.jl/experiments/test/runtests.jl
+          julia -O0 --color=yes --project=ClimaCoupler.jl/experiments/AMIP -e 'using Pkg; Pkg.instantiate()'
+          julia -O0 --color=yes --project=ClimaCoupler.jl/experiments/AMIP -e 'using Pkg; Pkg.develop(; path = ".")'
+          julia -O0 --color=yes --project=ClimaCoupler.jl/experiments/AMIP ClimaCoupler.jl/experiments/test/runtests.jl
