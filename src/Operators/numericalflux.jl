@@ -1860,8 +1860,14 @@ entropy-conservative fluxes (it is what makes ``⟦w⟧·F^\\# = ⟦ψ⟧`` hold
 @inline function ln_mean(x, y)
     ε = oftype(x, 1e-4)
     f² = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y)  # ((x−y)/(x+y))²
+    # Build the series coefficients at the working precision: bare `2 / 3` etc.
+    # are Float64 literals, which promote the Taylor branch to Float64 while the
+    # `log` branch stays Float32. The resulting Union{Float32,Float64} boxes
+    # every flux NamedTuple built on top of this and the GPU kernels fail to
+    # compile (dynamic NamedTuple construction, gpu_gc_pool_alloc).
+    c1, c2, c3 = oftype(f², 2 // 3), oftype(f², 2 // 5), oftype(f², 2 // 7)
     return f² < ε ?
-           (x + y) / (2 + f² * (2 / 3 + f² * (2 / 5 + f² * 2 / 7))) :
+           (x + y) / (2 + f² * (c1 + f² * (c2 + f² * c3))) :
            (y - x) / log(y / x)
 end
 
