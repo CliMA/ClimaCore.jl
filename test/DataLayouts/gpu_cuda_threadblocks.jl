@@ -16,7 +16,6 @@ function make_data(DL, S; Nv = 1, Ni = 1, Nj = 1, Nh = nothing)
 end
 
 pt_stencil(d) = ext.fd_shmem_stencil_partition(d, size(d, 1))
-pt_sem(d) = ext.spectral_partition(d, length(d))
 get_Nh(h_elem) = h_elem^2 * 6
 
 function pt_masked(d; frac)
@@ -48,22 +47,6 @@ end
     @test pt_stencil(make_data(DataLayouts.VIJFH, S; Nv = 1000)) == (; threads = (1000,), blocks = (1, 1, 1), Nvthreads = 1000)
 end
 
-@testset "spectral_partition" begin
-    S = Float64
-    for DL in (DataLayouts.VIJFH, DataLayouts.VIJHF)
-        @test pt_sem(make_data(DL, S; Nv = 10, Ni = 1, Nh = get_Nh(100))) == (; threads = (1, 1, 64), blocks = (60000, 1), Nvthreads = 64)
-        @test pt_sem(make_data(DL, S; Nv = 10, Ni = 4, Nh = get_Nh(100))) == (; threads = (4, 1, 64), blocks = (60000, 1), Nvthreads = 64)
-        @test pt_sem(make_data(DL, S; Nv = 100, Ni = 4, Nh = get_Nh(100))) == (; threads = (4, 1, 64), blocks = (60000, 2), Nvthreads = 64)
-
-        @test pt_sem(make_data(DL, S; Nv = 10, Ni = 1, Nj = 1, Nh = get_Nh(100))) == (; threads = (1, 1, 64), blocks = (60000, 1), Nvthreads = 64)
-        @test pt_sem(make_data(DL, S; Nv = 10, Ni = 4, Nj = 4, Nh = get_Nh(100))) == (; threads = (4, 4, 64), blocks = (60000, 1), Nvthreads = 64)
-        @test pt_sem(make_data(DL, S; Nv = 100, Ni = 4, Nj = 4, Nh = get_Nh(100))) == (; threads = (4, 4, 64), blocks = (60000, 2), Nvthreads = 64)
-
-        @test pt_sem(make_data(DL, S; Ni = 1, Nj = 1, Nh = get_Nh(100))) == (; threads = (1, 1, 64), blocks = (60000, 1), Nvthreads = 64) # can/should we reduce # of blocks?
-        @test pt_sem(make_data(DL, S; Ni = 4, Nj = 4, Nh = get_Nh(100))) == (; threads = (4, 4, 64), blocks = (60000, 1), Nvthreads = 64) # can/should we reduce # of blocks?
-    end
-end
-
 @testset "masked_partition" begin
     S = Float64
     for DL in (DataLayouts.VIJFH, DataLayouts.VIJHF)
@@ -78,3 +61,28 @@ end
 end
 
 #! format: on
+
+# A sub-block wider than a warp has no barrier of its own and uses the
+# block-wide sync_threads, so every block must hold exactly one of them; see
+# ext.max_subblock_launch_threads.
+@testset "a block holds one wide sub-block" begin
+    for N in (2, 4, 8, 16, 32, 64, 128, 256)
+        subscope = ext.ThisSubBlock{N}()
+        cap = ext.max_subblock_launch_threads(subscope)
+        block_threads = DataLayouts.subscope_launch_threads(subscope, cap)
+
+        # Whole sub-blocks, so none is missing threads (see the invariant in
+        # DataLayouts.subscope_launch_threads).
+        @test block_threads % N == 0
+
+        # One wide sub-block per block, so a block-wide barrier is exactly that
+        # sub-block's barrier. Narrower sub-blocks keep sharing a block.
+        @test cld(block_threads, N) ==
+              (N > ext.THREADS_PER_WARP ? 1 : cld(ext.MAX_SUBBLOCK_LAUNCH_THREADS, N))
+
+        # The trailing dimension of a sub-block's shared memory has one entry per
+        # sub-block a block can hold, so the largest index a launched block can
+        # produce has to be in range.
+        @test cld(cap, N) == cld(block_threads, N)
+    end
+end

@@ -12,11 +12,11 @@ import ClimaCore:
 );
 import .TestUtilities as TU
 
-# DG internal-face flux loops on an extruded plane x–z shell
+# DG interior-face flux loops on an extruded plane x–z shell
 # (`SpectralElementSpace1D` horizontal × finite-difference vertical): the
 # 1D-horizontal counterpart of unit_extruded_sphere_dg.jl. This exercises
-# `add_numerical_flux_internal_extruded_1d!` and the extruded-1D branch of
-# `add_lifting_flux_internal!`, whose `UVector`-normal surface geometry and
+# `_add_interior_face_flux_extruded_1d!` and the extruded-1D branch of
+# `add_lifting_flux_interior!`, whose `UVector`-normal surface geometry and
 # 1D face-node indexing are otherwise only run by the plane FDDG examples.
 # (Flux-differencing and the LDG Laplacian are 2D-horizontal only.)
 
@@ -40,7 +40,7 @@ function extruded_plane_spaces(
     hspace = Spaces.SpectralElementSpace1D(
         htopology,
         Quadratures.GLL{Nq}();
-        discontinuous = true,
+        discretization = Spaces.DG(),
     )
 
     zdomain = Domains.IntervalDomain(
@@ -95,7 +95,7 @@ else
                 # and outward normal, so this pins the
                 # `compute_surface_geometry_1d` scaling that the vanishing
                 # and conservation testsets below cannot see.
-                hwdiv = Operators.WeakDivergence()
+                hwdiv = Operators.Divergence{Operators.WeakForm}()
                 hdiv = Operators.Divergence()
                 lgeom = Fields.local_geometry_field(center_space)
                 q = smooth_scalar(ccoords)
@@ -106,7 +106,7 @@ else
                     q * uv,
                 )
                 dy_mw = @. hwdiv(F) * (-(lgeom.WJ))
-                Operators.add_numerical_flux_internal!(central_flux, dy_mw, y)
+                Operators.add_numerical_flux_interior!(central_flux, dy_mw, y)
                 dy = @. dy_mw / lgeom.WJ
                 dy_strong = @. -hdiv(F)
                 err = maximum(abs, parent(dy) .- parent(dy_strong))
@@ -120,7 +120,7 @@ else
                     lgeom = Fields.local_geometry_field(space)
                     r = similar(q)
                     r .= 0
-                    Operators.add_numerical_flux_internal!(jump_penalty, r, q)
+                    Operators.add_numerical_flux_interior!(jump_penalty, r, q)
                     rn = @. r / lgeom.WJ
                     @test maximum(abs, parent(rn)) <
                           tol * maximum(abs, parent(q))
@@ -132,7 +132,7 @@ else
                 lgeom = Fields.local_geometry_field(center_space)
                 r = similar(q, Geometry.UVector{FT})
                 fill!(parent(r), 0)
-                Operators.add_lifting_flux_internal!(grad_lift, r, q)
+                Operators.add_lifting_flux_interior!(grad_lift, r, q)
                 rn = @. r / lgeom.WJ
                 @test maximum(abs, parent(rn)) < tol * maximum(abs, parent(q))
             end
@@ -145,7 +145,7 @@ else
                 lgeom = Fields.local_geometry_field(center_space)
                 rc = similar(q)
                 fill!(parent(rc), 0)
-                Operators.add_lifting_flux_internal!(jump_lift, rc, q, λ)
+                Operators.add_lifting_flux_interior!(jump_lift, rc, q, λ)
                 rn = @. rc / lgeom.WJ
                 @test maximum(abs, parent(rn)) < tol * maximum(abs, parent(q))
 
@@ -156,7 +156,7 @@ else
                 copyto!(parent(qd), qd_cpu)
                 rd = similar(qd)
                 fill!(parent(rd), 0)
-                Operators.add_lifting_flux_internal!(jump_lift, rd, qd, λ)
+                Operators.add_lifting_flux_interior!(jump_lift, rd, qd, λ)
                 @test sum(parent(qd) .* parent(rd)) < 0
             end
 
@@ -169,7 +169,7 @@ else
                 y = map((qi, uvi) -> (; q = qi, uv = uvi), q, uv)
                 r = similar(q)
                 r .= 0
-                Operators.add_numerical_flux_internal!(central_flux, r, y)
+                Operators.add_numerical_flux_interior!(central_flux, r, y)
                 scale = sum(abs, parent(r))
                 @test abs(sum(parent(r))) < tol_sum * scale
             end
@@ -184,7 +184,7 @@ else
                 lgeom = Fields.local_geometry_field(center_space)
                 r = similar(q)
                 r .= 0
-                Operators.add_numerical_flux_internal!(two_field_jump, r, q, s)
+                Operators.add_numerical_flux_interior!(two_field_jump, r, q, s)
                 rn = @. r / lgeom.WJ
                 @test maximum(abs, parent(rn)) < tol * maximum(abs, parent(q))
             end

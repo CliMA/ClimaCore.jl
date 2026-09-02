@@ -4,45 +4,335 @@ ClimaCore.jl Release Notes
 main
 -------
 
-- The DG face operators (`Operators.add_numerical_flux_internal!` and
-  `Operators.add_lifting_flux_internal!`) now run on distributed (MPI)
-  `Topology2D` spaces: each rank completes its rank-boundary
-  (`Topologies.ghost_faces`) side through a face-strip halo exchange
-  (`Topologies.GhostFaceExchange`) that ships only the `Nq` face-node values
-  per face, on both CPU and CUDA. Several operators in one tendency evaluation
-  can share a single exchange via `Operators.start_dg_ghost_exchange(args...)`
-  and the `ghost_exchange` keyword. Covered by 2- and 3-rank CPU and CUDA
-  tests.
+- ![][badge-💥breaking] The Galerkin discretization of a spectral-element grid
+  is represented by the singleton types `Grids.CG()` (the default) and
+  `Grids.DG()`: construct `SpectralElementGrid1D`/`SpectralElementGrid2D` (and
+  the corresponding `Spaces` constructors) with `discretization = Grids.DG()`,
+  and read it back with `Grids.discretization(grid)` /
+  `Spaces.discretization(space)`, which discretization-dependent code can
+  dispatch on. This replaces the Boolean `discontinuous = true` grid keyword.
+  The discretization is a type parameter of these grids rather than a field, so
+  it is inferrable and the methods dispatching on it resolve statically; code
+  that spells out their type parameters positionally needs one more parameter.
+  Omitting the keyword follows the quadrature: `CG()` when its nodes are shared
+  across element boundaries (`Quadratures.requires_dss`, e.g. GLL) and `DG()`
+  otherwise, so a single-node horizontal space stays discontinuous. Passing
+  `CG()` explicitly with a quadrature that cannot represent a continuous space
+  raises an `ArgumentError` rather than being silently downgraded. On a `DG()` grid
+  `Spaces.weighted_dss!` (and its `start!`/`internal!`/`ghost!` split) is a
+  no-op, `Spaces.create_dss_buffer` returns `nothing`, and no DSS weights are
+  computed; `Grids.is_continuous` / `Spaces.is_continuous` report the
+  discretization, so models can gate DSS on the space itself rather than on the
+  quadrature type. The discretization is part of the grid cache key, forwards
+  through `Grids.LevelGrid`, and is serialized by `InputOutput` (grids in files
+  without the attribute read back as continuous).
+  PR [2599](https://github.com/CliMA/ClimaCore.jl/pull/2599)
 
-- `Operators.add_numerical_flux_boundary!` now has CUDA kernels (staging +
-  gather over `Operators.dg_boundary_connectivity`), so it no longer needs
-  scalar indexing on device arrays.
-
-- Spectral-element grids can be marked as discontinuous-Galerkin function
-  spaces: `SpectralElementGrid1D`/`SpectralElementGrid2D` (and the
-  corresponding `Spaces` constructors) accept `discontinuous = true`. On such
-  grids, `Spaces.weighted_dss!` (and its `start!`/`internal!`/`ghost!` split)
-  is a no-op, `create_dss_buffer` returns `nothing`, and no DSS weights are
-  computed. The new queries `Grids.is_continuous(grid)` /
-  `Spaces.is_continuous(space)` report the discretization, so downstream
-  models can gate DSS on the space itself rather than on the quadrature type.
-  The flag is part of the grid cache key and is serialized by `InputOutput`
-  (grids in files written before it existed read back as continuous).
-  [2599](https://github.com/CliMA/ClimaCore.jl/pull/2599)
-
-- Introduces horizontal discontinuous-Galerkin (DG) operator support. The
-  discretization-generic machinery lives in `src/Operators/numericalflux.jl`:
-  interior- and boundary-face numerical fluxes and symmetric face liftings on
-  pure-2D and extruded (1D and 2D horizontal) spectral-element spaces, the
-  flux-differencing (split-form / FDDG) volume divergence of Souza et al.
-  (2023), and the device-resident `DGConnectivity` face buffer (with
-  CUDA implementations in the `ClimaCoreCUDAExt` extension). A generic flux
-  library lives in `src/Operators/dg_fluxes.jl`: `CentralNumericalFlux`,
+- ![][badge-✨feature/enhancement] Added horizontal discontinuous-Galerkin (DG)
+  operator support. The discretization-generic machinery lives in
+  `src/Operators/numericalflux.jl`: interior- and boundary-face numerical
+  fluxes (`Operators.add_numerical_flux_interior!` and
+  `add_numerical_flux_boundary!`) and symmetric face liftings
+  (`add_lifting_flux_interior!`) on pure-2D and extruded (1D and 2D
+  horizontal) spectral-element spaces, the flux-differencing (split-form /
+  FDDG) volume divergence of Souza et al. (2023), and the device-resident
+  `DGConnectivity` face buffer. A generic flux library lives in
+  `src/Operators/dg_fluxes.jl`: `CentralNumericalFlux`,
   `RusanovNumericalFlux`, central-lifting and jump-penalty face functions, and
   an LDG/SIPG Laplacian for optional scale-selective dissipation.
   Equation-set-specific fluxes (compressible Euler with Cartesian momentum
-  components) are example code. Operator tests are included as part of
-  `test/runtests.jl`.
+  components) are example code. The face operators run on CPU and CUDA (with
+  kernels in the `ClimaCoreCUDAExt` extension) and on distributed (MPI)
+  `Topology2D` spaces, where each rank completes its rank-boundary
+  (`Topologies.ghost_faces`) side through a face-strip halo exchange
+  (`Topologies.GhostFaceExchange`) that ships only the `Nq` face-node values
+  per face. Several operators in one tendency evaluation can share a single
+  exchange by passing the handle returned by
+  `Operators.start_dg_ghost_exchange(args...)` as a leading argument. Covered
+  by 2- and 3-rank CPU and CUDA tests.
+  PRs [2602](https://github.com/CliMA/ClimaCore.jl/pull/2602),
+  [2603](https://github.com/CliMA/ClimaCore.jl/pull/2603)
+
+- ![][badge-✨feature/enhancement] Added the model-level CG↔DG switch
+  `Operators.tendency_completion` / `Operators.complete_tendency!`: a tendency
+  written as an element-local weak form plus one completion call runs on both
+  discretizations, with the completion object built once from the space —
+  `Spaces.weighted_dss!` on continuous spaces, the mass-weighted DG interface
+  (and optional boundary) numerical fluxes on `Grids.DG()` spaces. The tendency
+  may be a `Field` on either discretization, or a `FieldVector` on a continuous
+  one, where the completion is a single batched `Spaces.weighted_dss!` over all
+  components (which must agree on their discretization). On a discontinuous
+  space it must be one `Field` with a composite (e.g. `NamedTuple`) eltype,
+  since the interface numerical flux is evaluated on the whole state at a face
+  node. The CG↔DG Bickley-jet integration test runs one shallow-water tendency
+  on both discretizations through this switch.
+
+- ![][badge-✨feature/enhancement] Added `Operators.Outflow(; order = 0)`, a
+  physically named convenience constructor for advection-operator outflow
+  boundary conditions: it returns `Operators.Extrapolate{order}()`, an
+  order-`order` extrapolation from the interior whose order-0 case is the
+  zero-normal-gradient closure, so `Outflow() === Extrapolate{0}()` and
+  `Outflow(; order = 2) === Extrapolate{2}()`. Additive only; `Extrapolate`
+  remains the numerical primitive and nothing changes for existing code.
+
+- ![][badge-💥breaking] `Operators.AbstractBoundaryCondition` is
+  specialized into `Operators.VerticalBoundaryCondition` (the boundary
+  conditions of the vertical finite-difference operators, e.g. `SetValue`,
+  `Extrapolate`) and `Operators.HorizontalBoundaryCondition` (those of the
+  horizontal DG numerical-flux operators, e.g. `ReflectingWallBC`), so the two
+  families are distinct at the type level. Passing a boundary condition to an
+  operator of the other family now fails at dispatch with an error naming the
+  mismatch. Custom boundary conditions must subtype the family they implement:
+  the finite-difference stencil defaults now dispatch on
+  `VerticalBoundaryCondition`, so a pre-existing direct subtype of
+  `AbstractBoundaryCondition` fails with a `MethodError` (in
+  `left_interior_idx`/`right_interior_idx`) or, when `boundary_width` is
+  undefined, the generic invalid-boundary-condition error.
+
+- ![][badge-✨feature/enhancement] Added the horizontal Laplacian atoms
+  `Operators.scalar_laplacian`, `Operators.scalar_laplacian!` and
+  `Operators.vector_laplacian`, the building blocks of ∇⁴ hyperdiffusion. On
+  continuous (CG) spaces the returning forms give lazy, element-local operator
+  expressions that fuse into consuming broadcasts; materialized intermediates
+  must be made continuous with `Spaces.weighted_dss!` between passes (batch
+  several intermediates into one call to share the ghost exchange). On
+  discontinuous (DG) spaces `scalar_laplacian` includes the interior-penalty
+  face corrections itself and `weighted_dss!` is a no-op, so one calling
+  sequence serves both discretizations (`vector_laplacian` is not yet
+  implemented for DG). `Operators.scalar_laplacian!(out, χ; weight)` writes the
+  result into a caller-owned field and is allocation-free on both
+  discretizations, so it is the form to use in a tendency; `out` may alias `χ`.
+  Each call to the returning `scalar_laplacian` owns its result — freshly
+  allocated on DG — so any number of results may be live at once. On DG the
+  gradient and a materialized lazy argument live in scratch fields keyed on the
+  space's grid (released by the zero-argument `Utilities.Cache.clean_cache!()`),
+  and the in-place `Operators.ldg_laplacian_tendency!` writes the tendency into
+  a caller-owned field. The hybrid example's hyperdiffusion is rewritten on top
+  of these atoms.
+  PR [2606](https://github.com/CliMA/ClimaCore.jl/pull/2606)
+- ![][badge-🚀performance] FieldVector broadcasts on GPU flatten to linear
+  indexing when the destination and every array in the broadcast have the
+  same shape and are `IndexLinear` (dense arrays and contiguous views),
+  bypassing CUDA.jl's N-dimensional Cartesian index computation (measured 3×
+  faster vector updates in a baroclinic-wave benchmark); in-place updates
+  like `x .-= dx` preserve destination identity through the flattening, so
+  they no longer allocate a defensive aliasing copy (previously 7.85 GB of
+  device allocations per step on a 63-level sphere, now zero). CPU broadcasts
+  keep the standard path, which guarantees zero allocations.
+  Spectral-element slab loops reserve half the shared memory per
+  block (`MAX_SUBBLOCK_LAUNCH_THREADS` 256 → 128), and the eager
+  finite-difference kernel packs 128 threads per block and queries the SM
+  count from the device. The environment variables `CLIMA_CUDA_MAX_WAVES`,
+  `CLIMA_FD_MAX_THREADS`, and `CLIMA_DSS_MAX_THREADS` (read once at module
+  load) override launch-tuning defaults for experiments (see
+  `perf/sweep_kernel_configs.jl`). `CLIMA_COLLECT_KERNEL_STATS` toggles the
+  development-only per-launch statistics; it is a compile-time constant (read
+  when the CUDA extension precompiles) so that the statistics block folds away
+  and does not enter the kernel-launch type-stability contract.
+  PR [2606](https://github.com/CliMA/ClimaCore.jl/pull/2606)
+- ![][badge-✨feature/enhancement] Spectral element operators are now evaluated
+  through the slice-loop primitives (`foreach_slab` and the other
+  `DataLayouts.foreach_*` loops), so they can appear inside fused loop bodies
+  alongside pointwise broadcasts: one loop on CPUs and one kernel launch on
+  GPUs per fused body, replacing the hand-written CUDA spectral kernels.
+  Statements in a fused body may read the results of the statements before
+  them, both pointwise and through operators, and temporaries materialized
+  inside a body are stored in per-thread registers. `Restrict` cannot read a
+  register-resident argument on GPUs and now throws an error asking for the
+  argument to be materialized outside the fused loop.
+- ![][badge-🚀performance] Fused spectral element broadcasts compile with
+  lower memory and run faster than the replaced implementation on CPUs, and
+  slightly faster on GPUs.
+
+- ![][badge-💥breaking] The advection operators' boundary treatment has been
+  reworked around a generalized `Extrapolate{N}` boundary condition (also
+  written `Extrapolate(N)`, with `Extrapolate() == Extrapolate{0}()`), which
+  selects how the ghost points reached by the interior stencil are padded:
+  every ghost point of a stencil takes the value extrapolated (with an
+  order-`N` polynomial, `0 <= N <= 2`) from the `N + 1` interior points
+  closest to the boundary, and the order is reduced where the stencil has
+  fewer interior points in range (at a boundary face itself only 2 are in
+  range, so the order there is at most 1; `UpwindBiasedProductC2F`'s 2-point
+  stencil only ever has 1 in range, so every order reduces to closest-value
+  padding for it). `Extrapolate` is now the only boundary condition the
+  advection operators (`UpwindBiasedProductC2F`,
+  `Upwind3rdOrderBiasedProductC2F`, `LinVanLeerC2F`, `FCTBorisBook`,
+  `FCTZalesak`, and `TVDLimitedFluxC2F`) accept, and `Extrapolate{0}` is added
+  to an operator's `bcs` when it is constructed with no boundary conditions.
+  It replaces the one-sided conditions, which remain as deprecated aliases
+  (`FirstOrderOneSided == Extrapolate{0}` and
+  `ThirdOrderOneSided == Extrapolate{1}`). The aliases are **not**
+  numerically identical to the old conditions: the old conditions replaced
+  the whole stencil with fixed one-sided reconstructions at the two faces
+  nearest each boundary, while `Extrapolate` keeps the interior stencil's
+  upwinding and only pads its ghost points. At the face one in from a
+  boundary, the results coincide exactly when the velocity at that face
+  points toward the boundary (the old downwind-biased reconstruction is then
+  also the upwind choice), and differ when it points into the domain: with
+  inflow `v³` at the second-lowest face and centers `x₁, x₂, x₃` counted up
+  from the boundary, `Upwind3rdOrderBiasedProductC2F` with
+  `ThirdOrderOneSided` gave `v³ (4x₁ + 10x₂ - 2x₃) / 12` and now gives
+  `v³ (x₁ + x₂) / 2` with `Extrapolate{1}`, while with `FirstOrderOneSided`
+  it gave the first-order `v³ x₁` and now gives `v³ (2x₁ + x₂) / 3` with
+  `Extrapolate{0}`. At the boundary face itself the old reconstructions
+  reached one center beyond the boundary, so they were only meaningful under
+  an enclosing operator that overrides the boundary face (e.g.
+  `DivergenceF2C` with `SetValue`); `Extrapolate`'s ghost-point padding is
+  well-defined there. User-supplied callable ghost-point reconstructions are
+  no longer accepted. A boundary condition whose keyword name matches neither
+  of the space's vertical boundary names is now an error at broadcast time
+  (previously it was silently ignored), except for the default
+  `(bottom, top)` pair of `Extrapolate{0}`s, which applies at any boundary
+  names. An advection operator is rewritten
+  as an operator-matrix multiply exactly when its interior stencil is linear
+  in the advected argument (`Operators.has_linear_stencil`), with the
+  ghost-point extrapolations folded into its matrix's boundary rows by
+  multiplying the interior row with the matrix of extrapolation weights; all
+  others are evaluated pointwise. Note that `Extrapolate` on
+  `UpwindBiasedProductC2F` also changes meaning: it used to replicate the
+  operator's *output* at the closest interior face (`U(v, x)[1/2] =
+  U(v, x)[3/2]`), while it now pads the ghost *input*, so the boundary face
+  evaluates to `v³[1/2] x[1]`. As before, the flux through the boundary
+  itself should be imposed by the enclosing operator, e.g. `DivergenceF2C`
+  with a `SetValue` boundary.
+
+  On non-periodic domains, this changes results at the two faces nearest each
+  boundary (with the default `Extrapolate{0}` padding):
+  - `LinVanLeerC2F` previously used one-sided first-order upwind
+    reconstructions there; it now uses the ghost-point-padded limited stencil.
+  - `FCTBorisBook` previously returned a zero antidiffusive flux there, and it
+    still does, since the padded ghost points make the one-sided difference on
+    the boundary side vanish, and that difference bounds the corrected flux;
+    its results are unchanged everywhere.
+  - `FCTZalesak` and `TVDLimitedFluxC2F` previously forced their corrected or
+    limited fluxes to zero there; they now compute the ghost-point-padded
+    stencil instead.
+
+  Two operators also change their calling convention. Since an advection
+  operator advects a single center-valued argument, `FCTZalesak` now takes its
+  two advected quantities as a single field with 2-tuple elements:
+  `FCTZalesak.(A, Φ, Φᵗᵈ)` becomes `FCTZalesak.(A, tuple.(Φ, Φᵗᵈ))` (or
+  `FCTZalesak(A, tuple(Φ, Φᵗᵈ))` inside `@.`). Broadcast arguments beyond the
+  velocity and advected field are evaluated at the current face and passed
+  through as is, so `TVDLimitedFluxC2F` now requires its upwinding velocity
+  `𝓊` to be supplied as contravariant data: either a `Contravariant3Vector`
+  field, or a scalar field holding the contravariant3 component, e.g.
+  `Geometry.contravariant3.(u, Fields.local_geometry_field(face_space))`.
+
+  `TVDLimitedFluxC2F`'s slope ratio `r` is now zero whenever the upwind slope
+  is zero, even if the denominator `ϕ₊₁₂ - ϕ₋₁₂ + eps` is also zero (which
+  happens when `ϕ₊₁₂ - ϕ₋₁₂` is exactly `-eps`, e.g. in regions where `ϕ` is
+  flat up to roundoff, and previously produced `NaN` limited fluxes from
+  `0 / 0`). `MatrixFields.operator_matrix` now reports every advection
+  operator with a nonlinear stencil or boundary reconstruction (including
+  `TVDLimitedFluxC2F`, which previously threw a `MethodError`) as a nonlinear
+  operator that cannot be represented by a matrix.
+  [2544](https://github.com/CliMA/ClimaCore.jl/pull/2544)
+
+- ![][badge-🔥behavioralΔ] Broadcasts over the linear one-argument finite
+  difference operators are now evaluated as operator-matrix multiplies:
+  `@. op(arg)` is rewritten to multiply `arg` by `op`'s operator matrix
+  (`MatrixFields.operator_matrix`), with value-fixing boundary conditions
+  reapplied around the multiply by a `SetBoundaryOperator`. Two user-visible
+  consequences:
+  - A center-input operator (`InterpolateC2F`, `GradientC2F`, `DivergenceC2F`,
+    `CurlC2F`, ...) constructed without a boundary condition produces a `NaN`
+    matrix row at each boundary face, so the result there is `NaN`, just as it
+    was on the pointwise stencil path; a forgotten boundary condition is still
+    flagged at run time. This also applies to the explicit
+    `MatrixFields.operator_matrix` API, whose boundary rows for a missing
+    boundary condition were previously **zero**: they are now `NaN` rows.
+  - `CurlC2F` results are now `Contravariant12Vector`s rather than
+    `Contravariant123Vector`s with a structurally zero third component, since
+    its operator matrix's rows produce the two nonzero components of the
+    vertical curl contribution; `SetCurl` boundary values are projected onto
+    the `Contravariant12` axis accordingly. Code that read the `u³` component
+    of a `CurlC2F` result must drop it (it was always zero).
+
+  Columns too short for a stencil's interior (e.g. a center-to-face operator
+  on a single-level column, or a 4-point advection stencil on a 2-level
+  column) are now supported: `Operators.window_bounds` clamps the overlapping
+  boundary windows instead of rejecting them with an `AssertionError`, and
+  every face is computed with the appropriate boundary row (the ghost-point
+  extrapolations reduce their order to the interior points actually in
+  range). When the two boundary windows overlap on such a column, the bottom
+  (left) boundary condition always takes precedence: e.g. a two-sided
+  `SetDivergence` on a single-level column, which prescribes two values for
+  the one output point, applies the bottom value there. On GPUs, finite
+  difference broadcasts over
+  `MultiColumnFiniteDifferenceSpace` now use the eager
+  one-thread-per-level kernel like the extruded and single-column families,
+  instead of falling back to the one-thread-per-value kernel.
+  [2544](https://github.com/CliMA/ClimaCore.jl/pull/2544)
+
+- ![][badge-💥breaking] Removed the `Extrapolate` boundary condition from
+  `GradientF2C`, where it replicated the operator's output at the closest
+  interior point (`G(x)[1] = G(x)[2]`); it remains available on
+  `DivergenceF2C`, where it keeps that replicate-output meaning
+  (`D(v)[1] = D(v)[2]`), and on the interpolation operators `InterpolateC2F`
+  and `WeightedInterpolateC2F`, where it copies the closest interior input.
+  `GradientF2C` now accepts `SetGradient(v₀)`, which prescribes the gradient
+  at the center closest to the boundary (with `v₀` projected onto the
+  covariant 3 axis, as for `GradientC2F`). The finite-difference biased
+  interpolation operators are named for the vertical direction they lean
+  toward: `BottomBiasedC2F` and `BottomBiasedF2C` take the value below a node,
+  `TopBiasedC2F` and `TopBiasedF2C` the value above. `LeftBiasedC2F`,
+  `LeftBiasedF2C`, `RightBiasedC2F`, and `RightBiasedF2C` remain available as
+  compatibility aliases.
+  [2544](https://github.com/CliMA/ClimaCore.jl/pull/2544),
+  [2608](https://github.com/CliMA/ClimaCore.jl/pull/2608)
+
+- ![][badge-💥breaking] Removed unused finite difference operators and boundary
+  conditions [2521](https://github.com/CliMA/ClimaCore.jl/pull/2521)
+  - Removed `SetValue` from `GradientC2F`, `DivergenceC2F`, `CurlC2F` and
+    `UpwindBiasedProductC2F`
+  - Removed `SetGradient` from `InterpolateC2F` and `WeightedInterpolateC2F`
+  - Removed the `AdvectionC2C`, `AdvectionF2F`, `FluxCorrectionC2C` and
+    `FluxCorrectionF2F` operators
+  - Removed the `UpwindBiasedGradient` operator, which had no downstream users
+  - Removed the `LeftBiased3rdOrderC2F`, `LeftBiased3rdOrderF2C`,
+    `RightBiased3rdOrderC2F` and `RightBiased3rdOrderF2C` operators, which had
+    no downstream users (the C2F reconstructions survive as the interior
+    stencil of `Upwind3rdOrderBiasedProductC2F`, which applies the left- or
+    right-biased variant according to the sign of its velocity argument)
+
+  Each of these can be written in terms of the remaining operators and boundary
+  conditions; `test/Operators/finitedifference/unit_column.jl` contains a
+  testset ("Boundary values and advection built from the primitive operators")
+  that pins the replacement expressions for `SetValue` on `GradientC2F`,
+  `DivergenceC2F` and `UpwindBiasedProductC2F`, and for the `AdvectionC2C`,
+  `AdvectionF2F` and `FluxCorrectionC2C` stencils, against the stencil each
+  reproduces (the remaining removals follow the same patterns). For
+  example, a `SetValue(x₀)` boundary on `GradientC2F` is the same as
+  `SetGradient(Covariant3Vector(2 * (x[1] - x₀)))`, and `AdvectionC2C(v, θ)` is
+  `InterpolateF2C()(dot(Contravariant3Vector(v), GradientC2F()(θ)))`. The
+  helper functions `Operators.gradient_c2f_dirichlet`,
+  `Operators.divergence_c2f_dirichlet`, `Operators.curl_c2f_dirichlet` and
+  `Operators.upwind_biased_product_c2f_dirichlet` build the removed `SetValue`
+  replacements automatically (materializing their results, so they are
+  migration aids rather than performance-sensitive building blocks), pass
+  boundary values that are already boundary conditions through unchanged (so a
+  Dirichlet value on one boundary can be combined with an explicit condition
+  on the other), and requesting a `SetValue` from one of the four operators'
+  constructors automatically returns an `Operators.DirichletOperator` that
+  applies the matching helper when broadcast, so existing
+  `GradientC2F(bottom = SetValue(x₀)).(x)`-style code keeps working. The
+  replacement stencil is built lazily, so it fuses into an enclosing broadcast
+  like a true operator application, but each application still materializes
+  any lazy argument (the boundary rows need the argument's boundary levels)
+  along with small level fields holding the boundary rows' values.
+  `MatrixFields.operator_matrix` now reports `LinVanLeerC2F` as a
+  nonlinear operator instead of failing with a `MethodError`.
+
+- The "point cloud" types have been renamed to use the `Multi` prefix:
+  - `Grids.PointCloudGrid` is now `Grids.MultiPointGrid`,
+  - `Grids.ExtrudedPointCloudGrid` is `Grids.ExtrudedMultiPointGrid`,
+  - `Spaces.PointCloudSpace` is now `Spaces.MultiPointSpace`,
+  - `CommonGrids.PointColumnEnsembleGrid` is now `CommonGrids.MultiColumnGrid`,
+  - `CommonSpaces.PointColumnEnsembleSpace` is now
+    `CommonSpaces.MultiColumnSpace`.
+  - The old names are available, but deprecated.
+    [2611](https://github.com/CliMA/ClimaCore.jl/pull/2611)
 
 v0.15.3
 -------
@@ -127,6 +417,7 @@ v0.15.0
   (`Operators.use_fd_shmem()` returns `false`), so default behavior and performance are unchanged.
   Downstream code that opted in by defining `Operators.use_fd_shmem() = true` will no longer
   see any effect from doing so. [2526](https://github.com/CliMA/ClimaCore.jl/pull/2526)
+
 - ![][badge-🔥behavioralΔ] Unified strong/weak spectral element operator variants
   via a `FormType` parameter. `Divergence`, `Gradient`, and `Curl` now carry a
   second type parameter (`StrongForm` or `WeakForm`), and `WeakDivergence`,

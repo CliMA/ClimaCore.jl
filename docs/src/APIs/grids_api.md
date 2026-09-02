@@ -12,6 +12,7 @@ Grids.FiniteDifferenceGrid
 Grids.ExtrudedFiniteDifferenceGrid
 Grids.SpectralElementGrid1D
 Grids.SpectralElementGrid2D
+Grids.MultiPointGrid
 ```
 
 ## Hypsography

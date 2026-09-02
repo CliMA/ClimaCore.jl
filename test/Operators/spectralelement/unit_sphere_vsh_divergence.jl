@@ -48,7 +48,7 @@ const Nq = 4
     positions = unit_sphere_positions(space)
 
     sdiv = Operators.Divergence()
-    wdiv = Operators.WeakDivergence()
+    wdiv = Operators.Divergence{Operators.WeakForm}()
     split_div = Operators.SplitDivergence()
     (lψ, mψ) = (3, 2)
     ψ = ylm_field(lψ, mψ, space)

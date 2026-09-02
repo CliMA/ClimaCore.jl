@@ -32,7 +32,7 @@ function opt_Gradient(field)
 end
 
 function opt_WeakGradient(field)
-    wgrad = Operators.WeakGradient()
+    wgrad = Operators.Gradient{Operators.WeakForm}()
     return wgrad.(field)
 end
 
@@ -42,7 +42,7 @@ function opt_Curl(field)
 end
 
 function opt_WeakCurl(field)
-    wcurl = Operators.WeakCurl()
+    wcurl = Operators.Curl{Operators.WeakForm}()
     return wcurl.(field)
 end
 
@@ -57,7 +57,7 @@ function opt_Divergence(field)
 end
 
 function opt_WeakDivergence(field)
-    wdiv = Operators.WeakDivergence()
+    wdiv = Operators.Divergence{Operators.WeakForm}()
     return wdiv.(field)
 end
 
@@ -66,13 +66,13 @@ opt_VectorDss_Curl(field) = Spaces.weighted_dss!(opt_Curl(field))
 
 function opt_VectorDss_DivGrad(field)
     sdiv = Operators.Divergence()
-    wgrad = Operators.WeakGradient()
+    wgrad = Operators.Gradient{Operators.WeakForm}()
     return Spaces.weighted_dss!(@. wgrad(sdiv(field)))
 end
 
 function opt_ScalarHyperdiffusion(field)
     grad = Operators.Gradient()
-    wdiv = Operators.WeakDivergence()
+    wdiv = Operators.Divergence{Operators.WeakForm}()
     χ = Spaces.weighted_dss!(@. wdiv(grad(field)))
     ∇⁴field = Spaces.weighted_dss!(@. wdiv(grad(χ)))
     return ∇⁴field
@@ -80,10 +80,10 @@ end
 
 function opt_VectorHyperdiffusion(field)
     scurl = Operators.Curl()
-    wcurl = Operators.WeakCurl()
+    wcurl = Operators.Curl{Operators.WeakForm}()
 
     sdiv = Operators.Divergence()
-    wgrad = Operators.WeakGradient()
+    wgrad = Operators.Gradient{Operators.WeakForm}()
 
     χ = Spaces.weighted_dss!(
         @. wgrad(sdiv(field)) - Geometry.Covariant12Vector(

@@ -80,13 +80,13 @@ base_test_state() = shallow_water_state(
 
     rc = similar(y)
     fill!(parent(rc), 0)
-    Operators.add_numerical_flux_internal!(central, rc, y, params)
+    Operators.add_numerical_flux_interior!(central, rc, y, params)
     scale = maximum(abs, parent(rc))
 
     for numflux in (rusanov, roe)
         r = similar(y)
         fill!(parent(r), 0)
-        Operators.add_numerical_flux_internal!(numflux, r, y, params)
+        Operators.add_numerical_flux_interior!(numflux, r, y, params)
         # numerical flux = central + dissipation(jump); the jump is (near) zero
         # for a single-valued state, so the dissipation must vanish.
         @test maximum(abs, parent(r) .- parent(rc)) < 1e-10 * scale
@@ -103,7 +103,7 @@ end
     for numflux in (rusanov, roe)
         r = similar(y)
         fill!(parent(r), 0)
-        Operators.add_numerical_flux_internal!(numflux, r, y, params)
+        Operators.add_numerical_flux_interior!(numflux, r, y, params)
         # ρ and ρθ are advected scalars: each interface adds ∓sWJ·flux to its two
         # nodes, and these equal-and-opposite contributions cancel in the global
         # sum, so each scalar is globally conserved (total node sum is zero). (ρu

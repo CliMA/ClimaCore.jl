@@ -343,8 +343,8 @@ function _slice_along(field, coord)
     ortho_field = Fields.Field(eltype(field), space_ortho)
 
     # copy the data into this field for the given node idx for all elements intersecting slice coord
-    field_data = ClimaCore.Fields.todata(field)
-    ortho_data = ClimaCore.Fields.todata(ortho_field)
+    field_data = ClimaCore.Fields.field_values(field)
+    ortho_data = ClimaCore.Fields.field_values(ortho_field)
 
     for i in 1:size(linear_idx, axis == 1 ? 2 : 1)
         for v in 1:ClimaCore.Spaces.nlevels(space_ortho)

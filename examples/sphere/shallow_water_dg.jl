@@ -202,7 +202,7 @@ function rhs!(dY, y, _, t)
         dh_mw,
         state,
     )
-    Operators.add_numerical_flux_internal!(
+    Operators.add_numerical_flux_interior!(
         Operators.kennedy_gruber_rusanov_height,
         dh_mw,
         state,

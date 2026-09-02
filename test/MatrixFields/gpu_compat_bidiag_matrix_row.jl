@@ -63,8 +63,8 @@ foreach(field -> fill!(parent(field), 0), values(c))
 ᶜlat = Fields.coordinate_field(cspace).lat
 @. c.ᶜu₃ʲ = C3(ᶜlat)
 
-const ᶜleft_bias = Operators.LeftBiasedF2C()
-const ᶜright_bias = Operators.RightBiasedF2C()
+const ᶜleft_bias = Operators.BottomBiasedF2C()
+const ᶜright_bias = Operators.TopBiasedF2C()
 const ᶜleft_bias_matrix = MatrixFields.operator_matrix(ᶜleft_bias)
 const ᶜright_bias_matrix = MatrixFields.operator_matrix(ᶜright_bias)
 

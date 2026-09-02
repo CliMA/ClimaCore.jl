@@ -1,7 +1,27 @@
-import UnrolledUtilities: unrolled_all, unrolled_allequal, unrolled_flatmap
+import UnrolledUtilities: unrolled_map, unrolled_all, unrolled_allequal, unrolled_flatmap
+import CUDA: LLVM # Used by shmem_pointer to emit a shared-memory global.
 
 const THREADS_PER_WARP = 32
 const MAX_WARPS_PER_BLOCK = 32
+
+# Smallest sub-block that a slice loop can assign a slice to, and therefore the
+# last stop before ThisThread in the chain of scopes that slice_subscope
+# descends through; see partition(::ThisSubBlock) below.
+const MIN_THREADS_PER_SUBBLOCK = 2
+
+# Cap on the number of threads in a block that assigns one slice to each of
+# its sub-blocks. A sub-block's shared memory is allocated for the largest
+# number of sub-blocks a block can hold (see scoped_static_array below), and
+# that allocation is compiled into the kernel before its launch configuration
+# is known, so the two have to agree on a bound. Without a cap the bound is a
+# full 1024-thread block, which makes every slab loop reserve eight times the
+# shared memory it can use -- and shared memory is what limits the occupancy
+# of spectral element kernels. A cap of 128 reserves half the shared memory
+# per block of a 256-thread bound, which raised occupancy and measured faster
+# on an A100 baroclinic wave (h_elem = 30, z_elem = 63). Slabs with more
+# points than the cap fall back to multiple points per thread (see
+# DataLayouts.slice_subscope).
+const MAX_SUBBLOCK_LAUNCH_THREADS = 128
 
 # To reduce latency, only check device attributes before the first launch.
 const DEVICE_ASSUMPTIONS_CHECKED = Ref(false)
@@ -49,9 +69,15 @@ Support for multidimensional grids may be added in a future release.
 """
 struct ThisKernel <: DataLayouts.DataScope end
 
-@inline DataLayouts.partition(::ThisKernel) = ThisBlock()
-@inline DataLayouts.num_partitions(::ThisKernel) = CUDA.gridDim().x
-@inline DataLayouts.partition_rank(::ThisKernel) = CUDA.blockIdx().x
+# A kernel is partitioned into sub-blocks of MAX_SUBBLOCK_LAUNCH_THREADS threads
+# rather than into blocks, so that every scope in the chain that slice_subscope
+# descends through has a compile-time thread count (see static_num_threads
+# below): DataLayouts.register_similar needs that count to be constant to size a
+# thread's register storage, and a dynamically-sized ThisBlock at the top of the
+# chain would make it a run-time value for every slice with more than
+# THREADS_PER_WARP points. ThisBlock stays a subscope of ThisKernel even though
+# it is not part of the static partitioning chain; it is the scope of every
+# shared-memory allocation (see DataScope(::Type{<:CUDA.CuDeviceArray}) above).
 @inline DataLayouts.num_threads(::ThisKernel) = CUDA.gridDim().x * CUDA.blockDim().x
 @inline DataLayouts.thread_rank(::ThisKernel) =
     (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
@@ -79,14 +105,50 @@ Support for multidimensional blocks may be added in a future release.
 """
 struct ThisBlock <: ThisCooperativeGroup end
 
-@inline DataLayouts.partition(::ThisBlock) = DataLayouts.ThisThread()
-@inline DataLayouts.num_partitions(::ThisBlock) = CUDA.blockDim().x
-@inline DataLayouts.partition_rank(::ThisBlock) = CUDA.threadIdx().x
+# A block is partitioned into warps rather than into individual threads, so that
+# slice_subscope can descend past ThisBlock and give a slice with no more points
+# than a warp has lanes a group of exactly that many threads. Partitioning
+# straight into threads makes num_threads(partition(ThisBlock())) equal to 1,
+# which stops the descent at ThisBlock for every slice with more than one point:
+# a 4x4 GLL slab then occupies a whole 16-thread block, wasting half of the
+# block's only warp and capping occupancy at the hardware limit of 32 blocks per
+# multiprocessor (512 of 2048 threads), instead of packing 16 slabs into one
+# 256-thread block. Beyond a warp there is nothing to gain.
+@inline DataLayouts.partition(::ThisBlock) = ThisWarp()
 @inline DataLayouts.num_threads(::ThisBlock) = CUDA.blockDim().x
 @inline DataLayouts.thread_rank(::ThisBlock) = CUDA.threadIdx().x
 @inline DataLayouts.synchronize(::ThisBlock) = CUDA.sync_threads()
+
+# Equal sizes invariant: two static shared-memory allocations are given the
+# same memory only when they ask for the same number of bytes. Separately
+# compiled allocations share whenever their globals have the same name, at the
+# size of whichever module merged first; CUDA.CuStaticSharedArray names every
+# global "shmem", so unequal allocations can share and write out of bounds.
+# Putting the byte size in the name (this is otherwise CuStaticSharedArray's
+# llvmcall) lets only EQUAL allocations share, so the buffer reuse invariant in
+# Operators/spectralelement.jl has to hold for every equally sized pair.
+@generated function shmem_pointer(::Type{T}, ::Val{bytes}) where {T, bytes}
+    LLVM.@dispose ctx = LLVM.Context() begin
+        pointer_type = convert(LLVM.LLVMType, Core.LLVMPtr{T, CUDA.AS.Shared})
+        llvm_f, _ = LLVM.Interop.create_function(pointer_type)
+        array_type = LLVM.ArrayType(LLVM.Int8Type(), bytes)
+        global_var = LLVM.GlobalVariable(
+            LLVM.parent(llvm_f), array_type, "shmem_$(bytes)B", CUDA.AS.Shared)
+        LLVM.linkage!(global_var, LLVM.API.LLVMInternalLinkage)
+        LLVM.initializer!(global_var, LLVM.null(array_type))
+        LLVM.alignment!(global_var, max(32, Base.datatype_alignment(T)))
+        LLVM.@dispose builder = LLVM.IRBuilder() begin
+            LLVM.position!(builder, LLVM.BasicBlock(llvm_f, "entry"))
+            zeros = [LLVM.ConstantInt(0), LLVM.ConstantInt(0)]
+            first_byte = LLVM.gep!(builder, array_type, global_var, zeros)
+            LLVM.ret!(builder, LLVM.bitcast!(builder, first_byte, pointer_type))
+        end
+        LLVM.Interop.call_function(llvm_f, Core.LLVMPtr{T, CUDA.AS.Shared})
+    end
+end
 @inline DataLayouts.scoped_static_array(::ThisBlock, ::Type{T}, dims) where {T} =
-    CUDA.CuStaticSharedArray(T, dims)
+    CUDA.CuDeviceArray{T, length(dims), CUDA.AS.Shared}(
+        shmem_pointer(T, Val(prod(dims) * sizeof(T))), (dims...,))
 
 """
     ThisSubBlock{N}()
@@ -104,14 +166,24 @@ Operations that require dynamically-sized array allocations are not supported.
 """
 const ThisWarp = ThisSubBlock{THREADS_PER_WARP}
 
+# Sub-blocks are halved until they hold MIN_THREADS_PER_SUBBLOCK threads, which
+# are partitioned into single threads. Halving keeps every sub-block aligned
+# with the lanes of a warp, which thread_rank and synchronize below rely on.
 @inline DataLayouts.partition(::ThisSubBlock{N}) where {N} =
-    N < 4 ? DataLayouts.ThisThread() : ThisSubBlock{N ÷ 2}()
+    N <= MIN_THREADS_PER_SUBBLOCK ? DataLayouts.ThisThread() : ThisSubBlock{N ÷ 2}()
 @inline DataLayouts.num_threads(::ThisSubBlock{N}) where {N} = N
+@inline DataLayouts.static_num_threads(::ThisSubBlock{N}) where {N} = N
 @inline DataLayouts.thread_rank(::ThisSubBlock{N}) where {N} =
     N > THREADS_PER_WARP ? (DataLayouts.thread_rank(ThisBlock()) - 1) % N + 1 :
     N < THREADS_PER_WARP ? (CUDA.laneid() - 1) % N + 1 : CUDA.laneid()
 @inline DataLayouts.synchronize(::ThisSubBlock{N}) where {N} =
     N > THREADS_PER_WARP ? DataLayouts.synchronize(ThisBlock()) : CUDA.sync_warp()
+
+@inline DataLayouts.partition(::ThisKernel) =
+    ThisSubBlock{MAX_SUBBLOCK_LAUNCH_THREADS}()
+@inline DataLayouts.is_subscope(::ThisBlock, ::ThisKernel) = true
+@inline DataLayouts.num_subscopes(::ThisBlock, ::ThisKernel) = CUDA.gridDim().x
+@inline DataLayouts.subscope_rank(::ThisBlock, ::ThisKernel) = CUDA.blockIdx().x
 
 @inline DataLayouts.is_subscope(::ThisSubBlock, ::ThisBlock) = true
 @inline DataLayouts.num_subscopes(::ThisSubBlock{N}, ::ThisBlock) where {N} =
@@ -119,13 +191,39 @@ const ThisWarp = ThisSubBlock{THREADS_PER_WARP}
 @inline DataLayouts.subscope_rank(::ThisSubBlock{N}, ::ThisBlock) where {N} =
     cld(CUDA.threadIdx().x, N)
 
-# Assign threads in a sub-block one slice of an array shared across their block.
+# Largest block that a slice loop assigning every slice to this subscope may be
+# launched with, before DataLayouts.subscope_launch_threads rounds it down to a
+# whole number of sub-blocks.
+#
+# ONE WIDE SUB-BLOCK PER BLOCK. A sub-block of at most a warp has a barrier of
+# its own (sync_warp), independent of every other warp in the block, so a
+# block may hold as many such sub-blocks as MAX_SUBBLOCK_LAUNCH_THREADS
+# allows. A wider sub-block has no barrier of its own and is synchronized with
+# the block-wide sync_threads instead (see synchronize(::ThisSubBlock) above),
+# so a block must hold exactly one of them: two sub-blocks in one block are
+# given consecutive ranks by subscope_indices, which hands rank r the strided
+# subset r:n:num_slices of the loop's slices, and those subsets differ in
+# length by one whenever num_slices is not a multiple of n. The sub-block with
+# the extra slice then
+# reaches that round's barriers after its neighbours have already returned from
+# the kernel, and sync_threads reached by only part of a block is undefined
+# behavior. Giving each wide sub-block a block of its own makes the block-wide
+# barrier exactly the sub-block's barrier, and makes subscope_rank(scope,
+# ThisBlock()) always one, so the shared memory below holds a single sub-block's
+# worth of values instead of MAX_SUBBLOCK_LAUNCH_THREADS ÷ N of them.
+@inline max_subblock_launch_threads(::ThisSubBlock{N}) where {N} =
+    N > THREADS_PER_WARP ? N : MAX_SUBBLOCK_LAUNCH_THREADS
+
+# Assign threads in a sub-block one slice of an array shared across their
+# block. The sub-block count comes from max_subblock_launch_threads, the cap
+# on a sub-block slice loop's block size, rather than from
+# num_subscopes(scope, ThisWarp()): a warp is a subscope of a ThisSubBlock{N}
+# with N > THREADS_PER_WARP and not the other way around, so that call throws
+# an InvalidSubscopeError for wide sub-blocks.
 @inline function DataLayouts.scoped_static_array(
-    scope::ThisSubBlock,
-    ::Type{T},
-    dims,
-) where {T}
-    max_subblocks = MAX_WARPS_PER_BLOCK * DataLayouts.num_subscopes(scope, ThisWarp())
+    scope::ThisSubBlock{N}, ::Type{T}, dims,
+) where {N, T}
+    max_subblocks = cld(max_subblock_launch_threads(scope), N)
     array = DataLayouts.scoped_static_array(ThisBlock(), T, (dims..., max_subblocks))
     subblock_index = DataLayouts.subscope_rank(scope, ThisBlock())
     return @inbounds view(array, ntuple(Returns(:), Val(length(dims)))..., subblock_index)
@@ -166,7 +264,7 @@ Base.@propagate_inbounds @inline function DataLayouts.subscope_indices(
 )
     rank = CUDA.blockIdx().x
     n = CUDA.gridDim().x
-    view_range = rank:n:length(indices)
+    view_range = DataLayouts.strided_range(rank, n, length(indices))
     return DataLayouts.subscope_index_view(ThisKernel(), indices, view_range)
 end
 
@@ -180,9 +278,9 @@ end
 
 @inline function DataLayouts.subscope_index_view(
     ::Union{ThisKernel, ThisCooperativeGroup},
-    indices::DataLayouts.StridedCartesianIndices{I, V},
+    indices::DataLayouts.StridedCartesianIndices,
     view_range,
-) where {I, V}
+)
     new_range = indices.view_range[view_range]
     return DataLayouts.StridedCartesianIndices(indices.indices, new_range)
 end

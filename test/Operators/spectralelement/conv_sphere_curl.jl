@@ -19,7 +19,7 @@ radius = FT(1)
 domain = Domains.SphereDomain(radius)
 
 scurl = Operators.Curl()
-wcurl = Operators.WeakCurl()
+wcurl = Operators.Curl{Operators.WeakForm}()
 
 @testset "curl" begin
     Ne = 7

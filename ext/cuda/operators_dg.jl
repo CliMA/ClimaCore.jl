@@ -1,12 +1,12 @@
 #=
-CUDA implementations of the DG internal-face and flux-differencing volume
+CUDA implementations of the DG interior-face and flux-differencing volume
 operators (see src/Operators/numericalflux.jl for the CPU methods and the
 operator contracts).
 
 Kernel design:
 - Flux-differencing volume (`_add_flux_differencing_divergence!`), element-local.
-- Internal-face fluxes (`_add_numerical_flux_internal!`,
-  `_add_lifting_flux_internal!`): two-pass staging + gather, follows `DSS` GPU kernels.
+- Interior-face fluxes (`_add_numerical_flux_interior!`,
+  `_add_lifting_flux_interior!`): two-pass staging + gather, follows `DSS` GPU kernels.
 - Ghost (inter-rank) faces: face-strip halo exchange
   (`Topologies.GhostFaceExchange`, one pack kernel per argument) started
   before the interior kernels (overlapping communication with compute), then
@@ -20,6 +20,12 @@ Kernel design:
 import ClimaCore: Operators, Topologies, Quadratures, Grids, DataLayouts
 import ClimaCore.Operators: DGConnectivity
 import UnrolledUtilities: unrolled_map
+
+# Block size of the face flux, pack, and gather kernels. They are small,
+# memory-bound, and use no shared memory, so 128-thread blocks (4 warps) keep
+# the launch fine-grained enough to spread the (v, q, f)-ordered work across
+# SMs, matching the 128-thread caps used elsewhere for occupancy.
+const DG_FACE_BLOCK_THREADS = 128
 
 # ---------------------------------------------------------------------------
 # Flux-differencing volume divergence
@@ -35,11 +41,10 @@ function Operators._add_flux_differencing_divergence!(
     grid = Spaces.grid(space)
     if grid isa Grids.ExtrudedFiniteDifferenceGrid
         @assert grid.horizontal_grid isa Grids.SpectralElementGrid2D
-        Nv = Spaces.nlevels(space)
     else
         @assert grid isa Grids.SpectralElementGrid2D
-        Nv = 1
     end
+    Nv = Spaces.nlevels(space)
     quadrature_style = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
     FT = Spaces.undertype(space)
@@ -97,24 +102,24 @@ function dg_fddg_volume_kernel!(
 end
 
 # ---------------------------------------------------------------------------
-# Internal-face numerical flux and symmetric lifting (staging + gather)
+# Interior-face numerical flux and symmetric lifting (staging + gather)
 # ---------------------------------------------------------------------------
 
-Operators._add_numerical_flux_internal!(
+Operators._add_numerical_flux_interior!(
     ::ClimaComms.CUDADevice,
+    ghost_exchange,
     fn::F,
     dydt,
-    args...;
-    ghost_exchange = nothing,
-) where {F} = _dg_face_apply!(fn, dydt, args, Val(:numflux); ghost_exchange)
+    args...,
+) where {F} = _dg_face_apply!(ghost_exchange, fn, dydt, args, Val(:numflux))
 
-Operators._add_lifting_flux_internal!(
+Operators._add_lifting_flux_interior!(
     ::ClimaComms.CUDADevice,
+    ghost_exchange,
     fn::F,
     dydt,
-    args...;
-    ghost_exchange = nothing,
-) where {F} = _dg_face_apply!(fn, dydt, args, Val(:lifting); ghost_exchange)
+    args...,
+) where {F} = _dg_face_apply!(ghost_exchange, fn, dydt, args, Val(:lifting))
 
 # The face-strip halo exchange starts before the interior-face kernels, so the
 # communication overlaps with the interior compute; each argument is packed by
@@ -128,27 +133,35 @@ function Operators._start_dg_ghost_exchange_handle(
     topology = Spaces.topology(space)
     ClimaComms.context(topology) isa ClimaComms.SingletonCommsContext &&
         return Operators.NO_DG_GHOST_EXCHANGE
-    grid = Spaces.grid(space)
-    Nv =
-        grid isa Grids.ExtrudedFiniteDifferenceGrid ? Spaces.nlevels(space) :
-        1
+    Nv = Spaces.nlevels(space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     args_data =
         unrolled_map(a -> a isa Fields.Field ? Fields.field_values(a) : a, args)
     bufs = ntuple(Val(length(args_data))) do i
         a = args_data[i]
         a isa DataLayouts.DataLayout || return nothing
-        ex = Operators._dg_face_exchange(space, a, i)
-        isnothing(ex) && return nothing
+        Operators._dg_face_exchange(space, a, i)
+    end
+    Operators._claim_dg_face_exchanges!(bufs)
+    foreach(ntuple(identity, Val(length(args_data)))) do i
+        ex = bufs[i]
+        isnothing(ex) && return
         nstrips = length(ex.slot_lidx)
-        p = linear_partition(Nq * Nv * nstrips, _max_threads_cuda())
+        p = linear_partition(Nv * Nq * nstrips, DG_FACE_BLOCK_THREADS)
         auto_launch!(
             dg_face_pack_kernel!,
-            (ex.send_data, a, ex.slot_lidx, ex.slot_face, Val(Nq), Nv, nstrips);
+            (
+                ex.send_data,
+                args_data[i],
+                ex.slot_lidx,
+                ex.slot_face,
+                Val(Nq),
+                Nv,
+                nstrips,
+            );
             threads_s = p.threads,
             blocks_s = p.blocks,
         )
-        ex
     end
     # MPI reads the device-side send buffers on the host timeline, so the
     # pack kernels must have completed (the DSS-start pattern).
@@ -164,23 +177,16 @@ Operators._dg_shared_or_start(
     ::Nothing,
 ) = Operators._start_dg_ghost_exchange_handle(device, space, args)
 
-function _dg_face_apply!(
-    fn::F,
-    dydt,
-    args,
-    mode::Val;
-    ghost_exchange = nothing,
-) where {F}
+function _dg_face_apply!(ghost_exchange, fn::F, dydt, args, mode::Val) where {F}
     space = axes(dydt)
     topology = Spaces.topology(space)
     grid = Spaces.grid(space)
     if grid isa Grids.ExtrudedFiniteDifferenceGrid
         @assert grid.horizontal_grid isa Grids.SpectralElementGrid2D
-        Nv = Spaces.nlevels(space)
     else
         @assert grid isa Grids.SpectralElementGrid2D
-        Nv = 1
     end
+    Nv = Spaces.nlevels(space)
     quadrature_style = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
     conn = Operators.dg_connectivity(space)
@@ -206,8 +212,8 @@ function _dg_face_apply!(
         nsides = mode isa Val{:lifting} ? 2 : 1
         staging = Operators._dg_staging_buffer(space, T, nsides, conn.nfaces)
 
-        nitemsA = Nq * Nv * conn.nfaces
-        pA = linear_partition(nitemsA, _max_threads_cuda())
+        nitemsA = Nv * Nq * conn.nfaces
+        pA = linear_partition(nitemsA, DG_FACE_BLOCK_THREADS)
         auto_launch!(
             dg_face_flux_kernel!,
             (
@@ -226,7 +232,7 @@ function _dg_face_apply!(
         )
 
         nitemsB = conn.nbnodes * Nv
-        pB = linear_partition(nitemsB, _max_threads_cuda())
+        pB = linear_partition(nitemsB, DG_FACE_BLOCK_THREADS)
         auto_launch!(
             dg_face_gather_kernel!,
             (
@@ -262,8 +268,8 @@ function _dg_face_apply!(
         # with the ghost gather map, whose contributions are all side 1.
         gstaging = Operators._dg_ghost_staging_buffer(space, T, gconn.nfaces)
 
-        nitemsC = Nq * Nv * gconn.nfaces
-        pC = linear_partition(nitemsC, _max_threads_cuda())
+        nitemsC = Nv * Nq * gconn.nfaces
+        pC = linear_partition(nitemsC, DG_FACE_BLOCK_THREADS)
         auto_launch!(
             dg_ghost_face_flux_kernel!,
             (
@@ -282,7 +288,7 @@ function _dg_face_apply!(
         )
 
         nitemsD = gconn.nbnodes * Nv
-        pD = linear_partition(nitemsD, _max_threads_cuda())
+        pD = linear_partition(nitemsD, DG_FACE_BLOCK_THREADS)
         auto_launch!(
             dg_face_gather_kernel!,
             (
@@ -317,8 +323,8 @@ Base.@propagate_inbounds function _dg_flux_minus(
     faces,
     sgeom,
     ::Val{Nq},
-    q,
     v,
+    q,
     f,
 ) where {Nq}
     elem⁻ = Int(faces[1, f])
@@ -333,7 +339,7 @@ Base.@propagate_inbounds function _dg_flux_minus(
         a -> a isa DataLayouts.DataLayout ? a[CI(v, i⁻, j⁻, elem⁻)] : a,
         args_data,
     )
-    return sgeom[q, v, f], argvals⁻, idx⁺, i⁺, j⁺
+    return sgeom[v, q, f], argvals⁻, idx⁺, i⁺, j⁺
 end
 
 Base.@propagate_inbounds function dg_face_flux_kernel!(
@@ -348,10 +354,10 @@ Base.@propagate_inbounds function dg_face_flux_kernel!(
     mode,
 ) where {F, Nq}
     gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
-    @inbounds if gidx ≤ Nq * Nv * nfaces
-        (q, v, f) = Utilities.cart_ind((Nq, Nv, nfaces), gidx).I
+    @inbounds if gidx ≤ Nv * Nq * nfaces
+        (v, q, f) = Utilities.cart_ind((Nv, Nq, nfaces), gidx).I
         sg, argvals⁻, elem⁺, i⁺, j⁺ =
-            _dg_flux_minus(args_data, faces, sgeom, Val(Nq), q, v, f)
+            _dg_flux_minus(args_data, faces, sgeom, Val(Nq), v, q, f)
         CI = CartesianIndex
         argvals⁺ = unrolled_map(
             a -> a isa DataLayouts.DataLayout ? a[CI(v, i⁺, j⁺, elem⁺)] : a,
@@ -359,12 +365,12 @@ Base.@propagate_inbounds function dg_face_flux_kernel!(
         )
         if mode isa Val{:numflux}
             val = fn(sg.normal, argvals⁻, argvals⁺)
-            staging[q, v, 1, f] = Operators._fd_scale(sg.sWJ, val)
+            staging[v, q, 1, f] = Operators._fd_scale(sg.sWJ, val)
         else
             lift⁻ = fn(sg.normal, argvals⁻, argvals⁺)
             lift⁺ = fn(-sg.normal, argvals⁺, argvals⁻)
-            staging[q, v, 1, f] = Operators._fd_scale(sg.sWJ, lift⁻)
-            staging[q, v, 2, f] = Operators._fd_scale(sg.sWJ, lift⁺)
+            staging[v, q, 1, f] = Operators._fd_scale(sg.sWJ, lift⁻)
+            staging[v, q, 2, f] = Operators._fd_scale(sg.sWJ, lift⁺)
         end
     end
     return nothing
@@ -384,8 +390,8 @@ function dg_face_pack_kernel!(
     nstrips,
 ) where {Nq}
     gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
-    if gidx ≤ Nq * Nv * nstrips
-        (q, v, s) = Utilities.cart_ind((Nq, Nv, nstrips), gidx).I
+    if gidx ≤ Nv * Nq * nstrips
+        (v, q, s) = Utilities.cart_ind((Nv, Nq, nstrips), gidx).I
         i, j = Topologies.face_node_index(Int(slot_face[s]), Nq, q, false)
         CI = CartesianIndex
         send_data[CI(v, q, 1, s)] = data[CI(v, i, j, Int(slot_lidx[s]))]
@@ -414,10 +420,10 @@ function dg_ghost_face_flux_kernel!(
     nfaces,
 ) where {F, Nq}
     gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
-    if gidx ≤ Nq * Nv * nfaces
-        (q, v, f) = Utilities.cart_ind((Nq, Nv, nfaces), gidx).I
+    if gidx ≤ Nv * Nq * nfaces
+        (v, q, f) = Utilities.cart_ind((Nv, Nq, nfaces), gidx).I
         sg, argvals⁻, slot, _i⁺, _j⁺ =
-            _dg_flux_minus(args_data, faces, sgeom, Val(Nq), q, v, f)
+            _dg_flux_minus(args_data, faces, sgeom, Val(Nq), v, q, f)
         reversed = faces[5, f] == Int32(1)
         q′ = reversed ? Nq - q + 1 : q
         CI = CartesianIndex
@@ -426,7 +432,7 @@ function dg_ghost_face_flux_kernel!(
             args_data,
             recv_data,
         )
-        staging[q, v, 1, f] =
+        staging[v, q, 1, f] =
             Operators._fd_scale(sg.sWJ, fn(sg.normal, argvals⁻, argvals⁺))
     end
     return nothing
@@ -459,7 +465,7 @@ function dg_face_gather_kernel!(
             q = Int(contrib_q[c])
             side = Int(contrib_side[c])
             if mode isa Val{:numflux}
-                s = staging[q, v, 1, f]
+                s = staging[v, q, 1, f]
                 # minus side subtracts, plus side adds (antisymmetric flux)
                 acc = Operators._fd_add(
                     acc,
@@ -467,7 +473,7 @@ function dg_face_gather_kernel!(
                 )
             else
                 # symmetric lifting: each side adds its own lift
-                acc = Operators._fd_add(acc, staging[q, v, side, f])
+                acc = Operators._fd_add(acc, staging[v, q, side, f])
             end
         end
         dydt_data[I] = acc
@@ -493,11 +499,10 @@ function _dg_boundary_apply!(fn::F, dydt, args) where {F}
     grid = Spaces.grid(space)
     if grid isa Grids.ExtrudedFiniteDifferenceGrid
         @assert grid.horizontal_grid isa Grids.SpectralElementGrid2D
-        Nv = Spaces.nlevels(space)
     else
         @assert grid isa Grids.SpectralElementGrid2D
-        Nv = 1
     end
+    Nv = Spaces.nlevels(space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
 
     dydt_data = Fields.field_values(dydt)
@@ -506,8 +511,8 @@ function _dg_boundary_apply!(fn::F, dydt, args) where {F}
     T = eltype(dydt_data)
     staging = Operators._dg_boundary_staging_buffer(space, T, bconn.nfaces)
 
-    nitemsA = Nq * Nv * bconn.nfaces
-    pA = linear_partition(nitemsA, _max_threads_cuda())
+    nitemsA = Nv * Nq * bconn.nfaces
+    pA = linear_partition(nitemsA, DG_FACE_BLOCK_THREADS)
     auto_launch!(
         dg_boundary_face_flux_kernel!,
         (staging, fn, args_data, bconn.faces, bconn.sgeom, Val(Nq), Nv, bconn.nfaces);
@@ -519,7 +524,7 @@ function _dg_boundary_apply!(fn::F, dydt, args) where {F}
     # the boundary accumulation `dydt -= sWJ * fn(n̂, ·⁻)` (all boundary
     # contributions are side 1).
     nitemsB = bconn.nbnodes * Nv
-    pB = linear_partition(nitemsB, _max_threads_cuda())
+    pB = linear_partition(nitemsB, DG_FACE_BLOCK_THREADS)
     auto_launch!(
         dg_face_gather_kernel!,
         (
@@ -556,8 +561,8 @@ function dg_boundary_face_flux_kernel!(
     nfaces,
 ) where {F, Nq}
     gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
-    if gidx ≤ Nq * Nv * nfaces
-        (q, v, f) = Utilities.cart_ind((Nq, Nv, nfaces), gidx).I
+    if gidx ≤ Nv * Nq * nfaces
+        (v, q, f) = Utilities.cart_ind((Nv, Nq, nfaces), gidx).I
         elem⁻ = Int(faces[1, f])
         face⁻ = Int(faces[2, f])
         i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
@@ -566,8 +571,8 @@ function dg_boundary_face_flux_kernel!(
             a -> a isa DataLayouts.DataLayout ? a[CI(v, i⁻, j⁻, elem⁻)] : a,
             args_data,
         )
-        sg = sgeom[q, v, f]
-        staging[q, v, 1, f] =
+        sg = sgeom[v, q, f]
+        staging[v, q, 1, f] =
             Operators._fd_scale(sg.sWJ, fn(sg.normal, argvals⁻))
     end
     return nothing
@@ -610,7 +615,7 @@ function dg_tensor_product_kernel!(
     Nv,
 ) where {Nij, Nvt}
     S = eltype(out)
-    work = CUDA.CuStaticSharedArray(S, (Nij, Nij, Nvt))
+    work = DataLayouts.scoped_static_array(ThisBlock(), S, (Nij, Nij, Nvt))
     i = threadIdx().x
     j = threadIdx().y
     k = threadIdx().z
@@ -620,7 +625,7 @@ function dg_tensor_product_kernel!(
     if v ≤ Nv
         work[i, j, k] = indata[CI(v, i, j, h)]
     end
-    CUDA.sync_threads()
+    DataLayouts.synchronize(ThisBlock())
     if v ≤ Nv
         r = Operators._fd_scale(M[i, 1] * M[j, 1], work[1, 1, k])
         for jj in 1:Nij, ii in 1:Nij

@@ -19,6 +19,11 @@ import ClimaCore.Geometry: ⊗
 # (weak divergence completed by a Rusanov interface flux), checking total mass
 # conservation and numerical stability for Float32 and Float64.
 #
+# One tendency function serves both discretizations: the CG↔DG switch is the
+# space (`discretization = Spaces.DG()` at grid construction) plus the
+# `Operators.tendency_completion` object built from it, which applies DSS on
+# the CG space and the interface numerical flux on the DG space.
+#
 # Both forms build their divergence from the same physical flux function
 # `sw_flux` (components in the local orthonormal (U, V) basis, as in
 # examples/bickleyjet/): the operators apply the metric transform to
@@ -62,28 +67,13 @@ end
 # Upper bound on the normal signal speed |u ⋅ n| + √(g ρ).
 sw_wavespeed(state, p) = sqrt(p.g * state.ρ) + norm(state.ρu / state.ρ)
 
-function shallow_water_rhs_cg!(dydt, y, (space, params), t)
-    wdiv = Operators.WeakDivergence()
+# The element-local weak divergence, completed across element interfaces by
+# the completion object (DSS on CG, Rusanov interface flux on DG).
+function shallow_water_rhs!(dydt, y, (params, completion), t)
+    wdiv = Operators.Divergence{Operators.WeakForm}()
     rparams = Ref(params)
     @. dydt = -wdiv(sw_flux(y, rparams))
-    Spaces.weighted_dss!(dydt)
-    return dydt
-end
-
-function shallow_water_rhs_dg!(dydt, y, (space, params, numflux), t)
-    wdiv = Operators.WeakDivergence()
-    lgeom = Fields.local_geometry_field(space)
-
-    # Volume weak divergence, weighted by WJ so the interface flux
-    # contributions can be accumulated directly.
-    rparams = Ref(params)
-    @. dydt = wdiv(sw_flux(y, rparams)) * (-lgeom.WJ)
-
-    # Surface numerical flux across element boundaries
-    Operators.add_numerical_flux_internal!(numflux, dydt, y, params)
-
-    # Un-weight by dividing by the metric determinant WJ
-    @. dydt = dydt / lgeom.WJ
+    Operators.complete_tendency!(completion, dydt, y, params)
     return dydt
 end
 
@@ -105,8 +95,6 @@ end
         mesh = Meshes.RectilinearMesh(domain, 8, 8)
         grid_topology = Topologies.Topology2D(context, mesh)
         quad = Quadratures.GLL{4}()
-        space = Spaces.SpectralElementSpace2D(grid_topology, quad)
-        coords = Fields.coordinate_field(space)
 
         params = (
             ϵ = FT(0.1),
@@ -116,11 +104,6 @@ end
             c = FT(2.0),
             g = FT(10.0),
         )
-
-        # Initial conditions: Bickley jet profile
-        init_fn = BickleyInit(params)
-        y0 = init_fn.(coords)
-        mass0 = sum(y0.ρ)
 
         dt = FT(0.005)
         nsteps = 10
@@ -136,50 +119,53 @@ end
             @. y = FT(0.5) * y + FT(0.5) * (y_stage + dt * dydt)
         end
 
-        @testset "Continuous Galerkin (CG) Integration [$FT]" begin
-            y = copy(y0)
-            dydt = similar(y)
-            y_stage = similar(y)
-
-            # Warmup step
-            shallow_water_rhs_cg!(dydt, y, (space, params), FT(0))
-
-            # Run SSPRK steps
-            for step in 1:nsteps
-                rk_step!(shallow_water_rhs_cg!, y, dydt, y_stage, (space, params), dt)
-            end
-
-            # Verify mass conservation
-            mass_final = sum(y.ρ)
-            tol = FT == Float32 ? 1e-4 : 1e-10
-            @test isapprox(mass_final, mass0, rtol = tol)
-        end
-
-        @testset "Discontinuous Galerkin (DG) Integration [$FT]" begin
-            y = copy(y0)
-            dydt = similar(y)
-            y_stage = similar(y)
-            numflux = Operators.RusanovNumericalFlux(sw_flux, sw_wavespeed)
-
-            # Warmup step
-            shallow_water_rhs_dg!(dydt, y, (space, params, numflux), FT(0))
-
-            # Run SSPRK steps
-            for step in 1:nsteps
-                rk_step!(
-                    shallow_water_rhs_dg!,
-                    y,
-                    dydt,
-                    y_stage,
-                    (space, params, numflux),
-                    dt,
+        # The discretization is chosen here and nowhere else: the space's
+        # discretization makes `tendency_completion` return the DSS
+        # completion (CG) or the numerical-flux completion (DG); the tendency
+        # function and the model state are shared.
+        numflux = Operators.RusanovNumericalFlux(sw_flux, sw_wavespeed)
+        for (name, discretization) in (
+            ("Continuous Galerkin (CG)", Spaces.CG()),
+            ("Discontinuous Galerkin (DG)", Spaces.DG()),
+        )
+            @testset "$name Integration [$FT]" begin
+                space = Spaces.SpectralElementSpace2D(
+                    grid_topology,
+                    quad;
+                    discretization,
                 )
-            end
+                @test Spaces.discretization(space) === discretization
+                @test Spaces.is_continuous(space) ==
+                      (discretization isa Spaces.CG)
+                coords = Fields.coordinate_field(space)
+                y0 = BickleyInit(params).(coords)
+                mass0 = sum(y0.ρ)
 
-            # Verify mass conservation
-            mass_final = sum(y.ρ)
-            tol = FT == Float32 ? 1e-4 : 1e-10
-            @test isapprox(mass_final, mass0, rtol = tol)
+                y = copy(y0)
+                dydt = similar(y)
+                y_stage = similar(y)
+                completion = Operators.tendency_completion(dydt; numflux)
+
+                # Compiles the tendency before the stepping loop; `dydt` is
+                # overwritten by stage 1 of the first `rk_step!`, so this call
+                # does not affect the trajectory.
+                shallow_water_rhs!(dydt, y, (params, completion), FT(0))
+
+                for step in 1:nsteps
+                    rk_step!(
+                        shallow_water_rhs!,
+                        y,
+                        dydt,
+                        y_stage,
+                        (params, completion),
+                        dt,
+                    )
+                end
+
+                mass_final = sum(y.ρ)
+                tol = FT == Float32 ? 1e-4 : 1e-10
+                @test isapprox(mass_final, mass0, rtol = tol)
+            end
         end
     end
 end

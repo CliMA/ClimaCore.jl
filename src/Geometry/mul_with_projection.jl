@@ -1,4 +1,6 @@
 import LinearAlgebra: Adjoint
+import UnrolledUtilities: unrolled_map_into_tuple
+import ..Utilities: fieldtype_vals
 
 const SingleValue = Union{Number, AbstractTensor}
 
@@ -37,13 +39,51 @@ end
 basis1(::Type{<:AbstractTensor{2, <:Any, <:Tuple{B, Any}}}) where {B} = B
 basis2(::Type{<:AbstractTensor{2, <:Any, <:Tuple{Any, B}}}) where {B} = B
 
-recursively_find_dual_axes_for_projection(
+"""
+    _dual_axes_for_projection(X)
+
+The axes that the second operand of a multiplication must be projected onto for
+entries of type `X` in the first operand, or `nothing` if no projection is
+needed. For entries with multiple components that do not all share one axis, the
+result is a `Tuple` of axes that pairs componentwise with the entry, with
+`nothing` for the components that need no projection.
+
+The result must reduce to a compile-time constant: the eager finite difference
+GPU kernel branches on `isnothing` of it (see `project_row2_for_mul` in
+`ext/cuda/operators_fd_eager.jl`), and a runtime branch there makes the whole
+projection dynamically dispatched, which fails to compile. The recursion stays
+foldable because components are traversed as `Val`s of their field types
+(`fieldtype_vals`), which inference specializes unconditionally instead of
+hitting its recursion limiter; new methods for new entry types (see
+`auto_broadcaster_methods.jl`) must preserve this, i.e. only branch on type
+information.
+"""
+@inline _dual_axes_for_projection(::Val{X}) where {X} =
+    _dual_axes_for_projection(X)
+@inline _dual_axes_for_projection(::Type{X}) where {X <: Tensor{2}} =
+    dual(tensor_axes(X)[2])
+# Entries with multiple components (Tuples or NamedTuples, and AutoBroadcasters
+# of them; see auto_broadcaster_methods.jl) pair componentwise in a
+# multiplication, like the AutoBroadcaster methods of `mul_with_projection`, so
+# the dual axes form a matching Tuple, with `nothing` for components that need
+# no projection. When no component needs projection, the result is `nothing`.
+@inline function _dual_axes_for_projection(
     ::Type{X},
-) where {X <: Tensor{2}} = dual(tensor_axes(X)[2])
-@inline function recursively_find_dual_axes_for_projection(::Type{X}) where {X}
+) where {X <: Union{Tuple, NamedTuple}}
+    axes = unrolled_map_into_tuple(_dual_axes_for_projection, fieldtype_vals(X))
+    unrolled_all(isnothing, axes) && return nothing
+    # When every component projects onto the same axis, collapse the Tuple into
+    # that single axis. Projecting every tensor leaf onto it is equivalent to
+    # pairing componentwise, and unlike the Tuple it also handles a second
+    # operand that is not itself multi-component (e.g. a NamedTuple of covectors
+    # multiplying a single vector, as in `(ᶜρχ, ᶠu₃)` blocks).
+    unrolled_allequal(axes) && return first(axes)
+    return axes
+end
+@inline function _dual_axes_for_projection(::Type{X}) where {X}
     Y = eltype(X)
     Y === X && return nothing
-    return recursively_find_dual_axes_for_projection(Y)
+    return _dual_axes_for_projection(Y)
 end
 
 

@@ -2,6 +2,7 @@ using Test
 import Random
 import ClimaComms
 import ClimaCore.DataLayouts
+import StaticArrays
 
 import ClimaCore  # for `pkgdir` below
 @isdefined(TU) || include(
@@ -317,6 +318,158 @@ end
                 data,
             )
             @test pool_accounting_drained()
+        end
+    end
+end
+
+# A slice's point count must be a compile-time constant for foreach_slice's
+# chosen scope to be one, even when the layout's element count is dynamic.
+@testset "num_slice_points is a compile-time constant" begin
+    # Wrapping the result in a Val makes inference's constant visible in a type.
+    static_points(op, data) =
+        Base.return_types(data -> Val(DataLayouts.num_slice_points(op, data)),
+            Tuple{typeof(data)})[1]
+
+    static = DataLayouts.VIJFH{Float64, 7, 4, 4, 5}(Array{Float64}, 5)
+    dynamic = DataLayouts.VIJFH{Float64, 7, 4, 4, nothing}(Array{Float64}, 5)
+    for data in (static, dynamic) # statically inferrable and dynamic
+        @test DataLayouts.has_inferred_size(data) == (data === static)
+        @test static_points(DataLayouts.slab, data) === Val{16}
+        @test static_points(DataLayouts.column, data) === Val{7}
+        @test static_points(view, data) === Val{1}
+    end
+
+    # Level slices: an uninferrable element count is reported as unbounded.
+    @test static_points(DataLayouts.level, static) === Val{16 * 5}
+    @test static_points(DataLayouts.level, dynamic) === Val{typemax(Int)}
+
+    # Empty layouts report the slice size they would have; loops are no-ops.
+    empty_data = DataLayouts.VIJFH{Float64, 7, 4, 4, nothing}(Array{Float64}, 0)
+    @test static_points(DataLayouts.slab, empty_data) === Val{16}
+    @test static_points(DataLayouts.column, empty_data) === Val{7}
+    slices = 0
+    DataLayouts.foreach_slab(_ -> (global slices += 1), empty_data)
+    @test slices == 0
+
+    # A broadcast's slices are constant whenever every argument's slices are.
+    bc = Base.broadcasted(+, dynamic, dynamic)
+    @test static_points(DataLayouts.slab, bc) === Val{16}
+    @test static_points(DataLayouts.column, bc) === Val{7}
+end
+
+# Every range subindex of a StridedRange must give back another StridedRange:
+# the generic AbstractArray fallback allocates a Vector and throws an
+# interpolated size error, neither of which can be compiled for a GPU.
+@testset "range subsets of a StridedRange" begin
+    range = DataLayouts.StridedRange(3, 5, 4) # 3:5:18
+    values = collect(range)
+    @test values == [3, 8, 13, 18]
+
+    for sub in (Base.OneTo(3), 2:4, 2:2:4, 4:-2:2, 3:2, DataLayouts.StridedRange(2, 2, 2))
+        subset = range[sub]
+        @test subset isa DataLayouts.StridedRange
+        @test collect(subset) == values[sub]
+    end
+
+    # Views of views must reindex without allocating.
+    array = reshape(collect(1:24), 4, 6)
+    for outer in (DataLayouts.StridedRange(2, 4, 3), 2:4:14)
+        outer_view = view(array, outer)
+        for inner in (Base.OneTo(2), 2:3, DataLayouts.StridedRange(1, 2, 2))
+            @test collect(view(outer_view, inner)) == collect(outer_view)[inner]
+        end
+    end
+end
+
+# Each thread of a RegisterArray must map its own points onto its own storage
+# injectively, independently of its rank. FakeGroup stands in for the GPU
+# sub-block scopes; it is defined outside the testsets, which wrap their bodies
+# in functions.
+struct FakeGroup{N} <: DataLayouts.DataScope end
+DataLayouts.partition(::FakeGroup{N}) where {N} =
+    N == 2 ? DataLayouts.ThisThread() : FakeGroup{N ÷ 2}()
+DataLayouts.num_threads(::FakeGroup{N}) where {N} = N
+DataLayouts.static_num_threads(::FakeGroup{N}) where {N} = N
+# Rank of the thread currently "running", stepped through by one CPU thread.
+const FAKE_RANK = Ref(1)
+DataLayouts.thread_rank(::FakeGroup) = FAKE_RANK[]
+
+@testset "RegisterArray stores one thread's points" begin
+    for Nq in (2, 4, 5, 17), Nf in (1, 3), N in (2, 4, 16, 32, 256)
+        array_size = (1, Nq, Nq, Nf, 1) # a slab of a VIJFH layout
+        (; Np, SB) = DataLayouts.register_array_params(array_size, Val(4))
+        Nl = cld(Np, N)
+        @test Np == Nq^2 && SB == Nq^2 && Nl == cld(Nq^2, N)
+        array = DataLayouts.RegisterArray{array_size, 4, N}(
+            StaticArrays.MArray{Tuple{Nl * Nf}, Float64}(undef),
+        )
+        @test size(array) == array_size
+        for rank in 1:min(N, Np) # every thread that is assigned points
+            # Linear indices of this thread's components, in full-array order.
+            indices = [
+                f * Np + p for f in 0:(Nf - 1) for p in (rank - 1):N:(Np - 1)
+            ]
+            slots = map(i -> DataLayouts.register_index(array, i + 1), indices)
+            @test allunique(slots)
+            @test all(slot -> 1 <= slot <= Nl * Nf, slots)
+        end
+    end
+
+    # Registers are only used for a scope with a statically known thread count
+    # covering more than one thread; CPU loops keep the ordinary allocation.
+    data = DataLayouts.VIJFH{Float64, 1, 4, 4, 1}(Array{Float64})
+    slab = DataLayouts.slab(data, 1, 1)
+    is_register(scope) =
+        DataLayouts.parent_type(
+            DataLayouts.register_similar(DataLayouts.reassign(slab, scope), Float64),
+        ) <: DataLayouts.RegisterArray
+    @test is_register(FakeGroup{16}())
+    @test !is_register(DataLayouts.ThisThread())
+    @test !is_register(DataLayouts.ThisThreadPool()) # no static_num_threads
+end
+
+# A launch unit holding only part of a subscope silently skips some points; see
+# the whole subscopes invariant in DataLayouts.subscope_launch_threads.
+# visited_points returns the points of an Np-point slice that a subscope of N
+# threads reaches when only its first `present` threads were launched.
+function visited_points(::FakeGroup{N}, present, Np) where {N}
+    points = Int[]
+    for rank in 1:present
+        FAKE_RANK[] = rank
+        indices = @inbounds DataLayouts.subscope_indices(
+            DataLayouts.ThisThread(),
+            FakeGroup{N}(),
+            Base.OneTo(Np),
+        )
+        append!(points, indices)
+    end
+    FAKE_RANK[] = 1
+    return sort!(points)
+end
+
+# Threads of the last subscope in a launch unit of the given size, which is a
+# whole subscope only when the size is a multiple of the subscope's thread count.
+present_threads(threads, N) = threads % N == 0 ? N : threads % N
+
+@testset "a launch unit holds whole subscopes" begin
+    # Every sub-block width that the GPU scope chain descends through, against
+    # every block size that an occupancy search over whole warps could return.
+    for N in (2, 4, 8, 16, 32, 64, 128, 256), max_threads in 32:32:256
+        max_threads < N && continue
+        threads = DataLayouts.subscope_launch_threads(FakeGroup{N}(), max_threads)
+        @test threads % N == 0
+        @test N <= threads <= max_threads
+
+        # With whole subscopes, every point of a slice is visited exactly once.
+        for Np in (max(N - 1, 1), N, N + 1, 3N + 1)
+            @test visited_points(FakeGroup{N}(), present_threads(threads, N), Np) ==
+                  collect(1:Np)
+        end
+
+        # Rounding the block size to whole warps instead is what loses points.
+        if max_threads % N != 0
+            @test visited_points(FakeGroup{N}(), present_threads(max_threads, N), N) !=
+                  collect(1:N)
         end
     end
 end

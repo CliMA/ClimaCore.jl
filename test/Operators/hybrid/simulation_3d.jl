@@ -18,11 +18,15 @@ device = ClimaComms.device()
         )
 
     function rhs!(dudt, u, _, t)
-        A = Operators.AdvectionC2C(
-            bottom = Operators.SetValue(sin(-t)),
-            top = Operators.Extrapolate(),
+        gradc2f = Operators.GradientC2F(
+            bottom = Operators.SetGradient(Geometry.WVector(cos(-t))),
+            top = Operators.SetGradient(Geometry.WVector(cos(-t))),
         )
-        return @. dudt = -A(V, u)
+        interpf2c = Operators.InterpolateF2C()
+        return @. dudt =
+            -1 * interpf2c(
+                LinearAlgebra.dot(Geometry.Contravariant3Vector(V), gradc2f(u)),
+            )
     end
 
     U = sin.(Fields.coordinate_field(hv_center_space).z)

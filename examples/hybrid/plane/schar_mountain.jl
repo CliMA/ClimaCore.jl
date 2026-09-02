@@ -163,9 +163,9 @@ function rhs_invariant!(dY, Y, _, t)
     # 0) update w at the bottom
 
     hdiv = Operators.Divergence()
-    hwdiv = Operators.WeakDivergence()
+    hwdiv = Operators.Divergence{Operators.WeakForm}()
     hgrad = Operators.Gradient()
-    hwgrad = Operators.WeakGradient()
+    hwgrad = Operators.Gradient{Operators.WeakForm}()
     hcurl = Operators.Curl()
 
     # get u_cov at first interior cell center
@@ -223,10 +223,6 @@ function rhs_invariant!(dY, Y, _, t)
     # Contravariant3Vector(1) ⊗ (Flux Tensor)
 
     vdivf2c = Operators.DivergenceF2C(
-        top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-        bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-    )
-    vdivc2f = Operators.DivergenceC2F(
         top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
     )
@@ -305,13 +301,25 @@ function rhs_invariant!(dY, Y, _, t)
     ᶠ∇ₕw = @. hgrad(fw.components.data.:1)
     ᶜ∇ₕh_tot = @. hgrad(h_tot)
 
+    # The diffusive flux κ₂ ∇ᵥw is zero at each boundary face; that Dirichlet
+    # value on the divergence's argument is imposed by
+    # `divergence_c2f_dirichlet`, which reproduces the one-sided difference
+    # whose factor of 2 comes from the boundary face lying half a cell from
+    # the closest center.
+    κ₂∇ᵥw = @. κ₂ * ᶜ∇ᵥw
+    vκ₂∇²w = Operators.divergence_c2f_dirichlet(
+        κ₂∇ᵥw;
+        bottom = Geometry.WVector(0.0),
+        top = Geometry.WVector(0.0),
+    )
+
     dfw = dY.w.components.data.:1
     dcu = dY.uₕ.components.data.:1
 
     @. dcu += hwdiv(κ₂ * ᶜ∇ₕuₕ)
     @. dcu += vdivf2c(κ₂ * ᶠ∇ᵥuₕ)
     @. dfw += hwdiv(κ₂ * ᶠ∇ₕw)
-    @. dfw += vdivc2f(κ₂ * ᶜ∇ᵥw)
+    @. dfw += vκ₂∇²w
     @. dρe += hwdiv(cρ * κ₂ * ᶜ∇ₕh_tot)
     @. dρe += vdivf2c(fρ * κ₂ * ᶠ∇ᵥh_tot)
 
@@ -416,6 +424,28 @@ sol = @timev CTS.solve!(integrator)
     w = maximum(abs, parent(Geometry.WVector.(sol.u[end].w)))
     @info "Peak |w| at the end of the run: $w m/s"
     @test 1 < w < 3
+end
+
+@testset "no flow through the terrain" begin
+    # The lower boundary is the coordinate surface ξ³ = 0, so the flow normal
+    # to it is the contravariant-3 component of the velocity, not `w`. Over a
+    # ridge this steep, the two differ: g¹³/g³³ reaches 0.059 at the steepest
+    # point, so a boundary condition written on `w` alone would leave a normal
+    # velocity of that order. `project_surface_w!` sets u₃ = -g³¹u₁/g³³, which
+    # is what makes the contravariant-3 component vanish.
+    Y = sol.u[end]
+    Ic2f = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    fuₕ = Ic2f.(Y.uₕ)
+    total = @. Geometry.Covariant13Vector(fuₕ) + Geometry.Covariant13Vector(Y.w)
+    u³ = Geometry.contravariant3.(total, Fields.local_geometry_field(hv_face_space))
+    surface_u³ = maximum(abs, parent(Fields.level(u³, half)))
+    # For scale, the contravariant-3 velocity reached in the interior.
+    interior_u³ = maximum(abs, parent(u³))
+    @info "Surface normal velocity: $surface_u³ (interior scale $interior_u³)"
+    @test surface_u³ < 1e-12 * max(interior_u³, eps())
 end
 
 ENV["GKSwstype"] = "nul"

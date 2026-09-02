@@ -302,7 +302,7 @@ function rhs!(dY, Y, _, t)
     )
     Fh = map((s, zi) -> flux_h(s, eq, zi), y, z)
     dy_mw = @. hwdiv(Fh) * (-(lgeom_c.WJ))
-    Operators.add_numerical_flux_internal!(numflux_h, dy_mw, y, eq, z)
+    Operators.add_numerical_flux_interior!(numflux_h, dy_mw, y, eq, z)
     @. dy_mw = dy_mw / lgeom_c.WJ
     @. dYc.ρ = dy_mw.ρ
     @. dYc.ρe = dy_mw.ρe
@@ -332,7 +332,7 @@ function rhs!(dY, Y, _, t)
     # Horizontal advection of ρw
     uₕf = @. If(uₕ)
     dρw_mw = @. hwdiv(uₕf ⊗ ρw) * (-(lgeom_f.WJ))
-    Operators.add_numerical_flux_internal!(ρw_roe, dρw_mw, ρw, uₕf)
+    Operators.add_numerical_flux_interior!(ρw_roe, dρw_mw, ρw, uₕf)
     @. dρw += dρw_mw / lgeom_f.WJ
 
     # Optional element-local cutoff filter (off by default for a clean witness)

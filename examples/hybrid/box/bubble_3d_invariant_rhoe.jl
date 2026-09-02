@@ -37,6 +37,7 @@ using Logging
 using CUDA
 include(joinpath(@__DIR__, "../..", "example_utils.jl")) # linkfig
 CUDA.allowscalar(false)
+include("../flux_correction_utils.jl")
 
 """
     SimulationParameters{FT}
@@ -217,11 +218,11 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
     # fw = -g^31 cuₕ/ g^33
 
     hdiv = Operators.Divergence()
-    hwdiv = Operators.WeakDivergence()
+    hwdiv = Operators.Divergence{Operators.WeakForm}()
     hgrad = Operators.Gradient()
-    hwgrad = Operators.WeakGradient()
+    hwgrad = Operators.Gradient{Operators.WeakForm}()
     hcurl = Operators.Curl()
-    hwcurl = Operators.WeakCurl()
+    hwcurl = Operators.Curl{Operators.WeakForm}()
 
     dρ .= 0 .* cρ
 
@@ -329,19 +330,8 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
     @. dρe -= hwdiv(cuvw * (cρe + cp))
     @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
     @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
-
-    fcc = Operators.FluxCorrectionC2C(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-    fcf = Operators.FluxCorrectionF2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-
-    @. dρ += fcc(fw, cρ)
-    @. dρe += fcc(fw, cρe)
-    # dYc.ρuₕ += fcc(w, Yc.ρuₕ)
+    add_flux_correction_c2c!(dρe, fw, cρe)
+    add_flux_correction_c2c!(dρ, fw, cρ)
 
     Spaces.weighted_dss_start!(dY.Yc, ghost_buffer.Yc)
     Spaces.weighted_dss_start!(dY.uₕ, ghost_buffer.uₕ)

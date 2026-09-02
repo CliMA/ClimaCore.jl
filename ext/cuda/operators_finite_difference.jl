@@ -33,32 +33,78 @@ function Base.copyto!(
 
     fspace = Spaces.face_space(space)
     n_face_levels = Spaces.nlevels(fspace)
+    high_resolution = !(n_face_levels ≤ 256)
+    max_shmem = device_attributes().max_shmem_per_block
 
     (_, Ni, Nj, Nh) = size(out_fv)
-    # This uses block and grid indices instead of computing cartesian indices from a
-    # linear index. The launch configuration is optimized for common use case of 64 face
-    # levels and Ni = Nj = 4. Periodic toppologies and masks are not currently supported
-    # `eager_copyto_stencil_kernel!` requires a  block size of (n_face_levels, Ni, 1)
-    # this block config is better for VIJFH. It is only used when the total number of
-    # threads in a block is between 32 and 256 to avoid underutilization of the GPU and
-    # errors due to too many registers used when the block size is too large.
-    if !Topologies.isperiodic(space) && mask isa NoMask &&
-       32 <= n_face_levels * Ni <= 256
-        op_matrix_bc = replace_fd_ops(bc)
-        args = (
-            strip_space(out, space),
-            strip_space(op_matrix_bc, space),
-            axes(out),
-        )
-        auto_launch!(
-            eager_copyto_stencil_kernel!,
-            args;
-            threads_s = (n_face_levels, Ni, 1),
-            blocks_s = (1, Nj, Nh),
-            always_inline = true,
-            shmem = n_face_levels * Ni * 9 * 4, # see `check_if_fits_in_shmem` for how this is calculated
-        )
-        return out
+    # `eager_copyto_stencil_kernel!` requires one x-thread per face level, so a block
+    # is (n_face_levels, columns_per_block, 1) and the grid indexes the remaining
+    # columns. Each thread derives a linear column index from its y-thread and block
+    # index and decomposes it into `(i, j, h)`; this layout suits VIJFH, where the
+    # vertical axis is contiguous. Both periodic and non-periodic vertical topologies
+    # are supported (`has_padding_thread` accounts for the extra face level of
+    # non-periodic spaces), as are masked spaces. High-resolution columns (more face
+    # levels than fit in a block) fall through to `copyto_stencil_kernel!` below.
+    # TODO: auto reduce max reg usage when needed because of high res columns
+    # The eager kernel's per-level indexing (`calc_level_val` for `Field`s, and
+    # `has_padding_thread`) is written for the finite difference space families
+    # in `Operators.AllFiniteDifferenceSpace` (extruded, single-column, and
+    # multi-column); any other family with a vertical dimension must take the
+    # lazy kernel below, since `calc_level_val`'s space gate would misread its
+    # fields as level fields and evaluate them entirely at level 1. Keep this
+    # gate and that space gate in sync.
+    eager_supported = space isa Operators.AllFiniteDifferenceSpace
+    if !high_resolution && eager_supported
+        # Size the dynamic shared memory to fit the largest single expression result
+        # in the broadcasted tree; `nothing` means an expression's cached entry type
+        # could not be sized (non-concrete inference), so the eager kernel cannot be
+        # launched and the lazy kernel below (which needs no shared memory) is used.
+        eager_shmem_per_thread = max_eager_shmem_per_thread(bc)
+        # mask.N holds the active column count in a one-element device array;
+        # reading it on the host needs @allowscalar.
+        n_columns =
+            mask isa NoMask ? Ni * Nj * Nh :
+            CUDA.@allowscalar(mask.N[1])
+        # One column per block keeps register pressure low, which matters more than
+        # occupancy until there are enough columns to saturate the device; past that,
+        # pack as many columns into each block as FD_MAX_THREADS allow. The cap
+        # defaults to 128 threads (2 columns at 64 levels), which measured faster
+        # than 256 on an A100 baroclinic wave (h_elem = 30, z_elem = 63) by
+        # reducing register pressure; CLIMA_FD_MAX_THREADS overrides it.
+        fd_max_threads = FD_MAX_THREADS[]
+        threads_dim_y =
+            n_columns > fd_max_threads * device_attributes().sm_count ?
+            max(1, div(fd_max_threads, n_face_levels)) : 1
+        block_dim_x = div(n_columns, threads_dim_y, RoundUp)
+        eager_shmem =
+            isnothing(eager_shmem_per_thread) ? nothing :
+            n_face_levels * threads_dim_y * eager_shmem_per_thread
+        # use fallback lazy evaluation if the eager kernel would exceed the
+        # device's per-block shared memory
+        if !isnothing(eager_shmem) && eager_shmem ≤ max_shmem
+            # `axes(out)` is passed as the space the kernel evaluates `bc` on, since
+            # `out` and `bc` are space-stripped. The kernel recovers the output
+            # layout's horizontal extents from the type parameters of
+            # `field_values(out)` (see `vijh_params`), so the `CartesianIndices` it
+            # builds from them divides by compile-time constants, keeping the
+            # per-thread `divrem` cheap.
+            args = (
+                strip_space(out, space),
+                strip_space(bc, space),
+                mask,
+                axes(out),
+            )
+
+            auto_launch!(
+                eager_copyto_stencil_kernel!,
+                args;
+                threads_s = (n_face_levels, threads_dim_y, 1),
+                blocks_s = (block_dim_x, 1, 1),
+                always_inline = true,
+                shmem = eager_shmem,
+            )
+            return out
+        end
     end
     cart_inds = if mask isa NoMask
         cartesian_indices(out_fv)

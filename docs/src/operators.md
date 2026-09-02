@@ -23,17 +23,16 @@ without explicitly assembling the matrix representing the discretized operator.
 Gradient
 Divergence
 SplitDivergence
-WeakDivergence
-WeakGradient
 Curl
-WeakCurl
 ```
 
 ### Strong and weak forms
 
 `Divergence`, `Gradient`, and `Curl` each have a strong and a weak variant,
-distinguished by a [`FormType`](@ref) type parameter. The weak variants are also
-available under the names `WeakDivergence`, `WeakGradient`, and `WeakCurl`.
+selected by the [`FormType`](@ref) type parameter: `Divergence()` is the strong
+form (`Divergence{StrongForm}`) and `Divergence{WeakForm}()` is the weak form
+(and likewise for `Gradient` and `Curl`). Both forms are documented in the
+operator docstrings above.
 
 ```@docs
 FormType
@@ -73,15 +72,17 @@ InterpolateC2F
 InterpolateF2C
 WeightedInterpolateC2F
 WeightedInterpolateF2C
+AdvectionOperator
 UpwindBiasedProductC2F
 Upwind3rdOrderBiasedProductC2F
 FCTBorisBook
 FCTZalesak
 LinVanLeerC2F
-LeftBiasedC2F
-RightBiasedC2F
-LeftBiasedF2C
-RightBiasedF2C
+TVDLimitedFluxC2F
+BottomBiasedC2F
+TopBiasedC2F
+BottomBiasedF2C
+TopBiasedF2C
 AbstractTVDSlopeLimiter
 ```
 
@@ -90,8 +91,6 @@ AbstractTVDSlopeLimiter
 ```@docs
 GradientF2C
 GradientC2F
-AdvectionF2F
-AdvectionC2C
 DivergenceF2C
 DivergenceC2F
 CurlC2F
@@ -101,19 +100,90 @@ CurlC2F
 
 ```@docs
 SetBoundaryOperator
-FirstOrderOneSided
-ThirdOrderOneSided
+```
+
+### Dirichlet (`SetValue`) replacement helpers
+
+```@docs
+DirichletOperator
+gradient_c2f_dirichlet
+divergence_c2f_dirichlet
+curl_c2f_dirichlet
+upwind_biased_product_c2f_dirichlet
 ```
 
 ## Finite difference boundary conditions
 
 ```@docs
 AbstractBoundaryCondition
+VerticalBoundaryCondition
 SetCurl
 SetValue
 SetGradient
 SetDivergence
 Extrapolate
+Outflow
+```
+
+[`Outflow`](@ref) is a physically named convenience constructor for
+[`Extrapolate`](@ref) (an outflow extrapolation whose order-0 case is the
+zero-normal-gradient closure), accepted wherever `Extrapolate` is.
+
+## Discontinuous Galerkin operators
+
+Face and volume operators for discontinuous-Galerkin (DG) discretizations on
+spectral-element spaces constructed with `discretization = Grids.DG()`. The
+face operators act on a mass-weighted residual (`WJ * ∂Y/∂t`) and complete
+the weak-form (or flux-differencing) volume terms at element interfaces.
+
+```@docs
+add_numerical_flux_interior!
+add_numerical_flux_boundary!
+add_lifting_flux_interior!
+lifting_correction
+add_flux_differencing_divergence!
+add_ldg_laplacian_flux_interior!
+ldg_laplacian_tendency
+ldg_laplacian_tendency!
+ldg_penalty_parameter
+start_dg_ghost_exchange
+DGGhostExchange
+```
+
+### Model-level CG↔DG switching
+
+A model's tendency assembly can be written once for both discretizations: the
+element-local weak-form tendency is completed across element interfaces by a
+completion object built from the space — DSS on continuous spaces, interface
+numerical fluxes on discontinuous ones.
+
+```@docs
+tendency_completion
+complete_tendency!
+AbstractTendencyCompletion
+DSSCompletion
+NumericalFluxCompletion
+```
+
+### Numerical fluxes and face lifts
+
+```@docs
+AbstractNumericalFlux
+CentralNumericalFlux
+RusanovNumericalFlux
+LDGLaplacianFlux
+central_gradient_lift
+central_curl3_lift
+jump_penalty_lift
+```
+
+### DG boundary conditions
+
+```@docs
+HorizontalBoundaryCondition
+ghost_state
+PeriodicBC
+ReflectingWallBC
 ```
 
 ## Discontinuous Galerkin operators

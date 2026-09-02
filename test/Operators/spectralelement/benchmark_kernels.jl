@@ -38,7 +38,7 @@ end
 kernel_spectral_wdiv_array!(args) = kernel_copyto!(args)
 function kernel_spectral_wdiv!(args)
     (; u, ϕ) = args
-    wdiv = Operators.WeakDivergence()
+    wdiv = Operators.Divergence{Operators.WeakForm}()
     @. ϕ = wdiv(u)
     return
 end
@@ -65,7 +65,7 @@ end
 kernel_spectral_div_grad_array!(args) = kernel_copyto!(args)
 function kernel_spectral_div_grad!(args)
     (; ϕ, ψ) = args
-    wdiv = Operators.WeakDivergence()
+    wdiv = Operators.Divergence{Operators.WeakForm}()
     grad = Operators.Gradient()
     @. ϕ = wdiv(grad(ψ))
     return
@@ -75,7 +75,7 @@ end
 kernel_spectral_wgrad_div_array!(args) = kernel_copyto!(args)
 function kernel_spectral_wgrad_div!(args)
     (; u, du) = args
-    wgrad = Operators.WeakGradient()
+    wgrad = Operators.Gradient{Operators.WeakForm}()
     div = Operators.Divergence()
     @. du = wgrad(div(u))
     return
@@ -86,7 +86,7 @@ kernel_spectral_wcurl_curl_array!(args) = kernel_copyto!(args)
 function kernel_spectral_wcurl_curl!(args)
     (; u, du) = args
     curl = Operators.Curl()
-    wcurl = Operators.WeakCurl()
+    wcurl = Operators.Curl{Operators.WeakForm}()
     @. du =
         Geometry.Covariant12Vector(wcurl(Geometry.Covariant3Vector(curl(u))))
     return

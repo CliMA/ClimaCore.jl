@@ -138,8 +138,13 @@ end
     struct_indices(array, Val(Nf), index, prod(size(array)[1:(F - 1)]))
 
 @inline struct_index(i, array, index::Integer, stride::Integer) = index + (i - 1) * stride
+
+# A StridedRange instead of range(index; step, length), a StepRange whose
+# length Base obtains by division once per view built from it (see the note on
+# StridedRange); the stride is not a compile-time constant when a slab is
+# spread over several threads, and a point view is taken once per point.
 @inline struct_indices(array, ::Val{Nf}, index::Integer, stride::Integer) where {Nf} =
-    (range(index; step = stride, length = Nf),)
+    (StridedRange(index, stride, Nf),)
 
 """
     set_struct!(array, value, [index, Val(F)])
@@ -207,16 +212,10 @@ end
     Nf = num_basetypes(B, T)
     @boundscheck checkbounds(array, struct_indices(array, Val(Nf), index...)...)
     entries = bitcast_struct(NTuple{Nf, B}, value)
-    return set_struct_entries!(array, entries, 1, index...)
-end
-
-# Store the entries with tuple recursion, which unrolls like a generated
-# function; a closure over array and index is not eliminated in GPU kernels,
-# where it allocates at every point.
-@inline set_struct_entries!(array, ::Tuple{}, i, index...) = array
-@propagate_inbounds function set_struct_entries!(array, entries::Tuple, i, index...)
-    @inbounds array[struct_index(i, array, index...)] = first(entries)
-    return set_struct_entries!(array, Base.tail(entries), i + 1, index...)
+    unrolled_foreach(enumerate(entries)) do (i, entry)
+        @inbounds array[struct_index(i, array, index...)] = entry
+    end
+    return array
 end
 
 """

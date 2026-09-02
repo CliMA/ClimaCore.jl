@@ -875,7 +875,7 @@ end
         @test op_on_level_of_field ==
               (Spaces.level(gradh.(field.x), TU.fc_index(1, space)))
 
-        @test_broken op_on_level_of_field == Base.materialize((Spaces.level(
+        @test op_on_level_of_field == Base.materialize((Spaces.level(
             lazy.(gradh.(field.x)),
             TU.fc_index(1, space),
         )),)
@@ -1501,7 +1501,7 @@ end
     FT = Float64
     context = ClimaComms.context(ClimaComms.device())
     for space in (
-        TU.PointColumnEnsembleSpace(FT; context),
+        TU.MultiColumnSpace(FT; context),
         TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
     )
         for subspace in (Spaces.level(space, 1), Spaces.column(space, 1, 1, 1))
@@ -1512,63 +1512,6 @@ end
             @test (@. sum(src1 + src2)) ≈ (@. sum(src1) + 2)
             @test (@. sum((sin(src1) + cos(src2))^2) / 2) ≈
                   (@. ((sin(src1.:1) + cos(FT(1)))^2 + (sin(src1.:2) + cos(FT(1)))^2) / 2)
-        end
-    end
-end
-
-function test_fused_loop(foreach_slice, space, subspace)
-    FT = Spaces.undertype(space)
-    dest = Fields.Field(FT, space)
-    src1 = Fields.Field(Tuple{FT, FT}, space)
-    src2 = Fields.Field(Tuple{FT, FT}, subspace)
-    parent(src1) .= rand.(FT)
-    parent(src2) .= rand.(FT)
-
-    function fused_loop!(dest, src1, src2)
-        @. dest = 0
-        temp1 = @. sin(src1.:1) + cos(src2.:1)
-        @. dest += temp1 * temp1
-        temp2 = @. sin(src1.:2) + cos(src2.:2)
-        @. dest += temp2 * temp2
-        @. dest /= 2
-    end
-
-    foreach_slice(fused_loop!, dest, src1, src2)
-    @test dest ≈ @. sum((sin(src1) + cos(src2))^2) / 2
-
-    CUDA_FRAMES = @isdefined(CUDA) ? (AnyFrameModule(CUDA),) : ()
-    @test_opt ignored_modules = CUDA_FRAMES foreach_slice(fused_loop!, dest, src1, src2)
-end
-
-@testset "foreach_slice pointwise broadcast fusion" begin
-    context = ClimaComms.context(ClimaComms.device())
-
-    for space1 in TU.all_spaces(Float64; context)
-        test_fused_loop(foreach_point, space1, space1)
-        test_fused_loop(foreach_level, space1, space1)
-        test_fused_loop(foreach_slab, space1, space1)
-        test_fused_loop(foreach_column, space1, space1)
-
-        space2 = Spaces.level(space1, 1)
-        if space1 !== space2
-            @test_throws DimensionMismatch test_fused_loop(foreach_point, space1, space2)
-            @test_throws DimensionMismatch test_fused_loop(foreach_level, space1, space2)
-            @test_throws DimensionMismatch test_fused_loop(foreach_slab, space1, space2)
-
-            test_fused_loop(foreach_column, space1, space2)
-        end
-
-        space3 = Spaces.column(space1, 1, 1, 1)
-        if space1 !== space3
-            @test_throws DimensionMismatch test_fused_loop(foreach_point, space1, space3)
-            @test_throws DimensionMismatch test_fused_loop(foreach_column, space1, space3)
-
-            test_fused_loop(foreach_level, space1, space3)
-            if DataLayouts.nelems(Spaces.local_geometry_data(space1)) == 1
-                test_fused_loop(foreach_slab, space1, space3)
-            else
-                @test_throws DimensionMismatch test_fused_loop(foreach_slab, space1, space3)
-            end
         end
     end
 end

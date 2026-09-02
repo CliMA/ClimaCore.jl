@@ -2,7 +2,7 @@ import ClimaComms
 ClimaComms.@import_required_backends
 using ClimaCore.CommonGrids
 import ClimaCore.CommonGrids:
-    ExtrudedCubedSphereGrid, CubedSphereGrid, Box3DGrid, PointColumnEnsembleGrid
+    ExtrudedCubedSphereGrid, CubedSphereGrid, Box3DGrid, MultiColumnGrid
 using ClimaCore:
     Geometry,
     Hypsography,
@@ -126,7 +126,7 @@ using Test
     z_elem = 10
     z_min = -10.0
     z_max = 20.0
-    grid = PointColumnEnsembleGrid(;
+    grid = MultiColumnGrid(;
         points,
         z_elem,
         z_min,
@@ -134,7 +134,7 @@ using Test
         radius,
     )
     @test grid isa Grids.ExtrudedFiniteDifferenceGrid
-    @test grid.horizontal_grid isa Grids.PointCloudGrid
+    @test grid.horizontal_grid isa Grids.MultiPointGrid
     @test grid.horizontal_grid.global_geometry.radius == radius
     @test grid.vertical_grid.topology.mesh.domain.coord_max == Geometry.ZPoint(z_max)
     @test grid.vertical_grid.topology.mesh.domain.coord_min == Geometry.ZPoint(z_min)

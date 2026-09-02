@@ -360,7 +360,7 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
         ρ,
     )
     Operators.add_flux_differencing_divergence!(cartesian_volume_fn, dy_mw, y)
-    Operators.add_numerical_flux_internal!(cartesian_interface_fn, dy_mw, y)
+    Operators.add_numerical_flux_interior!(cartesian_interface_fn, dy_mw, y)
     @. dYc.ρ = dy_mw.ρ / lgeom_c.WJ
     @. dYc.ρe = dy_mw.ρe / lgeom_c.WJ
     @. dYc.ρu1 = dy_mw.ρu1 / lgeom_c.WJ
@@ -375,7 +375,7 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
         dy_q,
         y,
     )
-    Operators.add_numerical_flux_internal!(
+    Operators.add_numerical_flux_interior!(
         tracer_interface_fn,
         dy_q,
         y,
@@ -509,7 +509,7 @@ function compute_tendency_fddg!(dY, Y, t, vertical_transport)
     λf = interface_flux == :roe ? (@. If(sqrt(uE^2 + uN^2))) : (@. If(λ))
     y_f = map((h, uvi, λi) -> (; h = h, uv = uvi, λ = λi), ρw_sc, uvf, λf)
     dρw_mw = @. hwdiv(uvf * ρw_sc) * (-(lgeom_f.WJ))
-    Operators.add_numerical_flux_internal!(
+    Operators.add_numerical_flux_interior!(
         Operators.kennedy_gruber_rusanov_height,
         dρw_mw,
         y_f,

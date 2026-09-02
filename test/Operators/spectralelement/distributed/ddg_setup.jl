@@ -6,7 +6,7 @@ launched at a fixed rank count (see ddg2.jl / ddg3.jl):
 
 On a distributed cubed sphere, faces that straddle a rank boundary live in
 `Topologies.ghost_faces` and are completed by the ghost-face exchange in
-`add_numerical_flux_internal!` / `add_lifting_flux_internal!`. The checks are
+`add_numerical_flux_interior!` / `add_lifting_flux_interior!`. The checks are
 per-local-node comparisons against element-local reference operators, so a
 wrong (or skipped) ghost exchange shows up as a mismatch at the
 partition-boundary elements without any cross-rank gather.
@@ -50,14 +50,14 @@ function run_ddg_tests(::Type{FT}) where {FT}
         # weak form plus the central numerical flux reconstructs it only if the
         # flux couples the true neighbour across the rank boundary, so this
         # comparison at every local node tests the ghost exchange directly.
-        hwdiv = Operators.WeakDivergence()
+        hwdiv = Operators.Divergence{Operators.WeakForm}()
         hdiv = Operators.Divergence()
         F = Geometry.transform.(Ref(Geometry.Contravariant12Axis()), uv)
         q = ones(space)
         y = map((qi, uvi) -> (; q = qi, uv = uvi), q, uv)
 
         dy_mw = @. hwdiv(F) * (-(lgeom.WJ))
-        Operators.add_numerical_flux_internal!(dg_central_flux, dy_mw, y)
+        Operators.add_numerical_flux_interior!(dg_central_flux, dy_mw, y)
         dy = @. dy_mw / lgeom.WJ
 
         dy_strong = @. -hdiv(F)
@@ -76,7 +76,7 @@ function run_ddg_tests(::Type{FT}) where {FT}
         y = map((qi, uvi) -> (; q = qi, uv = uvi), q, uv)
         r = similar(q)
         r .= 0
-        Operators.add_numerical_flux_internal!(dg_central_flux, r, y)
+        Operators.add_numerical_flux_interior!(dg_central_flux, r, y)
         total = allsum(r)
         scale = ClimaComms.allreduce(context, sum(abs, parent(r)), +)
         cons_tol = FT == Float32 ? FT(1e-5) : FT(1e-10)
@@ -90,7 +90,7 @@ function run_ddg_tests(::Type{FT}) where {FT}
         q = @. sind(coords.long) * cosd(coords.lat)^2
         r = similar(q)
         r .= 0
-        Operators.add_numerical_flux_internal!(dg_jump_penalty, r, q)
+        Operators.add_numerical_flux_interior!(dg_jump_penalty, r, q)
         rn = @. r / lgeom.WJ
         err = maximum(abs, parent(rn))
         err_global = ClimaComms.allreduce(context, err, max)
@@ -108,7 +108,7 @@ function run_ddg_tests(::Type{FT}) where {FT}
         s = @. cosd(coords.long) * cosd(coords.lat)
         r = similar(q)
         r .= 0
-        Operators.add_numerical_flux_internal!(two_field_jump, r, q, s)
+        Operators.add_numerical_flux_interior!(two_field_jump, r, q, s)
         rn = @. r / lgeom.WJ
         err = maximum(abs, parent(rn))
         err_global = ClimaComms.allreduce(context, err, max)
@@ -125,28 +125,18 @@ function run_ddg_tests(::Type{FT}) where {FT}
 
         r_ref = similar(q)
         r_ref .= 0
-        Operators.add_numerical_flux_internal!(dg_central_flux, r_ref, y)
+        Operators.add_numerical_flux_interior!(dg_central_flux, r_ref, y)
         l_ref = similar(q, Geometry.UVVector{FT})
         fill!(parent(l_ref), 0)
-        Operators.add_lifting_flux_internal!(lift_q, l_ref, y)
+        Operators.add_lifting_flux_interior!(lift_q, l_ref, y)
 
         ex = Operators.start_dg_ghost_exchange(y)
         r = similar(q)
         r .= 0
-        Operators.add_numerical_flux_internal!(
-            dg_central_flux,
-            r,
-            y;
-            ghost_exchange = ex,
-        )
+        Operators.add_numerical_flux_interior!(ex, dg_central_flux, r, y)
         l = similar(q, Geometry.UVVector{FT})
         fill!(parent(l), 0)
-        Operators.add_lifting_flux_internal!(
-            lift_q,
-            l,
-            y;
-            ghost_exchange = ex,
-        )
+        Operators.add_lifting_flux_interior!(ex, lift_q, l, y)
         @test parent(r) == parent(r_ref)
         @test parent(l) == parent(l_ref)
 
@@ -157,20 +147,33 @@ function run_ddg_tests(::Type{FT}) where {FT}
             ex2 = Operators.start_dg_ghost_exchange(y)
             r2 = similar(q)
             r2 .= 0
-            @test_throws ErrorException Operators.add_numerical_flux_internal!(
+            @test_throws ErrorException Operators.add_numerical_flux_interior!(
+                ex2,
                 dg_jump_penalty,
                 r2,
-                q;
-                ghost_exchange = ex2,
+                q,
             )
             # Consume the started exchange so the next round on `y` finds
             # its buffers idle.
-            Operators.add_numerical_flux_internal!(
+            Operators.add_numerical_flux_interior!(
+                ex2,
                 dg_central_flux,
                 r2,
-                y;
-                ghost_exchange = ex2,
+                y,
             )
+
+            # Distinct fields of the same type share exchange buffers, so
+            # starting a second round while one is in flight throws instead
+            # of overwriting the in-flight send strips; after the first
+            # round is consumed, a round on the other field works.
+            q2 = @. cosd(coords.long) * cosd(coords.lat)
+            ex3 = Operators.start_dg_ghost_exchange(q)
+            @test_throws ErrorException Operators.start_dg_ghost_exchange(q2)
+            r3 = similar(q)
+            r3 .= 0
+            Operators.add_numerical_flux_interior!(ex3, dg_jump_penalty, r3, q)
+            ex4 = Operators.start_dg_ghost_exchange(q2)
+            Operators.add_numerical_flux_interior!(ex4, dg_jump_penalty, r3, q2)
         end
     end
 
@@ -216,7 +219,7 @@ function run_ddg_tests(::Type{FT}) where {FT}
                 reversed = gconn.faces[5, f] == 1
                 i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, qq, false)
                 q′ = reversed ? Nq - qq + 1 : qq
-                sg = gconn.sgeom[qq, 1, f]
+                sg = gconn.sgeom[1, qq, f]
                 y⁻ = y_data[CartesianIndex(1, i⁻, j⁻, elem⁻)]
                 y⁺ = ex.recv_data[CartesianIndex(1, q′, 1, slot)]
                 staging[qq, f] =
@@ -259,7 +262,7 @@ function run_ddg_tests(::Type{FT}) where {FT}
         q = @. sind(coords.long) * cosd(coords.lat)^2
         r = similar(q, Geometry.UVVector{FT})
         fill!(parent(r), 0)
-        Operators.add_lifting_flux_internal!(
+        Operators.add_lifting_flux_interior!(
             Operators.central_gradient_lift,
             r,
             q,

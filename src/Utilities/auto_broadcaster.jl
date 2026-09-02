@@ -92,7 +92,7 @@ also be passed an iterator's type to infer the result type for such an iterator.
 """
 add_auto_broadcasters(itr) =
     itr isa AutoBroadcaster || is_auto_broadcastable(itr) ?
-    AutoBroadcaster(unrolled_map(add_auto_broadcasters, unwrap(itr))) : itr
+    AutoBroadcaster(unrolled_tuple_map(add_auto_broadcasters, unwrap(itr))) : itr
 add_auto_broadcasters(::Type{T}) where {T} =
     return_type(add_auto_broadcasters, Tuple{T})
 
@@ -106,7 +106,7 @@ be passed an iterator's type to infer the result type for such an iterator.
 """
 drop_auto_broadcasters(itr) =
     itr isa AutoBroadcaster || is_auto_broadcastable(itr) ?
-    unrolled_map(drop_auto_broadcasters, unwrap(itr)) : itr
+    unrolled_tuple_map(drop_auto_broadcasters, unwrap(itr)) : itr
 drop_auto_broadcasters(::Type{T}) where {T} =
     return_type(drop_auto_broadcasters, Tuple{T})
 
@@ -148,12 +148,15 @@ julia> sum(Base.materialize(bc))
 auto_broadcasted(f::F, args, axes...) where {F} =
     auto_broadcasted(Base.Broadcast.combine_styles(args...), f, args, axes...)
 function auto_broadcasted(style::Base.BroadcastStyle, f::F, args, axes...) where {F}
-    wrapped_f(args...) = f(unrolled_map(add_auto_broadcasters, args)...)
-    unwrapped_f(args...) = f(unrolled_map(drop_auto_broadcasters, args)...)
     bc = Base.Broadcast.Broadcasted(style, f, args, axes...)
     unsafe_eltype(bc) != Union{} && return bc
+    # The closures below are only constructed when needed: building them before
+    # the check above would add two heap allocations whenever `f` is not a
+    # singleton, and `auto_broadcasted` runs once per slab per expression node.
+    wrapped_f(args...) = f(unrolled_tuple_map(add_auto_broadcasters, args)...)
     bc′ = Base.Broadcast.Broadcasted(style, wrapped_f, args, axes...)
     unsafe_eltype(bc′) != Union{} && return bc′
+    unwrapped_f(args...) = f(unrolled_tuple_map(drop_auto_broadcasters, args)...)
     bc′′ = Base.Broadcast.Broadcasted(style, unwrapped_f, args, axes...)
     unsafe_eltype(bc′′) != Union{} && return bc′′
     return bc # error in bc is not caused by missing or extra AutoBroadcasters
@@ -208,18 +211,18 @@ Base.showerror(
 # Zip the arguments instead of splatting them to guarantee recursive inlining
 function _nested_broadcast(f::F, args) where {F}
     unrolled_any(Base.Fix2(isa, AutoBroadcaster), args) || return f(args...)
-    unwrapped_args = unrolled_map(unwrap, args)
+    unwrapped_args = unrolled_tuple_map(unwrap, args)
     broadcastable_args =
         unrolled_flatmap(get_auto_broadcastable_tuple, unwrapped_args)
-    lengths = unrolled_map(length, broadcastable_args)
+    lengths = unrolled_tuple_map(length, broadcastable_args)
     unrolled_allequal(lengths) ||
         throw(UnequalNestedBroadcastLengthsError{lengths}())
     broadcast_axis = StaticOneTo(first(lengths))
-    uniform_length_args = unrolled_map(unwrapped_args) do x
+    uniform_length_args = unrolled_tuple_map(unwrapped_args) do x
         is_auto_broadcastable(x) ? x : Iterators.map(Returns(x), broadcast_axis)
     end
-    zipped_args = unrolled_map(tuple, uniform_length_args...)
-    result_itr = unrolled_map(Base.Fix1(_nested_broadcast, f), zipped_args)
+    zipped_args = unrolled_tuple_map(tuple, uniform_length_args...)
+    result_itr = unrolled_tuple_map(Base.Fix1(_nested_broadcast, f), zipped_args)
     return AutoBroadcaster(result_itr)
 end
 
@@ -229,8 +232,8 @@ nested_broadcast(::Type{T}, args...) where {T} =
 
 # Nested version of f.(typeof.(x), typeof.(y), ...) for x::type1, y::type2, etc.
 nested_broadcast_over_types(f::F, types...) where {F} = nested_broadcast(
-    (args...) -> f(unrolled_map(typeof, args)...),
-    unrolled_map(new, types)...,
+    (args...) -> f(unrolled_tuple_map(typeof, args)...),
+    unrolled_tuple_map(new, types)...,
 )
 
 # Nested version of typeof(new.(f.(typeof.(x), typeof.(y), ...))) for x::type1...
@@ -258,7 +261,7 @@ Base.axes(x::AutoBroadcaster, dim...) = axes(unwrap(x), dim...)
 Base.size(x::AutoBroadcaster, dim...) = size(unwrap(x), dim...)
 Base.iterate(x::AutoBroadcaster, state...) = iterate(unwrap(x), state...)
 Base.merge(args::AutoBroadcaster...) =
-    AutoBroadcaster(merge(unrolled_map(unwrap, args)...))
+    AutoBroadcaster(merge(unrolled_tuple_map(unwrap, args)...))
 Base.@propagate_inbounds Base.getindex(x::AutoBroadcaster, index) =
     getindex(unwrap(x), index)
 Base.@propagate_inbounds Base.setindex(x::AutoBroadcaster, value, index) =
@@ -267,7 +270,7 @@ Base.@propagate_inbounds Base.setindex(x::AutoBroadcaster, value, index) =
 # Broadcasts/maps/reductions are not recursive, unlike the math operations below
 Base.broadcastable(x::AutoBroadcaster) = Base.broadcastable(unwrap(x))
 Base.map(f::F, arg::AutoBroadcaster, args::AutoBroadcaster...) where {F} =
-    AutoBroadcaster(map(f, unwrap(arg), unrolled_map(unwrap, args)...))
+    AutoBroadcaster(map(f, unwrap(arg), unrolled_tuple_map(unwrap, args)...))
 Base.mapreduce(
     f::F,
     op::O,
@@ -275,7 +278,7 @@ Base.mapreduce(
     args::AutoBroadcaster...;
     init...,
 ) where {F, O} =
-    mapreduce(f, op, unwrap(arg), unrolled_map(unwrap, args)...; init...)
+    mapreduce(f, op, unwrap(arg), unrolled_tuple_map(unwrap, args)...; init...)
 
 # Circumvent the built-in convert function, which can introduce type
 # instabilities for nested Tuples and NamedTuples on Julia 1.10
@@ -290,7 +293,7 @@ nested_convert(::Type{T}, arg) where {T} = _nested_convert((new(T), arg))
 _nested_convert((x, y)) =
     x isa AutoBroadcaster ? AutoBroadcaster(_nested_convert((unwrap(x), y))) :
     is_auto_broadcastable(x) ?
-    unrolled_map(_nested_convert, unrolled_map(tuple, x, unwrap(y))) :
+    unrolled_tuple_map(_nested_convert, unrolled_tuple_map(tuple, x, unwrap(y))) :
     convert(typeof(x), unwrap(y))
 
 ###############################################

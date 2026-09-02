@@ -2,11 +2,11 @@
 #
 #     ⟨f, div(u)⟩ = -⟨grad(f), u⟩,   ⟨a, b⟩ = ∫ a b = sum(a .* b).
 #
-# `WeakDivergence` is defined by exactly this property elementwise, with the
-# element boundary integrals dropped, so the identity holds to roundoff on any
-# mesh, without DSS or periodicity. For the staggered finite-difference pair,
-# ⟨f, divf2c(u)⟩ on centers telescopes against -⟨gradc2f(f), u⟩ on faces
-# whenever u vanishes on the boundary faces.
+# `Divergence{WeakForm}` is defined by exactly this property elementwise,
+# with the element boundary integrals dropped, so the identity holds to
+# roundoff on any mesh, without DSS or periodicity. For the staggered
+# finite-difference pair, ⟨f, divf2c(u)⟩ on centers telescopes against
+# -⟨gradc2f(f), u⟩ on faces whenever u vanishes on the boundary faces.
 using Test
 import ClimaComms
 ClimaComms.@import_required_backends
@@ -49,7 +49,7 @@ import Random: seed!
     parent(f) .= rand.(FT)
     parent(u) .= rand.(FT)
 
-    wdiv = Operators.WeakDivergence()
+    wdiv = Operators.Divergence{Operators.WeakForm}()
     grad = Operators.Gradient()
 
     # ⟨f, wdiv(u)⟩ = -⟨∇f, u⟩, with the covariant gradient paired with u

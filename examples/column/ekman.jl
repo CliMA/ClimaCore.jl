@@ -68,29 +68,30 @@ function tendency!(dY, Y, _, t)
     # must still be set, not left to whatever the tendency buffer contains.
     @. dw = Geometry.WVector(zero(FT))
 
-    A = Operators.AdvectionC2C(
-        bottom = Operators.SetValue(0.0),
-        top = Operators.SetValue(0.0),
-    )
-
-    # No slip at the surface and the geostrophic wind at the top, so both
-    # boundary faces of ∂z(u, v) come from the gradient operator and the
-    # divergence needs no boundary condition of its own.
+    # No slip at the surface and the geostrophic wind at the top. The boundary
+    # values of u and v are imposed through the gradient operator (via
+    # `gradient_c2f_dirichlet`), so both boundary faces of ∂z(u, v) come from
+    # the gradient and the divergence needs no boundary condition of its own.
+    # The advective form is an interpolated center-to-face gradient, with zero
+    # boundary values imposed the same way.
     divf2c = Operators.DivergenceF2C()
+    interpf2c = Operators.InterpolateF2C()
 
     # u-momentum
-    gradc2f = Operators.GradientC2F(
-        bottom = Operators.SetValue(FT(0)),
-        top = Operators.SetValue(FT(ug)),
-    )
-    @. du = divf2c(ν * gradc2f(u)) + f * (v - vg) - A(w, u)
+    ∇u = Operators.gradient_c2f_dirichlet(u; bottom = FT(0), top = FT(ug))
+    ∇u_advect = Operators.gradient_c2f_dirichlet(u; bottom = FT(0), top = FT(0))
+    @. du =
+        divf2c(ν * ∇u) + f * (v - vg) - interpf2c(
+            Geometry.dot(Geometry.Contravariant3Vector(w), ∇u_advect),
+        )
 
     # v-momentum
-    gradc2f = Operators.GradientC2F(
-        bottom = Operators.SetValue(FT(0)),
-        top = Operators.SetValue(FT(vg)),
-    )
-    @. dv = divf2c(ν * gradc2f(v)) - f * (u - ug) - A(w, v)
+    ∇v = Operators.gradient_c2f_dirichlet(v; bottom = FT(0), top = FT(vg))
+    ∇v_advect = Operators.gradient_c2f_dirichlet(v; bottom = FT(0), top = FT(0))
+    @. dv =
+        divf2c(ν * ∇v) - f * (u - ug) - interpf2c(
+            Geometry.dot(Geometry.Contravariant3Vector(w), ∇v_advect),
+        )
     return dY
 end
 

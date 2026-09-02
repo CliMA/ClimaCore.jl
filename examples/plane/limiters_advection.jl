@@ -93,7 +93,7 @@ include(joinpath(@__DIR__, "..", "example_utils.jl")) # linkfig
 function tendency!(yₜ, y, parameters, t)
     (; u, Δₕq) = parameters
     grad = Operators.Gradient()
-    wdiv = Operators.WeakDivergence()
+    wdiv = Operators.Divergence{Operators.WeakForm}()
     coord = Fields.coordinate_field(axes(u))
     @. u = Geometry.UVVector(
         -u0 * (coord.y - flow_center.y) * cospi(t / end_time),

@@ -55,14 +55,12 @@ function tendency!(dY, Y, _, t)
 
     du = dY.u
     dp = dY.p
-
-    ∂f = Operators.GradientC2F(
-        left = Operators.SetValue(0.0),
-        right = Operators.SetValue(0.0),
-    )
+    # The homogeneous Dirichlet condition u = 0 on both boundary faces is
+    # imposed through the gradient operator by `gradient_c2f_dirichlet`.
+    ∂u = Operators.gradient_c2f_dirichlet(u; left = 0.0, right = 0.0)
     ∂c = Operators.DivergenceF2C()
 
-    @. dp = -Geometry.WVector(∂f(u))
+    @. dp = -Geometry.WVector(∂u)
     @. du = -∂c(p)
 
     return dY
@@ -93,7 +91,9 @@ exact_p(z, t) = -cos(z) * sin(t)
 
 # The scheme conserves the discrete energy (Δz/2) (Σ u² + Σ w p²) exactly, with
 # the boundary faces carrying half weight — that weighting is what makes the
-# boundary terms in `GradientC2F(SetValue)` and `DivergenceF2C` cancel.
+# boundary terms in `gradient_c2f_dirichlet` (which imposes the Dirichlet
+# condition on `u` through `GradientC2F`'s `SetGradient`) and `DivergenceF2C`
+# cancel.
 face_weights = [j == 1 || j == nelems + 1 ? 0.5 : 1.0 for j in 1:(nelems + 1)]
 Δz = z_length / nelems
 energy(Y) =

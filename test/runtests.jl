@@ -60,18 +60,18 @@ unit_tests = [
 
     # Fields
     UnitTest("Fields"                                   ,"Fields/unit_field.jl"; tier = :unit, subsystem = :fields),
+    UnitTest("Fields - fused slice loops"              ,"Fields/unit_fusion.jl"; tier = :unit, subsystem = :fields, slow = true), # compiles the spectral stack for every space; excluded from the one-process GHA jobs
     UnitTest("Fields - inference regression"            ,"Fields/inference_repro.jl"; tier = :inference, subsystem = :fields),
     UnitTest("Fields - zero-allocation broadcasts"      ,"Fields/allocs_field.jl"; meta = :cpu_only, tier = :allocs, subsystem = :fields),
     UnitTest("Fields - convergence integrals"           ,"Fields/conv_field_integrals.jl"; tier = :conv, subsystem = :fields),
     UnitTest("Fields - multi broadcast fusion"          ,"Fields/unit_field_multi_broadcast_fusion.jl"; tier = :unit, subsystem = :fields),
+    UnitTest("Fields - FieldVector flattening"          ,"Fields/unit_fieldvector_flatten.jl"; tier = :unit, subsystem = :fields),
     UnitTest("Fields - inference"                       ,"Fields/inference_fields.jl"; meta = :cpu_only, tier = :inference, subsystem = :fields),
-    UnitTest("Reinstantiate broadcasted"                ,"Operators/unit_reinstantiate_bc.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Placeholder Fields"                       ,"Operators/unit_common.jl"; tier = :unit, subsystem = :operators),
 
     # Spectral Element Operators
-    UnitTest("Spectral elem - form types"               ,"Operators/spectralelement/unit_form_types.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - vector identities"        ,"Operators/spectralelement/unit_vector_identities.jl"; tier = :unit, subsystem = :operators),
-    UnitTest("Spectral elem - rectilinear"              ,"Operators/spectralelement/unit_rectilinear.jl"; tier = :unit, subsystem = :operators),
+    UnitTest("Spectral elem - rectilinear"              ,"Operators/spectralelement/unit_rectilinear.jl"; tier = :unit, subsystem = :operators, slow = true), # 28 min under the GHA coverage job; Buildkite runs it uninstrumented
     UnitTest("Spectral elem - plane"                    ,"Operators/spectralelement/unit_plane.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - inference"                ,"Operators/spectralelement/inference_spectralelement.jl"; tier = :inference, subsystem = :operators),
     UnitTest("Spectral elem - gradient tensor"          ,"Operators/spectralelement/unit_covar_deriv_ops.jl"; tier = :unit, subsystem = :operators),
@@ -91,22 +91,25 @@ unit_tests = [
     UnitTest("Spectral elem - sphere hyperdiff vec"     ,"Operators/spectralelement/unit_sphere_hyperdiffusion_vec.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - sphere hyperdiff vec conv" ,"Operators/spectralelement/conv_sphere_hyperdiffusion_vec.jl"; tier = :conv, subsystem = :operators),
     UnitTest("Spectral elem - over-integration"         ,"Operators/spectralelement/unit_overintegration.jl"; meta = :cpu_only, tier = :unit, subsystem = :operators),
-    # `add_numerical_flux_internal!`/`_boundary!` walk faces in a host loop and
+    # `add_numerical_flux_interior!`/`_boundary!` walk faces in a host loop and
     # scalar-index the data, so tests built on them either wrap the calls in a
     # scoped `allowscalar` (the two below) or are :cpu_only (the three after).
     UnitTest("Spectral elem - DG two-point fluxes"      ,"Operators/spectralelement/unit_two_point_fluxes.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG sphere fluxes"         ,"Operators/spectralelement/unit_sphere_dg_fluxes.jl"; tier = :unit, subsystem = :operators),
-    UnitTest("Spectral elem - DG stability properties"  ,"Operators/spectralelement/unit_dg_stability.jl"; meta = :cpu_only, tier = :unit, subsystem = :operators),
-    UnitTest("Spectral elem - DG boundary fluxes"       ,"Operators/spectralelement/unit_dg_boundary_fluxes.jl"; meta = :cpu_only, tier = :unit, subsystem = :operators),
+    UnitTest("Spectral elem - DG stability properties"  ,"Operators/spectralelement/unit_dg_stability.jl"; tier = :unit, subsystem = :operators),
+    UnitTest("Spectral elem - DG boundary fluxes"       ,"Operators/spectralelement/unit_dg_boundary_fluxes.jl"; tier = :unit, subsystem = :operators),
+    UnitTest("Spectral elem - Laplacian atoms"          ,"Operators/spectralelement/unit_laplacians.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG extruded sphere"       ,"Operators/spectralelement/unit_extruded_sphere_dg.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG extruded plane"        ,"Operators/spectralelement/unit_extruded_plane_dg.jl"; tier = :unit, subsystem = :operators),
+    UnitTest("Spectral elem - tendency completion"      ,"Operators/spectralelement/unit_tendency_completion.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG divergence conv"       ,"Operators/spectralelement/conv_dg_divergence.jl"; meta = :cpu_only, tier = :conv, subsystem = :operators),
     UnitTest("Operators - broadcast inference"          ,"Operators/inference_operators.jl"; tier = :inference, subsystem = :operators),
     UnitTest("FD ops - zero-allocation stencils"        ,"Operators/finitedifference/allocs_fd_ops.jl"; meta = :cpu_only, tier = :allocs, subsystem = :operators),
+    UnitTest("SEM ops - zero-allocation broadcasts"     ,"Operators/spectralelement/allocs_spectral_ops.jl"; meta = :cpu_only, tier = :allocs, subsystem = :operators),
 
     # Finite Difference & Hybrid Operators
     UnitTest("FD ops - column"                          ,"Operators/finitedifference/unit_column.jl"; tier = :unit, subsystem = :operators),
-    UnitTest("FD ops - tensor"                          ,"Operators/finitedifference/unit_tensor.jl"; tier = :unit, subsystem = :operators),
+    UnitTest("FD ops - tensor"                          ,"Operators/finitedifference/unit_tensor.jl"; tier = :unit, subsystem = :operators, slow = true), # largest instrumented compile peak; the coverage job cannot afford it
     UnitTest("FD ops - boundary symmetry"               ,"Operators/finitedifference/unit_boundary_symmetry.jl"; tier = :unit, subsystem = :operators),
     UnitTest("FD ops - upwind schemes"                  ,"Operators/finitedifference/unit_upwind_schemes.jl"; tier = :unit, subsystem = :operators),
     UnitTest("FD ops - inference"                       ,"Operators/finitedifference/inference_finitedifference.jl"; meta = :cpu_only, tier = :inference, subsystem = :operators),
@@ -139,13 +142,13 @@ unit_tests = [
     UnitTest("MatrixFields - broadcasting"              ,"MatrixFields/unit_matrix_field_broadcasting.jl"; meta = :cpu_only, tier = :unit, subsystem = :matrixfields, slow = true), # 3.1 min for all 22 cases
     UnitTest("MatrixFields - multiple field solve"      ,"MatrixFields/multiple_field_solve_reproducer_1.jl"; tier = :unit, subsystem = :matrixfields),
     UnitTest("MatrixFields - flat spaces"               ,"MatrixFields/unit_flat_spaces.jl"; tier = :unit, subsystem = :matrixfields),
-    UnitTest("MatrixFields - indexing"                  ,"MatrixFields/unit_field_matrix_indexing.jl"; tier = :unit, subsystem = :matrixfields),
+    UnitTest("MatrixFields - indexing"                  ,"MatrixFields/unit_field_matrix_indexing.jl"; tier = :unit, subsystem = :matrixfields, slow = true), # +1.5 GiB instrumented peak on the coverage job
     UnitTest("MatrixFields - operator matrices"         ,"MatrixFields/unit_operator_matrices.jl"; tier = :unit, subsystem = :matrixfields, slow = true), # 4.3 min
     UnitTest("MatrixFields - mat mul recursion"         ,"MatrixFields/unit_matrix_multiplication_recursion.jl"; tier = :unit, subsystem = :matrixfields),
 
     # Hypsography
     UnitTest("Hypsography - 2d"                         ,"Hypsography/unit_hypsography_2d.jl"; tier = :unit, subsystem = :hypsography),
-    UnitTest("Hypsography - 3d sphere"                  ,"Hypsography/unit_hypsography_3dsphere.jl"; tier = :unit, subsystem = :hypsography),
+    UnitTest("Hypsography - 3d sphere"                  ,"Hypsography/unit_hypsography_3dsphere.jl"; tier = :unit, subsystem = :hypsography, slow = true), # +3 GiB instrumented peak; the coverage job's repeated OOM site
 
     # Limiters, IO, Remapping
     UnitTest("Limiter"                                  ,"Limiters/unit_limiter.jl"; tier = :unit, subsystem = :limiters),
@@ -176,6 +179,7 @@ unit_tests = [
     # Quality & Deprecations
     UnitTest("Aqua"                                     ,"aqua.jl"; tier = :misc, subsystem = :quality),
     UnitTest("Deprecations"                             ,"deprecations.jl"; tier = :misc, subsystem = :quality),
+    UnitTest("Precompile workload"                      ,"precompile_workload.jl"; tier = :misc, subsystem = :quality, slow = true), # ~1 min: recompiles ClimaCore in a subprocess
 
     # GPU Only
     UnitTest("GPU - cuda"                               ,"gpu/cuda.jl"; meta = :gpu_only, tier = :gpu, subsystem = :gpu),
@@ -243,22 +247,25 @@ end
 
 # Optional CLI / Environment-based test filtering:
 # e.g. TEST_TIER=unit, TEST_EXCLUDE_TIER=conv,inference, TEST_SUBSYSTEM=operators,
-# TEST_TAG=dg, TEST_FAST=true, TEST_EXCLUDE_SLOW=true
+# TEST_EXCLUDE_SUBSYSTEM=operators, TEST_TAG=dg, TEST_FAST=true,
+# TEST_EXCLUDE_SLOW=true
 let
     tier_filter = get(ENV, "TEST_TIER", nothing)
     exclude_tier_filter = get(ENV, "TEST_EXCLUDE_TIER", nothing)
     subsystem_filter = get(ENV, "TEST_SUBSYSTEM", nothing)
+    exclude_subsystem_filter = get(ENV, "TEST_EXCLUDE_SUBSYSTEM", nothing)
     tag_filter = get(ENV, "TEST_TAG", nothing)
     fast_filter = get(ENV, "TEST_FAST", "false") == "true"
     exclude_slow_filter = get(ENV, "TEST_EXCLUDE_SLOW", "false") == "true"
     if !isnothing(tier_filter) || !isnothing(exclude_tier_filter) ||
-       !isnothing(subsystem_filter) || !isnothing(tag_filter) ||
-       fast_filter || exclude_slow_filter
+       !isnothing(subsystem_filter) || !isnothing(exclude_subsystem_filter) ||
+       !isnothing(tag_filter) || fast_filter || exclude_slow_filter
         filtered = filter_tests(
             unit_tests;
             tier = tier_filter,
             exclude_tier = exclude_tier_filter,
             subsystem = subsystem_filter,
+            exclude_subsystem = exclude_subsystem_filter,
             tag = tag_filter,
             fast = fast_filter,
             exclude_slow = exclude_slow_filter,
@@ -287,6 +294,7 @@ if isempty(unit_tests)
                 "TEST_TIER",
                 "TEST_EXCLUDE_TIER",
                 "TEST_SUBSYSTEM",
+                "TEST_EXCLUDE_SUBSYSTEM",
                 "TEST_TAG",
                 "TEST_FAST",
                 "TEST_EXCLUDE_SLOW",

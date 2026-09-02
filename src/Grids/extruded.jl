@@ -126,8 +126,8 @@ end
 
 topology(grid::ExtrudedFiniteDifferenceGrid) = topology(grid.horizontal_grid)
 
-is_continuous(grid::ExtrudedFiniteDifferenceGrid) =
-    is_continuous(grid.horizontal_grid)
+discretization(grid::ExtrudedFiniteDifferenceGrid) =
+    discretization(grid.horizontal_grid)
 
 ClimaComms.context(grid::ExtrudedFiniteDifferenceGrid) =
     ClimaComms.context(grid.horizontal_grid)
@@ -187,15 +187,17 @@ const ExtrudedRectilinearSpectralElementGrid3D =
     ExtrudedFiniteDifferenceGrid{<:RectilinearSpectralElementGrid2D}
 const ExtrudedCubedSphereSpectralElementGrid3D =
     ExtrudedFiniteDifferenceGrid{<:CubedSphereSpectralElementGrid2D}
-const ExtrudedPointCloudGrid = ExtrudedFiniteDifferenceGrid{<:PointCloudGrid}
+const ExtrudedMultiPointGrid = ExtrudedFiniteDifferenceGrid{<:MultiPointGrid}
+# Backwards-compatibility alias for the old name.
+Base.@deprecate_binding ExtrudedPointCloudGrid ExtrudedMultiPointGrid false
 
 # The show method for `AbstractGrid` calls `topology(grid)`, which errors for
-# a point-cloud horizontal grid, so print the point-cloud fields directly
-function Base.show(io::IO, grid::ExtrudedPointCloudGrid)
+# a multi-point horizontal grid, so print the multi-point fields directly
+function Base.show(io::IO, grid::ExtrudedMultiPointGrid)
     indent = get(io, :indent, 0)
     iio = IOContext(io, :indent => indent + 2)
     println(io, nameof(typeof(grid)), ":")
-    print_pointcloud_horizontal(iio, grid.horizontal_grid, indent)
+    print_multipoint_horizontal(iio, grid.horizontal_grid, indent)
     println(iio)
     println(iio, " "^(indent + 2), "vertical:")
     print(iio, " "^(indent + 4), "mesh: ", vertical_topology(grid).mesh)

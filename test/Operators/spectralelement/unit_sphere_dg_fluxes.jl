@@ -33,8 +33,8 @@ include("utils_dg.jl")  # dg_sphere_space, dg_jump_penalty
 # dispatch, not the operator. This barrier specializes on the concrete
 # argument types, so the measurement runs in a typed frame.
 @noinline function measured_flux_allocs(fn::F, r, q) where {F}
-    Operators.add_numerical_flux_internal!(fn, r, q)
-    return @allocated Operators.add_numerical_flux_internal!(fn, r, q)
+    Operators.add_numerical_flux_interior!(fn, r, q)
+    return @allocated Operators.add_numerical_flux_interior!(fn, r, q)
 end
 
 @testset "Cubed-Sphere DG Interface Fluxes" begin
@@ -52,7 +52,7 @@ end
                 q = smooth_scalar(coords)
                 r = similar(q)
                 fill!(parent(r), 0)
-                Operators.add_numerical_flux_internal!(dg_jump_penalty, r, q)
+                Operators.add_numerical_flux_interior!(dg_jump_penalty, r, q)
                 rn = @. r / lgeom.WJ
                 tol = FT == Float32 ? 1e-4 : 1e-10
                 @test maximum(abs, parent(rn)) < tol * maximum(abs, parent(q))

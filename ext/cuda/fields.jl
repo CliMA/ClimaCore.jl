@@ -38,3 +38,6 @@ end
 
 cuda_synchronize(device::ClimaComms.CUDADevice; kwargs...) =
     CUDA.synchronize(; kwargs...)
+
+# SubArrays are covered by the generic parent-recursion method in Fields.
+Fields.is_gpu_array_type(::Type{<:CUDA.CuArray}) = true

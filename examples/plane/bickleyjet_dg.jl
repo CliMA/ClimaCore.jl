@@ -180,7 +180,7 @@ elseif numflux_name == "roe"
     roeflux
 else
     # Without this, an unrecognized name leaves `numflux === nothing` and the
-    # run dies inside `add_numerical_flux_internal!` with a `MethodError`.
+    # run dies inside `add_numerical_flux_interior!` with a `MethodError`.
     error("Unknown numerical flux $(repr(numflux_name)): pass one of \
            \"central\", \"rusanov\" or \"roe\".")
 end
@@ -200,13 +200,13 @@ function rhs!(dydt, y, (parameters, numflux), t)
     #  W = Quadrature weights
     #  J = Jacobian determinant of the transformation `ξ` to `x`
     #
-    wdiv = Operators.WeakDivergence()
+    wdiv = Operators.Divergence{Operators.WeakForm}()
 
     local_geometry_field = Fields.local_geometry_field(y)
 
     dydt .= wdiv.(flux.(y, Ref(parameters))) .* (.-(local_geometry_field.WJ))
 
-    Operators.add_numerical_flux_internal!(numflux, dydt, y, parameters)
+    Operators.add_numerical_flux_interior!(numflux, dydt, y, parameters)
     Operators.add_numerical_flux_boundary!(
         dydt,
         y,

@@ -117,11 +117,11 @@ div.(grad.(s))
 #=
 function benchmark_se_kernels(::Type{FT}) where {FT}
     hdiv = Operators.Divergence()
-    wdiv = Operators.WeakDivergence()
+    wdiv = Operators.Divergence{Operators.WeakForm}()
     grad = Operators.Gradient()
-    wgrad = Operators.WeakGradient()
+    wgrad = Operators.Gradient{Operators.WeakForm}()
     curl = Operators.Curl()
-    wcurl = Operators.WeakCurl()
+    wcurl = Operators.Curl{Operators.WeakForm}()
 
     s, uₕ, uᵥ = initialize_mwe(ClimaComms.CUDADevice(), FT)
 

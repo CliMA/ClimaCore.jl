@@ -153,7 +153,7 @@ end
 
 function lazy_data_broadcast(adaption::T) where {T}
     n_args = Val(fieldcount(T))
-    data_args = ntuple(i -> Fields.todata(getfield(adaption, i)), n_args)
+    data_args = ntuple(i -> Fields.field_values(getfield(adaption, i)), n_args)
     return Base.Broadcast.broadcasted(Operators.unionall_type(T), data_args...)
 end # Should this be defined in Fields? It can also be extended to nested structs.
 
@@ -291,7 +291,7 @@ function diffuse_surface_elevation!(
         f_z = f.z
     end
     # Define required ops
-    wdiv = Operators.WeakDivergence()
+    wdiv = Operators.Divergence{Operators.WeakForm}()
     grad = Operators.Gradient()
     # Create dss buffer
     ghost_buffer = (bf = Spaces.create_dss_buffer(f_z),)
@@ -303,7 +303,7 @@ end
 
 function _diffuse_surface_elevation!(f, κ, maxiter, dt, χf, f_z, ghost_buffer)
     # Define required ops
-    wdiv = Operators.WeakDivergence()
+    wdiv = Operators.Divergence{Operators.WeakForm}()
     grad = Operators.Gradient()
     # Apply smoothing
     for iter in 1:maxiter

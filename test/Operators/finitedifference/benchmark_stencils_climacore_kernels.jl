@@ -37,30 +37,30 @@ function op_InterpolateC2F!(c, f, bcs)
     return nothing
 end
 n_reads_writes(::Type{typeof(op_InterpolateC2F!)}) = 2 # 1 write + 1 reads (0 metric terms)
-function op_LeftBiasedC2F!(c, f, bcs)
-    interp = Operators.LeftBiasedC2F(bcs)
+function op_BottomBiasedC2F!(c, f, bcs)
+    interp = Operators.BottomBiasedC2F(bcs)
     @. f.x = interp(c.y)
     return nothing
 end
-n_reads_writes(::Type{typeof(op_LeftBiasedC2F!)}) = 2 # 1 write + 1 reads (0 metric terms)
-function op_LeftBiasedF2C!(c, f, bcs = (;))
-    interp = Operators.LeftBiasedF2C(bcs)
+n_reads_writes(::Type{typeof(op_BottomBiasedC2F!)}) = 2 # 1 write + 1 reads (0 metric terms)
+function op_BottomBiasedF2C!(c, f, bcs = (;))
+    interp = Operators.BottomBiasedF2C(bcs)
     @. c.x = interp(f.y)
     return nothing
 end
-n_reads_writes(::Type{typeof(op_LeftBiasedF2C!)}) = 2 # 1 write + 1 reads (0 metric terms)
-function op_RightBiasedC2F!(c, f, bcs)
-    interp = Operators.RightBiasedC2F(bcs)
+n_reads_writes(::Type{typeof(op_BottomBiasedF2C!)}) = 2 # 1 write + 1 reads (0 metric terms)
+function op_TopBiasedC2F!(c, f, bcs)
+    interp = Operators.TopBiasedC2F(bcs)
     @. f.x = interp(c.y)
     return nothing
 end
-n_reads_writes(::Type{typeof(op_RightBiasedC2F!)}) = 2 # 1 write + 1 reads (0 metric terms)
-function op_RightBiasedF2C!(c, f, bcs = (;))
-    interp = Operators.RightBiasedF2C(bcs)
+n_reads_writes(::Type{typeof(op_TopBiasedC2F!)}) = 2 # 1 write + 1 reads (0 metric terms)
+function op_TopBiasedF2C!(c, f, bcs = (;))
+    interp = Operators.TopBiasedF2C(bcs)
     @. c.x = interp(f.y)
     return nothing
 end
-n_reads_writes(::Type{typeof(op_RightBiasedF2C!)}) = 2 # 1 write + 1 reads (0 metric terms)
+n_reads_writes(::Type{typeof(op_TopBiasedF2C!)}) = 2 # 1 write + 1 reads (0 metric terms)
 #### Curl
 function op_CurlC2F!(c, f, bcs = (;))
     curl = Operators.CurlC2F(bcs)
@@ -179,24 +179,14 @@ GradientF2C
 GradientC2F
 InterpolateF2C
 InterpolateC2F
-LeftBiasedC2F
-LeftBiasedF2C
-RightBiasedC2F
-RightBiasedF2C
+BottomBiasedC2F
+BottomBiasedF2C
+TopBiasedC2F
+TopBiasedF2C
 
 # Additional operators
 UpwindBiasedProductC2F
 Upwind3rdOrderBiasedProductC2F
 CurlC2F
-
-# Unused (at the moment) operators
-LeftBiased3rdOrderC2F  # unused
-LeftBiased3rdOrderF2C  # unused
-RightBiased3rdOrderC2F # unused
-RightBiased3rdOrderF2C # unused
-AdvectionF2F           # only used in ClimaAtmos src/
-AdvectionC2C           # only used in ClimaAtmos src/
-FluxCorrectionC2C      # unused at the moment
-FluxCorrectionF2F      # only used in ClimaAtmos src/
 ```
 =#

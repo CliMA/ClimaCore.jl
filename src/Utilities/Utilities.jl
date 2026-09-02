@@ -5,6 +5,79 @@ using UnrolledUtilities
 import ForwardDiff
 import InteractiveUtils
 
+# Shared walker for the two macros below: apply set! to every listed function's
+# methods that belong to this package (mutations of foreign methods would not
+# survive precompilation), including matching Core.kwcall methods and their
+# hidden body-function methods, where keyword arguments put the loop bodies.
+function set_inference_flag!(set!::S, root::Module, fs) where {S}
+    for f in fs
+        if f isa Module
+            defined_names = filter(Base.Fix1(isdefined, f), names(f; all = true))
+            values = map(Base.Fix1(getproperty, f), defined_names)
+            functions = filter(Base.Fix2(isa, Function), values)
+            set_inference_flag!(set!, root, (functions..., Core.kwcall))
+            continue
+        end
+        f === Core.kwcall && continue # handled with the body functions below
+        for method in methods(f)
+            Base.moduleroot(method.module) === root || continue
+            set!(method)
+        end
+    end
+    for method in methods(Core.kwcall)
+        Base.moduleroot(method.module) === root || continue
+        F = Base.unwrap_unionall(method.sig).parameters[3]
+        Core.kwcall in fs || any(g -> g isa Function && F <: typeof(g), fs) ||
+            continue
+        set!(method)
+        body_function = Base.bodyfunction(method)
+        isnothing(body_function) && continue
+        foreach(set!, methods(body_function))
+    end
+    return nothing
+end
+
+"""
+    @drop_recursion_limits f₁, f₂, ...
+
+Remove the inference recursion limit from every listed function's methods that
+this package owns, along with the package's `Core.kwcall` methods that target a
+listed function (or all of them, if `Core.kwcall` is listed) and their hidden
+body functions, where keyword arguments put the actual loop bodies. Listing a
+module applies to every function it defines. Use this for functions that
+recurse by design: the default limit widens their argument types, turning
+downstream calls into dynamic dispatch with runtime allocations, including
+inside GPU kernels. Only owned methods are touched, since a mutated foreign
+method would not survive precompilation.
+"""
+macro drop_recursion_limits(fs...)
+    f_exprs = length(fs) == 1 && Meta.isexpr(fs[1], :tuple) ? fs[1].args : fs
+    return :(@static if hasfield(Method, :recursion_relation)
+        set_inference_flag!(
+            m -> m.recursion_relation = Returns(true),
+            Base.moduleroot(@__MODULE__),
+            ($(map(esc, f_exprs)...),),
+        )
+    end)
+end
+
+"""
+    @drop_constprop f₁, f₂, ...
+
+Like [`@drop_recursion_limits`](@ref), but disables constant propagation on the
+methods, for functions whose bodies constprop re-infers once per distinct
+constant argument (thread counts, index-collection lengths) without ever
+reaching a different compiled result.
+"""
+macro drop_constprop(fs...)
+    f_exprs = length(fs) == 1 && Meta.isexpr(fs[1], :tuple) ? fs[1].args : fs
+    return :(set_inference_flag!(
+        m -> m.constprop = 0x02,
+        Base.moduleroot(@__MODULE__),
+        ($(map(esc, f_exprs)...),),
+    ))
+end
+
 """
     ConvertTo{T}()
 
@@ -27,6 +100,7 @@ false
 struct ConvertTo{T} end
 @inline (::ConvertTo{T})(x) where {T} = convert(T, x)
 
+
 include("plushalf.jl")
 include("auto_broadcaster.jl")
 include("cache.jl")
@@ -34,6 +108,8 @@ include("safe_mapreduce.jl")
 
 module Unrolled # TODO: Move all of these functions into UnrolledUtilities.jl
 
+import UnrolledUtilities
+import ..Utilities: @drop_recursion_limits
 # Alternative to Base.setindex with guaranteed constant propagation
 @inline unrolled_setindex(x::Tuple, value, ::Val{i}) where {i} =
     ntuple(n -> n == i ? value : x[n], Val(length(x)))
@@ -48,16 +124,39 @@ module Unrolled # TODO: Move all of these functions into UnrolledUtilities.jl
     return Base.Cartesian.@ntuple $N n -> f(x[n])
 end
 
-# Remove each function's recursion limit for better type inference on Julia 1.10
-if hasfield(Method, :recursion_relation)
-    for f in (unrolled_setindex, unrolled_insert, unrolled_map_with_inbounds)
-        for m in methods(f)
-            m.recursion_relation = Returns(true)
-        end
-    end
+# Tuple-only fast path for UnrolledUtilities.unrolled_map,
+# whose generic method drags a chain of helpers through inference per distinct
+# broadcast or layout type; non-Tuples forward to UnrolledUtilities. This is
+# the only shim that earns its keep: removing it costs ~10% of a spectral
+# expression's compilation memory (extruded-sphere hyperdiffusion:
+# 735/753/1671 MB vs 671/690/1503 MB), while shims for the other unrolled_*
+# functions are each worth well under a percent. Not map(f, x) or
+# ntuple(n -> f(x[n]), Val(N)): neither survives recursion-lifting or inference
+# past 32 elements, which rebreaks deeply nested AutoBroadcaster cases and
+# reintroduces GPU kernel allocations (gpu_gc_pool_alloc).
+@generated unrolled_tuple_map(f, x::NTuple{N, Any}) where {N} = quote
+    Base.@_inline_meta
+    return Base.Cartesian.@ntuple $N n -> f(x[n])
 end
+@generated unrolled_tuple_map(f, x::NTuple{N, Any}, y::NTuple{N, Any}) where {N} = quote
+    Base.@_inline_meta
+    return Base.Cartesian.@ntuple $N n -> f(x[n], y[n])
+end
+@inline unrolled_tuple_map(f::F, itrs...) where {F} =
+    UnrolledUtilities.unrolled_map(f, itrs...)
 
-end
+# NOTE: unrolled_flatten and unrolled_flatmap are deliberately not defined
+# here: expanding them at the call site makes layout_args and
+# get_non_point_arg_tuple inline far enough into foreach_slice that constprop
+# gives up inside Base.Threads._spawn_set_thrpool, reintroducing a runtime
+# dispatch that test/Fields/unit_fusion.jl asserts against with @test_opt.
+
+@drop_recursion_limits unrolled_setindex, unrolled_insert,
+unrolled_map_with_inbounds, unrolled_tuple_map
+
+end # module Unrolled
+
+import .Unrolled: unrolled_tuple_map
 
 """
     cart_ind(n::NTuple, i::Integer)
@@ -204,9 +303,9 @@ with special handling of `DataType` fields to avoid errors during compilation.
 
 # Examples
 
-```jldoctest; setup = :(import ClimaCore.Utilities: new)
-julia> new(Int) isa Int
-true
+```jldoctest; setup = :(import ClimaCore.Utilities: new), filter = r"-?\\d+"
+julia> new(Int)
+4889520192
 
 julia> new(Complex{Int}, (1, 2))
 1 + 2im

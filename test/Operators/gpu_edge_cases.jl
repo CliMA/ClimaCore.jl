@@ -19,6 +19,7 @@ import ClimaCore:
     Geometry,
     Operators,
     Quadratures
+import ClimaCore.CommonSpaces: MultiColumnSpace, CellCenter
 
 const test_device = ClimaComms.device()
 const cpu_device = ClimaComms.CPUSingleThreaded()
@@ -80,7 +81,7 @@ function se_operator_results(space)
         (@. sin(coords.x) + cos(coords.y))
     u = @. Geometry.UVVector(f, 2 * f)
     grad_f = Operators.Gradient().(f)
-    wdiv_u = Operators.WeakDivergence().(u)
+    wdiv_u = Operators.Divergence{Operators.WeakForm}().(u)
     Spaces.weighted_dss!(grad_f)
     Spaces.weighted_dss!(wdiv_u)
     return (grad_f, wdiv_u)
@@ -116,14 +117,68 @@ function fd_c2f_results(center_space, face_space)
     zc = Fields.coordinate_field(center_space).z
     f = @. zc^2 + 1
     gradc2f = Operators.GradientC2F(
-        bottom = Operators.SetValue(FT(1)),
-        top = Operators.SetValue(FT(2)),
+        bottom = Operators.SetGradient(Geometry.WVector(FT(1))),
+        top = Operators.SetGradient(Geometry.WVector(FT(2))),
     )
     interpc2f = Operators.InterpolateC2F(
         bottom = Operators.Extrapolate(),
         top = Operators.Extrapolate(),
     )
     return (gradc2f.(f), interpc2f.(f))
+end
+
+# Advection and nested-multiply stencils, covering the eager GPU kernel's
+# advection (pointwise and operator-matrix) and matrix-multiply handlers.
+function fd_advection_inputs(center_space, face_space)
+    FT = Spaces.undertype(center_space)
+    zc = Fields.coordinate_field(center_space).z
+    zf = Fields.coordinate_field(face_space).z
+    x = @. zc / (zc + 1) + FT(0.5)
+    w = @. Geometry.WVector(zf / (zf + 1) + FT(0.5))
+    u³ = Geometry.Contravariant3Vector.(
+        Geometry.contravariant3.(w, Fields.local_geometry_field(face_space)),
+    )
+    return (; FT, x, w, u³)
+end
+
+function fd_advection_results(center_space, face_space)
+    (; FT, x, w, u³) = fd_advection_inputs(center_space, face_space)
+    up3 = Operators.Upwind3rdOrderBiasedProductC2F(
+        bottom = Operators.Extrapolate(1),
+        top = Operators.Extrapolate(1),
+    )
+    div_sv = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
+        top = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
+    )
+    gradc2f = Operators.GradientC2F(
+        bottom = Operators.SetGradient(Geometry.WVector(FT(1))),
+        top = Operators.SetGradient(Geometry.WVector(FT(0))),
+    )
+    divf2c = Operators.DivergenceF2C()
+    return (
+        (@. div_sv(up3(w, x))),
+        (@. divf2c(gradc2f(x))),
+        fd_pointwise_advection_results(center_space, face_space)...,
+    )
+end
+
+# The pointwise-evaluated advection operators (no operator-matrix rewrite):
+# LinVanLeerC2F, FCTZalesak (tuple-valued advected field and neighboring-face
+# velocities) and TVDLimitedFluxC2F (contravariant extra parameter). Safe on
+# 1- and 2-center columns, where they clamp all indices.
+function fd_pointwise_advection_results(center_space, face_space)
+    (; FT, x, w, u³) = fd_advection_inputs(center_space, face_space)
+    lvl = Operators.LinVanLeerC2F(
+        constraint = Operators.MonotoneLocalExtrema(),
+    )
+    fctz = Operators.FCTZalesak()
+    tvd = Operators.TVDLimitedFluxC2F(method = Operators.MinModLimiter())
+    return (
+        lvl.(w, x, FT(0.1)),
+        fctz.(u³, tuple.(x, x .* FT(0.9))),
+        tvd.(u³, x, u³),
+    )
 end
 
 @testset "boundary-only column, Nv = 1 (device vs CPU) [$FT]" for FT in (
@@ -140,13 +195,29 @@ end
         @test all(isfinite, Array(parent(field)))
     end
 
-    # Center-to-face stencils do not support a column whose interior window
-    # is empty: `Operators.window_bounds` rejects it on every device. This
-    # test pins that limitation; if empty interior windows are ever
-    # supported, replace it with a device-vs-CPU comparison like the one
-    # above.
-    @test_throws AssertionError fd_c2f_results(spaces...)
-    @test_throws AssertionError fd_c2f_results(spaces_cpu...)
+    # Center-to-face stencils on a column whose interior window is empty:
+    # `Operators.window_bounds` used to reject these, but it now clamps the
+    # overlapping boundary windows (boundary handling is dispatched per index,
+    # with the left window taking precedence), so both faces are computed with
+    # their boundary rows.
+    for (field, field_cpu) in
+        zip(fd_c2f_results(spaces...), fd_c2f_results(spaces_cpu...))
+        @test device_matches_cpu(field, field_cpu; rtol = 10 * eps(FT))
+        @test all(isfinite, Array(parent(field)))
+    end
+
+    # Pointwise advection operators, whose ghost handling clamps every index.
+    # (The matrix-rewritten Upwind3rdOrderBiasedProductC2F is excluded on 1-
+    # and 2-center columns: the CPU matrix multiply currently reads past the
+    # column end when the two boundary windows overlap, which is a BoundsError
+    # under --check-bounds=yes; see matrix_multiplication.jl.)
+    for (field, field_cpu) in zip(
+        fd_pointwise_advection_results(spaces...),
+        fd_pointwise_advection_results(spaces_cpu...),
+    )
+        @test device_matches_cpu(field, field_cpu; rtol = 10 * eps(FT))
+        @test all(isfinite, Array(parent(field)))
+    end
 end
 
 @testset "smallest column with an interior, Nv = 2 (device vs CPU) [$FT]" for FT in (
@@ -167,9 +238,103 @@ end
     end
     spaces = two_level_spaces(test_device)
     spaces_cpu = two_level_spaces(cpu_device)
-    results = (fd_f2c_results(spaces...)..., fd_c2f_results(spaces...)...)
-    results_cpu =
-        (fd_f2c_results(spaces_cpu...)..., fd_c2f_results(spaces_cpu...)...)
+    # As for Nv = 1, the pointwise advection operators are included and the
+    # matrix-rewritten ones excluded (see the comment there).
+    results = (
+        fd_f2c_results(spaces...)...,
+        fd_c2f_results(spaces...)...,
+        fd_pointwise_advection_results(spaces...)...,
+    )
+    results_cpu = (
+        fd_f2c_results(spaces_cpu...)...,
+        fd_c2f_results(spaces_cpu...)...,
+        fd_pointwise_advection_results(spaces_cpu...)...,
+    )
+    for (field, field_cpu) in zip(results, results_cpu)
+        @test device_matches_cpu(field, field_cpu; rtol = 10 * eps(FT))
+        @test all(isfinite, Array(parent(field)))
+    end
+end
+
+@testset "vertically periodic column (device vs CPU) [$FT]" for FT in (
+    Float32,
+    Float64,
+)
+    # On a vertically periodic column, stencil indices wrap instead of
+    # clamping (`mod1` in the eager kernel's window and matrix helpers), and
+    # boundary conditions are ignored; nothing else in the GPU tier covers
+    # the periodic vertical topology.
+    periodic_column_spaces(device) = begin
+        context = ClimaComms.SingletonCommsContext(device)
+        domain = Domains.IntervalDomain(
+            Geometry.ZPoint(FT(0)),
+            Geometry.ZPoint(FT(1));
+            periodic = true,
+        )
+        mesh = Meshes.IntervalMesh(domain; nelems = 8)
+        topology = Topologies.IntervalTopology(context, mesh)
+        center_space = Spaces.CenterFiniteDifferenceSpace(topology)
+        (center_space, Spaces.FaceFiniteDifferenceSpace(center_space))
+    end
+    periodic_results(center_space, face_space) = begin
+        zc = Fields.coordinate_field(center_space).z
+        zf = Fields.coordinate_field(face_space).z
+        f = @. sinpi(2 * zc) + 2
+        u = @. Geometry.WVector(cospi(2 * zf) + FT(0.5))
+        (
+            Operators.DivergenceF2C().(u),
+            Operators.GradientC2F().(f),
+            Operators.InterpolateC2F().(f),
+            fd_advection_results(center_space, face_space)...,
+        )
+    end
+    spaces = periodic_column_spaces(test_device)
+    spaces_cpu = periodic_column_spaces(cpu_device)
+    for (field, field_cpu) in zip(
+        periodic_results(spaces...),
+        periodic_results(spaces_cpu...),
+    )
+        @test device_matches_cpu(field, field_cpu; rtol = 10 * eps(FT))
+        @test all(isfinite, Array(parent(field)))
+    end
+end
+
+@testset "multi-column FD space (device vs CPU) [$FT]" for FT in (
+    Float32,
+    Float64,
+)
+    # MultiColumnFiniteDifferenceSpace is in the eager GPU kernel's supported
+    # space families (`Operators.AllFiniteDifferenceSpace`); its `Field`
+    # handler must read each leaf field at the thread's level, not misread the
+    # space as a level field and read everything at level 1 -- the CPU
+    # references vary with z, so that failure mode cannot match them.
+    mc_spaces(device) = begin
+        points = [
+            Geometry.LatLongPoint(FT(10i - 40), FT(20i - 80)) for i in 1:7
+        ]
+        center_space = MultiColumnSpace(
+            FT;
+            points,
+            z_elem = 8,
+            z_min = FT(0),
+            z_max = FT(1000),
+            device,
+            staggering = CellCenter(),
+        )
+        (center_space, Spaces.face_space(center_space))
+    end
+    spaces = mc_spaces(test_device)
+    spaces_cpu = mc_spaces(cpu_device)
+    results = (
+        fd_f2c_results(spaces...)...,
+        fd_c2f_results(spaces...)...,
+        fd_advection_results(spaces...)...,
+    )
+    results_cpu = (
+        fd_f2c_results(spaces_cpu...)...,
+        fd_c2f_results(spaces_cpu...)...,
+        fd_advection_results(spaces_cpu...)...,
+    )
     for (field, field_cpu) in zip(results, results_cpu)
         @test device_matches_cpu(field, field_cpu; rtol = 10 * eps(FT))
         @test all(isfinite, Array(parent(field)))

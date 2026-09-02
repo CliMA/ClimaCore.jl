@@ -69,7 +69,7 @@ const grad_lift = Operators.central_gradient_lift
         lgeom = Fields.local_geometry_field(space)
         r = similar(q)
         r .= 0
-        Operators.add_numerical_flux_internal!(jump_penalty, r, q)
+        Operators.add_numerical_flux_interior!(jump_penalty, r, q)
         rn = @. r / lgeom.WJ
         @test maximum(abs, parent(rn)) < 1e-10 * maximum(abs, parent(q))
     end
@@ -80,7 +80,7 @@ end
     lgeom = Fields.local_geometry_field(center_space)
     r = similar(q)
     r .= 0
-    Operators.add_ldg_laplacian_flux_internal!(r, q, FT(1))
+    Operators.add_ldg_laplacian_flux_interior!(r, q, FT(1))
     rn = @. r / lgeom.WJ
     @test maximum(abs, parent(rn)) < 1e-10 * maximum(abs, parent(q))
 end
@@ -90,7 +90,7 @@ end
     lgeom = Fields.local_geometry_field(center_space)
     r = similar(q, Geometry.UVVector{FT})
     fill!(parent(r), 0)
-    Operators.add_lifting_flux_internal!(grad_lift, r, q)
+    Operators.add_lifting_flux_interior!(grad_lift, r, q)
     rn = @. r / lgeom.WJ
     @test maximum(abs, parent(rn)) < 1e-10 * maximum(abs, parent(q))
 end
@@ -104,7 +104,7 @@ end
     y = map((qi, uvi) -> (; q = qi, uv = uvi), q, uv)
     r = similar(q)
     r .= 0
-    Operators.add_numerical_flux_internal!(central_flux, r, y)
+    Operators.add_numerical_flux_interior!(central_flux, r, y)
     scale = sum(abs, parent(r))
     @test abs(sum(parent(r))) < 1e-12 * scale
 end
@@ -122,13 +122,13 @@ end
 
     r = similar(q)
     r .= 0
-    Operators.add_numerical_flux_internal!(jump_penalty, r, q)
+    Operators.add_numerical_flux_interior!(jump_penalty, r, q)
     rn = @. r / lgeom.WJ
     @test maximum(abs, parent(rn)) < 1e-10 * maximum(abs, parent(q))
 
     rl = similar(q, Geometry.UVVector{FT})
     fill!(parent(rl), 0)
-    Operators.add_lifting_flux_internal!(grad_lift, rl, q)
+    Operators.add_lifting_flux_interior!(grad_lift, rl, q)
     rln = @. rl / lgeom.WJ
     @test maximum(abs, parent(rln)) < 1e-10 * maximum(abs, parent(q))
 end
@@ -205,7 +205,7 @@ end
     y = map((qi, uvi) -> (; q = qi, uv = uvi), q, uv)
 
     dy_mw = @. hwdiv(F) * (-(lgeom.WJ))
-    Operators.add_numerical_flux_internal!(central_flux, dy_mw, y)
+    Operators.add_numerical_flux_interior!(central_flux, dy_mw, y)
     dy = @. dy_mw / lgeom.WJ
 
     dy_strong = @. -hdiv(F)

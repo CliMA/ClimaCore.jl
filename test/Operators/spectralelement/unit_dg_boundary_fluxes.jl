@@ -21,7 +21,7 @@ import ClimaCore:
 import .TestUtilities as TU
 
 # `add_numerical_flux_boundary!`, the boundary-face counterpart of
-# `add_numerical_flux_internal!`, on a channel domain (periodic in x, walls at
+# `add_numerical_flux_interior!`, on a channel domain (periodic in x, walls at
 # y = ±Ly/2). The interior-face path is covered elsewhere, on boundary-free
 # domains:
 #
@@ -59,7 +59,7 @@ function channel_space(
     return Spaces.SpectralElementSpace2D(
         topology,
         Quadratures.GLL{Nq}();
-        discontinuous = true,
+        discretization = Spaces.DG(),
     )
 end
 
@@ -122,6 +122,32 @@ end
             @test sum(parent(rb)) ≈ -c * (2 * Lx + 2 * Ly) rtol = sqrt(eps(FT))
         end
 
+        @testset "Extruded channel: constant flux integrates over the walls [$FT]" begin
+            # On an extruded (channel × z) space, `sWJ` carries the vertical
+            # measure, so a constant boundary flux integrates to
+            # −c · (wall length × height) summed over both walls.
+            zmax = FT(3)
+            zdomain = Domains.IntervalDomain(
+                Geometry.ZPoint(zero(FT)),
+                Geometry.ZPoint(zmax);
+                boundary_names = (:bottom, :top),
+            )
+            vspace = Spaces.CenterFiniteDifferenceSpace(
+                ClimaComms.device(),
+                Meshes.IntervalMesh(zdomain, nelems = 5),
+            )
+            xspace = Spaces.ExtrudedFiniteDifferenceSpace(
+                channel_space(FT; Lx, Ly),
+                vspace,
+            )
+            c = FT(3)
+            rx = zeros(xspace)
+            qx = ones(xspace)
+            const_flux(normal, (q⁻,)) = c
+            Operators.add_numerical_flux_boundary!(const_flux, rx, qx)
+            @test sum(parent(rx)) ≈ -c * 2 * Lx * zmax rtol = sqrt(eps(FT))
+        end
+
         @testset "Multi-field (NamedTuple) boundary flux [$FT]" begin
             # A flux returning a NamedTuple must scale and subtract per field,
             # like the interior loops and the GPU boundary kernel: its `a`
@@ -173,7 +199,7 @@ end
                     elem⁻ = Int(bconn.faces[1, f])
                     face⁻ = Int(bconn.faces[2, f])
                     i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, qq, false)
-                    sg = bconn.sgeom[qq, 1, f]
+                    sg = bconn.sgeom[1, qq, f]
                     q⁻ = q_data[CartesianIndex(1, i⁻, j⁻, elem⁻)]
                     staging[qq, f] = sg.sWJ * flux(sg.normal, (q⁻,))
                 end

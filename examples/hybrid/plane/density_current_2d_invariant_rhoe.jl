@@ -95,9 +95,9 @@ function rhs_invariant!(dY, Y, _, t)
     # fw = -g^31 cuₕ/ g^33
 
     hdiv = Operators.Divergence()
-    hwdiv = Operators.WeakDivergence()
+    hwdiv = Operators.Divergence{Operators.WeakForm}()
     hgrad = Operators.Gradient()
-    hwgrad = Operators.WeakGradient()
+    hwgrad = Operators.Gradient{Operators.WeakForm}()
     hcurl = Operators.Curl()
 
     If2c = Operators.InterpolateF2C()
@@ -130,10 +130,6 @@ function rhs_invariant!(dY, Y, _, t)
 
     # 1.b) vertical divergence
     vdivf2c = Operators.DivergenceF2C(
-        top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-        bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-    )
-    vdivc2f = Operators.DivergenceC2F(
         top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
     )
@@ -202,7 +198,16 @@ function rhs_invariant!(dY, Y, _, t)
     hκ₂∇²uₕ = @. hwdiv(κ₂ * ᶜ∇ₕuₕ)
     vκ₂∇²uₕ = @. vdivf2c(κ₂ * ᶠ∇ᵥuₕ)
     hκ₂∇²w = @. hwdiv(κ₂ * ᶠ∇ₕw)
-    vκ₂∇²w = @. vdivc2f(κ₂ * ᶜ∇ᵥw)
+
+    # The diffusive flux κ₂ ∇ᵥw is zero at each boundary face; that Dirichlet
+    # value on the divergence's argument is imposed by
+    # `divergence_c2f_dirichlet`.
+    κ₂∇ᵥw = @. κ₂ * ᶜ∇ᵥw
+    vκ₂∇²w = Operators.divergence_c2f_dirichlet(
+        κ₂∇ᵥw;
+        bottom = Geometry.WVector(0.0),
+        top = Geometry.WVector(0.0),
+    )
     hκ₂∇²h_tot = @. hwdiv(cρ * κ₂ * ᶜ∇ₕh_tot)
     vκ₂∇²h_tot = @. vdivf2c(fρ * κ₂ * ᶠ∇ᵥh_tot)
 

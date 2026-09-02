@@ -29,5 +29,6 @@ include("Remapping/Remapping.jl")
 
 include("deprecated.jl")
 include("to_device.jl")
+include("precompile_workload.jl")
 
 end # module

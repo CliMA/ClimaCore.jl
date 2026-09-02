@@ -153,7 +153,7 @@ warp_surface_elev(coord, hc::FT) where {FT} =
     z_min = -10.0
     z_max = 20.0
     staggering = Grids.CellCenter()
-    space = PointColumnEnsembleSpace(;
+    space = MultiColumnSpace(;
         points,
         z_elem,
         z_min,
@@ -164,7 +164,7 @@ warp_surface_elev(coord, hc::FT) where {FT} =
     @test space.staggering isa Grids.CellCenter
     grid = Spaces.grid(space)
     @test grid isa Grids.ExtrudedFiniteDifferenceGrid
-    @test grid.horizontal_grid isa Grids.PointCloudGrid
+    @test grid.horizontal_grid isa Grids.MultiPointGrid
     @test grid.horizontal_grid.global_geometry.radius == radius
     @test grid.vertical_grid.topology.mesh.domain.coord_max == Geometry.ZPoint(z_max)
     @test grid.vertical_grid.topology.mesh.domain.coord_min == Geometry.ZPoint(z_min)
@@ -174,7 +174,7 @@ warp_surface_elev(coord, hc::FT) where {FT} =
           longs
 
     # Test memoization when constructing the same space
-    space2 = PointColumnEnsembleSpace(;
+    space2 = MultiColumnSpace(;
         points = copy(points),
         z_elem,
         z_min,

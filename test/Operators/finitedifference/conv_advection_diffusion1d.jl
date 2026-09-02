@@ -64,21 +64,35 @@ import .TestUtilities: convergence_rate
         V = Geometry.WVector.(ones(FT, fs))
 
         function ∑tendencies!(dT, T, z, t)
-            bc_vb = Operators.SetValue(
-                FT(gaussian(z₀, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)),
-            )
-            bc_gt = Operators.SetGradient(
-                Geometry.WVector(
-                    FT(∇gaussian(z₁, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)),
+            # Dirichlet condition at the bottom. Unlike a prescribed analytic
+            # gradient, this uses the evolving solution's own half-cell difference,
+            # so the scheme's bottom-boundary treatment is part of what the
+            # convergence rate measures.
+            bc_gb = Operators.SetGradient(
+                Geometry.Covariant3Vector.(
+                    2 .* (
+                        Fields.level(T, 1) .-
+                        FT(gaussian(z₀, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ))
+                    ),
                 ),
             )
-            A = Operators.AdvectionC2C(
-                bottom = bc_vb,
-                top = Operators.Extrapolate(),
+            bc_gt = Operators.SetGradient(
+                Geometry.WVector(FT(∇gaussian(z₁, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ))),
             )
-            gradc2f = Operators.GradientC2F(; bottom = bc_vb, top = bc_gt)
+            top_center_left_biased_grad =
+                Geometry.Covariant3Vector.(
+                    Fields.level(T, Fields.nlevels(T)) .-
+                    Fields.level(T, Fields.nlevels(T) - 1),
+                )
+
+            bc_gt_lb = Operators.SetGradient(top_center_left_biased_grad)
+            gradc2f = Operators.GradientC2F(bottom = bc_gb, top = bc_gt)
+            gradc2f_advect = Operators.GradientC2F(bottom = bc_gb, top = bc_gt_lb)
+            interpf2c = Operators.InterpolateF2C()
             divf2c = Operators.DivergenceF2C()
-            return @. dT = divf2c(ν * gradc2f(T)) - A(V, T)
+            return @. dT =
+                divf2c(ν * gradc2f(T)) -
+                interpf2c(Geometry.dot(Geometry.Contravariant3Vector(V), gradc2f_advect(T)))
         end
 
         # Solve the ODE operator. The explicit diffusive stability limit is
@@ -102,13 +116,16 @@ import .TestUtilities: convergence_rate
         computed_result = sol.u[end]
         analytical_result = gaussian.(zp, t₁; μ = μ, δ = δ, ν = ν, 𝓌 = 𝓌)
         Δh[k] = (z₁ - z₀) / n
+        # Root-mean-square error. (Dividing the Euclidean norm by N instead of
+        # √N would scale the error by an extra √Δh and inflate the measured
+        # rate by 1/2.)
         err[k] =
             norm(parent(computed_result) .- analytical_result) /
-            length(analytical_result)
+            sqrt(length(analytical_result))
     end
     conv = convergence_rate(err, Δh)
     # conv should be approximately 2 for second order-accurate stencil.
-    @test 1.4 ≤ conv[1] ≤ 2.6
-    @test 1.4 ≤ conv[2] ≤ 2.6
+    @test conv[1] ≈ 2 atol = 0.3
+    @test conv[2] ≈ 2 atol = 0.3
     @test err[3] ≤ err[2] ≤ err[1] ≤ 1e-2
 end

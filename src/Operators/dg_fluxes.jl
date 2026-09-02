@@ -49,7 +49,7 @@ end
 Symmetric central lifting completing the strong-form DG gradient of a scalar:
 each side adds ``(q^* - q_{side}) n̂_{side}`` with central ``q^*``, i.e.
 ``((q⁺ - q⁻)/2)\\,n̂`` on the minus side. Use with
-[`add_lifting_flux_internal!`](@ref) / [`lifting_correction`](@ref).
+[`add_lifting_flux_interior!`](@ref) / [`lifting_correction`](@ref).
 """
 central_gradient_lift(normal, (q⁻,), (q⁺,)) = ((q⁺ - q⁻) / 2) * normal
 
@@ -87,20 +87,43 @@ WJ-normalized interior-penalty Laplacian tendency approximating
 ``κ ∇⋅(ρ_{weight} ∇q)`` (or ``κ ∇²q`` when `ρ_weight === nothing`): weak-form
 volume term plus the consistent numerical flux
 ``−\\{\\!\\{κ G\\}\\!\\}·n̂ + τ [\\![q]\\!]`` with ``G = ρ_{weight} ∇q``
-(or ``G = ∇q``). See [`LDGLaplacianFlux`](@ref) and
-[`ldg_penalty_parameter`](@ref).
+(or ``G = ∇q``). Allocates the result and its gradient scratch; the in-place
+[`ldg_laplacian_tendency!`](@ref) takes both as arguments. See
+[`LDGLaplacianFlux`](@ref) and [`ldg_penalty_parameter`](@ref).
 """
-function ldg_laplacian_tendency(q, ρ_weight, κ, τ)
-    wdiv = WeakDivergence()
+ldg_laplacian_tendency(q, ρ_weight, κ, τ) = ldg_laplacian_tendency!(
+    similar(q),
+    Fields.Field(Geometry.UVVector{eltype(q)}, axes(q)),
+    q,
+    ρ_weight,
+    κ,
+    τ,
+)
+
+"""
+    ldg_laplacian_tendency!(out, G_uv, q, ρ_weight, κ, τ)
+
+In-place form of [`ldg_laplacian_tendency`](@ref): writes the tendency into
+`out`, using `G_uv` as scratch for the gradient. Neither `out` nor `G_uv` may
+alias `q` or `ρ_weight`. Returns `out`.
+"""
+function ldg_laplacian_tendency!(out, G_uv, q, ρ_weight, κ, τ)
+    wdiv = Divergence{WeakForm}()
     grad = Gradient()
     lgeom = Fields.local_geometry_field(axes(q))
-    residual = similar(q)
-    G = ρ_weight === nothing ? (@. grad(q)) : (@. ρ_weight * grad(q))
-    @. residual = (-lgeom.WJ) * κ * (-wdiv(G))
-    # Face normals are UVVector; raise G to the same basis for G·n̂.
-    G_uv = @. Geometry.UVVector(G)
-    add_ldg_laplacian_flux_internal!(residual, q, G_uv, κ, τ)
-    return residual ./ lgeom.WJ
+    # Face normals are UVVector; G is built in that basis for G·n̂, and the
+    # volume term takes the divergence of the same field (the covariant-to-UV
+    # conversion is exact, so the result differs only by roundoff from a
+    # divergence of the covariant gradient).
+    if ρ_weight === nothing
+        @. G_uv = Geometry.UVVector(grad(q))
+    else
+        @. G_uv = Geometry.UVVector(ρ_weight * grad(q))
+    end
+    @. out = (-lgeom.WJ) * κ * (-wdiv(G_uv))
+    add_ldg_laplacian_flux_interior!(out, q, G_uv, κ, τ)
+    @. out = out / lgeom.WJ
+    return out
 end
 
 """
@@ -110,9 +133,7 @@ Interior-penalty scaling ``τ = κ (2N_q − 1)^2 / h`` using the horizontal
 spectral-element length scale (works for extruded hybrid spaces).
 """
 function ldg_penalty_parameter(κ, space)
-    hspace =
-        space isa Spaces.ExtrudedFiniteDifferenceSpace ?
-        Spaces.horizontal_space(space) : space
+    hspace = Spaces.horizontal_space(space)
     h = Spaces.node_horizontal_length_scale(hspace)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(hspace))
     return κ * (2 * Nq - 1)^2 / h
@@ -122,7 +143,7 @@ end
     LDGLaplacianFlux(τ)
 
 Consistent interior-penalty flux for the LDG/SIPG Laplacian. Called through
-[`add_numerical_flux_internal!`](@ref) on a WJ-weighted residual of
+[`add_numerical_flux_interior!`](@ref) on a WJ-weighted residual of
 ``−∇·F`` with ``F = −κ G`` and ``G = ∇q`` (or ``ρ_{weight} ∇q``). Arguments
 are `(q, G, κ)` on each side, where `G` must share the face-normal
 basis (typically [`Geometry.UVVector`](@ref)); returns
@@ -140,19 +161,27 @@ function (fn::LDGLaplacianFlux)(normal, argvals⁻, argvals⁺)
 end
 
 """
-    add_ldg_laplacian_flux_internal!(dydt, q, G, κ, τ)
+    add_ldg_laplacian_flux_interior!(dydt, q, G, κ, τ)
 
 Add consistent LDG/SIPG face coupling
 ``−\\{\\!\\{κ G\\}\\!\\}·n̂ + τ[[q]]`` to a WJ-weighted Laplacian residual.
-Accepts a shared [`start_dg_ghost_exchange`](@ref) handle started on
-`(q, G, κ)`.
+The method with a leading `ghost_exchange` consumes a shared
+[`start_dg_ghost_exchange`](@ref) handle started on `(q, G, κ)`.
 """
-add_ldg_laplacian_flux_internal!(dydt, q, G, κ, τ; ghost_exchange = nothing) =
-    add_numerical_flux_internal!(
-        LDGLaplacianFlux(τ),
-        dydt,
-        q,
-        G,
-        κ;
-        ghost_exchange,
-    )
+add_ldg_laplacian_flux_interior!(dydt, q, G, κ, τ) =
+    add_numerical_flux_interior!(LDGLaplacianFlux(τ), dydt, q, G, κ)
+add_ldg_laplacian_flux_interior!(
+    ghost_exchange::DGGhostExchange,
+    dydt,
+    q,
+    G,
+    κ,
+    τ,
+) = add_numerical_flux_interior!(
+    ghost_exchange,
+    LDGLaplacianFlux(τ),
+    dydt,
+    q,
+    G,
+    κ,
+)

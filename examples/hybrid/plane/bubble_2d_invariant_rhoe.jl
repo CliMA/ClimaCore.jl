@@ -95,9 +95,9 @@ function rhs_invariant!(dY, Y, _, t)
     # fw = -g^31 cuₕ/ g^33
 
     hdiv = Operators.Divergence()
-    hwdiv = Operators.WeakDivergence()
+    hwdiv = Operators.Divergence{Operators.WeakForm}()
     hgrad = Operators.Gradient()
-    hwgrad = Operators.WeakGradient()
+    hwgrad = Operators.Gradient{Operators.WeakForm}()
     hcurl = Operators.Curl()
 
     If2c = Operators.InterpolateF2C()
@@ -143,8 +143,8 @@ function rhs_invariant!(dY, Y, _, t)
     )
     # 1.c) vertical upwinding
     third_order_upwind_c2f = Operators.Upwind3rdOrderBiasedProductC2F(
-        bottom = Operators.ThirdOrderOneSided(),
-        top = Operators.ThirdOrderOneSided(),
+        bottom = Operators.Extrapolate(1),
+        top = Operators.Extrapolate(1),
     )
     # we want the total u³ at the boundary to be zero: we can either constrain
     # both to be zero, or allow one to be non-zero and set the other to be its
@@ -194,18 +194,6 @@ function rhs_invariant!(dY, Y, _, t)
     @. dρe -= vdivf2c((Ic2f(cρ) * third_order_upwind_c2f(fw, (cρe + cp) / cρ)))
     @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 
-    fcc = Operators.FluxCorrectionC2C(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-    fcf = Operators.FluxCorrectionF2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-
-    # Flux correction (Upwind Correction to Central scheme)
-    # @. dρ += fcc(fw, cρ)
-    # @. dρe += fcc(fw, cρe)
 
     Spaces.weighted_dss!(dY.Yc)
     Spaces.weighted_dss!(dY.uₕ)

@@ -555,11 +555,11 @@ function rhs!(dYdt, y, parameters, t)
 
 
         div = Operators.Divergence()
-        wdiv = Operators.WeakDivergence()
+        wdiv = Operators.Divergence{Operators.WeakForm}()
         grad = Operators.Gradient()
-        wgrad = Operators.WeakGradient()
+        wgrad = Operators.Gradient{Operators.WeakForm}()
         curl = Operators.Curl()
-        wcurl = Operators.WeakCurl()
+        wcurl = Operators.Curl{Operators.WeakForm}()
 
         # Compute hyperviscosity first
         @nvtx "Hyperviscosity (rhs!)" color = colorant"green" begin

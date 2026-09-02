@@ -46,13 +46,18 @@ T = Fields.zeros(FT, cspace)
 # Solve Heat Equation: ∂_t T = α ∇²T
 function tendency!(dT, T, _, t)
 
-    bcs_bottom = Operators.SetValue(T_bottom)
-    bcs_top = Operators.SetGradient(Geometry.WVector(dTdz_top))
-
-    gradc2f = Operators.GradientC2F(bottom = bcs_bottom, top = bcs_top)
+    # the Dirichlet condition T = T_bottom on the bottom boundary face is
+    # imposed through the gradient operator by `gradient_c2f_dirichlet`; the
+    # top boundary's Neumann condition is passed through as an explicit
+    # `SetGradient`
+    ∇T = Operators.gradient_c2f_dirichlet(
+        T;
+        bottom = T_bottom,
+        top = Operators.SetGradient(Geometry.WVector(dTdz_top)),
+    )
     divf2c = Operators.DivergenceF2C()
 
-    return @. dT = α * divf2c(gradc2f(T))
+    return @. dT = α * divf2c(∇T)
 end
 
 tendency!(similar(T), T, nothing, 0.0)

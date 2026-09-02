@@ -32,8 +32,13 @@ import ..Grids:
     Staggering,
     CellFace,
     CellCenter,
+    Discretization,
+    CG,
+    DG,
     topology,
     vertical_topology,
+    discretization,
+    is_continuous,
     local_geometry_type,
     local_geometry_data,
     global_geometry,
@@ -67,18 +72,8 @@ ClimaComms.device(space::AbstractSpace) = ClimaComms.device(grid(space))
 topology(space::AbstractSpace) = topology(grid(space))
 vertical_topology(space::AbstractSpace) = vertical_topology(grid(space))
 
-"""
-    Spaces.is_continuous(space)
-
-Whether fields on `space` are members of the continuous (CG) function space,
-maintained via [`Spaces.weighted_dss!`](@ref). `false` for discontinuous (DG)
-spaces: spectral-element grids constructed with `discontinuous = true` or
-with a quadrature whose nodes are not shared across element boundaries (e.g.
-`Quadratures.GL`). In those cases, `weighted_dss!` is a no-op, and
-inter-element coupling is supplied by DG numerical fluxes. Downstream models
-can use this to decide whether a stage state needs DSS.
-"""
-is_continuous(space::AbstractSpace) = Grids.is_continuous(grid(space))
+discretization(space::AbstractSpace) = discretization(grid(space))
+is_continuous(space::AbstractSpace) = is_continuous(grid(space))
 
 
 local_geometry_data(space::AbstractSpace) =

@@ -135,7 +135,13 @@ end
 # cudaOccMaxPotentialOccupancyBlockSize times the maximum number of waves,
 # optimized for single-stream execution of both small and large workloads
 # https://gitlab.com/nvidia/headers/cuda-individual/cudart/-/blob/main/cuda_occupancy.h#L1865-1965
-function uncached_launch_configuration(cu_func, strict, default_max_waves, config_args...)
+function uncached_launch_configuration(
+    cu_func,
+    strict,
+    default_max_waves,
+    default_granularity,
+    config_args...,
+)
     attrs = device_attributes()
     cu_func_attrs = CUDA.attributes(cu_func)
     regs_per_thread = Int(cu_func_attrs[CUDA.FUNC_ATTRIBUTE_NUM_REGS])
@@ -159,15 +165,35 @@ function uncached_launch_configuration(cu_func, strict, default_max_waves, confi
     user_constraints_ignorable = user_max_threads_per_block >= default_max_threads_per_block
     max_threads_per_block = min(user_max_threads_per_block, default_max_threads_per_block)
 
-    # Launch a single wave of blocks unless a caller asks for more. This
-    # replaces a heuristic that launched fld(regs_per_thread, 48) + 1 waves, on
-    # the assumption that higher register pressure leads to uneven load
-    # distributions. An A100 sweep over max_waves in (1, 2, 4) found one wave to
-    # be at least as fast throughout and clearly fastest for reductions, where
-    # the equal-shape lazy reduction went from 145 to 129 us, so that assumption
-    # was costing more in block-scheduling than it recovered.
-    max_waves = something(default_max_waves, 1)
+    # Launch a single wave of blocks unless a caller asks for more. An A100
+    # sweep over max_waves in (1, 2, 4) on small unit benchmarks found one
+    # wave at least as fast throughout and fastest for reductions (the
+    # equal-shape lazy reduction: 129 us at one wave, 145 us at more). On a
+    # realistic problem with zero per-step device allocations (baroclinic
+    # wave, h_elem = 30, z_elem = 63, A100; see perf/sweep_kernel_configs.jl),
+    # 4-8 waves measured ~6% faster per step (215 vs 228 ms). The default
+    # stays at one wave until the reduction slowdown at higher wave counts is
+    # revisited; CLIMA_CUDA_MAX_WAVES overrides it for tuning experiments.
+    max_waves = something(default_max_waves, MAX_WAVES[])
 
+    # Block sizes are searched in whole multiples of this unit, one warp unless
+    # a caller needs a coarser one: a partially populated sub-block skips the
+    # points of the threads it is missing (see subscope_launch_threads). The
+    # unit is clamped to the largest launchable block, so the search always has
+    # a candidate.
+    granularity = max(something(default_granularity, 0), attrs.threads_per_warp)
+    unit = min(granularity, max_threads_per_block)
+
+    # A warp-unit caller also gets the largest launchable block even when it is
+    # not a whole number of warps (matching CUDA's own search); only a caller
+    # that asked for a coarser unit needs the clamped candidate dropped, since
+    # a non-whole block is not merely suboptimal for it but incorrect.
+    block_sizes =
+        isnothing(default_granularity) ?
+        (
+            min(units * unit, max_threads_per_block) for
+            units in 1:cld(max_threads_per_block, unit)
+        ) : (units * unit for units in 1:fld(max_threads_per_block, unit))
     # Iterating from small to large block sizes, prefer configurations with more
     # total threads; on ties, prefer larger blocks (fewer blocks means less
     # block-scheduling latency), but never accept a new configuration with fewer
@@ -175,9 +201,7 @@ function uncached_launch_configuration(cu_func, strict, default_max_waves, confi
     # spreads small workloads across as many multiprocessors as possible, while
     # also confining large workloads to as few blocks as possible.
     (best_threads_per_block, best_num_blocks, best_limit) = (0, 0, :user)
-    for warps_per_block in 1:cld(max_threads_per_block, attrs.threads_per_warp)
-        threads_per_block =
-            min(warps_per_block * attrs.threads_per_warp, max_threads_per_block)
+    for threads_per_block in block_sizes
         (max_blocks_per_wave, active_blocks_limit) =
             max_active_blocks(threads_per_block, regs_per_thread, shmem_per_block)
         user_max_blocks = get_user_max_blocks(threads_per_block, config_args...)
@@ -192,8 +216,11 @@ function uncached_launch_configuration(cu_func, strict, default_max_waves, confi
         end
     end
 
-    # Compare searches unaffected by config_args against CUDA's implementation.
-    if DataLayouts.VALIDATE_LAUNCH_CONFIGURATIONS[] && user_constraints_ignorable
+    # Compare searches unaffected by config_args against CUDA's implementation,
+    # which only ever considers whole warps.
+    if DataLayouts.VALIDATE_LAUNCH_CONFIGURATIONS[] &&
+       user_constraints_ignorable &&
+       isnothing(default_granularity)
         min_blocks_per_wave = cld(best_num_blocks, max_waves)
         cuda_config = (; blocks = min_blocks_per_wave, threads = best_threads_per_block)
         @assert CUDA.launch_configuration(cu_func) == cuda_config
@@ -232,13 +259,20 @@ as possible. While `CUDA.launch_configuration` and its underlying C function
     and grid dimensions of the launch configuration are individually limited
     (similar to CUDA's implementation, but with the addition of `max_blocks`).
 
+A `granularity` may also be specified, in which case only block sizes that are
+whole multiples of it are considered. This defaults to the warp size, which is
+the smallest unit a block can usefully be made of; a loop that hands each slice
+to a sub-block needs the coarser unit of one sub-block (see
+`DataLayouts.subscope_launch_threads`).
+
 In each case, `max_waves` can be specified to control how many waves of blocks
 are scheduled. Kernels with uneven load distributions (e.g., due to conditional
 branches or nonuniform memory accesses) may require multiple waves to prevent
 some multiprocessors from idling while others are still active. However, block
 scheduling also adds measurable latency, so the number of waves should not be
 increased unless load redistribution is necessary. Setting `max_waves` to
-`nothing` gives it a dynamic value based on the kernel's register pressure.
+`nothing` gives it the default of one wave, which the `CLIMA_CUDA_MAX_WAVES`
+environment variable overrides.
 
 Like `CUDA.launch_configuration`, this returns a `NamedTuple` containing the
 optimal number of threads per block and the optimal number of blocks, and it
@@ -262,9 +296,14 @@ function launch_configuration(
     config_args...;
     strict = true,
     max_waves = nothing,
+    granularity = nothing,
 ) where {F}
     cu_func = (CUDA.@cuda always_inline = true launch = false f(args...)).fun
-    cache_key = (cu_func, strict, max_waves, config_args...)
+    # The default is resolved before the cache key is built, so that changing
+    # MAX_WAVES[] at runtime (as perf/sweep_kernel_configs.jl does) misses the
+    # cache instead of returning configurations computed for the old value.
+    max_waves = something(max_waves, MAX_WAVES[])
+    cache_key = (cu_func, strict, max_waves, granularity, config_args...)
     lock(LAUNCH_CONFIGURATION_CACHE_LOCK)
     try
         return get!(LAUNCH_CONFIGURATION_CACHE, cache_key) do
@@ -284,7 +323,12 @@ end
 const reported_stats = Dict()
 const kernel_names = IdDict()
 
-collect_kernel_stats() = false
+# A compile-time constant, not a `Ref`, so that inference folds away the
+# development-only statistics block in `auto_launch!` (which is otherwise
+# type-unstable and fails the fused-broadcast `@test_opt`). Set
+# `CLIMA_COLLECT_KERNEL_STATS` before the extension precompiles to enable it,
+# or redefine this method (as perf/stress_test_compiler.jl does).
+collect_kernel_stats() = COLLECT_KERNEL_STATS
 
 function _memory_bytes(memory, key::Symbol)
     if hasproperty(memory, key)
@@ -317,15 +361,51 @@ function _getenv_bool(var::AbstractString; default::Bool = false)
     end
 end
 
-# Create a ref to hold the setting determining whether to name kernels from
-# stack trace
+# Parse integer-valued environment variables. Warns and falls back to the
+# default on unparsable input, and errors on a value outside `min:max` so a
+# misconfigured cap fails loudly at load instead of being silently clipped or
+# failing at the first kernel launch. Only called from __init__: kernel-launch
+# paths must read the Refs below, not ENV.
+function _getenv_int(
+    var::AbstractString,
+    default::Int;
+    min::Int = 1,
+    max::Int = typemax(Int),
+)
+    raw = get(ENV, var, nothing)
+    raw === nothing && return default
+    value = tryparse(Int, strip(String(raw)))
+    if isnothing(value)
+        @warn "Unrecognized integer env var value; using default" var = var val =
+            raw default = default
+        return default
+    end
+    value < min && error("$var must be ≥ $min, got $value")
+    value > max && error("$var must be ≤ $max, got $value")
+    return value
+end
+
+# Refs to hold settings read from environment variables in __init__: kernel
+# naming from stack traces, per-launch kernel statistics, the wave count used
+# by the launch-configuration search, and the block-size cap of the eager FD
+# kernel.
 const NAME_KERNELS_FROM_STACK_TRACE = Ref{Bool}(false)
+const COLLECT_KERNEL_STATS =
+    _getenv_bool("CLIMA_COLLECT_KERNEL_STATS"; default = false)
+const MAX_WAVES = Ref{Int}(1)
+const FD_MAX_THREADS = Ref{Int}(128)
+const DSS_MAX_THREADS = Ref{Int}(256)
 
 # Always reload when module is imported so precompilation doesn't make it "stick"
 function __init__()
     NAME_KERNELS_FROM_STACK_TRACE[] = _getenv_bool(
         "CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE"; default = false,
     )
+    MAX_WAVES[] = _getenv_int("CLIMA_CUDA_MAX_WAVES", 1)
+    # 1024 is CUDA's threads-per-block limit; these caps feed block sizes
+    # directly, so a larger value would fail at the first kernel launch.
+    FD_MAX_THREADS[] = _getenv_int("CLIMA_FD_MAX_THREADS", 128; max = 1024)
+    DSS_MAX_THREADS[] = _getenv_int("CLIMA_DSS_MAX_THREADS", 256; max = 1024)
 end
 
 name_kernels_from_stack_trace() = NAME_KERNELS_FROM_STACK_TRACE[]

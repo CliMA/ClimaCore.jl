@@ -2,7 +2,7 @@
 
 This guide covers patterns for writing code that runs on CPU and GPU, and on single-process and MPI-distributed configurations. All CliMA model packages use `ClimaComms.jl` to abstract over device and parallelism.
 
-> To set up a machine and **run** a model on GPU (install Julia, add `CUDA.jl`, runtime compatibility, `CLIMACOMMS_DEVICE`), see [running_on_gpu.md](../workflow/running_on_gpu.md). 
+> To set up a machine and **run** a model on GPU (install Julia, add `CUDA.jl`, runtime compatibility, `CLIMACOMMS_DEVICE`), see [running_on_gpu.md](../workflow/running_on_gpu.md).
 
 ## 1. Acquiring the device and context
 
@@ -116,7 +116,7 @@ Use this pattern when adding a new GPU test entry point so all packages stay con
 
 - **Implicit host transfer**: `sum(field)` on a GPU field is fine; `field[1]` is not. The first goes through a GPU reduction; the second triggers `allowscalar` and either errors (recommended) or silently transfers.
 - **Random number streams under MPI**: `rand()` is not synchronized across ranks. For an independent per-rank stream, seed an explicit RNG with a rank-dependent seed (`rng = Random.Xoshiro(base_seed + ClimaComms.mypid(context))`); for cross-rank-synchronized randomness, generate on root and broadcast (`ClimaComms.bcast`).
-- **`println` inside kernels**: not GPU-compatible and not MPI-safe. See [gpu_performance.md](../performance/gpu_performance.md) §7 for the static-error rule.
+- **`println` inside kernels**: not GPU-compatible and not MPI-safe. See [gpu_performance.md §7](../performance/gpu_performance.md) for the static-error rule.
 - **Saving to a shared filesystem from every rank**: causes file lock contention. Use root-only IO or rank-suffixed filenames.
 
 ## Self-correction

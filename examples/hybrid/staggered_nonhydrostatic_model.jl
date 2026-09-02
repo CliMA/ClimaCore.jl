@@ -36,11 +36,11 @@ const CT12 = Geometry.Contravariant12Vector
 
 const divₕ = Operators.Divergence()
 const split_divₕ = Operators.SplitDivergence()
-const wdivₕ = Operators.WeakDivergence()
+const wdivₕ = Operators.Divergence{Operators.WeakForm}()
 const gradₕ = Operators.Gradient()
-const wgradₕ = Operators.WeakGradient()
+const wgradₕ = Operators.Gradient{Operators.WeakForm}()
 const curlₕ = Operators.Curl()
-const wcurlₕ = Operators.WeakCurl()
+const wcurlₕ = Operators.Curl{Operators.WeakForm}()
 
 const ᶜinterp = Operators.InterpolateF2C()
 const ᶠinterp = Operators.InterpolateC2F(
@@ -59,14 +59,10 @@ const ᶠcurlᵥ = Operators.CurlC2F(
     bottom = Operators.SetCurl(CT12(FT(0), FT(0))),
     top = Operators.SetCurl(CT12(FT(0), FT(0))),
 )
-const ᶜFC = Operators.FluxCorrectionC2C(
-    bottom = Operators.Extrapolate(),
-    top = Operators.Extrapolate(),
-)
 const ᶠupwind_product1 = Operators.UpwindBiasedProductC2F()
 const ᶠupwind_product3 = Operators.Upwind3rdOrderBiasedProductC2F(
-    bottom = Operators.ThirdOrderOneSided(),
-    top = Operators.ThirdOrderOneSided(),
+    bottom = Operators.Extrapolate(1),
+    top = Operators.Extrapolate(1),
 )
 
 const ᶜinterp_matrix = MatrixFields.operator_matrix(ᶜinterp)
@@ -164,10 +160,6 @@ function implicit_tendency!(Yₜ, Y, p, t)
     Yₜ.c.uₕ .= (zero(eltype(Yₜ.c.uₕ)),)
 
     @. Yₜ.f.w = -(ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) + ᶠgradᵥ(ᶜK + ᶜΦ))
-
-    # TODO: Add flux correction to the Jacobian
-    # @. Yₜ.c.ρ += ᶜFC(ᶠw, ᶜρ)
-    # @. Yₜ.c.ρe += ᶜFC(ᶠw, ᶜρe)
 
     return Yₜ
 end

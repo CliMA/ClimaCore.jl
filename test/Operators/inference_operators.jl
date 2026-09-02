@@ -22,8 +22,8 @@ apply2(op_outer, op_inner, f) = op_outer.(op_inner.(f))
         cspace = TU.ColumnCenterFiniteDifferenceSpace(FT)
         f = sin.(Fields.coordinate_field(cspace).z)
         gradc2f = Operators.GradientC2F(
-            bottom = Operators.SetValue(FT(0)),
-            top = Operators.SetValue(FT(0)),
+            bottom = Operators.SetGradient(Geometry.WVector(FT(0))),
+            top = Operators.SetGradient(Geometry.WVector(FT(0))),
         )
         divf2c = Operators.DivergenceF2C()
         @test (@inferred apply1(gradc2f, f)) isa Fields.Field
@@ -34,7 +34,7 @@ apply2(op_outer, op_inner, f) = op_outer.(op_inner.(f))
         coords = Fields.coordinate_field(sspace)
         g = @. sind(coords.long) * cosd(coords.lat)
         grad = Operators.Gradient()
-        wdiv = Operators.WeakDivergence()
+        wdiv = Operators.Divergence{Operators.WeakForm}()
         @test (@inferred apply1(grad, g)) isa Fields.Field
         @test (@inferred apply2(wdiv, grad, g)) isa Fields.Field
     end

@@ -88,19 +88,16 @@ function tendency!(yₜ, y, parameters, t)
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
     )
     upwind1 = Operators.UpwindBiasedProductC2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
+        bottom = Operators.Extrapolate(0),
+        top = Operators.Extrapolate(0),
     )
     upwind3 = Operators.Upwind3rdOrderBiasedProductC2F(
-        bottom = Operators.ThirdOrderOneSided(),
-        top = Operators.ThirdOrderOneSided(),
+        bottom = Operators.Extrapolate(1),
+        top = Operators.Extrapolate(1),
     )
-    FCTZalesak = Operators.FCTZalesak(
-        bottom = Operators.FirstOrderOneSided(),
-        top = Operators.FirstOrderOneSided(),
-    )
+    FCTZalesak = Operators.FCTZalesak()
     hdiv = Operators.Divergence()
-    hwdiv = Operators.WeakDivergence()
+    hwdiv = Operators.Divergence{Operators.WeakForm}()
     hgrad = Operators.Gradient()
 
     function local_velocity(coord)
@@ -141,8 +138,7 @@ function tendency!(yₜ, y, parameters, t)
         Ic2f(ρ) * (
             upwind1(uᵥ, q1) + FCTZalesak(
                 upwind3(uᵥ, q1) - upwind1(uᵥ, q1),
-                q1 / dt,
-                q1 / dt - vdivf2c(Ic2f(ρ) * upwind1(uᵥ, q1)) / ρ,
+                tuple(q1 / dt, q1 / dt - vdivf2c(Ic2f(ρ) * upwind1(uᵥ, q1)) / ρ),
             )
         ),
     )
