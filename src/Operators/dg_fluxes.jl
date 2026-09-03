@@ -6,7 +6,19 @@
 """
     CentralNumericalFlux(fluxfn)
 
-Evaluates the central numerical flux using `fluxfn`.
+Interface numerical flux `((F⁻ + F⁺) / 2)' * normal`, the average of the
+physical flux `fluxfn(args...)` on the two sides of a face. It adds no
+dissipation, so an advection-dominated DG run with it is unstable; use
+[`RusanovNumericalFlux`](@ref) for a dissipative alternative built from the
+same `fluxfn`. Callable as `numflux(normal, argvals⁻, argvals⁺)`, the
+contract of [`add_numerical_flux_interior!`](@ref).
+
+# Examples
+
+```julia
+numflux = Operators.CentralNumericalFlux(physical_flux)
+completion = Operators.tendency_completion(dydt; numflux)
+```
 """
 struct CentralNumericalFlux{F} <: AbstractNumericalFlux
     fluxfn::F
@@ -21,7 +33,23 @@ end
 """
     RusanovNumericalFlux(fluxfn, wavespeedfn)
 
-Evaluates the Rusanov numerical flux using `fluxfn` with wavespeed `wavespeedfn`
+Interface numerical flux `((F⁻ + F⁺) / 2)' * normal + (λ / 2) * (y⁻ - y⁺)`:
+the central flux of `fluxfn(args...)` plus a jump penalty with
+`λ = max(wavespeedfn(args⁻...), wavespeedfn(args⁺...))`, an upper bound on the
+normal signal speed. The penalty is the dissipation that keeps a DG transport
+scheme stable; `wavespeedfn` may overestimate the speed at the cost of extra
+dissipation. Callable as `numflux(normal, argvals⁻, argvals⁺)`, the contract
+of [`add_numerical_flux_interior!`](@ref); the first argument value on each
+side is the state `y`.
+
+# Examples
+
+```julia
+sw_flux(y, p) = (; ρ = y.ρu, ρu = (y.ρu ⊗ (y.ρu / y.ρ)) + (p.g * y.ρ^2 / 2) * I)
+sw_wavespeed(y, p) = sqrt(p.g * y.ρ) + norm(y.ρu / y.ρ)
+numflux = Operators.RusanovNumericalFlux(sw_flux, sw_wavespeed)
+completion = Operators.tendency_completion(dydt; numflux)
+```
 """
 struct RusanovNumericalFlux{F, W} <: AbstractNumericalFlux
     fluxfn::F

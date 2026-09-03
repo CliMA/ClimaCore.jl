@@ -25,6 +25,17 @@ Each call owns its result on both discretizations, so any number of results
 may be live at once. The DG result is a fresh `Field`; in a tendency, where
 that allocation is not wanted, use [`scalar_laplacian!`](@ref) to write into a
 caller-owned field instead.
+
+# Examples
+
+Fourth-order hyperdiffusion `∇⁴χ` on either discretization:
+
+```julia
+∇²χ = similar(χ)
+Operators.scalar_laplacian!(∇²χ, χ)
+Spaces.weighted_dss!(∇²χ)          # no-op on DG
+@. dydt -= ν * Operators.scalar_laplacian(∇²χ)
+```
 """
 scalar_laplacian(χ; weight = nothing) =
     scalar_laplacian(Spaces.discretization(axes(χ)), χ, weight)
