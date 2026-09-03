@@ -102,6 +102,7 @@ import .Helpers.DefaultRectangleXYMesh
         hypsography_fun = (h_grid, z_grid) -> Grids.Flat(),
         global_geometry::Geometry.AbstractGlobalGeometry = Geometry.ShallowSphericalGlobalGeometry{FT}(radius),
         quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
+        discretization::Union{Nothing, Grids.Discretization} = nothing,
         h_mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain{FT}(radius), h_elem),
         h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(context, h_mesh),
         VIJH = DataLayouts.VIJFH,
@@ -126,6 +127,7 @@ A convenience constructor, which builds an
   - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
   - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
   - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
+  - `discretization` the Galerkin discretization of the horizontal spectral-element grid: `Grids.CG()`, continuous across element boundaries with DSS, or `Grids.DG()`, discontinuous with interface numerical fluxes. When omitted (`nothing`) it follows the quadrature: `CG()` for GLL nodes, `DG()` for quadratures whose nodes are not shared between elements. See [`Grids.SpectralElementGrid2D`](@ref).
   - `h_mesh` the horizontal mesh (defaults to `Meshes.EquiangularCubedSphere`)
   - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
   - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
@@ -169,6 +171,7 @@ function ExtrudedCubedSphereGrid(
         radius,
     ),
     quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
+    discretization::Union{Nothing, Grids.Discretization} = nothing,
     h_mesh = Meshes.EquiangularCubedSphere(
         Domains.SphereDomain{FT}(radius),
         h_elem,
@@ -223,6 +226,7 @@ end
         device::ClimaComms.AbstractDevice = ClimaComms.device(),
         context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
         quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
+        discretization::Union{Nothing, Grids.Discretization} = nothing,
         h_mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain{FT}(radius), h_elem),
         h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(context, h_mesh),
         VIJH = DataLayouts.VIJFH,
@@ -239,6 +243,7 @@ A convenience constructor, which builds a
   - `device` the `ClimaComms.device`
   - `context` the `ClimaComms.context`
   - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
+  - `discretization` the Galerkin discretization of the horizontal spectral-element grid: `Grids.CG()`, continuous across element boundaries with DSS, or `Grids.DG()`, discontinuous with interface numerical fluxes. When omitted (`nothing`) it follows the quadrature: `CG()` for GLL nodes, `DG()` for quadratures whose nodes are not shared between elements. See [`Grids.SpectralElementGrid2D`](@ref).
   - `h_mesh` the horizontal mesh (defaults to `Meshes.EquiangularCubedSphere`)
   - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
   - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
@@ -261,6 +266,7 @@ function CubedSphereGrid(
     device::ClimaComms.AbstractDevice = ClimaComms.device(),
     context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
     quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
+    discretization::Union{Nothing, Grids.Discretization} = nothing,
     h_mesh = Meshes.EquiangularCubedSphere(
         Domains.SphereDomain{FT}(radius),
         h_elem,
@@ -279,6 +285,7 @@ function CubedSphereGrid(
         quad;
         VIJH,
         enable_mask,
+        discretization,
     )
 end
 
@@ -357,6 +364,7 @@ end
         hypsography_fun = (h_grid, z_grid) -> Grids.Flat(),
         global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
         quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
+        discretization::Union{Nothing, Grids.Discretization} = nothing,
         VIJH = DataLayouts.VIJFH,
         [h_topology::Topologies.AbstractDistributedTopology], # optional
         [z_mesh::Meshes.IntervalMesh], # optional
@@ -387,6 +395,7 @@ A convenience constructor, which builds a
   - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
   - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
   - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
+  - `discretization` the Galerkin discretization of the horizontal spectral-element grid: `Grids.CG()`, continuous across element boundaries with DSS, or `Grids.DG()`, discontinuous with interface numerical fluxes. When omitted (`nothing`) it follows the quadrature: `CG()` for GLL nodes, `DG()` for quadratures whose nodes are not shared between elements. See [`Grids.SpectralElementGrid2D`](@ref).
   - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
   - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
   - `enable_bubble` enables the "bubble correction" for more accurate element areas when computing the spectral element space. See [`Grids.SpectralElementGrid2D`](@ref) for more information.
@@ -435,6 +444,7 @@ function Box3DGrid(
     hypsography_fun = (h_grid, z_grid) -> Grids.Flat(),
     global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
     quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
+    discretization::Union{Nothing, Grids.Discretization} = nothing,
     h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(
         context,
         DefaultRectangleXYMesh(
@@ -513,6 +523,7 @@ end
         hypsography_fun = (h_grid, z_grid) -> Grids.Flat(),
         global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
         quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
+        discretization::Union{Nothing, Grids.Discretization} = nothing,
     )
 
 A convenience constructor, which builds a
@@ -535,6 +546,7 @@ A convenience constructor, which builds a
   - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
   - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
   - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
+  - `discretization` the Galerkin discretization of the horizontal spectral-element grid: `Grids.CG()`, continuous across element boundaries with DSS, or `Grids.DG()`, discontinuous with interface numerical fluxes. When omitted (`nothing`) it follows the quadrature: `CG()` for GLL nodes, `DG()` for quadratures whose nodes are not shared between elements. See [`Grids.SpectralElementGrid2D`](@ref).
 
 # Example usage
 
@@ -569,6 +581,7 @@ function SliceXZGrid(
     hypsography_fun = (h_grid, z_grid) -> Grids.Flat(),
     global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
     quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
+    discretization::Union{Nothing, Grids.Discretization} = nothing,
     VIJH::Type{<:DataLayouts.VIJHWithF} = DataLayouts.VIJFH,
     h_mesh::Meshes.IntervalMesh = DefaultSliceXMesh(
         FT;
@@ -624,6 +637,7 @@ end
         hypsography::Grids.HypsographyAdaption = Grids.Flat(),
         global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
         quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
+        discretization::Union{Nothing, Grids.Discretization} = nothing,
         enable_mask::Bool = false,
     )
 
@@ -645,6 +659,7 @@ A convenience constructor, which builds a
   - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
   - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
   - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
+  - `discretization` the Galerkin discretization of the horizontal spectral-element grid: `Grids.CG()`, continuous across element boundaries with DSS, or `Grids.DG()`, discontinuous with interface numerical fluxes. When omitted (`nothing`) it follows the quadrature: `CG()` for GLL nodes, `DG()` for quadratures whose nodes are not shared between elements. See [`Grids.SpectralElementGrid2D`](@ref).
   - `enable_mask` enables a horizontal mask, for skipping operations on specified
     columns via `set_mask!`.
 
@@ -682,6 +697,7 @@ function RectangleXYGrid(
     hypsography::Grids.HypsographyAdaption = Grids.Flat(),
     global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
     quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
+    discretization::Union{Nothing, Grids.Discretization} = nothing,
     VIJH::Type{<:DataLayouts.VIJHWithF} = DataLayouts.VIJFH,
     h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(
         context,
@@ -707,6 +723,7 @@ function RectangleXYGrid(
         VIJH,
         enable_bubble,
         enable_mask,
+        discretization,
     )
 end
 

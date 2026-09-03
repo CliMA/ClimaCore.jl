@@ -42,14 +42,14 @@ timestepping dependencies that ClimaCore itself does not:
 
 ```
 julia --project=.buildkite -e 'using Pkg; Pkg.instantiate()'
-julia --project=.buildkite examples/plane/bickleyjet_cg.jl
+julia --project=.buildkite examples/plane/bickleyjet.jl cg
 ```
 
 Or from the REPL:
 
 ```
 julia --project=.buildkite
-julia> include("examples/plane/bickleyjet_cg.jl")
+julia> include("examples/plane/bickleyjet.jl")
 ```
 
 Most examples write plots and animations to an `output/` directory beside the

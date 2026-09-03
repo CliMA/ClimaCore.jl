@@ -370,7 +370,7 @@ for data in (roughnesses_no_lim, roughnesses_with_lim, ranges_no_lim, ranges_wit
 end
 
 ENV["GKSwstype"] = "nul"
-using ClimaCorePlots, Plots
+using Plots
 Plots.GRBackend()
 path = joinpath(@__DIR__, "output", "deformation_flow")
 mkpath(path)

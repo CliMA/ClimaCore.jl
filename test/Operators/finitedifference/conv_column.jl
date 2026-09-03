@@ -18,14 +18,13 @@ import .TestUtilities: convergence_rate
 # divergence `adv_wc` at every resolution, so that the convergence rates can be
 # inspected alongside the profiles they were computed from.
 #
-# Plots and ClimaCorePlots are in the .buildkite environment but not in the one
-# `Pkg.test` builds, and here they only write diagnostic PNGs — no assertion
-# depends on them. Make them optional, as test/tabulated_tests.jl does for
-# PrettyTables, so the test still runs in a plotting-free environment.
+# Plots is in the .buildkite environment but not always in the one `Pkg.test`
+# builds, and here it only writes diagnostic PNGs — no assertion depends on
+# it. Make it optional, as test/tabulated_tests.jl does for PrettyTables, so
+# the test still runs in a plotting-free environment.
 ENV["GKSwstype"] = "nul"
 const HAVE_PLOTS = try
     import Plots
-    import ClimaCorePlots
     Plots.GRBackend()
     true
 catch
@@ -79,7 +78,7 @@ function plot_flux_and_adv(name, results)
         linestyle = :dash,
     )
     # Set the guides after the series, so that they are not overwritten by the
-    # defaults of the ClimaCorePlots recipe.
+    # defaults of the ClimaCoreRecipesBaseExt recipe.
     Plots.plot!(w_plt; title = "w", xguide = "w (WVector)", yguide = "z faces")
     Plots.plot!(c_plt; title = "c", xguide = "c", yguide = "z centers")
     Plots.plot!(

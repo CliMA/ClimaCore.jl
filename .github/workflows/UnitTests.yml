@@ -70,6 +70,16 @@ jobs:
           TEST_EXCLUDE_TIER: "conv,inference,allocs,smoke"
           # `slow` marks the multi-minute tests (see test/tabulated_tests.jl).
           TEST_EXCLUDE_SLOW: "true"
+          # Collected by the "Upload plot artifacts" step; the Makie and Plots
+          # extension tests write their rendered PNGs here (test/output).
+          CI_OUTPUT_DIR: output
+      - name: Upload plot artifacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: plot-output-${{ matrix.version }}-${{ matrix.os }}
+          path: test/output
+          if-no-files-found: ignore
 
   coverage:
     # The 1.10 ubuntu run is instrumented for coverage, which bypasses the

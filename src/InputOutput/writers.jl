@@ -361,6 +361,7 @@ defaultname(::Grids.SpectralElementGrid1D) = "horizontal_grid"
 defaultname(::Grids.SpectralElementGrid2D) = "horizontal_grid"
 defaultname(::Grids.ExtrudedFiniteDifferenceGrid) = "extruded_finite_difference_grid"
 defaultname(grid::Grids.FiniteDifferenceGrid) = defaultname(grid.topology)
+defaultname(::Grids.MultiPointGrid) = "multi_point_grid"
 defaultname(grid::Grids.LevelGrid) = "$(defaultname(grid.full_grid)): level $(grid.level)"
 
 """
@@ -436,6 +437,20 @@ function write_new!(
     group = create_group(writer.file, "grids/$name")
     write_attribute(group, "type", "FiniteDifferenceGrid")
     write_attribute(group, "topology", write!(writer, Spaces.topology(grid)))
+    return name
+end
+
+function write_new!(
+    writer::HDF5Writer,
+    grid::Grids.MultiPointGrid,
+    name::AbstractString = defaultname(grid),
+)
+    group = create_group(writer.file, "grids/$name")
+    write_attribute(group, "type", "MultiPointGrid")
+    write_attribute(group, "radius", grid.global_geometry.radius)
+    # 2×N matrix of (lat, long) coordinates, one column per point
+    coords = Array(parent(grid.local_geometry.coordinates))
+    write_dataset(group, "points", coords[1, 1, 1, :, :])
     return name
 end
 
@@ -698,12 +713,14 @@ function write!(
     nd = ndims(array)
 
     staggering = Spaces.staggering(space)
-    topology = Spaces.topology(space)
     grid = Spaces.grid(space)
     grid_name = write!(writer, grid)
 
-    if topology isa Topologies.Topology2D &&
-       !(writer.context isa ClimaComms.SingletonCommsContext)
+    # topology is only queried on the distributed path: point-cloud spaces
+    # have no topology and are single-process only
+    if !(writer.context isa ClimaComms.SingletonCommsContext) &&
+       Spaces.topology(space) isa Topologies.Topology2D
+        topology = Spaces.topology(space)
         nelems = Topologies.nelems(topology)
         f_dim = DataLayouts.f_dim(values)
         h_dim = isnothing(f_dim) || f_dim == 5 ? 4 : 5

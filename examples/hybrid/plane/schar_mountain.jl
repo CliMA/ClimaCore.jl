@@ -449,7 +449,7 @@ end
 end
 
 ENV["GKSwstype"] = "nul"
-import Plots, ClimaCorePlots
+import Plots
 Plots.GRBackend()
 
 dir = "schar_etot_nh"

@@ -103,6 +103,7 @@ unit_tests = [
     UnitTest("Spectral elem - DG extruded plane"        ,"Operators/spectralelement/unit_extruded_plane_dg.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - tendency completion"      ,"Operators/spectralelement/unit_tendency_completion.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG divergence conv"       ,"Operators/spectralelement/conv_dg_divergence.jl"; meta = :cpu_only, tier = :conv, subsystem = :operators),
+    UnitTest("Spectral elem - Cartesian tensor div conv","Operators/spectralelement/conv_cartesian_tensor_divergence.jl"; meta = :cpu_only, tier = :conv, subsystem = :operators),
     UnitTest("Operators - broadcast inference"          ,"Operators/inference_operators.jl"; tier = :inference, subsystem = :operators),
     UnitTest("FD ops - zero-allocation stencils"        ,"Operators/finitedifference/allocs_fd_ops.jl"; meta = :cpu_only, tier = :allocs, subsystem = :operators),
     UnitTest("SEM ops - zero-allocation broadcasts"     ,"Operators/spectralelement/allocs_spectral_ops.jl"; meta = :cpu_only, tier = :allocs, subsystem = :operators),
@@ -166,6 +167,7 @@ unit_tests = [
     UnitTest("InputOutput - hybrid3dcubedsphere"        ,"InputOutput/unit_hybrid3dcubedsphere.jl"; tier = :unit, subsystem = :io),
     UnitTest("InputOutput - hybrid3dcubedsphere_topo"   ,"InputOutput/unit_hybrid3dcubedsphere_topography.jl"; tier = :unit, subsystem = :io),
     UnitTest("InputOutput - finitedifferences"          ,"InputOutput/unit_finitedifference.jl"; tier = :unit, subsystem = :io),
+    UnitTest("InputOutput - multicolumn"                ,"InputOutput/unit_multicolumn.jl"; tier = :unit, subsystem = :io),
     UnitTest("InputOutput - pointspaces"                ,"InputOutput/unit_point.jl"; meta = :cpu_only, tier = :unit, subsystem = :io),
     UnitTest("Array interpolation"                      ,"Remapping/unit_interpolate_array.jl"; tier = :unit, subsystem = :remapping),
     UnitTest("Distributed remapping"                    ,"Remapping/unit_distributed_remapping.jl"; tier = :unit, subsystem = :remapping),
@@ -181,6 +183,10 @@ unit_tests = [
     UnitTest("Aqua"                                     ,"aqua.jl"; tier = :misc, subsystem = :quality),
     UnitTest("Deprecations"                             ,"deprecations.jl"; tier = :misc, subsystem = :quality),
     UnitTest("Precompile workload"                      ,"precompile_workload.jl"; tier = :misc, subsystem = :quality, slow = true), # ~1 min: recompiles ClimaCore in a subprocess
+
+    # Visualization
+    UnitTest("Makie extension"                          ,"Visualize/visualize.jl"; meta = :cpu_only, tier = :unit, subsystem = :viz),
+    UnitTest("Plots extension"                          ,"Visualize/plots.jl"; meta = :cpu_only, tier = :unit, subsystem = :viz),
 
     # GPU Only
     UnitTest("GPU - cuda"                               ,"gpu/cuda.jl"; meta = :gpu_only, tier = :gpu, subsystem = :gpu),

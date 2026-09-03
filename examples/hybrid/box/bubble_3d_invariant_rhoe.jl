@@ -29,7 +29,7 @@ import ClimaCore:
     Quadratures,
     Fields,
     Operators
-using ClimaCorePlots, Plots
+using Plots
 using ClimaCore.Geometry
 using ClimaCore.Spaces.Quadratures
 using Logging

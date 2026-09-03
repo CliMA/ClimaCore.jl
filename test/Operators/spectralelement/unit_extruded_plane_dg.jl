@@ -18,7 +18,7 @@ import .TestUtilities as TU
 # `_add_interior_face_flux_extruded_1d!` and the extruded-1D branch of
 # `add_lifting_flux_interior!`, whose `UVector`-normal surface geometry and
 # 1D face-node indexing are otherwise only run by the plane FDDG examples.
-# (Flux-differencing and the LDG Laplacian are 2D-horizontal only.)
+# (Flux-differencing and the SIPG Laplacian are 2D-horizontal only.)
 
 function extruded_plane_spaces(
     ::Type{FT};

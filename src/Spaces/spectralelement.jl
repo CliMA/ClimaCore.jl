@@ -49,12 +49,19 @@ end
 
 # 1D
 """
-    SpectralElementSpace1D(grid::SpectralElementGrid1D)
+    SpectralElementSpace1D(grid::Grids.SpectralElementGrid1D)
     SpectralElementSpace1D(
         topology::Topologies.IntervalTopology,
         quadrature_style::Quadratures.QuadratureStyle;
+        discretization = nothing,
         kwargs...
     )
+
+A one-dimensional spectral-element space. The second form builds the
+[`Grids.SpectralElementGrid1D`](@ref) and forwards `kwargs` to it;
+`discretization = Grids.DG()` makes the space discontinuous across element
+boundaries, and omitting it follows the quadrature. Read the choice back with
+[`Spaces.discretization`](@ref).
 """
 struct SpectralElementSpace1D{G} <: AbstractSpectralElementSpace
     grid::G
@@ -82,12 +89,32 @@ end
 
 # 2D
 """
-    SpectralElementSpace2D(grid::SpectralElementGrid1D)
+    SpectralElementSpace2D(grid::Grids.SpectralElementGrid2D)
     SpectralElementSpace2D(
         topology::Topologies.Topology2D,
         quadrature_style::Quadratures.QuadratureStyle;
+        discretization = nothing,
         kwargs...,
     )
+
+A two-dimensional spectral-element space. The second form builds the
+[`Grids.SpectralElementGrid2D`](@ref) and forwards `kwargs` to it
+(`discretization`, `enable_bubble`, `enable_mask`, `autodiff_metric`, `VIJH`);
+`discretization = Grids.DG()` makes the space discontinuous across element
+boundaries, so [`Spaces.weighted_dss!`](@ref) is a no-op and inter-element
+coupling goes through numerical fluxes. Omitting it follows the quadrature.
+Read the choice back with [`Spaces.discretization`](@ref).
+
+# Examples
+
+```julia
+space = Spaces.SpectralElementSpace2D(topology, Quadratures.GLL{4}())
+dg_space = Spaces.SpectralElementSpace2D(
+    topology,
+    Quadratures.GLL{4}();
+    discretization = Grids.DG(),
+)
+```
 """
 struct SpectralElementSpace2D{G} <: AbstractSpectralElementSpace
     grid::G

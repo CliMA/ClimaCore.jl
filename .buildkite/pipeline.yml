@@ -889,7 +889,7 @@ steps:
         key: "cpu_bickleyjet_cg"
         retry: *retry_policy
         command:
-          - "julia --color=yes --project=.buildkite examples/plane/bickleyjet_cg.jl"
+          - "julia --color=yes --project=.buildkite examples/plane/bickleyjet.jl cg"
         artifact_paths:
           - "examples/plane/output/cg/*"
 
@@ -924,7 +924,7 @@ steps:
               - "roe"
               - "roe noslip"
         command:
-          - "julia --color=yes --project=.buildkite examples/plane/bickleyjet_dg.jl {{matrix.case}}"
+          - "julia --color=yes --project=.buildkite examples/plane/bickleyjet.jl dg {{matrix.case}}"
         artifact_paths:
           - "examples/plane/output/dg_*/*"
 

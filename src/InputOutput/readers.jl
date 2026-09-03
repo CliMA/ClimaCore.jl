@@ -127,8 +127,9 @@ Dict{Any, Any} with 3 entries:
   "face_extruded_finite_difference_space"   => FaceExtrudedFiniteDifferenceSpace:…
 ```
 
-Once "unpacked" as shown above, `ClimaCorePlots` or `ClimaCoreMakie` can be used to visualise
-fields. `ClimaCoreTempestRemap` supports interpolation onto user-specified grids if necessary.
+Once "unpacked" as shown above, fields can be visualised by loading `Plots` or `Makie`, which
+activates the corresponding ClimaCore plotting extension. `ClimaCoreTempestRemap` supports
+interpolation onto user-specified grids if necessary.
 """
 struct HDF5Reader{C <: ClimaComms.AbstractCommsContext}
     file::HDF5.File
@@ -501,6 +502,15 @@ function read_grid_new(reader, name)
     elseif type == "FiniteDifferenceGrid"
         topology = read_topology(reader, attrs(group)["topology"])
         return Grids.FiniteDifferenceGrid(topology)
+    elseif type == "MultiPointGrid"
+        radius = attrs(group)["radius"]
+        coords = read(group, "points")
+        points = [
+            Geometry.LatLongPoint(coords[1, i], coords[2, i]) for
+            i in 1:size(coords, 2)
+        ]
+        device = ClimaComms.device(reader.context)
+        return Grids.MultiPointGrid(points; radius, device)
     elseif type == "ExtrudedFiniteDifferenceGrid"
         vertical_grid = read_grid(reader, attrs(group)["vertical_grid"])
         horizontal_grid = read_grid(reader, attrs(group)["horizontal_grid"])
@@ -631,7 +641,13 @@ function read_field(reader::HDF5Reader, name::AbstractString)
             space = Spaces.PointSpace(local_geometry_data)
             topology = nothing
         end
-        if !(space isa Spaces.AbstractPointSpace)
+        if space isa Union{
+            Spaces.MultiPointSpace,
+            Spaces.MultiColumnFiniteDifferenceSpace,
+        }
+            topology = nothing
+            ArrayType = ClimaComms.array_type(ClimaComms.device(reader.context))
+        elseif !(space isa Spaces.AbstractPointSpace)
             topology = Spaces.topology(space)
             ArrayType = ClimaComms.array_type(topology)
         end

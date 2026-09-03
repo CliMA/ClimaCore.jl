@@ -17,6 +17,7 @@ Specifies that the local coordinates align with the Cartesian coordinates, e.g.
 the Cartesian vector basis.
 """
 struct CartesianGlobalGeometry <: AbstractGlobalGeometry end
+Base.broadcastable(x::CartesianGlobalGeometry) = tuple(x)
 
 # coordinates
 CartesianPoint(pt::XPoint{FT}, ::CartesianGlobalGeometry) where {FT} =
@@ -221,6 +222,43 @@ function CartesianVector(
     G = local_to_cartesian(geom, coord)
     G * u
 end
+
+# Rank-2 rotation of the second axis of a flux tensor `T` between
+# the local orthonormal frame and the global Cartesian123 frame.
+#
+# `G = local_to_cartesian(geom, coord)` has axes `(UVWAxis, UVWAxis)` and is
+# orthonormal (`G'G = I`), so `CartesianTensor` post-multiplies by `G'`
+# (`(T*G')[i,j] = Σₖ T[i,k] G[j,k]`, rotating each row's momentum vector
+# local→Cartesian) and `LocalTensor` post-multiplies by `G` to invert it. The
+# tensor's second axis must be the full 3D `UVWAxis` (on a 2D horizontal shell
+# promote the momentum vector to `UVW` before forming the flux, e.g.
+# `(ρu) ⊗ Geometry.project(UVWAxis(), u)`)
+function CartesianTensor(
+    T::AbstractTensor{2},
+    geom::AbstractSphericalGlobalGeometry,
+    coord::Union{LatLongPoint, LatLongZPoint},
+)
+    G = local_to_cartesian(geom, coord)
+    T * G'
+end
+
+function LocalTensor(
+    T::AbstractTensor{2},
+    geom::AbstractSphericalGlobalGeometry,
+    coord::Union{LatLongPoint, LatLongZPoint},
+)
+    G = local_to_cartesian(geom, coord)
+    T * G
+end
+
+# Planar identity methods: on a `CartesianGlobalGeometry` the local orthonormal
+# frame *is* the global Cartesian frame, so all four rotations are the
+# identity. Providing them lets the same tensor-divergence code path run
+# unchanged on planes (where the rotation is a no-op) and on the sphere.
+CartesianVector(u::UVWVector, ::CartesianGlobalGeometry, _) = u
+LocalVector(u::UVWVector, ::CartesianGlobalGeometry, _) = u
+CartesianTensor(T::AbstractTensor{2}, ::CartesianGlobalGeometry, _) = T
+LocalTensor(T::AbstractTensor{2}, ::CartesianGlobalGeometry, _) = T
 
 function product_geometry(
     horizontal_local_geometry::LocalGeometry,

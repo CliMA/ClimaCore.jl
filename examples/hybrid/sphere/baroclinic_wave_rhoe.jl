@@ -5,7 +5,7 @@
 # implicitly (`SSP333`). Run through `driver.jl` with
 # `TEST_NAME=sphere/baroclinic_wave_rhoe`.
 using Test
-using ClimaCorePlots, Plots
+using Plots
 using ClimaCore.DataLayouts
 
 include("baroclinic_wave_utils.jl")

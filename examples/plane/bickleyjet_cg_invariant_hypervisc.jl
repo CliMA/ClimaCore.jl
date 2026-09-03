@@ -1,4 +1,4 @@
-# Bickley jet (see `bickleyjet_cg.jl`), written in vector-invariant form —
+# Bickley jet (see `bickleyjet.jl`), written in vector-invariant form —
 # the momentum tendency carries a gradient of the Bernoulli function and a
 # vorticity cross product instead of a flux divergence — and stabilized with
 # hyperviscosity rather than relying on the discretization alone.
@@ -174,7 +174,7 @@ if usempi
 end
 
 ENV["GKSwstype"] = "nul"
-using ClimaCorePlots, Plots
+using Plots
 Plots.GRBackend()
 dir = "cg_invariant_hypervisc"
 path = joinpath(@__DIR__, "output", dir)
@@ -216,7 +216,7 @@ if !usempi || (usempi && ClimaComms.iamroot(context))
         @test cross_jet_speed(y_end) > 5 * cross_jet_speed(y_start)
         # Hyperviscosity is not sign-preserving, so the tracer still leaves its
         # initial [-1, 1] range, but far less than without it (measured:
-        # [-1.22, 1.18] here against [-3.1, 2.7] in `bickleyjet_cg.jl`).
+        # [-1.22, 1.18] here against [-3.1, 2.7] in `bickleyjet.jl`).
         @test maximum(abs, y_end.ρθ ./ y_end.ρ) < 1.5
     end
 

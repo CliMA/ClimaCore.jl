@@ -37,7 +37,7 @@ import ClimaCore:
 
 # visualization artifacts
 ENV["GKSwstype"] = "nul"
-using ClimaCorePlots, Plots
+using Plots
 Plots.GRBackend()
 dir = "limited_advection"
 path = joinpath(@__DIR__, "output", dir)

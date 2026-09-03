@@ -834,3 +834,53 @@ end
           Geometry.UVWVector(0.0, 0.0, 1.0)
 
 end
+
+@testset "rank-2 tensor local <-> Cartesian momentum-axis rotation" begin
+    global_geom = Geometry.SphericalGlobalGeometry(2.0)
+    coords = (
+        Geometry.LatLongPoint(0.0, 0.0),
+        Geometry.LatLongPoint(37.0, -122.0),
+        Geometry.LatLongPoint(-45.0, 90.0),
+        Geometry.LatLongPoint(90.0, 0.0),   # north pole
+    )
+    T = Geometry.Tensor(
+        (@SMatrix [1.0 2.0 3.0; 4.0 5.0 6.0; 7.0 8.0 9.0]),
+        (Geometry.UVWAxis(), Geometry.UVWAxis()),
+    )
+    for coord in coords
+        G = Geometry.local_to_cartesian(global_geom, coord)
+        Tc = Geometry.CartesianTensor(T, global_geom, coord)
+
+        # Round trip: LocalTensor ∘ CartesianTensor == identity.
+        @test Geometry.components(Geometry.LocalTensor(Tc, global_geom, coord)) ≈
+              Geometry.components(T)
+
+        # Only the momentum (second) axis is rotated: each row's momentum vector
+        # matches the rank-1 CartesianVector rotation.
+        for i in 1:3
+            m = Geometry.UVWVector(T[i, 1], T[i, 2], T[i, 3])
+            cm = Geometry.CartesianVector(m, global_geom, coord)
+            @test SVector(Tc[i, 1], Tc[i, 2], Tc[i, 3]) ≈ Geometry.components(cm)
+        end
+
+        # A one-axis rotation of p·I gives p·G' (NOT p·I): physical isotropy is
+        # an operator-level (∇·(qI)=∇q) property, not a rotation property.
+        p = 3.5
+        PI = Geometry.Tensor(
+            (@SMatrix [p 0.0 0.0; 0.0 p 0.0; 0.0 0.0 p]),
+            (Geometry.UVWAxis(), Geometry.UVWAxis()),
+        )
+        @test Geometry.components(
+            Geometry.CartesianTensor(PI, global_geom, coord),
+        ) ≈ p * Geometry.components(G)'
+    end
+
+    # On a CartesianGlobalGeometry (plane) the rotations are the identity.
+    cgeom = Geometry.CartesianGlobalGeometry()
+    xyz = Geometry.XYZPoint(1.0, 2.0, 3.0)
+    @test Geometry.CartesianTensor(T, cgeom, xyz) === T
+    @test Geometry.LocalTensor(T, cgeom, xyz) === T
+    u = Geometry.UVWVector(1.0, 2.0, 3.0)
+    @test Geometry.CartesianVector(u, cgeom, xyz) === u
+    @test Geometry.LocalVector(u, cgeom, xyz) === u
+end

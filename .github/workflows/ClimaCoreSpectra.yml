@@ -26,23 +26,8 @@ jobs:
         run: >
           julia --project=monorepo -e 'using Pkg;
           Pkg.develop([
-            PackageSpec(path="$(pwd())"),
             PackageSpec(path="$(pwd())/lib/ClimaCoreSpectra"),
           ])'
       - name: Run the tests
-        continue-on-error: true
-        env:
-            GKSwstype: nul
-            CI_OUTPUT_DIR: output
         run: >
           julia --project=monorepo -e 'using Pkg; Pkg.test("ClimaCoreSpectra")'
-          && echo "TESTS_SUCCESSFUL=true" >> $GITHUB_ENV
-      - name: Upload test Artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: climacore-spectra-output
-          path: |
-            lib/ClimaCoreSpectra/test/output
-      - name: Fail after artifacts if tests failed
-        if: ${{ env.TESTS_SUCCESSFUL != 'true' }}
-        run: exit 1

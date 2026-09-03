@@ -99,7 +99,7 @@ end
             end
         end
 
-        @testset "LDG penalty flux vanishes for continuous fields [$FT]" begin
+        @testset "SIPG penalty flux vanishes for continuous fields [$FT]" begin
             # Isolate τ[[q]]: with G ≡ 0 the consistency term drops out, so the
             # face residual must vanish when [[q]] ≈ 0.
             q = smooth_scalar(ccoords)
@@ -108,7 +108,7 @@ end
             G0 = @. Geometry.UVVector(zero(grad(q)))
             r = similar(q)
             r .= 0
-            Operators.add_ldg_laplacian_flux_interior!(r, q, G0, FT(1), FT(1))
+            Operators.add_sipg_laplacian_flux_interior!(r, q, G0, FT(1), FT(1))
             rn = @. r / lgeom.WJ
             @test maximum(abs, parent(rn)) < tol * maximum(abs, parent(q))
         end
@@ -264,7 +264,7 @@ end
             scale = maximum(abs, parent(r_weak))
             @test maximum(abs, parent(r_fd .- r_weak)) < tol_sum * scale
 
-            # LDG/SIPG consistency term: for a continuous flux G, weak κ∇·G
+            # SIPG consistency term: for a continuous flux G, weak κ∇·G
             # plus −{{κG}}·n̂ recovers strong κ∇·G (same SBP as the first-order
             # central-flux identity). One-sided grad(q) is discontinuous, so use
             # the analytic gradient of q here.
@@ -281,11 +281,11 @@ end
             )
             G_c12 =
                 Geometry.transform.(Ref(Geometry.Contravariant12Axis()), G_uv)
-            r_ldg = @. (-(rlgeom.WJ)) * κ * (-hwdiv(G_c12))
-            Operators.add_ldg_laplacian_flux_interior!(r_ldg, q, G_uv, κ, τ)
+            r_sipg = @. (-(rlgeom.WJ)) * κ * (-hwdiv(G_c12))
+            Operators.add_sipg_laplacian_flux_interior!(r_sipg, q, G_uv, κ, τ)
             r_lap_strong = @. rlgeom.WJ * κ * hdiv(G_c12)
             scale_lap = maximum(abs, parent(r_lap_strong))
-            @test maximum(abs, parent(r_ldg .- r_lap_strong)) < tol * scale_lap
+            @test maximum(abs, parent(r_sipg .- r_lap_strong)) < tol * scale_lap
 
             # Check allocations
             allocs = measured_fddg_allocs(central_2pt, r_fd, y)

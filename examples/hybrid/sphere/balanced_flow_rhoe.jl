@@ -11,7 +11,7 @@
 # does not lets them grow.
 using Test
 import ClimaTimeSteppers as CTS
-using ClimaCorePlots, Plots
+using Plots
 using ClimaCore.DataLayouts
 
 include("baroclinic_wave_utils.jl")

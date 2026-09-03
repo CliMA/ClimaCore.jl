@@ -74,7 +74,7 @@ const lim_flag = true
 
 # Plot variables and auxiliary function
 ENV["GKSwstype"] = "nul"
-import ClimaCorePlots, Plots
+import Plots
 Plots.GRBackend()
 dirname = "plane_advection_limiter_$(test_name)"
 
