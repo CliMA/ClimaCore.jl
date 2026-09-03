@@ -196,6 +196,7 @@ unit_tests = [
     UnitTest("Spaces - CUDA extruded spaces"            ,"Spaces/extruded_cuda.jl"; meta = :gpu_only, tier = :gpu, subsystem = :spaces),
     UnitTest("Spaces - CUDA point spaces"               ,"Spaces/point_cuda.jl"; meta = :gpu_only, tier = :gpu, subsystem = :spaces),
     UnitTest("Operators - spectral element CUDA"        ,"Operators/spectralelement/gpu_rectilinear.jl"; meta = :gpu_only, tier = :gpu, subsystem = :gpu),
+    UnitTest("Operators - DG face kernels CPU vs GPU"   ,"Operators/spectralelement/gpu_dg_face_kernels.jl"; meta = :gpu_only, tier = :gpu, subsystem = :gpu),
     UnitTest("Operators - finite difference CUDA"       ,"Operators/hybrid/gpu_ops.jl"; meta = :gpu_only, tier = :gpu, subsystem = :gpu),
     UnitTest("Operators - FD broadcasting edge cases"   ,"Operators/finitedifference/broadcasting_edge_cases.jl"; meta = :gpu_only, tier = :gpu, subsystem = :operators),
     UnitTest("Operators - edge-case meshes"             ,"Operators/gpu_edge_cases.jl"; meta = :gpu_only, tier = :gpu, subsystem = :operators),
