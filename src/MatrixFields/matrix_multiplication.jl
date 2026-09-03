@@ -1,8 +1,8 @@
 """
     MultiplyColumnwiseBandMatrixField()
 
-An operator that multiplies a `ColumnwiseBandMatrixField` by another `Field`,
-i.e., matrix-vector or matrix-matrix multiplication.
+Operator that multiplies a `ColumnwiseBandMatrixField` by another `Field`, i.e.,
+matrix-vector or matrix-matrix multiplication.
 
 What follows is a derivation of the algorithm used by this operator with
 single-column `Field`s. For `Field`s on multiple columns, the same computation
@@ -199,7 +199,7 @@ The expression for ``(M_1 * M_2)[i][d_{prod}]`` then becomes
     M_1[i][d] * M_2[i + d][d_{prod} - d], \\text{ where} \\\\[0.5em]
 ld_{prod} \\leq d_{prod} \\leq ud_{prod}.
 \\end{gather*}
-```# TODO: Remove this in the next major release of ClimaCore.
+```
 
 The values of ``i`` in this range are considered to be in the "interior" of the
 operator, while those not in this range (for which we cannot make these
@@ -232,13 +232,13 @@ ld_1 + ld_2 \\leq d_{prod} \\leq ud_1 + ud_2.
 
 In other words, the outer diagonal indices of ``M_1 * M_2`` are
 
-```math # matrix-matrix multiplication
+```math
 ld_{prod} = ld_1 + ld_2 \\quad \\text{and} \\quad ud_{prod} = ud_1 + ud_2.
 ```
 
 This means that we can express the bounds on the interior values of ``i`` as
 
-```math # matrix-vector multiplication
+```math
 \\text{max}(li_1, li_2 - ld_2) - ld_1 \\leq i \\leq
     \\text{min}(ri_1, ri_2 - ud_2) - ud_1.
 ```

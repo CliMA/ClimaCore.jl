@@ -19,8 +19,8 @@
 """
     default_basetype(T)
 
-Finds a type that [`set_struct!`](@ref) and [`get_struct`](@ref) can use to
-store either a value of type `T`, or any of the fields within such a value. If
+Return a type that [`set_struct!`](@ref) and [`get_struct`](@ref) can use to
+store either a value of type `T` or any of the fields within such a value. If
 possible, this type is found by recursively searching the `fieldtypes` of `T`;
 otherwise, an unsigned integer type is selected based on the `fieldtype` sizes.
 """
@@ -52,9 +52,9 @@ end
 """
     check_basetype(B, T)
 
-Checks whether [`set_struct!`](@ref) and [`get_struct`](@ref) can use values of
-type `B` to store a value of type `T`. Throws an error if this is not the case,
-printing out an example of a specific field that cannot use `B` as a basetype.
+Check whether [`set_struct!`](@ref) and [`get_struct`](@ref) can use values of
+type `B` to store a value of type `T`. Return `nothing` if so; otherwise throw an
+`ArgumentError` that names a specific field which cannot use `B` as a basetype.
 """
 @inline check_basetype(::Type{B}, ::Type{T}) where {B, T} =
     is_valid_basetype(B, T) ? nothing : invalid_basetype_error(B, T)
@@ -62,7 +62,7 @@ printing out an example of a specific field that cannot use `B` as a basetype.
 """
     checked_valid_basetype(B, T)
 
-Returns either `B` or the [`default_basetype`](@ref) of `T`, depending on
+Return either `B` or the [`default_basetype`](@ref) of `T`, depending on
 whether `B` satisfies [`check_basetype`](@ref) for `T`.
 """
 @inline checked_valid_basetype(::Type{B}, ::Type{T}) where {B, T} =
@@ -71,15 +71,15 @@ whether `B` satisfies [`check_basetype`](@ref) for `T`.
 """
     num_basetypes(B, T)
 
-Determines how many values of type `B` are required by [`set_struct!`](@ref) and
-[`get_struct`](@ref) to store a single value of type `T`.
+Return the number of values of type `B` that [`set_struct!`](@ref) and
+[`get_struct`](@ref) use to store a single value of type `T`.
 """
 @inline num_basetypes(::Type{B}, ::Type{T}) where {B, T} = sizeof(T) ÷ sizeof(B)
 
 # Base's fieldoffset lowers to a ccall that cannot be compiled in GPU kernels,
 # so the generated branch evaluates it at compile time and returns the offset as
 # a constant. The identical non-generated branch is still needed for inference
-# to properly analyze this function when the field index is a runtime value
+# to analyze this function when the field index is a runtime value
 # (e.g., data.:(i) in a loop over i), where it infers to an Int and keeps view
 # types concrete; a plain @generated function would infer to Any in that case.
 @inline stable_fieldoffset(::Type{T}, ::Val{i}) where {T, i} =
@@ -92,7 +92,7 @@ Determines how many values of type `B` are required by [`set_struct!`](@ref) and
 """
     struct_field_view(array, T, Val(i), [Val(F)])
 
-Creates a view of the data in `array` that corresponds to a particular field of
+Return a view of the data in `array` that corresponds to a particular field of
 `T`, assuming that `array` has been populated by [`set_struct!`](@ref). The
 field is specified through a `Val` that contains its index `i`, and it can be
 loaded from the resulting view using [`get_struct`](@ref).
@@ -150,12 +150,13 @@ end
     set_struct!(array, value, [index, Val(F)])
     set_struct!(array, value, [index, stride])
 
-Populates `array` with data that represents any `isbits` `value`, using
-[`bitcast_struct`](@ref) to convert `value` into entries of the array.
+Populate `array` with data that represents any `isbits` `value`, using
+[`bitcast_struct`](@ref) to convert `value` into entries of the array, and return
+`array`.
 
 For multidimensional arrays with values stored along a particular dimension, an
 index is used to identify the location of one value, with the dimension
-specified as `Val(F)`. The target values's index should be a `CartesianIndex`
+specified as `Val(F)`. The target value's index should be a `CartesianIndex`
 that contains its coordinate along every dimension except `F`. When there is no
 such dimension, `F` may be replaced with `nothing`.
 
@@ -222,12 +223,12 @@ end
     get_struct(array, T, [index, Val(F)])
     get_struct(array, T, [index, stride])
 
-Loads a value of type `T` that [`set_struct!`](@ref) has stored in `array`,
+Load a value of type `T` that [`set_struct!`](@ref) has stored in `array`,
 using [`bitcast_struct`](@ref) to convert entries of the array into this value.
 
 For multidimensional arrays with values stored along a particular dimension, an
 index is used to identify the location of one value, with the dimension
-specified as `Val(F)`. The target values's index should be a `CartesianIndex`
+specified as `Val(F)`. The target value's index should be a `CartesianIndex`
 that contains its coordinate along every dimension except `F`. When there is no
 such dimension, `F` may be replaced with `nothing`.
 
@@ -273,8 +274,8 @@ end
 """
     view_struct(array, T, [index, Val(F)])
 
-Analogous to [`get_struct`](@ref), but for a view of the struct data instead of
-the value itself. The value may be accessed with `get_struct(struct_view, T)`,
+Return a view of the struct data that [`get_struct`](@ref) would load, instead of
+the value itself. The value can be accessed with `get_struct(struct_view, T)`,
 and it can be updated with `set_struct!(struct_view, new_value)`.
 """
 @inline function view_struct(array, ::Type{T}, index...) where {T}

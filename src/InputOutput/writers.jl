@@ -3,10 +3,11 @@ abstract type AbstractWriter end
 """
     layout_string(values)
 
-Canonical layout string for a `DataLayout`, stored as the `data_layout`
-attribute of a dataset in an HDF5 file. This matches the layout names used by
-older versions of ClimaCore, so that files written by [`HDF5Writer`](@ref) stay
-backwards-compatible.
+Return the layout string of the `DataLayout` `values` (`"DataF"`, `"VIJFH"`, or
+`"VIJHF"`), stored as the `data_layout` attribute of a dataset in an HDF5 file.
+The strings match the layout names used by earlier versions of ClimaCore, so
+files written by [`HDF5Writer`](@ref) remain readable by them. Other layouts
+throw an error.
 """
 layout_string(values) =
     values isa DataLayouts.DataF ? "DataF" :
@@ -19,42 +20,45 @@ parent_h_dim(values::DataLayouts.VIJHWithF) =
     something(DataLayouts.f_dim(values), 5) == 5 ? 4 : 5
 
 """
-    HDF5Writer(filename::AbstractString[,
-               context::ClimaComms.AbstractCommsContext];
+    HDF5Writer(filename::AbstractString,
+               context::ClimaComms.AbstractCommsContext;
                overwrite::Bool = true)
     HDF5Writer(::Function,
-               filename::AbstractString[,
-               context::ClimaComms.AbstractCommsContext];
+               filename::AbstractString,
+               context::ClimaComms.AbstractCommsContext;
                overwrite::Bool = true)
 
-An `AbstractWriter` for writing to HDF5-formatted files using the ClimaCore
-storage conventions. An internal cache is used to avoid writing duplicate
-domains, meshes, topologies and spaces to the file. Use [`HDF5Reader`](@ref) to
-load the data from the file.
+Open `filename` for writing ClimaCore objects with the ClimaCore HDF5 storage
+conventions. Objects are written with [`write!`](@ref) and read back with
+[`HDF5Reader`](@ref). The writer caches the domains, meshes, topologies, and
+grids it has written, so each is stored once per file.
 
-The optional `context` can be used for writing distributed fields: in this case,
-the `MPICommsContext` used passed as an argument: this must match the context
-used for distributing the `Field`.
+# Arguments
 
-The writer overwrites or appends to existing files depending on the value of the
-`overwrite` keyword argument. When `overwrite` is `false`, the writer appends to
-`filename` if the file already exists, otherwise it creates a new one.
+  - `filename`: Path of the HDF5 file.
+  - `context`: The `ClimaComms` context of the run (`ClimaComms.context()`). For
+    distributed fields it is the `MPICommsContext` the fields are distributed
+    with; the file is then opened with MPI-IO.
+
+# Keyword Arguments
+
+  - `overwrite = true`: Replace an existing file. With `overwrite = false`, an
+    existing file is opened for appending, and a missing file is created.
+
+The `do`-block form passes the writer to the function and closes the file when
+the function returns. Both forms require `context`.
 
 !!! note
 
-    The default Julia HDF5 binaries are not built with MPI support. To use the
-    distributed functionality, you will need to configure HDF5.jl with an
-    MPI-enabled HDF5 library, see [the HDF5.jl
+    The default Julia HDF5 binaries are built without MPI support. Writing with
+    an `MPICommsContext` requires HDF5.jl configured with an MPI-enabled HDF5
+    library; see [the HDF5.jl
     documentation](https://juliaio.github.io/HDF5.jl/stable/#Parallel-HDF5).
 
-# Interface
-
-[`write!`](@ref)
-
-# Usage
+# Examples
 
 ```julia
-InputOutput.HDF5Writer(filename) do writer
+InputOutput.HDF5Writer(filename, ClimaComms.context()) do writer
     InputOutput.write!(writer, Y, "Y")
 end
 ```
@@ -118,9 +122,10 @@ function Base.close(hdfwriter::HDF5Writer)
 end
 
 """
-    write_attributes!(writer::AbstractWriter, name::AbstractString, data::Dict)
+    write_attributes!(writer::HDF5Writer, name::AbstractString, data::Dict)
 
-Write `data` as attributes to the object at `name` in the given HDF5 file.
+Write the key-value pairs of `data` as attributes of the object at path `name`
+in the file of `writer`.
 """
 write_attributes!(writer::HDF5Writer, name::AbstractString, data::Dict) =
     h5writeattr(writer.file.filename, name, data)
@@ -137,20 +142,19 @@ function cartesianindices_to_matrix(elemorder)
 end
 
 """
-    write!(writer::AbstractWriter, obj[, preferredname])
+    write!(writer::HDF5Writer, obj[, name])
 
-Write the object `obj` using `writer`. An optional `preferredname` can be
-provided, otherwise [`defaultname`](@ref) will be used to generate a name. The
-name of the object will be returned.
+Write a domain, mesh, topology, or grid `obj` to the file of `writer` and return
+the name it is stored under. `name` defaults to [`defaultname`](@ref).
 
-A cache of domains, meshes, topologies and grids is kept: if the same object
-has already been written, the file is not modified and the name under which
-the object was first written is returned. Distinct objects that request the
-same name (e.g. two spectral-element grids differing only in a constructor
-flag, both named "horizontal_grid") are written to distinct groups, with a
-`_2`, `_3`, ... suffix appended to later names; references always use the
-returned name. `Field`s and `FieldVector`s are _not_ cached, and so can be
-written multiple times.
+Each object is written once per file: writing an object that is already in the
+cache of `writer` leaves the file unchanged and returns the name it was first
+stored under. Distinct objects that request the same name (e.g. two
+spectral-element grids that differ only in a constructor flag, both named
+`"horizontal_grid"`) are stored in distinct groups; the second and later ones
+get a `_2`, `_3`, ... suffix. References between objects use the returned name.
+`Field`s and `FieldVector`s are written with the three-argument method below,
+are not cached, and require an explicit `name`.
 """
 function write!(writer::HDF5Writer, obj, name = defaultname(obj))
     get!(writer.cache, obj) do
@@ -170,7 +174,9 @@ end
 """
     defaultname(obj)
 
-Default name of object for InputOutput writers.
+Return the default name under which [`write!`](@ref) stores a domain, mesh,
+topology, or grid, e.g. `"sphere"`, `"z-interval"`, `"cubedsphere"`, or
+`"horizontal_grid"`. `Field`s and `FieldVector`s have no default name.
 """
 function defaultname end
 defaultname(::Domains.SphereDomain) = "sphere"
@@ -182,9 +188,21 @@ function defaultname(domain::Domains.IntervalDomain)
 end
 
 """
-    write_new!(writer, domain, name)
+    write_new!(writer::HDF5Writer, obj, name::AbstractString = defaultname(obj))
 
-Writes an object of type 'IntervalDomain' and name 'name' to the HDF5 file.
+Write `obj` to the file of `writer` under `name`, bypassing the cache, and
+return `name`. Methods exist for `Domains.IntervalDomain`,
+`Domains.SphereDomain`, `Meshes.IntervalMesh`, `Meshes.RectilinearMesh`,
+`Meshes.AbstractCubedSphere`, `Topologies.IntervalTopology`,
+`Topologies.Topology2D`, and the grid types `Grids.SpectralElementGrid1D`,
+`Grids.SpectralElementGrid2D`, `Grids.FiniteDifferenceGrid`,
+`Grids.MultiPointGrid`, `Grids.ExtrudedFiniteDifferenceGrid`, and
+`Grids.LevelGrid`. Each method creates a group under `domains/`, `meshes/`,
+`topologies/`, or `grids/`, stores the object's parameters as attributes, and
+writes the objects it depends on (e.g. the mesh of a topology) with
+[`write!`](@ref), storing their names as attributes.
+
+Called from [`write!`](@ref), which supplies a unique `name`.
 """
 function write_new!(
     writer::HDF5Writer,
@@ -208,11 +226,6 @@ function write_new!(
     return name
 end
 
-"""
-    write_new!(writer, domain, name)
-
-Writes an object of type 'SphereDomain' and name 'name' to the HDF5 file.
-"""
 function write_new!(
     writer::HDF5Writer,
     domain::Domains.SphereDomain,
@@ -276,11 +289,6 @@ function write_new!(
     return name
 end
 
-"""
-    write_new!(writer, mesh, name)
-
-Write `CubedSphereMesh` data to HDF5.
-"""
 function write_new!(
     writer::HDF5Writer,
     mesh::Meshes.AbstractCubedSphere,
@@ -303,11 +311,6 @@ end
 defaultname(::Topologies.Topology2D) = "2d"
 defaultname(topology::Topologies.IntervalTopology) = defaultname(topology.mesh)
 
-"""
-    write_new!(writer, topology, name)
-
-Write `IntervalTopology` data to HDF5.
-"""
 function write_new!(
     writer::HDF5Writer,
     topology::Topologies.IntervalTopology,
@@ -320,11 +323,6 @@ function write_new!(
     return name
 end
 
-"""
-    write_new!(writer, topology, name)
-
-Write `Topology2D` data to HDF5.
-"""
 function write_new!(
     writer::HDF5Writer,
     topology::Topologies.Topology2D,
@@ -364,11 +362,6 @@ defaultname(grid::Grids.FiniteDifferenceGrid) = defaultname(grid.topology)
 defaultname(::Grids.MultiPointGrid) = "multi_point_grid"
 defaultname(grid::Grids.LevelGrid) = "$(defaultname(grid.full_grid)): level $(grid.level)"
 
-"""
-    write_new!(writer, space, name)
-
-Write `SpectralElementSpace1D` data to HDF5.
-"""
 function write_new!(
     writer::HDF5Writer,
     grid::Grids.SpectralElementGrid1D,
@@ -455,11 +448,6 @@ function write_new!(
 end
 
 
-"""
-    write_new!(writer, domain, name)
-
-Writes an object of type 'Hypsography' and name 'name' to the HDF5 file.
-"""
 function write_new!(
     writer::HDF5Writer,
     grid::Grids.ExtrudedFiniteDifferenceGrid,
@@ -533,8 +521,18 @@ end
 # write fields
 """
     write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
+    write!(writer::HDF5Writer, fieldvector::Fields.FieldVector, name::AbstractString)
 
-Write the `field` to the HDF5 in `writer` and assign it the given `name`.
+Write `field` or `fieldvector` to the file of `writer` under `name` and return
+`name`.
+
+A `Field` is stored as the dataset `fields/<name>`, with its data layout,
+element type, grid name, and staggering as attributes; the grid is written
+with [`write!`](@ref) if it is not in the file yet. A `FieldVector` is stored
+as the group `fields/<name>`, and each component is written as a `Field` (or a
+nested `FieldVector`) under `<name>/<key>`, so the component `Y.c` of a
+`FieldVector` named `"Y"` is stored as `"Y/c"`. `Field`s and `FieldVector`s are
+not cached and can be written more than once under different names.
 """
 function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
     write!(writer, field, name, axes(field))
@@ -548,10 +546,10 @@ end
         space::Spaces.AbstractPointSpace,
     )
 
-Write a `Field`, with `axes` of type `PointSpace`,  to the HDF5 file. The field
-is written to the `fields` group in the file, with the name `name`. The local
-geometry data of the `PointSpace` is written to the `local_geometry_data` group
-with name `name`.
+Write a `Field` on a `PointSpace` to the file of `writer`. The field data is
+stored as the dataset `fields/<name>` and the local geometry data of the space
+as the dataset `local_geometry_data/<name>`, since a `PointSpace` has no grid
+to reference.
 """
 function write!(
     writer::HDF5Writer,
@@ -594,15 +592,17 @@ end
 """
     write!(
         writer::HDF5Writer,
+        group,
         values::DataLayouts.DataLayout,
         name::AbstractString,
         topology::Topologies.AbstractTopology,
     )
 
-Write an object of type `DataLayout` and name `name` to the HDF5 file.
-
-The `values` should belong to a `Field` whose `space`'s topology is
-`topology(axes(field))`.
+Write the `DataLayout` `values` as the dataset `name` in the HDF5 `group`.
+`topology` is the horizontal topology the data is laid out on; for a
+`Topology2D` with a distributed `writer` context, each rank writes its own
+elements with `_write_mpi!`, otherwise the whole array is written with
+`_write!`. Used for grid masks.
 """
 function write!(
     writer::HDF5Writer,
@@ -633,18 +633,12 @@ function write_plain_array!(group, array::AbstractArray, name::AbstractString)
 end
 
 """
-    _write_mpi!(
-        writer::HDF5Writer,
-        data::DataLayouts.DataLayout,
-        name::AbstractString,
-        nelems,
-        local_elem_gidx
-    )
+    _write_mpi!(group, values::DataLayouts.DataLayout, name; nelems, local_elem_gidx)
 
-This is an internal method, meant to be used for writing data layouts to the
-HDF5 file.
-
-This method should be used for distributed datalayouts.
+Write the distributed `DataLayout` `values` as the dataset `data/<name>` in the
+HDF5 `group` with a collective MPI write. The dataset holds all `nelems` global
+elements along the `H` axis; this rank writes the elements at the global
+indices `local_elem_gidx`. Return `name`.
 """
 function _write_mpi!(
     group,
@@ -672,16 +666,10 @@ function _write_mpi!(
 end
 
 """
-    _write!(
-        writer::HDF5Writer,
-        data::DataLayouts.DataLayout,
-        name::AbstractString,
-    )
+    _write!(group, values::DataLayouts.DataLayout, name::AbstractString)
 
-This is an internal method, meant to be used for writing data layouts to the
-HDF5 file.
-
-This method should be used when this is not a distributed datalayout.
+Write the whole parent array of `values` as the dataset `name` in the HDF5
+`group`, for data that is not distributed. Return `name`.
 """
 function _write!(group, values::DataLayouts.DataLayout, name::AbstractString;)
     array = parent(values)
@@ -700,7 +688,12 @@ end
         space::Spaces.AbstractSpace,
     )
 
-Write an object of type 'Field' and name 'name' to the HDF5 file.
+Write a `Field` on `space` as the dataset `fields/<name>` and return `name`.
+The grid of `space` is written first with [`write!`](@ref), and its name is
+stored in the `grid` attribute of the dataset, together with the data layout,
+element type, and staggering of the field. With a distributed `writer` context
+on a `Topology2D`, each rank writes its own elements with a collective MPI
+write.
 """
 function write!(
     writer::HDF5Writer,
@@ -780,7 +773,8 @@ end
 """
     write!(writer::HDF5Writer, name => value...)
 
-Write one or more `name => value` pairs to `writer`.
+Write one or more `name => value` pairs to `writer`, as
+`write!(writer, value, name)` for each pair. Return `nothing`.
 """
 function write!(writer::HDF5Writer, pairs::Pair...)
     for (name, value) in pairs
@@ -793,7 +787,8 @@ end
 """
     write!(filename::AbstractString, name => value...)
 
-Write one or more `name => value` pairs to the HDF5 file `filename`.
+Open an [`HDF5Writer`](@ref) on `filename`, write one or more `name => value`
+pairs to it, and close the file.
 """
 function write!(filename::AbstractString, pairs::Pair...)
     hdfwriter = HDF5Writer(filename)

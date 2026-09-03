@@ -1,7 +1,8 @@
 """
     DataMask
 
-Marks points in a discretized domain as active or inactive.
+Abstract type for masks that mark points in a discretized domain as active or
+inactive. Subtypes: [`NoMask`](@ref) and [`IJHMask`](@ref).
 """
 abstract type DataMask end
 
@@ -16,13 +17,16 @@ struct NoMask <: DataMask end
     IJHMask(data)
 
 A [`DataMask`](@ref) that marks the columns of a [`VIJFH`](@ref) or
-[`VIJHF`](@ref) layout as active or inactive, using the following cached values:
+[`VIJHF`](@ref) layout as active or inactive. The constructor marks every column as
+active; modify `is_active` and call [`set_mask_maps!`](@ref) to change the mask.
 
-  - `is_active`, a layout similar to `level(data, 1)` representing a boolean mask
-  - `N`, an array that contains the total number of active columns
-  - `i_map`, an array that contains the `i`-index of each active column
-  - `j_map`, an array that contains the `j`-index of each active column
-  - `h_map`, an array that contains the `h`-index of each active column
+# Fields
+
+  - `is_active`: A layout similar to `level(data, 1)` that holds the boolean mask.
+  - `N`: A one-element array that holds the total number of active columns.
+  - `i_map`: An array that holds the `i`-index of each active column.
+  - `j_map`: An array that holds the `j`-index of each active column.
+  - `h_map`: An array that holds the `h`-index of each active column.
 """
 struct IJHMask{D, A} <: DataMask
     is_active::D
@@ -46,8 +50,9 @@ end
 """
     set_mask_maps!(mask)
 
-Update the maps in an [`IJHMask`](@ref) based on the values in `mask.is_active`.
-This allocates memory when using GPUs, so it should only be called infrequently.
+Update `mask.N`, `mask.i_map`, `mask.j_map`, and `mask.h_map` in an
+[`IJHMask`](@ref) based on the values in `mask.is_active`, and return `mask`. This
+allocates memory when using GPUs, so it should only be called infrequently.
 """
 function set_mask_maps!(mask::IJHMask)
     using_arrays = parent(mask.is_active) isa Array
@@ -75,7 +80,7 @@ end
 """
     should_compute(mask, index)
 
-Check whether a [`DataMask`](@ref) marks the point at some index as active.
+Return whether a [`DataMask`](@ref) marks the point at `index` as active.
 """
 @propagate_inbounds should_compute(::NoMask, _) = true
 

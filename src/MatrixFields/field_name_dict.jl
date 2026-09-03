@@ -2,34 +2,43 @@
     FieldNameDict(keys, entries)
     FieldNameDict{T}(key_entry_pairs...)
 
-An `AbstractDict` with keys of type `T` that are stored as a `FieldNameSet{T}`.
-There are two subtypes of `FieldNameDict`:
+An `AbstractDict` with keys of type `T`, stored as a `FieldNameSet{T}`, and a
+tuple of entries. The two-argument constructor takes the key set and the
+entries; the parametric constructor takes `key => entry` pairs. `T` is either
+`FieldName` or `FieldNamePair`, which gives the two aliases:
 
-  - `FieldMatrix`, which maps a set of `FieldMatrixKeys` to either
-    `ColumnwiseBandMatrixField`s or multiples of `LinearAlgebra.I`; this is the
-    only user-facing subtype of `FieldNameDict`
-  - `FieldVectorView`, which maps a set of `FieldVectorKeys` to `Field`s; this
-    subtype is automatically generated when a `FieldVector` is used in the same
-    operation as a `FieldMatrix` (e.g., when both appear in the same broadcast
-    expression, or when both are passed to a `FieldMatrixSolver`)
+  - `FieldMatrix = FieldNameDict{FieldNamePair}`, which maps `FieldMatrixKeys`
+    to `ColumnwiseBandMatrixField`s, `DiagonalMatrixRow`s, or multiples of
+    `LinearAlgebra.I`; this is the user-facing alias.
+  - `FieldVectorView = FieldNameDict{FieldName}`, which maps `FieldVectorKeys`
+    to `Field`s; it is generated when a `FieldVector` is used in the same
+    operation as a `FieldMatrix` (e.g. when both appear in the same broadcast
+    expression, or when both are passed to a [`FieldMatrixSolver`](@ref)).
 
-A `FieldNameDict` can also be "lazy", which means that it can store
-`AbstractBroadcasted` objects that become `Field`s when they are materialized.
-Many internal operations generate lazy `FieldNameDict`s to reduce the number of
-calls to `materialize!`, since each call comes with a small performance penalty.
+A `FieldNameDict` is "lazy" when its entries include `AbstractBroadcasted`
+objects that become `Field`s on materialization. Internal operations produce
+lazy `FieldNameDict`s so that a chain of operations materializes once, in a
+single call to `materialize!`.
 
-The entry at a specific key can be extracted by calling `dict[key]`, and the
-entries that correspond to all the keys in a `FieldNameSet` can be extracted by
-calling `dict[set]`. If `dict` is a `FieldMatrix`, the corresponding identity
-matrix can be computed by calling `one(dict)`.
+`dict[key]` returns the entry at `key`, including entries nested inside a
+stored entry (e.g. a component of a vector-valued entry); `dict[set]` returns a
+`FieldNameDict` with the entries of `dict` at the keys in the `FieldNameSet`
+`set`. For a `FieldMatrix`, `one(dict)` returns the identity matrix with the
+diagonal keys of `dict`.
 
-When broadcasting over `FieldNameDict`s, the following operations are supported:
+Broadcasting over `FieldNameDict`s supports:
 
-  - Addition and subtraction
-  - Multiplication, where the first argument must be a `FieldMatrix`
-  - Inversion, where the argument must be a diagonal `FieldMatrix`, i.e., one in
-    which every entry is either a `ColumnwiseBandMatrixField` of
-    `DiagonalMatrixRow`s or a multiple of `LinearAlgebra.I`
+  - addition, subtraction, and negation,
+  - multiplication and division by a single value (a `Number` or a
+    `Geometry.SingleValue` wrapped in a `Ref` or a `Tuple`),
+  - multiplication, where the first argument is a `FieldMatrix`,
+  - inversion of a diagonal `FieldMatrix`, i.e. one in which every entry is a
+    `ColumnwiseBandMatrixField` of `DiagonalMatrixRow`s or a multiple of
+    `LinearAlgebra.I`.
+
+The result of `materialize!(dest, bc)` covers all keys of `dest`; entries of
+`dest` that are multiples of `LinearAlgebra.I` are immutable and must equal the
+corresponding entries of the result.
 """
 struct FieldNameDict{
     T <: Union{FieldName, FieldNamePair},
@@ -151,18 +160,23 @@ get_internal_key(child_name_pair::FieldNamePair, name_pair::FieldNamePair) = (
 """
     get_internal_entry(entry, name::FieldName)
 
-Returns the field indexed to by `name` from `entry`
+Return the component of `entry` at `name`, i.e. `get_field(entry, name)`.
+Called from `Base.getindex(::FieldNameDict, key)`.
 """
 get_internal_entry(entry, name::FieldName) = get_field(entry, name)
 # call get_internal_entry on scaling value, and rebuild entry container
 """
     get_internal_entry(entry, name_pair::FieldNamePair)
 
-Returns the field indexed to by `name_pair` from `entry`. Indexing behavior is described
-in the MatrixFields section of the documentation. If `entry` is a `ColumnwiseBandMatrixField`,
-and the field indexed to by `name_pair` is not a field of scalars, a broadcasted object
-is returned. This also happens when indexing off diagonal with the implicit tensor structure
-optimization (see MatrixFields documentation).
+Return the block of the matrix `entry` at `name_pair`, where `name_pair` is
+relative to the key under which `entry` is stored. The indexing rules are
+described in the MatrixFields reference page. A `UniformScaling` or
+`DiagonalMatrixRow` entry is indexed through its scaling value and rebuilt. For
+a `ColumnwiseBandMatrixField` entry, the result is a `Field` viewing the
+parent array when the block is a field of scalars of the parent's element type,
+and a `Broadcasted` object otherwise, including when `name_pair` indexes an
+off-diagonal block under the implicit tensor structure optimization (see
+`field_offset_and_type`).
 """
 get_internal_entry(entry::UniformScaling, name_pair::FieldNamePair) =
     UniformScaling(get_internal_entry(scaling_value(entry), name_pair))
@@ -347,26 +361,35 @@ end
 """
     field_offset_and_type(name_pair::FieldNamePair, ::Type{T}, ::Type{S}, full_key::FieldNamePair)
 
-Returns the offset of the field with name `name_pair` in an object of type `S` in
-multiples of `sizeof(T)`, the type of the field with name `name_pair`, and a `Val` indicating
-what method can index a ClimaCore `Field` of `S` with `name_pair`.
+Return a tuple `(offset, type, index_method)` for the component of an object of
+type `S` at `name_pair`, where `T` is the base type of the parent array.
 
-The third return value is one of the following:
+# Returns
 
-  - `Val(:view)`: indexing with a view is possible
-  - `Val(:view_of_blocks)`: indexing with a view of non-unfiform stride length is possible.\
-    This is not implemented, and currently treated the same as `Val(:broadcasted_fallback)`
-  - `Val(:broadcasted_fallback)`: indexing with a view is not possible
-  - `Val(:broadcasted_zero)`: indexing with a view is not possible, and the `name_pair` indexes
-    off diagonal with implicit tensor structure optimization (see MatrixFields docs)
+  - `offset`: The position of the component within `S`, in multiples of
+    `sizeof(T)`.
+  - `type`: The type of the component.
+  - `index_method`: A `Val` naming how a `Field` with element type `S` can be
+    indexed with `name_pair`:
+      + `Val(:view)`: a strided view of the parent array.
+      + `Val(:view_of_blocks)`: a view with non-uniform stride; not implemented,
+        so it is handled like `Val(:broadcasted_fallback)`.
+      + `Val(:broadcasted_fallback)`: a `Broadcasted` object that indexes each
+        element.
+      + `Val(:broadcasted_zero)`: a `Broadcasted` object of zeros, because
+        `name_pair` indexes an off-diagonal block under the implicit tensor
+        structure optimization (see the MatrixFields reference page).
 
-When `S` is a `Geometry.Tensor{2}`, and the name pair indexes to a slice of
-the tensor, an offset of `-1` is returned . In other words, the name pair cannot index into a slice.
+When `S` is a `Geometry.Tensor{2}` and only one name of `name_pair` indexes
+into its components, the pair addresses a slice, which cannot be a view, so the
+result is `(0, S, Val(:broadcasted_fallback))`. When neither name of
+`name_pair` is `@name()` and neither names a field of `S`, the pair is treated
+with the implicit tensor structure optimization: the first names of both are
+dropped, and the block is zero when they differ.
 
-If neither element of `name_pair` is `@name()`, the first name in the pair is indexed with
-first, and then the second name is used to index the result of the first.
-
-This is an internal funtion designed to be used with `get_internal_entry(::ColumnwiseBandMatrixField)`
+`full_key` is the complete key, used in the `KeyError` thrown when `name_pair`
+does not index into `S`. Called from
+`get_internal_entry(::ColumnwiseBandMatrixField, ::FieldNamePair)`.
 """
 function field_offset_and_type(
     name_pair::FieldNamePair,
@@ -460,11 +483,12 @@ end
 """
     get_scalar_keys(dict::FieldMatrix)
 
-Returns a `FieldMatrixKeys` object that contains the keys that result in
-a `ScalingFieldMatrixEntry{<: target_type}` or a `ColumnwiseBandMatrixField` with bands of
-eltype `<: target_type` when indexing `dict`. `target_type` is determined by the eltype of the
-parent of the first entry in `dict` that is a `Fields.Field`. If no such entry
-is found, `target_type` defaults to `Number`.
+Return the `FieldMatrixKeys` whose entries in `dict` are scalar blocks: keys
+for which `dict[key]` is a `ScalingFieldMatrixEntry` with values of type
+`target_type` or a `ColumnwiseBandMatrixField` whose band elements are of type
+`target_type`. `target_type` is the element type of the parent array of the
+first `Field` entry in `dict`, or `Number` when `dict` has no `Field` entries.
+Called from [`scalar_field_matrix`](@ref).
 """
 function get_scalar_keys(dict::FieldMatrix)
     first_field_idx = unrolled_findfirst(Base.Fix2(isa, Fields.Field), dict.entries)
@@ -486,10 +510,13 @@ function get_scalar_keys(dict::FieldMatrix)
 end
 
 """
-    get_scalar_keys(T::Type, ::Val{FT})
+    get_scalar_keys(::Type{T}, ::Val{FT})
 
-Returns a tuple of `FieldNamePair` objects that correspond to any children
-of `T` that are of type `<: FT`.
+Return a tuple of the `FieldNamePair`s, relative to an entry with element type
+`T`, that address the components of `T` of type `<: FT`. A `BandMatrixRow` is
+indexed through its element type, the components of a `Geometry.Tensor{2}` are
+addressed by row and column index (a `Geometry.Covector` only by column
+index), and a rank-1 tensor is indexed through its `components` field.
 """
 function get_scalar_keys(::Type{T}, ::Val{FT}) where {T, FT}
     if T <: FT
@@ -551,11 +578,13 @@ end
 """
     scalar_field_matrix(field_matrix::FieldMatrix)
 
-Constructs a `FieldNameDict` where the keys and entries are views
-of the entries of `field_matrix`, which corresponding to the
-`FT` typed components of entries of `field_matrix`.
+Construct a `FieldMatrix` whose entries are the scalar blocks of
+`field_matrix`: every entry with vector- or tensor-valued blocks is split into
+one entry per scalar component, keyed by the component names (see
+`get_scalar_keys`). Entries that are `Field`s of scalars are views of
+the parent arrays of `field_matrix`.
 
-# Example usage
+# Examples
 
 ```julia
 e¹² = Geometry.Covariant12Vector(1.6, 0.7)
@@ -616,8 +645,8 @@ end
 """
     is_lazy(dict)
 
-Checks whether the `FieldNameDict` `dict` contains any un-materialized
-`AbstractBroadcasted` entries.
+Return whether the `FieldNameDict` `dict` has any `AbstractBroadcasted`
+entries, i.e. entries that have not been materialized.
 """
 is_lazy(dict) =
     unrolled_any(Base.Fix2(isa, Base.AbstractBroadcasted), values(dict))
@@ -625,7 +654,10 @@ is_lazy(dict) =
 """
     lazy_main_diagonal(matrix)
 
-Constructs a lazy `FieldMatrix` that contains the main diagonal of `matrix`.
+Construct a lazy `FieldMatrix` with the diagonal keys of `matrix`, whose entries
+are the main diagonals of the corresponding entries of `matrix`. Diagonal
+entries are kept as they are; other `ColumnwiseBandMatrixField` entries become
+`Broadcasted` objects of `DiagonalMatrixRow`s.
 """
 function lazy_main_diagonal(matrix)
     diagonal_keys = matrix_diagonal_keys(keys(matrix))
@@ -638,14 +670,18 @@ function lazy_main_diagonal(matrix)
 end
 
 """
-    identity_field_matrix(x)
+    identity_field_matrix(x::Fields.FieldVector)
 
-Constructs a `FieldMatrix` that represents the identity operator for the
-`FieldVector` `x`. The keys of this `FieldMatrix` correspond to single values,
-such as numbers and vectors.
+Construct the `FieldMatrix` that represents the identity operator on the
+`FieldVector` `x`. It has one diagonal key for every `Field` in `x` whose
+element type is a `Geometry.SingleValue` (a number or a vector): the entry for
+a number-valued field is `UniformScaling(one(T))`, and the entry for a
+vector-valued field is a `DiagonalMatrixRow` holding the identity tensor of the
+field's basis.
 
-This offers an alternative to `one(matrix)`, which is not guaranteed to have all
-the entries required to solve `matrix * x = b` for `x` if `matrix` is sparse.
+Unlike `one(matrix)`, whose keys are the diagonal keys of `matrix`, the result
+has an entry for every single-valued field of `x`, so it covers all the entries
+needed to solve `matrix * x = b` for `x` when `matrix` is sparse.
 """
 function identity_field_matrix(x::Fields.FieldVector)
     single_field_names = filtered_names(x) do field
@@ -672,9 +708,9 @@ end
 """
     field_vector_view(x, [name_tree])
 
-Constructs a `FieldVectorView` that contains all of the `Field`s in the
-`FieldVector` `x`. The default `name_tree` is `FieldNameTree(x)`, but this can
-be modified if needed.
+Construct a `FieldVectorView` whose entries are the `Field`s in the
+`FieldVector` `x`, keyed by their names in `x`. `name_tree` is the
+`FieldNameTree` of the keys and defaults to `FieldNameTree(x)`.
 """
 function field_vector_view(x, name_tree = FieldNameTree(x))
     field_names = filtered_names(field -> field isa Fields.Field, x)
@@ -686,7 +722,8 @@ end
 """
     concrete_field_vector(vector)
 
-Converts the `FieldVectorView` `vector` back into a `FieldVector`.
+Convert the `FieldVectorView` `vector` into a `FieldVector`, rebuilding the
+nesting given by the `FieldNameTree` of its keys.
 """
 concrete_field_vector(vector) =
     concrete_field_vector_within_subtree(keys(vector).name_tree, vector)

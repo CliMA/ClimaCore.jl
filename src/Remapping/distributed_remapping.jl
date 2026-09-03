@@ -1,13 +1,13 @@
-# This file provides functions that perform Lagrange interpolation of fields onto pre-defined
-# grids of points. These functions are particularly useful to map the computational grid
-# onto lat-long-z/xyz grids.
+# This file provides functions that perform Lagrange interpolation of fields onto
+# pre-defined grids of points, for example to map the computational grid onto
+# lat-long-z or xyz grids.
 #
-# We perform interpolation as described in Berrut2004. Let us start by focusing on the 1D case.
+# Interpolation follows Berrut2004. Consider the 1D case first.
 #
-# In most simulations, the points where to interpolate are fixed and the field changes. So,
-# we design our functions with the assumption that we have a fixed `remapping` matrix
-# (computed from the evaluation points and the nodes), and a variable field. The `remapping`
-# matrix is essentially Equation (4.2) in Berrut2004:
+# In most simulations, the interpolation points are fixed and the field changes. The
+# functions therefore assume a fixed `remapping` matrix (computed from the evaluation
+# points and the nodes) and a variable field. The `remapping` matrix is Equation (4.2)
+# in Berrut2004:
 #
 # interpolated(x) = sum_j [w_j/(x - x_j) f_j] / sum_j [w_j / (x - x_j)]
 #
@@ -22,12 +22,11 @@
 # interpolated(x) = sum_j V_j f_j          (*)
 #
 #
-# In the 1D case, this is nice and efficient. Now, let us move to the 2D case. In this case,
-# we will have two weights V1 and V2 and
+# In the 2D case, there are two weight vectors V1 and V2, and
 #
 # interpolated(x) = sum_i sum_j V1_i V2_j f_ij
 #
-# In other words, this is
+# that is,
 #
 # interpolated(x) = V1^T * F * V2
 #
@@ -91,7 +90,7 @@
 """
     containing_pid(target_point, topology)
 
-Return the process id that contains the `target_point` in the given `topology`.
+Return the id of the process that owns the element of `topology` containing `target_point`.
 """
 function containing_pid(
     target_point::P,
@@ -108,11 +107,11 @@ end
 """
     target_hcoords_pid_bitmask(target_hcoords, topology, pid)
 
-Return a bitmask for points in `target_hcoords` in the given (horizontal) `topology` that
-belong to the process with process number `pid`.
+Return a `BitArray` of the same shape as `target_hcoords` that is `true` where the point
+lies in an element of the horizontal `topology` owned by process `pid`.
 
-This mask can be used to extract the `target_hcoords` relevant to the given `pid`. The mask
-is the same shape and size as the input `target_hcoords`, which makes it particularly useful.
+Indexing `target_hcoords` with the mask extracts the points local to `pid`; indexing an
+output array with it places their interpolated values back in the original shape.
 """
 function target_hcoords_pid_bitmask(target_hcoords, topology, pid)
     pid_hcoord = hcoord -> containing_pid(hcoord, topology)
@@ -146,10 +145,9 @@ struct Remapper{
     space::SPACE
 
     # Target points that are on the process where this object is defined.
-    # local_target_hcoords is stored as a 1D array (we store it as 1D array because in
-    # general there is no structure to this object, especially for cubed sphere, which have
-    # points spread all over the place). This is nothing when remapping purely vertical
-    # spaces.
+    # local_target_hcoords is stored as a 1D array because in general this object has no
+    # structure (on the cubed sphere, a process's points are scattered). This is nothing
+    # when remapping purely vertical spaces.
     local_target_hcoords::T1
 
     # Target coordinates in the vertical direction. zcoords are the same for all the
@@ -202,14 +200,13 @@ struct Remapper{
     # Storage area where the interpolated values are saved. This is meaningful only for the
     # root process and gets filled by a interpolate call. This has dimensions
     # (H, V, buffer_length), where H is the size of target_hcoords and V of target_zcoords.
-    # In other words, this is the expected output array.
+    # This is the output array.
     _interpolated_values::T10
 
     # Maximum number of Fields that can be interpolated at any given time
     buffer_length::Int
 
-    # A tuple of Colons (1, 2, or 3), used to more easily get views into arrays with unknown
-    # dimension (1-3D)
+    # A tuple of Colons (1, 2, or 3), used to take views into arrays of dimension 1 to 3.
     colons::T11
 
     # Horizontal remapping method. BilinearRemapping holds precomputed (s, t) and (i, j).
@@ -218,36 +215,44 @@ struct Remapper{
 end
 
 """
-Remapper(space, target_hcoords, target_zcoords, buffer_length = 1, horizontal_method = SpectralElementRemapping())
-Remapper(space; target_hcoords, target_zcoords, buffer_length = 1, horizontal_method = SpectralElementRemapping())
-Remapper(space, target_hcoords; buffer_length = 1, horizontal_method = SpectralElementRemapping())
-Remapper(space, target_zcoords; buffer_length = 1)
+    Remapper(space; target_hcoords, target_zcoords, buffer_length = 1,
+             horizontal_method = SpectralElementRemapping())
+    Remapper(space, target_hcoords, target_zcoords; buffer_length = 1,
+             horizontal_method = SpectralElementRemapping())
+    Remapper(space, target_hcoords; buffer_length = 1,
+             horizontal_method = SpectralElementRemapping())
+    Remapper(space, target_zcoords; buffer_length = 1)
 
-Return a `Remapper` responsible for interpolating any `Field` defined on the given `space`
-to the Cartesian product of `target_hcoords` with `target_zcoords`.
+Return a `Remapper` that interpolates any `Field` defined on `space` onto the Cartesian
+product of `target_hcoords` and `target_zcoords`.
 
-`target_zcoords` can be `nothing` for interpolation on horizontal spaces. Similarly,
-`target_hcoords` can be `nothing` for interpolation on vertical spaces.
+A `Remapper` stores the target points, the interpolation weights, and scratch arrays. It is
+tied to `space`, not to a `Field`, so one `Remapper` serves every `Field` on that space.
+Pass it to [`interpolate`](@ref) or `interpolate!`. Each MPI process builds its own
+`Remapper`, which holds the target points that fall in the elements of that process. For a
+one-off remapping, call `interpolate(field)` directly.
 
-The `Remapper` is designed to not be tied to any particular `Field`. You can use the same
-`Remapper` for any `Field` as long as they are all defined on the same `topology`.
+# Arguments
 
-`Remapper` is the main argument to the `interpolate` function.
+  - `space`: the space of the fields to interpolate. Horizontal-only spaces
+    (`AbstractSpectralElementSpace`) take only `target_hcoords`; vertical-only spaces
+    (`FiniteDifferenceSpace`, `MultiColumnFiniteDifferenceSpace`) take only
+    `target_zcoords`. Multi-column spaces require `Flat` hypsography. Masked spaces are
+    supported only when each element has a single node.
+  - `target_hcoords`: array of horizontal `Geometry.Point`s (e.g. `LatLongPoint`); the
+    output has the same shape along its leading dimensions. Defaults to
+    [`default_target_hcoords`](@ref) of `space`. `nothing` for vertical-only spaces.
+  - `target_zcoords`: vector of `Geometry.ZPoint`s, interpreted as reference `z`
+    coordinates. Defaults to [`default_target_zcoords`](@ref) of `space`. `nothing` or empty
+    for horizontal-only spaces.
 
-If you want to quickly remap something, you can call directly `interpolate`.
+# Keyword Arguments
 
-By default, [`default_target_zcoords`](@ref) [`default_target_hcoords`](@ref) are used to
-determine the coordinates.
-
-# Keyword arguments
-
-`buffer_length` is size of the internal buffer in the Remapper to store intermediate values
-for interpolation. Effectively, this controls how many fields can be remapped simultaneously
-in `interpolate`. When more fields than `buffer_length` are passed, the remapper will batch
-the work in sizes of `buffer_length`.
-
-`horizontal_method`: `SpectralElementRemapping()` (default; uses spectral element quadrature weights)
-or `BilinearRemapping()` (1D: linear on 2-point cell; 2D: bilinear on 2×2 cell).
+  - `buffer_length = 1`: number of fields the internal buffers hold, i.e., how many fields
+    `interpolate` processes in one batch. Passing more fields than `buffer_length` to
+    `interpolate` splits the work into batches of `buffer_length`.
+  - `horizontal_method = SpectralElementRemapping()`: [`SpectralElementRemapping`](@ref) or
+    [`BilinearRemapping`](@ref). Ignored for vertical-only spaces.
 """
 function Remapper end
 
@@ -370,7 +375,7 @@ function _Remapper(
     # For IntervalTopology, all the points belong to the same process and there's no notion
     # of containing pid
     if is_1d
-        # a .== a is an easy way to make a bitmask of the same shape as `a` filled with true
+        # a .== a makes a bitmask of the same shape as `a` filled with true
         local_target_hcoords_bitmask = target_hcoords .== target_hcoords
     else
         local_target_hcoords_bitmask =
@@ -391,7 +396,7 @@ function _Remapper(
         )
     num_hdims = length(ξs_combined[begin])
     # ξs is a Vector of SVector{1, Float64} or SVector{2, Float64}
-    # Here we split the two dimensions because we want to compute the two interpolation matrices.
+    # The two dimensions are split to compute the two interpolation matrices.
     ξs_split = Tuple([ξ[i] for ξ in ξs_combined] for i in 1:num_hdims)
 
     # Compute the interpolation matrices (or bilinear objects when BilinearRemapping)
@@ -520,7 +525,8 @@ function _Remapper(
 
     colons = ntuple(_ -> Colon(), num_dims)
 
-    # Reconstruct BilinearRemapping with computed arrays to preserve interface BilinearRemapping().
+    # Reconstruct BilinearRemapping with the computed arrays, keeping the BilinearRemapping()
+    # interface.
     if horiz_method isa BilinearRemapping
         horiz_method = BilinearRemapping(
             local_bilinear_s,
@@ -665,10 +671,15 @@ Remapper(
     )
 
 """
-    _set_interpolated_values!(remapper, field)
+    _set_interpolated_values!(remapper::Remapper, fields)
 
-Change the local state of `remapper` by performing interpolation of `fields` on the vertical
-and horizontal points.
+Interpolate each of `fields` horizontally and vertically onto the process-local target
+points and write the results into `remapper._local_interpolated_values`, one slice per
+field along the last dimension.
+
+Dispatches on `remapper.horiz_method`: `BilinearRemapping` uses its precomputed local node
+indices and coordinates; `SpectralElementRemapping` (or `nothing`, for vertical-only
+spaces) uses the interpolation matrices in `remapper.local_horiz_interpolation_weights`.
 """
 _set_interpolated_values!(remapper::Remapper, fields) =
     _set_interpolated_values!(remapper.horiz_method, remapper, fields)
@@ -740,7 +751,8 @@ function _set_interpolated_values_bilinear!(
     end
 end
 
-# Bilinear path (3D): horizontal bilinear level-by-level (at v_lo and v_hi), then vertical blend.
+# Bilinear path (3D): horizontal bilinear interpolation level by level (at v_lo and v_hi),
+# then a vertical blend.
 # Same structure as spectral: horizontal interpolation at each level, then linear vertical.
 function _set_interpolated_values_bilinear!(
     out::AbstractArray,
@@ -860,8 +872,8 @@ function set_interpolated_values_cpu_kernel!(
     for (field_index, field) in enumerate(fields)
         field_values = Fields.field_values(field)
 
-        # Reading values from field_values is expensive, so we try to limit the number of reads. We can do
-        # this because multiple target points might be all contained in the same element.
+        # Reads from field_values are limited by reusing the values while consecutive target
+        # points lie in the same element.
         prev_vindex, prev_lidx = -1, -1
         @inbounds for (vindex, (A, B)) in enumerate(vert_interpolation_weights)
             (v_lo, v_hi) = vert_bounding_indices[vindex]
@@ -905,8 +917,8 @@ function set_interpolated_values_cpu_kernel!(
     for (field_index, field) in enumerate(fields)
         field_values = Fields.field_values(field)
 
-        # Reading values from field_values is expensive, so we try to limit the number of reads. We can do
-        # this because multiple target points might be all contained in the same element.
+        # Reads from field_values are limited by reusing the values while consecutive target
+        # points lie in the same element.
         prev_vindex = -1
         @inbounds for (vindex, (A, B)) in enumerate(vert_interpolation_weights)
             (v_lo, v_hi) = vert_bounding_indices[vindex]
@@ -935,8 +947,8 @@ function set_interpolated_values_cpu_kernel!(
     for (field_index, field) in enumerate(fields)
         field_values = Fields.field_values(field)
 
-        # Reading values from field_values is expensive, so we try to limit the number of reads. We can do
-        # this because multiple target points might be all contained in the same element.
+        # Reads from field_values are limited by reusing the values while consecutive target
+        # points lie in the same element.
         prev_vindex, prev_lidx = -1, -1
         @inbounds for (vindex, (A, B)) in enumerate(vert_interpolation_weights)
             (v_lo, v_hi) = vert_bounding_indices[vindex]
@@ -1072,14 +1084,13 @@ end
 """
     _apply_mpi_bitmask!(remapper::Remapper, num_fields::Int)
 
-Change to local (private) state of the `remapper` by applying the MPI bitmask and reconstructing
-the correct shape for the interpolated values.
+Copy the first `num_fields` slices of `remapper._local_interpolated_values` into
+`remapper._interpolated_values` at the positions selected by
+`remapper.local_target_hcoords_bitmask`.
 
-Internally, `remapper` performs interpolation on a flat list of points, this function moves points
-around according to MPI-ownership and the expected output shape.
-
-`num_fields` is the number of fields that have been processed and have to be moved in the
-`interpolated_values`. We assume that it is always the first `num_fields` that have to be moved.
+`_local_interpolated_values` is a flat list over the process-local horizontal points; the
+bitmask restores the shape of the global `target_hcoords`. Entries owned by other processes
+stay zero, so that a `+` reduction across processes assembles the full array.
 """
 function _apply_mpi_bitmask!(remapper::Remapper, num_fields::Int)
     if isnothing(remapper.target_zcoords)
@@ -1101,8 +1112,8 @@ end
 """
     _reset_interpolated_values!(remapper::Remapper)
 
-Reset the local (private) state in `remapper`. This function has to be called before performing
-interpolation.
+Zero `remapper._interpolated_values`. Called before each batch in `interpolate!`, since
+results are collected across processes with a `+` reduction.
 """
 function _reset_interpolated_values!(remapper::Remapper)
     fill!(remapper._interpolated_values, 0)
@@ -1140,33 +1151,37 @@ function _collect_interpolated_values!(
 end
 
 """
-interpolate(remapper::Remapper, fields)
-interpolate!(dest, remapper::Remapper, fields)
+    interpolate(remapper::Remapper, fields)
+    interpolate!(dest, remapper::Remapper, fields)
 
-Interpolate the given `field`(s) as prescribed by `remapper`.
+Interpolate `fields`, a single `Field` or a collection of `Field`s on `remapper.space`,
+onto the target points of `remapper`.
 
-The optimal number of fields passed is the `buffer_length` of the `remapper`. If
-more fields are passed, the `remapper` will batch work with size up to its
-`buffer_length`.
+`interpolate` allocates and returns the output array on the root process and returns
+`nothing` on the other processes. `interpolate!` writes into `dest` and returns `nothing`;
+`dest` must be an array of the device's array type (e.g., `CuArray` on CUDA) on the root
+process and `nothing` on the other processes. `interpolate!` does not allocate and is type
+stable; `interpolate` allocates and has some internal type instability.
 
-This call mutates the internal (private) state of the `remapper`.
+The output has shape `(size(target_hcoords)..., length(target_zcoords))`, without the
+horizontal or vertical part for spaces that lack it (for a
+`MultiColumnFiniteDifferenceSpace`, the leading dimension indexes columns). When `fields`
+is a collection, a trailing dimension of length `length(fields)` is added.
 
-Horizontally, interpolation is performed with the barycentric formula in
-[Berrut2004](@cite), equation (3.2). Vertical interpolation is linear except
-in the boundary elements where it is 0th order.
+Fields are processed in batches of `remapper.buffer_length`; passing exactly
+`buffer_length` fields at once minimizes kernel launches and MPI calls. Both functions
+mutate the internal scratch state of `remapper`.
 
-`interpolate!` writes the output to the given `dest`iniation. `dest` is expected
-to be defined on the root process and to be `nothing` for the other processes.
+Horizontal interpolation follows `remapper.horiz_method`: for
+[`SpectralElementRemapping`](@ref), Lagrange interpolation on the element's quadrature
+nodes with the barycentric formula of [Berrut2004](@cite); for [`BilinearRemapping`](@ref),
+bilinear interpolation between the bracketing nodes. Vertical interpolation is linear
+between the two nearest levels; on center spaces, points in the outer half of the top and
+bottom cells take the cell-center value.
 
-Note: `interpolate` allocates new arrays and has some internal type-instability,
-`interpolate!` is non-allocating and type-stable.
+# Examples
 
-When using `interpolate!`, the `dest`ination has to be the same array type as the
-device in use (e.g., `CuArray` for CUDA runs).
-
-# Example
-
-Given `field1`,`field2`, two `Field` defined on a cubed sphere.
+Given `field1` and `field2`, two `Field`s defined on a cubed sphere:
 
 ```julia
 longpts = range(-180.0, 180.0, 21)
@@ -1183,9 +1198,8 @@ remapper = Remapper(space, hcoords, zcoords)
 int1 = interpolate(remapper, field1)
 int2 = interpolate(remapper, field2)
 
-# Or
+# Or, in one call, with int1 == int12[:, :, :, 1]
 int12 = interpolate(remapper, [field1, field2])
-# With int1 = int12[1, :, :, :]
 ```
 """
 function interpolate(remapper::Remapper, fields)
@@ -1261,10 +1275,10 @@ function interpolate!(
         )
 
         if !isa_vertical_space
-            # For spaces with an horizontal component, reshape the output so that it is a nice grid.
+            # For spaces with a horizontal component, reshape the output onto the target grid.
             _apply_mpi_bitmask!(remapper, num_fields)
         else
-            # For purely vertical spaces, just move to _interpolated_values
+            # For purely vertical spaces, copy to _interpolated_values
             remapper._interpolated_values .= remapper._local_interpolated_values
         end
 
@@ -1287,78 +1301,65 @@ function interpolate!(
 end
 
 """
-    interpolate(field; hresolution=180, zresolution=nothing, target_hcoords=..., target_zcoords=..., horizontal_method=SpectralElementRemapping())
+    interpolate(field; hresolution = 180, zresolution = nothing, target_hcoords,
+                target_zcoords, horizontal_method = SpectralElementRemapping())
+    interpolate(field, target_hcoords, target_zcoords;
+                horizontal_method = SpectralElementRemapping())
 
-Interpolate `field` onto the Cartesian product of `target_hcoords` and `target_zcoords`.
-`zresolution = nothing` disables vertical interpolation. `horizontal_method`: `SpectralElementRemapping()` or `BilinearRemapping()`.
-For performance, use a `Remapper` and `interpolate(remapper, fields)` instead.
+Interpolate `field` onto the Cartesian product of `target_hcoords` and `target_zcoords`
+and return the result as an array on the root process (`nothing` on the other processes).
 
-# Example
+Each call builds a `Remapper` for `axes(field)`. For repeated remapping, build the
+`Remapper` once and call `interpolate(remapper, fields)`.
 
-Given `field`, a `Field` defined on a cubed sphere.
+# Keyword Arguments
 
-By default, a target uniform grid is chosen (with resolution `hresolution` and
-`zresolution`), so remapping is simply
+  - `hresolution = 180`: number of points per horizontal direction of the default target
+    grid.
+  - `zresolution = nothing`: number of levels of the default target grid; `nothing` uses the
+    cell-center heights of the model levels.
+  - `target_hcoords`: horizontal target points; defaults to [`default_target_hcoords`](@ref)
+    of `axes(field)` with `hresolution`.
+  - `target_zcoords`: vertical target points; defaults to [`default_target_zcoords`](@ref)
+    of `axes(field)` with `zresolution`.
+  - `horizontal_method = SpectralElementRemapping()`: [`SpectralElementRemapping`](@ref) or
+    [`BilinearRemapping`](@ref); ignored for vertical-only spaces.
+
+# Examples
+
+Given `field`, a `Field` defined on a cubed sphere, interpolate onto the default uniform
+grid:
 
 ```julia
-julia> interpolate(field)
-
+interpolate(field)
 ```
 
-This will return an array of interpolated values.
-
-Resolution can be specified
+Change the resolution of the default grid:
 
 ```julia
-julia> interpolate(field; hresolution = 100, zresolution = 50)
-
+interpolate(field; hresolution = 100, zresolution = 50)
 ```
 
-Coordinates can be also specified directly:
+Specify the target coordinates directly:
 
 ```julia
-julia> zpts = range(0.0, 1000.0, 21)
 longpts = range(-180.0, 180.0, 21)
-
-julia> zcoords = [Geometry.ZPoint(z) for z in zpts]
 latpts = range(-80.0, 80.0, 21)
+zpts = range(0.0, 1000.0, 21)
+hcoords = [Geometry.LatLongPoint(lat, long) for long in longpts, lat in latpts]
+zcoords = [Geometry.ZPoint(z) for z in zpts]
 
-julia> interpolate(field, target_hcoords, target_zcoords)
-
+interpolate(field, hcoords, zcoords)
 ```
 
-If you need the array of coordinates, you can call `default_target_hcoords` (or
-`default_target_zcoords`) passing `axes(field)`. This will return an array of
-`Geometry.Point`s. The functions `Geometry.components` and `Geometry.component`
-can be used to extract the components as numeric values. For example,
+To obtain the coordinates of the default grid, call `default_target_hcoords(axes(field))`
+or `default_target_zcoords(axes(field))`. These return arrays of `Geometry.Point`s, whose
+numeric components `Geometry.components` and `Geometry.component` extract. For example,
+the latitudes of the default latitude-longitude grid are
 
 ```julia
-julia> Geometry.components.(
-           Geometry.components.([
-               Geometry.LatLongPoint(x, y) for x in range(-180.0, 180.0, length = 180),
-               y in range(-90.0, 90.0, length = 180)
-           ]),
-       )
-180×180 Matrix{StaticArraysCore.SVector{2, Float64}}:
- [-180.0, -90.0]    [-180.0, -88.9944]    …  [-180.0, 88.9944]    [-180.0, 90.0]
-  ⋮                                        ⋱
- [180.0, -90.0]     [180.0, -88.9944]        [180.0, 88.9944]     [180.0, 90.0]
+lats = getindex.(Geometry.components.(default_target_hcoords(axes(field))), 1)
 ```
-
-To extract only long or lat, one can broadcast `getindex`
-
-```julia
-julia> lats = getindex.(
-           Geometry.components.([
-               Geometry.LatLongPoint(x, y)
-               for x in range(-180.0, 180.0, length = 180),
-               y in range(-90.0, 90.0, length = 180)
-           ]),
-           1)
-
-```
-
-This can be used directly for plotting.
 """
 function interpolate(
     field::Fields.Field;

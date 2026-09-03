@@ -1,17 +1,16 @@
 """
-    MultiPointSpace
+    MultiPointSpace(grid)
 
-A horizontal space of N independent (lat, lon) points.  This is the N-column
-analogue of [`PointSpace`](@ref), which is the single-column level space.
+Horizontal space of `N` independent (lat, lon) points. This is the `N`-column
+analog of [`PointSpace`](@ref), which is the single-column level space.
 
-Like [`SpectralElementSpace2D`](@ref), the wrapped `grid` is either:
+Like [`SpectralElementSpace2D`](@ref), the wrapped `grid` is either
 
-  - a `Grids.MultiPointGrid` which is the level-agnostic horizontal space of a
+  - a `Grids.MultiPointGrid`, the level-agnostic horizontal grid of a
     [`MultiColumnFiniteDifferenceSpace`](@ref) (returned by
-    `Spaces.horizontal_space`)
-  - a `Grids.LevelGrid` of the extruded multi-column grid which is a single
-    vertical level (returned by `Spaces.level`), carrying full 3-D local
-    geometry.
+    `Spaces.horizontal_space`), or
+  - a `Grids.LevelGrid` of the extruded multi-column grid at a single vertical
+    level (returned by `Spaces.level`), carrying full 3D local geometry.
 """
 struct MultiPointSpace{G <: Grids.AbstractGrid} <: AbstractSpace
     grid::G
@@ -36,23 +35,22 @@ local_geometry_type(::Type{MultiPointSpace{G}}) where {G} =
 Adapt.adapt_structure(to, space::MultiPointSpace) =
     MultiPointSpace(Adapt.adapt(to, grid(space)))
 
-# Backwards-compatibility alias for the old name.
+# Deprecated alias of `MultiPointSpace`.
 Base.@deprecate_binding PointCloudSpace MultiPointSpace false
 
 """
-    MultiColumnFiniteDifferenceSpace
+    MultiColumnFiniteDifferenceSpace(grid, staggering)
 
-A space of N independent vertical columns at arbitrary horizontal (lat, lon)
-locations on a sphere.  This is the N-column generalisation of
-[`Spaces.FiniteDifferenceSpace`](@ref) (the single-column space):
+Space of `N` independent vertical columns at arbitrary horizontal (lat, lon)
+locations on a sphere. This is the `N`-column generalization of
+[`Spaces.FiniteDifferenceSpace`](@ref), the single-column space:
 
-  - The data layout is `VIJFH{LG, Nv, 1, 1, N}` (same vertical structure for every
-    column; full 3-D local geometry including lat/lon/z coordinates).
-  - `Spaces.level` returns a [`MultiPointSpace`](@ref) (N points at that
-    z-level) rather than a spectral-element horizontal space.
-  - `Spaces.column` returns a single-column
-    [`Spaces.FiniteDifferenceSpace`](@ref).
-  - [`Fields.bycolumn`](@ref) iterates over each column independently.
+  - The data layout is `VIJFH{LG, Nv, 1, 1, N}`: the same vertical structure for
+    every column, with full 3D local geometry including lat, lon, and z coordinates.
+  - `Spaces.level` returns a [`MultiPointSpace`](@ref) (`N` points at that level)
+    rather than a spectral element horizontal space.
+  - `Spaces.column` returns a single-column [`Spaces.FiniteDifferenceSpace`](@ref).
+  - `Fields.bycolumn` iterates over each column independently.
 
 There is no horizontal connectivity between columns; DSS and horizontal
 spectral-element operators are not supported.
@@ -82,8 +80,9 @@ FaceMultiColumnFiniteDifferenceSpace(space::MultiColumnFiniteDifferenceSpace) =
 CenterMultiColumnFiniteDifferenceSpace(space::MultiColumnFiniteDifferenceSpace) =
     MultiColumnFiniteDifferenceSpace(grid(space), CellCenter())
 
-# Override the generic `space(refspace::AbstractSpace, staggering) = space(grid(refspace), staggering)`
-# so that we return MultiColumnFiniteDifferenceSpace rather than ExtrudedFiniteDifferenceSpace.
+# Override the generic `space(refspace::AbstractSpace, staggering)`, which forwards to
+# `space(grid(refspace), staggering)`, so that the result is a
+# `MultiColumnFiniteDifferenceSpace` rather than an `ExtrudedFiniteDifferenceSpace`.
 space(refspace::MultiColumnFiniteDifferenceSpace, s::Staggering) =
     MultiColumnFiniteDifferenceSpace(grid(refspace), s)
 space(grid::Grids.ExtrudedMultiPointGrid, s::Staggering) =
@@ -154,8 +153,8 @@ set_mask!(::Any, ::MultiColumnFiniteDifferenceSpace) = nothing
 """
     obtain_surface_space(cs::CenterMultiColumnFiniteDifferenceSpace)
 
-Return the [`MultiPointSpace`](@ref) corresponding to the top face (surface) of
-`cs`.
+Return the horizontal [`MultiPointSpace`](@ref) of `cs`, which serves as the
+surface space of the columns.
 """
 obtain_surface_space(cs::CenterMultiColumnFiniteDifferenceSpace) =
     horizontal_space(cs)

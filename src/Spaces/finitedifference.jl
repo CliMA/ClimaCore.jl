@@ -1,16 +1,13 @@
 abstract type AbstractFiniteDifferenceSpace <: AbstractSpace end
 
 """
-    FiniteDifferenceSpace(
-        grid::Grids.FiniteDifferenceGrid,
-        staggering::Staggering
-    )
+    FiniteDifferenceSpace(grid::Grids.FiniteDifferenceGrid, staggering::Staggering)
+    FiniteDifferenceSpace(topology::Topologies.IntervalTopology, staggering::Staggering)
 
-A 1D finite-difference space, that lives on
-either:
+One-dimensional finite-difference space, located at either
 
-  - cell centers (where `staggering` is [`Grids.CellCenter`](@ref)) or
-  - cell faces (where `staggering` is [`Grids.CellFace`](@ref))
+  - cell centers, where `staggering` is [`Grids.CellCenter`](@ref), or
+  - cell faces, where `staggering` is [`Grids.CellFace`](@ref).
 """
 struct FiniteDifferenceSpace{
     G <: Grids.AbstractFiniteDifferenceGrid,
@@ -100,9 +97,8 @@ column(space::FiniteDifferenceSpace, indices...) =
 """
     face_space(space::FiniteDifferenceSpace)
 
-Return face-centered space corresponding to `space`.
-
-If `space` is already face-centered, return itself.
+Return the face-centered space corresponding to `space`. If `space` is already
+face-centered, return an equal space.
 """
 function face_space(space::FiniteDifferenceSpace)
     return FiniteDifferenceSpace(grid(space), CellFace())
@@ -111,9 +107,8 @@ end
 """
     center_space(space::FiniteDifferenceSpace)
 
-Return center-centered space corresponding to `space`.
-
-If `space` is already center-centered, return itself.
+Return the cell-centered space corresponding to `space`. If `space` is already
+cell-centered, return an equal space.
 """
 function center_space(space::FiniteDifferenceSpace)
     return FiniteDifferenceSpace(grid(space), CellCenter())
@@ -127,7 +122,8 @@ Base.length(space::FiniteDifferenceSpace) = length(coordinates_data(space))
 """
     Δz_data(space::AbstractSpace)
 
-A DataLayout containing the `Δz` on a given space `space`.
+Return a `DataLayout` containing the vertical extent `Δz = ∂z/∂ξ³` of each cell of
+`space` [m].
 """
 function Δz_data(space::AbstractSpace)
     lg = local_geometry_data(space)

@@ -21,11 +21,13 @@ using StaticArrays, LinearAlgebra
 
 
 """
-    ref_z_to_physical_z(adaption::HypsographyAdaption, z_ref::ZPoint, z_top::ZPoint) :: ZPoint
+    ref_z_to_physical_z(adaption::HypsographyAdaption, z_ref::ZPoint, z_top::ZPoint) -> ZPoint
 
-Convert reference `z`s to physical `z`s as prescribed by the given adaption.
+Convert the reference coordinate `z_ref` to the physical coordinate as prescribed by
+`adaption`, for a domain whose top is at `z_top`.
 
-This function has to be the inverse of `physical_z_to_ref_z`.
+Each `HypsographyAdaption` subtype implements this method; it is the inverse of
+[`physical_z_to_ref_z`](@ref).
 """
 function ref_z_to_physical_z(
     adaption::HypsographyAdaption,
@@ -34,11 +36,13 @@ function ref_z_to_physical_z(
 ) end
 
 """
-    physical_z_to_ref_z(adaption::HypsographyAdaption, z_ref::ZPoint, z_top::ZPoint) :: ZPoint
+    physical_z_to_ref_z(adaption::HypsographyAdaption, z_phys::ZPoint, z_top::ZPoint) -> ZPoint
 
-Convert physical `z`s to reference `z`s as prescribed by the given adaption.
+Convert the physical coordinate `z_phys` to the reference coordinate as prescribed by
+`adaption`, for a domain whose top is at `z_top`.
 
-This function has to be the inverse of `ref_z_to_physical_z`.
+This is the inverse of [`ref_z_to_physical_z`](@ref). It is used for remapping and is not
+implemented for `SLEVEAdaption`.
 """
 function physical_z_to_ref_z(
     adaption::HypsographyAdaption,
@@ -68,8 +72,12 @@ end
     LinearAdaption(surface)
 
 Locate the levels by linear interpolation between the surface and the top of the
-domain, using the method of [GalChen1975](@cite). The surface can be specified
-as a `ZPoint` or a `Field` of `ZPoint`s.
+domain, using the method of [GalChen1975](@cite):
+``z = z_{ref} + (1 - z_{ref} / z_{top})\\, z_{surface}``.
+
+# Fields
+
+  - `surface`: surface elevation [m], a `ZPoint` or a `Field` of `ZPoint`s.
 """
 struct LinearAdaption{F} <: HypsographyAdaption
     surface::F
@@ -102,14 +110,19 @@ end
 """
     SLEVEAdaption(surface, ηₕ, s)
 
-Locate vertical levels using an exponential function between the surface and the
-top of the domain, using the method of [Schar2002](@cite).  The surface can be
-specified as a `ZPoint` or a `Field` of `ZPoint`s.
+Locate the vertical levels with a hyperbolic-sine decay of the terrain influence between
+the surface and the top of the domain, using the method of [Schar2002](@cite), modified
+so that no warping is applied above the generalized coordinate `ηₕ`.
 
-This method is modified such no warping is applied above the generalized
-coordinate `ηₕ`, where `0 ≤ ηₕ < 1`. `s` governs the decay rate.
-If the decay-scale is poorly specified (i.e., `s * zₜ` is lower than the maximum
-surface elevation), a warning is thrown and `s` is adjusted such that it `szₜ > maximum(z_surface)`.
+# Fields
+
+  - `surface`: surface elevation [m], a `ZPoint` or a `Field` of `ZPoint`s.
+  - `ηₕ`: normalized height `z_ref / z_top` above which the levels are flat [-], with
+    `0 ≤ ηₕ ≤ 1`.
+  - `s`: decay scale of the terrain influence as a fraction of `z_top` [-].
+
+`ref_z_to_physical_z` throws an error when the decay scale `s * z_top` does not exceed
+the surface elevation.
 """
 struct SLEVEAdaption{F, FT} <: HypsographyAdaption
     surface::F
@@ -263,21 +276,29 @@ function _ExtrudedFiniteDifferenceGrid(
 end
 
 """
-    diffuse_surface_elevation!(f::Field; κ::T, iter::Int, dt::T)
+    diffuse_surface_elevation!(f::Field; κ = 1e8, maxiter = 100, dt = 1e-1)
 
-Option for 2nd order diffusive smoothing of generated terrain.
-Mutate (smooth) a given elevation profile `f` before assigning the surface
-elevation to the `HypsographyAdaption` type. A spectral second-order diffusion
-operator is applied with forward-Euler updates to generate
-profiles for each new iteration. Steps to generate smoothed terrain (
-represented as a ClimaCore Field) are as follows:
+Smooth the surface elevation field `f` in place with second-order diffusion, before
+passing it to a `HypsographyAdaption`. Returns `f`.
 
-  - Compute discrete elevation profile f
-  - Compute diffuse_surface_elevation!(f, κ, iter). f is mutated.
-  - Define `Hypsography.LinearAdaption(f)`
-  - Define `ExtrudedFiniteDifferenceSpace` with new surface elevation.
-    Default diffusion parameters are appropriate for spherical arrangements.
-    For `zmax-zsfc` == 𝒪(10^4), κ == 𝒪(10^8), dt == 𝒪(10⁻¹).
+A weak-form spectral Laplacian is applied to `f` with `maxiter` forward-Euler steps of
+size `dt` and diffusivity `κ`; a weighted DSS is applied to the Laplacian after each
+step. `f` is a `Field` of `Real`s or of `ZPoint`s.
+
+# Keyword Arguments
+
+  - `κ = 1e8`: diffusivity [m²/s].
+  - `maxiter = 100`: number of forward-Euler steps.
+  - `dt = 1e-1`: time step [s].
+
+The default parameters suit spherical domains with `zmax - zsfc` of order 10⁴ m.
+
+# Examples
+
+```julia
+diffuse_surface_elevation!(z_surface)
+adaption = Hypsography.LinearAdaption(z_surface)
+```
 """
 function diffuse_surface_elevation!(
     f::Fields.Field;

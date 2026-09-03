@@ -26,9 +26,16 @@ import Adapt
 import StaticArrays, LinearAlgebra, Statistics
 
 """
-    Field(values, space)
+    Field(values::DataLayout, space::AbstractSpace)
+    Field(T::Type, space::AbstractSpace)
 
-A set of `values` defined at each point of a `space`.
+Field of `values` defined at each point of `space`. The second form allocates an
+uninitialized field with element type `T` on `space`.
+
+# Fields
+
+  - `values`: The `DataLayout` holding the field values.
+  - `space`: The `AbstractSpace` on which the field is defined; returned by `axes`.
 """
 struct Field{V <: DataLayout, S <: AbstractSpace}
     values::V
@@ -299,8 +306,8 @@ end
 """
     fill!(field::Field, value; mask = get_mask(axes(field)))
 
-Fill `field` with `value`. The mask is extracted from the field's space,
-and `fill!` is only applied where the `mask` is true.
+Fill `field` with `value` and return `field`. By default `mask` is the mask of the
+space of `field`; `fill!` writes only where the mask is active.
 """
 @inline function Base.fill!(field::Field, value; mask = get_mask(axes(field)))
     fill!(field_values(field), value; mask)
@@ -315,10 +322,11 @@ Base.fill(value::FT, space::AbstractSpace) where {FT} = fill!(Field(FT, space), 
 
 """
     zeros(space::AbstractSpace)
+    zeros(FT::Type, space::AbstractSpace)
 
-Create a new field on `space` that is zero everywhere. Unlike `fill`, this also
-zeroes out data at points that are masked out, so that the field does not
-contain any uninitialized values.
+Create a new field on `space` that is zero everywhere, with element type `FT`
+(default: the float type of `space`). Unlike `fill`, this also zeroes data at
+masked-out points, so that the field contains no uninitialized values.
 """
 function Base.zeros(::Type{FT}, space::AbstractSpace) where {FT}
     field = Field(FT, space)
@@ -329,8 +337,10 @@ Base.zeros(space::AbstractSpace) = zeros(Spaces.undertype(space), space)
 
 """
     ones(space::AbstractSpace)
+    ones(FT::Type, space::AbstractSpace)
 
-Create a new field on `space` that is one everywhere.
+Create a new field on `space` that is one everywhere, with element type `FT`
+(default: the float type of `space`). Masked-out points are set as well.
 """
 function Base.ones(::Type{FT}, space::AbstractSpace) where {FT}
     field = Field(FT, space)
@@ -348,8 +358,10 @@ end
 
 """
     coordinate_field(space::AbstractSpace)
+    coordinate_field(field::Field)
 
-Return a pointer to the input space's coordinates `Field`.
+Return the coordinates of `space` (or of the space of `field`) as a `Field`. The
+result shares the coordinate data of the space; no copy is made.
 """
 coordinate_field(space::AbstractSpace) =
     Field(Spaces.coordinates_data(space), space)
@@ -357,8 +369,10 @@ coordinate_field(field::Field) = coordinate_field(axes(field))
 
 """
     local_geometry_field(space::AbstractSpace)
+    local_geometry_field(field::Field)
 
-Return a pointer to the input space's `LocalGeometry` `Field`.
+Return the `LocalGeometry` of `space` (or of the space of `field`) as a `Field`. The
+result shares the local geometry data of the space; no copy is made.
 """
 local_geometry_field(space::AbstractSpace) =
     Field(Spaces.local_geometry_data(space), space)
@@ -371,8 +385,8 @@ local_geometry_field(bc::Base.Broadcast.Broadcasted) =
     Δz_field(field::Field)
     Δz_field(space::AbstractSpace)
 
-Return a pointer to the input space's `Field` containing the `Δz` values on the
-same space as the given field.
+Return a `Field` on `space` (or on the space of `field`) containing the vertical
+extent `Δz` of each cell [m]. The result shares the geometry data of the space.
 """
 Δz_field(field::Field) = Δz_field(axes(field))
 Δz_field(space::AbstractSpace) = Field(Spaces.Δz_data(space), space)
@@ -399,13 +413,13 @@ end
 """
     Spaces.weighted_dss!(f::Field, dss_buffer = Spaces.create_dss_buffer(field))
 
-Apply weighted direct stiffness summation (DSS) to `f`. This operates in-place
-(i.e. it modifies the `f`). `ghost_buffer` contains the necessary information
-for communication in a distributed setting, see [`Spaces.create_dss_buffer`](@ref).
+Apply weighted direct stiffness summation (DSS) to `f` in place and return `f`.
+`dss_buffer` holds the buffers for communication in a distributed setting; see
+[`Spaces.create_dss_buffer`](@ref). On a discontinuous (DG) space this is a no-op.
 
 This is a projection operation from the piecewise polynomial space
-``\\mathcal{V}_0`` to the continuous space ``\\mathcal{V}_1 = \\mathcal{V}_0 \\cap \\mathcal{C}_0``, defined as the field ``\\theta \\in \\mathcal{V}_1``
-such that for all ``\\phi \\in \\mathcal{V}_1``
+``V_0`` to the continuous space ``V_1 = V_0 \\cap C_0``, defined as the field ``\\theta \\in V_1``
+such that for all ``\\phi \\in V_1``
 
 ```math
 \\int_\\Omega \\phi \\theta \\,d\\Omega = \\int_\\Omega \\phi f \\,d\\Omega
@@ -448,10 +462,10 @@ Spaces.weighted_dss_ghost!(field::Field, dss_buffer) =
     Spaces.weighted_dss_ghost!(field_values(field), axes(field), dss_buffer)
 
 """
-    Spaces.weighted_dss!(field1 => ghost_buffer1, field2 => ghost_buffer2, ...)
+    Spaces.weighted_dss!(field1 => dss_buffer1, field2 => dss_buffer2, ...)
 
-Call [`Spaces.weighted_dss!`](@ref) on multiple fields at once, overlapping
-communication as much as possible.
+Call [`Spaces.weighted_dss!`](@ref) on multiple fields at once, overlapping the
+communication of all fields with computation. Returns `nothing`.
 """
 function Spaces.weighted_dss!(
     (field1, dss_buffer1)::Pair,
@@ -495,7 +509,8 @@ end
 """
     Spaces.create_dss_buffer(field::Field)
 
-Create a buffer for communicating neighbour information of `field`.
+Create a DSS buffer for communicating the neighbor information of `field`, or
+`nothing` if `field` needs no buffer.
 """
 Spaces.create_dss_buffer(field::Field) =
     Spaces.create_dss_buffer(field_values(field), axes(field))
@@ -503,11 +518,10 @@ Spaces.create_dss_buffer(field::Field) =
 """
     set!(f::Function, field::Field, args = ())
 
-Apply function `f` to populate values in field `field`. `f` must have a function
-signature with signature `f(::LocalGeometry[, args...])`. Additional arguments
-may be passed to `f` with `args`.
+Populate `field` with the values of `f`, which is called as
+`f(::LocalGeometry, args...)` at every point. Returns `nothing`.
 
-## Example
+# Examples
 
 ```julia
 using ClimaCore.Fields
@@ -600,15 +614,14 @@ end
 """
     array2field(array, space)
 
-Wraps `array` in a `ClimaCore` `Field` that is defined over `space`. Can be used
-to simplify the process of getting and setting values in an `RRTMGPModel`; e.g.
+Wrap `array` in a `Field` defined over `space`, without copying. The element type
+of the resulting `Field` is the element type of `array`. Used to get and set values
+of external models that store their state in plain arrays, e.g. an `RRTMGPModel`:
 
+```julia
+array2field(center_temperature, center_space) .= center_temperature_field
+face_flux_field .= array2field(model.face_flux, face_space)
 ```
-    array2field(center_temperature, center_space) .= center_temperature_field
-    face_flux_field .= array2field(model.face_flux, face_space)
-```
-
-The struct type of the resulting `Field` is set to the array's element type.
 """
 function array2field(array, space)
     data = Spaces.local_geometry_data(space)
@@ -620,17 +633,18 @@ end
 """
     field2array(field)
 
-Extracts a view of a `ClimaCore` `Field`'s underlying array. Can be used to
-simplify the process of getting and setting values in an `RRTMGPModel`; e.g.
+Return a view of the underlying array of `field`. Used to get and set values of
+external models that store their state in plain arrays, e.g. an `RRTMGPModel`:
 
-```
-    center_temperature .= field2array(center_temperature_field)
-    field2array(face_flux_field) .= face_flux
+```julia
+center_temperature .= field2array(center_temperature_field)
+field2array(face_flux_field) .= face_flux
 ```
 
-The dimensions of the resulting array are `([number of vertical nodes], number of horizontal nodes)`, with the first dimension dropped for fields defined over
-horizontal spaces. Only fields of scalars are supported; i.e., the element type
-of the array must be the same as the struct type of `field`.
+The dimensions of the resulting array are
+`(number of vertical nodes, number of horizontal nodes)`, with the first dimension
+dropped for fields on horizontal spaces. Only fields of scalars are supported: the
+element type of `field` must be the element type of its parent array.
 """
 function field2array(field::Field)
     if sizeof(eltype(field)) != sizeof(eltype(parent(field)))

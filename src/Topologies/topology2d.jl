@@ -2,27 +2,91 @@ using ClimaComms, DataStructures
 using GilbertCurves
 
 """
-    Topology2D(mesh::AbstractMesh2D, elemorder=Mesh.elements(mesh))
+    Topology2D(
+        context::ClimaComms.AbstractCommsContext,
+        mesh::Meshes.AbstractMesh{2},
+        elemorder = Meshes.elements(mesh),
+        elempid = nothing,
+        orderindex = Meshes.linearindices(elemorder),
+    )
 
-This is a distributed topology for 2D meshes. `elemorder` is a vector or other
-linear ordering of the `Mesh.elements(mesh)`. `elempid` is a sorted vector of
-the same length as `elemorder`, each element of which contains the `pid` of the
-owning process.
+Distributed topology for 2D meshes. `elemorder` is a vector or other linear ordering
+of `Meshes.elements(mesh)`, and `orderindex` its inverse. Elements are partitioned
+across processes in contiguous blocks of `elemorder`; `elempid` must be `nothing`
+(a user-supplied partition is not supported). Construction is memoized in
+`Cache.OBJECT_CACHE`.
 
-Internally, we can refer to elements in several different ways:
+Elements are referred to in several ways:
 
-  - `elem`: an element of the `mesh`. Often a `CartesianIndex` object.
-  - `gidx`: "global index": an enumeration of all elements:
-      + `elemorder[gidx] == elem`
-      + `orderindex[elem] == gidx`
-  - `lidx`: "local index": an enumeration of local elements.
-      + `local_elem_gidx[lidx] == gidx`
-  - `sidx`: "send index": an index into the send buffer of a local element. A
-    single local element may have multiple `sidx`s if it needs to be send to
-    multiple processes.
-      + `send_elem_lidx[sidx] == lidx`
-  - `ridx`: "receive index": an index into the receive buffer of a ghost element.
-      + `recv_elem_gidx[ridx] == gidx`
+  - `elem`: an element of the `mesh`, often a `CartesianIndex`.
+  - `gidx`: "global index", an enumeration of all elements, with
+    `elemorder[gidx] == elem` and `orderindex[elem] == gidx`.
+  - `lidx`: "local index", an enumeration of the elements local to this process, with
+    `local_elem_gidx[lidx] == gidx`.
+  - `sidx`: "send index", an index into the send buffer. A local element has one
+    `sidx` per process it is sent to, with `send_elem_lidx[sidx] == lidx`.
+  - `ridx`: "receive index", an index into the receive buffer of ghost elements, with
+    `recv_elem_gidx[ridx] == gidx`.
+
+# Fields
+
+Common to all processes:
+
+  - `context`: The `ClimaComms` context on which the topology is defined.
+  - `mesh`: The mesh on which the topology is constructed.
+  - `elemorder`: `elemorder[gidx]` is the element with global index `gidx`.
+  - `orderindex`: The inverse of `elemorder`: `orderindex[elemorder[gidx]] == gidx`.
+  - `elempid`: `elempid[gidx]` is the process id owning element `gidx`.
+
+Specific to this process:
+
+  - `local_elem_gidx`: The global indices of the elements local to this process.
+  - `neighbor_pids`: Process ids of the neighboring processes.
+  - `send_elem_lidx`: Local indices of the elements copied to the send buffer.
+  - `send_elem_lengths`: Number of elements sent to each neighboring process.
+  - `recv_elem_gidx`: Global indices of the elements received.
+  - `recv_elem_lengths`: Number of elements received from each neighboring process.
+  - `interior_faces`: Vector of all unique interior faces
+    `(lidx, face, olidx, oface, reversed)`.
+  - `ghost_faces`: Vector of all ghost faces `(lidx, face, ridx, oface, reversed)`.
+  - `local_vertices`: The `(lidx, vert)` pairs of the vertices of local elements
+    that touch no ghost element.
+  - `local_vertex_offset`: Index in `local_vertices` of the first pair of each unique
+    vertex.
+  - `ghost_vertices`: The `(isghost, idx, vert)` triples of the vertices of local
+    elements that touch a ghost element; `idx` is the `lidx` if `isghost` is
+    `false` and the `ridx` otherwise.
+  - `ghost_vertex_offset`: Index in `ghost_vertices` of the first triple of each
+    unique vertex.
+  - `local_neighbor_elem`: The `lidx` of the neighboring local elements of each local
+    element.
+  - `local_neighbor_elem_offset`: Index into `local_neighbor_elem` of the first
+    neighbor of each element.
+  - `ghost_neighbor_elem`: The `ridx` of the neighboring ghost elements of each local
+    element.
+  - `ghost_neighbor_elem_offset`: Index into `ghost_neighbor_elem` of the first
+    neighbor of each element.
+  - `boundaries`: `NamedTuple` of vectors of `(lidx, face)` pairs for each boundary.
+  - `internal_elems`: Local elements (`lidx`) that touch no ghost element.
+  - `perimeter_elems`: Local elements (`lidx`) on the process boundary.
+  - `nglobalvertices`: Total number of unique vertices.
+  - `nglobalfaces`: Total number of unique non-boundary faces.
+  - `ghost_vertex_gcidx`: Global connection index of each unique ghost vertex.
+  - `ghost_face_gcidx`: Global connection index of each ghost face.
+  - `comm_vertex_lengths`: `comm_vertex_lengths[i]` is the number of unique vertices
+    communicated to `neighbor_pids[i]`.
+  - `comm_face_lengths`: `comm_face_lengths[i]` is the number of unique faces
+    communicated to `neighbor_pids[i]`.
+  - `ghost_vertex_neighbor_loc`: Positions in `neighbor_pids` of the processes each
+    unique ghost vertex is sent to, as a ragged array.
+  - `ghost_vertex_comm_idx_offset`: Offsets of the ragged array
+    `ghost_vertex_neighbor_loc`: ghost vertex `i` is sent to
+    `neighbor_pids[ghost_vertex_neighbor_loc[j]]` for
+    `j in ghost_vertex_comm_idx_offset[i]:(ghost_vertex_comm_idx_offset[i + 1] - 1)`.
+  - `repr_ghost_vertex`: Representative local `(lidx, vert)` of each unique ghost
+    vertex.
+  - `ghost_face_neighbor_loc`: Position in `neighbor_pids` of the process each ghost
+    face is communicated to.
 """
 mutable struct Topology2D{
     C <: ClimaComms.AbstractCommsContext,
@@ -39,155 +103,46 @@ mutable struct Topology2D{
     BF,
     RGV,
 } <: AbstractDistributedTopology
-    """
-    the ClimaComms context on which the topology is defined
-    """
     context::C
 
     # common to all processes
-    """
-    mesh on which the topology is constructed
-    """
     mesh::M
-    """
-    `elemorder[gidx]` should give the `e`th element
-    """
     elemorder::EO
-    """
-    the inverse of `elemorder`: `orderindex[elemorder[e]] == e`
-    """
     orderindex::OI
-    """
-    `elempid[gidx]` gives the process id which owns the `e`th element
-    """
     elempid::Vector{Int}
 
     # specific to this process
-    """
-    the global indices that are local to this process
-    """
     local_elem_gidx::UnitRange{Int}
-    """
-    process ids of neighboring processes
-    """
     neighbor_pids::Vector{Int}
-    """
-    local indices of elements to be copied to send buffer
-    """
     send_elem_lidx::Vector{Int}
-    """
-    number of elems to send to each neighbor process
-    """
     send_elem_lengths::Vector{Int}
-    """
-    global indices of elements being received
-    """
     recv_elem_gidx::Vector{Int}
-    """
-    number of elems to send to each neighbor process
-    """
     recv_elem_lengths::Vector{Int}
 
-    """
-    a vector of all unique interior faces, (e, face, o, oface, reversed)
-    """
     interior_faces::IF
-    """
-    a vector of all ghost faces, (e, face, o, oface, reversed)
-    """
     ghost_faces::GF
-    """
-    the collection of `(lidx, vert)`` pairs of vertices of local elements which touch a ghost element
-    """
     local_vertices::LV
-    """
-    the index in `local_vertices` of the first tuple for each unique vertex
-    """
     local_vertex_offset::LVO
-    """
-    The collection of `(isghost, idx, vert)` tuples of vertices of local elements which touch a ghost element.
-    If `isghost` is false, then `idx` is the `lidx`, otherwise it is the `ridx`
-    """
     ghost_vertices::GV
-    """
-    the index in `ghost_vertices` of the first tuple for each unique vertex
-    """
     ghost_vertex_offset::GVO
 
-    """
-    a vector of the lidx of neighboring local elements of each element
-    """
     local_neighbor_elem::VI
-    """
-    the index into `local_neighbor_elem` for the start of each element
-    """
     local_neighbor_elem_offset::VI
-    """
-    a vector of the ridx of neighboring ghost elements of each element
-    """
     ghost_neighbor_elem::Vector{Int}
-    """
-    the index into `ghost_neighbor_elem` for the start of each element
-    """
     ghost_neighbor_elem_offset::Vector{Int}
 
-    """
-    a NamedTuple of vectors of `(e,face)`
-    """
     boundaries::BF
-    """
-    internal local elements (lidx)
-    """
     internal_elems::Vector{Int}
-    """
-    local elements (lidx) located on process boundary
-    """
     perimeter_elems::Vector{Int}
-    """
-    total number of unique non-boundary vertices
-    """
     nglobalvertices::Int
-    """
-    total number of unique non-boundary faces
-    """
     nglobalfaces::Int
-    """
-    global connection idx for each unique ghost vertex
-    """
     ghost_vertex_gcidx::Vector{Int}
-    """
-    global connection idx for each unique ghost face
-    """
     ghost_face_gcidx::Vector{Int}
-    """
-    number of unique vertices to be communicated to neighboring processes
-    (`comm_vertex_lengths[i]` = number of unique vertices to be communicated to `neighbor_pids[i]`)
-    """
     comm_vertex_lengths::Vector{Int}
-    """
-    number of unique faces to be communicated to each neighboring process
-    (`comm_face_lengths[i]` = number of unique faces to be communicated to `neighbor_pids[i]`)
-    """
     comm_face_lengths::Vector{Int}
-    """
-    neighbor process locations in neighbor_pids for each of the ghost vertices
-    """
     ghost_vertex_neighbor_loc::Vector{Int}
-    """
-    offset array for `ghost_vertex_neighbor_loc`
-    a ragged array representation: for i = 1:length(ghost_vertex_gcidx), we have that
-    for j = ghost_vertex_comm_idx_offset[i]:ghost_vertex_comm_idx_offset[i+1]-1
-    the ghost vertex ghost_vertex_gcidx[i] should get sent to
-    neighbor_pids[ghost_vertex_neighbor_loc[j]]
-    """
     ghost_vertex_comm_idx_offset::Vector{Int}
-    """
-    representative local ghost vertex (idx, vert) for each unique ghost vertex #Vector{Tuple{Int, Int}}
-    """
     repr_ghost_vertex::RGV #Vector{Tuple{Int, Int}}
-    """
-    neighbor process location in neighbor_pids for each ghost face
-    """
     ghost_face_neighbor_loc::Vector{Int}
 end
 
@@ -248,8 +203,8 @@ end
 """
     spacefillingcurve(mesh::Meshes.AbstractCubedSphere)
 
-Generate element ordering, `elemorder`, based on a space filling curve
-for a `CubedSphere` mesh.
+Return an element ordering `elemorder` for a cubed-sphere mesh based on a Gilbert
+space-filling curve through each panel.
 """
 function spacefillingcurve(mesh::Meshes.AbstractCubedSphere)
     ne = Meshes.n_elements_per_panel_direction(mesh)
@@ -270,8 +225,8 @@ end
 """
     spacefillingcurve(mesh::Meshes.RectilinearMesh)
 
-Generate element ordering, `elemorder`, based on a space filling curve
-for a `Rectilinear` mesh.
+Return an element ordering `elemorder` for a rectilinear mesh based on a Gilbert
+space-filling curve.
 """
 spacefillingcurve(mesh::Meshes.RectilinearMesh) = gilbertindices((
     Meshes.nelements(mesh.intervalmesh1),
@@ -321,7 +276,7 @@ function _Topology2D(
     nprocs = ClimaComms.nprocs(context)
     DA = ClimaComms.array_type(context.device)
 
-    # To make IO easier, we enforce the partitioning to be sequential in the element ordering.
+    # The partitioning is sequential in the element ordering, which simplifies IO.
     @assert elempid === nothing
     elempid, ranges = simple_partition(length(elemorder), nprocs)
     @assert issorted(elempid)
@@ -427,7 +382,8 @@ function _Topology2D(
                         # vidx will be lidx if local, gidx if ghost
                         # replace the gidx with ridx in step 4.
                         push!(ghost_vertices, (vpid != 0, vidx, vvert))
-                        # if it's a ghost_vertex, push every (dest pid, lidx) to the send_elem_set
+                        # For a ghost vertex, push every (dest pid, lidx) to the
+                        # send_elem_set.
                         if vpid != 0
                             for (xpid, xidx, _) in temp_vertlist
                                 if xpid == 0
@@ -867,8 +823,9 @@ struct Perimeter2D{Nq} <: AbstractPerimeter end
 """
     Perimeter2D(Nq)
 
-Construct a perimeter iterator for a 2D spectral element with `Nq` nodes per
-dimension (i.e. polynomial degree `Nq-1`).
+Construct an iterator over the `(i, j)` node indices on the perimeter of a 2D
+spectral element with `Nq` nodes per dimension (polynomial degree `Nq - 1`). The
+four vertices come first, followed by the interior nodes of each face.
 """
 Perimeter2D(Nq) = Perimeter2D{Nq}()
 

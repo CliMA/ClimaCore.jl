@@ -12,7 +12,7 @@
 # eltype center and face fields standing in for a prognostic state: a scalar
 # field and a scalar subfield view into a `NamedTuple` field compile to
 # different kernels, so both are exercised. Adding resolutions or broadcast
-# expressions widens the coverage at the cost of package load time.
+# expressions widens the coverage and lengthens package load time.
 if ccall(:jl_generating_output, Cint, ()) == 1 &&
    get(ENV, "CLIMA_SKIP_PRECOMPILE_WORKLOAD", "false") != "true"
     let

@@ -1,13 +1,16 @@
 """
-    rll_mesh(filename::AbstractString; nlat=90, nlon = round(Int, nlat * 1.6); verbose=false)
+    rll_mesh(filename::String; verbose = false, nlat = 90, nlon = round(Int, nlat * 1.6))
 
 Create a regular latitude-longitude (RLL) mesh and write it to `filename` in
-Exodus format. `nlat` is the number of latitudinal cells, and `nlon` is the
-number of longitudinal cells.
+Exodus format.
 
-Set `verbose=true` to print information.
+# Keyword Arguments
 
-See [Tempest remap: mesh generation](https://github.com/ClimateGlobalChange/tempestremap/#mesh-generation)
+  - `nlat = 90`: number of latitudinal cells.
+  - `nlon = round(Int, nlat * 1.6)`: number of longitudinal cells.
+  - `verbose = false`: if `true`, print the output of the TempestRemap executable.
+
+See [TempestRemap: mesh generation](https://github.com/ClimateGlobalChange/tempestremap/#mesh-generation).
 """
 function rll_mesh(
     filename::String;
@@ -35,14 +38,14 @@ $(TempestRemap_jll.GenerateRLLMesh_exe())
 end
 
 """
-    overlap_mesh(outfile::AbstractString, meshfile_a::AbstractString, meshfile_b::AbstractString; verbose=false)
+    overlap_mesh(outfile, meshfile_a, meshfile_b; verbose = false)
 
-Create the overlap mesh of `meshfile_a` and `meshfile_b` and
-write it to `outfile`. All files should be in Exodus format.
+Create the overlap mesh of `meshfile_a` and `meshfile_b` and write it to `outfile`. All
+files are in Exodus format.
 
-Set `verbose=true` to print information.
+Set `verbose = true` to print the output of the TempestRemap executable.
 
-See [Tempest remap: mesh generation](https://github.com/ClimateGlobalChange/tempestremap/#mesh-generation)
+See [TempestRemap: mesh generation](https://github.com/ClimateGlobalChange/tempestremap/#mesh-generation).
 """
 function overlap_mesh(
     outfile::AbstractString,
@@ -85,19 +88,20 @@ Create a file `weightfile` in SCRIP format containing the remapping weights from
 `meshfile_in` to `meshfile_out`, where `meshfile_overlap` is constructed via
 [`overlap_mesh`](@ref).
 
-Keyword arguments are passed as command-line options. These include:
+# Keyword Arguments
 
-  - `in_type` / `out_type`: the type of the input and output mesh:
-      + `"fv"` (default): finite volume (one value per element)
-      + `"cgll"`: continuous GLL finite element method (a single value for colocated nodes)
-      + `"dgll"`: discontinuous GLL finite element method (duplicate values for colocated nodes)
-  - 'in_np'/'out_np': Order of input and output meshes
-  - 'mono': Monotonicity of remapping
+  - `verbose = false`: if `true`, print the output of the TempestRemap executable.
+  - `kwargs...`: passed to `GenerateOfflineMap` as command-line options `--key value`; a
+    `true` value passes the flag `--key` alone. Common options:
+      + `in_type` / `out_type`: type of the input and output mesh:
+          * `"fv"` (default): finite volume, one value per element.
+          * `"cgll"`: continuous GLL finite element method, a single value for colocated nodes.
+          * `"dgll"`: discontinuous GLL finite element method, duplicate values for colocated
+            nodes.
+      + `in_np` / `out_np`: polynomial order of the input and output meshes.
+      + `mono`: set `mono = true` for monotone remapping.
 
-Set `mono = true` for monotone remapping
-Set `verbose=true` to print information.
-
-See [Tempest remap: offline map generation](https://github.com/ClimateGlobalChange/tempestremap/#offline-map-generation)
+See [TempestRemap: offline map generation](https://github.com/ClimateGlobalChange/tempestremap/#offline-map-generation).
 """
 function remap_weights(
     weightfile::AbstractString,
@@ -134,15 +138,15 @@ function remap_weights(
 end
 
 """
-    apply_remap(outfile::AbstractString, infile::AbstractString, weightfile::AbstractString, vars; verbose=false)
+    apply_remap(outfile, infile, weightfile, vars; verbose = false)
 
-Remap the NetCDF file `infile` to `outfile`, using the remapping weights
-`weightfile` constructed via [`remap_weights`](@ref).
-`vars` should be a collection of variable names to remap.
+Remap the NetCDF file `infile` to `outfile`, using the remapping weights in `weightfile`
+constructed via [`remap_weights`](@ref). `vars` is a collection of names of the variables
+to remap.
 
-Set `verbose=true` to print information.
+Set `verbose = true` to print the output of the TempestRemap executable.
 
-See [Tempest remap: offline map application](https://github.com/ClimateGlobalChange/tempestremap/#offline-map-application)
+See [TempestRemap: offline map application](https://github.com/ClimateGlobalChange/tempestremap/#offline-map-application).
 """
 function apply_remap(
     outfile::AbstractString,

@@ -144,7 +144,7 @@ Adapt.adapt_structure(to, space::SpectralElementSpace2D) =
 """
     SpectralElementSpaceSlab <: AbstractSpace
 
-A view into a `SpectralElementSpace2D` for a single slab.
+View into a spectral element space for a single slab (one element at one level).
 """
 struct SpectralElementSpaceSlab{C, Q, G} <: AbstractSpectralElementSpace
     context::C
@@ -183,12 +183,11 @@ Base.@propagate_inbounds column(space::AbstractSpectralElementSpace, indices...)
 
 """
     Spaces.node_horizontal_length_scale(space::AbstractSpectralElementSpace)
+    Spaces.node_horizontal_length_scale(::Nothing)
 
-The approximate length scale of the distance between nodes. This is defined as the
-length scale of the mesh (see [`Meshes.element_horizontal_length_scale`](@ref)), divided by the
-number of unique quadrature points along each dimension.
-
-Returns a default length scale of 1 when no space is provided.
+Return the approximate distance between nodes: the length scale of the mesh (see
+[`Meshes.element_horizontal_length_scale`](@ref)) divided by the number of unique
+quadrature points along each dimension. The method for `nothing` returns 1.
 """
 function node_horizontal_length_scale(space::AbstractSpectralElementSpace)
     quad = quadrature_style(space)
@@ -208,8 +207,8 @@ end
 """
     unique_nodes(space::SpectralElementSpace2D)
 
-An iterator over the unique nodes of `space`. Each node is represented by the
-first `((i,j), e)` triple.
+Return an iterator over the unique nodes of `space`. Each node is represented by
+the first `((i, j), e)` triple at which it occurs.
 
 This function is experimental, and may change in future.
 """
@@ -270,7 +269,7 @@ function Base.iterate(
             return nothing
         end
         # check if this node has been seen
-        # this assumes we don't have any shared vertices that are connected in a diagonal order,
+        # This assumes there are no shared vertices connected in a diagonal order,
         # e.g.
         #  1 | 3
         #  --+--

@@ -53,7 +53,8 @@ right_face_boundary_idx(arg) = right_face_boundary_idx(axes(arg))
 left_center_boundary_idx(arg) = left_center_boundary_idx(axes(arg))
 right_center_boundary_idx(arg) = right_center_boundary_idx(axes(arg))
 
-# unlike getidx, we allow extracting the face local geometry from the center space, and vice-versa
+# Unlike getidx, this allows extracting the face local geometry from the center space,
+# and vice versa.
 Base.@propagate_inbounds function Geometry.LocalGeometry(
     space::AllFiniteDifferenceSpace,
     idx::Integer,
@@ -89,24 +90,25 @@ strip_space(bc::AbstractBoundaryCondition, parent_space) =
 """
     NullBoundaryCondition()
 
-This is used as a placeholder when no other boundary condition can be applied.
+Placeholder boundary condition, used when no other boundary condition is given.
 
 Wherever an operator needs a boundary row for this condition (that is, wherever
-[`boundary_width`](@ref) is nonzero for it), the result produced there is `NaN`, which
-flags the missing boundary condition. This holds on every evaluation path: an operator
-that is rewritten into an operator matrix multiply gets a `NaN` boundary row (see
-`MatrixFields`), and any other operator goes through [`stencil_left_boundary`](@ref) /
-[`stencil_right_boundary`](@ref), which produce `NaN` directly.
+[`boundary_width`](@ref) is nonzero for it), the result produced there is `NaN`,
+which flags the missing boundary condition. This holds on every evaluation path:
+an operator that is rewritten into an operator matrix multiply gets a `NaN`
+boundary row (see `MatrixFields`), and any other operator goes through
+[`stencil_left_boundary`](@ref) / [`stencil_right_boundary`](@ref), which
+produce `NaN` directly.
 
 The advection operators never use this condition: when they are given no
 boundary conditions, [`Extrapolate{0}`](@ref Extrapolate) is added to their
 `bcs` by default, and a boundary whose name has no entry in `bcs` also falls
 back to `Extrapolate{0}` (see [`AdvectionOperator`](@ref)).
 
-Where `boundary_width` is zero the interior stencil applies instead and nothing special
-happens, so the same operator can give `NaN` at one boundary and an ordinary value at
-the other. To obtain a meaningful boundary value, give the operator a boundary
-condition, or overwrite the boundary afterwards with a [`SetBoundaryOperator`](@ref).
+Where `boundary_width` is zero the interior stencil applies instead, so the same
+operator can give `NaN` at one boundary and an ordinary value at the other. To
+obtain a meaningful boundary value, give the operator a boundary condition, or
+overwrite the boundary afterwards with a [`SetBoundaryOperator`](@ref).
 """
 struct NullBoundaryCondition <: VerticalBoundaryCondition end
 
@@ -114,7 +116,7 @@ struct NullBoundaryCondition <: VerticalBoundaryCondition end
     SetValue(val)
 
 Set the value at the boundary to be `val`. In the case of gradient operators,
-this will set the input value from which the gradient is computed.
+this sets the input value from which the gradient is computed.
 """
 struct SetValue{S} <: VerticalBoundaryCondition
     val::S
@@ -124,7 +126,7 @@ end
     SetGradient(val)
 
 Set the gradient at the boundary to be `val`. In the case of gradient operators
-this will set the output value of the gradient.
+this sets the output value of the gradient.
 """
 struct SetGradient{S} <: VerticalBoundaryCondition
     val::S
@@ -154,7 +156,7 @@ end
 
 Evaluate the same stencil as the interior, but pad each ghost point the stencil
 reaches with a value extrapolated (with an order-`N` polynomial) from the
-`N + 1` closest interior points. Currently, only `0 <= N <= 2` is supported.
+`N + 1` closest interior points. Only `0 <= N <= 2` is supported.
 
 If a stencil at a face `i` is a function of the values at
 `x[i-3/2], x[i-1/2], x[i+1/2], x[i+3/2]`, then at the face `i = 3/2` the single
@@ -179,8 +181,8 @@ extrapolation:
 x[-1] = x[0] = 2 * x[1] - x[2]
 ```
 
-Note that every ghost point of a stencil is padded with the same extrapolated
-value: the extrapolation continues the field along the third coordinate line
+Every ghost point of a stencil is padded with the same extrapolated value: the
+extrapolation continues the field along the third coordinate line
 with a single boundary value, rather than evaluating the extrapolating
 polynomial at each ghost point's own position.
 """
@@ -196,8 +198,8 @@ Extrapolate(N::Integer = 0) = Extrapolate{N}()
 """
     Outflow(; order = 0)
 
-Physically named outflow (zero-normal-gradient family) boundary condition:
-returns [`Extrapolate{order}()`](@ref Extrapolate), so it is accepted wherever
+Construct the outflow (zero-normal-gradient family) boundary condition, which is
+[`Extrapolate{order}()`](@ref Extrapolate), so it is accepted wherever
 `Extrapolate` is. On the finite-difference advection operators it pads the
 ghost points the interior stencil reaches with an order-`order` extrapolation
 from the interior; near a boundary the order is reduced when fewer than
@@ -209,7 +211,7 @@ Outflow(; order = 0) = Extrapolate{order}()
 """
     extrapolate_weights(bc::Extrapolate{N}, navailable)
 
-The weights of the `navailable` closest interior points in the ghost-point
+Return the weights of the `navailable` closest interior points in the ghost-point
 extrapolation of `bc`, as a tuple of 3 integers ordered from the closest
 interior point outwards (with trailing zeros when fewer than 3 points are
 used). The extrapolation order is reduced to `navailable - 1` when fewer than
@@ -247,17 +249,16 @@ end
     add_auto_broadcasters(x₃)
 
 # Deprecated aliases for the one-sided reconstruction boundary conditions that
-# Extrapolate replaces. Note that the aliases are NOT numerically identical to
-# the old conditions: the old conditions replaced the whole stencil with fixed
-# one-sided reconstructions at the two faces nearest each boundary, while
-# Extrapolate keeps the interior stencil's upwinding and only pads its ghost
-# points. At the face one in from a boundary the two coincide exactly when the
-# velocity at that face points toward the boundary (the old downwind-biased
-# reconstruction is then also the upwind choice) and differ when it points
-# into the domain (see NEWS.md for the stencils). At the boundary face itself
-# the old reconstructions reached one center beyond the boundary, so they were
-# only usable under an enclosing operator that overrides that face (e.g.
-# DivergenceF2C with SetValue); Extrapolate's ghost-point padding is
+# Extrapolate replaces. The aliases differ numerically from the conditions they
+# replace: those conditions replaced the whole stencil with fixed one-sided
+# reconstructions at the two faces nearest each boundary, while Extrapolate keeps
+# the interior stencil's upwinding and only pads its ghost points. At the face one
+# in from a boundary the two coincide exactly when the velocity at that face points
+# toward the boundary (the downwind-biased reconstruction is then also the upwind
+# choice) and differ when it points into the domain (see NEWS.md for the stencils).
+# At the boundary face itself the replaced reconstructions reached one center
+# beyond the boundary, so they required an enclosing operator that overrides that
+# face (e.g. DivergenceF2C with SetValue); Extrapolate's ghost-point padding is
 # well-defined there.
 Base.@deprecate_binding FirstOrderOneSided Extrapolate{0} false
 Base.@deprecate_binding ThirdOrderOneSided Extrapolate{1} false
@@ -273,7 +274,8 @@ struct RightBoundaryWindow{name} <: BoundaryWindow end
 """
     FiniteDifferenceOperator
 
-An abstract type for finite difference operators. Instances of this should define:
+Supertype of the finite difference operators, which act along the vertical
+(column) direction. Subtypes define:
 
   - [`return_eltype`](@ref)
   - [`return_space`](@ref)
@@ -333,9 +335,16 @@ AbstractStencilStyle(bc, ::ClimaComms.AbstractCPUDevice) = ColumnStencilStyle
 """
     StencilBroadcasted{Style}(op, args[,axes[, work]])
 
-This is similar to a `Base.Broadcast.Broadcasted` object.
+Broadcast node holding a [`FiniteDifferenceOperator`](@ref) `op` applied to
+`args`, analogous to a `Base.Broadcast.Broadcasted` object. Returned by
+`Base.Broadcast.broadcasted(op::FiniteDifferenceOperator, args...)`.
 
-This is returned by `Base.Broadcast.broadcasted(op::FiniteDifferenceOperator)`.
+# Fields
+
+  - `op`: The operator.
+  - `args`: The broadcast arguments.
+  - `axes`: The result space, or `nothing` before instantiation.
+  - `work`: Optional work storage, `nothing` by default.
 """
 struct StencilBroadcasted{Style, Op, Args, Axes, Work} <:
        OperatorBroadcasted{Style}
@@ -404,66 +413,67 @@ end
 """
     stencil_interior_width(::Op, args...)
 
-Defines the width of the interior stencil for the operator `Op` with the given
-arguments. Returns a tuple of 2-tuples: each 2-tuple should be the lower and
-upper bounds of the index offsets of the stencil for each argument in the
-stencil.
+Return the width of the interior stencil for the operator `Op` with the given
+arguments, as a tuple of 2-tuples: each 2-tuple holds the lower and upper bounds
+of the index offsets of the stencil for the corresponding argument.
 
-## Example
+# Examples
 
+```julia
+stencil_interior_width(::Op, arg1, arg2) = ((-half, 1 + half), (0, 0))
 ```
-stencil(::Op, arg1, arg2) = ((-half, 1+half), (0,0))
-```
 
-implies that at index `i`, the stencil accesses `arg1` at `i-half`, `i+half` and
-`i+1+half`, and `arg2` at index `i`.
+implies that at index `i`, the stencil accesses `arg1` at `i - half`, `i + half`
+and `i + 1 + half`, and `arg2` at index `i`.
 """
 function stencil_interior_width end
 
 """
-    stencil_interior(::Op, space, idx, args...)
+    stencil_interior(::Op, space, idx, hidx, args...)
 
-Defines the stencil of the operator `Op` in the interior of the domain at `idx`;
-`args` are the input arguments.
+Return the value of the interior stencil of the operator `Op` at vertical index
+`idx` and horizontal index `hidx` of `space`; `args` are the input arguments.
 """
 function stencil_interior end
 
 """
     boundary_width(::Op, ::BC, args...)
 
-Defines the width of a boundary condition `BC` on an operator `Op`. This is the
-number of locations that are used in a modified stencil. Either this function,
-or [`left_interior_idx`](@ref) and [`right_interior_idx`](@ref) should be
-defined for a specific `Op`/`BC` combination.
+Return the width of a boundary condition `BC` on an operator `Op`: the number
+of locations at which a modified stencil is used. Either this function, or
+[`left_interior_idx`](@ref) and [`right_interior_idx`](@ref), must be defined
+for a specific `Op`/`BC` combination.
 """
 function boundary_width end
 
 """
-    stencil_left_boundary(op, bc, idx, hidx, args...)
+    stencil_left_boundary(op, bc, space, idx, hidx, args...)
 
-The result of stencil operator `op` at horizontal index `hidx` and some vertical
-index `idx` near the left boundary, with boundary condition `bc`. For operators
-that cannot be evaluated without a boundary condition, a `NullBoundaryCondition`
-generates `NaN` values here.
+Return the result of the stencil operator `op` at horizontal index `hidx` and
+vertical index `idx` of `space` near the left boundary, with boundary condition
+`bc`. For operators that cannot be evaluated without a boundary condition, a
+`NullBoundaryCondition` generates `NaN` values here.
 
-Operators that are rewritten into an operator matrix multiply do not reach this method:
-their boundary rows come from `MatrixFields` instead, where a `NullBoundaryCondition`
-row is filled with `NaN`s, so the boundary output is `NaN` there as well.
+Operators that are rewritten into an operator matrix multiply do not reach this
+method: their boundary rows come from `MatrixFields` instead, where a
+`NullBoundaryCondition` row is filled with `NaN`s, so the boundary output is
+`NaN` there as well.
 """
 stencil_left_boundary(op, ::NullBoundaryCondition, space, _, _, args...) =
     new(return_eltype(op, args...)) * Spaces.undertype(space)(NaN)
 
 """
-    stencil_right_boundary(op, bc, idx, hidx, args...)
+    stencil_right_boundary(op, bc, space, idx, hidx, args...)
 
-The result of stencil operator `op` at horizontal index `hidx` and some vertical
-index `idx` near the right boundary, with boundary condition `bc`. For operators
-that cannot be evaluated without a boundary condition, a `NullBoundaryCondition`
-generates `NaN` values here.
+Return the result of the stencil operator `op` at horizontal index `hidx` and
+vertical index `idx` of `space` near the right boundary, with boundary condition
+`bc`. For operators that cannot be evaluated without a boundary condition, a
+`NullBoundaryCondition` generates `NaN` values here.
 
-Operators that are rewritten into an operator matrix multiply do not reach this method:
-their boundary rows come from `MatrixFields` instead, where a `NullBoundaryCondition`
-row is filled with `NaN`s, so the boundary output is `NaN` there as well.
+Operators that are rewritten into an operator matrix multiply do not reach this
+method: their boundary rows come from `MatrixFields` instead, where a
+`NullBoundaryCondition` row is filled with `NaN`s, so the boundary output is
+`NaN` there as well.
 """
 stencil_right_boundary(op, ::NullBoundaryCondition, space, _, _, args...) =
     new(return_eltype(op, args...)) * Spaces.undertype(space)(NaN)
@@ -485,12 +495,11 @@ function assert_valid_bcs(op, kwargs, ::Type{ValidBCs}) where {ValidBCs}
     return nothing
 end
 
-# `SetValue` was removed from `GradientC2F`, `DivergenceC2F`, `CurlC2F` and
-# `UpwindBiasedProductC2F`, but each removed boundary stencil is exactly
-# expressible with the remaining operators and boundary conditions. When a
-# `SetValue` is requested, those constructors return a [`DirichletOperator`](@ref)
-# (defined with the `*_c2f_dirichlet` helpers below) instead of an operator of
-# their own type.
+# `GradientC2F`, `DivergenceC2F`, `CurlC2F` and `UpwindBiasedProductC2F` have no
+# `SetValue` boundary stencil of their own; each is exactly expressible with the
+# other operators and boundary conditions. When a `SetValue` is requested, those
+# constructors return a `DirichletOperator` (defined with the `*_c2f_dirichlet`
+# helpers below) instead of an operator of their own type.
 has_setvalue_bc(kwargs) =
     UU.unrolled_any(bc -> bc isa SetValue, values(values(kwargs)))
 
@@ -573,7 +582,7 @@ Interpolate a center-valued field to a face-valued field from below.
 B(x)[i] = x[i-\\tfrac{1}{2}]
 ```
 
-Only the bottom boundary condition should be set. Currently supported is:
+Only the bottom boundary condition can be set. The supported condition is:
 
   - [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
 
@@ -615,10 +624,10 @@ right_interior_idx(
 Interpolate a face-valued field to a center-valued field from below.
 
 ```math
-B(x)[i+\\tfrac{1}{2}] = x[i]
+B(x)[i] = x[i-\\tfrac{1}{2}]
 ```
 
-Only the bottom boundary condition should be set. Currently supported is:
+Only the bottom boundary condition can be set. The supported condition is:
 
   - [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
 
@@ -683,7 +692,7 @@ Interpolate a center-valued field to a face-valued field from above.
 T(x)[i] = x[i+\\tfrac{1}{2}]
 ```
 
-Only the top boundary condition should be set. Currently supported is:
+Only the top boundary condition can be set. The supported condition is:
 
   - [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
 
@@ -728,12 +737,12 @@ Interpolate a face-valued field to a center-valued field from above.
 T(x)[i] = x[i+\\tfrac{1}{2}]
 ```
 
-Only the top boundary condition should be set. Currently supported is:
+Only the top boundary condition can be set. The supported condition is:
 
   - [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
 
 ```math
-T(x)[n+\\tfrac{1}{2}] = x_0
+T(x)[n] = x_0
 ```
 """
 struct TopBiasedF2C{BCS} <: InterpolationOperator
@@ -781,13 +790,13 @@ Interpolate a face-valued field `x` to centers, weighted by a face-valued field
 
 ```math
 WI(w, x)[i] = \\frac{
-        w[i+\\tfrac{1}{2}] x[i+\\tfrac{1}{2}] +  w[i-\\tfrac{1}{2}] x[i-\\tfrac{1}{2}])
+        w[i+\\tfrac{1}{2}] x[i+\\tfrac{1}{2}] +  w[i-\\tfrac{1}{2}] x[i-\\tfrac{1}{2}]
     }{
         w[i+\\tfrac{1}{2}] + w[i-\\tfrac{1}{2}]
     }
 ```
 
-No boundary conditions are required (or supported)
+No boundary conditions are required (or supported).
 """
 struct WeightedInterpolateF2C{BCS <: @NamedTuple{}} <:
        WeightedInterpolationOperator
@@ -833,7 +842,7 @@ Interpolate a center-valued field `x` to faces, weighted by a center-valued fiel
 
 ```math
 WI(w, x)[i] = \\frac{
-    w[i+\\tfrac{1}{2}] x[i+\\tfrac{1}{2}] +  w[i-\\tfrac{1}{2}] x[i-\\tfrac{1}{2}])
+    w[i+\\tfrac{1}{2}] x[i+\\tfrac{1}{2}] +  w[i-\\tfrac{1}{2}] x[i-\\tfrac{1}{2}]
 }{
     w[i+\\tfrac{1}{2}] + w[i-\\tfrac{1}{2}]
 }
@@ -893,11 +902,10 @@ boundary_width(::WeightedInterpolateC2F, ::VerticalBoundaryCondition) = 1
 """
     AdvectionOperator
 
-An abstract type for advection operators. As of now, advection operators that
-do the following are supported:
-
-Given a face-valued velocity field `v` and a center-valued field `x`, for each
-face `i` the advection operator computes a function of the form
+Supertype of the advection operators, e.g. [`UpwindBiasedProductC2F`](@ref) and
+[`FCTZalesak`](@ref). Given a face-valued velocity field `v` and a
+center-valued field `x`, for each face `i` an advection operator computes a
+function of the form
 `f(v[i-1], v[i], v[i+1], x[i-3/2], x[i-1/2], x[i+1/2], x[i+3/2])` or
 `f(v[i], x[i-3/2], x[i-1/2], x[i+1/2], x[i+3/2])`
 and returns a contravariant3 component. On non-periodic domains, all faces are
@@ -933,11 +941,14 @@ pointwise, through the callable interface described below.
     zero derivative along the third coordinate line). The flux through the
     boundary surface is imposed by the enclosing operator instead.
 
-By default, it is assumed that the operator is only a function of the velocity at the current
-face. If the operator is a function of the velocity at neighboring faces, then the operator should define
+By default, the operator is assumed to be a function of the velocity at the
+current face only. An operator that is a function of the velocity at
+neighboring faces defines
 
 `Operators.advection_velocity_width(::SomeAdvectionOperator) = Val(:neighboring)`
-and the operator will be evaluated with the velocity at neighboring faces as well. The default is `Val(:current)`.
+
+and is then evaluated with the velocity at neighboring faces as well. The
+default is `Val(:current)`.
 
 The advected field is the broadcast argument following the velocity. An
 operator that is a function of the stencils of multiple center-valued
@@ -966,8 +977,8 @@ abstract type AdvectionOperator <: FiniteDifferenceOperator end
 """
     has_linear_stencil(op::AdvectionOperator)
 
-Whether `op` is a linear function of its advected argument, in the interior
-and at the boundaries, so that it can be rewritten as an operator-matrix
+Return whether `op` is a linear function of its advected argument, in the
+interior and at the boundaries, so that it can be rewritten as an operator-matrix
 multiply (see `MatrixFields.operator_matrix`). This requires an operator type
 with a linear interior stencil (`has_linear_interior`) and a linear
 ghost-point reconstruction (`is_linear_reconstruction`) at every boundary.
@@ -1268,8 +1279,8 @@ where ``\\boldsymbol{e}_3`` is the 3rd covariant basis vector.
 
 The only supported boundary condition is [`Extrapolate`](@ref)
 ([`Outflow`](@ref)), which is also added to `bcs` (as `Extrapolate{0}`) by
-default when no boundary conditions
-are given: boundary faces are computed with the interior stencil, padding the
+default when no boundary conditions are given: boundary faces are computed with
+the interior stencil, padding the
 ghost point it reaches with the boundary condition's extrapolation. The
 stencil only reaches a ghost point at the boundary face itself, where a single
 interior point is in range, so every extrapolation order reduces to the value
@@ -1280,8 +1291,8 @@ where ``x_b`` is the value at the center closest to the boundary.
 To prescribe the value of `x` used on the outside of a boundary instead, pass
 a [`SetValue`](@ref): the constructor then returns a
 [`DirichletOperator`](@ref) that applies
-[`upwind_biased_product_c2f_dirichlet`](@ref), the exact replacement for the
-removed `SetValue` stencil, fused into an enclosing broadcast with lazy
+[`upwind_biased_product_c2f_dirichlet`](@ref), which reproduces the `SetValue`
+boundary stencil exactly and fuses into an enclosing broadcast with lazy
 boundary rows.
 """
 struct UpwindBiasedProductC2F{BCS} <: AdvectionOperator
@@ -1321,29 +1332,29 @@ boundary_width(::UpwindBiasedProductC2F, ::VerticalBoundaryCondition) = 1
 
 Compute the product of the face-valued vector field `v` and a center-valued
 field `x` at cell faces using a slope-limited reconstruction of `x`, following
-the van Leer class of limiters as noted in [Lin1994](@cite). Four limiter
-constraint options are provided:
+the van Leer class of limiters of [Lin1994](@cite). `dt` is the time step,
+which enters the limiter through the local upwind CFL number. Four limiter
+`constraint` options are provided:
 
-  - `AlgebraicMean`: Algebraic mean, this guarantees neither positivity nor
-    monotonicity (eq 2, `avg`)
-  - `PositiveDefinite`: Positive-definite with implicit diffusion based on local
-    stencil extrema (eq 3b, 3c, 5a, 5b, `posd`)
-  - `MonotoneHarmonic`: Monotonicity preserving harmonic mean, this implies a strong
-    monotonicity constraint (eq 4, `mono4`)
-  - `MonotoneLocalExtrema`: Monotonicity preserving, with extrema bounded by the
-    edge cells in the stencil (eq 5, `mono5`)
+  - `AlgebraicMean()`: Algebraic mean, which guarantees neither positivity nor
+    monotonicity (eq. 2, `avg`).
+  - `PositiveDefinite()`: Positive-definite with implicit diffusion based on
+    local stencil extrema (eqs. 3b, 3c, 5a, 5b, `posd`).
+  - `MonotoneHarmonic()`: Monotonicity-preserving harmonic mean, which implies a
+    strong monotonicity constraint (eq. 4, `mono4`).
+  - `MonotoneLocalExtrema()`: Monotonicity-preserving, with extrema bounded by
+    the edge cells in the stencil (eq. 5, `mono5`).
 
 The diffusion implied by these methods is proportional to the local upwind CFL
-number. The `mismatch` Δ𝜙 = 0 returns the first-order upwind method. Special
-cases (discussed in Lin et al (1994)) include setting the 𝜙_min = 0 or 𝜙_max =
-saturation mixing ratio for water vapor are not considered here in favour of
-the generalized local extrema in equation (5a, 5b).
+number. The mismatch Δ𝜙 = 0 returns the first-order upwind method. Special
+cases discussed in [Lin1994](@cite), such as setting 𝜙_min = 0 or 𝜙_max to the
+saturation mixing ratio for water vapor, are not considered here in favour of
+the generalized local extrema in eqs. (5a, 5b).
 
 As for all [`AdvectionOperator`](@ref)s, boundary faces are computed with the
 interior stencil, padding ghost points with the [`Extrapolate`](@ref)
 ([`Outflow`](@ref)) boundary condition's extrapolation (`Extrapolate{0}` is
-added to `bcs` by default when
-no boundary conditions are given).
+added to `bcs` by default when no boundary conditions are given).
 """
 struct LinVanLeerC2F{BCS, C} <: AdvectionOperator
     bcs::BCS
@@ -1423,7 +1434,7 @@ end
     U.(v, x)
 
 Compute the product of a face-valued vector field `v` and a center-valued field
-`x` at cell faces by upwinding `x`, to third-order of accuracy, according to `v`
+`x` at cell faces by upwinding `x`, to third order of accuracy, according to `v`:
 
 ```math
 U(v,x)[i] = \\begin{cases}
@@ -1436,8 +1447,8 @@ This stencil is based on [WickerSkamarock2002](@cite), eq. 4(a).
 
 The only supported boundary condition is [`Extrapolate`](@ref)
 ([`Outflow`](@ref)): boundary faces are computed with the interior stencil,
-padding each ghost point it
-reaches with the condition's extrapolation from the in-range interior points
+padding each ghost point it reaches with the condition's extrapolation from the
+in-range interior points
 (the extrapolation order is reduced at the boundary face itself, where only 2
 interior points are in range). When no boundary conditions are given,
 `Extrapolate{0}` is added to `bcs` by default. The extrapolations are taken
@@ -1485,25 +1496,26 @@ boundary_width(::Upwind3rdOrderBiasedProductC2F, ::VerticalBoundaryCondition) =
 Correct the flux using the flux-corrected transport formulation by Boris and
 Book [BorisBook1973](@cite).
 
-Input arguments:
+# Arguments
 
-  - a face-valued vector field `v`
-  - a center-valued field `x`
+  - `v`: A face-valued vector field.
+  - `x`: A center-valued field.
 
 ```math
 Ac(v,x)[i] =
   s[i] \\max \\left\\{0, \\min \\left[ |v[i] |, s[i] \\left( x[i+\\tfrac{3}{2}] - x[i+\\tfrac{1}{2}]  \\right) ,  s[i] \\left( x[i-\\tfrac{1}{2}] - x[i-\\tfrac{3}{2}]  \\right) \\right] \\right\\},
 ```
 
-where ``s[i] = +1`` if  ``v[i] \\geq 0`` and ``s[i] = -1`` if  ``v [i] \\leq 0``, and ``Ac`` represents the resulting corrected antidiffusive
-flux. This formulation is based on [BorisBook1973](@cite), as reported in
+where ``s[i] = +1`` if ``v[i] \\geq 0`` and ``s[i] = -1`` if ``v[i] \\leq 0``,
+and ``Ac`` represents the resulting corrected antidiffusive flux. This
+formulation is based on [BorisBook1973](@cite), as reported in
 [durran2010](@cite) section 5.4.1.
 
 As for all [`AdvectionOperator`](@ref)s, boundary faces are computed with the
 interior stencil, padding ghost points with the [`Extrapolate`](@ref)
 ([`Outflow`](@ref)) boundary condition's extrapolation (`Extrapolate{0}` is
-added to `bcs` by default when
-no boundary conditions are given). With the default, the padded values make
+added to `bcs` by default when no boundary conditions are given). With the
+default, the padded values make
 the one-sided difference of `x` on the boundary side vanish at the two faces
 nearest each boundary, and that difference bounds the corrected antidiffusive
 flux, so the flux is zero there.
@@ -1534,23 +1546,25 @@ fct_boris_book(v, a⁻⁻, a⁻, a⁺, a⁺⁺) =
 Correct the flux using the flux-corrected transport formulation by Zalesak
 [zalesak1979fully](@cite).
 
-Input arguments:
+# Arguments
 
-  - a face-valued vector field `A`
-  - a center-valued field whose elements are 2-tuples of `Φ` and `Φᵗᵈ`
+  - `A`: A face-valued vector field, the antidiffusive flux.
+  - `tuple.(Φ, Φᵗᵈ)`: A center-valued field whose elements are 2-tuples of the
+    field `Φ` and its transported-diffused value `Φᵗᵈ`.
 
 ```math
 Φ_j^{n+1} = Φ_j^{td} - (C_{j+\\frac{1}{2}}A_{j+\\frac{1}{2}} - C_{j-\\frac{1}{2}}A_{j-\\frac{1}{2}})
 ```
 
-This stencil is based on [zalesak1979fully](@cite), as reported in [durran2010]
-(@cite) section 5.4.2, where ``C`` denotes the corrected antidiffusive flux.
+This stencil is based on [zalesak1979fully](@cite), as reported in
+[durran2010](@cite) section 5.4.2, where ``C`` denotes the corrected
+antidiffusive flux.
 
 As for all [`AdvectionOperator`](@ref)s, boundary faces are computed with the
 interior stencil, padding ghost points with the [`Extrapolate`](@ref)
 ([`Outflow`](@ref)) boundary condition's extrapolation (`Extrapolate{0}` is
-added to `bcs` by default when
-no boundary conditions are given); the extrapolation of a tuple-valued field
+added to `bcs` by default when no boundary conditions are given); the
+extrapolation of a tuple-valued field
 applies to each of `Φ` and `Φᵗᵈ`. No value is imposed at the faces nearest
 each boundary: the corrected antidiffusive flux there is whatever the padded
 stencil gives.
@@ -1616,10 +1630,11 @@ end
 """
     AbstractTVDSlopeLimiter
 
-An asbtract TVD-slope limiter type. Use `subtypes(AbstractTVDSlopeLimiter)`
-to see the supported subtypes. See
-
-`TVDLimitedFluxC2F` for the general formulation.
+Supertype of the TVD slope limiters used by [`TVDLimitedFluxC2F`](@ref), which
+documents the general formulation. Each subtype defines the multiplicative
+limiter `C(r)` of the slope ratio `r`. Subtypes: `RZeroLimiter`,
+`RHalfLimiter`, `RMaxLimiter`, `MinModLimiter`, `KorenLimiter`,
+`SuperbeeLimiter`, and `MonotonizedCentralLimiter`.
 """
 abstract type AbstractTVDSlopeLimiter end
 
@@ -1627,8 +1642,8 @@ abstract type AbstractTVDSlopeLimiter end
 """
     RZeroLimiter()
 
-A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
-`TVDLimitedFluxC2F` for the general formulation.
+[`AbstractTVDSlopeLimiter`](@ref) with `C(r) = 0`, which returns the low-order
+flux.
 """
 struct RZeroLimiter <: AbstractTVDSlopeLimiter end
 limiter_coeff(r, ::RZeroLimiter) = zero(r)
@@ -1636,8 +1651,7 @@ limiter_coeff(r, ::RZeroLimiter) = zero(r)
 """
     RHalfLimiter()
 
-A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
-`TVDLimitedFluxC2F` for the general formulation.
+[`AbstractTVDSlopeLimiter`](@ref) with `C(r) = 1/2`.
 """
 struct RHalfLimiter <: AbstractTVDSlopeLimiter end
 limiter_coeff(r, ::RHalfLimiter) = one(r) / 2
@@ -1645,8 +1659,8 @@ limiter_coeff(r, ::RHalfLimiter) = one(r) / 2
 """
     RMaxLimiter()
 
-A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
-`TVDLimitedFluxC2F` for the general formulation.
+[`AbstractTVDSlopeLimiter`](@ref) with `C(r) = 1`, which returns the high-order
+flux.
 """
 struct RMaxLimiter <: AbstractTVDSlopeLimiter end
 limiter_coeff(r, ::RMaxLimiter) = one(r)
@@ -1654,8 +1668,7 @@ limiter_coeff(r, ::RMaxLimiter) = one(r)
 """
     MinModLimiter()
 
-A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
-`TVDLimitedFluxC2F` for the general formulation.
+[`AbstractTVDSlopeLimiter`](@ref) with `C(r) = max(0, min(1, r))`.
 """
 struct MinModLimiter <: AbstractTVDSlopeLimiter end
 limiter_coeff(r, ::MinModLimiter) = max(0, min(1, r))
@@ -1663,8 +1676,7 @@ limiter_coeff(r, ::MinModLimiter) = max(0, min(1, r))
 """
     KorenLimiter()
 
-A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
-`TVDLimitedFluxC2F` for the general formulation.
+[`AbstractTVDSlopeLimiter`](@ref) with `C(r) = max(0, min(2r, (1 + 2r) / 3, 2))`.
 """
 struct KorenLimiter <: AbstractTVDSlopeLimiter end
 limiter_coeff(r, ::KorenLimiter) = max(0, min(2r, (1 + 2r) / 3, 2))
@@ -1672,8 +1684,7 @@ limiter_coeff(r, ::KorenLimiter) = max(0, min(2r, (1 + 2r) / 3, 2))
 """
     SuperbeeLimiter()
 
-A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
-`TVDLimitedFluxC2F` for the general formulation.
+[`AbstractTVDSlopeLimiter`](@ref) with `C(r) = max(0, min(1, r), min(2, r))`.
 """
 struct SuperbeeLimiter <: AbstractTVDSlopeLimiter end
 limiter_coeff(r, ::SuperbeeLimiter) = max(0, min(1, r), min(2, r))
@@ -1681,42 +1692,37 @@ limiter_coeff(r, ::SuperbeeLimiter) = max(0, min(1, r), min(2, r))
 """
     MonotonizedCentralLimiter()
 
-A subtype of [`AbstractTVDSlopeLimiter`](@ref) limiter. See
-`TVDLimitedFluxC2F` for the general formulation.
+[`AbstractTVDSlopeLimiter`](@ref) with `C(r) = max(0, min(2r, (1 + r) / 2, 2))`.
 """
 struct MonotonizedCentralLimiter <: AbstractTVDSlopeLimiter end
 limiter_coeff(r, ::MonotonizedCentralLimiter) = max(0, min(2r, (1 + r) / 2, 2))
 
 """
-    TVDLimitedFluxC2F{BCS, M} <: AdvectionOperator
-
     U = TVDLimitedFluxC2F(; method)
     U.(𝒜, Φ, 𝓊)
 
-`𝒜`, following the notation of Durran (Numerical Methods for Fluid Dynamics, 2ⁿᵈ
-ed.) is the antidiffusive flux given by
+Limit the face-valued antidiffusive flux `𝒜` with a TVD slope limiter `method`,
+using the center-valued field `Φ` to compute the slope ratio and the face-valued
+velocity `𝓊` to determine the upwind direction.
 
-`𝒜 = ℱʰ - ℱˡ` where h and l superscripts represent the high and lower
-order (monotone) fluxes respectively. The effect of the TVD limiters is then to
-adjust the flux
+Following the notation of [durran2010](@cite), `𝒜 = ℱʰ - ℱˡ` is the
+antidiffusive flux, where the superscripts h and l denote the high- and
+low-order (monotone) fluxes. The TVD limiter adjusts the flux to
 
-```F_{j+1/2} = F^{l}_{j+1/2} + C_{j+1/2}(F^{h}_{j+1/2} - F^{l}_{j+1/2}) where
-C_{j+1/2} is the multiplicative limiter which is a function of ```
+```math
+F_{j+1/2} = F^{l}_{j+1/2} + C_{j+1/2} (F^{h}_{j+1/2} - F^{l}_{j+1/2}),
+```
 
-the ratio of the slope of the solution across a cell interface.
+where ``C_{j+1/2}`` is the multiplicative limiter, a function of the ratio `r`
+of the upwind slope of `Φ` to the slope across the cell interface. `C = 1`
+recovers the high-order flux and `C = 0` the low-order flux. The operator
+returns ``C_{j+1/2} 𝒜_{j+1/2}``.
 
- - `C=1` recovers the high order flux.
- - `C=0` recovers the low order flux.
-
-Supported limiter types are
-
-- RZeroLimiter (returns low order flux)
-- RHalfLimiter (flux multiplier == 1/2)
-- RMaxLimiter (returns high order flux)
-- MinModLimiter
-- KorenLimiter
-- SuperbeeLimiter
-- MonotonizedCentralLimiter
+The supported `method`s are the subtypes of [`AbstractTVDSlopeLimiter`](@ref):
+`RZeroLimiter()` (returns the low-order flux), `RHalfLimiter()` (flux
+multiplier `1/2`), `RMaxLimiter()` (returns the high-order flux),
+`MinModLimiter()`, `KorenLimiter()`, `SuperbeeLimiter()`, and
+`MonotonizedCentralLimiter()`.
 
 The face-valued velocity `𝓊` is only used to determine the upwind direction,
 and must be supplied as contravariant data: either a `Contravariant3Vector`
@@ -1727,10 +1733,9 @@ velocity field `u` in another basis).
 As for all [`AdvectionOperator`](@ref)s, boundary faces are computed with the
 interior stencil, padding ghost points with the [`Extrapolate`](@ref)
 ([`Outflow`](@ref)) boundary condition's extrapolation (`Extrapolate{0}` is
-added to `bcs` by default when
-no boundary conditions are given). No value is imposed at the faces nearest
-each boundary: the limited flux there is whatever the padded stencil gives.
-```
+added to `bcs` by default when no boundary conditions are given). No value is
+imposed at the faces nearest each boundary: the limited flux there is whatever
+the padded stencil gives.
 """
 struct TVDLimitedFluxC2F{BCS, M} <: AdvectionOperator
     bcs::BCS
@@ -1773,23 +1778,23 @@ abstract type BoundaryOperator <: FiniteDifferenceOperator end
 """
     SetBoundaryOperator(;boundaries...)
 
-This operator is the identity in the interior, and replaces the value at each boundary
-for which a condition is given. It preserves the space of its argument, so it modifies
-the boundary faces of a face field or the boundary center cells of a center field. A side
-with no condition is left untouched.
+Return the argument unchanged in the interior, and replace the value at each
+boundary for which a condition is given. The operator preserves the space of its
+argument, so it modifies the boundary faces of a face field or the boundary
+center cells of a center field. A side with no condition is left untouched.
 
 The following boundary conditions are supported:
 
   - [`SetValue(val)`](@ref): set the value to be `val` on the boundary.
-  - [`SetGradient(val)`](@ref): set the value to be `val` on the boundary, projected onto
-    the `Covariant3` axis.
-  - [`SetCurl(val)`](@ref): set the value to be `val` on the boundary, projected onto the
-    `Contravariant12` axis (the axis of [`CurlC2F`](@ref)'s output).
+  - [`SetGradient(val)`](@ref): set the value to be `val` on the boundary,
+    projected onto the `Covariant3` axis.
+  - [`SetCurl(val)`](@ref): set the value to be `val` on the boundary, projected
+    onto the `Contravariant12` axis (the axis of [`CurlC2F`](@ref)'s output).
   - [`SetDivergence(val)`](@ref): set the value to be `val` on the boundary.
 
-The projecting conditions exist so that this operator can reapply the boundary conditions
-of the operator it was derived from when a broadcast is rewritten as an operator matrix
-multiply; see `MatrixFields.modifies_output`.
+The projecting conditions exist so that this operator can reapply the boundary
+conditions of the operator it was derived from when a broadcast is rewritten as
+an operator matrix multiply; see `MatrixFields.modifies_output`.
 """
 struct SetBoundaryOperator{BCS} <: BoundaryOperator
     bcs::BCS
@@ -1890,7 +1895,7 @@ end
 
 
 abstract type GradientOperator <: FiniteDifferenceOperator end
-# TODO: we should probably make the axis the operator is working over as part of the operator type
+# TODO: make the axis the operator works over part of the operator type.
 # similar to the spectral operators, hardcoded to vertical only `(3,)` for now
 return_eltype(::GradientOperator, arg) =
     Geometry.gradient_result_type(Val((3,)), eltype(arg))
@@ -1906,14 +1911,15 @@ Compute the gradient of a face-valued field `x`, returning a center-valued
 G(x)[i]^3 = x[i+\\tfrac{1}{2}] - x[i-\\tfrac{1}{2}]
 ```
 
-We note that the usual division factor ``1 / \\Delta z`` that appears in a first-order
-finite difference operator is accounted for in the `LocalVector` basis. Hence, users
-need to cast the output of the `GradientF2C` to a `UVector`, `VVector` or `WVector`,
-according to the type of domain on which the operator is defined.
+The usual division factor ``1 / \\Delta z`` of a first-order finite difference
+operator is accounted for in the `LocalVector` basis. Hence, users must cast the
+output of `GradientF2C` to a `UVector`, `VVector` or `WVector`, according to
+the type of domain on which the operator is defined.
 
 The following boundary conditions are supported:
 
-  - by default, the value of `x` at the boundary face will be used.
+  - By default (no boundary condition), the value of `x` at the boundary face
+    is used.
   - [`SetValue(x₀)`](@ref): calculate the gradient assuming the value at the
     boundary is `x₀`. For the left boundary, this becomes:
 
@@ -1973,16 +1979,16 @@ The following boundary conditions are supported:
     ``\\partial x / \\partial \\xi^3``, the derivative along the third
     coordinate line. On a terrain-following grid the boundary is the coordinate
     surface ``\\xi^3`` = const, whose normal derivative is the contravariant 3
-    component ``g^{31} \\partial_1 x + g^{33} \\partial_3 x``. The two differ
-    wherever ``g^{31}`` is nonzero, so `SetGradient(Covariant3Vector(0))` is a
-    zero normal derivative only where the boundary is flat; elsewhere the value
-    that gives one is ``-g^{31} \\partial_1 x / g^{33}``.
+    component ``g^{31} \\partial_1 x + g^{32} \\partial_2 x + g^{33} \\partial_3 x``.
+    The two differ wherever ``g^{31}`` or ``g^{32}`` is nonzero, so
+    `SetGradient(Covariant3Vector(0))` is a zero normal derivative only where
+    the boundary is flat; elsewhere the value that gives one is
+    ``-(g^{31} \\partial_1 x + g^{32} \\partial_2 x) / g^{33}``.
 
 To prescribe the boundary value of `x` instead, pass a [`SetValue`](@ref):
 the constructor then returns a [`DirichletOperator`](@ref) that applies
-[`gradient_c2f_dirichlet`](@ref), the exact replacement for the removed
-`SetValue` stencil, fused into an enclosing broadcast with lazy
-boundary rows.
+[`gradient_c2f_dirichlet`](@ref), which reproduces the `SetValue` boundary
+stencil exactly and fuses into an enclosing broadcast with lazy boundary rows.
 """
 struct GradientC2F{BC} <: GradientOperator
     bcs::BC
@@ -2021,18 +2027,21 @@ where `Jv³` is the Jacobian multiplied by the third contravariant component of
 
 The following boundary conditions are supported:
 
-  - by default, the value of `v` at the boundary face will be used.
+  - By default (no boundary condition), the value of `v` at the boundary face
+    is used.
   - [`SetValue(v₀)`](@ref): calculate the divergence assuming the value at the
     boundary is `v₀`. For the left boundary, this becomes:
 
 ```math
-D(v)[1] = (Jv³[1+\\tfrac{1}{2}] - Jv³₀) / J[i]
+D(v)[1] = (Jv³[1+\\tfrac{1}{2}] - Jv³₀) / J[1]
 ```
 
-  - [`SetDivergence(v₀)`](@ref): set the divergence at the cell center  closest to
-    the boundary
+  - [`SetDivergence(d₀)`](@ref SetDivergence): set the divergence at the cell
+    center closest to the boundary to be `d₀`. For the left boundary, this
+    becomes:
 
-```
+```math
+D(v)[1] = d₀
 ```
 
   - [`Extrapolate()`](@ref Extrapolate), equivalently [`Outflow()`](@ref):
@@ -2117,9 +2126,8 @@ The following boundary conditions are supported:
 
 To prescribe the boundary value of `v` instead, pass a [`SetValue`](@ref):
 the constructor then returns a [`DirichletOperator`](@ref) that applies
-[`divergence_c2f_dirichlet`](@ref), the exact replacement for the removed
-`SetValue` stencil, fused into an enclosing broadcast with lazy
-boundary rows.
+[`divergence_c2f_dirichlet`](@ref), which reproduces the `SetValue` boundary
+stencil exactly and fuses into an enclosing broadcast with lazy boundary rows.
 """
 struct DivergenceC2F{BC} <: DivergenceOperator
     bcs::BC
@@ -2150,8 +2158,8 @@ return_eltype(::CurlFiniteDifferenceOperator, arg) =
 
 Compute the vertical-derivative contribution to the curl of a center-valued
 covariant vector field `v`. It acts on the horizontal covariant components of
-`v` (that is it only depends on ``v₁`` and ``v₂``), and will return a face-valued horizontal
-contravariant vector field (that is ``C(v)³ = 0``).
+`v` (that is, it only depends on ``v₁`` and ``v₂``), and returns a face-valued
+horizontal contravariant vector field (that is, ``C(v)³ = 0``).
 
 Specifically it approximates:
 
@@ -2181,9 +2189,8 @@ The following boundary conditions are supported:
 
 To prescribe the boundary value of `v` instead, pass a [`SetValue`](@ref):
 the constructor then returns a [`DirichletOperator`](@ref) that applies
-[`curl_c2f_dirichlet`](@ref), the exact replacement for the removed
-`SetValue` stencil, fused into an enclosing broadcast with lazy
-boundary rows.
+[`curl_c2f_dirichlet`](@ref), which reproduces the `SetValue` boundary stencil
+exactly and fuses into an enclosing broadcast with lazy boundary rows.
 """
 struct CurlC2F{BC} <: CurlFiniteDifferenceOperator
     bcs::BC
@@ -2206,9 +2213,9 @@ boundary_width(::CurlC2F, ::VerticalBoundaryCondition) = 1
 
 # Dirichlet (`SetValue`) replacements for the center-to-face operators.
 #
-# `SetValue` was removed from `GradientC2F`, `DivergenceC2F`, `CurlC2F` and
-# `UpwindBiasedProductC2F`, but each removed boundary stencil is exactly
-# expressible with the remaining operators and boundary conditions (the
+# `GradientC2F`, `DivergenceC2F`, `CurlC2F` and `UpwindBiasedProductC2F` have no
+# `SetValue` boundary stencil of their own; each is exactly expressible with the
+# other operators and boundary conditions (the
 # "Boundary values and advection built from the primitive operators" testset
 # in `test/Operators/finitedifference/unit_column.jl` pins the replacement
 # expressions against the stencils they reproduce). The helpers below build
@@ -2229,14 +2236,18 @@ boundary_width(::CurlC2F, ::VerticalBoundaryCondition) = 1
 The operator returned by the constructor of `Op` (one of [`GradientC2F`](@ref),
 [`DivergenceC2F`](@ref), [`CurlC2F`](@ref) or [`UpwindBiasedProductC2F`](@ref))
 when one of the requested boundary conditions is a [`SetValue`](@ref), which
-those operators no longer support directly. Applying it with `.` calls the
-corresponding Dirichlet replacement helper ([`gradient_c2f_dirichlet`](@ref),
+those operators do not support directly. Applying it with `.` calls the
+corresponding Dirichlet helper ([`gradient_c2f_dirichlet`](@ref),
 [`divergence_c2f_dirichlet`](@ref), [`curl_c2f_dirichlet`](@ref) or
 [`upwind_biased_product_c2f_dirichlet`](@ref)) with each `SetValue(x₀)`
-unwrapped to its  `x₀value` and every other boundary condition passed through
-as given. The replacement is built as a lazy stencil broadcast with lazy
-boundary rows, so it fuses into an enclosing broadcast like a true operator
-application and allocates nothing.
+unwrapped to its value `x₀` and every other boundary condition passed through
+as given. The helper's result is a lazy stencil broadcast with lazy boundary
+rows, so it fuses into an enclosing broadcast like a true operator application
+and allocates nothing.
+
+# Fields
+
+  - `bcs`: `NamedTuple` of boundary values and conditions, keyed by boundary name.
 """
 struct DirichletOperator{Op, BCS}
     bcs::BCS
@@ -2398,9 +2409,11 @@ end
 """
     gradient_c2f_dirichlet(x; <boundary_name> = x₀...)
 
-The vertical gradient of the center-valued field `x` interpolated to faces,
-with the value of `x` prescribed to be `x₀` at each named boundary face: the
-exact replacement for the removed `GradientC2F(<boundary_name> = SetValue(x₀)).(x)`, built (for `bottom` and `top` boundaries) as
+Return the vertical gradient of the center-valued field `x` at faces, with the
+value of `x` prescribed to be `x₀` at each named boundary face: the Dirichlet
+form of [`GradientC2F`](@ref), equivalent to
+`GradientC2F(<boundary_name> = SetValue(x₀)).(x)` and built (for `bottom` and
+`top` boundaries) as
 
 ```julia
 GradientC2F(
@@ -2474,12 +2487,12 @@ end
 """
     divergence_c2f_dirichlet(v; <boundary_name> = v₀...)
 
-The vertical contribution to the divergence of the center-valued vector field
-`v` interpolated to faces, with the value of `v` prescribed to be `v₀` at
-each named boundary face: the exact replacement for the removed
-`DivergenceC2F(<boundary_name> = SetValue(v₀)).(v)`, built by wrapping a plain
-`DivergenceC2F` in a [`SetBoundaryOperator`](@ref) that overrides each
-prescribed boundary face with the removed stencil's value,
+Return the vertical contribution to the divergence of the center-valued vector
+field `v` at faces, with the value of `v` prescribed to be `v₀` at each named
+boundary face: the Dirichlet form of [`DivergenceC2F`](@ref), equivalent to
+`DivergenceC2F(<boundary_name> = SetValue(v₀)).(v)` and built by wrapping a
+plain `DivergenceC2F` in a [`SetBoundaryOperator`](@ref) that overrides each
+prescribed boundary face with the Dirichlet stencil's value,
 
 ```math
 D(v)[\\tfrac{1}{2}] = (Jv³[1] - Jv³₀) \\frac{2}{J[\\tfrac{1}{2}]}
@@ -2564,11 +2577,11 @@ end
 """
     curl_c2f_dirichlet(u; <boundary_name> = u₀...)
 
-The vertical-derivative contribution to the curl of the center-valued
-covariant vector field `u` interpolated to faces, with the value of `u`
-prescribed to be `u₀` at each named boundary face: the exact replacement for
-the removed `CurlC2F(<boundary_name> = SetValue(u₀)).(u)`, built by supplying
-the removed stencil's boundary rows,
+Return the vertical-derivative contribution to the curl of the center-valued
+covariant vector field `u` at faces, with the value of `u` prescribed to be
+`u₀` at each named boundary face: the Dirichlet form of [`CurlC2F`](@ref),
+equivalent to `CurlC2F(<boundary_name> = SetValue(u₀)).(u)` and built by
+supplying the Dirichlet stencil's boundary rows,
 
 ```math
 C(u)[\\tfrac{1}{2}]^1 = -(u_2[1] - u_{2,0}) \\frac{2}{J[\\tfrac{1}{2}]}, \\quad
@@ -2644,14 +2657,15 @@ end
 """
     upwind_biased_product_c2f_dirichlet(v, x; <boundary_name> = x₀...)
 
-The first-order upwind product of the face-valued vector field `v` and the
-center-valued field `x`, with the value of `x` on the outside of each named
-boundary prescribed to be `x₀`: the exact replacement for the removed
-`UpwindBiasedProductC2F(<boundary_name> = SetValue(x₀)).(v, x)`, built by
-wrapping a plain [`UpwindBiasedProductC2F`](@ref) in a
-[`SetBoundaryOperator`](@ref) that overrides each prescribed boundary face
-with the removed stencil's value, the upwind product of `v³` there with `x₀`
-on the boundary side and the closest center value of `x` on the interior side.
+Return the first-order upwind product of the face-valued vector field `v` and
+the center-valued field `x`, with the value of `x` on the outside of each named
+boundary prescribed to be `x₀`: the Dirichlet form of
+[`UpwindBiasedProductC2F`](@ref), equivalent to
+`UpwindBiasedProductC2F(<boundary_name> = SetValue(x₀)).(v, x)` and built by
+wrapping a plain `UpwindBiasedProductC2F` in a [`SetBoundaryOperator`](@ref)
+that overrides each prescribed boundary face with the Dirichlet stencil's
+value, the upwind product of `v³` there with `x₀` on the boundary side and the
+closest center value of `x` on the interior side.
 
 Each boundary value may be a number, a `Field` (on the corresponding boundary
 level of `x`'s space, or on a whole space, of which only the level adjacent to
@@ -2742,17 +2756,17 @@ _stencil_interior_width(bc::StencilBroadcasted) =
     stencil_interior_width(bc.op, bc.args...)
 
 """
-    left_interior_idx(space::AbstractSpace, op::FiniteDifferenceOperator, bc::VerticalBoundaryCondition, args..)
+    left_interior_idx(space, op::FiniteDifferenceOperator, bc::VerticalBoundaryCondition, args...)
 
-The index of the left-most interior point of the operator `op` with boundary
-`bc` when used with arguments `args...`. By default, this is
+Return the index of the left-most interior point of the operator `op` with
+boundary `bc` when used with arguments `args...`. By default, this is
 
 ```julia
 left_idx(space) + boundary_width(op, bc)
 ```
 
-but can be overwritten for specific stencil types (e.g. if the stencil is
-assymetric).
+but it can be overridden for specific stencil types (e.g. if the stencil is
+asymmetric).
 """
 @inline function left_interior_idx(
     space::AbstractSpace,
@@ -2764,17 +2778,17 @@ assymetric).
 end
 
 """
-    right_interior_idx(space::AbstractSpace, op::FiniteDifferenceOperator, bc::VerticalBoundaryCondition, args..)
+    right_interior_idx(space, op::FiniteDifferenceOperator, bc::VerticalBoundaryCondition, args...)
 
-The index of the right-most interior point of the operator `op` with boundary
-`bc` when used with arguments `args...`. By default, this is
+Return the index of the right-most interior point of the operator `op` with
+boundary `bc` when used with arguments `args...`. By default, this is
 
 ```julia
 right_idx(space) - boundary_width(op, bc)
 ```
 
-but can be overwritten for specific stencil types (e.g. if the stencil is
-assymetric).
+but it can be overridden for specific stencil types (e.g. if the stencil is
+asymmetric).
 """
 @inline function right_interior_idx(
     space::AbstractSpace,
@@ -2794,7 +2808,9 @@ end
 """
     left_interior_window_idx(arg, space, loc)
 
-Compute the index of the leftmost point which uses only the interior stencil of the space.
+Compute the index of the leftmost point of `arg` (a stencil broadcast, field,
+or scalar) on `space` that uses only the interior stencil; `loc` is the left
+boundary window.
 """
 @inline function left_interior_window_idx(
     bc::StencilBroadcasted,
@@ -3039,7 +3055,8 @@ end
 @noinline inferred_getidx_error(idx_type::Type, space_type::Type) =
     error("Invalid index type `$idx_type` for field on space `$space_type`")
 
-# recursively unwrap getidx broadcast arguments in a way that is statically reducible by the optimizer
+# Recursively unwrap getidx broadcast arguments in a way that the optimizer can reduce
+# statically.
 @generated function call_bc_f(f::F, space, idx, hidx, args...) where {F}
     N = length(args)
     return quote
@@ -3110,10 +3127,12 @@ function Base.Broadcast.materialize!(
     dest_space, result_space = axes(dest), axes(bc)
     if result_space !== dest_space && !allow_mismatched_spaces_unsafe()
         # TODO: we pass the types here to avoid stack copying data
-        # but this could lead to a confusing error message (same space type but different instances)
+        # but this could lead to a confusing error message (same space type but
+        # different instances)
         inferred_stencil_spaces_error(typeof(dest_space), typeof(result_space))
     end
-    # the default Base behavior is to instantiate a Broadcasted object with the same axes as the dest
+    # The default Base behavior is to instantiate a Broadcasted object with the same axes
+    # as the destination.
     return copyto!(
         dest,
         Base.Broadcast.instantiate(
@@ -3241,10 +3260,10 @@ end
 """
     fd_shmem_is_supported(bc::Base.Broadcast.AbstractBroadcasted)
 
-Returns a Bool indicating whether or not the broadcasted object supports
-shared memory, allowing us to dispatch into an optimized kernel.
+Return whether the broadcasted object `bc` supports shared memory, so that the
+GPU extension can dispatch to an optimized kernel.
 
-This function and dispatch should be removed once all operators support
+This function and its dispatch become unnecessary once all operators support
 shared memory.
 """
 function fd_shmem_is_supported end
@@ -3252,19 +3271,19 @@ function fd_shmem_is_supported end
 """
     any_fd_shmem_supported(::Base.Broadcast.AbstractBroadcasted)
 
-Returns a Bool indicating if any operators in the broadcasted object support
-finite difference shared memory shmem.
+Return whether any operator in the broadcasted object supports finite-difference
+shared memory (see [`fd_shmem_is_supported`](@ref)).
 """
 function any_fd_shmem_supported end
 
 """
-    promote_bcs
+    promote_bcs(op::FiniteDifferenceOperator, FT)
+    promote_bcs(bcs::NamedTuple, FT)
 
-Used to promote integer-specified boundary conditions to the
-given type (the space's undertype) so that `getidx` is
-type-stable throughout the entire broadcast expression.
-
-This is an internal method.
+Promote the boundary conditions of `op` (or the boundary-condition `NamedTuple`
+`bcs`) with `promote_bc`, so that integer-valued boundary conditions take the
+space's float type `FT` and `getidx` is type-stable throughout the broadcast
+expression. Internal.
 """
 @inline function promote_bcs(
     op::FiniteDifferenceOperator,
@@ -3299,13 +3318,13 @@ end
     NamedTuple{N}(map(x -> promote_bc(x, FT), values(bcs)))
 
 """
-    promote_bc
+    promote_bc(bc::AbstractBoundaryCondition, FT)
 
-Used to promote integer-specified boundary conditions to the
-given type (the space's undertype) so that `getidx` is
-type-stable throughout the entire broadcast expression.
-
-This is an internal method.
+Promote the value of a `SetValue`, `SetGradient`, `SetDivergence`, or `SetCurl`
+boundary condition to the space's float type `FT` when it is an `Integer` or an
+axis tensor of another element type, so that `getidx` is type-stable throughout
+the broadcast expression; other boundary conditions are returned unchanged.
+Internal.
 """
 promote_bc(bc::SetValue, FT) = bc
 promote_bc(bc::SetGradient, FT) = bc
@@ -3345,16 +3364,19 @@ promote_bc(bc::SetCurl{<:Geometry.AbstractTensor}, ::Type{FT}) where {FT} =
 """
     use_fd_shmem()
 
-Allows users to, from global scope, enable finite
-difference shmem for operators that support it.
-TODO: ~30% slowdown was noticed with CC 0.14.31
-in Aquaplanet benchmarks. This may need attention in
-future releases
+Return whether finite-difference shared memory is enabled for the operators that
+support it; `false` by default. Users can enable it from global scope by
+redefining the method.
 
-## Usage
+# Examples
 
 ```julia
-Operators.use_fd_shmem() = false
+Operators.use_fd_shmem() = true
 ```
+
+# Notes
+
+A ~30% slowdown was observed with shared memory enabled in ClimaCore 0.14.31
+aquaplanet benchmarks.
 """
 use_fd_shmem() = false

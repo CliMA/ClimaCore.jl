@@ -22,7 +22,7 @@ abstract type Discretization end
 
 The continuous-Galerkin [`Discretization`](@ref): functions are
 single-valued at element boundaries, and element-local weak operators are
-completed by [`Spaces.weighted_dss!`](@ref).
+completed by `Spaces.weighted_dss!`.
 """
 struct CG <: Discretization end
 
@@ -40,14 +40,16 @@ struct DG <: Discretization end
     SpectralElementGrid1D(
         topology::Topologies.IntervalTopology,
         quadrature_style::Quadratures.QuadratureStyle;
-        VIJH,
+        VIJH = DataLayouts.VIJFH,
         discretization = nothing,
     )
 
-A one-dimensional grid: within each element the space is represented as a
-polynomial. `discretization` selects continuous ([`CG`](@ref)) or
+One-dimensional spectral element grid: within each element the space is
+represented as a polynomial. `VIJH` is the `DataLayouts.VIJHWithF` layout of the
+local geometry. `discretization` selects continuous ([`CG`](@ref)) or
 discontinuous ([`DG`](@ref)) Galerkin, and follows the quadrature when omitted;
-see [`SpectralElementGrid2D`](@ref).
+see [`SpectralElementGrid2D`](@ref). Construction is memoized in
+`Cache.OBJECT_CACHE`.
 """
 mutable struct SpectralElementGrid1D{
     T,
@@ -72,7 +74,7 @@ local_geometry_type(
 ) where {LG} = eltype(LG) # calls eltype from DataLayouts
 
 # non-view grids are cached based on their input arguments
-# this means that if data is saved in two different files, reloading will give fields which live on the same grid
+# Data saved in two different files therefore reloads onto the same grid object.
 function SpectralElementGrid1D(
     topology::Topologies.IntervalTopology,
     quadrature_style::Quadratures.QuadratureStyle;
@@ -171,7 +173,8 @@ end
 """
     SpectralElementGrid2D <: AbstractSpectralElementGrid
 
-A two-dimensional grid: within each element the space is represented as a polynomial.
+Two-dimensional spectral element grid: within each element the space is represented
+as a polynomial. See the constructor for the keyword options.
 """
 mutable struct SpectralElementGrid2D{
     T,
@@ -205,60 +208,63 @@ local_geometry_type(
 
 """
     SpectralElementGrid2D(
-        topology,
-        quadrature_style;
-        enable_bubble,
-        autodiff_metric,
-        VIJH,
-        enable_mask::Bool,
+        topology::Topologies.Topology2D,
+        quadrature_style::Quadratures.QuadratureStyle;
+        VIJH = DataLayouts.VIJFH,
+        enable_bubble = false,
+        autodiff_metric = true,
+        enable_mask = false,
         discretization = nothing,
     )
 
-Construct a `SpectralElementGrid2D` instance given a `topology` and `quadrature`. The
-flag `enable_bubble` enables the `bubble correction` for more accurate element areas.
-The flag `autodiff_metric` enables the use of automatic differentiation instead of the
-SEM for computing metric terms.
+Construct a `SpectralElementGrid2D` from a `topology` and a `quadrature_style`.
+Construction is memoized in `Cache.OBJECT_CACHE`.
 
-# Input arguments:
+# Keyword Arguments
 
-  - topology: Topology2D
-  - quadrature_style: QuadratureStyle
-  - enable_bubble: Bool
-  - autodiff_metric: Bool
-  - VIJH: subtype of DataLayouts.VIJHWithF with a specific F axis
-  - enable_mask: Boolean used to skip operations where the space's mask is 0
-  - discretization: continuous ([`CG`](@ref)) or discontinuous
-    ([`DG`](@ref)) Galerkin, following the quadrature when omitted. On a `DG()` grid no continuity is maintained
-    across element boundaries, so [`Spaces.weighted_dss!`](@ref) is a no-op on
-    fields over this grid and inter-element coupling is instead supplied by DG
-    numerical fluxes (see `Operators.add_numerical_flux_interior!`). No DSS
-    weights are computed. `InputOutput` serializes the discretization; grids in
-    files written before it existed read back as continuous.
+  - `VIJH`: Subtype of `DataLayouts.VIJHWithF` used for the local geometry; defaults
+    to `DataLayouts.VIJFH`.
+  - `enable_bubble`: Apply the bubble correction described below, so that numerical
+    and geometric element areas match; defaults to `false`.
+  - `autodiff_metric`: Compute metric terms with automatic differentiation instead of
+    the spectral element differentiation matrix; defaults to `true`.
+  - `enable_mask`: Attach a `DataLayouts.IJHMask`, so that operations can skip nodes
+    where the mask is inactive; defaults to `false`.
+  - `discretization`: Continuous ([`CG`](@ref)) or discontinuous ([`DG`](@ref))
+    Galerkin; follows the quadrature when omitted. On a `DG()` grid no continuity is
+    maintained across element boundaries, so `Spaces.weighted_dss!` is a no-op on
+    fields over this grid and inter-element coupling is supplied by DG numerical
+    fluxes (see `Operators.add_numerical_flux_interior!`). No DSS weights are
+    computed. `InputOutput` serializes the discretization; grids in files written
+    without it read back as continuous.
 
-The idea behind the so-called `bubble_correction` is that the numerical area
-of the domain (e.g., the sphere) is given by the sum of nodal integration weights
-times their corresponding Jacobians. However, this discrete sum is not exactly
-equal to the exact geometric area  (4pi*radius^2 for the sphere). To make these equal,
-the "epsilon bubble" approach modifies the inner weights in each element so that
-geometric and numerical areas of each element match.
+# Notes
 
-Let ``\\Delta A^e := A^e_{exact} - A^e_{approx}``, then, in
-the case of linear elements, we correct ``W_{i,j} J^e_{i,j}`` by:
+The numerical area of the domain (e.g. the sphere) is the sum of nodal integration
+weights times their Jacobians. This discrete sum is not exactly equal to the
+geometric area (`4πR²` for the sphere). The "epsilon bubble" correction modifies
+the interior weights in each element so that the geometric and numerical areas of
+each element match.
 
-```math
-\\widehat{W_{i,j} J^e}_{i,j} = W_{i,j} J^e_{i,j} + \\Delta A^e * W_{i,j} / Nq^2 .
-```
-
-and the case of non linear elements, by
+Let ``\\Delta A^e := A^e_{exact} - A^e_{approx}``. For linear elements,
+``W_{i,j} J^e_{i,j}`` is corrected by
 
 ```math
-\\widehat{W_{i,j} J^e}_{i,j} = W_{i,j} J^e_{i,j} \\left( 1 + \\tilde{A}^e \\right) ,
+\\widehat{W_{i,j} J^e}_{i,j} = W_{i,j} J^e_{i,j} + \\Delta A^e \\, W_{i,j} / N_q^2 ,
 ```
 
-where ``\\tilde{A}^e`` is the approximated area given by the sum of the interior nodal integration weights.
+and for nonlinear elements by
 
-Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSphere`](@ref) and
-[`Meshes.EquidistantCubedSphere`](@ref) type, not for [`Meshes.ConformalCubedSphere`](@ref).
+```math
+\\widehat{W_{i,j} J^e}_{i,j} = W_{i,j} J^e_{i,j} \\left( 1 + \\widetilde{A}^e \\right) ,
+```
+
+where ``\\widetilde{A}^e`` is the approximate area given by the sum of the interior nodal
+integration weights.
+
+The correction is accurate only for cubed spheres of the
+[`Meshes.EquiangularCubedSphere`](@ref) and [`Meshes.EquidistantCubedSphere`](@ref)
+type, not for [`Meshes.ConformalCubedSphere`](@ref).
 """
 function SpectralElementGrid2D(
     topology::Topologies.Topology2D,
@@ -734,8 +740,8 @@ end
     Grids.discretization(grid)
     Spaces.discretization(space)
 
-The [`Discretization`](@ref) of `grid` (or of `space`'s grid): [`CG`](@ref)`()`
-or [`DG`](@ref)`()`, as given at grid construction. Grids with no horizontal
+Return the [`Discretization`](@ref) of `grid` (or of the grid of `space`):
+[`CG`](@ref)`()` or [`DG`](@ref)`()`, as given at grid construction. Grids with no horizontal
 spectral elements are `CG()`, since every node belongs to one element.
 
 There is no fallback for `AbstractGrid`: a new grid type needs its own method,
@@ -748,9 +754,9 @@ discretization(grid::SpectralElementGrid2D) = grid.discretization
     Grids.is_continuous(grid)
     Spaces.is_continuous(space)
 
-Whether fields on `grid` (or on `space`'s grid) are members of the continuous
-(CG) function space: `Grids.discretization(grid) isa CG`. Discontinuous (DG)
-grids skip [`Spaces.weighted_dss!`](@ref) and couple elements through
+Return `true` if fields on `grid` (or on the grid of `space`) are members of the
+continuous (CG) function space, i.e. `Grids.discretization(grid) isa CG`. Discontinuous (DG)
+grids skip `Spaces.weighted_dss!` and couple elements through
 numerical fluxes instead.
 """
 is_continuous(grid::AbstractGrid) = discretization(grid) isa CG

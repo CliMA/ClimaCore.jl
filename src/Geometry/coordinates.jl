@@ -1,26 +1,19 @@
 """
     AbstractPoint
 
-Represents a point in space.
+Supertype for points in space, parameterized by the float type `FT` of their coordinates.
 
-The following types are supported:
+Concrete subtypes, grouped by the abstract dimension types `Abstract1DPoint`,
+`Abstract2DPoint`, and `Abstract3DPoint`:
 
-  - `XPoint(x)`
-  - `YPoint(y)`
-  - `ZPoint(z)`
-  - `XYPoint(x, y)`
-  - `XZPoint(x, z)`
-  - `XYZPoint(x, y, z)`
-  - `LatPoint(lat)`
-  - `LongPoint(long)`
-  - `LatLongPoint(lat, long)`
-  - `LatLongZPoint(lat, long, z)`
-  - `Cartesian1Point(x1)`
-  - `Cartesian2Point(x2)`
-  - `Cartesian3Point(x3)`
-  - `Cartesian12Point(x1, x2)`
-  - `Cartesian13Point(x1, x3)`
-  - `Cartesian123Point(x1, x2, x3)`
+  - 1D: `XPoint(x)`, `YPoint(y)`, `ZPoint(z)`, `PPoint(p)`, `LatPoint(lat)`,
+    `LongPoint(long)`, `Cartesian1Point(x1)`, `Cartesian2Point(x2)`, `Cartesian3Point(x3)`.
+  - 2D: `XYPoint(x, y)`, `XZPoint(x, z)`, `YZPoint(y, z)`, `LatLongPoint(lat, long)`,
+    `Cartesian12Point(x1, x2)`, `Cartesian13Point(x1, x3)`.
+  - 3D: `XYZPoint(x, y, z)`, `LatLongZPoint(lat, long, z)`, `LatLongPPoint(lat, long, p)`,
+    `Cartesian123Point(x1, x2, x3)`.
+
+Latitudes and longitudes are in degrees.
 """
 abstract type AbstractPoint{FT} end
 
@@ -177,7 +170,7 @@ coordinate_type(ptyp::Type{<:AbstractPoint}, ax::Integer) = _coordinate_type(pty
 coordinate(pt::AbstractPoint, ax::Int) = _coordinate(pt, Val(ax))
 coordinate(pt::AbstractPoint, ax::Integer) = _coordinate(pt, Int(ax))
 
-# the following are needed for linranges to work correctly with coordinate values
+# The following methods let ranges (LinRange, StepRangeLen) work with coordinate values.
 Base.:(-)(p1::T) where {T <: AbstractPoint} = unionalltype(T)((-components(p1)...))
 Base.:(-)(p1::T, p2::T) where {T <: AbstractPoint} =
     unionalltype(T)((components(p1) - components(p2))...)
@@ -192,7 +185,7 @@ Base.:(/)(p::T, x::Number) where {T <: AbstractPoint} =
 Base.LinRange(start::T, stop::T, length::Integer) where {T <: Abstract1DPoint} =
     Base.LinRange{T}(start, stop, length)
 
-# we add our own method to this so that `BigFloat` coordinate ranges are computed accurately.
+# Own method so that `BigFloat` coordinate ranges are computed accurately.
 function Base.lerpi(j::Integer, d::Integer, a::T, b::T) where {T <: Abstract1DPoint}
     T(Base.lerpi(j, d, component(a, 1), component(b, 1)))
 end
@@ -208,9 +201,10 @@ Base.isless(x::Abstract1DPoint, y::Abstract1DPoint) = isless(promote(x, y)...)
 """
     bilinear_interpolate(coords::NTuple{4}, ξ1, ξ2)
 
-Bilinear interpolate between `coords` by parameters `ξ1, ξ2`, each in the interval `[-1,1]`.
+Interpolate bilinearly between `coords` with the reference parameters `ξ1, ξ2`, each in
+the interval `[-1, 1]`.
 
-`coords` should be a 4-tuple of coordinates in counter-clockwise order.
+`coords` is a 4-tuple of coordinates (`SVector`s or points) in counter-clockwise order.
 
 ```
       4-------3
@@ -238,13 +232,16 @@ end
 
 
 """
-    bilinear_invert(cc::NTuple{4, V}) where {V<:SVector{2}}
+    bilinear_invert(vert_coords::NTuple{4, V}) where {V <: SVector{2}}
 
-Solve find `ξ1` and `ξ2` such that
+Find the reference parameters `ξ1` and `ξ2` such that
 
-    bilinear_interpolate(coords, ξ1, ξ2) == 0
+    bilinear_interpolate(vert_coords, ξ1, ξ2) == 0
 
-See also [`bilinear_interpolate`](@ref).
+and return them as an `SVector`. Of the two roots of the resulting quadratic, the one
+smaller in magnitude (closest to the interval `[-1, 1]`) is chosen.
+
+See also `bilinear_interpolate`.
 """
 function bilinear_invert(vert_coords::NTuple{4, V}) where {V <: SVector{2}}
     # 1) express as 2 equations
@@ -268,7 +265,8 @@ function bilinear_invert(vert_coords::NTuple{4, V}) where {V <: SVector{2}}
     # 3) rearrange (A):
     #   -(a1 + a3*ξ2) = ξ1 * (a2 + a4*ξ2)
     # 4) multiply (B) by (a2 + a4*ξ2), and eliminate ξ1
-    #    b1 * (a2 + a4*ξ2) - b2 * (a1 + a3*ξ2) + b3 * (a2 + a4*ξ2) * ξ2 - b4 * (a1 + a3*ξ2) * ξ2 == 0
+    #    b1 * (a2 + a4*ξ2) - b2 * (a1 + a3*ξ2)
+    #        + b3 * (a2 + a4*ξ2) * ξ2 - b4 * (a1 + a3*ξ2) * ξ2 == 0
     # 5) collect coefficients of powers of ξ2
     c0 = b1 * a2 - b2 * a1
     c1 = b1 * a4 - b2 * a3 + b3 * a2 - b4 * a1
@@ -291,10 +289,10 @@ end
 
 
 """
-    interpolate(coords::NTuple{2}, ξ1)
+    linear_interpolate(coords::NTuple{2, V}, ξ1) where {V <: Abstract1DPoint}
 
-Interpolate between `coords` by parameters `ξ1` in the interval `[-1,1]`.
-The type of interpolation is determined by the element type of `coords`
+Interpolate linearly between the two 1D points `coords` with the reference parameter `ξ1`
+in the interval `[-1, 1]`, returning a point of the same type.
 """
 function linear_interpolate(
     coords::NTuple{2, V},

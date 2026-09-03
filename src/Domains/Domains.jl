@@ -7,7 +7,13 @@ export RectangleDomain
 """
     AbstractDomain
 
-A domain represents a region of space.
+Supertype for domains, which represent regions of space.
+
+Subtypes:
+
+  - [`IntervalDomain`](@ref): a closed interval along one coordinate direction.
+  - [`RectangleDomain`](@ref): the product of two interval domains.
+  - [`SphereDomain`](@ref): the surface of a sphere.
 """
 abstract type AbstractDomain end
 
@@ -22,7 +28,8 @@ float_type(domain::AbstractDomain) = float_type(coordinate_type(domain))
 """
     boundary_names(obj::Union{AbstractDomain, AbstractMesh, AbstractTopology})
 
-A tuple or vector of unique boundary names of a spatial domain.
+Return a tuple or vector of the unique boundary names of a spatial domain, mesh, or
+topology. Periodic directions contribute no names.
 """
 function boundary_names end
 
@@ -40,12 +47,18 @@ boundary_names(domain::IntervalDomain) =
     isperiodic(domain) ? () : unique(domain.boundary_names)
 
 """
-    IntervalDomain(coord⁻, coord⁺; periodic=true)
-    IntervalDomain(coord⁻, coord⁺; boundary_names::Tuple{Symbol,Symbol})
+    IntervalDomain(coord_min, coord_max; periodic = false, boundary_names = nothing)
+    IntervalDomain(coords::ClosedInterval; kwargs...)
 
-Construct a `IntervalDomain`, the closed interval is given by `coord⁻`, `coord⁺` coordinate arguments.
+Construct an `IntervalDomain`, the closed interval between the 1D coordinates `coord_min`
+and `coord_max` (or the endpoints of `coords`).
 
-Either a `periodic` or `boundary_names` keyword argument is required.
+# Keyword Arguments
+
+  - `periodic = false`: whether the interval is periodic.
+  - `boundary_names = nothing`: a `Tuple{Symbol, Symbol}` naming the lower and upper
+    boundaries. Required when `periodic` is `false`; passing neither keyword throws an
+    `ArgumentError`.
 """
 function IntervalDomain(
     coord_min::Geometry.Abstract1DPoint,
@@ -68,14 +81,14 @@ IntervalDomain(coords::IntervalSets.ClosedInterval; kwargs...) =
 """
     z_max(domain::IntervalDomain)
 
-The domain maximum along the z-direction.
+Return the domain maximum along the `z` direction.
 """
 z_max(domain::IntervalDomain) = domain.coord_max.z
 
 """
     z_min(domain::IntervalDomain)
 
-The domain minimum along the z-direction.
+Return the domain minimum along the `z` direction.
 """
 z_min(domain::IntervalDomain) = domain.coord_min.z
 
@@ -119,15 +132,22 @@ boundary_names(domain::RectangleDomain) = unique(
 )::Vector{Symbol}
 
 """
+    RectangleDomain(interval1::IntervalDomain, interval2::IntervalDomain)
     RectangleDomain(x1::ClosedInterval, x2::ClosedInterval;
-        x1boundary::Tuple{Symbol,Symbol},
-        x2boundary::Tuple{Symbol,Symbol},
         x1periodic = false,
         x2periodic = false,
+        x1boundary = nothing,
+        x2boundary = nothing,
     )
 
-Construct a `RectangularDomain` in the horizontal.
-If a given x1 or x2 boundary is not periodic, then `x1boundary` or `x2boundary` boundary name keyword arguments must be supplied.
+Construct a `RectangleDomain`, the product of two interval domains in the horizontal.
+`interval1 * interval2` is equivalent to the first form.
+
+# Keyword Arguments
+
+  - `x1periodic = false`, `x2periodic = false`: whether each direction is periodic.
+  - `x1boundary = nothing`, `x2boundary = nothing`: `Tuple{Symbol, Symbol}` boundary names
+    for each direction. Required for every direction that is not periodic.
 """
 function RectangleDomain(
     x1::IntervalSets.ClosedInterval{X1CT},
@@ -162,7 +182,8 @@ coordinate_type(domain::RectangleDomain) = typeof(
 """
     SphereDomain(radius)
 
-A domain representing the surface of a sphere with radius `radius`.
+Domain representing the surface of a sphere with radius `radius` [m]. Its coordinate
+type is `Geometry.Cartesian123Point`, and it has no boundaries.
 """
 struct SphereDomain{FT} <: AbstractDomain where {FT <: AbstractFloat}
     radius::FT

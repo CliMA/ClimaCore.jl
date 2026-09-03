@@ -6,11 +6,11 @@ broadcast_zero(field) = zero(eltype(Base.broadcastable(field)))
 """
     column_integral_definite!(ϕ_top, ᶜ∂ϕ∂z, [ϕ_bot])
 
-Sets `````ϕ_top```{}= \\frac{1}{ΔA(z_{bot})}\\int_{z_{bot}}^{z_{top}}\\, ```ᶜ∂ϕ∂z```(z)\\,ΔA(z)\\,dz +{}```ϕ_bot`````, where ``z_{bot}`` and ``z_{top}`` are
+Set `````ϕ_top```{}= \\frac{1}{ΔA(z_{bot})}\\int_{z_{bot}}^{z_{top}}\\, ```ᶜ∂ϕ∂z```(z)\\,ΔA(z)\\,dz +{}```ϕ_bot`````, where ``z_{bot}`` and ``z_{top}`` are
 the values of `z` at the bottom and top of the domain, and where `ΔA` is the
 area differential `J/Δz`, with `J` denoting the metric Jacobian. The input
-`ᶜ∂ϕ∂z` should be a cell-center `Field` or `AbstractBroadcasted`, and the output
-`ϕ_top` should be a horizontal `Field`. The default value of `ϕ_bot` is 0.
+`ᶜ∂ϕ∂z` must be a cell-center `Field` or `AbstractBroadcasted`, and the output
+`ϕ_top` must be a horizontal `Field`. The default value of `ϕ_bot` is 0.
 """
 function column_integral_definite!(ϕ_top, ᶜ∂ϕ∂z, ϕ_bot = broadcast_zero(ϕ_top))
     ᶜJ = Fields.local_geometry_field(axes(ᶜ∂ϕ∂z)).J
@@ -25,15 +25,15 @@ end
 """
     column_integral_indefinite!(ᶠϕ, ᶜ∂ϕ∂z, [ϕ_bot])
 
-Sets `````ᶠϕ```(z) = \\frac{1}{ΔA(z_{bot})}\\int_{z_{bot}}^z\\,```ᶜ∂ϕ∂z```(z')\\, ΔA(z')\\,dz' +{}```ϕ_bot`````, where ``z_{bot}`` is the value of `z` at the bottom
+Set `````ᶠϕ```(z) = \\frac{1}{ΔA(z_{bot})}\\int_{z_{bot}}^z\\,```ᶜ∂ϕ∂z```(z')\\, ΔA(z')\\,dz' +{}```ϕ_bot`````, where ``z_{bot}`` is the value of `z` at the bottom
 of the domain, and where `ΔA` is the area differential `J/Δz`, with `J` denoting
-the metric Jacobian. The input `ᶜ∂ϕ∂z` should be a cell-center `Field` or
-`AbstractBroadcasted`, and the output `ᶠϕ` should be a cell-face `Field`. The
+the metric Jacobian. The input `ᶜ∂ϕ∂z` must be a cell-center `Field` or
+`AbstractBroadcasted`, and the output `ᶠϕ` must be a cell-face `Field`. The
 default value of `ϕ_bot` is 0.
 
     column_integral_indefinite!(∂ϕ∂z, ᶠϕ, [ϕ_bot], [rtol])
 
-Sets `````ᶠϕ```(z) = \\frac{1}{ΔA(z_{bot})}\\int_{z_{bot}}^z\\, ```∂ϕ∂z```(```ᶠϕ```(z'), z')\\,ΔA(z')\\,dz' +{}```ϕ_bot`````, where `∂ϕ∂z` can be
+Set `````ᶠϕ```(z) = \\frac{1}{ΔA(z_{bot})}\\int_{z_{bot}}^z\\, ```∂ϕ∂z```(```ᶠϕ```(z'), z')\\,ΔA(z')\\,dz' +{}```ϕ_bot`````, where `∂ϕ∂z` can be
 any scalar-valued two-argument function. When a shallow atmosphere approximation
 is used, `ΔA = ΔA_{bot}` at all values of `z`, and the output `ᶠϕ` satisfies
 `ᶜgradᵥ.(ᶠϕ) ≈ ∂ϕ∂z.(ᶜint.(ᶠϕ), ᶜz)` with a relative tolerance of `rtol`, where
@@ -106,7 +106,7 @@ struct UnspecifiedInit end
 """
     column_reduce!(f, output, input; [init], [transform], [reverse])
 
-Applies `reduce` to `input` along the vertical direction, storing the result in
+Apply `reduce` to `input` along the vertical direction, storing the result in
 `output`. The `input` can be either a `Field` or an `AbstractBroadcasted` that
 performs pointwise or columnwise operations on `Field`s. Each reduced value is
 computed by iteratively applying `f` to the values in `input`, starting from the
@@ -215,14 +215,14 @@ end
 """
     column_accumulate!(f, output, input; [init], [transform], [reverse])
 
-Applies `accumulate` to `input` along the vertical direction, storing the result
+Apply `accumulate` to `input` along the vertical direction, storing the result
 in `output`. The `input` can be either a `Field` or an `AbstractBroadcasted`
 that performs pointwise or columnwise operations on `Field`s. By default, each
 accumulated value is computed by iteratively applying `f` to the values in
 `input`, starting from the bottom of each column and moving upward, and the
 result of each iteration is passed to the `transform` function before being
 stored in `output`.
-The `init` value is is optional for center-to-center, face-to-face, and
+The `init` value is optional for center-to-center, face-to-face, and
 face-to-center accumulation, but it is required for center-to-face accumulation.
 When `reverse = true`, accumulation starts at the top boundary and proceeds
 downward, with the corresponding staggered boundary offsets reversed.

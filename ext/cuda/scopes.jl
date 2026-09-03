@@ -64,8 +64,8 @@ DataLayouts.scoped_array(::ThisHost, ::Type{T}, dims; buffer = false) where {T} 
 [`DataScope`](@ref) that represents all available threads on a GPU. Operations
 that require synchronizations or array allocations are not supported.
 
-NOTE: This assumes that kernels are always launched with one-dimensional grids.
-Support for multidimensional grids may be added in a future release.
+`num_threads` and `thread_rank` assume that kernels are launched with one-dimensional
+grids.
 """
 struct ThisKernel <: DataLayouts.DataScope end
 
@@ -86,11 +86,16 @@ struct ThisKernel <: DataLayouts.DataScope end
 """
     ThisCooperativeGroup
 
-Abstract type that represents a "cooperative group" from the
+Supertype for scopes that represent a "cooperative group" from the
 [`CG`](https://cuda.juliagpu.org/stable/development/kernel/#Cooperative-groups)
-module in `CUDA.jl`, which is built on top of the `cooperative_groups`
+module in `CUDA.jl`, which is built on the `cooperative_groups`
 [extension](https://docs.nvidia.com/cuda/cuda-c-programming-guide/#cooperative-groups)
-that comes prepackaged with CUDA.
+of CUDA.
+
+Subtypes:
+
+  - [`ThisBlock`](@ref): one thread block.
+  - [`ThisSubBlock`](@ref): `N` threads of a block; [`ThisWarp`](@ref) is the `N = 32` case.
 """
 abstract type ThisCooperativeGroup <: DataLayouts.DataScope end
 
@@ -100,8 +105,8 @@ abstract type ThisCooperativeGroup <: DataLayouts.DataScope end
 [`DataScope`](@ref) that represents one thread block of [`ThisKernel`](@ref).
 Operations that require dynamically-sized array allocations are not supported.
 
-NOTE: This assumes that kernels are always launched with one-dimensional blocks.
-Support for multidimensional blocks may be added in a future release.
+`num_threads` and `thread_rank` assume that kernels are launched with one-dimensional
+blocks.
 """
 struct ThisBlock <: ThisCooperativeGroup end
 

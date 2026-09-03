@@ -59,7 +59,7 @@ const DEVICE_ATTRIBUTE_CACHE_INITIALIZED = Threads.Atomic{Bool}(false)
 """
     device_attributes()
 
-Collection of hardware properties from the CUDA API and CUDA Runtime Headers,
+Return the collection of hardware properties from the CUDA API and CUDA Runtime Headers,
 obtained through calls to `CUDA.attribute`.
 
 Attributes are obtained by querying the C driver, which adds measurable latency
@@ -551,7 +551,7 @@ function auto_launch!(
             config = launch_configuration(f!, args)
             threads = isnothing(nitems) ? nothing : min(nitems, config.threads)
             blocks = isnothing(nitems) ? nothing : cld(nitems, threads)
-            # For now, let's just collect info, later we can benchmark
+            # Collect the launch information for inspection.
 #! format: off
             s = ""
             s *= "Launching kernel $f! with following config:\n"
@@ -592,9 +592,9 @@ end
 """
     thread_index()
 
-Return the threadindex:
+Return the linear index of the current thread across all blocks:
 
-```
+```julia
 (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x
 ```
 """
@@ -604,10 +604,8 @@ Return the threadindex:
 """
     kernel_indexes(tidx, n)
 
-Return a tuple of indexes from the kernel,
-where `tidx` is the cuda thread index and
-`n` is a tuple of max lengths along each
-dimension of the accessed data.
+Return the `CartesianIndex` corresponding to the linear thread index `tidx` in data of
+size `n`, a tuple of lengths along each dimension.
 """
 Base.@propagate_inbounds kernel_indexes(tidx, n::Tuple) =
     CartesianIndices(map(x -> Base.OneTo(x), n))[tidx]
@@ -615,11 +613,10 @@ Base.@propagate_inbounds kernel_indexes(tidx, n::Tuple) =
 """
     valid_range(tidx, n::Int)
 
-Returns a `Bool` indicating if the thread index
-(`tidx`) is in the valid range, based on `n`, a
-tuple of max lengths along each dimension of the
+Return whether the thread index `tidx` is in the valid range `1:n`, where `n` is the
+total number of items to process.
 
-accessed data.
+# Examples
 
 ```julia
 function kernel!(data, n)

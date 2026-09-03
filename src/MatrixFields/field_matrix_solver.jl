@@ -1,55 +1,55 @@
 """
     FieldMatrixSolverAlgorithm
 
-Description of how to solve an equation of the form `A * x = b` for `x`, where
-`A` is a `FieldMatrix` and where `x` and `b` are both `FieldVector`s. Different
-algorithms can be nested inside each other, enabling the construction of
-specialized linear solvers that fully utilize the sparsity pattern of `A`.
-
-# Interface
+Abstract type for algorithms that solve an equation of the form `A * x = b` for
+`x`, where `A` is a `FieldMatrix` and where `x` and `b` are both `FieldVector`s.
+Different algorithms can be nested inside each other, enabling the construction of
+specialized linear solvers that use the sparsity pattern of `A`. Subtypes:
+[`BlockDiagonalSolve`](@ref), [`BlockLowerTriangularSolve`](@ref),
+[`BlockArrowheadSolve`](@ref), [`SchurComplementReductionSolve`](@ref), and
+[`LazyFieldMatrixSolverAlgorithm`](@ref).
 
 Every subtype of `FieldMatrixSolverAlgorithm` must implement methods for the
 following functions:
 
-  - [`field_matrix_solver_cache`](@ref)
-  - [`check_field_matrix_solver`](@ref)
-  - [`run_field_matrix_solver!`](@ref)
+  - [`field_matrix_solver_cache`](@ref).
+  - [`check_field_matrix_solver`](@ref).
+  - [`run_field_matrix_solver!`](@ref).
 """
 abstract type FieldMatrixSolverAlgorithm end
 
 """
     field_matrix_solver_cache(alg, A, b)
 
-Allocates the cache required by the `FieldMatrixSolverAlgorithm` `alg` to solve
-the equation `A * x = b`.
+Allocate and return the cache required by the `FieldMatrixSolverAlgorithm` `alg`
+to solve the equation `A * x = b`.
 """
 function field_matrix_solver_cache end
 
 """
     check_field_matrix_solver(alg, cache, A, b)
 
-Checks that the sparsity structure of `A` is supported by the
+Check that the sparsity structure of `A` is supported by the
 `FieldMatrixSolverAlgorithm` `alg`, and that `A` is compatible with `b` in the
-equation `A * x = b`.
+equation `A * x = b`; throw an error otherwise.
 """
 function check_field_matrix_solver end
 
 """
     run_field_matrix_solver!(alg, cache, x, A, b)
 
-Sets `x` to the value that solves the equation `A * x = b` using the
-`FieldMatrixSolverAlgorithm` `alg`.
+Set `x` to the value that solves the equation `A * x = b` using the
+`FieldMatrixSolverAlgorithm` `alg` and its `cache`.
 """
 function run_field_matrix_solver! end
 
 """
     FieldMatrixSolver(alg, A, b)
 
-Combination of a `FieldMatrixSolverAlgorithm` `alg` and the cache it requires to
-solve the equation `A * x = b` for `x`. The values of `A` and `b` that get
-passed to this constructor should be `similar` to the ones that get passed to
-`field_matrix_solve!` in order to ensure that the cache gets allocated
-correctly.
+Combination of a [`FieldMatrixSolverAlgorithm`](@ref) `alg` and the cache it
+requires to solve the equation `A * x = b` for `x`. The values of `A` and `b`
+passed to this constructor must be `similar` to the ones passed to
+[`field_matrix_solve!`](@ref), so that the cache is allocated correctly.
 """
 struct FieldMatrixSolver{A <: FieldMatrixSolverAlgorithm, C}
     alg::A
@@ -70,7 +70,8 @@ end
 """
     field_matrix_solve!(solver, x, A, b)
 
-Solves the equation `A * x = b` for `x` using the `FieldMatrixSolver` `solver`.
+Solve the equation `A * x = b` for `x` in place using the [`FieldMatrixSolver`](@ref)
+`solver`, and return `x`.
 """
 NVTX.@annotate function field_matrix_solve!(
     solver::FieldMatrixSolver,
@@ -136,7 +137,7 @@ lazy_sub(As...) = Base.Broadcast.broadcasted(-, As...)
 """
     lazy_mul(A, args...)
 
-Constructs a lazy `FieldMatrix` that represents the product `@. *(A, args...)`.
+Construct a lazy `FieldMatrix` that represents the product `@. *(A, args...)`.
 This involves regular broadcasting when `A` is a `FieldMatrix`, but it has more
 complex behavior for other objects like the [`LazySchurComplement`](@ref).
 """
@@ -145,16 +146,16 @@ lazy_mul(A, args...) = Base.Broadcast.broadcasted(*, A, args...)
 """
     LazySchurComplement(A₁₁, A₁₂, A₂₁, A₂₂, [alg₁, cache₁, A₁₂_x₂, invA₁₁_A₁₂_x₂])
 
-An analogue of a `FieldMatrix` that represents the Schur complement of `A₁₁` in
-`A`, `A₂₂ - A₂₁ * inv(A₁₁) * A₁₂`. Since `inv(A₁₁)` will generally be a dense
-matrix, it would not be efficient to directly compute the Schur complement. So,
-this object only supports the "lazy" functions [`lazy_mul`](@ref), which allows
-it to be multiplied by the vector `x₂`, and [`lazy_preconditioner`](@ref), which
-allows it to be approximated with a `FieldMatrix`.
+Analogue of a `FieldMatrix` that represents the Schur complement of `A₁₁` in `A`,
+`A₂₂ - A₂₁ * inv(A₁₁) * A₁₂`. Since `inv(A₁₁)` is generally a dense matrix,
+computing the Schur complement directly is inefficient, so this object only
+supports the "lazy" functions [`lazy_mul`](@ref), which multiplies it by the vector
+`x₂`, and [`lazy_preconditioner`](@ref), which approximates it with a
+`FieldMatrix`.
 
-The values `alg₁`, `cache₁`, `A₁₂_x₂`, and `invA₁₁_A₁₂_x₂` need to be specified
-in order for `lazy_mul` to be able to compute `inv(A₁₁) * A₁₂ * x₂`. When a
-`LazySchurComplement` is not passed to `lazy_mul`, these values can be omitted.
+The values `alg₁`, `cache₁`, `A₁₂_x₂`, and `invA₁₁_A₁₂_x₂` must be specified for
+`lazy_mul` to compute `inv(A₁₁) * A₁₂ * x₂`. When a `LazySchurComplement` is not
+passed to `lazy_mul`, these values can be omitted.
 """
 struct LazySchurComplement{M11, M12, M21, M22, A1, C1, V1, V2}
     A₁₁::M11
@@ -213,15 +214,14 @@ A = \\begin{bmatrix}
 \\end{bmatrix}
 ```
 
-This algorithm solves the `N` block equations `Aₙₙ * xₙ = bₙ` in sequence (though
-we might want to parallelize it in the future).
+This algorithm solves the `N` block equations `Aₙₙ * xₙ = bₙ` in sequence.
 
 If `Aₙₙ` is a diagonal matrix, the equation `Aₙₙ * xₙ = bₙ` is solved by making a
 single pass over the data, setting each `xₙ[i]` to `inv(Aₙₙ[i, i]) * bₙ[i]`.
 
 Otherwise, on a CPU, the equation `Aₙₙ * xₙ = bₙ` is solved using Gaussian elimination
-(without pivoting), which makes two passes over the data. This is currently only
-implemented for tri-diagonal and penta-diagonal matrices `Aₙₙ`. In Gaussian
+(without pivoting), which makes two passes over the data. This is only
+implemented for tridiagonal and pentadiagonal matrices `Aₙₙ`. In Gaussian
 elimination, `Aₙₙ` is effectively factorized into the product `Lₙ * Dₙ * Uₙ`,
 where `Dₙ` is a diagonal matrix, and where `Lₙ` and `Uₙ` are unit lower and upper
 triangular matrices, respectively. The first pass multiplies both sides of the
@@ -233,16 +233,15 @@ unstable when `Aₙₙ` has entries with large disparities in magnitude, but avo
 this would require swapping the rows of `Aₙₙ` (i.e., replacing `Dₙ` with a
 partial pivoting matrix).
 
-For performance reasons, on a GPU different solver is used for tri-diagonal systems
-that makes use of parallel cyclic reduction (PCR) method. This is to make better use of
-the GPU parallelism and shared memory. Since in this solver we need to launch
-a thread per each row of the matrix, it is used only for systems smaller than 512
-as to not violate CUDA limitations. Above that size, the code will fall back to
-the Gaussian elimination method used for CPU (and may show degraded performance).
+On a GPU, tridiagonal systems are solved with the parallel cyclic reduction (PCR)
+method, which makes better use of GPU parallelism and shared memory. Since this
+solver launches one thread per row of the matrix, it is only used for systems with
+at most 512 rows, to stay within CUDA thread block limits. Above that size, the
+code falls back to the Gaussian elimination method used on the CPU, with degraded
+performance.
 
-PCR method works by recursively decomposing a larger tridiagonal system into two
-system of half the size. This process is continued until we are left with a system
-of size 1, which can be solved directly.
+PCR recursively decomposes a tridiagonal system into two systems of half the size,
+until the systems have size 1 and can be solved directly.
 """
 struct BlockDiagonalSolve <: FieldMatrixSolverAlgorithm end
 
@@ -279,7 +278,8 @@ function run_field_matrix_solver!(
 )
     names = matrix_row_keys(keys(A))
     # The following is a performance optimization.
-    # Using `foreach(name-> single_field_solve!(cache[name], x[name], A[name, name], b[name]), names)`
+    # Using
+    # `foreach(name -> single_field_solve!(cache[name], x[name], A[name, name], b[name]), names)`
     # is perfectly fine, but may launch many gpu kernels. So,
     # We may want to call `multiple_field_solve!`, which fuses
     # these kernels into one. However, `multiple_field_solve!`
@@ -312,7 +312,7 @@ function run_field_matrix_solver!(
 end
 
 """
-    BlockLowerTriangularSolve(names₁...; [alg₁], [alg₂])
+    BlockLowerTriangularSolve(names₁...; alg₁ = BlockDiagonalSolve(), alg₂ = BlockDiagonalSolve())
 
 A `FieldMatrixSolverAlgorithm` for a 2×2 block lower triangular matrix:
 
@@ -378,7 +378,7 @@ function run_field_matrix_solver!(
 end
 
 """
-    BlockArrowheadSolve(names₁...; [alg₂])
+    BlockArrowheadSolve(names₁...; alg₂ = BlockDiagonalSolve())
 
 A `FieldMatrixSolverAlgorithm` for a 2×2 block arrowhead matrix:
 
@@ -394,10 +394,10 @@ The `FieldName`s in `names₁` correspond to the subscript `₁`, while all othe
     using the algorithm `alg₂`, which is set to a [`BlockDiagonalSolve`](@ref) by
     default, and set `x₁` to `inv(A₁₁) * (b₁ - A₁₂ * x₂)`.
 
-Since `A₁₁` is a diagonal matrix, `inv(A₁₁)` is easy to compute, which means
-that the Schur complement of `A₁₁` in `A`, `A₂₂ - A₂₁ * inv(A₁₁) * A₁₂`, as well
-as the vectors `b₂ - A₂₁ * inv(A₁₁) * b₁` and `inv(A₁₁) * (b₁ - A₁₂ * x₂)`, are
-also easy to compute.
+Since `A₁₁` is a diagonal matrix, `inv(A₁₁)` is also diagonal, so the Schur
+complement of `A₁₁` in `A`, `A₂₂ - A₂₁ * inv(A₁₁) * A₁₂`, as well as the vectors
+`b₂ - A₂₁ * inv(A₁₁) * b₁` and `inv(A₁₁) * (b₁ - A₁₂ * x₂)`, can be computed
+directly with band matrix operations.
 
 This algorithm is equivalent to block Gaussian elimination with all operations
 inlined into a single step.
@@ -415,14 +415,11 @@ BlockArrowheadSolve(names₁...; alg₂ = BlockDiagonalSolve()) =
 import LazyBroadcast: lazy
 function field_matrix_solver_cache(alg::BlockArrowheadSolve, A, b)
     A₁₁, A₁₂, A₂₁, A₂₂, _, b₂ = partition_blocks(alg.names₁, A, b)
-    # We want to allocate a field for A₂₂′, but we can't simply use
-    # `similar(A₂₂)`, as `A₂₂` could be a `BidiagonalMatrixRow` and
-    # `A₂₁` could be a `QuaddiagonalMatrixRow`, resulting in `A₂₂′
-    # needing to be a `QuaddiagonalMatrixRow` (due to promotion).
-
-    # So we need the eltype of the broadcast expression. We use `lazy` to first
-    # get the broadcasted object and then call similar (instead of evaluating
-    # broadcast expressions with potentially un-initialized data).
+    # A field for A₂₂′ cannot be allocated with `similar(A₂₂)`: `A₂₂` could be a
+    # `BidiagonalMatrixRow` and `A₂₁` a `QuaddiagonalMatrixRow`, in which case
+    # promotion makes `A₂₂′` a `QuaddiagonalMatrixRow`. The eltype of the broadcast
+    # expression is needed instead. `lazy` returns the broadcasted object, on which
+    # `similar` is called without evaluating the expression on uninitialized data.
 
     A₂₂′_bc = @. lazy(A₂₂ - A₂₁ * inv(A₁₁) * A₁₂) # Broadcasted{<:AbstractFieldStyle} object
     A₂₂′ = similar(A₂₂′_bc) # returns a Field
@@ -453,7 +450,7 @@ function run_field_matrix_solver!(
 end
 
 """
-    SchurComplementReductionSolve(names₁...; [alg₁], alg₂)
+    SchurComplementReductionSolve(names₁...; alg₁ = BlockDiagonalSolve(), alg₂)
 
 A `FieldMatrixSolverAlgorithm` for any 2×2 block matrix:
 
@@ -470,11 +467,11 @@ The `FieldName`s in `names₁` correspond to the subscript `₁`, while all othe
     using the algorithm `alg₂`.
  3. Solve `A₁₁ * x₁ = b₁ - A₁₂ * x₂` for `x₁` using the algorithm `alg₁`.
 
-Since `A₁₁` is not necessarily a diagonal matrix, `inv(A₁₁)` will generally be a
-dense matrix, which means that the Schur complement of `A₁₁` in `A`,
+Since `A₁₁` is not necessarily a diagonal matrix, `inv(A₁₁)` is generally a dense
+matrix, which means that the Schur complement of `A₁₁` in `A`,
 `A₂₂ - A₂₁ * inv(A₁₁) * A₁₂`, cannot be computed efficiently. So, `alg₂` must be
-set to a `LazyFieldMatrixSolverAlgorithm`, which can evaluate the matrix-vector
-product `(A₂₂ - A₂₁ * inv(A₁₁) * A₁₂) * x₂` without actually computing the Schur
+a [`LazyFieldMatrixSolverAlgorithm`](@ref), which can evaluate the matrix-vector
+product `(A₂₂ - A₂₁ * inv(A₁₁) * A₁₂) * x₂` without computing the Schur
 complement matrix. This involves representing the Schur complement matrix by a
 [`LazySchurComplement`](@ref), which uses `alg₁` to invert `A₁₁` when computing
 the matrix-vector product.

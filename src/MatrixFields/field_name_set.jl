@@ -3,28 +3,27 @@ const FieldNamePair = Tuple{FieldName, FieldName}
 """
     FieldNameSet{T}(values, [name_tree])
 
-An `AbstractSet` that contains values of type `T`, which serves as an analogue
-of a `KeySet` for a `FieldNameDict`. There are two subtypes of `FieldNameSet`:
+`AbstractSet` that contains values of type `T`, serving as an analogue of a
+`KeySet` for a [`FieldNameDict`](@ref). There are two aliases of `FieldNameSet`:
 
-  - `FieldVectorKeys`, for which `T` is set to `FieldName`
-  - `FieldMatrixKeys`, for which `T` is set to `Tuple{FieldName, FieldName}`; each
-    tuple of type `T` represents a pair of row-column indices
+  - `FieldVectorKeys`, for which `T` is `FieldName`.
+  - `FieldMatrixKeys`, for which `T` is `Tuple{FieldName, FieldName}`; each tuple
+    of type `T` represents a pair of row-column indices.
 
 Since `FieldName`s are singleton types, the result of almost any `FieldNameSet`
 operation can be inferred during compilation. So, with the exception of `map`,
-`foreach`, and `set_string`, functions of `FieldNameSet`s do not have any
-performance cost at runtime (as long as their arguments are inferrable).
+`foreach`, and `set_string`, functions of `FieldNameSet`s have no performance cost
+at runtime (as long as their arguments are inferrable).
 
 Unlike other `AbstractSet`s, `FieldNameSet` has special behavior for overlapping
-values. For example, the `FieldName`s `@name(a.b)` and `@name(a.b.c)` overlap,
-so any set operation needs to first decompose `@name(a.b)` into its child values
-before combining it with `@name(a.b.c)`. In order to support this (and also to
-support the ability to compute set complements), `FieldNameSet` stores a
-`FieldNameTree` `name_tree`, which it uses to infer child values. If `name_tree`
-is not specified, it gets set to `nothing` by default, which causes some
-`FieldNameSet` operations to become disabled. For binary operations like `union`
-or `setdiff`, only one set needs to specify a `name_tree`; if two sets both
-specify a `name_tree`, the `name_tree`s must be identical.
+values. For example, the `FieldName`s `@name(a.b)` and `@name(a.b.c)` overlap, so
+any set operation needs to first decompose `@name(a.b)` into its child values
+before combining it with `@name(a.b.c)`. To support this (and to support set
+complements), `FieldNameSet` stores a [`FieldNameTree`](@ref) `name_tree`, which it
+uses to infer child values. If `name_tree` is not specified, it defaults to
+`nothing`, which disables some `FieldNameSet` operations. For binary operations
+like `union` or `setdiff`, only one set needs to specify a `name_tree`; if both
+sets specify a `name_tree`, the `name_tree`s must be identical.
 """
 struct FieldNameSet{
     T <: Union{FieldName, FieldNamePair},

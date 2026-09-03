@@ -7,21 +7,20 @@ column_matrix(data) = reshape(parent(data), size(data, 1), :)
 """
     VerticalMassBorrowingLimiter(q_min)
 
-A vertical-only mass borrowing limiter.
+Vertical-only mass-borrowing limiter.
 
-The mass borrower borrows tracer mass from an adjacent, lower layer.
-It conserves the total tracer mass and can avoid negative tracers.
+The limiter borrows tracer mass from adjacent lower layers to raise each layer's tracer
+value to at least its minimum. It conserves the total tracer mass in the column.
 
-`q_min` should be a tuple of minimum tracer values for each tracer.
+`q_min` is a tuple with one minimum tracer value per component of the limited field.
 
-At level k, it will first borrow the mass from the layer k+1 (lower level).
-If the mass is not sufficient in layer k+1, it will borrow mass from
-layer k+2. The borrower will proceed this process until the bottom layer.
-If the tracer mass in the bottom layer goes negative, it will repeat the
-process from the bottom to the top. In this way, the borrower works for
-any shape of mass profiles.
+At level `k`, the limiter first borrows mass from layer `k+1` (the lower level). If the
+mass in layer `k+1` is not sufficient, it borrows from layer `k+2`, and so on down to
+the bottom layer. If the tracer mass in the bottom layer goes below the minimum, the
+limiter repeats the process from the bottom to the top. This makes the limiter work for
+any shape of mass profile.
 
-# Example usage
+# Examples
 
 ```julia
 ρ = fill(1.0, space)
@@ -30,11 +29,9 @@ limiter = VerticalMassBorrowingLimiter((0.0, 0.0))
 Limiters.apply_limiter!(q, ρ, limiter)
 ```
 
-This code was adapted from [E3SM](https://github.com/E3SM-Project/E3SM/blob/2c377c5ec9a5585170524b366ad85074ab1b1a5c/components/eam/src/physics/cam/massborrow.F90)
-
-References:
-
-  - [zhang2018impact](@cite)
+Adapted from the
+[E3SM mass borrower](https://github.com/E3SM-Project/E3SM/blob/2c377c5ec9a5585170524b366ad85074ab1b1a5c/components/eam/src/physics/cam/massborrow.F90);
+see [zhang2018impact](@cite).
 """
 struct VerticalMassBorrowingLimiter{T <: Tuple}
     q_min::T
@@ -44,9 +41,11 @@ end
 """
     apply_limiter!(q::Fields.Field, ρ::Fields.Field, lim::VerticalMassBorrowingLimiter)
 
-Apply the vertical mass borrowing
-limiter `lim` to field `q`, given
-density `ρ`.
+Apply the vertical mass-borrowing limiter `lim` to the tracer field `q` in place, given
+the density field `ρ`.
+
+Each component of `q` is limited column by column with the corresponding entry of
+`lim.q_min`, using the cell volume from the local geometry of `ρ`. Returns `nothing`.
 """
 apply_limiter!(
     q::Fields.Field,
@@ -112,7 +111,9 @@ end
         q_min::AbstractFloat,
     )
 
-Apply vertical mass borrowing limiter to an array backing a single column of scalar data.
+Apply the vertical mass-borrowing limiter in place to `q_data`, the array backing a single
+column of scalar tracer data, with column density `ρ_data`, cell volume `ΔV_data`, and
+minimum value `q_min`. Returns `nothing`.
 """
 function column_massborrow!(
     q_data::AbstractArray,

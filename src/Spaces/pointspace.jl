@@ -9,6 +9,16 @@ A zero-dimensional space: a single point, the horizontal space of one column
 (`Spaces.level` of a [`FiniteDifferenceSpace`](@ref)). For `N` disconnected
 horizontal points see [`MultiPointSpace`](@ref), and for `N` independent
 columns see [`MultiColumnFiniteDifferenceSpace`](@ref).
+
+# Constructor
+
+    PointSpace(context::ClimaComms.AbstractCommsContext, local_geometry::Geometry.LocalGeometry)
+    PointSpace(context::ClimaComms.AbstractCommsContext, coord::Geometry.Abstract1DPoint)
+    PointSpace(device::ClimaComms.AbstractDevice, x)
+    PointSpace(x)
+
+Construct a `PointSpace` from a `LocalGeometry`, or from a 1D coordinate with unit
+metric terms. Without a `context`, the default `ClimaComms.context()` is used.
 """
 struct PointSpace{
     C <: ClimaComms.AbstractCommsContext,

@@ -2,7 +2,15 @@
 """
     AbstractGlobalGeometry
 
-Determines the conversion from local coordinates and vector bases to a Cartesian basis.
+Supertype for global geometries, which determine the conversion from local coordinates
+and vector bases to a Cartesian basis.
+
+Subtypes:
+
+  - [`CartesianGlobalGeometry`](@ref): local coordinates align with Cartesian coordinates.
+  - [`SphericalGlobalGeometry`](@ref): local coordinates refer to a sphere of given radius.
+  - `ShallowSphericalGlobalGeometry`, `DeepSphericalGlobalGeometry`: spherical geometries
+    for extruded spheres with the shallow- and deep-atmosphere assumptions.
 """
 abstract type AbstractGlobalGeometry end
 
@@ -12,9 +20,9 @@ Cartesian123Point(pt::AbstractPoint, global_geometry::AbstractGlobalGeometry) =
 """
     CartesianGlobalGeometry()
 
-Specifies that the local coordinates align with the Cartesian coordinates, e.g.
-`XYZPoint` aligns with `Cartesian123Point`, and `UVWVector` aligns with
-the Cartesian vector basis.
+Global geometry in which the local coordinates align with the Cartesian coordinates, e.g.
+`XYZPoint` aligns with `Cartesian123Point`, and `UVWVector` aligns with the Cartesian
+vector basis.
 """
 struct CartesianGlobalGeometry <: AbstractGlobalGeometry end
 
@@ -36,13 +44,12 @@ Base.broadcastable(x::AbstractSphericalGlobalGeometry) = tuple(x)
 """
     SphericalGlobalGeometry(radius)
 
-Specifies that the local coordinates are specified in reference to a sphere of
-radius `radius`. The `x1` axis is aligned with the zero longitude line.
+Global geometry in which the local coordinates refer to a sphere of radius `radius` [m].
+The `x1` axis is aligned with the zero longitude line.
 
-The local vector basis has `u` in the zonal direction (with east being
-positive), `v` in the meridonal (north positive), and `w` in the radial
-direction (outward positive). For a point located at the pole, we take the limit
-along the zero longitude line:
+The local vector basis has `u` in the zonal direction (east positive), `v` in the
+meridional direction (north positive), and `w` in the radial direction (outward
+positive). At a pole, the basis is the limit along the zero longitude line:
 
   - at the north pole, this corresponds to `u` being aligned with the `x2`
     direction, `v` being aligned with the negative `x1` direction, and `w` being
@@ -59,9 +66,8 @@ end
 """
     ShallowSphericalGlobalGeometry(radius)
 
-Similar to [`SphericalGlobalGeometry`](@ref), but for extruded spheres. In this
-case, it uses the "shallow-atmosphere" assumption that circumference is the same
-at all `z`.
+Like [`SphericalGlobalGeometry`](@ref), but for extruded spheres, with the
+shallow-atmosphere assumption that the circumference is the same at all `z`.
 """
 struct ShallowSphericalGlobalGeometry{FT} <: AbstractSphericalGlobalGeometry
     radius::FT
@@ -70,8 +76,8 @@ end
 """
     DeepSphericalGlobalGeometry(radius)
 
-Similar to [`SphericalGlobalGeometry`](@ref), but for extruded spheres. In this
-case, it uses the "deep-atmosphere" assumption that circumference increases with `z`.
+Like [`SphericalGlobalGeometry`](@ref), but for extruded spheres, with the
+deep-atmosphere assumption that the circumference increases with `z`.
 """
 struct DeepSphericalGlobalGeometry{FT} <: AbstractSphericalGlobalGeometry
     radius::FT
@@ -139,9 +145,10 @@ end
 
 
 """
-    great_circle_distance(pt1::LatLongPoint, pt2::LatLongPoint, global_geometry::SphericalGlobalGeometry)
+    great_circle_distance(pt1::LatLongPoint, pt2::LatLongPoint, global_geom::AbstractSphericalGlobalGeometry)
 
-Compute the great circle (spherical geodesic) distance between `pt1` and `pt2`.
+Compute the great-circle (spherical geodesic) distance between `pt1` and `pt2` on the
+sphere of radius `global_geom.radius` [m].
 """
 function great_circle_distance(
     pt1::LatLongPoint, pt2::LatLongPoint, global_geom::AbstractSphericalGlobalGeometry,
@@ -151,9 +158,13 @@ function great_circle_distance(
 end
 
 """
-    great_circle_distance(pt1::LatLongZPoint, pt2::LatLongZPoint, global_geometry::SphericalGlobalGeometry)
+    great_circle_distance(pt1::LatLongZPoint, pt2::LatLongZPoint, global_geom::ShallowSphericalGlobalGeometry)
+    great_circle_distance(pt1::LatLongZPoint, pt2::LatLongZPoint, global_geom::DeepSphericalGlobalGeometry)
 
-Compute the great circle (spherical geodesic) distance between `pt1` and `pt2`.
+Compute the great-circle (spherical geodesic) distance between `pt1` and `pt2` [m],
+ignoring the difference in `z`. The shallow geometry measures the distance on the sphere
+of radius `global_geom.radius`; the deep geometry on the sphere of radius
+`global_geom.radius + (pt1.z + pt2.z) / 2`.
 """
 function great_circle_distance(
     pt1::LatLongZPoint, pt2::LatLongZPoint, global_geom::ShallowSphericalGlobalGeometry,
@@ -176,9 +187,10 @@ end
 
 
 """
-    euclidean_distance(pt1::XYPoint, pt2::XYPoint)
+    euclidean_distance(pt1::T, pt2::T)
 
-Compute the 2D or 3D Euclidean distance between `pt1` and `pt2`.
+Compute the Euclidean distance between two points of the same Cartesian type `T`, one of
+`XPoint`, `YPoint`, `ZPoint`, `XYPoint`, `XZPoint`, or `XYZPoint`.
 """
 function euclidean_distance(
     pt1::T,
@@ -250,7 +262,7 @@ end
 
 # Reshape an identity-padded 3×3 metric tensor back to its native I-sized
 # form (axes `(Orth(I), Cov(I))`), recovering the geometric block from the
-# padded storage so combinations preserve the proper `I`.
+# padded storage so combinations preserve `I`.
 @inline _unpadded_metric_tensor(::LocalGeometry{I}, ∂x∂ξ) where {I} =
     reshape(∂x∂ξ, (Components{Orthonormal, I}(), Components{Covariant, I}()))
 

@@ -1,16 +1,14 @@
 """
-    Meshes
+    Spaces
 
-  - domain
-  - topology
-  - coordinates
-  - metric terms (inverse partial derivatives)
-  - quadrature rules and weights
+Function spaces on which fields are defined. A space combines a grid (domain,
+topology, coordinates, metric terms, and quadrature rules and weights) with a
+vertical staggering.
 
-## References / notes
+# Notes
 
-  - [ceed](https://ceed.exascaleproject.org/ceed-code/)
-  - [QA](https://github.com/CliMA/ClimateMachine.jl/blob/ans/sphere/test/Numerics/DGMethods/compressible_navier_stokes_equations/sphere/sphere_helper_functions.jl)
+References: [CEED](https://ceed.exascaleproject.org/ceed-code/) and the
+[ClimateMachine sphere helpers](https://github.com/CliMA/ClimateMachine.jl/blob/ans/sphere/test/Numerics/DGMethods/compressible_navier_stokes_equations/sphere/sphere_helper_functions.jl).
 """
 module Spaces
 
@@ -53,13 +51,8 @@ using StaticArrays, ForwardDiff, LinearAlgebra, Adapt
 """
     AbstractSpace
 
-Should define
-
-  - `grid`
-
-  - `staggering`
-
-  - `space` constructor
+Abstract supertype of spaces. Subtypes define `grid(space)`, `staggering(space)`,
+and the constructor `space(grid, staggering)`.
 """
 abstract type AbstractSpace end
 
@@ -153,15 +146,15 @@ weighted_jacobian(space::AbstractSpace) = local_geometry_data(space).WJ
 """
     Spaces.local_area(space::Spaces.AbstractSpace)
 
-The length/area/volume of `space` local to the current context. See
-[`Spaces.area`](@ref)
+Return the length, area, or volume of the part of `space` local to the current
+process. See [`Spaces.area`](@ref).
 """
 local_area(space::AbstractSpace) = Base.sum(weighted_jacobian(space))
 
 """
     Spaces.area(space::Spaces.AbstractSpace)
 
-The length/area/volume of `space`. This is computed as the sum of the quadrature
+Return the length, area, or volume of `space`, computed as the sum of the quadrature
 weights ``W_i`` multiplied by the Jacobian determinants ``J_i``:
 
 ```math
@@ -179,7 +172,7 @@ ClimaComms.array_type(space::AbstractSpace) =
 """
     z_max(::AbstractSpace)
 
-The domain maximum along the z-direction.
+Return the maximum `z` coordinate of the vertical domain of `space`.
 """
 function z_max(space::AbstractSpace)
     mesh = Topologies.mesh(vertical_topology(space))
@@ -190,7 +183,7 @@ end
 """
     z_min(::AbstractSpace)
 
-The domain minimum along the z-direction.
+Return the minimum `z` coordinate of the vertical domain of `space`.
 """
 function z_min(space::AbstractSpace)
     mesh = Topologies.mesh(vertical_topology(space))
@@ -201,7 +194,7 @@ end
 """
     ncolumns(space::AbstractSpace)
 
-Number of columns in a given `space` on the local processor.
+Return the number of columns of `space` on the local process.
 """
 ncolumns(space::ExtrudedFiniteDifferenceSpace) =
     ncolumns(horizontal_space(space))
@@ -226,7 +219,7 @@ get_mask(space::ExtrudedFiniteDifferenceSpace) =
 """
     has_vertical(::AbstractSpace)
 
-Returns a bool indicating that the space has a vertical grid.
+Return `true` if the space has a vertical grid.
 """
 function has_vertical end
 has_vertical(::AbstractSpace) = false
@@ -237,7 +230,7 @@ has_vertical(::FiniteDifferenceSpace) = true
 """
     has_horizontal(::AbstractSpace)
 
-Returns a bool indicating that the space has a horizontal grid.
+Return `true` if the space has a horizontal grid.
 """
 function has_horizontal end
 has_horizontal(::AbstractSpace) = false

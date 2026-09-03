@@ -3,14 +3,12 @@
 import StaticArrays
 
 """
-    property_chains
+    property_chains(f::Union{Field, FieldVector})
 
-An array of "property chains", used to recursively
-`getproperty` until a single scalar field is reached.
+Return an array of the "property chains" of `f`: the tuples of property names that
+`getproperty` follows recursively until a single scalar field is reached.
 
-A property chain may be, for example
-`(:model, :submodel, :temperature)`
-where
+A property chain may be, for example, `(:model, :submodel, :temperature)`, where
 `model.submodel.temperature` is a scalar field.
 """
 function property_chains(f::Union{Field, FieldVector})
@@ -104,12 +102,12 @@ end
 """
     field_iterator(::Union{Field, FieldVector})
 
-Returns an iterable field, that recursively calls
-`getproperty` for all of the `propertynames`, and
-returns a `Tuple` of
+Return an iterator over the scalar fields of `f`, found by recursively calling
+`getproperty` for all `propertynames`. Each item is a `Tuple` of
 
-  - the individual scalar field and
-  - the tuple chain used to reach the scalar field
+  - the individual scalar field, with `Covariant12Vector` and `Covariant3Vector`
+    fields converted to `UVVector` and `WVector` fields, and
+  - the property chain used to reach it.
 """
 function field_iterator(f::Union{Field, FieldVector})
     prop_chains = property_chains(f)
