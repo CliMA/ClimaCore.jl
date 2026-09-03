@@ -174,7 +174,7 @@ if usempi
 end
 
 ENV["GKSwstype"] = "nul"
-using ClimaCorePlots, Plots
+using Plots
 Plots.GRBackend()
 dir = "cg_invariant_hypervisc"
 path = joinpath(@__DIR__, "output", dir)

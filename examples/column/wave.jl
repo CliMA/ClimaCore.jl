@@ -130,7 +130,7 @@ end
 end
 
 ENV["GKSwstype"] = "nul"
-using ClimaCorePlots, Plots
+using Plots
 Plots.GRBackend()
 
 dir = "wave"

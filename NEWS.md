@@ -371,9 +371,15 @@ main
   `MultiColumnFiniteDifferenceSpace`
   [2596](https://github.com/CliMA/ClimaCore.jl/pull/2596)
 
-- Support remapping and HDF5 reading/writing for
-  `MultiColumnFiniteDifferenceSpace`
-  [2596](https://github.com/CliMA/ClimaCore.jl/pull/2596)
+- ![][badge-💥breaking] The plotting companion packages have been folded into
+  package extensions, and the `ClimaCoreVTK` companion package has been deleted.
+  Makie plotting has moved from `ClimaCoreMakie` into the `ClimaCoreMakieExt`
+  extension, which loads automatically when one of the `Makie` backends is
+  loaded, and the Plots recipes have moved from `ClimaCorePlots` into the
+  `ClimaCoreRecipesBaseExt` extension, which loads automatically when both
+  `ClimaCore` and `Plots` are loaded. `ClimaCoreVTK` was unmaintained and
+  unused, and has been removed with no replacement.
+  [2595](https://github.com/CliMA/ClimaCore.jl/pull/2595)
 
 v0.15.3
 -------

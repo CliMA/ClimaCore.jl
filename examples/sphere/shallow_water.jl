@@ -32,7 +32,6 @@ import ClimaTimeSteppers as CTS
 using Logging
 using ClimaComms
 import TerminalLoggers
-using ClimaCorePlots
 import Plots
 include(joinpath(@__DIR__, "..", "example_utils.jl")) # linkfig
 

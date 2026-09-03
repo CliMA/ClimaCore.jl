@@ -30,11 +30,13 @@ function Makie.plot!(
     output_nodes = [:positions]
     map!(plot.attributes, input_nodes, output_nodes) do f
         space = axes(f)
+        # parent arrays are laid out as (V, I, J, F, H)
         vertices = parent(ClimaCore.Spaces.coordinates_data(space))
-        Nq, _, Nh = size(vertices)
+        (_, Nq, _, _, Nh) = size(vertices)
         vals = parent(f)
         positions = [
-            i <= Nq ? Makie.Point2f(vertices[i, 1, h], vals[i, 1, h]) :
+            i <= Nq ?
+            Makie.Point2f(vertices[1, i, 1, 1, h], vals[1, i, 1, 1, h]) :
             Makie.Point2f(NaN, NaN) for i in 1:(Nq + 1), h in 1:Nh
         ]
         return (vec(positions),)

@@ -37,7 +37,7 @@ const context = ClimaComms.SingletonCommsContext()
 
 # visualization artifacts
 ENV["GKSwstype"] = "nul"
-using ClimaCorePlots, Plots
+using Plots
 Plots.GRBackend()
 dir = "hadley_circulation"
 path = joinpath(@__DIR__, "output", dir)

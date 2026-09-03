@@ -11,10 +11,10 @@ import ClimaCore:
     Spaces,
     Fields,
     Geometry,
-    Hypsography
-using ClimaCoreMakie, Makie
+    Hypsography,
+    Visualize
 
-using GLMakie
+import CairoMakie
 OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 @show OUTPUT_DIR
 
@@ -40,11 +40,11 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
         Geometry.UVVector(uu, uv)
     end
 
-    fig = ClimaCoreMakie.fieldheatmap(u.components.data.:1)
+    fig = Visualize.fieldheatmap(u.components.data.:1)
     @test fig !== nothing
 
     fig_png = joinpath(OUTPUT_DIR, "2D_cubed_sphere.png")
-    GLMakie.save(fig_png, fig)
+    CairoMakie.save(fig_png, fig)
     @test isfile(fig_png)
 end
 
@@ -70,11 +70,11 @@ end
         cos(coord.x + coord.y)
     end
 
-    fig = ClimaCoreMakie.fieldheatmap(sinxy)
+    fig = Visualize.fieldheatmap(sinxy)
     @test fig !== nothing
 
     fig_png = joinpath(OUTPUT_DIR, "2D_rectangle.png")
-    GLMakie.save(fig_png, fig)
+    CairoMakie.save(fig_png, fig)
     @test isfile(fig_png)
 end
 
@@ -115,28 +115,28 @@ end
 
     fcoords = Fields.coordinate_field(face_space)
 
-    f = Figure()
-    gaa = f[1, 1] = GridLayout()
-    gab = f[1, 2] = GridLayout()
-    gba = f[2, 1] = GridLayout()
-    gbb = f[2, 2] = GridLayout()
+    f = CairoMakie.Figure()
+    gaa = f[1, 1] = CairoMakie.GridLayout()
+    gab = f[1, 2] = CairoMakie.GridLayout()
+    gba = f[2, 1] = CairoMakie.GridLayout()
+    gbb = f[2, 2] = CairoMakie.GridLayout()
 
-    paa = fieldcontourf!(Axis(gaa[1, 1]), fcoords.x)
-    Colorbar(gaa[1, 2], paa)
-    pab = fieldheatmap!(Axis(gab[1, 1]), fcoords.x)
-    Colorbar(gab[1, 2], pab)
-    plot(fcoords.z)
+    paa = Visualize.fieldcontourf!(CairoMakie.Axis(gaa[1, 1]), fcoords.x)
+    CairoMakie.Colorbar(gaa[1, 2], paa)
+    pab = Visualize.fieldheatmap!(CairoMakie.Axis(gab[1, 1]), fcoords.x)
+    CairoMakie.Colorbar(gab[1, 2], pab)
+    CairoMakie.plot(fcoords.z)
 
     center_space = Spaces.CenterExtrudedFiniteDifferenceSpace(face_space)
 
     ccoords = Fields.coordinate_field(center_space)
-    pba = fieldcontourf!(Axis(gba[1, 1]), ccoords.x)
-    Colorbar(gba[1, 2], pba)
-    pbb = fieldheatmap!(Axis(gbb[1, 1]), ccoords.x)
-    Colorbar(gbb[1, 2], pbb)
+    pba = Visualize.fieldcontourf!(CairoMakie.Axis(gba[1, 1]), ccoords.x)
+    CairoMakie.Colorbar(gba[1, 2], pba)
+    pbb = Visualize.fieldheatmap!(CairoMakie.Axis(gbb[1, 1]), ccoords.x)
+    CairoMakie.Colorbar(gbb[1, 2], pbb)
 
     fig_png = joinpath(OUTPUT_DIR, "extruded_topology.png")
-    GLMakie.save(fig_png, f)
+    CairoMakie.save(fig_png, f)
     @test isfile(fig_png)
 
 end

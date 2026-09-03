@@ -182,6 +182,10 @@ unit_tests = [
     UnitTest("Deprecations"                             ,"deprecations.jl"; tier = :misc, subsystem = :quality),
     UnitTest("Precompile workload"                      ,"precompile_workload.jl"; tier = :misc, subsystem = :quality, slow = true), # ~1 min: recompiles ClimaCore in a subprocess
 
+    # Visualization
+    UnitTest("Makie extension"                          ,"Visualize/visualize.jl"; meta = :cpu_only, tier = :unit, subsystem = :viz),
+    UnitTest("Plots extension"                          ,"Visualize/plots.jl"; meta = :cpu_only, tier = :unit, subsystem = :viz),
+
     # GPU Only
     UnitTest("GPU - cuda"                               ,"gpu/cuda.jl"; meta = :gpu_only, tier = :gpu, subsystem = :gpu),
     UnitTest("GPU - compiler stress regression"         ,"gpu/compiler_stress_regression.jl"; meta = :gpu_only, tier = :gpu, subsystem = :gpu),

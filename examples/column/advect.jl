@@ -191,7 +191,7 @@ using Test
 end
 
 ENV["GKSwstype"] = "nul"
-using ClimaCorePlots, Plots
+using Plots
 Plots.GRBackend()
 
 dir = "advect"

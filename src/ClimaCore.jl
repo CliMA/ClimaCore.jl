@@ -26,6 +26,7 @@ include("InputOutput/InputOutput.jl")
 include("CommonGrids/CommonGrids.jl")
 include("CommonSpaces/CommonSpaces.jl")
 include("Remapping/Remapping.jl")
+include("Visualize/Visualize.jl")
 
 include("deprecated.jl")
 include("to_device.jl")

@@ -284,7 +284,7 @@ using Test
 # TODO: visualization artifacts
 
 # ENV["GKSwstype"] = "nul"
-# using ClimaCorePlots, Plots
+# using Plots
 # Plots.GRBackend()
 # dir = "nonhydrostatic_gravity_wave"
 # path = joinpath(@__DIR__, "output", dir)

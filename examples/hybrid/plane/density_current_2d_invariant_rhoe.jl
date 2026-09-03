@@ -269,7 +269,7 @@ using Test
 end
 
 ENV["GKSwstype"] = "nul"
-import Plots, ClimaCorePlots
+import Plots
 Plots.GRBackend()
 
 dir = "dc_invariant_etot"

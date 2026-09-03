@@ -6,35 +6,34 @@ ClimaCore.jl provides the dynamical core infrastructure for [CliMA](https://clim
 
 ## Directory map
 
-| Layer             | Directory                              | Description                                                                    |
-|:----------------- |:-------------------------------------- |:------------------------------------------------------------------------------ |
-| Core module       | `src/ClimaCore.jl`                     | Top-level module, re-exports all sub-modules                                   |
-| DataLayouts       | `src/DataLayouts/`                     | Low-level array-of-structs / struct-of-arrays data storage backends            |
-| Geometry          | `src/Geometry/`                        | Coordinate types, axis tensors, covariant/contravariant transforms             |
-| Domains           | `src/Domains/`                         | Abstract domain definitions (intervals, rectangles, spheres)                   |
-| Meshes            | `src/Meshes/`                          | Mesh generation: interval, rectangle, cubed-sphere                             |
-| Topologies        | `src/Topologies/`                      | Distributed topologies, DSS (direct stiffness summation) connectivity          |
-| Quadratures       | `src/Quadratures/`                     | Gauss–Legendre and Gauss–Lobatto quadrature rules                              |
-| Grids             | `src/Grids/`                           | Spectral element and finite-difference grid types                              |
-| Spaces            | `src/Spaces/`                          | Function spaces built on grids (spectral element, finite-difference, extruded) |
-| Fields            | `src/Fields/`                          | `Field` type — the primary user-facing data container on a space               |
-| Operators         | `src/Operators/`                       | Spectral element and finite-difference differential operators                  |
-| MatrixFields      | `src/MatrixFields/`                    | Banded matrix fields for implicit vertical solvers                             |
-| Hypsography       | `src/Hypsography/`                     | Terrain-following coordinate transforms                                        |
-| Limiters          | `src/Limiters/`                        | Flux limiters for transport                                                    |
-| Remapping         | `src/Remapping/`                       | Interpolation and remapping between spaces                                     |
-| InputOutput       | `src/InputOutput/`                     | HDF5-based checkpointing and restart I/O                                       |
-| CommonGrids       | `src/CommonGrids/`                     | Pre-built convenience grid constructors                                        |
-| CommonSpaces      | `src/CommonSpaces/`                    | Pre-built convenience space constructors                                       |
-| Utilities         | `src/Utilities/`                       | Internal utilities (PlusHalf indexing, AutoBroadcaster, etc.)                  |
-| DebugOnly         | `src/DebugOnly/`                       | Debug-mode-only utilities                                                      |
-| CUDA ext          | `ext/ClimaCoreCUDAExt.jl`, `ext/cuda/` | CUDA GPU extension (loaded via Pkg extensions)                                 |
-| Krylov ext        | `ext/KrylovExt.jl`                     | Krylov.jl integration for iterative solvers                                    |
-| Lib: Plots        | `lib/ClimaCorePlots/`                  | Plots.jl recipes for ClimaCore fields                                          |
-| Lib: Makie        | `lib/ClimaCoreMakie/`                  | Makie.jl recipes for ClimaCore fields                                          |
-| Lib: VTK          | `lib/ClimaCoreVTK/`                    | VTK output for visualization                                                   |
-| Lib: TempestRemap | `lib/ClimaCoreTempestRemap/`           | TempestRemap bindings for conservative remapping                               |
-| Lib: Spectra      | `lib/ClimaCoreSpectra/`                | Spectral analysis of fields on the sphere                                      |
+| Layer             | Directory                                      | Description                                                                    |
+|:----------------- |:---------------------------------------------- |:------------------------------------------------------------------------------ |
+| Core module       | `src/ClimaCore.jl`                             | Top-level module, re-exports all sub-modules                                   |
+| DataLayouts       | `src/DataLayouts/`                             | Low-level array-of-structs / struct-of-arrays data storage backends            |
+| Geometry          | `src/Geometry/`                                | Coordinate types, axis tensors, covariant/contravariant transforms             |
+| Domains           | `src/Domains/`                                 | Abstract domain definitions (intervals, rectangles, spheres)                   |
+| Meshes            | `src/Meshes/`                                  | Mesh generation: interval, rectangle, cubed-sphere                             |
+| Topologies        | `src/Topologies/`                              | Distributed topologies, DSS (direct stiffness summation) connectivity          |
+| Quadratures       | `src/Quadratures/`                             | Gauss–Legendre and Gauss–Lobatto quadrature rules                              |
+| Grids             | `src/Grids/`                                   | Spectral element and finite-difference grid types                              |
+| Spaces            | `src/Spaces/`                                  | Function spaces built on grids (spectral element, finite-difference, extruded) |
+| Fields            | `src/Fields/`                                  | `Field` type — the primary user-facing data container on a space               |
+| Operators         | `src/Operators/`                               | Spectral element and finite-difference differential operators                  |
+| MatrixFields      | `src/MatrixFields/`                            | Banded matrix fields for implicit vertical solvers                             |
+| Hypsography       | `src/Hypsography/`                             | Terrain-following coordinate transforms                                        |
+| Limiters          | `src/Limiters/`                                | Flux limiters for transport                                                    |
+| Remapping         | `src/Remapping/`                               | Interpolation and remapping between spaces                                     |
+| InputOutput       | `src/InputOutput/`                             | HDF5-based checkpointing and restart I/O                                       |
+| CommonGrids       | `src/CommonGrids/`                             | Pre-built convenience grid constructors                                        |
+| CommonSpaces      | `src/CommonSpaces/`                            | Pre-built convenience space constructors                                       |
+| Utilities         | `src/Utilities/`                               | Internal utilities (PlusHalf indexing, AutoBroadcaster, etc.)                  |
+| DebugOnly         | `src/DebugOnly/`                               | Debug-mode-only utilities                                                      |
+| CUDA ext          | `ext/ClimaCoreCUDAExt.jl`, `ext/cuda/`         | CUDA GPU extension (loaded via Pkg extensions)                                 |
+| Krylov ext        | `ext/KrylovExt.jl`                             | Krylov.jl integration for iterative solvers                                    |
+| Makie ext         | `ext/ClimaCoreMakieExt.jl`, `ext/makie/`       | Makie.jl recipes for ClimaCore fields                                          |
+| Plots ext         | `ext/ClimaCoreRecipesBaseExt.jl`, `ext/plots/` | Plots.jl recipes for ClimaCore fields                                          |
+| Lib: TempestRemap | `lib/ClimaCoreTempestRemap/`                   | TempestRemap bindings for conservative remapping                               |
+| Lib: Spectra      | `lib/ClimaCoreSpectra/`                        | Spectral analysis of fields on the sphere                                      |
 
 ## Key abstractions
 
@@ -53,7 +52,7 @@ Tests are defined in `test/runtests.jl` using the `UnitTest` / `tabulated_tests`
 | CPU unit tests          | 104 tests covering DataLayouts, Geometry, Meshes, Topologies, Quadratures, Spaces, Fields, Operators (spectral element + finite-difference), MatrixFields, Hypsography, Limiters, Remapping, InputOutput, Aqua, deprecations |
 | GPU tests (`:gpu_only`) | 9 tests: CUDA kernels, compiler stress regression, DataLayout GPU ops, spectral element CUDA, finite-difference CUDA, extruded sphere/3dbox CUDA, field map-reduce CUDA                                                      |
 | Buildkite CI            | Runs the unit tests on an HPC cluster with CUDA, defined in `.buildkite/pipeline.yml`                                                                                                                                        |
-| Lib CI workflows        | Separate GitHub Actions per companion package: ClimaCoreMakie, ClimaCorePlots, ClimaCoreSpectra, ClimaCoreTempestRemap, ClimaCoreVTK                                                                                         |
+| Lib CI workflows        | Separate GitHub Actions per companion package: ClimaCoreSpectra, ClimaCoreTempestRemap                                                                                                                                       |
 
 ## Repo-specific conventions
 

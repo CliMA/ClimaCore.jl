@@ -127,8 +127,9 @@ Dict{Any, Any} with 3 entries:
   "face_extruded_finite_difference_space"   => FaceExtrudedFiniteDifferenceSpace:…
 ```
 
-Once "unpacked" as shown above, `ClimaCorePlots` or `ClimaCoreMakie` can be used to visualise
-fields. `ClimaCoreTempestRemap` supports interpolation onto user-specified grids if necessary.
+Once "unpacked" as shown above, fields can be visualised by loading `Plots` or `Makie`, which
+activates the corresponding ClimaCore plotting extension. `ClimaCoreTempestRemap` supports
+interpolation onto user-specified grids if necessary.
 """
 struct HDF5Reader{C <: ClimaComms.AbstractCommsContext}
     file::HDF5.File
