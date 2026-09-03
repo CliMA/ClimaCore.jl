@@ -4,14 +4,17 @@ coordinate_type(mesh::AbstractMesh) = coordinate_type(domain(mesh))
 """
     nelements(mesh::AbstractMesh)
 
-The number of elements in the mesh.
+Return the number of elements in `mesh`.
 """
 nelements(mesh::AbstractMesh) = length(elements(mesh))
 
 """
-    i = refindex(ϕ, n)
+    refindex(ϕ, n)
 
-Given a reference coordinate `ϕ` in the interval ```[-1, 1]``, divide the interval into ```n` evenly spaced subintervals, and return the index of the subinterval (`i`), and the position in the subinterval (`ϕs`), normalized to normalized `[-1, 1]`.
+Divide the reference interval `[-1, 1]` into `n` evenly spaced subintervals and
+return the index `i` of the subinterval containing the reference coordinate `ϕ`.
+`refcoord(ϕ, n, i)` gives the position within that subinterval, normalized to
+`[-1, 1]`.
 """
 function refindex(ϕ, n)
     ϕn = ϕ * n
@@ -26,7 +29,8 @@ end
 """
     Meshes.SharedVertices(mesh, elem, vert)
 
-An iterator over (element, vertex) pairs that are shared with `(elem,vert)`.
+Iterator over the `(element, vertex)` pairs that share the vertex `vert` of element
+`elem` in `mesh`, starting with `(elem, vert)` itself.
 """
 struct SharedVertices{M <: AbstractMesh, E}
     mesh::M
@@ -73,11 +77,11 @@ end
 """
     Meshes.linearindices(elemorder)
 
-Given a data structure `elemorder[i] = elem` that orders elements, construct the
-inverse map from `orderindex = linearindices(elemorder)` such that
-`orderindex[elem] = i`.
+Given a data structure `elemorder` with `elemorder[i] = elem` that orders elements,
+return the inverse map `orderindex` such that `orderindex[elem] = i`.
 
-This will try to use the most efficient structure available.
+The result is a `LinearIndices` for `CartesianIndices`, a dense `Int` array for a
+vector of `CartesianIndex`, and a `Dict` otherwise.
 """
 linearindices(elemorder::CartesianIndices) = LinearIndices(elemorder)
 function linearindices(elemorder::AbstractVector{<:CartesianIndex})
@@ -97,12 +101,12 @@ function linearindices(elemorder)
 end
 
 """
-    M = Meshes.face_connectivity_matrix(mesh, elemorder = elements(mesh))
+    Meshes.face_connectivity_matrix(mesh, elemorder = elements(mesh))
 
-Construct a `Bool`-valued `SparseCSCMatrix` containing the face connections of
+Construct a `Bool`-valued `SparseMatrixCSC` `M` containing the face connections of
 `mesh`. Elements are indexed according to `elemorder`.
 
-Note that `M[i,i] == true` only if two distinct faces of element `i` are connected.
+`M[i, i] == true` only if two distinct faces of element `i` are connected.
 """
 function face_connectivity_matrix(
     mesh::AbstractMesh,
@@ -128,12 +132,12 @@ function face_connectivity_matrix(
 end
 
 """
-    M = Meshes.vertex_connectivity_matrix(mesh, elemorder = elements(mesh))
+    Meshes.vertex_connectivity_matrix(mesh, elemorder = elements(mesh))
 
-Construct a `Bool`-valued `SparseCSCMatrix` containing the vertex connections of
-`mesh`. Elements are indexed according to `elemorder`.
+Construct a `Bool`-valued `SparseMatrixCSC` `M` containing the vertex connections
+of `mesh`. Elements are indexed according to `elemorder`.
 
-Note that `M[i,i] == true` only if two distinct vertices of element `i` are connected.
+`M[i, i] == true` only if two distinct vertices of element `i` are connected.
 """
 function vertex_connectivity_matrix(
     mesh::AbstractMesh,
@@ -177,21 +181,19 @@ end
 
 
 """
-    elem = Meshes.containing_element(mesh::AbstractMesh, coord)
+    Meshes.containing_element(mesh::AbstractMesh, coord)
 
-The element `elem` in `mesh` containing the coordinate `coord`. If the
-coordinate falls on the boundary between two or more elements, an arbitrary
-element is chosen.
+Return the element of `mesh` containing the coordinate `coord`. If the coordinate
+falls on the boundary between two or more elements, one of them is chosen
+arbitrarily.
 """
 function containing_element end
 
 """
-    ξ = Meshes.reference_coordinates(mesh::AbstractMesh, elem, coord)
+    Meshes.reference_coordinates(mesh::AbstractMesh, elem, coord)
 
-An `SVector` of coordinates in the reference element such that
-
-    Meshes.coordinates(mesh, elem, ξ) == coord
-
-This can be used for interpolation to a specific point.
+Return an `SVector` `ξ` of coordinates in the reference element such that
+`Meshes.coordinates(mesh, elem, ξ) == coord`. Used for interpolation to a specific
+point.
 """
 function reference_coordinates end

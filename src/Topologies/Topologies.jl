@@ -13,12 +13,12 @@ import ..slab, ..column, ..level
 import ..DeviceSideDevice, ..DeviceSideContext
 
 """
-AbstractTopology
+    AbstractTopology
 
-Subtypes of `AbstractHorizontalTopology` define connectiveness of a
-mesh in the horizontal domain.
+Abstract supertype of topologies, which define the connectivity of the elements of
+a mesh. Subtypes: [`IntervalTopology`](@ref) and [`Topology2D`](@ref).
 
-# Interfaces
+Subtypes implement the following interface:
 
   - [`nelems`](@ref)
   - [`domain(topology::AbstractTopology)`](@ref)
@@ -80,28 +80,28 @@ function domain end
 """
     mesh(topology)
 
-Returns the mesh underlying the `topology`
+Return the mesh underlying `topology`.
 """
 function mesh end
 
 """
     nelems(topology)
 
-The total number of elements in `topology`.
+Return the total number of elements in `topology`.
 """
 function nelems end
 
 """
     nlocalelems(topology)
 
-The number of local elements in `topology`.
+Return the number of elements local to this process in `topology`.
 """
 function nlocalelems end
 
 """
     nneighbors(topology)
 
-The number of neighbors of this process in `topology`.
+Return the number of neighboring processes of this process in `topology`.
 """
 function nneighbors end
 nneighbors(::AbstractTopology) = 0
@@ -109,7 +109,7 @@ nneighbors(::AbstractTopology) = 0
 """
     nsendelems(topology)
 
-The number of elements to send to neighbors in `topology`.
+Return the number of elements this process sends to its neighbors in `topology`.
 """
 function nsendelems end
 nsendelems(::AbstractTopology) = 0
@@ -118,7 +118,7 @@ nsendelems(::AbstractTopology, _) = 0
 """
     nghostelems(topology)
 
-The number of ghost elements in `topology`.
+Return the number of ghost elements in `topology`.
 """
 function nghostelems end
 nghostelems(::AbstractTopology) = 0
@@ -127,33 +127,37 @@ nghostelems(::AbstractTopology, _) = 0
 """
     localelemindex(topology, elem)
 
-The local index for the specified element; useful for distributed topologies.
+Return the local index of element `elem`; used by distributed topologies.
 """
 function localelemindex end
 
 """
-    (c1,c2,c3,c4) = vertex_coordinates(topology, elem)
+    vertex_coordinates(topology, elem)
 
-The coordinates of the 4 vertices of element `elem`.
+Return a tuple of the coordinates of the vertices of element `elem` (two in 1D, four
+in 2D).
 """
 function vertex_coordinates end
 
 """
-    (opelem, opface, reversed) = opposing_face(topology, elem, face)
+    opposing_face(topology, elem, face)
 
-The opposing face of face number `face` of element `elem` in `topology`.
+Return the face `(opelem, opface, reversed)` opposite face number `face` of element
+`elem` in `topology`.
 
-  - `opelem` is the opposing element number, 0 for a boundary, negative for a ghost element
-  - `opface` is the opposite face number, or boundary face number if a boundary
-  - `reversed` indicates whether the opposing face has the opposite orientation.
+  - `opelem`: The opposing element number; 0 for a boundary, negative for a ghost
+    element.
+  - `opface`: The opposing face number, or the boundary face number for a boundary.
+  - `reversed`: Whether the opposing face has the opposite orientation.
 """
 function opposing_face end
 
 """
-    i,j = face_node_index(face, Nq, q, reversed=false)
+    face_node_index(face, Nq, q, reversed = false)
 
-The node indices of the `q`th node on face `face`, where `Nq` is the number of
-face nodes in each direction.
+Return the node indices `(i, j)` of the `q`th node on face `face`, where `Nq` is the
+number of nodes in each direction. If `reversed`, count from the other end of the
+face.
 """
 @inline function face_node_index(face, Nq, q, reversed = false)
     if reversed
@@ -173,8 +177,8 @@ end
 """
     interior_faces(topology::AbstractTopology)
 
-An iterator over the interior faces of `topology`. Each element of the iterator
-is a 5-tuple the form
+Return an iterator over the interior faces of `topology`. Each item is a 5-tuple of
+the form
 
     (elem1, face1, elem2, face2, reversed)
 
@@ -191,8 +195,8 @@ end
 """
     ghost_faces(topology::AbstractTopology)
 
-An iterator over the ghost faces of `topology`. Each element of the iterator
-is a 5-tuple the form
+Return an iterator over the ghost faces of `topology`. Each item is a 5-tuple of the
+form
 
     (elem1, face1, elem2, face2, reversed)
 
@@ -209,24 +213,24 @@ end
 """
     local_neighboring_elements(topology::AbstractTopology, lidx::Integer)
 
-An iterator of the local element indices (lidx) of the local elements which are
-neighbors of the local element `lidx` in `topology` (excluding `lidx` itself).
+Return an iterator over the local element indices of the local elements that are
+neighbors of the local element `lidx` in `topology`, excluding `lidx` itself.
 """
 function local_neighboring_elements end
 
 """
-    ghost_neighboring_elements(topology::AbstractTopology, ridx::Integer)
+    ghost_neighboring_elements(topology::AbstractTopology, lidx::Integer)
 
-An iterator of the receive buffer indices (ridx) of the ghost elements which are
-neighbors  of the local element `lidx` in `topology`.
+Return an iterator over the receive buffer indices (`ridx`) of the ghost elements
+that are neighbors of the local element `lidx` in `topology`.
 """
 function ghost_neighboring_elements end
 
 """
-    i,j = vertex_node_index(vertex_num, Nq)
+    vertex_node_index(vertex_num, Nq)
 
-The node indices of `vertex_num`, where `Nq` is the number of face nodes in
-each direction.
+Return the node indices `(i, j)` of vertex `vertex_num`, where `Nq` is the number of
+nodes in each direction.
 """
 function vertex_node_index(vertex_num, Nq)
     if vertex_num == 1
@@ -243,8 +247,8 @@ end
 """
     Topologies.VertexIterator
 
-An iterator over the unique (shared) vertices of the topology `topology`.
-Each vertex returns a `Vertex` object, which is itself an iterator.
+Iterator over the unique (shared) vertices of a topology. Each item is a `Vertex`,
+which is itself an iterator over the `(element, vertex)` pairs that share it.
 """
 struct VertexIterator{T}
     vertices::Vector{T}
@@ -286,7 +290,7 @@ end
 """
     local_vertices(topology)
 
-An iterator over the interior vertices of `topology`. Each vertex is an
+Return an iterator over the interior vertices of `topology`. Each vertex is an
 iterator over `(lidx, vert)` pairs.
 """
 function local_vertices end
@@ -294,15 +298,16 @@ function local_vertices end
 """
     ghost_vertices(topology)
 
-An iterator over the ghost vertices of `topology`. Each vertex is an
-iterator over `(isghost, lidx/ridx, vert)` pairs.
+Return an iterator over the ghost vertices of `topology`. Each vertex is an iterator
+over `(isghost, idx, vert)` triples, where `idx` is a local index `lidx` if
+`isghost` is `false` and a receive buffer index `ridx` otherwise.
 """
 function ghost_vertices end
 
 """
     neighbors(topology)
 
-Returns an array of the PIDs of the neighbors of this process.
+Return a vector of the PIDs of the neighboring processes of this process.
 """
 function neighbors end
 neighbors(::AbstractTopology) = Int[]
@@ -310,7 +315,7 @@ neighbors(::AbstractTopology) = Int[]
 """
     boundary_tags(topology)
 
-A `Tuple` or `NamedTuple` of the boundary tags of the topology. A boundary tag
+Return a `Tuple` or `NamedTuple` of the boundary tags of `topology`. A boundary tag
 is an integer that uniquely identifies a boundary.
 """
 function boundary_tags end
@@ -318,7 +323,7 @@ function boundary_tags end
 """
     boundary_tag(topology, name::Symbol)
 
-The boundary tag of the topology for boundary name `name`. A boundary tag
+Return the boundary tag of `topology` for the boundary named `name`. A boundary tag
 is an integer that uniquely identifies a boundary.
 """
 function boundary_tag end
@@ -326,8 +331,8 @@ function boundary_tag end
 """
     boundary_faces(topology, boundarytag)
 
-An iterator over the faces of `topology` which face the boundary with tag
-`boundarytag`. Each element of the iterator is an `(elem, face)` pair.
+Return an iterator over the faces of `topology` on the boundary with tag
+`boundarytag`. Each item is an `(elem, face)` pair.
 """
 function boundary_faces end
 

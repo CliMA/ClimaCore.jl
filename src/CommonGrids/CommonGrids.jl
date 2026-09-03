@@ -1,18 +1,23 @@
 """
     CommonGrids
 
-CommonGrids contains convenience constructors for common
-grids. Constructors in this module are sometimes dynamically
-created. You may want to use a different constructor if you're
-making the object in a performance-critical section, and if
-you know the type parameters at compile time.
+Keyword constructors for the grids used in most ClimaCore configurations:
+[`ExtrudedCubedSphereGrid`](@ref), [`CubedSphereGrid`](@ref),
+[`ColumnGrid`](@ref), [`Box3DGrid`](@ref), [`SliceXZGrid`](@ref),
+[`RectangleXYGrid`](@ref), and [`MultiColumnGrid`](@ref). Each takes the float
+type as an optional first argument (default `Float64`) and the configuration as
+keyword arguments, and composes the domain, mesh, topology, and grid from the
+`Domains`, `Meshes`, `Topologies`, and `Grids` modules. Configurations without
+a constructor here are composed from those modules directly.
 
-If no convenience constructor exists, then you may need to
-create a custom grid using our low-level compose-able API.
+The constructors build the type parameters of the grid from runtime values, so
+their return type is not inferred by the compiler. Code that builds a grid in a
+performance-critical section and knows the type parameters at compile time can
+call the `Grids` constructors directly.
 
-# Transitioning to using CommonGrids
+# Examples
 
-You may have constructed a grid in the following way:
+The grid built by hand as
 
 ```julia
 using ClimaComms
@@ -49,7 +54,7 @@ grid = Grids.ExtrudedFiniteDifferenceGrid(
 )
 ```
 
-You may re-write this as:
+corresponds to
 
 ```julia
 using ClimaCore.CommonGrids: ExtrudedCubedSphereGrid
@@ -88,55 +93,47 @@ import .Helpers.DefaultRectangleXYMesh
 #####
 
 """
-    ExtrudedCubedSphereGrid(
-        ::Type{<:AbstractFloat}; # defaults to Float64
-        z_elem::Integer,
-        z_min::Real,
-        z_max::Real,
-        radius::Real,
-        h_elem::Integer,
-        n_quad_points::Integer,
-        device::ClimaComms.AbstractDevice = ClimaComms.device(),
-        context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
-        stretch::Meshes.StretchingRule = Meshes.Uniform(),
-        hypsography_fun = (h_grid, z_grid) -> Grids.Flat(),
-        global_geometry::Geometry.AbstractGlobalGeometry = Geometry.ShallowSphericalGlobalGeometry{FT}(radius),
-        quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
-        discretization::Union{Nothing, Grids.Discretization} = nothing,
-        h_mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain{FT}(radius), h_elem),
-        h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(context, h_mesh),
-        VIJH = DataLayouts.VIJFH,
-        z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
-        enable_bubble::Bool = false
-        enable_mask::Bool = false
-    )
+    ExtrudedCubedSphereGrid([FT = Float64]; z_elem, z_min, z_max, radius, h_elem,
+                            n_quad_points, kwargs...)
 
-A convenience constructor, which builds an
-[`Grids.ExtrudedFiniteDifferenceGrid`](@ref), given:
+Construct a [`Grids.ExtrudedFiniteDifferenceGrid`](@ref) on a cubed sphere: a
+[`Grids.SpectralElementGrid2D`](@ref) horizontal grid extruded along a
+[`Grids.FiniteDifferenceGrid`](@ref) vertical grid, with a shallow spherical
+global geometry.
 
-  - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
-  - `z_elem` the number of z-points
-  - `z_min` the domain minimum along the z-direction.
-  - `z_max` the domain maximum along the z-direction.
-  - `radius` the radius of the cubed sphere
-  - `h_elem` the number of horizontal elements per side of every panel (6 panels in total)
-  - `n_quad_points` the number of quadrature points per horizontal element
-  - `device` the `ClimaComms.device`
-  - `context` the `ClimaComms.context`
-  - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
-  - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
-  - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
-  - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
-  - `discretization` the Galerkin discretization of the horizontal spectral-element grid: `Grids.CG()`, continuous across element boundaries with DSS, or `Grids.DG()`, discontinuous with interface numerical fluxes. When omitted (`nothing`) it follows the quadrature: `CG()` for GLL nodes, `DG()` for quadratures whose nodes are not shared between elements. See [`Grids.SpectralElementGrid2D`](@ref).
-  - `h_mesh` the horizontal mesh (defaults to `Meshes.EquiangularCubedSphere`)
-  - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
-  - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
-  - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
-  - `enable_bubble` enables the "bubble correction" for more accurate element areas when computing the spectral element space. See [`Grids.SpectralElementGrid2D`](@ref) for more information.
-  - `enable_mask` enables a horizontal mask, for skipping operations on specified
-    columns via `set_mask!`.
+# Arguments
 
-# Example usage
+  - `FT`: The floating-point type, `Float32` or `Float64`.
+
+# Keyword Arguments
+
+  - `z_elem::Integer`: Number of vertical elements.
+  - `z_min::Real`, `z_max::Real`: Vertical extent of the domain.
+  - `radius::Real`: Radius of the sphere.
+  - `h_elem::Integer`: Number of horizontal elements per side of each of the six
+    cubed-sphere panels.
+  - `n_quad_points::Integer`: Number of quadrature points per element side.
+  - `device = ClimaComms.device()`: The `ClimaComms` device.
+  - `context = ClimaComms.context(device)`: The `ClimaComms` context; its device
+    must equal `device`.
+  - `stretch = Meshes.Uniform()`: The `Meshes.StretchingRule` of the default
+    vertical mesh; see [`Meshes.Uniform`](@ref).
+  - `hypsography_fun = (h_grid, z_grid) -> Grids.Flat()`: A callable that returns
+    the `Grids.HypsographyAdaption` for the given horizontal and vertical grids.
+  - `global_geometry = Geometry.ShallowSphericalGlobalGeometry{FT}(radius)`: The
+    `Geometry.AbstractGlobalGeometry` of the extruded grid.
+  - `quad = Quadratures.GLL{n_quad_points}()`: The `Quadratures.QuadratureStyle`.
+  - `discretization = nothing`, `VIJH = DataLayouts.VIJFH`,
+    `enable_bubble = false`, `enable_mask = false`: Passed to the horizontal
+    [`Grids.SpectralElementGrid2D`](@ref), which documents them.
+  - `h_mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain{FT}(radius), h_elem)`:
+    The horizontal mesh.
+  - `h_topology = Topologies.Topology2D(context, h_mesh, Topologies.spacefillingcurve(h_mesh))`:
+    The horizontal topology.
+  - `z_mesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch)`: The vertical
+    `Meshes.IntervalMesh`, with boundaries named `:bottom` and `:top`.
+
+# Examples
 
 ```julia
 using ClimaCore.CommonGrids
@@ -217,39 +214,34 @@ function ExtrudedCubedSphereGrid(
 end
 
 """
-    CubedSphereGrid(
-        ::Type{<:AbstractFloat}; # defaults to Float64
-        radius::Real,
-        h_elem::Integer,
-        n_quad_points::Integer,
-        device::ClimaComms.AbstractDevice = ClimaComms.device(),
-        context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
-        quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
-        discretization::Union{Nothing, Grids.Discretization} = nothing,
-        h_mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain{FT}(radius), h_elem),
-        h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(context, h_mesh),
-        VIJH = DataLayouts.VIJFH,
-        enable_mask = false,
-    )
+    CubedSphereGrid([FT = Float64]; radius, h_elem, n_quad_points, kwargs...)
 
-A convenience constructor, which builds a
-[`Grids.SpectralElementGrid2D`](@ref) given:
+Construct a [`Grids.SpectralElementGrid2D`](@ref) on the surface of a cubed
+sphere.
 
-  - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
-  - `radius` the radius of the cubed sphere
-  - `h_elem` the number of horizontal elements per side of every panel (6 panels in total)
-  - `n_quad_points` the number of quadrature points per horizontal element
-  - `device` the `ClimaComms.device`
-  - `context` the `ClimaComms.context`
-  - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
-  - `discretization` the Galerkin discretization of the horizontal spectral-element grid: `Grids.CG()`, continuous across element boundaries with DSS, or `Grids.DG()`, discontinuous with interface numerical fluxes. When omitted (`nothing`) it follows the quadrature: `CG()` for GLL nodes, `DG()` for quadratures whose nodes are not shared between elements. See [`Grids.SpectralElementGrid2D`](@ref).
-  - `h_mesh` the horizontal mesh (defaults to `Meshes.EquiangularCubedSphere`)
-  - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
-  - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
-  - `enable_mask` enables a horizontal mask, for skipping operations on specified
-    columns via `set_mask!`.
+# Arguments
 
-# Example usage
+  - `FT`: The floating-point type, `Float32` or `Float64`.
+
+# Keyword Arguments
+
+  - `radius::Real`: Radius of the sphere.
+  - `h_elem::Integer`: Number of elements per side of each of the six
+    cubed-sphere panels.
+  - `n_quad_points::Integer`: Number of quadrature points per element side.
+  - `device = ClimaComms.device()`: The `ClimaComms` device.
+  - `context = ClimaComms.context(device)`: The `ClimaComms` context; its device
+    must equal `device`.
+  - `quad = Quadratures.GLL{n_quad_points}()`: The `Quadratures.QuadratureStyle`.
+  - `discretization = nothing`, `VIJH = DataLayouts.VIJFH`,
+    `enable_mask = false`: Passed to [`Grids.SpectralElementGrid2D`](@ref),
+    which documents them.
+  - `h_mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain{FT}(radius), h_elem)`:
+    The mesh.
+  - `h_topology = Topologies.Topology2D(context, h_mesh, Topologies.spacefillingcurve(h_mesh))`:
+    The topology.
+
+# Examples
 
 ```julia
 using ClimaCore.CommonGrids
@@ -289,30 +281,27 @@ function CubedSphereGrid(
 end
 
 """
-    ColumnGrid(
-        ::Type{<:AbstractFloat}; # defaults to Float64
-        z_elem::Integer,
-        z_min::Real,
-        z_max::Real,
-        device::ClimaComms.AbstractDevice = ClimaComms.device(),
-        context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
-        stretch::Meshes.StretchingRule = Meshes.Uniform(),
-        z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
-    )
+    ColumnGrid([FT = Float64]; z_elem, z_min, z_max, kwargs...)
 
-A convenience constructor, which builds a
-[`Grids.FiniteDifferenceGrid`](@ref) given:
+Construct a [`Grids.FiniteDifferenceGrid`](@ref) for a single vertical column.
 
-  - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
-  - `z_elem` the number of z-points
-  - `z_min` the domain minimum along the z-direction.
-  - `z_max` the domain maximum along the z-direction.
-  - `device` the `ClimaComms.device`
-  - `context` the `ClimaComms.context`
-  - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
-  - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
+# Arguments
 
-# Example usage
+  - `FT`: The floating-point type, `Float32` or `Float64`.
+
+# Keyword Arguments
+
+  - `z_elem::Integer`: Number of vertical elements.
+  - `z_min::Real`, `z_max::Real`: Vertical extent of the domain.
+  - `device = ClimaComms.device()`: The `ClimaComms` device.
+  - `context = ClimaComms.context(device)`: The `ClimaComms` context; it must be
+    a `ClimaComms.SingletonCommsContext` whose device equals `device`.
+  - `stretch = Meshes.Uniform()`: The `Meshes.StretchingRule` of the default
+    mesh; see [`Meshes.Uniform`](@ref).
+  - `z_mesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch)`: The
+    `Meshes.IntervalMesh`, with boundaries named `:bottom` and `:top`.
+
+# Examples
 
 ```julia
 using ClimaCore.CommonGrids
@@ -343,66 +332,50 @@ function ColumnGrid(
 end
 
 """
-    Box3DGrid(
-        ::Type{<:AbstractFloat}; # defaults to Float64
-        z_elem::Integer,
-        x_min::Real,
-        x_max::Real,
-        y_min::Real,
-        y_max::Real,
-        z_min::Real,
-        z_max::Real,
-        periodic_x::Bool,
-        periodic_y::Bool,
-        n_quad_points::Integer,
-        x_elem::Integer,
-        y_elem::Integer,
-        device::ClimaComms.AbstractDevice = ClimaComms.device(),
-        context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
-        stretch::Meshes.StretchingRule = Meshes.Uniform(),
-        hypsography_fun = (h_grid, z_grid) -> Grids.Flat(),
-        global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
-        quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
-        discretization::Union{Nothing, Grids.Discretization} = nothing,
-        VIJH = DataLayouts.VIJFH,
-        [h_topology::Topologies.AbstractDistributedTopology], # optional
-        [z_mesh::Meshes.IntervalMesh], # optional
-        enable_bubble::Bool = false,
-        enable_mask::Bool = false,
-    )
+    Box3DGrid([FT = Float64]; z_elem, x_min, x_max, y_min, y_max, z_min, z_max,
+              periodic_x, periodic_y, n_quad_points, x_elem, y_elem, kwargs...)
 
-A convenience constructor, which builds a
-[`Grids.ExtrudedFiniteDifferenceGrid`](@ref) with a
-[`Grids.FiniteDifferenceGrid`](@ref) vertical grid and a
-[`Grids.SpectralElementGrid2D`](@ref) horizontal grid, given:
+Construct a [`Grids.ExtrudedFiniteDifferenceGrid`](@ref) on a rectangular box: a
+[`Grids.SpectralElementGrid2D`](@ref) horizontal grid on the `x`-`y` rectangle
+extruded along a [`Grids.FiniteDifferenceGrid`](@ref) vertical grid.
 
-  - `z_elem` the number of z-points
-  - `x_min` the domain minimum along the x-direction.
-  - `x_max` the domain maximum along the x-direction.
-  - `y_min` the domain minimum along the y-direction.
-  - `y_max` the domain maximum along the y-direction.
-  - `z_min` the domain minimum along the z-direction.
-  - `z_max` the domain maximum along the z-direction.
-  - `periodic_x` Bool indicating to use periodic domain along x-direction
-  - `periodic_y` Bool indicating to use periodic domain along y-direction
-  - `n_quad_points` the number of quadrature points per horizontal element
-  - `x_elem` the number of x-points
-  - `y_elem` the number of y-points
-  - `device` the `ClimaComms.device`
-  - `context` the `ClimaComms.context`
-  - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
-  - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
-  - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
-  - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
-  - `discretization` the Galerkin discretization of the horizontal spectral-element grid: `Grids.CG()`, continuous across element boundaries with DSS, or `Grids.DG()`, discontinuous with interface numerical fluxes. When omitted (`nothing`) it follows the quadrature: `CG()` for GLL nodes, `DG()` for quadratures whose nodes are not shared between elements. See [`Grids.SpectralElementGrid2D`](@ref).
-  - `h_topology` the horizontal topology (defaults to `Topologies.Topology2D`)
-  - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z` with given `stretch`
-  - `enable_bubble` enables the "bubble correction" for more accurate element areas when computing the spectral element space. See [`Grids.SpectralElementGrid2D`](@ref) for more information.
-  - `VIJH` the horizontal DataLayout type (defaults to `DataLayouts.VIJFH`). This parameter describes how data is arranged in memory. See [`Grids.SpectralElementGrid2D`](@ref) for its use.
-  - `enable_mask` enables a horizontal mask, for skipping operations on specified
-    columns via `set_mask!`.
+# Arguments
 
-# Example usage
+  - `FT`: The floating-point type, `Float32` or `Float64`.
+
+# Keyword Arguments
+
+  - `z_elem::Integer`: Number of vertical elements.
+  - `x_min::Real`, `x_max::Real`: Extent of the domain along `x`.
+  - `y_min::Real`, `y_max::Real`: Extent of the domain along `y`.
+  - `z_min::Real`, `z_max::Real`: Vertical extent of the domain.
+  - `periodic_x::Bool`, `periodic_y::Bool`: Whether the domain is periodic along
+    `x` and `y`. Non-periodic boundaries are named `:west`/`:east` and
+    `:south`/`:north`.
+  - `n_quad_points::Integer`: Number of quadrature points per element side.
+  - `x_elem::Integer`, `y_elem::Integer`: Number of horizontal elements along `x`
+    and `y`.
+  - `device = ClimaComms.device()`: The `ClimaComms` device.
+  - `context = ClimaComms.context(device)`: The `ClimaComms` context; its device
+    must equal `device`.
+  - `stretch = Meshes.Uniform()`: The `Meshes.StretchingRule` of the default
+    vertical mesh; see [`Meshes.Uniform`](@ref).
+  - `hypsography_fun = (h_grid, z_grid) -> Grids.Flat()`: A callable that returns
+    the `Grids.HypsographyAdaption` for the given horizontal and vertical grids.
+  - `global_geometry = Geometry.CartesianGlobalGeometry()`: The
+    `Geometry.AbstractGlobalGeometry` of the extruded grid; see
+    [`Geometry.CartesianGlobalGeometry`](@ref).
+  - `quad = Quadratures.GLL{n_quad_points}()`: The `Quadratures.QuadratureStyle`.
+  - `discretization = nothing`, `VIJH = DataLayouts.VIJFH`,
+    `enable_bubble = false`, `enable_mask = false`: Passed to the horizontal
+    [`Grids.SpectralElementGrid2D`](@ref), which documents them.
+  - `h_topology`: The horizontal `Topologies.Topology2D`. It defaults to the
+    topology of the `Meshes.RectilinearMesh` given by the `x` and `y` arguments,
+    ordered along a space-filling curve.
+  - `z_mesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch)`: The vertical
+    `Meshes.IntervalMesh`, with boundaries named `:bottom` and `:top`.
+
+# Examples
 
 ```julia
 using ClimaCore.CommonGrids
@@ -505,48 +478,47 @@ function Box3DGrid(
 end
 
 """
-    SliceXZGrid(
-        ::Type{<:AbstractFloat}; # defaults to Float64
-        z_elem::Integer,
-        x_min::Real,
-        x_max::Real,
-        z_min::Real,
-        z_max::Real,
-        periodic_x::Bool,
-        n_quad_points::Integer,
-        x_elem::Integer,
-        device::ClimaComms.AbstractDevice = ClimaComms.device(),
-        context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
-        stretch::Meshes.StretchingRule = Meshes.Uniform(),
-        hypsography_fun = (h_grid, z_grid) -> Grids.Flat(),
-        global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
-        quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
-        discretization::Union{Nothing, Grids.Discretization} = nothing,
-    )
+    SliceXZGrid([FT = Float64]; z_elem, x_min, x_max, z_min, z_max, periodic_x,
+                n_quad_points, x_elem, kwargs...)
 
-A convenience constructor, which builds a
-[`Grids.ExtrudedFiniteDifferenceGrid`](@ref) with a
-[`Grids.FiniteDifferenceGrid`](@ref) vertical grid and a
-[`Grids.SpectralElementGrid1D`](@ref) horizontal grid, given:
+Construct a [`Grids.ExtrudedFiniteDifferenceGrid`](@ref) on an `x`-`z` slice: a
+[`Grids.SpectralElementGrid1D`](@ref) horizontal grid along `x` extruded along
+a [`Grids.FiniteDifferenceGrid`](@ref) vertical grid. The horizontal topology
+is built on a `ClimaComms.SingletonCommsContext`, so the grid is not
+distributed.
 
-  - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`]
-  - `z_elem` the number of z-points
-  - `x_min` the domain minimum along the x-direction.
-  - `x_max` the domain maximum along the x-direction.
-  - `z_min` the domain minimum along the z-direction.
-  - `z_max` the domain maximum along the z-direction.
-  - `periodic_x` Bool indicating to use periodic domain along x-direction
-  - `n_quad_points` the number of quadrature points per horizontal element
-  - `x_elem` the number of x-points
-  - `device` the `ClimaComms.device`
-  - `context` the `ClimaComms.context`
-  - `stretch` the mesh `Meshes.StretchingRule` (defaults to [`Meshes.Uniform`](@ref))
-  - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
-  - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
-  - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
-  - `discretization` the Galerkin discretization of the horizontal spectral-element grid: `Grids.CG()`, continuous across element boundaries with DSS, or `Grids.DG()`, discontinuous with interface numerical fluxes. When omitted (`nothing`) it follows the quadrature: `CG()` for GLL nodes, `DG()` for quadratures whose nodes are not shared between elements. See [`Grids.SpectralElementGrid2D`](@ref).
+# Arguments
 
-# Example usage
+  - `FT`: The floating-point type, `Float32` or `Float64`.
+
+# Keyword Arguments
+
+  - `z_elem::Integer`: Number of vertical elements.
+  - `x_min::Real`, `x_max::Real`: Extent of the domain along `x`.
+  - `z_min::Real`, `z_max::Real`: Vertical extent of the domain.
+  - `periodic_x::Bool`: Whether the domain is periodic along `x`. Non-periodic
+    boundaries are named `:west` and `:east`.
+  - `n_quad_points::Integer`: Number of quadrature points per element.
+  - `x_elem::Integer`: Number of horizontal elements.
+  - `device = ClimaComms.device()`: The `ClimaComms` device.
+  - `context = ClimaComms.context(device)`: The `ClimaComms` context; its device
+    must equal `device`.
+  - `stretch = Meshes.Uniform()`: The `Meshes.StretchingRule` of the default
+    vertical mesh; see [`Meshes.Uniform`](@ref).
+  - `hypsography_fun = (h_grid, z_grid) -> Grids.Flat()`: A callable that returns
+    the `Grids.HypsographyAdaption` for the given horizontal and vertical grids.
+  - `global_geometry = Geometry.CartesianGlobalGeometry()`: The
+    `Geometry.AbstractGlobalGeometry` of the extruded grid; see
+    [`Geometry.CartesianGlobalGeometry`](@ref).
+  - `quad = Quadratures.GLL{n_quad_points}()`: The `Quadratures.QuadratureStyle`.
+  - `discretization = nothing`, `VIJH = DataLayouts.VIJFH`: Passed to the
+    horizontal [`Grids.SpectralElementGrid1D`](@ref), which documents them.
+  - `h_mesh = DefaultSliceXMesh(FT; x_min, x_max, periodic_x, x_elem)`: The
+    horizontal `Meshes.IntervalMesh`.
+  - `z_mesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch)`: The vertical
+    `Meshes.IntervalMesh`, with boundaries named `:bottom` and `:top`.
+
+# Examples
 
 ```julia
 using ClimaCore.CommonGrids
@@ -618,49 +590,39 @@ function SliceXZGrid(
 end
 
 """
-    RectangleXYGrid(
-        ::Type{<:AbstractFloat}; # defaults to Float64
-        x_min::Real,
-        x_max::Real,
-        y_min::Real,
-        y_max::Real,
-        periodic_x::Bool,
-        periodic_y::Bool,
-        n_quad_points::Integer,
-        x_elem::Integer, # number of horizontal elements
-        y_elem::Integer, # number of horizontal elements
-        device::ClimaComms.AbstractDevice = ClimaComms.device(),
-        context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
-        hypsography::Grids.HypsographyAdaption = Grids.Flat(),
-        global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
-        quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
-        discretization::Union{Nothing, Grids.Discretization} = nothing,
-        enable_mask::Bool = false,
-    )
+    RectangleXYGrid([FT = Float64]; x_min, x_max, y_min, y_max, periodic_x,
+                    periodic_y, n_quad_points, x_elem, y_elem, kwargs...)
 
-A convenience constructor, which builds a
-[`Grids.SpectralElementGrid2D`](@ref) with a horizontal
-`RectilinearMesh` mesh, given:
+Construct a [`Grids.SpectralElementGrid2D`](@ref) on an `x`-`y` rectangle with
+a `Meshes.RectilinearMesh`.
 
-  - `x_min` the domain minimum along the x-direction.
-  - `x_max` the domain maximum along the x-direction.
-  - `y_min` the domain minimum along the y-direction.
-  - `y_max` the domain maximum along the y-direction.
-  - `periodic_x` Bool indicating to use periodic domain along x-direction
-  - `periodic_y` Bool indicating to use periodic domain along y-direction
-  - `n_quad_points` the number of quadrature points per horizontal element
-  - `x_elem` the number of x-points
-  - `y_elem` the number of y-points
-  - `device` the `ClimaComms.device`
-  - `context` the `ClimaComms.context`
-  - `hypsography_fun` a function or callable object (`hypsography_fun(h_grid, z_grid) -> hypsography`) for constructing the hypsography model.
-  - `global_geometry` the global geometry (defaults to [`Geometry.CartesianGlobalGeometry`](@ref))
-  - `quad` the quadrature style (defaults to `Quadratures.GLL{n_quad_points}`)
-  - `discretization` the Galerkin discretization of the horizontal spectral-element grid: `Grids.CG()`, continuous across element boundaries with DSS, or `Grids.DG()`, discontinuous with interface numerical fluxes. When omitted (`nothing`) it follows the quadrature: `CG()` for GLL nodes, `DG()` for quadratures whose nodes are not shared between elements. See [`Grids.SpectralElementGrid2D`](@ref).
-  - `enable_mask` enables a horizontal mask, for skipping operations on specified
-    columns via `set_mask!`.
+# Arguments
 
-# Example usage
+  - `FT`: The floating-point type, `Float32` or `Float64`.
+
+# Keyword Arguments
+
+  - `x_min::Real`, `x_max::Real`: Extent of the domain along `x`.
+  - `y_min::Real`, `y_max::Real`: Extent of the domain along `y`.
+  - `periodic_x::Bool`, `periodic_y::Bool`: Whether the domain is periodic along
+    `x` and `y`. Non-periodic boundaries are named `:west`/`:east` and
+    `:south`/`:north`.
+  - `n_quad_points::Integer`: Number of quadrature points per element side.
+  - `x_elem::Integer`, `y_elem::Integer`: Number of elements along `x` and `y`.
+  - `device = ClimaComms.device()`: The `ClimaComms` device.
+  - `context = ClimaComms.context(device)`: The `ClimaComms` context; its device
+    must equal `device`.
+  - `quad = Quadratures.GLL{n_quad_points}()`: The `Quadratures.QuadratureStyle`.
+  - `discretization = nothing`, `VIJH = DataLayouts.VIJFH`,
+    `enable_bubble = false`, `enable_mask = false`: Passed to
+    [`Grids.SpectralElementGrid2D`](@ref), which documents them.
+  - `h_topology`: The `Topologies.Topology2D`. It defaults to the topology of the
+    `Meshes.RectilinearMesh` given by the `x` and `y` arguments.
+  - `hypsography = Grids.Flat()`, `global_geometry = Geometry.CartesianGlobalGeometry()`:
+    Accepted for interface compatibility with the extruded grids; a
+    `Grids.SpectralElementGrid2D` has neither, so they do not affect the result.
+
+# Examples
 
 ```julia
 using ClimaCore.CommonGrids
@@ -725,39 +687,35 @@ function RectangleXYGrid(
 end
 
 """
-    MultiColumnGrid(
-        ::Type{<:AbstractFloat}; # defaults to Float64
-        points::AbstractVector{Geometry.LatLongPoint{FT}},
-        z_elem::Integer,
-        z_min::Real,
-        z_max::Real,
-        radius::Real,
-        device::ClimaComms.AbstractDevice = ClimaComms.device(),
-        stretch::Meshes.StretchingRule = Meshes.Uniform(),
-        z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
-    )
+    MultiColumnGrid([FT = Float64]; points, z_elem, z_min, z_max, kwargs...)
 
-A convenience constructor that builds an
-[`Grids.ExtrudedFiniteDifferenceGrid`](@ref) for N independent columns at
-arbitrary (lat, lon) locations on a sphere, given:
+Construct a [`Grids.ExtrudedFiniteDifferenceGrid`](@ref) of independent
+vertical columns at given latitude-longitude locations on a sphere: a
+[`Grids.MultiPointGrid`](@ref) horizontal grid extruded along a
+[`Grids.FiniteDifferenceGrid`](@ref) vertical grid, with `Grids.Flat()`
+hypsography and a shallow spherical global geometry.
 
-  - `FT` the floating-point type (defaults to `Float64`) [`Float32`, `Float64`],
-  - `points` a vector of `Geometry.LatLongPoint` specifying each column
-    location,
-  - `z_elem` the number of z-points,
-  - `z_min` the domain minimum along the z-direction,
-  - `z_max` the domain maximum along the z-direction,
-  - `radius` the radius of the sphere,
-  - `device` the `ClimaComms.device`,
-  - `stretch` the mesh `Meshes.StretchingRule` (defaults to
-    [`Meshes.Uniform`](@ref)),
-  - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z`
-    with given `stretch`.
+The columns have no horizontal connectivity, so horizontal operators are not
+defined on the grid; `Fields.bycolumn` iterates over the columns.
 
-There is no horizontal connectivity between columns. Horizontal operators are
-not supported. Use `Fields.bycolumn` to iterate over columns.
+# Arguments
 
-# Example usage
+  - `FT`: The floating-point type, `Float32` or `Float64`.
+
+# Keyword Arguments
+
+  - `points::AbstractVector{Geometry.LatLongPoint{FT}}`: The location of each
+    column.
+  - `z_elem::Integer`: Number of vertical elements.
+  - `z_min::Real`, `z_max::Real`: Vertical extent of the domain.
+  - `radius::Real = FT(6.371229e6)`: Radius of the sphere.
+  - `device = ClimaComms.device()`: The `ClimaComms` device.
+  - `stretch = Meshes.Uniform()`: The `Meshes.StretchingRule` of the default
+    vertical mesh; see [`Meshes.Uniform`](@ref).
+  - `z_mesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch)`: The vertical
+    `Meshes.IntervalMesh`, with boundaries named `:bottom` and `:top`.
+
+# Examples
 
 ```julia
 using ClimaCore.CommonGrids, ClimaCore.Geometry

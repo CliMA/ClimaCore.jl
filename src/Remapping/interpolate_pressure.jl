@@ -3,31 +3,44 @@ import ClimaInterpolations
 """
     PressureInterpolator
 
-An interpolator for interpolating ClimaCore fields defined on a space whose
-vertical coordinate is z to a space whose vertical coordinate is pressure.
+Interpolate fields from a space whose vertical coordinate is height `z` to a space whose
+vertical coordinate is pressure.
 
-Interpolating to pressure coordinates is done by:
+Construct one with `PressureInterpolator(pfull_field, pressure_levels)` and apply it with
+[`interpolate_pressure`](@ref) or [`interpolate_pressure!`](@ref). After the pressure field
+changes, call [`update!`](@ref) before interpolating again.
 
- 1. Applying column-wise cumulative minimum to the pressure field which ensures
-    monotonicity.
- 2. Interpolating to the specified pressure levels using the monotonic pressure
-    field.
+Interpolation proceeds in two steps:
 
-!!! warning "No validation of pressure-height relationship"
+ 1. Apply a column-wise cumulative minimum to the pressure field, so that pressure is
+    monotone in each column.
+ 2. Interpolate linearly in the monotone pressure to the target `pressure_levels`.
 
-    The implementation assumes pressure decreases monotonically with height. If
-    the interpolated field appears unrealistic, check for instabilities or
-    inversions in the pressure field.
+# Fields
 
-!!! note "Boundary conditions for vertical interpolation"
+  - `pfull_field`: pressure on a center space whose vertical coordinate is height.
+  - `scratch_center_pressure_field`: column-wise cumulative minimum of `pfull_field`.
+  - `scratch_face_pressure_field`: `scratch_center_pressure_field` interpolated to faces.
+  - `pressure_space`: the space of `pfull_field` with pressure as the vertical coordinate.
+  - `pressure_levels`: the target pressure levels, in decreasing order, shared by all
+    columns.
+  - `extrapolate`: `ClimaInterpolations.Interpolation1D.Extrapolate1D` rule for pressure
+    levels outside a column's pressure range.
 
-    By default, vertical interpolation uses constant boundary conditions at the
-    top and bottom of the atmosphere. Interpolated values at pressure levels
-    outside the model's vertical range may be inaccurate.
+!!! warning "No validation of the pressure-height relationship"
+
+    The implementation assumes that pressure decreases monotonically with height. Where
+    the cumulative minimum flattens the pressure profile, the interpolated field is
+    unreliable; check for instabilities or inversions in the pressure field.
+
+!!! note "Boundary conditions"
+
+    By default, values at pressure levels outside a column's pressure range are
+    extrapolated as constants (`Flat()`) and may be inaccurate.
 
 !!! note "Center space"
 
-    The pressure field must be defined on a center space.
+    `pfull_field` must be defined on a center space.
 """
 struct PressureInterpolator{
     CENTER <: Fields.Field,
@@ -36,63 +49,24 @@ struct PressureInterpolator{
     LEVELS,
     EXTRAPOLATE <: ClimaInterpolations.Interpolation1D.Extrapolate1D,
 }
-    """
-    A ClimaCore.Field representing pressure on center space. This field is
-    defined on a space with height (z) as the vertical coordinate, not
-    pressure.
-    """
     pfull_field::CENTER
-
-    """
-    A scratch pressure field that stores the result of applying accumulate
-    with min.
-    """
     scratch_center_pressure_field::CENTER
-
-    """
-    A scratch face pressure field that is interpolated from
-    scratch_center_pressure_field
-    """
     scratch_face_pressure_field::FACE
-
-    """
-    A space that is identical to the space that pfull_field is defined on,
-    but the vertical coordinate is pressure
-    """
     pressure_space::SPACE
-
-    """
-    A 1D vector of pressure coordinates to interpolate onto for every
-    column
-    """
     pressure_levels::LEVELS
-
-    """
-    Extrapolation condition when interpolating outside of the pressure
-    range
-    """
     extrapolate::EXTRAPOLATE
 end
 
 """
-    construct_pressure_space(
-        ::Type{FT},
-        space::Union{
-            Spaces.ExtrudedFiniteDifferenceSpace,
-            Spaces.AbstractFiniteDifferenceSpace,
-        },
-        pressure_levels,
-    )
+    construct_pressure_space(::Type{FT}, space, pressure_levels)
 
-Construct a new space for pressure-coordinate interpolation.
+Return a space like `space` but with pressure as the vertical coordinate.
 
-Given an input `space`, creates a new space where:
-
-  - The vertical coordinate type is `PPoint` (pressure) instead of `ZPoint`
-    (height)
-  - The vertical staggering is `CellFace`
-  - All horizontal components (e.g. topology, quadrature, grid if they exist) are
-    preserved from the input space
+The vertical grid is a `FiniteDifferenceGrid` of `PPoint{FT}`s with faces at
+`pressure_levels`, and the staggering is `CellFace`. For an
+`ExtrudedFiniteDifferenceSpace`, the horizontal grid and global geometry are kept and the
+hypsography is `Flat`; for an `AbstractFiniteDifferenceSpace`, the result is a
+`FiniteDifferenceSpace`.
 """
 function construct_pressure_space(
     ::Type{FT},
@@ -129,9 +103,13 @@ function construct_pressure_space(
 end
 
 """
-    construct_pfull_grid(::Type{FT}, pressure_levels, device) where {FT}
+    construct_pfull_grid(::Type{FT}, pressure_levels, device)
 
-Construct a `Grids.FiniteDifferenceGrid` consisting of `PPoints`.
+Return a `Grids.FiniteDifferenceGrid` whose faces are `PPoint{FT}`s at `pressure_levels`,
+on a `SingletonCommsContext` for `device`.
+
+`pressure_levels` must be increasing. The boundary at the minimum pressure is named `:top`
+and the boundary at the maximum pressure `:bottom`.
 """
 function construct_pfull_grid(::Type{FT}, pressure_levels, device) where {FT}
     pfull_boundary_names = (:top, :bottom)
@@ -158,11 +136,12 @@ end
         extrapolate = ClimaInterpolations.Interpolation1D.Flat(),
     )
 
-Construct a `PressureInterpolator` from `pfull_field`, a pressure field defined
-on a center space and `pressure_levels`, a vector of pressure levels to
-interpolate to.
+Construct a `PressureInterpolator` from `pfull_field`, the pressure on a center space, and
+`pressure_levels`, the vector of pressure levels to interpolate to.
 
-The pressure levels must be in ascending or descending order.
+`pressure_levels` must be sorted, ascending or descending; they are converted to the
+element type of `pfull_field`. `extrapolate` sets the treatment of levels outside a
+column's pressure range; the default `Flat()` extrapolates constants.
 """
 function PressureInterpolator(
     pfull_field::Fields.Field,
@@ -188,17 +167,17 @@ end
 """
     PressureInterpolator(
         pfull_field::Fields.Field,
-        pressure_space::Union{
-            Spaces.AbstractFiniteDifferenceSpace,
-            Spaces.ExtrudedFiniteDifferenceSpace,
-        };
-        extrapolate = ClimaInterpolations.Interpolation1D.Flat()
+        pressure_space;
+        extrapolate = ClimaInterpolations.Interpolation1D.Flat(),
     )
 
-Construct a `PressureInterpolator` from `pfull_field`, a pressure field, and
-`pressure_space`, a space with pressure as the vertical coordinate.
+Construct a `PressureInterpolator` from `pfull_field`, the pressure on a center space, and
+`pressure_space`, a space whose vertical coordinate is `PPoint` (as built by
+`construct_pressure_space`). The face coordinates of `pressure_space` are the target
+pressure levels.
 
-The default extrapolation behavior is constant extrapolation.
+`extrapolate` sets the treatment of levels outside a column's pressure range; the default
+`Flat()` extrapolates constants.
 """
 function PressureInterpolator(
     pfull_field::Fields.Field,
@@ -239,24 +218,23 @@ end
 """
     pfull_field(pfull_intp::PressureInterpolator)
 
-Get the pressure field defined on the center space from `pfull_intp`.
+Return the pressure field on the center space stored in `pfull_intp`.
 """
 pfull_field(pfull_intp::PressureInterpolator) = pfull_intp.pfull_field
 
 """
     pressure_space(pfull_intp::PressureInterpolator)
 
-Return the space where the points along the vertical are `PPoint`s.
+Return the space of `pfull_intp` whose vertical coordinates are `PPoint`s.
 """
 pressure_space(pfull_intp::PressureInterpolator) = pfull_intp.pressure_space
 
 """
     update!(pfull_intp::PressureInterpolator)
 
-Update `pfull_intp` after the pressure field has been modified.
+Recompute the monotone scratch pressure fields of `pfull_intp` from its pressure field.
 
-This should only be called once whenever the pressure field changes before
-performing new interpolations.
+Call this once after the pressure field changes and before interpolating again.
 """
 function update!(pfull_intp::PressureInterpolator)
     (; pfull_field, scratch_center_pressure_field, scratch_face_pressure_field) = pfull_intp
@@ -265,14 +243,13 @@ function update!(pfull_intp::PressureInterpolator)
 end
 
 """
-    _update!(
-        pfull_field::Fields.Field,
-        scratch_center_pressure_field,
-        scratch_face_pressure_field,
-    )
+    _update!(pfull_field, scratch_center_pressure_field, scratch_face_pressure_field)
 
-A helper function to update the pressure fields, so that the pressures for each
-column are monotonic.
+Fill `scratch_center_pressure_field` with the column-wise cumulative minimum (from the
+bottom up) of `pfull_field`, and `scratch_face_pressure_field` with its interpolation to
+faces, extrapolating at the top and bottom.
+
+Called from [`update!`](@ref) and the `PressureInterpolator` constructor.
 """
 function _update!(
     pfull_field::Fields.Field,
@@ -292,13 +269,12 @@ function _update!(
 end
 
 """
-    interpolate_pressure(
-        field::Fields.Field,
-        pfull_intp::PressureInterpolator,
-    )
+    interpolate_pressure(field::Fields.Field, pfull_intp::PressureInterpolator)
 
-Vertically interpolate field onto a space identical to that of field, but with
-pressure as the vertical coordinate and return the interpolated field.
+Interpolate `field` vertically onto the pressure space of `pfull_intp` and return the
+result as a new `Field`.
+
+See [`interpolate_pressure!`](@ref) for the in-place version.
 """
 function interpolate_pressure(
     field::Fields.Field,
@@ -314,12 +290,15 @@ end
     interpolate_pressure!(
         dest::Fields.Field,
         field::Fields.Field,
-        pfull_intp::PressureInterpolator;
+        pfull_intp::PressureInterpolator,
     )
 
-Vertically interpolate `field` onto `dest` and return `nothing`.
+Interpolate `field` vertically onto `dest`, a `Field` on the pressure space of
+`pfull_intp`, and return `nothing`.
 
-The vertical coordinate of the space of `dest` must be in pressure.
+`field` may live on a center or a face space; the matching scratch pressure field of
+`pfull_intp` serves as the source coordinate. Interpolation is linear in pressure, with the
+extrapolation rule of `pfull_intp` outside a column's pressure range.
 """
 function interpolate_pressure!(
     dest::Fields.Field,

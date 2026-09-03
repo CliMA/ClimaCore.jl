@@ -2,20 +2,20 @@ import BlockArrays
 
 
 """
-    FieldVector
+    FieldVector{T, M} <: BlockArrays.AbstractBlockVector{T}
 
-A `FieldVector` is a wrapper around one or more `Field`s that acts like vector
-of the underlying arrays.
+Wrapper around one or more `Field`s that acts like a vector of the underlying
+arrays. Unlike a plain concatenation of the underlying arrays, its components can
+be referred to by name.
 
-Unlike a plain concatenation of the underlying arrays, its fields can be
-referred to by name.
+# Constructor
 
-# Constructors
+    FieldVector(; name1 = field1, name2 = field2, ...)
 
-    FieldVector(;name1=field1, name2=field2, ...)
-
-Construct a `FieldVector`, wrapping `field1, field2, ...` using the names
-`name1, name2, ...`.
+Construct a `FieldVector` wrapping `field1, field2, ...` under the names
+`name1, name2, ...`. `Real` components are wrapped in a `ScalarWrapper` and
+`NamedTuple` components become nested `FieldVector`s (see `Fields.wrap`). The
+element type `T` is the promotion of the component element types.
 """
 struct FieldVector{T, M} <: BlockArrays.AbstractBlockVector{T}
     values::M
@@ -29,11 +29,11 @@ function Adapt.adapt_structure(to, fv::FieldVector)
 end
 
 """
-    Fields.ScalarWrapper(val) <: AbstractArray{T,0}
+    Fields.ScalarWrapper{T} <: AbstractArray{T, 0}
 
-This is a wrapper around scalar values that allows them to be mutated as part of
-a FieldVector. A call `getproperty` on a `FieldVector` with this component will
-return a scalar, instead of the boxed object.
+Mutable wrapper around a scalar value, so that it can be mutated as part of a
+`FieldVector`. `getproperty` on a `FieldVector` with such a component returns the
+scalar, not the wrapper.
 """
 mutable struct ScalarWrapper{T} <: AbstractArray{T, 0}
     val::T
@@ -50,8 +50,8 @@ Base.zero(s::ScalarWrapper) = ScalarWrapper(zero(s.val))
 """
     Fields.wrap(x)
 
-Construct a mutable wrapper around `x`. This can be extended for new types
-(especially immutable ones).
+Construct a mutable wrapper around `x` for use as a `FieldVector` component. This
+can be extended for new types, especially immutable ones.
 """
 wrap(x) = x
 wrap(x::Real) = ScalarWrapper(x)
@@ -61,8 +61,9 @@ wrap(x::NamedTuple) = FieldVector(; pairs(x)...)
 """
     Fields.unwrap(x::T)
 
-This is called when calling `getproperty` on a `FieldVector` property of element
-type `T`.
+Return the value exposed by `getproperty` on a `FieldVector` for the stored
+component `x`. `ScalarWrapper` components unwrap to their scalar; other components
+are returned as is.
 """
 unwrap(x) = x
 
@@ -87,7 +88,7 @@ _values(fv::FieldVector) = getfield(fv, :values)
 """
     backing_array(x)
 
-The `AbstractArray` that is backs an object `x`, allowing it to be treated as a
+Return the `AbstractArray` that backs `x`, allowing it to be treated as a
 component of a `FieldVector`.
 """
 backing_array(x) = x
@@ -219,9 +220,7 @@ end
 """
     Spaces.create_dss_buffer(fv::FieldVector)
 
-Create a NamedTuple of buffers for communicating neighbour information of
-each Field in `fv`. In this NamedTuple, the name of each field is mapped
-to the buffer.
+Create a `NamedTuple` mapping the name of each field in `fv` to its DSS buffer.
 """
 function Spaces.create_dss_buffer(fv::FieldVector)
     NamedTuple{propertynames(fv)}(
@@ -235,10 +234,10 @@ end
 """
     Spaces.weighted_dss!(fv::FieldVector, dss_buffer = Spaces.create_dss_buffer(fv))
 
-Apply weighted direct stiffness summation (DSS) to each field in `fv`.
-If a `dss_buffer` object is not provided, a buffer will be created for each
-field in `fv`.
-Note that using the `Pair` interface here parallelizes the `weighted_dss!` calls.
+Apply weighted direct stiffness summation (DSS) to each field in `fv` in place. If
+`dss_buffer` is not provided, a buffer is created for each field in `fv`. The
+fields are passed to the `Pair` method of `Spaces.weighted_dss!`, which overlaps
+their communication.
 """
 function Spaces.weighted_dss!(
     fv::FieldVector,
@@ -322,7 +321,8 @@ end
     unrolled_map(Val, names)
 @inline unval(::Val{value}) where {value} = value
 
-# Recursively call transform_bc_args() on broadcast arguments in a way that is statically reducible by the optimizer
+# Recursively call transform_bc_args() on broadcast arguments in a way that the
+# optimizer can reduce statically.
 # see Base.Broadcast.preprocess_args
 @inline transform_bc_args(args::Tuple, inds...) =
     unrolled_map(args) do arg
@@ -345,7 +345,7 @@ end
 @inline transform_broadcasted(x, symb_val, axes) = x
 
 # FieldVector entries are N-dimensional arrays, and broadcasting over them on
-# GPU pays for an N-dimensional Cartesian index computation (one integer
+# GPU performs an N-dimensional Cartesian index computation (one integer
 # division and modulo per dimension) in every thread. When the destination and
 # every array in the broadcast have the same shape and support fast linear
 # indexing (`Base.IndexStyle` is `IndexLinear`: dense arrays and contiguous
@@ -681,10 +681,11 @@ function __rprint_diff(io::IO, xi, yi; pc, xname, yname) # assume we can compute
 end
 
 """
-    rprint_diff(io::IO, ::T, ::T) where {T <: Union{FieldVector, NamedTuple}}
-    rprint_diff(::T, ::T) where {T <: Union{FieldVector, NamedTuple}}
+    _rprint_diff(io::IO, x::T, y::T, xname, yname) where {T <: Union{FieldVector, NamedTuple}}
+    _rprint_diff(x::T, y::T, xname, yname) where {T <: Union{FieldVector, NamedTuple}}
 
-Recursively print differences in given `Union{FieldVector, NamedTuple}`.
+Recursively print the differences between `x` and `y` to `io` (default `stdout`),
+labeling them with `xname` and `yname`. Called by `@rprint_diff`.
 """
 _rprint_diff(
     io::IO,
@@ -703,9 +704,10 @@ _rprint_diff(
     _rprint_diff(stdout, x, y, xname, yname)
 
 """
-    @rprint_diff(::T, ::T) where {T <: Union{FieldVector, NamedTuple}}
+    @rprint_diff x y
 
-Recursively print differences in given `Union{FieldVector, NamedTuple}`.
+Recursively print the differences between `x` and `y`, which are `FieldVector`s or
+`NamedTuple`s of the same type, to `stdout`.
 """
 macro rprint_diff(x, y)
     return :(_rprint_diff(
@@ -744,17 +746,16 @@ end
 """
     rcompare(x::T, y::T; strict = true) where {T <: Union{FieldVector, NamedTuple}}
 
-Recursively compare given fieldvectors via `==`.
-Returns `true` if `x == y` recursively.
+Recursively compare `x` and `y` via `==`; return `true` if all components are
+equal.
 
-The keyword `strict = true` allows users to additionally
-check that the types match. If `strict = false`, then
-`rcompare` will return `true` for `FieldVector`s and
-`NamedTuple`s with the same properties but permuted order.
-For example:
+With `strict = true`, the types must match as well, and `FieldVector`s or
+`NamedTuple`s of different types compare unequal. With `strict = false`,
+`rcompare` returns `true` for `FieldVector`s and `NamedTuple`s with the same
+properties in permuted order. For example:
 
-  - `rcompare((;a=1,b=2), (;b=2,a=1); strict = true)` will return `false` and
-  - `rcompare((;a=1,b=2), (;b=2,a=1); strict = false)` will return `true`
+  - `rcompare((; a = 1, b = 2), (; b = 2, a = 1); strict = true)` returns `false`.
+  - `rcompare((; a = 1, b = 2), (; b = 2, a = 1); strict = false)` returns `true`.
 """
 rcompare(
     x::T,

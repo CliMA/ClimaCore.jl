@@ -1,11 +1,13 @@
 """
     dss_transform(arg, local_geometry, weight, I)
 
-Transfrom `arg[I]` to a basis for direct stiffness summation (DSS).
-Transformations only apply to vector quantities.
+Transform `arg[I]` to a basis for direct stiffness summation (DSS) and multiply it by
+the DSS weight. Transformations only apply to vector quantities.
 
-  - `local_geometry[I]` is the relevant `LocalGeometry` object. If it is `nothing`, then no transformation is performed
-  - `weight[I]` is the relevant DSS weights. If `weight` is `nothing`, then the result is simply summation.
+  - `local_geometry[I]`: The `LocalGeometry` at `I`. If `local_geometry` is `nothing`,
+    no transformation is performed.
+  - `weight[I]`: The DSS weight at `I`. If `weight` is `nothing`, the weight is 1 and
+    the result is plain summation.
 
 See [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
@@ -91,9 +93,10 @@ const NonTransformedAxis =
 end
 
 """
-    dss_untransform(T, targ, local_geometry, I...)
+    dss_untransform(T, targ, local_geometry, I)
 
-Transform `targ[I...]` back to a value of type `T` after performing direct stiffness summation (DSS).
+Transform `targ` back to a value of type `T` using `local_geometry[I]`, after direct
+stiffness summation (DSS).
 
 See [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
@@ -191,8 +194,8 @@ end
 """
     fill_send_buffer!(topology, data, ghost_buffer::GhostBuffer)
 
-Loads the send buffer of `ghost_buffer` with the data of the elements
-that neighboring processes need for their ghost elements.
+Load the send buffer of `ghost_buffer` with the data of the elements that
+neighboring processes need for their ghost elements. Returns `nothing`.
 """
 function fill_send_buffer!(
     topology::Topology2D,
@@ -217,10 +220,10 @@ end
 """
     GhostFaceExchange
 
-Face-strip halo exchange for the DG ghost-face operators: ships only the `Nq`
+Face-strip halo exchange for the DG ghost-face operators: exchanges only the `Nq`
 face-node values (per level and field component) of each rank-boundary face,
 instead of whole neighbour elements — the face analog of the perimeter-only
-`DSSBuffer`. Only face-sharing neighbours participate; vertex-only halo
+[`DSSBuffer`](@ref). Only face-sharing neighbours participate; vertex-only halo
 neighbours are excluded on both sides of each pair, so participation is
 symmetric by construction.
 
@@ -235,14 +238,18 @@ peer expects. Strips are packed in the sending face's natural node order
 (`face_node_index(face, Nq, q, false)`); a receiver whose face is `reversed`
 relative to the sender reads node `q` at strip index `Nq - q + 1`.
 
-Fields:
+# Fields
 
-  - `graph_context`: the `ClimaComms` exchange over face-sharing neighbours;
-  - `send_data`, `recv_data`: the strip layouts described above;
-  - `slot_lidx`, `slot_face`: strip slot → local element and face, stored with
-    the topology's array type for the device-side pack;
-  - `face_slot`: position in [`ghost_faces`](@ref) order → strip slot (host
-    vector; consumed when building face connectivity on the host).
+  - `graph_context`: The `ClimaComms` exchange over face-sharing neighbours.
+  - `send_data`, `recv_data`: The strip layouts described above.
+  - `slot_lidx`, `slot_face`: Strip slot → local element and face, stored with the
+    topology's array type for the device-side pack.
+  - `face_slot`: Position in [`ghost_faces`](@ref) order → strip slot (host vector,
+    consumed when building face connectivity on the host).
+  - `in_flight`: Latch set at fill and cleared at finish. Exchanges are memoized per
+    (space, data type, argument position), so distinct fields of the same type share
+    this object; an overlapping second start is an error rather than a silent
+    overwrite of the in-flight send strips.
 """
 struct GhostFaceExchange{G, D, IV}
     graph_context::G
@@ -299,11 +306,11 @@ end
 """
     create_ghost_face_exchange(data, topology)
 
-Construct the [`GhostFaceExchange`](@ref) for exchanging the ghost-face strips
-of `data` (see there for the slot and node-order conventions). Returns
-`nothing` on single-process contexts and on ranks with no ghost faces — with
-face-strip granularity a rank with no ghost faces shares no exchange with any
-neighbour, so it can skip the exchange without stranding a peer.
+Construct the [`GhostFaceExchange`](@ref) for exchanging the ghost-face strips of
+`data` (see there for the slot and node-order conventions). Return `nothing` on
+single-process contexts and on ranks with no ghost faces: with face-strip
+granularity a rank with no ghost faces shares no exchange with any neighbour, so
+it can skip the exchange without stranding a peer.
 """
 create_ghost_face_exchange(data, topology::AbstractTopology) = nothing
 
@@ -353,9 +360,9 @@ end
 """
     fill_face_send_buffer!(data, exchange::GhostFaceExchange)
 
-Load the send strips of `exchange` with the face-node values of `data`, in
-each face's natural node order. Host loop — the CUDA path packs with a single
-kernel instead (see `ext/cuda/operators_dg.jl`).
+Load the send strips of `exchange` with the face-node values of `data`, in each
+face's natural node order. Returns `nothing`. This is the host loop; the CUDA path
+packs with a single kernel instead (see `ext/cuda/operators_dg.jl`).
 """
 function fill_face_send_buffer!(
     data::DataLayouts.DataLayout,

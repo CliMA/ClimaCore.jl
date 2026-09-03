@@ -3,21 +3,19 @@ import ClimaCore: slab, column
 
 
 """
-    def_time_coord(nc::NCDataset, length=Inf, eltype=Float64;
-        units = "seconds since 2020-01-01 00:00:00"
-        kwargs...
-    )
+    def_time_coord(nc::NCDataset, length = Inf, eltype = Float64;
+        standard_name = "time", long_name = "time", axis = "T", kwargs...)
 
-Deine a time coordinate (dimension + variable) `"time"` in the NetCDF dataset
-`nc`. By default its length is set to be unlimited. The variable corresponding
-to the coordinate is returned.
+Define a time coordinate (dimension and variable) `"time"` in the NetCDF dataset `nc` and
+return the variable. By default its length is unlimited.
 
-Additional attributes can be added as keyword arguments.
+The keyword arguments `standard_name`, `long_name`, and `axis` set the corresponding
+attributes; any further keyword arguments are added as attributes as well.
 
-# Example
+# Examples
 
 ```julia
-timevar = add_time_coord!(nc; units = "seconds since 2020-01-01 00:00:00")
+timevar = def_time_coord(nc; units = "seconds since 2020-01-01 00:00:00")
 timevar[:] = collect(0.0:0.5:60)
 ```
 """
@@ -45,10 +43,15 @@ end
 """
     def_space_coord(nc::NCDataset, space::Spaces.AbstractSpace; type = "dgll")
 
-Add spatial dimensions for `space` in the NetCDF dataset `nc`, compatible with
-the type used by [`remap_weights`](@ref).
+Define the spatial dimensions and coordinate variables for `space` in the NetCDF dataset
+`nc` and return the coordinate variables as a tuple.
 
-If a compatible dimension already exists, it will be reused.
+For horizontal and extruded spaces, `type` is the node type used by
+[`remap_weights`](@ref), `"cgll"` (unique nodes) or `"dgll"` (all nodes); it is recorded
+in the `node_type` attribute of `nc`. Horizontal coordinates are `X`/`Y` [m] on
+rectilinear meshes and `lat`/`lon` [degrees] otherwise; vertical coordinates are `z`
+for center spaces and `z_half` for face spaces [m]. If a compatible dimension already
+exists, it is reused; if one with a different size exists, an error is thrown.
 """
 def_space_coord(
     nc::NCDataset,
@@ -243,7 +246,8 @@ end
 """
     space_dims(space::Spaces.AbstractSpace)
 
-The names of the NetCDF dimensions used by `space`.
+Return the names of the NetCDF dimensions used by `space`, as defined by
+[`def_space_coord`](@ref).
 """
 space_dims(space::Spaces.SpectralElementSpace2D) = ("ncol",)
 space_dims(space::Spaces.CenterFiniteDifferenceSpace) = ("z",)
@@ -252,11 +256,11 @@ space_dims(space::Spaces.CenterExtrudedFiniteDifferenceSpace) = ("ncol", "z")
 space_dims(space::Spaces.FaceExtrudedFiniteDifferenceSpace) = ("ncol", "z_half")
 
 """
-    NCDatasets.defVar(nc::NCDataset, name::String, T, space::AbstractSpace, extradims=())
+    NCDatasets.defVar(nc::NCDataset, name, T::DataType, space::AbstractSpace, extradims = ())
 
-Define a new variable in `nc` named `name` of element type `T` suitable for
-storing a field on `space`, along with any further dimensions specified in
-`extradims`. The new variable is returned.
+Define a new variable in `nc` named `name`, suitable for storing a field with element
+type `T <: Real` on `space`, along with any further dimensions named in `extradims`, and
+return it. The variable is stored as `Float64` regardless of `T`.
 """
 function NCDatasets.defVar(
     nc::NCDataset,
@@ -270,15 +274,14 @@ function NCDatasets.defVar(
 end
 
 """
-    NCDatasets.defVar(nc::NCDataset, name, field::Field, extradims=())
+    NCDatasets.defVar(nc::NCDataset, name, field::Field, extradims = ())
 
-Define a new variable in `nc` named `name` of suitable for storing `field`,
-along with any further dimensions specified in `extradims`. The new variable is
-returned.
+Define a new variable in `nc` named `name`, suitable for storing `field`, along with any
+further dimensions named in `extradims`, and return it.
 
 !!! note
 
-    This does not write any data to the variable.
+    This does not write any data to the variable; assign `var[:] = field` to do so.
 """
 function NCDatasets.defVar(
     nc::NCDataset,
@@ -292,9 +295,14 @@ end
 """
     var[:, extraidx...] = field
 
-Write the data in `field` to a NetCDF variable `var`. `extraidx` are any extra indices of `var`.
+Write the data in `field` to the NetCDF variable `var` and return `var`. `extraidx` are
+the indices of `var` along any extra dimensions, e.g. the time index.
 
-Appropriate spatial dimensions should already be defined by [`defVar`](@ref).
+`var` must have been defined by [`defVar`](@ref) on a dataset whose spatial dimensions
+were defined by [`def_space_coord`](@ref); the dataset's `node_type` attribute selects
+the unique or all-node layout.
+
+# Examples
 
 ```julia
 # Given a collection of fields U, write them as a single array to a NetCDF file.

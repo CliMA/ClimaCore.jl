@@ -2,21 +2,18 @@ import Adapt
 import ClimaComms
 
 """
-    out = to_device(device, x::Union{
-        DataLayouts.DataLayout,
-        Spaces.AbstractSpace,
-        Fields.Field,
-        Fields.FieldVector,
-    })
+    to_device(device, x)
 
 Move `x` to the given `device`.
 
-This is particularly useful to move different types of `Space.AbstractSpace`s,
-`Fields.Field`s, and `Fields.FieldVector`s from CPUs to GPUs and viceversa.
+`x` is a `DataLayouts.DataLayout`, `Spaces.AbstractSpace`, `Fields.Field`, or
+`Fields.FieldVector`; this moves the backing arrays between CPUs and GPUs in either
+direction.
 
-If the input is already defined on the target device, returns a copy.
+# Returns
 
-This means that `out === x` will not in general be satisfied.
+A copy of `x` on `device`, also when `x` already lives on `device`; the result is never
+`===` to `x`.
 """
 function to_device(
     device::ClimaComms.AbstractDevice,
@@ -34,21 +31,16 @@ to_device(::ClimaComms.CPUMultiThreaded, _) = error("Not supported")
 
 
 """
-    out = to_cpu(x::Union{
-        DataLayouts.DataLayout,
-        Spaces.AbstractSpace,
-        Fields.Field,
-        Fields.FieldVector,
-    })
+    to_cpu(x)
 
-Move `x` backing data to the CPU.
+Move the backing data of `x` to the CPU.
 
-This is particularly useful for `Space.AbstractSpace`s,
-`Fields.Field`s, and `Fields.FieldVector`s.
+`x` is a `DataLayouts.DataLayout`, `Spaces.AbstractSpace`, `Fields.Field`, or
+`Fields.FieldVector`. Equivalent to `to_device(ClimaComms.CPUSingleThreaded(), x)`.
 
-Returns a copy.
+# Returns
 
-This means that `out === x` will not in general be satisfied.
+A copy of `x` on the CPU; the result is never `===` to `x`.
 """
 to_cpu(
     x::Union{

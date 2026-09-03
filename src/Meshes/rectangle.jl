@@ -1,13 +1,16 @@
 """
     RectilinearMesh <: AbstractMesh2D
 
-# Constructors
+Rectilinear mesh of a `RectangleDomain`: the product of two `IntervalMesh`es.
+Elements are indexed by `CartesianIndex{2}`.
+
+# Constructor
 
     RectilinearMesh(domain::RectangleDomain, n1, n2)
 
-Construct a `RectilinearMesh` of equally-spaced `n1` by `n2` elements on `domain`.
+Construct a `RectilinearMesh` of `n1` by `n2` equally spaced elements on `domain`.
 
-    RectilinearMesh(intervalmesh1::IntervalMesh1, intervalmesh2::IntervalMesh2)
+    RectilinearMesh(intervalmesh1::IntervalMesh, intervalmesh2::IntervalMesh)
 
 Construct the product mesh of `intervalmesh1` and `intervalmesh2`.
 """

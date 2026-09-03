@@ -8,15 +8,19 @@ import ...Meshes, ...Geometry, ...Domains
 #####
 
 """
+    DefaultSliceXMesh(; kwargs...)
     DefaultSliceXMesh(
-        ::Type{<:AbstractFloat}; # defaults to Float64
+        ::Type{FT};
         x_min::Real,
         x_max::Real,
         periodic_x::Bool,
         x_elem::Integer,
     )
 
-A convenience constructor, which builds an `IntervalMesh`.
+Build the `Meshes.IntervalMesh` along `x` used by the slice grids.
+
+The float type `FT` defaults to `Float64`. When `periodic_x` is `false`, the boundaries
+are named `:west` and `:east`.
 """
 DefaultSliceXMesh(; kwargs...) = DefaultSliceXMesh(Float64; kwargs...)
 function DefaultSliceXMesh(
@@ -38,15 +42,18 @@ function DefaultSliceXMesh(
 end
 
 """
+    DefaultZMesh(; kwargs...)
     DefaultZMesh(
-        ::Type{<:AbstractFloat}; # defaults to Float64
+        ::Type{FT};
         z_min::Real,
         z_max::Real,
         z_elem::Integer,
         stretch::Meshes.StretchingRule = Meshes.Uniform(),
     )
 
-A convenience constructor, which builds an `IntervalMesh`.
+Build the vertical `Meshes.IntervalMesh` used by the extruded grids.
+
+The float type `FT` defaults to `Float64`. The boundaries are named `:bottom` and `:top`.
 """
 DefaultZMesh(; kwargs...) = DefaultZMesh(Float64; kwargs...)
 function DefaultZMesh(
@@ -66,19 +73,24 @@ function DefaultZMesh(
 end
 
 """
+    DefaultRectangleXYMesh(; kwargs...)
     DefaultRectangleXYMesh(
-        ::Type{<:AbstractFloat}; # defaults to Float64
+        ::Type{FT};
         x_min::Real,
         x_max::Real,
         y_min::Real,
         y_max::Real,
+        x_elem::Integer,
+        y_elem::Integer,
         periodic_x::Bool,
         periodic_y::Bool,
     )
 
-A convenience constructor, which builds a
-`RectilinearMesh` with a rectangular domain
-composed of interval domains.
+Build the `Meshes.RectilinearMesh` on a rectangular domain composed of two interval
+domains, as used by the rectangle and box grids.
+
+The float type `FT` defaults to `Float64`. Non-periodic boundaries are named `:west`,
+`:east`, `:south`, and `:north`.
 """
 DefaultRectangleXYMesh(; kwargs...) = DefaultRectangleXYMesh(Float64; kwargs...)
 function DefaultRectangleXYMesh(

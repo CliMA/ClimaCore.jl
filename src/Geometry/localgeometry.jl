@@ -2,33 +2,36 @@ isapproxsymmetric(A::AbstractMatrix{T}; rtol = 10 * eps(T)) where {T <: Abstract
     Base.isapprox(A, A'; rtol)
 
 """
-    LocalGeometry
+    LocalGeometry{I, C, FT, M, G}
+    LocalGeometry(coordinates, J, WJ, ∂x∂ξ::Tensor{2})
 
-The necessary local metric information defined at each node.
+Local metric information defined at each node.
+
+`I` is the tuple of component names of the reference-space axes that the node's grid
+spans, `C` the coordinate type, `FT` the float type, and `M` and `G` the padded
+tensor types of `∂x∂ξ` and `gⁱʲ`. The constructor accepts a `∂x∂ξ` `Tensor{2}` with
+orthonormal and covariant bases of any size and pads it to the full 3×3 shape.
+
+# Fields
+
+  - `coordinates`: coordinates of the node.
+  - `J`: Jacobian determinant of the transformation from reference space `ξ` to physical
+    space `x`.
+  - `WJ`: `J` multiplied by the quadrature weight.
+  - `∂x∂ξ`: canonical metric ∂x/∂ξ, identity-padded to the full
+    `(UVWAxis, Covariant123Axis)` shape so that a single matrix-vector product covers
+    every conversion regardless of `I`.
+  - `gⁱʲ`: contravariant metric tensor, identity-padded to the full
+    `(Contravariant123Axis, Contravariant123Axis)` shape.
+
+The derived properties `invJ`, `∂ξ∂x`, and `gᵢⱼ` are computed on access as the inverses
+of `J`, `∂x∂ξ`, and `gⁱʲ`.
 """
 struct LocalGeometry{I, C <: AbstractPoint, FT, M, G}
-    """
-    Coordinates of the current point
-    """
     coordinates::C
-    """
-    Jacobian determinant of the transformation `ξ` (reference space) to `x` (physical space)
-    """
     J::FT
-    """
-    Metric terms: `J` multiplied by the quadrature weights
-    """
     WJ::FT
-    """
-    Canonical metric ∂x/∂ξ. Identity-padded to full
-    (UVWAxis, Covariant123Axis) shape so a single matvec covers every
-    conversion regardless of `I`.
-    """
     ∂x∂ξ::M
-    """
-    Contravariant metric tensor gⁱʲ. Identity-padded to full
-    (Contravariant123, Contravariant123) shape.
-    """
     gⁱʲ::G
 end
 
@@ -71,8 +74,8 @@ const PaddedContravariantMetric{FT} =
 """
     LocalGeometryType(::Type{C}, ::Type{FT}, I)
 
-Compute the concrete `LocalGeometry` type for coordinate type `C`, float type `FT`,
-and index tuple `I`. Useful for pre-allocating DataLayouts with the correct element type.
+Return the concrete `LocalGeometry` type for coordinate type `C`, float type `FT`, and
+component-name tuple `I`, for pre-allocating data layouts with the correct element type.
 """
 function LocalGeometryType(::Type{C}, ::Type{FT}, I::Tuple) where {C <: AbstractPoint, FT}
     return LocalGeometry{
@@ -83,33 +86,32 @@ function LocalGeometryType(::Type{C}, ::Type{FT}, I::Tuple) where {C <: Abstract
 end
 
 """
-    SurfaceGeometry
+    SurfaceGeometry{FT, N}
 
-The necessary local metric information defined at each node on each surface.
+Local metric information defined at each node on each element surface.
+
+# Fields
+
+  - `sWJ`: surface Jacobian determinant multiplied by the surface quadrature weight.
+  - `normal`: outward-pointing surface normal vector.
 """
 struct SurfaceGeometry{FT, N}
-    """
-    surface Jacobian determinant, multiplied by the surface quadrature weight
-    """
     sWJ::FT
-    """
-    surface outward pointing normal vector
-    """
     normal::N
 end
 
 """
-    CoordinateOnlyGeometry
+    CoordinateOnlyGeometry{C}
 
-The necessary coordinates information defined at each node.
+Coordinate information defined at each node, without metric terms.
 
-This is currently used for constructing spaces with pressure as the vertical
-coordinate.
+Used for constructing spaces with pressure as the vertical coordinate.
+
+# Fields
+
+  - `coordinates`: coordinates of the node.
 """
 struct CoordinateOnlyGeometry{C <: AbstractPoint}
-    """
-    Coordinates of the current point
-    """
     coordinates::C
 end
 

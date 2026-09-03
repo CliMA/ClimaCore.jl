@@ -15,7 +15,8 @@ end
 """
     LinearRemap(target::AbstractSpace, source::AbstractSpace)
 
-A remapping operator from the `source` space to the `target` space.
+Construct a linear remapping operator from the `source` space to the `target`
+space; apply it with `remap` or `remap!`.
 
 See [Ullrich2015](@cite) eqs. 3 and 4.
 """
@@ -27,7 +28,7 @@ end
 """
     remap(R::LinearRemap, source_field::Field)
 
-Applies `R` to `source_field` and outputs a new field on the target space.
+Apply `R` to `source_field` and return a new field on the target space.
 """
 function remap(R::LinearRemap, source_field::Field)
     target_space = R.target
@@ -38,7 +39,9 @@ end
 """
     remap!(target_field::Field, R::LinearRemap, source_field::Field)
 
-Applies the remapping operator `R` to `source_field` and stores the solution in `target_field`.
+Apply the remapping operator `R` to `source_field`, store the result in
+`target_field`, and return `target_field`. The spaces of the fields must match
+`R.source` and `R.target`.
 """
 function remap!(target_field::Field, R::LinearRemap, source_field::Field)
     @assert (R.source == axes(source_field) && R.target == axes(target_field)) "Remap operator and field space dimensions do not match."
@@ -49,7 +52,8 @@ end
 """
     linear_remap_op(target::AbstractSpace, source::AbstractSpace)
 
-Computes linear remapping operator `R` for remapping from `source` to `target` spaces.
+Compute the linear remapping operator `R` from the `source` to the `target`
+space.
 
 Entry `R_{ij}` gives the contribution weight to the target node `i` from
 source node `j`; nodes are indexed by their global position, determined
@@ -64,7 +68,8 @@ end
 """
     overlap(target, source)
 
-Computes local weights of the overlap mesh for `source` to `target` spaces.
+Compute the local weights of the overlap mesh between the `source` and `target`
+spaces. 2D spaces must be single-process and on rectilinear meshes.
 """
 function overlap(target::SpectralElementSpace1D, source::SpectralElementSpace1D)
     return x_overlap(target, source)
@@ -109,7 +114,8 @@ end
 """
     x_overlap(target, source)
 
-Computes 1D local weights of the overlap mesh for `source` to `target` spaces.
+Compute the 1D local weights of the overlap mesh between the `source` and
+`target` spaces.
 
 For 1D spaces, this returns the full local weight matrix of the overlap. In 2D,
 this returns the overlap weights in the first dimension.
@@ -155,9 +161,8 @@ end
 """
     y_overlap(target, source)
 
-Computes 1D local weights of the overlap mesh for `source` to `target` spaces.
-
-This returns the overlap weights in the second dimension for 2D spaces.
+Compute the 1D local weights of the overlap mesh between the `source` and
+`target` spaces in the second dimension, for 2D spaces.
 """
 function y_overlap(
     target::T,
@@ -206,11 +211,13 @@ end
 """
     overlap_weights!(J_ov, target, source, i, j, coords_t, coords_s)
 
-Computes the overlap weights for a pair of source and target elements.
+Compute the overlap weights for a pair of source and target elements and store
+them in `J_ov`.
 
-The spatial overlap of element `i` on the `target` space and element `j`
-of the `source` space, computed for each nodal pair, approximating
-[Ullrich2015](@cite) eq. 19 via quadrature.
+The spatial overlap of element `i` on the `target` space and element `j` of the
+`source` space (with 1D coordinate bounds `coords_t` and `coords_s`) is computed
+for each nodal pair, approximating [Ullrich2015](@cite) eq. 19 via quadrature.
+Non-overlapping elements leave `J_ov` unchanged.
 """
 function overlap_weights!(J_ov, target, source, i, j, coords_t, coords_s)
     FT = Spaces.undertype(source)
@@ -245,7 +252,8 @@ function overlap_weights!(J_ov, target, source, i, j, coords_t, coords_s)
         targ_idx = Nq_t * (i - 1) + k # global nodal index
         for l in 1:Nq_s
             src_idx = Nq_s * (j - 1) + l
-            # (integral of src_basis * tgt_basis on overlap) / (reference elem length * overlap elem length)
+            # (integral of src_basis * tgt_basis on overlap) /
+            #     (reference elem length * overlap elem length)
             J_ov[targ_idx, src_idx] =
                 (w_ov' * (I_mat_t[:, k] .* I_mat_s[:, l])) ./ 2 *
                 (max_ov - min_ov)
@@ -268,13 +276,13 @@ ycomponent(xy::Geometry.XYPoint) = Geometry.component(xy, 2)
 """
     local_weights(space::AbstractSpace)
 
-Each degree of freedom is associated with a local weight J_i.
-For finite volumes the local weight J_i would represent the geometric area
-of the associated region. For nodal finite elements, the local weight
-represents the value of the global Jacobian, or some global integral of the
-associated basis function.
+Return the vector of local weights `J_i` of the degrees of freedom of `space`
+(the `WJ` of its local geometry). For finite volumes the local weight `J_i` is
+the geometric area of the associated region; for nodal finite elements, it is
+the value of the global Jacobian, or some global integral of the associated
+basis function.
 
-See [Ullrich2015] section 2.
+See [Ullrich2015](@cite) section 2.
 """
 function local_weights(space::AbstractSpace)
     wj = Spaces.local_geometry_data(space).WJ

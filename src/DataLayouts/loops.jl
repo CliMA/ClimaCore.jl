@@ -3,10 +3,10 @@ macro simd_if(condition_expr, loop_expr)
 end
 
 # Whether a point loop over these indices should run under @simd. This requires
-# an indexable iterator, and it only pays off when LLVM can vectorize across
+# an indexable iterator, and it only helps when LLVM can vectorize across
 # many contiguous points, like in the flattened CartesianIndices iterations of
 # CPU loops. GPU scopes override this for their strided index subsets: each GPU
-# thread only iterates a few points, and @simd's loop restructuring just adds
+# thread only iterates a few points, and @simd's loop restructuring adds
 # branches and index arithmetic to every kernel.
 # The dispatch is on the index type rather than on the loop's scope, which would
 # read as the more direct question. Taking a scope here regressed GPU kernels
@@ -71,12 +71,12 @@ end
 """
     slice_subscope(scope, op, args...)
 
-[`DataScope`](@ref) that [`foreach_slice`](@ref) assigns to slices of the given
-arguments when parallelizing over `scope`. By default, this is the smallest
-scope that does not require any thread to process more than one point from the
-largest slice returned by `op`, out of `scope` itself and its subsets. When no
-such scope is available, the largest subset is used in order to minimize the
-number of points per thread.
+Return the [`DataScope`](@ref) that [`foreach_slice`](@ref) assigns to slices of
+the given arguments when parallelizing over `scope`. By default, this is the
+smallest scope, out of `scope` itself and its subsets, that does not require any
+thread to process more than one point from the largest slice returned by `op`.
+When no such scope is available, the largest subset is used in order to minimize
+the number of points per thread.
 
 `scope` itself is only used when its thread count is a compile-time constant
 (see [`static_num_threads`](@ref)), since `scoped_slice_loop` gives every
@@ -117,15 +117,16 @@ end
     (mask, enumerate)
 
 """
-    foreach_slice(op, f, args...; [mask], [enumerate])
+    foreach_slice(op, f, args...; mask = NoMask(), enumerate = Val(false))
+    foreach_slice(scope, op, f, args...; mask = NoMask(), enumerate = Val(false))
 
-Generalization of `eachslice`/`mapslices` that applies `f` to slices of every
-[`DataLayout`](@ref) or similarly indexable argument, where the slice operator
-`op` can be any of the following:
+Apply `f` to slices of every [`DataLayout`](@ref) or similarly indexable argument,
+as a generalization of `eachslice`/`mapslices`. The slice operator `op` can be any
+of the following:
 
-  - [`level`](@ref), but only when [`nelems`](@ref) is statically inferrable
-  - [`slab`](@ref) or [`column`](@ref)
-  - `view` (for single-point slices)
+  - [`level`](@ref), but only when [`nelems`](@ref) is statically inferrable.
+  - [`slab`](@ref) or [`column`](@ref).
+  - `view` (for single-point slices).
 
 Each slice is assigned to a [`slice_subscope`](@ref) of `scope`, by default the
 largest available [`DataScope`](@ref) that can access every argument, and a
@@ -145,7 +146,7 @@ makes this `f(index, slices...)`, like in a loop over `Base.enumerate(arg)`.
         throw(DimensionMismatch("Inputs to foreach_slice must have compatible dimensions"))
     scope = DataScope(args...)
     # Go straight onto the loop barrier for scopes without setup: every layer
-    # of keyword-argument forwarding costs a Core.kwcall method and a hidden
+    # of keyword-argument forwarding adds a Core.kwcall method and a hidden
     # body method per loop, each re-optimized with the whole loop inlined.
     return needs_loop_setup(scope) ?
            foreach_slice(scope, op, f, args...; mask, enumerate) :
@@ -161,10 +162,10 @@ for (name, op, ref) in (
     (:foreach_column, :column, "[`column`](@ref)"),
 )
     # The body of foreach_slice is replicated instead of forwarded to, since a
-    # forwarding layer costs about as much inference as the loop it forwards to.
+    # forwarding layer takes about as much inference as the loop it forwards to.
     @eval begin
         """
-            $($name)(f, args...; [mask], [enumerate])
+            $($name)(f, args...; mask = NoMask(), enumerate = Val(false))
 
         Run [`foreach_slice`](@ref) with $($ref) as the slice operator.
         """
@@ -302,12 +303,13 @@ end
 end
 
 """
-    reduce_points(op, arg; [mask], [init])
+    reduce_points(op, arg; mask = NoMask(), [init])
+    reduce_points(scope, op, arg; mask = NoMask(), [init])
 
-Generalization of `reduce` that uses `op` to combine all values of a
-[`DataLayout`](@ref) or similarly indexable argument assigned to `scope`, by
-default the largest available [`DataScope`](@ref) that can access the argument.
-A [`DataMask`](@ref) may be used to skip a particular subset of points. The
+Combine all values of a [`DataLayout`](@ref) or similarly indexable argument with
+`op`, as a generalization of `reduce`, using the threads of `scope`, by default the
+largest available [`DataScope`](@ref) that can access the argument. A
+[`DataMask`](@ref) may be used to skip a particular subset of points. The
 `init` value must be specified if the `mask` disables every point, if there are
 no points in `arg` to begin with, or when reducing with any mask on a GPU,
 where a mask can leave whole blocks without active points.
@@ -403,11 +405,11 @@ end
 end
 
 """
-    column_reduce!(op, dest, arg; [mask], [flip], [init])
+    column_reduce!(op, dest, arg; mask = NoMask(), flip = Val(false), [init])
 
 Use [`foreach_column`](@ref) to combine the levels of each column of `arg` with
-`op`, storing the results in corresponding columns of `dest`. Setting `flip` to
-`Val(true)` changes the order of reduction from left-associative (default) to
+`op`, storing the results in the corresponding columns of `dest`. Setting `flip`
+to `Val(true)` changes the order of reduction from left-associative (default) to
 right-associative, and `init` seeds the fold when it is given.
 """
 @inline column_reduce!(

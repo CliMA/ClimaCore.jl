@@ -1,18 +1,20 @@
 """
     BandMatrixRow{ld}(entries...)
 
-Stores the nonzero entries in a row of a band matrix, starting with the lowest
-diagonal, which has index `ld`. Supported operations include accessing the entry
-on the diagonal with index `d` by calling `row[d]`, taking linear combinations
-with other band matrix rows (and with `LinearAlgebra.I`), and checking for
-equality with other band matrix rows (and with `LinearAlgebra.I`). There are
-several aliases for commonly used subtypes of `BandMatrixRow`:
+Nonzero entries in a row of a band matrix, starting with the lowest diagonal,
+which has index `ld`. Supported operations include accessing the entry on the
+diagonal with index `d` by calling `row[d]`, taking linear combinations with other
+band matrix rows (and with `LinearAlgebra.I`), and checking for equality with other
+band matrix rows (and with `LinearAlgebra.I`). There are several aliases for
+commonly used subtypes of `BandMatrixRow`:
 
-  - `DiagonalMatrixRow(entry_1)`
-  - `BidiagonalMatrixRow(entry_1, entry_2)`
-  - `TridiagonalMatrixRow(entry_1, entry_2, entry_3)`
-  - `QuaddiagonalMatrixRow(entry_1, entry_2, entry_3, entry_4)`
-  - `PentadiagonalMatrixRow(entry_1, entry_2, entry_3, entry_4, entry_5)`
+  - `DiagonalMatrixRow(entry_1)`, with `ld = 0`.
+  - `BidiagonalMatrixRow(entry_1, entry_2)`, with `ld = -1 + half`.
+  - `TridiagonalMatrixRow(entry_1, entry_2, entry_3)`, with `ld = -1`.
+  - `QuaddiagonalMatrixRow(entry_1, entry_2, entry_3, entry_4)`, with
+    `ld = -2 + half`.
+  - `PentadiagonalMatrixRow(entry_1, entry_2, entry_3, entry_4, entry_5)`, with
+    `ld = -2`.
 """
 struct BandMatrixRow{ld, bw, T} # bw is the bandwidth (the number of diagonals)
     entries::NTuple{bw, T}
@@ -33,8 +35,8 @@ const PentadiagonalMatrixRow{T} = BandMatrixRow{-2, 5, T}
 """
     outer_diagonals(::Type{<:BandMatrixRow})
 
-Gets the indices of the lower and upper diagonals, `ld` and `ud`, of the given
-subtype of `BandMatrixRow`.
+Return the indices of the lower and upper diagonals, `(ld, ud)`, of the given
+subtype of [`BandMatrixRow`](@ref).
 """
 outer_diagonals(::Type{<:BandMatrixRow{ld, bw}}) where {ld, bw} =
     (ld, ld + bw - 1)
@@ -47,8 +49,8 @@ outer_diagonals(::Type{<:BandMatrixRow{ld, bw}}) where {ld, bw} =
 """
     band_matrix_row_type(ld, ud, T)
 
-A shorthand for getting the subtype of `BandMatrixRow` that has entries of type
-`T` on the diagonals with indices in the range `ld:ud`.
+Return the subtype of [`BandMatrixRow`](@ref) that has entries of type `T` on the
+diagonals with indices in the range `ld:ud`.
 """
 band_matrix_row_type(ld, ud, T) = BandMatrixRow{ld, ud - ld + 1, T}
 

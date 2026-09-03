@@ -22,21 +22,23 @@ passed to the function directly. This behavior is triggered by using
 `AutoBroadcaster`s, optionally in conjunction with compatible iterators that are
 not wrapped in `AutoBroadcaster`s, in the following ways:
 
-  - passing them to standard math functions or constructors
-  - passing them to `ifelse` (for iterating over conditional values)
-  - applying them as function calls (for iterating over functions)
-  - explicitly calling [`nested_broadcast`](@ref)
+  - passing them to standard math functions or constructors,
+  - passing them to `ifelse` (for iterating over conditional values),
+  - applying them as function calls (for iterating over functions),
+  - explicitly calling [`nested_broadcast`](@ref).
 
 Nested `AutoBroadcaster`s constructed with [`add_auto_broadcasters`](@ref)
 evaluate broadcasts recursively, mapping across every layer of nested iterators
 so that broadcasted functions are only applied to non-iterators in the innermost
-layers. Aside from automatic broadcasting, `AutoBroadcaster`s are essentially
-identical to their underlying iterators, with support for common operations like
-`iterate`, `propertynames`, `getindex`, and `reduce`.
+layers. Aside from automatic broadcasting, `AutoBroadcaster`s behave like their
+underlying iterators, with support for common operations like `iterate`,
+`propertynames`, `getindex`, and `reduce`.
 
 # Examples
 
-```jldoctest; setup = :(import ClimaCore.Utilities, ClimaCore.Geometry.StaticArrays)
+```julia
+julia> import ClimaCore.Utilities, StaticArrays;
+
 julia> x = Utilities.AutoBroadcaster((1, 2.0, StaticArrays.SVector(3, 4)))
 (1, 2.0, [3, 4])
 
@@ -65,16 +67,16 @@ unwrap(x::AutoBroadcaster) = getfield(x, :itr) # getproperty is overwritten belo
 unwrap(x) = x
 
 """
-    is_auto_broadcastable(::Type)
+    is_auto_broadcastable(T)
     is_auto_broadcastable(itr)
 
-Indicates whether an [`AutoBroadcaster`](@ref) should broadcast over iterators
-of the given type. By default, this is only true for `Tuple` and `NamedTuple`
-types, but it can be extended to any statically-sized type compatible with
+Return whether an [`AutoBroadcaster`](@ref) should broadcast over iterators of
+type `T`. By default, this is only `true` for `Tuple` and `NamedTuple` types, but
+it can be extended to any statically sized type compatible with
 [UnrolledUtilities.jl](https://github.com/CliMA/UnrolledUtilities.jl).
 
-For convenience, `is_auto_broadcastable` also supports passing a concrete
-iterator instead of its type, but this method should not be extended directly.
+For convenience, `is_auto_broadcastable` also accepts an iterator instead of its
+type, but this method should not be extended directly.
 """
 is_auto_broadcastable(::Type{<:DefaultBroadcastable}) = true
 is_auto_broadcastable(::Type) = false
@@ -83,12 +85,13 @@ is_auto_broadcastable(itr) = is_auto_broadcastable(typeof(itr))
 
 """
     add_auto_broadcasters(itr)
-    add_auto_broadcasters(::Type)
+    add_auto_broadcasters(T)
 
-Recursively applies the [`AutoBroadcaster`](@ref) constructor to iterators for
-which [`is_auto_broadcastable`](@ref) is true, as well as their elements for
-which it is true, while leaving values for which it is false unmodified. Can
-also be passed an iterator's type to infer the result type for such an iterator.
+Recursively apply the [`AutoBroadcaster`](@ref) constructor to iterators for
+which [`is_auto_broadcastable`](@ref) is `true`, as well as their elements for
+which it is `true`, while leaving values for which it is `false` unmodified. When
+passed an iterator's type `T`, return the inferred result type for such an
+iterator.
 """
 add_auto_broadcasters(itr) =
     itr isa AutoBroadcaster || is_auto_broadcastable(itr) ?
@@ -98,11 +101,11 @@ add_auto_broadcasters(::Type{T}) where {T} =
 
 """
     drop_auto_broadcasters(itr)
-    drop_auto_broadcasters(::Type)
+    drop_auto_broadcasters(T)
 
-Recursively unwraps constructors applied by [`add_auto_broadcasters`](@ref),
-extracting the iterator from every [`AutoBroadcaster`](@ref) in `itr`. Can also
-be passed an iterator's type to infer the result type for such an iterator.
+Recursively undo [`add_auto_broadcasters`](@ref), extracting the iterator from
+every [`AutoBroadcaster`](@ref) in `itr`. When passed an iterator's type `T`,
+return the inferred result type for such an iterator.
 """
 drop_auto_broadcasters(itr) =
     itr isa AutoBroadcaster || is_auto_broadcastable(itr) ?
@@ -113,12 +116,12 @@ drop_auto_broadcasters(::Type{T}) where {T} =
 """
     auto_broadcasted([style], f, args, [axes])
 
-Analogue of `Base.Broadcast.Broadcasted(style, f, args, axes)` that can pass the
+Construct a `Base.Broadcast.Broadcasted(style, f, args, axes)`, passing the
 arguments of `f` through either [`add_auto_broadcasters`](@ref) or
-[`drop_auto_broadcasters`](@ref) if doing so will help avoid an inferred error.
+[`drop_auto_broadcasters`](@ref) if doing so avoids an inferred error.
 
 When the [`unsafe_eltype`](@ref) of `Broadcasted(style, f, args, axes)`
-indicates that `f` will throw an error, a new `Broadcasted` wrapper is
+indicates that `f` throws an error, a new `Broadcasted` wrapper is
 constructed with `add_auto_broadcasters` applied to every argument, and then
 another is constructed with `drop_auto_broadcasters` applied to every argument.
 If one of the new wrappers no longer corresponds to a guaranteed error, it is
@@ -127,7 +130,9 @@ returned instead of the original wrapper. Otherwise, the default result of
 
 # Examples
 
-```jldoctest; setup = :(import ClimaCore.Utilities), filter = r"\\{.+\\}"
+```julia
+julia> import ClimaCore.Utilities;
+
 julia> x = (im, (1, 2.0), [3, 4])
 (im, (1, 2.0), [3, 4])
 
@@ -165,17 +170,19 @@ end
 """
     nested_broadcast(f, args...)
 
-Analogue of `broadcast` that is applied recursively over nested iterators, as
-long as at least one argument is an [`AutoBroadcaster`](@ref). All loops over
-iterator elements are unrolled and inlined to optimize performance.
+Apply `f` elementwise to `args`, like `broadcast`, recursing over nested iterators,
+as long as at least one argument is an [`AutoBroadcaster`](@ref). All loops over
+iterator elements are unrolled and inlined.
 
-This function is automatically called when an [`AutoBroadcaster`](@ref) is
+This function is called automatically when an [`AutoBroadcaster`](@ref) is
 passed to any standard math function or constructor, but for generic operations
 it must be called explicitly.
 
 # Examples
 
-```jldoctest; setup = :(import ClimaCore.Utilities)
+```julia
+julia> import ClimaCore.Utilities;
+
 julia> x = Utilities.add_auto_broadcasters(((:a, :b, :c), (:d, :e, :f), :g))
 ((:a, :b, :c), (:d, :e, :f), :g)
 

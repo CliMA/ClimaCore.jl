@@ -9,43 +9,50 @@ export QuadratureStyle,
     GLL, GL, polynomial_degree, degrees_of_freedom, quadrature_points
 
 """
-QuadratureStyle{Nq}
+    QuadratureStyle{Nq}
 
-Quadrature style supertype. See sub-types:
+Supertype for quadrature rules with `Nq` points on the reference interval `[-1, 1]`.
 
-  - [`GLL`](@ref)
-  - [`GL`](@ref)
-  - [`Uniform`](@ref)
+Subtypes:
+
+  - [`GLL`](@ref): Gauss-Legendre-Lobatto quadrature, which includes the endpoints.
+  - [`GL`](@ref): Gauss-Legendre quadrature.
+  - [`Uniform`](@ref): uniformly spaced midpoint quadrature.
+  - `ClosedUniform`: uniformly spaced quadrature including the endpoints.
+
+Subtypes implement [`quadrature_points`](@ref) and `unique_degrees_of_freedom`.
 """
 abstract type QuadratureStyle{Nq} end
 
 """
-    polynomial_degree(QuadratureStyle) -> Int
+    polynomial_degree(quadstyle::QuadratureStyle) -> Int
 
-Returns the polynomial degree of the `QuadratureStyle` concrete type
+Return the polynomial degree `Nq - 1` of the quadrature rule `quadstyle`.
 """
 @inline polynomial_degree(::QuadratureStyle{Nq}) where {Nq} = Nq - 1
 
 
 """
-    degrees_of_freedom(QuadratureStyle) -> Int
+    degrees_of_freedom(quadstyle::QuadratureStyle) -> Int
 
-Returns the degrees_of_freedom of the `QuadratureStyle` concrete type
+Return the number of quadrature points `Nq` of the quadrature rule `quadstyle`.
 """
 @inline degrees_of_freedom(::QuadratureStyle{Nq}) where {Nq} = Nq
 
 """
-    requires_dss(QuadratureStyle)
+    requires_dss(quadstyle::QuadratureStyle) -> Bool
 
-Determines whether the `QuadratureStyle` requires direct stiffness summation.
+Return whether `quadstyle` requires direct stiffness summation, i.e. whether its nodes
+are shared between neighboring elements.
 """
 requires_dss(quadstyle) =
     unique_degrees_of_freedom(quadstyle) < degrees_of_freedom(quadstyle)
 
 """
-    points, weights = quadrature_points(::Type{FT}, quadrature_style)
+    quadrature_points(::Type{FT}, quadstyle::QuadratureStyle) -> (points, weights)
 
-The points and weights of the quadrature rule in floating point type `FT`.
+Return the points and weights of the quadrature rule `quadstyle` on `[-1, 1]` as a tuple
+of two `SVector`s with element type `FT`.
 """
 function quadrature_points end
 
@@ -85,7 +92,8 @@ end
 """
     Uniform{Nq}()
 
-Uniformly-spaced quadrature.
+Uniformly spaced midpoint quadrature with `Nq` points; the endpoints of `[-1, 1]` are not
+included.
 """
 struct Uniform{Nq} <: QuadratureStyle{Nq} end
 
@@ -99,7 +107,8 @@ end
 """
     ClosedUniform{Nq}()
 
-Uniformly-spaced quadrature including boundary.
+Uniformly spaced trapezoidal quadrature with `Nq` points, including the endpoints of
+`[-1, 1]`.
 """
 struct ClosedUniform{Nq} <: QuadratureStyle{Nq} end
 
@@ -119,12 +128,14 @@ end
 
 
 """
-    barycentric_weights(x::SVector{Nq}) where {Nq}
+    barycentric_weights(x::SVector{Nq})
+    barycentric_weights(::Type{FT}, quadstyle::QuadratureStyle)
 
-The barycentric weights associated with the array of point locations `x`:
+Return the barycentric weights associated with the point locations `x`, or with the
+quadrature points of `quadstyle` in float type `FT`:
 
 ```math
-w_j = \\frac{1}{\\prod_{k \\ne j} (x_i - x_j)}
+w_j = \\frac{1}{\\prod_{k \\ne j} (x_k - x_j)}
 ```
 
 See [Berrut2004](@cite), equation 3.2.
@@ -149,10 +160,13 @@ end
 
 """
     interpolation_matrix(x::SVector, r::SVector{Nq})
+    interpolation_matrix(x::Vector, r)
+    interpolation_matrix(::Type{FT}, quadto::QuadratureStyle, quadfrom::QuadratureStyle)
 
-The matrix which interpolates the Lagrange polynomial of degree `Nq-1` through
-the points `r`, to points `x`. The matrix coefficients are computed using the
-Barycentric formula of [Berrut2004](@cite), section 4:
+Return the matrix that interpolates the Lagrange polynomial of degree `Nq - 1` through
+the points `r` to the points `x`. The third method uses the quadrature points of
+`quadfrom` and `quadto` in float type `FT`. The matrix coefficients are computed with the
+barycentric formula of [Berrut2004](@cite), section 4:
 
 ```math
 I_{ij} = \\begin{cases}
@@ -225,10 +239,11 @@ end
 end
 
 """
-    V = orthonormal_poly(points, quad)
+    orthonormal_poly(points::SVector, quad::GLL)
 
-`V_{ij}` contains the `j-1`th Legendre polynomial evaluated at `points[i]`.
-i.e. it is the mapping from the modal to the nodal representation.
+Return the matrix `V` whose entry `V[i, j]` is the orthonormal Legendre polynomial of
+degree `j - 1` evaluated at `points[i]`, i.e. the map from the modal to the nodal
+representation for the polynomial space of `quad`.
 """
 function orthonormal_poly(
     points::SVector{Np, FT},
@@ -261,22 +276,24 @@ function cutoff_filter_matrix(
 end
 
 """
-    differentiation_matrix(r::SVector{Nq, T}) where {Nq, T}
+    differentiation_matrix(r::SVector{Nq, T})
 
-The spectral differentiation matrix for the Lagrange polynomial of degree `Nq-1`
-interpolating at points `r`.
+Return the spectral differentiation matrix for the Lagrange polynomial of degree `Nq - 1`
+interpolating at the points `r`.
 
-The matrix coefficients are computed using the [Berrut2004](@cite), section 9.3:
+The matrix coefficients are computed following [Berrut2004](@cite), section 9.3:
 
 ```math
 D_{ij} = \\begin{cases}
     \\displaystyle
-    \\frac{w_j}{w_i (x_i - x_j)} &\\text{ if } i \\ne j \\\\
-    -\\sum_{k \\ne j} D_{kj} &\\text{ if } i = j
+    \\frac{w_j}{w_i (x_i - x_j)} &\\text{ if } i \\ne j, \\\\
+    \\displaystyle
+    \\sum_{k \\ne i} \\frac{1}{x_i - x_k} &\\text{ if } i = j,
 \\end{cases}
 ```
 
-where ``w_j`` are the barycentric weights, see [`barycentric_weights`](@ref).
+where ``w_j`` are the barycentric weights, see [`barycentric_weights`](@ref). The rows
+of ``D`` sum to zero.
 """
 function differentiation_matrix(r::SVector{Nq, T}) where {Nq, T}
     wb = barycentric_weights(r)
@@ -298,10 +315,10 @@ function differentiation_matrix(r::SVector{Nq, T}) where {Nq, T}
 end
 
 """
-    differentiation_matrix(FT, quadstyle::QuadratureStyle)
+    differentiation_matrix(::Type{FT}, quadstyle::QuadratureStyle)
 
-The spectral differentiation matrix at the quadrature points of `quadstyle`,
-using floating point types `FT`.
+Return the spectral differentiation matrix at the quadrature points of `quadstyle`, in
+float type `FT`.
 """
 @generated function differentiation_matrix(
     ::Type{FT},

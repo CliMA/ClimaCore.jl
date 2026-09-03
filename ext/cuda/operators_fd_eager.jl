@@ -73,8 +73,8 @@ _sizeof_or_nothing(::Type{T}) where {T} = isconcretetype(T) ? sizeof(T) : nothin
 """
     cached_operand_type(bc)
 
-The type that `calc_level_val` writes into shared memory for the multiplication `bc`,
-i.e. `typeof(project_row2_for_mul(mat1_row, mat2_row, hidx, mat2_space))`.
+Return the type that `calc_level_val` writes into shared memory for the multiplication
+`bc`, i.e. `typeof(project_row2_for_mul(mat1_row, mat2_row, hidx, mat2_space))`.
 
 The size cannot be read off the second operand directly, because
 `project_row2_for_mul` projects every tensor leaf of that operand onto the axis dual
@@ -82,9 +82,9 @@ to the first operand's entries, which changes its size in either direction: a
 `Covariant1Vector` widens to a `Contravariant123Vector`, while a `Covariant12Vector`
 narrows to a `Contravariant1Vector`. For a matrix-matrix product those leaves are also
 nested inside a `BandMatrixRow`, so no property of the operand's outermost type
-bounds the projected size. Mirror `project_row2_for_mul`'s type-level logic instead
-and infer the projected type, so the buffer is always big enough for what the kernel
-writes into it.
+bounds the projected size. This function mirrors the type-level logic of
+`project_row2_for_mul` and infers the projected type, so the buffer is always big enough
+for what the kernel writes into it.
 
 The kernel's multiply handler allocates its shared memory buffer with this same
 function, so the launch-time sizing and the device-side element type cannot go out
@@ -124,7 +124,7 @@ end
 """
     advection_shmem_entry_type(bc)
 
-The type that the `AdvectionOperator` method of `calc_level_val` writes into
+Return the type that the `AdvectionOperator` method of `calc_level_val` writes into
 shared memory for `bc`, per thread: the advected field's value at the thread's center
 level, prepended with the contravariant3 velocity component at the thread's face when
 the operator also needs the velocity at neighboring faces
@@ -154,6 +154,8 @@ ClimaCore.Utilities.unsafe_eltype(::CUDA.CuRefType{T}) where {T} = T
 """
     has_padding_thread(space)
 
+Return whether the last x-thread of the eager kernel maps to no output level of `space`.
+
 The eager kernel launches one thread per face level. For a non-periodic center-output
 space there is one fewer center level than face level, so the last x-thread
 (`v == blockDim().x`) does not map to a valid output level and must be skipped. For face
@@ -169,9 +171,9 @@ compile-time constant.
 """
     eager_copyto_stencil_kernel!(out, bc::BC, mask, space)
 
-CUDA kernel to compute the value of a `Broadcasted` or `StencilBroadcasted` at a single index.
-This calls `calc_level_val(bc, hidx, space)`, which computes the value of the broadcasted
-expression at the given index, and then copies the result into `out`.
+Compute the value of the `Broadcasted` or `StencilBroadcasted` expression `bc` at the
+current thread's index and copy it into `out`; this is the CUDA kernel of the eager
+finite-difference path. The value is computed by `calc_level_val(bc, hidx, space)`.
 """
 Base.@propagate_inbounds function eager_copyto_stencil_kernel!(
     out,
@@ -252,9 +254,9 @@ end
 """
     reconstruct_space_and_call_calc_level_val(arg, (hidx, space))
 
-If `arg` is a `Broadcasted`, `StencilBroadcasted`, or `Field`,
-reconstruct the space for the argument and call `calc_level_val` on it. This allows
-us to use Base.Fix2.
+If `arg` is a `Broadcasted`, `StencilBroadcasted`, or `Field`, reconstruct the space for
+the argument and call `calc_level_val` on it. The tuple argument allows the function to
+be used with `Base.Fix2`.
 """
 Base.@propagate_inbounds reconstruct_space_and_call_calc_level_val(
     arg::A,
@@ -275,8 +277,8 @@ Base.@propagate_inbounds reconstruct_space_and_call_calc_level_val(
 """
     calc_level_val(val::T, hidx, space)
 
-If `val` is not a `Broadcasted`, `StencilBroadcasted`, or `Field`, just return `val`.
-If it is a `Ref`, return `val[]`. If it is a one element tuple, return the element.
+If `val` is not a `Broadcasted`, `StencilBroadcasted`, or `Field`, return `val`. If it
+is a `Ref`, return `val[]`. If it is a one-element tuple, return the element.
 """
 Base.@propagate_inbounds calc_level_val(val::T, hidx, space) where {T <: Ref} = val[]
 Base.@propagate_inbounds calc_level_val(val::T, hidx, space) where {V, T <: Tuple{V}} =
@@ -331,7 +333,7 @@ Base.@propagate_inbounds function calc_level_val(
     )
     @inbounds mat2[v + (block_col_idx - 1) * CUDA.blockDim().x] = mat2_row_converted
     CUDA.sync_threads()
-    # if the output is on centers, the padding CUDA.blockDim().xth thread can just return 0
+    # If the output is on centers, the padding thread (index CUDA.blockDim().x) returns 0.
     has_padding_thread(mat1_space) && v == CUDA.blockDim().x &&
         return new(eltype(bc))
     if mat1_space.staggering isa Spaces.CellCenter
@@ -377,10 +379,11 @@ end
 """
     calc_level_val(bc::StencilBroadcasted{<:Any, <: SetBoundaryOperator}, hidx, space)
 
-A `SetBoundaryOperator` only modifies the two boundary levels of the space it is applied
-to, and is the identity in the interior. At the boundaries we dispatch to
-`stencil_left_boundary` / `stencil_right_boundary` (which extract and project the
-boundary value), and in the interior we reuse the eagerly-computed value of the argument.
+Compute the value of a `SetBoundaryOperator` at the current thread's level. The operator
+modifies only the two boundary levels of the space it is applied to and is the identity
+in the interior: at the boundaries the value comes from `stencil_left_boundary` or
+`stencil_right_boundary` (which extract and project the boundary value), and in the
+interior the eagerly computed value of the argument is reused.
 """
 Base.@propagate_inbounds function calc_level_val(
     bc::BC,
@@ -432,7 +435,8 @@ end
 """
     calc_level_val(bc::StencilBroadcasted{<:Any, <:AdvectionOperator}, hidx, space)
 
-Each thread computes the velocity (converted to its contravariant3 component) and the
+Compute the value of an `AdvectionOperator` at the current thread's face level. Each
+thread computes the velocity (converted to its contravariant3 component) and the
 advected field at its own level, caches them in shared memory, and then gathers the
 4 neighboring center values (and, for operators with
 `advection_velocity_width(op) == Val(:neighboring)`, the 2 neighboring face velocities)
@@ -502,8 +506,8 @@ end
 """
     advection_center_window(v, n_faces, periodic)
 
-Shared-memory indices of the 4 center-level stencil values around the face of x-thread
-`v` (the thread that holds center level `v`; the face index is `v - half`). Mirrors
+Return the shared-memory indices of the 4 center-level stencil values around the face of
+x-thread `v` (the thread that holds center level `v`; the face index is `v - half`). Mirrors
 `stencil_interior(::AdvectionOperator, ...)`: out-of-range center indices are
 clamped to the domain on non-periodic spaces (padding the ghost cells with the closest
 interior value) and wrap around on periodic ones.
@@ -598,8 +602,8 @@ end
 """
     calc_level_val(bc::StencilBroadcasted, hidx, space)
 
-Fallback case of `calc_level_val` that calls `Operators.getidx`. This is used for
-affine BCs or values that won't fit in shmmem.
+Fallback method of `calc_level_val` that calls `Operators.getidx`. This is used for
+affine boundary conditions and for values that do not fit in shared memory.
 """
 Base.@propagate_inbounds function calc_level_val(
     bc::BC,
@@ -660,7 +664,7 @@ end
 """
     calc_level_val(bc::StencilBroadcasted{<:Any, <: FDOperatorMatrix}, hidx, space)
 
-Return the correct row of the operator matrix for the current thread
+Return the row of the operator matrix for the current thread's level.
 """
 Base.@propagate_inbounds function calc_level_val(
     bc::BC,
@@ -680,9 +684,10 @@ end
 """
     get_op_row(op_matrix, args, hidx, space)
 
-Get the correct row of the operator matrix for the current thread, taking into account boundary conditions.
+Return the row of the operator matrix for the current thread's level, taking boundary
+conditions into account.
 
-Takes the broadcasted `FDOperatorMatrix` itself rather than rebuilding one from its
+This takes the broadcasted `FDOperatorMatrix` itself rather than rebuilding one from its
 wrapped operator: the `FDOperatorMatrix` constructor carries a value-dependent
 `has_affine_bc` check with an `@warn`, which cannot be compiled into device code when
 the operator still holds a value-fixing boundary condition (as it does through the
@@ -747,7 +752,8 @@ end
 """
     project_row2_for_mul(mat1_row, mat2_row, hidx, space)
 
-Projects `mat2_row` onto the correct axis for multiplication with `mat1_row` if necessary, and returns the projected row.
+Project `mat2_row` onto the axis dual to the entries of `mat1_row`, if a projection is
+needed, and return the projected row.
 """
 Base.@propagate_inbounds function project_row2_for_mul(mat1_row, mat2_row, hidx, space)
     mat1_et = mat1_row isa BandMatrixRow ? eltype(mat1_row) : typeof(mat1_row)

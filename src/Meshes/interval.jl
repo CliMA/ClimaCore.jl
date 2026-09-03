@@ -1,17 +1,27 @@
 """
     IntervalMesh <: AbstractMesh
 
-A 1D mesh on an `IntervalDomain`.
+One-dimensional mesh on an `IntervalDomain`. Elements are numbered `1:nelems`.
 
-# Constuctors
+# Fields
+
+  - `stretch`: The stretching rule used to place the faces.
+  - `domain`: The `IntervalDomain`.
+  - `faces`: Vector of face coordinates, of length `nelems + 1`.
+  - `meta`: Stretching-specific metadata (e.g. the solved stretching parameter), or
+    `nothing`.
+  - `reverse_mode`: Whether the smallest element is at the top of the domain.
+
+# Constructor
 
     IntervalMesh(domain::IntervalDomain, faces::AbstractVector)
 
 Construct a 1D mesh with face locations at `faces`.
 
-    IntervalMesh(domain::IntervalDomain[, stretching=Uniform()]; nelems=)
+    IntervalMesh(domain::IntervalDomain, stretching = Uniform(); nelems, reverse_mode = false)
 
-Constuct a 1D mesh on `domain` with `nelems` elements, using `stretching`. Possible values of `stretching` are:
+Construct a 1D mesh on `domain` with `nelems` elements, using `stretching`. Possible
+values of `stretching` are:
 
   - [`Uniform()`](@ref)
   - [`ExponentialStretching(H)`](@ref)
@@ -136,8 +146,7 @@ abstract type StretchingRule end
 """
     UnknownStretch()
 
-An unknown stretch rule, to be used when constructing an `IntervalMesh` with
-given faces.
+Placeholder stretching rule of an `IntervalMesh` constructed from explicit faces.
 """
 struct UnknownStretch end
 
@@ -176,10 +185,9 @@ end
     ExponentialStretching(H::FT)
 
 Apply exponential stretching to the domain when constructing elements. `H` is
-the scale height (a typical atmospheric scale height `H ≈ 7.5`km).
+the scale height [m]; a typical atmospheric scale height is `H ≈ 7.5e3`.
 
-For an interval ``[z_0,z_1]``, this makes the elements uniformally spaced in
-``\\zeta``, where
+For an interval ``[z_0, z_1]``, the elements are uniformly spaced in ``ζ``, where
 
 ```math
 \\zeta = \\frac{1 - e^{-\\eta/h}}{1-e^{-1/h}},
@@ -190,11 +198,11 @@ the non-dimensional scale height. If `reverse_mode` is `true`, the smallest
 element is at the top, and the largest at the bottom (this is typical for land
 model configurations).
 
-Then, the user can define a stretched mesh via
+Construct a stretched mesh via
 
-    ClimaCore.Meshes.IntervalMesh(interval_domain, ExponentialStretching(H); nelems::Int, reverse_mode = false)
+    IntervalMesh(interval_domain, ExponentialStretching(H); nelems, reverse_mode = false)
 
-`faces` contain reference z without any warping.
+The resulting `faces` are reference heights without terrain warping.
 """
 struct ExponentialStretching{FT} <: StretchingRule
     H::FT
@@ -232,19 +240,27 @@ end
 """
     GeneralizedExponentialStretching(dz_bottom::FT, dz_top::FT)
 
-Apply a generalized form of exponential stretching to the domain when constructing elements.
-`dz_bottom` and `dz_top` are target element grid spacings at the bottom and at the top of the
-vertical column domain (m). In typical atmosphere configurations, `dz_bottom` is the smallest
-grid spacing and `dz_top` the largest one. On the other hand, for typical land configurations,
-`dz_bottom` is the largest grid spacing and `dz_top` the smallest one.
+Apply a generalized form of exponential stretching to the domain when constructing
+elements. `dz_bottom` and `dz_top` are the target element spacings at the bottom and
+at the top of the vertical column domain [m]. In typical atmosphere configurations,
+`dz_bottom` is the smallest spacing and `dz_top` the largest; in typical land
+configurations, `dz_bottom` is the largest and `dz_top` the smallest. For land
+configurations, use `reverse_mode = true` (default `false`).
 
-For land configurations, use `reverse_mode` = `true` (default value `false`).
+Construct a generalized stretched mesh via
 
-Then, the user can define a generalized stretched mesh via
+    IntervalMesh(
+        interval_domain,
+        GeneralizedExponentialStretching(dz_bottom, dz_top);
+        nelems,
+        FT_solve = Float64,
+        tol = 1e-3,
+        reverse_mode = false,
+    )
 
-    ClimaCore.Meshes.IntervalMesh(interval_domain, GeneralizedExponentialStretching(dz_bottom, dz_top); nelems::Int, reverse_mode = false)
-
-`faces` contain reference z without any warping.
+where `FT_solve` is the float type and `tol` the residual tolerance of the root
+solve for the stretching parameters. `nelems` must be at least 2. The resulting
+`faces` are reference heights without terrain warping.
 """
 struct GeneralizedExponentialStretching{FT} <: StretchingRule
     dz_bottom::FT
@@ -277,7 +293,7 @@ function IntervalMesh(
     # since the vertical coordinate is positive upward
     z_bottom = Geometry.component(domain.coord_min, 1)
     z_top = Geometry.component(domain.coord_max, 1)
-    # but in case of reverse_mode, we temporarily swap them together with dz_bottom and dz_top
+    # but in reverse_mode they are swapped temporarily, together with dz_bottom and dz_top
     # so that the following root solve algorithm does not need to change
     if reverse_mode
         z_bottom, z_top = Geometry.component(domain.coord_max, 1),
@@ -353,14 +369,12 @@ end
 """
     HyperbolicTangentStretching(dz_surface::FT)
 
-Apply a hyperbolic tangent stretching to the domain when constructing elements.
-`dz_surface` is the target element grid spacing at the surface. In typical atmosphere
-configuration, it is the grid spacing at the bottom of the
-vertical column domain (m). On the other hand, for typical land configurations,
-it is the grid spacing at the top of the vertical column domain.
+Apply hyperbolic tangent stretching to the domain when constructing elements.
+`dz_surface` is the target element spacing at the surface [m]: in typical
+atmosphere configurations, the spacing at the bottom of the vertical column domain;
+in typical land configurations, the spacing at the top.
 
-For an interval ``[z_0,z_1]``, this makes the elements uniformally spaced in
-``\\zeta``, where
+For an interval ``[z_0, z_1]``, the elements are uniformly spaced in ``ζ``, where
 
 ```math
 \\eta = 1 - \\frac{tanh[\\gamma(1-\\zeta)]}{tanh(\\gamma)},
@@ -369,14 +383,21 @@ For an interval ``[z_0,z_1]``, this makes the elements uniformally spaced in
 where ``\\eta = \\frac{z - z_0}{z_1-z_0}``. The stretching parameter ``\\gamma``
 is chosen to achieve a given resolution `dz_surface` at the surface.
 
-Then, the user can define a stretched mesh via
+Construct a stretched mesh via
 
-    ClimaCore.Meshes.IntervalMesh(interval_domain, HyperbolicTangentStretching(dz_surface); nelems::Int, reverse_mode)
+    IntervalMesh(
+        interval_domain,
+        HyperbolicTangentStretching(dz_surface);
+        nelems,
+        FT_solve = Float64,
+        tol = nothing,
+        reverse_mode = false,
+    )
 
-`reverse_mode` is default to false for atmosphere configurations. For land configurations,
-use `reverse_mode` = `true`.
-
-`faces` contain reference z without any warping.
+where `FT_solve` is the float type and `tol` the residual tolerance of the root
+solve for ``γ`` (default `1e-6 * dz_surface`). `nelems` must be at least 2. For
+land configurations, use `reverse_mode = true`. The resulting `faces` are reference
+heights without terrain warping.
 """
 struct HyperbolicTangentStretching{FT} <: StretchingRule
     dz_surface::FT
@@ -448,15 +469,12 @@ function IntervalMesh(
 end
 
 """
-    truncate_mesh(
-        parent_mesh::AbstractMesh,
-        trunc_domain::IntervalDomain{CT},
-    )
+    truncate_mesh(parent_mesh::IntervalMesh, trunc_domain::IntervalDomain)
 
-Constructs an `IntervalMesh`, truncating the given `parent_mesh` defined on a
-truncated `trunc_domain`. The truncation preserves the number of
-degrees of freedom covering the space from the `trunc_domain`'s `z_bottom` to `z_top`,
-adjusting the stretching.
+Construct an `IntervalMesh` on `trunc_domain` by truncating `parent_mesh`. The
+result has as many elements as `parent_mesh` has faces below the top of
+`trunc_domain`, and uses a `GeneralizedExponentialStretching` with the bottom and
+top spacings of the truncated parent faces.
 """
 function truncate_mesh(
     parent_mesh::IntervalMesh,

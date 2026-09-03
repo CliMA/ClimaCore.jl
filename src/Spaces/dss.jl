@@ -16,7 +16,9 @@ perimeter(space::AbstractSpectralElementSpace) = Topologies.Perimeter2D(
 """
     create_dss_buffer(data, space)
 
-Creates a [`Topologies.DSSBuffer`](@ref) for the field data corresponding to `data`
+Create a [`Topologies.DSSBuffer`](@ref) for the field data `data` on `space`.
+Return `nothing` if `space` is discontinuous (DG) or has no second horizontal
+dimension (1D spectral element spaces use `dss_1d!` and need no buffer).
 """
 create_dss_buffer(data::DataLayouts.VIJHWithF, space) =
     (!is_continuous(space) || isone(size(data, 3))) ? nothing :
@@ -28,17 +30,17 @@ create_dss_buffer(data::DataLayouts.VIJHWithF, space) =
     )
 
 """
-    function weighted_dss!(data, space, dss_buffer)
+    weighted_dss!(data, space, dss_buffer)
 
-Computes weighted dss of `data`.
+Compute the weighted direct stiffness summation (DSS) of `data` in place: values at
+nodes shared between elements are replaced by their weighted average. On a
+discontinuous (DG) space this is a no-op.
 
-It comprises of the following steps:
+It consists of the following steps:
 
-1). [`Spaces.weighted_dss_start!`](@ref)
-
-2). [`Spaces.weighted_dss_internal!`](@ref)
-
-3). [`Spaces.weighted_dss_ghost!`](@ref)
+ 1. [`Spaces.weighted_dss_start!`](@ref),
+ 2. [`Spaces.weighted_dss_internal!`](@ref),
+ 3. [`Spaces.weighted_dss_ghost!`](@ref).
 """
 function weighted_dss!(data::DataLayouts.VIJHWithF, space, dss_buffer)
     weighted_dss_start!(data, space, dss_buffer)
@@ -76,20 +78,21 @@ cuda_synchronize(device::ClimaComms.AbstractDevice; kwargs...) = nothing
 """
     weighted_dss_start!(data, space, dss_buffer)
 
-It comprises of the following steps:
+Start the weighted DSS of `data`: prepare the perimeter data of the elements on the
+process boundary and begin communication with neighboring processes. Returns
+`nothing`.
 
-1). Apply [`Spaces.dss_transform!`](@ref) on perimeter elements. This weights and tranforms vector
-fields to physical basis if needed. Scalar fields are weighted. The transformed and/or weighted
-perimeter `data` is stored in `perimeter_data`.
+It consists of the following steps:
 
-2). Apply [`Spaces.dss_local_ghost!`](@ref)
-This computes partial weighted DSS on ghost vertices, using only the information from `local` vertices.
-
-3). [`Spaces.fill_send_buffer!`](@ref)
-Loads the send buffer from `perimeter_data`. For unique ghost vertices, only data from the
-representative ghost vertices which store result of "ghost local" DSS are loaded.
-
-4). Start DSS communication with neighboring processes
+ 1. Apply [`Spaces.dss_transform!`](@ref) on perimeter elements. This weights, and
+    transforms to the physical basis if needed, the vector fields; scalar fields are
+    weighted. The result is stored in `dss_buffer.perimeter_data`.
+ 2. Apply [`Spaces.dss_local_ghost!`](@ref), which computes the partial weighted DSS
+    on ghost vertices using only the information from local vertices.
+ 3. Apply [`Spaces.fill_send_buffer!`](@ref), which loads the send buffer from
+    `perimeter_data`. For unique ghost vertices, only the representative vertices,
+    which hold the result of the "ghost local" DSS, are loaded.
+ 4. Start the DSS communication with neighboring processes.
 """
 function weighted_dss_start!(data, space, dss_buffer)
     isnothing(dss_buffer) && return nothing
@@ -105,12 +108,20 @@ end
 """
     weighted_dss_internal!(data, space, dss_buffer)
 
-1). Apply [`Spaces.dss_transform!`](@ref) on interior elements. Local elements are split into interior
-and perimeter elements to facilitate overlapping of communication with computation.
+Perform the part of the weighted DSS of `data` that needs no communication, while
+the communication started by [`Spaces.weighted_dss_start!`](@ref) is in flight.
+Returns `nothing`.
 
-2). Probe communication
+It consists of the following steps:
 
-3). [`Spaces.dss_local!`](@ref) computes the weighted DSS on local vertices and faces.
+ 1. Apply [`Spaces.dss_transform!`](@ref) on interior elements. Local elements are
+    split into interior and perimeter elements so that communication overlaps with
+    computation.
+ 2. Apply [`Spaces.dss_local!`](@ref), which computes the weighted DSS on local
+    vertices and faces.
+ 3. Apply [`Spaces.dss_untransform!`](@ref) on interior elements.
+
+On a 1D spectral element space, the whole DSS is performed here with `dss_1d!`.
 """
 function weighted_dss_internal!(data, space, dss_buffer)
     is_continuous(space) || return nothing
@@ -156,16 +167,20 @@ end
 """
     weighted_dss_ghost!(data, space, dss_buffer)
 
-1). Finish communications.
+Finish the weighted DSS of `data` started by [`Spaces.weighted_dss_start!`](@ref).
+Returns `data`.
 
-2). Call [`Spaces.load_from_recv_buffer!`](@ref)
-After the communication is complete, this adds data from the recv buffer to the corresponding location in
-`perimeter_data`. For ghost vertices, this data is added only to the representative vertices. The values are
-then scattered to other local vertices corresponding to each unique ghost vertex in `dss_local_ghost`.
+It consists of the following steps:
 
-3). Call [`Spaces.dss_untransform!`](@ref) on all local elements.
-This transforms the DSS'd local vectors back to Covariant12 vectors, and copies the DSS'd data from the
-`perimeter_data` to `data`.
+ 1. Finish the communication.
+ 2. Apply [`Spaces.load_from_recv_buffer!`](@ref), which adds the data in the
+    receive buffer to the corresponding locations in `perimeter_data`. For ghost
+    vertices, the data is added only to the representative vertices; the values
+    are then scattered to the other local vertices of each unique ghost vertex by
+    `dss_ghost!`.
+ 3. Apply [`Spaces.dss_untransform!`](@ref) on perimeter elements, which transforms
+    the summed vectors back to their original basis and copies the summed data from
+    `perimeter_data` to `data`.
 """
 function weighted_dss_ghost!(data, space, dss_buffer)
     isnothing(dss_buffer) && return data

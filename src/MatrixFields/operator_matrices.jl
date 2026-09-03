@@ -394,9 +394,9 @@ end
 """
     operator_matrix(op)
 
-Constructs a new operator (or operator-like object) that generates the matrix
-applied by `op` to its final argument. If `op_matrix = operator_matrix(op)`,
-we can use the following identities:
+Construct a new operator (or operator-like object) that generates the matrix
+applied by `op` to its final argument. If `op_matrix = operator_matrix(op)`, the
+following identities hold:
 
   - When `op` takes one argument, `@. op(arg) == @. op_matrix() * arg`.
   - When `op` takes multiple arguments,
@@ -419,9 +419,9 @@ When `op` takes more than one argument, `operator_matrix(op)` constructs a
 `FiniteDifferenceOperator` that generates the operator matrix. When `op` only
 takes one argument, it instead constructs an `AbstractLazyOperator`, which is
 internally converted into a `FiniteDifferenceOperator` when used in a broadcast
-expression. Implementing `op_matrix` as a lazy operator allows us to add an
-argument to the expression `op_matrix.()`, and we then use this argument to
-infer the space and element type of the operator matrix.
+expression. Implementing `op_matrix` as a lazy operator adds an argument to the
+expression `op_matrix.()`, from which the space and element type of the operator
+matrix are inferred.
 
 As an example, the `InterpolateF2C()` operator on a space with ``n`` cell
 centers applies an ``n \\times (n + 1)`` bidiagonal matrix:
@@ -489,8 +489,8 @@ However, this simplifies to a linear transformation when ``grad_b`` and
 ```
 
 In general, when `op` has nonzero boundary conditions that make it apply an
-affine transformation, `operator_matrix(op)` will print out a warning and zero
-out the boundary conditions before computing the operator matrix.
+affine transformation, `operator_matrix(op)` prints a warning and zeros out the
+boundary conditions before computing the operator matrix.
 
 In addition to affine transformations, there are also some operators that apply
 nonlinear transformations to their arguments; that is, transformations which
@@ -503,9 +503,7 @@ cannot be accurately approximated without using more terms of the form
 \\ldots.
 ```
 
-When `op` is such an operator, `operator_matrix(op)` will throw an error. In the
-future, we may want to modify `operator_matrix(op)` so that it will instead
-return ``\\textrm{op}'(\\textbf{0})``, where ``\\textbf{0} ={} ```zero.(arg)`.
+When `op` is such an operator, `operator_matrix(op)` throws an error.
 """
 operator_matrix(op::OneArgFDOperator) = LazyOneArgFDOperatorMatrix(op)
 operator_matrix(op::TwoArgFDOperator) = FDOperatorMatrix(op)

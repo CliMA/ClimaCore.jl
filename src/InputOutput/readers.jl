@@ -57,10 +57,9 @@ end
 """
     is_type_expr(expr)
 
-Check if an expression is a type expression, with no function calls or other non-type
-expressions, with the expection of @NamedTuple.
-This function is based on the JLD.jl `is_valid_type_exp`.
-See https://github.com/JuliaIO/JLD.jl/blob/80ac89643e3ad87545e48f4d361a00a29cdf4e2f/src/JLD.jl#L922
+Return whether `expr` is a type expression, containing no function calls or other
+non-type expressions, with the exception of `@NamedTuple`. Based on `is_valid_type_exp`
+in [JLD.jl](https://github.com/JuliaIO/JLD.jl/blob/80ac89643e3ad87545e48f4d361a00a29cdf4e2f/src/JLD.jl#L922).
 """
 is_type_expr(s::Symbol) = true
 is_type_expr(q::QuoteNode) = is_type_expr(q.value)
@@ -82,23 +81,19 @@ is_type_expr(t) = isbits(t)
     HDF5Reader(::Function, filename::AbstractString, context::ClimaComms.AbstractCommsContext)
 
 An `AbstractReader` for reading from HDF5 files created by [`HDF5Writer`](@ref).
-The reader object contains an internal cache of domains, meshes, topologies and
-spaces that are read so that duplicate objects are not created.
+The reader caches the domains, meshes, topologies, grids, and spaces it reads so that
+duplicate objects are not created.
 
 `context` is the `ClimaComms` context of the run (`ClimaComms.context()`); with
 an `MPICommsContext` the resulting `Field`s are distributed over its ranks,
 which requires an HDF5 library with MPI support, as for [`HDF5Writer`](@ref).
-The `do`-block form closes the file when the block returns.
+The `do`-block form closes the file when the block returns. Opening a file written by a
+newer version of ClimaCore logs a warning.
 
-# Interface
+Objects are read with [`read_domain`](@ref), [`read_mesh`](@ref), [`read_topology`](@ref),
+[`read_space`](@ref), and [`read_field`](@ref).
 
-  - [`read_domain`](@ref)
-  - [`read_mesh`](@ref)
-  - [`read_topology`](@ref)
-  - [`read_space`](@ref)
-  - [`read_field`](@ref)
-
-# Usage
+# Examples
 
 ```julia
 InputOutput.HDF5Reader(filename, ClimaComms.context()) do reader
@@ -114,26 +109,11 @@ A `FieldVector` named `"Y"` with components `c` and `f` is stored as the fields
 `"Y/c"` and `"Y/f"`; the members of a `NamedTuple`-valued field (`Y.c.ρ`) are
 not addressable separately.
 
-To explore the contents of the `reader`, use either
-
-```julia
-julia> reader |> propertynames
-
-```
-
-e.g, to explore the components of the `space`,
-
-```julia
-julia> reader.space_cache
-Dict{Any, Any} with 3 entries:
-  "center_extruded_finite_difference_space" => CenterExtrudedFiniteDifferenceSpace:…
-  "horizontal_space"                        => SpectralElementSpace2D:…
-  "face_extruded_finite_difference_space"   => FaceExtrudedFiniteDifferenceSpace:…
-```
-
-Once "unpacked" as shown above, fields can be visualised by loading `Plots` or `Makie`, which
-activates the corresponding ClimaCore plotting extension. `ClimaCoreTempestRemap` supports
-interpolation onto user-specified grids if necessary.
+The caches expose what has been read so far, e.g. `reader.space_cache` is a `Dict` from
+space names such as `"horizontal_space"` to the space objects. Fields read this way can be
+plotted by loading a Makie backend (e.g. `CairoMakie`), which activates ClimaCore's
+plotting extension (`ClimaCore.Visualize`), and interpolated onto other grids with
+`ClimaCoreTempestRemap`.
 """
 struct HDF5Reader{C <: ClimaComms.AbstractCommsContext}
     file::HDF5.File
@@ -263,7 +243,8 @@ end
 """
     matrix_to_cartesianindices(elemorder_matrix)
 
-Converts the `elemorder_matrix` to cartesian indices.
+Convert the `elemorder_matrix`, whose rows are element indices, to an array of
+`CartesianIndex` with one dimension per column, sized by the maximum index in each.
 """
 function matrix_to_cartesianindices(elemorder_matrix)
     m, ndims = size(elemorder_matrix)
@@ -279,8 +260,8 @@ end
 """
     read_domain(reader::AbstractReader, name)
 
-Reads a domain named `name` from `reader`. Domain objects are cached in the
-reader to avoid creating duplicate objects.
+Read the domain named `name` from `reader`, or from the reader cache if it has already
+been read.
 """
 function read_domain(reader, name)
     Base.get!(reader.domain_cache, name) do
@@ -314,8 +295,8 @@ end
 """
     read_mesh(reader::AbstractReader, name)
 
-Reads a mesh named `name` from `reader`, or from the reader cache if it has
-already been read.
+Read the mesh named `name` from `reader`, or from the reader cache if it has already been
+read.
 """
 function read_mesh(reader, name)
     Base.get!(reader.mesh_cache, name) do
@@ -374,8 +355,9 @@ end
 """
     read_topology(reader::AbstractReader, name)
 
-Reads a topology named `name` from `reader`, or from the reader cache if it has
-already been read.
+Read the topology named `name` from `reader`, or from the reader cache if it has already
+been read. A `Topology2D` is created with the reader's context, so it is distributed when
+the context is an `MPICommsContext`.
 """
 function read_topology(reader, name)
     Base.get!(reader.topology_cache, name) do
@@ -428,8 +410,8 @@ end
 """
     read_grid(reader::AbstractReader, name)
 
-Reads a space named `name` from `reader`, or from the reader cache if it has
-already been read.
+Read the grid named `name` from `reader`, or from the reader cache if it has already been
+read.
 """
 function read_grid(reader, name)
     Base.get!(reader.grid_cache, name) do
@@ -440,9 +422,9 @@ end
 """
     read_data_layout(dataset, topology)
 
-Read a datalayout from a `dataset`, with a given `topology`.
-
-This should cooperate with datasets written by `write!` for datalayouts.
+Read a `DataLayout` from the HDF5 `dataset` for the given `topology`, selecting the
+elements local to this process when `topology` is a `Topology2D`. This is the inverse of
+the [`write!`](@ref) method for data layouts.
 """
 function read_data_layout(dataset, topology)
     ArrayType = ClimaComms.array_type(topology)
@@ -559,8 +541,8 @@ end
 """
     read_space(reader::AbstractReader, name)
 
-Reads a space named `name` from `reader`, or from the reader cache if it has
-already been read.
+Read the space named `name` from `reader`, or from the reader cache if it has already
+been read.
 """
 function read_space(reader, name)
     Base.get!(reader.space_cache, name) do
@@ -614,9 +596,9 @@ end
 """
     read_field(reader, name)
 
-Reads a `Field` or `FieldVector` named `name` from `reader`. Fields are _not_
-cached, so that reading the same field multiple times will create multiple
-distinct objects.
+Read the `Field` or `FieldVector` named `name` from `reader`. Fields are not cached, so
+reading the same field multiple times creates distinct objects. The components of a
+`FieldVector` are addressed by their slash path, e.g. `"Y/c"`.
 """
 function read_field(reader::HDF5Reader, name::AbstractString)
     key = "fields/$name"
@@ -639,7 +621,7 @@ function read_field(reader::HDF5Reader, name::AbstractString)
             lg_obj = reader.file["local_geometry_data/$name"]
             ArrayType = ClimaComms.array_type(ClimaComms.device(reader.context))
             lg_data = ArrayType(read(lg_obj))
-            # because it is a point space, the data layout of local_geometry_data is always DataF
+            # For a point space, the data layout of local_geometry_data is always DataF.
             lg_type = read_type(attrs(lg_obj)["local_geometry_type"])
             local_geometry_data = DataLayouts.DataF{lg_type}(lg_data)
             space = Spaces.PointSpace(local_geometry_data)
@@ -685,9 +667,10 @@ function read_field(reader::HDF5Reader, name::AbstractString)
 end
 
 """
-    read_attributes(reader::AbstractReader, name::AbstractString, data::Dict)
+    read_attributes(reader::AbstractReader, name::AbstractString)
 
-Return the attributes associated to the object at `name` in the given HDF5 file.
+Return a `Dict` of the attributes of the object at path `name` in the HDF5 file of
+`reader`.
 """
 read_attributes(reader::HDF5Reader, name::AbstractString) =
     h5readattr(reader.file.filename, name)

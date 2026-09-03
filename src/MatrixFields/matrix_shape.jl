@@ -10,15 +10,16 @@ matrix_shape(matrix_field) = matrix_shape(matrix_field, axes(matrix_field))
 """
     matrix_shape(matrix_field, [matrix_space])
 
-Returns the matrix shape for a matrix field defined on the `matrix_space`. By default,
-`matrix_space` is set to `axes(matrix_field)`.
+Return the shape of a matrix field whose rows are defined on `matrix_space`, which
+defaults to `axes(matrix_field)`.
 
-When the matrix_space is a finite difference space (extruded or otherwise): the shape is
-either `Square()`, `FaceToCenter()`, or `CenterToFace()`, depending on
-whether the diagonal indices of `matrix_field` are `Int`s or `PlusHalf`s and
-whether `matrix_space` is on cell centers or cell faces.
+When `matrix_space` is a finite difference space (extruded or not), the shape is
+`Square()`, `FaceToCenter()`, or `CenterToFace()`, depending on whether the
+diagonal indices of `matrix_field` are `Int`s or `PlusHalf`s and whether
+`matrix_space` is on cell centers or cell faces.
 
-When the matrix_space is a spectral element or point space: only a Square() shape is supported.
+When `matrix_space` is a spectral element or point space, only the `Square()` shape
+is supported, and `matrix_field` must have `DiagonalMatrixRow` entries.
 """
 matrix_shape(matrix_field, matrix_space) = _matrix_shape(
     eltype(outer_diagonals(eltype(matrix_field))),
@@ -44,10 +45,10 @@ _matrix_shape(::Type{PlusHalf{Int}}, ::Spaces.CellFace) = CenterToFace()
 """
     column_axes(matrix_field, [matrix_space])
 
-Returns the space that corresponds to the columns of `matrix_field`, i.e., the
+Return the space that corresponds to the columns of `matrix_field`, i.e., the
 `axes` of the `Field`s by which `matrix_field` can be multiplied. The
-`matrix_space`, on the other hand, is the space that corresponds to the rows of
-`matrix_field`. By default, `matrix_space` is set to `axes(matrix_field)`.
+`matrix_space` is the space that corresponds to the rows of `matrix_field`, and it
+defaults to `axes(matrix_field)`.
 """
 column_axes(matrix_field, matrix_space = axes(matrix_field)) =
     _column_axes(matrix_shape(matrix_field, matrix_space), matrix_space)

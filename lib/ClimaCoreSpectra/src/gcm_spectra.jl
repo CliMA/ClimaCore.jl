@@ -10,16 +10,36 @@ Cleanup items:
 import FFTW
 
 """
-    AbstractSpectralSphericalMesh
+    AbstractSpectralSphericalMesh{FT, ArrF3, ArrI2, ArrC3, ArrC4}
 
-An abstract spherical mesh data structure for calculating spectra.
+Supertype for spherical mesh data structures used to compute spectra. The only subtype
+is [`SpectralSphericalMesh`](@ref).
 """
 abstract type AbstractSpectralSphericalMesh{FT, ArrF3, ArrI2, ArrC3, ArrC4} end
 
 """
-    SpectralSphericalMesh
+    SpectralSphericalMesh{FT}(nθ, nd)
+    SpectralSphericalMesh(nθ, nd, ArrType, ComplexType, IntArrType)
 
-Spherical mesh data structure for calculating spectra. The mesh represents a regular lat-long grid.
+Spherical mesh data structure for computing spectra on a regular latitude-longitude grid
+with `nθ` latitudes, `nλ = 2nθ` longitudes, and `nd` vertical levels. The triangular
+truncation is `num_fourier = floor((2nθ - 1) / 3)` (e.g. `nθ = 32` gives T21).
+
+`ArrType`, `ComplexType`, and `IntArrType` are the array types used for the real,
+complex, and integer work arrays; the first form uses `Array`s of `FT`.
+
+# Fields
+
+  - `num_fourier`: number of truncated zonal wavenumbers `m`.
+  - `num_spherical`: number of total wavenumbers `n` (`num_fourier + 1`).
+  - `nλ`, `nθ`, `nd`: numbers of longitudes, latitudes, and vertical levels.
+  - `Δλ`: longitude spacing [rad].
+  - `qwg`: Gaussian-weighted associated Legendre polynomials, indexed `[m, n, θ]`.
+  - `qnm`: normalized associated Legendre polynomials, indexed `[m, n, θ]`.
+  - `wave_numbers`: total wavenumber `n` for each `[m, n]` entry.
+  - `var_grid`, `var_fourier`, `var_spherical`, `var_spectrum`: work arrays for the
+    variable on the grid, after the Fourier transform, in spherical-harmonic space, and
+    its power spectrum.
 """
 mutable struct SpectralSphericalMesh{FT, ArrF3, ArrI2, ArrC3, ArrC4} <:
                AbstractSpectralSphericalMesh{FT, ArrF3, ArrI2, ArrC3, ArrC4}
@@ -99,30 +119,35 @@ end
 """
     compute_legendre!(FT, num_fourier, num_spherical, sinθ, nθ)
 
-Normalized associated Legendre polynomials, P_{m,l} = qnm.
+Compute the normalized associated Legendre polynomials ``P_{l,m}`` at the Gaussian
+latitudes and return them as an array `qnm` of shape
+`(num_fourier + 1, num_spherical + 1, nθ)`, with `qnm[m + 1, l + 1, :]` holding
+``P_{l,m}``. The function allocates its result and mutates none of its arguments.
 
-# Arguments:
+# Arguments
 
-  - FT: FloatType
-  - num_fourier: Int, number of truncated zonal wavenumbers (m)
-  - num_spherical: Int, number of total wavenumbers (n)
-  - sinθ: Array{FT} with sin(latitude)
-  - nθ: Int, number of Gaussian latitudes
+  - `FT`: float type.
+  - `num_fourier`: number of truncated zonal wavenumbers `m`.
+  - `num_spherical`: number of total wavenumbers `n`.
+  - `sinθ`: array of `sin(latitude)` at the Gaussian latitudes.
+  - `nθ`: number of Gaussian latitudes.
 
-# References:
+# Notes
 
-  - Ehrendorfer, M. (2011) Spectral Numerical Weather Prediction Models, Appendix B, Society for Industrial and Applied Mathematics
-  - Winch, D. (2007) Spherical harmonics, in Encyclopedia of Geomagnetism and Paleomagnetism, Eds Gubbins D. and Herrero-Bervera, E., Springer
+Following the notation and equation numbers of Ehrendorfer (2011), Appendix B, with
+`l = 0, 1, …` and `m = -l, …, l`:
 
-# Details (using notation and Eq. references from Ehrendorfer, 2011):
-
-    l=0,1...∞    and m = -l, -l+1, ... l-1, l
-    P_{0,0} = 1, such that 1/4π ∫∫YYdS = δ (where Y = spherical harmonics, S = domain surface area)
+    P_{0,0} = 1
     P_{m,m} = sqrt((2m+1)/2m) cosθ P_{m-1,m-1}
     P_{m+1,m} = sqrt(2m+3) sinθ P_{m,m}
-    sqrt((l^2-m^2)/(4l^2-1))P_{l,m} = P_{l-1, m} -  sqrt(((l-1)^2-m^2)/(4(l-1)^2 - 1))P_{l-2,m}
-    THe normalization assures that 1/2 ∫_{-1}^1 P_{l,m}(sinθ) P_{n,m}(sinθ) dsinθ = δ_{n,l}
-    Julia index starts with 1, so qnm[m+1,l+1] = P_l^m
+    sqrt((l²-m²)/(4l²-1)) P_{l,m} = sinθ P_{l-1,m} - sqrt(((l-1)²-m²)/(4(l-1)²-1)) P_{l-2,m}
+
+The normalization gives ``\\frac{1}{2} \\int_{-1}^1 P_{l,m}(x) P_{n,m}(x)\\, dx = δ_{n,l}``
+with ``x = \\sin θ``.
+
+References: Ehrendorfer, M. (2011), Spectral Numerical Weather Prediction Models,
+Appendix B, SIAM; Winch, D. (2007), Spherical harmonics, in Encyclopedia of
+Geomagnetism and Paleomagnetism, Springer.
 """
 function compute_legendre!(FT, num_fourier, num_spherical, sinθ, nθ)
 
@@ -157,29 +182,20 @@ end
 """
     compute_gaussian!(FT, n)
 
-Compute sin(latitude) and the weight factors for Gaussian integration.
+Compute `sin(latitude)` at the `n` Gaussian latitudes and the corresponding weights for
+Gaussian integration, returned as the tuple `(sinθ, wts)` of arrays with element type
+`FT`. `n` must be even. The function allocates its results and mutates none of its
+arguments.
 
-# Arguments
+# Notes
 
-  - FT: FloatType
-  - n: Int, number of Gaussian latitudes
-
-# References
-
-  - Ehrendorfer, M., Spectral Numerical Weather Prediction Models, Appendix B, Society for Industrial and Applied Mathematics, 2011
-
-# Details (following notation from Ehrendorfer, 2011):
-
-    Pn(x) is an odd function
-    solve half of the n roots and weightes of Pn(x) # n = 2n_half
-    P_{-1}(x) = 0
-    P_0(x) = 1
-    P_1(x) = x
-    nP_n(x) = (2n-1)xP_{n-1}(x) - (n-1)P_{n-2}(x)
-    P'_n(x) = n/(x^2-1)(xP_{n}(x) - P_{n-1}(x))
-    x -= P_n(x)/P'_{n}()
-    Initial guess xi^{0} = cos(π(i-0.25)/(n+0.5))
-    wi = 2/(1-xi^2)/P_n'(xi)^2
+The roots of the Legendre polynomial ``P_n`` are found by Newton iteration from the
+initial guess ``x_i = \\cos(π(i - 1/4)/(n + 1/2))``, using the recurrences
+``n P_n(x) = (2n-1) x P_{n-1}(x) - (n-1) P_{n-2}(x)`` and
+``P'_n(x) = \\frac{n}{x^2 - 1}(x P_n(x) - P_{n-1}(x))``; since ``P_n`` is odd, only half
+of the roots are computed. The weights are ``w_i = 2 / ((1 - x_i^2) P'_n(x_i)^2)``. An
+error is logged if the iteration does not converge. See Ehrendorfer, M. (2011), Spectral
+Numerical Weather Prediction Models, Appendix B, SIAM.
 """
 function compute_gaussian!(FT, n)
     itermax = 10000
@@ -222,27 +238,33 @@ function compute_gaussian!(FT, n)
 end
 
 """
-    trans_grid_to_spherical!(mesh::SpectralSphericalMesh, pfield::Arr{FT,2})
+    trans_grid_to_spherical!(mesh::SpectralSphericalMesh, pfield::AbstractArray)
 
-Transforms a variable on a Gaussian grid (pfield[nλ, nθ]) into the spherical harmonics domain (var_spherical2d[num_fourier+1, num_spherical+1]).
+Transform the variable `pfield` of shape `(nλ, nθ)` on a Gaussian grid into
+spherical-harmonic space and return the complex coefficient array of shape
+`(num_fourier + 1, num_spherical + 1, nθ ÷ 2)`, split by latitude hemisphere pairs.
 
-# Details:
-
-    Here λ = longitude, θ = latitude, η = sinθ, m = zonal wavenumber, n = total wavenumber:
-    var_spherical2d = F_{m,n}    # Output variable in spectral space (Complex{FT}[num_fourier+1, num_spherical+1])
-    qwg = P_{m,n}(η)w(η)         # Weighted Legendre polynomials (FT[num_fourier+1, num_spherical+1, nθ])
-    var_fourier2d = g_{m, θ}     # Untruncated Fourier transformation (Complex{FT} [nλ, nθ])
-    pfield = F(λ, η)             # Input variable on Gaussian grid FT[nλ, nθ]
+The transform is a Fourier transform along each latitude circle followed by a Legendre
+transform using the weighted polynomials `mesh.qwg`. `mesh` is read but not mutated;
+`nθ` must be even.
 
 # Arguments
 
-  - mesh: struct with mesh information
-  - pfield: variable on Gaussian grid to be transformed
+  - `mesh`: mesh information and weighted Legendre polynomials.
+  - `pfield`: variable on the Gaussian grid to be transformed.
 
-# References
+# Notes
 
-  - Ehrendorfer, M., Spectral Numerical Weather Prediction Models, Appendix B, Society for Industrial and Applied Mathematics, 2011
-  - [Wiin1967](@cite)
+With λ the longitude, θ the latitude, η = sin θ, `m` the zonal wavenumber, and `n` the
+total wavenumber:
+
+    var_spherical2d = F_{m,n}    # output in spectral space
+    qwg = P_{m,n}(η) w(η)        # weighted Legendre polynomials
+    var_fourier2d = g_{m,θ}      # untruncated Fourier transform
+    pfield = F(λ, η)             # input on the Gaussian grid
+
+See Ehrendorfer, M. (2011), Spectral Numerical Weather Prediction Models, Appendix B,
+SIAM, and [Wiin1967](@cite).
 """
 function trans_grid_to_spherical!(
     mesh::SpectralSphericalMesh{FT},
@@ -290,13 +312,15 @@ end
 """
     compute_wave_numbers!(wave_numbers, num_fourier::Int, num_spherical::Int)
 
-Store the total wave number `n` for this basis in a matrix `wave_numbers` of shape [m,n].
+Store the total wavenumber `n` for each `(m, n)` entry of the triangular truncation in
+the matrix `wave_numbers`, which is mutated in place. Entries with `n < m` are left
+unchanged. Returns `nothing`.
 
-# Arguments:
+# Arguments
 
-  - wave_numbers: Matrix of [Int, Int] to store the wave wave_numbers
-  - num_fourier: Int, number of truncated zonal wavenumbers (m)
-  - num_spherical: Int, number of total wavenumbers (n)
+  - `wave_numbers`: integer matrix of shape `(num_fourier + 1, num_spherical + 1)`.
+  - `num_fourier`: number of truncated zonal wavenumbers `m`.
+  - `num_spherical`: number of total wavenumbers `n`.
 """
 function compute_wave_numbers!(
     wave_numbers,
@@ -317,19 +341,26 @@ end
 """
     power_spectrum_1d(FT, var_grid, z, lat, lon, weight)
 
-For a variable `var_grid` on a (lon,lat,z) grid, given an array of
-`weight`s, compute the zonal (1D) power spectrum using a Fourier
-transform at each Gaussian latitude. The input field must be first
-intepolated to a Gaussian grid.
+Compute the zonal (1D) power spectrum of the variable `var_grid` on a `(lon, lat, z)`
+grid with a Fourier transform along each latitude circle, weighting each level by
+`weight`. The input field must first be interpolated to a regular latitude-longitude
+grid.
 
 # Arguments
 
-  - FT: FloatType
-  - var_grid: variable on a Gaussian (lon, lat, z) grid to be transformed
-  - z: Array with uniform z levels
-  - lat: Array with uniform lats
-  - lon: Array with uniform longs
-  - weight: Array with weights for mass-weighted calculations
+  - `FT`: float type.
+  - `var_grid`: variable on the `(lon, lat, z)` grid to be transformed.
+  - `z`: array of vertical levels.
+  - `lat`: array of latitudes [degrees].
+  - `lon`: array of uniformly spaced longitudes [degrees].
+  - `weight`: array with one weight per level, e.g. for mass weighting.
+
+# Returns
+
+The tuple `(zon_spectrum, freqs)` of arrays of shape `(num_pfourier, nlat, nlev)`, where
+`num_pfourier` is the number of non-negative Fourier frequencies: the power at each
+frequency (with the negative-frequency contribution folded in) and the corresponding
+angular wavenumbers.
 """
 function power_spectrum_1d(FT, var_grid, z, lat, lon, weight)
     num_lev = length(z)
@@ -380,23 +411,29 @@ end
 """
     power_spectrum_2d(FT, var_grid, mass_weight)
 
-Transform a variable defined on a regular lat long grid to the 2d spectral space using `fft` on latitude circles
-(as for the 1D spectrum) and Legendre polynomials for meridians, and calculate spectra.
+Transform the variable `var_grid` on a regular latitude-longitude grid into
+spherical-harmonic space, using an FFT along latitude circles (as for the 1D spectrum)
+and a Legendre transform along meridians, and compute its 2D power spectrum.
 
 # Arguments
 
-  - FT: FloatType
-  - var_grid: variable on a Gaussian (lon, lat, z) grid to be transformed
-  - mass_weight: Array with weights for mass-weighted calculations.
+  - `FT`: float type.
+  - `var_grid`: variable on the `(lon, lat, z)` grid to be transformed, with `nlon = 2 nlat`.
+  - `mass_weight`: array with one weight per level, e.g. for mass weighting.
 
-# References
+# Returns
 
-  - [Baer1972](@cite)
+The tuple `(var_spectrum, wave_numbers, var_spherical, mesh)`: the power spectrum indexed
+`[m, n, k]`, the total wavenumber of each `[m, n]` entry, the spherical-harmonic
+coefficients indexed `[m, n, k, θ]`, and the [`SpectralSphericalMesh`](@ref) used.
+
+See [Baer1972](@cite).
 """
 function power_spectrum_2d(FT, var_grid, mass_weight)
 
     # TODO:
-    #  - Can we define `power_spectrum_2d(field::ClimaCore.Field, mass_weight::ClimaCore.Field)`
+    #  - Can we define
+    #    `power_spectrum_2d(field::ClimaCore.Field, mass_weight::ClimaCore.Field)`
     #  - Call ClimaCoreTempestRemap internally to export lat-lon grid
     #  - ClimaCoreSpectra can then take this output and compute the spectra
 

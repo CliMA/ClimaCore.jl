@@ -1,11 +1,12 @@
 """
     interpolate_slab!(output_array, field, slab_indices, weights)
 
-Interpolate horizontal field on the given `slab_indices` using the given interpolation
-`weights`.
+Interpolate `field` horizontally at one point per entry of `output_array`, writing the
+results in place.
 
-`interpolate_slab!` interpolates several values at a fixed `z` coordinate. For this reason,
-it requires several slab indices and weights.
+`slab_indices[k]` is the `Fields.SlabIndex` (level and element) of the `k`-th target point,
+and `weights[k]` is a tuple of one (1D) or two (2D) vectors of interpolation weights over
+the quadrature nodes of that element, as returned by `interpolation_weights`.
 """
 interpolate_slab!(output_array, field::Fields.Field, slab_indices, weights) =
     interpolate_slab!(
@@ -73,9 +74,14 @@ end
 """
     vertical_indices_ref_coordinate(space, zcoord)
 
-Return the vertical indices of the elements below and above `zcoord`.
+Return `(v_lo, v_hi, ξ3)`: the two vertical level indices that bracket `zcoord` and the
+reference coordinate `ξ3 ∈ [-1, 1]` of `zcoord` between them, so that linear
+interpolation reads `((1 - ξ3) * f_lo + (1 + ξ3) * f_hi) / 2`.
 
-Return also the correct reference coordinate `zcoord` for vertical interpolation.
+On a `FaceExtrudedFiniteDifferenceSpace`, `v_lo` and `v_hi` are the two faces of the
+containing element. On a `CenterExtrudedFiniteDifferenceSpace`, they are the two nearest
+cell centers; in a non-periodic column, they coincide for points in the outer half of the
+top and bottom cells, so that the cell-center value is returned.
 """
 function vertical_indices_ref_coordinate end
 
@@ -123,26 +129,17 @@ function vertical_indices_ref_coordinate(
 end
 
 """
-    interpolate_slab_level(
-                           field::Fields.Field,
-                           h::Integer,
-                           Is::Tuple,
-                           zpts;
-                           fill_value = eltype(field)(NaN)
-                           )
+    interpolate_slab_level!(output_array, field, h, Is, vertical_indices_ref_coordinates)
 
-Vertically interpolate the given `field` on `zpts`.
+Interpolate `field` at one horizontal point of element `h`, given by the horizontal weights
+`Is`, and at each vertical position in `vertical_indices_ref_coordinates`, writing one
+value per vertical position into `output_array`.
 
-`interpolate_slab_level!` interpolates several values at a fixed horizontal coordinate.
-
-The field is linearly interpolated across two neighboring vertical elements.
-
-For centered-valued fields, if `zcoord` is in the top (bottom) half of a top (bottom)
-element in a column, no interpolation is performed and the value at the cell center is
-returned. Effectively, this means that the interpolation is first-order accurate across the
-column, but zeroth-order accurate close to the boundaries.
-
-Return `fill_value` when the vertical coordinate is negative.
+`Is` is a tuple of one (1D) or two (2D) vectors of horizontal interpolation weights over the
+quadrature nodes of the element. Each entry of `vertical_indices_ref_coordinates` is a
+`(v_lo, v_hi, ξ3)` triple from `vertical_indices_ref_coordinate`: the field is interpolated
+horizontally on levels `v_lo` and `v_hi` and then linearly in `ξ3` between them. On center
+spaces, points in the outer half of the top and bottom cells take the cell-center value.
 """
 function interpolate_slab_level!(
     output_array,
@@ -231,15 +228,31 @@ function interpolate_slab_level!(
 end
 
 """
-    interpolate_array(field, xpts, ypts; horizontal_method = SpectralElementRemapping())
+    interpolate_array(field, xpts, zpts; horizontal_method = SpectralElementRemapping())
     interpolate_array(field, xpts, ypts, zpts; horizontal_method = SpectralElementRemapping())
+    interpolate_array(field, xpts, ypts; horizontal_method = SpectralElementRemapping())
 
-Interpolate a field to a regular array using pointwise interpolation.
+Interpolate `field` pointwise onto the Cartesian product of the given coordinate vectors
+and return the values as an `Array` with one dimension per coordinate vector.
 
-This is primarily used for plotting and diagnostics.
+The first two methods apply to an `ExtrudedFiniteDifferenceField` with a 1D or 2D
+horizontal space; the third applies to a `SpectralElementField2D`. Horizontal interpolation
+follows `horizontal_method`: [`SpectralElementRemapping`](@ref) interpolates with the
+Lagrange polynomial through all quadrature nodes of the element, [`BilinearRemapping`](@ref)
+interpolates bilinearly between the bracketing quadrature nodes. Vertical interpolation is
+linear between the two bracketing levels; on center spaces, points in the outer half of the
+top and bottom cells take the cell-center value.
 
-`horizontal_method`: `SpectralElementRemapping()` (default; uses spectral element quadrature weights)
-or `BilinearRemapping()` (bilinear on the 2-point cell containing (ξ₁,ξ₂)).
+`field` must live on a single process (`SingletonCommsContext`). For distributed or
+repeated remapping, build a [`Remapper`](@ref) and use [`interpolate`](@ref).
+
+# Arguments
+
+  - `field`: the `Field` to interpolate.
+  - `xpts`, `ypts`: vectors of horizontal coordinate points (e.g. `Geometry.LongPoint`,
+    `Geometry.LatPoint`, `Geometry.XPoint`); `xpts` and `ypts` are combined with
+    `Geometry.product_coordinates`.
+  - `zpts`: vector of `Geometry.ZPoint`s, interpreted as reference `z` coordinates.
 
 # Examples
 
@@ -253,7 +266,8 @@ interpolate_array(field, longpts, latpts, zpts)
 
 !!! note
 
-    Hypsography is not currently handled correctly.
+    `zpts` are located in the reference vertical mesh; hypsography (terrain-following
+    heights) is ignored.
 """
 function interpolate_array end
 
@@ -383,10 +397,14 @@ end
 """
     interpolation_weights(horz_mesh, hcoord, quad_points, method::AbstractRemappingMethod)
 
-Return weights (tuple of arrays) to interpolate onto `hcoord`.
+Return the horizontal interpolation weights for the point `hcoord` as a tuple of one
+(`AbstractMesh1D`) or two (`AbstractMesh2D`) vectors, with one weight per quadrature node
+of the containing element in each direction.
 
-  - `SpectralElementRemapping()`: uses spectral element quadrature weights.
-  - `BilinearRemapping()`: Bilinear on the 2-point cell containing (ξ1, ξ2).
+With `SpectralElementRemapping()`, the weights are the Lagrange basis polynomials through
+`quad_points` evaluated at the reference coordinates of `hcoord`. With
+`BilinearRemapping()`, only the two nodes that bracket the point in each direction have
+nonzero weights, `1 - s` and `s`, where `s ∈ [0, 1]` is the local coordinate between them.
 """
 function interpolation_weights end
 

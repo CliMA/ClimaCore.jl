@@ -1,8 +1,10 @@
 """
     AbstractCubedSphere <: AbstractMesh2D
 
-This is an abstract type of cubed-sphere meshes on `SphereDomain`s. A
-cubed-sphere mesh has 6 panels, laid out as follows:
+Abstract supertype of cubed-sphere meshes on `SphereDomain`s. Subtypes:
+[`EquiangularCubedSphere`](@ref), [`EquidistantCubedSphere`](@ref), and
+[`ConformalCubedSphere`](@ref). A cubed-sphere mesh has 6 panels, laid out as
+follows:
 
 ```
                                           :   Panel 1   :
@@ -34,49 +36,55 @@ cubed-sphere mesh has 6 panels, laid out as follows:
 :   Panel 6   :
 ```
 
-This is the same panel ordering used by the S2 Geometry library (though we use 1-based
-instead of 0-based numering).
+This is the panel ordering of the S2 Geometry library, with 1-based instead of
+0-based numbering.
 
-Elements are indexed by a `CartesianIndex{3}` object, where the components are:
+Elements are indexed by a `CartesianIndex{3}`, whose components are:
 
-  - horizontal element index (left to right) within each panel.
-  - vertical element index (bottom to top) within each panel.
-  - panel number
+  - the horizontal element index (left to right) within each panel,
+  - the vertical element index (bottom to top) within each panel,
+  - the panel number.
 
-Subtypes should have the following fields:
+# Fields
 
-  - `domain`: a `SphereDomain`
-  - `ne`: number of elements across each panel
+Subtypes have the following fields:
 
-# External links
+  - `domain`: The `SphereDomain`.
+  - `ne`: Number of elements across each panel.
+  - `localelementmap`: The [`LocalElementMap`](@ref) from the reference element to
+    the sphere.
 
-  - [S2Geometry library](https://s2geometry.io/devguide/s2cell_hierarchy)
-  - [MIT GCM exch2](https://mitgcm.readthedocs.io/en/latest/phys_pkgs/exch2.html?highlight=cube%20sphere#fig-48tile)
+# Notes
+
+External references:
+
+  - [S2Geometry library](https://s2geometry.io/devguide/s2cell_hierarchy).
+  - [MIT GCM exch2](https://mitgcm.readthedocs.io/en/latest/phys_pkgs/exch2.html?highlight=cube%20sphere#fig-48tile).
 """
 abstract type AbstractCubedSphere <: AbstractMesh2D end
 
 """
     LocalElementMap
 
-An abstract type of mappings from the reference element to a physical domain.
+Abstract supertype of mappings from the reference element to the physical domain.
+Subtypes: [`IntrinsicMap`](@ref) and [`NormalizedBilinearMap`](@ref).
 """
 abstract type LocalElementMap end
 
 """
     IntrinsicMap()
 
-This [`LocalElementMap`](@ref) uses the intrinsic mapping of the cubed sphere to
-map the reference element to the physical domain.
+[`LocalElementMap`](@ref) that uses the intrinsic mapping of the cubed sphere to map
+the reference element to the physical domain.
 """
 struct IntrinsicMap <: LocalElementMap end
 
 """
     NormalizedBilinearMap()
 
-The [`LocalElementMap`](@ref) for meshes on spherical domains of
-[Guba2014](@cite). It uses bilinear interpolation between the Cartesian
-coordinates of the element vertices, then normalizes the result to lie on the
-sphere.
+[`LocalElementMap`](@ref) for meshes on spherical domains of [Guba2014](@cite). It
+uses bilinear interpolation between the Cartesian coordinates of the element
+vertices, then normalizes the result to lie on the sphere.
 """
 struct NormalizedBilinearMap <: LocalElementMap end
 
@@ -153,10 +161,10 @@ function opposing_face(
 end
 
 """
-    to_panel(panel, coord1::Geometry.Cartesian123Point)
+    to_panel(panel::Integer, coord::Geometry.Cartesian123Point)
 
-Given a point at `coord1` on panel 1 of a sphere, transform
-it to panel `panel`.
+Transform the point `coord` on panel 1 of a sphere to the corresponding point on
+panel `panel`.
 """
 function to_panel(panel::Integer, coord::Geometry.Cartesian123Point)
     ζ0, ζx, ζy = Geometry.components(coord)
@@ -177,9 +185,10 @@ function to_panel(panel::Integer, coord::Geometry.Cartesian123Point)
 end
 
 """
-    panel = cubedspherepanel(coord::Geometry.Cartesian123Point)
+    containing_panel(coord::Geometry.Cartesian123Point)
 
-Given a point `coord`, return its panel number (an integer between 1 and 6).
+Return the panel number (an integer between 1 and 6) of the panel containing the
+point `coord`.
 """
 function containing_panel(coord::Geometry.Cartesian123Point)
     maxdim = argmax(abs.(Geometry.components(coord)))
@@ -194,10 +203,9 @@ function containing_panel(coord::Geometry.Cartesian123Point)
 end
 
 """
-    coord1 = from_panel(panel::Int, coord::Geometry.Cartesian123Point)
+    from_panel(panel::Int, coord::Geometry.Cartesian123Point)
 
-Given a point `coord` and its panel number `panel`, return its coordinates in panel 1
-(`coord1`).
+Transform the point `coord` on panel `panel` to the corresponding point on panel 1.
 """
 function from_panel(panel::Int, coord::Geometry.Cartesian123Point)
     if panel == 1
@@ -225,9 +233,9 @@ function coordinates(
     ne = mesh.ne
     x, y, panel = elem.I
     # ϕx, ϕy ∈ [-1,1] are the "panel coordinates" of the vertex
-    # we arrange this calculation carefully so that if zero, the sign is
-    # consistent with other vertices of the element. this makes it easier to
-    # deal with branch cuts (e.g. when plotting on lat/long axes)
+    # The calculation is arranged so that a zero result carries a sign consistent
+    # with the other vertices of the element, which simplifies branch cuts (e.g. when
+    # plotting on lat/long axes).
 
     if (vert == 1 || vert == 4)
         ϕx = FT(2 * (x - 1) - ne) / ne
@@ -256,7 +264,7 @@ function coordinates(
     FT = typeof(mesh.domain.radius)
     ne = mesh.ne
     x, y, panel = elem.I
-    # again, we want to arrange the calculation carefully so that signed zeros are correct
+    # As above, the calculation is arranged so that signed zeros are correct:
     # - if iseven(ne) and ϕx == 0, then ξ1 == +/-1, and should have the _opposite_ sign
     # - if isodd(ne) and ϕx == 0, then ξ1 == 0, and should have the same sign
     ox = 2 * x - 1 - ne
@@ -360,16 +368,16 @@ end
 An equiangular gnomonic mesh proposed by [Ronchi1996](@cite).
 Uses the element indexing convention of [`AbstractCubedSphere`](@ref).
 
-# Constructors
+# Constructor
 
     EquiangularCubedSphere(
         domain::Domains.SphereDomain,
         ne::Integer,
-        localelementmap=NormalizedBilinearMap()
-        )
+        localelementmap = NormalizedBilinearMap(),
+    )
 
-Constuct an `EquiangularCubedSphere` on `domain` with `ne` elements across
-each panel.
+Construct an `EquiangularCubedSphere` on `domain` with `ne` elements across each
+panel.
 """
 struct EquiangularCubedSphere{S <: SphereDomain, E <: LocalElementMap} <:
        AbstractCubedSphere
@@ -411,12 +419,16 @@ end
 An equidistant gnomonic mesh outlined in [Rancic1996](@cite) and [Nair2005](@cite).
 Uses the element indexing convention of [`AbstractCubedSphere`](@ref).
 
-# Constructors
+# Constructor
 
-    EquidistantCubedSphere(domain::Domains.SphereDomain, ne::Integer)
+    EquidistantCubedSphere(
+        domain::Domains.SphereDomain,
+        ne::Integer,
+        localelementmap = NormalizedBilinearMap(),
+    )
 
-Constuct an `EquidistantCubedSphere` on `domain` with `ne` elements across
-each panel.
+Construct an `EquidistantCubedSphere` on `domain` with `ne` elements across each
+panel.
 """
 struct EquidistantCubedSphere{S <: SphereDomain, E <: LocalElementMap} <:
        AbstractCubedSphere
@@ -449,12 +461,15 @@ end
 A conformal mesh outlined in [Rancic1996](@cite).
 Uses the element indexing convention of [`AbstractCubedSphere`](@ref).
 
-# Constructors
+# Constructor
 
-    ConformalCubedSphere(domain::Domains.SphereDomain, ne::Integer)
+    ConformalCubedSphere(
+        domain::Domains.SphereDomain,
+        ne::Integer,
+        localelementmap = NormalizedBilinearMap(),
+    )
 
-Constuct a `ConformalCubedSphere` on `domain` with `ne` elements across
-each panel.
+Construct a `ConformalCubedSphere` on `domain` with `ne` elements across each panel.
 """
 struct ConformalCubedSphere{S <: SphereDomain, E <: LocalElementMap} <:
        AbstractCubedSphere
