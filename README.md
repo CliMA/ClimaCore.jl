@@ -4,7 +4,7 @@
 
 # ClimaCore.jl
 
-The dynamical core (_dycore_) of the CliMA Earth System Model: composable, GPU-capable tools for discretizing and solving partial differential equations on the sphere and in Cartesian domains.
+The dynamical core (_dycore_) of the CliMA Earth System Model: composable, performance-portable tools for discretizing partial differential equations on the sphere and in Cartesian domains.
 
 |||
 |------------------:|:------------------------------------------------------------|
@@ -43,17 +43,18 @@ The dynamical core (_dycore_) of the CliMA Earth System Model: composable, GPU-c
 [zenodo-img]: https://img.shields.io/badge/DOI-10.5281%2Fzenodo.5554759-blue.svg
 [zenodo-url]: https://zenodo.org/badge/latestdoi/356355994
 
-ClimaCore.jl provides the spatial discretization building blocks for the [Climate Modeling Alliance (CliMA)](https://clima.caltech.edu/) Earth System Model, which is written entirely in [Julia](https://julialang.org/). It pairs a high-level API for composing differential operators and defining flexible discretizations with low-level APIs for data layouts, specialized implementations, and threading — targeting both CPU and GPU architectures from a single codebase.
+ClimaCore.jl is the spatial discretization layer of the [Climate Modeling Alliance (CliMA)](https://clima.caltech.edu/) Earth System Model, written entirely in [Julia](https://julialang.org/). It supplies the grids, fields, and differential operators that [ClimaAtmos.jl](https://github.com/CliMA/ClimaAtmos.jl) and [ClimaLand.jl](https://github.com/CliMA/ClimaLand.jl) build their equations on, and time steps them with [ClimaTimeSteppers.jl](https://github.com/CliMA/ClimaTimeSteppers.jl). Configurations range from a single column to large-eddy simulation on a box to a global cubed sphere, and the same model code runs on a CPU, on many nodes through MPI, and on a GPU.
 
 ## Features
 
-- **Spectral-element horizontal discretizations**: continuous (CG) and discontinuous (DG) Galerkin spectral elements.
-- **Flexible vertical discretization**: staggered finite differences on center/face grids.
-- **Multiple geometries**: Cartesian and spherical domains, with governing equations expressed in covariant vectors for curvilinear systems and Cartesian vectors for Euclidean spaces.
-- **`Field` abstraction**: scalar-, vector-, or struct-valued fields carrying values, geometry, and mesh information, with flexible memory layouts (AoS, SoA, AoSoA) and useful overloads (`sum`, `norm`, ...).
-- **Composable operators via broadcasting**: differential operators (`grad`, `div`, `interpolate`, ...) act like functions when broadcast over a `Field`, fusing operators and function calls into a single pass.
-- **GPU acceleration**: broadcast expressions compile to custom CUDA kernels, with specialization on polynomial degree for kernel performance.
-- **Time-stepper compatible**: `Field`s and `FieldVector`s act as the state vector for [ClimaTimeSteppers](https://github.com/CliMA/ClimaTimeSteppers.jl), which the tests and examples here time-step with.
+- **Horizontal spectral elements**: continuous (CG) and discontinuous (DG) Galerkin discretizations on quadrilateral elements, selected by one keyword and completed across element boundaries by direct stiffness summation (CG) or numerical fluxes (DG).
+- **Staggered vertical finite differences**: Lorenz staggering on cell centers and faces, with center-to-face and face-to-center operators and their boundary conditions.
+- **Upwinding and limiters**: upwind-biased, FCT, and TVD reconstructions for advection, plus the quasi-monotone horizontal limiter and the vertical mass-borrowing limiter for positivity.
+- **Curvilinear geometry**: covariant and contravariant bases, metric terms, and terrain-following coordinates, so operators are written once and evaluated on Cartesian and spherical domains alike.
+- **Matrix-free operators via broadcasting**: differential operators act like functions when broadcast over a `Field`, fusing operators and function calls into a single pass and compiling to one CPU loop or one CUDA kernel.
+- **Performance portability and scaling**: one codebase runs on CPUs and GPUs and distributes over MPI, with weak-scaling efficiency above 92% on GPUs and above 98% on CPUs, and 0.20 simulated years per day at 6 km resolution on 256 H100 GPUs ([Yatunin et al. 2026](https://CliMA.github.io/ClimaCore.jl/stable/explanation/performance/)).
+- **Differentiability**: fields and operators carry `ForwardDiff` dual numbers, so a column tendency can be differentiated for Jacobians and calibration.
+- **Time-stepper compatible**: `Field`s and `FieldVector`s are the state vector for [ClimaTimeSteppers.jl](https://github.com/CliMA/ClimaTimeSteppers.jl).
 
 ## Installation
 
@@ -92,7 +93,7 @@ grad = Operators.GradientC2F(
 ∂θ = @. Geometry.WVector(grad(θ))   # face-valued vertical gradient (≈ cos(z))
 ```
 
-More runnable examples (column, plane, and sphere configurations) are in the [`examples/`](examples/) directory.
+This snippet is the [Home page](https://CliMA.github.io/ClimaCore.jl/stable/) example, which the docs build runs on every commit. More runnable examples (column, plane, and sphere configurations) are in the [`examples/`](examples/) directory.
 
 ## Documentation
 
@@ -106,6 +107,8 @@ ClimaCore.jl is the dynamical core used throughout the [CliMA](https://github.co
 
 - [ClimaAtmos.jl](https://github.com/CliMA/ClimaAtmos.jl) — atmosphere model
 - [ClimaLand.jl](https://github.com/CliMA/ClimaLand.jl) — land model
+
+Device and communication backends come from [ClimaComms.jl](https://github.com/CliMA/ClimaComms.jl), and time integration from [ClimaTimeSteppers.jl](https://github.com/CliMA/ClimaTimeSteppers.jl).
 
 ## Contributing
 
