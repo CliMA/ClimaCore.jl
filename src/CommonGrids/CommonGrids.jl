@@ -191,7 +191,6 @@ function ExtrudedCubedSphereGrid(
     ),
     enable_bubble::Bool = false,
     enable_mask::Bool = false,
-    discretization::Union{Grids.Discretization, Nothing} = nothing,
 ) where {FT}
     @assert ClimaComms.device(context) == device "The given device and context device do not match."
 
@@ -482,7 +481,6 @@ function Box3DGrid(
     enable_bubble::Bool = false,
     VIJH::Type{<:DataLayouts.VIJHWithF} = DataLayouts.VIJFH,
     enable_mask::Bool = false,
-    discretization::Union{Grids.Discretization, Nothing} = nothing,
 ) where {FT}
     @assert ClimaComms.device(context) == device "The given device and context device do not match."
     h_grid = Grids.SpectralElementGrid2D(
@@ -597,7 +595,6 @@ function SliceXZGrid(
         z_elem,
         stretch,
     ),
-    discretization::Union{Grids.Discretization, Nothing} = nothing,
 ) where {FT}
     @assert ClimaComms.device(context) == device "The given device and context device do not match."
 
