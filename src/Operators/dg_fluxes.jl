@@ -68,6 +68,81 @@ function (fn::RusanovNumericalFlux)(normal, argvals⁻, argvals⁺)
 end
 
 # ---------------------------------------------------------------------------
+# Christoffel-free Cartesian tensor divergence
+#
+# The weak `Divergence` contracts a tensor's first (transport) axis `j` and
+# carries its second (momentum) axis `i` through unchanged. With that storage
+# order, the exact divergence on a curved space is
+#
+#     (∇·T)ⁱ = (1/J) ∂_ξʲ(J Tʲⁱ) + Γⁱ_jk Tʲᵏ
+#
+# (the contracted index `j` is first, matching `∂_ξʲ`; the free result index `i`
+# is the surviving second axis). The operator computes only the first term,
+# dropping the connection term `Γⁱ_jk Tʲᵏ` on the momentum index `i`. Expressing
+# that momentum axis in the spatially-constant global Cartesian basis (where the
+# Christoffel symbols vanish) makes the dropped term identically zero, so the
+# plain operator becomes exact.
+# ---------------------------------------------------------------------------
+
+"""
+    cartesian_tensor_divergence(T, numflux, faceargs...)
+
+Weak-form divergence `∇·T` of a rank-2 flux tensor field `T` on a DG spectral
+space, evaluated Christoffel-free by rotating the momentum (second) axis of `T`
+into the global Cartesian basis (see
+`Geometry.CartesianTensor`), applying the weak `Divergence` there, and rotating
+the resulting vector back to the local frame with `Geometry.LocalVector`. On a
+`CartesianGlobalGeometry` (plane) the rotations are the identity, so the same
+call runs unchanged.
+
+`T`'s momentum (second) axis must be the full 3D `UVWAxis`; on a 2D horizontal
+shell promote the momentum vector before forming the flux, e.g.
+`(ρu) ⊗ Geometry.project(Geometry.UVWAxis(), u)`.
+
+The interface term is completed by `numflux`, applied via
+[`add_numerical_flux_interior!`](@ref) with the Cartesian
+tensor field as the first face argument followed by `faceargs...`. It must
+return a Cartesian (`Cartesian123Vector`) face increment so that volume and face
+terms are contracted in the same frame.
+
+Allocates the result and one Cartesian-tensor scratch field;
+[`cartesian_tensor_divergence!`](@ref) takes both as arguments and is
+allocation-free.
+"""
+function cartesian_tensor_divergence(T, numflux, faceargs...)
+    space = axes(T)
+    coords = Fields.coordinate_field(space)
+    FT = Spaces.undertype(space)
+    global_geom = Spaces.global_geometry(space)
+    Tc = @. Geometry.CartesianTensor(T, global_geom, coords)
+    out = Fields.Field(Geometry.UVWVector{FT}, space)
+    return cartesian_tensor_divergence!(out, Tc, T, numflux, faceargs...)
+end
+
+"""
+    cartesian_tensor_divergence!(out, Tc, T, numflux, faceargs...)
+
+In-place [`cartesian_tensor_divergence`](@ref): writes the divergence into the
+local-frame vector field `out`, using the rank-2 field `Tc` as scratch for the
+Cartesian-rotated flux. Neither `out` nor `Tc` may alias `T`. Returns `out`.
+
+Allocation-free given the two buffers.
+"""
+function cartesian_tensor_divergence!(out, Tc, T, numflux, faceargs...)
+    space = axes(T)
+    coords = Fields.coordinate_field(space)
+    lgeom = Fields.local_geometry_field(space)
+    global_geom = Spaces.global_geometry(space)
+    wdiv = Divergence{WeakForm}()
+    @. Tc = Geometry.CartesianTensor(T, global_geom, coords)
+    @. out = wdiv(Tc) * (-lgeom.WJ)
+    add_numerical_flux_interior!(numflux, out, Tc, faceargs...)
+    @. out = -out / lgeom.WJ
+    @. out = Geometry.LocalVector(out, global_geom, coords)
+    return out
+end
+
+# ---------------------------------------------------------------------------
 # DG face-function library for non-conservative (vector-invariant) terms
 # ---------------------------------------------------------------------------
 
