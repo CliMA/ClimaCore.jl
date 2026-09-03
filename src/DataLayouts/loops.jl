@@ -559,3 +559,59 @@ end
 @inline Base.:(==)(arg1::MaybeLazyDataLayout, arg2::MaybeLazyDataLayout; kwargs...) =
     size(arg1) == size(arg2) &&
     mapreduce(all ∘ ==, &, arg1, arg2; init = true, kwargs...)
+
+# ---------------------------------------------------------------------------
+# Register-pressure cap for GPU kernels launched from within a block of code.
+#
+# Kernels whose per-point work is arithmetically heavy (many inlined `pow`/`exp`
+# bodies, long dependency chains) end up with 150-255 registers per thread and
+# then run at 8-12 warps per SM, where the scheduler cannot hide instruction
+# latency. Capping the allocator (ptxas `maxrregcount`) trades a few spills for
+# occupancy and measured up to 1.7x on such kernels. The cap is a compiler
+# option of the *launch*, not of the user function, so it is exposed as a scoped
+# setting read by the CUDA extension's `auto_launch!`/`launch_configuration`
+# (see ext/cuda/cuda_utils.jl). It is a no-op on the CPU.
+#
+# The setting is a plain global (not task-local): ClimaCore launches kernels
+# from a single task per process, and the cap is meant to be set around a few
+# specific broadcasts, not concurrently from several tasks.
+# ---------------------------------------------------------------------------
+
+const KERNEL_MAXREGS = Ref{Int}(0) # 0 = no cap (compiler default)
+
+"""
+    kernel_maxregs()
+
+Current per-thread register cap for GPU kernels, or `nothing` when uncapped.
+Set it for a block of code with [`with_kernel_maxregs`](@ref).
+"""
+kernel_maxregs() = KERNEL_MAXREGS[] == 0 ? nothing : KERNEL_MAXREGS[]
+
+"""
+    with_kernel_maxregs(f, maxregs::Integer)
+
+Run `f()` with every GPU kernel launched inside it compiled with at most
+`maxregs` registers per thread (`0` removes the cap). Kernels compiled under a
+different cap are cached separately, so the same broadcast can be run with and
+without a cap in one session. Has no effect on the CPU.
+
+Use it around broadcasts of register-bound point functions, where the extra
+occupancy outweighs the spills the cap introduces; measure before adopting a
+value, since a cap that is too low only adds local-memory traffic.
+
+```julia
+DataLayouts.with_kernel_maxregs(128) do
+    @. out = expensive_point_function(a, b, c)
+end
+```
+"""
+function with_kernel_maxregs(f::F, maxregs::Integer) where {F}
+    maxregs >= 0 || throw(ArgumentError("maxregs must be non-negative, got $maxregs"))
+    old = KERNEL_MAXREGS[]
+    KERNEL_MAXREGS[] = maxregs
+    try
+        return f()
+    finally
+        KERNEL_MAXREGS[] = old
+    end
+end

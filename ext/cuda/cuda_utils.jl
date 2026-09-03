@@ -298,7 +298,13 @@ function launch_configuration(
     max_waves = nothing,
     granularity = nothing,
 ) where {F}
-    cu_func = (CUDA.@cuda always_inline = true launch = false f(args...)).fun
+    # `maxregs` is part of the compiled kernel, so a different cap yields a
+    # different `cu_func` and therefore a different cache entry below.
+    cu_func =
+        (CUDA.@cuda always_inline = true maxregs = DataLayouts.kernel_maxregs() launch =
+            false f(
+            args...,
+        )).fun
     # The default is resolved before the cache key is built, so that changing
     # MAX_WAVES[] at runtime (as perf/sweep_kernel_configs.jl does) misses the
     # cache instead of returning configurations computed for the old value.
@@ -453,6 +459,7 @@ end
         blocks_s,
         always_inline = true,
         shmem = 0,
+        maxregs = DataLayouts.kernel_maxregs(),
     )
 
 Launch a cuda kernel, using `CUDA.launch_configuration` (if `auto=true`)
@@ -460,6 +467,10 @@ to determine the number of threads/blocks.
 
 Suggested threads and blocks (`threads_s`, `blocks_s`) can be given
 to benchmark compare against auto-determined threads/blocks (if `auto=false`).
+
+`maxregs` caps the registers per thread the compiler may allocate (ptxas
+`maxrregcount`); it defaults to the scoped setting of
+`DataLayouts.with_kernel_maxregs`, and `nothing` leaves the compiler default.
 """
 function auto_launch!(
     f!::F!,
@@ -471,6 +482,7 @@ function auto_launch!(
     always_inline = true,
     caller = :unknown,
     shmem = 0,
+    maxregs = DataLayouts.kernel_maxregs(),
 ) where {F!}
     # If desired, compute a kernel name from the stack trace and store in
     # a global Dict, which serves as an in memory cache
@@ -529,8 +541,8 @@ function auto_launch!(
         @assert !isnothing(nitems)
         if nitems ≥ 0
             # Note: `name = nothing` here will revert to default behavior
-            kernel = CUDA.@cuda name = kernel_name always_inline = true launch =
-                false f!(args...)
+            kernel = CUDA.@cuda name = kernel_name always_inline = true maxregs =
+                maxregs launch = false f!(args...)
             config = launch_configuration(f!, args)
             threads = min(nitems, config.threads)
             blocks = cld(nitems, threads)
@@ -538,8 +550,8 @@ function auto_launch!(
         end
     else
         kernel =
-            CUDA.@cuda name = kernel_name always_inline = always_inline threads =
-                threads_s blocks = blocks_s shmem = shmem f!(args...)
+            CUDA.@cuda name = kernel_name always_inline = always_inline maxregs =
+                maxregs threads = threads_s blocks = blocks_s shmem = shmem f!(args...)
     end
 
     if collect_kernel_stats() # only for development use
@@ -547,7 +559,9 @@ function auto_launch!(
         # CUDA.registers(kernel) > 50 || return nothing # for debugging
         # occursin("single_field_solve_kernel", string(nameof(F!))) || return nothing
         if !haskey(reported_stats, key)
-            kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
+            kernel = CUDA.@cuda always_inline = true maxregs = maxregs launch = false f!(
+                args...,
+            )
             config = launch_configuration(f!, args)
             threads = isnothing(nitems) ? nothing : min(nitems, config.threads)
             blocks = isnothing(nitems) ? nothing : cld(nitems, threads)

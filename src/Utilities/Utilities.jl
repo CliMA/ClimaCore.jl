@@ -102,6 +102,7 @@ struct ConvertTo{T} end
 
 
 include("plushalf.jl")
+include("static_select.jl")
 include("auto_broadcaster.jl")
 include("cache.jl")
 include("safe_mapreduce.jl")
