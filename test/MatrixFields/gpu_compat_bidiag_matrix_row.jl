@@ -25,44 +25,6 @@ const ᶠgradᵥ = Operators.GradientC2F(
 )
 const ᶠgradᵥ_matrix = MatrixFields.operator_matrix(ᶠgradᵥ)
 
-device = ClimaComms.device()
-context = ClimaComms.context(device)
-cspace =
-    TU.CenterExtrudedFiniteDifferenceSpace(GFT; zelem = 25, helem = 10, context)
-fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
-@info "device = $device"
-
-∂ᶠu₃ʲ_err_∂ᶠu₃ʲ_type = BandMatrixRow{
-    -1,
-    3,
-    typeof(C3(GFT(0)) * CT3(GFT(0))'),
-}
-
-f = (;
-    ∂ᶠu₃ʲ_err_∂ᶠu₃ʲ = Fields.Field(∂ᶠu₃ʲ_err_∂ᶠu₃ʲ_type, fspace),
-    ᶠtridiagonal_matrix_c3 = Fields.Field(
-        TridiagonalMatrixRow{C3{GFT}},
-        fspace,
-    ),
-    ᶠu₃ = Fields.Field(C3{GFT}, fspace),
-    adj_u₃ = Fields.Field(DiagonalMatrixRow{typeof(CT3(GFT(0))')}, fspace),
-)
-c = (;
-    ᶜu₃ʲ = Fields.Field(C3{GFT}, cspace),
-    bdmr_l = Fields.Field(BidiagonalMatrixRow{GFT}, cspace),
-    bdmr_r = Fields.Field(BidiagonalMatrixRow{GFT}, cspace),
-    bdmr = Fields.Field(BidiagonalMatrixRow{GFT}, cspace),
-)
-
-# `Fields.Field(T, space)` leaves the data uninitialized, so fill it in: the
-# comparison below needs deterministic values, and `ᶜu₃ʲ` needs both signs in
-# order to exercise both branches of the upwinding `ifelse`.
-foreach(field -> fill!(parent(field), 0), values(f))
-foreach(field -> fill!(parent(field), 0), values(c))
-# (`lat` spans [-90, 90], so it already takes both signs.)
-ᶜlat = Fields.coordinate_field(cspace).lat
-@. c.ᶜu₃ʲ = C3(ᶜlat)
-
 const ᶜleft_bias = Operators.BottomBiasedF2C()
 const ᶜright_bias = Operators.TopBiasedF2C()
 const ᶜleft_bias_matrix = MatrixFields.operator_matrix(ᶜleft_bias)
@@ -123,6 +85,44 @@ end
 
 using Test
 @testset "gpu_compat_bidiag_matrix_row" begin
+    device = ClimaComms.device()
+    context = ClimaComms.context(device)
+    cspace =
+        TU.CenterExtrudedFiniteDifferenceSpace(GFT; zelem = 25, helem = 10, context)
+    fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
+    @info "device = $device"
+
+    ∂ᶠu₃ʲ_err_∂ᶠu₃ʲ_type = BandMatrixRow{
+        -1,
+        3,
+        typeof(C3(GFT(0)) * CT3(GFT(0))'),
+    }
+
+    f = (;
+        ∂ᶠu₃ʲ_err_∂ᶠu₃ʲ = Fields.Field(∂ᶠu₃ʲ_err_∂ᶠu₃ʲ_type, fspace),
+        ᶠtridiagonal_matrix_c3 = Fields.Field(
+            TridiagonalMatrixRow{C3{GFT}},
+            fspace,
+        ),
+        ᶠu₃ = Fields.Field(C3{GFT}, fspace),
+        adj_u₃ = Fields.Field(DiagonalMatrixRow{typeof(CT3(GFT(0))')}, fspace),
+    )
+    c = (;
+        ᶜu₃ʲ = Fields.Field(C3{GFT}, cspace),
+        bdmr_l = Fields.Field(BidiagonalMatrixRow{GFT}, cspace),
+        bdmr_r = Fields.Field(BidiagonalMatrixRow{GFT}, cspace),
+        bdmr = Fields.Field(BidiagonalMatrixRow{GFT}, cspace),
+    )
+
+    # `Fields.Field(T, space)` leaves the data uninitialized, so fill it in: the
+    # comparison below needs deterministic values, and `ᶜu₃ʲ` needs both signs in
+    # order to exercise both branches of the upwinding `ifelse`.
+    foreach(field -> fill!(parent(field), 0), values(f))
+    foreach(field -> fill!(parent(field), 0), values(c))
+    # (`lat` spans [-90, 90], so it already takes both signs.)
+    ᶜlat = Fields.coordinate_field(cspace).lat
+    @. c.ᶜu₃ʲ = C3(ᶜlat)
+
     foo(c, f)
     @test all(isfinite, parent(f.∂ᶠu₃ʲ_err_∂ᶠu₃ʲ))
 
