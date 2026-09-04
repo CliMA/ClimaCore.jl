@@ -1,7 +1,6 @@
 using Test
 import ClimaCore
-using ClimaCore:
-    Geometry, Quadratures, Domains, Meshes, Topologies, Spaces, Fields
+using ClimaCore: Geometry, Domains, Meshes, Topologies, Spaces, Fields, Grids
 using ClimaCore.CommonSpaces
 import ClimaCore.Spaces:
     CenterFiniteDifferenceSpace,
@@ -14,24 +13,8 @@ ClimaComms.@import_required_backends
 
 @testset "Deprecations" begin
     FT = Float64
-    context = ClimaComms.SingletonCommsContext()
-    R = FT(6.371229e6)
-    npoly = 3
     z_max = FT(30e3)
     z_elem = 64
-    h_elem = 30
-    # Horizontal space
-    domain = Domains.SphereDomain(R)
-    horizontal_mesh = Meshes.EquiangularCubedSphere(domain, h_elem)
-    horizontal_topology = Topologies.Topology2D(
-        context,
-        horizontal_mesh,
-        Topologies.spacefillingcurve(horizontal_mesh),
-    )
-    quad = Quadratures.GLL{npoly + 1}()
-    h_space = Spaces.SpectralElementSpace2D(horizontal_topology, quad)
-
-    # Vertical space
     z_domain = Domains.IntervalDomain(
         Geometry.ZPoint(zero(z_max)),
         Geometry.ZPoint(z_max);
@@ -40,10 +23,23 @@ ClimaComms.@import_required_backends
     z_mesh = Meshes.IntervalMesh(z_domain, nelems = z_elem)
 
     # Deprecated methods:
+    device = ClimaComms.device()
+    grid = Grids.FiniteDifferenceGrid(Topologies.IntervalTopology(device, z_mesh))
+
     @test_deprecated Topologies.IntervalTopology(z_mesh)
+    @test Topologies.IntervalTopology(z_mesh) ==
+          Topologies.IntervalTopology(device, z_mesh)
+
     @test_deprecated FaceFiniteDifferenceSpace(z_mesh)
+    @test FaceFiniteDifferenceSpace(z_mesh) ==
+          FiniteDifferenceSpace(grid, Grids.CellFace())
+
     @test_deprecated CenterFiniteDifferenceSpace(z_mesh)
+    @test CenterFiniteDifferenceSpace(z_mesh) ==
+          FiniteDifferenceSpace(grid, Grids.CellCenter())
+
     @test_deprecated FiniteDifferenceGrid(z_mesh)
+    @test FiniteDifferenceGrid(z_mesh) == grid
 end
 
 # The old "universal index" convention from ClimaCore's DataLayouts, which is

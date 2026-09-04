@@ -58,7 +58,7 @@ function plot_flux_and_adv(name, results)
     # moved to the CPU.
     function plottable(field)
         field = ClimaCore.to_cpu(field)
-        eltype(field) <: Geometry.AxisVector || return field
+        eltype(field) <: Geometry.AbstractTensor{1} || return field
         return Geometry.WVector.(field, Fields.local_geometry_field(axes(field)))
     end
 
@@ -113,7 +113,7 @@ end
     n_elems_seq = 2 .^ (5, 6, 7, 8)
     device = ClimaComms.device()
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(0.5))
-    for (i, stretch_fn) in enumerate(stretch_fns)
+    for stretch_fn in stretch_fns
         err = zeros(FT, length(n_elems_seq))
         werr = zeros(FT, length(n_elems_seq))
         Δh = zeros(FT, length(n_elems_seq))
@@ -165,7 +165,7 @@ end
     n_elems_seq = 2 .^ (5, 6, 7, 8)
     device = ClimaComms.device()
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(0.5))
-    for (i, stretch_fn) in enumerate(stretch_fns)
+    for stretch_fn in stretch_fns
         err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
         werr = zeros(FT, length(n_elems_seq))
         for (k, n) in enumerate(n_elems_seq)
@@ -220,7 +220,7 @@ end
     n_elems_seq = 2 .^ (5, 6, 7, 8)
     device = ClimaComms.device()
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(0.5))
-    for (i, stretch_fn) in enumerate(stretch_fns)
+    for stretch_fn in stretch_fns
         err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
         for (k, n) in enumerate(n_elems_seq)
             interval = Geometry.ZPoint(a) .. Geometry.ZPoint(b)
@@ -274,7 +274,7 @@ end
     n_elems_seq = 2 .^ (5, 6, 7, 8)
     device = ClimaComms.device()
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(0.5))
-    for (i, stretch_fn) in enumerate(stretch_fns)
+    for stretch_fn in stretch_fns
         err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
         for (k, n) in enumerate(n_elems_seq)
             interval = Geometry.ZPoint(a) .. Geometry.ZPoint(b)
@@ -412,8 +412,6 @@ end
     conv_grad_sin_c = convergence_rate(err_grad_sin_c, Δh)
     # DivergenceF2C conv, with f(z) = sin(z)
     conv_div_sin_c = convergence_rate(err_div_sin_c, Δh)
-    # GradientC2F conv, with f(z) = z, SetGradient
-    conv_grad_z = convergence_rate(err_grad_z_f, Δh)
     # GradientC2F conv, with f(z) = cos(z), SetGradient
     conv_grad_cos_f2 = convergence_rate(err_grad_cos_f2, Δh)
     # DivergenceC2F conv, with f(z) = cos(z), SetDivergence
@@ -435,9 +433,9 @@ end
     @test conv_div_sin_c[3] ≈ 2 atol = 0.1
     @test conv_div_sin_c[1] ≤ conv_div_sin_c[2] ≤ conv_div_sin_c[3]
 
-    # GradientC2F conv, with f(z) = z, SetGradient
+    # GradientC2F with f(z) = z, SetGradient. The error is at roundoff, so the
+    # convergence rate is too noisy to assert on; the error bound is the test.
     @test norm(err_grad_z_f) ≤ 200 * eps(FT)
-    # Convergence rate for this case is noisy because error very small
 
     # GradientC2F conv, with f(z) = cos(z), SetGradient
     @test err_grad_cos_f2[3] ≤ err_grad_cos_f2[2] ≤ err_grad_cos_f2[1] ≤ 0.1

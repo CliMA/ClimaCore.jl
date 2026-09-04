@@ -8,6 +8,7 @@ import ClimaCore:
     Hypsography,
     Fields,
     Operators,
+    Quadratures,
     Utilities
 import ClimaComms
 
@@ -30,12 +31,12 @@ h_domain = Domains.RectangleDomain(
 h_mesh = Meshes.RectilinearMesh(h_domain, 10, 10)
 h_grid = Spaces.grid(
     Spaces.SpectralElementSpace2D(
-        Topologies.DistributedTopology2D(
+        Topologies.Topology2D(
             comms_ctx,
             h_mesh,
             Topologies.spacefillingcurve(h_mesh),
         ),
-        Spaces.Quadratures.GLL{4}(),
+        Quadratures.GLL{4}(),
     ),
 )
 z_domain = Domains.IntervalDomain(

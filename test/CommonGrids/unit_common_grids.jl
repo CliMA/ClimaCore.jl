@@ -61,8 +61,6 @@ using Test
     @test grid.horizontal_grid isa Grids.SpectralElementGrid2D
     @test Grids.topology(grid.horizontal_grid).mesh isa
           Meshes.EquiangularCubedSphere
-    @test Grids.topology(grid.horizontal_grid).mesh isa
-          Meshes.EquiangularCubedSphere
 
     grid = CubedSphereGrid(; radius = 10, n_quad_points = 4, h_elem = 10)
     @test grid isa Grids.SpectralElementGrid2D

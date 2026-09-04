@@ -162,11 +162,7 @@ end
         f = fill((; x = FT(1)), space)
         pow_n(f) # Compile first
         p_allocated = @allocated pow_n(f)
-        if space isa Spaces.SpectralElementSpace1D
-            @test p_allocated == 0
-        else
-            @test p_allocated == 0 broken = (device isa ClimaComms.CUDADevice)
-        end
+        @test p_allocated == 0
         pow_n_bc(f) # Compile first
         p_allocated = @allocated pow_n_bc(f)
         if space isa Spaces.SpectralElementSpace1D
@@ -175,7 +171,7 @@ end
             # TODO: On extruded spaces, this broadcast has two unelided views
             # from getproperty (48 bytes each); whether the compiler elides
             # them depends on how much of its inference budget is used up.
-            @test p_allocated ≤ 96 broken = (device isa ClimaComms.CUDADevice)
+            @test p_allocated ≤ 96
         end
     end
 end
@@ -511,7 +507,7 @@ end
     horzdomain = Domains.SphereDomain(FT(100))
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, 1)
     horztopology = Topologies.Topology2D(context, horzmesh)
-    quad = Spaces.Quadratures.GLL{2}()
+    quad = Quadratures.GLL{2}()
     space = Spaces.SpectralElementSpace2D(horztopology, quad)
 
     vars1 = (; # order is different!

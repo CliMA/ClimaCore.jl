@@ -892,7 +892,7 @@ if !with_mpi
         fcoords = Fields.coordinate_field(fspace)
         finterp_z = Remapping.interpolate(fremapper, fcoords.z)
         fexpected_z = ArrayType(zpts)
-        finterp_z ≈ fexpected_z
+        @test finterp_z ≈ fexpected_z
 
         # Remapping two fields
         cinterp = Remapping.interpolate(cremapper, [ccoords.z, ccoords.z])
