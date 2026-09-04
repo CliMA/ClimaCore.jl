@@ -31,24 +31,19 @@ import .TestUtilities as TU
         space = Spaces.SpectralElementSpace2D(topology, quad)
 
         coords = Fields.coordinate_field(space)
-        lgeom = Fields.local_geometry_field(space)
 
         # Smooth scalar and vector fields
         f = @. sind(coords.long) * cosd(coords.lat)^2
-        g = @. cosd(coords.long) * sind(coords.lat)
         u_uv = @. Geometry.UVVector(
             cosd(coords.long) * cosd(coords.lat),
             -sind(coords.long) * sind(coords.lat),
         )
-        u_cov = Geometry.transform.(Ref(Geometry.Covariant12Axis()), u_uv)
         u_contra = Geometry.transform.(Ref(Geometry.Contravariant12Axis()), u_uv)
 
         grad_op = Operators.Gradient()
         div_op = Operators.Divergence()
         curl_op = Operators.Curl()
         wdiv_op = Operators.Divergence{Operators.WeakForm}()
-        wgrad_op = Operators.Gradient{Operators.WeakForm}()
-        wcurl_op = Operators.Curl{Operators.WeakForm}()
 
         # 1. curl(grad(f)) == 0
         grad_f = grad_op.(f)

@@ -72,14 +72,14 @@ end
     end
 end
 
-@testset "boundaries" begin
+@testset "vertices" begin
     context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
     @testset "1 element across each panel" begin
         topology = Topologies.Topology2D(
             context,
             Meshes.EquiangularCubedSphere(Domains.SphereDomain(5.0), 1),
         )
-        length(Topologies.local_vertices(topology)) == 8
+        @test length(Topologies.local_vertices(topology)) == 8
         for uvert in Topologies.local_vertices(topology)
             @test length(uvert) == 3
         end
@@ -89,7 +89,7 @@ end
             context,
             Meshes.EquiangularCubedSphere(Domains.SphereDomain(5.0), 3),
         )
-        length(Topologies.local_vertices(topology)) == 8 + 12 * 2 + 6 * 4
+        @test length(Topologies.local_vertices(topology)) == 8 + 12 * 2 + 6 * 4
         for uvert in Topologies.local_vertices(topology)
             @test length(uvert) in (3, 4)
         end

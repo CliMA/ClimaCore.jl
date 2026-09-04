@@ -62,7 +62,7 @@ import .TestUtilities: convergence_rate
     Nes = [3, 9, 27]
     Nqs = [4, 6]
 
-    for (Iq, Nq) in enumerate(Nqs)
+    for Nq in Nqs
         err_sgrad = Array{FT}(undef, length(Nes))
         err_wgrad = Array{FT}(undef, length(Nes))
         Δh = Array{FT}(undef, length(Nes))
