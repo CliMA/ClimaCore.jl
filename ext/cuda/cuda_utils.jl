@@ -385,7 +385,18 @@ launch_kernel!(
 # ceiling is held to; reaching it needs registers down to 168, rather than the
 # 128 that a 16-warp target would demand. Setting the target to zero disables the
 # mechanism, restoring unannotated launches.
-const LAUNCH_BOUNDS_TARGET_WARPS_PER_SM = Ref{Int}(12)
+# 16 warps/SM, raised from 12 on 2026-09-04 after measuring both. On the AMIP
+# hot kernel ptxas reaches 128 registers for +208 bytes of spill -- inside the
+# 256-byte budget -- and the step is worth +1.79% SYPD, reproduced across two
+# runs 0.11% apart against a 0.43% noise floor. That is nearly three times the
+# 8 -> 12 step (+0.63%), so occupancy had not saturated at 12.
+#
+# The budget itself remains the load-bearing part and is validated at both ends
+# now: +344 B (pre-fusion, 12 warps) ran 20.5% SLOWER and is correctly rejected;
+# +208 B is accepted and helps. Do not raise the target further without
+# measuring -- 128 -> 96 registers would be the next step and there is no reason
+# to assume it stays on the right side of the trade.
+const LAUNCH_BOUNDS_TARGET_WARPS_PER_SM = Ref{Int}(16)
 const LAUNCH_BOUNDS_SPILL_BUDGET = Ref{Int}(256)
 
 const LaunchBounds = @NamedTuple{maxthreads::Int, blocks_per_sm::Int}
