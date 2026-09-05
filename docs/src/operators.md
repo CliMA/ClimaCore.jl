@@ -140,11 +140,6 @@ The Laplacian below couples elements two ways: [`SIPGLaplacianFlux`](@ref) at
 the faces, and a jump correction folded into the volume divergence. Including
 both ensures order of accuracy is maintained with a symmetric operator.
 
-[`cartesian_tensor_divergence`](@ref) computes the divergence of a rank-2 flux
-tensor (e.g. the momentum flux `ρu⊗u`). The weak `Divergence` is computed
-by rotating the momentum axis into the global Cartesian basis, where the Christoffel symbols
-outside the derivative are absent.
-
 ```@docs
 add_numerical_flux_interior!
 add_numerical_flux_boundary!
@@ -176,14 +171,20 @@ NumericalFluxCompletion
 ```
 
 [`cartesian_tensor_divergence`](@ref) uses this same switch to compute the
-divergence of a rank-2 flux tensor (e.g. the momentum flux `ρu⊗u`) on
-either discretization. The weak `Divergence` drops the Christoffel terms
+horizontal divergence of a rank-2 flux tensor (e.g. the momentum flux `ρu⊗u`)
+on either discretization. The weak `Divergence` drops the Christoffel terms
 `Γⁱ_jk Tʲᵏ` on the tensor's momentum axis on a curved space; the helper first
 rotates that momentum axis into the global Cartesian basis (where the
 Christoffel symbols vanish), then applies `Divergence` and completes the
 interfaces with the supplied completion, so the plain operator becomes exact on
 both CG and DG. Casting the conservation law's momentum components in the
 Cartesian basis to eliminate the connection terms follows [Vinokur1974](@cite).
+
+Like the spectral `Divergence` it is built from, it differentiates along the
+horizontal directions only, so on an extruded space the vertical flux
+divergence is a separate term. Keep that term in the Cartesian frame too — the
+connection terms it drops are removed by the same rotation — and rotate it back
+with `Geometry.LocalVector`. The docstring below works the pair through.
 
 ```@docs
 cartesian_tensor_divergence

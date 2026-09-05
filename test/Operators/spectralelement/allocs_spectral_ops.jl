@@ -11,6 +11,8 @@ import ClimaCore: Fields, Spaces, Operators, Geometry
 );
 import .TestUtilities as TU
 
+include("utils_tensor_divergence.jl")
+
 # Allocation gates mirroring `benchmark_ops.jl`. Bare operator applications stay
 # at zero allocations and will NOT catch per-slab rebuild allocations (~180 kB
 # per call in a real tendency), so these kernels deliberately compose operators
@@ -54,5 +56,61 @@ u_cross_curl_u!(dest, u, f, curl) = (
         # These two apply a `UnionAll` vector constructor on top of an operator.
         TU.@test_zero_allocations wcurl_curl!(du, u, curl, wcurl)
         TU.@test_zero_allocations u_cross_curl_u!(du, u, f, curl)
+    end
+end
+
+cartesian_tensor_div!(out, Tc, T, completion) = (
+    Operators.cartesian_tensor_divergence!(out, Tc, T, completion);
+    nothing
+)
+
+# The buffers and completion the gate below measures against. The momentum axis
+# is UVW, so `similar(T)` is a wide enough scratch for the rotated tensor.
+function tensor_div_alloc_setup(::Type{FT}, space) where {FT}
+    coords = Fields.coordinate_field(space)
+    v = Geometry.UVVector.(cosd.(coords.lat), sind.(coords.long))
+    m = local_cartesian_field(
+        space,
+        Geometry.Cartesian123Vector(FT(0.3), FT(-0.7), FT(0.5)),
+    )
+    T = v .⊗ m
+    out = Fields.Field(Geometry.UVWVector{FT}, space)
+    completion = tensor_div_completion(
+        space;
+        numflux = Operators.CentralNumericalFlux(identity),
+    )
+    return (out, similar(T), T, completion)
+end
+
+# The tensor divergence reaches two memoized objects — the momentum rotation
+# and, on a continuous space, its own DSS buffer — through the untyped object
+# cache, so a lost type assertion there surfaces here as boxing.
+@testset "Cartesian tensor divergence does not allocate" begin
+    TU.@test_precisions FT begin
+        for discretization in (Spaces.CG(), Spaces.DG())
+            space = tensor_div_sphere_space(FT; helem = 3, discretization)
+            out, Tc, T, completion = tensor_div_alloc_setup(FT, space)
+            TU.@test_zero_allocations cartesian_tensor_div!(
+                out,
+                Tc,
+                T,
+                completion,
+            )
+        end
+    end
+    # On an extruded space the rotation comes from the horizontal space, which
+    # puts `Spaces.horizontal_space` in the hot path, where it allocates 16 B
+    # unless `_momentum_rotation` inlines it (it is marked `@inline` for this).
+    # Float64 alone: that inlining does not turn on precision, and each extruded
+    # space costs ~10 s to specialize.
+    for discretization in (Spaces.CG(), Spaces.DG())
+        space = tensor_div_topography_space(
+            Float64;
+            helem = 3,
+            nz = 6,
+            discretization,
+        )
+        out, Tc, T, completion = tensor_div_alloc_setup(Float64, space)
+        TU.@test_zero_allocations cartesian_tensor_div!(out, Tc, T, completion)
     end
 end
