@@ -52,6 +52,19 @@ end
     end
 end
 
+@testset "vertex index range check" begin
+    # Out-of-range vertex indices used to fall through to the last branch of
+    # `coordinates` and silently return vertex 3's coordinates (#1026).
+    mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain(3.0), 4)
+    elem = CartesianIndex(1, 1, 1)
+    for vert in 1:4
+        @test Meshes.coordinates(mesh, elem, vert) isa Geometry.AbstractPoint
+    end
+    for vert in (-1, 0, 5, 8)
+        @test_throws ArgumentError Meshes.coordinates(mesh, elem, vert)
+    end
+end
+
 @testset "vertex coordinates consistent" begin
     for FT in [Float32, Float64, BigFloat]
         domain = Domains.SphereDomain(FT(5))

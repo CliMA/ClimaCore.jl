@@ -221,6 +221,7 @@ function coordinates(
     elem::CartesianIndex{3},
     vert::Integer,
 )
+    check_vertex_index(vert, 4)
     FT = typeof(mesh.domain.radius)
     ne = mesh.ne
     x, y, panel = elem.I
