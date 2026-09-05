@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Debugging · ClimaCore.jl</title><meta name="title" content="Debugging · ClimaCore.jl"/><meta property="og:title" content="Debugging · ClimaCore.jl"/><meta property="twitter:title" content="Debugging · ClimaCore.jl"/><meta name="description" content="Documentation for ClimaCore.jl."/><meta property="og:description" content="Documentation for ClimaCore.jl."/><meta property="twitter:description" content="Documentation for ClimaCore.jl."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../"><img src="../assets/logo.png" alt="ClimaCore.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../">ClimaCore.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../intro/">Introduction</a></li><li><a class="tocitem" href="../math_framework/">Mathematical Framework</a></li><li><a class="tocitem" href="../installation_instructions/">Installation and How-to Guides</a></li><li><a class="tocitem" href="../geometry/">Geometry</a></li><li><a class="tocitem" href="../operators/">Operators</a></li><li><a class="tocitem" href="../remapping/">Remapping</a></li><li><a class="tocitem" href="../matrix_fields/">MatrixFields</a></li><li><input class="collapse-toggle" id="menuitem-9" type="checkbox"/><label class="tocitem" for="menuitem-9"><span class="docs-label">API</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../APIs/utilities_api/">Utilities</a></li><li><a class="tocitem" href="../APIs/datalayouts_api/">DataLayouts</a></li><li><a class="tocitem" href="../APIs/geometry_api/">Geometry</a></li><li><a class="tocitem" href="../APIs/domains_api/">Domains</a></li><li><a class="tocitem" href="../APIs/meshes_api/">Meshes</a></li><li><a class="tocitem" href="../APIs/topologies_api/">Topologies</a></li><li><a class="tocitem" href="../APIs/grids_api/">Grids</a></li><li><a class="tocitem" href="../APIs/hypso_api/">Hypsography</a></li><li><a class="tocitem" href="../APIs/dss_api/">DSS</a></li><li><a class="tocitem" href="../APIs/common_grids_api/">CommonGrids</a></li><li><a class="tocitem" href="../APIs/spaces_api/">Spaces</a></li><li><a class="tocitem" href="../APIs/common_spaces_api/">CommonSpaces</a></li><li><a class="tocitem" href="../APIs/quadratures_api/">Quadratures</a></li><li><a class="tocitem" href="../APIs/fields_api/">Fields</a></li><li><a class="tocitem" href="../APIs/limiters_api/">Limiters</a></li><li><a class="tocitem" href="../APIs/input_output_api/">InputOutput</a></li><li><a class="tocitem" href="../APIs/remapping_api/">Remapping</a></li><li><a class="tocitem" href="../APIs/recursive_apply_api/">RecursiveApply</a></li><li><a class="tocitem" href="../APIs/devices_api/">Devices</a></li><li><a class="tocitem" href="../APIs/debug_only_api/">DebugOnly</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-10" type="checkbox"/><label class="tocitem" for="menuitem-10"><span class="docs-label">Developer docs</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../performance_tips/">Performance tips</a></li><li><a class="tocitem" href="../shmem_design/">Shared memory design</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-11" type="checkbox"/><label class="tocitem" for="menuitem-11"><span class="docs-label">Tutorials</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../tutorials/introduction/">Introduction to ClimaCore.jl</a></li></ul></li><li><a class="tocitem" href="../examples/">Examples</a></li><li><a class="tocitem" href="../masks/">Masks</a></li><li class="is-active"><a class="tocitem" href>Debugging</a><ul class="internal"><li><a class="tocitem" href="#Finding-where-NaN-arise"><span>Finding where <code>NaN</code> arise</span></a></li></ul></li><li><input class="collapse-toggle" id="menuitem-15" type="checkbox"/><label class="tocitem" for="menuitem-15"><span class="docs-label">Libraries</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../lib/ClimaCorePlots/">ClimaCorePlots.jl</a></li><li><a class="tocitem" href="../lib/ClimaCoreMakie/">ClimaCoreMakie.jl</a></li><li><a class="tocitem" href="../lib/ClimaCoreVTK/">ClimaCoreVTK.jl</a></li><li><a class="tocitem" href="../lib/ClimaCoreTempestRemap/">ClimaCoreTempestRemap.jl</a></li><li><a class="tocitem" href="../lib/ClimaCoreSpectra/">ClimaCoreSpectra.jl</a></li></ul></li><li><a class="tocitem" href="../Contributing/">Contributing guide</a></li><li><a class="tocitem" href="../code_of_conduct/">Code of Conduct</a></li><li><a class="tocitem" href="../faq/">Frequently asked questions</a></li><li><a class="tocitem" href="../references/">References</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Debugging</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Debugging</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/CliMA/ClimaCore.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/CliMA/ClimaCore.jl/blob/main/docs/src/debugging.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Debugging"><a class="docs-heading-anchor" href="#Debugging">Debugging</a><a id="Debugging-1"></a><a class="docs-heading-anchor-permalink" href="#Debugging" title="Permalink"></a></h1><p><code>ClimaCore</code> comes with a set of debugging tools for a variety of situations. These tools are collected in the <a href="../APIs/debug_only_api/#ClimaCore.DebugOnly"><code>ClimaCore.DebugOnly</code></a> modules and are presented in this page.</p><h2 id="Finding-where-NaN-arise"><a class="docs-heading-anchor" href="#Finding-where-NaN-arise">Finding where <code>NaN</code> arise</a><a id="Finding-where-NaN-arise-1"></a><a class="docs-heading-anchor-permalink" href="#Finding-where-NaN-arise" title="Permalink"></a></h2><p>One of the most challenging tasks that users have is: debug a large simulation that is breaking, e.g., yielding <code>NaN</code>s somewhere. This is especially complex for large models with many terms and implicit time-stepping with all the bells and whistles that the CliMA ecosystem offers.</p><p>Because so much data (for example, the solution state, and many cached fields) is typically contained in <code>ClimaCore</code> data structures, we offer a hook to inspect this data after any operation that <code>ClimaCore</code> performs.</p><h3 id="Example"><a class="docs-heading-anchor" href="#Example">Example</a><a id="Example-1"></a><a class="docs-heading-anchor-permalink" href="#Example" title="Permalink"></a></h3><h4 id="Print-NaNs-when-they-are-found"><a class="docs-heading-anchor" href="#Print-NaNs-when-they-are-found">Print <code>NaNs</code> when they are found</a><a id="Print-NaNs-when-they-are-found-1"></a><a class="docs-heading-anchor-permalink" href="#Print-NaNs-when-they-are-found" title="Permalink"></a></h4><p>In this example, we add a callback that simply prints <code>NaNs found</code> every instance when they are detected in a <code>ClimaCore</code> operation.</p><p>To do this, we need two ingredients:</p><p>First, we need to enable the callback system:</p><pre><code class="language-julia hljs">import ClimaCore
+ClimaCore.DebugOnly.call_post_op_callback() = true</code></pre><p>The line <code>ClimaCore.DebugOnly.call_post_op_callback() = true</code> means that at the end of every <code>ClimaCore</code> operation, the function <code>ClimaCore.DebugOnly.post_op_callback</code> is called. By default, this function does nothing. So, the second ingredient is to define a method:</p><pre><code class="language-julia hljs">function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
+    has_nans = result isa Number ? isnan(result) : any(isnan, parent(result))
+    has_inf = result isa Number ? isinf(result) : any(isinf, parent(result))
+    if has_nans || has_inf
+        has_nans &amp;&amp; println(&quot;NaNs found!&quot;)
+        has_inf &amp;&amp; println(&quot;Infs found!&quot;)
+    end
+end</code></pre><p>If needed, multiple methods of <code>post_op_callback</code> can be defined, but here, we define a general method that checks if <code>NaN</code>s are in the given object.</p><p>Note that we need <code>post_op_callback</code> to be called for a wide variety of inputs because it is called by many different functions with many different objects. Therefore, we recommend that you define <code>post_op_callback</code> with a very general method signature, like the one above and perhaps use <code>Infiltrator</code> to inspect the arguments.</p><p>Now, let us put everything together and demonstrate a complete example:</p><pre><code class="language-julia hljs">import ClimaCore
+ClimaCore.DebugOnly.call_post_op_callback() = true
+function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
+    has_nans = result isa Number ? isnan(result) : any(isnan, parent(result))
+    has_inf = result isa Number ? isinf(result) : any(isinf, parent(result))
+    if has_nans || has_inf
+        has_nans &amp;&amp; println(&quot;NaNs found!&quot;)
+        has_inf &amp;&amp; println(&quot;Infs found!&quot;)
+    end
+end
+
+FT = Float64
+data = ClimaCore.DataLayouts.VIJFH{FT}(Array{FT}, zeros; Nv=5, Nij=2, Nh=2)
+@. data = NaN</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">NaNs found!
+NaNs found!
+NaNs found!</code></pre><p>This example should print <code>NaN</code> on your standard output.</p><p>As you see, this only tells us that a <code>NaN</code> was found, but not which function triggered the <code>NaN</code>. A simple way to find that is to extend this example with <code>Infiltrator</code>.</p><h4 id="Infiltrating-and-Exfiltrating"><a class="docs-heading-anchor" href="#Infiltrating-and-Exfiltrating">Infiltrating and Exfiltrating</a><a id="Infiltrating-and-Exfiltrating-1"></a><a class="docs-heading-anchor-permalink" href="#Infiltrating-and-Exfiltrating" title="Permalink"></a></h4><p><a href="https://github.com/JuliaDebug/Infiltrator.jl">Infiltrator.jl</a> is a simple debugging tool for Julia packages.</p><p>Here is an example, where we can use Infiltrator.jl to find where <code>NaN</code>s is coming from interactively.</p><h5 id="Infiltrating"><a class="docs-heading-anchor" href="#Infiltrating">Infiltrating</a><a id="Infiltrating-1"></a><a class="docs-heading-anchor-permalink" href="#Infiltrating" title="Permalink"></a></h5><p>Suppose you have a <code>NaN</code> in your simulation and what to look at the variables right before the expression caused the <code>NaN</code>. One of the challenges in this is that you probably have a tower of function being called, many of which belong to other packages.</p><p>Let us simulate this case (note this is a toy example optimized for clarity and not for performance: the functions below have unnecessary allocations)</p><pre><code class="language-julia hljs">import ClimaCore
+using ClimaCore.CommonSpaces
+space = CubedSphereSpace(; radius = 10, n_quad_points = 4, h_elem = 10)
+myrho = ones(space)
+myP = ones(space)
+myu = ones(space)
+
+kinetic_energy(field) = field .* field ./ 2
+other_energy(field) = field ./ sum(field)
+offset_by_one(field) = field .- 1
+
+function specific_energy(rho, P, u)
+    density_without_restmass = offset_by_one(rho)
+    return (kinetic_energy(u) .+ other_energy(P)) ./ density_without_restmass
+end
+
+function renormalized_energy(rho, P, u)
+    energy = specific_energy(rho, P, u)
+    return energy ./ sum(energy)
+end
+
+any(isnan, renormalized_energy(myrho, myP, myu)) # true</code></pre><p>To debug this, we first need to identify where the first <code>NaN</code> is produced. We use <code>DebugOnly.call_post_op_callback</code> and infiltrate.</p><pre><code class="language-julia hljs">import Infiltrator # must be in your default environment
+ClimaCore.DebugOnly.call_post_op_callback() = true
+function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
+    has_nans = result isa Number ? isnan(result) : any(isnan, parent(result))
+    has_inf = result isa Number ? isinf(result) : any(isinf, parent(result))
+    @infiltrate has_nans || has_inf
+end</code></pre><p>&quot;Infiltrating&quot; means being dropped into a new REPL where in the scope of the <code>@infiltrate</code> macro. <code>@infiltrate condition</code> means that we want to infiltrate only when the <code>condition</code> is true (in this case <code>has_nans || has_inf</code>).</p><p>Now, when we run our example, we will see</p><pre><code class="language-julia hljs">julia&gt; renormalized_energy(myrho, myP, myu)
+Infiltrating post_op_callback(::ClimaCore.DataLayouts.IJFH{Float64, 4, Array{Float64, 4}}, ::ClimaCore.DataLayouts.IJFH{Float64, 4, Array{Float64, 4}}, ::Vararg{Any}; kwargs::@Kwargs{})
+  at REPL[40]:4
+infil&gt;</code></pre><p>Here, we are dropped into a new REPL with full access to the variables in the scope where the <code>NaN</code> occurred. However, because of how <code>post_op_callback</code>, this is at a low level within <code>ClimaCore</code>, which is typically not useful. Hence, the next step is to type <code>@trace</code>, which prints out</p><pre><code class="language-julia hljs">[1] post_op_callback(::ClimaCore.DataLayouts.IJFH{…}, ::ClimaCore.DataLayouts.IJFH{…}, ::Vararg{…}; kwargs::@Kwargs{})
+    at REPL[40]:4
+[2] post_op_callback
+    at REPL[40]:1
+[3] copyto!
+    at ClimaCore.jl/src/DataLayouts/copyto.jl:18
+[4] copyto!
+    at ClimaCore.jl/src/Fields/broadcast.jl:190
+[5] copy
+    at ClimaCore.jl/src/Fields/broadcast.jl:97
+[6] materialize
+    at .julia/juliaup/julia-1.11.4+0.x64.linux.gnu/share/julia/base/broadcast.jl:872
+[7] specific_energy(rho::ClimaCore.Fields.Field{…}, P::ClimaCore.Fields.Field{…}, u::ClimaCore.Fields.Field{…})
+    at REPL[31]:2
+[8] renormalized_energy(rho::ClimaCore.Fields.Field{…}, P::ClimaCore.Fields.Field{…}, u::ClimaCore.Fields.Field{…})
+    at REPL[36]:2
+[9] top-level scope</code></pre><p><code>@trace</code> returns a type-limited stacktrace that we can read backwards until we see our functions. In this case, we see that the first <code>NaN</code> is in <code>specific_energy</code>, so we will investigate that function. We leave the Infiltrator REPL with <code>@exit</code>, disable the <code>call_post_op_callback</code>, and move our <code>infiltrate</code> call within the target function:</p><pre><code class="language-julia hljs">ClimaCore.DebugOnly.call_post_op_callback() = false
+function specific_energy(rho, P, u)
+    @infiltrate
+    density_without_restmass = offset_by_one(rho)
+    return (kinetic_energy(u) .+ other_energy(P)) ./ density_without_restmass
+end</code></pre><p>Now, when we evaluate our problematic expression (the one at the top level, in this case <code>renormalized_energy(myrho, myP, myu)</code>), we will be dropped in a REPL inside <code>specific_energy</code>. Here, we have access to <code>density_without_restmass</code>, and we notice that it can be zero, leading to the <code>NaN</code>.</p><div class="admonition is-success" id="Tip-87bf825b18e64fb2"><header class="admonition-header">Tip<a class="admonition-anchor" href="#Tip-87bf825b18e64fb2" title="Permalink"></a></header><div class="admonition-body"><p>The infiltrator REPL is different from the normal Julia repl. Type <code>?</code> for some useful commands. You can fetch objects defined in the main REPL by prepending their name with <code>Main</code>. Similarly, if you want to infiltrate inside a module, prepend <code>@infiltrate</code> with <code>Main</code> (<code>Main.@infiltrate</code>).</p></div></div><p>Looking at this code, we could have probably guess that the <code>NaN</code> comes from a division from 0, and the real question is how do we get that?. In more complex cases, the functions are spread across different packages and involve several different variables. This approach allows one to systematically identify where things go wrong.</p><h5 id="Exfiltrating-and-StructuredPrinting"><a class="docs-heading-anchor" href="#Exfiltrating-and-StructuredPrinting">Exfiltrating and StructuredPrinting</a><a id="Exfiltrating-and-StructuredPrinting-1"></a><a class="docs-heading-anchor-permalink" href="#Exfiltrating-and-StructuredPrinting" title="Permalink"></a></h5><p>Let&#39;s now see a different way to use Infiltrator, where we move the variables in specific scope to the Main scope in the REPL and do some analysis on it.</p><pre><code class="language-julia hljs">import ClimaCore
+import Infiltrator # must be in your default environment
+ClimaCore.DebugOnly.call_post_op_callback() = true
+function ClimaCore.DebugOnly.post_op_callback(result, args...; kwargs...)
+    has_nans = result isa Number ? isnan(result) : any(isnan, parent(result))
+    has_inf = result isa Number ? isinf(result) : any(isinf, parent(result))
+    if has_nans || has_inf
+        has_nans &amp;&amp; println(&quot;NaNs found!&quot;)
+        has_inf &amp;&amp; println(&quot;Infs found!&quot;)
+        # Let&#39;s define the stack trace so that we know where this came from
+        st = stacktrace()
+
+        # Let&#39;s use Infiltrator.jl to exfiltrate to drop into the REPL.
+        # Now, `Infiltrator.safehouse` will be a NamedTuple
+        # containing `result`, `args`, `kwargs` and `st`.
+        Infiltrator.@exfiltrate
+        # sometimes code execution doesn&#39;t stop, I&#39;m not sure why. Let&#39;s
+        # make sure we exfiltrate immediately with the data we want.
+        error(&quot;Exfiltrating.&quot;)
+    end
+end
+
+FT = Float64
+data = ClimaCore.DataLayouts.VIJFH{FT}(Array{FT}, zeros; Nv=5, Nij=2, Nh=2)
+x = ClimaCore.DataLayouts.VIJFH{FT}(Array{FT}, zeros; Nv=5, Nij=2, Nh=2)
+parent(x)[1] = NaN # emulate incorrect initialization
+@. data = x + 1
+# Let&#39;s see what happened
+(;result, args, kwargs, st) = Infiltrator.safehouse;
+
+# You can print the stack trace, to see where the NaNs were found:
+ClimaCore.DebugOnly.print_depth_limited_stack_trace(st; maxtypedepth=1)
+
+# Once there, you can see that the call lead you to `copyto!`,
+# Inspecting `args` shows that the `Broadcasted` object used to populate the
+# result was:
+julia&gt; args[2]
+Base.Broadcast.Broadcasted{ClimaCore.DataLayouts.VIJFHStyle{5, 2, Array{Float64}}}(+, (ClimaCore.DataLayouts.VIJFH{Float64, 5, 2, Array{Float64, 5}}
+  [NaN, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  …  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1))
+
+# And there&#39;s your problem, NaNs is on the right-hand-side of that assignment.</code></pre><p>If your broadcasted object is very long, it can be a bit overwhelming to figure out which part of the expression contains NaNs (if any). To make this process more manageable, we can use <a href="https://github.com/charleskawczynski/StructuredPrinting.jl"><code>StructuredPrinting.jl</code></a> to highlight which parts of the broadcasted object contains NaNs:</p><pre><code class="language-julia hljs">using StructuredPrinting
+import ClimaCore: DataLayouts
+highlight_nans(x::DataLayouts.AbstractData) = any(y-&gt;isnan(y), parent(x));
+highlight_nans(_) = false;
+bc = Infiltrator.safehouse.args[2]; # we know that argument 2 is the broadcasted object
+(; result) = Infiltrator.safehouse; # get the result
+@structured_print bc Options(; highlight = x-&gt;highlight_nans(x))</code></pre><p>This last line results in:</p><pre><code class="language-julia hljs">julia&gt; @structured_print bc Options(; highlight = x-&gt;highlight_nans(x))
+bc
+bc.style::ClimaCore.DataLayouts.VIJFHStyle{5, 2, Array{Float64}}
+bc.f::typeof(+)
+bc.args::Tuple{ClimaCore.DataLayouts.VIJFH{Float64, 5, 2, Array{…}}, Int64}
+bc.args.1::ClimaCore.DataLayouts.VIJFH{Float64, 5, 2, Array{Float64, 5}}       # highlighted in RED
+bc.args.2::Int64
+bc.axes::NTuple{5, Base.OneTo{Int64}}
+bc.axes.1::Base.OneTo{Int64}
+bc.axes.1.stop::Int64
+bc.axes.2::Base.OneTo{Int64}
+bc.axes.2.stop::Int64
+bc.axes.3::Base.OneTo{Int64}
+bc.axes.3.stop::Int64
+bc.axes.4::Base.OneTo{Int64}
+bc.axes.4.stop::Int64
+bc.axes.5::Base.OneTo{Int64}
+bc.axes.5.stop::Int64</code></pre><h4 id="Caveats"><a class="docs-heading-anchor" href="#Caveats">Caveats</a><a id="Caveats-1"></a><a class="docs-heading-anchor-permalink" href="#Caveats" title="Permalink"></a></h4><div class="admonition is-category-warn" id="Warn-d128cbaa2f2310b8"><header class="admonition-header">Warn<a class="admonition-anchor" href="#Warn-d128cbaa2f2310b8" title="Permalink"></a></header><div class="admonition-body"><p>While <code>post_op_callback</code> may be helpful, it&#39;s not bullet proof. NaNs can infiltrate user data any time internals are used. For example <code>parent (data) .= NaN</code> will not be caught by ClimaCore.DebugOnly, and errors can be observed later than expected.</p></div></div><div class="admonition is-info" id="Note-e42b02c7f04c0faf"><header class="admonition-header">Note<a class="admonition-anchor" href="#Note-e42b02c7f04c0faf" title="Permalink"></a></header><div class="admonition-body"><p><code>post_op_callback</code> is called in many places, so this is a performance-critical code path and expensive operations performed in <code>post_op_callback</code> may significantly slow down your code.</p></div></div><div class="admonition is-category-warn" id="Warn-41432a1683a18725"><header class="admonition-header">Warn<a class="admonition-anchor" href="#Warn-41432a1683a18725" title="Permalink"></a></header><div class="admonition-body"><p>It is <em>highly</em> recommended to use <code>post_op_callback</code> <em>without</em> <code>@testset</code>, as Test.jl may continue running through code execution, until all of the tests in a given <code>@testset</code> are complete, and the result will be that you will get the <em>last</em> observed instance of <code>NaN</code> or <code>Inf</code>.</p></div></div><h4 id="Faster-explorations-when-the-initialization-is-expensive"><a class="docs-heading-anchor" href="#Faster-explorations-when-the-initialization-is-expensive">Faster explorations when the initialization is expensive</a><a id="Faster-explorations-when-the-initialization-is-expensive-1"></a><a class="docs-heading-anchor-permalink" href="#Faster-explorations-when-the-initialization-is-expensive" title="Permalink"></a></h4><p>Sometimes, we want to start from a given simulation state and explore different ideas. For example, we want to run a simulation for 10 days, and then test how different approaches affect its stability. Sometimes, checkpoints offer a way to do this, but not everything can be checkpointed. </p><p>A simple way to &quot;checkpoint&quot; a simulation is to <code>deepcopy</code> its state. This allows one to step the copy instead of the original one, which can be re-used to make new copies, allowing for various explorations. <code>ClimaCore</code> does not support this workflow out-of-the-box. The reason for this is that <code>ClimaCore</code> uses pointers to perform certain safety checks, and deepcopies return new pointers (by definition). To enable this, override the <code>DebugOnly.allow_mismatched_spaces_unsafe</code> function so that it returns true. When <code>DebugOnly.allow_mismatched_spaces_unsafe</code> returns true, <code>ClimaCore</code> can mix fields defined on space that are not identically the same.</p><p>Let us look at an example of this.</p><pre><code class="language-julia hljs">import ClimaCore
+using ClimaCore.CommonSpaces
+other_space = deepcopy(space)
+
+one = ones(space)
+other_one = ones(other_space)
+
+one .+ other_one  # This throws an error 
+
+ClimaCore.DebugOnly.allow_mismatched_spaces_unsafe() = true
+one .+ other_one # Now it&#39;s fine!</code></pre><div class="admonition is-category-warn" id="Warn-2682f0e49fc84ae0"><header class="admonition-header">Warn<a class="admonition-anchor" href="#Warn-2682f0e49fc84ae0" title="Permalink"></a></header><div class="admonition-body"><p><code>ClimaCore</code> checks for consistency of spaces to protect you from non-sense results. If you disable this check, you are responsible to ensure that the results make sense.</p></div></div></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../masks/">« Masks</a><a class="docs-footer-nextpage" href="../lib/ClimaCorePlots/">ClimaCorePlots.jl »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 20 February 2026 23:02">Friday 20 February 2026</span>. Using Julia version 1.10.10.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
