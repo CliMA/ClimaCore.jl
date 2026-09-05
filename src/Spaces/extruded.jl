@@ -23,6 +23,9 @@ struct ExtrudedFiniteDifferenceSpace{
     staggering::S
 end
 
+Base.ndims(::Type{ExtrudedFiniteDifferenceSpace{G, S}}) where {G, S} =
+    ndims(G)
+
 local_geometry_type(::Type{ExtrudedFiniteDifferenceSpace{G, S}}) where {G, S} =
     local_geometry_type(G)
 

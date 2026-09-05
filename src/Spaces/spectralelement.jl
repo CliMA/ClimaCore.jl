@@ -72,6 +72,8 @@ space(grid::Grids.LevelGrid{<:Grids.ExtrudedSpectralElementGrid2D}, ::Nothing) =
     SpectralElementSpace1D(grid)
 grid(space::SpectralElementSpace1D) = getfield(space, :grid)
 
+Base.ndims(::Type{SpectralElementSpace1D{G}}) where {G} = ndims(G)
+
 local_geometry_type(::Type{SpectralElementSpace1D{G}}) where {G} =
     local_geometry_type(G)
 
@@ -123,6 +125,8 @@ space(grid::Grids.SpectralElementGrid2D, ::Nothing) =
     SpectralElementSpace2D(grid)
 space(grid::Grids.LevelGrid{<:Grids.ExtrudedSpectralElementGrid3D}, ::Nothing) =
     SpectralElementSpace2D(grid)
+
+Base.ndims(::Type{SpectralElementSpace2D{G}}) where {G} = ndims(G)
 
 local_geometry_type(::Type{SpectralElementSpace2D{G}}) where {G} =
     local_geometry_type(G)
