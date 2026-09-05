@@ -271,17 +271,7 @@ plot(map(x -> x.w, ClimaCore.Geometry.WVector.(∇cosz)), ylim = (0, 10))
 
 # **Center to face gradient**
 #
-# Uses the same stencil, but doesn't work directly:
-
-sinz = sin.(column_center_coords.z)
-gradc2f = ClimaCore.Operators.GradientC2F()
-# this throws an error when julia is launched with --check-bounds=yes
-# if ran with nomrally (auto bounds checking), behavior at the boundary is undefined
-# (i.e. it will read some random memory outside the array)
-# ∇sinz = gradc2f.(sinz) ## undefined behavior at boundary
-#----------------------------------------------------------------------------
-
-# This throws an error when bounds checking is enabled because face values at the boundary are _not_ well-defined:
+# Uses the same stencil, but the boundary faces are _not_ well-defined:
 #
 # ```
 # ...
@@ -297,6 +287,18 @@ gradc2f = ClimaCore.Operators.GradientC2F()
 #         ????
 # ```
 #
+# The stencil for a face needs a center value on each side of it, and the two
+# boundary faces only have one. Broadcasting the operator without a boundary
+# condition does _not_ throw: it runs, and fills the two boundary faces with
+# `NaN`. That way a forgotten boundary condition shows up in the output rather
+# than silently producing a plausible number.
+
+sinz = sin.(column_center_coords.z)
+gradc2f = ClimaCore.Operators.GradientC2F()
+∇sinz_nan = gradc2f.(sinz)
+first(parent(ClimaCore.Geometry.WVector.(∇sinz_nan))) ## NaN
+#----------------------------------------------------------------------------
+
 # To handle boundaries we need to *modify the stencil*. This is done by providing the *gradient* $\nabla\theta^*$ of $\theta$ at the boundary:
 #
 # ```math

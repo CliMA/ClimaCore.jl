@@ -1983,6 +1983,35 @@ the constructor then returns a [`DirichletOperator`](@ref) that applies
 [`gradient_c2f_dirichlet`](@ref), the exact replacement for the removed
 `SetValue` stencil, fused into an enclosing broadcast with lazy
 boundary rows.
+
+Note that `SetGradient` and `SetValue` place their data in different places,
+and are not interchangeable: `SetGradient(v₀)` sets the *gradient* at the
+boundary face itself, while `SetValue(x₀)` sets the *value* of `x` at that
+face and differences it against the first interior center, over the half
+spacing between them.
+
+# Omitting a boundary condition
+
+If a boundary is left without a condition, the stencil has no center value
+outside the domain to difference against and there is nothing to fall back
+on, so the operator fills that boundary face with `NaN` rather than guessing:
+a forgotten boundary condition shows up in the output instead of silently
+producing a plausible number.
+
+For example, with `sinz` a center field holding `sin(z)` on 8 elements over
+`[0, π]`, the nine face values are
+
+```julia
+vec(parent(Geometry.WVector.(GradientC2F().(sinz))))
+
+# 9-element Vector{Float64}:
+#  NaN, 0.91795, 0.70257, 0.38023, 0.0, -0.38023, -0.70257, -0.91795, NaN
+```
+
+A boundary only needs a condition if the enclosing broadcast actually reads
+that face. In `divf2c.(GradientC2F().(x))`, for instance, `DivergenceF2C`'s
+own boundary handling means the boundary faces of the inner gradient are
+never read, so the `NaN`s there do not propagate.
 """
 struct GradientC2F{BC} <: GradientOperator
     bcs::BC
