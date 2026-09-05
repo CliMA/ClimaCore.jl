@@ -26,37 +26,36 @@ atexit() do
     global_logger(prev_logger)
 end
 
-domain = Domains.RectangleDomain(
-    Domains.IntervalDomain(
-        Geometry.XPoint(-2π),
-        Geometry.XPoint(2π),
-        periodic = true,
-    ),
-    Domains.IntervalDomain(
-        Geometry.YPoint(-2π),
-        Geometry.YPoint(2π),
-        periodic = true,
-    ),
-)
-n1, n2 = 16, 16
-Nq = 4
-quad = Quadratures.GLL{Nq}()
-mesh = Meshes.RectilinearMesh(domain, n1, n2)
-
-grid_topology = Topologies.Topology2D(comms_ctx, mesh, Meshes.elements(mesh))
-global_grid_topology =
-    Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
-Nf = 4
-Nv = 1
-space = Spaces.SpectralElementSpace2D(grid_topology, quad)
-global_space = Spaces.SpectralElementSpace2D(global_grid_topology, quad)
-
-gathered_coord = ClimaComms.gather(
-    comms_ctx,
-    Fields.field_values(Fields.coordinate_field(space)),
-)
-
 @testset "gathering coordinate field" begin
+    domain = Domains.RectangleDomain(
+        Domains.IntervalDomain(
+            Geometry.XPoint(-2π),
+            Geometry.XPoint(2π),
+            periodic = true,
+        ),
+        Domains.IntervalDomain(
+            Geometry.YPoint(-2π),
+            Geometry.YPoint(2π),
+            periodic = true,
+        ),
+    )
+    n1, n2 = 16, 16
+    Nq = 4
+    quad = Quadratures.GLL{Nq}()
+    mesh = Meshes.RectilinearMesh(domain, n1, n2)
+
+    grid_topology =
+        Topologies.Topology2D(comms_ctx, mesh, Meshes.elements(mesh))
+    global_grid_topology =
+        Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+    global_space = Spaces.SpectralElementSpace2D(global_grid_topology, quad)
+
+    gathered_coord = ClimaComms.gather(
+        comms_ctx,
+        Fields.field_values(Fields.coordinate_field(space)),
+    )
+
     if pid == 1
         diff = maximum(
             abs.(

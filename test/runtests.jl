@@ -91,9 +91,13 @@ unit_tests = [
     UnitTest("Spectral elem - sphere hyperdiff vec"     ,"Operators/spectralelement/unit_sphere_hyperdiffusion_vec.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - sphere hyperdiff vec conv" ,"Operators/spectralelement/conv_sphere_hyperdiffusion_vec.jl"; tier = :conv, subsystem = :operators),
     UnitTest("Spectral elem - over-integration"         ,"Operators/spectralelement/unit_overintegration.jl"; meta = :cpu_only, tier = :unit, subsystem = :operators),
-    # `add_numerical_flux_interior!`/`_boundary!` walk faces in a host loop and
-    # scalar-index the data, so tests built on them either wrap the calls in a
-    # scoped `allowscalar` (the two below) or are :cpu_only (the three after).
+    # Spectral Element - Discontinuous Galerkin (DG) operators
+    # The DG interface fluxes have native GPU kernels in ClimaCoreCUDAExt, so
+    # the operators need no `allowscalar`; unit_two_point_fluxes and
+    # unit_sphere_dg_fluxes wrap their whole testset body in one for their own
+    # scalar-indexing assertions. The conv_ sweeps below are :cpu_only, as are
+    # the allocs_ files, whose byte sentinels count CUDA's host-side launch
+    # wrappers.
     UnitTest("Spectral elem - DG two-point fluxes"      ,"Operators/spectralelement/unit_two_point_fluxes.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG sphere fluxes"         ,"Operators/spectralelement/unit_sphere_dg_fluxes.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG stability properties"  ,"Operators/spectralelement/unit_dg_stability.jl"; tier = :unit, subsystem = :operators),
@@ -102,6 +106,7 @@ unit_tests = [
     UnitTest("Spectral elem - DG extruded sphere"       ,"Operators/spectralelement/unit_extruded_sphere_dg.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG extruded plane"        ,"Operators/spectralelement/unit_extruded_plane_dg.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - tendency completion"      ,"Operators/spectralelement/unit_tendency_completion.jl"; tier = :unit, subsystem = :operators),
+    UnitTest("Spectral elem - Cartesian tensor div"     ,"Operators/spectralelement/unit_cartesian_tensor_divergence.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - DG divergence conv"       ,"Operators/spectralelement/conv_dg_divergence.jl"; meta = :cpu_only, tier = :conv, subsystem = :operators),
     UnitTest("Spectral elem - Cartesian tensor div conv","Operators/spectralelement/conv_cartesian_tensor_divergence.jl"; meta = :cpu_only, tier = :conv, subsystem = :operators),
     UnitTest("Operators - broadcast inference"          ,"Operators/inference_operators.jl"; tier = :inference, subsystem = :operators),

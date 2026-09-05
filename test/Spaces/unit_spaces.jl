@@ -640,7 +640,7 @@ end
               data[1, Nij, 1, :, 3] .+ data[1, 1, 1, :, 4]
     end
 
-    @testset "slab 3" begin
+    @testset "slab 4" begin
         @test data_dss[1, 2:Nij, 2:Nij, :, 4] == data[1, 2:Nij, 2:Nij, :, 4]
         @test data_dss[1, 1, 2:Nij, :, 4] ==
               data[1, Nij, 2:Nij, :, 3] .+ data[1, 1, 2:Nij, :, 4]

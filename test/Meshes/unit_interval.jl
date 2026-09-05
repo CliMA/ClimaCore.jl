@@ -136,7 +136,7 @@ end
         Geometry.ZPoint(1.0000000000000000),
     ]
     @test Meshes.coordinates(mesh, 1, 1) == ref_profile[1]
-    for eidx in Meshes.nelements(mesh)
+    for eidx in 1:Meshes.nelements(mesh)
         @test Meshes.coordinates(mesh, eidx, 1) == ref_profile[eidx]
         @test Meshes.coordinates(mesh, eidx, 2) == ref_profile[eidx + 1]
     end
@@ -194,7 +194,7 @@ end
         Geometry.ZPoint(0.0),
     ]
     @test Meshes.coordinates(mesh, 1, 1) == ref_profile[1]
-    for eidx in Meshes.nelements(mesh)
+    for eidx in 1:Meshes.nelements(mesh)
         @test Meshes.coordinates(mesh, eidx, 1) == ref_profile[eidx]
         @test Meshes.coordinates(mesh, eidx, 2) == ref_profile[eidx + 1]
     end

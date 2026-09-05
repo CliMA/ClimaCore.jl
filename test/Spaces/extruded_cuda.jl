@@ -19,8 +19,7 @@ compare(cpu, gpu, f) = all(parent(f(cpu)) .≈ Array(parent(f(gpu))))
 @testset "CuArray-backed extruded spaces" begin
     device = ClimaComms.device()
     context = SingletonCommsContext(device)
-    collect(TU.all_spaces(Float64; zelem = 10, context)) # make sure we can construct spaces
-    as = collect(TU.all_spaces(Float64; zelem = 10, context))
+    as = collect(TU.all_spaces(Float64; zelem = 10, context)) # make sure we can construct spaces
     @test length(as) == 9
 end
 
@@ -30,7 +29,6 @@ end
     device = ClimaComms.device(gpu_context)
 
     FT = Float64
-    device = ClimaComms.device(gpu_context)
     local X, Y
     ClimaComms.allowscalar(device) do
         # TODO: add support and test for all spaces

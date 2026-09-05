@@ -56,14 +56,6 @@ const topBC_op = Operators.SetBoundaryOperator(
     bottom = Operators.SetValue(Geometry.Covariant3Vector(zero(FT))),
 )
 
-# Set up fields
-K = Fields.zeros(subsurface_space)
-dψdϑ_res = Fields.zeros(subsurface_space) .+ FT(115.901)
-
-tridiag_type = MatrixFields.TridiagonalMatrixRow{FT}
-dest_field = Fields.Field(tridiag_type, subsurface_space)
-fill!(parent(dest_field), NaN)
-
 # Test field update with multiple nested operations
 function update_field!(dest_field, K, dψdϑ_res)
     @. dest_field =
@@ -77,10 +69,18 @@ function update_field!(dest_field, K, dψdϑ_res)
         )
 end
 
-update_field!(dest_field, K, dψdϑ_res)
-
 using Test
 @testset "matrix multiplication recursion" begin
+    # Set up fields
+    K = Fields.zeros(subsurface_space)
+    dψdϑ_res = Fields.zeros(subsurface_space) .+ FT(115.901)
+
+    tridiag_type = MatrixFields.TridiagonalMatrixRow{FT}
+    dest_field = Fields.Field(tridiag_type, subsurface_space)
+    fill!(parent(dest_field), NaN)
+
+    update_field!(dest_field, K, dψdϑ_res)
+
     # The destination is pre-filled with NaN, so this checks both that the
     # nested broadcast compiled (the original regression) and that it wrote
     # every entry.

@@ -88,9 +88,6 @@ plot_string = ["uniform", "stretched"]
 
 @testset "VerticalMassBorrowingLimiter on advection" begin
     for (i, stretch) in enumerate(stretch_fns)
-        i = 1
-        stretch = Meshes.Uniform()
-
         z_elem = 2^6
         z_min = -π
         z_max = π

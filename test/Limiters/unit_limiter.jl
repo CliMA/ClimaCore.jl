@@ -191,7 +191,6 @@ end
     Nij = 2
     device = ClimaComms.device()
     comms_ctx = ClimaComms.SingletonCommsContext(device)
-    gpu_broken = device isa ClimaComms.CUDADevice
 
     for FT in (Float32,)
         lim_tol = FT(5e-14)

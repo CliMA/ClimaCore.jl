@@ -13,28 +13,26 @@ import ClimaCore:
     Quadratures
 using LinearAlgebra, IntervalSets
 
-FT = Float64
-domain = Domains.RectangleDomain(
-    Geometry.XPoint{FT}(-pi) .. Geometry.XPoint{FT}(pi),
-    Geometry.YPoint{FT}(-pi) .. Geometry.YPoint{FT}(pi);
-    x1periodic = true,
-    x2periodic = true,
-)
+@testset "Spectral element operators on a rectilinear mesh" begin
+    FT = Float64
+    domain = Domains.RectangleDomain(
+        Geometry.XPoint{FT}(-pi) .. Geometry.XPoint{FT}(pi),
+        Geometry.YPoint{FT}(-pi) .. Geometry.YPoint{FT}(pi);
+        x1periodic = true,
+        x2periodic = true,
+    )
 
-Nq = 5
-quad = Quadratures.GLL{Nq}()
-device = ClimaComms.CPUSingleThreaded()
-grid_mesh = Meshes.RectilinearMesh(domain, 17, 16)
-grid_topology =
-    Topologies.Topology2D(ClimaComms.SingletonCommsContext(device), grid_mesh)
-grid_space = Spaces.SpectralElementSpace2D(grid_topology, quad)
-grid_coords = Fields.coordinate_field(grid_space)
+    Nq = 5
+    quad = Quadratures.GLL{Nq}()
+    device = ClimaComms.CPUSingleThreaded()
+    mesh = Meshes.RectilinearMesh(domain, 17, 16)
+    topology =
+        Topologies.Topology2D(ClimaComms.SingletonCommsContext(device), mesh)
+    space = Spaces.SpectralElementSpace2D(topology, quad)
+    coords = Fields.coordinate_field(space)
 
-grid_test_setup = (grid_topology, grid_space, grid_coords)
+    @testset "interpolate / restrict" begin
 
-@testset "interpolate / restrict" begin
-
-    for (topology, space, coords) in (grid_test_setup,)
         INq = 9
         Iquad = Quadratures.GLL{INq}()
         Ispace = Spaces.SpectralElementSpace2D(topology, Iquad)
@@ -94,11 +92,9 @@ grid_test_setup = (grid_topology, grid_space, grid_coords)
 
         @test norm(spectral_nested .- (laplacian_field .+ 2 .* f)) ≤ 3.0e-4
     end
-end
 
-@testset "gradient" begin
+    @testset "gradient" begin
 
-    for (topology, space, coords) in (grid_test_setup,)
         f = sin.(coords.x .+ 2 .* coords.y)
 
         grad = Operators.Gradient()
@@ -122,11 +118,9 @@ end
         Spaces.weighted_dss!(gradfv)
         @test eltype(gradfv) <: Geometry.Tensor{2}
     end
-end
 
 
-@testset "weak gradient" begin
-    for (topology, space, coords) in (grid_test_setup,)
+    @testset "weak gradient" begin
         f = sin.(coords.x .+ 2 .* coords.y)
 
         wgrad = Operators.Gradient{Operators.WeakForm}()
@@ -139,10 +133,8 @@ end
             2 .* cos.(coords.x .+ 2 .* coords.y),
         ) rtol = 1e-2
     end
-end
 
-@testset "curl" begin
-    for (topology, space, coords) in (grid_test_setup,)
+    @testset "curl" begin
         v =
             Geometry.UVVector.(
                 sin.(coords.x .+ 2 .* coords.y),
@@ -166,18 +158,13 @@ end
 
         @test curlv ≈ curlv_ref rtol = 1e-2
     end
-end
 
-@testset "curl-curl" begin
-    for (topology, space, coords) in (grid_test_setup,)
+    @testset "curl-curl" begin
         v =
             Geometry.UVVector.(
                 sin.(coords.x .+ 2 .* coords.y),
                 cos.(3 .* coords.x .+ 2 .* coords.y),
             )
-        curlv_ref =
-            .-3 .* sin.(3 .* coords.x .+ 2 .* coords.y) .-
-            2 .* cos.(coords.x .+ 2 .* coords.y)
         curlcurlv_ref1 =
             .-6 .* cos.(3 .* coords.x .+ 2 .* coords.y) .+
             4 .* sin.(coords.x .+ 2 .* coords.y)
@@ -197,18 +184,13 @@ end
         @test Geometry.UVVector.(curlcurlv) ≈
               Geometry.UVVector.(curlcurlv_ref1, curlcurlv_ref2) rtol = 4e-2
     end
-end
 
-@testset "weak curl-strong curl" begin
-    for (topology, space, coords) in (grid_test_setup,)
+    @testset "weak curl-strong curl" begin
         v =
             Geometry.UVVector.(
                 sin.(coords.x .+ 2 .* coords.y),
                 cos.(3 .* coords.x .+ 2 .* coords.y),
             )
-        curlv_ref =
-            .-3 .* sin.(3 .* coords.x .+ 2 .* coords.y) .-
-            2 .* cos.(coords.x .+ 2 .* coords.y)
         curlcurlv_ref1 =
             .-6 .* cos.(3 .* coords.x .+ 2 .* coords.y) .+
             4 .* sin.(coords.x .+ 2 .* coords.y)
@@ -231,10 +213,8 @@ end
         @test curlcurlv ≈ Geometry.UVVector.(curlcurlv_ref1, curlcurlv_ref2) rtol =
             4e-2
     end
-end
 
-@testset "weak curl" begin
-    for (topology, space, coords) in (grid_test_setup,)
+    @testset "weak curl" begin
         v =
             Geometry.UVVector.(
                 sin.(coords.x .+ 2 .* coords.y),
@@ -257,10 +237,8 @@ end
             curlv_ref,
         ) rtol = 1e-2
     end
-end
 
-@testset "div" begin
-    for (topology, space, coords) in (grid_test_setup,)
+    @testset "div" begin
         v =
             Geometry.UVVector.(
                 sin.(coords.x .+ 2 .* coords.y),
@@ -276,11 +254,9 @@ end
 
         @test divv ≈ divv_ref rtol = 1e-2
     end
-end
 
 
-@testset "weak div" begin
-    for (topology, space, coords) in (grid_test_setup,)
+    @testset "weak div" begin
         v =
             Geometry.UVVector.(
                 sin.(coords.x .+ 2 .* coords.y),
@@ -296,11 +272,9 @@ end
 
         @test divv ≈ divv_ref rtol = 1e-2
     end
-end
 
 
-@testset "annhilator property: curl-grad" begin
-    for (topology, space, coords) in (grid_test_setup,)
+    @testset "annihilator property: curl-grad" begin
         f = sin.(coords.x .+ 2 .* coords.y)
 
         grad = Operators.Gradient()
@@ -313,10 +287,8 @@ end
 
         @test norm(curlgradf) < 1e-12
     end
-end
 
-@testset "annhilator property: div-curl" begin
-    for (topology, space, coords) in (grid_test_setup,)
+    @testset "annihilator property: div-curl" begin
         v = Geometry.Covariant3Vector.(sin.(coords.x .+ 2 .* coords.y))
         curl = Operators.Curl()
         curlv = curl.(v)
@@ -328,10 +300,8 @@ end
 
         @test norm(divcurlv) < 1e-12
     end
-end
 
-@testset "scalar hyperdiffusion" begin
-    for (topology, space, coords) in (grid_test_setup,)
+    @testset "scalar hyperdiffusion" begin
         k = 2
         l = 3
         y = @. sin(k * coords.x + l * coords.y)
@@ -344,10 +314,8 @@ end
 
         @test ∇⁴y_ref ≈ ∇⁴y rtol = 2e-2
     end
-end
 
-@testset "vector hyperdiffusion" begin
-    for (topology, space, coords) in (grid_test_setup,)
+    @testset "vector hyperdiffusion" begin
         k = 2
         l = 3
         y = @. Geometry.UVVector(sin(k * coords.x + l * coords.y), 0.0)
@@ -382,11 +350,9 @@ end
 
         @test ∇⁴y_ref ≈ ∇⁴y rtol = 2e-2
     end
-end
 
 
-@testset "vector hyperdiffusion 3d" begin
-    for (topology, space, coords) in (grid_test_setup,)
+    @testset "vector hyperdiffusion 3d" begin
         k = 2
         l = 3
 
@@ -414,36 +380,35 @@ end
         )
 
     end
-end
 
-@testset "operators on masked spaces" begin
-    masked_space = Spaces.SpectralElementSpace2D(
-        grid_topology,
-        quad;
-        enable_mask = true,
-    )
-    Spaces.set_mask!(coords -> coords.x > 0, masked_space)
-    masked_coords = Fields.coordinate_field(masked_space)
+    @testset "operators on masked spaces" begin
+        masked_space = Spaces.SpectralElementSpace2D(
+            topology,
+            quad;
+            enable_mask = true,
+        )
+        Spaces.set_mask!(c -> c.x > 0, masked_space)
 
-    grad = Operators.Gradient()
-    wdiv = Operators.Divergence{Operators.WeakForm}()
-    f = sin.(grid_coords.x .+ 2 .* grid_coords.y)
-    masked_f = zeros(masked_space)
-    parent(masked_f) .= parent(f)
+        grad = Operators.Gradient()
+        wdiv = Operators.Divergence{Operators.WeakForm}()
+        f = sin.(coords.x .+ 2 .* coords.y)
+        masked_f = zeros(masked_space)
+        parent(masked_f) .= parent(f)
 
-    # A spectral operator reads every point of each slab, so its values on
-    # active columns match the unmasked computation.
-    active = parent(Spaces.get_mask(masked_space).is_active)
-    matches_on_active_columns(masked_result, result) = all(
-        !active[v, i, j, h, 1] ||
-            parent(masked_result)[v, i, j, h, c] ≈ parent(result)[v, i, j, h, c]
-        for v in axes(active, 1), i in axes(active, 2),
-        j in axes(active, 3), h in axes(active, 4),
-        c in axes(parent(result), 5)
-    )
-    @test matches_on_active_columns(grad.(masked_f), grad.(f))
-    @test matches_on_active_columns(
-        (@. wdiv(grad(masked_f)) + masked_f),
-        (@. wdiv(grad(f)) + f),
-    )
+        # A spectral operator reads every point of each slab, so its values on
+        # active columns match the unmasked computation.
+        active = parent(Spaces.get_mask(masked_space).is_active)
+        matches_on_active_columns(masked_result, result) = all(
+            !active[v, i, j, h, 1] ||
+                parent(masked_result)[v, i, j, h, c] ≈ parent(result)[v, i, j, h, c]
+            for v in axes(active, 1), i in axes(active, 2),
+            j in axes(active, 3), h in axes(active, 4),
+            c in axes(parent(result), 5)
+        )
+        @test matches_on_active_columns(grad.(masked_f), grad.(f))
+        @test matches_on_active_columns(
+            (@. wdiv(grad(masked_f)) + masked_f),
+            (@. wdiv(grad(f)) + f),
+        )
+    end
 end

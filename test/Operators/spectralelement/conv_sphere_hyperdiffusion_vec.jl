@@ -16,7 +16,7 @@ import .TestUtilities: convergence_rate
 
     radius = FT(1)
     domain = Domains.SphereDomain(radius)
-    for (Iq, Nq) in enumerate(Nqs)
+    for Nq in Nqs
         err_∇⁴ = Array{FT}(undef, length(Nes))
         Δh = Array{FT}(undef, length(Nes))
 
