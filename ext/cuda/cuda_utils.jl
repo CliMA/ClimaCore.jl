@@ -418,6 +418,13 @@ const LaunchBoundsDecision = @NamedTuple{
     unbounded_warps::Int,
     bounded_warps::Int,
     spill_growth::Int,
+    # Absolute local-memory footprint of each compile, in bytes. `spill_growth`
+    # is their difference, which is what the budget tests, but a difference
+    # cannot distinguish "demand fell" from "both compiles moved together" --
+    # and a kernel pinned at the 255-register cap reports 255 either way, so the
+    # register count alone cannot tell you whether a change did anything.
+    unbounded_local::Int,
+    bounded_local::Int,
 }
 # Keyed on the kernel and argument TYPES, not on the compiled function. Keying
 # it on the compiled kernel would mean calling `cufunction` on every launch
@@ -485,7 +492,7 @@ function uncached_launch_bounds(f::F, args, target_warps) where {F}
     unbounded_regs = Int(CUDA.registers(unbounded))
     unbounded_warps = max_warps_per_sm_by_registers(unbounded_regs)
     unbounded_local = _memory_bytes(CUDA.memory(unbounded), :local)
-    decision(bounds, regs, growth) = (;
+    decision(bounds, regs, growth, blocal = unbounded_local) = (;
         kernel,
         bounds,
         target_warps,
@@ -494,6 +501,8 @@ function uncached_launch_bounds(f::F, args, target_warps) where {F}
         unbounded_warps,
         bounded_warps = max_warps_per_sm_by_registers(regs),
         spill_growth = growth,
+        unbounded_local,
+        bounded_local = blocal,
     )
     unannotated() = decision(nothing, unbounded_regs, 0)
 
@@ -506,15 +515,16 @@ function uncached_launch_bounds(f::F, args, target_warps) where {F}
     bounds = (; maxthreads, blocks_per_sm = 1)
     bounded = compile_kernel(f, args, bounds)
     bounded_regs = Int(CUDA.registers(bounded))
-    spill_growth = _memory_bytes(CUDA.memory(bounded), :local) - unbounded_local
+    bounded_local = _memory_bytes(CUDA.memory(bounded), :local)
+    spill_growth = bounded_local - unbounded_local
 
     # Keep the annotated kernel only if it bought the occupancy it asked for
     # without spilling more than the budget allows.
     if max_warps_per_sm_by_registers(bounded_regs) < target_warps ||
        spill_growth > LAUNCH_BOUNDS_SPILL_BUDGET[]
-        return decision(nothing, bounded_regs, spill_growth)
+        return decision(nothing, bounded_regs, spill_growth, bounded_local)
     end
-    return decision(bounds, bounded_regs, spill_growth)
+    return decision(bounds, bounded_regs, spill_growth, bounded_local)
 end
 
 # `.maxntid` is emitted as a three-tuple padded with ones, so an annotation only
