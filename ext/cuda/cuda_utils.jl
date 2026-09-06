@@ -391,11 +391,20 @@ launch_kernel!(
 # runs 0.11% apart against a 0.43% noise floor. That is nearly three times the
 # 8 -> 12 step (+0.63%), so occupancy had not saturated at 12.
 #
-# The budget itself remains the load-bearing part and is validated at both ends
-# now: +344 B (pre-fusion, 12 warps) ran 20.5% SLOWER and is correctly rejected;
-# +208 B is accepted and helps. Do not raise the target further without
-# measuring -- 128 -> 96 registers would be the next step and there is no reason
-# to assume it stays on the right side of the trade.
+# The budget itself remains the load-bearing part and is validated at three
+# points now: +344 B (pre-fusion, 12 warps) ran 20.5% SLOWER and is correctly
+# rejected; +208 B is accepted and helps; +392 B was measured on 2026-09-06 by
+# raising the budget to 512 so the guard would let it through, and the hot
+# kernel ran 18.4% slower (150.3 -> 177.9 ms over 10 launches). Reverted. Two
+# rejections either side of one acceptance, with the losses landing where the
+# budget says they should.
+#
+# There is also no finer step to take. ptxas goes from 128 registers (16 warps)
+# straight to 80 (24 warps) on this kernel -- a 21-warp target compiles to the
+# same 80 registers as a 24-warp one. So the target is not held back by a
+# cautious budget; the next rung is simply too far up, and asking for it costs
+# more in spill than the occupancy returns. This would change if the kernel body
+# shrank enough to reach 80 registers without the spill.
 const LAUNCH_BOUNDS_TARGET_WARPS_PER_SM = Ref{Int}(16)
 const LAUNCH_BOUNDS_SPILL_BUDGET = Ref{Int}(256)
 
