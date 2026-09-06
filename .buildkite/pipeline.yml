@@ -1222,6 +1222,17 @@ steps:
         env:
           TEST_NAME: "sphere/baroclinic_wave_rhoe"
 
+      - label: ":computer: 3D sphere baroclinic wave (ρe) DG"
+        key: "cpu_baroclinic_wave_rho_e_dg"
+        retry: *retry_policy
+        command:
+          - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
+        artifact_paths:
+          - "examples/hybrid/sphere/output/baroclinic_wave_rhoe_dg/Float32/*"
+        env:
+          TEST_NAME: "sphere/baroclinic_wave_rhoe"
+          DISCRETIZATION: "DG"
+
       - label: ":computer: MPI 3D sphere baroclinic wave (ρe)"
         key: "cpu_mpi_baroclinic_wave_rho_e"
         retry: *retry_policy

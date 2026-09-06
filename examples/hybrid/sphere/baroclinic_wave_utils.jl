@@ -90,11 +90,35 @@ function sphere_center_initial_condition(
         @. v₀ += δv(long, lat, z)
     end
     ᶜuₕ_local = @. Geometry.UVVector(u₀, v₀)
-    ᶜuₕ = @. Geometry.Covariant12Vector(ᶜuₕ_local, ᶜlocal_geometry)
     ᶜρe = @. ᶜρ *
              (cv_d * (temp(lat, z) - T_tri) + norm_sqr(ᶜuₕ_local) / 2 + grav * z)
+    return initial_state(
+        Spaces.discretization(axes(ᶜlocal_geometry)),
+        ᶜlocal_geometry,
+        ᶜρ,
+        ᶜρe,
+        ᶜuₕ_local,
+    )
+end
+
+# The same flow in whichever momentum variable the discretization prognoses:
+# covariant velocity for the vector-invariant (CG) form, orthonormal momentum
+# for the flux (DG) one, whose interface flux is evaluated against an
+# orthonormal face normal.
+function initial_state(::Grids.CG, ᶜlocal_geometry, ᶜρ, ᶜρe, ᶜuₕ_local)
+    ᶜuₕ = @. Geometry.Covariant12Vector(ᶜuₕ_local, ᶜlocal_geometry)
     return NamedTuple{(:ρ, :ρe, :uₕ)}.(tuple.(ᶜρ, ᶜρe, ᶜuₕ))
 end
+
+function initial_state(::Grids.DG, ᶜlocal_geometry, ᶜρ, ᶜρe, ᶜuₕ_local)
+    ᶜρuₕ = @. ᶜρ * ᶜuₕ_local
+    return NamedTuple{(:ρ, :ρe, :ρuₕ)}.(tuple.(ᶜρ, ᶜρe, ᶜρuₕ))
+end
+
+# The horizontal velocity of a saved state, for diagnostics.
+center_velocity(Yc) = center_velocity(Spaces.discretization(axes(Yc)), Yc)
+center_velocity(::Grids.CG, Yc) = @. Geometry.UVVector(Yc.uₕ)
+center_velocity(::Grids.DG, Yc) = @. Geometry.UVVector(Yc.ρuₕ / Yc.ρ)
 
 function face_initial_condition(local_geometry)
     (; lat, long, z) = local_geometry.coordinates
@@ -119,6 +143,8 @@ end
 
 function rayleigh_sponge_tendency!(Yₜ, Y, p, t)
     (; ᶜβ, ᶠβ) = p
-    @. Yₜ.c.uₕ -= ᶜβ * Y.c.uₕ
+    ᶜmₜ = horizontal_momentum(Yₜ.c)
+    ᶜm = horizontal_momentum(Y.c)
+    @. ᶜmₜ -= ᶜβ * ᶜm
     @. Yₜ.f.w -= ᶠβ * Y.f.w
 end

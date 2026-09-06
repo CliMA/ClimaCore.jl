@@ -2,7 +2,7 @@
 # Set `TEST_NAME` to a case file relative to this directory (for example
 # `sphere/baroclinic_wave_rhoe`); the driver includes it, builds the spaces and
 # initial state it declares, and runs it. See `sphere/README.md` for the other
-# environment variables it reads.
+# environment variables it reads, `DISCRETIZATION` among them.
 #
 # The defaults below are overwritten by each case file.
 # TODO: Allow some of these to be environment variables or CLI arguments
@@ -59,6 +59,19 @@ const FT = get(ENV, "FLOAT_TYPE", "Float32") == "Float32" ? Float32 : Float64
 
 include("../common_spaces.jl")
 
+# The Galerkin form of the horizontal space. It reaches the case files through
+# the space alone: the tendency, the initial condition and the diagnostics all
+# dispatch on `Spaces.discretization`, so nothing else here has to branch.
+const discretization_name = get(ENV, "DISCRETIZATION", "CG")
+const discretization = if discretization_name == "CG"
+    Grids.CG()
+elseif discretization_name == "DG"
+    Grids.DG()
+else
+    error("DISCRETIZATION must be \"CG\" or \"DG\", got \
+           $(repr(discretization_name))")
+end
+
 if get(ENV, "Z_STRETCH", "false") == "true"
     z_stretch_scale = FT(7e3)
     z_stretch = Meshes.ExponentialStretching(z_stretch_scale)
@@ -77,6 +90,9 @@ include(joinpath(test_dir, "$test_file_name.jl"))
 
 if z_stretch_string == "stretched"
     test_file_name = "$(z_stretch_string)_$(test_file_name)"
+end
+if discretization isa Grids.DG
+    test_file_name = "$(test_file_name)_dg"
 end
 
 if haskey(ENV, "RESTART_FILE")
@@ -102,7 +118,8 @@ else
         horizontal_mesh,
         npoly,
         comms_ctx,
-        VIJH,
+        VIJH;
+        discretization,
     )
     center_space, face_space =
         make_hybrid_spaces(h_space, z_max, z_elem; z_stretch)
@@ -191,6 +208,7 @@ if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
 end
 
 @info "Running `$test_dir/$test_file_name` test case"
+@info "with a $discretization_name horizontal discretization"
 @info "on a vertical $z_stretch_string grid"
 
 walltime = @elapsed sol = CTS.solve!(integrator)
@@ -205,7 +223,8 @@ if is_distributed # replace sol.u on the root processor with the global sol.u
         global_h_space = make_horizontal_space(
             horizontal_mesh,
             npoly,
-            ClimaComms.SingletonCommsContext(),
+            ClimaComms.SingletonCommsContext();
+            discretization,
         )
         global_center_space, global_face_space =
             make_hybrid_spaces(global_h_space, z_max, z_elem; z_stretch)

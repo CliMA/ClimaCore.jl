@@ -4,11 +4,19 @@
 # for the vertical acoustic terms, and the Jacobian that the IMEX schemes solve
 # against. Including this file requires the constants listed below to already be
 # defined, which each case file does before the `include`.
+#
+# The horizontal discretization of the space selects the form of the explicit
+# tendency. A continuous (CG) space carries velocity `uₕ` in the
+# vector-invariant form below; a discontinuous (DG) one carries momentum `ρuₕ`
+# in the flux form of `dg_tendency.jl`, which is what an interface numerical
+# flux can be written for. Everything else — the vertical finite differences,
+# the implicit split, the Jacobian, the time stepping — is shared.
 using LinearAlgebra: ×, norm, norm_sqr, dot
 using ClimaCore: Operators, Fields
 
 include("implicit_equation_jacobian.jl")
 include("hyperdiffusion.jl")
+include("dg_tendency.jl")
 
 # Constants required before `include("staggered_nonhydrostatic_model.jl")`
 # const FT = ?    # floating-point type
@@ -87,6 +95,39 @@ const ᶠno_flux_row3 = Operators.SetBoundaryOperator(
 
 pressure_ρe(ρe, K, Φ, ρ) = ρ * R_d * ((ρe / ρ - K - Φ) / cv_d + T_tri)
 
+##
+## The horizontal momentum variable
+##
+# `uₕ` under the vector-invariant (CG) form, `ρuₕ` under the flux (DG) one.
+# Reached through these two functions wherever code is shared, so that the
+# choice lives in the space rather than in every call site.
+
+horizontal_momentum(Yc) =
+    horizontal_momentum(Spaces.discretization(axes(Yc)), Yc)
+horizontal_momentum(::Grids.CG, Yc) = Yc.uₕ
+horizontal_momentum(::Grids.DG, Yc) = Yc.ρuₕ
+
+# The velocity itself. Under the flux form this is a derived quantity, written
+# into cache scratch, so the result is valid until the next call.
+horizontal_velocity(Y, p) =
+    horizontal_velocity(Spaces.discretization(axes(Y.c)), Y, p)
+horizontal_velocity(::Grids.CG, Y, p) = Y.c.uₕ
+function horizontal_velocity(::Grids.DG, Y, p)
+    @. p.ᶜuₕ = Y.c.ρuₕ / Y.c.ρ
+    return p.ᶜuₕ
+end
+
+# The Coriolis parameter, from the coordinates on a sphere and from the
+# constant `f` on a plane.
+function coriolis_parameter(ᶜlocal_geometry)
+    ᶜcoord = ᶜlocal_geometry.coordinates
+    if eltype(ᶜcoord) <: Geometry.LatLongZPoint
+        return @. 2 * Ω * sind(ᶜcoord.lat)
+    else
+        return map(_ -> f, ᶜlocal_geometry)
+    end
+end
+
 get_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, dt, upwinding_mode) = merge(
     default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode),
     additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt),
@@ -94,12 +135,8 @@ get_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, dt, upwinding_mode) = merge(
 
 function default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode)
     ᶜcoord = ᶜlocal_geometry.coordinates
-    if eltype(ᶜcoord) <: Geometry.LatLongZPoint
-        ᶜf = @. 2 * Ω * sind(ᶜcoord.lat)
-    else
-        ᶜf = map(_ -> f, ᶜlocal_geometry)
-    end
-    ᶜf = @. CT3(Geometry.WVector(ᶜf))
+    ᶜfscalar = coriolis_parameter(ᶜlocal_geometry)
+    ᶜf = @. CT3(Geometry.WVector(ᶜfscalar))
     ᶠupwind_product, ᶠupwind_product_matrix, ᶠno_flux_row =
         if upwinding_mode == :first_order
             ᶠupwind_product1, ᶠupwind_product1_matrix, ᶠno_flux_row1
@@ -109,6 +146,7 @@ function default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode)
             nothing, nothing, nothing
         end
     return (;
+        dg_cache(ᶜlocal_geometry, ᶠlocal_geometry, ᶜfscalar)...,
         ᶜuvw = similar(ᶜlocal_geometry, C123{FT}),
         ᶜK = similar(ᶜlocal_geometry, FT),
         ᶜΦ = grav .* ᶜcoord.z,
@@ -130,7 +168,7 @@ function default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode)
             f = Spaces.create_dss_buffer(Y.f),
             χ = Spaces.create_dss_buffer(Y.c.ρ), # for hyperdiffusion
             χw = Spaces.create_dss_buffer(Y.f.w.components.data.:1), # for hyperdiffusion
-            χuₕ = Spaces.create_dss_buffer(Y.c.uₕ), # for hyperdiffusion
+            χuₕ = Spaces.create_dss_buffer(horizontal_momentum(Y.c)), # for hyperdiffusion
         ),
     )
 end
@@ -139,7 +177,7 @@ additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = (;)
 
 function implicit_tendency!(Yₜ, Y, p, t)
     ᶜρ = Y.c.ρ
-    ᶜuₕ = Y.c.uₕ
+    ᶜuₕ = horizontal_velocity(Y, p)
     ᶠw = Y.f.w
     (; ᶜK, ᶜΦ, ᶜp, ᶠupwind_product) = p
 
@@ -157,7 +195,8 @@ function implicit_tendency!(Yₜ, Y, p, t)
         ))
     end
 
-    Yₜ.c.uₕ .= (zero(eltype(Yₜ.c.uₕ)),)
+    ᶜmₜ = horizontal_momentum(Yₜ.c)
+    ᶜmₜ .= (zero(eltype(ᶜmₜ)),)
 
     @. Yₜ.f.w = -(ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) + ᶠgradᵥ(ᶜK + ᶜΦ))
 
@@ -177,7 +216,20 @@ function remaining_tendency!(Yₜ, Y, p, t)
     return Yₜ
 end
 
-function default_remaining_tendency!(Yₜ, Y, p, t)
+# The vector-invariant form on a continuous space, the flux form of
+# `dg_tendency.jl` on a discontinuous one.
+default_remaining_tendency!(Yₜ, Y, p, t) = default_remaining_tendency!(
+    Spaces.discretization(axes(Y.c)),
+    Yₜ,
+    Y,
+    p,
+    t,
+)
+
+default_remaining_tendency!(::Grids.DG, Yₜ, Y, p, t) =
+    dg_remaining_tendency!(Yₜ, Y, p, t)
+
+function default_remaining_tendency!(::Grids.CG, Yₜ, Y, p, t)
     ᶜρ = Y.c.ρ
     ᶜuₕ = Y.c.uₕ
     ᶠw = Y.f.w
@@ -228,7 +280,7 @@ additional_tendency!(Yₜ, Y, p, t) = nothing
 function implicit_equation_jacobian!(j, Y, p, δtγ, t)
     (; ∂Yₜ∂Y, ∂R∂Y, flags) = j
     ᶜρ = Y.c.ρ
-    ᶜuₕ = Y.c.uₕ
+    ᶜuₕ = horizontal_velocity(Y, p)
     ᶠw = Y.f.w
     (; ᶜK, ᶜΦ, ᶜp, ∂ᶜK∂ᶠw) = p
     (; ᶠupwind_product, ᶠupwind_product_matrix, ᶠno_flux_row) = p

@@ -37,10 +37,17 @@ Environment variables read by the driver:
 * `OUTPUT_DIR`: where JLD2 output is written.
 * `RESTART_FILE`: a JLD2 file from a previous run to restart from.
 * `FLOAT_TYPE`: `Float32` (default) or `Float64`.
+* `DISCRETIZATION`: `CG` (default) or `DG`, the horizontal Galerkin form.
+  `DG` runs `sphere/baroclinic_wave_rhoe` with the flux-form momentum
+  equation of `examples/hybrid/dg_tendency.jl` and a Rusanov interface flux
+  in place of the DSS, and without hyperdiffusion — over two days rather than
+  ten, for the reason the case file gives. Output goes to a `_dg`-suffixed
+  directory.
 
 Resolution, timestep, and output frequency are set in the case file itself
 (e.g. `sphere/baroclinic_wave_rhoe.jl`); `dt_save_to_disk = FT(0)` disables
-JLD2 output.
+JLD2 output. The baroclinic wave picks its timestep from `DISCRETIZATION`,
+the DG form needing a smaller one for its explicit horizontal terms.
 
 ## Remapping output to a lat/lon grid
 
