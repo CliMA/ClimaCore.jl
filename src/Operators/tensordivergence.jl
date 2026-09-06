@@ -32,8 +32,8 @@ the result rotated back to the local frame (`Geometry.LocalVector`); on a plane
 Like the spectral `Divergence` it is built from, this differentiates along the
 two horizontal directions only, so on an extruded space the vertical flux
 divergence is a separate term. That term drops the same connection terms, so
-form it in the Cartesian frame as well (`Geometry.CartesianTensor`) and apply
-`Geometry.LocalVector` once, to the sum.
+rotate its flux tensor to Cartesian as well before differencing it, as in the
+example below.
 
 The result is a 3D `Geometry.UVWVector`, whose `w` component on the sphere is
 the curvature term — `-|u|²/R` for `u⊗u` under solid-body rotation, the same
@@ -50,7 +50,8 @@ the local orthonormal face normal.
 DSS on a CG space, the numerical flux on a DG one, the same CG↔DG switch as
 [`complete_tendency!`](@ref). On a DG space `faceargs...` are the trailing
 arguments of the completion's `numflux` (the Cartesian tensor is its first face
-argument, and the flux must return a `Cartesian123Vector`); on a CG space they
+argument, and the flux must return the momentum vector it produces from that
+tensor, whose `UVW` components are global Cartesian); on a CG space they
 are unused, as is the completion's DSS buffer — the buffer this needs is one
 for its own `UVWVector` result, which it owns — so a model can pass the
 completion it built for its own tendency.
@@ -58,6 +59,31 @@ completion it built for its own tendency.
 Allocates the result, and the Cartesian-tensor scratch wherever the rotation is
 not the identity; [`cartesian_tensor_divergence!`](@ref) takes both buffers and
 is allocation-free.
+
+# Examples
+
+The whole `∇·T` on an extruded space, the vertical flux divergence carrying the
+same rotation. `ᶜT` is the flux tensor on cell centers and `ᶠT` the same flux
+on faces:
+
+```julia
+geom = Spaces.global_geometry(axes(ᶜT))
+ᶜcoords = Fields.coordinate_field(axes(ᶜT))
+ᶠcoords = Fields.coordinate_field(axes(ᶠT))
+
+ᶜdivₕ = Operators.cartesian_tensor_divergence(ᶜT, completion)
+
+ᶠTc = @. Geometry.CartesianTensor(ᶠT, geom, ᶠcoords)
+ᶜdivᵥ = Operators.DivergenceF2C().(ᶠTc)
+
+ᶜdivT = @. ᶜdivₕ + Geometry.LocalVector(ᶜdivᵥ, geom, ᶜcoords)
+```
+
+Differencing the local-frame `ᶠT` leaves the connection terms of the vertical
+derivative in place, an error that on a topographic sphere runs larger than the
+divergence itself (1.8x its peak at Ne = 4, GLL{4}, 10 levels). The two terms
+are rotated back one at a time here, which agrees with rotating their sum to
+roundoff, the rotation being linear.
 
 ## References
 
@@ -109,12 +135,18 @@ end
 # It is memoized because `local_to_cartesian` costs four `sind`/`cosd` per node
 # and the operator needs it twice per call: a CG call at that resolution takes
 # 8.9 ms with the cache and 17.7 ms without. The nine numbers per node are
-# released by `Utilities.Cache.clean_cache!()`; the grid appears in the key and
-# `clean_cache!(grid)` filters on the cached value, so it leaves them in place.
-# The key omits the global geometry, which holds while `local_to_cartesian`
-# resolves to a single method for spherical geometries; a geometry whose local
-# vertical departs from the radial direction would need its own key.
-_momentum_rotation(space) =
+# released by `Utilities.Cache.clean_cache!()`. `clean_cache!(grid)` does not
+# release them: it filters on the cached value, and the grid appears here in the
+# key, so a sweep over many grids has to call the no-argument form (the same
+# holds for `dg_connectivity` and `_momentum_dss_buffer`). The key omits the
+# global geometry, which holds while `local_to_cartesian` resolves to a single
+# method for spherical geometries; a geometry whose local vertical departs from
+# the radial direction would need its own key.
+#
+# `@inline` so that `horizontal_space` folds into the caller: left as a call it
+# allocates its 16 B wrapper on an extruded space, which the zero-allocation
+# gate in allocs_spectral_ops.jl catches.
+@inline _momentum_rotation(space) =
     _momentum_rotation(Spaces.global_geometry(space), Spaces.horizontal_space(space))
 
 # On a plane the local orthonormal frame is the global Cartesian frame.

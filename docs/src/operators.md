@@ -183,8 +183,8 @@ Cartesian basis to eliminate the connection terms follows [Vinokur1974](@cite).
 Like the spectral `Divergence` it is built from, it differentiates along the
 horizontal directions only, so on an extruded space the vertical flux
 divergence is a separate term. Keep that term in the Cartesian frame too — the
-connection terms it drops are removed by the same rotation — and rotate the sum
-back to the local frame once, with `Geometry.LocalVector`.
+connection terms it drops are removed by the same rotation — and rotate it back
+with `Geometry.LocalVector`. The docstring below works the pair through.
 
 ```@docs
 cartesian_tensor_divergence

@@ -100,8 +100,9 @@ end
     end
     # On an extruded space the rotation comes from the horizontal space, which
     # puts `Spaces.horizontal_space` in the hot path, where it allocates 16 B
-    # unless the caller inlines it. Float64 alone: that inlining does not turn
-    # on precision, and each extruded space costs ~10 s to specialize.
+    # unless `_momentum_rotation` inlines it (it is marked `@inline` for this).
+    # Float64 alone: that inlining does not turn on precision, and each extruded
+    # space costs ~10 s to specialize.
     for discretization in (Spaces.CG(), Spaces.DG())
         space = tensor_div_topography_space(
             Float64;
