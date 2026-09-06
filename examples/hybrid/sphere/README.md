@@ -39,10 +39,16 @@ Environment variables read by the driver:
 * `FLOAT_TYPE`: `Float32` (default) or `Float64`.
 * `DISCRETIZATION`: `CG` (default) or `DG`, the horizontal Galerkin form.
   `DG` runs `sphere/baroclinic_wave_rhoe` with the flux-form momentum
-  equation of `examples/hybrid/dg_tendency.jl` and a Rusanov interface flux
-  in place of the DSS, and without hyperdiffusion — over two days rather than
-  ten, for the reason the case file gives. Output goes to a `_dg`-suffixed
-  directory.
+  equation of `examples/hybrid/dg_tendency.jl` and an interface numerical flux
+  in place of the DSS, and without hyperdiffusion — over a shorter run than
+  the CG one, for the reason the case file gives. Output goes to a
+  `_dg`-suffixed directory.
+* `DG_FLUX`: the DG horizontal assembly — `kg-roe` (default), `kg-rusanov`,
+  `ranocha-roe`, `ranocha-rusanov`, or `rusanov`. The first four are
+  flux-differencing schemes (the Kennedy-Gruber or the entropy-conservative
+  Ranocha two-point volume flux) with a wave-selective Roe or a Rusanov
+  interface flux; `rusanov` is the plain weak-form volume divergence with a
+  Rusanov interface flux. See `examples/hybrid/dg_tendency.jl`.
 
 Resolution, timestep, and output frequency are set in the case file itself
 (e.g. `sphere/baroclinic_wave_rhoe.jl`); `dt_save_to_disk = FT(0)` disables

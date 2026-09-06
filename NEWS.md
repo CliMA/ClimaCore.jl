@@ -4,6 +4,28 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] The 3D sphere baroclinic wave runs on either
+  horizontal discretization from one driver: `DISCRETIZATION=DG` runs
+  `examples/hybrid/driver.jl` on a discontinuous space, where the momentum
+  equation takes the flux form of the new `examples/hybrid/dg_tendency.jl` and
+  the element coupling is an interface numerical flux instead of a DSS. The two
+  forms share the driver, the spaces, the initial condition, the vertical
+  finite differences, the implicit split, the Jacobian and the diagnostics;
+  code common to both reaches the prognostic momentum through
+  `horizontal_momentum` / `horizontal_velocity`, so the choice lives in the
+  space. The CG configuration is unchanged.
+
+  `DG_FLUX` selects the DG horizontal assembly: `kg-roe` (default),
+  `kg-rusanov`, `ranocha-roe` and `ranocha-rusanov` use
+  `Operators.add_flux_differencing_divergence!` with the Kennedy-Gruber or the
+  entropy-conservative Ranocha two-point volume flux and a wave-selective Roe
+  or a Rusanov interface flux, while `rusanov` uses the plain weak-form volume
+  divergence — `Operators.cartesian_tensor_divergence!` for the momentum —
+  with a Rusanov interface flux. All of them carry the momentum in the global
+  Cartesian basis, where the Christoffel terms of a curved space vanish. The
+  fluxes are ported from the `as/ranocha-flux` branch, which developed them
+  against this model.
+
 - ![][badge-✨feature/enhancement] The `CommonGrids` and `CommonSpaces`
   constructors that build a horizontal spectral-element grid
   (`ExtrudedCubedSphereGrid`, `CubedSphereGrid`, `Box3DGrid`, `SliceXZGrid`,

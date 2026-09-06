@@ -7,7 +7,9 @@
 #
 # `DISCRETIZATION=DG` runs the same case on a discontinuous horizontal space,
 # where the momentum equation takes the flux form of `dg_tendency.jl` and the
-# element coupling is a Rusanov interface flux instead of a DSS.
+# element coupling is an interface numerical flux instead of a DSS. `DG_FLUX`
+# selects that assembly; the default pairs the Kennedy-Gruber two-point volume
+# flux with a Roe interface flux.
 using Test
 using Plots
 using ClimaCore.DataLayouts
@@ -33,12 +35,19 @@ z_elem = parse(Int, get(ENV, "Z_ELEM", "10"))
 #
 # The horizon: with hyperdiffusion off (below) nothing damps a grid-scale
 # momentum mode inside an element — the interface flux only damps jumps
-# between elements. One grows at the cubed-sphere panel corners: max|w| runs
-# 0.011 m/s at 12 h, 0.022 at 24 h, 0.048 at 36 h, 0.108 at 48 h, doubling
+# between elements. Under `DG_FLUX=rusanov`, whose weak-form volume term
+# de-aliases nothing, one grows at the cubed-sphere panel corners: max|w| runs
+# 0.011 m/s at 12 h, 0.022 at 24 h, 0.048 at 36 h and 0.108 at 48 h, doubling
 # every ~12 h against the CG run's steady 0.01-0.03, and the run diverges on
-# day 5. Two days is inside that, and long enough for the wave to grow (the
-# check below wants a factor of 4; the DG run reaches 12). Giving DG the full
-# ten days needs a momentum closure on DG spaces — see the comment on
+# day 5. Flux differencing slows that a long way — under the default `kg-roe`
+# the same sequence is 0.008, 0.022, 0.035, 0.090, and by 72 h 0.111 against
+# `rusanov`'s 0.466, peaking over the equator rather than a panel corner —
+# which is the de-aliasing `Operators.SplitDivergence` gives the CG form. It
+# does not remove the mode: `kg-roe` reaches day 9 rather than day 5, but by
+# day 5 max|v| is already 20 m/s against the CG run's 6.5 at day 10. Two days
+# is inside the clean window for either, and long enough for the wave to grow
+# (the check below wants a factor of 4; the DG run reaches 12). The full ten
+# days needs a momentum closure on DG spaces — see the comment on
 # hyperdiffusion below.
 t_end = discretization isa Grids.DG ? FT(60 * 60 * 24 * 2) : FT(60 * 60 * 24 * 10)
 dt = discretization isa Grids.DG ? FT(100) : FT(400)

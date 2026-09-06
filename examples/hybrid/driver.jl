@@ -208,7 +208,8 @@ if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
 end
 
 @info "Running `$test_dir/$test_file_name` test case"
-@info "with a $discretization_name horizontal discretization"
+@info "with a $discretization_name horizontal discretization" *
+      (discretization isa Grids.DG ? ", $dg_flux_name fluxes" : "")
 @info "on a vertical $z_stretch_string grid"
 
 walltime = @elapsed sol = CTS.solve!(integrator)
