@@ -1,7 +1,7 @@
 """
     dss_transform(arg, local_geometry, weight, I)
 
-Transfrom `arg[I]` to a basis for direct stiffness summation (DSS).
+Transform `arg[I]` to a basis for direct stiffness summation (DSS).
 Transformations only apply to vector quantities.
 
   - `local_geometry[I]` is the relevant `LocalGeometry` object. If it is `nothing`, then no transformation is performed

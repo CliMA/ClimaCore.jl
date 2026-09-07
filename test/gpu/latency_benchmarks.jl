@@ -12,7 +12,7 @@ import LazyBroadcast: lazy
 # gate on. Baselines below are the reference values to compare against.
 let # kernel-launch latency, reported not asserted
     # test to catch regressions and improvement to kernel launch time from ClimaCoreCUDAExt
-    # after the inital compilation
+    # after the initial compilation
     ext = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
     @assert !isnothing(ext) # cuda must be loaded to test this extension
     space = ExtrudedCubedSphereSpace(Float32;

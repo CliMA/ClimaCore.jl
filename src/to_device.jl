@@ -12,7 +12,7 @@ import ClimaComms
 Move `x` to the given `device`.
 
 This is particularly useful to move different types of `Space.AbstractSpace`s,
-`Fields.Field`s, and `Fields.FieldVector`s from CPUs to GPUs and viceversa.
+`Fields.Field`s, and `Fields.FieldVector`s from CPUs to GPUs and vice versa.
 
 If the input is already defined on the target device, returns a copy.
 

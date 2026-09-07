@@ -580,7 +580,7 @@ if VERSION < v"1.10"
             return match_list
         end
 
-        # We can't gaurantee that printing for all
+        # We can't guarantee that printing for all
         # field types will succeed, so fallback to
         # printing `Field{...}` if this fails.
         try

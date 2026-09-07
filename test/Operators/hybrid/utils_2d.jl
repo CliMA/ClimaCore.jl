@@ -8,9 +8,9 @@
 
 # 1) horz_div(V_center): project to Contravariant1 + Contravariant2, take spectral derivative
 # 2) horz_div(V_face): project to Contravariant1 + Contravariant2, interpolate to center, take spectral derivative
-#   - will be zero if orthogional geom
+#   - will be zero if orthogonal geom
 # 3) vert_div(V_center): project to Contravariant3, interpolate to face, take FD deriv
-#   - will be zero if orthogional geom
+#   - will be zero if orthogonal geom
 # 4) vert_div(V_face): project to Contravariant3, take FD deriv
 
 using Test

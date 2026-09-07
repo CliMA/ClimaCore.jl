@@ -195,7 +195,7 @@ function roeflux(n, (y⁻, parameters⁻), (y⁺, parameters⁺))
     p⁺ = (λ * ρ⁺)^2 * 0.5
     c⁺ = λ * sqrt(ρ⁺)
 
-    # construct roe averges
+    # construct roe averages
     ρ = sqrt(ρ⁻ * ρ⁺)
     u = roe_average(ρ⁻, ρ⁺, u⁻, u⁺)
     θ = roe_average(ρ⁻, ρ⁺, θ⁻, θ⁺)

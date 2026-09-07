@@ -1,4 +1,4 @@
-# Main implentation based on: https://github.com/CliMA/ClimateMachine.jl/blob/master/src/Common/Spectra/power_spectrum_gcm.jl
+# Main implementation based on: https://github.com/CliMA/ClimateMachine.jl/blob/master/src/Common/Spectra/power_spectrum_gcm.jl
 
 #=
 Cleanup items:
@@ -131,7 +131,6 @@ function compute_legendre!(FT, num_fourier, num_spherical, sinθ, nθ)
     qnm = zeros(FT, num_fourier + 1, num_spherical + 2, nθ)
 
     cosθ = sqrt.(1 .- sinθ .^ 2)
-    ε = zeros(FT, num_fourier + 1, num_spherical + 2)
 
     qnm[1, 1, :] .= 1 # P_{0,0}
     for m in 1:num_fourier
@@ -171,7 +170,7 @@ Compute sin(latitude) and the weight factors for Gaussian integration.
 # Details (following notation from Ehrendorfer, 2011):
 
     Pn(x) is an odd function
-    solve half of the n roots and weightes of Pn(x) # n = 2n_half
+    solve half of the n roots and weights of Pn(x) # n = 2n_half
     P_{-1}(x) = 0
     P_0(x) = 1
     P_1(x) = x
@@ -320,7 +319,7 @@ end
 For a variable `var_grid` on a (lon,lat,z) grid, given an array of
 `weight`s, compute the zonal (1D) power spectrum using a Fourier
 transform at each Gaussian latitude. The input field must be first
-intepolated to a Gaussian grid.
+interpolated to a Gaussian grid.
 
 # Arguments
 

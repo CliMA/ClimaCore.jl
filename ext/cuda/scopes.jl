@@ -1,4 +1,4 @@
-import UnrolledUtilities: unrolled_map, unrolled_all, unrolled_allequal, unrolled_flatmap
+import UnrolledUtilities: unrolled_map, unrolled_all
 import LLVM # Used by shmem_pointer to emit a shared-memory global.
 import CUDA
 

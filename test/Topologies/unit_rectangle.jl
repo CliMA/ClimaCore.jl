@@ -59,7 +59,7 @@ end
         @test_throws AssertionError Topologies.opposing_face(topology, 1, 0)
     end
 
-    @testset "1×1 element quad mesh with all periodic boundries" begin
+    @testset "1×1 element quad mesh with all periodic boundaries" begin
         topology = rectangular_grid(1, 1, true, true)
 
         @test Topologies.opposing_face(topology, 1, 1) == (1, 3, true)
@@ -128,7 +128,7 @@ end
 
 @testset "simple rectangular mesh interior faces iterator" begin
 
-    @testset "1×1 element quad mesh with all periodic boundries" begin
+    @testset "1×1 element quad mesh with all periodic boundaries" begin
         topology = rectangular_grid(1, 1, true, true)
         @test length(Topologies.interior_faces(topology)) == 2
         faces = collect(Topologies.interior_faces(topology))
@@ -170,8 +170,8 @@ end
     end
 end
 
-@testset "simple rectangular mesh boundry faces iterator" begin
-    @testset "1×1 element quad mesh with all periodic boundries" begin
+@testset "simple rectangular mesh boundary faces iterator" begin
+    @testset "1×1 element quad mesh with all periodic boundaries" begin
         topology = rectangular_grid(1, 1, true, true)
         @test isempty(Topologies.boundary_tags(topology))
     end
@@ -220,7 +220,7 @@ end
 
 @testset "simple rectangular mesh vertex iterator" begin
 
-    @testset "1×1 element quad mesh with all periodic boundries" begin
+    @testset "1×1 element quad mesh with all periodic boundaries" begin
         topology = rectangular_grid(1, 1, true, true)
         # This has 1 global vertex
         @test length(Topologies.local_vertices(topology)) == 1
@@ -277,7 +277,7 @@ end
 @testset "simple rectangular mesh coordinates" begin
 
 
-    @testset "1×1 element quad mesh with all periodic boundries" begin
+    @testset "1×1 element quad mesh with all periodic boundaries" begin
         topology = rectangular_grid(1, 1, true, true)
         c1, c2, c3, c4 = Topologies.vertex_coordinates(topology, 1)
         @test c1 == Geometry.XYPoint(0.0, 0.0)
@@ -286,7 +286,7 @@ end
         @test c4 == Geometry.XYPoint(0.0, 1.0)
     end
 
-    @testset "1×1 element quad mesh with non-periodic boundries" begin
+    @testset "1×1 element quad mesh with non-periodic boundaries" begin
         topology =
             rectangular_grid(1, 1, false, false; x1min = -1.0, x2min = -1.0)
         c1, c2, c3, c4 = Topologies.vertex_coordinates(topology, 1)

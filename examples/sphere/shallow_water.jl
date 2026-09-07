@@ -250,7 +250,7 @@ RossbyHaurwitzTest(α::FT) where {FT} =
 
 A fifth one, called "barotropic_instability", reproduces the test case in
 Galewsky et al, "An initial-value problem for testing numerical models of
-the global shallow-water equations", 2004 (also in Sec. 7.6 of Ullirch et al,
+the global shallow-water equations", 2004 (also in Sec. 7.6 of Ullrich et al,
 "High-order ﬁnite-volume methods for the shallow-water equations on
 the sphere", 2010). This test case consists of a zonal jet with compact
 support at a latitude of 45°. A small height disturbance is then added,

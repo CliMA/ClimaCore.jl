@@ -215,7 +215,7 @@ local_geometry_type(
     )
 
 Construct a `SpectralElementGrid2D` instance given a `topology` and `quadrature`. The
-flag `enable_bubble` enables the `bubble correction` for more accurate element areas.
+flag `enable_bubble` enables the "bubble correction" for more accurate element areas.
 The flag `autodiff_metric` enables the use of automatic differentiation instead of the
 SEM for computing metric terms.
 
@@ -235,10 +235,10 @@ SEM for computing metric terms.
     weights are computed. `InputOutput` serializes the discretization; grids in
     files written before it existed read back as continuous.
 
-The idea behind the so-called `bubble_correction` is that the numerical area
+The idea behind the so-called "bubble correction" is that the numerical area
 of the domain (e.g., the sphere) is given by the sum of nodal integration weights
 times their corresponding Jacobians. However, this discrete sum is not exactly
-equal to the exact geometric area  (4pi*radius^2 for the sphere). To make these equal,
+equal to the exact geometric area (4pi*radius^2 for the sphere). To make these equal,
 the "epsilon bubble" approach modifies the inner weights in each element so that
 geometric and numerical areas of each element match.
 

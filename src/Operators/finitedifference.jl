@@ -1376,7 +1376,7 @@ function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::MonotoneLocalExtre
     min𝜙 = min(a⁻, a⁰, a⁺)
     max𝜙 = max(a⁻, a⁰, a⁺)
     𝛼 = min(abs(Δ𝜙_avg), 2 * (a⁰ - min𝜙), 2 * (max𝜙 - a⁰))
-    Δ𝛼 = sign(Δ𝜙_avg) * 𝛼 * (1 - sign(v) * v * dt)
+    return sign(Δ𝜙_avg) * 𝛼 * (1 - sign(v) * v * dt)
 end
 
 function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::MonotoneHarmonic)
@@ -1616,7 +1616,7 @@ end
 """
     AbstractTVDSlopeLimiter
 
-An asbtract TVD-slope limiter type. Use `subtypes(AbstractTVDSlopeLimiter)`
+An abstract TVD-slope limiter type. Use `subtypes(AbstractTVDSlopeLimiter)`
 to see the supported subtypes. See
 
 `TVDLimitedFluxC2F` for the general formulation.
@@ -1700,23 +1700,25 @@ ed.) is the antidiffusive flux given by
 order (monotone) fluxes respectively. The effect of the TVD limiters is then to
 adjust the flux
 
-```F_{j+1/2} = F^{l}_{j+1/2} + C_{j+1/2}(F^{h}_{j+1/2} - F^{l}_{j+1/2}) where
-C_{j+1/2} is the multiplicative limiter which is a function of ```
+```math
+F_{j+1/2} = F^{l}_{j+1/2} + C_{j+1/2}(F^{h}_{j+1/2} - F^{l}_{j+1/2})
+```
 
-the ratio of the slope of the solution across a cell interface.
+where ``C_{j+1/2}`` is the multiplicative limiter, a function of the ratio of the
+slope of the solution across a cell interface.
 
- - `C=1` recovers the high order flux.
- - `C=0` recovers the low order flux.
+  - `C=1` recovers the high order flux.
+  - `C=0` recovers the low order flux.
 
 Supported limiter types are
 
-- RZeroLimiter (returns low order flux)
-- RHalfLimiter (flux multiplier == 1/2)
-- RMaxLimiter (returns high order flux)
-- MinModLimiter
-- KorenLimiter
-- SuperbeeLimiter
-- MonotonizedCentralLimiter
+  - RZeroLimiter (returns low order flux)
+  - RHalfLimiter (flux multiplier == 1/2)
+  - RMaxLimiter (returns high order flux)
+  - MinModLimiter
+  - KorenLimiter
+  - SuperbeeLimiter
+  - MonotonizedCentralLimiter
 
 The face-valued velocity `𝓊` is only used to determine the upwind direction,
 and must be supplied as contravariant data: either a `Contravariant3Vector`
@@ -1730,7 +1732,6 @@ interior stencil, padding ghost points with the [`Extrapolate`](@ref)
 added to `bcs` by default when
 no boundary conditions are given). No value is imposed at the faces nearest
 each boundary: the limited flux there is whatever the padded stencil gives.
-```
 """
 struct TVDLimitedFluxC2F{BCS, M} <: AdvectionOperator
     bcs::BCS
@@ -2752,7 +2753,7 @@ left_idx(space) + boundary_width(op, bc)
 ```
 
 but can be overwritten for specific stencil types (e.g. if the stencil is
-assymetric).
+asymmetric).
 """
 @inline function left_interior_idx(
     space::AbstractSpace,
@@ -2774,7 +2775,7 @@ right_idx(space) - boundary_width(op, bc)
 ```
 
 but can be overwritten for specific stencil types (e.g. if the stencil is
-assymetric).
+asymmetric).
 """
 @inline function right_interior_idx(
     space::AbstractSpace,
@@ -3018,7 +3019,7 @@ Base.@propagate_inbounds function getidx(
     return @inbounds field_data[v, i, j, h]
 end
 
-# unwap boxed scalars
+# unwrap boxed scalars
 @inline getidx(parent_space, scalar::Tuple{T}, idx, hidx) where {T} = scalar[1]
 @inline getidx(parent_space, scalar::Ref, idx, hidx) = scalar[]
 @inline getidx(parent_space, field::Fields.PointField, idx, hidx) = field[]

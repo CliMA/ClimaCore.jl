@@ -207,7 +207,7 @@ _check_mismatched_spaces(::T, ::T) where {T <: AbstractSpace} = nothing
 _check_mismatched_spaces(space1, space2) =
     error("FusedMultiBroadcast spaces are not the same.")
 
-error_mismatched_spaces() = error("Broacasted spaces are not the same.")
+error_mismatched_spaces() = error("Broadcasted spaces are not the same.")
 
 @inline function Base.Broadcast.broadcast_shape(
     space1::AbstractSpace,

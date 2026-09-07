@@ -110,7 +110,7 @@ expression returns). Sometimes, when debugging, it is convenient to disable this
 check.
 
 The most common case for this is to allow combining spaces that were
-`deepcopied`, given that the consistency check in performed by comparing the
+`deepcopied`, given that the consistency check is performed by comparing the
 pointer of the spaces, not their contents. In other words, allowing for
 mismatched spaces allows one to work with spaces that are identical, but not the
 same.
@@ -151,12 +151,8 @@ julia> one = ones(space);
 julia> other_one = ones(other_space);
 
 julia> one .+ other_one
-ERROR: Broacasted spaces are not the same.
-Stacktrace:
- [1] error(s::String)
-   @ Base ./error.jl:35
- [2] error_mismatched_spaces(space1::Type, space2::Type)
-   @ ClimaCore.Fields ~/repos/ClimaCore.jl/src/Fields/broadcast.jl:227
+ERROR: Broadcasted spaces are not the same.
+[...]
 
 # Turning `allow_mismatched_spaces_unsafe` on
 

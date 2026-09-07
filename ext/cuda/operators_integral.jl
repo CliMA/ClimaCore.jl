@@ -1,13 +1,11 @@
 import ClimaCore: DataLayouts, Spaces, Fields, level, column
 import ClimaCore.Operators:
-    left_idx,
     strip_space,
     column_reduce_device!,
     single_column_reduce!,
     column_accumulate_device!,
     single_column_accumulate!
 import ClimaComms
-using CUDA: @cuda
 
 # The output of `column_reduce!` on a `FiniteDifferenceSpace` is a 0-dimensional
 # `DataF`, so use `size(data, d)` (which is 1 for `d > ndims(data)`) instead of

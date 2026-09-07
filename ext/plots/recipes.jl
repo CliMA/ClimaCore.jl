@@ -78,7 +78,7 @@ RecipesBase.@recipe function f(space::Spaces.ExtrudedFiniteDifferenceSpace)
     data = Fields.field_values(coord_field)
     Nv, Ni, Nj, Nh = size(data)
 
-    #TODO: assumes VIFH layout
+    # only layouts with a singleton J axis (1D horizontal spaces) are supported
     @assert Nj == 1 "plotting only defined for 1D extruded fields"
 
     hspace = Spaces.horizontal_space(space)
@@ -141,20 +141,12 @@ RecipesBase.@recipe function f(
 
     # compute the interpolated data to plot
     space = axes(field)
-    topology = Spaces.topology(space)
-    mesh = topology.mesh
 
     Nu = interpolate
     coord_field = Fields.coordinate_field(space)
 
     M_coords = Operators.matrix_interpolate(coord_field, Nu)
     M = Operators.matrix_interpolate(field, Nu)
-
-    domain = Meshes.domain(mesh)
-    x1min = Geometry.component(domain.interval1.coord_min, 1)
-    x2min = Geometry.component(domain.interval2.coord_min, 1)
-    x1max = Geometry.component(domain.interval1.coord_max, 1)
-    x2max = Geometry.component(domain.interval2.coord_max, 1)
 
     # our interpolated field is transposed
     x1coord = [Geometry.component(pt, 1) for pt in M_coords[:, 1]]
@@ -278,7 +270,7 @@ function _slice_along(field, coord)
         error("$coord is outside of the field axis domain: $domain")
     end
 
-    # get the elment offset given the axis slice
+    # get the element offset given the axis slice
     slice_h = ClimaCore.Meshes.containing_element(hmesh_slice, coord)
     hidx = axis == 1 ? linear_idx[slice_h, 1] : linear_idx[1, slice_h]
 
@@ -379,7 +371,7 @@ RecipesBase.@recipe function f(
     (hcoord, vcoord, data)
 end
 
-function _unfolded_pannel_matrix(field, interpolate)
+function _unfolded_panel_matrix(field, interpolate)
     space = axes(field)
     FT = Spaces.undertype(space)
     topology = Spaces.topology(space)
@@ -393,14 +385,14 @@ function _unfolded_pannel_matrix(field, interpolate)
 
     dof = interpolate
 
-    pannel_range(i) =
+    panel_range(i) =
         ((panel_size * dof) * (i - 1) + 1):((panel_size * dof) * i)
 
-    # construct a matrix to fill in the rotated / flipped pannel data
+    # construct a matrix to fill in the rotated / flipped panel data
     unfolded_panels =
         fill(NaN, ((panel_size * dof) * 3, (panel_size * dof) * 4))
 
-    # temporary pannels as we have to rotate / flip some and not all operators are in place
+    # temporary panels as we have to rotate / flip some and not all operators are in place
     # TODO: inefficient memory wise, but good enough for now
     panels = [fill(NaN, (panel_size * dof, panel_size * dof)) for _ in 1:6]
 
@@ -435,7 +427,7 @@ function _unfolded_pannel_matrix(field, interpolate)
     panel_locations =
         [(4, 2, 0), (1, 2, 0), (3, 3, 2), (2, 2, 1), (3, 2, 1), (3, 1, 1)]
     for (i, (px, py, rot)) in enumerate(panel_locations)
-        unfolded_panels[pannel_range(py), pannel_range(px)] .= if rot == 0
+        unfolded_panels[panel_range(py), panel_range(px)] .= if rot == 0
             panels[i]
         elseif rot == 1
             reverse(transpose(panels[i]), dims = 1)
@@ -446,15 +438,15 @@ function _unfolded_pannel_matrix(field, interpolate)
         end
     end
     #=
-    unfolded_panels[pannel_range(1), pannel_range(2)] =
+    unfolded_panels[panel_range(1), panel_range(2)] =
         reverse(panels[5], dims = 1)
-    unfolded_panels[pannel_range(2), pannel_range(1)] =
+    unfolded_panels[panel_range(2), panel_range(1)] =
         reverse(panels[4], dims = 2)
-    unfolded_panels[pannel_range(2), pannel_range(2)] = transpose(panels[1])
-    unfolded_panels[pannel_range(2), pannel_range(3)] = transpose(panels[2])
-    unfolded_panels[pannel_range(2), pannel_range(4)] =
+    unfolded_panels[panel_range(2), panel_range(2)] = transpose(panels[1])
+    unfolded_panels[panel_range(2), panel_range(3)] = transpose(panels[2])
+    unfolded_panels[panel_range(2), panel_range(4)] =
         reverse(panels[6], dims = 2)
-    unfolded_panels[pannel_range(3), pannel_range(2)] =
+    unfolded_panels[panel_range(3), panel_range(2)] =
         reverse(panels[3], dims = 2)
     =#
     return unfolded_panels
@@ -466,7 +458,7 @@ RecipesBase.@recipe function f(
 )
     @assert interpolate ≥ 1 "number of element quadrature points for uniform interpolation must be ≥ 1"
 
-    unfolded_panels = _unfolded_pannel_matrix(field, interpolate)
+    unfolded_panels = _unfolded_panel_matrix(field, interpolate)
 
     # construct the title for info about the field space
     space = axes(field)
@@ -501,7 +493,7 @@ RecipesBase.@recipe function f(
         end
     end
     level_field = Fields.level(field, level)
-    unfolded_panels = _unfolded_pannel_matrix(level_field, hinterpolate)
+    unfolded_panels = _unfolded_panel_matrix(level_field, hinterpolate)
 
     # construct the title for info about the field space
     nlevel = Spaces.nlevels(space)

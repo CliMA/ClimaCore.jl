@@ -1,5 +1,5 @@
 """
-    TransSphericalToGrid!(mesh, snm, FT)
+    trans_spherical_to_grid!(mesh, snm, FT)
 
 Transforms a variable expressed in spherical harmonics (var_spherical[num_fourier+1, num_spherical+1]) onto a Gaussian grid (pfield[nλ, nθ])
 
@@ -12,7 +12,7 @@ Transforms a variable expressed in spherical harmonics (var_spherical[num_fourie
     = ∑_{m= 0}^{N} ∑_{n=m}^{N} F_{m,n} P_{m,n} e^{imλ} + ∑_{m= 1}^{N} ∑_{n=m}^{N} F_{-m,n} P_{-m,n} e^{-imλ}
 
     Here η = sinθ, N = num_fourier, and denote
-    ! extra coeffients in snm n > N are not used.
+    ! extra coefficients in snm n > N are not used.
 
     ∑_{n=m}^{N} F_{m,n} P_{m,n}     = g_{m}(η) m = 1, ... N
     ∑_{n=m}^{N} F_{m,n} P_{m,n}/2.0 = g_{m}(η) m = 0
@@ -25,7 +25,7 @@ Transforms a variable expressed in spherical harmonics (var_spherical[num_fourie
     snm = F_{m,n}         # Complex{Float64} [num_fourier+1, num_spherical+1]
     qnm = P_{m,n,η}         # Float64[num_fourier+1, num_spherical+1, nθ]
     fourier_g = g_{m, η} # Complex{Float64} nλ×nθ with padded 0s fourier_g[num_fourier+2, :] == 0.0
-    pfiled = F(λ, η)      # Float64[nλ, nθ]
+    pfield = F(λ, η)      # Float64[nλ, nθ]
 
     ! use all spherical harmonic modes
 

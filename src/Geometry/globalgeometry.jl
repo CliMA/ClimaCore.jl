@@ -41,7 +41,7 @@ Specifies that the local coordinates are specified in reference to a sphere of
 radius `radius`. The `x1` axis is aligned with the zero longitude line.
 
 The local vector basis has `u` in the zonal direction (with east being
-positive), `v` in the meridonal (north positive), and `w` in the radial
+positive), `v` in the meridional (north positive), and `w` in the radial
 direction (outward positive). For a point located at the pole, we take the limit
 along the zero longitude line:
 
@@ -92,7 +92,7 @@ end
 function LatLongPoint(pt::Cartesian123Point, ::AbstractSphericalGlobalGeometry)
     ϕ = atand(pt.x3, hypot(pt.x2, pt.x1))
     # IEEE754 spec states that atand(±0.0, −0.0) == ±180, however to make the UV
-    # orienation consistent, we define the longitude to be zero at the poles
+    # orientation consistent, we define the longitude to be zero at the poles
     if abs(ϕ) == 90
         λ = zero(ϕ)
     else

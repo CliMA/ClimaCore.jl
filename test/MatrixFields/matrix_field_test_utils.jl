@@ -235,7 +235,6 @@ function dycore_prognostic_EDMF_FieldMatrix(
         center_space, face_space = test_spaces(FT)
     end
     surface_space = Spaces.level(face_space, half)
-    surface_space = Spaces.level(face_space, half)
     sfc_vec = random_field(FT, surface_space)
     ᶜvec = random_field(FT, center_space)
     ᶠvec = random_field(FT, face_space)
@@ -341,7 +340,6 @@ function scaling_only_dycore_prognostic_EDMF_FieldMatrix(
     if isnothing(center_space) || isnothing(face_space)
         center_space, face_space = test_spaces(FT)
     end
-    surface_space = Spaces.level(face_space, half)
     surface_space = Spaces.level(face_space, half)
     sfc_vec = random_field(FT, surface_space)
     ᶜvec = random_field(FT, center_space)

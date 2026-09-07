@@ -354,7 +354,7 @@ what method can index a ClimaCore `Field` of `S` with `name_pair`.
 The third return value is one of the following:
 
   - `Val(:view)`: indexing with a view is possible
-  - `Val(:view_of_blocks)`: indexing with a view of non-unfiform stride length is possible.\
+  - `Val(:view_of_blocks)`: indexing with a view of non-uniform stride length is possible.\
     This is not implemented, and currently treated the same as `Val(:broadcasted_fallback)`
   - `Val(:broadcasted_fallback)`: indexing with a view is not possible
   - `Val(:broadcasted_zero)`: indexing with a view is not possible, and the `name_pair` indexes
@@ -366,7 +366,7 @@ the tensor, an offset of `-1` is returned . In other words, the name pair cannot
 If neither element of `name_pair` is `@name()`, the first name in the pair is indexed with
 first, and then the second name is used to index the result of the first.
 
-This is an internal funtion designed to be used with `get_internal_entry(::ColumnwiseBandMatrixField)`
+This is an internal function designed to be used with `get_internal_entry(::ColumnwiseBandMatrixField)`
 """
 function field_offset_and_type(
     name_pair::FieldNamePair,

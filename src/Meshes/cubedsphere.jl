@@ -35,7 +35,7 @@ cubed-sphere mesh has 6 panels, laid out as follows:
 ```
 
 This is the same panel ordering used by the S2 Geometry library (though we use 1-based
-instead of 0-based numering).
+instead of 0-based numbering).
 
 Elements are indexed by a `CartesianIndex{3}` object, where the components are:
 
@@ -177,7 +177,7 @@ function to_panel(panel::Integer, coord::Geometry.Cartesian123Point)
 end
 
 """
-    panel = cubedspherepanel(coord::Geometry.Cartesian123Point)
+    panel = containing_panel(coord::Geometry.Cartesian123Point)
 
 Given a point `coord`, return its panel number (an integer between 1 and 6).
 """

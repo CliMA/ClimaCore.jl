@@ -3,7 +3,7 @@
 
 A 1D mesh on an `IntervalDomain`.
 
-# Constuctors
+# Constructors
 
     IntervalMesh(domain::IntervalDomain, faces::AbstractVector)
 
@@ -188,7 +188,7 @@ end
 Apply exponential stretching to the domain when constructing elements. `H` is
 the scale height (a typical atmospheric scale height `H ≈ 7.5`km).
 
-For an interval ``[z_0,z_1]``, this makes the elements uniformally spaced in
+For an interval ``[z_0,z_1]``, this makes the elements uniformly spaced in
 ``\\zeta``, where
 
 ```math
@@ -390,7 +390,7 @@ configuration, it is the grid spacing at the bottom of the
 vertical column domain (m). On the other hand, for typical land configurations,
 it is the grid spacing at the top of the vertical column domain.
 
-For an interval ``[z_0,z_1]``, this makes the elements uniformally spaced in
+For an interval ``[z_0,z_1]``, this makes the elements uniformly spaced in
 ``\\zeta``, where
 
 ```math

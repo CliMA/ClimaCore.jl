@@ -300,8 +300,8 @@ function benchmark_operators_column(bm; z_elems, helem, Nq, compile::Bool = fals
     ffield = fill(field_vars(FT), fspace)
     benchmark_operators_base(bm, trials, t_min, cfield, ffield, "column"; compile)
 
-    # Tests are removed since they're flakey. And maintaining
-    # them before they're converged is a bit of work..
+    # Results are reported without assertions because the measurements are not yet
+    # stable enough for maintainable baselines.
     tabulate_benchmark(bm)
     return (; bm, trials, t_min)
 end
@@ -319,7 +319,7 @@ function benchmark_operators_sphere(bm; z_elems, helem, Nq, compile::Bool = fals
     ffield = fill(field_vars(FT), fspace)
     benchmark_operators_base(bm, trials, t_min, cfield, ffield, "sphere"; compile)
 
-    # Tests are removed since they're flakey. And maintaining
+    # Tests are removed since they're flaky. And maintaining
     # them before they're converged is a bit of work..
     tabulate_benchmark(bm)
     return (; trials, t_min)

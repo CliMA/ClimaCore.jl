@@ -37,7 +37,7 @@ Remove `object` from the cache of created objects.
 
 In most cases, this function should not need to be called, unless you are
 constructing many grid objects, for example when doing a sweep over grid
-paramaters.
+parameters.
 """
 function clean_cache!(object)
     filter!(OBJECT_CACHE) do (cache_key, cache_obj)
@@ -53,7 +53,7 @@ Remove all objects from the cache of created objects.
 
 In most cases, this function should not need to be called, unless you are
 constructing many grid objects, for example when doing a sweep over grid
-paramaters.
+parameters.
 """
 function clean_cache!()
     empty!(OBJECT_CACHE)

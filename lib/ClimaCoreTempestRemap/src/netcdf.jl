@@ -3,21 +3,25 @@ import ClimaCore: slab, column
 
 
 """
-    def_time_coord(nc::NCDataset, length=Inf, eltype=Float64;
-        units = "seconds since 2020-01-01 00:00:00"
-        kwargs...
+    def_time_coord(nc::NCDataset, length = Inf, eltype = Float64;
+        standard_name = "time",
+        long_name = "time",
+        axis = "T",
+        kwargs...,
     )
 
-Deine a time coordinate (dimension + variable) `"time"` in the NetCDF dataset
+Define a time coordinate (dimension + variable) `"time"` in the NetCDF dataset
 `nc`. By default its length is set to be unlimited. The variable corresponding
 to the coordinate is returned.
 
-Additional attributes can be added as keyword arguments.
+Any further keyword arguments are written as attributes of the variable. Note
+that no `units` attribute is written unless one is given, and CF-conforming
+readers need it to interpret the values.
 
 # Example
 
 ```julia
-timevar = add_time_coord!(nc; units = "seconds since 2020-01-01 00:00:00")
+timevar = def_time_coord(nc; units = "seconds since 2020-01-01 00:00:00")
 timevar[:] = collect(0.0:0.5:60)
 ```
 """

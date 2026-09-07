@@ -18,7 +18,6 @@ Kernel design:
 =#
 
 import ClimaCore: Operators, Topologies, Quadratures, Grids, DataLayouts
-import ClimaCore.Operators: DGConnectivity
 import UnrolledUtilities: unrolled_map
 
 # Block size of the face flux, pack, and gather kernels. They are small,
@@ -199,7 +198,6 @@ function _dg_face_apply!(ghost_exchange, fn::F, dydt, args, mode::Val) where {F}
     args_data =
         unrolled_map(a -> a isa Fields.Field ? Fields.field_values(a) : a, args)
     T = eltype(dydt_data)
-    DA = ClimaComms.array_type(topology)
 
     ghost = Operators._dg_shared_or_start(
         ClimaComms.device(space),

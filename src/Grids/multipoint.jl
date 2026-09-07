@@ -88,9 +88,9 @@ function _MultiPointGrid(
     # Nv = Ni = Nj = 1 (one node per "column element"), Nh = N
     local_geometry = DataLayouts.VIJFH{LG, 1, 1, 1, nothing}(Array{FT}, N)
 
-    ∂x∂ξ_axes = (
-        Geometry.LocalAxis{AIdx}(),
-        Geometry.CovariantAxis{AIdx}(),
+    ∂x∂ξ_bases = (
+        Geometry.Components{Geometry.Orthonormal, AIdx}(),
+        Geometry.Components{Geometry.Covariant, AIdx}(),
     )
     deg2rad = FT(π) / 180
 
@@ -110,7 +110,7 @@ function _MultiPointGrid(
             pt,
             J,
             J,   # WJ — unit quadrature weight × J
-            Geometry.Tensor(∂x∂ξ_mat, ∂x∂ξ_axes),
+            Geometry.Tensor(∂x∂ξ_mat, ∂x∂ξ_bases),
         )
     end
 

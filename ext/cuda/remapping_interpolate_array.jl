@@ -2,7 +2,6 @@ import ClimaCore.Remapping: interpolate_slab!
 import ClimaCore: Topologies, Spaces, Fields, Operators, Quadratures
 import ClimaComms
 import CUDA
-using CUDA: @cuda
 
 function _configure_threadblock(max_threads, nitems)
     nthreads = min(max_threads, nitems)

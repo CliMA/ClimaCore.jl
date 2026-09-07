@@ -248,13 +248,13 @@ discrete_hydrostatic_balance!(ρ, p, z_top / n_vert, grav)
 # i.e., keep ρT unchanged before vs after the correction on ρ
 ρe = @. ρe + (ρ - ρ_ana) * Φ(zc_vec) - (ρ - ρ_ana) * cv_d * T_tri
 
-# Note: In princile, ρe = @. cv_d * p /R_d - ρ * cv_d * T_tri + ρ * Φ(zc_vec) should work,
+# Note: In principle, ρe = @. cv_d * p /R_d - ρ * cv_d * T_tri + ρ * Φ(zc_vec) should work,
 #       however, it is not as accurate as the above correction
 
 # set up initial condition: not discretely balanced; only create a Field as a
 # place holder
 Yc = map(coord -> init_sbr_thermo(coord.z), c_coords)
-# put the dicretely balanced ρ and ρe into Yc
+# put the discretely balanced ρ and ρe into Yc
 parent(Yc.ρ) .= ρ  # Yc.ρ is a VIJFH layout
 parent(Yc.ρe) .= ρe
 
