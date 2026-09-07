@@ -449,7 +449,7 @@ end
             dss_buffer123 = Spaces.create_dss_buffer(y123)
             dss_buffer123_cpu = Spaces.create_dss_buffer(y123_cpu)
 
-            # Ensure physical velocity is continous across SE boundary for initial state
+            # Ensure physical velocity is continuous across SE boundary for initial state
             Spaces.weighted_dss!(y123 => dss_buffer123)
             Spaces.weighted_dss!(y123_cpu => dss_buffer123_cpu)
 
@@ -471,7 +471,7 @@ end
             dss_buffer123 = Spaces.create_dss_buffer(y123)
             dss_buffer123_cpu = Spaces.create_dss_buffer(y123_cpu)
 
-            # Ensure physical velocity is continous across SE boundary for initial state
+            # Ensure physical velocity is continuous across SE boundary for initial state
             Spaces.weighted_dss!(y123 => dss_buffer123)
             Spaces.weighted_dss!(y123_cpu => dss_buffer123_cpu)
 

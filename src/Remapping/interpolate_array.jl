@@ -123,15 +123,17 @@ function vertical_indices_ref_coordinate(
 end
 
 """
-    interpolate_slab_level(
-                           field::Fields.Field,
-                           h::Integer,
-                           Is::Tuple,
-                           zpts;
-                           fill_value = eltype(field)(NaN)
-                           )
+    interpolate_slab_level!(
+        output_array,
+        field::Fields.Field,
+        h::Integer,
+        Is::Tuple,
+        vertical_indices_ref_coordinates,
+    )
 
-Vertically interpolate the given `field` on `zpts`.
+Vertically interpolate the given `field` into `output_array`, at the vertical
+indices and reference coordinates in `vertical_indices_ref_coordinates` (as
+returned by `vertical_indices_ref_coordinate`).
 
 `interpolate_slab_level!` interpolates several values at a fixed horizontal coordinate.
 
@@ -141,8 +143,6 @@ For centered-valued fields, if `zcoord` is in the top (bottom) half of a top (bo
 element in a column, no interpolation is performed and the value at the cell center is
 returned. Effectively, this means that the interpolation is first-order accurate across the
 column, but zeroth-order accurate close to the boundaries.
-
-Return `fill_value` when the vertical coordinate is negative.
 """
 function interpolate_slab_level!(
     output_array,

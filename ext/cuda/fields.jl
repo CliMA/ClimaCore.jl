@@ -1,7 +1,6 @@
 import ClimaComms
-using CUDA: @cuda
 import ClimaCore: Spaces, Fields
-import ClimaCore.Fields: Field, FieldStyle
+import ClimaCore.Fields: Field
 import ClimaCore.Fields: AbstractFieldStyle, bycolumn
 import ClimaCore.Spaces: AbstractSpace, cuda_synchronize
 

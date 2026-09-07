@@ -15,7 +15,7 @@ using StaticArrays, IntervalSets, LinearAlgebra
 
 include("sphere_sphericalharmonics.jl")
 
-# Diffusion on vector: input covariant vecotor
+# Diffusion on vector: input covariant vector
 function ∇²(u)
     scurl = Operators.Curl()
     sdiv = Operators.Divergence()

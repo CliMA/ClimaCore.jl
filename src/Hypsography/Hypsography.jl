@@ -263,7 +263,7 @@ function _ExtrudedFiniteDifferenceGrid(
 end
 
 """
-    diffuse_surface_elevation!(f::Field; κ::T, iter::Int, dt::T)
+    diffuse_surface_elevation!(f::Field; κ::T, maxiter::Int, dt::T)
 
 Option for 2nd order diffusive smoothing of generated terrain.
 Mutate (smooth) a given elevation profile `f` before assigning the surface
@@ -273,7 +273,7 @@ profiles for each new iteration. Steps to generate smoothed terrain (
 represented as a ClimaCore Field) are as follows:
 
   - Compute discrete elevation profile f
-  - Compute diffuse_surface_elevation!(f, κ, iter). f is mutated.
+  - Compute `diffuse_surface_elevation!(f; κ, maxiter)`. `f` is mutated.
   - Define `Hypsography.LinearAdaption(f)`
   - Define `ExtrudedFiniteDifferenceSpace` with new surface elevation.
     Default diffusion parameters are appropriate for spherical arrangements.

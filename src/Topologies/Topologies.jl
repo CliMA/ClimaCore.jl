@@ -13,9 +13,9 @@ import ..slab, ..column, ..level
 import ..DeviceSideDevice, ..DeviceSideContext
 
 """
-AbstractTopology
+    AbstractTopology
 
-Subtypes of `AbstractHorizontalTopology` define connectiveness of a
+Subtypes of `AbstractTopology` define the connectivity of a
 mesh in the horizontal domain.
 
 # Interfaces

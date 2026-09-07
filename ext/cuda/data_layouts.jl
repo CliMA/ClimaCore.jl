@@ -199,7 +199,7 @@ compact_device_view(array, data) = array
     restricted =
         filter(d -> indices[d] isa UnitRange, ntuple(identity, Val(N)))
     dynamic = filter(d -> iszero(extents[d]), restricted)
-    array = CompactDeviceView{
+    compact = CompactDeviceView{
         eltype(array),
         N,
         extents,
@@ -214,9 +214,9 @@ compact_device_view(array, data) = array
     )
     # Validates every extent assumption at launch time, including that any
     # Base.OneTo indices span their full parent dimensions
-    size(array) == size(array) ||
+    size(compact) == size(array) ||
         throw(DimensionMismatch("DataLayout extents do not match its array"))
-    return array
+    return compact
 end
 
 Adapt.adapt_structure(to::CUDA.KernelAdaptor, data::DataLayouts.DataLayout) =

@@ -134,8 +134,8 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     ᶠspace_no_mask = Spaces.face_space(ᶜspace_no_mask)
     ᶠcoords_no_mask = Fields.coordinate_field(ᶠspace_no_mask)
     c_no_mask = Fields.Field(FT, ᶜspace_no_mask)
-    @test_throws ErrorException("Broacasted spaces are not the same.") @. c_no_mask +
-                                                                          ᶜf
+    @test_throws ErrorException("Broadcasted spaces are not the same.") @. c_no_mask +
+                                                                           ᶜf
     ᶠf_no_mask = Fields.Field(FT, ᶠspace_no_mask)
     if ClimaComms.device(ᶜspace_no_mask) isa ClimaComms.CUDADevice
         @. c_no_mask = div(Geometry.WVector(foo(ᶠf_no_mask, ᶠcoords_no_mask)))

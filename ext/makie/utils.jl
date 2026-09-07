@@ -1,13 +1,14 @@
 """
     plot_vertices(space::AbstractSpace[, coords])
 
-Compute the vertices of `space`` for plotting, returning a vector of `Point2f`
+Compute the vertices of `space` for plotting, returning a vector of `Point2f`
 or `Point3f`.
 
 `coords` can be one of the following:
 - `field` containing the coordinates of the vertices (default is to use `Fields.coordinate_field(space)`)
 - a tuple of scalar fields, one for each coordinate
-- a type which
+- a point type to convert the coordinates of `space` to, e.g.
+  `Geometry.Cartesian123Point`
 """
 
 function plot_vertices(space::ClimaCore.Spaces.AbstractSpace, ::Nothing)

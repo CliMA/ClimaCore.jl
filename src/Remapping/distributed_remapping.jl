@@ -1140,8 +1140,8 @@ function _collect_interpolated_values!(
 end
 
 """
-interpolate(remapper::Remapper, fields)
-interpolate!(dest, remapper::Remapper, fields)
+    interpolate(remapper::Remapper, fields)
+    interpolate!(dest, remapper::Remapper, fields)
 
 Interpolate the given `field`(s) as prescribed by `remapper`.
 
@@ -1155,7 +1155,7 @@ Horizontally, interpolation is performed with the barycentric formula in
 [Berrut2004](@cite), equation (3.2). Vertical interpolation is linear except
 in the boundary elements where it is 0th order.
 
-`interpolate!` writes the output to the given `dest`iniation. `dest` is expected
+`interpolate!` writes the output to the given `dest`ination. `dest` is expected
 to be defined on the root process and to be `nothing` for the other processes.
 
 Note: `interpolate` allocates new arrays and has some internal type-instability,

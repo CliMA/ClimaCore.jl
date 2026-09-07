@@ -96,15 +96,3 @@ end
         Nvthreads,
     )
 end
-@inline function fd_shmem_stencil_universal_index(space::Spaces.AbstractSpace, data)
-    (tv,) = CUDA.threadIdx()
-    (h, bv, ij) = CUDA.blockIdx()
-    v = tv + (bv - 1) * CUDA.blockDim().x
-    (_, Ni, Nj, _) = size(data)
-    if Ni * Nj < ij
-        return CartesianIndex((-1, -1, -1, -1))
-    end
-    @inbounds (i, j) = CartesianIndices((Ni, Nj))[ij].I
-    return CartesianIndex((v, i, j, h))
-end
-@inline fd_shmem_stencil_is_valid_index(I, data) = 1 ≤ I[4] ≤ size(data, 4)

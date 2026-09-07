@@ -1,13 +1,12 @@
 import ClimaCore: Fields, Spaces, Quadratures, Topologies
 import Base.Broadcast: Broadcasted
 import ClimaComms
-using CUDA: @cuda, i32
+using CUDA: i32
 import ClimaCore.Utilities: half
 import ClimaCore.Operators
 import ClimaCore.Operators: AbstractStencilStyle, strip_space
 import ClimaCore.Operators: setidx!, getidx
 import ClimaCore.Operators: StencilBroadcasted
-import ClimaCore.Operators: LeftBoundaryWindow, RightBoundaryWindow, Interior
 
 struct CUDAColumnStencilStyle <: AbstractStencilStyle end
 

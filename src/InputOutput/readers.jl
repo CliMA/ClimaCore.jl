@@ -1,6 +1,6 @@
 abstract type AbstractReader end
 
-# these need to be here for to make the eval work
+# these need to be here to make the eval work
 # TODO: figure out a better way to represent types
 using StaticArrays
 using ..ClimaCore
@@ -58,7 +58,7 @@ end
     is_type_expr(expr)
 
 Check if an expression is a type expression, with no function calls or other non-type
-expressions, with the expection of @NamedTuple.
+expressions, with the exception of @NamedTuple.
 This function is based on the JLD.jl `is_valid_type_exp`.
 See https://github.com/JuliaIO/JLD.jl/blob/80ac89643e3ad87545e48f4d361a00a29cdf4e2f/src/JLD.jl#L922
 """
@@ -661,7 +661,7 @@ function read_field(reader::HDF5Reader, name::AbstractString)
         else
             data = ArrayType(read(obj))
         end
-        # The `value_type` attribute is deprecated. here we mantain backwards compatibility
+        # The `value_type` attribute is deprecated. here we maintain backwards compatibility
         ElType = read_type(
             haskey(attrs(obj), "field_eltype") ?
             attrs(obj)["field_eltype"] : attrs(obj)["value_type"],

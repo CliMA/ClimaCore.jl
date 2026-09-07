@@ -314,7 +314,7 @@ end
 
 
 """
-    interpolate(coords::NTuple{2}, ξ1)
+    linear_interpolate(coords::NTuple{2}, ξ1)
 
 Interpolate between `coords` by parameters `ξ1` in the interval `[-1,1]`.
 The type of interpolation is determined by the element type of `coords`

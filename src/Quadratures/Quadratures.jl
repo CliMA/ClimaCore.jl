@@ -9,13 +9,14 @@ export QuadratureStyle,
     GLL, GL, polynomial_degree, degrees_of_freedom, quadrature_points
 
 """
-QuadratureStyle{Nq}
+    QuadratureStyle{Nq}
 
 Quadrature style supertype. See sub-types:
 
   - [`GLL`](@ref)
   - [`GL`](@ref)
   - [`Uniform`](@ref)
+  - [`ClosedUniform`](@ref)
 """
 abstract type QuadratureStyle{Nq} end
 

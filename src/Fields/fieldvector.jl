@@ -681,8 +681,8 @@ function __rprint_diff(io::IO, xi, yi; pc, xname, yname) # assume we can compute
 end
 
 """
-    rprint_diff(io::IO, ::T, ::T) where {T <: Union{FieldVector, NamedTuple}}
-    rprint_diff(::T, ::T) where {T <: Union{FieldVector, NamedTuple}}
+    _rprint_diff(io::IO, ::T, ::T, xname, yname) where {T <: Union{FieldVector, NamedTuple}}
+    _rprint_diff(::T, ::T, xname, yname) where {T <: Union{FieldVector, NamedTuple}}
 
 Recursively print differences in given `Union{FieldVector, NamedTuple}`.
 """

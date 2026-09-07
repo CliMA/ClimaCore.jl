@@ -11,7 +11,10 @@ nelements(mesh::AbstractMesh) = length(elements(mesh))
 """
     i = refindex(ϕ, n)
 
-Given a reference coordinate `ϕ` in the interval ```[-1, 1]``, divide the interval into ```n` evenly spaced subintervals, and return the index of the subinterval (`i`), and the position in the subinterval (`ϕs`), normalized to normalized `[-1, 1]`.
+Given a reference coordinate `ϕ` in the interval `[-1, 1]`, divide the interval into
+`n` evenly spaced subintervals, and return the index `i` of the subinterval
+containing `ϕ`. Use `refcoord` to get the position within that
+subinterval, normalized to `[-1, 1]`.
 """
 function refindex(ϕ, n)
     ϕn = ϕ * n
@@ -99,7 +102,7 @@ end
 """
     M = Meshes.face_connectivity_matrix(mesh, elemorder = elements(mesh))
 
-Construct a `Bool`-valued `SparseCSCMatrix` containing the face connections of
+Construct a `Bool`-valued `SparseMatrixCSC` containing the face connections of
 `mesh`. Elements are indexed according to `elemorder`.
 
 Note that `M[i,i] == true` only if two distinct faces of element `i` are connected.
@@ -130,7 +133,7 @@ end
 """
     M = Meshes.vertex_connectivity_matrix(mesh, elemorder = elements(mesh))
 
-Construct a `Bool`-valued `SparseCSCMatrix` containing the vertex connections of
+Construct a `Bool`-valued `SparseMatrixCSC` containing the vertex connections of
 `mesh`. Elements are indexed according to `elemorder`.
 
 Note that `M[i,i] == true` only if two distinct vertices of element `i` are connected.

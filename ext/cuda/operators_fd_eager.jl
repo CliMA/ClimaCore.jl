@@ -603,7 +603,7 @@ end
     calc_level_val(bc::StencilBroadcasted, hidx, space)
 
 Fallback case of `calc_level_val` that calls `Operators.getidx`. This is used for
-affine BCs or values that won't fit in shmmem.
+affine BCs or values that won't fit in shmem.
 """
 Base.@propagate_inbounds function calc_level_val(
     bc::BC,

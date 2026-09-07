@@ -279,7 +279,7 @@ end
 """
     write_new!(writer, mesh, name)
 
-Write `CubedSphereMesh` data to HDF5.
+Write `AbstractCubedSphere` mesh data to HDF5.
 """
 function write_new!(
     writer::HDF5Writer,
@@ -634,11 +634,11 @@ end
 
 """
     _write_mpi!(
-        writer::HDF5Writer,
-        data::DataLayouts.DataLayout,
-        name::AbstractString,
+        group,
+        values::DataLayouts.DataLayout,
+        name::AbstractString;
         nelems,
-        local_elem_gidx
+        local_elem_gidx,
     )
 
 This is an internal method, meant to be used for writing data layouts to the

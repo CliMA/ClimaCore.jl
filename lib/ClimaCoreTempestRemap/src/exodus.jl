@@ -100,7 +100,7 @@ function write_exodus(
         defDim(dts, "num_nod_per_el1", num_nod_per_el1)
         defDim(dts, "num_att_in_blk1", num_att_in_blk1)
 
-        # global attibutes
+        # global attributes
         dts.attrib["title"] = "ClimaCore.jl mesh from $(topology)"
         dts.attrib["api_version"] = Float32(5.0)
         dts.attrib["version"] = Float32(5.0)

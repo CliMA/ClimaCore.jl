@@ -8,7 +8,7 @@ Plots a heatmap of a field.
 
 Inherited from [`Makie.mesh`](https://docs.makie.org/stable/examples/plotting_functions/mesh/index.html#mesh).
 
-  - `colormap::Union{Symbol, Vector{<:Colorant}} = :viridis`` sets the colormap that is sampled for numeric colors.
+  - `colormap::Union{Symbol, Vector{<:Colorant}} = :viridis` sets the colormap that is sampled for numeric colors.
 
   - `colorrange::Tuple{<:Real, <:Real}` sets the values representing the start and end points of colormap.
 

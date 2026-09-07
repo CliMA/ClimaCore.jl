@@ -97,7 +97,7 @@ mutable struct Topology2D{
     """
     ghost_faces::GF
     """
-    the collection of `(lidx, vert)`` pairs of vertices of local elements which touch a ghost element
+    the collection of `(lidx, vert)` pairs of vertices of local elements which touch a ghost element
     """
     local_vertices::LV
     """
@@ -271,7 +271,7 @@ end
     spacefillingcurve(mesh::Meshes.RectilinearMesh)
 
 Generate element ordering, `elemorder`, based on a space filling curve
-for a `Rectilinear` mesh.
+for a `RectilinearMesh`.
 """
 spacefillingcurve(mesh::Meshes.RectilinearMesh) = gilbertindices((
     Meshes.nelements(mesh.intervalmesh1),
@@ -386,7 +386,7 @@ function _Topology2D(
     ghost_neighbor_elem = Int[]
     ghost_neighbor_elem_offset = Int[1]
 
-    # 1) iterate over the vertices of local elements to determeind the vertex connectivity
+    # 1) iterate over the vertices of local elements to determine the vertex connectivity
     #    since we don't yet know the ridx of halo elements, we instead store the gidx.
     for (lidx, gidx) in enumerate(local_elem_gidx)
         elem = elemorder[gidx]

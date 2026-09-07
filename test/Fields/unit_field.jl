@@ -286,7 +286,7 @@ end
     @test nt_sum.b ≈ 8.0 * 10.0 rtol = 10eps()
     @test norm(nt_field) ≈ sqrt(2.0) rtol = 10eps()
 
-    # Test scalar asignment
+    # Test scalar assignment
     nt_field.a .= 0.0
     @test sum(nt_field.a) == 0.0
 end

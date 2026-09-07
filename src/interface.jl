@@ -1,4 +1,4 @@
-# Toplevel interface functions for recurisve broadcast expressions
+# Toplevel interface functions for recursive broadcast expressions
 import ..Utilities.Unrolled: unrolled_map_with_inbounds
 
 """

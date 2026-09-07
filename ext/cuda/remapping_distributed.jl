@@ -1,7 +1,6 @@
 import ClimaCore: Topologies, Spaces, Fields, Quadratures
 import ClimaComms
 import CUDA
-using CUDA: @cuda
 import UnrolledUtilities
 import ClimaCore.Remapping: _set_interpolated_values_device!, bilinear, linear
 
@@ -18,9 +17,6 @@ function ClimaCore.Remapping._set_interpolated_values_bilinear!(
     ::Nothing,
 )
     field_values = tuple(map(f -> Fields.field_values(f), fields)...)
-    num_horiz = length(local_horiz_indices)
-    num_vert = length(vert_bounding_indices)
-    num_fields = length(field_values)
     nitems = length(out)
     args = (
         out,
@@ -87,9 +83,6 @@ function ClimaCore.Remapping._set_interpolated_values_bilinear!(
     local_bilinear_j,
 )
     field_values = tuple(map(f -> Fields.field_values(f), fields)...)
-    num_horiz = length(local_horiz_indices)
-    num_vert = length(vert_bounding_indices)
-    num_fields = length(field_values)
     nitems = length(out)
     args = (
         out,
@@ -173,8 +166,6 @@ function ClimaCore.Remapping._set_interpolated_values_bilinear!(
     ::Nothing,
 )
     field_values = tuple(map(f -> Fields.field_values(f), fields)...)
-    num_horiz = length(local_horiz_indices)
-    num_fields = length(field_values)
     nitems = length(out)
     args = (
         out,
@@ -228,8 +219,6 @@ function ClimaCore.Remapping._set_interpolated_values_bilinear!(
     local_bilinear_j,
 )
     field_values = tuple(map(f -> Fields.field_values(f), fields)...)
-    num_horiz = length(local_horiz_indices)
-    num_fields = length(field_values)
     nitems = length(out)
     args = (
         out,
@@ -449,7 +438,6 @@ function _set_interpolated_values_device!(
 )
 
     space = axes(first(fields))
-    FT = Spaces.undertype(space)
     quad = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(quad)
 
