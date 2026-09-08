@@ -1,5 +1,5 @@
 using Test
-import ClimaCore.CommonSpaces: ExtrudedCubedSphereSpace, ColumnSpace
+import ClimaCore.CommonSpaces: ExtrudedCubedSphereSpace, ColumnSpace, MultiColumnSpace
 import ClimaCore.Remapping
 import ClimaCore.Remapping:
     PressureInterpolator, interpolate_pressure, interpolate_pressure!, update!
@@ -42,6 +42,26 @@ import ClimaInterpolations
         @test pfull_col_space.staggering == Grids.CellFace()
         @test pfull_col_space.grid.topology.mesh.faces ==
               Geometry.PPoint.([0.0, 1.0, 10.0, 100.0])
+
+        multicol_space = MultiColumnSpace(FT;
+            points = [
+                Geometry.LatLongPoint(FT(0), FT(0)),
+                Geometry.LatLongPoint(FT(10), FT(20)),
+            ],
+            z_elem = 10,
+            z_min = 0,
+            z_max = 1,
+            staggering = Grids.CellCenter(),
+        )
+
+        pfull_multicol_space =
+            Remapping.construct_pressure_space(FT, multicol_space, [0.0, 1.0, 10.0, 100.0])
+        @test pfull_multicol_space isa Spaces.MultiColumnFiniteDifferenceSpace
+        @test pfull_multicol_space.grid.horizontal_grid ===
+              multicol_space.grid.horizontal_grid
+        @test pfull_multicol_space.staggering == Grids.CellFace()
+        @test pfull_multicol_space.grid.vertical_grid.topology.mesh.faces ==
+              Geometry.PPoint.([0.0, 1.0, 10.0, 100.0])
     end
 end
 
@@ -61,8 +81,19 @@ for FT in (Float32, Float64)
         z_max = 1,
         staggering = Grids.CellCenter(),
     )
+    multicol_space = MultiColumnSpace(FT;
+        points = [
+            Geometry.LatLongPoint(FT(0), FT(0)),
+            Geometry.LatLongPoint(FT(10), FT(20)),
+            Geometry.LatLongPoint(FT(-30), FT(45)),
+        ],
+        z_elem = 10,
+        z_min = 0,
+        z_max = 1,
+        staggering = Grids.CellCenter(),
+    )
     @testset "Vertical interpolation to pressure coordinates ($FT)" begin
-        for space in (extruded_space, col_space)
+        for space in (extruded_space, col_space, multicol_space)
             pfull_field = fill(FT(1.0), space)
             pfull_field_array = Fields.field2array(pfull_field)
             tmp_pfull_field_array = Array(pfull_field_array)
@@ -131,7 +162,7 @@ for FT in (Float32, Float64)
     end
 
     @testset "Face spaces ($FT)" begin
-        for space in (extruded_space, col_space)
+        for space in (extruded_space, col_space, multicol_space)
             pfull_field = fill(FT(1.0), space)
             pfull_field_view = Fields.field2array(pfull_field)
             tmp_pfull_field_view = Array(pfull_field_view)
@@ -184,7 +215,7 @@ for FT in (Float32, Float64)
 
 
     @testset "Non monotonic pressure and z relationship ($FT)" begin
-        for space in (extruded_space, col_space)
+        for space in (extruded_space, col_space, multicol_space)
             pfull_field = fill(FT(1.0), space)
             pfull_field_view = Fields.field2array(pfull_field)
             tmp_pfull_field_view = Array(pfull_field_view)

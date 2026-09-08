@@ -9,7 +9,7 @@ import Random
 const comms_ctx = ClimaComms.SingletonCommsContext(ClimaComms.device())
 filename = tempname(; cleanup = true)
 
-@testset "HDF5 restart test for multi-column point-cloud spaces" begin
+@testset "HDF5 restart test for multi-column spaces" begin
     Random.seed!(42)
     FT = Float32
     points = [

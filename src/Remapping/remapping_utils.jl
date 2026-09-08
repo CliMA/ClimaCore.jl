@@ -161,7 +161,7 @@ function default_target_hcoords(
     return nothing
 end
 
-# Point-cloud columns have no horizontal interpolation
+# Multi-column spaces have no horizontal interpolation
 function default_target_hcoords(
     space::Union{
         Spaces.MultiColumnFiniteDifferenceSpace,
@@ -172,7 +172,7 @@ function default_target_hcoords(
     return nothing
 end
 
-# Point clouds have no vertical extent
+# Multi-point spaces have no vertical extent
 function default_target_zcoords(
     space::Spaces.MultiPointSpace;
     zresolution = nothing,

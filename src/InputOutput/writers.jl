@@ -716,7 +716,7 @@ function write!(
     grid = Spaces.grid(space)
     grid_name = write!(writer, grid)
 
-    # topology is only queried on the distributed path: point-cloud spaces
+    # topology is only queried on the distributed path: multi-point and multi-column spaces
     # have no topology and are single-process only
     if !(writer.context isa ClimaComms.SingletonCommsContext) &&
        Spaces.topology(space) isa Topologies.Topology2D

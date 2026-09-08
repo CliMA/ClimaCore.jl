@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] `Remapping.PressureInterpolator` supports
+  `MultiColumnFiniteDifferenceSpace`, so fields on multiple independent columns
+  can be interpolated to pressure coordinates like fields on extruded or
+  single-column spaces.
+
 v0.16.1
 -------
 - Bugfixes for compatibilty with CUDA.jl v6 [2628](https://github.com/CliMA/ClimaCore.jl/pull/2628)
