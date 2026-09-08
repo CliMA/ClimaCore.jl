@@ -79,6 +79,7 @@ end
         ::Type{FT},
         space::Union{
             Spaces.ExtrudedFiniteDifferenceSpace,
+            Spaces.MultiColumnFiniteDifferenceSpace,
             Spaces.AbstractFiniteDifferenceSpace,
         },
         pressure_levels,
@@ -96,7 +97,10 @@ Given an input `space`, creates a new space where:
 """
 function construct_pressure_space(
     ::Type{FT},
-    space::Spaces.ExtrudedFiniteDifferenceSpace,
+    space::Union{
+        Spaces.ExtrudedFiniteDifferenceSpace,
+        Spaces.MultiColumnFiniteDifferenceSpace,
+    },
     pressure_levels,
 ) where {FT}
     device = ClimaComms.device(space)
@@ -110,11 +114,7 @@ function construct_pressure_space(
         Grids.Flat(),
         space.grid.global_geometry,
     )
-    pressure_space = Spaces.ExtrudedFiniteDifferenceSpace(
-        grid,
-        Spaces.CellFace(),
-    )
-    return pressure_space
+    return Spaces.space(grid, Spaces.CellFace())
 end
 
 function construct_pressure_space(
@@ -191,6 +191,7 @@ end
         pressure_space::Union{
             Spaces.AbstractFiniteDifferenceSpace,
             Spaces.ExtrudedFiniteDifferenceSpace,
+            Spaces.MultiColumnFiniteDifferenceSpace,
         };
         extrapolate = ClimaInterpolations.Interpolation1D.Flat()
     )
@@ -205,6 +206,7 @@ function PressureInterpolator(
     pressure_space::Union{
         Spaces.AbstractFiniteDifferenceSpace,
         Spaces.ExtrudedFiniteDifferenceSpace,
+        Spaces.MultiColumnFiniteDifferenceSpace,
     };
     extrapolate = ClimaInterpolations.Interpolation1D.Flat(),
 )

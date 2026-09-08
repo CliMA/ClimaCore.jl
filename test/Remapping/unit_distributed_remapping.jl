@@ -973,7 +973,7 @@ if !with_mpi
         zcoords = [Geometry.ZPoint(z) for z in zpts]
 
         # Default target coordinates: no horizontal interpolation for
-        # multi-column spaces, and point-cloud level spaces opt out entirely
+        # multi-column spaces, and multi-point spaces opt out entirely
         @test isnothing(Remapping.default_target_hcoords(cspace))
         @test length(Remapping.default_target_zcoords(cspace)) == 30
         pcs = Spaces.horizontal_space(cspace)
