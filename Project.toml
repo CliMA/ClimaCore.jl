@@ -1,6 +1,6 @@
 name = "ClimaCore"
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
-version = "0.16.0"
+version = "0.16.1"
 authors = ["CliMA Contributors <clima-software@caltech.edu>"]
 
 [deps]

@@ -4,6 +4,13 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.16.1
+-------
+- Bugfixes for compatibilty with CUDA.jl v6 [2628](https://github.com/CliMA/ClimaCore.jl/pull/2628)
+
+v0.16.0
+-------
+
 - ![][badge-✨feature/enhancement] The `CommonGrids` and `CommonSpaces`
   constructors that build a horizontal spectral-element grid
   (`ExtrudedCubedSphereGrid`, `CubedSphereGrid`, `Box3DGrid`, `SliceXZGrid`,
