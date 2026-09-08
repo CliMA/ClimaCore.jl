@@ -254,6 +254,64 @@ function run_ddg_tests(::Type{FT}) where {FT}
         end
     end
 
+    @testset "ghost flux: CPU vs GPU equivalence [$FT, $nprocs ranks]" begin
+        # Direct value-level CPU-vs-device equivalence of the ghost-face kernels
+        # at a fixed partition. On a CPU launch both spaces
+        # are the CPU space (an exact self-check that also exercises the
+        # dual-context machinery); on a GPU launch this compares the CUDA ghost
+        # kernels against the CPU ghost loop across ranks.
+        cpu_context = ClimaComms.MPICommsContext(ClimaComms.CPUSingleThreaded())
+        space_cpu = dg_sphere_space(FT; context = cpu_context)
+        coords_cpu = Fields.coordinate_field(space_cpu)
+        uv_cpu = @. Geometry.UVVector(
+            cosd(coords_cpu.long),
+            -sind(coords_cpu.long) * sind(coords_cpu.lat),
+        )
+        q_cpu = @. sind(coords_cpu.long) * cosd(coords_cpu.lat)^2
+        y_cpu = map((qi, uvi) -> (; q = qi, uv = uvi), q_cpu, uv_cpu)
+        # Seed the device state with the exact CPU bytes (same local ordering).
+        q_dev = @. sind(coords.long) * cosd(coords.lat)^2
+        y_dev = map((qi, uvi) -> (; q = qi, uv = uvi), q_dev, uv)
+        copyto!(parent(y_dev), Array(parent(y_cpu)))
+
+        # numflux ghost path (antisymmetric, minus-side accumulation)
+        r_cpu = similar(q_cpu)
+        r_cpu .= 0
+        Operators.add_numerical_flux_interior!(dg_central_flux, r_cpu, y_cpu)
+        r_dev = similar(q_dev)
+        r_dev .= 0
+        Operators.add_numerical_flux_interior!(dg_central_flux, r_dev, y_dev)
+        err = maximum(abs, Array(parent(r_dev)) .- Array(parent(r_cpu)))
+        scale = maximum(abs, Array(parent(r_cpu)))
+        err_global = ClimaComms.allreduce(context, err, max)
+        scale_global = ClimaComms.allreduce(context, scale, max)
+        @test err_global < tol * scale_global
+
+        # lifting ghost path (symmetric, plus accumulation)
+        l_cpu = similar(q_cpu, Geometry.UVVector{FT})
+        fill!(parent(l_cpu), 0)
+        Operators.add_lifting_flux_interior!(
+            Operators.central_gradient_lift,
+            l_cpu,
+            q_cpu,
+        )
+        l_dev = similar(q_dev, Geometry.UVVector{FT})
+        fill!(parent(l_dev), 0)
+        # Reseed the device scalar to match `q_cpu` byte-for-byte.
+        q_seed = similar(q_dev)
+        copyto!(parent(q_seed), Array(parent(q_cpu)))
+        Operators.add_lifting_flux_interior!(
+            Operators.central_gradient_lift,
+            l_dev,
+            q_seed,
+        )
+        err_l = maximum(abs, Array(parent(l_dev)) .- Array(parent(l_cpu)))
+        scale_l = maximum(abs, Array(parent(l_cpu)))
+        err_l_global = ClimaComms.allreduce(context, err_l, max)
+        scale_l_global = ClimaComms.allreduce(context, scale_l, max)
+        @test err_l_global < tol * max(scale_l_global, eps(FT))
+    end
+
     @testset "central lifting vanishes for continuous fields [$FT, $nprocs ranks]" begin
         # Exercises the symmetric-lifting ghost path (the `+` accumulation):
         # the central gradient lift is a jump, so it vanishes on a single-valued
