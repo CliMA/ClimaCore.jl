@@ -149,7 +149,11 @@ element type cannot go out of sync.
            Tuple{v3_type, x_type} : x_type
 end
 
-ClimaCore.Utilities.unsafe_eltype(::CUDA.CuRefType{T}) where {T} = T
+@static if pkgversion(CUDA) < v"6"
+    ClimaCore.Utilities.unsafe_eltype(::CUDA.CuRefType{T}) where {T} = T
+else
+    ClimaCore.Utilities.unsafe_eltype(::CUDA.CUDACore.CuRefType{T}) where {T} = T
+end
 
 """
     has_padding_thread(space)
