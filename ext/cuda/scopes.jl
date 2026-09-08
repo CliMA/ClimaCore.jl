@@ -1,5 +1,6 @@
 import UnrolledUtilities: unrolled_map, unrolled_all, unrolled_allequal, unrolled_flatmap
-import CUDA: LLVM # Used by shmem_pointer to emit a shared-memory global.
+import LLVM # Used by shmem_pointer to emit a shared-memory global.
+import CUDA
 
 const THREADS_PER_WARP = 32
 const MAX_WARPS_PER_BLOCK = 32
