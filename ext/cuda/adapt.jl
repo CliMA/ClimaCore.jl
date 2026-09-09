@@ -1,57 +1,45 @@
 import CUDA, Adapt
+import ClimaComms
 import ClimaCore
-import ClimaCore: Grids, Spaces, Topologies
+import ClimaCore: DataLayouts, Grids, Meshes, Topologies
 
 Adapt.adapt_structure(
-    to::CUDA.KernelAdaptor,
-    grid::Grids.ExtrudedFiniteDifferenceGrid,
-) = Grids.DeviceExtrudedFiniteDifferenceGrid(
-    Adapt.adapt(to, Grids.vertical_topology(grid)),
-    Adapt.adapt(to, Grids.quadrature_style(grid)),
-    Adapt.adapt(to, grid.global_geometry),
-    Adapt.adapt(to, grid.center_local_geometry),
-    Adapt.adapt(to, grid.face_local_geometry),
-)
+    ::CUDA.KernelAdaptor,
+    ::ClimaComms.AbstractCommsContext,
+) = ClimaCore.DeviceSideContext()
 
-Adapt.adapt_structure(
-    to::CUDA.KernelAdaptor,
-    grid::Grids.FiniteDifferenceGrid,
-) = Grids.DeviceFiniteDifferenceGrid(
-    Adapt.adapt(to, grid.topology),
-    Adapt.adapt(to, grid.global_geometry),
-    Adapt.adapt(to, grid.center_local_geometry),
-    Adapt.adapt(to, grid.face_local_geometry),
-)
+Adapt.adapt_structure(::CUDA.KernelAdaptor, ::Meshes.AbstractMesh) = nothing
+
+Adapt.adapt_structure(::CUDA.KernelAdaptor, ::Topologies.Topology2D) = nothing
 
 Adapt.adapt_structure(
     to::CUDA.KernelAdaptor,
     grid::Grids.SpectralElementGrid1D,
-) = Grids.DeviceSpectralElementGrid1D(
+) = Grids.SpectralElementGrid1D(
+    Adapt.adapt(to, grid.topology),
     Adapt.adapt(to, grid.quadrature_style),
     Adapt.adapt(to, grid.global_geometry),
     Adapt.adapt(to, grid.local_geometry),
+    nothing, # dss_weights
+    grid.discretization,
 )
 
 Adapt.adapt_structure(
     to::CUDA.KernelAdaptor,
     grid::Grids.SpectralElementGrid2D,
-) = Grids.DeviceSpectralElementGrid2D(
+) = Grids.SpectralElementGrid2D(
+    Adapt.adapt(to, grid.topology),
     Adapt.adapt(to, grid.quadrature_style),
     Adapt.adapt(to, grid.global_geometry),
     Adapt.adapt(to, grid.local_geometry),
-    Adapt.adapt(to, grid.mask),
+    nothing, # dss_weights
+    nothing, # interior_surface_geometry
+    nothing, # boundary_surface_geometries
+    DataLayouts.NoMask(), # mask
+    grid.enable_bubble,
+    grid.autodiff_metric,
+    grid.discretization,
 )
-
-Adapt.adapt_structure(to::CUDA.KernelAdaptor, space::Spaces.PointSpace) =
-    Spaces.PointSpace(
-        ClimaCore.DeviceSideContext(),
-        Adapt.adapt(to, Spaces.local_geometry_data(space)),
-    )
-
-Adapt.adapt_structure(
-    to::CUDA.KernelAdaptor,
-    topology::Topologies.IntervalTopology,
-) = Topologies.DeviceIntervalTopology(topology.boundaries)
 
 Adapt.adapt_structure(
     to::CUDA.KernelAdaptor,

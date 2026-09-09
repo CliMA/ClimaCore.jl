@@ -180,13 +180,10 @@ issubspace(subspace::FiniteDifferenceSpace, space::ExtrudedFiniteDifferenceSpace
     grid(subspace) === grid(space).vertical_grid ||
     (grid(subspace) isa Grids.ColumnGrid && grid(subspace).full_grid === grid(space))
 
-# This must also cover device-side spaces, which appear in place of their host
-# counterparts inside GPU kernels (see reconstruct_placeholder_space). Without a
-# method that matches, `level` falls back to the generic identity method, which
-# silently returns the extruded space itself. Device-side grids do not store
-# their horizontal grid, so the aliases above cannot tell how many horizontal
-# dimensions such a space spans; the directions spanned by the coordinates of
-# its local geometry, which host and device spaces share, stand in for that.
+# Dispatch on the directions spanned by the local geometry's coordinates, so
+# that one method covers every extruded grid. Without a matching method, `level`
+# falls back to the generic identity method and silently returns the extruded
+# space itself.
 Base.@propagate_inbounds level(space::ExtrudedFiniteDifferenceSpace, v) =
     _level_space(
         eltype(local_geometry_data(space)),
