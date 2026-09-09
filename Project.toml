@@ -39,7 +39,7 @@ Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
 
 [extensions]
-ClimaCoreCUDAExt = "CUDA"
+ClimaCoreCUDAExt = ["CUDA", "GPUCompiler"]
 ClimaCoreMakieExt = "Makie"
 ClimaCoreRecipesBaseExt = "RecipesBase"
 KrylovExt = "Krylov"
@@ -63,7 +63,7 @@ DataStructures = "0.18.13, 0.19"
 Dates = "1"
 FastBroadcast = "0.3.1"
 ForwardDiff = "0.10.15, 1"
-GPUCompiler = "1.8.2"
+GPUCompiler = "1.8.2, 2"
 GaussQuadrature = "0.5.8"
 GilbertCurves = "0.1"
 HDF5 = "0.16.16, 0.17"

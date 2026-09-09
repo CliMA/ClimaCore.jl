@@ -349,10 +349,10 @@ weakdeps = ["CUDA", "MPI"]
 deps = ["Adapt", "BandedMatrices", "BlockArrays", "ClimaComms", "ClimaInterpolations", "CubedSphere", "DataStructures", "ForwardDiff", "GaussQuadrature", "GilbertCurves", "HDF5", "InteractiveUtils", "IntervalSets", "KrylovKit", "LLVM", "LazyBroadcast", "LinearAlgebra", "MultiBroadcastFusion", "NVTX", "PkgVersion", "Random", "RootSolvers", "SparseArrays", "StaticArrays", "Statistics", "UnrolledUtilities"]
 path = ".."
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
-version = "0.16.0"
+version = "0.16.1"
 
     [deps.ClimaCore.extensions]
-    ClimaCoreCUDAExt = "CUDA"
+    ClimaCoreCUDAExt = ["CUDA", "GPUCompiler"]
     ClimaCoreMakieExt = "Makie"
     ClimaCoreRecipesBaseExt = "RecipesBase"
     KrylovExt = "Krylov"
