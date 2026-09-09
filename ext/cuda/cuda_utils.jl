@@ -2,6 +2,7 @@ import CUDA
 import ClimaCore.Fields
 import ClimaCore.DataLayouts
 import ClimaCore.Utilities
+import GPUCompiler
 
 function uncached_device_attributes()
     device = CUDA.device()
@@ -477,7 +478,7 @@ function auto_launch!(
     kernel_name = nothing
     if name_kernels_from_stack_trace()
         # Create a key from the method instance and types of the args
-        key = objectid(CUDA.methodinstance(typeof(f!), typeof(args)))
+        key = objectid(GPUCompiler.methodinstance(typeof(f!), typeof(args)))
         kernel_name_exists = key in keys(kernel_names)
         if !kernel_name_exists
             # Construct the kernel name, ignoring modules we don't care about
