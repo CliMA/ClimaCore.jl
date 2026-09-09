@@ -68,7 +68,7 @@ end
 Adapt.@adapt_structure SpectralElementGrid1D
 
 local_geometry_type(
-    ::Type{SpectralElementGrid1D{<:Any, <:Any, <:Any, LG}},
+    ::Type{<:SpectralElementGrid1D{<:Any, <:Any, <:Any, LG}},
 ) where {LG} = eltype(LG) # calls eltype from DataLayouts
 
 # non-view grids are cached based on their input arguments
@@ -200,7 +200,7 @@ end
 Adapt.@adapt_structure SpectralElementGrid2D
 
 local_geometry_type(
-    ::Type{SpectralElementGrid2D{<:Any, <:Any, <:Any, LG}},
+    ::Type{<:SpectralElementGrid2D{<:Any, <:Any, <:Any, LG}},
 ) where {LG} = eltype(LG) # calls eltype from DataLayouts
 
 """
