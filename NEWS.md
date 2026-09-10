@@ -14,10 +14,10 @@ main
   `Grids.ExtrudedFiniteDifferenceGrid`, so multi-column grids can use a
   `DeepSphericalGlobalGeometry` instead of always being shallow.
 
-- ![][badge-✨feature/enhancement] `Remapping.PressureInterpolator` supports
-  `MultiColumnFiniteDifferenceSpace`, so fields on multiple independent columns
-  can be interpolated to pressure coordinates like fields on extruded or
-  single-column spaces.
+- ![][badge-✨feature/enhancement] `Spaces.MultiPointSpace` implements
+  `Spaces.quadrature_style`, `Spaces.node_horizontal_length_scale`,
+  `Spaces.all_nodes`, `MatrixFields.all_columns`, and
+  `MatrixFields.field2arrays`.
 
 v0.16.1
 -------
