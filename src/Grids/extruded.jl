@@ -188,8 +188,6 @@ const ExtrudedRectilinearSpectralElementGrid3D =
 const ExtrudedCubedSphereSpectralElementGrid3D =
     ExtrudedFiniteDifferenceGrid{<:CubedSphereSpectralElementGrid2D}
 const ExtrudedMultiPointGrid = ExtrudedFiniteDifferenceGrid{<:MultiPointGrid}
-# Backwards-compatibility alias for the old name.
-Base.@deprecate_binding ExtrudedPointCloudGrid ExtrudedMultiPointGrid false
 
 # The show method for `AbstractGrid` calls `topology(grid)`, which errors for
 # a multi-point horizontal grid, so print the multi-point fields directly

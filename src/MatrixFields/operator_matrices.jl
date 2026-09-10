@@ -81,6 +81,12 @@ operator_input_space(
     space::Spaces.MultiColumnFiniteDifferenceSpace,
 ) = space
 
+# The zero of a row type whose entries may themselves be composite (e.g. a
+# `NamedTuple`-valued band matrix row), which `Base.zero` cannot build on its
+# own. Wrapping the type in an `AutoBroadcaster` maps `zero` over the entries.
+nested_zero(::Type{T}) where {T} =
+    drop_auto_broadcasters(zero(add_auto_broadcasters(T)))
+
 has_affine_bc(op) = unrolled_any(
     bc ->
         bc isa Union{
@@ -92,7 +98,7 @@ has_affine_bc(op) = unrolled_any(
             (
                 typeof(bc.val) <:
                 Union{Fields.Field, Base.AbstractBroadcasted}
-            ) || bc.val != rzero(typeof(bc.val))
+            ) || bc.val != nested_zero(typeof(bc.val))
         ),
     op.bcs,
 )
@@ -629,7 +635,7 @@ op_matrix_last_row(op, bc, space, idx, hidx, args...) =
 @inline nan_boundary_row(
     ::Type{BMR},
     ::Type{FT},
-) where {BMR <: BandMatrixRow, FT} = convert(BMR, rzero(BMR) * FT(NaN))
+) where {BMR <: BandMatrixRow, FT} = convert(BMR, nested_zero(BMR) * FT(NaN))
 Operators.stencil_left_boundary(
     op_matrix::FDOperatorMatrix,
     ::Operators.NullBoundaryCondition,
@@ -665,7 +671,7 @@ Operators.stencil_right_boundary(
 # constant contributed by the boundary value is zeroed out (see `has_affine_bc`).
 # For every operator except GradientF2C/DivergenceF2C, a value-fixing condition
 # prescribes the output at the boundary as a pure constant, so its linear part is zero
-# and the boundary row is all zeros (`rzero` of the row type, which keeps the row's
+# and the boundary row is all zeros (`nested_zero` of the row type, which keeps the row's
 # bandwidth and zeroes its entries; the multiply clips the out-of-range band entries at
 # the column ends, so the row need not be narrowed).
 const ValueFixingBoundaryCondition = Union{
@@ -686,7 +692,7 @@ Base.@propagate_inbounds Operators.stencil_left_boundary(
     idx,
     hidx,
     args...,
-) = rzero(Operators.return_eltype(op_matrix, args...))
+) = nested_zero(Operators.return_eltype(op_matrix, args...))
 # Mirror of stencil_left_boundary above, for the right boundary.
 Base.@propagate_inbounds Operators.stencil_right_boundary(
     op_matrix::FDOperatorMatrix,
@@ -695,7 +701,7 @@ Base.@propagate_inbounds Operators.stencil_right_boundary(
     idx,
     hidx,
     args...,
-) = rzero(Operators.return_eltype(op_matrix, args...))
+) = nested_zero(Operators.return_eltype(op_matrix, args...))
 
 # GradientF2C/DivergenceF2C with a SetValue are the exception (as with
 # `modifies_input`): the condition fixes an input value, and the near-boundary output

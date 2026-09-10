@@ -185,7 +185,6 @@ unit_tests = [
 
     # Quality & Deprecations
     UnitTest("Aqua"                                     ,"aqua.jl"; tier = :misc, subsystem = :quality),
-    UnitTest("Deprecations"                             ,"deprecations.jl"; tier = :misc, subsystem = :quality),
     UnitTest("Precompile workload"                      ,"precompile_workload.jl"; tier = :misc, subsystem = :quality, slow = true), # ~1 min: recompiles ClimaCore in a subprocess
 
     # Visualization

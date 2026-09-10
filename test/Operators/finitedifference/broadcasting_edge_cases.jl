@@ -9,7 +9,6 @@ import ClimaCore
 import .TestUtilities as TU;
 using Test
 using ClimaComms
-import ClimaCore.MatrixFields: ⋅
 import LinearAlgebra: I
 ClimaComms.@import_required_backends
 
@@ -35,7 +34,7 @@ ClimaComms.@import_required_backends
             fspace,
         )
         dtγ = FT(1)
-        out = @. FT(-1) * float(dtγ) * (divf2c_matrix() ⋅ full_bidiag_matrix_scratch) - (I,)
+        out = @. FT(-1) * float(dtγ) * (divf2c_matrix() * full_bidiag_matrix_scratch) - (I,)
         expected_result =
             fill(MatrixFields.TridiagonalMatrixRow(0.0f0, -1.0f0, 0.0f0), cspace)
         @test out == expected_result

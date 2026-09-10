@@ -199,7 +199,7 @@ The expression for ``(M_1 * M_2)[i][d_{prod}]`` then becomes
     M_1[i][d] * M_2[i + d][d_{prod} - d], \\text{ where} \\\\[0.5em]
 ld_{prod} \\leq d_{prod} \\leq ud_{prod}.
 \\end{gather*}
-```# TODO: Remove this in the next major release of ClimaCore.
+```
 
 The values of ``i`` in this range are considered to be in the "interior" of the
 operator, while those not in this range (for which we cannot make these
@@ -244,9 +244,6 @@ This means that we can express the bounds on the interior values of ``i`` as
 ```
 """
 struct MultiplyColumnwiseBandMatrixField <: Operators.FiniteDifferenceOperator end
-
-# TODO: Remove this in the next major release of ClimaCore.
-const ⋅ = MultiplyColumnwiseBandMatrixField()
 
 Operators.strip_space(op::MultiplyColumnwiseBandMatrixField, _) = op
 

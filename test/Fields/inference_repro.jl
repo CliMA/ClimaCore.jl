@@ -44,7 +44,8 @@ function make_space(
         boundary_names = boundary_names,
     )
     mesh = Meshes.IntervalMesh(column; nelems = nelements)
-    subsurface_space = Spaces.CenterFiniteDifferenceSpace(mesh)
+    subsurface_space =
+        Spaces.CenterFiniteDifferenceSpace(ClimaComms.device(), mesh)
     return subsurface_space
 end
 

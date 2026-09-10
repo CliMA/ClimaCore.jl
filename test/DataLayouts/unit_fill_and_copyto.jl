@@ -2,9 +2,14 @@ using Test
 import Random
 import ClimaComms
 import ClimaCore: DataLayouts, Geometry
-import ClimaCore.RecursiveApply: ⊞
+import ClimaCore.Utilities: add_auto_broadcasters, drop_auto_broadcasters
 ClimaComms.@import_required_backends
 Random.seed!(1234)
+
+# `+` that maps over the elements of a composite eltype, for comparing against
+# a broadcast that ClimaCore evaluated with `AutoBroadcaster`s.
+nested_add(x, y) =
+    drop_auto_broadcasters(add_auto_broadcasters(x) + add_auto_broadcasters(y))
 
 # Loop over different layout shapes and different types of parent arrays.
 function testable_layouts(A, T)
@@ -59,7 +64,7 @@ function test_single_F!(data)
     @test all(to_data(parent(data)) .== to_data(parent(rand_data)))
 
     Base.copyto!(data, Base.Broadcast.broadcasted(+, rand_data, 0x1))
-    @test all(to_data(parent(data)) .== to_data(parent(rand_data)) .⊞ 0x1)
+    @test all(to_data(parent(data)) .== nested_add.(to_data(parent(rand_data)), 0x1))
 end
 
 function test_multiple_F!(data)
@@ -78,7 +83,10 @@ function test_multiple_F!(data)
     # As in the previous test, we do not need to convert the second component.
 
     Base.copyto!(data, Base.Broadcast.broadcasted(+, rand_data, 0x1))
-    @test all(to_data(parent(data.:1)) .== to_data(parent(rand_data.:1)) .⊞ 0x1)
+    @test all(
+        to_data(parent(data.:1)) .==
+        nested_add.(to_data(parent(rand_data.:1)), 0x1),
+    )
     # Do not test the second component, since it spans multiple array indices.
 end
 

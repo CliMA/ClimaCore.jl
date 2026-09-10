@@ -390,10 +390,6 @@ end
             top = Operators.Extrapolate(2),
         ).bcs.top === Operators.Extrapolate(2)
 
-        # The deprecated one-sided conditions are aliases for Extrapolate
-        @test Operators.FirstOrderOneSided() === Operators.Extrapolate(0)
-        @test Operators.ThirdOrderOneSided() === Operators.Extrapolate(1)
-
         # Outflow is a physically named convenience constructor for Extrapolate
         @test Operators.Outflow() === Operators.Extrapolate{0}()
         @test Operators.Outflow(; order = 2) === Operators.Extrapolate{2}()
