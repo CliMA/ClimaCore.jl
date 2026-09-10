@@ -1,11 +1,8 @@
 import CUDA
 import ClimaComms
 import LinearAlgebra: UniformScaling
-import ClimaCore.Operators
-import ClimaCore.MatrixFields
-import ClimaCore.MatrixFields: _single_field_solve!
-import ClimaCore.MatrixFields: multiple_field_solve!
-import ClimaCore.MatrixFields: is_CuArray_type
+import ClimaCore.MatrixFields: _single_field_solve!, multiple_field_solve!
+import ClimaCore.MatrixFields: is_CuArray_type, matrix_row_keys
 
 is_CuArray_type(::Type{T}) where {T <: CUDA.CuArray} = true
 
@@ -17,14 +14,14 @@ NVTX.@annotate function multiple_field_solve!(
     b,
 )
     x1 = first(values(x))
-    names = MatrixFields.matrix_row_keys(keys(A))
+    names = matrix_row_keys(keys(A))
     Nnames = length(names)
     _, Ni, Nj, Nh = size(Fields.field_values(x1))
-    sscache = Operators.strip_space(cache)
     mask = Spaces.get_mask(axes(x1))
-    ssx = Operators.strip_space(x)
-    ssA = Operators.strip_space(A)
-    ssb = Operators.strip_space(b)
+    sscache = toggle_placeholder_grids(cache)
+    ssx = toggle_placeholder_grids(x)
+    ssA = toggle_placeholder_grids(A)
+    ssb = toggle_placeholder_grids(b)
     caches = map(name -> sscache[name], names)
     xs = map(name -> ssx[name], names)
     As = map(name -> ssA[name, name], names)

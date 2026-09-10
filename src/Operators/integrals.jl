@@ -80,12 +80,8 @@ end
 
 ################################################################################
 
-const PointwiseOrColumnwiseBroadcasted = Union{
-    Base.Broadcast.Broadcasted{
-        <:Union{Fields.FieldStyle, AbstractStencilStyle},
-    },
-    StencilBroadcasted,
-}
+const PointwiseOrColumnwiseBroadcasted =
+    Base.Broadcast.Broadcasted{<:Union{Fields.FieldStyle, AbstractStencilStyle}}
 
 # TODO: inline / delete this helper
 Base.@propagate_inbounds function get_level_value(
@@ -182,7 +178,7 @@ function column_reduce_device!(
     end
 end
 
-# On GPUs, input and output go through strip_space to become _input and _output.
+# The input/output are turned into _input/_output via toggle_placeholder_grids.
 function single_column_reduce!(
     f::F,
     transform::T,
@@ -322,7 +318,7 @@ function column_accumulate_device!(
     end
 end
 
-# On GPUs, input and output go through strip_space to become _input and _output.
+# The input/output are turned into _input/_output via toggle_placeholder_grids.
 function single_column_accumulate!(
     f::F,
     transform::T,
@@ -335,7 +331,7 @@ function single_column_accumulate!(
     device = ClimaComms.device(space)
     first_level = left_idx(space)
     last_level = right_idx(space)
-    output = unstrip_space(_output, space)
+    output = toggle_placeholder_grids(_output, space)
     is_c2c_or_f2f = Spaces.staggering(space) == Spaces.staggering(axes(output))
     is_c2f = !is_c2c_or_f2f && Spaces.staggering(space) == Spaces.CellCenter()
     is_f2c = !is_c2c_or_f2f && !is_c2f

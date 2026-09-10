@@ -165,7 +165,7 @@ end
           (0, app, 2 * app)
     @test bytes(bc(+, bc(wdiv, bc(grad, f)), bc(div, bc(grad, f)))) == 4 * app
     deep(x) = @. wdiv(grad(wdiv(grad(wdiv(grad(wdiv(grad(wdiv(grad(x)))))))))) # 10
-    @test 2 * app <= Operators.MAX_INLINED_BUFFER_BYTES < 10 * app
+    @test 2 * app <= Operators.MAX_BUFFER_SIZE < 10 * app
     @test Array(parent(deep(f))) ≈ parent(deep(f_cpu))
 end
 

@@ -35,7 +35,7 @@ Base.@deprecate_binding RightBiasedF2C TopBiasedF2C false
 Base.@propagate_inbounds function get_node(
     parent_space, field::Fields.Field, ij::CartesianIndex{N}, slabidx,
 ) where {N}
-    space = reconstruct_placeholder_space(axes(field), parent_space)
+    space = toggle_placeholder_grids(axes(field), parent_space)
     _v =
         if space isa Spaces.FaceExtrudedFiniteDifferenceSpace ||
            space isa Spaces.FaceFiniteDifferenceSpace

@@ -66,8 +66,8 @@ operator_input_space(
     space::Spaces.MultiColumnFiniteDifferenceSpace,
 ) = Spaces.FaceMultiColumnFiniteDifferenceSpace(space)
 
-# A SetBoundaryOperator is space-preserving (`return_space(op, space) = space`), so its
-# operator matrix must be built on the argument's own space, whether center or face;
+# A SetBoundaryOperator is space-preserving, so its operator matrix must be
+# built on the argument's own space.
 operator_input_space(
     ::Operators.SetBoundaryOperator,
     space::Spaces.FiniteDifferenceSpace,
@@ -114,9 +114,6 @@ function FDOperatorMatrix(op::O) where {O}
                linear operator, so its boundary conditions will be zeroed out"
     return FDOperatorMatrix{O}(op)
 end
-
-Operators.strip_space(op::FDOperatorMatrix, parent_space) =
-    FDOperatorMatrix(Operators.strip_space(op.op, parent_space))
 
 struct LazyOneArgFDOperatorMatrix{O <: OneArgFDOperator} <: AbstractLazyOperator
     op::O
@@ -216,40 +213,13 @@ output_bcs(op) = filter_bcs(Base.Fix1(modifies_output, op), op.bcs)
 op_with_matrix_bcs(op) =
     isempty(op.bcs) ? op : Base.typename(typeof(op)).wrapper(matrix_bcs(op))
 
-# Constructs the `op_matrix * arg` StencilBroadcasted that applies an operator
-# matrix to `arg`.
-multiply_matrix_broadcasted(::Type{Style}, op_matrix, arg, axes, work) where {Style} =
-    let args = (op_matrix, arg)
-        Operators.StencilBroadcasted{
-            Style,
-            MultiplyColumnwiseBandMatrixField,
-            typeof(args),
-            typeof(axes),
-            typeof(work),
-        }(
-            MultiplyColumnwiseBandMatrixField(),
-            args,
-            axes,
-            work,
-        )
-    end
+# Constructs the `op_matrix * arg` broadcast that applies an operator matrix.
+multiply_matrix_broadcasted(::Type{S}, op_matrix, arg, axes) where {S} =
+    Broadcast.Broadcasted{S}(MultiplyColumnwiseBandMatrixField(), (op_matrix, arg), axes)
 
-# Wraps `arg` in a StencilBroadcasted that applies the SetBoundaryOperator `op`.
-apply_boundary_operator(::Type{Style}, op, arg, axes, work) where {Style} =
-    let args = (arg,)
-        Operators.StencilBroadcasted{
-            Style,
-            typeof(op),
-            typeof(args),
-            typeof(axes),
-            typeof(work),
-        }(
-            op,
-            args,
-            axes,
-            work,
-        )
-    end
+# Wraps `arg` in a broadcast that applies the SetBoundaryOperator `op`.
+apply_boundary_operator(::Type{S}, op, arg, axes) where {S} =
+    Broadcast.Broadcasted{S}(op, (arg,), axes)
 
 # A gradient operator matrix has vector entries and a divergence operator matrix has
 # covector entries, so for the plain `*` of the matrix multiply to produce a result of
@@ -262,35 +232,16 @@ adjoint_matrix_result(op, result) = result
 adjoint_matrix_result(::Operators.DivergenceOperator, result) =
     Base.Broadcast.broadcasted(adjoint, result)
 
-# Builds an ordinary StencilBroadcasted, without rewriting `op` into a matrix multiply.
-unconverted_stencil_broadcasted(
-    ::Type{Style},
-    op,
-    args::Args,
-    axes,
-    work::Work,
-) where {Style, Args, Work} = Operators.StencilBroadcasted{
-    Style,
-    typeof(op),
-    Args,
-    typeof(axes),
-    Work,
-}(
-    op,
-    args,
-    axes,
-    work,
-)
+# Builds an ordinary broadcasted, without rewriting `op` into a matrix multiply.
+unconverted_stencil_broadcasted(style, op, args...) =
+    Broadcast.Broadcasted(style, op, args)
+
+const StencilStyle = Operators.OperatorStyle{typeof(column)}
 
 # A SetBoundaryOperator has no operator matrix: it is what the conversions below use to
 # reapply the boundary conditions they strip out, so it is built verbatim.
-Operators.StencilBroadcasted{Style}(
-    op::Operators.SetBoundaryOperator,
-    args::Args,
-    axes::Spaces.AbstractSpace,
-    work::Work = nothing,
-) where {Style, Args, Work} =
-    unconverted_stencil_broadcasted(Style, op, args, axes, work)
+Broadast.broadcasted(style::StencilStyle, op::Operators.SetBoundaryOperator, args...) =
+    unconverted_stencil_broadcasted(style, op, args...)
 
 # Converts a broadcast over a one-argument operator, `op(arg)`, into the
 # equivalent operator matrix expression, `op_matrix() * arg`. Boundary conditions
@@ -298,22 +249,17 @@ Operators.StencilBroadcasted{Style}(
 # reapplied to `arg` or to the result with a SetBoundaryOperator. Gradient and
 # Divergence operators require an additional adjoint on the input and output,
 # respectively.
-function Operators.StencilBroadcasted{Style}(
-    op::OneArgFDOperator,
-    args::Args,
-    axes::Spaces.AbstractSpace,
-    work::Work = nothing,
-) where {Style, Args, Work}
+function Broadast.broadcasted(style::StencilStyle, op::OneArgFDOperator, args...)
     op_matrix = Base.Broadcast.broadcasted(
         FDOperatorMatrix(op_with_matrix_bcs(op)),
-        Fields.local_geometry_field(operator_input_space(op, axes)),
+        Fields.local_geometry_field(operator_input_space(op, axes(first(args)))),
     )
 
     bcs_in = input_bcs(op)
     arg =
         isempty(bcs_in) ? args[1] :
         apply_boundary_operator(
-            Style,
+            typeof(style),
             Operators.SetBoundaryOperator(bcs_in),
             args[1],
             Base.axes(args[1]),
@@ -321,13 +267,13 @@ function Operators.StencilBroadcasted{Style}(
         )
     arg = adjoint_matrix_arg(op, arg)
 
-    result = multiply_matrix_broadcasted(Style, op_matrix, arg, axes, work)
+    result = multiply_matrix_broadcasted(typeof(style), op_matrix, arg, axes, work)
     result = adjoint_matrix_result(op, result)
 
     bcs_out = output_bcs(op)
     return isempty(bcs_out) ? result :
            apply_boundary_operator(
-        Style,
+        typeof(style),
         Operators.SetBoundaryOperator(bcs_out),
         result,
         axes,
@@ -343,13 +289,8 @@ end
 # WeightedInterpolateC2F has such conditions (SetValue); every other two-argument
 # operator's conditions are linear, so `output_bcs` is empty for them and both
 # `op_with_matrix_bcs` and this function leave them untouched.
-Operators.StencilBroadcasted{Style}(
-    op::TwoArgFDOperator,
-    args::Args,
-    axes::Spaces.AbstractSpace,
-    work::Work = nothing,
-) where {Style, Args, Work} =
-    two_arg_matrix_broadcasted(Style, op, args, axes, work)
+Broadcast.broadcasted(style::StencilStyle, op::TwoArgFDOperator, args...) =
+    two_arg_matrix_broadcasted(typeof(style), op, args, axes, work)
 
 # An advection operator is only equivalent to a matrix multiply when its
 # interior stencil and its boundary reconstructions are all linear in the
@@ -357,15 +298,10 @@ Operators.StencilBroadcasted{Style}(
 # an ordinary stencil and evaluated pointwise. `has_linear_stencil` only
 # depends on the types of the operator and its boundary conditions, so this
 # branch folds at compile time.
-Operators.StencilBroadcasted{Style}(
-    op::Operators.AdvectionOperator,
-    args::Args,
-    axes::Spaces.AbstractSpace,
-    work::Work = nothing,
-) where {Style, Args, Work} =
+Broadcast.broadcasted(style::StencilStyle, op::Operators.AdvectionOperator, args...) =
     Operators.has_linear_stencil(op) ?
-    two_arg_matrix_broadcasted(Style, op, args, axes, work) :
-    unconverted_stencil_broadcasted(Style, op, args, axes, work)
+    two_arg_matrix_broadcasted(typeof(style), op, args, axes, work) :
+    unconverted_stencil_broadcasted(typeof(style), op, args, axes, work)
 
 function two_arg_matrix_broadcasted(
     ::Type{Style},
@@ -547,8 +483,8 @@ Operators.right_interior_idx(
     args...,
 ) = Operators.right_interior_idx(space, op_matrix.op, bc, args...)
 
-Operators.return_space(op_matrix::FDOperatorMatrix, spaces...) =
-    Operators.return_space(op_matrix.op, spaces...)
+Operators.return_space(op_matrix::FDOperatorMatrix, args...) =
+    Operators.return_space(op_matrix.op, args...)
 
 function Operators.return_eltype(op_matrix::FDOperatorMatrix, args...)
     args′ = args[1:(end - 1)]
@@ -574,7 +510,7 @@ end
 
 Base.@propagate_inbounds function Operators.stencil_left_boundary(
     op_matrix::FDOperatorMatrix,
-    bc::Operators.AbstractBoundaryCondition,
+    bc::Operators.VerticalBoundaryCondition,
     space,
     idx,
     hidx,
@@ -587,7 +523,7 @@ end
 
 Base.@propagate_inbounds function Operators.stencil_right_boundary(
     op_matrix::FDOperatorMatrix,
-    bc::Operators.AbstractBoundaryCondition,
+    bc::Operators.VerticalBoundaryCondition,
     space,
     idx,
     hidx,
@@ -972,8 +908,7 @@ Base.@propagate_inbounds function op_matrix_first_row(
     # sides). `should_call_left_boundary` takes precedence, so this row must
     # fold the right boundary's ghosts as well, with the order of both
     # extrapolations reduced to the number of in-range points.
-    bc_right =
-        Operators.get_boundary(op, Operators.right_boundary_window(space))
+    bc_right = Operators.get_boundary(op, Operators.RightBoundaryWindow(space))
     nghost_right = max(
         Operators.boundary_width(op, bc_right) -
         (Operators.right_face_boundary_idx(space) - idx),
@@ -999,8 +934,7 @@ Base.@propagate_inbounds function op_matrix_last_row(
     # (`should_call_left_boundary` takes precedence, so overlapping faces are
     # routed to `op_matrix_first_row`), but fold them like `op_matrix_first_row`
     # does for symmetry and robustness.
-    bc_left =
-        Operators.get_boundary(op, Operators.left_boundary_window(space))
+    bc_left = Operators.get_boundary(op, Operators.LeftBoundaryWindow(space))
     nghost_left = max(
         Operators.boundary_width(op, bc_left) -
         (idx - Operators.left_face_boundary_idx(space)),
