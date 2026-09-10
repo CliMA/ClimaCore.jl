@@ -3,8 +3,10 @@
     MultiPointGrid{C, GG, LG} <: AbstractSpectralElementGrid
 
 Horizontal grid of `N` arbitrary, disconnected (lat, long) locations on a sphere.
-There is no connectivity between columns; no spectral element basis, DSS, or
-horizontal operators are supported on this grid.
+There is no connectivity between columns and no spectral element basis, so DSS
+is not supported. Horizontal spectral-element derivative operators (`Gradient`,
+`Divergence`, `Curl`, and their weak forms) are accepted and evaluate to zero, as
+on a single-column `FiniteDifferenceSpace`.
 
 This is the horizontal component of a multi-column extruded space (`N` independent
 columns at user-chosen sphere locations). Construct it with
@@ -17,11 +19,8 @@ columns at user-chosen sphere locations). Construct it with
   - `local_geometry`: A `VIJFH{LG, 1, 1, 1, N}` data layout, with each of the `N`
     locations represented by an element with one nodal point.
 
-Based on the [metric
-tensor](https://en.wikipedia.org/wiki/Metric_tensor#The_round_metric_on_a_sphere)
-of a sphere, the horizontal Jacobian `∂x∂ξ` is the diagonal matrix
-`diag(R·cosd(lat)·π/180, R·π/180)` (long, lat), with determinant
-`J = R²·cosd(lat)·(π/180)²`.
+Every location has unit horizontal metric terms (`∂x∂ξ = I`, `J = WJ = 1`). The
+sphere radius is only used for the global geometry.
 """
 struct MultiPointGrid{
     C <: ClimaComms.AbstractCommsContext,
@@ -58,17 +57,13 @@ quadrature_style(::MultiPointGrid) = nothing
     )
 
 Build a `MultiPointGrid` from a vector of `LatLongPoint`s and a sphere `radius`.
-The horizontal metric terms in `local_geometry` are set from the sphere geometry
-at each point: `∂x∂ξ = diag(R·cosd(lat)·π/180, R·π/180)`,
-`J = R²·cosd(lat)·(π/180)²`. Construction is memoized in `Cache.OBJECT_CACHE`.
+Every location has unit horizontal metric terms.
 
 # Keyword Arguments
 
   - `radius`: Sphere radius [m]; must be positive.
   - `device`: `ClimaComms.AbstractDevice` on which the geometry is stored; defaults to
     `ClimaComms.device()`.
-
-Every point must satisfy `|lat| < 90`, since the metric degenerates at the poles.
 """
 function MultiPointGrid(
     points::AbstractVector{Geometry.LatLongPoint{FT}};
@@ -100,30 +95,17 @@ function _MultiPointGrid(
     # Nv = Ni = Nj = 1 (one node per "column element"), Nh = N
     local_geometry = DataLayouts.VIJFH{LG, 1, 1, 1, nothing}(Array{FT}, N)
 
-    ∂x∂ξ_bases = (
-        Geometry.Components{Geometry.Orthonormal, AIdx}(),
-        Geometry.Components{Geometry.Covariant, AIdx}(),
+    ∂x∂ξ = Geometry.Tensor(
+        FT(1) * I,
+        (
+            Geometry.Components{Geometry.Orthonormal, AIdx}(),
+            Geometry.Components{Geometry.Covariant, AIdx}(),
+        ),
     )
-    deg2rad = FT(π) / 180
 
     for (h, pt) in enumerate(points)
-        abs(pt.lat) < 90 || throw(ArgumentError(
-            "Latitude ($(pt.lat)) must satisfy |lat| < 90",
-        ))
-
-        # Sphere metric: arc length per degree in each coordinate direction.
-        # ∂x∂ξ is diagonal: (R·π/180) in the lat direction,
-        #                    (R·cosd(lat)·π/180) in the lon direction.
-        s_lat = FT(radius) * deg2rad
-        s_lon = FT(radius) * deg2rad * cosd(pt.lat)
-        J = s_lat * s_lon   # det of diagonal Jacobian
-        ∂x∂ξ_mat = SMatrix{2, 2, FT, 4}(s_lon, zero(FT), zero(FT), s_lat)
-        local_geometry[1, 1, 1, h] = Geometry.LocalGeometry(
-            pt,
-            J,
-            J,   # WJ — unit quadrature weight × J
-            Geometry.Tensor(∂x∂ξ_mat, ∂x∂ξ_bases),
-        )
+        local_geometry[1, 1, 1, h] =
+            Geometry.LocalGeometry(pt, one(FT), one(FT), ∂x∂ξ)
     end
 
     DA = ClimaComms.array_type(device)

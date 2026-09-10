@@ -52,8 +52,9 @@ locations on a sphere. This is the `N`-column generalization of
   - `Spaces.column` returns a single-column [`Spaces.FiniteDifferenceSpace`](@ref).
   - `Fields.bycolumn` iterates over each column independently.
 
-There is no horizontal connectivity between columns; DSS and horizontal
-spectral-element operators are not supported.
+There is no horizontal connectivity between columns; DSS is not supported, and
+horizontal spectral-element derivative operators evaluate to zero, as on a
+single column.
 """
 struct MultiColumnFiniteDifferenceSpace{
     G <: Grids.AbstractExtrudedFiniteDifferenceGrid,

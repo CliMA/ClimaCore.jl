@@ -91,7 +91,8 @@ Four names look alike and mean different things:
   - `Spaces.MultiPointSpace` is `N` disconnected horizontal points.
   - `MultiColumnSpace` (`Spaces.MultiColumnFiniteDifferenceSpace`) is `N`
     independent columns over those points; it supports vertical operators and
-    `Fields.bycolumn`, but no horizontal operators or DSS.
+    `Fields.bycolumn`, but not DSS, and horizontal derivative operators evaluate
+    to zero.
   - `ColumnSpace` (`Spaces.FiniteDifferenceSpace`) is one column.
 
 ## What the constructors do

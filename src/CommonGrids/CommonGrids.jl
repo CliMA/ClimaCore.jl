@@ -695,8 +695,9 @@ vertical columns at given latitude-longitude locations on a sphere: a
 [`Grids.FiniteDifferenceGrid`](@ref) vertical grid, with `Grids.Flat()`
 hypsography and a shallow spherical global geometry.
 
-The columns have no horizontal connectivity, so horizontal operators are not
-defined on the grid; `Fields.bycolumn` iterates over the columns.
+The columns have no horizontal connectivity: DSS is not supported, and
+horizontal derivative operators evaluate to zero. `Fields.bycolumn` iterates
+over the columns.
 
 # Arguments
 

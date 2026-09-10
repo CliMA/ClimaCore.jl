@@ -14,6 +14,10 @@ main
   `Spaces.all_nodes`, `MatrixFields.all_columns`, and
   `MatrixFields.field2arrays`.
 
+- ![][badge-🔥behavioralΔ] `Grids.MultiPointGrid` uses an identity horizontal
+  metric (`∂x∂ξ = I`, `J = WJ = 1`) instead of the sphere metric, and no longer
+  rejects points at the poles.
+
 v0.16.2
 -------
 
