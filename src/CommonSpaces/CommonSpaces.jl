@@ -14,7 +14,6 @@ export ExtrudedCubedSphereSpace,
     SliceXZSpace,
     RectangleXYSpace,
     MultiColumnSpace,
-    PointColumnEnsembleSpace,
     CellCenter,
     CellFace,
     face_space,
@@ -489,8 +488,5 @@ MultiColumnSpace(::Type{FT}; staggering::Staggering, kwargs...) where {FT} =
         MultiColumnGrid(FT; kwargs...),
         staggering,
     )
-
-# Backwards-compatibility alias for the old name.
-Base.@deprecate_binding PointColumnEnsembleSpace MultiColumnSpace false
 
 end # module

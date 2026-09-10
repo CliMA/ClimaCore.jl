@@ -71,8 +71,7 @@ export ExtrudedCubedSphereGrid,
     Box3DGrid,
     SliceXZGrid,
     RectangleXYGrid,
-    MultiColumnGrid,
-    PointColumnEnsembleGrid
+    MultiColumnGrid
 
 import ClimaComms
 import ..DataLayouts,
@@ -791,8 +790,5 @@ function MultiColumnGrid(
     z_grid = Grids.FiniteDifferenceGrid(z_topology)
     return Grids.ExtrudedFiniteDifferenceGrid(h_grid, z_grid)
 end
-
-# Backwards-compatibility alias for the old name.
-Base.@deprecate_binding PointColumnEnsembleGrid MultiColumnGrid false
 
 end # module

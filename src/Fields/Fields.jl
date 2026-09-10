@@ -71,12 +71,6 @@ const SpectralElementField2D{V, S} =
 
 const FiniteDifferenceField{V, S} =
     Field{V, S} where {V <: DataLayout, S <: Spaces.FiniteDifferenceSpace}
-# Backwards-compatibility alias for the pre-rewrite ColumnField, which was a
-# Field with DataLayouts.DataColumn values. Single-column fields are now
-# identified by their space (a FiniteDifferenceSpace, which may wrap a
-# ColumnGrid returned by `column(::ExtrudedFiniteDifferenceSpace, ...)`), so
-# the old ColumnField is the same set of fields as FiniteDifferenceField.
-const ColumnField = FiniteDifferenceField
 const FaceFiniteDifferenceField{V, S} =
     Field{V, S} where {V <: DataLayout, S <: Spaces.FaceFiniteDifferenceSpace}
 const CenterFiniteDifferenceField{V, S} = Field{
@@ -215,11 +209,6 @@ Base.@propagate_inbounds level(field::Field, v) = Field(
     level(field_values(field), Spaces.integer_level_index(axes(field), v)),
     level(axes(field), v),
 )
-
-# DEPRECATED: use level(field, v) instead; a caller that reaches this method
-# with a multi-level field has a bug that it silently hides. No warning, as in
-# src/DataLayouts/deprecated.jl. Remove once ClimaAtmos has migrated.
-level(field::Field) = field
 
 Base.@propagate_inbounds slab(field::Field, h) =
     Field(slab(field_values(field), h), slab(axes(field), h))

@@ -4,6 +4,60 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-💥breaking] Removed the backwards-compatibility shims and
+  deprecated aliases that the rewrites of the last few releases left behind.
+  Every one of them had a direct replacement, listed below; nothing else about
+  the API changes.
+  - `Geometry`: `AxisTensor{T, N, B, S}` → `Tensor{N, T, B, S}` (the `T` and
+    `N` parameters are swapped), `AxisVector{T, A, S}` →
+    `Tensor{1, T, Tuple{A}, S}`, `Axis2Tensor{T, B, S}` → `Tensor{2, T, B, S}`,
+    `AxisTensor(bases, components)` → `Tensor(components, bases)`, and
+    `Geometry.components(x)` → `parent(x)` for tensors (the `AbstractPoint`
+    method of `components` is unchanged). The generic axis aliases
+    `CovariantAxis{I}`, `ContravariantAxis{I}`, `LocalAxis{I}` and
+    `CartesianAxis{I}` are gone; use the concrete `Components{...}` aliases
+    that name their indices, e.g. `Contravariant12Axis` for
+    `ContravariantAxis{(1, 2)}`.
+  - `DataLayouts`: `AbstractData{T}` → `DataLayout{T}`; the `IJFH{T, Nij}` and
+    `IJHF{T, Nij}` aliases for `Nv = 1` layouts → `VIJFH{T, 1, Nij, Nij, nothing}`
+    and `VIJHF{T, 1, Nij, Nij, nothing}`; and the "universal index" methods that
+    accepted a 5-dimensional `CartesianIndex` → the 4-dimensional
+    `CartesianIndex(v, i, j, h)`. `AbstractData`, `IJFH` and `IJHF` are no
+    longer exported by `DataLayouts`.
+  - `Operators`: `WeakDivergence`/`WeakGradient`/`WeakCurl` →
+    `Divergence{WeakForm}`/`Gradient{WeakForm}`/`Curl{WeakForm}`;
+    `LeftBiasedC2F`/`LeftBiasedF2C`/`RightBiasedC2F`/`RightBiasedF2C` →
+    `BottomBiasedC2F`/`BottomBiasedF2C`/`TopBiasedC2F`/`TopBiasedF2C`; and
+    `FirstOrderOneSided`/`ThirdOrderOneSided` → `Extrapolate{0}`/`Extrapolate{1}`
+    (which are not numerically identical to the boundary conditions the old
+    names originally named — see the v0.16.0 entry).
+  - `Fields`: `ColumnField` → `FiniteDifferenceField`, and the no-index
+    `level(field)` fallback → `level(field, v)`.
+  - The "point cloud" names deprecated in v0.16.0: `Grids.PointCloudGrid` →
+    `Grids.MultiPointGrid`, `Grids.ExtrudedPointCloudGrid` →
+    `Grids.ExtrudedMultiPointGrid`, `Spaces.PointCloudSpace` →
+    `Spaces.MultiPointSpace`, `CommonGrids.PointColumnEnsembleGrid` →
+    `CommonGrids.MultiColumnGrid`, and `CommonSpaces.PointColumnEnsembleSpace` →
+    `CommonSpaces.MultiColumnSpace`.
+  - `MatrixFields`: the `⋅` alias for `MultiplyColumnwiseBandMatrixField()` →
+    `*`, which has denoted matrix multiplication since v0.14.27. `⋅` is no
+    longer exported by `MatrixFields`.
+  - The mesh-only constructors deprecated in v0.14.10:
+    `Topologies.IntervalTopology(mesh)`, `Spaces.FaceFiniteDifferenceSpace(mesh)`,
+    `Spaces.CenterFiniteDifferenceSpace(mesh)` and
+    `Grids.FiniteDifferenceGrid(mesh)` → the two-argument forms that take a
+    `ClimaComms.AbstractDevice` first.
+  - The `RecursiveApply` module (`⊞`, `⊟`, `⊠`, `radd`, `rsub`, `rmul`, `rdiv`,
+    `rzero`, `rmin`, `rmax`, `rpromote_type`), a compatibility layer over the
+    `AutoBroadcaster` wrappers since v0.14.52. Wrap the arguments with
+    `Utilities.add_auto_broadcasters`, apply the ordinary function, and unwrap
+    the result with `Utilities.drop_auto_broadcasters`; e.g. `x ⊞ y` becomes
+    `drop_auto_broadcasters(add_auto_broadcasters(x) + add_auto_broadcasters(y))`,
+    and `rzero(T)` becomes `drop_auto_broadcasters(zero(add_auto_broadcasters(T)))`.
+
+  `Operators.get_node`, which lived at the end of `src/Operators/deprecated.jl`
+  but was never deprecated, moved to `src/Operators/common.jl`; it is unchanged.
+
 v0.16.1
 -------
 - Bugfixes for compatibilty with CUDA.jl v6 [2628](https://github.com/CliMA/ClimaCore.jl/pull/2628)

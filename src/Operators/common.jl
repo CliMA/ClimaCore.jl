@@ -247,3 +247,28 @@ function unstrip_space(bc::Broadcast.Broadcasted, parent_space)
     args = unrolled_tuple_map(Base.Fix2(unstrip_space, space), bc.args)
     return Broadcast.Broadcasted(bc.style, bc.f, args, space)
 end
+
+# Read the value of `field` at one node of a slab. Used by the `Remapping`
+# module (and its CUDA extension) to interpolate a field onto arbitrary points.
+# A 1-dimensional index is a column of a 1D space, so its second index is 1.
+Base.@propagate_inbounds function get_node(
+    parent_space,
+    field::Fields.Field,
+    ij::CartesianIndex{N},
+    slabidx,
+) where {N}
+    space = reconstruct_placeholder_space(axes(field), parent_space)
+    _v =
+        if space isa Spaces.FaceExtrudedFiniteDifferenceSpace ||
+           space isa Spaces.FaceFiniteDifferenceSpace
+            slabidx.v + half
+        elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace ||
+               space isa Spaces.AbstractSpectralElementSpace ||
+               space isa Spaces.CenterFiniteDifferenceSpace
+            slabidx.v
+        else
+            error("invalid space")
+        end
+    (i, j) = N == 1 ? (ij[1], 1) : Tuple(ij)
+    return Fields.field_values(field)[isnothing(_v) ? 1 : _v, i, j, slabidx.h]
+end

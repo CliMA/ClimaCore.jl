@@ -547,7 +547,6 @@ include("indexing.jl")
 include("masks.jl")
 include("loops.jl")
 include("registers.jl")
-include("deprecated.jl")
 
 # Drop the default recursion limit from every function defined in this module
 # (including hidden kwcall body functions): slice loops and reductions are
