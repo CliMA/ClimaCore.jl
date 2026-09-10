@@ -44,10 +44,7 @@ end
 
 # A level field has no vertical dimension, and a column field has no horizontal
 # dimensions; both hold a single value along the dimensions they are missing,
-# and are broadcast across them. On GPUs the spaces of a broadcast's arguments
-# are replaced by placeholders before the launch and rebuilt inside the kernel,
-# so such an argument is easy to index as though it spanned the whole extruded
-# space, which reads outside of its data.
+# and are broadcast across them.
 @testset "Reduced-dimension arguments of a finite difference stencil" begin
     FT = Float64
     helem = 4

@@ -104,17 +104,6 @@ function Base.show(io::IO, dict::FieldNameDict)
     end
 end
 
-function Operators.strip_space(dict::FieldNameDict)
-    vals = unrolled_map(values(dict)) do val
-        if val isa Fields.Field
-            Fields.Field(Fields.field_values(val), Operators.PlaceholderSpace())
-        else
-            val
-        end
-    end
-    FieldNameDict(keys(dict), vals)
-end
-
 function Adapt.adapt_structure(to, dict::FieldNameDict)
     vals = unrolled_map(v -> Adapt.adapt_structure(to, v), values(dict))
     FieldNameDict(keys(dict), vals)
@@ -1034,9 +1023,8 @@ function summary_string(field::Fields.Field, indent_level)
     return "$("    "^indent_level)Field{$(eltype(field)), $staggering_string}"
 end
 function summary_string(bc::Base.AbstractBroadcasted, indent_level)
-    func = bc isa Operators.OperatorBroadcasted ? bc.op : bc.f
     arg_strings = map(arg -> summary_string(arg, indent_level + 1), bc.args)
     tab = "    "^indent_level
-    return "$(tab)Broadcasted{$func}(\n$(join(arg_strings, ",\n")),\n$tab)"
+    return "$(tab)Broadcasted{$(bc.f)}(\n$(join(arg_strings, ",\n")),\n$tab)"
 end
 =#

@@ -702,6 +702,16 @@ function _claim_dg_face_exchanges!(ghost_bufs)
     foreach(ex -> isnothing(ex) || (ex.in_flight[] = true), ghost_bufs)
     return nothing
 end
+
+"""
+    HorizontalBoundaryCondition <: AbstractBoundaryCondition
+
+Supertype for the boundary conditions of the horizontal DG numerical-flux
+operators (see [`add_numerical_flux_boundary!`](@ref)), e.g.
+[`ReflectingWallBC`](@ref). Subtypes should define [`ghost_state`](@ref).
+"""
+abstract type HorizontalBoundaryCondition <: AbstractBoundaryCondition end
+
 """
     PeriodicBC <: HorizontalBoundaryCondition
 
@@ -864,7 +874,7 @@ add_numerical_flux_boundary!(
     bc::AbstractBoundaryCondition,
     dydt,
     args...,
-) = invalid_boundary_condition_error(typeof(numflux), typeof(bc))
+) = invalid_boundary_condition_error(numflux, bc)
 # ---------------------------------------------------------------------------
 # Symmetric face lifting for non-conservative (gradient / curl) terms
 # ---------------------------------------------------------------------------

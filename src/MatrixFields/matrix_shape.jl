@@ -53,11 +53,5 @@ column_axes(matrix_field, matrix_space = axes(matrix_field)) =
     _column_axes(matrix_shape(matrix_field, matrix_space), matrix_space)
 
 _column_axes(::Square, space) = space
-_column_axes(::FaceToCenter, space) = Operators.reconstruct_placeholder_space(
-    Operators.FacePlaceholderSpace(),
-    space,
-)
-_column_axes(::CenterToFace, space) = Operators.reconstruct_placeholder_space(
-    Operators.CenterPlaceholderSpace(),
-    space,
-)
+_column_axes(::FaceToCenter, space) = Spaces.face_space(space)
+_column_axes(::CenterToFace, space) = Spaces.center_space(space)

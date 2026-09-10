@@ -324,11 +324,6 @@ end
 
 end
 
-# `level` and `column` have generic identity fallbacks, so a slice method that is
-# typed only on host grids does not error on a device-side space: it silently
-# returns the space it was handed. GPU kernels slice device-side spaces (see
-# Operators.reconstruct_placeholder_space), and a whole extruded space standing in
-# for one of its levels indexes a level field as if it spanned every level.
 @testset "slicing device-side extruded spaces" begin
     FT = Float64
     # a space with a 2D horizontal grid, and one with a 1D horizontal grid

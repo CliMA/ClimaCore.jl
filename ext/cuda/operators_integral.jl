@@ -1,6 +1,6 @@
 import ClimaCore: DataLayouts, Spaces, Fields, level, column
 import ClimaCore.Operators:
-    strip_space,
+    toggle_placeholder_grids,
     column_reduce_device!,
     single_column_reduce!,
     column_accumulate_device!,
@@ -35,8 +35,8 @@ function column_reduce_device!(
         single_column_reduce!,
         f,
         transform,
-        strip_space(output, axes(output)), # The output space is irrelevant here
-        strip_space(input, space),
+        toggle_placeholder_grids(output)),
+        toggle_placeholder_grids(input),
         init,
         space,
         mask,
@@ -80,8 +80,8 @@ function column_accumulate_device!(
         single_column_accumulate!,
         f,
         transform,
-        strip_space(output, space),
-        strip_space(input, space),
+        toggle_placeholder_grids(output),
+        toggle_placeholder_grids(input),
         init,
         space,
         mask,

@@ -4,9 +4,8 @@ import ClimaComms
 using CUDA: i32
 import ClimaCore.Utilities: half
 import ClimaCore.Operators
-import ClimaCore.Operators: AbstractStencilStyle, strip_space
+import ClimaCore.Operators: AbstractStencilStyle, toggle_placeholder_grids
 import ClimaCore.Operators: setidx!, getidx
-import ClimaCore.Operators: StencilBroadcasted
 
 struct CUDAColumnStencilStyle <: AbstractStencilStyle end
 
@@ -20,10 +19,7 @@ include("operators_fd_eager.jl")
 
 function Base.copyto!(
     out::Field,
-    bc::Union{
-        StencilBroadcasted{CUDAColumnStencilStyle},
-        Broadcasted{CUDAColumnStencilStyle},
-    };
+    bc::Broadcasted{CUDAColumnStencilStyle};
     mask = Spaces.get_mask(axes(out)),
 )
     space = axes(out)
@@ -81,15 +77,15 @@ function Base.copyto!(
         # use fallback lazy evaluation if the eager kernel would exceed the
         # device's per-block shared memory
         if !isnothing(eager_shmem) && eager_shmem ≤ max_shmem
-            # `axes(out)` is passed as the space the kernel evaluates `bc` on, since
-            # `out` and `bc` are space-stripped. The kernel recovers the output
-            # layout's horizontal extents from the type parameters of
-            # `field_values(out)` (see `vijh_params`), so the `CartesianIndices` it
-            # builds from them divides by compile-time constants, keeping the
-            # per-thread `divrem` cheap.
+            # `axes(out)` is passed as the space the kernel evaluates `bc` on,
+            # since `out` and `bc` are given placeholder grids. The kernel
+            # recovers the output layout's horizontal extents from the type
+            # parameters of `field_values(out)` (see `vijh_params`), so the
+            # `CartesianIndices` it builds from them divides by compile-time
+            # constants, keeping the per-thread `divrem` cheap.
             args = (
-                strip_space(out, space),
-                strip_space(bc, space),
+                toggle_placeholder_grids(out),
+                toggle_placeholder_grids(bc),
                 mask,
                 axes(out),
             )
@@ -112,8 +108,8 @@ function Base.copyto!(
     end
 
     args = cudaconvert((
-        strip_space(out, space),
-        strip_space(bc, space),
+        toggle_placeholder_grids(out),
+        toggle_placeholder_grids(bc),
         axes(out),
         bounds,
         mask,
@@ -139,10 +135,7 @@ end
 
 function copyto_stencil_kernel!(
     out,
-    bc::Union{
-        StencilBroadcasted{CUDAColumnStencilStyle},
-        Broadcasted{CUDAColumnStencilStyle},
-    },
+    bc::Broadcasted{CUDAColumnStencilStyle},
     space,
     bds,
     mask,

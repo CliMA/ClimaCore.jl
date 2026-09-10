@@ -248,8 +248,6 @@ struct MultiplyColumnwiseBandMatrixField <: Operators.FiniteDifferenceOperator e
 # TODO: Remove this in the next major release of ClimaCore.
 const ⋅ = MultiplyColumnwiseBandMatrixField()
 
-Operators.strip_space(op::MultiplyColumnwiseBandMatrixField, _) = op
-
 # These name the two corners of the band matrix, not the ends of the column.
 # The vertical index runs from the domain bottom (the `LeftBoundaryWindow`) to
 # the domain top (the `RightBoundaryWindow`), so the matrix's top-left corner
@@ -343,8 +341,7 @@ function Operators.return_eltype(
     end
 end
 
-Operators.return_space(::MultiplyColumnwiseBandMatrixField, space1, space2) =
-    space1
+Operators.return_space(::MultiplyColumnwiseBandMatrixField, arg1, _) = axes(arg1)
 
 # Compute max(li - i, ld) and min(ri - i, ud). Both corners clamp both ends of
 # the band: on columns too short for the interior stencil, the boundary windows

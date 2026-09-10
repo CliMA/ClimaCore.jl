@@ -1,12 +1,10 @@
 import ClimaCore: Spaces, Quadratures, Topologies, Operators
-import Base.Broadcast: Broadcasted
 import ClimaCore.Fields: Field, field_values, AbstractFieldStyle
 import ClimaComms
 import ClimaCore.Utilities: half, new, unsafe_eltype
 import ClimaCore.Operators
 import ClimaCore.Geometry: project
-import ClimaCore.Operators:
-    StencilBroadcasted, setidx!, getidx, reconstruct_placeholder_space
+import ClimaCore.Operators: OperatorBroadcasted, setidx!, getidx, toggle_placeholder_grids
 import ClimaCore.MatrixFields: FaceToCenter, CenterToFace, CenterToCenter,
     FaceToFace, FDOperatorMatrix, MultiplyColumnwiseBandMatrixField,
     op_matrix_row_type, BandMatrixRow, band_matrix_d
@@ -40,21 +38,18 @@ non-concrete type; see `cached_operand_type`), in which case the caller must fal
 to the lazy `copyto_stencil_kernel!` instead of launching the eager kernel.
 """
 max_eager_shmem_per_thread(x) = 0
-max_eager_shmem_per_thread(bc::Union{Broadcasted, StencilBroadcasted}) =
+max_eager_shmem_per_thread(bc::OperatorBroadcasted) =
     _max_eager_shmem_over_args(bc.args)
-max_eager_shmem_per_thread(
-    bc::StencilBroadcasted{S, <:MultiplyColumnwiseBandMatrixField},
-) where {S} =
+max_eager_shmem_per_thread(bc::OperatorBroadcasted{<:MultiplyColumnwiseBandMatrixField}) =
     _shmem_max(
         _sizeof_or_nothing(cached_operand_type(bc)),
         _max_eager_shmem_over_args(bc.args),
     )
-max_eager_shmem_per_thread(
-    bc::StencilBroadcasted{S, <:Operators.AdvectionOperator},
-) where {S} = _shmem_max(
-    _sizeof_or_nothing(advection_shmem_entry_type(bc)),
-    _max_eager_shmem_over_args(bc.args),
-)
+max_eager_shmem_per_thread(bc::OperatorBroadcasted{<:Operators.AdvectionOperator}) =
+    _shmem_max(
+        _sizeof_or_nothing(advection_shmem_entry_type(bc)),
+        _max_eager_shmem_over_args(bc.args),
+    )
 
 _max_eager_shmem_over_args(args::Tuple) = UnrolledUtilities.unrolled_mapreduce(
     max_eager_shmem_per_thread,
@@ -171,18 +166,18 @@ compile-time constant.
     space.staggering isa Spaces.CellCenter && !Topologies.isperiodic(space)
 
 """
-    eager_copyto_stencil_kernel!(out, bc::BC, mask, space)
+    eager_copyto_stencil_kernel!(out, bc, mask, space)
 
-CUDA kernel to compute the value of a `Broadcasted` or `StencilBroadcasted` at a single index.
+CUDA kernel to compute the value of an `OperatorBroadcasted` at a single index.
 This calls `calc_level_val(bc, hidx, space)`, which computes the value of the broadcasted
 expression at the given index, and then copies the result into `out`.
 """
 Base.@propagate_inbounds function eager_copyto_stencil_kernel!(
     out,
-    bc::BC,
+    bc,
     mask,
     space,
-) where {BC}
+)
     v = threadIdx().x
     col_idx = threadIdx().y + (blockIdx().x - 1) * blockDim().y
     # Out-of-range columns must not exit early: the shmem handlers in `calc_level_val`
@@ -256,20 +251,19 @@ end
 """
     reconstruct_space_and_call_calc_level_val(arg, (hidx, space))
 
-If `arg` is a `Broadcasted`, `StencilBroadcasted`, or `Field`,
-reconstruct the space for the argument and call `calc_level_val` on it. This allows
-us to use Base.Fix2.
+If `arg` is a `Broadcasted` or `Field`, reconstruct the space for the argument
+and call `calc_level_val` on it. This allows us to use Base.Fix2.
 """
 Base.@propagate_inbounds reconstruct_space_and_call_calc_level_val(
     arg::A,
     space_idx_tpl::S,
 ) where {
-    A <: Union{Base.Broadcast.Broadcasted{<:AbstractFieldStyle}, StencilBroadcasted, Field},
+    A <: Union{Base.Broadcast.Broadcasted{<:AbstractFieldStyle}, Field},
     S,
 } = @inbounds @inline calc_level_val(
     arg,
     space_idx_tpl[1],
-    reconstruct_placeholder_space(axes(arg), space_idx_tpl[2]),
+    toggle_placeholder_grids(axes(arg), space_idx_tpl[2]),
 )
 Base.@propagate_inbounds reconstruct_space_and_call_calc_level_val(
     arg::A,
@@ -279,7 +273,7 @@ Base.@propagate_inbounds reconstruct_space_and_call_calc_level_val(
 """
     calc_level_val(val::T, hidx, space)
 
-If `val` is not a `Broadcasted`, `StencilBroadcasted`, or `Field`, just return `val`.
+If `val` is not an `OperatorBroadcasted` or `Field`, just return `val`.
 If it is a `Ref`, return `val[]`. If it is a one element tuple, return the element.
 """
 Base.@propagate_inbounds calc_level_val(val::T, hidx, space) where {T <: Ref} = val[]
@@ -288,20 +282,16 @@ Base.@propagate_inbounds calc_level_val(val::T, hidx, space) where {V, T <: Tupl
 Base.@propagate_inbounds calc_level_val(arg::S, hidx, space) where {S} = arg
 
 """
-    calc_level_val(bc::StencilBroadcasted{<:Any, <: MultiplyColumnwiseBandMatrixField}, hidx, space)
+    calc_level_val(bc::OperatorBroadcasted{<:MultiplyColumnwiseBandMatrixField}, hidx, space)
 
 Call `calc_level_val` on both args of `bc`, place the result of the second arg into shared memory,
 and then perform the multiplication.
 """
 Base.@propagate_inbounds function calc_level_val(
-    bc::BC,
+    bc::OperatorBroadcasted{<:MultiplyColumnwiseBandMatrixField},
     hidx,
     space,
-) where {
-    S,
-    Op <: MultiplyColumnwiseBandMatrixField,
-    BC <: StencilBroadcasted{S, Op},
-}
+)
     # The launch configuration sizes the dynamic shared memory to fit the largest single
     # expression result in the broadcasted tree (see `max_eager_shmem_per_thread`), so the
     # result of every multiplication is guaranteed to fit and can always be cached.
@@ -310,8 +300,8 @@ Base.@propagate_inbounds function calc_level_val(
     # Whether the vertical topology is periodic. `row_mul_*!` uses this (a compile-time
     # constant) to wrap operand reads at the column ends instead of zero-padding them.
     periodic = Topologies.isperiodic(space)
-    mat1_space = reconstruct_placeholder_space(axes(bc.args[1i32]), space)
-    mat2_space = reconstruct_placeholder_space(axes(bc.args[2i32]), space)
+    mat1_space = toggle_placeholder_grids(axes(bc.args[1i32]), space)
+    mat2_space = toggle_placeholder_grids(axes(bc.args[2i32]), space)
 
     mat2_row = calc_level_val(bc.args[2i32], hidx, mat2_space)
     mat1_row = calc_level_val(bc.args[1i32], hidx, mat1_space)
@@ -379,7 +369,7 @@ Base.@propagate_inbounds function calc_level_val(
 end
 
 """
-    calc_level_val(bc::StencilBroadcasted{<:Any, <: SetBoundaryOperator}, hidx, space)
+    calc_level_val(bc::OperatorBroadcasted{<:SetBoundaryOperator}, hidx, space)
 
 A `SetBoundaryOperator` only modifies the two boundary levels of the space it is applied
 to, and is the identity in the interior. At the boundaries we dispatch to
@@ -387,28 +377,25 @@ to, and is the identity in the interior. At the boundaries we dispatch to
 boundary value), and in the interior we reuse the eagerly-computed value of the argument.
 """
 Base.@propagate_inbounds function calc_level_val(
-    bc::BC,
+    bc::OperatorBroadcasted{<:SetBoundaryOperator},
     hidx,
     space,
-) where {
-    S,
-    Op <: Operators.SetBoundaryOperator,
-    BC <: StencilBroadcasted{S, Op},
-}
+)
     op = bc.op
     v = threadIdx().x
     val_no_bcs = @inline @inbounds calc_level_val(bc.args[1i32], hidx, space)
-    # A `SetBoundaryOperator` is space-preserving (`return_space(op, space) = space`), so
-    # this method is compiled for both staggerings: the automatic conversion puts one on a
-    # face output (InterpolateC2F + SetValue), on a center output (DivergenceF2C +
-    # SetDivergence), and on a face input (GradientF2C + SetValue). Deriving `idx` from
-    # the compile-time staggering type keeps the two staggerings apart, so the `PlusHalf`
-    # face index only reaches `should_call_*_boundary` when compiling for a face space and
-    # its `idx < left_interior_idx` comparison never mixes a `PlusHalf` with an integer
-    # center index -- which would pull in non-GPU-compatible error-formatting code.
+    # A `SetBoundaryOperator` is space-preserving, so this method is compiled
+    # for both staggerings: the automatic conversion puts one on face outputs
+    # (InterpolateC2F+SetValue), center outputs (DivergenceF2C+SetDivergence),
+    # and face inputs (GradientF2C+SetValue). Deriving `idx` from the
+    # compile-time staggering type keeps the two staggerings apart, so the
+    # `PlusHalf` face index only reaches `should_call_*_boundary` when compiling
+    # for a face space and its `idx < left_interior_idx` comparison never mixes
+    # a `PlusHalf` with an integer center index, since that would pull in
+    # error-handling code that isn't GPU-compatible.
     idx = space.staggering isa Spaces.CellFace ? (v - half) : v
-    if Operators.should_call_left_boundary(idx, space, op, bc.args...)
-        lbw = Operators.left_boundary_window(space)
+    if Operators.should_call_left_boundary(bc, idx)
+        lbw = Operators.LeftBoundaryWindow(space)
         return @inbounds @inline Operators.stencil_left_boundary(
             op,
             Operators.get_boundary(op, lbw),
@@ -418,8 +405,8 @@ Base.@propagate_inbounds function calc_level_val(
             bc.args...,
         )
     elseif !(has_padding_thread(space) && v == CUDA.blockDim().x) &&
-           Operators.should_call_right_boundary(idx, space, op, bc.args...)
-        rbw = Operators.right_boundary_window(space)
+           Operators.should_call_right_boundary(bc, idx)
+        rbw = Operators.RightBoundaryWindow(space)
         return @inbounds @inline Operators.stencil_right_boundary(
             op,
             Operators.get_boundary(op, rbw),
@@ -434,7 +421,7 @@ Base.@propagate_inbounds function calc_level_val(
 end
 
 """
-    calc_level_val(bc::StencilBroadcasted{<:Any, <:AdvectionOperator}, hidx, space)
+    calc_level_val(bc::OperatorBroadcasted{<:AdvectionOperator}, hidx, space)
 
 Each thread computes the velocity (converted to its contravariant3 component) and the
 advected field at its own level, caches them in shared memory, and then gathers the
@@ -451,22 +438,18 @@ whose garbage entry is cached but never read because the window indices are clam
 the center range (or wrapped, on periodic spaces) exactly like `stencil_interior`'s.
 """
 Base.@propagate_inbounds function calc_level_val(
-    bc::BC,
+    bc::OperatorBroadcasted{<:AdvectionOperator},
     hidx,
     space,
-) where {
-    S,
-    Op <: Operators.AdvectionOperator,
-    BC <: StencilBroadcasted{S, Op},
-}
+)
     op = bc.op
     v = threadIdx().x
     block_col_idx = threadIdx().y
     n_faces = CUDA.blockDim().x
     periodic = Topologies.isperiodic(space)
     width = Operators.advection_velocity_width(op)
-    velocity_space = reconstruct_placeholder_space(axes(bc.args[1i32]), space)
-    arg_space = reconstruct_placeholder_space(axes(bc.args[2i32]), space)
+    velocity_space = toggle_placeholder_grids(axes(bc.args[1i32]), space)
+    arg_space = toggle_placeholder_grids(axes(bc.args[2i32]), space)
     velocity_val =
         @inbounds @inline calc_level_val(bc.args[1i32], hidx, velocity_space)
     arg_val = @inbounds @inline calc_level_val(bc.args[2i32], hidx, arg_space)
@@ -600,16 +583,12 @@ Base.@propagate_inbounds function advection_gather(
 end
 
 """
-    calc_level_val(bc::StencilBroadcasted, hidx, space)
+    calc_level_val(bc::OperatorBroadcasted, hidx, space)
 
 Fallback case of `calc_level_val` that calls `Operators.getidx`. This is used for
 affine BCs or values that won't fit in shmem.
 """
-Base.@propagate_inbounds function calc_level_val(
-    bc::BC,
-    hidx,
-    space,
-) where {BC <: StencilBroadcasted}
+Base.@propagate_inbounds function calc_level_val(bc::OperatorBroadcasted, hidx, space)
     v = threadIdx().x
     if has_padding_thread(space)
         v == CUDA.blockDim().x && return @inline @inbounds new(eltype(bc))
@@ -662,19 +641,15 @@ Base.@propagate_inbounds function calc_level_val(
 end
 
 """
-    calc_level_val(bc::StencilBroadcasted{<:Any, <: FDOperatorMatrix}, hidx, space)
+    calc_level_val(bc::OperatorBroadcasted{<:FDOperatorMatrix}, hidx, space)
 
 Return the correct row of the operator matrix for the current thread
 """
 Base.@propagate_inbounds function calc_level_val(
-    bc::BC,
+    bc::OperatorBroadcasted{<:FDOperatorMatrix},
     hidx,
     space,
-) where {
-    S,
-    BC <:
-    StencilBroadcasted{S, <:FDOperatorMatrix},
-}
+)
     op_matrix = bc.op
     args = bc.args
     val = @inbounds @inline get_op_row(op_matrix, args, hidx, space)
@@ -709,11 +684,10 @@ Base.@propagate_inbounds function get_op_row(
         return new(row_type)
     end
     v_half = outputs_to_face ? v - half : v
-    in_left_bnd = Operators.should_call_left_boundary(v_half, space, op, nothing)
-    in_right_bnd =
-        Operators.should_call_right_boundary(v_half, space, op, nothing)
+    in_left_bnd = Operators.should_call_left_boundary(bc, v_half)
+    in_right_bnd = Operators.should_call_right_boundary(bc, v_half)
     if in_left_bnd
-        lloc = Operators.left_boundary_window(space)
+        lloc = Operators.LeftBoundaryWindow(space)
         left_bndry = Operators.get_boundary(op, lloc)
         val = @inbounds @inline Operators.stencil_left_boundary(
             op_matrix,
@@ -724,7 +698,7 @@ Base.@propagate_inbounds function get_op_row(
             args...,
         )
     elseif in_right_bnd
-        rroc = Operators.right_boundary_window(space)
+        rroc = Operators.RightBoundaryWindow(space)
         right_bndry = Operators.get_boundary(op, rroc)
         val = @inbounds @inline Operators.stencil_right_boundary(
             op_matrix,
