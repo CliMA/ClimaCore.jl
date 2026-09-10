@@ -26,8 +26,6 @@ import ..DataLayouts: PointIndex
 import ..Domains: z_max, z_min
 import ..Meshes: n_elements_per_panel_direction
 
-import ..DeviceSideDevice, ..DeviceSideContext
-
 import ..Grids:
     Staggering,
     CellFace,
@@ -108,13 +106,6 @@ horizontal_grid(grid::Grids.LevelGrid) = grid.full_grid.horizontal_grid
 vertical_grid(grid::Grids.AbstractFiniteDifferenceGrid) = grid
 vertical_grid(grid::Grids.ColumnGrid) = vertical_grid(grid.full_grid)
 vertical_grid(grid::Grids.AbstractExtrudedFiniteDifferenceGrid) = grid.vertical_grid
-
-# Device-side extruded grids do not store their vertical grids, so the vertical
-# topology, which Adapt preserves, stands in as the identity token compared by
-# issubspace: column slices share a vertical topology exactly when their host
-# grids share a vertical grid.
-vertical_grid(grid::Grids.DeviceExtrudedFiniteDifferenceGrid) =
-    Grids.vertical_topology(grid)
 
 half_level_error() = throw(ArgumentError("Cannot use PlusHalf as CellCenter space index"))
 

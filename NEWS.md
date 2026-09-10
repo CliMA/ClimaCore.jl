@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- The device-side grid types
+  `Grids.DeviceFiniteDifferenceGrid`, `Grids.DeviceExtrudedFiniteDifferenceGrid`,
+  `Grids.DeviceSpectralElementGrid1D`, `Grids.DeviceSpectralElementGrid2D` and
+  `Topologies.DeviceIntervalTopology` are removed.
+
 v0.16.1
 -------
 - Bugfixes for compatibilty with CUDA.jl v6 [2628](https://github.com/CliMA/ClimaCore.jl/pull/2628)

@@ -22,7 +22,7 @@ abstract type AbstractExtrudedFiniteDifferenceGrid <: AbstractGrid end
 
 Construct an `ExtrudedFiniteDifferenceGrid` from the horizontal and vertical spaces.
 """
-mutable struct ExtrudedFiniteDifferenceGrid{
+struct ExtrudedFiniteDifferenceGrid{
     H <: AbstractGrid,
     V <: FiniteDifferenceGrid,
     A <: HypsographyAdaption,
@@ -153,29 +153,6 @@ global_geometry(grid::AbstractExtrudedFiniteDifferenceGrid) =
 
 quadrature_style(grid::ExtrudedFiniteDifferenceGrid) =
     quadrature_style(grid.horizontal_grid)
-
-
-## GPU compatibility
-struct DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, CLG, FLG} <:
-       AbstractExtrudedFiniteDifferenceGrid
-    vertical_topology::VT
-    quadrature_style::Q
-    global_geometry::GG
-    center_local_geometry::CLG
-    face_local_geometry::FLG
-end
-
-ClimaComms.device(::DeviceExtrudedFiniteDifferenceGrid) = DeviceSideDevice()
-ClimaComms.context(::DeviceExtrudedFiniteDifferenceGrid) = DeviceSideContext()
-
-local_geometry_type(
-    ::Type{DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, CLG, FLG}},
-) where {VT, Q, GG, CLG, FLG} = eltype(CLG) # calls eltype from DataLayouts
-
-quadrature_style(grid::DeviceExtrudedFiniteDifferenceGrid) =
-    grid.quadrature_style
-vertical_topology(grid::DeviceExtrudedFiniteDifferenceGrid) =
-    grid.vertical_topology
 
 ## aliases
 
