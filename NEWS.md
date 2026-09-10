@@ -9,6 +9,11 @@ main
   `Grids.DeviceSpectralElementGrid1D`, `Grids.DeviceSpectralElementGrid2D` and
   `Topologies.DeviceIntervalTopology` are removed.
 
+- ![][badge-✨feature/enhancement] `Spaces.MultiPointSpace` implements
+  `Spaces.quadrature_style`, `Spaces.node_horizontal_length_scale`,
+  `Spaces.all_nodes`, `MatrixFields.all_columns`, and
+  `MatrixFields.field2arrays`.
+
 v0.16.2
 -------
 
