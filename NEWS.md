@@ -9,6 +9,16 @@ main
   can be interpolated to pressure coordinates like fields on extruded or
   single-column spaces.
 
+- ![][badge-✨feature/enhancement] `CommonGrids.MultiColumnGrid` and
+  `CommonSpaces.MultiColumnSpace` accept a `deep` keyword, forwarded to
+  `Grids.ExtrudedFiniteDifferenceGrid`, so multi-column grids can use a
+  `DeepSphericalGlobalGeometry` instead of always being shallow.
+
+- ![][badge-✨feature/enhancement] `Remapping.PressureInterpolator` supports
+  `MultiColumnFiniteDifferenceSpace`, so fields on multiple independent columns
+  can be interpolated to pressure coordinates like fields on extruded or
+  single-column spaces.
+
 v0.16.1
 -------
 - Bugfixes for compatibilty with CUDA.jl v6 [2628](https://github.com/CliMA/ClimaCore.jl/pull/2628)
