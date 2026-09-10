@@ -2,6 +2,7 @@ using Test
 using JET
 
 import ClimaCore: Geometry, Domains, Meshes, Spaces, Fields, MatrixFields
+import ClimaCore.CommonSpaces: MultiColumnSpace
 import ClimaComms
 ClimaComms.@import_required_backends
 
@@ -82,4 +83,34 @@ ClimaComms.@import_required_backends
 
     # Because this test is broken, printing matrix fields allocates some memory.
     @test_broken (@allocated MatrixFields.column_field2array_view(ᶜᶜmat)) == 0
+end
+
+@testset "field2arrays on multi-column fields" begin
+    lats = [0.0, 10.0, -5.0]
+    points = [Geometry.LatLongPoint(lat, 0.0) for lat in lats]
+    device = ClimaComms.CPUSingleThreaded()
+    center_space = MultiColumnSpace(;
+        points,
+        z_elem = 3,
+        z_min = 0.0,
+        z_max = 3.0,
+        radius = 100.0,
+        staggering = Spaces.CellCenter(),
+        device,
+    )
+    face_space = Spaces.face_space(center_space)
+    # Values depend on the column so that a mix-up between columns is detected.
+    ᶜf = map(c -> c.z * (1 + c.lat), Fields.coordinate_field(center_space))
+    ᶠf = map(c -> c.z * (1 + c.lat), Fields.coordinate_field(face_space))
+    ᶜᶜmat = map(f -> MatrixFields.TridiagonalMatrixRow(2 * f, 4 * f, 8 * f), ᶜf)
+    ᶠᶜmat = map(f -> MatrixFields.BidiagonalMatrixRow(2 * f, 4 * f), ᶠf)
+
+    for field in (ᶜf, ᶠf, ᶜᶜmat, ᶠᶜmat)
+        arrays = MatrixFields.field2arrays(field)
+        @test vec(arrays) == [
+            MatrixFields.column_field2array(Spaces.column(field, 1, 1, h)) for
+            h in eachindex(lats)
+        ]
+        @test collect(MatrixFields.field2arrays_view(field)) == arrays
+    end
 end
