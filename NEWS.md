@@ -19,6 +19,9 @@ main
   `Spaces.all_nodes`, `MatrixFields.all_columns`, and
   `MatrixFields.field2arrays`.
 
+- ![][badge-🔥behavioralΔ] `Grids.MultiPointGrid` uses an identity horizontal
+  metric (`∂x∂ξ = I`, `J = WJ = 1`) instead of the sphere metric.
+
 v0.16.1
 -------
 - Bugfixes for compatibilty with CUDA.jl v6 [2628](https://github.com/CliMA/ClimaCore.jl/pull/2628)
