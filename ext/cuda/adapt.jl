@@ -59,7 +59,7 @@ Adapt.adapt_structure(
 ) = Limiters.QuasiMonotoneLimiter(
     Adapt.adapt(to, lim.q_bounds),
     Adapt.adapt(to, lim.q_bounds_nbr),
-    Adapt.adapt(to, lim.ghost_buffer),
+    nothing,
     lim.rtol,
     Limiters.NoConvergenceStats(),
 )

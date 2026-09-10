@@ -248,19 +248,21 @@ end
 Update the field `limiter.q_bounds_nbr` based on `limiter.q_bounds` in the ghost
 neighbors. This should be called after the ghost exchange has completed.
 
-!!! note
-
-    This loop indexes slabs of the receive buffer from the host, so the
-    distributed limiter is only supported on CPUs. Running it with a
-    `CUDADevice` and an `MPICommsContext` would trigger scalar indexing of a
-    `CuArray`. Making distributed limiters work on GPUs requires replacing
-    this loop (and the `q_bounds_nbr` update below) with a kernel.
-
 Part of [`compute_bounds!`](@ref).
 """
+compute_neighbor_bounds_ghost!(
+    limiter::QuasiMonotoneLimiter,
+    topology::Topologies.AbstractTopology,
+) = compute_neighbor_bounds_ghost!(
+    limiter,
+    topology,
+    ClimaComms.device(topology),
+)
+
 function compute_neighbor_bounds_ghost!(
     limiter::QuasiMonotoneLimiter,
     topology::Topologies.AbstractTopology,
+    dev::ClimaComms.AbstractCPUDevice,
 )
     q_bounds_nbr = limiter.q_bounds_nbr
     (Nv, _, _, Nh) = size(q_bounds_nbr)
@@ -308,11 +310,13 @@ function compute_bounds!(
 )
     compute_element_bounds!(limiter, ρq, ρ)
     if limiter.ghost_buffer isa Topologies.GhostBuffer
+        topology = Spaces.topology(axes(ρq))
         Spaces.fill_send_buffer!(
-            Spaces.topology(axes(ρq)),
+            topology,
             limiter.q_bounds,
             limiter.ghost_buffer,
         )
+        Spaces.cuda_synchronize(ClimaComms.device(topology); blocking = true)
         ClimaComms.start(limiter.ghost_buffer.graph_context)
     end
     compute_neighbor_bounds_local!(limiter, ρ)

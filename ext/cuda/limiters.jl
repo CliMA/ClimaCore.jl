@@ -2,6 +2,7 @@ import ClimaCore.Limiters:
     QuasiMonotoneLimiter,
     compute_element_bounds!,
     compute_neighbor_bounds_local!,
+    compute_neighbor_bounds_ghost!,
     apply_limiter!,
     apply_limit_slab!,
     VerticalMassBorrowingLimiter,
@@ -117,6 +118,61 @@ function compute_neighbor_bounds_local_kernel!(
             q_max = max(q_max, slab_q_bounds[2])
         end
         slab_q_bounds_nbr = slab(q_bounds_nbr, v, h)
+        slab_q_bounds_nbr[1] = q_min
+        slab_q_bounds_nbr[2] = q_max
+    end
+    return nothing
+end
+
+function compute_neighbor_bounds_ghost!(
+    limiter::QuasiMonotoneLimiter,
+    topology::Topologies.AbstractTopology,
+    dev::ClimaComms.CUDADevice,
+)
+    if limiter.ghost_buffer isa Topologies.GhostBuffer
+        (Nv, _, _, Nh) = size(limiter.q_bounds_nbr)
+        nthreads, nblocks = config_threadblock(Nv, Nh)
+        args = (
+            limiter,
+            Base.broadcastable(limiter.ghost_buffer.recv_data),
+            topology.ghost_neighbor_elem,
+            topology.ghost_neighbor_elem_offset,
+        )
+        auto_launch!(
+            compute_neighbor_bounds_ghost_kernel!,
+            args;
+            threads_s = nthreads,
+            blocks_s = nblocks,
+        )
+    end
+    call_post_op_callback() &&
+        post_op_callback(limiter.q_bounds_nbr, limiter, topology, dev)
+    return nothing
+end
+
+function compute_neighbor_bounds_ghost_kernel!(
+    limiter,
+    q_bounds_ghost,
+    ghost_neighbor_elem,
+    ghost_neighbor_elem_offset,
+)
+    (; q_bounds_nbr) = limiter
+    (Nv, _, _, Nh) = size(q_bounds_nbr)
+    n = (Nv, Nh)
+    tidx = thread_index()
+    @inbounds if valid_range(tidx, prod(n))
+        (v, h) = kernel_indexes(tidx, n).I
+        slab_q_bounds_nbr = slab(q_bounds_nbr, v, h)
+        q_min = slab_q_bounds_nbr[1]
+        q_max = slab_q_bounds_nbr[2]
+        for lne in
+            ghost_neighbor_elem_offset[h]:(ghost_neighbor_elem_offset[h + 1] - 1)
+
+            gidx = ghost_neighbor_elem[lne]
+            ghost_slab_q_bounds = slab(q_bounds_ghost, v, gidx)
+            q_min = min(q_min, ghost_slab_q_bounds[1])
+            q_max = max(q_max, ghost_slab_q_bounds[2])
+        end
         slab_q_bounds_nbr[1] = q_min
         slab_q_bounds_nbr[2] = q_max
     end
