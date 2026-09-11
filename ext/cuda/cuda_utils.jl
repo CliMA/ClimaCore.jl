@@ -405,17 +405,7 @@ launch_kernel!(
 # cautious budget; the next rung is simply too far up, and asking for it costs
 # more in spill than the occupancy returns. This would change if the kernel body
 # shrank enough to reach 80 registers without the spill.
-# EXPERIMENT 2026-09-10: disabled (0) to isolate whether the register cap causes
-# the reversal documented in docs/learnings.md 4g. On a 120-step window the
-# bounded kernel starts 2x faster than baseline and ends 31% SLOWER, degrading
-# monotonically, while baseline stays flat. The suspicion is that 128 registers
-# suit the early working set and not the later one, so spill grows with
-# atmospheric activity -- which the compile-time spill budget cannot see.
-#
-# If the degradation vanishes with this at 0, the cap is the cause and the
-# CloudMicrophysics fusion may still stand on its own. If it persists, the cause
-# is elsewhere in the stack.
-const LAUNCH_BOUNDS_TARGET_WARPS_PER_SM = Ref{Int}(0)
+const LAUNCH_BOUNDS_TARGET_WARPS_PER_SM = Ref{Int}(16)
 const LAUNCH_BOUNDS_SPILL_BUDGET = Ref{Int}(256)
 
 const LaunchBounds = @NamedTuple{maxthreads::Int, blocks_per_sm::Int}
