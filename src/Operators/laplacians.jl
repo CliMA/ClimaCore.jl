@@ -8,7 +8,7 @@
 """
     scalar_laplacian(χ; weight = nothing)
 
-Weak horizontal Laplacian of a scalar, `wdivₕ(gradₕ(χ))`, or
+Return the weak horizontal Laplacian of the scalar `χ`, `wdivₕ(gradₕ(χ))`, or
 `wdivₕ(weight * gradₕ(χ))` when a `weight` field (e.g., a density) is given.
 
 On continuous (CG) spaces this returns a lazy operator expression, so it fuses
@@ -145,8 +145,8 @@ end
 """
     vector_laplacian(u; divergence_factor = 1)
 
-Weak horizontal vector Laplacian of a horizontal covariant vector, as the
-grad-div minus curl-curl identity
+Return the weak horizontal vector Laplacian of the horizontal covariant vector
+`u`, as the grad-div minus curl-curl identity
 `divergence_factor * wgradₕ(divₕ(u)) − C12(wcurlₕ(C3(curlₕ(u))))`, with the
 grad-div part scaled by `divergence_factor` (used for divergence damping in
 the second pass of ∇⁴ hyperdiffusion). On spaces with one horizontal
@@ -155,9 +155,9 @@ is built.
 
 Returns a lazy operator expression on continuous (CG) spaces; the result is
 element-local and must be made continuous with
-[`Spaces.weighted_dss!`](@ref) before it is differentiated again. Not yet
-implemented for discontinuous (DG) spaces, which need grad-div/curl-curl
-face lifting.
+[`Spaces.weighted_dss!`](@ref) before it is differentiated again. Throws an
+error on discontinuous (DG) spaces, which need grad-div/curl-curl face lifting
+that is not implemented.
 """
 vector_laplacian(u; divergence_factor = 1) =
     vector_laplacian(Spaces.discretization(axes(u)), u, divergence_factor)

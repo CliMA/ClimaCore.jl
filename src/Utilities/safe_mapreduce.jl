@@ -7,17 +7,17 @@ const PAIRWISE_BLOCKSIZE = 1024
 """
     safe_mapreduce(f, op, itr; [init])
 
-Analogue of `Base.mapreduce(f, op, itr; [init])` for an indexable collection
-`itr`, with the additional guarantee that it can be compiled in GPU kernels.
-Unlike `Base.mapreduce`, this never reaches the empty collection error path,
-which builds a string that cannot be compiled for a GPU; if `init` is not
-provided, this assumes that `itr` is nonempty.
+Apply `f` to every element of the indexable collection `itr` and reduce the results
+with `op`, like `Base.mapreduce(f, op, itr; init)`, with the guarantee that the
+call can be compiled in GPU kernels. Unlike `Base.mapreduce`, this never reaches
+the empty collection error path, which builds a string that cannot be compiled for
+a GPU; if `init` is not provided, `itr` must be nonempty.
 
-When `init` is available, the reduction is a sequential left fold seeded by
-`init`. Otherwise, the reduction is only sequential for iterator lengths below
-1024; for longer iterators, the reduction is pairwise, so its roundoff error
-grows logarithmically rather than linearly with respect to length. Sequential
-reductions use `@simd` loops, meaning that associativity is not guaranteed.
+When `init` is provided, the reduction is a sequential left fold seeded by `init`.
+Otherwise, the reduction is only sequential for iterator lengths below 1024; for
+longer iterators, the reduction is pairwise, so its roundoff error grows
+logarithmically rather than linearly with length. Sequential reductions use `@simd`
+loops, so the order in which `op` is applied is not guaranteed.
 """
 Base.@propagate_inbounds function safe_mapreduce(
     f::F,

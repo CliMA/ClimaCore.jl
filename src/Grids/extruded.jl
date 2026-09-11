@@ -15,12 +15,18 @@ abstract type AbstractExtrudedFiniteDifferenceGrid <: AbstractGrid end
 
 """
     ExtrudedFiniteDifferenceGrid(
-        horizontal_space::AbstractSpace,
-        vertical_space::FiniteDifferenceSpace,
-        hypsography::HypsographyAdaption = Flat(),
+        horizontal_grid::AbstractSpectralElementGrid,
+        vertical_grid::FiniteDifferenceGrid,
+        hypsography::HypsographyAdaption = Flat();
+        deep = false,
     )
 
-Construct an `ExtrudedFiniteDifferenceGrid` from the horizontal and vertical spaces.
+Construct an `ExtrudedFiniteDifferenceGrid` from the horizontal and vertical grids.
+
+If the horizontal grid has a `Geometry.SphericalGlobalGeometry`, the extruded grid
+uses `Geometry.DeepSphericalGlobalGeometry` when `deep = true` and
+`Geometry.ShallowSphericalGlobalGeometry` otherwise. Construction is memoized in
+`Cache.OBJECT_CACHE`.
 """
 mutable struct ExtrudedFiniteDifferenceGrid{
     H <: AbstractGrid,
@@ -94,7 +100,8 @@ function ExtrudedFiniteDifferenceGrid(
     end
 end
 
-# Non-memoized constructor. Should not generally be called, but can be defined for other Hypsography types
+# Non-memoized constructor. Extend this method for other hypsography types; callers go
+# through the memoized constructor above.
 function _ExtrudedFiniteDifferenceGrid(
     horizontal_grid::AbstractSpectralElementGrid,
     vertical_grid::FiniteDifferenceGrid,
@@ -188,7 +195,7 @@ const ExtrudedRectilinearSpectralElementGrid3D =
 const ExtrudedCubedSphereSpectralElementGrid3D =
     ExtrudedFiniteDifferenceGrid{<:CubedSphereSpectralElementGrid2D}
 const ExtrudedMultiPointGrid = ExtrudedFiniteDifferenceGrid{<:MultiPointGrid}
-# Backwards-compatibility alias for the old name.
+# Deprecated alias of `ExtrudedMultiPointGrid`.
 Base.@deprecate_binding ExtrudedPointCloudGrid ExtrudedMultiPointGrid false
 
 # The show method for `AbstractGrid` calls `topology(grid)`, which errors for

@@ -4,14 +4,14 @@ abstract type Staggering end
 """
     CellCenter()
 
-Cell center location
+Cell-center staggering location.
 """
 struct CellCenter <: Staggering end
 
 """
     CellFace()
 
-Cell face location
+Cell-face staggering location.
 """
 struct CellFace <: Staggering end
 
@@ -22,12 +22,11 @@ abstract type AbstractFiniteDifferenceGrid <: AbstractGrid end
     FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
     FiniteDifferenceGrid(device::ClimaComms.AbstractDevice, mesh::Meshes.IntervalMesh)
 
-Construct a `FiniteDifferenceGrid` from an `IntervalTopology` (or an
-`IntervalMesh`).
+Construct a `FiniteDifferenceGrid` from an `IntervalTopology`, or from an
+`IntervalMesh` and a `device`.
 
-This is an object which contains all the necessary geometric information.
-
-To avoid unnecessary duplication, we memoize the construction of the grid.
+The grid stores the topology, the global geometry, and the local geometry at cell
+centers and cell faces. Construction is memoized in `Cache.OBJECT_CACHE`.
 """
 mutable struct FiniteDifferenceGrid{
     T <: Topologies.AbstractIntervalTopology,
@@ -80,7 +79,8 @@ function _FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
     )
 end
 
-# called by the FiniteDifferenceGrid constructor, and the ExtrudedFiniteDifferenceGrid constructor with Hypsography
+# Called by the FiniteDifferenceGrid constructor and by the ExtrudedFiniteDifferenceGrid
+# constructor with hypsography.
 function fd_geometry_data(
     center_coordinates::DataLayouts.VIJHWithF{Geometry.ZPoint{FT}},
     face_coordinates::DataLayouts.VIJHWithF{Geometry.ZPoint{FT}},

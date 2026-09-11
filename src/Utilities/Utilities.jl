@@ -43,7 +43,7 @@ end
 Remove the inference recursion limit from every listed function's methods that
 this package owns, along with the package's `Core.kwcall` methods that target a
 listed function (or all of them, if `Core.kwcall` is listed) and their hidden
-body functions, where keyword arguments put the actual loop bodies. Listing a
+body functions, where keyword arguments put the loop bodies. Listing a
 module applies to every function it defines. Use this for functions that
 recurse by design: the default limit widens their argument types, turning
 downstream calls into dynamic dispatch with runtime allocations, including
@@ -64,10 +64,10 @@ end
 """
     @drop_constprop f₁, f₂, ...
 
-Like [`@drop_recursion_limits`](@ref), but disables constant propagation on the
-methods, for functions whose bodies constprop re-infers once per distinct
-constant argument (thread counts, index-collection lengths) without ever
-reaching a different compiled result.
+Disable constant propagation on the same set of methods that
+[`@drop_recursion_limits`](@ref) selects. Use this for functions whose bodies
+constant propagation re-infers once per distinct constant argument (thread counts,
+index-collection lengths) without ever reaching a different compiled result.
 """
 macro drop_constprop(fs...)
     f_exprs = length(fs) == 1 && Meta.isexpr(fs[1], :tuple) ? fs[1].args : fs
@@ -81,10 +81,10 @@ end
 """
     ConvertTo{T}()
 
-A GPU-compatible callable that converts its argument to type `T`, equivalent to
+GPU-compatible callable that converts its argument to type `T`, equivalent to
 `Base.Fix1(convert, T)` but `isbitstype`. `Base.Fix1` stores a `Type{T}` field,
 which is not `isbits`, so it cannot be captured by GPU kernels. `ConvertTo{T}`
-is an empty struct and is always `isbits`, making it safe to use in broadcast
+is an empty struct and is always `isbits`, so it can be used in broadcast
 expressions that run on the GPU.
 
 # Examples
@@ -127,10 +127,10 @@ end
 # Tuple-only fast path for UnrolledUtilities.unrolled_map,
 # whose generic method drags a chain of helpers through inference per distinct
 # broadcast or layout type; non-Tuples forward to UnrolledUtilities. This is
-# the only shim that earns its keep: removing it costs ~10% of a spectral
+# the only shim that is measurable: removing it adds ~10% to a spectral
 # expression's compilation memory (extruded-sphere hyperdiffusion:
 # 735/753/1671 MB vs 671/690/1503 MB), while shims for the other unrolled_*
-# functions are each worth well under a percent. Not map(f, x) or
+# functions each change it by well under a percent. Not map(f, x) or
 # ntuple(n -> f(x[n]), Val(N)): neither survives recursion-lifting or inference
 # past 32 elements, which rebreaks deeply nested AutoBroadcaster cases and
 # reintroduces GPU kernel allocations (gpu_gc_pool_alloc).
@@ -161,9 +161,8 @@ import .Unrolled: unrolled_tuple_map
 """
     cart_ind(n::NTuple, i::Integer)
 
-Returns a `CartesianIndex` from the list
-`CartesianIndices(map(x->Base.OneTo(x), n))[i]`
-given size `n` and location `i`.
+Return the `CartesianIndex` `CartesianIndices(map(Base.OneTo, n))[i]` for an array
+of size `n` and linear index `i`.
 """
 Base.@propagate_inbounds cart_ind(n::NTuple, i::Integer) =
     @inbounds CartesianIndices(map(x -> Base.OneTo(x), n))[i]
@@ -172,13 +171,9 @@ Base.@propagate_inbounds cart_ind(n::NTuple, i::Integer) =
     linear_ind(n::NTuple, ci::CartesianIndex)
     linear_ind(n::NTuple, t::NTuple)
 
-Returns a linear index from the list
-`LinearIndices(map(x->Base.OneTo(x), n))[ci]`
-given size `n` and cartesian index `ci`.
-
-The `linear_ind(n::NTuple, t::NTuple)` wraps `t`
-in a `Cartesian` index and calls
-`linear_ind(n::NTuple, ci::CartesianIndex)`.
+Return the linear index `LinearIndices(map(Base.OneTo, n))[ci]` for an array of
+size `n` and Cartesian index `ci`. The method for a tuple `t` wraps it in a
+`CartesianIndex` first.
 """
 Base.@propagate_inbounds linear_ind(n::NTuple, ci::CartesianIndex) =
     @inbounds LinearIndices(map(x -> Base.OneTo(x), n))[ci]
@@ -188,7 +183,8 @@ Base.@propagate_inbounds linear_ind(n::NTuple, loc::NTuple) =
 """
     stable_view(array, indices...)
 
-Like `view`, but with two modifications that avoid expensive operations:
+Return a view of `array` like `view(array, indices...)`, with two modifications
+that avoid expensive operations:
 
   - Every view is a `SubArray`, even when `array` is a GPU array. GPUArrays
     replaces each contiguous view of a `CuArray` with a new `CuArray` derived
@@ -230,8 +226,8 @@ end
 """
     unionall_type(T)
 
-Drops all parameters from the type `T`. If the input argument is not a `Type`,
-its type is used instead.
+Return the type `T` with all of its parameters dropped. If the argument is not a
+`Type`, its type is used instead.
 
 # Examples
 
@@ -249,9 +245,9 @@ unionall_type(x) = unionall_type(typeof(x))
 """
     replace_type_parameter(T, P, P′)
 
-Recursively modifies the parameters of `T`, replacing every subtype of `P` with
-`P′`. This is like constructing a value of type `T` and converting subfields of
-type `P` to type `P′`, though no constructors are actually called or compiled.
+Return the type `T` with every parameter that is a subtype of `P` recursively
+replaced by `P′`. This is like constructing a value of type `T` and converting
+subfields of type `P` to type `P′`, though no constructors are called or compiled.
 """
 replace_type_parameter(T, P, P′) = replace_type_parameter(T, Val(Tuple{P, P′}))
 
@@ -267,10 +263,11 @@ replace_type_parameter(::Type{T}, val::Val{Tuple{P, P′}}) where {T, P, P′} =
 """
     fieldtype_vals(T)
 
-Statically inferrable analogue of `Val.(fieldtypes(T))`. Functions of `Type`s
-are specialized upon successful constant propagation, but functions of `Val`s
-are always specialized, so `fieldtype_vals` can be used in place of `fieldtypes`
-to ensure that recursive functions over nested types have inferrable outputs.
+Return a statically inferrable analogue of `Val.(fieldtypes(T))`. Functions of
+`Type`s are specialized upon successful constant propagation, but functions of
+`Val`s are always specialized, so `fieldtype_vals` can be used in place of
+`fieldtypes` to ensure that recursive functions over nested types have inferrable
+outputs.
 """
 @inline fieldtype_vals(::Type{T}) where {T} =
     ntuple(Val ∘ Base.Fix1(fieldtype, T), Val(fieldcount(T)))
@@ -293,17 +290,17 @@ to ensure that recursive functions over nested types have inferrable outputs.
 """
     new(T, [fields])
 
-Exposes the `new` pseudo-function that allocates a value of type `T`, which can
-otherwise only be explicitly called from inner constructors.
+Allocate a value of type `T` with the `new` pseudo-function, which can otherwise
+only be called from inner constructors.
 
 If provided, the second argument is used to initialize fields of the new value
-(unlike the lowered pseudo-function, this will not automatically convert to the
+(unlike the lowered pseudo-function, this does not convert the values to the
 `fieldtypes` of `T`). Otherwise, the fields are initialized with arbitrary data,
 with special handling of `DataType` fields to avoid errors during compilation.
 
 # Examples
 
-```jldoctest; setup = :(import ClimaCore.Utilities: new), filter = r"-?\\d+"
+```julia
 julia> new(Int)
 4889520192
 
@@ -346,8 +343,8 @@ end
 """
     is_inferred_type(T)
 
-Checks if `T` either satisfies `isconcretetype` or is a `Type{..}` value (or the
-more generic `DataType` value).
+Return whether `T` either satisfies `isconcretetype` or is a `Type{..}` value (or
+the more generic `DataType` value).
 """
 @inline is_inferred_type(::Type{T}) where {T} =
     T != Union{} && (isconcretetype(T) || T <: Type)
@@ -355,8 +352,8 @@ more generic `DataType` value).
 """
     return_type(f, T)
 
-Equivalent to `Core.Compiler.return_type(f, T)`, but with an additional check to
-ensure that the result satisfies [`is_inferred_type`](@ref) whenever `T` does.
+Return `Core.Compiler.return_type(f, T)`, after checking that the result satisfies
+[`is_inferred_type`](@ref) whenever `T` does; otherwise throw an `InferenceError`.
 Used in place of `Core.Compiler.return_type` to flag deteriorations in type
 inference before they can lead to behavioral changes.
 """
@@ -367,9 +364,9 @@ inference before they can lead to behavioral changes.
 """
     unsafe_eltype(itr)
 
-Analogue of `eltype` with support for un-materialized broadcast expressions,
-adapted from `Base.Broadcast.combine_eltypes`. Does not perform any safety
-checks, and may potentially return non-concrete types (like an empty `Union{}`).
+Return the element type of `itr`, including un-materialized broadcast expressions,
+adapted from `Base.Broadcast.combine_eltypes`. This performs no safety checks, and
+it may return non-concrete types (like an empty `Union{}`).
 """
 @inline unsafe_eltype(itr) = eltype(itr)
 @inline unsafe_eltype((; f, args)::Base.Broadcast.Broadcasted) =
@@ -381,10 +378,10 @@ checks, and may potentially return non-concrete types (like an empty `Union{}`).
 """
     safe_eltype(itr)
 
-Analogue of `eltype` with support for un-materialized broadcast expressions,
-adapted from `Base.Broadcast.combine_eltypes`. Throws an error when the result
-does not satisfy [`is_inferred_type`](@ref), indicating which part of the
-expression first encounters a type instability or an error during inference.
+Return the element type of `itr`, including un-materialized broadcast expressions,
+adapted from `Base.Broadcast.combine_eltypes`. Throw an error when the result does
+not satisfy [`is_inferred_type`](@ref), indicating which part of the expression
+first encounters a type instability or an error during inference.
 """
 @inline safe_eltype(itr) =
     is_inferred_type(unsafe_eltype(itr)) ? unsafe_eltype(itr) : eltype_error(itr)
@@ -398,7 +395,7 @@ eltype_error(bc::Base.Broadcast.Broadcasted) =
 """
     recursive_bottom_eltype(x)
 
-The scalar type underlying `x`, found by following `eltype` until it stops
+Return the scalar type underlying `x`, found by following `eltype` until it stops
 changing. For a nested array of arrays this is the type of the numbers at the
 bottom, not the type of the outer element.
 

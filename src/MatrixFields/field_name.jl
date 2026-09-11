@@ -1,12 +1,12 @@
 """
     FieldName(name_chain...)
 
-A singleton type that represents a chain of `getproperty` calls, which can be
-used to access a property or sub-property of an object `x` using the function
+Singleton type that represents a chain of `getproperty` calls, which can be used to
+access a property or sub-property of an object `x` using the function
 `get_field(x, name)`. The entire object `x` can also be accessed with the empty
 `FieldName()`.
 
-Note that `FieldName` behaves like a scalar for broadcasting.
+A `FieldName` behaves like a scalar for broadcasting.
 """
 struct FieldName{name_chain} end
 FieldName() = FieldName{()}() # This is required for type stability.
@@ -16,13 +16,13 @@ Base.broadcastable(name::FieldName) = tuple(name)
 """
     @name(expr)
 
-Shorthand for constructing a `FieldName`. Some examples include
+Construct a [`FieldName`](@ref) from a chain of `getproperty` calls. For example:
 
-  - `name = @name()`, in which case `get_field(x, name)` returns `x`
-  - `name = @name(a)`, in which case `get_field(x, name)` returns `x.a`
-  - `name = @name(a.b.c)`, in which case `get_field(x, name)` returns `x.a.b.c`
+  - `name = @name()`, in which case `get_field(x, name)` returns `x`.
+  - `name = @name(a)`, in which case `get_field(x, name)` returns `x.a`.
+  - `name = @name(a.b.c)`, in which case `get_field(x, name)` returns `x.a.b.c`.
   - `name = @name(a.b.c.:(1).d)`, in which case `get_field(x, name)` returns
-    `x.a.b.c.:(1).d`
+    `x.a.b.c.:(1).d`.
 
 This macro is preferred over the `FieldName` constructor because it checks
 whether `expr` is a syntactically valid chain of `getproperty` calls before
@@ -121,9 +121,10 @@ end
 """
     FieldNameTree(x)
 
-Tree of `FieldName`s that can be used to access `x` with `get_field(x, name)`.
-Check whether a `name` is valid by calling `is_valid_name(name, tree)`,
-and extract the children of `name` by calling `child_names(name, tree)`.
+Tree of [`FieldName`](@ref)s that can be used to access `x` with
+`get_field(x, name)`. Check whether a `name` is valid by calling
+`is_valid_name(name, tree)`, and extract the children of `name` by calling
+`child_names(name, tree)`.
 """
 abstract type FieldNameTree end
 struct FieldNameTreeLeaf{V <: FieldName} <: FieldNameTree

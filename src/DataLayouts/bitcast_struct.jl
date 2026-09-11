@@ -55,18 +55,18 @@ bitcast_struct_expr(@nospecialize(T), @nospecialize(S), inputs...) =
     bitcast_struct(T, value)
     bitcast_struct(T, array, Val(num_indices), index...)
 
-Converts `value` into an `isbits` type `T` that spans the same number of bytes
+Convert `value` into an `isbits` type `T` that spans the same number of bytes
 (counting all bytes that are used as padding; see extended help for details).
-Serves as a GPU-compatible generalization of the native `Core.bitcast` function,
+This is a GPU-compatible generalization of the native `Core.bitcast` function,
 losslessly converting between arbitrary data types, including composite types.
 
-Instead of converting a single value, it is also possible to convert a subset of
-an array corresponding to the result of [`get_struct`](@ref). This is equivalent
-to converting the array elements after first loading them into a tuple, but with
-guaranteed inlining for arbitrary data types. Inlining is necessary for the
-compiler's [`getfield_elim_pass!`](https://hackmd.io/bZz8k6SHQQuNUW-Vs7rqfw) to
-eliminate reads of array elements for unused fields of `T` (a key optimization
-in GPU kernels, where reads from global memory can be relatively expensive).
+Instead of converting a single value, it is also possible to convert the
+`num_indices` entries of an array that [`get_struct`](@ref) reads at `index`. This
+is equivalent to converting the array elements after first loading them into a
+tuple, but with guaranteed inlining for arbitrary data types. Inlining is necessary
+for the compiler's [`getfield_elim_pass!`](https://hackmd.io/bZz8k6SHQQuNUW-Vs7rqfw)
+to eliminate reads of array elements for unused fields of `T` (an optimization that
+matters in GPU kernels, where reads from global memory are expensive).
 
 # Examples
 
@@ -111,10 +111,10 @@ their padding bytes are in different positions), `bitcast_struct(T, value)`
 makes no distinction between padding and non-padding. Although `reinterpret` is
 therefore less likely to produce unexpected outputs, it also performs runtime
 allocations in heap memory, making it unsuitable for GPU kernels that do not
-support such allocations. In contrast, `bitcast_struct` has a much simpler
+support such allocations. In contrast, `bitcast_struct` has a shorter
 implementation, with all of its allocations confined to stack memory. Moreover,
 as long as `bitcast_struct` is only called within [`set_struct!`](@ref) and
-[`get_struct`](@ref), potentially unexpected outputs will be hidden from users.
+[`get_struct`](@ref), potentially unexpected outputs are hidden from users.
 
 In addition to the low-level method of `reinterpret` for `isbits` inputs, there
 is another method for `AbstractArray` inputs that behaves exactly like
@@ -140,9 +140,9 @@ spanning the eight padding bytes inserted between the `Int32`s and the `Int128`.
 
 For more information about `reinterpret` and padding, see the following:
 
-  - https://discourse.julialang.org/t/reinterpret-returns-wrong-values
-  - https://discourse.julialang.org/t/reinterpret-vector-into-single-struct
-  - https://discourse.julialang.org/t/reinterpret-vector-of-mixed-type-tuples
+  - https://discourse.julialang.org/t/reinterpret-returns-wrong-values.
+  - https://discourse.julialang.org/t/reinterpret-vector-into-single-struct.
+  - https://discourse.julialang.org/t/reinterpret-vector-of-mixed-type-tuples.
 """
 @generated bitcast_struct(::Type{T}, value::S) where {T, S} =
     Expr(:block, :@inline, bitcast_struct_expr(T, S, :value))

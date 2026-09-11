@@ -70,26 +70,25 @@ abstract type AbstractComponents end
     Components{T <: ComponentsType, names}()
     Components(components_type::ComponentsType, names::Tuple)
 
-Type-level description of a single tensor axis. The parameter `T` selects the
-component convention ([`Covariant`](@ref), [`Contravariant`](@ref),
-[`Orthonormal`](@ref), or [`OneScalar`](@ref)), and `names` is a tuple of
-identifiers for the components along the axis (typically dimension indices
-like `(1, 3)` for the ξ¹/ξ³ directions, or `(nothing,)` for the scalar row
-of a covector; see [`ScalarComponents`](@ref)).
+Type-level description of a single tensor axis. The parameter `T` selects the component
+convention (`Covariant`, `Contravariant`, `Orthonormal`, or `OneScalar`), and `names` is a
+tuple of identifiers for the components along the axis: dimension indices such as `(1, 3)`
+for the ξ¹/ξ³ directions, or `(nothing,)` for the scalar row of a covector (see
+`ScalarComponents`). The constructor throws a `DuplicateComponentNamesError` if `names`
+repeat.
 
-A `Components` is a singleton: all information lives in the type parameters, so
-instances are free at runtime and available for multiple dispatch. Named aliases
-such as `Covariant13Axis`, `UWAxis`, and `ScalarComponents` are defined for every
-supported dimension combination.
+A `Components` is a singleton: all information lives in the type parameters, so instances
+carry no runtime data and are available for multiple dispatch. Aliases such as
+`Covariant13Axis`, `UWAxis`, and `ScalarComponents` are defined for every supported
+dimension combination.
 
 # Role in `reshape`
 
-`Components` objects (as opposed to bare `ComponentsType`s) carry the component
-names, so they are what lets `reshape` reorder, drop, or zero-fill components
-along an axis. Passing `Axes` to `reshape` cannot change the underlying
-`ComponentsType` of a concrete `Tensor`; for that, use the component-conversion
-helpers in `conversions.jl` (e.g. `project`, `transform`), which apply the
-appropriate metric from a `LocalGeometry`.
+`Components` objects, unlike bare `ComponentsType`s, carry the component names, so
+`reshape` uses them to reorder, drop, or zero-fill components along an axis. `reshape`
+alone cannot change the `ComponentsType` of a concrete [`Tensor`](@ref); that needs a
+metric from a `LocalGeometry` and is done by [`project`](@ref) and [`transform`](@ref) in
+`conversions.jl`.
 
 # Examples
 
@@ -227,34 +226,34 @@ abstract type AbstractTensor{N, T, B <: AbstractAxes{N}} <: AbstractArray{T, N} 
     Tensor(components, bases::NTuple{N, Components})
     Tensor(s::UniformScaling, bases::NTuple{2, Components})
 
-`N`-dimensional tensor whose entries in `components` are interpreted with
-respect to the given `bases`. Each entry of `bases` is a [`Components`](@ref), and
-the shape of `components` must match `length.(bases)`. The bases are
-stored as a type parameter so that operations can dispatch on the kind of
-basis (covariant, contravariant, orthonormal, or scalar) at compile time.
+`N`-dimensional tensor whose entries in `components` are interpreted with respect to the
+given `bases`. Each entry of `bases` is a [`Components`](@ref), and the shape of
+`components` must match `length.(bases)` (otherwise the constructor throws a
+`DimensionMismatch`). The bases are stored as a type parameter so that operations can
+dispatch on the kind of basis (covariant, contravariant, orthonormal, or scalar) at compile
+time.
 
-Use `parent(x)` to get the component array and `axes(x)` to get the bases.
-Scalar indexing `x[i, j, ...]` reads directly from the component array;
-colon-indexing yields a smaller `Tensor` over the remaining non-colon axes.
+`parent(x)` returns the component array and `axes(x)` the bases. Scalar indexing
+`x[i, j, ...]` reads from the component array; indexing with colons yields a smaller
+`Tensor` over the colon axes.
 
 # Shapes that `Tensor` takes in practice
 
   - `Tensor{1}` (a vector): `components::SVector`, `bases::Tuple{Components}`.
-  - `Tensor{2}` covector (a row-vector): the first axis is [`ScalarComponents`](@ref)
-    and `components::Adjoint{T, SVector}`. This is what `v'` produces for a
-    `Tensor{1}` `v`.
+  - `Tensor{2}` covector (a row vector): the first axis is `ScalarComponents` and
+    `components::Adjoint{T, SVector}`. This is what `v'` produces for a `Tensor{1}` `v`.
   - `Tensor{2}` square tensor: `components::SMatrix`.
 
-The `UniformScaling` constructor is a convenience that converts
-`s = λ * I` (where `λ = s.λ` is the scalar stored in Julia's
-`LinearAlgebra.UniformScaling`) into an `SMatrix` of the appropriate size -
-e.g., `Tensor(2I, (b, b))` builds a diagonal tensor with `2` on the diagonal.
+The `UniformScaling` constructor converts `s = λ * I` (with `λ = s.λ` the scalar stored
+in `LinearAlgebra.UniformScaling`) into an `SMatrix` of the size given by `bases`, which
+must be square; e.g., `Tensor(2I, (b, b))` builds a diagonal tensor with `2` on the
+diagonal.
 
 # Role in `reshape`
 
-`reshape(x::Tensor, bases::NTuple{N, Components})` changes basis-vector
-*names* along each axis, zero-filling gaps. Changing the `ComponentsType` of a
-concrete `Tensor` is not possible through `reshape` alone; attempting it
+`reshape(x::Tensor, bases::NTuple{N, Components})` changes the component *names* along
+each axis, dropping components absent from `bases` and zero-filling the missing ones.
+`reshape` alone cannot change the `ComponentsType` of a concrete `Tensor`; attempting it
 throws a `DimensionMismatch`:
 
 ```julia
@@ -262,8 +261,8 @@ julia> reshape(Covariant12Vector(1.0, 2.0), (Contravariant12Axis(),))
 ERROR: DimensionMismatch: Metric is needed for change of basis: Covariant vs Contravariant
 ```
 
-To change basis types, use `project` / `transform` from `conversions.jl`,
-which apply the appropriate metric from a `LocalGeometry`.
+To change the basis type, use [`project`](@ref) or [`transform`](@ref) with a
+`LocalGeometry`, which apply the metric.
 
 # Examples
 
@@ -370,13 +369,13 @@ Base.@propagate_inbounds Base.view(x::Tensor, indices::TensorIndex...) =
 """
     pad_metric_tensor(∂x∂ξ::Tensor{2})
 
-Pads an N×N metric tensor with axes `(Components{Orthonormal, I}, Components{Covariant, I})`
-to a full 3×3 tensor with axes `(UVWAxis, Covariant123Axis)`, putting `1`
-on diagonal entries for dimensions outside `I` and `0` on cross-coupling
-entries. The padded form encodes the "identity metric in directions
-orthogonal to `I`" convention as actual matrix entries, so a single matvec
-`padded_M * v` covers all source-name configurations without partition
-logic. Idempotent for `I == (1, 2, 3)`.
+Pad an `N×N` tensor with axes `(Components{Orthonormal, I}, Components{Covariant, I})` to
+a `3×3` tensor with axes `(UVWAxis, Covariant123Axis)`, with `1` on the diagonal entries
+for dimensions outside `I` and `0` on the off-diagonal entries that couple to them.
+
+The padded form writes the convention "identity metric in the directions orthogonal to
+`I`" as matrix entries, so that a single matrix-vector product `padded_M * v` handles every
+set of source component names. Return `∂x∂ξ` unchanged when `I == (1, 2, 3)`.
 """
 function pad_metric_tensor(∂x∂ξ::Tensor{2})
     src_names = component_names(axes(∂x∂ξ, 1))
@@ -533,7 +532,7 @@ Base.:-(x::AbstractTensor, y::AbstractTensor) =
 # error branch is GPU-incompatible (string formatting & exception machinery).
 # `SArray + SArray` already bypasses `promote_shape`, but covector storage
 # (`Adjoint{T, SVector}`) inherits from AbstractMatrix and falls into Base's
-# path. Route those through the underlying SVector to keep kernels clean.
+# path. Route those through the underlying SVector so that kernels compile.
 @inline _add_components(xs::SArray...) = +(xs...)
 @inline _sub_components(x::SArray, y::SArray) = x - y
 @inline _add_components(xs::Adjoint{<:Any, <:SVector}...) =
@@ -662,11 +661,17 @@ end
 
 """
     project(basis, v)
-    project(basis, v, local_geometry)
+    project(basis, v, basis2)
+    project(v, basis)
 
-Project the first axis of vector/tensor `v` onto `basis`, zero-filling
-components not present in the source. When `local_geometry` is provided,
-performs a change of basis type (e.g., Covariant → Contravariant) via the metric.
+Change the component names along the first axis of the vector or 2-tensor `v` to `basis`,
+dropping components absent from `basis` and zero-filling components absent from `v`. For a
+2-tensor, `project(basis, v, basis2)` also changes the second axis to `basis2`, and
+`project(v, basis)` changes only the second axis.
+
+The `ComponentsType` of each axis must match. Changing it (e.g., `Covariant` to
+`Contravariant`) needs a metric; see the `project(basis, v, local_geometry)` methods in
+`conversions.jl`.
 """
 @inline project(b::Components, v::AbstractTensor{1}) = reshape(v, (b,))
 @inline project(b::Components, v::AbstractTensor{2}) = reshape(v, (b, axes(v, 2)))
@@ -678,8 +683,9 @@ end
 """
     transform(basis, v)
 
-Transform the first axis of vector or 2-tensor `v` to `basis`. Unlike
-`project`, throws an `InexactError` if any dropped component is nonzero.
+Change the component names along the first axis of the vector or 2-tensor `v` to `basis`,
+like [`project`](@ref), but throw an `InexactError` if any dropped component of `v` is
+nonzero (for a 2-tensor, if any entry of a dropped row is nonzero).
 """
 @inline function transform(b::Components, v::AbstractTensor{1})
     result = reshape(v, (b,))
@@ -716,7 +722,7 @@ end
     outer(x, y)
     x ⊗ y
 
-Compute the outer product of `x` and `y`.
+Compute the outer product `x * y'` of `x` and `y`.
 """
 function outer end
 const ⊗ = outer
