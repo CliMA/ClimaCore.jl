@@ -1,5 +1,4 @@
-# Toplevel interface functions for recursive broadcast expressions
-import ..Utilities.Unrolled: unrolled_map_with_inbounds
+import UnrolledUtilities: unrolled_map
 
 """
     level(data, v)
@@ -30,10 +29,7 @@ for op in (:level, :slab, :column)
     @eval $op(n::Number, inds...) = n
     @eval $op(::Nothing, inds...) = nothing
     @eval Base.@propagate_inbounds $op(t::Tuple, inds...) =
-        unrolled_map_with_inbounds(t) do x
-            Base.@_propagate_inbounds_meta
-            $op(x, inds...)
-        end
+        unrolled_map(x -> (Base.@_propagate_inbounds_meta; $op(x, inds...)), t)
     @eval Base.@propagate_inbounds $op(nt::NamedTuple, inds...) =
         NamedTuple{keys(nt)}($op(values(nt), inds...))
 end

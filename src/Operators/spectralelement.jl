@@ -216,7 +216,7 @@ slab(op::SpectralElementOperator, _...) = op
 level(op::SpectralElementOperator, _...) = op
 
 function Broadcast.broadcasted(op::SpectralElementOperator, args...)
-    args′ = unrolled_tuple_map(Broadcast.broadcastable, args)
+    args′ = unrolled_map(Broadcast.broadcastable, args)
     style = Broadcast.result_style(SpectralStyle(), Broadcast.combine_styles(args′...))
     return Broadcast.broadcasted(style, op, args′...)
 end
@@ -241,10 +241,10 @@ end
 
 drop_operators(arg) = arg
 drop_operators(bc::SpectralBroadcasted) =
-    Fields.sliced_broadcasted(bc.f, unrolled_tuple_map(drop_operators, bc.args), nothing)
+    Fields.sliced_broadcasted(bc.f, unrolled_map(drop_operators, bc.args), nothing)
 drop_operators(bc::SpectralBroadcasted{<:SpectralElementOperator}) =
     Fields.sliced_broadcasted(
-        Returns(new(eltype(bc))), unrolled_tuple_map(drop_operators, bc.args), nothing,
+        Returns(new(eltype(bc))), unrolled_map(drop_operators, bc.args), nothing,
     )
 
 # Allocate materialized results from the broadcast's own data; the space-based
@@ -308,7 +308,7 @@ function apply_operator end
 # corresponding apply_operator call, which is evaluated eagerly.
 apply_operators(arg) = arg
 apply_operators(bc::SpectralBroadcasted) =
-    Broadcast.broadcasted(bc.f, unrolled_tuple_map(apply_operators, bc.args)...)
+    Broadcast.broadcasted(bc.f, unrolled_map(apply_operators, bc.args)...)
 apply_operators(bc::SpectralBroadcasted{<:SpectralElementOperator}) =
     scoped_apply_operator(
         DataLayouts.DataScope(bc),
@@ -323,10 +323,10 @@ apply_operators(bc::SpectralBroadcasted{<:SpectralElementOperator}) =
 # DataLayouts.slice_subscope).
 inlined_buffer_bytes(arg) = 0
 inlined_buffer_bytes(bc::Union{Broadcast.Broadcasted, SpectralBroadcasted}) =
-    +(0, unrolled_tuple_map(inlined_buffer_bytes, bc.args)...)
+    unrolled_sum(inlined_buffer_bytes, bc.args)
 inlined_buffer_bytes(bc::SpectralBroadcasted{<:SpectralElementOperator}) =
-    2 * max(unrolled_tuple_map(sizeof ∘ eltype, (bc, bc.args...))...) +
-    +(0, unrolled_tuple_map(inlined_buffer_bytes, bc.args)...)
+    2 * unrolled_maximum(sizeof ∘ eltype, (bc, bc.args...)) +
+    unrolled_sum(inlined_buffer_bytes, bc.args)
 
 # Inline each operator unless its expression asks a block for more than CUDA's
 # 48 KB of static shared memory (a compilation error). The budget is 192 bytes
@@ -337,9 +337,9 @@ inlined_buffer_bytes(bc::SpectralBroadcasted{<:SpectralElementOperator}) =
 # error.
 const MAX_INLINED_BUFFER_BYTES = 48 * 1024 ÷ 256
 @inline scoped_apply_operator(scope, ::Val{true}, bc) =
-    apply_operator(bc.f, unrolled_tuple_map(apply_operators, bc.args)...)
+    apply_operator(bc.f, unrolled_map(apply_operators, bc.args)...)
 @noinline scoped_apply_operator(scope, ::Val{false}, bc) =
-    apply_operator(bc.f, unrolled_tuple_map(apply_operators, bc.args)...)
+    apply_operator(bc.f, unrolled_map(apply_operators, bc.args)...)
 
 # The muladd_slab! variants loop over DataLayouts instead of Fields so slicing
 # does not construct a new space type per distinct argument type. Instantiate so
@@ -410,7 +410,7 @@ end
     indices = DataLayouts.each_slice_index(column, dest_data)
     ordered(k, n) = dim isa Val{:i} ? (k, n) : (n, k)
     @inbounds for n in axes(indices, dim isa Val{:i} ? 2 : 1)
-        values = unrolled_tuple_map(n′ -> arg_point_value(arg_data, ordered(n′, n)...), n′s)
+        values = unrolled_map(n′ -> arg_point_value(arg_data, ordered(n′, n)...), n′s)
         for k in axes(indices, dim isa Val{:i} ? 1 : 2)
             column(dest_data, Tuple(indices[ordered(k, n)..., 1])...)[] +=
                 unrolled_sum(n′ -> matrix[k, n′] * values[n′], n′s)

@@ -1,5 +1,4 @@
 import ..DebugOnly: allow_mismatched_spaces_unsafe
-import ..Utilities.Unrolled: unrolled_tuple_map
 
 """
     AbstractFieldStyle
@@ -95,10 +94,7 @@ field_values(bc::Broadcast.Broadcasted) = bc
 @inline field_values(bc::LazyField{FieldStyle{DS}}) where {DS} =
     Broadcast.Broadcasted{DS}(
         bc.f,
-        unrolled_tuple_map(
-            arg -> arg isa MaybeLazyField ? field_values(arg) : arg,
-            bc.args,
-        ),
+        unrolled_map(arg -> arg isa MaybeLazyField ? field_values(arg) : arg, bc.args),
     )
 
 # Forward size/scope primitives from Base and DataLayouts to the field_values.
@@ -112,7 +108,7 @@ end
 @inline DataLayouts.reassign(bc::LazyField, scope) = Broadcast.Broadcasted(
     bc.style,
     bc.f,
-    unrolled_tuple_map(
+    unrolled_map(
         arg -> arg isa MaybeLazyField ? DataLayouts.reassign(arg, scope) : arg,
         bc.args,
     ),
@@ -157,7 +153,7 @@ end
 # Extend the DataLayout methods of IndexStyle and eachindex to Field broadcasts.
 Base.IndexStyle(bc::LazyField) = IndexStyle(field_values(bc))
 Base.eachindex(arg::MaybeLazyField, args::MaybeLazyField...) =
-    eachindex(field_values(arg), unrolled_tuple_map(field_values, args)...)
+    eachindex(field_values(arg), unrolled_map(field_values, args)...)
 
 Base.similar(bc::LazyField, ::Type{T}) where {T} = Field(T, axes(bc))
 

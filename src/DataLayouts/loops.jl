@@ -265,19 +265,13 @@ end
     subscope, scope, op::O, f::F, mask, enumerate, args...,
 ) where {O, F}
     indices = subscope_slice_indices(subscope, scope, mask, op, args...)
-    scoped_args = reassign_every_arg(subscope, args...)
+    scoped_args = unrolled_map(Base.Fix2(reassign, subscope), args)
     @simd_if (op == view && simd_over_indices(indices)) for i in 1:length(indices)
         index = @inbounds indices[i]
         slices = @inbounds slice_every_arg(op, index, scoped_args...)
         @inline enumerate isa Val{true} ? f(index, slices...) : f(slices...)
     end
 end
-
-# Every argument, assigned to the subscope that processes its slices; hoisted
-# out of the loop (which it commutes with), since reassigning inside the loop
-# would rebuild each broadcast expression at every iteration.
-@inline reassign_every_arg(subscope, args...) =
-    unrolled_tuple_map(Base.Fix2(reassign, subscope), args)
 
 # One slice of every argument. A generated function rather than an unrolled_map
 # over a closure (two method instances per slice loop per argument-type

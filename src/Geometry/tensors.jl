@@ -183,21 +183,12 @@ combine_components(b1::Components, b2::Components) =
         components_type(b1),
         unique_names((component_names(b1)..., component_names(b2)...)),
     )
-# The init value is passed positionally instead of as a keyword argument
-# because kwcalls of unrolled_reduce do not always specialize during GPU
-# compilation, which makes them dynamic.
 combine_components(b::Components, bases::Components...) =
-    unrolled_reduce(combine_components, bases, b)
-# Use unrolled_flatmap instead of unrolled_filter because basis computations
-# can be compiled for GPUs; see the "Kernel-reachable unrolled functions" unit
-# test.
+    unrolled_reduce(combine_components, bases; init = b)
 function overlap_components(b1::Components, b2::Components)
     check_same_type(components_type(b1), components_type(b2))
     names2 = component_names(b2)
-    overlap = unrolled_flatmap(
-        n -> unrolled_in(n, names2) ? (n,) : (),
-        component_names(b1),
-    )
+    overlap = unrolled_filter(Base.Fix2(unrolled_in, names2), component_names(b1))
     return Components(components_type(b1), overlap)
 end
 
@@ -205,7 +196,7 @@ end
 # `nothing` denoting vectors present in dest_axis but missing from src_axis
 function matching_component_indices(dest_axis, src_axis)
     check_same_type(components_type(dest_axis), components_type(src_axis))
-    return unrolled_tuple_map(
+    return unrolled_map(
         Base.Fix2(unrolled_findfirst, component_names(src_axis)) ∘ ==,
         component_names(dest_axis),
     )
@@ -292,11 +283,11 @@ struct Tensor{N, T, B <: Axes{N}, C} <: AbstractTensor{N, T, B}
 end
 
 Tensor(components::C, bases::B) where {C, B} =
-    size(components) == unrolled_tuple_map(length, bases) ?
+    size(components) == unrolled_map(length, bases) ?
     Tensor{ndims(C), eltype(C), B, C}(components, bases) :
     throw(DimensionMismatch("Tensor component array size, $(size(components)), \
-                             does not match dimensions of tensor \
-                             bases, $(unrolled_tuple_map(length, bases))"))
+                             does not match dimensions of tensor bases, \
+                             $(unrolled_map(length, bases))"))
 
 # Allow UniformScaling as components for square 2-tensors (converted into SMatrix)
 function Tensor(s::UniformScaling, bases::NTuple{2, Components})
@@ -337,7 +328,7 @@ Base.rand(rng::Random.AbstractRNG, ::Type{Tensor{N, T, B, C}}) where {N, T, B, C
 Base.show(io::IO, x::Tensor) =
     print(io, "Tensor(", parent(x), ", ", axes(x), ")")
 
-Base.size(x::Tensor) = unrolled_tuple_map(length, axes(x))
+Base.size(x::Tensor) = unrolled_map(length, axes(x))
 
 Base.@propagate_inbounds Base.getindex(x::Tensor, indices::Integer...) =
     parent(x)[indices...]
@@ -424,11 +415,10 @@ check_ndims(x, N) =
 function Base.reshape(x::Tensor, bases::Axes)
     check_ndims(x, length(bases))
     axes(x) == bases && return x
-    components_constructor = SArray{Tuple{unrolled_tuple_map(length, bases)...}, eltype(x)}
-    component_indices = unrolled_product(
-        unrolled_tuple_map(matching_component_indices, bases, axes(x))...,
-    )
-    component_values = unrolled_tuple_map(component_indices) do indices
+    components_constructor = SArray{Tuple{unrolled_map(length, bases)...}, eltype(x)}
+    component_indices =
+        unrolled_product(unrolled_map(matching_component_indices, bases, axes(x))...)
+    component_values = unrolled_map(component_indices) do indices
         unrolled_any(isnothing, indices) ? zero(eltype(x)) : x[indices...]
     end
     return Tensor(components_constructor(component_values), bases)
@@ -438,9 +428,9 @@ Base.reshape(x::AbstractTensor, bases::Components...) = reshape(x, bases)
 # Change the ComponentsTypes without constraining the component_names
 Base.reshape(x::Tensor, types::ComponentsTypes) =
     check_ndims(x, length(types)) &&
-    unrolled_tuple_map(components_type, axes(x)) == types ? x :
+    unrolled_map(components_type, axes(x)) == types ? x :
     throw(DimensionMismatch("Metric is needed for change of basis: \
-                             $(unrolled_tuple_map(components_type, axes(x))) vs $types"))
+                             $(unrolled_map(components_type, axes(x))) vs $types"))
 Base.reshape(x::AbstractTensor, types::ComponentsType...) = reshape(x, types)
 
 # Change all bases to a single ComponentsType
@@ -458,8 +448,8 @@ apply_f(f, x::Tensor) = Tensor(f(parent(x)), axes(x))
 
 function reshape_and_apply_f(f::F, args...) where {F}
     unrolled_foreach(Base.Fix2(check_ndims, ndims(args[1])), args)
-    bases = unrolled_tuple_map(combine_components, unrolled_tuple_map(axes, args)...)
-    components = f(unrolled_tuple_map(x -> parent(reshape(x, bases)), args)...)
+    bases = unrolled_map(combine_components, unrolled_map(axes, args)...)
+    components = f(unrolled_map(x -> parent(reshape(x, bases)), args)...)
     components isa AbstractArray || return components  # return scalar values
     return Tensor(components, bases)               # add bases to non-scalars
 end
@@ -537,7 +527,7 @@ Base.:-(x::AbstractTensor, y::AbstractTensor) =
 @inline _add_components(xs::SArray...) = +(xs...)
 @inline _sub_components(x::SArray, y::SArray) = x - y
 @inline _add_components(xs::Adjoint{<:Any, <:SVector}...) =
-    adjoint(+(unrolled_tuple_map(adjoint, xs)...))
+    adjoint(unrolled_sum(adjoint, xs))
 @inline _sub_components(x::Adjoint{<:Any, <:SVector}, y::Adjoint{<:Any, <:SVector}) =
     adjoint(adjoint(x) - adjoint(y))
 Base.:(==)(x::AbstractTensor, y::AbstractTensor) = reshape_and_apply_f(==, x, y)
