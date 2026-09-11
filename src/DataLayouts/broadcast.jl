@@ -40,8 +40,7 @@ const LazyDataLayout{D} = Broadcast.Broadcasted{<:DataStyle{<:Any, D}}
 
 # Avoid Base's Broadcast.combine_axes, whose DimensionMismatch error cannot be
 # compiled in GPU kernels because it generates a string during runtime.
-@inline Broadcast._axes(bc::LazyDataLayout, ::Nothing) =
-    unrolled_tuple_map(Base.OneTo, size(bc))
+@inline Broadcast._axes(bc::LazyDataLayout, ::Nothing) = unrolled_map(Base.OneTo, size(bc))
 
 combine_sizes(size1, size2) =
     isempty(size2) ? size1 :
@@ -101,7 +100,7 @@ cross a thread boundary has to be allocated with this function.
 # each pair's destination and broadcast unconverted (e.g. as CuArrays instead
 # of CuDeviceArrays in kernel arguments).
 Adapt.adapt_structure(to, fmb::FusedMultiBroadcast) = FusedMultiBroadcast(
-    unrolled_tuple_map(fmb.pairs) do pair
+    unrolled_map(fmb.pairs) do pair
         Pair(Adapt.adapt(to, pair.first), Adapt.adapt(to, pair.second))
     end,
 )
@@ -135,23 +134,21 @@ arguments of a broadcast expression.
 # Only specify the parent array element type, instead of a concrete array type.
 @inline parent_eltype(arg) = eltype(parent_type(arg))
 @inline parent_type(bc::LazyDataLayout) =
-    AbstractArray{promote_type(unrolled_tuple_map(parent_eltype, layout_args(bc))...)}
+    AbstractArray{promote_type(unrolled_map(parent_eltype, layout_args(bc))...)}
 
 # Allow any combination of f_dim values, taking a maximum to resolve conflicts.
 # Reduce with a nothing-or-integer accumulator instead of collecting the
 # non-nothing values into a tuple, so that no intermediate tuples appear in
-# GPU-compiled code. The init value is passed positionally instead of as a
-# keyword argument because kwcalls of unrolled_reduce do not always specialize
-# during GPU compilation of wide broadcast expressions.
+# GPU-compiled code.
 @inline f_dim(bc::LazyDataLayout) =
-    unrolled_reduce(unrolled_tuple_map(f_dim, layout_args(bc)), nothing) do dim1, dim2
+    unrolled_reduce(unrolled_map(f_dim, layout_args(bc)); init = nothing) do dim1, dim2
         isnothing(dim1) ? dim2 : isnothing(dim2) ? dim1 : max(dim1, dim2)
     end
 
 # Extrude singleton axes like Broadcast.combine_axes when combining vijh_params.
 @inline vijh_params(bc::LazyDataLayout) =
-    unrolled_reduce(unrolled_tuple_map(vijh_params, layout_args(bc))) do params1, params2
-        unrolled_tuple_map(params1, params2) do N1, N2
+    unrolled_reduce(unrolled_map(vijh_params, layout_args(bc))) do params1, params2
+        unrolled_map(params1, params2) do N1, N2
             isnothing(N1) || isnothing(N2) ? nothing :
             N1 == N2 || isone(N2) ? N1 :
             isone(N1) ? N2 : Broadcast.throwdm((Base.OneTo(N1),), (Base.OneTo(N2),))
@@ -181,8 +178,7 @@ const DATA_LAYOUT_PRIMITIVES =
 for f in (:ndims, :length, :size, :axes, DATA_LAYOUT_PRIMITIVES...)
     f_with_module_prefix = f in DATA_LAYOUT_PRIMITIVES ? f : :(Base.$f)
     @eval @inline $f_with_module_prefix(bc::FusedMultiBroadcast) =
-        unrolled_allequal($f, unrolled_tuple_map(first, bc.pairs)) ?
-        $f(first(first(bc.pairs))) :
+        unrolled_allequal($f ∘ first, bc.pairs) ? $f(first(first(bc.pairs))) :
         throw(DimensionMismatch($("$f is inconsistent among fused broadcasts")))
 end
 
@@ -193,14 +189,14 @@ Replaces each of the [`layout_args`](@ref) in a broadcast expression with
 `f(layout_arg, f_args...)`.
 """
 @propagate_inbounds function modify_args(f::F, bc::LazyDataLayout, f_args...) where {F}
-    modified_args = unrolled_map_with_inbounds(bc.args) do arg
+    modified_args = unrolled_map(bc.args) do arg
         Base.@_propagate_inbounds_meta
         arg isa MaybeLazyDataLayout ? f(arg, f_args...) : arg
     end
     return Broadcast.Broadcasted(bc.style, bc.f, modified_args)
 end
 @propagate_inbounds function modify_args(f::F, bc::FusedMultiBroadcast, f_args...) where {F}
-    modified_pairs = unrolled_map_with_inbounds(bc.pairs) do (dest, bc)
+    modified_pairs = unrolled_map(bc.pairs) do (dest, bc)
         Base.@_propagate_inbounds_meta
         Pair(f(dest, f_args...), bc isa MaybeLazyDataLayout ? f(bc, f_args...) : bc)
     end

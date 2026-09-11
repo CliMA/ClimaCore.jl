@@ -106,58 +106,6 @@ include("auto_broadcaster.jl")
 include("cache.jl")
 include("safe_mapreduce.jl")
 
-module Unrolled # TODO: Move all of these functions into UnrolledUtilities.jl
-
-import UnrolledUtilities
-import ..Utilities: @drop_recursion_limits
-# Alternative to Base.setindex with guaranteed constant propagation
-@inline unrolled_setindex(x::Tuple, value, ::Val{i}) where {i} =
-    ntuple(n -> n == i ? value : x[n], Val(length(x)))
-
-# Analogue of insert! that follows the same pattern as unrolled_setindex
-@inline unrolled_insert(x::Tuple, value, ::Val{i}) where {i} =
-    ntuple(n -> n == i ? value : x[n < i ? n : n - 1], Val(length(x) + 1))
-
-# Same as UnrolledUtilities.unrolled_map, but annotated with @propagate_inbounds
-@generated unrolled_map_with_inbounds(f, x::NTuple{N, Any}) where {N} = quote
-    Base.@_propagate_inbounds_meta
-    return Base.Cartesian.@ntuple $N n -> f(x[n])
-end
-
-# Tuple-only fast path for UnrolledUtilities.unrolled_map,
-# whose generic method drags a chain of helpers through inference per distinct
-# broadcast or layout type; non-Tuples forward to UnrolledUtilities. This is
-# the only shim that earns its keep: removing it costs ~10% of a spectral
-# expression's compilation memory (extruded-sphere hyperdiffusion:
-# 735/753/1671 MB vs 671/690/1503 MB), while shims for the other unrolled_*
-# functions are each worth well under a percent. Not map(f, x) or
-# ntuple(n -> f(x[n]), Val(N)): neither survives recursion-lifting or inference
-# past 32 elements, which rebreaks deeply nested AutoBroadcaster cases and
-# reintroduces GPU kernel allocations (gpu_gc_pool_alloc).
-@generated unrolled_tuple_map(f, x::NTuple{N, Any}) where {N} = quote
-    Base.@_inline_meta
-    return Base.Cartesian.@ntuple $N n -> f(x[n])
-end
-@generated unrolled_tuple_map(f, x::NTuple{N, Any}, y::NTuple{N, Any}) where {N} = quote
-    Base.@_inline_meta
-    return Base.Cartesian.@ntuple $N n -> f(x[n], y[n])
-end
-@inline unrolled_tuple_map(f::F, itrs...) where {F} =
-    UnrolledUtilities.unrolled_map(f, itrs...)
-
-# NOTE: unrolled_flatten and unrolled_flatmap are deliberately not defined
-# here: expanding them at the call site makes layout_args and
-# get_non_point_arg_tuple inline far enough into foreach_slice that constprop
-# gives up inside Base.Threads._spawn_set_thrpool, reintroducing a runtime
-# dispatch that test/Fields/unit_fusion.jl asserts against with @test_opt.
-
-@drop_recursion_limits unrolled_setindex, unrolled_insert,
-unrolled_map_with_inbounds, unrolled_tuple_map
-
-end # module Unrolled
-
-import .Unrolled: unrolled_tuple_map
-
 """
     cart_ind(n::NTuple, i::Integer)
 

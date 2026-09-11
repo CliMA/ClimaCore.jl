@@ -632,11 +632,7 @@ end
 # nesting depth: their contribution is Union{}, the identity of promote_type
 # (which a nested FieldVector of nothing but scalars also promotes to).
 _array_type(x) = ClimaComms.array_type(x) # Fields
-# The splatted form is used instead of unrolled_mapreduce because the latter's
-# init keyword routes through Core.kwcall, which deepens the recursion cycle on
-# nested FieldVectors until inference gives up on optimizing it.
-_array_type(x::FieldVector) =
-    promote_type(unrolled_map(_array_type, Tuple(_values(x)))...)
+_array_type(x::FieldVector) = unrolled_mapreduce(_array_type, promote_type, _values(x))
 _array_type(::ScalarWrapper) = Union{}
 _array_type(x::A) where {A <: AbstractArray} =
     parent(x) === x ? Base.typename(A).wrapper : _array_type(parent(x))

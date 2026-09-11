@@ -120,13 +120,10 @@ in a 1-dimensional `ReshapedArray`, which blocks SIMD in pointwise loops).
     first(parentindices(array)[F]) - 1
 
 # Constant-folded Cartesian-to-linear index conversion for array of size `dims`.
-# The init value is passed positionally instead of as a keyword argument
-# because kwcalls of unrolled_reduce do not always specialize during GPU
-# compilation of wide broadcast expressions, which makes them dynamic.
 @inline function linear_index(dims, indices)
     dim_index_pairs = unrolled_map(tuple, dims, indices)
     (offset, _) =
-        unrolled_reduce(dim_index_pairs, (0, 1)) do (offset, stride), (dim, index)
+        unrolled_reduce(dim_index_pairs; init = (0, 1)) do (offset, stride), (dim, index)
             (offset + (index - 1) * stride, stride * dim)
         end
     return offset + 1
@@ -197,7 +194,7 @@ end
 end
 @propagate_inbounds Base.view(bc::FusedMultiBroadcast, index::PointIndex) =
     FusedMultiBroadcast(
-        unrolled_map_with_inbounds(bc.pairs) do (dest, arg)
+        unrolled_map(bc.pairs) do (dest, arg)
             Base.@_propagate_inbounds_meta
             Pair(
                 view(dest, Broadcast.newindex(dest, index)),

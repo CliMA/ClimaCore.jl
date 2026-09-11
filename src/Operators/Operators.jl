@@ -2,7 +2,7 @@ module Operators
 
 import LinearAlgebra, Adapt
 
-using StaticArrays
+using StaticArrays, UnrolledUtilities
 
 import Base.Broadcast: Broadcasted
 
@@ -25,10 +25,7 @@ import ..Topologies
 import ..Meshes
 import ..Grids
 import ..Fields: Fields, Field
-import UnrolledUtilities: unrolled_map, unrolled_filter
-import UnrolledUtilities: unrolled_all, unrolled_in, unrolled_sum
 import LazyBroadcast: lazy
-import ..Utilities.Unrolled: unrolled_tuple_map
 
 include("common.jl")
 include("spectralelement.jl")

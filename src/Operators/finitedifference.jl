@@ -6,7 +6,6 @@ import ..Utilities:
     nested_broadcast_result_type,
     add_auto_broadcasters
 import ..DebugOnly: allow_mismatched_spaces_unsafe
-import UnrolledUtilities: unrolled_map
 
 const AllFiniteDifferenceSpace = Union{
     Spaces.FiniteDifferenceSpace,
@@ -318,11 +317,7 @@ get_boundary(
 ) where {name} = get_boundary(op.bcs, name)
 
 strip_space(op::FiniteDifferenceOperator, parent_space) =
-    unionall_type(typeof(op))(
-        NamedTuple{keys(op.bcs)}(
-            unrolled_tuple_map(Base.Fix2(strip_space, parent_space), values(op.bcs)),
-        ),
-    )
+    unionall_type(typeof(op))(unrolled_map(Base.Fix2(strip_space, parent_space), op.bcs))
 
 abstract type AbstractStencilStyle <: Fields.AbstractFieldStyle end
 
@@ -396,7 +391,7 @@ function strip_space(sbc::StencilBroadcasted{Style}, parent_space) where {Style}
     new_space = placeholder_space(current_space, parent_space)
     return StencilBroadcasted{Style}(
         strip_space(sbc.op, current_space),
-        unrolled_tuple_map(Base.Fix2(strip_space, current_space), sbc.args),
+        unrolled_map(Base.Fix2(strip_space, current_space), sbc.args),
         new_space,
     )
 end
@@ -475,12 +470,9 @@ function assert_no_bcs(op, kwargs)
     error("$op does not accept boundary conditions.")
 end
 
-import UnrolledUtilities as UU
-
-
 function assert_valid_bcs(op, kwargs, ::Type{ValidBCs}) where {ValidBCs}
-    UU.unrolled_foreach(values(values(kwargs))) do bc
-        @assert bc isa ValidBCs "$op only supports boundary conditions:\n\n\t $ValidBCs.\n\n BCs given:\n\n\t $(values(values(kwargs)))"
+    unrolled_foreach(values(kwargs)) do bc
+        @assert bc isa ValidBCs "$op only supports boundary conditions:\n\n\t $ValidBCs.\n\n BCs given:\n\n\t $(values(kwargs))"
     end
     return nothing
 end
@@ -491,8 +483,7 @@ end
 # `SetValue` is requested, those constructors return a [`DirichletOperator`](@ref)
 # (defined with the `*_c2f_dirichlet` helpers below) instead of an operator of
 # their own type.
-has_setvalue_bc(kwargs) =
-    UU.unrolled_any(bc -> bc isa SetValue, values(values(kwargs)))
+has_setvalue_bc(kwargs) = unrolled_any(bc -> bc isa SetValue, values(kwargs))
 
 """
     InterpolateF2C()
@@ -973,8 +964,7 @@ with a linear interior stencil (`has_linear_interior`) and a linear
 ghost-point reconstruction (`is_linear_reconstruction`) at every boundary.
 """
 has_linear_stencil(op::AdvectionOperator) =
-    has_linear_interior(op) &&
-    UU.unrolled_all(is_linear_reconstruction, values(op.bcs))
+    has_linear_interior(op) && unrolled_all(is_linear_reconstruction, op.bcs)
 has_linear_interior(::AdvectionOperator) = false
 is_linear_reconstruction(::Extrapolate) = true
 
@@ -1012,7 +1002,7 @@ get_advection_boundary(bcs::NamedTuple, name::Symbol) =
     Topologies.isperiodic(space) && return nothing
     names =
         (Spaces.left_boundary_name(space), Spaces.right_boundary_name(space))
-    UU.unrolled_all(name -> name in names, keys(op.bcs)) ||
+    unrolled_all(name -> name in names, keys(op.bcs)) ||
         invalid_advection_bc_names_error(typeof(op), keys(op.bcs), names)
     return nothing
 end
@@ -1364,12 +1354,8 @@ struct MonotoneHarmonic <: LimiterConstraint end
 struct MonotoneLocalExtrema <: LimiterConstraint end
 
 
-strip_space(op::LinVanLeerC2F, parent_space) = LinVanLeerC2F(
-    NamedTuple{keys(op.bcs)}(
-        unrolled_tuple_map(Base.Fix2(strip_space, parent_space), values(op.bcs)),
-    ),
-    op.constraint,
-)
+strip_space(op::LinVanLeerC2F, parent_space) =
+    LinVanLeerC2F(unrolled_map(Base.Fix2(strip_space, parent_space), op.bcs), op.constraint)
 
 function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::MonotoneLocalExtrema)
     Δ𝜙_avg = ((a⁰ - a⁻) + (a⁺ - a⁰)) / 2
@@ -1742,12 +1728,8 @@ function TVDLimitedFluxC2F(; method, kwargs...)
     TVDLimitedFluxC2F(advection_bcs(kwargs), method)
 end
 
-strip_space(op::TVDLimitedFluxC2F, parent_space) = TVDLimitedFluxC2F(
-    NamedTuple{keys(op.bcs)}(
-        unrolled_tuple_map(Base.Fix2(strip_space, parent_space), values(op.bcs)),
-    ),
-    op.method,
-)
+strip_space(op::TVDLimitedFluxC2F, parent_space) =
+    TVDLimitedFluxC2F(unrolled_map(Base.Fix2(strip_space, parent_space), op.bcs), op.method)
 
 @inline (op::TVDLimitedFluxC2F)(
     A,
@@ -2091,9 +2073,7 @@ Adapt.adapt_structure(to, op::FiniteDifferenceOperator) =
 @inline adapt_fd_operator(to, op, bcs) =
     unionall_type(typeof(op))(; adapt_bcs(to, bcs)...)
 
-@inline adapt_bcs(to, bcs) = NamedTuple{keys(bcs)}(
-    unrolled_tuple_map(bc -> Adapt.adapt_structure(to, bc), values(bcs)),
-)
+@inline adapt_bcs(to, bcs) = unrolled_map(Base.Fix1(Adapt.adapt_structure, to), bcs)
 
 """
     D = DivergenceC2F(;boundaryname=boundarycondition...)
@@ -2788,9 +2768,7 @@ end
 
 
 @inline _left_interior_window_idx_args(args::Tuple, space, loc) =
-    unrolled_tuple_map(args) do arg
-        left_interior_window_idx(arg, space, loc)
-    end
+    unrolled_map(arg -> left_interior_window_idx(arg, space, loc), args)
 
 """
     left_interior_window_idx(arg, space, loc)
@@ -2836,9 +2814,7 @@ end
 end
 
 @inline _right_interior_window_idx_args(args::Tuple, space, loc) =
-    unrolled_tuple_map(args) do arg
-        right_interior_window_idx(arg, space, loc)
-    end
+    unrolled_map(arg -> right_interior_window_idx(arg, space, loc), args)
 
 @inline function right_interior_window_idx(
     bc::StencilBroadcasted,
@@ -3088,7 +3064,7 @@ function Base.Broadcast.broadcasted(
     # may help with latency.
     FT = Spaces.undertype(axes(StencilBroadcasted{Style}(op, args)))
     args′ =
-        unrolled_tuple_map(args) do arg
+        unrolled_map(args) do arg
             is_auto_broadcastable(eltype(arg)) ?
             Base.Broadcast.broadcasted(add_auto_broadcasters, arg) : arg
         end

@@ -1,5 +1,4 @@
 import LinearAlgebra: Adjoint
-import UnrolledUtilities: unrolled_map_into_tuple
 import ..Utilities: fieldtype_vals
 
 const SingleValue = Union{Number, AbstractTensor}
@@ -70,7 +69,7 @@ information.
 @inline function _dual_axes_for_projection(
     ::Type{X},
 ) where {X <: Union{Tuple, NamedTuple}}
-    axes = unrolled_map_into_tuple(_dual_axes_for_projection, fieldtype_vals(X))
+    axes = unrolled_map(_dual_axes_for_projection, fieldtype_vals(X))
     unrolled_all(isnothing, axes) && return nothing
     # When every component projects onto the same axis, collapse the Tuple into
     # that single axis. Projecting every tensor leaf onto it is equivalent to
