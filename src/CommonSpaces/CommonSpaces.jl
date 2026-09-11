@@ -449,6 +449,7 @@ RectangleXYSpace(::Type{FT}; kwargs...) where {FT} =
         device::ClimaComms.AbstractDevice = ClimaComms.device(),
         stretch::Meshes.StretchingRule = Meshes.Uniform(),
         z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
+        deep::Bool = false,
         staggering::Staggering,
     )
 

@@ -9,6 +9,19 @@ main
   can be interpolated to pressure coordinates like fields on extruded or
   single-column spaces.
 
+- ![][badge-✨feature/enhancement] `CommonGrids.MultiColumnGrid` and
+  `CommonSpaces.MultiColumnSpace` accept a `deep` keyword, forwarded to
+  `Grids.ExtrudedFiniteDifferenceGrid`, so multi-column grids can use a
+  `DeepSphericalGlobalGeometry` instead of always being shallow.
+
+- ![][badge-✨feature/enhancement] `Spaces.MultiPointSpace` implements
+  `Spaces.quadrature_style`, `Spaces.node_horizontal_length_scale`,
+  `Spaces.all_nodes`, `MatrixFields.all_columns`, and
+  `MatrixFields.field2arrays`.
+
+- ![][badge-🔥behavioralΔ] `Grids.MultiPointGrid` uses an identity horizontal
+  metric (`∂x∂ξ = I`, `J = WJ = 1`) instead of the sphere metric.
+
 v0.16.1
 -------
 - Bugfixes for compatibilty with CUDA.jl v6 [2628](https://github.com/CliMA/ClimaCore.jl/pull/2628)

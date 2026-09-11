@@ -12,12 +12,8 @@ basis, DSS, or horizontal operators are supported on this grid.
 This is the horizontal component used by a multi-column extruded space (N
 independent columns at user-chosen sphere locations).
 
-The `local_geometry` is stored as a `VIJFH{LG, 1, 1, 1, N}` data layout, with
-each of the `N` locations represented by an element with one nodal point. Based
-on the [metric
-tensor](https://en.wikipedia.org/wiki/Metric_tensor#The_round_metric_on_a_sphere)
-of a sphere, the horizontal Jacobian `∂x∂ξ` is given by the diagonal matrix
-`diag(R·π/180, R·cosd(lat)·π/180)`, with the determinant `J = R²·cosd(lat)·(π/180)²`.
+Every location has unit horizontal metric term. The sphere radius is only used for the global
+geometry, e.g. for deep-atmosphere scaling when the grid is extruded.
 """
 struct MultiPointGrid{
     C <: ClimaComms.AbstractCommsContext,
@@ -54,9 +50,7 @@ quadrature_style(::MultiPointGrid) = nothing
     )
 
 Convenience constructor: build a `MultiPointGrid` from a vector of
-`LatLongPoint`s and a sphere `radius`. The horizontal metric terms in
-`local_geometry` are set from the sphere geometry at each point:
-`∂x∂ξ = diag(R·π/180, R·cosd(lat)·π/180)`, `J = R²·cosd(lat)·(π/180)²`.
+`LatLongPoint`s and a sphere `radius`.
 """
 function MultiPointGrid(
     points::AbstractVector{Geometry.LatLongPoint{FT}};
@@ -88,30 +82,20 @@ function _MultiPointGrid(
     # Nv = Ni = Nj = 1 (one node per "column element"), Nh = N
     local_geometry = DataLayouts.VIJFH{LG, 1, 1, 1, nothing}(Array{FT}, N)
 
-    ∂x∂ξ_bases = (
-        Geometry.Components{Geometry.Orthonormal, AIdx}(),
-        Geometry.Components{Geometry.Covariant, AIdx}(),
+    ∂x∂ξ = Geometry.Tensor(
+        FT(1) * I,
+        (
+            Geometry.Components{Geometry.Orthonormal, AIdx}(),
+            Geometry.Components{Geometry.Covariant, AIdx}(),
+        ),
     )
-    deg2rad = FT(π) / 180
 
     for (h, pt) in enumerate(points)
         abs(pt.lat) < 90 || throw(ArgumentError(
             "Latitude ($(pt.lat)) must satisfy |lat| < 90",
         ))
-
-        # Sphere metric: arc length per degree in each coordinate direction.
-        # ∂x∂ξ is diagonal: (R·π/180) in the lat direction,
-        #                    (R·cosd(lat)·π/180) in the lon direction.
-        s_lat = FT(radius) * deg2rad
-        s_lon = FT(radius) * deg2rad * cosd(pt.lat)
-        J = s_lat * s_lon   # det of diagonal Jacobian
-        ∂x∂ξ_mat = SMatrix{2, 2, FT, 4}(s_lon, zero(FT), zero(FT), s_lat)
-        local_geometry[1, 1, 1, h] = Geometry.LocalGeometry(
-            pt,
-            J,
-            J,   # WJ — unit quadrature weight × J
-            Geometry.Tensor(∂x∂ξ_mat, ∂x∂ξ_bases),
-        )
+        local_geometry[1, 1, 1, h] =
+            Geometry.LocalGeometry(pt, one(FT), one(FT), ∂x∂ξ)
     end
 
     DA = ClimaComms.array_type(device)

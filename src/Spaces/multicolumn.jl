@@ -146,6 +146,11 @@ horizontal_space(space::MultiColumnFiniteDifferenceSpace) =
     MultiPointSpace(grid(space).horizontal_grid)
 horizontal_space(space::MultiPointSpace) = space
 
+quadrature_style(space::MultiPointSpace) = quadrature_style(grid(space))
+node_horizontal_length_scale(::MultiPointSpace) = 1
+all_nodes(space::MultiPointSpace) =
+    Iterators.product(((1, 1),), 1:ncolumns(space))
+
 # No DSS / mask machinery needed.
 get_mask(space::MultiPointSpace) = DataLayouts.NoMask()
 get_mask(space::MultiColumnFiniteDifferenceSpace) = DataLayouts.NoMask()

@@ -735,6 +735,7 @@ end
         device::ClimaComms.AbstractDevice = ClimaComms.device(),
         stretch::Meshes.StretchingRule = Meshes.Uniform(),
         z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
+        deep::Bool = false,
     )
 
 A convenience constructor that builds an
@@ -752,7 +753,9 @@ arbitrary (lat, lon) locations on a sphere, given:
   - `stretch` the mesh `Meshes.StretchingRule` (defaults to
     [`Meshes.Uniform`](@ref)),
   - `z_mesh` the vertical mesh, defaults to an `Meshes.IntervalMesh` along `z`
-    with given `stretch`.
+    with given `stretch`,
+  - `deep` whether to use deep-atmosphere metric terms (defaults to `false`,
+    a shallow atmosphere).
 
 There is no horizontal connectivity between columns. Horizontal operators are
 not supported. Use [`ClimaCore.Fields.bycolumn`](@ref) to iterate over columns.
@@ -782,6 +785,7 @@ function MultiColumnGrid(
     device::ClimaComms.AbstractDevice = ClimaComms.device(),
     stretch::Meshes.StretchingRule = Meshes.Uniform(),
     z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
+    deep::Bool = false,
 ) where {FT}
     h_grid = Grids.MultiPointGrid(points; radius, device)
     z_topology = Topologies.IntervalTopology(
@@ -789,7 +793,7 @@ function MultiColumnGrid(
         z_mesh,
     )
     z_grid = Grids.FiniteDifferenceGrid(z_topology)
-    return Grids.ExtrudedFiniteDifferenceGrid(h_grid, z_grid)
+    return Grids.ExtrudedFiniteDifferenceGrid(h_grid, z_grid; deep)
 end
 
 # Backwards-compatibility alias for the old name.

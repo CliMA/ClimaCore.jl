@@ -97,8 +97,12 @@ function column_field2array_view(field::Fields.FiniteDifferenceField)
 end
 
 all_columns(::Fields.FiniteDifferenceField) = (((1, 1), 1),)
-all_columns(field::Fields.ExtrudedFiniteDifferenceField) =
-    Spaces.all_nodes(Spaces.horizontal_space(axes(field)))
+all_columns(
+    field::Union{
+        Fields.ExtrudedFiniteDifferenceField,
+        Fields.MultiColumnFiniteDifferenceField,
+    },
+) = Spaces.all_nodes(Spaces.horizontal_space(axes(field)))
 
 column_map(f::F, field) where {F} =
     Iterators.map(all_columns(field)) do ((i, j), h)
@@ -108,10 +112,10 @@ column_map(f::F, field) where {F} =
 """
     field2arrays(field)
 
-Converts a field defined on a `FiniteDifferenceSpace` or on an
-`ExtrudedFiniteDifferenceSpace` into a collection of arrays, each of which
-corresponds to a column of the field. This is done by calling
-`column_field2array` on each of the field's columns.
+Converts a field defined on a `FiniteDifferenceSpace`, an
+`ExtrudedFiniteDifferenceSpace` or a `MultiColumnFiniteDifferenceSpace` into a
+collection of arrays, each of which corresponds to a column of the field. This
+is done by calling `column_field2array` on each of the field's columns.
 """
 field2arrays(field) = collect(column_map(column_field2array, field))
 

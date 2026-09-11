@@ -140,6 +140,9 @@ using Test
     @test vec(collect(parent(grid.horizontal_grid.local_geometry.coordinates.lat))) == lats
     @test vec(collect(parent(grid.horizontal_grid.local_geometry.coordinates.long))) ==
           longs
+    @test Grids.global_geometry(grid) isa Geometry.ShallowSphericalGlobalGeometry
+    deep_grid = MultiColumnGrid(; points, z_elem, z_min, z_max, radius, deep = true)
+    @test Grids.global_geometry(deep_grid) isa Geometry.DeepSphericalGlobalGeometry
 end
 
 @testset "Space-filling curve usage in CommonGrids" begin
