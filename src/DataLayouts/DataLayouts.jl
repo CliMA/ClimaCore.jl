@@ -11,8 +11,6 @@ import MultiBroadcastFusion: @make_type, @make_fused, fused_direct
 using UnrolledUtilities
 
 import ..Utilities: @drop_recursion_limits, @drop_constprop
-import ..Utilities.Unrolled: unrolled_setindex, unrolled_insert, unrolled_map_with_inbounds
-import ..Utilities.Unrolled: unrolled_tuple_map
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters, auto_broadcasted
 import ..Utilities: stable_view, unionall_type, replace_type_parameter, safe_mapreduce
 import ..Utilities: fieldtype_vals, return_type, safe_eltype, unsafe_eltype
