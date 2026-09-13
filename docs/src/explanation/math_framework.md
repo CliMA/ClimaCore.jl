@@ -66,13 +66,15 @@ volumes.
 ![Covariant and contravariant basis vectors of a terrain-following grid](../assets/coordinate_sketch.png)
 
 *A stretched terrain-following grid over a mountain. Dotted lines are the
-coordinate surfaces `ξ³ = const` (levels) and `ξ¹ = const` (columns); `k̂` is
-the vertical unit vector. The covariant basis vectors `ê₁`, `ê₃` are tangent
-to the coordinate lines, so over the slope `ê₃` follows the tilted column; the
-contravariant basis vectors `ê¹`, `ê²`, `ê³` are normal to the coordinate
-surfaces, so `ê³` is normal to the level. On flat ground the two bases
-coincide; over the slope they differ, and the metric terms `g³¹, g³²` relate
-them. From [Yatunin2026](@cite).*
+levels `ξ³ = const`, dashed lines the columns `ξ¹ = const`; `k̂` is the
+vertical unit vector. The covariant basis vectors are tangent to the
+coordinate lines, so `ê₁` and `ê₂` follow the tilted level and acquire a
+vertical component, while `ê₃` stays vertical: the map displaces the levels
+but leaves the columns vertical. The contravariant basis vectors are normal
+to the coordinate surfaces, so `ê¹` and `ê²` stay horizontal and `ê³` tilts
+with the level. On flat ground, the two bases coincide; over the slope, they
+differ, and the metric terms `g³¹, g³²` relate them.
+From [Yatunin2026](@cite).*
 
 The operators fix which components they take and return. A gradient of a
 scalar is naturally covariant, `(∇ψ)_i = ∂ψ/∂ξⁱ`; a divergence needs

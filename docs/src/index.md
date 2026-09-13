@@ -29,6 +29,7 @@ equations, and it runs on CPUs and on NVIDIA GPUs.
     resolution on a few dozen GPUs, with weak-scaling efficiency above 92% on
     GPUs and above 98% on CPUs, on supercomputers and on cloud GPU instances
     [Yatunin2026](@cite).
+    ([Performance and portability](explanation/performance.md)).
   - **Differentiable in forward mode.** ForwardDiff dual numbers propagate
     through fields, broadcasts, and operators, and grid metric terms are
     computed by automatic differentiation of the mesh coordinates. Reverse-mode
