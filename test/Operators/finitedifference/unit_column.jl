@@ -886,3 +886,45 @@ end
         bottom = Operators.Extrapolate(),
     )
 end
+
+@testset "Dual-valued fields through composed stencils and axis conversion" begin
+    # Regression test: a stencil composition such as `GradientF2C(InterpolateC2F(θ))` is
+    # rewritten into a band-matrix product whose (Float) coefficients multiply the
+    # (Dual) data.
+    import ForwardDiff
+    for FT in (Float32, Float64)
+        domain = Domains.IntervalDomain(
+            Geometry.ZPoint{FT}(0.0),
+            Geometry.ZPoint{FT}(1000.0);
+            boundary_names = (:bottom, :top),
+        )
+        mesh = Meshes.IntervalMesh(domain; nelems = 10)
+        topology = Topologies.IntervalTopology(
+            ClimaComms.SingletonCommsContext(device),
+            mesh,
+        )
+        cspace = Spaces.CenterFiniteDifferenceSpace(topology)
+        D = ForwardDiff.Dual{Nothing, FT, 2}
+        θ = Fields.Field(D, cspace)
+        θ .= ForwardDiff.Dual{Nothing}(FT(300), FT(1), FT(0))
+        ᶠinterp = Operators.InterpolateC2F(
+            bottom = Operators.Extrapolate(),
+            top = Operators.Extrapolate(),
+        )
+        ᶜgradᵥ = Operators.GradientF2C()
+
+        bc = Base.broadcasted(
+            Geometry.WVector,
+            Base.broadcasted(ᶜgradᵥ, Base.broadcasted(ᶠinterp, θ)),
+        )
+        @test eltype(bc) == Geometry.WVector{D}
+        @test eltype(Base.Broadcast.instantiate(bc)) == Geometry.WVector{D}
+
+        dest = Fields.Field(D, cspace)
+        @. dest = Geometry.WVector(ᶜgradᵥ(ᶠinterp(θ))).components.data.:1
+        @test eltype(dest) == D
+        # The gradient of a uniform field vanishes, and so does its derivative.
+        @test maximum(x -> abs(ForwardDiff.value(x)), dest) == 0
+        @test maximum(x -> maximum(abs, ForwardDiff.partials(x)), dest) == 0
+    end
+end

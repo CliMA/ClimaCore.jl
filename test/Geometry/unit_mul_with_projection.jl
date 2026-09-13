@@ -145,3 +145,32 @@ end
         T(covector * number, number * vector, covector * projected_tensor),
     )
 end
+
+@testset "mul_return_type promotes the storage type with the element type" begin
+    import ForwardDiff
+    for FT in (Float32, Float64)
+        D = ForwardDiff.Dual{Nothing, FT, 2}
+        d = ForwardDiff.Dual{Nothing}(FT(2), FT(1), FT(0))
+        tensors = (
+            Geometry.Covariant3Vector(FT(1)),
+            Geometry.Covariant12Vector(FT(1), FT(2)),
+            Geometry.UVWVector(FT(1), FT(2), FT(3)),
+            Geometry.Covariant3Vector(FT(1))',                     # covector
+            Geometry.UVWVector(FT(1), FT(2), FT(3)) *
+            Geometry.Covariant123Vector(FT(1), FT(2), FT(3))',     # 2-tensor
+        )
+        for x in tensors
+            X = typeof(x)
+            # A `Dual` scalar times a `Float` tensor is a `Dual` tensor whose storage is
+            # `Dual` as well: the return type has to be the type `*` actually produces.
+            @test mul_return_type(D, X) == typeof(d * x)
+            @test mul_return_type(X, D) == typeof(x * d)
+            @test eltype(parent(d * x)) == D
+            # No promotion, no change: the existing result types are untouched.
+            @test mul_return_type(FT, X) == X
+            @test mul_return_type(X, FT) == X
+            @test (@allocated mul_return_type(D, X)) == 0
+            @test_opt mul_return_type(D, X)
+        end
+    end
+end
