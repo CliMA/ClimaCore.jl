@@ -30,11 +30,11 @@ column_parent_matrix(field) =
 """
     column_field2array(field)
 
-Converts a field defined on a `FiniteDifferenceSpace` into either a `Vector` or
-a `BandedMatrix`, depending on whether the elements of the field are single
-values or `BandMatrixRow`s. This involves copying the data stored in the field.
-Because `BandedMatrix` does not currently support operations with `CuArray`s,
-all GPU data is copied to the CPU.
+Convert a field defined on a `FiniteDifferenceSpace` into either a `Vector` or a
+`BandedMatrix`, depending on whether the elements of the field are single values or
+[`BandMatrixRow`](@ref)s. This copies the data stored in the field. Because
+`BandedMatrix` does not support operations with `CuArray`s, all GPU data is copied
+to the CPU.
 """
 function column_field2array(field::Fields.FiniteDifferenceField)
     if eltype(field) <: BandMatrixRow # field represents a matrix
@@ -78,8 +78,8 @@ end
 """
     column_field2array_view(field)
 
-Similar to `column_field2array(field)`, except that this version avoids copying
-the data stored in the field.
+Convert a field like [`column_field2array`](@ref)`(field)`, but return a view that
+does not copy the data stored in the field.
 """
 function column_field2array_view(field::Fields.FiniteDifferenceField)
     if eltype(field) <: BandMatrixRow # field represents a matrix
@@ -108,17 +108,18 @@ column_map(f::F, field) where {F} =
 """
     field2arrays(field)
 
-Converts a field defined on a `FiniteDifferenceSpace` or on an
-`ExtrudedFiniteDifferenceSpace` into a collection of arrays, each of which
-corresponds to a column of the field. This is done by calling
-`column_field2array` on each of the field's columns.
+Convert a field defined on a `FiniteDifferenceSpace` or on an
+`ExtrudedFiniteDifferenceSpace` into a vector of arrays, each of which corresponds
+to a column of the field. This is done by calling [`column_field2array`](@ref) on
+each of the field's columns.
 """
 field2arrays(field) = collect(column_map(column_field2array, field))
 
 """
     field2arrays_view(field)
 
-Similar to `field2arrays(field)`, except that this version calls
-`column_field2array_view` instead of `column_field2array`.
+Convert a field like [`field2arrays`](@ref)`(field)`, but call
+[`column_field2array_view`](@ref) instead of [`column_field2array`](@ref) and
+return a lazy iterator instead of a vector.
 """
 field2arrays_view(field) = column_map(column_field2array_view, field)

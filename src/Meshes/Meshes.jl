@@ -23,17 +23,18 @@ import SparseArrays, CubedSphere, LinearAlgebra, StaticArrays
 """
     AbstractMesh{dim}
 
-A `Mesh` is an object which represents how we discretize a domain into elements.
+Abstract supertype of meshes, which describe how a domain is discretized into
+elements. Subtypes: `IntervalMesh`, `RectilinearMesh`, and the
+[`AbstractCubedSphere`](@ref) meshes.
 
-It should be lightweight (i.e. exists on all MPI ranks), e.g for meshes stored
-in a file, it would contain the filename.
+A mesh is lightweight and exists on all MPI ranks; a mesh stored in a file, for
+example, holds only the filename.
 
-# Face and vertex numbering
+# Notes
 
-In 1D, faces and vertices are the same, and both are numbered `[1,2]`.
-
-In 2D, a face is a line segment between to vertices, and both are numbered `[1,2,3,4]`,
-in a counter-clockwise direction.
+**Face and vertex numbering.** In 1D, faces and vertices coincide, and both are
+numbered `[1, 2]`. In 2D, a face is a line segment between two vertices, and both
+are numbered `[1, 2, 3, 4]` in counter-clockwise order.
 
 ```
  v4        f3        v3
@@ -48,9 +49,7 @@ f4 |                 | f2     f2 =>  v2 v3
   v1       f1        v2
 ```
 
-# Interface
-
-A subtype of `AbstractMesh` should define the following methods:
+**Interface.** A subtype of `AbstractMesh` defines the following methods:
 
   - [`domain(mesh)`](@ref)
   - [`elements(mesh)`](@ref)
@@ -60,7 +59,7 @@ A subtype of `AbstractMesh` should define the following methods:
   - [`coordinates(mesh, elem, vert)`](@ref)
   - [`containing_element`](@ref) (optional)
 
-The following types/methods are provided by `AbstractMesh`:
+The following types and methods are provided for every `AbstractMesh`:
 
   - [`SharedVertices(mesh, elem, vert)`](@ref)
   - [`face_connectivity_matrix(mesh[,elemorder])`](@ref face_connectivity_matrix)
@@ -74,45 +73,49 @@ const AbstractMesh2D = AbstractMesh{2}
 """
     Meshes.domain(mesh::AbstractMesh)
 
-The domain (a subtype of  [`Domains.AbstractDomain`](@ref)) on which the mesh is defined.
+Return the domain (a subtype of [`Domains.AbstractDomain`](@ref)) on which `mesh` is
+defined.
 """
 function domain end
 
 """
     Meshes.elements(mesh::AbstractMesh)
 
-An iterator over the elements of a mesh. Elements of a mesh can be of any type.
+Return an iterator over the elements of `mesh`. Elements can be of any type.
 """
 function elements end
 
 """
     Meshes.is_boundary_face(mesh::AbstractMesh, elem, face::Int)::Bool
 
-Determine whether face `face` of element `elem` is on the boundary of `mesh`.
+Return `true` if face `face` of element `elem` is on the boundary of `mesh`.
 
-`elem` should be an element of [`elements(mesh)`](@ref).
+`elem` is an element of [`elements(mesh)`](@ref).
 """
 function is_boundary_face end
 
 """
     Meshes.boundary_face_name(mesh::AbstractMesh, elem, face::Int)::Union{Symbol,Nothing}
 
-The name of the boundary facing `face` of element `elem`, or `nothing` if it is
-not on the boundary.
+Return the name of the boundary containing face `face` of element `elem`, or
+`nothing` if the face is not on the boundary.
 """
 function boundary_face_name end
 
 """
     opelem, opface, reversed = Meshes.opposing_face(mesh::AbstractMesh, elem, face::Int)
 
-The element and face (`opelem`, `opface`) that oppose face `face` of element `elem`.
+Return the element and face (`opelem`, `opface`) opposite face `face` of element
+`elem`, and whether the node ordering along the shared face is `reversed` relative
+to `face`.
 """
 function opposing_face end
 
 """
     Meshes.element_horizontal_length_scale(mesh::AbstractMesh)
 
-The approximate length scale (in units of distance) of the elements of the mesh.
+Return the approximate length scale of the elements of `mesh`, in the units of the
+domain coordinates.
 """
 function element_horizontal_length_scale end
 

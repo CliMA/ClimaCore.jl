@@ -1,9 +1,9 @@
 """
     MatrixFields
 
-This module adds support for defining and manipulating `Field`s that represent
-matrices. Specifically, it adds the `BandMatrixRow` type, which can be used
-to store the entries of a band matrix. A `Field` of `BandMatrixRow`s on a
+Module for defining and manipulating `Field`s that represent matrices. It adds
+the [`BandMatrixRow`](@ref) type, which stores the entries of one row of a band
+matrix. A `Field` of `BandMatrixRow`s on a
 `FiniteDifferenceSpace` can be interpreted as a band matrix by vertically
 concatenating the `BandMatrixRow`s. Similarly, a `Field` of `BandMatrixRow`s on
 an `ExtrudedFiniteDifferenceSpace` can be interpreted as a collection of band
@@ -11,34 +11,34 @@ matrices, one for each column of the `Field`. Such `Field`s are called
 `ColumnwiseBandMatrixField`s, and this module adds the following functionality
 for them:
 
-  - Constructors, e.g., `matrix_field = @. BidiagonalMatrixRow(field1, field2)`
-  - Linear combinations, e.g., `@. 3 * matrix_field1 + matrix_field2 / 3`
-  - Matrix-vector multiplication, e.g., `@. matrix_field * field`
-  - Matrix-matrix multiplication, e.g., `@. matrix_field1 * matrix_field2`
+  - Constructors, e.g., `matrix_field = @. BidiagonalMatrixRow(field1, field2)`.
+  - Linear combinations, e.g., `@. 3 * matrix_field1 + matrix_field2 / 3`.
+  - Matrix-vector multiplication, e.g., `@. matrix_field * field`.
+  - Matrix-matrix multiplication, e.g., `@. matrix_field1 * matrix_field2`.
   - Compatibility with `LinearAlgebra.I`, e.g., `@. matrix_field = (4I,)` or
-    `@. matrix_field - (4I,)`
+    `@. matrix_field - (4I,)`.
   - Compatibility with generic data types, e.g., the entries of `matrix_field` can
     be iterators instead of single values, which allows `matrix_field` to
-    represent multiple band matrices at the same time
-  - Integration with `Operators`, e.g., the `matrix_field` that gets applied to
+    represent multiple band matrices at the same time.
+  - Integration with `Operators`, e.g., the `matrix_field` that is applied to
     the argument of any `FiniteDifferenceOperator` `op` can be obtained using
-    the `FiniteDifferenceOperator` `operator_matrix(op)`
-  - Conversions to native array types, e.g., `field2arrays(matrix_field)` can
-    convert each column of `matrix_field` into a `BandedMatrix` from
-    `BandedMatrices.jl`
-  - Custom printing, e.g., `matrix_field` gets displayed as a `BandedMatrix`,
-    specifically, as the `BandedMatrix` that corresponds to its first column
+    the `FiniteDifferenceOperator` [`operator_matrix`](@ref)`(op)`.
+  - Conversions to native array types, e.g., [`field2arrays`](@ref)`(matrix_field)`
+    converts each column of `matrix_field` into a `BandedMatrix` from
+    `BandedMatrices.jl`.
+  - Custom printing, e.g., `matrix_field` is displayed as the `BandedMatrix` that
+    corresponds to its first column.
 
-This module also adds support for defining and manipulating sparse block
-matrices of `Field`s. Specifically, it adds the `FieldMatrix` type, which is a
-dictionary that maps pairs of `FieldName`s to `ColumnwiseBandMatrixField`s or
-multiples of `LinearAlgebra.I`. This comes with the following functionality:
+This module also supports sparse block matrices of `Field`s through the
+`FieldMatrix` type (see [`FieldNameDict`](@ref)), which is a dictionary that maps
+pairs of [`FieldName`](@ref)s to `ColumnwiseBandMatrixField`s or multiples of
+`LinearAlgebra.I`. This comes with the following functionality:
 
-  - Addition and subtraction, e.g., `@. field_matrix1 + field_matrix2`
-  - Matrix-vector multiplication, e.g., `@. field_matrix * field_vector`
-  - Matrix-matrix multiplication, e.g., `@. field_matrix1 * field_matrix2`
-  - The ability to solve linear equations using `FieldMatrixSolver`, which is a
-    generalization of `ldiv!` that is designed to optimize solver performance
+  - Addition and subtraction, e.g., `@. field_matrix1 + field_matrix2`.
+  - Matrix-vector multiplication, e.g., `@. field_matrix * field_vector`.
+  - Matrix-matrix multiplication, e.g., `@. field_matrix1 * field_matrix2`.
+  - Solving linear equations with [`FieldMatrixSolver`](@ref), a generalization of
+    `ldiv!` that is designed to optimize solver performance.
 """
 module MatrixFields
 

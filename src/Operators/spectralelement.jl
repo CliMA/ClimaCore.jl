@@ -43,10 +43,11 @@ struct WeakForm <: FormType end
 """
     materialize_buffer(arg)
 
-Like `Base.materialize(arg)`, but storing the result of a lazy `Broadcasted`
-expression in a buffer from [`buffer_similar`](@ref) that every thread in the
-argument's scope can read; register-resident `Field`s (see
-[`register_similar`](@ref)) are also copied into such a buffer. On GPUs two
+Materialize `arg` like `Base.materialize(arg)`, but store the result of a lazy
+`Broadcasted` expression in a buffer from [`buffer_similar`](@ref) that every
+thread in the argument's scope can read; register-resident `Field`s (see
+[`register_similar`](@ref)) are also copied into such a buffer, and other
+arguments are returned unchanged. On GPUs two
 buffers of equal byte size can share memory, so callers must keep their
 lifetimes disjoint; see the buffer reuse invariant in [`apply_operator`](@ref).
 """
@@ -75,8 +76,8 @@ lifetimes disjoint; see the buffer reuse invariant in [`apply_operator`](@ref).
 """
     has_private_buffers(arg)
 
-Whether a buffer allocated for `arg` is private to the allocating thread, which
-holds exactly when `arg`'s [`DataLayouts.DataScope`](@ref) is
+Return whether a buffer allocated for `arg` is private to the allocating thread,
+which holds exactly when `arg`'s [`DataLayouts.DataScope`](@ref) is
 [`DataLayouts.ThisThread`](@ref) (as on CPUs); otherwise buffers live in shared
 memory and must obey the buffer reuse invariant in [`apply_operator`](@ref).
 """
@@ -86,8 +87,8 @@ memory and must obey the buffer reuse invariant in [`apply_operator`](@ref).
 """
     register_similar(arg, T)
 
-Like `Base.similar(arg, T)`, but with the new `Field`'s data in each thread's
-registers; used for every [`apply_operator`](@ref) destination, which only its
+Allocate a `Field` like `Base.similar(arg, T)`, but with its data in each
+thread's registers; used for every [`apply_operator`](@ref) destination, which only its
 own thread reads and writes. This lets two applications in one fused expression
 be live at once (see the buffer reuse invariant in [`apply_operator`](@ref)).
 """
@@ -99,7 +100,7 @@ register_similar(arg, ::Type{T}) where {T} = Fields.Field(
 """
     buffer_similar(arg, T)
 
-Like `Base.similar(arg, T)`, but always allocated through the argument's
+Allocate a `Field` like `Base.similar(arg, T)`, but always through the argument's
 [`DataLayouts.DataScope`](@ref) (shared memory on GPUs), never in per-thread
 registers; used for every buffer whose values cross a thread boundary.
 """
@@ -284,9 +285,9 @@ end
 Eagerly evaluate the [`SpectralElementOperator`](@ref) `op` over one slab of
 slab `Field`s and/or lazy pointwise broadcasts over slabs.
 
-# Buffer reuse invariant
+# Notes
 
-On GPUs, buffers of equal byte size can be assigned to the same shared memory
+**Buffer reuse invariant.** On GPUs, buffers of equal byte size can be assigned to the same shared memory
 (see `DataLayouts.scoped_static_array`), so each `apply_operator` method keeps
 at most one buffer of each size live at a time, separating every reuse from the
 previous use with a `DataLayouts.synchronize`. The destination stays live for
@@ -530,12 +531,12 @@ end
     wdiv = Divergence{WeakForm}()   # weak form
     div.(u)
 
-Computes the per-element spectral divergence of a vector field ``u``.
+Compute the per-element spectral divergence of a vector field ``u``.
 `Divergence()` computes the strong form; `Divergence{WeakForm}()` computes the
 weak form (the volume-integral contribution obtained after integration by
 parts), distinguished by the [`FormType`](@ref) parameter.
 
-## Strong form
+# Strong form
 
 The divergence of a vector field ``u`` is defined as
 
@@ -560,12 +561,12 @@ form, this can be written as
 J^{-1} \\sum_i D_i J u^i
 ```
 
-where ``D_i`` is the derivative matrix along the ``i``th dimension
+where ``D_i`` is the derivative matrix along the ``i``th dimension.
 
-## Weak form
+# Weak form
 
-The weak divergence is the scalar field ``\\theta \\in \\mathcal{V}_0`` such
-that for all ``\\phi\\in \\mathcal{V}_0``
+The weak divergence is the scalar field ``\\theta \\in V_0`` such
+that for all ``\\phi\\in V_0``
 
 ```math
 \\int_\\Omega \\phi \\theta \\, d \\Omega
@@ -573,7 +574,7 @@ that for all ``\\phi\\in \\mathcal{V}_0``
 - \\int_\\Omega (\\nabla \\phi) \\cdot u \\,d \\Omega
 ```
 
-where ``\\mathcal{V}_0`` is the space of ``u``. It arises as the contribution
+where ``V_0`` is the space of ``u``. It arises as the contribution
 of the volume integral after applying integration by parts to the weak form
 expression of the divergence
 
@@ -598,9 +599,9 @@ which reduces to
 
 where ``W`` is the diagonal matrix of quadrature weights.
 
-## References
+# References
 
-  - [Taylor2010](@cite), equation 15
+  - [Taylor2010](@cite), equation 15.
 """
 struct Divergence{F <: FormType} <: SpectralElementOperator end
 Divergence() = Divergence{StrongForm}()
@@ -608,7 +609,8 @@ Divergence() = Divergence{StrongForm}()
 return_space(::Divergence, space) = space
 return_eltype(::Divergence, arg) = Geometry.divergence_result_type(eltype(arg))
 
-# Strong form is J⁻¹ ∑ₕ Dₕ J argʰ, weak form is -(WJ)⁻¹ ∑ₕ Dₕᵀ WJ argʰ.
+# Strong form is J⁻¹ ∑ₕ Dₕ J argʰ;
+# weak form is -(WJ)⁻¹ ∑ₕ Dₕᵀ WJ argʰ.
 function apply_operator(op::Divergence{F}, arg) where {F}
     dims = horizontal_dims(arg)
     lg = Fields.local_geometry_field(arg)
@@ -626,18 +628,22 @@ end
     split_div = SplitDivergence()
     split_div.(ρu, ψ)
 
-Computes the divergence of the product `ρu * ψ` using a **split-form (entropy-stable)** discretization.
+Compute the divergence of the product `ρu * ψ` using a split-form
+(entropy-stable) discretization.
 
-This operator is designed for the advection of scalar quantities in conservation laws (e.g.,
-thermodynamic variables or tracers). By evaluating the divergence using a specific averaging of the
-conservative and advective forms, this formulation cancels aliasing errors that arise from the product
-of two spectrally variable fields, thereby inhibiting the growth of quadratic instabilities (such as
-cold temperature spikes) without requiring hyperviscosity.
+This operator is designed for the advection of scalar quantities in
+conservation laws (e.g., thermodynamic variables or tracers). By evaluating the
+divergence using an average of the conservative and advective forms, this
+formulation cancels aliasing errors that arise from the product of two
+spectrally variable fields, which inhibits the growth of quadratic instabilities
+(such as cold temperature spikes) without requiring hyperviscosity.
 
 # Arguments
 
-  - `ρu`: The transport vector field, typically the **mass flux**. It must be a vector quantity (e.g., `Geometry.Contravariant12Vector`).
-  - `ψ`: The **specific** scalar quantity to be advected (e.g., specific total energy ``e_{tot}`` or specific humidity ``q_{tot}``).
+  - `ρu`: The transport vector field, typically the mass flux. It must be a
+    vector quantity (e.g., `Geometry.Contravariant12Vector`).
+  - `ψ`: The specific scalar quantity to be advected (e.g., specific total
+    energy ``e_{tot}`` or specific humidity ``q_{tot}``).
 
 # Mathematical Formulation
 
@@ -712,11 +718,12 @@ sequentially along each dimension.
 
 # Properties
 
- 1. **Conservation:** The split operator conserves ``\\rho \\mathbf{u} \\psi``
+ 1. **Conservation:** The split operator conserves ``\\rho \\mathbf{u} \\psi``.
  2. **Consistency:** If ``\\psi = 1``, the split operator degenerates to the
-    weak formulation of ``\\nabla \\cdot \\rho \\mathbf{u}`` (mass continuity)
+    weak formulation of ``\\nabla \\cdot \\rho \\mathbf{u}`` (mass continuity).
  3. **Complexity:** The split operator has the same ``O(N^2)`` complexity per
-    element as the strong and weak operators, but needs twice as many operations
+    element as the strong and weak operators, but needs twice as many
+    operations.
 
 # References
 
@@ -762,7 +769,7 @@ Compute the gradient of `f` on each element, returning a
 contribution obtained after integration by parts), distinguished by the
 [`FormType`](@ref) parameter.
 
-## Strong form
+# Strong form
 
 The ``i``th covariant component of the gradient is the partial derivative with
 respect to the reference element:
@@ -779,10 +786,10 @@ D_i f
 
 where ``D_i`` is the derivative matrix along the ``i``th dimension.
 
-## Weak form
+# Weak form
 
-The weak gradient is the vector field ``\\theta \\in \\mathcal{V}_0`` such that
-for all ``\\phi \\in \\mathcal{V}_0``
+The weak gradient is the vector field ``\\theta \\in V_0`` such that
+for all ``\\phi \\in V_0``
 
 ```math
 \\int_\\Omega \\phi \\cdot \\theta \\, d \\Omega
@@ -790,7 +797,7 @@ for all ``\\phi \\in \\mathcal{V}_0``
 - \\int_\\Omega (\\nabla \\cdot \\phi) f \\, d\\Omega
 ```
 
-where ``\\mathcal{V}_0`` is the space of ``f``. It arises from the contribution
+where ``V_0`` is the space of ``f``. It arises from the contribution
 of the volume integral after applying integration by parts to the weak form
 expression of the gradient
 
@@ -813,9 +820,9 @@ which reduces to
 \\theta_i = -W^{-1} D_i^\\top W f
 ```
 
-## References
+# References
 
-  - [Taylor2010](@cite), equation 16
+  - [Taylor2010](@cite), equation 16.
 """
 struct Gradient{F <: FormType} <: SpectralElementOperator end
 Gradient() = Gradient{StrongForm}()
@@ -843,15 +850,15 @@ end
     wcurl = Curl{WeakForm}()   # weak form
     curl.(u)
 
-Computes the per-element spectral curl of a covariant vector field ``u``.
+Compute the per-element spectral curl of a covariant vector field ``u``.
 `Curl()` computes the strong form; `Curl{WeakForm}()` computes the weak form
 (the volume-integral contribution obtained after integration by parts),
 distinguished by the [`FormType`](@ref) parameter.
 
-Note: The vector field ``u`` needs to be explicitly converted to a
-`CovariantVector`, as then the curl is independent of the local metric tensor.
+The vector field ``u`` must be explicitly converted to a `CovariantVector`, as
+then the curl is independent of the local metric tensor.
 
-## Strong form
+# Strong form
 
 The curl of a vector field ``u`` is a vector field with contravariant components
 
@@ -884,13 +891,13 @@ In matrix form, this becomes
 \\epsilon^{ijk} J^{-1} D_j u_k
 ```
 
-Note that unused dimensions will be dropped: e.g. the 2D curl of a
-`Covariant12Vector`-field will return a `Contravariant3Vector`.
+Unused dimensions are dropped: e.g. the 2D curl of a `Covariant12Vector`-field
+returns a `Contravariant3Vector`.
 
-## Weak form
+# Weak form
 
-The weak curl is the vector field ``\\theta \\in \\mathcal{V}_0`` such that for
-all ``\\phi \\in \\mathcal{V}_0``
+The weak curl is the vector field ``\\theta \\in V_0`` such that for
+all ``\\phi \\in V_0``
 
 ```math
 \\int_\\Omega \\phi \\cdot \\theta \\, d \\Omega
@@ -898,7 +905,7 @@ all ``\\phi \\in \\mathcal{V}_0``
 \\int_\\Omega (\\nabla \\times \\phi) \\cdot u \\,d \\Omega
 ```
 
-where ``\\mathcal{V}_0`` is the space of ``u``. It arises from the contribution
+where ``V_0`` is the space of ``u``. It arises from the contribution
 of the volume integral after applying integration by parts to the weak form
 expression of the curl
 
@@ -921,9 +928,9 @@ which, by using the anti-symmetry of the Levi-Civita symbol, reduces to
 \\theta^i = - \\epsilon^{ijk} (WJ)^{-1} D_j^\\top W u_k
 ```
 
-## References
+# References
 
-  - [Taylor2010](@cite), equation 17
+  - [Taylor2010](@cite), equation 17.
 """
 struct Curl{F <: FormType} <: SpectralElementOperator end
 Curl() = Curl{StrongForm}()
@@ -932,7 +939,8 @@ return_space(::Curl, space) = space
 return_eltype(::Curl, arg) =
     Geometry.curl_result_type(Val(horizontal_dims(arg)), eltype(arg))
 
-# Strong form is J⁻¹ ∑ₕₙₘ εʰⁿᵐ Dₕ argₙ eₘ, weak form is -(WJ)⁻¹ ∑ₕₙₘ εʰⁿᵐ Dₕᵀ W argₙ eₘ.
+# Strong form is J⁻¹ ∑ₕₙₘ εʰⁿᵐ Dₕ argₙ eₘ;
+# weak form is -(WJ)⁻¹ ∑ₕₙₘ εʰⁿᵐ Dₕᵀ W argₙ eₘ.
 function apply_operator(op::Curl{F}, arg) where {F}
     dims = horizontal_dims(arg)
     lg = Fields.local_geometry_field(arg)
@@ -970,8 +978,8 @@ Adapt.adapt_structure(to, op::TensorOperator) =
     i = Interpolate(space)
     i.(f)
 
-Interpolates `f` to the `space`. If `space` has equal or higher polynomial
-degree as the space of `f`, this is exact, otherwise it will be lossy.
+Interpolate `f` to `space`. If `space` has equal or higher polynomial degree
+than the space of `f`, this is exact; otherwise it is lossy.
 
 In matrix form, it is the linear operator
 
@@ -991,11 +999,11 @@ end
     r = Restrict(space)
     r.(f)
 
-Computes the projection of a field `f` on ``\\mathcal{V}_0`` to a lower degree
-polynomial space `space` (``\\mathcal{V}_0^*``). `space` must be on the same
+Compute the projection of a field `f` on ``V_0`` to a lower degree
+polynomial space `space` (``V_0^*``). `space` must be on the same
 topology as the space of `f`, but have a lower polynomial degree.
 
-It is defined as the field ``\\theta \\in \\mathcal{V}_0^*`` such that for all ``\\phi \\in \\mathcal{V}_0^*``
+It is defined as the field ``\\theta \\in V_0^*`` such that for all ``\\phi \\in V_0^*``
 
 ```math
 \\int_\\Omega \\phi \\theta \\,d\\Omega = \\int_\\Omega \\phi f \\,d\\Omega
@@ -1008,8 +1016,8 @@ In matrix form, this is
 ```
 
 where ``W^*`` and ``J^*`` are the quadrature weights and Jacobian determinant of
-``\\mathcal{V}_0^*``, and ``I`` is the interpolation operator (see [`Interpolate`](@ref))
-from ``\\mathcal{V}_0^*`` to ``\\mathcal{V}_0``. This reduces to
+``V_0^*``, and ``I`` is the interpolation operator (see [`Interpolate`](@ref))
+from ``V_0^*`` to ``V_0``. This reduces to
 
 ```math
 \\theta = (W^* J^*)^{-1} I^\\top WJ f
@@ -1069,7 +1077,9 @@ end
     tensor_product!(out, in, M)
     tensor_product!(inout, M)
 
-Computes the tensor product `out = (M ⊗ M) * in` on each element.
+Compute the tensor product `out = (M ⊗ M) * in` on each element (`M * in` for
+1D elements) and return `out`; the two-argument form applies it in place to
+`inout`.
 """
 function tensor_product! end
 
@@ -1174,8 +1184,9 @@ end
 """
     matrix_interpolate(field, quadrature)
 
-Computes the tensor product given a uniform quadrature `out = (M ⊗ M) * in` on each element.
-Returns a 2D Matrix for plotting / visualizing 2D Fields.
+Interpolate `field` onto the uniform `quadrature` points of each element with
+`tensor_product!`, and return the result as a 2D `Matrix` for plotting
+or visualizing 2D fields.
 """
 function matrix_interpolate end
 
@@ -1215,8 +1226,9 @@ end
 """
     matrix_interpolate(field, Nu::Integer)
 
-Computes the tensor product given a uniform quadrature degree of Nu on each element.
-Returns a 2D Matrix for plotting / visualizing 2D Fields.
+Interpolate `field` onto `Nu` uniformly spaced points per dimension in each
+element (`Quadratures.Uniform{Nu}()`), and return the result as a 2D `Matrix`
+for plotting or visualizing 2D fields.
 """
 matrix_interpolate(field::Field, Nu::Integer) =
     matrix_interpolate(field, Quadratures.Uniform{Nu}())
@@ -1224,7 +1236,8 @@ matrix_interpolate(field::Field, Nu::Integer) =
 """
     rmatmul1(W, S, i, j)
 
-Recursive matrix product along the 1st dimension of `S`. Equivalent to:
+Compute the matrix product of `W` along the 1st dimension of the slab `S`.
+Equivalent to:
 
     mapreduce(*, +, W[i,:], S[:,j])
 """
@@ -1240,7 +1253,8 @@ end
 """
     rmatmul2(W, S, i, j)
 
-Recursive matrix product along the 2nd dimension `S`. Equivalent to:
+Compute the matrix product of `W` along the 2nd dimension of the slab `S`.
+Equivalent to:
 
     mapreduce(*, +, W[j,:], S[i, :])
 """
@@ -1258,8 +1272,8 @@ end
 # a 16 GB runner). The @inline annotations on the buffer helpers, weighting
 # functions, and per-dimension closures are load-bearing for CPU runtime:
 # without them, buffer Fields cross through memory and combine_axes runs per
-# slab, costing 30-120% of a fused expression's runtime. Also inlining
-# apply_operator(s) buys little (~10%) and roughly doubles LLVM time and memory.
+# slab, adding 30-120% to a fused expression's runtime. Inlining apply_operator(s)
+# as well gains about 10% and roughly doubles LLVM time and memory.
 @drop_constprop apply_operator, muladd_slab!, muladd_slab_dims!,
 materialize_buffer, maybe_private_buffer, materialize_jacobian_weighted,
 materialize_quadrature_weighted, jacobian_unweighted,

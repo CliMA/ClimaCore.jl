@@ -82,11 +82,12 @@ end
 """
     each_slice_index(op, arg)
 
-Generalization of `eachindex` for the slice operators [`level`](@ref),
-[`slab`](@ref), [`column`](@ref), and `view` (for creating single-point slices).
-The result is always an iterator of Cartesian indices, whose scalar offsets are
-simple enough for SIMD optimization (a `view` at a linear index wraps its parent
-in a 1-dimensional `ReshapedArray`, which blocks SIMD in pointwise loops).
+Return an iterator over the indices of the slices that the slice operator `op`
+produces from `arg`, generalizing `eachindex` to [`level`](@ref), [`slab`](@ref),
+[`column`](@ref), and `view` (for single-point slices). The result is always an
+iterator of Cartesian indices, whose scalar offsets permit SIMD optimization (a
+`view` at a linear index wraps its parent in a 1-dimensional `ReshapedArray`, which
+blocks SIMD in pointwise loops).
 """
 @inline each_slice_index(::typeof(view), arg) = CartesianIndices(size(arg))
 @inline each_slice_index(::typeof(level), arg) = CartesianIndices((nlevels(arg),))
@@ -177,7 +178,7 @@ end
 # Use Broadcast.newindex to match the behavior of getindex for LazyDataLayouts.
 #
 # The argument loop is expanded by a generated function rather than routed
-# through modify_args, whose two extra closure layers cost 10% more compilation
+# through modify_args, whose two extra closure layers add 10% compilation
 # memory on the vector hyperdiffusion benchmark (point views are taken once per
 # node of a broadcast expression per slice loop over it).
 @generated Base.view(bc::LazyDataLayout, index::PointIndex) = quote

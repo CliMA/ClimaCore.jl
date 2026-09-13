@@ -38,11 +38,12 @@ local_sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}}) =
 """
     sum([f=identity,] v::Field)
 
-Approximate integration of `v` or `f.(v)` over the domain. In an `AbstractSpectralElementSpace`,
-an integral over the entire space is computed by summation over the elements of the integrand
-multiplied by the Jacobian determinants and the quadrature weights at each node within an element.
-Hence, `sum` is computed by summation of the field values multiplied by the Jacobian determinants
-and quadrature weights:
+Compute the approximate integral of `v` or `f.(v)` over the domain. In an
+`AbstractSpectralElementSpace`, an integral over the entire space is computed by
+summation over the elements of the integrand multiplied by the Jacobian
+determinants and the quadrature weights at each node within an element. Hence,
+`sum` is the sum of the field values multiplied by the Jacobian determinants and
+quadrature weights:
 
 ```math
 \\sum_i f(v_i) W_i J_i
@@ -71,9 +72,9 @@ Base.sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}}) =
 Base.sum(fn, field::Field) = Base.sum(fn, field, ClimaComms.device(field))
 
 """
-    maximum([f=identity,]v::Field)
+    maximum([f=identity,] v::Field)
 
-Approximate maximum of `v` or `f.(v)` over the domain.
+Compute the maximum of `v` or `f.(v)` over the domain.
 
 If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
 """
@@ -107,9 +108,9 @@ Base.extrema(field::Field) = extrema(identity, field)
 """
     mean([f=identity, ]v::Field)
 
-The mean value of `field` or `f.(field)` over the domain, weighted by area.
-Similar to `sum`, in an `AbstractSpectralElementSpace`, this is computed by
-summation of the field values multiplied by the Jacobian determinants and quadrature weights:
+Compute the mean of `v` or `f.(v)` over the domain, weighted by area. As for `sum`,
+in an `AbstractSpectralElementSpace` this is computed by summation of the field
+values multiplied by the Jacobian determinants and quadrature weights:
 
 ```math
 \\frac{\\sum_i f(v_i) W_i J_i}{\\sum_i W_i J_i}
@@ -145,8 +146,9 @@ Statistics.mean(fn, field::Field) =
 """
     norm(v::Field, p=2; normalize=true)
 
-The approximate ``L^p`` norm of `v`, where ``L^p`` represents the space of measurable
-functions for which the p-th power of the absolute value is Lebesgue integrable, that is:
+Compute the approximate ``L^p`` norm of `v`, where ``L^p`` is the space of
+measurable functions for which the `p`-th power of the absolute value is Lebesgue
+integrable, that is:
 
 ```math
 \\| v \\|_p = \\left( \\int_\\Omega |v|^p d \\Omega \\right)^{1/p}
@@ -154,10 +156,10 @@ functions for which the p-th power of the absolute value is Lebesgue integrable,
 
 where ``|v|`` is defined to be the absolute value if ``v`` is a scalar-valued Field, or the 2-norm
 if it is a vector-valued Field or composite Field (see [LinearAlgebra.norm](https://docs.julialang.org/en/v1/stdlib/LinearAlgebra/#LinearAlgebra.norm)).
-Similar to `sum` and `mean`, in an `AbstractSpectralElementSpace`, this is computed by
-summation of the field values multiplied by the Jacobian determinants and quadrature weights.
-If `normalize=true` (the default), then internally the discrete norm is divided
-by the sum of the Jacobian determinants and quadrature weights:
+As for `sum` and `mean`, in an `AbstractSpectralElementSpace` this is computed by
+summation of the field values multiplied by the Jacobian determinants and
+quadrature weights. If `normalize = true` (the default), the discrete norm is
+divided by the sum of the Jacobian determinants and quadrature weights:
 
 ```math
 \\left(\\frac{\\sum_i |v_i|^p W_i J_i}{\\sum_i W_i J_i}\\right)^{1/p}
@@ -165,18 +167,18 @@ by the sum of the Jacobian determinants and quadrature weights:
 \\left(\\frac{\\int_\\Omega |v|^p \\, d \\Omega}{\\int_\\Omega \\, d \\Omega}\\right)^{1/p}
 ```
 
-If `p=Inf`, then the norm is the maximum of the absolute values
+If `p = Inf`, the norm is the maximum of the absolute values,
 
 ```math
 \\max_i |v_i| \\approx \\sup_{\\Omega} |v|
 ```
 
-Consequently all norms should have the same units for all ``p`` (being the same
-as calling `norm` on a single value).
+so that the norm has the same units for all ``p``, namely those of `norm` of a
+single value.
 
-If `normalize=false`, then the denominator term is omitted, and so the result will be
-the norm as described above multiplied by the length/area/volume of ``\\Omega`` to
-the power of ``1/p``.
+If `normalize = false`, the denominator is omitted, and the result is the norm
+described above multiplied by the length, area, or volume of ``\\Omega`` to the
+power ``1/p``.
 """
 LinearAlgebra.norm(field::Field, p::Real = 2; normalize = true) =
     LinearAlgebra.norm(

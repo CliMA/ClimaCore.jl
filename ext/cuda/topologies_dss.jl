@@ -132,7 +132,8 @@ function Topologies.dss_local!(
             last_offset = local_vertex_offset[vertex_index + 1] - 1
             # Accumulate in a loop: sum with a closure would box v (also assigned in the
             # other branch), and sum's empty-collection error path cannot be compiled in
-            # a GPU kernel. Every vertex has a local_vertices entry, so the loop is nonempty.
+            # a GPU kernel. Every vertex has a local_vertices entry, so the loop is
+            # nonempty.
             (h, vert) = local_vertices[first_offset]
             p = Topologies.perimeter_vertex_node_index(vert)
             sum_data = perimeter_data[v, p, 1, h]

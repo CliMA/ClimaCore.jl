@@ -1,334 +1,186 @@
-# Contributing Guide
+# Contributing
 
-Thank you for considering contributing to `ClimaCore.jl`! We hope this guide
-helps you make a contribution.
+ClimaCore.jl is developed in the open, and contributions of every size are
+welcome: bug reports, documentation fixes, examples, and features. This page
+says how to report a problem, how to set up a development environment, what
+the pre-commit hooks and CI check, and how the documentation is built.
 
-> [!IMPORTANT]
-> **Developer Guides**
-> ClimaCore.jl follows the shared [CliMA Developer Guides](https://github.com/CliMA/DeveloperGuides). Please review the local copy at `docs/dev-guides/` or the [Developer Guides documentation page](dev_guides.md) for ecosystem-wide architecture, performance, and workflow standards before contributing.
+!!! note "Developer guides"
 
-## What to contribute?
+    ClimaCore follows the shared [CliMA Developer Guides](https://github.com/CliMA/DeveloperGuides),
+    vendored at [`docs/dev-guides/`](https://github.com/CliMA/ClimaCore.jl/tree/main/docs/dev-guides)
+    and synced monthly. They hold the code style, comment and documentation
+    policy, GPU and type-stability rules, and the review checklist; the
+    repository-specific guide is
+    [`docs/clima_core_specific.md`](https://github.com/CliMA/ClimaCore.jl/blob/main/docs/clima_core_specific.md).
+    Edits to the shared guides belong upstream, not in the vendored copy.
 
-  - The easiest way to contribute is by running `ClimaCore.jl`, identifying
-    problems and opening issues.
+## Ways to contribute
 
-  - You can tackle an existing issue. See our open [Issues](https://github.com/CliMA/ClimaCore.jl/issues). We try to keep a list of [good first issues](https://github.com/CLiMA/ClimaCore.jl/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) accessible to new contributors.
+  - Run ClimaCore, and open an issue for anything that is wrong or hard to use.
+  - Take an existing [issue](https://github.com/CliMA/ClimaCore.jl/issues);
+    those labeled [good first issue](https://github.com/CliMA/ClimaCore.jl/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+    need no prior knowledge of the code base.
+  - Improve the documentation, or write an example or tutorial.
+  - Implement a feature.
 
-  - Write an example or tutorial.
+Before starting on something larger than a fix, say so on the issue (or open
+one), so that the work is not duplicated and design questions are settled
+early. For questions rather than problems, use the repository's
+[discussions](https://github.com/CliMA/ClimaCore.jl/discussions).
 
-  - Improve documentation or comments if you found something hard to use.
+## Reporting a bug
 
-  - Implement a new feature for `ClimaCore.jl` and its users.
+Search the [issues](https://github.com/CliMA/ClimaCore.jl/issues) first. If
+the problem is new, open an issue with the bug-report template and include
 
-If you're interested in working on something, let us know by commenting on existing issues or
-by opening a new issue. This is to make sure no one else is working on the same issue and so
-we can help and guide you in case there is anything you need to know beforehand.
+  - a minimal code snippet that reproduces it on the latest release, or on
+    `main` if the release is not affected;
+  - the complete error message and stack trace, however long;
+  - the output of `versioninfo()` and `] status`, and the hardware (in
+    particular the GPU, if any).
 
-## How to contribute and bug reporting
+## Development setup
 
-The simplest way to contribute to `ClimaCore.jl` is to create or comment on issues, requesting something you think is missing or reporting something you think is not functioning properly.
-
-The most useful issues or bug reports:
-
-  - Head over to the [issues](https://github.com/CLiMA/ClimaCore.jl/issues) page.
-
-  - Search to see if your issue already exists or has even been solved previously.
-
-  - If you indeed have a new issue or request, click the "New Issue" button and select the `Bug report` template.
-
-  - Provide an explicit code snippet of code that reproduces the bug in the latest tagged version of `ClimaCore.jl`. Please be as specific as possible. Include the version of the code you were using, as well as what operating system you are running. The output of Julia's `versioninfo()` and `] status` is helpful to include. Try your best to include a complete, ["minimal working example"](https://en.wikipedia.org/wiki/Minimal_working_example) that reproduces the issue. Reducing bug-producing code to a minimal example can dramatically decrease the time it takes to resolve an issue.
-
-  - Paste the _entire_ error received when running the code snippet, even if it's unbelievably long.
-
-  - Use triple backticks (e.g., ````` ```some_code; and_some_more_code;``` `````) to enclose code snippets, and other [markdown formatting syntax](https://docs.github.com/en/github/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax) to make your issue easy and quick to read.
-
-  - Report the `ClimaCore.jl` version, Julia version, machine (especially if using a GPU) and any other possibly useful details of the computational environment in which the bug was created.
-
-Discussions are recommended for asking questions about (for example) the user interface, implementation details, science, and life in general.
-
-## But I want to _code_!
-
-  - New users help write `ClimaCore.jl` code and documentation by [forking](https://docs.github.com/en/github/collaborating-with-pull-requests/working-with-forks) the ClimaCore.jl repository, [using git](https://guides.github.com/introduction/git-handbook/) to edit code and docs, and then creating a [pull request](https://docs.github.com/en/github/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork). Pull requests are reviewed by `ClimaCore.jl` collaborators.
-
-  - A pull request can be merged once it is reviewed and approved by collaborators. If the pull request author has write access, they have the reponsibility of merging their pull request. Otherwise, `ClimaCore.jl` collabators will execute the merge with permission from the pull request author.
-
-  - Note: for small or minor changes (such as fixing a typo in documentation), the [GitHub editor](https://docs.github.com/en/github/managing-files-in-a-repository/managing-files-on-github/editing-files-in-your-repository) is super useful for forking and opening a pull request with a single click.
-
-  - Write your code with love and care. In particular, conform to existing `ClimaCore.jl` style and formatting conventions. For example, we love verbose and explicit variable names, use `TitleCase` for types, `snake_case` for objects, and always.put.spaces.after.commas. For formatting decisions we loosely follow the [YASGuide](https://github.com/jrevels/YASGuide). It's worth few extra minutes of our time to leave future generations with well-written, readable code.
-
-### Using `git`
-
-If you are unfamiliar with `git` and version control, the following guides
-can be helpful:
-
-  - [Atlassian (bitbucket) `git`
-    tutorials](https://www.atlassian.com/git/tutorials). A set of tips and tricks
-    for getting started with `git`.
-  - [GitHub's `git` tutorials](https://try.github.io/). A set of resources from
-    GitHub to learn `git`.
-
-We provide a brief [git tutorial](https://github.com/CliMA/ClimaWorkshops/blob/main/intro-best-practices/intro-to-git.md) in the [Introduction to Best Practices](https://github.com/CliMA/ClimaWorkshops/tree/main/intro-best-practices) of our [ClimaWorkshops](https://github.com/CliMA/ClimaWorkshops) series.
-
-### General coding guidelines
-
- 1. Keep the number of members of Julia structs small if possible (less than 8 members).
- 2. Code should reflect "human intuition" if possible. This mean abstraction should reflect how humans reason about the problem under consideration.
- 3. Code with small blast radius. If your code needs to be modified or extended, the resulting required changes should be as small and as localized as possible.
- 4. When you write code, write it with testing and debugging in mind.
- 5. Ideally, the lowest level structs have no defaults for their member fields. Nobody can remember all the defaults, so it is better to introduce them at the high-level API only.
- 6. Make sure that module imports are specific so that it is easy to trace back where functions that are used inside a module are coming from.
- 7. Consider naming abstract Julia types "AbstractMyType" in order to avoid confusion for the reader of your code.
- 8. Comments in your code should explain why the code exists and clarify if necessary, not just restate the line of code in words.
- 9. Be mindful of namespace issues when writing functional code, especially when writing function code that represents mathematical or physical concepts.
-10. Condider using keywords in your structs to allow readers to more effectively reason about your code.
-
-### Who is a "collaborator" and how can I become one?
-
-  - Collaborators have permissions to review pull requests and status allows a contributor to review pull requests in addition to opening them. Collaborators can also create branches in the main `ClimaCore.jl` repository.
-
-  - We ask that new contributors try their hand at forking `ClimaCore.jl`, and opening and merging a pull request before requesting collaborator status.
-
-### Ground Rules
-
-  - Each pull request should consist of a logical collection of changes. You can
-    include multiple bug fixes in a single pull request, but they should be related.
-    For unrelated changes, please submit multiple pull requests.
-
-  - Do not commit changes to files that are irrelevant to your feature or bugfix
-    (eg: `.gitignore`).
-
-  - Be willing to accept criticism and work on improving your code; we don't want
-    to break other users' code, so care must be taken not to introduce bugs. We
-    discuss pull requests and keep working on them until we believe we've done a
-    good job.
-
-  - Be aware that the pull request review process is not immediate, and is
-    generally proportional to the size of the pull request.
-
-### Setting up your development environment
-
-  - Install [Julia](https://julialang.org/) on your system.
-
-  - Install `git` on your system if it is not already there (install XCode command line tools on
-    a Mac or `git bash` on Windows).
-
-  - Login to your GitHub account and make a fork of the
-    [`ClimaCore.jl` repository](https://github.com/CLiMA/ClimaCore.jl) by
-    clicking the "Fork" button.
-
-  - Clone your fork of the `ClimaCore.jl` repository (in terminal on Mac/Linux or git shell/
-    GUI on Windows) in the location you'd like to keep it.
+ 1. Fork the repository on GitHub and clone your fork:
 
     ```
-    git clone https://github.com/your-user-name/ClimaCore.jl.git
+    git clone https://github.com/<your-user-name>/ClimaCore.jl.git
+    cd ClimaCore.jl
+    git remote add upstream https://github.com/CliMA/ClimaCore.jl.git
     ```
 
-  - Navigate to that folder in the terminal or in Anaconda Prompt if you're on Windows.
-
-  - Connect your repository to the upstream (main project).
+ 2. Instantiate the project and run the tests:
 
     ```
-    git remote add `ClimaCore.jl` https://github.com/CLiMA/ClimaCore.jl.git
+    julia --project -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
     ```
 
-  - Create the development environment by opening Julia via `julia --project` then
-    typing in `] instantiate`. This will install all the dependencies in the Project.toml
-    file.
+    The full suite takes a long time; [`test/runtests.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/test/runtests.jl)
+    shows how to run a subset.
 
-  - You can test to make sure `ClimaCore.jl` works by typing in `] test`. Doing so will run all
-    the tests (and this can take a while).
+ 3. Install the pre-commit hooks (next section), so that formatting is checked
+    before each commit.
 
-Your development environment is now ready!
+## Pre-commit hooks
 
-### Pre-commit hooks
-
-`ClimaCore.jl` ships a [`.pre-commit-config.yaml`](https://github.com/CliMA/ClimaCore.jl/blob/main/.pre-commit-config.yaml)
-that runs the same checks CI runs, so formatting and whitespace problems are
-caught before you push. Installing it is optional but recommended:
+[`.pre-commit-config.yaml`](https://github.com/CliMA/ClimaCore.jl/blob/main/.pre-commit-config.yaml)
+defines the checks CI runs on every pull request. Installing the hooks is
+optional but saves a round trip:
 
 ```bash
 uv tool install prek   # or: pipx install prek
 prek install           # installs the git hook in this clone
 ```
 
-[`prek`](https://prek.j178.dev) is a fast, drop-in replacement for
-[`pre-commit`](https://pre-commit.com); either tool reads the same config, so
-`pip install pre-commit && pre-commit install` works too.
+[`prek`](https://prek.j178.dev) is a drop-in replacement for
+[`pre-commit`](https://pre-commit.com); `pip install pre-commit && pre-commit install`
+reads the same configuration. The hooks then run on the staged files at every
+`git commit`; `prek run --all-files` sweeps the repository, and
+`prek run julia-formatter --all-files` runs one hook. The hooks are:
 
-Once installed, the hooks run automatically on `git commit` against your staged
-files. To sweep the whole repository, or to check a single hook, run:
-
-```bash
-prek run --all-files
-prek run julia-formatter --all-files
-```
-
-The hooks are:
-
-  - The standard [`pre-commit-hooks`](https://github.com/pre-commit/pre-commit-hooks)
-    set: trailing whitespace, end-of-file newline, mixed line endings, TOML and
-    YAML syntax, merge-conflict markers, large files, case conflicts, and broken
-    symlinks.
-  - `julia-formatter`, which runs `JuliaFormatter` from the version-pinned
+  - The standard [`pre-commit-hooks`](https://github.com/pre-commit/pre-commit-hooks):
+    trailing whitespace, end-of-file newline, mixed line endings, TOML and YAML
+    syntax, merge-conflict markers, large files, case conflicts, broken symlinks.
+  - `julia-formatter`, which runs JuliaFormatter from the version-pinned
     [`.dev/format/`](https://github.com/CliMA/ClimaCore.jl/blob/main/.dev/format/Project.toml)
-    environment (currently `=2.10.1`) with the rules in the root
+    environment with the rules in
     [`.JuliaFormatter.toml`](https://github.com/CliMA/ClimaCore.jl/blob/main/.JuliaFormatter.toml).
-    Using the pinned environment matters: `Pkg.add("JuliaFormatter")` in your base
-    environment may install a different version, which produces a different diff
-    from CI. `format_docstrings` and `format_markdown` are both enabled, so
-    docstring bodies and `.md` files are formatted too; the vendored
-    `docs/dev-guides/`, `.github/`, and files that use hand-maintained layout
-    (`README.md`, `NEWS.md`, `AGENTS.md`) are excluded. Julia code inside a
-    fenced block is reformatted, so tag REPL transcripts and raw program output
-    as ```julia-repl`` or ```text``, not `````julia``.
+    Use the pinned environment: another JuliaFormatter version produces a
+    different diff from CI. `format_docstrings` and `format_markdown` are on, so
+    docstring bodies and `.md` files are formatted too, and Julia code inside a
+    fenced block is reformatted; tag REPL transcripts and program output as
+    ```julia-repl`` or ```text``, not `````julia``. The
+    vendored `docs/dev-guides/`, `.github/`, and the hand-laid-out `README.md`,
+    `NEWS.md`, and `AGENTS.md` are excluded.
   - `markdown-link-ambiguity`, which flags a docs-build failure that is easy to
-    introduce and slow to diagnose. Documenter parses `[text](target)` as a link,
-    and its parser accepts any whitespace between the bracket and the parenthesis,
-    including a line break, so bracketed units followed by a parenthetical become
-    a link with an unresolvable target. Since `docs/make.jl` uses
-    `checkdocs = :exports`, such a link stays latent in an unrendered docstring
-    until someone adds that symbol to a page, and the build then fails in an
-    unrelated pull request. Separate the bracket and the parenthesis with
-    punctuation, or wrap the units in backticks.
+    introduce and slow to diagnose: Documenter parses `[text](target)` as a link
+    even across whitespace or a line break, so bracketed units followed by a
+    parenthetical, `[m/s] (at the surface)`, become a link with an unresolvable
+    target. Because `docs/make.jl` uses `checkdocs = :exports`, such a link in
+    an unrendered docstring stays latent until the symbol is added to a page.
+    Separate the bracket and the parenthesis with punctuation, or put the units
+    in backticks.
 
-CI runs the same hooks on every pull request via
-[`.github/workflows/run-prek.yml`](https://github.com/CliMA/ClimaCore.jl/blob/main/.github/workflows/run-prek.yml),
-so a clean `prek run --all-files` locally means a green formatting check.
-
+CI runs the same hooks through
+[`.github/workflows/format.yml`](https://github.com/CliMA/ClimaCore.jl/blob/main/.github/workflows/format.yml).
 Repository-wide formatting commits are listed in
 [`.git-blame-ignore-revs`](https://github.com/CliMA/ClimaCore.jl/blob/main/.git-blame-ignore-revs);
-run `git config blame.ignoreRevsFile .git-blame-ignore-revs` to keep them out of
-your `git blame` output.
+`git config blame.ignoreRevsFile .git-blame-ignore-revs` keeps them out of
+`git blame`.
 
-## Pull Requests
+## Pull requests
 
-We follow the [ColPrac guide](https://github.com/SciML/ColPrac) for collaborative practices.
-We ask that new contributors read that guide before submitting a pull request.
+The project follows the [ColPrac](https://github.com/SciML/ColPrac) guide for
+collaborative practices. Pull requests go against `main` from a branch of your
+fork (collaborators may branch in the main repository). Keep each pull request
+to one logical change, leave unrelated files alone, and write commit messages
+in the style of [Chris Beams's guide](https://chris.beams.io/posts/git-commit/).
+A pull request is merged once a collaborator has reviewed and approved it; an
+author with write access merges their own, otherwise a collaborator merges
+with the author's consent. Review takes time in proportion to the size of the
+change, so small pull requests move faster. Contributors who have opened and
+merged a pull request may ask for collaborator status, which adds the ability
+to review.
 
-Changes and contributions should be made via GitHub pull requests against the `main` branch.
+If this is your first pull request, GitHub's
+[guide to forks](https://docs.github.com/en/github/collaborating-with-pull-requests/working-with-forks)
+and the [Open Source Guides](https://opensource.guide/how-to-contribute/)
+explain the workflow; for a one-line fix, the GitHub web editor forks and
+opens the pull request for you.
 
-When you're done making changes, commit the changes you made. Chris Beams has written a
-[guide](https://chris.beams.io/posts/git-commit/) on how to write good commit messages.
+## What CI checks
 
-When you think your changes are ready to be merged into the main repository, push to your fork
-and [submit a pull request](https://github.com/CLiMA/ClimaAtmos.jl/compare/).
+| Check         | What it does                                                                                                                                                                                                                                                                                                                                                                                |
+|:------------- |:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prek checks   | The pre-commit hooks above, over the whole repository.                                                                                                                                                                                                                                                                                                                                      |
+| Documentation | Builds the documentation, runs its examples and doctests, and checks cross-references; a preview is deployed for the pull request.                                                                                                                                                                                                                                                          |
+| Unit tests    | `Pkg.test()` on the latest commit of the pull request, on Linux; stale jobs are cancelled on push. Documentation-only changes skip it.                                                                                                                                                                                                                                                      |
+| OS unit tests | The unit tests on Linux, macOS, and Windows.                                                                                                                                                                                                                                                                                                                                                |
+| ClimaCore CI  | The expensive tests, the GPU tests, and the examples, as Slurm jobs on an HPC cluster through [Buildkite](https://buildkite.com/clima/climacore-ci), defined in `.buildkite/pipeline.yml`. [`docs/dev-guides/workflow/ci_triage.md`](https://github.com/CliMA/ClimaCore.jl/blob/main/docs/dev-guides/workflow/ci_triage.md) is the checklist for a failure that does not reproduce locally. |
 
-**Working on your first Pull Request?** You can learn how from this _free_ video series
-[How to Contribute to an Open Source Project on GitHub](https://egghead.io/courses/how-to-contribute-to-an-open-source-project-on-github), Aaron Meurer's [tutorial on the git workflow](https://www.asmeurer.com/git-workflow/), or the guide [“How to Contribute to Open Source"](https://opensource.guide/how-to-contribute/).
+CI does not measure GPU kernel launch latency, because absolute latencies vary
+between nodes and with load. A change to the CUDA extension
+(`ext/ClimaCoreCUDAExt.jl`, `ext/cuda/`) should be checked by hand with the
+scripts in [`perf/`](https://github.com/CliMA/ClimaCore.jl/tree/main/perf) and
+[`benchmarks/`](https://github.com/CliMA/ClimaCore.jl/tree/main/benchmarks) or
+by profiling.
 
-### Unit testing
+## Documentation
 
-Currently a number of checks are run per commit for a given PR.
+The documentation is organized by [Diátaxis](https://diataxis.fr/) mode:
+tutorials (Literate.jl scripts in `docs/tutorials/`), how-to guides
+(`docs/src/howto/`), explanation (`docs/src/explanation/`), and reference
+(`docs/src/reference/`, curated `@docs` blocks). A new page goes in the
+directory of its mode and in the `pages` tree of `docs/make.jl`; a how-to
+title is a task ("Run on a GPU"), and every code block a reader might paste is
+an `@example` block or part of a tutorial, so that the build runs it.
+[`docs/dev-guides/code-quality/documentation_policy.md`](https://github.com/CliMA/ClimaCore.jl/blob/main/docs/dev-guides/code-quality/documentation_policy.md)
+is the policy for pages and docstrings.
 
-  - `Prek checks` runs the hooks in `.pre-commit-config.yaml`, including
-    `JuliaFormatter`, over the whole repository. Reproduce it locally with `prek run --all-files` (see [Pre-commit hooks](#Pre-commit-hooks) above), or run the
-    formatter alone from the pinned environment:
-    `julia --startup-file=no --project=.dev/format -e 'using Pkg; Pkg.instantiate(); using JuliaFormatter; format(".")'`.
-    JuliaFormatter v2.10.1 must be used; a different version produces a different
-    diff.
-  - `Documentation` rebuilds the documentation for the PR and checks if the docs
-    are consistent and generate valid output.
-  - `Unit Tests` run subsets of the unit tests defined in `tests/`, using `Pkg.test()`.
-    The tests are run in parallel to ensure that they finish in a reasonable time.
-    The tests only run the latest commit for a PR, branch and will kill any stale jobs on push.
-    These tests are only run on Linux (Ubuntu LTS).
+Tutorials are [Literate.jl](https://fredrikekre.github.io/Literate.jl/stable/)
+scripts: comments become text, code runs and its output is shown, and a
+trailing `;` suppresses the output of a line. Plots use CairoMakie with the
+`ClimaCore.Visualize` recipes. Write the comments as an article that states its goal
+first and shows a result at every step.
 
-Unit tests are run against every new commit for a given PR,
-the status of the unit-tests are not checked during the merge
-process but act as a sanity check for developers and reviewers.
-Depending on the content changed in the PR, some CI checks that
-are not necessary will be skipped.  For example doc only changes
-do not require the unit tests to be run.
-
-### Integration testing
-
-Currently, a number of checks are run during integration testing before being
-merged into `main`.
-
-  - `OS Unit Tests` checks that `ClimaCore.jl` package unit tests can pass
-    on every OS supported with a pre-compiled system image (Linux, macOS, Windows).
-  - `ClimaCore CI` computationally expensive integration testing on CPU and
-    GPU hardware using HPC cluster resources.
-
-Integration tests are run when triggered by a reviewer through `bors`.
-Integration tests are more computationally heavyweight than unit-tests and can
-exercise tests using accelerator hardware (GPUs).
-
-Currently HPC cluster integration tests are run using the [Buildkite CI service](https://buildkite.com/clima/climacore-ci).
-Tests are parallelized and run as individual [Slurm](https://slurm.schedmd.com/documentation.html)
-batch jobs on the HPC cluster and defined in `.buildkite/pipeline.yml`.
-
-### GPU Kernel Launch Latency
-
-When making changes to the CUDA extension (`ClimaCoreCUDAExt`), contributors should manually check for regressions or improvements in GPU kernel launch latency. We do not run automated CI tests for launch latency because absolute latency measurements tend to be flaky across different hardware nodes and transient loads. You can verify the performance impact of your changes using the benchmark scripts in the `benchmarks/` directory or by profiling the kernels locally.
-
-## Contributing to Documentation
-
-Documentation is written in Julia-flavored markdown and generated from two sources:
+To build locally:
 
 ```
-$CLIMACORE_HOME/docs/src
-```
-
-And [Literate.jl](https://fredrikekre.github.io/Literate.jl/v2/) tutorials:
-
-```
-$CLIMACORE_HOME/tutorials
-```
-
-To locally build the documentation you need to create a new `docs` project
-to build and install the documentation related dependencies:
-
-```
-cd $CLIMACORE_HOME
-julia --project=docs/ -e 'using Pkg; Pkg.instantiate()'
+julia --project=docs -e 'using Pkg; Pkg.develop(path = "."); Pkg.instantiate()'
 julia --project=docs docs/make.jl
 ```
 
-The makefile script will generate the appropriate markdown files and
-static html from both the `docs/src` and `tutorials/` directories,
-saving the output in `docs/src/generated`.
-
-### How to generate a literate tutorial file
-
-To create a tutorial using `ClimaCore.jl`, please use
-[Literate.jl](https://github.com/fredrikekre/Literate.jl),
-and consult the [Literate documentation](https://fredrikekre.github.io/Literate.jl/stable/)
-for questions. For now, all literate tutorials are held in
-the `tutorials` directory.
-
-With Literate, all comments turn into markdown text and any
-Julia code is read and run *as if it is in the Julia REPL*.
-As a small caveat to this, you might need to suppress the
-output of certain commands. For example, if you define and
-run the following function
-
-```
-function f()
-    return x = [i * i for i in 1:10]
-end
-x = f()
-```
-
-The entire list will be output, while
-
-```
-f();
-```
-
-does not (because of the `;`).
-
-To show plots, you may do something like the following:
-
-```
-using Plots
-plot(x)
-```
-
-Please consider writing the comments in your tutorial as if they are meant to
-be read as an *article explaining the topic the tutorial is meant to explain.*
-If there are any specific nuances to writing Literate documentation for `ClimaCore.jl`, please let us know!
+The output is in `docs/build/`; `LiveServer.servedocs()` rebuilds on save.
+The build checks external links (`LINKCHECK_STRICT=1` makes a broken link
+fatal) and, with `STRICT_DOCSTRING_REFS=1`, fails on a docstring `@ref` to a
+symbol that no page renders
+([`docs/check_docstring_refs.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/docs/check_docstring_refs.jl)).
 
 ## Credits
 
-This contributor's guide is heavily based on the excellent [ClimateMachine.jl contributor's guide](https://clima.github.io/ClimateMachine.jl/latest/Contributing/) and [ClimaAtmos.jl contributor's guide](https://clima.github.io/ClimaAtmos.jl/dev/contributor_guide/), which is heavily based on the excellent [Oceananigans.jl contributor's guide](https://clima.github.io/OceananigansDocumentation/stable/contributing/) which, in turn, is heavily based on the excellent [MetPy contributor's guide](https://github.com/Unidata/MetPy/blob/master/CONTRIBUTING.md).
+This guide derives from the [ClimateMachine.jl](https://clima.github.io/ClimateMachine.jl/latest/Contributing/)
+and [ClimaAtmos.jl](https://clima.github.io/ClimaAtmos.jl/dev/contributor_guide/)
+contributor guides, which in turn derive from those of
+[Oceananigans.jl](https://github.com/CliMA/Oceananigans.jl/blob/main/CONTRIBUTING.md)
+and [MetPy](https://github.com/Unidata/MetPy/blob/master/CONTRIBUTING.md).

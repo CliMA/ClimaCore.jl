@@ -1,7 +1,11 @@
 """
     AbstractNumericalFlux
 
-Abstract type for numerical flux functions used in DG methods.
+Supertype of the numerical flux functors of the DG face operators. A subtype is
+callable as `numflux(normal, argvals⁻, argvals⁺)`; see
+[`add_numerical_flux_interior!`](@ref) for the contract. Subtypes:
+[`CentralNumericalFlux`](@ref), [`RusanovNumericalFlux`](@ref), and
+[`SIPGLaplacianFlux`](@ref).
 """
 abstract type AbstractNumericalFlux end
 
@@ -80,20 +84,19 @@ const NO_DG_GHOST_EXCHANGE = DGGhostExchange(nothing, Ref(true))
     add_numerical_flux_interior!(fn, dydt, args...)
     add_numerical_flux_interior!(ghost_exchange, fn, dydt, args...)
 
-Add the numerical flux at the interior faces of the spectral space mesh.
+Add the numerical flux at the interior faces of the spectral element mesh to the
+mass-weighted residual `dydt` (`WJ * ∂Y/∂t`), and return `dydt`.
 
-The numerical flux is determined by evaluating
+At each face node, the flux is `fn(normal, argvals⁻, argvals⁺)`, where
 
-    fn(normal, argvals⁻, argvals⁺)
+  - `normal` is the unit normal vector, pointing from the "minus" side to the
+    "plus" side,
+  - `argvals⁻` is the tuple of values of `args` on the "minus" side of the face,
+  - `argvals⁺` is the tuple of values of `args` on the "plus" side of the face,
 
-where:
-
-  - `normal` is the unit normal vector, pointing from the "minus" side to the "plus" side
-  - `argvals⁻` is the tuple of values of `args` on the "minus" side of the face
-  - `argvals⁺` is the tuple of values of `args` on the "plus" side of the face
-    and should return the net flux from the "minus" side to the "plus" side.
-
-For consistency, it should satisfy the property that
+and `fn` returns the net flux from the "minus" side to the "plus" side, scaled
+by the surface Jacobian weight and subtracted from the minus side and added to
+the plus side. For consistency, `fn` must satisfy
 
     fn(normal, argvals⁻, argvals⁺) == -fn(-normal, argvals⁺, argvals⁻)
 
@@ -722,11 +725,14 @@ struct ReflectingWallBC <: HorizontalBoundaryCondition end
 """
     ghost_state(bc::HorizontalBoundaryCondition, normal, argvals⁻)
 
-Construct the exterior-side argument tuple for the given BC.
+Construct the exterior-side argument tuple for the boundary condition `bc`.
 
-Returns a tuple with the same length as `argvals⁻`, replacing only the
-prognostic state `argvals⁻[1]` with the ghost state; remaining arguments
-(e.g. equation parameters, coordinates) are forwarded unchanged.
+# Returns
+
+A tuple with the same length as `argvals⁻`, replacing only the prognostic state
+`argvals⁻[1]` with the ghost state; remaining arguments (e.g. equation
+parameters, coordinates) are forwarded unchanged. The fallback method throws for
+boundary conditions without a `ghost_state` method.
 """
 function ghost_state(::HorizontalBoundaryCondition, normal, argvals⁻)
     error("ghost_state not implemented for this boundary condition")
@@ -744,8 +750,8 @@ end
 """
     add_numerical_flux_boundary!(fn, dydt, args...)
 
-Add the numerical flux at the domain-boundary faces of the spectral space
-mesh:
+Add the numerical flux at the domain-boundary faces of the spectral element
+mesh, and return `dydt`:
 
     dydt -= sWJ * fn(normal, argvals⁻)
 
@@ -837,10 +843,13 @@ function _add_numerical_flux_boundary!(
 end
 
 """
-    add_numerical_flux_boundary!(numflux::AbstractNumericalFlux, bc::HorizontalBoundaryCondition, dydt, args...)
+    add_numerical_flux_boundary!(numflux, bc::HorizontalBoundaryCondition, dydt, args...)
 
-Add numerical flux at boundaries using a typed boundary condition.
-Constructs the ghost state via `ghost_state(bc, normal, argvals⁻)` and applies the numerical flux.
+Add the numerical flux at the domain-boundary faces using the boundary condition
+`bc`: at each boundary node the exterior state is
+[`ghost_state`](@ref)`(bc, normal, argvals⁻)`, and the flux is
+`numflux(normal, argvals⁻, argvals⁺)`. Returns `dydt`. A `bc` outside the
+[`HorizontalBoundaryCondition`](@ref) family throws.
 """
 function add_numerical_flux_boundary!(
     numflux::AbstractNumericalFlux,
@@ -873,9 +882,10 @@ add_numerical_flux_boundary!(
     add_lifting_flux_interior!(fn, dydt, args...)
     add_lifting_flux_interior!(ghost_exchange, fn, dydt, args...)
 
-Add *symmetric* face lifting terms at interior faces — the DG correction for
-non-conservative (gradient / curl) terms, where both sides of a face receive
-their own correction rather than equal-and-opposite fluxes:
+Add symmetric face lifting terms at interior faces to `dydt`, and return `dydt`.
+This is the DG correction for non-conservative (gradient / curl) terms, where
+both sides of a face receive their own correction rather than equal-and-opposite
+fluxes:
 
     dydt⁻ += sWJ * fn(n̂⁻, argvals⁻, argvals⁺)
     dydt⁺ += sWJ * fn(n̂⁺, argvals⁺, argvals⁻)
@@ -935,9 +945,9 @@ end
 """
     lifting_correction(fn, ::Type{T}, args...)
 
-WJ-normalized DG face-lifting correction field of element type `T`: applies
-[`add_lifting_flux_interior!`](@ref) with face function `fn` to a zero
-residual on the space of `args[1]` and divides by `WJ`. The result is the
+Return the WJ-normalized DG face-lifting correction field of element type `T`:
+apply [`add_lifting_flux_interior!`](@ref) with face function `fn` to a zero
+residual on the space of `args[1]` and divide by `WJ`. The result is the
 correction to the corresponding element-local strong-form operator.
 """
 function lifting_correction(fn::F, ::Type{T}, args...) where {F, T}
@@ -970,9 +980,9 @@ end
     add_flux_differencing_divergence!(fn2pt, dydt, y)
 
 Add the horizontal flux-differencing (split-form / FDDG) volume divergence to
-the mass-weighted residual `dydt` (Souza et al. 2023, JAMES, Eqs. 25–30):
-the collocation derivative acts on symmetric two-point fluxes along each
-reference direction.
+the mass-weighted residual `dydt`, and return `dydt` ([Souza2023](@cite),
+Eqs. 25–30): the collocation derivative acts on symmetric two-point fluxes along
+each reference direction.
 
 `fn2pt(nvec_a, nvec_b, y_a, y_b)` returns the two-point flux contracted with
 the (non-unit) nodal metric vectors in the local orthonormal horizontal frame.
@@ -1159,19 +1169,23 @@ end
     DGConnectivity
 
 Cached, device-resident connectivity and face geometry for the DG
-interior-face operators (the DSS-buffer analog for DG):
+interior-face operators (the DSS-buffer analog for DG).
 
+# Fields
+
+  - `nfaces`: Number of faces.
+  - `nbnodes`: Number of element boundary nodes in the gather map.
   - `faces`: `5 × nfaces` `Int32` matrix of interior faces
-    `(elem⁻, face⁻, elem⁺, face⁺, reversed)`;
-  - `sgeom`: precomputed [`Geometry.SurfaceGeometry`](@ref) per
-    `(level, q, face)` (level = 1 for pure 2D spaces), evaluated from the
-    minus side exactly as the CPU loops do;
-  - a deterministic gather map from element boundary nodes to their face
-    contributions, in ragged-array form (`node_*`, `node_offset`,
-    `contrib_*`): each boundary node `(elem, i, j)` lists the
-    `(face, side, q)` face-node slots that accumulate into it (2 entries at
-    element corners, 1 elsewhere), sorted at construction so the GPU gather
-    is bitwise deterministic.
+    `(elem⁻, face⁻, elem⁺, face⁺, reversed)`.
+  - `sgeom`: Precomputed [`Geometry.SurfaceGeometry`](@ref) per
+    `(level, q, face)` (level = 1 for pure 2D spaces), evaluated from the minus
+    side exactly as the CPU loops do.
+  - `node_elem`, `node_i`, `node_j`, `node_offset`, `contrib_face`,
+    `contrib_side`, `contrib_q`: A deterministic gather map from element boundary
+    nodes to their face contributions, in ragged-array form: each boundary node
+    `(elem, i, j)` lists the `(face, side, q)` face-node slots that accumulate
+    into it (2 entries at element corners, 1 elsewhere), sorted at construction
+    so the GPU gather is bitwise deterministic.
 
 Built once per space by [`dg_connectivity`](@ref) and stored with the array
 type of the space's device (`ClimaComms.array_type`).
@@ -1195,8 +1209,8 @@ end
 """
     dg_connectivity(space)
 
-Memoized [`DGConnectivity`](@ref) for `space`, keyed on the underlying grid
-and the space type (so center/face extruded spaces get separate buffers).
+Return the memoized [`DGConnectivity`](@ref) for `space`, keyed on the underlying
+grid and the space type (so center/face extruded spaces get separate buffers).
 Stored in `Utilities.Cache.OBJECT_CACHE` alongside the grid objects, so
 `Utilities.Cache.clean_cache!` releases it (the buffer holds device arrays).
 """
@@ -1330,8 +1344,8 @@ end
 """
     dg_ghost_connectivity(space)
 
-Memoized [`DGConnectivity`](@ref) over the topology's ghost (inter-rank)
-faces, or `nothing` when there are none. The entries differ from
+Return the memoized [`DGConnectivity`](@ref) over the topology's ghost
+(inter-rank) faces, or `nothing` when there are none. The entries differ from
 [`dg_connectivity`](@ref) in two ways: the third `faces` row holds the strip
 slot into the recv buffer of a `Topologies.GhostFaceExchange` (the plus-side
 value at loop node `q` is strip node `reversed ? Nq - q + 1 : q`) rather than
@@ -1397,9 +1411,9 @@ end
 """
     dg_boundary_connectivity(space)
 
-Memoized [`DGConnectivity`](@ref) over the topology's boundary faces (all
-boundary tags, concatenated in `Topologies.boundary_tags` order), or `nothing`
-when there are none (e.g. on the sphere). Boundary faces have no plus side:
+Return the memoized [`DGConnectivity`](@ref) over the topology's boundary faces
+(all boundary tags, concatenated in `Topologies.boundary_tags` order), or
+`nothing` when there are none (e.g. on the sphere). Boundary faces have no plus side:
 `faces` holds `(elem⁻, face⁻)` rows only, and the gather map contains only
 minus-side contributions — a node at a domain corner receives one contribution
 from each of its two boundary faces.

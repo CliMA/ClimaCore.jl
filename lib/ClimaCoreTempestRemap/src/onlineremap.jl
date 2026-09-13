@@ -5,16 +5,20 @@ using ClimaComms
 """
     LinearMap{S, T, W, I, V}
 
-stores information on the TempestRemap map and the source and target data:
+Remapping weights computed by TempestRemap between a source and a target space, together
+with the index maps needed to apply them. Construct with [`generate_map`](@ref) and apply
+with [`remap!`](@ref) or [`remap`](@ref).
 
-where:
+# Fields
 
-  - `source_space` and `target_space` are ClimaCore's 2D spaces.
-  - `weights` is a vector of remapping weights. (length = number of overlap-mesh nodes).
-  - `source_local_idxs` a 3-element Tuple with 3 index vectors, representing local (i,j,elem) indices on the source mesh. (length of each index vector = number of overlap-mesh nodes)
-  - `target_local_idxs` is the same as `source_local_idxs` but for the target mesh.
-  - `row_indices` are the target row indices from TempestRemap. (length = number of overlap-mesh nodes)
-  - `out_type` string that defines the output type.
+  - `source_space`, `target_space`: the ClimaCore 2D spectral element spaces.
+  - `weights`: vector of remapping weights, one per overlap-mesh node.
+  - `source_local_idxs`: 3-tuple of index vectors giving the local `(i, j, elem)` indices on
+    the source mesh; each vector has one entry per overlap-mesh node.
+  - `target_local_idxs`: as `source_local_idxs`, for the target mesh. On a distributed target
+    space, entries for elements owned by other processes are `0`.
+  - `row_indices`: target row indices from TempestRemap, one per overlap-mesh node.
+  - `out_type`: string naming the output mesh type (`"cgll"` or `"dgll"`).
 """
 struct LinearMap{S, T, W, I, V} # make consistent with / move to regridding.jl
     source_space::S
@@ -31,8 +35,12 @@ end
     remap!(target::DataLayout, R::LinearMap, source::DataLayout)
     remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
 
-Applies the remapping `R` to a `source`
-Field and stores the result in `target`.
+Apply the remapping `R` to `source` and store the result in `target`, overwriting its
+contents. When `R.out_type == "cgll"`, a DSS pass fills the redundant nodes of `target`.
+Returns `target`.
+
+The `DataLayout` method is for serial remapping; the `Field` method also handles a
+distributed target space, in which case the source must live on a non-distributed space.
 """
 function remap! end
 
@@ -45,7 +53,7 @@ function remap!(
     fill!(target, zero(eltype(target)))
 
     # ideally we would use the tempestremap dgll (redundant node) representation
-    # unfortunately, this doesn't appear to work quite as well (for out_type = dgll) as the cgll
+    # This works less well for out_type = dgll than for cgll.
     for (n, wt) in enumerate(R.weights)
         is, js, es = (
             view(R.source_local_idxs[1], n)[1],
@@ -60,7 +68,8 @@ function remap!(
         target[1, it, jt, et] += wt * source[1, is, js, es]
     end
 
-    # use unweighted dss to broadcast the so-far unpopulated (redundant) nodes from their unique node counterparts
+    # Use unweighted DSS to fill the still unpopulated (redundant) nodes from their
+    # unique-node counterparts.
     # (we could get rid of this if we added the redundant nodes to the matrix)
     # using out_type == "cgll"
     if R.out_type == "cgll"
@@ -91,7 +100,7 @@ function remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
         fill!(target, zero(eltype(target)))
 
         # ideally we would use the tempestremap dgll (redundant node) representation
-        # unfortunately, this doesn't appear to work quite as well (for out_type = dgll) as the cgll
+        # This works less well for out_type = dgll than for cgll.
         for (n, wt) in enumerate(R.weights)
             # extract local source indices
             is, js, es = (
@@ -114,7 +123,8 @@ function remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
             end
         end
 
-        # use unweighted dss to broadcast the so-far unpopulated (redundant) nodes from their unique node counterparts
+        # Use unweighted DSS to fill the still unpopulated (redundant) nodes from their
+        # unique-node counterparts.
         # (we could get rid of this if we added the redundant nodes to the matrix)
         # using out_type == "cgll"
         if R.out_type == "cgll"
@@ -128,7 +138,8 @@ end
 """
     remap(R::LinearMap, source::Field)
 
-Applies the remapping `R` to a `source` Field, allocating a new field in the output.
+Apply the remapping `R` to the `source` field and return the result in a newly allocated
+field on `R.target_space`.
 """
 function remap(R::LinearMap, source::Fields.Field)
     remap!(Fields.Field(eltype(source), R.target_space), R, source)
@@ -136,9 +147,33 @@ end
 
 
 """
-    generate_map(target_space, source_space; in_type="cgll", out_type="cgll")
+    generate_map(
+        target_space::Spaces.SpectralElementSpace2D,
+        source_space::Spaces.SpectralElementSpace2D;
+        target_space_distr = nothing,
+        meshfile_source = tempname(),
+        meshfile_target = tempname(),
+        meshfile_overlap = tempname(),
+        weightfile = tempname(),
+        in_type = "cgll",
+        out_type = "cgll",
+    )
 
-Generate the remapping weights from TempestRemap, returning a `LinearMap` object. This should only be called once.
+Generate the remapping weights from `source_space` to `target_space` with TempestRemap
+and return them as a [`LinearMap`](@ref).
+
+The meshes and weights are written and read on the root process and broadcast to the
+other processes. This runs external executables and is meant to be called once per pair
+of spaces.
+
+# Keyword Arguments
+
+  - `target_space_distr = nothing`: distributed version of `target_space`; when given, the
+    target indices are converted to the element indices local to each process.
+  - `meshfile_source`, `meshfile_target`, `meshfile_overlap`, `weightfile`: paths of the
+    Exodus mesh files and the SCRIP weight file; default to temporary files.
+  - `in_type = "cgll"`, `out_type = "cgll"`: TempestRemap mesh types of the source and
+    target, `"cgll"` or `"dgll"`.
 """
 function generate_map(
     target_space::Spaces.SpectralElementSpace2D,
@@ -184,12 +219,13 @@ function generate_map(
         # TempestRemap exports in CSR format (i.e. row_indices is sorted)
 
         # TODO: add in extra rows to avoid DSS step
-        #  - for each unique node, we would add extra rows for all the duplicates, with the same column
+        #  - for each unique node, add extra rows for all the duplicates, with the same
+        #    column
         #  - ideally keep in CSR format
         #  e.g. iterate by row (i.e. target node):
         #   - if new node, then append it
         #   - if not new, copy previous entries
-        #  - requires a mechanism to query whether find the first common node of a given node
+        #  - requires a mechanism to find the first common node of a given node
 
 
         # we need to be able to look up the indices of unique nodes
@@ -200,7 +236,8 @@ function generate_map(
             out_type == "cgll" ? collect(Spaces.unique_nodes(target_space)) :
             collect(Spaces.all_nodes(target_space))
 
-        # re-order our inds to TR's ordering of col/row inds and weights to avoid unnecessary allocations
+        # Reorder the indices to TempestRemap's ordering of col/row indices and weights,
+        # avoiding allocations.
         # extract i, j, e components of TR indexing
         source_unique_idxs_i =
             map(col -> source_unique_idxs[col][1][1], col_indices)
@@ -242,7 +279,7 @@ function generate_map(
         end
 
         # store only the inds local to this process (set inds from other processes to 0)
-        # TODO this is not a great implementation, but we needs the lengths of each array to be = |weights|
+        # TODO: improve; the length of each array must equal length(weights).
         target_local_idxs = map(vec -> similar(vec), target_unique_idxs)
         for (n, wt) in enumerate(weights)
             target_elem_gidx = view(target_unique_idxs[3], n)[1]

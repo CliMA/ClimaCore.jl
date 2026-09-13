@@ -1,10 +1,15 @@
 """
-    ColumnIndex(ij,h)
+    ColumnIndex(ij, h)
 
-An index into a column of a field. This can be used as an argument to `getindex`
-of a `Field`, to return a field on that column.
+Index into a column of a field. Passing a `ColumnIndex` to `getindex` of a `Field`
+returns the field restricted to that column.
 
-# Example
+# Fields
+
+  - `ij`: Tuple of horizontal nodal indices within the element.
+  - `h`: Horizontal element index.
+
+# Examples
 
 ```julia
 colidx = ColumnIndex((1, 1), 1)
@@ -20,7 +25,7 @@ end
 """
     ColumnGrid(full_grid, indices)
 
-View of the column at the given indices in an `ExtrudedFiniteDifferenceGrid`.
+View of the column at `indices` of the extruded grid `full_grid`.
 """
 struct ColumnGrid{
     G <: AbstractExtrudedFiniteDifferenceGrid,

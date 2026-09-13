@@ -4,6 +4,13 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.16.2
+-------
+
+- [#2622](https://github.com/CliMA/ClimaCore.jl/pull/2622) Rewrote the documentation as a
+  Diátaxis suite (tutorials, how-to guides, explanation pages, and curated reference
+  pages), revised the docstrings and code comments across the code base, and rewrote
+  the README.
 - ![][badge-✨feature/enhancement] `Remapping.PressureInterpolator` supports
   `MultiColumnFiniteDifferenceSpace`, so fields on multiple independent columns
   can be interpolated to pressure coordinates like fields on extruded or

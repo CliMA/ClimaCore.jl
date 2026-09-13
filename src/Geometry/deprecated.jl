@@ -1,18 +1,13 @@
-# Backwards-compatibility shims for the pre-`Tensor` Geometry API.
+# Compatibility aliases for the pre-`Tensor` Geometry API.
 #
-# The PR collapses `AxisTensor` / `AxisVector` / `Axis2Tensor` and the
-# `*Axis{I}` aliases into the single `Tensor` / `Components` types. Downstream
-# packages (ClimaAtmos, user code) that haven't migrated yet can keep
-# referring to the old names through the aliases below.
-#
-# These are not deprecated with warnings — they're plain aliases — so old
-# code continues to type-check without noise. Remove this file when all
-# downstream consumers have migrated to the new names.
+# `AxisTensor` / `AxisVector` / `Axis2Tensor` and the `*Axis{I}` aliases are spelled with
+# the `Tensor` / `Components` types. Downstream packages can keep referring to the names
+# below, which are plain aliases without deprecation warnings.
 
-# --- Type aliases (parameter order matches the old API) ---
+# --- Type aliases (parameter order matches the deprecated API) ---
 
-# Old: AxisTensor{T, N, B, S}. New: Tensor{N, T, B, S}. Parameters T and N
-# are swapped relative to the new form.
+# Deprecated: AxisTensor{T, N, B, S}. Current: Tensor{N, T, B, S}. Parameters T and N
+# are swapped relative to the current form.
 const AxisTensor{T, N, B, S} = Tensor{N, T, B, S}
 const AxisVector{T, A, S} = Tensor{1, T, Tuple{A}, S}
 const Axis2Tensor{T, B, S} = Tensor{2, T, B, S}

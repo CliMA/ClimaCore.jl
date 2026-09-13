@@ -8,16 +8,16 @@ Base.@propagate_inbounds Base.getindex(
 """
     Fields.bycolumn(fn, space)
 
-Call `fn(colidx)` to every [`ColumnIndex`](@ref) `colidx` of `space`. This can
-be used to apply multiple column-wise operations in a single pass, making use of
-multiple threads.
+Call `fn(colidx)` for every [`ColumnIndex`](@ref) `colidx` of `space`. This can
+be used to apply multiple column-wise operations in a single pass, using multiple
+threads on a `CPUMultiThreaded` device. Returns `nothing`.
 
 !!! note
 
-    On GPUs this will simply evaluate `f` once with `colidx=:` (i.e. it doesn't
-    perform evaluation by columns). This may change in future.
+    On GPUs this evaluates `fn` once with `colidx = :`, without iterating over
+    columns. This may change in future.
 
-# Example
+# Examples
 
 ```julia
 ∇ = GradientF2C()
@@ -130,14 +130,14 @@ end
 """
     ncolumns(::Field)
 
-Number of columns in the field's space.
+Return the number of columns of the space of `field`.
 """
 ncolumns(field::Field) = ncolumns(axes(field))
 
 """
     nlevels(::Field)
 
-Number of levels in the field's space.
+Return the number of levels of the space of `field`.
 """
 nlevels(field::Field) = nlevels(axes(field))
 

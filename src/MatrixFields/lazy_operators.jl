@@ -1,13 +1,13 @@
 """
     AbstractLazyOperator
 
-Supertype for "lazy operators", i.e., operators that can be called without any
-arguments by users, as long as they appear in broadcast expressions that contain
-at least one `Field`. If `lazy_op` is an `AbstractLazyOperator`, the expression
-`lazy_op.()` will internally be translated to `non_lazy_op.(fields...)`, as long
-as it appears in a broadcast expression with at least one `Field`. This
-translation is done by the function `replace_lazy_operator(space, lazy_op)`,
-which must be implemented by every subtype of `AbstractLazyOperator`.
+Supertype for "lazy operators", i.e., operators that users can call without any
+arguments, as long as they appear in broadcast expressions that contain at least
+one `Field`. If `lazy_op` is an `AbstractLazyOperator`, the expression `lazy_op.()`
+is translated to `non_lazy_op.(fields...)` when it appears in a broadcast
+expression with at least one `Field`. This translation is done by the function
+[`replace_lazy_operator`](@ref)`(space, lazy_op)`, which every subtype of
+`AbstractLazyOperator` must implement.
 """
 abstract type AbstractLazyOperator end
 
@@ -65,11 +65,10 @@ replace_lazy_operators(space, bc::LazyOperatorBroadcasted) =
 """
     replace_lazy_operator(space, lazy_op)
 
-Generates an instance of `Base.AbstractBroadcasted` that corresponds to the
+Return an instance of `Base.AbstractBroadcasted` that corresponds to the
 expression `lazy_op.()`, where the broadcast in which this expression appears is
-being evaluated on the given `space`. Note that the staggering (`CellCenter` or
-`CellFace`) of this `space` depends on the specifics of the broadcast and is not
-predetermined.
+evaluated on the given `space`. The staggering (`CellCenter` or `CellFace`) of
+this `space` depends on the specifics of the broadcast and is not predetermined.
 """
 replace_lazy_operator(_, ::AbstractLazyOperator) =
     error("Every subtype of AbstractLazyOperator must implement a method for
