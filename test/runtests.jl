@@ -91,6 +91,7 @@ unit_tests = [
     UnitTest("Spectral elem - sphere hyperdiff vec"     ,"Operators/spectralelement/unit_sphere_hyperdiffusion_vec.jl"; tier = :unit, subsystem = :operators),
     UnitTest("Spectral elem - sphere hyperdiff vec conv" ,"Operators/spectralelement/conv_sphere_hyperdiffusion_vec.jl"; tier = :conv, subsystem = :operators),
     UnitTest("Spectral elem - over-integration"         ,"Operators/spectralelement/unit_overintegration.jl"; meta = :cpu_only, tier = :unit, subsystem = :operators),
+    UnitTest("Spectral elem - lumped restriction"       ,"Operators/spectralelement/unit_lumped_restriction.jl"; tier = :unit, subsystem = :operators),
     # Spectral Element - Discontinuous Galerkin (DG) operators
     # The DG interface fluxes have native GPU kernels in ClimaCoreCUDAExt, so
     # the operators need no `allowscalar`; unit_two_point_fluxes and

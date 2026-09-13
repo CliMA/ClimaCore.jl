@@ -47,6 +47,12 @@ Interpolate
 Restrict
 ```
 
+### Element filtering operators
+
+```@docs
+LumpedRestriction
+```
+
 ## Finite difference operators
 
 Finite difference operators are similar with some subtle differences:

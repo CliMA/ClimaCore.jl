@@ -101,6 +101,21 @@ IL = Operators.Interpolate(
 )
 @test Array(parent(IL.(f .* 2 .+ f))) ≈ parent(IL_cpu.(f_cpu .* 2 .+ f_cpu))
 
+# LumpedRestriction publishes its WJ-weighted argument through a slab-sized
+# buffer and its coarse values through a smaller one; the fused form reads the
+# register-resident result of Gradient. See the buffer reuse invariant in
+# apply_operator.
+lumped = Operators.LumpedRestriction()
+@test Array(parent(lumped.(f))) ≈ parent(lumped.(f_cpu))
+@test Array(parent(lumped.(f .* 2 .+ f))) ≈ parent(lumped.(f_cpu .* 2 .+ f_cpu))
+@test Array(parent(lumped.(norm_sqr.(grad.(f))))) ≈
+      parent(lumped.(norm_sqr.(grad.(f_cpu))))
+@test Array(parent(lumped.(grad.(f)))) ≈ parent(lumped.(grad.(f_cpu)))
+@test Array(parent(div.(lumped.(grad.(f))))) ≈ parent(div.(lumped.(grad.(f_cpu)))) # composite
+mean_op = Operators.LumpedRestriction(Quadratures.GL{1}())
+@test Array(parent(mean_op.(norm_sqr.(grad.(f))))) ≈
+      parent(mean_op.(norm_sqr.(grad.(f_cpu))))
+
 # Check the equal sizes invariant in the CUDA extension's shmem_pointer on
 # compiled kernels: allocations share a global only when they ask for the same
 # number of bytes AND are emitted from separately compiled functions.

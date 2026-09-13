@@ -31,6 +31,23 @@ function opt_Gradient(field)
     return grad.(field)
 end
 
+function opt_LumpedRestriction(field)
+    lumped = Operators.LumpedRestriction()
+    return lumped.(field)
+end
+
+function opt_LumpedRestriction_GradientNorm(field)
+    grad = Operators.Gradient()
+    lumped = Operators.LumpedRestriction()
+    return @. lumped(LinearAlgebra.norm_sqr(grad(field)))
+end
+
+function opt_LumpedRestriction_Gradient(field)
+    grad = Operators.Gradient()
+    lumped = Operators.LumpedRestriction()
+    return @. lumped(grad(field))
+end
+
 function opt_WeakGradient(field)
     wgrad = Operators.Gradient{Operators.WeakForm}()
     return wgrad.(field)
@@ -109,6 +126,10 @@ end
     function test_operators(field, vfield)
         @test_opt opt_Gradient(field)
         opt_WeakGradient(field)
+
+        @test_opt opt_LumpedRestriction(field)
+        @test_opt opt_LumpedRestriction_GradientNorm(field)
+        @test_opt opt_LumpedRestriction_Gradient(field)
 
         covfield = Geometry.CovariantVector.(vfield)
         @test_opt function_filter = filter opt_Curl(covfield)
