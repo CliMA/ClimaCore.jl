@@ -125,11 +125,11 @@ mutable struct Topology2D{
     """
     a vector of the ridx of neighboring ghost elements of each element
     """
-    ghost_neighbor_elem::Vector{Int}
+    ghost_neighbor_elem::VI
     """
     the index into `ghost_neighbor_elem` for the start of each element
     """
-    ghost_neighbor_elem_offset::Vector{Int}
+    ghost_neighbor_elem_offset::VI
 
     """
     a NamedTuple of vectors of `(e,face)`
@@ -212,8 +212,8 @@ function Adapt.adapt_structure(to, topo::Topology2D)
         Adapt.adapt(to, topo.ghost_vertex_offset),
         Adapt.adapt(to, topo.local_neighbor_elem),
         Adapt.adapt(to, topo.local_neighbor_elem_offset),
-        topo.ghost_neighbor_elem,
-        topo.ghost_neighbor_elem_offset,
+        Adapt.adapt(to, topo.ghost_neighbor_elem),
+        Adapt.adapt(to, topo.ghost_neighbor_elem_offset),
         Adapt.adapt(to, topo.boundaries),
         topo.internal_elems,
         topo.perimeter_elems,
@@ -624,8 +624,8 @@ function _Topology2D(
         DA(ghost_vertex_offset),
         DA(local_neighbor_elem),
         DA(local_neighbor_elem_offset),
-        ghost_neighbor_elem,
-        ghost_neighbor_elem_offset,
+        DA(ghost_neighbor_elem),
+        DA(ghost_neighbor_elem_offset),
         boundaries,
         internal_elems,
         perimeter_elems,

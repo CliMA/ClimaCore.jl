@@ -604,8 +604,10 @@ steps:
         command: "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Limiters/distributed/dlimiter.jl"
         env:
           CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_ntasks: 3
+          slurm_gpus: 1
           modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
 
   # TODO: improve performance label: [inference, allocs, flops, latency, benchmark, boundscheck]
