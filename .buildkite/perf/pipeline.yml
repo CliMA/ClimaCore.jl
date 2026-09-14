@@ -10,7 +10,7 @@ env:
   GKSwstype: 100
   SLURM_KILL_BAD_EXIT: 1
   COUPLER_PATH: ".buildkite/perf/ClimaCoupler.jl"
-  COUPLER_COMMIT: "f75fc7400f1860f261a0871ef832537af4a833cb"
+  COUPLER_COMMIT: "891083ae3961bd980939bfacb10724a71c9b4d3a"
   CONFIG_PATH: "$COUPLER_PATH/config/nightly_configs"
   BENCHMARK_CONFIG_PATH: "$COUPLER_PATH/config/benchmark_configs"
 
@@ -50,7 +50,7 @@ steps:
     artifact_paths: "output/gpu_amip_progedmf_1M_land_he16/artifacts/*"
     env:
       CLIMACOMMS_DEVICE: "CUDA"
-      BASELINE_SYPD: "0.308"
+      BASELINE_SYPD: "0.278"
       MIN_PERCENT_CHANGE: "-1"
     agents:
       slurm_gpus_per_task: 1
