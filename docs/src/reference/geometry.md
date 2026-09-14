@@ -16,6 +16,9 @@ duration.
 
 ```@docs
 Geometry.AbstractPoint
+Geometry.Abstract1DPoint
+Geometry.Abstract2DPoint
+Geometry.Abstract3DPoint
 Geometry.float_type
 ```
 
@@ -27,15 +30,37 @@ Cartesian points `Cartesian1Point`, `Cartesian2Point`, `Cartesian3Point`,
 `Cartesian12Point`, and `Cartesian123Point` refer to a single global Cartesian
 frame, used when everything is mapped to one frame for output or
 visualization; they are distinct from `XPoint`, `XYPoint`, and `XYZPoint`,
-whose meaning depends on the domain.
+whose meaning depends on the domain. The concrete point types are listed in the
+`AbstractPoint` docstring; the coordinates of a point are read as properties
+(`p.lat`, `p.z`, `p.x`, …) or with `component`.
+
+```@docs
+Geometry.component
+Geometry.coordinate
+Geometry.tofloat
+Geometry.euclidean_distance
+Geometry.great_circle_distance
+```
 
 ## Vectors and tensors
 
 ```@docs
 Geometry.Tensor
+Geometry.Components
+Geometry.CovariantVector
+Geometry.ContravariantVector
+Geometry.LocalVector
 Geometry.:⊗
+Geometry.outer
 Geometry.project
 Geometry.transform
+Geometry.LinearAlgebra.norm(::Geometry.AbstractTensor, ::Geometry.LocalGeometry)
+Geometry.LinearAlgebra.norm_sqr(::Any, ::Geometry.LocalGeometry)
+```
+
+```@docs
+Geometry.CartesianVector
+Geometry.CartesianPoint
 ```
 
 ## Local geometry
@@ -47,6 +72,7 @@ as a field.
 ```@docs
 Geometry.LocalGeometry
 Geometry.SurfaceGeometry
+Geometry.undertype
 ```
 
 ## Global geometry
@@ -54,12 +80,9 @@ Geometry.SurfaceGeometry
 ```@docs
 Geometry.AbstractGlobalGeometry
 Geometry.CartesianGlobalGeometry
+Geometry.AbstractSphericalGlobalGeometry
 Geometry.SphericalGlobalGeometry
-```
-
-## Internal helpers
-
-```@docs
-Geometry.mul_with_projection
-Geometry.mul_return_type
+Geometry.ShallowSphericalGlobalGeometry
+Geometry.DeepSphericalGlobalGeometry
+Geometry.radius
 ```

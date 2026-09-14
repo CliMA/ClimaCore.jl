@@ -107,6 +107,17 @@ struct QuasiMonotoneLimiter{D, G, FT, CS}
     convergence_stats::CS
 end
 
+"""
+    print_convergence_stats(limiter::QuasiMonotoneLimiter)
+    print_convergence_stats(io::IO, stats)
+
+Print the convergence statistics accumulated by the
+[`Limiters.QuasiMonotoneLimiter`](@ref) `limiter` (to `stdout`), or the
+statistics object `stats` (to `io`): the number of elements in which the limiter
+iteration did not converge, the maximum relative error, and the minimum tracer
+mass. Nothing is printed if the limiter was constructed with
+`convergence_stats = NoConvergenceStats()`.
+"""
 print_convergence_stats(lim::QuasiMonotoneLimiter) =
     print_convergence_stats(stdout, lim.convergence_stats)
 

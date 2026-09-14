@@ -48,8 +48,7 @@ One-dimensional spectral element grid: within each element the space is
 represented as a polynomial. `VIJH` is the `DataLayouts.VIJHWithF` layout of the
 local geometry. `discretization` selects continuous ([`CG`](@ref)) or
 discontinuous ([`DG`](@ref)) Galerkin, and follows the quadrature when omitted;
-see [`SpectralElementGrid2D`](@ref). Construction is memoized in
-`Cache.OBJECT_CACHE`.
+see [`SpectralElementGrid2D`](@ref).
 """
 struct SpectralElementGrid1D{
     T,
@@ -218,7 +217,6 @@ local_geometry_type(
     )
 
 Construct a `SpectralElementGrid2D` from a `topology` and a `quadrature_style`.
-Construction is memoized in `Cache.OBJECT_CACHE`.
 
 # Keyword Arguments
 

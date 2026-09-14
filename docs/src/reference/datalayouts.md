@@ -33,6 +33,7 @@ DataLayouts.ncomponents
 DataLayouts.layout_constructor
 DataLayouts.rebuild
 DataLayouts.reassign
+DataLayouts.replace_basetype
 ```
 
 ## Data scopes
@@ -77,6 +78,7 @@ DataLayouts.column_reduce!
 DataLayouts.DataMask
 DataLayouts.NoMask
 DataLayouts.IJHMask
+DataLayouts.is_active
 DataLayouts.set_mask_maps!
 DataLayouts.should_compute
 ```

@@ -1,3 +1,9 @@
+"""
+    AbstractPointSpace <: AbstractSpace
+
+Abstract supertype of zero-dimensional spaces, whose local geometry is a single
+point. The concrete subtype is [`Spaces.PointSpace`](@ref).
+"""
 abstract type AbstractPointSpace <: AbstractSpace end
 
 local_geometry_data(space::AbstractPointSpace) = space.local_geometry

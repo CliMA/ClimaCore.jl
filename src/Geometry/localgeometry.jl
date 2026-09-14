@@ -115,6 +115,13 @@ struct CoordinateOnlyGeometry{C <: AbstractPoint}
     coordinates::C
 end
 
+"""
+    undertype(::Type{G})
+
+Return the floating point type underlying the geometry type `G`, one of `LocalGeometry`,
+`SurfaceGeometry`, or `CoordinateOnlyGeometry`: the type of the metric terms, or of the
+coordinates for a `CoordinateOnlyGeometry`.
+"""
 undertype(::Type{<:LocalGeometry{I, C, FT}}) where {I, C, FT} = FT
 undertype(::Type{SurfaceGeometry{FT, N}}) where {FT, N} = FT
 undertype(::Type{<:CoordinateOnlyGeometry{C}}) where {C} = eltype(C)

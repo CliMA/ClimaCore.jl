@@ -25,8 +25,7 @@ Construct an `ExtrudedFiniteDifferenceGrid` from the horizontal and vertical gri
 
 If the horizontal grid has a `Geometry.SphericalGlobalGeometry`, the extruded grid
 uses `Geometry.DeepSphericalGlobalGeometry` when `deep = true` and
-`Geometry.ShallowSphericalGlobalGeometry` otherwise. Construction is memoized in
-`Cache.OBJECT_CACHE`.
+`Geometry.ShallowSphericalGlobalGeometry` otherwise.
 """
 struct ExtrudedFiniteDifferenceGrid{
     H <: AbstractGrid,
@@ -157,6 +156,8 @@ local_geometry_data(grid::AbstractExtrudedFiniteDifferenceGrid, ::CellFace) =
     grid.face_local_geometry
 global_geometry(grid::AbstractExtrudedFiniteDifferenceGrid) =
     grid.global_geometry
+
+hypsography(grid::ExtrudedFiniteDifferenceGrid) = grid.hypsography
 
 quadrature_style(grid::ExtrudedFiniteDifferenceGrid) =
     quadrature_style(grid.horizontal_grid)
