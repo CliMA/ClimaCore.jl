@@ -157,9 +157,6 @@ function Base.show(io::IO, grid::MultiPointGrid)
     print_multipoint_horizontal(iio, grid, indent)
 end
 
-# Deprecated alias of `MultiPointGrid`.
-Base.@deprecate_binding PointCloudGrid MultiPointGrid false
-
 # Grids with no horizontal spectral elements are continuous: every node
 # belongs to exactly one element, so there is nothing for DSS to reconcile.
 discretization(grid::AbstractFiniteDifferenceGrid) = CG()

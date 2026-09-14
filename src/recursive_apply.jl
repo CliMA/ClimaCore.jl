@@ -1,4 +1,9 @@
-# This module is for backwards compatibility with previous versions of ClimaCore
+# This module is for backwards compatibility with previous versions of ClimaCore.
+#
+# TODO: delete. Only used in-repo by MatrixFields (`rzero` in operator_matrices.jl)
+# and by test/DataLayouts/unit_fill_and_copyto.jl and
+# test/MatrixFields/unit_operator_matrices.jl; replace with
+# `Utilities.add_auto_broadcasters` / `drop_auto_broadcasters`.
 module RecursiveApply
 
 using ..Utilities: add_auto_broadcasters, drop_auto_broadcasters

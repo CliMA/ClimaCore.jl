@@ -1,29 +1,14 @@
 # Deprecated methods
+#
+# TODO: delete. The mesh-only constructor below (deprecated in v0.14.10) is only used
+# in-repo by test/Fields/inference_repro.jl.
 
 import ClimaComms
-import .Grids: FiniteDifferenceGrid, CellFace, CellCenter
-import .Spaces:
-    CenterFiniteDifferenceSpace,
-    FaceFiniteDifferenceSpace,
-    FiniteDifferenceSpace
-import .Topologies: IntervalTopology
+import .Grids: FiniteDifferenceGrid, CellCenter
+import .Spaces: CenterFiniteDifferenceSpace, FiniteDifferenceSpace
 import .Meshes: IntervalMesh
-import .DataLayouts
 
-@deprecate IntervalTopology(mesh::IntervalMesh) IntervalTopology(
-    ClimaComms.SingletonCommsContext(ClimaComms.device()),
-    mesh,
-)
-
-@deprecate FaceFiniteDifferenceSpace(mesh::IntervalMesh) FiniteDifferenceSpace(
-    FiniteDifferenceGrid(ClimaComms.device(), mesh),
-    CellFace(),
-)
 @deprecate CenterFiniteDifferenceSpace(mesh::IntervalMesh) FiniteDifferenceSpace(
     FiniteDifferenceGrid(ClimaComms.device(), mesh),
     CellCenter(),
-)
-
-@deprecate FiniteDifferenceGrid(mesh::IntervalMesh) FiniteDifferenceGrid(
-    IntervalTopology(ClimaComms.device(), mesh),
 )

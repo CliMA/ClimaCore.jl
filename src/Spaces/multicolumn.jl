@@ -35,9 +35,6 @@ local_geometry_type(::Type{MultiPointSpace{G}}) where {G} =
 Adapt.adapt_structure(to, space::MultiPointSpace) =
     MultiPointSpace(Adapt.adapt(to, grid(space)))
 
-# Deprecated alias of `MultiPointSpace`.
-Base.@deprecate_binding PointCloudSpace MultiPointSpace false
-
 """
     MultiColumnFiniteDifferenceSpace(grid, staggering)
 

@@ -4,6 +4,37 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-💥breaking] Deprecated names that nothing in this repository uses are
+  removed; every one of them had a direct replacement, listed here.
+  - Geometry: `AxisTensor{T, N, B, S}` -> `Tensor{N, T, B, S}` (the `T` and `N`
+    parameters are swapped), `AxisVector` and `Axis2Tensor` likewise,
+    `AxisTensor(bases, components)` -> `Tensor(components, bases)`, and the generic
+    `CovariantAxis{I}`, `ContravariantAxis{I}`, `LocalAxis{I}` and `CartesianAxis{I}`
+    -> the concrete aliases that name their indices (`Covariant12Axis`, ...).
+  - DataLayouts: `AbstractData{T}` -> `DataLayout{T}`, the `IJFH`/`IJHF` aliases for
+    `Nv = 1` layouts -> `VIJFH`/`VIJHF`, and the universal-index methods taking a
+    5-dimensional `CartesianIndex` -> the 4-dimensional `CartesianIndex(v, i, j, h)`.
+  - Operators: `WeakDivergence`/`WeakGradient`/`WeakCurl` ->
+    `Divergence{WeakForm}`/`Gradient{WeakForm}`/`Curl{WeakForm}`, the
+    `LeftBiased*`/`RightBiased*` spellings -> `BottomBiased*`/`TopBiased*`, and
+    `FirstOrderOneSided`/`ThirdOrderOneSided` -> `Extrapolate{0}`/`Extrapolate{1}`.
+  - Fields: `ColumnField` -> `FiniteDifferenceField`, and the no-index `level(field)`
+    fallback -> `level(field, v)`.
+  - The point-cloud names deprecated in v0.16.0 (`PointCloudGrid`, `PointCloudSpace`,
+    `ExtrudedPointCloudGrid`, `PointColumnEnsembleGrid`, `PointColumnEnsembleSpace`)
+    -> their `MultiPoint*`/`MultiColumn*` equivalents.
+  - The mesh-only constructors `IntervalTopology(mesh)`, `FiniteDifferenceGrid(mesh)`
+    and `FaceFiniteDifferenceSpace(mesh)` deprecated in v0.14.10 -> the two-argument
+    forms taking a `ClimaComms.AbstractDevice` first. `CenterFiniteDifferenceSpace(mesh)`
+    is still defined, with a deprecation warning.
+
+  The remaining deprecated names are kept but are no longer exported or documented:
+  `MatrixFields.⋅` (use `*`, which has denoted matrix multiplication since v0.14.27),
+  `Geometry.components(::AbstractTensor)` (use `parent`), and the `RecursiveApply`
+  module (use `Utilities.add_auto_broadcasters`/`drop_auto_broadcasters`). These are
+  now considered internals, and will be deleted in the future. They are only kept so
+  JET tests will still pass.
+
 - The device-side grid types
   `Grids.DeviceFiniteDifferenceGrid`, `Grids.DeviceExtrudedFiniteDifferenceGrid`,
   `Grids.DeviceSpectralElementGrid1D`, `Grids.DeviceSpectralElementGrid2D` and

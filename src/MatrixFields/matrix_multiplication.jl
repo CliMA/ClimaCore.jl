@@ -245,7 +245,9 @@ This means that we can express the bounds on the interior values of ``i`` as
 """
 struct MultiplyColumnwiseBandMatrixField <: Operators.FiniteDifferenceOperator end
 
-# TODO: Remove this in the next major release of ClimaCore.
+# TODO: delete. Deprecated, unexported alias for `MultiplyColumnwiseBandMatrixField()`;
+# `*` has denoted matrix multiplication since v0.14.27. Only used in-repo by
+# test/Operators/finitedifference/broadcasting_edge_cases.jl.
 const ⋅ = MultiplyColumnwiseBandMatrixField()
 
 Operators.strip_space(op::MultiplyColumnwiseBandMatrixField, _) = op

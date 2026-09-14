@@ -299,6 +299,10 @@ function Tensor(s::UniformScaling, bases::NTuple{2, Components})
 end
 
 Base.parent(x::Tensor) = x.components
+# TODO: delete. Deprecated spelling of `parent(x)` for tensors, only used in-repo by
+# test/Geometry/unit_geometry.jl; the `AbstractPoint` method in coordinates.jl is the
+# live API.
+@inline components(x::AbstractTensor) = parent(x)
 Base.axes(x::Tensor) = x.bases
 
 @inline _unwrap(t::UnionAll) = _unwrap(t.body)

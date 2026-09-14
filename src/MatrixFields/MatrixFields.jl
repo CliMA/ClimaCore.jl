@@ -74,7 +74,7 @@ export DiagonalMatrixRow,
     QuaddiagonalMatrixRow,
     PentadiagonalMatrixRow
 export FieldVectorKeys, FieldMatrixKeys, FieldVectorView, FieldMatrix
-export FieldMatrixWithSolver, ⋅
+export FieldMatrixWithSolver
 
 include("band_matrix_row.jl")
 
