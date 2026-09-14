@@ -14,6 +14,25 @@ Subtypes:
 """
 abstract type AbstractGlobalGeometry end
 
+"""
+    CartesianPoint(pt::AbstractPoint, global_geometry::AbstractGlobalGeometry)
+
+Convert the point `pt` from the coordinates of the domain to the single global Cartesian
+frame, returning a `Cartesian*Point`.
+
+With a [`Geometry.CartesianGlobalGeometry`](@ref), `XPoint`, `ZPoint`, `XYPoint`,
+`XZPoint`, and `XYZPoint` map to `Cartesian1Point`, `Cartesian3Point`, `Cartesian12Point`,
+`Cartesian13Point`, and `Cartesian123Point` with the same coordinate values. With an
+`AbstractSphericalGlobalGeometry` of radius `r`, `LatLongPoint` and `LatLongZPoint` map to
+a `Cartesian123Point` at distance `r` (respectively `r + z`) from the centre of the
+sphere, with the `x1` axis through zero latitude and longitude and the `x3` axis through
+the north pole. The inverses on the sphere are
+`LatLongPoint(pt::Cartesian123Point, global_geometry)` and
+`LatLongZPoint(pt::Cartesian123Point, global_geometry)`. Use
+`Cartesian123Point(pt, global_geometry)` to always obtain a 3D point.
+"""
+function CartesianPoint end
+
 Cartesian123Point(pt::AbstractPoint, global_geometry::AbstractGlobalGeometry) =
     Cartesian123Point(CartesianPoint(pt, global_geometry))
 
@@ -39,8 +58,25 @@ CartesianPoint(pt::XZPoint{FT}, ::CartesianGlobalGeometry) where {FT} =
 CartesianPoint(pt::XYZPoint{FT}, ::CartesianGlobalGeometry) where {FT} =
     Cartesian123Point{FT}(pt.x, pt.y, pt.z)
 
+"""
+    AbstractSphericalGlobalGeometry
+
+Supertype for global geometries in which the local coordinates refer to a sphere:
+[`Geometry.SphericalGlobalGeometry`](@ref), `ShallowSphericalGlobalGeometry`, and
+`DeepSphericalGlobalGeometry`. Every subtype stores the radius of the sphere [m], returned
+by `radius`. Positions are `LatLongPoint`s or `LatLongZPoint`s, and `CartesianPoint`,
+`CartesianVector`, and `great_circle_distance` convert to the global Cartesian frame and
+measure distances on the sphere.
+"""
 abstract type AbstractSphericalGlobalGeometry <: AbstractGlobalGeometry end
 Base.broadcastable(x::AbstractSphericalGlobalGeometry) = tuple(x)
+
+"""
+    radius(global_geometry::AbstractSphericalGlobalGeometry)
+
+Return the radius [m] of the sphere that `global_geometry` refers to.
+"""
+radius(global_geometry::AbstractSphericalGlobalGeometry) = global_geometry.radius
 
 """
     SphericalGlobalGeometry(radius)
@@ -226,6 +262,17 @@ function LocalVector(
     G' * u
 end
 
+"""
+    CartesianVector(u::UVWVector, global_geometry::AbstractGlobalGeometry, coord::AbstractPoint)
+
+Rotate the vector `u`, given by its components `u` (east), `v` (north), `w` (up) in the
+local orthonormal frame at the position `coord`, into the single global Cartesian frame,
+returning a `Cartesian123Vector`. For an `AbstractSphericalGlobalGeometry`, `coord` is the
+`LatLongPoint` or `LatLongZPoint` at which `u` is defined. For a
+[`Geometry.CartesianGlobalGeometry`](@ref) the local and global frames coincide, so `u` is
+returned unchanged and `coord` is ignored. The inverse is
+`LocalVector(u::Cartesian123Vector, global_geometry, coord)`.
+"""
 function CartesianVector(
     u::UVWVector,
     geom::AbstractSphericalGlobalGeometry,

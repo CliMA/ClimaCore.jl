@@ -56,8 +56,11 @@ ClimaComms.context(field::Field) = ClimaComms.context(axes(field))
 Adapt.adapt_structure(to, field::Field) =
     Field(Adapt.adapt(to, field_values(field)), Adapt.adapt(to, axes(field)))
 
-## aliases
-# Point Field
+"""
+    PointField{V, S}
+
+A [`Fields.Field`](@ref) on a [`Spaces.PointSpace`](@ref).
+"""
 const PointField{V, S} =
     Field{V, S} where {V <: DataLayout, S <: Spaces.PointSpace}
 
@@ -66,61 +69,130 @@ const PointField{V, S} =
 const PointDataField{V, S} =
     Field{V, S} where {V <: DataLayout{<:Any, 0}, S <: Spaces.AbstractSpace}
 
-# Spectral Element Field
+"""
+    SpectralElementField{V, S}
+
+A [`Fields.Field`](@ref) on a [`Spaces.AbstractSpectralElementSpace`](@ref).
+"""
 const SpectralElementField{V, S} = Field{
     V,
     S,
 } where {V <: DataLayout, S <: Spaces.AbstractSpectralElementSpace}
+"""
+    SpectralElementField1D{V, S}
+
+A [`Fields.Field`](@ref) on a [`Spaces.SpectralElementSpace1D`](@ref).
+"""
 const SpectralElementField1D{V, S} =
     Field{V, S} where {V <: DataLayout, S <: Spaces.SpectralElementSpace1D}
+"""
+    SpectralElementField2D{V, S}
+
+A [`Fields.Field`](@ref) on a [`Spaces.SpectralElementSpace2D`](@ref).
+"""
 const SpectralElementField2D{V, S} =
     Field{V, S} where {V <: DataLayout, S <: Spaces.SpectralElementSpace2D}
 
+"""
+    FiniteDifferenceField{V, S}
+
+A [`Fields.Field`](@ref) on a [`Spaces.FiniteDifferenceSpace`](@ref).
+"""
 const FiniteDifferenceField{V, S} =
     Field{V, S} where {V <: DataLayout, S <: Spaces.FiniteDifferenceSpace}
+"""
+    FaceFiniteDifferenceField{V, S}
+
+A [`Fields.Field`](@ref) on a [`Spaces.FaceFiniteDifferenceSpace`](@ref).
+"""
+const FaceFiniteDifferenceField{V, S} =
+    Field{V, S} where {V <: DataLayout, S <: Spaces.FaceFiniteDifferenceSpace}
+"""
+    CenterFiniteDifferenceField{V, S}
+
+A [`Fields.Field`](@ref) on a [`Spaces.CenterFiniteDifferenceSpace`](@ref).
+"""
+const CenterFiniteDifferenceField{V, S} = Field{
+    V,
+    S,
+} where {V <: DataLayout, S <: Spaces.CenterFiniteDifferenceSpace}
+
 # Backwards-compatibility alias for the pre-rewrite ColumnField, which was a
 # Field with DataLayouts.DataColumn values. Single-column fields are now
 # identified by their space (a FiniteDifferenceSpace, which may wrap a
 # ColumnGrid returned by `column(::ExtrudedFiniteDifferenceSpace, ...)`), so
 # the old ColumnField is the same set of fields as FiniteDifferenceField.
 const ColumnField = FiniteDifferenceField
-const FaceFiniteDifferenceField{V, S} =
-    Field{V, S} where {V <: DataLayout, S <: Spaces.FaceFiniteDifferenceSpace}
-const CenterFiniteDifferenceField{V, S} = Field{
-    V,
-    S,
-} where {V <: DataLayout, S <: Spaces.CenterFiniteDifferenceSpace}
 
-# Extruded Fields
+"""
+    ExtrudedFiniteDifferenceField{V, S}
+
+A [`Fields.Field`](@ref) on a [`Spaces.ExtrudedFiniteDifferenceSpace`](@ref).
+"""
 const ExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
 } where {V <: DataLayout, S <: Spaces.ExtrudedFiniteDifferenceSpace}
+"""
+    ExtrudedFiniteDifferenceField2D{V, S}
+
+A [`Fields.Field`](@ref) on a [`Spaces.ExtrudedFiniteDifferenceSpace2D`](@ref).
+"""
 const ExtrudedFiniteDifferenceField2D{V, S} = Field{
     V,
     S,
 } where {V <: DataLayout, S <: Spaces.ExtrudedFiniteDifferenceSpace2D}
+"""
+    ExtrudedFiniteDifferenceField3D{V, S}
+
+A [`Fields.Field`](@ref) on a [`Spaces.ExtrudedFiniteDifferenceSpace3D`](@ref).
+"""
 const ExtrudedFiniteDifferenceField3D{V, S} = Field{
     V,
     S,
 } where {V <: DataLayout, S <: Spaces.ExtrudedFiniteDifferenceSpace3D}
+"""
+    FaceExtrudedFiniteDifferenceField{V, S}
+
+A [`Fields.Field`](@ref) on a [`Spaces.FaceExtrudedFiniteDifferenceSpace`](@ref).
+"""
 const FaceExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
 } where {V <: DataLayout, S <: Spaces.FaceExtrudedFiniteDifferenceSpace}
+"""
+    CenterExtrudedFiniteDifferenceField{V, S}
+
+A [`Fields.Field`](@ref) on a [`Spaces.CenterExtrudedFiniteDifferenceSpace`](@ref).
+"""
 const CenterExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
 } where {V <: DataLayout, S <: Spaces.CenterExtrudedFiniteDifferenceSpace}
 
+"""
+    MultiColumnFiniteDifferenceField{V, S}
+
+A [`Fields.Field`](@ref) on a [`Spaces.MultiColumnFiniteDifferenceSpace`](@ref).
+"""
 const MultiColumnFiniteDifferenceField{V, S} = Field{
     V,
     S,
 } where {V <: DataLayout, S <: Spaces.MultiColumnFiniteDifferenceSpace}
+"""
+    FaceMultiColumnFiniteDifferenceField{V, S}
+
+A [`Fields.Field`](@ref) on a [`Spaces.FaceMultiColumnFiniteDifferenceSpace`](@ref).
+"""
 const FaceMultiColumnFiniteDifferenceField{V, S} = Field{
     V,
     S,
 } where {V <: DataLayout, S <: Spaces.FaceMultiColumnFiniteDifferenceSpace}
+"""
+    CenterMultiColumnFiniteDifferenceField{V, S}
+
+A [`Fields.Field`](@ref) on a [`Spaces.CenterMultiColumnFiniteDifferenceSpace`](@ref).
+"""
 const CenterMultiColumnFiniteDifferenceField{V, S} = Field{
     V,
     S,
@@ -129,15 +201,29 @@ const CenterMultiColumnFiniteDifferenceField{V, S} = Field{
     S <: Spaces.CenterMultiColumnFiniteDifferenceSpace,
 }
 
+"""
+    ExtrudedSpectralElementField2D{V, S}
+
+A [`Fields.Field`](@ref) on a [`Spaces.ExtrudedSpectralElementSpace2D`](@ref).
+"""
 const ExtrudedSpectralElementField2D{V, S} = Field{
     V,
     S,
 } where {V <: DataLayout, S <: Spaces.ExtrudedSpectralElementSpace2D}
+"""
+    RectilinearSpectralElementField2D{V, S}
 
+A [`Fields.Field`](@ref) on a [`Spaces.RectilinearSpectralElementSpace2D`](@ref).
+"""
 const RectilinearSpectralElementField2D{V, S} = Field{
     V,
     S,
 } where {V <: DataLayout, S <: Spaces.RectilinearSpectralElementSpace2D}
+"""
+    ExtrudedRectilinearSpectralElementField3D{V, S}
+
+A [`Fields.Field`](@ref) on a [`Spaces.ExtrudedRectilinearSpectralElementSpace3D`](@ref).
+"""
 const ExtrudedRectilinearSpectralElementField3D{V, S} = Field{
     V,
     S,
@@ -145,14 +231,20 @@ const ExtrudedRectilinearSpectralElementField3D{V, S} = Field{
     V <: DataLayout,
     S <: Spaces.ExtrudedRectilinearSpectralElementSpace3D,
 }
+"""
+    CubedSphereSpectralElementField2D{V, S}
 
-
-# Cubed Sphere Fields
-
+A [`Fields.Field`](@ref) on a [`Spaces.CubedSphereSpectralElementSpace2D`](@ref).
+"""
 const CubedSphereSpectralElementField2D{V, S} = Field{
     V,
     S,
 } where {V <: DataLayout, S <: Spaces.CubedSphereSpectralElementSpace2D}
+"""
+    ExtrudedCubedSphereSpectralElementField3D{V, S}
+
+A [`Fields.Field`](@ref) on a [`Spaces.ExtrudedCubedSphereSpectralElementSpace3D`](@ref).
+"""
 const ExtrudedCubedSphereSpectralElementField3D{V, S} = Field{
     V,
     S,
@@ -163,6 +255,14 @@ const ExtrudedCubedSphereSpectralElementField3D{V, S} = Field{
 
 Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 Base.ndims(::Type{Field{V, S}}) where {V, S} = Base.ndims(V)
+
+"""
+    Fields.field_values(field::Field)
+
+The `DataLayouts.DataLayout` holding the values of `field`, without the space.
+For a broadcasted expression over fields, return the corresponding broadcasted
+expression over their `DataLayout`s.
+"""
 @inline field_values(field::Field) = getfield(field, :values)
 
 field_values(x::Number) = x
@@ -170,6 +270,13 @@ field_values(t::Tuple) = map(field_values, t)
 field_values(nt::NamedTuple) = NamedTuple{keys(nt)}(field_values(values(nt)))
 
 @inline Base.axes(field::Field) = getfield(field, :space)
+
+"""
+    parent(field::Field)
+
+The array that stores the values of `field`, in the memory order of its
+`DataLayouts.DataLayout` (see [`Fields.field_values`](@ref)).
+"""
 Base.parent(field::Field) = parent(field_values(field))
 
 # Define device and device array type
@@ -182,6 +289,26 @@ ClimaComms.array_type(field::Field) =
     Field(getproperty(field_values(field), i), axes(field))
 @inline Base.getproperty(field::Field, name::Symbol) =
     Field(getproperty(field_values(field), name), axes(field))
+
+"""
+    Fields.component(field::Field, i::Integer)
+
+Return the `i`th scalar component of `field`, whose element type must be a
+`Geometry.Tensor` (a vector or higher-order tensor), as a [`Fields.Field`](@ref) on
+the same space that shares memory with `field`. Components are numbered in the
+column-major order of the tensor components, so for a vector `i` is the index of
+the basis vector, and for a 2-tensor `i` runs down the columns of the matrix.
+Equivalent to the property chain `field.components.data.:(i)`.
+
+# Example
+
+```julia
+u₁ = Fields.component(uₕ, 1)  # first covariant component of a Covariant12Vector field
+```
+"""
+@inline component(field::Field, i::Integer) =
+    eltype(field) <: Geometry.Tensor ? getproperty(field.components.data, i) :
+    throw(ArgumentError("Expected Field with Tensor elements, got $(eltype(field))"))
 
 Base.eltype(::Type{<:Field{V}}) where {V} = eltype(V)
 Base.IndexStyle(::Type{<:Field{V}}) where {V} = IndexStyle(V)

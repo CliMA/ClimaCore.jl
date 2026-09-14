@@ -10,6 +10,8 @@ A mesh is a division of a domain into elements.
 
 ```@docs
 Meshes.AbstractMesh
+Meshes.AbstractMesh1D
+Meshes.AbstractMesh2D
 Meshes.IntervalMesh
 Meshes.RectilinearMesh
 Meshes.AbstractCubedSphere
@@ -47,15 +49,10 @@ Meshes.truncate_mesh
 Meshes.domain
 Meshes.elements
 Meshes.nelements
-Meshes.is_boundary_face
-Meshes.boundary_face_name
-Meshes.opposing_face
+Meshes.n_elements_per_panel_direction
 Meshes.coordinates
 Meshes.containing_element
 Meshes.reference_coordinates
-Meshes.SharedVertices
-Meshes.face_connectivity_matrix
-Meshes.vertex_connectivity_matrix
 Meshes.linearindices
 Meshes.element_horizontal_length_scale
 ```

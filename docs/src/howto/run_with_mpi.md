@@ -102,10 +102,8 @@ MPI.jl, pointing it at a system MPI, and launching are ClimaComms's
     topology = Topologies.Topology2D(context, mesh, Topologies.spacefillingcurve(mesh))
     ```
 
-    `Topologies.DistributedTopology2D` is an alias of `Topology2D`.
-
  3. Write the model as on one process. DSS buffers are created per field with
-    `Spaces.create_dss_buffer` and hold the send and receive buffers;
+    `Topologies.create_dss_buffer` and hold the send and receive buffers;
     `Spaces.weighted_dss!(field, buffer)` performs the exchange. Passing several
     fields (or a `FieldVector`) to one call shares the exchange. On DG spaces,
     `Operators.start_dg_ghost_exchange` starts one halo exchange that several

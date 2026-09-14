@@ -41,7 +41,8 @@ import ..Grids:
     dss_weights,
     set_mask!,
     get_mask,
-    quadrature_style
+    quadrature_style,
+    hypsography
 
 import ClimaComms
 using StaticArrays, ForwardDiff, LinearAlgebra, Adapt
@@ -54,8 +55,44 @@ and the constructor `space(grid, staggering)`.
 """
 abstract type AbstractSpace end
 
+"""
+    Spaces.grid(space::AbstractSpace)
+
+Return the `Grids.AbstractGrid` underlying `space`: the domain, topology,
+coordinates, metric terms, and quadrature, without the vertical staggering.
+"""
 function grid end
+
+"""
+    Spaces.staggering(space::AbstractSpace)
+
+Return the vertical staggering of `space`: [`Grids.CellCenter`](@ref) or
+[`Grids.CellFace`](@ref) for spaces with a vertical direction, and `nothing`
+for purely horizontal spaces.
+"""
 function staggering end
+
+"""
+    Spaces.horizontal_space(space::AbstractSpace)
+
+Return the horizontal space of `space`: `space` itself for a spectral element
+space, the wrapped horizontal space of an
+[`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) or
+[`Spaces.MultiColumnFiniteDifferenceSpace`](@ref), and the first level of a
+[`Spaces.FiniteDifferenceSpace`](@ref) (a [`Spaces.PointSpace`](@ref)).
+"""
+function horizontal_space end
+
+"""
+    Spaces.eachslabindex(space::AbstractSpace)
+
+Return an iterator over the indices of the slabs (single elements at a single
+level) of `space`: element indices `h` for a spectral element space, and
+`(v, h)` tuples of level and element indices for an
+[`Spaces.ExtrudedFiniteDifferenceSpace`](@ref). Each index can be passed to
+`slab(space, index...)`.
+"""
+function eachslabindex end
 
 ClimaComms.context(space::AbstractSpace) = ClimaComms.context(grid(space))
 ClimaComms.device(space::AbstractSpace) = ClimaComms.device(grid(space))
@@ -79,23 +116,81 @@ end
 
 global_geometry(space::AbstractSpace) = global_geometry(grid(space))
 
+"""
+    Spaces.radius(space::AbstractSpace)
+
+Return the radius [m] of the sphere on which `space` is defined, read from the
+`radius` of its global geometry (`Spaces.global_geometry(space)`). Throws an
+`ArgumentError` if the global geometry is not spherical, e.g. for spaces on
+planar or interval domains.
+"""
+function radius(space::AbstractSpace)
+    gg = global_geometry(space)
+    gg isa Geometry.AbstractSphericalGlobalGeometry || throw(
+        ArgumentError(
+            "the global geometry of the space is $(nameof(typeof(gg))), which \
+             is not spherical and so has no radius",
+        ),
+    )
+    return gg.radius
+end
+
 space(refspace::AbstractSpace, staggering::Staggering) =
     space(grid(refspace), staggering)
 
+"""
+    Spaces.issubspace(subspace::AbstractSpace, space::AbstractSpace)
+
+Return `true` if fields on `subspace` can be broadcast against fields on
+`space`: `subspace` is `space` itself, the horizontal space or a level of an
+extruded `space`, or the vertical space or a column of it. Two spaces built on
+the same grid with different staggering are not subspaces of each other.
+"""
 issubspace(subspace::AbstractSpace, space::AbstractSpace) = subspace === space
 
+"""
+    Spaces.undertype(space::AbstractSpace)
+
+Return the underlying floating-point type of `space`, i.e. the number type of
+the coordinates and metric terms of its local geometry.
+"""
 undertype(space::AbstractSpace) =
     Geometry.undertype(eltype(local_geometry_data(space)))
 
+"""
+    Spaces.coordinates_data(space::AbstractSpace)
+    Spaces.coordinates_data(grid::Grids.AbstractGrid)
+    Spaces.coordinates_data(staggering, grid::Grids.AbstractGrid)
+
+Return the `DataLayout` of coordinates of `space` (or of `grid` at the given
+`staggering`): the `coordinates` of its local geometry.
+"""
 coordinates_data(space::AbstractSpace) = local_geometry_data(space).coordinates
 coordinates_data(grid::Grids.AbstractGrid) =
     local_geometry_data(grid).coordinates
 coordinates_data(staggering, grid::Grids.AbstractGrid) =
     local_geometry_data(staggering, grid).coordinates
 
+"""
+    Spaces.horizontal_grid(grid::Grids.AbstractGrid)
+
+Return the horizontal grid underlying `grid`: a spectral element grid is its own
+horizontal grid, and a `Grids.LevelGrid` returns the horizontal grid of the
+extruded grid it is a level of. Used to decide whether two horizontal spaces
+share a grid (see `Spaces.issubspace`).
+"""
 horizontal_grid(grid::Grids.AbstractSpectralElementGrid) = grid
 horizontal_grid(grid::Grids.LevelGrid) = grid.full_grid.horizontal_grid
 
+"""
+    Spaces.vertical_grid(grid::Grids.AbstractGrid)
+
+Return the vertical (finite difference) grid underlying `grid`: a finite
+difference grid is its own vertical grid, an extruded grid returns its
+`vertical_grid`, and a `Grids.ColumnGrid` returns the vertical grid of the
+extruded grid it is a column of. Used to decide whether two vertical spaces
+share a grid (see `Spaces.issubspace`).
+"""
 vertical_grid(grid::Grids.AbstractFiniteDifferenceGrid) = grid
 vertical_grid(grid::Grids.ColumnGrid) = vertical_grid(grid.full_grid)
 vertical_grid(grid::Grids.AbstractExtrudedFiniteDifferenceGrid) = grid.vertical_grid
@@ -181,6 +276,14 @@ function z_min(space::AbstractSpace)
     domain = Topologies.domain(mesh)
     return Domains.z_min(domain)
 end
+
+"""
+    nlevels(space::AbstractSpace)
+
+Return the number of vertical levels of `space` at its staggering: the number of
+cell centers or cell faces for a staggered space, and 1 for a horizontal space.
+"""
+function nlevels end
 
 """
     ncolumns(space::AbstractSpace)

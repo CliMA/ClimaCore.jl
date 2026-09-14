@@ -20,6 +20,21 @@ FieldMatrixWithSolver(
     alg::FieldMatrixSolverAlgorithm = BlockDiagonalSolve(),
 ) = FieldMatrixWithSolver(A, FieldMatrixSolver(alg, A, b))
 
+"""
+    matrix(A::FieldMatrixWithSolver)
+
+Return the `FieldMatrix` wrapped by the [`FieldMatrixWithSolver`](@ref) `A`.
+"""
+matrix(A::FieldMatrixWithSolver) = A.matrix
+
+"""
+    solver(A::FieldMatrixWithSolver)
+
+Return the [`FieldMatrixSolver`](@ref) of the [`FieldMatrixWithSolver`](@ref)
+`A`, which is `nothing` if `A` was created by `one(::FieldMatrixWithSolver)`.
+"""
+solver(A::FieldMatrixWithSolver) = A.solver
+
 Base.keys(A::FieldMatrixWithSolver) = keys(A.matrix)
 
 Base.values(A::FieldMatrixWithSolver) = values(A.matrix)

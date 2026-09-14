@@ -7,4 +7,6 @@ CurrentModule = ClimaCore
 ```@docs
 to_device
 to_cpu
+DeviceSideDevice
+DeviceSideContext
 ```

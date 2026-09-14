@@ -171,6 +171,25 @@ _norm_sqr(uᵢ::OrthonormalTensor, ::LocalGeometry) = norm_sqr(uᵢ)
 
 _norm(u::AbstractTensor, lg::LocalGeometry) = sqrt(_norm_sqr(u, lg))
 
+"""
+    norm_sqr(u, lg::LocalGeometry)
+
+Metric-aware squared norm of the vector `u` at a node with local geometry `lg`: `u` is
+converted to the local orthonormal frame first, so the result does not depend on which
+basis `u` is stored in. Numbers and arrays are passed through to the one-argument
+`norm_sqr`; other containers are summed over recursively.
+"""
+norm_sqr(u, lg::LocalGeometry) = _norm_sqr(u, lg)
+
+"""
+    norm(u::AbstractTensor, lg::LocalGeometry)
+
+Metric-aware norm of the vector `u` at a node with local geometry `lg`: `u` is converted
+to the local orthonormal frame first, so the result does not depend on which basis `u` is
+stored in. Equal to `sqrt(norm_sqr(u, lg))`.
+"""
+norm(u::AbstractTensor, lg::LocalGeometry) = _norm(u, lg)
+
 # TODO: Determine if this 3D general method impacts performance
 function _cross(u::AbstractTensor{1}, v::AbstractTensor{1}, lg::LocalGeometry)
     x = ContravariantVector(u, lg)

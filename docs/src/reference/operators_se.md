@@ -32,15 +32,6 @@ StrongForm
 WeakForm
 ```
 
-The names `WeakDivergence`, `WeakGradient`, and `WeakCurl` are aliases of the
-weak-form types, kept for downstream packages.
-
-```@docs
-WeakDivergence
-WeakGradient
-WeakCurl
-```
-
 ## Laplacians
 
 Building blocks of hyperdiffusion on both discretizations.
@@ -56,4 +47,10 @@ vector_laplacian
 ```@docs
 Interpolate
 Restrict
+```
+
+## Tensor products
+
+```@docs
+tensor_product!
 ```

@@ -38,6 +38,15 @@ end
 
 Adapt.@adapt_structure IJHMask
 
+"""
+    is_active(mask::IJHMask)
+
+The boolean layout that marks each column of the masked data as active (`true`) or
+inactive (`false`); it has the shape of `level(data, 1)`. Modify it in place and call
+[`set_mask_maps!`](@ref) to apply the change.
+"""
+is_active(mask::IJHMask) = mask.is_active
+
 function IJHMask(data::VIJHWithF)
     is_active = map(Returns(true), level(data, 1))
     N = similar(parent(data), Int, 1)
