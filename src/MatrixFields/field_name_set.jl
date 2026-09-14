@@ -61,7 +61,23 @@ struct FieldNameSet{
     end
 end
 
+"""
+    FieldVectorKeys(values, [name_tree])
+
+Alias for `FieldNameSet{FieldName}`: the key set of a `FieldVectorView`, i.e. a
+set of `FieldName`s such as `(@name(c.ρ), @name(f.u₃))`, that serves as the
+analogue of a `KeySet` for a [`FieldNameDict`](@ref).
+"""
 const FieldVectorKeys = FieldNameSet{FieldName}
+
+"""
+    FieldMatrixKeys(values, [name_tree])
+
+Alias for `FieldNameSet{Tuple{FieldName, FieldName}}`: the key set of a
+`FieldMatrix`, i.e. a set of `(row_name, col_name)` pairs of `FieldName`s such as
+`((@name(c.ρ), @name(c.ρ)), (@name(c.ρ), @name(f.u₃)))`, that serves as the
+analogue of a `KeySet` for a [`FieldNameDict`](@ref).
+"""
 const FieldMatrixKeys = FieldNameSet{FieldNamePair}
 
 # Do not print the FieldNameTree, since the current implementation ensures that

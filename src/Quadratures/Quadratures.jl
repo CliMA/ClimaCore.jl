@@ -40,6 +40,17 @@ Return the number of quadrature points `Nq` of the quadrature rule `quadstyle`.
 @inline degrees_of_freedom(::QuadratureStyle{Nq}) where {Nq} = Nq
 
 """
+    unique_degrees_of_freedom(quadstyle::QuadratureStyle) -> Int
+
+Return the number of quadrature points of `quadstyle` per element that are not
+shared with a neighbouring element. This is `Nq - 1` for rules that include the
+element endpoints ([`Quadratures.GLL`](@ref) and `ClosedUniform`), whose
+endpoint nodes are shared, and `Nq` for rules that do not ([`Quadratures.GL`](@ref)
+and `Uniform`).
+"""
+function unique_degrees_of_freedom end
+
+"""
     requires_dss(quadstyle::QuadratureStyle) -> Bool
 
 Return whether `quadstyle` requires direct stiffness summation, i.e. whether its nodes
@@ -266,6 +277,16 @@ function spectral_filter_matrix(
     return V * Diagonal(Σ) / V
 end
 
+"""
+    cutoff_filter_matrix(::Type{FT}, quad::GLL{Nq}, Nc::Integer)
+
+Return the `Nq × Nq` `SMatrix{Nq, Nq, FT}` that applies a spectral cutoff filter to
+nodal values at the [`Quadratures.GLL`](@ref) points of `quad`: the values are
+projected onto the orthonormal Legendre basis, the first `Nc` modes (polynomial
+degrees `0` to `Nc - 1`) are kept and the remaining modes are set to zero, and
+the result is transformed back to nodal values. It is built with
+`spectral_filter_matrix`.
+"""
 function cutoff_filter_matrix(
     ::Type{FT},
     quad::GLL{Nq},

@@ -49,15 +49,42 @@ function Base.show(io::IO, ::FieldName{name_chain}) where {name_chain}
     print(io, "@name($(join(quoted_names, '.')))")
 end
 
+"""
+    extract_first(name::FieldName)
+
+Return the first component of the name chain of `name`, which is either a
+`Symbol` or an `Integer`; e.g., `extract_first(@name(a.b.c)) == :a`.
+"""
 extract_first(::FieldName{name_chain}) where {name_chain} = first(name_chain)
+
+"""
+    drop_first(name::FieldName)
+
+Return the `FieldName` obtained by removing the first component of the name chain
+of `name`; e.g., `drop_first(@name(a.b.c)) == @name(b.c)`.
+"""
 drop_first(::FieldName{name_chain}) where {name_chain} =
     FieldName(Base.tail(name_chain)...)
 
+"""
+    has_field(x, name::FieldName)
+
+Return whether `get_field(x, name)` is valid, i.e., whether each component of the
+name chain of `name` is one of the `propertynames` of the value selected by the
+preceding components. Every `x` has the empty field `@name()`.
+"""
 has_field(x, ::FieldName{()}) = true
 has_field(x, name::FieldName) =
     extract_first(name) in propertynames(x) &&
     has_field(getproperty(x, extract_first(name)), drop_first(name))
 
+"""
+    get_field(x, name::FieldName)
+
+Return the field of `x` selected by `name`, by calling `getproperty` once for
+each component of the name chain; e.g., `get_field(x, @name(a.b))` is `x.a.b`.
+The empty name `@name()` returns `x` itself.
+"""
 get_field(x, ::FieldName{()}) = x
 get_field(x, name::FieldName) =
     get_field(getproperty(x, extract_first(name)), drop_first(name))
@@ -71,6 +98,13 @@ broadcasted_get_field(x, ::FieldName{()}) = x
 broadcasted_get_field(x, name::FieldName) =
     broadcasted_get_field(getfield(x, extract_first(name)), drop_first(name))
 
+"""
+    is_child_name(child_name::FieldName, parent_name::FieldName)
+
+Return whether the name chain of `parent_name` is a prefix of the name chain of
+`child_name`, so that `child_name` refers to `parent_name` or to a field nested
+inside of it. Every name is a child of itself and of the empty name `@name()`.
+"""
 is_child_name(
     ::FieldName{child_name_chain},
     ::FieldName{parent_name_chain},
@@ -91,12 +125,27 @@ extract_internal_name(
         unrolled_drop(child_name_chain, Val(length(parent_name_chain)))...,
     ) : error("$child_name is not a child name of $parent_name")
 
+"""
+    append_internal_name(name::FieldName, internal_name::FieldName)
+
+Return the `FieldName` whose name chain is the concatenation of the name chains
+of `name` and `internal_name`; e.g.,
+`append_internal_name(@name(a.b), @name(c)) == @name(a.b.c)`. This is the inverse
+of `extract_internal_name`.
+"""
 append_internal_name(
     ::FieldName{name_chain},
     ::FieldName{internal_name_chain},
 ) where {name_chain, internal_name_chain} =
     FieldName(name_chain..., internal_name_chain...)
 
+"""
+    top_level_names(x)
+
+Return a tuple of single-component `FieldName`s, one for each of the
+`propertynames` of `x`; e.g., `(@name(a), @name(b))` for a `NamedTuple` with keys
+`a` and `b`. The result is an empty tuple when `x` has no properties.
+"""
 top_level_names(x) = wrapped_prop_names(Val(propertynames(x)))
 wrapped_prop_names(::Val{()}) = ()
 wrapped_prop_names(::Val{prop_names}) where {prop_names} = (
@@ -104,6 +153,15 @@ wrapped_prop_names(::Val{prop_names}) where {prop_names} = (
     wrapped_prop_names(Val(Base.tail(prop_names)))...,
 )
 
+"""
+    filtered_names(f, x)
+
+Return a tuple of the `FieldName`s of all fields of `x` (including `x` itself,
+as `@name()`) for which `f(field)` is true, searching the properties of `x`
+recursively. The recursion stops at any field that satisfies `f`, so no returned
+name is a child of another, and fields without properties that do not satisfy
+`f` are omitted.
+"""
 filtered_names(f::F, x) where {F} = filtered_child_names(f, x, @name())
 function filtered_child_names(f::F, x, name) where {F}
     field = get_field(x, name)

@@ -69,8 +69,23 @@ local_geometry_type(::Type{MultiColumnFiniteDifferenceSpace{G, S}}) where {G, S}
 grid(space::MultiColumnFiniteDifferenceSpace) = getfield(space, :grid)
 staggering(space::MultiColumnFiniteDifferenceSpace) = getfield(space, :staggering)
 
+"""
+    FaceMultiColumnFiniteDifferenceSpace{G}
+
+Alias of [`Spaces.MultiColumnFiniteDifferenceSpace`](@ref) with
+[`Grids.CellFace`](@ref) staggering: `N` independent columns located at cell
+faces. `G` is the extruded multi-point grid type.
+"""
 const FaceMultiColumnFiniteDifferenceSpace{G} =
     MultiColumnFiniteDifferenceSpace{G, CellFace}
+
+"""
+    CenterMultiColumnFiniteDifferenceSpace{G}
+
+Alias of [`Spaces.MultiColumnFiniteDifferenceSpace`](@ref) with
+[`Grids.CellCenter`](@ref) staggering: `N` independent columns located at cell
+centers. `G` is the extruded multi-point grid type.
+"""
 const CenterMultiColumnFiniteDifferenceSpace{G} =
     MultiColumnFiniteDifferenceSpace{G, CellCenter}
 

@@ -49,17 +49,6 @@ DataLayouts.buffer_similar
 static_num_threads
 ```
 
-## Grids
-
-```@meta
-CurrentModule = ClimaCore.Grids
-```
-
-```@docs
-Grids.topology
-Grids.local_geometry_data
-```
-
 ## Geometry
 
 ```@meta
@@ -67,8 +56,24 @@ CurrentModule = ClimaCore.Geometry
 ```
 
 ```@docs
-Components
 bilinear_interpolate
+mul_with_projection
+mul_return_type
+```
+
+## Meshes
+
+```@meta
+CurrentModule = ClimaCore.Meshes
+```
+
+```@docs
+SharedVertices
+face_connectivity_matrix
+vertex_connectivity_matrix
+opposing_face
+is_boundary_face
+boundary_face_name
 ```
 
 ## Topologies
@@ -79,6 +84,43 @@ CurrentModule = ClimaCore.Topologies
 
 ```@docs
 GhostFaceExchange
+nsendelems
+nghostelems
+localelemindex
+face_node_index
+ghost_faces
+vertex_node_index
+ghost_vertices
+ghost_neighboring_elements
+dss_transform
+dss_transform!
+dss_untransform
+dss_untransform!
+```
+
+## Limiters
+
+```@meta
+CurrentModule = ClimaCore.Limiters
+```
+
+```@docs
+compute_element_bounds!
+compute_neighbor_bounds_local!
+compute_neighbor_bounds_ghost!
+apply_limit_slab!
+column_massborrow!
+```
+
+## Remapping
+
+```@meta
+CurrentModule = ClimaCore.Remapping
+```
+
+```@docs
+default_target_hcoords
+default_target_zcoords
 ```
 
 ## Utilities
@@ -89,6 +131,23 @@ CurrentModule = ClimaCore.Utilities
 
 ```@docs
 Utilities.@drop_recursion_limits
+stable_view
+unionall_type
+replace_type_parameter
+fieldtype_vals
+Utilities.new
+is_inferred_type
+return_type
+unsafe_eltype
+safe_eltype
+safe_mapreduce
+ConvertTo
+AutoBroadcaster
+is_auto_broadcastable
+add_auto_broadcasters
+drop_auto_broadcasters
+auto_broadcasted
+nested_broadcast
 ```
 
 ## MatrixFields
@@ -104,10 +163,6 @@ matrix_shape
 column_axes
 AbstractLazyOperator
 replace_lazy_operator
-FieldName
-@name
-FieldNameTree
-FieldNameSet
 is_lazy
 lazy_main_diagonal
 lazy_mul

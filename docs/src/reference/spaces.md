@@ -17,6 +17,7 @@ the horizontal, stacked over the cells of a staggered vertical grid.*
 
 ```@docs
 Spaces
+Spaces.AbstractSpace
 Spaces.Δz_data
 ```
 
@@ -30,14 +31,20 @@ mesh and derive the other from it with `Spaces.face_space` or
 twice.
 
 ```@docs
+Spaces.AbstractFiniteDifferenceSpace
 Spaces.FiniteDifferenceSpace
+Spaces.CenterFiniteDifferenceSpace
+Spaces.FaceFiniteDifferenceSpace
 ```
 
 ## Spectral Element Spaces
 
 ```@docs
+Spaces.AbstractSpectralElementSpace
 Spaces.SpectralElementSpace1D
 Spaces.SpectralElementSpace2D
+Spaces.RectilinearSpectralElementSpace2D
+Spaces.CubedSphereSpectralElementSpace2D
 Spaces.SpectralElementSpaceSlab
 ```
 
@@ -61,11 +68,24 @@ Spaces.node_horizontal_length_scale
 
 ```@docs
 Spaces.ExtrudedFiniteDifferenceSpace
+Spaces.ExtrudedFiniteDifferenceSpace2D
+Spaces.ExtrudedFiniteDifferenceSpace3D
+Spaces.CenterExtrudedFiniteDifferenceSpace
+Spaces.FaceExtrudedFiniteDifferenceSpace
+Spaces.CenterExtrudedFiniteDifferenceSpace2D
+Spaces.FaceExtrudedFiniteDifferenceSpace2D
+Spaces.CenterExtrudedFiniteDifferenceSpace3D
+Spaces.FaceExtrudedFiniteDifferenceSpace3D
+Spaces.ExtrudedSpectralElementSpace2D
+Spaces.ExtrudedSpectralElementSpace3D
+Spaces.ExtrudedRectilinearSpectralElementSpace3D
+Spaces.ExtrudedCubedSphereSpectralElementSpace3D
 ```
 
 ## Point Spaces
 
 ```@docs
+Spaces.AbstractPointSpace
 Spaces.PointSpace
 ```
 
@@ -74,6 +94,40 @@ Spaces.PointSpace
 ```@docs
 Spaces.MultiPointSpace
 Spaces.MultiColumnFiniteDifferenceSpace
+Spaces.CenterMultiColumnFiniteDifferenceSpace
+Spaces.FaceMultiColumnFiniteDifferenceSpace
+```
+
+## Accessors
+
+The grid behind a space and its parts. Accessors that a space forwards to its
+grid are documented on the [Grids](grids.md) page and are called with the
+`Grids` qualifier even when given a space: `Grids.topology(space)`,
+`Grids.quadrature_style(space)`, `Grids.global_geometry(space)`,
+`Grids.vertical_topology(space)`, `Grids.dss_weights(space)`,
+`Grids.set_mask!(space, …)`, `Grids.get_mask(space)`, `Grids.hypsography(space)`. Likewise
+`Domains.z_min(space)` and `Domains.z_max(space)`,
+`Meshes.n_elements_per_panel_direction(space)`,
+`Topologies.create_dss_buffer(field)` and `ClimaCore.level(space, i)`,
+`ClimaCore.column(space, i, j, h)`.
+
+```@docs
+Spaces.grid
+Spaces.staggering
+Spaces.horizontal_space
+Spaces.horizontal_grid
+Spaces.vertical_grid
+Spaces.center_space
+Spaces.face_space
+Spaces.has_horizontal
+Spaces.has_vertical
+Spaces.nlevels
+Spaces.ncolumns
+Spaces.undertype
+Spaces.coordinates_data
+Spaces.radius
+Spaces.issubspace
+Spaces.eachslabindex
 ```
 
 ## Utilities

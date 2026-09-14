@@ -1,3 +1,12 @@
+"""
+    AbstractSpectralElementSpace <: AbstractSpace
+
+Abstract supertype of horizontal spectral element spaces, in which each element
+carries a polynomial representation on quadrature nodes. Subtypes are
+[`Spaces.SpectralElementSpace1D`](@ref), [`Spaces.SpectralElementSpace2D`](@ref),
+and `SpectralElementSpaceSlab`; they have no staggering (`staggering(space)` is
+`nothing`) and are their own horizontal space.
+"""
 abstract type AbstractSpectralElementSpace <: AbstractSpace end
 
 Topologies.nlocalelems(space::AbstractSpectralElementSpace) =
@@ -309,12 +318,26 @@ function Base.iterate(
 end
 
 ## aliases
+"""
+    RectilinearSpectralElementSpace2D
+
+Alias of [`Spaces.SpectralElementSpace2D`](@ref) restricted to grids on a
+rectangular (plane) domain: a `Grids.RectilinearSpectralElementGrid2D`, or a
+level of a `Grids.ExtrudedRectilinearSpectralElementGrid3D`.
+"""
 const RectilinearSpectralElementSpace2D = SpectralElementSpace2D{
     <:Union{
         Grids.RectilinearSpectralElementGrid2D,
         Grids.LevelRectilinearSpectralElementGrid2D,
     },
 }
+"""
+    CubedSphereSpectralElementSpace2D
+
+Alias of [`Spaces.SpectralElementSpace2D`](@ref) restricted to grids on a
+cubed-sphere domain: a `Grids.CubedSphereSpectralElementGrid2D`, or a level of
+a `Grids.ExtrudedCubedSphereSpectralElementGrid3D`.
+"""
 const CubedSphereSpectralElementSpace2D = SpectralElementSpace2D{
     <:Union{
         Grids.CubedSphereSpectralElementGrid2D,

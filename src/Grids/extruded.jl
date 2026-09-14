@@ -158,6 +158,8 @@ local_geometry_data(grid::AbstractExtrudedFiniteDifferenceGrid, ::CellFace) =
 global_geometry(grid::AbstractExtrudedFiniteDifferenceGrid) =
     grid.global_geometry
 
+hypsography(grid::ExtrudedFiniteDifferenceGrid) = grid.hypsography
+
 quadrature_style(grid::ExtrudedFiniteDifferenceGrid) =
     quadrature_style(grid.horizontal_grid)
 

@@ -5,6 +5,7 @@ CurrentModule = ClimaCore
 ```
 
 ```@docs
+Grids.AbstractGrid
 Grids.CellFace
 Grids.CellCenter
 Grids.ColumnGrid
@@ -13,6 +14,23 @@ Grids.ExtrudedFiniteDifferenceGrid
 Grids.SpectralElementGrid1D
 Grids.SpectralElementGrid2D
 Grids.MultiPointGrid
+Grids.LevelGrid
+Grids.ColumnIndex
+```
+
+## Accessors
+
+These accept a grid or a space built on it.
+
+```@docs
+Grids.topology
+Grids.vertical_topology
+Grids.quadrature_style
+Grids.global_geometry
+Grids.local_geometry_data
+Grids.dss_weights
+Grids.get_mask
+Grids.set_mask!
 ```
 
 ## Discretization
@@ -33,4 +51,5 @@ Grids.is_continuous
 
 ```@docs
 Grids.Flat
+Grids.hypsography
 ```

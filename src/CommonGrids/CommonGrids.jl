@@ -85,8 +85,38 @@ import ..DataLayouts,
 
 include("Helpers.jl")
 import .Helpers.DefaultSliceXMesh
-import .Helpers.DefaultZMesh
 import .Helpers.DefaultRectangleXYMesh
+
+"""
+    DefaultZMesh(; kwargs...)
+    DefaultZMesh(
+        ::Type{FT};
+        z_min::Real,
+        z_max::Real,
+        z_elem::Integer,
+        stretch::Meshes.StretchingRule = Meshes.Uniform(),
+    )
+
+Build the vertical `Meshes.IntervalMesh` used by the extruded grids.
+
+The float type `FT` defaults to `Float64`. The boundaries are named `:bottom` and `:top`.
+"""
+DefaultZMesh(; kwargs...) = DefaultZMesh(Float64; kwargs...)
+function DefaultZMesh(
+    ::Type{FT};
+    z_min::Real,
+    z_max::Real,
+    z_elem::Integer,
+    stretch::Meshes.StretchingRule = Meshes.Uniform(),
+) where {FT}
+    z_boundary_names = (:bottom, :top)
+    z_domain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(z_min),
+        Geometry.ZPoint{FT}(z_max);
+        boundary_names = z_boundary_names,
+    )
+    return Meshes.IntervalMesh(z_domain, stretch; nelems = z_elem)
+end
 
 #####
 ##### Grids

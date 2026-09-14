@@ -1,3 +1,9 @@
+"""
+    AbstractFiniteDifferenceSpace <: AbstractSpace
+
+Abstract supertype of one-dimensional, vertically staggered finite difference
+spaces. The concrete subtype is [`Spaces.FiniteDifferenceSpace`](@ref).
+"""
 abstract type AbstractFiniteDifferenceSpace <: AbstractSpace end
 
 """
@@ -24,7 +30,22 @@ FiniteDifferenceSpace(
 local_geometry_type(::Type{FiniteDifferenceSpace{G, S}}) where {G, S} =
     local_geometry_type(G)
 
+"""
+    FaceFiniteDifferenceSpace{G}
+
+Alias of [`Spaces.FiniteDifferenceSpace`](@ref) with [`Grids.CellFace`](@ref)
+staggering: a one-dimensional space located at cell faces. `G` is the finite
+difference grid type.
+"""
 const FaceFiniteDifferenceSpace{G} = FiniteDifferenceSpace{G, CellFace}
+
+"""
+    CenterFiniteDifferenceSpace{G}
+
+Alias of [`Spaces.FiniteDifferenceSpace`](@ref) with [`Grids.CellCenter`](@ref)
+staggering: a one-dimensional space located at cell centers. `G` is the finite
+difference grid type.
+"""
 const CenterFiniteDifferenceSpace{G} = FiniteDifferenceSpace{G, CellCenter}
 
 grid(space::AbstractFiniteDifferenceSpace) = getfield(space, :grid)
