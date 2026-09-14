@@ -455,7 +455,7 @@ function alloc_test_nested_expressions_13(
                 fψ
         end
         #! format: on
-        @test p_i == 0 broken = USING_CUDA
+        @test_broken p_i == 0
     end
 end
 
