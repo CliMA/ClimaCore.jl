@@ -28,7 +28,7 @@ Construct a `FiniteDifferenceGrid` from an `IntervalTopology`, or from an
 The grid stores the topology, the global geometry, and the local geometry at cell
 centers and cell faces. Construction is memoized in `Cache.OBJECT_CACHE`.
 """
-mutable struct FiniteDifferenceGrid{
+struct FiniteDifferenceGrid{
     T <: Topologies.AbstractIntervalTopology,
     GG,
     CLG,
@@ -172,25 +172,3 @@ local_geometry_data(grid::FiniteDifferenceGrid, ::CellCenter) =
 local_geometry_data(grid::FiniteDifferenceGrid, ::CellFace) =
     grid.face_local_geometry
 global_geometry(grid::FiniteDifferenceGrid) = grid.global_geometry
-
-## GPU compatibility
-struct DeviceFiniteDifferenceGrid{T, GG, CLG, FLG} <:
-       AbstractFiniteDifferenceGrid
-    topology::T
-    global_geometry::GG
-    center_local_geometry::CLG
-    face_local_geometry::FLG
-end
-
-local_geometry_type(
-    ::Type{DeviceFiniteDifferenceGrid{T, GG, CLG, FLG}},
-) where {T, GG, CLG, FLG} = eltype(CLG) # calls eltype from DataLayouts
-
-topology(grid::DeviceFiniteDifferenceGrid) = grid.topology
-vertical_topology(grid::DeviceFiniteDifferenceGrid) = grid.topology
-
-local_geometry_data(grid::DeviceFiniteDifferenceGrid, ::CellCenter) =
-    grid.center_local_geometry
-local_geometry_data(grid::DeviceFiniteDifferenceGrid, ::CellFace) =
-    grid.face_local_geometry
-global_geometry(grid::DeviceFiniteDifferenceGrid) = grid.global_geometry

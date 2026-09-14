@@ -17,7 +17,7 @@ Sequential topology on a [`Meshes.IntervalMesh`](@ref). Only a
 """
 struct IntervalTopology{
     C <: ClimaComms.AbstractCommsContext,
-    M <: Meshes.IntervalMesh,
+    M <: Union{Meshes.IntervalMesh, Nothing},
     B,
 } <: AbstractIntervalTopology
     context::C
@@ -26,14 +26,6 @@ struct IntervalTopology{
 end
 
 Adapt.@adapt_structure IntervalTopology
-
-## gpu
-struct DeviceIntervalTopology{B} <: AbstractIntervalTopology
-    boundaries::B
-end
-
-ClimaComms.context(topology::DeviceIntervalTopology) = DeviceSideContext()
-ClimaComms.device(topology::DeviceIntervalTopology) = DeviceSideDevice()
 
 function IntervalTopology(
     context::ClimaComms.AbstractCommsContext,

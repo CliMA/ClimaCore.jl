@@ -59,8 +59,14 @@ function vertical_topology end
 
 
 
-ClimaComms.context(grid::AbstractGrid) = ClimaComms.context(topology(grid))
-ClimaComms.device(grid::AbstractGrid) = ClimaComms.device(topology(grid))
+# The topology may be `nothing` in a kernel (see `ext/cuda/adapt.jl`), in which
+# case the grid is on the device side.
+ClimaComms.context(grid::AbstractGrid) =
+    isnothing(topology(grid)) ? DeviceSideContext() :
+    ClimaComms.context(topology(grid))
+ClimaComms.device(grid::AbstractGrid) =
+    isnothing(topology(grid)) ? DeviceSideDevice() :
+    ClimaComms.device(topology(grid))
 
 Meshes.domain(grid::AbstractGrid) = Meshes.domain(topology(grid))
 
@@ -99,7 +105,6 @@ Return `true` if the grid has a horizontal part.
 function has_horizontal end
 has_horizontal(::AbstractGrid) = false
 has_horizontal(::ExtrudedFiniteDifferenceGrid) = true
-has_horizontal(::DeviceSpectralElementGrid2D) = true
 has_horizontal(::SpectralElementGrid2D) = true
 has_horizontal(::SpectralElementGrid1D) = true
 has_horizontal(::MultiPointGrid) = true
