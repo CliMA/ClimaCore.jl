@@ -4,6 +4,16 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-🐛bugfix] `Geometry.mul_return_type` promotes the storage type of a
+  `Number * Tensor` (and `Tensor * Number`) product along with its element type,
+  so that the return type is the one `*` produces. Previously a `Float` tensor
+  times a `Dual` scalar reported `Dual` elements with `Float` storage, and a
+  broadcast that had to be materialized into an intermediate field — for
+  example `WVector(∇ᵥ(I(θ))).components.data.:1` over a `Dual`-valued `θ`, where
+  the composed stencil becomes a band-matrix product with `Float` coefficients —
+  allocated that intermediate with the `Float` element type and then failed to
+  write the `Dual` values into it.
+
 - The device-side grid types
   `Grids.DeviceFiniteDifferenceGrid`, `Grids.DeviceExtrudedFiniteDifferenceGrid`,
   `Grids.DeviceSpectralElementGrid1D`, `Grids.DeviceSpectralElementGrid2D` and

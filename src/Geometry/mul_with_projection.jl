@@ -115,16 +115,23 @@ mul_return_type(::Type{X}, ::Type{Y}) where {X <: Number, Y <: Number} =
     promote_type(X, Y)
 
 # Number * Tensor = Tensor (same bases, promoted element type)
-# For covectors (component storage is Adjoint), preserve the exact type rather
-# than reconstructing via tensor_type (which would use SMatrix instead of Adjoint).
+# The storage type is promoted along with the element type: `*` builds the result
+# from `components * a`, so a `Float64` tensor times a `Dual` has `Dual` storage.
+promote_storage_type(::Type{C}, ::Type{T}) where {C <: StaticArray, T} =
+    similar_type(C, T)
+promote_storage_type(
+    ::Type{<:Adjoint{<:Any, S}}, ::Type{T},
+) where {S <: StaticArray, T} = Adjoint{T, similar_type(S, T)}
 mul_return_type(
     ::Type{X}, ::Type{Y},
-) where {T, B, C, X <: Number, Y <: Tensor{<:Any, T, B, C}} =
-    Tensor{ndims(Y), promote_type(X, T), B, C}
+) where {T, B, C, X <: Number, Y <: Tensor{<:Any, T, B, C}} = Tensor{
+    ndims(Y), promote_type(X, T), B, promote_storage_type(C, promote_type(X, T)),
+}
 mul_return_type(
     ::Type{X}, ::Type{Y},
-) where {T, B, C, X <: Tensor{<:Any, T, B, C}, Y <: Number} =
-    Tensor{ndims(X), promote_type(T, Y), B, C}
+) where {T, B, C, X <: Tensor{<:Any, T, B, C}, Y <: Number} = Tensor{
+    ndims(X), promote_type(T, Y), B, promote_storage_type(C, promote_type(T, Y)),
+}
 
 # Covector * Vector = scalar (dot product)
 mul_return_type(
