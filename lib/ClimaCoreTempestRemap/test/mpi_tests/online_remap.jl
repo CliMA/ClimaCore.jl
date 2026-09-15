@@ -4,9 +4,9 @@ using ClimaComms
 using ClimaCore:
     Geometry, Meshes, Domains, Topologies, Spaces, Fields, Quadratures
 using Test
-# use these packages for manual inspection of solutions
+# use this package for manual inspection of solutions (it loads ClimaCore's
+# ClimaCoreRecipesBaseExt extension, which defines the Field plot recipes)
 # using Plots
-# using ClimaCorePlots
 
 @testset "distributed online remapping" begin
     # general setup

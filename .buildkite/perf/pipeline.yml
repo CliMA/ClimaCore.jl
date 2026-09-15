@@ -25,11 +25,7 @@ steps:
       - echo "--- Instantiate AMIP env"
       # Instantiate and dev install ClimaCore
       - julia --project=$COUPLER_PATH/experiments/AMIP/ -e 'using Pkg; Pkg.Registry.update(); Pkg.instantiate(;verbose=true)'
-      - julia --project=$COUPLER_PATH/experiments/AMIP/ -e 'using Pkg;
-        Pkg.develop([
-          PackageSpec(path="."),
-          PackageSpec(path="lib/ClimaCoreMakie"),
-        ])'
+      - julia --project=$COUPLER_PATH/experiments/AMIP/ -e 'using Pkg; Pkg.develop(PackageSpec(path="."))'
       - julia --project=$COUPLER_PATH/experiments/AMIP/ -e 'using Pkg; Pkg.add("MPI")'
       - julia --project=$COUPLER_PATH/experiments/AMIP/ -e 'using Pkg; Pkg.precompile()'
       - julia --project=$COUPLER_PATH/experiments/AMIP/ -e 'using Pkg; Pkg.status()'
