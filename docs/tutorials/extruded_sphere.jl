@@ -15,7 +15,7 @@ import ClimaCore
 import ClimaCore:
     Domains, Meshes, Topologies, Quadratures, Spaces, Fields, Geometry, Operators, Remapping
 import ClimaCore.MatrixFields
-import ClimaCore.MatrixFields: @name, ⋅
+import ClimaCore.MatrixFields: @name
 import ClimaTimeSteppers as CTS
 using CairoMakie
 CairoMakie.activate!(type = "png")
@@ -114,7 +114,7 @@ gradᵥ_matrix = MatrixFields.operator_matrix(gradᵥ)
 
 function Wfact(W, Y, p, dtγ, t)
     @. W.matrix[@name(φ), @name(φ)] =
-        dtγ * κ * divᵥ_matrix() ⋅ gradᵥ_matrix() - (LinearAlgebra.I,)
+        dtγ * κ * divᵥ_matrix() * gradᵥ_matrix() - (LinearAlgebra.I,)
     return nothing
 end
 

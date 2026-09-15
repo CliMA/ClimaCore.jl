@@ -28,8 +28,7 @@ MultiplyColumnwiseBandMatrixField
 ```
 
 Broadcasted `*` between matrix fields is rewritten to this operator, so
-`@. C = A * B` is the public form. The exported `⋅` is the same operator, kept for
-existing callers and not part of the public API.
+`@. C = A * B` is the public form.
 
 ## Operator Matrices
 
