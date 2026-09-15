@@ -48,7 +48,7 @@ and what is opt-in.
 | `:conv`      | `conv_`       | Convergence tests. Run the code at several resolutions to verify a theoretical convergence rate. |
 | `:smoke`     | `smoke_`      | Short end-to-end integrations (a few steps of a real driver) that assert conservation / error bounds. |
 | `:gpu`       | `gpu_`        | GPU-only tests (CPU-vs-GPU comparison, CUDA kernels). Skipped unless a CUDA device is present. Files under `test/gpu/` need no prefix. |
-| `:misc`      | —             | Quality gates that don't fit above (Aqua, deprecations).                   |
+| `:misc`      | —             | Quality gates that don't fit above (Aqua, precompile workload).                   |
 
 ## Cost
 
