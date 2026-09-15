@@ -2,7 +2,6 @@ using Test
 import Random
 import ClimaComms
 import ClimaCore: DataLayouts, Geometry
-import ClimaCore.RecursiveApply: ⊞
 ClimaComms.@import_required_backends
 Random.seed!(1234)
 
@@ -34,6 +33,13 @@ function testable_layouts(A, T)
     end
 end
 
+# The values of a layout's parent array, bitcast to the layout's `eltype` as it appears
+# in broadcasts, where composite values are wrapped in `AutoBroadcaster`s. The wrappers
+# make `+` map over the components of a composite value; since `==` maps over them as
+# well, the values below are compared with `===`.
+data_converter(data) =
+    array -> DataLayouts.bitcast_struct.(eltype(Base.broadcastable(data)), array)
+
 # Compare a filled layout against the value at the first point of another
 # layout, using copies on the CPU (reading device data directly would require
 # scalar indexing of GPU arrays) and single-point views at every index (the
@@ -43,29 +49,29 @@ function test_filled_with_first_point(to_data, data, rand_data)
     cpu_data = DataLayouts.rebuild(data, Array)
     cpu_first_point = to_data(parent(view(DataLayouts.rebuild(rand_data, Array), 1)))
     return all(eachindex(cpu_data)) do index
-        to_data(parent(view(cpu_data, index))) == cpu_first_point
+        all(to_data(parent(view(cpu_data, index))) .=== cpu_first_point)
     end
 end
 
 function test_single_F!(data)
     rand_data = similar(data)
     Random.rand!(parent(rand_data))
-    to_data(array) = DataLayouts.bitcast_struct.(eltype(data), array)
+    to_data = data_converter(data)
 
     Base.fill!(data, first(DataLayouts.rebuild(rand_data, Array)))
     @test test_filled_with_first_point(to_data, data, rand_data)
 
     Base.copyto!(data, rand_data)
-    @test all(to_data(parent(data)) .== to_data(parent(rand_data)))
+    @test all(to_data(parent(data)) .=== to_data(parent(rand_data)))
 
     Base.copyto!(data, Base.Broadcast.broadcasted(+, rand_data, 0x1))
-    @test all(to_data(parent(data)) .== to_data(parent(rand_data)) .⊞ 0x1)
+    @test all(to_data(parent(data)) .=== to_data(parent(rand_data)) .+ 0x1)
 end
 
 function test_multiple_F!(data)
     rand_data = similar(data)
     Random.rand!(parent(rand_data))
-    to_data(array) = DataLayouts.bitcast_struct.(eltype(data.:1), array)
+    to_data = data_converter(data.:1)
 
     Base.fill!(data, first(DataLayouts.rebuild(rand_data, Array)))
     @test test_filled_with_first_point(to_data, data.:1, rand_data.:1)
@@ -73,12 +79,12 @@ function test_multiple_F!(data)
     # We do not need to convert the second component, since it has no padding.
 
     Base.copyto!(data, rand_data)
-    @test all(to_data(parent(data.:1)) .== to_data(parent(rand_data.:1)))
+    @test all(to_data(parent(data.:1)) .=== to_data(parent(rand_data.:1)))
     @test all(parent(data.:2) .== parent(rand_data.:2))
     # As in the previous test, we do not need to convert the second component.
 
     Base.copyto!(data, Base.Broadcast.broadcasted(+, rand_data, 0x1))
-    @test all(to_data(parent(data.:1)) .== to_data(parent(rand_data.:1)) .⊞ 0x1)
+    @test all(to_data(parent(data.:1)) .=== to_data(parent(rand_data.:1)) .+ 0x1)
     # Do not test the second component, since it spans multiple array indices.
 end
 

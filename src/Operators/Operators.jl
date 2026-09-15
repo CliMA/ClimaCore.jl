@@ -12,7 +12,6 @@ import ..Utilities:
     Cache,
     new,
     unwrap,
-    half,
     is_auto_broadcastable,
     add_auto_broadcasters,
     drop_auto_broadcasters

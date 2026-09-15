@@ -26,13 +26,15 @@ main
   - The mesh-only constructors `IntervalTopology(mesh)`, `FiniteDifferenceGrid(mesh)`,
     `CenterFiniteDifferenceSpace(mesh)` and `FaceFiniteDifferenceSpace(mesh)` deprecated
     in v0.14.10 -> the two-argument forms taking a `ClimaComms.AbstractDevice` first.
+  - The `RecursiveApply` module, a compatibility layer over the `AutoBroadcaster`
+    wrappers since v0.14.52 -> `Utilities.add_auto_broadcasters` /
+    `drop_auto_broadcasters`.
 
   The remaining deprecated names are kept but are no longer exported or documented:
-  `MatrixFields.⋅` (use `*`, which has denoted matrix multiplication since v0.14.27),
-  `Geometry.components(::AbstractTensor)` (use `parent`), and the `RecursiveApply`
-  module (use `Utilities.add_auto_broadcasters`/`drop_auto_broadcasters`). These are
-  now considered internals, and will be deleted in the future. They are only kept so
-  JET tests will still pass.
+  `MatrixFields.⋅` (use `*`, which has denoted matrix multiplication since v0.14.27) and
+  `Geometry.components(::AbstractTensor)` (use `parent`). These are now considered
+  internals, and will be deleted in the future. They are only kept so JET tests will
+  still pass.
 
 - The device-side grid types
   `Grids.DeviceFiniteDifferenceGrid`, `Grids.DeviceExtrudedFiniteDifferenceGrid`,

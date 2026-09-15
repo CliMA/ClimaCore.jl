@@ -1,5 +1,5 @@
-import ClimaCore.Remapping: interpolate_slab!
-import ClimaCore: Topologies, Spaces, Fields, Operators, Quadratures
+import ClimaCore.Remapping: interpolate_slab!, level_index
+import ClimaCore: Topologies, Spaces, Fields, Quadratures
 import ClimaComms
 import CUDA
 
@@ -60,15 +60,13 @@ function interpolate_slab_kernel!(
     @inbounds begin
         I1, I2 = weights[index]
         Nq1, Nq2 = length(I1), length(I2)
+        (; v, h) = slab_indices[index]
+        vidx = level_index(space, v)
 
         val = zero(FT)
 
         for j in 1:Nq2, i in 1:Nq1
-            ij = CartesianIndex((i, j))
-            val +=
-                I1[i] *
-                I2[j] *
-                Operators.get_node(space, field, ij, slab_indices[index])
+            val += I1[i] * I2[j] * field[vidx, i, j, h]
         end
         output_array[index] = val
     end
@@ -90,14 +88,13 @@ function interpolate_slab_kernel!(
         FT = Spaces.undertype(space)
         I1, = weights[index]
         Nq = length(I1)
+        (; v, h) = slab_indices[index]
+        vidx = level_index(space, v)
 
         val = zero(FT)
 
         for i in 1:Nq
-            ij = CartesianIndex((i))
-            val +=
-                I1[i] *
-                Operators.get_node(space, field, ij, slab_indices[index])
+            val += I1[i] * field[vidx, i, 1, h]
         end
         output_array[index] = val
     end
@@ -194,6 +191,8 @@ function interpolate_slab_level_kernel!(
         Nq = Quadratures.degrees_of_freedom(quad)
         is_bilinear = (Nq1 == 2 && Nq2 == 2)
         v_lo, v_hi, ξ3 = vidx_ref_coordinates[index]
+        vidx_lo = level_index(space, v_lo)
+        vidx_hi = level_index(space, v_hi)
 
         f_lo = zero(FT)
         f_hi = zero(FT)
@@ -202,15 +201,8 @@ function interpolate_slab_level_kernel!(
             # Bilinear: map stencil index 1,2 → node index 1,Nq; else use index as-is
             ii = is_bilinear ? (1 + (i - 1) * (Nq - 1)) : i
             jj = is_bilinear ? (1 + (j - 1) * (Nq - 1)) : j
-            ij = CartesianIndex((ii, jj))
-            f_lo +=
-                I1[i] *
-                I2[j] *
-                Operators.get_node(space, field, ij, Fields.SlabIndex(v_lo, h))
-            f_hi +=
-                I1[i] *
-                I2[j] *
-                Operators.get_node(space, field, ij, Fields.SlabIndex(v_hi, h))
+            f_lo += I1[i] * I2[j] * field[vidx_lo, ii, jj, h]
+            f_hi += I1[i] * I2[j] * field[vidx_hi, ii, jj, h]
         end
         output_array[index] = ((1 - ξ3) * f_lo + (1 + ξ3) * f_hi) / 2
     end
@@ -237,6 +229,8 @@ function interpolate_slab_level_kernel!(
         # When Nq1==2 we have a 2-point (linear) bilinear stencil: map stencil index 1,2 → node 1,Nq
         is_bilinear = (Nq1 == 2)
         v_lo, v_hi, ξ3 = vidx_ref_coordinates[index]
+        vidx_lo = level_index(space, v_lo)
+        vidx_hi = level_index(space, v_hi)
 
         f_lo = zero(FT)
         f_hi = zero(FT)
@@ -244,13 +238,8 @@ function interpolate_slab_level_kernel!(
         for i in 1:Nq1
             # Bilinear: map stencil index 1,2 → node index 1,Nq; else use index as-is
             ii = is_bilinear ? (1 + (i - 1) * (Nq - 1)) : i
-            ij = CartesianIndex((ii,))
-            f_lo +=
-                I1[i] *
-                Operators.get_node(space, field, ij, Fields.SlabIndex(v_lo, h))
-            f_hi +=
-                I1[i] *
-                Operators.get_node(space, field, ij, Fields.SlabIndex(v_hi, h))
+            f_lo += I1[i] * field[vidx_lo, ii, 1, h]
+            f_hi += I1[i] * field[vidx_hi, ii, 1, h]
         end
 
         output_array[index] = ((1 - ξ3) * f_lo + (1 + ξ3) * f_hi) / 2

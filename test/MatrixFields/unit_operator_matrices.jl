@@ -1,6 +1,5 @@
 import LinearAlgebra: I
 
-import ClimaCore.RecursiveApply: rzero
 import ClimaCore
 import ClimaCore.Operators:
     SetValue,
@@ -50,9 +49,11 @@ function test_op_matrix(
 ) where {Op, BC}
     FT = Spaces.undertype(axes(args[end]))
 
-    # Use zeroed-out boundary conditions to avoid affine operator warnings.
+    # Use zeroed-out boundary conditions to avoid affine operator warnings. The
+    # `eltype` of a broadcastable field wraps composite values in `AutoBroadcaster`s,
+    # so `zero` maps over their components.
     op_bc = if BC <: SetValue
-        BC(rzero(eltype(args[end])))
+        BC(zero(eltype(Base.broadcastable(args[end]))))
     elseif BC <: SetGradient
         BC(zero(Geometry.Covariant3Vector{FT}))
     elseif BC <: SetDivergence
@@ -77,9 +78,8 @@ function test_op_matrix(
     # This boundary condition doesn't matter, since it's applied after the
     # operator. It is zeroed out for simplicity, but it does not need to be.
     boundary_op = if requires_boundary_values
-        boundary_op_bc = SetValue(
-            rzero(eltype(Base.Broadcast.broadcasted(op, args...))),
-        )
+        boundary_op_bc =
+            SetValue(zero(eltype(Base.Broadcast.broadcasted(op, args...))))
         SetBoundaryOperator(; bottom = boundary_op_bc, top = boundary_op_bc)
     else
         nothing
@@ -387,7 +387,7 @@ end
     c12_a = rand(Geometry.Covariant12Vector{FT})
     c12_b = rand(Geometry.Covariant12Vector{FT})
 
-    nested_zero = rzero(NestedType{FT})
+    nested_zero = zero(eltype(Base.broadcastable(ᶜnested)))
     set_nested_values =
         (; bottom = SetValue(nested_zero), top = SetValue(nested_zero))
     c3_zero = zero(Geometry.Covariant3Vector{FT})
