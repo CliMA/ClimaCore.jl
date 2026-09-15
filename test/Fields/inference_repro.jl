@@ -2,7 +2,7 @@
 # To reproduce, run this script on GPU
 import ClimaComms
 ClimaComms.@import_required_backends
-import ClimaCore: Fields, Domains, Geometry, Meshes, Spaces
+import ClimaCore: Fields, Domains, Geometry, Meshes, Topologies, Spaces
 
 macro ConstantValue(T)
     quote
@@ -44,7 +44,8 @@ function make_space(
         boundary_names = boundary_names,
     )
     mesh = Meshes.IntervalMesh(column; nelems = nelements)
-    subsurface_space = Spaces.CenterFiniteDifferenceSpace(mesh)
+    topology = Topologies.IntervalTopology(ClimaComms.device(), mesh)
+    subsurface_space = Spaces.CenterFiniteDifferenceSpace(topology)
     return subsurface_space
 end
 

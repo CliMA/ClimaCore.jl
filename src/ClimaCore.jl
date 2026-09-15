@@ -28,7 +28,6 @@ include("CommonSpaces/CommonSpaces.jl")
 include("Remapping/Remapping.jl")
 include("Visualize/Visualize.jl")
 
-include("deprecated.jl")
 include("to_device.jl")
 include("precompile_workload.jl")
 

@@ -183,9 +183,8 @@ unit_tests = [
     UnitTest("Integration - Solid-body rotation 3D"     ,"Integration/smoke_solid_body_rotation.jl"; meta = :cpu_only, tier = :smoke, subsystem = :integration),
     UnitTest("Integration - column FCT/van Leer advection", "Integration/smoke_column_advection.jl"; meta = :cpu_only, tier = :smoke, subsystem = :limiters),
 
-    # Quality & Deprecations
+    # Quality
     UnitTest("Aqua"                                     ,"aqua.jl"; tier = :misc, subsystem = :quality),
-    UnitTest("Deprecations"                             ,"deprecations.jl"; tier = :misc, subsystem = :quality),
     UnitTest("Precompile workload"                      ,"precompile_workload.jl"; tier = :misc, subsystem = :quality, slow = true), # ~1 min: recompiles ClimaCore in a subprocess
 
     # Visualization

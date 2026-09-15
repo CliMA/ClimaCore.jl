@@ -23,10 +23,9 @@ main
   - The point-cloud names deprecated in v0.16.0 (`PointCloudGrid`, `PointCloudSpace`,
     `ExtrudedPointCloudGrid`, `PointColumnEnsembleGrid`, `PointColumnEnsembleSpace`)
     -> their `MultiPoint*`/`MultiColumn*` equivalents.
-  - The mesh-only constructors `IntervalTopology(mesh)`, `FiniteDifferenceGrid(mesh)`
-    and `FaceFiniteDifferenceSpace(mesh)` deprecated in v0.14.10 -> the two-argument
-    forms taking a `ClimaComms.AbstractDevice` first. `CenterFiniteDifferenceSpace(mesh)`
-    is still defined, with a deprecation warning.
+  - The mesh-only constructors `IntervalTopology(mesh)`, `FiniteDifferenceGrid(mesh)`,
+    `CenterFiniteDifferenceSpace(mesh)` and `FaceFiniteDifferenceSpace(mesh)` deprecated
+    in v0.14.10 -> the two-argument forms taking a `ClimaComms.AbstractDevice` first.
 
   The remaining deprecated names are kept but are no longer exported or documented:
   `MatrixFields.⋅` (use `*`, which has denoted matrix multiplication since v0.14.27),
