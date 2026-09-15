@@ -16,7 +16,7 @@ import ..DataLayouts,
     ..Quadratures,
     ..Fields,
     ..Hypsography
-import ClimaCore.Utilities: half
+import ClimaCore.Utilities: PlusHalf, half
 import ClimaCore.Spaces: cuda_synchronize
 
 include("remapping_utils.jl")
