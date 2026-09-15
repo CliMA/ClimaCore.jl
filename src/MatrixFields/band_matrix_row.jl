@@ -26,10 +26,58 @@ BandMatrixRow{ld}(entries::Vararg{Any, bw}) where {ld, bw} =
 BandMatrixRow{ld, bw}(entries::Vararg{Any, bw}) where {ld, bw} =
     BandMatrixRow{ld, bw, promote_type(map(typeof, entries)...)}(entries)
 
+"""
+    DiagonalMatrixRow{T}
+    DiagonalMatrixRow(entry)
+
+Alias for `BandMatrixRow{0, 1, T}`: a row of a [`BandMatrixRow`](@ref) matrix
+field with a single entry on the main diagonal (index `0`). Fields of
+`DiagonalMatrixRow`s represent diagonal matrices, and a `DiagonalMatrixRow` can
+also appear directly as a scaling entry of a `FieldMatrix`.
+"""
 const DiagonalMatrixRow{T} = BandMatrixRow{0, 1, T}
+
+"""
+    BidiagonalMatrixRow{T}
+    BidiagonalMatrixRow(entry_1, entry_2)
+
+Alias for `BandMatrixRow{-1 + half, 2, T}`: a row of a [`BandMatrixRow`](@ref) matrix
+field with entries on the diagonals `-1/2` and `+1/2`. This is the row type of
+matrices that map between cell centers and cell faces, e.g. the matrices of
+two-point interpolation and difference operators.
+"""
 const BidiagonalMatrixRow{T} = BandMatrixRow{-1 + half, 2, T}
+
+"""
+    TridiagonalMatrixRow{T}
+    TridiagonalMatrixRow(entry_1, entry_2, entry_3)
+
+Alias for `BandMatrixRow{-1, 3, T}`: a row of a [`BandMatrixRow`](@ref) matrix
+field with entries on the diagonals `-1`, `0`, and `+1`. This is the row type of
+square (center-to-center or face-to-face) matrices with a three-point stencil.
+"""
 const TridiagonalMatrixRow{T} = BandMatrixRow{-1, 3, T}
+
+"""
+    QuaddiagonalMatrixRow{T}
+    QuaddiagonalMatrixRow(entry_1, entry_2, entry_3, entry_4)
+
+Alias for `BandMatrixRow{-2 + half, 4, T}`: a row of a [`BandMatrixRow`](@ref)
+matrix field with entries on the diagonals `-3/2`, `-1/2`, `+1/2`, and `+3/2`.
+This is the row type of center-to-face or face-to-center matrices with a
+four-point stencil, e.g. the matrices of third-order upwinding operators.
+"""
 const QuaddiagonalMatrixRow{T} = BandMatrixRow{-2 + half, 4, T}
+
+"""
+    PentadiagonalMatrixRow{T}
+    PentadiagonalMatrixRow(entry_1, entry_2, entry_3, entry_4, entry_5)
+
+Alias for `BandMatrixRow{-2, 5, T}`: a row of a [`BandMatrixRow`](@ref) matrix
+field with entries on the diagonals `-2`, `-1`, `0`, `+1`, and `+2`. This is the
+row type of square matrices with a five-point stencil, e.g. the product of two
+`BidiagonalMatrixRow` matrices and a `TridiagonalMatrixRow` matrix.
+"""
 const PentadiagonalMatrixRow{T} = BandMatrixRow{-2, 5, T}
 
 """

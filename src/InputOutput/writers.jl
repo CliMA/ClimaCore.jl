@@ -763,7 +763,7 @@ function write!(
 )
     group = create_group(writer.file, "fields/$name")
     write_attribute(group, "type", "FieldVector")
-    for (key, component) in pairs(Fields._values(fieldvector))
+    for (key, component) in pairs(Fields.field_vector_values(fieldvector))
         write!(writer, component, "$name/$key")
     end
     return name

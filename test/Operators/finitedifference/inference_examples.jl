@@ -111,7 +111,7 @@ function alloc_test_derivative(cfield, ffield, ∇c, ∇f)
     p = @allocated begin
         c∇closure()
     end
-    @test p ≤ 8208 broken = USING_CUDA
+    @test p ≤ 8208
 
     ##### C2F
     # wvec = Geometry.WVector # cannot re-define, otherwise many allocations
@@ -181,7 +181,7 @@ function alloc_test_operators_in_loops(cfield, ffield)
         p = @allocated begin
             c∇closure()
         end
-        @test p ≤ 8208 broken = USING_CUDA
+        @test p ≤ 8208
     end
 end
 function alloc_test_nested_expressions_1(cfield, ffield)

@@ -14,30 +14,22 @@ Topologies.AbstractTopology
 Topologies.IntervalTopology
 Topologies.Topology2D
 Topologies.spacefillingcurve
-Topologies.nelems
-Topologies.nneighbors
-Topologies.nsendelems
-Topologies.nghostelems
-Topologies.localelemindex
-Topologies.face_node_index
-Topologies.ghost_faces
-Topologies.vertex_node_index
-Topologies.local_vertices
-Topologies.ghost_vertices
-Topologies.neighbors
 ```
 
 ## Interfaces
 
 ```@docs
 Topologies.mesh
+Topologies.nelems
 Topologies.nlocalelems
+Topologies.nneighbors
+Topologies.neighbors
 Topologies.vertex_coordinates
+Topologies.local_vertices
 Topologies.opposing_face
 Topologies.interior_faces
 Topologies.boundary_tags
 Topologies.boundary_tag
 Topologies.boundary_faces
 Topologies.local_neighboring_elements
-Topologies.ghost_neighboring_elements
 ```

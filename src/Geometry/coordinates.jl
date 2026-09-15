@@ -25,8 +25,29 @@ Return the floating point type backing `T`: `T` can either be an object or a typ
 float_type(::Type{<:AbstractPoint{FT}}) where {FT} = FT
 float_type(::AbstractPoint{FT}) where {FT} = FT
 
+"""
+    Abstract1DPoint{FT}
+
+Supertype for points with a single coordinate of float type `FT`: `XPoint`, `YPoint`,
+`ZPoint`, `PPoint`, `LatPoint`, `LongPoint`, `Cartesian1Point`, `Cartesian2Point`, and
+`Cartesian3Point`. 1D points support `tofloat`, ordering with `isless`, and `LinRange`s.
+"""
 abstract type Abstract1DPoint{FT} <: AbstractPoint{FT} end
+
+"""
+    Abstract2DPoint{FT}
+
+Supertype for points with two coordinates of float type `FT`: `XYPoint`, `XZPoint`,
+`YZPoint`, `LatLongPoint`, `Cartesian12Point`, and `Cartesian13Point`.
+"""
 abstract type Abstract2DPoint{FT} <: AbstractPoint{FT} end
+
+"""
+    Abstract3DPoint{FT}
+
+Supertype for points with three coordinates of float type `FT`: `XYZPoint`,
+`LatLongZPoint`, `LatLongPPoint`, and `Cartesian123Point`.
+"""
 abstract type Abstract3DPoint{FT} <: AbstractPoint{FT} end
 
 Base.show(io::IO, point::Abstract1DPoint) =
@@ -40,9 +61,18 @@ Base.show(io::IO, point::Abstract3DPoint) = print(io,
 )
 
 """
+    tofloat(p::Abstract1DPoint)
+
+Return the single coordinate of the 1D point `p` as a plain number, e.g.
+`tofloat(ZPoint(2.0)) == 2.0`. Defined for every 1D point type.
+"""
+function tofloat end
+
+"""
     @pointtype name fieldname1 ...
 
-Define a subtype `name` of `AbstractPoint` with appropriate conversion functions.
+Define a subtype `name` of `AbstractPoint` with appropriate conversion functions. A
+docstring placed before the macro call is attached to the generated struct.
 """
 macro pointtype(name, fields...)
     if length(fields) == 1
@@ -155,6 +185,14 @@ LatLongPPoint(latlongp::LatLongPoint, pp::PPoint) =
 LatLongPPoint(latp::LatPoint, longp::LongPoint, pp::PPoint) =
     product_coordinates(product_coordinates(latp, longp), pp)
 
+"""
+    component(p::AbstractPoint, i)
+
+Return the `i`th coordinate of the point `p` as a plain number, where `i` is either an
+integer index or the name of the coordinate as a `Symbol`: for `p = XYPoint(1.0, 2.0)`,
+both `component(p, 2)` and `component(p, :y)` return `2.0`. See also `coordinate`, which
+returns the coordinate as a 1D point.
+"""
 component(p::AbstractPoint{FT}, i::Symbol) where {FT} = getfield(p, i)::FT
 component(p::AbstractPoint{FT}, i::Integer) where {FT} = getfield(p, i)::FT
 
@@ -190,6 +228,14 @@ _coordinate(p::XYZPoint, ::Val{3}) = ZPoint(p.z)
 coordinate_type(ptyp::Type{<:AbstractPoint}, ax::Int) = _coordinate_type(ptyp, Val(ax))
 coordinate_type(ptyp::Type{<:AbstractPoint}, ax::Integer) = _coordinate_type(ptyp, Int(ax))
 
+"""
+    coordinate(pt::AbstractPoint, ax::Integer)
+
+Return the `ax`th coordinate of `pt` as a 1D point: `coordinate(XYZPoint(1.0, 2.0, 3.0), 3)`
+is `ZPoint(3.0)`, and for a 1D point `coordinate(pt, 1)` is `pt` itself. Defined for all
+1D points and for `XYPoint`, `XZPoint`, `YZPoint`, and `XYZPoint`; the type of the result
+is given by `coordinate_type`. See also `component`, which returns the plain number.
+"""
 coordinate(pt::AbstractPoint, ax::Int) = _coordinate(pt, Val(ax))
 coordinate(pt::AbstractPoint, ax::Integer) = _coordinate(pt, Int(ax))
 

@@ -1358,10 +1358,50 @@ end
 @inline (op::LinVanLeerC2F)(v, a⁻⁻, a⁻, a⁺, a⁺⁺, dt) =
     slope_limited_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺, dt, op.constraint)
 
+"""
+    LimiterConstraint
+
+Supertype of the `constraint` options of [`LinVanLeerC2F`](@ref), which select how
+the slope of the reconstructed field is limited: [`AlgebraicMean`](@ref),
+[`PositiveDefinite`](@ref), [`MonotoneHarmonic`](@ref), [`MonotoneLocalExtrema`](@ref).
+"""
 abstract type LimiterConstraint end
+
+"""
+    AlgebraicMean()
+
+[`LimiterConstraint`](@ref) for [`LinVanLeerC2F`](@ref): the slope is the algebraic
+mean of the two one-sided differences, scaled by `1 - |CFL|`. It guarantees neither
+positivity nor monotonicity (eq. 2, `avg`, of [Lin1994](@cite)).
+"""
 struct AlgebraicMean <: LimiterConstraint end
+
+"""
+    PositiveDefinite()
+
+[`LimiterConstraint`](@ref) for [`LinVanLeerC2F`](@ref): the mean slope is bounded by
+twice the distance from the upwind value to the local stencil minimum and maximum,
+which keeps the reconstruction positive with implicit diffusion (eqs. 3b, 3c, 5a, 5b,
+`posd`, of [Lin1994](@cite)).
+"""
 struct PositiveDefinite <: LimiterConstraint end
+
+"""
+    MonotoneHarmonic()
+
+[`LimiterConstraint`](@ref) for [`LinVanLeerC2F`](@ref): the slope is the harmonic
+mean of the two one-sided differences when they have the same sign and zero
+otherwise, a strong monotonicity constraint (eq. 4, `mono4`, of [Lin1994](@cite)).
+"""
 struct MonotoneHarmonic <: LimiterConstraint end
+
+"""
+    MonotoneLocalExtrema()
+
+[`LimiterConstraint`](@ref) for [`LinVanLeerC2F`](@ref): the mean slope is bounded so
+that the reconstructed values stay within the minimum and maximum of the three-cell
+stencil, preserving monotonicity (eq. 5, `mono5`, of [Lin1994](@cite)).
+"""
 struct MonotoneLocalExtrema <: LimiterConstraint end
 
 

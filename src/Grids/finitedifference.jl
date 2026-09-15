@@ -26,7 +26,7 @@ Construct a `FiniteDifferenceGrid` from an `IntervalTopology`, or from an
 `IntervalMesh` and a `device`.
 
 The grid stores the topology, the global geometry, and the local geometry at cell
-centers and cell faces. Construction is memoized in `Cache.OBJECT_CACHE`.
+centers and cell faces.
 """
 struct FiniteDifferenceGrid{
     T <: Topologies.AbstractIntervalTopology,

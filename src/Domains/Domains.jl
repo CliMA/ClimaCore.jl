@@ -92,6 +92,13 @@ Return the domain minimum along the `z` direction.
 """
 z_min(domain::IntervalDomain) = domain.coord_min.z
 
+"""
+    coordinate_type(domain::AbstractDomain)
+
+The `Geometry.AbstractPoint` type of the coordinates of `domain`: for example
+`Geometry.ZPoint{FT}` for a vertical `IntervalDomain`, `Geometry.XYPoint{FT}` for a
+`RectangleDomain`, and `Geometry.Cartesian123Point{FT}` for a `SphereDomain`.
+"""
 coordinate_type(::IntervalDomain{CT}) where {CT} = CT
 Base.eltype(domain::IntervalDomain) = coordinate_type(domain)
 
@@ -198,6 +205,13 @@ Base.show(io::IO, domain::SphereDomain) =
     print(io, nameof(typeof(domain)), ": radius = ", domain.radius)
 
 boundary_names(::SphereDomain) = ()
+
+"""
+    radius(domain::SphereDomain)
+
+The radius of the sphere [m].
+"""
+radius(domain::SphereDomain) = domain.radius
 coordinate_type(::SphereDomain{FT}) where {FT} = Geometry.Cartesian123Point{FT}
 
 end # module

@@ -71,6 +71,13 @@ end
 
 abstract type AbstractDistributedTopology <: AbstractTopology end
 
+"""
+    Domains.coordinate_type(topology::Topologies.AbstractTopology)
+
+Return the `Geometry.AbstractPoint` type of the coordinates of the domain of
+`topology`, e.g. `Geometry.ZPoint{FT}` for a vertical interval topology and
+`Geometry.Cartesian123Point{FT}` for a cubed-sphere topology.
+"""
 coordinate_type(topology::AbstractTopology) = coordinate_type(domain(topology))
 
 function domain end

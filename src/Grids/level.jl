@@ -1,3 +1,12 @@
+"""
+    LevelGrid(full_grid::AbstractExtrudedFiniteDifferenceGrid, level)
+
+Horizontal grid at a single vertical level of an extruded grid, as returned by
+`level(grid, v)`: an integer `level` selects a cell center and a
+`PlusHalf{Int}` selects a cell face. It shares the topology, quadrature, DSS
+weights, and global geometry of `full_grid`, and its local geometry is the
+corresponding level of the local geometry of `full_grid`.
+"""
 struct LevelGrid{
     G <: AbstractExtrudedFiniteDifferenceGrid,
     L <: Union{Int, PlusHalf{Int}},
@@ -41,6 +50,7 @@ local_geometry_data(levelgrid::LevelGrid{<:Any, PlusHalf{Int}}, ::Nothing) =
         levelgrid.level + half,
     )
 global_geometry(levelgrid::LevelGrid) = global_geometry(levelgrid.full_grid)
+hypsography(levelgrid::LevelGrid) = hypsography(levelgrid.full_grid)
 
 ## GPU compatibility
 Adapt.adapt_structure(to, grid::LevelGrid) =

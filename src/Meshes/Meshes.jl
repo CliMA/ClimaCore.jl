@@ -67,7 +67,21 @@ The following types and methods are provided for every `AbstractMesh`:
 """
 abstract type AbstractMesh{dim} end
 
+"""
+    AbstractMesh1D
+
+Alias for `AbstractMesh{1}` (see `AbstractMesh`): the supertype of
+one-dimensional meshes, i.e. `IntervalMesh`, whose elements are intervals.
+"""
 const AbstractMesh1D = AbstractMesh{1}
+
+"""
+    AbstractMesh2D
+
+Alias for `AbstractMesh{2}` (see `AbstractMesh`): the supertype of
+two-dimensional meshes, i.e. `RectilinearMesh` and the `AbstractCubedSphere`
+meshes, whose elements are quadrilaterals.
+"""
 const AbstractMesh2D = AbstractMesh{2}
 
 """

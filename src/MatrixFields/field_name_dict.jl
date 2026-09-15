@@ -67,7 +67,25 @@ function FieldNameDict{T}(key_entry_pairs::Pair{<:T}...) where {T}
     return FieldNameDict(FieldNameSet{T}(keys), entries)
 end
 
+"""
+    FieldVectorView
+
+Alias for `FieldNameDict{FieldName}` (see [`FieldNameDict`](@ref)): a dictionary
+that maps `FieldName`s to `Field`s, with keys stored as `FieldVectorKeys`. It is
+the form in which a `FieldVector` participates in operations with a
+`FieldMatrix`, e.g. matrix-vector broadcasts and [`FieldMatrixSolver`](@ref)s.
+"""
 const FieldVectorView = FieldNameDict{FieldName}
+
+"""
+    FieldMatrix
+
+Alias for `FieldNameDict{FieldNamePair}` (see [`FieldNameDict`](@ref)): a sparse
+block matrix that maps `(row_name, col_name)` pairs of `FieldName`s, stored as
+`FieldMatrixKeys`, to `ColumnwiseBandMatrixField`s, `DiagonalMatrixRow`s, or
+multiples of `LinearAlgebra.I`. Construct one with `FieldMatrix(key => entry, ...)`,
+and wrap it in a [`FieldMatrixWithSolver`](@ref) to use it with `ldiv!`.
+"""
 const FieldMatrix = FieldNameDict{FieldNamePair}
 
 const ScalingFieldMatrixEntry{T} =
@@ -618,6 +636,16 @@ function scalar_field_matrix(field_matrix::FieldMatrix)
     return FieldNameDict(scalar_keys, entries)
 end
 
+"""
+    replace_name_tree(dict::FieldNameDict, name_tree)
+    replace_name_tree(set::FieldNameSet, name_tree)
+
+Return a copy of `dict` (or `set`) whose keys carry the `FieldNameTree`
+`name_tree` in place of their current one, leaving the values unchanged. A
+`FieldMatrix` is usually constructed without a name tree, so this is used to
+attach the name tree of a `FieldVector` to it before set operations that need to
+resolve overlapping names, e.g. inside [`FieldMatrixSolver`](@ref).
+"""
 replace_name_tree(dict::FieldNameDict, name_tree) =
     FieldNameDict(replace_name_tree(keys(dict), name_tree), values(dict))
 

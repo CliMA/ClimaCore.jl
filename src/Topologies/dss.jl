@@ -202,6 +202,16 @@ dss_untransform!(
         )
     end
 
+"""
+    dss_load_perimeter_data!(device, dss_buffer, data, perimeter)
+
+Copy the values of `data` at the element-perimeter nodes given by `perimeter` into
+`dss_buffer.perimeter_data`. This is the first phase of a DSS operation; the
+untransformed counterpart of `dss_transform!`, used when `data` needs no local
+geometry transformation.
+
+Part of [`ClimaCore.Spaces.weighted_dss!`](@ref); see also [`DSSBuffer`](@ref).
+"""
 dss_load_perimeter_data!(
     ::ClimaComms.AbstractCPUDevice,
     (; perimeter_data)::DSSBuffer,
@@ -214,6 +224,16 @@ dss_load_perimeter_data!(
         perimeter_data[v, p, 1, h] = data[v, i, j, h]
     end
 
+"""
+    dss_unload_perimeter_data!(device, data, dss_buffer, perimeter)
+
+Copy the summed values in `dss_buffer.perimeter_data` back into `data` at the
+element-perimeter nodes given by `perimeter`. This is the final phase of a DSS
+operation; the untransformed counterpart of `dss_untransform!`, used when `data`
+needs no local geometry transformation.
+
+Part of [`ClimaCore.Spaces.weighted_dss!`](@ref); see also [`DSSBuffer`](@ref).
+"""
 dss_unload_perimeter_data!(
     ::ClimaComms.AbstractCPUDevice,
     data::DataLayouts.VIJHWithF,
