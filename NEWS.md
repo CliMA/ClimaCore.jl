@@ -4,6 +4,9 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- [#2642](https://github.com/CliMA/ClimaCore.jl/pull/2642) Ensured that all
+  names used in downstream packages are documented.
+
 - ![][badge-🐛bugfix] `Geometry.mul_return_type` promotes the storage type of a
   `Number * Tensor` (and `Tensor * Number`) product along with its element type,
   so that the return type is the one `*` produces. Previously a `Float` tensor

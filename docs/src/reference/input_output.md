@@ -9,6 +9,7 @@ CurrentModule = ClimaCore
 ```@docs
 InputOutput.HDF5Writer
 InputOutput.write!
+InputOutput.write_attributes!
 ```
 
 ## Readers
@@ -20,5 +21,6 @@ InputOutput.read_mesh
 InputOutput.read_topology
 InputOutput.read_space
 InputOutput.read_field
+InputOutput.read_attributes
 InputOutput.defaultname
 ```

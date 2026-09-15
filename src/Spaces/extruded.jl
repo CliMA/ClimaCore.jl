@@ -31,8 +31,23 @@ local_geometry_type(::Type{ExtrudedFiniteDifferenceSpace{G, S}}) where {G, S} =
 space(grid::Grids.ExtrudedFiniteDifferenceGrid, staggering::Staggering) =
     ExtrudedFiniteDifferenceSpace(grid, staggering)
 
+"""
+    FaceExtrudedFiniteDifferenceSpace{G}
+
+Alias of [`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) with
+[`Grids.CellFace`](@ref) staggering: an extruded space located at cell faces.
+`G` is the extruded grid type.
+"""
 const FaceExtrudedFiniteDifferenceSpace{G} =
     ExtrudedFiniteDifferenceSpace{G, CellFace}
+
+"""
+    CenterExtrudedFiniteDifferenceSpace{G}
+
+Alias of [`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) with
+[`Grids.CellCenter`](@ref) staggering: an extruded space located at cell
+centers. `G` is the extruded grid type.
+"""
 const CenterExtrudedFiniteDifferenceSpace{G} =
     ExtrudedFiniteDifferenceSpace{G, CellCenter}
 
@@ -97,28 +112,92 @@ Adapt.adapt_structure(to, space::ExtrudedFiniteDifferenceSpace) =
         staggering(space),
     )
 
+"""
+    ExtrudedFiniteDifferenceSpace2D
+
+Alias of [`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) with either staggering
+whose horizontal grid is a one-dimensional spectral element grid
+(`Grids.SpectralElementGrid1D`), so the space is two-dimensional.
+"""
 const ExtrudedFiniteDifferenceSpace2D = ExtrudedFiniteDifferenceSpace{
     <:Grids.ExtrudedFiniteDifferenceGrid{<:Grids.SpectralElementGrid1D},
 }
+
+"""
+    ExtrudedFiniteDifferenceSpace3D
+
+Alias of [`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) with either staggering
+whose horizontal grid is a two-dimensional spectral element grid
+([`Grids.SpectralElementGrid2D`](@ref)), so the space is three-dimensional.
+"""
 const ExtrudedFiniteDifferenceSpace3D = ExtrudedFiniteDifferenceSpace{
     <:Grids.ExtrudedFiniteDifferenceGrid{<:Grids.SpectralElementGrid2D},
 }
+
+"""
+    ExtrudedSpectralElementSpace2D
+
+Alias of [`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) on a
+`Grids.ExtrudedSpectralElementGrid2D`, i.e. an extruded one-dimensional
+spectral element grid. It denotes the same set of spaces as
+`ExtrudedFiniteDifferenceSpace2D`.
+"""
 const ExtrudedSpectralElementSpace2D =
     ExtrudedFiniteDifferenceSpace{<:Grids.ExtrudedSpectralElementGrid2D}
+
+"""
+    ExtrudedSpectralElementSpace3D
+
+Alias of [`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) on a
+`Grids.ExtrudedSpectralElementGrid3D`, i.e. an extruded two-dimensional
+spectral element grid. It denotes the same set of spaces as
+`ExtrudedFiniteDifferenceSpace3D`.
+"""
 const ExtrudedSpectralElementSpace3D =
     ExtrudedFiniteDifferenceSpace{<:Grids.ExtrudedSpectralElementGrid3D}
 
+"""
+    CenterExtrudedFiniteDifferenceSpace2D
+
+Alias of `CenterExtrudedFiniteDifferenceSpace` (an
+[`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) at cell centers) whose
+horizontal grid is a one-dimensional spectral element grid.
+"""
 const CenterExtrudedFiniteDifferenceSpace2D =
     CenterExtrudedFiniteDifferenceSpace{
         <:Grids.ExtrudedFiniteDifferenceGrid{<:Grids.SpectralElementGrid1D},
     }
+
+"""
+    CenterExtrudedFiniteDifferenceSpace3D
+
+Alias of `CenterExtrudedFiniteDifferenceSpace` (an
+[`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) at cell centers) whose
+horizontal grid is a two-dimensional spectral element grid.
+"""
 const CenterExtrudedFiniteDifferenceSpace3D =
     CenterExtrudedFiniteDifferenceSpace{
         <:Grids.ExtrudedFiniteDifferenceGrid{<:Grids.SpectralElementGrid2D},
     }
+
+"""
+    FaceExtrudedFiniteDifferenceSpace2D
+
+Alias of `FaceExtrudedFiniteDifferenceSpace` (an
+[`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) at cell faces) whose horizontal
+grid is a one-dimensional spectral element grid.
+"""
 const FaceExtrudedFiniteDifferenceSpace2D = FaceExtrudedFiniteDifferenceSpace{
     <:Grids.ExtrudedFiniteDifferenceGrid{<:Grids.SpectralElementGrid1D},
 }
+
+"""
+    FaceExtrudedFiniteDifferenceSpace3D
+
+Alias of `FaceExtrudedFiniteDifferenceSpace` (an
+[`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) at cell faces) whose horizontal
+grid is a two-dimensional spectral element grid.
+"""
 const FaceExtrudedFiniteDifferenceSpace3D = FaceExtrudedFiniteDifferenceSpace{
     <:Grids.ExtrudedFiniteDifferenceGrid{<:Grids.SpectralElementGrid2D},
 }
@@ -172,6 +251,15 @@ horizontal_space(full_space::ExtrudedFiniteDifferenceSpace) =
 
 vertical_topology(space::ExtrudedFiniteDifferenceSpace) =
     vertical_topology(grid(space))
+
+"""
+    Spaces.hypsography(space::ExtrudedFiniteDifferenceSpace)
+
+Return the `Grids.HypsographyAdaption` of the grid of `space`: `Grids.Flat()`
+when the vertical coordinate is not adapted to surface topography, and a
+terrain-following adaption otherwise. Forwards to `Grids.hypsography`.
+"""
+hypsography(space::ExtrudedFiniteDifferenceSpace) = hypsography(grid(space))
 
 issubspace(subspace::AbstractSpectralElementSpace, space::ExtrudedFiniteDifferenceSpace) =
     grid(subspace) === grid(space).horizontal_grid ||
@@ -233,9 +321,24 @@ end
 
 
 ## aliases
+"""
+    ExtrudedRectilinearSpectralElementSpace3D
+
+Alias of [`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) with either staggering
+whose horizontal grid is a two-dimensional spectral element grid on a
+rectangular (plane) domain (`Grids.ExtrudedRectilinearSpectralElementGrid3D`).
+"""
 const ExtrudedRectilinearSpectralElementSpace3D = ExtrudedFiniteDifferenceSpace{
     <:Grids.ExtrudedRectilinearSpectralElementGrid3D,
 }
+
+"""
+    ExtrudedCubedSphereSpectralElementSpace3D
+
+Alias of [`Spaces.ExtrudedFiniteDifferenceSpace`](@ref) with either staggering
+whose horizontal grid is a two-dimensional spectral element grid on a
+cubed-sphere domain (`Grids.ExtrudedCubedSphereSpectralElementGrid3D`).
+"""
 const ExtrudedCubedSphereSpectralElementSpace3D = ExtrudedFiniteDifferenceSpace{
     <:Grids.ExtrudedCubedSphereSpectralElementGrid3D,
 }

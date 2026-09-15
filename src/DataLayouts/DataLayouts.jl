@@ -284,6 +284,15 @@ Base.similar(data::DataLayout, maybe_dims::Dims...) =
 Base.similar(data::DataLayout, ::Type{T}, maybe_dims::Dims...) where {T} =
     similar_layout(data, T, maybe_dims...)
 
+"""
+    replace_basetype(data::DataLayout, ::Type{B})
+
+Return an uninitialized [`DataLayout`](@ref) like `data` whose parent array has
+element type `B` in place of the current base type, with the element type of
+`data` rewritten accordingly (e.g. a layout of `Tuple{Float64, Float64}` backed
+by a `Float64` array becomes a layout of `Tuple{Float32, Float32}` backed by a
+`Float32` array when `B = Float32`).
+"""
 function replace_basetype(data::DataLayout, ::Type{B}) where {B}
     T = replace_type_parameter(eltype(data), eltype(parent_type(data)), B)
     return similar_layout(data, T, B)

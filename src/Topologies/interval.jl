@@ -5,8 +5,7 @@ abstract type AbstractIntervalTopology <: AbstractTopology end
     IntervalTopology(device::ClimaComms.AbstractDevice, mesh::Meshes.IntervalMesh)
 
 Sequential topology on a [`Meshes.IntervalMesh`](@ref). Only a
-`SingletonCommsContext` is supported. Construction is memoized in
-`Cache.OBJECT_CACHE`.
+`SingletonCommsContext` is supported.
 
 # Fields
 

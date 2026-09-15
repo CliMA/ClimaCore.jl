@@ -574,8 +574,44 @@ coordinate_axis(::Type{<:LatLongPoint}) = (1, 2)
 coordinate_axis(coord::AbstractPoint) = coordinate_axis(typeof(coord))
 
 # Generic vector/tensor type aliases
+"""
+    CovariantVector{T, I, S}
+    CovariantVector(u::AbstractTensor{1}, local_geometry::LocalGeometry)
+
+Alias for a rank-1 [`Geometry.Tensor`](@ref) whose axis is `Components{Covariant, I}`: a
+vector represented by its covariant components (`u₁`, `u₂`, `u₃`) along the dimensions `I`,
+with element type `T` and storage `S`. The concrete aliases `Covariant1Vector`, ...,
+`Covariant123Vector` fix `I`. Called with a vector `u` and a
+[`Geometry.LocalGeometry`](@ref), it converts `u` to covariant components with the metric
+of `local_geometry` (`u` is returned unchanged if it is already covariant).
+"""
 const CovariantVector{T, I, S} = Tensor{1, T, Tuple{Components{Covariant, I}}, S}
+"""
+    ContravariantVector{T, I, S}
+    ContravariantVector(u::AbstractTensor{1}, local_geometry::LocalGeometry)
+
+Alias for a rank-1 [`Geometry.Tensor`](@ref) whose axis is `Components{Contravariant, I}`:
+a vector represented by its contravariant components (`u¹`, `u²`, `u³`) along the dimensions
+`I`, with element type `T` and storage `S`. The concrete aliases `Contravariant1Vector`,
+..., `Contravariant123Vector` fix `I`. Called with a vector `u` and a
+[`Geometry.LocalGeometry`](@ref), it converts `u` to contravariant components with the
+metric of `local_geometry` (`u` is returned unchanged if it is already contravariant).
+"""
 const ContravariantVector{T, I, S} = Tensor{1, T, Tuple{Components{Contravariant, I}}, S}
+"""
+    LocalVector{T, I, S}
+    LocalVector(u::AbstractTensor{1}, local_geometry::LocalGeometry)
+    LocalVector(u::Cartesian123Vector, global_geometry::AbstractGlobalGeometry, coord)
+
+Alias for a rank-1 [`Geometry.Tensor`](@ref) whose axis is `Components{Orthonormal, I}`: a
+vector represented by its components (`u`, `v`, `w`) in the local orthonormal frame along
+the dimensions `I`, with element type `T` and storage `S`. The concrete aliases `UVector`,
+`UVVector`, `UVWVector`, ... (and their `Cartesian*Vector` synonyms) fix `I`. Called with
+a vector `u` and a [`Geometry.LocalGeometry`](@ref), it converts `u` to the local
+orthonormal frame with the metric of `local_geometry`. The three-argument form rotates a
+vector from the global Cartesian frame into the local frame at the position `coord`; it is
+the inverse of `CartesianVector`.
+"""
 const LocalVector{T, I, S} = Tensor{1, T, Tuple{Components{Orthonormal, I}}, S}
 
 # Union types for dispatch

@@ -19,8 +19,3 @@ Remapping.AbstractRemappingMethod
 Remapping.SpectralElementRemapping
 Remapping.BilinearRemapping
 ```
-
-```@docs
-Remapping.default_target_hcoords
-Remapping.default_target_zcoords
-```

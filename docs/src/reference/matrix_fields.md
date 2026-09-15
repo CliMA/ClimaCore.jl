@@ -12,6 +12,13 @@ MatrixFields
 
 ```@docs
 BandMatrixRow
+DiagonalMatrixRow
+BidiagonalMatrixRow
+TridiagonalMatrixRow
+QuaddiagonalMatrixRow
+PentadiagonalMatrixRow
+LowerDiagonalMatrixRow
+UpperDiagonalMatrixRow
 ```
 
 ## Matrix Field Multiplication
@@ -19,6 +26,9 @@ BandMatrixRow
 ```@docs
 MultiplyColumnwiseBandMatrixField
 ```
+
+Broadcasted `*` between matrix fields is rewritten to this operator, so
+`@. C = A * B` is the public form.
 
 ## Operator Matrices
 
@@ -30,9 +40,34 @@ operator_matrix
 
 ```@docs
 FieldNameDict
+FieldMatrix
+FieldVectorView
+FieldMatrixKeys
+FieldVectorKeys
 identity_field_matrix
 field_vector_view
 concrete_field_vector
+```
+
+## Field names
+
+The keys of a `FieldMatrix` and `FieldVectorView` are `FieldName`s, constructed
+with `@name` and queried/manipulated using the functions below.
+
+```@docs
+FieldName
+@name
+FieldNameTree
+FieldNameSet
+has_field
+get_field
+is_child_name
+append_internal_name
+top_level_names
+extract_first
+drop_first
+filtered_names
+replace_name_tree
 ```
 
 ## Linear Solvers
@@ -41,6 +76,8 @@ concrete_field_vector
 FieldMatrixSolverAlgorithm
 FieldMatrixSolver
 FieldMatrixWithSolver
+matrix
+solver
 field_matrix_solve!
 BlockDiagonalSolve
 BlockLowerTriangularSolve
@@ -71,6 +108,7 @@ column_field2array_view
 field2arrays
 field2arrays_view
 scalar_field_matrix
+band_matrix_info
 ```
 
 ## Indexing a FieldMatrix
