@@ -245,9 +245,6 @@ This means that we can express the bounds on the interior values of ``i`` as
 """
 struct MultiplyColumnwiseBandMatrixField <: Operators.FiniteDifferenceOperator end
 
-# TODO: Remove this in the next major release of ClimaCore.
-const ⋅ = MultiplyColumnwiseBandMatrixField()
-
 Operators.strip_space(op::MultiplyColumnwiseBandMatrixField, _) = op
 
 # These name the two corners of the band matrix, not the ends of the column.

@@ -37,6 +37,5 @@ include("laplacians.jl")
 include("finitedifference.jl")
 include("remapping.jl")
 include("integrals.jl")
-include("deprecated.jl")
 
 end # module

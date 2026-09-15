@@ -247,21 +247,6 @@ end
     3 * (add_auto_broadcasters(x₁) - add_auto_broadcasters(x₂)) +
     add_auto_broadcasters(x₃)
 
-# Deprecated aliases for the one-sided reconstruction boundary conditions that
-# Extrapolate replaces. The aliases differ numerically from the conditions they
-# replace: those conditions replaced the whole stencil with fixed one-sided
-# reconstructions at the two faces nearest each boundary, while Extrapolate keeps
-# the interior stencil's upwinding and only pads its ghost points. At the face one
-# in from a boundary the two coincide exactly when the velocity at that face points
-# toward the boundary (the downwind-biased reconstruction is then also the upwind
-# choice) and differ when it points into the domain (see NEWS.md for the stencils).
-# At the boundary face itself the replaced reconstructions reached one center
-# beyond the boundary, so they required an enclosing operator that overrides that
-# face (e.g. DivergenceF2C with SetValue); Extrapolate's ghost-point padding is
-# well-defined there.
-Base.@deprecate_binding FirstOrderOneSided Extrapolate{0} false
-Base.@deprecate_binding ThirdOrderOneSided Extrapolate{1} false
-
 abstract type Location end
 abstract type Boundary <: Location end
 abstract type BoundaryWindow <: Location end

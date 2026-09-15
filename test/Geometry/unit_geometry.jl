@@ -929,15 +929,14 @@ end
         Tc = Geometry.CartesianTensor(T, global_geom, coord)
 
         # Round trip: LocalTensor ∘ CartesianTensor == identity.
-        @test Geometry.components(Geometry.LocalTensor(Tc, global_geom, coord)) ≈
-              Geometry.components(T)
+        @test parent(Geometry.LocalTensor(Tc, global_geom, coord)) ≈ parent(T)
 
         # Only the momentum (second) axis is rotated: each row's momentum vector
         # matches the rank-1 CartesianVector rotation.
         for i in 1:3
             m = Geometry.UVWVector(T[i, 1], T[i, 2], T[i, 3])
             cm = Geometry.CartesianVector(m, global_geom, coord)
-            @test SVector(Tc[i, 1], Tc[i, 2], Tc[i, 3]) ≈ Geometry.components(cm)
+            @test SVector(Tc[i, 1], Tc[i, 2], Tc[i, 3]) ≈ parent(cm)
         end
 
         # A one-axis rotation of p·I gives p·G' (NOT p·I): physical isotropy is
@@ -947,9 +946,8 @@ end
             (@SMatrix [p 0.0 0.0; 0.0 p 0.0; 0.0 0.0 p]),
             (Geometry.UVWAxis(), Geometry.UVWAxis()),
         )
-        @test Geometry.components(
-            Geometry.CartesianTensor(PI, global_geom, coord),
-        ) ≈ p * Geometry.components(G)'
+        @test parent(Geometry.CartesianTensor(PI, global_geom, coord)) ≈
+              p * parent(G)'
     end
 
     # On a CartesianGlobalGeometry (plane) the rotations are the identity.
