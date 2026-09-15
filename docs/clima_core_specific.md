@@ -47,17 +47,17 @@ ClimaCore.jl provides the dynamical core infrastructure for [CliMA](https://clim
 
 Tests are defined in `test/runtests.jl` using the `UnitTest` / `tabulated_tests` framework:
 
-| Group                   | What it covers                                                                                                                                                                                                               |
-|:----------------------- |:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CPU unit tests          | 104 tests covering DataLayouts, Geometry, Meshes, Topologies, Quadratures, Spaces, Fields, Operators (spectral element + finite-difference), MatrixFields, Hypsography, Limiters, Remapping, InputOutput, Aqua, deprecations |
-| GPU tests (`:gpu_only`) | 9 tests: CUDA kernels, compiler stress regression, DataLayout GPU ops, spectral element CUDA, finite-difference CUDA, extruded sphere/3dbox CUDA, field map-reduce CUDA                                                      |
-| Buildkite CI            | Runs the unit tests on an HPC cluster with CUDA, defined in `.buildkite/pipeline.yml`                                                                                                                                        |
-| Lib CI workflows        | Separate GitHub Actions per companion package: ClimaCoreSpectra, ClimaCoreTempestRemap                                                                                                                                       |
+| Group                   | What it covers                                                                                                                                                                                                 |
+|:----------------------- |:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CPU unit tests          | 104 tests covering DataLayouts, Geometry, Meshes, Topologies, Quadratures, Spaces, Fields, Operators (spectral element + finite-difference), MatrixFields, Hypsography, Limiters, Remapping, InputOutput, Aqua |
+| GPU tests (`:gpu_only`) | 9 tests: CUDA kernels, compiler stress regression, DataLayout GPU ops, spectral element CUDA, finite-difference CUDA, extruded sphere/3dbox CUDA, field map-reduce CUDA                                        |
+| Buildkite CI            | Runs the unit tests on an HPC cluster with CUDA, defined in `.buildkite/pipeline.yml`                                                                                                                          |
+| Lib CI workflows        | Separate GitHub Actions per companion package: ClimaCoreSpectra, ClimaCoreTempestRemap                                                                                                                         |
 
 ## Repo-specific conventions
 
   - **Module-per-directory**: each `src/` subdirectory is its own Julia sub-module, re-exported from `ClimaCore.jl`.
-  - **`lib/` companion packages**: visualization and remapping packages live as independent Julia packages under `lib/`, each with its own `Project.toml`. They have separate CI workflows.
+  - **`lib/` companion packages**: remapping and spectral-analysis packages live as independent Julia packages under `lib/`, each with its own `Project.toml`. They have separate CI workflows.
   - **`ext/` CUDA pattern**: GPU support uses Julia's package extension mechanism (`ext/ClimaCoreCUDAExt.jl`). CPU fallbacks are always provided.
   - **Coding style**: `TitleCase` for types, `snake_case` for objects/functions, spaces after commas. Formatting is enforced by `JuliaFormatter`, pinned in `.dev/format/Project.toml` and run by the pre-commit hooks and CI (`.github/workflows/format.yml`), with the rules in `.JuliaFormatter.toml`.
   - **ColPrac**: the project follows the [ColPrac guide](https://github.com/SciML/ColPrac) for collaborative practices.
