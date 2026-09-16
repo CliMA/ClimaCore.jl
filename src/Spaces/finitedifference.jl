@@ -101,9 +101,6 @@ CenterFiniteDifferenceSpace(
 Adapt.adapt_structure(to, space::FiniteDifferenceSpace) =
     FiniteDifferenceSpace(Adapt.adapt(to, grid(space)), staggering(space))
 
-issubspace(space1::FiniteDifferenceSpace, space2::FiniteDifferenceSpace) =
-    vertical_grid(grid(space1)) === vertical_grid(grid(space2))
-
 Base.@propagate_inbounds level(space::FiniteDifferenceSpace, v) = PointSpace(
     ClimaComms.context(space),
     level(local_geometry_data(space), integer_level_index(space, v)),

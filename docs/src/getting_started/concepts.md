@@ -29,7 +29,7 @@ A model is built from the bottom up, each object wrapping the one below it.
 | Operator   | `Operators`   | A stencil or spectral derivative that acts on fields inside a broadcast expression.                                                                                                 |
 
 ```@raw html
-<div class="figure-center" style="width: 55%; background-color: white;">
+<div class="figure-center" style="width: 55%; background-color: white; padding: 20px;">
 ```
 
 ![Domain, mesh, topology, space, and field on a rectangle](../assets/APIobjects.png)

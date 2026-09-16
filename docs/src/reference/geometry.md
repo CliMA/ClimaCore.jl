@@ -59,8 +59,10 @@ Geometry.LinearAlgebra.norm_sqr(::Any, ::Geometry.LocalGeometry)
 ```
 
 ```@docs
-Geometry.CartesianVector
 Geometry.CartesianPoint
+Geometry.CartesianVector
+Geometry.CartesianTensor
+Geometry.LocalTensor
 ```
 
 ## Local geometry

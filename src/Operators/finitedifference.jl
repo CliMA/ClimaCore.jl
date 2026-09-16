@@ -1365,7 +1365,7 @@ struct AlgebraicMean <: LimiterConstraint end
     PositiveDefinite()
 
 [`LimiterConstraint`](@ref) for [`LinVanLeerC2F`](@ref): the mean slope is bounded by
-twice the distance from the upwind value to the local stencil minimum and maximum,
+twice the distance from the topmost stencil value to the local minimum and maximum,
 which keeps the reconstruction positive with implicit diffusion (eqs. 3b, 3c, 5a, 5b,
 `posd`, of [Lin1994](@cite)).
 """
@@ -1389,7 +1389,6 @@ stencil, preserving monotonicity (eq. 5, `mono5`, of [Lin1994](@cite)).
 """
 struct MonotoneLocalExtrema <: LimiterConstraint end
 
-
 strip_space(op::LinVanLeerC2F, parent_space) =
     LinVanLeerC2F(unrolled_map(Base.Fix2(strip_space, parent_space), op.bcs), op.constraint)
 
@@ -1411,14 +1410,12 @@ function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::MonotoneHarmonic)
     end
 end
 
-posdiff(x, y) = ifelse(x - y ≥ 0, x - y, zero(x))
-
 function compute_Δ𝛼_linvanleer(a⁻, a⁰, a⁺, v, dt, ::PositiveDefinite)
     Δ𝜙_avg = ((a⁰ - a⁻) + (a⁺ - a⁰)) / 2
     min𝜙 = min(a⁻, a⁰, a⁺)
     max𝜙 = max(a⁻, a⁰, a⁺)
     return sign(Δ𝜙_avg) *
-           min(abs(Δ𝜙_avg), 2 * posdiff(a⁺, min𝜙), 2 * posdiff(max𝜙, a⁺)) *
+           min(abs(Δ𝜙_avg), 2 * max(a⁺ - min𝜙, zero(a⁺)), 2 * max(max𝜙 - a⁺, zero(a⁺))) *
            (1 - sign(v) * v * dt)
 end
 

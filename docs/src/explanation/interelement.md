@@ -105,8 +105,7 @@ model's tendency function then works on both discretizations:
 ```julia
 function rhs!(dydt, y, (params, completion), t)
     wdiv = Operators.Divergence{Operators.WeakForm}()
-    rparams = Ref(params)
-    @. dydt = -wdiv(physical_flux(y, rparams))
+    @. dydt = -wdiv(physical_flux(y, (params,)))
     Operators.complete_tendency!(completion, dydt, y, params)
     return dydt
 end

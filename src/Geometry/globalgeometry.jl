@@ -282,16 +282,17 @@ function CartesianVector(
     G * u
 end
 
-# Rank-2 rotation of the second axis of a flux tensor `T` between
-# the local orthonormal frame and the global Cartesian123 frame.
-#
-# `G = local_to_cartesian(geom, coord)` has axes `(UVWAxis, UVWAxis)` and is
-# orthonormal (`G'G = I`), so `CartesianTensor` post-multiplies by `G'`
-# (`(T*G')[i,j] = Σₖ T[i,k] G[j,k]`, rotating each row's momentum vector
-# local→Cartesian) and `LocalTensor` post-multiplies by `G` to invert it. The
-# tensor's second axis must be the full 3D `UVWAxis` (on a 2D horizontal shell
-# promote the momentum vector to `UVW` before forming the flux, e.g.
-# `(ρu) ⊗ Geometry.project(UVWAxis(), u)`)
+"""
+    CartesianTensor(T::AbstractTensor{2}, global_geometry::AbstractGlobalGeometry, coord::AbstractPoint)
+
+Similar to `CartesianVector`, but for rank-2 tensors whose second axis uses the local
+orthonormal basis, given by the components `u` (east), `v` (north), and `w` (up). The
+inverse is `LocalTensor(T, global_geometry, coord)`.
+
+Before supplying a tensor to this function, promote its second axis to the full `UVWAxis`.
+For example, when working on a 2D horizontal plane, express the flux `ρu ⊗ u` as
+`ρu ⊗ Geometry.project(UVWAxis(), u)`.
+"""
 function CartesianTensor(
     T::AbstractTensor{2},
     geom::AbstractSphericalGlobalGeometry,
@@ -301,6 +302,12 @@ function CartesianTensor(
     T * G'
 end
 
+"""
+    LocalTensor(T::AbstractTensor{2}, global_geometry::AbstractGlobalGeometry, coord::AbstractPoint)
+
+Similar to `LocalVector`, but for rank-2 tensors. Rotates a tensor from the global Cartesian
+frame into the local frame at the position `coord`. This is the inverse of `CartesianTensor`.
+"""
 function LocalTensor(
     T::AbstractTensor{2},
     geom::AbstractSphericalGlobalGeometry,
