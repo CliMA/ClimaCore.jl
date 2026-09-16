@@ -13,8 +13,7 @@ using GilbertCurves
 Distributed topology for 2D meshes. `elemorder` is a vector or other linear ordering
 of `Meshes.elements(mesh)`, and `orderindex` its inverse. Elements are partitioned
 across processes in contiguous blocks of `elemorder`; `elempid` must be `nothing`
-(a user-supplied partition is not supported). Construction is memoized in
-`Cache.OBJECT_CACHE`.
+(a user-supplied partition is not supported).
 
 Elements are referred to in several ways:
 

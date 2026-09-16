@@ -29,7 +29,7 @@ A model is built from the bottom up, each object wrapping the one below it.
 | Operator   | `Operators`   | A stencil or spectral derivative that acts on fields inside a broadcast expression.                                                                                                 |
 
 ```@raw html
-<div class="figure-center" style="width: 55%;">
+<div class="figure-center" style="width: 55%; background-color: white;">
 ```
 
 ![Domain, mesh, topology, space, and field on a rectangle](../assets/APIobjects.png)
@@ -120,8 +120,8 @@ The operators are independent of the geometry of the domain. The same
 tendency function runs on
 
   - a single column (`ColumnSpace`), for single-column model tests;
-  - an x–z slice (`SliceXZSpace`), for two-dimensional mountain-wave and
-    density-current cases;
+  - an x–z slice (`SliceXZSpace`), for two-dimensional mountain wave and
+    density current cases;
   - a Cartesian box (`Box3DSpace`) with periodic or wall boundaries, the
     configuration of large-eddy and cloud-resolving simulations
     [Sridhar22a](@cite);

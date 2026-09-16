@@ -17,4 +17,8 @@ Domains.SphereDomain
 
 ```@docs
 Domains.boundary_names
+Domains.coordinate_type
+Domains.z_min
+Domains.z_max
+Domains.radius
 ```

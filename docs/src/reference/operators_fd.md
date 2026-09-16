@@ -35,7 +35,27 @@ BottomBiasedC2F
 TopBiasedC2F
 BottomBiasedF2C
 TopBiasedF2C
+```
+
+### Flux limiters and constraints
+
+Available slope limiters for [`TVDLimitedFluxC2F`](@ref) and constraints for
+[`LinVanLeerC2F`](@ref).
+
+```@docs
 AbstractTVDSlopeLimiter
+RZeroLimiter
+RHalfLimiter
+RMaxLimiter
+MinModLimiter
+KorenLimiter
+SuperbeeLimiter
+MonotonizedCentralLimiter
+LimiterConstraint
+AlgebraicMean
+PositiveDefinite
+MonotoneHarmonic
+MonotoneLocalExtrema
 ```
 
 ## Derivative operators

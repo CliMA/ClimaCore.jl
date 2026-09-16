@@ -83,7 +83,17 @@ function FieldVector(; kwargs...)
     return FieldVector{T}(values)
 end
 
-_values(fv::FieldVector) = getfield(fv, :values)
+"""
+    Fields.field_vector_values(fv::FieldVector)
+
+Return the `NamedTuple` of the top-level values of `fv`, keyed by the names
+passed to the constructor. Fields and nested `FieldVector`s are returned as
+stored; scalar components are returned as their `ScalarWrapper` (use
+`getproperty` to unwrap them).
+"""
+field_vector_values(fv::FieldVector) = getfield(fv, :values)
+# Internal name kept for existing callers and downstream packages.
+const _values = field_vector_values
 
 """
     backing_array(x)
@@ -95,21 +105,21 @@ backing_array(x) = x
 backing_array(x::Field) = parent(x)
 
 
-Base.propertynames(fv::FieldVector) = propertynames(_values(fv))
+Base.propertynames(fv::FieldVector) = propertynames(field_vector_values(fv))
 @inline function Base.getproperty(fv::FieldVector, name::Symbol)
-    unwrap(getfield(_values(fv), name))
+    unwrap(getfield(field_vector_values(fv), name))
 end
 
 @inline function Base.setproperty!(fv::FieldVector, name::Symbol, value)
-    x = getfield(_values(fv), name)
+    x = getfield(field_vector_values(fv), name)
     x .= value
 end
 
 
 BlockArrays.blockaxes(fv::FieldVector) =
-    (BlockArrays.BlockRange(1:length(_values(fv))),)
+    (BlockArrays.BlockRange(1:length(field_vector_values(fv))),)
 Base.axes(fv::FieldVector) =
-    (BlockArrays.blockedrange(map(length ∘ backing_array, Tuple(_values(fv)))),)
+    (BlockArrays.blockedrange(map(length ∘ backing_array, Tuple(field_vector_values(fv)))),)
 
 # The AbstractArray fallback computes length from axes, whose blockedrange is
 # not inferrable for nested FieldVectors and allocates on every call; sum the
@@ -117,14 +127,14 @@ Base.axes(fv::FieldVector) =
 # whose backing_array is the FieldVector itself).
 Base.length(fv::FieldVector) = unrolled_reduce(
     (n, value) -> n + length(backing_array(value)),
-    Tuple(_values(fv)),
+    Tuple(field_vector_values(fv)),
     0,
 )
 
 Base.@propagate_inbounds Base.getindex(
     fv::FieldVector,
     block::BlockArrays.Block{1},
-) = backing_array(_values(fv)[block.n...])
+) = backing_array(field_vector_values(fv)[block.n...])
 Base.@propagate_inbounds function Base.getindex(
     fv::FieldVector,
     bidx::BlockArrays.BlockIndex{1},
@@ -150,21 +160,21 @@ Base.@propagate_inbounds Base.setindex!(fv::FieldVector, val, i::Integer) =
     setindex!(fv, val, BlockArrays.findblockindex(axes(fv, 1), i))
 
 Base.similar(fv::FieldVector{T}) where {T} =
-    FieldVector{T}(map(similar, _values(fv)))
+    FieldVector{T}(map(similar, field_vector_values(fv)))
 Base.similar(fv::FieldVector{T}, ::Type{T}) where {T} =
-    FieldVector{T}(map(similar, _values(fv)))
+    FieldVector{T}(map(similar, field_vector_values(fv)))
 _similar(x, ::Type{T}) where {T} = similar(x, T)
 _similar(x::Field, ::Type{T}) where {T} =
     Field(DataLayouts.replace_basetype(field_values(x), T), axes(x))
 Base.similar(fv::FieldVector{T}, ::Type{T′}) where {T, T′} =
-    FieldVector{T′}(map(x -> _similar(x, T′), _values(fv)))
+    FieldVector{T′}(map(x -> _similar(x, T′), field_vector_values(fv)))
 
-Base.copy(fv::FieldVector{T}) where {T} = FieldVector{T}(map(copy, _values(fv)))
-Base.zero(fv::FieldVector{T}) where {T} = FieldVector{T}(map(zero, _values(fv)))
+Base.copy(fv::FieldVector{T}) where {T} = FieldVector{T}(map(copy, field_vector_values(fv)))
+Base.zero(fv::FieldVector{T}) where {T} = FieldVector{T}(map(zero, field_vector_values(fv)))
 
 for op in (:level, :slab, :column)
     @eval Base.@propagate_inbounds $op(fv::FieldVector{T}, inds...) where {T} =
-        FieldVector{T}($op(_values(fv), inds...))
+        FieldVector{T}($op(field_vector_values(fv), inds...))
 end
 
 struct FieldVectorStyle <: Base.Broadcast.AbstractArrayStyle{1} end
@@ -316,7 +326,7 @@ end
 # Val-wrap property names so broadcast transformations and closures receive type
 # parameters rather than runtime Symbols; deeply nested broadcasts can exhaust the
 # constant-propagation budget before the getfield calls, causing runtime allocations.
-@inline property_name_vals(fv::FieldVector) = property_name_vals(_values(fv))
+@inline property_name_vals(fv::FieldVector) = property_name_vals(field_vector_values(fv))
 @inline property_name_vals(::NamedTuple{names}) where {names} =
     unrolled_map(Val, names)
 @inline unval(::Val{value}) where {value} = value
@@ -341,7 +351,7 @@ end
     )
 end
 @inline transform_broadcasted(fv::FieldVector, ::Val{symb}, axes) where {symb} =
-    parent(getfield(_values(fv), symb))
+    parent(getfield(field_vector_values(fv), symb))
 @inline transform_broadcasted(x, symb_val, axes) = x
 
 # FieldVector entries are N-dimensional arrays, and broadcasting over them on
@@ -412,7 +422,7 @@ is_gpu_array_type(::Type{<:SubArray{<:Any, <:Any, P}}) where {P} =
     bc::Union{FieldVector, Base.Broadcast.Broadcasted{FieldVectorStyle}},
 )
     unrolled_foreach(property_name_vals(dest)) do symb_val
-        array = parent(getfield(_values(dest), unval(symb_val)))
+        array = parent(getfield(field_vector_values(dest), unval(symb_val)))
         bct = transform_broadcasted(bc, symb_val, axes(array))
         if array isa FieldVector
             copyto!(array, bct)
@@ -440,7 +450,7 @@ for S in
         bc::Base.Broadcast.Broadcasted{<:$S},
     )
         unrolled_foreach(property_name_vals(dest)) do symb_val
-            array = parent(getfield(_values(dest), unval(symb_val)))
+            array = parent(getfield(field_vector_values(dest), unval(symb_val)))
             array isa FieldVector ? copyto!(array, bc) :
             copyto!(array, Base.Broadcast.instantiate(bc))
         end
@@ -456,23 +466,23 @@ end
 
 @inline function Base.fill!(dest::FieldVector, value)
     unrolled_foreach(property_name_vals(dest)) do symb_val
-        fill!(parent(getfield(_values(dest), unval(symb_val))), value)
+        fill!(parent(getfield(field_vector_values(dest), unval(symb_val))), value)
     end
     call_post_op_callback() && post_op_callback(dest, dest, value)
     return dest
 end
 
 Base.mapreduce(f, op, fv::FieldVector) =
-    mapreduce(x -> mapreduce(f, op, backing_array(x)), op, _values(fv))
+    mapreduce(x -> mapreduce(f, op, backing_array(x)), op, field_vector_values(fv))
 
-Base.any(f, fv::FieldVector) = any(x -> any(f, backing_array(x)), _values(fv))
+Base.any(f, fv::FieldVector) = any(x -> any(f, backing_array(x)), field_vector_values(fv))
 Base.any(f::Function, fv::FieldVector) = # avoid ambiguities
-    any(x -> any(f, backing_array(x)), _values(fv))
+    any(x -> any(f, backing_array(x)), field_vector_values(fv))
 Base.any(fv::FieldVector) = any(identity, fv)
 
-Base.all(f, fv::FieldVector) = all(x -> all(f, backing_array(x)), _values(fv))
+Base.all(f, fv::FieldVector) = all(x -> all(f, backing_array(x)), field_vector_values(fv))
 Base.all(f::Function, fv::FieldVector) =
-    all(x -> all(f, backing_array(x)), _values(fv))
+    all(x -> all(f, backing_array(x)), field_vector_values(fv))
 Base.all(fv::FieldVector) = all(identity, fv)
 
 # TODO: figure out a better way to handle these
@@ -492,7 +502,7 @@ LinearAlgebra.ldiv!(A::LinearAlgebra.LU, x::FieldVector) =
     x .= LinearAlgebra.ldiv!(A, Vector(x))
 
 function LinearAlgebra.norm_sqr(x::FieldVector)
-    value_norm_sqrs = unrolled_map(_values(x)) do value
+    value_norm_sqrs = unrolled_map(field_vector_values(x)) do value
         LinearAlgebra.norm_sqr(backing_array(value))
     end
     return sum(value_norm_sqrs; init = zero(eltype(x)))
@@ -527,7 +537,7 @@ function fieldvector2array!(array::AbstractVector, fv::FieldVector)
              length $(length(array))",
         ),
     )
-    _blocks2array!(array, 0, Tuple(_values(fv)))
+    _blocks2array!(array, 0, Tuple(field_vector_values(fv)))
     return array
 end
 
@@ -552,7 +562,7 @@ function array2fieldvector!(fv::FieldVector, array::AbstractVector)
              length $(length(fv))",
         ),
     )
-    _array2blocks!(array, 0, Tuple(_values(fv)))
+    _array2blocks!(array, 0, Tuple(field_vector_values(fv)))
     return fv
 end
 
@@ -587,7 +597,7 @@ _blocks2array!(array, offset, vals::Tuple) = unrolled_reduce(
     offset,
 )
 _block2array!(array, offset, block::FieldVector) =
-    _blocks2array!(array, offset, Tuple(_values(block)))
+    _blocks2array!(array, offset, Tuple(field_vector_values(block)))
 function _block2array!(array, offset, block::AbstractArray)
     n = length(block)
     copyto!(array, offset + 1, block, 1, n)
@@ -606,7 +616,7 @@ _array2blocks!(array, offset, vals::Tuple) = unrolled_reduce(
     offset,
 )
 _array2block!(array, offset, block::FieldVector) =
-    _array2blocks!(array, offset, Tuple(_values(block)))
+    _array2blocks!(array, offset, Tuple(field_vector_values(block)))
 function _array2block!(array, offset, block::AbstractArray)
     n = length(block)
     copyto!(block, 1, array, offset + 1, n)
@@ -633,20 +643,20 @@ end
 # (which a nested FieldVector of nothing but scalars also promotes to).
 _array_type(x) = ClimaComms.array_type(x) # Fields
 _array_type(x::FieldVector) =
-    unrolled_mapreduce(_array_type, promote_type, _values(x); init = Union{})
+    unrolled_mapreduce(_array_type, promote_type, field_vector_values(x); init = Union{})
 _array_type(::ScalarWrapper) = Union{}
 _array_type(x::A) where {A <: AbstractArray} =
     parent(x) === x ? Base.typename(A).wrapper : _array_type(parent(x))
 
 ClimaComms.device(x::FieldVector) = ClimaComms.device(ClimaComms.context(x))
 function ClimaComms.context(x::FieldVector)
-    isempty(_values(x)) && error("Empty FieldVector has no device or context")
+    isempty(field_vector_values(x)) && error("Empty FieldVector has no device or context")
     # We don't have promotion for devices or contexts, so we use the first value
     # that isn't a PointField (a PointField's data can be stored on a different
     # device from other Fields to avoid scalar indexing on GPUs). If there is no
     # such value, fall back to using the first PointField.
-    index = unrolled_findfirst(Base.Fix1(!isa, PointField), _values(x))
-    return ClimaComms.context(_values(x)[isnothing(index) ? 1 : index])
+    index = unrolled_findfirst(Base.Fix1(!isa, PointField), field_vector_values(x))
+    return ClimaComms.context(field_vector_values(x)[isnothing(index) ? 1 : index])
 end
 
 function __rprint_diff(

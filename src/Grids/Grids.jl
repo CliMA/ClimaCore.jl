@@ -53,9 +53,55 @@ function local_geometry_type end
 # Fallback, but this requires user error-handling
 local_geometry_type(::Type{T}) where {T} = Union{}
 
+"""
+    Grids.dss_weights(grid::AbstractGrid, staggering::Union{Staggering, Nothing})
+
+Return the direct stiffness summation (DSS) weights of `grid` at the given
+`staggering`: a `DataLayout` of the inverse multiplicity of each node, scaled by
+the Jacobian, which `Spaces.weighted_dss!` applies to average shared nodes across
+element boundaries. Returns `nothing` for discontinuous (`DG`) grids. Extruded
+grids reuse the weights of their horizontal grid. If the grid is not staggered,
+`staggering` is `nothing`.
+"""
 function dss_weights end
+
+"""
+    Grids.quadrature_style(grid::AbstractGrid)
+
+Return the `Quadratures.QuadratureStyle` of the horizontal spectral element part
+of `grid` (e.g. `Quadratures.GLL{4}()`), or `nothing` for grids with no
+spectral element part.
+"""
 function quadrature_style end
+
+"""
+    Grids.vertical_topology(grid::AbstractGrid)
+
+Return the `Topologies.IntervalTopology` of the vertical part of `grid`: the
+topology of a finite difference grid, or that of the vertical grid of an
+extruded grid.
+"""
 function vertical_topology end
+
+"""
+    Grids.global_geometry(grid::AbstractGrid)
+
+Return the `Geometry.AbstractGlobalGeometry` of `grid`, which relates its local
+coordinates to a global Cartesian frame: `Geometry.CartesianGlobalGeometry` for
+planar and interval domains, and a spherical global geometry (carrying the
+`radius`) for grids on a sphere.
+"""
+function global_geometry end
+
+"""
+    Grids.hypsography(grid::AbstractGrid)
+
+Return the `HypsographyAdaption` of an extruded grid: [`Flat`](@ref) when the
+vertical coordinate is not adapted to surface topography, and a
+terrain-following adaption otherwise. Levels of an extruded grid
+(`Grids.LevelGrid`) return the hypsography of their full grid.
+"""
+function hypsography end
 
 
 

@@ -81,6 +81,15 @@ function transform_field(x)
     end
 end
 
+"""
+    Fields.single_field(f::Union{Field, FieldVector}, prop_chain, transform = transform_field)
+
+Return the field reached from `f` by following the property chain `prop_chain`
+(a tuple of symbols or integers, e.g. `(:c, :uₕ, :components, :data, 1)`),
+applying `transform` at each step. The default `transform_field` converts
+covariant vector fields to `UVVector`/`WVector` fields for output and leaves
+other fields unchanged; pass `identity` to skip the conversion.
+"""
 function single_field(
     f::Union{Field, FieldVector},
     prop_chain,

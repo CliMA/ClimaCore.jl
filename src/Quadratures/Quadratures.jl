@@ -20,12 +20,13 @@ Subtypes:
   - [`Uniform`](@ref): uniformly spaced midpoint quadrature.
   - `ClosedUniform`: uniformly spaced quadrature including the endpoints.
 
-Subtypes implement [`quadrature_points`](@ref) and `unique_degrees_of_freedom`.
+Subtypes implement [`quadrature_points`](@ref) and
+[`unique_degrees_of_freedom`](@ref).
 """
 abstract type QuadratureStyle{Nq} end
 
 """
-    polynomial_degree(quadstyle::QuadratureStyle) -> Int
+    polynomial_degree(quadstyle::QuadratureStyle)
 
 Return the polynomial degree `Nq - 1` of the quadrature rule `quadstyle`.
 """
@@ -33,14 +34,25 @@ Return the polynomial degree `Nq - 1` of the quadrature rule `quadstyle`.
 
 
 """
-    degrees_of_freedom(quadstyle::QuadratureStyle) -> Int
+    degrees_of_freedom(quadstyle::QuadratureStyle)
 
 Return the number of quadrature points `Nq` of the quadrature rule `quadstyle`.
 """
 @inline degrees_of_freedom(::QuadratureStyle{Nq}) where {Nq} = Nq
 
 """
-    requires_dss(quadstyle::QuadratureStyle) -> Bool
+    unique_degrees_of_freedom(quadstyle::QuadratureStyle)
+
+Return the number of quadrature points of `quadstyle` per element that are not
+shared with a neighbouring element. This is `Nq - 1` for rules that include the
+element endpoints ([`Quadratures.GLL`](@ref) and `ClosedUniform`), whose
+endpoint nodes are shared, and `Nq` for rules that do not ([`Quadratures.GL`](@ref)
+and `Uniform`).
+"""
+function unique_degrees_of_freedom end
+
+"""
+    requires_dss(quadstyle::QuadratureStyle)
 
 Return whether `quadstyle` requires direct stiffness summation, i.e. whether its nodes
 are shared between neighboring elements.
@@ -49,7 +61,7 @@ requires_dss(quadstyle) =
     unique_degrees_of_freedom(quadstyle) < degrees_of_freedom(quadstyle)
 
 """
-    quadrature_points(::Type{FT}, quadstyle::QuadratureStyle) -> (points, weights)
+    quadrature_points(::Type{FT}, quadstyle::QuadratureStyle)
 
 Return the points and weights of the quadrature rule `quadstyle` on `[-1, 1]` as a tuple
 of two `SVector`s with element type `FT`.
@@ -266,6 +278,15 @@ function spectral_filter_matrix(
     return V * Diagonal(Σ) / V
 end
 
+"""
+    cutoff_filter_matrix(::Type{FT}, quad::GLL{Nq}, Nc::Integer)
+
+Return the `Nq × Nq` `SMatrix{Nq, Nq, FT}` that applies a spectral cutoff filter to
+nodal values at the [`Quadratures.GLL`](@ref) points of `quad`: the values are
+projected onto the orthonormal Legendre basis, the first `Nc` modes (polynomial
+degrees `0` to `Nc - 1`) are kept and the remaining modes are set to zero, and
+the result is transformed back to nodal values.
+"""
 function cutoff_filter_matrix(
     ::Type{FT},
     quad::GLL{Nq},

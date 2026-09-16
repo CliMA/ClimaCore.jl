@@ -31,8 +31,7 @@ equations, and it runs on CPUs and on NVIDIA GPUs.
     [Yatunin2026](@cite).
   - **Differentiable in forward mode.** ForwardDiff dual numbers propagate
     through fields, broadcasts, and operators, and grid metric terms are
-    computed by automatic differentiation of the mesh coordinates. Reverse-mode
-    differentiation is planned.
+    computed by automatic differentiation of the mesh coordinates.
   - **Geometries from a single column to the cubed sphere.** Columns, x–z slices,
     Cartesian boxes and planes, and the equiangular cubed sphere, with
     terrain-following vertical coordinates. The operators serve both

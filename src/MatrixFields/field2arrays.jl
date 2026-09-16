@@ -10,6 +10,17 @@ band_matrix_d(field_d, ::Union{Square, FaceToFace, CenterToCenter}) = field_d
 band_matrix_d(field_d, ::FaceToCenter) = field_d + half
 band_matrix_d(field_d, ::CenterToFace) = field_d - half
 
+"""
+    band_matrix_info(field)
+
+Return `(n_rows, n_cols, matrix_ld, matrix_ud)` for a `ColumnwiseBandMatrixField`:
+the size of the `BandedMatrix` that each column of `field` represents, and the
+`Int` indices of its lowest and highest diagonals. The diagonal indices of
+`field`'s [`BandMatrixRow`](@ref)s, which are half-integers for center-to-face and
+face-to-center matrices, are shifted by `matrix_shape(field)` to obtain
+`matrix_ld` and `matrix_ud`. Throws an error if the main diagonal lies outside
+the band, since `BandedMatrices.jl` does not support such matrices.
+"""
 function band_matrix_info(field)
     field_ld, field_ud = outer_diagonals(eltype(field))
     n_rows = Spaces.nlevels(axes(field))
