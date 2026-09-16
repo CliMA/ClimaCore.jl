@@ -4,6 +4,23 @@ ClimaCore.jl Release Notes
 main
 -------
 
+
+v1.0.0
+-------
+
+ClimaCore's first stable release. Names that are neither exported nor documented
+remain internal and may change in any release. Apart from the removals listed
+below, v1.0.0 is API-identical to v0.16.2.
+
+- ![][badge-💥breaking] Removed the `ClimaCoreMakie` and `ClimaCorePlots`
+  packages under `lib/`. Both had been deprecated shims since v0.16.0: the Makie
+  recipes live in ClimaCore's `ClimaCoreMakieExt` extension and the Plots recipes
+  in its `ClimaCoreRecipesBaseExt` extension, and both extensions load
+  automatically once ClimaCore and the corresponding plotting package are loaded.
+  Drop the dependency and call `ClimaCore.Visualize.fieldheatmap` (and friends)
+  or `Plots.plot(field)` directly. `ClimaCoreTempestRemap` and `ClimaCoreSpectra`
+  are unaffected and remain in `lib/`.
+
 - ![][badge-💥breaking] Removed the backwards-compatibility shims and
   deprecated aliases that the rewrites of the last few releases left behind.
   Every one of them had a direct replacement, listed below; nothing else about
