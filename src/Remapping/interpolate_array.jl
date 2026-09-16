@@ -1,3 +1,21 @@
+# The value of `field` at horizontal node `ij` of element `h` on vertical level `v`. `ij`
+# has one index on a 1D horizontal space and two on a 2D one. `v` is an integer center
+# level, a `PlusHalf` face level, or `nothing` on a space without a vertical dimension,
+# matching the level index of a `Fields.SlabIndex`.
+Base.@propagate_inbounds function node_value(
+    field::Fields.Field,
+    v::Integer,
+    ij::CartesianIndex{N},
+    h::Integer,
+) where {N}
+    (i, j) = N == 1 ? (ij[1], 1) : Tuple(ij)
+    return field[v, i, j, h]
+end
+Base.@propagate_inbounds node_value(field, v::PlusHalf, ij, h) =
+    node_value(field, v + half, ij, h)
+Base.@propagate_inbounds node_value(field, ::Nothing, ij, h) =
+    node_value(field, 1, ij, h)
+
 """
     interpolate_slab!(output_array, field, slab_indices, weights)
 
@@ -32,15 +50,13 @@ function interpolate_slab!(
     @inbounds for index in 1:length(output_array)
         (I1, I2) = weights[index]
         Nq1, Nq2 = length(I1), length(I2)
+        (; v, h) = slab_indices[index]
 
         output_array[index] = zero(FT)
 
         for j in 1:Nq2, i in 1:Nq1
             ij = CartesianIndex((i, j))
-            output_array[index] +=
-                I1[i] *
-                I2[j] *
-                Operators.get_node(space, field, ij, slab_indices[index])
+            output_array[index] += I1[i] * I2[j] * node_value(field, v, ij, h)
         end
     end
 end
@@ -59,14 +75,13 @@ function interpolate_slab!(
     @inbounds for index in 1:length(output_array)
         (I1,) = weights[index]
         Nq = length(I1)
+        (; v, h) = slab_indices[index]
 
         output_array[index] = zero(FT)
 
         for i in 1:Nq
             ij = CartesianIndex((i,))
-            output_array[index] +=
-                I1[i] *
-                Operators.get_node(space, field, ij, slab_indices[index])
+            output_array[index] += I1[i] * node_value(field, v, ij, h)
         end
     end
 end
@@ -181,14 +196,8 @@ function interpolate_slab_level!(
 
         for j in 1:Nq2, i in 1:Nq1
             ij = CartesianIndex((i, j))
-            f_lo +=
-                I1[i] *
-                I2[j] *
-                Operators.get_node(space, field, ij, Fields.SlabIndex(v_lo, h))
-            f_hi +=
-                I1[i] *
-                I2[j] *
-                Operators.get_node(space, field, ij, Fields.SlabIndex(v_hi, h))
+            f_lo += I1[i] * I2[j] * node_value(field, v_lo, ij, h)
+            f_hi += I1[i] * I2[j] * node_value(field, v_hi, ij, h)
         end
 
         output_array[index] = ((1 - ξ3) * f_lo + (1 + ξ3) * f_hi) / 2
@@ -216,12 +225,8 @@ function interpolate_slab_level!(
 
         for i in 1:Nq
             ij = CartesianIndex((i,))
-            f_lo +=
-                I1[i] *
-                Operators.get_node(space, field, ij, Fields.SlabIndex(v_lo, h))
-            f_hi +=
-                I1[i] *
-                Operators.get_node(space, field, ij, Fields.SlabIndex(v_hi, h))
+            f_lo += I1[i] * node_value(field, v_lo, ij, h)
+            f_hi += I1[i] * node_value(field, v_hi, ij, h)
         end
         output_array[index] = ((1 - ξ3) * f_lo + (1 + ξ3) * f_hi) / 2
     end
@@ -386,8 +391,7 @@ function interpolate_array(
         val = zero(FT)
         for j in 1:Nq2, i in 1:Nq1
             ij = CartesianIndex((i, j))
-            slabidx = Fields.SlabIndex(nothing, h)
-            val += I1[i] * I2[j] * Operators.get_node(space, field, ij, slabidx)
+            val += I1[i] * I2[j] * node_value(field, nothing, ij, h)
         end
         array[ix, iy] = val
     end

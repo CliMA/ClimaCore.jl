@@ -20,7 +20,7 @@ A tendency split into explicit and implicit parts for ClimaTimeSteppers
 
     ```julia
     import ClimaCore.MatrixFields
-    import ClimaCore.MatrixFields: @name, ⋅
+    import ClimaCore.MatrixFields: @name
     jacobian = MatrixFields.FieldMatrix(
         (@name(c.ρ), @name(f.u₃)) => similar(Y.c.ρ, MatrixFields.BidiagonalMatrixRow{FT}),
         (@name(f.u₃), @name(c.ρ)) => similar(Y.f.u₃, MatrixFields.BidiagonalMatrixRow{FT}),
@@ -35,7 +35,7 @@ A tendency split into explicit and implicit parts for ClimaTimeSteppers
 
  2. Fill the entries from operator matrices. `MatrixFields.operator_matrix(op)`
     is the banded matrix of a finite-difference operator, and products of
-    operator matrices (`⋅`) and of matrices with fields are banded matrices
+    operator matrices (`*`) and of matrices with fields are banded matrices
     too, so the Jacobian of a composed stencil is written as the same
     composition:
 
@@ -44,7 +44,7 @@ A tendency split into explicit and implicit parts for ClimaTimeSteppers
     gradᵥ_matrix = MatrixFields.operator_matrix(gradᵥ)
     function Wfact(W, Y, p, dtγ, t)
         @. W.matrix[@name(c.ρ), @name(c.ρ)] =
-            dtγ * κ * divᵥ_matrix() ⋅ gradᵥ_matrix() - (LinearAlgebra.I,)
+            dtγ * κ * divᵥ_matrix() * gradᵥ_matrix() - (LinearAlgebra.I,)
         return nothing
     end
     ```

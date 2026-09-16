@@ -65,7 +65,7 @@ function results(ᶜspace)
         ᶜdiv_mat = @.(div_mat() * ᶠw),
         ᶠinterp_mat = @.(interp_mat() * ᶜf),
         ᶜdivₕ = Operators.Divergence().(ᶜcov12),
-        ᶜwdivₕ = Operators.WeakDivergence().(ᶜcov12),
+        ᶜwdivₕ = Operators.Divergence{Operators.WeakForm}().(ᶜcov12),
         ᶜgradₕ = Operators.Gradient().(ᶜf),
         ᶠ∫f, ∫f, max_f, ᶠacc,
         ᶜΔz = Fields.Δz_field(ᶜspace),

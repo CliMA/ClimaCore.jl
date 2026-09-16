@@ -350,11 +350,6 @@ Base.@propagate_inbounds level(field::Field, v) = Field(
     level(axes(field), v),
 )
 
-# DEPRECATED: use level(field, v) instead; a caller that reaches this method
-# with a multi-level field has a bug that it silently hides. No warning, as in
-# src/DataLayouts/deprecated.jl. Remove once ClimaAtmos has migrated.
-level(field::Field) = field
-
 Base.@propagate_inbounds slab(field::Field, h) =
     Field(slab(field_values(field), h), slab(axes(field), h))
 Base.@propagate_inbounds slab(field::Field, v, h) = Field(
