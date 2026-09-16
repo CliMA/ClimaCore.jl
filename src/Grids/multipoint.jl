@@ -47,8 +47,6 @@ topology(::MultiPointGrid) = error(
 local_geometry_data(grid::MultiPointGrid, ::Nothing) = grid.local_geometry
 global_geometry(grid::MultiPointGrid) = grid.global_geometry
 
-quadrature_style(::MultiPointGrid) = nothing
-
 """
     MultiPointGrid(
         points  :: AbstractVector{Geometry.LatLongPoint{FT}};

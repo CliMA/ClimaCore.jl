@@ -93,8 +93,7 @@ sw_wavespeed(y, p) = sqrt(p.g * y.ρ) + norm(y.ρu / y.ρ)
 
 function shallow_water_rhs!(dydt, y, (p, completion), t)
     wdiv = Operators.Divergence{Operators.WeakForm}()
-    rp = Ref(p)
-    @. dydt = -wdiv(sw_flux(y, rp))
+    @. dydt = -wdiv(sw_flux(y, (p,)))
     Operators.complete_tendency!(completion, dydt, y, p)
     return dydt
 end
@@ -102,7 +101,7 @@ end
 numflux = Operators.RusanovNumericalFlux(sw_flux, sw_wavespeed)
 
 function tendency(space)
-    y = bickley_jet.(Fields.coordinate_field(space), Ref(params))
+    y = bickley_jet.(Fields.coordinate_field(space), (params,))
     dydt = similar(y)
     completion = Operators.tendency_completion(dydt; numflux)
     shallow_water_rhs!(dydt, y, (params, completion), FT(0))

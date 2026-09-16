@@ -57,11 +57,11 @@ local_geometry_type(::Type{T}) where {T} = Union{}
     Grids.dss_weights(grid::AbstractGrid, staggering::Union{Staggering, Nothing})
 
 Return the direct stiffness summation (DSS) weights of `grid` at the given
-`staggering`: a `DataLayout` of the inverse multiplicity of each node, scaled by
-the Jacobian, which `Spaces.weighted_dss!` applies to average shared nodes across
-element boundaries. Returns `nothing` for discontinuous (`DG`) grids. Extruded
-grids reuse the weights of their horizontal grid. If the grid is not staggered,
-`staggering` is `nothing`.
+`staggering`: a `DataLayout` of the inverse multiplicity of each node, weighted
+by the node's metric Jacobian within each element, which `Spaces.weighted_dss!`
+applies to average shared nodes across element boundaries. Return `nothing` for
+discontinuous (`DG`) grids. Extruded grids reuse the weights of their horizontal
+grid. If the grid is not staggered, `staggering` should be set to `nothing`.
 """
 function dss_weights end
 
@@ -69,8 +69,8 @@ function dss_weights end
     Grids.quadrature_style(grid::AbstractGrid)
 
 Return the `Quadratures.QuadratureStyle` of the horizontal spectral element part
-of `grid` (e.g. `Quadratures.GLL{4}()`), or `nothing` for grids with no
-spectral element part.
+of `grid` (e.g. `Quadratures.GLL{4}()`). Throw a `MethodError` if `grid` has no
+such horizontal part.
 """
 function quadrature_style end
 
@@ -102,8 +102,6 @@ terrain-following adaption otherwise. Levels of an extruded grid
 (`Grids.LevelGrid`) return the hypsography of their full grid.
 """
 function hypsography end
-
-
 
 # The topology may be `nothing` in a kernel (see `ext/cuda/adapt.jl`), in which
 # case the grid is on the device side.
@@ -181,7 +179,7 @@ get_mask(::ExtrudedFiniteDifferenceGrid{<:MultiPointGrid}) = DataLayouts.NoMask(
 Set the active-node mask of `grid`. With `fn`, the mask is `fn(coord)` evaluated at
 every coordinate of the horizontal grid; with `data`, the mask is copied from
 `data`. The mask maps are then rebuilt with `DataLayouts.set_mask_maps!`. Does
-nothing if the grid mask is a `DataLayouts.NoMask`. Returns `nothing`.
+nothing if the grid mask is a `DataLayouts.NoMask`.
 """
 function set_mask! end
 

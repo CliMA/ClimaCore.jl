@@ -114,8 +114,6 @@ Adapt.adapt_structure(to, space::MultiColumnFiniteDifferenceSpace) =
         staggering(space),
     )
 
-issubspace(space1::MultiPointSpace, space2::MultiPointSpace) =
-    horizontal_grid(grid(space1)) === horizontal_grid(grid(space2))
 issubspace(subspace::MultiPointSpace, space::MultiColumnFiniteDifferenceSpace) =
     grid(subspace) === grid(space).horizontal_grid ||
     (grid(subspace) isa Grids.LevelGrid && grid(subspace).full_grid === grid(space))

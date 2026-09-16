@@ -31,7 +31,7 @@ completion = Operators.tendency_completion(dydt; numflux)
 
 function rhs!(dydt, y, (params, completion), t)
     wdiv = Operators.Divergence{Operators.WeakForm}()
-    @. dydt = -wdiv(physical_flux(y, Ref(params)))
+    @. dydt = -wdiv(physical_flux(y, (params,)))
     Operators.complete_tendency!(completion, dydt, y, params)
     return dydt
 end

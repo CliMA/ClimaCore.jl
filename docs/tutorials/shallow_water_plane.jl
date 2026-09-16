@@ -76,7 +76,7 @@ function init_state(local_geometry, p)
     return (; ρ = p.ρ₀, u = u, ρθ = p.ρ₀ * sin(p.k * y))
 end
 
-y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
+y0 = init_state.(Fields.local_geometry_field(space), (parameters,))
 fieldheatmap(y0.ρθ)
 
 # ## 3. The tendency

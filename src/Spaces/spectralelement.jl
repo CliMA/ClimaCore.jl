@@ -170,11 +170,6 @@ ClimaComms.context(space::SpectralElementSpaceSlab) = space.context
 quadrature_style(space::SpectralElementSpaceSlab) = space.quadrature_style
 local_geometry_data(space::SpectralElementSpaceSlab) = space.local_geometry
 
-issubspace(space1::SpectralElementSpaceSlab, space2::SpectralElementSpaceSlab) =
-    space1 == space2
-issubspace(space1::AbstractSpectralElementSpace, space2::AbstractSpectralElementSpace) =
-    horizontal_grid(grid(space1)) === horizontal_grid(grid(space2))
-
 level(space::AbstractSpectralElementSpace, v) =
     isone(v) ? space : throw(ArgumentError("Space only has one level"))
 
