@@ -1512,6 +1512,30 @@ end
     end
 end
 
+# A level of an extruded space and the horizontal space it was levelled from are
+# distinct objects sharing a horizontal grid, so broadcasting between them relies
+# on the same-type `Spaces.issubspace` methods rather than on `===`.
+@testset "broadcasts between a level and its horizontal space" begin
+    FT = Float64
+    context = ClimaComms.context(ClimaComms.device())
+    for space in (
+        TU.MultiColumnSpace(FT; context),
+        TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
+    )
+        hspace = Spaces.horizontal_space(space)
+        lspace = Spaces.level(space, 1)
+        @test Spaces.issubspace(lspace, hspace)
+        @test Spaces.issubspace(hspace, lspace)
+        hfield = Fields.Field(FT, hspace)
+        lfield = Fields.Field(FT, lspace)
+        parent(hfield) .= rand.(FT)
+        parent(lfield) .= rand.(FT)
+        expected = Array(parent(hfield))[:] .+ Array(parent(lfield))[:]
+        @test Array(parent(hfield .+ lfield))[:] ≈ expected
+        @test Array(parent(lfield .+ hfield))[:] ≈ expected
+    end
+end
+
 include("unit_field_multi_broadcast_fusion.jl")
 
 nothing

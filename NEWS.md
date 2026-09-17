@@ -4,6 +4,16 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v1.0.1
+-------
+
+- Fixed a regression in v1.0.0: the `Spaces.issubspace` methods that let a field
+  on a level of an extruded space broadcast against a field on the horizontal
+  space it was levelled from (and the corresponding finite difference and
+  `MultiPointSpace` methods) were dropped by accident. They are restored, so
+  surface boundary conditions built on a level space broadcast against
+  horizontal fields again.
+
 
 v1.0.0
 -------
