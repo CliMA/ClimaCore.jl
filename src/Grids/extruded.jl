@@ -162,6 +162,11 @@ hypsography(grid::ExtrudedFiniteDifferenceGrid) = grid.hypsography
 quadrature_style(grid::ExtrudedFiniteDifferenceGrid) =
     quadrature_style(grid.horizontal_grid)
 
+issubgrid(subgrid::FiniteDifferenceGrid, grid::ExtrudedFiniteDifferenceGrid) =
+    issubgrid(subgrid, grid.vertical_grid)
+issubgrid(subgrid::AbstractSpectralElementGrid, grid::ExtrudedFiniteDifferenceGrid) =
+    issubgrid(subgrid, grid.horizontal_grid)
+
 ## aliases
 
 const ExtrudedSpectralElementGrid2D =

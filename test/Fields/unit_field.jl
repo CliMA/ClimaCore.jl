@@ -846,6 +846,10 @@ end
         @test level_of_field == Spaces.level(field, TU.fc_index(1, space))
         @test level_of_field ==
               Base.materialize(Spaces.level(lazy.(identity.(field)), TU.fc_index(1, space)))
+        if space isa Spaces.ExtrudedFiniteDifferenceSpace
+            level_field = fill((; x = FT(1)), Spaces.horizontal_space(space))
+            @test iszero(sum(level_of_field .- level_field).x)
+        end
     end
 end
 

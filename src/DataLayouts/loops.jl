@@ -32,7 +32,7 @@ end
 @inline each_maskable_slice_index(_, mask::IJHMask, ::typeof(column), args...) =
     ActiveColumnIndices(mask)
 @inline each_maskable_slice_index(_, mask::IJHMask, ::typeof(view), args...) =
-    ActivePointIndices{size(first(args), 1)}(mask)
+    ActivePointIndices{nlevels(first(args))}(mask)
 
 # Every valid mask and slice operator combination has indexable slice indices:
 # NoMask uses the full index ranges, and IJHMask (which only supports column
@@ -481,7 +481,9 @@ end
 end
 
 @inline function Base.copyto!(dest::DataLayout, arg::MaybeLazyDataLayout; kwargs...)
-    foreach_point(dest, arg; kwargs...) do dest_point, arg_point
+    dest_and_arg = Broadcast.broadcasted(tuple, dest, arg)
+    foreach_point(dest_and_arg; kwargs...) do dest_and_arg_point
+        @inbounds (dest_point, arg_point) = dest_and_arg_point.args
         @inbounds dest_point[] = arg_point[]
     end
     call_post_op_callback() && post_op_callback(dest, dest, arg; kwargs...)

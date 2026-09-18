@@ -261,13 +261,6 @@ terrain-following adaption otherwise. Forwards to `Grids.hypsography`.
 """
 hypsography(space::ExtrudedFiniteDifferenceSpace) = hypsography(grid(space))
 
-issubspace(subspace::AbstractSpectralElementSpace, space::ExtrudedFiniteDifferenceSpace) =
-    grid(subspace) === grid(space).horizontal_grid ||
-    (grid(subspace) isa Grids.LevelGrid && grid(subspace).full_grid === grid(space))
-issubspace(subspace::FiniteDifferenceSpace, space::ExtrudedFiniteDifferenceSpace) =
-    grid(subspace) === grid(space).vertical_grid ||
-    (grid(subspace) isa Grids.ColumnGrid && grid(subspace).full_grid === grid(space))
-
 # Dispatch on the directions spanned by the local geometry's coordinates.
 Base.@propagate_inbounds level(space::ExtrudedFiniteDifferenceSpace, v) =
     _level_space(

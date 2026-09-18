@@ -154,6 +154,23 @@ parent_broadcasted(bc::DataLayouts.LazyDataLayout) =
     @test_throws DimensionMismatch volume .+ mismatched_volume
 end
 
+# Broadcasts whose source corresponds to a slice of the destination must use the
+# destination axes when materializing.
+@testset "extruding broadcast axes" begin
+    device = ClimaComms.device()
+    dest = test_data(device, Float64, 1, 10)
+    src = test_data(device, Float64, 1, 10)
+    for src_slice in (
+        view(src, 1),
+        DataLayouts.level(src, 1),
+        DataLayouts.slab(src, 1, 1),
+        DataLayouts.column(src, 1, 1, 1),
+    )
+        dest .= src_slice
+        @test all(parent(dest) .== parent(src_slice))
+    end
+end
+
 # Measure allocations from a top-level function, since the @allocated macro has
 # a small constant overhead when it is used in a local scope.
 assign_scalar!(data) = data .= eltype(data)(0.5)

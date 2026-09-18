@@ -114,13 +114,6 @@ Adapt.adapt_structure(to, space::MultiColumnFiniteDifferenceSpace) =
         staggering(space),
     )
 
-issubspace(subspace::MultiPointSpace, space::MultiColumnFiniteDifferenceSpace) =
-    grid(subspace) === grid(space).horizontal_grid ||
-    (grid(subspace) isa Grids.LevelGrid && grid(subspace).full_grid === grid(space))
-issubspace(subspace::FiniteDifferenceSpace, space::MultiColumnFiniteDifferenceSpace) =
-    grid(subspace) === grid(space).vertical_grid ||
-    (grid(subspace) isa Grids.ColumnGrid && grid(subspace).full_grid === grid(space))
-
 level(space::MultiPointSpace, v) =
     isone(v) ? space : throw(ArgumentError("Space only has one level"))
 Base.@propagate_inbounds level(space::MultiColumnFiniteDifferenceSpace, v) =

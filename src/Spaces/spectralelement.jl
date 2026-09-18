@@ -12,8 +12,6 @@ abstract type AbstractSpectralElementSpace <: AbstractSpace end
 Topologies.nlocalelems(space::AbstractSpectralElementSpace) =
     Topologies.nlocalelems(topology(space))
 
-
-
 quadrature_style(space::AbstractSpectralElementSpace) =
     quadrature_style(grid(space))
 
@@ -169,6 +167,14 @@ ClimaComms.context(space::SpectralElementSpaceSlab) = space.context
 
 quadrature_style(space::SpectralElementSpaceSlab) = space.quadrature_style
 local_geometry_data(space::SpectralElementSpaceSlab) = space.local_geometry
+
+issubspace(subspace::SpectralElementSpaceSlab, space::SpectralElementSpaceSlab) =
+    subspace === space
+issubspace(subspace::SpectralElementSpaceSlab, space::AbstractSpace) =
+    subspace.context == ClimaComms.context(space) &&
+    subspace.quadrature_style == quadrature_style(space) &&
+    parent(parent(subspace.local_geometry)) === parent(local_geometry_data(space))
+issubspace(::AbstractSpace, ::SpectralElementSpaceSlab) = false
 
 level(space::AbstractSpectralElementSpace, v) =
     isone(v) ? space : throw(ArgumentError("Space only has one level"))
