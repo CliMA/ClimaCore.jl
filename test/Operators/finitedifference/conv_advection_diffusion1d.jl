@@ -79,11 +79,11 @@ import .TestUtilities: convergence_rate
             bc_gt = Operators.SetGradient(
                 Geometry.WVector(FT(∇gaussian(z₁, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ))),
             )
+            T_top = Fields.level(T, Fields.nlevels(T))
+            T_top_m1 = Fields.level(T, Fields.nlevels(T) - 1)
+            T_top_m1_shifted = Fields.Field(Fields.field_values(T_top_m1), axes(T_top))
             top_center_left_biased_grad =
-                Geometry.Covariant3Vector.(
-                    Fields.level(T, Fields.nlevels(T)) .-
-                    Fields.level(T, Fields.nlevels(T) - 1),
-                )
+                Geometry.Covariant3Vector.(T_top .- T_top_m1_shifted)
 
             bc_gt_lb = Operators.SetGradient(top_center_left_biased_grad)
             gradc2f = Operators.GradientC2F(bottom = bc_gb, top = bc_gt)

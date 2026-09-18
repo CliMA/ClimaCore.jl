@@ -205,6 +205,10 @@ end
         end,
     )
 
+# Slices of zero-dimensional data are no-ops, without extra SubArray wrappers.
+@inline Base.view(data::DataLayout{<:Any, 0}, index::PointIndex) =
+    unrolled_all(isone, Tuple(index)) ? data : Base.throw_boundserror(data, (index,))
+
 # A single-point slice of multidimensional data keeps its number of dimensions,
 # so single-point broadcasts are identified by their length instead of ndims.
 # One method per broadcast type, avoiding ambiguity with the PointIndex methods.

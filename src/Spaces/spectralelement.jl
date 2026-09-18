@@ -12,8 +12,6 @@ abstract type AbstractSpectralElementSpace <: AbstractSpace end
 Topologies.nlocalelems(space::AbstractSpectralElementSpace) =
     Topologies.nlocalelems(topology(space))
 
-
-
 quadrature_style(space::AbstractSpectralElementSpace) =
     quadrature_style(grid(space))
 
@@ -169,6 +167,15 @@ ClimaComms.context(space::SpectralElementSpaceSlab) = space.context
 
 quadrature_style(space::SpectralElementSpaceSlab) = space.quadrature_style
 local_geometry_data(space::SpectralElementSpaceSlab) = space.local_geometry
+
+# Single-slab fields act like point fields in spectral element broadcasts (at
+# the level of elements rather than points), so a SpectralElementSpaceSlab is
+# a subspace of every other AbstractSpace that uses the same quadrature_style.
+issubspace(subspace::SpectralElementSpaceSlab, space::AbstractSpace) =
+    space isa Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace} &&
+    subspace.quadrature_style == quadrature_style(space)
+issubspace(subspace::SpectralElementSpaceSlab, space::SpectralElementSpaceSlab) =
+    subspace === space
 
 level(space::AbstractSpectralElementSpace, v) =
     isone(v) ? space : throw(ArgumentError("Space only has one level"))

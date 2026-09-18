@@ -245,7 +245,8 @@ quadrature_style(space::ExtrudedFiniteDifferenceSpace) =
     quadrature_style(grid(space))
 topology(space::ExtrudedFiniteDifferenceSpace) = topology(grid(space))
 
-
+vertical_space(full_space::ExtrudedFiniteDifferenceSpace) =
+    space(grid(full_space).vertical_grid, staggering(full_space))
 horizontal_space(full_space::ExtrudedFiniteDifferenceSpace) =
     space(grid(full_space).horizontal_grid, nothing)
 
@@ -261,20 +262,8 @@ terrain-following adaption otherwise. Forwards to `Grids.hypsography`.
 """
 hypsography(space::ExtrudedFiniteDifferenceSpace) = hypsography(grid(space))
 
-issubspace(subspace::AbstractSpectralElementSpace, space::ExtrudedFiniteDifferenceSpace) =
-    grid(subspace) === grid(space).horizontal_grid ||
-    (grid(subspace) isa Grids.LevelGrid && grid(subspace).full_grid === grid(space))
-issubspace(subspace::FiniteDifferenceSpace, space::ExtrudedFiniteDifferenceSpace) =
-    grid(subspace) === grid(space).vertical_grid ||
-    (grid(subspace) isa Grids.ColumnGrid && grid(subspace).full_grid === grid(space))
-
-# This must also cover device-side spaces, which appear in place of their host
-# counterparts inside GPU kernels (see reconstruct_placeholder_space). Without a
-# method that matches, `level` falls back to the generic identity method, which
-# silently returns the extruded space itself. Device-side grids do not store
-# their horizontal grid, so the aliases above cannot tell how many horizontal
-# dimensions such a space spans; the directions spanned by the coordinates of
-# its local geometry, which host and device spaces share, stand in for that.
+# Dispatch on the directions spanned by the local geometry's coordinates, since
+# device-side extruded grids do not store their vertical/horizontal components.
 Base.@propagate_inbounds level(space::ExtrudedFiniteDifferenceSpace, v) =
     _level_space(
         eltype(local_geometry_data(space)),

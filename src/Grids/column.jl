@@ -47,3 +47,10 @@ vertical_topology(colgrid::ColumnGrid) = vertical_topology(colgrid.full_grid)
 local_geometry_data(colgrid::ColumnGrid, staggering::Staggering) =
     column(local_geometry_data(colgrid.full_grid, staggering), colgrid.indices...)
 global_geometry(colgrid::ColumnGrid) = global_geometry(colgrid.full_grid)
+
+issubgrid(subgrid::ColumnGrid, grid::ColumnGrid) = subgrid === grid
+issubgrid(subgrid::ColumnGrid, grid::AbstractGrid) = issubgrid(subgrid.full_grid, grid)
+issubgrid(subgrid::AbstractGrid, grid::ColumnGrid) =
+    grid.full_grid isa DeviceExtrudedFiniteDifferenceGrid ?
+    throw(ArgumentError("Cannot compare device-side slices of extruded grids")) :
+    issubgrid(subgrid, grid.full_grid.vertical_grid)

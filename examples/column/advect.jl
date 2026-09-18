@@ -91,11 +91,12 @@ upwind_flux(θ, t) = Operators.upwind_biased_product_c2f_dirichlet(
 function centered_advection_gradient(θ, t)
     θ_n = Fields.level(θ, Fields.nlevels(θ))
     θ_nm1 = Fields.level(θ, Fields.nlevels(θ) - 1)
+    θ_nm1_shifted = Fields.Field(Fields.field_values(θ_nm1), axes(θ_n))
     return Operators.gradient_c2f_dirichlet(
         θ;
         left = exact_θ(z_left, t),
         right = Operators.SetGradient(
-            @. lazy(Geometry.Covariant3Vector(θ_n - θ_nm1))
+            @. lazy(Geometry.Covariant3Vector(θ_n - θ_nm1_shifted))
         ),
     )
 end

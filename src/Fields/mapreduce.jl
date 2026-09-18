@@ -235,5 +235,5 @@ function Base.isapprox(
 end
 
 Base.:(==)(field1::Field, field2::Field) =
-    axes(field1) === axes(field2) &&
+    axes(field1) == axes(field2) &&
     field_values(field1) == field_values(field2)

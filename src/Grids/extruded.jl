@@ -162,6 +162,10 @@ hypsography(grid::ExtrudedFiniteDifferenceGrid) = grid.hypsography
 quadrature_style(grid::ExtrudedFiniteDifferenceGrid) =
     quadrature_style(grid.horizontal_grid)
 
+issubgrid(subgrid::FiniteDifferenceGrid, grid::ExtrudedFiniteDifferenceGrid) =
+    issubgrid(subgrid, grid.vertical_grid)
+issubgrid(subgrid::AbstractSpectralElementGrid, grid::ExtrudedFiniteDifferenceGrid) =
+    issubgrid(subgrid, grid.horizontal_grid)
 
 ## GPU compatibility
 struct DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, CLG, FLG} <:
@@ -184,6 +188,11 @@ quadrature_style(grid::DeviceExtrudedFiniteDifferenceGrid) =
     grid.quadrature_style
 vertical_topology(grid::DeviceExtrudedFiniteDifferenceGrid) =
     grid.vertical_topology
+
+issubgrid(
+    ::Union{DeviceFiniteDifferenceGrid, AbstractSpectralElementGrid},
+    ::DeviceExtrudedFiniteDifferenceGrid,
+) = throw(ArgumentError("Cannot compare device-side slices of extruded grids"))
 
 ## aliases
 

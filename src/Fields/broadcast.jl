@@ -130,7 +130,7 @@ end
 # Body of a slice operator applied to one node of a broadcast expression; a
 # generated function makes slicing a node one method instance rather than three
 # per node per distinct expression type (as in DataLayouts/indexing.jl).
-sliced_broadcast_body(op::Symbol, bc_type) = quote
+sliced_broadcast_body(op, bc_type) = quote
     Base.@_propagate_inbounds_meta
     f = getfield(bc, :f)
     f′ = f isa Union{Function, Type} ? f : $op(f, inds...)
@@ -147,7 +147,7 @@ sliced_broadcast_body(op::Symbol, bc_type) = quote
     )
 end
 
-for op in (:level, :slab, :column)
+for op in (:(Base.view), :level, :slab, :column)
     @eval @generated $op(bc::LazyField, inds...) =
         sliced_broadcast_body($(QuoteNode(op)), bc)
 end
@@ -225,21 +225,6 @@ end
 @inline Base.Broadcast.broadcast_shape(space::AbstractSpace, ::Tuple) = space
 @inline Base.Broadcast.broadcast_shape(::Tuple, space::AbstractSpace) = space
 
-@inline Base.Broadcast.broadcast_shape(
-    pointspace::AbstractPointSpace,
-    space::AbstractSpace,
-) = space
-@inline Base.Broadcast.broadcast_shape(
-    space::AbstractSpace,
-    pointspace::AbstractPointSpace,
-) = space
-
-# Avoid method ambiguity:
-@inline Base.Broadcast.broadcast_shape(
-    a::AbstractPointSpace,
-    b::AbstractPointSpace,
-) = a
-
 # Overload broadcast axes shape checking for more useful error message for Field Spaces
 @inline function Base.Broadcast.check_broadcast_shape(
     space1::AbstractSpace,
@@ -275,24 +260,6 @@ end
     ::AbstractSpace,
     ::Tuple{T},
 ) where {T}
-    return nothing
-end
-@inline function Base.Broadcast.check_broadcast_shape(
-    ::AbstractSpace,
-    ::AbstractPointSpace,
-)
-    return nothing
-end
-@inline function Base.Broadcast.check_broadcast_shape(
-    ::AbstractPointSpace,
-    ::AbstractSpace,
-)
-    return nothing
-end
-@inline function Base.Broadcast.check_broadcast_shape(
-    ::AbstractPointSpace,
-    ::AbstractPointSpace,
-)
     return nothing
 end
 
