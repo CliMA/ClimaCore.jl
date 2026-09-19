@@ -39,6 +39,7 @@ import ..Grids:
     local_geometry_data,
     global_geometry,
     dss_weights,
+    issubgrid,
     set_mask!,
     get_mask,
     quadrature_style,
@@ -146,7 +147,9 @@ Return `true` if fields on `subspace` can be broadcast against fields on
 extruded `space`, or the vertical space or a column of it. Two spaces built on
 the same grid with different staggering are not subspaces of each other.
 """
-issubspace(subspace::AbstractSpace, space::AbstractSpace) = subspace === space
+issubspace(subspace::AbstractSpace, space::AbstractSpace) =
+    issubgrid(grid(subspace), grid(space)) &&
+    (isnothing(staggering(subspace)) || staggering(subspace) == staggering(space))
 
 """
     Spaces.undertype(space::AbstractSpace)
@@ -176,8 +179,7 @@ coordinates_data(staggering, grid::Grids.AbstractGrid) =
 
 Return the horizontal grid underlying `grid`: a spectral element grid is its own
 horizontal grid, and a `Grids.LevelGrid` returns the horizontal grid of the
-extruded grid it is a level of. Used to decide whether two horizontal spaces
-share a grid (see `Spaces.issubspace`).
+extruded grid it is a level of.
 """
 horizontal_grid(grid::Grids.AbstractSpectralElementGrid) = grid
 horizontal_grid(grid::Grids.LevelGrid) = grid.full_grid.horizontal_grid
@@ -188,8 +190,7 @@ horizontal_grid(grid::Grids.LevelGrid) = grid.full_grid.horizontal_grid
 Return the vertical (finite difference) grid underlying `grid`: a finite
 difference grid is its own vertical grid, an extruded grid returns its
 `vertical_grid`, and a `Grids.ColumnGrid` returns the vertical grid of the
-extruded grid it is a column of. Used to decide whether two vertical spaces
-share a grid (see `Spaces.issubspace`).
+extruded grid it is a column of.
 """
 vertical_grid(grid::Grids.AbstractFiniteDifferenceGrid) = grid
 vertical_grid(grid::Grids.ColumnGrid) = vertical_grid(grid.full_grid)
@@ -218,6 +219,9 @@ include("multicolumn.jl")
 include("triangulation.jl")
 include("dss.jl")
 
+# Resolve method ambiguities for issubspace.
+issubspace(::PointSpace, ::SpectralElementSpaceSlab) = false
+issubspace(::SpectralElementSpaceSlab, ::PointSpace) = false
 
 function center_space(space::AbstractSpace)
     error("`center_space` can only be called with vertical/extruded spaces")

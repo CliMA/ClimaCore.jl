@@ -29,6 +29,7 @@ Grids.quadrature_style
 Grids.global_geometry
 Grids.local_geometry_data
 Grids.dss_weights
+Grids.issubgrid
 Grids.get_mask
 Grids.set_mask!
 ```

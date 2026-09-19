@@ -47,3 +47,9 @@ vertical_topology(colgrid::ColumnGrid) = vertical_topology(colgrid.full_grid)
 local_geometry_data(colgrid::ColumnGrid, staggering::Staggering) =
     column(local_geometry_data(colgrid.full_grid, staggering), colgrid.indices...)
 global_geometry(colgrid::ColumnGrid) = global_geometry(colgrid.full_grid)
+
+issubgrid(subgrid::ColumnGrid, grid::ColumnGrid) = subgrid === grid
+issubgrid(subgrid::ColumnGrid, grid::AbstractGrid) =
+    subgrid === grid || subgrid.full_grid === grid
+issubgrid(subgrid::AbstractGrid, grid::ColumnGrid) =
+    subgrid === grid || issubgrid(subgrid, grid.full_grid)

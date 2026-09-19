@@ -83,6 +83,12 @@ function PointSpace(
     return PointSpace(context, local_geometry)
 end
 
+issubspace(subspace::PointSpace, space::PointSpace) = subspace === space
+issubspace(subspace::PointSpace, space::AbstractSpace) =
+    subspace.context == ClimaComms.context(space) &&
+    parent(parent(subspace.local_geometry)) === parent(local_geometry_data(space))
+issubspace(::AbstractSpace, ::PointSpace) = false
+
 all_nodes(::PointSpace) = (1,)
 
 node_horizontal_length_scale(space::PointSpace) = 1
