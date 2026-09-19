@@ -1,0 +1,9 @@
+/* Center a figure and scale it to a fraction of the content width. The image
+   fills the wrapper, so its displayed width tracks the wrapper width. */
+.figure-center {
+    margin: 1.5em auto;
+    text-align: center;
+}
+.figure-center img {
+    width: 100%;
+}
