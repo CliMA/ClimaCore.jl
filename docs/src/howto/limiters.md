@@ -3,9 +3,10 @@
 Spectral-element transport overshoots: a tracer bounded between 0 and 1
 develops values outside that range where the flow is under-resolved.
 `ClimaCore.Limiters` provides a horizontal quasi-monotone limiter that
-restores element-local bounds while conserving mass, and a vertical mass
-borrowing limiter that removes negative values. Both are applied to the
-state after a time step or stage.
+restores element-local bounds while conserving mass, a vertical mass
+borrowing limiter that removes negative values, and a Zhang–Shu positivity
+limiter for the conserved state of a DG discretization. All are applied to
+the state after a time step or stage.
 
 ## Quasi-monotone limiter (horizontal)
 
@@ -53,6 +54,35 @@ minimum, conserving the column's tracer mass [zhang2018impact](@cite):
 limiter = Limiters.VerticalMassBorrowingLimiter((0.0, 0.0))  # one minimum per tracer
 Limiters.apply_limiter!(q, ρ, limiter)
 ```
+
+## Zhang–Shu positivity limiter (DG)
+
+`Limiters.PositivityLimiter` restores physical floors on a conserved DG
+state [ZhangShu2010](@cite): in each element it scales the nodal conserved
+vector toward the element mean by one factor `θ ∈ [0, 1]` enforcing
+per-field linear floors and a nonlinear floor `g ≥ p_min` (via a
+GPU-compatible functor `gfn`), preserving every element mean exactly. It is
+not tied to a prognostic variable family:
+
+```julia
+limiter = Limiters.PositivityLimiter(FT; p_min)
+Limiters.apply_positivity_limiter!(limiter, gfn, states, floors, off)
+```
+
+`states` is any tuple of conserved fields; `floors` entries are a number or
+`nothing` (scaled but unconstrained); `gfn` and the unscaled auxiliary field
+`off` may be `nothing`. Convenience forms for the compressible Euler system
+(total energy) supply the floors — `ρ_min` on the density, `0` on the tracer:
+
+```julia
+limiter = Limiters.PositivityLimiter(FT; ρ_min, p_min)
+Limiters.apply_positivity_limiter!(limiter, pressure_fn, (ρ, ρe, ρu1, ρu2, ρu3, ρq), off)
+```
+
+`ρq` may be scalar-valued or have a `NamedTuple` element type (one density
+per microphysics species, each with its own `≥ 0` constraint); the dry
+5-tuple `(ρ, ρe, ρu1, ρu2, ρu3)` drops the tracer constraint. Apply after
+each stage of an SSP time step.
 
 ## Limited vertical reconstructions
 

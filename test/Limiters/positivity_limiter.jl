@@ -1,6 +1,8 @@
-# Tests the Zhang–Shu PositivityLimiter on an extruded space, in both state
-# shapes: the moist 6-tuple (ρ, ρe, ρu1, ρu2, ρu3, ρq) and the dry 5-tuple
-# without the tracer. Pins the properties the limiter exists for: it is a
+# Tests the Zhang–Shu PositivityLimiter on an extruded space, in all state
+# shapes: the moist 6-tuple (ρ, ρe, ρu1, ρu2, ρu3, ρq) with a scalar or
+# NamedTuple-valued (multi-species) tracer field, the dry 5-tuple without the
+# tracer, and the generic (states, floors) form on a non-Euler system.
+# Pins the properties the limiter exists for: it is a
 # no-op on admissible states, it restores the ρ/ρq/p floors, and it preserves
 # every WJ-weighted element mean exactly (a redistribution, not a clamp).
 using Test
@@ -23,8 +25,9 @@ const γ = FT(1.4)
 zs_pressure(ρ, ρe, u1, u2, u3, ρq, off) =
     (γ - 1) * (ρe - (u1^2 + u2^2 + u3^2) / (2 * ρ) - ρ * off)
 
-# WJ-weighted integrals per element slab, one entry per (v, h) — the
-# conserved quantities the limiter must preserve. Uses the parent arrays,
+# WJ-weighted integrals per element slab, one entry per (v, f, h) — the
+# conserved quantities the limiter must preserve, kept per field component so
+# a NamedTuple-valued tracer is checked per species. Uses the parent arrays,
 # laid out (Nv, Ni, Nj, Nf, Nh) on an extruded space.
 function element_integrals(f)
     space = axes(f)
@@ -32,7 +35,7 @@ function element_integrals(f)
     wj .= Fields.local_geometry_field(space).WJ
     pf = parent(f)
     pw = parent(wj)
-    return dropdims(sum(pf .* pw; dims = (2, 3, 4)); dims = (2, 3, 4))
+    return dropdims(sum(pf .* pw; dims = (2, 3)); dims = (2, 3))
 end
 
 function constant_field(space, val)
@@ -98,6 +101,61 @@ end
     @test minimum(parent(p)) >= p_min - 1e-6
     # The limiter actually engaged (states differ from the perturbed input).
     @test parent(ρ)[1, 1, 1, 1, 1] >= ρ_min
+end
+
+@testset "PositivityLimiter: NamedTuple multi-tracer field" begin
+    space = TU.CenterExtrudedFiniteDifferenceSpace(FT)
+    ρ_min = FT(1e-6)
+    p_min = FT(1e-2)
+    lim = Limiters.PositivityLimiter(FT; ρ_min, p_min, maxiter = 30)
+    (ρ, ρe, u1, u2, u3, _, off) = admissible_state(space)
+    # Nonequilibrium-style tracer set: one field, NamedTuple element type.
+    ρq = Fields.Field(NamedTuple{(:tot, :liq, :rai), NTuple{3, FT}}, space)
+    fill!(parent(ρq), FT(1e-3))
+    # Undershoots in two different species/elements (4th parent axis is the
+    # species index), plus a density undershoot in a third element.
+    parent(ρq)[2, 1, 1, 2, 2] = -FT(1e-3)  # liq
+    parent(ρq)[1, 2, 1, 3, 3] = -FT(1) / 2000  # rai
+    parent(ρ)[1, 1, 1, 1, 1] = -FT(1) / 10
+    ints_before = map(element_integrals, (ρ, ρe, u1, u2, u3, ρq))
+    Limiters.apply_positivity_limiter!(
+        lim,
+        zs_pressure,
+        (ρ, ρe, u1, u2, u3, ρq),
+        off,
+    )
+    ints_after = map(element_integrals, (ρ, ρe, u1, u2, u3, ρq))
+    for (b, a) in zip(ints_before, ints_after)
+        @test all(isapprox.(b, a; rtol = 1e-12))
+    end
+    @test minimum(parent(ρ)) >= ρ_min - eps(FT)
+    @test minimum(parent(ρq)) >= -eps(FT)  # every species nonnegative
+end
+
+@testset "PositivityLimiter: generic form (shallow-water-like 3-field)" begin
+    # The generic (states, floors) form is not tied to the Euler 5/6-tuple:
+    # a 3-field system with a floor on the first field only, no nonlinear
+    # functional (gfn = nothing) and no auxiliary field (off = nothing).
+    space = TU.CenterExtrudedFiniteDifferenceSpace(FT)
+    h_min = FT(1e-4)
+    lim = Limiters.PositivityLimiter(FT; maxiter = 30)
+    h = constant_field(space, 2)
+    hu1 = constant_field(space, 1 / 2)
+    hu2 = constant_field(space, -1 / 3)
+    parent(h)[1, 2, 2, 1, 1] = -FT(1) / 2
+    ints_before = map(element_integrals, (h, hu1, hu2))
+    Limiters.apply_positivity_limiter!(
+        lim,
+        nothing,
+        (h, hu1, hu2),
+        (h_min, nothing, nothing),
+        nothing,
+    )
+    ints_after = map(element_integrals, (h, hu1, hu2))
+    for (b, a) in zip(ints_before, ints_after)
+        @test all(isapprox.(b, a; rtol = 1e-12))
+    end
+    @test minimum(parent(h)) >= h_min - eps(FT)
 end
 
 @testset "PositivityLimiter: dry 5-tuple" begin
