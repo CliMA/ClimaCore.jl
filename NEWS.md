@@ -4,6 +4,13 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] New `Limiters.PositivityLimiter`, the
+  mean-preserving Zhang-Shu positivity limiter for DG states, applied with
+  `apply_limiter!`. In each element it scales fields toward their means to
+  enforce linear floors (e.g. `floors = (; ρ = 1e-6)`) and, optionally, a
+  concave constraint `g(U, aux) ≥ g_min` (e.g. pressure). Element means are
+  preserved exactly.
+
 - ![][badge-🐛bugfix] The `PlaceholderSpace` infrastructure is replaced by a
   simpler `PlaceholderGrid`, which only stands in for grids in the arguments of
   GPU kernels launched from the host and is swapped out at the start of each
