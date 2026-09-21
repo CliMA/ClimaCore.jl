@@ -7,7 +7,6 @@ import ClimaCore.Limiters:
     PositivityLimiter,
     apply_positivity_limiter!,
     apply_positivity_slab!,
-    _positivity_tracer,
     _positivity_slab,
     VerticalMassBorrowingLimiter,
     column_massborrow!
@@ -171,26 +170,22 @@ end
 
 function apply_positivity_limiter!(
     lim::PositivityLimiter,
-    pfn::F,
-    states,
+    gfn::F,
+    states::Tuple,
+    floors::Tuple,
     off,
     ::ClimaComms.CUDADevice,
 ) where {F}
-    (ρ, ρe, u1, u2, u3) = states
-    dρ = Fields.field_values(ρ)
-    (Nv, _, _, Nh) = size(dρ)
+    dstates = map(Fields.field_values, states)
+    (Nv, _, _, Nh) = size(first(dstates))
     nthreads, nblocks = config_threadblock(Nv, Nh)
     args = (
         lim,
-        pfn,
-        dρ,
-        Fields.field_values(ρe),
-        Fields.field_values(u1),
-        Fields.field_values(u2),
-        Fields.field_values(u3),
-        _positivity_tracer(states),
-        Fields.field_values(off),
-        Spaces.local_geometry_data(axes(ρ)).WJ,
+        gfn,
+        dstates,
+        floors,
+        off === nothing ? nothing : Fields.field_values(off),
+        Spaces.local_geometry_data(axes(first(states))).WJ,
     )
     auto_launch!(
         apply_positivity_limiter_kernel!,
@@ -203,19 +198,24 @@ end
 
 function apply_positivity_limiter_kernel!(
     lim::PositivityLimiter,
-    pfn::F,
-    dρ, dρe, du1, du2, du3, dρq, doff, dWJ,
+    gfn::F,
+    dstates,
+    floors,
+    doff,
+    dWJ,
 ) where {F}
-    (Nv, _, _, Nh) = size(dρ)
+    (Nv, _, _, Nh) = size(first(dstates))
     n = (Nv, Nh)
     tidx = thread_index()
     @inbounds if valid_range(tidx, prod(n))
         (v, h) = kernel_indexes(tidx, n).I
         apply_positivity_slab!(
-            lim, pfn,
-            slab(dρ, v, h), slab(dρe, v, h),
-            slab(du1, v, h), slab(du2, v, h), slab(du3, v, h),
-            _positivity_slab(dρq, v, h), slab(doff, v, h), slab(dWJ, v, h),
+            lim,
+            gfn,
+            map(d -> slab(d, v, h), dstates),
+            floors,
+            _positivity_slab(doff, v, h),
+            slab(dWJ, v, h),
         )
     end
     return nothing
