@@ -27,7 +27,7 @@ If the horizontal grid has a `Geometry.SphericalGlobalGeometry`, the extruded gr
 uses `Geometry.DeepSphericalGlobalGeometry` when `deep = true` and
 `Geometry.ShallowSphericalGlobalGeometry` otherwise.
 """
-struct ExtrudedFiniteDifferenceGrid{
+mutable struct ExtrudedFiniteDifferenceGrid{
     H <: AbstractGrid,
     V <: FiniteDifferenceGrid,
     A <: HypsographyAdaption,
@@ -161,6 +161,29 @@ hypsography(grid::ExtrudedFiniteDifferenceGrid) = grid.hypsography
 
 quadrature_style(grid::ExtrudedFiniteDifferenceGrid) =
     quadrature_style(grid.horizontal_grid)
+
+
+## GPU compatibility
+struct DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, CLG, FLG} <:
+       AbstractExtrudedFiniteDifferenceGrid
+    vertical_topology::VT
+    quadrature_style::Q
+    global_geometry::GG
+    center_local_geometry::CLG
+    face_local_geometry::FLG
+end
+
+ClimaComms.device(::DeviceExtrudedFiniteDifferenceGrid) = DeviceSideDevice()
+ClimaComms.context(::DeviceExtrudedFiniteDifferenceGrid) = DeviceSideContext()
+
+local_geometry_type(
+    ::Type{DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, CLG, FLG}},
+) where {VT, Q, GG, CLG, FLG} = eltype(CLG) # calls eltype from DataLayouts
+
+quadrature_style(grid::DeviceExtrudedFiniteDifferenceGrid) =
+    grid.quadrature_style
+vertical_topology(grid::DeviceExtrudedFiniteDifferenceGrid) =
+    grid.vertical_topology
 
 ## aliases
 

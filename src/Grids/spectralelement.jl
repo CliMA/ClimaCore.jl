@@ -50,7 +50,7 @@ local geometry. `discretization` selects continuous ([`CG`](@ref)) or
 discontinuous ([`DG`](@ref)) Galerkin, and follows the quadrature when omitted;
 see [`SpectralElementGrid2D`](@ref).
 """
-struct SpectralElementGrid1D{
+mutable struct SpectralElementGrid1D{
     T,
     Q,
     GG <: Geometry.AbstractGlobalGeometry,
@@ -175,7 +175,7 @@ end
 Two-dimensional spectral element grid: within each element the space is represented
 as a polynomial. See the constructor for the keyword options.
 """
-struct SpectralElementGrid2D{
+mutable struct SpectralElementGrid2D{
     T,
     Q,
     GG <: Geometry.AbstractGlobalGeometry,
@@ -767,6 +767,25 @@ global_geometry(grid::AbstractSpectralElementGrid) = grid.global_geometry
 
 quadrature_style(grid::AbstractSpectralElementGrid) = grid.quadrature_style
 dss_weights(grid::AbstractSpectralElementGrid, ::Nothing) = grid.dss_weights
+
+## GPU compatibility
+struct DeviceSpectralElementGrid1D{Q, GG, LG} <: AbstractSpectralElementGrid
+    quadrature_style::Q
+    global_geometry::GG
+    local_geometry::LG
+end
+struct DeviceSpectralElementGrid2D{Q, GG, LG, M} <: AbstractSpectralElementGrid
+    quadrature_style::Q
+    global_geometry::GG
+    local_geometry::LG
+    mask::M
+end
+
+ClimaComms.context(grid::DeviceSpectralElementGrid1D) = DeviceSideContext()
+ClimaComms.device(grid::DeviceSpectralElementGrid1D) = DeviceSideDevice()
+
+ClimaComms.context(grid::DeviceSpectralElementGrid2D) = DeviceSideContext()
+ClimaComms.device(grid::DeviceSpectralElementGrid2D) = DeviceSideDevice()
 
 ## aliases
 const RectilinearSpectralElementGrid2D =
