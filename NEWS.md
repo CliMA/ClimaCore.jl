@@ -14,6 +14,15 @@ main
   `Spaces.all_nodes`, `MatrixFields.all_columns`, and
   `MatrixFields.field2arrays`.
 
+- ![][badge-🔥behavioralΔ] `Grids.MultiPointGrid` uses an identity horizontal
+  metric (`∂x∂ξ = I`, `J = WJ = 1`) instead of the sphere metric, and no longer
+  rejects points at the poles.
+
+- ![][badge-✨feature/enhancement] `Grids.MultiPointGrid(FT, ncolumns)` and
+  `CommonGrids.MultiColumnGrid(FT; ncolumns, ...)` build independent columns
+  without horizontal coordinates: on a Cartesian global geometry, with `ZPoint`
+  coordinates and the local geometry of a single-column `FiniteDifferenceGrid`.
+
 v0.16.2
 -------
 

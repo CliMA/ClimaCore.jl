@@ -142,6 +142,40 @@ using Test
           longs
 end
 
+@testset "MultiColumnGrid without horizontal coordinates" begin
+    ncolumns = 3
+    z_elem = 10
+    z_min = -10.0
+    z_max = 20.0
+    grid = MultiColumnGrid(; ncolumns, z_elem, z_min, z_max)
+    @test grid isa Grids.ExtrudedFiniteDifferenceGrid
+    @test grid.horizontal_grid isa Grids.MultiPointGrid
+    @test Grids.global_geometry(grid) isa Geometry.CartesianGlobalGeometry
+    @test DataLayouts.nelems(grid.horizontal_grid.local_geometry) == ncolumns
+    @test grid.vertical_grid.topology.mesh.domain.coord_max == Geometry.ZPoint(z_max)
+    @test grid.vertical_grid.topology.mesh.domain.coord_min == Geometry.ZPoint(z_min)
+    # The columns have the local geometry of the vertical grid
+    @test eltype(grid.center_local_geometry) ==
+          eltype(grid.vertical_grid.center_local_geometry)
+    @test eltype(grid.face_local_geometry) == eltype(grid.vertical_grid.face_local_geometry)
+    for h in 1:ncolumns
+        @test vec(
+            parent(Grids.column(grid, 1, 1, h).full_grid.center_local_geometry)[
+                :,
+                :,
+                :,
+                :,
+                h,
+            ],
+        ) ==
+              vec(parent(grid.vertical_grid.center_local_geometry))
+    end
+    @test_throws ArgumentError MultiColumnGrid(; z_elem, z_min, z_max)
+    @test_throws ArgumentError MultiColumnGrid(;
+        points = [Geometry.LatLongPoint(0.0, 0.0)], ncolumns = 1, z_elem, z_min, z_max,
+    )
+end
+
 @testset "Space-filling curve usage in CommonGrids" begin
     @testset "ExtrudedCubedSphereGrid uses space-filling curve" begin
         grid = ExtrudedCubedSphereGrid(;

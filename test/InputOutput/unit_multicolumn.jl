@@ -58,3 +58,44 @@ filename = tempname(; cleanup = true)
         @test restart_Y == Y # test if restart is exact
     end
 end
+
+@testset "HDF5 restart test for columns without horizontal coordinates" begin
+    Random.seed!(42)
+    FT = Float32
+    ncolumns = 3
+    center_space = CommonSpaces.MultiColumnSpace(
+        FT;
+        ncolumns,
+        z_elem = 10,
+        z_min = 0,
+        z_max = 10_000,
+        staggering = Grids.CellCenter(),
+        device = ClimaComms.device(comms_ctx),
+    )
+    face_space = Spaces.face_space(center_space)
+    level_space = Spaces.level(center_space, 1)
+
+    Y = Fields.FieldVector(;
+        c = Fields.Field(FT, center_space),
+        f = Fields.Field(FT, face_space),
+        l = Fields.Field(FT, level_space),
+    )
+    for field in (Y.c, Y.f, Y.l)
+        parent(field) .= rand.(FT)
+    end
+
+    InputOutput.HDF5Writer(filename, comms_ctx) do writer
+        InputOutput.write!(writer, Y, "Y")
+    end
+
+    InputOutput.HDF5Reader(filename, comms_ctx) do reader
+        restart_Y = InputOutput.read_field(reader, "Y")
+        @test axes(restart_Y.c) isa Spaces.CenterMultiColumnFiniteDifferenceSpace
+        @test axes(restart_Y.f) isa Spaces.FaceMultiColumnFiniteDifferenceSpace
+        @test axes(restart_Y.l) isa Spaces.MultiPointSpace
+        @test Spaces.ncolumns(axes(restart_Y.c)) == ncolumns
+        @test Spaces.global_geometry(axes(restart_Y.c)) isa Geometry.CartesianGlobalGeometry
+        @test eltype(Fields.coordinate_field(axes(restart_Y.c))) == Geometry.ZPoint{FT}
+        @test restart_Y == Y # test if restart is exact
+    end
+end

@@ -489,13 +489,18 @@ function read_grid_new(reader, name)
         topology = read_topology(reader, attrs(group)["topology"])
         return Grids.FiniteDifferenceGrid(topology)
     elseif type == "MultiPointGrid"
+        device = ClimaComms.device(reader.context)
+        haskey(attrs(group), "radius") || return Grids.MultiPointGrid(
+            read_type(attrs(group)["float_type"]),
+            attrs(group)["ncolumns"];
+            device,
+        )
         radius = attrs(group)["radius"]
         coords = read(group, "points")
         points = [
             Geometry.LatLongPoint(coords[1, i], coords[2, i]) for
             i in 1:size(coords, 2)
         ]
-        device = ClimaComms.device(reader.context)
         return Grids.MultiPointGrid(points; radius, device)
     elseif type == "ExtrudedFiniteDifferenceGrid"
         vertical_grid = read_grid(reader, attrs(group)["vertical_grid"])

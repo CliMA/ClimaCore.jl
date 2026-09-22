@@ -21,7 +21,7 @@ keywords, so the space is built on whatever `CLIMACOMMS_DEVICE` selects.
 | `Box3DSpace`               | 3D box: 2D spectral elements × finite difference    | The plane keywords plus the column keywords                                         |
 | `CubedSphereSpace`         | 2D cubed sphere, spectral elements                  | `radius`, `h_elem`, `n_quad_points`                                                 |
 | `ExtrudedCubedSphereSpace` | 3D shell: cubed sphere × finite difference          | The sphere keywords plus the column keywords                                        |
-| `MultiColumnSpace`         | `N` independent columns at given `LatLongPoint`s    | `points`, `radius`, plus the column keywords                                        |
+| `MultiColumnSpace`         | `N` independent columns, with or without locations  | `points` and `radius`, or `ncolumns`, plus the column keywords                      |
 
 Every extruded constructor accepts `hypsography_fun`, a function of the
 horizontal and vertical grids returning a `Hypsography` adaption
@@ -91,7 +91,8 @@ Four names look alike and mean different things:
   - `Spaces.MultiPointSpace` is `N` disconnected horizontal points.
   - `MultiColumnSpace` (`Spaces.MultiColumnFiniteDifferenceSpace`) is `N`
     independent columns over those points; it supports vertical operators and
-    `Fields.bycolumn`, but no horizontal operators or DSS.
+    `Fields.bycolumn`, but not DSS, and horizontal derivative operators evaluate
+    to zero.
   - `ColumnSpace` (`Spaces.FiniteDifferenceSpace`) is one column.
 
 ## What the constructors do

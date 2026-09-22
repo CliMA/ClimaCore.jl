@@ -68,6 +68,7 @@ unit_tests = [
     UnitTest("Fields - FieldVector flattening"          ,"Fields/unit_fieldvector_flatten.jl"; tier = :unit, subsystem = :fields),
     UnitTest("Fields - inference"                       ,"Fields/inference_fields.jl"; meta = :cpu_only, tier = :inference, subsystem = :fields),
     UnitTest("Placeholder Fields"                       ,"Operators/unit_common.jl"; tier = :unit, subsystem = :operators),
+    UnitTest("Operators - multi-column vs single column","Operators/unit_multicolumn_column_equivalence.jl"; tier = :unit, subsystem = :operators),
 
     # Spectral Element Operators
     UnitTest("Spectral elem - vector identities"        ,"Operators/spectralelement/unit_vector_identities.jl"; tier = :unit, subsystem = :operators),

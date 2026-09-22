@@ -440,10 +440,16 @@ function write_new!(
 )
     group = create_group(writer.file, "grids/$name")
     write_attribute(group, "type", "MultiPointGrid")
-    write_attribute(group, "radius", grid.global_geometry.radius)
-    # 2×N matrix of (lat, long) coordinates, one column per point
-    coords = Array(parent(grid.local_geometry.coordinates))
-    write_dataset(group, "points", coords[1, 1, 1, :, :])
+    if grid.global_geometry isa Geometry.AbstractSphericalGlobalGeometry
+        write_attribute(group, "radius", grid.global_geometry.radius)
+        # 2×N matrix of (lat, long) coordinates, one column per point
+        coords = Array(parent(grid.local_geometry.coordinates))
+        write_dataset(group, "points", coords[1, 1, 1, :, :])
+    else
+        # Columns without horizontal coordinates: their number and float type
+        write_attribute(group, "ncolumns", DataLayouts.nelems(grid.local_geometry))
+        write_attribute(group, "float_type", string(eltype(parent(grid.local_geometry))))
+    end
     return name
 end
 

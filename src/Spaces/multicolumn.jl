@@ -1,7 +1,8 @@
 """
     MultiPointSpace(grid)
 
-Horizontal space of `N` independent (lat, lon) points. This is the `N`-column
+Horizontal space of `N` independent points, (lat, lon) points on a sphere or columns
+without horizontal coordinates. This is the `N`-column
 analog of [`PointSpace`](@ref), which is the single-column level space.
 
 Like [`SpectralElementSpace2D`](@ref), the wrapped `grid` is either
@@ -41,19 +42,22 @@ Base.@deprecate_binding PointCloudSpace MultiPointSpace false
 """
     MultiColumnFiniteDifferenceSpace(grid, staggering)
 
-Space of `N` independent vertical columns at arbitrary horizontal (lat, lon)
-locations on a sphere. This is the `N`-column generalization of
-[`Spaces.FiniteDifferenceSpace`](@ref), the single-column space:
+Space of `N` independent vertical columns, at arbitrary horizontal (lat, lon)
+locations on a sphere or without horizontal coordinates. This is the `N`-column
+generalization of [`Spaces.FiniteDifferenceSpace`](@ref), the single-column space:
 
   - The data layout is `VIJFH{LG, Nv, 1, 1, N}`: the same vertical structure for
-    every column, with full 3D local geometry including lat, lon, and z coordinates.
+    every column, with full 3D local geometry including lat, lon, and z coordinates,
+    or with `ZPoint` coordinates and the local geometry of a single column when the
+    columns have no horizontal coordinates.
   - `Spaces.level` returns a [`MultiPointSpace`](@ref) (`N` points at that level)
     rather than a spectral element horizontal space.
   - `Spaces.column` returns a single-column [`Spaces.FiniteDifferenceSpace`](@ref).
   - `Fields.bycolumn` iterates over each column independently.
 
-There is no horizontal connectivity between columns; DSS and horizontal
-spectral-element operators are not supported.
+There is no horizontal connectivity between columns; DSS is not supported, and
+horizontal spectral-element derivative operators evaluate to zero, as on a
+single column.
 """
 struct MultiColumnFiniteDifferenceSpace{
     G <: Grids.AbstractExtrudedFiniteDifferenceGrid,

@@ -261,3 +261,22 @@ warp_surface_elev(coord, hc::FT) where {FT} =
     @test Spaces.grid(space2) === grid
     @test space2 === space
 end
+
+@testset "MultiColumnSpace without horizontal coordinates" begin
+    ncolumns = 3
+    z_elem = 10
+    z_min = -10.0
+    z_max = 20.0
+    staggering = Grids.CellCenter()
+    space = MultiColumnSpace(; ncolumns, z_elem, z_min, z_max, staggering)
+    @test space isa Spaces.MultiColumnFiniteDifferenceSpace
+    @test Spaces.ncolumns(space) == ncolumns
+    @test Spaces.global_geometry(space) isa Geometry.CartesianGlobalGeometry
+    @test eltype(Fields.coordinate_field(space)) == Geometry.ZPoint{Float64}
+    @test Spaces.grid(space).vertical_grid.topology.mesh.domain.coord_max ==
+          Geometry.ZPoint(z_max)
+
+    # Test memoization when constructing the same space
+    space2 = MultiColumnSpace(; ncolumns, z_elem, z_min, z_max, staggering)
+    @test space2 === space
+end

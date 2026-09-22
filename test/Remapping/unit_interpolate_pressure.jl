@@ -62,6 +62,22 @@ import ClimaInterpolations
         @test pfull_multicol_space.staggering == Grids.CellFace()
         @test pfull_multicol_space.grid.vertical_grid.topology.mesh.faces ==
               Geometry.PPoint.([0.0, 1.0, 10.0, 100.0])
+
+        # Columns without horizontal coordinates
+        zcol_space = MultiColumnSpace(FT;
+            ncolumns = 2,
+            z_elem = 10,
+            z_min = 0,
+            z_max = 1,
+            staggering = Grids.CellCenter(),
+        )
+        pfull_zcol_space =
+            Remapping.construct_pressure_space(FT, zcol_space, [0.0, 1.0, 10.0, 100.0])
+        @test pfull_zcol_space isa Spaces.MultiColumnFiniteDifferenceSpace
+        @test pfull_zcol_space.grid.horizontal_grid === zcol_space.grid.horizontal_grid
+        @test eltype(Fields.coordinate_field(pfull_zcol_space)) == Geometry.PPoint{FT}
+        @test pfull_zcol_space.grid.vertical_grid.topology.mesh.faces ==
+              Geometry.PPoint.([0.0, 1.0, 10.0, 100.0])
     end
 end
 

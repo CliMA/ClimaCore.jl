@@ -688,15 +688,19 @@ end
 
 """
     MultiColumnGrid([FT = Float64]; points, z_elem, z_min, z_max, kwargs...)
+    MultiColumnGrid([FT = Float64]; ncolumns, z_elem, z_min, z_max, kwargs...)
 
 Construct a [`Grids.ExtrudedFiniteDifferenceGrid`](@ref) of independent
-vertical columns at given latitude-longitude locations on a sphere: a
-[`Grids.MultiPointGrid`](@ref) horizontal grid extruded along a
-[`Grids.FiniteDifferenceGrid`](@ref) vertical grid, with `Grids.Flat()`
-hypsography and a shallow spherical global geometry.
+vertical columns, at given latitude-longitude locations on a sphere or without
+horizontal coordinates: a [`Grids.MultiPointGrid`](@ref) horizontal grid extruded
+along a [`Grids.FiniteDifferenceGrid`](@ref) vertical grid, with `Grids.Flat()`
+hypsography and a shallow spherical global geometry, or a Cartesian one for
+columns without horizontal coordinates, whose columns have `ZPoint` coordinates
+and the local geometry of a [`ColumnGrid`](@ref).
 
-The columns have no horizontal connectivity, so horizontal operators are not
-defined on the grid; `Fields.bycolumn` iterates over the columns.
+The columns have no horizontal connectivity: DSS is not supported, and
+horizontal derivative operators evaluate to zero. `Fields.bycolumn` iterates
+over the columns.
 
 # Arguments
 
@@ -706,6 +710,8 @@ defined on the grid; `Fields.bycolumn` iterates over the columns.
 
   - `points::AbstractVector{Geometry.LatLongPoint{FT}}`: The location of each
     column.
+  - `ncolumns::Integer`: The number of columns, for columns without horizontal
+    coordinates. Give either `points` or `ncolumns`.
   - `z_elem::Integer`: Number of vertical elements.
   - `z_min::Real`, `z_max::Real`: Vertical extent of the domain.
   - `radius::Real = FT(6.371229e6)`: Radius of the sphere.
@@ -727,12 +733,14 @@ grid = MultiColumnGrid(;
     z_max = 10_000,
     radius = 6.371229e6,
 )
+grid = MultiColumnGrid(; ncolumns = 3, z_elem = 10, z_min = 0, z_max = 10_000)
 ```
 """
 MultiColumnGrid(; kwargs...) = MultiColumnGrid(Float64; kwargs...)
 function MultiColumnGrid(
     ::Type{FT};
-    points::AbstractVector{Geometry.LatLongPoint{FT}},
+    points::Union{Nothing, AbstractVector{Geometry.LatLongPoint{FT}}} = nothing,
+    ncolumns::Union{Nothing, Integer} = nothing,
     z_elem::Integer,
     z_min::Real,
     z_max::Real,
@@ -741,7 +749,19 @@ function MultiColumnGrid(
     stretch::Meshes.StretchingRule = Meshes.Uniform(),
     z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
 ) where {FT}
-    h_grid = Grids.MultiPointGrid(points; radius, device)
+    h_grid = if isnothing(ncolumns)
+        isnothing(points) &&
+            throw(
+                ArgumentError(
+                    "give the `points` of the columns or their number `ncolumns`",
+                ),
+            )
+        Grids.MultiPointGrid(points; radius, device)
+    else
+        isnothing(points) ||
+            throw(ArgumentError("give either the `points` of the columns or `ncolumns`"))
+        Grids.MultiPointGrid(FT, ncolumns; device)
+    end
     z_topology = Topologies.IntervalTopology(
         ClimaComms.SingletonCommsContext(device),
         z_mesh,
