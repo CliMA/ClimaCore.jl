@@ -50,7 +50,7 @@ local geometry. `discretization` selects continuous ([`CG`](@ref)) or
 discontinuous ([`DG`](@ref)) Galerkin, and follows the quadrature when omitted;
 see [`SpectralElementGrid2D`](@ref).
 """
-struct SpectralElementGrid1D{
+@host_device_struct struct SpectralElementGrid1D{
     T,
     Q,
     GG <: Geometry.AbstractGlobalGeometry,
@@ -66,7 +66,6 @@ struct SpectralElementGrid1D{
     discretization::Disc
 end
 
-Adapt.@adapt_structure SpectralElementGrid1D
 
 local_geometry_type(
     ::Type{<:SpectralElementGrid1D{<:Any, <:Any, <:Any, LG}},
@@ -175,7 +174,7 @@ end
 Two-dimensional spectral element grid: within each element the space is represented
 as a polynomial. See the constructor for the keyword options.
 """
-struct SpectralElementGrid2D{
+@host_device_struct struct SpectralElementGrid2D{
     T,
     Q,
     GG <: Geometry.AbstractGlobalGeometry,
@@ -199,7 +198,6 @@ struct SpectralElementGrid2D{
     discretization::Disc
 end
 
-Adapt.@adapt_structure SpectralElementGrid2D
 
 local_geometry_type(
     ::Type{<:SpectralElementGrid2D{<:Any, <:Any, <:Any, LG}},

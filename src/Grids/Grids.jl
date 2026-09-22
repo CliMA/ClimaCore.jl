@@ -54,6 +54,75 @@ function local_geometry_type end
 local_geometry_type(::Type{T}) where {T} = Union{}
 
 """
+    @host_device_struct struct Name{P...} <: Super
+        field::T
+        ...
+    end
+
+Define a grid as two structs with the same fields and type parameters: a
+`mutable struct HostName`, which a space refers to by pointer and
+an immutable `struct DeviceName`, which is what kernels receive (see
+[`device_twin`](@ref)). `Name` is a `Union` alias of the two, so dispatch,
+aliases and constructors written against `Name` accept both, `Name(args...)`
+constructs the host grid, and `Name{P...}` in an alias covers both twins.
+Adapting either twin with a host adaptor keeps its kind.
+"""
+macro host_device_struct(ex)
+    ex isa Expr && ex.head === :struct ||
+        error("@host_device_struct expects a struct definition")
+    ex.args[1] === false ||
+        error("@host_device_struct expects an immutable struct definition")
+    header, body = ex.args[2], ex.args[3]
+    if header isa Expr && header.head === :(<:)
+        name_params, super = header.args
+    else
+        name_params, super = header, nothing
+    end
+    if name_params isa Symbol
+        name, params = name_params, Any[]
+    else
+        name, params = name_params.args[1], name_params.args[2:end]
+    end
+    param_names = map(p -> p isa Symbol ? p : p.args[1], params)
+    fields = filter(a -> !(a isa LineNumberNode), body.args)
+    field_names = map(f -> f isa Symbol ? f : f.args[1], fields)
+    host, device = Symbol(:Host, name), Symbol(:Device, name)
+    function struct_def(struct_name, mutable)
+        struct_header = Expr(:curly, struct_name, params...)
+        isnothing(super) || (struct_header = Expr(:(<:), struct_header, super))
+        return Expr(:struct, mutable, struct_header, Expr(:block, fields...))
+    end
+    twin_type(struct_name) = Expr(:curly, struct_name, param_names...)
+    adapted = [:(Adapt.adapt(to, getfield(grid, $(QuoteNode(f))))) for f in field_names]
+    return esc(
+        quote
+            $(struct_def(host, true))
+            $(struct_def(device, false))
+            Core.@__doc__ const $(Expr(:curly, name, params...)) =
+                Union{$(twin_type(host)), $(twin_type(device))}
+            (::Type{$name})(args...) = $host(args...)
+            Adapt.adapt_structure(to, grid::$host) = $host($(adapted...))
+            Adapt.adapt_structure(to, grid::$device) = $device($(adapted...))
+            device_twin(to, grid::$host) = $device($(adapted...))
+            public_name(::$name) = $(QuoteNode(name))
+        end,
+    )
+end
+
+"""
+    Grids.device_twin(to, grid)
+
+Return the immutable device twin of the host grid `grid` (see
+[`@host_device_struct`](@ref)), with every field adapted with `to`. The CUDA
+extension calls this from its kernel adaptor, so that kernels receive an isbits
+grid while the host keeps the mutable one.
+"""
+function device_twin end
+
+# The name of a grid without the `Host`/`Device` prefix of its twins.
+public_name(grid::AbstractGrid) = nameof(typeof(grid))
+
+"""
     Grids.dss_weights(grid::AbstractGrid, staggering::Union{Staggering, Nothing})
 
 Return the direct stiffness summation (DSS) weights of `grid` at the given
@@ -124,7 +193,7 @@ include("level.jl")
 function Base.show(io::IO, grid::AbstractGrid)
     indent = get(io, :indent, 0)
     iio = IOContext(io, :indent => indent + 2)
-    println(io, nameof(typeof(grid)), ":")
+    println(io, public_name(grid), ":")
     if has_horizontal(grid)
         # some reduced spaces (like slab space) do not have topology
         println(iio, " "^(indent + 2), "horizontal:")

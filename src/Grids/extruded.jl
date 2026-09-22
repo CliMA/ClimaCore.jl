@@ -27,7 +27,7 @@ If the horizontal grid has a `Geometry.SphericalGlobalGeometry`, the extruded gr
 uses `Geometry.DeepSphericalGlobalGeometry` when `deep = true` and
 `Geometry.ShallowSphericalGlobalGeometry` otherwise.
 """
-struct ExtrudedFiniteDifferenceGrid{
+@host_device_struct struct ExtrudedFiniteDifferenceGrid{
     H <: AbstractGrid,
     V <: FiniteDifferenceGrid,
     A <: HypsographyAdaption,
@@ -43,10 +43,9 @@ struct ExtrudedFiniteDifferenceGrid{
     face_local_geometry::FLG
 end
 
-Adapt.@adapt_structure ExtrudedFiniteDifferenceGrid
 
 local_geometry_type(
-    ::Type{ExtrudedFiniteDifferenceGrid{H, V, A, GG, CLG, FLG}},
+    ::Type{<:ExtrudedFiniteDifferenceGrid{H, V, A, GG, CLG, FLG}},
 ) where {H, V, A, GG, CLG, FLG} = eltype(CLG) # calls eltype from DataLayouts
 
 function ExtrudedFiniteDifferenceGrid(
@@ -179,7 +178,7 @@ const ExtrudedMultiPointGrid = ExtrudedFiniteDifferenceGrid{<:MultiPointGrid}
 function Base.show(io::IO, grid::ExtrudedMultiPointGrid)
     indent = get(io, :indent, 0)
     iio = IOContext(io, :indent => indent + 2)
-    println(io, nameof(typeof(grid)), ":")
+    println(io, public_name(grid), ":")
     print_multipoint_horizontal(iio, grid.horizontal_grid, indent)
     println(iio)
     println(iio, " "^(indent + 2), "vertical:")

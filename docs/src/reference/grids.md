@@ -16,6 +16,8 @@ Grids.SpectralElementGrid2D
 Grids.MultiPointGrid
 Grids.LevelGrid
 Grids.ColumnIndex
+Grids.@host_device_struct
+Grids.device_twin
 ```
 
 ## Accessors

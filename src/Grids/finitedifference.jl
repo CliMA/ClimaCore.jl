@@ -28,7 +28,7 @@ Construct a `FiniteDifferenceGrid` from an `IntervalTopology`, or from an
 The grid stores the topology, the global geometry, and the local geometry at cell
 centers and cell faces.
 """
-struct FiniteDifferenceGrid{
+@host_device_struct struct FiniteDifferenceGrid{
     T <: Topologies.AbstractIntervalTopology,
     GG,
     CLG,
@@ -39,7 +39,6 @@ struct FiniteDifferenceGrid{
     center_local_geometry::CLG
     face_local_geometry::FLG
 end
-Adapt.@adapt_structure FiniteDifferenceGrid
 
 function FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
     get!(Cache.OBJECT_CACHE, (FiniteDifferenceGrid, topology)) do
@@ -164,7 +163,7 @@ topology(grid::FiniteDifferenceGrid) = grid.topology
 vertical_topology(grid::FiniteDifferenceGrid) = grid.topology
 
 local_geometry_type(
-    ::Type{FiniteDifferenceGrid{T, GG, CLG, FLG}},
+    ::Type{<:FiniteDifferenceGrid{T, GG, CLG, FLG}},
 ) where {T, GG, CLG, FLG} = eltype(CLG) # calls eltype from DataLayouts
 
 local_geometry_data(grid::FiniteDifferenceGrid, ::CellCenter) =

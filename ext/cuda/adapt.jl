@@ -11,10 +11,13 @@ Adapt.adapt_storage(
 Adapt.adapt_storage(::CUDA.KernelAdaptor, ::Meshes.AbstractMesh) = nothing
 Adapt.adapt_structure(::CUDA.KernelAdaptor, ::Topologies.Topology2D) = nothing
 
+# Kernels receive the immutable device twin of each grid (see
+# `Grids.@host_device_struct`); the spectral element grids also drop the DSS
+# weights, surface geometries and mask, which kernels do not use.
 Adapt.adapt_structure(
     to::CUDA.KernelAdaptor,
-    grid::Grids.SpectralElementGrid1D,
-) = Grids.SpectralElementGrid1D(
+    grid::Grids.HostSpectralElementGrid1D,
+) = Grids.DeviceSpectralElementGrid1D(
     Adapt.adapt(to, grid.topology),
     Adapt.adapt(to, grid.quadrature_style),
     Adapt.adapt(to, grid.global_geometry),
@@ -25,8 +28,8 @@ Adapt.adapt_structure(
 
 Adapt.adapt_structure(
     to::CUDA.KernelAdaptor,
-    grid::Grids.SpectralElementGrid2D,
-) = Grids.SpectralElementGrid2D(
+    grid::Grids.HostSpectralElementGrid2D,
+) = Grids.DeviceSpectralElementGrid2D(
     Adapt.adapt(to, grid.topology),
     Adapt.adapt(to, grid.quadrature_style),
     Adapt.adapt(to, grid.global_geometry),
@@ -39,6 +42,17 @@ Adapt.adapt_structure(
     grid.autodiff_metric,
     grid.discretization,
 )
+
+# One method per grid to be more specific in dispatch than the adapt
+# methods `@host_device_struct` defines
+Adapt.adapt_structure(
+    to::CUDA.KernelAdaptor,
+    grid::Grids.HostFiniteDifferenceGrid,
+) = Grids.device_twin(to, grid)
+Adapt.adapt_structure(
+    to::CUDA.KernelAdaptor,
+    grid::Grids.HostExtrudedFiniteDifferenceGrid,
+) = Grids.device_twin(to, grid)
 
 Adapt.adapt_structure(
     to::CUDA.KernelAdaptor,
