@@ -89,6 +89,15 @@ Base.eltype(bc::LazyField) = unsafe_eltype(bc)
 
 Base.similar(bc::LazyField) = similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
 
+@inline function Base.copy(bc::LazyField{FieldStyle{DS}}) where {DS}
+    dest = similar(bc)
+    DataLayouts._copyto!(
+        field_values(dest),
+        Base.Broadcast.instantiate(field_values(bc)),
+        Spaces.get_mask(axes(bc)),
+    )
+    return dest
+end
 Base.copy(bc::LazyField) =
     copyto!(similar(bc), bc; mask = Spaces.get_mask(axes(bc)))
 
@@ -166,7 +175,11 @@ Base.similar(bc::LazyField{FieldStyle{DS}}, ::Type{T}) where {DS, T} =
     Field(similar(field_values(bc), T), axes(bc))
 
 @inline function Base.copyto!(dest::Field, bc::LazyField; mask = get_mask(axes(dest)))
-    copyto!(field_values(dest), Base.Broadcast.instantiate(field_values(bc)); mask)
+    DataLayouts._copyto!(
+        field_values(dest),
+        Base.Broadcast.instantiate(field_values(bc)),
+        mask,
+    )
     return dest
 end
 

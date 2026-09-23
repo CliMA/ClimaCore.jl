@@ -37,7 +37,15 @@ mul_return_type(::Type{X}, ::Type{Y}) where {X, Y <: AutoBroadcaster} =
 
 divergence_result_type(::Type{X}) where {X <: AutoBroadcaster} =
     nested_broadcast_result_type(divergence_result_type, X)
+# The Union{} methods terminate the recursion above when inference reaches a
+# bottom type, which happens while it is still widening the element types of a
+# nested broadcast. Without them, nested_broadcast_result_type would recurse on
+# Union{} and inference would give up, so these are needed for inference rather
+# than for any call that can actually happen at run time.
+divergence_result_type(::Type{Union{}}) = Union{}
 gradient_result_type(val, ::Type{X}) where {X <: AutoBroadcaster} =
     nested_broadcast_result_type(Base.Fix1(gradient_result_type, val), X)
+gradient_result_type(val, ::Type{Union{}}) = Union{}
 curl_result_type(val, ::Type{X}) where {X <: AutoBroadcaster} =
     nested_broadcast_result_type(Base.Fix1(curl_result_type, val), X)
+curl_result_type(val, ::Type{Union{}}) = Union{}

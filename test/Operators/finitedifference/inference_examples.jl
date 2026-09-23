@@ -455,7 +455,11 @@ function alloc_test_nested_expressions_13(
                 fψ
         end
         #! format: on
-        @test_broken p_i == 0
+        if VERSION ≥ v"1.11.0-beta"
+            TU.@test_allocations p_i == 0
+        else
+            @test_broken p_i == 0
+        end
     end
 end
 
