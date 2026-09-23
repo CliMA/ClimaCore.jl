@@ -443,25 +443,32 @@ end
 # and any other scalar broadcast becomes a pointwise loop. Since materialize!
 # attaches dest's axes, but foreach_point strips dest of its axes, the scalar
 # broadcast must also have its axes dropped, mirroring how Base's instantiate
-# drops scalar broadcast axes. The StaticArrayStyle{0} and AbstractBlockStyle{0}
-# methods avoid ambiguities with StaticArrays and BlockArrays.
+# drops scalar broadcast axes.
+@inline function _copyto_scalar_broadcast!(dest::DataLayout, bc; kwargs...)
+    if bc.f === identity && isone(length(bc.args)) && Broadcast.isflat(bc)
+        @inbounds arg = first(bc.args)
+        @inbounds fill!(dest, arg isa Tuple ? first(arg) : arg[]; kwargs...)
+    else
+        bc_without_axes = Broadcast.Broadcasted(bc.style, bc.f, bc.args)
+        foreach_point(dest; kwargs...) do dest_point
+            @inbounds dest_point[] = first(bc_without_axes)
+        end
+        call_post_op_callback() && post_op_callback(dest, dest, bc; kwargs...)
+        dest
+    end
+end
+
+# The StaticArrayStyle{0} and AbstractBlockStyle{0} methods avoid ambiguities
+# with StaticArrays and BlockArrays. ClimaCoreCUDAExt adds the corresponding
+# AbstractGPUArrayStyle{0} method, which cannot be defined here because
+# GPUArrays is not a dependency of ClimaCore.
 for S in (
     :(<:Broadcast.AbstractArrayStyle{0}),
     :(<:StaticArrays.StaticArrayStyle{0}),
     :(<:BlockArrays.AbstractBlockStyle{0}),
 )
     @eval @inline Base.copyto!(dest::DataLayout, bc::Broadcast.Broadcasted{$S}; kwargs...) =
-        if bc.f === identity && isone(length(bc.args)) && Broadcast.isflat(bc)
-            @inbounds arg = first(bc.args)
-            @inbounds fill!(dest, arg isa Tuple ? first(arg) : arg[]; kwargs...)
-        else
-            bc_without_axes = Broadcast.Broadcasted(bc.style, bc.f, bc.args)
-            foreach_point(dest; kwargs...) do dest_point
-                @inbounds dest_point[] = first(bc_without_axes)
-            end
-            call_post_op_callback() && post_op_callback(dest, dest, bc; kwargs...)
-            dest
-        end
+        _copyto_scalar_broadcast!(dest, bc; kwargs...)
 end
 
 @inline is_scalar_or_length_one(arg) = true

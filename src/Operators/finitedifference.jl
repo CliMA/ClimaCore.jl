@@ -380,6 +380,30 @@ function Base.Broadcast.instantiate(
     return Base.Broadcast.Broadcasted{Style}(bc.f, args, axes)
 end
 
+# `AbstractStencilStyle <: Fields.AbstractFieldStyle`, so a `Broadcasted` that
+# is both stencil-styled and operator-headed matches the method above (more
+# specific in the style) and the `NonPointwiseBroadcasted` method in common.jl
+# (more specific in the function) equally. An operator head determines the
+# result space through `return_space` rather than through `combine_axes`, so
+# the operator-headed behaviour applies.
+Base.Broadcast.instantiate(
+    (;
+        style,
+        f,
+        args,
+        axes,
+    )::Base.Broadcast.Broadcasted{
+        <:AbstractStencilStyle,
+        <:Any,
+        <:AbstractOperator,
+    },
+) = Base.Broadcast.Broadcasted(
+    style,
+    f,
+    unrolled_map(Base.Broadcast.instantiate, args),
+    axes,
+)
+
 function strip_space(sbc::StencilBroadcasted{Style}, parent_space) where {Style}
     current_space = axes(sbc)
     new_space = placeholder_space(current_space, parent_space)
@@ -1079,6 +1103,27 @@ Base.@propagate_inbounds stencil_left_boundary(
 Base.@propagate_inbounds stencil_right_boundary(
     op::AdvectionOperator,
     bc,
+    space,
+    idx,
+    hidx,
+    args...,
+) = stencil_interior(op, space, idx, hidx, args...)
+# The generic `NullBoundaryCondition` methods are more specific in the boundary
+# condition while the two above are more specific in the operator, so an
+# AdvectionOperator carrying a NullBoundaryCondition matches both equally.
+# These are never reached at runtime either (boundary_width is 0); they give
+# AdvectionOperator the same behaviour for every boundary condition.
+Base.@propagate_inbounds stencil_left_boundary(
+    op::AdvectionOperator,
+    ::NullBoundaryCondition,
+    space,
+    idx,
+    hidx,
+    args...,
+) = stencil_interior(op, space, idx, hidx, args...)
+Base.@propagate_inbounds stencil_right_boundary(
+    op::AdvectionOperator,
+    ::NullBoundaryCondition,
     space,
     idx,
     hidx,

@@ -585,6 +585,55 @@ function Operators.tensor_product!(
     indata::DataLayouts.VIJHWithF{S, Nv, Nij, Nij, Nh, F, Sc, A},
     M::SMatrix{Nij, Nij},
 ) where {S, Nv, Nij, Nh, F, Sc, A <: CUDA.CuArray}
+    return _cuda_tensor_product!(out, indata, M)
+end
+
+# Disambiguators. The method above is more specific than the generic
+# `VIJHWithF` method in `Operators`, but it neither implies nor is implied by
+# the two specialized CPU methods:
+#
+#   * `tensor_product!(::Union{VIJHWithF{S,Nv,Ni_out,1}, VIH1{S,Nv,Ni_out}},
+#                      ::VIJHWithF{S,Nv,Ni_in,1}, ::SMatrix{Ni_out,Ni_in})`
+#     intersects it where `Nij == 1`, and
+#   * `tensor_product!(::VIJHWithF{S,1,Nij_out,Nij_out,1},
+#                      ::VIJHWithF{S,1,Nij_in,Nij_in,1}, ::SMatrix{...})`
+#     intersects it where `Nv == Nh == 1`,
+#
+# because those methods place no constraint on the backing array type while
+# this one places none on `Nj`/`Nv`/`Nh`. The two intersections themselves
+# overlap at `Nij == Nv == Nh == 1`, so a third method is needed to break the
+# tie between the first two. All of these are one-node/one-element degenerate
+# configurations that do not arise in practice, but for device-resident data
+# the CUDA implementation is the correct one to run in every case.
+function Operators.tensor_product!(
+    out::DataLayouts.VIJHWithF{S, Nv, 1, 1, Nh, F, Sc, A},
+    indata::DataLayouts.VIJHWithF{S, Nv, 1, 1, Nh, F, Sc, A},
+    M::SMatrix{1, 1},
+) where {S, Nv, Nh, F, Sc, A <: CUDA.CuArray}
+    return _cuda_tensor_product!(out, indata, M)
+end
+
+function Operators.tensor_product!(
+    out::DataLayouts.VIJHWithF{S, 1, Nij, Nij, 1, F, Sc, A},
+    indata::DataLayouts.VIJHWithF{S, 1, Nij, Nij, 1, F, Sc, A},
+    M::SMatrix{Nij, Nij},
+) where {S, Nij, F, Sc, A <: CUDA.CuArray}
+    return _cuda_tensor_product!(out, indata, M)
+end
+
+function Operators.tensor_product!(
+    out::DataLayouts.VIJHWithF{S, 1, 1, 1, 1, F, Sc, A},
+    indata::DataLayouts.VIJHWithF{S, 1, 1, 1, 1, F, Sc, A},
+    M::SMatrix{1, 1},
+) where {S, F, Sc, A <: CUDA.CuArray}
+    return _cuda_tensor_product!(out, indata, M)
+end
+
+function _cuda_tensor_product!(
+    out::DataLayouts.VIJHWithF{S, Nv, Nij, Nij},
+    indata::DataLayouts.VIJHWithF{S, Nv, Nij, Nij},
+    M::SMatrix{Nij, Nij},
+) where {S, Nv, Nij}
     Nh_runtime = DataLayouts.nelems(out)
     @assert Nh_runtime == DataLayouts.nelems(indata)
     Nvt = max(1, min(fld(_max_threads_cuda(), Nij * Nij), Nv))

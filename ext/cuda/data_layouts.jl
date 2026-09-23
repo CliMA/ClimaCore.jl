@@ -235,3 +235,30 @@ Adapt.adapt_structure(to::CUDA.KernelAdaptor, data::DataLayouts.DataLayout) =
     ::Val{F},
 ) where {E, R, A, F} =
     Base.IndexStyle(A) == Base.IndexLinear() && R == (F,) && isone(E[F])
+
+# Disambiguate the scalar-broadcast `copyto!` methods in ClimaCore against
+# `copyto!(::AbstractArray, ::Broadcasted{<:AbstractGPUArrayStyle})` in
+# GPUArrays. These styles are zero-dimensional, so ClimaCore's implementations
+# (which fill the destination pointwise) are the correct ones to use. The
+# corresponding StaticArrays and BlockArrays disambiguators live in
+# `src/DataLayouts/loops.jl` and `src/Fields/fieldvector.jl`; these two cannot,
+# because GPUArrays is not a dependency of ClimaCore.
+@inline Base.copyto!(
+    dest::DataLayouts.DataLayout,
+    bc::Base.Broadcast.Broadcasted{<:CUDA.GPUArrays.AbstractGPUArrayStyle{0}};
+    kwargs...,
+) = DataLayouts._copyto_scalar_broadcast!(dest, bc; kwargs...)
+
+@inline Base.copyto!(
+    dest::Fields.FieldVector,
+    bc::Base.Broadcast.Broadcasted{<:CUDA.GPUArrays.AbstractGPUArrayStyle{0}},
+) = Fields._copyto_scalar_broadcast!(dest, bc)
+
+# Disambiguate `rand(::AbstractRNG, ::Type{<:Tensor})` in ClimaCore against
+# CUDA's scalar `rand(rng::RNG, T::Type)`, which would try to allocate a
+# `CuArray{<:Tensor}` and read back its only element.
+Base.rand(
+    rng::CUDA.RNG,
+    ::Type{Geometry.Tensor{N, T, B, C}},
+) where {N, T, B, C} =
+    Geometry._rand_tensor(rng, Geometry.Tensor{N, T, B, C})

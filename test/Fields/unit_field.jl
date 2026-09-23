@@ -23,6 +23,7 @@ import ClimaCore:
 
 using LazyBroadcast: lazy
 using LinearAlgebra: norm
+import LinearAlgebra
 using Statistics: mean
 using ForwardDiff
 
@@ -412,6 +413,54 @@ end
     @test !all(Yb)
     parent(Yb.b) .= true
     @test all(Yb)
+end
+
+@testset "FieldVector ldiv!" begin
+    # `ldiv!(::LU, ::FieldVector)` dispatches on the factor type, because a
+    # method taking any `LU` would be ambiguous with the thirteen methods that
+    # LinearAlgebra and ArrayLayouts define with an unconstrained second
+    # argument. The covered factor types are `Matrix` and `Tridiagonal`.
+    # Everything else here is a wrapper that `lu` materializes into a `Matrix`,
+    # so it is covered too; the cases are listed because the signatures do not
+    # show which factor types `lu` produces.
+    space = spectral_space_2D()
+    FT = Spaces.undertype(space)
+    Y = Fields.FieldVector(; a = ones(space))
+    n = length(parent(Y))
+    dense =
+        Matrix{FT}(LinearAlgebra.I, n, n) .+
+        FT(1 // 10) .* FT[1 / (i + j) for i in 1:n, j in 1:n]
+    rhs = FT[1 / i for i in 1:n]
+
+    matrices = (
+        "Matrix" => dense,
+        "Tridiagonal" => LinearAlgebra.Tridiagonal(dense),
+        "view" => view(dense, 1:n, 1:n),
+        "Symmetric" => LinearAlgebra.Symmetric(dense * dense'),
+        "Adjoint" => dense',
+    )
+    for (name, A) in matrices
+        expected = Matrix(A) \ rhs
+
+        # Two-argument, in place on the FieldVector.
+        x = similar(Y)
+        parent(x) .= reshape(rhs, size(parent(x)))
+        LinearAlgebra.ldiv!(LinearAlgebra.lu(A), x)
+        @test vec(parent(x)) ≈ expected rtol = 100eps(FT)
+
+        # Three-argument.
+        b = similar(Y)
+        parent(b) .= reshape(rhs, size(parent(b)))
+        x3 = similar(Y)
+        LinearAlgebra.ldiv!(x3, LinearAlgebra.lu(A), b)
+        @test vec(parent(x3)) ≈ expected rtol = 100eps(FT)
+    end
+
+    # The QR methods next to the LU ones have no other coverage.
+    x = similar(Y)
+    parent(x) .= reshape(rhs, size(parent(x)))
+    LinearAlgebra.ldiv!(LinearAlgebra.qr(dense), x)
+    @test vec(parent(x)) ≈ dense \ rhs rtol = 100eps(FT)
 end
 
 # Allocation measurements run in top-level functions, since the @allocated
