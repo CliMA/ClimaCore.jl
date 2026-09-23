@@ -89,8 +89,7 @@ Base.eltype(bc::LazyField) = unsafe_eltype(bc)
 
 Base.similar(bc::LazyField) = similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
 
-Base.copy(bc::LazyField) =
-    copyto!(similar(bc), bc; mask = Spaces.get_mask(axes(bc)))
+Base.copy(bc::LazyField) = copyto!(similar(bc), bc, Spaces.get_mask(axes(bc)))
 
 field_values(bc::Broadcast.Broadcasted) = bc
 @inline field_values(bc::LazyField{FieldStyle{DS}}) where {DS} =
@@ -165,8 +164,15 @@ Base.similar(bc::LazyField, ::Type{T}) where {T} = Field(T, axes(bc))
 Base.similar(bc::LazyField{FieldStyle{DS}}, ::Type{T}) where {DS, T} =
     Field(similar(field_values(bc), T), axes(bc))
 
-@inline function Base.copyto!(dest::Field, bc::LazyField; mask = get_mask(axes(dest)))
-    copyto!(field_values(dest), Base.Broadcast.instantiate(field_values(bc)); mask)
+# The mask is an optional positional argument, as for DataLayouts (see the
+# copyto! methods in DataLayouts/loops.jl), and every copyto! method for a
+# LazyField style accepts it in the same position.
+@inline function Base.copyto!(
+    dest::Field,
+    bc::LazyField,
+    mask::DataLayouts.DataMask = get_mask(axes(dest)),
+)
+    copyto!(field_values(dest), Base.Broadcast.instantiate(field_values(bc)), mask)
     return dest
 end
 
@@ -370,16 +376,14 @@ function Base.copyto!(
     field::Field,
     bc::Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}},
 )
-    mask = get_mask(axes(field))
-    copyto!(field_values(field), bc; mask)
+    copyto!(field_values(field), bc, get_mask(axes(field)))
     return field
 end
 function Base.copyto!(
     field::Field,
     bc::Base.Broadcast.Broadcasted{Base.Broadcast.Style{Tuple}},
 )
-    mask = get_mask(axes(field))
-    copyto!(field_values(field), bc; mask)
+    copyto!(field_values(field), bc, get_mask(axes(field)))
     return field
 end
 

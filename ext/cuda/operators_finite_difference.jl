@@ -23,8 +23,8 @@ function Base.copyto!(
     bc::Union{
         StencilBroadcasted{CUDAColumnStencilStyle},
         Broadcasted{CUDAColumnStencilStyle},
-    };
-    mask = Spaces.get_mask(axes(out)),
+    },
+    mask::DataLayouts.DataMask = Spaces.get_mask(axes(out)),
 )
     space = axes(out)
     bounds = Operators.window_bounds(space, bc)

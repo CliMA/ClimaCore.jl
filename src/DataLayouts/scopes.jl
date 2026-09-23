@@ -290,7 +290,12 @@ end
 # detects threaded loops from outside of ClimaCore and nothing else. The threads must be
 # spawned into the default pool explicitly, since a plain Task inherits the pool of the
 # task that creates it, which may be the interactive pool.
-function launch_pool_threads(f::F, n) where {F}
+#
+# Like parallelize_over, this is a function barrier: @nospecialize gives every
+# loop body a single shared method instance, which is what keeps compile time
+# from scaling with the number of distinct loops. It costs one dynamic call per
+# loop launch, which is negligible beside the Threads.@spawn calls below.
+@noinline function launch_pool_threads(@nospecialize(f), n::Int)
     tasks = Vector{Task}(undef, n)
     for rank in Base.OneTo(n)
         @inbounds tasks[rank] = Threads.@spawn :default begin
@@ -331,7 +336,14 @@ pool_loop_threads() = (n = pool_thread_info()[2]; n > 0 ? n : default_pool_size(
 partition(::ThisThreadPool) = ThisThread()
 num_threads(::ThisThreadPool) = pool_loop_threads()
 thread_rank(::ThisThreadPool) = max(pool_thread_info()[1], 1)
-parallelize_over(f::F, ::ThisThreadPool) where {F} =
+# Both this and launch_pool_threads are function barriers: @noinline keeps the
+# loop body out of the caller, and @nospecialize compiles a single method
+# instance for every loop body instead of one per closure type. Unlike the
+# per-slab barrier ruled out in scoped_slice_loop, this barrier is crossed once
+# per loop launch rather than once per slice, so its dynamic dispatch is
+# amortized against the Threads.@spawn calls that immediately follow it, while
+# the compile-time saving applies to every distinct loop in the program.
+@noinline parallelize_over(@nospecialize(f), ::ThisThreadPool) =
     iszero(pool_thread_info()[1]) ? launch_pool_threads(f, pool_loop_threads()) :
     throw(ArgumentError("Nested loops over ThisThreadPool are not supported"))
 

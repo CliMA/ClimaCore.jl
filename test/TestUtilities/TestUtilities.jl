@@ -44,13 +44,50 @@ export convergence_rate,
     test_column_operators,
     ssp33!,
     @test_zero_allocations,
+    @test_allocations,
     @test_precisions
+
+"""
+    ALLOCATION_TESTS_ARE_MEANINGFUL
+
+Whether `@allocated`-based assertions can be trusted in this session.
+
+ClimaCore's CPU loops run on the default thread pool whenever their data is
+backed by a plain `Array`: the `DataScope` of a `DataLayout` is derived from the
+array type (`DataScope(::Type{<:Array}) = ThisThreadPool()`), never from the
+`ClimaComms` device. A test that builds its spaces with `CPUSingleThreaded`
+therefore still launches `Threads.@spawn` tasks whenever Julia is started with
+more than one thread in the default pool, and that machinery allocates a few
+kilobytes per loop regardless of whether the loop body itself allocates.
+
+Allocation assertions are consequently only meaningful when the default pool has
+a single thread. Rather than let them fail on thread-launch overhead, or paper
+over it with a byte allowance large enough to hide real regressions, the macros
+below mark them `Broken` when the pool is larger.
+
+This is a `const` rather than a function, and the macros below branch on it at
+**expansion time**, so that when allocations are measurable they expand to
+exactly `@test ...` and nothing else. That matters: these assertions sit in
+testset bodies whose allocation counts depend on how much of the compiler's
+inference budget is left (see the `TODO`s about unelided `getproperty` views),
+so injecting even a branch and a function call near a measurement can change the
+number being measured. Expansion-time gating cannot perturb anything, because
+the gate leaves no trace in the generated code. The default pool size is fixed
+for the lifetime of the process, so deciding once at load time is also correct.
+
+Making the device select the scope would let these run under any thread count,
+but the scope is a type parameter of every `DataLayout`, so that is a separate
+change.
+"""
+const ALLOCATION_TESTS_ARE_MEANINGFUL = Threads.nthreads(:default) == 1
 
 """
     @test_zero_allocations expr
 
 Evaluates `expr` in an isolated `@noinline` runner to prevent closure/box capture artifacts,
 warms up the evaluation, and asserts `@test allocs == 0`.
+
+Marked `Broken` instead when [`ALLOCATION_TESTS_ARE_MEANINGFUL`](@ref) is false.
 """
 macro test_zero_allocations(expr)
     quote
@@ -60,9 +97,30 @@ macro test_zero_allocations(expr)
                 return nothing
             end
             _run_zero_alloc_eval() # Warmup
-            $Test.@test ($Base.@allocated _run_zero_alloc_eval()) == 0
+            $(
+                if ALLOCATION_TESTS_ARE_MEANINGFUL
+                    :($Test.@test ($Base.@allocated _run_zero_alloc_eval()) == 0)
+                else
+                    :($Test.@test_skip ($Base.@allocated _run_zero_alloc_eval()) == 0)
+                end
+            )
         end
     end
+end
+
+"""
+    @test_allocations comparison
+
+Like `@test`, but for a comparison against a measured allocation count, such as
+`p == 0` or `p <= 96`. Marked `Broken` instead when
+[`ALLOCATION_TESTS_ARE_MEANINGFUL`](@ref) is false.
+
+Expands to exactly `@test comparison` when allocations are measurable, so that
+adding this gate cannot change the allocation counts being asserted on.
+"""
+macro test_allocations(ex)
+    return ALLOCATION_TESTS_ARE_MEANINGFUL ? esc(:($Test.@test $ex)) :
+           esc(:($Test.@test_skip $ex))
 end
 
 """

@@ -65,11 +65,17 @@ function ExtrudedFiniteDifferenceGrid(
     else
         global_geometry = horizontal_grid.global_geometry
     end
+    # The global geometry's type depends on a runtime branch, so specializing
+    # the rest of construction on it compiles the whole grid pipeline once per
+    # branch for no benefit. Base.inferencebarrier (an undocumented but stable
+    # Base internal, present in 1.10-1.12) widens it back to Any. Nothing
+    # downstream loses inference: the memoized constructor below stores grids
+    # in an untyped Dict, so callers already received an Any from it.
     ExtrudedFiniteDifferenceGrid(
         horizontal_grid,
         vertical_grid,
         hypsography,
-        global_geometry,
+        Base.inferencebarrier(global_geometry),
     )
 end
 

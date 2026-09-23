@@ -3199,8 +3199,8 @@ function Base.copyto!(
     bc::Union{
         StencilBroadcasted{ColumnStencilStyle},
         Broadcasted{ColumnStencilStyle},
-    };
-    mask = DataLayouts.NoMask(),
+    },
+    mask::DataLayouts.DataMask = DataLayouts.NoMask(),
 )
     space = axes(bc)
     local_geometry = Spaces.local_geometry_data(space)

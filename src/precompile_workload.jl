@@ -126,6 +126,29 @@ if ccall(:jl_generating_output, Cint, ()) == 1 &&
             Y = similar(X)
             @. Y = X + FT(0.5) * X
             Y .-= X
+
+            # Also precompile grid, space, and DSS construction for
+            # CPUSingleThreaded(), which is the default device when Julia is
+            # started with a single thread.
+            context_st =
+                ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
+            vtopo_st = Topologies.IntervalTopology(context_st, vmesh)
+            vspace_st = Spaces.CenterFiniteDifferenceSpace(vtopo_st)
+            htopo_st = Topologies.Topology2D(context_st, hmesh)
+            hspace_st = Spaces.SpectralElementSpace2D(htopo_st, quad)
+            cspace_st = Spaces.ExtrudedFiniteDifferenceSpace(
+                hspace_st,
+                vspace_st,
+                Hypsography.Flat(),
+            )
+            Spaces.FaceExtrudedFiniteDifferenceSpace(cspace_st)
+            ρ_st = ones(cspace_st)
+            Spaces.weighted_dss!(ρ_st)
+            Operators.Gradient().(ρ_st)
+            uₕ_st = @. Geometry.Covariant12Vector(
+                Geometry.UVVector(one(ρ_st), 2 * one(ρ_st)),
+            )
+            Operators.Divergence().(uₕ_st)
         end
         # The topology and grid constructors memoize into the global object
         # cache; empty it so the workload's objects are not serialized into

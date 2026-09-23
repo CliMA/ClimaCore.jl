@@ -122,6 +122,24 @@ end
     @test parent(point .+ data) == parent(data) .+ Array(parent(point))[]
 end
 
+# A multi-element tuple is indexed along the first (level) dimension, as in Base,
+# and an IJHMask leaves inactive columns untouched, as for any other broadcast.
+@testset "multi-element tuple broadcasts with a mask" begin
+    device = ClimaComms.CPUSingleThreaded()
+    data = test_data(device, Float64, 1, 3)
+    fill!(parent(data), 0)
+    mask = DataLayouts.IJHMask(data)
+    DataLayouts.is_active(mask)[1, 1, 1, 1] = false
+    DataLayouts.set_mask_maps!(mask)
+    bc = Base.broadcasted(identity, (1.0, 2.0, 3.0))
+    copyto!(data, bc, mask)
+    @test parent(data)[:, 1, 1, 1, 1] == zeros(3)
+    @test parent(data)[:, 2, 1, 1, 1] == [1.0, 2.0, 3.0]
+    @test parent(data)[:, 4, 4, 1, 5] == [1.0, 2.0, 3.0]
+    copyto!(data, bc)
+    @test parent(data)[:, 1, 1, 1, 1] == [1.0, 2.0, 3.0]
+end
+
 parent_broadcasted(data::DataLayouts.DataLayout) = parent(data)
 parent_broadcasted(bc::DataLayouts.LazyDataLayout) =
     Base.broadcasted(bc.f, map(parent_broadcasted, bc.args)...)
