@@ -13,6 +13,8 @@ env:
   COUPLER_COMMIT: "27f9a4736d3f324a0b35281d31b2b13d64f7d92c"
   CONFIG_PATH: "$COUPLER_PATH/config/nightly_configs"
   BENCHMARK_CONFIG_PATH: "$COUPLER_PATH/config/benchmark_configs"
+  LAND_PATH: ".buildkite/perf/ClimaLand.jl"
+  LAND_COMMIT: "5638de8dc8fb1a534ee6446bc8155296e0407454"
 
 timeout_in_minutes: 840
 
@@ -42,12 +44,76 @@ steps:
     command:
       - "srun julia --threads=3 --color=yes --project=$COUPLER_PATH/experiments/AMIP/ $COUPLER_PATH/experiments/AMIP/run_simulation.jl --config_file $BENCHMARK_CONFIG_PATH/amip_progedmf_1m_land_he16.yml --job_id gpu_amip_progedmf_1M_land_he16"
       - echo "--- Checking SYPD from artifacts"
-      - bash .buildkite/perf/check-sypd.sh
+      - bash .buildkite/perf/check-perf.sh output/gpu_amip_progedmf_1M_land_he16/artifacts/sypd.txt
     artifact_paths: "output/gpu_amip_progedmf_1M_land_he16/artifacts/*"
     env:
       CLIMACOMMS_DEVICE: "CUDA"
-      BASELINE_SYPD: "0.278"
+      # Fallback used when no passing main build metadata is available yet.
+      BASELINE: "0.278"
       MIN_PERCENT_CHANGE: "-1"
+    agents:
+      slurm_gpus_per_task: 1
+      slurm_cpus_per_task: 4
+      slurm_ntasks: 1
+      slurm_mem: 16GB
+
+  - label: "init land :GPU:"
+    key: "init_gpu_land_env"
+    command:
+      - git clone https://github.com/CliMA/ClimaLand.jl.git $LAND_PATH && bash -c "cd $LAND_PATH && git checkout $LAND_COMMIT"
+      - echo "--- Instantiate ClimaLand benchmark env"
+      - julia --project=$LAND_PATH -e 'using Pkg; Pkg.Registry.update(); Pkg.instantiate(;verbose=true)'
+      # The benchmark scripts run against .buildkite, which devs ClimaLand itself
+      - julia --project=$LAND_PATH/.buildkite -e 'using Pkg; Pkg.develop(; path = ENV["LAND_PATH"]); Pkg.develop(; path = pwd()); Pkg.instantiate(;verbose=true)'
+      - julia --project=$LAND_PATH/.buildkite -e 'using Pkg; Pkg.precompile()'
+      - julia --project=$LAND_PATH/.buildkite -e 'using CUDA; CUDA.precompile_runtime()'
+      - julia --project=$LAND_PATH/.buildkite -e 'using Pkg; Pkg.status()'
+    agents:
+      slurm_gpus: 1
+      slurm_cpus_per_task: 8
+    env:
+      JULIA_NUM_PRECOMPILE_TASKS: 8
+      JULIA_MAX_NUM_PRECOMPILE_FILES: 50
+
+  # ClimaLand is the only model that runs with a land/sea mask, so it is the
+  # only one whose timings track the masked loop and column operator paths.
+  # Both steps run ClimaLand's own benchmark scripts, which sample the
+  # simulation repeatedly and report a mean and standard deviation; the model
+  # setup therefore lives in ClimaLand rather than being duplicated here.
+  - label: "Global soil model GPU (masked columns)"
+    key: "gpu_climaland_soil"
+    depends_on: "init_gpu_land_env"
+    command:
+      - "srun bash .buildkite/perf/run-land-benchmark.sh $LAND_PATH soil"
+      - echo "--- Checking the benchmark rate"
+      - bash .buildkite/perf/check-perf.sh soil_benchmark_gpu/sims_per_second.txt
+    artifact_paths: "soil_benchmark_gpu/*"
+    env:
+      CLIMACOMMS_DEVICE: "CUDA"
+      JULIA_CUDA_MEMORY_POOL: "cuda"
+      # No fallback yet: the first passing main build records the baseline.
+      # Set BASELINE once a few builds show the spread that the script reports
+      # alongside the mean.
+      MIN_PERCENT_CHANGE: "-5"
+    agents:
+      slurm_gpus_per_task: 1
+      slurm_cpus_per_task: 4
+      slurm_ntasks: 1
+      slurm_mem: 16GB
+
+  - label: "Flagship snowy land model GPU (soil + canopy + snow)"
+    key: "gpu_climaland_snowy_land"
+    depends_on: "init_gpu_land_env"
+    command:
+      - "srun bash .buildkite/perf/run-land-benchmark.sh $LAND_PATH snowy_land"
+      - echo "--- Checking the benchmark rate"
+      - bash .buildkite/perf/check-perf.sh snowy_land_benchmark_gpu/sims_per_second.txt
+    artifact_paths: "snowy_land_benchmark_gpu/*"
+    env:
+      CLIMACOMMS_DEVICE: "CUDA"
+      JULIA_CUDA_MEMORY_POOL: "cuda"
+      # No fallback yet: the first passing main build records the baseline.
+      MIN_PERCENT_CHANGE: "-5"
     agents:
       slurm_gpus_per_task: 1
       slurm_cpus_per_task: 4
