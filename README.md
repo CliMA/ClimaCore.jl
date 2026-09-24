@@ -110,6 +110,24 @@ ClimaCore.jl is the dynamical core used throughout the [CliMA](https://github.co
 
 Device and communication backends come from [ClimaComms.jl](https://github.com/CliMA/ClimaComms.jl), and time integration from [ClimaTimeSteppers.jl](https://github.com/CliMA/ClimaTimeSteppers.jl).
 
+## For developers
+
+### Downstream performance checks
+
+A change that looks harmless in ClimaCore can cost a downstream model real time,
+so a separate Buildkite pipeline, [`.buildkite/perf/pipeline.yml`](.buildkite/perf/pipeline.yml),
+runs whole models against the development version of ClimaCore. It clones
+ClimaCoupler and ClimaLand at pinned commits, `Pkg.develop`s ClimaCore into
+them, and benchmarks one AMIP configuration plus ClimaLand's global soil and
+snowy land models on a GPU. ClimaLand is the only model that runs with a
+land/sea mask, so those two steps are the only end-to-end coverage of the masked
+loop and column operator paths.
+
+To trigger these tests, add `[perf]` to your commit message. The pipeline will
+show up as a GitHub status check on the pull request, separate from the main CI
+run. Each step attaches its timings, flame graphs and CUDA profiles as build
+artifacts.
+
 ## Contributing
 
 Contributors should follow the shared CliMA engineering standards in [`docs/dev-guides/`](docs/dev-guides/), which cover architecture, performance, code quality, documentation, and workflows. These are vendored from [CliMA/DeveloperGuides](https://github.com/CliMA/DeveloperGuides). The repo's [`AGENTS.md`](AGENTS.md) is a starting point for AI agents with repo-specific guidance.
