@@ -123,7 +123,10 @@ snowy land models on a GPU. ClimaLand is the only model that runs with a
 land/sea mask, so those two steps are the only end-to-end coverage of the masked
 loop and column operator paths.
 
-To run the tests with your changes, go to the [Buildkite pipeline](buildkite.com/clima/climacore-end-to-end-performance/), click `New Build`, enter the name of your branch, and run the build.
+To trigger these tests, add `[perf]` to your commit message. The pipeline will
+show up as a GitHub status check on the pull request, separate from the main CI
+run. Each step attaches its timings, flame graphs and CUDA profiles as build
+artifacts.
 
 ## Contributing
 
