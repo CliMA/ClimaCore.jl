@@ -14,7 +14,7 @@ env:
   CONFIG_PATH: "$COUPLER_PATH/config/nightly_configs"
   BENCHMARK_CONFIG_PATH: "$COUPLER_PATH/config/benchmark_configs"
   LAND_PATH: ".buildkite/perf/ClimaLand.jl"
-  LAND_COMMIT: "5638de8dc8fb1a534ee6446bc8155296e0407454"
+  LAND_COMMIT: "4009df0ac2a5b62e84c5d21734926aa00338aee0"
 
 timeout_in_minutes: 840
 
