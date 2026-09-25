@@ -11,7 +11,17 @@ See also [`half`](@ref).
 """
 struct PlusHalf{I <: Integer} <: Real
     i::I
+    # The implicit converting constructor that Julia would generate accepts any
+    # `i` (`PlusHalf{I}(i::Any) = new{I}(convert(I, i))`), which is ambiguous
+    # with the singleton-scalar constructors `(::Type{<:Number})(::One)` and
+    # `(::Type{<:Number})(::Zero)` defined by VectorInterface.jl. Restricting
+    # the inner constructor to `Integer` resolves those ambiguities; a
+    # `PlusHalf` is only ever built from an integer index.
+    PlusHalf{I}(i::Integer) where {I <: Integer} = new{I}(convert(I, i))
 end
+# Defining an inner constructor suppresses both default constructors, so the
+# `PlusHalf(i)` form is defined here.
+PlusHalf(i::I) where {I <: Integer} = PlusHalf{I}(i)
 PlusHalf{I}(h::PlusHalf{I}) where {I <: Integer} = h
 
 """

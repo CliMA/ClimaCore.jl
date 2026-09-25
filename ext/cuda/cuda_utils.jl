@@ -322,7 +322,11 @@ function config_via_occupancy(f::F, nitems, args) where {F}
 end
 
 const reported_stats = Dict()
-const kernel_names = IdDict()
+# Cache of kernel names, keyed by the same pair that identifies a kernel
+# specialization: the kernel function's type and the tuple type of its
+# arguments. Concretely typed so that the lookup in `auto_launch!` is
+# inference-friendly (see the comment there).
+const kernel_names = Dict{Tuple{Type, Type}, Union{String, Nothing}}()
 
 # A compile-time constant, not a `Ref`, so that inference folds away the
 # development-only statistics block in `auto_launch!` (which is otherwise
@@ -477,8 +481,15 @@ function auto_launch!(
     # a global Dict, which serves as an in memory cache
     kernel_name = nothing
     if name_kernels_from_stack_trace()
-        # Create a key from the method instance and types of the args
-        key = objectid(GPUCompiler.methodinstance(typeof(f!), typeof(args)))
+        # Key on the kernel function's type and the tuple type of its
+        # arguments, the pair that identifies a kernel specialization and that
+        # `GPUCompiler.methodinstance` is looked up with. Both are statically
+        # known here, so building the key introduces no runtime dispatch. That
+        # matters because `name_kernels_from_stack_trace()` reads a `Ref` and
+        # so cannot be const-folded: inference sees this branch on every
+        # launch path, and a dispatch here would show up in every `@test_opt`
+        # over a kernel launch.
+        key = (F!, typeof(args))
         kernel_name_exists = key in keys(kernel_names)
         if !kernel_name_exists
             # Construct the kernel name, ignoring modules we don't care about

@@ -322,6 +322,10 @@ Base.one(::Type{Tensor{N, T, B, C}}) where {N, T, B, C} =
 Base.convert(::Type{Tensor{N, T, B, C}}, x::AbstractTensor) where {N, T, B, C} =
     Tensor(convert(C, parent(reshape(x, B.instance))), B.instance)
 Base.rand(rng::Random.AbstractRNG, ::Type{Tensor{N, T, B, C}}) where {N, T, B, C} =
+    _rand_tensor(rng, Tensor{N, T, B, C})
+# ClimaCoreCUDAExt adds a `rand(::CUDA.RNG, ::Type{<:Tensor})` method that also
+# calls this helper, to disambiguate against CUDA's `rand(rng::RNG, T::Type)`.
+_rand_tensor(rng, ::Type{Tensor{N, T, B, C}}) where {N, T, B, C} =
     Tensor(rand(rng, C), B.instance)
 
 Base.show(io::IO, x::Tensor) =
@@ -422,7 +426,8 @@ function Base.reshape(x::Tensor, bases::Axes)
     end
     return Tensor(components_constructor(component_values), bases)
 end
-Base.reshape(x::AbstractTensor, bases::Components...) = reshape(x, bases)
+Base.reshape(x::AbstractTensor, base1::Components, bases::Components...) =
+    reshape(x, (base1, bases...))
 
 # Change the ComponentsTypes without constraining the component_names
 Base.reshape(x::Tensor, types::ComponentsTypes) =
@@ -430,7 +435,14 @@ Base.reshape(x::Tensor, types::ComponentsTypes) =
     unrolled_map(components_type, axes(x)) == types ? x :
     throw(DimensionMismatch("Metric is needed for change of basis: \
                              $(unrolled_map(components_type, axes(x))) vs $types"))
-Base.reshape(x::AbstractTensor, types::ComponentsType...) = reshape(x, types)
+Base.reshape(x::AbstractTensor, type1::ComponentsType, types::ComponentsType...) =
+    reshape(x, (type1, types...))
+
+# `Axes{0}` and `ComponentsTypes{0}` are both `Tuple{}`, so an empty tuple
+# matches the two methods above equally. There is nothing to reshape in that
+# case, and check_ndims reports the dimension mismatch for every tensor that
+# reaches it (every Tensor has at least one axis).
+Base.reshape(x::Tensor, ::Tuple{}) = (check_ndims(x, 0); x)
 
 # Change all bases to a single ComponentsType
 Base.reshape(x::AbstractTensor, type::ComponentsType) =
@@ -454,8 +466,11 @@ function reshape_and_apply_f(f::F, args...) where {F}
 end
 
 
-Base.map(f::F, args::AbstractTensor...) where {F} =
-    reshape_and_apply_f((xs...) -> map(f, xs...), args...)
+# The leading argument is separate from the varargs so that a zero-argument
+# `map(f)` does not match this method (which would make it ambiguous with the
+# equally-empty `map(f, ::BandMatrixRow...)`).
+Base.map(f::F, arg1::AbstractTensor, args::AbstractTensor...) where {F} =
+    reshape_and_apply_f((xs...) -> map(f, xs...), arg1, args...)
 
 # The contracted-axis basis for `x * y`.
 new_components_for_product(x, y) = overlap_components(axes(x, ndims(x)), dual(axes(y, 1)))
@@ -523,10 +538,15 @@ Base.:-(x::AbstractTensor, y::AbstractTensor) =
 # `SArray + SArray` already bypasses `promote_shape`, but covector storage
 # (`Adjoint{T, SVector}`) inherits from AbstractMatrix and falls into Base's
 # path. Route those through the underlying SVector so that kernels compile.
-@inline _add_components(xs::SArray...) = +(xs...)
+# The leading argument is kept out of the varargs so that neither method
+# matches a zero-argument `_add_components()`, which would make them ambiguous
+# with each other.
+@inline _add_components(x::SArray, xs::SArray...) = +(x, xs...)
 @inline _sub_components(x::SArray, y::SArray) = x - y
-@inline _add_components(xs::Adjoint{<:Any, <:SVector}...) =
-    adjoint(unrolled_sum(adjoint, xs))
+@inline _add_components(
+    x::Adjoint{<:Any, <:SVector},
+    xs::Adjoint{<:Any, <:SVector}...,
+) = adjoint(unrolled_sum(adjoint, (x, xs...)))
 @inline _sub_components(x::Adjoint{<:Any, <:SVector}, y::Adjoint{<:Any, <:SVector}) =
     adjoint(adjoint(x) - adjoint(y))
 Base.:(==)(x::AbstractTensor, y::AbstractTensor) = reshape_and_apply_f(==, x, y)
