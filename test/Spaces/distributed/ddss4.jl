@@ -8,7 +8,7 @@ include("ddss_setup.jl")
 @testset "2x2 element mesh with periodic boundaries" begin
     Nq = 4
     space, comms_ctx = distributed_space((2, 2), (true, true), (Nq, 1, 1))
-    init_state(local_geometry, p) = (ρ = 1.0)
+    init_state(local_geometry, p) = (; ρ = 1.0)
     y0 = init_state.(Fields.local_geometry_field(space), Ref(nothing))
 
     nel = Topologies.nlocalelems(Spaces.topology(space))

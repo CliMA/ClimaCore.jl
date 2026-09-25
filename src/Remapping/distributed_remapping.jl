@@ -912,8 +912,6 @@ function set_interpolated_values_cpu_kernel!(
     vert_bounding_indices,
     ::Nothing,
 )
-    space = axes(first(fields))
-    FT = Spaces.undertype(space)
     for (field_index, field) in enumerate(fields)
         field_values = Fields.field_values(field)
 

@@ -35,7 +35,7 @@ path = joinpath(@__DIR__, "output", dir, device_name)
 mkpath(path)
 
 function lim!(y, parameters, t, y_ref)
-    (; w, Δt, limiter) = parameters
+    (; limiter) = parameters
     Limiters.apply_limiter!(y.q, y.ρ, limiter)
     return nothing
 end
@@ -51,7 +51,7 @@ function perturb_field!(f::Fields.Field; perturb_radius)
 end
 
 function tendency!(yₜ, y, parameters, t)
-    (; w, Δt, limiter) = parameters
+    (; w) = parameters
     FT = Spaces.undertype(axes(y.q))
     bcvel = pulse(-π, t, z₀, zₕ, z₁, speed)
     divf2c = Operators.DivergenceF2C(
@@ -61,10 +61,6 @@ function tendency!(yₜ, y, parameters, t)
     upwind1 = Operators.UpwindBiasedProductC2F(
         bottom = Operators.Extrapolate(0),
         top = Operators.Extrapolate(0),
-    )
-    upwind3 = Operators.Upwind3rdOrderBiasedProductC2F(
-        bottom = Operators.Extrapolate(1),
-        top = Operators.Extrapolate(1),
     )
     If = Operators.InterpolateC2F()
     @. yₜ.q = -divf2c(upwind1(w, y.q) * If(y.q))

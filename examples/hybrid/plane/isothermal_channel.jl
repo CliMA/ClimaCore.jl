@@ -208,7 +208,6 @@ function rhs_invariant!(dY, Y, _, t)
         Geometry.Covariant13Vector.(Ic2f.(cuₕ)) .+
         Geometry.Covariant13Vector.(fw)
     fu¹² = Geometry.project.(Ref(Geometry.Contravariant1Axis()), fu)
-    fu³ = Geometry.project.(Ref(Geometry.Contravariant3Axis()), fu)
 
     cu = Geometry.Covariant13Vector.(cuₕ) .+ Geometry.Covariant13Vector.(cw)
     cu³ = Geometry.project.(Ref(Geometry.Contravariant3Axis()), cu)

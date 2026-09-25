@@ -332,7 +332,6 @@ function single_column_accumulate!(
     space,
     reverse,
 ) where {F, T}
-    device = ClimaComms.device(space)
     first_level = left_idx(space)
     last_level = right_idx(space)
     output = unstrip_space(_output, space)

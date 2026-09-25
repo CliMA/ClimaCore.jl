@@ -142,7 +142,7 @@ function fd_advection_inputs(center_space, face_space)
 end
 
 function fd_advection_results(center_space, face_space)
-    (; FT, x, w, u³) = fd_advection_inputs(center_space, face_space)
+    (; FT, x, w) = fd_advection_inputs(center_space, face_space)
     up3 = Operators.Upwind3rdOrderBiasedProductC2F(
         bottom = Operators.Extrapolate(1),
         top = Operators.Extrapolate(1),

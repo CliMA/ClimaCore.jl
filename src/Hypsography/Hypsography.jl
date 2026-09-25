@@ -141,7 +141,7 @@ function ref_z_to_physical_z(
     (; surface, ηₕ, s) = adaption
     @assert 0 <= ηₕ <= 1
     @assert s >= 0
-    if s * z_top.z <= adaption.surface.z
+    if s * z_top.z <= surface.z
         error("Decay scale (s*z_top) must be higher than max surface elevation")
     end
 

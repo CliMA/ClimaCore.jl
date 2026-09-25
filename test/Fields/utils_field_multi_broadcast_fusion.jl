@@ -39,7 +39,6 @@ function CenterExtrudedFiniteDifferenceSpaceLineHSpace(
     helem = 4,
     Nq = 4,
 ) where {FT}
-    radius = FT(128)
     zlim = (0, 1)
     domain = Domains.IntervalDomain(
         Geometry.XPoint(zero(FT)),
@@ -96,7 +95,7 @@ end
 
 function fused!(X, Y)
     (; x1, x2, x3) = X
-    (; y1, y2, y3) = Y
+    (; y1, y2) = Y
     @fused_direct begin
         @. y1 = x1 + x2 + x3
         @. y2 = x1 + x2 + x3
@@ -105,7 +104,7 @@ function fused!(X, Y)
 end
 function unfused!(X, Y)
     (; x1, x2, x3) = X
-    (; y1, y2, y3) = Y
+    (; y1, y2) = Y
     @. y1 = x1 + x2 + x3
     @. y2 = x1 + x2 + x3
     return nothing

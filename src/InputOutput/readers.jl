@@ -372,7 +372,6 @@ function read_topology_new(reader::HDF5Reader, name::AbstractString)
     if type == "IntervalTopology"
         mesh = read_mesh(reader, attrs(group)["mesh"])
         device = ClimaComms.device(reader.context)
-        context = ClimaComms.SingletonCommsContext(device)
         return Topologies.IntervalTopology(device, mesh)
     elseif type == "Topology2D"
         mesh = read_mesh(reader, attrs(group)["mesh"])
@@ -493,7 +492,7 @@ function read_grid_new(reader, name)
         coords = read(group, "points")
         points = [
             Geometry.LatLongPoint(coords[1, i], coords[2, i]) for
-            i in 1:size(coords, 2)
+            i in axes(coords, 2)
         ]
         device = ClimaComms.device(reader.context)
         return Grids.MultiPointGrid(points; radius, device)

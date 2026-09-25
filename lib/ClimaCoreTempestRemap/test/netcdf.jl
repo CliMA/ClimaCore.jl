@@ -335,7 +335,6 @@ function test_warp(coords)
     λₘ = FT(3 / 2 * 180)  # degrees
     rₘ = @. FT(acos(sind(ϕₘ) * sind(ϕ) + cosd(ϕₘ) * cosd(ϕ) * cosd(λ - λₘ))) # Great circle distance (rads)
     Rₘ = FT(3π / 4) # Moutain radius
-    ζₘ = FT(π / 16) # Mountain oscillation half-width
     h₀ = FT(10)
     if rₘ < Rₘ
         zₛ = FT(h₀ / 2) * (1 + cospi(rₘ / Rₘ))

@@ -97,7 +97,7 @@ function sphere_center_initial_condition(
 end
 
 function face_initial_condition(local_geometry)
-    (; lat, long, z) = local_geometry.coordinates
+    (; z) = local_geometry.coordinates
     w = @. Geometry.Covariant3Vector(zero(z))
     return NamedTuple{(:w,)}.(tuple.(w))
 end
