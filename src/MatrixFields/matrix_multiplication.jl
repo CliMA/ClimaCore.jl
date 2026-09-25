@@ -382,14 +382,13 @@ function multiply_matrix_at_index(
     bc,
     ::Type{T},
 ) where {T <: BandMatrixRow}
-    lg = Geometry.LocalGeometry(space, idx, hidx)
     prod_type = Operators.return_eltype(
         MultiplyColumnwiseBandMatrixField(),
         matrix1,
         arg,
     )
 
-    column_space1 = column_axes(matrix1, space)
+    column_space1 = isnothing(bc) ? nothing : column_axes(matrix1, space)
     ld1, ud1 = outer_diagonals(eltype(matrix1))
     boundary_modified_ld1 = boundary_modified_ld(bc, ld1, column_space1, idx)
     boundary_modified_ud1 = boundary_modified_ud(bc, ud1, column_space1, idx)
@@ -399,7 +398,7 @@ function multiply_matrix_at_index(
     matrix1_row = @inbounds Operators.getidx(space, matrix1, idx, hidx)
 
     matrix2 = arg
-    column_space2 = column_axes(matrix2, column_space1)
+    column_space2 = isnothing(bc) ? nothing : column_axes(matrix2, column_space1)
     ld2, ud2 = outer_diagonals(eltype(matrix2))
     prod_ld, prod_ud = outer_diagonals(prod_type)
     boundary_modified_prod_ld =
@@ -445,7 +444,9 @@ function multiply_matrix_at_index(
             @inbounds for d in min_d:max_d
                 value1 = matrix1_row[d]
                 value2 = matrix2_rows_wrapper[d][prod_d - d]
-                value2_lg = Geometry.LocalGeometry(space, idx + d, hidx)
+                value2_lg =
+                    isnothing(Geometry._dual_axes_for_projection(typeof(value1))) ?
+                    nothing : Geometry.LocalGeometry(space, idx + d, hidx)
                 prod_entry += mul_with_projection(value1, value2, value2_lg)
             end # Using a for-loop is currently faster than using mapreduce.
             prod_entry
@@ -465,14 +466,13 @@ function multiply_matrix_at_index(
     bc,
     ::Type{T},
 ) where {T}
-    lg = Geometry.LocalGeometry(space, idx, hidx)
     prod_type = Operators.return_eltype(
         MultiplyColumnwiseBandMatrixField(),
         matrix1,
         arg,
     )
 
-    column_space1 = column_axes(matrix1, space)
+    column_space1 = isnothing(bc) ? nothing : column_axes(matrix1, space)
     ld1, ud1 = outer_diagonals(eltype(matrix1))
     boundary_modified_ld1 = boundary_modified_ld(bc, ld1, column_space1, idx)
     boundary_modified_ud1 = boundary_modified_ud(bc, ud1, column_space1, idx)
@@ -486,7 +486,9 @@ function multiply_matrix_at_index(
     @inbounds for d in boundary_modified_ld1:boundary_modified_ud1
         value1 = matrix1_row[d]
         value2 = Operators.getidx(space, vector, idx + d, hidx)
-        value2_lg = Geometry.LocalGeometry(space, idx + d, hidx)
+        value2_lg =
+            isnothing(Geometry._dual_axes_for_projection(typeof(value1))) ?
+            nothing : Geometry.LocalGeometry(space, idx + d, hidx)
         prod_value += mul_with_projection(value1, value2, value2_lg)
     end # Using a for-loop is currently faster than using mapreduce.
     return prod_value

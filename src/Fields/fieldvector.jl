@@ -417,23 +417,112 @@ is_gpu_array_type(::Type{<:SubArray{<:Any, <:Any, P}}) where {P} =
     (Base.OneTo(length(dest)),),
 )
 
+# is_cpu_linear_compatible gates the linear loop in copyto_linear_bc! the same
+# way is_flat_compatible gates flatten_bc_arg: the argument types accepted here
+# must be exactly those eval_linear_bc has methods for, so that any type added
+# to one without the other fails with a MethodError instead of being evaluated
+# incorrectly. The loop is restricted to multidimensional Arrays because a
+# FieldVector's leaves are multidimensional whenever they come from a Field.
+# The Array signature excludes the SubArray leaves that other packages attach
+# to FieldVectors, and ndims > 1 excludes their Vector leaves.
+#
+# The loop deliberately bypasses two things Base's copyto! would do.
+#
+#   - `Broadcast.instantiate` is skipped, so the broadcast's axes are never
+#     computed or validated. check_linear_bc_sizes takes that responsibility:
+#     it requires every Array in the broadcast to have exactly the same size as
+#     the destination, which is stricter than Base's singleton expansion, and
+#     it falls back to the general path when that fails. Equal sizes imply
+#     equal linear index ranges, so linear indexing visits corresponding
+#     elements in every argument.
+#
+#   - `Broadcast.broadcast_unalias` is skipped, so no defensive copy is made of
+#     an argument that shares memory with the destination. This is safe because
+#     equal sizes also mean that every argument is either `===` the destination
+#     (in which case element i is read before it is written, as in `x .+= y`)
+#     or a distinct Array, and distinct Arrays owned by distinct Fields do not
+#     overlap. That same argument is what licenses `@simd ivdep`: with no
+#     partial overlap possible, no iteration can depend on another.
+@inline is_cpu_linear_compatible(dest::Array, arg::Array) =
+    ndims(dest) > 1 && ndims(dest) == ndims(arg)
+@inline is_cpu_linear_compatible(dest::Array, arg::Number) = true
+@inline is_cpu_linear_compatible(dest::Array, arg::Base.RefValue) = true
+@inline is_cpu_linear_compatible(dest::Array, arg::Tuple{Any}) = true
+@inline is_cpu_linear_compatible(dest::Array, arg) = false
+@inline is_cpu_linear_compatible(
+    dest::Array,
+    bc::Base.Broadcast.Broadcasted,
+) =
+    ndims(dest) > 1 &&
+    unrolled_all(Base.Fix1(is_cpu_linear_compatible, dest), bc.args)
+@inline is_cpu_linear_compatible(dest::AbstractArray, arg) = false
+
+@inline check_linear_bc_sizes(sz::Tuple, arg::Array) = sz == size(arg)
+@inline check_linear_bc_sizes(sz::Tuple, arg) = true
+@inline check_linear_bc_sizes(sz::Tuple, bc::Base.Broadcast.Broadcasted) =
+    unrolled_all(Base.Fix1(check_linear_bc_sizes, sz), bc.args)
+
+@inline eval_linear_bc(arg::Array, i::Int) = @inbounds arg[i]
+@inline eval_linear_bc(arg::Number, i::Int) = arg
+@inline eval_linear_bc(arg::Base.RefValue, i::Int) = arg[]
+@inline eval_linear_bc(arg::Tuple{Any}, i::Int) = arg[1]
+@inline eval_linear_bc(bc::Base.Broadcast.Broadcasted, i::Int) =
+    bc.f(unrolled_map(arg -> eval_linear_bc(arg, i), bc.args)...)
+
+# The slow path out of copyto_linear_bc!, taken only when the sizes in a
+# broadcast do not all match. @noinline keeps Base's generic machinery out of
+# the caller, and Base.inferencebarrier (an undocumented but stable Base
+# internal, present in 1.10-1.12) discards the broadcast's concrete type so
+# that this whole path is compiled once rather than once per broadcast shape.
+# The resulting dynamic dispatch is acceptable precisely because the path is
+# rare; the fast path above never reaches it.
+@noinline function _copyto_broadcast_fallback!(
+    dest::AbstractArray,
+    bc::Base.Broadcast.Broadcasted,
+)
+    bc_any = Base.inferencebarrier(bc)::Base.Broadcast.Broadcasted
+    bct = Base.Broadcast.Broadcasted(bc_any.f, bc_any.args, axes(dest))
+    return copyto!(dest, Base.Broadcast.instantiate(bct))
+end
+
+@inline function copyto_linear_bc!(
+    dest::Array,
+    bc::Base.Broadcast.Broadcasted,
+)
+    check_linear_bc_sizes(size(dest), bc) ||
+        return _copyto_broadcast_fallback!(dest, bc)
+    @inbounds @simd ivdep for i in 1:length(dest)
+        dest[i] = eval_linear_bc(bc, i)
+    end
+    return dest
+end
+
 @inline function Base.copyto!(
     dest::FieldVector,
     bc::Union{FieldVector, Base.Broadcast.Broadcasted{FieldVectorStyle}},
 )
     unrolled_foreach(property_name_vals(dest)) do symb_val
         array = parent(getfield(field_vector_values(dest), unval(symb_val)))
-        bct = transform_broadcasted(bc, symb_val, axes(array))
         if array isa FieldVector
+            bct = transform_broadcasted(bc, symb_val, nothing)
             copyto!(array, bct)
-        elseif is_flat_compatible(array, bct)
-            flat_dest = vec(array)
-            copyto!(
-                flat_dest,
-                Base.Broadcast.instantiate(flatten_bc_arg(array, flat_dest, bct)),
-            )
+        elseif bc isa Base.Broadcast.Broadcasted &&
+               is_cpu_linear_compatible(
+            array,
+            transform_broadcasted(bc, symb_val, nothing),
+        )
+            copyto_linear_bc!(array, transform_broadcasted(bc, symb_val, nothing))
         else
-            copyto!(array, Base.Broadcast.instantiate(bct))
+            bct = transform_broadcasted(bc, symb_val, axes(array))
+            if is_flat_compatible(array, bct)
+                flat_dest = vec(array)
+                copyto!(
+                    flat_dest,
+                    Base.Broadcast.instantiate(flatten_bc_arg(array, flat_dest, bct)),
+                )
+            else
+                copyto!(array, Base.Broadcast.instantiate(bct))
+            end
         end
     end
     call_post_op_callback() && post_op_callback(dest, dest, bc)
@@ -443,6 +532,15 @@ end
 # Define separate methods for Style{Tuple} and AbstractArrayStyle{0}, instead
 # of a single method for their Union, to avoid a dispatch ambiguity with the
 # method for AbstractArrays in Base.Broadcast.
+#
+# The incoming broadcast carries the FieldVector's own axes, which are the
+# BlockedOneTo of the flattened vector and bear no relation to the axes of any
+# individual leaf array. They must be replaced by the leaf's axes before
+# instantiating, just as transform_broadcasted does for FieldVectorStyle:
+# instantiate only checks the axes for singleton-expansion compatibility, but
+# the copyto! it feeds requires them to match the destination exactly. Scalar
+# styles happen to survive the mismatch because Base short-circuits them to
+# fill!, while Style{Tuple} would otherwise throw a DimensionMismatch.
 for S in
     (:(Base.Broadcast.Style{Tuple}), :(Base.Broadcast.AbstractArrayStyle{0}))
     @eval @inline function Base.copyto!(
@@ -451,8 +549,17 @@ for S in
     )
         unrolled_foreach(property_name_vals(dest)) do symb_val
             array = parent(getfield(field_vector_values(dest), unval(symb_val)))
-            array isa FieldVector ? copyto!(array, bc) :
-            copyto!(array, Base.Broadcast.instantiate(bc))
+            if array isa FieldVector
+                copyto!(array, bc)
+            else
+                bc_leaf = Base.Broadcast.Broadcasted(
+                    bc.style,
+                    bc.f,
+                    bc.args,
+                    axes(array),
+                )
+                copyto!(array, Base.Broadcast.instantiate(bc_leaf))
+            end
         end
         call_post_op_callback() && post_op_callback(dest, dest, bc)
         return dest

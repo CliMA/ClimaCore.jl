@@ -142,6 +142,16 @@ makes this `f(index, slices...)`, like in a loop over `Base.enumerate(arg)`.
 """
 @inline function foreach_slice(op::O, f::F, args...; kwargs...) where {O, F}
     (mask, enumerate) = slice_loop_flags(; kwargs...)
+    return _foreach_slice(op, f, mask, enumerate, args...)
+end
+
+@inline function _foreach_slice(
+    op::O,
+    f::F,
+    mask,
+    enumerate,
+    args...,
+) where {O, F}
     unrolled_allequal(Base.Fix1(each_slice_index, op), args) ||
         throw(DimensionMismatch("Inputs to foreach_slice must have compatible dimensions"))
     scope = DataScope(args...)
@@ -149,7 +159,7 @@ makes this `f(index, slices...)`, like in a loop over `Base.enumerate(arg)`.
     # of keyword-argument forwarding adds a Core.kwcall method and a hidden
     # body method per loop, each re-optimized with the whole loop inlined.
     return needs_loop_setup(scope) ?
-           foreach_slice(scope, op, f, args...; mask, enumerate) :
+           _foreach_slice(scope, op, f, mask, enumerate, args...) :
            scoped_slice_loop(
         slice_subscope(scope, op, args...), scope, op, f, mask, enumerate, args...,
     )
@@ -161,8 +171,10 @@ for (name, op, ref) in (
     (:foreach_slab, :slab, "[`slab`](@ref)"),
     (:foreach_column, :column, "[`column`](@ref)"),
 )
-    # The body of foreach_slice is replicated instead of forwarded to, since a
-    # forwarding layer takes about as much inference as the loop it forwards to.
+    # These wrappers only unpack keyword arguments and forward to _foreach_slice
+    # with a fixed slice operator. Keeping the forwarding layer free of the loop
+    # body itself is what makes it cheap: _foreach_slice is inferred once per
+    # (op, f, args...) combination instead of once per entry point.
     @eval begin
         """
             $($name)(f, args...; mask = NoMask(), enumerate = Val(false))
@@ -171,48 +183,42 @@ for (name, op, ref) in (
         """
         @inline function $name(f::F, args...; kwargs...) where {F}
             (mask, enumerate) = slice_loop_flags(; kwargs...)
-            unrolled_allequal(Base.Fix1(each_slice_index, $op), args) ||
-                throw(
-                    DimensionMismatch(
-                        "Inputs to foreach_slice must have compatible dimensions",
-                    ),
-                )
-            scope = DataScope(args...)
-            return needs_loop_setup(scope) ?
-                   foreach_slice(scope, $op, f, args...; mask, enumerate) :
-                   scoped_slice_loop(
-                slice_subscope(scope, $op, args...),
-                scope,
-                $op,
-                f,
-                mask,
-                enumerate,
-                args...,
-            )
+            return _foreach_slice($op, f, mask, enumerate, args...)
         end
     end
 end
 
 # Whether looping over a DataScope requires work before and after the loop,
-# done by the scope's own foreach_slice method; extend alongside every method.
+# done by the scope's own _foreach_slice method; extend alongside every method.
 @inline needs_loop_setup(::DataScope) = false
 
 # A thread pool has to be resolved before looping over it, and given back afterward.
 @inline needs_loop_setup(::ThisThreadPool) = true
-@inline function foreach_slice(
+@inline function _foreach_slice(
     scope::ThisThreadPool,
     op::O,
     f::F,
-    args...;
-    kwargs...,
+    mask,
+    enumerate,
+    args...,
 ) where {O, F}
-    pool_thread_info() == (0, 0) ||
-        return foreach_pool_slice(num_threads(scope), scope, op, f, args...; kwargs...)
-    threads = resolve_pool_threads()
+    # A single-threaded pool takes a shortcut around the whole claim/release
+    # protocol. This is exactly equivalent to running it: claim_pool_threads
+    # returns 0 without touching POOL_THREADS_IN_USE when the pool has one
+    # thread, and PENDING_POOL_LOOPS is only incremented to be decremented
+    # again, so no shared state would change. Folding one_thread into in_pool
+    # is what skips the release in the finally block, and it cannot mask a real
+    # nested loop: pool_thread_info is only set by launch_pool_threads and by a
+    # resolve_pool_threads call that claims threads, and a one-thread pool
+    # reaches neither.
+    one_thread = isone(default_pool_size())
+    in_pool = one_thread || pool_thread_info() != (0, 0)
+    threads =
+        one_thread ? 1 : (in_pool ? num_threads(scope) : resolve_pool_threads())
     try
-        return foreach_pool_slice(threads, scope, op, f, args...; kwargs...)
+        return foreach_pool_slice(threads, scope, op, f, mask, enumerate, args...)
     finally
-        release_pool_threads()
+        in_pool || release_pool_threads()
     end
 end
 
@@ -224,11 +230,20 @@ end
     scope::ThisThreadPool,
     op::O,
     f::F,
-    args...;
     mask,
     enumerate,
+    args...,
 ) where {O, F} =
-    isone(threads) ? foreach_slice(ThisThread(), op, f, args...; mask, enumerate) :
+    isone(threads) ?
+    scoped_slice_loop(
+        slice_subscope(ThisThread(), op, args...),
+        ThisThread(),
+        op,
+        f,
+        mask,
+        enumerate,
+        args...,
+    ) :
     parallelize_over(
         () -> scoped_slice_loop(
             slice_subscope(scope, op, args...), scope, op, f, mask, enumerate, args...,
@@ -236,13 +251,18 @@ end
         scope,
     )
 
+@inline _foreach_slice(
+    scope::DataScope, op::O, f::F, mask, enumerate, args...,
+) where {O, F} =
+    scoped_slice_loop(
+        slice_subscope(scope, op, args...), scope, op, f, mask, enumerate, args...,
+    )
+
 @inline function foreach_slice(
     scope::DataScope, op::O, f::F, args...; kwargs...,
 ) where {O, F}
     (mask, enumerate) = slice_loop_flags(; kwargs...)
-    return scoped_slice_loop(
-        slice_subscope(scope, op, args...), scope, op, f, mask, enumerate, args...,
-    )
+    return _foreach_slice(scope, op, f, mask, enumerate, args...)
 end
 
 # The loop body lives behind a function barrier so that the subscope is a
@@ -445,23 +465,36 @@ end
 # broadcast must also have its axes dropped, mirroring how Base's instantiate
 # drops scalar broadcast axes. The StaticArrayStyle{0} and AbstractBlockStyle{0}
 # methods avoid ambiguities with StaticArrays and BlockArrays.
+#
+# The implementation lives in _copyto! rather than in Base.copyto!, so that the
+# Style{Tuple} method below can reach it after converting to a scalar style.
 for S in (
     :(<:Broadcast.AbstractArrayStyle{0}),
     :(<:StaticArrays.StaticArrayStyle{0}),
     :(<:BlockArrays.AbstractBlockStyle{0}),
 )
-    @eval @inline Base.copyto!(dest::DataLayout, bc::Broadcast.Broadcasted{$S}; kwargs...) =
+    @eval @inline function _copyto!(
+        dest::DataLayout,
+        bc::Broadcast.Broadcasted{$S},
+        mask,
+    )
         if bc.f === identity && isone(length(bc.args)) && Broadcast.isflat(bc)
             @inbounds arg = first(bc.args)
-            @inbounds fill!(dest, arg isa Tuple ? first(arg) : arg[]; kwargs...)
-        else
-            bc_without_axes = Broadcast.Broadcasted(bc.style, bc.f, bc.args)
-            foreach_point(dest; kwargs...) do dest_point
-                @inbounds dest_point[] = first(bc_without_axes)
-            end
-            call_post_op_callback() && post_op_callback(dest, dest, bc; kwargs...)
-            dest
+            return @inbounds fill!(dest, arg isa Tuple ? first(arg) : arg[]; mask)
         end
+        bc_without_axes = Broadcast.Broadcasted(bc.style, bc.f, bc.args)
+        foreach_point(dest; mask) do dest_point
+            @inbounds dest_point[] = first(bc_without_axes)
+        end
+        call_post_op_callback() && post_op_callback(dest, dest, bc; mask)
+        return dest
+    end
+
+    @eval @inline Base.copyto!(
+        dest::DataLayout,
+        bc::Broadcast.Broadcasted{$S};
+        kwargs...,
+    ) = _copyto!(dest, bc, slice_loop_flags(; kwargs...)[1])
 end
 
 @inline is_scalar_or_length_one(arg) = true
@@ -470,23 +503,48 @@ end
     unrolled_all(is_scalar_or_length_one, bc.args)
 
 # Handle single-element tuples in DataLayout broadcasts the same way as Refs.
-# For multi-element tuples, fall back to Base's default copyto! implementation.
-@inline function Base.copyto!(
+# For multi-element tuples, fall back to Base's default copyto! implementation,
+# which iterates over dest's axes and so cannot honor a DataMask.
+@inline function _copyto!(
+    dest::DataLayout,
+    bc::Broadcast.Broadcasted{Broadcast.Style{Tuple}},
+    mask,
+)
+    is_scalar_or_length_one(bc) || return _copyto_unmaskable!(dest, bc, mask)
+    scalar_bc = convert(Broadcast.Broadcasted{Broadcast.DefaultArrayStyle{0}}, bc)
+    return _copyto!(dest, scalar_bc, mask)
+end
+
+@inline _copyto_unmaskable!(dest::DataLayout, bc, ::NoMask) =
+    Base.copyto!(dest, convert(Broadcast.Broadcasted{Nothing}, bc))
+@inline _copyto_unmaskable!(dest::DataLayout, bc, mask) = throw(
+    ArgumentError(
+        "broadcasting a multi-element tuple into a DataLayout falls back to \
+         Base.copyto!, which does not support the mask keyword argument",
+    ),
+)
+
+@inline Base.copyto!(
     dest::DataLayout,
     bc::Broadcast.Broadcasted{Broadcast.Style{Tuple}};
     kwargs...,
-)
-    style_type = is_scalar_or_length_one(bc) ? Broadcast.DefaultArrayStyle{0} : Nothing
-    return copyto!(dest, convert(Broadcast.Broadcasted{style_type}, bc); kwargs...)
-end
+) = _copyto!(dest, bc, slice_loop_flags(; kwargs...)[1])
 
-@inline function Base.copyto!(dest::DataLayout, arg::MaybeLazyDataLayout; kwargs...)
-    foreach_point(dest, arg; kwargs...) do dest_point, arg_point
-        @inbounds dest_point[] = arg_point[]
-    end
-    call_post_op_callback() && post_op_callback(dest, dest, arg; kwargs...)
+@inline function _copyto!(dest::DataLayout, arg::MaybeLazyDataLayout, mask)
+    _foreach_slice(
+        view,
+        (dest_point, arg_point) -> (@inbounds dest_point[] = arg_point[]),
+        mask,
+        Val(false),
+        dest,
+        arg,
+    )
+    call_post_op_callback() && post_op_callback(dest, dest, arg; mask)
     return dest
 end
+
+@inline Base.copyto!(dest::DataLayout, arg::MaybeLazyDataLayout; kwargs...) =
+    _copyto!(dest, arg, slice_loop_flags(; kwargs...)[1])
 
 @inline function Base.copyto!(bc::FusedMultiBroadcast; kwargs...)
     foreach_point(bc; kwargs...) do bc_point
@@ -498,8 +556,8 @@ end
     return bc
 end
 
-@inline Base.copy(arg::MaybeLazyDataLayout; kwargs...) =
-    copyto!(similar(arg), arg; kwargs...)
+@inline Base.copy(arg::MaybeLazyDataLayout; mask = NoMask()) =
+    _copyto!(similar(arg), arg, mask)
 
 # Add axes to LazyDataLayouts and AutoBroadcaster wrappers to DataLayouts before
 # reducing them. Remove all AutoBroadcaster wrappers after obtaining the result.

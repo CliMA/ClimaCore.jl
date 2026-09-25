@@ -162,16 +162,16 @@ end
         f = fill((; x = FT(1)), space)
         pow_n(f) # Compile first
         p_allocated = @allocated pow_n(f)
-        @test p_allocated == 0
+        TU.@test_allocations p_allocated == 0
         pow_n_bc(f) # Compile first
         p_allocated = @allocated pow_n_bc(f)
         if space isa Spaces.SpectralElementSpace1D
-            @test p_allocated == 0
+            TU.@test_allocations p_allocated == 0
         else
             # TODO: On extruded spaces, this broadcast has two unelided views
             # from getproperty (48 bytes each); whether the compiler elides
             # them depends on how much of its inference budget is used up.
-            @test p_allocated ≤ 96
+            TU.@test_allocations p_allocated ≤ 96
         end
     end
 end
@@ -210,18 +210,18 @@ end
         ifelse_broadcast_allocating(a, b, c)
         p_allocated = @allocated ifelse_broadcast_allocating(a, b, c)
         if VERSION ≥ v"1.11.0-beta"
-            @test p_allocated == 0
+            TU.@test_allocations p_allocated == 0
         else
             @test_broken p_allocated == 0
         end
 
         ifelse_broadcast_or(a, b, c)
         p_allocated = @allocated ifelse_broadcast_or(a, b, c)
-        @test p_allocated == 0
+        TU.@test_allocations p_allocated == 0
 
         ifelse_broadcast_simple(a, b, c)
         p_allocated = @allocated ifelse_broadcast_simple(a, b, c)
-        @test p_allocated == 0
+        TU.@test_allocations p_allocated == 0
     end
 end
 
@@ -488,7 +488,7 @@ fv_from_array_allocations(Y, array) = @allocated Fields.array2fieldvector!(Y, ar
             () -> fv_from_array_allocations(Y2, array),
         )
             measure!()
-            @test measure!() == 0
+            TU.@test_allocations measure!() == 0
         end
     end
 end
@@ -559,7 +559,7 @@ end
     test_fv_allocations!(Y1, Y2, Y3, Y4)
     p_allocated = @allocated test_fv_allocations!(Y1, Y2, Y3, Y4)
     if device isa ClimaComms.AbstractCPUDevice
-        @test p_allocated == 0
+        TU.@test_allocations p_allocated == 0
     elseif device isa ClimaComms.CUDADevice
         @test_broken p_allocated == 0
     end
@@ -612,7 +612,7 @@ end
     @test_opt call_getcolumn(fv, colidx, device)
     p = @allocated call_getcolumn(fv, colidx, device)
     if ClimaComms.SingletonCommsContext(device) isa ClimaComms.AbstractCPUDevice
-        @test p ≤ 32
+        TU.@test_allocations p ≤ 32
     end
 end
 
@@ -1298,6 +1298,57 @@ end
     @test all(==(0.0), parent(C))
 end
 
+# Broadcasting a single-element tuple is how Base.broadcastable presents any
+# custom scalar (see the VarTimescaleAcnv pattern in inference_fields.jl), so a
+# FieldVector has to accept it exactly like a Ref. This used to throw a
+# DimensionMismatch, because the FieldVector's BlockedOneTo axes were passed
+# down to each leaf array unchanged.
+@testset "FieldVector broadcasting with scalar-like arguments" begin
+    context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
+    FT = Float64
+    domain = Domains.IntervalDomain(
+        Geometry.ZPoint(FT(0)) .. Geometry.ZPoint(FT(1)),
+        periodic = true,
+    )
+    mesh = Meshes.IntervalMesh(domain; nelems = 10)
+    space = Spaces.CenterFiniteDifferenceSpace(
+        Topologies.IntervalTopology(context, mesh),
+    )
+
+    all_entries_equal(fv, v) =
+        all(propertynames(fv)) do name
+            p = getproperty(fv, name)
+            p isa Fields.FieldVector ? all_entries_equal(p, v) :
+            all(==(v), parent(p))
+        end
+
+    # Leaves are built with fill rather than a map closure: a closure would
+    # capture the local FT as a non-constant DataType, making the broadcast's
+    # element type uninferrable, which ClimaCore rejects outright.
+    make_flat() =
+        Fields.FieldVector(; a = fill(FT(1), space), b = fill(FT(2), space))
+    make_nested() = Fields.FieldVector(;
+        inner = Fields.FieldVector(; a = fill(FT(1), space)),
+        c = fill(FT(3), space),
+    )
+
+    for make in (make_flat, make_nested)
+        # Style{Tuple}: the case that used to throw.
+        Y = make()
+        Y .= (FT(7),)
+        @test all_entries_equal(Y, FT(7))
+
+        # AbstractArrayStyle{0} and plain scalars must keep working.
+        Y = make()
+        Y .= Ref(FT(8))
+        @test all_entries_equal(Y, FT(8))
+
+        Y = make()
+        Y .= FT(9)
+        @test all_entries_equal(Y, FT(9))
+    end
+end
+
 function integrate_bycolumn!(∫y, Y)
     Fields.bycolumn(axes(Y.y)) do colidx
         Operators.column_integral_definite!(∫y[colidx], Y.y[colidx])
@@ -1321,13 +1372,13 @@ end
         # Implicit bycolumn
         Operators.column_integral_definite!(∫y, y) # compile first
         p = @allocated Operators.column_integral_definite!(∫y, y)
-        @test p == 0
+        TU.@test_allocations p == 0
         # Skip spaces incompatible with Fields.bycolumn:
         TU.bycolumnable(space) || continue
         # Explicit bycolumn
         integrate_bycolumn!(∫y, Y) # compile first
         p = @allocated integrate_bycolumn!(∫y, Y)
-        @test p == 0
+        TU.@test_allocations p == 0
         nothing
     end
     nothing

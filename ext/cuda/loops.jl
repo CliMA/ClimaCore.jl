@@ -6,18 +6,26 @@ has_inferred_slice_size(op::O, arg) where {O} =
     end
 
 DataLayouts.needs_loop_setup(::ThisHost) = true
-DataLayouts.foreach_slice(scope::ThisHost, op::O, f::F, args...; kwargs...) where {O, F} =
+DataLayouts._foreach_slice(
+    scope::ThisHost,
+    op::O,
+    f::F,
+    mask,
+    enumerate,
+    args...,
+) where {O, F} =
     if !unrolled_all(Base.Fix1(has_inferred_slice_size, op), args)
-        DataLayouts.unfused_slice_loop(scope, op, f, args...; kwargs...)
+        DataLayouts.unfused_slice_loop(scope, op, f, args...; mask, enumerate)
     else
         check_device_assumptions()
-        kernel_kwargs = values(kwargs) # capture kwargs as NamedTuple (Pairs isn't isbitstype)
-        kernel_function(args...) = DataLayouts.foreach_slice(
+        kernel_function(args...) = DataLayouts.scoped_slice_loop(
+            DataLayouts.slice_subscope(ThisKernel(), op, args...),
             ThisKernel(),
             op,
             f,
-            args...;
-            kernel_kwargs...,
+            mask,
+            enumerate,
+            args...,
         )
 
         # A rank can own no elements; there are then no slices to launch
