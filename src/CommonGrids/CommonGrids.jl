@@ -220,7 +220,6 @@ function ExtrudedCubedSphereGrid(
 ) where {FT}
     @assert ClimaComms.device(context) == device "The given device and context device do not match."
 
-    z_boundary_names = (:bottom, :top)
     h_grid = Grids.SpectralElementGrid2D(
         h_topology,
         quad;

@@ -98,7 +98,7 @@ function compute_neighbor_bounds_local_kernel!(
     local_neighbor_elem,
     local_neighbor_elem_offset,
 )
-    (; q_bounds_nbr, ghost_buffer, rtol) = limiter
+    (; q_bounds_nbr) = limiter
     (Nv, _, _, Nh) = size(q_bounds_nbr)
     n = (Nv, Nh)
     tidx = thread_index()

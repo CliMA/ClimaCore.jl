@@ -30,7 +30,6 @@ function benchmark_kernel_array!(
     device::ClimaComms.AbstractCPUDevice;
     silent = true,
 )
-    (; ϕ_arr, ψ_arr) = args
     kernel_fun!(args) # compile first
     trial = BenchmarkTools.@benchmark $kernel_fun!($args)
     if !silent
@@ -186,7 +185,7 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
     space_name = nameof(typeof(space))
     if ClimaComms.iamroot(context)
         nprocs = ClimaComms.nprocs(context)
-        @info "Setting up benchmark" device context float_type panel_size poly_nodes space_name
+        @info "Setting up benchmark" device context nprocs float_type panel_size poly_nodes space_name
     end
 
     # Fields
@@ -299,7 +298,6 @@ function test_against_best_times(bm, best_times)
     else
         @info "Spectral element CUDA operator benchmarks passed 🎉"
     end
-    setdiff_keys = setdiff(keys(bm), keys(best_times))
     if !(length(intersect_keys) == length(best_times) == length(bm))
         @show collect(keys(bm))
         @show collect(keys(best_times))

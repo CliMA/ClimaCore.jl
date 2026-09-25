@@ -83,9 +83,9 @@ function aos_cart_offset!(X, Y, us; nreps = 1, bm=nothing, n_trials = 30)
     if Y isa Array
         e = Inf
         CI = CartesianIndices((get_Nv(us), get_Nij(us), get_Nij(us), get_Nh(us), 1))
-        for t in 1:n_trials
+        for _ in 1:n_trials
             et = Base.@elapsed begin
-                for i in 1:nreps
+                for _ in 1:nreps
                     @inbounds @simd for I in 1:get_N(us)
                         CI1 = CI[I]
                         CI2 = CI1 + CartesianIndex((0, 0, 0, 0, 1))
@@ -102,9 +102,9 @@ function aos_cart_offset!(X, Y, us; nreps = 1, bm=nothing, n_trials = 30)
         config = CUDA.launch_configuration(kernel.fun)
         threads = min(get_N(us), config.threads)
         blocks = cld(get_N(us), threads)
-        for t in 1:n_trials
+        for _ in 1:n_trials
             et = CUDA.@elapsed begin
-                for i in 1:nreps # reduce variance / impact of launch latency
+                for _ in 1:nreps # reduce variance / impact of launch latency
                     kernel(X,Y,us; threads, blocks)
                 end
             end
@@ -131,9 +131,9 @@ end;
 function aos_lin_offset!(X, Y, us; nreps = 1, bm=nothing, n_trials = 30)
     if Y isa Array
         e = Inf
-        for t in 1:n_trials
+        for _ in 1:n_trials
             et = Base.@elapsed begin
-                for i in 1:nreps
+                for _ in 1:nreps
                     @inbounds @simd for I in 1:get_N(us)
                         LY1 = const_linear_index(us, I, 0)
                         LX1 = const_linear_index(us, I, 0)
@@ -151,9 +151,9 @@ function aos_lin_offset!(X, Y, us; nreps = 1, bm=nothing, n_trials = 30)
         config = CUDA.launch_configuration(kernel.fun)
         threads = min(get_N(us), config.threads)
         blocks = cld(get_N(us), threads)
-        for t in 1:n_trials
+        for _ in 1:n_trials
             et = CUDA.@elapsed begin
-                for i in 1:nreps
+                for _ in 1:nreps
                     kernel(X,Y,us; threads, blocks)
                 end
             end
@@ -181,9 +181,9 @@ function soa_cart_index!(X, Y, us; nreps = 1, bm=nothing, n_trials = 30)
     e = Inf
     if first(Y) isa Array
         CI = CartesianIndices((get_Nv(us), get_Nij(us), get_Nij(us), get_Nh(us)))
-        for t in 1:n_trials
+        for _ in 1:n_trials
             et = Base.@elapsed begin
-                for i in 1:nreps
+                for _ in 1:nreps
                     (y1,) = Y
                     (x1, x2, x3) = X
                     @inbounds @simd for I in 1:get_N(us)
@@ -198,9 +198,9 @@ function soa_cart_index!(X, Y, us; nreps = 1, bm=nothing, n_trials = 30)
         config = CUDA.launch_configuration(kernel.fun)
         threads = min(get_N(us), config.threads)
         blocks = cld(get_N(us), threads)
-        for t in 1:n_trials
+        for _ in 1:n_trials
             et = CUDA.@elapsed begin
-                for i in 1:nreps # reduce variance / impact of launch latency
+                for _ in 1:nreps # reduce variance / impact of launch latency
                     kernel(X,Y,us; threads, blocks)
                 end
             end
@@ -226,9 +226,9 @@ end;
 function soa_linear_index!(X, Y, us; nreps = 1, bm=nothing, n_trials = 30)
     e = Inf
     if first(Y) isa Array
-        for t in 1:n_trials
+        for _ in 1:n_trials
             et = Base.@elapsed begin
-                for i in 1:nreps
+                for _ in 1:nreps
                     (y1,) = Y
                     (x1, x2, x3) = X
                     @inbounds @simd for I in 1:get_N(us)
@@ -243,9 +243,9 @@ function soa_linear_index!(X, Y, us; nreps = 1, bm=nothing, n_trials = 30)
         config = CUDA.launch_configuration(kernel.fun)
         threads = min(get_N(us), config.threads)
         blocks = cld(get_N(us), threads)
-        for t in 1:n_trials
+        for _ in 1:n_trials
             et = CUDA.@elapsed begin
-                for i in 1:nreps # reduce variance / impact of launch latency
+                for _ in 1:nreps # reduce variance / impact of launch latency
                     kernel(X,Y,us; threads, blocks)
                 end
             end

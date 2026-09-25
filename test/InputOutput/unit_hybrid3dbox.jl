@@ -43,8 +43,6 @@ function hvspace_3D(
         x1periodic = true,
         x2periodic = true,
     )
-    Nv = Meshes.nelements(vertmesh)
-    Nf_center, Nf_face = 2, 1 #1 + 3 + 1
     quad = Quadratures.GLL{npoly + 1}()
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
     horztopology = Topologies.Topology2D(context, horzmesh)

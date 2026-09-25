@@ -124,7 +124,7 @@ end
         end
 
         function scalar_field_matrix_wrapper(field_matrix_of_tensors)
-            A_scalar = MatrixFields.scalar_field_matrix(field_matrix_of_tensors)
+            MatrixFields.scalar_field_matrix(field_matrix_of_tensors)
             return nothing
         end
 

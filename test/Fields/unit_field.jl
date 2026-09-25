@@ -580,12 +580,12 @@ end
 
 function call_getcolumn(fv, colidx, device)
     ClimaComms.allowscalar(device) do
-        fvcol = fv[colidx]
+        fv[colidx]
     end
     nothing
 end
 function call_getproperty(fv)
-    fva = fv.c.a
+    fv.c.a
     nothing
 end
 @testset "FieldVector getindex" begin

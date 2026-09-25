@@ -118,7 +118,7 @@ partition numbers
         end
     end
 
-    init_state(local_geometry, p) = (ρ = 1.0)
+    init_state(local_geometry, p) = (; ρ = 1.0)
     y0 = init_state.(Fields.local_geometry_field(space), Ref(nothing))
     nel = Topologies.nlocalelems(Spaces.topology(space))
 

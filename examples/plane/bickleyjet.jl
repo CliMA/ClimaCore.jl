@@ -182,11 +182,9 @@ function roeflux(n, (y⁻, parameters⁻), (y⁺, parameters⁺))
 
     u⁻ = ρu⁻ / ρ⁻
     θ⁻ = ρθ⁻ / ρ⁻
-    uₙ⁻ = u⁻' * n
 
     u⁺ = ρu⁺ / ρ⁺
     θ⁺ = ρθ⁺ / ρ⁺
-    uₙ⁺ = u⁺' * n
 
     # in general thermodynamics, (pressure, soundspeed)
     p⁻ = (λ * ρ⁻)^2 * 0.5

@@ -220,10 +220,10 @@ function interpolation_matrix(points_to::Vector, points_from)
     T = eltype(points_to)
     bw = barycentric_weights(points_from)
     M = zeros(T, length(points_to), length(points_from))
-    for i in 1:length(points_to)
+    for i in eachindex(points_to)
         x_to = points_to[i]
         skip_row = false
-        for j in 1:length(points_from)
+        for j in eachindex(points_from)
             if x_to == points_from[j]
                 # assign to one to avoid singularity condition
                 M[i, j] = one(T)

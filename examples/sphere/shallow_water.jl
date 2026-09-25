@@ -350,7 +350,7 @@ function surface_topography(space, test::AbstractTest)
 end
 # Set initial condition
 function set_initial_condition(space, test::RossbyHaurwitzTest)
-    (; a, h0, ω, K, α, params) = test
+    (; a, h0, ω, K, params) = test
     (; R, Ω, g) = params
     Y = map(Fields.local_geometry_field(space)) do local_geometry
         coord = local_geometry.coordinates
@@ -423,7 +423,6 @@ function set_initial_condition(space, test::SteadyStateCompactTest)
         x(ϕprime) = xₑ * (ϕprime - ϕᵦ) / (ϕₑ - ϕᵦ)
         uλprime(ϕprime) =
             u0 * b(x(ϕprime)) * b(xₑ - x(ϕprime)) * exp(4.0 / xₑ)
-        uϕprime = 0.0
 
         # Set integral needed for height initial state
         h_int(γ) =
@@ -648,7 +647,6 @@ function shallow_water_driver(ARGS, ::Type{FT}) where {FT}
             space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     end
 
-    coords = Fields.coordinate_field(space)
     f = set_coriolis_parameter(space, test)
     h_s = surface_topography(space, test)
     Y = set_initial_condition(space, test)
@@ -768,7 +766,7 @@ function postprocessing(test, test_params, solution, Y0_global, T, dt)
         )
         # Height errors over time
         relL1err = Array{Float64}(undef, length(solution))
-        for t in 1:length(solution)
+        for t in eachindex(solution)
             relL1err[t] =
                 norm(solution[t].h .- Y0_global.h, 1) / norm(Y0_global.h, 1)
         end

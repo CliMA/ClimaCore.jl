@@ -186,7 +186,7 @@ function generate_map(
     in_type = "cgll",
     out_type = "cgll",
 )
-    if (target_space_distr != nothing)
+    if !isnothing(target_space_distr)
         comms_ctx = ClimaComms.context(target_space_distr)
     else
         comms_ctx = ClimaComms.context(target_space)
@@ -269,7 +269,7 @@ function generate_map(
     target_unique_idxs = ClimaComms.bcast(comms_ctx, target_unique_idxs)
     ClimaComms.barrier(comms_ctx)
 
-    if target_space_distr != nothing
+    if !isnothing(target_space_distr)
         # Create map from unique (TempestRemap convention) to local element indices
         target_local_elem_gidx =
             Spaces.topology(target_space_distr).local_elem_gidx # gidx = local_elem_gidx[lidx]
@@ -281,7 +281,7 @@ function generate_map(
         # store only the inds local to this process (set inds from other processes to 0)
         # TODO: improve; the length of each array must equal length(weights).
         target_local_idxs = map(vec -> similar(vec), target_unique_idxs)
-        for (n, wt) in enumerate(weights)
+        for n in eachindex(weights)
             target_elem_gidx = view(target_unique_idxs[3], n)[1]
             if !(target_elem_gidx in keys(target_global_elem_lidx))
                 it = 0

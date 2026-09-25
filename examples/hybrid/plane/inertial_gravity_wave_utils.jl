@@ -54,8 +54,8 @@ function Bretherton_transforms_threaded_mapreduce!(
 ) where {FT}
     # @info "Computing Bretherton_transforms! (threaded mapreduce)..."
     (; ᶠwb) = lin_cache
-    (; ᶜx, ᶠx, ᶜz, ᶠz, ᶠxz, ᶜxz) = lin_cache
-    (; ᶜρb_init_xz, ρfb_init_array, unit_integral, x_max, z_max) = lin_cache
+    (; ᶠxz, ᶜxz) = lin_cache
+    (; x_max, z_max) = lin_cache
     (; max_ikx, max_ikz, u₀) = lin_cache
     combine(ᶜpb, ᶜρb, ᶜub, ᶜvb) = (; ᶜpb, ᶜρb, ᶜub, ᶜvb)
     ᶜbretherton_fields =
@@ -70,7 +70,7 @@ function Bretherton_transforms_threaded_mapreduce!(
         ip;
         init = zeros(FT, axes(ᶠwb)),
     ) do (ikx, ikz)
-        (; pfb, ρfb, ufb, vfb, wfb) =
+        (; wfb) =
             Bretherton_transform_coeffs(lin_cache, ikx, ikz, t, FT)
 
         # Fourier coefficient of ᶜρb_init (for current kx and kz)
@@ -91,7 +91,7 @@ function Bretherton_transforms_threaded_mapreduce!(
         ip;
         init = zeroᶜbretherton_fields,
     ) do (ikx, ikz)
-        (; pfb, ρfb, ufb, vfb, wfb) =
+        (; pfb, ρfb, ufb, vfb) =
             Bretherton_transform_coeffs(lin_cache, ikx, ikz, t, FT)
 
         # Fourier coefficient of ᶜρb_init (for current kx and kz)
@@ -154,7 +154,7 @@ end
 function linear_solution!(Y, lin_cache, t, ::Type{FT}) where {FT}
     (; ᶜz, ᶜp₀, ᶜρ₀, ᶜu₀, ᶜv₀, ᶠw₀) = lin_cache
     (; ᶜinterp) = lin_cache
-    (; R_d, x_max, z_max, p_0, cp_d, cv_d, grav, T_tri) = lin_cache
+    (; R_d, cv_d, grav, T_tri) = lin_cache
     (; ᶜbretherton_factor_pρ) = lin_cache
     (; ᶜbretherton_factor_uvwT, ᶠbretherton_factor_uvwT) = lin_cache
     (; ᶜpb, ᶜρb, ᶜub, ᶜvb, ᶠwb, ᶜp, ᶜρ, ᶜu, ᶜv, ᶠw, ᶜT) = lin_cache
@@ -182,9 +182,9 @@ function linear_solution!(Y, lin_cache, t, ::Type{FT}) where {FT}
 end
 
 function Bretherton_transform_coeffs(args, ikx, ikz, t, ::Type{FT}) where {FT}
-    (; ᶜρb_init_xz, unit_integral, ρfb_init_array) = args
+    (; ρfb_init_array) = args
     (; max_ikx, max_ikz) = args
-    (; x_max, z_max, u₀, δ, cₛ², grav, f, ρₛ) = args
+    (; x_max, z_max, δ, cₛ², grav, f, ρₛ) = args
 
     # Fourier coefficient of ᶜρb_init (for current kx and kz)
     kx::FT = 2 * π / x_max * ikx

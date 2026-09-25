@@ -27,7 +27,7 @@ a_bcs(::Type{FT}, i::Int) where {FT} =
     (; bottom = Operators.SetValue(FT(0)), top = Operators.Extrapolate())
 
 function alloc_test_f2c_interp(cfield, ffield)
-    (; fx, fy, fz, fϕ, fψ) = ffield
+    (; fx, fy) = ffield
     (; cx, cy, cz, cϕ, cψ) = cfield
     Ic = Operators.InterpolateF2C()
     # Compile first
@@ -52,7 +52,7 @@ function alloc_test_f2c_interp(cfield, ffield)
 end
 
 function jet_test_f2c_interp2(cfield, ffield)
-    (; fx, fy, fz, fϕ, fψ) = ffield
+    (; fx, fy) = ffield
     (; cx, cy, cz, cϕ, cψ) = cfield
     Ic = Operators.InterpolateF2C()
     @. cz = cx * cy * Ic(fy) * Ic(fx) * cϕ * cψ
@@ -64,8 +64,7 @@ end
 # covers every invocation, so the GPU checks below are skipped instead.
 function alloc_test_c2f_interp(cfield, ffield, If)
     (;fx,fy,fz,fϕ,fψ) = ffield
-    (;cx,cy,cz,cϕ,cψ) = cfield
-    wvec = Geometry.WVector
+    (; cx, cy) = cfield
     # Compile first
     #! format: off
     @. ffield.fz = ffield.fx * ffield.fy * If(cfield.cy) * If(cfield.cx) * ffield.fϕ * ffield.fψ
@@ -125,7 +124,7 @@ function alloc_test_derivative(cfield, ffield, ∇c, ∇f)
 end
 
 function alloc_test_redefined_operators(cfield, ffield)
-    (; fx, fy, fz, fϕ, fψ) = ffield
+    (; fx, fy) = ffield
     (; cx, cy, cz, cϕ, cψ) = cfield
     ∇c = Operators.DivergenceF2C()
     wvec = Geometry.WVector
@@ -160,7 +159,7 @@ function alloc_test_redefined_operators(cfield, ffield)
 end
 
 function alloc_test_operators_in_loops(cfield, ffield)
-    (; fx, fy, fz, fϕ, fψ) = ffield
+    (; fx, fy) = ffield
     (; cx, cy, cz, cϕ, cψ) = cfield
     for i in 1:3
         wvec = Geometry.WVector
@@ -185,7 +184,6 @@ function alloc_test_operators_in_loops(cfield, ffield)
     end
 end
 function alloc_test_nested_expressions_1(cfield, ffield)
-    (; fx, fy, fz, fϕ, fψ) = ffield
     (; cx, cy, cz, cϕ, cψ) = cfield
     ∇c = Operators.DivergenceF2C()
     wvec = Geometry.WVector
@@ -198,7 +196,6 @@ function alloc_test_nested_expressions_1(cfield, ffield)
 end
 
 function alloc_test_nested_expressions_2(cfield, ffield)
-    (; fx, fy, fz, fϕ, fψ) = ffield
     (; cx, cy, cz, cϕ, cψ) = cfield
     ∇c = Operators.DivergenceF2C()
     wvec = Geometry.WVector
@@ -211,7 +208,7 @@ function alloc_test_nested_expressions_2(cfield, ffield)
 end
 
 function alloc_test_nested_expressions_3(cfield, ffield)
-    (; fx, fy, fz, fϕ, fψ) = ffield
+    (; fy) = ffield
     (; cx, cy, cz, cϕ, cψ) = cfield
     Ic = Operators.InterpolateF2C()
     ∇c = Operators.DivergenceF2C()
@@ -228,7 +225,7 @@ end
 
 function alloc_test_nested_expressions_4(cfield, ffield)
     (; fx, fy, fz, fϕ, fψ) = ffield
-    (; cx, cy, cz, cϕ, cψ) = cfield
+    (; cy) = cfield
     wvec = Geometry.WVector
     If = Operators.InterpolateC2F(;
         bottom = Operators.SetValue(0),
@@ -249,7 +246,7 @@ function alloc_test_nested_expressions_4(cfield, ffield)
 end
 
 function alloc_test_nested_expressions_5(cfield, ffield)
-    (; fx, fy, fz, fϕ, fψ) = ffield
+    (; fx) = ffield
     (; cx, cy, cz, cϕ, cψ) = cfield
     wvec = Geometry.WVector
     If = Operators.InterpolateC2F(;
@@ -268,7 +265,7 @@ end
 
 function alloc_test_nested_expressions_6(cfield, ffield)
     (;fx,fy,fz,fϕ,fψ) = ffield
-    (;cx,cy,cz,cϕ,cψ) = cfield
+    (; cx) = cfield
     wvec = Geometry.WVector
     Ic = Operators.InterpolateF2C()
     ∇f = Operators.DivergenceC2F(;
@@ -285,7 +282,7 @@ function alloc_test_nested_expressions_6(cfield, ffield)
 end
 
 function alloc_test_nested_expressions_7(cfield, ffield)
-    (; fx, fy, fz, fϕ, fψ) = ffield
+    (; fy) = ffield
     (; cx, cy, cz, cϕ, cψ) = cfield
     # Similar to alloc_test_nested_expressions_8
     Ic = Operators.InterpolateF2C()
@@ -297,9 +294,8 @@ function alloc_test_nested_expressions_7(cfield, ffield)
 end
 
 function alloc_test_nested_expressions_8(cfield, ffield)
-    (; fx, fy, fz, fϕ, fψ) = ffield
+    (; fy) = ffield
     (; cx, cy, cz, cϕ, cψ) = cfield
-    wvec = Geometry.WVector
     Ic = Operators.InterpolateF2C()
     @. cz = cx * cy * abs(Ic(fy)) * abs(Ic(fy)) * cϕ * cψ # Compile first
     p = @allocated begin
@@ -309,9 +305,8 @@ function alloc_test_nested_expressions_8(cfield, ffield)
 end
 
 function alloc_test_nested_expressions_9(cfield, ffield)
-    (; fx, fy, fz, fϕ, fψ) = ffield
+    (; fy) = ffield
     (; cx, cy, cz, cϕ, cψ) = cfield
-    wvec = Geometry.WVector
     Ic = Operators.InterpolateF2C()
     @. cz = Int(cx < cy) * abs(Ic(fy)) * abs(Ic(fy)) * cϕ * cψ # Compile first
     p = @allocated begin
@@ -321,7 +316,7 @@ function alloc_test_nested_expressions_9(cfield, ffield)
 end
 
 function alloc_test_nested_expressions_10(cfield, ffield)
-    (; fx, fy, fz, fϕ, fψ) = ffield
+    (; fy) = ffield
     (; cx, cy, cz, cϕ, cψ) = cfield
     Ic = Operators.InterpolateF2C()
     @. cz = ifelse(cx < cy, abs(Ic(fy)) * abs(Ic(fy)) * cϕ * cψ, 0) # Compile first
@@ -333,7 +328,7 @@ end
 
 function alloc_test_nested_expressions_11(cfield, ffield)
     (; fx, fy, fz, fϕ, fψ) = ffield
-    (; cx, cy, cz, cϕ, cψ) = cfield
+    (; cx, cy) = cfield
     If = Operators.InterpolateC2F(;
         bottom = Operators.SetValue(0.0),
         top = Operators.SetValue(0.0),
@@ -346,9 +341,6 @@ function alloc_test_nested_expressions_11(cfield, ffield)
 end
 
 function alloc_test_nested_expressions_12(cfield, ffield, ntcfield, ntffield)
-    (; fx, fy, fz, fϕ, fψ) = ffield
-    (; cx, cy, cz, cϕ, cψ) = cfield
-
     Ic = Operators.InterpolateF2C()
     cnt = ntcfield.nt
     fnt = ntffield.nt
@@ -358,15 +350,11 @@ function alloc_test_nested_expressions_12(cfield, ffield, ntcfield, ntffield)
         cnt_i = cnt.:($i)
         fnt_i = fnt.:($i)
         cxnt = cnt_i.cx
-        fxnt = fnt_i.fx
         cynt = cnt_i.cy
         fynt = fnt_i.fy
         cznt = cnt_i.cz
-        fznt = fnt_i.fz
         cϕnt = cnt_i.cϕ
-        fϕnt = fnt_i.fϕ
         cψnt = cnt_i.cψ
-        fψnt = fnt_i.fψ
         @. cznt = cxnt * cynt * Ic(fynt) * Ic(fynt) * cϕnt * cψnt
     end
 
@@ -377,15 +365,11 @@ function alloc_test_nested_expressions_12(cfield, ffield, ntcfield, ntffield)
         end
         @test_broken p_i == 0
         cxnt = cnt_i.cx
-        fxnt = fnt_i.fx
         cynt = cnt_i.cy
         fynt = fnt_i.fy
         cznt = cnt_i.cz
-        fznt = fnt_i.fz
         cϕnt = cnt_i.cϕ
-        fϕnt = fnt_i.fϕ
         cψnt = cnt_i.cψ
-        fψnt = fnt_i.fψ
         p = @allocated begin
             @. cznt = cxnt * cynt * Ic(fynt) * Ic(fynt) * cϕnt * cψnt
         end
@@ -400,18 +384,13 @@ function alloc_test_nested_expressions_13(
     ntffield,
     ::Type{FT},
 ) where {FT}
-    (; fx, fy, fz, fϕ, fψ) = ffield
-    (; cx, cy, cz, cϕ, cψ) = cfield
+    (; fx, fy, fψ) = ffield
+    (; cy, cz, cϕ) = cfield
 
-    Ic = Operators.InterpolateF2C()
     cnt = ntcfield.nt
     fnt = ntffield.nt
     wvec = Geometry.WVector
 
-    adv_bcs = (;
-        bottom = Operators.SetValue(wvec(FT(0))),
-        top = Operators.SetValue(wvec(FT(0))),
-    )
     LBC = Operators.BottomBiasedF2C(; bottom = Operators.SetValue(FT(0)))
     zero_bcs =
         (; bottom = Operators.SetValue(FT(0)), top = Operators.SetValue(FT(0)))

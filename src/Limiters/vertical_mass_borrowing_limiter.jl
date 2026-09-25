@@ -65,7 +65,6 @@ function apply_limiter!(
     ρ_column_data = Fields.field_values(ρ)
     ΔV_column_data = Fields.field_values(J)
     for f in 1:DataLayouts.ncomponents(q_column_data)
-        q_min_component = lim.q_min[f]
         column_massborrow!(
             (@view column_matrix(q_column_data)[:, f]),
             (@view column_matrix(ρ_column_data)[:, 1]),
@@ -89,7 +88,6 @@ function apply_limiter!(
         ρ_column_data = Fields.field_values(ρ[colidx])
         ΔV_column_data = Fields.field_values(J[colidx])
         for f in 1:DataLayouts.ncomponents(q_column_data)
-            q_min_component = lim.q_min[f]
             column_massborrow!(
                 (@view column_matrix(q_column_data)[:, f]),
                 (@view column_matrix(ρ_column_data)[:, 1]),

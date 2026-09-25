@@ -279,7 +279,7 @@ end
     @. cy = cos(zc)
     @. fy = LBC2F(cy)
     fy_ref = ClimaComms.allowscalar(device) do
-        [FT(10), [cyp[i] for i in 1:length(cyp)]...]
+        [FT(10), [cyp[i] for i in eachindex(cyp)]...]
     end
     @test all(fy_ref .== parent(ClimaCore.to_cpu(fy)))
 
@@ -287,7 +287,7 @@ end
     @. cy = cos(zc)
     @. fy = RBC2F(cy)
     fy_ref = ClimaComms.allowscalar(device) do
-        [[cyp[i] for i in 1:length(cyp)]..., FT(10)]
+        [[cyp[i] for i in eachindex(cyp)]..., FT(10)]
     end
     @test all(fy_ref .== parent(ClimaCore.to_cpu(fy)))
 

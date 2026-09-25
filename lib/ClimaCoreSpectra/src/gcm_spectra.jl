@@ -273,7 +273,7 @@ function trans_grid_to_spherical!(
     num_fourier, num_spherical = mesh.num_fourier, mesh.num_spherical
     var_fourier2d, var_spherical2d =
         mesh.var_fourier[:, :, 1] * 0, mesh.var_spherical[:, :, 1, :] * 0
-    nλ, nθ, nd = mesh.nλ, mesh.nθ, mesh.nd
+    nλ, nθ = mesh.nλ, mesh.nθ
 
     # Retrieve weighted Legendre polynomials
     qwg = mesh.qwg # qwg[m,n,nθ]
@@ -380,7 +380,6 @@ function power_spectrum_1d(FT, var_grid, z, lat, lon, weight)
     for k in 1:num_lev
         for j in 1:num_lat
             # compute fft frequencies for each latitude
-            x = lon ./ 180 .* π
             dx = (lon[2] - lon[1]) ./ 180 .* π
 
             freqs_ = FFTW.fftfreq(num_fourier, 1.0 / dx) # 0,+ve freq,-ve freqs (lowest to highest)
