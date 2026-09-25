@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Globe outline -->
+  <circle cx="100" cy="100" r="70" fill="none" stroke="black" stroke-width="6"/>
+
+  <!-- Cubed-sphere seams meeting at the center -->
+  <path d="M 100 100 Q 92 65 100 30" stroke="black" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <path d="M 100 100 Q 70 112 39.4 135" stroke="black" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <path d="M 100 100 Q 130 112 160.6 135" stroke="black" stroke-width="5" fill="none" stroke-linecap="round"/>
+
+  <!-- Element grid lines: upper-left face -->
+  <path d="M 70 115 Q 56 75 65 39.4" stroke="#999" stroke-width="2.5" fill="none"/>
+  <path d="M 96 65 Q 60 84 30 100" stroke="#999" stroke-width="2.5" fill="none"/>
+
+  <!-- Element grid lines: upper-right face -->
+  <path d="M 130 115 Q 144 75 135 39.4" stroke="#999" stroke-width="2.5" fill="none"/>
+  <path d="M 104 65 Q 140 84 170 100" stroke="#999" stroke-width="2.5" fill="none"/>
+
+  <!-- Element grid lines: bottom face -->
+  <path d="M 70 115 Q 100 144 135 160.6" stroke="#999" stroke-width="2.5" fill="none"/>
+  <path d="M 130 115 Q 100 144 65 160.6" stroke="#999" stroke-width="2.5" fill="none"/>
+
+  <!-- Julia-colored nodes at mesh intersections -->
+  <circle cx="100" cy="100" r="9" fill="#9558B2" stroke="white" stroke-width="2"/>
+  <circle cx="62" cy="80" r="9" fill="#4063D8" stroke="white" stroke-width="2"/>
+  <circle cx="138" cy="80" r="9" fill="#389826" stroke="white" stroke-width="2"/>
+  <circle cx="100" cy="141" r="9" fill="#CB3C33" stroke="white" stroke-width="2"/>
+</svg>
