@@ -90,13 +90,13 @@ end
     dom, mesh = unit_intervalmesh(nelems = 2, periodic = true)
     @test Meshes.domain(mesh) isa Domains.IntervalDomain
     @test Meshes.is_boundary_face(mesh, 1, 1) == false
-    @test Meshes.boundary_face_name(mesh, 1, 1) == nothing
+    @test Meshes.boundary_face_name(mesh, 1, 1) === nothing
     @test Meshes.is_boundary_face(mesh, 1, 2) == false
     @test Meshes.boundary_face_name(mesh, 1, 2) === nothing
     @test Meshes.is_boundary_face(mesh, 2, 1) == false
     @test Meshes.boundary_face_name(mesh, 2, 1) === nothing
     @test Meshes.is_boundary_face(mesh, 2, 2) == false
-    @test Meshes.boundary_face_name(mesh, 2, 2) == nothing
+    @test Meshes.boundary_face_name(mesh, 2, 2) === nothing
 
     @test_throws BoundsError Meshes.coordinates(mesh, 0, 1)
     @test Meshes.coordinates(mesh, 1, 1) == Geometry.ZPoint(0.0)

@@ -697,7 +697,6 @@ wrapped operator: the `FDOperatorMatrix` constructor carries a value-dependent
 the operator still holds a value-fixing boundary condition (as it does through the
 public `MatrixFields.operator_matrix` API, which does not strip boundary conditions).
 """
-
 Base.@propagate_inbounds function get_op_row(
     op_matrix::FDOperatorMatrix,
     args,

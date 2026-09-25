@@ -47,7 +47,7 @@ function interpolate_slab!(
     space = axes(field)
     FT = Spaces.undertype(space)
 
-    @inbounds for index in 1:length(output_array)
+    @inbounds for index in eachindex(output_array)
         (I1, I2) = weights[index]
         Nq1, Nq2 = length(I1), length(I2)
         (; v, h) = slab_indices[index]
@@ -72,7 +72,7 @@ function interpolate_slab!(
     space = axes(field)
     FT = Spaces.undertype(space)
 
-    @inbounds for index in 1:length(output_array)
+    @inbounds for index in eachindex(output_array)
         (I1,) = weights[index]
         Nq = length(I1)
         (; v, h) = slab_indices[index]
@@ -188,7 +188,7 @@ function interpolate_slab_level!(
     FT = Spaces.undertype(space)
     Nq1, Nq2 = length(I1), length(I2)
 
-    @inbounds for index in 1:length(vidx_ref_coordinates)
+    @inbounds for index in eachindex(vidx_ref_coordinates)
         v_lo, v_hi, ξ3 = vidx_ref_coordinates[index]
 
         f_lo = zero(FT)
@@ -217,7 +217,7 @@ function interpolate_slab_level!(
     FT = Spaces.undertype(space)
     Nq = length(I1)
 
-    @inbounds for index in 1:length(vidx_ref_coordinates)
+    @inbounds for index in eachindex(vidx_ref_coordinates)
         v_lo, v_hi, ξ3 = vidx_ref_coordinates[index]
 
         f_lo = zero(FT)

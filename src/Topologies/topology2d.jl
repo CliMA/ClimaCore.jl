@@ -616,7 +616,6 @@ function compute_ghost_send_recv_idx(topology::Topology2D, Nq)
         ghost_faces,
         ghost_face_neighbor_loc,
         nglobalvertices,
-        nglobalfaces,
     ) = topology
     repr_ghost_vertex = Array(topology.repr_ghost_vertex)
     nfacedof = Nq - 2

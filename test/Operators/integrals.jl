@@ -87,7 +87,6 @@ end
 
 function test_column_integral_indefinite_fn!(center_space)
     face_space = center_to_face_space(center_space)
-    ᶜz = Fields.coordinate_field(center_space).z
     ᶠz = Fields.coordinate_field(face_space).z
     for (i, fn) in enumerate(((ϕ, z) -> z, (ϕ, z) -> z^2, (ϕ, z) -> z^3))
         ᶠ∫u_ref = ᶠz .^ (i + 1) ./ (i + 1)

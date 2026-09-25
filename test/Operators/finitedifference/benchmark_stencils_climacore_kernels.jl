@@ -127,7 +127,6 @@ n_reads_writes(::Type{typeof(op_divUpwind3rdOrderBiasedProductC2F!)}) = -1 # tod
 
 function op_broadcast_example0!(c, f, bcs)
     Fields.bycolumn(axes(f.ᶠu³)) do colidx
-        CT3 = Geometry.Contravariant3Vector
         @. f.ᶠu³[colidx] = f.ᶠu³[colidx] + f.ᶠu³[colidx]
     end
     return nothing

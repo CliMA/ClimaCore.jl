@@ -328,14 +328,12 @@ function Operators.return_eltype(
          elements of type BandMatrixRow, but the given argument has $et_mat1",
     )
     if et_arg <: BandMatrixRow # matrix-matrix multiplication
-        matrix2 = arg
         ld1, ud1 = outer_diagonals(et_mat1)
         ld2, ud2 = outer_diagonals(et_arg)
         prod_ld, prod_ud = ld1 + ld2, ud1 + ud2
         prod_value_type = mul_return_type(eltype(et_mat1), eltype(et_arg))
         return band_matrix_row_type(prod_ld, prod_ud, prod_value_type)
     else # matrix-vector multiplication
-        vector = arg
         return mul_return_type(eltype(et_mat1), et_arg)
     end
 end
@@ -382,7 +380,6 @@ function multiply_matrix_at_index(
     bc,
     ::Type{T},
 ) where {T <: BandMatrixRow}
-    lg = Geometry.LocalGeometry(space, idx, hidx)
     prod_type = Operators.return_eltype(
         MultiplyColumnwiseBandMatrixField(),
         matrix1,
@@ -465,7 +462,6 @@ function multiply_matrix_at_index(
     bc,
     ::Type{T},
 ) where {T}
-    lg = Geometry.LocalGeometry(space, idx, hidx)
     prod_type = Operators.return_eltype(
         MultiplyColumnwiseBandMatrixField(),
         matrix1,

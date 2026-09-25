@@ -44,9 +44,9 @@ function at_dot_call!(X, Y; nreps = 1, print_info = true, bm=nothing, n_trials =
     (; y1) = Y
     e = Inf
     @. y1 = foo(x1, x2, x3) # compile
-    for t in 1:n_trials
+    for _ in 1:n_trials
         et = CUDA.@elapsed begin
-            for i in 1:nreps # reduce variance / impact of launch latency
+            for _ in 1:nreps # reduce variance / impact of launch latency
                 @. y1 = foo(x1, x2, x3) # 1 write, 1 read
             end
         end
@@ -83,9 +83,9 @@ function custom_kernel_bc!(X, Y, us::UniversalSizesStatic; swap=0, printtb=false
     printtb && @show blocks, threads
     kernel(y1, bc,us; threads, blocks) # compile
     e = Inf
-    for t in 1:n_trials
+    for _ in 1:n_trials
         et = CUDA.@elapsed begin
-            for i in 1:nreps # reduce variance / impact of launch latency
+            for _ in 1:nreps # reduce variance / impact of launch latency
                 kernel(y1, bc,us; threads, blocks)
             end
         end

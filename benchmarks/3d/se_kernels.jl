@@ -28,7 +28,7 @@ init_vθ(ϕ, z, R) = 1.0 / R
 init_w(ϕ, z) = 1.0
 
 function center_initial_condition(ᶜlocal_geometry, R)
-    (; lat, long, z) = ᶜlocal_geometry.coordinates
+    (; lat, z) = ᶜlocal_geometry.coordinates
     u₀ = @. init_uθ(lat, z, R)
     v₀ = @. init_vθ(lat, z, R)
     ᶜuₕ_local = @. Geometry.UVVector(u₀, v₀)
@@ -37,7 +37,7 @@ function center_initial_condition(ᶜlocal_geometry, R)
 end
 
 function face_initial_condition(local_geometry)
-    (; lat, long, z) = local_geometry.coordinates
+    (; lat, z) = local_geometry.coordinates
     w = @. Geometry.Covariant3Vector(init_w(lat, z))
     return w
 end
@@ -83,8 +83,6 @@ function initialize_mwe(device, ::Type{FT}) where {FT}
     z_topology = Topologies.IntervalTopology(context, z_mesh)
 
     z_center_space = Spaces.CenterFiniteDifferenceSpace(z_topology)
-
-    z_face_space = Spaces.FaceFiniteDifferenceSpace(z_topology)
 
     hv_center_space =
         Spaces.ExtrudedFiniteDifferenceSpace(h_space, z_center_space)
