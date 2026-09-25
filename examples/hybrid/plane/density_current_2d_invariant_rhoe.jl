@@ -49,7 +49,6 @@ function init_dry_density_current_2d(x, z)
     cp_d = C_p
     cv_d = C_v
     p_0 = MSLP
-    g = grav
 
     # auxiliary quantities
     r = sqrt((x - x_c)^2 / x_r^2 + (z - z_c)^2 / z_r^2)
@@ -94,10 +93,8 @@ function rhs_invariant!(dY, Y, _, t)
     # 0) update w at the bottom
     # fw = -g^31 cuₕ/ g^33
 
-    hdiv = Operators.Divergence()
     hwdiv = Operators.Divergence{Operators.WeakForm}()
     hgrad = Operators.Gradient()
-    hwgrad = Operators.Gradient{Operators.WeakForm}()
     hcurl = Operators.Curl()
 
     If2c = Operators.InterpolateF2C()
@@ -109,7 +106,6 @@ function rhs_invariant!(dY, Y, _, t)
     dρ .= 0 .* cρ
 
     cw = If2c.(fw)
-    fuₕ = Ic2f.(cuₕ)
     cuw = Geometry.Covariant13Vector.(cuₕ) .+ Geometry.Covariant13Vector.(cw)
 
     ce = @. cρe / cρ

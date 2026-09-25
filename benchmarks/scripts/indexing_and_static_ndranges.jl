@@ -243,9 +243,9 @@ function at_dot_call!(X, Y; nreps = 1, bm=nothing, n_trials = 30)
     (; y1) = Y
     @. y1 = myadd(x1, x2, x3) # compile
     e = Inf
-    for t in 1:n_trials
+    for _ in 1:n_trials
         et = CUDA.@elapsed begin
-            for i in 1:nreps # reduce variance / impact of launch latency
+            for _ in 1:nreps # reduce variance / impact of launch latency
                 @. y1 = myadd(x1, x2, x3) # 3 reads, 1 write
             end
         end
@@ -270,9 +270,9 @@ function custom_sol_kernel!(X, Y, ::Val{N}; nreps = 1, bm=nothing, n_trials = 30
     blocks = cld(N, threads)
     kernel(y1, x1, x2, x3, Val(N); threads, blocks) # compile
     e = Inf
-    for t in 1:n_trials
+    for _ in 1:n_trials
         et = CUDA.@elapsed begin
-            for i in 1:nreps # reduce variance / impact of launch latency
+            for _ in 1:nreps # reduce variance / impact of launch latency
                 kernel(y1, x1, x2, x3, Val(N); threads, blocks)
             end
         end
@@ -300,9 +300,9 @@ function custom_kernel_bc!(X, Y, us::AbstractUniversalSizes; printtb=false, use_
     e = Inf
     if y1 isa Array
         if bc isa Base.Broadcast.Broadcasted
-            for t in 1:n_trials
+            for _ in 1:n_trials
                 et = Base.@elapsed begin
-                    for i in 1:nreps # reduce variance / impact of launch latency
+                    for _ in 1:nreps # reduce variance / impact of launch latency
                         @inbounds @simd for j in eachindex(bc)
                             y1[j] = bc[j]
                         end
@@ -311,9 +311,9 @@ function custom_kernel_bc!(X, Y, us::AbstractUniversalSizes; printtb=false, use_
                 e = min(e, et)
             end
         else
-            for t in 1:n_trials
+            for _ in 1:n_trials
                 et = Base.@elapsed begin
-                    for i in 1:nreps # reduce variance / impact of launch latency
+                    for _ in 1:nreps # reduce variance / impact of launch latency
                         @inbounds @simd for j in 1:get_N(us)
                             y1[j] = bc[j]
                         end
@@ -335,9 +335,9 @@ function custom_kernel_bc!(X, Y, us::AbstractUniversalSizes; printtb=false, use_
         blocks = cld(N, threads)
         printtb && @show blocks, threads
         kernel(y1, bc,us; threads, blocks) # compile
-        for t in 1:n_trials
+        for _ in 1:n_trials
             et = CUDA.@elapsed begin
-                for i in 1:nreps # reduce variance / impact of launch latency
+                for _ in 1:nreps # reduce variance / impact of launch latency
                     kernel(y1, bc,us; threads, blocks)
                 end
             end

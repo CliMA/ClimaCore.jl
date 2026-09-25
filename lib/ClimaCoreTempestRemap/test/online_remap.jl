@@ -17,7 +17,6 @@ reshapes and broadcasts a sparse matrix data array (e.g., output from TempestRem
 function reshape_sparse_to_field!(field::Fields.Field, in_array::Array, R)
     fill!(Fields.field_values(field), zero(eltype(field)))
 
-    f = 1
     for (n, row) in enumerate(R.row_indices)
         it, jt, et = (
             view(R.target_local_idxs[1], n),
@@ -28,8 +27,6 @@ function reshape_sparse_to_field!(field::Fields.Field, in_array::Array, R)
     end
     # broadcast to the redundant nodes using unweighted dss
     topology = Spaces.topology(axes(field))
-    hspace = Spaces.horizontal_space(axes(field))
-    quadrature_style = Spaces.quadrature_style(hspace)
     Topologies.dss!(Fields.field_values(field), topology)
     return field
 end
@@ -111,7 +108,7 @@ end
 
     NCDataset(datafile_in, "c") do nc
         def_space_coord(nc, space_i, ; type = "cgll") # only cgll supported by generate_map
-        nc_time = def_time_coord(nc)
+        def_time_coord(nc)
         nc_sinlong = defVar(nc, "sinlong", Float64, space_i, ("time",))
         nc_sinlong[:, 1] = field_i
         nothing

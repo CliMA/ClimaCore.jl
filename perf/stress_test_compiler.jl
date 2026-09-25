@@ -1620,7 +1620,6 @@ function multiarg_test(nargs::Int)
         "\n    ",
     )
     args_list = join(["f$i" for i in 1:nargs], ", ")
-    bench_args_list = join(["\$f$i" for i in 1:nargs], ", ")
 
     # Build operation: (f1 + f2 + ...) / (f_last + 1)
     sum_expr = join(["f$i" for i in 1:(nargs - 1)], " + ")
@@ -1875,7 +1874,6 @@ Tests how many spectral-element divergences the compiler can inline before givin
 """
 function div_test(n::Int)
     warm = join(["div_op.(v .* $(i).0)" for i in 1:n], " .+ ")
-    bench = join(["\$div_op.(\$v .* $(i).0)" for i in 1:n], " .+ ")
 
     test_impl = create_spectral_space() * """
 
@@ -1902,7 +1900,6 @@ Tests how many spectral-element curls the compiler can inline before giving up.
 """
 function curl_test(n::Int)
     warm = join(["curl_op.(v .* $(i).0)" for i in 1:n], " .+ ")
-    bench = join(["\$curl_op.(\$v .* $(i).0)" for i in 1:n], " .+ ")
 
     test_impl = create_spectral_space() * """
 
@@ -1929,7 +1926,6 @@ Tests how many center-to-face interpolations the compiler can inline before givi
 """
 function interp_test(n::Int)
     warm = join(["interp.(ᶜf .* $(i).0)" for i in 1:n], " .+ ")
-    bench = join(["\$interp.(\$ᶜf .* $(i).0)" for i in 1:n], " .+ ")
 
     test_impl = create_column_space() * """
 
@@ -1959,7 +1955,6 @@ Tests how many weighted center-to-face interpolations the compiler can inline be
 """
 function weighted_interp_test(n::Int)
     warm = join(["winterp.(ᶜw, ᶜf .* $(i).0)" for i in 1:n], " .+ ")
-    bench = join(["\$winterp.(\$ᶜw, \$ᶜf .* $(i).0)" for i in 1:n], " .+ ")
 
     test_impl = create_column_space() * """
 
@@ -1992,7 +1987,6 @@ can inline before giving up.
 """
 function upwinding_test(n::Int)
     warm = join(["upwind.(ᶠv, ᶜf .* $(i).0)" for i in 1:n], " .+ ")
-    bench = join(["\$upwind.(\$ᶠv, \$ᶜf .* $(i).0)" for i in 1:n], " .+ ")
 
     test_impl = create_column_space() * """
 

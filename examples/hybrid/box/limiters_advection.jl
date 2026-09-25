@@ -154,7 +154,7 @@ function init_state(cspace, fspace, test_case, params)
             Geometry.euclidean_distance(coord, bell_centers[1]),
             Geometry.euclidean_distance(coord, bell_centers[2]),
         )
-        (; x, y, z) = coord
+        (; x, y) = coord
         if test_case isa SlottedSpheres
             if rd[1] <= r0 && abs(x - bell_centers[1].x) >= r0 / 6
                 return 1.0

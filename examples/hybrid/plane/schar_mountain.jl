@@ -158,7 +158,6 @@ function rhs_invariant!(dY, Y, _, t)
     dρq = dY.Yc.ρq
     z = coords.z
     fz = face_coords.z
-    fx = face_coords.x
 
     # 0) update w at the bottom
 

@@ -183,7 +183,6 @@ function short_name(key)
 end
 function benchmark_func!(bm, t_min, trials, fun, c, f, verbose = false; compile::Bool)
     device = ClimaComms.device(c)
-    str_print = ""
     all_bcs = bcs_tested(c, fun)
     for (ibc,bcs) in enumerate(bcs_tested(c, fun))
         key = (fun, bc_name(bcs)...)
@@ -206,7 +205,6 @@ function benchmark_func!(bm, t_min, trials, fun, c, f, verbose = false; compile:
             verbose && show(stdout, MIME("text/plain"), trials[key])
 
             t_min[key] = minimum(trials[key].times) # nano seconds
-            t_pretty = BenchmarkTools.prettytime(t_min[key])
             if !verbose
                 ibc == 1 && print("Benchmarking $fun: ")
                 print("($ibc/$(length(all_bcs)))")
@@ -265,12 +263,9 @@ function sphere_benchmark_arrays(device, z_elems, helem, Nq, ::Type{FT}; compile
     Nh = helem * helem * 6
     cdims = (z_elems  , Nq, Nq, 1, Nh)
     fdims = (z_elems+1, Nq, Nq, 1, Nh)
-    L = ArrayType(zeros(FT, cdims...))
     D = ArrayType(zeros(FT, cdims...))
     U = ArrayType(zeros(FT, cdims...))
     xarr = ArrayType(rand(FT, cdims...))
-    uₕ_x = ArrayType(rand(FT, cdims...))
-    uₕ_y = ArrayType(rand(FT, cdims...))
     yarr = ArrayType(rand(FT, fdims...))
 
     if device isa ClimaComms.CUDADevice
@@ -373,7 +368,6 @@ function test_results_column(t_min)
     buffer = 2
     ns = 1
     μs = 10^3
-    ms = 10^6
     results = [
     [(op_GradientF2C!, :none), 253.100*ns*buffer],
     [(op_GradientF2C!, :SetValue, :SetValue), 270.448*ns*buffer],
@@ -417,8 +411,6 @@ function test_results_sphere(t_min)
     # If these tests fail, just update the numbers (or the
     # buffer) so long its not an egregious regression.
     buffer = 2
-    ns = 1
-    μs = 10^3
     ms = 10^6
     results = [
     [(op_GradientF2C!, :none), 1.746*ms*buffer],

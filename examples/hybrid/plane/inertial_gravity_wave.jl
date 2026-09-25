@@ -124,7 +124,7 @@ function center_initial_condition(ᶜlocal_geometry)
 end
 
 function face_initial_condition(local_geometry)
-    (; x, z) = local_geometry.coordinates
+    (; z) = local_geometry.coordinates
     w = @. Geometry.Covariant3Vector(zero(z))
     return NamedTuple{(:w,)}.(tuple.(w))
 end

@@ -101,7 +101,7 @@ function write_exodus(
         dts.attrib["file_size"] = 0
 
         # variables
-        var_time_whole = defVar(dts, "time_whole", Float64, ("time_step",))
+        defVar(dts, "time_whole", Float64, ("time_step",))
         var_qa_records = defVar(
             dts,
             "qa_records",
@@ -110,8 +110,7 @@ function write_exodus(
         )
         var_coor_names =
             defVar(dts, "coor_names", Char, ("len_string", "num_dim"))
-        var_eb_names =
-            defVar(dts, "eb_names", Char, ("len_string", "num_el_blk"))
+        defVar(dts, "eb_names", Char, ("len_string", "num_el_blk"))
         var_eb_status = defVar(dts, "eb_status", Int32, ("num_el_blk",))
         var_eb_prop1 = defVar(dts, "eb_prop1", Int32, ("num_el_blk",))
         var_attrib1 = defVar(

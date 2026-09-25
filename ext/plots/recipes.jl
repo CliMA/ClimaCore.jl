@@ -317,13 +317,13 @@ function _slice_along(field, coord)
     field_data = ClimaCore.Fields.field_values(field)
     ortho_data = ClimaCore.Fields.field_values(ortho_field)
 
-    for i in 1:size(linear_idx, axis == 1 ? 2 : 1)
+    for i in axes(linear_idx, axis == 1 ? 2 : 1)
         for v in 1:ClimaCore.Spaces.nlevels(space_ortho)
             hidx = axis == 1 ? linear_idx[slice_h, i] : linear_idx[i, slice_h]
             ijslab = ClimaCore.slab(field_data, v, hidx)
             islab = ClimaCore.slab(ortho_data, v, i)
             # copy the nodal data
-            for ni in 1:size(islab, 2) # size(islab) is (Nv, Ni, Nj, Nh)
+            for ni in axes(islab, 2) # size(islab) is (Nv, Ni, Nj, Nh)
                 islab[ni] =
                     axis == 1 ? ijslab[1, hnode_idx, ni, 1] : ijslab[1, ni, hnode_idx, 1]
             end

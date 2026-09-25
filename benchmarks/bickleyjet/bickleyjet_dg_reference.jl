@@ -54,7 +54,6 @@ function init_st_ref!(st_ref, X, ::Val{Nq}, parameters) where {Nq}
 end
 
 function init_st_ref(X, ::Val{Nq}, parameters) where {Nq}
-    global Nstate
     n1 = size(X, 4)
     n2 = size(X, 5)
     st_ref = Array{Float64}(undef, (Nq, Nq, Nstate, n1, n2))
@@ -69,7 +68,6 @@ struct TendencyState{DT, WJT, ST}
     scratch::ST
 
     function TendencyState(n1, n2, ::Val{Nq}) where {Nq}
-        global Nstate
         ∂ξ∂x = @SMatrix [n1/(2pi) 0; 0 n2/(2pi)]
         WJv¹ =
             MArray{Tuple{Nstate, Nq, Nq}, Float64, 3, Nstate * Nq * Nq}(undef)
@@ -87,14 +85,12 @@ struct TendencyState{DT, WJT, ST}
 end
 
 function init_tendency_states(n1, n2, ::Val{Nq}) where {Nq}
-    global Nstate
     return [TendencyState(n1, n2, Val(Nq)) for _ in 1:nthreads()]
 end
 
 getval(::Val{V}) where {V} = V
 
 function volume_ref!(dydt_ref, y0_ref, (n1, n2, parameters, valNq, states), t)
-    global Nstate
     # specialize on Nq
     Nq = getval(valNq)
     (_, W, D) = spaceconfig(Val(Nq))
@@ -103,7 +99,6 @@ function volume_ref!(dydt_ref, y0_ref, (n1, n2, parameters, valNq, states), t)
     # "Volume" part
     @threads for h2 in 1:n2
         @inbounds begin
-            g = parameters.g
             state = states[threadid()]
             WJv¹ = state.WJv¹
             WJv² = state.WJv²
@@ -346,7 +341,6 @@ function add_face_ref_cuda_kernel!(dYdt, Y, parameters, Nq, W, D)
     h1, h2 = blockIdx().x, blockIdx().y
     i = j = threadIdx().x
     n1, n2 = size(Y, 4), size(Y, 5)
-    FT = eltype(dYdt)
 
     # "Face" part
     sJ1 = 2pi / n1

@@ -45,7 +45,6 @@ function warp_surface(coord)
     # Specification for Agnesi Mountain following
     # Ulrich and Guerra [2016 GMD]
     x = Geometry.component(coord, 1)
-    FT = eltype(x)
     ac = 1000
     hc = 1.0
     return hc / (1 + (x / ac)^2)
@@ -157,7 +156,6 @@ function rhs_invariant!(dY, Y, _, t)
     dρ .= 0 .* cρ
 
     cw = If2c.(fw)
-    fuₕ = Ic2f.(cuₕ)
     cuw = Geometry.Covariant13Vector.(cuₕ) .+ Geometry.Covariant13Vector.(cw)
 
     ce = @. cρe / cρ

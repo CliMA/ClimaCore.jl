@@ -151,7 +151,6 @@ function hvspace_3D(
         x1periodic = true,
         x2periodic = true,
     )
-    Nf_center, Nf_face = 2, 1 #1 + 3 + 1
     quad = Quadratures.GLL{npoly + 1}()
     horzmesh = Meshes.RectilinearMesh(horzdomain, xyelem, xyelem)
     horztopology = Topologies.Topology2D(comms_ctx, horzmesh)
@@ -201,7 +200,7 @@ function compute_κ₄(sim_params::SimulationParameters{FT}) where {FT}
 end
 
 function rhs_invariant!(dY, Y, ghost_buffer, t)
-    (; C_p, C_v, MSLP, grav, R_d, T_0) = ghost_buffer.params
+    (; C_v, grav, R_d, T_0) = ghost_buffer.params
     (; z, κ₄, cω³, fω¹², fu¹², fu³, cuvw, cE, ce, cI, cT, cp, ch_tot) =
         ghost_buffer
     cρ = Y.Yc.ρ # scalar on centers
@@ -370,7 +369,6 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
         ClimaComms.nprocs(comms_ctx) Float_type = FT resolution = resolution
 
     sim_params = SimulationParameters(FT, resolution, args...)
-    (; lxy, lz) = sim_params
     # set up 3D domain - doubly periodic box
     hv_center_space, hv_face_space, horztopology =
         hvspace_3D(sim_params, comms_ctx)
