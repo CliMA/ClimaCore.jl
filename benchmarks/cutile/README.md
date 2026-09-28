@@ -102,5 +102,6 @@ then the same commands.
   rows; the correctness gate catches it if that assumption fails (workaround:
   pick `--tv` dividing `--zelem`, e.g. `--tv 63` is invalid but `--zelem 64`
   works, or pad the arrays).
-- Float32 tile `muladd` must not silently demote to TF32 — the rtol = 1e-5
-  gate fails if it does.
+- Float32 tile `muladd` must not silently demote to TF32. The gate allows
+  ~2e-4 of the peak derivative (the Float32 CPU-vs-GPU cancellation floor)
+  and fails for a TF32-scale error, about 1e-3 of the peak.
