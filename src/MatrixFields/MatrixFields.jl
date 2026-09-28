@@ -113,7 +113,7 @@ Base.broadcasted(style::Fields.AbstractFieldStyle, ::typeof(*), x, y) =
 
 function Base.broadcasted(
     ::MultiplyColumnwiseBandMatrixField,
-    x::Fields.PointField,
+    x::Union{Fields.PointField, Fields.SpectralElementField},
     y,
 )
     @assert eltype(x) <: DiagonalMatrixRow
