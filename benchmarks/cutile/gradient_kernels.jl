@@ -4,8 +4,8 @@ CUDA.jl contenders for the spectral-element gradient benchmark
 
   - `launch_grad_cuda_ref!`: hand-written, flop-matched replication of the
     strong-form Gradient contraction, coalesced along `v`.
-  - `launch_copy_floor!`: bandwidth floor with the identical memory traffic
-    (1 read + 2 writes per point) and zero flops.
+  - `launch_copy_floor!`: bandwidth floor with one read and `nwrites` writes
+    per point (the gradient is `nwrites = 2`) and zero flops.
   - `gradient_weight`: the fused 16x32 "KronGEMM" weight used by the cuTile
     contender, built from ClimaCore's differentiation matrix.
 
@@ -62,7 +62,7 @@ function grad_cuda_ref_kernel!(out, f, D, ::Val{Nq}) where {Nq}
     return nothing
 end
 
-function copy_floor_kernel!(out, f, ::Val{Nq}) where {Nq}
+function copy_floor_kernel!(out, f, nwrites, ::Val{Nq}) where {Nq}
     v = CUDA.threadIdx().x + (CUDA.blockIdx().x - 1) * CUDA.blockDim().x
     q = CUDA.blockIdx().y
     h = CUDA.blockIdx().z
@@ -71,8 +71,9 @@ function copy_floor_kernel!(out, f, ::Val{Nq}) where {Nq}
         i = (q - 1) % Nq + 1
         j = (q - 1) ÷ Nq + 1
         @inbounds x = f[v, i, j, 1, h]
-        @inbounds out[v, i, j, 1, h] = x
-        @inbounds out[v, i, j, 2, h] = x
+        for w in 1:nwrites
+            @inbounds out[v, i, j, w, h] = x
+        end
     end
     return nothing
 end
@@ -96,11 +97,12 @@ function launch_grad_cuda_ref!(out, f, D::SMatrix{Nq, Nq}) where {Nq}
     return nothing
 end
 
-function launch_copy_floor!(out, f, ::Val{Nq}) where {Nq}
+function launch_copy_floor!(out, f, ::Val{Nq}, nwrites) where {Nq}
     (threads, blocks) = pointwise_launch_dims(f, Nq)
     CUDA.@cuda threads = threads blocks = blocks copy_floor_kernel!(
         out,
         f,
+        nwrites,
         Val(Nq),
     )
     return nothing

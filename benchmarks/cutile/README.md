@@ -45,19 +45,22 @@ Tiny-config GPU correctness check (cheap, do this before full-size runs):
 
 ```bash
 julia +1.11 --project=benchmarks/cutile benchmarks/cutile/benchmark_gradient.jl \
-    --helem 2 --zelem 4
+    --float-type Float64 --helem 2 --zelem 4 --n-reads-writes 3
 ```
 
-Full canonical size (ne30/L63, Nh = 5400, 5.44M points):
+Full sweep (Float32 and Float64, `h_elem` 30/60/90, copy-floor traffic
+counts 3/6/9). One process, then a table of cuTile speedup against ClimaCore:
 
 ```bash
-julia +1.11 --project=benchmarks/cutile benchmarks/cutile/benchmark_gradient.jl \
-    --float-type Float64
-julia +1.11 --project=benchmarks/cutile benchmarks/cutile/benchmark_gradient.jl \
-    --float-type Float32
+julia +1.11 --project=benchmarks/cutile benchmarks/cutile/benchmark_gradient.jl
 ```
 
-Options: `--helem 30 --zelem 63 --nq 4 --tv 64`
+The gradient kernels always move one read and two writes. Counts 6 and 9 are
+copy floors only: one read and 5 or 8 writes of the same value, so the
+bandwidth reference can be store-heavy. Narrow a single axis with a comma
+list, for example `--float-type Float64 --helem 30,60`.
+
+Other options: `--zelem 63 --nq 4 --tv 64`
 (`--tv` is the cuTile tile size along the vertical; power of two),
 `--contenders climacore,cutile,cuda_ref,copy_floor` (default `all`;
 drop `cutile` to run on nodes without CUDA-13 drivers).
@@ -67,7 +70,7 @@ drop `cutile` to run on nodes without CUDA-13 drivers).
 ```bash
 #!/bin/bash
 #SBATCH --job-name=cutile-grad-bench
-#SBATCH --time=00:30:00
+#SBATCH --time=01:00:00
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:a100:1
 #SBATCH --cpus-per-task=8
@@ -75,8 +78,7 @@ drop `cutile` to run on nodes without CUDA-13 drivers).
 export CLIMACOMMS_DEVICE=CUDA
 export JULIA_CUDA_USE_COMPAT=true   # forward-compat libcuda if node driver < 580
 cd $SLURM_SUBMIT_DIR                # submit from the ClimaCore.jl root
-julia +1.11 --project=benchmarks/cutile benchmarks/cutile/benchmark_gradient.jl --float-type Float64
-julia +1.11 --project=benchmarks/cutile benchmarks/cutile/benchmark_gradient.jl --float-type Float32
+julia +1.11 --project=benchmarks/cutile benchmarks/cutile/benchmark_gradient.jl
 ```
 
 Interactive: `srun --partition=gpu --gres=gpu:a100:1 --mem=32G --time=1:00:00 --pty bash`,
@@ -88,8 +90,12 @@ then the same commands.
   final table — this op is memory-bound (~0.7 flop/byte); the ideal traffic is
   1 read + 2 writes per point (130.6 MiB at the canonical Float64 size, so the
   A100-40GB roofline is ~95–110 µs).
-- Nothing should beat `copy_floor`; if it does, the script warns (timing
-  artifact / clock boost).
+- Nothing should beat the 1R+2W `copy_floor`; if it does, the script warns
+  (timing artifact / clock boost). The 1R+5W and 1R+8W rows are heavier
+  copies, not a floor for the gradient.
+- The last table is cuTile speedup against ClimaCore,
+  `t_climacore / t_cutile`, at each float type and `h_elem`. A value above 1
+  means cuTile is faster.
 - The two timing methods (BenchmarkTools min, CUDA-event loop min) should
   agree within ~10%; the loop variant amortizes launch overhead, which can
   differ between cuTile launches and ClimaCore's `auto_launch!`.
