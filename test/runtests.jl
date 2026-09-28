@@ -48,6 +48,7 @@ unit_tests = [
 
     # Spaces
     UnitTest("Spaces"                                   ,"Spaces/unit_spaces.jl"; tier = :unit, subsystem = :spaces),
+    UnitTest("Spaces - multi-column slices"             ,"Spaces/unit_multicolumn_slices.jl"; tier = :unit, subsystem = :spaces),
     UnitTest("dss"                                      ,"Spaces/unit_dss.jl"; tier = :unit, subsystem = :spaces),
     UnitTest("Spaces - exact 2x2 DSS"                   ,"Spaces/unit_dss_exact.jl"; tier = :unit, subsystem = :spaces),
     UnitTest("Spaces - DSS vs grouped reference"        ,"Spaces/unit_dss_reference.jl"; tier = :unit, subsystem = :spaces),

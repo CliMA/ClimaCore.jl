@@ -132,6 +132,9 @@ function _ExtrudedFiniteDifferenceGrid(
 end
 
 topology(grid::ExtrudedFiniteDifferenceGrid) = topology(grid.horizontal_grid)
+# Columns without horizontal coordinates have only a vertical topology, like a
+# `FiniteDifferenceGrid`
+topology(grid::ExtrudedFiniteDifferenceGrid{<:EmptyPointGrid}) = vertical_topology(grid)
 
 discretization(grid::ExtrudedFiniteDifferenceGrid) =
     discretization(grid.horizontal_grid)

@@ -62,7 +62,7 @@ single column.
 struct MultiColumnFiniteDifferenceSpace{
     G <: Grids.AbstractExtrudedFiniteDifferenceGrid,
     S <: Staggering,
-} <: AbstractSpace
+} <: AbstractFiniteDifferenceSpace
     grid::G
     staggering::S
 end
@@ -148,6 +148,13 @@ nlevels(space::MultiColumnFiniteDifferenceSpace) =
 horizontal_space(space::MultiColumnFiniteDifferenceSpace) =
     MultiPointSpace(grid(space).horizontal_grid)
 horizontal_space(space::MultiPointSpace) = space
+# Columns without horizontal coordinates behave like a `FiniteDifferenceSpace`, whose
+# horizontal space is its first level
+horizontal_space(
+    space::MultiColumnFiniteDifferenceSpace{
+        <:Grids.ExtrudedFiniteDifferenceGrid{<:Grids.EmptyPointGrid},
+    },
+) = level(space, 1)
 
 quadrature_style(space::MultiPointSpace) = quadrature_style(grid(space))
 node_horizontal_length_scale(::MultiPointSpace) = 1

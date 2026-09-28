@@ -22,6 +22,10 @@ main
   `CommonGrids.MultiColumnGrid(FT; ncolumns, ...)` build independent columns
   without horizontal coordinates: on a Cartesian global geometry, with `ZPoint`
   coordinates and the local geometry of a single-column `FiniteDifferenceGrid`.
+  `Spaces.MultiColumnFiniteDifferenceSpace` is a subtype of
+  `Spaces.AbstractFiniteDifferenceSpace`, like `Spaces.FiniteDifferenceSpace`, and
+  such columns behave like one: `Spaces.topology` is the vertical topology and
+  `Spaces.horizontal_space` is the first level, with `ZPoint` coordinates.
 
 v0.16.2
 -------

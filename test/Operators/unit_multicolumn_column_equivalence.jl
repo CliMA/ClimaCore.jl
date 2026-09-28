@@ -127,6 +127,13 @@ end
 
     @test eltype(Fields.coordinate_field(ᶜmulti)) == Geometry.ZPoint{FT}
     @test Spaces.global_geometry(ᶜmulti) isa Geometry.CartesianGlobalGeometry
+    # The columns behave like a single column: a vertical topology and domain, and a
+    # horizontal space that is the first level, with `ZPoint` coordinates
+    @test Spaces.topology(ᶜmulti) == Spaces.topology(ᶜsingle)
+    @test Meshes.domain(Spaces.grid(ᶜmulti)) == Meshes.domain(Spaces.grid(ᶜsingle))
+    @test Spaces.horizontal_space(ᶜmulti) == Spaces.level(ᶜmulti, 1)
+    @test eltype(Fields.coordinate_field(Spaces.horizontal_space(ᶜmulti))) ==
+          Geometry.ZPoint{FT}
     for (multi, single) in
         ((ᶜmulti, ᶜsingle), (Spaces.face_space(ᶜmulti), Spaces.face_space(ᶜsingle)))
         @test eltype(Spaces.local_geometry_data(multi)) ==

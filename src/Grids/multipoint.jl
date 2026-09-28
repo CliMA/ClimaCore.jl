@@ -62,6 +62,13 @@ Geometry.coordinate_axis(::Type{<:EmptyPoint}) = ()
 Geometry.product_coordinates(::EmptyPoint, zp::Geometry.ZPoint) = zp
 Geometry.product_coordinates(::EmptyPoint, pp::Geometry.PPoint) = pp
 
+# The grid of columns without horizontal coordinates
+const EmptyPointGrid = MultiPointGrid{
+    <:Any,
+    <:Any,
+    <:DataLayouts.DataLayout{<:Geometry.LocalGeometry{(), <:EmptyPoint}},
+}
+
 """
     MultiPointGrid(
         points  :: AbstractVector{Geometry.LatLongPoint{FT}};
