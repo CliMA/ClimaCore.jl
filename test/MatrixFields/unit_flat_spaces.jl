@@ -35,3 +35,19 @@ import ClimaCore.MatrixFields: @name
         @test x == b
     end
 end
+
+@testset "DiagonalMatrixRow multiplication on Spectral Element and Point Spaces" begin
+    for FT in (Float32, Float64)
+        comms_ctx = ClimaComms.SingletonCommsContext(comms_device)
+        ps = TU.PointSpace(FT; context = comms_ctx)
+        ses = TU.SpectralElementSpace2D(FT; context = comms_ctx)
+        for space in (ps, ses)
+            J = random_field(DiagonalMatrixRow{FT}, space)
+            b = random_field(FT, space)
+            J_b = @. J * b
+            @test J_b isa Fields.Field
+            @test axes(J_b) === space
+            @test J_b == @. J.entries.:1 * b
+        end
+    end
+end
