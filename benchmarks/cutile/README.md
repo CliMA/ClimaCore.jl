@@ -65,6 +65,18 @@ Other options: `--zelem 63 --nq 4 --tv 64`
 `--contenders climacore,cutile,cuda_ref,copy_floor` (default `all`;
 drop `cutile` to run on nodes without CUDA-13 drivers).
 
+Fused production expressions (pressure gradient, scalar hyperdiffusion).
+Compares the ClimaAtmos broadcast with a split that materializes each
+strong gradient, and with that split when the gradient is the cuTile
+KronGEMM. The summary speedup is fused time over cuTile time. Default is
+both precisions at `h_elem = 30`:
+
+```bash
+julia +1.11 --project=benchmarks/cutile benchmarks/cutile/benchmark_fused.jl
+julia +1.11 --project=benchmarks/cutile benchmarks/cutile/benchmark_fused.jl \
+    --float-type Float64 --helem 30,60,90
+```
+
 ## Slurm (Caltech cluster)
 
 ```bash
