@@ -61,11 +61,11 @@ function csv_arg(flag, default, parse_one)
 end
 
 const FLOAT_TYPES = Dict("Float64" => Float64, "Float32" => Float32)
-const float_types = csv_arg("--float-type", [Float32, Float64]) do name
+const float_types = csv_arg("--float-type", [Float32, Float64], name -> begin
     haskey(FLOAT_TYPES, name) ||
         error("unknown --float-type $name; expected Float32 or Float64")
     return FLOAT_TYPES[name]
-end
+end)
 function int_arg(flag, default)
     raw = getarg(flag)
     raw === nothing && return default
