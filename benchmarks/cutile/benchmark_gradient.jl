@@ -143,9 +143,14 @@ cpu_space = create_space(
 
 grad = Operators.Gradient()
 
-f_gpu = init_field!(zeros(gpu_space))
+# Initialize on the CPU and copy those nodal values to the device. Re-evaluating
+# sind/cosd on the GPU disagrees by a few ulps; the GLL differentiation matrix
+# (row 1-norm ≈ 9 at Nq = 4) turns that into an O(1e-4) covariant-component
+# error in Float32, which fails the 1e-5 gate even when the contraction matches.
 f_cpu = init_field!(zeros(cpu_space))
-∇f_cpu = @. grad(f_cpu) # CPU oracle
+f_gpu = zeros(gpu_space)
+parent(Fields.field_values(f_gpu)) .= parent(Fields.field_values(f_cpu))
+∇f_cpu = @. grad(f_cpu) # CPU oracle on the same nodal values
 ∇f_gpu = @. grad(f_gpu) # materializes the output field; reused in-place below
 
 fv = Fields.field_values(f_gpu)
@@ -214,9 +219,10 @@ for name in filter(in(keys(runners)), ["climacore", "cuda_ref", "cutile"])
     )
     ok || error(
         "$name does not match the CPU oracle — aborting before timing. " *
-        "For `cutile` this can indicate KronGEMM weight ordering or a masked " *
-        "out-of-bounds store issue; for Float32 it can indicate implicit " *
-        "TF32 demotion in the tile matmul.",
+        "The oracle is Gradient on the same nodal values. A `cutile` failure " *
+        "can indicate KronGEMM weight ordering or a masked out-of-bounds " *
+        "store; a Float32 `cutile` failure can indicate TF32 demotion in the " *
+        "tile matmul.",
     )
 end
 
