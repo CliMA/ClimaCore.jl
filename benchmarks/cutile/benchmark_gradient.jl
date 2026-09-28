@@ -149,7 +149,9 @@ grad = Operators.Gradient()
 # error in Float32, which fails the 1e-5 gate even when the contraction matches.
 f_cpu = init_field!(zeros(cpu_space))
 f_gpu = zeros(gpu_space)
-parent(Fields.field_values(f_gpu)) .= parent(Fields.field_values(f_cpu))
+# memcpy, not a broadcast: a CPU Array is not a bitstype and cannot be captured
+# by the GPU broadcast kernel.
+copyto!(parent(Fields.field_values(f_gpu)), parent(Fields.field_values(f_cpu)))
 ∇f_cpu = @. grad(f_cpu) # CPU oracle on the same nodal values
 ∇f_gpu = @. grad(f_gpu) # materializes the output field; reused in-place below
 
