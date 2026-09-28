@@ -47,6 +47,9 @@ topology(::MultiPointGrid) = error(
 local_geometry_data(grid::MultiPointGrid, ::Nothing) = grid.local_geometry
 global_geometry(grid::MultiPointGrid) = grid.global_geometry
 
+# One nodal point per element, shared with no neighbour.
+quadrature_style(::MultiPointGrid) = Quadratures.GL{1}()
+
 """
     MultiPointGrid(
         points  :: AbstractVector{Geometry.LatLongPoint{FT}};

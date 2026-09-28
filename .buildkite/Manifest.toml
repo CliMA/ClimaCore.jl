@@ -334,9 +334,9 @@ version = "1.0.0"
 
 [[deps.ClimaComms]]
 deps = ["Adapt", "Logging", "LoggingExtras"]
-git-tree-sha1 = "99825dd76c1036c5e80c1dab91bbd2c371f34446"
+git-tree-sha1 = "786488f1cdac5d42d22db590a766b96213b14efd"
 uuid = "3a4d1b5c-c61d-41fd-a00a-5873ba7a1b0d"
-version = "0.6.11"
+version = "0.6.12"
 weakdeps = ["CUDA", "MPI"]
 
     [deps.ClimaComms.extensions]

@@ -618,8 +618,6 @@ function compute_ghost_send_recv_idx(topology::Topology2D, Nq)
         nglobalvertices,
         nglobalfaces,
     ) = topology
-    ghost_vertices = Array(topology.ghost_vertices)
-    ghost_vertex_offset = Array(topology.ghost_vertices)
     repr_ghost_vertex = Array(topology.repr_ghost_vertex)
     nfacedof = Nq - 2
     comm_lengths = comm_vertex_lengths .+ (comm_face_lengths .* nfacedof)
@@ -634,7 +632,8 @@ function compute_ghost_send_recv_idx(topology::Topology2D, Nq)
         neighbor_pids,
         recv_data,
         comm_lengths,
-        neighbor_pids,
+        neighbor_pids;
+        persistent = false,
     )
     send_offset = Int[1]
     append!(send_offset, cumsum(comm_lengths) .+ 1)
@@ -694,8 +693,15 @@ function compute_ghost_send_recv_idx(topology::Topology2D, Nq)
     for (i, gidx) in enumerate(ghost_face_ugidx)
         loc = ghost_face_neighbor_loc[i]
         offset = send_offset[loc]
-        (e, face, _, _, _) = ghost_faces[i]
-        prange = perimeter_face_indices(face, nfacedof, true) # reverse face data (double check)
+        (e, face, _, _, reversed) = ghost_faces[i]
+        # The sender packs its own face nodes in its natural order (see the
+        # send loop above), so buffer slot j holds the neighbour's j-th node.
+        # `reversed` is the relative orientation of the two sides of the face,
+        # so it maps the neighbour's j-th node onto ours -- the same pairing
+        # `dss_local!` applies to interior faces. Every mesh currently returns
+        # `reversed = true`; reading the flag keeps the two paths consistent
+        # rather than relying on that.
+        prange = perimeter_face_indices(face, nfacedof, reversed)
         ghost_face_send_idx[i] =
             offset + findfirst(send_data[offset:end] .== gidx) - 1
         ghost_face_recv_idx[i] =

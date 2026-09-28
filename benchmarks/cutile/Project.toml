@@ -1,3 +1,9 @@
+[compat]
+BenchmarkTools = "1"
+CUDA = "6.3"
+cuTile = "1"
+julia = "1.11"
+
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
@@ -13,8 +19,6 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 cuTile = "0dea8319-8c4a-4662-a73d-20234d115b9a"
 
-[compat]
-BenchmarkTools = "1"
-CUDA = "6.3"
-cuTile = "1"
-julia = "1.11"
+[extras]
+CUDA_Compiler_jll = "d1e2174e-dfdc-576e-b43e-73b79eb1aca8"
+CUDA_Runtime_jll = "76a88914-d11a-5bdc-97e0-2f5a05c973a2"

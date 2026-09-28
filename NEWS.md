@@ -4,6 +4,21 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v1.0.1
+-------
+
+- ![][badge-🚀performance] Restored the device-side grid types
+  `Grids.DeviceFiniteDifferenceGrid`, `Grids.DeviceExtrudedFiniteDifferenceGrid`,
+  `Grids.DeviceSpectralElementGrid1D`, `Grids.DeviceSpectralElementGrid2D` and
+  `Topologies.DeviceIntervalTopology`, which v1.0.0 removed in favour of adapting
+  the host grids into GPU kernels. Host grids are mutable again, so a grid sits
+  behind one pointer in a space rather than inline: an extruded cubed sphere space
+  goes from 176 bytes back to 8, and every `Field` and `Broadcasted` node holding
+  one shrinks with it. Downstream code that builds operator and `FieldVector`
+  broadcasts compiles roughly twice as fast, back to its v0.16.1 speed
+  (`perf/grid_compile_repro.jl`). Run time and ClimaCore's own precompile time are
+  unaffected.
+
 
 v1.0.0
 -------

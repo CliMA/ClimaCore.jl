@@ -223,7 +223,7 @@ function alloc_test_nested_expressions_3(cfield, ffield)
         @. cz = cx * cy * ∇c(wvec(LB(Ic(fy) * cx))) * ∇c(wvec(LB(Ic(fy) * cx))) * cϕ * cψ
     end
     #! format: on
-    @test p ≤ 5200 broken = USING_CUDA
+    @test p ≤ 5200
 end
 
 function alloc_test_nested_expressions_4(cfield, ffield)
@@ -245,7 +245,7 @@ function alloc_test_nested_expressions_4(cfield, ffield)
         @. fz = fx * fy * ∇f(wvec(LB(If(cy) * fx))) * ∇f(wvec(LB(If(cy) * fx))) * fϕ * fψ
     end
     #! format: on
-    @test p ≤ 5296 broken = USING_CUDA
+    @test p ≤ 5296
 end
 
 function alloc_test_nested_expressions_5(cfield, ffield)
@@ -263,7 +263,7 @@ function alloc_test_nested_expressions_5(cfield, ffield)
         @. cz = cx * cy * ∇c(wvec(If(cy) * fx)) * ∇c(wvec(If(cy) * fx)) * cϕ * cψ
     end
     #! format: off
-    @test p ≤ 5200 broken = USING_CUDA
+    @test p ≤ 5200
 end
 
 function alloc_test_nested_expressions_6(cfield, ffield)
@@ -281,7 +281,7 @@ function alloc_test_nested_expressions_6(cfield, ffield)
         @. fz = fx * fy * ∇f(wvec(Ic(fy) * cx)) * ∇f(wvec(Ic(fy) * cx)) * fϕ * fψ
     end
     #! format: on
-    @test p ≤ 5200 broken = USING_CUDA
+    @test p ≤ 5200
 end
 
 function alloc_test_nested_expressions_7(cfield, ffield)
@@ -342,7 +342,7 @@ function alloc_test_nested_expressions_11(cfield, ffield)
     p = @allocated begin
         @. fz = fx * fy * abs(If(cy * cx)) * abs(If(cy * cx)) * fϕ * fψ
     end
-    @test p ≤ 4416 broken = USING_CUDA
+    @test p ≤ 4416
 end
 
 function alloc_test_nested_expressions_12(cfield, ffield, ntcfield, ntffield)

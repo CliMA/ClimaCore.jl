@@ -50,7 +50,7 @@ const FT = Dict("Float64" => Float64, "Float32" => Float32)[getarg(
     "--float-type",
     "Float64",
 )]
-const helem = getarg("--helem", 30)
+const helem = getarg("--helem", 60)
 const zelem = getarg("--zelem", 63)
 const Nq = getarg("--nq", 4)
 const tv = getarg("--tv", 64) # cuTile tile size along v (power of two)
