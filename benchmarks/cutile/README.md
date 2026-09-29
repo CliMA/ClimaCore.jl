@@ -72,10 +72,33 @@ KronGEMM. The summary speedup is fused time over cuTile time. Default is
 both precisions at `h_elem = 30`:
 
 ```bash
-julia +1.11 --project=benchmarks/cutile benchmarks/cutile/benchmark_fused.jl
-julia +1.11 --project=benchmarks/cutile benchmarks/cutile/benchmark_fused.jl \
+julia --project=benchmarks/cutile benchmarks/cutile/benchmark_fused.jl
+julia --project=benchmarks/cutile benchmarks/cutile/benchmark_fused.jl \
     --float-type Float64 --helem 30,60,90
 ```
+
+`examples/hybrid/sphere/baroclinic_wave_rhoe_cutile.jl` runs the standard
+baroclinic wave with the horizontal pressure-gradient force
+(`Yₜ.c.uₕ -= gradₕ(p)/ρ + gradₕ(K + Φ)`) computed by the KronGEMM kernel;
+`PGRAD=fused` runs the unmodified fused broadcast from the same file and
+environment, so the walltimes printed by `driver.jl` are directly comparable.
+Only the pressure gradient is swapped — the hyperdiffusion laplacian stays
+fused, where `benchmark_fused.jl` shows the split loses at Float64.
+
+```bash
+export CLIMACOMMS_DEVICE=CUDA
+export TEST_NAME=sphere/baroclinic_wave_rhoe_cutile
+PGRAD=fused  julia +1.11 --project=benchmarks/cutile examples/hybrid/driver.jl
+PGRAD=cutile julia +1.11 --project=benchmarks/cutile examples/hybrid/driver.jl
+```
+
+Defaults: `H_ELEM=30`, `Z_ELEM=63`, Float32, `npoly = 3` (fixed: cuTile tile
+extents must be powers of two, so Nq = 4, matching the microbenchmarks above),
+six simulated hours (`T_END=21600`), and `dt`/`κ₄` scaled from the `h_elem = 4`
+case (override with `DT`/`KAPPA_4` if the defaults misbehave at a new
+resolution). Compilation is paid equally by both runs; keep `T_END` large
+enough that it amortizes, or compare a pair of restarts. The final `ρe` norms
+and max meridional wind are printed for cross-checking the two runs.
 
 ## Slurm (Caltech cluster)
 
