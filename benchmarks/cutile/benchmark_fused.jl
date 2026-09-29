@@ -26,6 +26,9 @@ Usage (GPU node; see README.md):
     julia +1.11 --project=benchmarks/cutile benchmarks/cutile/benchmark_fused.jl
 
     ... benchmark_fused.jl --float-type Float64 --helem 30,60 --zelem 63
+
+Fast correctness pass (gate only, no timing) for remote iteration:
+    ... benchmark_fused.jl --check-only --helem 4 --zelem 8
 =#
 
 import CUDA
@@ -82,6 +85,7 @@ const helems = csv_arg("--helem", [30], s -> parse(Int, s))
 const zelem = int_arg("--zelem", 63)
 const Nq = int_arg("--nq", 4)
 const tv = int_arg("--tv", 64)
+const check_only = "--check-only" in ARGS
 
 ##### Preflight
 
@@ -191,17 +195,30 @@ function time_kernel!(run!; ntrials = 100, ninner = 10)
     return (; t_bt, t_loop)
 end
 
-function check_against_oracle!(name, result, oracle, FT)
+# CPU-vs-GPU gate. The pressure operands carry large node-constant offsets
+# (p ≈ 1e5 Pa, K + Φ up to ≈ 3e5 J/kg) whose exact horizontal gradient is
+# zero: each row of D cancels O(‖operand‖) products down to an O(1e2) result.
+# CPU mul/add and GPU FFMA round that cancellation differently, so agreement
+# has an absolute floor of eps(FT) · ‖D‖∞ · ‖operands‖ — far above
+# rtol · ‖result‖ for the pressure expression. `noise_scale` carries that
+# operand magnitude (times any downstream linear gain); real kernel bugs
+# (weight ordering, masked stores, TF32 demotion) sit orders of magnitude
+# above this gate.
+function check_against_oracle!(name, result, oracle, FT; noise_scale)
     rtol = FT == Float64 ? 1e-12 : 1e-4
-    scale = max(maximum(abs, oracle), eps(FT))
-    atol = FT == Float64 ? zero(FT) : 2e-4 * scale
-    ok = isapprox(result, oracle; rtol, atol)
-    maxrel = maximum(abs.(result .- oracle)) / scale
+    # floatmin, not eps: laplacian values are dimensional (1/m²), legitimately
+    # ≪ eps(FT), and an eps floor would inflate the gate past real O(1) bugs.
+    scale = max(maximum(abs, oracle), floatmin(FT))
+    gate = max(8 * eps(FT) * noise_scale, rtol * scale)
+    maxerr = maximum(abs.(result .- oracle))
+    ok = maxerr <= gate
     @printf(
-        "  %-16s %s (max rel-scale error %.3e)\n",
+        "  %-16s %s (max abs err %.3e, gate %.3e, rel-scale %.3e)\n",
         name,
         ok ? "PASS" : "FAIL",
-        maxrel,
+        maxerr,
+        gate,
+        maxerr / scale,
     )
     ok || error("$name does not match the CPU fused oracle")
     return nothing
@@ -231,6 +248,8 @@ function run_case(::Type{FT}, helem, device) where {FT}
 
     du_cpu = @. C12(grad(cpu.p) / cpu.ρ + grad(cpu.K + cpu.Φ))
     lap_cpu = @. wdiv(grad(cpu.χ))
+    ∇χ_cpu = @. grad(cpu.χ)
+    bernoulli_cpu = @. cpu.K + cpu.Φ
     p_du = parent(Fields.field_values(du_cpu))
     p_lap = parent(Fields.field_values(lap_cpu))
 
@@ -250,6 +269,28 @@ function run_case(::Type{FT}, helem, device) where {FT}
     C = 2 * Kq
     Wt = CUDA.CuArray(gradient_weight(D))
     launch! = (dest, src) -> launch_scalar_grad!(dest, src, Wt; tv, K = Kq, C)
+
+    # Rounding-noise magnitudes for the correctness gate: the operand size a
+    # single D contraction cancels, with wdiv's linear gain (estimated as the
+    # ratio of output to input magnitude) applied to the laplacian's inner
+    # gradient stage.
+    maxabs(x) = maximum(abs, parent(Fields.field_values(x)))
+    Dnorm = maximum(sum(abs, Matrix(D); dims = 2))
+    noise_du =
+        Dnorm * (
+            maxabs(cpu.p) / minimum(parent(Fields.field_values(cpu.ρ))) +
+            maxabs(bernoulli_cpu)
+        )
+    wdiv_gain = maximum(abs, p_lap) / max(maxabs(∇χ_cpu), eps(FT))
+    noise_lap = Dnorm * (wdiv_gain * maxabs(cpu.χ) + maximum(abs, p_lap))
+    noise_scales = Dict(
+        "pressure_fused" => noise_du,
+        "pressure_split" => noise_du,
+        "pressure_cutile" => noise_du,
+        "lap_fused" => noise_lap,
+        "lap_split" => noise_lap,
+        "lap_cutile" => noise_lap,
+    )
 
     runners = Dict(
         "pressure_fused" => () -> begin
@@ -311,11 +352,25 @@ function run_case(::Type{FT}, helem, device) where {FT}
     ]
 
     Nh = size(parent(Fields.field_values(p)), 5)
-    println("Correctness gate vs CPU fused expression:")
+    println(
+        "Correctness gate vs CPU fused expression " *
+        "(gate = max(8 eps ‖D‖∞ ‖operands‖, rtol · scale)):",
+    )
     for name in order
         runners[name]()
         CUDA.synchronize()
-        check_against_oracle!(name, Array(outputs[name]()), oracles[name], FT)
+        check_against_oracle!(
+            name,
+            Array(outputs[name]()),
+            oracles[name],
+            FT;
+            noise_scale = noise_scales[name],
+        )
+    end
+
+    if check_only
+        println("\n--check-only: skipping timing")
+        return (; FT, helem, Nh, times = Dict{String, Float64}())
     end
 
     println("\nTiming:")
@@ -356,6 +411,7 @@ function µs(times, name)
 end
 
 function print_summary(rows)
+    rows = filter(row -> !isempty(row.times), rows)
     isempty(rows) && return nothing
     header = [
         "float",
