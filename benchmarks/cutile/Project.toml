@@ -1,23 +1,29 @@
-[compat]
-BenchmarkTools = "1"
-CUDA = "6.3"
-cuTile = "1"
-julia = "1.11"
-
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 ClimaComms = "3a4d1b5c-c61d-41fd-a00a-5873ba7a1b0d"
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
+ClimaTimeSteppers = "595c0a79-7f3d-439a-bc5a-b232dc3bde79"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 LazyBroadcast = "9dccce8e-a116-406d-9fcc-a88ed4f510c8"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+TerminalLoggers = "5d786b92-1e48-4d6f-9151-6b4477ca9bed"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 cuTile = "0dea8319-8c4a-4662-a73d-20234d115b9a"
+
+[compat]
+BenchmarkTools = "1"
+CUDA = "6.3"
+ClimaTimeSteppers = "1"
+JLD2 = "0.5, 0.6"
+TerminalLoggers = "0.1"
+cuTile = "1"
+julia = "1.11"
 
 [extras]
 CUDA_Compiler_jll = "d1e2174e-dfdc-576e-b43e-73b79eb1aca8"

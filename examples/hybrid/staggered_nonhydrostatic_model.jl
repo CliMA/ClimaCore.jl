@@ -215,13 +215,27 @@ function default_remaining_tendency!(Yₜ, Y, p, t)
 
     @. Yₜ.c.uₕ -= ᶜinterp(ᶠω¹² × ᶠu³) + (ᶜf + ᶜω³) × CT12(ᶜuₕ)
     if point_type <: Geometry.Abstract3DPoint
-        @. Yₜ.c.uₕ -= gradₕ(ᶜp) / ᶜρ + gradₕ(ᶜK + ᶜΦ)
+        pressure_gradient_tendency!(
+            Yₜ,
+            ᶜρ,
+            ᶜp,
+            ᶜK,
+            ᶜΦ,
+            get(p, :pgrad_scheme, nothing),
+        )
     elseif point_type <: Geometry.Abstract2DPoint
         @. Yₜ.c.uₕ -= C12(gradₕ(ᶜp) / ᶜρ + gradₕ(ᶜK + ᶜΦ))
     end
 
     @. Yₜ.f.w -= ᶠω¹² × ᶠu¹²
 end
+
+# The horizontal pressure-gradient force on 3D point types. A case file may
+# swap the scheme by placing a `pgrad_scheme` object in its `additional_cache`
+# and defining a method on that object's type; the default is the fused
+# broadcast.
+pressure_gradient_tendency!(Yₜ, ᶜρ, ᶜp, ᶜK, ᶜΦ, ::Nothing) =
+    @. Yₜ.c.uₕ -= gradₕ(ᶜp) / ᶜρ + gradₕ(ᶜK + ᶜΦ)
 
 additional_tendency!(Yₜ, Y, p, t) = nothing
 
