@@ -53,11 +53,14 @@ global_geometry(levelgrid::LevelGrid) = global_geometry(levelgrid.full_grid)
 hypsography(levelgrid::LevelGrid) = hypsography(levelgrid.full_grid)
 
 issubgrid(subgrid::LevelGrid, grid::LevelGrid) = subgrid === grid
-issubgrid(subgrid::LevelGrid, grid::AbstractGrid) = issubgrid(subgrid.full_grid, grid)
-issubgrid(subgrid::AbstractGrid, grid::LevelGrid) =
-    grid.full_grid isa DeviceExtrudedFiniteDifferenceGrid ?
-    throw(ArgumentError("Cannot compare device-side slices of extruded grids")) :
-    issubgrid(subgrid, grid.full_grid.horizontal_grid)
+maybe_issubgrid(subgrid::LevelGrid, grid::LevelGrid) = true
+for f in (:issubgrid, :maybe_issubgrid)
+    @eval $f(subgrid::LevelGrid, grid::AbstractGrid) = $f(subgrid.full_grid, grid)
+    @eval $f(subgrid::AbstractGrid, grid::LevelGrid) =
+        grid.full_grid isa DeviceExtrudedFiniteDifferenceGrid ?
+        throw(ArgumentError("Cannot compare device-side slices of extruded grids")) :
+        $f(subgrid, grid.full_grid.horizontal_grid)
+end
 
 ## GPU compatibility
 Adapt.adapt_structure(to, grid::LevelGrid) =

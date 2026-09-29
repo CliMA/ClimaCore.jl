@@ -16,7 +16,7 @@ import ..Spaces: nlevels, ncolumns
 import ..Spaces: get_mask, set_mask!
 import ..Geometry: Geometry
 import ..Utilities: PlusHalf, half, safe_eltype, unsafe_eltype
-import ..Utilities: recursive_bottom_eltype
+import ..Utilities: recursive_bottom_eltype, @drop_recursion_limits
 import ..Utilities: drop_auto_broadcasters, auto_broadcasted
 import ..Utilities: add_auto_broadcasters, is_auto_broadcastable
 using UnrolledUtilities

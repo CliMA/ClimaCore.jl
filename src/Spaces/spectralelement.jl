@@ -32,24 +32,14 @@ function Base.show(io::IO, space::AbstractSpectralElementSpace)
     else
         println(iio, " "^(indent + 2), "mask_enabled: true")
     end
-    if hasfield(typeof(grid(space)), :topology)
+    if hasfield(typeof(space), :grid) && hasfield(typeof(grid(space)), :topology)
         # some reduced spaces (like slab space) do not have topology
         print(iio, " "^(indent + 2), "context: ")
         Topologies.print_context(iio, topology(grid(space)).context)
         println(iio)
-        println(
-            iio,
-            " "^(indent + 2),
-            "mesh: ",
-            topology(grid(space)).mesh,
-        )
+        println(iio, " "^(indent + 2), "mesh: ", topology(grid(space)).mesh)
     end
-    print(
-        iio,
-        " "^(indent + 2),
-        "quadrature: ",
-        quadrature_style(grid(space)),
-    )
+    print(iio, " "^(indent + 2), "quadrature: ", quadrature_style(space))
 end
 
 
@@ -171,11 +161,16 @@ local_geometry_data(space::SpectralElementSpaceSlab) = space.local_geometry
 # Single-slab fields act like point fields in spectral element broadcasts (at
 # the level of elements rather than points), so a SpectralElementSpaceSlab is
 # a subspace of every other AbstractSpace that uses the same quadrature_style.
-issubspace(subspace::SpectralElementSpaceSlab, space::AbstractSpace) =
-    space isa Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace} &&
-    subspace.quadrature_style == quadrature_style(space)
 issubspace(subspace::SpectralElementSpaceSlab, space::SpectralElementSpaceSlab) =
     subspace === space
+maybe_issubspace(subspace::SpectralElementSpaceSlab, space::SpectralElementSpaceSlab) =
+    typeof(subspace) == typeof(space)
+for f in (:issubspace, :maybe_issubspace)
+    @eval $f(subspace::SpectralElementSpaceSlab, space::AbstractSpace) =
+        space isa Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace} &&
+        subspace.quadrature_style == quadrature_style(space)
+    @eval $f(subspace::AbstractSpace, space::SpectralElementSpaceSlab) = false
+end
 
 level(space::AbstractSpectralElementSpace, v) =
     isone(v) ? space : throw(ArgumentError("Space only has one level"))

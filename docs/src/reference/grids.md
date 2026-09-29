@@ -30,6 +30,7 @@ Grids.global_geometry
 Grids.local_geometry_data
 Grids.dss_weights
 Grids.issubgrid
+Grids.maybe_issubgrid
 Grids.get_mask
 Grids.set_mask!
 ```

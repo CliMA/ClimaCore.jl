@@ -886,26 +886,30 @@ end
     FT = Float64
     for space in TU.all_spaces(FT)
         field = fill((; x = FT(1)), space)
-        point_of_field = Fields.Field(view(Fields.field_values(field), 1), view(space, 1))
-        level_of_field = Fields.Field(
+        point_of_field = view(field, 1)
+        level_of_field = Spaces.level(field, 1)
+        slab_of_field = Spaces.slab(field, 1, 1)
+        column_of_field = Spaces.column(field, 1, 1, 1)
+
+        @test point_of_field === Fields.Field(
+            view(Fields.field_values(field), 1),
+            view(space, 1),
+        )
+        @test level_of_field === Fields.Field(
             Spaces.level(Fields.field_values(field), 1),
             Spaces.level(space, 1),
         )
-        slab_of_field = Fields.Field(
+        @test slab_of_field === Fields.Field(
             Spaces.slab(Fields.field_values(field), 1, 1),
             Spaces.slab(space, 1, 1),
         )
-        column_of_field = Fields.Field(
+        @test column_of_field === Fields.Field(
             Spaces.column(Fields.field_values(field), 1, 1, 1),
             Spaces.column(space, 1, 1, 1),
         )
 
-        @test point_of_field == view(field, 1)
-        @test level_of_field == Spaces.level(field, 1)
-        @test slab_of_field == Spaces.slab(field, 1, 1)
-        @test column_of_field == Spaces.column(field, 1, 1, 1)
-
-        @test point_of_field == Base.materialize(view(lazy.(identity.(field)), 1))
+        @test point_of_field ==
+              Base.materialize(view(lazy.(identity.(field)), 1))
         @test level_of_field ==
               Base.materialize(Spaces.level(lazy.(identity.(field)), 1))
         @test slab_of_field ==
@@ -913,39 +917,91 @@ end
         @test column_of_field ==
               Base.materialize(Spaces.column(lazy.(identity.(field)), 1, 1, 1))
 
-        @test field == (point_of_field .+ field) ./ 2
-        @test field == (level_of_field .+ field) ./ 2
-        @test field == (slab_of_field .+ field) ./ 2
-        @test field == (column_of_field .+ field) ./ 2
-
-        @test level_of_field == (level_of_field .+ point_of_field) ./ 2
-        @test slab_of_field == (slab_of_field .+ point_of_field) ./ 2
-        @test column_of_field == (column_of_field .+ point_of_field) ./ 2
-
-        @test level_of_field == (level_of_field .+ slab_of_field) ./ 2
-
-        if space isa Spaces.ExtrudedFiniteDifferenceSpace
-            @test_throws ErrorException level_of_field .+ column_of_field
-            @test_throws ErrorException slab_of_field .+ column_of_field
-
-            horizontal_field = fill((; x = FT(1)), Spaces.horizontal_space(space))
-            @test field == (field .+ horizontal_field) ./ 2
-            @test horizontal_field == (point_of_field .+ horizontal_field) ./ 2
-            @test level_of_field == (level_of_field .+ horizontal_field) ./ 2
-            @test horizontal_field == (slab_of_field .+ horizontal_field) ./ 2
-            @test_throws ErrorException column_of_field .+ horizontal_field
-
-            vertical_field = fill((; x = FT(1)), Spaces.vertical_space(space))
-            @test field == (field .+ vertical_field) ./ 2
-            @test vertical_field == (point_of_field .+ vertical_field) ./ 2
-            @test_throws ErrorException level_of_field .+ vertical_field
-            @test_throws ErrorException slab_of_field .+ vertical_field
-            @test column_of_field == (column_of_field .+ vertical_field) ./ 2
+        for sliced_field in (point_of_field, level_of_field, slab_of_field, column_of_field)
+            sliced_field == field && continue
+            @test field === (field .= sliced_field)
+            @test_throws DimensionMismatch sliced_field .= field
+            @test field == field .+ sliced_field .- 1
+        end
+        for sliced_field in (level_of_field, slab_of_field, column_of_field)
+            sliced_field == point_of_field && continue
+            @test sliced_field === (sliced_field .= point_of_field)
+            @test_throws DimensionMismatch point_of_field .= sliced_field
+            @test sliced_field == sliced_field .+ point_of_field .- 1
         end
 
-        for field_slice in (point_of_field, level_of_field, slab_of_field, column_of_field)
-            size(field_slice) == size(field) && continue
-            @test_throws DimensionMismatch field_slice .= field
+        if slab_of_field != point_of_field
+            @test level_of_field === (level_of_field .= slab_of_field)
+            @test_throws DimensionMismatch slab_of_field .= level_of_field
+            @test level_of_field == level_of_field .+ slab_of_field .- 1
+        end
+        if column_of_field != point_of_field
+            for level_or_slab_of_field in (level_of_field, slab_of_field)
+                level_or_slab_of_field == point_of_field && continue
+                @test_throws DimensionMismatch level_or_slab_of_field .= column_of_field
+                @test_throws DimensionMismatch column_of_field .= level_or_slab_of_field
+                @test_throws DimensionMismatch level_or_slab_of_field .+ column_of_field
+                @test field === (field .= level_or_slab_of_field .+ column_of_field .- 1)
+                @test field == level_or_slab_of_field .+ column_of_field .- field
+            end
+        end
+
+        if Spaces.has_horizontal(space)
+            other_column_of_field =
+                space isa Spaces.MultiColumnFiniteDifferenceSpace ?
+                Spaces.column(field, 1, 1, 2) : Spaces.column(field, 2, 1, 1)
+
+            @test column_of_field === (column_of_field .= other_column_of_field)
+            @test other_column_of_field === (other_column_of_field .= column_of_field)
+            @test_throws DimensionMismatch column_of_field .+ other_column_of_field
+            @test field === (field .= column_of_field .+ other_column_of_field .- 1)
+            @test field == column_of_field .+ other_column_of_field .- field
+        end
+
+        if space isa Spaces.ExtrudedFiniteDifferenceSpace
+            horizontal_field = fill((; x = FT(1)), Spaces.horizontal_space(space))
+            vertical_field = fill((; x = FT(1)), Spaces.vertical_space(space))
+
+            @test field === (field .= horizontal_field)
+            @test field === (field .= vertical_field)
+            @test_throws DimensionMismatch horizontal_field .= field
+            @test_throws DimensionMismatch vertical_field .= field
+            @test field == field .+ horizontal_field .- 1
+            @test field == field .+ vertical_field .- 1
+
+            @test_throws DimensionMismatch point_of_field .= horizontal_field
+            @test_throws DimensionMismatch point_of_field .= vertical_field
+            @test horizontal_field === (horizontal_field .= point_of_field)
+            @test vertical_field === (vertical_field .= point_of_field)
+            @test horizontal_field == point_of_field .+ horizontal_field .- 1
+            @test vertical_field == point_of_field .+ vertical_field .- 1
+
+            @test level_of_field === (level_of_field .= horizontal_field)
+            @test_throws DimensionMismatch level_of_field .= vertical_field
+            @test horizontal_field === (horizontal_field .= level_of_field)
+            @test_throws DimensionMismatch vertical_field .= level_of_field
+            @test level_of_field == level_of_field .+ horizontal_field .- 1
+            @test_throws DimensionMismatch level_of_field .+ vertical_field
+            @test field === (field .= level_of_field .+ vertical_field .- 1)
+            @test field == level_of_field .+ vertical_field .- field
+
+            @test_throws DimensionMismatch slab_of_field .= horizontal_field
+            @test_throws DimensionMismatch slab_of_field .= vertical_field
+            @test horizontal_field === (horizontal_field .= slab_of_field)
+            @test_throws DimensionMismatch vertical_field .= slab_of_field
+            @test horizontal_field == slab_of_field .+ horizontal_field .- 1
+            @test_throws DimensionMismatch slab_of_field .+ vertical_field
+            @test field === (field .= slab_of_field .+ vertical_field .- 1)
+            @test field == slab_of_field .+ vertical_field .- field
+
+            @test_throws DimensionMismatch column_of_field .= horizontal_field
+            @test column_of_field === (column_of_field .= vertical_field)
+            @test_throws DimensionMismatch horizontal_field .= column_of_field
+            @test vertical_field === (vertical_field .= column_of_field)
+            @test_throws DimensionMismatch column_of_field .+ horizontal_field
+            @test column_of_field == column_of_field .+ vertical_field .- 1
+            @test field === (field .= column_of_field .+ horizontal_field .- 1)
+            @test field == column_of_field .+ horizontal_field .- field
         end
     end
 end

@@ -59,11 +59,18 @@ function return_space end
 const NonPointwiseBroadcasted =
     Broadcast.Broadcasted{<:Fields.AbstractFieldStyle, <:Any, <:AbstractOperator}
 
+# The arguments of a non-pointwise broadcast can have spaces that differ from
+# the result's space (e.g., an F2C operator reads from a face space and writes
+# to a center space), so they cannot be verified through check_broadcast_space.
+shared_space_field(bc) = Fields.local_geometry_field(Fields.shared_space(bc))
+
 Utilities.unsafe_eltype((; f, args)::NonPointwiseBroadcasted) =
     return_eltype(f, args...)
-Broadcast._axes((; f, args)::NonPointwiseBroadcasted, ::Nothing) =
+@inline Fields.shared_space((; f, args)::NonPointwiseBroadcasted) =
     return_space(f, unrolled_map(axes, args)...)
-Broadcast.instantiate((; style, f, args, axes)::NonPointwiseBroadcasted) =
+@inline Fields.check_broadcast_space(space, bc::NonPointwiseBroadcasted, only_check_size) =
+    Fields.check_broadcast_space(space, shared_space_field(bc), only_check_size)
+@inline Broadcast.instantiate((; style, f, args, axes)::NonPointwiseBroadcasted) =
     Broadcast.Broadcasted(style, f, unrolled_map(Broadcast.instantiate, args), axes)
 
 # TODO: Remove this after refactoring the StencilBroadcasted API.
@@ -73,15 +80,13 @@ Base.Broadcast.BroadcastStyle(
     ::Type{<:OperatorBroadcasted{Style}},
 ) where {Style} = Style()
 
-@inline instantiate_args(args::Tuple) = unrolled_map(Base.Broadcast.instantiate, args)
+@inline Fields.shared_space(opbc::OperatorBroadcasted) =
+    return_space(opbc.op, unrolled_map(axes, opbc.args)...)
+@inline Fields.check_broadcast_space(space, opbc::OperatorBroadcasted, only_check_size) =
+    Fields.check_broadcast_space(space, shared_space_field(opbc), only_check_size)
 
-function Base.axes(opbc::OperatorBroadcasted)
-    if isnothing(opbc.axes)
-        return_space(opbc.op, unrolled_map(axes, opbc.args)...)
-    else
-        opbc.axes
-    end
-end
+Base.axes(opbc::OperatorBroadcasted) =
+    isnothing(opbc.axes) ? Fields.shared_space(opbc) : opbc.axes
 Base.Broadcast.broadcastable(opbc::OperatorBroadcasted) = opbc
 Base.copy(opbc::OperatorBroadcasted) = copyto!(similar(opbc), opbc)
 Base.similar(opbc::OperatorBroadcasted, ::Type{Eltype}) where {Eltype} =

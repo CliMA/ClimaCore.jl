@@ -102,7 +102,7 @@ Allocate a `Field` like `Base.similar(arg, T)`, but always through the argument'
 [`DataLayouts.DataScope`](@ref) (shared memory on GPUs), never in per-thread
 registers; used for every buffer whose values cross a thread boundary.
 """
-buffer_similar(arg, ::Type{T}) where {T} = Fields.Field(
+@inline buffer_similar(arg, ::Type{T}) where {T} = Fields.Field(
     DataLayouts.buffer_similar(Fields.field_values(arg), T),
     axes(arg),
 )
