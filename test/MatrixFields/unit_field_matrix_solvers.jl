@@ -567,3 +567,52 @@ end
     @test extrema(x_parent_host[:, 1, 1, 1, col_active]) == (-1.0, -1.0)
     @test extrema(x_parent_host[:, 1, 1, 1, col_inactive]) == (0.0, 0.0)
 end
+
+@testset "FieldMatrix inverses of integer scaling entries" begin
+    for FT in (Float32, Float64)
+        center_space, _ = test_spaces(FT)
+        b = Fields.FieldVector(;
+            a = random_field(FT, center_space),
+            c = random_field(FT, center_space),
+        )
+        b_c = Fields.FieldVector(; c = b.c)
+        x = similar(b_c)
+        # inv.(A) * b and the solve stay in FT and equal the correctly rounded b / 3
+        for entry in (3I, DiagonalMatrixRow(3))
+            A = MatrixFields.FieldMatrix((@name(c), @name(c)) => entry)
+            inv_A_b = Base.materialize(@. inv(A) * b_c)[@name(c)]
+            @test eltype(inv_A_b) == FT
+            @test inv_A_b == b.c ./ 3
+            ldiv!(x, FieldMatrixWithSolver(A, b_c), b_c)
+            @test x.c == b.c ./ 3
+        end
+
+        # the Schur complement of an integer scaling block stays in FT
+        tridiagonal =
+            random_field(MatrixFields.TridiagonalMatrixRow{FT}, center_space)
+        A = MatrixFields.FieldMatrix(
+            (@name(a), @name(a)) => 3I,
+            (@name(a), @name(c)) => tridiagonal,
+            (@name(c), @name(a)) => tridiagonal,
+            (@name(c), @name(c)) => tridiagonal,
+        )
+        alg = MatrixFields.BlockArrowheadSolve(@name(a))
+        solver = MatrixFields.FieldMatrixSolver(alg, A, b)
+        @test eltype(eltype(solver.cache.A₂₂′[(@name(c), @name(c))])) == FT
+
+        # products of Rational and Rational or integer scaling entries stay in FT
+        A1 = MatrixFields.FieldMatrix(
+            (@name(a), @name(a)) => (1 // 3) * I,
+            (@name(a), @name(c)) => tridiagonal,
+            (@name(c), @name(a)) => I,
+            (@name(c), @name(c)) => tridiagonal,
+        )
+        A2 = MatrixFields.FieldMatrix(
+            (@name(a), @name(a)) => (1 // 3) * I,
+            (@name(c), @name(a)) => tridiagonal,
+        )
+        A1_A2 = Base.materialize(@. A1 * A2)
+        @test eltype(eltype(A1_A2[(@name(a), @name(a))])) == FT
+        @test eltype(eltype(A1_A2[(@name(c), @name(a))])) == FT
+    end
+end

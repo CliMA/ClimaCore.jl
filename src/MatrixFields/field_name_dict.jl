@@ -94,6 +94,24 @@ const ScalingFieldMatrixEntry{T} =
 scaling_value(entry::UniformScaling) = entry.λ
 scaling_value(entry::DiagonalMatrixRow) = entry[0]
 
+inv_scaling_value(value::Integer) = 1 // value
+inv_scaling_value(value) = inv(value)
+inv_scaling_entry(entry::UniformScaling) =
+    UniformScaling(inv_scaling_value(scaling_value(entry)))
+inv_scaling_entry(entry::DiagonalMatrixRow) =
+    DiagonalMatrixRow(inv_scaling_value(scaling_value(entry)))
+
+scaling_mul(value1, value2) = value1 * value2
+scaling_mul(value::Rational, x) = numerator(value) * x / denominator(value)
+scaling_mul(x, value::Rational) = x * numerator(value) / denominator(value)
+scaling_mul(value1::Rational, value2::Integer) = value1 * value2
+scaling_mul(value1::Integer, value2::Rational) = value1 * value2
+scaling_mul(value1::Rational, value2::Rational) = value1 * value2
+
+scaling_ldiv(value::Integer, x) = x / value
+scaling_ldiv(value::Rational, x) = denominator(value) * x / numerator(value)
+scaling_ldiv(value, x) = inv(value) * x
+
 check_entry(_, _) = false
 check_entry(::Type{FieldName}, ::Fields.Field) = true
 check_entry(::Type{FieldNamePair}, ::ScalingFieldMatrixEntry) = true
@@ -961,14 +979,23 @@ function Base.Broadcast.broadcasted(
                 entry1 isa ScalingFieldMatrixEntry &&
                 entry2 isa ScalingFieldMatrixEntry
             )
-                product_value = scaling_value(entry1) * scaling_value(entry2)
+                product_value =
+                    scaling_mul(scaling_value(entry1), scaling_value(entry2))
                 product_value isa Number ?
                 (UniformScaling(product_value),) :
                 (DiagonalMatrixRow(product_value),)
             elseif entry1 isa ScalingFieldMatrixEntry
-                Base.Broadcast.broadcasted(*, (scaling_value(entry1),), entry2)
+                Base.Broadcast.broadcasted(
+                    scaling_mul,
+                    (scaling_value(entry1),),
+                    entry2,
+                )
             elseif entry2 isa ScalingFieldMatrixEntry
-                Base.Broadcast.broadcasted(*, entry1, (scaling_value(entry2),))
+                Base.Broadcast.broadcasted(
+                    scaling_mul,
+                    entry1,
+                    (scaling_value(entry2),),
+                )
             else
                 Base.Broadcast.broadcasted(*, entry1, entry2)
             end
@@ -994,7 +1021,7 @@ function Base.Broadcast.broadcasted(
         "inv.(<matrix>) cannot be computed because the matrix",
     )
     entries = unrolled_map(values(matrix)) do entry
-        entry isa ScalingFieldMatrixEntry ? inv(entry) :
+        entry isa ScalingFieldMatrixEntry ? inv_scaling_entry(entry) :
         Base.Broadcast.broadcasted(inv, entry)
     end
     return FieldNameDict(keys(matrix), entries)
