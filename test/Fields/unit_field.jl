@@ -832,20 +832,71 @@ end
     end
 end
 
-##### Levels, columns, and slabs #####
-
-@testset "Levels of Fields and Field broadcasts" begin
+@testset "Slices of Fields and pointwise Field broadcasts" begin
     FT = Float64
     for space in TU.all_spaces(FT)
-        TU.levelable(space) || continue
         field = fill((; x = FT(1)), space)
+        point_of_field = Fields.Field(view(Fields.field_values(field), 1), view(space, 1))
         level_of_field = Fields.Field(
             Spaces.level(Fields.field_values(field), 1),
-            Spaces.level(space, TU.fc_index(1, space)),
+            Spaces.level(space, 1),
         )
-        @test level_of_field == Spaces.level(field, TU.fc_index(1, space))
+        slab_of_field = Fields.Field(
+            Spaces.slab(Fields.field_values(field), 1, 1),
+            Spaces.slab(space, 1, 1),
+        )
+        column_of_field = Fields.Field(
+            Spaces.column(Fields.field_values(field), 1, 1, 1),
+            Spaces.column(space, 1, 1, 1),
+        )
+
+        @test point_of_field == view(field, 1)
+        @test level_of_field == Spaces.level(field, 1)
+        @test slab_of_field == Spaces.slab(field, 1, 1)
+        @test column_of_field == Spaces.column(field, 1, 1, 1)
+
+        @test point_of_field == Base.materialize(view(lazy.(identity.(field)), 1))
         @test level_of_field ==
-              Base.materialize(Spaces.level(lazy.(identity.(field)), TU.fc_index(1, space)))
+              Base.materialize(Spaces.level(lazy.(identity.(field)), 1))
+        @test slab_of_field ==
+              Base.materialize(Spaces.slab(lazy.(identity.(field)), 1, 1))
+        @test column_of_field ==
+              Base.materialize(Spaces.column(lazy.(identity.(field)), 1, 1, 1))
+
+        @test field == (point_of_field .+ field) ./ 2
+        @test field == (level_of_field .+ field) ./ 2
+        @test field == (slab_of_field .+ field) ./ 2
+        @test field == (column_of_field .+ field) ./ 2
+
+        @test level_of_field == (level_of_field .+ point_of_field) ./ 2
+        @test slab_of_field == (slab_of_field .+ point_of_field) ./ 2
+        @test column_of_field == (column_of_field .+ point_of_field) ./ 2
+
+        @test level_of_field == (level_of_field .+ slab_of_field) ./ 2
+
+        if space isa Spaces.ExtrudedFiniteDifferenceSpace
+            @test_throws ErrorException level_of_field .+ column_of_field
+            @test_throws ErrorException slab_of_field .+ column_of_field
+
+            horizontal_field = fill((; x = FT(1)), Spaces.horizontal_space(space))
+            @test field == (field .+ horizontal_field) ./ 2
+            @test horizontal_field == (point_of_field .+ horizontal_field) ./ 2
+            @test level_of_field == (level_of_field .+ horizontal_field) ./ 2
+            @test horizontal_field == (slab_of_field .+ horizontal_field) ./ 2
+            @test_throws ErrorException column_of_field .+ horizontal_field
+
+            vertical_field = fill((; x = FT(1)), Spaces.vertical_space(space))
+            @test field == (field .+ vertical_field) ./ 2
+            @test vertical_field == (point_of_field .+ vertical_field) ./ 2
+            @test_throws ErrorException level_of_field .+ vertical_field
+            @test_throws ErrorException slab_of_field .+ vertical_field
+            @test column_of_field == (column_of_field .+ vertical_field) ./ 2
+        end
+
+        for field_slice in (point_of_field, level_of_field, slab_of_field, column_of_field)
+            size(field_slice) == size(field) && continue
+            @test_throws DimensionMismatch field_slice .= field
+        end
     end
 end
 
@@ -875,56 +926,6 @@ end
             lazy.(gradh.(field.x)),
             TU.fc_index(1, space),
         )),)
-    end
-end
-
-@testset "Columns of Fields and Field broadcasts" begin
-    FT = Float64
-    for space in TU.all_spaces(FT)
-        TwoColumnIndexSpace = Union{
-            Spaces.SpectralElementSpace1D,
-            Spaces.ExtrudedSpectralElementSpace2D,
-        }
-        ThreeColumnIndexSpace = Union{
-            Spaces.SpectralElementSpace2D,
-            Spaces.ExtrudedSpectralElementSpace3D,
-        }
-        if space isa Union{TwoColumnIndexSpace, ThreeColumnIndexSpace}
-            field = fill((; x = FT(1)), space)
-            indices = space isa TwoColumnIndexSpace ? (1, 1) : (1, 1, 1)
-            column_of_field = Fields.Field(
-                Spaces.column(Fields.field_values(field), indices...),
-                Spaces.column(space, indices...),
-            )
-            @test column_of_field == Spaces.column(field, indices...)
-            @test column_of_field ==
-                  Base.materialize(Spaces.column(lazy.(identity.(field)), indices...))
-        end
-    end
-end
-
-@testset "Slabs of Fields and Field broadcasts" begin
-    FT = Float64
-    is_cuda = ClimaComms.device() == ClimaComms.CUDADevice()
-    for space in TU.all_spaces(FT)
-        OneSlabIndexSpace =
-            Union{Spaces.SpectralElementSpace1D, Spaces.SpectralElementSpace2D}
-        TwoSlabIndexSpace = Union{
-            Spaces.ExtrudedSpectralElementSpace2D,
-            Spaces.ExtrudedSpectralElementSpace3D,
-        }
-        if space isa Union{OneSlabIndexSpace, TwoSlabIndexSpace}
-            field = fill((; x = FT(1)), space)
-            indices = space isa OneSlabIndexSpace ? (1,) : (1, 1)
-            slab_of_field = Fields.Field(
-                Spaces.slab(Fields.field_values(field), indices...),
-                Spaces.slab(space, indices...),
-            )
-            @test slab_of_field == Spaces.slab(field, indices...)
-            @test slab_of_field == Base.materialize(
-                Spaces.slab(lazy.(identity.(field)), indices...),
-            )
-        end
     end
 end
 

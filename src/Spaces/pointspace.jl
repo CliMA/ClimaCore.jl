@@ -81,6 +81,16 @@ function PointSpace(
     return PointSpace(context, local_geometry)
 end
 
+# Point fields act like zero-dimensional Refs/AbstractArrays when broadcasting,
+# so a PointSpace is a subspace of every other AbstractSpace. PointSpaces can be
+# equivalent even when their local_geometry data is stored in different arrays.
+issubspace(subspace::PointSpace, space::AbstractSpace) = true
+issubspace(subspace::PointSpace, space::PointSpace) =
+    subspace.context == space.context && (
+        subspace.local_geometry === space.local_geometry ||
+        mapreduce(==, &, subspace.local_geometry, space.local_geometry)
+    )
+
 all_nodes(::PointSpace) = (1,)
 
 node_horizontal_length_scale(space::PointSpace) = 1

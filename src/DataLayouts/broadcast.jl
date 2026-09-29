@@ -56,6 +56,9 @@ Base.size(bc::LazyDataLayout) =
     unrolled_mapreduce(combine_sizes, bc.args) do arg
         arg isa Tuple ? (length(arg),) : size(arg) # size(::Tuple) is undefined
     end
+Base.size(bc::LazyDataLayout, i::Integer) =
+    1 <= i <= ndims(bc) ? (@inbounds size(bc)[i]) : 1
+
 # Make ndims support nested broadcasts whose axes have not been instantiated.
 @inline Base.ndims(::LazyDataLayout{D}) where {D} = ndims(D)
 

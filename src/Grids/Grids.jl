@@ -103,6 +103,14 @@ terrain-following adaption otherwise. Levels of an extruded grid
 """
 function hypsography end
 
+"""
+    Grids.issubgrid(subgrid::AbstractGrid, grid::AbstractGrid)
+
+Determine whether `subgrid` is either equal to `grid`, or if it is a component
+of `grid` (e.g., if it is a `LevelGrid` of an `ExtrudedFiniteDifferenceGrid`).
+"""
+issubgrid(subgrid::AbstractGrid, grid::AbstractGrid) = subgrid === grid
+
 ClimaComms.context(grid::AbstractGrid) = ClimaComms.context(topology(grid))
 ClimaComms.device(grid::AbstractGrid) = ClimaComms.device(topology(grid))
 
@@ -114,6 +122,10 @@ include("multipoint.jl")
 include("extruded.jl")
 include("column.jl")
 include("level.jl")
+
+# Resolve ambiguities for issubgrid.
+issubgrid(::ColumnGrid, ::LevelGrid) = false
+issubgrid(::LevelGrid, ::ColumnGrid) = false
 
 function Base.show(io::IO, grid::AbstractGrid)
     indent = get(io, :indent, 0)

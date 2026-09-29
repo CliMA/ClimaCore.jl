@@ -73,8 +73,9 @@ function tendency!(dT, T, _, t)
     # interior faces.
     T_top = Fields.level(T, Fields.nlevels(T))
     T_top_m1 = Fields.level(T, Fields.nlevels(T) - 1)
+    T_top_m1_shifted = Fields.Field(Fields.field_values(T_top_m1), axes(T_top))
     bc_gradient_top_extrapolated = Operators.SetGradient(
-        @. lazy(Geometry.Covariant3Vector(T_top - T_top_m1))
+        @. lazy(Geometry.Covariant3Vector(T_top - T_top_m1_shifted))
     )
 
     ∇T = Operators.gradient_c2f_dirichlet(
