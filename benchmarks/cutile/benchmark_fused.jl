@@ -14,9 +14,13 @@ Contenders, timed as a whole:
            the pointwise / weak-divergence remainder
   cutile:  the same split, with each strong gradient replaced by the
            KronGEMM kernel from gradient_kernels_cutile.jl
+  1kernel: the whole expression as a single cuTile kernel with the pointwise
+           work fused around the per-element GEMMs
+           (fused_kernels_cutile.jl); nothing is materialized in between
 
-Momentum hyperdiffusion, wgrad(div(u)) − wcurl(curl(u)), is not here. This
-cuTile kernel only implements the strong scalar gradient.
+Momentum hyperdiffusion, wgrad(div(u)) − wcurl(curl(u)), is not here. The
+cuTile kernels implement the strong scalar gradient and the scalar
+Laplacian.
 
 `weighted_dss!` between ∇² and ∇⁴ passes is not timed. Every contender needs
 the same exchange afterward.
@@ -49,6 +53,7 @@ using Printf: @printf
 
 include(joinpath(@__DIR__, "gradient_kernels.jl"))
 include(joinpath(@__DIR__, "gradient_kernels_cutile.jl"))
+include(joinpath(@__DIR__, "fused_kernels_cutile.jl"))
 
 const C12 = Geometry.Covariant12Vector
 const grad = Operators.Gradient()
@@ -76,11 +81,15 @@ function int_arg(flag, default)
 end
 
 const FLOAT_TYPES = Dict("Float64" => Float64, "Float32" => Float32)
-const float_types = csv_arg("--float-type", [Float32, Float64], name -> begin
-    haskey(FLOAT_TYPES, name) ||
-        error("unknown --float-type $name; expected Float32 or Float64")
-    return FLOAT_TYPES[name]
-end)
+const float_types = csv_arg(
+    "--float-type",
+    [Float32, Float64],
+    name -> begin
+        haskey(FLOAT_TYPES, name) ||
+            error("unknown --float-type $name; expected Float32 or Float64")
+        return FLOAT_TYPES[name]
+    end,
+)
 const helems = csv_arg("--helem", [30], s -> parse(Int, s))
 const zelem = int_arg("--zelem", 63)
 const Nq = int_arg("--nq", 4)
@@ -269,6 +278,14 @@ function run_case(::Type{FT}, helem, device) where {FT}
     C = 2 * Kq
     Wt = CUDA.CuArray(gradient_weight(D))
     launch! = (dest, src) -> launch_scalar_grad!(dest, src, Wt; tv, K = Kq, C)
+    spectral = CuTileSpectral(gpu_space; tv)
+    du_1kernel = similar(∇p)
+    lap_1kernel = similar(χ)
+    println(
+        "1kernel metrics: ",
+        spectral.mtv == 1 ? "level-uniform (one level read)" : "per level",
+        ", tv = $(spectral.tv)",
+    )
 
     # Rounding-noise magnitudes for the correctness gate: the operand size a
     # single D contraction cancels, with wdiv's linear gain (estimated as the
@@ -290,6 +307,8 @@ function run_case(::Type{FT}, helem, device) where {FT}
         "lap_fused" => noise_lap,
         "lap_split" => noise_lap,
         "lap_cutile" => noise_lap,
+        "pressure_1kernel" => noise_du,
+        "lap_1kernel" => noise_lap,
     )
 
     runners = Dict(
@@ -325,6 +344,24 @@ function run_case(::Type{FT}, helem, device) where {FT}
             @. lap_cutile = wdiv(gχ)
             nothing
         end,
+        "pressure_1kernel" =>
+            () -> begin
+                cutile_pressure_gradient!(
+                    du_1kernel,
+                    p,
+                    K,
+                    Φ,
+                    ρ,
+                    spectral;
+                    scale = 1,
+                    accumulate = false,
+                )
+                nothing
+            end,
+        "lap_1kernel" => () -> begin
+            cutile_scalar_laplacian!(lap_1kernel, χ, spectral)
+            nothing
+        end,
     )
     outputs = Dict(
         "pressure_fused" => () -> parent(Fields.field_values(du_fused)),
@@ -333,6 +370,8 @@ function run_case(::Type{FT}, helem, device) where {FT}
         "lap_fused" => () -> parent(Fields.field_values(lap_fused)),
         "lap_split" => () -> parent(Fields.field_values(lap_split)),
         "lap_cutile" => () -> parent(Fields.field_values(lap_cutile)),
+        "pressure_1kernel" => () -> parent(Fields.field_values(du_1kernel)),
+        "lap_1kernel" => () -> parent(Fields.field_values(lap_1kernel)),
     )
     oracles = Dict(
         "pressure_fused" => p_du,
@@ -341,14 +380,18 @@ function run_case(::Type{FT}, helem, device) where {FT}
         "lap_fused" => p_lap,
         "lap_split" => p_lap,
         "lap_cutile" => p_lap,
+        "pressure_1kernel" => p_du,
+        "lap_1kernel" => p_lap,
     )
     order = [
         "pressure_fused",
         "pressure_split",
         "pressure_cutile",
+        "pressure_1kernel",
         "lap_fused",
         "lap_split",
         "lap_cutile",
+        "lap_1kernel",
     ]
 
     Nh = size(parent(Fields.field_values(p)), 5)
@@ -388,20 +431,24 @@ function run_case(::Type{FT}, helem, device) where {FT}
         )
     end
     @printf(
-        "\npressure   fused %8.2f µs | split %8.2f µs (split/fused %.2f) | cutile %8.2f µs (fused/cutile %.2f)\n",
+        "\npressure   fused %8.2f µs | split %8.2f µs (split/fused %.2f) | cutile %8.2f µs (fused/cutile %.2f) | 1kernel %8.2f µs (fused/1kernel %.2f)\n",
         times["pressure_fused"] * 1e6,
         times["pressure_split"] * 1e6,
         times["pressure_split"] / times["pressure_fused"],
         times["pressure_cutile"] * 1e6,
         times["pressure_fused"] / times["pressure_cutile"],
+        times["pressure_1kernel"] * 1e6,
+        times["pressure_fused"] / times["pressure_1kernel"],
     )
     @printf(
-        "laplacian  fused %8.2f µs | split %8.2f µs (split/fused %.2f) | cutile %8.2f µs (fused/cutile %.2f)\n",
+        "laplacian  fused %8.2f µs | split %8.2f µs (split/fused %.2f) | cutile %8.2f µs (fused/cutile %.2f) | 1kernel %8.2f µs (fused/1kernel %.2f)\n",
         times["lap_fused"] * 1e6,
         times["lap_split"] * 1e6,
         times["lap_split"] / times["lap_fused"],
         times["lap_cutile"] * 1e6,
         times["lap_fused"] / times["lap_cutile"],
+        times["lap_1kernel"] * 1e6,
+        times["lap_fused"] / times["lap_1kernel"],
     )
     return (; FT, helem, Nh, times)
 end
@@ -421,10 +468,14 @@ function print_summary(rows)
         "p split µs",
         "p cutile µs",
         "p speedup",
+        "p 1kernel µs",
+        "p 1k speedup",
         "lap fused µs",
         "lap split µs",
         "lap cutile µs",
         "lap speedup",
+        "lap 1kernel µs",
+        "lap 1k speedup",
     ]
     data = Matrix{Any}(undef, length(rows), length(header))
     for (i, row) in pairs(rows)
@@ -436,15 +487,19 @@ function print_summary(rows)
         data[i, 5] = µs(t, "pressure_split")
         data[i, 6] = µs(t, "pressure_cutile")
         data[i, 7] = round(t["pressure_fused"] / t["pressure_cutile"]; digits = 2)
-        data[i, 8] = µs(t, "lap_fused")
-        data[i, 9] = µs(t, "lap_split")
-        data[i, 10] = µs(t, "lap_cutile")
-        data[i, 11] = round(t["lap_fused"] / t["lap_cutile"]; digits = 2)
+        data[i, 8] = µs(t, "pressure_1kernel")
+        data[i, 9] = round(t["pressure_fused"] / t["pressure_1kernel"]; digits = 2)
+        data[i, 10] = µs(t, "lap_fused")
+        data[i, 11] = µs(t, "lap_split")
+        data[i, 12] = µs(t, "lap_cutile")
+        data[i, 13] = round(t["lap_fused"] / t["lap_cutile"]; digits = 2)
+        data[i, 14] = µs(t, "lap_1kernel")
+        data[i, 15] = round(t["lap_fused"] / t["lap_1kernel"]; digits = 2)
     end
     println()
     PrettyTables.pretty_table(
         data;
-        title = "speedup = t_fused / t_cutile  (>1 means the cuTile split is faster than the fused ClimaCore expression)",
+        title = "speedup = t_fused / t_cutile (split) and t_fused / t_1kernel (single fused kernel); >1 means cuTile is faster than the fused ClimaCore expression",
         column_labels = header,
         alignment = :l,
     )

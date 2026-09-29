@@ -1,16 +1,27 @@
-# Baroclinic wave (Ullrich et al., 2014) with the horizontal pressure-gradient
-# force computed by the cuTile KronGEMM kernel from `benchmarks/cutile`, for
-# timing the kernel inside a full simulation rather than in isolation. The
-# fused ClimaCore baseline runs from the same file with `PGRAD=fused`, so an
-# A/B comparison shares one environment and configuration.
+# Baroclinic wave (Ullrich et al., 2014) with the horizontal spectral
+# operators of two tendencies swapped for single-kernel cuTile versions
+# (`benchmarks/cutile/fused_kernels_cutile.jl`), for timing them inside a full
+# simulation rather than in isolation:
+#
+#   PGRAD      the pressure-gradient force  uₜ -= grad(p)/ρ + grad(K + Φ)
+#   HYPERDIFF  the two scalar Laplacian passes of the energy hyperdiffusion,
+#              χ = ∇²((ρe + p)/ρ)  and  ρeₜ -= κ₄ ∇·(ρ ∇χ)
+#
+# Each is `fused` (the ClimaCore broadcast) or `cutile` (one cuTile kernel
+# with the pointwise work fused around per-element GEMMs). HYPERDIFF defaults
+# to the value of PGRAD, so `PGRAD=fused` is the pure baseline and
+# `PGRAD=cutile` moves both tendencies. Momentum hyperdiffusion and every
+# other operator stay on ClimaCore in all configurations, so the walltimes
+# printed by driver.jl are directly comparable.
 #
 # Requires the `benchmarks/cutile` environment (Julia 1.11, CUDA 13 driver;
 # see benchmarks/cutile/README.md):
 #
 #     export CLIMACOMMS_DEVICE=CUDA
 #     export TEST_NAME=sphere/baroclinic_wave_rhoe_cutile
-#     PGRAD=cutile julia +1.11 --project=benchmarks/cutile examples/hybrid/driver.jl
 #     PGRAD=fused  julia +1.11 --project=benchmarks/cutile examples/hybrid/driver.jl
+#     PGRAD=cutile julia +1.11 --project=benchmarks/cutile examples/hybrid/driver.jl
+#     PGRAD=cutile HYPERDIFF=fused julia +1.11 --project=benchmarks/cutile examples/hybrid/driver.jl
 #
 # Configuration (env): H_ELEM (30), Z_ELEM (63), DT, T_END (21600 s), KAPPA_4,
 # TV (cuTile vertical tile size), FLOAT_TYPE (Float32).
@@ -23,8 +34,12 @@ using ClimaCore.DataLayouts
 include("baroclinic_wave_utils.jl")
 
 const pgrad_name = get(ENV, "PGRAD", "cutile")
-pgrad_name in ("cutile", "fused") ||
-    error("PGRAD must be \"cutile\" or \"fused\"; got $(repr(pgrad_name))")
+const hyperdiff_name = get(ENV, "HYPERDIFF", pgrad_name)
+for (var, name) in (("PGRAD", pgrad_name), ("HYPERDIFF", hyperdiff_name))
+    name in ("cutile", "fused") ||
+        error("$var must be \"cutile\" or \"fused\"; got $(repr(name))")
+end
+const use_cutile = pgrad_name == "cutile" || hyperdiff_name == "cutile"
 
 # Variables required for driver.jl
 h_elem = parse(Int, get(ENV, "H_ELEM", "30"))
@@ -42,122 +57,126 @@ dt_save_to_disk = FT(0)
 ode_algorithm = CTS.SSP333
 jacobian_flags = (; ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode = :no_∂ᶜp∂ᶜK, ∂ᶠ𝕄ₜ∂ᶜρ_mode = :exact)
 
-if pgrad_name == "cutile"
+if use_cutile
     import CUDA
-    include(joinpath(@__DIR__, "../../../benchmarks/cutile/gradient_kernels.jl"))
     include(
-        joinpath(@__DIR__, "../../../benchmarks/cutile/gradient_kernels_cutile.jl"),
+        joinpath(@__DIR__, "../../../benchmarks/cutile/fused_kernels_cutile.jl"),
     )
 
     VERSION >= v"1.11" || error(
         "cuTile requires Julia >= 1.11 (this is $VERSION); use `julia +1.11`.",
     )
     CUDA.functional() ||
-        error("PGRAD=cutile requires a GPU node with CLIMACOMMS_DEVICE=CUDA.")
+        error("the cutile schemes require a GPU node with CLIMACOMMS_DEVICE=CUDA.")
     CUDA.driver_version() >= v"13" || error(
         "cuTile requires an NVIDIA driver supporting CUDA 13 (driver >= 580).",
     )
     CUDA.capability(CUDA.device()) >= v"8.0" ||
         error("cuTile requires compute capability >= 8.0 (Ampere+).")
 
-    struct CuTilePressureGradient{W, V, S}
-        Wt::W
-        ∇p::V
-        ∇b::V
-        bernoulli::S
-        tv::Int
-        Kq::Int
-        Cq::Int
-    end
+    # Pressure-gradient force, in place on the momentum tendency.
+    pressure_gradient_tendency!(Yₜ, ᶜρ, ᶜp, ᶜK, ᶜΦ, s::CuTileSpectral) =
+        cutile_pressure_gradient!(Yₜ.c.uₕ, ᶜp, ᶜK, ᶜΦ, ᶜρ, s)
 
-    # Strong scalar gradient via the KronGEMM kernel; `dest` is a
-    # Covariant12Vector field, `src` a scalar field on the same space.
-    function cutile_scalar_grad!(dest, src, s::CuTilePressureGradient)
-        pf = parent(Fields.field_values(src))
-        po = parent(Fields.field_values(dest))
-        (Nv, _, _, _, Nh) = size(pf)
-        launch_grad_cutile!(
-            reshape(pf, Nv, s.Kq, Nh),
-            s.Wt,
-            reshape(po, Nv, s.Cq, Nh);
-            tv = s.tv,
-            K = s.Kq,
-            C = s.Cq,
-        )
-        return nothing
-    end
-
-    function pressure_gradient_tendency!(
-        Yₜ,
-        ᶜρ,
-        ᶜp,
-        ᶜK,
-        ᶜΦ,
-        s::CuTilePressureGradient,
-    )
-        (; ∇p, ∇b, bernoulli) = s
-        @. bernoulli = ᶜK + ᶜΦ
-        cutile_scalar_grad!(∇p, ᶜp, s)
-        cutile_scalar_grad!(∇b, bernoulli, s)
-        @. Yₜ.c.uₕ -= ∇p / ᶜρ + ∇b
-        return nothing
-    end
-
-    function cutile_pgrad_scheme(ᶜlocal_geometry)
-        space = axes(ᶜlocal_geometry)
-        quad = Spaces.quadrature_style(space)
-        Nq = Quadratures.degrees_of_freedom(quad)
-        Kq = Nq * Nq
-        Cq = 2 * Kq
-        ispow2(Kq) || error("cuTile tile extents must be powers of two; \
-                             Nq² = $Kq. Use npoly = 3.")
-        D = Quadratures.differentiation_matrix(FT, quad)
-        Wt = CUDA.CuArray(gradient_weight(D))
-        ∇p = similar(ᶜlocal_geometry, Geometry.Covariant12Vector{FT})
-        Nv = size(parent(Fields.field_values(∇p)), 1)
-        tv = min(parse(Int, get(ENV, "TV", "64")), nextpow(2, Nv))
-        ispow2(tv) || error("TV must be a power of two; got $tv")
-        s = CuTilePressureGradient(
-            Wt,
-            ∇p,
-            similar(∇p),
-            similar(ᶜlocal_geometry, FT),
-            tv,
-            Kq,
-            Cq,
+    # Energy hyperdiffusion: χ = ∇²((ρe + p) / ρ) with the enthalpy as the
+    # kernel prologue, then ρeₜ -= κ₄ ∇·(ρ ∇χ) accumulated in place.
+    scalar_hyperdiffusion_first_pass!(ᶜχ, Y, ᶜp, s::CuTileSpectral) =
+        cutile_scalar_laplacian!(ᶜχ, Y.c.ρe, s; energy = (ᶜp, Y.c.ρ))
+    scalar_hyperdiffusion_second_pass!(Yₜ, ᶜχ, ᶜρ, κ₄, s::CuTileSpectral) =
+        cutile_scalar_laplacian!(
+            Yₜ.c.ρe,
+            ᶜχ,
+            s;
+            weight = ᶜρ,
+            scale = -κ₄,
+            accumulate = true,
         )
 
-        # One-time on-device check against ClimaCore's Gradient (also warms up
-        # the kernel). Both run on the GPU, so they differ only by contraction
-        # order; a weight-ordering or masked-store bug is O(1) wrong.
+    # One-time on-device check of every kernel configuration used above
+    # against ClimaCore's operators on the same GPU (also warms them up).
+    # Operands carry production-like node-constant offsets, whose exact
+    # horizontal gradient is zero, so the gate has the rounding floor
+    # eps · ‖D‖∞ · ‖operand‖ of that cancellation besides rtol · ‖result‖.
+    function check_cutile_spectral(s::CuTileSpectral, space)
+        maxabs(x) = maximum(abs, parent(Fields.field_values(x)))
+        D = Quadratures.differentiation_matrix(FT, Spaces.quadrature_style(space))
+        Dnorm = maximum(sum(abs, Matrix(D); dims = 2))
+        rtol = FT == Float64 ? 1e-12 : 1e-4
+        function gate!(name, result, oracle, operand_scale)
+            scale = max(maxabs(oracle), floatmin(FT))
+            gate = max(8 * eps(FT) * Dnorm * operand_scale, rtol * scale)
+            err = maximum(
+                abs.(
+                    parent(Fields.field_values(result)) .-
+                    parent(Fields.field_values(oracle)),
+                ),
+            )
+            err <= gate || error(
+                "cuTile $name disagrees with ClimaCore: max abs err $err, gate $gate",
+            )
+            return nothing
+        end
+
         coords = Fields.coordinate_field(space)
+        wdiv = Operators.Divergence{Operators.WeakForm}()
+        grad = Operators.Gradient()
+        p = @. FT(1e5) * (1 + FT(0.1) * sind(coords.long) * cosd(coords.lat))
+        ρ = @. 1 + FT(0.05) * cosd(coords.lat) + coords.z / z_max
+        Kin = @. FT(100) * sind(coords.long)^2
+        Φ = @. grav * coords.z
         χ = @. sind(coords.long) * cosd(coords.lat) * (1 + coords.z / z_max)
-        ref = @. gradₕ(χ)
-        out = similar(ref)
-        cutile_scalar_grad!(out, χ, s)
+        ρe = @. ρ * (FT(2e5) + FT(1e4) * cosd(2 * coords.long) * sind(coords.lat))
+
+        uₜ0 = @. Geometry.Covariant12Vector(FT(0.25) * cosd(coords.lat), FT(-0.75))
+        uₜ_ref = @. uₜ0 - Geometry.Covariant12Vector(grad(p) / ρ + grad(Kin + Φ))
+        uₜ = copy(uₜ0)
+        cutile_pressure_gradient!(uₜ, p, Kin, Φ, ρ, s)
         CUDA.synchronize()
-        maxerr = maximum(
-            abs.(
-                parent(Fields.field_values(out)) .-
-                parent(Fields.field_values(ref))
-            ),
+        gate!(
+            "pressure gradient",
+            uₜ,
+            uₜ_ref,
+            maxabs(p) / minimum(parent(ρ)) + maxabs(Kin) + maxabs(Φ),
         )
-        scale = maximum(abs, parent(Fields.field_values(ref)))
-        rtol = FT == Float64 ? 1e-11 : 1e-3
-        maxerr <= rtol * scale || error(
-            "cuTile gradient disagrees with ClimaCore Gradient: \
-             max abs err $maxerr, gate $(rtol * scale)",
-        )
-        @info "cuTile pressure gradient enabled" Nq Nv tv maxerr
+
+        h_tot = @. (ρe + p) / ρ
+        χ1_ref = @. wdiv(grad(h_tot))
+        χ1 = similar(χ)
+        cutile_scalar_laplacian!(χ1, ρe, s; energy = (p, ρ))
+        CUDA.synchronize()
+        lap_gain = maxabs(χ1_ref) / max(maxabs(@. grad(h_tot)), eps(FT))
+        gate!("enthalpy Laplacian", χ1, χ1_ref, lap_gain * maxabs(h_tot) + maxabs(χ1_ref))
+
+        κ = FT(3e15)
+        acc0 = @. FT(0.5) * sind(3 * coords.long)
+        acc_ref = @. acc0 - κ * wdiv(ρ * grad(χ))
+        acc = copy(acc0)
+        cutile_scalar_laplacian!(acc, χ, s; weight = ρ, scale = -κ, accumulate = true)
+        CUDA.synchronize()
+        lap_gain = maxabs(acc_ref) / max(maxabs(@. grad(χ)), eps(FT))
+        gate!("weighted Laplacian", acc, acc_ref, lap_gain * maxabs(χ) + maxabs(acc_ref))
+
+        @info "cuTile spectral kernels verified against ClimaCore" s.tv s.mtv s.Nv
+        return nothing
+    end
+
+    function cutile_spectral_cache(ᶜlocal_geometry)
+        space = axes(ᶜlocal_geometry)
+        s = CuTileSpectral(space; tv = parse(Int, get(ENV, "TV", "64")))
+        check_cutile_spectral(s, space)
         return s
     end
 end
 
-additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = merge(
-    hyperdiffusion_cache(ᶜlocal_geometry; κ₄),
-    pgrad_name == "cutile" ?
-    (; pgrad_scheme = cutile_pgrad_scheme(ᶜlocal_geometry)) : (;),
-)
+function additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt)
+    cache = hyperdiffusion_cache(ᶜlocal_geometry; κ₄)
+    use_cutile || return cache
+    spectral = cutile_spectral_cache(ᶜlocal_geometry)
+    pgrad_name == "cutile" && (cache = merge(cache, (; pgrad_scheme = spectral)))
+    hyperdiff_name == "cutile" &&
+        (cache = merge(cache, (; hyperdiff_scheme = spectral)))
+    return cache
+end
 additional_tendency!(Yₜ, Y, p, t) = hyperdiffusion_tendency!(Yₜ, Y, p, t)
 
 center_initial_condition(local_geometry) =
@@ -165,8 +184,8 @@ center_initial_condition(local_geometry) =
 
 function postprocessing(sol, output_dir)
     # No plots: the point of this case is the walltime printed by driver.jl.
-    # The norms let the PGRAD=fused and PGRAD=cutile runs be compared.
-    @info "PGRAD = $pgrad_name"
+    # The norms let the configurations be compared.
+    @info "PGRAD = $pgrad_name, HYPERDIFF = $hyperdiff_name"
     @info "L₂ norm of ρe at t = $(sol.t[1]): $(norm(sol.u[1].c.ρe))"
     @info "L₂ norm of ρe at t = $(sol.t[end]): $(norm(sol.u[end].c.ρe))"
     v_end = maximum(abs, Geometry.UVVector.(sol.u[end].c.uₕ).components.data.:2)

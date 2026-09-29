@@ -31,13 +31,16 @@ postprocessing(sol, output_dir) = nothing
 ################################################################################
 
 import ClimaTimeSteppers as CTS
+using Logging
+# Must be loaded before the GPU backend: CUDA.jl >= 6 (and cuTile.jl) run
+# kernel compilation in the world age captured at their `__init__`, so log
+# statements inside compilation cannot see a logger type loaded afterwards.
+using TerminalLoggers: TerminalLogger
 using ClimaComms
 ClimaComms.@import_required_backends
 const comms_ctx = ClimaComms.context()
 is_distributed = comms_ctx isa ClimaComms.MPICommsContext
 using ClimaCore: DataLayouts
-
-using Logging
 
 if is_distributed
     const pid, nprocs = ClimaComms.init(comms_ctx)
@@ -46,7 +49,6 @@ if is_distributed
     @info "Setting up distributed run on $nprocs \
         processor$(nprocs == 1 ? "" : "s") on a $(comms_ctx.device) device"
 else
-    using TerminalLoggers: TerminalLogger
     prev_logger = global_logger(TerminalLogger())
 end
 atexit() do

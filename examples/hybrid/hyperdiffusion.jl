@@ -33,15 +33,26 @@ function hyperdiffusion_tendency!(Yₜ, Y, p, t)
     # The first pass writes through `scalar_laplacian!`, allocation-free on
     # both discretizations; the second stays in the returning form, which on
     # CG is lazy and fuses into the tendency broadcast.
-    ᶜh_tot = lazy.((Y.c.ρe .+ ᶜp) ./ ᶜρ)
-    Operators.scalar_laplacian!(ᶜχ, ᶜh_tot)
+    # A case file may swap the scalar passes by placing a `hyperdiff_scheme`
+    # object in its `additional_cache` and defining the two pass methods on
+    # its type; the default is ClimaCore's operators.
+    scheme = get(p, :hyperdiff_scheme, nothing)
+    scalar_hyperdiffusion_first_pass!(ᶜχ, Y, ᶜp, scheme)
     ᶜχuₕ .= Operators.vector_laplacian(ᶜuₕ)
     Spaces.weighted_dss!(ᶜχ => ghost_buffer.χ, ᶜχuₕ => ghost_buffer.χuₕ)
 
-    Yₜ.c.ρe .-= κ₄ .* Operators.scalar_laplacian(ᶜχ; weight = ᶜρ)
+    scalar_hyperdiffusion_second_pass!(Yₜ, ᶜχ, ᶜρ, κ₄, scheme)
     Yₜ.c.uₕ .-=
         κ₄ .* Operators.vector_laplacian(
             ᶜχuₕ;
             divergence_factor = divergence_damping_factor,
         )
 end
+
+# ᶜχ = ∇²((ρe + p) / ρ), the Laplacian of specific enthalpy.
+scalar_hyperdiffusion_first_pass!(ᶜχ, Y, ᶜp, ::Nothing) =
+    Operators.scalar_laplacian!(ᶜχ, lazy.((Y.c.ρe .+ ᶜp) ./ Y.c.ρ))
+
+# Yₜ.c.ρe -= κ₄ ∇·(ρ ∇ᶜχ), the density-weighted second pass.
+scalar_hyperdiffusion_second_pass!(Yₜ, ᶜχ, ᶜρ, κ₄, ::Nothing) =
+    Yₜ.c.ρe .-= κ₄ .* Operators.scalar_laplacian(ᶜχ; weight = ᶜρ)
