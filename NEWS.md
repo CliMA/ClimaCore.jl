@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] `Remapping.PressureInterpolator` accepts
+  `method = Remapping.LogLinearInPressure()` to interpolate linearly in log
+  pressure. The default `Remapping.LinearInPressure()` interpolates linearly
+  in pressure.
+
 v1.0.3
 -------
 

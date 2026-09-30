@@ -186,8 +186,9 @@ Remapping.pressure_space(pressure_intp)   # the space whose vertical coordinate 
 
 The interpolator first enforces that pressure decreases monotonically with
 height in every column (by a cumulative minimum), then interpolates linearly
-in pressure, holding the boundary value constant beyond the model's top and
-bottom. Pressure levels outside the model's range therefore receive the
-boundary value, not an extrapolation. The result lives on a new space whose
+in pressure, or in log pressure with `method = Remapping.LogLinearInPressure()`,
+holding the boundary value constant beyond the model's top and bottom.
+Pressure levels outside the model's range therefore receive the boundary
+value, not an extrapolation. The result lives on a new space whose
 vertical coordinate is pressure, so the `Remapper` above can then remap it to
 a latitude–longitude grid.

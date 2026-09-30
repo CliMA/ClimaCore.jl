@@ -1,6 +1,28 @@
 import ClimaInterpolations
 
 """
+    LinearInPressure()
+
+Interpolate linearly in pressure.
+"""
+struct LinearInPressure end
+
+"""
+    LogLinearInPressure()
+
+Interpolate linearly in the logarithm of pressure. All pressures must be positive.
+"""
+struct LogLinearInPressure end
+
+# Convert pressures in place to the coordinate in which `method` interpolates linearly
+to_pressure_coordinate!(::LinearInPressure, p) = p
+function to_pressure_coordinate!(::LogLinearInPressure, p)
+    # log does not throw for zero, or on GPUs
+    any(<=(0), p) && error("LogLinearInPressure requires positive pressures")
+    return p .= log.(p)
+end
+
+"""
     PressureInterpolator
 
 Interpolate fields from a space whose vertical coordinate is height `z` to a space whose
@@ -14,18 +36,22 @@ Interpolation proceeds in two steps:
 
  1. Apply a column-wise cumulative minimum to the pressure field, so that pressure is
     monotone in each column.
- 2. Interpolate linearly in the monotone pressure to the target `pressure_levels`.
+ 2. Interpolate linearly in the monotone pressure, or in its logarithm with
+    [`LogLinearInPressure`](@ref), to the target `pressure_levels`.
 
 # Fields
 
   - `pfull_field`: pressure on a center space whose vertical coordinate is height.
-  - `scratch_center_pressure_field`: column-wise cumulative minimum of `pfull_field`.
+  - `scratch_center_pressure_field`: column-wise cumulative minimum of `pfull_field`, in the
+    coordinate of `method`.
   - `scratch_face_pressure_field`: `scratch_center_pressure_field` interpolated to faces.
   - `pressure_space`: the space of `pfull_field` with pressure as the vertical coordinate.
   - `pressure_levels`: the target pressure levels, in decreasing order, shared by all
     columns.
+  - `target_coordinate`: `pressure_levels` in the coordinate of `method`.
   - `extrapolate`: `ClimaInterpolations.Interpolation1D.Extrapolate1D` rule for pressure
     levels outside a column's pressure range.
+  - `method`: [`LinearInPressure`](@ref) or [`LogLinearInPressure`](@ref).
 
 !!! warning "No validation of the pressure-height relationship"
 
@@ -48,13 +74,16 @@ struct PressureInterpolator{
     SPACE <: Spaces.AbstractSpace,
     LEVELS,
     EXTRAPOLATE <: ClimaInterpolations.Interpolation1D.Extrapolate1D,
+    METHOD <: Union{LinearInPressure, LogLinearInPressure},
 }
     pfull_field::CENTER
     scratch_center_pressure_field::CENTER
     scratch_face_pressure_field::FACE
     pressure_space::SPACE
     pressure_levels::LEVELS
+    target_coordinate::LEVELS
     extrapolate::EXTRAPOLATE
+    method::METHOD
 end
 
 """
@@ -133,6 +162,7 @@ end
         pfull_field::Fields.Field,
         pressure_levels;
         extrapolate = ClimaInterpolations.Interpolation1D.Flat(),
+        method = LinearInPressure(),
     )
 
 Construct a `PressureInterpolator` from `pfull_field`, the pressure on a center space, and
@@ -140,12 +170,14 @@ Construct a `PressureInterpolator` from `pfull_field`, the pressure on a center 
 
 `pressure_levels` must be sorted, ascending or descending; they are converted to the
 element type of `pfull_field`. `extrapolate` sets the treatment of levels outside a
-column's pressure range; the default `Flat()` extrapolates constants.
+column's pressure range; the default `Flat()` extrapolates constants. `method` is
+[`LinearInPressure`](@ref) or [`LogLinearInPressure`](@ref).
 """
 function PressureInterpolator(
     pfull_field::Fields.Field,
     pressure_levels;
     extrapolate = ClimaInterpolations.Interpolation1D.Flat(),
+    method = LinearInPressure(),
 )
     if issorted(pressure_levels, rev = true)
         pressure_levels = sort(pressure_levels)
@@ -156,11 +188,7 @@ function PressureInterpolator(
 
     space = axes(pfull_field)
     pressure_space = construct_pressure_space(FT, space, pressure_levels)
-    return PressureInterpolator(
-        pfull_field,
-        pressure_space;
-        extrapolate,
-    )
+    return PressureInterpolator(pfull_field, pressure_space; extrapolate, method)
 end
 
 """
@@ -168,6 +196,7 @@ end
         pfull_field::Fields.Field,
         pressure_space;
         extrapolate = ClimaInterpolations.Interpolation1D.Flat(),
+        method = LinearInPressure(),
     )
 
 Construct a `PressureInterpolator` from `pfull_field`, the pressure on a center space, and
@@ -176,7 +205,8 @@ Construct a `PressureInterpolator` from `pfull_field`, the pressure on a center 
 pressure levels.
 
 `extrapolate` sets the treatment of levels outside a column's pressure range; the default
-`Flat()` extrapolates constants.
+`Flat()` extrapolates constants. `method` is [`LinearInPressure`](@ref) or
+[`LogLinearInPressure`](@ref).
 """
 function PressureInterpolator(
     pfull_field::Fields.Field,
@@ -186,6 +216,7 @@ function PressureInterpolator(
         Spaces.MultiColumnFiniteDifferenceSpace,
     };
     extrapolate = ClimaInterpolations.Interpolation1D.Flat(),
+    method = LinearInPressure(),
 )
     axes(pfull_field).staggering isa Grids.CellCenter || error("The staggering of the
     pressure field must be cell center")
@@ -204,15 +235,19 @@ function PressureInterpolator(
     pressure_levels = [point.p for point in Iterators.reverse(pfull_mesh.faces)]
     issorted(pressure_levels, rev = true) || error("Pressure levels are not sorted")
     pressure_levels = typeofarray(pressure_levels)
-    _update!(pfull_field, scratch_center_pressure_field, scratch_face_pressure_field)
-    return PressureInterpolator(
+    target_coordinate = to_pressure_coordinate!(method, copy(pressure_levels))
+    pfull_intp = PressureInterpolator(
         pfull_field,
         scratch_center_pressure_field,
         scratch_face_pressure_field,
         pressure_space,
         pressure_levels,
+        target_coordinate,
         extrapolate,
+        method,
     )
+    update!(pfull_intp)
+    return pfull_intp
 end
 
 """
@@ -237,29 +272,14 @@ Recompute the monotone scratch pressure fields of `pfull_intp` from its pressure
 Call this once after the pressure field changes and before interpolating again.
 """
 function update!(pfull_intp::PressureInterpolator)
-    (; pfull_field, scratch_center_pressure_field, scratch_face_pressure_field) = pfull_intp
-    _update!(pfull_field, scratch_center_pressure_field, scratch_face_pressure_field)
-    return nothing
-end
-
-"""
-    _update!(pfull_field, scratch_center_pressure_field, scratch_face_pressure_field)
-
-Fill `scratch_center_pressure_field` with the column-wise cumulative minimum (from the
-bottom up) of `pfull_field`, and `scratch_face_pressure_field` with its interpolation to
-faces, extrapolating at the top and bottom.
-
-Called from [`update!`](@ref) and the `PressureInterpolator` constructor.
-"""
-function _update!(
-    pfull_field::Fields.Field,
-    scratch_center_pressure_field,
-    scratch_face_pressure_field,
-)
+    (; pfull_field, scratch_center_pressure_field, scratch_face_pressure_field, method) =
+        pfull_intp
     pfull_array = Fields.field2array(pfull_field)
     scratch_pfull_array = Fields.field2array(scratch_center_pressure_field)
     # Pressure is decreasing for increasing z
     accumulate!(min, scratch_pfull_array, pfull_array, dims = 1)
+    # Before interpolating to faces, so faces are averaged in the method's coordinate
+    to_pressure_coordinate!(method, scratch_pfull_array)
     intp_c2f = Operators.InterpolateC2F(
         bottom = Operators.Extrapolate(),
         top = Operators.Extrapolate(),
@@ -297,8 +317,9 @@ Interpolate `field` vertically onto `dest`, a `Field` on the pressure space of
 `pfull_intp`, and return `nothing`.
 
 `field` may live on a center or a face space; the matching scratch pressure field of
-`pfull_intp` serves as the source coordinate. Interpolation is linear in pressure, with the
-extrapolation rule of `pfull_intp` outside a column's pressure range.
+`pfull_intp` serves as the source coordinate. Interpolation is linear in the coordinate of
+the method of `pfull_intp` (pressure or its logarithm), with the extrapolation rule of
+`pfull_intp` outside a column's pressure range.
 """
 function interpolate_pressure!(
     dest::Fields.Field,
@@ -308,7 +329,7 @@ function interpolate_pressure!(
     (;
         scratch_center_pressure_field,
         scratch_face_pressure_field,
-        pressure_levels,
+        target_coordinate,
         extrapolate,
     ) =
         pfull_intp
@@ -324,7 +345,7 @@ function interpolate_pressure!(
     ClimaInterpolations.Interpolation1D.interpolate1d!(
         dest_array,
         scratch_pfull_array,
-        pressure_levels,
+        target_coordinate,
         field_array,
         ClimaInterpolations.Interpolation1D.Linear(),
         extrapolate,
