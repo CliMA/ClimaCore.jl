@@ -10,6 +10,8 @@ Remapping.Remapper
 Remapping.interpolate
 Remapping.PressureInterpolator
 Remapping.PressureInterpolator(pfull_field::Fields.Field, pfull_levels)
+Remapping.LinearInPressure
+Remapping.LogLinearInPressure
 Remapping.pfull_field
 Remapping.pressure_space
 Remapping.update!

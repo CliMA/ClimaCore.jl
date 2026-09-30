@@ -2,7 +2,11 @@ using Test
 import ClimaCore.CommonSpaces: ExtrudedCubedSphereSpace, ColumnSpace, MultiColumnSpace
 import ClimaCore.Remapping
 import ClimaCore.Remapping:
-    PressureInterpolator, interpolate_pressure, interpolate_pressure!, update!
+    PressureInterpolator,
+    LogLinearInPressure,
+    interpolate_pressure,
+    interpolate_pressure!,
+    update!
 import ClimaCore: Fields, Geometry, Grids, Meshes, Spaces
 import ClimaInterpolations
 
@@ -213,6 +217,37 @@ for FT in (Float32, Float64)
         end
     end
 
+    @testset "Log-linear interpolation ($FT)" begin
+        for space in (extruded_space, col_space, multicol_space)
+            # z is linear in log(p) away from the boundary faces, so log-linear
+            # interpolation is exact there
+            z = copy(Fields.coordinate_field(space).z)
+            z_face = copy(Fields.coordinate_field(Spaces.face_space(space)).z)
+            pfull_field = @. exp(-z)
+            z_levels = FT[0.83, 0.47, 0.12]
+            pfull_intp = PressureInterpolator(
+                pfull_field,
+                exp.(-z_levels);
+                method = LogLinearInPressure(),
+            )
+            atol = 10 * eps(FT)
+            dest = Array(Fields.field2array(interpolate_pressure(z, pfull_intp)))
+            @test all(isapprox.(dest, z_levels; atol))
+            dest = Array(Fields.field2array(interpolate_pressure(z_face, pfull_intp)))
+            @test all(isapprox.(dest, z_levels; atol))
+
+            @. pfull_field = exp(-2 * z)
+            update!(pfull_intp)
+            dest = Array(Fields.field2array(interpolate_pressure(z, pfull_intp)))
+            @test all(isapprox.(dest, z_levels ./ 2; atol))
+
+            # Test that nonpositive pressures are rejected
+            method = LogLinearInPressure()
+            @test_throws ErrorException PressureInterpolator(pfull_field, FT[-1, 1]; method)
+            pfull_field .= 0
+            @test_throws ErrorException update!(pfull_intp)
+        end
+    end
 
     @testset "Non monotonic pressure and z relationship ($FT)" begin
         for space in (extruded_space, col_space, multicol_space)
