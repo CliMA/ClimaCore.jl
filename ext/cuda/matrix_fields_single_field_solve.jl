@@ -10,6 +10,7 @@ import ClimaCore.MatrixFields
 import ClimaCore.MatrixFields: single_field_solve!
 import ClimaCore.MatrixFields: _single_field_solve!
 import ClimaCore.MatrixFields: band_matrix_solve!, unzip_tuple_field_values
+import ClimaCore.MatrixFields: scaling_ldiv
 
 function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
 
@@ -102,7 +103,7 @@ function _single_field_solve!(
     b_data = Fields.field_values(b)
     Nv = DataLayouts.nlevels(x_data)
     @inbounds for v in 1:Nv
-        x_data[v] = inv(A.λ) * b_data[v]
+        x_data[v] = scaling_ldiv(A.λ, b_data[v])
     end
 end
 
@@ -115,7 +116,7 @@ function _single_field_solve!(
 )
     x_data = Fields.field_values(x)
     b_data = Fields.field_values(b)
-    x_data[] = inv(A.λ) * b_data[]
+    x_data[] = scaling_ldiv(A.λ, b_data[])
 end
 
 using StaticArrays: MArray

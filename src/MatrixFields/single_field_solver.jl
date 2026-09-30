@@ -39,7 +39,7 @@ function single_field_solver_cache(A::ColumnwiseBandMatrixField, b)
 end
 
 single_field_solve!(_, x, A::ScalingFieldMatrixEntry, b) =
-    x .= (inv(scaling_value(A)),) .* b
+    x .= scaling_ldiv.((scaling_value(A),), b)
 single_field_solve!(cache, x, A::ColumnwiseBandMatrixField, b) =
     if eltype(A) <: DiagonalMatrixRow
         A₀ = A.entries.:1

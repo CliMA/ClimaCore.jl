@@ -4,6 +4,16 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-🐛bugfix] [#2662](https://github.com/CliMA/ClimaCore.jl/pull/2662) Kept `Float32` values in `Float32` for a `MatrixFields`
+  scaling entry with an integer value, such as `I` or `2I`, in `inv.(A) * b`, in
+  the Schur complement of `BlockArrowheadSolve` and in the solve of such an entry,
+  which computed in `Float64` before.
+- ![][badge-🤖precisionΔ] [#2662](https://github.com/CliMA/ClimaCore.jl/pull/2662) Divided by an integer `MatrixFields` scaling value in
+  place of multiplying by its `Float64` inverse, so that `inv.(A) * b` and the
+  solve of such an entry are rounded once; for a value that is not a power of two,
+  `Float64` results change in the last bit, and the `Float32` solution of
+  `BlockArrowheadSolve` with such a block changes in the last bits.
+
 v1.0.1
 -------
 
