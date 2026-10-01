@@ -49,6 +49,12 @@ Interpolate
 Restrict
 ```
 
+## Element filtering operators
+
+```@docs
+LumpedRestriction
+```
+
 ## Tensor products
 
 ```@docs
