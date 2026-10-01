@@ -1,7 +1,7 @@
 agents:
   queue: central
   slurm_mem: 8G
-  modules: climacommon/2024_10_10
+  modules: climacommon/2025_03_18
 
 env:
   JULIA_LOAD_PATH: "${JULIA_LOAD_PATH}:${BUILDKITE_BUILD_CHECKOUT_PATH}/.buildkite"
@@ -290,7 +290,7 @@ steps:
         agents:
            slurm_ntasks: 2
            slurm_gpus: 2
-           modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+           modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: topologies distributed"
         key: unit_topologies_distributed
@@ -300,7 +300,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 4
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: common spaces with CUDA and MPI"
         key: "gpu_common_cuda_mpi_spaces"
@@ -313,7 +313,7 @@ steps:
         agents:
           slurm_gpus: 1
           slurm_ntasks: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: common spaces with MPI"
         key: "common_cuda_mpi_spaces"
@@ -324,7 +324,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: distributed cuda spaces"
         key: "gpu_distributed_extruded_cuda_spaces"
@@ -338,7 +338,7 @@ steps:
         agents:
           slurm_gpus_per_task: 1
           slurm_ntasks: 3
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: distributed dss2"
         key: unit_distributed_dss2
@@ -348,7 +348,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: distributed DG operators (2 ranks)"
         key: unit_distributed_dg2
@@ -358,7 +358,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: distributed DG operators (3 ranks)"
         key: unit_distributed_dg3
@@ -368,7 +368,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 3
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: cuda distributed DG operators (2 ranks)"
         key: gpu_distributed_dg2
@@ -381,7 +381,7 @@ steps:
         agents:
           slurm_ntasks: 2
           slurm_gpus: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: cuda distributed DG operators (3 ranks)"
         key: gpu_distributed_dg3
@@ -394,7 +394,7 @@ steps:
         agents:
           slurm_ntasks: 3
           slurm_gpus: 3
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: distributed dss3"
         key: unit_distributed_dss3
@@ -404,7 +404,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 3
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: distributed dss4"
         key: unit_distributed_dss4
@@ -414,7 +414,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 4
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: distributed remapping (2 processes)"
         key: distributed_remapping_2procs
@@ -425,7 +425,7 @@ steps:
           CLIMACOMMS_DEVICE: "CPU"
         agents:
           slurm_ntasks: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: distributed remapping with CUDA (2 processes)"
         key: distributed_remapping_gpu_2procs
@@ -447,7 +447,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 4
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: cuda dss 2-process test"
         key: "gpu_ddss2_test"
@@ -462,7 +462,7 @@ steps:
         agents:
           slurm_ntasks: 2
           slurm_gpus: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: cuda dss 3-process test"
         key: "gpu_ddss3_test"
@@ -477,7 +477,7 @@ steps:
         agents:
           slurm_ntasks: 3
           slurm_gpus: 3
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: cuda dss 4-process test"
         key: "gpu_ddss4_test"
@@ -492,7 +492,7 @@ steps:
         agents:
           slurm_ntasks: 4
           slurm_gpus: 4
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: cuda Cubed Sphere dss; ne = 32; 2-process test"
         key: "gpu_ddss_ne32_cs_2processes"
@@ -507,7 +507,7 @@ steps:
         agents:
           slurm_ntasks: 2
           slurm_gpus: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: cuda Cubed Sphere dss; ne = 32; 3-process test"
         key: "gpu_ddss_ne32_cs_3processes"
@@ -522,7 +522,7 @@ steps:
         agents:
           slurm_ntasks: 3
           slurm_gpus: 3
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: cuda Cubed Sphere dss; ne = 32; 4-process test"
         key: "gpu_ddss_ne32_cs_4processes"
@@ -537,7 +537,7 @@ steps:
         agents:
           slurm_ntasks: 4
           slurm_gpus: 4
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: distributed reduction cuda"
         key: unit_distributed_reduction_cuda
@@ -551,7 +551,7 @@ steps:
         agents:
           slurm_gpus_per_task: 1
           slurm_ntasks: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: run sphere geometry distributed (2)"
         key: unit_run_sphere_geometry_distributed2
@@ -572,7 +572,7 @@ steps:
         agents:
           slurm_ntasks: 3
           slurm_mem: 20GB
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: run sphere geometry distributed (4)"
         key: unit_run_sphere_geometry_distributed4
@@ -583,7 +583,7 @@ steps:
         agents:
           slurm_ntasks: 4
           slurm_mem: 20GB
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: Parallel HDF5 IO tests"
         key: "cpu_parallel_hdf5"
@@ -596,7 +596,7 @@ steps:
         agents:
           slurm_nodes: 3
           slurm_tasks_per_node: 1
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: "Unit: distributed limiters"
         key: unit_limiters_distributed
@@ -606,7 +606,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 3
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
   # TODO: improve performance label: [inference, allocs, flops, latency, benchmark, boundscheck]
   # TODO: use perf env for perf jobs, or merge test/perf envs
@@ -912,7 +912,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 4
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
       - label: ":computer: Bickley jet DG {{matrix.case}}"
         key: "cpu_bickleyjet_dg"
@@ -1081,7 +1081,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
   - group: "Examples: Sphere"
     steps:
@@ -1166,7 +1166,7 @@ steps:
         agents:
           slurm_nodes: 1
           slurm_tasks_per_node: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
   - group: "Examples: hybrid sphere"
     steps:
@@ -1234,7 +1234,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 2
-          modules: mpiwrapper/2024_05_27 climacommon/2024_10_10
+          modules: mpiwrapper/2024_05_27 climacommon/2025_03_18
 
 
       - label: ":computer: 3D sphere nonhydrostatic gravity wave"
