@@ -58,6 +58,9 @@ v1.0.2
   same as `Y .= Ref(x)`. The `FieldVector`'s own `BlockedOneTo` axes were
   previously passed down to each leaf array unchanged.
 
+- ![][badge-🐛bugfix] Fixed GPU compilation of finite difference stencil
+  broadcasts on Julia 1.12.
+
 v1.0.1
 -------
 

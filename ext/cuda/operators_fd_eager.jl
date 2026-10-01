@@ -249,18 +249,37 @@ Base.@propagate_inbounds function calc_level_val(
     space,
 ) where {BC <: Base.Broadcast.Broadcasted}
     resolved_args = @inbounds @inline UnrolledUtilities.unrolled_map(
-        Base.Fix2(reconstruct_space_and_call_calc_level_val, (hidx, space)),
+        LevelValResolver(hidx, space),
         bc.args,
     )
     return @inline @inbounds bc.f(resolved_args...)
 end
 
 """
+    LevelValResolver(hidx, space)
+
+Callable struct that maps an argument of a broadcast tree to its value at the current
+thread's level.
+
+This is needed because `Base.Fix2` becomes the generic `Base.Fix{N}` on Julia 1.12,
+and routing the recursion through it causes inference to give up
+"""
+struct LevelValResolver{H, S}
+    hidx::H
+    space::S
+end
+Base.@propagate_inbounds (resolver::LevelValResolver)(arg) =
+    reconstruct_space_and_call_calc_level_val(
+        arg,
+        (resolver.hidx, resolver.space),
+    )
+
+"""
     reconstruct_space_and_call_calc_level_val(arg, (hidx, space))
 
 If `arg` is a `Broadcasted`, `StencilBroadcasted`, or `Field`, reconstruct the space for
-the argument and call `calc_level_val` on it. The tuple argument allows the function to
-be used with `Base.Fix2`.
+the argument and call `calc_level_val` on it. The tuple argument keeps the signature
+compatible with [`LevelValResolver`](@ref).
 """
 Base.@propagate_inbounds reconstruct_space_and_call_calc_level_val(
     arg::A,
@@ -475,7 +494,7 @@ Base.@propagate_inbounds function calc_level_val(
         @inbounds @inline calc_level_val(bc.args[1i32], hidx, velocity_space)
     arg_val = @inbounds @inline calc_level_val(bc.args[2i32], hidx, arg_space)
     params = @inbounds @inline UnrolledUtilities.unrolled_map(
-        Base.Fix2(reconstruct_space_and_call_calc_level_val, (hidx, space)),
+        LevelValResolver(hidx, space),
         Base.tail(Base.tail(bc.args)),
     )
     @inbounds lg = Geometry.LocalGeometry(velocity_space, v - half, hidx)
@@ -770,7 +789,7 @@ Base.@propagate_inbounds function project_row2_for_mul(mat1_row, mat2_row, hidx,
         v_maybe_half = space.staggering isa Spaces.CellFace ? v - half : v
         @inbounds lg = Geometry.LocalGeometry(space, v_maybe_half, hidx)
     end
-    # put needed info into tuple so we can use Base.Fix2
+    # put needed info into tuple so we can reuse it for every entry of the row
     projection_tuple = (project_onto, lg)
     return @inbounds @inline recursively_project(
         projection_tuple,
@@ -814,23 +833,48 @@ Base.@propagate_inbounds project_or_map(
 # A single axis projects every tensor leaf below it (a container, like a
 # BandMatrixRow, maps the whole projection over its entries).
 Base.@propagate_inbounds project_or_map(axis, lg, y) =
-    map(Base.Fix1(recursively_project, (axis, lg)), y)
+    map(RowEntryProjector((axis, lg)), y)
+
+"""
+    RowEntryProjector(projection_tuple)
+
+Callable struct, used to map the projection over the
+entries of a container. Like [`LevelValResolver`](@ref), this is used instead of `Base.Fix1`
+because it improves inferebility with the recursive projection mechanism on Julia 1.12.
+"""
+struct RowEntryProjector{T}
+    projection_tuple::T
+end
+Base.@propagate_inbounds (projector::RowEntryProjector)(y) =
+    recursively_project(projector.projection_tuple, y)
 @inline project_or_map(axis, lg, y::Number) = y
 @inline project_or_map(axis, lg, y::AbstractTensor) = project(axis, y, lg)
 
 # Zip each component's axis with its component so the componentwise map can reuse
-# `Base.Fix2` instead of a closure over `lg`. This must use `unrolled_map_into_tuple`
-# rather than `unrolled_map`: the latter derives its output type from a nested
-# `Base.promote_op` query, which is not precise inside the `Utilities.return_type`
-# call in `cached_operand_type` and widens the projected type to a non-concrete
-# `BandMatrixRow`, whereas `unrolled_map_into_tuple` maps directly into a `Tuple`.
+# a `PairedProjector` instead of a closure over `lg`. This must use
+# `unrolled_map_into_tuple` rather than `unrolled_map`: the latter derives its output
+# type from a nested `Base.promote_op` query, which is not precise inside the
+# `Utilities.return_type` call in `cached_operand_type` and widens the projected type
+# to a non-concrete `BandMatrixRow`, whereas `unrolled_map_into_tuple` maps directly
+# into a `Tuple`.
 Base.@propagate_inbounds paired_projection(axes_per_component, ys, lg) =
     UnrolledUtilities.unrolled_map_into_tuple(
-        Base.Fix2(paired_projection_component, lg),
+        PairedProjector(lg),
         zip(axes_per_component, ys),
     )
 Base.@propagate_inbounds paired_projection_component((axis, y), lg) =
     project_or_map(axis, lg, y)
+
+"""
+    PairedProjector(lg)
+
+Callable struct for the same reason as [`LevelValResolver`](@ref).
+"""
+struct PairedProjector{L}
+    lg::L
+end
+Base.@propagate_inbounds (projector::PairedProjector)(axis_and_y) =
+    paired_projection_component(axis_and_y, projector.lg)
 
 if hasfield(Method, :recursion_relation)
     dont_limit = (args...) -> true
@@ -847,6 +891,19 @@ if hasfield(Method, :recursion_relation)
         m.recursion_relation = dont_limit
     end
     for m in methods(calc_level_val)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(reconstruct_space_and_call_calc_level_val)
+        m.recursion_relation = dont_limit
+    end
+    # `methods` of a callable instance lists the call methods of its type.
+    for m in methods(LevelValResolver(nothing, nothing))
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(RowEntryProjector(nothing))
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(PairedProjector(nothing))
         m.recursion_relation = dont_limit
     end
 end
