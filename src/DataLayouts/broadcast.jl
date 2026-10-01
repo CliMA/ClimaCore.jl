@@ -130,7 +130,8 @@ the arguments of a broadcast expression.
 @inline layout_args(bc::FusedMultiBroadcast) =
     unrolled_flatmap(get_layout_arg_tuple, unrolled_flatten(bc.pairs))
 
-@inline DataScope(bc::MaybeFusedDataLayoutBroadcast) = DataScope(layout_args(bc)...)
+@inline DataScope(bc::MaybeFusedDataLayoutBroadcast) =
+    unrolled_mapreduce(DataScope, DataScope, layout_args(bc))
 
 @inline layout_type(::LazyDataLayout{D}) where {D} = D
 

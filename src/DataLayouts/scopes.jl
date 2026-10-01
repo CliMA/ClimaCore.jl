@@ -73,7 +73,8 @@ DataScope(scope1::DataScope, scope2::DataScope) =
     is_subscope(scope2, scope1) ? scope2 :
     throw(NonOverlappingScopesError(scope1, scope2))
 
-DataScope(arg1, arg2, args...) = DataScope(DataScope(arg1), DataScope(arg2, args...))
+@inline DataScope(arg1, arg2, args...) =
+    unrolled_mapreduce(DataScope, DataScope, (arg1, arg2, args...))
 
 """
     partition(scope)
