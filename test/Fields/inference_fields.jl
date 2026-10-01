@@ -47,12 +47,12 @@ import .TestUtilities as TU;
         Yx = Y.x
         foo!(Yx) # compile first
         p = @allocated foo!(Yx)
-        @test p == 0
+        TU.@test_allocations p == 0
 
         # bycolumn
         foocolumn!(Yx) # compile first
         p = @allocated foocolumn!(Yx)
-        @test p == 0
+        TU.@test_allocations p == 0
     end
 end
 
@@ -75,11 +75,11 @@ end
         # TODO: On extruded spaces, these operations have an unelided view
         # from getproperty (48 bytes); whether the compiler elides it depends
         # on how much of its inference budget is used up.
-        @test p ≤ 48
+        TU.@test_allocations p ≤ 48
 
         callfill!(Y)
         p = @allocated callfill!(Y)
-        @test p ≤ 48
+        TU.@test_allocations p ≤ 48
     end
 end
 
@@ -103,7 +103,7 @@ end
         dt = FT(2.0)
         fast_broadcast_single_field!(Y1, dt, Y2)
         p = @allocated fast_broadcast_single_field!(Y1, dt, Y2)
-        @test p == 0
+        TU.@test_allocations p == 0
         fast_broadcast_copyto!(Y1, dt, Y2)
         p = @allocated fast_broadcast_copyto!(Y1, dt, Y2)
         @test_broken p == 0
@@ -167,18 +167,18 @@ end
             Y .= 0
             nothing
         end
-        @test p == 0
+        TU.@test_allocations p == 0
 
         call_zero_eltype!(Y) # compile first
         p = @allocated call_zero_eltype!(Y)
-        @test p == 0
+        TU.@test_allocations p == 0
 
         fill!(Y, zero(eltype(Y))) # compile first
         p = @allocated begin
             fill!(Y, zero(eltype(Y)))
             nothing
         end
-        @test p == 0
+        TU.@test_allocations p == 0
     end
 end
 
@@ -235,7 +235,7 @@ end
     # TODO: This FieldVector broadcast has several dozen unelided views from
     # getproperty (48 bytes each); whether the compiler elides them depends on
     # how much of its inference budget is used up.
-    @test palloc ≤ 1280
+    TU.@test_allocations palloc ≤ 1280
 end
 
 struct VarTimescaleAcnv{FT}

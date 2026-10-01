@@ -419,9 +419,13 @@ Base.copy(field::Field) = Field(copy(field_values(field)), axes(field))
 Base.deepcopy_internal(field::Field, stackdict::IdDict) =
     Field(Base.deepcopy_internal(field_values(field), stackdict), axes(field))
 
-function Base.copyto!(dest::Field, src::Field; mask = get_mask(axes(dest)))
+function Base.copyto!(
+    dest::Field,
+    src::Field,
+    mask::DataLayouts.DataMask = get_mask(axes(dest)),
+)
     @assert axes(dest) == axes(src)
-    copyto!(field_values(dest), field_values(src); mask)
+    copyto!(field_values(dest), field_values(src), mask)
     return dest
 end
 

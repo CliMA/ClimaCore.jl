@@ -4,6 +4,29 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-🚀performance] Reduced compilation latency (TTFX) across grid/space
+  construction, `DataLayout` and `Field` broadcasts, spectral and finite-difference
+  operators, and `FieldVector` broadcasts by eliminating internal `Core.kwcall`
+  forwarding layers and duplicate `ThisThreadPool` loop specializations in
+  `DataLayouts`, making `is_cpu_linear_compatible` a compile-time check in
+  `FieldVector` `copyto!`, avoiding union-splitting in
+  `ExtrudedFiniteDifferenceGrid`, removing unused `LocalGeometry` constructions in
+  `MatrixFields.multiply_matrix_at_index`, and precompiling single-threaded CPU
+  contexts in `precompile_workload.jl`. The package image also shrinks by roughly
+  20% (322 MB to 257 MB).
+
+- ![][badge-🔥behavioralΔ] The `copyto!` methods for `Field`s and `DataLayout`s,
+  including those for spectral and column-stencil operator broadcasts, take the
+  optional `DataMask` as a third positional argument, `copyto!(dest, bc, mask)`,
+  in place of the `mask` keyword argument. A multi-element tuple broadcast into
+  a `DataLayout` writes only the points that the mask marks as active.
+
+- ![][badge-🐛bugfix] Broadcasting a single-element tuple into a `FieldVector`,
+  as in `Y .= (x,)`, no longer throws a `DimensionMismatch`. This is the form
+  `Base.broadcastable` produces for custom scalar types, so it now behaves the
+  same as `Y .= Ref(x)`. The `FieldVector`'s own `BlockedOneTo` axes were
+  previously passed down to each leaf array unchanged.
+
 v1.0.1
 -------
 

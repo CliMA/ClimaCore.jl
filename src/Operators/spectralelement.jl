@@ -52,13 +52,11 @@ buffers of equal byte size can share memory, so callers must keep their
 lifetimes disjoint; see the buffer reuse invariant in [`apply_operator`](@ref).
 """
 @inline materialize_buffer(arg) = arg
-@inline materialize_buffer(bc::Base.Broadcast.Broadcasted) = constant_field(
-    copyto!(
-        buffer_similar(bc, drop_auto_broadcasters(Utilities.safe_eltype(bc))),
-        bc;
-        mask = Spaces.get_mask(axes(bc)),
-    ),
-)
+@inline function materialize_buffer(bc::Base.Broadcast.Broadcasted)
+    dest = buffer_similar(bc, drop_auto_broadcasters(Utilities.safe_eltype(bc)))
+    copyto_slab!(dest, bc)
+    return constant_field(dest)
+end
 @inline materialize_buffer(arg::Fields.Field) =
     DataLayouts.stored_in_registers(Fields.field_values(arg)) ?
     materialize_buffer(Base.broadcasted(identity, arg)) : arg
@@ -259,14 +257,16 @@ Base.similar(bc::SpectralBroadcasted, ::Type{T}) where {T} =
 # both of its materialize! layers; other arguments are rare enough to keep .=.
 @inline copyto_slab!(dest, bc::Fields.LazyField) = copyto!(
     Fields.field_values(dest),
-    Base.Broadcast.instantiate(Fields.field_values(bc));
-    mask = Spaces.get_mask(axes(dest)),
+    Base.Broadcast.instantiate(Fields.field_values(bc)),
+    Spaces.get_mask(axes(dest)),
 )
 @inline copyto_slab!(dest, arg) = (dest .= arg)
 
 # Evaluate copyto! slab by slab, replacing operator broadcasts with pointwise ones.
 function Base.copyto!(
-    dest::Fields.Field, bc::SpectralBroadcasted; mask = DataLayouts.NoMask(),
+    dest::Fields.Field,
+    bc::SpectralBroadcasted,
+    mask::DataLayouts.DataMask = DataLayouts.NoMask(),
 )
     bc_no_space = strip_space(bc, axes(dest)) # Drop copies of space before sending to GPU.
     # A mask cannot skip slabs: a slab is live whenever any of its columns is
