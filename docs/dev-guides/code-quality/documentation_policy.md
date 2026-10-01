@@ -222,6 +222,7 @@ Each bullet starts with the backticked identifier. For complex options, list val
 - **Prefer Unicode for simple expressions**: α, β, ρ, ∂, ∇, ≤, ∈ all render inline and read more naturally than `\alpha`, `\beta`, etc., matching the variable names in the code.
 - **Use LaTeX for complex layout**: fractions, integrals with bounds, multi-line alignment.
 - **Inline:** double backticks, ``` ``α · β`` ```. **Display:** fenced ` ```math ` block.
+- **Accents:** use `\widehat` and `\widetilde`, never `\hat` or `\tilde`. The narrow forms do not render in the docs build.
 
 ~~~markdown
 ```math
