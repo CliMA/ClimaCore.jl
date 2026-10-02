@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>CommonGrids · ClimaCore.jl</title><meta name="title" content="CommonGrids · ClimaCore.jl"/><meta property="og:title" content="CommonGrids · ClimaCore.jl"/><meta property="twitter:title" content="CommonGrids · ClimaCore.jl"/><meta name="description" content="Documentation for ClimaCore.jl."/><meta property="og:description" content="Documentation for ClimaCore.jl."/><meta property="twitter:description" content="Documentation for ClimaCore.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.png" alt="ClimaCore.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">ClimaCore.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../intro/">Introduction</a></li><li><a class="tocitem" href="../../math_framework/">Mathematical Framework</a></li><li><a class="tocitem" href="../../installation_instructions/">Installation and How-to Guides</a></li><li><a class="tocitem" href="../../geometry/">Geometry</a></li><li><a class="tocitem" href="../../operators/">Operators</a></li><li><a class="tocitem" href="../../remapping/">Remapping</a></li><li><a class="tocitem" href="../../matrix_fields/">MatrixFields</a></li><li><input class="collapse-toggle" id="menuitem-9" type="checkbox" checked/><label class="tocitem" for="menuitem-9"><span class="docs-label">API</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../utilities_api/">Utilities</a></li><li><a class="tocitem" href="../datalayouts_api/">DataLayouts</a></li><li><a class="tocitem" href="../geometry_api/">Geometry</a></li><li><a class="tocitem" href="../domains_api/">Domains</a></li><li><a class="tocitem" href="../meshes_api/">Meshes</a></li><li><a class="tocitem" href="../topologies_api/">Topologies</a></li><li><a class="tocitem" href="../grids_api/">Grids</a></li><li><a class="tocitem" href="../hypso_api/">Hypsography</a></li><li><a class="tocitem" href="../dss_api/">DSS</a></li><li class="is-active"><a class="tocitem" href>CommonGrids</a></li><li><a class="tocitem" href="../spaces_api/">Spaces</a></li><li><a class="tocitem" href="../common_spaces_api/">CommonSpaces</a></li><li><a class="tocitem" href="../quadratures_api/">Quadratures</a></li><li><a class="tocitem" href="../fields_api/">Fields</a></li><li><a class="tocitem" href="../limiters_api/">Limiters</a></li><li><a class="tocitem" href="../input_output_api/">InputOutput</a></li><li><a class="tocitem" href="../remapping_api/">Remapping</a></li><li><a class="tocitem" href="../recursive_apply_api/">RecursiveApply</a></li><li><a class="tocitem" href="../devices_api/">Devices</a></li><li><a class="tocitem" href="../debug_only_api/">DebugOnly</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-10" type="checkbox"/><label class="tocitem" for="menuitem-10"><span class="docs-label">Developer docs</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../performance_tips/">Performance tips</a></li><li><a class="tocitem" href="../../shmem_design/">Shared memory design</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-11" type="checkbox"/><label class="tocitem" for="menuitem-11"><span class="docs-label">Tutorials</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../tutorials/introduction/">Introduction to ClimaCore.jl</a></li></ul></li><li><a class="tocitem" href="../../examples/">Examples</a></li><li><a class="tocitem" href="../../masks/">Masks</a></li><li><a class="tocitem" href="../../debugging/">Debugging</a></li><li><input class="collapse-toggle" id="menuitem-15" type="checkbox"/><label class="tocitem" for="menuitem-15"><span class="docs-label">Libraries</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../lib/ClimaCorePlots/">ClimaCorePlots.jl</a></li><li><a class="tocitem" href="../../lib/ClimaCoreMakie/">ClimaCoreMakie.jl</a></li><li><a class="tocitem" href="../../lib/ClimaCoreVTK/">ClimaCoreVTK.jl</a></li><li><a class="tocitem" href="../../lib/ClimaCoreTempestRemap/">ClimaCoreTempestRemap.jl</a></li><li><a class="tocitem" href="../../lib/ClimaCoreSpectra/">ClimaCoreSpectra.jl</a></li></ul></li><li><a class="tocitem" href="../../Contributing/">Contributing guide</a></li><li><a class="tocitem" href="../../code_of_conduct/">Code of Conduct</a></li><li><a class="tocitem" href="../../faq/">Frequently asked questions</a></li><li><a class="tocitem" href="../../references/">References</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">API</a></li><li class="is-active"><a href>CommonGrids</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>CommonGrids</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/CliMA/ClimaCore.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/CliMA/ClimaCore.jl/blob/main/docs/src/APIs/common_grids_api.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="CommonGrids"><a class="docs-heading-anchor" href="#CommonGrids">CommonGrids</a><a id="CommonGrids-1"></a><a class="docs-heading-anchor-permalink" href="#CommonGrids" title="Permalink"></a></h1><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="ClimaCore.CommonGrids" href="#ClimaCore.CommonGrids"><code>ClimaCore.CommonGrids</code></a> — <span class="docstring-category">Module</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">CommonGrids</code></pre><p>CommonGrids contains convenience constructors for common grids. Constructors in this module are sometimes dynamically created. You may want to use a different constructor if you&#39;re making the object in a performance-critical section, and if you know the type parameters at compile time.</p><p>If no convenience constructor exists, then you may need to create a custom grid using our low-level compose-able API.</p><p><strong>Transitioning to using CommonGrids</strong></p><p>You may have constructed a grid in the following way:</p><pre><code class="language-julia hljs">using ClimaComms
+using ClimaCore: DataLayouts, Geometry, Topologies, Quadratures, Domains, Meshes, Grids
+FT = Float64
+z_elem = 63
+z_min = FT(0)
+z_max = FT(1)
+radius = FT(6.371229e6)
+h_elem = 15
+n_quad_points = 4
+device = ClimaComms.device()
+context = ClimaComms.context(device)
+hypsography = Grids.Flat()
+global_geometry = Geometry.ShallowSphericalGlobalGeometry{FT}(radius)
+quad = Quadratures.GLL{n_quad_points}()
+h_mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain{FT}(radius), h_elem)
+h_topology = Topologies.Topology2D(context, h_mesh)
+z_boundary_names = (:bottom, :top)
+z_domain = Domains.IntervalDomain(
+    Geometry.ZPoint{FT}(z_min),
+    Geometry.ZPoint{FT}(z_max);
+    boundary_names = z_boundary_names,
+)
+z_mesh = Meshes.IntervalMesh(z_domain; nelems = z_elem)
+h_grid = Grids.SpectralElementGrid2D(h_topology, quad)
+z_topology = Topologies.IntervalTopology(context, z_mesh)
+z_grid = Grids.FiniteDifferenceGrid(z_topology)
+grid = Grids.ExtrudedFiniteDifferenceGrid(
+    h_grid,
+    z_grid,
+    hypsography,
+    global_geometry,
+)</code></pre><p>You may re-write this as:</p><pre><code class="language-julia hljs">using ClimaCore.CommonGrids: ExtrudedCubedSphereGrid
+grid = ExtrudedCubedSphereGrid(;
+    z_elem = 63,
+    z_min = 0,
+    z_max = 1,
+    radius = 6.371229e6,
+    h_elem = 15,
+    n_quad_points = 4,
+)</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/CliMA/ClimaCore.jl/blob/f03a7a451343a1fceef201ec6aa8dcdf728659ad/src/CommonGrids/CommonGrids.jl#L1-L66">source</a></section></article><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="ClimaCore.CommonGrids.ExtrudedCubedSphereGrid" href="#ClimaCore.CommonGrids.ExtrudedCubedSphereGrid"><code>ClimaCore.CommonGrids.ExtrudedCubedSphereGrid</code></a> — <span class="docstring-category">Function</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">ExtrudedCubedSphereGrid(
+    ::Type{&lt;:AbstractFloat}; # defaults to Float64
+    z_elem::Integer,
+    z_min::Real,
+    z_max::Real,
+    radius::Real,
+    h_elem::Integer,
+    n_quad_points::Integer,
+    device::ClimaComms.AbstractDevice = ClimaComms.device(),
+    context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
+    stretch::Meshes.StretchingRule = Meshes.Uniform(),
+    hypsography_fun = (h_grid, z_grid) -&gt; Grids.Flat(),
+    global_geometry::Geometry.AbstractGlobalGeometry = Geometry.ShallowSphericalGlobalGeometry{FT}(radius),
+    quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
+    h_mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain{FT}(radius), h_elem),
+    h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(context, h_mesh),
+    horizontal_layout_type = DataLayouts.IJFH,
+    z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
+    enable_bubble::Bool = false
+    enable_mask::Bool = false
+)</code></pre><p>A convenience constructor, which builds an <a href="../grids_api/#ClimaCore.Grids.ExtrudedFiniteDifferenceGrid"><code>Grids.ExtrudedFiniteDifferenceGrid</code></a>, given:</p><ul><li><code>FT</code> the floating-point type (defaults to <code>Float64</code>) [<code>Float32</code>, <code>Float64</code>]</li><li><code>z_elem</code> the number of z-points</li><li><code>z_min</code> the domain minimum along the z-direction.</li><li><code>z_max</code> the domain maximum along the z-direction.</li><li><code>radius</code> the radius of the cubed sphere</li><li><code>h_elem</code> the number of horizontal elements per side of every panel (6 panels in total)</li><li><code>n_quad_points</code> the number of quadrature points per horizontal element</li><li><code>device</code> the <code>ClimaComms.device</code></li><li><code>context</code> the <code>ClimaComms.context</code></li><li><code>stretch</code> the mesh <code>Meshes.StretchingRule</code> (defaults to <a href="../meshes_api/#ClimaCore.Meshes.Uniform"><code>Meshes.Uniform</code></a>)</li><li><code>hypsography_fun</code> a function or callable object (<code>hypsography_fun(h_grid, z_grid) -&gt; hypsography</code>) for constructing the hypsography model.</li><li><code>global_geometry</code> the global geometry (defaults to <a href="../geometry_api/#ClimaCore.Geometry.CartesianGlobalGeometry"><code>Geometry.CartesianGlobalGeometry</code></a>)</li><li><code>quad</code> the quadrature style (defaults to <code>Quadratures.GLL{n_quad_points}</code>)</li><li><code>h_mesh</code> the horizontal mesh (defaults to <code>Meshes.EquiangularCubedSphere</code>)</li><li><code>h_topology</code> the horizontal topology (defaults to <code>Topologies.Topology2D</code>)</li><li><code>horizontal_layout_type</code> the horizontal DataLayout type (defaults to <code>DataLayouts.IJFH</code>). This parameter describes how data is arranged in memory. See <a href="../grids_api/#ClimaCore.Grids.SpectralElementGrid2D"><code>Grids.SpectralElementGrid2D</code></a> for its use.</li><li><code>z_mesh</code> the vertical mesh, defaults to an <code>Meshes.IntervalMesh</code> along <code>z</code> with given <code>stretch</code></li><li><code>enable_bubble</code> enables the &quot;bubble correction&quot; for more accurate element areas when computing the spectral element space. See <a href="../grids_api/#ClimaCore.Grids.SpectralElementGrid2D"><code>Grids.SpectralElementGrid2D</code></a> for more information.</li><li><code>enable_mask</code> enables a horizontal mask, for skipping operations on specified               columns via <code>set_mask!</code>.</li></ul><p><strong>Example usage</strong></p><pre><code class="language-julia hljs">using ClimaCore.CommonGrids
+grid = ExtrudedCubedSphereGrid(;
+    z_elem = 10,
+    z_min = 0,
+    z_max = 1,
+    radius = 10,
+    h_elem = 10,
+    n_quad_points = 4,
+)</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/CliMA/ClimaCore.jl/blob/f03a7a451343a1fceef201ec6aa8dcdf728659ad/src/CommonGrids/CommonGrids.jl#L85-L145">source</a></section></article><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="ClimaCore.CommonGrids.CubedSphereGrid" href="#ClimaCore.CommonGrids.CubedSphereGrid"><code>ClimaCore.CommonGrids.CubedSphereGrid</code></a> — <span class="docstring-category">Function</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">CubedSphereGrid(
+    ::Type{&lt;:AbstractFloat}; # defaults to Float64
+    radius::Real,
+    h_elem::Integer,
+    n_quad_points::Integer,
+    device::ClimaComms.AbstractDevice = ClimaComms.device(),
+    context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
+    quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
+    h_mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain{FT}(radius), h_elem),
+    h_topology::Topologies.AbstractDistributedTopology = Topologies.Topology2D(context, h_mesh),
+    horizontal_layout_type = DataLayouts.IJFH,
+    enable_mask = false,
+)</code></pre><p>A convenience constructor, which builds a <a href="../grids_api/#ClimaCore.Grids.SpectralElementGrid2D"><code>Grids.SpectralElementGrid2D</code></a> given:</p><ul><li><code>FT</code> the floating-point type (defaults to <code>Float64</code>) [<code>Float32</code>, <code>Float64</code>]</li><li><code>radius</code> the radius of the cubed sphere</li><li><code>h_elem</code> the number of horizontal elements per side of every panel (6 panels in total)</li><li><code>n_quad_points</code> the number of quadrature points per horizontal element</li><li><code>device</code> the <code>ClimaComms.device</code></li><li><code>context</code> the <code>ClimaComms.context</code></li><li><code>quad</code> the quadrature style (defaults to <code>Quadratures.GLL{n_quad_points}</code>)</li><li><code>h_mesh</code> the horizontal mesh (defaults to <code>Meshes.EquiangularCubedSphere</code>)</li><li><code>h_topology</code> the horizontal topology (defaults to <code>Topologies.Topology2D</code>)</li><li><code>horizontal_layout_type</code> the horizontal DataLayout type (defaults to <code>DataLayouts.IJFH</code>). This parameter describes how data is arranged in memory. See <a href="../grids_api/#ClimaCore.Grids.SpectralElementGrid2D"><code>Grids.SpectralElementGrid2D</code></a> for its use.</li><li><code>enable_mask</code> enables a horizontal mask, for skipping operations on specified               columns via <code>set_mask!</code>.</li></ul><p><strong>Example usage</strong></p><pre><code class="language-julia hljs">using ClimaCore.CommonGrids
+grid = CubedSphereGrid(; radius = 10, n_quad_points = 4, h_elem = 10)</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/CliMA/ClimaCore.jl/blob/f03a7a451343a1fceef201ec6aa8dcdf728659ad/src/CommonGrids/CommonGrids.jl#L210-L247">source</a></section></article><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="ClimaCore.CommonGrids.ColumnGrid" href="#ClimaCore.CommonGrids.ColumnGrid"><code>ClimaCore.CommonGrids.ColumnGrid</code></a> — <span class="docstring-category">Function</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">ColumnGrid(
+    ::Type{&lt;:AbstractFloat}; # defaults to Float64
+    z_elem::Integer,
+    z_min::Real,
+    z_max::Real,
+    device::ClimaComms.AbstractDevice = ClimaComms.device(),
+    context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
+    stretch::Meshes.StretchingRule = Meshes.Uniform(),
+    z_mesh::Meshes.IntervalMesh = DefaultZMesh(FT; z_min, z_max, z_elem, stretch),
+)</code></pre><p>A convenience constructor, which builds a <a href="../grids_api/#ClimaCore.Grids.FiniteDifferenceGrid"><code>Grids.FiniteDifferenceGrid</code></a> given:</p><ul><li><code>FT</code> the floating-point type (defaults to <code>Float64</code>) [<code>Float32</code>, <code>Float64</code>]</li><li><code>z_elem</code> the number of z-points</li><li><code>z_min</code> the domain minimum along the z-direction.</li><li><code>z_max</code> the domain maximum along the z-direction.</li><li><code>device</code> the <code>ClimaComms.device</code></li><li><code>context</code> the <code>ClimaComms.context</code></li><li><code>stretch</code> the mesh <code>Meshes.StretchingRule</code> (defaults to <a href="../meshes_api/#ClimaCore.Meshes.Uniform"><code>Meshes.Uniform</code></a>)</li><li><code>z_mesh</code> the vertical mesh, defaults to an <code>Meshes.IntervalMesh</code> along <code>z</code> with given <code>stretch</code></li></ul><p><strong>Example usage</strong></p><pre><code class="language-julia hljs">using ClimaCore.CommonGrids
+grid = ColumnGrid(; z_elem = 10, z_min = 0, z_max = 10)</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/CliMA/ClimaCore.jl/blob/f03a7a451343a1fceef201ec6aa8dcdf728659ad/src/CommonGrids/CommonGrids.jl#L278-L308">source</a></section></article><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="ClimaCore.CommonGrids.Box3DGrid" href="#ClimaCore.CommonGrids.Box3DGrid"><code>ClimaCore.CommonGrids.Box3DGrid</code></a> — <span class="docstring-category">Function</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">Box3DGrid(
+    ::Type{&lt;:AbstractFloat}; # defaults to Float64
+    z_elem::Integer,
+    x_min::Real,
+    x_max::Real,
+    y_min::Real,
+    y_max::Real,
+    z_min::Real,
+    z_max::Real,
+    periodic_x::Bool,
+    periodic_y::Bool,
+    n_quad_points::Integer,
+    x_elem::Integer,
+    y_elem::Integer,
+    device::ClimaComms.AbstractDevice = ClimaComms.device(),
+    context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
+    stretch::Meshes.StretchingRule = Meshes.Uniform(),
+    hypsography_fun = (h_grid, z_grid) -&gt; Grids.Flat(),
+    global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
+    quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
+    horizontal_layout_type = DataLayouts.IJFH,
+    [h_topology::Topologies.AbstractDistributedTopology], # optional
+    [z_mesh::Meshes.IntervalMesh], # optional
+    enable_bubble::Bool = false,
+    enable_mask::Bool = false,
+)</code></pre><p>A convenience constructor, which builds a <a href="../grids_api/#ClimaCore.Grids.ExtrudedFiniteDifferenceGrid"><code>Grids.ExtrudedFiniteDifferenceGrid</code></a> with a <a href="../grids_api/#ClimaCore.Grids.FiniteDifferenceGrid"><code>Grids.FiniteDifferenceGrid</code></a> vertical grid and a <a href="../grids_api/#ClimaCore.Grids.SpectralElementGrid2D"><code>Grids.SpectralElementGrid2D</code></a> horizontal grid, given:</p><ul><li><code>z_elem</code> the number of z-points</li><li><code>x_min</code> the domain minimum along the x-direction.</li><li><code>x_max</code> the domain maximum along the x-direction.</li><li><code>y_min</code> the domain minimum along the y-direction.</li><li><code>y_max</code> the domain maximum along the y-direction.</li><li><code>z_min</code> the domain minimum along the z-direction.</li><li><code>z_max</code> the domain maximum along the z-direction.</li><li><code>periodic_x</code> Bool indicating to use periodic domain along x-direction</li><li><code>periodic_y</code> Bool indicating to use periodic domain along y-direction</li><li><code>n_quad_points</code> the number of quadrature points per horizontal element</li><li><code>x_elem</code> the number of x-points</li><li><code>y_elem</code> the number of y-points</li><li><code>device</code> the <code>ClimaComms.device</code></li><li><code>context</code> the <code>ClimaComms.context</code></li><li><code>stretch</code> the mesh <code>Meshes.StretchingRule</code> (defaults to <a href="../meshes_api/#ClimaCore.Meshes.Uniform"><code>Meshes.Uniform</code></a>)</li><li><code>hypsography_fun</code> a function or callable object (<code>hypsography_fun(h_grid, z_grid) -&gt; hypsography</code>) for constructing the hypsography model.</li><li><code>global_geometry</code> the global geometry (defaults to <a href="../geometry_api/#ClimaCore.Geometry.CartesianGlobalGeometry"><code>Geometry.CartesianGlobalGeometry</code></a>)</li><li><code>quad</code> the quadrature style (defaults to <code>Quadratures.GLL{n_quad_points}</code>)</li><li><code>h_topology</code> the horizontal topology (defaults to <code>Topologies.Topology2D</code>)</li><li><code>z_mesh</code> the vertical mesh, defaults to an <code>Meshes.IntervalMesh</code> along <code>z</code> with given <code>stretch</code></li><li><code>enable_bubble</code> enables the &quot;bubble correction&quot; for more accurate element areas when computing the spectral element space. See <a href="../grids_api/#ClimaCore.Grids.SpectralElementGrid2D"><code>Grids.SpectralElementGrid2D</code></a> for more information.</li><li><code>horizontal_layout_type</code> the horizontal DataLayout type (defaults to <code>DataLayouts.IJFH</code>). This parameter describes how data is arranged in memory. See <a href="../grids_api/#ClimaCore.Grids.SpectralElementGrid2D"><code>Grids.SpectralElementGrid2D</code></a> for its use.</li><li><code>enable_mask</code> enables a horizontal mask, for skipping operations on specified               columns via <code>set_mask!</code>.</li></ul><p><strong>Example usage</strong></p><pre><code class="language-julia hljs">using ClimaCore.CommonGrids
+grid = Box3DGrid(;
+    z_elem = 10,
+    x_min = 0,
+    x_max = 1,
+    y_min = 0,
+    y_max = 1,
+    z_min = 0,
+    z_max = 10,
+    periodic_x = false,
+    periodic_y = false,
+    n_quad_points = 4,
+    x_elem = 3,
+    y_elem = 4,
+)</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/CliMA/ClimaCore.jl/blob/f03a7a451343a1fceef201ec6aa8dcdf728659ad/src/CommonGrids/CommonGrids.jl#L332-L409">source</a></section></article><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="ClimaCore.CommonGrids.SliceXZGrid" href="#ClimaCore.CommonGrids.SliceXZGrid"><code>ClimaCore.CommonGrids.SliceXZGrid</code></a> — <span class="docstring-category">Function</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">SliceXZGrid(
+    ::Type{&lt;:AbstractFloat}; # defaults to Float64
+    z_elem::Integer,
+    x_min::Real,
+    x_max::Real,
+    z_min::Real,
+    z_max::Real,
+    periodic_x::Bool,
+    n_quad_points::Integer,
+    x_elem::Integer,
+    device::ClimaComms.AbstractDevice = ClimaComms.device(),
+    context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
+    stretch::Meshes.StretchingRule = Meshes.Uniform(),
+    hypsography_fun = (h_grid, z_grid) -&gt; Grids.Flat(),
+    global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
+    quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
+)</code></pre><p>A convenience constructor, which builds a <a href="../grids_api/#ClimaCore.Grids.ExtrudedFiniteDifferenceGrid"><code>Grids.ExtrudedFiniteDifferenceGrid</code></a> with a <a href="../grids_api/#ClimaCore.Grids.FiniteDifferenceGrid"><code>Grids.FiniteDifferenceGrid</code></a> vertical grid and a <a href="../grids_api/#ClimaCore.Grids.SpectralElementGrid1D"><code>Grids.SpectralElementGrid1D</code></a> horizontal grid, given:</p><ul><li><code>FT</code> the floating-point type (defaults to <code>Float64</code>) [<code>Float32</code>, <code>Float64</code>]</li><li><code>z_elem</code> the number of z-points</li><li><code>x_min</code> the domain minimum along the x-direction.</li><li><code>x_max</code> the domain maximum along the x-direction.</li><li><code>z_min</code> the domain minimum along the z-direction.</li><li><code>z_max</code> the domain maximum along the z-direction.</li><li><code>periodic_x</code> Bool indicating to use periodic domain along x-direction</li><li><code>n_quad_points</code> the number of quadrature points per horizontal element</li><li><code>x_elem</code> the number of x-points</li><li><code>device</code> the <code>ClimaComms.device</code></li><li><code>context</code> the <code>ClimaComms.context</code></li><li><code>stretch</code> the mesh <code>Meshes.StretchingRule</code> (defaults to <a href="../meshes_api/#ClimaCore.Meshes.Uniform"><code>Meshes.Uniform</code></a>)</li><li><code>hypsography_fun</code> a function or callable object (<code>hypsography_fun(h_grid, z_grid) -&gt; hypsography</code>) for constructing the hypsography model.</li><li><code>global_geometry</code> the global geometry (defaults to <a href="../geometry_api/#ClimaCore.Geometry.CartesianGlobalGeometry"><code>Geometry.CartesianGlobalGeometry</code></a>)</li><li><code>quad</code> the quadrature style (defaults to <code>Quadratures.GLL{n_quad_points}</code>)</li></ul><p><strong>Example usage</strong></p><pre><code class="language-julia hljs">using ClimaCore.CommonGrids
+grid = SliceXZGrid(;
+    z_elem = 10,
+    x_min = 0,
+    x_max = 1,
+    z_min = 0,
+    z_max = 1,
+    periodic_x = false,
+    n_quad_points = 4,
+    x_elem = 4,
+)</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/CliMA/ClimaCore.jl/blob/f03a7a451343a1fceef201ec6aa8dcdf728659ad/src/CommonGrids/CommonGrids.jl#L478-L534">source</a></section></article><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="ClimaCore.CommonGrids.RectangleXYGrid" href="#ClimaCore.CommonGrids.RectangleXYGrid"><code>ClimaCore.CommonGrids.RectangleXYGrid</code></a> — <span class="docstring-category">Function</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">RectangleXYGrid(
+    ::Type{&lt;:AbstractFloat}; # defaults to Float64
+    x_min::Real,
+    x_max::Real,
+    y_min::Real,
+    y_max::Real,
+    periodic_x::Bool,
+    periodic_y::Bool,
+    n_quad_points::Integer,
+    x_elem::Integer, # number of horizontal elements
+    y_elem::Integer, # number of horizontal elements
+    device::ClimaComms.AbstractDevice = ClimaComms.device(),
+    context::ClimaComms.AbstractCommsContext = ClimaComms.context(device),
+    hypsography::Grids.HypsographyAdaption = Grids.Flat(),
+    global_geometry::Geometry.AbstractGlobalGeometry = Geometry.CartesianGlobalGeometry(),
+    quad::Quadratures.QuadratureStyle = Quadratures.GLL{n_quad_points}(),
+    enable_mask::Bool = false,
+)</code></pre><p>A convenience constructor, which builds a <a href="../grids_api/#ClimaCore.Grids.SpectralElementGrid2D"><code>Grids.SpectralElementGrid2D</code></a> with a horizontal <code>RectilinearMesh</code> mesh, given:</p><ul><li><code>x_min</code> the domain minimum along the x-direction.</li><li><code>x_max</code> the domain maximum along the x-direction.</li><li><code>y_min</code> the domain minimum along the y-direction.</li><li><code>y_max</code> the domain maximum along the y-direction.</li><li><code>periodic_x</code> Bool indicating to use periodic domain along x-direction</li><li><code>periodic_y</code> Bool indicating to use periodic domain along y-direction</li><li><code>n_quad_points</code> the number of quadrature points per horizontal element</li><li><code>x_elem</code> the number of x-points</li><li><code>y_elem</code> the number of y-points</li><li><code>device</code> the <code>ClimaComms.device</code></li><li><code>context</code> the <code>ClimaComms.context</code></li><li><code>hypsography_fun</code> a function or callable object (<code>hypsography_fun(h_grid, z_grid) -&gt; hypsography</code>) for constructing the hypsography model.</li><li><code>global_geometry</code> the global geometry (defaults to <a href="../geometry_api/#ClimaCore.Geometry.CartesianGlobalGeometry"><code>Geometry.CartesianGlobalGeometry</code></a>)</li><li><code>quad</code> the quadrature style (defaults to <code>Quadratures.GLL{n_quad_points}</code>)</li><li><code>enable_mask</code> enables a horizontal mask, for skipping operations on specified               columns via <code>set_mask!</code>.</li></ul><p><strong>Example usage</strong></p><pre><code class="language-julia hljs">using ClimaCore.CommonGrids
+grid = RectangleXYGrid(;
+    x_min = 0,
+    x_max = 1,
+    y_min = 0,
+    y_max = 1,
+    periodic_x = false,
+    periodic_y = false,
+    n_quad_points = 4,
+    x_elem = 3,
+    y_elem = 4,
+)</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/CliMA/ClimaCore.jl/blob/f03a7a451343a1fceef201ec6aa8dcdf728659ad/src/CommonGrids/CommonGrids.jl#L590-L647">source</a></section></article></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../dss_api/">« DSS</a><a class="docs-footer-nextpage" href="../spaces_api/">Spaces »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Saturday 2 August 2025 14:12">Saturday 2 August 2025</span>. Using Julia version 1.10.10.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
