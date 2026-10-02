@@ -39,26 +39,88 @@ struct FieldNameSet{
         values::NTuple{<:Any, T},
         name_tree::Union{FieldNameTree, Nothing} = nothing,
     ) where {T}
-        unrolled_foreach(values) do value
-            (isnothing(name_tree) || is_valid_value(value, name_tree)) || error(
-                "Invalid FieldNameSet value: $value is incompatible with the \
-                 FieldNameTree",
-            )
-            n_duplicate_values = length(unrolled_filter(isequal(value), values))
-            n_duplicate_values == 1 || error(
-                "Duplicate FieldNameSet values: $n_duplicate_values copies of \
-                $value have been passed to a FieldNameSet constructor",
-            )
-            overlapping_values = unrolled_filter(values) do value′
-                value′ != value && is_overlapping_value(value, value′)
-            end
-            isempty(overlapping_values) || error(
-                "Overlapping FieldNameSet values: $value cannot be in the same \
-                FieldNameSet as $(values_string(overlapping_values))",
-            )
-        end
+        check_values(values, name_tree)
         return new{T, typeof(values), typeof(name_tree)}(values, name_tree)
     end
+end
+
+"""
+    check_values(values, name_tree)
+
+Throw an error if any value in `values` is incompatible with `name_tree`, is
+duplicated, or overlaps with another value. Every `FieldName` is a singleton, so
+`values` and `name_tree` are fully determined by their types, and the checks
+run once per type while this method is being generated. The compiled method
+body is `nothing`.
+"""
+@generated function check_values(
+    ::V,
+    ::N,
+) where {V <: Tuple, N <: Union{FieldNameTree, Nothing}}
+    check_value_chains(V.instance, N === Nothing ? nothing : N.instance)
+    return nothing
+end
+
+# Name chains of a value as vectors of symbols and integers
+name_chain_vector(::FieldName{name_chain}) where {name_chain} =
+    Any[name_chain...]
+value_chains(name::FieldName) = (name_chain_vector(name),)
+value_chains(name_pair::FieldNamePair) =
+    (name_chain_vector(name_pair[1]), name_chain_vector(name_pair[2]))
+
+is_child_chain(child::Vector{Any}, parent::Vector{Any}) =
+    length(child) >= length(parent) &&
+    view(child, 1:length(parent)) == parent
+is_overlapping_chain(chain1::Vector{Any}, chain2::Vector{Any}) =
+    is_child_chain(chain1, chain2) || is_child_chain(chain2, chain1)
+are_overlapping_chains(chains1::Tuple, chains2::Tuple) =
+    all(((chain1, chain2),) -> is_overlapping_chain(chain1, chain2), zip(chains1, chains2))
+
+# Name chains of every name in the tree
+function tree_chain_vectors!(chains::Vector{Vector{Any}}, @nospecialize(tree))
+    push!(chains, name_chain_vector(tree.name))
+    if tree isa FieldNameTreeNode
+        for subtree in tree.subtrees
+            tree_chain_vectors!(chains, subtree)
+        end
+    end
+    return chains
+end
+
+@noinline function check_value_chains(
+    @nospecialize(values::Tuple),
+    @nospecialize(name_tree),
+)
+    n_values = length(values)
+    chains = Any[value_chains(values[i]) for i in 1:n_values]
+    tree_chains =
+        isnothing(name_tree) ? nothing :
+        tree_chain_vectors!(Vector{Any}[], name_tree)
+    for i in 1:n_values
+        value = values[i]
+        value_chain_tuple = chains[i]
+        (
+            isnothing(tree_chains) ||
+            all(chain -> chain in tree_chains, value_chain_tuple)
+        ) || error(
+            "Invalid FieldNameSet value: $value is incompatible with the \
+             FieldNameTree",
+        )
+        n_duplicate_values = count(j -> chains[j] == value_chain_tuple, 1:n_values)
+        n_duplicate_values == 1 || error(
+            "Duplicate FieldNameSet values: $n_duplicate_values copies of \
+            $value have been passed to a FieldNameSet constructor",
+        )
+        overlapping_values = Any[
+            values[j] for j in 1:n_values if chains[j] != value_chain_tuple &&
+                are_overlapping_chains(value_chain_tuple, chains[j])
+        ]
+        isempty(overlapping_values) || error(
+            "Overlapping FieldNameSet values: $value cannot be in the same \
+            FieldNameSet as $(values_string(overlapping_values))",
+        )
+    end
+    return nothing
 end
 
 """
