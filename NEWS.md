@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ClimaCore now requires LLVM.jl 10. The CUDA extension generates its static
+  shared-memory allocations with `LLVM.Interop.@llvmgenerated`, which replaces
+  the `create_function`/`call_function` helpers that LLVM.jl 10 removed; the
+  generated code is unchanged.
+
 - ![][badge-🔥behavioralΔ] Unmasked point loops use linear indices on CPUs too
   whenever every argument supports them, except over layouts whose sizes are
   all static, with several axes longer than 1 and an axis whose length is not a
