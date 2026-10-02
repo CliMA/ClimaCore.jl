@@ -4,6 +4,9 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v1.0.3
+-------
+
 - ![][badge-🐛bugfix] Broadcasts over fields with different spaces now recursively
   traverse the entire expression tree to find the largest shared space. All input
   fields are checked against the shared space, with strict compatibility rules
