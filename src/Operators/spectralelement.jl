@@ -102,7 +102,7 @@ Allocate a `Field` like `Base.similar(arg, T)`, but always through the argument'
 [`DataLayouts.DataScope`](@ref) (shared memory on GPUs), never in per-thread
 registers; used for every buffer whose values cross a thread boundary.
 """
-buffer_similar(arg, ::Type{T}) where {T} = Fields.Field(
+@inline buffer_similar(arg, ::Type{T}) where {T} = Fields.Field(
     DataLayouts.buffer_similar(Fields.field_values(arg), T),
     axes(arg),
 )
@@ -1074,6 +1074,218 @@ end
 
 
 """
+    lumped = LumpedRestriction(Quadratures.GLL{2}())   # == LumpedRestriction()
+    lumped.(f)
+
+Within each spectral element, restricts `f` onto the nodal basis of the
+lower-degree quadrature passed to the constructor, using a lumped (diagonal)
+mass matrix, and interpolates the result back to the element's own quadrature
+points. The result lives on the space of `f`, so the operator composes with
+other spectral operators inside one broadcast expression, e.g.
+`@. lumped(norm_sqr(grad(f)))`. On a space without a horizontal spectral
+element (a column), or when the quadrature is the space's own, `f` is returned
+unchanged; any other quadrature must have fewer points than the space's.
+
+With ``B`` the interpolation matrix from the coarse quadrature points ``\\xi^*_a``
+to the element's quadrature points ``\\xi_i`` (``B_{ia} = \\ell^*_a(\\xi_i)``, the
+coarse Lagrange basis evaluated at the fine points) and ``WJ`` the quadrature
+weights times the Jacobian determinant, the operator computes in each element
+
+```math
+\\theta_{ab} = \\frac{\\sum_{ij} B_{ia} B_{jb} \\, WJ_{ij} \\, f_{ij}}
+                    {\\sum_{ij} B_{ia} B_{jb} \\, WJ_{ij}},
+\\qquad
+(\\mathrm{lumped}\\, f)_{ij} = \\sum_{ab} B_{ia} B_{jb} \\, \\theta_{ab}.
+```
+
+This is the lumped-mass form of [`Restrict`](@ref) followed by
+[`Interpolate`](@ref): the denominator is the row sum of the exact coarse mass
+matrix ``B^\\top \\mathrm{diag}(WJ) B``, so no second space and no linear solve
+are needed. Because ``\\sum_{ab} B_{ia} B_{jb} = 1`` at every point, the operator
+reproduces a constant and conserves the ``WJ``-weighted integral of `f` over
+every element (both to round-off). It is linear in `f` and applies componentwise to vector- or
+tensor-valued fields. It is a smoothing filter, not a projection: a linear
+variation within an element is retained with a reduced slope (one third of it
+for `GLL{2}` on `GLL{4}`), and the result is discontinuous across element
+boundaries.
+
+The default `GLL{2}` restricts onto the element's corner (bilinear) basis, so
+the result varies at most bilinearly inside each element. With `GL{1}` (a single
+Gauss point), it returns the ``WJ``-weighted element mean at every point. For
+both `GLL{2}` and `GL{1}`, ``B_{ia} \\ge 0`` everywhere (so non-negativity is
+preserved) and the coarse basis has degree at most 1 (so a `GLL{Nq}` quadrature
+integrates ``\\ell^*_a |\\nabla f|^2`` of degree ``\\le 2 N_q - 3`` without Lobatto
+aliasing); higher-degree coarse quadratures (``N_c \\ge 3``) have mixed-sign
+``B_{ia}`` and neither preserve non-negativity nor remove the boundary excess.
+
+## Motivation
+
+The nodal derivative of a degree-``N`` element polynomial carries the end-of-
+interval error of polynomial differentiation: once a field has structure within
+about three elements per wavelength, its per-element [`Gradient`](@ref) is
+systematically too large at the boundary quadrature points and too small at
+the interior ones, while the element integral stays about right. In a linear
+expression this error alternates in sign and averages out, but in a
+positive-definite invariant like `norm_sqr(grad(f))` it is rectified into a
+same-sign excess at every element edge and corner that a weighted DSS cannot
+remove (DSS conserves the weighted sum over a node's copies, and the excess has
+the same sign on both sides). Applying this operator to the invariant removes
+the node-position bias while conserving each element's integral of it, so a
+quantity like a gradient-based subgrid-scale variance no longer imprints the
+element mesh on the fields it feeds.
+
+# Continuity
+
+The result is continuous within each element but not across element boundaries,
+where the two adjacent elements generally hold different values at their shared
+nodes. A consumer that applies a convex nonlinearity pointwise and then a
+weighted DSS to the result (e.g., a condensation threshold on the standard
+deviation derived from `lumped(norm_sqr(grad(f)))`, followed by DSS of the
+tendency) will recover a small boundary excess from that discontinuity; applying
+`Spaces.weighted_dss!` to the output of this operator before the nonlinearity
+removes it while leaving the operator's node-class means unchanged.
+
+# Buffer usage
+
+Two buffers are live in sequence, never at once: the ``WJ``-weighted argument
+(the size of one slab of `f`) while the coarse values are accumulated, and the
+coarse values ``\\theta`` (the size of one coarse slab) while they are
+interpolated back; see the buffer reuse invariant in [`apply_operator`](@ref).
+"""
+struct LumpedRestriction{Q <: Quadratures.QuadratureStyle} <: SpectralElementOperator
+    quadrature_style::Q
+end
+LumpedRestriction() = LumpedRestriction(Quadratures.GLL{2}())
+
+return_eltype(::LumpedRestriction, arg) = eltype(arg)
+
+# The coarse quadrature is validated here, when the broadcast's axes are first
+# computed on the host, rather than in apply_operator: a throw in kernel code
+# only traps on GPUs and never surfaces as an ArgumentError. The operator is the
+# identity for the space's own quadrature, a no-op on spaces without a
+# horizontal quadrature (columns), and otherwise needs fewer coarse points than
+# the space has: a different quadrature with the same number of points would
+# give the coarse buffer the byte size of the weighted argument's buffer (see
+# the buffer reuse invariant), so it is rejected rather than handled.
+function return_space(op::LumpedRestriction, space)
+    check_coarse_quadrature(op, space)
+    return space
+end
+check_coarse_quadrature(op, space) = nothing
+function check_coarse_quadrature(
+    op,
+    space::Union{Spaces.AbstractSpectralElementSpace, Spaces.ExtrudedFiniteDifferenceSpace},
+)
+    fine_quadrature_style = Spaces.quadrature_style(space)
+    op.quadrature_style == fine_quadrature_style && return nothing
+    Quadratures.degrees_of_freedom(op.quadrature_style) <
+    Quadratures.degrees_of_freedom(fine_quadrature_style) || throw(
+        ArgumentError(
+            "LumpedRestriction requires either the quadrature of its argument's space \
+             or a quadrature with fewer points",
+        ),
+    )
+    return nothing
+end
+
+# The interpolation matrix along horizontal dimension h, or a 1×1 identity when
+# h is not a horizontal dimension of the slab (as on a 1D horizontal space, where
+# the other dimension has a single point).
+@inline dim_matrix(::Val{h}, dims, B) where {h} =
+    unrolled_in(h, dims) ? B : SMatrix{1, 1}(one(eltype(B)))
+
+# A buffer for the coarse values of one slab: the layout of data, with its
+# horizontal dimensions in dims shrunk to Nc points, allocated through data's
+# DataScope so that every thread of the slab can read it.
+@inline function coarse_buffer(data, ::Type{T}, dims, ::Val{Nc}) where {T, Nc}
+    B = DataLayouts.checked_valid_basetype(eltype(DataLayouts.parent_type(data)), T)
+    Nf = DataLayouts.num_basetypes(B, T)
+    (; Nv, Ni, Nj, Nh) = DataLayouts.vijh_params(data)
+    Ni′ = unrolled_in(1, dims) ? Nc : Ni
+    Nj′ = unrolled_in(2, dims) ? Nc : Nj
+    array_size = DataLayouts.add_f_dim((Nv, Ni′, Nj′, Nh), Nf, Val(DataLayouts.f_dim(data)))
+    array = DataLayouts.scoped_static_array(DataLayouts.DataScope(data), B, array_size)
+    return DataLayouts.rebuild(data, array, T; Ni = Ni′, Nj = Nj′)
+end
+
+# Like constant_field, but for a DataLayout: freeze a thread-local buffer into an
+# immutable SArray once it is fully written, so that reading it through the
+# closures below does not force it onto the heap.
+@inline constant_data(data) =
+    has_private_buffers(data) ? DataLayouts.rebuild(data, StaticArrays.SArray) : data
+
+# Set θ_ab = Σ_ij Bᵢ[i, a] Bⱼ[j, b] arg′_ij / Σ_ij Bᵢ[i, a] Bⱼ[j, b] WJ_ij for every
+# coarse point (a, b), where arg′ = WJ f has already been materialized. Every
+# coarse point reads the whole slab, so all threads that materialized arg′ must
+# be synchronized before this is called.
+@inline function lumped_restrict_slab!(θ, Bᵢ, Bⱼ, arg′, WJ)
+    arg_data = slab_data(arg′)
+    WJ_data = slab_data(WJ)
+    i′s = ntuple(identity, Val(size(Bᵢ, 1)))
+    j′s = ntuple(identity, Val(size(Bⱼ, 1)))
+    DataLayouts.foreach_column(θ; enumerate = Val(true)) do index, θ_point
+        (a, b, _) = Tuple(index)
+        weighted_sum(data) = unrolled_sum(j′s) do j
+            @inbounds Bⱼ[j, b] * unrolled_sum(
+                i -> (@inbounds Bᵢ[i, a] * arg_point_value(data, i, j)),
+                i′s,
+            )
+        end
+        @inbounds θ_point[] = weighted_sum(arg_data) / weighted_sum(WJ_data)
+        nothing
+    end
+end
+
+# Set dest_ij = Σ_ab Bᵢ[i, a] Bⱼ[j, b] θ_ab for every point (i, j) of the slab.
+# All threads that wrote θ must be synchronized before this is called.
+@inline function prolong_slab!(dest, Bᵢ, Bⱼ, θ)
+    a′s = ntuple(identity, Val(size(Bᵢ, 2)))
+    b′s = ntuple(identity, Val(size(Bⱼ, 2)))
+    DataLayouts.foreach_column(
+        slab_data(dest); enumerate = Val(true),
+    ) do index, dest_point
+        (i, j, _) = Tuple(index)
+        @inbounds dest_point[] = unrolled_sum(b′s) do b
+            @inbounds Bⱼ[j, b] * unrolled_sum(
+                a -> (@inbounds Bᵢ[i, a] * arg_point_value(θ, a, b)),
+                a′s,
+            )
+        end
+        nothing
+    end
+end
+
+function apply_operator(op::LumpedRestriction, arg)
+    dims = horizontal_dims(arg)
+    isempty(dims) && return arg # no horizontal element to filter within
+    fine_quadrature_style = Spaces.quadrature_style(axes(arg))
+    # Other quadratures with Nc ≥ Nq were rejected on the host (see return_space).
+    op.quadrature_style == fine_quadrature_style && return arg # identity on the space's own basis
+    Nc = Quadratures.degrees_of_freedom(op.quadrature_style)
+    T = return_eltype(op, arg)
+    dest = register_similar(arg, T)
+    FT = Spaces.undertype(axes(dest))
+    scope = DataLayouts.DataScope(arg)
+    WJ = Fields.local_geometry_field(arg).WJ
+    # Every coarse point reads every point of WJ f, so publish it through a
+    # buffer even when arg is register-resident (e.g., the result of Gradient).
+    arg′ = materialize_buffer(Base.broadcasted(*, arg, WJ))
+    DataLayouts.synchronize(scope)
+    B = Quadratures.interpolation_matrix(FT, fine_quadrature_style, op.quadrature_style)
+    Bᵢ = dim_matrix(Val(1), dims, B)
+    Bⱼ = dim_matrix(Val(2), dims, B)
+    # θ has a different byte size from arg′ (Nc < Nq), so the two buffers cannot
+    # alias while both are live; see the buffer reuse invariant.
+    θ = coarse_buffer(slab_data(arg′), T, dims, Val(Nc))
+    lumped_restrict_slab!(θ, Bᵢ, Bⱼ, arg′, WJ)
+    DataLayouts.synchronize(scope)
+    prolong_slab!(dest, Bᵢ, Bⱼ, constant_data(θ))
+    # Synchronize before returning; see the comment in the Divergence method.
+    DataLayouts.synchronize(scope)
+    return constant_field(dest)
+end
+
+"""
     tensor_product!(out, in, M)
     tensor_product!(inout, M)
 
@@ -1275,6 +1487,7 @@ end
 # slab, adding 30-120% to a fused expression's runtime. Inlining apply_operator(s)
 # as well gains about 10% and roughly doubles LLVM time and memory.
 @drop_constprop apply_operator, muladd_slab!, muladd_slab_dims!,
+lumped_restrict_slab!, prolong_slab!,
 materialize_buffer, maybe_private_buffer, materialize_jacobian_weighted,
 materialize_quadrature_weighted, jacobian_unweighted,
 quadrature_unweighted, fused_buffer, register_similar, buffer_similar

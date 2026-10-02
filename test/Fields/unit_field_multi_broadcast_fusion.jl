@@ -13,7 +13,7 @@ include("utils_field_multi_broadcast_fusion.jl")
     x = rand_field(FT, cspace)
     y = rand_field(FT, fspace)
     # Cannot fuse center and face-spaced broadcasting
-    @test_throws ErrorException begin
+    @test_throws DimensionMismatch begin
         @fused_direct begin
             @. x += 1
             @. y += 1

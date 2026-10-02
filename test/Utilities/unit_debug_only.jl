@@ -3,16 +3,14 @@ import ClimaCore
 import ClimaCore: DebugOnly
 
 # Unit tests for the DebugOnly module (debugging hooks).
-# NOTE: `call_post_op_callback`/`allow_mismatched_spaces_unsafe` are meant to
-# be overloaded by users while debugging; overriding them here would leak a
-# global method redefinition into the rest of the suite, so only the default
-# behavior and the pure helpers are tested.
+# NOTE: `call_post_op_callback` is meant to be overloaded by users while
+# debugging; overriding it here would leak a global method redefinition into the
+# rest of the suite, so only the default behavior and pure helpers are tested.
 
 @testset "DebugOnly" begin
     @testset "safe defaults" begin
         # Debug hooks must be off by default: production behavior.
         @test DebugOnly.call_post_op_callback() == false
-        @test DebugOnly.allow_mismatched_spaces_unsafe() == false
     end
 
     @testset "example_debug_post_op_callback" begin

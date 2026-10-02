@@ -15,11 +15,22 @@ using Aqua
     pkg_match(pkgname, pkdir::Nothing) = false
     pkg_match(pkgname, pkdir::AbstractString) = occursin(pkgname, pkdir)
     filter!(x -> pkg_match("ClimaCore", pkgdir(last(x).module)), ambs)
+    # When the whole suite runs in one process, the Operators benchmark
+    # utilities load StatsBase before this file, and `StatsBase.TestStat(v)`
+    # is then ambiguous with `(::Type{<:Number})(::AutoBroadcaster)`. The
+    # constructor disambiguators in Utilities/auto_broadcaster.jl are generated
+    # when ClimaCore is precompiled, so they cannot cover packages that are not
+    # ClimaCore dependencies. StatsBase is excluded so that the count does not
+    # depend on which tests ran first.
+    from_statsbase(m) = nameof(Base.moduleroot(m.module)) === :StatsBase
+    filter!(x -> !any(from_statsbase, x), ambs)
 
     # If the number of ambiguities is less than the limit below,
     # then please lower the limit based on the new number of ambiguities.
     # We're trying to drive this number down to zero to reduce latency.
-    n_existing_ambiguities = 27
+    # ClimaCoreCUDAExt adds ambiguities of its own, so the count has to be
+    # checked with CUDA loaded (CLIMACOMMS_DEVICE=CUDA) as well.
+    n_existing_ambiguities = 0
     if !(length(ambs) ≤ n_existing_ambiguities)
         for method_ambiguity in ambs
             @show method_ambiguity

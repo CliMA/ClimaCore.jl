@@ -168,10 +168,12 @@ hypsography(grid::ExtrudedFiniteDifferenceGrid) = grid.hypsography
 quadrature_style(grid::ExtrudedFiniteDifferenceGrid) =
     quadrature_style(grid.horizontal_grid)
 
-issubgrid(subgrid::FiniteDifferenceGrid, grid::ExtrudedFiniteDifferenceGrid) =
-    issubgrid(subgrid, grid.vertical_grid)
-issubgrid(subgrid::AbstractSpectralElementGrid, grid::ExtrudedFiniteDifferenceGrid) =
-    issubgrid(subgrid, grid.horizontal_grid)
+for f in (:issubgrid, :maybe_issubgrid)
+    @eval $f(subgrid::FiniteDifferenceGrid, grid::ExtrudedFiniteDifferenceGrid) =
+        $f(subgrid, grid.vertical_grid)
+    @eval $f(subgrid::AbstractSpectralElementGrid, grid::ExtrudedFiniteDifferenceGrid) =
+        $f(subgrid, grid.horizontal_grid)
+end
 
 ## GPU compatibility
 struct DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, CLG, FLG} <:

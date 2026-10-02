@@ -79,3 +79,31 @@ end
               sizeof(typeof(Adapt.adapt(to, parent(view_data))))
     end
 end
+
+# Point loops whose bodies broadcast over many single-point views
+struct ScaledSum{FT}
+    scale::FT
+end
+Base.broadcastable(f::ScaledSum) = tuple(f)
+@inline (f::ScaledSum)(args...) = f.scale * +(args...)
+
+@testset "point broadcasts nested in point loops" begin
+    device = ClimaComms.device()
+    FT = Float32
+    A = ClimaComms.array_type(device){FT}
+    (Nv, Nij, Nh) = (10, 4, 5)
+    dest = VIJFH{FT, Nv, Nij, Nij, nothing}(A, Nh)
+    args = ntuple(7) do n
+        data = VIJFH{FT, Nv, Nij, Nij, nothing}(A, Nh)
+        parent(data) .= n
+        data
+    end
+    f = ScaledSum(FT(2))
+    c = FT(1)
+    for n in (1, 5, 7)
+        ClimaCore.DataLayouts.foreach_point(dest, args[1:n]...) do dest_point, arg_points...
+            @. dest_point = f(arg_points..., c)
+        end
+        @test all(==(2 * (sum(1:n) + 1)), Array(parent(dest)))
+    end
+end

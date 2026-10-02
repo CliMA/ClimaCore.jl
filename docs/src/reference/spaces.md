@@ -128,6 +128,7 @@ Spaces.undertype
 Spaces.coordinates_data
 Spaces.radius
 Spaces.issubspace
+Spaces.maybe_issubspace
 Spaces.eachslabindex
 ```
 

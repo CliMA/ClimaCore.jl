@@ -28,6 +28,9 @@ wcurl_curl!(dest, u, curl, wcurl) = (
         Geometry.Covariant12Vector(wcurl(Geometry.Covariant3Vector(curl(u))));
     nothing
 )
+lumped_grad_norm!(dest, ϕ, grad, lumped) =
+    (@. dest = lumped(LA.norm_sqr(grad(ϕ))); nothing)
+lumped_grad!(dest, ϕ, grad, lumped) = (@. dest = lumped(grad(ϕ)); nothing)
 u_cross_curl_u!(dest, u, f, curl) = (
     @. dest = Geometry.Contravariant12Vector(u) × (f + curl(u));
     nothing
@@ -48,11 +51,17 @@ u_cross_curl_u!(dest, u, f, curl) = (
         wdiv = Operators.Divergence{Operators.WeakForm}()
         curl = Operators.Curl()
         wcurl = Operators.Curl{Operators.WeakForm}()
+        lumped = Operators.LumpedRestriction()
 
         TU.@test_zero_allocations div_grad!(ϕ, ψ, grad, wdiv)
         TU.@test_zero_allocations grad_only!(du, ϕ, grad)
         TU.@test_zero_allocations grad_norm!(du, ϕ, ψ, u, grad)
         TU.@test_zero_allocations wgrad_div!(du, u, wgrad, div)
+        TU.@test_zero_allocations lumped_grad_norm!(ϕ, ψ, grad, lumped)
+        # Non-scalar arguments: a vector (rank 1) and the gradient of a vector (rank 2).
+        TU.@test_zero_allocations lumped_grad!(du, ϕ, grad, lumped)
+        ∇u = grad.(u)
+        TU.@test_zero_allocations lumped_grad!(∇u, u, grad, lumped)
         # These two apply a `UnionAll` vector constructor on top of an operator.
         TU.@test_zero_allocations wcurl_curl!(du, u, curl, wcurl)
         TU.@test_zero_allocations u_cross_curl_u!(du, u, f, curl)

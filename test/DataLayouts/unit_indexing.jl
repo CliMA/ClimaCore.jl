@@ -5,7 +5,7 @@
 #    instead of silently corrupting the parent array.
 using Test
 import ClimaCore.DataLayouts
-import ClimaCore.DataLayouts: VIJFH, slab, column, level
+import ClimaCore.DataLayouts: DataF, VIJFH, slab, column, level
 
 @testset "slab/column/level shapes and bounds [$FT]" for FT in
                                                          (Float32, Float64)
@@ -37,6 +37,19 @@ import ClimaCore.DataLayouts: VIJFH, slab, column, level
     @test size(column(single, 1, 1, 1)) == ()
     @test_throws BoundsError slab(single, 2, 1)
     @test_throws BoundsError column(single, 2, 1, 1)
+
+    # A zero-dimensional DataF returns itself when sliced in-bounds, without
+    # wrapping its 1D parent array in nested SubArray/ReshapedArray views.
+    df = DataF{FT}(Array{FT})
+    df[] = FT(3)
+    @test slab(df, 1, 1) === df
+    @test column(df, 1, 1, 1) === df
+    @test level(df, 1) === df
+    @test df[1, 1, 1, 1] == FT(3)
+    @test_throws BoundsError slab(df, 2, 1)
+    @test_throws BoundsError column(df, 2, 1, 1)
+    @test_throws BoundsError level(df, 2)
+    @test_throws BoundsError df[2]
 end
 
 @testset "setindex! type safety" begin

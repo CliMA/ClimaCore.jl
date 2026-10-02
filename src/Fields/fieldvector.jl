@@ -213,6 +213,10 @@ Base.Broadcast.BroadcastStyle(
     as::Base.Broadcast.AbstractArrayStyle,
     fs::FieldVectorStyle,
 ) = as
+# `FieldVectorStyle` is itself an `AbstractArrayStyle`, so combining two of them
+# matches the two methods above equally. Two FieldVectors broadcast together
+# stay a FieldVector.
+Base.Broadcast.BroadcastStyle(fs::FieldVectorStyle, ::FieldVectorStyle) = fs
 
 function Base.similar(
     bc::Base.Broadcast.Broadcasted{FieldVectorStyle},
@@ -529,10 +533,6 @@ end
     return dest
 end
 
-# Define separate methods for Style{Tuple} and AbstractArrayStyle{0}, instead
-# of a single method for their Union, to avoid a dispatch ambiguity with the
-# method for AbstractArrays in Base.Broadcast.
-#
 # The incoming broadcast carries the FieldVector's own axes, which are the
 # BlockedOneTo of the flattened vector and bear no relation to the axes of any
 # individual leaf array. They must be replaced by the leaf's axes before
@@ -541,29 +541,43 @@ end
 # the copyto! it feeds requires them to match the destination exactly. Scalar
 # styles happen to survive the mismatch because Base short-circuits them to
 # fill!, while Style{Tuple} would otherwise throw a DimensionMismatch.
-for S in
-    (:(Base.Broadcast.Style{Tuple}), :(Base.Broadcast.AbstractArrayStyle{0}))
-    @eval @inline function Base.copyto!(
+@inline function _copyto_scalar_broadcast!(dest::FieldVector, bc)
+    unrolled_foreach(property_name_vals(dest)) do symb_val
+        array = parent(getfield(field_vector_values(dest), unval(symb_val)))
+        if array isa FieldVector
+            copyto!(array, bc)
+        else
+            bc_leaf =
+                Base.Broadcast.Broadcasted(bc.style, bc.f, bc.args, axes(array))
+            copyto!(array, Base.Broadcast.instantiate(bc_leaf))
+        end
+    end
+    call_post_op_callback() && post_op_callback(dest, dest, bc)
+    return dest
+end
+
+# Define separate methods for Style{Tuple} and AbstractArrayStyle{0}, instead
+# of a single method for their Union, to avoid a dispatch ambiguity with the
+# method for AbstractArrays in Base.Broadcast. The StaticArrayStyle{0} and
+# AbstractBlockStyle{0} methods likewise avoid ambiguities with the
+# `copyto!(::AbstractArray, ::Broadcasted{<:StaticArrayStyle})` and
+# `copyto!(::AbstractArray, ::Broadcasted{<:AbstractBlockStyle{N}})` methods in
+# StaticArrays and BlockArrays, in the same way as the DataLayout methods in
+# DataLayouts/loops.jl. ClimaCoreCUDAExt adds the corresponding
+# AbstractGPUArrayStyle{0} method, which cannot be defined here because
+# GPUArrays is not a dependency of ClimaCore. All of these styles are
+# zero-dimensional, so the scalar-broadcast implementation above is the correct
+# one to use in every case.
+for S in (
+    :(Base.Broadcast.Style{Tuple}),
+    :(Base.Broadcast.AbstractArrayStyle{0}),
+    :(StaticArrays.StaticArrayStyle{0}),
+    :(BlockArrays.AbstractBlockStyle{0}),
+)
+    @eval @inline Base.copyto!(
         dest::FieldVector,
         bc::Base.Broadcast.Broadcasted{<:$S},
-    )
-        unrolled_foreach(property_name_vals(dest)) do symb_val
-            array = parent(getfield(field_vector_values(dest), unval(symb_val)))
-            if array isa FieldVector
-                copyto!(array, bc)
-            else
-                bc_leaf = Base.Broadcast.Broadcasted(
-                    bc.style,
-                    bc.f,
-                    bc.args,
-                    axes(array),
-                )
-                copyto!(array, Base.Broadcast.instantiate(bc_leaf))
-            end
-        end
-        call_post_op_callback() && post_op_callback(dest, dest, bc)
-        return dest
-    end
+    ) = _copyto_scalar_broadcast!(dest, bc)
 end
 
 # Copying a scalar fills every entry with it, as in fill!. Without this method,
@@ -602,11 +616,38 @@ LinearAlgebra.ldiv!(
 LinearAlgebra.ldiv!(A::LinearAlgebra.QRCompactWY, x::FieldVector) =
     x .= LinearAlgebra.ldiv!(A, Vector(x))
 
-LinearAlgebra.ldiv!(x::FieldVector, A::LinearAlgebra.LU, b::FieldVector) =
-    x .= LinearAlgebra.ldiv!(A, Vector(b))
-
-LinearAlgebra.ldiv!(A::LinearAlgebra.LU, x::FieldVector) =
-    x .= LinearAlgebra.ldiv!(A, Vector(x))
+# `ldiv!(::LU, ::AbstractVector)` is claimed by several packages with methods
+# that are unconstrained in their second argument, e.g. LinearAlgebra's
+# `ldiv!(::LU{T, Tridiagonal{T, V}}, ::AbstractVecOrMat)` and the twelve
+# `ldiv!(::LU{<:Any, <:Typ}, ::Any)` methods that ArrayLayouts generates from
+# `@layoutfactorizations`. A single `ldiv!(::LU, ::FieldVector)` method is
+# ambiguous with every one of them, and there is no way to disambiguate without
+# mirroring ArrayLayouts' internal list of wrapper types. Instead, dispatch on
+# the two factor types that `lu`/`lu!` produces for the Jacobians a
+# FieldVector is solved against: a dense `Matrix` and a `Tridiagonal` (from a
+# vertical-only Jacobian). Both are disjoint from all of the layout wrapper
+# types, so no ambiguity remains. The three-argument methods cover the same two
+# factor types.
+#
+# The Tridiagonal methods are more specific than LinearAlgebra's
+# `ldiv!(::LU{T, Tridiagonal{T, V}}, ::AbstractVecOrMat)`, which would index
+# into the FieldVector elementwise. Their first argument has to spell out
+# `Tridiagonal{T, V}` with a method-level `where`, as that method does:
+# `LU{T, <:Tridiagonal{T}}` describes the same set of types but is not
+# recognized as being as specific, and `LU{T, Tridiagonal{T}}` matches no
+# factorization at all, since `Tridiagonal{T}` is a `UnionAll`.
+for (LUType, params) in (
+    (:(LinearAlgebra.LU{T, Matrix{T}}), (:T,)),
+    (:(LinearAlgebra.LU{T, LinearAlgebra.Tridiagonal{T, V}}), (:T, :V)),
+)
+    @eval LinearAlgebra.ldiv!(A::$LUType, x::FieldVector) where {$(params...)} =
+        x .= LinearAlgebra.ldiv!(A, Vector(x))
+    @eval LinearAlgebra.ldiv!(
+        x::FieldVector,
+        A::$LUType,
+        b::FieldVector,
+    ) where {$(params...)} = x .= LinearAlgebra.ldiv!(A, Vector(b))
+end
 
 function LinearAlgebra.norm_sqr(x::FieldVector)
     value_norm_sqrs = unrolled_map(field_vector_values(x)) do value

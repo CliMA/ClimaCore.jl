@@ -195,12 +195,11 @@ function SpectralElementSpace1D(
     ::Type{FT};
     context = ClimaComms.SingletonCommsContext(),
 ) where {FT}
-    # 1d domain space
     domain = Domains.IntervalDomain(
         Geometry.XPoint{FT}(-3) .. Geometry.XPoint{FT}(5),
         periodic = true,
     )
-    mesh = Meshes.IntervalMesh(domain; nelems = 1)
+    mesh = Meshes.IntervalMesh(domain; nelems = 4)
     topology = Topologies.IntervalTopology(context, mesh)
     quad = Quadratures.GLL{4}()
     return Spaces.SpectralElementSpace1D(topology, quad)
@@ -210,7 +209,6 @@ function SpectralElementSpace2D(
     ::Type{FT};
     context = ClimaComms.SingletonCommsContext(),
 ) where {FT}
-    # 1×1 domain space
     domain = Domains.RectangleDomain(
         Geometry.XPoint{FT}(-3) .. Geometry.XPoint{FT}(5),
         Geometry.YPoint{FT}(-2) .. Geometry.YPoint{FT}(8),
@@ -218,7 +216,7 @@ function SpectralElementSpace2D(
         x2periodic = false,
         x2boundary = (:south, :north),
     )
-    mesh = Meshes.RectilinearMesh(domain, 1, 1)
+    mesh = Meshes.RectilinearMesh(domain, 4, 4)
     topology = Topologies.Topology2D(context, mesh)
     quad = Quadratures.GLL{4}()
     return Spaces.SpectralElementSpace2D(topology, quad)

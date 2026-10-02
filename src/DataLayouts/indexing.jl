@@ -139,7 +139,7 @@ end
     array = parent(data)
     F = f_dim(data)
     (index == CartesianIndex() && isone(length(data))) &&
-        return (array, isone(ndims(array)) ? () : (first(CartesianIndices(data)), Val(F)))
+        return (array, (first(CartesianIndices(data)), Val(F)))
     (index isa CartesianIndex || isnothing(F)) && return (array, (index, Val(F)))
     IndexStyle(data) == IndexCartesian() &&
         return (array, (CartesianIndices(data)[index], Val(F)))
@@ -151,6 +151,20 @@ end
     num_strides_in_parent = index_for_dims_after_F * parent_Nf + parent_f
     parent_index = num_strides_in_parent * stride + offset_for_dims_before_F + 1
     return (parent(array), (parent_index, stride))
+end
+
+# A DataF is the only layout with a one-dimensional parent array, which holds
+# its single value, so every in-bounds index selects that value and none is
+# passed on. Passing a Cartesian index would make view_struct wrap the parent
+# in a reshaped SubArray, and slicing that view again (a spectral broadcast
+# inside foreach_slab slices its arguments a second time) reaches a reshape
+# error whose message is built from a string, which does not compile on GPUs.
+@inline checkbounds_single_point(array, index) =
+    all(isone, Tuple(index)) || Base.throw_boundserror(array, Tuple(index))
+@propagate_inbounds function array_and_index_args(data::DataF, index)
+    array = parent(data)
+    @boundscheck checkbounds_single_point(array, index)
+    return (array, ())
 end
 
 # Always convert to the element type of a DataLayout when modifying its values.
@@ -170,6 +184,11 @@ end
     return DataF{eltype(data), typeof(DataScope(data))}(
         view_struct(array, eltype(data), index_args...),
     )
+end
+# A DataF is already a single-point view, so an in-bounds slice of it is itself.
+@propagate_inbounds function Base.view(data::DataF, index::PointIndex)
+    @boundscheck checkbounds_single_point(parent(data), index)
+    return data
 end
 
 # Use Broadcast.newindex to match the behavior of getindex for LazyDataLayouts.

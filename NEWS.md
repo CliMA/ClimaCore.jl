@@ -4,6 +4,32 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v1.0.3
+-------
+
+- ![][badge-🐛bugfix] Broadcasts over fields with different spaces now recursively
+  traverse the entire expression tree to find the largest shared space. All input
+  fields are checked against the shared space, with strict compatibility rules
+  defined through `Grids.issubgrid` and `Spaces.issubspace`. Broadcast destinations
+  can have different spaces from the inputs, as long as their sizes are consistent.
+
+v1.0.2
+-------
+
+- ![][badge-✨feature/enhancement] New spectral element operator
+  `Operators.LumpedRestriction(quadrature_style)`: within each element, it
+  restricts a field onto the nodal basis of a lower-degree quadrature with a
+  lumped mass matrix and interpolates the result back to the element's own
+  quadrature points, so the output lives on the input's space and composes in
+  one broadcast with other spectral operators (e.g.
+  `@. lumped(norm_sqr(grad(f)))`). The default `GLL{2}` gives the bilinear
+  corner basis; `GL{1}` gives the element mean. It reproduces constants and
+  conserves every element's `WJ`-weighted integral exactly, and it removes the
+  systematic excess of positive-definite gradient invariants like
+  `norm_sqr(grad(f))` at element edges and corners that comes from the
+  end-of-interval error of polynomial differentiation and that DSS cannot
+  remove.
+
 - ![][badge-🚀performance] Reduced compilation latency (TTFX) across grid/space
   construction, `DataLayout` and `Field` broadcasts, spectral and finite-difference
   operators, and `FieldVector` broadcasts by eliminating internal `Core.kwcall`

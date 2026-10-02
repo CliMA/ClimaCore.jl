@@ -42,6 +42,7 @@ import ..Grids:
     global_geometry,
     dss_weights,
     issubgrid,
+    maybe_issubgrid,
     set_mask!,
     get_mask,
     quadrature_style,
@@ -150,13 +151,21 @@ extruded `space`, or the vertical space or a column of it. Two spaces built on
 the same grid with different staggering are not subspaces of each other.
 """
 issubspace(subspace::AbstractSpace, space::AbstractSpace) =
-    subspace === space ||
-    (has_vertical(space) || has_horizontal(space)) && # if grid(space) is defined
     issubgrid(grid(subspace), grid(space)) &&
     (isnothing(staggering(subspace)) || staggering(subspace) == staggering(space))
 
 Base.:(==)(space1::AbstractSpace, space2::AbstractSpace) =
     issubspace(space1, space2) && issubspace(space2, space1)
+
+"""
+    Spaces.maybe_issubspace(subspace::AbstractSpace, space::AbstractSpace)
+
+Similar to [`Spaces.issubspace`](@ref), but based solely on the types of `space`
+and `subspace`, rather than their actual values.
+"""
+maybe_issubspace(subspace::AbstractSpace, space::AbstractSpace) =
+    maybe_issubgrid(grid(subspace), grid(space)) &&
+    (isnothing(staggering(subspace)) || staggering(subspace) == staggering(space))
 
 """
     Spaces.undertype(space::AbstractSpace)
@@ -225,6 +234,12 @@ include("extruded.jl")
 include("multicolumn.jl")
 include("triangulation.jl")
 include("dss.jl")
+
+# Resolve ambiguities for issubspace and maybe_issubspace.
+for f in (:issubspace, :maybe_issubspace)
+    @eval $f(::PointSpace, ::SpectralElementSpaceSlab) = true
+    @eval $f(::SpectralElementSpaceSlab, ::PointSpace) = false
+end
 
 function center_space(space::AbstractSpace)
     error("`center_space` can only be called with vertical/extruded spaces")
@@ -320,24 +335,20 @@ get_mask(space::ExtrudedFiniteDifferenceSpace) =
 """
     has_vertical(::AbstractSpace)
 
-Return `true` if the space has a vertical grid.
+Return `true` if the space has a vertical component.
 """
-function has_vertical end
-has_vertical(::AbstractSpace) = false
-has_vertical(::ExtrudedFiniteDifferenceSpace) = true
-has_vertical(::MultiColumnFiniteDifferenceSpace) = true
-has_vertical(::FiniteDifferenceSpace) = true
+has_vertical(space::AbstractSpace) = Grids.has_vertical(grid(space))
+has_vertical(::PointSpace) = false
+has_vertical(::SpectralElementSpaceSlab) = false
 
 """
     has_horizontal(::AbstractSpace)
 
-Return `true` if the space has a horizontal grid.
+Return `true` if the space has a horizontal component.
 """
-function has_horizontal end
-has_horizontal(::AbstractSpace) = false
-has_horizontal(::ExtrudedFiniteDifferenceSpace) = true
-has_horizontal(::SpectralElementSpace1D) = true
-has_horizontal(::SpectralElementSpace2D) = true
+has_horizontal(space::AbstractSpace) = Grids.has_horizontal(grid(space))
+has_horizontal(::PointSpace) = false
+has_horizontal(::SpectralElementSpaceSlab) = true
 
 set_mask!(fn, space::AbstractSpace) = set_mask!(fn, grid(space))
 set_mask!(fn, space::ExtrudedFiniteDifferenceSpace) =

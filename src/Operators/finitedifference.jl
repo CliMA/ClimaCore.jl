@@ -5,7 +5,6 @@ import ..Utilities:
     AutoBroadcaster,
     nested_broadcast_result_type,
     add_auto_broadcasters
-import ..DebugOnly: allow_mismatched_spaces_unsafe
 
 const AllFiniteDifferenceSpace = Union{
     Spaces.FiniteDifferenceSpace,
@@ -348,37 +347,43 @@ Adapt.adapt_structure(to, sbc::StencilBroadcasted{Style}) where {Style} =
         Adapt.adapt(to, sbc.axes),
     )
 
-function Base.Broadcast.instantiate(sbc::StencilBroadcasted)
-    op = sbc.op
-    # recursively instantiate the arguments to allocate intermediate work arrays
-    args = instantiate_args(sbc.args)
-    # axes: same logic as Broadcasted
-    if sbc.axes isa Nothing # Not done via dispatch to make it easier to extend instantiate(::Broadcasted{Style})
-        axes = Base.axes(sbc)
-    else
-        axes = sbc.axes
-        if axes !== Base.axes(sbc)
-            Base.Broadcast.check_broadcast_axes(axes, args...)
-        end
-    end
-    Style = AbstractStencilStyle(sbc, ClimaComms.device(axes))
-    return StencilBroadcasted{Style}(op, args, axes)
+@inline function Base.Broadcast.instantiate(sbc::StencilBroadcasted)
+    Style = AbstractStencilStyle(sbc, ClimaComms.device(axes(sbc)))
+    instantiated_args = unrolled_map(Base.Broadcast.instantiate, sbc.args)
+    return StencilBroadcasted{Style}(sbc.op, instantiated_args, axes(sbc))
 end
-function Base.Broadcast.instantiate(
+@inline function Base.Broadcast.instantiate(
     bc::Base.Broadcast.Broadcasted{<:AbstractStencilStyle},
 )
-    # recursively instantiate the arguments to allocate intermediate work arrays
-    args = instantiate_args(bc.args)
-    # axes: same logic as Broadcasted
-    if bc.axes isa Nothing # Not done via dispatch to make it easier to extend instantiate(::Broadcasted{Style})
-        axes = Base.Broadcast.combine_axes(args...)
-    else
-        axes = bc.axes
-        Base.Broadcast.check_broadcast_axes(axes, args...)
-    end
-    Style = AbstractStencilStyle(bc, ClimaComms.device(axes))
-    return Base.Broadcast.Broadcasted{Style}(bc.f, args, axes)
+    isnothing(bc.axes) || Base.Broadcast.check_broadcast_axes(bc.axes, bc.args...)
+    Style = AbstractStencilStyle(bc, ClimaComms.device(axes(bc)))
+    instantiated_args = unrolled_map(Base.Broadcast.instantiate, bc.args)
+    return Base.Broadcast.Broadcasted{Style}(bc.f, instantiated_args, axes(bc))
 end
+
+# `AbstractStencilStyle <: Fields.AbstractFieldStyle`, so a `Broadcasted` that
+# is both stencil-styled and operator-headed matches the method above (more
+# specific in the style) and the `NonPointwiseBroadcasted` method in common.jl
+# (more specific in the function) equally. An operator head determines the
+# result space through `return_space` rather than through `combine_axes`, so
+# the operator-headed behaviour applies.
+Base.Broadcast.instantiate(
+    (;
+        style,
+        f,
+        args,
+        axes,
+    )::Base.Broadcast.Broadcasted{
+        <:AbstractStencilStyle,
+        <:Any,
+        <:AbstractOperator,
+    },
+) = Base.Broadcast.Broadcasted(
+    style,
+    f,
+    unrolled_map(Base.Broadcast.instantiate, args),
+    axes,
+)
 
 function strip_space(sbc::StencilBroadcasted{Style}, parent_space) where {Style}
     current_space = axes(sbc)
@@ -1068,22 +1073,21 @@ boundary_width(::AdvectionOperator, ::VerticalBoundaryCondition) = 0
 # evaluating the interior stencil keeps the semantics identical either way.
 # (Operators rewritten as matrix multiplies never evaluate these raw-operator
 # methods at all: their boundary rows come through FDOperatorMatrix.)
-Base.@propagate_inbounds stencil_left_boundary(
-    op::AdvectionOperator,
-    bc,
-    space,
-    idx,
-    hidx,
-    args...,
-) = stencil_interior(op, space, idx, hidx, args...)
-Base.@propagate_inbounds stencil_right_boundary(
-    op::AdvectionOperator,
-    bc,
-    space,
-    idx,
-    hidx,
-    args...,
-) = stencil_interior(op, space, idx, hidx, args...)
+# The `NullBoundaryCondition` methods resolve an ambiguity: the generic
+# `NullBoundaryCondition` methods are more specific in the boundary condition,
+# and the `Any` methods here are more specific in the operator.
+for f in (:stencil_left_boundary, :stencil_right_boundary),
+    BC in (:Any, :NullBoundaryCondition)
+
+    @eval Base.@propagate_inbounds $f(
+        op::AdvectionOperator,
+        ::$BC,
+        space,
+        idx,
+        hidx,
+        args...,
+    ) = stencil_interior(op, space, idx, hidx, args...)
+end
 stencil_interior_width(
     op::AdvectionOperator,
     velocity,
@@ -3123,7 +3127,7 @@ function Base.Broadcast.materialize!(
     bc::Base.Broadcast.Broadcasted{Style},
 ) where {Style <: AbstractStencilStyle}
     dest_space, result_space = axes(dest), axes(bc)
-    if result_space !== dest_space && !allow_mismatched_spaces_unsafe()
+    if result_space !== dest_space
         # TODO: we pass the types here to avoid stack copying data
         # but this could lead to a confusing error message (same space type but
         # different instances)
