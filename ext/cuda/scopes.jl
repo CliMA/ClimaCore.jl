@@ -133,24 +133,24 @@ struct ThisBlock <: ThisCooperativeGroup end
 # Putting the byte size in the name (this is otherwise CuStaticSharedArray's
 # llvmcall) lets only EQUAL allocations share, so the buffer reuse invariant in
 # Operators/spectralelement.jl has to hold for every equally sized pair.
-@generated function shmem_pointer(::Type{T}, ::Val{bytes}) where {T, bytes}
-    LLVM.@dispose ctx = LLVM.Context() begin
-        pointer_type = convert(LLVM.LLVMType, Core.LLVMPtr{T, CUDA.AS.Shared})
-        llvm_f, _ = LLVM.Interop.create_function(pointer_type)
-        array_type = LLVM.ArrayType(LLVM.Int8Type(), bytes)
-        global_var = LLVM.GlobalVariable(
-            LLVM.parent(llvm_f), array_type, "shmem_$(bytes)B", CUDA.AS.Shared)
-        LLVM.linkage!(global_var, LLVM.API.LLVMInternalLinkage)
-        LLVM.initializer!(global_var, LLVM.null(array_type))
-        LLVM.alignment!(global_var, max(32, Base.datatype_alignment(T)))
-        LLVM.@dispose builder = LLVM.IRBuilder() begin
-            LLVM.position!(builder, LLVM.BasicBlock(llvm_f, "entry"))
-            zeros = [LLVM.ConstantInt(0), LLVM.ConstantInt(0)]
-            first_byte = LLVM.gep!(builder, array_type, global_var, zeros)
-            LLVM.ret!(builder, LLVM.bitcast!(builder, first_byte, pointer_type))
-        end
-        LLVM.Interop.call_function(llvm_f, Core.LLVMPtr{T, CUDA.AS.Shared})
-    end
+LLVM.Interop.@llvmgenerated builder function shmem_pointer(
+    ::Type{T},
+    ::Val{bytes},
+)::Core.LLVMPtr{T, CUDA.AS.Shared} where {T, bytes}
+    array_type = LLVM.ArrayType(LLVM.Int8Type(), bytes)
+    global_var = LLVM.GlobalVariable(
+        LLVM.Interop.current_module(builder),
+        array_type,
+        "shmem_$(bytes)B",
+        CUDA.AS.Shared,
+    )
+    global_var.linkage = LLVM.Linkage.Internal
+    global_var.initializer = LLVM.null(array_type)
+    global_var.alignment = max(32, Base.datatype_alignment(T))
+    zeros = [LLVM.ConstantInt(0), LLVM.ConstantInt(0)]
+    first_byte = LLVM.gep!(builder, array_type, global_var, zeros)
+    pointer_type = convert(LLVM.LLVMType, Core.LLVMPtr{T, CUDA.AS.Shared})
+    LLVM.bitcast!(builder, first_byte, pointer_type)
 end
 @inline DataLayouts.scoped_static_array(::ThisBlock, ::Type{T}, dims) where {T} =
     CUDA.CuDeviceArray{T, length(dims), CUDA.AS.Shared}(
