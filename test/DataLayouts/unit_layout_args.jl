@@ -62,6 +62,16 @@ new_point_data(::Type{T} = FT) where {T} = DataLayouts.DataF{T}(A)
         @test length(DataLayouts.layout_args(fused_bc)) == 6
     end
 
+    @testset "leaf_layout_args" begin
+        @test length(DataLayouts.leaf_layout_args(wide_bc)) == 19
+        @test length(DataLayouts.leaf_layout_args(nested_bc)) == 3
+        @test length(DataLayouts.leaf_layout_args(fused_bc)) == 26
+        @test all(
+            arg -> arg isa DataLayouts.DataLayout,
+            DataLayouts.leaf_layout_args(fused_bc),
+        )
+    end
+
     @testset "equal_layout_shapes" begin
         same_shape_args =
             (ntuple(_ -> new_data(), 16)..., new_point_data(), FT(1))

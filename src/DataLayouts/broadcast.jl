@@ -116,9 +116,6 @@ const MaybeFusedDataLayoutBroadcast = Union{LazyDataLayout, FusedMultiBroadcast}
 
 @inline get_layout_arg_tuple(arg) = is_layout_arg(arg) ? (arg,) : ()
 
-# NOTE: layout_args must keep going through unrolled_flatmap; see the
-# unrolled_flatten note in src/Utilities/Utilities.jl.
-
 """
     layout_args(bc)
 
@@ -130,7 +127,22 @@ the arguments of a broadcast expression.
 @inline layout_args(bc::FusedMultiBroadcast) =
     unrolled_flatmap(get_layout_arg_tuple, unrolled_flatten(bc.pairs))
 
-@inline DataScope(bc::MaybeFusedDataLayoutBroadcast) = DataScope(layout_args(bc)...)
+"""
+    leaf_layout_args(bc)
+
+Return a tuple of every [`DataLayout`](@ref) in a broadcast expression,
+including those nested inside its [`LazyDataLayout`](@ref) arguments.
+"""
+@inline leaf_layout_args(data::DataLayout) = (data,)
+@inline leaf_layout_args(bc::MaybeFusedDataLayoutBroadcast) =
+    unrolled_flatmap(leaf_layout_args, layout_args(bc))
+
+# Combine the scopes of the leaf layouts rather than recursing into nested
+# broadcasts through DataScope: a nested broadcast with more layout arguments
+# than its parent would make the Vararg method of DataScope call itself with a
+# longer argument tuple, which inference widens to an unspecialized signature.
+@inline DataScope(bc::MaybeFusedDataLayoutBroadcast) =
+    unrolled_reduce(DataScope, unrolled_map(DataScope, leaf_layout_args(bc)))
 
 @inline layout_type(::LazyDataLayout{D}) where {D} = D
 

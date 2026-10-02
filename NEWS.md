@@ -10,6 +10,12 @@ main
   had made that an error ("Broadcasted spaces are not the same") by comparing the
   slices' local geometry, which broke downstream code that uses level-1 fields as
   per-column scalars. `==` on `PointSpace`s still compares the local geometry.
+- ![][badge-🐛bugfix] Broadcasts into a `DataLayout` or `Field` no longer allocate
+  when the broadcast expression has more layout arguments than the destination
+  pair it is copied through (e.g. `@. dest = f(params, a, b, c, d, e)`), which
+  v1.0.2 had introduced for every such assignment: the `DataScope` of a nested
+  broadcast is now combined over its leaf `DataLayout`s instead of recursing
+  through a growing argument tuple that inference widened to a dynamic call.
 
 v1.0.2
 -------
