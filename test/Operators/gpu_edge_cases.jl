@@ -340,3 +340,49 @@ end
         @test all(isfinite, Array(parent(field)))
     end
 end
+
+@testset "nested operator-matrix stencil on extruded sphere (device vs CPU) [$FT]" for FT in
+                                                                                       (
+    Float32,
+    Float64,
+)
+    # Regression test for the eager GPU stencil kernel on Julia 1.12: a weighted
+    # center-to-face interpolation whose arguments are themselves broadcasts
+    # `ρ * J`, and an axis-vector conversion of a vector field
+    extruded_sphere_spaces(device) = begin
+        context = ClimaComms.SingletonCommsContext(device)
+        hdomain = Domains.SphereDomain(FT(6.371e6))
+        hmesh = Meshes.EquiangularCubedSphere(hdomain, 2)
+        htopology = Topologies.Topology2D(context, hmesh)
+        hspace = Spaces.SpectralElementSpace2D(htopology, Quadratures.GLL{4}())
+        vdomain = Domains.IntervalDomain(
+            Geometry.ZPoint(FT(0)),
+            Geometry.ZPoint(FT(60e3));
+            boundary_names = (:bottom, :top),
+        )
+        vmesh = Meshes.IntervalMesh(vdomain; nelems = 10)
+        vtopology = Topologies.IntervalTopology(context, vmesh)
+        vspace = Spaces.CenterFiniteDifferenceSpace(vtopology)
+        center_space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
+        (center_space, Spaces.face_space(center_space))
+    end
+    winterp_results(center_space, face_space) = begin
+        ᶠwinterp = Operators.WeightedInterpolateC2F(;
+            bottom = Operators.Extrapolate(),
+            top = Operators.Extrapolate(),
+        )
+        coords = Fields.coordinate_field(center_space)
+        ᶜρ = @. 1 + coords.z / FT(60e3)
+        ᶜJ = Fields.local_geometry_field(center_space).J
+        ᶜuₕ = @. Geometry.Covariant12Vector(sind(coords.lat), cosd(coords.long))
+        ᶠuₕ = @. ᶠwinterp(ᶜρ * ᶜJ, ᶜuₕ)
+        ᶠuₕ³ = @. ᶠwinterp(ᶜρ * ᶜJ, Geometry.Contravariant3Vector(ᶜuₕ))
+        (ᶠuₕ, ᶠuₕ³)
+    end
+    results = winterp_results(extruded_sphere_spaces(test_device)...)
+    results_cpu = winterp_results(extruded_sphere_spaces(cpu_device)...)
+    for (field, field_cpu) in zip(results, results_cpu)
+        @test device_matches_cpu(field, field_cpu; rtol = 10 * eps(FT))
+        @test all(isfinite, Array(parent(field)))
+    end
+end
