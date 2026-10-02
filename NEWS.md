@@ -4,6 +4,13 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-🐛bugfix] Point fields are again broadcast-compatible with every other
+  point field on the same context, as they were before v1.0.2: two `Fields.level`
+  slices of a column at different levels can be combined in one broadcast. v1.0.2
+  had made that an error ("Broadcasted spaces are not the same") by comparing the
+  slices' local geometry, which broke downstream code that uses level-1 fields as
+  per-column scalars. `==` on `PointSpace`s still compares the local geometry.
+
 v1.0.2
 -------
 
