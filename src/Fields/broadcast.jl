@@ -1,5 +1,3 @@
-import ..DebugOnly: allow_mismatched_spaces_unsafe
-
 """
     AbstractFieldStyle
 
@@ -67,9 +65,50 @@ Base.Broadcast.combine_styles(arg1::MaybeLazyField, arg2, arg3, args...) =
         (arg1, arg2, arg3, args...),
     )
 
-# Base's _axes only supports Tuple values of bc.axes, so broadcasts whose axes
-# are spaces need this additional method.
-Base.Broadcast._axes(::Base.Broadcast.Broadcasted, space::AbstractSpace) = space
+# Base's combine_axes checks pairwise combinations of arguments, incorrectly
+# flagging expressions like field .+ subfield_1 .+ subfield_2 as broadcast
+# errors when subfield_1 and subfield_2 are defined on different spaces, so it
+# must be replaced with a method that recursively combines all broadcast inputs.
+@inline shared_space(_) = nothing
+@inline shared_space(field::Field) = axes(field)
+@inline shared_space(bc::LazyField) =
+    unrolled_reduce(bc.args; init = nothing) do space, arg
+        !isnothing(shared_space(arg)) &&
+        (isnothing(space) || Spaces.maybe_issubspace(space, shared_space(arg))) ?
+        shared_space(arg) : space
+    end
+
+# A similar recursive method takes the place of Base's check_broadcast_shape,
+# with an only_check_size flag used when checking broadcast destination spaces.
+@inline check_broadcast_space(_, _, _) = nothing
+@inline check_broadcast_space(space, field::Field, ::Val{true}) =
+    Base.Broadcast.check_broadcast_axes(
+        axes(Fields.local_geometry_field(space)),
+        Fields.field_values(field),
+    )
+@inline check_broadcast_space(space, field::Field, ::Val{false}) =
+    !isnothing(space) && Spaces.issubspace(axes(field), space) ? nothing :
+    throw(DimensionMismatch("Fields could not be broadcast to a shared space"))
+@inline check_broadcast_space(space, bc::LazyField, only_check_size) =
+    unrolled_foreach(arg -> check_broadcast_space(space, arg, only_check_size), bc.args)
+
+@drop_recursion_limits shared_space, check_broadcast_space
+
+# Modify axes and check_broadcast_axes to support AbstractSpaces, and make
+# instantiate call axes instead of Base's combine_axes.
+@inline Base.Broadcast._axes(::Base.Broadcast.Broadcasted, space::AbstractSpace) = space
+@inline function Base.Broadcast._axes(bc::LazyField, ::Nothing)
+    check_broadcast_space(shared_space(bc), bc, Val(false))
+    return shared_space(bc)
+end
+
+@inline Base.Broadcast.check_broadcast_axes(space::AbstractSpace, arg, args...) =
+    unrolled_foreach(arg -> check_broadcast_space(space, arg, Val(true)), (arg, args...))
+
+@inline function Base.Broadcast.instantiate(bc::LazyField)
+    isnothing(bc.axes) || Base.Broadcast.check_broadcast_axes(bc.axes, bc.args...)
+    return Base.Broadcast.Broadcasted(bc.style, bc.f, bc.args, axes(bc))
+end
 
 # Define broadcastable/broadcasted/newindex/eltype/similar/copy to match
 # DataStyle broadcasting (see broadcast.jl in the DataLayouts module).
@@ -190,83 +229,7 @@ function Base.copyto!(
             Pair(field_values(pair.first), bc)
         end,
     )
-    check_mismatched_spaces(fmbc)
     copyto!(fmb_data; mask)
-end
-
-@inline check_mismatched_spaces(fmbc::FusedMultiBroadcast) =
-    check_mismatched_spaces(
-        map(x -> axes(x.first), fmbc.pairs),
-        axes(first(fmbc.pairs).first),
-    )
-@inline check_mismatched_spaces(axs::Tuple{<:Any}, ax1) =
-    _check_mismatched_spaces(first(axs), ax1)
-@inline check_mismatched_spaces(axs::Tuple{}, ax1) = nothing
-@inline function check_mismatched_spaces(axs::Tuple, ax1)
-    _check_mismatched_spaces(first(axs), ax1)
-    check_mismatched_spaces(Base.tail(axs), ax1)
-end
-
-_check_mismatched_spaces(::T, ::T) where {T <: AbstractSpace} = nothing
-_check_mismatched_spaces(space1, space2) =
-    error("FusedMultiBroadcast spaces are not the same.")
-
-error_mismatched_spaces() = error("Broadcasted spaces are not the same.")
-
-@inline function Base.Broadcast.broadcast_shape(
-    space1::AbstractSpace,
-    space2::AbstractSpace,
-)
-    if space1 !== space2 && !allow_mismatched_spaces_unsafe()
-        if Spaces.issubspace(space2, space1)
-            return space1
-        elseif Spaces.issubspace(space1, space2)
-            return space2
-        else
-            error_mismatched_spaces()
-        end
-    end
-    return space1
-end
-@inline Base.Broadcast.broadcast_shape(space::AbstractSpace, ::Tuple) = space
-@inline Base.Broadcast.broadcast_shape(::Tuple, space::AbstractSpace) = space
-
-# Overload broadcast axes shape checking for more useful error message for Field Spaces
-@inline function Base.Broadcast.check_broadcast_shape(
-    space1::AbstractSpace,
-    space2::AbstractSpace,
-)
-    # When DebugOnly.allow_mismatched_spaces_unsafe() returns true, the check is skipped
-    # and `space1` is returned. The caller is responsible for the spaces being
-    # compatible. This allows working with spaces that are == but not ===, e.g.,
-    # deepcopied spaces.
-    if space1 !== space2 && !allow_mismatched_spaces_unsafe()
-        if Spaces.issubspace(space2, space1) ||
-           Spaces.issubspace(space1, space2)
-            nothing
-        else
-            error_mismatched_spaces()
-        end
-    end
-    return nothing
-end
-@inline function Base.Broadcast.check_broadcast_shape(
-    space::AbstractSpace,
-    ax2::Tuple,
-)
-    error_mismatched_spaces()
-end
-@inline function Base.Broadcast.check_broadcast_shape(
-    ::AbstractSpace,
-    ::Tuple{},
-)
-    return nothing
-end
-@inline function Base.Broadcast.check_broadcast_shape(
-    ::AbstractSpace,
-    ::Tuple{T},
-) where {T}
-    return nothing
 end
 
 # By default, broadcasted Vals are put in Refs, leading to type instabilities

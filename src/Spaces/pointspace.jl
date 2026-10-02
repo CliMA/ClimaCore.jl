@@ -84,12 +84,20 @@ end
 # Point fields act like zero-dimensional Refs/AbstractArrays when broadcasting,
 # so a PointSpace is a subspace of every other AbstractSpace. PointSpaces can be
 # equivalent even when their local_geometry data is stored in different arrays.
-issubspace(subspace::PointSpace, space::AbstractSpace) = true
 issubspace(subspace::PointSpace, space::PointSpace) =
     subspace.context == space.context && (
         subspace.local_geometry === space.local_geometry ||
-        mapreduce(==, &, subspace.local_geometry, space.local_geometry)
+        ClimaComms.allowscalar(ClimaComms.device(space)) do
+            @inbounds subspace.local_geometry[] == space.local_geometry[]
+        end
     )
+maybe_issubspace(subspace::PointSpace, space::PointSpace) =
+    subspace.context == space.context &&
+    eltype(subspace.local_geometry) == eltype(space.local_geometry)
+for f in (:issubspace, :maybe_issubspace)
+    @eval $f(subspace::PointSpace, space::AbstractSpace) = true
+    @eval $f(subspace::AbstractSpace, space::PointSpace) = false
+end
 
 all_nodes(::PointSpace) = (1,)
 

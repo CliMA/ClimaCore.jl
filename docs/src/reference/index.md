@@ -25,7 +25,7 @@ space, and fields live on spaces.
 | `Remapping`    | Interpolation between spaces and to latitude–longitude grids                |
 | `InputOutput`  | HDF5 checkpoint writers and readers                                         |
 | `Utilities`    | Half-integer indexing, caches, and other shared helpers                     |
-| `DebugOnly`    | Hooks for locating NaNs and mismatched spaces                               |
+| `DebugOnly`    | Hooks for detecting invalid states, such as NaN values                      |
 
 ## Export conventions
 

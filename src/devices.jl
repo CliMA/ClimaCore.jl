@@ -27,3 +27,6 @@ struct DeviceSideContext <: ClimaComms.AbstractCommsContext end
 
 ClimaComms.context(::DeviceSideDevice) = DeviceSideContext()
 ClimaComms.device(::DeviceSideContext) = DeviceSideDevice()
+
+# Scalar indexing is always allowed in code that runs within an accelerator.
+ClimaComms.allowscalar(f, ::DeviceSideDevice, args...; kwargs...) = f(args...; kwargs...)

@@ -49,8 +49,11 @@ local_geometry_data(colgrid::ColumnGrid, staggering::Staggering) =
 global_geometry(colgrid::ColumnGrid) = global_geometry(colgrid.full_grid)
 
 issubgrid(subgrid::ColumnGrid, grid::ColumnGrid) = subgrid === grid
-issubgrid(subgrid::ColumnGrid, grid::AbstractGrid) = issubgrid(subgrid.full_grid, grid)
-issubgrid(subgrid::AbstractGrid, grid::ColumnGrid) =
-    grid.full_grid isa DeviceExtrudedFiniteDifferenceGrid ?
-    throw(ArgumentError("Cannot compare device-side slices of extruded grids")) :
-    issubgrid(subgrid, grid.full_grid.vertical_grid)
+maybe_issubgrid(subgrid::ColumnGrid, grid::ColumnGrid) = true
+for f in (:issubgrid, :maybe_issubgrid)
+    @eval $f(subgrid::ColumnGrid, grid::AbstractGrid) = $f(subgrid.full_grid, grid)
+    @eval $f(subgrid::AbstractGrid, grid::ColumnGrid) =
+        grid.full_grid isa DeviceExtrudedFiniteDifferenceGrid ?
+        throw(ArgumentError("Cannot compare device-side slices of extruded grids")) :
+        $f(subgrid, grid.full_grid.vertical_grid)
+end

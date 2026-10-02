@@ -125,24 +125,3 @@ inspecting broadcast objects.
   - Do not combine the hook with `@testset`: Test.jl keeps running after an
     error until the set completes, so the state you inspect is the last
     occurrence, not the first.
-
-## Reuse a state after `deepcopy`
-
-Exploring alternatives from a spun-up state is easiest by advancing a
-`deepcopy` of it, so that the original is kept for the next copy. `ClimaCore`
-checks that fields in one broadcast live on the same space by object identity,
-and a `deepcopy` creates a new space object, so a broadcast that mixes the copy
-with fields on the original space raises a mismatched-spaces error.
-`DebugOnly.allow_mismatched_spaces_unsafe` turns that check off:
-
-```julia
-import ClimaCore
-other_space = deepcopy(space)
-ones(space) .+ ones(other_space)                          # error: mismatched spaces
-ClimaCore.DebugOnly.allow_mismatched_spaces_unsafe() = true
-ones(space) .+ ones(other_space)                          # allowed
-```
-
-The check exists to prevent meaningless results from fields on different
-grids; with it off, you are responsible for making sure the spaces are in fact
-equivalent.

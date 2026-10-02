@@ -4,6 +4,12 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-🐛bugfix] Broadcasts over fields with different spaces now recursively
+  traverse the entire expression tree to find the largest shared space. All input
+  fields are checked against the shared space, with strict compatibility rules
+  defined through `Grids.issubgrid` and `Spaces.issubspace`. Broadcast destinations
+  can have different spaces from the inputs, as long as their sizes are consistent.
+
 v1.0.2
 -------
 
