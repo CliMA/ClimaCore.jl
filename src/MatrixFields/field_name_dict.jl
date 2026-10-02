@@ -163,11 +163,23 @@ Base.:(==)(dict1::FieldNameDict, dict2::FieldNameDict) =
 
 function Base.getindex(dict::FieldNameDict, key)
     key in keys(dict) || throw(KeyError(key))
-    key′, entry′ =
-        unrolled_filter(pair -> is_child_value(key, pair[1]), pairs(dict))[1]
+    index = parent_key_index(keys(dict), key)
+    key′ = keys(dict).values[index]
+    entry′ = values(dict)[index]
     internal_key = get_internal_key(key, key′)
     return get_internal_entry(entry′, internal_key)
 end
+
+# Index of the first key in `set` of which `key` is a child, computed once per
+# type.
+@generated parent_key_index(set::FieldNameSet, key::Union{FieldName, FieldNamePair}) =
+    Expr(
+        :block,
+        findfirst(
+            value′ -> is_child_chain_value(chain_value(key.instance), value′),
+            chain_values(set.instance),
+        ),
+    )
 
 get_internal_key(child_name::FieldName, name::FieldName) =
     extract_internal_name(child_name, name)
