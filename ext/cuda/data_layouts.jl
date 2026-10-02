@@ -235,3 +235,49 @@ Adapt.adapt_structure(to::CUDA.KernelAdaptor, data::DataLayouts.DataLayout) =
     ::Val{F},
 ) where {E, R, A, F} =
     Base.IndexStyle(A) == Base.IndexLinear() && R == (F,) && isone(E[F])
+
+# CUDA 6 splits CUDA.jl into subpackages: GPUArrays is reached through
+# CUDACore, and the RNG whose scalar `rand(rng, T::Type)` needs disambiguating
+# below moves to cuRAND, while `CUDA.RNG` becomes GPUArrays' RNG. CUDA 5 keeps
+# GPUArrays and that RNG (as `CUDA.RNG`) in CUDA itself.
+const AbstractGPUArrayStyle =
+    (isdefined(CUDA, :GPUArrays) ? CUDA.GPUArrays : CUDA.CUDACore.GPUArrays).AbstractGPUArrayStyle
+const CUDA_RNGS =
+    isdefined(CUDA, :cuRAND) ? (CUDA.RNG, CUDA.cuRAND.NativeRNG) : (CUDA.RNG,)
+
+# Disambiguate the scalar-broadcast `copyto!` methods in ClimaCore against
+# `copyto!(::AbstractArray, ::Broadcasted{<:AbstractGPUArrayStyle})` in
+# GPUArrays. These styles are zero-dimensional, so ClimaCore's implementations
+# (which fill the destination pointwise) are the correct ones to use. The
+# corresponding StaticArrays and BlockArrays disambiguators live in
+# `src/DataLayouts/loops.jl` and `src/Fields/fieldvector.jl`; these two cannot,
+# because GPUArrays is not a dependency of ClimaCore.
+@inline Base.copyto!(
+    dest::DataLayouts.DataLayout,
+    bc::Base.Broadcast.Broadcasted{<:AbstractGPUArrayStyle{0}},
+    mask::DataLayouts.DataMask = DataLayouts.NoMask(),
+) = DataLayouts._copyto_scalar_broadcast!(dest, bc, mask)
+
+@inline Base.copyto!(
+    dest::Fields.FieldVector,
+    bc::Base.Broadcast.Broadcasted{<:AbstractGPUArrayStyle{0}},
+) = Fields._copyto_scalar_broadcast!(dest, bc)
+
+# Disambiguate `rand(::AbstractRNG, ::Type{<:Tensor})` in ClimaCore against the
+# scalar `rand(rng, T::Type)` of CUDA's native RNG, which would allocate a
+# `CuArray{<:Tensor}` and read back its only element. The components are drawn
+# as a flat `CuArray{T}` and copied to the host: `rand(rng, C)` for a static
+# array type `C` would hit the same scalar method and then an ambiguity between
+# CUDA's and StaticArrays' `rand(rng, T, dims)`. A method on the `Union` of the
+# RNG types would not be more specific than either scalar method, so each type
+# gets its own. On CUDA 6, `CUDA.RNG` has no scalar `rand` to disambiguate
+# against, but covering it makes `rand(CUDA.default_rng(), T)` work. These RNGs
+# are host-side objects, so the host copy is always possible; kernels draw from
+# the device RNG `Philox2x32`, which takes the generic method in Geometry.
+for RNG in CUDA_RNGS
+    @eval Base.rand(
+        rng::$RNG,
+        ::Type{Geometry.Tensor{N, T, B, C}},
+    ) where {N, T, B, C} =
+        Geometry.Tensor(C(Array(rand(rng, T, length(C)))), B.instance)
+end

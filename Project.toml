@@ -33,13 +33,12 @@ UnrolledUtilities = "0fe1646c-419e-43be-ac14-22321958931b"
 
 [weakdeps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
-GPUCompiler = "61eb1bfa-7361-4325-ad38-22787b887f55"
 Krylov = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
 
 [extensions]
-ClimaCoreCUDAExt = ["CUDA", "GPUCompiler"]
+ClimaCoreCUDAExt = "CUDA"
 ClimaCoreMakieExt = "Makie"
 ClimaCoreRecipesBaseExt = "RecipesBase"
 KrylovExt = "Krylov"
@@ -63,7 +62,6 @@ DataStructures = "0.18.13, 0.19"
 Dates = "1"
 FastBroadcast = "0.3.1"
 ForwardDiff = "0.10.15, 1"
-GPUCompiler = "1.8.2, 2"
 GaussQuadrature = "0.5.8"
 GilbertCurves = "0.1"
 HDF5 = "0.16.16, 0.17"
