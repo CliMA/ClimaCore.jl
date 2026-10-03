@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ClimaCore now requires LLVM.jl 10. The CUDA extension generates its static
+  shared-memory allocations with `LLVM.Interop.@llvmgenerated`, which replaces
+  the `create_function`/`call_function` helpers that LLVM.jl 10 removed; the
+  generated code is unchanged.
+
 - ![][badge-✨feature/enhancement] `Remapping.PressureInterpolator` accepts
   `method = Remapping.LogLinearInPressure()` to interpolate linearly in log
   pressure. The default `Remapping.LinearInPressure()` interpolates linearly
