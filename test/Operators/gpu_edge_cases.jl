@@ -18,6 +18,7 @@ import ClimaCore:
     Fields,
     Geometry,
     Operators,
+    MatrixFields,
     Quadratures
 import ClimaCore.CommonSpaces: MultiColumnSpace, CellCenter
 
@@ -337,6 +338,83 @@ end
     )
     for (field, field_cpu) in zip(results, results_cpu)
         @test device_matches_cpu(field, field_cpu; rtol = 10 * eps(FT))
+        @test all(isfinite, Array(parent(field)))
+    end
+end
+
+@testset "high-resolution column (device vs CPU) [$FT]" for FT in (
+    Float32,
+    Float64,
+)
+    # A column with more than 256 face levels does not fit in one block of the
+    # eager GPU kernel, so it uses the lazy kernel, which evaluates nested
+    # stencils pointwise. This covers nested limiter and operator matrix
+    # expressions that once failed to compile for the lazy kernel.
+    high_resolution_column_spaces(device) = begin
+        context = ClimaComms.SingletonCommsContext(device)
+        domain = Domains.IntervalDomain(
+            Geometry.ZPoint(FT(0)),
+            Geometry.ZPoint(FT(1));
+            boundary_names = (:bottom, :top),
+        )
+        mesh = Meshes.IntervalMesh(domain; nelems = 300)
+        topology = Topologies.IntervalTopology(context, mesh)
+        center_space = Spaces.CenterFiniteDifferenceSpace(topology)
+        (center_space, Spaces.FaceFiniteDifferenceSpace(center_space))
+    end
+    nested_results(center_space, face_space) = begin
+        (; x, w) = fd_advection_inputs(center_space, face_space)
+        ᶠρ = Fields.coordinate_field(face_space).z .+ 1
+        up1 = Operators.UpwindBiasedProductC2F(
+            bottom = Operators.Extrapolate(0),
+            top = Operators.Extrapolate(0),
+        )
+        up3 = Operators.Upwind3rdOrderBiasedProductC2F(
+            bottom = Operators.Extrapolate(1),
+            top = Operators.Extrapolate(1),
+        )
+        div_sv = Operators.DivergenceF2C(
+            bottom = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
+            top = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
+        )
+        fctz = Operators.FCTZalesak()
+        c3_zero = zero(Geometry.Covariant3Vector{FT})
+        ᶜdiv_matrix = MatrixFields.operator_matrix(Operators.DivergenceF2C())
+        ᶠgrad_matrix = MatrixFields.operator_matrix(
+            Operators.GradientC2F(
+                bottom = Operators.SetGradient(c3_zero),
+                top = Operators.SetGradient(c3_zero),
+            ),
+        )
+        ᶠupwind_matrix =
+            MatrixFields.operator_matrix(Operators.UpwindBiasedProductC2F())
+        (
+            # flux-corrected advection, as in examples/hybrid/sphere/deformation_flow.jl
+            (@. -div_sv(
+                ᶠρ * up1(w, x) + fctz(
+                    ᶠρ * (up3(w, x) - up1(w, x)),
+                    tuple(x, x - div_sv(ᶠρ * up1(w, x)) / x),
+                ),
+            )),
+            (@. ᶜdiv_matrix() * MatrixFields.DiagonalMatrixRow(ᶠρ) * ᶠgrad_matrix() * x +
+                ᶜdiv_matrix() * (ᶠupwind_matrix(w) * x)),
+        )
+    end
+    spaces = high_resolution_column_spaces(test_device)
+    spaces_cpu = high_resolution_column_spaces(cpu_device)
+    for (field, field_cpu) in
+        zip(fd_advection_results(spaces...), fd_advection_results(spaces_cpu...))
+        @test device_matches_cpu(field, field_cpu; rtol = 10 * eps(FT))
+        @test all(isfinite, Array(parent(field)))
+    end
+    # The operator matrix product contains a second derivative, so a 1-ulp
+    # change in x can change it by ~4000 eps at this resolution.
+    for (field, field_cpu, rtol) in zip(
+        nested_results(spaces...),
+        nested_results(spaces_cpu...),
+        (100 * eps(FT), 10_000 * eps(FT)),
+    )
+        @test device_matches_cpu(field, field_cpu; rtol)
         @test all(isfinite, Array(parent(field)))
     end
 end

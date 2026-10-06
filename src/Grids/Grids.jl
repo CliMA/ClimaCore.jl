@@ -128,6 +128,7 @@ include("finitedifference.jl")
 include("spectralelement.jl")
 include("multipoint.jl")
 include("extruded.jl")
+include("placeholders.jl")
 include("column.jl")
 include("level.jl")
 

@@ -332,6 +332,10 @@ get_mask(space::SpectralElementSpaceSlab) = DataLayouts.NoMask()
 get_mask(space::ExtrudedFiniteDifferenceSpace) =
     get_mask(horizontal_space(space))
 
+Grids.toggle_placeholder_grid(x, space::AbstractSpace) =
+    Grids.toggle_placeholder_grid(x, grid(space))
+Grids.toggle_placeholder_grid(x, ::Union{PointSpace, SpectralElementSpaceSlab}) = x
+
 """
     has_vertical(::AbstractSpace)
 
