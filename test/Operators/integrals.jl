@@ -28,6 +28,14 @@ const CLIMACORE_CUDA_MOD = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
 const CUDA_FRAMES =
     USING_CUDA ?
     (AnyFrameModule(CUDA_MOD), AnyFrameModule(CLIMACORE_CUDA_MOD)) : ()
+# On Julia 1.12, `@assert` converts non-literal messages to strings through
+# `Base._assert_tostring`, which hides their types from the compiler, so the
+# error path of every assertion has two runtime dispatches: the conversion, and
+# the `AssertionError` constructor that receives its result. Both are only
+# reached when an assertion fails, so ignore them in `@test_opt`.
+const ASSERT_FRAMES =
+    VERSION >= v"1.12" ? (JET.LastFrameMethod(Base._assert_tostring),) : ()
+not_assertion_error(@nospecialize(f)) = f !== AssertionError
 
 are_boundschecks_forced = Base.JLOptions().check_bounds == 1
 center_to_face_space(center_space::Spaces.CenterFiniteDifferenceSpace) =
@@ -101,10 +109,8 @@ function test_column_integral_indefinite_fn!(center_space)
             maximum(@. abs((ref_array - test_array) / ref_array))
         @test max_relative_error <= 0.006 # Less than 0.6% error at the top level.
 
-        @test_opt ignored_modules = CUDA_FRAMES column_integral_indefinite!(
-            fn,
-            ᶠ∫u_test,
-        )
+        @test_opt ignored_modules = (CUDA_FRAMES..., ASSERT_FRAMES...) function_filter =
+            not_assertion_error column_integral_indefinite!(fn, ᶠ∫u_test)
 
         test_allocs(@allocated column_integral_indefinite!(fn, ᶠ∫u_test))
     end

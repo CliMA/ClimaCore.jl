@@ -153,7 +153,11 @@ end
             parse(Int, m[1]) for m in eachmatch(r"addrspace\(3\) global \[(\d+) x", llvm(f))
         ])
     @test shared_sizes(two_shared_sizes!) == [2048, 4096]
-    @test shared_sizes(one_shared_size!) == [2048] # equal sizes are merged
+    # Equal sizes from separately compiled functions are merged. Julia 1.12
+    # compiles all of a kernel's functions together and uniquely renames their
+    # globals, so they are no longer merged; this is safe, but uses more
+    # shared memory than the buffer reuse invariant allows for.
+    @test shared_sizes(one_shared_size!) == [2048] broken = VERSION >= v"1.12"
     @test shared_sizes(one_function_two_arrays!) == [2048, 2048] # never merged
 end
 

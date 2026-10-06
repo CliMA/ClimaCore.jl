@@ -132,7 +132,9 @@ struct ThisBlock <: ThisCooperativeGroup end
 # global "shmem", so unequal allocations can share and write out of bounds.
 # Putting the byte size in the name (this is otherwise CuStaticSharedArray's
 # llvmcall) lets only EQUAL allocations share, so the buffer reuse invariant in
-# Operators/spectralelement.jl has to hold for every equally sized pair.
+# Operators/spectralelement.jl has to hold for every equally sized pair. On
+# Julia 1.12, all of a kernel's functions are compiled together and their
+# globals are uniquely renamed, so no allocations share memory.
 @generated function shmem_pointer(::Type{T}, ::Val{bytes}) where {T, bytes}
     LLVM.@dispose ctx = LLVM.Context() begin
         pointer_type = convert(LLVM.LLVMType, Core.LLVMPtr{T, CUDA.AS.Shared})

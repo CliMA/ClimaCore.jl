@@ -26,6 +26,9 @@ end
     # Context is not fully inferred due to nthreads() and cuda_ext_is_loaded(),
     # so let's ignore these for now.
     context = ClimaComms.context()
+    # Julia 1.12 and JET 0.12 report more runtime dispatches during space
+    # construction (e.g., in Tensor constructors and struct_indices).
+    v1_12 = VERSION >= v"1.12"
 
 #! format: off
     if ClimaComms.device(context) isa ClimaComms.CUDADevice
@@ -35,17 +38,17 @@ end
         test_n_failures(110,  TU.ColumnCenterFiniteDifferenceSpace, context)
         test_n_failures(110,  TU.ColumnFaceFiniteDifferenceSpace, context)
         test_n_failures(408,  TU.SphereSpectralElementSpace, context)
-        test_n_failures(418,  TU.CenterExtrudedFiniteDifferenceSpace, context)
-        test_n_failures(418,  TU.FaceExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(v1_12 ? 442 : 418,  TU.CenterExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(v1_12 ? 443 : 418,  TU.FaceExtrudedFiniteDifferenceSpace, context)
     else
         test_n_failures(0,    TU.PointSpace, context)
-        test_n_failures(131,  TU.SpectralElementSpace1D, context)
-        test_n_failures(295,  TU.SpectralElementSpace2D, context)
+        test_n_failures(v1_12 ? 201 : 131,  TU.SpectralElementSpace1D, context)
+        test_n_failures(v1_12 ? 343 : 295,  TU.SpectralElementSpace2D, context)
         test_n_failures(110,  TU.ColumnFaceFiniteDifferenceSpace, context)
         test_n_failures(110,  TU.ColumnCenterFiniteDifferenceSpace, context)
-        test_n_failures(301,  TU.SphereSpectralElementSpace, context)
-        test_n_failures(316,  TU.CenterExtrudedFiniteDifferenceSpace, context)
-        test_n_failures(316,  TU.FaceExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(v1_12 ? 349 : 301,  TU.SphereSpectralElementSpace, context)
+        test_n_failures(v1_12 ? 402 : 316,  TU.CenterExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(v1_12 ? 403 : 316,  TU.FaceExtrudedFiniteDifferenceSpace, context)
 
         # The OBJECT_CACHE causes inference failures that inhibit understanding
         # inference failures in _SpectralElementGrid2D, so let's `@test_opt` those

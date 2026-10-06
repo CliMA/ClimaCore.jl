@@ -117,7 +117,7 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     ᶠf = zeros(ᶠspace)
     c = zeros(ᶜspace)
     div = Operators.DivergenceF2C()
-    foo(f, cf) = cf.lat > 0.5 ? zero(f) : sqrt(-1) # results in NaN in masked regions
+    foo(f, cf) = cf.lat > 0.5 ? zero(f) : oftype(f, NaN) # NaN in masked regions
     @. c = div(Geometry.WVector(foo(ᶠf, ᶠcoords)))
     @test count(isnan, parent(c)) == 0
 
@@ -136,15 +136,8 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     c_no_mask = Fields.Field(FT, ᶜspace_no_mask)
     @test_throws DimensionMismatch @. c_no_mask + ᶜf
     ᶠf_no_mask = Fields.Field(FT, ᶠspace_no_mask)
-    if ClimaComms.device(ᶜspace_no_mask) isa ClimaComms.CUDADevice
-        @. c_no_mask = div(Geometry.WVector(foo(ᶠf_no_mask, ᶠcoords_no_mask)))
-        @test count(isnan, parent(c_no_mask)) == 49600
-    else
-        @test_throws DomainError begin
-            @. c_no_mask =
-                div(Geometry.WVector(foo(ᶠf_no_mask, ᶠcoords_no_mask)))
-        end
-    end
+    @. c_no_mask = div(Geometry.WVector(foo(ᶠf_no_mask, ᶠcoords_no_mask)))
+    @test count(isnan, parent(c_no_mask)) == 49600
 
 end
 

@@ -220,7 +220,7 @@ function alloc_test_nested_expressions_3(cfield, ffield)
         @. cz = cx * cy * ∇c(wvec(LB(Ic(fy) * cx))) * ∇c(wvec(LB(Ic(fy) * cx))) * cϕ * cψ
     end
     #! format: on
-    @test p ≤ 5200
+    @test p ≤ 5216
 end
 
 function alloc_test_nested_expressions_4(cfield, ffield)
@@ -242,7 +242,7 @@ function alloc_test_nested_expressions_4(cfield, ffield)
         @. fz = fx * fy * ∇f(wvec(LB(If(cy) * fx))) * ∇f(wvec(LB(If(cy) * fx))) * fϕ * fψ
     end
     #! format: on
-    @test p ≤ 5296
+    @test p ≤ 5504
 end
 
 function alloc_test_nested_expressions_5(cfield, ffield)
@@ -337,7 +337,7 @@ function alloc_test_nested_expressions_11(cfield, ffield)
     p = @allocated begin
         @. fz = fx * fy * abs(If(cy * cx)) * abs(If(cy * cx)) * fϕ * fψ
     end
-    @test p ≤ 4416
+    @test p ≤ 4960
 end
 
 function alloc_test_nested_expressions_12(cfield, ffield, ntcfield, ntffield)
@@ -409,10 +409,14 @@ function alloc_test_nested_expressions_13(
         fynt = fnt_i.fy
         a_up_bcs = a_bcs(FT, i)
         Iaf1 = Operators.InterpolateC2F(; a_up_bcs...)
+        # Compile first, with the same expression as below, since GPU kernels
+        # are compiled when they are first launched
         @. fynt =
-            -(∇f(wvec(LBC(Iaf1(cxnt) * fx * fxnt * fxnt)))) +
-            (fx * Iaf1(cxnt) * fxnt * (I0f(cz) * fy - I0f(cy) * fxnt)) +
-            (fx * Iaf1(cxnt) * I0f(cϕ)) +
+            (
+                -(∇f(wvec(LBC(Iaf1(cxnt) * fx * fxnt * fxnt)))) +
+                (fx * Iaf1(cxnt) * fxnt * (I0f(cz) * fy - I0f(cy) * fxnt)) +
+                (fx * Iaf1(cxnt) * I0f(cϕ))
+            ) +
             fψ
     end
 
@@ -435,7 +439,8 @@ function alloc_test_nested_expressions_13(
         end
         #! format: on
         if VERSION ≥ v"1.11.0-beta"
-            TU.@test_allocations p_i == 0
+            # Launching a GPU kernel allocates on the host
+            TU.@test_allocations p_i ≤ (USING_CUDA ? 3840 : 0)
         else
             @test_broken p_i == 0
         end

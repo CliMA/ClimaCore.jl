@@ -148,6 +148,15 @@ const CUDA_FRAMES =
         ),
     ) : ()
 const cublas_frames = USING_CUDA ? (AnyFrameModule(CUDA_MOD.CUBLAS),) : ()
+# On Julia 1.12, `@assert` converts non-literal messages to strings through
+# `Base._assert_tostring`, which hides their types from the compiler, so the
+# error path of every assertion has two runtime dispatches: the conversion, and
+# the `AssertionError` constructor that receives its result. Both are only
+# reached when an assertion fails, so ignore them in `@test_opt`.
+const ASSERT_FRAMES =
+    USING_JET && VERSION >= v"1.12" ?
+    (JET.LastFrameMethod(Base._assert_tostring),) : ()
+not_assertion_error(@nospecialize(f)) = f !== AssertionError
 const invalid_ir_error = USING_CUDA ? CUDA_MOD.InvalidIRError : ErrorException
 
 # Test the allocating and non-allocating versions of a field broadcast against

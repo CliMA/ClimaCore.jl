@@ -69,17 +69,32 @@ function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
         end
 
         # In addition to ignoring the type instabilities from CUDA, ignore those
-        # from CUBLAS (norm), KrylovKit (eigsolve), and CoreLogging (@debug).
+        # from CUBLAS (norm), KrylovKit (eigsolve), CoreLogging (@debug), and
+        # assertion error paths.
         ignored = (
             CUDA_FRAMES...,
             cublas_frames...,
+            ASSERT_FRAMES...,
             AnyFrameModule(MatrixFields.KrylovKit),
             AnyFrameModule(Base.CoreLogging),
         )
         USING_CUDA ||
-            @test_opt ignored_modules = ignored FieldMatrixWithSolver(A, b, alg)
-        USING_CUDA || @test_opt ignored_modules = ignored ldiv!(x, A′, b)
-        @test_opt ignored_modules = ignored mul!(b_test, A′, x)
+            @test_opt ignored_modules = ignored function_filter = not_assertion_error FieldMatrixWithSolver(
+                A,
+                b,
+                alg,
+            )
+        USING_CUDA ||
+            @test_opt ignored_modules = ignored function_filter = not_assertion_error ldiv!(
+                x,
+                A′,
+                b,
+            )
+        @test_opt ignored_modules = ignored function_filter = not_assertion_error mul!(
+            b_test,
+            A′,
+            x,
+        )
 
         # TODO: fix broken test when Nv is added to the type space
         USING_CUDA || @test ldiv_allocs(x, A′, b) ≤ 1536

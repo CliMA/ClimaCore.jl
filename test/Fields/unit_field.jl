@@ -1298,13 +1298,15 @@ Base.broadcastable(x::InferenceFoo) = Ref(x)
     context = ClimaComms.SingletonCommsContext(device)
     for space in TU.all_spaces(FT; context)
         Y = fill((; a = FT(0), b = FT(1)), space)
-        @test_throws ErrorException("type InferenceFoo has no field bingo") FieldFromNamedTupleBroken(
+        # Julia 1.12 throws a FieldError with a module-qualified type name and a
+        # quoted field name, while earlier versions throw an ErrorException
+        @test_throws r"InferenceFoo has no field `?bingo" FieldFromNamedTupleBroken(
             space,
             ics_foo,
             FT,
             foo,
         )
-        @test_throws ErrorException("type InferenceFoo has no field baz") FieldFromNamedTupleBroken(
+        @test_throws r"InferenceFoo has no field `?baz" FieldFromNamedTupleBroken(
             space,
             ics_foo_with_field,
             FT,
