@@ -94,11 +94,6 @@ cross a thread boundary has to be allocated with this function.
     size(bc),
 )
 
-# Define a MultiBroadcastFusion type, FusedMultiBroadcast, and a corresponding
-# @fused macro, as outlined in https://github.com/CliMA/MultiBroadcastFusion.jl.
-@make_type FusedMultiBroadcast
-@make_fused fused_direct FusedMultiBroadcast fused_direct
-
 # Adapt does not descend into Base.Pair, so Adapt.@adapt_structure would leave
 # each pair's destination and broadcast unconverted (e.g. as CuArrays instead
 # of CuDeviceArrays in kernel arguments).

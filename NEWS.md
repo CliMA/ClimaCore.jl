@@ -8,6 +8,10 @@ main
   `method = Remapping.LogLinearInPressure()` to interpolate linearly in log
   pressure. The default `Remapping.LinearInPressure()` interpolates linearly
   in pressure.
+- ![][badge-🐛bugfix] `Fields.@fused_direct` is now implemented in ClimaCore,
+  and the MultiBroadcastFusion.jl dependency has been removed. This fixes
+  `UndefVarError`s for local variables in `@fused_direct` blocks on Julia 1.12,
+  where MultiBroadcastFusion resolved them as globals in `Main`.
 
 v1.0.3
 -------
