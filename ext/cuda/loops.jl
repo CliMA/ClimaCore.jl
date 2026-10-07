@@ -35,10 +35,18 @@ DataLayouts._foreach_slice(
         # over, and num_slice_points cannot slice an empty layout.
         isempty(DataLayouts.each_slice_index(op, first(args))) && return
 
+        # Adapt the closure and the arguments to their device forms once, for
+        # both the launch configuration and the launch; going through @cuda for
+        # each would adapt them twice, which is a measurable share of the host
+        # time of a small pointwise kernel. (This binding must not share a name
+        # with any local of kernel_function, or Julia would turn that local
+        # into a captured variable of the closure.)
+        compact_args = Grids.toggle_compact_args(args...)
+        (kernel, device_args) = compile_kernel(kernel_function, compact_args)
+
         # partition(::ThisKernel) descends directly to sub-blocks, so
         # slice_subscope never returns ThisBlock itself.
         subscope = DataLayouts.slice_subscope(ThisKernel(), op, args...)
-        compact_args = Grids.toggle_compact_args(args...)
         if subscope isa ThisSubBlock
             # Each sub-block gets one slice. The block size is capped at the
             # value that sizes the sub-blocks' shared memory (see
@@ -52,18 +60,19 @@ DataLayouts._foreach_slice(
                 max_subblock_launch_threads(subscope),
             )
             slices_per_block = max_block_threads ÷ subblock_threads
-            (; threads, blocks) = launch_configuration(
-                kernel_function, compact_args, max_block_threads,
+            (; threads, blocks) = compiled_launch_configuration(
+                kernel.fun, max_block_threads,
                 cld(max_slices, slices_per_block); granularity = subblock_threads,
             )
         else
             # Extra threads run empty loops, so max_points isn't a strict limit.
             max_points = maximum(length, args)
-            (; threads, blocks) = launch_configuration(
-                kernel_function, compact_args, max_points; strict = false,
-            )
+            (; threads, blocks) =
+                compiled_launch_configuration(kernel.fun, max_points; strict = false)
         end
-        auto_launch!(kernel_function, compact_args; threads_s = threads, blocks_s = blocks)
+        launch_compiled!(
+            kernel, device_args, kernel_function, compact_args; threads, blocks,
+        )
     end
 
 # Only save a reduction result to an array from one thread per reduction scope.

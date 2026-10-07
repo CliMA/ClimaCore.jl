@@ -289,16 +289,32 @@ register pressure and shared memory requirements, which adds measurable latency
 if done more than once per kernel, so the result is cached in an `IdDict`. A
 lock is used to prevent multiple threads from updating the cache simultaneously,
 since an `IdDict` should never be read as it is being rehashed.
+
+This method compiles `f` for `args` (adapting them to their device forms) in
+order to look up the kernel; a caller that has already done so with
+[`compile_kernel`](@ref) should pass the compiled `CuFunction` to
+[`compiled_launch_configuration`](@ref) instead of adapting everything again.
 """
-function launch_configuration(
-    f::F,
-    args,
+launch_configuration(f::F, args, config_args...; kwargs...) where {F} =
+    compiled_launch_configuration(
+        (CUDA.@cuda always_inline = true launch = false f(args...)).fun,
+        config_args...;
+        kwargs...,
+    )
+
+"""
+    compiled_launch_configuration(cu_func, config_args...; strict, max_waves, granularity)
+
+The cached core of [`launch_configuration`](@ref), for a kernel that has
+already been compiled to a `CuFunction`.
+"""
+function compiled_launch_configuration(
+    cu_func::CUDA.CuFunction,
     config_args...;
     strict = true,
     max_waves = nothing,
     granularity = nothing,
-) where {F}
-    cu_func = (CUDA.@cuda always_inline = true launch = false f(args...)).fun
+)
     # The default is resolved before the cache key is built, so that changing
     # MAX_WAVES[] at runtime (as perf/sweep_kernel_configs.jl does) misses the
     # cache instead of returning configurations computed for the old value.
@@ -465,6 +481,74 @@ to determine the number of threads/blocks.
 Suggested threads and blocks (`threads_s`, `blocks_s`) can be given
 to benchmark compare against auto-determined threads/blocks (if `auto=false`).
 """
+# Kernel name computed from the stack trace when NAME_KERNELS_FROM_STACK_TRACE
+# is enabled (nothing otherwise), cached per method instance in kernel_names.
+function kernel_name_from_stack_trace(f!::F!, args) where {F!}
+    name_kernels_from_stack_trace() || return nothing
+    kernel_name = nothing
+    # Key on the kernel function's type and the tuple type of its arguments,
+    # the pair that identifies a kernel specialization. Both are statically
+    # known here, so building the key introduces no runtime dispatch. That
+    # matters because `name_kernels_from_stack_trace()` reads a `Ref` and so
+    # cannot be const-folded: inference sees this branch on every launch
+    # path, and a dispatch here would show up in every `@test_opt` over a
+    # kernel launch.
+    #
+    # Unlike a method instance, this key does not change when Revise
+    # redefines the kernel function, so a revised kernel keeps the name
+    # cached before the edit, including a possibly stale file and line, until
+    # `empty!(kernel_names)` or a restart. Only the name is stale: CUDA's
+    # compilation cache tracks the world age and recompiles the revised
+    # kernel either way.
+    key = (F!, typeof(args))
+    kernel_name_exists = key in keys(kernel_names)
+    if !kernel_name_exists
+        # Construct the kernel name, ignoring modules we don't care about
+        stack = stacktrace()
+        first_relevant_index = findfirst(is_relevant_frame, stack)
+        if !isnothing(first_relevant_index)
+            # Don't include file if this is inside an NVTX annotation
+            frame = stack[first_relevant_index]::Base.StackTraces.StackFrame
+            func_name = string(frame.func)
+            if contains(func_name, "#")
+                func_name = split(func_name, "#")[1]
+            end
+            frame_method =
+                frame.linfo isa Core.CodeInstance ? frame.linfo.def : frame.linfo
+            fp_split =
+                splitpath(fpath_from_method_instance(frame_method::Core.MethodInstance))
+            if "NVTX" in fp_split
+                fp_string = "_NVTX"
+                line_string = ""
+            else
+                # Trim base directory off of file path to shorten
+                package_index = findfirst(fp_split) do part
+                    startswith(part, "Clima")
+                end
+                if isnothing(package_index)
+                    package_index = findfirst(p -> p == ".julia", fp_split)
+                end
+                if isnothing(package_index)
+                    package_index = findfirst(p -> p == "src", fp_split)
+                end
+                if isnothing(package_index)
+                    package_index = 1
+                end
+                fp_string =
+                    "_FILE_" *
+                    string(joinpath(fp_split[package_index:end]...))
+                line_string = "_L" * string(frame.line)
+            end
+            name_str = string(func_name) * fp_string * line_string
+            kernel_name = replace(name_str, r"[^A-Za-z0-9]" => "_")
+        end
+        @debug "Using kernel name: $kernel_name"
+        kernel_names[key] = kernel_name
+    end
+    kernel_name = kernel_names[key]
+    return kernel_name
+end
+
 function auto_launch!(
     f!::F!,
     args,
@@ -476,72 +560,7 @@ function auto_launch!(
     caller = :unknown,
     shmem = 0,
 ) where {F!}
-    # If desired, compute a kernel name from the stack trace and store in
-    # a global Dict, which serves as an in memory cache
-    kernel_name = nothing
-    if name_kernels_from_stack_trace()
-        # Key on the kernel function's type and the tuple type of its
-        # arguments, the pair that identifies a kernel specialization. Both are
-        # statically known here, so building the key introduces no runtime
-        # dispatch. That matters because `name_kernels_from_stack_trace()`
-        # reads a `Ref` and so cannot be const-folded: inference sees this
-        # branch on every launch path, and a dispatch here would show up in
-        # every `@test_opt` over a kernel launch.
-        #
-        # Unlike the method instance it replaces, this key does not change
-        # when Revise redefines the kernel function, so a revised kernel keeps
-        # the name cached before the edit, including a possibly stale file and
-        # line, until `empty!(kernel_names)` or a restart. Only the name is
-        # stale: CUDA's compilation cache tracks the world age and recompiles
-        # the revised kernel either way.
-        key = (F!, typeof(args))
-        kernel_name_exists = key in keys(kernel_names)
-        if !kernel_name_exists
-            # Construct the kernel name, ignoring modules we don't care about
-            stack = stacktrace()
-            first_relevant_index = findfirst(is_relevant_frame, stack)
-            if !isnothing(first_relevant_index)
-                # Don't include file if this is inside an NVTX annotation
-                frame = stack[first_relevant_index]::Base.StackTraces.StackFrame
-                func_name = string(frame.func)
-                if contains(func_name, "#")
-                    func_name = split(func_name, "#")[1]
-                end
-                frame_method =
-                    frame.linfo isa Core.CodeInstance ? frame.linfo.def : frame.linfo
-                fp_split =
-                    splitpath(fpath_from_method_instance(frame_method::Core.MethodInstance))
-                if "NVTX" in fp_split
-                    fp_string = "_NVTX"
-                    line_string = ""
-                else
-                    # Trim base directory off of file path to shorten
-                    package_index = findfirst(fp_split) do part
-                        startswith(part, "Clima")
-                    end
-                    if isnothing(package_index)
-                        package_index = findfirst(p -> p == ".julia", fp_split)
-                    end
-                    if isnothing(package_index)
-                        package_index = findfirst(p -> p == "src", fp_split)
-                    end
-                    if isnothing(package_index)
-                        package_index = 1
-                    end
-                    fp_string =
-                        "_FILE_" *
-                        string(joinpath(fp_split[package_index:end]...))
-                    line_string = "_L" * string(frame.line)
-                end
-                name_str = string(func_name) * fp_string * line_string
-                kernel_name = replace(name_str, r"[^A-Za-z0-9]" => "_")
-            end
-            @debug "Using kernel name: $kernel_name"
-            kernel_names[key] = kernel_name
-        end
-        kernel_name = kernel_names[key]
-    end
-
+    kernel_name = kernel_name_from_stack_trace(f!, args)
     if auto
         @assert !isnothing(nitems)
         if nitems ≥ 0
@@ -558,7 +577,53 @@ function auto_launch!(
             CUDA.@cuda name = kernel_name always_inline = always_inline threads =
                 threads_s blocks = blocks_s shmem = shmem f!(args...)
     end
+    collect_kernel_stats() &&
+        report_kernel_stats(kernel, f!, args, nitems, threads_s, blocks_s, kernel_name)
+    return nothing
+end
 
+"""
+    compile_kernel(f!, args)
+
+Adapt the kernel function `f!` and its `args` to their device forms once and
+compile (or fetch from the compiler cache) the kernel for them, returning
+`(kernel, kernel_args)`. `CUDA.@cuda` adapts every argument each time it runs,
+so a launch that computes a launch configuration and then launches goes
+through two full adaptations; this pair with [`launch_compiled!`](@ref) does
+one. The adapted `kernel_args` hold raw device pointers, so the original `args`
+must be kept alive until the launch (see `launch_compiled!`).
+"""
+function compile_kernel(f!::F!, args) where {F!}
+    kernel_name = kernel_name_from_stack_trace(f!, args)
+    kernel_f = CUDA.cudaconvert(f!)
+    kernel_args = map(CUDA.cudaconvert, args)
+    kernel_tt = Tuple{map(Core.Typeof, kernel_args)...}
+    kernel = CUDA.cufunction(kernel_f, kernel_tt; always_inline = true, name = kernel_name)
+    return (kernel, kernel_args)
+end
+
+"""
+    launch_compiled!(kernel, kernel_args, f!, args; threads, blocks)
+
+Launch the `kernel` returned by [`compile_kernel`](@ref) with its already
+adapted `kernel_args`, keeping the original `f!` and `args` alive for the
+duration of the launch (the adapted arguments only hold raw device pointers).
+"""
+function launch_compiled!(kernel, kernel_args, f!::F!, args; threads, blocks) where {F!}
+    GC.@preserve f! args begin
+        kernel(kernel_args...; threads, blocks, convert = Val(false))
+    end
+    collect_kernel_stats() && report_kernel_stats(
+        kernel, f!, args, nothing, threads, blocks,
+        kernel_name_from_stack_trace(f!, args),
+    )
+    return nothing
+end
+
+# Development-only statistics about a launched kernel (see collect_kernel_stats).
+function report_kernel_stats(
+    kernel, f!::F!, args, nitems, threads_s, blocks_s, kernel_name,
+) where {F!}
     if collect_kernel_stats() # only for development use
         key = (F!, typeof(args), CUDA.registers(kernel))
         # CUDA.registers(kernel) > 50 || return nothing # for debugging
