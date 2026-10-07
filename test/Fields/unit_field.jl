@@ -1006,32 +1006,40 @@ end
     end
 end
 
-@testset "Levels of nonlocal Fields and nonlocal Field broadcasts" begin
+@testset "Slices of Fields and nonlocal Field broadcasts" begin
     FT = Float64
     gradh = Operators.Gradient()
-    # Todo: Make this work over all spaces; currently broken for everything else.
-    for space in (
-        TU.CenterExtrudedFiniteDifferenceSpace(FT),
-        TU.FaceExtrudedFiniteDifferenceSpace(FT),
-    )
+    for space in TU.all_spaces(FT)
         TU.levelable(space) || continue
-        field = fill((; x = FT(1)), space)
+        coords = Fields.coordinate_field(space)
+        field = :lat in propertynames(coords) ? (@. coords.z + sind(coords.lat)) : coords.z
+        level_of_field = Spaces.level(field, TU.fc_index(1, space))
+        other_level_of_field = Spaces.level(field, TU.fc_index(2, space))
+        level_of_twos = fill(FT(2), axes(other_level_of_field))
 
-        op_on_level_of_field =
-            gradh.(
-                Fields.Field(
-                    Spaces.level(Fields.field_values(field.x), 1),
-                    Spaces.level(space, TU.fc_index(1, space)),
-                ),
-            )
+        # Every argument of a sliced broadcast is sliced at its own indices.
+        bc = Base.Broadcast.instantiate(lazy.(field .* level_of_twos))
+        @test Spaces.level(bc, TU.fc_index(3, space)).args[2] === level_of_twos
+        @test Spaces.column(bc, 1, 1, 1).args[2] ===
+              Spaces.column(level_of_twos, 1, 1, 1)
 
-        @test op_on_level_of_field ==
-              (Spaces.level(gradh.(field.x), TU.fc_index(1, space)))
+        gradv =
+            Spaces.staggering(space) isa Spaces.CellCenter ?
+            Operators.GradientC2F(;
+                bottom = Operators.SetValue(FT(0)),
+                top = Operators.SetValue(FT(0)),
+            ) : Operators.GradientF2C()
+        @test (@. gradv(field * level_of_twos)) ≈ (@. 2 * gradv(field))
 
-        @test op_on_level_of_field == Base.materialize((Spaces.level(
-            lazy.(gradh.(field.x)),
-            TU.fc_index(1, space),
-        )),)
+        space isa Spaces.ExtrudedFiniteDifferenceSpace || continue
+        @test gradh.(level_of_field) == Spaces.level(gradh.(field), TU.fc_index(1, space))
+        @test gradh.(level_of_field) ==
+              Base.materialize(Spaces.level(lazy.(gradh.(field)), TU.fc_index(1, space)))
+        @test (@. gradh(field * level_of_twos)) ≈ (@. 2 * gradh(field))
+        level_of_gradh = similar(gradh.(level_of_field))
+        level_of_gradh .= gradh.(other_level_of_field)
+        @test Fields.field_values(level_of_gradh) ==
+              Fields.field_values(Spaces.level(gradh.(field), TU.fc_index(2, space)))
     end
 end
 
