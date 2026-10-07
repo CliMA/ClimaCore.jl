@@ -32,7 +32,7 @@ end
 @inline each_maskable_slice_index(_, mask::IJHMask, ::typeof(column), args...) =
     ActiveColumnIndices(mask)
 @inline each_maskable_slice_index(_, mask::IJHMask, ::typeof(view), args...) =
-    ActivePointIndices{nlevels(first(args))}(mask)
+    ActivePointIndices{nlevels(first(args)), CartesianIndex{4}}(mask)
 
 # Every valid mask and slice operator combination has indexable slice indices:
 # NoMask uses the full index ranges, and IJHMask (which only supports column

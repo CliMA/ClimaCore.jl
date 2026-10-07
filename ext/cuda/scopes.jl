@@ -301,10 +301,10 @@ end
 
 @inline function DataLayouts.subscope_index_view(
     ::Union{ThisKernel, ThisCooperativeGroup},
-    indices::DataLayouts.ActivePointIndices{Nv},
+    indices::DataLayouts.ActivePointIndices{Nv, I},
     view_range,
-) where {Nv}
-    return DataLayouts.ActivePointIndices{Nv}(indices.mask, indices.indices[view_range])
+) where {Nv, I}
+    return DataLayouts.ActivePointIndices{Nv, I}(indices.mask, indices.indices[view_range])
 end
 
 # A unit range indexed at the positions in view_range is the same range of
@@ -328,3 +328,19 @@ end
     ::typeof(view),
     args...,
 ) = eachindex(args...)
+
+# Masked point loops on device scopes likewise use linear point indices
+# whenever eachindex would, under the same IndexStyle condition: each active
+# point then costs one column_map lookup instead of three (i, j, h) lookups,
+# and every point view skips its Cartesian-to-linear conversion. Layouts with
+# different shapes keep Cartesian indices, which Broadcast.newindex projects
+# onto singleton dimensions.
+@inline function DataLayouts.each_maskable_slice_index(
+    ::Union{ThisKernel, ThisCooperativeGroup},
+    mask::IJHMask,
+    ::typeof(view),
+    args...,
+)
+    I = IndexStyle(args...) == IndexLinear() ? Int : CartesianIndex{4}
+    return DataLayouts.ActivePointIndices{DataLayouts.nlevels(first(args)), I}(mask)
+end

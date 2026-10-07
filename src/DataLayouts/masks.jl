@@ -27,6 +27,8 @@ active; modify `is_active` and call [`set_mask_maps!`](@ref) to change the mask.
   - `i_map`: An array that holds the `i`-index of each active column.
   - `j_map`: An array that holds the `j`-index of each active column.
   - `h_map`: An array that holds the `h`-index of each active column.
+  - `column_map`: An array that holds the linear `(i, j, h)` index of each active
+    column, so that a point loop can locate an active point with one lookup.
 """
 struct IJHMask{D, A} <: DataMask
     is_active::D
@@ -34,6 +36,7 @@ struct IJHMask{D, A} <: DataMask
     i_map::A
     j_map::A
     h_map::A
+    column_map::A
 end
 
 Adapt.@adapt_structure IJHMask
@@ -51,7 +54,7 @@ function IJHMask(data::VIJHWithF)
     is_active = map(Returns(true), level(data, 1))
     N = similar(parent(data), Int, 1)
     i_map = similar(parent(data), Int, length(is_active))
-    mask = IJHMask(is_active, N, i_map, similar(i_map), similar(i_map))
+    mask = IJHMask(is_active, N, i_map, similar(i_map), similar(i_map), similar(i_map))
     set_mask_maps!(mask)
     return mask
 end
@@ -59,9 +62,9 @@ end
 """
     set_mask_maps!(mask)
 
-Update `mask.N`, `mask.i_map`, `mask.j_map`, and `mask.h_map` in an
-[`IJHMask`](@ref) based on the values in `mask.is_active`, and return `mask`. This
-allocates memory when using GPUs, so it should only be called infrequently.
+Update `mask.N`, `mask.i_map`, `mask.j_map`, `mask.h_map`, and `mask.column_map`
+in an [`IJHMask`](@ref) based on the values in `mask.is_active`, and return `mask`.
+This allocates memory when using GPUs, so it should only be called infrequently.
 """
 function set_mask_maps!(mask::IJHMask)
     using_arrays = parent(mask.is_active) isa Array
@@ -69,12 +72,18 @@ function set_mask_maps!(mask::IJHMask)
     i_map = using_arrays ? mask.i_map : Array(mask.i_map)
     j_map = using_arrays ? mask.j_map : Array(mask.j_map)
     h_map = using_arrays ? mask.h_map : Array(mask.h_map)
+    column_map = using_arrays ? mask.column_map : Array(mask.column_map)
+    # The linear column index follows the column-major order of a layout's
+    # (i, j, h) dimensions, which is the order of its linear point indices
+    # once the level index is folded in (see ActivePointIndices below).
+    column_indices = LinearIndices(size(is_active)[2:4])
     n = 1
     @inbounds for index in CartesianIndices(is_active)
         is_active[index] || continue
         i_map[n] = index[2]
         j_map[n] = index[3]
         h_map[n] = index[4]
+        column_map[n] = column_indices[index[2], index[3], index[4]]
         n += 1
     end
     fill!(mask.N, n - 1)
@@ -82,6 +91,7 @@ function set_mask_maps!(mask::IJHMask)
         copyto!(mask.i_map, i_map)
         copyto!(mask.j_map, j_map)
         copyto!(mask.h_map, h_map)
+        copyto!(mask.column_map, column_map)
     end
     return mask
 end
@@ -117,18 +127,22 @@ Adapt.@adapt_structure ActiveColumnIndices
 
 # The level count is a type parameter, so that the divrem below strength
 # reduces to multiplies and shifts instead of compiling into an integer
-# division, which is emulated on GPUs.
-struct ActivePointIndices{Nv, M, V} <: AbstractVector{CartesianIndex{4}}
+# division, which is emulated on GPUs. The index type `I` is either
+# `CartesianIndex{4}`, which every layout accepts, or `Int`, a linear point
+# index that is only valid when every layout in the loop shares a shape (see
+# `IndexStyle` in indexing.jl) but costs one map lookup per point instead of
+# three and skips the Cartesian-to-linear conversion in every point view.
+struct ActivePointIndices{Nv, I, M, V} <: AbstractVector{I}
     mask::M
     indices::V
 end
-ActivePointIndices{Nv}(mask, indices) where {Nv} =
-    ActivePointIndices{Nv, typeof(mask), typeof(indices)}(mask, indices)
-ActivePointIndices{Nv}(mask) where {Nv} =
-    ActivePointIndices{Nv}(mask, Base.OneTo(Nv * Int(@inbounds mask.N[1])))
+ActivePointIndices{Nv, I}(mask, indices) where {Nv, I} =
+    ActivePointIndices{Nv, I, typeof(mask), typeof(indices)}(mask, indices)
+ActivePointIndices{Nv, I}(mask) where {Nv, I} =
+    ActivePointIndices{Nv, I}(mask, Base.OneTo(Nv * Int(@inbounds mask.N[1])))
 Base.size(inds::ActivePointIndices) = (length(inds.indices),)
 Base.@propagate_inbounds function Base.getindex(
-    inds::ActivePointIndices{Nv},
+    inds::ActivePointIndices{Nv, CartesianIndex{4}},
     n::Int,
 ) where {Nv}
     (; i_map, j_map, h_map) = inds.mask
@@ -136,5 +150,13 @@ Base.@propagate_inbounds function Base.getindex(
     (v, col) = (v_zero + 1, n_zero + 1)
     @inbounds CartesianIndex(v, i_map[col], j_map[col], h_map[col])
 end
-Adapt.adapt_structure(to, inds::ActivePointIndices{Nv}) where {Nv} =
-    ActivePointIndices{Nv}(Adapt.adapt(to, inds.mask), Adapt.adapt(to, inds.indices))
+Base.@propagate_inbounds function Base.getindex(
+    inds::ActivePointIndices{Nv, Int},
+    n::Int,
+) where {Nv}
+    (n_zero, v_zero) = divrem(inds.indices[n] - 1, Nv)
+    column = @inbounds inds.mask.column_map[n_zero + 1]
+    return (column - 1) * Nv + v_zero + 1
+end
+Adapt.adapt_structure(to, inds::ActivePointIndices{Nv, I}) where {Nv, I} =
+    ActivePointIndices{Nv, I}(Adapt.adapt(to, inds.mask), Adapt.adapt(to, inds.indices))
