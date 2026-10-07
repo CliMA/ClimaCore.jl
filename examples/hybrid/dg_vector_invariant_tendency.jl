@@ -81,7 +81,6 @@ function dg_vi_remaining_tendency!(Yₜ, Y, p, t)
     @. Yₜ.c.ρe += ᶜdYt.ρe
     @. Yₜ.c.ρ -= ᶜdivᵥ(ᶠinterp(ᶜρ * ᶜuₕ))
     @. Yₜ.c.ρe -= ᶜdivᵥ(ᶠinterp((ᶜρe + ᶜp) * ᶜuₕ))
-    dg_vertical_monotone_tendency!(Yₜ, Y, p)
 
     # Horizontal derivatives of the momentum equation.
     @. ᶜdYt_uₕ.∇p = Geometry.UVVector(wgradₕ(ᶜp))
