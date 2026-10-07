@@ -125,10 +125,13 @@ center_velocity(Yc) = center_velocity(momentum_form(Yc), Yc)
 center_velocity(::VectorInvariantForm, Yc) = @. Geometry.UVVector(Yc.uₕ)
 center_velocity(::FluxForm, Yc) = @. Geometry.UVVector(Yc.ρuₕ / Yc.ρ)
 
-# The specific kinetic energy of a saved state, `w` included.
+# The specific kinetic energy of a saved state, `w` included. A state moved to
+# the CPU has separate copies of the center and face grids, so `w`, interpolated
+# from the faces, is put on the space of `Y.c` before the two are combined.
 function center_kinetic_energy(Y)
     ᶜuₕ = center_velocity(Y.c)
-    ᶜw = @. Geometry.WVector(ᶜinterp(Y.f.w))
+    ᶜw_values = Fields.field_values(@. Geometry.WVector(ᶜinterp(Y.f.w)))
+    ᶜw = Fields.Field(ᶜw_values, axes(Y.c))
     return @. (norm_sqr(ᶜuₕ) + norm_sqr(ᶜw)) / 2
 end
 
